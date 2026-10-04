@@ -260,7 +260,8 @@ export class GilgalSet {
       case 'dustWall': this.focus.set(army.frontX - 12, 0, 0); half = 55; break;
       case 'king': this.focus.copy(saul.pos).add(new THREE.Vector3(-2, 0, 0)); half = 22; break;
       case 'spearRaised': this.focus.set(SAUL_HALT.x - 16, 0, 0); half = 40; break;
-      case 'silence': this.focus.set(-12, 0, 0); half = 42; break;
+      // (cut7, CUT v5.2: the front rank, the king and the old man come up the road to him — a tighter, sharper box)
+      case 'silence': this.focus.set(SAUL_HALT.x + 2, 0, 0.4); half = 24; break;
       case 'rise': this.focus.copy(this.anchors.tear.center); half = 60; break;
       default: this.focus.copy(this.anchors.tear.center); half = 11;
     }

@@ -99,6 +99,9 @@ export class SkySystem {
   private lightMat = new THREE.Matrix4();
   private tmpV = new THREE.Vector3();
   private tmpF = new THREE.Vector3();
+  private tmpD = new THREE.Vector3();
+  private tmpUp = new THREE.Vector3();
+  private tmpInv = new THREE.Matrix4();
 
   constructor(private renderer: THREE.WebGLRenderer, shadowSize: number) {
     const lutData = new Float32Array(LUT_W * LUT_H * 4);
@@ -388,8 +391,9 @@ export class SkySystem {
     const texel = (sc.right - sc.left) / this.sun.shadow.mapSize.x;
     const f = this.tmpF.copy(focus);
     // express focus in light space to snap
-    const lightMat = this.lightMat.lookAt(this.tmpV.set(0, 0, 0), dir.clone().negate(), new THREE.Vector3(0, 1, 0));
-    const inv = lightMat.clone().invert();
+    // (load1, wave 4: no per-frame allocations — the same values from reused temporaries)
+    const lightMat = this.lightMat.lookAt(this.tmpV.set(0, 0, 0), this.tmpD.copy(dir).negate(), this.tmpUp.set(0, 1, 0));
+    const inv = this.tmpInv.copy(lightMat).invert();
     f.applyMatrix4(inv);
     f.x = Math.round(f.x / texel) * texel;
     f.y = Math.round(f.y / texel) * texel;

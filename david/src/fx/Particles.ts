@@ -14,6 +14,8 @@ interface P {
 export class ParticleSystem {
   readonly points: THREE.Points;
   private parts: P[] = [];
+  /** (load1, wave 4) the other half of a double buffer: the living particles are compacted into it, no array per frame */
+  private spare: P[] = [];
   private geo = new THREE.BufferGeometry();
   private pos: Float32Array;
   private col: Float32Array;
@@ -89,7 +91,8 @@ export class ParticleSystem {
     const w = shared.uWind.value;
     const ws = shared.uWindStrength.value;
     let n = 0;
-    const alive: P[] = [];
+    const alive = this.spare;
+    alive.length = 0;
     for (const p of this.parts) {
       p.life += dt;
       if (p.life >= p.max) continue;
@@ -114,6 +117,7 @@ export class ParticleSystem {
       this.size[n] = p.size;
       n++;
     }
+    this.spare = this.parts;
     this.parts = alive;
     this.geo.setDrawRange(0, n);
     (this.geo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;

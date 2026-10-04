@@ -10,7 +10,9 @@ import { manStyle, type GroomStyle } from './styles';
  *   samuelStyle()        Samuel: a Nazirite from birth (1 Sam 1:11 "וּמוֹרָה לֹא־יַעֲלֶה עַל־רֹאשׁוֹ"; Num 6:5 "גַּדֵּל פֶּרַע"):
  *                        uncut, loose, very long grey-white hair to mid-back, pushed back from the face, a few iron-grey
  *                        strands at the nape; a full, long, untrimmed grey-white beard to mid-chest (Lev 19:27).
- *   elderStyle(seed)     the elders (8:4): long grey / white / greying beards, long hair; seeded.
+ *   elderStyle(seed)     the elders (8:4): every one a different man (ELDER_LOOKS by seed): dark brown, black, brown
+ *                        with grey streaks, salt and pepper, one iron-grey — never Samuel's white; beards round, long
+ *                        and narrow, or short.
  *   soldierStyle(seed)   Israelite levy (15:4): full beards (young men short), hair to the nape / shoulders.
  *   philistineStyle(seed) clean-shaven (Medinet Habu), short hair under the headdress / helmet.
  */
@@ -173,21 +175,94 @@ export function samuelStyle(): GroomStyle {
 }
 
 // ================================================================================================= ELDERS
-/** Elders of Israel (50-75): long greying / white beards, long hair; seeded grey fraction, beard length, waviness. */
-export function elderStyle(seed: number): GroomStyle {
-  const R0 = rng(seed * 4513 + 71);
-  // (finishing pass: salt and pepper more than snow — out of focus near the lens a white head read as a white blob)
-  const grey = 0.25 + 0.6 * R0(); // 0.25 greying .. 0.85 mostly white
-  const beardLen = 0.1 + 0.1 * R0();
-  const hairLen = 0.14 + 0.12 * R0();
-  const wavy = R0();
-  const base: [number, number, number] = R0() < 0.6 ? [0.06, 0.047, 0.04] : [0.1, 0.075, 0.056];
-  const col = (dark: number) => (R: () => number, f: THREE.Vector3, root: THREE.Color, tip: THREE.Color) => {
-    if (R() < grey) return greyWhite(R, f, root, tip, dark);
-    lin(base, root);
-    vary(root, R, 0.25);
-    tip.copy(root).multiplyScalar(1.4);
+/**
+ * The look of each elder of Ramah (cut7, wave 4 — the user: "the people look exactly like Samuel"): every elder a
+ * different man and none like Samuel (the only snow-white head): dark brown, black, brown with grey streaks, salt and
+ * pepper, one clearly iron-grey; beards full and round, long and narrow, short and trimmed; ages ~45-68. Indexed by
+ * the elder's seed (FilmStage / dev/cast-ramah: seed = Ramah mark + 1; mark 0 the speaker, 2-3 the pair, 6-7 the near
+ * pair); other seeds draw from the same ranges.
+ *   hair: sRGB base colour · grey: share of grey strands · greyAt: where the grey sits ('temples' streaks at the sides
+ *   and the chin, 'mix' salt and pepper all through, 'all' iron-grey) · beard: shape · beardLen / hairLen (m) · wavy
+ */
+export interface ElderLook {
+  hair: [number, number, number];
+  grey: number;
+  greyAt: 'temples' | 'mix' | 'all';
+  beard: 'round' | 'long' | 'short';
+  beardLen: number;
+  hairLen: number;
+  wavy: number;
+}
+const BLACK: [number, number, number] = [0.035, 0.029, 0.026];
+const DARK_BROWN: [number, number, number] = [0.07, 0.05, 0.038];
+const BROWN: [number, number, number] = [0.13, 0.088, 0.06];
+const CHESTNUT: [number, number, number] = [0.17, 0.105, 0.065];
+export const ELDER_LOOKS: ElderLook[] = [
+  // 1 · mark 0, THE SPEAKER (~55): dark brown, grey streaks at the temples, a full round beard
+  { hair: DARK_BROWN, grey: 0.16, greyAt: 'temples', beard: 'round', beardLen: 0.12, hairLen: 0.17, wavy: 0.7 },
+  // 2 · mark 1, seated (~45): black, short trimmed beard
+  { hair: BLACK, grey: 0.03, greyAt: 'mix', beard: 'short', beardLen: 0.045, hairLen: 0.13, wavy: 0.2 },
+  // 3 · mark 2 (~62): salt and pepper, long narrow beard
+  { hair: DARK_BROWN, grey: 0.42, greyAt: 'mix', beard: 'long', beardLen: 0.2, hairLen: 0.2, wavy: 0.3 },
+  // 4 · mark 3, the pair's near man (~50): chestnut brown, full round beard
+  { hair: CHESTNUT, grey: 0.06, greyAt: 'temples', beard: 'round', beardLen: 0.13, hairLen: 0.22, wavy: 0.85 },
+  // 5 · mark 4 (~45): dark brown, short beard
+  { hair: DARK_BROWN, grey: 0.02, greyAt: 'mix', beard: 'short', beardLen: 0.05, hairLen: 0.12, wavy: 0.6 },
+  // 6 · mark 5 (~68): the one clearly grey — iron-grey (never white), long beard
+  { hair: BROWN, grey: 0.82, greyAt: 'all', beard: 'long', beardLen: 0.19, hairLen: 0.2, wavy: 0.4 },
+  // 7 · mark 6, near pair (~58): black, grey streaks, full round beard
+  { hair: BLACK, grey: 0.18, greyAt: 'temples', beard: 'round', beardLen: 0.11, hairLen: 0.16, wavy: 0.55 },
+  // 8 · mark 7, near pair (~52): dark brown, long narrow beard
+  { hair: DARK_BROWN, grey: 0.05, greyAt: 'mix', beard: 'long', beardLen: 0.18, hairLen: 0.19, wavy: 0.15 },
+  // 9 · mark 8 (~64): salt and pepper, short beard
+  { hair: BROWN, grey: 0.45, greyAt: 'mix', beard: 'short', beardLen: 0.06, hairLen: 0.14, wavy: 0.5 },
+  // 10 · mark 9 (~48): brown, full beard
+  { hair: BROWN, grey: 0.04, greyAt: 'temples', beard: 'round', beardLen: 0.1, hairLen: 0.18, wavy: 0.9 },
+  // 11 · mark 10 (~57): black, grey streaks, long beard
+  { hair: BLACK, grey: 0.2, greyAt: 'temples', beard: 'long', beardLen: 0.17, hairLen: 0.15, wavy: 0.35 },
+];
+/** the look of an elder by seed (1-based; the table, or the same ranges for other seeds) */
+export function elderLook(seed: number): ElderLook {
+  const L = ELDER_LOOKS[seed - 1];
+  if (L) return L;
+  const R = rng(seed * 4513 + 71);
+  const hairs = [BLACK, DARK_BROWN, BROWN, CHESTNUT];
+  const beards: ElderLook['beard'][] = ['round', 'long', 'short'];
+  const beard = beards[Math.floor(R() * 3)];
+  return {
+    hair: hairs[Math.floor(R() * hairs.length)], grey: 0.05 + 0.4 * R(), greyAt: R() < 0.5 ? 'temples' : 'mix', beard,
+    beardLen: beard === 'short' ? 0.045 + 0.02 * R() : beard === 'long' ? 0.16 + 0.05 * R() : 0.1 + 0.04 * R(), hairLen: 0.12 + 0.1 * R(), wavy: R(),
   };
+}
+
+/** an elder's grey strand: iron-grey / pepper (dark-rooted), never Samuel's ivory white */
+function ironGrey(R: () => number, root: THREE.Color, tip: THREE.Color, light: number) {
+  lin([0.36 + 0.14 * light, 0.35 + 0.135 * light, 0.33 + 0.125 * light], root);
+  vary(root, R, 0.14);
+  tip.copy(root).multiplyScalar(1.12 + 0.1 * R());
+}
+
+/** Elders of Israel (8:4): seeded look (ELDER_LOOKS) — hair and beard colour, grey, beard shape and length, waviness. */
+export function elderStyle(seed: number): GroomStyle {
+  const L = elderLook(seed);
+  const R0 = rng(seed * 4513 + 71);
+  const grey = L.grey;
+  // where the grey grows: streaks at the temples / sides and the chin, all through (pepper), or all over
+  const greyW = (f: THREE.Vector3, beard: boolean) => {
+    if (L.greyAt === 'all') return 1;
+    if (L.greyAt === 'mix') return 1;
+    // temples: the sides of the scalp above the ears and the chin of the beard
+    return beard ? 0.6 + 1.4 * ss(-0.05, -0.11, f.y) * ss(0.06, 0.0, Math.abs(f.x)) : 0.25 + 2.6 * ss(0.035, 0.065, Math.abs(f.x)) * ss(-0.06, 0.02, f.z);
+  };
+  const col = (beard: boolean) => (R: () => number, f: THREE.Vector3, root: THREE.Color, tip: THREE.Color) => {
+    if (R() < grey * greyW(f, beard)) return ironGrey(R, root, tip, L.greyAt === 'all' ? 0.45 + 0.4 * R() : 0.2 + 0.5 * R());
+    lin(L.hair, root);
+    vary(root, R, 0.22);
+    // sun-warmed tips (a dark head in the low sun reads brown, never flat black)
+    tip.copy(root).multiplyScalar(1.35 + 0.25 * R());
+    tip.r *= 1.06;
+  };
+  const wavy = L.wavy;
   const scalp: LayerStyle = {
     name: 'elder-scalp',
     kind: 0,
@@ -197,7 +272,7 @@ export function elderStyle(seed: number): GroomStyle {
     // (finishing pass: fuller groomed locks — the near elders of P5 are seen from behind, their hair large in frame)
     locks: 260,
     sim: { low: 8, medium: 16, high: 24 },
-    length: (f, n, R) => (hairLen + 0.08 * ss(0.02, -0.08, f.z)) * (0.8 + 0.4 * R()),
+    length: (f, n, R) => (L.hairLen + 0.08 * ss(0.02, -0.08, f.z)) * (0.8 + 0.4 * R()),
     comb: (f, n, out) => {
       dir(out, f.x * 0.4, -0.3, -1);
       out.y -= 1.0 * ss(0.0, -0.08, f.z);
@@ -220,8 +295,11 @@ export function elderStyle(seed: number): GroomStyle {
     width: 0.00013,
     stiffness: 0.25,
     childLen: [0.75, 1.0],
-    colors: col(0.12),
+    colors: col(false),
   };
+  // beard shapes: full and round (long at the sides too), long and narrow (the chin long, the cheeks short), short and
+  // trimmed (even, close)
+  const shape = L.beard;
   const beard: LayerStyle = {
     name: 'elder-beard',
     kind: 1,
@@ -234,20 +312,25 @@ export function elderStyle(seed: number): GroomStyle {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y) * ss(0.0, 0.3, n.z);
       const chin = ss(-0.03, -0.11, f.y) * ss(0.09, 0.02, ax);
-      const L = beardLen * (0.45 + 0.55 * chin) + 0.02 * ss(0.07, 0.03, ax);
-      return (must > 0.5 ? 0.04 : L) * (0.82 + 0.3 * R());
+      const bl = L.beardLen;
+      const len = shape === 'round' ? bl * (0.62 + 0.38 * chin) + 0.02 * ss(0.07, 0.03, ax)
+        : shape === 'long' ? bl * (0.22 + 0.78 * chin * chin) + 0.012 * ss(0.07, 0.03, ax)
+          : bl * (0.8 + 0.2 * chin);
+      return (must > 0.5 ? (shape === 'short' ? 0.022 : 0.04) : len) * (0.85 + 0.25 * R());
     },
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y);
-      dir(out, Math.sign(f.x) * (0.06 + 0.55 * must), -1, 0.32 - 0.22 * must);
+      // a long narrow beard gathers to the chin; a round one falls straight and full
+      const gather = shape === 'long' ? -0.1 : shape === 'round' ? 0.1 : 0.03;
+      dir(out, Math.sign(f.x) * (0.06 + gather + 0.55 * must), -1, 0.32 - 0.22 * must);
       return out;
     },
-    lift: 0.14,
-    gravity: 16,
+    lift: shape === 'short' ? 0.3 : 0.14,
+    gravity: shape === 'short' ? 6 : 16,
     combPull: 12,
-    tousle: 1.6,
-    volume: (t, Rv) => 0.0018 + (Rv + 0.002) * ss(0, 0.3, t) + 0.004 * ss(0.2, 0.8, t),
+    tousle: shape === 'short' ? 0.8 : 1.6,
+    volume: (t, Rv) => 0.0018 + (Rv + 0.002) * ss(0, 0.3, t) + (shape === 'round' ? 0.006 : 0.004) * ss(0.2, 0.8, t),
     curlR: [0.002, 0.0045],
     curlPitch: [0.035, 0.06],
     curlStart: 0.2,
@@ -257,18 +340,19 @@ export function elderStyle(seed: number): GroomStyle {
     frizz: 0.0005,
     flyaway: 0.0012,
     width: 0.0002,
-    stiffness: 0.4,
+    stiffness: shape === 'short' ? 0.7 : 0.4,
     childLen: [0.7, 1.0],
-    colors: col(0.05),
+    colors: col(true),
   };
-  const capG = 0.18 + 0.4 * grey;
+  // the scalp cap under the strands: the hair's own colour, a little lighter where it greys
+  const capL = 0.45 * (L.hair[0] + L.hair[1] + L.hair[2]) + 0.3 * grey;
   return {
     name: `elder-${seed}`,
     layers: [scalp, beard],
     ctrl: { low: 9, medium: 12, high: 16 },
     segs: { low: 12, medium: 18, high: 28 },
-    shading: { shift: 0.03, roughness: 0.42, specular: 0.48, backlit: 0.6, scatter: 0.65, aoDirect: 0.55 },
-    capColor: [capG, capG * 0.96, capG * 0.9],
+    shading: { shift: 0.03, roughness: 0.42, specular: 0.48, backlit: 0.6, scatter: 0.45 + 0.2 * grey, aoDirect: 0.55 },
+    capColor: [Math.min(0.5, capL * 1.05), Math.min(0.48, capL * 0.95), Math.min(0.45, capL * 0.85)],
     capOffset: 0.004,
     capBeard: 0.8,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },

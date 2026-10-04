@@ -149,33 +149,29 @@ canvas { display: block; outline: none; }
 .crosshair.on { display: block; opacity: 1; }
 .ui.is-touch .crosshair { width: 136px; height: 136px; }
 .crosshair svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.55)); }
-.crosshair .ring-bg { fill: none; stroke: rgba(255, 245, 225, 0.22); stroke-width: 2.5; }
-.crosshair .win { fill: none; stroke: rgba(247, 227, 176, 0.5); stroke-width: 6; stroke-linecap: round; transition: stroke 0.08s; }
-.crosshair .win-p { fill: none; stroke: rgba(255, 214, 120, 0.85); stroke-width: 6; stroke-linecap: round; }
-.crosshair.inwin .win { stroke: rgba(255, 236, 190, 0.95); }
-.crosshair.inwin .win-p { stroke: #ffd36e; filter: drop-shadow(0 0 5px rgba(255, 200, 100, 0.95)); }
-.crosshair .ring { fill: none; stroke: rgba(247, 227, 176, 0.75); stroke-width: 2.2; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke 0.2s; }
-.crosshair .pouch { fill: #fff6e2; stroke: rgba(60, 38, 18, 0.8); stroke-width: 1.2; opacity: 0; transition: opacity 0.15s; }
-.crosshair.whirl .pouch { opacity: 1; }
-.crosshair.inwin .pouch { fill: #ffd36e; }
+/* (play1, gameplay v2.1) the power gauge round the reticle: a dark track, its gold "strong" zone at the top end, the
+   fill running clockwise from the top while he whirls; gold inside the zone, rust when the arm tires */
+.crosshair .ring-bg { fill: none; stroke: rgba(18, 12, 6, 0.42); stroke-width: 8; }
+.crosshair .gz { fill: none; stroke: rgba(255, 205, 105, 0.5); stroke-width: 8; }
+.crosshair .fill { fill: none; stroke: rgba(250, 236, 204, 0.95); stroke-width: 5.5; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke 0.1s; }
+.crosshair.gold .fill { stroke: #ffd36e; filter: drop-shadow(0 0 5px rgba(255, 200, 100, 0.95)); }
+.crosshair.gold .gz { stroke: rgba(255, 222, 140, 0.95); animation: gzPulse 0.28s ease-in-out infinite alternate; }
+@keyframes gzPulse { to { stroke: rgba(255, 244, 200, 1); } }
+.crosshair.tired .fill { stroke: #c98a5e; }
+.crosshair.tired .gz { stroke: rgba(201, 138, 94, 0.45); }
 .crosshair.loading .ring-bg { animation: ringWait 0.7s ease-in-out infinite; }
-@keyframes ringWait { 50% { stroke: rgba(255, 245, 225, 0.5); } }
+@keyframes ringWait { 50% { stroke: rgba(255, 245, 225, 0.35); } }
 .crosshair .dot { fill: #fff; }
 .crosshair .tick { stroke: rgba(255, 255, 255, 0.85); stroke-width: 1.6; }
 .crosshair.target .dot { fill: #ffb37a; }
 .crosshair.target .tick { stroke: #ffb37a; }
-.crosshair .rel { stroke: transparent; stroke-width: 4; stroke-linecap: round; }
-.crosshair.rel-on .rel { animation: relFade 0.9s ease-out forwards; }
-.crosshair.r-perfect .rel { stroke: #ffd36e; }
-.crosshair.r-sweet .rel { stroke: #fff6e2; }
-.crosshair.r-early .rel, .crosshair.r-late .rel { stroke: #ff8a5c; }
 @keyframes relFade { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
-.crosshair.r-perfect.rel-on .win-p { animation: perfFlash 0.5s ease-out; }
-@keyframes perfFlash { 0% { stroke: #fff; stroke-width: 11; } 100% { } }
-.crosshair .cue { position: absolute; top: -30px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 600 17px var(--serif-he); color: #fff3d8; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); opacity: 0; }
+.crosshair.r-gold.rel-on .gz, .crosshair.r-gold.rel-on .ring-bg { animation: perfFlash 0.5s ease-out; }
+@keyframes perfFlash { 0% { stroke: #fff6d8; stroke-width: 13; } 100% { } }
+.crosshair .cue { position: absolute; top: -32px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 700 19px var(--serif-he); color: #fff3d8; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); opacity: 0; }
 .crosshair.rel-on .cue { animation: relFade 0.9s ease-out forwards; }
-.crosshair.r-perfect .cue { color: #ffd36e; }
-.crosshair.r-early .cue, .crosshair.r-late .cue { color: #ffb08a; }
+.crosshair.r-gold .cue { color: #ffd36e; }
+.crosshair.r-weak .cue { color: #ffb08a; font-size: 16px; font-weight: 600; }
 .crosshair .range { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; opacity: 0; color: #ffcf9a; text-shadow: var(--shadow); transition: opacity 0.3s; }
 .crosshair.far .range { opacity: 0.9; }
 .hitmark { position: fixed; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; opacity: 0; pointer-events: none; }

@@ -17,7 +17,7 @@ import { applyHandheld, portraitLens, TAKE_OFFSET } from '../film/FilmCams';
 import { bootMark } from '../core/bootProfile';
 
 /**
- * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v5, docs/intro-script-v5.md: 134.5 s): the player of the shot sheet
+ * THE OPENING FILM "הַטּוֹב מִמֶּךָּ" (CUT v5.2, docs/intro-script-v5.md: 141.5 s): the player of the shot sheet
  * src/content/introScript.ts. The PROLOGUE (cut7): P1 out of black (the time card, the picture rising on `picture`) — the
  * flight over the hills of Judah (land set 'judah'); dissolves into Bethlehem (P2) and Rachel's tomb (P3) in the game
  * world, into the realistic 3D map (P4, map1's set 'map'; P4 -> P5 an invisible cut inside it), into the Philistine host

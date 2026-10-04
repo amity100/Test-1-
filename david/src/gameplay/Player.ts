@@ -10,36 +10,33 @@ import type { SfxName } from '../audio/AudioEngine';
 import { LAYOUT } from '../world/Layout';
 
 /**
- * (play1, docs/gameplay-v2.md §1, §3) The sling's numbers. Hitting is skill: the stone flies on a real trajectory
- * (gravity, drag, wind — Projectiles); the reticle is the launch direction, "zeroed" at ZERO m (a perfect release at
- * that distance flies along the line of sight — nearer it passes a little high, farther it drops: aim higher at
- * range); the release must be TIMED against the whirl.
+ * (play1, docs/gameplay-v2.md §1, §3 and v2.1) The sling's numbers. Power is the skill: hold to whirl — the power
+ * fills in POWER_TIME s, then a gold "strong" window of GOLD_TIME s (a release there: full power, a little faster and
+ * truer), then the arm tires and the aim sways. Release at ANY moment: no timing window, no penalty for the moment. The
+ * stone flies on a real trajectory (gravity, drag, wind — Projectiles): the reticle is where a FULL-power stone goes
+ * (its drop at that distance allowed for), a weaker one falls short of it, more the weaker it is.
  */
 export const SLING = {
-  /** seconds of whirling to full power */
-  powerTime: 1.4,
-  /** whirl rate (revolutions / s) at no and at full power */
-  rate0: 1.4,
-  rate1: 3.0,
-  /** the sweet release window, half width in revolutions, at no and at full power (±61° .. ±41° of the circle) */
-  window0: 0.17,
-  window1: 0.115,
-  /** the perfect window is this share of the sweet one */
-  perfectFrac: 0.35,
-  /** launch speed (m/s) at no and at full power; a perfect release and a chosen smooth stone fly a little faster */
-  speed0: 21,
-  speed1: 37,
-  perfectBonus: 1.05,
+  /** seconds of whirling from weak to full power; then the gold window; beyond it the arm tires */
+  powerTime: 1.0,
+  goldTime: 0.6,
+  /** whirl rate (revolutions / s) weak .. full */
+  rate0: 1.5,
+  rate1: 3.1,
+  /** launch speed (m/s) at no and at full power; a gold release and a chosen smooth stone fly a little faster */
+  speed0: 11,
+  speed1: 33,
+  goldBonus: 1.04,
   smoothBonus: 1.02,
-  /** the distance (m) at which the sling flies along the line of sight */
-  zero: 14,
-  /** degrees: the most a sweet (not perfect) release strays; outside the window: per revolution late / early; cap */
-  sweetDev: 0.25,
-  missDevPerRev: 32,
-  maxDev: 10,
-  /** the stone's own scatter (1 sigma, degrees): a chosen smooth stone / a rough heap stone */
-  spreadSmooth: 0.06,
-  spreadPlain: 0.17,
+  /** the stone's own scatter (1 sigma, degrees): a chosen smooth stone / a heap stone; a gold release is truer (×) */
+  spreadSmooth: 0.12,
+  spreadPlain: 0.2,
+  goldSpread: 0.5,
+  /** held past the gold window: the aim sways, growing to this (degrees) over TIRED_RAMP s */
+  tiredSway: 1.3,
+  tiredRamp: 1.5,
+  /** touch screens: a small magnetism toward a target near the reticle (the share of the error closed per second) */
+  magnet: 2.2,
   /** whirl at least this long before a release throws (shorter: he keeps the sling, armed) */
   minWhirl: 0.18,
   /** stow the sling after this long armed without aiming */
@@ -54,22 +51,28 @@ export interface StoneBag {
   preferSmooth: boolean;
 }
 
-/** what the HUD shows of the sling (the timing ring) */
+/** what the HUD shows of the sling (the power gauge round the reticle) */
 export interface SlingHud {
   /** 0..1: the aim camera eased in (the ring fades in with it) */
   aim: number;
   whirling: boolean;
-  /** the whirl's phase in revolutions (the release point at every integer) */
-  phase: number;
-  /** sweet window half width (revolutions) and the perfect share */
-  window: number;
-  perfectFrac: number;
+  /** 0..1 power (weak .. full) */
   power: number;
+  /** 0..1 of the gauge's ring: the power part (to GOLD_START), then the gold window (to 1) */
+  fill: number;
+  /** in the gold "strong" window now */
+  gold: boolean;
+  /** 0..1: held past the gold window (the arm tires) */
+  tired: number;
+  /** where the gold zone begins on the ring (GOLD_START) */
+  goldStart: number;
   /** the stone in the pouch is one of the chosen smooth stones */
   smooth: boolean;
   /** drawing / reloading (the ring waits) */
   loading: boolean;
 }
+/** where the gold "strong" zone begins on the gauge's ring (its share: the gold window's share of the whole hold) */
+export const GOLD_START = SLING.powerTime / (SLING.powerTime + SLING.goldTime);
 
 const _d = new THREE.Vector3();
 const _o = new THREE.Vector3();
@@ -86,18 +89,19 @@ function gauss() {
 }
 
 /**
- * David: third-person controller, the sling (carried in the sash, drawn, whirled, released on timing, reloaded,
- * stowed), staff strikes, dodge, health. The realistic model must be loaded first:
+ * David: third-person controller, the sling (carried in the sash, drawn, whirled to power, released at will,
+ * reloaded, stowed), staff strikes, dodge, health. The realistic model must be loaded first:
  * `await DavidModel.preload(engine.quality.name, { msaa })` (main.ts).
  *
  * THE SLING API (for Story, the range and the bear fight):
  *  - state: `model.sling.state` ('stowed' | 'draw' | 'idle' armed | 'spin' | 'release' | 'reload' | 'stow');
- *    `armed`, `aiming`, `whirling`, `power`, `whirlPhase` / `whirlRate` / `window` (the timing), `bag` (stones);
+ *    `armed`, `aiming`, `whirling`, `power`, `whirlT`, `slingGold` / `slingTired` (the gold window / past it),
+ *    `whirlPhase` / `whirlRate` (the whirl's picture), `bag` (stones);
  *  - control: `canSling` (the button draws / whirls / throws), `drawSling()`, `stowSling(instant?)`;
- *  - events: `onShot(shot)` at every release (ShotInfo: power, timing, perfect, sweet, deviation, intent),
- *    `projectiles.onResolve(shot)` when it hits (shot.hit) or misses (shot.missOffset), `onBeat()` at every pass of
- *    the release point, `onNoStones()`;
- *  - `hud` for the timing ring; `lastShot`.
+ *  - events: `onShot(shot)` at every release (ShotInfo: power, perfect = a gold release, intent),
+ *    `projectiles.onResolve(shot)` when it hits (shot.hit) or misses (shot.missOffset), `onBeat()` at every turn of the
+ *    whirl, `onNoStones()`;
+ *  - `hud` for the power gauge; `lastShot`.
  */
 export class Player {
   readonly model: DavidModel;
@@ -115,15 +119,22 @@ export class Player {
   carrying = false;
   /** the sling button is held: the aim camera is on (drawing / reloading / whirling) */
   aiming = false;
-  /** the sling whirls (power and the timing run) */
+  /** the sling whirls (the power fills) */
   whirling = false;
   power = 0;
   whirlT = 0;
-  /** revolutions since the whirl began (the release point is at every integer) */
+  /** revolutions since the whirl began (the picture; the release no longer depends on it) */
   whirlPhase = 0;
   whirlRate = 0;
-  /** the sweet window's half width now (revolutions) */
-  window: number = SLING.window0;
+  /** in the gold "strong" window now (full power and a small bonus for a release) */
+  get slingGold() {
+    return this.whirling && this.whirlT >= SLING.powerTime && this.whirlT < SLING.powerTime + SLING.goldTime;
+  }
+  /** 0..1: held past the gold window (the arm tires, the aim sways) */
+  get slingTired() {
+    return this.whirling ? clamp((this.whirlT - SLING.powerTime - SLING.goldTime) / SLING.tiredRamp, 0, 1) : 0;
+  }
+  private sway = new THREE.Vector2();
   private dodgeT = -1;
   private dodgeDir = new THREE.Vector3();
   private strikeT = -1;
@@ -163,7 +174,7 @@ export class Player {
   lastShot: ShotInfo | null = null;
   /** aim friction on touch screens over a target (0 = off) */
   aimAssist = 1;
-  readonly hud: SlingHud = { aim: 0, whirling: false, phase: 0, window: SLING.window0, perfectFrac: SLING.perfectFrac, power: 0, smooth: false, loading: false };
+  readonly hud: SlingHud = { aim: 0, whirling: false, power: 0, fill: 0, gold: false, tired: 0, goldStart: GOLD_START, smooth: false, loading: false };
   private shotId = 0;
   private armedIdle = 0;
   /** after a release the aim lens stays a moment (to see where the stone goes), unless he walks off */
@@ -427,7 +438,6 @@ export class Player {
     const pressed = input.take('sling');
     const held = input.slingHeld;
     const releasedEvt = input.takeRelease('sling');
-    const lag = releasedEvt ? input.releaseLag() : 0;
     // Story (rescue, clinch) may switch the aim off directly
     if (!this.aiming && this.whirling) this.cancelAim();
     const act = m.actionName;
@@ -461,10 +471,11 @@ export class Player {
       else {
         if (!this.whirling && m.slingReady && !this.pendingShot) this.startWhirl();
         if (!this.whirling && S.state === 'idle' && !S.loaded) m.reloadSling();
-        if (this.whirling) this.advanceWhirl(dt);
+        if (this.whirling) this.advanceWhirl(dt, cam);
         this.computeAim(cam, input, dt);
         if (releasedEvt || !held) {
-          if (this.whirling && this.whirlT >= SLING.minWhirl) this.throwStone(lag);
+          // released at any moment: the stone goes (the throw's whip brings the pouch round within ≈0.09 s)
+          if (this.whirling && this.whirlT >= SLING.minWhirl) this.throwStone();
           else this.cancelAim(); // let go while drawing: he keeps the sling in his hand (armed)
         }
       }
@@ -482,9 +493,10 @@ export class Player {
     const h = this.hud;
     h.aim = cam.aimWeight * (this.aiming || this.whirling || this.postAim > 0 ? 1 : 0);
     h.whirling = this.whirling;
-    h.phase = this.whirlPhase;
-    h.window = this.window;
     h.power = this.power;
+    h.fill = this.whirling ? clamp(this.whirlT / (SLING.powerTime + SLING.goldTime), 0, 1) : 0;
+    h.gold = this.slingGold;
+    h.tired = this.slingTired;
     h.smooth = this.pouchKind === 'smooth';
     h.loading = this.aiming && !this.whirling;
   }
@@ -497,26 +509,35 @@ export class Player {
     // the first pass by the release point comes ≈0.45 s after the first turn (a full turn to find the rhythm)
     this.whirlPhase = -0.62;
     this.whirlRate = SLING.rate0;
-    this.window = SLING.window0;
+    this.sway.set(0, 0);
     m.hold = 'spin';
     m.sling.state = 'spin';
   }
 
-  private advanceWhirl(dt: number) {
+  private advanceWhirl(dt: number, cam: CameraRig) {
     const m = this.model;
+    const wasGold = this.slingGold;
     this.whirlT += dt;
     this.power = clamp(this.whirlT / SLING.powerTime, 0, 1);
     const rate = THREE.MathUtils.lerp(SLING.rate0, SLING.rate1, Math.pow(this.power, 0.85));
     const before = this.whirlPhase;
     this.whirlPhase += rate * dt;
     this.whirlRate = rate;
-    this.window = THREE.MathUtils.lerp(SLING.window0, SLING.window1, this.power);
-    // the beat: in the frame nearest to the pass by the release point (at most half a frame off)
+    // the whirl's rhythm: a whoosh at every turn, rising with the power
     const half = rate * dt * 0.5;
     if (Math.floor(this.whirlPhase + half) > Math.floor(before + half)) {
       this.sfx('slingWhoosh', 0.35 + 0.45 * this.power, 0.85 + 0.45 * this.power);
       this.onBeat?.();
     }
+    // the gold window opens: a soft cue
+    if (this.slingGold && !wasGold) this.sfx('slingPerfect', 0.35, 1.25);
+    // held past it, his arm tires: the aim sways gently (the reticle drifts; he can still throw)
+    const tired = this.slingTired;
+    const A = THREE.MathUtils.degToRad(SLING.tiredSway) * tired;
+    const sx = A * Math.sin(this.whirlT * 1.9), sy = A * 0.6 * Math.sin(this.whirlT * 2.7 + 1.1);
+    cam.yaw += sx - this.sway.x;
+    cam.pitch += sy - this.sway.y;
+    this.sway.set(sx, sy);
     m.spinPhase = this.whirlPhase * Math.PI * 2;
     m.spinPower = this.power;
     m.spinRate = rate;
@@ -544,75 +565,65 @@ export class Player {
     this.pouchKind = smooth ? 'smooth' : 'plain';
   }
 
-  /** the release: the timing against the whirl decides where the stone goes */
-  private throwStone(lag: number) {
+  /**
+   * the release — at any moment (gameplay v2.1): the power decides how far it flies; a release in the gold window is
+   * full power with a small bonus (a little faster and truer) and counts as a strong throw (`shot.perfect`)
+   */
+  private throwStone() {
     const m = this.model;
-    const phaseAt = this.whirlPhase - this.whirlRate * lag;
-    const e = phaseAt - Math.round(phaseAt); // revolutions, - early / + late
-    const s = this.window, p = s * SLING.perfectFrac;
-    const ae = Math.abs(e);
-    let mag = 0;
-    if (ae > p && ae <= s) mag = (SLING.sweetDev * (ae - p)) / (s - p);
-    else if (ae > s) mag = Math.min(SLING.maxDev, SLING.sweetDev + (ae - s) * SLING.missDevPerRev);
-    const sg = Math.sign(e);
+    const gold = this.slingGold;
     const shot = Projectiles.newShot(++this.shotId);
     shot.power = this.power;
-    shot.timing = e;
-    shot.window = s;
-    shot.perfect = ae <= p;
-    shot.sweet = ae <= s;
+    shot.timing = 0;
+    shot.window = 0;
+    shot.perfect = gold;
+    shot.sweet = true;
     shot.smooth = this.pouchKind === 'smooth';
-    // early: the stone flies left and a little high; late: right and low (the pouch's path round the circle)
-    shot.devRight = sg * mag * 0.85;
-    shot.devUp = -sg * mag * 0.5;
-    shot.speed = THREE.MathUtils.lerp(SLING.speed0, SLING.speed1, this.power) * (shot.perfect ? SLING.perfectBonus : 1) * (shot.smooth ? SLING.smoothBonus : 1);
+    shot.devRight = 0;
+    shot.devUp = 0;
+    shot.speed = THREE.MathUtils.lerp(SLING.speed0, SLING.speed1, this.power) * (gold ? SLING.goldBonus : 1) * (shot.smooth ? SLING.smoothBonus : 1);
     shot.aimDist = this.aimDist;
     shot.intent = this.aimTarget ?? this.nearestTarget();
+    this.throwAim.copy(this.aimPoint);
     this.pendingShot = shot;
     this.lastShot = shot;
     this.postAim = 0.9;
     this.whirling = false;
     this.aiming = false;
     this.power = 0;
+    this.sway.set(0, 0);
     m.hold = 'none';
     this.audio.slingSpin(false, 0);
     m.play('throw', [{ t: THROW_RELEASE, fn: () => this.fire(shot) }]);
     this.onShot?.(shot);
   }
+  private readonly throwAim = new THREE.Vector3();
 
   /**
-   * the cord slips: the stone leaves the pouch along the reticle's line (converging with it at the distance of what he
-   * aims at), lofted to the zero, deviated by the timing, scattered by the stone. The convergence distance is the
-   * intended target's (or what the reticle is on): holding the reticle ABOVE a target for the drop must not send the
-   * stone toward whatever lies far behind it (the camera sits behind and beside the pouch: parallax)
+   * the cord slips: the stone leaves the pouch toward the reticle's point (the target under it, or the ground, or far
+   * out), raised so that a FULL-power stone comes down there (drag and drop allowed for; not the wind — he aims into
+   * it). A weaker stone keeps that line and falls short, more the weaker it is; then the stone's own scatter.
    */
   private fire(shot: ShotInfo) {
     const m = this.model;
     const from = _o.copy(m.sling.pouch);
-    const camera = this.engine.camera;
-    const ray = camera.getWorldDirection(_r);
-    const conv = shot.intent ? clamp(shot.intent.center().distanceTo(camera.position), 4, 120) : clamp(this.aimPoint.distanceTo(camera.position), 4, 120);
-    const target = _u.copy(camera.position).addScaledVector(ray, conv);
-    const dir = _d.subVectors(target, from);
-    if (dir.lengthSq() < 1e-6) dir.copy(this.forward);
-    dir.normalize();
+    const to = this.throwAim;
+    const k = shot.smooth ? STONE_DRAG : STONE_DRAG_ROUGH;
     const v = shot.speed;
-    // zeroing: the loft that brings the stone back to the line of sight at SLING.zero m (+8 % for the drag)
-    const loft = 0.5 * Math.asin(clamp((9.81 * SLING.zero) / (v * v), 0, 1)) * 1.08;
-    const spread = THREE.MathUtils.degToRad(shot.smooth ? SLING.spreadSmooth : SLING.spreadPlain);
-    const up = THREE.MathUtils.degToRad(shot.devUp) + loft + gauss() * spread;
-    const right = THREE.MathUtils.degToRad(shot.devRight) + gauss() * spread;
-    const rv = _r.crossVectors(dir, UP).normalize(); // his right
-    const uv = _u.crossVectors(rv, dir).normalize();
-    dir.addScaledVector(uv, Math.tan(up)).addScaledVector(rv, Math.tan(right)).normalize();
-    const vel = _p.copy(dir).multiplyScalar(v);
+    // the line is solved for full power: for this stone if he threw it at full power (gold or not), else for a full one
+    const vRef = shot.power >= 0.999 ? v : SLING.speed1 * (shot.smooth ? SLING.smoothBonus : 1);
+    const el = Projectiles.elevation(from, to, vRef, k).angle;
+    const az = Math.atan2(to.x - from.x, to.z - from.z);
+    const spread = THREE.MathUtils.degToRad(shot.smooth ? SLING.spreadSmooth : SLING.spreadPlain) * (shot.perfect ? SLING.goldSpread : 1);
+    const e = el + gauss() * spread, a = az + gauss() * spread;
+    const vel = _p.set(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)).multiplyScalar(v);
     this.pendingShot = null;
     this.pouchKind = null;
-    this.projectiles.fire(from, vel, shot, shot.smooth ? STONE_DRAG : STONE_DRAG_ROUGH);
+    this.projectiles.fire(from, vel, shot, k);
     m.releaseSling();
     this.audio.sfx('slingRelease', { volume: 0.9 });
     if (shot.perfect) this.sfx('slingPerfect', 0.9);
-    if (v > 26) this.sfx('stoneWhistle', clamp((v - 22) / 16, 0.3, 1), 0.8 + clamp((v - 21) / 16, 0, 1) * 0.45);
+    if (v > 24) this.sfx('stoneWhistle', clamp((v - 20) / 14, 0.3, 1), 0.8 + clamp((v - 19) / 14, 0, 1) * 0.45);
     this.throws++;
     this.onThrow?.();
   }
@@ -666,6 +677,20 @@ export class Player {
           break;
         }
       }
+      // (w4) the reticle just off a target: the stone is thrown at THAT target's range (its line stays his own), so a
+      // near miss stays a near miss — not a stone sailing on to the ground metres behind the jar
+      let lockS = Infinity, lockA = Infinity;
+      for (const t of this.projectiles.targets) {
+        if (!t.enabled() || t.kind === 'solid') continue;
+        const s = _p.subVectors(t.center(), o).dot(d);
+        if (s < 3 || s > best) continue;
+        const off = Math.sqrt(Math.max(0, _p.lengthSq() - s * s));
+        if (off < t.radius + 0.45 + 0.012 * s && off / s < lockA) {
+          lockA = off / s;
+          lockS = s;
+        }
+      }
+      if (lockS < best) best = lockS;
     }
     if (!isFinite(best)) best = 150;
     this.aimPoint.copy(o).addScaledVector(d, best);
@@ -673,16 +698,25 @@ export class Player {
     // in range: roughly how far this power carries on a perfect release (drag included)
     const v = THREE.MathUtils.lerp(SLING.speed0, SLING.speed1, this.power);
     this.aimInRange = this.aimDist < (v * v) / 9.81 * 0.62;
-    // touch screens: a little friction over a target (the aim slows down there) — never a pull onto it
+    // touch screens: a little friction and a small magnetism over a target near the reticle (never a snap onto it)
     let scale = 1;
     if (input.isTouch && this.aimAssist > 0) {
       const t = this.aimTarget ?? this.nearestTarget();
       if (t) {
         const c = t.center();
         const dist = c.distanceTo(o);
-        const ang = Math.acos(clamp(_p.subVectors(c, o).normalize().dot(d), -1, 1));
+        const dt3 = _p.subVectors(c, o).normalize();
+        const ang = Math.acos(clamp(dt3.dot(d), -1, 1));
         const zone = Math.atan(t.radius / Math.max(1, dist)) + THREE.MathUtils.degToRad(1.4);
-        if (ang < zone) scale = THREE.MathUtils.lerp(1, 0.55, this.aimAssist);
+        if (ang < zone) {
+          scale = THREE.MathUtils.lerp(1, 0.55, this.aimAssist);
+          const k = (1 - Math.exp(-SLING.magnet * dt)) * 0.5 * this.aimAssist;
+          let dy = Math.atan2(-dt3.x, -dt3.z) - Math.atan2(-d.x, -d.z);
+          while (dy > Math.PI) dy -= 2 * Math.PI;
+          while (dy < -Math.PI) dy += 2 * Math.PI;
+          cam.yaw += dy * k;
+          cam.pitch -= (Math.asin(clamp(dt3.y, -1, 1)) - Math.asin(clamp(d.y, -1, 1))) * k;
+        }
       }
     }
     cam.lookScale = damp(cam.lookScale, scale, 12, dt);

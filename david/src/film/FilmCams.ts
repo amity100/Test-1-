@@ -16,7 +16,8 @@ import { ARMY, roadZ, SAMUEL, SAUL_HALT, SUN } from './gilgal/gilgalLayout';
  *
  *   Gilgal (gilgalCam):  'dustWall' G1 · 'king' G2 · 'spearRaised' G3 · 'silence' G4 · 'tear' G5a · 'tear:insert' G5b
  *                        · 'verdict' G6 · 'saulAlone' G7
- *   Land (landCam):      'flight' 'glint' 'elders' — the prologue of CUT v2 (not filmed in CUT v3; kept compiling)
+ *   Land (landCam):      'flight' P1 · 'threat' P6 · 'elders' P7 — the prologue of CUT v5.2 (141.5 s, cut7); 'glint'
+ *                        (CUT v2's P4) kept compiling
  *
  * A take name 'base:variant' is filmed with the blocking of `base` (actors, army) at blocking time t + TAKE_OFFSET:
  * the insert G5b continues the tear of G5a (base shot time = insert time + the length of G5a: 4.0 s in CUT v3).
@@ -43,7 +44,18 @@ export const FILM_CAM = {
   // (CUT v3: 4 s — the same lane and push (cut4's verified lens positions: between ranks 6 and 7 at the start, clear of
   //  every man), now running to the cut on the drift ease; the lens lengthens a little further (8 -> 7.4°: Samuel
   //  measured 37 % of the picture height at 8.2°) so he ends at ~40 % of the picture height)
-  silence: { x0: -14, x1: -9.6, z0: 1.575, z1: 1.575, h0: 1.98, h1: 1.9, lookSide: -1.8, fov0: 16, fov1: 7.4, clear: 0.8 },
+  // (cut7, CUT v5.2, 6.5 s — the old man must READ and the space must be G5a's: the lens starts between the shoulders
+  //  of the front rank on the lane (files 8 | 9), creeps while the roar ebbs and the heads turn, pushes through the
+  //  front rank once it has stepped aside (`part`) and across the gap to the king's right shoulder — Saul's eye-line,
+  //  his head and shoulder soft at frame left — while Samuel walks up the road to him (gilgalBlocking.samuelG4): full
+  //  figure by the verse, knee-up at the end, his face and hair clear, 1.85 m before the king as in the tear.
+  //  Keys: [shot s, x from Saul's halt, lateral from the road's centre (+ = south), height over the ground] — every
+  //  channel a monotone cubic (still drifting at the cut); the look on Samuel's face, `lookSide` m to frame right of it)
+  silence: {
+    // (the lens keeps >= 0.9 m from the front rank until it has stepped aside — Crowd.nearHide never pops a man)
+    keys: [[0, -6.6, 1.575, 1.7], [1.2, -6.48, 1.57, 1.71], [1.75, -5.65, 1.5, 1.74], [3.0, -3.8, 1.0, 1.81], [3.8, -3.08, 0.78, 1.84], [6.5, -2.4, 0.66, 1.86]] as [number, number, number, number][],
+    lookSide: 0.18, lookH: 1.52, fov0: 31, fov1: 26, clear: 0.6,
+  },
   // G5a: a medium-wide two-shot from the south at chest height (bodies ~70 % of the frame), a slow lateral move
   // west -> east with the action (cut4: backlit by the tear's cheated sun, GilgalSet.setSunCheat)
   // (CUT v3: the lateral move runs over the whole 4 s — Samuel's turn-step, Saul's plea, the lunge and the grip)
@@ -95,21 +107,30 @@ export const FILM_CAM = {
       [12.4, 1075, 815, 650, 297, -7.5, -1.2, 40],
     ] as [number, number, number, number, number, number, number, number][],
     minAGL: 60,
+    // (wave 4 — the orchestrator: ~1 s of flat lavender fog inside the deck at 7-8 s) the flight dives through a GAP
+    // in the deck ([x, z, radius m], clear within 45 % of the radius): the gap opens ahead as the lens nears it (the
+    // deck breaking up), its lit walls slide past the lens on the way down, the hills show through it below
+    hole: [1290, 340, 330] as [number, number, number],
     thinAt: [7.0, 10.2] as [number, number],
     // the last 1.5 s warmer (grade highlight warmth +warmAdd, FilmStage's judah handle) into P2's warm morning
     warmAt: [9.5, 11.0] as [number, number],
     warmAdd: 0.055,
     thinTo: 0.38,
   },
-  // P6 'threat' (cut7, CUT v5): the Philistine host — the map's descent continued: a crane that comes down out of the
-  // sky toward the head of the column marching at the lens (ESE, out of Ashdod) on the marching men's right (the sunlit
-  // flank; the morning sun behind the lens' left shoulder). High and wide at the start (the column snaking back to
-  // Ashdod's tell, the sea a pale band on the horizon, the sky's negative space for the card and 13:19), it sinks on a
-  // LOG-height ease (a constant apparent rate that slows as it nears the ground, like the map's descent) to a long lens
-  // at a man's height ahead of the column's right files: the near ranks large, the bronze glinting, the column soft
-  // behind them in its dust. Every distance is relative to the head of the column (it marches 1.2 m/s toward the lens).
-  // (from 220 m to a man's height on a log ease = a mean -0.68 /s of log-height: the map's descent rate at the cut)
-  threat: { ahead0: 600, ahead1: 24, side0: 160, side1: 6.5, h0: 220, h1: 1.9, back0: 1200, back1: 70, lookSide0: 0, lookSide1: 1.2, lookH0: 2.5, lookH1: 1.55, fov0: 34, fov1: 12, contrast: 1.1, focusBack: 6, fStop: 5.6 },
+  // P6 'threat' (cut7, CUT v5.2, 10 s — the user: "clearer from the start and better looking"): ON the host from the
+  // first frame. A low lens beside the road ahead of the column on the marching men's right (their sunlit flank; the
+  // morning sun behind the lens' left shoulder), looking back WNW down the road toward Ashdod — the direction P5's map
+  // was descending in: the elite front ranks (bronze helmets, scale corselets, round shields, spears) and the feather
+  // crowns behind them march at the lens out of their own dust, large and clear, the column soft behind them. The lens
+  // holds its place while they come on (`rise[0]`), then ONE slow crane move up and back (every distance log-
+  // interpolated on a smoothstep that is still moving at the cut): the column revealed stretching back down the road
+  // to Ashdod's tell, the plain hazy, the sea's pale band beyond. The lens stays low enough that the plain is always seen
+  // at a grazing angle (no field pattern), the sky's upper third free for the card (right) and 13:19 (left).
+  // ahead / side: the lens from the head's position at t = 0 (world: it stands still until `rise`); back / lookSide:
+  // the look point behind the head NOW (it marches 1.2 m/s at the lens); h / lookH over the ground.
+  // (probed at 640x360, desktop-high: the elite front rank ~9 m off at the first frame, ~70 % of the picture height;
+  //  the crane ends ~7 m up, ~33 m ahead of the head: the column from the lower frame back to Ashdod's tell)
+  threat: { ahead0: 9.5, ahead1: 56, side0: 4.1, side1: 15, h0: 1.15, h1: 10, back0: 6, back1: 130, lookSide0: 1.3, lookSide1: 0, lookH0: 1.42, lookH1: 0, fov0: 20, fov1: 25, rise: [2.6, 12.0] as [number, number], contrast: 1.1, focusBack: 1.0, fStop: 5.6 },
   // P4 (cut4): a long lens AHEAD of the column on the marching men's right, 1.45 m high, looking back down its length:
   // the column comes diagonally toward the lens, its nearest file (the right edge, lat +2.75) large and soft at the
   // frame's right edge, the rest receding into the dust; the lens retreats slower than the march and trucks in
@@ -133,8 +154,10 @@ export const FILM_CAM = {
  * toward +X; the real sun stands at -95 = west, behind Saul) for these set-ups — NNE, so that from the cameras on the
  * south side of the action line it stands BEHIND the two men (G5a/G5b) and behind Samuel's face side (G6). Takes not
  * listed keep the real sun (G7 looks west at Saul: the real sun is behind HIM).
+ * (cut7, CUT v5.2: G4 'silence' takes the same light — it ends on the two men face to face as G5a begins: the low sun
+ *  behind the old man, his hair and mantle rimmed, the shadows of both falling the same way across the road)
  */
-export const SUN_CHEAT: Record<string, number> = { tear: 150, 'tear:insert': 150, verdict: 150 };
+export const SUN_CHEAT: Record<string, number> = { silence: 150, tear: 150, 'tear:insert': 150, verdict: 150 };
 
 /** blocking time offset (s) of a split take: its base shot has already run this long (the G5b insert continues the
  *  tear at the end of G5a: TEAR_INSERT_AT = the length of G5a in the sheet, 4.0 s in CUT v3).
@@ -310,16 +333,17 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       return true;
     }
     case 'silence': {
-      // G4 — the roar cuts: the lens between the soldiers' shoulders a few ranks behind the king pushes forward;
-      // heads turn, the men step aside, and the old man stands in the road far ahead (long lens); Saul's back soft
-      // at the left. The lens is kept clear of the men (their formation slots) so it never enters a head.
+      // G4 (cut7, CUT v5.2) — the roar ebbs: from between the front rank's shoulders the lens creeps, then pushes
+      // through the parted rank to the king's right shoulder (his eye-line) while the old man walks up the road and
+      // stands before him (FILM_CAM.silence). The lens is kept clear of the men (their formation slots).
       const c = FILM_CAM.silence;
       const sam = samuelAt('silence', t).pos;
-      out.pos.set(SAUL_HALT.x + lerp(c.x0, c.x1, e), 0, roadZ(SAUL_HALT.x) + lerp(c.z0, c.z1, e));
+      const ch = (i: number) => monotone(c.keys.map((k) => [k[0], k[i]] as [number, number]), t);
+      out.pos.set(SAUL_HALT.x + ch(1), 0, roadZ(SAUL_HALT.x) + ch(2));
       clearOfArmy(out.pos, 'silence', t, c.clear);
-      out.pos.y = H(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, e);
-      out.look.set(sam.x, H(sam.x, sam.z) + 1.42, sam.z + 0.35 + c.lookSide);
-      out.fov = lerp(c.fov0, c.fov1, e);
+      out.pos.y = H(out.pos.x, out.pos.z) + ch(3);
+      out.look.set(sam.x, H(sam.x, sam.z) + c.lookH, sam.z + c.lookSide);
+      out.fov = lerp(c.fov0, c.fov1, ss(1.0, 4.0, t));
       return true;
     }
     case 'tear': {
@@ -450,12 +474,11 @@ export function gilgalFocus(take: string, t: number, H: (x: number, z: number) =
       return { point: out.set(s.x, H(s.x, s.z) + 1.85, s.z), fStop: 4 };
     }
     case 'silence': {
-      // from the soldiers' heads near the lens to the old man as the ranks part (beats.part -> just after the name card)
+      // (cut7, CUT v5.2) on the old man's eyes the whole take: the front rank's shoulders and the king soft
+      const eyes = ctx?.samuelEyes?.(out);
+      if (eyes) return { point: eyes, fStop: 3.2 };
       const sam = samuelAt('silence', t).pos;
-      const k = ss(takeBeat('silence', 'part', 1.0) - 0.2, takeBeat('silence', 'card', 1.6) + 0.25, t);
-      _a.set(SAUL_HALT.x - 4, H(SAUL_HALT.x - 4, 0) + 1.6, roadZ(SAUL_HALT.x));
-      _b.set(sam.x, H(sam.x, sam.z) + 1.45, sam.z);
-      return { point: out.copy(_a).lerp(_b, k), fStop: 4 };
+      return { point: out.set(sam.x, H(sam.x, sam.z) + 1.5, sam.z), fStop: 3.2 };
     }
     case 'tear': {
       const sm = samuelAt('tear', t).pos;
@@ -546,20 +569,21 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     return true;
   }
   if (take === 'threat' && ctx.coast) {
-    // P6 (cut7) — the crane down out of the sky to the head of the column (FILM_CAM.threat): every distance
-    // log-interpolated on the drift ease (the apparent speed stays constant, the descent slows as it nears the ground)
+    // P6 (cut7, CUT v5.2) — on the front ranks from the first frame, then the crane up and back (FILM_CAM.threat):
+    // the lens holds still while the column marches at it, then every distance is log-interpolated on one smoothstep
+    // (a constant apparent rate; still moving at the cut)
     const c = FILM_CAM.threat;
     const hd = ctx.coast.heading;
-    const k = drift(u);
+    const k = ss(c.rise[0], c.rise[1], t);
     const L = (a: number, b: number) => a * Math.pow(b / a, k);
     _a.set(-hd.z, 0, hd.x); // the marching men's right: the sunlit flank of the main column
-    _b.copy(ctx.coast.columnHead).addScaledVector(hd, FILM_CAM.coast.march * t); // the head now
-    out.pos.copy(_b).addScaledVector(hd, L(c.ahead0, c.ahead1)).addScaledVector(_a, L(c.side0, c.side1));
+    out.pos.copy(ctx.coast.columnHead).addScaledVector(hd, L(c.ahead0, c.ahead1)).addScaledVector(_a, L(c.side0, c.side1));
     out.pos.y = ctx.height(out.pos.x, out.pos.z) + L(c.h0, c.h1);
+    _b.copy(ctx.coast.columnHead).addScaledVector(hd, FILM_CAM.coast.march * t); // the head now
     out.look.copy(_b).addScaledVector(hd, -L(c.back0, c.back1)).addScaledVector(_a, lerp(c.lookSide0, c.lookSide1, k));
     out.look.y = ctx.height(out.look.x, out.look.z) + lerp(c.lookH0, c.lookH1, k);
     out.fov = lerp(c.fov0, c.fov1, k);
-    out.roll = 0.012 * (1 - k) * Math.sin(u * 2.4);
+    out.roll = 0.01 * k * Math.sin(u * 2.4);
     return true;
   }
   if (take === 'glint' && ctx.coast) {

@@ -47,6 +47,27 @@ export interface ArmPose {
   hd: [number, number, number];
 }
 
+/**
+ * The faces of the elders of Ramah (cut7, wave 4 — "every elder a different man, none like Samuel"): per seed (= Ramah
+ * mark + 1) the 'elder' preset's morphs (build, age, nose, jaw, face length, brow, eyes), the skin tone and the brows
+ * (dark brows under dark hair, salt and pepper where the hair greys; the grey one keeps the preset's grey brows). The
+ * hair, beard and dress of the same seeds: hair/filmStyles ELDER_LOOKS, wardrobe/film ELDER_DRESS. Other seeds keep
+ * the preset's seeded variation.
+ */
+const ELDER_FACES: { v: Record<string, number>; tone: number; brow?: [number, number, number]; pepper?: number }[] = [
+  /* 1 the speaker ~55 */ { v: { heavy: 0.55, older: 0.2, noseBig: 0.5, jawWide: 0.7, faceLong: -0.3, browHeavy: 0.6, eyesSmall: 0.2 }, tone: 0.9, brow: [0.075, 0.055, 0.042], pepper: 0.18 },
+  /* 2 ~45 */ { v: { lean: 0.6, younger: 0.7, noseBig: 0.2, jawWide: -0.3, faceLong: 0.7, browHeavy: -0.2, eyesSmall: -0.3 }, tone: 1.0, brow: [0.04, 0.032, 0.028], pepper: 0.04 },
+  /* 3 ~62 */ { v: { heavy: 0.3, older: 0.6, noseBig: 0.9, jawWide: 0.1, faceLong: 0.4, browHeavy: 0.2, eyesSmall: 0.5 }, tone: 0.95, brow: [0.09, 0.07, 0.055], pepper: 0.4 },
+  /* 4 ~50 */ { v: { heavy: 0.8, younger: 0.3, noseBig: -0.4, jawWide: 0.5, faceLong: -0.5, browHeavy: 0.4, eyesSmall: -0.2 }, tone: 0.86, brow: [0.14, 0.09, 0.06], pepper: 0.06 },
+  /* 5 ~45 */ { v: { lean: 0.3, younger: 0.8, noseBig: 0.6, jawWide: -0.5, faceLong: 0.2, browHeavy: 0.7, eyesSmall: 0.4 }, tone: 0.93, brow: [0.075, 0.055, 0.042], pepper: 0.03 },
+  /* 6 the grey one ~68 */ { v: { lean: 0.7, older: 0.9, noseBig: 0.4, jawWide: -0.6, faceLong: 0.8, browHeavy: -0.3, eyesSmall: 0.6 }, tone: 1.03 },
+  /* 7 ~58 */ { v: { heavy: 0.4, older: 0.4, noseBig: 1.0, jawWide: 0.3, faceLong: 0.1, browHeavy: 0.5, eyesSmall: -0.4 }, tone: 0.88, brow: [0.04, 0.032, 0.028], pepper: 0.2 },
+  /* 8 ~52 */ { v: { lean: 0.4, younger: 0.4, noseBig: -0.2, jawWide: 0.8, faceLong: -0.2, browHeavy: 0.1, eyesSmall: 0.1 }, tone: 0.97, brow: [0.075, 0.055, 0.042], pepper: 0.06 },
+  /* 9 ~64 */ { v: { heavy: 0.6, older: 0.7, noseBig: 0.3, jawWide: 0.4, faceLong: -0.6, browHeavy: 0.8, eyesSmall: 0.3 }, tone: 0.92, brow: [0.12, 0.09, 0.07], pepper: 0.42 },
+  /* 10 ~48 */ { v: { lean: 0.2, younger: 0.6, noseBig: 0.1, jawWide: 0.2, faceLong: 0.5, browHeavy: -0.4, eyesSmall: -0.5 }, tone: 0.95, brow: [0.13, 0.088, 0.06], pepper: 0.05 },
+  /* 11 ~57 */ { v: { heavy: 0.2, older: 0.3, noseBig: 0.6, jawWide: -0.2, faceLong: 0.6, browHeavy: 0.3, eyesSmall: 0.2 }, tone: 0.9, brow: [0.04, 0.032, 0.028], pepper: 0.22 },
+];
+
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -177,9 +198,17 @@ export class FilmActor {
     const crowd = lod === 'crowd';
     const seed = spec.seed ?? 1;
     const preset = spec.role === 'saul' ? 'saul' : spec.role === 'samuel' ? 'samuel' : spec.role === 'elder' ? 'elder' : 'man';
+    // the elders of Ramah: a chosen face per seed (ELDER_FACES), else the preset's seeded variation
+    const ef = spec.role === 'elder' ? ELDER_FACES[seed - 1] : undefined;
     const human = await HumanModel.load({
       preset, quality: crowd ? 'low' : q,
-      ...(preset === 'man' || preset === 'elder' ? { seed: spec.role === 'philistine' ? seed + 400 : seed } : {}),
+      ...(ef
+        ? {
+          variation: { heavy: 0, lean: 0, older: 0, younger: 0, noseBig: 0, jawWide: 0, faceLong: 0, browHeavy: 0, eyesSmall: 0, ...ef.v },
+          skinTint: new THREE.Color(ef.tone * 1.012, ef.tone, ef.tone * 0.975),
+          ...(ef.brow ? { brows: { color: ef.brow, pepper: ef.pepper ?? 0, pepperColor: [0.4, 0.385, 0.36] as [number, number, number] } } : {}),
+        }
+        : preset === 'man' || preset === 'elder' ? { seed: spec.role === 'philistine' ? seed + 400 : seed } : {}),
       ...(crowd ? { geometry: 'base' as const, textureSize: 1024 as const } : {}),
     });
     const gq = crowd ? 'low' : q;
@@ -216,6 +245,8 @@ export class FilmActor {
           props.staff.userData.prop = r.staff;
         }
         groomSpec = { kind: 'elder', seed };
+        // the hair pressed under his head-band / head-cloth (the crown above it)
+        if (r.head) headband = { height: r.head.lift, radius: [rx + r.head.extra - 0.002, rz + r.head.extra - 0.002], width: r.head.height, tilt: r.head.tilt };
         break;
       }
       case 'philistine': {

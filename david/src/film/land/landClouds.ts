@@ -88,6 +88,8 @@ export class LandClouds {
       ...landAtmo, ...cloudShared,
       tNoise: { value: this.noise },
       uExt: { value: 0.0085 },
+      // (cut7, wave 4) a gap in the deck: (x, z) centre, radius (m), strength 0..1 — P1's flight dives through it
+      uHole: { value: new THREE.Vector4(0, 0, 1, 0) },
       uAmbTop: { value: new THREE.Color(0.34, 0.34, 0.56) },
       uAmbBottom: { value: new THREE.Color(0.22, 0.19, 0.27) },
       uSunI: { value: 8.5 },
@@ -115,6 +117,7 @@ export class LandClouds {
         precision highp sampler3D;
         uniform sampler3D tNoise;
         uniform float uExt, uSunI;
+        uniform vec4 uHole;
         uniform vec3 uAmbTop, uAmbBottom, uSunTint;
         uniform vec2 uDitherOffset;
         uniform float uFrame;
@@ -128,6 +131,8 @@ export class LandClouds {
           float hf = (p.y - uDeck.x) / (uDeck.y - uDeck.x);
           if (hf <= 0.0 || hf >= 1.0) return 0.0;
           float cov = cloudWeather(p.xz);
+          // the gap the flight dives through (its walls lit like the deck's broken edge)
+          cov *= 1.0 - uHole.w * (1.0 - smoothstep(uHole.z * 0.45, uHole.z, length(p.xz - uHole.xy)));
           if (cov < 0.02) return 0.0;
           vec3 wind = vec3(uCloudTime * 0.00035, 0.0, uCloudTime * 0.00012);
           float n = texture(tNoise, p * vec3(1.0 / 5200.0, 1.0 / 2600.0, 1.0 / 5200.0) + wind).r;

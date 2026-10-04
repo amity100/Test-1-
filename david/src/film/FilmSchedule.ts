@@ -103,6 +103,8 @@ export class FilmSchedule {
   private readonly holdScale: number;
   private readonly budgetMs: number;
   private readonly share: number;
+  /** KHR_parallel_shader_compile: programs compile off the main thread (else only behind a cover) */
+  private readonly parallel: boolean;
 
   private constructor(
     private readonly engine: Engine,
@@ -110,6 +112,7 @@ export class FilmSchedule {
   ) {
     this.budgetMs = engine.quality.mobile ? 5 : 7;
     this.share = engine.quality.mobile ? FILM_SHARE_MOBILE : FILM_SHARE_DESKTOP;
+    this.parallel = engine.renderer.extensions.has('KHR_parallel_shader_compile');
     const hs = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('holdscale')) : NaN;
     this.holdScale = Number.isFinite(hs) && hs > 0 ? hs : 1;
     const { primeWorld, ...stageOpts } = opts;
@@ -140,6 +143,11 @@ export class FilmSchedule {
     const s = new FilmSchedule(engine, opts);
     void s.run();
     return s;
+  }
+
+  /** resolves when every job is done (or given up) */
+  whenSettled(): Promise<void> {
+    return Promise.all(this.order.map((n) => this.ready(n))).then(() => undefined);
   }
 
   /** resolves when the set is built and prepared (or failed / skipped: the player falls back to a world vista) */
@@ -190,6 +198,13 @@ export class FilmSchedule {
    */
   startWait(): number {
     if (this.unitMs <= 0) return Infinity;
+    if (!this.parallel) {
+      // (wave 4) without KHR_parallel_shader_compile every program compiles ON the main thread at its first draw: no
+      // pre-compile may run under the film (it would stutter) — everything is done behind the cover first
+      let all = 0;
+      for (const n of this.order) all += ((this.rel[n] ?? 1) * (1 - this.doneFrac(n)) * this.unitMs) / 1000;
+      return this.settled ? 0 : Math.max(0.2, all);
+    }
     let heavy = 0;
     for (const n of this.heavyPending()) heavy += ((this.rel[n] ?? 1) * ((this.bshare[n] ?? 0.3) - this.doneFrac(n)) * this.unitMs) / 1000;
     let cum = 0, wait = 0;
@@ -246,7 +261,7 @@ export class FilmSchedule {
   }
 
   report() {
-    return { order: this.order, deadline: this.deadline, state: this.state, times: this.times, unitMs: Math.round(this.unitMs), startWait: this.startWait(), slices: this.slices, stats: this.stage.buildStats };
+    return { order: this.order, deadline: this.deadline, state: this.state, times: this.times, unitMs: Math.round(this.unitMs), startWait: this.startWait(), parallel: this.parallel, slices: this.slices, stats: this.stage.buildStats };
   }
 
   // ------------------------------------------------------------------------------------------ the builder
@@ -340,13 +355,17 @@ export class FilmSchedule {
       this.calibrate(n, performance.now() - t0, covered0, this.bshare[n] ?? 0.3);
       if (buildOnly) return;
     }
+    // (wave 4) the world's texture images download while the sets build; a set's first frames need them
+    await this.engine.texturesReady.catch(() => undefined);
     const t1 = performance.now();
     const covered1 = this.covered;
     this.state[n] = 'compiling';
     if (this.covered) {
       // behind the loading / start screen: programs and uploads in slices first (the start screen stays responsive),
-      // then — if the picture is still covered — the full warm-up on the canvas (a click waits for it: enterFilm)
-      await this.stage.prepareSet(name, { budgetMs: () => this.sliceBudget(), yieldFrame: () => this.frameYield() });
+      // then — if the picture is still covered — the full warm-up on the canvas (a click waits for it: enterFilm). The
+      // first sets (judah) are warmed up on the canvas only (wave 4): the loading screen needs no slices, and the canvas
+      // warm-up compiles and uploads the same things itself
+      if (!this.firstSets().includes(n)) await this.stage.prepareSet(name, { budgetMs: () => this.sliceBudget(), yieldFrame: () => this.frameYield() });
       if (this.covered) {
         const p = this.stage.precompileSet(name);
         this.canvasBusy = p;

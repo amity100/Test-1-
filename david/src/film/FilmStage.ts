@@ -15,7 +15,7 @@ import { baseTake, FILM_CAM, gilgalCam, gilgalFocus, landCam, SUN_CHEAT, takeBea
  * behind the loading screen and disposed set by set as the film leaves it (phones!). This module is imported lazily (it
  * pulls in src/film/gilgal, src/film/cast, src/film/crowd, src/film/land and src/film/map through dynamic imports only).
  *
- * CUT v5 (docs/intro-script-v5.md, 134.5 s): the prologue films in the land sets 'judah' (P1 the flight), 'map' (P4-P5,
+ * CUT v5.2 (docs/intro-script-v5.md, 141.5 s): the prologue films in the land sets 'judah' (P1 the flight), 'map' (P4-P5,
  * map1's realistic 3D map), 'coast' (P6 the Philistine host) and 'ramah' (P7 the elders), then 'gilgal' (G1-G7); the
  * rest is the game world (FilmWorld). EVERY SET IS AN INDEPENDENT ASYNC BUILDER (buildSet: no ordering assumptions, its
  * own progress, small yielding steps, its own build time in buildStats) so the loading wave can start the film once
@@ -430,6 +430,9 @@ export class FilmStage {
             tier: q.tier,
             coast: { route: a.route, columnHead: a.columnHead, columnWidth: a.columnWidth },
             ground: (x, z) => set.height.height(x, z),
+            // (CUT v5.2: P6 opens ON the front ranks 6-12 m from the lens — the full-detail figures reach that far on
+            // phones too; the per-LOD caps keep the count)
+            ...(q.tier === 'mobile-low' ? { lodDistances: [13, 30, 400] as [number, number, number] } : q.tier === 'mobile-high' ? { lodDistances: [15, 36, 500] as [number, number, number] } : {}),
           });
           set.scene.add(host.group);
           set.showPlaceholders(false);
@@ -707,6 +710,8 @@ export class FilmStage {
           const F = FILM_CAM.flight;
           const k = Math.max(0, Math.min(1, (t - F.thinAt[0]) / (F.thinAt[1] - F.thinAt[0])));
           set.setDeckCover(1 - (1 - F.thinTo) * k * k * (3 - 2 * k));
+          // (wave 4) the gap in the deck the flight dives through (never a flat fog inside the cloud)
+          set.setDeckHole(F.hole[0], F.hole[1], F.hole[2], 1);
           // the end of the flight warmer (it dissolves into the world's warm morning); put back when the view is left
           const uw = engine.post.grade.uniforms.uWarm;
           if (savedWarm === null) savedWarm = uw.value as number;
@@ -743,8 +748,8 @@ export class FilmStage {
         }
         if (name === 'ramah' && set.anchors.ramah) return { point: tmp.copy(set.anchors.ramah.samuel.pos).add(new THREE.Vector3(0, 1.5, 0)), fStop: 4 };
         if (name === 'coast' && take === 'threat' && camCtx.coast) {
-          // P6 (cut7): on the head of the column (it marches toward the lens): deep at the high start, the near files
-          // sharp and the column behind them soft as the lens comes down
+          // P6 (cut7, CUT v5.2): on the front ranks (they march at the lens): the near files sharp and the column soft
+          // behind them at the low start, everything deep once the crane has risen
           const c = camCtx.coast;
           tmp.copy(c.columnHead).addScaledVector(c.heading, FILM_CAM.coast.march * t - FILM_CAM.threat.focusBack);
           tmp.y = set.height.height(tmp.x, tmp.z) + 1.5;

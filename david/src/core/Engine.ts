@@ -10,10 +10,10 @@ import { Vegetation } from '../world/Vegetation';
 import { Rocks } from '../world/Rocks';
 import { Grass } from '../world/Grass';
 import { Village } from '../world/Village';
-import { loadTextures, type TextureSet } from '../world/Textures';
+import { loadTextures, textureSetReady, type TextureSet } from '../world/Textures';
 import { configureWorld } from '../world/WorldQuality';
 import { SUN } from '../world/Layout';
-import { bootLog, bootStep, bootSync } from './bootProfile';
+import { bootLog, bootMark, bootStep, bootSync } from './bootProfile';
 
 // =====================================================================================================
 // Quality tiers
@@ -590,6 +590,11 @@ export class Engine {
    */
   readonly qualityStored: boolean;
   tex!: TextureSet;
+  /**
+   * load1 (wave 4): resolves when every world texture image has arrived (the world is built while they download; the
+   * first frames that need their pixels — the warm-up's prime / benchmark, the film's first set — wait for it)
+   */
+  texturesReady: Promise<void> = Promise.resolve();
   terrain!: Terrain;
   sky!: SkySystem;
   post!: PostFX;
@@ -711,7 +716,14 @@ export class Engine {
     configureWorld(q);
     progress(0.02, 'טוען מרקמים…');
     // (load1: every part timed into the boot profile, window.__boot)
-    this.tex = await bootStep('world:textures', () => loadTextures(this.renderer, (f) => progress(0.02 + f * 0.2, 'טוען מרקמים…'), q));
+    // (load1, wave 4) the texture set resolves at once — the CPU builds below run while the images download; the first
+    // render that needs their pixels waits for texturesReady (same files, same textures)
+    this.tex = await bootStep('world:textures', () => loadTextures(this.renderer, () => undefined, q, { defer: true }));
+    this.texturesReady = (textureSetReady.get(this.tex) ?? Promise.resolve()).then(() => {
+      bootMark('world:texturesLoaded');
+      // the texture budget once more now that every image is known (the call at the end of build saw some still loading)
+      this.enforceTextureBudget();
+    });
     progress(0.25, 'מעצב את הרי יהודה…');
     await step();
     this.terrain = bootSync('world:terrain', () => new Terrain({ nearSpacing: q.nearSpacing, farSegments: q.farSegments }));
@@ -765,6 +777,16 @@ export class Engine {
       this.makePost();
       this.applySize(true);
     });
+    // (load1, wave 4) the static scenery never moves after it is built (wind and sway live in the shaders, hidden trees
+    // are instance matrices): its matrices are composed once here instead of on every frame (?staticmat=0 to compare)
+    if (new URLSearchParams(location.search).get('staticmat') !== '0') {
+      for (const g of [this.terrain.group, this.village.group, this.rocks.group, this.vegetation.group]) {
+        g.updateMatrixWorld(true);
+        g.traverse((o) => {
+          o.matrixAutoUpdate = false;
+        });
+      }
+    }
     const onResize = () => this.requestResize();
     addEventListener('resize', onResize);
     addEventListener('orientationchange', onResize);
@@ -1116,7 +1138,7 @@ export class Engine {
    * variant the first pass missed). Every slice stays within `budgetMs` of main-thread time and a frame is awaited
    * between slices (`yieldFrame`). Visibility / frustum flags are put back exactly. Resolves with what it did.
    */
-  async prepareView(view: ViewSpec, opts: { budgetMs?: number | (() => number); yieldFrame?: () => Promise<void>; pose?: BenchView } = {}): Promise<{ objects: number; programs: number; slices: number; worstMs: number; ms: number }> {
+  async prepareView(view: ViewSpec, opts: { budgetMs?: number | (() => number); yieldFrame?: () => Promise<void>; pose?: BenchView; root?: THREE.Object3D } = {}): Promise<{ objects: number; programs: number; slices: number; worstMs: number; ms: number }> {
     const t0 = performance.now();
     const r = this.renderer;
     const scene = view.scene;
@@ -1134,9 +1156,10 @@ export class Engine {
     const budgetOf = () => (typeof opts.budgetMs === 'function' ? opts.budgetMs() : opts.budgetMs ?? 6);
     const nextFrame = opts.yieldFrame ?? (() => new Promise<void>((res) => requestAnimationFrame(() => setTimeout(res, 0))));
     const items: THREE.Object3D[] = [];
-    scene.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if ((m.isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) && m.material) items.push(o);
+    const drawable = (o: THREE.Object3D) => !!(((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) && (o as THREE.Mesh).material);
+    // `root`: only that subtree (e.g. the bear, built after the world was prepared), lit by the whole scene
+    (opts.root ?? scene).traverse((o) => {
+      if (drawable(o)) items.push(o);
     });
     let slices = 0, worst = 0;
     let sliceT = performance.now();
@@ -1181,46 +1204,47 @@ export class Engine {
     await tick();
     // (2) uploads: draw the meshes a few at a time into a scratch target (everything else hidden; lights unchanged)
     if (!this.scratchRT) this.scratchRT = new THREE.WebGLRenderTarget(64, 64, { type: this.floatTargets ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: true });
-    const vis = new Map<THREE.Object3D, boolean>();
-    const cull = new Map<THREE.Object3D, boolean>();
-    const itemSet = new Set(items);
+    // (wave 4) every slice hides / un-culls only for its own draw and puts back the flags it found — read at that moment,
+    // so nothing is left changed across a yield (the scene may be the one on screen, and the game changes visibility)
+    const nodes: THREE.Object3D[] = [];
     scene.traverse((o) => {
-      vis.set(o, o.visible);
-      if (itemSet.has(o)) {
-        cull.set(o, o.frustumCulled);
-        o.visible = false;
-        o.frustumCulled = false;
-      } else if (!(o as THREE.Light).isLight) o.visible = true; // groups: let their children through
+      if (!(o as THREE.Light).isLight) nodes.push(o);
     });
-    const autoUpdate = scene.matrixWorldAutoUpdate;
-    try {
-      let k = 0;
-      let per = parallel ? 4 : 1;
-      while (k < items.length && !this.contextLost) {
-        const bt = performance.now();
-        const batch = items.slice(k, k + per);
-        k += batch.length;
-        for (const o of batch) o.visible = true;
-        const prevRT = r.getRenderTarget();
-        try {
-          r.setRenderTarget(this.scratchRT);
-          r.render(scene, cam);
-        } catch (e) {
-          console.warn('[engine] prepareView render', e);
-        } finally {
-          r.setRenderTarget(prevRT);
-          for (const o of batch) o.visible = false;
-        }
-        const ms = performance.now() - bt;
-        // grow the groups while they are cheap, shrink them when one was expensive
-        const budget = budgetOf();
-        per = ms < budget * 0.25 ? Math.min(64, per * 2) : ms > budget ? Math.max(1, per >> 1) : per;
-        await tick();
+    const vis: boolean[] = new Array(nodes.length);
+    let k = 0;
+    let per = parallel ? 4 : 1;
+    while (k < items.length && !this.contextLost) {
+      const bt = performance.now();
+      const batch = new Set(items.slice(k, k + per));
+      k += batch.size;
+      const cull: boolean[] = [];
+      const bl = [...batch];
+      for (let i = 0; i < nodes.length; i++) {
+        const o = nodes[i];
+        vis[i] = o.visible;
+        // renderables: only this slice's; groups: let their children through
+        o.visible = drawable(o) ? batch.has(o) : true;
       }
-    } finally {
-      scene.matrixWorldAutoUpdate = autoUpdate;
-      for (const [o, v] of vis) o.visible = v;
-      for (const [o, c] of cull) o.frustumCulled = c;
+      for (const o of bl) {
+        cull.push(o.frustumCulled);
+        o.frustumCulled = false;
+      }
+      const prevRT = r.getRenderTarget();
+      try {
+        r.setRenderTarget(this.scratchRT);
+        r.render(scene, cam);
+      } catch (e) {
+        console.warn('[engine] prepareView render', e);
+      } finally {
+        r.setRenderTarget(prevRT);
+        for (let i = 0; i < nodes.length; i++) nodes[i].visible = vis[i];
+        for (let i = 0; i < bl.length; i++) bl[i].frustumCulled = cull[i];
+      }
+      const ms = performance.now() - bt;
+      // grow the groups while they are cheap, shrink them when one was expensive
+      const budget = budgetOf();
+      per = ms < budget * 0.25 ? Math.min(64, per * 2) : ms > budget ? Math.max(1, per >> 1) : per;
+      await tick();
     }
     return { objects: items.length, programs: (r.info.programs?.length ?? 0) - programs0, slices, worstMs: Math.round(worst), ms: Math.round(performance.now() - t0) };
   }
@@ -1387,6 +1411,7 @@ export class Engine {
    * before the first shot in the world).
    */
   async primeWorld(views: BenchView[], covered: () => boolean, slice: { budgetMs?: number | (() => number); yieldFrame?: () => Promise<void> } = {}) {
+    await this.texturesReady;
     if (this.contextLost) return;
     // (both modes) the programs and uploads in slices off the canvas: the start screen stays responsive meanwhile
     await this.prepareView({ scene: this.scene, camera: this.camera }, { ...slice, pose: views[0] });
@@ -1430,7 +1455,9 @@ export class Engine {
     // (load1) a device with a stored result is not measured again: the stored tier / scale are applied by detectQuality
     // and the governor keeps them honest (?bench=force measures anyway)
     const bench = this.willBenchmark(opts);
-    // (load1) prime: false = the caller primes the world later (primeWorld); a benchmark always primes first
+    // (load1) prime: false = the caller primes the world later (primeWorld); a benchmark always primes first — on the
+    // world's real textures (wave 4: they may still be downloading when the warm-up starts)
+    if (bench || ((opts.precompile ?? true) && opts.prime !== false)) await bootStep('warmup:textures', () => this.texturesReady);
     if (bench || ((opts.precompile ?? true) && opts.prime !== false)) {
       // prime: uploads, shadow maps, first-use programs
       bootSync('warmup:prime', () => {

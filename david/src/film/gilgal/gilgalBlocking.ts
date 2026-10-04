@@ -14,7 +14,9 @@ import { ARMY, roadZ, SAMUEL, SAMUEL_EXIT, SAUL_FACE, SAUL_HALT } from './gilgal
  *   G1 dustWall    5.5  timeCard 0.2 · shofar 1.5 (the picture) · horns 2.1 · card 2.8   the front rank out of the dust
  *   G2 king        6.5  slow motion 0.5 (3.25 s of action) · card 1.0 · headTurn 3.6      Saul's stride, continuous
  *   G3 spearRaised 5.0  halt 0.6 · spearUp 1.3 · roar 1.7 (+0-0.5 stagger) · verse 2.0     the roar held to the cut
- *   G4 silence     4.0  roarCut 0 · headsTurn 0.4 · part 1.0 · card 1.6 · step 2.8 (Samuel's step)
+ *   G4 silence     6.5  roarCut 0 · headsTurn 0.4 · part 1.0 · card 1.6 · step 2.8 · verse 3.0 (CUT v5.2, cut7: the roar
+ *                  ebbs; Samuel walks up the road to the king — `step` his last step — and stands before him, 1.85 m
+ *                  away as in the tear; his answer, 15:26, at `verse`)
  *   G5 tear        4.0 + 5.0  ONE continuous action filmed in two takes: 'tear' (G5a, real time: turn 0.5 · lunge
  *                  2.2 · grip 3.3) and 'tear:insert' (G5b, slow motion 0.35: pull 0.4 · rip 1.4 · free 3.6; blocking
  *                  time of the insert = shot time + 4.0)
@@ -57,7 +59,7 @@ export const BEATS = {
   dustWall: beats('dustWall', { timeCard: 0.2, shofar: 1.5, horns: 2.1, card: 2.8 }),
   king: beats('king', { card: 1.0, headTurn: 3.6 }),
   spearRaised: beats('spearRaised', { halt: 0.6, spearUp: 1.3, roar: 1.7, roarSpread: 0.5, verse: 2.0 }),
-  silence: beats('silence', { roarCut: 0, headsTurn: 0.4, part: 1.0, card: 1.6, step: 2.8 }),
+  silence: beats('silence', { roarCut: 0, headsTurn: 0.4, part: 1.0, card: 1.6, step: 2.8, verse: 3.0 }),
   tear: (() => {
     const a = beats('tear', { turn: 0.5, lunge: 2.2, grip: 3.3 });
     const b = beats('tear:insert', { pull: 0.4, rip: 1.4, free: 3.6 });
@@ -154,12 +156,27 @@ export function tearGrip(t: number, out = new THREE.Vector3()) {
 }
 
 /**
- * G4 ONLY (cut4 v6): in the silence Samuel stands 14 m nearer the army than his mark for the tear, so the long lens
- * holds him large behind the parting ranks; the cut to G5a is a time ellipsis (the dialogue of 15:13-26 is elided) and
- * G5a+ keep SAMUEL_STEP. G1-G3 keep SAMUEL.pos (he is not in their frames).
+ * G4 ONLY (cut7, CUT v5.2 — the old man must READ and stand before the king, the space of G5a): as the roar ebbs Samuel
+ * is already coming up the road toward the king (from SAMUEL_G4_FROM m east of Saul's halt, behind G3's lens), walks on
+ * at an old man's steady pace and with his last step (`step` .. +0.7 s) stops SAMUEL_G4_AT m before him, facing him —
+ * the distance of the tear (G5a: 1.7 m) — and answers him (15:26). G5a+ keep SAMUEL_STEP (the cut to G5a moves on along
+ * the road: the two men's distance, sides and facing are the same). G1-G3 keep SAMUEL.pos (he is not in their frames).
  */
-export const SAMUEL_G4 = new THREE.Vector3(-2, 0, 0.4);
-const SAMUEL_G4_STEP = SAMUEL_G4.clone().add(new THREE.Vector3(-0.55, 0, 0));
+export const SAMUEL_G4_FROM = 5.0;
+export const SAMUEL_G4_AT = 1.85;
+/** his pace (m/s) on the way up: SAMUEL_G4_FROM - SAMUEL_G4_AT metres = the pace over `step` + half the last step */
+const SAM_G4_PACE = (SAMUEL_G4_FROM - SAMUEL_G4_AT) / (BEATS.silence.step + 0.35);
+/** metres Samuel has walked toward the king at G4 time t (steady, then the last step slowing to a stop over 0.7 s) */
+function samuelG4Walk(t: number) {
+  const s = BEATS.silence.step;
+  if (t <= s) return SAM_G4_PACE * Math.max(0, t);
+  const u = Math.min(1, (t - s) / 0.7);
+  return SAM_G4_PACE * (s + 0.7 * (u - 0.5 * u * u));
+}
+/** Samuel's G4 feet at shot time t (on the road, facing the king) */
+export function samuelG4(t: number, out = new THREE.Vector3()) {
+  return out.set(SAUL_HALT.x + SAMUEL_G4_FROM - samuelG4Walk(t), 0, roadZ(SAUL_HALT.x));
+}
 
 /** Samuel's mark after his step toward the army in G4 (the tear starts here), facing west */
 export const SAMUEL_STEP = SAMUEL.pos.clone().add(new THREE.Vector3(-0.55, 0, 0));
@@ -326,8 +343,10 @@ export function samuelAt(shot: GilgalShotName, t: number): ActorState {
     case 'spearRaised':
     case 'faceOff': return { pos: SAMUEL.pos.clone(), yaw: SAMUEL.yaw, walk: 0, cue: 0, action: 'stands in the road, wrapped in his robe' };
     case 'silence': {
+      // walking up the road to the king; the last step at `step`; then he stands before him and answers (15:26)
       const s = BEATS.silence.step;
-      return { pos: SAMUEL_G4.clone().lerp(SAMUEL_G4_STEP, ss(s, s + 0.75, at)), yaw: SAMUEL.yaw, walk: at > s && at < s + 0.75 ? 0.75 : 0, cue: 0, action: 'stands in the road; one step toward the king' };
+      const v = at < s ? SAM_G4_PACE : at < s + 0.7 ? SAM_G4_PACE * (1 - (at - s) / 0.7) : 0;
+      return { pos: samuelG4(at), yaw: SAMUEL.yaw, walk: v, cue: 0, action: 'walks up the road to the king; stops before him; answers him (15:26)' };
     }
     case 'tear': {
       const A = TEAR_ACTION;
@@ -380,7 +399,8 @@ export function armyAt(shot: GilgalShotName, t: number): ArmyState {
     case 'silence': {
       const B = BEATS.silence;
       // (perf v6, cut4: the files nearest the lens lane step aside 1-2 m between `part` and 2.2 s)
-      return { frontX: SAUL_HALT.x, walk: 0, raise: 1 - ss(B.headsTurn + 0.1, B.part + 0.9, at), part: ss(B.part, Math.max(B.part + 0.8, B.step - 0.2), at), turn: ss(B.headsTurn, B.headsTurn + 0.6, at) };
+      // (cut7, CUT v5.2: within 0.9 s — the lens pushes through the front rank right behind them)
+      return { frontX: SAUL_HALT.x, walk: 0, raise: 1 - ss(B.headsTurn + 0.1, B.part + 0.9, at), part: ss(B.part, B.part + 0.9, at), turn: ss(B.headsTurn, B.headsTurn + 0.6, at) };
     }
     default: return { frontX: SAUL_HALT.x, walk: 0, raise: 0, part: 1, turn: 1 };
   }

@@ -44,6 +44,8 @@ export interface HumanLoadOptions {
   variation?: Record<string, number>;
   /** multiplies the albedo */
   skinTint?: THREE.Color;
+  /** the brows' colour (sRGB) and salt-and-pepper over the preset's (the film's elders: dark brows under dark hair) */
+  brows?: { color?: [number, number, number]; pepper?: number; pepperColor?: [number, number, number] };
 }
 
 const dataCache = new Map<string, Promise<HumanData>>();
@@ -252,7 +254,8 @@ export class HumanModel {
     // screen-space subsurface scattering (desktop PostFX): the body is skin
     registerSkinMesh(this.body);
     // ---- strands (brows, lashes) and tear lines share the skeleton
-    const bc = rig.brows.color ?? [0.12, 0.07, 0.04];
+    const bo = options.brows;
+    const bc = bo?.color ?? rig.brows.color ?? [0.12, 0.07, 0.04];
     const keep = q === 'low' ? 2 : 1;
     const mkStrands = (prefix: 'brow' | 'lash', mat: StrandMaterial) => {
       const g = buildAuxGeometry(data, prefix, keep, variation);
@@ -269,10 +272,10 @@ export class HumanModel {
     const browCol = new THREE.Color().setRGB(bc[0], bc[1], bc[2], THREE.SRGBColorSpace); // preset colours are sRGB
     // (finishing pass: per-preset salt-and-pepper, opacity and tip brightness — Samuel's white brows read as two cotton
     // balls with every strand the same light grey at 0.92 opacity)
-    const pc = rig.brows.pepperColor;
+    const pc = bo?.pepperColor ?? rig.brows.pepperColor;
     this.brows = mkStrands('brow', new StrandMaterial({
       color: browCol, tipColor: browCol.clone().multiplyScalar(rig.brows.tip ?? 1.5), opacity: rig.brows.opacity ?? 0.92, widthScale: 1.0,
-      pepper: rig.brows.pepper ?? 0, pepperColor: pc ? new THREE.Color().setRGB(pc[0], pc[1], pc[2], THREE.SRGBColorSpace) : undefined,
+      pepper: bo?.pepper ?? rig.brows.pepper ?? 0, pepperColor: pc ? new THREE.Color().setRGB(pc[0], pc[1], pc[2], THREE.SRGBColorSpace) : undefined,
     }));
     // face pass: lashes are near-black at every hair colour (they read as a dark lash LINE that frames the eye); the
     // old brow-tinted, glossy lashes caught the back light and read as a pale "eyeliner" rim above the eye

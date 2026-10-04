@@ -52,7 +52,8 @@ async function boot() {
   samuel.addTo(set.scene);
   const elders: FilmActor[] = [];
   for (let i = 0; i < Math.min(n, anchors.elders.length); i++) {
-    const e = await FilmActor.create({ role: 'elder', quality: qn, seed: i + 1, msaa: q.msaa, ground: H, lod: i < 6 ? 'near' : 'crowd' });
+    // ?near=<n>: the first n elders at 'near' LOD (default 6; the contact sheet of the elders' faces uses 11)
+    const e = await FilmActor.create({ role: 'elder', quality: qn, seed: i + 1, msaa: q.msaa, ground: H, lod: i < +(params.get('near') ?? 6) ? 'near' : 'crowd' });
     e.addTo(set.scene);
     elders.push(e);
   }

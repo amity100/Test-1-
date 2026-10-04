@@ -1173,8 +1173,16 @@ export class BearModel {
     }
     this.fk();
     this.writeBones();
-    this.ready = loadAssets(this.quality).then((a) => this.build(a)).catch((e) => console.error('[bear] asset load failed', e));
+    // (load1, wave 4) the bear's ~2.7 MB (mesh + fur textures) are not needed before the game: they download once the
+    // gate opens (main.ts: when the start screen is up), never competing with the first set's downloads
+    this.ready = (BearModel.loadAfter ?? Promise.resolve())
+      .then(() => loadAssets(this.quality))
+      .then((a) => this.build(a))
+      .catch((e) => console.error('[bear] asset load failed', e));
   }
+
+  /** load1: the bear's assets are fetched after this resolves (null = at once) */
+  static loadAfter: Promise<unknown> | null = null;
 
   /** Load (and cache) the bear assets for a tier ahead of time, e.g. behind a loading screen. */
   static preload(quality: BearQuality = detectQuality()): Promise<void> {

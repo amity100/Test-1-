@@ -114,28 +114,43 @@ export class BodyIndex {
     const cx = Math.floor(p.x / this.cell), cy = Math.floor(p.y / this.cell), cz = Math.floor(p.z / this.cell);
     const cand: number[] = [];
     const dist: number[] = [];
+    // (load1, wave 4: the same result, faster) the cube of cells around p grows one SHELL at a time instead of being
+    // rescanned from its centre for every radius; candidates keep the position they had in the full rescan (`cell` x/y/z
+    // and their index in the cell's list), so ties in distance still sort exactly as before
+    const cxs: number[] = [], cys: number[] = [], czs: number[] = [], lis: number[] = [];
+    const pos = this.pos, nrm = this.nrm, px = p.x, py = p.y, pz = p.z;
+    let R = 1;
     for (let pass = 0; pass < 2; pass++) {
+      cand.length = dist.length = cxs.length = cys.length = czs.length = lis.length = 0;
       for (let rr = 1; rr <= 8; rr++) {
-        cand.length = 0;
-        dist.length = 0;
+        R = rr;
         for (let x = -rr; x <= rr; x++)
           for (let y = -rr; y <= rr; y++)
             for (let z = -rr; z <= rr; z++) {
+              if (rr > 1 && Math.max(Math.abs(x), Math.abs(y), Math.abs(z)) < rr) continue; // scanned at a smaller radius
               const l = this.grid.get(this.key(cx + x, cy + y, cz + z));
               if (!l) continue;
-              for (const j of l) {
+              for (let li = 0; li < l.length; li++) {
+                const j = l[li];
                 if (vertOk && !vertOk(j)) continue;
-                const dx = p.x - this.pos[j * 3], dy = p.y - this.pos[j * 3 + 1], dz = p.z - this.pos[j * 3 + 2];
-                if (facing && pass === 0 && dx * this.nrm[j * 3] + dy * this.nrm[j * 3 + 1] + dz * this.nrm[j * 3 + 2] < -0.003) continue;
+                const dx = px - pos[j * 3], dy = py - pos[j * 3 + 1], dz = pz - pos[j * 3 + 2];
+                if (facing && pass === 0 && dx * nrm[j * 3] + dy * nrm[j * 3 + 1] + dz * nrm[j * 3 + 2] < -0.003) continue;
                 cand.push(j);
                 dist.push(Math.hypot(dx, dy, dz));
+                cxs.push(x);
+                cys.push(y);
+                czs.push(z);
+                lis.push(li);
               }
             }
         if (cand.length >= k * 3) break;
       }
       if (cand.length) break;
     }
-    const order = cand.map((_, i) => i).sort((a, b) => dist[a] - dist[b]);
+    // the order of the full rescan at the final radius R (x, then y, then z, then the cell's list): the old stable sort's ties
+    const S = 2 * R + 1;
+    const rank = cand.map((_, i) => (((cxs[i] + R) * S + (cys[i] + R)) * S + (czs[i] + R)) * 1048576 + lis[i]);
+    const order = cand.map((_, i) => i).sort((a, b) => dist[a] - dist[b] || rank[a] - rank[b]);
     const out: Weights = new Map();
     const kk = Math.min(k, order.length);
     for (let c = 0; c < kk; c++) {

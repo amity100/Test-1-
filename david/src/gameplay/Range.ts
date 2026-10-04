@@ -40,8 +40,8 @@ export interface RoundDef {
 }
 
 export const ROUNDS: RoundDef[] = [
-  { title: 'הִתְחַמְּמוּת', note: 'שְׁלֹשָׁה כַּדִּים עַל הַגָּדֵר — לְמַד אֶת הַקֶּצֶב: שַׁחְרֵר כְּשֶׁהַכִּיס בָּאוֹר', wind: 0, windFrom: 'left', maxStones: 9, par3: 3, par2: 5 },
-  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — הָאֶבֶן יוֹרֶדֶת בַּדֶּרֶךְ: כַּוֵּן גָּבוֹהַּ יוֹתֵר, וְשִׂים לֵב לָרוּחַ', wind: 2.5, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
+  { title: 'הִתְחַמְּמוּת', note: 'שְׁלֹשָׁה כַּדִּים עַל הַגָּדֵר — שַׁחְרֵר כְּשֶׁהַטַּבַּעַת זְהֻבָּה', wind: 0, windFrom: 'left', maxStones: 9, par3: 3, par2: 5 },
+  { title: 'לְמֵרָחוֹק', note: 'עַל הַגָּדָה שֶׁמִּנֶּגֶד — רַק זְרִיקָה חֲזָקָה תַּגִּיעַ; כַּוֵּן מוּל הָרוּחַ', wind: 2.5, windFrom: 'left', maxStones: 14, par3: 5, par2: 8 },
   { title: 'מַטָּרוֹת נָעוֹת', note: 'הַדְּלַעַת בַּחֶבֶל וְהַכַּד עַל הַבּוּל הַמִּתְגַּלְגֵּל — כַּוֵּן לְפָנֵיהֶם', wind: 1.5, windFrom: 'right', maxStones: 12, par3: 3, par2: 5 },
   { title: 'הַחֶבֶל הַדַּק', note: 'פְּגַע בַּחֶבֶל שֶׁעָלָיו תָּלוּי הַנֹּאד — לֹא בַּנֹּאד', wind: 0.8, windFrom: 'left', maxStones: 10, par3: 2, par2: 4 },
 ];
@@ -49,7 +49,7 @@ export const ROUNDS: RoundDef[] = [
 /** the Hebrew praise lines (narration style, never verses) */
 const PRAISE = {
   hit: ['יָפֶה', 'קְלִיעָה', 'בְּדִיּוּק', 'יָד בְּטוּחָה'],
-  perfect: ['מֻשְׁלָם', 'שִׁחְרוּר מֻשְׁלָם', 'כְּמוֹ חֵץ'],
+  perfect: ['זְרִיקָה חֲזָקָה', 'בְּכָל הַכֹּחַ', 'כְּמוֹ חֵץ'],
   streak: ['שְׁתַּיִם בְּרֶצֶף', 'שָׁלֹשׁ בְּרֶצֶף', 'אַרְבַּע בְּרֶצֶף', 'אֵין מַחְטִיא'],
   far: ['מֵרָחוֹק', 'קְלִיעָה רְחוֹקָה'],
   cord: ['בַּחֶבֶל עַצְמוֹ'],
@@ -878,6 +878,7 @@ export class Range {
     this.round = r;
     this.live = true;
     this.time = 0;
+    this.followed = false;
     for (const t of this.targets) if (t.round === r) t.reset();
     this.setRoundVisible(r);
     const n = this.targets.filter((t) => t.round === r && t.counts).length;
@@ -928,8 +929,17 @@ export class Range {
     this.stats.stones++;
     if (shot.perfect) this.stats.perfects++;
     if (shot.sweet) this.stats.sweet++;
-    if (shot.perfect && shot.aimDist > 19 && shot.intent && this.round >= 2) this.hooks.followStone?.(shot);
+    // (w4) a strong throw is now the usual one for a sure hand: the slow lens behind the stone once a round (the first
+    // strong long throw with the reticle on its target), not on every throw
+    if (shot.perfect && shot.aimDist > 19 && shot.intent && this.round >= 2 && !this.followed && this.onTargetAtRelease) {
+      this.followed = true;
+      this.hooks.followStone?.(shot);
+    }
   }
+  /** the slow follow lens has run this round */
+  private followed = false;
+  /** set by Story just before a release: the reticle was on a target */
+  onTargetAtRelease = false;
 
   /** a throw is resolved: a miss breaks the streak */
   onResolve(shot: ShotInfo) {

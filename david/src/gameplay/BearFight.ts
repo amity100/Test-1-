@@ -750,8 +750,9 @@ export class FightBot {
         input.holdSling(true);
         this.slingOn = true;
       } else if (p.whirling && p.whirlT > 0.8) {
-        const e = p.whirlPhase - Math.round(p.whirlPhase);
-        if (Math.abs(e) < p.window * (careful ? 0.4 : 0.9)) {
+        // (play1, gameplay v2.1) no timing any more: release in the gold "strong" window (the careful bot), or once
+        // the power is full (the average one)
+        if (careful ? p.slingGold && p.whirlT > 1.1 : p.power >= 1) {
           input.holdSling(false);
           this.slingOn = false;
         }
@@ -836,8 +837,8 @@ export class FightBot {
       h.input.holdSling(true);
       this.slingOn = true;
     } else if (p.whirling && p.whirlT > 0.8) {
-      const e = p.whirlPhase - Math.round(p.whirlPhase);
-      if (Math.abs(e) < p.window * (this.level === 'careful' ? 0.4 : 0.9)) {
+      // (play1, gameplay v2.1) released in the gold window (careful) or at full power (the others)
+      if (this.level === 'careful' ? p.slingGold && p.whirlT > 1.1 : p.power >= 1) {
         h.input.holdSling(false);
         this.slingOn = false;
       }

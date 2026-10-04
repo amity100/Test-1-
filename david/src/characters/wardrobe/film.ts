@@ -383,7 +383,29 @@ export async function dressArmourBearer(human: HumanModel, opts: FilmDressOption
 }
 
 // ================================================================================================ ELDERS
-export async function dressElder(human: HumanModel, opts: FilmDressOptions): Promise<{ outfit: Outfit; staff: Prop | null }> {
+/**
+ * The dress of each elder of Ramah (cut7, wave 4 — the user: the elders "look exactly like Samuel"; Samuel is the one in
+ * cream wool, bare-headed): indexed by seed (= Ramah mark + 1, see hair/filmStyles ELDER_LOOKS). Undyed browns, greys,
+ * goat-hair black, oatmeal; madder-red and ochre bands, a tekhelet band on one; head-bands and wrapped head-cloths of
+ * different colours on most (two bare-headed, both dark-haired). Iron Age weaves only (plain bands, no patterns).
+ *   tunic / mantle: dyes · bands: the mantle's hem bands (none = plain) · head: 'bare' | 'band' | 'cloth' + colour
+ */
+const MADDER = 0x8e3f2c, OCHRE = 0xa7773a;
+const ELDER_DRESS: { tunic: number; mantle: number; bands?: [number, number]; head: 'bare' | 'band' | 'cloth'; headCol?: number }[] = [
+  /* 1 the speaker */ { tunic: 0xc4b594, mantle: 0x7d6a52, bands: [MADDER, OCHRE], head: 'band', headCol: MADDER },
+  /* 2 */ { tunic: 0xb9a887, mantle: 0x6a6258, head: 'cloth', headCol: 0xa88f6c },
+  /* 3 */ { tunic: 0xa89a7c, mantle: 0x3a332c, bands: [0xb9a887, 0x5e5143], head: 'cloth', headCol: 0xd2c5a6 },
+  /* 4 the pair's near man */ { tunic: 0xcdbf9f, mantle: 0x5e5143, bands: [OCHRE, 0x3b3128], head: 'bare' },
+  /* 5 */ { tunic: 0x9a8f7a, mantle: 0xa89a7c, bands: [TEKHELET, 0x3b3128], head: 'band', headCol: 0x5a4632 },
+  /* 6 the grey one */ { tunic: 0xb9a887, mantle: 0x55504a, bands: [MADDER, 0x2e2a26], head: 'cloth', headCol: 0x6a5b49 },
+  /* 7 near pair */ { tunic: 0xc4b594, mantle: 0x8a7a62, head: 'cloth', headCol: MADDER },
+  /* 8 near pair */ { tunic: 0xa89a7c, mantle: 0x2e2a26, bands: [OCHRE, 0x8a7a62], head: 'cloth', headCol: 0xb08a45 },
+  /* 9 */ { tunic: 0xcdbf9f, mantle: 0x74644f, head: 'cloth', headCol: 0x7b756b },
+  /* 10 */ { tunic: 0xb9a887, mantle: 0x7b756b, bands: [MADDER, 0x3b3128], head: 'bare' },
+  /* 11 */ { tunic: 0x9a8f7a, mantle: 0x6a5b49, head: 'band', headCol: 0x7a3426 },
+];
+
+export async function dressElder(human: HumanModel, opts: FilmDressOptions): Promise<{ outfit: Outfit; staff: Prop | null; head: { height: number; lift: number; extra: number; tilt: number } | null }> {
   const t0 = performance.now();
   const tier = opts.quality;
   const seed = opts.seed ?? 1;
@@ -395,36 +417,51 @@ export async function dressElder(human: HumanModel, opts: FilmDressOptions): Pro
   const hipY = (lm.hip.L.y + lm.hip.R.y) / 2;
   outfit.capsules.push(...legCapsules(fit, 0.016, 0.06));
   const pick = <T,>(a: T[]) => a[Math.floor(R() * a.length)];
+  // (the seeded draws are kept in their old order — the staff and the cut of every garment stay as they were; the
+  // table only chooses the colours and the head)
+  const D = ELDER_DRESS[seed - 1];
   // (finishing pass: the gathering of P5 read as a row of cream figures — the bible's mantles are "mostly undyed wool
   // (cream, brown, grey, black goat)": fewer creams, more browns, greys and goat-hair black; the long tunics a little
   // less uniform too)
-  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.15, dye: pick([0xcdbf9f, 0xc4b594, 0xb9a887, 0xa89a7c, 0x9a8f7a]), hem: 0.55 + 0.3 * R(), sleeve: 1.5 + 0.4 * R(), neck: 'slit', flare: 0.12, folds: 0.8, seed, name: 'kuttonet', fray: 0.15, dust: 0.5, variation: [0.05, 0.12, 0.02] });
-  const rich = R() < 0.35;
-  const mdye = pick([0xb9a887, 0x8a7a62, 0x74644f, 0x5e5143, 0x3a332c, 0x6a6258, 0x7d6a52]);
-  const bandCol = pick([0x9a4a2c, 0xa7773a, TEKHELET]);
+  const kdye = pick([0xcdbf9f, 0xc4b594, 0xb9a887, 0xa89a7c, 0x9a8f7a]);
+  const kut = fittedTunic(fit, { tex: t.weave_medium, tile: 0.15, dye: D?.tunic ?? kdye, hem: 0.55 + 0.3 * R(), sleeve: 1.5 + 0.4 * R(), neck: 'slit', flare: 0.12, folds: 0.8, seed, name: 'kuttonet', fray: 0.15, dust: 0.5, variation: [0.05, 0.12, 0.02] });
+  const rich0 = R() < 0.35;
+  const mdye0 = pick([0x8a7a62, 0x74644f, 0x5e5143, 0x3a332c, 0x6a6258, 0x7d6a52, 0x55504a]);
+  const bandCol0 = pick([0x9a4a2c, 0xa7773a, TEKHELET]);
+  const rich = D ? !!D.bands : rich0;
+  const mdye = D?.mantle ?? mdye0;
+  const bandCol = D?.bands?.[0] ?? bandCol0;
+  const band2 = D?.bands?.[1] ?? 0x3b3128;
   const mantle = fittedTunic(fit, {
     tex: t.weave_medium, tile: 0.22, dye: mdye, hem: 0.35 + 0.35 * R(), sleeve: 0, sleeveless: true, neck: 'round', offset: 0.012, ease: 0.014, flare: 0.16, folds: 1.8, variation: [0.08, 0.14, 0.03], skirtFolds: [0.5, 0.4, 0.08], fuzz: 0.45,
     seed: seed + 9, name: 'mantle', sideSlit: { top: hipY + 0.02, half: 0.24, underlap: 0.006 }, hide: false, inner: [kut.restPos[0], kut.restPos[1]], fray: 0.2, sheen: 0.5, roughness: 0.95, dust: 0.6,
     armhole: { half: 0.55, top: lm.yArmpit + 0.012 + 0.07 }, shoulderFolds: 5,
-    ...(rich ? { palette: [bandCol, 0x3b3128, 0, 0], bands: [{ from: 0.04, to: 0.07, motif: 0, pal: 0 }, { from: 0.074, to: 0.08, motif: 0, pal: 1 }] } : {}),
+    ...(rich ? { palette: [bandCol, band2, 0, 0], bands: [{ from: 0.04, to: 0.07, motif: 0, pal: 0 }, { from: 0.074, to: 0.08, motif: 0, pal: 1 }] } : {}),
   });
   if (!opts.crowd) {
     const tm = tzitzitMats(tier, t.rope, t.fringe);
     tzitzit(fit, mantle.corners, { ...tm, length: 0.16 * S });
   }
   const hr = R();
-  if (hr < 0.35) {
-    const band = clothMaterial({ tier, tex: t.weave_medium, tile: 0.08, dye: pick([0x8e3f2c, 0x5a4632, 0xd9cba8]), hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
+  const hcol0 = hr < 0.35 ? pick([0x8e3f2c, 0x5a4632, 0xd9cba8]) : hr < 0.7 ? pick([0xd2c5a6, 0xa88f6c, 0x8a7458, 0x6a5b49]) : 0;
+  const headKind = D?.head ?? (hr < 0.35 ? 'band' : hr < 0.7 ? 'cloth' : 'bare');
+  const hcol = D?.headCol ?? hcol0;
+  let head: { height: number; lift: number; extra: number; tilt: number } | null = null;
+  if (headKind === 'band') {
+    const band = clothMaterial({ tier, tex: t.weave_medium, tile: 0.08, dye: hcol, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0 });
     headRing(fit, { height: 0.022, thickness: 0.004, material: band, extra: 0.012 });
-  } else if (hr < 0.7) {
-    const cloth = clothMaterial({ tier, tex: t.weave_medium, tile: 0.1, dye: pick([0xd2c5a6, 0xa88f6c, 0x8a7458, 0x6a5b49]), hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.3 });
-    headRing(fit, { height: 0.06, thickness: 0.016, material: cloth, extra: 0.012, lift: 0.01, tilt: 0.012 });
+    head = { height: 0.022, lift: 0, extra: 0.012, tilt: 0 };
+  } else if (headKind === 'cloth') {
+    // a wrapped head-cloth: a deep band of wool wound round the head (the crown shows above it)
+    const cloth = clothMaterial({ tier, tex: t.weave_medium, tile: 0.1, dye: hcol, hem: [0, 0.1, 0.01, 0], edgeMask: [0, 0], transmit: 0.3 });
+    headRing(fit, { height: 0.068, thickness: 0.018, material: cloth, extra: 0.013, lift: 0.012, tilt: 0.012 });
+    head = { height: 0.068, lift: 0.012, extra: 0.013, tilt: 0.012 };
   }
   sandals(fit, t.leather, { wraps: 1, height: 0.05 });
   const staff = R() < 0.55 ? makeStaff(tier, t.wood, t.bark, { length: 1.35 * S + R() * 0.15, gripAt: 1.0 * S, seed }) : null;
   if (staff) outfit.props.staff = staff;
   outfit.finish(t0);
-  return { outfit, staff };
+  return { outfit, staff, head };
 }
 
 // ================================================================================================ PHILISTINES

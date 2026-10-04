@@ -89,7 +89,14 @@ function shrink(img: HTMLImageElement | ImageBitmap, max: number): HTMLCanvasEle
   return c;
 }
 
-export function loadTextures(renderer: THREE.WebGLRenderer, onProgress: (f: number) => void, quality?: { name?: string; texMax?: number; anisotropy?: number }): Promise<TextureSet> {
+/**
+ * load1 (wave 4): with `{ defer: true }` loadTextures resolves at once with the set (every texture object exists, its
+ * image still downloading) so the world can be BUILT while the images download; textureSetReady.get(set) resolves when
+ * every image has arrived (the same LoadingManager onLoad the plain call waits for). Same files, same textures.
+ */
+export const textureSetReady = new WeakMap<TextureSet, Promise<void>>();
+
+export function loadTextures(renderer: THREE.WebGLRenderer, onProgress: (f: number) => void, quality?: { name?: string; texMax?: number; anisotropy?: number }, opts: { defer?: boolean } = {}): Promise<TextureSet> {
   const tier = worldTier(quality);
   const manager = new THREE.LoadingManager();
   const loader = new THREE.TextureLoader(manager);
@@ -144,9 +151,12 @@ export function loadTextures(renderer: THREE.WebGLRenderer, onProgress: (f: numb
     cypress: foliage(secondary(cypressLeaves, cypressLeaves512)),
     broadleaf: broad,
   };
-  return new Promise((resolve, reject) => {
+  const loaded = new Promise<TextureSet>((resolve, reject) => {
     manager.onProgress = (_u, loaded, total) => onProgress(loaded / total);
     manager.onLoad = () => resolve(set);
     manager.onError = (u) => reject(new Error('Failed to load texture ' + u));
   });
+  if (!opts.defer) return loaded;
+  textureSetReady.set(set, loaded.then(() => undefined));
+  return Promise.resolve(set);
 }

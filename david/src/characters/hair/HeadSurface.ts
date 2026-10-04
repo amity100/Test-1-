@@ -112,6 +112,9 @@ export class SDFGrid {
           const lin = di + nx * (dj + ny * dk);
           if (lin < 0) offs.push([di, dj, dk]);
         }
+    // (load1, wave 4: same result, faster) the 13 offsets as flat typed arrays, the neighbour's index as one add
+    const odi = Int32Array.from(offs, (o) => o[0]), odj = Int32Array.from(offs, (o) => o[1]), odk = Int32Array.from(offs, (o) => o[2]);
+    const olin = Int32Array.from(offs, (o) => o[0] + nx * (o[1] + ny * o[2]));
     const sweep = (sign: number) => {
       const ks = sign > 0 ? 0 : nz - 1, ke = sign > 0 ? nz : -1;
       const js = sign > 0 ? 0 : ny - 1, je = sign > 0 ? ny : -1;
@@ -122,10 +125,17 @@ export class SDFGrid {
             const c = i + nx * (j + ny * k);
             const px = mx + i * h, py = my + j * h, pz = mz + k * h;
             let bd = best[c], bv = near[c];
+            // interior cells need no bounds test (every neighbour exists)
+            const inside = i > 0 && j > 0 && k > 0 && i < nx - 1 && j < ny - 1 && k < nz - 1;
             for (let o = 0; o < 13; o++) {
-              const ii = i + offs[o][0] * sign, jj = j + offs[o][1] * sign, kk = k + offs[o][2] * sign;
-              if (ii < 0 || jj < 0 || kk < 0 || ii >= nx || jj >= ny || kk >= nz) continue;
-              const v = near[ii + nx * (jj + ny * kk)];
+              let n: number;
+              if (inside) n = c + olin[o] * sign;
+              else {
+                const ii = i + odi[o] * sign, jj = j + odj[o] * sign, kk = k + odk[o] * sign;
+                if (ii < 0 || jj < 0 || kk < 0 || ii >= nx || jj >= ny || kk >= nz) continue;
+                n = ii + nx * (jj + ny * kk);
+              }
+              const v = near[n];
               if (v < 0 || v === bv) continue;
               const dx = px - pos[v * 3], dy = py - pos[v * 3 + 1], dz = pz - pos[v * 3 + 2];
               const d = dx * dx + dy * dy + dz * dz;

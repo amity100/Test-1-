@@ -164,14 +164,18 @@ function glintTexture() {
   if (g) {
     const r = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
     r.addColorStop(0, 'rgba(255,255,255,1)');
-    r.addColorStop(0.18, 'rgba(255,250,235,0.55)');
+    r.addColorStop(0.24, 'rgba(255,253,245,0.92)');
+    r.addColorStop(0.46, 'rgba(255,248,230,0.36)');
     r.addColorStop(1, 'rgba(255,245,225,0)');
     g.fillStyle = r;
     g.fillRect(0, 0, n, n);
+    // four soft rays (a star of the sun on wet stone)
     g.globalCompositeOperation = 'lighter';
-    g.fillStyle = 'rgba(255,250,235,0.5)';
-    g.fillRect(n / 2 - 0.75, 2, 1.5, n - 4);
-    g.fillRect(2, n / 2 - 0.75, n - 4, 1.5);
+    for (const [w, a] of [[2.2, 0.35], [1, 0.75]] as const) {
+      g.fillStyle = `rgba(255,250,235,${a})`;
+      g.fillRect(n / 2 - w / 2, 1, w, n - 2);
+      g.fillRect(1, n / 2 - w / 2, n - 2, w);
+    }
   }
   _glintTex = new THREE.CanvasTexture(c);
   return _glintTex;
@@ -228,9 +232,9 @@ export class StreamBed {
     void stoneMap;
     this.materials = {
       // water-worn limestone / flint pebbles: pale, polished, a soft sheen
-      smooth: new THREE.MeshStandardMaterial({ color: 0xf2ecdf, roughness: 0.24, metalness: 0 }),
+      smooth: new THREE.MeshStandardMaterial({ color: 0xf8f3e8, roughness: 0.2, metalness: 0, emissive: 0x2e2a22, emissiveIntensity: 0.4 }),
       // wet: at the water's edge, a little darker and glossy
-      wet: new THREE.MeshStandardMaterial({ color: 0xd6ccb8, roughness: 0.09, metalness: 0.02 }),
+      wet: new THREE.MeshStandardMaterial({ color: 0xe2d8c4, roughness: 0.08, metalness: 0.02, emissive: 0x2a261e, emissiveIntensity: 0.35 }),
       rough: new THREE.MeshStandardMaterial({ color: 0xd2c6b0, roughness: 0.9, metalness: 0 }),
     };
   }
@@ -265,11 +269,44 @@ export class StreamBed {
     ax /= al;
     az /= al;
     const cx = -az, cz = ax; // across
-    this.center.set(S.x, T.heightAt(S.x, S.z), S.z);
     const at = (u: number, v: number, out: THREE.Vector3) => {
       const x = S.x + ax * u + cx * v, z = S.z + az * u + cz * v;
       return out.set(x, T.heightAt(x, z), z);
     };
+    // (w4) the wadi's floor — the grass-free band of gravel (the terrain's wadi mask) — wanders a few metres off the
+    // polyline (its noise) and lies ≈7 m south of the layout's point: find its middle every metre along the bed (the
+    // median of the clear cells across it), smoothed; the trickle and the stones lie on it, clear of the bank's grass
+    const floor: number[] = [];
+    for (let k = 0; k <= 32; k++) {
+      const u = k - 16, ok: number[] = [];
+      for (let v = -8; v <= 22; v += 0.5) {
+        const m = T.maskAt(S.x + ax * u + cx * v, S.z + az * u + cz * v);
+        if (m.wadi > 0.85 && m.grass < 0.08) ok.push(v);
+      }
+      floor.push(ok.length ? ok[ok.length >> 1] : NaN);
+    }
+    const valid = floor.map((f, k) => (Number.isNaN(f) ? -1 : k)).filter((k) => k >= 0);
+    for (let k = 0; k < floor.length; k++) {
+      if (!Number.isNaN(floor[k])) continue;
+      let best = -1;
+      for (const j of valid) if (best < 0 || Math.abs(j - k) < Math.abs(best - k)) best = j;
+      floor[k] = best >= 0 ? floor[best] : 0;
+    }
+    const sm = floor.map((_, k) => {
+      let sum = 0, w = 0;
+      for (let j = -3; j <= 3; j++) {
+        const i = Math.min(floor.length - 1, Math.max(0, k + j)), ww = 4 - Math.abs(j);
+        sum += floor[i] * ww;
+        w += ww;
+      }
+      return sum / w;
+    });
+    const floorV = (u: number) => {
+      const f = Math.min(31.999, Math.max(0, u + 16)), k = Math.floor(f), t = f - k;
+      return sm[k] * (1 - t) + sm[k + 1] * t;
+    };
+    const trickleV = (u: number) => floorV(u) + Math.sin(u * 0.45 + 1.2) * 0.9 + Math.sin(u * 1.3) * 0.25;
+    at(0, floorV(0), this.center);
     // ---- the trickle: a narrow glossy ribbon of water winding down the bed's middle
     {
       const N = 48, L = 26;
@@ -277,7 +314,7 @@ export class StreamBed {
       const p = new THREE.Vector3();
       for (let i = 0; i <= N; i++) {
         const u = -L / 2 + (i / N) * L;
-        const wv = Math.sin(u * 0.45 + 1.2) * 0.9 + Math.sin(u * 1.3) * 0.25;
+        const wv = trickleV(u);
         const w = 0.22 + 0.16 * (0.5 + 0.5 * Math.sin(u * 0.7 + 0.4));
         for (const s of [-1, 1]) {
           at(u, wv + s * w, p);
@@ -300,13 +337,12 @@ export class StreamBed {
       this.group.add(m);
     }
     await yieldFrame();
-    const trickleV = (u: number) => Math.sin(u * 0.45 + 1.2) * 0.9 + Math.sin(u * 1.3) * 0.25;
     // ---- the pebble field: every shape and size, many more angular / flat ones than worn round ones
     const shapes: { geo: THREE.BufferGeometry; mat: THREE.Material; n: number }[] = [
       { geo: pebbleShape(11, 0.1, 0.55, 1.2), mat: this.materials.rough, n: 160 },
       { geo: pebbleShape(23, 0.2, 0.35, 1.3), mat: this.materials.rough, n: 140 },
       { geo: pebbleShape(37, 0.45, 0.7, 1.05), mat: this.materials.rough, n: 120 },
-      { geo: pebbleShape(51, 0.85, 0.62, 1.15), mat: this.materials.smooth, n: 70 },
+      { geo: pebbleShape(51, 0.85, 0.62, 1.15), mat: this.materials.rough, n: 70 },
     ];
     const m4 = this.tmpM;
     const q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
@@ -318,14 +354,14 @@ export class StreamBed {
       for (let i = 0; i < sh.n; i++) {
         const u = (rnd() - 0.5) * 26, v = trickleV(u) + (rnd() - 0.5) * 2 * (1.2 + rnd() * 2.6);
         at(u, v, p);
-        const s = 0.012 + Math.pow(rnd(), 2.2) * 0.07;
+        const s = 0.01 + Math.pow(rnd(), 2.4) * 0.024;
         e.set((rnd() - 0.5) * 0.5, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.5);
         q.setFromEuler(e);
         sc.set(s, s, s);
         p.y += s * 0.25;
         m4.compose(p, q, sc);
         im.setMatrixAt(i, m4);
-        this.tmpC.setHSL(0.09 + rnd() * 0.04, 0.12 + rnd() * 0.12, 0.62 + rnd() * 0.2);
+        this.tmpC.setHSL(0.08 + rnd() * 0.04, 0.14 + rnd() * 0.12, 0.5 + rnd() * 0.2);
         im.setColorAt(i, this.tmpC);
       }
       im.instanceMatrix.needsUpdate = true;
@@ -334,7 +370,7 @@ export class StreamBed {
       this.meshes.push(im);
       await yieldFrame();
     }
-    // ---- the stones he can take (gameplay v2.1): EVERY one a good one — ten smooth, water-worn sling stones (≈7-9 cm,
+    // ---- the stones he can take (gameplay v2.1): EVERY one a good one — ten smooth, water-worn sling stones (≈8-11 cm,
     // a little larger, paler and more polished than the gravel), spread along the whole stretch of the bed and its
     // edges, a few metres apart, on top of the gravel, at the water's edge (wet and glossy) or up at the bed's edge
     const geos = [pebbleShape(101, 1, 0.66, 1.18, 2), pebbleShape(113, 1, 0.74, 1.1, 2), pebbleShape(127, 1, 0.6, 1.25, 2)];
@@ -355,12 +391,13 @@ export class StreamBed {
         at(u, v, p);
         if (!this.colliders.free(p.x, p.z, 0.5)) continue;
         if (T.slopeAt(p.x, p.z) > 0.5) continue;
+        if (T.maskAt(p.x, p.z).grass > 0.06) continue; // never hidden in the bank's grass
         if (used.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 1.4)) continue;
         pp = p.clone();
       }
       if (!pp) pp = at(u0, trickleV(u0) + side * off, new THREE.Vector3());
       used.push(pp);
-      const s = 0.033 + rnd() * 0.004;
+      const s = 0.039 + rnd() * 0.005;
       e.set((rnd() - 0.5) * 0.25, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.25);
       placed.push({ pp, g: i % geos.length, wet: where === 0, s, q: new THREE.Quaternion().setFromEuler(e) });
     }
@@ -388,7 +425,7 @@ export class StreamBed {
     }
     // the sun's glint on the nearest ones (a soft star that comes and goes; never a beacon)
     this.glints = Array.from({ length: 3 }, () => {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glintTexture(), color: 0xfff6e0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glintTexture(), color: 0xfff6e0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
       sp.scale.setScalar(0.11);
       sp.visible = false;
       this.group.add(sp);
@@ -448,14 +485,15 @@ export class StreamBed {
 
   /** the geometry / material of a candidate (the stone in his hand) */
   look(c: Candidate) {
-    return { geo: c.mesh.geometry, mat: c.mesh.material as THREE.Material, scale: 0.03 };
+    return { geo: c.mesh.geometry, mat: c.mesh.material as THREE.Material, scale: 0.034 };
   }
 
   /**
-   * The soft cues: the sun glints now and then on the three stones nearest to him within 14 m (a small star that comes
-   * and goes, each at its own pace); the very nearest within 2.6 m brightens a little with a slow pulse.
+   * The soft cues: the sun glints on the three stones nearest to him within 14 m (a small star that comes and goes, each
+   * at its own pace; its size grows a little with the distance from the eye so it still reads from 8-12 m on a small
+   * screen); the very nearest within 2.6 m brightens a little with a slow pulse.
    */
-  update(near: THREE.Vector3 | null, time: number) {
+  update(near: THREE.Vector3 | null, time: number, eye: THREE.Vector3 | null = null) {
     let target: Candidate | null = null;
     if (near) {
       const g = this.nearestStone(near);
@@ -468,11 +506,15 @@ export class StreamBed {
         const c = free[i];
         sp.visible = !!c;
         if (!c) return;
-        sp.position.set(c.pos.x, c.pos.y + c.homeS * 0.55, c.pos.z);
+        sp.position.set(c.pos.x, c.pos.y + c.homeS * 0.6, c.pos.z);
         const ph = time * (1.3 + i * 0.37) + c.index * 2.1 + i * 1.7;
-        const tw = Math.pow(Math.max(0, Math.sin(ph)), 3);
-        (sp.material as THREE.SpriteMaterial).opacity = 0.18 + 0.72 * tw;
-        sp.scale.setScalar(0.08 + 0.06 * tw);
+        // a slow swell with a quicker sparkle on top: never quite gone, never a steady beacon
+        const tw = Math.pow(0.5 + 0.5 * Math.sin(ph), 2) * (0.75 + 0.25 * Math.sin(ph * 3.1 + 0.6));
+        const d = eye ? eye.distanceTo(sp.position) : Math.hypot(c.pos.x - near!.x, c.pos.z - near!.z) + 3;
+        // a little toward the eye, so the gravel round the stone does not clip the star's lower half
+        if (eye) sp.position.lerp(eye, Math.min(0.2, 0.25 / Math.max(d, 0.5)));
+        (sp.material as THREE.SpriteMaterial).opacity = 0.4 + 0.6 * tw;
+        sp.scale.setScalar(THREE.MathUtils.clamp(d * 0.026, 0.12, 0.42) * (0.7 + 0.45 * tw));
       });
     }
     if (this.glint && this.glint.c !== target) {

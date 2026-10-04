@@ -638,6 +638,9 @@ export class LandSet {
   /** judah: the deck's cover 0..1 (the morning burning it off: P1 thins it once the lens is below it) */
   setDeckCover(w: number) { if (this.deck) this.deck.w = Math.max(0, Math.min(1, w)); }
 
+  /** judah: a gap in the deck centred at (x, z), `r` m across its soft edge (P1's flight dives through it); w 0 = none */
+  setDeckHole(x: number, z: number, r: number, w = 1) { (this.clouds?.uniforms.uHole?.value as THREE.Vector4 | undefined)?.set(x, z, r, w); }
+
   /** per frame: sky dome follow, shadow framing around the action, water / cloud / dust time */
   update(dt: number, camera: THREE.PerspectiveCamera) {
     this.time += dt;

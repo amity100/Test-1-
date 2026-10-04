@@ -13,10 +13,11 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '
 export interface KeyHint { key: string; touch: string; label: string }
 
 /** (play1) an SVG arc of the circle (cx, cy, r) centred on its top, `deg` wide in all (the sling's release window) */
-function arcPath(cx: number, cy: number, r: number, deg: number) {
-  const h = Math.min(179.5, Math.max(0.5, deg / 2)) * (Math.PI / 180);
-  const x0 = cx - r * Math.sin(h), y0 = cy - r * Math.cos(h), x1 = cx + r * Math.sin(h);
-  return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${h > Math.PI / 2 ? 1 : 0} 1 ${x1.toFixed(2)} ${y0.toFixed(2)}`;
+/** (play1) an SVG arc on a circle, clockwise from angle a0 to a1 (degrees from the top) */
+function arcFrom(cx: number, cy: number, r: number, a0: number, a1: number) {
+  const pt = (a: number) => [cx + r * Math.sin((a * Math.PI) / 180), cy - r * Math.cos((a * Math.PI) / 180)];
+  const [x0, y0] = pt(a0), [x1, y1] = pt(Math.min(a1, a0 + 359.5));
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
 }
 
 /** Layout of one film text event (CUT v2 typography, docs/intro-script-v2.md). */
@@ -124,9 +125,9 @@ export class UI {
     this.objEl = el('div', 'objective');
     this.hintEl = el('div', 'hint');
     this.promptEl = el('div', 'prompt');
-    // (play1) the sling's reticle and timing ring: the launch direction (the centre), the release window lit at the top
-    // of the ring (narrowing with power), the pouch running round it at the whirl's pace, the power inside
-    this.crossEl = el('div', 'crosshair', `<svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="44"/><path class="win"/><path class="win-p"/><circle class="ring" cx="60" cy="60" r="36"/><line class="rel" x1="60" y1="8" x2="60" y2="22"/><circle class="pouch" cx="60" cy="16" r="5"/><circle class="dot" cx="60" cy="60" r="2.4"/><path class="tick" d="M60 50 V54 M60 66 V70 M50 60 H54 M66 60 H70"/></svg><div class="cue"></div><div class="range">מִחוּץ לַטְּוָח — סוֹבֵב חָזָק יוֹתֵר</div>`);
+    // (play1, gameplay v2.1) the sling's reticle and power gauge: where a full-power stone goes (the centre); the
+    // gauge fills round it while he whirls, its last part the gold "strong" zone
+    this.crossEl = el('div', 'crosshair', `<svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="44"/><path class="gz"/><circle class="fill" cx="60" cy="60" r="44"/><circle class="dot" cx="60" cy="60" r="2.4"/><path class="tick" d="M60 50 V54 M60 66 V70 M50 60 H54 M66 60 H70"/></svg><div class="cue"></div><div class="range">רָחוֹק מִדַּי — סוֹבֵב עוֹד</div>`);
     this.markerEl = el('div', 'marker', '<div class="mk-diamond"></div><div class="mk-label"></div>');
     this.healthEl = el('div', 'health');
     this.bossEl = el('div', 'boss', '<div class="boss-name">הַדֹּב</div><div class="boss-bar"><div></div></div><div class="boss-note"></div>');
@@ -415,8 +416,8 @@ export class UI {
   }
 
   // ------------------------------------------------------------------------------ HUD: the sling (play1, gameplay v2 §3)
-  private ring: { win: SVGPathElement; winP: SVGPathElement; pow: SVGCircleElement; pouch: SVGCircleElement; rel: SVGLineElement; cue: HTMLDivElement } | null = null;
-  private lastWin = -1;
+  private ring: { gz: SVGPathElement; fill: SVGCircleElement; cue: HTMLDivElement } | null = null;
+  private lastGold = -1;
   private relUntil = 0;
   private hitEl: HTMLDivElement | null = null;
   private praiseEl: HTMLDivElement | null = null;
@@ -431,11 +432,11 @@ export class UI {
     return e;
   }
   /**
-   * The sling's reticle. `s` (the Player's hud) drives the timing ring: the window arc at the top (its half width in
-   * revolutions of the whirl), the perfect part of it, the pouch running round the ring (it passes the top at every
-   * integer phase — release while it is inside the lit arc), the power inside; the ring fades in with the aim camera.
+   * The sling's reticle and power gauge (gameplay v2.1). `s` (the Player's hud) drives the gauge: it fills clockwise
+   * from the top while he whirls (`fill`), its last part (from `goldStart`) the gold "strong" zone — gold while he is
+   * in it, rust once the arm tires; the ring fades in with the aim camera.
    */
-  crosshair(visible: boolean, power = 0, onTarget = false, inRange = true, s?: { aim: number; whirling: boolean; phase: number; window: number; perfectFrac: number; power: number; smooth: boolean; loading: boolean }) {
+  crosshair(visible: boolean, power = 0, onTarget = false, inRange = true, s?: { aim: number; whirling: boolean; power: number; fill: number; gold: boolean; tired: number; goldStart: number; smooth: boolean; loading: boolean }) {
     const now = performance.now();
     const showRel = now < this.relUntil;
     const on = visible || showRel;
@@ -443,41 +444,34 @@ export class UI {
     if (!on) return;
     if (!this.ring) {
       const q = <T extends Element>(c: string) => this.crossEl.querySelector(c) as T;
-      this.ring = { win: q('.win'), winP: q('.win-p'), pow: q('.ring'), pouch: q('.pouch'), rel: q('.rel'), cue: q('.cue') };
+      this.ring = { gz: q('.gz'), fill: q('.fill'), cue: q('.cue') };
     }
     const R = this.ring;
     this.crossEl.style.opacity = s ? String(Math.max(showRel ? 1 : 0, Math.min(1, s.aim * 1.25))) : '';
-    const c = 2 * Math.PI * 36;
-    R.pow.style.strokeDasharray = `${c * (s ? s.power : power)} ${c}`;
+    const c = 2 * Math.PI * 44;
+    R.fill.style.strokeDasharray = `${(c * (s ? s.fill : power)).toFixed(2)} ${c.toFixed(2)}`;
     this.crossEl.classList.toggle('target', onTarget);
-    this.crossEl.classList.toggle('far', !inRange && power > 0.2);
+    this.crossEl.classList.toggle('far', !inRange && (s ? s.whirling : power > 0.2));
     if (!s) return;
-    if (Math.abs(s.window - this.lastWin) > 0.002) {
-      this.lastWin = s.window;
-      R.win.setAttribute('d', arcPath(60, 60, 44, s.window * 360));
-      R.winP.setAttribute('d', arcPath(60, 60, 44, s.window * s.perfectFrac * 360));
+    if (s.goldStart !== this.lastGold) {
+      this.lastGold = s.goldStart;
+      R.gz.setAttribute('d', arcFrom(60, 60, 44, s.goldStart * 360, 360));
     }
-    const ph = s.phase - Math.floor(s.phase);
-    const th = ph * Math.PI * 2;
-    R.pouch.setAttribute('cx', (60 + 44 * Math.sin(th)).toFixed(2));
-    R.pouch.setAttribute('cy', (60 - 44 * Math.cos(th)).toFixed(2));
-    const err = s.phase - Math.round(s.phase);
     this.crossEl.classList.toggle('whirl', s.whirling);
     this.crossEl.classList.toggle('loading', s.loading);
-    this.crossEl.classList.toggle('inwin', s.whirling && Math.abs(err) <= s.window);
+    this.crossEl.classList.toggle('gold', s.gold);
+    this.crossEl.classList.toggle('tired', s.tired > 0);
     this.crossEl.classList.toggle('smooth', s.smooth);
   }
 
-  /** the release's read-out on the ring: where in the window he let go (a tick), and a word (0.9 s) */
-  slingRelease(kind: 'perfect' | 'sweet' | 'early' | 'late', err: number) {
+  /** the release's read-out on the ring (0.9 s): a gold flash and חָזָק for a strong throw, חַלָּשׁ for a weak one */
+  slingRelease(kind: 'gold' | 'full' | 'weak') {
     if (!this.ring) return;
     const R = this.ring;
-    const deg = Math.max(-170, Math.min(170, err * 360));
-    R.rel.setAttribute('transform', `rotate(${deg.toFixed(1)} 60 60)`);
-    this.crossEl.classList.remove('r-perfect', 'r-sweet', 'r-early', 'r-late', 'rel-on');
+    this.crossEl.classList.remove('r-gold', 'r-full', 'r-weak', 'rel-on');
     void this.crossEl.offsetWidth;
     this.crossEl.classList.add(`r-${kind}`, 'rel-on');
-    R.cue.textContent = kind === 'perfect' ? 'מֻשְׁלָם' : kind === 'sweet' ? '' : kind === 'early' ? 'מֻקְדָּם מִדַּי' : 'מְאֻחָר מִדַּי';
+    R.cue.textContent = kind === 'gold' ? 'חָזָק' : kind === 'weak' ? 'חַלָּשׁ' : '';
     this.relUntil = performance.now() + 900;
   }
 

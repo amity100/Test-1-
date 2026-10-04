@@ -75,7 +75,7 @@ interface Stone {
   landed: number;
 }
 /** a sling stone's radius (m): it touches a target when its centre passes within the target's radius plus this */
-const STONE_R = 0.025;
+const STONE_R = 0.04; // (gameplay v2.1: the stone's 2.5 cm + a little forgiveness)
 /** dots of a stone's path: spacing (m), most per stone, how long they stay after the stone came down (s) */
 const PATH_STEP = 0.55, PATH_MAX = 96, PATH_FADE = 1.6;
 
@@ -379,6 +379,11 @@ export class Projectiles {
   }
 
   /** a fresh ShotInfo (the Player fills it) */
+  /** the launch elevation for a stone of speed v / drag k through `to` (see launchElevation) */
+  static elevation(from: THREE.Vector3, to: THREE.Vector3, v: number, k: number) {
+    return launchElevation(from, to, v, k);
+  }
+
   static newShot(id: number): ShotInfo {
     return {
       id, power: 0, speed: 0, timing: 0, window: 0.12, perfect: false, sweet: false, smooth: false, devRight: 0, devUp: 0,
@@ -405,6 +410,40 @@ export class Projectiles {
     vel.y = Math.sin(ang) * v;
     return { vel, inRange };
   }
+}
+
+/**
+ * (play1, gameplay v2.1) The launch elevation (rad above the horizontal toward `to`) that brings a stone of speed `v`
+ * and drag `k` from `from` down through `to` on the low arc — gravity and drag, no wind (the player aims into the wind
+ * himself). Out of reach: the elevation of a long throw (`reach` false). Integrates the same physics as the flight.
+ */
+export function launchElevation(from: THREE.Vector3, to: THREE.Vector3, v: number, k: number): { angle: number; reach: boolean } {
+  const D = Math.hypot(to.x - from.x, to.z - from.z), H = to.y - from.y;
+  if (D < 0.05) return { angle: H >= 0 ? 1.2 : -1.2, reach: true };
+  const h = 1 / 240;
+  const heightAt = (a: number) => {
+    let x = 0, y = 0, vx = v * Math.cos(a), vy = v * Math.sin(a);
+    for (let i = 0; i < 2400; i++) {
+      const sp = Math.hypot(vx, vy);
+      vx -= k * sp * vx * h;
+      vy -= (9.81 + k * sp * vy) * h;
+      const nx = x + vx * h, ny = y + vy * h;
+      if (nx >= D) return y + (ny - y) * ((D - x) / Math.max(1e-9, nx - x));
+      x = nx;
+      y = ny;
+      if (vx < 0.05 || y < H - 80) break;
+    }
+    return -1e9;
+  };
+  let lo = -0.75, hi = 0.68;
+  if (heightAt(hi) < H) return { angle: hi, reach: false };
+  if (heightAt(lo) > H) return { angle: lo, reach: true };
+  for (let it = 0; it < 18; it++) {
+    const mid = (lo + hi) * 0.5;
+    if (heightAt(mid) < H) lo = mid;
+    else hi = mid;
+  }
+  return { angle: (lo + hi) * 0.5, reach: true };
 }
 
 /** one integration step of a stone: gravity + quadratic drag against the air moving with the wind (semi-implicit) */

@@ -83,8 +83,9 @@ export class Story {
     // solids when it is built (lazily, at the stones objective); every release is read out on the reticle, and while
     // a round is live a miss says where the stone went (high / low / left / right)
     player.onShot = (shot) => {
-      const kind = shot.perfect ? 'perfect' : shot.sweet ? 'sweet' : shot.timing < 0 ? 'early' : 'late';
-      this.ui.slingRelease(kind, shot.timing);
+      // (gameplay v2.1) a gold release is a strong throw; a weak one is said so
+      this.ui.slingRelease(shot.perfect ? 'gold' : shot.power < 0.45 ? 'weak' : 'full');
+      if (this.range) this.range.onTargetAtRelease = player.aimOnTarget;
       this.range?.onShot(shot);
     };
     player.onNoStones = () => this.ui.hint('<span class="h-item rh">הַיַּלְקוּט רֵיק — מַלֵּא אוֹתוֹ מֵעֲרֵמַת הָאֲבָנִים שֶׁלְּיַד סִמַּן הַקְּלִיעָה, אוֹ בַּנַּחַל</span>', 4);
@@ -364,7 +365,8 @@ export class Story {
     this.player.bag.smooth = this.player.bag.plain = 0;
     this.player.bag.preferSmooth = false;
     this.ui.objective('אֱסֹף חָמֵשׁ אֲבָנִים לַקֶּלַע', 'אֲבָנִים חֲלָקוֹת, שֶׁהַמַּיִם לִטְּשׁוּ, פְּזוּרוֹת לְאֹרֶךְ הַנַּחַל וְעַל גְּדוֹתָיו');
-    const bedPos = this.groundV(L.stones.x, L.stones.z, 0.6);
+    // the middle of the wadi's gravel floor (the bed finds it as it starts building; the layout's point is on the bank)
+    const bedPos = bed.center.lengthSq() > 0 ? bed.center.clone().setY(bed.center.y + 0.6) : this.groundV(L.stones.x, L.stones.z, 0.6);
     const bedMarker = () => (Math.hypot(this.player.pos.x - bedPos.x, this.player.pos.z - bedPos.z) > 10 ? bedPos : null);
     this.setMarker(bedMarker, 'הַנַּחַל');
     let taken = 0, busy = false, searchT = 0, pointing = false;
@@ -372,7 +374,7 @@ export class Story {
     count();
     this.beh = (dt) => {
       const inBed = Math.hypot(this.player.pos.x - bedPos.x, this.player.pos.z - bedPos.z) < 15;
-      bed.update(inBed ? this.player.pos : null, this.time);
+      bed.update(inBed ? this.player.pos : null, this.time, this.engine.camera.position);
       this.pickMove?.(dt);
       if (!bed.built || busy) {
         this.ui.prompt(null);
@@ -520,8 +522,8 @@ export class Story {
     p.bag.preferSmooth = r === 4; // the finale: his chosen smooth stones first
     p.sfx('roundStart', 0.8);
     this.ui.praise(def.title, 1.8);
-    if (r === 1) this.ui.hint('<span class="h-item rh">הַחְזֵק — הַקֶּלַע מִסְתּוֹבֵב · שַׁחְרֵר כְּשֶׁהַכִּיס עוֹבֵר בָּאוֹר שֶׁבְּרֹאשׁ הַטַּבַּעַת</span>', 10);
-    else if (r === 2) this.ui.hint('<span class="h-item rh">בַּמֶּרְחָק הָאֶבֶן יוֹרֶדֶת — כַּוֵּן מֵעַל הַמַּטָּרָה, וְהָרוּחַ מְסִיטָה אוֹתָהּ</span>', 10);
+    if (r === 1) this.ui.hint('<span class="h-item rh">הַחְזֵק — הַקֶּלַע מִסְתּוֹבֵב וְהַכֹּחַ גָּדֵל · שַׁחְרֵר כְּשֶׁהַטַּבַּעַת זְהֻבָּה, וְהָאֶבֶן תַּגִּיעַ אֶל הַכַּוָּנֶת</span>', 10);
+    else if (r === 2) this.ui.hint('<span class="h-item rh">הַמַּטָּרוֹת רְחוֹקוֹת — רַק זְרִיקָה חֲזָקָה תַּגִּיעַ אֲלֵיהֶן; הָרוּחַ מְסִיטָה אֶת הָאֶבֶן, כַּוֵּן מוּלָהּ</span>', 10);
     else if (r === 3) this.ui.hint('<span class="h-item rh">כַּוֵּן לְאָן שֶׁהַמַּטָּרָה תַּגִּיעַ — לֹא לְאָן שֶׁהִיא עַכְשָׁו</span>', 9);
     else this.ui.verse(...verseArgs('jdg_20_16_slingers'), 8);
     let done = false, skip = false;
@@ -564,7 +566,7 @@ export class Story {
     const lines: [string, string][] = [
       ['פְּגִיעוֹת', `${st.hits} / ${st.targets}`],
       ['אֲבָנִים', `${st.stones}`],
-      ['שִׁחְרוּר מֻשְׁלָם', `${st.perfects}`],
+      ['זְרִיקוֹת חֲזָקוֹת', `${st.perfects}`],
       ['רֶצֶף', `${st.bestStreak}`],
       ['זְמַן', `${mm}:${String(ss).padStart(2, '0')}`],
     ];
@@ -696,16 +698,15 @@ export class Story {
     if (!R || !R.live || shot.hit || !shot.intent || shot.missDist > 4) return;
     const right = _missR.setFromMatrixColumn(this.engine.camera.matrixWorld, 0);
     const o = shot.missOffset;
-    // along the throw: a stone that came down before the target (on the bank above it — the targets stand lower,
-    // in the wadi) fell SHORT; one that passed over it went LONG; otherwise high / low, left / right
+    // (gameplay v2.1) what he can act on: SHORT (came down before it, or passed under it: throw stronger) or LONG
+    // (passed over it), LEFT or RIGHT (the wind, the lead)
     const c = shot.intent.center();
     const dh = _missD.set(c.x - shot.from.x, 0, c.z - shot.from.z).normalize();
     const along = o.x * dh.x + o.z * dh.z;
     const up = o.y, side = o.dot(right);
     const words: string[] = [];
-    if (along < -0.6) words.push('קָצָר');
-    else if (along > 0.6) words.push('אָרֹךְ');
-    else if (Math.abs(up) > 0.1 && Math.abs(up) >= Math.abs(side) * 0.5) words.push(up < 0 ? 'נָמוּךְ' : 'גָּבוֹהַּ');
+    if (along < -0.6 || (Math.abs(along) <= 0.6 && up < -0.1 && Math.abs(up) >= Math.abs(side) * 0.5)) words.push('קָצָר');
+    else if (along > 0.6 || (up > 0.1 && Math.abs(up) >= Math.abs(side) * 0.5)) words.push('אָרֹךְ');
     if (Math.abs(side) > 0.1 && Math.abs(side) >= Math.abs(up) * 0.5) words.push(side < 0 ? 'שְׂמֹאלָה' : 'יָמִינָה');
     if (!words.length) words.push('קָרוֹב');
     this.ui.praise(`${words.join(' · ')}${shot.missDist < 0.45 ? ' — כִּמְעַט' : ''}`, 1.3, true);

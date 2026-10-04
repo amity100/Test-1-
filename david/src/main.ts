@@ -7,6 +7,7 @@ import { Flock } from './characters/Flock';
 import { Player } from './gameplay/Player';
 import { DavidModel } from './characters/DavidModel';
 import { BearActor } from './gameplay/BearActor';
+import { BearModel } from './characters/BearModel';
 import { Props } from './gameplay/Props';
 import { Projectiles } from './gameplay/Projectiles';
 import { CameraRig } from './gameplay/CameraRig';
@@ -80,7 +81,56 @@ function ensureViewport() {
   document.head.appendChild(m);
 }
 
+/**
+ * load1 (wave 4): REPEAT VISITS — the game's binaries and JSON fetched with fetch() (meshes, height tiles, motion clips,
+ * rigs: .binz / .binz.txt / .json under assets/) are kept in Cache Storage, in a cache named after this build's entry
+ * chunk (its file name carries the build hash; older builds' caches are deleted), so a second visit reads them locally
+ * whatever cache headers the host sends. Cache-first, network on a miss or any error; images keep the browser's own
+ * HTTP cache. ?assetcache=0 turns it off.
+ */
+function installAssetCache() {
+  try {
+    if (typeof caches === 'undefined' || new URLSearchParams(location.search).get('assetcache') === '0') return;
+    const entry = new URL(import.meta.url);
+    const build = entry.pathname.split('/').pop() || 'dev';
+    const name = 'david-assets-' + build;
+    const open = caches.open(name);
+    open.catch(() => undefined);
+    caches
+      .keys()
+      .then((ks) => Promise.all(ks.filter((k) => k.startsWith('david-assets-') && k !== name).map((k) => caches.delete(k))))
+      .catch(() => undefined);
+    const net = window.fetch.bind(window);
+    const cacheable = (url: string) => {
+      try {
+        const u = new URL(url, location.href);
+        return u.origin === entry.origin && u.pathname.includes('/assets/') && /\.(binz|txt|json)$/.test(u.pathname);
+      } catch {
+        return false;
+      }
+    };
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if ((init?.method && init.method !== 'GET') || !cacheable(url)) return net(input, init);
+      let c: Cache | null = null;
+      try {
+        c = await open;
+        const hit = await c.match(url);
+        if (hit) return hit;
+      } catch {
+        c = null;
+      }
+      const res = await net(input, init);
+      if (c && res.ok) c.put(url, res.clone()).catch(() => undefined);
+      return res;
+    };
+  } catch {
+    /* storage unavailable (private mode, an opaque origin): the network as before */
+  }
+}
+
 async function boot() {
+  installAssetCache();
   ensureViewport();
   // Hebrew UI; set on the container too because the artifact host wraps the page in its own <html>
   app.dir = 'rtl';
@@ -133,8 +183,20 @@ async function boot() {
         void m.loadTile('judah').catch(() => undefined);
       })
       .catch(() => undefined);
+    // (wave 4) the film's lazily loaded code for its first set (the builder, the stage, the land sets: ~130 KB) is
+    // requested now too, not in a chain of imports when the first set starts (each a round trip on a phone network)
+    void import('./film/FilmSchedule').catch(() => undefined);
+    void import('./film/land/LandSet').catch(() => undefined);
   }
-  await bootStep('world', () => engine.build((f, label) => ui.setLoading(f * LP, label)));
+  // (load1, wave 4) every download the start screen needs begins NOW and runs in parallel with the CPU builds: the world's
+  // textures (Engine.build no longer waits for them), the judah tiles (above), David's body / costume / hair / clips
+  // (his preload starts here; its CPU parts run between the world's steps). The bear's ~2.7 MB wait until the start
+  // screen is up (not needed before the game).
+  let openBearGate: () => void = () => undefined;
+  BearModel.loadAfter = new Promise<void>((r) => (openBearGate = r));
+  const worldP = bootStep('world', () => engine.build((f, label) => ui.setLoading(f * LP, label)));
+  const davidP = bootStep('david:preload', () => DavidModel.preload(engine.quality.name, { msaa: engine.quality.msaa }));
+  await worldP;
   const terrain = engine.terrain;
   const ground = (x: number, z: number) => terrain.heightAt(x, z);
 
@@ -160,7 +222,7 @@ async function boot() {
   flock.onSound = (kind, pos, vol) => audio.at(kind, pos, vol * 0.8, 1, 70);
   // David: realistic human + strand hair + fitted costume (async; the Player constructs him synchronously)
   ui.setLoading(0.97 * LP, 'דָּוִד יוֹצֵא אֶל הַצֹּאן…');
-  const david = await bootStep('david:preload', () => DavidModel.preload(q, { msaa: engine.quality.msaa }));
+  const david = await davidP;
   for (const k of ['human', 'outfit', 'groom'] as const) bootLog.steps.push({ name: `david:${k}`, start: -1, ms: Math.round(david.loadMs[k]) });
   const player = bootSync('player', () => new Player(engine, projectiles, audio));
   const bear = bootSync('bear', () => new BearActor(terrain, engine.colliders, engine.scene));
@@ -197,7 +259,9 @@ async function boot() {
   // the CPU builds the film's first set), its frames are drawn by the background builder before the film's first shot
   // in the world (P2) — behind the start screen, or off the canvas while the film plays. ?prime=boot keeps it here.
   const deferPrime = preloadStage && Intro.progressive() && precompileOn && !engine.willBenchmark(benchOpts) && params.get('prime') !== 'boot';
-  const bench = await bootStep('warmup', () => engine.warmup({ ...benchOpts, precompile: precompileOn, prime: !deferPrime, views: warmViews }));
+  // (wave 4) with the prime deferred the world's programs are not compiled here either: the first frames' programs (the
+  // film's first set and the post chain) compile first, the world's in the background builder's world job
+  const bench = await bootStep('warmup', () => engine.warmup({ ...benchOpts, precompile: precompileOn && !deferPrime, prime: !deferPrime, views: warmViews }));
   (window as unknown as Record<string, unknown>).__bench = bench;
   // the score's voicing follows the final render tier (phones: lighter synthesis, shorter reverb)
   audio.setLite(engine.quality.name === 'low');
@@ -216,8 +280,20 @@ async function boot() {
     );
     (window as unknown as Record<string, unknown>).__stageMs = performance.now() - t0;
   }
+  // the world's texture images are in by now (the first set's warm-up waited for them); a failed one fails the boot as before
+  await engine.texturesReady;
   ui.setLoading(1, 'מוכן');
   bootMark('ready');
+  openBearGate();
+  // (wave 4) the bear, built once its assets arrive, is warmed up off the canvas in small slices — after the film's sets
+  // (it is first seen in the game, minutes later)
+  if (precompileOn) {
+    const sched0 = Intro.schedule;
+    void bear.model.ready
+      .then(() => (sched0 ? sched0.whenSettled() : undefined))
+      .then(() => engine.prepareView({ scene: engine.scene, camera: engine.camera }, { root: bear.model.root, budgetMs: 4 }))
+      .catch((e) => console.warn('[boot] bear warm-up', e));
+  }
 
   // ------------------------------------------------------------------ pause handling
   const setPaused = (p: boolean) => {

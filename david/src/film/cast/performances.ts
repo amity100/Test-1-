@@ -55,6 +55,21 @@ const ss = (a: number, b: number, x: number) => {
 };
 const lerp3 = (a: [number, number, number], b: [number, number, number], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const mixPose = (a: ArmPose, b: ArmPose, t: number): ArmPose => ({ ua: lerp3(a.ua, b.ua, t), fa: lerp3(a.fa, b.fa, t), hd: lerp3(a.hd, b.hd, t) });
+/**
+ * G4 (cut7, CUT v5.2): Samuel's jaw as he answers the king (15:26 on screen from beats.verse): syllables at ~4.4 Hz in
+ * three phrases with short breaths between them, each syllable its own opening; closed before and after.
+ */
+function g4Speech(t: number) {
+  const v0 = (INTRO_SHOTS.find((s) => s.take === 'silence')?.beats?.verse ?? 3.0) + 0.15;
+  const phrases: [number, number][] = [[0, 0.95], [1.2, 2.05], [2.3, 3.05]];
+  const x = t - v0;
+  let on = 0;
+  for (const [a, b] of phrases) on = Math.max(on, ss(a, a + 0.06, x) * (1 - ss(b - 0.08, b, x)));
+  if (on <= 0) return 0;
+  const syl = Math.max(0, Math.sin(x * 2 * Math.PI * 4.4));
+  return on * (0.05 + 0.16 * syl * (0.7 + 0.3 * Math.sin(x * 7.3 + 1.1)));
+}
+
 /** smooth value noise (-1..1) for tremble / sway */
 function noise1(x: number, seed = 0) {
   const i = Math.floor(x), f = x - i;
@@ -235,7 +250,8 @@ export function speechViseme(t: number, words: readonly IntroWord[], vowels: { v
 // ================================================================================================ GILGAL
 /** face light per shot [Saul, Samuel] (FilmActor.faceFill: illuminance in the sun's units; the sun is ≈3-7) */
 export const FACE_FILL: Record<GilgalShotName, [number, number]> = {
-  dustWall: [2.2, 0], king: [2.6, 0], spearRaised: [2.4, 0], silence: [2.0, 1.4], faceOff: [1.5, 1.3],
+  // (cut7, CUT v5.2: G4 ends on Samuel's face before the king, the cheated sun behind him: more fill on his face)
+  dustWall: [2.2, 0], king: [2.6, 0], spearRaised: [2.4, 0], silence: [1.2, 2.1], faceOff: [1.5, 1.3],
   tear: [1.1, 1.1], verdict: [1.1, 0.9], saulAlone: [1.9, 0.8], rise: [1.4, 0],
 };
 export interface GilgalCast {
@@ -404,7 +420,11 @@ export class GilgalPerformance {
         saul.mocap.play('idle_breathe', { fade: 0, time: shot === 'saulAlone' ? 1.2 : 0 });
     }
     // ---- Samuel's clip: grave, still listening (Rocketbox listen_sad: the breath and the small weight shifts)
-    samuel.mocap.play('listen_sad', { fade: 0, time: shot === 'verdict' ? 0.9 : 0.3 });
+    // (cut7, CUT v5.2: in G4 he is already walking up the road to the king when the shot opens)
+    if (shot === 'silence') {
+      samuel.mocap.play('walk_slow', { fade: 0, sync: true, time: 0.35 });
+      samuel.mocap.matchSpeed('walk_slow', Math.max(0.4, m0.walk));
+    } else samuel.mocap.play('listen_sad', { fade: 0, time: shot === 'verdict' ? 0.9 : 0.3 });
     samuel.place(m0.pos, m0.yaw);
     if (shot === 'tear') {
       // the tear is ONE take of root motion: the turn-step carries him away from his mark
@@ -606,24 +626,25 @@ export class GilgalPerformance {
       samuel.place(m.pos, m.yaw);
       samuel.mocap.lookAt = this.eyeOf(saul, this.samTarget);
       if (shot === 'silence') {
-        // grieving, eyes on the road before him; as the roar dies he lifts his head to the king
+        // grieving, eyes on the road before him as he walks; as the roar dies he lifts his head to the king
         const lift = ss(BEATS.silence.headsTurn + 0.2, BEATS.silence.headsTurn + 1.1, t);
         samuel.headWorld(this.tmp).add(this._f.set(Math.sin(m.yaw) * 4, -1.3, Math.cos(m.yaw) * 4));
         this.samTarget.lerp(this.tmp, 1 - lift);
-        samuel.breath.amp = 0.4;
+        // the breath of the walk, settling as he stands
+        samuel.breath.amp = 0.55 - 0.15 * ss(BEATS.silence.step + 0.7, BEATS.silence.step + 2.2, t);
       }
       samuel.lookRate = 2;
       if (shot === 'silence') {
-        // one step toward the king (the capture's step, speed-matched; the legs only)
-        const step = BEATS.silence.step;
+        // (cut7, CUT v5.2) the walk up the road, speed-matched to the blocking, the last step at `step`; then he stands
+        // (listen_sad: the breath, the small weight shifts)
         const cur = samuel.mocap.current()?.name;
-        if (m.walk > 0 && cur !== 'walk_slow') {
-          samuel.mocap.play('walk_slow', { fade: 0.3, time: 0.35 });
-          samuel.mocap.matchSpeed('walk_slow', 0.75);
-        } else if (t > step + 0.8 && cur === 'walk_slow') samuel.mocap.play('listen_sad', { fade: 0.5, time: 1 });
+        if (m.walk > 0.05) {
+          if (cur !== 'walk_slow') samuel.mocap.play('walk_slow', { fade: 0.3, sync: true, time: 0.35 });
+          samuel.mocap.matchSpeed('walk_slow', Math.max(0.4, m.walk));
+        } else if (cur === 'walk_slow') samuel.mocap.play('listen_sad', { fade: 0.6, time: 1 });
       }
       this.samFace.set({ sad: 0.45, determined: 0.35 });
-      this.samFace.jawTarget = 0;
+      this.samFace.jawTarget = shot === 'silence' ? g4Speech(t) : 0;
     }
     // ---------------------------------------------------------------- ARMOUR-BEARER one step behind the king
     if (armourBearer) {
