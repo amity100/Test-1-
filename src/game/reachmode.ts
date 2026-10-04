@@ -358,7 +358,8 @@ export class ReachMode {
     }
 
     // what the hand would do there
-    this.plan = alive && this.win && !this.held ? this.planHand() : null;
+    // (not while your hand is out or a man is on his way through: it's busy)
+    this.plan = alive && this.win && !this.held && !this.hands.of('player') && !this.pulls.length ? this.planHand() : null;
 
     // the hand
     if (this.held) this.updateHeldPortal(realDt, inp.hand);
@@ -368,7 +369,7 @@ export class ReachMode {
         h.audio.ui('deny');
         this.hud.callout('reach.noWindow', 'info');
         this.handCd = 0.2;
-      } else this.handPress();
+      } else if (this.plan) this.handPress();
     }
 
     // the weapon
@@ -500,6 +501,7 @@ export class ReachMode {
       const air = this.airDist ?? this.pastMan(ray.origin, ray.dir, eye);
       const spot = placeWindow(h.world, ray.origin, ray.dir, eye, air, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
       if (h.device() === 'touch') this.magnet(spot, ray.origin, ray.dir);
+      this.faceTarget(spot);
       this.ghost = Object.assign(spot, { seen: this.seenAt(spot.pos) });
     } else if (this.wasWindow && this.ghost && alive) {
       // let go: it opens there
@@ -510,10 +512,24 @@ export class ReachMode {
     this.wasWindow = holding;
   }
 
-  /** The man the aim is on (in sight, within reach): how far just past him is (m from your eyes), else null. */
+  /**
+   * What the aim is on (in sight, within reach), and so how far the window
+   * stands (m from your eyes): just past a man, right on a weapon on the
+   * floor; null: nothing (the first surface it meets).
+   */
   private pastMan(origin: V3, dir: V3, eye: V3): number | null {
     const h = this.h;
     let best: number | null = null;
+    for (const w of this.armory.list) {
+      if (w.holder !== null || !Armory.live(w)) continue;
+      const s = _a.subVectors(w.pos, origin).dot(dir);
+      if (s <= 0) continue;
+      if (_b.copy(origin).addScaledVector(dir, s).distanceTo(w.pos) > 0.55) continue;
+      const d = Math.hypot(w.pos.x - eye.x, w.pos.z - eye.z);
+      if (d > REACH.range || (best !== null && d >= best)) continue;
+      if (!h.world.lineOfSight(eye, _c.copy(w.pos).setY(w.pos.y + 0.3))) continue;
+      best = d;
+    }
     for (const e0 of h.enemies.list) {
       const e = e0 as Enemy;
       if (!e.alive || !e.reach || !e.body) continue;
@@ -534,6 +550,28 @@ export class ReachMode {
     const bottom = g.pos.y - REACH.window.height / 2;
     const fl = this.h.world.groundAt(g.pos.x, g.pos.z, 0.2, bottom);
     return fl === -Infinity ? 0 : Math.max(0, bottom - fl);
+  }
+
+  /**
+   * A window looks at the man right by it (you see him through its twin;
+   * past him that's his back, short of him his face — and then he sees you
+   * through it); with nobody by it, it faces you.
+   */
+  private faceTarget(spot: WindowSpot) {
+    let best: Enemy | null = null;
+    let bd = Infinity;
+    for (const e0 of this.h.enemies.list) {
+      const e = e0 as Enemy;
+      if (!e.alive || !e.reach || !e.body) continue;
+      const pt = bodyPoint(e.pos, e.height, spot.pos, _a);
+      const d = Math.hypot(pt.x - spot.pos.x, pt.z - spot.pos.z);
+      if (d < 0.3 || !byWindow(spot.pos, spot.look, pt, REACH.window.reach)) continue;
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    }
+    if (best) flat(_b.subVectors(best.pos, spot.pos), spot.look);
   }
 
   /** A thumb's help: the ghost leans onto the spot behind the man nearest the crosshair (a small radius). */
@@ -559,7 +597,7 @@ export class ReachMode {
     if (this.h.standAt(_c.x, _c.z, best.pos.y) === null) return;
     spot.pos.copy(_c);
     spot.surface = 'floor';
-    flat(_d.subVectors(_c, this.h.player.body.pos), spot.look);
+    flat(_d.subVectors(this.h.player.body.pos, _c), spot.look);
     spot.dist = spot.pos.distanceTo(this.h.eye(_eye));
     spot.ok = spot.dist >= W.min && spot.dist <= REACH.range + 1.5;
   }
@@ -586,6 +624,16 @@ export class ReachMode {
     const wall = h.world.raycast(_a.set(feet.x, feet.y + 1, feet.z), aim, ahead + 0.5, { sight: false });
     if (wall) ahead = Math.max(0.6, wall.distance - 0.45);
     const near = nearSpot(feet, aim, ahead);
+    // (on the crosshair: the camera sits over your shoulder, the window stands where its ray crosses `ahead`)
+    const ro = ray.origin, rd = ray.dir;
+    const den = rd.x * aim.x + rd.z * aim.z;
+    if (den > 0.2) {
+      const s = ((feet.x + aim.x * ahead - ro.x) * aim.x + (feet.z + aim.z * ahead - ro.z) * aim.z) / den;
+      const side = (ro.x + rd.x * s - near.pos.x) * aim.z - (ro.z + rd.z * s - near.pos.z) * aim.x;
+      const k = THREE.MathUtils.clamp(side, -0.7, 0.7);
+      near.pos.x += aim.z * k;
+      near.pos.z -= aim.x * k;
+    }
     const g = h.world.groundAt(near.pos.x, near.pos.z, 0.3, feet.y + 1);
     if (g > -Infinity && Math.abs(g - feet.y) < 1.2) near.pos.y = g + REACH.window.height / 2 + 0.02;
     const far = { pos: spot.pos.clone(), look: spot.look.clone(), surface: spot.surface };
@@ -870,7 +918,8 @@ export class ReachMode {
       case 'grab': {
         const p = w.enemyId !== null ? this.portals.get(w.enemyId) : null;
         if (!p || !this.portals.grab(p)) return this.whiffed();
-        this.held = { p, t: 0 };
+        // (its hold counts from your press: a quick tap still means "right in front of me")
+        this.held = { p, t: w.t };
         h.audio.reachGrab(p.b);
         h.hitstop(0.04);
         h.fx.ring(_a.copy(p.b).setY(p.b.y + 0.06), 1.6, 0.3, REACH_CYAN);
@@ -1289,7 +1338,8 @@ export class ReachMode {
     if (this.meleeTarget()) return 'melee';
     if (!this.win) return null;
     const e = this.windowTarget();
-    if (!e) return 'miss';
+    // (nothing there: the hand's chip already says so)
+    if (!e) return null;
     return this.able(e.id) && sideOf(e.pos, e.yaw, this.win.far.pos) === 'front' ? 'blocked' : 'kill';
   }
 

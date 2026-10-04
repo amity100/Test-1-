@@ -204,6 +204,7 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _eye = new THREE.Vector3();
+const _through = new THREE.Vector3();
 
 const hd = (a: V3, b: V3) => Math.hypot(a.x - b.x, a.z - b.z);
 const between = (r: readonly [number, number], k: number) => r[0] + (r[1] - r[0]) * k;
@@ -325,8 +326,8 @@ export class ReachAI {
       }
       sys.halt(e, dt);
       sys.face(e, w.far, dt);
-      const aimAt = w.through(pl.chest, _c);
       this.muzzle(e, _a);
+      const aimAt = w.through(pl.chest, _through);
       if (m.gun === 'aim') {
         m.gunT -= dt;
         const k = 1 - Math.max(0, m.gunT) / R.aim;
@@ -674,7 +675,8 @@ export class ReachAI {
     }
     const d = hd(e.pos, p.a);
     // he walks up to it while it opens; he waits there while your hand has it
-    if (!RedPortals.isOpen(p) || p.held) {
+    // (it opens, then he braces a beat at it before he steps in: your moment to take it)
+    if (!RedPortals.isOpen(p) || p.held || p.t < REACH.enemy.portal.telegraph + REACH.enemy.portal.brace) {
       if (d > 1.3) this.walk(sys, e, p.a, d, 2.6, dt);
       else {
         sys.halt(e, dt);

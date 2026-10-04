@@ -1142,7 +1142,7 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 
 /* ---- REACH: the window grammar ---- */
 /* the old mode's leftovers stay away under REACH (STYLE, the rift pips, the score bank) */
-.reach-on .h-style, .reach-on .h-pips, .reach-on .h-bank, .reach-on .h-gate, .reach-on .h-aim { display: none !important; }
+.reach-on .h-style, .reach-on .h-pips, .reach-on .h-bank, .reach-on .h-feed, .reach-on .h-gate, .reach-on .h-aim { display: none !important; }
 /* the lab panel: a compact strip top-left (wave, who's left, the clock; the rules folded behind RULES) */
 .lab-panel[data-variant='reach'] { width: auto; min-width: 0; max-width: 300px; padding: 5px 10px 6px; gap: 4px; background: linear-gradient(180deg, rgba(8, 11, 17, 0.62), rgba(8, 11, 17, 0.45)); }
 .lab-panel[data-variant='reach'] .lp-head, .lab-panel[data-variant='reach'] .lp-splits, .lab-panel[data-variant='reach'] .lp-stats, .lab-panel[data-variant='reach'] .lp-tools { display: none; }

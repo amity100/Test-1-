@@ -933,34 +933,77 @@ each **combat variant** to choose one.
 - **REACH** (the approved core mechanic; `game/reach.ts` — every number in `REACH` — with
   `game/weapons.ts`, `game/reachmode.ts`, `game/reachfx.ts`, `actors/reachai.ts`, `ui/reachhud.ts`;
   gated on `reachOn()`, so the missions and the other variants play exactly as before).
-  - *The HAND* (RMB / LT / HAND). Aim at anything you see within 30 m (magnetism 2.2° mouse, 4.5°
-    pad, 8° thumb): a small cyan window opens just short of it (0.15 s) and your arm comes out.
-    On a weapon (on the floor or in a man's hands): it flies to your hand. On a man: he's yanked to
-    you by the collar (0.3 s) and lands 1.7 m in front of you, reeling 1.5 s. On their red portal:
-    press takes it, aim, let go: its exit is where you aimed (a tap: right in front of you). What
-    the aim is on is marked, and a chip by the crosshair says what a press does (SNATCH RIFLE /
-    PULL / TAKE PORTAL / TAKEN). Where things overlap: their portal, then a weapon, then a man.
-  - *Weapons on the floor*. Every wave starts with everyone empty-handed and ~1.5 weapons per fighter
-    (you included) scattered, ~60% rifles; they glow (an amber or ice ring, a light pillar). The
-    first window to open next to one takes it (a later one comes back empty: TOO LATE). One weapon
-    in hand; taking another drops it. RIFLE (LMB / RT / WEAPON): one magazine of 12, 22 a round
-    (double on a reeling man), spent it's thrown aside. KNIFE: up close one stab kills; a man within
-    30 m in plain sight is stabbed through a window (35: two for a man on his feet, one if he's
-    reeling). A knife lost over the edge comes back where the wave put it.
-  - *PORTAL* (Q / Y / PORTAL): travel only (the old door / fall portal: press, aim, let go), no slow
-    motion. The body is FLOW's (run, slide, double jump, wall kick) without the meter or POWER.
-    The strikes, PARRY, DODGE, lock-on, the blade lunge, SHOVE and POWER are all off.
-  - *Their side* (`ReachAI`, the brain `EnemySystem` asks for men spawned with `def.reach`; 60 hp).
-    A human beat (0.4-1.0 s) after GO, then the nearest weapon in sight through a red window (or
-    on foot); with you armed and in sight, sometimes your weapon: a red window by your hand,
-    0.5 s to get away (move 1.6 m or go through a portal) or pull him first. A rifle keeps 9-18 m and
-    fires bursts of 3 bolts (15 each) after a 0.5 s red laser, at most 2 guns on you; spent, it's
-    dropped and he goes for another. A knife runs at you, a 0.45 s red wind-up, 25. Their RED PORTALS
-    (one at a time, 3 s apart) open 0.5 s before they step in: a knife's exit 2.6 m from you, a rifle's
-    flank 9 m out. Out of an exit you moved they tumble: over the void or the pool, that's the end.
-  - *Waves* (`REACH_WAVES`): 3, 4, 6 men on their posts as the banner comes up, frozen through a big
-    3-2-1, then GO (one line on the keys shows once). Death: back at whichever respawn spot is
-    furthest from them. KILLS BY TOOL: RIFLE, KNIFE, PORTAL (a redirect), OTHER.
+  **One rule: you open a window; what you do in front of you happens at the window.**
+  - *WINDOW* (hold RMB / LT / WINDOW; the touch button's drag aims). A ghost window (its outline,
+    a chevron the way it faces, a line down to the floor) stands where you aim: on the first wall
+    (0.6 m in front of it), on the floor (standing on the spot), else in mid-air at 30 m; the wheel
+    sets a mid-air distance (3-30 m, 1.5 m a step; a new hold starts from the aim's own). Aimed at a
+    man it stands 0.9 m past him; at a weapon on the floor, on it. Cyan: it can open; amber: a man
+    would see it (HE'LL SEE IT); red: too near you (< 3 m). Let go: it opens there (0.2 s) and its
+    twin, the NEAR window, opens 1.4 m in front of you on the crosshair, facing you; the pair is a
+    real rift pair (`RiftSystem.openStrike`, both cyan): through the near one you see out of the far
+    one. A window looks at the man right by it (past him: back at you, his back in the near window;
+    short of him: at his face, and he sees you through it), with nobody by it, at you. One pair at a
+    time, 4 s (a new one shuts the old), 0.35 s between; the far one has a cyan frame and a diamond
+    readable from anywhere; a bar under the crosshair runs its time down.
+  - *HAND* (E / MMB / F / RB / X / HAND), only with a window open; it acts at the far window. The
+    arm comes out of it (0.15 s) to what is right by it: ≤1.6 m from its plane (either side), ≤1.0 m
+    across, ±1.45 m up. Their red portal first, then the nearest of: a weapon on the floor (it flies
+    through to your hand), a man's weapon (DISARM), an unarmed man (PULL: into the far window,
+    0.18 s, out of the near one, 0.16 s, landing 2 m in front of you on the crosshair, facing you,
+    reeling 1.2 s; the window shuts behind him). Nothing there: a whiff, 0.4 s to recover. A man who
+    has NOTICED the window and has it in front of him slaps the hand away / holds on to his gun
+    (0.4 s). The chip by the crosshair says what HAND does now (TAKE RIFLE / DISARM / PULL HIM /
+    TAKE PORTAL / NOTHING THERE / HE SEES IT), a ring marks it. Their portal: hold HAND, aim, let go:
+    its exit is where you aimed (a tap: 3 m in front of you), the chip names the outcome.
+  - *WEAPON* (LMB / RT / WEAPON). RIFLE: 12 rounds, 22 a round (double on a reeling man); fired with
+    the crosshair on the near window the round comes out of the far one (`raycastThrough`), else
+    as ever. KNIFE: a man within 2.3 m in front of you dies of one stab (a lunge); otherwise, with a
+    window open, the knife comes out of the far window at the man right by it (≤1.3 m from its plane):
+    from behind or the side he dies, from the front he parries (PARRIED); nobody there: a whiff.
+  - *BODY*. Walk (or jump) into the near window: out of the far one, your speed kept (the rift
+    pair's physics; behind a man, you come out facing his back). Q and the old door portal are gone
+    here. The body is FLOW's (run, slide, double jump, wall kick) without the meter or POWER; the
+    strikes, PARRY, DODGE, lock-on, the blade lunge, SHOVE and POWER are all off.
+  - *They see it* (`REACH.notice`). A far window within 8 m in front of a man's eyes (±60°, in
+    sight) for 0.35 s is noticed (he shouts, turns to it for 1.6 s). A rifleman on its facing side
+    (he can see you through it) lasers into it (0.55 s; the laser is drawn into the far window and
+    out of the near one at you) and fires a burst through it: the rounds come out of the near
+    window at you (they stay his: they hurt you, nobody steers them). So: open it behind them, fast.
+  - *Weapons on the floor*. Every wave starts with everyone empty-handed and ~1.3 weapons per fighter
+    (you included), ~60% rifles, laid out in clusters about as far from your pad as from them; they
+    glow (an amber or ice ring, a light pillar). A weapon is whoever's hand TOUCHES it first: a
+    hand out of a window getting there, or walking over it with empty hands (1.05 m). Sending a hand
+    only marks it; a hand that gets there second comes back empty (TOO LATE). One weapon in hand;
+    taking another drops it; a spent rifle is thrown aside; a knife lost over the edge comes back.
+  - *Their side* (`ReachAI`; 60 hp; three kinds of man per `LabSpawn.reachRole`: RUSHER — a knife,
+    portals in at you; GUNNER — a rifle at range; FLANKER — a rifle and portals round your side).
+    A beat (0.35-0.9 s) after GO, then the weapon he likes: walked over, or through a big red window
+    of his own (2.2 m tall, a light pillar; 0.45 s open before the hand comes out, 0.25 s out) — a
+    race you can see. With you armed and in sight, sometimes your weapon: a red window by your hand,
+    0.5 s to get away (1.6 m, or through your window). A rifle keeps 9-18 m and fires bursts of 3
+    after a 0.55 s red laser, at most 2 guns on you. A knife runs at you, a 0.45 s red wind-up, 25.
+    Their RED PORTALS (one at a time, 3 s apart; 2.3 m tall with a pillar) open over 0.5 s, then he
+    braces 0.9 s before stepping in: a rusher's exit 2.6 m from you, a flanker's 9 m out. Your far
+    window by one of its ends + HAND takes it. Out of an exit you moved he tumbles (5 m/s): over the
+    void or the pool he's gone; 6 m+ over the floor the fall kills him, 3 m+ he reels 2.4 s (25);
+    facing a wall within 1.4 m he's slammed into it (30, reeling 1.6 s); for 3 s his own side's rounds
+    hit him.
+  - *What you can't see* (`ReachMode.threats`): red arrows at the screen's edge for every threat off
+    it within 30 m: a gun with its laser on you, a knife within 12 m, a thief (and MOVE), their red
+    windows and portals (urgent ones pulse). The lab panel is a compact strip top-left (wave, who's
+    left, the clock; the rules card opens itself through W1's start, then folds behind RULES); the
+    old mode's STYLE meter, rift pips, score feed, floor distance marks, FLIP button and hints are
+    gone here. One tip line at the first GO, gone in 5 s.
+  - *Waves* (`REACH_WAVES`): 3, 4, 5, 6, 8 men (later waves mix rushers, gunners and flankers) on
+    their posts as the banner comes up, still through a short 3-2-1 (3 s for W1, 2.2 s after the
+    CLEAR card), then GO. Death: back at whichever respawn spot is furthest from them. KILLS BY TOOL:
+    RIFLE, KNIFE, PORTAL (a redirect: the void, the water, a fall, a slam), OTHER.
+  - *Controls*. Desktop: RMB hold WINDOW (wheel: mid-air distance), E / MMB HAND, LMB WEAPON, Space
+    jump / double jump, C slide, Shift sprint. Pad: LT WINDOW, RB / X HAND, RT WEAPON. Phone
+    (landscape): WINDOW (hold, drag to aim, lift to open), HAND, WEAPON, JUMP and a small SLIDE; a
+    thumb's ghost leans onto the spot 1 m behind the man nearest the crosshair (within ~4°, and only
+    if it was within 2.6 m of it anyway).
 - **PRECISION** (`src/game/precision.ts`; the answer to "the game plays itself"). Nothing
   aims, picks or chases for you; defence and execution are skills:
   - *Manual aim.* Strikes (REFLECT's key aside), a LOOP cannon's catch, and GRAB take only

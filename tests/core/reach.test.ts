@@ -64,14 +64,14 @@ describe('REACH: where the window opens', () => {
     expect(s.pos.y - REACH.window.height / 2).toBeGreaterThanOrEqual(-0.01);
   });
 
-  it('on the floor: standing on the spot you aimed at, looking where you look', () => {
+  it('on the floor: standing on the spot you aimed at, facing you', () => {
     const w = flatWorld();
     const dir = V(0, -1.6, 10).normalize();
     const s = placeWindow(w, eye, dir, eye, null, groundOf(w));
     expect(s.surface).toBe('floor');
     expect(s.pos.z).toBeCloseTo(10, 1);
     expect(s.pos.y).toBeCloseTo(REACH.window.height / 2 + 0.02, 2);
-    expect(s.look.z).toBeCloseTo(1, 5);
+    expect(s.look.z).toBeCloseTo(-1, 5);
   });
 
   it('in mid-air: nothing within reach, it stands at REACH.range; the wheel sets it nearer, short of a wall', () => {
@@ -352,6 +352,7 @@ function rig(o: { hole?: boolean; device?: 'kbm' | 'touch' } = {}) {
     input.window = false;
     step(Math.ceil(REACH.window.open * 60) + 1);
   };
+  const unpin = (e: Enemy) => pinned.delete(e);
   const press = (k: 'hand' | 'fire', n = 30) => {
     if (k === 'hand') input.handPress = true;
     else input.firePress = true;
@@ -367,7 +368,7 @@ function rig(o: { hole?: boolean; device?: 'kbm' | 'touch' } = {}) {
     m.portalCd = 99;
     m.gunT = 99;
   };
-  return { sc, R, host, rifts, pos, ray, input, step, aimAt, openAt, press, man, freeze, calls, state, marked, camera };
+  return { sc, R, host, rifts, pos, ray, input, step, aimAt, openAt, press, man, freeze, unpin, calls, state, marked, camera };
 }
 
 describe('REACH: one window at a time', () => {
@@ -472,6 +473,26 @@ describe('REACH: the hand at the far window', () => {
     step(2);
     expect(R.ghost!.pos.z).toBeCloseTo(14 + REACH.window.past, 0);
     expect(sideOf(e.pos, e.yaw, R.ghost!.pos)).toBe('back');
+    input.window = false;
+  });
+
+  it('a window looks at the man right by it: past him it faces you (his back in its twin); short of him it faces him (his face — and he sees you)', () => {
+    const { R, man, freeze, step, aimAt, input } = rig();
+    const e = man(V(0, 0, 14), Math.PI);
+    step(1);
+    freeze(e);
+    aimAt(V(0, 1.2, 14));
+    input.window = true;
+    step(2);
+    expect(R.ghost!.look.z).toBeCloseTo(-1, 2);
+    R.airDist = 12.8;
+    step(1);
+    expect(R.ghost!.pos.z).toBeLessThan(14);
+    expect(R.ghost!.look.z).toBeCloseTo(1, 2);
+    // nobody by it: it faces you
+    R.airDist = 6;
+    step(1);
+    expect(R.ghost!.look.z).toBeCloseTo(-1, 2);
     input.window = false;
   });
 
@@ -602,14 +623,14 @@ describe('REACH: the weapon through the window', () => {
     const r = R.armory.add('rifle', V(0, 0, -20));
     R.armory.give(r, 'player');
     // a man off to the side, nowhere near your line of fire
-    const e = man(V(10, 0, 14), Math.PI);
+    const e = man(V(8, 0, 8), Math.PI);
     const other = man(V(-8, 0, 12), Math.PI);
     step(1);
     freeze(e);
     freeze(other);
     aimAt(V(0, 1.6, 30));
-    // the far window by him, looking the way you look (+z)
-    R.openWindow({ pos: V(10, 1.5, 10), look: V(0, 0, 1), surface: 'air', dist: 14, ok: true });
+    // the far window just past him, facing you: out of it comes your round, through his back
+    R.openWindow({ pos: V(10, 1.5, 10), look: V(-1, 0, -1).normalize(), surface: 'air', dist: 14, ok: true });
     step(Math.ceil(REACH.window.open * 60) + 2);
     const w = R.win!;
     // straight ahead: the crosshair is on the near window
@@ -642,8 +663,8 @@ describe('REACH: the weapon through the window', () => {
     }
     expect(crossed.length).toBe(1);
     expect(b.pos.distanceTo(V(w.far.pos.x, b.pos.y, w.far.pos.z))).toBeLessThan(1.2);
-    // out along the far window's look, still at walking speed
-    expect(b.vel.z).toBeGreaterThan(4);
+    // out of its face (it faces you: you come out behind whatever is in front of it), still at walking speed
+    expect(b.vel.z).toBeLessThan(-4);
   });
 });
 
@@ -661,23 +682,27 @@ describe('REACH: they see your window', () => {
   });
 
   it('a rifleman on the far side of your window shoots into it: the laser shows the way, the round comes out of your near window at you', () => {
-    const { R, sc, man, openAt, step, rifts, pos } = rig();
-    const e = man(V(0, 0, 16), Math.PI);
+    const { R, sc, man, freeze, unpin, openAt, step, rifts, pos } = rig();
+    // he looks away from you; your window opens right in front of his eyes (it faces you: he sees you through it)
+    const e = man(V(0, 0, 10), 0);
     step(1);
     const w = R.armory.add('rifle', V(9, 0, 9));
     R.armory.give(w, e.id);
-    R.ai.mind(e, Math.random).react = 99;
-    // the far window 4 m in front of him, looking at him (mid-air, along your aim)
-    openAt(V(0, 1.4, 12));
-    expect(R.win!.far.look.z).toBeCloseTo(1, 3);
+    // (busy with something else until then: no gun on you of his own accord)
+    freeze(e);
+    openAt(V(0, 1.4, 13));
+    expect(R.win!.far.look.z).toBeCloseTo(-1, 3);
     sc.log.bolts.length = 0;
-    step(Math.ceil((REACH.notice.time + REACH.enemy.rifle.aim) * 60) + 30);
+    step(Math.ceil(REACH.notice.time * 60) + 2);
+    expect(R.win!.noticed.has(e.id)).toBe(true);
+    unpin(e);
+    step(Math.ceil(REACH.enemy.rifle.aim * 60) + 20);
     expect(sc.log.telegraphs.some((t) => t.id === e.id && t.to.distanceTo(V(pos.x, 1.3, pos.z)) < 0.3)).toBe(true);
     const shot = sc.log.bolts.find((b) => b.id === e.id);
     expect(shot).toBeTruthy();
     // its path: into the far window, out of the near one, at your chest
     const segs = rifts.raycastThrough(shot!.from, shot!.dir, 40, sc.world, 1);
-    expect(segs.length).toBe(2);
+    expect(segs.length, JSON.stringify({ from: shot!.from, dir: shot!.dir, far: R.win?.far, near: R.win?.near })).toBe(2);
     const out = segs[1];
     const d = new THREE.Vector3().subVectors(out.to, out.from).normalize();
     const toMe = V(pos.x, pos.y + 1.3, pos.z).sub(out.from as THREE.Vector3);

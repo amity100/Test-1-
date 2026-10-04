@@ -166,8 +166,10 @@ export const REACH = {
       cooldown: [5, 8] as const,
     },
     portal: {
-      /** Red, it opens this long before he steps in (s). */
+      /** Red, it opens this long before anyone can use it (s)... */
       telegraph: 0.5,
+      /** ...and he braces at it this long more before he steps in (s): time to get a window by it. */
+      brace: 0.9,
       /** A rusher further than this from you (m) takes a portal this often (per decision)... */
       knifeFrom: 8,
       knifeChance: 0.6,
@@ -192,7 +194,7 @@ export const REACH = {
       maxHold: 3,
       /** It shuts this long after he's through (s), or this long after it opened, whatever happened. */
       after: 0.35,
-      life: 5,
+      life: 6,
     },
   },
   waves: {
@@ -219,6 +221,7 @@ export interface WindowSpot {
 
 const UP = new THREE.Vector3(0, 1, 0);
 const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
 
 /** The flat (horizontal) unit direction of `d` (+Z if it has none). */
 export function flat(d: V3, out = new THREE.Vector3()): THREE.Vector3 {
@@ -230,11 +233,13 @@ export function flat(d: V3, out = new THREE.Vector3()): THREE.Vector3 {
 /**
  * Where the WINDOW key's ghost stands for the aim ray (origin, unit dir) seen
  * from `eye`: on the first surface the ray meets within REACH.range (a wall:
- * REACH.window.off in front of it, looking out of it; the floor: standing on
- * it, looking where you look; a ceiling: under it), else in mid-air at the
- * range. `air` (m from your eyes, the wheel's distance): never further than
- * that, in mid-air short of a surface. `groundAt(x, z, y)`: the floor's top
- * under a point (-Infinity: none), so a window never sinks into it.
+ * REACH.window.off in front of it; the floor: standing on it; a ceiling: under
+ * it), else in mid-air at the range. `air` (m from your eyes: the wheel's
+ * distance, or just past the man you aim at): never further than that, in
+ * mid-air short of a surface. Every window faces you (it looks back along
+ * your aim: through its twin you see what's in front of it, its far side
+ * toward you — a man's back, if it's behind him). `groundAt(x, z, y)`: the
+ * floor's top under a point (-Infinity: none), so it never sinks into it.
  */
 export function placeWindow(
   world: Pick<CollisionWorld, 'raycast'>,
@@ -250,7 +255,6 @@ export function placeWindow(
   const lead = Math.max(0, _a.subVectors(eye, origin).dot(dir));
   const maxT = lead + (air !== null ? Math.min(air, REACH.range) : REACH.range);
   const hit = world.raycast(origin as THREE.Vector3, dir as THREE.Vector3, maxT);
-  const look = flat(dir);
   const pos = new THREE.Vector3();
   let surface: WindowSpot['surface'] = 'air';
   if (hit) {
@@ -263,10 +267,9 @@ export function placeWindow(
       pos.copy(hit.point).addScaledVector(dir, -W.off);
       pos.y -= H2;
     } else {
-      // a wall: in front of it, looking out of it
+      // a wall: in front of it
       surface = 'wall';
-      flat(n, look);
-      pos.copy(hit.point).addScaledVector(look, W.off);
+      pos.copy(hit.point).addScaledVector(flat(n, _b), W.off);
     }
   } else pos.copy(origin).addScaledVector(dir, maxT);
   // never into the floor (a low one stands on it)
@@ -277,6 +280,7 @@ export function placeWindow(
       if (surface === 'air') surface = 'floor';
     }
   }
+  const look = flat(_b.subVectors(eye, pos), new THREE.Vector3());
   const dist = pos.distanceTo(eye);
   return { pos, look, surface, dist, ok: dist >= W.min && dist <= REACH.range + 1.5 };
 }
