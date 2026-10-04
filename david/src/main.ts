@@ -15,6 +15,7 @@ import { Story } from './gameplay/Story';
 import { Intro } from './gameplay/Intro';
 import { LAYOUT, SUN } from './world/Layout';
 import { narration } from './content/introNarration';
+import { setSafeSkinning } from './characters/human/DualQuatSkinning';
 import { bootLog, bootMark, bootStep, bootSync } from './core/bootProfile';
 
 const params = new URLSearchParams(location.search);
@@ -87,6 +88,15 @@ async function boot() {
   (window as unknown as Record<string, unknown>).__boot = bootLog;
   bootMark('boot');
   const engine = bootSync('engine:new', () => new Engine(app));
+  // humans: standard 4-influence skinning on phones and Apple / mobile GPUs (the 8-influence DQS path lost the legs
+  // there — see DualQuatSkinning SAFE SKINNING); ?skin=safe | ?skin=dqs force either path
+  {
+    const p = params.get('skin');
+    const safe = p === 'safe' ? true : p === 'dqs' ? false
+      : engine.quality.mobile || /Apple|Mali|Adreno|PowerVR|Immortalis|Xclipse|Maleoon|Mobile/i.test(engine.quality.gpu);
+    setSafeSkinning(safe);
+    (window as unknown as Record<string, unknown>).__skin = safe ? 'safe' : 'dqs';
+  }
   const input = new Input(engine.renderer.domElement, app);
   const ui = new UI(app, input.isTouch);
   input.setTouchVisible(false);

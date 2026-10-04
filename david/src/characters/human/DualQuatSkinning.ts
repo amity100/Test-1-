@@ -19,6 +19,62 @@ import * as THREE from 'three';
  * plus a uniform scale and written to a small float texture (3 texels per bone).
  */
 
+/**
+ * SAFE SKINNING (phones and Apple / mobile GPUs): three.js' standard 4-influence linear blend skinning instead of the
+ * 8-influence DQS path below. On a real phone the custom path left the hips and legs of every human undrawn or torn
+ * (the region skinned with influences 5-8 — the arms, head and torso were fine, and the bear and the sheep, skinned the
+ * standard way, were fine), while software WebGL drew them correctly. In safe mode no material is patched, and every
+ * skinned geometry under a human keeps its 4 largest influences, renormalised (`toFourInfluences`).
+ * main.ts decides it once per device (setSafeSkinning); ?skin=dqs | ?skin=safe force it.
+ */
+let SAFE = false;
+export function setSafeSkinning(v: boolean) {
+  SAFE = v;
+}
+export function safeSkinning() {
+  return SAFE;
+}
+const converted = new WeakSet<THREE.BufferGeometry>();
+/** Keep the 4 largest of up to 8 influences (skinIndex/skinWeight + skinIndex2/skinWeight2), renormalised, in skinIndex/skinWeight. */
+export function toFourInfluences(g: THREE.BufferGeometry) {
+  if (converted.has(g)) return;
+  converted.add(g);
+  const si = g.getAttribute('skinIndex') as THREE.BufferAttribute | undefined;
+  const sw = g.getAttribute('skinWeight') as THREE.BufferAttribute | undefined;
+  if (!si || !sw) return;
+  const si2 = g.getAttribute('skinIndex2') as THREE.BufferAttribute | undefined;
+  const sw2 = g.getAttribute('skinWeight2') as THREE.BufferAttribute | undefined;
+  const n = si.count;
+  const ib = new Float64Array(8), wb = new Float64Array(8);
+  for (let v = 0; v < n; v++) {
+    let k = 0;
+    for (let j = 0; j < 4; j++) { ib[k] = si.getComponent(v, j); wb[k++] = sw.getComponent(v, j); }
+    if (si2 && sw2) for (let j = 0; j < 4; j++) { ib[k] = si2.getComponent(v, j); wb[k++] = sw2.getComponent(v, j); }
+    // top 4 by weight (selection: 8 elements)
+    for (let a = 0; a < 4; a++) {
+      let best = a;
+      for (let b = a + 1; b < k; b++) if (wb[b] > wb[best]) best = b;
+      if (best !== a) {
+        const ti = ib[a]; ib[a] = ib[best]; ib[best] = ti;
+        const tw = wb[a]; wb[a] = wb[best]; wb[best] = tw;
+      }
+    }
+    let sum = 0;
+    for (let a = 0; a < 4; a++) sum += Math.max(0, wb[a]);
+    for (let a = 0; a < 4; a++) {
+      si.setComponent(v, a, ib[a]);
+      sw.setComponent(v, a, sum > 1e-8 ? Math.max(0, wb[a]) / sum : a === 0 ? 1 : 0);
+    }
+  }
+  // influences 5-8 are folded into the 4 above: zero them, so CPU readers of both sets (hair roots) stay exact
+  if (sw2) {
+    for (let v = 0; v < n; v++) for (let j = 0; j < 4; j++) sw2.setComponent(v, j, 0);
+    sw2.needsUpdate = true;
+  }
+  si.needsUpdate = true;
+  sw.needsUpdate = true;
+}
+
 const _m = new THREE.Matrix4();
 const _inv = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -178,10 +234,29 @@ export class DualQuatSkinning {
     this.texture.needsUpdate = true;
     // the renderer calls skeleton.update() once per frame before drawing any mesh bound to it
     const orig = skeleton.update.bind(skeleton);
-    skeleton.update = () => {
-      orig();
-      this.compute();
-    };
+    if (SAFE) {
+      // safe mode: no dual quaternions; every skinned geometry under this human keeps its 4 largest influences
+      // (garments attached later are picked up within a few frames)
+      let frame = 0;
+      skeleton.update = () => {
+        if (frame < 240 ? true : frame % 30 === 0) this.convertTree();
+        frame++;
+        orig();
+      };
+    } else {
+      skeleton.update = () => {
+        orig();
+        this.compute();
+      };
+    }
+  }
+
+  /** Safe mode: the human's skinned geometries to 4 renormalised influences (idempotent per geometry). */
+  private convertTree() {
+    this.root.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (m.isSkinnedMesh && m.skeleton === this.skeleton) toFourInfluences(m.geometry);
+    });
   }
 
   /** Replace the per-bone DQS factors (0 = LBS .. 1 = DQS), e.g. to tune a joint at runtime. */
@@ -235,6 +310,7 @@ export class DualQuatSkinning {
    * `materialFor()` is the same call under a clearer name.
    */
   patchMaterial<M extends THREE.Material>(material: M, eight = false): M {
+    if (SAFE) return material; // standard three.js skinning (see SAFE SKINNING above)
     const owner = patchOwner.get(material);
     if (owner === this) return material;
     if (owner) return this.cloneFor(material, eight);

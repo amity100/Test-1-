@@ -253,8 +253,10 @@ export const VERDICT_WORDS: readonly IntroWord[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------------------
-// THE FILM (CUT v5, 134.5 s) — PROLOGUE 0-61 (the land · Bethlehem · Rachel · the map · the Philistines · Ramah) ·
-// 1 Gilgal 61-71.5 · 2 the spear and the silence 71.5-80.5 · 3 the tear 80.5-89.5 · 4 the verdict 89.5-98.5 ·
+// THE FILM (CUT v5.1, 139 s; the user, 4 Oct: the Philistines longer and clear from the first frame, the tribes not rushed —
+// P5 9 -> 10.5 s, P6 7 -> 10 s) — PROLOGUE 0-65.5 (the land · Bethlehem · Rachel · the map · the Philistines · Ramah) ·
+// 1 Gilgal 65.5-76 · 2 the spear and the silence 76-85 · 3 the tear 85-94 · 4 the verdict 94-103 · 5 David 103-113 ·
+// 6 the flock, the lamb and the logo 113-139, then the game
 // 5 David 98.5-108.5 · 6 the flock, the lamb and the logo 108.5-134.5, then the game
 // ---------------------------------------------------------------------------------------------------------
 export const INTRO_SHOTS: readonly IntroShot[] = [
@@ -318,22 +320,22 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'road reaches them. The camera keeps moving, slow and grand. No specific mountain is marked as Sinai.',
   },
   {
-    id: 'map-tribes', n: 'P5', set: 'map', take: 'tribes', dur: 9.0, cut: 'cut', cue: 'judges', beat: 'judea',
+    id: 'map-tribes', n: 'P5', set: 'map', take: 'tribes', dur: 10.5, cut: 'cut', cue: 'judges', beat: 'judea',
     // the same continuous camera as P4 (the cut is invisible) · tribes: the names of the tribes spread over their land ·
     // verse: "no king in Israel" · cities: the five Philistine cities glow on the coast and the lens starts down to them
-    beats: { tribes: 0.4, verse: 2.6, cities: 6.2 },
-    text: [{ at: 2.6, seconds: 3.9, kind: 'verse', quote: 'jdg_21_25_no_king', stagger: 0.16, side: 'center', v: 'bottom', lines: 2 }],
+    beats: { tribes: 0.4, verse: 3.0, cities: 7.2 },
+    text: [{ at: 3.0, seconds: 4.4, kind: 'verse', quote: 'jdg_21_25_no_king', stagger: 0.16, side: 'center', v: 'bottom', lines: 2 }],
     direction: 'The map continues (same camera, no visible cut): the lens comes lower over the land of Israel; the names '
       + 'of the twelve tribes appear over their territories (Dan in the north, as in the days of Saul); then on the '
       + 'coastal plain the five Philistine cities glow — Gaza, Ashkelon, Ashdod, Gath, Ekron (`cities`) — and the lens '
       + 'starts to descend toward the coast.',
   },
   {
-    id: 'philistines', n: 'P6', set: 'coast', take: 'threat', dur: 7.0, cut: 'dissolve', fade: 1.0, cue: 'threat', beat: 'warriors',
-    beats: { card: 0.6, verse: 1.8 },
+    id: 'philistines', n: 'P6', set: 'coast', take: 'threat', dur: 10.0, cut: 'dissolve', fade: 1.0, cue: 'threat', beat: 'warriors',
+    beats: { card: 0.8, verse: 3.2 },
     text: [
-      { at: 0.6, seconds: 3.0, kind: 'place', narration: ['philistia'], side: 'right', v: 'top' },
-      { at: 1.8, seconds: 4.8, kind: 'verse', quote: 's1_13_19_no_smith_film', stagger: 0.14, side: 'left', v: 'top', lines: 2 },
+      { at: 0.8, seconds: 3.4, kind: 'place', narration: ['philistia'], side: 'right', v: 'top' },
+      { at: 3.2, seconds: 5.6, kind: 'verse', quote: 's1_13_19_no_smith_film', stagger: 0.14, side: 'left', v: 'top', lines: 2 },
     ],
     direction: "The Philistine host on the coastal plain, the map's descent continued: from a crane 220 m over the plain, "
       + "looking back WNW down the column marching inland out of Ashdod (its tell behind it, the sea a pale band), the lens "
@@ -546,5 +548,5 @@ export const INTRO_CUES: readonly IntroCue[] = introCues(false);
 /** Kept for API compatibility (the score's tests import it): identical to INTRO_CUES. */
 export const INTRO_CUES_SHORT: readonly IntroCue[] = INTRO_CUES;
 
-/** Total length of the film (CUT v5: 134.5 s — the prologue, Gilgal, David; the lamb and the logo are its last shot). */
+/** Total length of the film (CUT v5.1: 139 s — the prologue, Gilgal, David; the lamb and the logo are its last shot). */
 export const INTRO_LENGTH = introLength(INTRO_CUES);
