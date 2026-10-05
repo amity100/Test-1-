@@ -504,6 +504,9 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
       });
       hand.setGripRadius(0.014);
       hand.setHero(1);
+      // tiers without depth of field see the fist sharp: it is kept a backlit near-silhouette there (the lens' blur is
+      // what keeps a game hand from reading as one at this scale; without it, less surface is better)
+      if (!engine.post.dofAvailable) hand.skin.skinUniforms.uSkinTint.value.multiplyScalar(0.42);
       hand.rig.breathe = 0;
       hand.rig.blinkEnabled = false;
       scene.add(hand.root);
@@ -891,6 +894,17 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
     ground: () => -10,
     frame(_take, _u, t, out) {
       camAt(t, out);
+      // screens wider than 16:9 (phones in landscape ~2.16, ultrawide) see more of the frame's sides: in the first
+      // second the mantle's front edge (past the fist) would come into frame — the lens slides left by the extra
+      // half-width, letting go as the push carries the frame off that edge
+      const el = engine.renderer.domElement;
+      const asp = el.clientWidth / Math.max(1, el.clientHeight);
+      if (asp > 1.78) {
+        const half = Math.tan(THREE.MathUtils.degToRad(out.fov ?? 20) / 2);
+        const dx = (asp - 1.78) * half * out.pos.distanceTo(out.look) * (1 - ss(1.2, 2.3, t));
+        out.pos.x -= dx;
+        out.look.x -= dx;
+      }
       // test only: a debug lens (window.__macroCam = { pos: [x, y, z], look: [x, y, z], fov })
       const dbg = testMode ? ((window as unknown as Record<string, unknown>).__macroCam as { pos: number[]; look: number[]; fov: number } | undefined) : undefined;
       if (dbg) {

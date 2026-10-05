@@ -15,11 +15,12 @@ import { baseTake, FILM_CAM, flightT, gilgalCam, gilgalFocus, landCam, SUN_CHEAT
  * behind the loading screen and disposed set by set as the film leaves it (phones!). This module is imported lazily (it
  * pulls in src/film/gilgal, src/film/cast, src/film/crowd, src/film/land and src/film/map through dynamic imports only).
  *
- * CUT v5.2 (docs/intro-script-v5.md, 141.5 s): the prologue films in the land sets 'judah' (P1 the flight), 'map' (P4-P5,
- * map1's realistic 3D map), 'coast' (P6 the Philistine host) and 'ramah' (P7 the elders), then 'gilgal' (G1-G7); the
- * rest is the game world (FilmWorld). EVERY SET IS AN INDEPENDENT ASYNC BUILDER (buildSet: no ordering assumptions, its
- * own progress, small yielding steps, its own build time in buildStats) so the loading wave can start the film once
- * judah (+ the world) is ready and build the map, coast, ramah and Gilgal in the background during the prologue:
+ * CUT v6 (docs/intro-script-v6.md, 103.6 s): the cold open C0 films in its own set 'macro' (src/film/macro: the fist on
+ * the me'il's corner), then the land sets 'judah' (P1 the flight), 'map' (P4, map1's realistic 3D map), 'coast' (P6 the
+ * Philistine host) and 'ramah' (P7 the elders), then 'gilgal' (G1-G7); the rest is the game world (FilmWorld). EVERY SET
+ * IS AN INDEPENDENT ASYNC BUILDER (buildSet: no ordering assumptions, its own progress, small yielding steps, its own
+ * build time in buildStats) so the loading wave can start the film once macro + judah (+ the world) are ready and build
+ * the map, coast, ramah and Gilgal in the background during the prologue (FilmSchedule):
  *
  *   const stage = await FilmStage.load(engine, { onProgress });     every used set in film order + the pre-compile
  *   // or progressively:
