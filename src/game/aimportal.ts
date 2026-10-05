@@ -51,9 +51,10 @@ export const AIMP = {
    * The near twin: `ahead` m in front of your chest on the crosshair (plus `lead` s per m/s you run at
    * it, at most `max`), centred on the crosshair as far as it can be while your own body line stays
    * `body` m inside it and the crosshair `margin` m inside; standing on your floor unless the crosshair
-   * needs it raised (at most `float` m off it).
+   * needs it raised (at most `float` m off it). While it is open it slides sideways with you (`follow`: a
+   * strafe keeps it, and him in it, on your crosshair; walking at it still walks you in).
    */
-  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6 },
+  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6, follow: true },
   /**
    * The crosshair on a man: within `deg` (by device) of his body (his radius plus `pad` m, his height
    * plus `padY` m), in sight, within `range` m; a tap within `tapPx` px of him on the screen. The exit
@@ -61,16 +62,16 @@ export const AIMP = {
    * see him), facing him, standing on his floor.
    */
   magnet: { deg: { kbm: 3, pad: 4.5, touch: 7 }, pad: 0.35, padY: 0.3, range: 45, tapPx: 60, dist: 1.3, lead: 0.2 },
-  /** The side choice: a flick shorter than `dead` (of a full push) keeps the default; ABOVE stands `over` m over his head. */
-  snap: { dist: 1.3, over: 0.7, dead: 0.35 },
+  /** The side choice: PORTAL held on a man this long (s), the look picks his side; a flick shorter than `dead` (of a full push) keeps the default; ABOVE stands `over` m over his head. */
+  snap: { pick: 0.06, over: 0.7, dead: 0.35 },
   /**
    * The knife: a man within `direct` m in front of you (a lunge), else (a pair open, its near twin within
    * `nearMax` m of you) whoever stands within `reach` m in front of the exit. After GO, for `edgeTime` s,
    * the knife reaches `edge` m further (and `edgeY` m up or down).
    */
   stab: { reach: 2.0, melee: 1.5, cooldown: 0.4, direct: 1.8, nearMax: 3.6, edge: 1.0, edgeY: 2.6, edgeTime: 0.35 },
-  /** GO: the dash into the near twin takes `time` s; out of the exit at `arrive` m/s along its front; a STAB / FIRE pressed within `buffer` s before arriving lands on arrival; the pair shuts `close` s after. */
-  go: { time: 0.12, arrive: 3.2, buffer: 0.25, close: 0.15 },
+  /** GO: the dash into the near twin takes `time` s; out of the exit at `arrive` m/s along its front; a STAB / FIRE pressed within `buffer` s before arriving lands on arrival; the pair shuts `close` s after (it has done its work: nothing of it in your view once you are out). */
+  go: { time: 0.12, arrive: 3.2, buffer: 0.25, close: 0 },
   pull: { reach: 2.5, land: 2.0, stun: 1.2, hold: 0.6, through: 0.18, out: 0.16, arc: 0.45 },
   throw: { speed: 18, up: 6, bodyDamage: 35 },
   /** Deaths on the way: a fall this high (m), a body hitting a wall this fast (m/s); the softer ones hurt. */
@@ -368,7 +369,10 @@ export function fitSnap(world: Pick<CollisionWorld, 'raycast'>, e: Body, side: S
   const toward = _b.set(s.pos.x - chest.x, 0, s.pos.z - chest.z);
   const dist = toward.length();
   toward.multiplyScalar(1 / Math.max(dist, 1e-6));
-  const hit = world.raycast(chest, toward, dist + 0.5);
+  // (at his chest and at his knees: a low block behind him counts too)
+  let hit = world.raycast(chest, toward, dist + 0.5);
+  const low = world.raycast(new THREE.Vector3(e.pos.x, e.pos.y + 0.35, e.pos.z), toward, dist + 0.5);
+  if (low && (!hit || low.distance < hit.distance)) hit = low;
   if (hit) {
     const wallD = hit.distance;
     if (wallD < 0.75) {

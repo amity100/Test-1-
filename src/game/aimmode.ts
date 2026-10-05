@@ -191,6 +191,9 @@ export class AimMode {
   /** You came out of the exit (game time): what was pressed on the way lands next frame. */
   private arrivedT = -99;
   private closeAt = -1;
+  /** Where you stood last frame (the near twin slides sideways with you). */
+  private lastFeet = new THREE.Vector3();
+  private hasFeet = false;
   /** The side is being picked: the game sends the look to the choice, not the camera. */
   get snapLatched() {
     return !!this.snapTarget && !!this.snapSide && this.choosing;
@@ -364,6 +367,7 @@ export class AimMode {
     // GO, and what you pressed on the way
     if (alive && go && inp.goPress) this.go();
     this.updateDash(dt);
+    this.followNear();
 
     // the weapons
     if (alive && go) {
@@ -444,6 +448,7 @@ export class AimMode {
       device: h.device(),
       ret: this.snapLatched && this.snapSide ? { kind: 'snap', side: this.snapSide, ok: this.ghost?.spot.ok !== false } : this.overSealed ? { kind: 'sealed' } : null,
       compass: this.compass(),
+      mark: this.markOf(),
       pair: this.pair ? Math.max(0, AIMP.life - this.pair.t) / AIMP.life : null,
       ammo: this.ammo,
       reload: this.reloadT > 0 ? 1 - this.reloadT / AIMP.rifle.reload : null,
@@ -495,14 +500,28 @@ export class AimMode {
     return g > -Infinity ? g : e.pos.y;
   }
 
-  /** The exit for a side of a man: next to where he will be in a moment, seen from where you stand. */
-  spotFor(e: Enemy, side: Side): Spot {
+  /**
+   * The exit for a side of a man: next to where he will be in a moment, seen
+   * from where you stand. The default side (BEHIND) with no room there (his
+   * back to a wall, sealed metal): the first of his sides, then over his head,
+   * that has room.
+   */
+  spotFor(e: Enemy, side: Side, fallback = side === 'behind'): Spot {
     const me = this.h.player.body.pos;
     const b = e.body;
-    const at = b && !b.simulate ? leadPos(e.pos, b.vel, AIMP.magnet.lead, _d) : _d.copy(e.pos);
-    const view = _c.set(e.pos.x - me.x, 0, e.pos.z - me.z);
+    const at = b && !b.simulate ? leadPos(e.pos, b.vel, AIMP.magnet.lead, new THREE.Vector3()) : e.pos.clone();
+    const view = new THREE.Vector3(e.pos.x - me.x, 0, e.pos.z - me.z);
     if (view.lengthSq() < 1e-6) view.set(Math.sin(this.h.player.yaw), 0, Math.cos(this.h.player.yaw));
-    return fitSnap(this.h.world, { pos: at, yaw: e.yaw, height: e.height }, side, this.floorOf(e), view.normalize());
+    view.normalize();
+    const body = { pos: at, yaw: e.yaw, height: e.height };
+    const floor = this.floorOf(e);
+    const spot = fitSnap(this.h.world, body, side, floor, view);
+    if (spot.ok || !fallback) return spot;
+    for (const s of ['left', 'right', 'above'] as const) {
+      const o = fitSnap(this.h.world, body, s, floor, view);
+      if (o.ok) return o;
+    }
+    return spot;
   }
 
   /** The side choice: PORTAL held on a man past a tap (or the side key with a man under the crosshair); its flick picks the side. */
@@ -512,7 +531,7 @@ export class AimMode {
     const onMan = live && inp.portal && this.holdT >= 0 && p && p.man !== null ? (this.h.enemies.get(p.man) as Enemy | null) : null;
     if (onMan && onMan.alive && !onMan.held) {
       this.snapTarget = onMan;
-      this.choosing = this.holdT >= AIMP.live || inp.snap;
+      this.choosing = this.holdT >= AIMP.snap.pick || inp.snap;
       this.snapSide = this.choosing ? pickSide(inp.snapVec.x, inp.snapVec.y) : p!.side;
       return;
     }
@@ -575,10 +594,10 @@ export class AimMode {
     } else if (live && !this.dash) {
       // not pressed: where it would open (the crosshair on a man: next to him; the side key: the side picked)
       const man = this.snapTarget ?? this.hover;
-      if (man) {
+      // (the pair already stands by him: no ghost on top of it; the side key shows the side it would pick)
+      if (man && (this.snapTarget || !(p && p.man === man.id))) {
         const spot = this.spotFor(man, this.snapTarget && this.snapSide ? this.snapSide : 'behind');
-        // (the pair already stands there: no ghost on top of it)
-        if (!(p && p.man === man.id && p.far.pos.distanceTo(spot.pos) < 0.6)) this.ghost = { spot, kind: spot.ok ? 'snap' : 'bad' };
+        this.ghost = { spot, kind: spot.ok ? 'snap' : 'bad' };
       }
     }
     // let go: it stays where it is, its time counted from now
@@ -717,6 +736,32 @@ export class AimMode {
       this.h.player.endLunge?.();
       this.dash = null;
     }
+  }
+
+  /**
+   * The near twin slides sideways with you (a strafe keeps it, and what you see
+   * through it, on your crosshair); toward it or away from it you move as ever
+   * (walking at it walks you in). Not while you dash, not once you are far
+   * from it.
+   */
+  private followNear() {
+    const me = this.h.player.body.pos;
+    const p = this.pair;
+    if (p && AIMP.near.follow && this.hasFeet && !this.dash) {
+      const n = p.near;
+      const dx = me.x - this.lastFeet.x, dz = me.z - this.lastFeet.z;
+      // (its right: across its face)
+      const rx = n.normal.z, rz = -n.normal.x;
+      const side = dx * rx + dz * rz;
+      const near = Math.hypot(n.pos.x - me.x, n.pos.z - me.z) < AIMP.stab.nearMax;
+      if (near && Math.abs(side) > 1e-4 && Math.abs(side) < 1) {
+        n.pos.x += rx * side;
+        n.pos.z += rz * side;
+        this.h.rifts.moveStrikeEntrance(p.strike, spotFrame(n, 'stand'));
+      }
+    }
+    this.lastFeet.copy(me);
+    this.hasFeet = true;
   }
 
   private endDash() {
@@ -1245,6 +1290,18 @@ export class AimMode {
       if (e.alive && (e as Enemy).aim === 'mirror') out.push({ id: e.id, pos: e.pos, yaw: e.yaw });
     }
     return out;
+  }
+
+  /** The bracket round the man the crosshair is on (not once the pair stands by him: the near twin shows him). */
+  private markOf(): AimHudState['mark'] {
+    const e = this.hover;
+    if (!e || (this.pair && this.pair.man === e.id) || this.snapLatched) return null;
+    const cam = this.h.camera;
+    _ndc.set(e.pos.x, e.pos.y, e.pos.z).project(cam);
+    if (_ndc.z > 1) return null;
+    const fy = _ndc.y, fx = _ndc.x;
+    _ndc.set(e.pos.x, e.pos.y + e.height, e.pos.z).project(cam);
+    return { x: (fx + _ndc.x + 2) / 4, y: (2 - fy - _ndc.y) / 4, h: Math.abs(_ndc.y - fy) / 2 };
   }
 
   /** The compass round the man SNAP is on, in screen 0..1. */

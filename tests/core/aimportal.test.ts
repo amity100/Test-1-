@@ -318,8 +318,8 @@ describe('AIM PORTAL: next to a man', () => {
   it('it follows his facing: turn him round and BEHIND is the other side', () => {
     const a = snapSpot({ ...man, yaw: 0 }, 'behind');
     const b = snapSpot({ ...man, yaw: Math.PI }, 'behind');
-    expect(a.pos.z).toBeCloseTo(10 - AIMP.snap.dist, 5);
-    expect(b.pos.z).toBeCloseTo(10 + AIMP.snap.dist, 5);
+    expect(a.pos.z).toBeCloseTo(10 - AIMP.magnet.dist, 5);
+    expect(b.pos.z).toBeCloseTo(10 + AIMP.magnet.dist, 5);
   });
 
   it('ABOVE: over his head looking down; BELOW: a disc in the floor under his feet looking up', () => {
@@ -1260,7 +1260,7 @@ describe('AIM PORTAL: PORTAL next to a man, at any range', () => {
     const g = man(V(0, 0, 14), Math.PI);
     freeze(g);
     aimAt(V(0, 1.2, 14));
-    hold(Math.ceil(AIMP.live * 60) + 2);
+    hold(Math.ceil(AIMP.snap.pick * 60) + 2);
     expect(R.pair!.man).toBe(g.id);
     expect(R.snapLatched).toBe(true);
     input.snapVec = { x: 0, y: 1 };
@@ -1279,6 +1279,20 @@ describe('AIM PORTAL: PORTAL next to a man, at any range', () => {
     expect(R.snapLatched).toBe(false);
     expect(R.pair!.far.pos.x).toBeCloseTo(-AIMP.magnet.dist, 1);
     // the look is the camera's again while not held
+  });
+
+  it('his back to a wall (no room behind him): PORTAL on him opens at his side instead, still next to him, facing him', () => {
+    const { R, man, freeze, aimAt, tap, sc } = rig();
+    sc.world.add(V(-5, 0, 14.5), V(5, 4, 15.5));
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    tap();
+    expect(R.pair).not.toBeNull();
+    const f = R.pair!.far;
+    expect(Math.abs(f.pos.x)).toBeCloseTo(AIMP.magnet.dist, 1);
+    expect(f.pos.z).toBeCloseTo(14, 1);
+    expect(V(-f.pos.x, 0, 14 - f.pos.z).normalize().dot(f.normal)).toBeCloseTo(1, 3);
   });
 
   it('a man on the move: the exit opens next to where he will be in a moment', () => {

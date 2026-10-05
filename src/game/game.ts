@@ -2505,7 +2505,8 @@ export class Game {
       this.stats.bestCombo = Math.max(this.stats.bestCombo, banked.banked);
       this.stats.styleTotal = this.style.state.total;
       const rankIdx = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS'].indexOf(this.style.state.rank);
-      if ((banked.banked >= 1500 || rankIdx >= 3) && this.exporterOk()) {
+      // (not in AIM PORTAL's lab fight: its button sat where the look thumb lands, and a touch on it is a replay mid-fight)
+      if ((banked.banked >= 1500 || rankIdx >= 3) && this.exporterOk() && !(this.lab && aimOn())) {
         this.clipOfferT = 6;
         this.clipFrames = this.recorder.aroundCombo(this.style.lastChainSpan);
         this.hud.offerClip(true);
@@ -2605,7 +2606,8 @@ export class Game {
         this.blade.cancel();
         this.rig.rotateBy(aimTurn ?? yawDelta);
         this.rig.kick = Math.max(this.rig.kick, 0.8);
-        this.renderer.grade.uniforms.uFlash.value = 1;
+        // (AIM PORTAL: you come out next to a man: a lighter flash, he must stay readable)
+        this.renderer.grade.uniforms.uFlash.value = aimOn() ? 0.3 : 1;
       },
       // FLOW: a kick off a wall (a whoosh, dust off it), the double jump (a ring under you), a slide
       airJump: (pos, wall) => {

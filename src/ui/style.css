@@ -1209,6 +1209,19 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .is-touch .ah-ammo i { width: 22px; height: 22px; }
 .is-touch .ah-ammo span { font-size: 17px; }
 .is-touch .ah-ret, .is-touch .ah-stab { font-size: 10px; }
+/* (phone: the chips go left of the crosshair: GO and STAB sit right of it) */
+.is-touch .ah-stab { transform: translate(calc(-100% - 26px), 40px) scale(.85); }
+.is-touch .ah-stab.on { transform: translate(calc(-100% - 26px), 40px); }
+.is-touch .ah-ret { transform: translate(calc(-100% - 26px), 14px) scale(.85); }
+.is-touch .ah-ret.on { transform: translate(calc(-100% - 26px), 14px); }
+/* the man the crosshair is on: a magenta bracket round him (PORTAL opens next to him) */
+.ah-mark { position: absolute; transform: translate(-50%, -50%); opacity: 0; transition: opacity .08s; }
+.ah-mark.on { opacity: 1; }
+.ah-mark i { position: absolute; width: 9px; height: 9px; border: 0 solid #ff9bff; filter: drop-shadow(0 0 3px rgba(255, 155, 255, 0.9)); }
+.ah-mark i:nth-child(1) { left: 0; top: 0; border-left-width: 2px; border-top-width: 2px; }
+.ah-mark i:nth-child(2) { right: 0; top: 0; border-right-width: 2px; border-top-width: 2px; }
+.ah-mark i:nth-child(3) { left: 0; bottom: 0; border-left-width: 2px; border-bottom-width: 2px; }
+.ah-mark i:nth-child(4) { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
 .ah-comp { position: absolute; width: 150px; height: 150px; margin: -75px 0 0 -75px; opacity: 0; transition: opacity .08s; }
 .ah-comp.on { opacity: 1; }
 .ah-comp::before { content: ''; position: absolute; inset: 22px; border: 2px dashed rgba(255, 155, 255, 0.55); border-radius: 50%; }

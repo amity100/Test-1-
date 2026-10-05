@@ -12,6 +12,8 @@ export interface AimHudState {
   ret: { kind: 'sealed' | 'close' | 'snap'; side?: Side; ok?: boolean } | null;
   /** The SNAP compass round the man under the crosshair (screen position in 0..1; null: none). */
   compass: { x: number; y: number; side: Side; ok: boolean } | null;
+  /** The man the crosshair is on (PORTAL opens next to him): a bracket round him, his middle and height in screen 0..1 (null: none). */
+  mark?: { x: number; y: number; h: number } | null;
   /** The pair's life left (1 → 0; null: none open). */
   pair: number | null;
   ammo: number;
@@ -48,6 +50,7 @@ export class AimHud {
   private callEl: HTMLDivElement;
   private ammoEl: HTMLDivElement;
   private compEl: HTMLDivElement;
+  private markEl: HTMLDivElement;
   private pips: HTMLElement[] = [];
   private arrowEls: HTMLElement[] = [];
   private cache = new Map<string, string>();
@@ -61,6 +64,7 @@ export class AimHud {
     const pips = [...new Set(COMPASS)].map((s) => `<i data-s="${s}"><b></b></i>`).join('');
     el.innerHTML = `
       <div class="rh-arrows">${'<i><b></b></i>'.repeat(ARROWS)}</div>
+      <div class="ah-mark"><i></i><i></i><i></i><i></i></div>
       <div class="ah-comp">${pips}<u></u></div>
       <div class="ah-ret"><b></b></div>
       <div class="ah-stab"><i>${REACH_ICON.knife}</i><b></b><kbd></kbd></div>
@@ -78,6 +82,7 @@ export class AimHud {
     this.callEl = el.querySelector('.rh-call') as HTMLDivElement;
     this.ammoEl = el.querySelector('.ah-ammo') as HTMLDivElement;
     this.compEl = el.querySelector('.ah-comp') as HTMLDivElement;
+    this.markEl = el.querySelector('.ah-mark') as HTMLDivElement;
     this.pips = Array.from(el.querySelectorAll('.ah-comp > i')) as HTMLElement[];
     this.arrowEls = Array.from(el.querySelectorAll('.rh-arrows > i')) as HTMLElement[];
     // (the pips sit on a ring: ABOVE on top, RIGHT, BELOW, LEFT, FRONT low right; BEHIND, the default, in the middle)
@@ -150,6 +155,19 @@ export class AimHud {
         p.classList.toggle('on', on);
         (p.querySelector('b') as HTMLElement).textContent = on ? t(`aim.side.${c.side}`) : '';
       }
+    });
+    // the bracket round the man the crosshair is on (at least a thumb's size: a far man is a few px tall)
+    const m = s.mark ?? null;
+    const mk = m ? `${Math.round(m.x * 500)}|${Math.round(m.y * 500)}|${Math.round(m.h * 500)}` : 'off';
+    this.put('mark', mk, () => {
+      this.markEl.classList.toggle('on', !!m);
+      if (!m) return;
+      const H = this.el.clientHeight || 720;
+      const hp = Math.max(46, m.h * H * 1.15);
+      this.markEl.style.left = `${(m.x * 100).toFixed(2)}%`;
+      this.markEl.style.top = `${(m.y * 100).toFixed(2)}%`;
+      this.markEl.style.height = `${hp.toFixed(0)}px`;
+      this.markEl.style.width = `${Math.max(30, hp * 0.55).toFixed(0)}px`;
     });
     this.put('stab', `${s.stab}|${s.device}`, () => {
       this.stabEl.className = `ah-stab${s.stab ? ` on ${s.stab}` : ''}`;
