@@ -86,6 +86,28 @@ export function reachRules(): string {
   return `<small class="pr-title rr-title">${esc(t('reach.rule.title'))}</small>${rows}`;
 }
 
+/** AIM PORTAL's rules card: the one rule, then the five verbs, the key per device (touch: the button's own label). */
+export const AIM_RULES = ['portal', 'fire', 'stab', 'pull', 'snap'] as const;
+const AIM_KEYS: Record<(typeof AIM_RULES)[number], { kbm: string; pad: string; touch: string }> = {
+  portal: { kbm: 'RMB', pad: 'LT', touch: 'touch.aimportal' },
+  fire: { kbm: 'LMB', pad: 'RT', touch: 'touch.fire' },
+  stab: { kbm: 'F', pad: 'X', touch: 'touch.stab' },
+  pull: { kbm: 'E', pad: 'RB', touch: 'touch.pull' },
+  snap: { kbm: 'CTRL', pad: 'LT + R-STICK', touch: 'touch.aimportal' },
+};
+
+/** An AIM PORTAL key's label on this device. */
+export function aimKey(k: (typeof AIM_RULES)[number]): string {
+  const m = AIM_KEYS[k];
+  const dev = getDevice();
+  return dev === 'touch' ? t(m.touch) : dev === 'pad' ? m.pad : m.kbm;
+}
+
+export function aimRules(): string {
+  const rows = AIM_RULES.map((k) => `<div class="ar-${k}"><kbd>${esc(aimKey(k))}</kbd><span>${esc(t(`aim.rule.${k}`))}</span></div>`).join('');
+  return `<small class="pr-title rr-title">${esc(t('aim.rule.title'))}</small>${rows}`;
+}
+
 /** What FLOW's HUD shows: the POWER meter and its state, speed (for the lines). */
 export interface FlowHudState {
   /** 0..1. */
@@ -106,6 +128,7 @@ export const TOOL_KEY: Record<LabTool, string> = {
   blade: 'lab.tool.blade',
   rifle: 'lab.tool.rifle',
   knife: 'lab.tool.knife',
+  throw: 'lab.tool.throw',
   redirect: 'lab.tool.redirect',
   other: 'lab.tool.other',
 };
@@ -221,7 +244,7 @@ export class LabHud {
 
   private build() {
     this.cache.clear();
-    // (only what the lab offers: REACH, for now; no F-keys)
+    // (only what the lab offers: AIM PORTAL, for now; no F-keys)
     const chips = LAB_OFFERED.map((v) => `<button type="button" data-v="${v}"><span>${esc(t(`lab.v.${v}`))}</span></button>`).join('');
     const tools = labTools(this.toolsFor).map((k) => `<div class="lt-${k}"><small>${esc(t(TOOL_KEY[k]))}</small><b data-f="k.${k}">0</b></div>`).join('');
     this.el.innerHTML = `
@@ -241,7 +264,7 @@ export class LabHud {
 
   private rulesDev = '';
   /** The variant the tool grid was built for. */
-  private toolsFor: CombatVariant = 'reach';
+  private toolsFor: CombatVariant = 'aimportal';
   private countEl: HTMLDivElement | null = null;
   private countKey = '';
 
@@ -297,14 +320,14 @@ export class LabHud {
     const dev = `${getDevice()}|${s.variant}`;
     if (dev !== this.rulesDev) {
       this.rulesDev = dev;
-      this.set('rules', s.variant === 'reach' ? reachRules() : s.variant === 'flow' ? flowRules() + precisionRules() : precisionRules(), true);
+      this.set('rules', s.variant === 'aimportal' ? aimRules() : s.variant === 'reach' ? reachRules() : s.variant === 'flow' ? flowRules() + precisionRules() : precisionRules(), true);
     }
   }
 
   /** WAVE n: the banner, with a countdown to the first man through. */
   announce(n: number, waves: number, sub: string, variant: CombatVariant) {
     // (REACH: the rules card shows itself through W1's start, then folds behind RULES)
-    if (n === 1 && variant === 'reach' && getDevice() !== 'touch') {
+    if (n === 1 && (variant === 'reach' || variant === 'aimportal') && getDevice() !== 'touch') {
       this.el.classList.add('rules-open');
       clearTimeout(this.rulesTimer);
       this.rulesTimer = window.setTimeout(() => this.el.classList.remove('rules-open'), 11000);

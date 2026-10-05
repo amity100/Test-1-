@@ -482,6 +482,8 @@ export interface SpawnDef {
   reach?: boolean;
   /** REACH: how he fights (a RUSHER: knife and portals at you; a GUNNER: rifle at range; a FLANKER: rifle and portals round your side). */
   reachRole?: 'rusher' | 'gunner' | 'flanker';
+  /** COMBAT LAB, AIM PORTAL only: which of its three men he is (actors/aimai.ts). Never set elsewhere. */
+  aim?: 'gunner' | 'mirror' | 'rusher';
 }
 
 export interface EnemyView {
@@ -946,7 +948,9 @@ export type Action =
   /** The STRIKES: REFLECT, LOOP, SWAP, DASH. */
   | 'strike1' | 'strike2' | 'strike3' | 'strike4'
   /** COMBAT LAB, FLOW only: held = the POWER moment. */
-  | 'power';
+  | 'power'
+  /** COMBAT LAB, AIM PORTAL only: held = SNAP (pick the side of the man under the crosshair). */
+  | 'snap';
 
 export interface AimInfo {
   valid: boolean;

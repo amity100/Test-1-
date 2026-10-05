@@ -86,6 +86,11 @@ const O = {
   reachRifle: { ref: 6, gap: 0.03, cap: 4 },
   reachSwing: { ref: 4, gap: 0.08 },
   reachClatter: { ref: 4, gap: 0.1, cap: 2 },
+  // AIM PORTAL
+  aimPop: { ref: 6, gap: 0.04, cap: 3, crit: true },
+  aimWhoosh: { ref: 6, gap: 0.05, cap: 3 },
+  aimBuzz: { ref: 4, gap: 0.12, cap: 2, crit: true },
+  aimReload: { ref: 3, gap: 0.2, cap: 1 },
 } satisfies Record<string, VoiceOpts>;
 
 const RANKS: readonly StyleRank[] = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
@@ -1571,6 +1576,53 @@ export class Audio implements AudioAPI {
       this.ring(v, v.out, t, [1850, 2770, 4100], [0.1, 0.07, 0.05], 0.25, 1);
       this.ring(v, v.out, t + 0.09, [1700, 2600], [0.06, 0.04], 0.2, 1);
       this.hiss(v, v.out, 'crackle', 'bandpass', t, 2500, 2500, 0.8, 0.3, 0.001, 0.1);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // AIM PORTAL
+  // ---------------------------------------------------------------------------
+
+  /** The pair pops open: a bright pluck over a low suck (`far`: the exit, higher). */
+  aimPop(pos: V3, far = true): void {
+    this.one('aimPop', pos, far ? 0.6 : 0.5, O.aimPop, (v, t) => {
+      const k = far ? 1 : 0.8;
+      this.tone(v, v.out, 'sine', t, 1560 * k, 520 * k, 0.04, 0.4, 0.001, 0.12);
+      this.hiss(v, v.out, 'white', 'bandpass', t, 2200 * k, 6800 * k, 2.6, 0.35, 0.001, 0.09);
+      this.tone(v, v.out, 'sine', t, 220 * k, 70, 0.1, 0.5, 0.002, 0.16);
+    });
+  }
+
+  /** Something fast through the pair: a rising rush (k: 0..1 how hard). */
+  aimWhoosh(pos: V3, k = 0.6): void {
+    this.one('aimWhoosh', pos, 0.35 + 0.4 * Math.min(1, k), O.aimWhoosh, (v, t) => {
+      const g = this.gainN(v, v.out, 0);
+      g.gain.setValueAtTime(EPS, t);
+      g.gain.exponentialRampToValueAtTime(0.6, t + 0.07);
+      g.gain.exponentialRampToValueAtTime(EPS, t + 0.22);
+      const bp = this.filt(v, g, 'bandpass', 600, 1.3);
+      glide(bp.frequency, t, 400, 3600, 0.2);
+      this.noise(v, bp, 'pink', t, t + 0.23);
+    });
+  }
+
+  /** A sealed panel refuses it: a short flat buzz. */
+  aimBuzz(pos: V3): void {
+    this.one('aimBuzz', pos, 0.55, O.aimBuzz, (v, t) => {
+      const lp = this.filt(v, v.out, 'lowpass', 1400, 1);
+      for (let i = 0; i < 2; i++) {
+        this.tone(v, lp, 'sawtooth', t + i * 0.07, 130, 120, 0, 0.35, 0.003, 0.06);
+        this.tone(v, lp, 'square', t + i * 0.07, 196, 180, 0, 0.18, 0.003, 0.06);
+      }
+    });
+  }
+
+  /** The magazine goes back in. */
+  aimReload(pos: V3): void {
+    this.one('aimReload', pos, 0.4, O.aimReload, (v, t) => {
+      this.ring(v, v.out, t, [1500, 2300], [0.08, 0.05], 0.18, 1);
+      this.ring(v, v.out, t + 0.9, [1100, 1900, 2800], [0.1, 0.07, 0.05], 0.22, 1);
+      this.hiss(v, v.out, 'crackle', 'bandpass', t + 0.9, 2200, 2200, 0.8, 0.3, 0.001, 0.07);
     });
   }
 

@@ -38,6 +38,24 @@ export const TOWERS = [
 export const TOWER_COL = 1.5;
 export const TOWER_TOP = 2.3;
 
+/**
+ * SEALED panels (AIM PORTAL): dark metal that refuses portals (a red flash and a
+ * buzz where you aim): [x0, z0, x1, z1, height]. Men hide behind them.
+ */
+export const SEALED: [number, number, number, number, number][] = [
+  [-18, 16, -12, 16.35, 3],
+  [12, 15, 18, 15.35, 3],
+  [-19, -1, -18.65, 5, 3],
+  [-1, -15, 5, -14.65, 3],
+];
+
+/** Taller platforms (AIM PORTAL; no stairs: portals, or a double jump from the cover): [x0, z0, x1, z1], top at PLATFORM_Y. */
+export const PLATFORMS: [number, number, number, number][] = [
+  [-29.5, 8.5, -25, 13],
+  [24.5, 2.5, 29.5, 7],
+];
+export const PLATFORM_Y = 3.2;
+
 /** The long wall for flanking exits. */
 export const LONG_WALL = { x0: -16.4, x1: -15.6, z0: -18, z1: 6, h: 5 };
 
@@ -115,6 +133,8 @@ export interface LabSpawn {
   pulse?: 2;
   /** REACH: how he fights (actors/reachai.ts). */
   reachRole?: 'rusher' | 'gunner' | 'flanker';
+  /** AIM PORTAL: which man he is (actors/aimai.ts). */
+  aim?: 'gunner' | 'mirror' | 'rusher';
 }
 
 export interface LabWave {
@@ -403,6 +423,29 @@ export const REACH_WAVES: LabWave[] = [
   },
 ];
 
+/** An AIM PORTAL man on his post (the gate only names where he is from). */
+const man = (aim: 'gunner' | 'mirror' | 'rusher', x: number, y: number, z: number): LabSpawn => ({ ...s('rifleman', 'pusher', 'rings', x, y, z), aim });
+const Gn = 'gunner' as const, Mr = 'mirror' as const, Rs = 'rusher' as const;
+const PY = PLATFORM_Y;
+
+/**
+ * AIM PORTAL's waves (DESIGN §14): 3, 4, 5, 6, 8 men. GUNNERS first (they hide
+ * behind cover and peek), MIRRORS from wave 2 (a shield that eats rounds: get
+ * behind him), RUSHERS from wave 3 (a knife and sometimes a portal of their
+ * own). Everyone stands on his post through the countdown.
+ */
+export const AIM_WAVES: LabWave[] = [
+  { subKey: 'lab.a1', ready: true, spawns: [man(Gn, -8, 0, 17), man(Gn, 8, 0, 18), man(Gn, 0, 0, 22)] },
+  { subKey: 'lab.a2', ready: true, spawns: [man(Gn, -14, 0, 12), man(Gn, 15, 0, 19), man(Gn, -27.2, PY, 10.7), man(Mr, 0, 0, 14)] },
+  { subKey: 'lab.a3', ready: true, spawns: [man(Gn, -12, 0, 18), man(Gn, 27, PY, 4.7), man(Mr, 6, 0, 12), man(Rs, -18, 0, 10), man(Rs, 14, 0, 6)] },
+  { subKey: 'lab.a4', ready: true, spawns: [man(Gn, -22, 0, 14), man(Gn, 12, 0, 21), man(Mr, -6, 0, 10), man(Mr, 18, 0, 12), man(Rs, -14, 0, 2), man(Rs, 8, 0, 4)] },
+  {
+    subKey: 'lab.a5',
+    ready: true,
+    spawns: [man(Gn, -27.2, PY, 10.7), man(Gn, 27, PY, 4.7), man(Gn, 0, 0, 23), man(Mr, -8, 0, 12), man(Mr, 10, 0, 11), man(Rs, -20, 0, 4), man(Rs, 16, 0, 5), man(Rs, 0, 0, 8)],
+  },
+];
+
 const copyWaves = (ws: LabWave[]): LabWave[] =>
   ws.map((w) => {
     const o: LabWave = { ...w, spawns: w.spawns.map((q) => ({ ...q, post: q.post.clone() })) };
@@ -417,7 +460,7 @@ export function labArena(): LabArena {
     respawns: [START.pos.clone(), V(-25, 0, -25), V(23, 0, -26), V(-26, 0, 9), V(26, 0, 22)],
     gates: GATES.map((g) => ({ ...g, pos: g.pos.clone() })),
     waves: copyWaves(WAVES),
-    variants: { onslaught: copyWaves(ONSLAUGHT_WAVES), flow: copyWaves(ONSLAUGHT_WAVES), reach: copyWaves(REACH_WAVES) },
+    variants: { onslaught: copyWaves(ONSLAUGHT_WAVES), flow: copyWaves(ONSLAUGHT_WAVES), reach: copyWaves(REACH_WAVES), aimportal: copyWaves(AIM_WAVES) },
   };
 }
 

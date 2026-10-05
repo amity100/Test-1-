@@ -7,7 +7,7 @@ import { makePropFactory } from './tower/props';
 import type { TowerAtmosphere, TowerBuild } from './tower';
 import { createLabMaterials, decalUV, type DecalId } from './combatlab/materials';
 import {
-  COVER, DECK, GANTRY, GATE_D, GATE_H, GATE_W, GATES, KILL_Y, LOADS, LONG_WALL, MENU_VIEW, PAD, POOL, RING, SEA_Y, STAIR, STAIR_E, STAIR_W,
+  COVER, DECK, GANTRY, PLATFORMS, PLATFORM_Y, SEALED, GATE_D, GATE_H, GATE_W, GATES, KILL_Y, LOADS, LONG_WALL, MENU_VIEW, PAD, POOL, RING, SEA_Y, STAIR, STAIR_E, STAIR_W,
   START, SUN_DIR, TOWER_COL, TOWER_H, TOWER_TOP, TOWERS, WALL_H, inPool, labArena,
 } from './combatlab/layout';
 
@@ -160,6 +160,7 @@ export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, op
   buildRing(L);
   buildTowers(L);
   buildCover(L);
+  buildSealed(L);
   buildGantry(L);
   buildPad(L);
   buildBackdrop(L);
@@ -193,6 +194,7 @@ export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, op
     nav: [
       { minX: -33, maxX: 33, minZ: -33, maxZ: DECK.z1, floorY: 0 },
       { minX: RING.cx - RING.outer, maxX: RING.cx + RING.outer, minZ: RING.cz - RING.outer, maxZ: RING.cz + RING.outer, floorY: RING.y },
+      ...PLATFORMS.map(([x0, z0, x1, z1]) => ({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, floorY: PLATFORM_Y })),
       ...TOWERS.map((t) => ({ minX: t.x - TOWER_TOP, maxX: t.x + TOWER_TOP, minZ: t.z - TOWER_TOP, maxZ: t.z + TOWER_TOP, floorY: TOWER_H })),
     ],
     playerStart: START.pos.clone(),
@@ -439,6 +441,32 @@ function buildCover({ ctx, mb }: Lab) {
   }
   mb.box('steel', w.x0 - 0.03, 0, w.z0, w.x1 + 0.03, 0.3, w.z1, C.steel, 1, { ao: 0 });
   wallDecal(mb, 'COMBAT LAB', V(w.x1, 2.6, (w.z0 + w.z1) / 2 - 3), V(1, 0, 0), 7, C.ink);
+}
+
+/** SEALED panels (they refuse portals) and the taller platforms. */
+function buildSealed({ ctx, mb }: Lab) {
+  for (const [x0, z0, x1, z1, h] of SEALED) {
+    solid(ctx, 'steel', x0, 0, z0, x1, h, z1, 0x23272d, 2, { tag: 'sealed', noPortal: true }, { ao: 0.3 });
+    // a hazard stripe at the foot, a red light line along the top on both faces
+    const red = new THREE.Color(3, 0.2, 0.15);
+    const thin = Math.min(x1 - x0, z1 - z0) < 1;
+    if (thin && x1 - x0 > z1 - z0) {
+      for (const [za, zb] of [[z0 - 0.012, z0], [z1, z1 + 0.012]]) {
+        mb.box('emissive', x0 + 0.2, h - 0.35, za, x1 - 0.2, h - 0.25, zb, red, 1, { ao: 0 });
+        mb.box('stripe', x0 + 0.2, 0.3, za, x1 - 0.2, 0.55, zb, C.orange, 1, { ao: 0 });
+      }
+    } else {
+      for (const [xa, xb] of [[x0 - 0.012, x0], [x1, x1 + 0.012]]) {
+        mb.box('emissive', xa, h - 0.35, z0 + 0.2, xb, h - 0.25, z1 - 0.2, red, 1, { ao: 0 });
+        mb.box('stripe', xa, 0.3, z0 + 0.2, xb, 0.55, z1 - 0.2, C.orange, 1, { ao: 0 });
+      }
+    }
+  }
+  for (const [x0, z0, x1, z1] of PLATFORMS) {
+    solid(ctx, 'grid', x0, 0, z0, x1, PLATFORM_Y, z1, C.tall, 4, { tag: 'platform' }, { ao: 0.5 });
+    rim(mb, x0, z0, x1, z1, PLATFORM_Y, 'nsew', 0.14, 0.18);
+    mb.box('steel', x0 - 0.04, 0, z0 - 0.04, x1 + 0.04, 0.25, z1 + 0.04, C.steel, 1, { ao: 0 });
+  }
 }
 
 function buildGantry({ ctx, mb }: Lab) {

@@ -77,7 +77,7 @@ afterEach(() => {
 
 describe('FLOW: the gate', () => {
   it('is FLOW only, and only in the lab; FLOW plays PRECISION and fights ONSLAUGHT', () => {
-    expect(VARIANTS).toEqual(['current', 'precision', 'onslaught', 'flow', 'reach']);
+    expect(VARIANTS).toEqual(['current', 'precision', 'onslaught', 'flow', 'reach', 'aimportal']);
     expect(variantForKey('F4')).toBe('flow');
     for (const v of ['current', 'precision', 'onslaught'] as const) expect(flowOn(v), v).toBe(false);
     expect(flowOn('flow')).toBe(true);

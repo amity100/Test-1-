@@ -53,6 +53,13 @@ export class Input {
   touchMove = { x: 0, y: 0 };
   /** Screen taps (CSS px) the touch UI records while the game asks for them (FLOW's POWER: tap a man to mark him). Read with consumeTaps(). */
   taps: { x: number; y: number }[] = [];
+  /** AIM PORTAL's SNAP side choice (x right, y up, -1..1): a mouse flick (accumulated), the R-stick, a drag on PORTAL. */
+  snapX = 0;
+  snapY = 0;
+  /** The game sends the look to the SNAP choice, not the camera (a man is latched). */
+  divertLook = false;
+  /** Taps on the world (CSS px) the touch UI records for AIM PORTAL (a tap opens the exit right there). Read with consumeWorldTaps(). */
+  worldTaps: { x: number; y: number }[] = [];
   /** The game has a PORTAL in hand (set every frame): RMB / LT / Y / D-pad do its things, not their own. */
   portalHolding = false;
   /** Called when the last used device changes (i18n device variants are switched automatically). */
@@ -90,6 +97,9 @@ export class Input {
     KeyR: 'strike4',
     // the lab's FLOW: held = the POWER moment (nothing else reads it)
     KeyZ: 'power',
+    // the lab's AIM PORTAL: held = SNAP (pick the side of the man under the crosshair)
+    ControlLeft: 'snap',
+    ControlRight: 'snap',
   };
 
   constructor(private canvas: HTMLElement) {
@@ -136,6 +146,17 @@ export class Input {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
       if (!this.mouseLive() || !this.enabled) return;
+      if (this.divertLook) {
+        // SNAP has a man: the flick picks his side (a hundred px or so is the full push)
+        this.snapX += e.movementX / 110;
+        this.snapY -= e.movementY / 110;
+        const m = Math.hypot(this.snapX, this.snapY);
+        if (m > 1) {
+          this.snapX /= m;
+          this.snapY /= m;
+        }
+        return;
+      }
       this.lookX += e.movementX * LOOK.mouse * this.sensitivity;
       this.lookY += e.movementY * LOOK.mouse * this.sensitivity * (this.invertY ? -1 : 1);
     });
@@ -277,8 +298,19 @@ export class Input {
     if (this.device !== 'pad') return;
     setMove(lx, -ly);
     const speed = LOOK.pad * (this.held.has('portal') ? LOOK.padAimScale : 1) * this.sensitivity;
-    this.lookX += Math.sign(rx) * rx * rx * speed * dt;
-    this.lookY += Math.sign(ry) * ry * ry * speed * dt * 0.7 * (this.invertY ? -1 : 1);
+    // AIM PORTAL: with LT held, the right stick pushed picks the SNAP side (when a man is latched it is not the camera)
+    const ltHeld = btn(6);
+    if (ltHeld && Math.hypot(rx, ry) > 0.4) {
+      if (!this.held.has('snap')) this.down('snap');
+      this.snapX = rx;
+      this.snapY = -ry;
+    } else if (this.held.has('snap') && !this.keys.has('ControlLeft') && !this.keys.has('ControlRight')) {
+      this.up('snap');
+    }
+    if (!(this.divertLook && ltHeld)) {
+      this.lookX += Math.sign(rx) * rx * rx * speed * dt;
+      this.lookY += Math.sign(ry) * ry * ry * speed * dt * 0.7 * (this.invertY ? -1 : 1);
+    }
 
     const edge = (i: number, on: (() => void) | null, off: (() => void) | null) => {
       const b = btn(i);
@@ -343,6 +375,19 @@ export class Input {
     this.lookX = 0;
     this.lookY = 0;
     return { x, y };
+  }
+
+  /** Start a fresh SNAP choice (BEHIND him). */
+  resetSnap() {
+    this.snapX = 0;
+    this.snapY = 0;
+  }
+
+  consumeWorldTaps() {
+    if (!this.worldTaps.length) return this.worldTaps;
+    const t = this.worldTaps;
+    this.worldTaps = [];
+    return t;
   }
 
   consumeTaps() {

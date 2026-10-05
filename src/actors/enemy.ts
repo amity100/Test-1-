@@ -3,6 +3,7 @@ import type { CharacterAPI, DynBody, EnemyKind, EnemyState, EnemyView, Locomotio
 import type { NavGrid } from '../world/nav';
 import { KIND, ONS, type KindTune } from './tuning';
 import { REACH } from '../game/reach';
+import { AIMP } from '../game/aimportal';
 
 /** What he believes (states like stagger/launched are only bodily). */
 export type Mode = 'calm' | 'suspicious' | 'combat';
@@ -227,6 +228,12 @@ export class Enemy implements EnemyView {
   /** How far up his rifle is (the game's REACH brain sets it: 0 empty-handed / a knife). */
   reachPose = 0;
 
+  // --- AIM PORTAL (only for a man spawned with `def.aim`)
+  readonly aim: 'gunner' | 'mirror' | 'rusher' | null;
+  /** You threw him (his death is the throw's); he went through your pair (his fall / slam is the pair's). */
+  aimThrown = false;
+  aimPorted = false;
+
   constructor(readonly id: number, readonly def: SpawnDef, char: CharacterAPI, body: DynBody | null, senseOffset: number) {
     this.key = `enemy:${id}`;
     this.kind = def.kind;
@@ -235,7 +242,8 @@ export class Enemy implements EnemyView {
     this.ons = def.onslaught ? new OnsState() : null;
     this.reach = !!def.reach;
     this.reachRole = def.reachRole ?? null;
-    this.hp = this.maxHp = this.arch ? ONS[this.arch].hp : this.reach ? REACH.enemy.hp : this.tune.hp;
+    this.aim = def.aim ?? null;
+    this.hp = this.maxHp = this.arch ? ONS[this.arch].hp : this.aim ? AIMP.enemy[this.aim].hp : this.reach ? REACH.enemy.hp : this.tune.hp;
     this.radius = this.tune.radius;
     this.height = this.tune.height;
     this.char = char;

@@ -52,6 +52,8 @@ import { CHAR_RIM, Character, type AnimLibrary, type CharacterAsset, type Look }
 import { dampAngle, Player, type PlayerEvents, type PlayerInput } from './player';
 import { FLOW, FLOW_SPRINT, flowBodyOn, flowOn, pickMark, PowerMeter, PowerMoment, type PowerCandidate } from './flow';
 import { ReachMode } from './reachmode';
+import { AimMode } from './aimmode';
+import { AIMP } from './aimportal';
 import { STRIP_HERO, STRIP_KESSLER } from './reachfx';
 import { BLADE, HiddenBlade } from './blade';
 import { OUTCOME_COLOR, RiftSystem } from './portals';
@@ -78,7 +80,7 @@ import { ChallengeSystem } from '../meta/challenges';
 import { META_STRINGS } from '../meta/strings';
 import { LAB_SPAWN_GUARD, LabMode } from './lab';
 import type { LabRunStats } from './labdirector';
-import { activeVariant, onslaughtOn, reachOn, setLabActive, setVariant, type CombatVariant } from './variant';
+import { activeVariant, aimOn, onslaughtOn, reachOn, setLabActive, setVariant, type CombatVariant } from './variant';
 import { aimedEnemy, behind, dodgeAt, dodgeSpot, exposedTo, Parry, ParryView, PRECISION, precisionOn, type DodgeRun } from './precision';
 
 import type { Settings } from './settings';
@@ -307,10 +309,14 @@ export class Game {
   lab: LabMode | null = null;
   /** REACH (the lab's remote hand, its weapons and its enemy side; only while the lab is loaded). */
   reach: ReachMode | null = null;
+  /** AIM PORTAL (the lab's default variant: your pair, rifle, knife, pull and throw, and its three kinds of man; only while the lab is loaded). */
+  aim: AimMode | null = null;
   /** When you last went through a rift (game time): their hand loses you. */
   private lastCrossT = -99;
   /** The wheel's steps this frame, for REACH's window. */
   private reachWheel = 0;
+  /** The SNAP choice's accumulated look (mouse flick), reset when SNAP latches a man. */
+  private aimSnapWas = false;
   /** The lab's results are in (the run ends on them, not on the mission's end screen). */
   private labStats: LabRunStats | null = null;
   /** Game time until which the player can't be hurt (a lab respawn on the pad). */
@@ -479,6 +485,8 @@ export class Game {
     this.lab = null;
     this.reach?.dispose();
     this.reach = null;
+    this.aim?.dispose();
+    this.aim = null;
     this.hud?.el.classList.remove('lab');
     setLabActive(false);
   }
@@ -598,9 +606,11 @@ export class Game {
     this.scene.add(this.projectiles.group);
     this.scene.add(this.parryView.group);
     this.enemies = new EnemySystem(this.physics, this.enemyHooks(), (kind, def) => {
-      const c = new Character(asset, anims, def?.onslaught && def.archetype ? def.archetype : LOOKS[kind]);
+      // AIM PORTAL's three: a gunner (the rifleman), a mirror (the shield carrier), a rusher (rust red, a knife)
+      const look = def?.aim === 'mirror' ? 'warden' : def?.aim === 'rusher' ? 'stormer' : def?.onslaught && def.archetype ? def.archetype : LOOKS[kind];
+      const c = new Character(asset, anims, look);
       // REACH: his hands start empty (his own rifle hidden); the weapons he takes show in them
-      if (def?.reach) c.addHeldWeapons(STRIP_KESSLER);
+      if (def?.reach || def?.aim === 'rusher') c.addHeldWeapons(STRIP_KESSLER);
       return c;
     });
     // the COMBAT LAB: its director brings the fights, its variant is in force
@@ -616,16 +626,17 @@ export class Game {
             if (precisionOn() && this.hp > 0 && this.respawnT < 0) {
               this.hp = LAW.player.hp;
             }
-            // (REACH: a short beat, no long slow motion)
-            this.slowT = Math.max(this.slowT, reachOn() ? 0.45 : 0.9);
-            this.slowScale = reachOn() ? 0.45 : 0.3;
+            // (REACH / AIM PORTAL: a short beat, no long slow motion)
+            this.slowT = Math.max(this.slowT, reachOn() || aimOn() ? 0.45 : 0.9);
+            this.slowScale = reachOn() || aimOn() ? 0.45 : 0.3;
             this.audio.sting('alert');
           },
           onFinished: (st) => this.labFinished(st),
           onWave: (_n, def) => {
             if (reachOn()) this.reach?.beginWave(def);
+            if (aimOn()) this.aim?.beginWave(def);
           },
-          toolFor: (ev) => (reachOn() && this.reach ? this.reach.toolFor(ev) : null),
+          toolFor: (ev) => (aimOn() && this.aim ? this.aim.toolFor(ev) : reachOn() && this.reach ? this.reach.toolFor(ev) : null),
         })
       : null;
     this.hud.el.classList.toggle('lab', !!arena);
@@ -690,6 +701,10 @@ export class Game {
       this.scene.add(reach.fx.group);
       // (one of everything it draws, so the programs compile with the world's)
       reach.fx.warm(this.camera.position.clone().addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 6));
+      const aim = (this.aim = this.makeAim());
+      this.enemies.aimBrain = aim.ai;
+      this.scene.add(aim.fx.group);
+      aim.fx.warm(this.camera.position.clone().addScaledVector(this.camera.getWorldDirection(new THREE.Vector3()), 6));
     }
 
     // rift hologram
@@ -699,6 +714,8 @@ export class Game {
     this.rifts.ghostFigure = ghost.root;
     this.rifts.group.add(ghost.root);
     this.rifts.events.opened = (end, which) => {
+      // (AIM PORTAL's pair has its own pop)
+      if (this.aim?.on && this.aim.isPairEnd(end)) return;
       this.audio.riftOpen(end.position, which === 'boss' ? 'gate' : which);
       this.fx.riftBurst(end.position, end.normal, which === 'exit' ? COL_EXIT : COL_ENTRANCE);
     };
@@ -829,6 +846,7 @@ export class Game {
       c.root.traverse((o) => (o as THREE.SkinnedMesh).skeleton?.dispose());
     }
     this.reach?.fx.warm(null);
+    this.aim?.fx.warm(null);
     this.worldObjs = this.scene.children.filter((o) => !before.has(o));
     this.newRun();
   }
@@ -965,6 +983,55 @@ export class Game {
     );
   }
 
+  /** AIM PORTAL, wired to this world. */
+  private makeAim(): AimMode {
+    const game = this;
+    return new AimMode(
+      {
+        get world() {
+          return game.level.world;
+        },
+        get enemies() {
+          return game.enemies;
+        },
+        fx: this.fx,
+        audio: this.audio,
+        camera: this.camera,
+        get player() {
+          return game.player;
+        },
+        get hero() {
+          return game.hero;
+        },
+        get rifts() {
+          return game.rifts;
+        },
+        aimRay: () => this.rig.aimRay(),
+        rayAt: (x, y) => {
+          // (a ray through a screen point: the camera's own frame, unprojected)
+          const o = this.camera.getWorldPosition(new THREE.Vector3());
+          const d = new THREE.Vector3(x, y, 0.5).unproject(this.camera).sub(o).normalize();
+          return { origin: o, dir: d };
+        },
+        eye: (out) => this.player.eye(out),
+        device: () => this.input.lastDevice,
+        time: () => this.time,
+        alive: () => this.hp > 0 && this.respawnT < 0,
+        safe: () => this.time < this.guardUntil || this.respawnT >= 0,
+        fighting: () => !!this.lab?.fighting,
+        standAt: (x, z, y) => this.standAt(x, z, y),
+        hurt: (amount, from) => this.hurtPlayer(amount, from),
+        hitstop: (s) => (this.hitstop = Math.max(this.hitstop, s)),
+        shake: (k) => (this.rig.shake = Math.max(this.rig.shake, k)),
+        kick: (k) => (this.rig.kick = Math.max(this.rig.kick, k)),
+        fireEnemyBolt: (e, from, dir) => this.enemies.hooks.fireBolt(e, from, dir),
+        laser: (e, from, to, t01) => this.enemies.hooks.telegraph(e, 'laser', from, to, t01),
+        vibrate: (ms) => navigator.vibrate?.(ms),
+      },
+      this.hud.el,
+    );
+  }
+
   /** REACH: of the lab's respawn spots, the one whose nearest living man is furthest away. */
   private labRespawn(): V3 {
     const lab = this.lab!;
@@ -1014,6 +1081,7 @@ export class Game {
     this.portal?.reset();
     this.blade?.reset();
     this.reach?.onRespawn();
+    this.aim?.onRespawn();
     this.strikeMarks?.clear();
     this.riftMarked?.clear();
     this.resetPrecision();
@@ -1118,7 +1186,7 @@ export class Game {
       // the lab: back on the pad, the wave goes on (the run records the death)
       if (died) this.lab.noteDeath();
       // (REACH: the spot furthest from them, so nobody waits on the pad with a knife)
-      const at = reachOn() ? this.labRespawn() : this.lab.arena.pad.pos;
+      const at = reachOn() || aimOn() ? this.labRespawn() : this.lab.arena.pad.pos;
       this.respawnPlayer(at, at === this.lab.arena.pad.pos ? this.lab.arena.pad.yaw : Math.atan2(-at.x, -at.z));
       this.guardUntil = this.time + LAB_SPAWN_GUARD;
       this.push({ type: 'death', t: this.time });
@@ -1278,7 +1346,7 @@ export class Game {
   private hintHold = 0;
   private updateHints(realDt: number) {
     // (REACH: its own one tip; none of the old ones)
-    if (this.lab && reachOn()) {
+    if (this.lab && (reachOn() || aimOn())) {
       this.hintQueue.length = 0;
       return;
     }
@@ -1353,6 +1421,13 @@ export class Game {
         return true;
       },
       onCross: (p, from, to) => {
+        // AIM PORTAL: a round of theirs into your exit comes out of the near twin, at you (it hurts, keeps its side);
+        // into the near twin it comes out of the exit, a round of the field (it hurts whoever it meets)
+        if (this.aim?.on && this.aim.isPairEnd(from)) {
+          if (p.team === 'kessler') p.charged = this.aim.isNearEnd(from);
+          this.fx.riftBurst(to.position, to.normal, COL_CHARGED);
+          return;
+        }
         // REACH: a round of theirs through your window is still theirs (it hits you; nobody steers it)
         if (this.reach?.on && this.reach.isWindowEnd(from)) {
           if (p.team === 'kessler') p.charged = false;
@@ -1525,7 +1600,7 @@ export class Game {
         if (p.kind === 'beam') p.life = p.age;
         return 'stop';
       }
-      const dmg = p.kind === 'beam' ? LAW.beam.damage : LAW.bolt.damageToPlayer;
+      const dmg = p.kind === 'beam' ? LAW.beam.damage : aimOn() ? p.damage : LAW.bolt.damageToPlayer;
       this.hurtPlayer(dmg, hit.point);
       return p.kind === 'beam' ? 'pass' : 'stop';
     }
@@ -1568,7 +1643,7 @@ export class Game {
   private enemyHooks(): EnemyHooks {
     return {
       fireBolt: (e, from, dir) => {
-        this.projectiles.fireBolt(from, dir, 'kessler', e.id);
+        this.projectiles.fireBolt(from, dir, 'kessler', e.id, aimOn() ? { damage: AIMP.enemy.gunner.damage } : {});
         this.audio.boltFire(from);
       },
       throwGrenade: (e, from, vel) => {
@@ -1735,7 +1810,7 @@ export class Game {
     this.push(ev);
     // the PORTAL first; the STRIKES once you've made your first kill with it
     // (PRECISION's rules card says how its keys work)
-    if (!precisionOn() && !reachOn()) this.hint('strikes', t('hint.strikes'), 10);
+    if (!precisionOn() && !reachOn() && !aimOn()) this.hint('strikes', t('hint.strikes'), 10);
     this.fx.embers(ctx.at, 16);
     // (a kill landing after you died heals no one: you stay dead)
     if (this.respawnT < 0) this.hp = Math.min(LAW.player.hp, this.hp + LAW.player.killHeal);
@@ -1887,11 +1962,21 @@ export class Game {
     }
   }
 
+  /** AIM PORTAL (touch): the oldest tap on the world this frame, as a screen point (NDC). */
+  private takeWorldTap(inp: Input): { x: number; y: number } | null {
+    const taps = inp.consumeWorldTaps();
+    if (!taps.length) return null;
+    const tp = taps[taps.length - 1];
+    const r = this.renderer.renderer.domElement.getBoundingClientRect();
+    return { x: ((tp.x - r.left) / r.width) * 2 - 1, y: -(((tp.y - r.top) / r.height) * 2 - 1) };
+  }
+
   private impactEnemy(v: EnemyView, speed: number, imp: DynBody, kc: KillCtx) {
     const lethal = v.armored ? LAW.armorSpeed : LAW.killSpeed;
+    // (AIM PORTAL: a thrown man hurts the one he hits, he does not kill him)
     const info: HitInfo = {
       source: 'impact',
-      amount: speed >= lethal ? 9999 : speed >= LAW.knockSpeed ? 25 : 0,
+      amount: aimOn() ? (speed >= LAW.knockSpeed ? AIMP.throw.bodyDamage : 0) : speed >= lethal ? 9999 : speed >= LAW.knockSpeed ? 25 : 0,
       charged: true,
       speed,
       dir: imp.vel.clone().normalize(),
@@ -2042,6 +2127,7 @@ export class Game {
     if (this.hp <= 0) {
       this.hp = 0;
       if (this.reach?.on) this.reach.playerDown();
+      if (this.aim?.on) this.aim.playerDown();
       this.respawnT = 1.1;
       this.player.char.die('shot');
       this.slowT = 1.1;
@@ -2068,7 +2154,7 @@ export class Game {
       setDevice(this.input.lastDevice);
     }
     // (REACH has no strikes: their bar stays away)
-    this.strikeBar.show(this.mode === 'playing' && !(this.lab && reachOn()));
+    this.strikeBar.show(this.mode === 'playing' && !(this.lab && (reachOn() || aimOn())));
     switch (this.mode) {
       case 'playing':
         this.update(realDt);
@@ -2149,9 +2235,12 @@ export class Game {
     let ts = 1;
     // (aboard the train: nothing more to do but ride)
     const alive = this.respawnT < 0 && !this.boarded;
-    // REACH: the lab's default (its HUD and its look on; the old verbs below all off)
-    const reach = !!this.reach && reachOn();
-    this.reach?.show(reach);
+    // REACH / AIM PORTAL: the lab's own variants (their HUD and look on; the old verbs below all off)
+    const reachV = !!this.reach && reachOn();
+    const aimV = !!this.aim && aimOn();
+    const reach = reachV || aimV;
+    this.reach?.show(reachV);
+    this.aim?.show(aimV);
     this.hud.el.classList.toggle('reach-on', reach);
     // held PORTAL (aiming the exit) and the LOOP cannon run in slow motion (REACH: no long slow motion)
     if (this.settings.slowmo && alive && !reach) {
@@ -2208,7 +2297,7 @@ export class Game {
         this.audio.ui('click');
       }
     } else {
-      // (REACH: the wheel sets how far its window stands in mid-air)
+      // (REACH / AIM PORTAL: the wheel sets how far its window / exit stands in mid-air)
       this.reachWheel = inp.consumeWheel();
       this.rifts.airDistance = null;
     }
@@ -2294,7 +2383,31 @@ export class Game {
     if (prec && free && inp.wasPressed('shove')) this.dodgePress(inp.moveX, inp.moveY);
     // REACH: the WEAPON and the HAND (before you move: a stab's step in moves you this frame)
     // (WINDOW: RMB / LT / its button; HAND: E / MMB / F / RB / X / its button; WEAPON: LMB / RT / its button)
-    if (reach) {
+    if (aimV) {
+      // AIM PORTAL: PORTAL (RMB / LT / its button), FIRE (LMB / RT), STAB (F / X), PULL and THROW (E / RB), SNAP (Ctrl / MMB / R-stick / a drag)
+      const snap = inp.isHeld('snap') || inp.isHeld('close');
+      this.aim!.update(dt, realDt, {
+        fire: free && inp.isHeld('portal'),
+        firePress: free && inp.wasPressed('portal'),
+        portal: free && inp.isHeld('strike1'),
+        portalPress: free && inp.wasPressed('strike1'),
+        portalRelease: inp.wasReleased('strike1'),
+        snap: free && snap,
+        snapVec: { x: inp.snapX, y: inp.snapY },
+        stabPress: free && inp.wasPressed('action'),
+        pullPress: free && (inp.wasPressed('strike3') || inp.wasPressed('shove')),
+        wheel: this.reachWheel,
+        worldTap: free ? this.takeWorldTap(inp) : null,
+      });
+      // SNAP latched a man: the look chooses his side, not the camera (a fresh choice starts on BEHIND)
+      const latched = this.aim!.snapLatched;
+      if (latched && !this.aimSnapWas) inp.resetSnap();
+      this.aimSnapWas = latched;
+      inp.divertLook = latched;
+    } else {
+      inp.divertLook = false;
+    }
+    if (reachV) {
       const handKeys = ['strike3', 'close', 'action', 'shove'] as const;
       this.reach!.update(dt, realDt, {
         fire: free && inp.isHeld('portal'),
@@ -2305,7 +2418,8 @@ export class Game {
         wheel: this.reachWheel,
       });
     }
-    this.touch?.setReach(reach ? this.reach!.touchState() : null);
+    this.touch?.setReach(reachV ? this.reach!.touchState() : null);
+    this.touch?.setAim(aimV ? this.aim!.touchState() : null);
     const wasAir = p.airborne;
     p.update(dt, pin, this.level.world, this.physics, this.physEv, this.playerEvents(), this.time);
     this.updateDodge(dt);
@@ -2625,7 +2739,7 @@ export class Game {
 
   private trapTargets(): TrapTarget[] {
     // REACH: the PORTAL is for travel only (no hatch over a man, no load)
-    if (this.lab && reachOn()) return [];
+    if (this.lab && (reachOn() || aimOn())) return [];
     const out = this.enemies.trapTargets().filter((tt) => {
       const e = this.enemies.byKey(tt.key);
       return !e || this.zones.active.has(e.def.zone);
@@ -2716,7 +2830,7 @@ export class Game {
     const b = p.body;
     if (this.respawnT >= 0) return null;
     // REACH: no blade, no grabs by hand: the WEAPON and the HAND do it all
-    if (this.lab && reachOn()) return null;
+    if (this.lab && (reachOn() || aimOn())) return null;
     if (this.carried) return { label: t('prompt.throw'), run: () => this.throwCarried() };
     const f = p.forward(_v2);
     // HIDDEN BLADE: anyone in reach, or a lunge away ahead of you (the label stays through its cooldown)

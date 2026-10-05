@@ -7,8 +7,9 @@ import { LabHud } from '../ui/labhud';
 import { t } from '../ui/i18n';
 import type { FxKit } from './fxkit';
 import { killTool, LabDirector, type LabRunStats, type LabTool } from './labdirector';
-import { chosenVariant, onslaughtOn, reachOn, type CombatVariant } from './variant';
+import { aimOn, chosenVariant, onslaughtOn, reachOn, type CombatVariant } from './variant';
 import { REACH } from './reach';
+import { AIMP } from './aimportal';
 
 /** REACH's men come in red (their portals' colour). */
 const REACH_IN = new THREE.Color(2.8, 0.18, 0.55);
@@ -53,9 +54,11 @@ export class LabMode {
     this.hud = new LabHud(hudRoot);
     // REACH's countdowns (its waves name no lead of their own: the numbers live in REACH)
     arena.variants?.reach?.forEach((w, i) => (w.lead = i === 0 ? REACH.waves.first : REACH.waves.between));
+    arena.variants?.aimportal?.forEach((w, i) => (w.lead = i === 0 ? AIMP.waves.first : AIMP.waves.between));
     this.director = new LabDirector(arena, {
       spawn: (s, gate, wave) => {
         const E = host.enemies;
+        if (aimOn(this.director.stats.variant)) return this.spawnAim(s, wave);
         if (reachOn(this.director.stats.variant)) return this.spawnReach(s, wave);
         const def: SpawnDef = {
           id: `pier.lab.w${wave}.${++this.seq}`,
@@ -106,6 +109,30 @@ export class LabMode {
       },
       finished: (stats) => host.onFinished(stats),
     });
+  }
+
+  /** An AIM PORTAL man (a gunner, a mirror, a rusher): on his post at once, facing you, a flash where he appears. */
+  private spawnAim(s: LabSpawn, wave: number): number {
+    const host = this.host;
+    const pl = host.playerPos();
+    const def: SpawnDef = {
+      id: `pier.lab.a${wave}.${++this.seq}`,
+      kind: 'rifleman',
+      pos: s.post.clone(),
+      yaw: Math.atan2(pl.x - s.post.x, pl.z - s.post.z),
+      zone: 'pier',
+      squad: `pier.lab.a${wave}`,
+      state: 'combat',
+      aim: s.aim ?? 'gunner',
+    };
+    const v = host.enemies.spawn(def) as Enemy;
+    host.enemies.inform(v, pl);
+    const at = s.post.clone().setY(s.post.y + 1.1);
+    host.fx.riftBurst(at, new THREE.Vector3(Math.sin(def.yaw), 0, Math.cos(def.yaw)), REACH_IN);
+    host.fx.ring(s.post.clone().setY(s.post.y + 0.05), 1.4, 0.4, REACH_IN);
+    host.fx.flash(at, 3, 0.3, 0xff2a6a);
+    if (this.seq % 2 === 1) host.audio.riftOpen(at, 'gate');
+    return v.id;
   }
 
   /** A REACH man: on his post at once, facing you, empty-handed (a red rift where he appears). */
@@ -162,7 +189,7 @@ export class LabMode {
       }
     } else if (d.phase === 'breather') this.hud.countdown(d.breatherT);
     // REACH: the 3-2-1 and GO (big, short)
-    if (reachOn(d.stats.variant)) this.hud.count(d.phase === 'breather' ? d.breatherT : d.phase === 'fight' && d.waveT < 0.7 ? 0 : null);
+    if (reachOn(d.stats.variant) || aimOn(d.stats.variant)) this.hud.count(d.phase === 'breather' ? d.breatherT : d.phase === 'fight' && d.waveT < 0.7 ? 0 : null);
     else this.hud.count(null);
     this.hud.update({
       variant: chosenVariant(),

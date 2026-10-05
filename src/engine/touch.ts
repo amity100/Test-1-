@@ -25,8 +25,9 @@ import { onLangChange, t } from '../ui/i18n';
  */
 
 type Finger =
-  | { kind: 'stick'; ox: number; oy: number; sprint: boolean }
-  | { kind: 'look'; x: number; y: number }
+  | { kind: 'stick'; ox: number; oy: number; sprint: boolean; t0: number; sx: number; sy: number; moved: number }
+  | { kind: 'look'; x: number; y: number; t0: number; sx: number; sy: number; moved: number }
+  | { kind: 'aimp'; el: HTMLElement; sx: number; sy: number; y: number; moved: number }
   | { kind: 'portal'; x: number; y: number; t0: number; cancel: boolean }
   | { kind: 'btn'; el: HTMLElement; action: Action | null; x: number; y: number; sx: number; sy: number; drag: boolean };
 
@@ -63,6 +64,29 @@ const ICON = {
 
 /** REACH's buttons and the actions they hold down (the game reads them as WEAPON, HAND, WINDOW). */
 const REACH_BTN: Record<string, Action> = { 'r-weapon': 'portal', 'r-hand': 'strike3', 'r-window': 'strike1' };
+
+/** AIM PORTAL's buttons and the actions they hold down (the game reads them as PORTAL, FIRE, STAB, PULL). */
+const AIM_BTN: Record<string, Action> = { 'a-fire': 'portal', 'a-stab': 'action', 'a-pull': 'strike3' };
+
+/** What AIM PORTAL shows on its buttons. */
+export interface TouchAimState {
+  /** FIRE's caption: the rounds left (or RELOAD). */
+  ammo: string;
+  /** A pair is open (PORTAL lit; PULL live). */
+  pair: boolean;
+  /** A man is in your hands (PULL says THROW). */
+  hold: boolean;
+  /** SNAP has a man (the drag from PORTAL picks his side). */
+  snap: boolean;
+}
+
+/** A tap is quick and short: it opens the exit where the finger touched. */
+const TAP_MS = 260;
+const TAP_PX = 14;
+/** A drag from PORTAL: this far (px) and it is SNAP's side choice; this much vertical drag is one wheel step; this far is a full push. */
+const SNAP_PX = 22;
+const WHEEL_PX = 20;
+const SNAP_FULL = 64;
 
 /** What REACH shows on its buttons. */
 export interface TouchReachState {
@@ -117,6 +141,9 @@ export class TouchControls {
   private powerHeld = false;
   private flowKey = '';
   private reachKey = '';
+  private aimKey = '';
+  /** AIM PORTAL is on: a quick tap on the world opens the exit there. */
+  private aimOn = false;
   private clipBtn: HTMLButtonElement;
   private shown = true;
   private actionLabel: string | null = null;
@@ -147,6 +174,10 @@ export class TouchControls {
         <button class="t-btn t-weapon" data-t="r-weapon" type="button">${ICON.weapon}<span class="t-lbl" data-k="touch.weapon"></span><span class="t-cap"></span></button>
         <button class="t-btn t-hand" data-t="r-hand" type="button">${ICON.hand}<span class="t-lbl" data-k="touch.hand"></span><span class="t-cap"></span></button>
         <button class="t-btn t-window" data-t="r-window" type="button">${ICON.window}<span class="t-lbl" data-k="touch.window"></span></button>
+        <button class="t-btn t-aportal" data-t="a-portal" type="button">${ICON.window}<span class="t-lbl" data-k="touch.aimportal"></span></button>
+        <button class="t-btn t-afire" data-t="a-fire" type="button">${ICON.weapon}<span class="t-lbl" data-k="touch.fire"></span><span class="t-cap"></span></button>
+        <button class="t-btn t-astab" data-t="a-stab" type="button">${ICON.action}<span class="t-lbl" data-k="touch.stab"></span></button>
+        <button class="t-btn t-apull" data-t="a-pull" type="button">${ICON.hand}<span class="t-lbl" data-k="touch.pull"></span></button>
       </div>`;
     root.appendChild(el);
     const q = <T extends HTMLElement>(s: string) => el.querySelector(s) as T;
@@ -232,6 +263,30 @@ export class TouchControls {
     (this.el.querySelector('.t-window') as HTMLElement).classList.toggle('open', !!s?.window);
   }
 
+  /** AIM PORTAL (null: off): PORTAL, FIRE, STAB and PULL take the places; SLIDE and JUMP stay. A quick tap on the world opens the exit there. */
+  setAim(s: TouchAimState | null) {
+    const key = s ? `${s.ammo}|${s.pair}|${s.hold}|${s.snap}` : 'off';
+    if (key === this.aimKey) return;
+    this.aimKey = key;
+    this.aimOn = !!s;
+    this.el.classList.toggle('aimp', !!s);
+    const fire = this.el.querySelector('.t-afire') as HTMLElement;
+    const fc = fire.querySelector('.t-cap') as HTMLElement;
+    fc.textContent = s?.ammo ?? '';
+    fire.classList.toggle('has-cap', !!s?.ammo);
+    (this.el.querySelector('.t-aportal') as HTMLElement).classList.toggle('open', !!s?.pair);
+    (this.el.querySelector('.t-aportal') as HTMLElement).classList.toggle('snap', !!s?.snap);
+    const pull = this.el.querySelector('.t-apull') as HTMLElement;
+    pull.classList.toggle('live', !!s?.pair || !!s?.hold);
+    pull.classList.toggle('hold', !!s?.hold);
+    const lbl = pull.querySelector('.t-lbl') as HTMLElement;
+    const k = s?.hold ? 'touch.throw' : 'touch.pull';
+    if (lbl.dataset.k !== k) {
+      lbl.dataset.k = k;
+      lbl.textContent = t(k);
+    }
+  }
+
   show(v: boolean) {
     if (v === this.shown) return;
     this.shown = v;
@@ -249,7 +304,7 @@ export class TouchControls {
       const now = performance.now();
       for (const [id, f] of this.fingers) {
         if (f.kind === 'portal' && now - f.t0 > 400) {
-          this.fingers.set(id, { kind: 'look', x: f.x, y: f.y });
+          this.fingers.set(id, { kind: 'look', x: f.x, y: f.y, t0: 0, sx: f.x, sy: f.y, moved: 999 });
           this.input.up('portal');
           this.portalBtn.classList.remove('down');
           this.el.classList.remove('rift-held');
@@ -347,18 +402,18 @@ export class TouchControls {
       // FLOW's POWER held: a touch off the buttons marks the man under it (it may still drag to look)
       if (this.powerHeld && (role === 'left' || role === 'right')) {
         this.input.taps.push({ x, y });
-        this.fingers.set(tt.identifier, { kind: 'look', x, y });
+        this.fingers.set(tt.identifier, { kind: 'look', x, y, t0: performance.now(), sx: x, sy: y, moved: 0 });
         continue;
       }
       switch (role) {
         case 'left': {
           if ([...this.fingers.values()].some((f) => f.kind === 'stick')) {
-            this.fingers.set(tt.identifier, { kind: 'look', x, y });
+            this.fingers.set(tt.identifier, { kind: 'look', x, y, t0: performance.now(), sx: x, sy: y, moved: 0 });
             break;
           }
           const ox = Math.max(STICK_R + 10, x),
             oy = Math.min(window.innerHeight - STICK_R - 10, Math.max(STICK_R + 10, y));
-          this.fingers.set(tt.identifier, { kind: 'stick', ox, oy, sprint: false });
+          this.fingers.set(tt.identifier, { kind: 'stick', ox, oy, sprint: false, t0: performance.now(), sx: x, sy: y, moved: 0 });
           this.stickEl.style.transform = `translate3d(${ox}px,${oy}px,0)`;
           this.knobEl.style.transform = 'translate3d(0,0,0)';
           this.stickEl.classList.add('on');
@@ -366,8 +421,17 @@ export class TouchControls {
           break;
         }
         case 'right':
-          this.fingers.set(tt.identifier, { kind: 'look', x, y });
+          this.fingers.set(tt.identifier, { kind: 'look', x, y, t0: performance.now(), sx: x, sy: y, moved: 0 });
           break;
+        case 'a-portal': {
+          // PORTAL: the press opens the pair; a drag from it picks SNAP's side (or, with nobody under the crosshair, sets the mid-air distance)
+          if ([...this.fingers.values()].some((f) => f.kind === 'aimp')) break;
+          this.fingers.set(tt.identifier, { kind: 'aimp', el: hit, sx: x, sy: y, y, moved: 0 });
+          this.input.down('strike1');
+          hit.classList.add('down');
+          vibrate(10);
+          break;
+        }
         case 'portal': {
           if ([...this.fingers.values()].some((f) => f.kind === 'portal')) break;
           this.fingers.set(tt.identifier, { kind: 'portal', x, y, t0: performance.now(), cancel: false });
@@ -395,7 +459,7 @@ export class TouchControls {
           vibrate(12);
           break;
         default: {
-          const action = REACH_BTN[role] ?? (role as Action);
+          const action = AIM_BTN[role] ?? REACH_BTN[role] ?? (role as Action);
           this.fingers.set(tt.identifier, { kind: 'btn', el: hit, action, x, y, sx: x, sy: y, drag: false });
           this.input.down(action);
           hit.classList.add('down');
@@ -451,12 +515,39 @@ export class TouchControls {
       switch (f.kind) {
         case 'stick':
           this.moveStick(f, x, y);
+          f.moved = Math.max(f.moved, Math.hypot(x - f.sx, y - f.sy));
           break;
         case 'look':
           this.look(x - f.x, y - f.y, this.aiming ? AIM_LOOK : 1);
+          f.moved = Math.max(f.moved, Math.hypot(x - f.sx, y - f.sy));
           f.x = x;
           f.y = y;
           break;
+        case 'aimp': {
+          const dx = x - f.sx, dy = y - f.sy;
+          f.moved = Math.max(f.moved, Math.hypot(dx, dy));
+          if (Math.hypot(dx, dy) > SNAP_PX) {
+            // a push toward a side (x right, y up); held, it is SNAP (the game uses it when a man is under the crosshair)
+            const m = Math.min(1, Math.hypot(dx, dy) / SNAP_FULL);
+            const l = Math.hypot(dx, dy);
+            this.input.snapX = (dx / l) * m;
+            this.input.snapY = (-dy / l) * m;
+            if (!this.input.isHeld('snap')) {
+              this.input.down('snap');
+              vibrate(12);
+            }
+          }
+          // vertical drag: the mid-air distance, a step every WHEEL_PX (up: further)
+          while (f.y - y >= WHEEL_PX) {
+            this.input.wheel += 1;
+            f.y -= WHEEL_PX;
+          }
+          while (y - f.y >= WHEEL_PX) {
+            this.input.wheel -= 1;
+            f.y += WHEEL_PX;
+          }
+          break;
+        }
         case 'portal': {
           if (!this.cancelRect) this.cancelRect = this.cancelEl.getBoundingClientRect();
           const r = this.cancelRect,
@@ -493,10 +584,27 @@ export class TouchControls {
     }
   }
 
+  /** A quick, short touch on the world: AIM PORTAL opens the exit right there. */
+  private worldTap(f: { t0: number; sx: number; sy: number; moved: number }) {
+    if (!this.aimOn) return;
+    if (performance.now() - f.t0 > TAP_MS || f.moved > TAP_PX) return;
+    this.input.worldTaps.push({ x: f.sx, y: f.sy });
+  }
+
   private endFinger(id: number, f: Finger, silent = false) {
     this.fingers.delete(id);
     switch (f.kind) {
+      case 'aimp':
+        f.el.classList.remove('down');
+        this.input.up('strike1');
+        this.input.up('snap');
+        this.input.resetSnap();
+        break;
+      case 'look':
+        if (!silent) this.worldTap(f);
+        break;
       case 'stick':
+        if (!silent && !f.sprint) this.worldTap(f);
         this.input.touchMove.x = this.input.touchMove.y = 0;
         if (f.sprint) this.input.up('sprint');
         this.stickEl.classList.remove('on', 'sprint');

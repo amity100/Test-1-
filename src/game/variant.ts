@@ -13,25 +13,29 @@
  * - reach:     REACH: the remote hand (snatch weapons, pull men, stab through a
  *              window), weapons on the floor, enemies with portals of their own
  *              (reach.ts; systems ask `reachOn()`). FLOW's body, none of the rest.
- *              The lab's default and, for now, the only variant its UI offers.
+ *              Kept in the code; the lab's UI no longer offers it.
+ * - aimportal: AIM PORTAL: a pair of portals, the far one opens where the
+ *              crosshair points, instantly; shoot, stab, pull and walk through
+ *              the pair (aimportal.ts; systems ask `aimOn()`). FLOW's body,
+ *              none of the rest. The lab's default and only offered variant.
  *
  * Systems read `activeVariant()`: the chosen preset while the lab is loaded,
  * CURRENT everywhere else (the missions keep playing as they do today).
  * The choice itself is a setting (`Settings.combatVariant`), kept across
  * world switches and reloads.
  */
-export type CombatVariant = 'current' | 'precision' | 'onslaught' | 'flow' | 'reach';
+export type CombatVariant = 'current' | 'precision' | 'onslaught' | 'flow' | 'reach' | 'aimportal';
 
-export const VARIANTS: readonly CombatVariant[] = ['current', 'precision', 'onslaught', 'flow', 'reach'];
+export const VARIANTS: readonly CombatVariant[] = ['current', 'precision', 'onslaught', 'flow', 'reach', 'aimportal'];
 /** The variant outside the lab (the missions): the game as it plays today. */
 export const DEFAULT_VARIANT: CombatVariant = 'current';
 /** The lab's own default (a new player, an old saved pick the UI no longer offers). */
-export const LAB_DEFAULT: CombatVariant = 'reach';
+export const LAB_DEFAULT: CombatVariant = 'aimportal';
 /**
  * What the lab's UI offers (its chips, the menus). The other variants stay in
- * the code until the owner signs off on REACH; nothing in the UI reaches them.
+ * the code until the owner signs off on AIM PORTAL; nothing in the UI reaches them.
  */
-export const LAB_OFFERED: readonly CombatVariant[] = ['reach'];
+export const LAB_OFFERED: readonly CombatVariant[] = ['aimportal'];
 
 /** The lab's pick from a saved setting: an offered variant, else the lab's default. */
 export function offeredVariant(v: unknown): CombatVariant {
@@ -86,6 +90,11 @@ export function onslaughtOn(v: CombatVariant = activeVariant()): boolean {
 /** REACH's rules apply (only that variant, only in the lab). */
 export function reachOn(v: CombatVariant = activeVariant()): boolean {
   return v === 'reach';
+}
+
+/** AIM PORTAL's rules apply (only that variant, only in the lab). */
+export function aimOn(v: CombatVariant = activeVariant()): boolean {
+  return v === 'aimportal';
 }
 
 /** F1 / F2 / F3 / F4 → a variant (null for any other key code). No longer bound in the UI (the lab offers REACH only). */

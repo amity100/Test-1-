@@ -3,14 +3,17 @@ import { labWaves, type LabArena, type LabGate, type LabSpawn, type LabWave } fr
 import { chosenVariant, setVariant, type CombatVariant } from './variant';
 
 /** What a lab kill is credited to (the run's KILLS BY TOOL). */
-export type LabTool = 'grab' | 'reflect' | 'loop' | 'swap' | 'dash' | 'blade' | 'rifle' | 'knife' | 'redirect' | 'other';
+export type LabTool = 'grab' | 'reflect' | 'loop' | 'swap' | 'dash' | 'blade' | 'rifle' | 'knife' | 'throw' | 'redirect' | 'other';
 export const LAB_TOOLS: readonly LabTool[] = ['grab', 'reflect', 'loop', 'swap', 'dash', 'blade', 'other'];
 /** REACH's own: a round, a knife, a portal of theirs you moved, anything else. */
 export const REACH_TOOLS: readonly LabTool[] = ['rifle', 'knife', 'redirect', 'other'];
 
+/** AIM PORTAL's: a round, a knife, a man thrown, a man the pair dropped / slammed, anything else. */
+export const AIM_TOOLS: readonly LabTool[] = ['rifle', 'knife', 'throw', 'redirect', 'other'];
+
 /** The tools a run under `v` credits (the HUD and the results list these). */
 export function labTools(v: CombatVariant): readonly LabTool[] {
-  return v === 'reach' ? REACH_TOOLS : LAB_TOOLS;
+  return v === 'aimportal' ? AIM_TOOLS : v === 'reach' ? REACH_TOOLS : LAB_TOOLS;
 }
 
 /**
@@ -77,7 +80,7 @@ export const LAB_TIMING = {
   spacing: 0.6,
 };
 
-const zeroKills = (): Record<LabTool, number> => ({ grab: 0, reflect: 0, loop: 0, swap: 0, dash: 0, blade: 0, rifle: 0, knife: 0, redirect: 0, other: 0 });
+const zeroKills = (): Record<LabTool, number> => ({ grab: 0, reflect: 0, loop: 0, swap: 0, dash: 0, blade: 0, rifle: 0, knife: 0, throw: 0, redirect: 0, other: 0 });
 
 /**
  * The lab's WAVE DIRECTOR: a fixed escalating sequence, a breather with a

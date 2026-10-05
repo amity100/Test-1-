@@ -310,10 +310,11 @@ describe('COMBAT LAB: variants and kill credit', () => {
     setVariant('bogus');
     expect(activeVariant()).toBe('current');
     expect(['F1', 'F2', 'F3', 'F4', 'F5'].map(variantForKey)).toEqual(['current', 'precision', 'onslaught', 'flow', null]);
-    // (the lab offers REACH only now: a new player, an old pick or a broken one all come back as REACH)
-    expect(readSettings(null).combatVariant).toBe('reach');
-    expect(readSettings(JSON.stringify({ combatVariant: 'precision' })).combatVariant).toBe('reach');
-    expect(readSettings(JSON.stringify({ combatVariant: 'nope' })).combatVariant).toBe('reach');
+    // (the lab offers AIM PORTAL only now: a new player, an old pick or a broken one all come back as AIM PORTAL)
+    expect(readSettings(null).combatVariant).toBe('aimportal');
+    expect(readSettings(JSON.stringify({ combatVariant: 'precision' })).combatVariant).toBe('aimportal');
+    expect(readSettings(JSON.stringify({ combatVariant: 'reach' })).combatVariant).toBe('aimportal');
+    expect(readSettings(JSON.stringify({ combatVariant: 'nope' })).combatVariant).toBe('aimportal');
   });
 
   it('credits kills to the tool that made them', () => {

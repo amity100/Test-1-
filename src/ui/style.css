@@ -1064,8 +1064,8 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 }
 
 /* ---- REACH (the lab's remote hand): small, by the crosshair; nothing that stays ---- */
-.reach-hud { position: absolute; inset: 0; pointer-events: none; display: none; font-family: var(--hud-font); color: #fff; }
-.reach-hud.on { display: block; }
+.reach-hud, .aim-hud { position: absolute; inset: 0; pointer-events: none; display: none; font-family: var(--hud-font); color: #fff; }
+.reach-hud.on, .aim-hud.on { display: block; }
 .rh-chip, .rh-stab { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px 0 5px; border-radius: 11px; font-size: 11px; font-weight: 800; letter-spacing: .08em; white-space: nowrap; opacity: 0; transform: translate(26px, 14px) scale(.85); transition: opacity .1s, transform .12s; background: rgba(6, 18, 26, 0.72); border: 1px solid rgba(127, 244, 255, 0.7); color: #bff8ff; text-shadow: none; }
 .rh-chip.on, .rh-stab.on { opacity: 1; transform: translate(26px, 14px); }
 .rh-chip i, .rh-stab i { display: block; width: 15px; height: 15px; }
@@ -1107,10 +1107,11 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .lab-count.go { color: #7ff4ff; letter-spacing: .1em; animation-duration: .8s; }
 @keyframes labCount { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.9); } }
 .is-touch .lab-count { top: 30%; font-size: 64px; }
-.lab-panel[data-variant='reach'] .lp-rules { display: flex; }
-.lab-panel[data-variant='reach'] .lp-vars button { cursor: default; }
+.lab-panel[data-variant='reach'] .lp-rules, .lab-panel[data-variant='aimportal'] .lp-rules { display: flex; }
+.lab-panel[data-variant='reach'] .lp-vars button, .lab-panel[data-variant='aimportal'] .lp-vars button { cursor: default; }
 .lp-rules .rr-title { color: #7ff4ff; }
 .lab-panel[data-variant='reach'] .lp-tools { grid-template-columns: repeat(4, 1fr); }
+.lab-panel[data-variant='aimportal'] .lp-tools { grid-template-columns: repeat(5, 1fr); }
 /* REACH on a phone: WEAPON (where the thumb rests), HAND above it, TRAVEL, SLIDE and JUMP */
 .t-weapon, .t-hand, .t-window { display: none; }
 .touch.reach .t-rift, .touch.reach .t-shove, .touch.reach .t-close, .touch.reach .t-power, .touch.reach .t-crouch, .touch.reach .t-action { display: none; }
@@ -1144,15 +1145,15 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 /* the old mode's leftovers stay away under REACH (STYLE, the rift pips, the score bank) */
 .reach-on .h-style, .reach-on .h-pips, .reach-on .h-bank, .reach-on .h-feed, .reach-on .h-gate, .reach-on .h-aim { display: none !important; }
 /* the lab panel: a compact strip top-left (wave, who's left, the clock; the rules folded behind RULES) */
-.lab-panel[data-variant='reach'] { width: auto; min-width: 0; max-width: 300px; padding: 5px 10px 6px; gap: 4px; background: linear-gradient(180deg, rgba(8, 11, 17, 0.62), rgba(8, 11, 17, 0.45)); }
-.lab-panel[data-variant='reach'] .lp-head, .lab-panel[data-variant='reach'] .lp-splits, .lab-panel[data-variant='reach'] .lp-stats, .lab-panel[data-variant='reach'] .lp-tools { display: none; }
-.lab-panel[data-variant='reach'] .lp-rules { display: none; }
-.lab-panel[data-variant='reach'].rules-open .lp-rules { display: flex !important; }
-.lab-panel[data-variant='reach'] .lp-more { display: block; }
-.lab-panel[data-variant='reach'] .lp-wave b { font-size: 15px; }
-.lab-panel[data-variant='reach'] .lp-rules > div { font-size: 11px; }
-.is-touch .lab-panel[data-variant='reach'] { top: calc(var(--st) + 8px); left: auto; right: calc(var(--sr) + 12px); padding: 3px 8px 4px; max-width: 260px; }
-.is-touch .lab-panel[data-variant='reach'] .lp-wave b { font-size: 12px; }
+.lab-panel[data-variant='reach'], .lab-panel[data-variant='aimportal'] { width: auto; min-width: 0; max-width: 300px; padding: 5px 10px 6px; gap: 4px; background: linear-gradient(180deg, rgba(8, 11, 17, 0.62), rgba(8, 11, 17, 0.45)); }
+.lab-panel[data-variant='reach'] .lp-head, .lab-panel[data-variant='aimportal'] .lp-head, .lab-panel[data-variant='reach'] .lp-splits, .lab-panel[data-variant='aimportal'] .lp-splits, .lab-panel[data-variant='reach'] .lp-stats, .lab-panel[data-variant='aimportal'] .lp-stats, .lab-panel[data-variant='reach'] .lp-tools, .lab-panel[data-variant='aimportal'] .lp-tools { display: none; }
+.lab-panel[data-variant='reach'] .lp-rules, .lab-panel[data-variant='aimportal'] .lp-rules { display: none; }
+.lab-panel[data-variant='reach'].rules-open .lp-rules, .lab-panel[data-variant='aimportal'].rules-open .lp-rules { display: flex !important; }
+.lab-panel[data-variant='reach'] .lp-more, .lab-panel[data-variant='aimportal'] .lp-more { display: block; }
+.lab-panel[data-variant='reach'] .lp-wave b, .lab-panel[data-variant='aimportal'] .lp-wave b { font-size: 15px; }
+.lab-panel[data-variant='reach'] .lp-rules > div, .lab-panel[data-variant='aimportal'] .lp-rules > div { font-size: 11px; }
+.is-touch .lab-panel[data-variant='reach'], .is-touch .lab-panel[data-variant='aimportal'] { top: calc(var(--st) + 8px); left: auto; right: calc(var(--sr) + 12px); padding: 3px 8px 4px; max-width: 260px; }
+.is-touch .lab-panel[data-variant='reach'] .lp-wave b, .is-touch .lab-panel[data-variant='aimportal'] .lp-wave b { font-size: 12px; }
 .rh-chip.ghost { border-color: rgba(127, 244, 255, 0.9); }
 .rh-chip.behind { border-color: #7ff4ff; background: rgba(4, 50, 60, 0.85); color: #fff; }
 .rh-chip.seen { border-color: #ffb83a; color: #ffe2a6; background: rgba(40, 24, 2, 0.78); }
@@ -1176,3 +1177,66 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 @keyframes rhArrow { from { opacity: .55; } to { opacity: 1; } }
 .is-touch .rh-arrows > i::before { left: -12px; top: -12px; width: 24px; height: 24px; }
 .is-touch .rh-arrows > i b { width: 16px; height: 16px; left: -8px; top: -8px; }
+
+
+/* ---- AIM PORTAL: small, by the crosshair; the compass round the man SNAP is on ---- */
+.ah-ret, .ah-stab, .ah-hold { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 11px; font-weight: 800; letter-spacing: .08em; white-space: nowrap; opacity: 0; transform: translate(26px, 14px) scale(.85); transition: opacity .1s, transform .12s; background: rgba(6, 18, 26, 0.72); border: 1px solid rgba(127, 244, 255, 0.7); color: #bff8ff; }
+.ah-ret.on, .ah-stab.on, .ah-hold.on { opacity: 1; transform: translate(26px, 14px); }
+.ah-ret.sealed, .ah-ret.close, .ah-ret.bad { border-color: #ff4a6a; background: rgba(60, 4, 14, 0.78); color: #ffd0d8; }
+.ah-ret.snap { border-color: #ff9bff; color: #ffd6ff; }
+.ah-stab { transform: translate(26px, 40px) scale(.85); border-color: rgba(255, 255, 255, 0.6); color: #fff; }
+.ah-stab.on { transform: translate(26px, 40px); }
+.ah-stab.blocked { border-color: #ff4a6a; color: #ff9ab0; }
+.ah-stab i { display: block; width: 14px; height: 14px; }
+.ah-stab svg { display: block; width: 100%; height: 100%; }
+.ah-stab kbd, .ah-hold kbd { font: 800 8.5px var(--hud-font); padding: 0 3px; border: 1px solid currentColor; border-radius: 3px; opacity: .75; }
+.ah-stab kbd:empty, .ah-hold kbd:empty { display: none; }
+.ah-hold { transform: translate(-50%, 56px) scale(.9); left: 50%; border-color: #ffd27a; color: #fff2cf; height: 26px; font-size: 13px; overflow: hidden; }
+.ah-hold.on { transform: translate(-50%, 56px); }
+.ah-hold u { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #ffd27a; transform-origin: left; display: block; }
+.ah-time { position: absolute; left: 50%; top: 50%; width: 46px; height: 3px; margin: 30px 0 0 -23px; background: rgba(255, 255, 255, 0.18); opacity: 0; border-radius: 2px; overflow: hidden; }
+.ah-time.on { opacity: 1; }
+.ah-time u { display: block; height: 100%; background: #7ff4ff; transform-origin: left; }
+.ah-ammo { position: absolute; right: calc(var(--sr, 0px) + 26px); bottom: calc(var(--sb, 0px) + 24px); display: none; align-items: center; gap: 8px; padding: 6px 12px 6px 9px; background: linear-gradient(90deg, rgba(8, 11, 17, 0.4), rgba(8, 11, 17, 0.75)); border-right: 3px solid var(--exit); font-weight: 800; letter-spacing: .12em; font-size: 12px; overflow: hidden; }
+.ah-ammo.on { display: flex; }
+.ah-ammo i { display: block; width: 30px; height: 30px; color: #7ff4ff; }
+.ah-ammo svg { display: block; width: 100%; height: 100%; }
+.ah-ammo span { font-size: 24px; min-width: 1.4em; text-align: right; }
+.ah-ammo.low span { color: #ff6a6a; }
+.ah-ammo.reload span { font-size: 13px; color: #ffd27a; }
+.ah-ammo u { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #ffd27a; transform-origin: left; display: block; transform: scaleX(0); }
+.is-touch .ah-ammo { right: auto; left: 50%; bottom: calc(var(--sb, 0px) + 8px); transform: translateX(-50%); padding: 3px 9px 3px 6px; font-size: 10px; }
+.is-touch .ah-ammo i { width: 22px; height: 22px; }
+.is-touch .ah-ammo span { font-size: 17px; }
+.is-touch .ah-ret, .is-touch .ah-stab { font-size: 10px; }
+.ah-comp { position: absolute; width: 150px; height: 150px; margin: -75px 0 0 -75px; opacity: 0; transition: opacity .08s; }
+.ah-comp.on { opacity: 1; }
+.ah-comp::before { content: ''; position: absolute; inset: 22px; border: 2px dashed rgba(255, 155, 255, 0.55); border-radius: 50%; }
+.ah-comp i { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: rgba(40, 10, 50, 0.7); border: 2px solid rgba(255, 155, 255, 0.8); }
+.ah-comp i.on { background: #ff9bff; border-color: #fff; transform: scale(1.5); box-shadow: 0 0 10px rgba(255, 155, 255, 0.9); }
+.ah-comp i b { position: absolute; left: 50%; top: 150%; transform: translateX(-50%); font: 800 10px var(--hud-font); letter-spacing: .1em; color: #ffd6ff; white-space: nowrap; text-shadow: 0 1px 4px #000; }
+.ah-comp.bad i.on { background: #ff4a6a; box-shadow: 0 0 10px rgba(255, 74, 106, 0.9); }
+.ah-comp.bad::before { border-color: rgba(255, 74, 106, 0.6); }
+.ah-comp i[data-s='above'] b { top: auto; bottom: 150%; }
+.aim-hud .rh-arrows { position: absolute; inset: 0; }
+/* AIM PORTAL on a phone: PORTAL (left of the thumb), FIRE (where it rests), STAB and PULL above them, SLIDE and JUMP */
+.t-aportal, .t-afire, .t-astab, .t-apull { display: none; }
+.touch.aimp .t-rift, .touch.aimp .t-shove, .touch.aimp .t-close, .touch.aimp .t-power, .touch.aimp .t-crouch, .touch.aimp .t-action, .touch.aimp .t-flip { display: none; }
+.touch.aimp .t-aportal, .touch.aimp .t-afire, .touch.aimp .t-astab, .touch.aimp .t-apull, .touch.aimp .t-slide { display: flex; }
+.touch.aimp .t-afire { right: 92px; bottom: 0; width: 98px; height: 98px; border: 3px solid rgba(255, 255, 255, 0.85); background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(8, 12, 20, 0.55) 72%); }
+.touch.aimp .t-afire svg { width: 40%; height: 40%; }
+.touch.aimp .t-aportal { right: 196px; bottom: 4px; width: 92px; height: 92px; border: 3px solid var(--exit); color: #bfe6ff; background: radial-gradient(circle, rgba(56, 182, 255, 0.28) 0%, rgba(8, 22, 38, 0.55) 72%); }
+.touch.aimp .t-aportal svg { width: 42%; height: 42%; color: #7ff4ff; }
+.touch.aimp .t-aportal.down { background: rgba(56, 220, 255, 0.45); }
+.touch.aimp .t-aportal.open { box-shadow: 0 0 18px rgba(127, 244, 255, 0.7); }
+.touch.aimp .t-aportal.snap { border-color: #ff9bff; box-shadow: 0 0 18px rgba(255, 155, 255, 0.8); }
+.touch.aimp .t-astab { right: 106px; bottom: 108px; width: 78px; height: 78px; border: 3px solid rgba(255, 255, 255, 0.7); }
+.touch.aimp .t-astab svg { width: 46%; height: 46%; }
+.touch.aimp .t-apull { right: 196px; bottom: 104px; width: 72px; height: 72px; border: 3px solid var(--entr); color: #ffe2bf; background: radial-gradient(circle, rgba(255, 150, 40, 0.22) 0%, rgba(30, 14, 4, 0.55) 72%); }
+.touch.aimp .t-apull svg { width: 46%; height: 46%; }
+.touch.aimp .t-apull:not(.live) { opacity: .5; }
+.touch.aimp .t-apull.hold { border-color: #ffd27a; box-shadow: 0 0 16px rgba(255, 210, 122, 0.8); }
+.touch.aimp .t-slide { right: 8px; bottom: 92px; width: 64px; height: 64px; opacity: .9; }
+.touch.aimp .t-clip { right: 196px; bottom: 190px; }
+.t-afire .t-cap { display: none; position: absolute; top: -10px; bottom: auto; height: auto; line-height: 1.4; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 8px; font: 800 9.5px var(--hud-font); letter-spacing: .06em; background: #fff; color: #0b0e14; white-space: nowrap; }
+.t-afire.has-cap .t-cap { display: block; }

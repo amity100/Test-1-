@@ -31,6 +31,8 @@ import { chargeUpdate, combat, endAttack, muzzleOf, provokeAttack, type Brain } 
 import { Enemy } from './enemy';
 import { onsCombat, OnsSquad, type OnsBrain } from './onslaught';
 import type { ReachAI } from './reachai';
+import type { AimAI } from './aimai';
+import { AIMP, impactOutcome } from '../game/aimportal';
 import { detectRate, seePlayer, seesPoint } from './perception';
 import { TurretRig } from './turret';
 import { AI, KIND, ONS } from './tuning';
@@ -115,6 +117,8 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
   readonly squad = new OnsSquad();
   /** REACH's brain (the game sets it in the lab; only men spawned with `def.reach` answer to it). */
   reachBrain: ReachAI | null = null;
+  /** AIM PORTAL's brain (the game sets it in the lab; only men spawned with `def.aim` answer to it). */
+  aimBrain: AimAI | null = null;
   private _ctx: EnemyContext | null = null;
   time = 0;
 
@@ -392,6 +396,12 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
       } else this.halt(e, dt);
       return;
     }
+    // AIM PORTAL: its own brain, always on to you
+    if (e.aim && this.aimBrain) {
+      if (e.mode !== 'combat') this.enterCombat(e, null, false);
+      this.aimBrain.think(this, e, dt);
+      return;
+    }
     // REACH: its own brain, always on to you (it looks for itself)
     if (e.reach && this.reachBrain) {
       if (e.mode !== 'combat') this.enterCombat(e, null, false);
@@ -422,7 +432,7 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
     }
     root.rotation.y = e.yaw;
     // (an ONSLAUGHT stormer runs with his gun down; a suppressor kneels to fire)
-    L.weaponUp = e.reach ? e.reachPose : e.tune.gun && e.mode === 'combat' && e.arch !== 'stormer' ? 1 : 0;
+    L.weaponUp = e.reach || e.aim ? e.reachPose : e.tune.gun && e.mode === 'combat' && e.arch !== 'stormer' ? 1 : 0;
     if (e.arch === 'suppressor') L.crouch = e.atkKind === 'suppress' && (e.atk === 'aim' || e.atk === 'fire') ? 1 : 0;
     L.downed = e.state === 'downed' || e.state === 'stunned';
     L.aim = e.kind === 'turret' ? e.pitch : 0;
@@ -1523,6 +1533,8 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
     this.blind(e);
     // (no word of you at all: his look around is where he stands now, not where he was thrown from)
     if (e.mode === 'combat' && e.contactT <= -1e9) e.lastKnown.copy(e.pos);
+    e.aimThrown = false;
+    e.aimPorted = false;
     e.launchChain = false;
     e.launchUnaware = false;
     e.crossings = 0;
@@ -1696,6 +1708,7 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
       return 'ignored';
     }
     if (!b.simulate || e.kind === 'turret') return 'ignored';
+    if (e.aim) return this.aimImpact(e, info);
     const s = info.speed;
     const ground = info.surface === 'ground';
     const hit = (): HitInfo => ({
@@ -1747,6 +1760,49 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
         if (e.state === 'launched') this.land(e);
         return 'hurt';
       }
+    }
+    if (ground && e.state === 'launched') this.land(e);
+    return 'ignored';
+  }
+
+  /**
+   * AIM PORTAL's men: a fall from AIMP.fall.kill m or a body slammed into a
+   * wall at AIMP.slam.kill m/s kills; the softer ones hurt and floor him; the
+   * rest he lands from (whoever put him in the air).
+   */
+  private aimImpact(e: Enemy, info: ImpactInfo): HitResult {
+    const b = e.body!;
+    const ground = info.surface === 'ground';
+    const out = impactOutcome(ground ? 'ground' : info.surface === 'ceiling' ? 'ceiling' : 'wall', info.speed, Math.max(0, b.peakY - info.point.y));
+    const h: HitInfo = {
+      source: ground ? 'fall' : 'impact',
+      amount: 0,
+      charged: true,
+      speed: info.speed,
+      dir: b.vel.clone(),
+      from: info.point.clone(),
+      team: 'neutral',
+      instigator: e.aimThrown || e.aimPorted ? 'player' : null,
+      crossings: e.crossings,
+      loops: e.loops,
+      fallHeight: Math.max(0, b.peakY - info.point.y),
+      exitEndId: b.lastEnd ? b.lastEnd.id : null,
+    };
+    if (out === 'kill') {
+      h.amount = e.hp;
+      this.die(e, h);
+      return 'killed';
+    }
+    if (out === 'hurt') {
+      h.amount = ground ? AIMP.fall.hurtDamage : AIMP.slam.hurtDamage;
+      if (this.damage(e, h.amount, h)) return 'killed';
+      if (ground && e.state === 'launched') {
+        this.land(e);
+        e.holdT = AIMP.fall.stun;
+        return 'hurt';
+      }
+      this.knockDown(e, 'downed', h);
+      return 'knocked';
     }
     if (ground && e.state === 'launched') this.land(e);
     return 'ignored';

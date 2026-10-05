@@ -137,11 +137,11 @@ export function flowOn(v: CombatVariant = activeVariant()): boolean {
 
 /**
  * FLOW's BODY moves the player (faster run, slide, double jump, wall kicks,
- * rifts keep your speed): FLOW, and REACH, which borrows the body and none of
+ * rifts keep your speed): FLOW, and REACH / AIM PORTAL, which borrow the body and none of
  * the rest (no meter, no POWER moment).
  */
 export function flowBodyOn(v: CombatVariant = activeVariant()): boolean {
-  return v === 'flow' || v === 'reach';
+  return v === 'flow' || v === 'reach' || v === 'aimportal';
 }
 
 /** A lit man where he is on screen (CSS px). */

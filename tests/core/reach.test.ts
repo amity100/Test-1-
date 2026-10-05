@@ -887,10 +887,10 @@ describe('REACH: what you cannot see', () => {
 // ---------------------------------------------------------------------------
 
 describe('REACH: the gate', () => {
-  it('the lab offers REACH only (and starts there); outside the lab everything is CURRENT', () => {
+  it('the old REACH is still in the code, no longer offered by the lab (AIM PORTAL is); outside the lab everything is CURRENT', () => {
     expect(VARIANTS).toContain('reach');
-    expect(LAB_OFFERED).toEqual(['reach']);
-    expect(readSettings(null).combatVariant).toBe('reach');
+    expect(LAB_OFFERED).toEqual(['aimportal']);
+    expect(readSettings(null).combatVariant).toBe('aimportal');
     setVariant('reach');
     expect(activeVariant()).toBe('current');
     expect(reachOn()).toBe(false);
