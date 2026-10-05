@@ -77,6 +77,8 @@ class Mind {
   meleeCd = 0;
   portalCd: number;
   portalId = -1;
+  /** When his brain last ran (game time): a gap means he was hit, held or flying: his half-done move is dropped. */
+  thinkT = -1;
   /** Not getting anywhere (s) and where he was. */
   stuckT = 0;
   readonly lastAt = new THREE.Vector3();
@@ -164,6 +166,15 @@ export class AimAI {
     const H = this.host;
     const m = this.mind(e, () => sys.rand());
     const pl = H.player();
+    // (a gap since he last thought: he was hit, pulled, thrown: a laser or a wind-up under way is off)
+    if (m.thinkT >= 0 && sys.time - m.thinkT > 0.2) {
+      m.gun = 'idle';
+      m.windT = -1;
+      m.intoPortal = false;
+      m.portalId = -1;
+      if (m.mode === 'peek') m.mode = 'advance';
+    }
+    m.thinkT = sys.time;
     e.reachPose = m.role === 'gunner' ? (m.gun !== 'idle' ? 1 : 0.55) : 0;
     if (!H.go()) {
       sys.halt(e, dt);

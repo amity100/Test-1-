@@ -447,10 +447,11 @@ export function shieldCross(pos: V3, yaw: number, a: V3, b: V3): number | null {
 
 /** A stab / pull from `from` lands on a man who sees it coming: the spot is in front of him (±60°). The MIRROR's front is where his shield looks (±70°). */
 export function guarded(pos: V3, yaw: number, from: V3, mirror: boolean): boolean {
-  if (!mirror) return sideOf(pos, yaw, from) === 'front';
   const dx = from.x - pos.x, dz = from.z - pos.z;
   const d = Math.hypot(dx, dz);
-  if (d < 1e-4) return true;
+  // (straight over his head or under his feet is no side he can guard)
+  if (d < 0.5) return false;
+  if (!mirror) return sideOf(pos, yaw, from) === 'front';
   return (dx * Math.sin(yaw) + dz * Math.cos(yaw)) / d >= Math.cos((70 * Math.PI) / 180);
 }
 

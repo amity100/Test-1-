@@ -133,6 +133,8 @@ export class Input {
       } else if (e.button === 1) {
         e.preventDefault();
         this.down('close');
+        // (AIM PORTAL's SNAP: Ctrl or the middle button)
+        this.down('snap');
       } else if (e.button === 3) this.tap('strike3'); // mouse back: SWAP
       else if (e.button === 4) this.tap('strike4'); // mouse forward: DASH
     });
@@ -141,7 +143,10 @@ export class Input {
       else if (e.button === 2) {
         if (this.rmbAction) this.up(this.rmbAction);
         this.rmbAction = null;
-      } else if (e.button === 1) this.up('close');
+      } else if (e.button === 1) {
+        this.up('close');
+        this.up('snap');
+      }
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {

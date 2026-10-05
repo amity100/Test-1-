@@ -2385,7 +2385,7 @@ export class Game {
     // (WINDOW: RMB / LT / its button; HAND: E / MMB / F / RB / X / its button; WEAPON: LMB / RT / its button)
     if (aimV) {
       // AIM PORTAL: PORTAL (RMB / LT / its button), FIRE (LMB / RT), STAB (F / X), PULL and THROW (E / RB), SNAP (Ctrl / MMB / R-stick / a drag)
-      const snap = inp.isHeld('snap') || inp.isHeld('close');
+      const snap = inp.isHeld('snap');
       this.aim!.update(dt, realDt, {
         fire: free && inp.isHeld('portal'),
         firePress: free && inp.wasPressed('portal'),
@@ -2594,6 +2594,8 @@ export class Game {
       crossed: (_from, _to, yawDelta) => {
         if (flowOn()) this.meter.add(FLOW.meter.portal);
         this.lastCrossT = this.time;
+        // (AIM PORTAL: a harder crossing kicks the view harder)
+        if (aimOn()) this.rig.kick = Math.max(this.rig.kick, Math.min(1.4, 0.4 + Math.hypot(this.player.body.vel.x, this.player.body.vel.y, this.player.body.vel.z) / 12));
         // through a rift mid-lunge: the lunge is over (the rift's momentum carries you on)
         this.blade.cancel();
         this.rig.rotateBy(yawDelta);

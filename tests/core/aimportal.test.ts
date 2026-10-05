@@ -299,6 +299,16 @@ describe('AIM PORTAL: reach and rules', () => {
     expect(standingBy(s, [tooFar, side, behind], AIMP.pull.reach)).toBeNull();
   });
 
+  it('an exit over his head (SNAP ABOVE) or under his feet (BELOW) has him in front of it: stabbed from above, pulled up out of the floor', () => {
+    const m = { id: 1, pos: V(5, 0, 5), height: 1.8, radius: 0.42, yaw: 0 };
+    const above = snapSpot(m, 'above');
+    expect(standingBy(above, [m], AIMP.stab.reach)?.id).toBe(1);
+    const below = snapSpot(m, 'below', 0);
+    expect(standingBy(below, [m], AIMP.pull.reach)?.id).toBe(1);
+    // (a man a few metres off to the side is not)
+    expect(standingBy(above, [{ ...m, id: 2, pos: V(9, 0, 5) }], AIMP.pull.reach)).toBeNull();
+  });
+
   it('a pulled man lands on your crosshair, 2 m in front of you', () => {
     const at = pullSpot(V(1, 0, 1), V(0, 0, 1));
     expect(at.z - 1).toBeCloseTo(AIMP.pull.land, 5);
@@ -335,6 +345,9 @@ describe('AIM PORTAL: reach and rules', () => {
     expect(guarded(p, 0, V(2, 0, 1), true)).toBe(true);
     expect(guarded(p, 0, V(2, 0, 0.1), true)).toBe(false);
     expect(guarded(p, 0, V(0, 0, -2), true)).toBe(false);
+    // straight over his head: no side to guard
+    expect(guarded(p, 0, V(0, 2.5, 0.1), false)).toBe(false);
+    expect(guarded(p, 0, V(0, 2.5, 0), true)).toBe(false);
   });
 
   it('what an impact does: a wall at 12 m/s kills, 8 hurts; a fall of 8 m kills, 3 hurts', () => {
@@ -1101,6 +1114,25 @@ describe('AIM PORTAL: waves and the men', () => {
     expect(fired.length).toBeGreaterThanOrEqual(AIMP.enemy.gunner.shots);
     // (the laser runs about AIMP.enemy.gunner.aim s before the first round)
     expect(fired[2] - fired[0]).toBeCloseTo(2 * AIMP.enemy.gunner.gap, 1);
+  });
+});
+
+describe('AIM PORTAL: a man hit mid-move drops it', () => {
+  it('a gunner aiming who is knocked off his feet does not keep a gun slot (his laser is off when he is back)', () => {
+    const { R, man, sc } = rig();
+    const g = man(V(0, 0, 14), Math.PI);
+    const m = R.ai.mind(g, Math.random);
+    m.react = 0;
+    R.ai.host.go = () => true;
+    m.gun = 'aim';
+    m.gunT = 0.4;
+    sc.step(2);
+    expect(R.ai.aiming(g.id)).toBe(true);
+    sc.sys.stagger(g, 0.6);
+    sc.step(Math.ceil(0.9 * 60));
+    // (back on his feet and thinking again: a laser under way is not resumed)
+    expect((m.gun as string) === 'idle' || m.gunT > 0.3).toBe(true);
+    expect(g.state).toBe('combat');
   });
 });
 
