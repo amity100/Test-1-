@@ -19,13 +19,14 @@ import type { RiftColorKey } from './portals';
 import {
   AIMP,
   aimKillTool,
-  crosshairTarget,
   fitSnap,
   guarded,
   inFrontOf,
+  leadPos,
+  magnetTarget,
   newSpot,
   nearSpot,
-  notices,
+  noticeDelay,
   pickSide,
   placeExit,
   pullSpot,
@@ -33,6 +34,7 @@ import {
   shieldCross,
   spotFrame,
   standingBy,
+  tapTarget,
   yawTo,
   type Side,
   type Spot,
@@ -92,16 +94,18 @@ export interface AimInput {
   portal: boolean;
   portalPress: boolean;
   portalRelease: boolean;
-  /** SNAP held (Ctrl / MMB / R-stick with LT / a drag from PORTAL). */
+  /** The side choice held on its own (Ctrl / MMB; R-stick with LT; a drag from PORTAL): with a man under the crosshair the look picks his side. */
   snap: boolean;
-  /** Its side choice: x right, y up (a flick, a stick, a drag), -1..1. */
+  /** The side choice: x right, y up (a flick, a stick, a drag), -1..1. */
   snapVec: { x: number; y: number };
   stabPress: boolean;
   pullPress: boolean;
+  /** GO (Q / B / the GO button): into the near twin, out of the exit. */
+  goPress?: boolean;
   /** Wheel steps this frame (+: further). */
   wheel?: number;
-  /** A tap on the world (touch), screen NDC. */
-  worldTap?: { x: number; y: number } | null;
+  /** A tap on the world (touch): screen NDC, and the screen's size in CSS px (`w`, `h`). */
+  worldTap?: { x: number; y: number; w?: number; h?: number } | null;
 }
 
 /** The open pair. */
@@ -116,6 +120,9 @@ export interface AimPair {
   t: number;
   readonly seen: Map<number, number>;
   readonly noticed: Set<number>;
+  /** The man it opened next to (null: a free spot), and the side. */
+  man: number | null;
+  side: Side;
 }
 
 const _a = new THREE.Vector3();
@@ -132,11 +139,17 @@ export class AimMode {
   readonly fx = new AimFx();
   readonly hud: Pick<AimHud, 'update' | 'callout' | 'show' | 'dispose' | 'tip'>;
   pair: AimPair | null = null;
-  /** The ghost while PORTAL is held (live re-aim) or SNAP has a man. */
+  /** The ghost: where PORTAL would open the exit (the crosshair on a man: next to him), or the side being picked. */
   ghost: { spot: Spot; kind: 'ok' | 'snap' | 'bad' } | null = null;
-  /** The man SNAP is on, and the side it would pick. */
+  /** The man the crosshair is on (PORTAL opens next to him; the HUD rings him). */
+  hover: Enemy | null = null;
+  /** The man whose side is being picked (PORTAL held on him, or the side key), and the side. */
   snapTarget: Enemy | null = null;
   snapSide: Side | null = null;
+  /** GO under way: seconds into the dash, the pair it is for. */
+  dash: { t: number; pair: number } | null = null;
+  /** Until when (game time) the knife reaches further (just out of the exit). */
+  edgeUntil = -1;
   /** Mid-air distance (null: the surface the aim meets, else AIMP.air.def). */
   airDist: number | null = null;
   ammo: number = AIMP.rifle.mag;
@@ -145,7 +158,7 @@ export class AimMode {
   /** Press → portal usable, the last time (ms of game time), for the harness. */
   lastOpen = { t: -1, count: 0, ms: -1 };
   /** What was used how often this run (the harness and the balance read it). */
-  readonly usage = { opened: 0, refused: 0, rifleDirect: 0, rifleThrough: 0, stabDirect: 0, stabThrough: 0, parried: 0, pulled: 0, thrown: 0, snapped: 0 };
+  readonly usage = { opened: 0, refused: 0, rifleDirect: 0, rifleThrough: 0, stabDirect: 0, stabThrough: 0, parried: 0, pulled: 0, thrown: 0, snapped: 0, go: 0, edge: 0 };
   /** The man in your hands (pulled; his time left to throw). */
   held: { id: number; t: number } | null = null;
   private pairSeq = 0;
@@ -172,10 +185,17 @@ export class AimMode {
   arrows: ThreatArrow[] = [];
   /** The snap vector read this frame (touch / pad / flick). */
   private snapVec = { x: 0, y: 0 };
-  /** SNAP has latched a man: the game sends the look to the side choice, not the camera. */
+  /** Presses waiting for GO to land (game time; -99: none). */
+  private bufStab = -99;
+  private bufFire = -99;
+  /** You came out of the exit (game time): what was pressed on the way lands next frame. */
+  private arrivedT = -99;
+  private closeAt = -1;
+  /** The side is being picked: the game sends the look to the choice, not the camera. */
   get snapLatched() {
-    return !!this.snapTarget;
+    return !!this.snapTarget && !!this.snapSide && this.choosing;
   }
+  private choosing = false;
 
   /** `hud`: the HUD to drive (tests pass a stand-in); else one is built under `hudRoot`. */
   constructor(private h: AimHost, hudRoot: HTMLElement | null, hud?: Pick<AimHud, 'update' | 'callout' | 'show' | 'dispose' | 'tip'>) {
@@ -242,8 +262,14 @@ export class AimMode {
     this.seenCross.clear();
     this.held = null;
     this.ghost = null;
+    this.hover = null;
     this.snapTarget = null;
     this.snapSide = null;
+    this.choosing = false;
+    this.endDash();
+    this.edgeUntil = -1;
+    this.bufStab = this.bufFire = this.arrivedT = -99;
+    this.closeAt = -1;
     this.airDist = null;
     this.ammo = AIMP.rifle.mag;
     this.reloadT = 0;
@@ -261,12 +287,14 @@ export class AimMode {
 
   playerDown() {
     this.closePair();
+    this.endDash();
     this.ghost = null;
     this.held = null;
   }
 
   onRespawn() {
     this.closePair();
+    this.endDash();
     this.ghost = null;
     this.ammo = AIMP.rifle.mag;
     this.reloadT = 0;
@@ -315,21 +343,27 @@ export class AimMode {
     this.wasGo = go;
     this.snapVec = inp.snapVec;
 
-    // the pair: it shuts by itself (not while you hold the button: it follows your aim)
+    // the pair: it shuts by itself (not while you hold the button: it follows your aim), or just after you came out of it
     const pr = this.pair;
     if (pr) {
       if (!(inp.portal && alive)) pr.t += dt;
-      if (pr.t >= AIMP.life) this.closePair();
+      if (pr.t >= AIMP.life || (this.closeAt >= 0 && now >= this.closeAt)) this.closePair();
       else {
         if (pr.t >= AIMP.grace) this.setNoPlayer(pr, false);
         this.updateNotice(pr, dt);
       }
     }
+    if (!this.pair) this.closeAt = -1;
 
-    // SNAP: a man under the crosshair when it is held; he stays yours while it is
+    // the man the crosshair is on (PORTAL opens next to him)
+    this.hover = alive && go && !this.held && !this.dash ? this.underCrosshair() : null;
+    // the side: picked while PORTAL is held on him (or with the side key)
     this.updateSnap(alive && go, inp);
     // PORTAL
     this.updatePortal(alive && go, realDt, inp);
+    // GO, and what you pressed on the way
+    if (alive && go && inp.goPress) this.go();
+    this.updateDash(dt);
 
     // the weapons
     if (alive && go) {
@@ -337,14 +371,25 @@ export class AimMode {
         const base = this.airDist ?? AIMP.air.def;
         this.airDist = THREE.MathUtils.clamp(base + inp.wheel * AIMP.air.step, AIMP.air.min, AIMP.air.max);
       }
-      if (this.held) {
+      if (this.dash) {
+        // (mid-dash: kept for the arrival)
+        if (inp.stabPress) this.bufStab = now;
+        if (inp.firePress) this.bufFire = now;
+      } else if (this.held) {
         this.held.t -= dt;
         if (inp.pullPress || inp.firePress) this.throwHeld();
         else if (this.held.t <= 0) this.held = null;
       } else {
+        const landed = now - this.arrivedT < 0.2;
+        if (landed && now - this.bufStab <= AIMP.go.buffer + 0.2 && this.stabCd <= 0) {
+          this.bufStab = -99;
+          this.stab();
+        }
+        const bufFire = landed && now - this.bufFire <= AIMP.go.buffer + 0.2;
+        if (bufFire) this.bufFire = -99;
         if (inp.pullPress) this.pull();
         if (inp.stabPress && this.stabCd <= 0) this.stab();
-        if (inp.fire && this.fireCd <= 0 && this.reloadT <= 0) this.shoot();
+        if ((inp.fire || bufFire) && this.fireCd <= 0 && this.reloadT <= 0) this.shoot();
         else if (inp.firePress && this.reloadT > 0) h.audio.ui('deny');
       }
     }
@@ -381,10 +426,12 @@ export class AimMode {
     }
 
     // the look and the HUD
+    const ring = this.snapTarget ?? this.hover;
     this.fx.update(dt, {
       ghost: this.ghost,
       shields: this.shields(),
       red: this.portals.list,
+      target: ring ? { pos: ring.pos, radius: ring.radius, picking: !!this.snapTarget } : null,
     });
     this.arrows = this.threats();
     this.overSealed = false;
@@ -395,7 +442,7 @@ export class AimMode {
     }
     const st: AimHudState = {
       device: h.device(),
-      ret: this.snapTarget && this.snapSide ? { kind: 'snap', side: this.snapSide, ok: this.ghost?.spot.ok !== false } : this.overSealed ? { kind: 'sealed' } : null,
+      ret: this.snapLatched && this.snapSide ? { kind: 'snap', side: this.snapSide, ok: this.ghost?.spot.ok !== false } : this.overSealed ? { kind: 'sealed' } : null,
       compass: this.compass(),
       pair: this.pair ? Math.max(0, AIMP.life - this.pair.t) / AIMP.life : null,
       ammo: this.ammo,
@@ -409,9 +456,9 @@ export class AimMode {
     for (const [id, tt] of this.lastHit) if (now - tt.t > 3) this.lastHit.delete(id);
   }
 
-  /** What the phone's buttons say: the rounds, whether a pair is open. */
+  /** What the phone's buttons say: the rounds, whether a pair is open (GO lit), a man under the crosshair. */
   touchState() {
-    return { ammo: this.reloadT > 0 ? t('aim.reload') : String(this.ammo), pair: !!this.pair, hold: !!this.held, snap: !!this.snapTarget };
+    return { ammo: this.reloadT > 0 ? t('aim.reload') : String(this.ammo), pair: !!this.pair, hold: !!this.held, snap: this.snapLatched, go: !!this.pair && !this.dash, target: !!this.hover };
   }
 
   // ------------------------------------------------------------------
@@ -432,14 +479,15 @@ export class AimMode {
     return e.alive && !e.held && (e.state === 'combat' || e.state === 'idle' || e.state === 'patrol' || e.state === 'suspicious' || e.state === 'charge');
   }
 
+  /** How far off a man the crosshair may be and still be on him (rad; by device). */
   private assist(): number {
     const d = this.h.device();
-    return THREE.MathUtils.degToRad(d === 'touch' ? 3.5 : d === 'pad' ? 2.5 : 1.2);
+    return THREE.MathUtils.degToRad(AIMP.magnet.deg[d]);
   }
 
   private underCrosshair(): Enemy | null {
     const ray = this.h.aimRay();
-    return crosshairTarget(ray.origin, ray.dir, this.men(), this.assist(), (a, b) => !this.h.world.lineOfSight(a, b), 60);
+    return magnetTarget(ray.origin, ray.dir, this.men(), this.assist(), (a, b) => !this.h.world.lineOfSight(a, b));
   }
 
   private floorOf(e: Enemy): number {
@@ -447,50 +495,91 @@ export class AimMode {
     return g > -Infinity ? g : e.pos.y;
   }
 
+  /** The exit for a side of a man: next to where he will be in a moment, seen from where you stand. */
+  spotFor(e: Enemy, side: Side): Spot {
+    const me = this.h.player.body.pos;
+    const b = e.body;
+    const at = b && !b.simulate ? leadPos(e.pos, b.vel, AIMP.magnet.lead, _d) : _d.copy(e.pos);
+    const view = _c.set(e.pos.x - me.x, 0, e.pos.z - me.z);
+    if (view.lengthSq() < 1e-6) view.set(Math.sin(this.h.player.yaw), 0, Math.cos(this.h.player.yaw));
+    return fitSnap(this.h.world, { pos: at, yaw: e.yaw, height: e.height }, side, this.floorOf(e), view.normalize());
+  }
+
+  /** The side choice: PORTAL held on a man past a tap (or the side key with a man under the crosshair); its flick picks the side. */
   private updateSnap(live: boolean, inp: AimInput) {
-    if (!live || !inp.snap) {
-      this.snapTarget = null;
-      this.snapSide = null;
+    // (PORTAL held since a press that opened next to a man: that man)
+    const p = this.pair;
+    const onMan = live && inp.portal && this.holdT >= 0 && p && p.man !== null ? (this.h.enemies.get(p.man) as Enemy | null) : null;
+    if (onMan && onMan.alive && !onMan.held) {
+      this.snapTarget = onMan;
+      this.choosing = this.holdT >= AIMP.live || inp.snap;
+      this.snapSide = this.choosing ? pickSide(inp.snapVec.x, inp.snapVec.y) : p!.side;
       return;
     }
-    if (!this.snapTarget || !this.snapTarget.alive || this.snapTarget.held) this.snapTarget = this.underCrosshair();
-    const e = this.snapTarget;
-    this.snapSide = e ? pickSide(inp.snapVec.x, inp.snapVec.y) : null;
+    if (live && inp.snap) {
+      // (the side key on its own: a man under the crosshair is held for the press)
+      if (!this.snapTarget || !this.snapTarget.alive || this.snapTarget.held) this.snapTarget = this.hover;
+      this.choosing = !!this.snapTarget;
+      this.snapSide = this.snapTarget ? pickSide(inp.snapVec.x, inp.snapVec.y) : null;
+      return;
+    }
+    this.snapTarget = null;
+    this.snapSide = null;
+    this.choosing = false;
   }
 
   // ------------------------------------------------------------------
   // PORTAL
   // ------------------------------------------------------------------
 
-  /** Where the exit goes now: SNAP's side of the man under it, else the first surface the crosshair meets. */
-  placement(ray: { origin: V3; dir: V3 } = this.h.aimRay()): { spot: Spot; kind: 'ok' | 'snap' | 'bad' } {
+  /** Where the exit goes now: next to the man the crosshair is on (or whose side is picked), else the first surface the crosshair meets. */
+  placement(ray: { origin: V3; dir: V3 } = this.h.aimRay()): { spot: Spot; kind: 'ok' | 'snap' | 'bad'; man: Enemy | null; side: Side } {
     const h = this.h;
-    if (this.snapTarget && this.snapTarget.alive && this.snapSide) {
-      const spot = fitSnap(h.world, this.snapTarget, this.snapSide, this.floorOf(this.snapTarget));
-      return { spot, kind: spot.ok ? 'snap' : 'bad' };
+    const man = this.snapTarget && this.snapTarget.alive ? this.snapTarget : this.hover;
+    if (man) {
+      const side = this.snapTarget && this.snapSide ? this.snapSide : 'behind';
+      const spot = this.spotFor(man, side);
+      return { spot, kind: spot.ok ? 'snap' : 'bad', man, side };
     }
     const spot = placeExit(h.world, ray.origin, ray.dir, h.eye(_eye), this.airDist, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
-    return { spot, kind: spot.ok ? 'ok' : 'bad' };
+    return { spot, kind: spot.ok ? 'ok' : 'bad', man: null, side: 'behind' };
   }
 
   private updatePortal(live: boolean, realDt: number, inp: AimInput) {
     const holding = live && inp.portal;
     if (live && inp.worldTap) this.tapOpen(inp.worldTap);
-    else if (live && inp.portalPress && this.cd <= 0) {
+    else if (live && inp.portalPress && this.cd <= 0 && !this.dash) {
       this.holdT = 0;
       this.pressOpen();
     }
     if (holding) this.holdT += realDt;
-    // the ghost: SNAP's side of the man; a held PORTAL longer than a tap: the exit follows the crosshair, live
     this.ghost = null;
-    if (live && this.snapTarget && this.snapSide) {
-      const spot = fitSnap(this.h.world, this.snapTarget, this.snapSide, this.floorOf(this.snapTarget));
-      this.ghost = { spot, kind: spot.ok ? 'snap' : 'bad' };
-    }
-    if (holding && this.pair && (this.holdT > AIMP.live || this.snapTarget)) {
-      const p = this.placement();
-      this.ghost = { spot: p.spot, kind: p.kind };
-      if (p.spot.ok) this.moveFar(p.spot);
+    const p = this.pair;
+    if (holding && p && this.holdT >= 0) {
+      if (p.man !== null && this.snapTarget) {
+        // on a man: the exit stays next to him (where he goes, on the side the flick picks)
+        const side = this.snapSide ?? p.side;
+        const spot = this.spotFor(this.snapTarget, side);
+        if (spot.ok) {
+          p.side = side;
+          this.moveFar(spot);
+        } else this.ghost = { spot, kind: 'bad' };
+      } else if (p.man === null && this.holdT > AIMP.live) {
+        // off a man: the exit follows the crosshair, live
+        const pl = this.placement();
+        if (!pl.man) {
+          this.ghost = { spot: pl.spot, kind: pl.kind };
+          if (pl.spot.ok) this.moveFar(pl.spot);
+        }
+      }
+    } else if (live && !this.dash) {
+      // not pressed: where it would open (the crosshair on a man: next to him; the side key: the side picked)
+      const man = this.snapTarget ?? this.hover;
+      if (man) {
+        const spot = this.spotFor(man, this.snapTarget && this.snapSide ? this.snapSide : 'behind');
+        // (the pair already stands there: no ghost on top of it)
+        if (!(p && p.man === man.id && p.far.pos.distanceTo(spot.pos) < 0.6)) this.ghost = { spot, kind: spot.ok ? 'snap' : 'bad' };
+      }
     }
     // let go: it stays where it is, its time counted from now
     if (!holding && this.wasPortal && this.pair) this.pair.t = 0;
@@ -498,28 +587,46 @@ export class AimMode {
     if (!holding) this.holdT = -1;
   }
 
-  /** The PORTAL press: open the pair now, at the crosshair (or SNAP's side). */
+  /** The PORTAL press: open the pair now, next to the man the crosshair is on (or the side picked), else at the crosshair. */
   private pressOpen() {
     const p = this.placement();
-    this.refuseOrOpen(p.spot);
+    this.refuseOrOpen(p.spot, p.man, p.side);
   }
 
-  /** A tap on the world (touch): open exactly at the surface under the finger; a tap on a man: behind him. */
-  private tapOpen(tap: { x: number; y: number }) {
-    if (this.cd > 0) return;
-    const ray = this.h.rayAt(tap.x, tap.y);
-    const man = crosshairTarget(ray.origin, ray.dir, this.men(), this.assist(), (a, b) => !this.h.world.lineOfSight(a, b), 60);
-    this.holdT = 0;
+  /**
+   * A tap on the world (touch): on or near a man (on the screen), next to him
+   * (behind); else right at the surface under the finger, unless a pair is
+   * open (a quick nudge of the look thumb is no reason to lose it: PORTAL
+   * moves it).
+   */
+  private tapOpen(tap: { x: number; y: number; w?: number; h?: number }) {
+    if (this.cd > 0 || this.dash) return;
+    const h = this.h;
+    const W = tap.w ?? 844, Hh = tap.h ?? 390;
+    const cam = h.camera;
+    const man = tapTarget(
+      ((tap.x + 1) / 2) * W,
+      ((1 - tap.y) / 2) * Hh,
+      this.men(),
+      (p) => {
+        _ndc.copy(p).project(cam);
+        return _ndc.z > 1 ? null : { x: ((_ndc.x + 1) / 2) * W, y: ((1 - _ndc.y) / 2) * Hh };
+      },
+      (to) => !h.world.lineOfSight(cam.position, to),
+    );
     if (man) {
-      this.refuseOrOpen(fitSnap(this.h.world, man, 'behind', this.floorOf(man)));
+      this.holdT = 0;
+      this.refuseOrOpen(this.spotFor(man, 'behind'), man, 'behind');
       return;
     }
-    const h = this.h;
+    if (this.pair) return;
+    this.holdT = 0;
+    const ray = h.rayAt(tap.x, tap.y);
     const spot = placeExit(h.world, ray.origin, ray.dir, h.eye(_eye), this.airDist, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
-    this.refuseOrOpen(spot);
+    this.refuseOrOpen(spot, null, 'behind');
   }
 
-  private refuseOrOpen(spot: Spot) {
+  private refuseOrOpen(spot: Spot, man: Enemy | null = null, side: Side = 'behind') {
     const h = this.h;
     this.cd = AIMP.cooldown;
     if (!spot.ok) {
@@ -531,31 +638,21 @@ export class AimMode {
       h.vibrate(30);
       return;
     }
-    this.openPair(spot);
+    this.openPair(spot, man, side);
   }
 
-  /** Open the pair: the exit at `far`, its twin in front of you. */
-  openPair(far: Spot) {
+  /** Open the pair: the exit at `far` (next to `man`, on `side`), its twin right in front of you on the crosshair. */
+  openPair(far: Spot, man: Enemy | null = null, side: Side = 'behind') {
     const h = this.h;
     this.closePair();
+    this.closeAt = -1;
     const ray = h.aimRay();
     const aim = flat(ray.dir, new THREE.Vector3());
-    const feet = h.player.body.pos;
     const v = h.player.body.vel;
-    const near = nearSpot(h.world, feet, aim, v.x * aim.x + v.z * aim.z, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
-    // (on the crosshair: the camera sits over your shoulder; the twin stands where its ray crosses `ahead`)
-    const den = ray.dir.x * aim.x + ray.dir.z * aim.z;
-    if (den > 0.2) {
-      const ahead = near.dist;
-      const s = ((feet.x + aim.x * ahead - ray.origin.x) * aim.x + (feet.z + aim.z * ahead - ray.origin.z) * aim.z) / den;
-      const side = (ray.origin.x + ray.dir.x * s - near.pos.x) * aim.z - (ray.origin.z + ray.dir.z * s - near.pos.z) * aim.x;
-      const k = THREE.MathUtils.clamp(side, -0.7, 0.7);
-      near.pos.x += aim.z * k;
-      near.pos.z -= aim.x * k;
-    }
+    const near = nearSpot(h.world, h.player.chest(_c), ray, v.x * aim.x + v.z * aim.z, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
     const strike = h.rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), AIMP.life + 1, 0, -1, ['entrance', 'exit']);
-    this.pair = { id: ++this.pairSeq, strike, near, far, t: 0, seen: new Map(), noticed: new Set() };
-    this.setNoPlayer(this.pair, true);
+    this.pair = { id: ++this.pairSeq, strike, near, far, t: 0, seen: new Map(), noticed: new Set(), man: man ? man.id : null, side };
+    if (AIMP.grace > 0) this.setNoPlayer(this.pair, true);
     this.faceAim();
     h.hero.play('interact', { fade: 0.05 });
     h.audio.aimPop(far.pos, true);
@@ -568,9 +665,101 @@ export class AimMode {
     this.lastOpen.ms = typeof performance !== 'undefined' ? performance.now() : -1;
     this.lastOpen.count++;
     this.usage.opened++;
-    if (this.snapTarget) this.usage.snapped++;
+    if (man) this.usage.snapped++;
   }
 
+  // ------------------------------------------------------------------
+  // GO: into the near twin, out of the exit
+  // ------------------------------------------------------------------
+
+  /** GO: a dash into the near twin (AIMP.go.time s); you come out of the exit facing where it faces. */
+  go(): boolean {
+    const h = this.h;
+    const p = this.pair;
+    if (!p || this.dash) {
+      if (!p) {
+        h.audio.ui('deny');
+        this.hud.callout('aim.noPair', 'info');
+      }
+      return false;
+    }
+    const b = h.player.body;
+    const T = AIMP.go.time;
+    // its middle, a little past its face, from your middle (no higher or lower than it takes to be inside it)
+    const n = p.near;
+    const from = _b.set(b.pos.x, b.pos.y + b.height * 0.5, b.pos.z);
+    const to = _a.copy(n.pos).addScaledVector(n.normal, -0.45);
+    to.y = THREE.MathUtils.clamp(from.y, n.pos.y - n.h / 2 + 0.2, n.pos.y + n.h / 2 - 0.2);
+    const d = _c.subVectors(to, from);
+    const fl = Math.hypot(d.x, d.z);
+    h.player.lunge(d, Math.max(fl / T, 5), T + 0.12);
+    // (up into a raised one: the rise, and what gravity takes on the way)
+    if (d.y > 0.05) {
+      b.vel.y = d.y / T + (LAW.gravity * T) / 2;
+      b.onGround = false;
+    }
+    this.dash = { t: 0, pair: p.id };
+    this.usage.go++;
+    h.hero.play('push', { fade: 0.04, speed: 1.8 });
+    h.audio.aimWhoosh(from, 0.7);
+    h.fx.streak(from, _d.copy(d).multiplyScalar(1 / T), AIM_CYAN);
+    h.kick(0.35);
+    h.vibrate(12);
+    return true;
+  }
+
+  private updateDash(dt: number) {
+    const D = this.dash;
+    if (!D) return;
+    D.t += dt;
+    // (it never got there: a wall, the pair gone)
+    if (D.t > AIMP.go.time + 0.18 || !this.pair || this.pair.id !== D.pair) {
+      this.h.player.endLunge?.();
+      this.dash = null;
+    }
+  }
+
+  private endDash() {
+    if (this.dash) this.h.player.endLunge?.();
+    this.dash = null;
+  }
+
+  /**
+   * You went through an end (the game's crossing): out of YOUR exit, you come
+   * out at AIMP.go.arrive m/s along its front, facing where it faces; the
+   * knife reaches further for a beat; what you pressed on the way lands next
+   * frame; the pair shuts behind you. Returns the view's turn (the pair's own
+   * turn, so you look where you were looking, now out of the exit), or null
+   * when it isn't yours.
+   */
+  heroCrossed(from: RiftEnd, to: RiftEnd): number | null {
+    const p = this.pair;
+    if (!p) return null;
+    const ends = this.h.rifts.strikeEnds(p.strike);
+    if (!ends || (from as object) !== ends.a || (to as object) !== ends.b) return null;
+    const h = this.h;
+    const now = h.time();
+    const b = h.player.body;
+    const n = to.normal;
+    let turn = 0;
+    if (Math.abs(n.y) < 0.5) {
+      // a door: out along its front, steady, toward him
+      const vy = b.vel.y;
+      b.vel.set(n.x, 0, n.z).normalize().multiplyScalar(AIMP.go.arrive);
+      b.vel.y = Math.min(vy, 1);
+      turn = Math.atan2(n.x, n.z) - Math.atan2(-p.near.normal.x, -p.near.normal.z);
+      while (turn > Math.PI) turn -= Math.PI * 2;
+      while (turn < -Math.PI) turn += Math.PI * 2;
+    } else if (n.y < -0.5) {
+      // a ceiling (over his head): down onto him
+      b.vel.set(0, -AIMP.go.arrive, 0);
+    }
+    this.dash = null;
+    this.arrivedT = now;
+    this.edgeUntil = now + AIMP.stab.edgeTime;
+    this.closeAt = now + AIMP.go.close;
+    return turn;
+  }
   private setNoPlayer(p: AimPair, on: boolean) {
     const ends = this.h.rifts.strikeEnds(p.strike);
     if (!ends) return;
@@ -615,13 +804,15 @@ export class AimMode {
     for (const e of this.men()) {
       if (p.noticed.has(e.id) || !this.able(e)) continue;
       e.eye(_a);
-      if (!notices(_a, e.yaw, p.far.pos) || !h.world.lineOfSight(_a, p.far.pos)) {
+      // (in front of his eyes he sees it at once; at his side, behind him, he hears it a moment later)
+      const need = noticeDelay(_a, e.yaw, p.far.pos);
+      if (need === null || !h.world.lineOfSight(_a, p.far.pos)) {
         p.seen.delete(e.id);
         continue;
       }
       const s = (p.seen.get(e.id) ?? 0) + dt;
       p.seen.set(e.id, s);
-      if (s >= AIMP.notice.time) {
+      if (s >= need) {
         p.noticed.add(e.id);
         h.audio.shout(e.chest(_b));
       }
@@ -773,21 +964,29 @@ export class AimMode {
     return guarded(thr.target.pos, thr.target.yaw, thr.from.pos, thr.target.aim === 'mirror') && this.able(thr.target) ? 'blocked' : 'kill';
   }
 
-  /** The man right in front of you within a stab. */
+  /** Just out of the exit: the knife reaches further. */
+  private edge(): boolean {
+    return this.h.time() < this.edgeUntil;
+  }
+
+  /** The man right in front of you within a stab (further just out of the exit). */
   private meleeTarget(): Enemy | null {
     const h = this.h;
     const p = h.player.body.pos;
     const ray = h.aimRay();
     const fy = Math.atan2(ray.dir.x, ray.dir.z);
-    let bd: number = AIMP.stab.direct;
+    const edge = this.edge();
+    let bd: number = AIMP.stab.direct + (edge ? AIMP.stab.edge : 0);
+    const dy = edge ? AIMP.stab.edgeY : 1.5;
     let best: Enemy | null = null;
     for (const o of this.men()) {
       const d = Math.hypot(o.pos.x - p.x, o.pos.z - p.z);
-      if (d > bd || Math.abs(o.pos.y - p.y) > 1.5) continue;
+      if (d > bd || Math.abs(o.pos.y - p.y) > dy) continue;
       let off = Math.atan2(o.pos.x - p.x, o.pos.z - p.z) - fy;
       while (off > Math.PI) off -= Math.PI * 2;
       while (off < -Math.PI) off += Math.PI * 2;
-      if (Math.abs(off) > 0.95) continue;
+      // (straight under you, off any angle: a drop onto him)
+      if (Math.abs(off) > 0.95 && d > 0.5) continue;
       bd = d;
       best = o;
     }
@@ -795,31 +994,25 @@ export class AimMode {
   }
 
   /**
-   * A stab aimed into the pair: the aim ray enters one end (within a stab's
-   * way of you), the man standing in front of the other end within its reach.
+   * A stab through the pair: it is open, its near twin within a stab's way of
+   * you, and a man stands within AIMP.stab.reach in front of the exit (you put
+   * it there: the knife goes through, whatever the crosshair is on).
    */
   private stabThrough(): { target: Enemy; from: Spot; into: Spot } | null {
     const p = this.pair;
-    if (!p) return null;
-    const h = this.h;
-    const ends = h.rifts.strikeEnds(p.strike);
-    if (!ends) return null;
-    const ray = h.aimRay();
-    const segs = h.rifts.raycastThrough(ray.origin, ray.dir, 40, h.world, 1);
-    const via = segs.length > 1 ? segs[0].viaEnd : null;
-    if (!via) return null;
-    const me = h.player.body.pos;
-    const intoNear = (via as object) === ends.a;
-    const into = intoNear ? p.near : p.far;
-    const out = intoNear ? p.far : p.near;
-    // (the end you stab into is within a stab's way of you)
-    if (_a.copy(into.pos).sub(me).setY(0).length() > 3.6) return null;
-    const target = standingBy(out, this.men(), AIMP.stab.reach);
-    return target ? { target, from: out, into } : null;
+    if (!p || this.dash) return null;
+    const me = this.h.player.body.pos;
+    if (_a.copy(p.near.pos).sub(me).setY(0).length() > AIMP.stab.nearMax) return null;
+    const target = standingBy(p.far, this.men(), AIMP.stab.reach);
+    return target ? { target, from: p.far, into: p.near } : null;
   }
 
   private stab() {
     const h = this.h;
+    if (this.dash) {
+      this.bufStab = h.time();
+      return;
+    }
     this.faceAim();
     this.stabCd = AIMP.stab.cooldown;
     this.knifeUntil = h.time() + 0.3;
@@ -829,8 +1022,11 @@ export class AimMode {
     if (close) {
       if (guarded(close.pos, close.yaw, h.player.body.pos, close.aim === 'mirror') && this.able(close)) return this.parried(close, h.player.chest(new THREE.Vector3()));
       const p = h.player.body.pos;
-      h.player.lunge(_a.set(close.pos.x - p.x, 0, close.pos.z - p.z), 6, 0.12);
+      // (a step in that ends right at him: further just out of the exit)
+      const d = Math.hypot(close.pos.x - p.x, close.pos.z - p.z);
+      if (d > 0.5) h.player.lunge(_a.set(close.pos.x - p.x, 0, close.pos.z - p.z), THREE.MathUtils.clamp((d - 0.85) / 0.12, 6, 16), 0.12);
       this.usage.stabDirect++;
+      if (this.edge() && d > AIMP.stab.direct) this.usage.edge++;
       this.knifeKill(close, h.player.chest(new THREE.Vector3()));
       return;
     }
@@ -839,9 +1035,10 @@ export class AimMode {
       this.stabCd = 0.25;
       return;
     }
-    // through it: the blade comes out of the other end
+    // through it: your hand into the near twin, the blade out of the exit
+    const c = _c.set(thr.target.pos.x, thr.target.pos.y + thr.target.height * 0.6, thr.target.pos.z);
     this.fx.tracer(h.hero.bonePos('RightHand', _b), thr.into.pos, new THREE.Color(2, 2, 2));
-    this.fx.tracer(thr.from.pos, _c.set(thr.target.pos.x, thr.target.pos.y + thr.target.height * 0.6, thr.target.pos.z), new THREE.Color(2, 2, 2));
+    this.fx.tracer(_a.copy(thr.from.pos).setY(Math.min(thr.from.pos.y + thr.from.h / 2 - 0.2, Math.max(thr.from.pos.y - thr.from.h / 2 + 0.2, c.y))), c, new THREE.Color(2, 2, 2));
     h.audio.aimWhoosh(thr.from.pos, 0.4);
     if (guarded(thr.target.pos, thr.target.yaw, thr.from.pos, thr.target.aim === 'mirror') && this.able(thr.target)) {
       this.parried(thr.target, thr.from.pos, true);

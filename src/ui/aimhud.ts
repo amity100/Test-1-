@@ -58,7 +58,7 @@ export class AimHud {
   constructor(root: HTMLElement) {
     const el = document.createElement('div');
     el.className = 'aim-hud';
-    const pips = COMPASS.map((s) => `<i data-s="${s}"><b></b></i>`).join('');
+    const pips = [...new Set(COMPASS)].map((s) => `<i data-s="${s}"><b></b></i>`).join('');
     el.innerHTML = `
       <div class="rh-arrows">${'<i><b></b></i>'.repeat(ARROWS)}</div>
       <div class="ah-comp">${pips}<u></u></div>
@@ -80,11 +80,11 @@ export class AimHud {
     this.compEl = el.querySelector('.ah-comp') as HTMLDivElement;
     this.pips = Array.from(el.querySelectorAll('.ah-comp > i')) as HTMLElement[];
     this.arrowEls = Array.from(el.querySelectorAll('.rh-arrows > i')) as HTMLElement[];
-    // (the six pips sit on a ring, 60° apart from the top)
+    // (the pips sit on a ring: ABOVE on top, RIGHT, BELOW, LEFT, FRONT low right; BEHIND, the default, in the middle)
     for (const p of this.pips) {
       const a = compassAngle(p.dataset.s as Side);
-      p.style.left = `${50 + Math.sin(a) * 50}%`;
-      p.style.top = `${50 - Math.cos(a) * 50}%`;
+      p.style.left = `${a === null ? 50 : 50 + Math.sin(a) * 50}%`;
+      p.style.top = `${a === null ? 50 : 50 - Math.cos(a) * 50}%`;
     }
     this.unsub = onLangChange(() => {
       this.cache.clear();

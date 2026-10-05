@@ -116,6 +116,8 @@ export interface AimFxState {
   /** The mirrors' shields: facing `yaw`, where they stand. */
   shields: { id: number; pos: V3; yaw: number }[];
   red: readonly RedPortal[];
+  /** The man the crosshair is on (a ring at his feet; brighter while his side is being picked). */
+  target?: { pos: V3; radius: number; picking: boolean } | null;
 }
 
 const _v = new THREE.Vector3();
@@ -138,6 +140,8 @@ export class AimFx {
   private shields = new Map<number, ShieldView>();
   private reds: RedView[] = [];
   private flashes: { m: THREE.Mesh; mat: THREE.MeshBasicMaterial; t: number }[] = [];
+  private mark: THREE.Mesh;
+  private markMat: THREE.MeshBasicMaterial;
   private t = 0;
 
   constructor() {
@@ -165,6 +169,13 @@ export class AimFx {
     this.ghost.add(this.ghostLine, this.ghostFill, this.ghostArrow);
     this.ghost.visible = false;
     this.group.add(this.ghost);
+    // the ring at the feet of the man the crosshair is on
+    this.markMat = add(GHOST_SNAP, 0.9);
+    this.mark = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 40).rotateX(-Math.PI / 2), this.markMat);
+    this.mark.renderOrder = 7;
+    this.mark.frustumCulled = false;
+    this.mark.visible = false;
+    this.group.add(this.mark);
     for (let i = 0; i < 8; i++) {
       const mat = add(AIM_CYAN);
       const m = new THREE.Mesh(TRACER, mat);
@@ -256,6 +267,7 @@ export class AimFx {
     for (const s of this.shields.values()) s.mesh.visible = false;
     for (const r of this.reds) r.g.visible = false;
     this.ghost.visible = false;
+    this.mark.visible = false;
   }
 
   update(dt: number, s: AimFxState) {
@@ -291,6 +303,14 @@ export class AimFx {
       this.ghostFill.scale.set(sp.w / 2, sp.h / 2, 1);
       this.ghostArrow.visible = g.kind !== 'bad';
       this.ghostFillMat.opacity = 0.1 + 0.05 * Math.sin(this.t * 14);
+    }
+    // the man the crosshair is on
+    const tg = s.target;
+    this.mark.visible = !!tg;
+    if (tg) {
+      this.mark.position.set(tg.pos.x, tg.pos.y + 0.05, tg.pos.z);
+      this.mark.scale.setScalar((tg.radius + 0.25) / 0.56 * (1 + 0.06 * Math.sin(this.t * 10)));
+      this.markMat.opacity = tg.picking ? 1 : 0.75;
     }
     // the shields
     const seen = new Set<number>();

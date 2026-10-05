@@ -62,6 +62,8 @@ export class Input {
   worldTaps: { x: number; y: number }[] = [];
   /** The game has a PORTAL in hand (set every frame): RMB / LT / Y / D-pad do its things, not their own. */
   portalHolding = false;
+  /** AIM PORTAL has a pair open (set every frame): the pad's B is GO, not crouch. */
+  aimGo = false;
   /** Called when the last used device changes (i18n device variants are switched automatically). */
   onDeviceChange: ((d: Device) => void) | null = null;
 
@@ -352,7 +354,19 @@ export class Input {
     hold(5, 'shove'); // RB
     hold(0, 'jump'); // A
     hold(2, 'action'); // X
-    hold(1, 'crouch'); // B
+    // B: crouch (AIM PORTAL with a pair open: GO)
+    edge(
+      1,
+      () => {
+        this.padHeld[1] = this.aimGo ? 'go' : 'crouch';
+        this.down(this.padHeld[1]);
+      },
+      () => {
+        const was = this.padHeld[1];
+        if (was) this.up(was);
+        this.padHeld[1] = null;
+      },
+    );
     hold(13, 'vision'); // D-pad down
     hold(12, 'photo'); // D-pad up
     hold(8, 'clip'); // View / Back

@@ -1963,12 +1963,12 @@ export class Game {
   }
 
   /** AIM PORTAL (touch): the oldest tap on the world this frame, as a screen point (NDC). */
-  private takeWorldTap(inp: Input): { x: number; y: number } | null {
+  private takeWorldTap(inp: Input): { x: number; y: number; w: number; h: number } | null {
     const taps = inp.consumeWorldTaps();
     if (!taps.length) return null;
     const tp = taps[taps.length - 1];
     const r = this.renderer.renderer.domElement.getBoundingClientRect();
-    return { x: ((tp.x - r.left) / r.width) * 2 - 1, y: -(((tp.y - r.top) / r.height) * 2 - 1) };
+    return { x: ((tp.x - r.left) / r.width) * 2 - 1, y: -(((tp.y - r.top) / r.height) * 2 - 1), w: r.width, h: r.height };
   }
 
   private impactEnemy(v: EnemyView, speed: number, imp: DynBody, kc: KillCtx) {
@@ -2384,7 +2384,8 @@ export class Game {
     // REACH: the WEAPON and the HAND (before you move: a stab's step in moves you this frame)
     // (WINDOW: RMB / LT / its button; HAND: E / MMB / F / RB / X / its button; WEAPON: LMB / RT / its button)
     if (aimV) {
-      // AIM PORTAL: PORTAL (RMB / LT / its button), FIRE (LMB / RT), STAB (F / X), PULL and THROW (E / RB), SNAP (Ctrl / MMB / R-stick / a drag)
+      // AIM PORTAL: PORTAL (RMB / LT / its button; held on a man, the look picks his side), FIRE (LMB / RT), STAB (F / X),
+      // PULL and THROW (E / RB), GO (Q / B / its button), the side key on its own (Ctrl / MMB / R-stick / a drag)
       const snap = inp.isHeld('snap');
       this.aim!.update(dt, realDt, {
         fire: free && inp.isHeld('portal'),
@@ -2396,16 +2397,19 @@ export class Game {
         snapVec: { x: inp.snapX, y: inp.snapY },
         stabPress: free && inp.wasPressed('action'),
         pullPress: free && (inp.wasPressed('strike3') || inp.wasPressed('shove')),
+        goPress: free && (inp.wasPressed('strike2') || inp.wasPressed('go')),
         wheel: this.reachWheel,
         worldTap: free ? this.takeWorldTap(inp) : null,
       });
-      // SNAP latched a man: the look chooses his side, not the camera (a fresh choice starts on BEHIND)
+      // his side being picked: the look chooses it, not the camera (a fresh choice starts on BEHIND; a drag on the phone writes its own)
       const latched = this.aim!.snapLatched;
-      if (latched && !this.aimSnapWas && inp.lastDevice === 'kbm') inp.resetSnap();
+      if (latched && !this.aimSnapWas && inp.lastDevice !== 'touch') inp.resetSnap();
       this.aimSnapWas = latched;
       inp.divertLook = latched;
+      inp.aimGo = !!this.aim!.pair;
     } else {
       inp.divertLook = false;
+      inp.aimGo = false;
     }
     if (reachV) {
       const handKeys = ['strike3', 'close', 'action', 'shove'] as const;
@@ -2591,14 +2595,15 @@ export class Game {
         this.shoved.clear();
         this.audio.shove(this.player.body.pos);
       },
-      crossed: (_from, _to, yawDelta) => {
+      crossed: (from, to, yawDelta) => {
         if (flowOn()) this.meter.add(FLOW.meter.portal);
         this.lastCrossT = this.time;
-        // (AIM PORTAL: a harder crossing kicks the view harder)
+        // (AIM PORTAL: a harder crossing kicks the view harder; out of your own exit the view turns by the pair's own turn)
+        const aimTurn = aimOn() && this.aim ? this.aim.heroCrossed(from, to) : null;
         if (aimOn()) this.rig.kick = Math.max(this.rig.kick, Math.min(1.4, 0.4 + Math.hypot(this.player.body.vel.x, this.player.body.vel.y, this.player.body.vel.z) / 12));
         // through a rift mid-lunge: the lunge is over (the rift's momentum carries you on)
         this.blade.cancel();
-        this.rig.rotateBy(yawDelta);
+        this.rig.rotateBy(aimTurn ?? yawDelta);
         this.rig.kick = Math.max(this.rig.kick, 0.8);
         this.renderer.grade.uniforms.uFlash.value = 1;
       },

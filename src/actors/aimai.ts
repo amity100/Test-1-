@@ -90,6 +90,10 @@ class Mind {
   readonly turnTo = new THREE.Vector3();
   turnUntil = -1;
   side = 1;
+  /** You vanished from where he had you and turned up at his side or his back (through your pair): he has lost you until then (game time). */
+  blindUntil = -1;
+  readonly lastPl = new THREE.Vector3();
+  hasLast = false;
   constructor(rand: () => number) {
     const [a, b] = AIMP.enemy.react;
     this.react = a + (b - a) * rand();
@@ -176,6 +180,14 @@ export class AimAI {
     }
     m.thinkT = sys.time;
     e.reachPose = m.role === 'gunner' ? (m.gun !== 'idle' ? 1 : 0.55) : 0;
+    // you were there and now you are here (through your pair), at his side or his back: he has lost you a moment
+    if (this.lostYou(sys, e, m, pl.pos)) {
+      sys.halt(e, dt);
+      m.gun = 'idle';
+      m.windT = -1;
+      m.intoPortal = false;
+      return;
+    }
     if (!H.go()) {
       sys.halt(e, dt);
       if (m.role === 'mirror') e.yaw = turnToward(e.yaw, yawTo(e.pos, pl.pos), dt, AIMP.enemy.mirror.turn);
@@ -197,6 +209,26 @@ export class AimAI {
     if (m.role === 'gunner') this.gunner(sys, e, m, dt);
     else if (m.role === 'mirror') this.mirror(sys, e, m, dt);
     else this.rusher(sys, e, m, dt);
+  }
+
+  /**
+   * You jumped (more than 2.5 m in a beat: through a portal) to a spot he
+   * doesn't have in front of his eyes: for AIMP.notice.side s (at his side) or
+   * AIMP.notice.back s (behind him) he doesn't know where you went (he stops,
+   * he doesn't turn to you, he doesn't shoot). True while that lasts.
+   */
+  private lostYou(sys: EnemySystem, e: Enemy, m: Mind, at: V3): boolean {
+    const jumped = m.hasLast && Math.hypot(at.x - m.lastPl.x, at.z - m.lastPl.z) > 2.5;
+    m.lastPl.set(at.x, at.y, at.z);
+    m.hasLast = true;
+    if (jumped && e.body && !e.body.simulate) {
+      // (in front of his eyes he has you at once)
+      const dx = at.x - e.pos.x, dz = at.z - e.pos.z;
+      const d = Math.hypot(dx, dz);
+      const c = d < 0.3 ? 1 : (dx * Math.sin(e.yaw) + dz * Math.cos(e.yaw)) / d;
+      if (c < AIMP.notice.cos) m.blindUntil = sys.time + (c > -0.5 ? AIMP.notice.side : AIMP.notice.back);
+    }
+    return sys.time < m.blindUntil;
   }
 
   private sees(e: Enemy, p: V3, range = 80) {

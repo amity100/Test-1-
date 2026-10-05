@@ -10,8 +10,11 @@ import {
   guarded,
   impactOutcome,
   inFrontOf,
+  leadPos,
   leftOf,
+  magnetTarget,
   nearSpot,
+  noticeDelay,
   notices,
   pickSide,
   placeExit,
@@ -22,6 +25,7 @@ import {
   snapSpot,
   spotFrame,
   standingBy,
+  tapTarget,
   turnToward,
 } from '../../src/game/aimportal';
 import { AimMode, type AimHost, type AimInput } from '../../src/game/aimmode';
@@ -141,18 +145,46 @@ describe('AIM PORTAL: where the exit opens', () => {
     expect(c.reason).toBe('close');
   });
 
-  it('the near twin: 1.3 m ahead of you, facing you, bottom on your floor; further when you run at it; nearer if a wall is in the way', () => {
+  it('the near twin: about 1 m ahead of your chest on the crosshair, facing you, standing on your floor; the crosshair always inside it with margin, your body line too', () => {
     const w = flatWorld();
-    const stand = nearSpot(w, V(0, 0, 0), V(0, 0, 1), 0, groundOf(w));
-    expect(stand.pos.z).toBeCloseTo(AIMP.near.ahead, 5);
-    expect(stand.normal.z).toBe(-1);
-    expect(stand.pos.y - AIMP.h / 2).toBeCloseTo(0.02, 5);
-    const run = nearSpot(w, V(0, 0, 0), V(0, 0, 1), 9, groundOf(w));
-    expect(run.pos.z).toBeGreaterThan(2.5);
+    const chest = V(0, 1.08, 0);
+    // the camera 3.1 m back over your right shoulder (yaw 0: your right is -x), looking ahead
+    const ray = { origin: V(-0.62, 1.6, -3.1), dir: V(0, 0, 1) };
+    const s = nearSpot(w, chest, ray, 0, groundOf(w));
+    expect(s.pos.z).toBeCloseTo(AIMP.near.ahead, 5);
+    expect(AIMP.near.ahead).toBeGreaterThanOrEqual(0.9);
+    expect(AIMP.near.ahead).toBeLessThanOrEqual(1.1);
+    expect(s.normal.z).toBe(-1);
+    expect(s.w).toBeGreaterThanOrEqual(1.3);
+    expect(s.h).toBeGreaterThanOrEqual(2.1);
+    // across: toward the crosshair (x -0.62 there), as far as your body line (x 0) stays inside
+    const cross = V(-0.62, 1.6, AIMP.near.ahead);
+    expect(Math.abs(cross.x - s.pos.x)).toBeLessThanOrEqual(s.w / 2 - AIMP.near.margin + 1e-6);
+    expect(Math.abs(0 - s.pos.x)).toBeLessThanOrEqual(s.w / 2 - AIMP.near.body + 1e-6);
+    expect(s.pos.x).toBeLessThan(-0.3);
+    // up: on the crosshair (1.6 m) as far as it may float off your floor; your middle (0.9 m) inside it: one step takes you in
+    expect(s.pos.y).toBeCloseTo(cross.y, 5);
+    expect(s.pos.y - s.h / 2).toBeGreaterThanOrEqual(0.02 - 1e-6);
+    expect(s.pos.y - s.h / 2).toBeLessThanOrEqual(0.02 + AIMP.near.float + 1e-6);
+    expect(s.pos.y - s.h / 2).toBeLessThan(0.9 - 0.2);
+    // looking down: it stands on your floor
+    const down = nearSpot(w, chest, { origin: ray.origin, dir: V(0, -0.2, 1).normalize() }, 0, groundOf(w));
+    expect(down.pos.y - down.h / 2).toBeCloseTo(0.02, 5);
+    // looking up at a man on a tower: it rises with the crosshair so the crosshair stays inside it
+    const upDir = V(0, 0.45, 1).normalize();
+    const up = nearSpot(w, chest, { origin: ray.origin, dir: upDir }, 0, groundOf(w));
+    const k = (AIMP.near.ahead + 3.1) / upDir.z;
+    const crossUp = ray.origin.clone().addScaledVector(upDir, k);
+    expect(Math.abs(crossUp.y - up.pos.y)).toBeLessThanOrEqual(up.h / 2 - AIMP.near.margin + 1e-6);
+    expect(up.pos.y).toBeGreaterThan(s.pos.y);
+    // a sprint at it: a little further, never past its max
+    const run = nearSpot(w, chest, ray, 9, groundOf(w));
+    expect(run.pos.z).toBeGreaterThan(AIMP.near.ahead);
     expect(run.pos.z).toBeLessThanOrEqual(AIMP.near.max + 1e-6);
-    w.add(V(-5, 0, 1.5), V(5, 4, 2.5));
-    const tight = nearSpot(w, V(0, 0, 0), V(0, 0, 1), 0, groundOf(w));
-    expect(tight.pos.z).toBeLessThan(1.3);
+    // a wall in the way: in front of it
+    w.add(V(-5, 0, 1.2), V(5, 4, 2.5));
+    const tight = nearSpot(w, chest, ray, 0, groundOf(w));
+    expect(tight.pos.z).toBeLessThan(1.2);
     expect(tight.pos.z).toBeGreaterThanOrEqual(0.6);
   });
 
@@ -177,49 +209,110 @@ function flatWallWorld() {
 }
 
 // ---------------------------------------------------------------------------
-// SNAP: the side of a man, relative to HIS facing
+// Next to a man: the side, as you see him
 // ---------------------------------------------------------------------------
 
-describe('AIM PORTAL: SNAP geometry', () => {
+describe('AIM PORTAL: next to a man', () => {
   const man = { pos: V(10, 0, 10), yaw: Math.PI / 2, height: 1.8 };
 
-  it('picks the side by a flick: nothing much is BEHIND him; the compass is six slots of 60°', () => {
+  it('a flick picks the side: nothing much is BEHIND him; up ABOVE, down BELOW, left LEFT, right RIGHT; the upper diagonals BEHIND, the lower FRONT', () => {
     expect(pickSide(0, 0)).toBe('behind');
     expect(pickSide(0.1, 0.1)).toBe('behind');
     expect(pickSide(0, 1)).toBe('above');
     expect(pickSide(0, -1)).toBe('below');
-    expect(pickSide(1, 0.5)).toBe('right');
-    expect(pickSide(1, -0.5)).toBe('front');
-    expect(pickSide(-1, -0.5)).toBe('behind');
-    expect(pickSide(-1, 0.5)).toBe('left');
+    expect(pickSide(1, 0)).toBe('right');
+    expect(pickSide(-1, 0)).toBe('left');
+    expect(pickSide(1, 0.15)).toBe('right');
+    expect(pickSide(0.7, 0.7)).toBe('behind');
+    expect(pickSide(-0.7, 0.7)).toBe('behind');
+    expect(pickSide(0.7, -0.7)).toBe('front');
+    expect(pickSide(-0.7, -0.7)).toBe('front');
     expect(new Set(COMPASS)).toEqual(new Set(SIDES));
-    for (const s of SIDES) expect(typeof s).toBe('string');
   });
 
-  it('BEHIND / FRONT / LEFT / RIGHT are 1.2 m from him on that side of HIS facing, their fronts toward him', () => {
-    // he faces +x: his behind is -x, his front +x, his left +z.. (facing +x with up +y: left is -z)
-    const f = facing(man.yaw, V());
-    const l = leftOf(man.yaw, V());
-    expect(f.x).toBeCloseTo(1, 5);
-    const b = snapSpot(man, 'behind');
-    expect(b.pos.x).toBeCloseTo(10 - AIMP.snap.dist, 5);
-    expect(b.pos.z).toBeCloseTo(10, 5);
-    expect(b.normal.x).toBeCloseTo(1, 5);
-    const fr = snapSpot(man, 'front');
-    expect(fr.pos.x).toBeCloseTo(10 + AIMP.snap.dist, 5);
-    expect(fr.normal.x).toBeCloseTo(-1, 5);
-    const left = snapSpot(man, 'left');
-    expect(left.pos.x - 10).toBeCloseTo(l.x * AIMP.snap.dist, 5);
-    expect(left.pos.z - 10).toBeCloseTo(l.z * AIMP.snap.dist, 5);
-    const right = snapSpot(man, 'right');
-    expect(right.pos.z - 10).toBeCloseTo(-l.z * AIMP.snap.dist, 5);
-    // left and right are opposite sides
-    expect(left.pos.distanceTo(right.pos)).toBeCloseTo(2 * AIMP.snap.dist, 5);
-    // (every side stands on his floor, person-sized)
+  it('the sides are as you see him: BEHIND the far side (his back when he faces you), RIGHT / LEFT as your screen has them; 1.3 m off, standing on his floor, fronts toward him', () => {
+    // you at x 0 looking +x at him; he faces you (-x)
+    const view = V(1, 0, 0);
+    const him = { ...man, yaw: -Math.PI / 2 };
+    const b = snapSpot(him, 'behind', 0, AIMP.magnet.dist, view);
+    expect(b.pos.x).toBeCloseTo(10 + AIMP.magnet.dist, 5);
+    expect(b.normal.x).toBeCloseTo(-1, 5);
+    const fr = snapSpot(him, 'front', 0, AIMP.magnet.dist, view);
+    expect(fr.pos.x).toBeCloseTo(10 - AIMP.magnet.dist, 5);
+    // (looking +x your right is +z... the game's right is (-cos yaw, 0, sin yaw): yaw = PI/2 gives +z)
+    const right = snapSpot(him, 'right', 0, AIMP.magnet.dist, view);
+    expect(right.pos.z).toBeCloseTo(10 + AIMP.magnet.dist, 5);
+    expect(right.normal.z).toBeCloseTo(-1, 5);
+    const left = snapSpot(him, 'left', 0, AIMP.magnet.dist, view);
+    expect(left.pos.z).toBeCloseTo(10 - AIMP.magnet.dist, 5);
     for (const s of [b, fr, left, right]) {
       expect(s.pos.y - AIMP.h / 2).toBeCloseTo(0.02, 5);
-      expect(s.pos.distanceTo(V(10, s.pos.y, 10))).toBeCloseTo(AIMP.snap.dist, 5);
+      expect(s.pos.distanceTo(V(10, s.pos.y, 10))).toBeCloseTo(AIMP.magnet.dist, 5);
+      expect(AIMP.magnet.dist).toBeGreaterThanOrEqual(1.2);
+      expect(AIMP.magnet.dist).toBeLessThanOrEqual(1.5);
+      // its front looks at him
+      expect(V(10 - s.pos.x, 0, 10 - s.pos.z).normalize().dot(s.normal)).toBeCloseTo(1, 5);
     }
+    // he faces away from you: the far side is in his face, so BEHIND is his back, your side of him
+    const away = snapSpot({ ...man, yaw: Math.PI / 2 }, 'behind', 0, AIMP.magnet.dist, view);
+    expect(away.pos.x).toBeCloseTo(10 - AIMP.magnet.dist, 5);
+    expect(guarded(V(10, 0, 10), Math.PI / 2, away.pos, false)).toBe(false);
+    // side-on to you: the far side (his flank)
+    const side = snapSpot({ ...man, yaw: 0 }, 'behind', 0, AIMP.magnet.dist, view);
+    expect(side.pos.x).toBeCloseTo(10 + AIMP.magnet.dist, 5);
+    expect(guarded(V(10, 0, 10), 0, side.pos, false)).toBe(false);
+  });
+
+  it('the crosshair is on a man within a cone that grows with the range (3° desktop, 7° touch) plus his body; the nearest to the crosshair wins; a wall hides him', () => {
+    const o = V(0, 1.6, 0);
+    const noWall = () => false;
+    const at = (d: number, x = 0) => ({ id: d, pos: V(x, 0, d), height: 1.8, radius: 0.42 });
+    const kbm = THREE.MathUtils.degToRad(AIMP.magnet.deg.kbm);
+    const touch = THREE.MathUtils.degToRad(AIMP.magnet.deg.touch);
+    expect(AIMP.magnet.deg.kbm).toBeGreaterThanOrEqual(3);
+    expect(AIMP.magnet.deg.touch).toBeGreaterThanOrEqual(7);
+    for (const d of [8, 20, 32]) {
+      // aimed 2.5° off his body's edge: on him with the help (desktop), as at any range
+      const edge = 0.42 + AIMP.magnet.pad;
+      const off = edge + Math.tan(THREE.MathUtils.degToRad(2.5)) * d;
+      const dir = V(off, 0, d).normalize();
+      expect(magnetTarget(o, dir, [at(d)], kbm, noWall)?.id).toBe(d);
+      // 6° off: not on desktop, yes on touch
+      const off6 = edge + Math.tan(THREE.MathUtils.degToRad(6)) * d;
+      const dir6 = V(off6, 0, d).normalize();
+      expect(magnetTarget(o, dir6, [at(d)], kbm, noWall)).toBeNull();
+      expect(magnetTarget(o, dir6, [at(d)], touch, noWall)?.id).toBe(d);
+    }
+    // two men: the one the crosshair is nearer to (by its leeway), not the nearer one
+    const near = { id: 1, pos: V(1.2, 0, 8), height: 1.8, radius: 0.42 };
+    const far = { id: 2, pos: V(0, 0, 25), height: 1.8, radius: 0.42 };
+    expect(magnetTarget(o, V(0, 0, 1), [near, far], kbm, noWall)?.id).toBe(2);
+    // a wall hides him; behind you is nobody
+    expect(magnetTarget(o, V(0, 0, 1), [far], kbm, () => true)).toBeNull();
+    expect(magnetTarget(o, V(0, 0, -1), [far], touch, noWall)).toBeNull();
+    // over his head (a man on a tower): his height plus a little counts
+    expect(magnetTarget(o, V(0, 0.3 / 20, 1).normalize(), [at(20)], 0, noWall)?.id).toBe(20);
+  });
+
+  it('a tap on the screen within 60 px of a man (feet to head) is on him; the nearest wins', () => {
+    const list = [
+      { id: 1, pos: V(0, 0, 0), height: 1.8, radius: 0.42 },
+      { id: 2, pos: V(1, 0, 0), height: 1.8, radius: 0.42 },
+    ];
+    // a fake projection: 100 px per m, y up the screen
+    const proj = (p: THREE.Vector3) => ({ x: 400 + p.x * 100, y: 300 - p.y * 100 });
+    expect(AIMP.magnet.tapPx).toBeGreaterThanOrEqual(60);
+    expect(tapTarget(400 + 40, 250, list, proj, () => false)?.id).toBe(1);
+    expect(tapTarget(400 + 75, 250, list, proj, () => false)?.id).toBe(2);
+    expect(tapTarget(400 - 70, 250, list, proj, () => false)).toBeNull();
+    expect(tapTarget(400, 250, list, proj, () => true)).toBeNull();
+  });
+
+  it('a moving man: the exit opens where he will be in a moment (a man in the air: where he is)', () => {
+    const p = leadPos(V(0, 0, 0), V(4, 0, 0));
+    expect(p.x).toBeCloseTo(4 * AIMP.magnet.lead, 5);
+    expect(leadPos(V(0, 0, 0), V(0.2, 0, 0)).x).toBe(0);
+    expect(leadPos(V(0, 0, 0), V(20, 0, 0)).x).toBe(0);
   });
 
   it('it follows his facing: turn him round and BEHIND is the other side', () => {
@@ -390,7 +483,7 @@ describe('AIM PORTAL: through the pair', () => {
     const rifts = makeRifts(world);
     const phys = makePhysics(world, rifts);
     const ev = recorder();
-    const near = nearSpot(world, V(0, 0, 0), V(0, 0, 1), 0, () => -Infinity);
+    const near = nearSpot(world, V(0, 1.08, 0), { origin: V(0, 1.6, -3), dir: V(0, 0, 1) }, 0, () => -Infinity);
     near.pos.y = 1.02;
     const far = { pos: V(15, 1.02, 0), normal: V(-1, 0, 0), hdir: V(0, 0, 1), surface: 'wall' as const, w: AIMP.w, h: AIMP.h };
     rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), 6);
@@ -412,7 +505,7 @@ describe('AIM PORTAL: through the pair', () => {
     const rifts = makeRifts(world);
     const phys = makePhysics(world, rifts);
     const ev = recorder();
-    const near = nearSpot(world, V(0, 0, 0), V(0, 0, 1), 0, () => -Infinity);
+    const near = nearSpot(world, V(0, 1.08, 0), { origin: V(0, 1.6, -3), dir: V(0, 0, 1) }, 0, () => -Infinity);
     near.pos.y = 1.02;
     const far = { pos: V(15, 1.02, 0), normal: V(-1, 0, 0), hdir: V(0, 0, 1), surface: 'wall' as const, w: AIMP.w, h: AIMP.h };
     rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), 6);
@@ -432,7 +525,7 @@ describe('AIM PORTAL: through the pair', () => {
     const rifts = makeRifts(world);
     const phys = makePhysics(world, rifts);
     const ev = recorder();
-    const near = nearSpot(world, V(0, 0, 0), V(0, 0, 1), 0, () => 0);
+    const near = nearSpot(world, V(0, 1.08, 0), { origin: V(0, 1.6, -3), dir: V(0, 0, 1) }, 0, () => 0);
     const floor = snapSpot({ pos: V(10, 0, 10), yaw: 0, height: 1.8 }, 'below', 0);
     rifts.openStrike(spotFrame(near, 'stand'), spotFrame(floor), 6);
     rifts.update(0.3, 0.3, 0.3);
@@ -448,7 +541,7 @@ describe('AIM PORTAL: through the pair', () => {
   it('a round through the near twin leaves the exit along its front (the rift system’s ray)', () => {
     const world = flatWallWorld();
     const rifts = makeRifts(world);
-    const near = nearSpot(world, V(0, 0, 0), V(0, 0, 1), 0, groundOf(world));
+    const near = nearSpot(world, V(0, 1.08, 0), { origin: V(0, 1.6, -3), dir: V(0, 0, 1) }, 0, groundOf(world));
     const far = { pos: V(20, 1.02, 5), normal: V(-1, 0, 0), hdir: V(0, 0, 1), surface: 'wall' as const, w: AIMP.w, h: AIMP.h };
     const s = rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), 6);
     rifts.update(0.3, 0.3, 0.3);
@@ -468,19 +561,37 @@ describe('AIM PORTAL: through the pair', () => {
 const noop = () => {};
 const sink = new Proxy({}, { get: () => noop }) as any;
 
-function rig(o: { device?: 'kbm' | 'touch' | 'pad' } = {}) {
+/**
+ * AIM PORTAL in a set piece: the real rift system and enemy system, a stand-in
+ * hero. `move`: the hero moves (a lunge, GO's dash, momentum, friction) and
+ * crosses the pair the way the physics does (the game's crossing hook calls
+ * heroCrossed, and the view turns by what it returns).
+ */
+function rig(o: { device?: 'kbm' | 'touch' | 'pad'; move?: boolean } = {}) {
   setLabActive(true);
   setVariant('aimportal');
   const sc = scenario();
   const rifts = new RiftSystem(new THREE.Scene(), null, sc.world, { portalScale: 0.5, lightCount: 2, maxViews: 2 });
   const pos = V(0, 0, 0);
   const vel = V();
+  const lunge = { dir: V(), speed: 0, t: 0 };
+  const crossings: { t: number; from: any; to: any; turn: number | null }[] = [];
   const player = {
-    body: { pos, vel, onGround: true },
+    body: { pos, vel, onGround: true, height: 1.8 },
     yaw: 0,
     weaponUp: 0,
     chest: (out = new THREE.Vector3()) => out.set(pos.x, pos.y + 1.3, pos.z),
-    lunge: noop,
+    lunge(dir: THREE.Vector3, speed: number, time: number) {
+      lunge.dir.set(dir.x, 0, dir.z).normalize();
+      lunge.speed = speed;
+      lunge.t = time;
+      player.yaw = Math.atan2(lunge.dir.x, lunge.dir.z);
+    },
+    endLunge() {
+      if (lunge.t <= 0) return;
+      lunge.t = 0;
+      vel.x = vel.z = 0;
+    },
   };
   const hero = {
     setHeld: noop,
@@ -531,19 +642,56 @@ function rig(o: { device?: 'kbm' | 'touch' | 'pad' } = {}) {
   const input: AimInput = { fire: false, firePress: false, portal: false, portalPress: false, portalRelease: false, snap: false, snapVec: { x: 0, y: 0 }, stabPress: false, pullPress: false, wheel: 0 };
   /** Men held facing one way (a set piece: their brain would turn them to you). */
   const pinned = new Map<Enemy, number>();
+  const dt = 1 / 60;
+  /** The hero's own motion (with `move`): a lunge, momentum and friction, and a crossing of the pair as the physics does it. */
+  const moveHero = () => {
+    if (lunge.t > 0) {
+      lunge.t -= dt;
+      vel.x = lunge.dir.x * lunge.speed;
+      vel.z = lunge.dir.z * lunge.speed;
+    } else {
+      const k = Math.exp(-6 * dt);
+      vel.x *= k;
+      vel.z *= k;
+    }
+    if (pos.y > 0 || vel.y > 0) vel.y -= LAW.gravity * dt;
+    const prev = V(pos.x, pos.y + 0.9, pos.z);
+    pos.addScaledVector(vel, dt);
+    if (pos.y < 0) {
+      pos.y = 0;
+      vel.y = 0;
+    }
+    const cur = V(pos.x, pos.y + 0.9, pos.z);
+    const end = rifts.findCrossing(prev, cur, 0.15, true);
+    if (!end) return;
+    const to = end.linked;
+    const p2 = rifts.transformPoint(end, cur, V());
+    const v2 = rifts.transformDir(end, vel, V());
+    pos.set(p2.x, p2.y - 0.9, p2.z).addScaledVector(to.normal, 0.05);
+    vel.copy(v2);
+    lunge.t = 0;
+    if (Math.abs(to.normal.y) < 0.5) player.yaw = Math.atan2(to.normal.x, to.normal.z);
+    const turn = R.heroCrossed(end, to);
+    crossings.push({ t: state.time, from: end, to, turn });
+    // the view turns with you: by the pair's turn
+    if (turn !== null) ray.dir.applyAxisAngle(V(0, 1, 0), turn);
+    ray.origin.set(pos.x, pos.y + 1.6, pos.z);
+  };
   const step = (n = 1) => {
     for (let i = 0; i < n; i++) {
       for (const [e, yaw] of pinned) e.yaw = yaw;
-      state.time += 1 / 60;
+      state.time += dt;
       sc.player.pos.copy(pos);
       sc.player.chest.set(pos.x, pos.y + 1.3, pos.z);
       camera.position.set(pos.x, pos.y + 1.8, pos.z - 3);
       camera.lookAt(camera.position.clone().add(ray.dir));
       camera.updateMatrixWorld();
-      R.update(1 / 60, 1 / 60, input);
-      rifts.update(1 / 60, 1 / 60, state.time);
+      R.update(dt, dt, input);
+      rifts.update(dt, dt, state.time);
       input.firePress = input.portalPress = input.portalRelease = input.stabPress = input.pullPress = false;
+      input.goPress = false;
       input.worldTap = null;
+      if (o.move) moveHero();
       sc.step(1);
     }
   };
@@ -575,7 +723,19 @@ function rig(o: { device?: 'kbm' | 'touch' | 'pad' } = {}) {
     const ends = rifts.strikeEnds(R.pair!.strike)!;
     aimAt(rifts.transformPoint(ends.b, p));
   };
-  return { sc, R, host, rifts, pos, vel, ray, input, step, aimAt, tap, man, freeze, aimThrough, calls, bolts, state, camera };
+  /** PORTAL held down (no let go): `n` frames. */
+  const hold = (n: number) => {
+    input.portal = true;
+    input.portalPress = true;
+    step(1);
+    step(Math.max(0, n - 1));
+  };
+  const letGo = () => {
+    input.portal = false;
+    input.portalRelease = true;
+    step(1);
+  };
+  return { sc, R, host, rifts, pos, vel, ray, input, step, aimAt, tap, hold, letGo, man, freeze, aimThrough, calls, bolts, state, camera, crossings, player };
 }
 
 describe('AIM PORTAL: the pair', () => {
@@ -653,21 +813,28 @@ describe('AIM PORTAL: the pair', () => {
     expect(calls).toContain('aim.sealed');
   });
 
-  it('the near twin does not take you at once (a short grace), then does', () => {
-    const { R, rifts, tap, step } = rig();
+  it('the near twin takes you at once (no grace), but only moving into its front: standing by it as it opens, or backing off, does nothing', () => {
+    const { R, rifts, tap, pos } = rig();
     tap(V(0, 1.6, 12), 1);
     const ends = rifts.strikeEnds(R.pair!.strike)!;
-    expect((ends.a as any).noPlayer).toBe(true);
-    step(Math.ceil(AIMP.grace * 60) + 2);
+    expect(AIMP.grace).toBe(0);
     expect((ends.a as any).noPlayer).toBe(false);
     expect((ends.b as any).noPlayer).toBe(false);
+    const n = R.pair!.near;
+    expect(n.pos.z - pos.z).toBeGreaterThanOrEqual(0.6);
+    // your middle, still, where you stand; stepping back; stepping in
+    const mid = V(n.pos.x, 0.9, 0);
+    expect(rifts.findCrossing(mid, mid, 0.15, true)).toBeNull();
+    expect(rifts.findCrossing(V(n.pos.x, 0.9, 0.2), V(n.pos.x, 0.9, -0.1), 0.15, true)).toBeNull();
+    expect(rifts.findCrossing(V(n.pos.x, 0.9, n.pos.z - 0.1), V(n.pos.x, 0.9, n.pos.z + 0.1), 0.15, true)).toBe(ends.a);
   });
 
-  it('the twin stands further ahead when you sprint at it', () => {
+  it('the twin stands a little further ahead when you sprint at it (never past its max)', () => {
     const { R, tap, vel, step } = rig();
     vel.set(0, 0, 9);
     tap(V(0, 1.6, 12));
-    expect(R.pair!.near.pos.z).toBeGreaterThan(2.5);
+    expect(R.pair!.near.pos.z).toBeGreaterThan(AIMP.near.ahead);
+    expect(R.pair!.near.pos.z).toBeLessThanOrEqual(AIMP.near.max + 0.01);
     step(1);
   });
 
@@ -689,14 +856,11 @@ describe('AIM PORTAL: the rifle through the pair', () => {
     const { R, man, freeze, tap, aimAt, aimThrough, input, step, sc } = rig();
     const g = man(V(0, 0, 14), Math.PI);
     freeze(g);
-    // the crosshair on him: SNAP BEHIND
+    // the crosshair on him: PORTAL opens right behind him
     aimAt(V(0, 1.2, 14));
-    input.snap = true;
-    input.snapVec = { x: 0, y: 0 };
     tap();
-    input.snap = false;
     expect(R.pair).not.toBeNull();
-    expect(R.pair!.far.pos.z).toBeCloseTo(15.2, 1);
+    expect(R.pair!.far.pos.z).toBeCloseTo(14 + AIMP.magnet.dist, 1);
     const tracers: [THREE.Vector3, THREE.Vector3][] = [];
     vi.spyOn(R.fx, 'tracer').mockImplementation((a: any, b: any) => void tracers.push([a.clone(), b.clone()]));
     aimThrough(g.chest(new THREE.Vector3()));
@@ -779,32 +943,30 @@ describe('AIM PORTAL: the rifle through the pair', () => {
 });
 
 describe('AIM PORTAL: the knife through the pair', () => {
-  it('from behind through the exit: dead; from the front: parried (a guard), alive', () => {
-    const { R, man, freeze, aimAt, aimThrough, input, step, tap, calls } = rig();
+  it('from behind through the exit: dead, whatever the crosshair is on (you put it by him); from the front: parried (a guard), alive', () => {
+    const { R, man, freeze, aimAt, input, step, tap, calls } = rig();
     const g = man(V(0, 0, 10), Math.PI);
     freeze(g);
     aimAt(V(0, 1.2, 10));
-    input.snap = true;
-    input.snapVec = { x: 0, y: 0 };
     tap();
-    input.snap = false;
-    aimThrough(g.chest(new THREE.Vector3()));
+    // (the crosshair somewhere else entirely: the knife still goes through the pair)
+    aimAt(V(8, 3, 4));
     expect(R.stabState()).toBe('kill');
     input.stabPress = true;
     step(2);
     expect(g.alive).toBe(false);
-    // the front: a second man, SNAP FRONT
+    // the front: a second man, the side key flicked to FRONT (the lower diagonal)
     const h = man(V(0, 0, 10), Math.PI);
     freeze(h);
     step(30);
     aimAt(V(0, 1.2, 10));
     input.snap = true;
-    input.snapVec = { x: 1, y: -0.5 };
+    input.snapVec = { x: 0.7, y: -0.7 };
+    step(1);
+    expect(R.snapSide).toBe('front');
     tap();
     input.snap = false;
-    expect(R.snapSide ?? 'front').toBeTruthy();
-    expect(R.pair!.far.pos.z).toBeCloseTo(8.8, 1);
-    aimThrough(h.chest(new THREE.Vector3()));
+    expect(R.pair!.far.pos.z).toBeCloseTo(10 - AIMP.magnet.dist, 1);
     expect(R.stabState()).toBe('blocked');
     input.stabPress = true;
     step(2);
@@ -812,21 +974,33 @@ describe('AIM PORTAL: the knife through the pair', () => {
     expect(calls).toContain('aim.parried');
   });
 
-  it('a stab reaches only 1.5 m past the exit (a man 2.4 m off is not touched)', () => {
-    const { R, man, freeze, aimAt, aimThrough, input, step, tap, pos } = rig();
-    const g = man(V(0, 0, 12), 0);
-    freeze(g);
-    // an exit in front of the hero looking at him from 2.4 m: free aim at a wall? use the mid-air one
-    pos.set(0, 0, 0);
-    aimAt(V(0, 1.6, 9.6));
+  it('the knife reaches AIMP.stab.reach (at least 1.8 m) past the exit; a man further off is not touched', () => {
+    expect(AIMP.stab.reach).toBeGreaterThanOrEqual(1.8);
+    const { R, man, freeze, input, step, tap } = rig();
+    // a free exit in mid-air 9.6 m off, looking back at you (nobody under the crosshair)
     R.airDist = 9.6;
     tap(V(0, 1.6, 9.6));
     expect(R.pair).not.toBeNull();
-    aimThrough(g.chest(new THREE.Vector3()));
+    expect(R.pair!.man).toBeNull();
+    const f = R.pair!.far;
+    const at = (d: number) => V(f.pos.x + f.normal.x * d, 0, f.pos.z + f.normal.z * d);
+    // facing away from it (his back to it)
+    const g = man(at(AIMP.stab.reach + 0.45), Math.PI);
+    freeze(g);
+    step(2);
     expect(R.stabState()).toBeNull();
     input.stabPress = true;
     step(2);
     expect(g.alive).toBe(true);
+    // 1.9 m off: through
+    const k = man(at(1.9), Math.PI);
+    freeze(k);
+    step(2);
+    step(20);
+    expect(R.stabState()).toBe('kill');
+    input.stabPress = true;
+    step(2);
+    expect(k.alive).toBe(false);
   });
 
   it('up close, in front of you, a back or side stab kills without a pair; a frontal one is parried', () => {
@@ -947,27 +1121,47 @@ describe('AIM PORTAL: pull and throw', () => {
 });
 
 describe('AIM PORTAL: they notice it, and SNAP', () => {
-  it('a man with the exit in front of him within 8 m notices it within 0.35 s and turns to it; one with his back to it, or too far, does not', () => {
-    const { R, man, freeze, tap, step } = rig();
-    const front = man(V(0, 0, 14), Math.PI);
-    const back = man(V(6, 0, 14), 0);
-    const far = man(V(-12, 0, 14), Math.PI);
-    for (const e of [front, back, far]) freeze(e);
-    tap(V(0, 1.2, 8));
-    // (an exit at about z=8: `front` is 6 m off, facing it; `back` has his back to it; `far` is 12 m)
-    R.airDist = 8;
-    tap(V(0, 1.6, 8));
-    step(Math.ceil((AIMP.notice.time + 0.1) * 60));
-    expect(R.pair!.noticed.has(front.id)).toBe(true);
-    expect(R.pair!.noticed.has(back.id)).toBe(false);
-    expect(R.pair!.noticed.has(far.id)).toBe(false);
+  it('they notice a new exit after 0.35 s in front of their eyes, 0.6 s at their side, 0.8 s behind them (near enough to hear it); far behind them, never', () => {
+    const eye = V(0, 1.6, 0);
+    // (yaw 0 looks +z)
+    expect(noticeDelay(eye, 0, V(0, 1, 5))).toBe(AIMP.notice.time);
+    expect(noticeDelay(eye, 0, V(1.3, 1, 0))).toBe(AIMP.notice.side);
+    expect(noticeDelay(eye, 0, V(0, 1, -1.3))).toBe(AIMP.notice.back);
+    expect(noticeDelay(eye, 0, V(0, 1, -6))).toBeNull();
+    expect(noticeDelay(eye, 0, V(0, 1, 9))).toBeNull();
+    expect(AIMP.notice.time).toBeLessThanOrEqual(0.35);
+    expect(AIMP.notice.side).toBeGreaterThanOrEqual(0.6);
+    expect(AIMP.notice.back).toBeLessThanOrEqual(0.8);
+    // in the game: PORTAL on a man facing you puts it at his back: a fair 0.8 s before he turns to it
+    const { R, man, freeze, aimAt, tap, step, input } = rig();
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    tap(undefined, 2);
+    step(Math.round(AIMP.notice.back * 60) - 8);
+    expect(R.pair!.noticed.has(g.id)).toBe(false);
+    step(10);
+    expect(R.pair!.noticed.has(g.id)).toBe(true);
+    // the exit in his face (the side key flicked to FRONT): he has it after 0.35 s
+    R.closePair();
+    const h = man(V(6, 0, 14), Math.PI);
+    freeze(h);
+    aimAt(V(6, 1.2, 14));
+    input.snap = true;
+    input.snapVec = { x: 0.7, y: -0.7 };
+    step(1);
+    tap(undefined, 2);
+    input.snap = false;
+    expect(R.pair!.man).toBe(h.id);
+    step(Math.round(AIMP.notice.time * 60) + 2);
+    expect(R.pair!.noticed.has(h.id)).toBe(true);
   });
 
-  it('SNAP with a man under the crosshair latches him, and the flick picks the side the exit opens at; without a man, free aim', () => {
+  it('the side key on its own (Ctrl / MMB, an alias): on a man it holds him and the flick picks his side as you see him; without a man, free aim', () => {
     const { R, man, freeze, aimAt, tap, input, step } = rig();
     const g = man(V(0, 0, 14), Math.PI);
     freeze(g);
-    // no man under the crosshair: free aim (SNAP changes nothing)
+    // no man under the crosshair: free aim (the key changes nothing)
     aimAt(V(0, 6, 30));
     input.snap = true;
     step(1);
@@ -976,18 +1170,18 @@ describe('AIM PORTAL: they notice it, and SNAP', () => {
     step(1);
     expect(R.snapLatched).toBe(true);
     expect(R.snapSide).toBe('behind');
-    input.snapVec = { x: -1, y: 0.4 };
+    input.snapVec = { x: -1, y: 0.2 };
     step(1);
     expect(R.snapSide).toBe('left');
     expect(R.ghost?.kind).toBe('snap');
     tap();
     expect(R.pair).not.toBeNull();
-    const left = leftOf(g.yaw, V());
-    expect(R.pair!.far.pos.x - g.pos.x).toBeCloseTo(left.x * AIMP.snap.dist, 1);
+    // (you look +z at him: your screen's left is +x)
+    expect(R.pair!.far.pos.x - g.pos.x).toBeCloseTo(AIMP.magnet.dist, 1);
     input.snap = false;
+    input.snapVec = { x: 0, y: 0 };
     step(1);
     expect(R.snapLatched).toBe(false);
-    expect(R.ghost).toBeNull();
   });
 
   it('a tap on a man (touch) opens the exit behind him; a tap on the world opens it right where it landed', () => {
@@ -1001,6 +1195,210 @@ describe('AIM PORTAL: they notice it, and SNAP', () => {
     expect(R.pair).not.toBeNull();
     // (the camera looks +z from (0, 1.8, -3): the ray goes through the man's chest-high)
     void camera;
+  });
+});
+
+describe('AIM PORTAL: PORTAL next to a man, at any range', () => {
+  it('the crosshair on (or near) a man at 8, 20 and 32 m: PORTAL (no modifier) opens the exit 1.3 m behind him as you see him, facing him, on his floor; the ghost and a ring show it first', () => {
+    for (const d of [8, 20, 32]) {
+      const { R, man, freeze, aimAt, tap, step } = rig();
+      const g = man(V(0, 0, d), Math.PI);
+      freeze(g);
+      // the crosshair 2° off his body
+      aimAt(V(0.42 + AIMP.magnet.pad + Math.tan(THREE.MathUtils.degToRad(2)) * d, 1.2, d));
+      step(1);
+      expect(R.hover).toBe(g);
+      expect(R.ghost?.kind).toBe('snap');
+      expect(R.ghost!.spot.pos.distanceTo(V(0, R.ghost!.spot.pos.y, d + AIMP.magnet.dist))).toBeLessThan(0.05);
+      tap();
+      expect(R.pair).not.toBeNull();
+      expect(R.pair!.man).toBe(g.id);
+      const f = R.pair!.far;
+      expect(f.pos.distanceTo(V(0, f.pos.y, d + AIMP.magnet.dist))).toBeLessThan(0.05);
+      expect(f.normal.z).toBeCloseTo(-1, 5);
+      expect(f.pos.y - f.h / 2).toBeCloseTo(0.02, 2);
+      // (the pair stands there now: no ghost on top of it)
+      step(1);
+      expect(R.ghost).toBeNull();
+    }
+  });
+
+  it('touch: a tap within 60 px of a man on the screen opens next to him; the PORTAL button with him 6° off the crosshair too', () => {
+    const { R, man, freeze, input, step, camera, aimAt, tap } = rig({ device: 'touch' });
+    const g = man(V(2, 0, 20), Math.PI);
+    freeze(g);
+    step(1);
+    const W = 844, H = 390;
+    const c = g.chest(new THREE.Vector3()).project(camera);
+    const px = ((c.x + 1) / 2) * W + 50, py = ((1 - c.y) / 2) * H;
+    input.worldTap = { x: (px / W) * 2 - 1, y: -((py / H) * 2 - 1), w: W, h: H };
+    step(1);
+    expect(R.pair?.man).toBe(g.id);
+    R.closePair();
+    step(20);
+    // the button: the crosshair 6° to his side
+    aimAt(V(2 + 0.77 + Math.tan(THREE.MathUtils.degToRad(6)) * 20, 1.2, 20));
+    tap();
+    expect(R.pair?.man).toBe(g.id);
+  });
+
+  it('a tap on the plain world with a pair open leaves the pair alone (a nudge of the look thumb); on a man it moves it to him', () => {
+    const { R, man, freeze, input, step, aimAt, tap } = rig({ device: 'touch' });
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    tap();
+    const id = R.pair!.id;
+    step(20);
+    input.worldTap = { x: 0.8, y: -0.6, w: 844, h: 390 };
+    step(1);
+    expect(R.pair!.id).toBe(id);
+  });
+
+  it('held on him past a tap, the look picks his side and the exit goes there live; let go: it stays; a quick tap is the default side', () => {
+    const { R, man, freeze, aimAt, hold, letGo, input, step } = rig();
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    hold(Math.ceil(AIMP.live * 60) + 2);
+    expect(R.pair!.man).toBe(g.id);
+    expect(R.snapLatched).toBe(true);
+    input.snapVec = { x: 0, y: 1 };
+    step(1);
+    expect(R.pair!.far.surface).toBe('ceiling');
+    expect(R.pair!.far.pos.y).toBeGreaterThan(g.height);
+    input.snapVec = { x: 1, y: 0 };
+    step(1);
+    // (you look +z at him: your screen's right is -x)
+    expect(R.pair!.far.pos.x).toBeCloseTo(-AIMP.magnet.dist, 1);
+    expect(R.pair!.side).toBe('right');
+    input.portal = false;
+    letGo();
+    input.snapVec = { x: 0, y: 0 };
+    step(10);
+    expect(R.snapLatched).toBe(false);
+    expect(R.pair!.far.pos.x).toBeCloseTo(-AIMP.magnet.dist, 1);
+    // the look is the camera's again while not held
+  });
+
+  it('a man on the move: the exit opens next to where he will be in a moment', () => {
+    const { R, man, aimAt, tap, step } = rig();
+    const g = man(V(0, 0, 14), Math.PI);
+    aimAt(V(0, 1.2, 14));
+    step(1);
+    g.body!.vel.set(4, 0, 0);
+    tap(undefined, 1);
+    expect(R.pair!.far.pos.x).toBeCloseTo(4 * AIMP.magnet.lead, 0);
+  });
+});
+
+describe('AIM PORTAL: GO', () => {
+  it('GO: a dash of about 0.12 s into the near twin; out of the exit by him at a steady speed along its front, the view turned with the pair (toward him); the pair shuts behind you', () => {
+    const { R, man, freeze, aimAt, tap, input, step, crossings, pos, vel, ray, state } = rig({ move: true });
+    const g = man(V(0, 0, 20), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 20));
+    tap();
+    const t0 = state.time;
+    input.goPress = true;
+    step(1);
+    expect(R.dash).not.toBeNull();
+    for (let n = 0; n < 30 && !crossings.length; n++) step(1);
+    expect(crossings.length).toBe(1);
+    expect(state.time - t0).toBeLessThanOrEqual(AIMP.go.time + 0.04);
+    expect(AIMP.go.time).toBeLessThanOrEqual(0.15);
+    expect(R.dash).toBeNull();
+    // out of the exit 1.3 m behind him, heading at him, the view along the exit's front
+    expect(Math.hypot(pos.x, pos.z - (20 + AIMP.magnet.dist))).toBeLessThan(0.4);
+    expect(vel.z).toBeCloseTo(-AIMP.go.arrive, 1);
+    expect(crossings[0].turn).toBeCloseTo(Math.PI, 3);
+    expect(ray.dir.z).toBeLessThan(-0.9);
+    expect(R.edgeUntil).toBeGreaterThan(state.time);
+    step(Math.ceil(AIMP.go.close * 60) + 2);
+    expect(R.pair).toBeNull();
+    // you glide in close, you do not slam into him
+    step(30);
+    expect(Math.hypot(pos.x - g.pos.x, pos.z - g.pos.z)).toBeGreaterThan(0.6);
+    expect(Math.hypot(pos.x - g.pos.x, pos.z - g.pos.z)).toBeLessThan(AIMP.stab.direct);
+  });
+
+  it('a STAB pressed during the dash lands on arrival (buffered), from behind: dead', () => {
+    const { R, man, freeze, aimAt, tap, input, step, crossings } = rig({ move: true });
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    tap();
+    input.goPress = true;
+    step(1);
+    input.stabPress = true;
+    step(1);
+    expect(crossings.length).toBe(0);
+    expect(g.alive).toBe(true);
+    for (let n = 0; n < 20 && g.alive; n++) step(1);
+    expect(crossings.length).toBe(1);
+    expect(g.alive).toBe(false);
+    expect(R.usage.stabDirect).toBe(1);
+  });
+
+  it('just out of the exit the knife reaches 1 m further (he stepped away): for AIMP.stab.edgeTime s, not after', () => {
+    const { R, man, freeze, aimAt, tap, input, step, crossings, pos } = rig({ move: true });
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    tap();
+    input.goPress = true;
+    step(1);
+    for (let n = 0; n < 20 && !crossings.length; n++) step(1);
+    // he stepped 1.2 m away from where he was
+    g.body!.pos.z -= 1.3;
+    const d = Math.hypot(pos.x - g.pos.x, pos.z - g.pos.z);
+    expect(d).toBeGreaterThan(AIMP.stab.direct);
+    expect(d).toBeLessThan(AIMP.stab.direct + AIMP.stab.edge);
+    expect(R.stabState()).toBe('melee');
+    input.stabPress = true;
+    step(1);
+    expect(g.alive).toBe(false);
+    expect(R.usage.edge).toBe(1);
+    // the same, too late
+    const r2 = rig({ move: true });
+    const h = r2.man(V(0, 0, 14), Math.PI);
+    r2.freeze(h);
+    r2.aimAt(V(0, 1.2, 14));
+    r2.tap();
+    r2.input.goPress = true;
+    r2.step(1);
+    for (let n = 0; n < 20 && !r2.crossings.length; n++) r2.step(1);
+    r2.step(Math.ceil(AIMP.stab.edgeTime * 60) + 2);
+    h.body!.pos.set(r2.pos.x, 0, r2.pos.z - (AIMP.stab.direct + 0.5));
+    r2.input.stabPress = true;
+    r2.step(1);
+    expect(h.alive).toBe(true);
+  });
+
+  it('no pair: GO does nothing (a word); while you dash, PORTAL waits', () => {
+    const { R, input, step, calls } = rig({ move: true });
+    input.goPress = true;
+    step(1);
+    expect(R.dash).toBeNull();
+    expect(calls).toContain('aim.noPair');
+  });
+
+  it('you turn up behind him through your pair: he has lost you for a beat (no turning to you, no shot) before he finds you', () => {
+    const { man, step, pos, R } = rig();
+    const g = man(V(0, 0, 10), Math.PI);
+    const m = R.ai.mind(g, Math.random);
+    m.react = 0;
+    step(30);
+    const yaw0 = g.yaw;
+    // you vanish and turn up 1 m behind him
+    pos.set(0, 0, 11);
+    step(Math.round((AIMP.notice.back - 0.2) * 60));
+    expect(Math.abs(g.yaw - yaw0)).toBeLessThan(0.05);
+    step(Math.round(0.6 * 60));
+    let d = g.yaw - Math.atan2(pos.x - g.pos.x, pos.z - g.pos.z);
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    expect(Math.abs(d)).toBeLessThan(0.5);
   });
 });
 

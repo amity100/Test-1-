@@ -950,7 +950,9 @@ export type Action =
   /** COMBAT LAB, FLOW only: held = the POWER moment. */
   | 'power'
   /** COMBAT LAB, AIM PORTAL only: held = SNAP (pick the side of the man under the crosshair). */
-  | 'snap';
+  | 'snap'
+  /** COMBAT LAB, AIM PORTAL only: GO (through your pair: the touch button; the pad's B while a pair is open). */
+  | 'go';
 
 export interface AimInfo {
   valid: boolean;
