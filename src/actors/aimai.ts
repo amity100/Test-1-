@@ -21,6 +21,11 @@ import type { EnemySystem } from './enemies';
  * - RUSHER: a knife. Runs along the floor, a red wind-up (0.45 s), a blow;
  *   from afar he sometimes steps through a red portal of his own (0.5 s of
  *   warning) to come out next to you.
+ *
+ * Fair beats for the player: a new exit in front of a man's eyes is noticed
+ * after 0.35 s, at his side 0.6 s, behind him 0.8 s; and when you vanish and
+ * turn up at his side or his back (through your pair) he has lost you for as
+ * long (he stops, he doesn't turn to you, he doesn't shoot).
  */
 
 /** Your pair as they see it. */
