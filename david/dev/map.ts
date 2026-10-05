@@ -10,6 +10,7 @@ import '../src/ui/style.css';
 import { makeQuality, type TierName } from '../src/core/Engine';
 import { PostFX } from '../src/fx/PostFX';
 import { createMapSet } from '../src/film/map/MapSet';
+import { geoBasis, geoToWorld } from '../src/film/map/mapData';
 import { applyHandheld, portraitLens } from '../src/film/FilmCams';
 import type { ShotFrame } from '../src/gameplay/CameraRig';
 
@@ -83,7 +84,32 @@ async function boot() {
     info.textContent = `${take} t=${t.toFixed(2)}  calls ${r.calls}  tris ${(r.tris / 1e6).toFixed(2)}M  near ${r.near.toFixed(0)} far ${(r.far / 1000).toFixed(0)}km  fov ${r.fov.toFixed(1)}`;
     return r;
   };
-  w.__mapH = { shot, handle, post, renderer, buildMs, stats: () => ({ tier: q.tier, buildMs, memory: renderer.info.memory, status: handle.status, steps: (w.__map as { steps?: unknown } | undefined)?.steps }) };
+  // test: a free camera in the map's geography (lon, lat, the lens' height in world metres over the sea — the relief is
+  // exaggerated, so this is NOT a real altitude — compass heading, pitch (deg, - = down), roll, vertical fov) with the
+  // map's own state at shot second t: for matching another set's frame (P1's last frame -> the match dissolve)
+  const geoCam = (lon: number, lat: number, h: number, heading: number, pitch: number, roll: number, fov: number, t = 0, frames = 2) => {
+    filmT = 14.2 + t;
+    const E = new THREE.Vector3(), N = new THREE.Vector3(), U = new THREE.Vector3();
+    geoBasis(lon, lat, E, N, U);
+    const P = geoToWorld(lon, lat, h, new THREE.Vector3(), 1);
+    const hd = THREE.MathUtils.degToRad(heading), pt = THREE.MathUtils.degToRad(pitch);
+    const F = E.clone().multiplyScalar(Math.sin(hd)).addScaledVector(N, Math.cos(hd)).multiplyScalar(Math.cos(pt)).addScaledVector(U, Math.sin(pt)).normalize();
+    for (let i = 0; i < frames; i++) {
+      cam.aspect = app.clientWidth / Math.max(1, app.clientHeight);
+      handle.enter('exodus');
+      handle.tick('exodus', t, 0);
+      cam.position.copy(P);
+      cam.up.copy(U);
+      cam.lookAt(P.clone().addScaledVector(F, 1000));
+      if (roll) cam.rotateZ(THREE.MathUtils.degToRad(roll));
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+      renderFrame(i === 0 ? 0 : 1 / 30);
+    }
+    return { calls: renderer.info.render.calls, near: cam.near, far: cam.far };
+  };
+  w.__mapH = { shot, geoCam, handle, post, renderer, buildMs, stats: () => ({ tier: q.tier, buildMs, memory: renderer.info.memory, status: handle.status, steps: (w.__map as { steps?: unknown } | undefined)?.steps }) };
   w.__ready = true;
   if (params.get('hud') === '0') info.style.display = 'none';
   const play = params.get('play');

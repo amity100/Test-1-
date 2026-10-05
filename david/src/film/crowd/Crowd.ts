@@ -154,6 +154,17 @@ export class CrowdAgent {
     }
     this.cur = { clip, t: o.time ?? 0, rate: o.rate ?? 1 };
   }
+  /**
+   * (host1, wave 6) the capture's foot contacts at the current time of the current take (bits heelL 1, ballL 2, heelR 4,
+   * ballR 8); 0 when unknown
+   */
+  contactsNow() {
+    const c = this.cur;
+    if (!c || !c.clip.contacts) return 0;
+    let f = Math.floor(c.t * c.clip.fps);
+    f = c.clip.loop ? ((f % c.clip.frames) + c.clip.frames) % c.clip.frames : Math.min(Math.max(f, 0), c.clip.frames - 1);
+    return c.clip.contacts[f] ?? 0;
+  }
   /** seconds left in a one-shot clip (Infinity for loops) */
   remaining() {
     const c = this.cur;
@@ -401,7 +412,9 @@ export class Crowd {
       frames(ag.cur!, B.a, o);
       if (ag.prev) {
         frames(ag.prev, B.b, o);
-        B.a[o + 3] = 1 - ag.fade;
+        // (wave 6) an eased cross-fade (no linear blend between two poses: the move starts and settles)
+        const fe = ag.fade * ag.fade * (3 - 2 * ag.fade);
+        B.a[o + 3] = 1 - fe;
       } else {
         B.a[o + 3] = 0;
       }

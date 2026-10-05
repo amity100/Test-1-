@@ -102,6 +102,11 @@ export interface FilmOptions {
    *  fade out) — at `endAt` the film hands him to the player; defaults 8 / 10 (the contract's D3 `settle` / length) */
   releaseAt?: number;
   endAt?: number;
+  /** (cut8, wave 6) 'back' (D1): from `turnAt` the head begins the turn toward `look` (the same turn 'reveal' finishes in
+   *  D2: a cut on action); 'reveal' (D2): from `lookDownAt` his eyes, then a little of his head, go down to `lookDown`
+   *  (his flock: D3 is what he sees) */
+  lookDownAt?: number;
+  lookDown?: THREE.Vector3 | null;
 }
 
 // channels (not joints) blended by the pose mixer
@@ -916,7 +921,7 @@ export class DavidModel {
     L: { on: false, w: 0, pos: new THREE.Vector3() },
     R: { on: false, w: 0, pos: new THREE.Vector3() },
   };
-  private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean; offLens: number; gaze: number; releaseAt: number; endAt: number } | null = null;
+  private film: { shot: FilmShot; t: number; look: THREE.Vector3 | null; wind: number; turnAt: number; turnDur: number; mood: Expression; moodW: number; blinked: boolean; offLens: number; gaze: number; releaseAt: number; endAt: number; lookDownAt: number; lookDown: THREE.Vector3 | null } | null = null;
   private filmTurn = 0;
   private filmBlink2 = -1;
   private filmEyes: THREE.Vector3 | null = null;
@@ -970,6 +975,7 @@ export class DavidModel {
   // rest data for IK / staff solving
   private readonly sockRestQ: Record<'L' | 'R', THREE.Quaternion> = { L: new THREE.Quaternion(), R: new THREE.Quaternion() };
   private readonly sockRestOff: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+  private readonly palmRestOff: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
   private readonly restFix: Record<string, THREE.Quaternion> = {};
   private readonly ankleRest: Record<'L' | 'R', THREE.Vector3> = { L: new THREE.Vector3(), R: new THREE.Vector3() };
   private readonly staffBaseQ = new THREE.Quaternion();
@@ -1086,6 +1092,9 @@ export class DavidModel {
       const sock = human.sockets[`handGrip${s}`];
       _m2.multiplyMatrices(rootInv, sock.matrixWorld).decompose(_v1, this.sockRestQ[s], _s1);
       this.sockRestOff[s].copy(_v1).sub(human.rig.restWorldPosition(`wrist.${s}`, _v2));
+      // (cut8, wave 6) the palm socket's rest offset from the wrist: palm contacts aim the palm, not the fist
+      _m2.multiplyMatrices(rootInv, human.sockets[`palm${s}`].matrixWorld).decompose(_v1, _q1, _s1);
+      this.palmRestOff[s].copy(_v1).sub(_v2);
       human.rig.restWorldPosition(`foot.${s}`, this.ankleRest[s]);
     }
     for (const n of ['uaL', 'uaR', 'thL', 'thR']) {
@@ -1398,6 +1407,7 @@ export class DavidModel {
     if (H.kneel > 0.001) m.layer(KNEEL, H.kneel, mo && mw > 0.5 ? KNEEL_UPPER : undefined);
     // (cut8, film D4) the cradle (arms bent before the chest) and the forward reach / bend to gather or set down the lamb
     if (H.cradle > 0.001 || this.cradleBend > 0.001 || this.cradleEffort > 0.001) this.filmCradlePose(H.cradle);
+    if (this.film) this.filmReachLean(dt); // (cut8, wave 6) leaning into a palm contact (the ewe's back beside him)
     if (H.thanks > 0.001) m.layer(THANKS, H.thanks, lw > 0.3 ? THANKS_UPPER : undefined);
     if (H.pull > 0.001) {
       this.pullT += dt;
@@ -1491,6 +1501,7 @@ export class DavidModel {
     // ---------- skin, hair, clothes
     this.human.update(dt, this.camera, this.viewportHeight);
     this.measureArmError();
+    if (this.film) this.measurePalms(); // (cut8, wave 6) film contacts
     this.placeStaff(dt);
     this.updateProps();
     // (cut8, film D4) the lamb's body follows his arms (after the pose is final)
@@ -1576,7 +1587,7 @@ export class DavidModel {
       wind = THREE.MathUtils.lerp(o.wind ?? 1.7, 1, smooth01((t - r0) / Math.max(0.1, r1 - r0 - 0.2)));
     }
     if (!f || f.shot !== shot) {
-      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? FILM_TURN_AT, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false, offLens: o.offLens ?? 0.38, gaze: o.gaze ?? 0.35, releaseAt: o.releaseAt ?? 8, endAt: o.endAt ?? 10 };
+      this.film = { shot, t, look: o.look ?? null, wind, turnAt: o.turnAt ?? FILM_TURN_AT, turnDur: o.turnDur ?? 2.2, mood: o.mood ?? 'neutral', moodW: o.moodWeight ?? 0.12, blinked: false, offLens: o.offLens ?? 0.38, gaze: o.gaze ?? 0.35, releaseAt: o.releaseAt ?? 8, endAt: o.endAt ?? 10, lookDownAt: o.lookDownAt ?? 1e9, lookDown: o.lookDown ?? null };
       this.filmBlink2 = -1; // a second blink pending from an earlier (skipped / replayed) shot never fires early
       if (shot !== 'reveal') this.filmTurn = 0;
     } else {
@@ -1591,6 +1602,8 @@ export class DavidModel {
       if (o.gaze !== undefined) f.gaze = o.gaze;
       if (o.releaseAt !== undefined) f.releaseAt = o.releaseAt;
       if (o.endAt !== undefined) f.endAt = o.endAt;
+      if (o.lookDownAt !== undefined) f.lookDownAt = o.lookDownAt;
+      if (o.lookDown !== undefined) f.lookDown = o.lookDown;
     }
     this.windScale = wind;
     this.autoHero = true;
@@ -1662,8 +1675,13 @@ export class DavidModel {
         m.add('chest', 0, 0, -0.018 * shift);
         const follow = -0.28 + 0.5 * smooth01((u - 0.3) / 2.6) - 0.16 * smooth01((u - 3.2) / 1.3) + 0.2 * smooth01((u - 4.7) / 1.0);
         const down = 0.03 * smooth01((u - 4.7) / 1.0);
-        m.add('head', 0.1 + down + 0.03 * Math.sin(u * 0.9), follow * 0.55, 0.015 * Math.sin(u * 0.6));
-        m.add('neck', 0.05 + down * 0.5, follow * 0.35, 0);
+        // (cut8, wave 6) a lamb bleats below: from `turnAt` the head begins the turn D2 finishes (a cut on action) — the
+        // same target, curve and speed as 'reveal' (filmTurn carries over the cut); the take's own head motion gives way
+        const tw = f.look && f.turnAt < 1e3 ? this.filmTurnTo(f, f.look, dt) : 0;
+        const keep = 1 - smooth01((f.t - f.turnAt + 0.15) / 0.5) * (f.look && f.turnAt < 1e3 ? 1 : 0);
+        m.add('head', (0.1 + down + 0.03 * Math.sin(u * 0.9)) * keep, follow * 0.55 * keep, 0.015 * Math.sin(u * 0.6));
+        m.add('neck', (0.05 + down * 0.5) * keep, follow * 0.35 * keep, 0);
+        void tw;
         const hand = smooth01((u - 2.1) / 0.5) * (1 - smooth01((u - 3.7) / 0.55));
         m.add('uaR', -0.16 * hand, 0, 0.05 * hand);
         m.add('faR', -0.55 * hand, 0.2 * hand, 0);
@@ -1690,28 +1708,24 @@ export class DavidModel {
       const yl = Math.atan2(_v7.x, _v7.z) + f.offLens;
       look.set(_v8.x + Math.sin(yl) * 30, _v8.y + 0.6, _v8.z + Math.cos(yl) * 30);
     }
-    this.j.neck.getWorldPosition(_v8);
-    this.root.worldToLocal(_v8);
-    const d = this.root.worldToLocal(_v7.copy(look)).sub(_v8);
-    // the hero stance already turns the head ~0.6 rad to his right: the turn adds the rest
-    const yaw = clamp(Math.atan2(d.x, d.z) + 0.6, -2.1, 2.1);
-    const pitch = clamp(-Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.3, 0.3) * 0.6;
     const u = clamp((f.t - f.turnAt) / Math.max(0.1, f.turnDur), 0, 1);
-    const target = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep: slow start, slow settle
-    this.filmTurn = damp(this.filmTurn, target, 10, dt);
-    const k = this.filmTurn;
-    // the head leads; the shoulders follow ~0.35 s later (cut v2: "the head and then the shoulders turn into the light")
-    const us = clamp((f.t - f.turnAt - 0.35) / Math.max(0.1, f.turnDur), 0, 1);
-    const ks = us * us * us * (us * (us * 6 - 15) + 10);
-    m.add('head', pitch * 0.55 * k, yaw * 0.46 * k, 0.03 * k);
-    m.add('neck', pitch * 0.35 * k, yaw * 0.3 * k, 0);
-    m.add('chest', 0, yaw * 0.16 * ks, 0);
-    m.add('spine', 0, yaw * 0.1 * ks, 0);
+    this.filmTurnTo(f, look, dt);
+    // (cut8, wave 6) D2 `lookDown`: his eyes go down to his flock first, then a little of the head (D3 is what he sees)
+    const ld = f.lookDown ? smooth01((f.t - f.lookDownAt) / 0.7) : 0;
+    if (ld > 0 && f.lookDown) {
+      this.j.neck.getWorldPosition(_v8);
+      this.root.worldToLocal(_v8);
+      const dd = this.root.worldToLocal(_v7.copy(f.lookDown)).sub(_v8);
+      const yawD = clamp(Math.atan2(dd.x, dd.z) + 0.6, -2.1, 2.1) - this.filmYaw;
+      const hd = smooth01((f.t - f.lookDownAt - 0.2) / 0.9);
+      m.add('head', 0.16 * hd, yawD * 0.3 * hd, 0);
+      m.add('neck', 0.08 * hd, yawD * 0.15 * hd, 0);
+    }
     // settled (CUT v3: D2 holds ~1 s after the turn): the head never parks — a slow drift with the breath
     const held = clamp((f.t - f.turnAt - f.turnDur * 0.85) / 0.6, 0, 1);
     m.add('head', 0.012 * Math.sin(f.t * 0.9) * held, 0.018 * Math.sin(f.t * 0.55 + 0.7) * held, 0);
     // the eyes lead the head by ~0.3 s; a blink as the turn begins, and one more as the eyes settle (not a stare)
-    this.filmEyes = f.t > f.turnAt - 0.3 ? look : null;
+    this.filmEyes = f.lookDown && ld > 0.02 ? f.lookDown : f.t > f.turnAt - 0.3 ? look : null;
     if (!f.blinked && f.t > f.turnAt + 0.05) {
       f.blinked = true;
       this.filmBlink2 = f.turnAt + f.turnDur * 0.8 + 0.4;
@@ -1725,11 +1739,37 @@ export class DavidModel {
     this.moodWeight = f.moodW;
   }
 
+  /** (cut8, wave 6) the head (then the shoulders) turning toward `look` from `f.turnAt` over `f.turnDur` (smootherstep):
+   *  shared by D1 'back' (it begins) and D2 'reveal' (it continues across the cut — filmTurn is kept) */
+  private filmYaw = 0;
+  private filmTurnTo(f: { t: number; turnAt: number; turnDur: number }, look: THREE.Vector3, dt: number): number {
+    const m = this.mixer;
+    this.j.neck.getWorldPosition(_v8);
+    this.root.worldToLocal(_v8);
+    const d = this.root.worldToLocal(_v7.copy(look)).sub(_v8);
+    // the hero stance already turns the head ~0.6 rad to his right: the turn adds the rest
+    const yaw = clamp(Math.atan2(d.x, d.z) + 0.6, -2.1, 2.1);
+    const pitch = clamp(-Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.3, 0.3) * 0.6;
+    this.filmYaw = yaw;
+    const u = clamp((f.t - f.turnAt) / Math.max(0.1, f.turnDur), 0, 1);
+    const target = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep: slow start, slow settle
+    this.filmTurn = damp(this.filmTurn, target, 10, dt);
+    const k = this.filmTurn;
+    // the head leads; the shoulders follow ~0.35 s later (cut v2: "the head and then the shoulders turn into the light")
+    const us = clamp((f.t - f.turnAt - 0.35) / Math.max(0.1, f.turnDur), 0, 1);
+    const ks = us * us * us * (us * (us * 6 - 15) + 10);
+    m.add('head', pitch * 0.55 * k, yaw * 0.46 * k, 0.03 * k);
+    m.add('neck', pitch * 0.35 * k, yaw * 0.3 * k, 0);
+    m.add('chest', 0, yaw * 0.16 * ks, 0);
+    m.add('spine', 0, yaw * 0.1 * ks, 0);
+    return k;
+  }
+
   // ---- (cut8, CUT v5) D3 'watch' and D4 'gather': David watches his flock; he gathers the newborn lamb into his arms
   /** the lamb gathered into his arms (film only — FilmWorld sets it): its object (re-placed every frame after the pose),
    *  its body centre in that object's space, where it lies on the ground (`from`, world) and how far it is lifted
    *  (`lift` 0 = on the ground, 1 = in the cradle against his chest) */
-  cradle: { obj: THREE.Object3D; center: THREE.Vector3; from: THREE.Matrix4; lift: number } | null = null;
+  cradle: { obj: THREE.Object3D; center: THREE.Vector3; from: THREE.Matrix4; lift: number; belly?: number } | null = null;
   /** 0..1 his hands on the lamb (arm IK onto the cradle frame) */
   cradleReach = 0;
   /** 0..1 the forward bend of the trunk (kneeling to gather the lamb, or to set it down) */
@@ -1743,6 +1783,14 @@ export class DavidModel {
    *  in his left) and its weight */
   filmHandR: THREE.Vector3 | null = null;
   filmHandRW = 0;
+  /** (wave 6) film contacts — a PALM resting on a surface: `point` (world: where the palm's centre goes — on the surface,
+   *  pressed in a little), `normal` (world, out of the surface: the palm faces against it), `fingers` (world: the
+   *  fingers' direction along the surface), `w` 0..1. The arm reaches by IK, the hand turns flat onto the surface, and a
+   *  correction measured on the palm socket after every frame makes the PALM (not the fist's grip centre) land on the
+   *  point — no gap, no penetration */
+  filmPalm: Record<'L' | 'R', { point: THREE.Vector3; normal: THREE.Vector3; fingers: THREE.Vector3; w: number } | null> = { L: null, R: null };
+  private readonly palmCorr = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+  private readonly palmCradle = { L: { point: new THREE.Vector3(), normal: new THREE.Vector3(), fingers: new THREE.Vector3(), w: 0 }, R: { point: new THREE.Vector3(), normal: new THREE.Vector3(), fingers: new THREE.Vector3(), w: 0 } };
   /** (wave 5) film only: the staff hand open (F2: the young hand about to close on the staff) */
   filmGripOpen = false;
   private cradleSock: THREE.Object3D | null = null;
@@ -1852,14 +1900,131 @@ export class DavidModel {
 
   /** his hands on the lamb: the right forearm under its belly (the hand under its chest), the left hand over its back */
   private filmCradleArms(rootQ: THREE.Quaternion) {
-    const C = CRADLE;
-    const w = smooth01(this.cradleReach);
+    // (wave 6) both PALMS under it — the right under its chest, the left under its belly — on the outside of its wool
+    // (pressed in ~1 cm, never through the body: `belly` is measured on its mesh), the palms up against it, the fingers
+    // reaching across under it away from his chest; the lamb lies on his forearms against his chest
+    const w = this.cradleReach;
     this.cradleFrame(_crM);
-    _cr3.set(C.rh[0], C.rh[1], C.rh[2]).applyMatrix4(_crM);
-    this.armIK('R', _cr3, _pole.set(-0.8, -1, -0.1).applyQuaternion(rootQ), w);
-    const over = this.cradle ? smooth01((this.cradle.lift - 0.6) / 0.35) : 1;
-    _cr3.set(C.lhUnder[0] + (C.lh[0] - C.lhUnder[0]) * over, C.lhUnder[1] + (C.lh[1] - C.lhUnder[1]) * over, C.lhUnder[2] + (C.lh[2] - C.lhUnder[2]) * over).applyMatrix4(_crM);
-    this.armIK('L', _cr3, _pole.set(0.75, -1, -0.35).applyQuaternion(rootQ), w);
+    const belly = (this.cradle?.belly ?? -0.145) + 0.01;
+    const yAx = _cr4.setFromMatrixColumn(_crM, 1).normalize(), xAx = _cr2.setFromMatrixColumn(_crM, 0).normalize();
+    const P = this.palmCradle;
+    // the approach: the hands come in low at its near side (its left, toward him) and slide across under it
+    const ap = 1 - smooth01(clamp((w - 0.35) / 0.65, 0, 1));
+    P.R.point.set(0.13 * ap, belly - 0.05 * ap, 0.07).applyMatrix4(_crM);
+    P.L.point.set(0.13 * ap, belly - 0.05 * ap, -0.09).applyMatrix4(_crM);
+    for (const sd of SIDES) {
+      const c = P[sd];
+      c.normal.copy(yAx).negate();
+      c.fingers.copy(xAx).negate();
+      c.w = w;
+      this.filmContact(sd, c, sd === 'R' ? _pole.set(-0.8, -1, -0.1).applyQuaternion(rootQ) : _pole.set(0.75, -1, -0.35).applyQuaternion(rootQ));
+    }
+  }
+
+  /** (wave 6) one palm contact: hand flat onto the surface, the arm by IK onto the point (+ the measured correction) */
+  private filmContact(side: 'L' | 'R', c: { point: THREE.Vector3; normal: THREE.Vector3; fingers: THREE.Vector3; w: number }, pole: THREE.Vector3) {
+    const w = smooth01(clamp(c.w, 0, 1));
+    if (w <= 0.001) return;
+    // the palm (not the fist) onto the point: the IK aims the grip socket, so its target is the point moved by the
+    // palm -> grip offset in the hand's frame; two rounds (the arm's solve turns the hand with the forearm)
+    const hd = this.j[`hd${side}`];
+    for (let k = 0; k < 2; k++) {
+      this.orientPalm(side, c.normal, c.fingers, w);
+      const hq = hd.getWorldQuaternion(_pq2);
+      _cr1.copy(this.sockRestOff[side]).sub(this.palmRestOff[side]).applyQuaternion(hq);
+      _cr1.add(c.point).addScaledVector(this.palmCorr[side], w);
+      this.armIK(side, _cr1, pole, w);
+    }
+    this.orientPalm(side, c.normal, c.fingers, w);
+  }
+
+  /** (wave 6) turn the hand so that its palm faces against `normal` (the socket's +X out of the palm into the surface)
+   *  with the fingers along `fingers` (the thumb on the anatomical side), weight w */
+  private orientPalm(side: 'L' | 'R', normal: THREE.Vector3, fingers: THREE.Vector3, w: number) {
+    const hd = this.j[`hd${side}`], fa = this.j[`fa${side}`];
+    const X = _pa.copy(normal).normalize().negate();
+    const F = _pb.copy(fingers).addScaledVector(X, -fingers.dot(X));
+    if (F.lengthSq() < 1e-6) return;
+    F.normalize();
+    // the thumb's side: palm down, fingers forward -> the right thumb is to the left (normal x fingers)
+    const Y = _pc.crossVectors(normal, F).normalize();
+    if (side === 'L') Y.negate();
+    const Z = _pd.crossVectors(X, Y).normalize();
+    Y.crossVectors(Z, X).normalize();
+    _pm.makeBasis(X, Y, Z);
+    const hq = _pq.setFromRotationMatrix(_pm).multiply(_pq2.copy(this.sockRestQ[side]).invert());
+    fa.updateWorldMatrix(true, false);
+    const local = fa.getWorldQuaternion(_pq2).invert().multiply(hq);
+    hd.quaternion.slerp(local, w);
+    hd.updateWorldMatrix(false, true);
+  }
+
+  private reachLean = 0;
+  private readonly reachDir = new THREE.Vector2(0, 1);
+  private armLen = 0;
+  /** (wave 6) the trunk leans toward a palm contact his arm alone would not reach easily (the ewe's back beside and
+   *  below him): a side bend into it and a little forward, the head kept level — eased in and out with the contact */
+  private filmReachLean(dt: number) {
+    let want = 0;
+    if (!this.armLen) this.armLen = this.j.faR.position.length() + this.j.hdR.position.length() + 0.06;
+    for (const sd of SIDES) {
+      const c = this.filmPalm[sd];
+      if (!c || c.w <= 0.01) continue;
+      this.root.updateWorldMatrix(true, false);
+      const sh = this.root.worldToLocal(this.j[`ua${sd}`].getWorldPosition(_ln1));
+      const d = this.root.worldToLocal(_ln2.copy(c.point)).sub(sh);
+      want = Math.max(want, clamp(d.length() - this.armLen * 0.88, 0, 0.14) * smooth01(clamp(c.w * 1.3, 0, 1)));
+      const h = Math.hypot(d.x, d.z);
+      if (h > 1e-3) this.reachDir.set(d.x / h, d.z / h);
+    }
+    this.reachLean = damp(this.reachLean, want, 4, dt);
+    const r = this.reachLean;
+    if (r < 0.002) return;
+    // the shoulder travels ≈ 0.22 m per radian of trunk bend; +z rolls the trunk toward his right (-x)
+    const a = r / 0.22, roll = -this.reachDir.x * a, pitch = (0.3 + 0.5 * Math.max(0, this.reachDir.y)) * a;
+    const m = this.mixer;
+    m.add('spine', 0.55 * pitch, 0, 0.6 * roll);
+    m.add('chest', 0.35 * pitch, 0, 0.4 * roll);
+    m.add('neck', -0.3 * pitch, 0, -0.4 * roll);
+    m.add('head', -0.2 * pitch, 0, -0.35 * roll);
+  }
+
+  /** (wave 6) the grip slot of a hand on wool: swapped in only as the hand goes INTO the grip from another pose (its
+   *  weight starts at 0: no pop); the hand's own grip shape goes back the same way */
+  private palmFingers(side: 'L' | 'R', pose: FingerPose, shape: FingerShape | null) {
+    const rig = this.human.rig;
+    if (pose !== 'grip' || (side === 'L' ? this.fingerL : this.fingerR) === 'grip') return;
+    const cur = rig.gripShape[side];
+    const mine = cur === PALM_ON_WOOL || cur === PALM_UNDER;
+    if (shape) {
+      if (!mine) this.palmGripSave[side] = cur;
+      rig.gripShape[side] = shape;
+    } else if (mine && this.palmGripSave[side]) {
+      rig.gripShape[side] = this.palmGripSave[side]!;
+      this.palmGripSave[side] = null;
+    }
+  }
+  private readonly palmGripSave: Record<'L' | 'R', FingerShape | null> = { L: null, R: null };
+
+  /** (wave 6) after the skin is posed: where each contact palm really is -> the correction for the next frame */
+  private measurePalms() {
+    for (const sd of SIDES) {
+      const c = this.filmPalm[sd] ?? (this.cradle && this.cradleReach > 0.001 ? this.palmCradle[sd] : null);
+      const corr = this.palmCorr[sd];
+      // only the small residual of a settled contact (the skin vs the proxies): never while the hand is still on its
+      // way (the error then is the blend's, and a wound-up correction would push the palm through the surface)
+      if (!c || c.w < 0.97) {
+        corr.multiplyScalar(0.8);
+        continue;
+      }
+      const sock = this.human.sockets[`palm${sd}` as 'palmL'];
+      if (!sock) continue;
+      sock.getWorldPosition(_pe);
+      _pe.sub(c.point).negate();
+      if (_pe.lengthSq() > 0.01) continue; // out of reach (> 10 cm): nothing to learn here
+      corr.addScaledVector(_pe, 0.3);
+      if (corr.lengthSq() > 0.0016) corr.setLength(0.04);
+    }
   }
 
   /** the cradle's arms (bent before the chest) and the forward bend to gather / set down the lamb */
@@ -2315,6 +2480,11 @@ export class DavidModel {
     if (this.cradle && this.cradleReach > 0.001) this.filmCradleArms(rootQ);
     // (cut8, wave 5, film D4) his right hand resting on a ewe's back as he walks through his flock
     if (this.filmHandR && this.filmHandRW > 0.001) this.armIK('R', this.filmHandR, _pole.set(-0.85, -1, -0.15).applyQuaternion(rootQ), smooth01(this.filmHandRW));
+    // (cut8, wave 6) palms resting ON surfaces (the ewe's wool)
+    for (const sd of SIDES) {
+      const c = this.filmPalm[sd];
+      if (c && c.w > 0.001) this.filmContact(sd, c, sd === 'R' ? _pole.set(-0.85, -1, -0.15).applyQuaternion(rootQ) : _pole.set(0.85, -1, -0.15).applyQuaternion(rootQ));
+    }
     // pick: after the grasp, the stone goes to the satchel at the left hip
     if (this.action?.name === 'pick' && this.hold !== 'carry') {
       const t = this.action.t;
@@ -2419,6 +2589,7 @@ export class DavidModel {
     else if (this.hold === 'thanks') R = 'open';
     else if (this.hold === 'carry' || this.hold === 'pull' || this.cradleReach > 0.5) R = 'grip';
     else if (this.filmHandRW > 0.5) R = 'relaxed'; // (cut8, film D4) resting on a ewe's back
+    else if ((this.filmPalm.R?.w ?? 0) > 0.3) R = 'grip'; // (cut8, wave 6) the palm on her wool (PALM_ON_WOOL)
     else if (this.hold === 'grab') R = 'fist';
     else if (this.slingHeld()) R = 'grip'; // (play1) the cords' ends in the fist (the sling grip below)
     // (play1) the sling hand: the finger loop on the middle finger, the knot pressed under the thumb against the hooked
@@ -2430,6 +2601,10 @@ export class DavidModel {
         rig.gripShape.R = this.slingGrip;
       }
     } else if (rig.gripShape.R === this.slingGrip && this.gripShapeR) rig.gripShape.R = this.gripShapeR;
+    // (cut8, wave 6) hands ON wool — under the lamb (both), on the ewe's back (right): flat, spread, gently curved
+    const under = this.cradleReach > 0.5 && this.hold !== 'carry' && this.hold !== 'pull';
+    this.palmFingers('L', L, under && !inHand ? PALM_UNDER : null);
+    this.palmFingers('R', R, under ? PALM_UNDER : R === 'grip' && (this.filmPalm.R?.w ?? 0) > 0.3 ? PALM_ON_WOOL : null);
     if (L !== this.fingerL) { rig.setFingers('L', L); this.fingerL = L; }
     if (R !== this.fingerR) { rig.setFingers('R', R); this.fingerR = R; }
   }
@@ -2982,6 +3157,14 @@ const SL_STOW = { tuck: 0.27, end: 0.42 } as const;
 const SLING_FIST: FingerShape = {
   f: [[64, 94, 60], [88, 104, 66], [92, 106, 68], [95, 108, 70]], t: [26, 34, 30], tOpp: 46, tw: [30, 42, 36], spread: [3, 1, 3, 6], cup: 16,
 };
+// (cut8, wave 6) hands on wool: the fingers spread and only gently curved, following a round back (a palm on the ewe:
+// the tips ≈ 1.3 cm below the palm's plane) or the curve of a belly (palms under the lamb: ≈ 2.4 cm above it)
+const PALM_ON_WOOL: FingerShape = {
+  f: [[4, 7, 3], [4, 7, 3], [5, 8, 4], [6, 9, 4]], t: [-2, 4, 4], tOpp: 4, tw: [0, 0, 0], spread: [7, 1, 6, 12], cup: 2,
+};
+const PALM_UNDER: FingerShape = {
+  f: [[8, 12, 6], [8, 12, 6], [9, 13, 7], [10, 14, 7]], t: [4, 8, 6], tOpp: 14, tw: [0, 0, 0], spread: [6, 1, 5, 10], cup: 5,
+};
 const SLING_LET_GO: FingerShape = {
   f: [[16, 20, 8], [70, 90, 56], [84, 100, 62], [90, 104, 66]], t: [-4, 4, 4], tOpp: 8, tw: [0, 0, 0], spread: [4, 1, 3, 6], cup: 10,
 };
@@ -3090,3 +3273,14 @@ const _crQ = new THREE.Quaternion();
 const _crQ2 = new THREE.Quaternion();
 const _crM = new THREE.Matrix4();
 const _crM2 = new THREE.Matrix4();
+// (cut8, wave 6) palm contacts
+const _pa = new THREE.Vector3();
+const _pb = new THREE.Vector3();
+const _pc = new THREE.Vector3();
+const _pd = new THREE.Vector3();
+const _pe = new THREE.Vector3();
+const _pm = new THREE.Matrix4();
+const _pq = new THREE.Quaternion();
+const _pq2 = new THREE.Quaternion();
+const _ln1 = new THREE.Vector3();
+const _ln2 = new THREE.Vector3();

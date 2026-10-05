@@ -56,8 +56,9 @@ export const ARMY = {
   /** total depth of the column including the part hidden in the dust (m) */
   depth: 240,
 };
-/** the close-up zone (shots 10-12): midway between the two men at hand height */
-export const TEAR = new THREE.Vector3((SAMUEL.pos.x + SAUL_FACE.pos.x) / 2 + 0.25, 1.05, 0.35);
+/** the close-up zone (shots 10-12): midway between the two men at hand height
+ *  (CUT v6.1, cut7: the tear is played on G4's marks before the halted army — Saul's halt + ~2 m east) */
+export const TEAR = new THREE.Vector3(SAUL_HALT.x + 2.0, 1.05, 0.5);
 /** the altar of unhewn stones (Exod 20:22; Radak 15:12), NE of the stone ring: centre, side, height */
 export const ALTAR = { x: 31.5, z: -21.5, size: 2.5, height: 1.2 };
 /** the camp of the returning army: black goat-hair tents south-east of the site (centre, radius) */

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { fbm, rng, ss, vnoise, type HeadSurface } from './HeadSurface';
 import type { HairShading } from './HairMaterial';
 import type { LayerStyle, Tier } from './grow';
+import type { GroomSkinStyle } from './groomSkin';
 
 /*
  * Grooms. Coordinates in the style functions: f = point - eye-centre midpoint (rest pose, metres),
@@ -24,10 +25,44 @@ export interface GroomStyle {
   widthTier: Record<Tier, number>;
   /** default headband (for kind: 'man' with headband: true) */
   headband?: boolean;
+  // ---- beard1 (wave 6): beards that grow out of the skin (optional; a style without them is built exactly as before)
+  /** the skin under the beard / scalp (roots, stubble, the hair's shadow) instead of the offset cap shell */
+  skin?: GroomSkinStyle;
+  /** fine strands under TAA (per-pixel coverage, 0.55 px ribbons) — see HairUniforms.uFine */
+  fine?: boolean;
+  /** 0..1: the beard's tail hangs from the chin when the jaw moves (HairUniforms.uJawHang) */
+  jawHang?: number;
+  /** the clothing's thickness over the chest / shoulders / back (m): long beards and hair rest on it (HeadSurface cloth) */
+  cloth?: number;
 }
 
 const lin = (c: [number, number, number], out: THREE.Color) => out.setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
 const _c = new THREE.Color();
+
+// ================================================================================================= beard1 (wave 6)
+// "The beards of all the characters look glued on like a costume." A beard that grows OUT OF the skin: no offset cap
+// shell (the skin under it carries the roots, the stubble and the beard's shadow — groomSkin.ts), density and length
+// falling off into the cheeks and the neck (short, single, scattered hairs at the border), an irregular line, clumps
+// with their own shade, a few strays, coarse dull beard hair whose inside lies in its own shadow, the golden rim
+// through the tips, fine sub-pixel strands under TAA (no yarn), the tail hanging from the chin when he speaks.
+/** growth parameters every natural beard layer shares (grow.ts LayerStyle) */
+export const NATURAL_BEARD = {
+  densityPow: 1.35,
+  edgeShort: [0.14, 0.6] as [number, number],
+  lockTint: [0.14, 0.05] as [number, number],
+  stray: 0.03,
+  flyWidth: 0.55,
+  widthVar: 0.35,
+};
+/** the scalp layer of the same men (per-lock shades, a few strays) */
+export const NATURAL_SCALP = {
+  lockTint: [0.1, 0.035] as [number, number],
+  stray: 0.012,
+  flyWidth: 0.6,
+  widthVar: 0.3,
+};
+/** beard strands' shading: broader dull highlight, self-shadowed inside, a rim through the tips */
+export const BEARD_SHADE = { rough: 0.12, spec: 0.7, selfShadow: 0.7, tipGlow: 0.7 };
 
 /** vary a colour per strand: brightness (log-normal-ish), slight warm/cool shift */
 function vary(out: THREE.Color, R: () => number, amount: number, warm = 0) {
@@ -142,6 +177,8 @@ export function saulStyle(): GroomStyle {
   // models pass: a little lighter again at the tips (0.155 0.114 0.086) — the dense beard still read as a black mass
   const TIPD: [number, number, number] = [0.19, 0.14, 0.104];
   const GREY: [number, number, number] = [0.56, 0.54, 0.51];
+  // beard1: the warm brown of a dark beard's ends in the sun
+  const WARM: [number, number, number] = [0.3, 0.2, 0.13];
   const scalp: LayerStyle = {
     name: 'saul-scalp',
     kind: 0,
@@ -178,6 +215,7 @@ export function saulStyle(): GroomStyle {
     width: 0.00016,
     stiffness: 0.22,
     childLen: [0.8, 1.0],
+    ...NATURAL_SCALP,
     colors: (R, f, root, tip) => {
       // grey threads: temples most, then scattered
       const temple = ss(0.045, 0.07, Math.abs(f.x)) * ss(0.08, 0.02, f.y);
@@ -191,13 +229,19 @@ export function saulStyle(): GroomStyle {
       vary(root, R, 0.28);
       lin(TIPD, tip);
       vary(tip, R, 0.25, 0.02);
+      // beard1: sun-warmed ends in the open air (a dark head in the low sun is brown at the tips, never a black hole)
+      if (R() < 0.16) tip.lerp(lin(WARM, _c), 0.6);
     },
   };
+  // beard1: Saul's natural line (his own noise), a groomed royal beard — little patchiness, the neck line a finger
+  // under the jaw
+  const shape = { seed: 2, line: -0.002, neck: 0.0, patchy: 0.18 };
   const beard: LayerStyle = {
     name: 'saul-beard',
     kind: 1,
     reach: 0.3,
-    mask: (s) => s.beardMask(),
+    mask: (s) => s.beardMasks(shape).grow,
+    ...NATURAL_BEARD,
     // wardrobe polish pass: a full, combed, oiled royal beard - denser, shaped (fuller and squarer at the chin),
     // coherent locks with small tight curls, few flyaways and fewer grey flecks (they read as noise at distance)
     strands: { low: 2200, medium: 7000, high: 15000 }, // face pass: denser (was medium 6000 / high 13000)
@@ -235,11 +279,11 @@ export function saulStyle(): GroomStyle {
     curlR: [0.0017, 0.0032],
     curlPitch: [0.045, 0.07],
     curlStart: 0.3,
-    curlNoise: 0.14, // wardrobe polish (court 0.4, originally 0.6)
+    curlNoise: 0.22, // wardrobe polish (court 0.4, originally 0.6); beard1 0.14 -> 0.22 (less like a combed wig)
     lockR: 0.006,
-    clump: 0.9, // combed, oiled locks (court 0.6, originally 0.4; wardrobe polish 0.84)
-    frizz: 0.0001, // (court 0.0003)
-    flyaway: 0.0002, // (court 0.001)
+    clump: 0.78, // combed, oiled locks (court 0.6, originally 0.4; wardrobe polish 0.84; 0.9 read as ropes) — beard1 0.78
+    frizz: 0.00016, // (court 0.0003)
+    flyaway: 0.0025, // (court 0.001; beard1: a few fine strays at the silhouette — the outline is never a cut edge)
     width: 0.00019,
     stiffness: 0.45,
     childLen: [0.75, 1.0],
@@ -256,19 +300,36 @@ export function saulStyle(): GroomStyle {
       vary(root, R, 0.25);
       lin(TIPD, tip);
       vary(tip, R, 0.25, 0.03);
+      // beard1: warm sun-lit strands through the dark mass, darker roots
+      const r = R();
+      if (r < 0.18) tip.lerp(lin(WARM, _c), 0.55 + 0.3 * R());
+      else if (r < 0.3) tip.multiplyScalar(0.7);
+      root.multiplyScalar(0.85);
     },
   };
   return {
     name: 'saul',
     layers: [scalp, beard],
     ctrl: { low: 10, medium: 14, high: 18 },
-    segs: { low: 14, medium: 22, high: 32 },
+    segs: { low: 14, medium: 22, high: 30 },
     // models pass: less back-lit glow (G2 / G7 are shot against the sun: stray strands lit up like wires)
-    shading: { shift: 0.035, roughness: 0.4, specular: 0.55, backlit: 0.6, scatter: 0.55, aoDirect: 0.6 },
+    shading: { shift: 0.035, roughness: 0.4, specular: 0.55, backlit: 0.6, scatter: 0.55, aoDirect: 0.6, beard: BEARD_SHADE },
     capColor: [0.092, 0.07, 0.057], // wardrobe polish: a shade lighter under the denser beard (was 0.075 0.058 0.048)
     capOffset: 0.004,
     capBeard: 0.7, // wardrobe polish: the beard cap only under the dense core (hard black mask round the mouth on phones)
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
+    // beard1: no cap — the skin under the beard and the scalp carries the roots and the beard's shadow
+    skin: {
+      beard: (s) => s.beardMasks(shape).skin,
+      scalp: (s) => s.scalpSkin(),
+      beardColor: [0.066, 0.05, 0.04],
+      scalpColor: [0.07, 0.054, 0.044],
+      cover: 0.86,
+      occDirect: 0.45,
+      occIndirect: 0.75,
+    },
+    fine: true,
+    jawHang: 0.6,
   };
 }
 
@@ -344,13 +405,19 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
     colors: col((f) => ss(0.045, 0.07, Math.abs(f.x))),
   };
   const layers: LayerStyle[] = [scalp];
+  // beard1 (wave 6): bearded men get the natural beard (their own line, from their seed) — a man without a beard (the
+  // Philistines) is built exactly as before
+  const natural = beardKind !== 'none';
+  const shape = { seed: o.seed, line: beardKind === 'short' ? -0.004 : 0, neck: beardKind === 'full' ? 0.004 : -0.004, patchy: 0.5 };
+  if (natural) Object.assign(scalp, NATURAL_SCALP);
   if (beardKind !== 'none') {
     const full = beardKind === 'full';
     const Lb = full ? 0.04 + 0.03 * R() : 0.011 + 0.007 * R();
     layers.push({
       name: 'man-beard',
       kind: 1,
-      mask: (s) => s.beardMask(),
+      mask: (s) => s.beardMasks(shape).grow,
+      ...NATURAL_BEARD,
       strands: full ? { low: 1500, medium: 5000, high: 12000 } : { low: 1600, medium: 5500, high: 14000 },
       locks: full ? 170 : 220,
       sim: full ? { low: 4, medium: 8, high: 12 } : { low: 0, medium: 0, high: 0 },
@@ -385,7 +452,7 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
       colors: col((f) => ss(-0.07, -0.1, f.y) * 1.5),
     });
   }
-  return {
+  const st: GroomStyle = {
     name: `man-${o.seed}`,
     layers,
     ctrl: { low: 8, medium: 11, high: 14 },
@@ -397,6 +464,24 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
     headband: !!o.headband,
   };
+  if (natural) {
+    // beard1: the roots on the skin (the grey of an older man mixed in), fine strands, the hanging beard
+    const g = greyP * 0.6;
+    const rc: [number, number, number] = [base[0] * (1 - g) + 0.5 * g, base[1] * (1 - g) + 0.48 * g, base[2] * (1 - g) + 0.45 * g];
+    st.shading.beard = BEARD_SHADE;
+    st.skin = {
+      beard: (s) => s.beardMasks(shape).skin,
+      scalp: (s) => s.scalpSkin(age > 0.75 ? 0.006 * (age - 0.75) * 4 : 0),
+      beardColor: rc,
+      scalpColor: rc,
+      cover: 0.84,
+      occDirect: 0.45,
+      occIndirect: 0.75,
+    };
+    st.fine = true;
+    st.jawHang = beardKind === 'full' ? 0.5 : 0;
+  }
+  return st;
 }
 
 /** per-vertex cap tint noise helper */

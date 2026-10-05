@@ -211,7 +211,10 @@ const FRAG_BODY = /* glsl */ `
       hit = true;
       float y = dh.y / hr;
       bool beard = uArmy < 0.5 && y < -0.2 && facing > -0.5;
-      col = y > 0.35 || (facing < -0.3 && y > -0.6) || beard ? hair : skin;
+      col = y > 0.35 || (facing < -0.3 && y > -0.6) ? hair : skin;
+      // (host1, wave 6) the far beards as the mesh LODs': warmer and lighter than the head's hair, blended into the cheek
+      // (no black disc under the face)
+      if (beard) col = mix(skin, mix(hair, vec3(0.072, 0.047, 0.03), 0.5), smoothstep(-0.15, -0.4, y));
       if ((mask & B_HEADBAND) != 0 && y > 0.25 && y < 0.5) col = uAccent[int(h.z * 3.999)];
       rough = 0.7;
     } else if ((mask & B_HEADCLOTH) != 0 && facing < 0.3 && impSeg(p, head - up * 0.05 * s, N - up * 0.06 * s, 0.085 * s)) {

@@ -234,6 +234,20 @@ export class SDFGrid {
 const HEAD_PREFIX = ['eye.', 'special', 'oris', 'levator', 'orbicularis', 'oculi', 'temporalis', 'risorius'];
 const isHeadBone = (n: string) => n === 'head' || n === 'jaw' || HEAD_PREFIX.some((p) => n.startsWith(p));
 
+/** beard1 (wave 6): the shape of a natural beard (HeadSurface.beardMasks) */
+export interface BeardShape {
+  /** shift of the cheek line (m, + = higher) */
+  line?: number;
+  /** shift of the neck line (m, + = lower down the neck) */
+  neck?: number;
+  /** thin patches on the upper cheeks 0..1 (default 0.4) */
+  patchy?: number;
+  /** the man's own noise */
+  seed?: number;
+  /** width of the stubble zone beyond the strands (m, default 0.012) */
+  stubble?: number;
+}
+
 export interface Roots {
   n: number;
   pos: Float32Array; // rest, character space
@@ -265,23 +279,29 @@ export class HeadSurface {
   readonly jawRestQuat: THREE.Quaternion;
   sdf!: SDFGrid;
   /** (wave 4b) the field's inputs while HeadSurface.create builds it in slices */
-  private sdfArgs: { use: Uint8Array; min: THREE.Vector3; max: THREE.Vector3; cell: number } | null = null;
+  private sdfArgs: { pos: Float32Array; use: Uint8Array; min: THREE.Vector3; max: THREE.Vector3; cell: number } | null = null;
   private scalpCache: Float32Array | null = null;
   private beardCache: Float32Array | null = null;
+  /** beard1: natural beard masks by shape */
+  private readonly natCache = new Map<string, { grow: Float32Array; skin: Float32Array }>();
 
   /**
    * load1 (wave 4b): the same surface with its distance field built in slices (the film's background builds; the
    * constructor builds it at once)
    */
-  static async create(human: HumanModel, sdfCell = 0.006, reach = 0.22): Promise<HeadSurface> {
-    const s = new HeadSurface(human, sdfCell, reach, true);
+  static async create(human: HumanModel, sdfCell = 0.006, reach = 0.22, cloth = 0): Promise<HeadSurface> {
+    const s = new HeadSurface(human, sdfCell, reach, true, cloth);
     const a = s.sdfArgs!;
-    s.sdf = await SDFGrid.fromVerticesAsync(s.pos, s.nrm, a.use, a.min, a.max, a.cell);
+    s.sdf = await SDFGrid.fromVerticesAsync(a.pos, s.nrm, a.use, a.min, a.max, a.cell);
     s.sdfArgs = null;
     return s;
   }
 
-  constructor(readonly human: HumanModel, sdfCell = 0.006, reach = 0.22, deferSdf = false) {
+  /**
+   * beard1 (wave 6): `cloth` (m) — the collision surface below the collar lies this far out (the garments over the chest,
+   * shoulders and back), so a long beard and long hair rest ON the mantle instead of sinking into it; 0 = the skin
+   */
+  constructor(readonly human: HumanModel, sdfCell = 0.006, reach = 0.22, deferSdf = false, cloth = 0) {
     const rig = human.data.rig;
     this.pos = human.restPositions();
     this.nrm = human.restNormals();
@@ -350,8 +370,21 @@ export class HeadSurface {
       const x = this.pos[v * 3], y = this.pos[v * 3 + 1], z = this.pos[v * 3 + 2];
       use[v] = x > min.x - 0.02 && x < max.x + 0.02 && y > min.y - 0.02 && y < max.y + 0.02 && z > min.z - 0.02 && z < max.z + 0.02 ? 1 : 0;
     }
-    if (deferSdf) this.sdfArgs = { use, min, max, cell: sdfCell };
-    else this.sdf = SDFGrid.fromVertices(this.pos, this.nrm, use, min, max, sdfCell);
+    let sdfPos = this.pos;
+    if (cloth > 0) {
+      // beard1: the torso pushed out by the clothing below the collar (the neck and the head stay the skin)
+      sdfPos = this.pos.slice();
+      const collarY = this.chin.y - 0.075;
+      for (let v = 0; v < nv; v++) {
+        const k = cloth * ss(collarY + 0.015, collarY - 0.035, this.pos[v * 3 + 1]) * (1 - ss(0.2, 0.45, this.region[v]));
+        if (k <= 0) continue;
+        sdfPos[v * 3] += this.nrm[v * 3] * k;
+        sdfPos[v * 3 + 1] += this.nrm[v * 3 + 1] * k;
+        sdfPos[v * 3 + 2] += this.nrm[v * 3 + 2] * k;
+      }
+    }
+    if (deferSdf) this.sdfArgs = { pos: sdfPos, use, min, max, cell: sdfCell };
+    else this.sdf = SDFGrid.fromVertices(sdfPos, this.nrm, use, min, max, sdfCell);
   }
 
   /** scalp growth mask per vertex (bake_skin.py hairline + ear exclusion by a flap-thickness test) */
@@ -411,6 +444,71 @@ export class HeadSurface {
       out[v] = Math.min(1, beard);
     }
     this.beardCache = out;
+    return out;
+  }
+
+  /**
+   * beard1 (wave 6): a NATURAL beard — the growth mask of the strands (`grow`) and the root density on the skin (`skin`,
+   * the strands' mask plus the sparse stubble zone beyond the last strands). The old beardMask() reached full density
+   * within 2 cm of a smooth line and stopped there: a bib with a drawn edge. Here the cheek line wanders (noise of
+   * ~1.5 cm and ~5 mm, the man's own seed), the density falls over ~2.5 cm into the cheek, thins in patches on the upper
+   * cheek, the neck line wanders lower under the jaw, and the skin keeps a stubble shadow ~1-1.5 cm beyond the strands.
+   * The lips (vermilion) stay exactly bare.
+   *   o.line  shift of the cheek line (m, + = higher on the cheek)   o.neck  shift of the neck line (m, + = lower)
+   *   o.patchy  0..1 thin patches on the upper cheeks   o.seed  the man's noise   o.stubble  the stubble zone (m)
+   */
+  beardMasks(o: BeardShape = {}): { grow: Float32Array; skin: Float32Array } {
+    const key = JSON.stringify(o);
+    const hit = this.natCache.get(key);
+    if (hit) return hit;
+    const nv = this.region.length;
+    const grow = new Float32Array(nv), skin = new Float32Array(nv);
+    const P = this.pos, N = this.nrm, E = this.E;
+    const chinY = this.chin.y - E.y;
+    const lipTop = this.lipTopY - E.y, lipBot = this.lipBottomY - E.y, lipW = this.mouthHalfW;
+    const seed = 700 + (o.seed ?? 0) * 13;
+    const lineShift = o.line ?? 0, neckShift = o.neck ?? 0, patchy = o.patchy ?? 0.4, stub = o.stubble ?? 0.012;
+    for (let v = 0; v < nv; v++) {
+      const r = this.region[v];
+      if (r <= 0.01) continue;
+      const px = P[v * 3], py = P[v * 3 + 1], pz = P[v * 3 + 2];
+      const fx = px - E.x, fy = py - E.y, fz = pz - E.z;
+      const ax = Math.abs(fx);
+      const head = ss(0.55, 0.9, this.headW[v]);
+      // the man's own irregular line: a slow wander (~1.5 cm) and a ragged one (~5 mm)
+      const n1 = fbm(px * 55, py * 55, pz * 55, 2, seed), n2 = fbm(px * 190, py * 190, pz * 190, 2, seed + 1);
+      const lineY = interp(ax, [0, 0.026, 0.064, 0.09], [-0.058, -0.058, -0.005, 0.02]) + lineShift + 0.007 * n1 + 0.0035 * n2;
+      const front = fz + 0.06 - ax * 0.4 + 0.006 * n1;
+      // cheeks: from nothing at the line to the full beard ~2.5 cm below it
+      const cheek = head * ss(lineY + 0.003, lineY - 0.022, fy) * ss(-0.035, 0.0, front);
+      // the stubble zone on the skin: beyond the strands, up the cheek and back toward the ear
+      const cheekSkin = head * ss(lineY + 0.003 + stub, lineY - 0.006, fy) * ss(-0.035 - stub, -0.004, front);
+      // thin patches high on the cheek (the beard is never a felt): only in the upper band, not in the dense core
+      const band = ss(lineY - 0.03, lineY - 0.008, fy);
+      const patch = 1 - patchy * band * ss(-0.1, 0.45, fbm(px * 95, py * 95, pz * 95, 2, seed + 2));
+      // moustache: philtrum to the corners of the mouth, above the upper lip
+      const must = head * ss(0.031, 0.021, ax) * ss(-0.066, -0.06, fy) * ss(-0.044, -0.05, fy);
+      // under the chin and down the neck to a wandering line ~3-5 cm under the jaw
+      const neckY = chinY - 0.042 - neckShift + 0.008 * n1 + 0.003 * n2;
+      const facing = ss(-0.2, 0.2, N[v * 3 + 2] + 0.3);
+      const under = Math.min(1, r * 2) * ss(chinY + 0.005, chinY - 0.01, fy) * ss(neckY - 0.012, neckY + 0.014, fy) * facing;
+      const underSkin = Math.min(1, r * 2) * ss(chinY + 0.005, chinY - 0.01, fy) * ss(neckY - 0.012 - stub * 1.3, neckY + 0.004, fy) * facing;
+      const lips = ss(lipW + 0.004, lipW - 0.001, ax) * ss(lipTop + 0.0025, lipTop - 0.0005, fy) * ss(lipBot - 0.0025, lipBot + 0.0005, fy) * ss(0.0, 0.3, N[v * 3 + 2]);
+      const g = Math.min(1, Math.max(cheek * patch, must, under)) * (1 - lips);
+      grow[v] = g;
+      skin[v] = Math.max(g, 0.42 * Math.min(1, Math.max(cheekSkin, underSkin)) * (1 - lips));
+    }
+    const out = { grow, skin };
+    this.natCache.set(key, out);
+    return out;
+  }
+
+  /** beard1: root density on the scalp skin — the strands' scalp mask with the fine short hairs ~4 mm below the line */
+  scalpSkin(hairlineShift = 0, hairline?: (phiDeg: number) => number): Float32Array {
+    const a = this.scalpMask(hairlineShift, hairline);
+    const b = this.scalpMask(hairlineShift - 0.004, hairline);
+    const out = new Float32Array(a.length);
+    for (let v = 0; v < a.length; v++) out[v] = Math.max(a[v], 0.5 * b[v]);
     return out;
   }
 

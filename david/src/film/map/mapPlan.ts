@@ -2,7 +2,8 @@ import { takeBeat, takeDur } from '../FilmCams';
 import { MAP_NAMES, TRIBE_ORDER } from '../../content/mapNames';
 
 /**
- * THE MAP'S SCRIPT — CUT v6 (docs/intro-script-v6.md): P4 'map-exodus', take 'exodus', ONE 10 s shot tied to the story.
+ * THE MAP'S SCRIPT — CUT v6.1 (docs/intro-script-v6-1.md; the concept: docs/intro-script-v6.md): P4 'map-exodus', take
+ * 'exodus', ONE 10.5 s shot tied to the story, in by a match dissolve out of P1, out by a dissolve into P6.
  * Everything is keyed to the shot's beats in src/content/introScript.ts (egypt, flock, verse, jordan, gilgal, land,
  * noKing — never hard-coded seconds).
  *
@@ -105,8 +106,9 @@ export function scatterHomes(n: number, seed = 7): { lon: number; lat: number }[
 }
 
 // ------------------------------------------------------------------------------------------------- the camera
-/** one pose of the map camera: looking at a ground point from `range` metres, `heading` (deg, from north
- *  clockwise) and `pitch` (deg below the horizon); `fov` = vertical lens angle (16:9 canvas, 2.39 picture) */
+/** one pose of the map camera: looking at a point at SEA LEVEL from `range` metres, `heading` (deg, from north
+ *  clockwise) and `pitch` (deg below the horizon); `fov` = vertical lens angle (16:9 canvas, 2.39 picture); `roll`
+ *  (deg, the film's convention: - = banking right) */
 export interface MapPose {
   lon: number;
   lat: number;
@@ -114,39 +116,78 @@ export interface MapPose {
   heading: number;
   pitch: number;
   fov: number;
+  roll: number;
 }
 
+/** a key of the move; `m` overrides the spline's tangent of a channel at this key (units per second; lr = log range) */
 export interface CamKey extends MapPose {
   t: number;
+  m?: Partial<Record<'lon' | 'lat' | 'lr' | 'heading' | 'pitch' | 'fov' | 'roll', number>>;
 }
 
 /**
- * P4's ONE move: out of P1's dive through the cloud deck the lens is already high above the region — the Earth's curved
- * horizon and the atmosphere's limb along the top — and it keeps coming forward and down (the dive continues), settling
- * onto the region while the flock crosses the wilderness (north-up: the delta lower-left, the wilderness low, the rift
- * right); from `land` it sinks over the land of Israel while the lights scatter, and turns WNW (bearing 290) toward
- * the coast and the Philistine cities — P6 opens on the same bearing on the front rank.
+ * P1's last frame (cut7's judah 'flight' at its end, FilmCams FILM_CAM.flight keys at flightT(6.5) = 11.15): the lens
+ * ~100 m over the hills just east of Bethlehem (35.2146 E, 31.6999 N), looking WNW (bearing 284.4) 7.9 deg down, a
+ * 40.9 deg lens, banked 2.75 deg right — and moving: turning right 18 deg/s, unbanking 1.9 deg/s, the lens narrowing
+ * 1 deg/s, pushing on and down over the ridges (the moving dissolve carries exactly this on as a layer over P4).
+ * The low sun is behind the lens' right shoulder in both sets (judah: az ~87; the map's bake: 104).
+ */
+export const P1_END = { lon: 35.2146, lat: 31.6999, heading: -75.6, pitch: 7.9, fov: 40.9, roll: -2.75, dHeading: 18, dRoll: 1.9, dFov: -1 } as const;
+
+/**
+ * P4's ONE move (CUT v6.1): IN by a MATCH dissolve out of P1 — the map opens on the same ridges at the same angle and
+ * light as P1's last frame (the lens over the hills of Judah looking WNW toward the coast, still turning right, the
+ * horizon high in the frame, banked a little) and goes on with P1's motion; as the dissolve ends the lens lifts and
+ * soars up and back — one continuous rise, the turn to the right carried on until the whole region lies below, north
+ * up (Egypt left, the wilderness low, the rift right) — while the flock crosses the wilderness. From `land` it sinks
+ * over the land of Israel, turns back WNW (bearing 290) and comes down toward the coast, the five Philistine cities
+ * glowing on the horizon in a warm haze, arriving low over the Shephelah — the dissolve into P6's dust lands on them.
  */
 export function exodusKeys(): CamKey[] {
   const b = mapBeats();
+  // the opening pose: P1's lens and heading from higher up (the map's relief is exaggerated x2.6 and ~1 km coarse: 6 km
+  // world over the sea, the horizon where P1's skyline is — its own dip compensated), the look point at sea level
+  const H0 = 6000;
+  const dip0 = (Math.sqrt((2 * H0) / 6_371_000) * 180) / Math.PI;
+  const p0 = 9.4 + dip0;
+  const r0 = H0 / Math.sin((p0 * Math.PI) / 180);
+  const h0 = r0 * Math.cos((p0 * Math.PI) / 180);
+  const hd0 = (P1_END.heading * Math.PI) / 180;
+  const lon0 = P1_END.lon + (h0 * Math.sin(hd0)) / (111_320 * Math.cos((P1_END.lat * Math.PI) / 180));
+  const lat0 = P1_END.lat + (h0 * Math.cos(hd0)) / 110_574;
+  const FL = b.flock, J = b.jordan;
   return [
-    { t: 0, lon: 33.35, lat: 31.45, range: 1_320_000, heading: 0, pitch: 21, fov: 26 },
-    { t: b.flock, lon: 33.3, lat: 30.55, range: 1_000_000, heading: 0, pitch: 33, fov: 26 },
-    { t: (b.flock + b.jordan) / 2, lon: 34.05, lat: 29.7, range: 800_000, heading: -2, pitch: 44, fov: 26 },
-    { t: b.jordan - 0.5, lon: 35.05, lat: 29.85, range: 700_000, heading: -7, pitch: 47, fov: 26 },
-    { t: b.gilgal, lon: 35.15, lat: 31.45, range: 520_000, heading: -14, pitch: 46, fov: 26 },
-    { t: b.land + 0.9, lon: 35.0, lat: 31.7, range: 360_000, heading: -30, pitch: 45, fov: 26 },
-    { t: b.dur, lon: 34.8, lat: 31.72, range: 118_000, heading: -70, pitch: 24, fov: 28 },
+    {
+      t: 0, lon: lon0, lat: lat0, range: r0, heading: P1_END.heading, pitch: p0, fov: P1_END.fov, roll: P1_END.roll,
+      // P1's motion at its cut: the push along the view (the range closing ~6 %/s), the turn, the lens, the bank
+      m: { lon: 0, lat: 0, lr: -0.06, heading: P1_END.dHeading, pitch: 0, fov: P1_END.dFov, roll: P1_END.dRoll },
+    },
+    // the dissolve is over: the lens lifts off the ridges (still turning right), the look point barely moving yet
+    { t: 1.0, lon: lon0 - 0.07, lat: lat0 - 0.04, range: 40_000, heading: -57.6, pitch: 14, fov: 37.5, roll: -0.8, m: { lon: -0.08, lat: -0.08 } },
+    // the soar: up and back, the turn carried on — the coast, the delta coming into view on the left
+    { t: 1.8, lon: 34.55, lat: 31.4, range: 210_000, heading: -30, pitch: 24, fov: 31, roll: 0 },
+    // the whole region below, north up (Egypt left, the wilderness low, the rift right); the flock out of the delta
+    { t: FL + 1.0, lon: 33.75, lat: 30.35, range: 900_000, heading: -6, pitch: 37, fov: 26.5, roll: 0 },
+    { t: (FL + J) / 2 + 0.15, lon: 34.05, lat: 29.7, range: 800_000, heading: -2, pitch: 44, fov: 26, roll: 0 },
+    { t: J - 0.5, lon: 35.05, lat: 29.85, range: 700_000, heading: -7, pitch: 47, fov: 26, roll: 0 },
+    { t: b.gilgal, lon: 35.15, lat: 31.45, range: 520_000, heading: -14, pitch: 46, fov: 26, roll: 0 },
+    { t: b.land + 0.9, lon: 35.0, lat: 31.7, range: 360_000, heading: -30, pitch: 45, fov: 26, roll: 0 },
+    { t: b.dur - 1.8, lon: 34.8, lat: 31.71, range: 105_000, heading: -62, pitch: 17, fov: 28, roll: 0 },
+    {
+      // arriving: ~3 km over the western edge of the hills, the horizon 40 % down the picture, Ashdod ahead, the five
+      // cities on the horizon band; still sinking a little at the cut (never a hold)
+      t: b.dur, lon: 34.674, lat: 31.733, range: 43_000, heading: -70, pitch: 4.0, fov: 30, roll: 0,
+      m: { lon: 0, lat: 0, lr: -0.05, heading: -0.6, pitch: -0.4, fov: 0.3, roll: 0 },
+    },
   ];
 }
 
-const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
-
 /**
- * The camera: ONE cubic Hermite spline through the keys, Catmull-Rom tangents inside (C1: no stop at any key), the range
- * in LOG space (a constant perceived speed of climb / descent). It starts moving (forward and down, the dive of P1 goes
- * on) and ends moving (the moving dissolve into P6 extrapolates it). Over a big change of range the ground point moves
- * in proportion to the height gained / lost, so the land never slides sideways under a low lens.
+ * The camera: ONE cubic Hermite spline through the keys, Catmull-Rom tangents inside (C1: no stop at any key) unless a
+ * key sets its own (`m`), the range in LOG space (a constant perceived speed of climb / descent). It starts with P1's
+ * motion and ends moving (the moving dissolve into P6 extrapolates it). C1 everywhere (no kink at a key): the look
+ * point's tangents are set small where the lens is low (P1's match, the arrival), so the land never slides sideways
+ * under a low lens; it travels while the lens is high.
  */
 export interface MapCamPath {
   pose(take: string, t: number, out: MapPose): MapPose;
@@ -156,25 +197,26 @@ export function mapCamPath(): MapCamPath {
   const keys = exodusKeys();
   const n = keys.length;
   const T = keys.map((k) => k.t);
-  const ch = {
+  type Ch = 'lon' | 'lat' | 'lr' | 'heading' | 'pitch' | 'fov' | 'roll';
+  const ch: Record<Ch, number[]> = {
     lon: keys.map((k) => k.lon),
     lat: keys.map((k) => k.lat),
     lr: keys.map((k) => Math.log(k.range)),
     heading: keys.map((k) => k.heading),
     pitch: keys.map((k) => k.pitch),
     fov: keys.map((k) => k.fov),
+    roll: keys.map((k) => k.roll),
   };
   const slope = (v: number[], i: number) => (v[i + 1] - v[i]) / (T[i + 1] - T[i]);
-  const tangents = (v: number[], m0: number, mEnd: number) =>
-    v.map((_, i) => (i === 0 ? m0 : i === n - 1 ? mEnd : (v[i + 1] - v[i - 1]) / (T[i + 1] - T[i - 1])));
-  const M = {
-    lon: tangents(ch.lon, slope(ch.lon, 0) * 0.5, 0),
-    lat: tangents(ch.lat, slope(ch.lat, 0) * 0.5, 0),
-    lr: tangents(ch.lr, slope(ch.lr, 0) * 0.9, slope(ch.lr, n - 2) * 0.85),
-    heading: tangents(ch.heading, 0, slope(ch.heading, n - 2) * 0.4),
-    pitch: tangents(ch.pitch, slope(ch.pitch, 0) * 0.9, slope(ch.pitch, n - 2) * 0.4),
-    fov: tangents(ch.fov, 0, 0),
-  };
+  const M = {} as Record<Ch, number[]>;
+  for (const c of Object.keys(ch) as Ch[]) {
+    const v = ch[c];
+    M[c] = v.map((_, i) => {
+      const o = keys[i].m?.[c];
+      if (o !== undefined) return o;
+      return i === 0 ? slope(v, 0) * 0.5 : i === n - 1 ? slope(v, n - 2) * 0.4 : (v[i + 1] - v[i - 1]) / (T[i + 1] - T[i - 1]);
+    });
+  }
   const herm = (v: number[], m: number[], i: number, u: number, dt: number) => {
     const u2 = u * u, u3 = u2 * u;
     return (2 * u3 - 3 * u2 + 1) * v[i] + (u3 - 2 * u2 + u) * dt * m[i] + (-2 * u3 + 3 * u2) * v[i + 1] + (u3 - u2) * dt * m[i + 1];
@@ -190,15 +232,9 @@ export function mapCamPath(): MapCamPath {
       out.heading = herm(ch.heading, M.heading, i, u, dt);
       out.pitch = herm(ch.pitch, M.pitch, i, u, dt);
       out.fov = herm(ch.fov, M.fov, i, u, dt);
-      const ra = keys[i].range, rb = keys[i + 1].range;
-      if (Math.abs(Math.log(rb / ra)) > 1.0) {
-        const w = Math.max(0, Math.min(1, (out.range - ra) / (rb - ra)));
-        out.lon = lerp(ch.lon[i], ch.lon[i + 1], w);
-        out.lat = lerp(ch.lat[i], ch.lat[i + 1], w);
-      } else {
-        out.lon = herm(ch.lon, M.lon, i, u, dt);
-        out.lat = herm(ch.lat, M.lat, i, u, dt);
-      }
+      out.roll = herm(ch.roll, M.roll, i, u, dt);
+      out.lon = herm(ch.lon, M.lon, i, u, dt);
+      out.lat = herm(ch.lat, M.lat, i, u, dt);
       return out;
     },
   };

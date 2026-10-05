@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { Expression } from '../../characters/human/HumanRig';
 import {
   actionTime as blockingActionTime, armyAt, BEATS, HALT_PLANT, STOP_PLANT, SAM_AWAY_YAW, SAM_FREED, SAM_HELD, SAM_PACE, SAM_STOP,
-  SAM_TURN_CUT, samuelAt, saulAt, SHOT_LEN, TEAR_ACTION, TEAR_KNEEL, timeScale, type GilgalShotName,
+  SAM_TURN_CUT, samuelAt, saulAt, SAUL_TEAR, SHOT_LEN, TEAR_ACTION, TEAR_KNEEL, tearKneelMark, tearPath, timeScale, type GilgalShotName,
 } from '../gilgal/gilgalBlocking';
+import { SpearFall } from '../gilgal/spearFall';
 import { INTRO_SHOTS, VERDICT_WORDS, type IntroWord } from '../../content/introScript';
 import type { FilmActor, ArmPose } from './FilmActor';
 
@@ -112,6 +113,15 @@ export const POSES = {
   /** G7: the fist raised a little into his own eye-line, the cloth hanging from it (readable in the foreground) */
   clothLookR: { ua: [-0.5, 0.08, -0.06], fa: [-1.55, 0.35, 0], hd: [0.3, 0, 0.1] } as ArmPose,
 };
+
+/**
+ * (CUT v6.1, cut7) Saul's spear after the roar: lowered (G3 `notice` -> G4 0.9 s) and set down PLANTED at his right side,
+ * gripped in his fist (fingers closed round the shaft); in G5a at `drop` the hand opens and it falls (SpearFall) and
+ * lies in the dust through G5b-G7. The butt `fwd` / `right` m from his G4 mark, leaning `lean` rad toward the side it
+ * falls to (`fallSide` rad from his right toward his back), `push` = the opening hand's nudge (rad/s); the fist on the
+ * shaft `gripAt` m above the butt (the leather binding).
+ */
+const SPEAR = { fwd: 0.24, right: 0.36, lean: 0.15, push: 0.4, fallSide: 0.44, length: 2.5, gripAt: 1.3, plant0: 0.9, plant1: 1.5 };
 
 /** smooth expression mixer: set targets, it eases the rig's expression weights (+ the jaw and the visemes) */
 export class FaceDriver {
@@ -334,32 +344,106 @@ export class GilgalPerformance {
   }
 
   /**
-   * The spear in his hand (G1-G4) or not with him (G5-G7: the armour-bearer has it — the director's notes: a planted
-   * spear stood as a stray vertical line at the edge of the tear's frame)
+   * (CUT v6.1, cut7) The spear never vanishes: in his fist (G1-G4 until it is set down: 'hand') or a prop of the set
+   * (planted at his side, falling from G5a `drop`, lying in the dust through G7: 'world'). The user: "he had a spear in
+   * his hand, and the spear suddenly vanished".
    */
-  private spearPlanted(on: boolean, _s?: { pos: THREE.Vector3; yaw: number }) {
+  private spearMode: 'hand' | 'world' = 'hand';
+  private spearFall: SpearFall | null = null;
+  private readonly spearFrom = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), set: false };
+  private readonly spearPos = new THREE.Vector3();
+  private readonly spearQuat = new THREE.Quaternion();
+  private readonly spearQ2 = new THREE.Quaternion();
+  private readonly spearDir = new THREE.Vector3();
+  private readonly spearGrip = new THREE.Vector3();
+  private readonly shaftAt = new THREE.Vector3();
+
+  private spearToHand() {
     const { saul } = this.cast;
     const sp = saul.props.spear;
     if (!sp) return;
-    if (on) {
-      const scene = saul.root.parent;
-      if (!scene) return;
-      scene.add(sp);
-      sp.visible = false;
-      saul.upright.R.weight = 0;
-      saul.human.rig.setFingers('R', 'relaxed');
-    } else if (sp.parent !== null && sp.parent === saul.root.parent) {
+    if (this.spearMode !== 'hand' || sp.parent === saul.root.parent) {
       sp.visible = true;
       saul.holdProp('spear', 'R');
-      saul.upright.R.weight = 1;
     }
+    this.spearMode = 'hand';
+    saul.upright.R.prop = 'spear';
+  }
+
+  /** the spear becomes a prop of the set at its current world pose (planted / falling / lying) */
+  private spearToWorld() {
+    const { saul } = this.cast;
+    const sp = saul.props.spear;
+    const scene = saul.root.parent;
+    if (!sp || !scene) return;
+    if (this.spearMode !== 'world' || sp.parent !== scene) {
+      sp.updateWorldMatrix(true, false);
+      scene.attach(sp);
+      sp.visible = true;
+    }
+    this.spearMode = 'world';
+    saul.upright.R.weight = 0;
+  }
+
+  /** the planted spear's fall (built once: his G4 mark, the set's ground) */
+  private spearFallOf(): SpearFall {
+    if (!this.spearFall) {
+      const yaw = Math.PI / 2; // Saul faces the old man (east) on his G4 mark
+      const fwd = V3(Math.sin(yaw), 0, Math.cos(yaw));
+      const right = V3(-Math.cos(yaw), 0, Math.sin(yaw));
+      const butt = SAUL_TEAR.clone().addScaledVector(fwd, SPEAR.fwd).addScaledVector(right, SPEAR.right);
+      butt.y = this.ground(butt.x, butt.z);
+      const fall = right.clone().multiplyScalar(Math.cos(SPEAR.fallSide)).addScaledVector(fwd, -Math.sin(SPEAR.fallSide)).normalize();
+      // the strike lands on the contract's `spearHits` (the score's knock)
+      const A = TEAR_ACTION;
+      this.spearFall = new SpearFall({ butt, fall, lean: SPEAR.lean, push: SPEAR.push, length: SPEAR.length, ground: this.ground, hitAfter: A.spearHits - A.drop });
+    }
+    return this.spearFall;
+  }
+
+  /** place the set's spear at fall time τ (τ < 0: planted, held); returns the grip point on its shaft (world) */
+  private spearAt(tau: number, blendFrom = 0): THREE.Vector3 {
+    const sp = this.cast.saul.props.spear;
+    const f = this.spearFallOf();
+    f.pose(tau, this.spearPos, this.spearQuat);
+    if (blendFrom > 0 && this.spearFrom.set) {
+      this.spearPos.lerp(this.spearFrom.pos, blendFrom);
+      this.spearQuat.slerp(this.spearQ2.copy(this.spearFrom.quat), blendFrom);
+    }
+    if (sp) {
+      sp.position.copy(this.spearPos);
+      sp.quaternion.copy(this.spearQuat);
+      sp.updateMatrixWorld(true);
+    }
+    this.spearDir.set(0, 1, 0).applyQuaternion(this.spearQuat);
+    return this.spearGrip.copy(this.spearPos).addScaledVector(this.spearDir, SPEAR.gripAt);
+  }
+
+  /** his right fist closed round the planted shaft (arm IK on the grip point, the palm to the shaft, thumb up it) */
+  private holdShaft(grip: THREE.Vector3, w: number, yaw: number) {
+    const { saul } = this.cast;
+    const fwd = this._f.set(Math.sin(yaw), 0, Math.cos(yaw));
+    const right = this._r.set(-Math.cos(yaw), 0, Math.sin(yaw));
+    saul.reach.R.target = this.shaftAt.copy(grip);
+    saul.reach.R.weight = w;
+    saul.reach.R.palm = this._p.copy(right).multiplyScalar(-0.85).addScaledVector(fwd, 0.35).normalize();
+    saul.reach.R.thumb = this._th.copy(this.spearDir);
+    saul.reach.R.orient = w;
+    saul.human.rig.setFingers('R', 'grip');
   }
 
   /** call on each cut (and before the first frame of a shot) */
   enter(shot: GilgalShotName) {
     const { saul, samuel } = this.cast;
-    const plant = shot === 'tear' || shot === 'verdict' || shot === 'saulAlone' || shot === 'rise';
-    this.spearPlanted(plant, plant ? saulAt('tear', 0) : undefined);
+    // the spear (CUT v6.1): in his fist until G4 sets it down; a prop of the set from then on (planted, falling, lying)
+    const inWorld = shot === 'tear' || shot === 'verdict' || shot === 'saulAlone' || shot === 'rise';
+    this.spearFrom.set = false;
+    if (inWorld) {
+      this.spearToWorld();
+      this.spearAt(shot === 'tear' ? -1 : 10);
+    } else this.spearToHand();
+    // G7 is what Samuel sees (the lens is his eyes): he is not in the frame
+    samuel.root.visible = shot !== 'saulAlone';
     this.shot = shot;
     this.clock = 0;
     for (const a of [saul, samuel, this.cast.armourBearer]) {
@@ -439,6 +523,14 @@ export class GilgalPerformance {
       else if (shot === 'verdict' || shot === 'saulAlone' || shot === 'rise') {
         // already torn: the piece in Saul's fist
         saul.place(s0.pos, s0.yaw);
+        // (CUT v6.1) still on his LEFT knee where the tear left him, sunk back onto his heel (G5b -> G6 -> G7 join
+        // continuous time): the legs of the kneeling stride, the kneel blend full
+        saul.kneel.side = 'L';
+        saul.kneel.fwd = 0.46;
+        saul.kneel.w = 1;
+        saul.kneel.sit = 0.55;
+        saul.mocap.playLayer('lunge', 'walk', { mask: 'legs', time: 0.74, speed: 0, fade: 0.001 });
+        this.lungeLegs = true;
         saul.armPose.R.pose = POSES.clothFistR; // G6 and G7 both open with the fist at his belt (G7 lifts it)
         saul.armPose.R.weight = 1;
         // a closed FIST round the wool (the 'grip' pose wraps the spear's shaft radius and read half-open in G7)
@@ -491,6 +583,9 @@ export class GilgalPerformance {
       saul.armPose.R.pose = mixPose(POSES.spearCarryR, POSES.spearRaiseR, up);
       saul.armPose.R.weight = shot === 'dustWall' || shot === 'king' ? 0.65 : 1;
       saul.upright.R.weight = shot === 'dustWall' || shot === 'king' ? 0.75 : 1;
+      // (CUT v6.1) the fist stays closed round the shaft (in Version 11 an open hand stood beside it in G4)
+      saul.human.rig.setFingers('R', 'grip');
+      saul.reach.R.weight = 0;
     }
     switch (shot) {
       case 'dustWall':
@@ -558,6 +653,23 @@ export class GilgalPerformance {
         this.saulFace.jawTarget = 0.28 * (1 - ss(0.0, 0.45, t)) + 0.05 + 0.03 * Math.max(0, Math.sin(t * 2.4));
         saul.breath.amp = 0.95 - 0.35 * ss(1, SHOT_LEN.silence, t);
         saul.breath.rate = 0.5;
+        // the spear (CUT v6.1): lowered in his fist (begun at G3 `notice`), then set down planted at his right side
+        // (plant0 -> plant1) — the fist stays closed round the shaft; G5a picks it up planted there
+        if (t >= SPEAR.plant0) {
+          if (this.spearMode === 'hand') {
+            const sp = saul.props.spear;
+            if (sp) {
+              sp.updateWorldMatrix(true, false);
+              sp.matrixWorld.decompose(this.spearFrom.pos, this.spearFrom.quat, this._p);
+              this.spearFrom.set = true;
+            }
+            this.spearToWorld();
+          }
+          const grip = this.spearAt(-1, 1 - ss(SPEAR.plant0, SPEAR.plant1, t));
+          const w = ss(SPEAR.plant0, SPEAR.plant0 + 0.3, t);
+          this.holdShaft(grip, w, s.yaw);
+          saul.armPose.R.weight = 1 - w;
+        }
         break;
       }
       case 'tear':
@@ -623,7 +735,10 @@ export class GilgalPerformance {
       this.samFace.set({ sad: 0.6 });
     } else if (shot === 'verdict') this.verdictSamuel(t, m);
     else {
-      samuel.place(m.pos, m.yaw);
+      // (CUT v6.1) G4 `turnGo`: the verse read, he begins to turn away — the turn-step G5a picks up (a cut on action)
+      const turning = shot === 'silence' && t >= BEATS.silence.turnGo;
+      if (!turning) samuel.place(m.pos, m.yaw);
+      else this.g4Turn(t, m);
       samuel.mocap.lookAt = this.eyeOf(saul, this.samTarget);
       if (shot === 'silence') {
         // grieving, eyes on the road before him as he walks; as the roar dies he lifts his head to the king
@@ -634,7 +749,12 @@ export class GilgalPerformance {
         samuel.breath.amp = 0.55 - 0.15 * ss(BEATS.silence.step + 0.7, BEATS.silence.step + 2.2, t);
       }
       samuel.lookRate = 2;
-      if (shot === 'silence') {
+      if (turning) {
+        // turning away: his eyes go ahead, to his way (east), away from the king
+        samuel.human.bones.head.getWorldPosition(this.samTarget);
+        samuel.mocap.lookAt = this.samTarget.add(this._f.set(Math.sin(samuel.yaw) * 20, -1, Math.cos(samuel.yaw) * 20));
+        samuel.lookRate = 4;
+      } else if (shot === 'silence') {
         // (cut7, CUT v5.2) the walk up the road, speed-matched to the blocking, the last step at `step`; then he stands
         // (listen_sad: the breath, the small weight shifts)
         const cur = samuel.mocap.current()?.name;
@@ -650,8 +770,10 @@ export class GilgalPerformance {
     if (armourBearer) {
       // one step behind the king — in the tear he stays where the king stood (he does not slide after the lunge)
       // (cut4 v6: in G5a/G5b he stays well back west, x < 7, clear of the two-shot)
-      const anchor = shot === 'tear' ? saulAt('tear', 0) : s;
-      const bd = shot === 'tear' ? 3.4 : 1.6;
+      // (CUT v6.1: the tear, the verdict and G7 are continuous time on G4's marks — he stays where he stood)
+      const after = shot === 'tear' || shot === 'verdict' || shot === 'saulAlone' || shot === 'rise';
+      const anchor = after ? saulAt('tear', 0) : s;
+      const bd = after ? 3.4 : 1.6;
       const back = V3(-Math.sin(anchor.yaw) * bd, 0, -Math.cos(anchor.yaw) * bd).add(V3(Math.cos(anchor.yaw) * 0.7, 0, -Math.sin(anchor.yaw) * 0.7));
       armourBearer.place(anchor.pos.clone().add(back), anchor.yaw);
       const a = armyAt(shot, t);
@@ -667,6 +789,22 @@ export class GilgalPerformance {
     this.samFace.update(adt);
     saul.update(adt, camera, viewportH, this.wind);
     samuel.update(adt, camera, viewportH, this.wind);
+  }
+
+  /** (CUT v6.1) G4 from `turnGo`: the old man's turn-step to his left (Rocketbox turn_go_L, its root motion applied) —
+   *  the same take G5a continues (tearLateEntry picks the clip up TURN_LEAD s in) */
+  private g4Turn(t: number, m: { pos: THREE.Vector3; yaw: number }) {
+    const { samuel } = this.cast;
+    const u = t - BEATS.silence.turnGo;
+    if (this.samPhase === 0) {
+      samuel.place(m.pos, m.yaw);
+      samuel.mocap.rootMotion = 'apply';
+      samuel.mocap.rootTarget = samuel.root;
+      samuel.cancelHeading = false;
+      samuel.mocap.play('turn_go_L', { fade: u < 0.05 ? 0.2 : 0, time: Math.max(0, u) });
+      this.samPhase = 1;
+    }
+    samuel.root.position.y = this.ground(samuel.root.position.x, samuel.root.position.z);
   }
 
   /**
@@ -686,32 +824,28 @@ export class GilgalPerformance {
     const right = this._r.set(-Math.cos(yaw), 0, Math.sin(yaw));
     if (tear) tear.cornerWorld(this.corner);
     else samuel.root.getWorldPosition(this.corner).setY(this.corner.y + 0.5);
-    // ---- placement: the blocking's path (the pleading walk, the rush), then onto his knee behind the corner
-    // (TEAR_KNEEL: root -> grip, his arm stretched down-forward); the knee does not slide: the mark is fixed once down
-    const kneel = ss(A.lunge + 0.5, A.grip - 0.08, at);
-    if (!this.kneelSet) {
-      const tx = this.corner.x - fwd.x * TEAR_KNEEL.back - right.x * TEAR_KNEEL.side;
-      const tz = this.corner.z - fwd.z * TEAR_KNEEL.back - right.z * TEAR_KNEEL.side;
-      const k = ss(A.lunge + 0.25, A.grip - 0.1, at);
-      this.kneelAt.set(THREE.MathUtils.lerp(s.pos.x, tx, k), 0, THREE.MathUtils.lerp(s.pos.z, tz, k));
-      if (at >= A.grip - 0.1) this.kneelSet = true;
-    }
+    // ---- placement (CUT v6.1): on his G4 mark until `lunge`, then two quick steps and the kneeling stride onto the
+    // kneel mark (gilgalBlocking tearPath / tearKneelMark: closed form — a seek lands on the same place); the knee
+    // strikes the ground at `kneel` and never slides
+    this.kneelAt.copy(SAUL_TEAR).lerp(tearKneelMark(), tearPath(at));
     saul.place(this.kneelAt, yaw);
-    // ---- clips: the pleading stand -> walking after him (speed-matched to his way: two slow steps, a hesitation, the
-    // rush) -> the lunge stride (the walk frozen in its long stride, RIGHT foot forward) -> on his knee
+    // ---- clips: standing (idle_king) -> the two quick steps (the walk, speed-matched to the path) -> the kneeling stride
+    // (the walk frozen in its long stride, RIGHT foot forward, on the legs) -> on his knee
     const cur = saul.mocap.current()?.name;
-    const walking = at >= A.turn + 0.3 && at < A.lunge + 0.5;
-    if (walking && cur !== 'walk') saul.mocap.play('walk', { fade: 0.25, sync: true, time: 0.25 });
-    if (cur === 'walk') saul.mocap.matchSpeed('walk', THREE.MathUtils.clamp(Math.hypot(saul.velocity.x, saul.velocity.z), 0.45, 2.3));
-    if (at >= A.lunge + 0.5 && cur !== 'idle_king') saul.mocap.play('idle_king', { fade: 0.3, time: 0.5 });
-    if (at >= A.lunge + 0.42 && !this.lungeLegs) {
+    const stepping = at >= A.lunge - 0.04 && at < A.kneel - 0.32;
+    if (stepping && cur !== 'walk') saul.mocap.play('walk', { fade: 0.18, sync: true, time: 0.25 });
+    if (cur === 'walk') saul.mocap.matchSpeed('walk', THREE.MathUtils.clamp(Math.hypot(saul.velocity.x, saul.velocity.z), 0.6, 2.4));
+    if (at >= A.kneel - 0.32 && cur !== 'idle_king') saul.mocap.play('idle_king', { fade: 0.3, time: 0.5 });
+    if (at >= A.kneel - 0.42 && !this.lungeLegs) {
       saul.mocap.playLayer('lunge', 'walk', { mask: 'legs', time: 0.74, speed: 0, fade: 0.2 });
       this.lungeLegs = true;
     }
-    // ---- body: leaning after him as he pleads; down on his LEFT knee (the right foot planted ahead) as the hand
-    // reaches the corner; leaning far forward into the reach, straining back while he holds (grip -> pull), back and
-    // upright as he pulls; when the wool gives he sinks back onto his heel (slowly, in the slow motion)
-    const pleadArm = ss(A.turn + 0.6, A.turn + 1.05, at) * (1 - ss(A.lunge + 0.1, A.lunge + 0.45, at));
+    // ---- body: a breath of stillness (the old man turns his back), the spear let go, the rush (leaning into it), down
+    // on his LEFT knee (the right foot planted ahead) at `kneel`, then leaning far forward into the reach for the
+    // corner; straining back while he holds (grip -> pull), back and upright as he pulls; when the wool gives he sinks
+    // back onto his heel (slowly, in the slow motion)
+    const kneel = ss(A.kneel - 0.42, A.kneel, at);
+    const rush = ss(A.lunge - 0.05, A.lunge + 0.3, at) * (1 - ss(A.kneel - 0.3, A.kneel, at));
     const pull = ss(A.pull - 0.06, A.rip + 0.08, at);
     const hold = ss(A.grip, A.grip + 0.25, at) * (1 - pull);
     const recoil = ss(A.free - 0.04, A.free + 0.14, at);
@@ -720,30 +854,44 @@ export class GilgalPerformance {
     saul.kneel.fwd = 0.46;
     saul.kneel.w = kneel;
     saul.kneel.sit = 0.55 * sink;
-    saul.body.drop = 0.12 * ss(A.lunge + 0.35, A.lunge + 0.6, at) * (1 - kneel);
-    const reachLean = ss(A.lunge + 0.3, A.grip - 0.05, at);
-    saul.body.lean = 0.1 * pleadArm + 0.62 * reachLean - 0.07 * hold - 0.34 * pull - 0.2 * recoil + 0.05 * sink;
-    saul.body.twist = 0.08 * pleadArm + 0.24 * reachLean - 0.08 * pull;
+    // the weight drops into the knee as it lands (and a small rebound), never a float
+    const land = Math.exp(-Math.pow((at - A.kneel - 0.05) / 0.09, 2));
+    saul.body.drop = 0.1 * rush + 0.05 * land;
+    const reachLean = ss(A.kneel - 0.15, A.grip - 0.05, at);
+    saul.body.lean = 0.14 * rush + 0.58 * reachLean - 0.07 * hold - 0.34 * pull - 0.2 * recoil + 0.05 * sink;
+    saul.body.twist = 0.06 * rush + 0.24 * reachLean - 0.08 * pull;
     saul.body.side = 0.04 * reachLean;
     saul.headingRate = 12;
-    // ---- arms: the right arm out to him as he pleads (open hand toward his back), then the hand to the corner (IK,
-    // the palm turned toward the cloth: the knuckles to the south / the lens side); the helmet stays under the left arm
+    // ---- the right hand: closed round the planted shaft until `drop`; it opens and the spear falls (SpearFall, the
+    // set's prop from here on); the empty hand swings with the rush, then reaches for the corner (IK, the palm turned
+    // toward the cloth) and closes on it at `grip`; the helmet stays under the left arm
     saul.armPose.R.pose = null;
     saul.armPose.R.weight = 0;
     saul.upright.R.weight = 0;
-    const palm = this.tmp2.copy(right).multiplyScalar(-1).addScaledVector(fwd, 0.25).add(this._p.set(0, -0.35, 0)).normalize();
-    saul.reach.R.palm = palm;
-    saul.reach.R.thumb = this._th.set(0, 1, 0).addScaledVector(fwd, 0.55).normalize();
-    saul.reach.R.orient = ss(A.lunge + 0.3, A.grip - 0.1, at);
-    if (!this.grabbed) {
-      const toCorner = ss(A.lunge + 0.1, A.lunge + 0.6, at);
-      // the plead: toward the old man's back at chest height (the arm cannot reach him: it stretches out to him)
-      samuel.headWorld(this.tearTarget).add(this._p.set(0, -0.5, 0)).addScaledVector(fwd, -0.15);
-      saul.reach.R.target = this.tearTarget.lerp(this.corner, toCorner);
-      saul.reach.R.weight = Math.max(0.55 * pleadArm, ss(A.lunge + 0.25, A.grip - 0.06, at));
-      if (pleadArm > 0.2 || at >= A.lunge) saul.human.rig.setFingers('R', 'open');
+    const tau = at - A.drop;
+    const grip = this.spearAt(tau);
+    if (tau < 0) {
+      this.holdShaft(grip, 1, yaw);
+    } else if (!this.grabbed) {
+      // the hand lets go (it follows the shaft a moment as it opens), then the arm drops and swings with the rush
+      const letGo = ss(0, 0.28, tau);
+      const toCorner = ss(A.kneel - 0.55, A.grip - 0.12, at);
+      if (letGo < 1 && toCorner <= 0) {
+        this.holdShaft(grip, 1 - letGo, yaw);
+        saul.human.rig.setFingers('R', 'open');
+      } else {
+        const palm = this.tmp2.copy(right).multiplyScalar(-1).addScaledVector(fwd, 0.25).add(this._p.set(0, -0.35, 0)).normalize();
+        saul.reach.R.palm = palm;
+        saul.reach.R.thumb = this._th.set(0, 1, 0).addScaledVector(fwd, 0.55).normalize();
+        saul.reach.R.orient = toCorner;
+        saul.reach.R.target = this.tearTarget.copy(this.corner);
+        saul.reach.R.weight = ss(A.kneel - 0.5, A.grip - 0.06, at);
+        saul.human.rig.setFingers('R', 'open');
+      }
       if (at >= A.grip && tear) {
         this.grabbed = true;
+        saul.reach.R.target = this.tearTarget.copy(this.corner);
+        saul.reach.R.weight = 1;
         saul.human.rig.setFingers('R', 'fist');
         saul.update(0); // the hand exactly at the corner this frame
         tear.grab(saul.human.sockets.handGripR);
@@ -760,13 +908,14 @@ export class GilgalPerformance {
         .addScaledVector(right, 0.04 * recoil);
       saul.reach.R.target = this.tearTarget;
       saul.reach.R.weight = 1;
+      saul.human.rig.setFingers('R', 'fist');
     }
     // the rip runs rip -> free; at `free` the last threads of the weave let go (MeilTear releases a tear-line vertex
     // only at progress >= its threshold + 0.12, up to ~1.11: TORN = 1.2 lets go of every one)
     if (tear) tear.progress = ss(A.rip, A.free, at) + (TORN - 1) * ss(A.free - 0.04, A.free + 0.04, at);
-    // ---- eyes: on the old man as he pleads (after him); down to the corner as he lunges; then UP to him as he holds
+    // ---- eyes: on the old man as he turns his back; down to the corner as he goes for it; then UP to him as he holds
     // (his face in profile for the insert): pleading, never violent — the brows up, the mouth open (visual-bible 3.3)
-    if (at < A.lunge + 0.3) saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);
+    if (at < A.kneel - 0.4) saul.mocap.lookAt = this.eyeOf(samuel, this.saulTarget);
     else if (at < A.grip - 0.02) saul.mocap.lookAt = this.corner;
     else saul.mocap.lookAt = samuel.headWorld(this.saulTarget);
     saul.lookRate = 9;
@@ -781,11 +930,11 @@ export class GilgalPerformance {
     // the brows climb (anguish, never the frown of violence)
     this.saulFace.units.LeftInnerBrowUp = this.saulFace.units.RightInnerBrowUp = 0.2 * plead + 0.3 * reach + 0.15 * gone;
     this.saulFace.units.LeftOuterBrowUp = this.saulFace.units.RightOuterBrowUp = 0.08 * plead + 0.12 * reach;
-    // a pleading word before the old man turns (15:25 "וְשׁוּב עִמִּי"), a call after him as he walks away; the mouth
-    // opens with the lunge (a cry) and hangs open as it tears — wide enough to read through the beard in profile
-    const call = speechJaw(at, A.turn + 0.2, 3, [], 3) * 1.2 + speechJaw(at - (A.turn + 0.75), A.lunge - A.turn - 0.8, 4, [0.55], 5) * 1.35;
+    // a word after him as he turns (15:25 "וְשׁוּב עִמִּי"); the mouth opens with the rush (a cry) and hangs open as it
+    // tears — wide enough to read through the beard in profile
+    const call = speechJaw(at, Math.max(0, A.drop - 0.1), 3, [], 3) * 1.25;
     this.saulFace.jawTarget = call + 0.38 * reach * (1 - 0.3 * gone) + 0.1 * gone;
-    this.saulFace.lips.lowerLipDown = 0.4 * reach + 0.12 * pleadArm;
+    this.saulFace.lips.lowerLipDown = 0.4 * reach;
     this.saulFace.lips.UpperLipUp = 0.16 * reach;
     saul.breath.amp = 0.7 + 0.25 * reach + 0.25 * gone;
     saul.breath.rate = 0.7;
@@ -915,6 +1064,10 @@ export class GilgalPerformance {
     // the eyes stay on the king, a long breath out
     const after = ss(V.speechEnd, V.speechEnd + 0.6, t);
     eyes.y -= 0.025 * after;
+    // (CUT v6.1) after the last word his eyes go DOWN to the king at his feet — to the fist with the torn corner: G7 is
+    // what he sees (an eyeline cut)
+    const down = ss(V.lookDown - 0.05, V.lookDown + 0.3, t);
+    if (down > 0) eyes.lerp(saul.human.sockets.handGripR.getWorldPosition(this._p), down);
     samuel.headRoll = -0.07 * ss(V.turnBack + 0.3, V.speech, t) + 0.025 * Math.sin(t * 1.3) - 0.02 * after;
     if (this.blinks === 0 && t >= V.speech - 0.28) {
       samuel.human.rig.blink();
@@ -982,8 +1135,10 @@ const STAFF_HOLD: Record<'L' | 'R', ArmPose> = {
   L: { ua: [-0.14, 0.08, 0.14], fa: [-1.15, 0, 0], hd: [0.1, 0, -0.05] },
 };
 
-/** the demanding elder's raised arm (proxy Euler, over the capture) */
-const DEMAND_R: ArmPose = { ua: [-2.45, 0.2, -0.38], fa: [-0.55, 0.1, 0], hd: [0.35, 0, 0.1] };
+/** the demanding elder's arm thrust out at Samuel (proxy Euler, over the capture)
+ *  (CUT v6.1, cut7: thrust FORWARD at shoulder height, not up — raised above the shoulder the wide sleeve of his robe
+ *  stretched into a flat white sheet and his hand was lost in it, Version 11 K034.0) */
+const DEMAND_R: ArmPose = { ua: [-1.62, 0.15, -0.3], fa: [-0.38, 0.1, 0], hd: [0.42, 0, 0.1] };
 
 /** the shot's beats (P5 of the contract, introScript 'ramah' : 'elders'; seconds of the shot) */
 const RAMAH_BEATS = (() => {

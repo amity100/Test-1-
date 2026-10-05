@@ -500,9 +500,14 @@ export class MeilTear {
     const palm = socket.parent?.getObjectByName(socket.name.replace('handGrip', 'palm'));
     if (palm && palm !== socket) _d.copy(palm.getWorldPosition(_s)).applyMatrix4(_m).multiplyScalar(0.55);
     else _d.set(0, 0, 0);
+    // (CUT v6.1, cut7) the wool goes INTO the fist: every grabbed point's offset is taken from the CORNER (not from the
+    // hand) and bunched round the grip — a hand that closed a few centimetres short of the corner used to hold the
+    // cloth at that distance, a fist closed in the air beside it (Version 11, G5b); now the corner and the wool round it
+    // are drawn into the fist (handOn ramps it over ~0.12 s: the tent of cloth pulled into the hand)
+    _a.fromArray(this.p, this.cornerP * 3).applyMatrix4(_m);
     for (let k = 0; k < this.grabW.length; k++) {
       if (this.grabW[k] <= 0) continue;
-      _v.fromArray(this.p, k * 3).applyMatrix4(_m);
+      _v.fromArray(this.p, k * 3).applyMatrix4(_m).sub(_a);
       // pull the offsets toward the fist (the cloth is bunched in the hand, a wad round the fingers)
       _v.multiplyScalar(BUNCH).add(_d);
       _v.toArray(this.grabOff, k * 3);

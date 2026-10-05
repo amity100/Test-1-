@@ -1,7 +1,7 @@
 /*
  * dev/crowd.html — harness of the film crowds (src/film/crowd).
  *   ?view=dust|side|roar|close|far|phil|sheet  &shot=<gilgal shot>  &t=<shot seconds>  &tier=desktop-high|mobile-low
- *   &w=&h=  &ranks=N
+ *   &w=&h=  &ranks=N  &heroes=0 (the crowd figures alone)
  * A plain late-afternoon Jordan-valley stage (low sun in the west, marl ground, haze) so the crowd can be judged on
  * its own; window.__info reports bake time, LOD counts, triangles, CPU per update.
  */
@@ -60,7 +60,8 @@ async function main() {
   let update: (dt: number) => void;
   let target = new THREE.Vector3();
   if (!phil) {
-    const army = await GilgalArmy.create({ tier, ranks: P.get('ranks') ? +P.get('ranks')! : undefined });
+    // (host1 wave 6) &heroes=0: the crowd figures alone (no FilmActor soldiers near the lens)
+    const army = await GilgalArmy.create({ tier, ranks: P.get('ranks') ? +P.get('ranks')! : undefined, heroes: P.get('heroes') === '0' ? false : undefined });
     info.bakeMs = Math.round(army.anim.bakeMs);
     info.frames = army.anim.totalFrames;
     info.lodTris = army.crowd.lodTriangles;

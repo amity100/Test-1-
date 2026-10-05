@@ -217,7 +217,7 @@ export class FilmSound {
    * sinks to `tail` × level (1 = held at full voice to the end). With `fall` (CUT v5.2: s after `t`, the cut into G4's
    * hush) it is held at full voice to `fall`, then sags and dies away (≈2 s, the stamping thinning with it) instead.
    */
-  roar(o: Out, t: number, dur: number, level: number, spread = 0.45, tail = 0.55, fall?: number): void {
+  roar(o: Out, t: number, dur: number, level: number, spread = 0.45, tail = 0.55, fall?: number, thin?: number): void {
     const v = new Voice(this.c);
     const bus = v.gain(0), p = v.pan(0);
     const drive = v.shaper(this.drive ?? this.c.curve('drive', 3));
@@ -226,7 +226,12 @@ export class FilmSound {
     B.setValueAtTime(0, t); B.linearRampToValueAtTime(level * 0.6, t + spread * 0.6);
     B.linearRampToValueAtTime(level, t + spread + 0.5);
     const fl = fall !== undefined && Number.isFinite(fall) && fall < dur - 0.3 ? Math.max(spread + 0.7, fall) : -1;
-    if (fl > 0) {
+    // CUT v6.1 (G3 -> G4, a cut on sound and eyeline): from `thin` the nearest men turn their heads and fall silent one
+    // by one — the shout thins — and it BREAKS OFF exactly at `dur` (the cut: they have seen Samuel); its hall rings on
+    const th = fl < 0 && thin !== undefined && Number.isFinite(thin) && thin < dur - 0.1 ? Math.max(spread + 0.6, thin) : -1;
+    if (th > 0) {
+      B.setValueAtTime(level, t + th); B.linearRampToValueAtTime(level * 0.42, t + dur - 0.05); B.linearRampToValueAtTime(0, t + dur);
+    } else if (fl > 0) {
       // CUT v5.2 (G4): the roar is not switched off — at `fall` the ranks run out of breath: the shout sags a little at
       // once and dies away over ≈1.5-2 s (the drive cleaning up as it goes, the voices dropping out one by one)
       B.setValueAtTime(level, t + fl - 0.04); B.linearRampToValueAtTime(level * 0.8, t + fl + 0.1);
@@ -261,21 +266,22 @@ export class FilmSound {
       os.frequency.exponentialRampToValueAtTime(f0 * rand(0.95, 1.08), on + rand(1, 1.8));
       const ge = v.gain(0), pn = v.pan(rand(-0.9, 0.9));
       ge.gain.setValueAtTime(0, on); ge.gain.linearRampToValueAtTime(rand(0.5, 1), on + rand(0.08, 0.2));
-      // voices drop out and come back (breaths)
-      const end = t + dur;
+      // voices drop out and come back (breaths); thinning (v6.1) — after `thin` each falls silent at its own moment
+      const end = t + (th > 0 ? th : dur);
       let x = on + rand(1.4, 2.6);
       while (x < end - 0.4) {
         ge.gain.setTargetAtTime(0.05, x, 0.06);
         ge.gain.setTargetAtTime(rand(0.5, 1), x + rand(0.25, 0.45), 0.08);
         x += rand(1.6, 2.8);
       }
+      if (th > 0) ge.gain.setTargetAtTime(0, t + th + rand(0, Math.max(0.05, dur - th - 0.1)), 0.06);
       os.connect(ge); ge.connect(pn); pn.connect(vox);
     }
     // stamping / spear butts on the ground
     const st = v.noise('brown', t), sl = v.filter('lowpass', 140, 0.8), sg = v.gain(0);
     const S = sg.gain;
     S.setValueAtTime(0, t);
-    for (let x = spread; x < (fl > 0 ? fl + 0.5 : dur) - 0.2; x += rand(0.18, 0.32)) {
+    for (let x = spread; x < (fl > 0 ? fl + 0.5 : th > 0 ? th + 0.15 : dur) - 0.2; x += rand(0.18, 0.32)) {
       const w = fl > 0 && x > fl ? Math.max(0, 1 - (x - fl) / 0.5) : 1;
       S.setValueAtTime(0, t + x); S.linearRampToValueAtTime(rand(0.8, 1.4) * w, t + x + 0.01); S.setTargetAtTime(0, t + x + 0.01, 0.05);
     }
@@ -306,6 +312,41 @@ export class FilmSound {
       G.setValueAtTime(0, tt); G.linearRampToValueAtTime(level * g0, tt + 0.07 + dl * 0.05); G.setTargetAtTime(0, tt + 0.1 + dl * 0.05, d * 0.35);
     }
     v.play(t, t + 3.4);
+  }
+
+  /**
+   * A spear let fall onto packed earth (CUT v6.1, G5a: Saul's hand opens and the spear drops): the shaft's dull knock on
+   * the ground (a woody thump, its low body), one short bounce, the bronze head and butt rattling, a puff of dust. Meant
+   * to sit under the music, never over it.
+   */
+  spearFall(o: Out, t: number, level: number, pan = -0.2): void {
+    const v = new Voice(this.c);
+    const p = v.pan(pan);
+    out2(p, o, 0.35, v);
+    const knock = (tt: number, lv: number): void => {
+      const n = v.noise('pink', tt), bp = v.filter('bandpass', this.c.hz(rand(240, 340)), 1.8), g = v.gain(0);
+      g.gain.setValueAtTime(0, tt); g.gain.linearRampToValueAtTime(lv * 2.2, tt + 0.003); g.gain.setTargetAtTime(0, tt + 0.003, 0.035);
+      n.connect(bp); bp.connect(g); g.connect(p);
+      const th = v.osc('sine', this.lite ? 180 : 110, 0, tt), tg = v.gain(0);
+      th.frequency.setValueAtTime(this.lite ? 190 : 120, tt); th.frequency.exponentialRampToValueAtTime(this.lite ? 120 : 70, tt + 0.12);
+      tg.gain.setValueAtTime(0, tt); tg.gain.linearRampToValueAtTime(lv * 0.9, tt + 0.004); tg.gain.setTargetAtTime(0, tt + 0.006, 0.05);
+      th.connect(tg); tg.connect(p);
+    };
+    knock(t, level);
+    const b1 = t + rand(0.12, 0.17);
+    knock(b1, level * 0.42);
+    // the bronze: a few short, dull inharmonic ticks as the head and the butt-spike settle
+    for (let i = 0; i < 4; i++) {
+      const tt = (i < 2 ? t : b1) + rand(0.004, 0.06), f = rand(1700, 3200);
+      const os = v.osc('sine', f, 0, tt), og = v.gain(0);
+      og.gain.setValueAtTime(0, tt); og.gain.linearRampToValueAtTime(level * rand(0.12, 0.22), tt + 0.0015); og.gain.setTargetAtTime(0, tt + 0.0015, rand(0.012, 0.03));
+      os.connect(og); og.connect(p);
+    }
+    // a puff of dust
+    const d = v.noise('pink', t), dl = v.filter('bandpass', 1300, 0.7), dg = v.gain(0);
+    dg.gain.setValueAtTime(0, t); dg.gain.linearRampToValueAtTime(level * 0.25, t + 0.03); dg.gain.setTargetAtTime(0, t + 0.04, 0.12);
+    d.connect(dl); dl.connect(dg); dg.connect(p);
+    v.play(t, t + 0.9);
   }
 
   /** Spear shafts knocking on leather-faced wooden shields (visual-bible 3.16): a dull woody thud. */

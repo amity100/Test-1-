@@ -327,7 +327,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     // egypt: the lens high over the region · flock: the road out of Egypt draws itself as a FLOCK of light — many small
     // lights moving together behind one, through the wilderness (Ps 78:52) · jordan: across the Jordan · land: the lens
     // sinks over the land of Israel, scattered tribes, no king (Judg 21:25) — and goes on toward the coast
-    beats: { egypt: 0.6, flock: 1.4, verse: 1.8, jordan: 4.8, gilgal: 5.4, land: 5.8, noKing: 6.0 },
+    // (map1, CUT v6.1: egypt 0.6 -> 0.9 — the lens lifts off P1's ridges as the match dissolve ends; flock 1.4 -> 1.7 —
+    //  the lights leave the delta as it comes into view on the soar)
+    beats: { egypt: 0.9, flock: 1.7, verse: 1.8, jordan: 4.8, gilgal: 5.4, land: 5.8, noKing: 6.0 },
     text: [
       { at: 1.8, seconds: 3.8, kind: 'verse', quote: 'ps_78_52_flock', stagger: 0.15, side: 'center', v: 'bottom', lines: 1 },
       { at: 6.0, seconds: 4.4, kind: 'verse', quote: 'jdg_21_25_no_king', stagger: 0.12, side: 'center', v: 'bottom', lines: 2 },
@@ -408,7 +410,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
     // drop: Saul's right hand opens and THE SPEAR FALLS (the shaft strikes the dust and lies there) · lunge: his two
     // quick steps after Samuel · kneel: the knee strikes the ground · grip: the empty right fist closes on the corner
     // of the me'il — the cut to G5b comes ~0.4 s later as the pull begins (a cut on action)
-    beats: { turn: 0.0, drop: 0.5, lunge: 0.8, kneel: 1.9, grip: 2.6 },
+    // (cut7, wave 6: set — spearHits: the shaft strikes the dust, the knock; the fall's own physics from `drop`,
+    // src/film/gilgal/spearFall.ts — a 2.5 m spear topples in ~1 s)
+    beats: { turn: 0.0, drop: 0.5, spearHits: 1.52, lunge: 0.8, kneel: 1.9, grip: 2.6 },
     direction: 'Samuel turns to go (15:27) — the same turn, the same places as the end of G4 (Saul a pace from him). Saul '
       + 'lets the spear fall from his hand, ON SCREEN — it topples, strikes the dust and lies there (it never vanishes) — '
       + 'takes two quick steps after him, drops to his knee and seizes the corner of his mantle with that hand.',

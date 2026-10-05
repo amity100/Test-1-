@@ -153,6 +153,10 @@ varying vec3 vCwColor;
 varying vec4 vCwInfo; // region, metalness, roughness, stripe flag
 varying vec3 vCwBind;
 varying vec3 vCwHair; // models pass: this man's hair colour (brows, stubble line)
+// (host1, wave 6) the region for the fragment's branches, NOT interpolated: an interpolated region turned every triangle
+// between two regions (skin 0 / beard 6, skin / scalp) into a band of scalp, eye, tunic, belt or hair shading — the hard
+// pale line round the beards
+flat varying float vCwReg;
 vec3 cwPos;
 vec3 cwNrm;
 
@@ -182,6 +186,7 @@ vec3 cwThigh(vec3 p, vec3 hip, vec3 knee, float r0, float r1) {
 void crowdCompute() {
   int reg = int(cRegion + 0.5);
   int mask = int(iMask + 0.5);
+  vCwReg = float(reg);
   if (reg >= 5 && ((mask >> (reg - 5)) & 1) == 0) { cwPos = vec3(0.0, -1000.0, 0.0); cwNrm = vec3(0.0, 1.0, 0.0); vCwColor = vec3(0.0); vCwInfo = vec4(0.0); vCwBind = vec3(0.0); vCwHair = vec3(0.0); return; }
   vec3 p; vec3 n;
   if (cProp > 0.5) {
@@ -261,7 +266,17 @@ void crowdCompute() {
   else if (reg == R_HAIR || reg == R_BEARD) {
     // road dust in the hair and beard, and the dust in the air between: far heads must not read as floating black dots
     float dd = smoothstep(20.0, 110.0, length(cameraPosition - iPose.xyz));
-    col = mix(hair * (0.9 + 0.2 * h2.x), uDustColor * 0.4, 0.18 + 0.4 * dd * uDust);
+    vec3 hc = hair * (0.9 + 0.2 * h2.x);
+    if (reg == R_BEARD) {
+      // (host1, wave 6 — "the beards look glued on like a costume") a beard is never a black mask: a little warmer and
+      // lighter than the hair of the head (sun-bleached), its strands lit in the fragment; the bake's shell is white in
+      // cColor, the skin under it carries the skin's own colour: that skin is the roots and the shadow, the skin showing
+      hc = mix(hc, vec3(0.072, 0.047, 0.03) * (0.85 + 0.3 * h2.y), 0.5);
+      bool shell = cColor.r > 0.97 && cColor.g > 0.97 && cColor.b > 0.97;
+      if (!shell) hc = mix(cc * mix(vec3(0.8, 0.78, 0.76), vec3(1.1, 1.04, 1.0), h.x), hc, 0.5);
+      stripe = shell ? 1.0 : 0.0;
+    }
+    col = mix(hc, uDustColor * 0.4, 0.18 + 0.4 * dd * uDust);
     rough = 0.78;
   }
   else if (reg == R_TUNIC) {
@@ -300,10 +315,12 @@ void crowdCompute() {
 const FRAG_HEAD = DEFINES + /* glsl */ `
 uniform float uArmy, uHemY, uBeltY;
 uniform vec3 uAccent[4];
+uniform vec3 uSkin;
 varying vec3 vCwColor;
 varying vec4 vCwInfo;
 varying vec3 vCwBind;
 varying vec3 vCwHair;
+flat varying float vCwReg;
 // models pass (CUT v2): the face of the baked 'man' body in bind space (src/assets/human/man/rig.json landmarks):
 // eye centre (x mirrored), eyeball radius, mouth line, nose tip
 const vec3 CW_EYE = vec3(0.0288, 1.5991, 0.1210);
@@ -352,7 +369,7 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
         '#include <color_fragment>',
         /* glsl */ `#include <color_fragment>
         vec3 cwc = vCwColor;
-        int cwr = int(vCwInfo.x + 0.5);
+        int cwr = int(vCwReg + 0.5);
         float cwRough = vCwInfo.z;
         float cwMetal = vCwInfo.y;
         float cwDist = length(vViewPosition);
@@ -385,7 +402,39 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
             } else if (vCwBind.y < uHemY + 0.05) cwc *= 0.6 + 0.4 * step(0.5, fract(atan(vCwBind.x, vCwBind.z) * 9.0));
             else if (pf > 1.5 && vCwBind.y < uHemY + 0.1) cwc = uAccent[int(pf > 3.5 ? 1.0 : 0.0) + (pElite ? 2 : 0)] * 0.9;
           }
-        } else if (cwr == R_HAIR || cwr == R_BEARD) {
+        } else if (cwr == R_BEARD) {
+          // (host1, wave 6) the beard grows out of the skin: its edge feathers into the cheeks, the neck and toward the
+          // ears over ~2 cm (the bake's limits, tools/crowd/bake_crowd.py: the cheek line 1.2 cm under the nose tip, the
+          // sideburns up to the eyes beside the ears, the neck 5.5 cm under the chin; the shell hangs 2.5 cm lower there),
+          // ragged (strand-scale noise), the skin beneath darkened by the roots and fading back to skin at the edge
+          vec3 b = vCwBind;
+          bool shellF = vCwInfo.w > 0.5;
+          float sb = smoothstep(0.052, 0.066, abs(b.x)) * step(0.0187, b.z);
+          float top = mix(1.545, 1.609, sb);
+          float back = mix(0.0487, 0.0187, sb);
+          float eTop = (top - b.y) / 0.02;
+          float eBot = (b.y - (shellF ? 1.405 : 1.432)) / 0.025;
+          float eBack = (b.z - back) / 0.02;
+          float edge = clamp(min(min(eTop, eBot), eBack), 0.0, 1.0);
+          float nb = cwN(b * vec3(420.0, 150.0, 420.0)) * 0.65 + cwN(b * vec3(1300.0, 420.0, 1300.0)) * 0.35;
+          if (shellF) {
+            if (nb > edge * 1.3 - 0.08) discard;
+            ${lite ? 'cwc *= 0.8 + 0.45 * nb;' : `{
+            vec3 q = b * vec3(900.0, 70.0, 500.0);
+            float strand = cwN(q) * 0.6 + cwN(q * 2.1 + 5.0) * 0.4;
+            float clump = cwN(b * vec3(120.0, 25.0, 60.0));
+            // darker roots near the skin, lighter sun-lit strand tips and clumps
+            cwc *= mix(1.0, (0.6 + 0.75 * strand) * (0.8 + 0.4 * clump), 0.35 + 0.65 * cwNear);
+            cwc *= 1.0 + 0.45 * smoothstep(0.62, 0.92, strand) * cwNear;
+            cwRough = 0.5 + 0.3 * strand;
+          }`}
+          } else {
+            // the skin under the beard: roots and shadow, back to plain skin at the edge
+            vec3 sk = uSkin * (0.9 + 0.2 * nb);
+            cwc = mix(sk, cwc * (0.75 + 0.5 * nb), clamp(edge * (0.65 + 0.5 * nb), 0.0, 1.0));
+            cwRough = 0.6;
+          }
+        } else if (cwr == R_HAIR) {
           ${lite ? '' : `if (cwNear > 0.0 && cwr == R_HAIR) {
             // no helmet edge: the hair shell ends in ragged locks at the hairline (the painted scalp shows under it).
             // (A silhouette discard was tried and dropped: it revealed the lit skin under the shells as white specks.)
@@ -400,7 +449,7 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
           }`}
           // strands: fine streaks across the flow (down the beard, back over the scalp), clumps, lighter sun-dried tips
           ${lite ? 'cwc *= 0.75 + 0.5 * cwN(vCwBind * vec3(160.0, 600.0, 160.0));' : `{
-            vec3 q = cwr == R_BEARD ? vCwBind * vec3(900.0, 70.0, 500.0) : vCwBind * vec3(900.0, 260.0, 160.0);
+            vec3 q = vCwBind * vec3(900.0, 260.0, 160.0);
             float strand = cwN(q) * 0.6 + cwN(q * 2.1 + 5.0) * 0.4;
             float clump = cwN(vCwBind * vec3(120.0, 25.0, 60.0));
             cwc *= mix(1.0, (0.55 + 0.75 * strand) * (0.8 + 0.4 * clump), 0.35 + 0.65 * cwNear);
@@ -464,7 +513,7 @@ export function crowdMaterial(u: CrowdUniforms, lite: boolean): THREE.MeshStanda
         }`,
       );
   };
-  m.customProgramCacheKey = () => 'crowd3' + (lite ? 'L' : 'H');
+  m.customProgramCacheKey = () => 'crowd4' + (lite ? 'L' : 'H');
   return m;
 }
 

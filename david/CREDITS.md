@@ -321,6 +321,10 @@ snapping — a new in-house thread-snap and strain), the title's one deep pulse 
 the shofar, and from the shofar one unbroken line of Saul's music through Samuel's arrival (darker, never a hush) to its
 peak on the tear; the shepherd's flashes as a faint shimmer over it. Same in-house synthesis, no third-party audio.
 Plots, measurements and MP3s: `dev/screens/score6/w5/`.
+CUT v6.1 (104.7 s, *score6*, wave 6): the sound carries every cut — the drum hit closing the host's phrase on the cut
+to Ramah, a man's close pass hiding the cut to Saul, the roar breaking off as the army sees Samuel, the spear's knock
+on the earth (a new in-house spear-fall), a lamb's bleat that turns David's head, a phrase crossing the dissolve into
+the last shot. Same in-house synthesis, no third-party audio. Plots, the table of cuts and MP3s: `dev/screens/score6/w6/`.
 
 ## Wardrobe & hair polish pass — `src/characters/wardrobe/`, `src/characters/hair/`, `tools/wardrobe/gen_textures.py`, `dev/wardrobe*`
 

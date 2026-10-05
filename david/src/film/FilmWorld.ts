@@ -80,7 +80,9 @@ export const HANDOFF = { x: -1.95, z: 10.2, heading: 0.6, pitch: 0.2, pivotH: 1.
  *  - stand:     his place in D3 (on the shoulder of the ridge, his flock on the slope below him)
  *  - start:     D4's first frame: among his sheep, walking slowly up the slope (at `slow` m/s until `descend`)
  *  - guide:     the ewe walking at his right with his hand on her back (the staff in his left): [m to his right, m
- *               ahead]; let go at `guideOff`
+ *               ahead]; let go at `guideOff` (she walks on, easing away to her right, and stops to graze)
+ *  - touch:     (wave 6) his right hand on her back, after the dissolve: [the reach begins, the palm lands on her wool,
+ *               it lifts off] (s; gone by `guideOff`) — a hover above her back, the touch, a stroke along it, the lift
  *  - lamb:      the newborn, fallen behind (it bleats for its mother) — at his front-left when he kneels
  *  - wayDown:   his way up to `kneel1`, beside the lamb
  *  - wayOn:     his way along the slope with the lamb in his arms to `kneel2`, before its mother
@@ -90,8 +92,9 @@ export const D4 = {
   stand: [-7.85, 10.65],
   start: [-2.2, 14.55],
   slow: 0.5,
-  guide: [0.62, 0.3],
-  guideOff: 1.45,
+  guide: [0.43, 0.3],
+  guideOff: 2.6,
+  touch: [0.7, 1.15, 2.1],
   lamb: [-2.61, 11.67],
   wayDown: [[-2.3, 13.4]],
   kneel1: [-2.4, 12.25],
@@ -109,6 +112,10 @@ export const D4 = {
 };
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+/** (wave 6) the stroke on the guide ewe's back, in her body bone's frame (rig units): x toward him (her left), z from
+ *  behind the withers back along her spine, `y` the back's top if a ray misses; `wool` her wool's outer shell over the
+ *  body mesh on her back, `press` how far the palm sinks into it (m) */
+const EWE_STROKE = { x: 0.06, z0: 0.05, z1: -0.1, n: 5, y: 0.19, wool: 0.016, press: 0.008 };
 const smooth = (u: number) => u * u * (3 - 2 * u);
 const smoother = (u: number) => u * u * u * (u * (u * 6 - 15) + 10);
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -241,6 +248,11 @@ export class FilmWorld {
   private readonly lambFrom = new THREE.Matrix4();
   private readonly lambCenter = new THREE.Vector3();
   private lastD4 = -1;
+  /** (wave 6) frames left to reset the model's dynamics after a cut-in / teleport */
+  private resetFrames = 0;
+  /** D2: where his eyes go down to — his flock on the slope below the rock (toward D3's view) */
+  private readonly flockBelow = new THREE.Vector3();
+  private lastWatch = -1;
   /** P2: the shepherd's walk along the terraces (start, direction) and morning smoke from a few roofs (film only) */
   private readonly p2Walk = { start: new THREE.Vector3(), dir: new THREE.Vector3(1, 0, 0) };
   private smoke: { points: THREE.Points; dispose: () => void; setPixelScale: (h: number, fov: number) => void } | null = null;
@@ -330,6 +342,12 @@ export class FilmWorld {
     );
     const ta = THREE.MathUtils.degToRad(WORLD_CAM.face.turnAz);
     this.faceCam.copy(this.rock).add(V(Math.sin(ta) * 40, 1.7, Math.cos(ta) * 40));
+    // (wave 6) D2's look down: the slope below toward D3's flock (south-south-west of the rock, ~14 m out, below him)
+    {
+      const st = WORLD_CAM.d4.stand, hd = WORLD_CAM.watch.heading;
+      const fx = st[0] + Math.sin(hd) * 11, fz = st[1] + Math.cos(hd) * 11;
+      this.flockBelow.set(fx, this.ground(fx, fz) + 0.4, fz);
+    }
   }
 
   /** D4: his walk down to the lamb and his walk on to its mother (world x / z) */
@@ -453,7 +471,8 @@ export class FilmWorld {
         // a slow drift out to the right and down (the flock opens beside him), never round him
         const c = WORLD_CAM.watch;
         const hd = c.heading, fx = Math.sin(hd), fz = Math.cos(hd), rx = -fz, rz = fx;
-        const F = this.feet;
+        const st = WORLD_CAM.d4.stand;
+        const F = this.tmp.set(st[0], this.ground(st[0], st[1]), st[1]); // (wave 6) his stand: he walks out of the lens
         const b = lerp(c.back0, c.back1, e), r = lerp(c.right0, c.right1, e);
         out.pos.set(F.x - fx * b + rx * r, F.y + lerp(c.up0, c.up1, e), F.z - fz * b + rz * r);
         out.pos.y = Math.max(out.pos.y, this.ground(out.pos.x, out.pos.z) + 0.6);
@@ -669,6 +688,11 @@ export class FilmWorld {
     const { player } = this.h;
     const m = player.model;
     m.resetDynamics();
+    // (wave 6) the cloth and the sling's cords settle from the NEW place: reset again on the take's first two frames
+    // (the first re-init still sees the skeleton's matrices from before the teleport — the cords were stretched across
+    // the frame at D4's cut-in)
+    this.resetFrames = 2;
+    this.eweLine = null;
     if (take === 'rachel-dawn' || take === 'bethlehem') {
       const key = take === 'rachel-dawn' ? 'rachel' : 'bethlehem';
       if (this.staged !== key) {
@@ -829,6 +853,10 @@ export class FilmWorld {
       this.restoreGlimpseGrade();
       m.filmGripOpen = false;
     }
+    if (this.resetFrames > 0) {
+      this.resetFrames--;
+      m.resetDynamics();
+    }
     this.setExposure(this.expK);
     this.tickBirds(take, t);
     switch (take) {
@@ -864,16 +892,37 @@ export class FilmWorld {
         return;
       case 'figure':
         this.clearPushers();
-        m.performFilm('back', t);
+        // (wave 6) at `turn` a lamb bleats below and he begins to turn his head into the light — D2 continues the same turn
+        m.performFilm('back', t, { look: this.faceCam, turnAt: takeBeat('figure', 'turn', 5.0), turnDur: WORLD_CAM.face.turnDur });
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'face':
         this.clearPushers();
-        m.performFilm('reveal', t, { look: this.faceCam, turnAt: takeBeat('face', 'turn', 0.8), turnDur: WORLD_CAM.face.turnDur, offLens: 0 });
+        // (wave 6) the turn begun in D1 at its `turn` beat continues across the cut at the same speed (a cut on action);
+        // at `lookDown` his eyes go down to his flock on the slope below (D3 is what he sees)
+        m.performFilm('reveal', t, {
+          look: this.faceCam,
+          turnAt: takeBeat('face', 'turn', 0.1) - 0.1 - (takeDur('figure', 5.5) - takeBeat('figure', 'turn', 5.0)),
+          turnDur: WORLD_CAM.face.turnDur,
+          offLens: 0,
+          lookDownAt: takeBeat('face', 'lookDown', 3.3),
+          lookDown: this.flockBelow,
+        });
         this.ff.tick(t, dt, this.h.engine.camera);
         return;
       case 'watch': {
-        // D3: on his rock, watching his flock below (the head following it), the wind in his curls; the cast lives
+        // D3: on his rock, watching his flock below (the head following it), the wind in his curls; the cast lives.
+        // (wave 6) from `walk` he starts down the slope toward them (the dissolve into D4 rides his steps)
+        const wk = takeBeat('watch', 'walk', 6.2);
+        if (t > wk) {
+          const st = WORLD_CAM.d4.stand, wh0 = WORLD_CAM.watch.heading;
+          const tau = t - wk, v1 = 0.85, ramp = 0.6;
+          const dist = tau < ramp ? (v1 * tau * tau) / (2 * ramp) : v1 * (tau - ramp / 2);
+          this.movePlayer(st[0] + Math.sin(wh0) * dist, st[1] + Math.cos(wh0) * dist, wh0, v1 * Math.min(1, tau / ramp));
+          m.hold = 'none';
+          m.speed = player.speed;
+        } else if (this.lastWatch > wk) this.placeDavid(WORLD_CAM.watch.heading, WORLD_CAM.d4.stand);
+        this.lastWatch = t;
         this.feet.copy(player.pos);
         // the grass pressed round the newborn on the rocks and the nursing pair (they read over the straw), and in
         // front of the lens
@@ -941,7 +990,7 @@ export class FilmWorld {
     };
     // the newborn on the rocks below his rock, and its mother further down looking up the slope toward it
     if (lamb.state === 'carried') this.releaseLamb(true);
-    put(lamb, d.lamb[0], d.lamb[1], Math.atan2(d.kneel1[0] - d.lamb[0], d.kneel1[1] - d.lamb[1]) + Math.PI / 2);
+    put(lamb, d.lamb[0], d.lamb[1], Math.atan2(d.kneel1[0] - d.lamb[0], d.kneel1[1] - d.lamb[1]) - Math.PI / 2);
     (lamb as unknown as { graze: number }).graze = 0;
     this.lambPhase = 'ground';
     if (ewe) put(ewe, d.ewe[0], d.ewe[1], Math.atan2(d.kneel2[0] - d.ewe[0], d.kneel2[1] - d.ewe[1]) + 0.5);
@@ -975,10 +1024,16 @@ export class FilmWorld {
     SR.forEach((r, i) => {
       if (rams[i]) put(rams[i], r[0], r[1], r[2]);
     });
-    // D4: the ewe walking at his left, his hand on her back (tickCast walks her)
+    // D4: the ewe walking at his right, his hand on her back (tickCast walks her) — (wave 6) the biggest free ewe that
+    // mothers no lamb (her back nearer his hand)
     let guide: Animal | null = null;
     if (forD4) {
-      guide = flock.animals.find((a) => a.kind === 'sheep' && !used.includes(a)) ?? null;
+      const mothers = flock.animals.filter((a) => a.kind === 'lamb').map((a) => a.mother);
+      for (const a of flock.animals) {
+        if (a.kind !== 'sheep' || used.includes(a) || mothers.includes(a)) continue;
+        if (!guide || a.size > guide.size) guide = a;
+      }
+      guide ??= flock.animals.find((a) => a.kind === 'sheep' && !used.includes(a)) ?? null;
       if (guide) {
         const g = this.guidePos(0, this.guideV);
         put(guide, g.x, g.z, this.guideHeading);
@@ -1163,16 +1218,23 @@ export class FilmWorld {
     const rise = lift + d.u1;
     m.cradleEffort = Math.max(0.55 * ss(lift, lift + 0.45, t) * (1 - ss(lift + 0.7, rise, t)), ss(rise - 0.1, rise + 0.45, t) * (1 - ss(rise + 0.8, rise + 1.5, t)));
     m.staffCrookW = ss(kneel + d.k1 - 0.15, kneel + d.k1 + 0.45, t) * (1 - ss(setDown + d.u2 + 0.1, setDown + d.u2 + 0.75, t));
-    // his right hand on the back of the ewe walking at his side (the staff in his left), until he goes to the lamb
+    // his right palm resting ON the wool of the ewe walking at his side (the staff in his left): it rides her back's bob
+    // and sway and strokes it a little, then lifts off as he goes to the lamb (wave 6: measured on her mesh — never into
+    // her)
+    // (wave 6) after the dissolve: the reach (the hand comes up from its swing to a hand's breadth over her back), the
+    // touch (it settles onto the wool), a stroke back along her back as they walk, the lift (up off the wool, then back
+    // to its swing)
     const guide = this.cast.guide;
-    if (guide && t < d.guideOff + 0.6) {
-      m.filmHandR = guide.backGrip.getWorldPosition(this.handV);
-      m.filmHandR.y += 0.04;
-      m.filmHandRW = ss(0.0, 0.3, t) * (1 - ss(d.guideOff - 0.35, d.guideOff + 0.05, t));
-    } else {
-      m.filmHandR = null;
-      m.filmHandRW = 0;
-    }
+    const [tR, tC, tL] = d.touch;
+    const wHand = guide ? ss(tR, tC - 0.05, t) * (1 - ss(tL + 0.12, d.guideOff, t)) : 0;
+    const hover = 0.075 * (1 - ss(tC - 0.28, tC, t)) + 0.085 * ss(tL, tL + 0.32, t);
+    m.filmHandR = null;
+    m.filmHandRW = 0;
+    if (guide && wHand > 0.001) {
+      const c = this.ewePalm(guide, ss(tC - 0.1, tL + 0.15, t), hover);
+      c.w = wHand;
+      m.filmPalm.R = c;
+    } else m.filmPalm.R = null;
     this.syncLamb(t);
     // where he looks: out over his flock as he walks · the lamb (from its bleat) · the lamb in his arms · his way and its
     // mother, with a look down to the lamb · the lamb at her flank · out over his flock and the valley
@@ -1181,7 +1243,12 @@ export class FilmWorld {
     lambW.y += 0.3;
     const over = V(player.pos.x + Math.sin(HANDOFF.heading) * 14, player.pos.y - 2.4, player.pos.z + Math.cos(HANDOFF.heading) * 14);
     if (t < lamb0 + 0.55) m.lookTarget = look.copy(over);
-    else if (t < rise + 0.9) m.lookTarget = look.copy(lambW);
+    else if (t < rise + 0.9) {
+      m.lookTarget = look.copy(lambW);
+      // (wave 6) a glance down at the ewe as his hand comes onto her back, then on to the lamb
+      const g = guide ? ss(tR - 0.1, tC - 0.1, t) * (1 - ss(tC + 0.4, tC + 0.85, t)) : 0;
+      if (g > 0.001) look.lerp(this.tmp3.copy(guide!.position).setY(guide!.position.y + 0.55), 0.7 * g);
+    }
     else if (t < setDown + d.u2 + 0.9) {
       const glance = ss(rise + 1.7, rise + 2.0, t) * (1 - ss(rise + 2.6, rise + 2.9, t));
       const ewe = V(d.ewe[0], this.ground(d.ewe[0], d.ewe[1]) + 0.55, d.ewe[1]);
@@ -1199,6 +1266,80 @@ export class FilmWorld {
     void flock;
   }
   private readonly handV = new THREE.Vector3();
+  // (wave 6) contacts measured on the animals' meshes
+  private readonly ray = new THREE.Raycaster();
+  private readonly palmE = { point: new THREE.Vector3(), normal: new THREE.Vector3(), fingers: new THREE.Vector3(), w: 0 };
+  /** the stroke line on the guide ewe's back: surface points and normals in her body bone's frame (sampled once a take) */
+  private eweLine: { a: Animal; pts: THREE.Vector3[]; ns: THREE.Vector3[] } | null = null;
+
+  /** the animal's posed body meshes (not the wool shells) */
+  private bodyMeshes(a: Animal): THREE.Object3D[] {
+    const ms = (a as unknown as { meshes: THREE.SkinnedMesh[] }).meshes.filter((x) => !x.geometry.getAttribute('aShell'));
+    const vis = ms.filter((x) => x.visible);
+    return vis.length ? vis : ms;
+  }
+
+  /**
+   * D4: his right palm on the walking ewe's back — ON her wool, on the near side of her spine behind the withers; `s`
+   * (0..1) strokes it back along her back, `hover` (m) holds it off the wool. The surface: rays down onto her posed body
+   * mesh along the stroke, once a take, kept in her body bone's frame (so the hand rides her bob and sway); her wool's
+   * outer shell lies ≈ EWE_STROKE.wool over that mesh on her back (Flock's shells: L·t along the normal, L·droop·t² down,
+   * L 0.028, droop 0.5); the palm presses EWE_STROKE.press into it.
+   */
+  private ewePalm(e: Animal, s: number, hover: number) {
+    const c = this.palmE;
+    const B = (e as unknown as { bones: THREE.Bone[] }).bones[0];
+    B.updateWorldMatrix(true, true);
+    const K = EWE_STROKE;
+    let line = this.eweLine;
+    if (!line || line.a !== e) {
+      line = this.eweLine = { a: e, pts: [], ns: [] };
+      const inv = this.tmpM.copy(B.matrixWorld).invert();
+      const down = this.tmp3.setFromMatrixColumn(B.matrixWorld, 1).normalize().negate();
+      const meshes = this.bodyMeshes(e);
+      for (let i = 0; i < K.n; i++) {
+        const z = K.z0 + ((K.z1 - K.z0) * i) / (K.n - 1);
+        this.ray.set(B.localToWorld(this.tmp2.set(K.x, 0.6, z)), down);
+        this.ray.far = 1.2;
+        let hit: THREE.Intersection | undefined;
+        try {
+          hit = this.ray.intersectObjects(meshes, false)[0];
+        } catch (err) {
+          console.warn('[film] ewe back', err);
+        }
+        const p = hit ? hit.point.clone() : B.localToWorld(V(K.x, K.y, z));
+        const n = hit?.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : down.clone().negate();
+        if (n.dot(down) > -0.3) n.copy(down).negate();
+        line.pts.push(p.applyMatrix4(inv));
+        line.ns.push(n.transformDirection(inv));
+      }
+    }
+    const f = clamp01(s) * (K.n - 1), i = Math.min(K.n - 2, Math.floor(f)), u = f - i;
+    c.point.lerpVectors(line.pts[i], line.pts[i + 1], u).applyMatrix4(B.matrixWorld);
+    c.normal.lerpVectors(line.ns[i], line.ns[i + 1], u).transformDirection(B.matrixWorld);
+    c.point.addScaledVector(c.normal, K.wool - K.press + hover);
+    // the fingers spread over her back, away from him and a little forward (along the forearm)
+    const h = e.heading;
+    c.fingers.set(-Math.cos(h) + Math.sin(h) * 0.45, 0, Math.sin(h) + Math.cos(h) * 0.45).normalize();
+    return c;
+  }
+  private readonly tmpM = new THREE.Matrix4();
+
+  /** the outside of the lamb's belly wool in its body-centre frame (m, < 0): a ray up from the ground under it */
+  private measureBelly(lamb: Animal): number {
+    try {
+      lamb.object.updateWorldMatrix(true, true);
+      const rc = (lamb as unknown as { rig: { center: number[] } }).rig.center;
+      const cy = lamb.object.position.y + rc[1] * lamb.size;
+      this.ray.set(this.tmp2.set(lamb.position.x, lamb.position.y + 0.02, lamb.position.z), V(0, 1, 0));
+      this.ray.far = 0.6;
+      const hit = this.ray.intersectObjects(this.bodyMeshes(lamb), false)[0];
+      if (hit && hit.point.y < cy) return hit.point.y - cy - 0.022; // + its wool (the shells: ≈1.8 cm + droop)
+    } catch (e) {
+      console.warn('[film] lamb belly', e);
+    }
+    return -0.145;
+  }
   private readonly guideV = new THREE.Vector3();
   private readonly gp = { pos: new THREE.Vector3(), heading: 0, speed: 0, phase: '' };
   private guideHeading = 0;
@@ -1210,12 +1351,17 @@ export class FilmWorld {
     const p = this.d4Pose(Math.min(t, d.guideOff), this.gp);
     const h = p.heading, fx = Math.sin(h), fz = Math.cos(h);
     out.set(p.pos.x - Math.cos(h) * d.guide[0] + fx * d.guide[1], 0, p.pos.z + Math.sin(h) * d.guide[0] + fz * d.guide[1]);
-    const tau = Math.min(Math.max(0, t - d.guideOff), 1.2);
-    out.x += fx * 0.5 * (tau - (tau * tau) / 2.4);
-    out.z += fz * 0.5 * (tau - (tau * tau) / 2.4);
+    // (wave 6) let go: she walks on at his pace, slowing to a stop over 1.8 s and easing off to her right (away from him,
+    // clear of his kneel), then grazes
+    const v0 = p.speed, T = 1.8;
+    const tau = Math.min(Math.max(0, t - d.guideOff), T);
+    const turn = -0.6 * ss(0, 1.4, tau);
+    const run = v0 * (tau - (tau * tau) / (2 * T));
+    out.x += Math.sin(h + turn * 0.5) * run;
+    out.z += Math.cos(h + turn * 0.5) * run;
     out.y = this.ground(out.x, out.z);
-    this.guideHeading = h;
-    this.guideSpeed = t < d.guideOff ? p.speed : 0.5 * Math.max(0, 1 - tau / 1.2);
+    this.guideHeading = h + turn;
+    this.guideSpeed = t < d.guideOff ? p.speed : v0 * Math.max(0, 1 - tau / T);
     return out;
   }
   private readonly lookFaceV = new THREE.Vector3();
@@ -1231,25 +1377,29 @@ export class FilmWorld {
     const lamb = flock.lamb;
     const d = WORLD_CAM.d4;
     const lift = takeBeat('horizon', 'lift', 4.0), setDown = takeBeat('horizon', 'setDown', 9.0);
-    const want = t < lift - 0.02 ? 'ground' : t < setDown + d.s2 ? 'arms' : 'free';
+    const want = t < lift + d.r0 - 0.1 ? 'ground' : t < setDown + d.s2 ? 'arms' : 'free';
     if (want !== this.lambPhase) {
       if (want === 'ground') {
         this.releaseLamb(true);
         lamb.nurse = null;
         lamb.position.set(d.lamb[0], this.ground(d.lamb[0], d.lamb[1]), d.lamb[1]);
         lamb.object.position.copy(lamb.position);
-        // (wave 5) standing side-on to where he will kneel (his hands go under its chest and belly; no turn at the lift)
-        lamb.heading = Math.atan2(d.kneel1[0] - d.lamb[0], d.kneel1[1] - d.lamb[1]) + Math.PI / 2;
+        // (wave 5/6) standing side-on to where he will kneel, its left toward him and its head to his left — as it will lie
+        // in his arms (no spin at the lift)
+        lamb.heading = Math.atan2(d.kneel1[0] - d.lamb[0], d.kneel1[1] - d.lamb[1]) - Math.PI / 2;
       } else if (want === 'arms') {
         lamb.nurse = null;
         // its pose where it stands (the cradle blends from it)
         const L0 = V(d.lamb[0], this.ground(d.lamb[0], d.lamb[1]), d.lamb[1]);
-        const toHim = Math.atan2(d.kneel1[0] - L0.x, d.kneel1[1] - L0.z) + Math.PI / 2;
+        const toHim = Math.atan2(d.kneel1[0] - L0.x, d.kneel1[1] - L0.z) - Math.PI / 2;
         this.lambFrom.compose(L0, new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), toHim), V(lamb.size, lamb.size, lamb.size));
+        // (wave 6) where its belly's wool really is (measured on its mesh while it stands): his palms go there, not
+        // through it
+        const belly = this.measureBelly(lamb);
         lamb.setCarried('arms');
         const rc = (lamb as unknown as { rig: { center: number[] } }).rig.center;
         this.lambCenter.set(rc[0], rc[1], rc[2]);
-        m.cradle = { obj: lamb.object, center: this.lambCenter, from: this.lambFrom, lift: 0 };
+        m.cradle = { obj: lamb.object, center: this.lambCenter, from: this.lambFrom, lift: 0, belly };
       } else {
         this.releaseLamb(true);
         // let go at its mother's side: it goes to her flank and nurses
@@ -1285,8 +1435,8 @@ export class FilmWorld {
         const fw = V(d.ewe[0] - d.kneel2[0], 0, d.ewe[1] - d.kneel2[1]).normalize();
         const L1 = V(d.kneel2[0] + fw.x * d.setDownD, 0, d.kneel2[1] + fw.z * d.setDownD);
         L1.y = this.ground(L1.x, L1.z);
-        const eweH = Math.atan2(d.ewe[0] - L1.x, d.ewe[1] - L1.z);
-        this.lambFrom.compose(L1, new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), eweH), V(lamb.size, lamb.size, lamb.size));
+        const sideOn = Math.atan2(fw.x, fw.z) + Math.PI / 2;
+        this.lambFrom.compose(L1, new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), sideOn), V(lamb.size, lamb.size, lamb.size));
       }
       m.cradle.lift = Math.min(up, 1 - down);
     }
@@ -1304,6 +1454,8 @@ export class FilmWorld {
     m.staffCrookW = 0;
     m.filmHandR = null;
     m.filmHandRW = 0;
+    m.filmPalm.R = null;
+    m.filmPalm.L = null;
     lamb.cradleFold = 1;
     lamb.cradleStir = 0;
     lamb.cradleLook = null;

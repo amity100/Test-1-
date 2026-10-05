@@ -8,6 +8,7 @@ import { enhanceLashes } from './lashes';
 import { slice } from '../../core/slice';
 import { capNoise, davidStyle, manStyle, saulStyle, type GroomStyle, type ManStyleOptions } from './styles';
 import { elderStyle, philistineStyle, samuelStyle, soldierStyle } from './filmStyles';
+import { buildGroomSkin, releaseGroomSkin, type GroomSkinMap } from './groomSkin';
 
 /*
  * createGroom(human, style, opts) — strand hair + beard for a HumanModel, parented to its head bone.
@@ -50,6 +51,11 @@ export interface GroomStats {
   trianglesFull: number;
   capTriangles: number;
   gpuBytes: number;
+  /** beard1: the skin map under the beard / scalp (bytes incl. mips, build ms; 0 without one) */
+  skinMapBytes: number;
+  skinMapMs: number;
+  /** mean / max occlusion of the skin under the dense hair (diagnostics) */
+  skinOcc?: [number, number];
   buildMs: number;
   /** ms per build phase: surface (rest skin + SDF), grow (guides + children + AO), upload */
   timings: { surface: number; grow: number; finish: number };
@@ -86,6 +92,9 @@ export class Groom {
   private readonly jawBone: THREE.Object3D | null;
   private readonly pointsTex: THREE.DataTexture;
   private readonly wind = new THREE.Vector3();
+  /** beard1: the skin map under the beard / scalp (attached to the human's SkinMaterial; null for David / caps) */
+  readonly skinMap: GroomSkinMap | null;
+  private readonly human: HumanModel;
 
   constructor(
     human: HumanModel,
@@ -99,8 +108,11 @@ export class Groom {
       msaa: number;
       stats: GroomStats;
       jawA: THREE.Matrix4;
+      skinMap?: GroomSkinMap | null;
     },
   ) {
+    this.human = human;
+    this.skinMap = parts.skinMap ?? null;
     this.root.name = `groom:${style.name}`;
     this.geo = parts.geo;
     this.count = this.drawCount = parts.geo.instanceCount;
@@ -177,6 +189,8 @@ export class Groom {
 
   setVisible(v: boolean) {
     this.root.visible = v;
+    // beard1: the roots on the skin come and go with the strands
+    if (this.skinMap) this.human.skin.groomSkin.uGroomOn.value = v ? 1 : 0;
   }
 
   /** switch between alpha-to-coverage (samples > 1) and dithered alpha (e.g. when the engine drops MSAA) */
@@ -200,6 +214,7 @@ export class Groom {
     this.capMaterial?.dispose();
     this.pointsTex.dispose();
     this.uniforms.uSim.value?.dispose();
+    releaseGroomSkin(this.human, this.skinMap);
   }
 }
 
@@ -229,7 +244,7 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
   const { style, seed } = resolveStyle(spec);
   const reach = style.layers.reduce((a, l) => Math.max(a, l.reach ?? 0.22), 0.22);
   // (wave 4b) built in slices when the film's background builder runs (core/slice); straight through otherwise
-  const S = await HeadSurface.create(human, q === 'low' ? 0.008 : 0.006, reach);
+  const S = await HeadSurface.create(human, q === 'low' ? 0.008 : 0.006, reach, style.cloth ?? 0);
   const t1 = performance.now();
   // let the loading screen breathe between the heavy steps
   await Promise.resolve();
@@ -245,7 +260,7 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
   }));
   const K = style.ctrl[q];
   const segs = style.segs[q];
-  const set = await growStrandsAsync(S, layers, K, headband);
+  const set = await growStrandsAsync(S, layers, K, headband, { skinOcc: !!style.skin });
   const t2 = performance.now();
   if (slice.due()) await slice.pause();
   // ---- rest character space -> head bone space
@@ -315,6 +330,9 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
   U.uVolR.value.set(0.085, 0.1, 0.105);
   U.uBeardC.value.copy(S.chin).add(new THREE.Vector3(0, 0.04, -0.06)).applyMatrix4(fromRest);
   U.uBeardR.value.set(0.06, 0.075, 0.07);
+  // beard1: fine strands under TAA, the hanging beard
+  U.uFine.value = style.fine ? 1 : 0;
+  U.uJawHang.value = style.jawHang ?? 0;
   // ---- simulation
   let sim: HairSim | null = null;
   if (slice.due()) await slice.pause();
@@ -336,9 +354,10 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
     t.needsUpdate = true;
     U.uSim.value = t;
   }
-  // ---- cap
+  // ---- cap (or, beard1: the skin itself under the beard / scalp — no offset shell, no edge)
   if (slice.due()) await slice.pause();
-  const cap = buildCap(S, style, fromRest);
+  const skinMap = style.skin ? await buildGroomSkin(human, S, style.skin, set.skinTau, q) : null;
+  const cap = skinMap ? null : buildCap(S, style, fromRest);
   // jaw: head-space rest point -> rest character -> jaw rest local
   const jawRest = new THREE.Matrix4().compose(S.jawRestPos, S.jawRestQuat, new THREE.Vector3(1, 1, 1));
   const jawA = jawRest.invert().multiply(toRest);
@@ -349,12 +368,15 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
     simGuides: set.G,
     trianglesFull: set.n * segs * 2,
     capTriangles: cap ? cap.getIndex()!.count / 3 : 0,
-    gpuBytes: texData.byteLength + set.n * 56 + nv * 20 + (cap ? cap.getAttribute('position').count * 48 : 0),
+    gpuBytes: texData.byteLength + set.n * 56 + nv * 20 + (cap ? cap.getAttribute('position').count * 48 : 0) + (skinMap ? skinMap.bytes : 0),
+    skinMapBytes: skinMap ? skinMap.bytes : 0,
+    skinMapMs: skinMap ? skinMap.ms : 0,
+    skinOcc: skinMap ? skinMap.occ : undefined,
     buildMs: 0,
     timings: { surface: t1 - t0, grow: t2 - t1, finish: 0 },
     layers: set.diag,
   };
-  const groom = new Groom(human, style, { geo, uniforms: U, pointsTex, sim, cap, msaa, stats, jawA });
+  const groom = new Groom(human, style, { geo, uniforms: U, pointsTex, sim, cap, msaa, stats, jawA, skinMap });
   stats.buildMs = performance.now() - t0;
   stats.timings.finish = performance.now() - t2;
   return groom;

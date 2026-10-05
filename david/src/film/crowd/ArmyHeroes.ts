@@ -16,6 +16,8 @@ import type { FilmActor, Quality } from '../cast/FilmActor';
 import { BEATS, MARCH_SPEED, type GilgalShotName } from '../gilgal/gilgalBlocking';
 import { TAKE_OFFSET } from '../FilmCams';
 import type { CrowdTier } from './Crowd';
+import type { CrowdDust } from './CrowdDust';
+import { FootLock, Swing } from './actorMotion';
 
 export interface HeroRole {
   kit: 'horn' | 'spear';
@@ -40,6 +42,8 @@ export interface HeroCue {
   pace: number;
   /** the soldier's roar start (shot seconds), -1 = none */
   roarT: number;
+  /** (wave 6) his ground speed now (m/s of action time): the walk take is time-warped to it */
+  speed: number;
 }
 
 const ss = (a: number, b: number, x: number) => {
@@ -47,18 +51,36 @@ const ss = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-/** heroes per tier: [horn blowers, near soldiers] */
+/**
+ * heroes per tier: [horn blowers, near soldiers] and their content quality.
+ * (host1, wave 6: more of the men near the lens are full actors, at the quality their distance needs — 'medium' on
+ *  desktop-high (~120 k triangles, ~2 s to build) instead of 'high' (~205 k, ~3.3 s): 3 + 4 builds in the time 3 + 2 took
+ *  (the Gilgal set's build time must not grow); phones unchanged)
+ */
 export const HERO_COUNT: Record<CrowdTier, [number, number]> = {
-  'desktop-high': [3, 2],
-  'desktop-medium': [3, 1],
+  'desktop-high': [3, 4],
+  'desktop-medium': [3, 2],
   'mobile-high': [2, 0],
   'mobile-low': [2, 0],
 };
+const HERO_Q: Record<CrowdTier, Quality> = { 'desktop-high': 'medium', 'desktop-medium': 'low', 'mobile-high': 'low', 'mobile-low': 'low' };
 
 /** the roar takes a hero chains through (the crowd's Rocketbox cheers) */
 const HERO_CHEERS = ['cheer_1', 'cheer_2', 'cheer_3', 'cheer_4', 'cheer_5'];
 
-const CARRY = { ua: [-0.12, -0.1, -0.16], fa: [-1.2, 0, 0], hd: [0.1, 0, 0.05] } as { ua: [number, number, number]; fa: [number, number, number]; hd: [number, number, number] };
+type Pose = { ua: [number, number, number]; fa: [number, number, number]; hd: [number, number, number] };
+/**
+ * (host1, wave 6 — as P6's vanguard) the spear carried at the side: the fist out at the right hip, the elbow bent, so the
+ * upright shaft rises beside the shoulder and never across the face (before: the fist at the belt, the shaft in front)
+ */
+const CARRY: Pose = { ua: [-0.08, -0.08, -0.24], fa: [-1.1, 0, 0], hd: [0.08, 0, 0.05] };
+/** the shield arm: the forearm forward and down, the fist at the hip (the shield is placed at it every frame) */
+const SHIELD_ARM: Pose = { ua: [-0.06, 0.05, 0.13], fa: [-0.82, 0.12, 0], hd: [0, 0.3, 0.05] };
+/** the spear slides up through the fist (m): gripped near its balance point the butt rides ~0.2 m over the road */
+const SPEAR_RAISE = 0.22;
+
+const _gp = new THREE.Vector3(), _gv = new THREE.Vector3(), _ga = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3();
+const _n = new THREE.Vector3(), _sx = new THREE.Vector3(), _sy = new THREE.Vector3(), _sm = new THREE.Matrix4(), _smi = new THREE.Matrix4();
 
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
@@ -88,14 +110,38 @@ class Hero {
   blow = 0;
   /** CUT v3 (G3): cheer takes chained in this roar (the roar is held 3.3 s to the cut) */
   private chain = 0;
+  // ---- (wave 6) the vanguard's machinery: the spear's lag on the grip, the shield's swing, the planted feet, the dust
+  private readonly spear = new Swing(70, 4.2);
+  private readonly spear0: [number, number];
+  private readonly gripPrev = new THREE.Vector3();
+  private readonly gripVel = new THREE.Vector3();
+  private hasGrip = false;
+  private readonly shield = new Swing(55, 5.5);
+  private shieldObj: THREE.Object3D | null = null;
+  private readonly shieldTurn: number;
+  private readonly locks = [new FootLock(1, 2), new FootLock(4, 8)];
+  dust: CrowdDust | null = null;
+  private steps = 0;
+  private carrying = false;
   constructor(readonly actor: FilmActor, readonly role: HeroRole) {
     const a = actor;
     a.mocap.rootMotion = 'inplace';
     a.cancelHeading = true;
+    a.headingRate = 2.2;
+    const h = (k: number) => {
+      const x = Math.sin(role.seed * 12.9898 + k * 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    // each man's own carry: tipped forward 2-11°, out to his right 1-7°
+    this.spear0 = [0.04 + 0.15 * h(2), 0.02 + 0.1 * h(3)];
+    this.shieldTurn = 0.45 + 0.3 * h(9);
     if (role.kit === 'spear' && a.props.main) {
       a.holdProp('main', 'R');
       a.upright.R.prop = 'main';
       a.upright.R.weight = 1;
+      // gripped nearer its balance point (dressSoldier grips 1.0 m from the butt: carried upright at the side it dragged
+      // through the ground)
+      a.props.main.translateY(SPEAR_RAISE);
     }
     if (role.kit === 'horn' && a.props.main) {
       const o = a.props.main;
@@ -108,8 +154,82 @@ class Hero {
       }
       a.human.rig.setFingers('R', 'grip');
     }
+    // the shield by its central grip in the left fist, placed every frame in the man's own frame (its face out to his left
+    // and a little forward) with its own swing — before: glued to the hand, it flipped with every arm swing
     const sh = a.props.shield;
-    if (sh && role.kit === 'spear') a.human.sockets.handGripL.add(sh);
+    if (sh && role.kit === 'spear') {
+      a.root.add(sh);
+      sh.matrixAutoUpdate = false;
+      this.shieldObj = sh;
+      a.human.rig.setFingers('L', 'grip');
+    }
+    // footfalls: the heel strike jolts the shaft and the shield; a puff of dust where the foot came down
+    a.mocap.onFootstep = (side) => this.footfall(side);
+  }
+
+  /** the cut into a beat: the springs at rest, the locks free */
+  reset() {
+    this.spear.reset(this.spear0[0], this.spear0[1]);
+    this.shield.reset(0, 0);
+    this.hasGrip = false;
+    for (const l of this.locks) l.reset();
+  }
+
+  private footfall(side: 'L' | 'R') {
+    this.steps++;
+    this.spear.vx += 0.3 + 0.03 * (this.steps % 5);
+    this.shield.vy += (side === 'L' ? 1 : -1) * 0.25;
+    const a = this.actor;
+    if (!this.dust || !a.root.visible) return;
+    const foot = (a.human.bones as Record<string, THREE.Object3D>)[`foot.${side}`];
+    if (!foot) return;
+    foot.getWorldPosition(_gp);
+    this.dust.emit(_gp.x, a.root.position.y, _gp.z, Math.sin(a.yaw), Math.cos(a.yaw), 0.8);
+  }
+
+  /** the spear: a damped pendulum on the grip, driven by the fist's acceleration (it lags the hand) */
+  private swingSpear(dt: number, yaw: number) {
+    const a = this.actor;
+    a.human.sockets.handGripR.getWorldPosition(_gp);
+    _f.set(Math.sin(yaw), 0, Math.cos(yaw));
+    _r.set(-_f.z, 0, _f.x);
+    let af = 0, ar = 0;
+    if (this.hasGrip && dt > 1e-4) {
+      _gv.copy(_gp).sub(this.gripPrev).divideScalar(dt);
+      _ga.copy(_gv).sub(this.gripVel).divideScalar(dt);
+      this.gripVel.copy(_gv);
+      af = THREE.MathUtils.clamp(_ga.dot(_f), -6, 6);
+      ar = THREE.MathUtils.clamp(_ga.dot(_r), -6, 6);
+    } else this.gripVel.set(0, 0, 0);
+    this.gripPrev.copy(_gp);
+    this.hasGrip = true;
+    if (dt > 0) {
+      this.spear.step(dt, this.spear0[0], this.spear0[1], -af * 0.7, -ar * 0.7);
+      this.shield.step(dt, 0, 0, -af * 0.5, -ar * 0.9);
+    }
+    const sx = THREE.MathUtils.clamp(this.spear.x, -0.2, 0.45), sy = THREE.MathUtils.clamp(this.spear.y, -0.25, 0.25);
+    a.upright.R.axis.set(0, Math.cos(sx) * Math.cos(sy), 0).addScaledVector(_f, Math.sin(sx)).addScaledVector(_r, Math.sin(sy)).normalize();
+  }
+
+  /** the shield at the left fist: face out to his left, turned toward his front, swinging on the grip */
+  private placeShield(yaw: number) {
+    const a = this.actor, sh = this.shieldObj!;
+    const turn = this.shieldTurn + THREE.MathUtils.clamp(this.shield.y, -0.35, 0.35);
+    const tilt = THREE.MathUtils.clamp(this.shield.x, -0.3, 0.3) * 0.6 + 0.06;
+    _f.set(Math.sin(yaw), 0, Math.cos(yaw));
+    _r.set(-_f.z, 0, _f.x);
+    _n.copy(_r).multiplyScalar(-Math.cos(turn)).addScaledVector(_f, Math.sin(turn)).normalize();
+    _sy.set(0, 1, 0).addScaledVector(_n, -Math.sin(tilt)).normalize();
+    _sx.crossVectors(_sy, _n).normalize();
+    _sy.crossVectors(_n, _sx);
+    _sm.makeBasis(_sx, _sy, _n);
+    a.human.sockets.handGripL.getWorldPosition(_gp);
+    _gp.addScaledVector(_n, 0.03);
+    _sm.setPosition(_gp);
+    a.root.updateWorldMatrix(true, false);
+    _smi.copy(a.root.matrixWorld).invert();
+    sh.matrix.multiplyMatrices(_smi, _sm);
+    sh.matrixWorldNeedsUpdate = true;
   }
 
   play(name: string, o: { fade?: number; time?: number; mirror?: boolean; speed?: number } = {}) {
@@ -175,7 +295,8 @@ class Hero {
     // ---- the clip of the soldier's state
     if (st === 'march') {
       if (changed || this.clip !== c.walk) this.play(c.walk, { fade: 0, time: c.phase, mirror: c.mirror });
-      mp.matchSpeed(c.walk, MARCH_SPEED * c.pace);
+      // (wave 6) time-warped to his ground speed now (the halt of G3 slows him onto his mark: the step shortens with it)
+      mp.matchSpeed(c.walk, Math.max(0.25, c.speed > 0 ? c.speed : MARCH_SPEED));
     } else if (st === 'roar') {
       if (changed) {
         this.chain = 0;
@@ -188,20 +309,31 @@ class Hero {
       }
     } else if (st === 'freeze') {
       if (changed && !this.roaring) this.play(c.cheer, { fade: 0, time: 1.2, mirror: c.mirror && this.role.kit !== 'spear' });
-      mp.setSpeed(this.clip, 0.05);
+      // (wave 6) the shout breaks off on the cut: the take slows into the drop of the arms (never a frozen pose)
+      mp.setSpeed(this.clip, 0.35);
     } else if (st === 'look') {
       if (changed) this.play(Math.sin(c.yaw * 7 + c.file) > 0 ? 'look_around_R' : 'look_around_L', { fade: 0.7, time: 0.35 });
     } else if (st === 'step') {
-      if (changed) this.play('walk_b', { fade: 0.25, time: c.phase });
-      mp.matchSpeed('walk_b', Math.max(0.3, Math.hypot(a.velocity.x, a.velocity.z)));
-    } else if (changed || this.clip === '') this.play(c.idle, { fade: st === 'lower' ? 1.1 : 0.4, time: c.phase * 1.7 });
+      if (changed) this.play('walk_n1', { fade: 0.3, time: c.phase });
+      mp.matchSpeed('walk_n1', Math.max(0.25, c.speed > 0 ? c.speed : Math.hypot(a.velocity.x, a.velocity.z)));
+    } else if (changed || this.clip === '') this.play(c.idle, { fade: st === 'lower' ? 0.7 : 0.45, time: c.phase * 1.7 });
     this.roaring = st === 'roar' || (st === 'freeze' && this.roaring);
-    // ---- the spear carried (upright, the arm bent) except in the roar
+    // ---- the spear carried at the side (upright, lagging the fist) except in the roar; the shield arm at the hip
     if (this.role.kit === 'spear') {
-      const carry = st === 'march' || st === 'halt' || st === 'idle' || st === 'lower' || st === 'step';
+      const carry = st === 'march' || st === 'halt' || st === 'idle' || st === 'lower' || st === 'step' || st === 'look';
       a.armPose.R.pose = carry ? CARRY : null;
-      a.armPose.R.weight = carry ? 0.8 : 0;
+      a.armPose.R.weight = carry ? 0.75 : 0;
       a.upright.R.weight = carry ? 1 : 0.4;
+      if (carry) this.swingSpear(dt, c.yaw);
+      else {
+        a.upright.R.axis.set(0, 1, 0);
+        this.hasGrip = false;
+      }
+      this.carrying = carry;
+      if (this.shieldObj) {
+        a.armPose.L.pose = carry ? SHIELD_ARM : null;
+        a.armPose.L.weight = carry ? 0.6 : 0;
+      }
     }
     // ---- the rams' horns (G1): lifted to the lips at the beat and blown
     let blow = 0;
@@ -256,6 +388,17 @@ class Hero {
       r.setExpressionWeight('determined', 0.3);
     }
     a.update(dt, camera, viewportH, wind);
+    // ---- (wave 6) the feet planted while they bear weight (the capture's contacts; after the rig and the foot IK)
+    if (dt > 0) {
+      const b = a.human.bones as Record<string, THREE.Object3D>;
+      const cc = mp.pose.contacts;
+      for (let i = 0; i < 2; i++) {
+        const sd = i === 0 ? 'L' : 'R';
+        this.locks[i].apply(cc, b[`upperleg01.${sd}`], b[`lowerleg01.${sd}`], b[`foot.${sd}`], b[`toe3-1.${sd}`], dt);
+      }
+    }
+    if (this.shieldObj) this.placeShield(c.yaw);
+    void this.carrying;
   }
 }
 
@@ -275,7 +418,7 @@ export class ArmyHeroes {
     const [hn, nn] = HERO_COUNT[o.tier];
     const horns = o.horns ?? hn, near = o.near ?? nn;
     const { FilmActor } = await import('../cast/FilmActor');
-    const q: Quality = o.tier === 'desktop-high' ? 'high' : o.tier === 'desktop-medium' ? 'medium' : 'low';
+    const q: Quality = HERO_Q[o.tier];
     const roles: HeroRole[] = [];
     for (let i = 0; i < horns; i++) roles.push({ kit: 'horn', seed: 31 + i * 7, index: i });
     for (let i = 0; i < near; i++) roles.push({ kit: 'spear', seed: 61 + i * 5, index: i });
@@ -284,6 +427,8 @@ export class ArmyHeroes {
       const a = await FilmActor.create({ role: 'soldier', quality: q, seed: r.seed, lod: 'near', kit: r.kit, ground: o.ground });
       // short soldier's hair: the exact groom, no strand simulation (the heroes' largest CPU cost)
       a.groom?.setSimulation(false);
+      // (wave 6) the feet on the set's ground (with the foot lock on the capture's contacts in Hero.update)
+      a.mocap.footIK = { enabled: true, ground: o.ground, maxAdjust: 0.2, align: 0.6 };
       heroes.push(new Hero(a, r));
     }
     return new ArmyHeroes(heroes);

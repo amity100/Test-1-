@@ -10,7 +10,9 @@ import { slice, type Slicer } from '../core/slice';
  * deadlines, while the start screen is up and while the prologue plays —
  *
  *   macro (C0) + judah (P1) before the start screen (CUT v6, cut7: the film opens on the cold open's small set)
- *   map (P4, film 14.5)     coast (P6, 24.5)     ramah (P7, 31.5)     gilgal (G1's pre-roll, 35.0)     world (F1, 46.5)
+ *   map (P4, film 14.2)     coast (P6, 24.7)     ramah (P7, 31.7)     gilgal (G1's pre-roll, 35.2)     world (D1, 74.2)
+ *   (CUT v6.1: the flashes F1 / F2 are out — the world's warm-up is due before D1; every deadline is read from the
+ *    contract's shot starts, nothing hard-coded)
  *
  * Two modes. COVERED (the loading / start screen or a black card covers the canvas): every builder step runs back to
  * back and a set is pre-compiled on the canvas (FilmStage.precompileSet: the full first-frame warm-up, what the old

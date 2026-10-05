@@ -52,6 +52,22 @@ export interface LayerStyle {
   /** children length ratio range */
   childLen?: [number, number];
   colors: (R: () => number, f: THREE.Vector3, root: THREE.Color, tip: THREE.Color) => void;
+  // ---- beard1 (wave 6): a beard that grows out of the skin. All optional; a style without them grows exactly as before
+  // (no extra draws from the style's random stream — the new variation uses hashes of its own).
+  /** root density ~ growth mask ^ densityPow (> 1: the border thins out faster than the mask) */
+  densityPow?: number;
+  /**
+   * short, sparse, scattered hairs at the border: [length factor at the edge, mask where the hair is full length]
+   * (a child's own root mask), and the clumping fades there too (single hairs, not the lock's rope)
+   */
+  edgeShort?: [number, number];
+  /** per-lock (clump) colour variation: log brightness amplitude, warm / cool shift amplitude */
+  lockTint?: [number, number];
+  /** flyaway width factor (default 0.8) and the share of children that stray a little from their lock (default 0) */
+  flyWidth?: number;
+  stray?: number;
+  /** width variation (log amplitude, default: the old uniform 0.75-1.25) */
+  widthVar?: number;
 }
 
 export interface Headband {
@@ -82,6 +98,22 @@ export interface StrandSet {
   G: number;
   /** per layer: strand count, mean / max strand length (m), mean root SDF (m), max push-out (m) */
   diag: { name: string; n: number; meanLen: number; maxLen: number; maxPush: number }[];
+  /** beard1: optical depth of the hair above each skin vertex of the HeadSurface (only when asked: GrowOptions.skinOcc) */
+  skinTau?: Float32Array;
+}
+
+/** beard1 (wave 6): extra outputs of a growth */
+export interface GrowOptions {
+  /** also integrate the hair density above every skin vertex (the skin map's occlusion: the beard's shadow) */
+  skinOcc?: boolean;
+}
+
+/** a hash in [0, 1) of two integers (per-lock variation without touching a style's random stream) */
+function hash2(a: number, b: number) {
+  let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
 }
 
 const GK = 40; // flow-curve resolution
@@ -171,17 +203,17 @@ export interface LayerBuild {
 }
 
 /** Grow all layers into one strand set with K control points per strand. */
-export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null): StrandSet {
-  return runSync(growStrandsSteps(S, layers, K, headband));
+export function growStrands(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null, go: GrowOptions = {}): StrandSet {
+  return runSync(growStrandsSteps(S, layers, K, headband, go));
 }
 
 /** (wave 4b) the same strands, grown in slices while the film's background builder runs (core/slice) */
-export function growStrandsAsync(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null): Promise<StrandSet> {
-  return runSliced(growStrandsSteps(S, layers, K, headband));
+export function growStrandsAsync(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null, go: GrowOptions = {}): Promise<StrandSet> {
+  return runSliced(growStrandsSteps(S, layers, K, headband, go));
 }
 
 /** the strand growth as steps: it may stop between locks / strands / passes (never inside one), so the result is the same */
-function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null): Generator<void, StrandSet, void> {
+function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, headband: Headband | null, go: GrowOptions): Generator<void, StrandSet, void> {
   const total = layers.reduce((a, l) => a + l.count, 0);
   const simTotal = layers.reduce((a, l) => a + l.simCount, 0);
   const set: StrandSet = {
@@ -272,7 +304,7 @@ function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, head
     }
     // ---- children
     yield;
-    const roots: Roots = yield* S.sampleRootsSteps(mask, L.count, L.seed + 21);
+    const roots: Roots = yield* S.sampleRootsSteps(mask, L.count, L.seed + 21, st.densityPow ?? 1);
     yield;
     // lock lookup grid (2 cm cells)
     const cell = 0.02;
@@ -325,13 +357,19 @@ function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, head
       const phJit = (R() - 0.5) * 0.5;
       const ox = x0 - g.p[0], oy = y0 - g.p[1], oz = z0 - g.p[2];
       const nseed = (L.seed * 7919 + c) | 0;
-      const frz = st.frizz * (fly ? 5 : 0.6 + 0.8 * R());
+      const frz0 = st.frizz * (fly ? 5 : 0.6 + 0.8 * R());
       const base = (si * K) * 4;
+      // beard1: at the border (the child's own root mask) short, single, scattered hairs; a few strays off every lock
+      const edge = st.edgeShort ? ss(0, st.edgeShort[1], roots.mask[c]) : 1;
+      const lenK = st.edgeShort ? st.edgeShort[0] + (1 - st.edgeShort[0]) * edge : 1;
+      const stray = st.stray ? hash2(L.seed + 5, c) < st.stray : false;
+      const clumpK = (st.edgeShort ? 0.2 + 0.8 * edge : 1) * (stray ? 0.35 : 1);
+      const frz = frz0 * (stray ? 3 : 1);
       for (let k = 0; k < K; k++) {
         const t = k / (K - 1);
-        const s = t * lr;
+        const s = t * lr * lenK;
         guideAt(g, s, P, U, V);
-        const clump = st.clump * ss(0, 0.55, t);
+        const clump = st.clump * ss(0, 0.55, t) * clumpK;
         const cn = st.curlNoise ?? 0;
         const lockN = g.phase * 3.1;
         const th = g.phase + phJit + (g.hand * 2 * Math.PI * s * g.len) / g.pitch + cn * 1.2 * vnoise(s * 6, lockN, 0.5, 17);
@@ -359,7 +397,8 @@ function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, head
         set.pts[base + k * 4 + 2] = X.z;
         set.pts[base + k * 4 + 3] = 1;
       }
-      set.a[si * 4] = st.width * L.widthScale * (0.75 + 0.5 * R()) * (fly ? 0.8 : 1);
+      set.a[si * 4] = st.width * L.widthScale * (0.75 + 0.5 * R()) * (fly ? st.flyWidth ?? 0.8 : 1);
+      if (st.widthVar) set.a[si * 4] *= Math.exp((hash2(L.seed + 9, c) - 0.5) * 2 * st.widthVar) * (0.72 + 0.28 * edge);
       set.a[si * 4 + 1] = R();
       set.a[si * 4 + 2] = roots.jaw[c];
       set.a[si * 4 + 3] = st.kind;
@@ -369,6 +408,13 @@ function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, head
       set.b[si * 4 + 3] = L.simCount > 0 ? 1 : 0;
       _f.set(x0, y0, z0).sub(S.E);
       st.colors(R, _f, rootC, tipC);
+      if (st.lockTint) {
+        // beard1: every lock (clump) its own shade — clumps read as clumps, not one dyed mass
+        const lb = Math.exp((hash2(L.seed * 3 + 1, gi) - 0.5) * 2 * st.lockTint[0]);
+        const lw = (hash2(L.seed * 5 + 2, gi) - 0.5) * 2 * st.lockTint[1];
+        rootC.setRGB(rootC.r * lb * (1 + lw), rootC.g * lb, rootC.b * lb * (1 - 1.4 * lw));
+        tipC.setRGB(tipC.r * lb * (1 + lw), tipC.g * lb, tipC.b * lb * (1 - 1.4 * lw));
+      }
       rootC.toArray(set.rootCol, si * 3);
       tipC.toArray(set.tipCol, si * 3);
     }
@@ -387,7 +433,7 @@ function* growStrandsSteps(S: HeadSurface, layers: LayerBuild[], K: number, head
   yield;
   if (headband) yield* compressHeadband(S, set, headband);
   yield;
-  yield* bakeAO(S, set);
+  yield* bakeAO(S, set, go.skinOcc === true);
   yield;
   yield* shuffleStrands(set, layers.length ? layers[0].seed + 99 : 99);
   return set;
@@ -449,7 +495,7 @@ function* compressHeadband(S: HeadSurface, set: StrandSet, hb: Headband): Genera
 }
 
 /** Ambient occlusion per control point: blurred strand density + proximity to the skin. */
-function* bakeAO(S: HeadSurface, set: StrandSet): Generator<void, void, void> {
+function* bakeAO(S: HeadSurface, set: StrandSet, skinOcc = false): Generator<void, void, void> {
   const n = set.n * set.K;
   if (!n) return;
   const pts = set.pts;
@@ -537,4 +583,26 @@ function* bakeAO(S: HeadSurface, set: StrandSet): Generator<void, void, void> {
     const skinAO = 0.35 + 0.65 * ss(0.0, 0.025, skin);
     pts[i * 4 + 3] = Math.max(0.04, occl * skinAO);
   }
+  if (!skinOcc) return;
+  // beard1 (wave 6): the optical depth of the hair lying over each skin vertex — integrated outward along the normal
+  // from 2 mm to ~4 cm (the roots, the beard over the chin and hanging in front of the neck, the hair over the scalp).
+  // Units: strand cross-section per volume x path (dimensionless); the skin map turns it into occlusion.
+  const P = S.pos, Nn = S.nrm, nv = P.length / 3;
+  const tau = new Float32Array(nv);
+  const xa = ox + h, ya = oy + h, za = oz + h, xb = ox + (nx - 1) * h, yb = oy + (ny - 1) * h, zb = oz + (nz - 1) * h;
+  for (let v = 0; v < nv; v++) {
+    if ((v & 1023) === 1023) yield;
+    if (S.region[v] <= 0.01) continue;
+    const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
+    if (x < xa - 0.04 || x > xb + 0.04 || y < ya - 0.04 || y > yb + 0.04 || z < za - 0.04 || z > zb + 0.04) continue;
+    let acc = 0;
+    for (let k = 0; k < 7; k++) {
+      const d = 0.002 + 0.006 * k;
+      const px = x + Nn[v * 3] * d, py = y + Nn[v * 3 + 1] * d, pz = z + Nn[v * 3 + 2] * d;
+      if (px < xa || px > xb || py < ya || py > yb || pz < za || pz > zb) continue;
+      acc += sample(px, py, pz) * 0.006;
+    }
+    tau[v] = acc;
+  }
+  set.skinTau = tau;
 }

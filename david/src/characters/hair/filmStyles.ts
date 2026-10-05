@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { rng, ss, vnoise } from './HeadSurface';
+import { rng, ss, vnoise, type BeardShape } from './HeadSurface';
 import type { LayerStyle } from './grow';
-import { manStyle, type GroomStyle } from './styles';
+import { BEARD_SHADE, NATURAL_BEARD, NATURAL_SCALP, manStyle, type GroomStyle } from './styles';
 
 /*
  * Grooms of the opening film's cast (docs/visual-bible.md 1.1, 3.0, 3.1, 3.4, 3.7, 3.9). Same conventions as styles.ts:
@@ -52,11 +52,16 @@ function greyWhite(R: () => number, f: THREE.Vector3, root: THREE.Color, tip: TH
 
 // ================================================================================================= SAMUEL
 export function samuelStyle(): GroomStyle {
+  const hairline = (phi: number) => 0.006 * Math.exp(-(((phi - 40) / 22) ** 2)); // a little receded at the temples (age)
+  // beard1 (wave 6): an old man's untrimmed beard — his own wandering cheek line a little high, thin patches high on
+  // the cheeks, the neck beard well down the throat
+  const shape: BeardShape = { seed: 1, line: 0.003, neck: 0.012, patchy: 0.3 };
   const scalp: LayerStyle = {
     name: 'samuel-scalp',
     kind: 0,
     reach: 0.66,
-    mask: (s) => s.scalpMask(0, (phi) => 0.006 * Math.exp(-(((phi - 40) / 22) ** 2))), // a little receded at the temples (age)
+    ...NATURAL_SCALP,
+    mask: (s) => s.scalpMask(0, hairline),
     // second cast pass: denser and fuller (read stringy / sparse at medium): more, broader strands in bigger locks
     strands: { low: 4600, medium: 18000, high: 30000 },
     // (finishing pass: more, broader locks with less clumping — in the backlit verdict MCU the hair read as ropes /
@@ -105,7 +110,8 @@ export function samuelStyle(): GroomStyle {
     name: 'samuel-beard',
     kind: 1,
     reach: 0.66,
-    mask: (s) => s.beardMask(),
+    mask: (s) => s.beardMasks(shape).grow,
+    ...NATURAL_BEARD,
     strands: { low: 2800, medium: 9000, high: 17000 },
     locks: 300,
     sim: { low: 8, medium: 12, high: 18 },
@@ -117,14 +123,18 @@ export function samuelStyle(): GroomStyle {
       const L = 0.1 + 0.16 * chin + 0.04 * ss(0.07, 0.03, ax);
       // face pass 2: the upper cheek edge grows short and blends into the skin (it hung as a curtain from a hard line)
       const cheekEdge = ss(-0.05, -0.022, f.y) * ss(0.028, 0.048, ax);
-      return (must > 0.5 ? 0.055 : L * (1 - 0.65 * cheekEdge)) * (0.82 + 0.3 * R());
+      // beard1: the moustache over the upper lip from the philtrum outward — short at the philtrum (the lips show),
+      // longer toward the corners, where it falls past the mouth into the beard (it covered the mouth like a pad)
+      const mustL = 0.013 + 0.032 * ss(0.003, 0.024, ax);
+      return (must > 0.5 ? mustL : L * (1 - 0.65 * cheekEdge)) * (0.82 + 0.3 * R());
     },
     comb: (f, n, out) => {
       const ax = Math.abs(f.x);
       const must = ss(0.03, 0.02, ax) * ss(-0.075, -0.06, f.y);
       // (finishing pass: the moustache falls over the lip into the beard, the beard hangs straight down to the chest
       // — combed out sideways (0.1 + 0.9 must) it read as a white fan / broom in the verdict)
-      dir(out, Math.sign(f.x) * (0.04 + 0.5 * must), -1, 0.3 - 0.2 * must);
+      // beard1: the moustache parts at the philtrum and is combed out and down toward the corners of the mouth
+      dir(out, Math.sign(f.x) * (0.04 + must * (0.12 + 0.6 * ss(0.002, 0.018, ax))), -1, 0.3 - 0.12 * must);
       return out;
     },
     // models pass: a heavy, full beard falling in groomed wavy locks (no radiating strays)
@@ -149,28 +159,56 @@ export function samuelStyle(): GroomStyle {
     colors: (R, f, root, tip) => {
       greyWhite(R, f, root, tip, 0.04);
       // face pass 2: a few darker iron-grey threads deep in the beard give the white mass depth and structure
-      if (R() < 0.12) {
+      // (beard1: 12 -> 18 % — the white mass needs its grey)
+      const r = R();
+      if (r < 0.18) {
         root.multiplyScalar(0.55);
         tip.multiplyScalar(0.75);
+      } else if (r < 0.27) {
+        // beard1: a few hairs of pure white among the grey-white
+        lin([0.86, 0.85, 0.81], root);
+        tip.copy(root);
       }
-      // tobacco-yellowed / darker round the mouth (the moustache of an old man)
-      const must = ss(0.035, 0.015, Math.abs(f.x)) * ss(-0.1, -0.06, f.y);
-      if (must > 0.3) root.multiplyScalar(0.85);
+      // beard1: round the mouth an old man's white beard is ivory and yellowed (food, sun) — the moustache and the hairs
+      // under the lower lip, fading out over ~3 cm
+      const mouth = ss(0.04, 0.012, Math.abs(f.x)) * ss(-0.115, -0.085, f.y) * ss(-0.04, -0.055, f.y);
+      if (mouth > 0.05 && R() < 0.75) {
+        const k = mouth * (0.35 + 0.35 * R());
+        root.lerp(lin([0.64, 0.56, 0.4], _c), k);
+        tip.lerp(lin([0.8, 0.72, 0.52], _c), k);
+      }
     },
   };
   return {
     name: 'samuel',
     layers: [scalp, beard],
     ctrl: { low: 10, medium: 14, high: 20 },
-    segs: { low: 14, medium: 24, high: 38 },
+    // beard1: high 38 -> 32 segments (the fine strands cost fill; the curves of these heavy waves need no more)
+    segs: { low: 14, medium: 24, high: 32 },
     // (models pass: less back-lit glow — the white mass lit up like a halo against the low sun)
     // (finishing pass: white hair scatters light through the whole mass — more scatter, less occlusion inside the
     // locks: the dark lock interiors striped the hair like ropes in the backlit verdict MCU)
-    shading: { shift: 0.03, roughness: 0.45, specular: 0.42, backlit: 0.55, scatter: 0.9, aoDirect: 0.4 },
+    // beard1: the beard (not the head hair) coarse and dull, its inside in its own shade, the tips glowing in the sun
+    shading: { shift: 0.03, roughness: 0.45, specular: 0.42, backlit: 0.55, scatter: 0.9, aoDirect: 0.4, beard: { rough: 0.1, spec: 0.65, selfShadow: 0.4, tipGlow: 0.35 } },
     capColor: [0.62, 0.6, 0.56], // the scalp cap near the white hair (models pass: a shade greyer — the beard read as a white wall)
     capOffset: 0.005,
     capBeard: 0.55,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
+    // beard1: no cap (it showed as a flat grey band at the hairline): the skin under the white hair and beard takes a
+    // grey-white root tint at half cover (an old man's pink skin shows through white hair) and the hair's shadow
+    // (white hair scatters the light through the mass: the skin under it is covered by pale roots and lies in a light
+    // shade — a dark, occluded skin showing through made the white beard read brown)
+    skin: {
+      beard: (s) => s.beardMasks(shape).skin,
+      scalp: (s) => s.scalpSkin(0, hairline),
+      beardColor: [0.66, 0.64, 0.6],
+      scalpColor: [0.66, 0.64, 0.6],
+      cover: 0.72,
+      occDirect: 0.22,
+      occIndirect: 0.4,
+    },
+    fine: true,
+    jawHang: 0.8,
   };
 }
 
@@ -263,11 +301,17 @@ export function elderStyle(seed: number): GroomStyle {
     tip.r *= 1.06;
   };
   const wavy = L.wavy;
+  const recede = 0.004 + 0.012 * R0(); // receding with age
+  // beard1 (wave 6): each elder's own natural line — a long narrow beard thins on the cheeks, a short one is trimmed lower
+  const bshape: BeardShape = L.beard === 'long' ? { seed: 100 + seed, line: -0.003, neck: 0.012, patchy: 0.5 }
+    : L.beard === 'short' ? { seed: 100 + seed, line: -0.005, neck: -0.006, patchy: 0.35 }
+      : { seed: 100 + seed, line: 0.0, neck: 0.008, patchy: 0.3 };
   const scalp: LayerStyle = {
     name: 'elder-scalp',
     kind: 0,
     reach: 0.42,
-    mask: (s) => s.scalpMask(0.004 + 0.012 * R0()), // receding with age
+    ...NATURAL_SCALP,
+    mask: (s) => s.scalpMask(recede),
     strands: { low: 2400, medium: 7000, high: 14000 },
     // (finishing pass: fuller groomed locks — the near elders of P5 are seen from behind, their hair large in frame)
     locks: 260,
@@ -304,7 +348,8 @@ export function elderStyle(seed: number): GroomStyle {
     name: 'elder-beard',
     kind: 1,
     reach: 0.42,
-    mask: (s) => s.beardMask(),
+    mask: (s) => s.beardMasks(bshape).grow,
+    ...NATURAL_BEARD,
     strands: { low: 1800, medium: 5500, high: 12000 },
     locks: 170,
     sim: { low: 4, medium: 8, high: 12 },
@@ -346,16 +391,31 @@ export function elderStyle(seed: number): GroomStyle {
   };
   // the scalp cap under the strands: the hair's own colour, a little lighter where it greys
   const capL = 0.45 * (L.hair[0] + L.hair[1] + L.hair[2]) + 0.3 * grey;
+  // beard1: the roots on the skin — his hair colour with his share of iron-grey mixed in (salt and pepper)
+  const gm = Math.min(0.85, grey * 0.8);
+  const rootC: [number, number, number] = [L.hair[0] * (1 - gm) + 0.42 * gm, L.hair[1] * (1 - gm) + 0.41 * gm, L.hair[2] * (1 - gm) + 0.39 * gm];
   return {
     name: `elder-${seed}`,
     layers: [scalp, beard],
     ctrl: { low: 9, medium: 12, high: 16 },
     segs: { low: 12, medium: 18, high: 28 },
-    shading: { shift: 0.03, roughness: 0.42, specular: 0.48, backlit: 0.6, scatter: 0.45 + 0.2 * grey, aoDirect: 0.55 },
+    shading: { shift: 0.03, roughness: 0.42, specular: 0.48, backlit: 0.6, scatter: 0.45 + 0.2 * grey, aoDirect: 0.55, beard: BEARD_SHADE },
     capColor: [Math.min(0.5, capL * 1.05), Math.min(0.48, capL * 0.95), Math.min(0.45, capL * 0.85)],
     capOffset: 0.004,
     capBeard: 0.8,
     widthTier: { low: 2.8, medium: 1.5, high: 1 },
+    // beard1: no cap shell — the skin carries the roots and the beard's shadow
+    skin: {
+      beard: (s) => s.beardMasks(bshape).skin,
+      scalp: (s) => s.scalpSkin(recede),
+      beardColor: rootC,
+      scalpColor: rootC,
+      cover: 0.84 - 0.25 * gm,
+      occDirect: 0.45,
+      occIndirect: 0.75,
+    },
+    fine: true,
+    jawHang: L.beard === 'short' ? 0.2 : 0.7,
   };
 }
 

@@ -10,7 +10,7 @@ import { labelPlan, mapBeats, mapCamPath, routeKeys, scatterHomes, type MapPose 
 import { MapLabels, type LabelSpec } from './mapLabels';
 
 /**
- * THE REALISTIC 3D MAP of the opening film (CUT v6 — P4 'map-exodus', take 'exodus', 10 s; docs/intro-script-v6.md):
+ * THE REALISTIC 3D MAP of the opening film (CUT v6.1 — P4 'map-exodus', take 'exodus', 10.5 s; docs/intro-script-v6-1.md):
  * the real land from the Nile delta and the Gulf of Suez to the Galilee and the Bashan seen like a satellite view at
  * first light — real elevation and natural colour restored to ~1000 BCE (tools/map/build_map.py, src/assets/map), the
  * relief exaggerated x2.6, the morning sun low in the east baked into soft long shadows, the sea with its depth colour
@@ -19,6 +19,10 @@ import { MapLabels, type LabelSpec } from './mapLabels';
  * behind it, spreading and gathering like sheep, across the wilderness and the Jordan to Gilgal; at `land` they scatter
  * over the land, at `noKing` the leading light goes out (Judg 21:25), and the lens sinks and turns WNW toward the coast
  * where the five Philistine cities kindle — the dissolve lands on P6. Two names orient: Egypt and the Jordan.
+ * CUT v6.1 — the two transitions: IN by a MATCH dissolve out of P1 (the map's first second is P1's own view — the hills
+ * of Judah from low, looking WNW, the same lens, bank and turn, in P1's rose dawn light; then the lens soars up and back
+ * into the region), OUT by a dissolve into P6 (the lens comes down low over the western hills toward the coast, the
+ * horizon where P6's is, the cities' glows swelling in a warm, dusty cream-gold light like P6's).
  *
  *   const handle = await createMapSet(engine, { onProgress });   // a FilmSetHandle ('map'); async, yielding steps
  *   handle.frame('exodus', u, t, out) / enter / tick / focus (null: deep focus) / dispose()
@@ -452,37 +456,53 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
   // ---- 7. the shot logic (pure functions of the shot time: seek-safe)
   const DUR = BT.dur;
   const path = mapCamPath();
-  const pose: MapPose = { lon: 0, lat: 0, range: 1, heading: 0, pitch: 45, fov: 30 };
+  const pose: MapPose = { lon: 0, lat: 0, range: 1, heading: 0, pitch: 45, fov: 30, roll: 0 };
   const E = new THREE.Vector3(), Nn = new THREE.Vector3(), U = new THREE.Vector3(), T = new THREE.Vector3(), F = new THREE.Vector3();
+  const Lup = new THREE.Vector3(), Rr = new THREE.Vector3(), Uc = new THREE.Vector3();
+  const WORLD_UP = new THREE.Vector3(0, 1, 0);
+  const tanMatchMax = Math.tan(THREE.MathUtils.degToRad(39));
   let curT = 0;
   let time = 0;
-  /** the camera at shot time t (aspect-aware: phones held upright see the taller region from further and higher) */
+  /**
+   * The camera at shot time t. Phones held upright see the taller region from further and higher (the player's
+   * portraitLens widens a portrait lens by k afterwards — pre-divided here so the result is this lens) — except at the
+   * two matches: the first seconds are P1's own lens and pose (in portrait the same widening the player gives P1) and
+   * the last are the low view across the plain (P6's horizon). Under a low lens the horizon is levelled to the local
+   * vertical (the map's world up is the region centre's).
+   */
   const camAt = (take: string, t: number, out: ShotFrame) => {
     path.pose(take, t, pose);
     const aspect = camera.aspect || 16 / 9;
-    // portrait: a taller lens, further away and a little steeper (the region is taller than wide); the player's
-    // portraitLens widens a portrait lens by k afterwards — pre-divided here so the result is this lens. From `land`
-    // the extra distance melts away: the land of Israel, narrow and tall, fills a portrait frame.
     const s = Math.max(0, Math.min(1, (1.2 - aspect) / (1.2 - 0.46)));
-    const tan0 = Math.tan(THREE.MathUtils.degToRad(pose.fov) / 2);
-    const tanP = tan0 * (1 + 0.9 * s);
-    const close = 0.85 * ramp(t, BT.land - 0.6, 2.6);
-    // the first seconds held upright: not further away but steeper and further north — the limb along the top, the
-    // near ground still inside the map's sharp box (a tall frame from that height would reach far south of it)
-    const early = s * (1 - ramp(t, 0, BT.flock + 1.4));
-    const rangeK = 1 + s * (1 - close) * Math.max(0, (0.62 * 2.39) / (1.9 * Math.max(aspect, 0.3)) - 1);
-    const range = pose.range * (rangeK + (0.95 - rangeK) * early);
-    const pitch = Math.min(84, pose.pitch + 9 * s + 6 * early);
-    const tLat = pose.lat + 1.1 * early;
+    const wFix = Math.max(1 - ramp(t, 0.9, 1.3), ramp(t, DUR - 2.6, 2.2));
     const k = aspect < 0.95 ? Math.min(2.6, Math.max(1, (0.45 * 2.39) / aspect)) : 1;
-    geoBasis(pose.lon, tLat, E, Nn, U);
-    T.copy(geoToWorld(pose.lon, tLat, ground(pose.lon, tLat), T));
+    const tan0 = Math.tan(THREE.MathUtils.degToRad(pose.fov) / 2);
+    const tanMap = tan0 * (1 + 0.9 * s);
+    const tanMatch = Math.min(tanMatchMax, tan0 * k);
+    const tanP = tanMap + (tanMatch - tanMap) * wFix;
+    const close = 0.85 * ramp(t, BT.land - 0.6, 2.6);
+    const rangeK = 1 + s * (1 - close) * Math.max(0, (0.62 * 2.39) / (1.9 * Math.max(aspect, 0.3)) - 1);
+    const range = pose.range * (1 + (rangeK - 1) * (1 - wFix));
+    const pitch = Math.min(84, pose.pitch + 9 * s * (1 - wFix));
+    geoBasis(pose.lon, pose.lat, E, Nn, U);
+    T.copy(geoToWorld(pose.lon, pose.lat, 0, T));
     const hd = THREE.MathUtils.degToRad(pose.heading), pt = THREE.MathUtils.degToRad(pitch);
     F.copy(E).multiplyScalar(Math.sin(hd)).addScaledVector(Nn, Math.cos(hd)).multiplyScalar(Math.cos(pt)).addScaledVector(U, -Math.sin(pt)).normalize();
     out.pos.copy(T).addScaledVector(F, -range);
     out.look.copy(T);
     out.fov = THREE.MathUtils.radToDeg(2 * Math.atan(tanP / k));
-    out.roll = 0;
+    let roll = THREE.MathUtils.degToRad(pose.roll);
+    const alt = out.pos.distanceTo(earthC) - MAP.R;
+    const wl = Math.max(0, Math.min(1, (300_000 - alt) / 250_000));
+    if (wl > 0) {
+      const g = worldToGeo(out.pos);
+      geoBasis(g.lon, g.lat, Rr, Uc, Lup);
+      Rr.crossVectors(F, WORLD_UP).normalize();
+      Uc.crossVectors(Rr, F);
+      Lup.addScaledVector(F, -Lup.dot(F));
+      roll -= Math.atan2(Lup.dot(Rr), Lup.dot(Uc)) * wl;
+    }
+    out.roll = roll;
     return range;
   };
 
@@ -495,6 +515,33 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     zen: (skyMat.uniforms.uZenith.value as THREE.Color).clone(), hor: (skyMat.uniforms.uHorizon.value as THREE.Color).clone(),
   };
   const dawnSun = new THREE.Color(1.0, 0.58, 0.36);
+  const hazeK0 = common.uHazeK.value, skyH0 = skyMat.uniforms.uSkyH.value as number;
+  // IN: P1's last frame (a pale rose-cream dawn sky, warm red-brown ridges under a low sun behind the lens, a lavender-
+  // rose haze toward the horizon); OUT: P6's first (a bright cream-gold sky, the horizon band glowing with dust)
+  const sat0 = common.uSat.value;
+  const OPEN = {
+    sunK: L0.sunK * 0.95, ambK: L0.ambK * 0.45, sunCol: new THREE.Color(1.0, 0.6, 0.4), hazeCol: new THREE.Color(1.0, 0.8, 0.7),
+    hazeSun: new THREE.Color(1.1, 0.74, 0.55), hazeK: hazeK0 * 1.0, zen: new THREE.Color(0.75, 0.66, 0.72), hor: new THREE.Color(1.7, 1.42, 1.18), skyH: 45000, exp: 0.9, sat: 1.45,
+  };
+  const SHUT = {
+    sunK: L0.sunK, ambK: L0.ambK * 0.8, sunCol: new THREE.Color(1.0, 0.8, 0.56), hazeCol: new THREE.Color(0.98, 0.8, 0.5),
+    hazeSun: new THREE.Color(1.25, 0.98, 0.6), hazeK: hazeK0 * 1.5, zen: new THREE.Color(0.8, 0.74, 0.56), hor: new THREE.Color(1.5, 1.28, 0.84), skyH: 45000, exp: 1.0, sat: sat0,
+  };
+  const zen = skyMat.uniforms.uZenith.value as THREE.Color, hor = skyMat.uniforms.uHorizon.value as THREE.Color;
+  const mixIn = (g: typeof OPEN, w: number) => {
+    if (w <= 0) return;
+    common.uSunK.value += (g.sunK - common.uSunK.value) * w;
+    common.uAmbK.value += (g.ambK - common.uAmbK.value) * w;
+    common.uSunCol.value.lerp(g.sunCol, w);
+    common.uHazeCol.value.lerp(g.hazeCol, w);
+    common.uHazeSun.value.lerp(g.hazeSun, w);
+    common.uHazeK.value += (g.hazeK - common.uHazeK.value) * w;
+    zen.lerp(g.zen, w);
+    hor.lerp(g.hor, w);
+    skyMat.uniforms.uSkyH.value += (g.skyH - (skyMat.uniforms.uSkyH.value as number)) * w;
+    common.uSat.value += (g.sat - common.uSat.value) * w;
+  };
+  /** the light at shot time t (uniforms); returns the exposure factor */
   const lightAt = (t: number) => {
     const d = 0.3 + 0.7 * ramp(t, BT.jordan - 0.5, 2.8);
     common.uSunK.value = L0.sunK * (0.14 + 0.86 * d);
@@ -502,15 +549,25 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     common.uSunCol.value.copy(dawnSun).lerp(L0.sunCol, d);
     common.uHazeCol.value.copy(L0.hazeCol).multiplyScalar(0.45 + 0.55 * d);
     common.uHazeSun.value.copy(L0.hazeSun).multiplyScalar(0.5 + 0.5 * d);
-    (skyMat.uniforms.uZenith.value as THREE.Color).copy(L0.zen).multiplyScalar(0.5 + 0.5 * d);
-    (skyMat.uniforms.uHorizon.value as THREE.Color).copy(L0.hor).multiplyScalar(0.5 + 0.5 * d);
-    return d;
+    common.uHazeK.value = hazeK0;
+    zen.copy(L0.zen).multiplyScalar(0.5 + 0.5 * d);
+    hor.copy(L0.hor).multiplyScalar(0.5 + 0.5 * d);
+    skyMat.uniforms.uSkyH.value = skyH0;
+    common.uSat.value = sat0;
+    // the matches: P1's light under the dissolve in, eased into the dawn of the map as the lens soars; P6's at the end
+    const wo = 1 - ramp(t, 0.8, 1.4), we = ramp(t, DUR - 3.0, 2.6);
+    mixIn(OPEN, wo);
+    mixIn(SHUT, we);
+    let x = 0.8 + 0.2 * d;
+    x += (OPEN.exp - x) * wo;
+    x += (SHUT.exp - x) * we;
+    return { d, x };
   };
 
   const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
   /** per frame: the light, the flock, its leader, the trace, the glows and the names for the shot time t */
   const shotState = (t: number, camRange: number) => {
-    const dawn = lightAt(t);
+    const dawn = lightAt(t).d;
     const hf = headAt(t);
     const ru = routeMat.uniforms;
     ru.uHead.value = hf;
@@ -571,10 +628,13 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     gilgalGlow.mat.uniforms.uAlpha.value = gl * 0.45 * (0.85 + 0.15 * Math.sin(time * 2.1));
     gilgalGlow.mat.uniforms.uSizePx.value = 40 * pxScale;
     // the five Philistine cities: they kindle on the coast (1 Sam 6:17's order) as the lens turns toward them
+    // (CUT v6.1) as the lens comes down toward them they swell into the warm haze of the horizon — where P6's dust and
+    // light will be when the dissolve lands
+    const near = ramp(t, DUR - 2.6, 2.4);
     cityGlows.forEach((c, i) => {
       const a = ramp(t, BT.noKing + 1.0 + i * 0.2, 0.6);
-      c.mat.uniforms.uAlpha.value = a * (0.8 + 0.2 * Math.sin(time * 2.6 + i * 1.3));
-      c.mat.uniforms.uSizePx.value = 22 * pxScale;
+      c.mat.uniforms.uAlpha.value = a * (0.8 + 0.2 * Math.sin(time * 2.6 + i * 1.3)) * (1 + 0.35 * near);
+      c.mat.uniforms.uSizePx.value = 22 * (1 + 1.1 * near) * pxScale;
     });
     // the names
     for (const l of LP) labels.set(l.id, ramp(t, l.t0, 0.5) * (1 - ramp(t, l.t1 - 0.6, 0.6)));
@@ -588,7 +648,7 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     camera,
     sky: null,
     // the dawn: a little lower over the wilderness, P6's morning at the end (lightAt)
-    exposure: () => 0.52 * (0.8 + 0.2 * lightAt(curT)),
+    exposure: () => 0.52 * lightAt(curT).x,
     atmosphere: { density: 0, godRays: 0 },
     update: (dt, cam) => {
       time += dt;

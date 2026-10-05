@@ -72,8 +72,32 @@ const g = await createGroom(guard, { kind: 'man', seed: 7, beard: 'full', headba
    coverage threshold is per *strand* (`fract(rand)`): a sub-pixel strand is drawn as a continuous >= 1 px line or not at
    all, a uniform random subset that keeps the coverage right — beards read as strands, not noise.
    `HairDepthMaterial` casts shadows with the same expansion (1.6× wider, ≥ 1 shadow texel, dithered coverage).
-4. **Cap**: the scalp (and beard) region of the skin, offset 1-6 mm along the normal, hair-root coloured with noise, soft
-   alpha at the hairline; follows the jaw. Keeps the scalp from showing through on every tier.
+4. **Cap** (David, Philistines): the scalp (and beard) region of the skin, offset 1-6 mm along the normal, hair-root
+   coloured with noise, soft alpha at the hairline; follows the jaw. Keeps the scalp from showing through on every tier.
+4b. **Beards that grow out of the skin** (beard1, wave 6 — the user: "the beards look glued on like a costume"). The
+   bearded men of the film (Saul, Samuel, the elders, the soldiers, every `man` with a beard) have NO cap. Instead:
+   - `groomSkin.ts` bakes a small map in the head's uv rectangle (RGBA8, 256x512 / 128x256 on 'low', ~0.35-0.7 MB with
+     mips): R root density (the strands' mask + the stubble zone ~1.2 cm beyond the last strands), G occlusion = the
+     optical depth of the actual strands above each skin vertex (grow.ts `bakeAO` with `skinOcc`: the beard's shadow on
+     the chin and down the neck, the hair's on the scalp), B beard / scalp root colour, A where single stubble hairs show.
+     It is handed to the human's `SkinMaterial` (`setGroomSkin`, the marked BEARD / SCALP SKIN section of
+     SkinMaterial.ts): uniforms only — every skin program of a tier carries the code behind a uniform branch, so no
+     variant is compiled per actor and a skin without a map (David) computes exactly what it did before. The shader tints
+     the albedo toward the root colour by density (white hair: half cover, the pink skin shows), breaks the edge with
+     3-8 mm noise, draws single follicle dots at the border on the hero tier (faded to their mean once sub-pixel), damps
+     the skin's own sheen under hair and darkens direct / indirect light by the occlusion.
+   - `HeadSurface.beardMasks(shape)`: a natural beard — the man's own wandering cheek line (noise ~1.5 cm / ~5 mm), the
+     density falling over ~2.5 cm into the cheek, thin patches high on the cheek, a wandering neck line 3-5 cm under the
+     jaw, the lips exactly bare; `scalpSkin()` adds the fine short hairs ~4 mm below the hairline.
+   - grow.ts (`densityPow`, `edgeShort`, `lockTint`, `stray`, `flyWidth`, `widthVar`; all optional): fewer roots toward
+     the border, short / single / scattered hairs there, every lock its own shade, a few strays off each lock, varied widths.
+   - HairMaterial: `uFine` — under TAA (every tier but mobile-low; MSAA is 0 everywhere since the TAA pass) a per-pixel
+     coverage dither that TAA resolves into soft sub-pixel strands and 0.55 px ribbons (the per-strand path had drawn
+     every sub-pixel strand as an opaque >= 1 px line: yarn); without TAA (mobile-low) more, dimmer lines with the same
+     mean coverage (sqrt(cov) of the strands, each shaded sqrt(cov) from its root colour). Beard strands (layer kind 1):
+     `HairShading.beard` = rougher, duller R, self-shadowed inside (occlusion exponent), the golden rim through the tips.
+     `uJawHang`: a long beard's tail follows the chin's translation, not the jaw's rotation, when he speaks.
+   David's groom sets none of these: his hair, cap and skin are bit-for-bit what they were.
 5. **Dynamics** (`HairSim.ts`): 16-56 guides per groom, damped Verlet in world space, roots pinned, style-memory spring
    toward the groomed shape (fading to the tip), gravity applied as the difference to the groomed gravity (still upright
    head = exact groom), wind drag with gusts, SDF collision via the head's current transform. Output: K × G float texture.

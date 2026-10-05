@@ -52,6 +52,11 @@ export interface BakedClip {
   speed: number;
   mirror: boolean;
   carry: boolean;
+  /**
+   * (host1, wave 6) the capture's foot contacts per baked frame (bits: heelL 1, ballL 2, heelR 4, ballR 8; mirrored with
+   * the take) — a crowd can end a walk when both feet are down (the walk -> stand blend then slides least)
+   */
+  contacts: Uint8Array;
 }
 
 export function clipKey(s: CrowdClipSpec) {
@@ -171,7 +176,7 @@ export class CrowdAnim {
     let frame = 0;
     for (const { s, c, r0, frames } of plan) {
       const loop = s.loop ?? (c.loop && !s.range && !s.peak);
-      const bc: BakedClip = { key: clipKey(s), clip: s.clip, start: frame, frames, fps: c.fps, duration: frames / c.fps, loop, speed: c.meta.speed, mirror: !!s.mirror, carry: !!s.carry };
+      const bc: BakedClip = { key: clipKey(s), clip: s.clip, start: frame, frames, fps: c.fps, duration: frames / c.fps, loop, speed: c.meta.speed, mirror: !!s.mirror, carry: !!s.carry, contacts: new Uint8Array(frames) };
       baked.push(bc);
       const pk = s.peak ? (MOCAP_BONES as readonly string[]).indexOf(s.peak) : -1;
       let best = -1e9, bestF = frames - 1;
@@ -179,6 +184,7 @@ export class CrowdAnim {
         // (wave 4b) a pause between frames when the film's builder slice is used up (core/slice); same frames, same order
         if (slice.due()) await slice.pause();
         c.sample(r0 + f / c.fps, pose, !!s.mirror);
+        bc.contacts[f] = pose.contacts;
         rig.update(0);
         const q = pose.q;
         for (let b = 1; b < CROWD_BONES; b++) {

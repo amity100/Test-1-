@@ -349,13 +349,15 @@ export async function dressDavid(human: HumanModel, opts: DressOptions): Promise
     // free-hanging lead from the bag's front corner up to the body
     const first = tubeSurface(upper.tube, ctrlTh[0], ctrlD[0]);
     const t = i / (lead + 1);
-    strapPts.push(endA.clone().lerp(first.p.clone().addScaledVector(first.n, 0.006), t));
+    strapPts.push(endA.clone().lerp(first.p.clone().addScaledVector(first.n, 0.012), t)); // (cut8, wave 6) see below
     strapN.push(bagOut.clone().lerp(first.n, t).normalize());
   }
   for (let i = 0; i <= NP; i++) {
     const t = i / NP;
     const sf = tubeSurface(upper.tube, interp(ctrlTh, t), interp(ctrlD, t));
-    strapPts.push(sf.p.addScaledVector(sf.n, 0.0065));
+    // (cut8, wave 6) 1.3 cm off the tunic (was 6.5 mm): in a deep forward bend (D4, gathering the lamb) the tunic's
+    // and the strap's skinning part, and the strap sank into the tunic — dark patches showing through it
+    strapPts.push(sf.p.addScaledVector(sf.n, 0.013));
     strapN.push(sf.n);
   }
   const lastOn = strapPts[strapPts.length - 1].clone(), lastN = strapN[strapN.length - 1].clone();

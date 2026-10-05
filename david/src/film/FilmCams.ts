@@ -29,7 +29,11 @@ export const FILM_CAM = {
   //  4 s of picture, the rank gaining on the lens as it backs away; the lens holds its first pose under the black. It
   //  opens tilted up ~10° into the glowing dust — the time card, centred, is carried over the dust, never over the
   //  men's heads (they sit in the lower third) — and tilts down onto the front rank as the card melts)
-  dust: { ahead0: 7.6, ahead1: 4.4, side0: 9.4, side1: 8.5, h0: 0.8, h1: 1.05, lookBack: 5, lookSide: 3.4, lookH0: 3.55, lookH1: 1.55, fov0: 44, fov1: 38 },
+  // (CUT v6.1, cut7: the cut to G2 hides in a man of the front rank passing close across the lens — G1 `wipe` 3.6. The
+  //  lens no longer backs away: it stands (`back` m/s at first, still from `stop`) beside the column's southern file and
+  //  the front rank reaches it; from `pan0` it pans with the rank's arrival to look across the march (north), and the
+  //  southernmost file's front man walks across the frame ~0.65 m in front of it (host1's walk, w6_notes.md))
+  dust: { ahead0: 5.0, back: 0.15, stop: 2.4, side0: 9.4, side1: 8.0, side0At: 0.5, side1At: 3.6, h0: 0.8, h1: 1.1, lookBack: 5, lookSide: 3.4, lookH0: 3.55, lookH1: 1.55, fov0: 44, fov1: 38, pan0: 2.3, pan1: 3.75, panLook: [-0.4, 1.25, -3.0] as [number, number, number] },
   // G2: very low in front of the striding king, tracking back with a slow push (the sun just beside his head)
   // (CUT v3: 6.5 s — the same push and arc, spread over the whole take)
   king: { d0: 4.9, d1: 3.3, lens: 0.3, side0: 1.1, side1: 0.5, lookH0: 1.32, lookH1: 1.52, lookSide: 0.95, fov0: 38, fov1: 33 },
@@ -83,7 +87,10 @@ export const FILM_CAM = {
   //  (the lens on his NORTH side: the fist with the torn corner is held on his south side, so it never covers his face)
   //  (CUT v3, 3 s: the rack fist -> face from just after beats.lookDown (`tilt0` s after it) to `tilt1` s before
   //   beats.tighten; the whip up into the light starts `whipLead` s before beats.flash and runs into the cut)
-  alone: { dx0: 1.75, dx1: 1.42, dz0: -0.3, dz1: -0.46, h0: 1.05, h1: 1.32, fov0: 24, fov1: 26.5, mix0: 0.04, mix1: 0.8, tilt0: 0.1, tilt1: 0.2, whipLead: 0.05, whip: 7 },
+  // (CUT v6.1, cut7: G7 is WHAT SAMUEL SEES — the eyeline cut on G6 `lookDown`: the lens at his eyes ~1.5 m east of the
+  //  king kneeling at his feet, looking down on the fist and the bowed head; it rises past him into the low sun at the
+  //  end. Samuel is not in the frame — the performance hides him)
+  alone: { dx0: 1.42, dx1: 1.22, dz0: 0.12, dz1: 0.02, h0: 1.52, h1: 1.46, fov0: 26, fov1: 27.5, mix0: 0.04, mix1: 0.8, tilt0: 0.1, tilt1: 0.2, whipLead: 0.05, whip: 6 },
   // P1 'flight' (cut7, CUT v5): ONE slow, majestic flight over the hills of Judah at dawn — 8 s of picture after the
   // black (P1 beats.picture 3.0). Keys in the judah set's metres (Bethlehem at the origin, +x east, +z SOUTH, alt =
   // metres above the sea): [t (shot s), x, alt, z, bearing (compass deg), pitch (deg, - = down), roll (deg, - = banking
@@ -308,20 +315,29 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       // CUT v3: the shot opens on 1.5 s of black (the time card); the picture comes in ON the shofar — the move runs
       // over the picture only (shofar -> the cut), the lens holding its first pose (relative to the rank) under the black
       const c = FILM_CAM.dust;
-      // (CUT v5: `t` is blocking time = shot time + TAKE_OFFSET 1.5 — the move runs from the shofar to the cut exactly
-      //  as in CUT v4: e = drift((t - 1.5) / 4))
+      // (CUT v5: `t` is blocking time = shot time + TAKE_OFFSET 1.5 — the move runs from the shofar to the cut)
       const off = TAKE_OFFSET.dustWall ?? 0;
       const t0 = off + takeBeat('dustWall', 'shofar', 0), T = off + takeDur('dustWall', 4);
       const e = drift((t - t0) / Math.max(0.5, T - t0));
+      const ts = Math.max(0, t - t0); // shot seconds of picture
       const a = armyAt('dustWall', t);
       const fx = a.frontX - ARMY.leadGap;
       const zr = roadZ(fx);
-      out.pos.set(fx + lerp(c.ahead0, c.ahead1, e), 0, zr + lerp(c.side0, c.side1, e));
+      // (CUT v6.1) the lens stands: it eases out of a slow backing (`back` m/s) by `stop`; the front rank reaches it
+      const fx0 = armyAt('dustWall', t0).frontX - ARMY.leadGap;
+      const backed = c.back * (ts < c.stop ? ts - (ts * ts * ts) / (c.stop * c.stop) + (ts * ts * ts * ts) / (2 * c.stop * c.stop * c.stop) : c.stop / 2);
+      out.pos.set(fx0 + c.ahead0 + backed, 0, zr + lerp(c.side0, c.side1, ss(c.side0At, c.side1At, ts)));
       out.pos.y = H(out.pos.x, out.pos.z) + lerp(c.h0, c.h1, e);
       out.look.set(fx - c.lookBack, 0, zr + c.lookSide);
       out.look.y = H(out.look.x, out.look.z) + lerp(c.lookH0, c.lookH1, e);
+      // the pan with the rank's arrival: across the march at the end (the southern file walks across the frame)
+      const pan = ss(c.pan0, c.pan1, ts);
+      if (pan > 0) {
+        _a.set(out.pos.x + c.panLook[0], out.pos.y - lerp(c.h0, c.h1, e) + c.panLook[1], out.pos.z + c.panLook[2]);
+        out.look.lerp(_a, pan);
+      }
       out.fov = lerp(c.fov0, c.fov1, e);
-      out.roll = -0.025 + 0.02 * e;
+      out.roll = (-0.025 + 0.02 * e) * (1 - pan);
       return true;
     }
     case 'king': {
@@ -439,10 +455,10 @@ export function gilgalCam(take: string, u: number, t: number, H: (x: number, z: 
       const g = H(s.x, s.z);
       const w0 = alonePhases();
       out.pos.set(s.x + lerp(c.dx0, c.dx1, e), g + lerp(c.h0, c.h1, e), s.z + lerp(c.dz0, c.dz1, e));
-      _a.set(s.x + 0.22, g + 0.98, s.z + 0.3); // the fist at his chest
+      _a.set(s.x + 0.3, g + 0.72, s.z + 0.25); // the fist (he kneels)
       const hand = ctx?.saulHand?.(_c);
       if (hand) _a.lerp(hand, 0.7);
-      _b.set(s.x + 0.05, g + 1.84, s.z);
+      _b.set(s.x + 0.08, g + 1.3, s.z);
       const eyes = ctx?.saulEyes?.(_c);
       if (eyes) _b.copy(eyes);
       out.look.copy(_a).lerp(_b, lerp(c.mix0, c.mix1, ss(w0.tilt0, w0.tilt1, t)));
@@ -529,10 +545,10 @@ export function gilgalFocus(take: string, t: number, H: (x: number, z: number) =
     case 'saulAlone': {
       const s = saulAt('saulAlone', t).pos;
       const g = H(s.x, s.z);
-      _a.set(s.x + 0.22, g + 0.98, s.z + 0.3);
+      _a.set(s.x + 0.3, g + 0.72, s.z + 0.25);
       const hand = ctx?.saulHand?.(_c);
       if (hand) _a.copy(hand);
-      const eyes = ctx?.saulEyes?.(_b) ?? _b.set(s.x + 0.05, g + 1.84, s.z);
+      const eyes = ctx?.saulEyes?.(_b) ?? _b.set(s.x + 0.08, g + 1.3, s.z);
       // the rack runs with the tilt (alonePhases), a little ahead of it
       const w0 = alonePhases();
       return { point: out.copy(_a).lerp(eyes, ss(w0.tilt0 + 0.05, w0.tilt1 - 0.1, t)), fStop: 2.0 };
@@ -608,12 +624,16 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     const c = FILM_CAM.threat;
     const hd = ctx.coast.heading;
     const r0 = takeBeat('threat', 'crane', 2.0);
-    const k = ss(r0, r0 + c.riseLen, t);
+    // (CUT v6.1: the crane EASES OUT and has arrived by `settle` — the hard cut to P7 lands on the drum hit after it,
+    //  never in the middle of the move; the look stops following the marching head there too)
+    const settle = takeBeat('threat', 'settle', r0 + c.riseLen);
+    const k = ss(r0, settle, t);
+    const tm = Math.min(t, settle);
     const L = (a: number, b: number) => a * Math.pow(b / a, k);
     _a.set(-hd.z, 0, hd.x); // the marching men's right: the sunlit flank of the main column
     out.pos.copy(ctx.coast.columnHead).addScaledVector(hd, L(c.ahead0, c.ahead1)).addScaledVector(_a, L(c.side0, c.side1));
     out.pos.y = ctx.height(out.pos.x, out.pos.z) + L(c.h0, c.h1);
-    _b.copy(ctx.coast.columnHead).addScaledVector(hd, FILM_CAM.coast.march * t); // the head now
+    _b.copy(ctx.coast.columnHead).addScaledVector(hd, FILM_CAM.coast.march * tm); // the head now (held from `settle`)
     out.look.copy(_b).addScaledVector(hd, -L(c.back0, c.back1)).addScaledVector(_a, lerp(c.lookSide0, c.lookSide1, k));
     out.look.y = ctx.height(out.look.x, out.look.z) + lerp(c.lookH0, c.lookH1, k);
     out.fov = lerp(c.fov0, c.fov1, k);

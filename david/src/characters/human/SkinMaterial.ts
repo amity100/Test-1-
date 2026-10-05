@@ -86,6 +86,8 @@ export class SkinMaterial extends THREE.MeshPhysicalMaterial {
     uLipWet: { value: 0.7 }, // lip moisture
     uHero: { value: 0.0 }, // hero close-up detail 0..1 ('high' quality only)
   };
+  /** beard1 (wave 6): the skin under a groom's beard / scalp (roots, stubble, the hair's shadow) — BEARD / SCALP SKIN below */
+  readonly groomSkin = createGroomSkinUniforms();
 
   constructor(tex: SkinTextures, opts: SkinOptions) {
     super({
@@ -509,6 +511,7 @@ if ( uSkinPass > 0.5 ) {
 }`,
         );
     };
+    patchGroomSkin(this); // beard1 (wave 6): BEARD / SCALP SKIN (end of file) — inert until a groom attaches its map
   }
 }
 
@@ -551,4 +554,152 @@ export function* uvDensityAttributeSteps(g: THREE.BufferGeometry): Generator<voi
   mean /= n;
   for (let i = 0; i < n; i++) if (!out[i]) out[i] = mean;
   return new THREE.BufferAttribute(out, 1);
+}
+
+// =====================================================================================================================
+// BEARD / SCALP SKIN — owner: beard1 (wave 6, "the beards look glued on like a costume"). Everything below and the two
+// marked lines in SkinMaterial (the `groomSkin` field, the `patchGroomSkin(this)` call) belong to this section.
+//
+// A beard grows OUT OF the skin: under it the skin is darkened and tinted by the roots and the stubble and lies in the
+// shadow of the hair mass. A groom (src/characters/hair/groomSkin.ts) bakes a small map in the head's UV rectangle —
+// R root density (with the sparse stubble zone beyond the strands), G occlusion by the hair above (the beard's shadow
+// on the chin and neck, the hair's on the scalp), B beard (1) / scalp (0) root colour, A where single stubble hairs
+// show (the thin border) — and attaches it with setGroomSkin(). The shader is in every skin program of a tier (no
+// define, no new variant per actor): a uniform branch (`uGroomOn`), so a skin without a groom map (David, every face
+// outside the masks) computes exactly what it computed before.
+// =====================================================================================================================
+export interface GroomSkinUniforms {
+  [k: string]: THREE.IUniform;
+  uGroomOn: THREE.IUniform<number>;
+  uGroomMap: THREE.IUniform<THREE.Texture | null>;
+  /** the map's rectangle in the body uv: (u0, v0, du, dv) */
+  uGroomRect: THREE.IUniform<THREE.Vector4>;
+  /** root colours (linear) */
+  uGroomBeardCol: THREE.IUniform<THREE.Color>;
+  uGroomScalpCol: THREE.IUniform<THREE.Color>;
+  /** x max root cover, y occlusion of direct light, z occlusion of indirect light, w follicle cells per metre */
+  uGroomParams: THREE.IUniform<THREE.Vector4>;
+  /** x stubble contrast (single hairs at the border), y edge noise, z skin sheen kept under hair (0..1), w unused */
+  uGroomParams2: THREE.IUniform<THREE.Vector4>;
+}
+
+export function createGroomSkinUniforms(): GroomSkinUniforms {
+  return {
+    uGroomOn: { value: 0 },
+    uGroomMap: { value: null },
+    uGroomRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+    uGroomBeardCol: { value: new THREE.Color(0.02, 0.014, 0.01) },
+    uGroomScalpCol: { value: new THREE.Color(0.02, 0.014, 0.01) },
+    uGroomParams: { value: new THREE.Vector4(0.85, 0.55, 0.7, 1500) },
+    uGroomParams2: { value: new THREE.Vector4(0.8, 0.45, 0.25, 0) },
+  };
+}
+
+export interface GroomSkinSettings {
+  map: THREE.Texture;
+  rect: THREE.Vector4;
+  beardColor: THREE.Color;
+  scalpColor: THREE.Color;
+  /** max cover by the root colour (0..1): ~0.85 dark beards, less for white hair (the pink skin shows) */
+  cover: number;
+  /** how much of the occlusion map darkens direct / indirect light */
+  occDirect: number;
+  occIndirect: number;
+  stubble?: number;
+  edgeNoise?: number;
+  sheen?: number;
+}
+
+/** attach (or with null detach) a groom's skin map: uniforms only — never a recompile */
+export function setGroomSkin(m: SkinMaterial, o: GroomSkinSettings | null) {
+  const u = m.groomSkin;
+  if (!o) {
+    u.uGroomOn.value = 0;
+    u.uGroomMap.value = null;
+    return;
+  }
+  u.uGroomMap.value = o.map;
+  u.uGroomRect.value.copy(o.rect);
+  u.uGroomBeardCol.value.copy(o.beardColor);
+  u.uGroomScalpCol.value.copy(o.scalpColor);
+  u.uGroomParams.value.set(o.cover, o.occDirect, o.occIndirect, 1500);
+  u.uGroomParams2.value.set(o.stubble ?? 0.8, o.edgeNoise ?? 0.45, o.sheen ?? 0.25, 0);
+  u.uGroomOn.value = 1;
+}
+
+const GROOM_SKIN_PARS = /* glsl */ `
+uniform float uGroomOn;
+uniform sampler2D uGroomMap;
+uniform vec4 uGroomRect, uGroomParams, uGroomParams2;
+uniform vec3 uGroomBeardCol, uGroomScalpCol;
+float gGroomOcc = 0.0;
+float gGroomCover = 0.0;`;
+
+// albedo: the root colour over the skin by density; at the border single stubble hairs (hero tier, faded to their mean
+// once sub-pixel); an irregular, noisy boundary (the map is vertex-interpolated, the noise breaks its smooth outline)
+const GROOM_SKIN_ALBEDO = /* glsl */ `
+#ifdef USE_MAP
+if ( uGroomOn > 0.5 ) {
+  vec4 gm = texture2D( uGroomMap, ( vMapUv - uGroomRect.xy ) / uGroomRect.zw );
+  if ( gm.r + gm.g > 0.004 ) {
+    vec3 gbp = vSkinBind;
+    float gn = skinNoise3( gbp * 170.0 ) * 0.65 + skinNoise3( gbp * 430.0 + 3.7 ) * 0.35;
+    float gEdge = clamp( gm.r * ( 1.0 - gm.r ) * 4.0, 0.0, 1.0 );
+    float gDens = clamp( gm.r + uGroomParams2.y * gEdge * ( gn - 0.5 ) * 1.6, 0.0, 1.0 );
+    float gCov = gDens;
+    #ifdef SKIN_HERO
+    {
+      vec3 gfp = gbp * uGroomParams.w;
+      float gfw = length( fwidth( gfp ) );
+      if ( gfw < 1.1 && gm.a > 0.01 ) {
+        vec3 gci = floor( gfp );
+        float gh = skinHash3( gci );
+        vec3 gj = vec3( skinHash3( gci + 13.1 ), skinHash3( gci + 27.7 ), skinHash3( gci + 41.3 ) ) * 0.5 + 0.25;
+        float gd = length( fract( gfp ) - gj );
+        float gDot = step( gh, gDens ) * ( 1.0 - smoothstep( 0.07, 0.19, gd ) );
+        float gDots = max( gDens * 0.5, gDot );
+        gCov = mix( gCov, mix( gDots, gDens, smoothstep( 0.4, 1.1, gfw ) ), gm.a * uGroomParams2.x );
+      }
+    }
+    #endif
+    gGroomCover = clamp( gCov * uGroomParams.x, 0.0, 1.0 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, mix( uGroomScalpCol, uGroomBeardCol, gm.b ), gGroomCover );
+    gGroomOcc = gm.g;
+  }
+}
+#endif`;
+
+// the skin's own sheen (oil, vellus) does not show through hair
+const GROOM_SKIN_SPEC = /* glsl */ `
+if ( uGroomOn > 0.5 ) gSpecOcc *= 1.0 - gGroomCover * ( 1.0 - uGroomParams2.z );`;
+
+// the hair mass shades the skin under it (the beard's shadow on the chin and the neck, the hair's on the scalp)
+const GROOM_SKIN_LIGHT = /* glsl */ `
+if ( uGroomOn > 0.5 && gGroomOcc + gGroomCover > 0.0 ) {
+  float gOd = 1.0 - gGroomOcc * uGroomParams.y;
+  float gOi = 1.0 - gGroomOcc * uGroomParams.z;
+  reflectedLight.directDiffuse *= gOd;
+  reflectedLight.directSpecular *= gOd;
+  reflectedLight.indirectDiffuse *= gOi;
+  reflectedLight.indirectSpecular *= gOi;
+  #ifdef USE_SHEEN
+  sheenSpecularDirect *= 1.0 - gGroomCover;
+  sheenSpecularIndirect *= 1.0 - gGroomCover;
+  #endif
+}`;
+
+/** the BEARD / SCALP SKIN chunks on a SkinMaterial (called once from its constructor, before any skinning patch) */
+function patchGroomSkin(m: SkinMaterial) {
+  const prev = m.onBeforeCompile;
+  const key = m.customProgramCacheKey();
+  m.customProgramCacheKey = () => key + '|groomskin1';
+  m.onBeforeCompile = (s, r) => {
+    prev.call(m, s, r);
+    Object.assign(s.uniforms, m.groomSkin);
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', `#include <common>\n${GROOM_SKIN_PARS}`)
+      .replace('#include <color_fragment>', `${GROOM_SKIN_ALBEDO}\n#include <color_fragment>`)
+      .replace('#include <emissivemap_fragment>', `${GROOM_SKIN_SPEC}\n#include <emissivemap_fragment>`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${GROOM_SKIN_LIGHT}`);
+  };
 }
