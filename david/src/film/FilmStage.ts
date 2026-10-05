@@ -186,7 +186,8 @@ const applyLand = (s: LandSnap) => {
 };
 
 /** clips only the film uses (released after it; generic clips stay: gameplay may share them) */
-const FILM_ONLY_CLIPS = ['walk_king', 'walk_halt', 'idle_king', 'grab_pull_R', 'old_turn_walk', 'walk_old', 'talk_gesture', 'argue', 'point_directions', 'idle_bus', 'walk_old_hunched'];
+// (wave 5: + the walks of host1's vanguard of the Philistine host — not `walk`, David's)
+const FILM_ONLY_CLIPS = ['walk_king', 'walk_halt', 'idle_king', 'grab_pull_R', 'old_turn_walk', 'walk_old', 'talk_gesture', 'argue', 'point_directions', 'idle_bus', 'walk_old_hunched', 'walk_b', 'walk_n1', 'walk_cool', 'walk_c'];
 
 /**
  * P7 'elders': the elders per tier (landSites mark indices, in the order of RamahPerformance's parts) and those at the

@@ -657,6 +657,9 @@ export function landCam(take: string, u: number, t: number, ctx: LandCamCtx, out
     // onto Samuel's face (his eyes ~1.58 m over his mark)
     _c.set(R.samuel.x, ctx.height(R.samuel.x, R.samuel.z) + c.samH, R.samuel.z);
     out.look.lerp(_c, snap);
+    // (his face on the right third: 8:5 is still up in the left of the frame as the lens arrives)
+    _b.subVectors(out.look, out.pos).cross(_a.set(0, 1, 0)).normalize();
+    out.look.addScaledVector(_b, -0.13 * snap);
     out.fov = lerp(lerp(c.fov0, c.fov1, ed), c.fovSnap - 1.5 * ss(away + 0.3, takeDur('elders', 5) + 0.5, t), snap);
     out.roll = 0.008 * Math.sin(u * 3);
     return true;

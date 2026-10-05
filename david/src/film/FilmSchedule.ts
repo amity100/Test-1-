@@ -47,13 +47,14 @@ const REL_COST: Record<'desktop' | 'mobile', Record<FilmJob, number>> = {
   // desktop-high 1280x720: judah 16.0 + 85.0 s, world prime 88 s, map 1.0 + 46.8, coast 3.7 + 33.0, ramah 54.5 + 107.1,
   // gilgal 48.2 + 190.7 (build + pre-compile); mobile-low 390x844: judah 6.7 + 10.2, world 24.3, map 0.9 + 8.7,
   // coast 4.9 + 8.5, ramah 21.6 + 24.2, gilgal 11.2 + 48.3
-  desktop: { world: 0.87, macro: 0.08, judah: 1, map: 0.47, coast: 0.36, ramah: 1.6, gilgal: 2.37 },
-  mobile: { world: 1.44, macro: 0.1, judah: 1, map: 0.57, coast: 0.79, ramah: 2.7, gilgal: 3.5 },
+  // (wave 5: the coast now builds host1's vanguard of full actors — host1's estimates 0.36 -> 0.8 / 0.79 -> 1.4)
+  desktop: { world: 0.87, macro: 0.08, judah: 1, map: 0.47, coast: 0.8, ramah: 1.6, gilgal: 2.37 },
+  mobile: { world: 1.44, macro: 0.1, judah: 1, map: 0.57, coast: 1.4, ramah: 2.7, gilgal: 3.5 },
 };
 /** the share of each set's cost that is its BUILD (the rest: its pre-compile / prepare), measured as above */
 const BUILD_SHARE: Record<'desktop' | 'mobile', Record<FilmJob, number>> = {
-  desktop: { world: 0, macro: 0.4, judah: 0.16, map: 0.02, coast: 0.1, ramah: 0.34, gilgal: 0.2 },
-  mobile: { world: 0, macro: 0.5, judah: 0.4, map: 0.1, coast: 0.37, ramah: 0.47, gilgal: 0.19 },
+  desktop: { world: 0, macro: 0.4, judah: 0.16, map: 0.02, coast: 0.5, ramah: 0.34, gilgal: 0.2 },
+  mobile: { world: 0, macro: 0.5, judah: 0.4, map: 0.1, coast: 0.55, ramah: 0.47, gilgal: 0.19 },
 };
 /**
  * The sets with the big builds (the cast's FilmActors and crowds, the coast's terrain shading). Since wave 4b their

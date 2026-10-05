@@ -97,7 +97,7 @@ export const D4 = {
   kneel1: [-2.4, 12.25],
   wayOn: [[-2.2, 11.2]],
   kneel2: [HANDOFF.x, HANDOFF.z],
-  ewe: [-1.68, 8.93],
+  ewe: [-1.11, 9.2],
   /** the lamb set down this far in front of him */
   setDownD: 0.62,
   /** seconds relative to the beats: the walk up ends at kneel + d1 (slow until descend + d0); he kneels at kneel + k1;
