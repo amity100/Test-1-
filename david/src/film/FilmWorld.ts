@@ -179,10 +179,12 @@ export const WORLD_CAM = {
     fStop0: 3.2, fStop1: 5.6,
   },
   d4: D4,
-  // (wave 5) F1 'glimpse:rock' (0.8 s flash): far behind the boy on his rock against the low sun — `dist0`→`dist1` m back
-  // along the sun's heading turned `azOff` deg, `h` m over the ground there, the frame `pitchUp` deg above him (the sun's
-  // glow in it), fov `fov`; a silhouette, never the face
-  glimpseRock: { dist0: 11.5, dist1: 11, azOff: 12, h: 2.4, pitchUp: 8, fov: 34, fStop: 2.8 },
+  // (wave 5, review) F1 'glimpse:rock' (0.8 s flash): the boy from behind, LARGE, standing on the crest of the ridge
+  // above his rock (`at` m from it away from the sun, where the land falls away toward the valley and the low sun), facing
+  // the sun; the lens close behind him (`dist0`→`dist1` m, the sun's line turned `azOff` deg so the disc stands beside
+  // his head), `h` m over its own ground (about his waist), tilted up `pitchUp` deg: the sky fills the upper frame — a
+  // silhouette with a rim of light, never the face
+  glimpseRock: { at: 12, dist0: 3.15, dist1: 2.9, azOff: 7, h: 0.95, pitchUp: 5, fov: 52, fStop: 2.8 },
   // F2 'glimpse:hand' (0.8 s flash): close behind-left of his staff hand, `d0`→`d1` m, looking past it along his gaze
   // (the flock out of focus below); the fingers close on the staff at `close` s
   glimpseHand: { d0: 0.72, d1: 0.6, left: 0.22, up: 0.18, ahead: 0.25, fov: 30, fStop: 1.4, close: 0.22 },
@@ -389,15 +391,17 @@ export class FilmWorld {
         this.rachelFrame(t, out);
         return true;
       case 'glimpse:rock': {
-        // F1 (wave 5): far behind him on his rock, toward the low sun — a silhouette above the valley; a slight push
+        // F1 (wave 5, review): close behind him on the crest, against the sky and the low sun — a slight push
         const c = WORLD_CAM.glimpseRock;
+        const C = this.crestSpot(this.tmp);
         const a = Math.atan2(this.sunH.x, this.sunH.z) + Math.PI + c.azOff * DEG;
-        const dd = lerp(c.dist0, c.dist1, uu);
-        out.pos.set(this.rock.x + Math.sin(a) * dd, 0, this.rock.z + Math.cos(a) * dd);
-        out.pos.y = this.ground(out.pos.x, out.pos.z) + c.h;
-        out.look.set(this.rock.x, this.rock.y + 1.2 + dd * Math.tan(c.pitchUp * DEG), this.rock.z);
+        const dd = lerp(c.dist0, c.dist1, smooth(uu));
+        out.pos.set(C.x + Math.sin(a) * dd, 0, C.z + Math.cos(a) * dd);
+        out.pos.y = Math.max(this.ground(out.pos.x, out.pos.z) + c.h, C.y + 0.75);
+        const dx = C.x - out.pos.x, dz = C.z - out.pos.z, dh = Math.hypot(dx, dz) || 1;
+        out.look.set(out.pos.x + (dx / dh) * 10, out.pos.y + 10 * Math.tan(c.pitchUp * DEG), out.pos.z + (dz / dh) * 10);
         out.fov = c.fov;
-        out.roll = 0.004;
+        out.roll = 0.006;
         return true;
       }
       case 'glimpse:hand': {
@@ -720,7 +724,11 @@ export class FilmWorld {
       return;
     }
     if (take === 'figure' || take === 'face' || take === 'vista' || take === 'glimpse:rock' || take === 'glimpse:hand') {
-      this.placeDavid();
+      // F1: on the crest above his rock, facing the low sun; the others on his rock
+      if (take === 'glimpse:rock') {
+        const C = this.crestSpot(this.tmp);
+        this.placeDavid(Math.atan2(this.sunH.x, this.sunH.z), [C.x, C.z]);
+      } else this.placeDavid();
       if (this.staged !== 'david') {
         this.unstage();
         this.staged = 'david';
@@ -1314,7 +1322,8 @@ export class FilmWorld {
    * narrow lens toward it — Intro.portrait). null = use the focus point.
    */
   subject(take: string, out: THREE.Vector3): THREE.Vector3 | null {
-    if (take === 'figure' || take === 'glimpse:rock') return out.copy(this.rock).add(V(0, 1.35, 0));
+    if (take === 'figure') return out.copy(this.rock).add(V(0, 1.35, 0));
+    if (take === 'glimpse:rock') return this.crestSpot(out).add(V(0, 1.25, 0));
     if (take === 'glimpse:hand') return this.handOf(out);
     if (take === 'watch') return out.copy(this.feet).add(V(0, 0.4, 0)).addScaledVector(V(Math.sin(WORLD_CAM.watch.heading), 0, Math.cos(WORLD_CAM.watch.heading)), 4.5).setY(this.feet.y + 0.2);
     if (take === 'horizon') return out.copy(this.feet).add(V(0, 1.1, 0));
@@ -1339,7 +1348,7 @@ export class FilmWorld {
       case 'face':
         return { point: eye(this.tmp), fStop: 1.8 };
       case 'glimpse:rock':
-        return { point: this.tmp.copy(this.rock).add(V(0, 1.2, 0)), fStop: WORLD_CAM.glimpseRock.fStop };
+        return { point: this.crestSpot(this.tmp).add(V(0, 1.3, 0)), fStop: WORLD_CAM.glimpseRock.fStop };
       case 'glimpse:hand':
         return { point: this.handOf(this.tmp), fStop: WORLD_CAM.glimpseHand.fStop };
       case 'watch': {
@@ -1579,6 +1588,14 @@ export class FilmWorld {
     if (!s) return;
     s.points.removeFromParent();
     s.dispose();
+  }
+
+  /** F1: his spot on the crest of the ridge above his rock (away from the sun: the land falls away in front of him) */
+  private crestSpot(out: THREE.Vector3): THREE.Vector3 {
+    const at = WORLD_CAM.glimpseRock.at;
+    out.set(this.rock.x - this.sunH.x * at, 0, this.rock.z - this.sunH.z * at);
+    out.y = this.ground(out.x, out.z);
+    return out;
   }
 
   /** F2: three sheep walking across behind his hand, a few metres down the slope (out of focus) — seek-safe */
