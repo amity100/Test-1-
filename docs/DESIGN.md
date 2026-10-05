@@ -906,7 +906,9 @@ each **combat variant** to choose one.
   with 16-step stairs on its west and east sides; two sniper towers T1 / T2 (8.5 m,
   rift access only, their tops portal-able); a free-standing long wall (5 m) for
   flanking exits; cover blocks of 1 m and 2 m; a gantry (not portal-able) with
-  two hanging loads; three casks, two crates; the player's pad in the south.
+  two hanging loads; three casks, two crates; the player's pad in the south. For AIM PORTAL it
+  adds four SEALED panels (dark metal, 3 m, `noPortal`: a red flash and a buzz where you aim) and
+  two taller platforms (3.2 m, no stairs, nav on top).
   One zone (`'pier'`, no encounters), nav layers: deck, ring, each tower top.
 - **Waves** (`WAVES`, `game/labdirector.ts`): W1 3 rifle anchors; W2 3 anchors + 2
   tower holders; W3 warden + 2 brutes pushing, 2 riflemen (one on the ring);
@@ -922,14 +924,78 @@ each **combat variant** to choose one.
   (`killTool`: GRAB/THROW, REFLECT, LOOP incl. geyser/cannon, SWAP, DASH, BLADE,
   OTHER), per wave too. Lab kills don't count toward the missions' challenges.
 - **Variants** (`src/game/variant.ts`): `current` (the game as it plays today),
-  `precision`, `onslaught`, `flow`, `reach`. **REACH is the lab's default and the only one its
-  UI offers now** (`LAB_OFFERED`; a saved pick it doesn't offer reads back as REACH); the other
-  four stay in the code, unreachable from the UI, until the owner signs off. No F-keys. The pick is
+  `precision`, `onslaught`, `flow`, `reach`, `aimportal`. **AIM PORTAL is the lab's default and the
+  only one its UI offers now** (`LAB_OFFERED`; a saved pick it doesn't offer, REACH included, reads
+  back as AIM PORTAL); the other four stay in the code, unreachable from the UI, until the owner
+  signs off. No F-keys. The pick is
   the `combatVariant` setting; the pause menu, the main menu and the HUD chip show it.
   Systems read `activeVariant()`: the pick inside the lab, `current` everywhere
   else; `onVariantChange()` notifies. ONSLAUGHT is PRECISION (`precisionOn()`) plus the
   enemy side below; FLOW is ONSLAUGHT (`onslaughtOn()`: its men, waves and dodge rule) plus
   the body and the POWER moment at the end of this section.
+- **AIM PORTAL** (the lab's current mechanic, replacing REACH, which the owner rejected as clunky;
+  `game/aimportal.ts` — every number in `AIMP` and the pure geometry — with `game/aimmode.ts`,
+  `game/aimfx.ts`, `actors/aimai.ts`, `ui/aimhud.ts`; gated on `aimOn()`: the missions and the other
+  variants play exactly as before; strikes, lock-on, the blade lunge, SHOVE, POWER and REACH's verbs
+  are off; the body is FLOW's). **One rule: a pair of portals. The far one (the EXIT) opens where the
+  crosshair points, now; its twin (the ENTRANCE) opens in front of you. Whatever enters one comes out
+  of the other with its speed. The crosshair is the cursor; nothing is chosen for you.**
+  - *PORTAL* (RMB tap / LT / the PORTAL button): the pair opens on the press itself (a rift strike
+    pair: real see-through portals, both ends crossable that frame; measured 16 ms median desktop,
+    29 ms phone, the game stepped at 60 Hz). The exit stands on the first surface the ray meets within
+    30 m (a wall: 0.05 m off it, 1.1 x 2 m; the floor or a ceiling: a 1.4 m disc, so a man falls into
+    it or you drop through it), else in mid-air at 12 m facing you; the wheel (touch: a vertical drag
+    on PORTAL) sets the mid-air distance 3-30 m and then also stops a farther wall short. A SEALED panel
+    or a surface nearer than 1.6 m refuses (a red flash, a buzz, SEALED / TOO CLOSE). The twin: 1.3 m
+    ahead (further, up to 3 m, at a run), bottom on your floor, facing you; neither end takes YOU for
+    0.25 s. One pair, 6 s (counted from when you let go), a new press replaces it, 0.15 s apart. Held
+    longer than 0.15 s the exit follows the crosshair live and stays where you let go. Phone: a quick
+    tap on the world (the free thumb, the stick held or not) opens the exit exactly at that surface
+    point; a tap on a man opens it behind him.
+  - *SNAP* (Ctrl or MMB held; LT + R-stick; a drag from PORTAL), with a man under the crosshair
+    (within 1.2° of his body, 2.5° pad, 3.5° touch, in sight): the exit opens at a side of HIM,
+    1.2 m from him, its front toward him: BEHIND / FRONT / LEFT / RIGHT by his facing, ABOVE (a disc
+    over his head looking down), BELOW (a disc in the floor under his feet: he drops through it).
+    The flick (mouse: the look is diverted to the choice; pad: the stick; touch: the drag) picks a
+    side on a compass of six slots 60° apart (top ABOVE, clockwise RIGHT, FRONT, BELOW, BEHIND, LEFT);
+    nothing much is BEHIND him. A six-pip compass round him and a ghost show it; a wall behind him
+    brings the spot in against it (sealed or tighter than 0.75 m: refused). Without SNAP, free aim.
+  - *What you do with the pair*: walk or jump in (out of the other with your speed, along its front:
+    the rift pair's physics; a short FOV kick). FIRE (LMB / RT / FIRE): the rifle (24 rounds, 22 a
+    round, 0.14 s, auto-reload 1.4 s), hitscan through `raycastThrough`: a round into the near twin
+    leaves the exit along its front (the tracer is drawn in two pieces), and into the exit it leaves
+    the near twin. STAB (F / X / STAB): a man within 1.8 m in front of you (a lunge), or, with the aim
+    entering one end within 3.6 m of you, whoever stands within 1.5 m in front of the other end; from
+    behind or the side he dies, from the front he parries (the mirror's front is where his shield
+    looks). PULL (E / RB / PULL): the man within 2.5 m in front of the exit is yanked through (0.18 s)
+    and out of the near twin onto your crosshair 2 m ahead, staggered 1.2 s; the pair shuts behind
+    him; for 0.6 s he is HELD: PULL or FIRE again THROWS him along your aim at 18 m/s (a lofted body):
+    a wall at 12 m/s or more kills him, a fall of 8 m or more, the void or the pool; a hit man
+    takes 35; softer hits (8-12 m/s, 4-8 m) hurt (20 / 25) and floor him. Men who walk or fall into an
+    end come out of the other with their velocity (a drop becomes a shove toward you; over a pool or
+    the void you can drop a man: stand at the rim, SNAP BELOW him across it). Enemy rounds are 12 dmg
+    and cross the pair too: into your exit they come out of the near twin at you; into the near twin
+    they come out of the exit and hurt whom they meet.
+  - *The three men* (`AimAI`; `LabSpawn.aim`): GUNNER (60 hp): hides behind cover and peeks, a red
+    laser 0.5 s then a burst of 3 (12 each), at most 2 guns on you and never two laser locks within
+    0.8 s; MIRROR (70 hp, a violet portal-shield 1.5 m in front of him, 1.5 x 2 m): eats every round
+    from the front (30% come back at you) and parries the knife; he keeps the shield on you
+    (140°/s) but turns it toward where a round through a portal came from, so a quick flank and
+    a SNAP BEHIND kill him; he walks at you (2.2 m/s) and bashes up close (18, 0.6 s wind-up);
+    RUSHER (50 hp): runs at you (6.4 m/s), a red wind-up 0.45 s, 25; from afar he steps through a red
+    portal of his own (0.5 s of warning) out next to you. They notice a new exit within 8 m in front
+    of their eyes after 0.35 s (a shout, they turn to it; a gunner may fire into it: a laser to the
+    exit and one out of the near twin at you). A man on a platform with no line to you comes down.
+  - *Waves* (`AIM_WAVES`, 3-2-1 first 2 s then 1.8 s): 3 gunners (each already behind tall cover),
+    3 gunners + a mirror, + two rushers, two mirrors, 8 from everywhere (platform men included).
+    Hero 100 hp, regen only after 4 s unhurt. KILLS BY TOOL: RIFLE, KNIFE, THROW, PORTAL (the pair
+    dropped or slammed him), OTHER.
+  - *Controls*. Desktop: mouse aim, RMB PORTAL (tap, or hold to re-aim live), LMB fire, F stab, E
+    pull / throw, wheel mid-air distance, Ctrl or MMB SNAP (the mouse then picks the side), Space
+    jump / double jump, C slide, Shift sprint. Pad: LT portal, RT fire, X stab, RB pull / throw, R-stick
+    with LT SNAP. Phone (landscape): PORTAL (tap; drag up / down: distance; drag toward a side on a
+    man: SNAP with the compass), FIRE, STAB, PULL, JUMP, SLIDE; a tap on the world opens the exit
+    there. One tip line at the first GO.
 - **REACH** (the approved core mechanic; `game/reach.ts` — every number in `REACH` — with
   `game/weapons.ts`, `game/reachmode.ts`, `game/reachfx.ts`, `actors/reachai.ts`, `ui/reachhud.ts`;
   gated on `reachOn()`, so the missions and the other variants play exactly as before).

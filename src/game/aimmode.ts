@@ -144,6 +144,8 @@ export class AimMode {
   reloadT = 0;
   /** Press → portal usable, the last time (ms of game time), for the harness. */
   lastOpen = { t: -1, count: 0, ms: -1 };
+  /** What was used how often this run (the harness and the balance read it). */
+  readonly usage = { opened: 0, refused: 0, rifleDirect: 0, rifleThrough: 0, stabDirect: 0, stabThrough: 0, parried: 0, pulled: 0, thrown: 0, snapped: 0 };
   /** The man in your hands (pulled; his time left to throw). */
   held: { id: number; t: number } | null = null;
   private pairSeq = 0;
@@ -522,6 +524,7 @@ export class AimMode {
     this.cd = AIMP.cooldown;
     if (!spot.ok) {
       this.refusedT = h.time();
+      this.usage.refused++;
       h.audio.aimBuzz(spot.pos);
       if (spot.reason === 'sealed') this.fx.refused(spot.pos, spot.normal);
       this.hud.callout(spot.reason === 'sealed' ? 'aim.sealed' : 'aim.close', 'warn');
@@ -564,6 +567,8 @@ export class AimMode {
     this.lastOpen.t = h.time();
     this.lastOpen.ms = typeof performance !== 'undefined' ? performance.now() : -1;
     this.lastOpen.count++;
+    this.usage.opened++;
+    if (this.snapTarget) this.usage.snapped++;
   }
 
   private setNoPlayer(p: AimPair, on: boolean) {
@@ -694,14 +699,16 @@ export class AimMode {
       if (shield) {
         const at = new THREE.Vector3().copy(o).addScaledVector(dir, bestT);
         pieces.push([si === 0 ? muzzle : o, at]);
-        this.shieldTook(shield, at, si === 0 ? h.player.body.pos : segs[si - 1].to);
+        this.shieldTook(shield, at, si === 0 ? h.player.body.pos : segs[si - 1].to, si > 0);
         endAt = at;
         break;
       }
       if (hitMan) {
         const at = new THREE.Vector3().copy(o).addScaledVector(dir, bestT);
         pieces.push([si === 0 ? muzzle : o, at]);
-        this.hitMan(hitMan, at, muzzle, si === 0 ? h.player.body.pos : segs[si - 1].to);
+        this.hitMan(hitMan, at, muzzle, si === 0 ? h.player.body.pos : segs[si - 1].to, si > 0);
+        if (si === 0) this.usage.rifleDirect++;
+        else this.usage.rifleThrough++;
         endAt = at;
         killedBy = hitMan;
         break;
@@ -728,7 +735,7 @@ export class AimMode {
   }
 
   /** A round of yours hit a man. */
-  private hitMan(e: Enemy, at: V3, muzzle: V3, from: V3) {
+  private hitMan(e: Enemy, at: V3, muzzle: V3, from: V3, viaPortal = false) {
     const h = this.h;
     const now = h.time();
     const info: HitInfo = {
@@ -742,19 +749,19 @@ export class AimMode {
     };
     this.lastHit.set(e.id, { tool: 'rifle', t: now });
     h.enemies.hit(e, info);
-    this.ai.attacked(e, from, now);
+    this.ai.attacked(e, from, now, viaPortal);
     h.fx.sparks(at, null, AIM_RED, 10);
     h.audio.boltImpact(at, false);
   }
 
   /** A mirror's shield took a round: a violet flare; some come back at you. */
-  private shieldTook(e: Enemy, at: V3, from: V3) {
+  private shieldTook(e: Enemy, at: V3, from: V3, viaPortal = false) {
     const h = this.h;
     const now = h.time();
     this.fx.shieldHit(e.id);
     h.fx.sparks(at, null, new THREE.Color(1.4, 0.5, 2.2), 8);
     h.audio.shieldClang(at);
-    this.ai.attacked(e, from, now);
+    this.ai.attacked(e, from, now, viaPortal);
     if (Math.random() < AIMP.enemy.mirror.returnChance && h.alive()) {
       _b.subVectors(h.player.chest(_c), at).normalize();
       h.fireEnemyBolt(e, _a.copy(at).addScaledVector(_b, 0.3), _b);
@@ -831,6 +838,7 @@ export class AimMode {
       if (guarded(close.pos, close.yaw, h.player.body.pos, close.aim === 'mirror') && this.able(close)) return this.parried(close, h.player.chest(new THREE.Vector3()));
       const p = h.player.body.pos;
       h.player.lunge(_a.set(close.pos.x - p.x, 0, close.pos.z - p.z), 6, 0.12);
+      this.usage.stabDirect++;
       this.knifeKill(close, h.player.chest(new THREE.Vector3()));
       return;
     }
@@ -844,20 +852,22 @@ export class AimMode {
     this.fx.tracer(thr.from.pos, _c.set(thr.target.pos.x, thr.target.pos.y + thr.target.height * 0.6, thr.target.pos.z), new THREE.Color(2, 2, 2));
     h.audio.aimWhoosh(thr.from.pos, 0.4);
     if (guarded(thr.target.pos, thr.target.yaw, thr.from.pos, thr.target.aim === 'mirror') && this.able(thr.target)) {
-      this.parried(thr.target, thr.from.pos);
+      this.parried(thr.target, thr.from.pos, true);
       return;
     }
+    this.usage.stabThrough++;
     this.knifeKill(thr.target, thr.from.pos);
   }
 
-  private parried(e: Enemy, at: V3) {
+  private parried(e: Enemy, at: V3, viaPortal = false) {
     const h = this.h;
+    this.usage.parried++;
     this.stabCd = 0.5;
     this.hud.callout('aim.parried', 'warn');
     h.fx.sparks(_a.copy(at), null, new THREE.Color(2, 2, 2), 12);
     h.audio.shieldClang(at);
     e.char.play('strike', { fade: 0.04 });
-    this.ai.attacked(e, at, h.time());
+    this.ai.attacked(e, at, h.time(), viaPortal);
   }
 
   private knifeKill(e: Enemy, from: V3) {
@@ -898,6 +908,7 @@ export class AimMode {
     e.body!.userData.manual = true;
     const into = new THREE.Vector3(p.far.pos.x, p.far.pos.y - Math.min(p.far.h, AIMP.h) / 2 + 0.05, p.far.pos.z);
     if (Math.abs(p.far.normal.y) > 0.9) into.copy(p.far.pos);
+    this.usage.pulled++;
     this.pulls.push({ id: e.id, phase: 'in', from: e.pos.clone(), to: into, t: 0 });
     h.audio.reachPull(e.chest(_a));
     h.hitstop(0.06);
@@ -1002,6 +1013,7 @@ export class AimMode {
     const v = new THREE.Vector3().copy(dir).multiplyScalar(AIMP.throw.speed);
     v.y += AIMP.throw.up;
     e.aimThrown = true;
+    this.usage.thrown++;
     this.thrown.add(e.id);
     h.enemies.launch(e, v);
     e.body.charge = LAW.chargeTime;

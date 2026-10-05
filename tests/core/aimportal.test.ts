@@ -747,14 +747,14 @@ describe('AIM PORTAL: the rifle through the pair', () => {
     expect(m.hp).toBe(AIMP.enemy.mirror.hp - AIMP.rifle.damage);
   });
 
-  it('the mirror turns his shield toward whoever hurt him, at the shield’s own speed', () => {
+  it('the mirror turns his shield toward where a round through a portal came from, at the shield’s own speed (one straight from you: he just keeps tracking you)', () => {
     const { R, man, sc } = rig();
     const m = man(V(0, 0, 14), Math.PI, 'mirror');
     const mind = R.ai.mind(m, Math.random);
     mind.react = 0;
     R.ai.host.go = () => true;
     // hit from the side (+x): he starts turning toward it; 0.3 s later no more than 140°/s of it
-    R.ai.attacked(m, V(12, 0, 14), 0);
+    R.ai.attacked(m, V(12, 0, 14), 0, true);
     sc.player.pos.set(0, 0, 0);
     sc.step(1);
     const y0 = m.yaw;

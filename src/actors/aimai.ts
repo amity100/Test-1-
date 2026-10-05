@@ -77,6 +77,13 @@ class Mind {
   meleeCd = 0;
   portalCd: number;
   portalId = -1;
+  /** Not getting anywhere (s) and where he was. */
+  stuckT = 0;
+  readonly lastAt = new THREE.Vector3();
+  /** Seconds walking to his cover (a spot he cannot reach is dropped). */
+  walkT = 0;
+  /** Out of sight of you this long (s): a man up on a platform with no line to you comes down. */
+  blindT = 0;
   /** Mirror: where he turns his shield (the last one to hurt him, else you) and until when (game time). */
   readonly turnTo = new THREE.Vector3();
   turnUntil = -1;
@@ -84,7 +91,7 @@ class Mind {
   constructor(rand: () => number) {
     const [a, b] = AIMP.enemy.react;
     this.react = a + (b - a) * rand();
-    this.portalCd = 2 + rand() * 3;
+    this.portalCd = 0.8 + rand() * 1.4;
     this.side = rand() < 0.5 ? -1 : 1;
   }
 }
@@ -103,12 +110,15 @@ export class AimAI {
   private minds = new Map<number, Mind>();
   /** When the last red portal opened (game time). */
   private lastPortalT = -99;
+  /** When a gun last began its laser (game time). */
+  private lastAimT = -99;
 
   constructor(readonly host: AimAIHost) {}
 
   reset() {
     this.minds.clear();
     this.lastPortalT = -99;
+    this.lastAimT = -99;
   }
 
   mind(e: Enemy, rand: () => number): Mind {
@@ -126,12 +136,21 @@ export class AimAI {
     return !!m && m.gun !== 'idle';
   }
 
-  /** Someone hurt him from `from` (the mirror turns his shield toward it, a moment). */
-  attacked(e: Enemy, from: V3, now: number) {
+  /**
+   * Someone hurt (or shot at) him from `from`. The mirror turns his shield toward
+   * where it came from: a round through a portal comes out of the exit, so the
+   * shield goes there a moment (a flank is a different side); one straight from you
+   * is you, and he keeps tracking you.
+   */
+  attacked(e: Enemy, from: V3, now: number, viaPortal = false) {
     const m = this.minds.get(e.id);
     if (!m) return;
+    if (!viaPortal) {
+      m.turnUntil = -1;
+      return;
+    }
     m.turnTo.set(from.x, from.y, from.z);
-    m.turnUntil = now + 2.5;
+    m.turnUntil = now + 1.5;
   }
 
   /** Guns on you right now (aiming or firing). */
@@ -154,6 +173,16 @@ export class AimAI {
     }
     m.meleeCd -= dt;
     m.portalCd -= dt;
+    // up on a platform with no line to you for a while: he jumps down toward you (a platform is no fortress)
+    if (e.pos.y > 2.5 && e.body && !e.body.simulate) {
+      m.blindT = pl.alive && this.sees(e, pl.chest, 80) ? 0 : m.blindT + dt;
+      if (m.blindT > 4) {
+        m.blindT = 0;
+        const d = Math.max(1, hd(e.pos, pl.pos));
+        sys.launch(e, _a.set(((pl.pos.x - e.pos.x) / d) * 4.5, 3.5, ((pl.pos.z - e.pos.z) / d) * 4.5));
+        return;
+      }
+    }
     if (m.role === 'gunner') this.gunner(sys, e, m, dt);
     else if (m.role === 'mirror') this.mirror(sys, e, m, dt);
     else this.rusher(sys, e, m, dt);
@@ -265,7 +294,8 @@ export class AimAI {
       const r = 2.5 + sys.rand() * 7;
       const x = e.pos.x + Math.sin(ang) * r, z = e.pos.z + Math.cos(ang) * r;
       const y = H.standAt(x, z, e.pos.y);
-      if (y === null) continue;
+      // (level ground: not the top of a block he cannot walk onto)
+      if (y === null || Math.abs(y - e.pos.y) > 0.35) continue;
       const d = Math.hypot(x - pl.pos.x, z - pl.pos.z);
       if (d < R.keep[0] - 1 || d > R.keep[1] + 8) continue;
       _c.set(x, y + 1.35, z);
@@ -293,7 +323,7 @@ export class AimAI {
       const r = 1 + (k % 3) * 0.9;
       const x = from.x + Math.sin(ang) * r, z = from.z + Math.cos(ang) * r;
       const y = H.standAt(x, z, from.y);
-      if (y === null) continue;
+      if (y === null || Math.abs(y - from.y) > 0.35) continue;
       _c.set(x, y + 1.4, z);
       if (!H.world.lineOfSight(_c, pl.chest)) continue;
       const d = Math.hypot(x - pl.pos.x, z - pl.pos.z);
@@ -367,6 +397,16 @@ export class AimAI {
     m.modeT -= dt;
     // out of the fight (far, or no line to you and no cover found): he closes in
     if (m.mode === 'advance') {
+      // (standing still out of your sight for long: he looks for cover somewhere else)
+      m.stuckT = hd(e.pos, m.lastAt) < 0.3 && !sees ? m.stuckT + dt : 0;
+      if (m.stuckT === 0) m.lastAt.copy(e.pos);
+      if (m.stuckT > 3) {
+        m.stuckT = 0;
+        m.mode = 'hide';
+        m.hasSpot = false;
+        m.modeT = 0.5;
+        return;
+      }
       if (sees && d <= R.keep[1] && m.gunT <= 0) {
         this.beginAim(m, pl, sys);
         return;
@@ -398,8 +438,17 @@ export class AimAI {
       if (hd(e.pos, m.spot) > 0.8) {
         sys.moveTo(e, m.spot, R.run, dt, true);
         if (m.modeT < 0.6) m.modeT = 0.6;
+        // (no way there for too long: forget that spot and come on)
+        m.walkT += dt;
+        if (m.walkT > 3.5) {
+          m.walkT = 0;
+          m.hasSpot = false;
+          m.mode = 'advance';
+          m.modeT = 1.2;
+        }
         return;
       }
+      m.walkT = 0;
       sys.halt(e, dt);
       sys.face(e, pl.pos, dt);
       if (m.modeT <= 0) {
@@ -427,7 +476,9 @@ export class AimAI {
   }
 
   private beginAim(m: Mind, pl: { alive: boolean; safe: boolean }, sys: EnemySystem) {
-    if (!pl.alive || pl.safe || this.shooters() >= AIMP.enemy.gunner.maxShooters) return;
+    // (two guns at most on you, and never two laser locks at the same moment: a gap between volleys)
+    if (!pl.alive || pl.safe || this.shooters() >= AIMP.enemy.gunner.maxShooters || sys.time - this.lastAimT < AIMP.enemy.gunner.volleyGap) return;
+    this.lastAimT = sys.time;
     m.gun = 'aim';
     m.gunT = AIMP.enemy.gunner.aim + sys.rand() * 0.1;
   }

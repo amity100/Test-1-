@@ -51,7 +51,7 @@ export const AIMP = {
   pull: { reach: 2.5, land: 2.0, stun: 1.2, hold: 0.6, through: 0.18, out: 0.16, arc: 0.45 },
   throw: { speed: 18, up: 6, bodyDamage: 35 },
   /** Deaths on the way: a fall this high (m), a body hitting a wall this fast (m/s); the softer ones hurt. */
-  fall: { kill: 8, hurt: 3, hurtDamage: 25, stun: 1.6 },
+  fall: { kill: 8, hurt: 4, hurtDamage: 25, stun: 1.6 },
   slam: { kill: 12, hurt: 8, hurtDamage: 20 },
   rifle: { mag: 24, reload: 1.4, damage: 22, interval: 0.14, range: 90 },
   /** A man in front of a new exit within `range` (m) and this cone (cos), seen this long (s), turns to it. */
@@ -59,9 +59,9 @@ export const AIMP = {
   hero: { hp: 100 },
   enemy: {
     react: [0.4, 0.8] as readonly [number, number],
-    gunner: { hp: 60, damage: 12, aim: 0.5, shots: 3, gap: 0.13, rest: [0.9, 1.6] as readonly [number, number], keep: [7, 17] as readonly [number, number], run: 4.6, spread: 0.012, hide: [1.4, 2.4] as readonly [number, number], maxShooters: 2, intoPortal: 0.55 },
-    mirror: { hp: 70, speed: 2.6, shieldDist: 1.5, shieldW: 1.5, shieldH: 2.0, turn: (140 * Math.PI) / 180, returnChance: 0.3, bash: { reach: 2.0, windup: 0.6, damage: 18, push: 5, cooldown: 1.4 } },
-    rusher: { hp: 50, run: 6.4, windup: 0.45, damage: 25, reach: 2.1, hit: 2.6, cooldown: 1.0, push: 5, portalFrom: 9, portalChance: 0.5, portalTele: 0.5, portalLife: 5, portalGap: 5, near: 2.6, ahead: 1.4 },
+    gunner: { hp: 60, damage: 12, aim: 0.5, shots: 3, gap: 0.13, rest: [1.2, 2.2] as readonly [number, number], keep: [7, 17] as readonly [number, number], run: 4.6, spread: 0.012, hide: [1.8, 3.2] as readonly [number, number], maxShooters: 2, intoPortal: 0.55, volleyGap: 0.8 },
+    mirror: { hp: 70, speed: 2.2, shieldDist: 1.5, shieldW: 1.5, shieldH: 2.0, turn: (140 * Math.PI) / 180, returnChance: 0.3, bash: { reach: 2.0, windup: 0.6, damage: 18, push: 5, cooldown: 1.4 } },
+    rusher: { hp: 50, run: 6.4, windup: 0.45, damage: 25, reach: 2.1, hit: 2.6, cooldown: 1.0, push: 5, portalFrom: 9, portalChance: 0.6, portalTele: 0.5, portalLife: 5, portalGap: 5, near: 2.6, ahead: 1.4 },
   },
   waves: { first: 2, between: 1.8 },
 };
