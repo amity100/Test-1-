@@ -758,20 +758,26 @@ describe('AIM PORTAL: the pair', () => {
     expect(R.pair!.near.normal.z).toBe(-1);
   });
 
-  it('one pair at a time: a new press replaces the old; it shuts by itself after its time; a second press inside the cooldown does nothing', () => {
+  it('one pair at a time: a new press moves it (its ends jump: no twin collapsing in your face); it shuts by itself after its time; a second press inside the cooldown does nothing', () => {
     const { R, rifts, tap, step, aimAt } = rig();
     tap(V(0, 1.6, 12));
     const first = R.pair!;
+    const far0 = first.far.pos.clone();
     expect(rifts.strikeOpen()).toBe(true);
     // (inside the cooldown: nothing)
     tap(V(5, 1.6, 12), 1);
+    expect(R.pair!.id).toBe(first.id);
     // let the cooldown run, then a new press
     step(Math.ceil(AIMP.cooldown * 60) + 2);
     aimAt(V(5, 1.6, 12));
     tap(V(5, 1.6, 12));
     expect(R.pair!.id).not.toBe(first.id);
-    expect(rifts.strikeEnds(first.strike)).toBeNull();
+    const ends = rifts.strikeEnds(R.pair!.strike)!;
+    expect(ends.b.position.distanceTo(far0)).toBeGreaterThan(2);
+    expect(ends.b.position.distanceTo(R.pair!.far.pos)).toBeLessThan(1e-6);
     expect(R.lastOpen.count).toBe(2);
+    // (the near twin collapses fast when it goes)
+    expect((ends.a as any).closeTime).toBeLessThan(0.1);
     step(Math.ceil(AIMP.life * 60) + 3);
     expect(R.pair).toBeNull();
     expect(rifts.strikeOpen()).toBe(false);

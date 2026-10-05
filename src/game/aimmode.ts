@@ -49,6 +49,8 @@ export interface AimRifts {
   strikeEnds(id: number): { a: RiftEnd; b: RiftEnd } | null;
   moveStrikeExit(id: number, f: RiftFrame & { kind: RiftEndKind }): boolean;
   moveStrikeEntrance(id: number, f: RiftFrame & { kind: RiftEndKind }): boolean;
+  /** Give a strike pair this long to live from now (s). */
+  setStrikeLife?(id: number, life: number): void;
   raycastThrough(origin: V3, dir: V3, maxDist: number, world: CollisionWorld, maxHops?: number): RaySegment[];
 }
 
@@ -283,9 +285,10 @@ export class AimMode {
     this.h.player.weaponUp = 0;
   }
 
-  /** A wave's breather: a full magazine, no pair, everyone's mind fresh. */
+  /** A wave's breather: a full magazine, no pair, everyone's mind fresh, the last wave's bodies gone. */
   beginWave(_def: LabWave) {
     this.reset();
+    this.h.enemies.clearDead?.();
   }
 
   playerDown() {
@@ -602,7 +605,10 @@ export class AimMode {
       }
     }
     // let go: it stays where it is, its time counted from now
-    if (!holding && this.wasPortal && this.pair) this.pair.t = 0;
+    if (!holding && this.wasPortal && this.pair) {
+      this.pair.t = 0;
+      this.h.rifts.setStrikeLife?.(this.pair.strike, AIMP.life + 1);
+    }
     this.wasPortal = holding;
     if (!holding) this.holdT = -1;
   }
@@ -661,16 +667,30 @@ export class AimMode {
     this.openPair(spot, man, side);
   }
 
-  /** Open the pair: the exit at `far` (next to `man`, on `side`), its twin right in front of you on the crosshair. */
+  /**
+   * Open the pair: the exit at `far` (next to `man`, on `side`), its twin
+   * right in front of you on the crosshair. A pair already open just jumps
+   * there (no collapsing twin in your face while the new one opens).
+   */
   openPair(far: Spot, man: Enemy | null = null, side: Side = 'behind') {
     const h = this.h;
-    this.closePair();
     this.closeAt = -1;
     const ray = h.aimRay();
     const aim = flat(ray.dir, new THREE.Vector3());
     const v = h.player.body.vel;
     const near = nearSpot(h.world, h.player.chest(_c), ray, v.x * aim.x + v.z * aim.z, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
-    const strike = h.rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), AIMP.life + 1, 0, -1, ['entrance', 'exit']);
+    const old = this.pair;
+    let strike: number;
+    if (old && h.rifts.setStrikeLife && h.rifts.moveStrikeEntrance(old.strike, spotFrame(near, 'stand')) && h.rifts.moveStrikeExit(old.strike, spotFrame(far))) {
+      strike = old.strike;
+      h.rifts.setStrikeLife(strike, AIMP.life + 1);
+    } else {
+      this.closePair();
+      strike = h.rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), AIMP.life + 1, 0, -1, ['entrance', 'exit']);
+    }
+    // (the near twin is right in front of the camera: it collapses at once when it goes)
+    const ends = h.rifts.strikeEnds(strike);
+    if (ends) (ends.a as { closeTime?: number }).closeTime = 0.07;
     this.pair = { id: ++this.pairSeq, strike, near, far, t: 0, seen: new Map(), noticed: new Set(), man: man ? man.id : null, side };
     if (AIMP.grace > 0) this.setNoPlayer(this.pair, true);
     this.faceAim();

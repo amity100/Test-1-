@@ -88,6 +88,8 @@ export class Portal implements RiftEnd {
   target = 0;
   pulse = 0;
   openTime = FEEL.portalOpenTime;
+  /** How long it takes to collapse (s; an end right in front of the camera goes faster). */
+  closeTime = FEEL.portalCloseTime;
   /** Another end links into it (a hijacked gate feeding the exit). */
   fed = false;
   /** Gate / boss id. */
@@ -505,6 +507,7 @@ export class RiftSystem implements RiftAPI {
     p.aimAt = -1;
     p.noPlayer = false;
     p.openTime = FEEL.portalOpenTime;
+    p.closeTime = FEEL.portalCloseTime;
     p.role = role;
     p.owner = owner;
     p.recolor(color);
@@ -1596,7 +1599,7 @@ export class RiftSystem implements RiftAPI {
 
     let released = false;
     for (const p of this.drawn) {
-      const rate = p.target > 0 ? 1 / p.openTime : 1 / FEEL.portalCloseTime;
+      const rate = p.target > 0 ? 1 / p.openTime : 1 / p.closeTime;
       p.open = THREE.MathUtils.clamp(p.open + Math.sign(p.target - p.open) * rate * dt, 0, 1);
       p.pulse = Math.max(0, p.pulse - dt * 2);
       if (!this.replaying) p.applyUniforms(time, p.target > 0 ? easeOutBack(p.open) : p.open, p.dormant);

@@ -467,6 +467,11 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
     e.char.update(dt, L);
   }
 
+  /** The dead out of the world (the COMBAT LAB between AIM PORTAL's waves: a floor of bodies reads like live men). */
+  clearDead() {
+    for (const e of this.list) if (!e.alive && !e.gone && !e.held) this.vanish(e);
+  }
+
   /** Gone for good (void, sunk): body out of physics, mesh hidden. */
   private vanish(e: Enemy) {
     if (e.body) {
