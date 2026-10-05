@@ -569,7 +569,9 @@ export async function dressPhilistine(human: HumanModel, opts: FilmDressOptions 
   const sword = makeSword(tier, t.leather, t.metal, t.wood, { blade: elite ? 0.75 : 0.6 });
   hangFromBelt(fit, tun, sword, { th: 1.45, out: elite ? 0.04 : 0.03, drop: 0.01, forward: 0.42, bone: 'pelvis.L', name: 'wardrobeSword' });
   outfit.props.sword = sword;
-  const main = makeSpear(tier, t.wood, t.metal, t.leather, { length: 2.0 + 0.5 * R(), head: 0.28, gripAt: 1.1, seed });
+  // (host1, wave 5) gripped nearer its balance point: carried upright at the side on the march (the fist ~1 m up) the
+  // butt rides ~0.2 m over the road — at 1.1 m from the butt it dragged through the ground
+  const main = makeSpear(tier, t.wood, t.metal, t.leather, { length: 2.0 + 0.5 * R(), head: 0.28, gripAt: 0.8, seed });
   const shield = makeShield(tier, t.leather, t.metal, t.wood, { radius: 0.3 + 0.05 * R(), boss: 'bronze', seed });
   if (!opts.crowd) await sandals(fit, t.leather, { wraps: 1.5, height: 0.08 });
   outfit.finish(t0);

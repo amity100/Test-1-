@@ -1869,11 +1869,11 @@ export class DavidModel {
     const b = smooth01(this.cradleBend);
     if (b > 0.001) {
       // (wave 5) gentler over the kneel (the knee down already lowers him: no jackknife from the hips)
-      m.add('hips', 0.1 * b, 0, 0);
-      m.add('spine', 0.21 * b, 0, 0);
-      m.add('chest', 0.15 * b, 0, 0);
-      m.add('neck', 0.06 * b, 0, 0);
-      m.add('head', 0.16 * b, 0, 0);
+      m.add('hips', 0.06 * b, 0, 0);
+      m.add('spine', 0.15 * b, 0, 0);
+      m.add('chest', 0.11 * b, 0, 0);
+      m.add('neck', 0.05 * b, 0, 0);
+      m.add('head', 0.13 * b, 0, 0);
     }
     // (wave 5) the weight: the chest back over the hips, the shoulders braced, the head down to the lamb
     const e = smooth01(this.cradleEffort);

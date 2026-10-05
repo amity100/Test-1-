@@ -69,7 +69,9 @@ export const FILM_CAM = {
   //  left third, Samuel walking away ESE on the right third; the look at chest height of the kneeling king)
   // (CUT v3: 5 s of slow motion — a slow drift east and a small push over the whole insert; the look a little higher and
   //  the lens a little wider than cut4's: with perf's CUT v3 knee mark the kneeling king's head touched the top edge)
-  insert: { dx0: -0.18, dx1: 0.12, dz0: 2.34, dz1: 2.18, h0: 0.6, h1: 0.62, lookX: 0.05, lookH: 0.93, follow: 0.2, fov0: 39, fov1: 37 },
+  // (cut7, CUT v6 — G5b is the payoff of the cold open C0: the push goes further in on the fist and the corner, the
+  //  lens tightening, so the rip lands on the image the film opened with — the fist, the dark wool, the sun behind it)
+  insert: { dx0: -0.18, dx1: 0.08, dz0: 2.34, dz1: 1.82, h0: 0.6, h1: 0.66, lookX: 0.05, lookH: 0.88, follow: 0.2, fov0: 39, fov1: 32 },
   // G6 (cut4): a medium close-up on Samuel, 3/4 FRONT from the south-west at eye level — the lens on the line from
   // Samuel toward Saul turned `rot` deg toward the lens side (his eyeline ~off-lens left), a slow 6 % push; the look
   // shifted `lookLeft` m to frame left (his face on the right third, the verse in the left negative space)

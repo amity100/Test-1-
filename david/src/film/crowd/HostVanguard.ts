@@ -135,6 +135,90 @@ class Swing {
   }
 }
 
+/**
+ * FOOT LOCK — the capture's contact flags (heel / ball per foot, tools/mocap) pin the foot to the plain while it bears
+ * weight: on heel strike the ankle's ground point is recorded and held (the leg solved back onto it by two-bone IK, the
+ * knee in its own bend plane, the foot's orientation kept); when the heel lifts and the ball still bears, the ball is
+ * held instead (the ankle rises and rolls over it); on lift-off the correction eases out in ~0.12 s. The in-place take
+ * time-warped to the ground speed leaves ~10-20 cm/s of residual drift at the ankle (measured on the bench); this takes
+ * it to the capture's own roll.
+ */
+class FootLock {
+  private mode: 0 | 1 | 2 = 0; // free / heel / ball
+  private readonly lock = new THREE.Vector3();
+  /** the correction applied last frame (world), eased out after lift-off */
+  private readonly off = new THREE.Vector3();
+  constructor(private readonly heelBit: number, private readonly ballBit: number) {}
+  reset() {
+    this.mode = 0;
+    this.off.set(0, 0, 0);
+  }
+  apply(contacts: number, thigh: THREE.Object3D, shin: THREE.Object3D, foot: THREE.Object3D, toe: THREE.Object3D | undefined, dt: number) {
+    const heel = (contacts & this.heelBit) !== 0, ball = (contacts & this.ballBit) !== 0;
+    foot.getWorldPosition(_fa);
+    if (toe) toe.getWorldPosition(_ft);
+    const want = heel ? 1 : ball && toe ? 2 : 0;
+    if (want !== this.mode) {
+      // a new phase: hold the point where it is NOW (with last frame's correction, so nothing jumps)
+      if (want === 1) this.lock.copy(_fa).add(this.off);
+      else if (want === 2) this.lock.copy(toe ? _ft : _fa).add(this.off);
+      this.mode = want;
+    }
+    if (this.mode === 0) {
+      this.off.multiplyScalar(Math.exp(-dt / 0.05));
+    } else {
+      // horizontal correction only (the height is the foot IK's); never more than 15 cm (a bad contact flag)
+      _fd.copy(this.lock).sub(this.mode === 1 ? _fa : _ft).setY(0);
+      if (_fd.lengthSq() > 0.15 * 0.15) {
+        this.mode = 0;
+        this.off.multiplyScalar(Math.exp(-dt / 0.05));
+      } else this.off.copy(_fd);
+    }
+    if (this.off.lengthSq() < 1e-8) return;
+    // two-bone IK: the ankle to (ankle + off), the knee in its current plane, the foot's world orientation kept
+    foot.getWorldQuaternion(_fq);
+    thigh.getWorldPosition(_fh);
+    shin.getWorldPosition(_fk);
+    _ftg.copy(_fa).add(this.off);
+    const la = _fh.distanceTo(_fk), lb = _fk.distanceTo(_fa);
+    _fd.copy(_ftg).sub(_fh);
+    const d = THREE.MathUtils.clamp(_fd.length(), Math.abs(la - lb) + 1e-4, la + lb - 1e-4);
+    _fd.normalize();
+    // bend plane: the current knee's offset from the hip-ankle line
+    _fp.copy(_fk).sub(_fh);
+    _fp.addScaledVector(_fd, -_fp.dot(_fd));
+    if (_fp.lengthSq() < 1e-8) return;
+    _fp.normalize();
+    const x = (la * la - lb * lb + d * d) / (2 * d);
+    const y = Math.sqrt(Math.max(0, la * la - x * x));
+    _fk2.copy(_fh).addScaledVector(_fd, x).addScaledVector(_fp, y);
+    rotWorld(thigh, _fq2.setFromUnitVectors(_fv.copy(_fk).sub(_fh).normalize(), _fv2.copy(_fk2).sub(_fh).normalize()));
+    shin.getWorldPosition(_fk);
+    foot.getWorldPosition(_fa);
+    rotWorld(shin, _fq2.setFromUnitVectors(_fv.copy(_fa).sub(_fk).normalize(), _fv2.copy(_ftg).sub(_fk).normalize()));
+    setWorldQuat(foot, _fq);
+  }
+}
+
+const _fa = new THREE.Vector3(), _ft = new THREE.Vector3(), _fd = new THREE.Vector3(), _fh = new THREE.Vector3(), _fk = new THREE.Vector3();
+const _fk2 = new THREE.Vector3(), _ftg = new THREE.Vector3(), _fp = new THREE.Vector3(), _fv = new THREE.Vector3(), _fv2 = new THREE.Vector3();
+const _fq = new THREE.Quaternion(), _fq2 = new THREE.Quaternion(), _rwP = new THREE.Quaternion(), _rwW = new THREE.Quaternion();
+/** apply a world-space rotation to a bone (children follow) */
+function rotWorld(bone: THREE.Object3D, dq: THREE.Quaternion) {
+  bone.updateWorldMatrix(true, false);
+  bone.getWorldQuaternion(_rwW);
+  bone.parent!.getWorldQuaternion(_rwP);
+  _rwW.premultiply(dq);
+  bone.quaternion.copy(_rwP.invert().multiply(_rwW));
+  bone.updateMatrixWorld(true);
+}
+function setWorldQuat(bone: THREE.Object3D, qw: THREE.Quaternion) {
+  bone.parent!.updateWorldMatrix(true, false);
+  bone.parent!.getWorldQuaternion(_rwP);
+  bone.quaternion.copy(_rwP.invert().multiply(qw));
+  bone.updateMatrixWorld(true);
+}
+
 class VanMan {
   readonly look = new THREE.Vector3();
   private readonly lookCur = new THREE.Vector3();
@@ -165,6 +249,7 @@ class VanMan {
   private readonly headVel = new THREE.Vector3();
   private readonly bendW = new THREE.Vector3();
   private hasHead = false;
+  private readonly locks = [new FootLock(1, 2), new FootLock(4, 8)];
 
   constructor(readonly actor: FilmActor, readonly slot: VanguardSlot, index: number, private readonly dust: CrowdDust | null) {
     const h = (k: number) => hash(slot.seed * 3.17 + k * 1.31, k * 0.77 + index);
@@ -239,6 +324,7 @@ class VanMan {
     this.lookCur.set(0, 0, 0);
     this.hasHead = false;
     this.bendW.set(0, 0, 0);
+    for (const l of this.locks) l.reset();
   }
 
   /** the shield on the left fist: face out to the man's left, turned toward his front, swinging on the grip */
@@ -323,6 +409,15 @@ class VanMan {
     const sx = THREE.MathUtils.clamp(this.spear.x, -0.2, 0.45), sy = THREE.MathUtils.clamp(this.spear.y, -0.25, 0.25);
     a.upright.R.axis.set(0, Math.cos(sx) * Math.cos(sy), 0).addScaledVector(_f, Math.sin(sx)).addScaledVector(_r, Math.sin(sy)).normalize();
     a.update(dt, camera, viewportH, wind);
+    // ---- the feet planted while they bear weight (after the rig, the body layer and the foot IK)
+    if (dt > 0) {
+      const b = a.human.bones as Record<string, THREE.Object3D>;
+      const c = a.mocap.pose.contacts;
+      for (let i = 0; i < 2; i++) {
+        const s = i === 0 ? 'L' : 'R';
+        this.locks[i].apply(c, b[`upperleg01.${s}`], b[`lowerleg01.${s}`], b[`foot.${s}`], b[`toe3-1.${s}`] ?? b[`toes.${s}`], dt);
+      }
+    }
     if (this.shieldObj) this.placeShield(cue.yaw);
     // ---- the crown's strips: bent back by the head's acceleration (the bob of every step) and leaning in the breeze
     if (this.crown && dt > 1e-4) {

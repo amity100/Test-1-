@@ -169,10 +169,10 @@ export const WORLD_CAM = {
       [3.0, 246, 3.0, 1.9, 0, -2, 40],
       [3.9, 244, 2.6, 1.8, 0, -3, 38],
       [5.0, 243, 2.7, 1.85, 0, -2, 38],
-      [6.2, 245, 3.2, 2.1, 0, 1.5, 40],
-      [7.4, 245, 3.4, 2.2, 0, 2, 40],
-      [8.5, 242, 3.4, 2.3, 0, 2, 41],
-      [9.6, 236, 3.4, 2.4, 0, 1.5, 43],
+      [6.2, 245, 3.2, 2.1, 0, 3, 40],
+      [7.4, 245, 3.4, 2.2, 0, 4.5, 40],
+      [8.5, 242, 3.4, 2.3, 0, 4.5, 41],
+      [9.6, 236, 3.4, 2.4, 0, 2.5, 43],
       [11.4, 224, 3.5, 2.4, 0, 0, 48],
     ] as [number, number, number, number, number, number, number][],
     // depth of field: on him / the lamb; everything sharp before the hand-off (the game's camera has none)
@@ -1148,7 +1148,8 @@ export class FilmWorld {
     const reachIn = ss(lift + d.r0, lift - 0.02, t), reachOut = 1 - ss(setDown + d.s2, setDown + d.s2 + 0.45, t);
     m.cradleReach = Math.min(reachIn, reachOut);
     m.cradleBend = Math.max(
-      ss(kneel + d.k1 + 0.15, lift + d.r0 + 0.2, t) * (1 - ss(lift + 0.35, lift + d.l1, t)),
+      // (the bend only once the knee is down: no jackknife from straight legs)
+      ss(kneel + d.k1 + 0.6, lift + 0.1, t) * (1 - ss(lift + 0.35, lift + d.l1, t)),
       ss(setDown + d.k2 + 0.2, setDown + d.s0 + 0.25, t) * (1 - ss(setDown + d.s2, setDown + d.u2 + 0.3, t)),
     );
     const rise = lift + d.u1;

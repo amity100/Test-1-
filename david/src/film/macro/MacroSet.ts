@@ -362,7 +362,8 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
   const weaveMat = weaveMaterial();
   disposables.push(weaveMat);
   const mkPiece = (upper: boolean) => {
-    const cols = 112, rows = upper ? 46 : 36;
+    // (phones: a coarser grid — the weave itself is in the shader)
+    const cols = mobile ? 84 : 112, rows = upper ? (mobile ? 34 : 46) : mobile ? 28 : 36;
     const n = (cols + 1) * (rows + 1);
     const pos = new Float32Array(n * 3), mat = new Float32Array(n * 2), strain = new Float32Array(n);
     const idx: number[] = [];
