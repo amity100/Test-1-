@@ -209,6 +209,8 @@ export function samuelStyle(): GroomStyle {
     },
     fine: true,
     jawHang: 0.8,
+    // the me'il and its throw over the chest and shoulders (~1.5-3 cm of wool): the long beard and hair rest on it
+    cloth: 0.026,
   };
 }
 
@@ -416,6 +418,7 @@ export function elderStyle(seed: number): GroomStyle {
     },
     fine: true,
     jawHang: L.beard === 'short' ? 0.2 : 0.7,
+    cloth: 0.02,
   };
 }
 

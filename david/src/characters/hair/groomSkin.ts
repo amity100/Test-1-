@@ -49,6 +49,8 @@ export interface GroomSkinMap {
   ms: number;
   /** diagnostics: mean / max occlusion over the dense root region (density > 0.5) */
   occ: [number, number];
+  /** ms of the phases: masks + per-vertex values, raster, dilation + upload prep */
+  phases: [number, number, number];
 }
 
 /**
@@ -68,6 +70,7 @@ export async function buildGroomSkin(human: HumanModel, S: HeadSurface, st: Groo
   const uvA = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
   const nv = S.region.length;
   if (!uvA || uvA.count !== nv || !(uvA as THREE.BufferAttribute).isBufferAttribute) return null;
+  const tA = performance.now();
   const beard = st.beard ? st.beard(S) : null;
   const scalp = st.scalp ? st.scalp(S) : null;
   const occGain = st.occGain ?? 0.55, occMax = st.occMax ?? 0.9;
@@ -108,6 +111,7 @@ export async function buildGroomSkin(human: HumanModel, S: HeadSurface, st: Groo
   const asp = (v1 - v0) / (u1 - u0);
   const W = asp >= 1 ? base : base * 2;
   const H = asp >= 1 ? base * 2 : base;
+  const tB = performance.now();
   const data = new Uint8Array(W * H * 4);
   const filled = new Uint8Array(W * H);
   const su = W / (u1 - u0), sv = H / (v1 - v0);
@@ -142,6 +146,7 @@ export async function buildGroomSkin(human: HumanModel, S: HeadSurface, st: Groo
         data[o * 4 + 3] = Math.round(255 * Math.min(1, A[ia] * wa + A[ib] * wb + A[ic] * wc));
       }
   }
+  const tC = performance.now();
   // dilate (seams, sub-texel triangles): an empty texel takes the mean of its filled neighbours
   const addO = new Int32Array(W * H), addV = new Uint8Array(W * H * 4);
   for (let pass = 0; pass < 3; pass++) {
@@ -199,7 +204,7 @@ export async function buildGroomSkin(human: HumanModel, S: HeadSurface, st: Groo
     map: tex, rect, beardColor: lin(st.beardColor), scalpColor: lin(st.scalpColor), cover: st.cover,
     occDirect: st.occDirect, occIndirect: st.occIndirect, stubble: st.stubble, edgeNoise: st.edgeNoise, sheen: st.sheen,
   });
-  return { texture: tex, rect, bytes: Math.round(W * H * 4 * 1.333), ms: ms + performance.now() - t0, occ: [oN ? +(oSum / oN).toFixed(3) : 0, +oMax.toFixed(3)] };
+  return { texture: tex, rect, bytes: Math.round(W * H * 4 * 1.333), ms: ms + performance.now() - t0, phases: [Math.round(tB - tA), Math.round(tC - tB), Math.round(performance.now() - tC)], occ: [oN ? +(oSum / oN).toFixed(3) : 0, +oMax.toFixed(3)] };
 }
 
 /** detach a groom's map from the skin (the skin is exactly as before) and free it */

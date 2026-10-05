@@ -330,6 +330,8 @@ export function saulStyle(): GroomStyle {
     },
     fine: true,
     jawHang: 0.6,
+    // the scale coat over the chest and shoulders: the beard and the hair rest on it
+    cloth: 0.02,
   };
 }
 
@@ -480,6 +482,7 @@ export function manStyle(o: ManStyleOptions): GroomStyle {
     };
     st.fine = true;
     st.jawHang = beardKind === 'full' ? 0.5 : 0;
+    st.cloth = 0.012;
   }
   return st;
 }

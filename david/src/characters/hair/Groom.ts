@@ -56,6 +56,7 @@ export interface GroomStats {
   skinMapMs: number;
   /** mean / max occlusion of the skin under the dense hair (diagnostics) */
   skinOcc?: [number, number];
+  skinPhases?: [number, number, number];
   buildMs: number;
   /** ms per build phase: surface (rest skin + SDF), grow (guides + children + AO), upload */
   timings: { surface: number; grow: number; finish: number };
@@ -372,6 +373,7 @@ export async function createGroom(human: HumanModel, spec: GroomStyleSpec, opts:
     skinMapBytes: skinMap ? skinMap.bytes : 0,
     skinMapMs: skinMap ? skinMap.ms : 0,
     skinOcc: skinMap ? skinMap.occ : undefined,
+    skinPhases: skinMap ? skinMap.phases : undefined,
     buildMs: 0,
     timings: { surface: t1 - t0, grow: t2 - t1, finish: 0 },
     layers: set.diag,

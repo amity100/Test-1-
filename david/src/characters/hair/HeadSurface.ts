@@ -505,10 +505,29 @@ export class HeadSurface {
 
   /** beard1: root density on the scalp skin — the strands' scalp mask with the fine short hairs ~4 mm below the line */
   scalpSkin(hairlineShift = 0, hairline?: (phiDeg: number) => number): Float32Array {
-    const a = this.scalpMask(hairlineShift, hairline);
-    const b = this.scalpMask(hairlineShift - 0.004, hairline);
-    const out = new Float32Array(a.length);
-    for (let v = 0; v < a.length; v++) out[v] = Math.max(a[v], 0.5 * b[v]);
+    // one pass of scalpMask's formula with both lines (the strands' and 4 mm lower), the noise and the ear test shared
+    const nv = this.region.length;
+    const out = new Float32Array(nv);
+    const P = this.pos, N = this.nrm, E = this.E, C = this.crown;
+    const PHI = [0, 30, 45, 62, 72, 80, 100, 120, 140, 180];
+    const HL = [0.074, 0.072, 0.066, 0.05, 0.03, -0.012, 0.02, -0.04, -0.075, -0.088];
+    for (let v = 0; v < nv; v++) {
+      const r = this.region[v];
+      if (r <= 0.01) continue;
+      const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
+      const fy = y - E.y;
+      if (fy < -0.134) continue;
+      const phi = Math.abs(THREE.MathUtils.radToDeg(Math.atan2(x - C.x, z - C.z)));
+      const hl = interp(phi, PHI, HL) + fbm(x * 90, y * 90, z * 90, 2, 50) * 0.004 + hairlineShift + (hairline ? hairline(phi) : 0);
+      const rr = Math.min(1, r);
+      let m = Math.max(rr * ss(hl - 0.003, hl + 0.01, fy), 0.5 * rr * ss(hl - 0.007, hl + 0.006, fy));
+      if (m <= 0) continue;
+      if (Math.abs(x - E.x) > 0.045) {
+        const s = this.sdf.sample(x - N[v * 3] * 0.012, y - N[v * 3 + 1] * 0.012, z - N[v * 3 + 2] * 0.012);
+        m *= 1 - ss(-0.006, -0.001, s);
+      }
+      out[v] = m;
+    }
     return out;
   }
 

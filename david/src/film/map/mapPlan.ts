@@ -177,7 +177,7 @@ export function exodusKeys(): CamKey[] {
       // arriving: ~3 km over the western edge of the hills, the horizon 40 % down the picture, Ashdod ahead, the five
       // cities on the horizon band; still sinking a little at the cut (never a hold)
       t: b.dur, lon: 34.674, lat: 31.733, range: 43_000, heading: -70, pitch: 4.0, fov: 30, roll: 0,
-      m: { lon: 0, lat: 0, lr: -0.05, heading: -0.6, pitch: -0.4, fov: 0.3, roll: 0 },
+      m: { lon: -0.004, lat: 0.0015, lr: -0.12, heading: -1.0, pitch: -0.6, fov: 0.3, roll: 0 },
     },
   ];
 }

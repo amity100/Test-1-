@@ -543,3 +543,7 @@ values and re-baked by our own tools (`tools/human`).
 - No third-party assets. The vanguard of full actors reuses the project's own FilmActor humans, costumes and the motion
   capture already credited above (CMU Graphics Lab Motion Capture Database; Microsoft Rocketbox, MIT); the spear and
   shield dynamics, the crown flutter, the gait selection and the bench are own code (CC0 by construction).
+- Wave 6 (host1: the army of Israel in G1-G4 — `GilgalArmy.ts`, `ArmyHeroes.ts`, `actorMotion.ts`; the crowd's beards
+  in `crowdShader.ts` / `impostorShader.ts`): no third-party assets. The walks, halts, roars and step-asides reuse the
+  motion capture credited above (CMU; Microsoft Rocketbox, MIT); foot locks, the halt ripple, the G1 wipe and the
+  shader beards are own code (CC0 by construction).

@@ -39,6 +39,14 @@ const NOTICE = takeBeat('spearRaised', 'notice', 4.5);
  */
 const WIPE = takeBeat('dustWall', 'wipe', 3.6);
 const WIPE_RANGE: [number, number] = [0.35, 1.3];
+/**
+ * (wave 6, measured in the 8 fps strips of the first wipe) where the man's body is at the cut: just right of the
+ * picture's centre (rad east of the lens axis), so his breadth covers the frame as the cut comes; the body (hip joints)
+ * walks ~0.2 m ahead of the actor's root. His whole file keeps that place in the march (WIPE_LAG_MAX: a ragged rank)
+ */
+const WIPE_AIM = 0.07;
+const WIPE_BODY_LEAD = 0.2;
+const WIPE_LAG_MAX: [number, number] = [-0.5, 0.9];
 
 /**
  * marching takes (CMU + Rocketbox): every man draws his own and his own phase — never in lockstep.
@@ -185,7 +193,11 @@ export class GilgalArmy {
   private readonly tmp = new THREE.Vector3();
   private readonly samuel = SAMUEL.pos.clone();
   /** (wave 6) the G1 wipe: the man (kept on his own line: no weave), his distance from the lens at the beat */
-  private wipe: { s: Soldier; dist: number; ok: boolean } | null = null;
+  private wipe: { s: Soldier; dist: number; ok: boolean; away: number } | null = null;
+  /** (wave 6) the file of the wipe walks this far behind (+) the front rank's line in every shot (m along the march) */
+  private fileLag = { file: -1, dx: 0 };
+  /** the man of the wipe is played by an actor (castHeroes); a crowd figure there keeps 1 m+ off the lens (nearHide) */
+  private wipeActor = false;
   private readonly wipeFrame: ShotFrame = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 40, roll: 0 };
 
   /**
@@ -205,8 +217,8 @@ export class GilgalArmy {
     }
     const st = armyAt('dustWall', tc);
     // the front-rank man whose line (his file's lateral place) passes nearest in front of the lens
-    let best: Soldier | null = null, bd = 1e9;
-    const v = new THREE.Vector3();
+    let best: Soldier | null = null, bd = 1e9, away = 1;
+    const v = new THREE.Vector3(), bv = new THREE.Vector3();
     for (const s of this.soldiers) {
       if (s.rank !== 0) continue;
       armySlot(s.file, s.rank, st.frontX, 0, 0.18, v);
@@ -214,16 +226,30 @@ export class GilgalArmy {
       if (d < bd) {
         bd = d;
         best = s;
+        bv.copy(v);
+        away = Math.sign(v.z - F.pos.z) || 1;
       }
     }
-    this.wipe = best ? { s: best, dist: bd, ok: bd >= WIPE_RANGE[0] && bd <= WIPE_RANGE[1] } : null;
+    this.wipe = best ? { s: best, dist: bd, ok: bd >= WIPE_RANGE[0] && bd <= WIPE_RANGE[1], away } : null;
+    // his place in the march: at the cut his body is on the ray WIPE_AIM east of the lens axis, where it meets his line
+    this.fileLag = { file: -1, dx: 0 };
+    if (best && this.wipe?.ok) {
+      const yaw = Math.atan2(F.look.x - F.pos.x, F.look.z - F.pos.z) - WIPE_AIM;
+      const c = Math.cos(yaw);
+      if (Math.abs(c) > 0.2) {
+        const xb = F.pos.x + ((bv.z - F.pos.z) / c) * Math.sin(yaw);
+        this.fileLag = { file: best.file, dx: THREE.MathUtils.clamp(bv.x - xb + WIPE_BODY_LEAD, WIPE_LAG_MAX[0], WIPE_LAG_MAX[1]) };
+      }
+    }
+    // castHeroes gives the wipe to the first spear-man hero, or on the phones to the first horn blower
+    this.wipeActor = (this.heroes?.heroes.length ?? 0) > 0;
     if (this.wipe && !this.wipe.ok) console.info(`[army] G1 wipe: the front rank passes ${bd.toFixed(2)} m from the lens — outside ${WIPE_RANGE.join('-')} m`);
   }
 
   /** (tests) the G1 wipe as planned */
   get wipeInfo() {
     const w = this.wipe;
-    return w ? { file: w.s.file, rank: w.s.rank, dist: +w.dist.toFixed(2), ok: w.ok } : null;
+    return w ? { file: w.s.file, rank: w.s.rank, dist: +w.dist.toFixed(2), ok: w.ok, actor: this.wipeActor, lag: +this.fileLag.dx.toFixed(2) } : null;
   }
 
   static async create(o: GilgalArmyOptions): Promise<GilgalArmy> {
@@ -246,6 +272,8 @@ export class GilgalArmy {
         army.heroes = null;
       }
     }
+    // the G1 wipe planned now: its file keeps its place in the march in every shot, whichever shot is entered first
+    army.planWipe();
     // test only (?test=1): the capture tools read wipeInfo / heroAt
     if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('test') === '1') (window as unknown as Record<string, unknown>).__gilgalArmy = army;
     return army;
@@ -256,12 +284,20 @@ export class GilgalArmy {
   /** (tests) where each hero soldier stands now (world), its cast slot, and its distance from the last lens */
   heroAt() {
     const from = this.lastCam ? this.lastCam.getWorldPosition(new THREE.Vector3()) : null;
-    return (this.heroes?.heroes ?? []).map((h, i) => {
+    const look = this.lastCam ? this.lastCam.getWorldDirection(new THREE.Vector3()) : null;
+    const hip = new THREE.Vector3(), hip2 = new THREE.Vector3();
+    const heroes = (this.heroes?.heroes ?? []).map((h, i) => {
       const p = h.actor.root.getWorldPosition(this.tmp);
       const s = this.soldiers[this.heroSlot[i] ?? -1];
       const d = from ? Math.hypot(p.x - from.x, p.z - from.z) : 0;
-      return { i, slot: s ? `${s.file}/${s.rank}` : '-', x: +p.x.toFixed(2), z: +p.z.toFixed(2), d: +d.toFixed(2), vis: h.actor.root.visible };
+      // the body (the mid of the hip joints) against the root
+      const b = h.actor.human.bones as Record<string, THREE.Object3D | undefined>;
+      b['upperleg01.L']?.getWorldPosition(hip);
+      b['upperleg01.R']?.getWorldPosition(hip2);
+      hip.add(hip2).multiplyScalar(0.5);
+      return { i, slot: s ? `${s.file}/${s.rank}` : '-', x: +p.x.toFixed(2), z: +p.z.toFixed(2), d: +d.toFixed(2), hx: +hip.x.toFixed(2), hz: +hip.z.toFixed(2), vis: h.actor.root.visible };
     });
+    return { cam: from && look ? [+from.x.toFixed(2), +from.y.toFixed(2), +from.z.toFixed(2), +look.x.toFixed(3), +look.z.toFixed(3)] : null, heroes };
   }
 
   /** the FilmActor soldiers near the lens (null = none) */
@@ -441,6 +477,7 @@ export class GilgalArmy {
       const ag = s.ag;
       const [r0, r1, r2, r3, r4] = s.r;
       armySlot(s.file, s.rank, st.frontX, st.part, 0.18, pos);
+      if (s.file === this.fileLag.file) pos.x -= this.fileLag.dx;
       // the halt of G3: the column still rolling in onto its marks (decelerating), the halt rippling back
       // (wave 6: ~1 s from the front rank to the 30th, every man his own jitter — never a halt in unison)
       let haltT = 0, v = st.walk;
@@ -458,6 +495,8 @@ export class GilgalArmy {
       const wa = wiper ? 0 : s.file >= 7 && s.file <= 10 ? 0.35 : 1;
       const wph = r4 * 6.28, wph2 = r3 * 6.28;
       pos.z += wa * (0.12 * Math.sin(pos.x * 0.21 + wph) + 0.05 * Math.sin(pos.x * 0.63 + wph2));
+      // no actor for him (heroes unavailable): a crowd figure passes 1 m+ off the lens, never hidden by nearHide in view
+      if (wiper && !this.wipeActor && this.wipe) pos.z += this.wipe.away * Math.max(0, 1.05 - this.wipe.dist);
       const wslope = wa * (0.12 * 0.21 * Math.cos(pos.x * 0.21 + wph) + 0.05 * 0.63 * Math.cos(pos.x * 0.63 + wph2));
       // the set's ground function is costly (DEM + noise): re-sample it only every 0.3 m of a man's way
       if (Math.abs(pos.x - s.gx) + Math.abs(pos.z - s.gz) > 0.3) {
@@ -695,9 +734,12 @@ export class GilgalArmy {
     let wipeGiven = false;
     // reserved before anyone is cast: the horn blowers (cast first into the nearest front-rank slots) must not take it
     if (wipeI >= 0) taken.add(wipeI);
+    // the phones cast horn blowers only: there the first horn blower is the man of the wipe (he blows in the front
+    // rank at `horns`, then marches past the lens)
+    const spearHeroes = H.heroes.some((h) => h.role.kit !== 'horn');
     this.heroSlot = H.heroes.map((h) => {
       const horn = h.role.kit === 'horn';
-      if (wipeI >= 0 && !wipeGiven && !horn) {
+      if (wipeI >= 0 && !wipeGiven && (!horn || !spearHeroes)) {
         wipeGiven = true;
         const s = this.soldiers[wipeI];
         slots.push({ file: s.file, rank: s.rank });

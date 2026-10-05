@@ -524,8 +524,8 @@ export async function createMapSet(engine: MapEngine, o: MapSetOptions = {}): Pr
     hazeSun: new THREE.Color(1.1, 0.74, 0.55), hazeK: hazeK0 * 1.0, zen: new THREE.Color(0.75, 0.66, 0.72), hor: new THREE.Color(1.7, 1.42, 1.18), skyH: 45000, exp: 0.9, sat: 1.45,
   };
   const SHUT = {
-    sunK: L0.sunK, ambK: L0.ambK * 0.8, sunCol: new THREE.Color(1.0, 0.8, 0.56), hazeCol: new THREE.Color(0.98, 0.8, 0.5),
-    hazeSun: new THREE.Color(1.25, 0.98, 0.6), hazeK: hazeK0 * 1.5, zen: new THREE.Color(0.8, 0.74, 0.56), hor: new THREE.Color(1.5, 1.28, 0.84), skyH: 45000, exp: 1.0, sat: sat0,
+    sunK: L0.sunK, ambK: L0.ambK * 0.8, sunCol: new THREE.Color(1.0, 0.75, 0.48), hazeCol: new THREE.Color(1.0, 0.8, 0.48),
+    hazeSun: new THREE.Color(1.25, 0.98, 0.6), hazeK: hazeK0 * 1.5, zen: new THREE.Color(0.8, 0.74, 0.56), hor: new THREE.Color(1.5, 1.28, 0.84), skyH: 45000, exp: 1.0, sat: 1.32,
   };
   const zen = skyMat.uniforms.uZenith.value as THREE.Color, hor = skyMat.uniforms.uHorizon.value as THREE.Color;
   const mixIn = (g: typeof OPEN, w: number) => {
