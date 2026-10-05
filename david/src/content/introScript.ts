@@ -85,7 +85,7 @@ export type FilmSetName = 'black' | 'macro' | 'judah' | 'coast' | 'ramah' | 'gil
  */
 export type FilmCue =
   | 'cold' //       C0     CUT v6: the cold open — near silence, breath, the threads snapping
-  | 'glimpse' //    F1 F2  CUT v6: silent flashes of the shepherd inside the king's music (the music does not stop)
+  | 'glimpse' //    F1 F2  CUT v6 only (unused since CUT v6.1: the flashes are out)
   | 'land' //       P1+P2  the flight: black -> the clouds -> through the deck -> the Judean ridges
   | 'rachel' //     P3     Rachel's standing stone, a shepherd and his flock pass
   | 'threat' //     P4     the Philistine column on the coastal plain (war drums in the score)
@@ -115,8 +115,8 @@ export type FilmCue =
 
 export type IntroShotId =
   | 'cold' //         C0 (CUT v6) the cold open: the tear, extreme close, before anything is known
-  | 'glimpse-rock' // F1 (CUT v6) a flash of the boy on the rock (no face) inside Saul's glory
-  | 'glimpse-hand' // F2 (CUT v6) a flash of a young hand on a shepherd's staff
+  | 'glimpse-rock' // F1 (CUT v6; OUT in CUT v6.1 — the user: the flashes were not connected) the boy on the rock
+  | 'glimpse-hand' // F2 (CUT v6; OUT in CUT v6.1) a young hand on a shepherd's staff
   | 'land' //         P1 (CUT v5) out of black: the land of Israel at dawn — the Judean hills
   | 'bethlehem' //    P2 (CUT v5) Bethlehem on its ridge
   | 'map-exodus' //   P4 (CUT v5) the realistic 3D map: the road out of Egypt to Gilgal
@@ -272,12 +272,24 @@ export const VERDICT_WORDS: readonly IntroWord[] = [
 // C0 0-5 · T 5-8 · P1 8-14.5 · P4 14.5-24.5 · P6 24.5-31.5 · P7 31.5-36.5 · G1 36.5-40.5 · G2 40.5-46.5 · F1 -47.3 ·
 // G3 -52.3 · F2 -53.1 · G4 -58.1 · G5a -61.6 · G5b -65.6 · G6 -71.1 · G7 -74.1 · D1 -79.6 · D2 -83.6 · D3 -89.6 ·
 // D4 -103.6, then the game
+//
+// CUT v6.1 (wave 6; the user, 5 Oct, after Version 11 — docs/intro-script-v6-1.md is binding): the two flashes of the
+// shepherd are OUT ("the quick jumps to David while we see Saul are not connected at all"); EVERY TRANSITION HAS A
+// REASON AND A LOGICAL TIMING ("there must be logic in the timing of the transitions … some just jump from thing to
+// thing"): a hard cut continues the action, a look or a sound and matches exactly (positions, props in hand, screen
+// direction, light); a dissolve marks a change of time or place; no cut while a verse is still being read or a camera
+// move is half done. Saul's spear never vanishes: it falls from his hand ON SCREEN in G5a and lies in the dust. Every
+// motion must be "super natural" (real contacts — no hand through a sheep, a fist that really holds the wool).
+// C0 0-4.7 · T 4.7-7.7 · P1 7.7-14.2 · P4 14.2-24.7 · P6 24.7-31.7 · P7 31.7-36.7 · G1 36.7-40.7 · G2 40.7-46.7 ·
+// G3 46.7-51.7 · G4 51.7-57.7 · G5a 57.7-60.7 · G5b 60.7-64.7 · G6 64.7-70.2 · G7 70.2-74.2 · D1 74.2-79.7 ·
+// D2 79.7-83.7 · D3 83.7-90.7 · D4 90.7-104.7, then the game
 // ---------------------------------------------------------------------------------------------------------
 export const INTRO_SHOTS: readonly IntroShot[] = [
-  // ================================================================== THE COLD OPEN (8 s): the question
+  // ================================================================== THE COLD OPEN (7.7 s): the question
   {
-    id: 'cold', n: 'C0', set: 'macro', take: 'tear:macro', dur: 5.0, cut: 'black', hold: 0.5, fade: 0.6, cue: 'cold', beat: 'saul-hall', slowmo: 0.25,
+    id: 'cold', n: 'C0', set: 'macro', take: 'tear:macro', dur: 4.7, cut: 'black', hold: 0.5, fade: 0.6, cue: 'cold', beat: 'saul-hall', slowmo: 0.25,
     // grip: the fist closes on the wool · pull: the cloth goes taut · rip: the first threads snap · snap: the last thread
+    // (CUT v6.1: the smash to the title comes 0.5 s after `snap`, as the corner flies free — the cut on the climax)
     beats: { grip: 0.8, pull: 1.8, rip: 2.7, snap: 4.2 },
     // (cut7) a set of its own, 'macro' (src/film/macro/MacroSet.ts): a small close-up set built in a fraction of a second
     // (Saul's fist, the corner of Samuel's me'il with its tzitzit, the threads, a warm out-of-focus ground) — the film
@@ -296,7 +308,7 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'A low pulse in the score; nothing else.',
   },
 
-  // ================================================================== BEFORE (28.5 s): the land, the road, no king, the threat, "give us a king"
+  // ================================================================== BEFORE (29 s): the land, the road, no king, the threat, "give us a king"
   {
     id: 'land', n: 'P1', set: 'judah', take: 'flight', dur: 6.5, cut: 'black', hold: 0.3, fade: 1.0, cue: 'land', beat: 'judea',
     beats: { timeCard: 0.3, card: 3.2 },
@@ -309,14 +321,16 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + '(the second half of CUT v5\'s P1: a span / take offset, faster). The time card over its first seconds.',
   },
   {
-    id: 'map-exodus', n: 'P4', set: 'map', take: 'exodus', dur: 10.0, cut: 'dissolve', fade: 1.2, cue: 'map', beat: 'judea',
+    // (CUT v6.1) comes in as a MATCH DISSOLVE: the map opens on the same ridges at the same angle and light as P1's last
+    // frame and soars up and back to the whole region — one continuous rise, no change of direction under the dissolve
+    id: 'map-exodus', n: 'P4', set: 'map', take: 'exodus', dur: 10.5, cut: 'dissolve', fade: 1.2, cue: 'map', beat: 'judea',
     // egypt: the lens high over the region · flock: the road out of Egypt draws itself as a FLOCK of light — many small
     // lights moving together behind one, through the wilderness (Ps 78:52) · jordan: across the Jordan · land: the lens
     // sinks over the land of Israel, scattered tribes, no king (Judg 21:25) — and goes on toward the coast
     beats: { egypt: 0.6, flock: 1.4, verse: 1.8, jordan: 4.8, gilgal: 5.4, land: 5.8, noKing: 6.0 },
     text: [
       { at: 1.8, seconds: 3.8, kind: 'verse', quote: 'ps_78_52_flock', stagger: 0.15, side: 'center', v: 'bottom', lines: 1 },
-      { at: 6.0, seconds: 3.9, kind: 'verse', quote: 'jdg_21_25_no_king', stagger: 0.12, side: 'center', v: 'bottom', lines: 2 },
+      { at: 6.0, seconds: 4.4, kind: 'verse', quote: 'jdg_21_25_no_king', stagger: 0.12, side: 'center', v: 'bottom', lines: 2 },
     ],
     direction: 'The realistic 3D map, short and tied to the story (the user: "connect it to our story — how we got to '
       + 'David\'s story; something similar happens with the people of Israel"): out of Egypt the people go like a flock — '
@@ -327,9 +341,10 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'orient (Egypt, the Jordan).',
   },
   {
-    id: 'philistines', n: 'P6', set: 'coast', take: 'threat', dur: 7.0, cut: 'dissolve', fade: 0.8, cue: 'threat', beat: 'warriors',
-    // crane: the lens leaves the front ranks and rises over the column
-    beats: { card: 0.6, crane: 2.4 },
+    id: 'philistines', n: 'P6', set: 'coast', take: 'threat', dur: 7.0, cut: 'dissolve', fade: 1.0, cue: 'threat', beat: 'warriors',
+    // crane: the lens leaves the front ranks and rises over the column · settle: the crane has arrived (eased out) — the
+    // hard cut to P7 lands on the drum hit at the end of the shot, never in the middle of the move (CUT v6.1)
+    beats: { card: 0.6, crane: 2.4, settle: 6.4 },
     text: [{ at: 0.6, seconds: 3.0, kind: 'place', narration: ['philistia'], side: 'right', v: 'top' }],
     direction: 'The Philistine front rank marching out of the dust at a low lens, then the rise over the column (CUT v5.2 '
       + 'staging). THE ANIMATION AND THE POLISH MUST BE OF A TOP GAME TODAY (the user: "the animation here is most '
@@ -348,94 +363,108 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'as his eyes close and he turns away (8:6). No card.',
   },
 
-  // ================================================================== THE KING (24 s): the shofar, Saul, the roar — and two flashes of a shepherd
+  // ================================================================== THE KING (15 s): the shofar, Saul, the roar (CUT v6.1: no flashes)
   {
     // the shot of CUT v3/v4 from its shofar on (shot time 0 = the old G1's 1.5 s: TAKE_OFFSET 1.5)
     id: 'dust', n: 'G1', set: 'gilgal', take: 'dustWall', dur: 4.0, cut: 'hard', cue: 'shofar', beat: 'warriors',
-    beats: { shofar: 0.0, horns: 0.6, card: 1.3 },
+    // wipe (CUT v6.1): a man of the front rank passes close across the lens — the cut to G2 is hidden in his passing
+    beats: { shofar: 0.0, horns: 0.6, card: 1.3, wipe: 3.6 },
     text: [{ at: 1.3, seconds: 2.5, kind: 'place', narration: ['gilgal'], side: 'left', v: 'top' }],
     direction: 'HARD CUT ON THE SHOFAR BLAST: the army out of the dust wall at the lens; the rams\' horns blown in the '
       + 'front rank. From here SAUL\'S MUSIC runs without a break to the tear (the user).',
   },
   {
     id: 'king', n: 'G2', set: 'gilgal', take: 'king', dur: 6.0, cut: 'cut', cue: 'saul', beat: 'warriors', slowmo: 0.5,
-    beats: { card: 1.0, headTurn: 3.4 },
+    // lastStep (CUT v6.1): the stride that leads into the halt begins — G3 picks the same stride up (a cut on action)
+    beats: { card: 1.0, headTurn: 3.4, lastStep: 5.6 },
     text: [{ at: 1.0, seconds: 3.4, kind: 'person', narration: ['saulShort', 'saulTitle'], side: 'left', v: 'top' }],
     direction: 'SAUL — the slow-motion stride at the head of the army, the sun behind him, the name huge in the sky.',
   },
   {
-    id: 'glimpse-rock', n: 'F1', set: 'world', take: 'glimpse:rock', dur: 0.8, cut: 'cut', cue: 'glimpse', beat: 'david',
-    direction: 'A FLASH (0.8 s), silent in the picture, the king\'s music going on under it: far away, against the low '
-      + 'sun, a boy from behind standing on a rock above a valley, his staff, the wind in his tunic — a silhouette, never '
-      + 'the face. Graded cooler/softer than Gilgal, like a memory or a premonition.',
-  },
-  {
     id: 'spear', n: 'G3', set: 'gilgal', take: 'spearRaised', dur: 5.0, cut: 'cut', cue: 'peak', beat: 'warriors',
-    beats: { halt: 0.6, spearUp: 1.3, roar: 1.7, roarSpread: 0.5, verse: 2.0 },
+    // notice (CUT v6.1): the nearest men's heads begin to turn toward the road — the roar breaks off on the cut to G4,
+    // which shows what they see (a cut on sound and eyeline)
+    beats: { halt: 0.6, spearUp: 1.3, roar: 1.7, roarSpread: 0.5, verse: 2.0, notice: 4.5 },
     text: [{ at: 2.0, seconds: 2.8, kind: 'verse', quote: 's1_9_2_head_above', stagger: 0.14, refAfter: 0.4, side: 'left', v: 'top', lines: 2 }],
     direction: 'The halt; Saul thrusts his spear up; THE ROAR through every rank.',
   },
-  {
-    id: 'glimpse-hand', n: 'F2', set: 'world', take: 'glimpse:hand', dur: 0.8, cut: 'cut', cue: 'glimpse', beat: 'david',
-    direction: 'A SECOND FLASH (0.8 s) at the height of the roar: close, a young hand closing on a shepherd\'s staff, '
-      + 'sheep passing out of focus behind — no face. The music does not stop.',
-  },
 
-  // ================================================================== THE FALL (21 s): Samuel, the tear — now understood — the verdict
+  // ================================================================== THE FALL (22.5 s): Samuel, the tear — now understood — the verdict, Saul alone
   {
-    id: 'silence', n: 'G4', set: 'gilgal', take: 'silence', dur: 5.0, cut: 'cut', cue: 'silence', beat: 'saul-hall',
-    beats: { roarCut: 0.0, headsTurn: 0.3, part: 0.8, card: 0.8, step: 2.0, verse: 1.8 },
+    id: 'silence', n: 'G4', set: 'gilgal', take: 'silence', dur: 6.0, cut: 'cut', cue: 'silence', beat: 'saul-hall',
+    // turnGo (CUT v6.1): 15:26 has been read; Samuel begins to turn away — G5a continues the same turn (a cut on action)
+    beats: { roarCut: 0.0, headsTurn: 0.3, part: 0.8, card: 0.8, step: 2.0, verse: 1.8, turnGo: 5.6 },
     text: [
       { at: 0.8, seconds: 2.0, kind: 'person', narration: ['samuel'], side: 'right', v: 'top' },
-      { at: 1.8, seconds: 3.2, kind: 'verse', quote: 's1_15_26_rejected_film', stagger: 0.14, side: 'left', v: 'top', lines: 2 },
+      { at: 1.8, seconds: 4.2, kind: 'verse', quote: 's1_15_26_rejected_film', stagger: 0.14, side: 'left', v: 'top', lines: 2 },
     ],
-    direction: 'Saul\'s music goes on — darker, not a hush (the user). The ranks part; Samuel comes up the road and stands '
-      + 'before the king; 15:26 as he speaks. Tighter than CUT v5.2.',
+    direction: 'Saul\'s music goes on — darker, not a hush (the user). What the army saw: Samuel in the road; the ranks '
+      + 'part; he comes up and stands before the king; 15:26 as he speaks. SAUL\'S SPEAR stays gripped in his right fist '
+      + '(fingers closed round the shaft — never an open hand beside a standing shaft). As the verse ends Samuel turns to go.',
   },
   {
-    id: 'tear', n: 'G5a', set: 'gilgal', take: 'tear', dur: 3.5, cut: 'cut', cue: 'tear', beat: 'saul-hall',
-    beats: { turn: 0.3, lunge: 1.7, grip: 2.8 },
-    direction: 'Samuel turns to go; Saul lunges, drops to his knee and seizes the corner of his mantle (15:27).',
+    id: 'tear', n: 'G5a', set: 'gilgal', take: 'tear', dur: 3.0, cut: 'cut', cue: 'tear', beat: 'saul-hall',
+    // (CUT v6.1, provisional — cut7 sets them): turn: Samuel's turn continues from G4's last frame (same positions) ·
+    // drop: Saul's right hand opens and THE SPEAR FALLS (the shaft strikes the dust and lies there) · lunge: his two
+    // quick steps after Samuel · kneel: the knee strikes the ground · grip: the empty right fist closes on the corner
+    // of the me'il — the cut to G5b comes ~0.4 s later as the pull begins (a cut on action)
+    beats: { turn: 0.0, drop: 0.5, lunge: 0.8, kneel: 1.9, grip: 2.6 },
+    direction: 'Samuel turns to go (15:27) — the same turn, the same places as the end of G4 (Saul a pace from him). Saul '
+      + 'lets the spear fall from his hand, ON SCREEN — it topples, strikes the dust and lies there (it never vanishes) — '
+      + 'takes two quick steps after him, drops to his knee and seizes the corner of his mantle with that hand.',
   },
   {
     id: 'tear-insert', n: 'G5b', set: 'gilgal', take: 'tear:insert', dur: 4.0, cut: 'cut', cue: 'tear', beat: 'saul-hall', slowmo: 0.35,
-    beats: { pull: 0.3, rip: 1.1, free: 3.0 },
+    // stop (CUT v6.1): Samuel stops and begins to turn back — G6 continues his turn (a cut on action)
+    beats: { pull: 0.3, rip: 1.1, free: 3.0, stop: 3.5 },
     direction: 'The tear in slow motion — the moment of the cold open, now seen whole and understood: Saul on his knee, '
-      + 'the fist in the wool, the rip, the corner coming free while Samuel walks on. The music\'s peak.',
+      + 'THE FIST REALLY IN THE WOOL (the cloth gathered in it, stretched taut from the fist to Samuel), the rip, the '
+      + 'corner coming free in his fist while Samuel walks on — and stops. The spear lies in the dust where it fell. '
+      + 'The music\'s peak.',
   },
   {
     id: 'verdict', n: 'G6', set: 'gilgal', take: 'verdict', dur: 5.5, cut: 'cut', cue: 'verdict', beat: 'saul-hall',
-    beats: { turnBack: 0.5, speech: 1.2, speechEnd: 4.9 },
+    // lookDown (CUT v6.1): after the last word his eyes go down to Saul — G7 is what he sees (an eyeline cut)
+    beats: { turnBack: 0.5, speech: 1.2, speechEnd: 4.9, lookDown: 5.0 },
     text: [{ at: 1.2, seconds: 4.3, kind: 'verse', quote: 's1_15_28_torn_today', words: VERDICT_WORDS, refAfter: 0.3, side: 'left', v: 'top', lines: 2 }],
     direction: 'THE VERDICT: Samuel turns back and speaks, close and backlit; the jaw speaks the words as they appear.',
   },
   {
-    id: 'saul-alone', n: 'G7', set: 'gilgal', take: 'saulAlone', dur: 3.0, cut: 'cut', cue: 'broken', beat: 'saul-hall',
-    beats: { lookDown: 0.4, tighten: 1.8, flash: 2.75 },
-    direction: 'Saul alone with the torn piece in his fist; the one breath of quiet; a whip up into the light.',
+    id: 'saul-alone', n: 'G7', set: 'gilgal', take: 'saulAlone', dur: 4.0, cut: 'cut', cue: 'broken', beat: 'saul-hall',
+    // (CUT v6.1: a real breath — 3.0 -> 4.0 s; the lens rises from his fist to his face and on into the sun at `flash`)
+    beats: { lookDown: 0.5, tighten: 2.0, flash: 3.55 },
+    direction: 'Saul alone on his knee with the torn piece in his fist, his spear in the dust beside him; the one breath '
+      + 'of quiet; the lens rises past his face into the sun.',
   },
 
-  // ================================================================== THE ANSWER (29.5 s): David
+  // ================================================================== THE ANSWER (30.5 s): David
   {
-    id: 'figure', n: 'D1', set: 'world', take: 'figure', dur: 5.5, cut: 'light', fade: 0.6, cue: 'figure', beat: 'david',
-    beats: { verse: 0.6 },
+    id: 'figure', n: 'D1', set: 'world', take: 'figure', dur: 5.5, cut: 'light', fade: 0.8, cue: 'figure', beat: 'david',
+    // turn (CUT v6.1): a lamb bleats below; he begins to turn his head — D2 continues the turn (a cut on action)
+    beats: { verse: 0.6, turn: 5.0 },
     text: [{ at: 0.6, seconds: 4.8, kind: 'verse', quote: 's1_15_28_to_your_neighbor', stagger: 0.42, side: 'right', v: 'top', lines: 2, gold: 2 }],
-    direction: 'Out of the light: the boy of the flashes — from behind on the rock above the valley at golden hour; '
-      + '15:28b answers the title: …הַטּוֹב מִמֶּךָּ.',
+    direction: 'Out of the light: a boy from behind on a rock above the valley at golden hour, his staff, his flock '
+      + 'below; 15:28b answers the title: …הַטּוֹב מִמֶּךָּ. A lamb bleats; he begins to turn his head.',
   },
   {
     id: 'face', n: 'D2', set: 'world', take: 'face', dur: 4.0, cut: 'cut', cue: 'face', beat: 'david',
-    beats: { turn: 0.8 },
-    direction: 'THE REVEAL: for the first time in the film, his face — it turns into the light. No text.',
+    // (CUT v6.1, provisional — cut8 sets them) turn: the head turn continues from D1's last frame into the light ·
+    // lookDown: his eyes go down to his flock — D3 is what he sees (an eyeline cut)
+    beats: { turn: 0.1, lookDown: 3.3 },
+    direction: 'THE REVEAL: for the first time in the film, his face — the turn begun in D1 brings it into the light. '
+      + 'Then his eyes go down to his flock. No text.',
   },
   {
-    id: 'watch', n: 'D3', set: 'world', take: 'watch', dur: 6.0, cut: 'cut', cue: 'watch', beat: 'flock',
-    beats: { verse: 0.8, rack: 4.0 },
-    text: [{ at: 0.8, seconds: 5.1, kind: 'verse', quote: 'ps_78_70_71_chose_david', stagger: 0.15, side: 'right', v: 'top', lines: 2 }],
-    direction: 'Over his shoulder onto his flock below; Ps 78:70-71 — the psalm of the map, now about him.',
+    id: 'watch', n: 'D3', set: 'world', take: 'watch', dur: 7.0, cut: 'cut', cue: 'watch', beat: 'flock',
+    // (CUT v6.1: 14 words need ~6 s on screen — 6.0 -> 7.0 s) walk: he starts down the slope toward his flock — the
+    // dissolve into D4 rides his step (time passes)
+    beats: { verse: 0.6, rack: 4.6, walk: 6.2 },
+    text: [{ at: 0.6, seconds: 6.2, kind: 'verse', quote: 'ps_78_70_71_chose_david', stagger: 0.15, side: 'right', v: 'top', lines: 2 }],
+    direction: 'What he sees: over his shoulder onto his flock below; Ps 78:70-71 — the psalm of the map, now about him. '
+      + 'At `walk` he starts down toward them.',
   },
   {
-    id: 'horizon', n: 'D4', set: 'world', take: 'horizon', dur: 14.0, cut: 'cut', cue: 'horizon', beat: 'title',
+    id: 'horizon', n: 'D4', set: 'world', take: 'horizon', dur: 14.0, cut: 'dissolve', fade: 1.0, cue: 'horizon', beat: 'title',
     // provisional beats (cut8 re-stages the take and sets them): the shepherd at work · the lamb lifted · the lockup ·
     // the lamb at its mother · the lockup out · the camera settles into the game
     beats: { lamb: 0.3, descend: 1.2, kneel: 3.4, lift: 4.0, logo: 5.2, hebrew: 6.0, chapter: 6.8, setDown: 9.0, logoOut: 9.8, settle: 11.4 },
@@ -444,7 +473,9 @@ export const INTRO_SHOTS: readonly IntroShot[] = [
       + 'among his flock — moving through the sheep, a touch on a ewe\'s back, the staff, a look over them — then he '
       + 'kneels to a newborn lamb and gathers it up with real weight and care (the hands under its chest and belly, the '
       + 'lamb\'s legs and head alive, held to his chest), carries it to its mother and sets it down; DAVID forms; the '
-      + 'camera eases into the game. One long, beautifully framed take with the light behind him.',
+      + 'camera eases into the game. One long, beautifully framed take with the light behind him. (CUT v6.1, the user: '
+      + '"when David takes hold of the sheep his hand really goes through it — strange and disturbing": every contact '
+      + 'is real — the hand rests ON the wool, the hands under the lamb press into its wool and never through it.)',
   },
 ];
 
@@ -516,5 +547,5 @@ export const INTRO_CUES: readonly IntroCue[] = introCues(false);
 /** Kept for API compatibility (the score's tests import it): identical to INTRO_CUES. */
 export const INTRO_CUES_SHORT: readonly IntroCue[] = INTRO_CUES;
 
-/** Total length of the film (CUT v6: 103.6 s — the prologue, Gilgal, David; the lamb and the logo are its last shot). */
+/** Total length of the film (CUT v6.1: 104.7 s — the prologue, Gilgal, David; the lamb and the logo are its last shot). */
 export const INTRO_LENGTH = introLength(INTRO_CUES);
