@@ -439,14 +439,15 @@ export class AimMode {
     });
     this.arrows = this.threats();
     this.overSealed = false;
-    if (alive && go && !this.snapTarget) {
+    if (alive && go && !this.snapTarget && !this.hover) {
       const ray = h.aimRay();
       const hit = h.world.raycast(ray.origin as THREE.Vector3, ray.dir as THREE.Vector3, AIMP.range + 4);
       this.overSealed = !!hit && !!hit.collider.noPortal;
     }
     const st: AimHudState = {
       device: h.device(),
-      ret: this.snapLatched && this.snapSide ? { kind: 'snap', side: this.snapSide, ok: this.ghost?.spot.ok !== false } : this.overSealed ? { kind: 'sealed' } : null,
+      // (the side being picked: its word is on the compass round him; this chip is for a sealed panel under the crosshair)
+      ret: this.overSealed && !this.snapLatched ? { kind: 'sealed' } : null,
       compass: this.compass(),
       mark: this.markOf(),
       pair: this.pair ? Math.max(0, AIMP.life - this.pair.t) / AIMP.life : null,
@@ -1259,6 +1260,22 @@ export class AimMode {
     h.shake(0.25);
     h.fx.streak(_b.copy(e.pos).setY(e.pos.y + 1), v, AIM_CYAN);
     return true;
+  }
+
+  /**
+   * A man went through an end (the game's crossing): out of YOUR near twin
+   * (dropped through the exit under his feet, or walked into it) he tumbles
+   * out in front of you at a walk, not flung past you: there for the knife.
+   */
+  manCrossed(e: Enemy, from: RiftEnd, to: RiftEnd) {
+    const p = this.pair;
+    const b = e.body;
+    if (!p || !b) return;
+    const ends = this.h.rifts.strikeEnds(p.strike);
+    if (!ends || (to as object) !== ends.a) return;
+    void from;
+    const n = to.normal;
+    b.vel.set(n.x * AIMP.pull.drop, Math.min(b.vel.y, 1), n.z * AIMP.pull.drop);
   }
 
   /** Men who went through your pair (their fall, their slam, is the pair's). */

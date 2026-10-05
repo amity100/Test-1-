@@ -1306,6 +1306,27 @@ describe('AIM PORTAL: PORTAL next to a man, at any range', () => {
   });
 });
 
+describe('AIM PORTAL: a man through your near twin', () => {
+  it('a man who drops through the exit under his feet tumbles out of your near twin in front of you (not flung past you)', () => {
+    const { R, rifts, man, freeze, tap, aimAt } = rig();
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    tap();
+    const ends = rifts.strikeEnds(R.pair!.strike)!;
+    // out of the near twin at his fall speed, turned toward you
+    g.body!.vel.set(0, 0, -6);
+    R.manCrossed(g, ends.b, ends.a);
+    const n = ends.a.normal;
+    expect(Math.hypot(g.body!.vel.x, g.body!.vel.z)).toBeCloseTo(AIMP.pull.drop, 5);
+    expect(g.body!.vel.z * n.z).toBeGreaterThan(0);
+    // (out of anything else: untouched)
+    g.body!.vel.set(0, 0, -6);
+    R.manCrossed(g, ends.a, ends.b);
+    expect(g.body!.vel.z).toBe(-6);
+  });
+});
+
 describe('AIM PORTAL: GO', () => {
   it('GO: a dash of about 0.12 s into the near twin; out of the exit by him at a steady speed along its front, the view turned with the pair (toward him); the pair shuts behind you', () => {
     const { R, man, freeze, aimAt, tap, input, step, crossings, pos, vel, ray, state } = rig({ move: true });
@@ -1556,13 +1577,17 @@ describe('AIM PORTAL: words, EN and HE', () => {
   const keys = [
     'lab.v.aimportal', 'lab.vd.aimportal', 'lab.tool.throw',
     ...AIM_WAVES.map((w) => w.subKey),
-    'aim.rule.title', 'aim.rule.portal', 'aim.rule.fire', 'aim.rule.stab', 'aim.rule.pull', 'aim.rule.snap',
+    'aim.rule.title', 'aim.rule.portal', 'aim.rule.fire', 'aim.rule.stab', 'aim.rule.pull', 'aim.rule.snap', 'aim.rule.go',
     'aim.sealed', 'aim.close', 'aim.stab.melee', 'aim.stab.kill', 'aim.stab.blocked', 'aim.throw', 'aim.reload', 'aim.parried',
     'aim.noPair', 'aim.nobody', 'aim.pulled', 'aim.through',
     ...SIDES.map((s) => `aim.side.${s}`),
     'aim.tip.kbm', 'aim.tip.pad', 'aim.tip.touch',
-    'touch.aimportal', 'touch.fire', 'touch.stab', 'touch.pull', 'touch.throw',
+    'touch.aimportal', 'touch.fire', 'touch.stab', 'touch.pull', 'touch.throw', 'touch.go',
   ];
+  it('the rules card names every verb, GO included', async () => {
+    const { AIM_RULES } = await import('../../src/ui/labhud');
+    for (const k of ['portal', 'snap', 'go', 'fire', 'stab', 'pull']) expect(AIM_RULES).toContain(k);
+  });
   it('every key exists in both languages, and the Hebrew is not the English', () => {
     const en = strings('en'), he = strings('he');
     for (const k of keys) {

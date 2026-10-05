@@ -938,64 +938,80 @@ each **combat variant** to choose one.
   `game/aimfx.ts`, `actors/aimai.ts`, `ui/aimhud.ts`; gated on `aimOn()`: the missions and the other
   variants play exactly as before; strikes, lock-on, the blade lunge, SHOVE, POWER and REACH's verbs
   are off; the body is FLOW's). **One rule: a pair of portals. The far one (the EXIT) opens where the
-  crosshair points, now; its twin (the ENTRANCE) opens in front of you. Whatever enters one comes out
-  of the other with its speed. The crosshair is the cursor; nothing is chosen for you.**
-  - *PORTAL* (RMB tap / LT / the PORTAL button): the pair opens on the press itself (a rift strike
-    pair: real see-through portals, both ends crossable that frame; measured 16 ms median desktop,
-    29 ms phone, the game stepped at 60 Hz). The exit stands on the first surface the ray meets within
-    30 m (a wall: 0.05 m off it, 1.1 x 2 m; the floor or a ceiling: a 1.4 m disc, so a man falls into
-    it or you drop through it), else in mid-air at 12 m facing you; the wheel (touch: a vertical drag
-    on PORTAL) sets the mid-air distance 3-30 m and then also stops a farther wall short. A SEALED panel
-    or a surface nearer than 1.6 m refuses (a red flash, a buzz, SEALED / TOO CLOSE). The twin: 1.3 m
-    ahead (further, up to 3 m, at a run), bottom on your floor, facing you; neither end takes YOU for
-    0.25 s. One pair, 6 s (counted from when you let go), a new press replaces it, 0.15 s apart. Held
-    longer than 0.15 s the exit follows the crosshair live and stays where you let go. Phone: a quick
-    tap on the world (the free thumb, the stick held or not) opens the exit exactly at that surface
-    point; a tap on a man opens it behind him.
-  - *SNAP* (Ctrl or MMB held; LT + R-stick; a drag from PORTAL), with a man under the crosshair
-    (within 1.2° of his body, 2.5° pad, 3.5° touch, in sight): the exit opens at a side of HIM,
-    1.2 m from him, its front toward him: BEHIND / FRONT / LEFT / RIGHT by his facing, ABOVE (a disc
-    over his head looking down), BELOW (a disc in the floor under his feet: he drops through it).
-    The flick (mouse: the look is diverted to the choice; pad: the stick; touch: the drag) picks a
-    side on a compass of six slots 60° apart (top ABOVE, clockwise RIGHT, FRONT, BELOW, BEHIND, LEFT);
-    nothing much is BEHIND him. A six-pip compass round him and a ghost show it; a wall behind him
-    brings the spot in against it (sealed or tighter than 0.75 m: refused). Without SNAP, free aim.
-  - *What you do with the pair*: walk or jump in (out of the other with your speed, along its front:
-    the rift pair's physics; a short FOV kick). FIRE (LMB / RT / FIRE): the rifle (24 rounds, 22 a
-    round, 0.14 s, auto-reload 1.4 s), hitscan through `raycastThrough`: a round into the near twin
-    leaves the exit along its front (the tracer is drawn in two pieces), and into the exit it leaves
-    the near twin. STAB (F / X / STAB): a man within 1.8 m in front of you (a lunge), or, with the aim
-    entering one end within 3.6 m of you, whoever stands within 1.5 m in front of the other end; from
-    behind or the side he dies, from the front he parries (the mirror's front is where his shield
-    looks). PULL (E / RB / PULL): the man within 2.5 m in front of the exit is yanked through (0.18 s)
-    and out of the near twin onto your crosshair 2 m ahead, staggered 1.2 s; the pair shuts behind
-    him; for 0.6 s he is HELD: PULL or FIRE again THROWS him along your aim at 18 m/s (a lofted body):
-    a wall at 12 m/s or more kills him, a fall of 8 m or more, the void or the pool; a hit man
-    takes 35; softer hits (8-12 m/s, 4-8 m) hurt (20 / 25) and floor him. Men who walk or fall into an
-    end come out of the other with their velocity (a drop becomes a shove toward you; over a pool or
-    the void you can drop a man: stand at the rim, SNAP BELOW him across it). Enemy rounds are 12 dmg
-    and cross the pair too: into your exit they come out of the near twin at you; into the near twin
-    they come out of the exit and hurt whom they meet.
+  crosshair points (on a man: right next to him), now; its twin (the ENTRANCE) opens right in front of
+  you, on the crosshair. Whatever enters one comes out of the other with its speed. You choose where;
+  nothing attacks for you.** (Comfort pass after the owner's playtest: the exit next to a man at any
+  range with no modifier, the near twin at arm's length on the crosshair, GO, buffered attacks, a fair
+  beat before a man reacts to a portal or to you behind him.)
+  - *PORTAL* (RMB / LT / the PORTAL button; no modifier). **The crosshair on a man** (within 3° of his
+    body on desktop, 4.5° pad, 7° touch, his body padded 0.35 m and 0.3 m up/down, in sight, up to 45 m:
+    `magnetTarget`; the nearest to the crosshair by that leeway wins): a magenta bracket and a ring at his
+    feet mark him and a ghost shows the exit; the press opens it **next to him**: 1.3 m from where he will
+    be in 0.2 s, standing on his floor, facing him, by default BEHIND him as you see him (the far side;
+    his back if he faces away from you; no room there: his left, his right, then over his head). Held on
+    him past 0.06 s, the look (mouse flick / R-stick / the drag from PORTAL) picks the side, live, on an
+    8-way compass round him: up ABOVE, down BELOW (a floor disc: he drops through it), left / right LEFT /
+    RIGHT as the screen has them, the upper diagonals BEHIND, the lower FRONT; let go and it stays. Ctrl /
+    MMB held on their own still pick a side first (an alias). **Off a man**: the first surface the ray
+    meets within 30 m (a wall: 0.05 m off it; the floor or a ceiling: a 1.4 m disc), else mid-air at 12 m
+    (the wheel / a vertical drag on PORTAL: 3-30 m); held past 0.15 s it follows the crosshair. SEALED
+    panels and surfaces nearer than 1.6 m refuse. Phone: a tap within 60 px of a man on the screen opens
+    next to him; a tap on the plain world opens right there (ignored while a pair is open: a nudge of the
+    look thumb is no reason to lose it). One pair, 6 s from let-go, 0.15 s apart; a new one replaces it.
+  - *The near twin* opens right in front of you on the crosshair: 1.0 m ahead of your chest (to 1.4 m at a
+    sprint; nearer at a wall), 1.3 x 2.1 m (the exit too), centred on where the crosshair ray crosses that
+    plane as far as your own body line stays 0.2 m inside it (the camera is over your shoulder), on your
+    floor unless the crosshair needs it raised (0.6 m at most, then as far as the crosshair stays 0.3 m
+    inside). So the crosshair is always in it and the man you put it by is framed on the crosshair (you see
+    his back through it). While it is open it slides sideways with you (a strafe keeps him in it); walking
+    at it walks you in (no grace: you cross only moving into its front).
+  - *GO* (Q / pad B while a pair is open / the GO button over PORTAL, lit while a pair is open): a 0.12 s
+    dash into the near twin's middle; out of the exit at 3.2 m/s along its front (no body-slam), facing
+    where it faces, the view turned by the pair's own turn (you look at him); the pair shuts as you come
+    out (nothing of it left in your view; a light flash only). A STAB or FIRE pressed during the dash lands
+    on arrival (buffer 0.25 s). For 0.35 s after arriving the knife reaches 1 m further (2.8 m) and 2.6 m
+    up or down (out over his head: down onto him). A man who sees you vanish and turn up at his side or
+    his back has lost you for 0.6 / 0.8 s (he stops, doesn't turn to you, doesn't shoot).
+  - *FIRE* (LMB / RT / FIRE): the rifle (24 rounds, 22 a round, 0.14 s, auto-reload 1.4 s), hitscan through
+    `raycastThrough`: a round into the near twin leaves the exit (the tracer in two pieces); one that misses
+    the near twin flies as ever. *STAB* (F / X / STAB): a man within 1.8 m in front of you (a lunge that
+    ends at him), else, a pair open and its near twin within 3.6 m of you, whoever stands within 2.0 m in
+    front of the exit: the knife goes through (your hand into the near twin, the blade out of the exit),
+    whatever the crosshair is on: you put the exit by him. From behind or the side he dies, from the front
+    he parries (the mirror's front is where his shield looks). *PULL* (E / RB / PULL): the man within
+    2.5 m in front of the exit is yanked through (0.18 s) onto your crosshair 2 m ahead, staggered 1.2 s;
+    the pair shuts; for 0.6 s PULL or FIRE THROWS him (18 m/s, lofted): a wall at 12 m/s or a fall of 8 m
+    kills, the void or the pool; softer hurts. Men who walk or drop into an end come out of the other (out
+    of your near twin: at 1.2 m/s, in front of you, staggered: a drop under his feet brings him to your
+    knife). Enemy rounds cross the pair too.
   - *The three men* (`AimAI`; `LabSpawn.aim`): GUNNER (60 hp): hides behind cover and peeks, a red
     laser 0.5 s then a burst of 3 (12 each), at most 2 guns on you and never two laser locks within
     0.8 s; MIRROR (70 hp, a violet portal-shield 1.5 m in front of him, 1.5 x 2 m): eats every round
     from the front (30% come back at you) and parries the knife; he keeps the shield on you
-    (140°/s) but turns it toward where a round through a portal came from, so a quick flank and
-    a SNAP BEHIND kill him; he walks at you (2.2 m/s) and bashes up close (18, 0.6 s wind-up);
-    RUSHER (50 hp): runs at you (6.4 m/s), a red wind-up 0.45 s, 25; from afar he steps through a red
-    portal of his own (0.5 s of warning) out next to you. They notice a new exit within 8 m in front
-    of their eyes after 0.35 s (a shout, they turn to it; a gunner may fire into it: a laser to the
+    (140°/s) but turns it toward where a round through a portal came from; he walks at you (2.2 m/s) and
+    bashes up close (18, 0.6 s wind-up); RUSHER (50 hp): runs at you (6.4 m/s), a red wind-up 0.45 s, 25;
+    from afar he steps through a red portal of his own (0.5 s of warning) out next to you. They notice a
+    new exit in front of their eyes within 8 m after 0.35 s, at their side after 0.6 s, behind them after
+    0.8 s (within 4 m: they hear it) — a shout, they turn to it; a gunner may fire into it (a laser to the
     exit and one out of the near twin at you). A man on a platform with no line to you comes down.
   - *Waves* (`AIM_WAVES`, 3-2-1 first 2 s then 1.8 s): 3 gunners (each already behind tall cover),
     3 gunners + a mirror, + two rushers, two mirrors, 8 from everywhere (platform men included).
     Hero 100 hp, regen only after 4 s unhurt. KILLS BY TOOL: RIFLE, KNIFE, THROW, PORTAL (the pair
-    dropped or slammed him), OTHER.
-  - *Controls*. Desktop: mouse aim, RMB PORTAL (tap, or hold to re-aim live), LMB fire, F stab, E
-    pull / throw, wheel mid-air distance, Ctrl or MMB SNAP (the mouse then picks the side), Space
-    jump / double jump, C slide, Shift sprint. Pad: LT portal, RT fire, X stab, RB pull / throw, R-stick
-    with LT SNAP. Phone (landscape): PORTAL (tap; drag up / down: distance; drag toward a side on a
-    man: SNAP with the compass), FIRE, STAB, PULL, JUMP, SLIDE; a tap on the world opens the exit
-    there. One tip line at the first GO.
+    dropped or slammed him), OTHER. No clip offer mid-fight in the lab (its phone button sat in the look
+    thumb's way).
+  - *Controls*. Desktop: mouse aim, RMB PORTAL (on a man: next to him; hold + flick: his side; off a man:
+    hold to re-aim live), LMB fire, F stab, Q GO, E pull / throw, wheel mid-air distance, Ctrl / MMB the side
+    key (alias), Space jump / double jump, C slide, Shift sprint. Pad: LT portal (+ R-stick held: side), RT
+    fire, X stab, B GO (while a pair is open; else slide), RB pull / throw. Phone (landscape; right
+    cluster: PORTAL and FIRE at the bottom, GO over PORTAL, STAB over FIRE, PULL left of PORTAL, SLIDE and
+    JUMP on the right; the chips by the crosshair sit left of it): PORTAL (tap; drag toward a side), FIRE
+    (drag from it to aim), STAB, GO, PULL, JUMP, SLIDE; a tap on (or near) a man opens next to him. One tip
+    line at the first GO of the fight.
+  - *Measured* (headless Chromium, real mouse / CDP touch, a man at 8 / 20 / 32 m, 0.25 s between inputs,
+    first input to his death): PORTAL + FIRE 0.60-0.62 s, PORTAL + STAB 0.32-0.33 s, PORTAL + GO + STAB
+    0.58 s, PORTAL held + flick BELOW + STAB 0.43-0.48 s, desktop and phone, standing or on the move (the
+    old build: plain PORTAL put the exit 8-20 m from him; with the old SNAP key a moving man walked out of
+    the 1.5 m knife and the walk-in slammed him down, 1.0-1.3 s or never).
 - **REACH** (the approved core mechanic; `game/reach.ts` — every number in `REACH` — with
   `game/weapons.ts`, `game/reachmode.ts`, `game/reachfx.ts`, `actors/reachai.ts`, `ui/reachhud.ts`;
   gated on `reachOn()`, so the missions and the other variants play exactly as before).

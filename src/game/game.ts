@@ -1897,6 +1897,8 @@ export class Game {
         // MATADOR is the move itself: his charge into your entrance
         if (e.kind === 'brute' && e.state === 'charge' && from.owner === 'player') this.push({ type: 'matador', t: this.time, at: e.pos.clone() });
         this.enemies.onCrossed(e, from, to, speed);
+        // (AIM PORTAL: a man out of your near twin drops out in front of you, he doesn't fly past you)
+        if (aimOn()) this.aim?.manCrossed(e as Enemy, from, to);
       }
       // (a grenade's crossing is reported by its projectile)
       if (b.kind !== 'grenade') this.push({ type: 'cross', t: this.time, who: b.kind, id: b.id, speed, loops: b.loops, fromKind: from.kind, toKind: to.kind });

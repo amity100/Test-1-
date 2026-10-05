@@ -72,7 +72,8 @@ export const AIMP = {
   stab: { reach: 2.0, melee: 1.5, cooldown: 0.4, direct: 1.8, nearMax: 3.6, edge: 1.0, edgeY: 2.6, edgeTime: 0.35 },
   /** GO: the dash into the near twin takes `time` s; out of the exit at `arrive` m/s along its front; a STAB / FIRE pressed within `buffer` s before arriving lands on arrival; the pair shuts `close` s after (it has done its work: nothing of it in your view once you are out). */
   go: { time: 0.12, arrive: 3.2, buffer: 0.25, close: 0 },
-  pull: { reach: 2.5, land: 2.0, stun: 1.2, hold: 0.6, through: 0.18, out: 0.16, arc: 0.45 },
+  /** PULL: the man within `reach` m in front of the exit, through in `through` s, out in `out` s onto your crosshair `land` m ahead, staggered `stun` s, yours to throw for `hold` s. A man who falls or walks out of your near twin comes out at `drop` m/s (in front of you, not past you). */
+  pull: { reach: 2.5, land: 2.0, stun: 1.2, hold: 0.6, through: 0.18, out: 0.16, arc: 0.45, drop: 1.2 },
   throw: { speed: 18, up: 6, bodyDamage: 35 },
   /** Deaths on the way: a fall this high (m), a body hitting a wall this fast (m/s); the softer ones hurt. */
   fall: { kill: 8, hurt: 4, hurtDamage: 25, stun: 1.6 },
