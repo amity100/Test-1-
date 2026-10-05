@@ -78,9 +78,9 @@ export interface AimHost {
   kick(k: number): void;
   /** One of their rounds (a mirror's returned one, from `from` along `dir`). */
   fireEnemyBolt(e: Enemy, from: V3, dir: V3): void;
-  /** The telegraph (their red laser) and the rest of the enemy hooks. */
+  /** Their red laser (a burst coming), 0..1. */
   laser(e: Enemy, from: V3, to: V3, t01: number): void;
-  /** A man down: the rest of his side's rounds find nobody of his. */
+  /** A haptic tick (phones). */
   vibrate(ms: number): void;
 }
 
@@ -665,8 +665,6 @@ export class AimMode {
     const muzzle = h.hero.heldMuzzle(new THREE.Vector3());
     const assist = this.h.device() === 'touch' ? THREE.MathUtils.degToRad(2) : this.h.device() === 'pad' ? THREE.MathUtils.degToRad(1.2) : 0;
     const men = this.men();
-    let endAt: THREE.Vector3 | null = null;
-    let killedBy: Enemy | null = null;
     const pieces: [THREE.Vector3, THREE.Vector3][] = [];
     for (let si = 0; si < segs.length; si++) {
       const sg = segs[si];
@@ -695,12 +693,11 @@ export class AimMode {
         shield = e;
         hitMan = null;
       }
-      const to = sg.hit || si < segs.length - 1 ? sg.to : sg.to;
+      const to = sg.to;
       if (shield) {
         const at = new THREE.Vector3().copy(o).addScaledVector(dir, bestT);
         pieces.push([si === 0 ? muzzle : o, at]);
         this.shieldTook(shield, at, si === 0 ? h.player.body.pos : segs[si - 1].to, si > 0);
-        endAt = at;
         break;
       }
       if (hitMan) {
@@ -709,20 +706,15 @@ export class AimMode {
         this.hitMan(hitMan, at, muzzle, si === 0 ? h.player.body.pos : segs[si - 1].to, si > 0);
         if (si === 0) this.usage.rifleDirect++;
         else this.usage.rifleThrough++;
-        endAt = at;
-        killedBy = hitMan;
         break;
       }
       pieces.push([si === 0 ? muzzle : o, to]);
       if (si === segs.length - 1) {
-        endAt = new THREE.Vector3().copy(to);
-        if (sg.hit) h.fx.sparks(endAt, sg.hit.normal, AIM_CYAN, 6);
+        if (sg.hit) h.fx.sparks(new THREE.Vector3().copy(to), sg.hit.normal, AIM_CYAN, 6);
       }
     }
     if (!pieces.length) pieces.push([muzzle, new THREE.Vector3().copy(ray.origin).addScaledVector(ray.dir, AIMP.rifle.range)]);
     for (const [a, b] of pieces) this.fx.tracer(a, b);
-    void endAt;
-    void killedBy;
     h.fx.flash(muzzle, 2.5, 0.05, 0x7ff4ff);
     h.audio.reachRifle(muzzle);
     h.kick(0.15);
