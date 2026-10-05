@@ -46,7 +46,7 @@ export const SEALED: [number, number, number, number, number][] = [
   [-18, 16, -12, 16.35, 3],
   [12, 15, 18, 15.35, 3],
   [-19, -1, -18.65, 5, 3],
-  [-1, -15, 5, -14.65, 3],
+  [2, -15.5, 7, -15.15, 3],
 ];
 
 /** Taller platforms (AIM PORTAL; no stairs: portals, or a double jump from the cover): [x0, z0, x1, z1], top at PLATFORM_Y. */

@@ -996,7 +996,7 @@ export class AimMode {
     const e = h.enemies.get(H.id) as Enemy | null;
     if (!e || !e.alive || !e.body) return false;
     const dir = _a.copy(h.aimRay().dir);
-    dir.y = Math.max(dir.y, -0.35);
+    dir.y = Math.max(dir.y, -0.25);
     dir.normalize();
     const v = new THREE.Vector3().copy(dir).multiplyScalar(AIMP.throw.speed);
     v.y += AIMP.throw.up;

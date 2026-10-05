@@ -88,8 +88,8 @@ describe('FLOW: the gate', () => {
     expect(flowOn()).toBe(false); // outside the lab: CURRENT
     setLabActive(true);
     expect(flowOn()).toBe(true);
-    // (the lab offers REACH only now: an old FLOW pick comes back as REACH)
-    expect(readSettings(JSON.stringify({ combatVariant: 'flow' })).combatVariant).toBe('reach');
+    // (the lab offers AIM PORTAL only now: an old FLOW pick comes back as AIM PORTAL)
+    expect(readSettings(JSON.stringify({ combatVariant: 'flow' })).combatVariant).toBe('aimportal');
   });
 
   it('the other variants run and sprint exactly as before; FLOW 1.5x', () => {

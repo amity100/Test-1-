@@ -49,7 +49,7 @@ export const AIMP = {
   /** Hits through the pair: the knife reaches this far in front of the exit (m), the pull this far (m). */
   stab: { reach: 1.5, melee: 1.5, cooldown: 0.4, direct: 1.8 },
   pull: { reach: 2.5, land: 2.0, stun: 1.2, hold: 0.6, through: 0.18, out: 0.16, arc: 0.45 },
-  throw: { speed: 18, up: 1.2, bodyDamage: 35 },
+  throw: { speed: 18, up: 6, bodyDamage: 35 },
   /** Deaths on the way: a fall this high (m), a body hitting a wall this fast (m/s); the softer ones hurt. */
   fall: { kill: 8, hurt: 3, hurtDamage: 25, stun: 1.6 },
   slam: { kill: 12, hurt: 8, hurtDamage: 20 },
