@@ -837,6 +837,8 @@ export class AimMode {
   private moveFar(spot: Spot) {
     const p = this.pair;
     if (!p) return;
+    // (somewhere else: a fresh portal to them; kept by a man as he moves: the same one, they still see it)
+    const moved = p.far.pos.distanceTo(spot.pos) > 1 || p.far.surface !== spot.surface;
     p.far.pos.copy(spot.pos);
     p.far.normal.copy(spot.normal);
     p.far.hdir.copy(spot.hdir);
@@ -844,6 +846,7 @@ export class AimMode {
     p.far.w = spot.w;
     p.far.h = spot.h;
     this.h.rifts.moveStrikeExit(p.strike, spotFrame(p.far));
+    if (!moved) return;
     p.seen.clear();
     p.noticed.clear();
   }
