@@ -163,7 +163,7 @@ void weave(vec2 m, float strain, out float h, out vec3 col, out float gap, out f
   // the felted wool closes many of the gaps (more of them open as the weave is pulled)
   // (and the felting is uneven: denser patches, a few wider gaps)
   float felt = mvn(m * 38.0) * 0.6 + mvn(m * 9.0) * 0.4;
-  gap = (1.0 - inW) * (1.0 - inF) * max(step(0.45 + 0.35 * felt, mh2(ci + 3.3)) * (0.35 + 0.65 * mh2(ci * 1.31 + 7.0)), smoothstep(0.15, 0.6, strain));
+  gap = (1.0 - inW) * (1.0 - inF) * max(step(0.45 + 0.35 * felt, mh2(ci + 3.3)) * (0.35 + 0.65 * mh2(ci * 1.31 + 7.0)), smoothstep(0.3, 0.95, strain) * step(0.35, mh2(ci * 0.77 + 1.9)));
   // the yarns' fuzzy rims (they catch the backlight)
   rim = (1.0 - smoothstep(0.0, 0.35, max(hw, hf))) * max(inW, inF);
   // a rolled hem: the last 4 mm denser and a shade darker
@@ -217,7 +217,7 @@ function weaveMaterial(): THREE.MeshPhysicalMaterial {
           float behind = max(0.0, -dot(geometryNormal, Ld));
           float along = pow(max(0.0, dot(-geometryViewDir, Ld)), 3.0);
           // heavy wool: the yarns themselves pass little light (their fuzzy rims a little); the gaps pass it
-          float thin = 0.02 + wGap * (0.2 + 2.6 * vStrain) + 0.08 * wRim;
+          float thin = 0.02 + wGap * (0.13 + 1.7 * vStrain) + 0.08 * wRim;
           reflectedLight.directDiffuse += directionalLights[0].color * uTrans * uTransmit * thin * (0.3 * behind + 1.4 * along * behind + 0.35 * along);
         }
         #endif`);
@@ -341,11 +341,11 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
   const hemi = new THREE.HemisphereLight(0xd8c3a2, 0x6b4c30, 0.35);
   scene.add(hemi);
   // the sunlit road bouncing warm light up into the fist and the front of the wool (a reflector's fill)
-  const bounce = new THREE.DirectionalLight(0xffbf86, 2.1);
+  const bounce = new THREE.DirectionalLight(0xffbf86, 1.6);
   bounce.position.set(-0.3, -0.45, 1.0);
   scene.add(bounce);
   // a kicker from behind (the sun's side, unshadowed): the rim along the knuckles and the forearm's top edge
-  const kick = new THREE.DirectionalLight(0xffd8a8, 3.0);
+  const kick = new THREE.DirectionalLight(0xffd0a0, 1.7);
   kick.position.set(-0.55, 0.6, -0.45);
   scene.add(kick);
   await c.yieldFrame();
@@ -825,7 +825,8 @@ export async function createMacroSet(c: FilmSetBuildContext): Promise<FilmSetHan
   const camAt = (t: number, out: ShotFrame) => {
     const u = clamp01(t / DUR);
     const e = u * u * (3 - 2 * u);
-    const la = 0.04 - 0.085 * e, lb = -0.036 + 0.034 * e;
+    // (the fist on the right third, partly cropped by the frame edge; the wool and the line it strains are the subject)
+    const la = 0.018 - 0.063 * e, lb = -0.03 + 0.028 * e;
     set3(out.look, la, lb, 0);
     const d = 0.3 - 0.125 * Math.pow(e, 1.15);
     set3(out.pos, la + 0.018 - 0.01 * e, lb - 0.022 + 0.01 * e, d);
