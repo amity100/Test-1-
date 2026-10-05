@@ -2401,7 +2401,7 @@ export class Game {
       });
       // SNAP latched a man: the look chooses his side, not the camera (a fresh choice starts on BEHIND)
       const latched = this.aim!.snapLatched;
-      if (latched && !this.aimSnapWas) inp.resetSnap();
+      if (latched && !this.aimSnapWas && inp.lastDevice === 'kbm') inp.resetSnap();
       this.aimSnapWas = latched;
       inp.divertLook = latched;
     } else {

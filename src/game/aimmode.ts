@@ -143,7 +143,7 @@ export class AimMode {
   /** Seconds of reload left (0: not reloading). */
   reloadT = 0;
   /** Press → portal usable, the last time (ms of game time), for the harness. */
-  lastOpen = { t: -1, count: 0 };
+  lastOpen = { t: -1, count: 0, ms: -1 };
   /** The man in your hands (pulled; his time left to throw). */
   held: { id: number; t: number } | null = null;
   private pairSeq = 0;
@@ -485,7 +485,7 @@ export class AimMode {
       const spot = fitSnap(this.h.world, this.snapTarget, this.snapSide, this.floorOf(this.snapTarget));
       this.ghost = { spot, kind: spot.ok ? 'snap' : 'bad' };
     }
-    if (holding && this.pair && this.holdT > AIMP.live) {
+    if (holding && this.pair && (this.holdT > AIMP.live || this.snapTarget)) {
       const p = this.placement();
       this.ghost = { spot: p.spot, kind: p.kind };
       if (p.spot.ok) this.moveFar(p.spot);
@@ -562,6 +562,7 @@ export class AimMode {
     h.fx.flash(near.pos, 2, 0.15, 0xffb060);
     h.vibrate(14);
     this.lastOpen.t = h.time();
+    this.lastOpen.ms = typeof performance !== 'undefined' ? performance.now() : -1;
     this.lastOpen.count++;
   }
 

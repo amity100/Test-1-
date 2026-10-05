@@ -436,9 +436,9 @@ const PY = PLATFORM_Y;
  */
 export const AIM_WAVES: LabWave[] = [
   { subKey: 'lab.a1', ready: true, spawns: [man(Gn, -8, 0, 17), man(Gn, 8, 0, 18), man(Gn, 0, 0, 22)] },
-  { subKey: 'lab.a2', ready: true, spawns: [man(Gn, -14, 0, 12), man(Gn, 15, 0, 19), man(Gn, -27.2, PY, 10.7), man(Mr, 0, 0, 14)] },
+  { subKey: 'lab.a2', ready: true, spawns: [man(Gn, -14, 0, 14), man(Gn, 15, 0, 19), man(Gn, -27.2, PY, 10.7), man(Mr, 0, 0, 14)] },
   { subKey: 'lab.a3', ready: true, spawns: [man(Gn, -12, 0, 18), man(Gn, 27, PY, 4.7), man(Mr, 6, 0, 12), man(Rs, -18, 0, 10), man(Rs, 14, 0, 6)] },
-  { subKey: 'lab.a4', ready: true, spawns: [man(Gn, -22, 0, 14), man(Gn, 12, 0, 21), man(Mr, -6, 0, 10), man(Mr, 18, 0, 12), man(Rs, -14, 0, 2), man(Rs, 8, 0, 4)] },
+  { subKey: 'lab.a4', ready: true, spawns: [man(Gn, -22, 0, 14), man(Gn, 12, 0, 19), man(Mr, -6, 0, 10), man(Mr, 18, 0, 12), man(Rs, -14, 0, 2), man(Rs, 8, 0, 4)] },
   {
     subKey: 'lab.a5',
     ready: true,
