@@ -884,6 +884,31 @@ describe('AIM PORTAL: the rifle through the pair', () => {
     void sc;
   });
 
+  it('turned away from the near twin (more than AIMP.near.cone°) to shoot someone else: the round flies past it, straight at him', () => {
+    const { R, man, freeze, aimAt, tap, input, step, ray, rifts, sc } = rig();
+    const a = man(V(0, 0, 14), Math.PI);
+    const b = man(V(8, 0, 9), -Math.PI / 2);
+    freeze(a);
+    freeze(b);
+    aimAt(V(0, 1.2, 14));
+    tap();
+    expect(R.pair!.man).toBe(a.id);
+    // (the camera behind your shoulder still sees b through the near twin: the rifle doesn't take that way)
+    ray.origin.set(-2.4, 1.6, -2.1);
+    ray.dir.subVectors(b.chest(new THREE.Vector3()), ray.origin).normalize();
+    const segs = rifts.raycastThrough(ray.origin, ray.dir, 90, sc.world, 2);
+    expect(segs.length).toBeGreaterThan(1);
+    expect(segs[0].viaEnd).toBe(rifts.strikeEnds(R.pair!.strike)!.a);
+    const hp = b.hp;
+    input.fire = true;
+    input.firePress = true;
+    step(1);
+    input.fire = false;
+    expect(b.hp).toBe(hp - AIMP.rifle.damage);
+    expect(a.hp).toBe(AIMP.enemy.gunner.hp);
+    expect(R.usage.rifleDirect).toBe(1);
+  });
+
   it('24 rounds, then an auto-reload of 1.4 s; no fire while it reloads', () => {
     const { R, input, step, aimAt } = rig();
     aimAt(V(0, 1.6, 40));
@@ -1414,6 +1439,31 @@ describe('AIM PORTAL: GO', () => {
     r2.input.stabPress = true;
     r2.step(1);
     expect(h.alive).toBe(true);
+  });
+
+  it('GO through an exit over his head: you drop in right behind him, facing his back, and the knife lands', () => {
+    const { R, man, freeze, aimAt, hold, letGo, input, step, crossings, pos, player } = rig({ move: true });
+    const g = man(V(0, 0, 10), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 10));
+    hold(Math.ceil(AIMP.snap.pick * 60) + 2);
+    input.snapVec = { x: 0, y: 1 };
+    step(1);
+    input.portal = false;
+    letGo();
+    input.snapVec = { x: 0, y: 0 };
+    expect(R.pair!.far.surface).toBe('ceiling');
+    input.goPress = true;
+    step(1);
+    for (let n = 0; n < 30 && !crossings.length; n++) step(1);
+    expect(crossings.length).toBe(1);
+    // behind him (he faces -z: his back is +z), looking the way he looks
+    expect(pos.z).toBeGreaterThan(10.3);
+    expect(Math.abs(pos.x)).toBeLessThan(0.3);
+    expect(Math.cos(player.yaw - g.yaw)).toBeGreaterThan(0.95);
+    input.stabPress = true;
+    for (let n = 0; n < 40 && g.alive; n++) step(1);
+    expect(g.alive).toBe(false);
   });
 
   it('no pair: GO does nothing (a word); while you dash, PORTAL waits', () => {

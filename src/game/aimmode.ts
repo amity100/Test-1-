@@ -323,8 +323,19 @@ export class AimMode {
     return !!ends && ((ends.a as object) === end || (ends.b as object) === end);
   }
 
+  /** Your aim (flat) is within AIMP.near.cone° of the way into the near twin (a round goes in). */
+  private intoNear(dir: V3): boolean {
+    const p = this.pair;
+    if (!p) return false;
+    const n = p.near.normal;
+    const l = Math.hypot(dir.x, dir.z);
+    if (l < 1e-6) return true;
+    return -(dir.x * n.x + dir.z * n.z) / l >= Math.cos(THREE.MathUtils.degToRad(AIMP.near.cone));
+  }
+
   /** The near twin (the entrance, in front of you). */
-  isNearEnd(end: { position: V3 }): boolean {
+  isNearEnd(end: { position: V3 } | null | undefined): boolean {
+    if (!end) return false;
     const p = this.pair;
     const ends = p ? this.h.rifts.strikeEnds(p.strike) : null;
     return !!ends && (ends.a as object) === end;
@@ -817,7 +828,18 @@ export class AimMode {
       while (turn > Math.PI) turn -= Math.PI * 2;
       while (turn < -Math.PI) turn += Math.PI * 2;
     } else if (n.y < -0.5) {
-      // a ceiling (over his head): down onto him
+      // a ceiling over his head: down right behind him (not onto his head), facing his back
+      const e = p.man !== null ? (h.enemies.get(p.man) as Enemy | null) : null;
+      if (e && e.alive) {
+        const bx = -Math.sin(e.yaw), bz = -Math.cos(e.yaw);
+        b.pos.x = e.pos.x + bx * 0.6;
+        b.pos.z = e.pos.z + bz * 0.6;
+        const yaw = Math.atan2(-bx, -bz);
+        turn = yaw - Math.atan2(-p.near.normal.x, -p.near.normal.z);
+        while (turn > Math.PI) turn -= Math.PI * 2;
+        while (turn < -Math.PI) turn += Math.PI * 2;
+        h.player.yaw = yaw;
+      }
       b.vel.set(0, -AIMP.go.arrive, 0);
     }
     this.dash = null;
@@ -921,7 +943,13 @@ export class AimMode {
     this.fireCd = AIMP.rifle.interval;
     this.firedT = now;
     const ray = h.aimRay();
-    const segs = h.rifts.raycastThrough(ray.origin, ray.dir, AIMP.rifle.range, h.world, 2);
+    let segs = h.rifts.raycastThrough(ray.origin, ray.dir, AIMP.rifle.range, h.world, 2);
+    // (turned away from the near twin to shoot someone else: past it, as your rifle points)
+    if (segs.length > 1 && this.pair && this.isNearEnd(segs[0].viaEnd as RiftEnd) && !this.intoNear(ray.dir)) {
+      const hit = h.world.raycast(ray.origin as THREE.Vector3, ray.dir as THREE.Vector3, AIMP.rifle.range, { sight: true });
+      const to = new THREE.Vector3().copy(ray.origin).addScaledVector(ray.dir, hit ? hit.distance : AIMP.rifle.range);
+      segs = [{ from: new THREE.Vector3().copy(ray.origin), to, hit: hit ?? null, viaEnd: null, charged: false } as RaySegment];
+    }
     const muzzle = h.hero.heldMuzzle(new THREE.Vector3());
     const assist = this.h.device() === 'touch' ? THREE.MathUtils.degToRad(2) : this.h.device() === 'pad' ? THREE.MathUtils.degToRad(1.2) : 0;
     const men = this.men();

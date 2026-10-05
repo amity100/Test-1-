@@ -52,9 +52,11 @@ export const AIMP = {
    * it, at most `max`), centred on the crosshair as far as it can be while your own body line stays
    * `body` m inside it and the crosshair `margin` m inside; standing on your floor unless the crosshair
    * needs it raised (at most `float` m off it). While it is open it slides sideways with you (`follow`: a
-   * strafe keeps it, and him in it, on your crosshair; walking at it still walks you in).
+   * strafe keeps it, and him in it, on your crosshair; walking at it still walks you in). Your rounds go
+   * into it only while you aim within `cone`° (left or right) of the way it looks: turned further to shoot
+   * someone else, they leave your rifle past it (the camera over your shoulder would still see through it).
    */
-  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6, follow: true },
+  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6, follow: true, cone: 25 },
   /**
    * The crosshair on a man: within `deg` (by device) of his body (his radius plus `pad` m, his height
    * plus `padY` m), in sight, within `range` m; a tap within `tapPx` px of him on the screen. The exit
