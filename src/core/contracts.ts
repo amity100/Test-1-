@@ -626,6 +626,8 @@ export interface NavLayer {
   minZ: number;
   maxZ: number;
   floorY: number;
+  /** Walk-grid cell size (m; default 0.9). */
+  cell?: number;
 }
 
 export interface EncounterDef {

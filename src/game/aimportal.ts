@@ -94,6 +94,23 @@ export const AIMP = {
     mirror: { hp: 70, speed: 2.2, shieldDist: 1.5, shieldW: 1.5, shieldH: 2.0, turn: (140 * Math.PI) / 180, returnChance: 0.3, bash: { reach: 2.0, windup: 0.6, damage: 18, push: 5, cooldown: 1.4 } },
     rusher: { hp: 50, run: 6.4, windup: 0.45, damage: 25, reach: 2.1, hit: 2.6, cooldown: 1.0, push: 5, portalFrom: 9, portalChance: 0.6, portalTele: 0.5, portalLife: 5, portalGap: 5, near: 2.6, ahead: 1.4 },
   },
+  /**
+   * What the men know of you (the compound: walls between you): they have you where they SAW you, or heard you
+   * (within `hear` m, through a wall); `hunch` s without a sight and they get a rough idea (your place, `spread`
+   * m out, again every `every` s): a wave can't stall. `hold`: the s a man stays on his post at the start.
+   * AMBUSH: a man who has had no sight of you for `after` s (a man who never has: `first` s into the wave) may (`chance`, then `cd` s) come round by a red portal
+   * of his own opening `behind` m behind you (a rusher `near`); `turn` s he spends turning to you first.
+   * SEARCH: `pts` spots `radius` m round where he thought you were, `look` s at each.
+   */
+  intel: {
+    hear: 6.5,
+    hunch: 12,
+    every: 4,
+    spread: 5,
+    hold: [4, 9] as readonly [number, number],
+    ambush: { after: 7, first: 28, chance: 0.5, cd: [6, 10] as readonly [number, number], behind: 5.5, turn: 0.55 },
+    search: { pts: 3, radius: [3, 8] as readonly [number, number], look: 0.9 },
+  },
   waves: { first: 2, between: 1.8 },
 };
 

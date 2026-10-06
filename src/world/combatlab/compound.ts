@@ -386,9 +386,9 @@ const Gn = 'gunner' as const, Mr = 'mirror' as const, Rs = 'rusher' as const;
 
 /** AIM PORTAL's five waves on the compound: 3, 4, 5, 6, 8 men; MIRRORS from wave 2, RUSHERS from wave 3. */
 export const AIM_WAVES_C: LabWave[] = [
-  { subKey: 'lab.a1', ready: true, spawns: [man(Gn, 'roomWS'), man(Gn, 'laneE'), man(Gn, 'cellSW')] },
-  { subKey: 'lab.a2', ready: true, spawns: [man(Gn, 'hallE'), man(Gn, 'barracksN'), man(Gn, 'bayS'), man(Mr, 'hall')] },
-  { subKey: 'lab.a3', ready: true, spawns: [man(Gn, 'roomEN'), man(Gn, 'terraceW'), man(Mr, 'laneW'), man(Rs, 'courtW'), man(Rs, 'shoreN')] },
+  { subKey: 'lab.a1', ready: true, spawns: [man(Gn, 'hallE'), man(Gn, 'barracksN'), man(Gn, 'bayS')] },
+  { subKey: 'lab.a2', ready: true, spawns: [man(Gn, 'roomEN'), man(Gn, 'cellSW'), man(Gn, 'laneE'), man(Mr, 'hall')] },
+  { subKey: 'lab.a3', ready: true, spawns: [man(Gn, 'terraceW'), man(Gn, 'roomWN'), man(Mr, 'laneW'), man(Rs, 'courtW'), man(Rs, 'shoreN')] },
   { subKey: 'lab.a4', ready: true, spawns: [man(Gn, 'perchP3'), man(Gn, 'hallW'), man(Mr, 'roomWN'), man(Mr, 'terraceMid'), man(Rs, 'barracksS'), man(Rs, 'pocketNE')] },
   {
     subKey: 'lab.a5',

@@ -1119,6 +1119,27 @@ export class EnemySystem implements EnemyAPI, Brain, OnsBrain {
     }
   }
 
+  private readonly pathTmp: V3[] = [];
+
+  /**
+   * How far he would walk to `goal` (m, along the nav grid's path), Infinity when there is no way (or the goal is
+   * not walkable). For choosing: nothing of his own is changed.
+   */
+  pathLength(e: Enemy, goal: V3): number {
+    const g = this.gridFor(e);
+    if (!g) return hdist(e.pos, goal);
+    if (!g.walkable(goal.x, goal.z)) return Infinity;
+    const n = g.findPathInto(e.pos as THREE.Vector3, goal as THREE.Vector3, this.pathTmp as THREE.Vector3[]);
+    if (n < 0) return Infinity;
+    let len = 0, px = e.pos.x, pz = e.pos.z;
+    for (let i = 0; i < n; i++) {
+      len += Math.hypot(this.pathTmp[i].x - px, this.pathTmp[i].z - pz);
+      px = this.pathTmp[i].x;
+      pz = this.pathTmp[i].z;
+    }
+    return len;
+  }
+
   /** The nav layer under his feet (nearest floorY within 1.2 m), cached. */
   gridFor(e: Enemy): NavGrid | null {
     const p = e.pos;

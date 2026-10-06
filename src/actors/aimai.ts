@@ -26,6 +26,16 @@ import type { EnemySystem } from './enemies';
  * after 0.35 s, at his side 0.6 s, behind him 0.8 s; and when you vanish and
  * turn up at his side or his back (through your pair) he has lost you for as
  * long (he stops, he doesn't turn to you, he doesn't shoot).
+ *
+ * THE COMPOUND (the lab's arena of walls): nobody knows where you are but by
+ * what he has SEEN or HEARD. A man starts on his post (HOLD), then goes to
+ * where he last had you; there nothing: he SEARCHES round it (a few spots, a
+ * look at each). 12 s without a sight of you and he gets a hunch (your place,
+ * give or take 5 m, again every 4 s): a wave cannot stall. A man who has not
+ * had you for a while (7 s) may come round the wall by a red portal of his own:
+ * its exit opens BEHIND you (or at your side), 0.5 s of warning, an arrow on
+ * the screen's edge when it is out of your view, and he comes through
+ * having to turn to you first (a gunner a beat, then his laser).
  */
 
 /** Your pair as they see it. */
@@ -48,7 +58,7 @@ export interface AimAIHost {
   readonly portals: RedPortals;
   /** The fight is on (after GO): before it nobody moves. */
   go(): boolean;
-  player(): { pos: V3; chest: V3; eye: V3; alive: boolean; safe: boolean };
+  player(): { pos: V3; chest: V3; eye: V3; alive: boolean; safe: boolean; /** The way you look (flat yaw): a portal behind you opens on its far side. */ yaw?: number };
   /** Your pair (null: none open). */
   pair(): AimAIPortal | null;
   /** Solid floor to stand on at (x, z) about level `y`: its top, else null. */
@@ -70,7 +80,28 @@ class Mind {
   gunT = 0;
   shots = 0;
   /** Gunner: where he is going and what he does there. */
-  mode: 'advance' | 'hide' | 'peek' = 'advance';
+  mode: 'hold' | 'advance' | 'hide' | 'peek' | 'search' = 'hold';
+  /** HOLD: seconds he stays on his post, and whether it has been set. */
+  holdT = -1;
+  /** Where he believes you are, when he last SAW you, when he last had any news of you (game time; -99: never). */
+  readonly known = new THREE.Vector3();
+  hasKnown = false;
+  seenT = -99;
+  newsT = -99;
+  /** He has had you in sight at least once (else the walls hid you from him from the start). */
+  everSeen = false;
+  /** When his brain first ran (game time). */
+  bornT = 0;
+  huntT = 0;
+  /** He has you in sight right now (this beat). */
+  seesNow = false;
+  /** SEARCH: spots round where he thought you were, and the one he is at, and how long he looks. */
+  readonly pts: THREE.Vector3[] = [];
+  ptI = 0;
+  lookT = 0;
+  /** Not moved (s) while meaning to, and where he was (the watchdog). */
+  idleT = 0;
+  readonly idleAt = new THREE.Vector3();
   readonly spot = new THREE.Vector3();
   hasSpot = false;
   modeT = 0;
@@ -185,6 +216,7 @@ export class AimAI {
     }
     m.thinkT = sys.time;
     e.reachPose = m.role === 'gunner' ? (m.gun !== 'idle' ? 1 : 0.55) : 0;
+    this.updateIntel(sys, e, m, pl);
     // you were there and now you are here (through your pair), at his side or his back: he has lost you a moment
     if (this.lostYou(sys, e, m, pl.pos)) {
       sys.halt(e, dt);
@@ -203,7 +235,7 @@ export class AimAI {
     m.portalCd -= dt;
     // up on a platform with no line to you for a while: he jumps down toward you (a platform is no fortress)
     if (e.pos.y > 2.5 && e.body && !e.body.simulate) {
-      m.blindT = pl.alive && this.sees(e, pl.chest, 80) ? 0 : m.blindT + dt;
+      m.blindT = m.seesNow ? 0 : m.blindT + dt;
       if (m.blindT > 4) {
         m.blindT = 0;
         const d = Math.max(1, hd(e.pos, pl.pos));
@@ -214,6 +246,49 @@ export class AimAI {
     if (m.role === 'gunner') this.gunner(sys, e, m, dt);
     else if (m.role === 'mirror') this.mirror(sys, e, m, dt);
     else this.rusher(sys, e, m, dt);
+  }
+
+  /** What he knows of you: where he saw you, heard you, or (long without news) has a hunch. */
+  private updateIntel(sys: EnemySystem, e: Enemy, m: Mind, pl: { pos: V3; chest: V3; alive: boolean }) {
+    const I = AIMP.intel, now = sys.time;
+    if (!m.hasKnown) {
+      // (the first beat: they know where the fight starts, and stand on their posts a while)
+      m.known.set(pl.pos.x, pl.pos.y, pl.pos.z);
+      m.hasKnown = true;
+      m.seenT = m.newsT = m.bornT = now;
+      m.holdT = between(I.hold, sys.rand());
+      m.mode = m.role === 'gunner' ? 'hold' : 'advance';
+      m.lastAt.copy(e.pos);
+      m.idleAt.copy(e.pos);
+    }
+    m.seesNow = pl.alive && this.sees(e, pl.chest, 80);
+    if (m.seesNow) {
+      m.known.set(pl.pos.x, pl.pos.y, pl.pos.z);
+      m.seenT = m.newsT = now;
+      m.everSeen = true;
+      return;
+    }
+    // (a footstep through a wall)
+    if (pl.alive && hd(e.pos, pl.pos) < I.hear) {
+      m.known.set(pl.pos.x, pl.pos.y, pl.pos.z);
+      m.newsT = now;
+      return;
+    }
+    // (no news for a long time: a hunch, your place give or take a few metres, new every few seconds)
+    if (pl.alive && now - m.newsT > I.hunch && now >= m.huntT) {
+      m.huntT = now + I.every;
+      const y0 = pl.pos.y;
+      m.known.set(pl.pos.x, y0, pl.pos.z);
+      for (let k = 0; k < 6; k++) {
+        const a = sys.rand() * Math.PI * 2, r = sys.rand() * I.spread;
+        const x = pl.pos.x + Math.sin(a) * r, z = pl.pos.z + Math.cos(a) * r;
+        const y = this.host.standAt(x, z, y0);
+        if (y !== null && Math.abs(y - y0) < 0.5) {
+          m.known.set(x, y, z);
+          break;
+        }
+      }
+    }
   }
 
   /**
@@ -330,37 +405,54 @@ export class AimAI {
   // The gunner
   // ------------------------------------------------------------------
 
-  /** A spot out of your sight (cover), nearest him, within reach of the fight; null if none found. */
+  /** Level, walkable ground at (x, z) round him: its floor, else null. */
+  private floorAt(sys: EnemySystem, e: Enemy, x: number, z: number): number | null {
+    const y = this.host.standAt(x, z, e.pos.y);
+    if (y === null || Math.abs(y - e.pos.y) > 0.35) return null;
+    const g = sys.gridFor(e);
+    if (g && !g.walkable(x, z)) return null;
+    return y;
+  }
+
+  /** A walk to (x, z) is no more than `slack` m beyond the straight line (a wall he'd have to go round is a long way). */
+  private near(sys: EnemySystem, e: Enemy, x: number, z: number, y: number, slack: number): boolean {
+    const L = sys.pathLength(e, _d.set(x, y, z));
+    return L <= hd(e.pos, _d) + slack;
+  }
+
+  /** A spot out of your sight (cover), nearest him, within a short walk of the fight; null if none found. */
   private findCover(sys: EnemySystem, e: Enemy, out: THREE.Vector3): boolean {
     const H = this.host;
     const pl = H.player();
     const R = AIMP.enemy.gunner;
-    let best = Infinity;
-    let found = false;
-    for (let k = 0; k < 14; k++) {
+    const cands: { x: number; y: number; z: number; r: number }[] = [];
+    for (let k = 0; k < 18; k++) {
       const ang = sys.rand() * Math.PI * 2;
       const r = 2.5 + sys.rand() * 7;
       const x = e.pos.x + Math.sin(ang) * r, z = e.pos.z + Math.cos(ang) * r;
-      const y = H.standAt(x, z, e.pos.y);
-      // (level ground: not the top of a block he cannot walk onto)
-      if (y === null || Math.abs(y - e.pos.y) > 0.35) continue;
+      const y = this.floorAt(sys, e, x, z);
+      if (y === null) continue;
       const d = Math.hypot(x - pl.pos.x, z - pl.pos.z);
       if (d < R.keep[0] - 1 || d > R.keep[1] + 8) continue;
       _c.set(x, y + 1.35, z);
       if (H.world.lineOfSight(pl.eye, _c)) continue;
       _c.set(x, y + 0.7, z);
       if (H.world.lineOfSight(pl.eye, _c)) continue;
-      if (r < best) {
-        best = r;
-        out.set(x, y, z);
-        found = true;
-      }
+      cands.push({ x, y, z, r });
     }
-    return found;
+    // (nearest first; the first whose way there is short)
+    cands.sort((a, b) => a.r - b.r);
+    for (let i = 0; i < Math.min(3, cands.length); i++) {
+      const c = cands[i];
+      if (!this.near(sys, e, c.x, c.z, c.y, 4.5)) continue;
+      out.set(c.x, c.y, c.z);
+      return true;
+    }
+    return false;
   }
 
   /** A spot near `from` with a clear line to you (to step out and shoot from). */
-  private findPeek(sys: EnemySystem, from: V3, out: THREE.Vector3): boolean {
+  private findPeek(sys: EnemySystem, e: Enemy, from: V3, out: THREE.Vector3): boolean {
     const H = this.host;
     const pl = H.player();
     const R = AIMP.enemy.gunner;
@@ -370,8 +462,8 @@ export class AimAI {
       const ang = (k / 12) * Math.PI * 2 + sys.rand() * 0.3;
       const r = 1 + (k % 3) * 0.9;
       const x = from.x + Math.sin(ang) * r, z = from.z + Math.cos(ang) * r;
-      const y = H.standAt(x, z, from.y);
-      if (y === null || Math.abs(y - from.y) > 0.35) continue;
+      const y = this.floorAt(sys, e, x, z);
+      if (y === null) continue;
       _c.set(x, y + 1.4, z);
       if (!H.world.lineOfSight(_c, pl.chest)) continue;
       const d = Math.hypot(x - pl.pos.x, z - pl.pos.z);
@@ -385,6 +477,78 @@ export class AimAI {
     return found;
   }
 
+  /** SEARCH: a few spots round where he thought you were, the nearest to him first. */
+  private beginSearch(sys: EnemySystem, e: Enemy, m: Mind) {
+    const S = AIMP.intel.search;
+    m.mode = 'search';
+    m.pts.length = 0;
+    m.ptI = 0;
+    m.lookT = 0;
+    const cands: { x: number; y: number; z: number; d: number }[] = [];
+    for (let k = 0; k < 14; k++) {
+      const ang = sys.rand() * Math.PI * 2;
+      const r = between(S.radius, sys.rand());
+      const x = m.known.x + Math.sin(ang) * r, z = m.known.z + Math.cos(ang) * r;
+      const y = this.floorAt(sys, e, x, z);
+      if (y === null) continue;
+      if (!this.near(sys, e, x, z, y, 24)) continue;
+      cands.push({ x, y, z, d: hd(e.pos, _d.set(x, y, z)) });
+    }
+    cands.sort((a, b) => a.d - b.d);
+    // (spread out: a spot too near the last one is skipped)
+    for (const c of cands) {
+      if (m.pts.length >= S.pts) break;
+      if (m.pts.some((q) => Math.hypot(q.x - c.x, q.z - c.z) < 3.5)) continue;
+      m.pts.push(new THREE.Vector3(c.x, c.y, c.z));
+    }
+    // (nowhere to look: he heads for the hunch)
+    if (!m.pts.length) m.mode = 'advance';
+  }
+
+  /** He walks the search; true while it goes on. */
+  private searching(sys: EnemySystem, e: Enemy, m: Mind, dt: number): boolean {
+    const S = AIMP.intel.search;
+    if (m.ptI >= m.pts.length) {
+      m.mode = 'advance';
+      m.modeT = 0.8;
+      return false;
+    }
+    const to = m.pts[m.ptI];
+    if (hd(e.pos, to) > 0.9) {
+      this.go(sys, e, m, to, AIMP.enemy.gunner.run * 0.75, dt);
+      m.walkT += dt;
+      if (m.walkT > 6) {
+        m.walkT = 0;
+        m.ptI++;
+      }
+      return true;
+    }
+    m.walkT = 0;
+    // (a look round: he turns this way and that)
+    m.lookT += dt;
+    sys.halt(e, dt);
+    e.yaw += Math.sin(m.lookT * 2.2) * dt * 1.6;
+    if (m.lookT > S.look) {
+      m.lookT = 0;
+      m.ptI++;
+    }
+    return true;
+  }
+
+  /** Walk toward `to` (the watchdog notes if he does not get anywhere). */
+  private go(sys: EnemySystem, e: Enemy, m: Mind, to: V3, speed: number, dt: number) {
+    sys.moveTo(e, to, speed, dt, true);
+    m.idleT = hd(e.pos, m.idleAt) < 0.3 ? m.idleT + dt : 0;
+    if (m.idleT === 0) m.idleAt.copy(e.pos);
+  }
+
+  /** He may come round the wall by a portal of his own (no sight of you for a while; one portal at a time). */
+  private mayAmbush(sys: EnemySystem, m: Mind): boolean {
+    const A = AIMP.intel.ambush;
+    const lost = m.everSeen ? sys.time - m.seenT > A.after : sys.time - m.bornT > A.first;
+    return lost && m.portalCd <= 0 && this.host.player().alive && !this.host.player().safe;
+  }
+
   private gunner(sys: EnemySystem, e: Enemy, m: Mind, dt: number) {
     const H = this.host;
     const pl = H.player();
@@ -392,12 +556,17 @@ export class AimAI {
     if (m.react > 0) {
       m.react -= dt;
       sys.halt(e, dt);
-      sys.face(e, pl.pos, dt);
+      sys.face(e, m.known, dt);
+      return;
+    }
+    // through a red portal of his own
+    if (m.portalId >= 0) {
+      this.portalWalk(sys, e, m, dt);
       return;
     }
     if (this.reactPortal(sys, e, m, dt)) return;
     const d = hd(e.pos, pl.pos);
-    const sees = pl.alive && this.sees(e, pl.chest, 70);
+    const sees = m.seesNow;
     if (m.gun === 'aim') {
       sys.halt(e, dt);
       sys.face(e, pl.pos, dt);
@@ -443,34 +612,66 @@ export class AimAI {
     }
     m.gunT -= dt;
     m.modeT -= dt;
-    // out of the fight (far, or no line to you and no cover found): he closes in
-    if (m.mode === 'advance') {
-      // (standing still out of your sight for long: he looks for cover somewhere else)
-      m.stuckT = hd(e.pos, m.lastAt) < 0.3 && !sees ? m.stuckT + dt : 0;
-      if (m.stuckT === 0) m.lastAt.copy(e.pos);
-      if (m.stuckT > 3) {
-        m.stuckT = 0;
-        m.mode = 'hide';
-        m.hasSpot = false;
-        m.modeT = 0.5;
-        return;
+    // sight of you ends a hold or a search: he is in the fight
+    if (sees && (m.mode === 'hold' || m.mode === 'search')) {
+      m.mode = 'advance';
+      m.modeT = 0.8;
+    }
+    // no sight of you for a while: round the wall by a portal of his own
+    if (!sees && m.mode !== 'hold' && this.mayAmbush(sys, m)) {
+      m.portalCd = between(AIMP.intel.ambush.cd, sys.rand());
+      if (sys.rand() < AIMP.intel.ambush.chance && this.openPortal(sys, e, m, true)) return;
+    }
+    // the watchdog: meaning to walk and not getting anywhere for 5 s: another way (a search spot, else the hunch)
+    if (m.idleT > 5 && !sees) {
+      m.idleT = 0;
+      m.hasSpot = false;
+      if (m.mode === 'advance') this.beginSearch(sys, e, m);
+      else if (m.mode === 'search') m.ptI++;
+      else m.mode = 'advance';
+    }
+    // HOLD: on his post, facing where he thinks you are
+    if (m.mode === 'hold') {
+      m.holdT -= dt;
+      sys.halt(e, dt);
+      sys.face(e, m.known, dt);
+      if (m.holdT <= 0) {
+        m.mode = 'advance';
+        m.modeT = 0.8;
       }
+      return;
+    }
+    if (m.mode === 'search') {
+      if (this.searching(sys, e, m, dt)) return;
+    }
+    // out of the fight (far, or no line to you and no cover found): he closes in on where he thinks you are
+    if (m.mode === 'advance') {
       if (sees && d <= R.keep[1] && m.gunT <= 0) {
         this.beginAim(m, pl, sys);
         return;
       }
-      if (d > R.keep[0] + 2 || !sees) sys.moveTo(e, pl.pos, R.run, dt, true);
-      else {
-        sys.halt(e, dt);
-        sys.face(e, pl.pos, dt);
+      if (sees) {
+        m.idleT = 0;
+        if (d > R.keep[0] + 2) sys.moveTo(e, pl.pos, R.run, dt, true);
+        else {
+          sys.halt(e, dt);
+          sys.face(e, pl.pos, dt);
+        }
+        // (a beat after he first sees you he goes looking for cover)
+        if (m.modeT <= 0) {
+          m.mode = 'hide';
+          m.hasSpot = false;
+          m.modeT = 0;
+        }
+        if (m.modeT === 0 && m.mode === 'advance') m.modeT = 0.8;
+        return;
       }
-      // (a beat after he first sees you he goes looking for cover)
-      if (sees && m.modeT <= 0) {
-        m.mode = 'hide';
-        m.hasSpot = false;
-        m.modeT = 0;
+      // (he got there and you are not: a look round)
+      if (hd(e.pos, m.known) < 2.2) {
+        this.beginSearch(sys, e, m);
+        return;
       }
-      if (m.modeT === 0 && m.mode === 'advance') m.modeT = 0.8;
+      this.go(sys, e, m, m.known, R.run, dt);
       return;
     }
     if (m.mode === 'hide') {
@@ -502,7 +703,7 @@ export class AimAI {
       if (m.modeT <= 0) {
         // step out: a spot by the cover with a line to you
         m.mode = 'peek';
-        m.hasSpot = this.findPeek(sys, e.pos, m.spot);
+        m.hasSpot = this.findPeek(sys, e, e.pos, m.spot);
         m.modeT = 2.5;
       }
       return;
@@ -539,15 +740,17 @@ export class AimAI {
     const H = this.host;
     const pl = H.player();
     const M = AIMP.enemy.mirror;
+    // (where he believes you are: his shield and his walk go there)
+    const tgt = m.seesNow ? pl.pos : m.known;
     if (m.react > 0) {
       m.react -= dt;
-      e.yaw = turnToward(e.yaw, yawTo(e.pos, pl.pos), dt, M.turn);
+      e.yaw = turnToward(e.yaw, yawTo(e.pos, tgt), dt, M.turn);
       sys.halt(e, dt);
       return;
     }
-    // his shield: toward the last one who hurt him, else you
+    // his shield: toward the last one who hurt him, else where he thinks you are
     const now = sys.time;
-    const at = now < m.turnUntil ? m.turnTo : pl.pos;
+    const at = now < m.turnUntil ? m.turnTo : tgt;
     e.yaw = turnToward(e.yaw, yawTo(e.pos, at), dt, M.turn);
     if (this.reactPortal(sys, e, m, dt)) return;
     const d = hd(e.pos, pl.pos);
@@ -575,7 +778,13 @@ export class AimAI {
       H.windup(e, M.bash.windup);
       return;
     }
-    if (d > M.bash.reach - 0.3) sys.moveTo(e, pl.pos, M.speed, dt, false);
+    // (he found nothing where he thought you were: a look round it)
+    if (!m.seesNow && hd(e.pos, m.known) < 1.5) {
+      if (m.mode !== 'search') this.beginSearch(sys, e, m);
+      if (this.searching(sys, e, m, dt)) return;
+      m.mode = 'advance';
+    }
+    if (hd(e.pos, tgt) > M.bash.reach - 0.3) this.go(sys, e, m, tgt, M.speed, dt);
     else sys.halt(e, dt);
   }
 
@@ -590,7 +799,7 @@ export class AimAI {
     if (m.react > 0) {
       m.react -= dt;
       sys.halt(e, dt);
-      sys.face(e, pl.pos, dt);
+      sys.face(e, m.known, dt);
       return;
     }
     // through a red portal of his own
@@ -599,8 +808,11 @@ export class AimAI {
       return;
     }
     if (this.reactPortal(sys, e, m, dt)) return;
+    // (the true distance only for a blow; where he thinks you are for the walk)
+    const tgt = m.seesNow ? pl.pos : m.known;
     const d = hd(e.pos, pl.pos);
-    const gap = Math.abs(pl.pos.y - e.pos.y) >= 1.6;
+    const dk = hd(e.pos, tgt);
+    const gap = Math.abs(pl.pos.y - e.pos.y) >= 1.6 && (m.seesNow || hd(e.pos, pl.pos) < AIMP.intel.hear);
     if (m.windT >= 0) {
       m.windT += dt;
       sys.halt(e, dt);
@@ -620,45 +832,63 @@ export class AimAI {
       }
       return;
     }
-    if (d <= K.reach && m.meleeCd <= 0 && pl.alive && !gap) {
+    if (d <= K.reach && m.meleeCd <= 0 && pl.alive && !gap && (m.seesNow || d < 3)) {
       m.windT = 0;
       H.windup(e, K.windup);
       return;
     }
-    // from afar (or no way down to you): a red portal right by you
-    if (m.portalCd <= 0 && (d > K.portalFrom || gap)) {
+    // from afar (or no way down to you): a red portal right by you (behind you when he has not got you in sight)
+    if (m.portalCd <= 0 && (dk > K.portalFrom || gap) && (m.seesNow || gap || this.mayAmbush(sys, m))) {
       m.portalCd = gap ? 0.8 : 2;
-      if ((gap || sys.rand() < K.portalChance) && this.openPortal(sys, e, m)) return;
+      if ((gap || sys.rand() < K.portalChance) && this.openPortal(sys, e, m, !m.seesNow && !gap)) return;
     }
-    if (d <= K.reach && !gap) {
+    if (m.seesNow && d <= K.reach && !gap) {
       sys.halt(e, dt);
       sys.face(e, pl.pos, dt);
       return;
     }
-    sys.moveTo(e, pl.pos, K.run, dt, true);
+    // (he got where he thought you were and you are not: a look round)
+    if (!m.seesNow && dk < 1.5) {
+      if (m.mode !== 'search') this.beginSearch(sys, e, m);
+      if (this.searching(sys, e, m, dt)) return;
+      m.mode = 'advance';
+    }
+    this.go(sys, e, m, tgt, K.run, dt);
   }
 
-  /** A pair of his: its entrance just ahead of him, its exit `near` m from you on floor you could stand on. */
-  private openPortal(sys: EnemySystem, e: Enemy, m: Mind): boolean {
+  /**
+   * A pair of his: its entrance just ahead of him, its exit on floor you could stand on with a clear line to you:
+   * `behind` you (the far side of where you look; a gunner AIMP.intel.ambush.behind m back, a rusher near), else on
+   * his own side of you (`near` m, where he'd come from).
+   */
+  private openPortal(sys: EnemySystem, e: Enemy, m: Mind, behind = false): boolean {
     const H = this.host;
     const pl = H.player();
     const K = AIMP.enemy.rusher;
     if (H.portals.list.length || sys.time - this.lastPortalT < K.portalGap) return false;
-    const base = Math.atan2(e.pos.x - pl.pos.x, e.pos.z - pl.pos.z);
+    const toMe = Math.atan2(e.pos.x - pl.pos.x, e.pos.z - pl.pos.z);
+    const look = pl.yaw ?? toMe + Math.PI;
+    const base = behind ? look + Math.PI : toMe;
+    const dist = behind ? (m.role === 'gunner' ? AIMP.intel.ambush.behind : K.near + 1) : K.near;
     let exit: THREE.Vector3 | null = null;
-    for (const off of [0.9, -0.9, 0.4, -0.4, 1.6, -1.6, 0]) {
-      const ang = base + off * m.side;
-      const x = pl.pos.x + Math.sin(ang) * K.near, z = pl.pos.z + Math.cos(ang) * K.near;
-      const y = H.standAt(x, z, pl.pos.y);
-      if (y === null) continue;
-      _c.set(x, y, z);
-      _eye.set(x, y + 1.5, z);
-      if (!H.world.lineOfSight(_eye, pl.chest)) continue;
-      exit = _c.clone();
-      break;
+    for (const dd of behind ? [0, -1.2, 1.2] : [0]) {
+      for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.3, -2.3]) {
+        // (offsets swing to the man's own side first: the exit is not where you stare)
+        const ang = base + off * m.side;
+        const r = dist + dd;
+        const x = pl.pos.x + Math.sin(ang) * r, z = pl.pos.z + Math.cos(ang) * r;
+        const y = H.standAt(x, z, pl.pos.y);
+        if (y === null || Math.abs(y - pl.pos.y) > 0.5) continue;
+        _c.set(x, y, z);
+        _eye.set(x, y + 1.5, z);
+        if (!H.world.lineOfSight(_eye, pl.chest)) continue;
+        exit = _c.clone();
+        break;
+      }
+      if (exit) break;
     }
     if (!exit) return false;
-    const to = Math.atan2(pl.pos.x - e.pos.x, pl.pos.z - e.pos.z);
+    const to = Math.atan2(m.known.x - e.pos.x, m.known.z - e.pos.z);
     let yawIn = to, ax = 0, az = 0, ay: number | null = null;
     for (const off of [0, 0.9, -0.9, 1.8, -1.8, Math.PI]) {
       yawIn = to + off;
@@ -672,6 +902,7 @@ export class AimAI {
     const p = H.portals.open(e.id, _a.set(ax, ay, az), yawIn, exit, by);
     this.lastPortalT = sys.time;
     m.portalId = p.id;
+    m.gun = 'idle';
     H.opened(exit);
     e.char.play('interact', { fade: 0.08 });
     return true;
@@ -712,6 +943,13 @@ export class AimAI {
     arrive(sys, e, p);
     m.portalId = -1;
     m.meleeCd = Math.min(m.meleeCd, 0.2);
+    // (a gunner who comes out behind you has to turn to you first, then his laser)
+    if (m.role === 'gunner') {
+      m.react = AIMP.intel.ambush.turn;
+      m.mode = 'advance';
+      m.modeT = 0.6;
+      m.portalCd = between(AIMP.intel.ambush.cd, sys.rand());
+    }
   }
 }
 

@@ -211,7 +211,8 @@ export class AimMode {
       go: () => h.fighting(),
       player: () => {
         const p = h.player;
-        return { pos: p.body.pos, chest: p.chest(_c), eye: h.eye(_eye), alive: h.alive(), safe: h.safe() };
+        const d = h.aimRay().dir;
+        return { pos: p.body.pos, chest: p.chest(_c), eye: h.eye(_eye), alive: h.alive(), safe: h.safe(), yaw: Math.atan2(d.x, d.z) };
       },
       pair: () => this.aiPair(),
       standAt: (x, z, y) => h.standAt(x, z, y),
