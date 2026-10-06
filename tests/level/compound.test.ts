@@ -56,6 +56,17 @@ describe('THE COMPOUND: geometry hygiene', () => {
     expect(bad).toEqual([]);
   });
 
+  it('is a few merged meshes (a handful of draw calls for all of it), the classic range\'s draw count', () => {
+    let meshes = 0;
+    L.root.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) meshes++;
+    });
+    expect(meshes).toBeLessThanOrEqual(14);
+    expect(L.world.colliders.length).toBeGreaterThan(300);
+    expect(L.world.colliders.length).toBeLessThan(600);
+    expect(L.zones[0].nav[0].cell).toBe(0.5);
+  });
+
   it('stands inside the deck, clear of the pool and the pad', () => {
     const bad: string[] = [];
     for (const b of ARENA_BOXES) {
@@ -276,6 +287,38 @@ describe('THE COMPOUND: a place to hide', () => {
         if (n >= 3) break;
       }
       if (n < 3) bad.push(`${p.id}: ${n}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('a perch sees over the short walls: from each, the floor beside several men who are hidden from it is seen and takes a portal', () => {
+    const bad: string[] = [];
+    for (const pl of PLATFORMS_C) {
+      const eyes: THREE.Vector3[] = [];
+      for (let x = pl.x0 + 0.6; x < pl.x1 - 0.5; x += 1) for (let z = pl.z0 + 0.6; z < pl.z1 - 0.5; z += 1) eyes.push(V(x, PLAT_Y + 1.6, z));
+      let n = 0;
+      for (const p of POSTS.filter((q) => q.y < 0.5)) {
+        let found = false;
+        for (const e of eyes) {
+          if (seesPost(e, p)) continue;
+          for (let a = 0; a < 16 && !found; a++) {
+            for (const r of [1.3, 2.3, 3.2]) {
+              const t = V(p.x + Math.sin((a * Math.PI) / 8) * r, 0.05, p.z + Math.cos((a * Math.PI) / 8) * r);
+              const d = t.clone().sub(e);
+              const len = d.length();
+              d.normalize();
+              const hit = L.world.raycast(e, d, len + 0.5);
+              if (!hit || hit.point.distanceTo(t) > 0.35 || hit.normal.y < 0.6) continue;
+              if (!placeExit(L.world, e, d, e, null, gAt).ok) continue;
+              found = true;
+              break;
+            }
+          }
+          if (found) break;
+        }
+        if (found) n++;
+      }
+      if (n < 3) bad.push(`${pl.id}: ${n}`);
     }
     expect(bad).toEqual([]);
   });
