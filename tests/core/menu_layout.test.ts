@@ -35,3 +35,12 @@ describe('phone menu layout', () => {
     expect(css).toMatch(/\.is-touch \.ui::after \{[^}]*pointer-events: none/);
   });
 });
+
+describe('phone HUD layout', () => {
+  it('the lab chip (top right) stops short of the centred pause button on a narrow screen', () => {
+    expect(css).toMatch(/max-width: min\(260px, calc\(50vw - 36px - var\(--sr\)\)\)/);
+  });
+  it('the one-column menu cannot grow wider than the screen', () => {
+    expect(css).toMatch(/\.m-main, \.m-pause \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  });
+});

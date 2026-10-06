@@ -1149,7 +1149,7 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .lab-panel[data-variant='reach'] .lp-more, .lab-panel[data-variant='aimportal'] .lp-more { display: block; }
 .lab-panel[data-variant='reach'] .lp-wave b, .lab-panel[data-variant='aimportal'] .lp-wave b { font-size: 15px; }
 .lab-panel[data-variant='reach'] .lp-rules > div, .lab-panel[data-variant='aimportal'] .lp-rules > div { font-size: 11px; }
-.is-touch .lab-panel[data-variant='reach'], .is-touch .lab-panel[data-variant='aimportal'] { top: calc(var(--st) + 8px); left: auto; right: calc(var(--sr) + 12px); padding: 3px 8px 4px; max-width: 260px; }
+.is-touch .lab-panel[data-variant='reach'], .is-touch .lab-panel[data-variant='aimportal'] { top: calc(var(--st) + 8px); left: auto; right: calc(var(--sr) + 12px); padding: 3px 8px 4px; max-width: min(260px, calc(50vw - 36px - var(--sr))); }
 .is-touch .lab-panel[data-variant='reach'] .lp-wave b, .is-touch .lab-panel[data-variant='aimportal'] .lp-wave b { font-size: 12px; }
 .rh-chip.ghost { border-color: rgba(127, 244, 255, 0.9); }
 .rh-chip.behind { border-color: #7ff4ff; background: rgba(4, 50, 60, 0.85); color: #fff; }
@@ -1289,6 +1289,14 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
   .btns button, .worlds .seg button, .seg button { align-items: center; }
   .worlds .lab-go small { display: none; }
   .m-end > .btns.row, .m-labend > .btns.row { position: sticky; bottom: calc(var(--sb) + 4px); z-index: 3; padding: 6px 0 2px; background: linear-gradient(180deg, rgba(3, 5, 8, 0), rgba(3, 5, 8, 0.88) 30%); }
+}
+/* narrow (a phone held upright): one column that never grows past the screen */
+@media (max-width: 720px) {
+  .m-main, .m-pause { grid-template-columns: minmax(0, 1fr); }
+  .btns { min-width: 0; }
+}
+@media (max-width: 720px) and (orientation: portrait) {
+  .logo h1 { font-size: clamp(30px, 10vw, 96px); }
 }
 @media (max-height: 400px) {
   .menu.on { gap: 8px; padding-top: calc(var(--st) + 8px); padding-bottom: calc(var(--sb) + 8px); }
