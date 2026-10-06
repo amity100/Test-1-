@@ -561,14 +561,23 @@ export class AimMode {
     view.normalize();
     const body = { pos: at, yaw: e.yaw, height: e.height };
     const floor = this.floorOf(e);
-    const spot = fitSnap(this.h.world, body, side, floor, view);
+    // (the turn it took for him a moment ago is tried first: on the edge of room the ghost holds still, no hopping)
+    const now = this.h.time();
+    const L = this.lastTurn && now - this.lastTurn.t < AIMP.magnet.hold ? this.lastTurn : null;
+    const prefer = (s: Side) => (L && L.man === e.id && L.side === s ? L.deg : undefined);
+    const keep = (o: Spot, s: Side) => {
+      if (o.ok && o.turn !== undefined && !(L && L.man === e.id && L.side === s && L.deg === o.turn)) this.lastTurn = { man: e.id, side: s, deg: o.turn, t: now };
+      return o;
+    };
+    const spot = keep(fitSnap(this.h.world, body, side, floor, view, prefer(side)), side);
     if (spot.ok || !fallback) return spot;
     for (const s of ['left', 'right', 'above'] as const) {
-      const o = fitSnap(this.h.world, body, s, floor, view);
+      const o = keep(fitSnap(this.h.world, body, s, floor, view, prefer(s)), s);
       if (o.ok) return o;
     }
     return spot;
   }
+  private lastTurn: { man: number; side: Side; deg: number; t: number } | null = null;
 
   /** The side choice: PORTAL held on a man past a tap (or the side key with a man under the crosshair); its flick picks the side. */
   private updateSnap(live: boolean, inp: AimInput) {

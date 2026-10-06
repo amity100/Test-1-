@@ -84,7 +84,7 @@ export const AIMP = {
    * from where he will be in `lead` s, on the side you pick (default: behind him as you see him), facing
    * him, standing on his floor; no room that way, the way is turned by `turn`° (the nearest that works);
    * a wall on it brings it in against the wall (no nearer him than `tight` m), slid along it at most
-   * `slide` m.
+   * `slide` m. A turn taken is kept `hold` s while it still works (on the edge of room the ghost holds still).
    */
   magnet: {
     deg: { kbm: 3, pad: 4.5, touch: 7 },
@@ -96,6 +96,7 @@ export const AIMP = {
     lead: 0.2,
     stick: 0.6,
     turn: [0, 25, -25, 50, -50] as readonly number[],
+    hold: 0.4,
     tight: 0.75,
     slide: 0.45,
   },
@@ -194,6 +195,8 @@ export interface Spot {
   dist: number;
   ok: boolean;
   reason: PortalRefusal;
+  /** A spot by a man: how far the way out from him was turned (°) to find room. */
+  turn?: number;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -824,7 +827,7 @@ function sideSpot(world: FitWorld, e: Body, dir: THREE.Vector3, floorY: number):
  * (a low ceiling: against it), BELOW: one in the floor under him, both slid off a wall too near. None: refused
  * ('sealed': a sealed wall in the way; 'close': no room).
  */
-export function fitSnap(world: FitWorld, e: Body, side: Side, floorY: number = e.pos.y, view?: V3): Spot {
+export function fitSnap(world: FitWorld, e: Body, side: Side, floorY: number = e.pos.y, view?: V3, prefer?: number): Spot {
   const M = AIMP.magnet;
   const s = snapSpot(e, side, floorY, M.dist, view);
   if (side === 'above') {
@@ -847,11 +850,14 @@ export function fitSnap(world: FitWorld, e: Body, side: Side, floorY: number = e
   const base = sideDir(e, side, view ?? facing(e.yaw).negate(), new THREE.Vector3());
   let first: Spot | null = null;
   const dir = new THREE.Vector3();
-  for (const deg of M.turn) {
+  // (the turn it took last time first, while it still works: the ghost does not hop between two)
+  const turns = prefer !== undefined && M.turn.includes(prefer) ? [prefer, ...M.turn.filter((d) => d !== prefer)] : M.turn;
+  for (const deg of turns) {
     dir.copy(base).applyAxisAngle(UP, THREE.MathUtils.degToRad(deg));
     const o = sideSpot(world, e, dir, floorY);
+    o.turn = deg;
     if (o.ok) return o;
-    first ??= o;
+    if (!first || deg === 0) first = o;
   }
   return first!;
 }
