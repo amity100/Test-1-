@@ -8,6 +8,8 @@ export interface NavBounds {
   maxZ: number;
   /** Walking surface height of this layer (default 0). */
   floorY?: number;
+  /** Cell size (m; default 0.9). The lab's compound uses 0.5: its doors are 3 m wide between thin walls. */
+  cell?: number;
 }
 
 /** Edge distances are capped here (m); anything further is "far from any drop". */
@@ -28,7 +30,7 @@ const SQRT2 = Math.SQRT2;
  * A* scratch buffers are allocated once per grid.
  */
 export class NavGrid {
-  readonly cell = 0.9;
+  readonly cell: number;
   readonly w: number;
   readonly h: number;
   readonly ox: number;
@@ -58,6 +60,7 @@ export class NavGrid {
   constructor(world: CollisionWorld, bounds: NavBounds, agentR = 0.42) {
     this.world = world;
     this.agentR = agentR;
+    this.cell = bounds.cell ?? 0.9;
     this.ox = bounds.minX;
     this.oz = bounds.minZ;
     this.floorY = bounds.floorY ?? 0;

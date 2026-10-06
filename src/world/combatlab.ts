@@ -213,8 +213,8 @@ export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, op
     bounds: new THREE.Box3(V(-34, KILL_Y - 1, -34), V(34, 40, DECK.z1 + 0.5)),
     nav: compound
       ? [
-          { minX: -33, maxX: 33, minZ: -33, maxZ: DECK.z1, floorY: 0 },
-          ...PLATFORMS_C.map((p) => ({ minX: p.x0, maxX: p.x1, minZ: p.z0, maxZ: p.z1, floorY: PLAT_Y })),
+          { minX: -33, maxX: 33, minZ: -33, maxZ: DECK.z1, floorY: 0, cell: 0.5 },
+          ...PLATFORMS_C.map((p) => ({ minX: p.x0, maxX: p.x1, minZ: p.z0, maxZ: p.z1, floorY: PLAT_Y, cell: 0.5 })),
         ]
       : [
           { minX: -33, maxX: 33, minZ: -33, maxZ: DECK.z1, floorY: 0 },

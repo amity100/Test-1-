@@ -204,7 +204,7 @@ function platform(id: string, x0: number, z0: number, x1: number, z1: number, si
 const H4 = 4, H45 = 4.5, H35 = 3.5, H3 = 3;
 
 // ---- S: LANDING (the spawn court), x -7..7, z -30..-15 ----------------------
-WX(-15, -7.25, 7.25, H4, [D(-4.2), Wn(0.3), D(4.2)], 'S.n');
+WX(-15, -7.25, 7.25, H4, [D(-4.5), Wn(2.2), D(5)], 'S.n');
 WZ(-7, -30, -15.25, H4, [D(-26.5), Wn(-21), Sl(-17)], 'S.w');
 WZ(7, -30, -15.25, H4, [Sl(-27), D(-21), Wn(-17)], 'S.e');
 low(-5, -19.5, -2.5, -19);
@@ -221,21 +221,17 @@ low(-29, -29.5, -26.5, -29);
 WZ(-29.75, -29.5, -23.25, H3, [Sd(-29.5, -23.25)], 'SW.pocket.sealed');
 WX(-19, -27, -17.25, H45, [Wn(-22)], 'SW.l.n');
 WZ(-17, -24.5, -19.25, H45, [], 'SW.l.e');
-WX(-13, -29.5, -13.5, H4, [], 'SW.row');
 pillar(-27, -15.5);
 pillar(-24, -15.5);
 pillar(-21, -15.5);
 
 // ---- SE: YARD with screens, x 8..30, z -30..-20 -----------------------------
-WX(-22, 14, 26, H4, [Wn(18), Wn(23), Sl(20.5)], 'SE.s');
+WX(-22, 14, 26, H4, [Wn(15.7), Wn(23), Sl(20.5)], 'SE.s');
 WZ(13, -29.5, -22.25, H4, [D(-26)], 'SE.w');
 WZ(26.5, -30, -22.25, H35, [], 'SE.e');
-// a U-shaped bay opening south
-WX(-24.5, 17.25, 22.75, H4, [Sl(20)], 'SE.bay.back');
-WZ(17, -29.5, -24.75, H4, [], 'SE.bay.w');
-WZ(23, -29.5, -24.75, H4, [], 'SE.bay.e');
-low(14.5, -28, 15.5, -26.5);
-low(24.5, -27, 25.5, -25.5);
+// two baffles (an S-bend: a man behind the second is hidden from the door; a slit looks through)
+WZ(18, -26, -22.25, H4, [Wn(-24.2)], 'SE.baf1');
+WZ(22.5, -29.75, -26.5, H4, [Sl(-28)], 'SE.baf2');
 
 // ---- W: BARRACKS (L), x -30..-14, z -12..0 and its lane ---------------------
 WX(-12, -30, -18.75, H4, [D(-22), Sl(-27.5)], 'W.s');
@@ -247,47 +243,48 @@ low(-29, -4, -26, -3.5);
 WZ(-14, -12, 0, H45, [Wn(-6), Sl(-2.5), D(-9.5)], 'W.lane');
 low(-17, -6, -15, -5.5);
 
+// ---- the west street's kiosk (an L: a man hides in its corner) ---------------
+WX(4.5, -26, -20.25, H4, [Sl(-23.5)], 'K1.s');
+WZ(-20, 4.25, 8.5, H4, [Wn(6.6)], 'K1.e');
+
 // ---- C: THE COMPOUND, x -8..8, z -9..7: four rooms round a hall -------------
-WX(-9, -8.25, 8.25, H45, [D(1.5), Sl(-5.5), Sl(5.5), Wn(-3)], 'C.s');
-WX(7, -8.25, 8.25, H45, [D(-1), Wn(-5.5), Sl(5.5), Sl(-3.5)], 'C.n');
-WZ(-8, -8.75, 6.75, H45, [D(3.5), Wn(-3.5), Sl(-0.5)], 'C.w');
-WZ(8, -8.75, 6.75, H45, [D(-3.5), Wn(3), Sl(0)], 'C.e');
-WZ(-2.5, -8.75, 6.75, H35, [D(-4.5), D(3.5)], 'C.hw');
-WZ(2.5, -8.75, 6.75, H35, [D(-5.5), D(2.5)], 'C.he');
+WX(-9, -8.25, 8.25, H45, [D(-0.5), Sl(-5.5), Sl(5.5), Wn(-3.2)], 'C.s');
+WX(7, -8.25, 8.25, H45, [D(0.5), Wn(-5.5), Sl(5.5), Sl(-4.2)], 'C.n');
+WZ(-8, -8.75, 6.75, H45, [D(-5.2), Wn(5.6), Sl(-0.5)], 'C.w');
+WZ(8, -8.75, 6.75, H45, [D(-3.5), Wn(3), Sl(-7.2)], 'C.e');
+WZ(-2.5, -8.75, 6.75, H35, [D(-2.4), D(3.5)], 'C.hw');
+WZ(2.5, -8.75, 6.75, H35, [D(-5.5), D(4.8)], 'C.he');
 WX(-1, -7.75, -2.75, H35, [D(-5.5)], 'C.dw');
 WX(0, 2.75, 7.75, H35, [D(5.5)], 'C.de');
 low(-1, -1, 1, 0);
 
 // ---- E: LANE and SHORE (the pool), x 8..30, z -22..8 --------------------------
 WZ(12.5, -12, 6, H45, [Wn(-9), D(-3), Sl(1.5), D(4)], 'E.lane');
-WX(5.75, 8.25, 12.25, H45, [], 'E.lane.end');
-low(8.7, -4, 11.8, -3.5);
+WX(5.75, 8.25, 12.25, H45, [Sd(8.25, 12.25)], 'E.lane.end');
 WX(-19, 14, 20.5, H4, [Wn(17.2)], 'E.sw');
-WZ(14, -22.25, -19.25, H4, [], 'E.swe');
+WZ(14, -21.75, -19.25, H4, [], 'E.swe');
 low(21, -19.5, 25, -19);
 WX(6.5, 14.25, 29.5, H35, [D(17), Wn(21.5), Sl(25), D(28.2)], 'E.n');
 low(17, 3, 19.5, 3.5);
 low(23, 2.5, 25.5, 3);
 pillar(16, 9, 1, 3.8);
-pillar(21, 9.5, 1, 3.8);
+pillar(24.5, 8.4, 1, 3.8);
 
 // ---- NW: COURT (a U of low walls), x -30..-8, z 10..28 ---------------------
 WX(11, -29.5, -17.25, H3, [D(-26), Wn(-21)], 'NW.s');
-WZ(-17, 11.25, 22, H3, [Wn(15), D(19)], 'NW.e');
-WX(22, -29.5, -17, H3, [Sl(-24), Wn(-20)], 'NW.n');
+WZ(-17, 11.25, 21.75, H3, [Wn(15), D(19)], 'NW.e');
+WX(22, -29.5, -16.75, H3, [Sl(-24), Wn(-20)], 'NW.n');
 WZ(-29.5, 11.25, 21.75, H3, [], 'NW.w');
 pillar(-24, 16, 1, 3.5);
 pillar(-21, 16, 1, 3.5);
 low(-27, 18.5, -24, 19);
-// the pocket behind it
-WZ(-13, 12, 26, H4, [Sl(16), D(20)], 'NW.out');
 
 // ---- N: HALL (long, two doors), x -8..8, z 11..27 ---------------------------
 WX(12, -7.25, 7.25, H4, [D(-4), Wn(0), D(4)], 'N.s');
 WZ(-8, 12.25, 24.75, H4, [Wn(16), Sl(20)], 'N.w');
 WZ(8, 12.25, 24.75, H4, [Wn(18), Sl(14)], 'N.e');
 WX(25, -8.25, 8.25, H35, [Wn(-4.5), Wn(4.5)], 'N.n');
-WX(18, -3, 3, H35, [], 'N.mid');
+WX(18, -3, 3, H35, [Sd(-3, 3)], 'N.mid');
 low(-6, 14, -3.5, 14.5);
 low(3.5, 21, 6, 21.5);
 
@@ -296,16 +293,16 @@ WX(13, 14.5, 29.5, H4, [D(18), Sl(24)], 'NE.s');
 WZ(14, 13.25, 24, H45, [Wn(16), Wn(20), Sl(22.5)], 'NE.w');
 WX(26, 14.25, 29.5, H4, [Wn(18)], 'NE.n');
 // the NE pocket (a dead end: one door, one slit)
-WX(20.5, 23.75, 29.5, H35, [Sl(26.5)], 'NE.pocket.s');
-WZ(23.5, 20.75, 25.75, H35, [D(23.2)], 'NE.pocket.w');
-pillar(18, 21, 1);
-pillar(21, 18.5, 1);
-low(16, 16.5, 18.5, 17);
+WX(21, 23.75, 29.5, H35, [Sl(26.5)], 'NE.pocket.s');
+WZ(23.5, 21.25, 25.75, H35, [D(23.4)], 'NE.pocket.w');
+WZ(29.75, 21.25, 25.5, H3, [Sd(21.25, 25.5)], 'NE.pocket.sealed');
+pillar(18, 22, 1);
+pillar(21, 19.9, 1);
 
 // ---- platforms (3.2 m, stairs, parapets) ------------------------------------
 // P1 looks over the NW court's low walls; P2 over the north shore and the pool; P3 over the SW pocket
 platform('P1', -14, 14, -10, 19.5, 's', -12);
-platform('P2', 24, 8, 29.5, 12, 'w', 10);
+platform('P2', 24.25, 15.5, 29.5, 20, 'w', 17.75);
 platform('P3', -14, -25, -9.5, -20, 'n', -11.75);
 
 export const ARENA_BOXES: readonly ArenaBox[] = boxes;
@@ -358,6 +355,7 @@ export const POSTS: Post[] = [
   post('barracksS', 'D', -27.5, -9),
   post('barracksN', 'D', -22.5, -3.5),
   post('laneW', 'D', -16.5, -3),
+  post('kiosk', 'D', -23.2, 7.0),
   post('roomWS', 'C', -5.5, -5),
   post('roomWN', 'C', -5.5, 3.5),
   post('roomES', 'C', 5.5, -5),
@@ -367,15 +365,15 @@ export const POSTS: Post[] = [
   post('bayS', 'H', 20, -26.5),
   post('shoreN', 'H', 20, 8.5),
   post('pocketNE', 'G', 27, 23.5),
-  post('terraceW', 'G', 17.5, 18.5),
-  post('terraceE', 'G', 26, 16),
+  post('terraceW', 'G', 16.4, 24.2),
+  post('terraceMid', 'G', 21.5, 15),
   post('hallW', 'F', -5, 20),
   post('hallMid', 'F', 0, 19.7),
   post('hallE', 'F', 5, 15),
   post('courtW', 'E', -26.5, 15),
   post('courtN', 'E', -23, 20),
   post('perchP1', 'E', -12, 17, PLAT_Y),
-  post('perchP2', 'H', 26.7, 10, PLAT_Y),
+  post('perchP2', 'G', 26.8, 17.75, PLAT_Y),
   post('perchP3', 'B', -11.75, -22.5, PLAT_Y),
 ];
 export const postById = (id: string) => POSTS.find((p) => p.id === id)!;
@@ -391,7 +389,7 @@ export const AIM_WAVES_C: LabWave[] = [
   { subKey: 'lab.a1', ready: true, spawns: [man(Gn, 'roomWS'), man(Gn, 'laneE'), man(Gn, 'cellSW')] },
   { subKey: 'lab.a2', ready: true, spawns: [man(Gn, 'hallE'), man(Gn, 'barracksN'), man(Gn, 'bayS'), man(Mr, 'hall')] },
   { subKey: 'lab.a3', ready: true, spawns: [man(Gn, 'roomEN'), man(Gn, 'terraceW'), man(Mr, 'laneW'), man(Rs, 'courtW'), man(Rs, 'shoreN')] },
-  { subKey: 'lab.a4', ready: true, spawns: [man(Gn, 'perchP3'), man(Gn, 'hallW'), man(Mr, 'roomWN'), man(Mr, 'terraceE'), man(Rs, 'barracksS'), man(Rs, 'pocketNE')] },
+  { subKey: 'lab.a4', ready: true, spawns: [man(Gn, 'perchP3'), man(Gn, 'hallW'), man(Mr, 'roomWN'), man(Mr, 'terraceMid'), man(Rs, 'barracksS'), man(Rs, 'pocketNE')] },
   {
     subKey: 'lab.a5',
     ready: true,
