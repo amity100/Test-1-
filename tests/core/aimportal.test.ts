@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import {
   AIMP,
   aimKillTool,
+  CHAIN,
+  chainArrival,
   COMPASS,
   crosshairTarget,
   facing,
@@ -38,6 +40,7 @@ import { LabDirector, labTools } from '../../src/game/labdirector';
 import { AIM_WAVES, labArena, labWaves } from '../../src/world/combatlab/layout';
 import { CollisionWorld } from '../../src/world/collision';
 import { strings } from '../../src/ui/i18n';
+import { AIM_RULES } from '../../src/ui/labhud';
 import { scenario, V } from '../enemies/fakes';
 import { makePhysics, makeRifts, makeWorld, recorder, run } from './helpers';
 import type { Enemy } from '../../src/actors/enemy';
@@ -576,6 +579,7 @@ function rig(o: { device?: 'kbm' | 'touch' | 'pad'; move?: boolean } = {}) {
   const vel = V();
   const lunge = { dir: V(), speed: 0, t: 0 };
   const crossings: { t: number; from: any; to: any; turn: number | null }[] = [];
+  const hops: { t: number; feet: THREE.Vector3; yaw: number; vel: THREE.Vector3 }[] = [];
   const player = {
     body: { pos, vel, onGround: true, height: 1.8 },
     yaw: 0,
@@ -635,6 +639,12 @@ function rig(o: { device?: 'kbm' | 'touch' | 'pad'; move?: boolean } = {}) {
     fireEnemyBolt: (e, from, dir) => bolts.push({ e: e.id, from: from.clone(), dir: dir.clone() }),
     laser: noop,
     vibrate: noop,
+    hop: (feet, yaw, v) => {
+      hops.push({ t: state.time, feet: feet.clone() as THREE.Vector3, yaw, vel: v.clone() as THREE.Vector3 });
+      pos.copy(feet);
+      vel.copy(v);
+      player.yaw = yaw;
+    },
   };
   const hud = { update: noop, show: noop, dispose: noop, tip: noop, callout: (k: string) => calls.push(k) };
   const R = new AimMode(host, null, hud as any);
@@ -735,7 +745,7 @@ function rig(o: { device?: 'kbm' | 'touch' | 'pad'; move?: boolean } = {}) {
     input.portalRelease = true;
     step(1);
   };
-  return { sc, R, host, rifts, pos, vel, ray, input, step, aimAt, tap, hold, letGo, man, freeze, aimThrough, calls, bolts, state, camera, crossings, player };
+  return { sc, R, host, rifts, pos, vel, ray, input, step, aimAt, tap, hold, letGo, man, freeze, aimThrough, calls, bolts, state, camera, crossings, player, hops };
 }
 
 describe('AIM PORTAL: the pair', () => {
@@ -1651,5 +1661,253 @@ describe('AIM PORTAL: words, EN and HE', () => {
       expect(he[k], `he ${k}`).toBeTruthy();
       if (!/^(aim\.tip|lab\.tool\.throw)/.test(k)) expect(he[k], `he differs ${k}`).not.toBe(en[k]);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CHAIN (the add-on): links one after another
+// ---------------------------------------------------------------------------
+
+describe('AIM PORTAL: CHAIN', () => {
+  /** A chain set piece: the hero at the origin looking +z; a wall ahead at z 14, a wall to the left (x -9) and to the right (x 9). */
+  function chainRig() {
+    const r = rig({ move: true });
+    r.sc.world.add(V(-12, 0, 14), V(12, 5, 14.5));
+    r.sc.world.add(V(-9.5, 0, 2), V(-9, 5, 14));
+    r.sc.world.add(V(9, 0, 2), V(9.5, 5, 14));
+    const press = () => {
+      r.input.chainPress = true;
+      r.step(1);
+      r.input.chainPress = false;
+    };
+    const wait = (s: number) => r.step(Math.ceil(s * 60));
+    /** PORTAL aimed at p (a tap), then the cooldown. */
+    const link = (p: THREE.Vector3) => {
+      r.tap(p);
+      wait(AIMP.cooldown + 0.05);
+    };
+    return { ...r, press, link, wait };
+  }
+
+  it('CHAIN starts a chain; each PORTAL after it adds the next link: the pair first (its twin and exit are links 1 and 2), then the surface under the crosshair, in order, up to four', () => {
+    const { R, press, link, hops } = chainRig();
+    expect(R.chain).toBeNull();
+    press();
+    expect(R.chain).not.toBeNull();
+    expect(R.chain!.placing).toBe(true);
+    expect(R.chainLinks).toBe(0);
+    link(V(0, 1.6, 14));
+    expect(R.pair).not.toBeNull();
+    expect(R.chainLinks).toBe(2);
+    expect(R.chain!.nodes.length).toBe(0);
+    // the third and the fourth: on the left wall, then the right one
+    link(V(-9, 1.6, 8));
+    expect(R.chainLinks).toBe(3);
+    expect(R.chain!.nodes[0].pos.x).toBeCloseTo(-9 + 0.05, 1);
+    expect(R.chain!.nodes[0].normal.x).toBeGreaterThan(0.9);
+    link(V(9, 1.6, 8));
+    expect(R.chainLinks).toBe(4);
+    expect(R.chain!.nodes[1].pos.x).toBeCloseTo(9 - 0.05, 1);
+    expect(R.chain!.nodes[1].normal.x).toBeLessThan(-0.9);
+    // (full: it stops taking links; the pair is where it was)
+    expect(CHAIN.max).toBe(4);
+    expect(R.chain!.placing).toBe(false);
+    expect(hops.length).toBe(0);
+  });
+
+  it('GO carries you through the chain: out of the exit as ever, then out of each link in order, 0.1 s apart, the speed kept, facing out of the link', () => {
+    const { R, press, link, hops, input, step, crossings, pos, state, vel, wait } = chainRig();
+    press();
+    link(V(0, 1.6, 14));
+    link(V(-9, 1.6, 8));
+    link(V(9, 1.6, 8));
+    const nodes = R.chain!.nodes.map((n) => n.pos.clone());
+    input.goPress = true;
+    step(1);
+    for (let n = 0; n < 30 && !crossings.length; n++) step(1);
+    expect(crossings.length).toBe(1);
+    const tCross = state.time;
+    const v0 = Math.hypot(vel.x, vel.z);
+    expect(v0).toBeGreaterThanOrEqual(AIMP.go.arrive - 0.01);
+    wait(0.5);
+    expect(hops.length).toBe(2);
+    // in order: the left link, then the right
+    expect(hops[0].feet.x).toBeLessThan(0);
+    expect(hops[1].feet.x).toBeGreaterThan(0);
+    expect(hops[0].feet.distanceTo(nodes[0])).toBeLessThan(1.3);
+    expect(hops[1].feet.distanceTo(nodes[1])).toBeLessThan(1.3);
+    // (each about CHAIN.hop s after the last arrival)
+    expect(hops[0].t - tCross).toBeGreaterThanOrEqual(CHAIN.hop - 1 / 60);
+    expect(hops[0].t - tCross).toBeLessThan(CHAIN.hop + 0.1);
+    expect(hops[1].t - hops[0].t).toBeGreaterThanOrEqual(CHAIN.hop - 1 / 60);
+    expect(hops[1].t - hops[0].t).toBeLessThan(CHAIN.hop + 0.05);
+    // the speed carried, along each link's front, the way you face its own
+    for (const h of hops) expect(Math.hypot(h.vel.x, h.vel.z)).toBeCloseTo(v0, 3);
+    expect(hops[0].vel.x).toBeGreaterThan(v0 * 0.99);
+    expect(hops[1].vel.x).toBeLessThan(-v0 * 0.99);
+    expect(hops[0].yaw).toBeCloseTo(Math.PI / 2, 2);
+    expect(hops[1].yaw).toBeCloseTo(-Math.PI / 2, 2);
+    // the chain ends there: no more hops, and you stand on solid ground at the last link's foot
+    expect(R.chain).not.toBeNull();
+    expect(hops[1].feet.y).toBeGreaterThanOrEqual(0);
+    expect(Math.abs(pos.y)).toBeLessThan(0.5);
+  });
+
+  it('a chain of two links is the pair alone: nothing carries you on', () => {
+    const { R, press, link, hops, input, step, crossings, wait } = chainRig();
+    press();
+    link(V(0, 1.6, 14));
+    expect(R.chainLinks).toBe(2);
+    input.goPress = true;
+    step(1);
+    for (let n = 0; n < 30 && !crossings.length; n++) step(1);
+    wait(0.5);
+    expect(hops.length).toBe(0);
+  });
+
+  it('CHAIN again, 8 s after the last link, your death, or a new pair after a chain that is done: each shuts all of it (the pair too)', () => {
+    // CHAIN again
+    let c = chainRig();
+    c.press();
+    c.link(V(0, 1.6, 14));
+    c.link(V(-9, 1.6, 8));
+    c.press();
+    expect(c.R.chain).toBeNull();
+    expect(c.R.pair).toBeNull();
+    expect(c.rifts.strikeOpen()).toBe(false);
+    // 8 s
+    c = chainRig();
+    c.press();
+    c.link(V(0, 1.6, 14));
+    c.link(V(-9, 1.6, 8));
+    c.wait(CHAIN.life - 1);
+    expect(c.R.chain).not.toBeNull();
+    expect(c.R.pair).not.toBeNull();
+    c.wait(1.2);
+    expect(c.R.chain).toBeNull();
+    expect(c.R.pair).toBeNull();
+    expect(c.rifts.strikeOpen()).toBe(false);
+    // (each link restarts the clock)
+    c = chainRig();
+    c.press();
+    c.link(V(0, 1.6, 14));
+    c.wait(CHAIN.life - 1);
+    c.link(V(-9, 1.6, 8));
+    c.wait(CHAIN.life - 1);
+    expect(c.R.chain).not.toBeNull();
+    // death
+    c = chainRig();
+    c.press();
+    c.link(V(0, 1.6, 14));
+    c.state.alive = false;
+    c.step(2);
+    expect(c.R.chain).toBeNull();
+    expect(c.R.pair).toBeNull();
+    // a full chain: the next PORTAL is a new pair, and the chain is gone
+    c = chainRig();
+    c.press();
+    c.link(V(0, 1.6, 14));
+    c.link(V(-9, 1.6, 8));
+    c.link(V(9, 1.6, 8));
+    expect(c.R.chain!.placing).toBe(false);
+    const id = c.R.pair!.id;
+    c.link(V(0, 1.6, 14));
+    expect(c.R.chain).toBeNull();
+    expect(c.R.pair).not.toBeNull();
+    expect(c.R.pair!.id).not.toBe(id);
+  });
+
+  it('without CHAIN a press is the pair as ever (it shuts after its time, the chain is not there); one that has been used stops taking links', () => {
+    const { R, tap, step } = chainRig();
+    tap(V(0, 1.6, 14));
+    expect(R.chain).toBeNull();
+    expect(R.chainLinks).toBe(0);
+    step(Math.ceil(AIMP.life * 60) + 3);
+    expect(R.pair).toBeNull();
+    // (used: after the crossing the chain stops placing; a press is a new pair)
+    const c = chainRig();
+    c.press();
+    c.link(V(0, 1.6, 14));
+    c.link(V(-9, 1.6, 8));
+    c.input.goPress = true;
+    c.step(1);
+    for (let n = 0; n < 30 && !c.crossings.length; n++) c.step(1);
+    expect(c.R.chain!.placing).toBe(false);
+  });
+
+  it('a link needs a surface: mid-air, the sealed, or a spot on top of another is refused (and the chain keeps what it has)', () => {
+    const { R, sc, press, link, calls, step } = chainRig();
+    press();
+    link(V(0, 1.6, 14));
+    // the open sky: mid-air
+    link(V(0, 20, 30));
+    expect(R.chain!.nodes.length).toBe(0);
+    expect(calls).toContain('aim.chain.air');
+    // a sealed panel
+    sc.world.add(V(4, 0, 6), V(8, 3, 6.4), { noPortal: true });
+    link(V(6, 1.6, 6));
+    expect(R.chain!.nodes.length).toBe(0);
+    expect(calls).toContain('aim.sealed');
+    // on the exit's own spot
+    link(V(0, 1.6, 14));
+    expect(R.chain!.nodes.length).toBe(0);
+    // a real one
+    link(V(-9, 1.6, 8));
+    expect(R.chain!.nodes.length).toBe(1);
+    step(1);
+  });
+
+  it('it cannot soft-lock: a link with no room out of it stops the chain where you are (on solid ground), and a hop never puts you inside a wall', () => {
+    const { R, sc, press, link, hops, input, step, crossings, wait, pos, calls } = chainRig();
+    press();
+    link(V(0, 1.6, 14));
+    link(V(-9, 1.6, 8));
+    // a block in front of that link, filling the room out of it
+    sc.world.add(V(-8.9, 0, 6), V(-6.5, 3, 10));
+    input.goPress = true;
+    step(1);
+    for (let n = 0; n < 30 && !crossings.length; n++) step(1);
+    wait(0.6);
+    expect(hops.length).toBe(0);
+    expect(calls).toContain('aim.chain.blocked');
+    expect(pos.x).toBeGreaterThan(-1);
+    expect(sc.world.overlapsCylinder(pos.x, pos.z, 0.34, pos.y + 0.05, pos.y + 1.75)).toBe(false);
+    expect(R.chain).not.toBeNull();
+  });
+
+  it('where a hop puts you: out of a wall link along its front, on a floor link standing on it, under a ceiling link falling; null when the room is taken', () => {
+    const w = flatWorld();
+    const spot = (pos: THREE.Vector3, normal: THREE.Vector3, hdir = V(0, 0, 1), h = 2.1) => ({ pos, normal, hdir, h });
+    const wall = chainArrival(w, spot(V(5, 1.07, 3), V(-1, 0, 0)), 6, -3);
+    expect(wall!.pos.x).toBeCloseTo(5 - CHAIN.clear[0], 5);
+    expect(wall!.pos.y).toBeCloseTo(0.02, 2);
+    expect(wall!.vel.x).toBeCloseTo(-6, 5);
+    expect(wall!.vel.y).toBeLessThanOrEqual(1);
+    expect(wall!.yaw).toBeCloseTo(-Math.PI / 2, 5);
+    const floor = chainArrival(w, spot(V(2, 0.05, 2), V(0, 1, 0), V(1, 0, 0), 1.4), 5, 0);
+    expect(floor!.pos.y).toBeCloseTo(0.07, 5);
+    expect(floor!.vel.x).toBeCloseTo(5, 5);
+    const ceil = chainArrival(w, spot(V(0, 5, 0), V(0, -1, 0), V(0, 0, 1), 1.4), 4, 0);
+    expect(ceil!.pos.y).toBeCloseTo(5 - 1.85, 5);
+    expect(ceil!.vel.y).toBeLessThan(0);
+    // the room taken: nowhere out of it
+    w.add(V(2, 0, -2), V(8, 3, 8));
+    expect(chainArrival(w, spot(V(1.95, 1.07, 3), V(1, 0, 0)), 6, 0)).toBeNull();
+    // (the nearer the wall, the further out it tries: 0.6, 0.9, 1.2)
+    const w2 = flatWorld();
+    w2.add(V(5.2, 0, -5), V(6, 3, 10));
+    const near = chainArrival(w2, spot(V(6.05, 1.07, 3), V(-1, 0, 0)), 6, 0);
+    expect(near).not.toBeNull();
+  });
+
+  it('gated: nothing happens unless you are alive and the fight is on; the chain is the lab’s (the missions never have AIM PORTAL on)', () => {
+    const r = chainRig();
+    r.state.alive = false;
+    r.press();
+    expect(r.R.chain).toBeNull();
+    setLabActive(false);
+    expect(aimOn()).toBe(false);
+    expect(AIM_RULES).toContain('chain');
+    expect(Object.keys(strings('en')).filter((k) => k.startsWith('aim.chain')).length).toBeGreaterThanOrEqual(5);
   });
 });

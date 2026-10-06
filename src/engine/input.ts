@@ -64,6 +64,8 @@ export class Input {
   portalHolding = false;
   /** AIM PORTAL has a pair open (set every frame): the pad's B is GO, not crouch. */
   aimGo = false;
+  /** AIM PORTAL is on (set every frame): the pad's Y is CHAIN (strike4), not strike2. */
+  aimChain = false;
   /** Called when the last used device changes (i18n device variants are switched automatically). */
   onDeviceChange: ((d: Device) => void) | null = null;
 
@@ -327,7 +329,7 @@ export class Input {
     };
     const hold = (i: number, a: Action) => edge(i, () => this.down(a), () => this.up(a));
     // a button that means one thing with the PORTAL in hand and another without
-    const dual = (i: number, withPortal: () => void, a: Action) =>
+    const dual = (i: number, withPortal: () => void, a: Action | (() => Action)) =>
       edge(
         i,
         () => {
@@ -335,8 +337,9 @@ export class Input {
             withPortal();
             this.padHeld[i] = null;
           } else {
-            this.padHeld[i] = a;
-            this.down(a);
+            const act = typeof a === 'function' ? a() : a;
+            this.padHeld[i] = act;
+            this.down(act);
           }
         },
         () => {
@@ -347,7 +350,7 @@ export class Input {
       );
     hold(7, 'portal'); // RT
     dual(6, () => this.tap('close'), 'strike1'); // LT: REFLECT (cancels a held PORTAL)
-    dual(3, () => this.tap('flip'), 'strike2'); // Y: LOOP (flips a held PORTAL's exit)
+    dual(3, () => this.tap('flip'), () => (this.aimChain ? 'strike4' : 'strike2')); // Y: LOOP (flips a held PORTAL's exit); AIM PORTAL: CHAIN
     dual(14, () => (this.wheel -= 1), 'strike3'); // D-pad left: SWAP (exit nearer)
     dual(15, () => (this.wheel += 1), 'strike4'); // D-pad right: DASH (exit further)
     hold(4, 'close'); // LB

@@ -166,6 +166,26 @@ export class Player {
   }
 
   /** Plain move (checkpoint, lift): no momentum, no charge. */
+  /** CHAIN: put the body at `feet` facing `yaw`, moving at `vel` (a teleport that keeps the momentum: no stale fall, mantle, lunge or slide). */
+  relocate(feet: V3, yaw: number, vel: V3) {
+    const b = this.body;
+    b.pos.copy(feet);
+    b.vel.set(vel.x, vel.y, vel.z);
+    b.onGround = false;
+    b.lastEnd = null;
+    b.peakY = feet.y;
+    if (b instanceof Body) {
+      b.live = false;
+      b.landedSinceCross = true;
+    }
+    this.yaw = yaw;
+    this.mantle = null;
+    this.slideT = 0;
+    this.shoveT = 0;
+    this.lungeT = 0;
+    this.airTime = 0;
+  }
+
   teleport(p: V3, yaw?: number) {
     const b = this.body;
     b.pos.copy(p);

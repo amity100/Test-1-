@@ -87,7 +87,7 @@ export function reachRules(): string {
 }
 
 /** AIM PORTAL's rules card: the one rule, then the five verbs, the key per device (touch: the button's own label). */
-export const AIM_RULES = ['portal', 'snap', 'go', 'fire', 'stab', 'pull'] as const;
+export const AIM_RULES = ['portal', 'snap', 'go', 'fire', 'stab', 'pull', 'chain'] as const;
 const AIM_KEYS: Record<(typeof AIM_RULES)[number], { kbm: string; pad: string; touch: string }> = {
   portal: { kbm: 'RMB', pad: 'LT', touch: 'touch.aimportal' },
   snap: { kbm: 'RMB + MOUSE', pad: 'LT + R-STICK', touch: 'touch.aimportal' },
@@ -95,6 +95,7 @@ const AIM_KEYS: Record<(typeof AIM_RULES)[number], { kbm: string; pad: string; t
   fire: { kbm: 'LMB', pad: 'RT', touch: 'touch.fire' },
   stab: { kbm: 'F', pad: 'X', touch: 'touch.stab' },
   pull: { kbm: 'E', pad: 'RB', touch: 'touch.pull' },
+  chain: { kbm: 'R', pad: 'Y', touch: 'touch.chain' },
 };
 
 /** An AIM PORTAL key's label on this device. */

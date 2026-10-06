@@ -1027,6 +1027,18 @@ export class Game {
         fireEnemyBolt: (e, from, dir) => this.enemies.hooks.fireBolt(e, from, dir),
         laser: (e, from, to, t01) => this.enemies.hooks.telegraph(e, 'laser', from, to, t01),
         vibrate: (ms) => navigator.vibrate?.(ms),
+        hop: (feet, yaw, vel) => {
+          // CHAIN: out of the next link, your speed kept: the view turns with you
+          const old = this.player.yaw;
+          this.player.relocate(feet, yaw, vel);
+          let d = yaw - old;
+          while (d > Math.PI) d -= Math.PI * 2;
+          while (d < -Math.PI) d += Math.PI * 2;
+          this.rig.rotateBy(d);
+          this.rig.snapTo(this.player.body.pos);
+          this.rig.kick = Math.max(this.rig.kick, 0.5);
+          this.renderer.grade.uniforms.uFlash.value = 0.25;
+        },
       },
       this.hud.el,
     );
@@ -2400,6 +2412,7 @@ export class Game {
         stabPress: free && inp.wasPressed('action'),
         pullPress: free && (inp.wasPressed('strike3') || inp.wasPressed('shove')),
         goPress: free && (inp.wasPressed('strike2') || inp.wasPressed('go')),
+        chainPress: free && inp.wasPressed('strike4'),
         wheel: this.reachWheel,
         worldTap: free ? this.takeWorldTap(inp) : null,
       });
@@ -2409,9 +2422,11 @@ export class Game {
       this.aimSnapWas = latched;
       inp.divertLook = latched;
       inp.aimGo = !!this.aim!.pair;
+      inp.aimChain = true;
     } else {
       inp.divertLook = false;
       inp.aimGo = false;
+      inp.aimChain = false;
     }
     if (reachV) {
       const handKeys = ['strike3', 'close', 'action', 'shove'] as const;

@@ -1194,6 +1194,15 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .ah-hold { transform: translate(-50%, 56px) scale(.9); left: 50%; border-color: #ffd27a; color: #fff2cf; height: 26px; font-size: 13px; overflow: hidden; }
 .ah-hold.on { transform: translate(-50%, 56px); }
 .ah-hold u { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #ffd27a; transform-origin: left; display: block; }
+.ah-chain { position: absolute; left: 50%; bottom: calc(var(--sb, 0px) + 96px); transform: translateX(-50%) scale(.9); display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(8, 11, 17, 0.7); border: 2px solid rgba(255, 214, 102, 0.55); border-radius: 14px; font: 800 11px var(--hud-font); letter-spacing: .1em; color: #ffe9a8; opacity: 0; transition: opacity .1s; white-space: nowrap; }
+.ah-chain.on { opacity: 1; transform: translateX(-50%); }
+.ah-chain.placing { border-color: #ffd666; box-shadow: 0 0 12px rgba(255, 214, 102, 0.5); }
+.ah-chain span { display: flex; gap: 4px; }
+.ah-chain span i { display: block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid rgba(255, 214, 102, 0.6); background: transparent; }
+.ah-chain span i.on { background: #ffd666; border-color: #fff3c4; box-shadow: 0 0 6px rgba(255, 214, 102, 0.9); }
+.ah-chain kbd { font: 800 8.5px var(--hud-font); padding: 0 3px; border: 1px solid currentColor; border-radius: 3px; opacity: .7; }
+.ah-chain kbd:empty { display: none; }
+.is-touch .ah-chain { bottom: calc(var(--sb, 0px) + 44px); font-size: 9.5px; padding: 2px 8px; }
 .ah-time { position: absolute; left: 50%; top: 50%; width: 46px; height: 3px; margin: 30px 0 0 -23px; background: rgba(255, 255, 255, 0.18); opacity: 0; border-radius: 2px; overflow: hidden; }
 .ah-time.on { opacity: 1; }
 .ah-time u { display: block; height: 100%; background: #7ff4ff; transform-origin: left; }
@@ -1233,9 +1242,9 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .ah-comp i[data-s='above'] b { top: auto; bottom: 150%; }
 .aim-hud .rh-arrows { position: absolute; inset: 0; }
 /* AIM PORTAL on a phone: PORTAL (left of the thumb), FIRE (where it rests), STAB and PULL above them, SLIDE and JUMP */
-.t-aportal, .t-afire, .t-astab, .t-apull, .t-ago { display: none; }
+.t-aportal, .t-afire, .t-astab, .t-apull, .t-ago, .t-achain { display: none; }
 .touch.aimp .t-rift, .touch.aimp .t-shove, .touch.aimp .t-close, .touch.aimp .t-power, .touch.aimp .t-crouch, .touch.aimp .t-action, .touch.aimp .t-flip { display: none; }
-.touch.aimp .t-aportal, .touch.aimp .t-afire, .touch.aimp .t-astab, .touch.aimp .t-apull, .touch.aimp .t-ago, .touch.aimp .t-slide { display: flex; }
+.touch.aimp .t-aportal, .touch.aimp .t-afire, .touch.aimp .t-astab, .touch.aimp .t-apull, .touch.aimp .t-ago, .touch.aimp .t-achain, .touch.aimp .t-slide { display: flex; }
 .touch.aimp .t-afire { right: 92px; bottom: 0; width: 98px; height: 98px; border: 3px solid rgba(255, 255, 255, 0.85); background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(8, 12, 20, 0.55) 72%); }
 .touch.aimp .t-afire svg { width: 40%; height: 40%; }
 .touch.aimp .t-aportal { right: 196px; bottom: 4px; width: 92px; height: 92px; border: 3px solid var(--exit); color: #bfe6ff; background: radial-gradient(circle, rgba(56, 182, 255, 0.28) 0%, rgba(8, 22, 38, 0.55) 72%); }
@@ -1254,6 +1263,12 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .touch.aimp .t-apull { right: 294px; bottom: 6px; width: 62px; height: 62px; border: 3px solid var(--entr); color: #ffe2bf; background: radial-gradient(circle, rgba(255, 150, 40, 0.22) 0%, rgba(30, 14, 4, 0.55) 72%); }
 .touch.aimp .t-apull svg { width: 46%; height: 46%; }
 .touch.aimp .t-apull:not(.live) { opacity: .5; }
+/* CHAIN (the add-on): a small button above PULL, near PORTAL; gold while a chain stands */
+.touch.aimp .t-achain { right: 300px; bottom: 78px; width: 50px; height: 50px; border: 2px solid rgba(255, 214, 102, 0.75); color: #ffe9a8; background: radial-gradient(circle, rgba(255, 190, 40, 0.18) 0%, rgba(30, 20, 4, 0.55) 72%); opacity: .8; }
+.touch.aimp .t-achain svg { width: 52%; height: 52%; color: #ffd666; }
+.touch.aimp .t-achain .t-lbl { font-size: 8px; }
+.touch.aimp .t-achain.live { opacity: 1; border-color: #ffd666; box-shadow: 0 0 14px rgba(255, 214, 102, 0.8); }
+.touch.aimp .t-achain.down { background: rgba(255, 214, 102, 0.4); }
 .touch.aimp .t-apull.hold { border-color: #ffd27a; box-shadow: 0 0 16px rgba(255, 210, 122, 0.8); }
 .touch.aimp .t-slide { right: 8px; bottom: 92px; width: 64px; height: 64px; opacity: .9; }
 .touch.aimp .t-clip { right: 196px; bottom: 190px; }

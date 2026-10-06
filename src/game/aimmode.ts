@@ -18,7 +18,9 @@ import type { RiftFrame } from './portalMath';
 import type { RiftColorKey } from './portals';
 import {
   AIMP,
+  CHAIN,
   aimKillTool,
+  chainArrival,
   fitSnap,
   guarded,
   inFrontOf,
@@ -39,7 +41,7 @@ import {
   type Side,
   type Spot,
 } from './aimportal';
-import { AIM_CYAN, AIM_RED, AimFx } from './aimfx';
+import { AIM_CHAIN, AIM_CYAN, AIM_RED, AimFx } from './aimfx';
 import { edgeArrow, flat } from './reach';
 
 /** The rift system as AIM PORTAL uses it (its pair is a strike pair). */
@@ -86,6 +88,8 @@ export interface AimHost {
   laser(e: Enemy, from: V3, to: V3, t01: number): void;
   /** A haptic tick (phones). */
   vibrate(ms: number): void;
+  /** CHAIN: put the hero at `feet` facing `yaw`, moving at `vel` (the view turns with him; nothing else of his is touched). */
+  hop?(feet: V3, yaw: number, vel: V3): void;
 }
 
 /** The game's input to AIM PORTAL this frame. */
@@ -106,6 +110,8 @@ export interface AimInput {
   goPress?: boolean;
   /** Wheel steps this frame (+: further). */
   wheel?: number;
+  /** CHAIN (R / Y / the CHAIN button): start a chain, or shut the one open. */
+  chainPress?: boolean;
   /** A tap on the world (touch): screen NDC, and the screen's size in CSS px (`w`, `h`). */
   worldTap?: { x: number; y: number; w?: number; h?: number } | null;
 }
@@ -160,9 +166,16 @@ export class AimMode {
   /** Press → portal usable, the last time (ms of game time), for the harness. */
   lastOpen = { t: -1, count: 0, ms: -1 };
   /** What was used how often this run (the harness and the balance read it). */
-  readonly usage = { opened: 0, refused: 0, rifleDirect: 0, rifleThrough: 0, stabDirect: 0, stabThrough: 0, parried: 0, pulled: 0, thrown: 0, snapped: 0, go: 0, edge: 0 };
+  readonly usage = { opened: 0, refused: 0, rifleDirect: 0, rifleThrough: 0, stabDirect: 0, stabThrough: 0, parried: 0, pulled: 0, thrown: 0, snapped: 0, go: 0, edge: 0, chainLinks: 0, hops: 0 };
   /** The man in your hands (pulled; his time left to throw). */
   held: { id: number; t: number } | null = null;
+  /**
+   * CHAIN (the add-on): the links past the pair (its near twin and exit are links 1 and 2), whether the next PORTAL
+   * adds one, and seconds since the last link. Null: no chain.
+   */
+  chain: { nodes: Spot[]; placing: boolean; t: number } | null = null;
+  /** The hop under way: the next link (index into chain.nodes), seconds since the last, and the speed carried. */
+  private hop: { i: number; t: number; speed: number } | null = null;
   private pairSeq = 0;
   private cd = 0;
   private fireCd = 0;
@@ -363,9 +376,16 @@ export class AimMode {
 
     // the pair: it shuts by itself (not while you hold the button: it follows your aim), or just after you came out of it
     const pr = this.pair;
-    if (pr) {
-      if (!(inp.portal && alive)) pr.t += dt;
-      if (pr.t >= AIMP.life || (this.closeAt >= 0 && now >= this.closeAt)) this.closePair();
+    // CHAIN: the chain's own clock keeps its pair (AIMP.chain.life s after its last link); death shuts it
+    const ch = this.chain;
+    if (ch) {
+      if (!(inp.portal && alive)) ch.t += dt;
+      if (ch.t >= CHAIN.life || !alive) this.closePair();
+      else if (alive && go && inp.chainPress) this.chainPress();
+    } else if (alive && go && inp.chainPress) this.chainPress();
+    if (pr && this.pair) {
+      if (!(inp.portal && alive) && !this.chain) pr.t += dt;
+      if ((!this.chain && pr.t >= AIMP.life) || (this.closeAt >= 0 && now >= this.closeAt)) this.closePair();
       else {
         if (pr.t >= AIMP.grace) this.setNoPlayer(pr, false);
         this.updateNotice(pr, dt);
@@ -382,6 +402,7 @@ export class AimMode {
     // GO, and what you pressed on the way
     if (alive && go && inp.goPress) this.go();
     this.updateDash(dt);
+    this.updateHop(dt);
     this.followNear();
 
     // the weapons
@@ -450,6 +471,7 @@ export class AimMode {
       ghost: this.ghost,
       shields: this.shields(),
       red: this.portals.list,
+      chain: this.chain && this.pair ? this.chain.nodes : [],
       target: ring ? { pos: ring.pos, radius: ring.radius, picking: !!this.snapTarget } : null,
     });
     this.arrows = this.threats();
@@ -465,7 +487,8 @@ export class AimMode {
       ret: this.overSealed && !this.snapLatched ? { kind: 'sealed' } : null,
       compass: this.compass(),
       mark: this.markOf(),
-      pair: this.pair ? Math.max(0, AIMP.life - this.pair.t) / AIMP.life : null,
+      pair: this.pair ? (this.chain ? Math.max(0, CHAIN.life - this.chain.t) / CHAIN.life : Math.max(0, AIMP.life - this.pair.t) / AIMP.life) : null,
+      chain: this.chain && this.pair ? { links: 2 + this.chain.nodes.length, max: CHAIN.max, placing: this.chain.placing } : null,
       ammo: this.ammo,
       reload: this.reloadT > 0 ? 1 - this.reloadT / AIMP.rifle.reload : null,
       hold: this.held ? Math.max(0, this.held.t) / AIMP.pull.hold : null,
@@ -479,7 +502,7 @@ export class AimMode {
 
   /** What the phone's buttons say: the rounds, whether a pair is open (GO lit), a man under the crosshair. */
   touchState() {
-    return { ammo: this.reloadT > 0 ? t('aim.reload') : String(this.ammo), pair: !!this.pair, hold: !!this.held, snap: this.snapLatched, go: !!this.pair && !this.dash, target: !!this.hover };
+    return { ammo: this.reloadT > 0 ? t('aim.reload') : String(this.ammo), pair: !!this.pair, hold: !!this.held, snap: this.snapLatched, go: !!this.pair && !this.dash, target: !!this.hover, chain: this.chain ? 2 + this.chain.nodes.length : 0 };
   }
 
   // ------------------------------------------------------------------
@@ -591,7 +614,9 @@ export class AimMode {
     this.ghost = null;
     const p = this.pair;
     if (holding && p && this.holdT >= 0) {
-      if (p.man !== null && this.snapTarget) {
+      if (this.chain) {
+        // (a chain: PORTAL held does not drag the exit: it adds links)
+      } else if (p.man !== null && this.snapTarget) {
         // on a man: the exit stays next to him (where he goes, on the side the flick picks)
         const side = this.snapSide ?? p.side;
         const spot = this.spotFor(this.snapTarget, side);
@@ -610,6 +635,11 @@ export class AimMode {
     } else if (live && !this.dash) {
       // not pressed: where it would open (the crosshair on a man: next to him; the side key: the side picked)
       const man = this.snapTarget ?? this.hover;
+      // (a chain being placed: where the next link would stand)
+      if (this.chain?.placing && p && !man) {
+        const pl = this.placement();
+        this.ghost = { spot: pl.spot, kind: pl.spot.ok && pl.spot.surface !== 'air' && this.linkFree(pl.spot) ? 'ok' : 'bad' };
+      }
       // (the pair already stands by him: no ghost on top of it; the side key shows the side it would pick)
       if (man && (this.snapTarget || !(p && p.man === man.id))) {
         const spot = this.spotFor(man, this.snapTarget && this.snapSide ? this.snapSide : 'behind');
@@ -657,7 +687,7 @@ export class AimMode {
       this.refuseOrOpen(this.spotFor(man, 'behind'), man, 'behind');
       return;
     }
-    if (this.pair) return;
+    if (this.pair && !this.chain?.placing) return;
     this.holdT = 0;
     const ray = h.rayAt(tap.x, tap.y);
     const spot = placeExit(h.world, ray.origin, ray.dir, h.eye(_eye), this.airDist, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
@@ -667,6 +697,14 @@ export class AimMode {
   private refuseOrOpen(spot: Spot, man: Enemy | null = null, side: Side = 'behind') {
     const h = this.h;
     this.cd = AIMP.cooldown;
+    // CHAIN: a chain being placed takes this one as its next link; a chain that is done is shut by a new pair
+    if (this.chain) {
+      if (this.chain.placing && this.pair) {
+        this.addLink(spot);
+        return;
+      }
+      if (!this.chain.placing) this.closePair();
+    }
     if (!spot.ok) {
       this.refusedT = h.time();
       this.usage.refused++;
@@ -692,6 +730,7 @@ export class AimMode {
     const v = h.player.body.vel;
     const near = nearSpot(h.world, h.player.chest(_c), ray, v.x * aim.x + v.z * aim.z, (x, z, y) => h.world.groundAt(x, z, 0.3, y));
     const old = this.pair;
+    const chain = this.chain;
     let strike: number;
     if (old && h.rifts.setStrikeLife && h.rifts.moveStrikeEntrance(old.strike, spotFrame(near, 'stand')) && h.rifts.moveStrikeExit(old.strike, spotFrame(far))) {
       strike = old.strike;
@@ -704,6 +743,12 @@ export class AimMode {
     const ends = h.rifts.strikeEnds(strike);
     if (ends) (ends.a as { closeTime?: number }).closeTime = 0.07;
     this.pair = { id: ++this.pairSeq, strike, near, far, t: 0, seen: new Map(), noticed: new Set(), man: man ? man.id : null, side };
+    // (the pair of a chain being placed lives as long as the chain does)
+    if (chain) {
+      this.chain = chain;
+      chain.t = 0;
+      h.rifts.setStrikeLife?.(strike, CHAIN.life + 1);
+    }
     if (AIMP.grace > 0) this.setNoPlayer(this.pair, true);
     this.faceAim();
     h.hero.play('interact', { fade: 0.05 });
@@ -846,7 +891,12 @@ export class AimMode {
     this.dash = null;
     this.arrivedT = now;
     this.edgeUntil = now + AIMP.stab.edgeTime;
-    this.closeAt = now + AIMP.go.close;
+    // CHAIN: the chain carries you on from the exit (the pair stays: the chain's clock shuts it)
+    const ch = this.chain;
+    if (ch) {
+      ch.placing = false;
+      if (ch.nodes.length) this.hop = { i: 0, t: 0, speed: Math.max(AIMP.go.arrive, Math.hypot(b.vel.x, b.vel.z)) };
+    } else this.closeAt = now + AIMP.go.close;
     return turn;
   }
   private setNoPlayer(p: AimPair, on: boolean) {
@@ -876,9 +926,109 @@ export class AimMode {
 
   closePair() {
     const p = this.pair;
+    this.chain = null;
+    this.hop = null;
     if (!p) return;
     this.h.rifts.closeStrike(p.strike);
     this.pair = null;
+  }
+
+  // ------------------------------------------------------------------
+  // CHAIN (the add-on): links one after another
+  // ------------------------------------------------------------------
+
+  /** Links standing (the pair's two and what was added); 0 when there is no chain. */
+  get chainLinks(): number {
+    return this.chain && this.pair ? 2 + this.chain.nodes.length : 0;
+  }
+
+  /** CHAIN: start a chain (the next PORTAL presses add links to it), or shut the one that is open (all of it, the pair too). */
+  chainPress() {
+    const h = this.h;
+    if (this.chain) {
+      this.closePair();
+      this.hud.callout('aim.chain.off', 'info');
+      h.audio.ui('deny');
+      return;
+    }
+    this.chain = { nodes: [], placing: true, t: 0 };
+    if (this.pair) h.rifts.setStrikeLife?.(this.pair.strike, CHAIN.life + 1);
+    this.hud.callout('aim.chain.on', 'good');
+    h.audio.ui('confirm');
+    h.vibrate(10);
+  }
+
+  /** A link stands clear of every other: the pair's two and the links added. */
+  private linkFree(spot: Spot): boolean {
+    const others: V3[] = [];
+    if (this.pair) others.push(this.pair.near.pos, this.pair.far.pos);
+    if (this.chain) for (const n of this.chain.nodes) others.push(n.pos);
+    return others.every((q) => Math.hypot(q.x - spot.pos.x, q.y - spot.pos.y, q.z - spot.pos.z) >= CHAIN.gap);
+  }
+
+  /** PORTAL, in a chain being placed: the next link at the surface under the crosshair (in mid-air, too close to another, or sealed: refused). */
+  private addLink(spot: Spot) {
+    const h = this.h;
+    const ch = this.chain;
+    if (!ch || !this.pair) return;
+    if (!spot.ok || spot.surface === 'air' || !this.linkFree(spot)) {
+      this.refusedT = h.time();
+      this.usage.refused++;
+      h.audio.aimBuzz(spot.pos);
+      if (spot.reason === 'sealed') this.fx.refused(spot.pos, spot.normal);
+      this.hud.callout(spot.reason === 'sealed' ? 'aim.sealed' : spot.reason === 'close' || (spot.ok && spot.surface !== 'air') ? 'aim.close' : 'aim.chain.air', 'warn');
+      h.vibrate(30);
+      return;
+    }
+    const n = newSpot();
+    n.pos.copy(spot.pos);
+    n.normal.copy(spot.normal);
+    n.hdir.copy(spot.hdir);
+    n.surface = spot.surface;
+    n.w = spot.w;
+    n.h = spot.h;
+    n.dist = spot.dist;
+    ch.nodes.push(n);
+    ch.t = 0;
+    h.rifts.setStrikeLife?.(this.pair.strike, CHAIN.life + 1);
+    h.audio.aimPop(n.pos, true);
+    h.fx.ring(_a.copy(n.pos).addScaledVector(n.normal, 0.1), 1.2, 0.3, AIM_CHAIN);
+    h.fx.flash(n.pos, 3, 0.18, 0xffe27a);
+    h.vibrate(14);
+    this.usage.chainLinks++;
+    if (2 + ch.nodes.length >= CHAIN.max) {
+      ch.placing = false;
+      this.hud.callout('aim.chain.full', 'good');
+    }
+  }
+
+  /** The hop under way: CHAIN.hop s after each arrival, out of the next link (your speed kept), to the last. */
+  private updateHop(dt: number) {
+    const hp = this.hop;
+    const ch = this.chain;
+    if (!hp || !ch) {
+      this.hop = null;
+      return;
+    }
+    hp.t += dt;
+    if (hp.t < CHAIN.hop) return;
+    const h = this.h;
+    const node = ch.nodes[hp.i];
+    const b = h.player.body;
+    const arr = node ? chainArrival(h.world, node, hp.speed, b.vel.y) : null;
+    if (!arr) {
+      // (no room out of it: the chain stops here, you stand on solid ground where you are)
+      this.hop = null;
+      this.hud.callout('aim.chain.blocked', 'warn');
+      return;
+    }
+    h.hop?.(arr.pos, arr.yaw, arr.vel);
+    h.audio.riftPass(_a.copy(node.pos), Math.hypot(arr.vel.x, arr.vel.z));
+    h.fx.riftBurst(_b.copy(node.pos), node.normal, AIM_CHAIN);
+    this.usage.hops++;
+    hp.i++;
+    hp.t = 0;
+    if (hp.i >= ch.nodes.length) this.hop = null;
   }
 
   /** You turn to where you aim (a shot, a stab, a pull all go that way). */

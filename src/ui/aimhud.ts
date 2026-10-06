@@ -16,6 +16,8 @@ export interface AimHudState {
   mark?: { x: number; y: number; h: number } | null;
   /** The pair's life left (1 → 0; null: none open). */
   pair: number | null;
+  /** CHAIN: links standing, the most, and whether the next PORTAL adds one (null: no chain). */
+  chain?: { links: number; max: number; placing: boolean } | null;
   ammo: number;
   /** Reloading: 0..1 progress (null: not). */
   reload: number | null;
@@ -27,6 +29,7 @@ export interface AimHudState {
 }
 
 const KEYS = {
+  chain: { kbm: 'R', pad: 'Y', touch: '' },
   fire: { kbm: 'LMB', pad: 'RT', touch: '' },
   stab: { kbm: 'F', pad: 'X', touch: '' },
   pull: { kbm: 'E', pad: 'RB', touch: '' },
@@ -47,6 +50,7 @@ export class AimHud {
   private stabEl: HTMLDivElement;
   private holdEl: HTMLDivElement;
   private timeEl: HTMLDivElement;
+  private chainEl: HTMLDivElement;
   private callEl: HTMLDivElement;
   private ammoEl: HTMLDivElement;
   private compEl: HTMLDivElement;
@@ -70,6 +74,7 @@ export class AimHud {
       <div class="ah-stab"><i>${REACH_ICON.knife}</i><b></b><kbd></kbd></div>
       <div class="ah-hold"><b></b><kbd></kbd><u></u></div>
       <div class="ah-time"><u></u></div>
+      <div class="ah-chain"><b></b><span><i></i><i></i><i></i><i></i></span><kbd></kbd></div>
       <div class="rh-call"></div>
       <div class="ah-ammo"><i>${REACH_ICON.rifle}</i><span></span><u></u></div>
       <div class="rh-tip"></div>`;
@@ -79,6 +84,7 @@ export class AimHud {
     this.stabEl = el.querySelector('.ah-stab') as HTMLDivElement;
     this.holdEl = el.querySelector('.ah-hold') as HTMLDivElement;
     this.timeEl = el.querySelector('.ah-time') as HTMLDivElement;
+    this.chainEl = el.querySelector('.ah-chain') as HTMLDivElement;
     this.callEl = el.querySelector('.rh-call') as HTMLDivElement;
     this.ammoEl = el.querySelector('.ah-ammo') as HTMLDivElement;
     this.compEl = el.querySelector('.ah-comp') as HTMLDivElement;
@@ -184,6 +190,16 @@ export class AimHud {
     this.put('time', tk, () => {
       this.timeEl.classList.toggle('on', s.pair !== null);
       (this.timeEl.querySelector('u') as HTMLElement).style.transform = `scaleX(${s.pair ?? 0})`;
+    });
+    // the chain: its links as pips (placed ones lit), PORTAL adds the next while it is being placed
+    const cn = s.chain ?? null;
+    this.put('chain', cn ? `${cn.links}|${cn.max}|${cn.placing}|${s.device}` : 'off', () => {
+      this.chainEl.classList.toggle('on', !!cn);
+      this.chainEl.classList.toggle('placing', !!cn?.placing);
+      if (!cn) return;
+      (this.chainEl.querySelector('b') as HTMLElement).textContent = `${t('aim.chain')} ${cn.links}/${cn.max}`;
+      (this.chainEl.querySelector('kbd') as HTMLElement).textContent = KEYS.chain[s.device];
+      Array.from(this.chainEl.querySelectorAll('span > i')).forEach((p, i) => p.classList.toggle('on', i < cn.links));
     });
     this.put('ammo', `${s.ammo}|${s.reload === null ? '' : Math.round(s.reload * 20)}`, () => {
       this.ammoEl.className = `ah-ammo on${s.ammo <= 5 ? ' low' : ''}${s.reload !== null ? ' reload' : ''}`;

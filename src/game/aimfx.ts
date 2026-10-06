@@ -6,6 +6,8 @@ import { AIMP, spotFrame, type Spot } from './aimportal';
 /** Yours: the rift cyan; the near twin's orange; theirs: Kessler red-magenta; the shield: violet. */
 export const AIM_CYAN = new THREE.Color(0.25, 1.6, 2.4);
 export const AIM_RED = new THREE.Color(2.8, 0.18, 0.55);
+/** The chain's links past the pair: a warm gold, apart from the pair's cyan and orange, their red and the shield's violet. */
+export const AIM_CHAIN = new THREE.Color(2.3, 1.7, 0.3);
 const SHIELD = new THREE.Color(1.1, 0.35, 1.9);
 const GHOST_OK = new THREE.Color(0.35, 1, 1);
 const GHOST_SNAP = new THREE.Color(1, 0.55, 1);
@@ -116,6 +118,8 @@ export interface AimFxState {
   /** The mirrors' shields: facing `yaw`, where they stand. */
   shields: { id: number; pos: V3; yaw: number }[];
   red: readonly RedPortal[];
+  /** The chain's links past the pair (CHAIN). */
+  chain?: readonly Spot[];
   /** The man the crosshair is on (a ring at his feet; brighter while his side is being picked). */
   target?: { pos: V3; radius: number; picking: boolean } | null;
 }
@@ -142,6 +146,7 @@ export class AimFx {
   private flashes: { m: THREE.Mesh; mat: THREE.MeshBasicMaterial; t: number }[] = [];
   private mark: THREE.Mesh;
   private markMat: THREE.MeshBasicMaterial;
+  private links: { g: THREE.Group; face: THREE.ShaderMaterial; ring: THREE.MeshBasicMaterial }[] = [];
   private t = 0;
 
   constructor() {
@@ -176,6 +181,20 @@ export class AimFx {
     this.mark.frustumCulled = false;
     this.mark.visible = false;
     this.group.add(this.mark);
+    // the chain's links past the pair (two at most)
+    for (let i = 0; i < 2; i++) {
+      const ringMat = add(AIM_CHAIN);
+      const face = faceMaterial(AIM_CHAIN);
+      const ring = new THREE.Mesh(RING, ringMat);
+      const disc = new THREE.Mesh(DISC, face);
+      disc.renderOrder = 2;
+      ring.renderOrder = 3;
+      const g = new THREE.Group();
+      g.add(disc, ring);
+      g.visible = false;
+      this.group.add(g);
+      this.links.push({ g, face, ring: ringMat });
+    }
     for (let i = 0; i < 8; i++) {
       const mat = add(AIM_CYAN);
       const m = new THREE.Mesh(TRACER, mat);
@@ -201,11 +220,16 @@ export class AimFx {
     const sv = this.shield(-1);
     sv.mesh.visible = !!at;
     if (at) sv.mesh.position.copy(at);
+    for (const l of this.links) {
+      l.g.visible = !!at;
+      if (at) l.g.position.copy(at);
+    }
     const rv = this.red(0);
     rv.g.visible = !!at;
     if (at) rv.g.position.copy(at);
     for (const e of rv.ends) e.oval.position.set(0, 1, 0);
     if (!at) {
+      for (const l of this.links) l.g.visible = false;
       this.shields.delete(-1);
       this.group.remove(sv.mesh);
       rv.g.visible = false;
@@ -266,6 +290,7 @@ export class AimFx {
     for (const f of this.flashes) f.m.visible = false;
     for (const s of this.shields.values()) s.mesh.visible = false;
     for (const r of this.reds) r.g.visible = false;
+    for (const l of this.links) l.g.visible = false;
     this.ghost.visible = false;
     this.mark.visible = false;
   }
@@ -326,6 +351,19 @@ export class AimFx {
       v.mat.uniforms.uT.value = this.t;
     }
     for (const [id, v] of this.shields) if (!seen.has(id) && id >= 0) v.mesh.visible = false;
+    // the chain's links: a gold ring with a swirling face, on the surface, facing out of it
+    const cs = s.chain ?? [];
+    for (let i = 0; i < this.links.length; i++) {
+      const l = this.links[i], sp = cs[i];
+      l.g.visible = !!sp;
+      if (!sp) continue;
+      l.g.position.copy(sp.pos);
+      l.g.quaternion.copy(spotFrame(sp).quaternion);
+      l.g.scale.set(sp.w / 2, sp.h / 2, 1);
+      l.face.uniforms.uT.value = this.t;
+      l.face.uniforms.uA.value = 0.85;
+      l.ring.opacity = 0.85 + 0.15 * Math.sin(this.t * 8 + i);
+    }
     // their red portals
     for (let i = 0; i < s.red.length || i < this.reds.length; i++) {
       const p = s.red[i];

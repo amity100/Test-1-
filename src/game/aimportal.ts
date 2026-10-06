@@ -114,6 +114,16 @@ export const AIMP = {
   waves: { first: 2, between: 1.8 },
 };
 
+/**
+ * CHAIN (the lab's add-on; not the game): CHAIN opens a chain of up to `max` linked portals. Its first two are
+ * the pair (the near twin, the exit); each PORTAL press after CHAIN adds the next link, on the surface under
+ * the crosshair. Going into the near twin you come out of the exit as ever, and the chain carries you on:
+ * `hop` s later out of the next link, and so on to the last, with your speed (the way you face is each link's).
+ * A link must stand `gap` m from the others and on a surface (not mid-air). The chain shuts `life` s after its
+ * last link (CHAIN again shuts it too); a new pair after a full chain, or your death, shuts it as well.
+ */
+export const CHAIN = { max: 4, life: 8, hop: 0.1, gap: 1.6, clear: [0.6, 0.9, 1.2] as readonly number[] };
+
 export type Surface = 'wall' | 'floor' | 'ceiling' | 'air';
 export type PortalRefusal = 'sealed' | 'close' | null;
 
@@ -207,6 +217,45 @@ export function placeExit(
 function standOnFloor(s: Spot, groundAt: (x: number, z: number, y: number) => number) {
   const g = groundAt(s.pos.x, s.pos.z, s.pos.y + s.h / 2);
   if (g > -Infinity && s.pos.y - s.h / 2 < g + 0.02) s.pos.y = g + s.h / 2 + 0.02;
+}
+
+/**
+ * Where a chain hop puts you (a copy of `node`'s exit): out of its front at `speed` m/s (flat), your feet on its
+ * bottom (a wall one: `clear` m out of it; a floor one: on it; a ceiling one: below it, falling). Null when the
+ * spot is not free for a body (a wall right there, a prop): the chain stops where you are.
+ */
+export function chainArrival(
+  world: Pick<CollisionWorld, 'overlapsCylinder'>,
+  node: Pick<Spot, 'pos' | 'normal' | 'hdir' | 'h'>,
+  speed: number,
+  _vy: number,
+  radius = 0.34,
+  height = 1.8,
+): { pos: THREE.Vector3; yaw: number; vel: THREE.Vector3 } | null {
+  const n = node.normal;
+  const free = (x: number, y: number, z: number) => !world.overlapsCylinder(x, z, radius, y + 0.05, y + height - 0.05);
+  if (Math.abs(n.y) < 0.5) {
+    const len = Math.hypot(n.x, n.z) || 1;
+    const nx = n.x / len, nz = n.z / len;
+    const y = node.pos.y - node.h / 2;
+    for (const c of CHAIN.clear) {
+      const x = node.pos.x + nx * c, z = node.pos.z + nz * c;
+      if (!free(x, y, z)) continue;
+      return { pos: new THREE.Vector3(x, y, z), yaw: Math.atan2(nx, nz), vel: new THREE.Vector3(nx * speed, Math.min(_vy, 1), nz * speed) };
+    }
+    return null;
+  }
+  const hx = node.hdir.x, hz = node.hdir.z;
+  const hl = Math.hypot(hx, hz) || 1;
+  const dx = hx / hl, dz = hz / hl;
+  if (n.y > 0) {
+    if (!free(node.pos.x, node.pos.y + 0.02, node.pos.z)) return null;
+    return { pos: new THREE.Vector3(node.pos.x, node.pos.y + 0.02, node.pos.z), yaw: Math.atan2(dx, dz), vel: new THREE.Vector3(dx * speed, 0, dz * speed) };
+  }
+  // out of a ceiling disc: standing under it, falling
+  const y = node.pos.y - height - 0.05;
+  if (!free(node.pos.x, y, node.pos.z)) return null;
+  return { pos: new THREE.Vector3(node.pos.x, y, node.pos.z), yaw: Math.atan2(dx, dz), vel: new THREE.Vector3(dx * speed, -AIMP.go.arrive, dz * speed) };
 }
 
 /** A spot's frame for the rift system (kind: what it is on). */

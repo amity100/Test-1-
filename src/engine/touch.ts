@@ -60,6 +60,7 @@ const ICON = {
   hand: SVG('<path d="M6.5 12.5V8a1.2 1.2 0 012.4 0v3.5M8.9 11V6a1.2 1.2 0 012.4 0v5M11.3 11V6.6a1.2 1.2 0 012.4 0v5M13.7 11.6V8.6a1.2 1.2 0 012.4 0v5.6c0 3.4-2.3 5.8-5.3 5.8-2.5 0-3.8-1.3-5.1-3.4L4.4 13.4a1.2 1.2 0 012-1.3l.1.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>'),
   weapon: SVG('<circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'),
   window: SVG('<rect x="6.5" y="3" width="11" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M9.5 8.5l5 3.5-5 3.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>'),
+  chain: SVG('<ellipse cx="8.2" cy="12" rx="4.3" ry="6.4" fill="none" stroke="currentColor" stroke-width="2.2"/><ellipse cx="15.8" cy="12" rx="4.3" ry="6.4" fill="none" stroke="currentColor" stroke-width="2.2"/>'),
   go: SVG('<ellipse cx="15.5" cy="12" rx="4.2" ry="8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M2.5 12h10.5M9.5 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'),
 };
 
@@ -67,7 +68,7 @@ const ICON = {
 const REACH_BTN: Record<string, Action> = { 'r-weapon': 'portal', 'r-hand': 'strike3', 'r-window': 'strike1' };
 
 /** AIM PORTAL's buttons and the actions they hold down (the game reads them as FIRE, STAB, PULL, GO). */
-const AIM_BTN: Record<string, Action> = { 'a-fire': 'portal', 'a-stab': 'action', 'a-pull': 'strike3', 'a-go': 'go' };
+const AIM_BTN: Record<string, Action> = { 'a-fire': 'portal', 'a-stab': 'action', 'a-pull': 'strike3', 'a-go': 'go', 'a-chain': 'strike4' };
 
 /** What AIM PORTAL shows on its buttons. */
 export interface TouchAimState {
@@ -83,6 +84,8 @@ export interface TouchAimState {
   go?: boolean;
   /** The crosshair is on a man: PORTAL opens next to him. */
   target?: boolean;
+  /** CHAIN: links standing (0: no chain). */
+  chain?: number;
 }
 
 /** A tap is quick and short: it opens the exit where the finger touched (a quick look nudge moves further than this). */
@@ -184,6 +187,7 @@ export class TouchControls {
         <button class="t-btn t-astab" data-t="a-stab" type="button">${ICON.action}<span class="t-lbl" data-k="touch.stab"></span></button>
         <button class="t-btn t-apull" data-t="a-pull" type="button">${ICON.hand}<span class="t-lbl" data-k="touch.pull"></span></button>
         <button class="t-btn t-ago" data-t="a-go" type="button">${ICON.go}<span class="t-lbl" data-k="touch.go"></span></button>
+        <button class="t-btn t-achain" data-t="a-chain" type="button">${ICON.chain}<span class="t-lbl" data-k="touch.chain"></span></button>
       </div>`;
     root.appendChild(el);
     const q = <T extends HTMLElement>(s: string) => el.querySelector(s) as T;
@@ -271,7 +275,7 @@ export class TouchControls {
 
   /** AIM PORTAL (null: off): PORTAL, FIRE, STAB and PULL take the places; SLIDE and JUMP stay. A quick tap on the world opens the exit there. */
   setAim(s: TouchAimState | null) {
-    const key = s ? `${s.ammo}|${s.pair}|${s.hold}|${s.snap}|${s.go}|${s.target}` : 'off';
+    const key = s ? `${s.ammo}|${s.pair}|${s.hold}|${s.snap}|${s.go}|${s.target}|${s.chain ?? 0}` : 'off';
     if (key === this.aimKey) return;
     this.aimKey = key;
     this.aimOn = !!s;
@@ -284,6 +288,9 @@ export class TouchControls {
     (this.el.querySelector('.t-aportal') as HTMLElement).classList.toggle('snap', !!s?.snap);
     (this.el.querySelector('.t-aportal') as HTMLElement).classList.toggle('target', !!s?.target && !s?.snap);
     (this.el.querySelector('.t-ago') as HTMLElement).classList.toggle('live', !!s?.go);
+    const chain = this.el.querySelector('.t-achain') as HTMLElement;
+    chain.classList.toggle('live', !!s?.chain);
+    chain.dataset.n = String(s?.chain ?? 0);
     const pull = this.el.querySelector('.t-apull') as HTMLElement;
     pull.classList.toggle('live', !!s?.pair || !!s?.hold);
     pull.classList.toggle('hold', !!s?.hold);
