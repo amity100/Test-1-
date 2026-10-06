@@ -670,9 +670,13 @@ export class RiftSystem implements RiftAPI {
         toLocal(p, pos, _l);
         if (Math.abs(_l.x) < p.width / 2 && Math.abs(_l.y) < p.height / 2 && _l.z > -3 && _l.z < 3.5) return true;
       } else {
-        if (p.host !== c && !faceHolds(c, p) && !(p.pass > 0 && passBehind(c, p, pos, p.pass))) continue;
+        const passing = p.pass > 0 && p.host !== c && !faceHolds(c, p);
+        if (passing && !passBehind(c, p, pos, p.pass)) continue;
+        if (p.host !== c && !faceHolds(c, p) && !passing) continue;
         toLocal(p, pos, _l);
-        if (Math.abs(_l.x) < p.width / 2 - radius * 0.3 && _l.z > -1.2 && _l.z < radius + 0.6 && Math.abs(_l.y) < p.height / 2 + 0.5) return true;
+        // (a near twin raised off the floor, walked into: the body's middle counts, not its feet)
+        const ly = p.pass > 0 ? _l.y + 0.9 : _l.y;
+        if (Math.abs(_l.x) < p.width / 2 - radius * 0.3 && _l.z > -1.2 && _l.z < radius + 0.6 && Math.abs(ly) < p.height / 2 + 0.5) return true;
       }
     }
     return false;

@@ -498,6 +498,24 @@ describe('AIM PORTAL: every portal fits where it opens', () => {
     expect(ev2.log.crossed.length).toBe(0);
   });
 
+  it('a near twin raised over a parapet in front of you (from a perch): a body walking at it goes in, not held off by the parapet', () => {
+    const w = flatWorld();
+    w.add(V(-5, 0, -5), V(5, 3.2, 0.9));
+    w.add(V(-5, 3.2, 0.6), V(5, 4.4, 0.9));
+    const rifts = makeRifts(w);
+    const phys = makePhysics(w, rifts);
+    const ev = recorder();
+    const near = { pos: V(0, 4.82, 0.55), normal: V(0, 0, -1), hdir: V(0, 0, 1), surface: 'stand' as const, w: AIMP.w, h: AIMP.h };
+    const far = { pos: V(20, 1.07, 10), normal: V(-1, 0, 0), hdir: V(0, 0, 1), surface: 'wall' as const, w: AIMP.w, h: AIMP.h };
+    const id = rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), 6);
+    (rifts.strikeEnds(id)!.a as { pass?: number }).pass = AIMP.near.pass;
+    rifts.update(0.3, 0.3, 0.3);
+    const b = phys.createBody('prop', { pos: V(0, 3.22, 0.1), radius: 0.34, height: 1.8, simulate: false });
+    b.vel.set(0, 0, 4);
+    run(phys, ev, 0.6);
+    expect(ev.log.crossed.length).toBe(1);
+  });
+
   it('the near twin in a doorway (a jamb at your side) or by a low wall in your way: its face clear of them, the crosshair in it', () => {
     const w = flatWorld();
     // a door 3 m wide in a wall at z = 1: you stand in it by its east jamb (x 1.5), aiming north-east past it
