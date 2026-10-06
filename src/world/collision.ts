@@ -9,6 +9,8 @@ export interface Collider {
   seeThrough?: boolean;
   /** Rifts can't be opened on this surface. */
   noPortal?: boolean;
+  /** A ledge on top of this one is never climbed (the lab's tall walls and perches: stairs are the way up). */
+  noMantle?: boolean;
   tag?: string;
 }
 

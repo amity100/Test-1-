@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { EnemyKind } from '../../core/contracts';
 import type { CombatVariant } from '../../game/variant';
+import { COMPOUND_RESPAWNS, AIM_WAVES_C } from './compound';
 
 /**
  * THE COMBAT LAB: a grey-box test range for the core combat. One 60 x 58 m
@@ -455,7 +456,20 @@ const copyWaves = (ws: LabWave[]): LabWave[] =>
     return o;
   });
 
-export function labArena(): LabArena {
+/** Which arena the lab builds: the compound (AIM PORTAL's: walls to hide behind) or the classic range (the other variants' towers, ring and cover). */
+export type LabArenaKind = 'compound' | 'classic';
+
+export function labArena(kind: LabArenaKind = 'classic'): LabArena {
+  if (kind === 'compound') {
+    // (the compound has AIM PORTAL's waves only: the other variants' posts stand in the classic range)
+    return {
+      pad: { pos: START.pos.clone(), yaw: START.yaw },
+      respawns: COMPOUND_RESPAWNS.map((p) => p.clone()),
+      gates: ([...GATES.filter((g) => g.kind === 'edge'), { id: 'rings', kind: 'drop', pos: START.pos.clone(), yaw: 0 }] as LabGate[]).map((g) => ({ ...g, pos: g.pos.clone() })),
+      waves: copyWaves(AIM_WAVES_C),
+      variants: { aimportal: copyWaves(AIM_WAVES_C) },
+    };
+  }
   return {
     pad: { pos: START.pos.clone(), yaw: START.yaw },
     respawns: [START.pos.clone(), V(-25, 0, -25), V(23, 0, -26), V(-26, 0, 9), V(26, 0, 22)],

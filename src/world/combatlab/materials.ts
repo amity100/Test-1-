@@ -11,10 +11,10 @@ export interface LabMaterials {
  * The lab's decal atlas: white glyphs on transparent (vertex colours tint
  * them), DECAL_COLS x DECAL_ROWS square cells; the glyphs fill each cell's middle half (a 2:1 band).
  */
-export const DECALS = ['01', '02', '03', '04', '05', 'T1', 'T2', 'R', 'SPAWN', 'COMBAT LAB', 'VOID', 'WATER'] as const;
+export const DECALS = ['01', '02', '03', '04', '05', 'T1', 'T2', 'R', 'SPAWN', 'COMBAT LAB', 'VOID', 'WATER', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'P1', 'P2', 'P3', 'L1', 'L2'] as const;
 export type DecalId = (typeof DECALS)[number];
-export const DECAL_COLS = 4;
-export const DECAL_ROWS = 4;
+export const DECAL_COLS = 5;
+export const DECAL_ROWS = 5;
 
 /** UVs of a decal's cell (CCW from bottom left, as Builder.quad takes them). */
 export function decalUV(id: DecalId): [number, number][] {

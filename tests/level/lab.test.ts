@@ -38,7 +38,7 @@ function overlapping(x: number, z: number, r: number, y0: number, y1: number) {
 }
 
 beforeAll(() => {
-  L = buildCombatLab(null, false, { headless: true });
+  L = buildCombatLab(null, false, { headless: true, arena: 'classic' });
 });
 
 afterEach(() => {

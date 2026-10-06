@@ -533,6 +533,7 @@ export class Player {
       const px = b.pos.x + f.x * d, pz = b.pos.z + f.z * d;
       const top = world.groundAt(px, pz, 0.18, b.pos.y + FEEL.mantleMax);
       if (!(top > b.pos.y + 0.55)) continue;
+      if (world.lastGround?.noMantle) continue;
       if (world.ceilingAt(px, pz, 0.25, top + 0.05) < top + 1.85) continue;
       if (world.overlapsCylinder(px, pz, FEEL.playerRadius * 0.8, top + 0.02, top + 1.7)) continue;
       // the space above our head on the way up must be clear

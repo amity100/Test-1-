@@ -1,14 +1,16 @@
 import * as THREE from 'three';
 import type { LampDef, PropDef, ZoneDef, ZoneId } from '../core/contracts';
+import type { Collider } from './collision';
 import type { SkyStyle } from '../render/fx';
 import { CollisionWorld } from './collision';
 import { addProp, Builder, resetPropSeq, solid, V, type Ctx } from './tower/kit';
 import { makePropFactory } from './tower/props';
 import type { TowerAtmosphere, TowerBuild } from './tower';
 import { createLabMaterials, decalUV, type DecalId } from './combatlab/materials';
+import { ARENA_BOXES, ARENA_OPENINGS, COMPOUND_BARRELS, COMPOUND_CRATES, DOOR_H, PLATFORMS_C, PLAT_Y, SLIT, WALL_LABELS, WALL_T, WIN, ZONE_LABELS, type ArenaBox } from './combatlab/compound';
 import {
   COVER, DECK, GANTRY, PLATFORMS, PLATFORM_Y, SEALED, GATE_D, GATE_H, GATE_W, GATES, KILL_Y, LOADS, LONG_WALL, MENU_VIEW, PAD, POOL, RING, SEA_Y, STAIR, STAIR_E, STAIR_W,
-  START, SUN_DIR, TOWER_COL, TOWER_H, TOWER_TOP, TOWERS, WALL_H, inPool, labArena,
+  START, SUN_DIR, TOWER_COL, TOWER_H, TOWER_TOP, TOWERS, WALL_H, inPool, labArena, type LabArenaKind,
 } from './combatlab/layout';
 
 const Z: ZoneId = 'pier';
@@ -32,6 +34,13 @@ const C = {
   steel: 0x3b4148,
   steelLt: 0x6b737c,
   ink: 0x262b31,
+  // the compound
+  wallA: 0xc9ccd0,
+  wallB: 0xd9dcdf,
+  cap: 0xf6f7f8,
+  sill: 0xaeb4ba,
+  sealed: 0x23272d,
+  parapet: 0xe3e5e7,
 };
 
 /** Clear blue-grey sky, a few bright cumulus: a neutral daylight the grey reads in. Linear RGB. */
@@ -136,8 +145,10 @@ function placed(b: Builder, key: string, g: THREE.BufferGeometry, p: THREE.Vecto
  *
  * headless: no canvas textures (plain materials), so it builds in node for tests.
  */
-export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, opts: { headless?: boolean } = {}): TowerBuild {
+export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, opts: { headless?: boolean; arena?: LabArenaKind } = {}): TowerBuild {
   const headless = !!opts.headless;
+  const kind: LabArenaKind = opts.arena ?? 'compound';
+  const compound = kind === 'compound';
   resetPropSeq();
   const world = new CollisionWorld();
   const { materials, waterNormals } = createLabMaterials(envMap, mobile, headless);
@@ -157,19 +168,28 @@ export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, op
 
   buildDeck(L);
   buildWalls(L);
-  buildRing(L);
-  buildTowers(L);
-  buildCover(L);
-  buildSealed(L);
-  buildGantry(L);
+  if (compound) buildCompound(L);
+  else {
+    buildRing(L);
+    buildTowers(L);
+    buildCover(L);
+    buildSealed(L);
+    buildGantry(L);
+  }
   buildPad(L);
   buildBackdrop(L);
 
-  // props: the two hanging loads, casks to set off, crates
-  for (const l of LOADS) addProp(ctx, 'load', l.pos, l.size, { hangFrom: V(l.pos.x, GANTRY.y, l.pos.z), id: l.id });
   const cask = V(0.6, 0.9, 0.6);
-  for (const [x, z] of [[-9.6, -13.6], [10, -8.5], [-1.2, 19.4]]) addProp(ctx, 'barrel', V(x, 0, z), cask, { explosive: true });
-  for (const [x, z] of [[14.2, -1], [-19.2, 8.2]]) addProp(ctx, 'crate', V(x, 0, z), V(1.2, 1.2, 1.2));
+  if (compound) {
+    // casks to set off and crates, in the streets
+    for (const [x, z] of COMPOUND_BARRELS) addProp(ctx, 'barrel', V(x, 0, z), cask, { explosive: true });
+    for (const [x, z] of COMPOUND_CRATES) addProp(ctx, 'crate', V(x, 0, z), V(1.2, 1.2, 1.2));
+  } else {
+    // props: the two hanging loads, casks to set off, crates
+    for (const l of LOADS) addProp(ctx, 'load', l.pos, l.size, { hangFrom: V(l.pos.x, GANTRY.y, l.pos.z), id: l.id });
+    for (const [x, z] of [[-9.6, -13.6], [10, -8.5], [-1.2, 19.4]]) addProp(ctx, 'barrel', V(x, 0, z), cask, { explosive: true });
+    for (const [x, z] of [[14.2, -1], [-19.2, 8.2]]) addProp(ctx, 'crate', V(x, 0, z), V(1.2, 1.2, 1.2));
+  }
 
   zoneRoot.add(mb.build(materials, { name: 'lab', noShadow: ['stripe', 'decal', 'emissive'] }));
   root.add(zoneRoot, far.build(materials, { name: 'lab:far', castShadow: false }));
@@ -191,12 +211,17 @@ export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, op
     nameKey: 'zone.pier.name',
     subKey: 'zone.pier.sub',
     bounds: new THREE.Box3(V(-34, KILL_Y - 1, -34), V(34, 40, DECK.z1 + 0.5)),
-    nav: [
-      { minX: -33, maxX: 33, minZ: -33, maxZ: DECK.z1, floorY: 0 },
-      { minX: RING.cx - RING.outer, maxX: RING.cx + RING.outer, minZ: RING.cz - RING.outer, maxZ: RING.cz + RING.outer, floorY: RING.y },
-      ...PLATFORMS.map(([x0, z0, x1, z1]) => ({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, floorY: PLATFORM_Y })),
-      ...TOWERS.map((t) => ({ minX: t.x - TOWER_TOP, maxX: t.x + TOWER_TOP, minZ: t.z - TOWER_TOP, maxZ: t.z + TOWER_TOP, floorY: TOWER_H })),
-    ],
+    nav: compound
+      ? [
+          { minX: -33, maxX: 33, minZ: -33, maxZ: DECK.z1, floorY: 0 },
+          ...PLATFORMS_C.map((p) => ({ minX: p.x0, maxX: p.x1, minZ: p.z0, maxZ: p.z1, floorY: PLAT_Y })),
+        ]
+      : [
+          { minX: -33, maxX: 33, minZ: -33, maxZ: DECK.z1, floorY: 0 },
+          { minX: RING.cx - RING.outer, maxX: RING.cx + RING.outer, minZ: RING.cz - RING.outer, maxZ: RING.cz + RING.outer, floorY: RING.y },
+          ...PLATFORMS.map(([x0, z0, x1, z1]) => ({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, floorY: PLATFORM_Y })),
+          ...TOWERS.map((t) => ({ minX: t.x - TOWER_TOP, maxX: t.x + TOWER_TOP, minZ: t.z - TOWER_TOP, maxZ: t.z + TOWER_TOP, floorY: TOWER_H })),
+        ],
     playerStart: START.pos.clone(),
     startYaw: START.yaw,
     killY: KILL_Y,
@@ -231,7 +256,7 @@ export function buildCombatLab(envMap: THREE.Texture | null, mobile: boolean, op
     killYAt: () => KILL_Y,
     menuView: { pos: MENU_VIEW.pos.clone(), look: MENU_VIEW.look.clone(), fov: MENU_VIEW.fov, sway: MENU_VIEW.sway },
     drownKey: 'respawn.water',
-    lab: labArena(),
+    lab: labArena(kind),
   };
 }
 
@@ -263,6 +288,112 @@ function buildDeck({ ctx, mb }: Lab) {
   // the void edge: a wide band on the lip, its face striped down, warnings
   bandX(mb, -31, 31, DECK.z1, 0, -1, 0.3, 0.6);
   for (const x of [-18, 0, 18]) floorDecal(mb, 'VOID', x, 0, DECK.z1 - 1.6, 3.2, C.orange);
+}
+
+
+// ---------------------------------------------------------------------------
+// THE COMPOUND (AIM PORTAL's arena; data in combatlab/compound.ts)
+// ---------------------------------------------------------------------------
+
+function buildCompound({ ctx, mb }: Lab) {
+  const amber = new THREE.Color(2.4, 0.95, 0.25);
+  const cyan = new THREE.Color(0.6, 2.0, 2.6);
+  const red = new THREE.Color(3, 0.2, 0.15);
+  const solidBox = (b: ArenaBox, color: THREE.ColorRepresentation, col: Partial<Collider>, uv = 4, ao = 0.7) =>
+    solid(ctx, b.kind === 'sealed' ? 'steel' : 'grid', b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, color, uv, col, { ao });
+  for (const b of ARENA_BOXES) {
+    const w = b.x1 - b.x0, d = b.z1 - b.z0;
+    switch (b.kind) {
+      case 'wall':
+      case 'lintel': {
+        const tall = b.y1 >= 4.2;
+        solidBox(b, tall ? C.wallA : C.wallB, { tag: 'wall', noMantle: true });
+        break;
+      }
+      case 'sill':
+        solidBox(b, C.sill, { tag: 'sill' });
+        break;
+      case 'sealed': {
+        solidBox(b, C.sealed, { tag: 'sealed', noPortal: true, noMantle: true }, 2, 0.3);
+        // a hazard stripe at the foot, a red light line along the top, on both faces
+        const thinX = w > d;
+        for (const [a, c] of thinX ? [[b.z0 - 0.012, b.z0], [b.z1, b.z1 + 0.012]] : [[b.x0 - 0.012, b.x0], [b.x1, b.x1 + 0.012]]) {
+          if (thinX) {
+            mb.box('emissive', b.x0 + 0.2, b.y1 - 0.35, a, b.x1 - 0.2, b.y1 - 0.25, c, red, 1, { ao: 0 });
+            mb.box('stripe', b.x0 + 0.2, 0.3, a, b.x1 - 0.2, 0.55, c, C.orange, 1, { ao: 0 });
+          } else {
+            mb.box('emissive', a, b.y1 - 0.35, b.z0 + 0.2, c, b.y1 - 0.25, b.z1 - 0.2, red, 1, { ao: 0 });
+            mb.box('stripe', a, 0.3, b.z0 + 0.2, c, 0.55, b.z1 - 0.2, C.orange, 1, { ao: 0 });
+          }
+        }
+        break;
+      }
+      case 'low':
+      case 'block':
+        solidBox(b, C.low, { tag: 'cover1' }, 2, 0.8);
+        rim(mb, b.x0, b.z0, b.x1, b.z1, b.y1, 'nsew', 0.08, 0.08);
+        break;
+      case 'pillar':
+        solidBox(b, C.towerCol, { tag: 'pillar', noMantle: true }, 2, 0.5);
+        mb.box('steel', b.x0 - 0.04, 0, b.z0 - 0.04, b.x1 + 0.04, 0.3, b.z1 + 0.04, C.steel, 1, { ao: 0 });
+        mb.box('stripe', b.x0 - 0.01, 2.6, b.z0 - 0.01, b.x1 + 0.01, 2.75, b.z1 + 0.01, C.orange, 1, { ao: 0 });
+        break;
+      case 'plat':
+        solidBox(b, C.tall, { tag: 'platform', noMantle: true }, 4, 0.5);
+        rim(mb, b.x0, b.z0, b.x1, b.z1, b.y1, 'nsew', 0.14, 0.18);
+        mb.box('steel', b.x0 - 0.04, 0, b.z0 - 0.04, b.x1 + 0.04, 0.25, b.z1 + 0.04, C.steel, 1, { ao: 0 });
+        break;
+      case 'parapet':
+        solidBox(b, C.parapet, { tag: 'parapet' }, 2, 0.4);
+        rim(mb, b.x0, b.z0, b.x1, b.z1, b.y1, 'nsew', 0.05, 0.06);
+        break;
+      case 'step':
+        solidBox(b, C.stair, { tag: 'stair' }, 2, 0.6);
+        bandX(mb, b.x0, b.x1, b.z0, b.y1, 1, 0.06, 0.05);
+        break;
+    }
+  }
+  // wall tops: a bright cap with an orange edge, so a ledge reads from a perch; and a dark kick strip at the foot on both faces
+  const capped = new Set<string>();
+  for (const b of ARENA_BOXES) {
+    if ((b.kind !== 'wall' && b.kind !== 'lintel') || b.y1 < 2.9) continue;
+    const key = `${b.x0.toFixed(2)},${b.z0.toFixed(2)},${b.x1.toFixed(2)},${b.z1.toFixed(2)},${b.y1}`;
+    if (capped.has(key)) continue;
+    capped.add(key);
+    const e = 0.04;
+    mb.box('grid', b.x0 - e, b.y1, b.z0 - e, b.x1 + e, b.y1 + 0.07, b.z1 + e, C.cap, 2, { ao: 0 });
+    rim(mb, b.x0 - e, b.z0 - e, b.x1 + e, b.z1 + e, b.y1 + 0.07, 'nsew', 0.06, 0.05);
+  }
+  for (const b of ARENA_BOXES) {
+    if (b.kind !== 'wall' || b.y0 > 0 || b.y1 < 2.9) continue;
+    mb.box('steel', b.x0 - 0.03, 0, b.z0 - 0.03, b.x1 + 0.03, 0.3, b.z1 + 0.03, C.steel, 1, { ao: 0 });
+  }
+  // openings: doors get amber jamb lights, windows and slits an orange frame
+  for (const o of ARENA_OPENINGS) {
+    const half = o.width / 2;
+    const T2 = WALL_T / 2 + 0.014;
+    const strip = (a0: number, a1: number, y0: number, y1: number, color: THREE.ColorRepresentation, key: 'emissive' | 'stripe') => {
+      for (const sgn of [-1, 1]) {
+        if (o.axis === 'x') mb.box(key, a0, y0, o.z + sgn * T2 - 0.005, a1, y1, o.z + sgn * T2 + 0.005, color, 1, { ao: 0 });
+        else mb.box(key, o.x + sgn * T2 - 0.005, y0, a0, o.x + sgn * T2 + 0.005, y1, a1, color, 1, { ao: 0 });
+      }
+    };
+    const c = o.axis === 'x' ? o.x : o.z;
+    if (o.k === 'door') {
+      strip(c - half, c - half + 0.1, 0.1, DOOR_H, amber, 'emissive');
+      strip(c + half - 0.1, c + half, 0.1, DOOR_H, amber, 'emissive');
+    } else if (o.k === 'window' || o.k === 'slit') {
+      const y0 = o.k === 'window' ? WIN.sill : SLIT.sill, y1 = o.k === 'window' ? WIN.head : SLIT.head;
+      strip(c - half, c + half, y0 - 0.07, y0, C.orange, 'stripe');
+      strip(c - half, c + half, y1, y1 + 0.07, C.orange, 'stripe');
+      strip(c - half, c - half + 0.07, y0, y1, C.orange, 'stripe');
+      strip(c + half - 0.07, c + half, y0, y1, C.orange, 'stripe');
+    }
+  }
+  // zone letters: big on the floor (they read from a perch), a small one on a wall by the main door
+  for (const z of ZONE_LABELS) floorDecal(mb, z.id as DecalId, z.x, 0, z.z, z.size ?? 4, C.orange, z.yaw ?? 0);
+  for (const wl of WALL_LABELS) wallDecal(mb, wl.id as DecalId, V(wl.x, wl.y, wl.z), V(wl.nx, 0, wl.nz), wl.w, wl.color ?? C.ink);
+  void cyan;
 }
 
 // ---------------------------------------------------------------------------
