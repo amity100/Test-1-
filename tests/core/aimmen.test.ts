@@ -169,12 +169,12 @@ describe('AIM PORTAL: what the men know', () => {
     expect(lasers.filter((t) => t > arrived).length).toBeGreaterThan(0);
   });
 
-  it('one that has never had you in sight waits much longer (28 s into the wave) before any ambush: a wave start is not a portal behind you', () => {
+  it('one that has never had you in sight waits much longer (18 s into the wave) before any ambush: a wave start is not a portal behind you', () => {
     const { sc, ai, step, man } = menRig();
     sc.setPlayer(0, 0, -12);
     const { m } = man(V(0, 0, 14));
     m.mode = 'advance';
-    for (let n = 0; n < 20 * 60; n++) {
+    for (let n = 0; n < (AIMP.intel.ambush.first - 3) * 60; n++) {
       m.portalCd = 0;
       step(1);
     }

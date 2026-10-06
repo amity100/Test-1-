@@ -341,11 +341,11 @@ export const WALL_LABELS: { id: string; x: number; y: number; z: number; nx: num
 ];
 
 /** Casks (explosive) and crates, on open floor in the streets. */
-export const COMPOUND_BARRELS: [number, number][] = [[-10, -11], [10.5, -10.5], [-10.5, 9], [3, 9.5], [15, 5]];
+export const COMPOUND_BARRELS: [number, number][] = [[-10, -11], [10.5, -10.5], [-9.4, 9.5], [3, 9.5], [15, 5]];
 export const COMPOUND_CRATES: [number, number][] = [[-9.5, -14.5], [9.5, 8.5], [-16, 8.5]];
 
 /** Where you may come back after a death (the pad among them). */
-export const COMPOUND_RESPAWNS: THREE.Vector3[] = [new THREE.Vector3(0, 0.15, -24), new THREE.Vector3(-10.5, 0, -12), new THREE.Vector3(10.5, 0, -12.5), new THREE.Vector3(0, 0, 9.5)];
+export const COMPOUND_RESPAWNS: THREE.Vector3[] = [new THREE.Vector3(0, 0.15, -24), new THREE.Vector3(-12.5, 0, -12.5), new THREE.Vector3(10.5, 0, -12.5), new THREE.Vector3(0, 0, 9.5)];
 
 /** A man's hiding place: where he stands, and what it is. */
 export interface Post {

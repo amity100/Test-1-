@@ -361,7 +361,8 @@ function buildCompound({ ctx, mb }: Lab) {
     capped.add(key);
     const e = 0.04;
     mb.box('grid', b.x0 - e, b.y1, b.z0 - e, b.x1 + e, b.y1 + 0.07, b.z1 + e, C.cap, 2, { ao: 0 });
-    rim(mb, b.x0 - e, b.z0 - e, b.x1 + e, b.z1 + e, b.y1 + 0.07, 'nsew', 0.06, 0.05);
+    // (the long edges only: where two pieces meet there is no line across the top)
+    rim(mb, b.x0 - e, b.z0 - e, b.x1 + e, b.z1 + e, b.y1 + 0.07, b.x1 - b.x0 >= b.z1 - b.z0 ? 'ns' : 'ew', 0.06, 0.05);
   }
   for (const b of ARENA_BOXES) {
     if (b.kind !== 'wall' || b.y0 > 0 || b.y1 < 2.9) continue;

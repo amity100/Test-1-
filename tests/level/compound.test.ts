@@ -143,6 +143,27 @@ describe('THE COMPOUND: walking it', () => {
     expect(bad).toEqual([]);
   });
 
+  it('every cask and crate rests on the deck, clear of every wall, and leaves a street open', () => {
+    expect(L.props.length).toBeGreaterThanOrEqual(6);
+    for (const p of L.props) {
+      const r = Math.min(p.size.x, p.size.z) / 2;
+      expect(Math.abs(L.world.groundAt(p.pos.x, p.pos.z, Math.min(0.2, r), p.pos.y + 0.3) - p.pos.y), p.id).toBeLessThan(0.05);
+      expect(L.world.overlapsCylinder(p.pos.x, p.pos.z, Math.max(p.size.x, p.size.z) / 2 + 0.05, p.pos.y + 0.05, p.pos.y + p.size.y), p.id).toBe(false);
+    }
+  });
+
+  it('the respawns stand on the deck with room, clear of every prop and on nav, joined to the pad', () => {
+    const grid = new NavGrid(L.world, L.zones[0].nav[0]);
+    const seen = navFlood(grid, L.lab!.pad.pos);
+    expect(L.lab!.respawns!.length).toBeGreaterThanOrEqual(3);
+    for (const r of L.lab!.respawns!) {
+      expect(Math.abs(L.world.groundAt(r.x, r.z, 0.3, r.y + 0.3) - r.y), `ground at ${r.x}, ${r.z}`).toBeLessThan(0.2);
+      expect(L.world.overlapsCylinder(r.x, r.z, 0.4, r.y + 0.1, r.y + 1.8), `room at ${r.x}, ${r.z}`).toBe(false);
+      for (const pr of L.props) expect(Math.hypot(pr.pos.x - r.x, pr.pos.z - r.z), `${pr.id} by ${r.x}, ${r.z}`).toBeGreaterThan(1.5);
+      expect(seen[grid.idx(r.x, r.z)], `joined ${r.x}, ${r.z}`).toBe(1);
+    }
+  });
+
   it('every post: on the ground (or a perch), on nav, with room, joined to the pad; none on a prop or a wall', () => {
     const z = L.zones[0];
     const grids = z.nav.map((n) => new NavGrid(L.world, n));

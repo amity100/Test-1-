@@ -1026,7 +1026,7 @@ each **combat variant** to choose one.
     are still marked on the screen). Cover is chosen by the walk (a spot behind a wall that is a long
     way round is skipped: `EnemySystem.pathLength`), a man 5 s without getting anywhere takes another
     way, a man on a perch who has no line to you for 4.5 s (a glimpse only eases it) jumps down.
-    **Round the wall by a portal**: a man who has had no sight of you for 7 s (a man who never has: 28 s
+    **Round the wall by a portal**: a man who has had no sight of you for 5 s (a man who never has: 18 s
     into the wave) may open a red portal of his own whose exit is BEHIND you (a rusher 3.6 m, a gunner
     5.5 m; floor you could stand on, a clear line to you): 0.5 s to open, an arrow on the screen's edge
     while it is out of your view, then he steps through: a rusher's blow follows its 0.45 s wind-up, a

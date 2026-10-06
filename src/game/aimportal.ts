@@ -108,7 +108,7 @@ export const AIMP = {
     every: 4,
     spread: 5,
     hold: [4, 9] as readonly [number, number],
-    ambush: { after: 7, first: 28, chance: 0.5, cd: [6, 10] as readonly [number, number], behind: 5.5, turn: 0.55 },
+    ambush: { after: 5, first: 18, chance: 0.65, cd: [5, 9] as readonly [number, number], behind: 5.5, turn: 0.55 },
     search: { pts: 3, radius: [3, 8] as readonly [number, number], look: 0.9 },
   },
   waves: { first: 2, between: 1.8 },
