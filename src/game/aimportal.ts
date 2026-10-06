@@ -124,8 +124,14 @@ export const AIMP = {
  */
 export const CHAIN = { max: 4, life: 8, hop: 0.1, gap: 1.6, clear: [0.6, 0.9, 1.2] as readonly number[] };
 
-export type Surface = 'wall' | 'floor' | 'ceiling' | 'air';
-export type PortalRefusal = 'sealed' | 'close' | null;
+/**
+ * What a portal stands on: a WALL, the FLOOR, a CEILING (on the surface, a hair off it); STAND: upright on the
+ * floor, free (by a man, or in front of a face too small to hold it: a low wall, a sill, a pillar, a stair);
+ * AIR: upright in mid-air (nothing within reach of the crosshair).
+ */
+export type Surface = 'wall' | 'floor' | 'ceiling' | 'stand' | 'air';
+/** Why one is refused: a sealed panel, too close to you, no room for it where you aim. */
+export type PortalRefusal = 'sealed' | 'close' | 'fit' | null;
 
 /** Where a portal stands: its centre, which way its front looks (unit), what it's on. */
 export interface Spot {
@@ -146,71 +152,294 @@ export interface Spot {
 const UP = new THREE.Vector3(0, 1, 0);
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
+const _c = new THREE.Vector3();
+const _q = new THREE.Vector3();
 
 export const newSpot = (): Spot => ({ pos: new THREE.Vector3(), normal: new THREE.Vector3(0, 0, 1), hdir: new THREE.Vector3(0, 0, 1), surface: 'air', w: AIMP.w, h: AIMP.h, dist: 0, ok: true, reason: null });
 
+/** A copy of a spot (its own vectors). */
+export function copySpot(s: Spot, out = newSpot()): Spot {
+  out.pos.copy(s.pos);
+  out.normal.copy(s.normal);
+  out.hdir.copy(s.hdir);
+  out.surface = s.surface;
+  out.w = s.w;
+  out.h = s.h;
+  out.dist = s.dist;
+  out.ok = s.ok;
+  out.reason = s.reason;
+  return out;
+}
+
+const refuse = (s: Spot, why: Exclude<PortalRefusal, null>) => {
+  s.ok = false;
+  s.reason = why;
+  return s;
+};
+
+// ---------------------------------------------------------------------------
+// FIT: a portal lies wholly on its surface, clear of everything round it
+// ---------------------------------------------------------------------------
+
+/** What the fit reads of the world. */
+export type FitWorld = Pick<CollisionWorld, 'raycast' | 'queryBox'>;
+
+/** The boxes round a point (within `r` m across, `ry` m up and down), enabled ones only. */
+function boxesAround(world: FitWorld, p: V3, r: number, ry: number, out: Collider[]): Collider[] {
+  world.queryBox(p.x - r, p.z - r, p.x + r, p.z + r, out);
+  let n = 0;
+  for (const c of out) {
+    if (!c.enabled || c.max.y < p.y - ry || c.min.y > p.y + ry || c.max.x < p.x - r || c.min.x > p.x + r || c.max.z < p.z - r || c.min.z > p.z + r) continue;
+    out[n++] = c;
+  }
+  out.length = n;
+  return out;
+}
+
+/** The box (of `list`) a point is inside, else null. */
+function boxAt(list: readonly Collider[], x: number, y: number, z: number): Collider | null {
+  const e = 1e-3;
+  for (const c of list) {
+    if (x > c.min.x + e && x < c.max.x - e && y > c.min.y + e && y < c.max.y - e && z > c.min.z + e && z < c.max.z - e) return c;
+  }
+  return null;
+}
+
+/** A spot's face axes: `n` out of its front, `u` its up, `r` across it. */
+function axes(s: Pick<Spot, 'normal' | 'hdir'>, n: THREE.Vector3, u: THREE.Vector3, r: THREE.Vector3) {
+  n.copy(s.normal);
+  if (Math.abs(n.y) > 0.9) u.set(s.hdir.x, 0, s.hdir.z).normalize();
+  else u.copy(UP);
+  r.crossVectors(u, n).normalize();
+}
+
+/** Its face, sampled: the middle, a ring at 0.55 of its size, its rim (the edge you see). */
+const RIM = 12;
+const INNER = 6;
+const _n = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const _r = new THREE.Vector3();
+function eachPoint(c: V3, s: Pick<Spot, 'w' | 'h'>, fn: (x: number, y: number, z: number) => boolean): boolean {
+  if (!fn(c.x, c.y, c.z)) return false;
+  for (let ring = 0; ring < 2; ring++) {
+    const k = ring === 0 ? 0.98 : 0.55;
+    const m = ring === 0 ? RIM : INNER;
+    for (let i = 0; i < m; i++) {
+      const a = ((i + (ring ? 0.5 : 0)) / m) * Math.PI * 2;
+      const ax = (Math.cos(a) * s.w * k) / 2, ay = (Math.sin(a) * s.h * k) / 2;
+      if (!fn(c.x + _r.x * ax + _u.x * ay, c.y + _r.y * ax + _u.y * ay, c.z + _r.z * ax + _u.z * ay)) return false;
+    }
+  }
+  return true;
+}
+
 /**
- * Where the crosshair ray (origin = the camera, unit dir; `eye`: your eyes)
- * puts the exit: on the first surface it meets within AIMP.range (a wall: a
- * hair off it, the floor, a ceiling), else in mid-air at `air` m (the wheel;
- * default AIMP.air.def), facing you. `air` set (not null) also stops a farther
- * surface short: mid-air at that distance. A sealed panel refuses it
- * (`ok` false, reason 'sealed'); a surface nearer than AIMP.minDist, too.
+ * A portal on a surface (centre `c`, axes set): every point of its face has the surface right behind it (within a
+ * couple of cm: one plane, whatever boxes make it), none of it sealed, and nothing stands out of the surface within
+ * AIMP.fit.clear m in front of it. 'ok', 'sealed' (part of it on a sealed panel), else 'bad'.
  */
-export function placeExit(
-  world: Pick<CollisionWorld, 'raycast'>,
-  origin: V3,
-  dir: V3,
-  eye: V3,
-  air: number | null,
-  groundAt: (x: number, z: number, y: number) => number,
-): Spot {
+function onSurface(list: readonly Collider[], c: V3, s: Pick<Spot, 'w' | 'h'>): 'ok' | 'sealed' | 'bad' {
+  const off = AIMP.off, clear = AIMP.fit.clear;
+  let sealed = false;
+  const ok = eachPoint(c, s, (x, y, z) => {
+    // (the surface under the point: solid just behind it, free just in front of it and further out)
+    const k = off + 0.03;
+    const back = boxAt(list, x - _n.x * k, y - _n.y * k, z - _n.z * k);
+    if (!back) return false;
+    if (back.noPortal) {
+      sealed = true;
+      return false;
+    }
+    const f = off - 0.02;
+    if (boxAt(list, x - _n.x * f, y - _n.y * f, z - _n.z * f)) return false;
+    return !boxAt(list, x + _n.x * clear, y + _n.y * clear, z + _n.z * clear);
+  });
+  return ok ? 'ok' : sealed ? 'sealed' : 'bad';
+}
+
+/** A portal standing free (centre `c`, axes set): nothing of the world in its face, nor a hair either side of it. */
+function inTheClear(list: readonly Collider[], c: V3, s: Pick<Spot, 'w' | 'h'>): boolean {
+  return eachPoint(c, s, (x, y, z) => !boxAt(list, x, y, z) && !boxAt(list, x + _n.x * 0.04, y + _n.y * 0.04, z + _n.z * 0.04) && !boxAt(list, x - _n.x * 0.04, y - _n.y * 0.04, z - _n.z * 0.04));
+}
+
+/** Room to come out of an upright one: a body's column `out` m in front of its foot, a floor under it about level. */
+function roomOut(world: FitWorld, list: readonly Collider[], foot: V3, n: V3, out = 0.45): boolean {
+  const x = foot.x + n.x * out, z = foot.z + n.z * out;
+  for (const y of [foot.y + 0.3, foot.y + 1.0, foot.y + 1.6]) {
+    for (const [dx, dz] of [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22]]) if (boxAt(list, x + dx, y, z + dz)) return false;
+  }
+  const g = world.raycast(_q.set(x, foot.y + 0.5, z), _b.set(0, -1, 0), 0.9);
+  return !!g && g.point.y > foot.y - 0.4;
+}
+
+/**
+ * Slide a spot along its face (across, and up for those that may) the least that `test` takes, at most
+ * AIMP.fit.slide m, keeping `anchor` (the crosshair's point, or null) AIMP.fit.keep m inside it. Moves `s.pos`;
+ * false when nothing within reach passes.
+ */
+function slide(s: Spot, anchor: V3 | null, up: boolean, test: (c: V3) => boolean, max: number = AIMP.fit.slide): boolean {
+  const F = AIMP.fit;
+  axes(s, _n, _u, _r);
+  const base = _c.copy(s.pos);
+  const steps = Math.round(max / F.step);
+  const cands: [number, number][] = [];
+  for (let i = -steps; i <= steps; i++) for (let j = up ? -steps : 0; j <= (up ? steps : 0); j++) cands.push([i * F.step, j * F.step]);
+  cands.sort((p, q) => Math.hypot(p[0], p[1]) - Math.hypot(q[0], q[1]));
+  const rx = Math.max(0.05, s.w / 2 - F.keep), ry = Math.max(0.05, s.h / 2 - F.keep);
+  const at = new THREE.Vector3();
+  for (const [da, du] of cands) {
+    at.copy(base).addScaledVector(_r, da).addScaledVector(_u, du);
+    if (anchor) {
+      _q.subVectors(anchor, at);
+      const ax = _q.dot(_r) / rx, ay = _q.dot(_u) / ry;
+      if (ax * ax + ay * ay > 1) continue;
+    }
+    if (test(at)) {
+      s.pos.copy(at);
+      return true;
+    }
+  }
+  s.pos.copy(base);
+  return false;
+}
+
+const _list: Collider[] = [];
+const _list2: Collider[] = [];
+
+/** Fit a surface spot (wall, floor, ceiling) onto its surface: 'ok' (moved there), 'sealed' or 'bad'. */
+function fitOnSurface(world: FitWorld, s: Spot, anchor: V3 | null, up: boolean, max: number = AIMP.fit.slide): 'ok' | 'sealed' | 'bad' {
+  const list = boxesAround(world, s.pos, Math.max(s.w, s.h) / 2 + max + 0.5, Math.max(s.w, s.h) / 2 + max + 0.5, _list);
+  axes(s, _n, _u, _r);
+  if (onSurface(list, s.pos, s) === 'sealed') return 'sealed';
+  return slide(s, anchor, up, (c) => onSurface(list, c, s) === 'ok', max) ? 'ok' : 'bad';
+}
+
+/** Fit an upright free-standing spot (stand, air): nothing in its face, room to come out of it; slid at most `max` m. */
+function fitStanding(world: FitWorld, s: Spot, anchor: V3 | null, max: number = AIMP.fit.slide, out = true): boolean {
+  const list = boxesAround(world, s.pos, s.w / 2 + max + 1.0, s.h / 2 + 1.0, _list2);
+  return slide(s, anchor, false, (c) => {
+    axes(s, _n, _u, _r);
+    if (!inTheClear(list, c, s)) return false;
+    return !out || roomOut(world, list, _a.set(c.x, c.y - s.h / 2, c.z), s.normal);
+  }, max);
+}
+
+/** The floor in front of a wall point (`n` its normal), at most `below` m under it: its top, else null. */
+function floorBy(groundAt: (x: number, z: number, y: number) => number, p: V3, n: V3, below: number): number | null {
+  const g = groundAt(p.x + n.x * 0.4, p.z + n.z * 0.4, p.y + 0.05);
+  return g > -Infinity && p.y - g <= below ? g : null;
+}
+
+/**
+ * The exit where the crosshair ray (origin = the camera, unit dir; `eye`: your eyes) meets the world, FITTED:
+ * - a WALL: standing on the floor in front of it when the crosshair is lower than its height (less AIMP.fit.keep),
+ *   else centred on the crosshair; slid along the wall (at most AIMP.fit.slide) to lie wholly on it, clear of
+ *   corners, jambs and openings. A face too small for it (a low wall, a sill, a jamb, a pillar): upright on the
+ *   floor right in front of it (STAND).
+ * - the FLOOR / a CEILING: a disc, slid to lie wholly on it, clear of the walls; on a stair or a narrow top
+ *   (no room for the disc): upright on that spot facing you (STAND), with room to come out of it.
+ * - nothing within AIMP.range (or the wheel's distance first): mid-air (AIR), upright, facing you, never in the
+ *   floor; with the world in its face it comes nearer.
+ * A sealed panel refuses it ('sealed'), a surface nearer than AIMP.minDist too ('close'). Where nothing of that
+ * fits, the rays round the crosshair (AIMP.fit.cone°) are tried, the nearest that fits wins (of one ring, the
+ * further: through a window rather than its sill); none: refused ('fit').
+ */
+export function placeExit(world: FitWorld, origin: V3, dir: V3, eye: V3, air: number | null, groundAt: (x: number, z: number, y: number) => number): Spot {
+  const s = exitAlong(world, origin, dir, eye, air, groundAt);
+  if (s.ok || s.reason !== 'fit') return s;
+  // nothing fits where the crosshair is: the nearest ray round it that does
+  const F = AIMP.fit;
+  const d = new THREE.Vector3().copy(dir as THREE.Vector3).normalize();
+  const side = new THREE.Vector3().crossVectors(d, UP);
+  if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+  side.normalize();
+  const upv = new THREE.Vector3().crossVectors(side, d).normalize();
+  const dd = d.clone();
+  const r = new THREE.Vector3();
+  for (let ring = 1; ring <= F.rings; ring++) {
+    const ang = THREE.MathUtils.degToRad((F.cone * ring) / F.rings);
+    let best: Spot | null = null;
+    for (let k = 0; k < 8; k++) {
+      const phi = (k / 8) * Math.PI * 2;
+      r.copy(dd).multiplyScalar(Math.cos(ang)).addScaledVector(side, Math.cos(phi) * Math.sin(ang)).addScaledVector(upv, Math.sin(phi) * Math.sin(ang));
+      const o = exitAlong(world, origin, r, eye, air, groundAt);
+      if (o.ok && (!best || o.dist > best.dist)) best = o;
+    }
+    if (best) return best;
+  }
+  return s;
+}
+
+/** One ray's exit (no search round it). */
+function exitAlong(world: FitWorld, origin: V3, dir: V3, eye: V3, air: number | null, groundAt: (x: number, z: number, y: number) => number): Spot {
+  const F = AIMP.fit;
   const s = newSpot();
   // (the ray starts at the camera: its distances run that much past your eyes)
   const lead = Math.max(0, _a.subVectors(eye, origin).dot(dir));
-  const maxT = lead + AIMP.range;
-  const hit = world.raycast(origin as THREE.Vector3, dir as THREE.Vector3, maxT);
+  const hit = world.raycast(origin as THREE.Vector3, dir as THREE.Vector3, lead + AIMP.range);
   const airT = air !== null ? lead + THREE.MathUtils.clamp(air, AIMP.air.min, AIMP.air.max) : null;
-  if (hit && (airT === null || hit.distance <= airT)) {
-    const n = hit.normal;
-    if (n.y > 0.6) {
-      s.surface = 'floor';
-      s.pos.copy(hit.point).addScaledVector(UP, AIMP.off);
-      s.normal.set(0, 1, 0);
-      flat(dir, s.hdir);
-      s.w = s.h = AIMP.flat;
-    } else if (n.y < -0.6) {
-      s.surface = 'ceiling';
-      s.pos.copy(hit.point).addScaledVector(UP, -AIMP.off);
-      s.normal.set(0, -1, 0);
-      flat(dir, s.hdir);
-      s.w = s.h = AIMP.flat;
-    } else {
-      s.surface = 'wall';
-      flat(n, s.normal);
-      s.pos.copy(hit.point).addScaledVector(s.normal, AIMP.off);
-      standOnFloor(s, groundAt);
-    }
-    s.dist = Math.max(0, hit.distance - lead);
-    const col = hit.collider as Collider;
-    if (col.noPortal) {
-      s.ok = false;
-      s.reason = 'sealed';
-    }
-  } else {
-    const t = airT ?? lead + AIMP.air.def;
+  if (!hit || (airT !== null && hit.distance > airT)) {
+    // mid-air: upright, facing you, its bottom never in the floor; with the world in its face it comes nearer
     s.surface = 'air';
-    s.pos.copy(origin).addScaledVector(dir, t);
-    s.dist = t - lead;
-    // mid-air: upright, facing you
-    flat(_a.subVectors(eye, s.pos), s.normal);
-    standOnFloor(s, groundAt);
+    for (let t = airT ?? lead + AIMP.air.def; t - lead >= AIMP.minDist; t -= 0.3) {
+      s.pos.copy(origin).addScaledVector(dir, t);
+      s.dist = t - lead;
+      flat(_a.subVectors(eye, s.pos), s.normal);
+      standOnFloor(s, groundAt);
+      if (fitStanding(world, s, null, 0, false)) return s;
+    }
+    return refuse(s, 'fit');
   }
-  if (s.ok && s.dist < AIMP.minDist) {
-    s.ok = false;
-    s.reason = 'close';
+  s.dist = Math.max(0, hit.distance - lead);
+  const anchor = hit.point.clone();
+  const n = hit.normal;
+  if ((hit.collider as Collider).noPortal) {
+    s.pos.copy(hit.point).addScaledVector(n, AIMP.off);
+    s.normal.copy(n);
+    s.surface = n.y > 0.6 ? 'floor' : n.y < -0.6 ? 'ceiling' : 'wall';
+    return refuse(s, 'sealed');
   }
-  return s;
+  if (s.dist < AIMP.minDist) {
+    s.pos.copy(hit.point).addScaledVector(n, AIMP.off);
+    s.normal.copy(n);
+    return refuse(s, 'close');
+  }
+  if (Math.abs(n.y) > 0.6) {
+    // a disc on the floor / a ceiling
+    s.surface = n.y > 0 ? 'floor' : 'ceiling';
+    s.normal.set(0, Math.sign(n.y), 0);
+    flat(dir, s.hdir);
+    s.w = s.h = AIMP.flat;
+    s.pos.copy(hit.point).addScaledVector(s.normal, AIMP.off);
+    const f = fitOnSurface(world, s, anchor, true);
+    if (f === 'ok') return s;
+    if (f === 'sealed') return refuse(s, 'sealed');
+    if (n.y < 0) return refuse(s, 'fit');
+    // a stair, a narrow top: upright on that spot, facing you
+    s.surface = 'stand';
+    s.w = AIMP.w;
+    s.h = AIMP.h;
+    flat(_a.subVectors(eye, hit.point), s.normal);
+    s.pos.set(hit.point.x, hit.point.y + AIMP.h / 2 + 0.02, hit.point.z);
+    return fitStanding(world, s, anchor) ? s : refuse(s, 'fit');
+  }
+  // a wall: a door in it, standing on the floor in front of it (the crosshair low enough), else on the crosshair
+  s.surface = 'wall';
+  flat(n, s.normal);
+  s.pos.copy(hit.point).addScaledVector(s.normal, AIMP.off);
+  const g = floorBy(groundAt, hit.point, s.normal, AIMP.h - F.keep);
+  const sits = g !== null;
+  if (sits) s.pos.y = g + AIMP.h / 2 + 0.02;
+  const f = fitOnSurface(world, s, anchor, !sits);
+  if (f === 'ok') return s;
+  if (f === 'sealed') return refuse(s, 'sealed');
+  // the face can't hold it (a low wall, a sill, a jamb, a pillar): upright on the floor right in front of it
+  const gs = floorBy(groundAt, hit.point, s.normal, F.stand);
+  if (gs === null) return refuse(s, 'fit');
+  s.surface = 'stand';
+  s.pos.copy(hit.point).addScaledVector(s.normal, AIMP.off + F.standOff);
+  s.pos.y = gs + AIMP.h / 2 + 0.02;
+  return fitStanding(world, s, anchor) ? s : refuse(s, 'fit');
 }
 
 /** A tall one never sinks into the floor: its bottom is on it at the lowest. */
@@ -267,60 +496,86 @@ export function spotFrame(s: Pick<Spot, 'pos' | 'normal' | 'hdir' | 'surface' | 
 }
 
 /**
- * The near twin: right in front of you on the crosshair. Its plane stands
- * AIMP.near.ahead m in front of your chest along your aim (flat; a little
- * further when you run at it; nearer if a wall is in the way), facing you;
- * across, it is centred on the point where the crosshair ray meets that plane,
- * as far as your own body line stays AIMP.near.body m inside it (the camera
- * sits over your shoulder: the two are a hand apart); up, its bottom is on
- * your floor unless the crosshair needs it raised (AIMP.near.float m at most,
- * then as far as the crosshair stays AIMP.near.margin m inside). So the
- * crosshair is always in it: a round or a stab aimed at what you see through
- * it goes through it, and one step (or GO) takes you in.
+ * The near twin: right in front of you on the crosshair. Its plane stands AIMP.near.ahead m in front of your
+ * chest along your aim (flat; a little further when you run at it), facing you; across, it is centred on the
+ * point where the crosshair ray meets that plane, as far as your own body line stays AIMP.near.body m inside it
+ * (the camera sits over your shoulder: the two are a hand apart); up, its bottom is on your floor unless the
+ * crosshair needs it raised (AIMP.near.float m at most, then as far as the crosshair stays AIMP.near.margin m
+ * inside). Whatever stands in its way, knee to head across its width (a wall, a jamb, a window's wall and sill,
+ * a low wall under your line), it stands AIMP.near.gap m in front of, never nearer than AIMP.near.min m (your
+ * own body); its face never in the world (slid across within what keeps the crosshair and your body line in
+ * it, else nearer). So the crosshair is always in it, one step (or GO) takes you in, and it never opens inside a
+ * wall.
  */
-export function nearSpot(
-  world: Pick<CollisionWorld, 'raycast'>,
-  chest: V3,
-  ray: { origin: V3; dir: V3 },
-  speedAlong: number,
-  groundAt: (x: number, z: number, y: number) => number,
-): Spot {
+export function nearSpot(world: FitWorld, chest: V3, ray: { origin: V3; dir: V3 }, speedAlong: number, groundAt: (x: number, z: number, y: number) => number): Spot {
   const N = AIMP.near;
+  const aim = flat(ray.dir, new THREE.Vector3());
+  const rx = -aim.z, rz = aim.x;
+  const hw = AIMP.w / 2;
+  const want: number = N.ahead + THREE.MathUtils.clamp(speedAlong * N.lead, 0, N.max - N.ahead);
+  // your floor
+  const g0 = groundAt(chest.x, chest.z, chest.y);
+  const floor = g0 > -Infinity && Math.abs(g0 - (chest.y - 1.1)) < 1.3 ? g0 : chest.y - 1.1;
+  /** The spot at `ahead` m: centred on the crosshair as far as it may be, `shift` m across from there (within its range). */
+  const build = (ahead: number, shift: number, s: Spot): { lo: number; hi: number } => {
+    const d = ray.dir;
+    const den = d.x * aim.x + d.z * aim.z;
+    const cx = _c.set(chest.x + aim.x * ahead, chest.y, chest.z + aim.z * ahead);
+    if (den > 0.15) {
+      const k = (ahead - ((ray.origin.x - chest.x) * aim.x + (ray.origin.z - chest.z) * aim.z)) / den;
+      cx.set(ray.origin.x + d.x * k, ray.origin.y + d.y * k, ray.origin.z + d.z * k);
+    }
+    // across: on the crosshair, your body line kept inside
+    const across = (cx.x - chest.x) * rx + (cx.z - chest.z) * rz;
+    let lo = Math.max(across - (hw - N.margin), -(hw - N.body));
+    let hi = Math.min(across + (hw - N.margin), hw - N.body);
+    if (lo > hi) lo = hi = THREE.MathUtils.clamp(across, -(hw - N.body), hw - N.body);
+    const c = THREE.MathUtils.clamp(THREE.MathUtils.clamp(across, lo, hi) + shift, lo, hi);
+    s.pos.set(chest.x + aim.x * ahead + rx * c, 0, chest.z + aim.z * ahead + rz * c);
+    // up: on your floor, raised only as far as the crosshair needs
+    const base = floor + s.h / 2 + 0.02;
+    let y = THREE.MathUtils.clamp(cx.y, base, base + N.float);
+    if (cx.y > y + s.h / 2 - N.margin) y = cx.y - (s.h / 2 - N.margin);
+    if (cx.y < y - s.h / 2 + N.margin) y = Math.max(base, cx.y + s.h / 2 - N.margin);
+    s.pos.y = y;
+    s.dist = ahead;
+    return { lo: lo - c, hi: hi - c };
+  };
   const s = newSpot();
   s.w = AIMP.w;
   s.h = AIMP.h;
-  const aim = flat(ray.dir, new THREE.Vector3());
-  let ahead: number = N.ahead + THREE.MathUtils.clamp(speedAlong * N.lead, 0, N.max - N.ahead);
-  const wall = world.raycast(_a.set(chest.x, chest.y, chest.z), _b.set(aim.x, 0, aim.z), ahead + 0.5);
-  if (wall) ahead = Math.max(0.6, wall.distance - 0.45);
-  // where the crosshair ray meets the plane `ahead` in front of your chest
-  const d = ray.dir;
-  const den = d.x * aim.x + d.z * aim.z;
-  const cx = new THREE.Vector3(chest.x + aim.x * ahead, chest.y, chest.z + aim.z * ahead);
-  if (den > 0.15) {
-    const k = (ahead - ((ray.origin.x - chest.x) * aim.x + (ray.origin.z - chest.z) * aim.z)) / den;
-    cx.set(ray.origin.x + d.x * k, ray.origin.y + d.y * k, ray.origin.z + d.z * k);
-  }
-  // across: on the crosshair, your body line kept inside
-  const rx = -aim.z, rz = aim.x;
-  const across = (cx.x - chest.x) * rx + (cx.z - chest.z) * rz;
-  const hw = s.w / 2;
-  const lo = Math.max(across - (hw - N.margin), -(hw - N.body));
-  const hi = Math.min(across + (hw - N.margin), hw - N.body);
-  const c = lo <= hi ? THREE.MathUtils.clamp(across, lo, hi) : THREE.MathUtils.clamp(across, -(hw - N.body), hw - N.body);
-  s.pos.set(chest.x + aim.x * ahead + rx * c, 0, chest.z + aim.z * ahead + rz * c);
-  // up: on your floor, raised only as far as the crosshair needs
-  const g0 = groundAt(s.pos.x, s.pos.z, chest.y);
-  const floor = g0 > -Infinity && Math.abs(g0 - (chest.y - 1.1)) < 1.3 ? g0 : chest.y - 1.1;
-  const base = floor + s.h / 2 + 0.02;
-  let y = THREE.MathUtils.clamp(cx.y, base, base + N.float);
-  if (cx.y > y + s.h / 2 - N.margin) y = cx.y - (s.h / 2 - N.margin);
-  if (cx.y < y - s.h / 2 + N.margin) y = Math.max(base, cx.y + s.h / 2 - N.margin);
-  s.pos.y = y;
-  s.surface = 'wall';
+  s.surface = 'stand';
   s.normal.set(-aim.x, 0, -aim.z);
   s.hdir.copy(aim);
-  s.dist = ahead;
+  build(want, 0, s);
+  // what stands in its way: flat along your aim, from your own plane, knee to head, across its width
+  const c0 = (s.pos.x - chest.x) * rx + (s.pos.z - chest.z) * rz;
+  let free = want;
+  const o = _a;
+  for (const k of [-1, -0.5, 0, 0.5, 1]) {
+    for (const hy of [0.25, 0.75, 1.3, 1.9]) {
+      const ac = c0 + k * (hw - 0.05);
+      o.set(chest.x + rx * ac, floor + hy, chest.z + rz * ac);
+      const hit = world.raycast(o, _b.set(aim.x, 0, aim.z), want + 0.3);
+      if (hit && hit.distance - N.gap < free) free = hit.distance - N.gap;
+    }
+  }
+  // its face clear of the world: slid across (within its range), else nearer
+  const list = boxesAround(world, _q.set(chest.x + aim.x * want, floor + 1.1, chest.z + aim.z * want), want + hw + 1.2, 2.6, _list2);
+  axes(s, _n, _u, _r);
+  for (let ahead = Math.max(N.min, free); ahead >= N.min - 1e-6; ahead -= 0.1) {
+    const r = build(ahead, 0, s);
+    if (inTheClear(list, s.pos, s)) return s;
+    const shifts: number[] = [];
+    for (let d = 0.1; d <= 0.9; d += 0.1) shifts.push(d, -d);
+    for (const sh of shifts) {
+      if (sh < r.lo - 1e-6 || sh > r.hi + 1e-6) continue;
+      build(ahead, sh, s);
+      if (inTheClear(list, s.pos, s)) return s;
+    }
+  }
+  // (nothing clear: hard by your chest on the crosshair; it takes you in all the same)
+  build(N.min, 0, s);
   return s;
 }
 
@@ -379,10 +634,10 @@ export function sideDir(e: Body, side: Exclude<Side, 'above' | 'below'>, view: V
 
 /**
  * Where the exit opens for a side of a man (feet `pos`, facing `yaw`), seen
- * along `view`: AIMP.magnet.dist m from him, standing on his floor (`floorY`),
- * its front toward him (a stab or a round through it comes at him from
- * there). ABOVE: a disc over his head looking down; BELOW: a disc in the floor
- * under his feet looking up (he drops through it).
+ * along `view`, in the open: AIMP.magnet.dist m from him, standing on his floor
+ * (`floorY`), its front toward him (a stab or a round through it comes at him
+ * from there). ABOVE: a disc over his head looking down; BELOW: a disc in the
+ * floor under his feet looking up (he drops through it).
  */
 export function snapSpot(e: Body, side: Side, floorY: number = e.pos.y, d: number = AIMP.magnet.dist, view: V3 = facing(e.yaw).negate()): Spot {
   const s = newSpot();
@@ -404,60 +659,105 @@ export function snapSpot(e: Body, side: Side, floorY: number = e.pos.y, d: numbe
     return s;
   }
   const dir = sideDir(e, side, v, new THREE.Vector3());
-  s.surface = 'wall';
+  s.surface = 'stand';
   s.pos.set(e.pos.x + dir.x * d, floorY + AIMP.h / 2 + 0.02, e.pos.z + dir.z * d);
   s.normal.set(-dir.x, 0, -dir.z);
   return s;
 }
 
+/** Nothing between two points (a sight line: what you see through doesn't count). */
+function clearLine(world: Pick<CollisionWorld, 'raycast'>, a: V3, b: V3): boolean {
+  const d = _q.subVectors(b, a);
+  const len = d.length();
+  if (len < 1e-4) return true;
+  d.multiplyScalar(1 / len);
+  return !world.raycast(a as THREE.Vector3, d, len - 0.05, { sight: true });
+}
+
+/** An exit by him sees him: from a little in front of its middle (at most his chest high) to his chest, and his knees. */
+function seesHim(world: FitWorld, s: Spot, e: Body): boolean {
+  const chest = _c.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z);
+  const from = new THREE.Vector3().copy(s.pos).addScaledVector(s.normal, 0.15);
+  if (Math.abs(s.normal.y) < 0.5) from.y = Math.min(from.y, chest.y);
+  if (!clearLine(world, from, chest)) return false;
+  if (Math.abs(s.normal.y) > 0.5) return true;
+  from.y = e.pos.y + 0.45;
+  return clearLine(world, from, _c.set(e.pos.x, e.pos.y + 0.45, e.pos.z));
+}
+
+/** A vertical side's exit along `dir` (flat unit, from him): against a wall that is in the way, else free; refused when there is no room. */
+function sideSpot(world: FitWorld, e: Body, dir: THREE.Vector3, floorY: number): Spot {
+  const M = AIMP.magnet, F = AIMP.fit;
+  const s = newSpot();
+  // the way out from him, at his knees, chest and head
+  let hit: RayHit | null = null;
+  for (const hy of [0.35, e.height * 0.6, e.height - 0.15]) {
+    const h = world.raycast(_a.set(e.pos.x, e.pos.y + hy, e.pos.z), dir, M.dist + 0.4);
+    if (h && (!hit || h.distance < hit.distance)) hit = h;
+  }
+  if (hit) {
+    if (hit.distance < M.tight) return refuse(s, 'close');
+    // against the wall, on his side of it: a door in it on his floor, fitted along it
+    s.surface = 'wall';
+    flat(hit.normal, s.normal);
+    s.pos.set(hit.point.x + s.normal.x * AIMP.off, floorY + AIMP.h / 2 + 0.02, hit.point.z + s.normal.z * AIMP.off);
+    const f = fitOnSurface(world, s, null, false, M.slide);
+    if (f === 'sealed') return refuse(s, 'sealed');
+    if (f === 'ok' && seesHim(world, s, e)) return s;
+    // its face too small (a low wall, a window): upright right in front of it
+    if (hit.distance - F.standOff < M.tight) return refuse(s, 'close');
+    s.surface = 'stand';
+    s.pos.set(hit.point.x + s.normal.x * (AIMP.off + F.standOff), floorY + AIMP.h / 2 + 0.02, hit.point.z + s.normal.z * (AIMP.off + F.standOff));
+    if (fitStanding(world, s, null, M.slide) && seesHim(world, s, e)) return s;
+    return refuse(s, 'fit');
+  }
+  // in the open, AIMP.magnet.dist off, facing him
+  s.surface = 'stand';
+  s.normal.set(-dir.x, 0, -dir.z);
+  s.pos.set(e.pos.x + dir.x * M.dist, floorY + AIMP.h / 2 + 0.02, e.pos.z + dir.z * M.dist);
+  if (fitStanding(world, s, null, M.slide) && seesHim(world, s, e)) return s;
+  return refuse(s, 'fit');
+}
+
 /**
- * A side spot that fits the world: a wall between him and it (his back to a
- * wall) brings it in against that wall (still on his side of it); sealed or
- * too tight there, it refuses.
+ * A side spot that fits the world: next to him, on his side of any wall, in sight of him, clear of everything.
+ * The side's way out from him, turned at most AIMP.magnet.turn (the nearest turn that works): a wall on that way
+ * (his back to it) brings the exit in against the wall (a door in it on his floor, slid along it off corners and
+ * openings; a face too small for it: upright right in front of it); else it stands free AIMP.magnet.dist m off,
+ * its face clear, room to come out of it and a floor there, a line from it to him. ABOVE: a disc over his head
+ * (a low ceiling: against it), BELOW: one in the floor under him, both slid off a wall too near. None: refused
+ * ('sealed': a sealed wall in the way; 'close': no room).
  */
-export function fitSnap(world: Pick<CollisionWorld, 'raycast'>, e: Body, side: Side, floorY: number = e.pos.y, view?: V3): Spot {
-  const s = snapSpot(e, side, floorY, AIMP.magnet.dist, view);
-  if (side === 'above' || side === 'below') {
+export function fitSnap(world: FitWorld, e: Body, side: Side, floorY: number = e.pos.y, view?: V3): Spot {
+  const M = AIMP.magnet;
+  const s = snapSpot(e, side, floorY, M.dist, view);
+  if (side === 'above') {
     // (a low ceiling over him: it opens against it)
-    if (side === 'above') {
-      const hit = world.raycast(_a.set(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z), UP, e.height * 0.5 + AIMP.snap.over + AIMP.flat / 2);
-      if (hit) {
-        s.pos.y = hit.point.y - AIMP.off;
-        if (hit.distance < e.height * 0.5 + 0.25) {
-          s.ok = false;
-          s.reason = 'close';
-        } else if ((hit.collider as Collider).noPortal) {
-          s.ok = false;
-          s.reason = 'sealed';
-        }
-      }
+    const hit = world.raycast(_a.set(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z), UP, e.height * 0.5 + AIMP.snap.over + AIMP.flat / 2);
+    if (hit) {
+      s.pos.y = hit.point.y - AIMP.off;
+      if (hit.distance < e.height * 0.5 + 0.25) return refuse(s, 'close');
+      if ((hit.collider as Collider).noPortal) return refuse(s, 'sealed');
+      const f = fitOnSurface(world, s, e.pos, true, M.slide);
+      return f === 'ok' ? s : refuse(s, f === 'sealed' ? 'sealed' : 'close');
     }
+    if (!fitStanding(world, s, _b.set(e.pos.x, s.pos.y, e.pos.z), M.slide, false) || !seesHim(world, s, e)) return refuse(s, 'close');
     return s;
   }
-  const chest = _a.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z);
-  const toward = _b.set(s.pos.x - chest.x, 0, s.pos.z - chest.z);
-  const dist = toward.length();
-  toward.multiplyScalar(1 / Math.max(dist, 1e-6));
-  // (at his chest and at his knees: a low block behind him counts too)
-  let hit = world.raycast(chest, toward, dist + 0.5);
-  const low = world.raycast(new THREE.Vector3(e.pos.x, e.pos.y + 0.35, e.pos.z), toward, dist + 0.5);
-  if (low && (!hit || low.distance < hit.distance)) hit = low;
-  if (hit) {
-    const wallD = hit.distance;
-    if (wallD < 0.75) {
-      s.ok = false;
-      s.reason = 'close';
-      return s;
-    }
-    // against the wall, on his side of it
-    s.pos.set(hit.point.x + hit.normal.x * AIMP.off, s.pos.y, hit.point.z + hit.normal.z * AIMP.off);
-    s.normal.set(hit.normal.x, 0, hit.normal.z).normalize();
-    if ((hit.collider as Collider).noPortal) {
-      s.ok = false;
-      s.reason = 'sealed';
-    }
+  if (side === 'below') {
+    const f = fitOnSurface(world, s, _b.set(e.pos.x, floorY, e.pos.z), true, M.slide);
+    return f === 'ok' ? s : refuse(s, f === 'sealed' ? 'sealed' : 'close');
   }
-  return s;
+  const base = sideDir(e, side, view ?? facing(e.yaw).negate(), new THREE.Vector3());
+  let first: Spot | null = null;
+  const dir = new THREE.Vector3();
+  for (const deg of M.turn) {
+    dir.copy(base).applyAxisAngle(UP, THREE.MathUtils.degToRad(deg));
+    const o = sideSpot(world, e, dir, floorY);
+    if (o.ok) return o;
+    first ??= o;
+  }
+  return first!;
 }
 
 /** Where a man will be in `lead` s at his ground speed (`vel`; a man in the air, or nearly still: where he is). */
