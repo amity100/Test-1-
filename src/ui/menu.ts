@@ -225,8 +225,8 @@ export class Menu {
       `<div class="m-main">
         <div class="m-col">
           ${this.brand()}
+          <div class="btns lead"><button type="button" class="primary" data-go="start"><span>${esc(t('menu.play'))}</span></button></div>
           <div class="btns">
-            <button type="button" class="primary" data-go="start"><span>${esc(t('menu.play'))}</span></button>
             ${cz ? `<button type="button" data-go="cont"><span>${esc(t('menu.continue'))}</span><small>${esc(t(`zone.${cz}.name`))}</small></button>` : ''}
             ${this.singleZone ? '' : `<button type="button" data-go="zones"><span>${esc(t('menu.zones'))}</span></button>`}
             <button type="button" data-go="challenges"><span>${esc(t('menu.challenges'))}</span></button>
@@ -273,8 +273,8 @@ export class Menu {
       `<div class="m-pause">
         <div class="m-col">
           <h2 class="title">${esc(t('menu.paused'))}</h2>
+          <div class="btns lead"><button type="button" class="primary" data-go="resume"><span>${esc(t('menu.resume'))}</span></button></div>
           <div class="btns">
-            <button type="button" class="primary" data-go="resume"><span>${esc(t('menu.resume'))}</span></button>
             ${this.inLab ? '' : `<button type="button" data-go="retry"><span>${esc(t('menu.retry'))}</span></button>`}
             <button type="button" data-go="restart"><span>${esc(t(this.inLab ? 'lab.restart' : 'menu.restart'))}</span>${this.inLab ? '<small dir="ltr">Enter</small>' : ''}</button>
             <button type="button" data-go="challenges"><span>${esc(t('menu.challenges'))}</span></button>

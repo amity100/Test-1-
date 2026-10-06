@@ -517,7 +517,7 @@ html[dir='rtl'] .is-touch .trk:first-child .nm { font-size: 15px; }
 .is-touch .h-air { right: 38px; }
 .is-touch .air-val { font-size: 18px; }
 @media (orientation: portrait) {
-  .is-touch .ui::after { content: '⟳  Rotate your device'; position: absolute; left: 50%; top: 45%; transform: translateX(-50%); background: var(--panel); padding: 12px 16px; font-size: 14px; letter-spacing: .1em; white-space: nowrap; z-index: 30; }
+  .is-touch .ui::after { content: '⟳  Rotate your device'; pointer-events: none; position: absolute; left: 50%; top: 45%; transform: translateX(-50%); background: var(--panel); padding: 12px 16px; font-size: 14px; letter-spacing: .1em; white-space: nowrap; z-index: 30; }
   html[lang='he'] .is-touch .ui::after { content: '⟳  סובב את המכשיר לרוחב'; }
 }
 
@@ -525,7 +525,7 @@ html[dir='rtl'] .is-touch .trk:first-child .nm { font-size: 15px; }
    MENUS
    ========================================================================= */
 .menu { position: absolute; inset: 0; display: none; pointer-events: auto; overflow-y: auto; overflow-x: hidden; z-index: 20; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
-.menu.on { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: calc(var(--st) + 28px) calc(var(--sr) + 28px) calc(var(--sb) + 28px) calc(var(--sl) + 28px); }
+.menu.on { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 22px; padding: calc(var(--st) + 28px) calc(var(--sr) + 28px) calc(var(--sb) + 28px) calc(var(--sl) + 28px); }
 .menu.boot { background: radial-gradient(ellipse at 50% 60%, #121a28 0%, #030507 72%); }
 .menu.main { background: linear-gradient(90deg, rgba(4, 6, 10, 0.95) 0%, rgba(4, 6, 10, 0.72) 40%, rgba(4, 6, 10, 0.2) 78%, rgba(4, 6, 10, 0.35) 100%); }
 html[dir='rtl'] .menu.main { background: linear-gradient(270deg, rgba(4, 6, 10, 0.95) 0%, rgba(4, 6, 10, 0.72) 40%, rgba(4, 6, 10, 0.2) 78%, rgba(4, 6, 10, 0.35) 100%); }
@@ -577,7 +577,6 @@ html[dir='rtl'] .worlds .seg button { letter-spacing: .04em; }
 html[dir='rtl'] .title { letter-spacing: .04em; }
 
 /* main */
-.menu.main { justify-content: center; }
 .m-main { width: 100%; max-width: 1180px; display: grid; grid-template-columns: minmax(300px, 430px) minmax(280px, 470px); justify-content: space-between; align-items: end; gap: 36px; }
 .m-col { display: flex; flex-direction: column; gap: 26px; }
 .m-brief { position: relative; padding: 20px 24px 18px; background: linear-gradient(180deg, rgba(8, 11, 17, 0.84), rgba(8, 11, 17, 0.66)); border-inline-start: 3px solid var(--entr); }
@@ -721,9 +720,7 @@ html[dir='rtl'] .cp-btns button { letter-spacing: .02em; font-size: 14px; }
 
 /* small screens (phones in landscape) */
 @media (max-height: 520px) {
-  .menu.on { gap: 12px; justify-content: flex-start; padding-top: calc(var(--st) + 14px); padding-bottom: calc(var(--sb) + 14px); }
-  .menu.boot.on { justify-content: center; }
-  .menu.main.on { justify-content: center; }
+  .menu.on { gap: 12px; padding-top: calc(var(--st) + 14px); padding-bottom: calc(var(--sb) + 14px); }
   .logo h1 { font-size: 40px; }
   .rings { width: 34px; }
   .brand p { margin-top: 4px; font-size: 10px; }
@@ -1274,3 +1271,31 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .touch.aimp .t-clip { right: 196px; bottom: 190px; }
 .t-afire .t-cap { display: none; position: absolute; top: -10px; bottom: auto; height: auto; line-height: 1.4; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 8px; font: 800 9.5px var(--hud-font); letter-spacing: .06em; background: #fff; color: #0b0e14; white-space: nowrap; }
 .t-afire.has-cap .t-cap { display: block; }
+
+/* ---------------------------------------------------------------------------
+   MENUS ON A PHONE: always reachable
+   - the content is centred with auto margins, not justify-content: a column that is taller than the
+     screen overflows at the top too, and the top of a scroller cannot be scrolled to (PLAY was cut off)
+   - the primary button (PLAY / RESUME) is sticky: it stays at the top of the screen while the menu scrolls
+   - the result cards' button row is sticky at the bottom
+   --------------------------------------------------------------------------- */
+.menu.on > :first-child { margin-top: auto; }
+.menu.on > :last-child { margin-bottom: auto; }
+.btns.lead { margin-bottom: -17px; }
+@media (max-height: 520px) {
+  .btns.lead { position: sticky; top: calc(var(--st) + 6px); z-index: 3; margin-bottom: -6px; }
+  .m-main > .m-col, .m-pause > .m-col { align-self: stretch; }
+  .btns button, .lang button, .worlds .lab-go, .vseg button, .cp-btns button, .seg button { min-height: 44px; }
+  .btns button, .worlds .seg button, .seg button { align-items: center; }
+  .worlds .lab-go small { display: none; }
+  .m-end > .btns.row, .m-labend > .btns.row { position: sticky; bottom: calc(var(--sb) + 4px); z-index: 3; padding: 6px 0 2px; background: linear-gradient(180deg, rgba(3, 5, 8, 0), rgba(3, 5, 8, 0.88) 30%); }
+}
+@media (max-height: 400px) {
+  .menu.on { gap: 8px; padding-top: calc(var(--st) + 8px); padding-bottom: calc(var(--sb) + 8px); }
+  .logo h1 { font-size: 30px; }
+  .rings { width: 26px; }
+  .brand p { display: none; }
+  .m-col { gap: 8px; }
+  .m-brief p { font-size: 11.5px; }
+  .title { font-size: 22px; }
+}
