@@ -120,8 +120,6 @@ export interface AimFxState {
   red: readonly RedPortal[];
   /** The chain's links past the pair (CHAIN). */
   chain?: readonly Spot[];
-  /** The man the crosshair is on (a ring at his feet; brighter while his side is being picked). */
-  target?: { pos: V3; radius: number; picking: boolean } | null;
 }
 
 const _v = new THREE.Vector3();
@@ -144,8 +142,6 @@ export class AimFx {
   private shields = new Map<number, ShieldView>();
   private reds: RedView[] = [];
   private flashes: { m: THREE.Mesh; mat: THREE.MeshBasicMaterial; t: number }[] = [];
-  private mark: THREE.Mesh;
-  private markMat: THREE.MeshBasicMaterial;
   private links: { g: THREE.Group; face: THREE.ShaderMaterial; ring: THREE.MeshBasicMaterial }[] = [];
   private t = 0;
 
@@ -174,13 +170,7 @@ export class AimFx {
     this.ghost.add(this.ghostLine, this.ghostFill, this.ghostArrow);
     this.ghost.visible = false;
     this.group.add(this.ghost);
-    // the ring at the feet of the man the crosshair is on
-    this.markMat = add(GHOST_SNAP, 0.9);
-    this.mark = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 40).rotateX(-Math.PI / 2), this.markMat);
-    this.mark.renderOrder = 7;
-    this.mark.frustumCulled = false;
-    this.mark.visible = false;
-    this.group.add(this.mark);
+    // (the man the crosshair is on is marked by the HUD's bracket alone: no ring at his feet on top of it)
     // the chain's links past the pair (two at most)
     for (let i = 0; i < 2; i++) {
       const ringMat = add(AIM_CHAIN);
@@ -292,7 +282,6 @@ export class AimFx {
     for (const r of this.reds) r.g.visible = false;
     for (const l of this.links) l.g.visible = false;
     this.ghost.visible = false;
-    this.mark.visible = false;
   }
 
   update(dt: number, s: AimFxState) {
@@ -328,14 +317,6 @@ export class AimFx {
       this.ghostFill.scale.set(sp.w / 2, sp.h / 2, 1);
       this.ghostArrow.visible = g.kind !== 'bad';
       this.ghostFillMat.opacity = 0.1 + 0.05 * Math.sin(this.t * 14);
-    }
-    // the man the crosshair is on
-    const tg = s.target;
-    this.mark.visible = !!tg;
-    if (tg) {
-      this.mark.position.set(tg.pos.x, tg.pos.y + 0.05, tg.pos.z);
-      this.mark.scale.setScalar((tg.radius + 0.25) / 0.56 * (1 + 0.06 * Math.sin(this.t * 10)));
-      this.markMat.opacity = tg.picking ? 1 : 0.75;
     }
     // the shields
     const seen = new Set<number>();
@@ -377,9 +358,9 @@ export class AimFx {
         const at = e === 0 ? p.a : p.b;
         const yaw = e === 0 ? p.ay : p.by;
         const end = v.ends[e];
-        end.oval.position.set(at.x, at.y + 1.15, at.z);
+        end.oval.position.set(at.x, at.y + AIMP.red.mid, at.z);
         end.oval.rotation.y = yaw + Math.PI;
-        end.oval.scale.set(0.62 * k, 1.1 * k, 1);
+        end.oval.scale.set((AIMP.red.w / 2 - 0.08) * k, (AIMP.red.h / 2 - 0.07) * k, 1);
         end.face.uniforms.uT.value = this.t;
         end.face.uniforms.uA.value = 0.85 * pulse;
         end.ring.opacity = pulse;

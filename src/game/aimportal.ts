@@ -43,10 +43,11 @@ export const AIMP = {
    * Off where the crosshair is, it slides along the surface at most `slide` m (`step` m steps, the nearest first). A
    * face too small for it (a low wall, a sill, a jamb, a pillar, a stair) gets one upright on the floor `standOff` m
    * in front of it (that floor at most `stand` m under the crosshair). None of that: rays round the crosshair (`cone`°,
-   * `rings` rings of 8) are tried, the nearest that fits wins (of one ring the further: through a window rather than
-   * onto its sill); none: refused ('fit', NO ROOM).
+   * `rings` rings of 8) are tried, the nearest that fits wins (of one ring, the one whose middle is nearest the
+   * crosshair); none: refused ('fit', NO ROOM). A ledge right by you (a parapet's top, a low wall at your knees)
+   * that the view looks over does not stop the crosshair: it goes on past it.
    */
-  fit: { keep: 0.15, clear: 0.2, slide: 0.6, step: 0.15, standOff: 0.12, stand: 1.6, cone: 2.4, rings: 3 },
+  fit: { keep: 0.15, clear: 0.2, slide: 0.6, step: 0.15, standOff: 0.12, stand: 2.6, cone: 2.4, rings: 3 },
   /** A surface nearer than this to your eyes refuses a portal (m). */
   minDist: 1.6,
   /** Person-sized: width, height; the horizontal ones (floor, ceiling) a disc this wide (m). */
@@ -65,14 +66,15 @@ export const AIMP = {
    * `body` m inside it and the crosshair `margin` m inside; standing on your floor unless the crosshair
    * needs it raised (at most `float` m off it). Something in its way (a wall, a jamb, a window's sill): it
    * stands `gap` m in front of it, never nearer your chest than `min` m (no room even there: raised over it, at
-   * most `rise` m, as far as the crosshair stays in it); a wall up to `pass` m behind it never
+   * most `rise` m, as far as the crosshair stays in it; hard against a wall at a slant: as narrow as `narrow`
+   * m); a wall up to `pass` m behind it never
    * stops you walking (or GO-ing) into it. While it is open it slides sideways with you (`follow`: a
    * strafe keeps it, and him in it, on your crosshair; walking at it still walks you in; never into a wall).
    * Your rounds go into it only while you aim within `cone`° (left or right) of the way it looks: turned
    * further to shoot someone else, they leave your rifle past it (the camera over your shoulder would still
    * see through it).
    */
-  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6, rise: 1.3, gap: 0.06, min: 0.45, pass: 0.6, follow: true, cone: 25 },
+  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6, rise: 1.3, narrow: [1.1, 0.95] as readonly number[], gap: 0.06, min: 0.45, pass: 0.6, follow: true, cone: 25 },
   /**
    * The crosshair on a man: within `deg` (by device) of his body (his radius plus `pad` m, his height
    * plus `padY` m), in sight, within `range` m; a tap within `tapPx` px of him on the screen. Of two, the
@@ -126,6 +128,8 @@ export const AIMP = {
    */
   notice: { range: 8, cos: 0.5, time: 0.35, side: 0.6, back: 0.8, feel: 4, react: 1.4 },
   hero: { hp: 100 },
+  /** Their red portals: an oval `w` x `h` m (its ring included), its middle `mid` m over the floor it stands on, its face clear of the world (never in a wall). */
+  red: { w: 1.4, h: 2.34, mid: 1.15 },
   /** The view: the camera pulled in closer than `far` m to your head (a wall right behind you, out of an exit on it), the hero fades, to `fade` at `near` m. */
   view: { far: 1.5, near: 0.85, fade: 0.28 },
   enemy: {
@@ -302,14 +306,20 @@ function inTheClear(list: readonly Collider[], c: V3, s: Pick<Spot, 'w' | 'h'>):
   return eachPoint(c, s, (x, y, z) => !boxAt(list, x, y, z) && !boxAt(list, x + _n.x * 0.04, y + _n.y * 0.04, z + _n.z * 0.04) && !boxAt(list, x - _n.x * 0.04, y - _n.y * 0.04, z - _n.z * 0.04));
 }
 
-/** Room to come out of an upright one: a body's column `out` m in front of its foot, a floor under it about level. */
+/**
+ * Room to come out of an upright one: a body's column `out` m in front of its foot, and a floor under you as you
+ * step out (about level there, and a stride further on: not the top of a wall you would fall off).
+ */
 function roomOut(world: FitWorld, list: readonly Collider[], foot: V3, n: V3, out = 0.45): boolean {
   const x = foot.x + n.x * out, z = foot.z + n.z * out;
   for (const y of [foot.y + 0.3, foot.y + 1.0, foot.y + 1.6]) {
     for (const [dx, dz] of [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22]]) if (boxAt(list, x + dx, y, z + dz)) return false;
   }
-  const g = world.raycast(_q.set(x, foot.y + 0.5, z), _b.set(0, -1, 0), 0.9);
-  return !!g && g.point.y > foot.y - 0.4;
+  for (const [k, drop] of [[out, 0.4], [out + 0.4, 0.6]]) {
+    const g = world.raycast(_q.set(foot.x + n.x * k, foot.y + 0.5, foot.z + n.z * k), _b.set(0, -1, 0), 0.5 + drop);
+    if (!g || g.point.y < foot.y - drop) return false;
+  }
+  return true;
 }
 
 /**
@@ -317,7 +327,7 @@ function roomOut(world: FitWorld, list: readonly Collider[], foot: V3, n: V3, ou
  * AIMP.fit.slide m, keeping `anchor` (the crosshair's point, or null) AIMP.fit.keep m inside it. Moves `s.pos`;
  * false when nothing within reach passes.
  */
-function slide(s: Spot, anchor: V3 | null, up: boolean, test: (c: V3) => boolean, max: number = AIMP.fit.slide): boolean {
+function slide(s: Spot, anchor: V3 | null, up: boolean, test: (c: V3) => boolean, max: number = AIMP.fit.slide, anchorUp = true): boolean {
   const F = AIMP.fit;
   axes(s, _n, _u, _r);
   const base = _c.copy(s.pos);
@@ -331,7 +341,7 @@ function slide(s: Spot, anchor: V3 | null, up: boolean, test: (c: V3) => boolean
     at.copy(base).addScaledVector(_r, da).addScaledVector(_u, du);
     if (anchor) {
       _q.subVectors(anchor, at);
-      const ax = _q.dot(_r) / rx, ay = _q.dot(_u) / ry;
+      const ax = _q.dot(_r) / rx, ay = anchorUp ? _q.dot(_u) / ry : 0;
       if (ax * ax + ay * ay > 1) continue;
     }
     if (test(at)) {
@@ -354,14 +364,14 @@ function fitOnSurface(world: FitWorld, s: Spot, anchor: V3 | null, up: boolean, 
   return slide(s, anchor, up, (c) => onSurface(list, c, s) === 'ok', max) ? 'ok' : 'bad';
 }
 
-/** Fit an upright free-standing spot (stand, air): nothing in its face, room to come out of it; slid at most `max` m. */
+/** Fit an upright free-standing spot (stand, air): nothing in its face, room to come out of it; slid at most `max` m (keeping `anchor` across it: the crosshair's point may be over or under it). */
 function fitStanding(world: FitWorld, s: Spot, anchor: V3 | null, max: number = AIMP.fit.slide, out = true): boolean {
   const list = boxesAround(world, s.pos, s.w / 2 + max + 1.0, s.h / 2 + 1.0, _list2);
   return slide(s, anchor, Math.abs(s.normal.y) > 0.9, (c) => {
     axes(s, _n, _u, _r);
     if (!inTheClear(list, c, s)) return false;
     return !out || roomOut(world, list, _a.set(c.x, c.y - s.h / 2, c.z), s.normal);
-  }, max);
+  }, max, false);
 }
 
 /** An upright spot standing free has nothing of the world in its face (the near twin as it slides with you). */
@@ -369,6 +379,17 @@ export function spotClear(world: FitWorld, s: Spot): boolean {
   const list = boxesAround(world, s.pos, Math.max(s.w, s.h) / 2 + 0.5, Math.max(s.w, s.h) / 2 + 0.5, _list);
   axes(s, _n, _u, _r);
   return inTheClear(list, s.pos, s);
+}
+
+/** A red portal of theirs (standing at `feet`, facing `yaw`) has its oval clear of the world. */
+export function redClear(world: FitWorld, feet: V3, yaw: number): boolean {
+  const s = newSpot();
+  s.surface = 'stand';
+  s.w = AIMP.red.w;
+  s.h = AIMP.red.h;
+  s.normal.set(Math.sin(yaw), 0, Math.cos(yaw));
+  s.pos.set(feet.x, feet.y + AIMP.red.mid, feet.z);
+  return spotClear(world, s);
 }
 
 /** The floor in front of a wall point (`n` its normal), at most `below` m under it: its top, else null. */
@@ -389,7 +410,8 @@ function floorBy(groundAt: (x: number, z: number, y: number) => number, p: V3, n
  *   floor; with the world in its face it comes nearer.
  * A sealed panel refuses it ('sealed'), a surface nearer than AIMP.minDist too ('close'). Where nothing of that
  * fits, the rays round the crosshair (AIMP.fit.cone°) are tried, the nearest that fits wins (of one ring, the
- * further: through a window rather than its sill); none: refused ('fit').
+ * one whose middle is nearest the crosshair); none: refused ('fit'). A ledge by you that the view looks over
+ * (a parapet's top within AIMP.minDist) does not stop the crosshair.
  */
 export function placeExit(world: FitWorld, origin: V3, dir: V3, eye: V3, air: number | null, groundAt: (x: number, z: number, y: number) => number): Spot {
   const s = exitAlong(world, origin, dir, eye, air, groundAt);
@@ -403,14 +425,22 @@ export function placeExit(world: FitWorld, origin: V3, dir: V3, eye: V3, air: nu
   const upv = new THREE.Vector3().crossVectors(side, d).normalize();
   const dd = d.clone();
   const r = new THREE.Vector3();
+  const off = (o: Spot) => _a.subVectors(o.pos, origin).normalize().dot(dd);
   for (let ring = 1; ring <= F.rings; ring++) {
     const ang = THREE.MathUtils.degToRad((F.cone * ring) / F.rings);
     let best: Spot | null = null;
+    let bc = -2;
     for (let k = 0; k < 8; k++) {
       const phi = (k / 8) * Math.PI * 2;
       r.copy(dd).multiplyScalar(Math.cos(ang)).addScaledVector(side, Math.cos(phi) * Math.sin(ang)).addScaledVector(upv, Math.sin(phi) * Math.sin(ang));
       const o = exitAlong(world, origin, r, eye, air, groundAt);
-      if (o.ok && (!best || o.dist > best.dist)) best = o;
+      // (of a ring, the one whose middle is nearest the crosshair)
+      if (!o.ok) continue;
+      const c = off(o);
+      if (c > bc) {
+        bc = c;
+        best = o;
+      }
     }
     if (best) return best;
   }
@@ -423,7 +453,11 @@ function exitAlong(world: FitWorld, origin: V3, dir: V3, eye: V3, air: number | 
   const s = newSpot();
   // (the ray starts at the camera: its distances run that much past your eyes)
   const lead = Math.max(0, _a.subVectors(eye, origin).dot(dir));
-  const hit = world.raycast(origin as THREE.Vector3, dir as THREE.Vector3, lead + AIMP.range);
+  let hit = world.raycast(origin as THREE.Vector3, dir as THREE.Vector3, lead + AIMP.range);
+  // (a ledge right by you that the view looks over: the top of a parapet, a low wall at your knees; the ray goes on past it)
+  for (let k = 0; k < 2 && hit && hit.distance - lead < AIMP.minDist && (hit.normal.y > 0.6 || hit.collider.max.y - hit.point.y < 0.12); k++) {
+    hit = world.raycast(origin as THREE.Vector3, dir as THREE.Vector3, lead + AIMP.range, { ignore: hit.collider });
+  }
   const airT = air !== null ? lead + THREE.MathUtils.clamp(air, AIMP.air.min, AIMP.air.max) : null;
   if (!hit || (airT !== null && hit.distance > airT)) {
     // mid-air: upright, facing you, its bottom never in the floor; with the world in its face it comes nearer
@@ -449,6 +483,7 @@ function exitAlong(world: FitWorld, origin: V3, dir: V3, eye: V3, air: number | 
   if (s.dist < AIMP.minDist) {
     s.pos.copy(hit.point).addScaledVector(n, AIMP.off);
     s.normal.copy(n);
+    s.surface = n.y > 0.6 ? 'floor' : n.y < -0.6 ? 'ceiling' : 'wall';
     return refuse(s, 'close');
   }
   if (Math.abs(n.y) > 0.6) {
@@ -573,6 +608,7 @@ export function nearSpot(world: FitWorld, chest: V3, ray: { origin: V3; dir: V3 
       cx.set(ray.origin.x + d.x * k, ray.origin.y + d.y * k, ray.origin.z + d.z * k);
     }
     // across: on the crosshair, your body line kept inside
+    const hw = s.w / 2;
     const across = (cx.x - chest.x) * rx + (cx.z - chest.z) * rz;
     let lo = Math.max(across - (hw - N.margin), -(hw - N.body));
     let hi = Math.min(across + (hw - N.margin), hw - N.body);
@@ -613,18 +649,24 @@ export function nearSpot(world: FitWorld, chest: V3, ray: { origin: V3; dir: V3 
   axes(s, _n, _u, _r);
   const shifts: number[] = [0];
   for (let d = 0.1; d <= 0.9; d += 0.1) shifts.push(d, -d);
-  for (let ahead = Math.max(N.min, free); ahead >= N.min - 1e-6; ahead -= 0.1) {
-    const r = build(ahead, 0, s);
-    // (on your floor first; then raised as far as the crosshair allows: over a low wall right in front of you)
-    for (let rise = 0; rise <= Math.min(r.up, N.rise) + 1e-6; rise += 0.1) {
-      for (const sh of shifts) {
-        if (sh < r.lo - 1e-6 || sh > r.hi + 1e-6) continue;
-        build(ahead, sh, s, rise);
-        if (inTheClear(list, s.pos, s)) return s;
+  // (its full width first; hard against a wall at a slant, a little narrower: AIMP.near.narrow)
+  for (const w of [AIMP.w, ...N.narrow]) {
+    s.w = w;
+    for (let ahead = Math.max(N.min, free); ahead >= N.min - 1e-6; ahead -= 0.1) {
+      const r = build(ahead, 0, s);
+      // (on your floor first; then raised as far as the crosshair allows: over a low wall right in front of you)
+      const top = Math.min(r.up, N.rise);
+      for (let k = 0, rise = 0; rise <= top + 1e-6; k++, rise = Math.min(k * 0.1, k * 0.1 > top && (k - 1) * 0.1 < top ? top : k * 0.1)) {
+        for (const sh of shifts) {
+          if (sh < r.lo - 1e-6 || sh > r.hi + 1e-6) continue;
+          build(ahead, sh, s, rise);
+          if (inTheClear(list, s.pos, s)) return s;
+        }
       }
     }
   }
   // (nothing clear: hard by your chest on the crosshair; it takes you in all the same)
+  s.w = AIMP.w;
   build(N.min, 0, s);
   return s;
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { V3 } from '../core/contracts';
 import type { CollisionWorld } from '../world/collision';
-import { AIMP, notices, turnToward, yawTo } from '../game/aimportal';
+import { AIMP, notices, redClear, turnToward, yawTo } from '../game/aimportal';
 import { RedPortals, arrive, type RedPortal } from './reachai';
 import { muzzleOf } from './behaviors';
 import type { Enemy } from './enemy';
@@ -891,6 +891,8 @@ export class AimAI {
         _c.set(x, y, z);
         _eye.set(x, y + 1.5, z);
         if (!H.world.lineOfSight(_eye, pl.chest)) continue;
+        // (its oval clear of the walls round it: never half in one)
+        if (!redClear(H.world, _c, Math.atan2(pl.pos.x - x, pl.pos.z - z))) continue;
         exit = _c.clone();
         break;
       }
@@ -904,8 +906,8 @@ export class AimAI {
       ax = e.pos.x + Math.sin(yawIn) * K.ahead;
       az = e.pos.z + Math.cos(yawIn) * K.ahead;
       ay = H.standAt(ax, az, e.pos.y);
-      // (level with him: not the top of a parapet or a block he cannot stand on)
-      if (ay !== null && Math.abs(ay - e.pos.y) < 0.4) break;
+      // (level with him: not the top of a parapet or a block he cannot stand on; its oval clear of the walls)
+      if (ay !== null && Math.abs(ay - e.pos.y) < 0.4 && redClear(H.world, _a.set(ax, ay, az), yawIn + Math.PI)) break;
       ay = null;
     }
     if (ay === null) return false;
@@ -934,20 +936,24 @@ export class AimAI {
       const x = e.pos.x + Math.sin(ang) * r, z = e.pos.z + Math.cos(ang) * r;
       const y = H.standAt(x, z, 0);
       if (y === null || Math.abs(y) > 0.4 || (deck && !deck.walkable(x, z))) continue;
+      if (!redClear(H.world, _a.set(x, y, z), Math.atan2(m.known.x - x, m.known.z - z))) continue;
       exit = new THREE.Vector3(x, y, z);
     }
     if (!exit) return false;
-    let ax = 0, az = 0, ay: number | null = null;
+    let ax = 0, az = 0, ay: number | null = null, yawIn = to;
     for (const off of [0, 0.9, -0.9, 1.8, -1.8, Math.PI]) {
       ax = e.pos.x + Math.sin(to + off) * K.ahead;
       az = e.pos.z + Math.cos(to + off) * K.ahead;
       ay = H.standAt(ax, az, e.pos.y);
-      // (level with him: not the top of a parapet or a block he cannot stand on)
-      if (ay !== null && Math.abs(ay - e.pos.y) < 0.4) break;
+      // (level with him: not the top of a parapet or a block he cannot stand on; its oval clear of the walls)
+      if (ay !== null && Math.abs(ay - e.pos.y) < 0.4 && redClear(H.world, _a.set(ax, ay, az), to + off)) {
+        yawIn = to + off;
+        break;
+      }
       ay = null;
     }
     if (ay === null) return false;
-    const p = H.portals.open(e.id, _a.set(ax, ay, az), to, exit, Math.atan2(m.known.x - exit.x, m.known.z - exit.z));
+    const p = H.portals.open(e.id, _a.set(ax, ay, az), yawIn, exit, Math.atan2(m.known.x - exit.x, m.known.z - exit.z));
     this.lastPortalT = sys.time;
     m.portalId = p.id;
     m.gun = 'idle';

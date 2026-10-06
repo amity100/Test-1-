@@ -1233,10 +1233,15 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .ah-comp::before { content: ''; position: absolute; inset: 22px; border: 2px dashed rgba(255, 155, 255, 0.55); border-radius: 50%; }
 .ah-comp i { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: rgba(40, 10, 50, 0.7); border: 2px solid rgba(255, 155, 255, 0.8); }
 .ah-comp i.on { background: #ff9bff; border-color: #fff; transform: scale(1.5); box-shadow: 0 0 10px rgba(255, 155, 255, 0.9); }
-.ah-comp i b { position: absolute; left: 50%; top: 150%; transform: translateX(-50%); font: 800 10px var(--hud-font); letter-spacing: .1em; color: #ffd6ff; white-space: nowrap; text-shadow: 0 1px 4px #000; }
+.ah-comp u { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 4px); text-decoration: none; padding: 2px 8px; border-radius: 9px; background: rgba(40, 10, 50, 0.72); border: 1px solid rgba(255, 155, 255, 0.7); font: 800 10px var(--hud-font); letter-spacing: .1em; color: #ffd6ff; white-space: nowrap; }
+.ah-comp.bad u { border-color: #ff4a6a; color: #ffd0d8; background: rgba(60, 4, 14, 0.78); }
+.is-touch .ah-comp { width: 118px; height: 118px; margin: -59px 0 0 -59px; }
+.is-touch .ah-comp::before { inset: 17px; }
+.is-touch .ah-comp u { font-size: 9px; }
+/* (on a phone FIRE shows the rounds: no second count) */
+.is-touch .ah-ammo.on { display: none; }
 .ah-comp.bad i.on { background: #ff4a6a; box-shadow: 0 0 10px rgba(255, 74, 106, 0.9); }
 .ah-comp.bad::before { border-color: rgba(255, 74, 106, 0.6); }
-.ah-comp i[data-s='above'] b { top: auto; bottom: 150%; }
 .aim-hud .rh-arrows { position: absolute; inset: 0; }
 /* AIM PORTAL on a phone: PORTAL (left of the thumb), FIRE (where it rests), STAB and PULL above them, SLIDE and JUMP */
 .t-aportal, .t-afire, .t-astab, .t-apull, .t-ago, .t-achain { display: none; }

@@ -65,7 +65,7 @@ export class AimHud {
   constructor(root: HTMLElement) {
     const el = document.createElement('div');
     el.className = 'aim-hud';
-    const pips = [...new Set(COMPASS)].map((s) => `<i data-s="${s}"><b></b></i>`).join('');
+    const pips = [...new Set(COMPASS)].map((s) => `<i data-s="${s}"></i>`).join('');
     el.innerHTML = `
       <div class="rh-arrows">${'<i><b></b></i>'.repeat(ARROWS)}</div>
       <div class="ah-mark"><i></i><i></i><i></i><i></i></div>
@@ -156,11 +156,9 @@ export class AimHud {
       this.compEl.style.left = `${(c.x * 100).toFixed(2)}%`;
       this.compEl.style.top = `${(c.y * 100).toFixed(2)}%`;
       this.compEl.classList.toggle('bad', !c.ok);
-      for (const p of this.pips) {
-        const on = p.dataset.s === c.side;
-        p.classList.toggle('on', on);
-        (p.querySelector('b') as HTMLElement).textContent = on ? t(`aim.side.${c.side}`) : '';
-      }
+      // (the side's word: one caption under the ring, always in the same place)
+      for (const p of this.pips) p.classList.toggle('on', p.dataset.s === c.side);
+      (this.compEl.querySelector('u') as HTMLElement).textContent = t(`aim.side.${c.side}`);
     });
     // the bracket round the man the crosshair is on (at least a thumb's size: a far man is a few px tall)
     const m = s.mark ?? null;

@@ -471,13 +471,11 @@ export class AimMode {
     }
 
     // the look and the HUD
-    const ring = this.snapTarget ?? this.hover;
     this.fx.update(dt, {
       ghost: this.ghost,
       shields: this.shields(),
       red: this.portals.list,
       chain: this.chain && this.pair ? this.chain.nodes : [],
-      target: ring ? { pos: ring.pos, radius: ring.radius, picking: !!this.snapTarget } : null,
     });
     this.arrows = this.threats();
     this.overSealed = false;
@@ -486,18 +484,20 @@ export class AimMode {
       const hit = h.world.raycast(ray.origin as THREE.Vector3, ray.dir as THREE.Vector3, AIMP.range + 4);
       this.overSealed = !!hit && !!hit.collider.noPortal;
     }
+    // (his side being picked: the compass round him says it all; the chips by the crosshair stand down meanwhile)
+    const picking = this.snapLatched;
     const st: AimHudState = {
       device: h.device(),
       // (the side being picked: its word is on the compass round him; this chip is for a sealed panel under the crosshair)
-      ret: this.overSealed && !this.snapLatched ? { kind: 'sealed' } : null,
+      ret: this.overSealed && !picking ? { kind: 'sealed' } : null,
       compass: this.compass(),
       mark: this.markOf(),
-      pair: this.pair ? (this.chain ? Math.max(0, CHAIN.life - this.chain.t) / CHAIN.life : Math.max(0, AIMP.life - this.pair.t) / AIMP.life) : null,
+      pair: this.pair && !picking ? (this.chain ? Math.max(0, CHAIN.life - this.chain.t) / CHAIN.life : Math.max(0, AIMP.life - this.pair.t) / AIMP.life) : null,
       chain: this.chain ? { links: this.chainLinks, max: CHAIN.max, placing: this.chain.placing } : null,
       ammo: this.ammo,
       reload: this.reloadT > 0 ? 1 - this.reloadT / AIMP.rifle.reload : null,
       hold: this.held ? Math.max(0, this.held.t) / AIMP.pull.hold : null,
-      stab: alive ? this.stabState() : null,
+      stab: alive && !picking ? this.stabState() : null,
       go,
       arrows: this.arrows,
     };
@@ -1606,7 +1606,9 @@ export class AimMode {
     if (!e || !this.snapSide) return null;
     _ndc.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z).project(this.h.camera);
     if (_ndc.z > 1) return null;
-    return { x: THREE.MathUtils.clamp((_ndc.x + 1) / 2, 0.08, 0.92), y: THREE.MathUtils.clamp((1 - _ndc.y) / 2, 0.12, 0.88), side: this.snapSide, ok: this.ghost?.spot.ok !== false };
+    // (on a phone it keeps left of the buttons and over the thumbs)
+    const touch = this.h.device() === 'touch';
+    return { x: THREE.MathUtils.clamp((_ndc.x + 1) / 2, touch ? 0.14 : 0.08, touch ? 0.6 : 0.92), y: THREE.MathUtils.clamp((1 - _ndc.y) / 2, touch ? 0.2 : 0.12, touch ? 0.66 : 0.88), side: this.snapSide, ok: this.ghost?.spot.ok !== false };
   }
 
   /** Edge arrows for the threats off the screen: a gun on you, a knife coming, a red portal. */
