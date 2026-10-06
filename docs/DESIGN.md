@@ -1011,7 +1011,8 @@ each **combat variant** to choose one.
     mid wall) refuse portals; every other wall takes them (under 1 m in 12 is sealed). Wall tops are
     bright capped ledges (a floor exit fits on one), zone letters A-H are stencilled big on the floor
     (they read from a perch). One merged mesh per material: the draw calls are the old arena's (about
-    65 a frame); triangles +30%, no more. **Sight is broken everywhere**: from no spot (grid of 1.5 m,
+    65 a frame, 61-70 against the old 64-70); a frame's triangles 108-132k against 82-105k, the bundle
+    +23 kB. **Sight is broken everywhere**: from no spot (grid of 1.5 m,
     perches included) can you see more than 35% of the 25 posts (the test pins it; the worst is a perch
     at 8 of 25), the average spot sees 2.4. **How you get a man you can't see**: (a) peek through a
     window or a slit, the crosshair on him, PORTAL puts the exit behind him, GO, stab; (b) aim at a
@@ -1022,8 +1023,7 @@ each **combat variant** to choose one.
     post (HOLD, 4-9 s) believing you are where the fight started, then walks to where he last SAW you
     or HEARD you (6.5 m, through a wall); there nothing: he SEARCHES (three spots 3-8 m round it, a
     look at each). 12 s without news and he gets a hunch (your place give or take 5 m, new every 4 s):
-    a wave can't stall (bots: no stretch of a fight without a kill beyond a minute; the last two men
-    are still marked on the screen). Cover is chosen by the walk (a spot behind a wall that is a long
+    a wave can't stall (the last two men are still marked on the screen). Cover is chosen by the walk (a spot behind a wall that is a long
     way round is skipped: `EnemySystem.pathLength`), a man 5 s without getting anywhere takes another
     way, a man on a perch who has no line to you for 4.5 s (a glimpse only eases it) jumps down.
     **Round the wall by a portal**: a man who has had no sight of you for 5 s (a man who never has: 18 s
@@ -1034,6 +1034,12 @@ each **combat variant** to choose one.
     (measured). Fair: one red portal at a time, 5 s apart.
   - *Waves* (`AIM_WAVES_C`, 3-2-1 first 2 s then 1.8 s; men stand on their posts through the countdown):
     3 gunners, 3 gunners + a mirror, + two rushers, two mirrors, 8 (perch men included).
+    *Measured* (headless Chromium, the human-like bot: 0.45-0.6 s reaction, 0.5 deg of aim error, a walk
+    over the nav grid to the nearest unvisited post, the verbs by taste): 12 runs (8 seeds mixed, rifle
+    only, FIRE only, STAB only, GO only), all five waves done in 90-129 s (a wave 12-41 s, never 20 s
+    without a kill: the longest stretch between two kills 7.5-17 s), 0-1 deaths, 97-286 damage; 0-4
+    red-portal ambushes and 0-3 perch descents a run; a passive hero on the pad dies at 16.4 s. A
+    camping hero (stands in the SW pocket and takes it) is flanked by a portal once or twice a wave.
     Hero 100 hp, regen only after 4 s unhurt. KILLS BY TOOL: RIFLE, KNIFE, THROW, PORTAL (the pair
     dropped or slammed him), OTHER. No clip offer mid-fight in the lab (its phone button sat in the look
     thumb's way).

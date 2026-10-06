@@ -489,7 +489,7 @@ export class AimMode {
       compass: this.compass(),
       mark: this.markOf(),
       pair: this.pair ? (this.chain ? Math.max(0, CHAIN.life - this.chain.t) / CHAIN.life : Math.max(0, AIMP.life - this.pair.t) / AIMP.life) : null,
-      chain: this.chain && this.pair ? { links: 2 + this.chain.nodes.length, max: CHAIN.max, placing: this.chain.placing } : null,
+      chain: this.chain ? { links: this.chainLinks, max: CHAIN.max, placing: this.chain.placing } : null,
       ammo: this.ammo,
       reload: this.reloadT > 0 ? 1 - this.reloadT / AIMP.rifle.reload : null,
       hold: this.held ? Math.max(0, this.held.t) / AIMP.pull.hold : null,
