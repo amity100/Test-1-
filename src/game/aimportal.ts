@@ -39,7 +39,8 @@ export const AIMP = {
    * FIT (every portal you open: the exit, a link, the one by a man, the near twin): it lies wholly on its surface (no
    * edge over an edge, an opening or a sealed panel; nothing standing out of the surface within `clear` m in front of
    * it: a corner, a jamb), the crosshair's point at least `keep` m inside its edge. A wall one stands on the floor in
-   * front of it while the crosshair is lower than its height (less `keep`): a door in the wall, not one hung on it.
+   * front of it while the crosshair is lower than its height (plus `sitOver`): a door in the wall, not one hung on it;
+   * aimed higher, it hangs on the crosshair (a drop out of it).
    * Off where the crosshair is, it slides along the surface at most `slide` m (`step` m steps, the nearest first). A
    * face too small for it (a low wall, a sill, a jamb, a pillar, a stair) gets one upright on the floor `standOff` m
    * in front of it (that floor at most `stand` m under the crosshair). None of that: rays round the crosshair (`cone`°,
@@ -47,7 +48,7 @@ export const AIMP = {
    * crosshair); none: refused ('fit', NO ROOM). A ledge right by you (a parapet's top, a low wall at your knees)
    * that the view looks over does not stop the crosshair: it goes on past it.
    */
-  fit: { keep: 0.15, clear: 0.2, slide: 0.6, step: 0.15, standOff: 0.12, stand: 2.6, cone: 2.4, rings: 3 },
+  fit: { keep: 0.15, clear: 0.2, slide: 0.6, step: 0.15, sitOver: 0.4, standOff: 0.12, stand: 2.6, cone: 2.4, rings: 3 },
   /** A surface nearer than this to your eyes refuses a portal (m). */
   minDist: 1.6,
   /** Person-sized: width, height; the horizontal ones (floor, ceiling) a disc this wide (m). */
@@ -357,11 +358,11 @@ const _list: Collider[] = [];
 const _list2: Collider[] = [];
 
 /** Fit a surface spot (wall, floor, ceiling) onto its surface: 'ok' (moved there), 'sealed' or 'bad'. */
-function fitOnSurface(world: FitWorld, s: Spot, anchor: V3 | null, up: boolean, max: number = AIMP.fit.slide): 'ok' | 'sealed' | 'bad' {
+function fitOnSurface(world: FitWorld, s: Spot, anchor: V3 | null, up: boolean, max: number = AIMP.fit.slide, anchorUp = true): 'ok' | 'sealed' | 'bad' {
   const list = boxesAround(world, s.pos, Math.max(s.w, s.h) / 2 + max + 0.5, Math.max(s.w, s.h) / 2 + max + 0.5, _list);
   axes(s, _n, _u, _r);
   if (onSurface(list, s.pos, s) === 'sealed') return 'sealed';
-  return slide(s, anchor, up, (c) => onSurface(list, c, s) === 'ok', max) ? 'ok' : 'bad';
+  return slide(s, anchor, up, (c) => onSurface(list, c, s) === 'ok', max, anchorUp) ? 'ok' : 'bad';
 }
 
 /** Fit an upright free-standing spot (stand, air): nothing in its face, room to come out of it; slid at most `max` m (keeping `anchor` across it: the crosshair's point may be over or under it). */
@@ -400,8 +401,8 @@ function floorBy(groundAt: (x: number, z: number, y: number) => number, p: V3, n
 
 /**
  * The exit where the crosshair ray (origin = the camera, unit dir; `eye`: your eyes) meets the world, FITTED:
- * - a WALL: standing on the floor in front of it when the crosshair is lower than its height (less AIMP.fit.keep),
- *   else centred on the crosshair; slid along the wall (at most AIMP.fit.slide) to lie wholly on it, clear of
+ * - a WALL: standing on the floor in front of it when the crosshair is lower than its height (plus
+ *   AIMP.fit.sitOver), else centred on the crosshair; slid along the wall (at most AIMP.fit.slide) to lie wholly on it, clear of
  *   corners, jambs and openings. A face too small for it (a low wall, a sill, a jamb, a pillar): upright on the
  *   floor right in front of it (STAND).
  * - the FLOOR / a CEILING: a disc, slid to lie wholly on it, clear of the walls; on a stair or a narrow top
@@ -509,10 +510,10 @@ function exitAlong(world: FitWorld, origin: V3, dir: V3, eye: V3, air: number | 
   s.surface = 'wall';
   flat(n, s.normal);
   s.pos.copy(hit.point).addScaledVector(s.normal, AIMP.off);
-  const g = floorBy(groundAt, hit.point, s.normal, AIMP.h - F.keep);
+  const g = floorBy(groundAt, hit.point, s.normal, AIMP.h + F.sitOver);
   const sits = g !== null;
   if (sits) s.pos.y = g + AIMP.h / 2 + 0.02;
-  const f = fitOnSurface(world, s, anchor, !sits);
+  const f = fitOnSurface(world, s, anchor, !sits, AIMP.fit.slide, !sits);
   if (f === 'ok') return s;
   if (f === 'sealed') return refuse(s, 'sealed');
   // the face can't hold it (a low wall, a sill, a jamb, a pillar): upright on the floor right in front of it
@@ -632,13 +633,12 @@ export function nearSpot(world: FitWorld, chest: V3, ray: { origin: V3; dir: V3 
   s.normal.set(-aim.x, 0, -aim.z);
   s.hdir.copy(aim);
   build(want, 0, s);
-  // what stands in its way: flat along your aim, from your own plane, knee to head, across its width
-  const c0 = (s.pos.x - chest.x) * rx + (s.pos.z - chest.z) * rz;
+  // what stands in your way into it: flat along your aim, from your own body, knee to head (its own face is kept
+  // clear below: a jamb beside you is no reason to bring it in)
   let free = want;
   const o = _a;
-  for (const k of [-1, -0.5, 0, 0.5, 1]) {
+  for (const ac of [-N.body - 0.05, 0, N.body + 0.05]) {
     for (const hy of [0.25, 0.75, 1.3, 1.9]) {
-      const ac = c0 + k * (hw - 0.05);
       o.set(chest.x + rx * ac, floor + hy, chest.z + rz * ac);
       const hit = world.raycast(o, _b.set(aim.x, 0, aim.z), want + 0.3);
       if (hit && hit.distance - N.gap < free) free = hit.distance - N.gap;

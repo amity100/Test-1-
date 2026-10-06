@@ -22,6 +22,7 @@ import {
   placeExit,
   pullSpot,
   rayCylinder,
+  redClear,
   shieldCross,
   SIDES,
   snapSpot,
@@ -216,6 +217,367 @@ function flatWallWorld() {
   w.add(V(-10, 0, 12), V(10, 6, 13));
   return w;
 }
+
+// ---------------------------------------------------------------------------
+// Precision: every portal fits where it opens (the compound's walls, doors, windows, slits, perches)
+// ---------------------------------------------------------------------------
+
+/** Points of a spot's face (rim and middle), `ahead` m out of its front. */
+function facePoints(s: { pos: THREE.Vector3; normal: THREE.Vector3; hdir: THREE.Vector3; w: number; h: number }, ahead = 0) {
+  const n = s.normal;
+  const up = Math.abs(n.y) > 0.9 ? V(s.hdir.x, 0, s.hdir.z).normalize() : V(0, 1, 0);
+  const r = new THREE.Vector3().crossVectors(up, n).normalize();
+  const out = [s.pos.clone().addScaledVector(n, ahead)];
+  for (let i = 0; i < 32; i++) {
+    const a = (i / 32) * Math.PI * 2;
+    out.push(s.pos.clone().addScaledVector(r, (Math.cos(a) * s.w * 0.97) / 2).addScaledVector(up, (Math.sin(a) * s.h * 0.97) / 2).addScaledVector(n, ahead));
+  }
+  return out;
+}
+const inWorld = (w: CollisionWorld, p: THREE.Vector3) => w.overlapsCylinder(p.x, p.z, 0.002, p.y - 0.002, p.y + 0.002);
+/** Nothing of the world in the spot's face. */
+const faceClear = (w: CollisionWorld, s: Parameters<typeof facePoints>[0]) => facePoints(s).every((p) => !inWorld(w, p));
+/** Every point of a surface spot's face has its surface right behind it (AIMP.off away, give or take 2 cm). */
+const faceOnSurface = (w: CollisionWorld, s: Parameters<typeof facePoints>[0]) =>
+  facePoints(s).every((p) => {
+    const hit = w.raycast(p.clone().addScaledVector(s.normal, 0.2), s.normal.clone().negate(), 0.5);
+    return !!hit && Math.abs(hit.distance - 0.2 - AIMP.off) < 0.02;
+  });
+
+describe('AIM PORTAL: every portal fits where it opens', () => {
+  const eye = V(0, 1.6, 0);
+  /** A wall across z = 10 (its face at 10), from x0 to x1, h high; a window in it from wx0 to wx1 (sill 0.9, head 2.0). */
+  const court = (o: { x0?: number; x1?: number; h?: number; win?: [number, number]; door?: [number, number] } = {}) => {
+    const w = flatWorld();
+    const x0 = o.x0 ?? -10, x1 = o.x1 ?? 10, h = o.h ?? 4;
+    const cuts = [o.win, o.door].filter(Boolean).sort((a, b) => a![0] - b![0]) as [number, number][];
+    let a = x0;
+    for (const [c0, c1] of cuts) {
+      w.add(V(a, 0, 10), V(c0, h, 10.5));
+      if (o.win && c0 === o.win[0]) {
+        w.add(V(c0, 0, 10), V(c1, 0.9, 10.5), { tag: 'sill' });
+        w.add(V(c0, 2.0, 10), V(c1, h, 10.5));
+      } else w.add(V(c0, 2.8, 10), V(c1, h, 10.5));
+      a = c1;
+    }
+    w.add(V(a, 0, 10), V(x1, h, 10.5));
+    return w;
+  };
+  const aimAt = (p: THREE.Vector3, from = eye) => p.clone().sub(from).normalize();
+
+  it('a wall: a door in it, standing on the floor in front of it, wholly on the wall, the crosshair inside it', () => {
+    const w = court();
+    for (const y of [0.5, 1.2, 1.9, 2.4]) {
+      const s = placeExit(w, eye, aimAt(V(1, y, 10)), eye, null, groundOf(w));
+      expect(s.ok).toBe(true);
+      expect(s.surface).toBe('wall');
+      expect(s.pos.y - s.h / 2).toBeCloseTo(0.02, 5);
+      expect(Math.abs(s.pos.x - 1)).toBeLessThanOrEqual(s.w / 2 - AIMP.fit.keep + 1e-6);
+      expect(faceOnSurface(w, s)).toBe(true);
+    }
+    // aimed well over its height: it hangs on the crosshair (a drop out of it), still wholly on the wall
+    const hi = placeExit(w, eye, aimAt(V(1, 3.0, 10)), eye, null, groundOf(w));
+    expect(hi.pos.y - hi.h / 2).toBeGreaterThan(0.5);
+    expect(hi.pos.y + hi.h / 2).toBeLessThanOrEqual(4 + 1e-6);
+    expect(faceOnSurface(w, hi)).toBe(true);
+  });
+
+  it('by the end of a wall, an opening or an inside corner it slides along the wall (never over the edge), the crosshair still in it', () => {
+    // the end of the wall at x = 2
+    const end = court({ x1: 2 });
+    const s = placeExit(end, eye, aimAt(V(1.8, 1.2, 10)), eye, null, groundOf(end));
+    expect(s.ok && s.surface).toBe('wall');
+    expect(s.pos.x + s.w / 2).toBeLessThanOrEqual(2 + 1e-3);
+    expect(Math.abs(s.pos.x - 1.8)).toBeLessThanOrEqual(s.w / 2 - AIMP.fit.keep + 1e-6);
+    expect(faceOnSurface(end, s)).toBe(true);
+    // a window at x 2..3.4: not half over it
+    const win = court({ win: [2, 3.4] });
+    const sw = placeExit(win, eye, aimAt(V(1.8, 1.2, 10)), eye, null, groundOf(win));
+    expect(sw.surface).toBe('wall');
+    expect(sw.pos.x + sw.w / 2).toBeLessThanOrEqual(2 + 1e-3);
+    expect(faceOnSurface(win, sw)).toBe(true);
+    // an inside corner: a wall coming out of it at x = 2 (toward you)
+    const corner = court();
+    corner.add(V(2, 0, 6), V(2.5, 4, 10));
+    const sc = placeExit(corner, eye, aimAt(V(1.8, 1.2, 10)), eye, null, groundOf(corner));
+    expect(sc.surface).toBe('wall');
+    expect(sc.pos.x + sc.w / 2).toBeLessThanOrEqual(2 + 1e-3);
+    expect(faceClear(corner, sc)).toBe(true);
+    expect(sc.dist).toBeCloseTo(10, 0);
+  });
+
+  it('a face too small for it (a low wall, a sill, a pillar, a stub between a window and a door): it stands upright on the floor right in front of it', () => {
+    const cases: [string, CollisionWorld, THREE.Vector3][] = [];
+    const low = flatWorld();
+    low.add(V(-3, 0, 10), V(3, 1.2, 10.5));
+    cases.push(['low wall', low, V(0, 0.7, 10)]);
+    const pillar = flatWorld();
+    pillar.add(V(-0.5, 0, 10), V(0.5, 3.8, 11));
+    cases.push(['pillar', pillar, V(0.2, 1.5, 10)]);
+    const stub = court({ win: [-2.4, -1], door: [-0.5, 2.5] });
+    cases.push(['stub', stub, V(-0.75, 1.2, 10)]);
+    const sill = court({ win: [-0.7, 0.7] });
+    cases.push(['sill', sill, V(0, 0.6, 10)]);
+    for (const [what, w, p] of cases) {
+      const s = placeExit(w, eye, aimAt(p), eye, null, groundOf(w));
+      expect(s.ok, what).toBe(true);
+      expect(s.surface, what).toBe('stand');
+      expect(s.normal.z, what).toBeCloseTo(-1, 5);
+      expect(s.pos.y - s.h / 2, what).toBeCloseTo(0.02, 5);
+      // in front of the face, a hair off it, nothing of the world in it
+      expect(10 - s.pos.z, what).toBeGreaterThanOrEqual(AIMP.off + AIMP.fit.standOff - 1e-6);
+      expect(faceClear(w, s), what).toBe(true);
+      // across: on the crosshair
+      expect(Math.abs(s.pos.x - p.x), what).toBeLessThanOrEqual(s.w / 2 - AIMP.fit.keep + 1e-6);
+    }
+  });
+
+  it('through a window at the floor beyond: there, not on the frame; on its sill or its jamb: never a portal hanging off it', () => {
+    const w = court({ win: [-0.7, 0.7] });
+    // (the floor 5.5 m past the window, seen through it from 3 m in front of it)
+    const by = V(0, 1.6, 7);
+    const beyond = placeExit(w, by, aimAt(V(0, 0, 16), by), by, null, groundOf(w));
+    expect(beyond.ok).toBe(true);
+    expect(beyond.surface).toBe('floor');
+    expect(beyond.pos.z).toBeGreaterThan(10.5 + AIMP.flat / 2 - 1e-3);
+    expect(faceOnSurface(w, beyond)).toBe(true);
+    // the crosshair on the sill's top (0.5 m deep: no room for a disc), and on the jamb (the side of the opening)
+    for (const p of [V(0, 0.9, 10.25), V(0.7, 1.4, 10.3)]) {
+      const s = placeExit(w, V(-2, 1.6, 4), aimAt(p, V(-2, 1.6, 4)), V(-2, 1.6, 4), null, groundOf(w));
+      expect(s.ok).toBe(true);
+      expect(faceClear(w, s)).toBe(true);
+      if (s.surface === 'wall' || s.surface === 'floor') expect(faceOnSurface(w, s)).toBe(true);
+    }
+  });
+
+  it('a floor disc by a wall slides off it; on a stair it stands upright; never on a wall top you would fall off', () => {
+    const w = court();
+    const s = placeExit(w, eye, aimAt(V(1, 0, 9.7)), eye, null, groundOf(w));
+    expect(s.surface).toBe('floor');
+    expect(s.pos.z + s.w / 2).toBeLessThanOrEqual(10 + 1e-3);
+    expect(faceClear(w, s)).toBe(true);
+    expect(faceOnSurface(w, s)).toBe(true);
+    // a flight of stairs (0.25 m steps, 0.5 m deep) climbing away from you
+    const st = flatWorld();
+    for (let k = 0; k < 8; k++) st.add(V(-1.25, 0, 6 + k * 0.5), V(1.25, (k + 1) * 0.25, 10));
+    const on = placeExit(st, eye, aimAt(V(0, 0.75, 7.25)), eye, null, groundOf(st));
+    expect(on.ok).toBe(true);
+    expect(on.surface).toBe('stand');
+    expect(faceClear(st, on)).toBe(true);
+    // from a perch, the top of a 0.5 m wall: no portal stands on it
+    const top = court({ h: 3 });
+    const perch = V(0, 4.8, 6);
+    const t = placeExit(top, perch, aimAt(V(0.2, 3, 10.25), perch), perch, null, groundOf(top));
+    if (t.ok) expect(t.pos.y - t.h / 2).toBeLessThan(2.9);
+  });
+
+  it('a ledge right by you that you look over (a parapet’s top) does not stop the crosshair', () => {
+    const w = flatWorld();
+    // a perch: you on it at y 3.2, a parapet 1.2 m tall 0.7 m in front of you
+    w.add(V(-5, 0, -5), V(5, 3.2, 1.0));
+    w.add(V(-5, 3.2, 0.7), V(5, 4.4, 1.0));
+    const me = V(0, 4.8, 0), cam = V(0, 5.6, -2.6);
+    // (the crosshair just over the parapet's top, by its far edge)
+    const dir = aimAt(V(0, 4.395, 0.97), cam);
+    const first = w.raycast(cam, dir, 40)!;
+    expect(first.normal.y).toBeCloseTo(1, 5);
+    expect(first.distance - me.distanceTo(cam)).toBeLessThan(AIMP.minDist);
+    const s = placeExit(w, cam, dir, me, null, groundOf(w));
+    expect(s.reason).not.toBe('close');
+    expect(s.ok).toBe(true);
+    expect(s.pos.y).toBeLessThan(0.2);
+  });
+
+  it('nothing fits there: refused (NO ROOM), not a portal in the world', () => {
+    // a 0.8 m slot of floor between two tall walls
+    const w = flatWorld();
+    w.add(V(-6, 0, 8), V(-0.4, 5, 14));
+    w.add(V(0.4, 0, 8), V(6, 5, 14));
+    w.add(V(-0.4, 0, 14), V(0.4, 5, 14.5));
+    const s = placeExit(w, V(0, 6, 4), aimAt(V(0, 0, 11), V(0, 6, 4)), V(0, 6, 4), null, groundOf(w));
+    if (!s.ok) expect(s.reason).toBe('fit');
+    else expect(faceClear(w, s)).toBe(true);
+    expect(strings('en')['aim.fit']).toBeTruthy();
+    expect(strings('he')['aim.fit']).not.toBe(strings('en')['aim.fit']);
+  });
+
+  it('by a man near a wall: on his side of it, in sight of him, nothing of the world in its face (an inside corner, a doorway, his back to a wall)', () => {
+    const w = flatWorld();
+    // a room's corner: walls along z = 10 and x = 5; a doorway in the x = -5 wall
+    w.add(V(-10, 0, 10), V(10, 4, 10.5));
+    w.add(V(5, 0, -10), V(5.5, 4, 10));
+    w.add(V(-5.5, 0, -10), V(-5, 4, 2));
+    w.add(V(-5.5, 0, 5), V(-5, 4, 10));
+    w.add(V(-5.5, 2.8, 2), V(-5, 4, 5));
+    const views = [V(0, 0, 1), V(1, 0, 0.4).normalize(), V(-1, 0, 0.3).normalize(), V(0.6, 0, 1).normalize()];
+    const men = [V(4.3, 0, 9.3), V(4.4, 0, 7), V(0, 0, 9.2), V(-4.4, 0, 3.5), V(-4.6, 0, 6), V(2, 0, 8.8)];
+    let n = 0;
+    for (const m of men) {
+      for (const view of views) {
+        for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+          for (const side of ['behind', 'left', 'right'] as const) {
+            const e = { pos: m, yaw, height: 1.8 };
+            const s = fitSnap(w, e, side, 0, view);
+            if (!s.ok) continue;
+            n++;
+            const where = `${side} of (${m.x}, ${m.z}) yaw ${yaw.toFixed(2)}`;
+            expect(faceClear(w, s), where).toBe(true);
+            // from a hand in front of its middle to his chest: nothing between (never across a wall from him)
+            const from = s.pos.clone().addScaledVector(s.normal, 0.15);
+            from.y = Math.min(from.y, 1.08);
+            expect(w.lineOfSight(from, V(m.x, 1.08, m.z)), where).toBe(true);
+            // it looks at him (within the turn it may take), standing on his floor, by him
+            expect(s.pos.y - s.h / 2, where).toBeCloseTo(0.02, 5);
+            expect(Math.hypot(s.pos.x - m.x, s.pos.z - m.z), where).toBeLessThanOrEqual(AIMP.magnet.dist + AIMP.magnet.slide + 0.05);
+            expect(V(m.x - s.pos.x, 0, m.z - s.pos.z).normalize().dot(s.normal), where).toBeGreaterThan(0.2);
+          }
+        }
+      }
+    }
+    expect(n).toBeGreaterThan(80);
+  });
+
+  it('his back to a wall: no room behind him (square to the wall) refuses BEHIND; at a slant it never squeezes him against it', () => {
+    const w = flatWorld();
+    w.add(V(-10, 0, 10), V(10, 4, 10.5));
+    // 0.6 m off the wall, he faces you: nothing behind him, not even turned
+    expect(fitSnap(w, { pos: V(0, 0, 9.4), yaw: Math.PI, height: 1.8 }, 'behind', 0, V(0, 0, 1)).ok).toBe(false);
+    // 1.2 m off: on the wall behind him, a door in it on his floor
+    const s = fitSnap(w, { pos: V(0, 0, 8.8), yaw: Math.PI, height: 1.8 }, 'behind', 0, V(0, 0, 1));
+    expect(s.ok && s.surface).toBe('wall');
+    expect(s.pos.z).toBeCloseTo(10 - AIMP.off, 5);
+    expect(10 - 8.8).toBeGreaterThanOrEqual(AIMP.magnet.tight);
+  });
+
+  it('ABOVE a man by a wall slides off it (the disc never cuts the wall); BELOW him by a wall too', () => {
+    const w = flatWorld();
+    w.add(V(-10, 0, 10), V(10, 4, 10.5));
+    const e = { pos: V(0, 0, 9.6), yaw: 0, height: 1.8 };
+    const up = fitSnap(w, e, 'above', 0, V(0, 0, 1));
+    expect(up.ok).toBe(true);
+    expect(up.pos.z + up.w / 2).toBeLessThanOrEqual(10 + 1e-3);
+    expect(faceClear(w, up)).toBe(true);
+    const down = fitSnap(w, e, 'below', 0, V(0, 0, 1));
+    expect(down.ok).toBe(true);
+    expect(down.pos.z + down.w / 2).toBeLessThanOrEqual(10 + 1e-3);
+    // (he is still over it: he drops through)
+    expect(Math.hypot(down.pos.x - e.pos.x, down.pos.z - e.pos.z)).toBeLessThanOrEqual(down.w / 2 - AIMP.fit.keep + 1e-6);
+  });
+
+  it('the near twin against a wall (a window in it, the crosshair through the window): in front of the wall, never in it; walk at it and you go through', () => {
+    const w = court({ win: [-0.7, 0.7] });
+    w.add(V(-60, -1, -60), V(60, 0, 60));
+    const chest = V(0, 1.08, 9.3);
+    const ray = { origin: V(-0.62, 1.7, 6.3), dir: aimAt(V(0, 1.2, 14), V(-0.62, 1.7, 6.3)) };
+    const s = nearSpot(w, chest, ray, 0, groundOf(w));
+    expect(s.pos.z).toBeLessThanOrEqual(10 - AIMP.near.gap + 1e-6);
+    expect(s.pos.z - chest.z).toBeGreaterThanOrEqual(AIMP.near.min - 1e-6);
+    expect(faceClear(w, s)).toBe(true);
+    // a body walking at it goes in (the wall right behind it does not stop it)
+    const rifts = makeRifts(w);
+    const phys = makePhysics(w, rifts);
+    const ev = recorder();
+    const far = { pos: V(20, 1.07, 0), normal: V(-1, 0, 0), hdir: V(0, 0, 1), surface: 'wall' as const, w: AIMP.w, h: AIMP.h };
+    const id = rifts.openStrike(spotFrame(s, 'stand'), spotFrame(far), 6);
+    (rifts.strikeEnds(id)!.a as { pass?: number }).pass = AIMP.near.pass;
+    rifts.update(0.3, 0.3, 0.3);
+    const b = phys.createBody('prop', { pos: V(s.pos.x, 0.02, 9.0), radius: 0.34, height: 1.8, simulate: false });
+    b.vel.set(0, 0, 4);
+    run(phys, ev, 0.8);
+    expect(ev.log.crossed.length).toBe(1);
+    // without the pass a wall that close holds him off (what the pass is for)
+    const rifts2 = makeRifts(w);
+    const phys2 = makePhysics(w, rifts2);
+    const ev2 = recorder();
+    rifts2.openStrike(spotFrame(s, 'stand'), spotFrame(far), 6);
+    rifts2.update(0.3, 0.3, 0.3);
+    const b2 = phys2.createBody('prop', { pos: V(s.pos.x, 0.02, 9.0), radius: 0.34, height: 1.8, simulate: false });
+    b2.vel.set(0, 0, 4);
+    run(phys2, ev2, 0.8);
+    expect(10 - s.pos.z).toBeLessThan(0.34);
+    expect(ev2.log.crossed.length).toBe(0);
+  });
+
+  it('the near twin in a doorway (a jamb at your side) or by a low wall in your way: its face clear of them, the crosshair in it', () => {
+    const w = flatWorld();
+    // a door 3 m wide in a wall at z = 1: you stand in it by its east jamb (x 1.5), aiming north-east past it
+    w.add(V(-10, 0, 0.75), V(-1.5, 4, 1.25));
+    w.add(V(1.5, 0, 0.75), V(10, 4, 1.25));
+    const chest = V(1.0, 1.08, 1.0);
+    const dir = V(0.5, -0.05, 1).normalize();
+    const ray = { origin: chest.clone().add(V(-0.62, 0.6, -2.9)), dir };
+    const s = nearSpot(w, chest, ray, 0, groundOf(w));
+    expect(faceClear(w, s)).toBe(true);
+    // a low wall right in front of you, the crosshair over it: it stands over it, the crosshair inside it
+    const lw = flatWorld();
+    lw.add(V(-3, 0, 0.55), V(3, 1.2, 1.0));
+    const r2 = { origin: V(-0.62, 1.9, -2.9), dir: V(0, -0.02, 1).normalize() };
+    const s2 = nearSpot(lw, V(0, 1.08, 0), r2, 0, groundOf(lw));
+    expect(faceClear(lw, s2)).toBe(true);
+    const k = (s2.pos.z - r2.origin.z) / r2.dir.z;
+    const cross = r2.origin.clone().addScaledVector(r2.dir, k);
+    expect(Math.abs(cross.y - s2.pos.y)).toBeLessThanOrEqual(s2.h / 2 - AIMP.near.margin + 1e-6);
+  });
+
+  it('their red portals never stand half in a wall', () => {
+    const w = flatWorld();
+    w.add(V(-10, 0, 10), V(10, 4, 10.5));
+    // facing you (south), its oval 0.4 m from the wall's face: clear; turned side-on, its edge in the wall: not
+    expect(redClear(w, V(0, 0, 9.6), Math.PI)).toBe(true);
+    expect(redClear(w, V(0, 0, 9.6), Math.PI / 2)).toBe(false);
+    expect(redClear(w, V(0, 0, 9.99), Math.PI)).toBe(false);
+  });
+});
+
+describe('AIM PORTAL: the magnet', () => {
+  const o = V(0, 1.6, 0);
+  const kbm = THREE.MathUtils.degToRad(AIMP.magnet.deg.kbm);
+  it('two men side by side: the one nearest the crosshair (by angle), not the nearer one; the one it is on keeps it until the other is clearly nearer (no flicker)', () => {
+    const a = { id: 1, pos: V(-0.45, 0, 10), height: 1.8, radius: 0.42 };
+    const b = { id: 2, pos: V(0.45, 0, 10), height: 1.8, radius: 0.42 };
+    const at = (x: number, prev: typeof a | null = null) => magnetTarget(o, V(x, 1.2 - 1.6, 10).normalize(), [a, b], kbm, () => false, AIMP.magnet.range, prev);
+    expect(at(-0.3)?.id).toBe(1);
+    expect(at(0.3)?.id).toBe(2);
+    // a nearer man 1 m to the side vs. a far one right under the crosshair: the far one
+    const near = { id: 3, pos: V(1.0, 0, 6), height: 1.8, radius: 0.42 };
+    const far = { id: 4, pos: V(0.05, 0, 20), height: 1.8, radius: 0.42 };
+    expect(magnetTarget(o, V(0, 0, 1), [near, far], kbm, () => false)?.id).toBe(4);
+    // the crosshair wobbling round the middle (a hand's jitter of ±0.08 m at 10 m): it stays on the one it was on
+    let cur: typeof a | null = at(-0.3);
+    let changes = 0;
+    for (let i = 0; i < 60; i++) {
+      const x = 0.03 + (i % 2 ? 0.08 : -0.08);
+      const next = at(x, cur);
+      if (next !== cur) changes++;
+      cur = next;
+    }
+    expect(changes).toBe(0);
+    // swept on past the middle: it goes over to the other once (and only once)
+    let swaps = 0;
+    cur = at(-0.6);
+    for (let x = -0.6; x <= 0.6; x += 0.02) {
+      const next = at(x, cur);
+      if (next !== cur) swaps++;
+      cur = next;
+    }
+    expect(swaps).toBe(1);
+    expect(cur?.id).toBe(2);
+  });
+
+  it('a man behind a wall is never grabbed; one seen through a window is', () => {
+    const w = flatWorld();
+    // a wall at z 5 with a window (x -1..1, y 0.9..2.0)
+    w.add(V(-10, 0, 5), V(-1, 4, 5.5));
+    w.add(V(1, 0, 5), V(10, 4, 5.5));
+    w.add(V(-1, 0, 5), V(1, 0.9, 5.5));
+    w.add(V(-1, 2.0, 5), V(1, 4, 5.5));
+    const blocked = (p: THREE.Vector3Like, q: THREE.Vector3Like) => !w.lineOfSight(p as THREE.Vector3, q as THREE.Vector3);
+    const hidden = { id: 1, pos: V(3, 0, 9), height: 1.8, radius: 0.42 };
+    const seen = { id: 2, pos: V(0, 0, 9), height: 1.8, radius: 0.42 };
+    expect(magnetTarget(o, V(3, 1.2 - 1.6, 9).normalize(), [hidden], THREE.MathUtils.degToRad(AIMP.magnet.deg.touch), blocked)).toBeNull();
+    expect(magnetTarget(o, V(0, 1.2 - 1.6, 9).normalize(), [seen], kbm, blocked)?.id).toBe(2);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Next to a man: the side, as you see him
@@ -1486,6 +1848,60 @@ describe('AIM PORTAL: GO', () => {
     input.stabPress = true;
     for (let n = 0; n < 40 && g.alive; n++) step(1);
     expect(g.alive).toBe(false);
+  });
+
+  it('GO held up on the way in (a body in the way): it goes through all the same, out of the exit, the view with it', () => {
+    const { R, man, freeze, aimAt, tap, input, step, hops, player, pos } = rig({ move: true });
+    const g = man(V(0, 0, 14), Math.PI);
+    freeze(g);
+    aimAt(V(0, 1.2, 14));
+    tap();
+    // (the dash never moves you: something stands in the way)
+    player.lunge = () => {};
+    input.goPress = true;
+    step(1);
+    expect(R.dash).not.toBeNull();
+    step(Math.ceil((AIMP.go.time + AIMP.go.stall) * 60) + 2);
+    expect(R.dash).toBeNull();
+    expect(hops.length).toBe(1);
+    expect(R.usage.goThrough).toBe(1);
+    // out of the exit's front (1.3 m behind him, facing him): between the exit and him
+    expect(Math.abs(pos.x)).toBeLessThan(0.1);
+    expect(pos.z).toBeLessThan(14 + AIMP.magnet.dist - 0.3);
+    expect(pos.z).toBeGreaterThan(14 + 0.5);
+    expect(Math.cos(hops[0].yaw - Math.PI)).toBeGreaterThan(0.99);
+  });
+
+  it('out of a door on a wall by GO, nobody in front: a step clear of the wall (room for the view); a man there: no step into him', () => {
+    const { R, aimAt, tap, input, step, crossings, pos, sc } = rig({ move: true });
+    sc.world.add(V(-10, 0, 12), V(10, 4, 13));
+    aimAt(V(0, 1.2, 12));
+    tap();
+    expect(R.pair!.far.surface).toBe('wall');
+    input.goPress = true;
+    step(1);
+    for (let n = 0; n < 30 && !crossings.length; n++) step(1);
+    expect(crossings.length).toBe(1);
+    step(30);
+    expect(12 - pos.z).toBeGreaterThanOrEqual(AIMP.go.step * 0.9);
+    // the same with a man 1.3 m out from the door: you stop short of him
+    const r2 = rig({ move: true });
+    r2.sc.world.add(V(-10, 0, 12), V(10, 4, 13));
+    const g = r2.man(V(3, 0, 10.7), 0);
+    r2.freeze(g);
+    r2.aimAt(V(3, 1.2, 12));
+    r2.step(1);
+    r2.R.closePair();
+    // (the crosshair off him, on the wall beside him: the door opens on the wall)
+    r2.aimAt(V(3.9, 1.0, 12));
+    r2.tap();
+    if (r2.R.pair && r2.R.pair.far.surface === 'wall') {
+      r2.input.goPress = true;
+      r2.step(1);
+      for (let n = 0; n < 30 && !r2.crossings.length; n++) r2.step(1);
+      r2.step(20);
+      expect(Math.hypot(r2.pos.x - g.pos.x, r2.pos.z - g.pos.z)).toBeGreaterThan(0.75);
+    }
   });
 
   it('no pair: GO does nothing (a word); while you dash, PORTAL waits', () => {

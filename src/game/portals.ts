@@ -670,7 +670,7 @@ export class RiftSystem implements RiftAPI {
         toLocal(p, pos, _l);
         if (Math.abs(_l.x) < p.width / 2 && Math.abs(_l.y) < p.height / 2 && _l.z > -3 && _l.z < 3.5) return true;
       } else {
-        if (p.host !== c && !faceHolds(c, p) && !(p.pass > 0 && behindWithin(c, p, p.pass))) continue;
+        if (p.host !== c && !faceHolds(c, p) && !(p.pass > 0 && passBehind(c, p, pos, p.pass))) continue;
         toLocal(p, pos, _l);
         if (Math.abs(_l.x) < p.width / 2 - radius * 0.3 && _l.z > -1.2 && _l.z < radius + 0.6 && Math.abs(_l.y) < p.height / 2 + 0.5) return true;
       }
@@ -1952,20 +1952,30 @@ function clampOn(v: number, lo: number, hi: number, half: number) {
 }
 
 /** Does the collider's face lie on this (axis-aligned) wall end's plane? */
-/** The box stands behind the end's face, its front within `depth` m of it, over its face (the end stands hard in front of it). */
-function behindWithin(c: Collider, p: Portal, depth: number) {
-  let zMax = -Infinity, xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-  for (let i = 0; i < 8; i++) {
-    _bc.set(i & 1 ? c.max.x : c.min.x, i & 2 ? c.max.y : c.min.y, i & 4 ? c.max.z : c.min.z);
-    toLocal(p, _bc, _bc);
-    zMax = Math.max(zMax, _bc.z);
-    xMin = Math.min(xMin, _bc.x);
-    xMax = Math.max(xMax, _bc.x);
-    yMin = Math.min(yMin, _bc.y);
-    yMax = Math.max(yMax, _bc.y);
+/**
+ * Across the end where the mover is (`pos`), the box is met within `depth` m behind its face and none of it stands
+ * in front of the face there: the end stands hard in front of it (AIM PORTAL's near twin against a wall).
+ */
+function passBehind(c: Collider, p: Portal, pos: V3, depth: number): boolean {
+  toLocal(p, pos, _bc);
+  const lx = THREE.MathUtils.clamp(_bc.x, -p.width / 2, p.width / 2), ly = THREE.MathUtils.clamp(_bc.y, -p.height / 2, p.height / 2);
+  // (a line through the face there, from a hair in front of it back through it)
+  _bc.set(lx, ly, 0.05).applyQuaternion(p.quaternion).add(p.position);
+  let t0 = -Infinity, t1 = Infinity;
+  const n = p.normal;
+  for (let k = 0; k < 3; k++) {
+    const o = k === 0 ? _bc.x : k === 1 ? _bc.y : _bc.z;
+    const d = -(k === 0 ? n.x : k === 1 ? n.y : n.z);
+    const lo = k === 0 ? c.min.x : k === 1 ? c.min.y : c.min.z, hi = k === 0 ? c.max.x : k === 1 ? c.max.y : c.max.z;
+    if (Math.abs(d) < 1e-9) {
+      if (o < lo || o > hi) return false;
+      continue;
+    }
+    const a = (lo - o) / d, b = (hi - o) / d;
+    t0 = Math.max(t0, Math.min(a, b));
+    t1 = Math.min(t1, Math.max(a, b));
   }
-  // (wholly behind its face, its front within `depth` of it)
-  return zMax < 0.05 && zMax > -depth && xMin < p.width / 2 && xMax > -p.width / 2 && yMin < p.height / 2 && yMax > -p.height / 2;
+  return t1 >= t0 && t0 > 0 && t0 <= depth + 0.05;
 }
 const _bc = new THREE.Vector3();
 
