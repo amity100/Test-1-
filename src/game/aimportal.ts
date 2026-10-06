@@ -131,6 +131,8 @@ export const AIMP = {
   hero: { hp: 100 },
   /** Their red portals: an oval `w` x `h` m (its ring included), its middle `mid` m over the floor it stands on, its face clear of the world (never in a wall). */
   red: { w: 1.4, h: 2.34, mid: 1.15 },
+  /** How long the pair takes to collapse (s; it opens in the rift system's 0.12 s): the exit, and the near twin (right in front of the camera: quicker still). */
+  anim: { close: 0.14, nearClose: 0.07 },
   /** The view: the camera pulled in closer than `far` m to your head (a wall right behind you, out of an exit on it), the hero fades, to `fade` at `near` m. */
   view: { far: 1.5, near: 0.85, fade: 0.28 },
   enemy: {

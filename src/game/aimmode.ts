@@ -749,8 +749,10 @@ export class AimMode {
     // (the near twin is right in front of the camera: it collapses at once when it goes; a wall right behind it never stops you walking in)
     const ends = h.rifts.strikeEnds(strike);
     if (ends) {
-      (ends.a as { closeTime?: number }).closeTime = 0.07;
-      (ends.a as { pass?: number }).pass = AIMP.near.pass;
+      const a = ends.a as { closeTime?: number; pass?: number };
+      a.closeTime = AIMP.anim.nearClose;
+      a.pass = AIMP.near.pass;
+      (ends.b as { closeTime?: number }).closeTime = AIMP.anim.close;
     }
     this.pair = { id: ++this.pairSeq, strike, near, far, t: 0, seen: new Map(), noticed: new Set(), man: man ? man.id : null, side };
     // (the pair of a chain being placed lives as long as the chain does)

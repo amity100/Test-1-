@@ -945,29 +945,54 @@ each **combat variant** to choose one.
   beat before a man reacts to a portal or to you behind him.)
   - *PORTAL* (RMB / LT / the PORTAL button; no modifier). **The crosshair on a man** (within 3° of his
     body on desktop, 4.5° pad, 7° touch, his body padded 0.35 m and 0.3 m up/down, in sight, up to 45 m:
-    `magnetTarget`; the nearest to the crosshair by that leeway wins): a magenta bracket and a ring at his
-    feet mark him and a ghost shows the exit; the press opens it **next to him**: 1.3 m from where he will
-    be in 0.2 s, standing on his floor, facing him, by default BEHIND him as you see him (the far side;
-    his back if he faces away from you; no room there: his left, his right, then over his head). Held on
+    `magnetTarget`; of two, the nearest to the crosshair by angle, and the one it is on keeps it until the
+    other is clearly nearer: no flicker between two men side by side; a man you can't see is never taken):
+    a magenta bracket marks him and a ghost shows the exit (exactly where the press opens it); the press
+    opens it **next to him**: 1.3 m from where he will be in 0.2 s, standing on his floor, facing him, by
+    default BEHIND him as you see him (the far side; his back if he faces away from you). No room that way:
+    the way is turned (25°, then 50°) first, then his left, his right, over his head. A wall on that way
+    (his back to it) brings it in against the wall on his side of it, slid along it off corners and
+    openings (a face too small: upright just in front of it); it is never in a wall, never across one from
+    him, always in sight of him; square to the wall, less than 0.75 m of room: refused. Held on
     him past 0.06 s, the look (mouse flick / R-stick / the drag from PORTAL) picks the side, live, on an
     8-way compass round him: up ABOVE, down BELOW (a floor disc: he drops through it), left / right LEFT /
     RIGHT as the screen has them, the upper diagonals BEHIND, the lower FRONT; let go and it stays. Ctrl /
-    MMB held on their own still pick a side first (an alias). **Off a man**: the first surface the ray
-    meets within 30 m (a wall: 0.05 m off it; the floor or a ceiling: a 1.4 m disc), else mid-air at 12 m
-    (the wheel / a vertical drag on PORTAL: 3-30 m); held past 0.15 s it follows the crosshair. SEALED
-    panels and surfaces nearer than 1.6 m refuse. Phone: a tap within 60 px of a man on the screen opens
+    MMB held on their own still pick a side first (an alias); while the side is picked the chips by the
+    crosshair stand down and one caption under the compass names the side. **Off a man**: the first
+    surface the ray meets within 30 m (a wall: a door 0.05 m off it; the floor or a ceiling: a 1.4 m disc),
+    else mid-air at 12 m (the wheel / a vertical drag on PORTAL: 3-30 m); held past 0.15 s it follows the
+    crosshair. SEALED panels and surfaces nearer than 1.6 m refuse (a ledge by you that the view looks
+    over, a parapet's top, does not stop the crosshair). Phone: a tap within 60 px of a man on the screen opens
     next to him; a tap on the plain world opens right there (ignored while a pair is open: a nudge of the
     look thumb is no reason to lose it). One pair, 6 s from let-go, 0.15 s apart; a new one replaces it.
+  - *FIT* (`AIMP.fit`; every portal you open: the exit, a CHAIN link, the one by a man): it lies wholly on its
+    surface: no edge over an edge, an opening or a sealed panel, nothing standing out of the surface within
+    0.2 m in front of it (a corner, a jamb), the crosshair's point 0.15 m inside its edge. A wall one is a door
+    standing on the floor in front of it (the crosshair lower than its height plus 0.4 m; aimed higher it
+    hangs on the crosshair: a drop out of it). Off where the crosshair is it slides along the surface at most
+    0.6 m, the nearest first. A face too small for it (a low wall, a window's sill or jamb, a pillar, a stub
+    between two openings, a stair) gets one upright on the floor 0.12 m in front of it (STAND), with room to
+    step out of it and a floor there (never on a wall's top). None of that: rays round the crosshair
+    (2.4°, three rings of 8) are tried, the one whose middle is nearest the crosshair wins; none: refused,
+    NO ROOM THERE. Their red portals' ovals keep clear of the walls too. Measured on the compound (25 920
+    rays from every walkable spot): portals in or hanging off the world 46% -> 0.3%; doors on a wall
+    floating off the floor 76% -> 0%; exits by a man in a wall 12% -> 0%.
   - *The near twin* opens right in front of you on the crosshair: 1.0 m ahead of your chest (to 1.4 m at a
-    sprint; nearer at a wall), 1.3 x 2.1 m (the exit too), centred on where the crosshair ray crosses that
+    sprint; in front of whatever stands in your way into it, 0.06 m short of it, never nearer than 0.45 m;
+    no room even there: raised over it, as far as the crosshair stays in it, or a little narrower at a
+    slant; its face never in a wall; a wall right behind it never stops you walking or GO-ing into it),
+    1.3 x 2.1 m (the exit too), centred on where the crosshair ray crosses that
     plane as far as your own body line stays 0.2 m inside it (the camera is over your shoulder), on your
     floor unless the crosshair needs it raised (0.6 m at most, then as far as the crosshair stays 0.3 m
     inside). So the crosshair is always in it and the man you put it by is framed on the crosshair (you see
     his back through it). While it is open it slides sideways with you (a strafe keeps him in it); walking
-    at it walks you in (no grace: you cross only moving into its front).
+    at it walks you in (no grace: you cross only moving into its front); it never slides into a wall.
   - *GO* (Q / pad B while a pair is open / the GO button over PORTAL, lit while a pair is open): a 0.12 s
     dash into the near twin's middle; out of the exit at 3.2 m/s along its front (no body-slam), facing
-    where it faces, the view turned by the pair's own turn (you look at him); the pair shuts as you come
+    where it faces, the view turned by the pair's own turn (you look at him); out of a door on a wall a
+    step of 1 m clear of it (never into a man), and with the camera pressed close behind you the hero fades
+    (to 28%) so what is in front of you stays in view; held up on the way in (a body in the way) GO goes
+    through all the same after 0.18 s. The pair shuts as you come
     out (nothing of it left in your view; a light flash only). A STAB or FIRE pressed during the dash lands
     on arrival (buffer 0.25 s). For 0.35 s after arriving the knife reaches 1 m further (2.8 m) and 2.6 m
     up or down (out over his head: down onto him). A man who sees you vanish and turn up at his side or
