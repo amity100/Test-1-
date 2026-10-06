@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { V3 } from '../core/contracts';
-import type { Collider, CollisionWorld } from '../world/collision';
+import type { Collider, CollisionWorld, RayHit } from '../world/collision';
 import { orientFrame, type RiftFrame } from './portalMath';
 import { bodyPoint, flat, sideOf } from './reach';
 
@@ -35,6 +35,18 @@ export const AIMP = {
   air: { def: 12, min: 3, max: 30, step: 1.5 },
   /** An exit stands this far off its surface (m). */
   off: 0.05,
+  /**
+   * FIT (every portal you open: the exit, a link, the one by a man, the near twin): it lies wholly on its surface (no
+   * edge over an edge, an opening or a sealed panel; nothing standing out of the surface within `clear` m in front of
+   * it: a corner, a jamb), the crosshair's point at least `keep` m inside its edge. A wall one stands on the floor in
+   * front of it while the crosshair is lower than its height (less `keep`): a door in the wall, not one hung on it.
+   * Off where the crosshair is, it slides along the surface at most `slide` m (`step` m steps, the nearest first). A
+   * face too small for it (a low wall, a sill, a jamb, a pillar, a stair) gets one upright on the floor `standOff` m
+   * in front of it (that floor at most `stand` m under the crosshair). None of that: rays round the crosshair (`cone`°,
+   * `rings` rings of 8) are tried, the nearest that fits wins (of one ring the further: through a window rather than
+   * onto its sill); none: refused ('fit', NO ROOM).
+   */
+  fit: { keep: 0.15, clear: 0.2, slide: 0.6, step: 0.15, standOff: 0.12, stand: 1.6, cone: 2.4, rings: 3 },
   /** A surface nearer than this to your eyes refuses a portal (m). */
   minDist: 1.6,
   /** Person-sized: width, height; the horizontal ones (floor, ceiling) a disc this wide (m). */
@@ -51,19 +63,39 @@ export const AIMP = {
    * The near twin: `ahead` m in front of your chest on the crosshair (plus `lead` s per m/s you run at
    * it, at most `max`), centred on the crosshair as far as it can be while your own body line stays
    * `body` m inside it and the crosshair `margin` m inside; standing on your floor unless the crosshair
-   * needs it raised (at most `float` m off it). While it is open it slides sideways with you (`follow`: a
-   * strafe keeps it, and him in it, on your crosshair; walking at it still walks you in). Your rounds go
-   * into it only while you aim within `cone`° (left or right) of the way it looks: turned further to shoot
-   * someone else, they leave your rifle past it (the camera over your shoulder would still see through it).
+   * needs it raised (at most `float` m off it). Something in its way (a wall, a jamb, a window's sill): it
+   * stands `gap` m in front of it, never nearer your chest than `min` m (no room even there: raised over it, at
+   * most `rise` m, as far as the crosshair stays in it); a wall up to `pass` m behind it never
+   * stops you walking (or GO-ing) into it. While it is open it slides sideways with you (`follow`: a
+   * strafe keeps it, and him in it, on your crosshair; walking at it still walks you in; never into a wall).
+   * Your rounds go into it only while you aim within `cone`° (left or right) of the way it looks: turned
+   * further to shoot someone else, they leave your rifle past it (the camera over your shoulder would still
+   * see through it).
    */
-  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6, follow: true, cone: 25 },
+  near: { ahead: 1.0, lead: 0.05, max: 1.4, body: 0.2, margin: 0.3, float: 0.6, rise: 1.3, gap: 0.06, min: 0.45, pass: 0.6, follow: true, cone: 25 },
   /**
    * The crosshair on a man: within `deg` (by device) of his body (his radius plus `pad` m, his height
-   * plus `padY` m), in sight, within `range` m; a tap within `tapPx` px of him on the screen. The exit
-   * opens `dist` m from where he will be in `lead` s, on the side you pick (default: behind him as you
-   * see him), facing him, standing on his floor.
+   * plus `padY` m), in sight, within `range` m; a tap within `tapPx` px of him on the screen. Of two, the
+   * one nearest the crosshair (by angle); the one it is on now keeps it until another is nearer by `stick`
+   * (its angle counts that much less: no flicker between two men side by side). The exit opens `dist` m
+   * from where he will be in `lead` s, on the side you pick (default: behind him as you see him), facing
+   * him, standing on his floor; no room that way, the way is turned by `turn`° (the nearest that works);
+   * a wall on it brings it in against the wall (no nearer him than `tight` m), slid along it at most
+   * `slide` m.
    */
-  magnet: { deg: { kbm: 3, pad: 4.5, touch: 7 }, pad: 0.35, padY: 0.3, range: 45, tapPx: 60, dist: 1.3, lead: 0.2 },
+  magnet: {
+    deg: { kbm: 3, pad: 4.5, touch: 7 },
+    pad: 0.35,
+    padY: 0.3,
+    range: 45,
+    tapPx: 60,
+    dist: 1.3,
+    lead: 0.2,
+    stick: 0.6,
+    turn: [0, 25, -25, 50, -50] as readonly number[],
+    tight: 0.75,
+    slide: 0.45,
+  },
   /** The side choice: PORTAL held on a man this long (s), the look picks his side; a flick shorter than `dead` (of a full push) keeps the default; ABOVE stands `over` m over his head. */
   snap: { pick: 0.06, over: 0.7, dead: 0.35 },
   /**
@@ -72,8 +104,14 @@ export const AIMP = {
    * the knife reaches `edge` m further (and `edgeY` m up or down).
    */
   stab: { reach: 2.0, melee: 1.5, cooldown: 0.4, direct: 1.8, nearMax: 3.6, edge: 1.0, edgeY: 2.6, edgeTime: 0.35 },
-  /** GO: the dash into the near twin takes `time` s; out of the exit at `arrive` m/s along its front; a STAB / FIRE pressed within `buffer` s before arriving lands on arrival; the pair shuts `close` s after (it has done its work: nothing of it in your view once you are out). */
-  go: { time: 0.12, arrive: 3.2, buffer: 0.25, close: 0 },
+  /**
+   * GO: the dash into the near twin takes `time` s (held up longer than `stall` s past it, by a body in the way:
+   * you go through all the same); out of the exit at `arrive` m/s along its front, and out of an upright one a
+   * step of `step` m at `stepSpeed` m/s (clear of the wall behind you: room for the view; never into a man); a
+   * STAB / FIRE pressed within `buffer` s before arriving lands on arrival; the pair shuts `close` s after (it
+   * has done its work: nothing of it in your view once you are out).
+   */
+  go: { time: 0.12, stall: 0.18, arrive: 3.2, step: 1.0, stepSpeed: 6, buffer: 0.25, close: 0 },
   /** PULL: the man within `reach` m in front of the exit, through in `through` s, out in `out` s onto your crosshair `land` m ahead, staggered `stun` s, yours to throw for `hold` s. A man who falls or walks out of your near twin comes out at `drop` m/s (in front of you, not past you). */
   pull: { reach: 2.5, land: 2.0, stun: 1.2, hold: 0.6, through: 0.18, out: 0.16, arc: 0.45, drop: 1.2 },
   throw: { speed: 18, up: 6, bodyDamage: 35 },
@@ -88,6 +126,8 @@ export const AIMP = {
    */
   notice: { range: 8, cos: 0.5, time: 0.35, side: 0.6, back: 0.8, feel: 4, react: 1.4 },
   hero: { hp: 100 },
+  /** The view: the camera pulled in closer than `far` m to your head (a wall right behind you, out of an exit on it), the hero fades, to `fade` at `near` m. */
+  view: { far: 1.5, near: 0.85, fade: 0.28 },
   enemy: {
     react: [0.4, 0.8] as readonly [number, number],
     gunner: { hp: 60, damage: 12, aim: 0.5, shots: 3, gap: 0.13, rest: [1.2, 2.2] as readonly [number, number], keep: [7, 17] as readonly [number, number], run: 4.6, spread: 0.012, hide: [1.8, 3.2] as readonly [number, number], maxShooters: 2, intoPortal: 0.55, volleyGap: 0.8 },
@@ -214,8 +254,8 @@ function axes(s: Pick<Spot, 'normal' | 'hdir'>, n: THREE.Vector3, u: THREE.Vecto
 }
 
 /** Its face, sampled: the middle, a ring at 0.55 of its size, its rim (the edge you see). */
-const RIM = 12;
-const INNER = 6;
+const RIM = 24;
+const INNER = 8;
 const _n = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _r = new THREE.Vector3();
@@ -317,11 +357,18 @@ function fitOnSurface(world: FitWorld, s: Spot, anchor: V3 | null, up: boolean, 
 /** Fit an upright free-standing spot (stand, air): nothing in its face, room to come out of it; slid at most `max` m. */
 function fitStanding(world: FitWorld, s: Spot, anchor: V3 | null, max: number = AIMP.fit.slide, out = true): boolean {
   const list = boxesAround(world, s.pos, s.w / 2 + max + 1.0, s.h / 2 + 1.0, _list2);
-  return slide(s, anchor, false, (c) => {
+  return slide(s, anchor, Math.abs(s.normal.y) > 0.9, (c) => {
     axes(s, _n, _u, _r);
     if (!inTheClear(list, c, s)) return false;
     return !out || roomOut(world, list, _a.set(c.x, c.y - s.h / 2, c.z), s.normal);
   }, max);
+}
+
+/** An upright spot standing free has nothing of the world in its face (the near twin as it slides with you). */
+export function spotClear(world: FitWorld, s: Spot): boolean {
+  const list = boxesAround(world, s.pos, Math.max(s.w, s.h) / 2 + 0.5, Math.max(s.w, s.h) / 2 + 0.5, _list);
+  axes(s, _n, _u, _r);
+  return inTheClear(list, s.pos, s);
 }
 
 /** The floor in front of a wall point (`n` its normal), at most `below` m under it: its top, else null. */
@@ -491,7 +538,7 @@ export function chainArrival(
 export function spotFrame(s: Pick<Spot, 'pos' | 'normal' | 'hdir' | 'surface' | 'w' | 'h'>, kind?: 'stand' | 'air' | 'wall' | 'floor' | 'ceiling') {
   const horizontal = Math.abs(s.normal.y) > 0.9;
   const q = orientFrame(new THREE.Vector3().copy(s.normal), horizontal ? new THREE.Vector3().copy(s.hdir) : UP);
-  const k = kind ?? (s.surface === 'air' ? 'air' : s.surface);
+  const k = kind ?? s.surface;
   return { position: new THREE.Vector3().copy(s.pos), quaternion: q, width: s.w, height: s.h, kind: k } satisfies RiftFrame & { kind: string };
 }
 
@@ -516,8 +563,8 @@ export function nearSpot(world: FitWorld, chest: V3, ray: { origin: V3; dir: V3 
   // your floor
   const g0 = groundAt(chest.x, chest.z, chest.y);
   const floor = g0 > -Infinity && Math.abs(g0 - (chest.y - 1.1)) < 1.3 ? g0 : chest.y - 1.1;
-  /** The spot at `ahead` m: centred on the crosshair as far as it may be, `shift` m across from there (within its range). */
-  const build = (ahead: number, shift: number, s: Spot): { lo: number; hi: number } => {
+  /** The spot at `ahead` m: centred on the crosshair as far as it may be, `shift` m across from there (within its range), raised `rise` m (at most as far as the crosshair stays in it). */
+  const build = (ahead: number, shift: number, s: Spot, rise = 0): { lo: number; hi: number; up: number } => {
     const d = ray.dir;
     const den = d.x * aim.x + d.z * aim.z;
     const cx = _c.set(chest.x + aim.x * ahead, chest.y, chest.z + aim.z * ahead);
@@ -537,9 +584,10 @@ export function nearSpot(world: FitWorld, chest: V3, ray: { origin: V3; dir: V3 
     let y = THREE.MathUtils.clamp(cx.y, base, base + N.float);
     if (cx.y > y + s.h / 2 - N.margin) y = cx.y - (s.h / 2 - N.margin);
     if (cx.y < y - s.h / 2 + N.margin) y = Math.max(base, cx.y + s.h / 2 - N.margin);
-    s.pos.y = y;
+    const up = Math.max(0, cx.y + s.h / 2 - N.margin - y);
+    s.pos.y = y + Math.min(rise, up);
     s.dist = ahead;
-    return { lo: lo - c, hi: hi - c };
+    return { lo: lo - c, hi: hi - c, up };
   };
   const s = newSpot();
   s.w = AIMP.w;
@@ -563,15 +611,17 @@ export function nearSpot(world: FitWorld, chest: V3, ray: { origin: V3; dir: V3 
   // its face clear of the world: slid across (within its range), else nearer
   const list = boxesAround(world, _q.set(chest.x + aim.x * want, floor + 1.1, chest.z + aim.z * want), want + hw + 1.2, 2.6, _list2);
   axes(s, _n, _u, _r);
+  const shifts: number[] = [0];
+  for (let d = 0.1; d <= 0.9; d += 0.1) shifts.push(d, -d);
   for (let ahead = Math.max(N.min, free); ahead >= N.min - 1e-6; ahead -= 0.1) {
     const r = build(ahead, 0, s);
-    if (inTheClear(list, s.pos, s)) return s;
-    const shifts: number[] = [];
-    for (let d = 0.1; d <= 0.9; d += 0.1) shifts.push(d, -d);
-    for (const sh of shifts) {
-      if (sh < r.lo - 1e-6 || sh > r.hi + 1e-6) continue;
-      build(ahead, sh, s);
-      if (inTheClear(list, s.pos, s)) return s;
+    // (on your floor first; then raised as far as the crosshair allows: over a low wall right in front of you)
+    for (let rise = 0; rise <= Math.min(r.up, N.rise) + 1e-6; rise += 0.1) {
+      for (const sh of shifts) {
+        if (sh < r.lo - 1e-6 || sh > r.hi + 1e-6) continue;
+        build(ahead, sh, s, rise);
+        if (inTheClear(list, s.pos, s)) return s;
+      }
     }
   }
   // (nothing clear: hard by your chest on the crosshair; it takes you in all the same)
@@ -696,16 +746,18 @@ function sideSpot(world: FitWorld, e: Body, dir: THREE.Vector3, floorY: number):
     if (h && (!hit || h.distance < hit.distance)) hit = h;
   }
   if (hit) {
-    if (hit.distance < M.tight) return refuse(s, 'close');
+    // (room for a body between him and the wall: square to the wall, not along a slanting way)
+    flat(hit.normal, s.normal);
+    const room = hit.distance * Math.abs(dir.x * s.normal.x + dir.z * s.normal.z);
+    if (room < M.tight) return refuse(s, 'close');
     // against the wall, on his side of it: a door in it on his floor, fitted along it
     s.surface = 'wall';
-    flat(hit.normal, s.normal);
     s.pos.set(hit.point.x + s.normal.x * AIMP.off, floorY + AIMP.h / 2 + 0.02, hit.point.z + s.normal.z * AIMP.off);
     const f = fitOnSurface(world, s, null, false, M.slide);
     if (f === 'sealed') return refuse(s, 'sealed');
     if (f === 'ok' && seesHim(world, s, e)) return s;
     // its face too small (a low wall, a window): upright right in front of it
-    if (hit.distance - F.standOff < M.tight) return refuse(s, 'close');
+    if (room - F.standOff < M.tight) return refuse(s, 'close');
     s.surface = 'stand';
     s.pos.set(hit.point.x + s.normal.x * (AIMP.off + F.standOff), floorY + AIMP.h / 2 + 0.02, hit.point.z + s.normal.z * (AIMP.off + F.standOff));
     if (fitStanding(world, s, null, M.slide) && seesHim(world, s, e)) return s;
@@ -770,11 +822,13 @@ export function leadPos(pos: V3, vel: V3, lead: number = AIMP.magnet.lead, out =
 
 /**
  * The man the crosshair is on: of those within `range` and in sight
- * (`blocked(from, to)`: a wall between, tried at his chest and his head), the
- * one whose body (his radius plus AIMP.magnet.pad, his height plus
- * AIMP.magnet.padY) the ray passes closest to, measured against how much
- * leeway he gets: the body's own size plus `pad` rad of the distance (a man
- * far off gets as much help as a near one, by angle). Null: none within it.
+ * (`blocked(from, to)`: a wall between, tried at his chest and his head: a man
+ * you can't see is never grabbed; seen through a window, he is), whose body
+ * (his radius plus AIMP.magnet.pad, his height plus AIMP.magnet.padY) the ray
+ * passes within the leeway (`pad` rad of the distance: a man far off gets as
+ * much help as a near one, by angle), the one nearest the crosshair by angle;
+ * `prev` (the one it is on now) keeps it until another is clearly nearer
+ * (AIMP.magnet.stick). Null: none within it.
  */
 export function magnetTarget<T extends Target>(
   origin: V3,
@@ -783,6 +837,7 @@ export function magnetTarget<T extends Target>(
   pad: number,
   blocked: (from: V3, to: V3) => boolean,
   range: number = AIMP.magnet.range,
+  prev: T | null = null,
 ): T | null {
   const M = AIMP.magnet;
   let best: T | null = null;
@@ -800,10 +855,15 @@ export function magnetTarget<T extends Target>(
     const py = origin.y + dir.y * t;
     const lo = e.pos.y - M.padY, hi = e.pos.y + e.height + M.padY;
     const dy = py < lo ? lo - py : py > hi ? py - hi : 0;
-    const off = Math.hypot(Math.max(0, Math.hypot(px, pz) - (e.radius + M.pad)), dy);
+    const across = Math.hypot(px, pz);
+    const off = Math.hypot(Math.max(0, across - (e.radius + M.pad)), dy);
     const leeway = tp * dist + 0.05;
     if (off > leeway) continue;
-    const score = off / leeway + dist * 0.002;
+    // how far the crosshair is from him, by angle (to his body's axis, feet to head): the nearest wins; the one it
+    // is on now counts `stick` less (two men side by side: no flicker)
+    const dyCore = py < e.pos.y ? e.pos.y - py : py > e.pos.y + e.height ? py - e.pos.y - e.height : 0;
+    let score = Math.atan2(Math.hypot(across, dyCore), Math.max(t, 0.5)) + dist * 1e-4;
+    if (e === prev) score *= M.stick;
     if (score >= bs) continue;
     _a.set(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z);
     _b.set(e.pos.x, e.pos.y + e.height - 0.1, e.pos.z);

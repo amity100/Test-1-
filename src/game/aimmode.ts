@@ -34,6 +34,7 @@ import {
   pullSpot,
   rayCylinder,
   shieldCross,
+  spotClear,
   spotFrame,
   standingBy,
   tapTarget,
@@ -136,6 +137,9 @@ export interface AimPair {
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
+
+/** The word for a refused portal: sealed, too close, no room. */
+const refusalKey = (s: Spot) => (s.reason === 'sealed' ? 'aim.sealed' : s.reason === 'fit' ? 'aim.fit' : 'aim.close');
 const _d = new THREE.Vector3();
 const _eye = new THREE.Vector3();
 const _ndc = new THREE.Vector3();
@@ -166,7 +170,7 @@ export class AimMode {
   /** Press → portal usable, the last time (ms of game time), for the harness. */
   lastOpen = { t: -1, count: 0, ms: -1 };
   /** What was used how often this run (the harness and the balance read it). */
-  readonly usage = { opened: 0, refused: 0, rifleDirect: 0, rifleThrough: 0, stabDirect: 0, stabThrough: 0, parried: 0, pulled: 0, thrown: 0, snapped: 0, go: 0, edge: 0, chainLinks: 0, hops: 0 };
+  readonly usage = { opened: 0, refused: 0, rifleDirect: 0, rifleThrough: 0, stabDirect: 0, stabThrough: 0, parried: 0, pulled: 0, thrown: 0, snapped: 0, go: 0, goThrough: 0, edge: 0, chainLinks: 0, hops: 0 };
   /** The man in your hands (pulled; his time left to throw). */
   held: { id: number; t: number } | null = null;
   /**
@@ -532,7 +536,9 @@ export class AimMode {
 
   private underCrosshair(): Enemy | null {
     const ray = this.h.aimRay();
-    return magnetTarget(ray.origin, ray.dir, this.men(), this.assist(), (a, b) => !this.h.world.lineOfSight(a, b));
+    // (the man it is on now keeps it until another is clearly nearer the crosshair: no flicker between two)
+    const prev = this.hover && this.hover.alive && !this.hover.held ? this.hover : null;
+    return magnetTarget(ray.origin, ray.dir, this.men(), this.assist(), (a, b) => !this.h.world.lineOfSight(a, b), AIMP.magnet.range, prev);
   }
 
   private floorOf(e: Enemy): number {
@@ -711,7 +717,7 @@ export class AimMode {
       this.usage.refused++;
       h.audio.aimBuzz(spot.pos);
       if (spot.reason === 'sealed') this.fx.refused(spot.pos, spot.normal);
-      this.hud.callout(spot.reason === 'sealed' ? 'aim.sealed' : 'aim.close', 'warn');
+      this.hud.callout(refusalKey(spot), 'warn');
       h.vibrate(30);
       return;
     }
@@ -740,9 +746,12 @@ export class AimMode {
       this.closePair();
       strike = h.rifts.openStrike(spotFrame(near, 'stand'), spotFrame(far), AIMP.life + 1, 0, -1, ['entrance', 'exit']);
     }
-    // (the near twin is right in front of the camera: it collapses at once when it goes)
+    // (the near twin is right in front of the camera: it collapses at once when it goes; a wall right behind it never stops you walking in)
     const ends = h.rifts.strikeEnds(strike);
-    if (ends) (ends.a as { closeTime?: number }).closeTime = 0.07;
+    if (ends) {
+      (ends.a as { closeTime?: number }).closeTime = 0.07;
+      (ends.a as { pass?: number }).pass = AIMP.near.pass;
+    }
     this.pair = { id: ++this.pairSeq, strike, near, far, t: 0, seen: new Map(), noticed: new Set(), man: man ? man.id : null, side };
     // (the pair of a chain being placed lives as long as the chain does)
     if (chain) {
@@ -810,11 +819,80 @@ export class AimMode {
     const D = this.dash;
     if (!D) return;
     D.t += dt;
-    // (it never got there: a wall, the pair gone)
-    if (D.t > AIMP.go.time + 0.18 || !this.pair || this.pair.id !== D.pair) {
+    // (the pair gone on the way: nothing to go through)
+    if (!this.pair || this.pair.id !== D.pair) {
       this.h.player.endLunge?.();
       this.dash = null;
+      return;
     }
+    // (held up on the way in, by a body or a prop in the way: through all the same)
+    if (D.t > AIMP.go.time + AIMP.go.stall) this.goThrough();
+  }
+
+  /**
+   * GO held up on the way into the near twin: you come out of the exit all the same, where a body walking in
+   * would (out of its front, on its foot; over his head: right behind him). No room out of it: GO stops where
+   * you are (a word).
+   */
+  private goThrough() {
+    const h = this.h;
+    const p = this.pair!;
+    h.player.endLunge?.();
+    let arr = chainArrival(h.world, p.far, AIMP.go.arrive, 0);
+    const e = p.man !== null ? (h.enemies.get(p.man) as Enemy | null) : null;
+    if (p.far.normal.y < -0.5 && e && e.alive) {
+      const bx = -Math.sin(e.yaw), bz = -Math.cos(e.yaw);
+      arr = { pos: new THREE.Vector3(e.pos.x + bx * 0.6, e.pos.y, e.pos.z + bz * 0.6), yaw: Math.atan2(-bx, -bz), vel: new THREE.Vector3() };
+    }
+    if (!arr || !h.hop) {
+      this.dash = null;
+      this.hud.callout('aim.fit', 'warn');
+      h.audio.ui('deny');
+      return;
+    }
+    h.hop(arr.pos, arr.yaw, arr.vel);
+    this.usage.goThrough++;
+    h.audio.riftPass(_a.copy(p.far.pos), AIMP.go.arrive);
+    h.fx.riftBurst(_b.copy(p.far.pos), p.far.normal, AIM_CYAN);
+    if (Math.abs(p.far.normal.y) < 0.5) this.stepOut(p);
+    this.arrived();
+  }
+
+  /**
+   * Out of an upright exit by GO: a step clear of it (AIMP.go.step m at most: a wall right behind you leaves the
+   * view no room), short of anything in front of it, never into a man.
+   */
+  private stepOut(p: AimPair) {
+    const h = this.h;
+    const b = h.player.body;
+    const n = _d.set(p.far.normal.x, 0, p.far.normal.z).normalize();
+    let room: number = AIMP.go.step;
+    for (const hy of [0.4, 1.3]) {
+      const hit = h.world.raycast(_a.set(b.pos.x, b.pos.y + hy, b.pos.z), n, AIMP.go.step + 0.6);
+      if (hit) room = Math.min(room, hit.distance - 0.55);
+    }
+    for (const e of this.men()) {
+      const dx = e.pos.x - b.pos.x, dz = e.pos.z - b.pos.z;
+      const along = dx * n.x + dz * n.z, across = Math.abs(dx * n.z - dz * n.x);
+      if (along > -0.3 && along < AIMP.go.step + 1.5 && across < 0.9 && Math.abs(e.pos.y - b.pos.y) < 1.5) room = Math.min(room, along - 1.1);
+    }
+    if (room > 0.15) h.player.lunge(n, AIMP.go.stepSpeed, room / AIMP.go.stepSpeed);
+  }
+
+  /** You came out of your exit: the knife reaches further for a beat, what you pressed on the way lands, the pair shuts (a chain carries you on). */
+  private arrived() {
+    const h = this.h;
+    const now = h.time();
+    const b = h.player.body;
+    this.dash = null;
+    this.arrivedT = now;
+    this.edgeUntil = now + AIMP.stab.edgeTime;
+    // CHAIN: the chain carries you on from the exit (the pair stays: the chain's clock shuts it)
+    const ch = this.chain;
+    if (ch) {
+      ch.placing = false;
+      if (ch.nodes.length) this.hop = { i: 0, t: 0, speed: Math.max(AIMP.go.arrive, Math.hypot(b.vel.x, b.vel.z)) };
+    } else this.closeAt = now + AIMP.go.close;
   }
 
   /**
@@ -836,7 +914,12 @@ export class AimMode {
       if (near && Math.abs(side) > 1e-4 && Math.abs(side) < 1) {
         n.pos.x += rx * side;
         n.pos.z += rz * side;
-        this.h.rifts.moveStrikeEntrance(p.strike, spotFrame(n, 'stand'));
+        // (never into a wall: it stays where it was)
+        if (spotClear(this.h.world, n)) this.h.rifts.moveStrikeEntrance(p.strike, spotFrame(n, 'stand'));
+        else {
+          n.pos.x -= rx * side;
+          n.pos.z -= rz * side;
+        }
       }
     }
     this.lastFeet.copy(me);
@@ -862,15 +945,16 @@ export class AimMode {
     const ends = this.h.rifts.strikeEnds(p.strike);
     if (!ends || (from as object) !== ends.a || (to as object) !== ends.b) return null;
     const h = this.h;
-    const now = h.time();
     const b = h.player.body;
     const n = to.normal;
+    const viaGo = !!this.dash;
     let turn = 0;
     if (Math.abs(n.y) < 0.5) {
-      // a door: out along its front, steady, toward him
+      // a door: out along its front, steady, toward him (by GO: a step clear of it)
       const vy = b.vel.y;
       b.vel.set(n.x, 0, n.z).normalize().multiplyScalar(AIMP.go.arrive);
       b.vel.y = Math.min(vy, 1);
+      if (viaGo) this.stepOut(p);
       turn = Math.atan2(n.x, n.z) - Math.atan2(-p.near.normal.x, -p.near.normal.z);
       while (turn > Math.PI) turn -= Math.PI * 2;
       while (turn < -Math.PI) turn += Math.PI * 2;
@@ -889,15 +973,7 @@ export class AimMode {
       }
       b.vel.set(0, -AIMP.go.arrive, 0);
     }
-    this.dash = null;
-    this.arrivedT = now;
-    this.edgeUntil = now + AIMP.stab.edgeTime;
-    // CHAIN: the chain carries you on from the exit (the pair stays: the chain's clock shuts it)
-    const ch = this.chain;
-    if (ch) {
-      ch.placing = false;
-      if (ch.nodes.length) this.hop = { i: 0, t: 0, speed: Math.max(AIMP.go.arrive, Math.hypot(b.vel.x, b.vel.z)) };
-    } else this.closeAt = now + AIMP.go.close;
+    this.arrived();
     return turn;
   }
   private setNoPlayer(p: AimPair, on: boolean) {
@@ -977,7 +1053,7 @@ export class AimMode {
       this.usage.refused++;
       h.audio.aimBuzz(spot.pos);
       if (spot.reason === 'sealed') this.fx.refused(spot.pos, spot.normal);
-      this.hud.callout(spot.reason === 'sealed' ? 'aim.sealed' : spot.reason === 'close' || (spot.ok && spot.surface !== 'air') ? 'aim.close' : 'aim.chain.air', 'warn');
+      this.hud.callout(!spot.ok ? refusalKey(spot) : spot.surface !== 'air' ? 'aim.close' : 'aim.chain.air', 'warn');
       h.vibrate(30);
       return;
     }

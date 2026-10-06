@@ -76,9 +76,15 @@ describe('AIM PORTAL: where the exit opens', () => {
     expect(s.normal.z).toBeCloseTo(-1, 5);
     expect(s.w).toBe(AIMP.w);
     expect(s.h).toBe(AIMP.h);
-    // (centred on the crosshair's height)
-    expect(s.pos.y).toBeCloseTo(1.6, 2);
+    // (a door in the wall: standing on the floor in front of it, the crosshair's height well inside it)
+    expect(s.pos.y - s.h / 2).toBeCloseTo(0.02, 5);
+    expect(1.6 - (s.pos.y - s.h / 2)).toBeGreaterThan(AIMP.fit.keep);
+    expect(s.pos.y + s.h / 2 - 1.6).toBeGreaterThan(AIMP.fit.keep);
     expect(s.dist).toBeCloseTo(12, 2);
+    // aimed higher than its height: centred on the crosshair (a drop out of it)
+    const hi = placeExit(w, eye, V(0, 3.4 - 1.6, 12).normalize(), eye, null, groundOf(w));
+    expect(hi.surface).toBe('wall');
+    expect(hi.pos.y).toBeCloseTo(3.4, 1);
   });
 
   it('on the floor: a horizontal disc, looking up, a hair over it', () => {
@@ -349,9 +355,12 @@ describe('AIM PORTAL: next to a man', () => {
     expect(s.normal.z).toBeCloseTo(-1, 3);
     const tight = fitSnap(w, { ...e, pos: V(10, 0, 10.6) }, 'behind');
     expect(tight.ok).toBe(false);
+    // a sealed wall right behind him (1 m): refused; a sealed wall never holds it
     const w2 = flatWorld();
     w2.add(V(0, 0, 11), V(30, 5, 12), { noPortal: true });
-    expect(fitSnap(w2, e, 'behind').reason).toBe('sealed');
+    expect(fitSnap(w2, { ...e, pos: V(10, 0, 10) }, 'behind').reason).toBe('sealed');
+    const turned = fitSnap(w2, e, 'behind');
+    if (turned.ok) expect(turned.surface).toBe('stand');
     // (a free spot is just the snap spot)
     const free = fitSnap(flatWorld(), e, 'behind');
     expect(free.pos.distanceTo(snapSpot(e, 'behind').pos)).toBeLessThan(1e-6);
@@ -1332,8 +1341,11 @@ describe('AIM PORTAL: PORTAL next to a man, at any range', () => {
     expect(R.pair).not.toBeNull();
     const f = R.pair!.far;
     expect(Math.abs(f.pos.x)).toBeCloseTo(AIMP.magnet.dist, 1);
-    expect(f.pos.z).toBeCloseTo(14, 1);
-    expect(V(-f.pos.x, 0, 14 - f.pos.z).normalize().dot(f.normal)).toBeCloseTo(1, 3);
+    // (slid off the wall: its edge clear of it, still by him)
+    expect(Math.abs(f.pos.z - 14)).toBeLessThanOrEqual(AIMP.magnet.slide);
+    expect(f.pos.z + f.w / 2).toBeLessThanOrEqual(14.5 + 0.01);
+    expect(Math.abs(f.normal.x)).toBeGreaterThan(0.99);
+    expect(Math.sign(f.normal.x)).toBe(-Math.sign(f.pos.x));
   });
 
   it('a man on the move: the exit opens next to where he will be in a moment', () => {

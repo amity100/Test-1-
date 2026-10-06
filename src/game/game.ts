@@ -1044,6 +1044,26 @@ export class Game {
     );
   }
 
+  /**
+   * AIM PORTAL: out of an exit on a wall (your back to it) the view has no room behind you and closes in on your
+   * shoulders: the hero fades (to AIMP.view.fade at the closest) so what is in front of you stays in view.
+   */
+  private fadeHero(on: boolean, dt: number) {
+    const V = AIMP.view;
+    let want = 1;
+    if (on) {
+      const b = this.player.body.pos;
+      const d = this.camera.position.distanceTo(_v.set(b.x, b.y + 1.45, b.z));
+      want = THREE.MathUtils.clamp(V.fade + ((d - V.near) / (V.far - V.near)) * (1 - V.fade), V.fade, 1);
+    }
+    const o = THREE.MathUtils.damp(this.heroOpacity, want, 16, dt);
+    const next = want === 1 && o > 0.99 ? 1 : o;
+    if (Math.abs(next - this.heroOpacity) < 0.003) return;
+    this.heroOpacity = next;
+    this.player.char.setOpacity(next);
+  }
+  private heroOpacity = 1;
+
   /** REACH: of the lab's respawn spots, the one whose nearest living man is furthest away. */
   private labRespawn(): V3 {
     const lab = this.lab!;
@@ -2561,6 +2581,7 @@ export class Game {
     this.rig.wide = THREE.MathUtils.damp(this.rig.wide, flow && this.power.phase !== 'idle' ? 1 : 0, this.power.phase === 'held' ? 7 : 3, realDt);
     if (flow && this.power.phase === 'chain') this.rig.yaw = dampAngle(this.rig.yaw, this.powerYaw, 9, realDt);
     this.rig.update(realDt, body.pos, p.slideT > 0 ? 1.35 : p.crouched ? 1 : 0, aiming, this.level.world);
+    this.fadeHero(aimV, realDt);
     if (flowBody && hs > FLOW_SPRINT * 0.9) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
     if (body.charge > 0 && speed > 8) this.fx.streak(_v.copy(body.pos).setY(body.pos.y + 1), body.vel, COL_CHARGED);
     for (const b of this.physics.bodies) if (b.kind !== 'player' && b.enabled && b.charge > 0 && b.vel.lengthSq() > 64) this.fx.streak(_v.copy(b.pos).setY(b.pos.y + b.height * 0.5), b.vel, COL_ENTRANCE);

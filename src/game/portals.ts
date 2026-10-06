@@ -100,6 +100,8 @@ export class Portal implements RiftEnd {
   aimAt = -1;
   /** Only for what it was opened for: the player passes through it like air. */
   noPlayer = false;
+  /** An upright end standing just in front of a wall (AIM PORTAL's near twin): a wall up to this far behind it never stops a body walking into it (m; 0: none). */
+  pass = 0;
   root = new THREE.Group();
   mesh: THREE.Mesh;
   sparks: THREE.Points;
@@ -506,6 +508,7 @@ export class RiftSystem implements RiftAPI {
     p.boost = 0;
     p.aimAt = -1;
     p.noPlayer = false;
+    p.pass = 0;
     p.openTime = FEEL.portalOpenTime;
     p.closeTime = FEEL.portalCloseTime;
     p.role = role;
@@ -667,7 +670,7 @@ export class RiftSystem implements RiftAPI {
         toLocal(p, pos, _l);
         if (Math.abs(_l.x) < p.width / 2 && Math.abs(_l.y) < p.height / 2 && _l.z > -3 && _l.z < 3.5) return true;
       } else {
-        if (p.host !== c && !faceHolds(c, p)) continue;
+        if (p.host !== c && !faceHolds(c, p) && !(p.pass > 0 && behindWithin(c, p, p.pass))) continue;
         toLocal(p, pos, _l);
         if (Math.abs(_l.x) < p.width / 2 - radius * 0.3 && _l.z > -1.2 && _l.z < radius + 0.6 && Math.abs(_l.y) < p.height / 2 + 0.5) return true;
       }
@@ -1949,6 +1952,23 @@ function clampOn(v: number, lo: number, hi: number, half: number) {
 }
 
 /** Does the collider's face lie on this (axis-aligned) wall end's plane? */
+/** The box stands behind the end's face, its front within `depth` m of it, over its face (the end stands hard in front of it). */
+function behindWithin(c: Collider, p: Portal, depth: number) {
+  let zMax = -Infinity, xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    _bc.set(i & 1 ? c.max.x : c.min.x, i & 2 ? c.max.y : c.min.y, i & 4 ? c.max.z : c.min.z);
+    toLocal(p, _bc, _bc);
+    zMax = Math.max(zMax, _bc.z);
+    xMin = Math.min(xMin, _bc.x);
+    xMax = Math.max(xMax, _bc.x);
+    yMin = Math.min(yMin, _bc.y);
+    yMax = Math.max(yMax, _bc.y);
+  }
+  // (wholly behind its face, its front within `depth` of it)
+  return zMax < 0.05 && zMax > -depth && xMin < p.width / 2 && xMax > -p.width / 2 && yMin < p.height / 2 && yMax > -p.height / 2;
+}
+const _bc = new THREE.Vector3();
+
 function faceHolds(c: Collider, p: Portal) {
   const n = p.normal;
   if (Math.abs(n.x) > 0.9) return Math.abs((n.x > 0 ? c.max.x : c.min.x) - p.position.x) < 0.1;
