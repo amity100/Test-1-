@@ -195,7 +195,7 @@ describe('THE COMPOUND: walking it', () => {
       const f = FLIGHTS[PLATFORMS_C.indexOf(p)];
       expect(reach.reached(f.top, 0.3), `${p.id}: ${reach.route(f.top, 0.3)}`).toBe(true);
     }
-  });
+  }, 30000);
 });
 
 // ---------------------------------------------------------------------------

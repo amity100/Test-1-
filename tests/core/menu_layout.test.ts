@@ -1,12 +1,18 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+
+// Node built-ins are imported dynamically so the strict tsconfig (no @types/node) stays happy; the CSS can't be
+// imported with ?raw here because vitest strips stylesheets.
+interface NodeFs {
+  readFileSync(p: URL, enc: 'utf8'): string;
+}
+const fs = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as NodeFs;
+const css = fs.readFileSync(new URL('../../src/ui/style.css', import.meta.url), 'utf8');
+const menu = fs.readFileSync(new URL('../../src/ui/menu.ts', import.meta.url), 'utf8');
 
 // A CSS / markup contract for the phone menus (no DOM here): the PLAY button must never be pushed off
 // the top of a scroller, and must stay in reach while the menu scrolls.
-const css = readFileSync('src/ui/style.css', 'utf8');
-const menu = readFileSync('src/ui/menu.ts', 'utf8');
 
-const rules = (sel: string) => [...css.matchAll(/(^|\n)\s*([^{}\n@][^{}]*)\{([^}]*)\}/g)].filter((m) => m[2].split(',').some((x) => x.trim() === sel)).map((m) => m[3]);
+const rules = (sel: string) => [...css.matchAll(/(^|\n)\s*([^{}\n@][^{}]*)\{([^}]*)\}/g)].filter((m) => m[2].split(',').some((x: string) => x.trim() === sel)).map((m) => m[3]);
 
 describe('phone menu layout', () => {
   it('never centres an overflowing menu with justify-content (the top becomes unreachable)', () => {
