@@ -150,6 +150,8 @@ const between = (r: readonly [number, number], k: number) => r[0] + (r[1] - r[0]
 
 export class AimAI {
   private minds = new Map<number, Mind>();
+  /** What the men did this run (the harness and the balance read it). */
+  readonly stats = { ambush: 0, perch: 0, search: 0, hunch: 0 };
   /** When the last red portal opened (game time). */
   private lastPortalT = -99;
   /** When a gun last began its laser (game time). */
@@ -161,6 +163,11 @@ export class AimAI {
     this.minds.clear();
     this.lastPortalT = -99;
     this.lastAimT = -99;
+  }
+
+  /** A fresh run: the counts start again. */
+  resetStats() {
+    this.stats.ambush = this.stats.perch = this.stats.search = this.stats.hunch = 0;
   }
 
   mind(e: Enemy, rand: () => number): Mind {
@@ -277,6 +284,7 @@ export class AimAI {
     // (no news for a long time: a hunch, your place give or take a few metres, new every few seconds)
     if (pl.alive && now - m.newsT > I.hunch && now >= m.huntT) {
       m.huntT = now + I.every;
+      this.stats.hunch++;
       const y0 = pl.pos.y;
       m.known.set(pl.pos.x, y0, pl.pos.z);
       for (let k = 0; k < 6; k++) {
@@ -480,6 +488,7 @@ export class AimAI {
   /** SEARCH: a few spots round where he thought you were, the nearest to him first. */
   private beginSearch(sys: EnemySystem, e: Enemy, m: Mind) {
     const S = AIMP.intel.search;
+    this.stats.search++;
     m.mode = 'search';
     m.pts.length = 0;
     m.ptI = 0;
@@ -905,6 +914,7 @@ export class AimAI {
     this.lastPortalT = sys.time;
     m.portalId = p.id;
     m.gun = 'idle';
+    if (behind) this.stats.ambush++;
     H.opened(exit);
     e.char.play('interact', { fade: 0.08 });
     return true;
@@ -941,6 +951,7 @@ export class AimAI {
     this.lastPortalT = sys.time;
     m.portalId = p.id;
     m.gun = 'idle';
+    this.stats.perch++;
     H.opened(exit);
     e.char.play('interact', { fade: 0.08 });
     return true;

@@ -266,6 +266,7 @@ export class AimMode {
 
   newRun() {
     this.tipped = false;
+    this.ai.resetStats();
     this.reset();
   }
 

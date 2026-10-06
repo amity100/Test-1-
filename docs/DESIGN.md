@@ -906,9 +906,9 @@ each **combat variant** to choose one.
   with 16-step stairs on its west and east sides; two sniper towers T1 / T2 (8.5 m,
   rift access only, their tops portal-able); a free-standing long wall (5 m) for
   flanking exits; cover blocks of 1 m and 2 m; a gantry (not portal-able) with
-  two hanging loads; three casks, two crates; the player's pad in the south. For AIM PORTAL it
-  adds four SEALED panels (dark metal, 3 m, `noPortal`: a red flash and a buzz where you aim) and
-  two taller platforms (3.2 m, no stairs, nav on top).
+  two hanging loads; three casks, two crates; the player's pad in the south. (This is the
+  `'classic'` range, kept for the other variants. AIM PORTAL, the lab's default, plays in the
+  COMPOUND: see below. SEALED panels are dark metal, `noPortal`: a red flash and a buzz where you aim.)
   One zone (`'pier'`, no encounters), nav layers: deck, ring, each tower top.
 - **Waves** (`WAVES`, `game/labdirector.ts`): W1 3 rifle anchors; W2 3 anchors + 2
   tower holders; W3 warden + 2 brutes pushing, 2 riflemen (one on the ring);
