@@ -994,11 +994,61 @@ each **combat variant** to choose one.
     new exit in front of their eyes within 8 m after 0.35 s, at their side after 0.6 s, behind them after
     0.8 s (within 4 m: they hear it) — a shout, they turn to it; a gunner may fire into it (a laser to the
     exit and one out of the near twin at you). A man on a platform with no line to you comes down.
-  - *Waves* (`AIM_WAVES`, 3-2-1 first 2 s then 1.8 s): 3 gunners (each already behind tall cover),
-    3 gunners + a mirror, + two rushers, two mirrors, 8 from everywhere (platform men included).
+  - *The COMPOUND* (AIM PORTAL's arena; `world/combatlab/compound.ts` is the data — axis-aligned boxes the
+    builder, the tests and the AI all read; the old range with its towers, ring and long wall stays in
+    `layout.ts` as `arena: 'classic'` for the other variants). The same 60 x 58 m deck, void edge, pool,
+    pad and gates, built as a place to HIDE: a 3 x 3 of complexes inside a 3 m ring road, 6 m streets
+    between them: **A** the landing (the pad's walled court, four ways out), **B** the SW yard (a dead-end
+    pocket, an L-cell, a perch P3), **C** the compound (four rooms round a hall, doors offset so no line
+    runs through), **D** the west barracks (an L), its lane and a kiosk, **E** the NW court (3 m walls,
+    P1 looks over them), **F** the north hall (a sealed mid wall), **G** the NE terrace (P2, pillars, a
+    pocket), **H** the east lane (a dead end), the shore of the pool and the SE yard (baffles). Walls
+    are 0.5 m thick, 3.5-4.5 m tall (`noMantle`: out of the jump + mantle's reach; the way up is the
+    perches' 13-step stairs, `noMantle` too), with doors (3 m, amber jamb lights, nav-safe on the lab's
+    0.5 m nav cell), **windows** (sill 0.9, head 2.0: a man's eye sees through; orange frame) and
+    **slits** (0.4 m wide), 1.2 m cover, pillar rows, three 3.2 m perches with 1.2 m parapets.
+    Four SEALED pieces (a pocket's back panel, the NE pocket's, the east lane's end, the north hall's
+    mid wall) refuse portals; every other wall takes them (under 1 m in 12 is sealed). Wall tops are
+    bright capped ledges (a floor exit fits on one), zone letters A-H are stencilled big on the floor
+    (they read from a perch). One merged mesh per material: the draw calls are the old arena's (about
+    65 a frame); triangles +30%, no more. **Sight is broken everywhere**: from no spot (grid of 1.5 m,
+    perches included) can you see more than 35% of the 25 posts (the test pins it; the worst is a perch
+    at 8 of 25), the average spot sees 2.4. **How you get a man you can't see**: (a) peek through a
+    window or a slit, the crosshair on him, PORTAL puts the exit behind him, GO, stab; (b) aim at a
+    surface you *can* see past a wall (through a window, over a 1.2 m wall, from a perch: a far face,
+    the floor on his side), walk out of it; (c) he does it to you. Every post has a flank (the test:
+    a spot where he is hidden but floor beside him is seen and takes a portal).
+  - *What the men know* (`aimai.ts`, `AIMP.intel`): nobody is told where you are. A man starts on his
+    post (HOLD, 4-9 s) believing you are where the fight started, then walks to where he last SAW you
+    or HEARD you (6.5 m, through a wall); there nothing: he SEARCHES (three spots 3-8 m round it, a
+    look at each). 12 s without news and he gets a hunch (your place give or take 5 m, new every 4 s):
+    a wave can't stall (bots: no stretch of a fight without a kill beyond a minute; the last two men
+    are still marked on the screen). Cover is chosen by the walk (a spot behind a wall that is a long
+    way round is skipped: `EnemySystem.pathLength`), a man 5 s without getting anywhere takes another
+    way, a man on a perch who has no line to you for 4.5 s (a glimpse only eases it) jumps down.
+    **Round the wall by a portal**: a man who has had no sight of you for 7 s (a man who never has: 28 s
+    into the wave) may open a red portal of his own whose exit is BEHIND you (a rusher 3.6 m, a gunner
+    5.5 m; floor you could stand on, a clear line to you): 0.5 s to open, an arrow on the screen's edge
+    while it is out of your view, then he steps through: a rusher's blow follows its 0.45 s wind-up, a
+    gunner must turn to you (0.55 s) before his 0.5 s laser. About 1.4 s from the portal's opening to a blow
+    (measured). Fair: one red portal at a time, 5 s apart.
+  - *Waves* (`AIM_WAVES_C`, 3-2-1 first 2 s then 1.8 s; men stand on their posts through the countdown):
+    3 gunners, 3 gunners + a mirror, + two rushers, two mirrors, 8 (perch men included).
     Hero 100 hp, regen only after 4 s unhurt. KILLS BY TOOL: RIFLE, KNIFE, THROW, PORTAL (the pair
     dropped or slammed him), OTHER. No clip offer mid-fight in the lab (its phone button sat in the look
     thumb's way).
+  - *CHAIN* (the add-on, NOT the game: R / pad Y / the small CHAIN button over PULL; lab-only, gated on
+    `aimOn()`; `AimMode.chain`, `CHAIN` in `aimportal.ts`). CHAIN starts a chain; each PORTAL after it adds
+    the next link at the surface under the crosshair, four links at most counting the pair (its near
+    twin and exit are links 1 and 2; a link needs a surface, 1.6 m from the others, not sealed; mid-air
+    is refused). Go into the near twin (walk, GO) and you come out of the exit as ever; the chain
+    carries you on, 0.1 s later out of the next link, and the next, your speed kept (never less than
+    GO's 3.2 m/s), facing out of each. A hop with no room out of the link (`chainArrival`: 0.6 / 0.9 /
+    1.2 m out, a body's room) stops the chain where you are, on solid ground. The chain's gold links are
+    drawn by `AimFx` (the pair stays the rift system's). The chain shuts 8 s after its last link, on
+    CHAIN again, on your death, or on a new pair after a full / used chain (opening a pair while it is
+    still being placed is its first link). Rounds, stabs and pulls go through the pair as ever; the HUD
+    shows `CHAIN 3/4` and its pips. Tests: order, the limit, close rules, momentum, gating, no soft-lock.
   - *Controls*. Desktop: mouse aim, RMB PORTAL (on a man: next to him; hold + flick: his side; off a man:
     hold to re-aim live), LMB fire, F stab, Q GO, E pull / throw, wheel mid-air distance, Ctrl / MMB the side
     key (alias), Space jump / double jump, C slide, Shift sprint. Pad: LT portal (+ R-stick held: side), RT

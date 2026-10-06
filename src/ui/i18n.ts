@@ -502,9 +502,9 @@ const EN: Record<string, string> = {
   // AIM PORTAL (game/aimportal.ts)
   'lab.v.aimportal': "AIM PORTAL",
   'lab.vd.aimportal': "A pair of portals: the far one opens where you aim, now; whatever enters one comes out the other.",
-  'lab.a1': "Three gunners. They hide behind cover and peek",
+  'lab.a1': "Three gunners behind the walls. See one through a window? Portal behind him",
   'lab.a2': "Four. A mirror: his shield eats rounds, get behind him",
-  'lab.a3': "Five. Rushers with knives, and portals of their own",
+  'lab.a3': "Five. Rushers with knives, and red portals that open behind you",
   'lab.a4': "Six. Two mirrors, two rushers",
   'lab.a5': "Eight, from everywhere",
   'lab.tool.throw': "THROW",
@@ -1148,9 +1148,9 @@ const HE: Record<string, string> = {
   // AIM PORTAL (game/aimportal.ts)
   'lab.v.aimportal': "פורטל מכוון",
   'lab.vd.aimportal': "זוג פורטלים: הרחוק נפתח במקום שאתם מכוונים, מיד; כל מה שנכנס לאחד יוצא מהשני.",
-  'lab.a1': "שלושה צלפים. מתחבאים מאחורי מחסה ומציצים",
+  'lab.a1': "שלושה צלפים מאחורי הקירות. רואים אחד דרך חלון? פורטל מאחוריו",
   'lab.a2': "ארבעה. מראה: המגן שלו אוכל כדורים, הגיעו מאחוריו",
-  'lab.a3': "חמישה. מסתערים עם סכינים, ופורטלים משלהם",
+  'lab.a3': "חמישה. מסתערים עם סכינים, ופורטלים אדומים שנפתחים מאחוריכם",
   'lab.a4': "שישה. שתי מראות, שני מסתערים",
   'lab.a5': "שמונה, מכל הכיוונים",
   'lab.tool.throw': "זריקה",

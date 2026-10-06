@@ -297,7 +297,6 @@ function buildDeck({ ctx, mb }: Lab) {
 
 function buildCompound({ ctx, mb }: Lab) {
   const amber = new THREE.Color(2.4, 0.95, 0.25);
-  const cyan = new THREE.Color(0.6, 2.0, 2.6);
   const red = new THREE.Color(3, 0.2, 0.15);
   const solidBox = (b: ArenaBox, color: THREE.ColorRepresentation, col: Partial<Collider>, uv = 4, ao = 0.7) =>
     solid(ctx, b.kind === 'sealed' ? 'steel' : 'grid', b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, color, uv, col, { ao });
@@ -393,7 +392,6 @@ function buildCompound({ ctx, mb }: Lab) {
   // zone letters: big on the floor (they read from a perch), a small one on a wall by the main door
   for (const z of ZONE_LABELS) floorDecal(mb, z.id as DecalId, z.x, 0, z.z, z.size ?? 4, C.orange, z.yaw ?? 0);
   for (const wl of WALL_LABELS) wallDecal(mb, wl.id as DecalId, V(wl.x, wl.y, wl.z), V(wl.nx, 0, wl.nz), wl.w, wl.color ?? C.ink);
-  void cyan;
 }
 
 // ---------------------------------------------------------------------------

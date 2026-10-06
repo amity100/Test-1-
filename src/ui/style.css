@@ -1202,7 +1202,7 @@ html[dir='rtl'] .flow-tip { font-family: 'Heebo', 'Oxanium', sans-serif; font-si
 .ah-chain span i.on { background: #ffd666; border-color: #fff3c4; box-shadow: 0 0 6px rgba(255, 214, 102, 0.9); }
 .ah-chain kbd { font: 800 8.5px var(--hud-font); padding: 0 3px; border: 1px solid currentColor; border-radius: 3px; opacity: .7; }
 .ah-chain kbd:empty { display: none; }
-.is-touch .ah-chain { bottom: calc(var(--sb, 0px) + 44px); font-size: 9.5px; padding: 2px 8px; }
+.is-touch .ah-chain { bottom: calc(var(--sb, 0px) + 56px); left: 38%; font-size: 9.5px; padding: 2px 8px; }
 .ah-time { position: absolute; left: 50%; top: 50%; width: 46px; height: 3px; margin: 30px 0 0 -23px; background: rgba(255, 255, 255, 0.18); opacity: 0; border-radius: 2px; overflow: hidden; }
 .ah-time.on { opacity: 1; }
 .ah-time u { display: block; height: 100%; background: #7ff4ff; transform-origin: left; }

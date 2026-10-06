@@ -233,13 +233,13 @@ export class AimAI {
     }
     m.meleeCd -= dt;
     m.portalCd -= dt;
-    // up on a platform with no line to you for a while: he jumps down toward you (a platform is no fortress)
-    if (e.pos.y > 2.5 && e.body && !e.body.simulate) {
-      m.blindT = m.seesNow ? 0 : m.blindT + dt;
-      if (m.blindT > 4) {
+    // up on a perch with no line to you for a while: a red portal of his own takes him down toward where he thinks you
+    // are (a perch is no fortress, and a parapet is higher than a jump)
+    if (e.pos.y > 2.5 && e.body && !e.body.simulate && m.portalId < 0) {
+      // (a glimpse of you does not reset it: it only eases it)
+      m.blindT = m.seesNow ? Math.max(0, m.blindT - dt * 0.35) : m.blindT + dt;
+      if (m.blindT > 4.5 && this.perchPortal(sys, e, m)) {
         m.blindT = 0;
-        const d = Math.max(1, hd(e.pos, pl.pos));
-        sys.launch(e, _a.set(((pl.pos.x - e.pos.x) / d) * 4.5, 3.5, ((pl.pos.z - e.pos.z) / d) * 4.5));
         return;
       }
     }
@@ -895,11 +895,49 @@ export class AimAI {
       ax = e.pos.x + Math.sin(yawIn) * K.ahead;
       az = e.pos.z + Math.cos(yawIn) * K.ahead;
       ay = H.standAt(ax, az, e.pos.y);
-      if (ay !== null) break;
+      // (level with him: not the top of a parapet or a block he cannot stand on)
+      if (ay !== null && Math.abs(ay - e.pos.y) < 0.4) break;
+      ay = null;
     }
     if (ay === null) return false;
     const by = Math.atan2(pl.pos.x - exit.x, pl.pos.z - exit.z);
     const p = H.portals.open(e.id, _a.set(ax, ay, az), yawIn, exit, by);
+    this.lastPortalT = sys.time;
+    m.portalId = p.id;
+    m.gun = 'idle';
+    H.opened(exit);
+    e.char.play('interact', { fade: 0.08 });
+    return true;
+  }
+
+  /** A pair of his that takes him down from a perch: its entrance just ahead of him, its exit on the deck 4-8 m out toward where he thinks you are. */
+  private perchPortal(sys: EnemySystem, e: Enemy, m: Mind): boolean {
+    const H = this.host;
+    const K = AIMP.enemy.rusher;
+    if (H.portals.list.length || sys.time - this.lastPortalT < K.portalGap) return false;
+    const deck = sys.navFor(e.def.zone).find((g) => g.floorY < 0.5) ?? null;
+    const to = Math.atan2(m.known.x - e.pos.x, m.known.z - e.pos.z);
+    let exit: THREE.Vector3 | null = null;
+    for (let k = 0; k < 14 && !exit; k++) {
+      const ang = to + (k === 0 ? 0 : (sys.rand() - 0.5) * 3.2);
+      const r = 4 + sys.rand() * 4;
+      const x = e.pos.x + Math.sin(ang) * r, z = e.pos.z + Math.cos(ang) * r;
+      const y = H.standAt(x, z, 0);
+      if (y === null || Math.abs(y) > 0.4 || (deck && !deck.walkable(x, z))) continue;
+      exit = new THREE.Vector3(x, y, z);
+    }
+    if (!exit) return false;
+    let ax = 0, az = 0, ay: number | null = null;
+    for (const off of [0, 0.9, -0.9, 1.8, -1.8, Math.PI]) {
+      ax = e.pos.x + Math.sin(to + off) * K.ahead;
+      az = e.pos.z + Math.cos(to + off) * K.ahead;
+      ay = H.standAt(ax, az, e.pos.y);
+      // (level with him: not the top of a parapet or a block he cannot stand on)
+      if (ay !== null && Math.abs(ay - e.pos.y) < 0.4) break;
+      ay = null;
+    }
+    if (ay === null) return false;
+    const p = H.portals.open(e.id, _a.set(ax, ay, az), to, exit, Math.atan2(m.known.x - exit.x, m.known.z - exit.z));
     this.lastPortalT = sys.time;
     m.portalId = p.id;
     m.gun = 'idle';

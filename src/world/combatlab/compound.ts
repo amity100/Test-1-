@@ -326,6 +326,12 @@ export const ZONE_LABELS: { id: string; x: number; z: number; size?: number; yaw
   { id: 'F', x: 0, z: 15.5, size: 3.2 },
   { id: 'G', x: 20, z: 23.5, size: 3.2 },
   { id: 'H', x: 21, z: -20.2, size: 3.2 },
+  // the perches (at their stairs' foot) and the lanes
+  { id: 'P1', x: -12, z: 6.2, size: 2.2 },
+  { id: 'P2', x: 16.4, z: 17.75, size: 2.2 },
+  { id: 'P3', x: -11.75, z: -12.2, size: 2.2 },
+  { id: 'L1', x: -16.5, z: -6.5, size: 2.2 },
+  { id: 'L2', x: 10.3, z: -6.5, size: 2.2 },
 ];
 
 /** Small labels on walls: where a man hides, where the stairs are. */
