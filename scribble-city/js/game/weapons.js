@@ -224,22 +224,25 @@ export class Weapons {
     const p = game.player;
     const f = p.fig.forward;
     const reach = slot.def.range;
+    // the eraser end rubs out the bit of body nearest to it
+    const tip = slot.model.tip ? _v.copy(slot.model.tip).applyMatrix4(slot.model.group.matrixWorld) : _v.copy(p.fig.j.handR);
     const hits = game.enemies.inArc(p.pos, f, reach, 1.25);
     let any = false;
     for (const e of hits) {
-      const part = e.isMonster ? 'body' : ['head', 'torso', 'armL', 'armR', 'torso'][Math.floor(Math.random() * 5)];
-      const hp = new THREE.Vector3(e.pos.x, e.pos.y + 1.3, e.pos.z);
-      game.enemies.damage(e, part, slot.def.damage, hp, f, 'melee');
+      if (e.isMonster) game.enemies.damage(e, 'body', slot.def.damage, e.fig.center.clone(), f, 'melee');
+      else game.enemies.damage(e, null, slot.def.damage, e.fig.closestSurfacePoint(tip, new THREE.Vector3()), f, 'melee');
       e.knock(f.x * 5, f.z * 5);
       any = true;
     }
-    // smack props/vehicles: little impact
+    for (const c of game.civilians.inArc(p.pos, f, reach, 1.25)) {
+      game.civilians.damage(c, c.fig.closestSurfacePoint(tip, new THREE.Vector3()), 'melee', slot.def.damage);
+      any = true;
+    }
     if (any) {
       game.audio.play('erase');
       game.camRig.addShake(0.12);
+      game.fx.crumbs(tip.x, tip.y, tip.z, 14, 3);
     }
-    const tip = slot.model.tip ? _v.copy(slot.model.tip).applyMatrix4(slot.model.group.matrixWorld) : p.fig.j.handR;
-    if (any) game.fx.crumbs(tip.x, tip.y, tip.z, 14, 3);
   }
 
   // Position held models each frame (called after the figure pose is updated).
@@ -343,6 +346,11 @@ export class Weapons {
           hitT = eh.t;
           hit = { type: 'enemy', enemy: eh.enemy, part: eh.part, x: ox + dx * eh.t, y: oy + dy * eh.t, z: oz + dz * eh.t };
         }
+        const ch = game.civilians.segmentHit(ox, oy, oz, dx, dy, dz, hitT);
+        if (ch) {
+          hitT = ch.t;
+          hit = { type: 'civ', civ: ch.civ, x: ox + dx * ch.t, y: oy + dy * ch.t, z: oz + dz * ch.t };
+        }
       } else {
         const ph = game.playerSegmentHit(ox, oy, oz, dx, dy, dz, hitT);
         if (ph) {
@@ -396,6 +404,12 @@ export class Weapons {
     const fx = game.fx;
     if (pr.radius > 0) {
       game.explosion(hit.x, hit.y, hit.z, pr.radius, pr.damage, pr.owner);
+      return;
+    }
+    if (hit.type === 'civ') {
+      game.civilians.damage(hit.civ, new THREE.Vector3(hit.x, hit.y, hit.z), pr.kind, pr.damage);
+      if (pr.kind === 'paint') hit.civ.fig.paint(pr.color);
+      fx.impact(hit.x, hit.y, hit.z, 0.6);
       return;
     }
     if (hit.type === 'enemy') {

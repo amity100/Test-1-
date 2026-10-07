@@ -1,20 +1,38 @@
 import * as THREE from 'three';
-import { Figure, MonsterFigure } from './figure.js';
+import { MonsterFigure } from './figure.js';
+import { Doodle } from './doodle.js';
+import { gangLook } from './looks.js';
 import { BLACK_INK, RED_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle, angleDiff, RNG } from '../core/util.js';
 
+// armor: how much of an eraser hit actually rubs out (bigger guys take more rubbing)
 const TYPES = {
-  thug: { head: 'thug', torso: 'torso_hoodie', hp: { head: 18, torso: 46, armL: 16, armR: 16, legs: 30 }, walk: 2.0, run: 5.0, range: 24, dmg: 7, interval: 1.15, burst: 2, sight: 40, scale: 1 },
-  mask: { head: 'mask', torso: 'torso_jacket', hp: { head: 16, torso: 40, armL: 14, armR: 14, legs: 26 }, walk: 2.2, run: 5.4, range: 20, dmg: 4, interval: 0.16, burst: 4, pause: 1.7, sight: 40, scale: 1 },
-  brute: { head: 'brute', torso: 'torso_brute', hp: { head: 40, torso: 120, armL: 36, armR: 36, legs: 60 }, walk: 1.8, run: 4.5, range: 2.4, dmg: 22, interval: 1.1, melee: true, sight: 34, scale: 1.14, bulk: 1.35 },
+  thug: { look: 'street', walk: 2.0, run: 5.0, range: 24, dmg: 7, interval: 1.15, burst: 2, sight: 40, scale: 1, armor: 1 },
+  mask: { look: 'mask', walk: 2.2, run: 5.4, range: 20, dmg: 4, interval: 0.16, burst: 4, pause: 1.7, sight: 40, scale: 1, armor: 1 },
+  mob: { look: 'mob', walk: 1.9, run: 4.6, range: 28, dmg: 11, interval: 1.4, burst: 1, sight: 44, scale: 1, armor: 1.2 },
+  brute: { look: 'biker', walk: 1.8, run: 4.5, range: 2.4, dmg: 22, interval: 1.1, melee: true, sight: 34, scale: 1.06, armor: 1.6 },
   scrib: { monster: 'scrib', hp: 120, walk: 2.4, run: 6.2, range: 2.6, dmg: 14, interval: 0.9, sight: 30, radius: 0.95 },
   stalk: { monster: 'stalk', hp: 150, walk: 1.8, run: 4.8, range: 3.2, dmg: 20, interval: 1.3, sight: 36, radius: 0.7 },
   spike: { monster: 'spike', hp: 90, walk: 3.0, run: 7.2, range: 2.4, dmg: 12, interval: 0.8, sight: 28, radius: 0.85 },
 };
 
 const _v = new THREE.Vector3();
+const _ro = new THREE.Vector3();
+const _rd = new THREE.Vector3();
+const _sp = new THREE.Vector3();
 let nextId = 1;
+
+// how big a hole each kind of hit rubs out (metres)
+export function holeRadius(kind, amount) {
+  if (kind === 'paint') return 0.045 + amount * 0.0018;
+  if (kind === 'pencil') return 0.07 + amount * 0.0011;
+  if (kind === 'melee') return 0.13;
+  if (kind === 'beam') return 0.09;
+  return 0.06 + amount * 0.001;
+}
+const REMOVE_AT = { head: 0.5, armL: 0.5, armR: 0.5, legL: 0.45, legR: 0.45, torso: 0.4 };
+const INK_WEIGHT = { head: 0.7, torso: 1.2, armL: 0.35, armR: 0.35, legL: 0.45, legR: 0.45 };
 
 class Enemy {
   constructor(mgr, type, x, z, territory) {
@@ -32,12 +50,9 @@ class Enemy {
       this.radius = this.cfg.radius;
       this.height = this.fig.cfg.cy + this.fig.cfg.h * 0.5;
     } else {
-      this.fig = new Figure(mgr.game.figures, { head: this.cfg.head, torso: this.cfg.torso, color: BLACK_INK, width: 3.3, scale: this.cfg.scale, bulk: this.cfg.bulk || 1, seed: this.id * 3.7 });
-      this.partHp = { ...this.cfg.hp };
-      this.maxTotal = Object.values(this.cfg.hp).reduce((a, b) => a + b, 0);
-      this.total = 0;
-      this.radius = 0.42 * (this.cfg.bulk || 1);
-      this.height = 1.85 * this.cfg.scale;
+      this.fig = new Doodle(mgr.game.figures, gangLook(this.cfg.look), { seed: this.id * 3.7, scale: this.cfg.scale });
+      this.radius = 0.4 * this.fig.bulk;
+      this.height = 1.85 * this.fig.scale;
     }
     this.pos = this.fig.pos;
     this.pos.set(x, groundHeight(x, z), z);
@@ -65,15 +80,26 @@ class Enemy {
   }
 
   get headless() {
-    return !this.isMonster && this.partHp.head <= 0;
+    return !this.isMonster && this.fig.parts.head < 0.5;
   }
 
+  // both legs gone: crawls
   get legless() {
-    return !this.isMonster && this.partHp.legs <= 0;
+    return !this.isMonster && this.fig.parts.legL < 0.5 && this.fig.parts.legR < 0.5;
   }
 
+  // one leg gone: limps
+  get limping() {
+    return !this.isMonster && (this.fig.parts.legL < 0.5) !== (this.fig.parts.legR < 0.5);
+  }
+
+  // the gun hand is gone
   get armless() {
-    return !this.isMonster && this.partHp.armR <= 0;
+    return !this.isMonster && this.fig.parts.armR < 0.5;
+  }
+
+  get doneDying() {
+    return this.isMonster ? this.dying >= 1.2 : this.fig.dissolve >= 1;
   }
 
   knock(x, z) {
@@ -82,7 +108,7 @@ class Enemy {
 
   paint(color) {
     this.paintT = 2.5;
-    if (!this.isMonster && this.fig.torsoSprite) this.fig.torsoSprite.material.uniforms.uTint.value.setRGB(0.55 + color[0] * 0.45, 0.55 + color[1] * 0.45, 0.55 + color[2] * 0.45);
+    if (!this.isMonster) this.fig.paint(color);
   }
 
   dispose() {
@@ -122,26 +148,39 @@ class Enemy {
     const game = this.game;
     const fig = this.fig;
     if (this.dying >= 0) {
-      this.dying += dt * 1.6;
-      if (this.isMonster) fig.dead = Math.min(1, this.dying);
-      else {
-        fig.dead = Math.min(1, this.dying * 2);
-        for (const k in fig.parts) fig.parts[k] = Math.max(0, fig.parts[k] - dt * 1.6);
+      if (this.isMonster) {
+        this.dying += dt * 1.6;
+        fig.dead = Math.min(1, this.dying);
+        fig.speed = 0;
+      } else {
+        this.dying += dt;
+        if (fig.split >= 0) {
+          // the legs stumble on for a moment after the waist is gone
+          fig.split += dt;
+          fig.speed = Math.max(0, fig.speed - dt * 2.5);
+          if (fig.split < 1) {
+            this.pos.x += Math.sin(this.yaw) * fig.speed * dt;
+            this.pos.z += Math.cos(this.yaw) * fig.speed * dt;
+          }
+          fig.dissolve = clamp((this.dying - 1.8) / 0.9, 0, 1);
+        } else {
+          fig.dead = Math.min(1, this.dying * 2.2);
+          fig.speed = 0;
+          fig.dissolve = clamp((this.dying - 0.9) / 0.9, 0, 1);
+        }
       }
-      fig.speed = 0;
       fig.update(dt);
       return;
     }
     this.stateT += dt;
     this.thinkT -= dt;
-    if (this.paintT > 0) {
-      this.paintT -= dt;
-      if (this.paintT <= 0 && !this.isMonster && fig.torsoSprite) fig.torsoSprite.material.uniforms.uTint.value.setRGB(1, 1, 1);
-    }
-    // fade erased parts
-    if (!this.isMonster) {
-      for (const k in this.partHp) {
-        if (this.partHp[k] <= 0 && fig.parts[k] > 0) fig.parts[k] = Math.max(0, fig.parts[k] - dt * 4);
+    if (this.paintT > 0) this.paintT -= dt;
+    if (this.headless) {
+      this.blindT = (this.blindT || 0) + dt;
+      // a headless body keeps going for a while and then folds
+      if (this.blindT > 14) {
+        this.mgr.kill(this);
+        return;
       }
     }
     const p = game.player;
@@ -177,8 +216,25 @@ class Enemy {
       moveX = Math.sin(this.yaw);
       moveZ = Math.cos(this.yaw);
       speed = cfg.walk * 0.8;
-      fig.armsUp = 1;
       fig.stagger = 1;
+      if (!cfg.melee && !this.armless) {
+        fig.aim = 1;
+        fig.aimYaw = Math.sin(this.blindT * 1.9) * 1.4;
+        fig.aimPitch = Math.sin(this.blindT * 1.3) * 0.5;
+        fig.flail = 0;
+      } else {
+        fig.flail = 1;
+        fig.aim = 0;
+      }
+    } else if (this.armless && !cfg.melee && !this.isMonster) {
+      // lost the gun hand: runs away from the player
+      const l = dist || 1;
+      const dir = this.mgr.steerTo(this, _v.set(this.pos.x - dx / l * 10, 0, this.pos.z - dz / l * 10));
+      moveX = dir[0];
+      moveZ = dir[1];
+      speed = cfg.run;
+      fig.armsUp = 0;
+      fig.flail = 0.6;
     } else if (this.state === 'patrol' || this.state === 'return') {
       const tdx = this.target.x - this.pos.x;
       const tdz = this.target.z - this.pos.z;
@@ -238,7 +294,8 @@ class Enemy {
         this.target.copy(this.home);
       }
     }
-    if (this.legless) speed = Math.min(speed, 1.1);
+    if (this.legless) speed = Math.min(speed, 0.9);
+    else if (this.limping) speed = Math.min(speed * 0.45, 1.8);
     if (this.flinch > 0) {
       this.flinch -= dt;
       speed *= 0.3;
@@ -262,12 +319,14 @@ class Enemy {
     fig.speed = sp;
     if (!this.isMonster) {
       fig.crawl = damp(fig.crawl, this.legless ? 1 : 0, 6, dt);
-      fig.aim = !cfg.melee && !this.armless && !headless && this.state === 'chase' && this.sees ? 1 : 0;
-      const ady = tp.y + 1.2 - (this.pos.y + 1.4);
-      fig.aimPitch = Math.atan2(ady, Math.max(1, dist));
       if (!headless) {
+        fig.aim = !cfg.melee && !this.armless && this.state === 'chase' && this.sees ? 1 : 0;
+        fig.aimYaw = 0;
+        const ady = tp.y + 1.2 - (this.pos.y + 1.4);
+        fig.aimPitch = Math.atan2(ady, Math.max(1, dist));
         fig.armsUp = 0;
-        fig.stagger = 0;
+        fig.stagger = this.limping ? 0.6 : 0;
+        if (!this.armless) fig.flail = 0;
       }
     }
     if (this.pendingHit) {
@@ -315,7 +374,8 @@ class Enemy {
   attack(dt, dist, tp) {
     const cfg = this.cfg;
     const game = this.game;
-    if (!this.sees) return;
+    if (!this.sees || this.headless) return;
+    if (this.armless && !cfg.melee && !this.isMonster) return;
     this.fireT -= dt;
     const melee = cfg.melee || this.isMonster || this.armless;
     if (melee) {
@@ -357,7 +417,7 @@ class Enemy {
     // held weapon
     const fr = this.game.figures;
     const j = this.fig.j;
-    if (this.partHp.armR <= 0) return;
+    if (this.fig.parts.armR < 0.5) return;
     const h = j.handR;
     if (this.cfg.melee) {
       const d = _v.copy(j.handR).sub(j.elbowR).normalize();
@@ -397,7 +457,7 @@ export class Enemies {
   }
 
   typeFor(kind) {
-    if (kind === 'crim') return this.rng.chance(0.6) ? 'thug' : 'mask';
+    if (kind === 'crim') return this.rng.pick(['thug', 'thug', 'mask', 'mob']);
     if (kind === 'brute') return 'brute';
     return this.rng.pick(['scrib', 'scrib', 'stalk', 'spike']);
   }
@@ -532,7 +592,7 @@ export class Enemies {
     const keep = [];
     for (const e of L) {
       e.update(dt);
-      if ((e.dying >= 1.2) || e.despawn) {
+      if (e.doneDying || e.despawn) {
         if (e.territory) {
           e.territory.alive = Math.max(0, e.territory.alive - 1);
           if (!e.despawn) e.territory.cooldown = 45 + Math.random() * 40;
@@ -554,35 +614,17 @@ export class Enemies {
   }
 
   // ------------------------------------------------------------------ hit tests
-  partAt(e, hx, hy, hz) {
-    if (e.isMonster) return 'body';
-    const s = e.cfg.scale;
-    const h = (hy - e.pos.y) / s;
-    const rx = -Math.cos(e.yaw);
-    const rz = Math.sin(e.yaw);
-    const lat = ((hx - e.pos.x) * rx + (hz - e.pos.z) * rz) / s;
-    if (e.fig.crawl > 0.5) {
-      // crawling: the torso is low
-      if (h > 0.55) return 'head';
-      return 'torso';
-    }
-    if (h > 1.42) return 'head';
-    if (h > 0.9) {
-      if (lat > 0.17) return 'armR';
-      if (lat < -0.17) return 'armL';
-      return 'torso';
-    }
-    return 'legs';
-  }
-
   segmentHit(ox, oy, oz, dx, dy, dz, maxT) {
     let best = null;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-6) return null;
     const len2 = dx * dx + dz * dz;
+    const ro = _ro.set(ox, oy, oz);
+    const rd = _rd.set(dx / len, dy / len, dz / len);
     for (const e of this.list) {
       if (!e.alive) continue;
       const ex = e.pos.x;
       const ez = e.pos.z;
-      // quick reject
       const cx = ox + dx * 0.5;
       const cz = oz + dz * 0.5;
       const reach = Math.sqrt(len2) * 0.5 + 3;
@@ -603,13 +645,10 @@ export class Enemies {
         }
         continue;
       }
-      const hd = Math.hypot(px - ex, pz - ez);
-      if (hd > e.radius) continue;
-      const top = e.pos.y + (e.fig.crawl > 0.5 ? 0.8 : e.height);
-      if (py < e.pos.y || py > top) continue;
-      const part = this.partAt(e, px, py, pz);
-      if (e.partHp[part] <= 0 && part !== 'torso') continue; // shot passes through erased parts
-      if (!best || t < best.t) best = { t, enemy: e, part };
+      if (Math.hypot(px - ex, pz - ez) > e.radius + 0.9) continue;
+      // exact hit on the drawn body (shots pass through erased holes)
+      const h = e.fig.raycast(ro, rd, maxT * len);
+      if (h && (!best || h.t / len < best.t)) best = { t: h.t / len, enemy: e, part: h.part, point: h.point };
     }
     return best;
   }
@@ -661,23 +700,53 @@ export class Enemies {
       if (e.hp <= 0) this.kill(e);
       return;
     }
-    e.partHp[part] -= amount;
-    e.total += amount;
-    if (e.partHp[part] <= 0 && e.fig.parts[part] > 0.99) {
-      // this part gets erased
-      const j = e.fig.j;
-      const at = part === 'head' ? j.headC : part === 'legs' ? j.kneeL : part === 'armR' ? j.elbowR : part === 'armL' ? j.elbowL : j.neck;
-      fx.crumbs(at.x, at.y, at.z, 22, 3.2);
-      fx.smoke(at.x, at.y, at.z, 0.7);
-      game.audio.play('erase', 0.9);
-      if (part === 'head') game.hud.toast('נמחק לו הראש!', 'good', 1.2);
-    }
-    if (e.partHp.torso <= 0 || e.total >= e.maxTotal * 0.62 || (e.headless && e.total > e.maxTotal * 0.35)) this.kill(e);
+    const fig = e.fig;
+    const r = holeRadius(kind, amount) / Math.cbrt(e.cfg.armor || 1);
+    const at = point || fig.center;
+    const res = fig.erase(at, r);
+    game.audio.play('erase', 0.55);
+    if (res) this.checkParts(e, res.part, at);
   }
 
-  kill(e) {
+  // parts that lost enough ink disappear; the body reacts to what is missing
+  checkParts(e, part, at) {
+    const game = this.game;
+    const fx = game.fx;
+    const fig = e.fig;
+    if (fig.parts[part] > 0.5 && fig.erased[part] >= REMOVE_AT[part]) {
+      fig.removePart(part);
+      const j = fig.j;
+      const c = part === 'head' ? j.headC : part === 'armR' ? j.elbowR : part === 'armL' ? j.elbowL : part === 'legR' ? j.kneeR : part === 'legL' ? j.kneeL : fig.center;
+      fx.crumbs(c.x, c.y, c.z, 24, 3.4);
+      fx.smoke(c.x, c.y, c.z, 0.7);
+      game.audio.play('erase', 1);
+      if (part === 'head') {
+        if (!this.headlessShown) game.hud.toast('נמחק לו הראש! עכשיו הוא לא רואה כלום', 'good', 1.6);
+        this.headlessShown = true;
+      }
+      if (part === 'armR' && !e.cfg.melee) {
+        game.dropWeapon && game.dropWeapon(e);
+      }
+      if (part === 'torso') {
+        this.kill(e, 'split');
+        return;
+      }
+    }
+    let lost = 0;
+    for (const k in INK_WEIGHT) lost += (fig.parts[k] < 0.5 ? 1 : fig.erased[k]) * INK_WEIGHT[k];
+    const P = fig.parts;
+    if (lost >= 1.7 || (P.legL + P.legR + P.armL + P.armR < 0.5) || (e.headless && fig.erased.torso > 0.3)) this.kill(e);
+  }
+
+  kill(e, how) {
     if (!e.alive) return;
     e.dying = 0;
+    if (!e.isMonster && how === 'split') {
+      e.fig.split = 0;
+      e.fig.splitDir = Math.random() < 0.5 ? 1 : -1;
+      e.fig.parts.torso = 0;
+      e.fig.speed = Math.max(e.fig.speed, 1.5);
+    }
     this.kills++;
     const fx = this.game.fx;
     fx.crumbs(e.pos.x, e.pos.y + 1.1, e.pos.z, 34, 3.5);
@@ -697,9 +766,20 @@ export class Enemies {
       if (e.isMonster) {
         this.damage(e, 'body', dmg, new THREE.Vector3(e.pos.x, e.pos.y + 1, e.pos.z), dir, 'blast');
       } else {
-        // a blast erases several parts at once
-        for (const part of ['head', 'armL', 'armR', 'legs', 'torso']) {
-          if (Math.random() < 0.55 + f * 0.4) this.damage(e, part, dmg * 0.6, new THREE.Vector3(e.pos.x, e.pos.y + 1, e.pos.z), dir, 'blast');
+        // a blast rubs out big chunks on the side facing it
+        const fig = e.fig;
+        const n = 2 + Math.round(f * 3);
+        for (let i = 0; i < n && e.alive; i++) {
+          const s2 = fig.shapes[Math.floor(Math.random() * fig.shapes.length)];
+          if (!s2) break;
+          _sp.set(x, y, z).lerp(s2.c, 0.92);
+          fig.closestSurfacePoint(_sp, _sp);
+          const res = fig.erase(_sp, 0.12 + 0.2 * f + Math.random() * 0.08);
+          if (res) this.checkParts(e, res.part, _sp);
+        }
+        if (e.alive) {
+          this.game.hud.hitMarker();
+          if (e.state !== 'chase') e.setState('chase');
         }
       }
       e.knock(dir.x * 9 * f, dir.z * 9 * f);

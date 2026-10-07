@@ -251,6 +251,12 @@ export class Game {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: 4.4 });
     }
+    if (this.params.has('test') && window.__camOverride) {
+      // test hook: fixed camera for screenshots
+      const o = window.__camOverride;
+      this.camera.position.set(o.pos[0], o.pos[1], o.pos[2]);
+      this.camera.lookAt(o.look[0], o.look[1], o.look[2]);
+    }
     this.camera.updateMatrixWorld();
     if (this.onFrame) this.onFrame(dt);
     this.airdraw.frame(dt);
@@ -526,6 +532,7 @@ export class Game {
     const d = Math.hypot(pp.x - x, pp.z - z);
     this.camRig.addShake(clamp(1.2 - d / 40, 0.1, 1));
     this.enemies.explosion(x, y, z, radius, damage);
+    this.civilians.explosion(x, y, z, radius);
     this.traffic.explosion(x, z, radius);
     if (d < radius) p.hurt((owner === 'player' ? 0.25 : 1) * damage * 0.35 * (1 - d / radius), x, z);
     this.enemies.noise(new THREE.Vector3(x, y, z), 60);

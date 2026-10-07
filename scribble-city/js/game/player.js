@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { Figure } from './figure.js';
-import { BLACK_INK } from '../render/LineBatch.js';
+import { Doodle } from './doodle.js';
+import { heroLook } from './looks.js';
 import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle } from '../core/util.js';
 
@@ -13,7 +13,7 @@ const _z = new THREE.Vector3();
 export class Player {
   constructor(game) {
     this.game = game;
-    this.fig = new Figure(game.figures, { head: 'hero', color: BLACK_INK, width: 3.6, seed: 7 });
+    this.fig = new Doodle(game.figures, heroLook(), { seed: 7 });
     this.pos = this.fig.pos;
     this.vel = new THREE.Vector3();
     this.yaw = 0;

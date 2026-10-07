@@ -1,16 +1,13 @@
 import * as THREE from 'three';
-import { Figure } from './figure.js';
-import { INK } from '../render/LineBatch.js';
+import { Doodle } from './doodle.js';
+import { civilianLook } from './looks.js';
+import { holeRadius } from './enemies.js';
 import { AVES, STREETS, AVE_W, ST_W, groundHeight, blockRect, BLOCK_TYPES } from '../world/layout.js';
-import { damp, dampAngle } from '../core/util.js';
+import { damp, dampAngle, clamp } from '../core/util.js';
 
-const TINTS = [[0.85, 0.75, 0.7], [0.7, 0.78, 0.88], [0.8, 0.85, 0.72], [0.9, 0.86, 0.72], [0.78, 0.74, 0.86], [0.92, 0.92, 0.9]];
-const LOOKS = [
-  { head: 'civ0', torso: 'torso_coat' },
-  { head: 'civ1', torso: 'torso_dress' },
-  { head: 'civ2', torso: 'torso_coat' },
-  { head: 'civ0', torso: 'torso_hoodie' },
-];
+const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
+const _ro = new THREE.Vector3();
+const _rd = new THREE.Vector3();
 
 /**
  * Pedestrians walking around their block's sidewalk. They panic and run when shooting starts.
@@ -19,9 +16,11 @@ class Civilian {
   constructor(mgr, bx, bz) {
     this.mgr = mgr;
     this.game = mgr.game;
-    const look = LOOKS[Math.floor(Math.random() * LOOKS.length)];
-    this.fig = new Figure(mgr.game.figures, { head: look.head, torso: look.torso, color: INK, width: 2.6, tint: TINTS[Math.floor(Math.random() * TINTS.length)], seed: Math.random() * 100, scale: 0.94 + Math.random() * 0.1 });
+    this.fig = new Doodle(mgr.game.figures, civilianLook(), { seed: Math.random() * 100, scale: 0.93 + Math.random() * 0.1 });
     this.pos = this.fig.pos;
+    this.radius = 0.33;
+    this.dying = -1;
+    this.headlessT = 0;
     const r = blockRect(bx, bz);
     const inset = 2.3;
     this.loop = [
@@ -45,13 +44,55 @@ class Civilian {
     this.dodgeV = new THREE.Vector3();
   }
 
+  get alive() {
+    return this.dying < 0;
+  }
+
+  get headless() {
+    return this.fig.parts.head < 0.5;
+  }
+
   update(dt) {
     const game = this.game;
     const fig = this.fig;
+    if (this.dying >= 0) {
+      this.dying += dt;
+      if (fig.split >= 0) {
+        fig.split += dt;
+        fig.speed = Math.max(0, fig.speed - dt * 2.5);
+        if (fig.split < 1) {
+          this.pos.x += Math.sin(this.yaw) * fig.speed * dt;
+          this.pos.z += Math.cos(this.yaw) * fig.speed * dt;
+        }
+        fig.dissolve = clamp((this.dying - 1.8) / 0.9, 0, 1);
+      } else {
+        fig.dead = Math.min(1, this.dying * 2.2);
+        fig.speed = 0;
+        fig.dissolve = clamp((this.dying - 1.2) / 0.9, 0, 1);
+      }
+      fig.update(dt);
+      return;
+    }
     let tx;
     let tz;
     let speed = this.speed;
-    if (this.panicT > 0) {
+    const legless = fig.parts.legL < 0.5 && fig.parts.legR < 0.5;
+    const limping = (fig.parts.legL < 0.5) !== (fig.parts.legR < 0.5);
+    if (this.headless) {
+      // runs blind in a panic, arms flailing, zig-zagging until the body gives up
+      this.headlessT += dt;
+      if (this.headlessT > 11) {
+        this.mgr.kill(this);
+        return;
+      }
+      if (!this.blindDir || Math.random() < dt * 0.8) this.blindDir = this.yaw + (Math.random() - 0.5) * 2.4;
+      tx = this.pos.x + Math.sin(this.blindDir) * 5;
+      tz = this.pos.z + Math.cos(this.blindDir) * 5;
+      speed = 5.2;
+      fig.flail = 1;
+      fig.stagger = 1;
+      fig.armsUp = 0;
+    } else if (this.panicT > 0) {
       this.panicT -= dt;
       const fx = this.pos.x - this.fearX;
       const fz = this.pos.z - this.fearZ;
@@ -62,6 +103,7 @@ class Civilian {
       fig.armsUp = 1;
     } else {
       fig.armsUp = 0;
+      fig.flail = 0;
       const t = this.loop[this.target];
       tx = t[0];
       tz = t[1];
@@ -74,6 +116,10 @@ class Civilian {
         speed = 0;
       }
     }
+    if (legless) speed = Math.min(speed, 0.8);
+    else if (limping) speed = Math.min(speed * 0.45, 1.8);
+    fig.crawl = damp(fig.crawl, legless ? 1 : 0, 6, dt);
+    if (!this.headless) fig.stagger = limping ? 0.6 : 0;
     const dx = tx - this.pos.x;
     const dz = tz - this.pos.z;
     const l = Math.hypot(dx, dz) || 1;
@@ -142,6 +188,106 @@ export class Civilians {
       }
     }
     for (const c of this.list) c.update(dt);
+    if (this.list.some((c) => c.fig.dissolve >= 1)) {
+      this.list = this.list.filter((c) => {
+        if (c.fig.dissolve < 1) return true;
+        c.dispose();
+        return false;
+      });
+    }
+  }
+
+  // ------------------------------------------------------------------ getting hit
+  segmentHit(ox, oy, oz, dx, dy, dz, maxT) {
+    let best = null;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-6) return null;
+    const ro = _ro.set(ox, oy, oz);
+    const rd = _rd.set(dx / len, dy / len, dz / len);
+    const len2 = dx * dx + dz * dz;
+    for (const c of this.list) {
+      if (!c.alive) continue;
+      let t = len2 > 1e-8 ? ((c.pos.x - ox) * dx + (c.pos.z - oz) * dz) / len2 : 0;
+      t = Math.max(0, Math.min(maxT, t));
+      if (Math.hypot(ox + dx * t - c.pos.x, oz + dz * t - c.pos.z) > 1.2) continue;
+      const h = c.fig.raycast(ro, rd, maxT * len);
+      if (h && (!best || h.t / len < best.t)) best = { t: h.t / len, civ: c, part: h.part, point: h.point };
+    }
+    return best;
+  }
+
+  inArc(pos, fwd, range, halfAngle) {
+    const out = [];
+    for (const c of this.list) {
+      if (!c.alive) continue;
+      const dx = c.pos.x - pos.x;
+      const dz = c.pos.z - pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > range + 0.4) continue;
+      const a = Math.acos(Math.max(-1, Math.min(1, (dx * fwd.x + dz * fwd.z) / (d || 1))));
+      if (a < halfAngle || d < 0.8) out.push(c);
+    }
+    return out;
+  }
+
+  damage(c, point, kind, amount) {
+    if (!c.alive) return;
+    const game = this.game;
+    const fig = c.fig;
+    const res = fig.erase(point, holeRadius(kind, amount));
+    game.fx.crumbs(point.x, point.y, point.z, 8, 2.5);
+    game.audio.play('erase', 0.5);
+    this.panic(c.pos, 30);
+    c.panicT = 8;
+    if (game.onCivilianHurt) game.onCivilianHurt(c);
+    if (!res) return;
+    const part = res.part;
+    if (fig.parts[part] > 0.5 && fig.erased[part] >= REMOVE_AT[part]) {
+      fig.removePart(part);
+      const j = fig.j;
+      const at = part === 'head' ? j.headC : fig.center;
+      game.fx.crumbs(at.x, at.y, at.z, 22, 3.2);
+      game.fx.smoke(at.x, at.y, at.z, 0.6);
+      game.audio.play('erase', 1);
+      if (part === 'torso') {
+        this.kill(c, 'split');
+        return;
+      }
+    }
+    let lost = 0;
+    for (const k of ['head', 'torso', 'armL', 'armR', 'legL', 'legR']) lost += fig.parts[k] < 0.5 ? 0.5 : fig.erased[k] * 0.5;
+    if (lost >= 1.4 || (c.headless && fig.erased.torso > 0.25)) this.kill(c);
+  }
+
+  explosion(x, y, z, radius) {
+    const at = new THREE.Vector3();
+    for (const c of this.list) {
+      if (!c.alive) continue;
+      const d = Math.hypot(c.pos.x - x, c.pos.y + 1 - y, c.pos.z - z);
+      if (d > radius) continue;
+      const f = 1 - d / radius;
+      const n = 2 + Math.round(f * 3);
+      for (let i = 0; i < n && c.alive; i++) {
+        const s = c.fig.shapes[Math.floor(Math.random() * c.fig.shapes.length)];
+        if (!s) break;
+        at.set(x, y, z).lerp(s.c, 0.92);
+        c.fig.closestSurfacePoint(at, at);
+        this.damage(c, at, 'blast', 60 + 140 * f);
+      }
+    }
+  }
+
+  kill(c, how) {
+    if (!c.alive) return;
+    c.dying = 0;
+    if (how === 'split') {
+      c.fig.split = 0;
+      c.fig.splitDir = Math.random() < 0.5 ? 1 : -1;
+      c.fig.parts.torso = 0;
+      c.fig.speed = Math.max(c.fig.speed, 1.5);
+    }
+    this.game.fx.crumbs(c.pos.x, c.pos.y + 1, c.pos.z, 26, 3.2);
+    if (this.game.onCivilianKilled) this.game.onCivilianKilled(c);
   }
 
   panic(pos, radius) {
