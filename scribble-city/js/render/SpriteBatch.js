@@ -13,9 +13,11 @@ attribute vec2 iPivot;
 varying vec2 vUv;
 varying vec4 vTint;
 varying float vDist;
+varying float vSun;
 
 void main() {
   vec2 off = (position.xy - iPivot) * iSize;
+  vSun = uLook > 0.5 ? shadowFast(iPos + vec3(0.0, iSize.y * 0.5, 0.0)) : 1.0;
   vec3 right;
   vec3 up;
   if (dot(iAxis, iAxis) < 0.01) {
@@ -45,11 +47,18 @@ uniform float uNearFade;
 varying vec2 vUv;
 varying vec4 vTint;
 varying float vDist;
+varying float vSun;
 void main() {
   vec4 tex = texture2D(uMap, vUv);
   float a = tex.a * vTint.a;
   vec3 col = tex.rgb * vTint.rgb;
   if (uNearFade > 0.0) a *= smoothstep(uNearFade * 0.45, uNearFade, vDist);
+  if (uLook > 0.5) {
+    col *= mix(vec3(0.85, 0.89, 1.03), vec3(1.05, 0.985, 0.9), vSun);
+    float ev = edgeVig(gl_FragCoord.xy);
+    vec3 pp = paperAt(gl_FragCoord.xy);
+    col = mix(col, pp + (col - pp) * 0.3, ev);
+  }
   if (uNoFog < 0.5) {
     float f = fogFactor(vDist);
     col = mix(col, paperAt(gl_FragCoord.xy), f);

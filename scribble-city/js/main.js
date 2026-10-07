@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { shared, makeLineMaterial, makeSurfaceMaterial, makeSkyMesh } from './render/materials.js';
+import { shared, makeLineMaterial, makeSurfaceMaterial, makeSkyMesh, setLook, savedLook, look, GOLDEN_SUN } from './render/materials.js';
+import { bakeSunShadows, updateSkyUniforms } from './render/sunlight.js';
+import { Steam } from './render/steam.js';
 import { buildAtlas } from './render/atlas.js';
 import { buildSignAtlas } from './render/signs.js';
 import { buildCity } from './world/city.js';
@@ -89,6 +91,23 @@ async function boot() {
 
   const sky = new Sky(scene, atlas);
 
+  // golden-hour look: bake the sun's view of the city once; steam from the manholes
+  setStatus('מצללים את העיר…');
+  await new Promise((r) => setTimeout(r, 10));
+  try {
+    bakeSunShadows(renderer, world.group, GOLDEN_SUN, 2048);
+    look.shadowsReady = true;
+  } catch (err) {
+    console.warn('shadow bake failed', err);
+  }
+  const steam = new Steam(scene, mats.line);
+  look.onChange = (id) => {
+    steam.visible = id === 1;
+    const box = document.getElementById('opt-look');
+    if (box) box.checked = id === 1;
+  };
+  setLook(params.has('look') ? +params.get('look') : savedLook());
+
   const resize = () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -105,6 +124,10 @@ async function boot() {
 
   const game = new Game({ renderer, scene, camera, world, atlas, signAtlas, mats, sky, touch, params });
   window.__game = game;
+  game.onFrame = (dt) => {
+    updateSkyUniforms(camera);
+    steam.update(dt, camera.position);
+  };
   await game.init();
   setStatus('');
   const startBtn = document.getElementById('start-btn');

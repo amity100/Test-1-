@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared } from '../render/materials.js';
+import { shared, setLook } from '../render/materials.js';
 import { Input } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { CameraRig } from './camera.js';
@@ -93,6 +93,7 @@ export class Game {
     $('respawn-btn').addEventListener('click', () => this.respawnFromDeath());
     $('opt-sound').addEventListener('change', (e) => this.audio.setEnabled(e.target.checked));
     $('opt-boil').addEventListener('change', (e) => (shared.uBoilAmp.value = e.target.checked ? 1 : 0));
+    $('opt-look').addEventListener('change', (e) => setLook(e.target.checked ? 1 : 0));
     $('opt-sens').addEventListener('input', (e) => (this.input.sensitivity = parseFloat(e.target.value)));
     this.input.on('lock', (locked) => {
       if (!locked && this.state === 'play' && !this.drawpad.open && !this.album.open && !this.touch && !this.input.lockFailed) this.pause();
@@ -249,6 +250,8 @@ export class Game {
     } else {
       this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: player.mode === 'draw' ? 3.6 : 4.4 });
     }
+    this.camera.updateMatrixWorld();
+    if (this.onFrame) this.onFrame(dt);
     // render dynamic figures
     if (dt > 0) {
       player.draw(this.camera.position);

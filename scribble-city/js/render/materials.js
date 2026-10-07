@@ -39,7 +39,44 @@ export const shared = {
   uBoil: { value: 0 },
   uBoilAmp: { value: 1 },
   uSunDir: { value: new THREE.Vector3(-0.45, 0.75, 0.48).normalize() },
+  uLook: { value: 1 },
+  uShadowMap: { value: (() => { const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); t.needsUpdate = true; return t; })() },
+  uShadowMatrix: { value: new THREE.Matrix4() },
+  uShadowOn: { value: 0 },
+  uShadowTexel: { value: 1 / 2048 },
+  uSunScreen: { value: new THREE.Vector3(0, 0, 0) },
+  uHorizonY: { value: 0 },
 };
+
+// Two looks for the same notebook city: the original daylight one, and golden hour
+// (low sun, cast shadows drawn as hatching, warm/cool coloured pencil, lit windows).
+const ORIGINAL_SUN = shared.uSunDir.value.clone();
+export const GOLDEN_SUN = new THREE.Vector3(-0.86, 0.47, 0.15).normalize();
+const LOOK_KEY = 'scribble-city-look';
+export const look = { shadowsReady: false, onChange: null };
+
+export function setLook(id) {
+  const up = id === 1;
+  shared.uLook.value = up ? 1 : 0;
+  shared.uSunDir.value.copy(up ? GOLDEN_SUN : ORIGINAL_SUN);
+  shared.uShadowOn.value = up && look.shadowsReady ? 1 : 0;
+  try {
+    localStorage.setItem(LOOK_KEY, String(shared.uLook.value));
+  } catch (e) {
+    // storage unavailable
+  }
+  if (look.onChange) look.onChange(shared.uLook.value);
+}
+
+export function savedLook() {
+  try {
+    const v = localStorage.getItem(LOOK_KEY);
+    if (v === '0') return 0;
+  } catch (e) {
+    // storage unavailable
+  }
+  return 1;
+}
 
 export function makeLineMaterial({ widthScale = 1, nudge = 0.004, minWidth = 0.85, depthTest = true } = {}) {
   return new THREE.ShaderMaterial({

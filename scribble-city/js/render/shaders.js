@@ -13,6 +13,13 @@ uniform vec3 uInk;
 uniform float uFogNear;
 uniform float uFogFar;
 uniform float uTime;
+uniform float uLook;        // 0 original, 1 golden hour (sun shadows, warm/cool pencil, glow)
+uniform sampler2D uShadowMap;
+uniform mat4 uShadowMatrix;
+uniform float uShadowOn;
+uniform float uShadowTexel;
+uniform vec3 uSunScreen;    // sun in device px (origin bottom-left); z = 1 when in front
+uniform float uHorizonY;    // device px from the bottom where the horizon sits
 
 float n2(vec2 p) { return texture2D(uNoise, (p + 0.5) / 256.0).r; }
 float n2b(vec2 p) { return texture2D(uNoise, (p + 0.5) / 256.0).g; }
@@ -21,6 +28,78 @@ float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
+}
+
+float lum3(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+// Sun visibility from the baked depth map of the city. Taps are spread in the receiver's own
+// plane (not in shadow-map space), which keeps grazing ground free of acne; a slow wobble
+// gives the shadow a hand-drawn edge. No derivatives here: COMMON is in vertex shaders too.
+float sunTap(vec3 p) {
+  vec4 sc = uShadowMatrix * vec4(p, 1.0);
+  vec3 s = sc.xyz / sc.w * 0.5 + 0.5;
+  if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) return 1.0;
+  return step(s.z - 0.0012, texture2D(uShadowMap, s.xy).r);
+}
+
+// One tap, for vertex shaders (every line segment and sprite asks once per vertex).
+float shadowFast(vec3 wp) {
+  if (uShadowOn < 0.5) return 1.0;
+  return sunTap(wp + vec3(0.0, 0.3, 0.0));
+}
+
+float shadowAt(vec3 wp, vec3 N) {
+  if (uShadowOn < 0.5) return 1.0;
+  vec3 t1 = normalize(abs(N.y) < 0.9 ? cross(N, vec3(0.0, 1.0, 0.0)) : cross(N, vec3(1.0, 0.0, 0.0)));
+  vec3 t2 = cross(N, t1);
+  vec2 wob = (vec2(n2(wp.xz * 0.45 + wp.y * 0.13), n2(wp.zx * 0.45 - wp.y * 0.11 + 17.0)) - 0.5) * 0.8;
+  vec3 b = wp + N * 0.25 + t1 * wob.x + t2 * wob.y;
+  float r = 0.3;
+  float v = sunTap(b) * 2.0;
+  v += sunTap(b + (t1 + t2) * r);
+  v += sunTap(b + (t1 - t2) * r);
+  v += sunTap(b + (-t1 + t2) * r);
+  v += sunTap(b - (t1 + t2) * r);
+  return smoothstep(0.15, 0.85, v / 6.0);
+}
+
+// Sketchbook look: towards the edges of the page the colouring is left unfinished.
+float edgeVig(vec2 fc) {
+  if (uLook < 0.5) return 0.0;
+  vec2 q = fc / uResolution;
+  vec2 d = abs(q - 0.5) * 2.0;
+  float e = max(d.x, d.y * 0.94);
+  vec2 p = fc / uPR;
+  float n = n2(p * 0.017) * 0.65 + n2(p * 0.055 + 5.0) * 0.35;
+  return smoothstep(0.8, 1.04, e + (n - 0.5) * 0.26);
+}
+
+// Golden hour in coloured pencil: a warm band hugging the horizon, strongest around the sun.
+vec3 skyGlow(vec2 fc, vec3 col) {
+  vec2 p = fc / uPR;
+  float H = uResolution.y;
+  float hy = (fc.y - uHorizonY) / H;
+  float st = n2(vec2((p.x * 0.35 + p.y * 0.9) * 0.9, p.y * 0.12 - p.x * 0.05)) * 0.6 + n2(vec2(p.x * 1.7 + p.y * 0.6, p.y * 2.3)) * 0.4;
+  float strokes = smoothstep(0.26, 0.62, st);
+  float sunD = uSunScreen.z > 0.5 ? length((fc - uSunScreen.xy) / H) : 9.0;
+  float sunBoost = exp(-sunD * 2.4) * uSunScreen.z;
+  float band = exp(-max(hy, 0.0) * 6.0) * smoothstep(-0.3, 0.0, hy);
+  float glow = clamp(band * (0.42 + 0.95 * sunBoost), 0.0, 1.0);
+  vec3 gc = mix(vec3(1.0, 0.8, 0.56), vec3(0.98, 0.7, 0.66), smoothstep(0.02, 0.3, hy));
+  col = mix(col, col * gc, glow * (0.5 + 0.5 * strokes));
+  float high = smoothstep(0.18, 0.75, hy) * (1.0 - sunBoost);
+  col = mix(col, col * vec3(0.87, 0.92, 1.03), high * 0.45 * (0.45 + 0.55 * strokes));
+  if (uSunScreen.z > 0.5) {
+    float r = H * 0.042;
+    vec2 dv = fc - uSunScreen.xy;
+    float d = length(dv);
+    float wob = (n2(vec2(atan(dv.y, dv.x) * 5.0, 3.0)) - 0.5) * 3.0 * uPR;
+    float ring = 1.0 - smoothstep(0.9 * uPR, 2.2 * uPR, abs(d - r + wob));
+    float fill = 1.0 - smoothstep(r - 2.0 * uPR, r, d);
+    col = mix(col, col * vec3(1.0, 0.9, 0.62), fill * (0.4 + 0.4 * strokes));
+    col = mix(col, vec3(0.85, 0.46, 0.26), ring * 0.5);
+  }
+  return col;
 }
 
 // The notebook page: warm paper grain, blue ruled lines, red margin on the right (Hebrew notebook).
@@ -43,6 +122,7 @@ vec3 paperAt(vec2 fc) {
   col = mix(col, uMarginCol, (1.0 - smoothstep(0.35, 1.3, md)) * 0.55);
   float md2 = abs(p.x - (W - 69.0));
   col = mix(col, uMarginCol, (1.0 - smoothstep(0.35, 1.0, md2)) * 0.25);
+  if (uLook > 0.5) col = skyGlow(fc, col);
   return col;
 }
 
@@ -72,6 +152,7 @@ varying float vHalfW;
 varying float vT;
 varying float vDist;
 varying float vSeed;
+varying float vSun;
 
 ${'' /* COMMON is prepended in JS */}
 
@@ -138,6 +219,11 @@ void main() {
   float taper = mix(0.4, 1.0, smoothstep(0.0, 0.16, t) * smoothstep(1.0, 0.84, t));
   w *= pressure * taper;
   w *= mix(1.0, 0.62, smoothstep(35.0, 260.0, dist));
+  vSun = 1.0;
+  if (uLook > 0.5) {
+    w *= mix(1.3, 1.0, smoothstep(5.0, 22.0, dist));
+    vSun = shadowFast(mix(iA, iB, 0.5));
+  }
   w = max(w, uMinWidth * uPR);
   float hw = w * 0.5 + 0.9;
   cP.xy += snrm * side * hw / (uResolution * 0.5) * cP.w;
@@ -159,6 +245,7 @@ varying float vHalfW;
 varying float vT;
 varying float vDist;
 varying float vSeed;
+varying float vSun;
 
 void main() {
   float d = abs(vSidePx);
@@ -171,8 +258,13 @@ void main() {
   float k = floor(vT * 11.0);
   a *= 1.0 - 0.5 * step(0.955, hash11(k + vSeed * 19.3));
   a *= vCol.a;
+  vec3 lc = vCol.rgb;
+  if (uLook > 0.5) {
+    lc = mix(lc * vec3(0.95, 0.97, 1.08), lc * vec3(1.3, 1.05, 0.78), vSun);
+    a = min(1.0, a * 1.12) * (1.0 - edgeVig(gl_FragCoord.xy) * 0.25);
+  }
   float f = fogFactor(vDist);
-  vec3 col = mix(vCol.rgb, paperAt(gl_FragCoord.xy), f);
+  vec3 col = mix(lc, paperAt(gl_FragCoord.xy), f);
   a *= 1.0 - f * 0.55;
   if (a < 0.015) discard;
   gl_FragColor = vec4(col, a);
@@ -224,6 +316,7 @@ varying vec4 vFace2;
 varying vec3 vN;
 varying vec3 vWPos;
 varying float vDist;
+float gPx;   // metres per pixel (worst direction), set once at the top of main()
 
 float lineMask(float coord, float fw, float wpx) {
   float d = abs(fract(coord + 0.5) - 0.5);
@@ -235,19 +328,37 @@ float hatchLayer(vec2 p, float spacing, float ang, float seed, float wpx) {
   vec2 dd = vec2(cos(ang), sin(ang));
   float along = dot(p, dd) / spacing;
   float across = dot(p, vec2(-dd.y, dd.x)) / spacing;
+  // derivatives of the smooth coordinates: the per-row jitter below jumps every row and
+  // would turn dense hatching into per-pixel noise
+  float fw = uLook > 0.5 ? gPx / spacing : fwidth(across);
+  float faw = uLook > 0.5 ? fw : fwidth(along);
   float row = floor(across + 0.5);
   float r = hash11(row * 1.37 + seed);
-  across += 0.16 * (n2(vec2(along * 0.35, row * 3.1 + seed)) - 0.5);
-  float fw = fwidth(across);
+  // wobble along the stroke; fades out where 'along' is squeezed on screen (grazing walls)
+  across += 0.16 * (n2(vec2(along * 0.35, row * 3.1 + seed)) - 0.5) * (1.0 - smoothstep(0.15, 0.6, faw * 0.35));
   float m = lineMask(across, fw, wpx);
   float sl = 3.0 + 4.0 * r;
   float q = (along + r * 9.0) / sl;
   float keep = step(0.12, hash11(floor(q) * 3.1 + row * 7.3 + seed));
   float sf = fract(q);
   keep *= smoothstep(0.0, 0.05, sf) * smoothstep(1.0, 0.9, sf);
+  keep = mix(keep, 0.88, smoothstep(0.04, 0.12, faw / 5.0));
   m *= keep;
   float tone = clamp(wpx * fw, 0.0, 1.0) * 0.75;
   return mix(m, tone, smoothstep(0.14, 0.4, fw));
+}
+
+// Pen hatching that keeps a steady spacing on the page (like a real drawing): the stroke
+// spacing in metres follows the pixel footprint, blending between power-of-two levels.
+float hatchPage(vec2 p, float pxSpacing, float ang, float seed, float wpx) {
+  float want = gPx * pxSpacing * uPR;
+  float lv = log2(max(want, 1e-4) / 0.05);
+  float l0 = floor(lv);
+  float t = lv - l0;
+  float s0 = 0.05 * exp2(l0);
+  float a = hatchLayer(p, s0, ang, seed + l0 * 3.1, wpx);
+  float b = hatchLayer(p, s0 * 2.0, ang, seed + (l0 + 1.0) * 3.1, wpx);
+  return mix(a, b, smoothstep(0.1, 0.9, t));
 }
 
 // Colored pencil: fine directional strokes with paper showing through; averages out far away.
@@ -284,6 +395,16 @@ void main() {
 
   vec2 fuv = fwidth(uv);
   float px = max(length(fuv) * 0.7071, 1e-4);
+  gPx = max(max(length(dFdx(uv)), length(dFdy(uv))), 1e-4);
+
+  float sunVis = 1.0;
+  float lightAmt = 0.0;
+  if (uLook > 0.5) {
+    sunVis = shadowAt(vWPos, N);
+    lightAmt = clamp(ndl * 1.5, 0.0, 1.0) * sunVis;
+    shade = 1.0 - (0.28 + 0.72 * lightAmt) + smoothstep(0.0, -0.5, ndl) * 0.12;
+    if (N.y > 0.7) shade = 1.0 - (0.45 + 0.55 * sunVis);
+  }
 
   vec3 col = paper;
 
@@ -298,6 +419,15 @@ void main() {
       cov *= smoothstep(gapw * 0.4, gapw + 0.05, ed + 0.02);
     }
     col = mix(paper, base, mix(1.0, cov * 0.85, colorful));
+    if (uLook > 0.5) {
+      // richer coloured pencil, warm where the sun hits, cool violet in the shade
+      vec3 b2 = clamp(vec3(lum3(base)) + (base - vec3(lum3(base))) * 1.35, 0.0, 1.0);
+      col = mix(paper, b2, mix(1.0, cov * 0.88, colorful));
+      col *= mix(vec3(0.83, 0.87, 1.02), vec3(1.035, 0.99, 0.925), lightAmt);
+      float pw = pencil(uv * 1.15 + 3.7, ang + 0.75, seed + 2.0, px);
+      col = mix(col, col * vec3(1.0, 0.86, 0.66), pw * lightAmt * 0.22);
+      col = mix(col, vec3(0.5, 0.52, 0.78), pw * (1.0 - lightAmt) * 0.2 * step(0.35, shade));
+    }
 
     if (style >= 0.5 && style < 5.5) {
       float cellW = vFace.y;
@@ -335,6 +465,7 @@ void main() {
         if (curtain) inside = 1.0;
         float kind = h;
         vec3 glass = mix(paper, vec3(0.66, 0.76, 0.88), 0.85);
+        if (uLook > 0.5) glass = mix(mix(vec3(0.6, 0.71, 0.9), vec3(1.0, 0.8, 0.6), lightAmt), paper, 0.15);
         vec3 fillC = col;
         if (kind < 0.36) {
           // dark interior: dense cross-hatching in ink
@@ -342,6 +473,11 @@ void main() {
           float d1 = hatchLayer(uv, hsp, 0.78, seed + h * 9.0, 1.0);
           float d2 = hatchLayer(uv, hsp, -0.78, seed + h * 5.0, 1.0);
           fillC = mix(col, uInk, clamp(max(d1, d2 * step(0.18, kind)), 0.0, 1.0) * 0.85 * detail + (1.0 - detail) * 0.35);
+          if (uLook > 0.5 && h2 > 0.55 && lightAmt < 0.35) {
+            // somebody is home: a warm lit window in the shade
+            float wl = pencil(uv * 1.4 + c * 3.0, 1.1, seed + c.y, px);
+            fillC = mix(col, vec3(1.0, 0.83, 0.42), (0.55 + 0.4 * wl) * mix(0.6, 1.0, detail));
+          }
         } else if (kind < 0.82) {
           float wc = pencil(uv * 1.3 + c * 2.0, 1.2, seed + c.x, px);
           fillC = mix(col, glass, wc * 0.8);
@@ -412,7 +548,19 @@ void main() {
     ink = max(ink, h3 * smoothstep(0.88, 0.95, shade) * 0.7);
     float ao = (1.0 - smoothstep(0.0, 1.4, vWPos.y)) * step(0.5, style) * step(style, 5.5);
     ink = max(ink, h2l * ao * 0.55);
-    col = mix(col, uInk, ink * 0.8);
+    if (uLook < 0.5) {
+      col = mix(col, uInk, ink * 0.8);
+    } else {
+      // lighter touch: colour carries the shade, the pen only accents it
+      float s4 = (shade + ao * 0.35) * (1.0 - step(0.7, N.y) * 0.6);
+      float h1p = hatchPage(uv, 7.0, a0, seed, 1.1);
+      float h2b = hatchPage(uv, 8.0, a0 - 0.95, seed + 3.0, 1.0);
+      float h3p = hatchPage(uv, 6.0, 0.05, seed + 7.0, 0.9);
+      float i4 = h1p * smoothstep(0.36, 0.46, s4) * 0.55;
+      i4 = max(i4, h2b * smoothstep(0.72, 0.82, s4) * 0.32);
+      i4 = max(i4, h3p * smoothstep(0.88, 0.94, s4) * 0.25);
+      col = mix(col, uInk * vec3(0.95, 0.97, 1.1), i4 * 0.7);
+    }
   } else if (style < 10.5) {
     // ------- avenue road (u across, v along) -------
     float w = vFace2.x;
@@ -476,6 +624,12 @@ void main() {
     float seg = step(0.62, hash12(vec2(floor(p.x / 6.0 + row * 0.37), row)));
     float wl = lineMask(wv, fwidth(wv), 1.3) * seg;
     col = mix(col, uInk, wl * 0.7 * (1.0 - smoothstep(0.06, 0.3, fwidth(wv))));
+    if (uLook > 0.5 && uSunScreen.z > 0.5) {
+      // the sun's path on the water in orange pencil
+      float band = exp(-pow((gl_FragCoord.x - uSunScreen.x) / (uResolution.x * 0.08), 2.0));
+      float glint = smoothstep(0.62, 0.8, n2(vec2(p.x * 0.45, p.y * 2.6) + vec2(uTime * 0.4, 0.0)));
+      col = mix(col, vec3(1.0, 0.7, 0.4), band * glint * 0.75);
+    }
   } else if (style < 16.5) {
     // ------- graph paper ground -------
     vec2 g = vWPos.xz / 2.0;
@@ -498,8 +652,24 @@ void main() {
     col = mix(mix(paper, base, 0.35), uInk, gl * 0.25 * (1.0 - smoothstep(0.15, 0.4, max(fwg.x, fwg.y))));
   }
 
+  if (style > 9.5 && uLook > 0.5) {
+    // ground: cool cross-hatched cast shadows, warm sunlit pavement
+    float lt = sunVis;
+    col *= mix(vec3(0.85, 0.89, 1.03), vec3(1.025, 0.995, 0.95), lt);
+    float gh1 = hatchPage(vWPos.xz, 7.0, 0.62, style * 1.7, 1.0);
+    float gh2 = hatchPage(vWPos.xz, 8.0, -0.62, style * 2.3, 0.9);
+    float sh = 1.0 - lt;
+    col = mix(col, uInk * vec3(0.95, 0.97, 1.1), (gh1 * 0.42 + gh2 * 0.12) * sh * 0.5);
+    float pw = pencil(vWPos.xz * 0.9, 0.4, style, px);
+    col = mix(col, col * vec3(1.0, 0.88, 0.7), pw * lt * 0.16);
+  }
   col *= uTintAll;
   col = mix(col, vec3(1.0), uFlash);
+  if (uLook > 0.5) {
+    float ev = edgeVig(gl_FragCoord.xy);
+    vec3 pp = paperAt(gl_FragCoord.xy);
+    col = mix(col, pp + (col - pp) * 0.22, ev);
+  }
   float f = fogFactor(length(vWPos - cameraPosition));
   col = mix(col, paperAt(gl_FragCoord.xy), f);
   gl_FragColor = vec4(col, 1.0);
@@ -518,9 +688,11 @@ uniform float uFlip;
 varying vec2 vUv;
 varying vec2 vLocal;
 varying float vDist;
+varying float vSun;
 
 void main() {
   vec3 center = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  vSun = uLook > 0.5 ? shadowFast(center + vec3(0.0, uSize.y * 0.5, 0.0)) : 1.0;
   vec2 off = (position.xy - uPivot) * uSize;
   vec3 right;
   vec3 up;
@@ -561,6 +733,7 @@ uniform float uWhiten;
 varying vec2 vUv;
 varying vec2 vLocal;
 varying float vDist;
+varying float vSun;
 
 void main() {
   vec4 tex = texture2D(uMap, vUv);
@@ -585,6 +758,8 @@ void main() {
     float edge = (1.0 - smoothstep(thr, thr + 0.12, n)) * step(0.001, uErase);
     col = mix(col, vec3(0.95, 0.6, 0.66), edge * 0.6);
   }
+  if (uLook > 0.5 && uNoFog < 0.5) col *= mix(vec3(0.85, 0.89, 1.03), vec3(1.05, 0.985, 0.9), vSun);
+  if (uLook > 0.5 && uNoFog > 0.5) col *= mix(vec3(1.0, 0.8, 0.66), vec3(0.93, 0.95, 1.02), smoothstep(0.15, 0.85, vLocal.y));
   if (uNoFog < 0.5) {
     float f = fogFactor(vDist);
     col = mix(col, paperAt(gl_FragCoord.xy), f);
