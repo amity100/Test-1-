@@ -55,7 +55,9 @@ export class DrawPad {
     c.addEventListener('pointermove', (e) => {
       if (!this.current) return;
       e.preventDefault();
-      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      // coalesced points give smoother lines at low frame rates; some browsers return none
+      let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+      if (!evs.length) evs = [e];
       let moved = 0;
       for (const ev of evs) {
         const p = pos(ev);

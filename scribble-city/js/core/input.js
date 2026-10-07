@@ -18,6 +18,9 @@ export class Input {
     this.locked = false;
     this.lockFailed = false;
     this.dragging = false;
+    this.skipMoves = 0;
+    this.lockRequest = null;
+    this.lockFailures = 0;
     this.buttons = {};
     this.listeners = [];
     this._bind();
@@ -51,7 +54,7 @@ export class Input {
     c.addEventListener('mousedown', (e) => {
       if (!this.enabled || this.touch) return;
       if (!this.locked && !this.lockFailed) {
-        this.requestLock();
+        this.requestLock(true);
         if (e.button === 0) return; // first click only locks the pointer
       }
       if (e.button === 0) {
@@ -70,8 +73,17 @@ export class Input {
     window.addEventListener('mousemove', (e) => {
       if (!this.enabled || this.touch) return;
       if (this.locked || this.dragging) {
-        this.lookDX += e.movementX || 0;
-        this.lookDY += e.movementY || 0;
+        const mx = e.movementX || 0;
+        const my = e.movementY || 0;
+        // browsers report a bogus jump (cursor -> lock point) right after the lock changes,
+        // and some mice/drivers produce isolated spikes: drop those instead of spinning the camera
+        if (this.skipMoves > 0) {
+          this.skipMoves--;
+          if (Math.abs(mx) + Math.abs(my) > 40) return;
+        }
+        if (Math.abs(mx) > 500 || Math.abs(my) > 500) return;
+        this.lookDX += mx;
+        this.lookDY += my;
       }
     });
     window.addEventListener('wheel', (e) => {
@@ -79,22 +91,42 @@ export class Input {
     }, { passive: true });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === c;
+      this.skipMoves = 2;
+      this.lockRequest = null;
+      if (this.locked) this.lockFailures = 0;
       this.emit('lock', this.locked);
     });
-    document.addEventListener('pointerlockerror', () => {
-      this.lockFailed = true;
-    });
+    document.addEventListener('pointerlockerror', () => this.onLockError());
     if (this.touch) this._bindTouch();
   }
 
-  requestLock() {
-    if (this.touch || this.lockFailed) return;
-    try {
-      const p = this.canvas.requestPointerLock && this.canvas.requestPointerLock();
-      if (p && p.catch) p.catch(() => (this.lockFailed = true));
-    } catch (err) {
+  /**
+   * gesture: the request comes straight from a click. Requests made later (after a drawing is
+   * graded) or right after Esc may be refused by the browser; only repeated refusals of real
+   * clicks mean the page can't lock the mouse here (e.g. a sandboxed frame) -> drag-to-look.
+   */
+  requestLock(gesture = false) {
+    if (this.touch || this.lockFailed || this.locked) return;
+    if (!this.canvas.requestPointerLock) {
       this.lockFailed = true;
+      return;
     }
+    if (this.lockRequest && performance.now() - this.lockRequest.t < 1500) return;
+    const req = { gesture, t: performance.now() };
+    this.lockRequest = req;
+    try {
+      const p = this.canvas.requestPointerLock();
+      if (p && p.catch) p.catch(() => this.onLockError(req));
+    } catch (err) {
+      this.onLockError(req);
+    }
+  }
+
+  onLockError(req = this.lockRequest) {
+    // Chrome both rejects the promise and fires pointerlockerror: count each request once
+    if (!req || req !== this.lockRequest) return;
+    this.lockRequest = null;
+    if (req.gesture && ++this.lockFailures >= 2) this.lockFailed = true;
   }
 
   releaseLock() {

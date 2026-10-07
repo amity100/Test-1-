@@ -338,8 +338,9 @@ void main() {
         vec3 fillC = col;
         if (kind < 0.36) {
           // dark interior: dense cross-hatching in ink
-          float d1 = hatchLayer(uv, 0.11, 0.78, seed + h * 9.0, 1.0);
-          float d2 = hatchLayer(uv, 0.11, -0.78, seed + h * 5.0, 1.0);
+          float hsp = 0.11 * exp2(ceil(log2(max(1.0, 4.5 * px / 0.11))));
+          float d1 = hatchLayer(uv, hsp, 0.78, seed + h * 9.0, 1.0);
+          float d2 = hatchLayer(uv, hsp, -0.78, seed + h * 5.0, 1.0);
           fillC = mix(col, uInk, clamp(max(d1, d2 * step(0.18, kind)), 0.0, 1.0) * 0.85 * detail + (1.0 - detail) * 0.35);
         } else if (kind < 0.82) {
           float wc = pencil(uv * 1.3 + c * 2.0, 1.2, seed + c.x, px);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Base strip of the instanced stroke: (t, side) pairs along the segment.
-const SUBDIV = 6;
+const SUBDIV = 4;
 const baseStrip = (() => {
   const pos = [];
   for (let i = 0; i <= SUBDIV; i++) {

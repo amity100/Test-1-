@@ -10,8 +10,8 @@
   --sticky: #fff07a;
   --green: #3fae4a;
   --blue: #3a6ad6;
-  --font-hand: "Gveret Levin", "Playpen Sans Hebrew", "Comic Sans MS", cursive;
-  --font-ui: "Playpen Sans Hebrew", "Gveret Levin", "Comic Sans MS", sans-serif;
+  --font-hand: "Gveret Levin", "Rubik", cursive;
+  --font-ui: "Rubik", "Arial Hebrew", "Segoe UI", sans-serif;
   color-scheme: light;
 }
 
@@ -402,7 +402,7 @@ body:not(.touch) .touch-only { display: none; }
   padding: 0;
   box-shadow: 2px 3px 0 rgba(36, 36, 44, 0.25);
 }
-.tbtn.big { width: 86px; height: 86px; font-size: 38px; background: rgba(255, 216, 58, 0.9); }
+.tbtn.big { width: 86px; height: 86px; font-size: 38px; background: rgba(255, 232, 120, 0.92); }
 .tbtn.small { width: 46px; height: 46px; font-size: 20px; }
 .tbtn.on, .tbtn:active { transform: scale(0.92); background: #ffe9a8; }
 #btn-fire { right: max(24px, env(safe-area-inset-right)); bottom: max(36px, env(safe-area-inset-bottom)); }
@@ -441,3 +441,6 @@ body:not(.touch) .touch-only { display: none; }
 }
 body.touch #weapon { bottom: auto; top: max(150px, calc(env(safe-area-inset-top) + 140px)); left: max(12px, env(safe-area-inset-left)); right: auto; }
 body.touch #goals { top: auto; bottom: 12px; right: auto; left: 50%; transform: translateX(-50%) rotate(-1deg); width: auto; max-width: 46vw; display: none; }
+
+.tbtn .ico { width: 58%; height: 58%; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; display: block; margin: auto; }
+.tbtn.big .ico { stroke-width: 2; }

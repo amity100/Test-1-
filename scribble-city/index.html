@@ -51,7 +51,7 @@
       <div id="weapon-grade"></div>
     </div>
 
-    <div id="hidden-tag" class="hidden">🙈 מוסתר</div>
+    <div id="hidden-tag" class="hidden">מוסתר</div>
     <div id="prompt" class="hidden"></div>
     <div id="toasts"></div>
     <div id="bigmsg" class="hidden"></div>
@@ -60,15 +60,15 @@
   <div id="touch" class="hidden">
     <div id="stick-zone"><div id="stick-base"><div id="stick-knob"></div></div></div>
     <div id="look-zone"></div>
-    <button id="btn-fire" class="tbtn big">🔥</button>
-    <button id="btn-jump" class="tbtn">⤒</button>
-    <button id="btn-draw" class="tbtn">✏️</button>
-    <button id="btn-photo" class="tbtn hidden">📷</button>
-    <button id="btn-enter" class="tbtn hidden">🚗</button>
-    <button id="btn-swap" class="tbtn">🔄</button>
+    <button id="btn-fire" class="tbtn big" aria-label="ירי"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/></svg></button>
+    <button id="btn-jump" class="tbtn" aria-label="קפיצה"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20V5M6 10l6-6 6 6M5 21h14"/></svg></button>
+    <button id="btn-draw" class="tbtn" aria-label="ציור"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L16.6 4a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/><path d="M14.6 6l3.4 3.4M4 20l4.6-1.2"/></svg></button>
+    <button id="btn-photo" class="tbtn hidden" aria-label="צילום"><svg class="ico" viewBox="0 0 24 24"><path d="M3 8.5h4l1.6-2.5h6.8L17 8.5h4V19H3z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button>
+    <button id="btn-enter" class="tbtn hidden" aria-label="כניסה לרכב"><svg class="ico" viewBox="0 0 24 24"><path d="M2.5 15.5v-3l2.5-.5 2.5-4h8l3.5 4 2.5.6v2.9z"/><circle cx="7" cy="16.5" r="2"/><circle cx="17" cy="16.5" r="2"/></svg></button>
+    <button id="btn-swap" class="tbtn" aria-label="החלפת נשק"><svg class="ico" viewBox="0 0 24 24"><path d="M4 9h13l-3-3M20 15H7l3 3"/></svg></button>
     <button id="btn-up" class="tbtn small hidden">▲</button>
     <button id="btn-down" class="tbtn small hidden">▼</button>
-    <button id="btn-pause" class="tbtn small">⏸</button>
+    <button id="btn-pause" class="tbtn small" aria-label="הפסקה"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
   </div>
 
   <div id="flash"></div>
@@ -98,7 +98,7 @@
       <div class="pad-foot">
         <button id="draw-done" class="btn primary">✓ סיימתי!</button>
         <button id="draw-undo" class="btn">↶ בטל קו</button>
-        <button id="draw-clear" class="btn">🧽 נקה</button>
+        <button id="draw-clear" class="btn">נקה דף</button>
         <button id="draw-cancel" class="btn danger">✕ ברח!</button>
       </div>
     </div>
@@ -119,7 +119,7 @@
         <div class="col touch-only">
           <h3>טלפון</h3>
           <p>ג׳ויסטיק משמאל · גרירה מימין להסתכלות</p>
-          <p>📷 צילום · ✏️ ציור · 🔥 ירי · 🚗 כניסה לרכב</p>
+          <p>מצלמה — צילום שלט · עיפרון — ציור · כוונת — ירי</p>
         </div>
         <div class="col">
           <h3>איך משחקים</h3>
@@ -149,7 +149,7 @@
     </div>
   </div>
 
-  <div id="rotate-hint" class="overlay hidden"><div class="sheet small"><h2>סובבו את הטלפון 📱↻</h2><p>המשחק עובד הכי טוב לרוחב.</p></div></div>
+  <div id="rotate-hint" class="overlay hidden"><div class="sheet small"><h2>סובבו את הטלפון לרוחב</h2><p>המשחק עובד הכי טוב לרוחב.</p></div></div>
   <div id="fatal" class="hidden"></div>
 </div>
 

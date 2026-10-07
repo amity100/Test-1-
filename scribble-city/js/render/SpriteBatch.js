@@ -41,6 +41,7 @@ void main() {
 const FRAG = /* glsl */ `
 uniform sampler2D uMap;
 uniform float uNoFog;
+uniform float uNearFade;
 varying vec2 vUv;
 varying vec4 vTint;
 varying float vDist;
@@ -48,6 +49,7 @@ void main() {
   vec4 tex = texture2D(uMap, vUv);
   float a = tex.a * vTint.a;
   vec3 col = tex.rgb * vTint.rgb;
+  if (uNearFade > 0.0) a *= smoothstep(uNearFade * 0.45, uNearFade, vDist);
   if (uNoFog < 0.5) {
     float f = fogFactor(vDist);
     col = mix(col, paperAt(gl_FragCoord.xy), f);
@@ -71,7 +73,7 @@ const quad = (() => {
  * (axis = 0) or a fixed quad oriented by right/up vectors (signs, ground decals).
  */
 export class SpriteBatch {
-  constructor(capacity, atlasTex, { dynamic = false, transparent = false, noFog = false, depthWrite = true, polygonOffset = false } = {}) {
+  constructor(capacity, atlasTex, { dynamic = false, transparent = false, noFog = false, depthWrite = true, polygonOffset = false, nearFade = 0 } = {}) {
     this.capacity = capacity;
     this.count = 0;
     this.dynamic = dynamic;
@@ -97,7 +99,7 @@ export class SpriteBatch {
     geo.instanceCount = 0;
     this.geometry = geo;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { ...shared, uMap: { value: atlasTex }, uNoFog: { value: noFog ? 1 : 0 } },
+      uniforms: { ...shared, uMap: { value: atlasTex }, uNoFog: { value: noFog ? 1 : 0 }, uNearFade: { value: nearFade } },
       vertexShader: COMMON + VERT,
       fragmentShader: COMMON + FRAG,
       transparent,

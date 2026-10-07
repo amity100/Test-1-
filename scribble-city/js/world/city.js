@@ -80,7 +80,7 @@ export function buildCity(scene, atlas, signAtlas, mats) {
       segs += batch.count;
     }
   }
-  const treeBatch = new SpriteBatch(W.trees.length + 4, atlas.texture);
+  const treeBatch = new SpriteBatch(W.trees.length + 4, atlas.texture, { nearFade: 6 });
   for (const t of W.trees) treeBatch.add({ ...t, rect: atlas.rects[t.rect], pivot: [0.5, 0] });
   treeBatch.commit();
   group.add(treeBatch.mesh);

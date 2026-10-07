@@ -200,6 +200,50 @@ class Vehicle {
       }
     };
     strokeSides(bodyStrokes, sl, W / 2);
+    // sketch the extrusion edges of the main shapes so the vehicle reads from any angle
+    const edgeFills = this.kind === 'tank' ? [0, 1] : [0];
+    for (const fi of edgeFills) {
+      const poly = bp.fills[fi].poly.map(L);
+      const step = Math.max(1, Math.floor(poly.length / 14));
+      for (let i = 0; i < poly.length; i += step) {
+        const [z, y] = poly[i];
+        sl.seg([-W / 2, y, z], [W / 2, y, z], { width: 1.8, overshoot: 0.06, wobble: 0.01, color: BLACK_INK });
+      }
+      for (let i = 0; i < poly.length - 1; i++) {
+        for (const s of [-1, 1]) sl.seg([s * W / 2, poly[i][1], poly[i][0]], [s * W / 2, poly[i + 1][1], poly[i + 1][0]], { width: 1.2, overshoot: 0.02, color: BLACK_INK, alpha: 0.55 });
+      }
+    }
+    // lights, plate and bumpers
+    {
+      const body = bp.fills[0].poly.map(L);
+      let zmin = Infinity;
+      let zmax = -Infinity;
+      let ymin = Infinity;
+      for (const [z, y] of body) {
+        zmin = Math.min(zmin, z);
+        zmax = Math.max(zmax, z);
+        ymin = Math.min(ymin, y);
+      }
+      const ring = (x, y, z, r, color, width) => {
+        const pts = [];
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          pts.push([x + Math.cos(a) * r, y + Math.sin(a) * r, z]);
+        }
+        sl.poly(pts, true, { width, overshoot: 0.01, color });
+      };
+      const ly = ymin + (this.kind === 'tank' ? 0.9 : 0.42);
+      for (const s of [-1, 1]) {
+        ring(s * W * 0.33, ly, zmin - 0.02, 0.09, [0.72, 0.12, 0.12], 3.2);
+        ring(s * W * 0.33, ly, zmax + 0.02, 0.1, [0.85, 0.7, 0.2], 3.2);
+      }
+      if (this.kind === 'car') {
+        sl.poly([[-0.32, ly - 0.12, zmin - 0.03], [0.32, ly - 0.12, zmin - 0.03], [0.32, ly + 0.06, zmin - 0.03], [-0.32, ly + 0.06, zmin - 0.03]], true, { width: 1.6, overshoot: 0.02, color: BLACK_INK });
+        sl.seg([-W / 2, ymin + 0.18, zmin - 0.04], [W / 2, ymin + 0.18, zmin - 0.04], { width: 3, overshoot: 0.05, color: BLACK_INK });
+        sl.seg([-W / 2, ymin + 0.18, zmax + 0.04], [W / 2, ymin + 0.18, zmax + 0.04], { width: 3, overshoot: 0.05, color: BLACK_INK });
+        for (let k = -2; k <= 2; k++) sl.seg([k * 0.12, ly - 0.1, zmax + 0.03], [k * 0.12, ly + 0.1, zmax + 0.03], { width: 1.2, overshoot: 0, color: BLACK_INK });
+      }
+    }
     this.body = new THREE.Group();
     this.group.add(this.body);
     if (!mb.empty) this.body.add(new THREE.Mesh(mb.build(), mats.itemSurface));
@@ -379,7 +423,7 @@ class Vehicle {
       this.spinner.rotation.y += dt * (0.6 + this.speedAbs * 0.05);
       const cam = this.game.camera.position;
       const a = Math.atan2(cam.x - this.pos.x, cam.z - this.pos.z) - this.yaw;
-      this.facing.rotation.y = a - Math.PI / 2;
+      this.facing.rotation.y = a;
       const wob = this.q.wobble;
       this.body.rotation.z = Math.sin(this.time * 2.1) * 0.04 + Math.sin(this.time * 5.3) * 0.08 * wob;
       this.body.rotation.x = Math.sin(this.time * 1.7) * 0.03 + Math.cos(this.time * 4.1) * 0.06 * wob;

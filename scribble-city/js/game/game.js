@@ -25,7 +25,7 @@ const GRADE_TEXT = {
   perfect: (n) => `ציור מושלם! ה${n} חזק במיוחד`,
   good: (n) => `ציור טוב — ה${n} מוכן`,
   wonky: (n) => `יצא עקום… ה${n} יעבוד רק חלקית`,
-  fail: (n) => `ציירת לא טוב — יצא ${n} מקולקל 🙃`,
+  fail: (n) => `ציירת לא טוב — יצא ${n} מקולקל`,
 };
 
 export class Game {
@@ -110,11 +110,11 @@ export class Game {
         // optional
       }
     } else {
-      this.input.requestLock();
+      this.input.requestLock(true);
     }
     this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
     setTimeout(() => {
-      if (!this.album.has('paint')) this.hud.toast('צלמו את השרטוט ממול (F / 📷)', 'info', 3.5);
+      if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
     }, 2600);
   }
 
@@ -129,7 +129,7 @@ export class Game {
     $('pause').classList.add('hidden');
     this.state = 'play';
     this.audio.init();
-    if (!this.touch) this.input.requestLock();
+    if (!this.touch) this.input.requestLock(true);
   }
 
   respawn() {
@@ -151,7 +151,7 @@ export class Game {
     this.enemies.reset();
     this.respawn();
     this.state = 'play';
-    if (!this.touch) this.input.requestLock();
+    if (!this.touch) this.input.requestLock(true);
     this.hud.toast('צוירת מחדש במחבוא', 'info');
   }
 
@@ -219,7 +219,14 @@ export class Game {
       this.updateHidden();
     }
     // camera
-    if (this.freeCam && this.state !== 'play') {
+    if (this.state === 'title' && !this.freeCam) {
+      // slow cinematic orbit behind the title page
+      const t = this.time * 0.04 + 0.9;
+      const cx = 10;
+      const cz = 30;
+      this.camera.position.set(cx + Math.cos(t) * 235, 92 + Math.sin(this.time * 0.07) * 10, cz + Math.sin(t) * 235);
+      this.camera.lookAt(cx, 28, cz);
+    } else if (this.freeCam && this.state !== 'play') {
       const v = this.freeCam;
       this.camera.position.set(v[0], v[1], v[2]);
       this.camera.rotation.set(v[4] || 0, v[3] || 0, 0, 'YXZ');
@@ -233,7 +240,7 @@ export class Game {
         while (d < -Math.PI) d += Math.PI * 2;
         this.camRig.yaw += d * (1 - Math.exp(-2.5 * dt));
       }
-      const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'ufo' ? { dist: 15, height: 2.2, shoulder: 0 } : { dist: 8.5, height: 2.6, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
+      const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'ufo' ? { dist: 15, height: 2.2, shoulder: 0 } : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
       this.camRig.update(dt, v.pos, opt);
     } else {
       this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: player.mode === 'draw' ? 3.6 : 4.4 });
@@ -561,9 +568,9 @@ export class Game {
         const b = this.photoTarget();
         if (b) {
           photo = true;
-          prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : this.touch ? '📷 לצלם את השרטוט' : 'F — לצלם את השרטוט';
+          prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : this.touch ? 'לצלם את השרטוט' : 'F — לצלם את השרטוט';
         } else if (p.hidden && this.album.size) {
-          prompt = this.touch ? '✏️ מוסתרים — זה הזמן לצייר' : 'מוסתרים — Q כדי לצייר';
+          prompt = this.touch ? 'מוסתרים — זה הזמן לצייר' : 'מוסתרים — Q כדי לצייר';
         }
       }
     }
