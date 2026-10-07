@@ -419,7 +419,19 @@ function billboard(W, ch, x, z, facing, rect, o = {}) {
   for (const c of [c0, c1, c2, c3]) sl.seg(c, back(c), { width: 1.6 });
   const center = [x + nx * 0.04, baseY + legH + h / 2, z + nz * 0.04];
   W.signs.push({ x: center[0], y: center[1], z: center[2], w: w * 0.98, h: h * 0.98, rect, axis: [rx, 0, rz], pivot: [0.5, 0.5] });
-  W.collision.addBox(Math.min(c0[0], c1[0]) - 0.15, Math.min(c0[2], c1[2]) - 0.15, Math.max(c0[0], c1[0]) + 0.15, Math.max(c0[2], c1[2]) + 0.15, baseY + legH, baseY + legH + h, 'wall');
+  // the board: one box when it is axis aligned, otherwise a chain of small boxes along it
+  // (a single bounding box of a diagonal board is a huge invisible block in front of it)
+  if (Math.abs(rx) < 0.02 || Math.abs(rz) < 0.02) {
+    W.collision.addBox(Math.min(c0[0], c1[0]) - 0.15, Math.min(c0[2], c1[2]) - 0.15, Math.max(c0[0], c1[0]) + 0.15, Math.max(c0[2], c1[2]) + 0.15, baseY + legH, baseY + legH + h, 'board');
+  } else {
+    const n = Math.ceil(w / 0.5);
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const px = c0[0] + (c1[0] - c0[0]) * t - nx * 0.12;
+      const pz = c0[2] + (c1[2] - c0[2]) * t - nz * 0.12;
+      W.collision.addBox(px - 0.22, pz - 0.22, px + 0.22, pz + 0.22, baseY + legH, baseY + legH + h, 'board');
+    }
+  }
   if (o.blueprint) {
     W.billboards.push({ id: o.blueprint, x: center[0], y: center[1], z: center[2], nx, nz, w, h, rx, rz });
   }

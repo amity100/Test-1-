@@ -173,7 +173,7 @@ export class Collision {
           if (this.marks[id] === st) continue;
           this.marks[id] = st;
           const b = this.boxes[id];
-          if (!b.alive || (ignoreTag && b.tag === ignoreTag)) continue;
+          if (!b.alive || (ignoreTag && (typeof ignoreTag === 'string' ? b.tag === ignoreTag : ignoreTag.has(b.tag)))) continue;
           const hit = rayBox(ox, oy, oz, dx, dy, dz, b, bestT);
           if (hit && hit.t < bestT) {
             bestT = hit.t;

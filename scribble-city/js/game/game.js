@@ -19,6 +19,10 @@ import { buildDrawnFlatModel } from './items.js';
 import { BLACK_INK } from '../render/LineBatch.js';
 import { clamp } from '../core/util.js';
 
+// things a photo of a billboard can be taken past (only buildings hide a board)
+const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
+const BOARD_SAMPLES = [[0, 0], [-0.38, -0.32], [0.38, -0.32], [-0.38, 0.32], [0.38, 0.32]];
+
 const $ = (id) => document.getElementById(id);
 
 const GRADE_TEXT = {
@@ -334,12 +338,12 @@ export class Game {
       const dz = b.z - cam.position.z;
       const d = Math.hypot(dx, dy, dz);
       if (d > 85) continue;
+      // in view: within ~25 degrees of the centre, more when the board fills the frame
       const cos = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / d;
-      if (cos < 0.9) continue;
+      if (Math.acos(Math.min(1, cos)) > 0.45 + Math.atan2(b.w * 0.5, d) * 0.8) continue;
       const facing = -(dx * b.nx + dz * b.nz) / Math.hypot(dx, dz);
       if (facing < 0.15) continue;
-      const blocked = this.world.collision.raycast(cam.position.x, cam.position.y, cam.position.z, dx, dy, dz, d - 1.2);
-      if (blocked && blocked.box && blocked.box.tag !== 'pole') continue;
+      if (!this.boardVisible(b)) continue;
       const sc = cos * 2 + facing - d / 120;
       if (sc > bestScore) {
         bestScore = sc;
@@ -347,6 +351,20 @@ export class Game {
       }
     }
     return best;
+  }
+
+  // Some part of the board (centre or an inset corner) is not hidden behind a building.
+  boardVisible(b) {
+    const c = this.camera.position;
+    const col = this.world.collision;
+    for (const [u, v] of BOARD_SAMPLES) {
+      const dx = b.x + b.rx * b.w * u - c.x;
+      const dy = b.y + b.h * v - c.y;
+      const dz = b.z + b.rz * b.w * u - c.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (!col.raycast(c.x, c.y, c.z, dx, dy, dz, d - 0.6, PHOTO_SEE_THROUGH)) return true;
+    }
+    return false;
   }
 
   takePhoto() {
