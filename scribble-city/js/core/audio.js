@@ -125,6 +125,11 @@ export class Audio {
         this.hiss(0.9, 0.8 * v, 600, 0.5, 'lowpass', 0, 60);
         this.tone('sine', 90, 28, 0.8, 0.6 * v);
         break;
+      case 'plop':
+        this.tone('sine', 160, 560, 0.09, 0.4 * v);
+        this.tone('sine', 560, 140, 0.2, 0.3 * v);
+        this.hiss(0.14, 0.22 * v, 1100, 1.2, 'lowpass');
+        break;
       case 'splat':
         this.hiss(0.08, 0.2 * v, 900, 1.5, 'lowpass');
         break;

@@ -20,6 +20,7 @@ export const GRADE = {
 const PAINT_COLORS = [[0.85, 0.35, 0.3], [0.3, 0.5, 0.85], [0.35, 0.7, 0.4], [0.9, 0.72, 0.25], [0.6, 0.4, 0.75]];
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _sm = new THREE.Matrix4();
 
 /**
  * The hero's arsenal (pencil + weapons he drew), firing logic, projectiles of everyone.
@@ -244,15 +245,25 @@ export class Weapons {
   // Position held models each frame (called after the figure pose is updated).
   updateModels() {
     const p = this.game.player;
+    const drawing = p.mode === 'draw';
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (!s.model || !s.model.group) continue;
-      s.model.group.visible = i === this.index && p.mode === 'foot';
+      s.model.group.visible = drawing ? i === 0 : i === this.index && p.mode === 'foot';
+    }
+    const fig = p.fig;
+    const j = fig.j;
+    if (drawing) {
+      // the graphite tip points at the line being drawn in the air
+      const pencil = this.slots[0];
+      const dir = fig.reachR ? _v.copy(j.handR).sub(fig.reachR) : _v.copy(fig.forward).negate();
+      pencil.model.group.matrix.copy(p.holdMatrix(dir));
+      pencil.model.group.matrixWorldNeedsUpdate = true;
+      pencil.model.group.updateMatrixWorld(true);
+      return;
     }
     const slot = this.current;
     if (!slot.model || p.mode !== 'foot') return;
-    const fig = p.fig;
-    const j = fig.j;
     let m;
     if (slot.def.kind === 'melee') {
       const dir = _v.copy(j.handR).sub(j.elbowR);
@@ -264,6 +275,14 @@ export class Weapons {
     } else {
       const dir = fig.aim ? _v.copy(this.aimPoint).sub(j.handR).normalize() : _v.copy(fig.forward).multiplyScalar(0.6).add(_w.set(0, -0.8, 0)).normalize();
       m = p.holdMatrix(dir);
+    }
+    if (slot.popAt !== undefined) {
+      // freshly drawn: plops into the hand with a little overshoot
+      const t = (this.game.time - slot.popAt) / 0.45;
+      if (t < 1) {
+        const k = t - 1;
+        m.multiply(_sm.makeScale(...Array(3).fill(Math.max(0.05, 1 + 2.70158 * k * k * k + 1.70158 * k * k))));
+      } else slot.popAt = undefined;
     }
     slot.model.group.matrix.copy(m);
     slot.model.group.matrixWorldNeedsUpdate = true;

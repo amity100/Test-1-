@@ -4,6 +4,7 @@ import { makeLineMaterial, makeSpriteMaterial, getSpriteGeometry } from '../rend
 import { clamp, lerp, hash1 } from '../core/util.js';
 
 const _v = new THREE.Vector3();
+const _w = new THREE.Vector3();
 
 /**
  * Shared renderer for all stick figures: one dynamic line batch for limbs,
@@ -131,6 +132,7 @@ export class Figure {
     this.crawl = 0;
     this.stagger = 0;
     this.armsUp = 0;
+    this.reachR = null; // world point the right hand reaches for (drawing in the air)
     this.visible = true;
     this.parts = { head: 1, torso: 1, armL: 1, armR: 1, legs: 1 };
     this.j = {};
@@ -248,7 +250,13 @@ export class Figure {
     for (const [elbow, hand, side, off] of arms) {
       const tgt = _v;
       let useIK = false;
-      if (this.aim && (side === 1 || this.aim === 2)) {
+      if (this.reachR && side === 1) {
+        const d = _w.copy(this.reachR).sub(j.shoulder);
+        const L = (armU + armF) * this.scale * 0.97;
+        if (d.length() > L) d.setLength(L);
+        tgt.copy(j.shoulder).add(d);
+        useIK = true;
+      } else if (this.aim && (side === 1 || this.aim === 2)) {
         // hands out in front along the aim direction
         const reach = side === 1 ? 0.55 : 0.4;
         tgt.copy(j.shoulder).addScaledVector(this.aimDir, reach * this.scale).addScaledVector(this.right, (side === 1 ? 0.06 : 0.02) * this.scale);

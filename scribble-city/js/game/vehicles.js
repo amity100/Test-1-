@@ -410,8 +410,8 @@ class Vehicle {
     if (this.reveal < 1) {
       this.reveal = Math.min(1, this.reveal + dt / 0.8);
       setReveal(this.lines, this.reveal);
-      const s = 0.2 + 0.8 * Math.min(1, this.reveal * 1.4);
-      this.group.scale.setScalar(s);
+      const k = Math.min(1, this.reveal * 1.6) - 1;
+      this.group.scale.setScalar(Math.max(0.1, 1 + 2.70158 * k * k * k + 1.70158 * k * k));
     }
     const input = this.driver ? this.game.input : null;
     if (this.kind === 'car') this.updateCar(dt, input);

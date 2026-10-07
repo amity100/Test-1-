@@ -13,7 +13,7 @@ import { Civilians } from './civilians.js';
 import { Traffic } from './traffic.js';
 import { HUD } from '../ui/hud.js';
 import { Album } from '../ui/album.js';
-import { DrawPad } from '../ui/drawpad.js';
+import { AirDraw } from '../ui/airdraw.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { buildDrawnFlatModel } from './items.js';
 import { BLACK_INK } from '../render/LineBatch.js';
@@ -60,7 +60,7 @@ export class Game {
     this.weapons = new Weapons(this);
     this.hud = new HUD(this);
     this.album = new Album(this);
-    this.drawpad = new DrawPad(this);
+    this.airdraw = new AirDraw(this);
     // eyes over hiding spots
     for (const h of world.hideSpots) {
       this.fx.marks.push({ rect: 'eye', x: h.x, y: 2.6, z: h.z, size: 0.75, visible: false, alpha: 0.85, spot: h });
@@ -96,7 +96,7 @@ export class Game {
     $('opt-look').addEventListener('change', (e) => setLook(e.target.checked ? 1 : 0));
     $('opt-sens').addEventListener('input', (e) => (this.input.sensitivity = parseFloat(e.target.value)));
     this.input.on('lock', (locked) => {
-      if (!locked && this.state === 'play' && !this.drawpad.open && !this.album.open && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -163,7 +163,7 @@ export class Game {
   onPlayerDeath() {
     if (this.player.inVehicle) this.exitVehicle(true);
     this.player.mode = 'dead';
-    if (this.drawpad.open) this.drawpad.close(true);
+    if (this.airdraw.open) this.airdraw.close(false);
     this.state = 'dead';
     this.audio.play('fail');
     setTimeout(() => {
@@ -210,7 +210,7 @@ export class Game {
     if (dt > 0) fr.begin(this.camera);
     if (playing) this.handleKeys();
     const look = input.consumeLook();
-    if (playing && !this.drawpad.open) {
+    if (playing && !this.airdraw.open) {
       this.camRig.applyLook(look.x, look.y);
       if (look.x || look.y) this.lastLookInput = this.time;
     }
@@ -248,10 +248,12 @@ export class Game {
       const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'ufo' ? { dist: 15, height: 2.2, shoulder: 0 } : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
       this.camRig.update(dt, v.pos, opt);
     } else {
-      this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: player.mode === 'draw' ? 3.6 : 4.4 });
+      if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
+      else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: 4.4 });
     }
     this.camera.updateMatrixWorld();
     if (this.onFrame) this.onFrame(dt);
+    this.airdraw.frame(dt);
     // render dynamic figures
     if (dt > 0) {
       player.draw(this.camera.position);
@@ -275,7 +277,7 @@ export class Game {
     const p = this.player;
     if (input.wasPressed('Escape')) {
       if (this.album.open) this.album.hide();
-      else if (!this.drawpad.open && this.state === 'play') this.pause();
+      else if (!this.airdraw.open && this.state === 'play') this.pause();
       return;
     }
     if (this.state !== 'play') return;
@@ -431,7 +433,7 @@ export class Game {
     if (p.mode !== 'foot') return;
     p.mode = 'draw';
     p.vel.set(0, 0, 0);
-    this.drawpad.show(id);
+    this.airdraw.show(id);
     if (!p.hidden) this.hud.toast('זהירות — לא מוסתרים! האויבים ימשיכו לתקוף', 'bad', 2.2);
   }
 
@@ -454,6 +456,7 @@ export class Game {
       model.muzzle = new THREE.Vector3(0, ml[1], ml[0] + 0.05);
       this.weapons.add(def, grade, model, res.score);
       this.weapons.current.strokes = strokes;
+      this.weapons.current.popAt = this.time;
       this.hud.updateWeapon();
     } else {
       const v = this.vehicles.spawn(bp.id, grade, res.score, res.aligned);

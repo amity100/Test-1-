@@ -139,7 +139,7 @@ export class Player {
     fig.yaw = this.yaw;
     fig.speed = Math.hypot(this.vel.x, this.vel.z);
     fig.air = !this.onGround;
-    fig.sit = damp(fig.sit, drawing ? 1 : 0, 8, dt);
+    fig.sit = damp(fig.sit, 0, 8, dt);
     fig.aimPitch = camRig.pitch + 0.08;
     fig.update(dt);
   }
