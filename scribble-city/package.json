@@ -1,0 +1,10 @@
+{
+  "name": "scribble-city",
+  "private": true,
+  "type": "module",
+  "description": "Notebook-doodle open world web game (static, no build step).",
+  "scripts": {
+    "serve": "npx http-server -p 8080 -c-1 .",
+    "test:recognizer": "node tools/test-recognizer.mjs"
+  }
+}

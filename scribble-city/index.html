@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f8f4e9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>עיר השרבוטים</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&family=Rubik:wght@400;600;800&family=Caveat:wght@500;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="wobble"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.5"/></filter>
+  <filter id="wobble2"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="9" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.5"/></filter>
+</svg>
+
+<div id="app">
+  <div id="viewport"></div>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"><span></span><span></span><span></span><span></span></div>
+    <div id="hitmarker">✕</div>
+    <div id="vignette"></div>
+    <div id="damage"></div>
+
+    <div id="topbar">
+      <div id="health" class="paper-card">
+        <div class="label">חיים</div>
+        <div class="bar"><div class="fill"></div></div>
+      </div>
+      <div id="vehicle-hp" class="paper-card hidden">
+        <div class="label">כלי</div>
+        <div class="bar"><div class="fill"></div></div>
+      </div>
+      <div id="district" class="paper-card"></div>
+    </div>
+
+    <div id="goals" class="sticky"></div>
+
+    <div id="minimap-wrap" class="paper-card"><canvas id="minimap" width="200" height="200"></canvas></div>
+
+    <div id="weapon" class="paper-card">
+      <canvas id="weapon-icon" width="120" height="72"></canvas>
+      <div id="weapon-name"></div>
+      <div id="weapon-ammo"></div>
+      <div id="weapon-grade"></div>
+    </div>
+
+    <div id="hidden-tag" class="hidden">🙈 מוסתר</div>
+    <div id="prompt" class="hidden"></div>
+    <div id="toasts"></div>
+    <div id="bigmsg" class="hidden"></div>
+  </div>
+
+  <div id="touch" class="hidden">
+    <div id="stick-zone"><div id="stick-base"><div id="stick-knob"></div></div></div>
+    <div id="look-zone"></div>
+    <button id="btn-fire" class="tbtn big">🔥</button>
+    <button id="btn-jump" class="tbtn">⤒</button>
+    <button id="btn-draw" class="tbtn">✏️</button>
+    <button id="btn-photo" class="tbtn hidden">📷</button>
+    <button id="btn-enter" class="tbtn hidden">🚗</button>
+    <button id="btn-swap" class="tbtn">🔄</button>
+    <button id="btn-up" class="tbtn small hidden">▲</button>
+    <button id="btn-down" class="tbtn small hidden">▼</button>
+    <button id="btn-pause" class="tbtn small">⏸</button>
+  </div>
+
+  <div id="flash"></div>
+  <div id="photo-pop" class="hidden"><div class="polaroid"><canvas width="360" height="240"></canvas><div class="caption"></div></div></div>
+
+  <div id="album" class="overlay hidden">
+    <div class="sheet">
+      <h2>האלבום שלי — מה לצייר?</h2>
+      <div id="album-list"></div>
+      <div class="sheet-foot">
+        <button id="album-close" class="btn">סגור</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="drawpad" class="hidden">
+    <div id="draw-danger"></div>
+    <div class="pad-wrap">
+      <div class="pad-head">
+        <div id="draw-title"></div>
+        <div id="draw-status"></div>
+      </div>
+      <div class="pad-body">
+        <div id="draw-ref" class="polaroid"><canvas width="300" height="200"></canvas><div class="caption">התמונה שצילמתי</div></div>
+        <div id="draw-area"><canvas id="draw-canvas"></canvas><canvas id="draw-grade"></canvas></div>
+      </div>
+      <div class="pad-foot">
+        <button id="draw-done" class="btn primary">✓ סיימתי!</button>
+        <button id="draw-undo" class="btn">↶ בטל קו</button>
+        <button id="draw-clear" class="btn">🧽 נקה</button>
+        <button id="draw-cancel" class="btn danger">✕ ברח!</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="title" class="overlay">
+    <div class="cover">
+      <div class="spiral"></div>
+      <h1>עיר השרבוטים</h1>
+      <p class="sub">ציירת את זה? זה אמיתי.</p>
+      <div class="howto">
+        <div class="col desktop-only">
+          <h3>מחשב</h3>
+          <p><b>WASD</b> הליכה · <b>עכבר</b> הסתכלות · <b>קליק</b> ירי/מחיקה</p>
+          <p><b>Shift</b> ריצה · <b>רווח</b> קפיצה · <b>1-4</b> החלפת נשק</p>
+          <p><b>F</b> צילום שלט · <b>Q</b> ציור · <b>E</b> כניסה לרכב · <b>M</b> מפה</p>
+        </div>
+        <div class="col touch-only">
+          <h3>טלפון</h3>
+          <p>ג׳ויסטיק משמאל · גרירה מימין להסתכלות</p>
+          <p>📷 צילום · ✏️ ציור · 🔥 ירי · 🚗 כניסה לרכב</p>
+        </div>
+        <div class="col">
+          <h3>איך משחקים</h3>
+          <p>מצלמים שלטים עם ציורים, מתחבאים, ומציירים אותם. ככה שהציור טוב יותר, הנשק או הרכב טובים יותר!</p>
+        </div>
+      </div>
+      <button id="start-btn" class="btn primary huge" disabled>טוען את המחברת…</button>
+      <div id="load-status"></div>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay hidden">
+    <div class="sheet small">
+      <h2>הפסקה</h2>
+      <button id="resume-btn" class="btn primary">המשך</button>
+      <label class="opt"><input type="checkbox" id="opt-sound" checked> צלילים</label>
+      <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים רועדים</label>
+      <label class="opt">רגישות <input type="range" id="opt-sens" min="0.3" max="2.5" step="0.1" value="1"></label>
+    </div>
+  </div>
+
+  <div id="death" class="overlay hidden">
+    <div class="sheet small">
+      <h2>נמחקת!</h2>
+      <p>מישהו מחק אותך מהמחברת… אבל אפשר לצייר אותך מחדש.</p>
+      <button id="respawn-btn" class="btn primary">צייר אותי מחדש</button>
+    </div>
+  </div>
+
+  <div id="rotate-hint" class="overlay hidden"><div class="sheet small"><h2>סובבו את הטלפון 📱↻</h2><p>המשחק עובד הכי טוב לרוחב.</p></div></div>
+  <div id="fatal" class="hidden"></div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
