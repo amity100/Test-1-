@@ -141,6 +141,20 @@ export function copLook() {
   return L;
 }
 
+// riot unit: helmet with a visor, padded vest
+export function swatLook() {
+  const L = baseLook({ pen: pick(['marker', 'fineliner', 'comic']), build: pick(['stocky', 'big', 'normal']), fem: chance(0.2) });
+  const navy = jit([0.14, 0.16, 0.26], 0.03);
+  L.top = { kind: 'vest', color: [0.2, 0.22, 0.3], under: navy, sleeves: 'long' };
+  L.bottom = { kind: 'pants', color: [0.12, 0.13, 0.18] };
+  L.shoes = [0.06, 0.06, 0.08];
+  L.hat = { kind: 'helmet', color: [0.16, 0.18, 0.26] };
+  L.hair = { style: 'short', color: pick(HAIR) };
+  L.face = { eyes: 'narrow', brows: 'angry', mouth: 'line', beard: null, glasses: null };
+  L.acc.push('badge', 'belt');
+  return L;
+}
+
 // ------------------------------------------------------------------ city people
 export function civilianLook(o = {}) {
   const fem = o.fem !== undefined ? o.fem : chance(0.5);

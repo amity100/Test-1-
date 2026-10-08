@@ -57,6 +57,22 @@ export class Audio {
     lp.connect(this.engGain).connect(this.master);
     this.engOsc.start();
     this.engOsc2.start();
+    // police siren (wails up and down)
+    this.sirOsc = c.createOscillator();
+    this.sirOsc.type = 'triangle';
+    this.sirGain = c.createGain();
+    this.sirGain.gain.value = 0;
+    this.sirOsc.connect(this.sirGain).connect(this.master);
+    this.sirOsc.start();
+  }
+
+  // 0..1: how close the nearest siren is
+  siren(level) {
+    if (!this.ctx || !this.sirOsc) return;
+    const t = this.ctx.currentTime;
+    const wail = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 0.45);
+    this.sirOsc.frequency.setTargetAtTime(560 + wail * 380, t, 0.05);
+    this.sirGain.gain.setTargetAtTime(this.enabled ? level * level * 0.07 : 0, t, 0.1);
   }
 
   setEnabled(on) {

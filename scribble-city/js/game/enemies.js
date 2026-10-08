@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { MonsterFigure } from './figure.js';
 import { Doodle } from './doodle.js';
-import { gangLook } from './looks.js';
+import { gangLook, copLook, swatLook } from './looks.js';
+import { PEN_BLUE, ERASER_PINK, ERASER_BLUE } from './items.js';
 import { BLACK_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle, angleDiff, RNG } from '../core/util.js';
@@ -15,6 +16,10 @@ const TYPES = {
   mask: { look: 'mask', walk: 2.2, run: 5.4, range: 28, dmg: 4, interval: 0.16, burst: 4, pause: 1.7, mag: 16, reload: 2.3, sight: 40, scale: 1, armor: 1, personas: { hothead: 2, standard: 2, veteran: 1 } },
   mob: { look: 'mob', walk: 1.9, run: 4.6, range: 40, dmg: 11, interval: 1.4, burst: 1, mag: 6, reload: 2.4, sight: 44, scale: 1, armor: 1.2, personas: { veteran: 3, standard: 1, lookout: 1 } },
   brute: { look: 'biker', walk: 1.8, run: 4.6, range: 2.4, dmg: 22, interval: 1.1, melee: true, sight: 34, scale: 1.06, armor: 1.6, personas: { hothead: 3, standard: 1 } },
+  // Scribble City Police: pen-pistols, the big school eraser, and paint M4s for the riot unit
+  cop: { look: 'cop', walk: 2.0, run: 5.2, range: 30, dmg: 8, interval: 0.5, burst: 3, pause: 1.6, mag: 12, reload: 1.8, sight: 42, scale: 1, armor: 1.1, personas: { standard: 3, veteran: 2, hothead: 1 }, faction: 'police', gun: 'pen' },
+  copEraser: { look: 'cop', walk: 2.0, run: 5.0, range: 2.5, dmg: 18, interval: 1.0, melee: true, sight: 38, scale: 1.03, armor: 1.3, personas: { hothead: 2, standard: 1 }, faction: 'police', club: 'eraser' },
+  swat: { look: 'swat', walk: 2.0, run: 5.2, range: 38, dmg: 6, interval: 0.11, burst: 5, pause: 1.3, mag: 30, reload: 2.4, sight: 46, scale: 1.02, armor: 1.5, personas: { veteran: 3, standard: 1 }, faction: 'police', gun: 'm4' },
   // a driver you pulled out of their car, coming after you with bare fists
   driver: { walk: 2.2, run: 5.4, range: 1.9, dmg: 6, interval: 0.85, melee: true, unarmed: true, sight: 32, scale: 1, armor: 0.85, personas: { hothead: 1 }, faction: 'civ' },
   scrib: { monster: 'scrib', hp: 120, walk: 2.4, run: 6.2, range: 2.6, dmg: 14, interval: 0.9, sight: 30, radius: 0.95 },
@@ -33,7 +38,7 @@ let nextId = 1;
 export function holeRadius(kind, amount) {
   if (kind === 'paint') return 0.045 + amount * 0.0018;
   if (kind === 'pencil') return 0.07 + amount * 0.0011;
-  if (kind === 'melee') return 0.13;
+  if (kind === 'melee') return 0.095 + amount * 0.001; // the big school eraser rubs a wider patch
   if (kind === 'beam') return 0.09;
   return 0.06 + amount * 0.001;
 }
@@ -177,7 +182,8 @@ class Enemy {
       this.radius = this.cfg.radius;
       this.height = this.fig.cfg.cy + this.fig.cfg.h * 0.5;
     } else {
-      this.fig = new Doodle(mgr.game.figures, look || gangLook(this.cfg.look), { seed: this.id * 3.7, scale: this.cfg.scale });
+      const L = look || (this.cfg.look === 'cop' ? copLook() : this.cfg.look === 'swat' ? swatLook() : gangLook(this.cfg.look));
+      this.fig = new Doodle(mgr.game.figures, L, { seed: this.id * 3.7, scale: this.cfg.scale });
       this.radius = 0.4 * this.fig.bulk;
       this.height = 1.85 * this.fig.scale;
     }
@@ -238,7 +244,7 @@ class Enemy {
     this.searchPt = null;
     this.lookT = 0;
     this.hurtT = -10;
-    this.squad = mgr.squadFor(territory, x, z);
+    this.squad = mgr.squadFor(territory, x, z, this.faction);
     this.squad.members.push(this);
   }
 
@@ -507,7 +513,7 @@ class Enemy {
         const pl = game.player;
         const pp = pl.inVehicle ? pl.inVehicle.pos : pl.pos;
         if (Math.hypot(pp.x - this.pos.x, pp.z - this.pos.z) < ph.range + 0.8 + (pl.inVehicle ? 1.6 : 0)) {
-          pl.hurt(ph.dmg, this.pos.x, this.pos.z);
+          pl.hurt(ph.dmg, this.pos.x, this.pos.z, this.fig.j ? this.fig.j.handR : null);
           game.audio.play(this.isMonster ? 'bite' : 'punch');
         }
       }
@@ -533,6 +539,7 @@ class Enemy {
       if (this.state === 'patrol' || this.state === 'return') this.awareness = Math.max(0, this.awareness - step * 0.12);
       return;
     }
+    if (this.faction === 'police' && !game.police.hostile) return; // just a witness
     this.lastSeen.copy(tp);
     this.seeT = game.time;
     if (this.state === 'combat') {
@@ -576,6 +583,14 @@ class Enemy {
   callBackup() {
     const sq = this.squad;
     const t = this.game.time;
+    if (this.faction === 'police') {
+      if (t - sq.backupT > 20) {
+        sq.backupT = t;
+        this.say('backup', 'alarm');
+        this.game.police.requestBackup();
+      }
+      return;
+    }
     if (this.isMonster || this.faction === 'civ' || sq.backupCalls >= 2 || t - sq.backupT < 25 || this.headless) return;
     sq.backupCalls++;
     sq.backupT = t;
@@ -715,6 +730,14 @@ class Enemy {
     const s = sq.search;
     const t = this.game.time;
     if (!s && this.joinT >= 0) return mv; // somebody spotted you: about to join the fight
+    if ((!s || t > s.until) && this.faction === 'police' && this.game.police.hostile) {
+      // the police don't give up while you're wanted: comb the area around the last report
+      sq.search = null;
+      sq.lastKnown.copy(this.game.police.lastSeen);
+      sq.beginSearch();
+      this.searchPt = null;
+      return mv;
+    }
     if (!s || t > s.until) {
       if (s && sq.search === s) {
         sq.search = null;
@@ -1389,7 +1412,8 @@ class Enemy {
     const diry = dyy / l + (Math.random() - 0.5) * miss * 2;
     const dirz = dzz / l + (Math.random() - 0.5) * miss * 2;
     const dl = Math.hypot(dirx, diry, dirz);
-    game.weapons.spawnEnemyShot(hand.x, hand.y, hand.z, dirx / dl, diry / dl, dirz / dl, cfg.dmg, 42, this.inCover && this.cover ? this.cover.box : null);
+    const shotKind = cfg.gun === 'pen' ? 'ink' : cfg.gun === 'm4' ? 'paintball' : 'enemy';
+    game.weapons.spawnEnemyShot(hand.x, hand.y, hand.z, dirx / dl, diry / dl, dirz / dl, cfg.dmg, cfg.gun === 'm4' ? 50 : 42, this.inCover && this.cover ? this.cover.box : null, shotKind);
     this.shots = (this.shots || 0) + 1;
     game.fx.muzzle(hand.x, hand.y, hand.z, 0.6);
     game.audio.play('enemyShot', clamp(1 - dist / 60, 0.15, 0.7));
@@ -1463,6 +1487,28 @@ class Enemy {
     if (this.fig.parts.armR < 0.5) return;
     const h = j.handR;
     if (this.cfg.unarmed) return;
+    if (this.cfg.club === 'eraser') {
+      // the big two-tone school eraser
+      const d = _v.copy(j.handR).sub(j.elbowR).normalize();
+      fr.lineXYZ(h.x, h.y, h.z, h.x + d.x * 0.16, h.y + d.y * 0.16, h.z + d.z * 0.16, ERASER_PINK, 15, this.id, 1, 0.004, 0);
+      fr.lineXYZ(h.x + d.x * 0.16, h.y + d.y * 0.16, h.z + d.z * 0.16, h.x + d.x * 0.32, h.y + d.y * 0.32, h.z + d.z * 0.32, ERASER_BLUE, 15, this.id + 1, 1, 0.004, 0);
+      fr.lineXYZ(h.x + d.x * 0.13, h.y + d.y * 0.13, h.z + d.z * 0.13, h.x + d.x * 0.19, h.y + d.y * 0.19, h.z + d.z * 0.19, [0.96, 0.95, 0.9], 16, this.id + 2, 1, 0.004, 0);
+      return;
+    }
+    if (this.cfg.gun === 'pen') {
+      const d = this.fig.aim ? this.fig.aimDir : _v.copy(j.handR).sub(j.elbowR).normalize();
+      fr.lineXYZ(h.x - d.x * 0.06, h.y - d.y * 0.06 + 0.03, h.z - d.z * 0.06, h.x + d.x * 0.26, h.y + d.y * 0.26 + 0.03, h.z + d.z * 0.26, [0.8, 0.86, 0.94], 6.5, this.id, 1, 0.006, 0);
+      fr.lineXYZ(h.x - d.x * 0.04, h.y - d.y * 0.04 + 0.03, h.z - d.z * 0.04, h.x + d.x * 0.22, h.y + d.y * 0.22 + 0.03, h.z + d.z * 0.22, PEN_BLUE, 2.2, this.id + 1, 1, 0.006, 0);
+      fr.lineXYZ(h.x, h.y, h.z, h.x, h.y - 0.1, h.z, [0.16, 0.18, 0.24], 5, this.id + 2, 1, 0.01, 0);
+      return;
+    }
+    if (this.cfg.gun === 'm4') {
+      const d = this.fig.aim ? this.fig.aimDir : _v.copy(j.handR).sub(j.elbowR).normalize();
+      fr.lineXYZ(h.x - d.x * 0.3, h.y - d.y * 0.3, h.z - d.z * 0.3, h.x + d.x * 0.42, h.y + d.y * 0.42, h.z + d.z * 0.42, [0.26, 0.27, 0.31], 6, this.id, 1, 0.006, 0);
+      fr.lineXYZ(h.x + d.x * 0.42, h.y + d.y * 0.42, h.z + d.z * 0.42, h.x + d.x * 0.62, h.y + d.y * 0.62, h.z + d.z * 0.62, [0.26, 0.27, 0.31], 2.4, this.id + 1, 1, 0.006, 0);
+      fr.lineXYZ(h.x + d.x * 0.08, h.y + d.y * 0.08, h.z + d.z * 0.08, h.x + d.x * 0.1, h.y + d.y * 0.1 - 0.12, h.z + d.z * 0.1, [0.95, 0.35, 0.6], 6, this.id + 2, 1, 0.006, 0);
+      return;
+    }
     if (this.cfg.melee) {
       const d = _v.copy(j.handR).sub(j.elbowR).normalize();
       fr.lineXYZ(h.x - d.x * 0.1, h.y - d.y * 0.1, h.z - d.z * 0.1, h.x + d.x * 0.85, h.y + d.y * 0.85, h.z + d.z * 0.85, [0.35, 0.25, 0.2], 7, this.id, 1, 0.02, 0);
@@ -1507,7 +1553,7 @@ export class Enemies {
     this.squads = [];
   }
 
-  squadFor(territory, x, z) {
+  squadFor(territory, x, z, faction = 'gang') {
     if (territory) {
       if (!territory.squad) {
         territory.squad = new Squad(this, new THREE.Vector3(territory.x, 0, territory.z), territory);
@@ -1517,9 +1563,10 @@ export class Enemies {
     }
     // loose guys join whoever is close, or start their own crew
     for (const s of this.squads) {
-      if (!s.territory && Math.hypot(s.home.x - x, s.home.z - z) < 30) return s;
+      if (!s.territory && s.faction === faction && Math.hypot(s.home.x - x, s.home.z - z) < 30) return s;
     }
     const s = new Squad(this, new THREE.Vector3(x, 0, z), null);
+    s.faction = faction;
     this.squads.push(s);
     return s;
   }
@@ -1551,6 +1598,20 @@ export class Enemies {
       return e;
     }
     return null;
+  }
+
+  // an officer getting out of a patrol car, already after you
+  spawnOfficer(type, x, z, look, where) {
+    const e = new Enemy(this, type, x, z, null, look);
+    e.home.set(x, 0, z);
+    e.lastSeen.copy(where);
+    e.squad.lastKnown.copy(where);
+    e.squad.knowT = this.game.time;
+    e.awareness = 1;
+    this.list.push(e);
+    e.enterCombat(false);
+    if (Math.random() < 0.6) e.say('spot', 'cop');
+    return e;
   }
 
   // the driver you just pulled out of the car wants it back
@@ -1783,8 +1844,8 @@ export class Enemies {
       for (const e of this.list) {
         const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
         if (d > 170 && e.state !== 'combat') e.despawn = true;
-        // bystanders who calmed down go about their day
-        if (e.faction === 'civ' && e.state !== 'combat' && d > 40) e.despawn = true;
+        // bystanders who calmed down go about their day; officers when the chase is off
+        if ((e.faction === 'civ' || (e.faction === 'police' && !game.police.hostile)) && e.state !== 'combat' && d > 45) e.despawn = true;
       }
     }
     // separation
@@ -1901,6 +1962,8 @@ export class Enemies {
     const game = this.game;
     const fx = game.fx;
     game.hud.hitMarker();
+    if (e.faction === 'police') game.onCrime('hurtCop', e.pos.x, e.pos.z);
+    else if (e.faction === 'civ') game.onCrime('hurtCiv', e.pos.x, e.pos.z);
     if (e.state !== 'combat' && e.state !== 'flee') {
       // they know roughly where that came from
       e.lastSeen.copy(game.player.pos);
@@ -1987,6 +2050,8 @@ export class Enemies {
     fx.smoke(e.pos.x, e.pos.y + 1.0, e.pos.z, 1.6);
     this.game.audio.play('erase', 1);
     if (!e.isMonster) this.allyDown(e);
+    const crime = e.faction === 'police' ? 'killCop' : e.faction === 'civ' ? 'killCiv' : e.faction === 'gang' ? 'killGang' : null;
+    if (crime) this.game.onCrime(crime, e.pos.x, e.pos.z);
     this.game.onEnemyKilled(e);
   }
 

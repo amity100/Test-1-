@@ -131,7 +131,7 @@ class Vehicle {
   buildStock(stock) {
     this.body = new THREE.Group();
     this.group.add(this.body);
-    const g = carGroup(this.game.mats, this.mgr.carModel(stock.color, stock.taxi));
+    const g = carGroup(this.game.mats, this.mgr.carModel(stock.color, stock.taxi, stock.police));
     g.rotation.y = -Math.PI / 2; // the city car model points along +x
     this.body.add(g);
     this.reveal = 1;
@@ -140,7 +140,7 @@ class Vehicle {
     this.halfWid = 0.95;
     this.heightM = 1.45;
     this.seat = true; // whoever drives shows through the windows
-    this.label = stock.taxi ? 'מונית' : 'מכונית';
+    this.label = stock.police ? 'ניידת' : stock.taxi ? 'מונית' : 'מכונית';
   }
 
   // template (x right, y down) -> local (z forward, y up), bottom of the drawing on the ground
@@ -722,11 +722,11 @@ export class Vehicles {
     this.models = new Map();
   }
 
-  carModel(color, taxi) {
-    const key = color.join(',') + (taxi ? 't' : '');
+  carModel(color, taxi, police = false) {
+    const key = color.join(',') + (taxi ? 't' : '') + (police ? 'p' : '');
     let m = this.models.get(key);
     if (!m) {
-      m = buildCarModel(this.game.mats, color, taxi);
+      m = buildCarModel(this.game.mats, color, taxi, police);
       this.models.set(key, m);
     }
     return m;

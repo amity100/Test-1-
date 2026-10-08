@@ -9,6 +9,7 @@ const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3();
 const _y = new THREE.Vector3();
 const _z = new THREE.Vector3();
+const _hp = new THREE.Vector3();
 
 export class Player {
   constructor(game) {
@@ -48,13 +49,18 @@ export class Player {
     return new THREE.Vector3(this.pos.x, this.pos.y + 1.6, this.pos.z);
   }
 
-  hurt(amount, fromX, fromZ) {
+  hurt(amount, fromX, fromZ, at = null) {
     if (this.mode === 'dead' || this.invuln > 0) return;
     if (this.inVehicle) {
       this.inVehicle.hurt(amount);
       return;
     }
     this.hp -= amount;
+    if (at) {
+      // the hit rubs a little hole in your own drawing (it fills back in as you heal)
+      this.fig.closestSurfacePoint(at, _hp);
+      this.fig.erase(_hp, 0.045 + amount * 0.0035);
+    }
     this.lastHurt = this.game.time;
     this.game.hud.hurtFlash(amount, fromX, fromZ);
     this.game.audio.play('hurt');
@@ -79,8 +85,12 @@ export class Player {
       if (v && v.seat) this.game.traffic.seat(fig, v.pos, v.yaw, dt);
       return;
     }
-    // regen after a few calm seconds
-    if (this.game.time - this.lastHurt > 4 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 9 * dt);
+    // regen after a few calm seconds; the rubbed-out spots fill back in
+    if (this.game.time - this.lastHurt > 4 && this.hp < this.maxHp) {
+      this.hp = Math.min(this.maxHp, this.hp + 9 * dt);
+      const holes = this.fig.holes.length;
+      if (holes && (this.hp >= this.maxHp || this.hp > this.maxHp - holes * 12)) this.fig.holes.pop();
+    }
 
     const drawing = this.mode === 'draw';
     const mv = drawing ? { x: 0, y: 0, sprint: false } : input.readMove();

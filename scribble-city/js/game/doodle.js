@@ -647,6 +647,14 @@ export class Doodle {
         this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.085 * hs, 0.01 * hs, 0.06 * hs, [0.06, 0.06, 0.08]);
       } else if (k === 'skimask') {
         this.ellipsoid('head', 'head', hc, hr, hu, hf, rx * 1.04, ry * 1.04, rz * 1.04, hat.color);
+      } else if (k === 'helmet') {
+        // riot helmet: a big dome and a smoky visor over the eyes
+        _a.copy(hc).addScaledVector(hu, 0.03 * hs);
+        const dome = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.22, ry * 1.18, rz * 1.22, hat.color);
+        below(dome, -0.01);
+        _a.copy(hc).addScaledVector(hf, rz * 0.55).addScaledVector(hu, 0.0);
+        const visor = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.05, 0.06 * hs, rz * 0.62, [0.42, 0.5, 0.62]);
+        visor.fill = FILL.FLAT;
       }
     }
     // a hoodie's hood (up frames the face, down rolls behind the neck)

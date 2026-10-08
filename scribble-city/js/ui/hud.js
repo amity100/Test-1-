@@ -26,6 +26,10 @@ export class HUD {
     this.vignette = $('vignette');
     this.crosshair = $('crosshair');
     this.minimap = $('minimap');
+    this.wantedEl = $('wanted');
+    this.wantedStars = [...this.wantedEl.children];
+    this.splatsEl = $('splats');
+    this.wantedLevel = 0;
     this.mctx = this.minimap.getContext('2d');
     this.lastDistrict = '';
     this.prompt = '';
@@ -141,12 +145,40 @@ export class HUD {
     this.damageEl.style.opacity = '0.9';
   }
 
+  // police stars; blinking while they have lost sight of you
+  setWanted(level, searching) {
+    this.wantedEl.classList.toggle('hidden', level <= 0);
+    this.wantedEl.classList.toggle('search', !!searching);
+    this.wantedStars.forEach((s, i) => s.classList.toggle('on', i < level));
+    if (level > this.wantedLevel) {
+      this.wantedEl.classList.remove('bump');
+      void this.wantedEl.offsetWidth;
+      this.wantedEl.classList.add('bump');
+    }
+    this.wantedLevel = level;
+  }
+
+  // a paint ball or ink blot hit you: a blob on the screen that drips and fades
+  splat(color) {
+    const el = document.createElement('div');
+    el.className = 'splat';
+    const s = 70 + Math.random() * 110;
+    el.style.width = `${s}px`;
+    el.style.height = `${s * (0.75 + Math.random() * 0.4)}px`;
+    el.style.left = `${15 + Math.random() * 65}%`;
+    el.style.top = `${15 + Math.random() * 55}%`;
+    el.style.background = `rgb(${color.map((c) => Math.round(c * 255)).join(',')})`;
+    this.splatsEl.appendChild(el);
+    while (this.splatsEl.children.length > 6) this.splatsEl.firstChild.remove();
+    setTimeout(() => el.remove(), 2400);
+  }
+
   updateWeapon() {
     const s = this.game.weapons.current;
     this.weaponName.textContent = s.def.name;
-    this.weaponAmmo.textContent = s.ammo === Infinity ? 'תמיד איתך' : `${s.ammo} יריות`;
-    this.weaponGrade.className = s.def.id === 'pencil' ? '' : s.grade;
-    this.weaponGrade.textContent = s.def.id === 'pencil' ? '' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
+    this.weaponAmmo.textContent = s.uses !== undefined ? `נשארו ${s.uses} מחיקות` : s.ammo === Infinity ? 'תמיד איתך' : `${s.ammo} יריות`;
+    this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear ? '' : s.grade;
+    this.weaponGrade.textContent = s.def.id === 'pencil' ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
     const c = this.weaponIcon;
     const g = c.getContext('2d');
     g.clearRect(0, 0, c.width, c.height);
@@ -173,6 +205,8 @@ export class HUD {
       g.lineTo(-44, 7);
       g.stroke();
       g.restore();
+    } else if (s.def.gear) {
+      drawGearIcon(g, s.def.id, c.width, c.height, s.uses !== undefined ? s.uses / s.def.uses : 1);
     } else if (s.strokes) {
       this.drawStrokesInto(g, s.strokes, c.width, c.height);
     } else {
@@ -293,4 +327,44 @@ export class HUD {
     g.fillText('N', -Math.sin(yaw) * nr, Math.cos(yaw) * nr);
     g.restore();
   }
+}
+
+// little drawings of police gear for the weapon card
+function drawGearIcon(g, id, w, h, wear = 1) {
+  g.save();
+  g.translate(w / 2, h / 2);
+  g.rotate(-0.12);
+  g.lineWidth = 2;
+  g.strokeStyle = '#141418';
+  g.lineJoin = 'round';
+  const box = (x, y, bw, bh, fill) => {
+    g.fillStyle = fill;
+    g.fillRect(x, y, bw, bh);
+    g.strokeRect(x, y, bw, bh);
+  };
+  if (id === 'pen') {
+    box(-30, -6, 56, 12, '#dfe9f4');
+    box(-24, -2, 46, 4, '#3a5cc6');
+    box(26, -6, 8, 12, '#3a5cc6');
+    box(-26, 6, 12, 22, '#2b2f3d');
+    g.beginPath();
+    g.moveTo(34, -5);
+    g.lineTo(44, 0);
+    g.lineTo(34, 5);
+    g.stroke();
+  } else if (id === 'm4') {
+    box(-52, -4, 22, 12, '#5a5b62');
+    box(-30, -8, 40, 14, '#43454d');
+    box(10, -6, 22, 10, '#5d5f68');
+    box(32, -3, 22, 4, '#43454d');
+    box(-12, 6, 12, 18, '#ee5a96');
+    box(-26, 6, 8, 14, '#43454d');
+    box(-20, -14, 24, 6, '#43454d');
+  } else {
+    const L = 24 + 52 * Math.max(0.2, wear);
+    box(-L / 2, -12, L / 2, 24, '#ee8a94');
+    box(0, -12, L / 2, 24, '#5d7bd2');
+    box(-8, -13, 16, 26, '#f6f3ea');
+  }
+  g.restore();
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildPencilModel } from './items.js';
+import { buildPencilModel, PEN_BLUE } from './items.js';
 import { BLACK_INK, RED_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
 
@@ -8,6 +8,10 @@ export const WEAPON_DEFS = {
   paint: { id: 'paint', name: 'אקדח צבע', kind: 'gun', projectile: 'paint', damage: 10, rate: 7.5, speed: 46, gravity: 6, spread: 0.016, ammo: 90, hands: 1 },
   rifle: { id: 'rifle', name: 'רובה עפרונות', kind: 'gun', projectile: 'pencil', damage: 27, rate: 3.4, speed: 92, gravity: 2.5, spread: 0.005, ammo: 40, hands: 2 },
   bazooka: { id: 'bazooka', name: 'בזוקת מחקים', kind: 'gun', projectile: 'eraser', damage: 150, radius: 6.5, rate: 0.8, speed: 36, gravity: 4, spread: 0.004, ammo: 8, hands: 2 },
+  // police gear you can pick up
+  pen: { id: 'pen', name: 'עט-אקדח', kind: 'gun', projectile: 'ink', damage: 15, rate: 4, speed: 78, gravity: 3, spread: 0.008, ammo: 24, hands: 1, gear: true },
+  m4: { id: 'm4', name: 'רובה צבע M4', kind: 'gun', projectile: 'paint', damage: 8, rate: 10, speed: 64, gravity: 4, spread: 0.02, ammo: 60, hands: 2, gear: true },
+  bigEraser: { id: 'bigEraser', name: 'מחק בית-ספר ענק', kind: 'melee', damage: 62, rate: 1.7, range: 2.8, uses: 30, gear: true },
 };
 
 export const GRADE = {
@@ -59,7 +63,7 @@ export class Weapons {
 
   add(def, grade, model, drawingScore) {
     const g = GRADE[grade];
-    const slot = { def, grade, ammo: Math.round(def.ammo * g.ammo), model, score: drawingScore };
+    const slot = { def, grade, ammo: def.ammo ? Math.round(def.ammo * g.ammo) : Infinity, uses: def.uses, model, score: drawingScore };
     // replace an existing weapon of the same type
     const i = this.slots.findIndex((s) => s.def.id === def.id);
     if (i > 0) {
@@ -192,7 +196,7 @@ export class Weapons {
       damage: def.damage * g.dmg,
       radius: def.radius ? def.radius * (slot.grade === 'perfect' ? 1.2 : slot.grade === 'fail' ? 0.5 : 1) : 0,
       life: sad ? 1.5 : 4,
-      color: PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)],
+      color: def.projectile === 'ink' ? PEN_BLUE : PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)],
       wobble: slot.grade === 'wonky' ? 1 : slot.grade === 'fail' ? 2 : 0,
       seed: Math.random() * 100,
       t: 0,
@@ -203,6 +207,7 @@ export class Weapons {
     game.camRig.addShake(def.projectile === 'eraser' ? 0.35 : 0.04);
     game.enemies.noise(player.pos, 32);
     game.civilians.panic(player.pos, 40);
+    game.onCrime('shoot', player.pos.x, player.pos.z);
     if (slot.ammo <= 0) {
       game.hud.toast(`ה${def.name} נגמר — אפשר לצייר אותו שוב`, 'info');
       this.removeModel(slot);
@@ -265,8 +270,19 @@ export class Weapons {
     }
     if (any) {
       game.audio.play('erase');
-      game.camRig.addShake(0.12);
-      game.fx.crumbs(tip.x, tip.y, tip.z, 14, 3);
+      game.camRig.addShake(slot.def.id === 'bigEraser' ? 0.2 : 0.12);
+      game.fx.crumbs(tip.x, tip.y, tip.z, slot.def.id === 'bigEraser' ? 26 : 14, 3);
+      if (slot.uses !== undefined) {
+        // a real eraser wears down as you use it
+        slot.uses--;
+        if (slot.uses <= 0) {
+          game.hud.toast(`ה${slot.def.name} נשחק עד הסוף`, 'info');
+          this.removeModel(slot);
+          this.slots.splice(this.slots.indexOf(slot), 1);
+          this.select(0);
+        }
+        game.hud.updateWeapon();
+      }
     }
   }
 
@@ -319,8 +335,10 @@ export class Weapons {
 
   // ------------------------------------------------------------------ projectiles
   // ignore: the box the shooter is crouched behind (shots go over its hood)
-  spawnEnemyShot(x, y, z, dx, dy, dz, damage, speed = 40, ignore = null) {
-    this.projectiles.push({ kind: 'enemy', owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, ignore });
+  // kind: 'enemy' (scribble bullet), 'ink' (police pen-pistol), 'paintball' (paint M4)
+  spawnEnemyShot(x, y, z, dx, dy, dz, damage, speed = 40, ignore = null, kind = 'enemy') {
+    const color = kind === 'paintball' ? PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)] : kind === 'ink' ? PEN_BLUE : null;
+    this.projectiles.push({ kind, owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, ignore, color });
   }
 
   spawnShell(x, y, z, dx, dy, dz, owner, damage, radius, speed = 45) {
@@ -420,6 +438,13 @@ export class Weapons {
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * s, pr.y - uy * s, pr.z - uz * s, [0.9, 0.58, 0.64], 16, pr.seed, 1, 0.02, 0);
       fr.lineXYZ(pr.x - ux * s, pr.y - uy * s, pr.z - uz * s, pr.x - ux * 2.4, pr.y - uy * 2.4, pr.z - uz * 2.4, BLACK_INK, 1.4, pr.seed + 1, 0.4, 0.05, 0);
       if (Math.random() < 0.3) this.game.fx.smoke(pr.x - ux, pr.y - uy, pr.z - uz, 0.6);
+    } else if (pr.kind === 'ink') {
+      // a blot of ballpoint ink
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, PEN_BLUE, 8, pr.seed, 1, 0.05, 0);
+      fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.9, pr.y - uy * 0.9, pr.z - uz * 0.9, PEN_BLUE, 1.4, pr.seed + 1, 0.55, 0.04, 0);
+    } else if (pr.kind === 'paintball') {
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.07, pr.y - uy * 0.07, pr.z - uz * 0.07, pr.color, 7, pr.seed, 1, 0.08, 0);
+      fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * 0.5, pr.y - uy * 0.5, pr.z - uz * 0.5, pr.color, 1.2, pr.seed + 1, 0.5, 0.04, 0);
     } else {
       // enemy scribble bullet
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.45, pr.y - uy * 0.45, pr.z - uz * 0.45, BLACK_INK, 3.4, pr.seed, 1, 0.02, 0);
@@ -442,16 +467,21 @@ export class Weapons {
     }
     if (hit.type === 'enemy') {
       game.enemies.damage(hit.enemy, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), pr.kind);
-      if (pr.kind === 'paint') hit.enemy.paint(pr.color);
+      if (pr.kind === 'paint' || pr.kind === 'ink') hit.enemy.paint(pr.kind === 'ink' ? PEN_BLUE : pr.color);
       fx.impact(hit.x, hit.y, hit.z, 0.7);
       return;
     }
     if (hit.type === 'player') {
-      game.player.hurt(pr.damage, pr.x - ux * 5, pr.z - uz * 5);
+      game.player.hurt(pr.damage, pr.x - ux * 5, pr.z - uz * 5, new THREE.Vector3(hit.x, hit.y, hit.z));
       fx.impact(hit.x, hit.y, hit.z, 0.6);
+      if (pr.color && !game.player.inVehicle) game.hud.splat(pr.color);
       return;
     }
     // world
+    if (pr.kind === 'ink' || pr.kind === 'paintball') {
+      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, pr.kind === 'ink' ? 0.45 : 0.5 + Math.random() * 0.3, pr.color);
+      return;
+    }
     if (pr.kind === 'paint') {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.7 + Math.random() * 0.4, pr.color);
       game.audio.play('splat', 0.4);

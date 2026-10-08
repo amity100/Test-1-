@@ -15,6 +15,8 @@ import { HUD } from '../ui/hud.js';
 import { Album } from '../ui/album.js';
 import { AirDraw } from '../ui/airdraw.js';
 import { Bubbles } from '../ui/bubbles.js';
+import { Police } from './police.js';
+import { Pickups } from './pickups.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { CAR_VARIANTS, DRIVER_SEAT } from './traffic.js';
 import { rebakeSunShadows } from '../render/sunlight.js';
@@ -63,6 +65,8 @@ export class Game {
     this.enemies = new Enemies(this);
     this.weapons = new Weapons(this);
     this.hud = new HUD(this);
+    this.police = new Police(this);
+    this.pickups = new Pickups(this);
     this.album = new Album(this);
     this.airdraw = new AirDraw(this);
     // eyes over hiding spots
@@ -159,6 +163,8 @@ export class Game {
     this.weapons.projectiles = [];
     this.enemies.reset();
     this.bubbles.clear();
+    this.police.reset();
+    for (const c of this.traffic.list) if (c.police) c.mode = c.crew && c.crew.length ? 'patrol' : 'leave';
     this.respawn();
     this.state = 'play';
     if (!this.touch) this.input.requestLock(true);
@@ -177,9 +183,32 @@ export class Game {
     }, 1300);
   }
 
-  onEnemyKilled() {
+  onEnemyKilled(e) {
+    if (e && e.faction === 'police') this.dropWeapon(e);
+    if (e && e.faction !== 'gang' && e.faction !== 'monster') return;
     this.goalFlags.kills++;
     this.updateGoals();
+  }
+
+  // the gun (or eraser) falls out of a hand that was rubbed out, or off a beaten officer
+  dropWeapon(e) {
+    const id = e.cfg.gun === 'pen' ? 'pen' : e.cfg.gun === 'm4' ? 'm4' : e.cfg.club === 'eraser' ? 'bigEraser' : null;
+    if (!id || e.dropped) return;
+    e.dropped = true;
+    const h = e.fig.j.handR;
+    this.pickups.drop(id, h.x, Math.max(h.y, 0.6), h.z);
+  }
+
+  onCrime(kind, x, z) {
+    this.police.crime(kind, x, z);
+  }
+
+  onCivilianHurt(c) {
+    this.onCrime('hurtCiv', c.pos.x, c.pos.z);
+  }
+
+  onCivilianKilled(c) {
+    this.onCrime('killCiv', c.pos.x, c.pos.z);
   }
 
   // ------------------------------------------------------------------ main loop
@@ -227,6 +256,8 @@ export class Game {
       this.civilians.update(dt);
       this.traffic.update(dt);
       this.world.objects.update(dt, rebakeSunShadows, this.camera.position);
+      this.police.update(dt);
+      this.pickups.update(dt);
       this.updateHidden();
     }
     // camera
@@ -275,6 +306,7 @@ export class Game {
       this.civilians.draw(this.camera.position);
       this.traffic.draw(this.camera.position);
       this.drawStuckPencils(fr);
+      this.pickups.draw(fr);
       this.fx.update(dt, fr);
       fr.end();
     }
@@ -512,9 +544,21 @@ export class Game {
     const t = this.traffic.take(c);
     const v = this.vehicles.spawnStock(CAR_VARIANTS[t.variant], t.pos, t.yaw);
     if (t.driver) this.ejectDriver(t.driver, t.pos, t.yaw, true);
+    if (t.police) {
+      this.onCrime('copcar', t.pos.x, t.pos.z);
+      if (t.crew && t.crew.length) {
+        const fx = Math.sin(t.yaw);
+        const fz = Math.cos(t.yaw);
+        t.crew.forEach((m, i) => {
+          const side = i === 0 ? 1 : -1;
+          m.fig.dispose();
+          this.enemies.spawnOfficer(m.type, t.pos.x + fz * side * 1.9, t.pos.z - fx * side * 1.9, m.look, this.player.pos);
+        });
+      }
+    }
     this.audio.play('punch', 0.6);
     this.enterVehicle(v);
-    if (this.onCrime) this.onCrime('carjack', t.pos.x, t.pos.z);
+    if (!t.police) this.onCrime('carjack', t.pos.x, t.pos.z);
   }
 
   // drive off with a car parked at the curb
