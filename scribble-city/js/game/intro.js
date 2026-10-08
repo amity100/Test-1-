@@ -531,6 +531,10 @@ export class Intro {
     this.phase = 'desk';
     this.t = 0;
     document.getElementById('title').classList.add('desk');
+    // the city is not drawn while the desk is on screen: get its shaders ready meanwhile, so
+    // the dive does not stall on the first frame of the city
+    const game = this.game;
+    if (game.renderer.compileAsync) game.renderer.compileAsync(game.scene, game.camera).catch(() => {});
   }
 
   // start: the camera dives into the page
@@ -581,8 +585,12 @@ export class Intro {
   }
 
   update(dt) {
+    // the opening runs on the wall clock, so it keeps its pace on a slow device too
+    const now = performance.now();
+    const real = this.last ? Math.min(0.1, (now - this.last) / 1000) : dt;
+    this.last = now;
     if (this.phase === 'off') return;
-    this.t += dt;
+    this.t += this.game.params.has('test') ? dt : real;
     const cam = this.cam;
     if (this.phase === 'desk') {
       // a slow breath of the camera over the desk
