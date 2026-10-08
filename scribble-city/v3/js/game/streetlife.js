@@ -346,14 +346,14 @@ const SERVICES = {
   }]] },
   sushi: { verb: 'להזמין סושי', who: 'השף', greet: 'רולים טריים. דג משורבט, אבל טרי.', offers: [['מגש סושי (+30 חיים)', 'sushi', heal(30, [0.95, 0.5, 0.4])]] },
   falafel: { verb: 'להזמין פלאפל', who: 'המוכר', greet: 'פלאפל בפיתה, עם הכל?', offers: [['פלאפל בפיתה (+45 חיים)', 'pita', heal(45, [0.55, 0.38, 0.18])]] },
-  shop: { verb: 'להיכנס לחנות', who: 'המוכר', greet: 'יש לנו הכל. כמעט הכל. מה צריך?', offers: [['מחק חדש לעיפרון', 'eraser', (game) => refillErasers(game)], ['חטיף (+10 חיים)', 'apple', heal(10, [0.6, 0.4, 0.25])]] },
-  hardware: { verb: 'להיכנס לחנות כלי העבודה', who: 'המוכר בחנות', greet: 'מחקים, עפרונות, סרגלים. מה חסר לך?', offers: [['מחק חדש (כל המחקים כמו חדשים)', 'eraser', (game) => refillErasers(game)]] },
+  shop: { verb: 'להיכנס לחנות', who: 'המוכר', greet: 'יש לנו הכל. כמעט הכל. מה צריך?', offers: [['מחק חדש לעיפרון', 'eraser', (game) => refillErasers(game)], ['חטיף (+10 חיים)', 'apple', heal(10, [0.6, 0.4, 0.25])], ['שרטוט: פלסטר ענק', 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
+  hardware: { verb: 'להיכנס לחנות כלי העבודה', who: 'המוכר בחנות', greet: 'מחקים, עפרונות, סרגלים, שדכנים, אקדחי דבק. מה חסר לך?', offers: [['מחק חדש (כל המחקים כמו חדשים)', 'eraser', (game) => refillErasers(game)], ['שרטוט: אקדח שדכן', 'stapler', (game) => giveBlueprint(game, 'stapler')], ['שרטוט: אקדח דבק', 'glue', (game) => giveBlueprint(game, 'glue')]] },
   pharmacy: { verb: 'להיכנס לבית המרקחת', who: 'הרוקחת', greet: 'נמחקת קצת? יש לי בדיוק את מה שצריך.', offers: [['תחבושת (כל החיים, וממלאת את החורים)', 'bandage', (game) => {
     const p = game.player;
     p.hp = p.maxHp;
     p.fig.holes.length = 0;
     game.hud.toast('כמו חדש!', 'good', 2);
-  }]] },
+  }], ['שרטוט: פלסטר ענק (לצייר כשצריך)', 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
   laundry: { verb: 'להיכנס למכבסה', who: 'המכבסה', greet: 'כתמי צבע? דיו? מחק? הכל יורד.', offers: [['ניקוי מהיר (מוריד כתמים וחורים, +10 חיים)', 'bandage', (game) => {
     const p = game.player;
     p.fig.paintT = 0;
@@ -419,6 +419,18 @@ function heroLook(game, fn, text) {
   fn(game.player.fig.look);
   game.streetlife.saveHero();
   game.hud.toast(text, 'good', 2);
+}
+
+// the shopkeeper sketches a blueprint on the back of a receipt: it goes into the album
+function giveBlueprint(game, id) {
+  const bp = BLUEPRINTS[id];
+  if (game.album.has(id)) {
+    game.hud.toast(`ה${bp.name} כבר באלבום — לחצו ${game.touch ? 'על העיפרון ✏' : 'Q'} כדי לצייר`, 'info', 2.6);
+    return;
+  }
+  game.album.add(id);
+  game.hud.toast(`שרטוט חדש באלבום: ${bp.name}! ${game.touch ? 'העיפרון ✏' : 'Q'} — לצייר אותו באוויר`, 'good', 3.4);
+  game.audio.play('pageflip');
 }
 
 function refillErasers(game) {

@@ -115,7 +115,7 @@ export class DayNight {
     }
     // headlights on the road in front of the car you drive
     const v = game && game.player && game.player.inVehicle;
-    if (v && night > 0.15 && v.kind !== 'ufo') shared.uCarLight.value.set(v.pos.x, v.pos.z, v.yaw, 1);
+    if (v && night > 0.15 && !v.flies) shared.uCarLight.value.set(v.pos.x, v.pos.z, v.yaw, 1);
     else shared.uCarLight.value.w = 0;
   }
 }

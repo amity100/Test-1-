@@ -528,6 +528,7 @@ export class Traffic {
 
   // keep the player's vehicles out of traffic cars
   collideVehicle(v) {
+    if (v.flies && v.alt > 2) return;
     for (const c of this.list) {
       if (c.poofT !== undefined) continue;
       const dx = v.pos.x - c.pos.x;

@@ -502,8 +502,10 @@ export class Doodle {
     const sleeves = top.sleeves;
     const upperArmC = sleeves === 'none' ? skin : topC;
     const foreArmC = sleeves === 'long' ? topC : skin;
-    const pantsC = bot.kind === 'skirt' || bot.kind === 'dress' ? skin : bot.color;
-    const shinC = bot.kind === 'shorts' || bot.kind === 'skirt' || bot.kind === 'dress' ? skin : bot.color;
+    // skirts and dresses reach the ankle: the legs under them are the fabric
+    const longSkirt = bot.kind === 'skirt' || bot.kind === 'dress';
+    const pantsC = bot.color;
+    const shinC = bot.kind === 'shorts' ? skin : bot.color;
     const legR = bot.kind === 'baggy' ? 1.2 : 1;
 
     // pelvis (stays with the legs if the waist gets erased)
@@ -530,11 +532,22 @@ export class Doodle {
         // sleeve stubs of the shirt under the vest
         for (const sh of [j.shoulderL, j.shoulderR]) this.ellipsoid('torso', 'chest', sh, rgt, ax, fwd, 0.06 * S, 0.06 * S, 0.06 * S, top.under);
       }
-      if (bot.kind === 'skirt' || bot.kind === 'dress') {
-        const long = bot.kind === 'dress' ? 1.25 : 1;
-        _a.copy(j.hip).addScaledVector(ax, -0.17 * long * S);
-        const sk = this.ellipsoid('pelvis', 'pelvis', _a, rgt, ax, fwd, 0.2 * bulk * S, 0.22 * long * S, 0.19 * bulk * S, bot.color);
+      if (longSkirt) {
+        // a long skirt: fitted at the hips, flaring out down to the ankles (sitting, it drapes
+        // over the knees)
+        _a.copy(j.hip).addScaledVector(ax, -0.24 * S);
+        const sk = this.ellipsoid('pelvis', 'pelvis', _a, rgt, ax, fwd, 0.2 * bulk * S, 0.3 * S, 0.19 * bulk * S, bot.color);
         this.clip(sk, ax, j.hip, 0.04 * S);
+        if (this.sit > 0.3) {
+          _a.lerpVectors(j.kneeL, j.kneeR, 0.5);
+          _b.lerpVectors(j.footL, j.footR, 0.5);
+          _c.lerpVectors(_a, _b, 0.5);
+          _d.subVectors(_a, _b).normalize();
+          this.ellipsoid('pelvis', 'pelvis', _c, rgt, _d, _e.crossVectors(rgt, _d).normalize(), 0.22 * bulk * S, Math.max(0.2 * S, _a.distanceTo(_b) * 0.55), 0.2 * bulk * S, bot.color);
+        } else {
+          _a.copy(j.hip).addScaledVector(ax, -0.6 * S);
+          this.ellipsoid('pelvis', 'pelvis', _a, rgt, ax, fwd, 0.235 * bulk * S, 0.31 * S, 0.215 * bulk * S, bot.color);
+        }
       }
       if (this.belly > 0.02) {
         // the drink inside, seen through the drawing

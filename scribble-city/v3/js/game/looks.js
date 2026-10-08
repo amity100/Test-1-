@@ -58,20 +58,34 @@ function baseLook(o = {}) {
   };
 }
 
+// Every woman in the city is dressed modestly: sleeves to the wrist, skirts and dresses to the
+// ankle (doodle.js draws them long), never shorts or a tank top.
+export function modest(L) {
+  if (!L || !L.fem) return L;
+  const t = L.top;
+  if (t) {
+    if (t.kind === 'tank') t.kind = 'tee';
+    t.sleeves = 'long';
+  }
+  if (L.bottom && L.bottom.kind === 'shorts') L.bottom = { kind: 'skirt', color: L.bottom.color };
+  return L;
+}
+
 // ------------------------------------------------------------------ the hero
 export function heroLook() {
+  // the hero of the evening: white tee, grey cargo trousers, white sneakers, a black cap
   const L = baseLook({ pen: 'fineliner' });
-  L.pen.width = 3.3;
-  L.pen.fill = FILL.PAPER;
-  L.skin = [0.98, 0.97, 0.93];
-  L.hair = { style: 'none', color: L.skin };
-  L.top = { kind: 'tee', color: [0.98, 0.97, 0.93], sleeves: 'none' };
-  L.bottom = { kind: 'pants', color: [0.98, 0.97, 0.93] };
-  L.shoes = [0.1, 0.1, 0.12];
+  L.pen.width = 3.0;
+  L.skin = [0.62, 0.43, 0.32];
+  L.hair = { style: 'short', color: [0.1, 0.08, 0.07] };
+  L.top = { kind: 'tee', color: [0.97, 0.96, 0.93], sleeves: 'short' };
+  L.bottom = { kind: 'baggy', color: [0.36, 0.36, 0.39] };
+  L.shoes = [0.96, 0.96, 0.95];
+  L.hat = { kind: 'cap', color: [0.09, 0.09, 0.11] };
   L.face = { eyes: 'dot', brows: 'flat', mouth: 'line', beard: null, glasses: null };
-  L.acc = ['headband'];
+  L.acc = [];
   L.hero = true;
-  return L;
+  return modest(L);
 }
 
 // ------------------------------------------------------------------ gangs (NY street crime, GTA flavour)
@@ -89,7 +103,7 @@ export function gangLook(kind = 'street') {
     if (chance(0.55)) L.acc.push('chain');
     if (chance(0.35)) L.acc.push('tattoo');
     L.face = { eyes: pick(['dot', 'angry', 'narrow']), brows: 'angry', mouth: pick(['line', 'frown', 'smirk']), beard: chance(0.3) ? 'stubble' : null, glasses: chance(0.25) ? 'shades' : null };
-    return L;
+    return modest(L);
   }
   if (kind === 'mob') {
     const L = baseLook({ pen: pick(['fineliner', 'sepia', 'comic']), build: pick(['normal', 'stocky', 'big']) });
@@ -102,7 +116,7 @@ export function gangLook(kind = 'street') {
     L.face = { eyes: pick(['narrow', 'dot']), brows: 'angry', mouth: pick(['frown', 'smirk']), beard: chance(0.3) ? 'mustache' : null, glasses: chance(0.4) ? 'shades' : null };
     if (chance(0.4)) L.acc.push('cigar');
     if (chance(0.5)) L.acc.push('ring');
-    return L;
+    return modest(L);
   }
   if (kind === 'biker') {
     const L = baseLook({ pen: pick(['marker', 'comic', 'fineliner']), build: pick(['big', 'stocky']) });
@@ -114,7 +128,7 @@ export function gangLook(kind = 'street') {
     L.face = { eyes: 'narrow', brows: 'angry', mouth: 'frown', beard: pick(['full', 'goatee', 'full']), glasses: chance(0.5) ? 'shades' : null };
     L.acc.push('tattoo');
     if (chance(0.5)) L.acc.push('chain');
-    return L;
+    return modest(L);
   }
   // masked robbers
   const L = baseLook({ pen: pick(['fineliner', 'comic']), build: pick(['normal', 'lanky']) });
@@ -124,7 +138,7 @@ export function gangLook(kind = 'street') {
   L.hat = { kind: 'skimask', color: pick([[0.12, 0.12, 0.14], [0.55, 0.15, 0.15], [0.2, 0.3, 0.2]]) };
   L.hair = { style: 'none', color: L.skin };
   L.face = { eyes: 'dot', brows: 'none', mouth: 'none', beard: null, glasses: null };
-  return L;
+  return modest(L);
 }
 
 // ------------------------------------------------------------------ police
@@ -138,7 +152,7 @@ export function copLook() {
   L.hair = L.fem ? { style: 'bun', color: pick(HAIR) } : { style: 'short', color: pick(HAIR) };
   L.face = { eyes: pick(['dot', 'narrow']), brows: 'angry', mouth: pick(['line', 'frown']), beard: !L.fem && chance(0.3) ? 'mustache' : null, glasses: chance(0.35) ? 'shades' : null };
   L.acc.push('badge', 'belt');
-  return L;
+  return modest(L);
 }
 
 // riot unit: helmet with a visor, padded vest
@@ -152,7 +166,7 @@ export function swatLook() {
   L.hair = { style: 'short', color: pick(HAIR) };
   L.face = { eyes: 'narrow', brows: 'angry', mouth: 'line', beard: null, glasses: null };
   L.acc.push('badge', 'belt');
-  return L;
+  return modest(L);
 }
 
 // ------------------------------------------------------------------ city people
@@ -165,7 +179,7 @@ export function civilianLook(o = {}) {
     L.top = { kind: pick(['tee', 'tee', 'sweater', 'jacket']), color: pick(BRIGHT), sleeves: chance(0.5) ? 'short' : 'long', inner: pick(BRIGHT) };
     L.bottom = { kind: fem && chance(0.4) ? 'skirt' : 'pants', color: chance(0.6) ? pick(DENIM) : pick(BRIGHT) };
   } else if (kind === 'dress') {
-    L.top = { kind: 'dress', color: pick(BRIGHT), sleeves: pick(['none', 'short']) };
+    L.top = { kind: 'dress', color: pick(BRIGHT), sleeves: 'long' };
     L.bottom = { kind: 'dress', color: L.top.color };
   } else if (kind === 'office') {
     const suit = pick([[0.2, 0.22, 0.3], [0.3, 0.3, 0.33], [0.5, 0.45, 0.4], [0.16, 0.16, 0.18]]);
@@ -203,7 +217,7 @@ export function civilianLook(o = {}) {
   };
   if (fem && chance(0.4)) L.acc.push('earrings');
   if (fem && chance(0.5)) L.face.lips = pick([[0.78, 0.2, 0.26], [0.65, 0.3, 0.35]]);
-  return L;
+  return modest(L);
 }
 
 // Bar crowd: every patron drawn by a different hand.
@@ -280,7 +294,7 @@ const BAR_STYLES = {
 export function barLook(style, o = {}, tries = 0) {
   const L = (BAR_STYLES[style] || BAR_STYLES.ballpointGuy)();
   if (o.fem !== undefined && L.fem !== o.fem && tries < 8) return barLook(style, o, tries + 1);
-  return L;
+  return modest(L);
 }
 
 export const BAR_STYLE_NAMES = Object.keys(BAR_STYLES);
@@ -293,7 +307,7 @@ export function bartenderLook() {
   L.shoes = [0.1, 0.08, 0.07];
   L.hair = { style: 'slick', color: [0.15, 0.12, 0.1] };
   L.face = { eyes: 'dot', brows: 'up', mouth: 'smile', beard: 'mustache', glasses: null };
-  return L;
+  return modest(L);
 }
 
 // ------------------------------------------------------------------ people at work on the street
@@ -376,7 +390,7 @@ export function shopkeeperLook(kind) {
       apron(pick([[0.3, 0.42, 0.6], [0.55, 0.36, 0.22]]));
       break;
   }
-  return L;
+  return modest(L);
 }
 
 // a kid (drawn with fewer, rounder lines)
@@ -391,7 +405,7 @@ export function kidLook(fem = chance(0.5)) {
   L.hair = fem ? { style: 'short', color: pick(HAIR.slice(0, 5)) } : { style: pick(['short', 'messy', 'curly']), color: pick(HAIR.slice(0, 5)) };
   L.acc = [];
   L.hat = null;
-  return L;
+  return modest(L);
 }
 
 // grandma and grandpa
@@ -404,7 +418,7 @@ export function elderLook(fem) {
   L.face = { eyes: 'dot', brows: 'up', mouth: 'smile', beard: !fem && chance(0.6) ? 'mustache' : null, glasses: fem ? 'round' : null };
   L.hat = !fem && chance(0.5) ? { kind: 'cap', color: [0.45, 0.42, 0.38] } : null;
   L.acc = fem ? ['earrings'] : [];
-  return L;
+  return modest(L);
 }
 
 // the street painter: beret, striped shirt, paint on the apron
@@ -415,5 +429,5 @@ export function painterLook() {
   L.hat = { kind: 'beret', color: [0.75, 0.18, 0.2] };
   L.apron = [0.85, 0.8, 0.7];
   L.acc = ['scarf'];
-  return L;
+  return modest(L);
 }

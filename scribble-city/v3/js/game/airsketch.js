@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BLUEPRINTS, blueprintBounds } from './blueprints.js';
 
 // Doodle people draw too: a pencil comes out, lines appear in the air stroke by stroke, and
 // then the drawing "plops" into the real thing (a cane, a hairdo, an umbrella, a dog...).
@@ -123,6 +124,17 @@ export const SHAPES = {
   hat: [P(arc(0, 0, 0.3, 0.32, 0, Math.PI, 10), INK, 1.6), P([[-0.5, 0], [0.5, 0]], INK, 1.8), P([[-0.3, 0.06], [0.3, 0.06]], RED, 2.2)],
 };
 
+// any blueprint, sketched in the air by someone else (a shopkeeper shows you how it goes)
+function blueprintSketch(id) {
+  const bp = BLUEPRINTS[id];
+  if (!bp) return [];
+  const b = blueprintBounds(bp);
+  const span = Math.max(b.w, b.h) || 1;
+  const cx = (b.x0 + b.x1) / 2;
+  const cy = (b.y0 + b.y1) / 2;
+  return bp.strokes.map((st) => P(st.pts.map(([x, y]) => [(x - cx) / span, (cy - y) / span]), INK, 1.4));
+}
+
 /**
  * Sketches drawn in the air by city people. Each faces the camera (like a page held up to you)
  * unless it is drawn on a wall.
@@ -140,7 +152,7 @@ export class AirSketches {
    * o.keep: stay drawn after finishing (call plop() or erase() later); o.onDone()
    */
   draw(o) {
-    const lines = typeof o.shape === 'string' ? SHAPES[o.shape] : o.shape;
+    const lines = typeof o.shape === 'string' ? SHAPES[o.shape] || blueprintSketch(o.shape) : o.shape;
     let total = 0;
     for (const l of lines) for (let i = 1; i < l.pts.length; i++) total += Math.hypot(l.pts[i][0] - l.pts[i - 1][0], l.pts[i][1] - l.pts[i - 1][1]);
     const sk = {

@@ -66,6 +66,7 @@ export function buildCity(scene, atlas, signAtlas, mats) {
       buildBlock(W, chunk(`b${bx}_${bz}`), bx, bz, BLOCK_TYPES[bz][bx]);
     }
   }
+  arsenalBoards(W, chunk);
   buildOuterSidewalks(W, chunk('outer'));
   buildBridge(W, chunk('bridge'));
   buildStatue(W, chunk('statue'));
@@ -474,6 +475,45 @@ function billboard(W, ch, x, z, facing, rect, o = {}) {
 }
 
 // --------------------------------------------------------------------------------------------
+// The new arsenal's blueprints, one billboard each, on the sidewalks of the districts that fit
+// them (the easy ones around the hideout, the minigun deep in the gang's fortress).
+// [blueprint, block x, block z, side of the block, along (0..1)]
+const ARSENAL_BOARDS = [
+  ['shield', 1, 4, 'n', 0.72],
+  ['stapler', 0, 3, 'e', 0.3],
+  ['bandage', 1, 3, 'w', 0.3],
+  ['shotgun', 0, 2, 'e', 0.65],
+  ['katana', 1, 2, 's', 0.3],
+  ['glue', 2, 3, 'w', 0.7],
+  ['boomerang', 2, 1, 's', 0.7],
+  ['planes', 2, 2, 'n', 0.25],
+  ['inkbomb', 4, 1, 'w', 0.3],
+  ['bike', 4, 3, 'w', 0.75],
+  ['laser', 2, 4, 'e', 0.3],
+  ['copter', 4, 4, 'n', 0.3],
+  ['minigun', 3, 0, 's', 0.5],
+];
+
+function arsenalBoards(W, chunk) {
+  for (const [id, bx, bz, side, t] of ARSENAL_BOARDS) {
+    const r = blockRect(bx, bz);
+    const ch = chunk(`b${bx}_${bz}`);
+    let x;
+    let z;
+    let facing;
+    if (side === 'w' || side === 'e') {
+      x = side === 'w' ? r.x0 + 2.2 : r.x1 - 2.2;
+      z = r.z0 + 10 + (r.z1 - r.z0 - 20) * t;
+      facing = side === 'w' ? -Math.PI / 2 : Math.PI / 2;
+    } else {
+      z = side === 'n' ? r.z0 + 2.2 : r.z1 - 2.2;
+      x = r.x0 + 12 + (r.x1 - r.x0 - 24) * t;
+      facing = side === 'n' ? Math.PI : 0;
+    }
+    billboard(W, ch, x, z, facing, `bb_${id}`, { blueprint: id, w: 8, legH: 3.4 });
+  }
+}
+
 function buildBlock(W, ch, bx, bz, type) {
   const r = blockRect(bx, bz);
   const rng = W.rng;

@@ -383,6 +383,44 @@ export class Audio {
         // a guitar chord, string by string
         [196, 247, 294, 392, 494].forEach((f, i) => this.tone('triangle', f, f * 0.995, 0.9, 0.05 * v, i * 0.025));
         break;
+      case 'shotgun':
+        this.hiss(0.32, 0.6 * v, 1200, 0.7, 'lowpass', 0, 260);
+        this.tone('sine', 160, 55, 0.25, 0.45 * v);
+        this.hiss(0.05, 0.25 * v, 3500, 1, 'highpass', 0.18);
+        this.tone('square', 260, 240, 0.04, 0.06 * v, 0.3);
+        break;
+      case 'staple':
+        this.tone('square', 1500, 700, 0.03, 0.08 * v);
+        this.hiss(0.03, 0.18 * v, 5200, 2, 'highpass');
+        break;
+      case 'slash':
+        this.hiss(0.16, 0.32 * v, 2800, 1.6, 'bandpass', 0, 900);
+        this.tone('triangle', 1400, 2400, 0.08, 0.05 * v);
+        break;
+      case 'whoosh':
+        this.hiss(0.4, 0.28 * v, 600, 1.2, 'bandpass', 0, 2200);
+        this.tone('sine', 220, 440, 0.18, 0.08 * v);
+        break;
+      case 'glue':
+        this.tone('sine', 140, 90, 0.12, 0.3 * v);
+        this.hiss(0.12, 0.2 * v, 700, 2, 'lowpass');
+        break;
+      case 'laser':
+        this.tone('sawtooth', 880 + Math.random() * 60, 860, 0.1, 0.035 * v);
+        this.tone('sine', 1760, 1740, 0.1, 0.03 * v);
+        break;
+      case 'scissors':
+        this.hiss(0.5, 0.22 * v, 1800, 3, 'bandpass', 0, 3600);
+        this.hiss(0.03, 0.18 * v, 5000, 3, 'highpass', 0.05);
+        break;
+      case 'mini':
+        this.tone('square', 520 + Math.random() * 80, 300, 0.035, 0.05 * v);
+        this.hiss(0.03, 0.14 * v, 2600, 1.4, 'bandpass');
+        break;
+      case 'block':
+        this.hiss(0.12, 0.45 * v, 500, 1, 'lowpass');
+        this.tone('sine', 120, 80, 0.1, 0.3 * v);
+        break;
       case 'crumble':
         // a whole prop rubbed out of the page
         this.hiss(0.5, 0.4 * v, 2200, 1.5, 'bandpass', 0, 900);
@@ -420,6 +458,11 @@ export class Audio {
       f = 55 + level * 120;
       vol = 0.05 + level * 0.04;
       this.engFilter.frequency.setTargetAtTime(500 + level * 900, t, 0.05);
+    } else if (kind === 'bike') {
+      // a buzzy little two-stroke
+      f = 90 + level * 210;
+      vol = 0.045 + level * 0.035;
+      this.engFilter.frequency.setTargetAtTime(900 + level * 1400, t, 0.04);
     } else if (kind === 'tank') {
       f = 32 + level * 30;
       vol = 0.09;

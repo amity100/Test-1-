@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sketcher, makeCanvas, ellipsePts, FONT_SIGN, FONT_NOTE, INK2D, BLACK2D, RED2D } from './sketch2d.js';
-import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
+import { BLUEPRINT_ORDER, BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { AVE_SIGNS, STREET_SIGNS } from '../world/layout.js';
 
 const PI = Math.PI;
@@ -444,7 +444,7 @@ function gigPoster(sk, ctx, w, h) {
 
 export function buildSignAtlas() {
   const W = 2048;
-  const H = 2048;
+  const H = 3072;
   const canvas = makeCanvas(W, H);
   const ctx = canvas.getContext('2d');
   const rects = {};
@@ -480,7 +480,7 @@ export function buildSignAtlas() {
     ctx.drawImage(tmp, cx, cy);
     rects[name] = [cx / W, 1 - (cy + 256) / H, 512 / W, 256 / H];
   };
-  for (const id of ['paint', 'rifle', 'car', 'bazooka', 'tank', 'ufo']) large(`bb_${id}`, (sk, c) => blueprintBoard(sk, c, 512, 256, BLUEPRINTS[id]));
+  for (const id of BLUEPRINT_ORDER) large(`bb_${id}`, (sk, c) => blueprintBoard(sk, c, 512, 256, BLUEPRINTS[id]));
   large('ad_rent', (sk, c) => adRent(sk, c, 512, 256));
   large('ad_phone', (sk, c) => adPhone(sk, c, 512, 256));
   large('ad_bank', (sk, c) => adBank(sk, c, 512, 256));
@@ -499,7 +499,7 @@ export function buildSignAtlas() {
   let med = 0;
   const square = (name, fn) => {
     const cx = (med % 8) * 256;
-    const cy = 1792;
+    const cy = H - 256;
     med++;
     const tmp = makeCanvas(256, 256);
     const tctx = tmp.getContext('2d');

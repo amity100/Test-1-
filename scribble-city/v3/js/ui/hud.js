@@ -176,7 +176,13 @@ export class HUD {
   updateWeapon() {
     const s = this.game.weapons.current;
     this.weaponName.textContent = s.def.name;
-    this.weaponAmmo.textContent = s.uses !== undefined ? `נשארו ${s.uses} מחיקות` : s.ammo === Infinity ? 'תמיד איתך' : `${s.ammo} יריות`;
+    const d = s.def;
+    this.weaponAmmo.textContent = d.block ? `המגן יחזיק עוד ${s.uses} מכות`
+      : s.uses !== undefined ? `נשארו ${s.uses} מחיקות`
+      : d.kind === 'beam' ? `${Math.ceil(s.ammo)} שניות של אור`
+      : d.projectile === 'scissors' ? (s.out ? 'באוויר… חוזרים אליך' : 'זורקים — וחוזרים')
+      : d.projectile === 'inkbomb' ? `${s.ammo} בקבוקי דיו`
+      : s.ammo === Infinity ? 'תמיד איתך' : `${s.ammo} יריות`;
     this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear ? '' : s.grade;
     this.weaponGrade.textContent = s.def.id === 'pencil' ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
     const c = this.weaponIcon;

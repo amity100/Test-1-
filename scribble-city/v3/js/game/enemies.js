@@ -40,6 +40,10 @@ export function holeRadius(kind, amount) {
   if (kind === 'pencil') return 0.07 + amount * 0.0011;
   if (kind === 'melee') return 0.095 + amount * 0.001; // the big school eraser rubs a wider patch
   if (kind === 'beam') return 0.09;
+  if (kind === 'crayon') return 0.06 + amount * 0.002;
+  if (kind === 'staple' || kind === 'shaving' || kind === 'glue') return 0.04 + amount * 0.0012;
+  if (kind === 'slash') return 0.13 + amount * 0.0011; // the ruler's edge cuts deep
+  if (kind === 'scissors') return 0.1 + amount * 0.0012;
   return 0.06 + amount * 0.001;
 }
 const REMOVE_AT = { head: 0.5, armL: 0.5, armR: 0.5, legL: 0.45, legR: 0.45, torso: 0.4 };
@@ -425,6 +429,18 @@ class Enemy {
       this.flinch -= dt;
       speed *= 0.3;
     }
+    // stapled for a moment, or glued to the pavement
+    if (this.pinT > 0) {
+      this.pinT -= dt;
+      speed *= 0.12;
+    }
+    if (this.glueT > 0) {
+      this.glueT -= dt;
+      speed = 0;
+      moveX = 0;
+      moveZ = 0;
+      this.dodgeT = 0;
+    }
     // integrate
     const tvx = moveX * speed;
     const tvz = moveZ * speed;
@@ -603,7 +619,7 @@ class Enemy {
     const v = this.game.player.inVehicle;
     if (!v || this.dodgeT > 0 || this.isMonster || this.legless || dist > 25) return;
     const sp = v.speed || 0;
-    if (Math.abs(sp) < 6 || v.kind === 'ufo') return;
+    if (Math.abs(sp) < 6 || v.flies) return;
     const f = v.fwd;
     const sign = sp > 0 ? 1 : -1;
     const rx = this.pos.x - v.pos.x;
@@ -1480,6 +1496,19 @@ class Enemy {
 
   draw(camPos) {
     this.fig.draw(camPos);
+    if (this.glueT > 0 && this.dying < 0) {
+      // a puddle of hot glue around the feet, strings of it up the legs
+      const fr = this.game.figures;
+      const p = this.pos;
+      const a = Math.min(1, this.glueT);
+      for (let i = 0; i < 5; i++) {
+        const an = i * 1.256 + this.id;
+        const r = 0.42 + 0.12 * Math.sin(i * 2.1);
+        fr.lineXYZ(p.x + Math.cos(an) * r, p.y + 0.04, p.z + Math.sin(an) * r, p.x + Math.cos(an + 1.3) * r, p.y + 0.04, p.z + Math.sin(an + 1.3) * r, [0.96, 0.96, 0.93], 9, this.id + i, 0.9 * a, 0.02, 0);
+      }
+      const j = this.fig.j;
+      for (const k of [j.kneeL, j.kneeR]) fr.lineXYZ(k.x, k.y, k.z, k.x + 0.05, p.y + 0.05, k.z, [0.96, 0.96, 0.93], 4, this.id + 7, 0.7 * a, 0.03, 0);
+    }
     if (this.isMonster || this.dying >= 0) return;
     // held weapon
     const fr = this.game.figures;

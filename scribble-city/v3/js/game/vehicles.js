@@ -16,6 +16,8 @@ const VEH = {
   car: { width: 1.95, hp: 170, len: 2.0 },
   tank: { width: 3.3, hp: 520, len: 3.2 },
   ufo: { width: 0, hp: 480, len: 3.6 },
+  bike: { width: 0.5, hp: 120, len: 1.1 },
+  copter: { width: 1.5, hp: 320, len: 3.0 },
 };
 
 const QUALITY = {
@@ -118,7 +120,10 @@ class Vehicle {
     this.reveal = 0;
     this.dead = false;
     this.driver = null;
-    this.radius = kind === 'tank' ? 2.4 : kind === 'ufo' ? 3.6 : 1.6;
+    this.radius = kind === 'tank' ? 2.4 : kind === 'ufo' ? 3.6 : kind === 'copter' ? 2.6 : kind === 'bike' ? 0.9 : 1.6;
+    // the UFO and the paper copter fly; the bike's rider sits on it in plain view
+    this.flies = kind === 'ufo' || kind === 'copter';
+    if (kind === 'bike') this.seat = true;
     this.group = new THREE.Group();
     this.group.matrixAutoUpdate = true;
     this.stock = stock;
@@ -291,8 +296,8 @@ class Vehicle {
     wheels.forEach((w, wi) => {
       const wmb = new MeshBuilder();
       const wsl = new StrokeList();
-      const ww = this.kind === 'tank' ? 0.5 : 0.32;
-      for (const s of [-1, 1]) {
+      const ww = this.kind === 'tank' ? 0.5 : this.kind === 'bike' ? 0.16 : 0.32;
+      for (const s of this.kind === 'bike' ? [0] : [-1, 1]) {
         const g = new THREE.Group();
         g.position.set(s * (W / 2 - ww / 2 + 0.02), w.c[1], w.c[0]);
         this.body.add(g);
@@ -307,7 +312,7 @@ class Vehicle {
       }
       const geo = wmb.build();
       const wl = wsl.toBatch(mats.itemLine);
-      for (const g of this.wheels.slice(-2)) {
+      for (const g of this.wheels.slice(this.kind === 'bike' ? -1 : -2)) {
         g.add(new THREE.Mesh(geo, mats.itemSurface));
         const lm = new THREE.Mesh(wl.geometry, mats.itemLine);
         lm.frustumCulled = false;
@@ -319,6 +324,58 @@ class Vehicle {
     this.halfLen = ((bbox.x1 - bbox.x0) * k) / 2;
     this.halfWid = W / 2;
     this.heightM = (bbox.y1 - bbox.y0) * k;
+    if (this.kind === 'copter') this.buildRotors(L, k);
+  }
+
+  // the paper copter's rotor: two long folded-paper blades on the mast, a little one on the tail
+  buildRotors(L, k) {
+    const mats = this.game.mats;
+    const top = L([44, 22]);
+    const span = 36 * k;
+    const make = (len, wid) => {
+      const mb = new MeshBuilder();
+      const sl = new StrokeList();
+      for (const a of [0, Math.PI / 2]) {
+        const c = Math.cos(a);
+        const sn = Math.sin(a);
+        const p = (u, v, y) => [u * sn + v * c, y, u * c - v * sn];
+        mb.quad(p(-len, -wid, 0), p(len, -wid, 0), p(len, wid, 0), p(-len, wid, 0), [0, 1, 0], [0.96, 0.95, 0.9], [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 3, 3, 90 + a]);
+        mb.quad(p(-len, wid, -0.01), p(len, wid, -0.01), p(len, -wid, -0.01), p(-len, -wid, -0.01), [0, -1, 0], [0.96, 0.95, 0.9], [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 3, 3, 91 + a]);
+        sl.poly([p(-len, -wid, 0.01), p(len, -wid, 0.01), p(len, wid, 0.01), p(-len, wid, 0.01)], true, { width: 1.8, overshoot: 0.05, color: BLACK_INK });
+        sl.seg(p(-len, 0, 0.012), p(len, 0, 0.012), { width: 1.2, overshoot: 0, color: [0.55, 0.6, 0.75] });
+      }
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(mb.build(), mats.itemSurface));
+      const lb = sl.toBatch(mats.itemLine);
+      lb.mesh.frustumCulled = false;
+      g.add(lb.mesh);
+      return g;
+    };
+    this.rotor = make(span, 0.16);
+    this.rotor.position.set(0, top[1] + 0.05, top[0]);
+    this.body.add(this.rotor);
+    const tail = L([96, 40]);
+    this.tailRotor = make(0.55, 0.06);
+    this.tailRotor.rotation.z = Math.PI / 2;
+    this.tailRotor.position.set(0.12, tail[1], tail[0]);
+    this.body.add(this.tailRotor);
+  }
+
+  // the bike's rider: astride the seat, hands on the bars
+  seatRider(fig, dt) {
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const L = this.toLocal;
+    const seat = L([47, 30]);
+    const bar = L([76, 20]);
+    fig.pos.set(this.pos.x + fx * seat[0], this.pos.y + Math.max(0, seat[1] - 0.48), this.pos.z + fz * seat[0]);
+    fig.yaw = this.yaw;
+    fig.sit = 1;
+    fig.speed = 0;
+    if (!fig.wheel) fig.wheel = new THREE.Vector3();
+    fig.wheel.set(this.pos.x + fx * bar[0], this.pos.y + bar[1], this.pos.z + fz * bar[0]);
+    fig.reachR = fig.wheel;
+    fig.update(dt);
   }
 
   buildUfo(aligned, L, k) {
@@ -433,12 +490,38 @@ class Vehicle {
       this.group.scale.setScalar(Math.max(0.1, 1 + 2.70158 * k * k * k + 1.70158 * k * k));
     }
     const input = this.driver ? this.game.input : null;
-    if (this.kind === 'car') this.updateCar(dt, input);
+    if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
     else if (this.kind === 'tank') this.updateTank(dt, input);
     else this.updateUfo(dt, input);
     this.group.position.copy(this.pos);
     this.group.rotation.set(0, this.yaw, 0);
-    if (this.kind === 'ufo') {
+    if (this.kind === 'copter') {
+      // the rotor whirls (fast when someone flies it), the body leans into where it goes
+      const spin = this.driver ? 26 : this.alt > 1.2 ? 14 : 2;
+      this.rotor.rotation.y += dt * spin;
+      this.tailRotor.rotation.x += dt * spin * 1.6;
+      if (spin > 10) {
+        // the blur of the blades: a few pale arcs of pen around the mast
+        const fr = this.game.figures;
+        const c = new THREE.Vector3().setFromMatrixPosition(this.rotor.matrixWorld);
+        const R = this.bp.scale * 0.36;
+        const n = 16;
+        for (let k = 0; k < 2; k++) {
+          const a0 = this.time * 9 + k * Math.PI;
+          for (let i = 0; i < 5; i++) {
+            const a = a0 + (i / n) * Math.PI * 2;
+            const b = a0 + ((i + 1) / n) * Math.PI * 2;
+            fr.lineXYZ(c.x + Math.cos(a) * R, c.y, c.z + Math.sin(a) * R, c.x + Math.cos(b) * R, c.y, c.z + Math.sin(b) * R, [0.92, 0.92, 0.98], 2.4, 70 + i + k * 5, 0.5 - i * 0.08, 0.01, 0);
+          }
+        }
+      }
+      const fx = Math.sin(this.yaw);
+      const fz = Math.cos(this.yaw);
+      const fwdV = (this.vx || 0) * fx + (this.vz || 0) * fz;
+      const sideV = (this.vx || 0) * fz - (this.vz || 0) * fx;
+      this.body.rotation.x = damp(this.body.rotation.x, clamp(fwdV * 0.018, -0.3, 0.3), 3, dt);
+      this.body.rotation.z = damp(this.body.rotation.z, clamp(sideV * 0.02, -0.35, 0.35), 3, dt) + Math.sin(this.time * 4.1) * 0.03 * this.q.wobble;
+    } else if (this.kind === 'ufo') {
       this.spinner.rotation.y += dt * (0.6 + this.speedAbs * 0.05);
       const cam = this.game.camera.position;
       const a = Math.atan2(cam.x - this.pos.x, cam.z - this.pos.z) - this.yaw;
@@ -449,6 +532,10 @@ class Vehicle {
     } else {
       this.wheelSpin += (this.speed * dt) / 0.4;
       for (const w of this.wheels) w.rotation.x = this.wheelSpin * (this.grade === 'fail' ? 0.6 : 1) + (this.grade === 'fail' ? Math.sin(this.time * 9) * 0.4 : 0);
+      if (this.kind === 'bike') {
+        // leaning into the turns
+        this.body.rotation.z = damp(this.body.rotation.z, clamp(-(this.turn || 0) * Math.min(1, this.speedAbs / 10) * 0.35, -0.5, 0.5), 6, dt);
+      }
       if (this.grade === 'fail' || this.grade === 'wonky') {
         this.body.position.y = Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3);
         this.body.rotation.z = Math.sin(this.time * 7) * 0.02 * this.q.wobble * Math.min(1, this.speedAbs / 2);
@@ -462,8 +549,8 @@ class Vehicle {
     const f = this.fwd.clone();
     let hit = false;
     let impact = 0;
-    const offs = this.kind === 'tank' ? [-2, 0, 2] : [-1.2, 0, 1.2];
-    const r = this.kind === 'tank' ? 1.7 : 1.0;
+    const offs = this.kind === 'tank' ? [-2, 0, 2] : this.kind === 'bike' ? [-0.7, 0, 0.7] : [-1.2, 0, 1.2];
+    const r = this.kind === 'tank' ? 1.7 : this.kind === 'bike' ? 0.55 : 1.0;
     for (const o of offs) {
       const p = new THREE.Vector3(this.pos.x + f.x * o, this.pos.y + 0.2, this.pos.z + f.z * o);
       const before = p.clone();
@@ -514,7 +601,7 @@ class Vehicle {
       if (Math.abs(along) < this.halfLen + 0.4 && side < this.halfWid + 0.4) {
         game.enemies.damage(e, 'torso', 999, e.pos.clone().setY(e.pos.y + 1), f.clone(), 'run');
         game.fx.sprite('fx_crash', e.pos.x, e.pos.y + 1, e.pos.z, { size: 1.6, life: 0.35 });
-        if (this.kind === 'car') this.hurt(4);
+        if (this.kind === 'car' || this.kind === 'bike') this.hurt(this.kind === 'bike' ? 6 : 4);
       }
     }
     game.civilians.dodge(this.pos, f, this.halfLen + 1.5, this.halfWid + 1.2, this.speed);
@@ -537,15 +624,17 @@ class Vehicle {
       throttle *= 0.1;
       if (Math.random() < dt * 4) this.game.fx.smoke(this.pos.x - Math.sin(this.yaw) * 2, this.pos.y + 0.6, this.pos.z - Math.cos(this.yaw) * 2, 0.8);
     }
-    const maxF = 27 * q.speed;
-    const maxR = 9 * q.speed;
-    const acc = 15 * q.accel;
+    const bike = this.kind === 'bike';
+    const maxF = (bike ? 36 : 27) * q.speed;
+    const maxR = (bike ? 6 : 9) * q.speed;
+    const acc = (bike ? 21 : 15) * q.accel;
     if (throttle > 0) this.speed += acc * throttle * dt * (this.speed < 0 ? 2.2 : 1);
     else if (throttle < 0) this.speed += acc * throttle * dt * (this.speed > 0 ? 2.2 : 0.8);
     else this.speed = damp(this.speed, 0, 0.9, dt);
     if (brake) this.speed = damp(this.speed, 0, 4, dt);
     this.speed = clamp(this.speed, -maxR, maxF);
-    const turn = (steer + (input ? q.pull * Math.sign(this.speed || 1) * 0.5 : 0)) * clamp(Math.abs(this.speed) / 6, 0, 1) * (brake ? 2.0 : 1.35) * Math.sign(this.speed || 1);
+    const turn = (steer + (input ? q.pull * Math.sign(this.speed || 1) * 0.5 : 0)) * clamp(Math.abs(this.speed) / 6, 0, 1) * (brake ? 2.0 : bike ? 1.8 : 1.35) * Math.sign(this.speed || 1);
+    this.turn = turn;
     this.yaw += turn * dt;
     const f = this.fwd;
     this.pos.x += f.x * this.speed * dt;
@@ -554,7 +643,7 @@ class Vehicle {
     this.speedAbs = Math.abs(this.speed);
     this.collideWorld(dt);
     this.runOver();
-    if (input) this.game.audio.engine(this.speedAbs / maxF, 'car');
+    if (input) this.game.audio.engine(this.speedAbs / maxF, bike ? 'bike' : 'car');
   }
 
   updateTank(dt, input) {
@@ -639,7 +728,7 @@ class Vehicle {
     this.vz = damp(this.vz || 0, az * maxS, 1.6 * q.accel, dt);
     const maxAlt = this.grade === 'fail' ? 1.2 : 70;
     this.vy = damp(this.vy, up * 9, 3, dt);
-    if (!this.driver) this.vy = damp(this.vy, (6 - this.alt) * 0.8, 1, dt);
+    if (!this.driver) this.vy = damp(this.vy, ((this.kind === 'copter' ? 1.05 : 6) - this.alt) * 0.8, 1, dt);
     this.alt = clamp(this.alt + this.vy * dt, 1.0, maxAlt);
     if (q.wobble) {
       this.vx += Math.sin(this.time * 1.3) * q.wobble * 1.5 * dt;
@@ -661,6 +750,16 @@ class Vehicle {
       this.vx *= 0.3;
       this.vz *= 0.3;
     }
+    if (this.kind === 'copter') {
+      // paper planes from the doors, at whatever you aim
+      this.reload -= dt;
+      if (input && input.fire && this.reload <= 0) {
+        this.reload = this.grade === 'perfect' ? 0.45 : this.grade === 'good' ? 0.6 : this.grade === 'wonky' ? 0.9 : 2;
+        this.dropPlane();
+      }
+      if (input) game.audio.engine(0.45 + this.speedAbs / 30, 'ufo');
+      return;
+    }
     // erase beam
     this.beamOn = !!(input && input.fire);
     if (this.beamOn) {
@@ -669,6 +768,29 @@ class Vehicle {
       if (flicker) this.beam(dt, power);
       game.audio.engine(1, 'beam');
     } else if (input) game.audio.engine(0.35 + this.speedAbs / 30, 'ufo');
+  }
+
+  dropPlane() {
+    const game = this.game;
+    const w = game.weapons;
+    const side = (this.planeSide = -(this.planeSide || 1));
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const x = this.pos.x + fz * side * 1.2;
+    const y = this.pos.y + 1.0;
+    const z = this.pos.z - fx * side * 1.2;
+    const a = w.aimPoint;
+    const d = new THREE.Vector3(a.x - x, a.y - y, a.z - z).normalize();
+    const sp = 22;
+    const q = this.q;
+    w.projectiles.push({
+      kind: 'plane', owner: 'player', x, y, z, vx: d.x * sp, vy: d.y * sp, vz: d.z * sp, gravity: 0,
+      damage: 60 * q.hp, radius: 3.2, life: 6, t: 0, seed: Math.random() * 100, wobble: this.grade === 'fail' ? 2 : 0,
+      homing: 3.2, cruise: sp,
+    });
+    game.audio.play('whoosh', 0.8);
+    game.enemies.noise(this.pos, 40);
+    game.onCrime('shoot', this.pos.x, this.pos.z);
   }
 
   beam(dt, power) {
@@ -756,7 +878,7 @@ export class Vehicles {
         const z = p.z + Math.cos(ang) * d;
         const hit = game.world.collision.pointInside(x, 1.0, z, v.radius * 0.8);
         if (!hit) {
-          v.pos.set(x, kind === 'ufo' ? 0 : groundHeight(x, z) * 0.5, z);
+          v.pos.set(x, v.flies ? 0 : groundHeight(x, z) * 0.5, z);
           placed = true;
           break;
         }
@@ -766,6 +888,7 @@ export class Vehicles {
     if (!placed) v.pos.set(p.x + f.x * 4, 0, p.z + f.z * 4);
     v.yaw = game.player.yaw;
     if (kind === 'ufo') v.alt = 3;
+    if (kind === 'copter') v.alt = 1.05;
     this.list.push(v);
     // keep at most 3 drawn vehicles around
     while (this.list.filter((o) => !o.stock).length > 3) {
@@ -812,7 +935,7 @@ export class Vehicles {
   pushOut(p, r) {
     this.game.traffic.pushOut(p, r);
     for (const v of this.list) {
-      if (v.dead || v.kind === 'ufo') continue;
+      if (v.dead || (v.flies && v.alt > 2)) continue;
       const dx = p.x - v.pos.x;
       const dz = p.z - v.pos.z;
       const fx = Math.sin(v.yaw);

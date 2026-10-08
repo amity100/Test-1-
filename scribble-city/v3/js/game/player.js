@@ -55,6 +55,9 @@ export class Player {
       this.inVehicle.hurt(amount);
       return;
     }
+    const full = amount;
+    if (this.game.weapons) amount = this.game.weapons.block(amount, fromX, fromZ);
+    if (amount < full * 0.5) at = null;
     this.hp -= amount;
     if (at) {
       // the hit rubs a little hole in your own drawing (it fills back in as you heal)
@@ -82,7 +85,10 @@ export class Player {
     if (this.mode === 'vehicle') {
       // behind the wheel of an ordinary car: you can see him through the windows
       const v = this.inVehicle;
-      if (v && v.seat) this.game.traffic.seat(fig, v.pos, v.yaw, dt);
+      if (v && v.seat) {
+        if (v.kind === 'bike') v.seatRider(fig, dt);
+        else this.game.traffic.seat(fig, v.pos, v.yaw, dt);
+      }
       return;
     }
     // regen after a few calm seconds; the rubbed-out spots fill back in

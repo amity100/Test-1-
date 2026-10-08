@@ -122,6 +122,21 @@ export class Effects {
     }
   }
 
+  // bits of coloured paper fluttering down (the paper planes go off in confetti)
+  confetti(x, y, z, n = 30, speed = 5) {
+    const COLS = [[0.95, 0.3, 0.35], [0.98, 0.78, 0.2], [0.3, 0.6, 0.95], [0.4, 0.82, 0.45], [0.86, 0.45, 0.9], [0.98, 0.97, 0.93]];
+    for (let i = 0; i < n; i++) {
+      if (this.particles.length > 420) this.particles.shift();
+      const a = Math.random() * Math.PI * 2;
+      const sp = speed * (0.3 + Math.random() * 0.8);
+      this.particles.push({
+        x, y, z, vx: Math.cos(a) * sp, vy: 2 + Math.random() * speed, vz: Math.sin(a) * sp,
+        life: 1.6 + Math.random() * 1.4, t: 0, len: 0.06 + Math.random() * 0.05,
+        color: COLS[Math.floor(Math.random() * COLS.length)], seed: Math.random() * 50, spin: Math.random() * 10, flutter: true,
+      });
+    }
+  }
+
   sparks(x, y, z, n = 6, color = [0.1, 0.1, 0.14]) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -165,7 +180,14 @@ export class Effects {
     for (const p of this.particles) {
       p.t += dt;
       if (p.t >= p.life) continue;
-      p.vy -= 14 * dt;
+      if (p.flutter) {
+        // paper drifts: air holds it up, it rocks from side to side
+        p.vy -= 4 * dt;
+        p.vy = Math.max(p.vy, -1.1);
+        p.vx *= Math.exp(-2.5 * dt);
+        p.vz *= Math.exp(-2.5 * dt);
+        p.x += Math.sin(p.t * 6 + p.seed) * 0.8 * dt;
+      } else p.vy -= 14 * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;

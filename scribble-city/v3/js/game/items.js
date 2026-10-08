@@ -84,7 +84,8 @@ export function buildDrawnFlatModel(bp, strokes, mats, o = {}) {
   const k = (bp.scale || 1) / 100;
   const ax = o.anchor ? o.anchor[0] : 50;
   const ay = o.anchor ? o.anchor[1] : 50;
-  const th = o.thickness || 0.03;
+  // half the thickness: the drawing becomes a solid object this thick
+  const th = (o.thickness || bp.thickness || 0.06) / 2;
   const L = (p) => [(p[0] - ax) * k, -(p[1] - ay) * k];
   const mb = new MeshBuilder();
   for (const f of bp.fills) {
@@ -98,16 +99,38 @@ export function buildDrawnFlatModel(bp, strokes, mats, o = {}) {
       tris = [];
     }
     const col = hexToRgb(f.color);
+    const ft = f.t !== undefined ? f.t / 2 : th;
     for (const [a, b, c] of tris) {
       const A = contour[a];
       const B = contour[b];
       const C = contour[c];
       for (const s of [-1, 1]) {
-        const p = (v) => [s * th, v.y, v.x];
+        const p = (v) => [s * ft, v.y, v.x];
         const ccw = (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x) > 0;
         const order = (s > 0) === ccw ? [A, B, C] : [A, C, B];
         mb.tri(p(order[0]), p(order[1]), p(order[2]), [s, 0, 0], col, [[order[0].x, order[0].y], [order[1].x, order[1].y], [order[2].x, order[2].y]]);
       }
+    }
+    // the sides all round, a shade darker
+    let area = 0;
+    for (let i = 0; i < contour.length; i++) {
+      const a = contour[i];
+      const b = contour[(i + 1) % contour.length];
+      area += a.x * b.y - b.x * a.y;
+    }
+    const sgn = area >= 0 ? 1 : -1;
+    const side = col.map((v) => v * 0.82);
+    for (let i = 0; i < contour.length; i++) {
+      const a = contour[i];
+      const b = contour[(i + 1) % contour.length];
+      const ez = b.x - a.x;
+      const ey = b.y - a.y;
+      const l = Math.hypot(ez, ey) || 1;
+      const nz = (ey / l) * sgn;
+      const ny = (-ez / l) * sgn;
+      const P = (x, v) => [x, v.y, v.x];
+      if (sgn > 0) mb.quad(P(-ft, a), P(ft, a), P(ft, b), P(-ft, b), [0, ny, nz], side, [[0, 0], [ft * 2, 0], [ft * 2, l], [0, l]]);
+      else mb.quad(P(-ft, b), P(ft, b), P(ft, a), P(-ft, a), [0, ny, nz], side, [[0, 0], [ft * 2, 0], [ft * 2, l], [0, l]]);
     }
   }
   const sl = new StrokeList();

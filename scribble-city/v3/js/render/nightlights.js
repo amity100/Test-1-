@@ -208,7 +208,7 @@ export class NightLights {
       }
     }
     for (const v of game.vehicles.list) {
-      if (v.dead || v.kind === 'ufo' || (!v.driver && v !== game.player.inVehicle)) continue;
+      if (v.dead || v.flies || (!v.driver && v !== game.player.inVehicle)) continue;
       add(v.pos.x, v.pos.z, v.yaw, 1.1, 1, 0.95, 0.8, 0);
     }
     this.beams.geometry.instanceCount = n;

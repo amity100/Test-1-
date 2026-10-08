@@ -64,7 +64,7 @@ for (const st of steps) {
     if (st.frames) await page.evaluate(`window.__frame(${st.frames}, ${st.dt || 1 / 30})`);
     if (st.shot) {
       const file = `${outPrefix}_${st.shot}.png`;
-      await page.screenshot({ path: file });
+      await page.screenshot({ path: file, timeout: 150000 });
       logs.push(`[shot] ${path.basename(file)}`);
     }
   } catch (e) {

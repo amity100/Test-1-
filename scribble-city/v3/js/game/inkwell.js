@@ -577,7 +577,7 @@ export class Inkwell {
     }
     f.done = 'yes';
     // what she offers: her number, a dance, or a blueprint sketched on a napkin
-    const missing = ['rifle', 'bazooka', 'car', 'tank', 'ufo'].filter((id) => !game.album.has(id));
+    const missing = ['rifle', 'bazooka', 'car', 'tank', 'ufo', 'katana', 'boomerang', 'planes', 'laser', 'bike'].filter((id) => !game.album.has(id));
     const roll = Math.random();
     if (missing.length && roll < 0.45) {
       const id = missing[0];

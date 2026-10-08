@@ -416,7 +416,7 @@ export class Game {
         while (d < -Math.PI) d += Math.PI * 2;
         this.camRig.yaw += d * (1 - Math.exp(-2.5 * dt));
       }
-      const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'ufo' ? { dist: 15, height: 2.2, shoulder: 0 } : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
+      const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'ufo' ? { dist: 15, height: 2.2, shoulder: 0 } : v.kind === 'copter' ? { dist: 13, height: 3.2, shoulder: 0 } : v.kind === 'bike' ? { dist: 5.2, height: 2.2, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 150) } : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
       this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
@@ -666,12 +666,25 @@ export class Game {
     const grade = res.grade;
     const msg = GRADE_TEXT[grade](bp.name);
     this.hud.toast(msg, grade === 'fail' ? 'bad' : grade === 'wonky' ? 'info' : 'good', 3.2);
-    if (bp.kind === 'weapon') {
+    if (bp.kind === 'heal') {
+      // the giant band-aid: every rubbed-out spot fills back in
+      const q = { perfect: 1, good: 1, wonky: 0.7, fail: 0.35 }[grade];
+      p.hp = Math.min(p.maxHp, Math.max(p.hp, p.maxHp * q));
+      if (q >= 1) p.fig.holes.length = 0;
+      else p.fig.holes.length = Math.floor(p.fig.holes.length * 0.5);
+      this.hud.toast(q >= 1 ? 'הפלסטר הענק סגר את כל החורים — חיים מלאים!' : 'הפלסטר עקום… אבל עזר קצת', q >= 1 ? 'good' : 'info', 2.8);
+      this.audio.play('cheer');
+    } else if (bp.kind === 'weapon') {
       const def = WEAPON_DEFS[bp.id];
       const model = buildDrawnFlatModel(bp, res.aligned, this.mats, { anchor: bp.anchors.grip, color: BLACK_INK, width: 2.2 });
-      const m = bp.anchors.muzzle;
-      const ml = model.toLocal(m);
-      model.muzzle = new THREE.Vector3(0, ml[1], ml[0] + 0.05);
+      if (bp.anchors.muzzle) {
+        const ml = model.toLocal(bp.anchors.muzzle);
+        model.muzzle = new THREE.Vector3(0, ml[1], ml[0] + 0.05);
+      }
+      if (bp.anchors.tip) {
+        const tl = model.toLocal(bp.anchors.tip);
+        model.tip = new THREE.Vector3(0, tl[1], tl[0]);
+      }
       this.weapons.add(def, grade, model, res.score);
       this.weapons.current.strokes = strokes;
       this.weapons.current.popAt = this.time;
@@ -789,8 +802,8 @@ export class Game {
     this.goalFlags.drove = true;
     this.updateGoals();
     this.audio.play('click');
-    $('btn-up').classList.toggle('hidden', v.kind !== 'ufo');
-    $('btn-down').classList.toggle('hidden', v.kind !== 'ufo');
+    $('btn-up').classList.toggle('hidden', !v.flies);
+    $('btn-down').classList.toggle('hidden', !v.flies);
   }
 
   exitVehicle(force = false) {
@@ -812,14 +825,14 @@ export class Game {
       const x = v.pos.x + sx * d;
       const z = v.pos.z + sz * d;
       if (!this.world.collision.pointInside(x, 1, z, 0.4)) {
-        p.pos.set(x, Math.max(0, v.kind === 'ufo' ? v.pos.y : 0), z);
+        p.pos.set(x, Math.max(0, v.flies ? v.pos.y : 0), z);
         placed = true;
         break;
       }
     }
     if (!placed) p.pos.set(v.pos.x, v.pos.y + 2, v.pos.z);
     p.vel.set(0, 0, 0);
-    if (v.kind === 'ufo' && v.alt > 3) p.vel.y = 0;
+    if (v.flies && v.alt > 3) p.vel.y = 0;
     $('btn-up').classList.add('hidden');
     $('btn-down').classList.add('hidden');
     if (!force) this.audio.play('click');
@@ -930,7 +943,7 @@ export class Game {
     let enter = false;
     if (p.inVehicle) {
       enter = true;
-      prompt = this.touch ? '' : p.inVehicle.kind === 'ufo' ? 'רווח/C — למעלה/למטה · קליק — קרן מחיקה · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+      prompt = this.touch ? '' : p.inVehicle.kind === 'ufo' ? 'רווח/C — למעלה/למטה · קליק — קרן מחיקה · E — לצאת' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
     } else if (p.mode === 'foot' && this.inBar) {
       const t = this.inkwell.target();
       prompt = t ? (this.touch ? '' : t.label) : '';
