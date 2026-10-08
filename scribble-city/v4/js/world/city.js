@@ -66,6 +66,21 @@ export function buildCity(scene, o = {}) {
   const meshes = ctx.B.flush(group, { static: true });
   const rooms = ctx.R.flush(group, { static: true, indoor: true });
   for (const m of rooms) m.renderOrder = 1;
+  // what is not worth drawing from far away: the rooms behind the shop windows, the small things
+  // on the sidewalks (the buildings, the palms' crowns and the city across the bay always stay)
+  const small = new Set([M.prop, M.propCyl, M.propPaint, M.pole, M.rail, M.bulb, M.glint, M.leaf, M.nut, M.board, M.lampGlass, M.court]);
+  const far = new Set([M.trunk, M.frond, M.steel, M.awning, M.frame]);
+  const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN']);
+  const cull = [];
+  for (const m of rooms) cull.push({ m, r: 55 });
+  for (const m of meshes) {
+    if (special.has(m.name)) continue;
+    // (the little things are not worth a mirror image in the wet street)
+    if (small.has(m.material) && m.material !== M.lampGlass) m.userData.noReflect = true;
+    if (o.low && (m.material === M.frame || m.material === M.awning || m.material === M.steel)) m.userData.noReflect = true;
+    if (small.has(m.material)) cull.push({ m, r: o.low ? 110 : 150 });
+    else if (far.has(m.material)) cull.push({ m, r: o.low ? 200 : 260 });
+  }
   const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length };
 
   const world = {
@@ -97,6 +112,13 @@ export function buildCity(scene, o = {}) {
     busStops: ctx.busStops || [],
     helipad: ctx.helipad || null,
     wheel: ctx.wheel || null,
+    // hide what is too far to matter (by the chunks' bounding spheres)
+    cull(cam) {
+      for (const c of cull) {
+        const sph = c.m.geometry.boundingSphere;
+        c.m.visible = sph.center.distanceTo(cam) - sph.radius < c.r;
+      }
+    },
     update(dt, t) {
       if (ctx.wheel) turnWheel(ctx.wheel, dt);
       // a neon letter that flickers (TACOS 24/7, as it always did)

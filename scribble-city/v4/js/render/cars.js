@@ -210,6 +210,8 @@ class Pool {
 
   end() {
     this.mesh.count = this.n;
+    // (nothing of this kind on the screen: no draw call at all)
+    this.mesh.visible = this.n > 0;
     for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX]) {
       at.clearUpdateRanges();
       at.addUpdateRange(0, Math.max(1, this.n) * at.itemSize);
@@ -303,7 +305,7 @@ export class CarRenderer {
     }
     const top = kind === 'van' ? 2.14 : kind === 'sports' ? 1.23 : 1.54;
     if (o.extra === 'taxi') {
-      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, [1.4, 1.2, 0.4]);
+      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, [0.85, 0.7, 0.22]);
     } else if (o.extra === 'police') {
       const blink = o.siren !== undefined ? o.siren : -1;
       const red = blink < 0 ? [0.5, 0.06, 0.08] : blink ? [3.2, 0.25, 0.3] : [0.5, 0.06, 0.08];

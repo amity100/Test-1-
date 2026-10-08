@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { civilianLook, kidLook, elderLook, painterLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
-import { blockRect, groundHeight } from '../world/layout.js';
+import { groundHeight } from '../world/layout.js';
 
 // Little scenes that could only happen in a drawn city: a mum draws her daughter the hairdo she
 // wants, a grandma draws grandpa a cane, a painter draws a door on a wall and somebody walks out
@@ -148,22 +148,18 @@ export class Vignettes {
 }
 
 // ------------------------------------------------------------------ where the scenes are
-// All around the start: the alley you wake up in, the sidewalk out to the avenue, the bar's
-// window, and the far sidewalk by the paint-blaster billboard.
+// All around the first boulevard, where you wake up: grandpa's cane coming down the shops'
+// sidewalk towards you, a painter on the side wall of the Sunset Market, a mum and her daughter
+// by the Bay Cafe, a balloon, a dog and a little rain cloud on the promenade.
 function sceneDefs(world) {
-  const r = blockRect(0, 4); // the start block (the hideout's block)
-  const r2 = blockRect(1, 4); // across the avenue
-  const bar = world.bar || { x: -175, z: 94 };
-  const zm = (r.z0 + 4.5 + r.z1 - 4.5) / 2;
   const col = world.collision;
-  const ex = r2.x0 + 3.4; // the walkway between the trees and the houses
   return [
-    { id: 'painter', x: r.x1 - 11, z: zm - 2.5, script: painterScene, wall: { x: r.x1 - 11, z: zm - 2.5 }, exit: { x: r.x1 - 1.5, z: zm } },
-    { id: 'cane', x: r.x1 - 2.35, z: r.z0 + 10, script: caneScene, path: { x: r.x1 - 2.35, z0: r.z0 + 5, z1: r.z0 + 30 } },
-    { id: 'hairdo', ...freeSpot(col, bar.x - 3, r.z0 + 3.3, 1, 0, 0.9), script: hairScene },
-    { id: 'balloon', ...freeSpot(col, ex, r2.z0 + 29, 0, 1, 0.5), script: balloonScene },
-    { id: 'dog', x: ex, z: r2.z0 + 9, script: dogScene, path: { x: ex, z0: r2.z0 + 6, z1: r2.z0 + 18 } },
-    { id: 'rain', x: ex, z: r2.z0 + 38, script: rainScene, path: { x: ex, z0: r2.z0 + 32, z1: r2.z0 + 42 } },
+    { id: 'cane', x: -6.2, z: -24, script: caneScene, path: { x: -6.2, z0: -30, z1: -12 } },
+    { id: 'painter', x: -17, z: 19, script: painterScene, wall: { x: -17, z: 18 }, exit: { x: -8, z: 21 } },
+    { id: 'hairdo', ...freeSpot(col, -5.2, -58, 0, 1, 0.9), script: hairScene },
+    { id: 'balloon', ...freeSpot(col, 15.4, -64, 0, 1, 0.5), script: balloonScene },
+    { id: 'dog', x: 15.4, z: -100, script: dogScene, path: { x: 15.4, z0: -104, z1: -90 } },
+    { id: 'rain', x: 16.4, z: 48, script: rainScene, path: { x: 16.4, z0: 40, z1: 52 } },
   ];
 }
 

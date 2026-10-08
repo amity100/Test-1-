@@ -684,3 +684,17 @@ html, body { background: #1b1430; }
 #air-status { border: 2.5px solid var(--ink); background: #d8fbe8; }
 #air-status.danger { background: #ffd0e4; }
 .polaroid { border: 2px solid var(--ink); box-shadow: 4px 6px 0 rgba(27, 20, 48, 0.55); }
+
+/* a phone on its side: the title card fits, the button is always there */
+.cover #start-btn { position: sticky; bottom: 4px; z-index: 2; }
+@media (max-height: 560px) {
+  .cover { padding: 10px 16px 10px; max-height: 96vh; }
+  .cover h1 { font-size: 38px; }
+  .cover .sub { font-size: 16px; margin: 2px 0 6px; }
+  .howto { gap: 8px; margin-bottom: 8px; }
+  .howto .col { padding: 4px 8px; font-size: 11.5px; line-height: 1.28; }
+  .howto h3 { font-size: 17px; margin-bottom: 2px; }
+  .howto p { margin: 1px 0; }
+  .btn.huge { font-size: 22px; padding: 8px 26px; }
+  #load-status { margin-top: 2px; min-height: 0; }
+}

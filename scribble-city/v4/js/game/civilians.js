@@ -324,32 +324,56 @@ export class Civilians {
       });
       let free = 0;
       for (const c of this.list) if (!c.scripted) free++;
-      let tries = 10;
       const first = !this.filled;
       this.filled = true;
+      let tries = first ? 60 : 8;
+      // the walks that pass near you
+      const near = [];
+      for (let col = -1; col < 3; col++) {
+        for (let row = 0; row < 5; row++) {
+          const L = sidewalkLoop(col, row);
+          let d = Infinity;
+          for (let i = 0; i < L.length; i++) {
+            const a = L[i];
+            const b = L[(i + 1) % L.length];
+            const dx = b[0] - a[0];
+            const dz = b[1] - a[1];
+            const t = Math.max(0, Math.min(1, ((p.x - a[0]) * dx + (p.z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+            d = Math.min(d, Math.hypot(a[0] + dx * t - p.x, a[1] + dz * t - p.z));
+          }
+          if (d < 80) near.push([col, row]);
+        }
+      }
+      let prom = 0;
+      for (const c of this.list) if (c.prom && !c.scripted) prom++;
+      const cam = game.camera;
+      const fwd = cam.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
       while (free < max && tries-- > 0) {
         // the promenade (when you are near the bay), or a block round you
         let c;
-        if (p.x > -40 && Math.random() < 0.3) {
+        if (p.x > -40 && (Math.random() < 0.3 || !near.length) && prom < max * 0.35) {
           const z = Math.max(NORTH_EDGE + 10, Math.min(SOUTH_EDGE, p.z + (Math.random() - 0.5) * 160));
           if (z > PIER.z0 - 4 && z < PIER.z1 + 4) continue;
           c = new Civilian(this, 'prom', z);
-        } else {
-          const col = Math.floor(Math.random() * 4) - 1;
-          const row = Math.floor(Math.random() * 5);
-          const loop = sidewalkLoop(col, row);
-          // somewhere on the loop near you
-          let near = Infinity;
-          for (const q of loop) near = Math.min(near, Math.hypot(q[0] - p.x, q[1] - p.z));
-          if (near > (tries > 4 ? 70 : 100)) continue;
+        } else if (near.length) {
+          const [col, row] = near[Math.floor(Math.random() * near.length)];
           c = new Civilian(this, col, row);
-        }
+        } else continue;
         // most of them close by (the street you are on is full of people)
-        const far = Math.random() < 0.35;
-        if (!c.placeNear(p, first ? 4 : far ? 45 : 24, far ? 100 : 60)) {
+        const far = Math.random() < 0.3;
+        if (!c.placeNear(p, first ? 3 : far ? 45 : 16, far ? 100 : 60)) {
           c.dispose();
           continue;
         }
+        // nobody pops up in plain sight
+        const vx = c.pos.x - cam.position.x;
+        const vz = c.pos.z - cam.position.z;
+        const vd = Math.hypot(vx, vz) || 1;
+        if (!first && vd < 50 && (vx * fwd.x + vz * fwd.z) / vd > 0.25) {
+          c.dispose();
+          continue;
+        }
+        if (c.prom) prom++;
         this.list.push(c);
         free++;
       }

@@ -261,12 +261,14 @@ export class Game {
     const f = this.camera.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
     this._sc = this._sc || new THREE.Vector3();
     pickLights(c);
+    if (this.world.cull) this.world.cull(c);
     this.world.sky.position.copy(c);
     this.pipe.render(this._sc.set(c.x + f.x * 35, 0, c.z + f.z * 35));
   }
 
   loop() {
     if (this.params.has('test')) {
+      window.__test = { buildWeaponModel, WEAPON_DEFS, BLUEPRINTS };
       window.__frame = (n = 1, dt = 1 / 30) => {
         for (let i = 0; i < n; i++) this.update(dt);
         this.renderFrame();
@@ -347,12 +349,10 @@ export class Game {
     }
     // camera
     if (this.state === 'title' && !this.freeCam) {
-      // slow cinematic orbit behind the title page
-      const t = this.time * 0.04 + 0.9;
-      const cx = 10;
-      const cz = 30;
-      this.camera.position.set(cx + Math.cos(t) * 235, 92 + Math.sin(this.time * 0.07) * 10, cz + Math.sin(t) * 235);
-      this.camera.lookAt(cx, 28, cz);
+      // behind the title page: drifting slowly up the first boulevard, into the sunset
+      const z = -20 + Math.sin(this.time * 0.025) * 70;
+      this.camera.position.set(14.5 + Math.sin(this.time * 0.05) * 2, 7.5 + Math.sin(this.time * 0.04) * 1.5, z);
+      this.camera.lookAt(1, 4.5, z - 70);
     } else if (this.freeCam && this.state !== 'play') {
       const v = this.freeCam;
       this.camera.position.set(v[0], v[1], v[2]);

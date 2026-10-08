@@ -81,7 +81,7 @@ async function boot() {
   await frame();
   const atlas = buildAtlas();
   const t0 = performance.now();
-  const world = buildCity(scene, {});
+  const world = buildCity(scene, { low });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
 
   setStatus('השמש שוקעת על העיר…');

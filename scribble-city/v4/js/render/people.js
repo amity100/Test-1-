@@ -198,6 +198,8 @@ class Pool {
 
   end() {
     this.mesh.count = this.n;
+    // (nothing of this kind on the screen: no draw call at all)
+    this.mesh.visible = this.n > 0;
     const n = Math.max(1, this.n);
     for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]) {
       at.clearUpdateRanges();
