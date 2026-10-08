@@ -12,6 +12,7 @@ const port = server.address().port;
 const browser = await launch();
 const mobile = !!process.env.MOBILE;
 const page = await browser.newPage(mobile ? { viewport: { width: +w, height: +h }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : { viewport: { width: +w, height: +h } });
+const cdp = mobile ? await page.context().newCDPSession(page) : null;
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));
@@ -26,6 +27,25 @@ for (const st of steps) {
     if (st.js) {
       const r = await page.evaluate(st.js);
       if (r !== undefined && r !== null) logs.push('[eval] ' + JSON.stringify(r).slice(0, 600));
+    }
+    // real taps / touch drags (MOBILE=1): { tap: '#btn-draw' } or { touch: [[x, y], [x, y], ...] }
+    if (st.tap) {
+      const box = await page.locator(st.tap).boundingBox();
+      if (!box) logs.push(`[tap] ${st.tap} not visible`);
+      else {
+        await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+        logs.push(`[tap] ${st.tap} at ${Math.round(box.x + box.width / 2)},${Math.round(box.y + box.height / 2)}`);
+      }
+    }
+    if (st.touch && cdp) {
+      const pts = st.touch;
+      const tp = (p) => [{ x: p[0], y: p[1], id: 7, radiusX: 4, radiusY: 4, force: 1 }];
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: tp(pts[0]) });
+      for (let i = 1; i < pts.length; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: tp(pts[i]) });
+        if (st.touchFrames) await page.evaluate(`window.__frame(1, ${st.dt || 1 / 30})`);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     }
     if (st.frames) await page.evaluate(`window.__frame(${st.frames}, ${st.dt || 1 / 30})`);
     if (st.shot) {

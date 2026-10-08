@@ -43,6 +43,7 @@ export class Album {
     if (this.items.has(id)) return false;
     this.items.set(id, { best: null });
     this.save();
+    if (this.onAdd) this.onAdd(id);
     return true;
   }
 
@@ -96,6 +97,12 @@ export class Album {
       const best = got && this.items.get(id).best !== null ? ` · שיא: ${this.items.get(id).best}` : '';
       meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? 'כלי רכב' : 'נשק') : ''}${best}`;
       item.appendChild(meta);
+      if (got) {
+        const go = document.createElement('div');
+        go.className = 'go';
+        go.textContent = '✏ לצייר באוויר';
+        item.appendChild(go);
+      }
       if (got) {
         item.addEventListener('click', () => {
           this.hide();

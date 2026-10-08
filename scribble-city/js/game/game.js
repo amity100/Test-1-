@@ -74,7 +74,12 @@ export class Game {
     this.inBar = false;
     this.boilOn = true;
     this.album = new Album(this);
+    this.album.onAdd = (id) => this.onAlbumAdd(id);
     this.airdraw = new AirDraw(this);
+    this.drawPick = null; // the photo the pencil opens with
+    this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
+    this.drewOnce = false;
+    this.drawBtnKey = '';
     // eyes over hiding spots
     for (const h of world.hideSpots) {
       this.fx.marks.push({ rect: 'eye', x: h.x, y: 2.6, z: h.z, size: 0.75, visible: false, alpha: 0.85, spot: h });
@@ -484,8 +489,15 @@ export class Game {
     pol.style.animation = '';
     clearTimeout(this.popT);
     this.popT = setTimeout(() => pop.classList.add('hidden'), 2300);
+    // the polaroid flies into the pencil button (that's where your photos are now)
+    const btn = $('btn-draw');
+    if (this.touch && btn.offsetParent) {
+      const r = btn.getBoundingClientRect();
+      pol.style.setProperty('--fly-x', `${r.left + r.width / 2 - window.innerWidth / 2}px`);
+      pol.style.setProperty('--fly-y', `${r.top + r.height / 2 - window.innerHeight / 2}px`);
+    }
     if (isNew) {
-      this.hud.toast(`שרטוט חדש באלבום: ${bp.name}! לחצו Q כדי לצייר`, 'good', 3.4);
+      this.hud.toast(this.touch ? `שרטוט חדש באלבום: ${bp.name}! לחצו על העיפרון ✏ כדי לצייר אותו באוויר` : `שרטוט חדש באלבום: ${bp.name}! לחצו Q כדי לצייר`, 'good', 3.8);
       if (b.id === 'paint') this.goalFlags.photo = true;
       if (b.id === 'car') this.goalFlags.car = true;
       if (b.id === 'tank' || b.id === 'ufo') this.goalFlags.heavy = true;
@@ -502,13 +514,24 @@ export class Game {
     }
     if (p.mode !== 'foot') return;
     if (this.album.size === 0) {
-      this.hud.toast('האלבום ריק — קודם מצלמים שלט עם שרטוט (F)', 'info');
+      this.hud.toast(this.touch ? 'האלבום ריק — קודם מצלמים שלט עם שרטוט (כפתור המצלמה ליד שלט)' : 'האלבום ריק — קודם מצלמים שלט עם שרטוט (F)', 'info', 3);
       return;
     }
     this.input.releaseLock();
+    // straight into the air with the newest photo; the arrows on the reference switch photos
     const ids = this.album.ids();
-    if (ids.length === 1) this.beginDrawing(ids[0]);
-    else this.album.show((id) => this.beginDrawing(id));
+    this.beginDrawing(this.album.has(this.drawPick) ? this.drawPick : ids[ids.length - 1]);
+  }
+
+  onAlbumAdd(id) {
+    this.drawPick = id;
+    this.nudgeDraw = true;
+    if (this.touch && !this.drewOnce) {
+      const hint = $('draw-hint');
+      hint.classList.remove('hidden');
+      clearTimeout(this.hintT);
+      this.hintT = setTimeout(() => hint.classList.add('hidden'), 9000);
+    }
   }
 
   beginDrawing(id) {
@@ -516,6 +539,9 @@ export class Game {
     if (p.mode !== 'foot') return;
     p.mode = 'draw';
     p.vel.set(0, 0, 0);
+    this.nudgeDraw = false;
+    this.drewOnce = true;
+    $('draw-hint').classList.add('hidden');
     this.airdraw.show(id);
     if (!p.hidden) this.hud.toast('זהירות — לא מוסתרים! האויבים ימשיכו לתקוף', 'bad', 2.2);
   }
@@ -543,7 +569,7 @@ export class Game {
       this.hud.updateWeapon();
     } else {
       const v = this.vehicles.spawn(bp.id, grade, res.score, res.aligned);
-      this.hud.toast(`לחצו E כדי להיכנס ל${bp.name}`, 'info', 3);
+      this.hud.toast(this.touch ? `לחצו על כפתור הרכב הירוק כדי להיכנס ל${bp.name}` : `לחצו E כדי להיכנס ל${bp.name}`, 'info', 3);
       v.strokes = strokes;
       if (bp.id === 'car') this.goalFlags.car = true;
     }
@@ -819,19 +845,31 @@ export class Game {
     if (this.touch) {
       $('btn-photo').classList.toggle('hidden', !photo);
       $('btn-enter').classList.toggle('hidden', !enter);
+      // the pencil: how many photos you carry, and a wiggle when one is waiting to be drawn
+      const n = this.album.size;
+      const key = `${n}|${this.nudgeDraw}`;
+      if (key !== this.drawBtnKey) {
+        this.drawBtnKey = key;
+        const btn = $('btn-draw');
+        btn.classList.toggle('empty', n === 0);
+        btn.classList.toggle('nudge', this.nudgeDraw && n > 0);
+        const badge = btn.querySelector('.badge');
+        badge.textContent = n;
+        badge.classList.toggle('hidden', n === 0);
+      }
     }
   }
 
   updateGoals() {
     const f = this.goalFlags;
     const all = [
-      { text: 'לצלם את השרטוט של אקדח הצבע (F)', done: f.photo },
+      { text: this.touch ? 'לצלם את השרטוט של אקדח הצבע (מצלמה)' : 'לצלם את השרטוט של אקדח הצבע (F)', done: f.photo },
       { text: 'להתחבא ליד פח, תא טלפון או בשיחים', done: f.hidden },
-      { text: 'לצייר את אקדח הצבע (Q)', done: f.drew },
+      { text: this.touch ? 'לצייר את אקדח הצבע (עיפרון)' : 'לצייר את אקדח הצבע (Q)', done: f.drew },
       { text: 'לקפוץ לבר The Inkwell (מעבר לפינה, ברחוב הצפוני)', done: f.bar },
       { text: `למחוק 5 עבריינים (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
       { text: 'למצוא את שרטוט המכונית בסוכנות (מזרח)', done: f.car },
-      { text: 'לצייר מכונית ולנהוג בה (E)', done: f.drove },
+      { text: this.touch ? 'לצייר מכונית ולנהוג בה' : 'לצייר מכונית ולנהוג בה (E)', done: f.drove },
       { text: 'להשיג שרטוט טנק או חללית (צפון)', done: f.heavy },
       { text: 'לצייר טנק או חללית', done: f.heavyDrawn },
     ];

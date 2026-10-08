@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
-import { scoreDrawing } from '../game/recognizer.js';
+import { BLUEPRINTS, drawBlueprint, blueprintBounds } from '../game/blueprints.js';
+import { scoreDrawing, gradeOf } from '../game/recognizer.js';
 import { LineBatch } from '../render/LineBatch.js';
 import { makeLineMaterial, makeSpriteMaterial, getSpriteGeometry } from '../render/materials.js';
 import { Sketcher, FONT_HAND } from '../render/sketch2d.js';
@@ -9,7 +9,9 @@ const PX = 250; // virtual pixels per metre handed to the recognizer (what the p
 const INK_C = [0.07, 0.07, 0.11];
 const RED = [0.8, 0.12, 0.15];
 const GUIDE = [0.32, 0.34, 0.46];
+const GHOST = [0.36, 0.56, 0.86]; // non-photo blue, like an artist's tracing guide
 const RED_CSS = '#c81e24';
+const TRACED_MAX = 70; // tracing over the ghost never makes a perfect item
 
 const COMMENTS = {
   perfect: ['מושלם! כל הכבוד', 'יצירת מופת!', 'מדויק להפליא'],
@@ -42,7 +44,14 @@ export class AirDraw {
     this.statusEl = $('air-status');
     this.dangerEl = $('air-danger');
     this.footEl = $('air-foot');
-    this.refCanvas = document.querySelector('#air-ref canvas');
+    this.refEl = $('air-ref');
+    this.refCanvas = this.refEl.querySelector('canvas');
+    this.refCaption = this.refEl.querySelector('.caption');
+    this.countEl = $('air-count');
+    this.ghostBtn = $('air-ghost');
+    this.ids = [];
+    this.ghost = false;
+    this.traced = false;
 
     this.mat = makeLineMaterial({ nudge: 0, minWidth: 1.4, depthTest: false });
     this.batch = new LineBatch(9000, this.mat, { dynamic: true });
@@ -145,9 +154,38 @@ export class AirDraw {
       if (this.phase === 'draw') this.strokes = [];
     });
     document.getElementById('air-cancel').addEventListener('click', () => this.close(true));
+    document.getElementById('air-ghost').addEventListener('click', () => this.toggleGhost());
+    // the reference photo: tap to see it big, arrows to switch to another photo from the album
+    const zoom = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.refEl.classList.toggle('zoom');
+    };
+    document.getElementById('air-zoom').addEventListener('click', zoom);
+    this.refCanvas.addEventListener('click', zoom);
+    document.getElementById('air-prev').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.cycle(-1);
+    });
+    document.getElementById('air-next').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.cycle(1);
+    });
+    this.countEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.phase === 'draw') this.game.album.show((id) => this.pick(id));
+    });
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
-      if (e.code === 'Escape') this.close(true);
+      if (this.game.album.open) {
+        if (e.code === 'Escape') this.game.album.hide();
+        return;
+      }
+      if (e.code === 'Escape') {
+        if (this.refEl.classList.contains('zoom')) this.refEl.classList.remove('zoom');
+        else this.close(true);
+      } else if (e.code === 'BracketLeft' || e.code === 'PageUp') this.cycle(-1);
+      else if (e.code === 'BracketRight' || e.code === 'PageDown') this.cycle(1);
       else if (e.code === 'Enter') {
         if (this.phase === 'grade') this.startPlop();
         else this.finish();
@@ -177,23 +215,20 @@ export class AirDraw {
 
   show(bpId) {
     const g = this.game;
-    const bp = BLUEPRINTS[bpId];
-    this.bp = bp;
     this.strokes = [];
     this.current = null;
     this.res = null;
     this.pen = null;
     this.phase = 'draw';
     this.t = 0;
+    this.ghost = false;
+    this.traced = false;
+    this.ghostBtn.classList.remove('on');
+    this.refEl.classList.remove('zoom');
     this.el.classList.remove('hidden');
     this.footEl.classList.remove('hidden');
     document.body.classList.add('air-drawing');
-    this.titleEl.textContent = `מציירים באוויר: ${bp.name}`;
-    const rc = this.refCanvas;
-    const rctx = rc.getContext('2d');
-    rctx.fillStyle = '#f7f4ec';
-    rctx.fillRect(0, 0, rc.width, rc.height);
-    drawBlueprint(rctx, bp, 0, 0, rc.width, rc.height, { pad: 0.08, seed: 3, width: 3 });
+    this.setBp(bpId);
     // camera behind the hero's right shoulder, looking where he faces; the sheet hangs in front
     const p = g.player;
     g.camRig.yaw = p.yaw;
@@ -203,6 +238,51 @@ export class AirDraw {
     g.camera.updateMatrixWorld();
     this.setupSheet();
     this.setDanger(false);
+  }
+
+  // which photo is being drawn (the reference in the corner, the title, the ghost)
+  setBp(id) {
+    const bp = BLUEPRINTS[id];
+    this.bp = bp;
+    this.ghostPts = null;
+    this.ids = this.game.album.ids();
+    if (!this.ids.includes(id)) this.ids.push(id);
+    const i = this.ids.indexOf(id);
+    this.titleEl.textContent = `מציירים באוויר: ${bp.name}`;
+    this.refCaption.textContent = bp.name;
+    this.countEl.textContent = `${i + 1}/${this.ids.length} ▦`;
+    this.refEl.classList.toggle('single', this.ids.length < 2);
+    const rc = this.refCanvas;
+    const rctx = rc.getContext('2d');
+    rctx.fillStyle = '#f7f4ec';
+    rctx.fillRect(0, 0, rc.width, rc.height);
+    drawBlueprint(rctx, bp, 0, 0, rc.width, rc.height, { pad: 0.08, seed: 3, width: 5 });
+    this.game.drawPick = id;
+  }
+
+  cycle(dir) {
+    if (this.phase !== 'draw' || this.ids.length < 2) return;
+    const i = this.ids.indexOf(this.bp.id);
+    this.pick(this.ids[(i + dir + this.ids.length) % this.ids.length]);
+  }
+
+  pick(id) {
+    if (this.phase !== 'draw' || !id || id === this.bp.id) return;
+    if (this.strokes.length) {
+      this.strokes = [];
+      this.current = null;
+      this.game.audio.play('erase', 0.5);
+    }
+    this.game.audio.play('pageflip', 0.5);
+    this.setBp(id);
+  }
+
+  toggleGhost() {
+    if (this.phase !== 'draw') return;
+    this.ghost = !this.ghost;
+    if (this.ghost) this.traced = true;
+    this.ghostBtn.classList.toggle('on', this.ghost);
+    if (this.ghost) this.game.hud.toast(`נייר העתקה: עוברים על הקווים הכחולים (ציון עד ${TRACED_MAX})`, 'info', 2.6);
   }
 
   setupSheet() {
@@ -243,7 +323,13 @@ export class AirDraw {
       return;
     }
     const res = scoreDrawing(strokesPx, this.bp);
+    if (this.traced && res.score > TRACED_MAX) {
+      res.score = TRACED_MAX;
+      res.grade = gradeOf(res.score);
+    }
     this.res = res;
+    this.refEl.classList.remove('zoom');
+    if (this.game.album.open) this.game.album.hide();
     this.strokesPx = strokesPx;
     this.current = null;
     this.game.audio.scratchStop();
@@ -269,6 +355,7 @@ export class AirDraw {
       if (res.partCoverage[i] < 0.38 && !missing.includes(st.label)) missing.push(st.label);
     });
     if (missing.length) sk.text(`חסר: ${missing.slice(0, 3).join(', ')}`, 300, 268, { size: 34, color: RED_CSS, font: FONT_HAND, align: 'right', weight: 400 });
+    if (this.traced) sk.text('(העתקה)', 150, 70, { size: 38, color: RED_CSS, font: FONT_HAND, weight: 400 });
     this.stickerTex.needsUpdate = true;
     const sw = this.W * 0.42;
     this.sticker.material.uniforms.uSize.value.set(sw, sw * (c.height / c.width));
@@ -328,6 +415,8 @@ export class AirDraw {
     this.current = null;
     this.pen = null;
     this.el.classList.add('hidden');
+    this.refEl.classList.remove('zoom');
+    if (this.game.album.open) this.game.album.hide();
     document.body.classList.remove('air-drawing');
     this.sticker.visible = false;
     this.game.audio.scratchStop();
@@ -345,6 +434,7 @@ export class AirDraw {
     b.clear();
     if (this.phase === 'draw' || this.phase === 'grade') {
       this.drawGuides(b, this.phase === 'draw' ? 1 : Math.max(0, 1 - this.t * 2));
+      if (this.ghost) this.drawGhost(b, this.phase === 'draw' ? 1 : Math.max(0, 1 - this.t * 3));
       this.drawStrokes(b, 1, -1);
       if (this.phase === 'grade') {
         this.drawCorrections(b, Math.min(1, this.t * 3));
@@ -402,8 +492,24 @@ export class AirDraw {
     const corners = [[-hw, hh, 1, -1], [hw, hh, -1, -1], [hw, -hh, -1, 1], [-hw, -hh, 1, 1]];
     let s = 1;
     for (const [u, v, du, dv] of corners) {
-      this.seg(b, u, v, u + du * L, v, GUIDE, 0.55 * alpha, 2.2, s++);
-      this.seg(b, u, v, u, v + dv * L, GUIDE, 0.55 * alpha, 2.2, s++);
+      this.seg(b, u, v, u + du * L, v, GUIDE, 0.85 * alpha, 3, s++);
+      this.seg(b, u, v, u, v + dv * L, GUIDE, 0.85 * alpha, 3, s++);
+    }
+  }
+
+  // tracing paper: the photo's lines, faint and blue, hanging in the middle of the sheet
+  drawGhost(b, alpha) {
+    if (alpha <= 0) return;
+    if (!this.ghostPts) {
+      const bb = blueprintBounds(this.bp);
+      const s = Math.min((this.W * 0.8) / bb.w, (this.H * 0.8) / bb.h);
+      const cx = bb.x0 + bb.w / 2;
+      const cy = bb.y0 + bb.h / 2;
+      this.ghostPts = this.bp.strokes.map((st) => st.pts.map(([x, y]) => [(x - cx) * s, -(y - cy) * s]));
+    }
+    let seed = 500;
+    for (const pts of this.ghostPts) {
+      for (let i = 1; i < pts.length; i++) this.seg(b, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], GHOST, 0.8 * alpha, 3.4, seed++);
     }
   }
 
