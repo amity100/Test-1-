@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>עיר השרבוטים · בדיקה</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Permanent+Marker&family=Rubik:wght@400;700&family=Gveret+Levin&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/v2.css">
+<script type="importmap">{ "imports": { "three": "../js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <div id="view"></div>
+  <div id="title" class="overlay"><div class="card"><h1>עיר השרבוטים</h1><button id="start" class="btn" disabled>…</button></div></div>
+  <div id="menu" class="overlay hidden"><div class="card small"><button id="resume" class="btn">המשך</button>
+  <label class="opt"><input type="checkbox" id="opt-boil" checked> boil</label><label class="opt"><input type="checkbox" id="opt-hq" checked> hq</label><label class="opt"><input type="checkbox" id="opt-hud" checked> hud</label></div></div>
+  <div id="hud" class="hidden"><button id="menu-btn" class="round">≡</button><div id="stick" class="touch-only"><div id="knob"></div></div></div>
+  <div id="fatal" class="hidden"></div>
+  <script type="module" src="./js/scaffold/main.js"></script>
+</body>
+</html>
