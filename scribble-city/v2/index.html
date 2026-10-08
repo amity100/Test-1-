@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b1430">
+<title>עיר השרבוטים · סגנון חדש</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Permanent+Marker&family=Rubik:wght@400;700&family=Gveret+Levin&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/v2.css">
+<script type="importmap">{ "imports": { "three": "../js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <div id="view"></div>
+
+  <div id="title" class="overlay">
+    <div class="card">
+      <h1>עיר השרבוטים</h1>
+      <p class="sub">סגנון חדש · טעימה קטנה</p>
+      <p class="about">שדרה אחת על המים בשקיעה, כמה בניינים וכמה אנשים. הכול מצויר ביד, בעטים צבעוניים.</p>
+      <div class="keys desktop-only"><b>WASD</b> הליכה · <b>עכבר</b> הסתכלות · <b>Shift</b> ריצה · <b>Esc</b> תפריט</div>
+      <div class="keys touch-only">ג׳ויסטיק משמאל להליכה · גרירה בצד ימין להסתכלות</div>
+      <button id="start" class="btn" disabled>טוען את העטים…</button>
+    </div>
+  </div>
+
+  <div id="menu" class="overlay hidden">
+    <div class="card small">
+      <h2>תפריט</h2>
+      <button id="resume" class="btn">המשך</button>
+      <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים חיים (רועדים)</label>
+      <label class="opt"><input type="checkbox" id="opt-hq" checked> איכות גבוהה</label>
+      <label class="opt"><input type="checkbox" id="opt-hud" checked> להציג כפתורים</label>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <button id="menu-btn" class="round" aria-label="תפריט">≡</button>
+    <div id="stick" class="touch-only"><div id="knob"></div></div>
+  </div>
+
+  <div id="fatal" class="hidden"></div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -29,7 +29,8 @@ if (process.env.SEED) {
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));
-await page.goto(`http://127.0.0.1:${port}/index.html?${query}`);
+// PAGE=v2/index.html tests another page of the project
+await page.goto(`http://127.0.0.1:${port}/${process.env.PAGE || 'index.html'}?${query}`);
 try {
   await page.waitForFunction('window.__ready === true', null, { timeout: 90000 });
 } catch (e) {
