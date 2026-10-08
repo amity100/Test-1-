@@ -383,7 +383,7 @@ export class AirDraw {
       let threat = g.time - (p.lastHurt || -9) < 1.2;
       if (!threat) {
         for (const e of g.enemies.list) {
-          if (!e.alive || e.state !== 'chase') continue;
+          if (!e.hostile) continue;
           if (Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < 30) {
             threat = true;
             break;

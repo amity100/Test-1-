@@ -594,7 +594,7 @@ class Vehicle {
     game.fx.smoke(mw.x, mw.y, mw.z, 2);
     game.audio.play('cannon');
     game.camRig.addShake(0.45);
-    game.enemies.noise(this.pos, 60);
+    game.enemies.noise(this.pos, 60, 'boom');
     this.speed -= 1.5;
   }
 

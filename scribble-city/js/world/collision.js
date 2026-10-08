@@ -144,6 +144,7 @@ export class Collision {
 
   /**
    * Ray cast against boxes using a DDA walk through grid cells.
+   * ignoreTag: a tag, a Set of tags or a single box to pass through.
    * Returns { t, x, y, z, nx, ny, nz, box } or null.
    */
   raycast(ox, oy, oz, dx, dy, dz, maxT, ignoreTag = null) {
@@ -173,7 +174,7 @@ export class Collision {
           if (this.marks[id] === st) continue;
           this.marks[id] = st;
           const b = this.boxes[id];
-          if (!b.alive || (ignoreTag && (typeof ignoreTag === 'string' ? b.tag === ignoreTag : ignoreTag.has(b.tag)))) continue;
+          if (!b.alive || (ignoreTag && ignored(b, ignoreTag))) continue;
           const hit = rayBox(ox, oy, oz, dx, dy, dz, b, bestT);
           if (hit && hit.t < bestT) {
             bestT = hit.t;
@@ -211,6 +212,13 @@ export class Collision {
     const h = this.raycast(ax, ay, az, dx, dy, dz, d - 0.2);
     return !h;
   }
+}
+
+// ignore: a tag, a Set of tags or one particular box
+function ignored(b, ig) {
+  if (typeof ig === 'string') return b.tag === ig;
+  if (ig instanceof Set) return ig.has(b.tag);
+  return b === ig;
 }
 
 function rayBox(ox, oy, oz, dx, dy, dz, b, maxT) {

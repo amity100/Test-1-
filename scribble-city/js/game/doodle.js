@@ -120,6 +120,7 @@ export class Doodle {
     this.aimYaw = 0; // aim offset from where the body faces (headless guys wave the gun around)
     this.melee = -1;
     this.sit = 0;
+    this.crouch = 0; // kneeling behind cover
     this.dead = 0;
     this.crawl = 0;
     this.stagger = 0;
@@ -191,6 +192,7 @@ export class Doodle {
     const j = this.j;
     const sit = this.sit;
     const crawl = this.crawl;
+    const crouch = this.crouch * (1 - crawl);
     const fem = this.look.fem;
     const bulk = this.bulk;
     const sw = (fem ? 0.15 : 0.17) * Math.max(0.9, bulk * 0.96);
@@ -201,7 +203,8 @@ export class Doodle {
     hipY += this.dance * Math.abs(Math.sin(ph)) * 0.05;
     hipY = lerp(hipY, 0.5, sit);
     hipY = lerp(hipY, 0.25, crawl);
-    const lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05;
+    hipY = lerp(hipY, 0.56, crouch);
+    const lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22;
     const leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
     this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
     const spine = 0.5;
@@ -242,6 +245,11 @@ export class Doodle {
       if (crawl > 0) {
         th = lerp(th, -0.2 + Math.sin(ph + off) * 0.3, crawl);
         kb = lerp(kb, 0.3, crawl);
+      }
+      if (crouch > 0) {
+        // right knee down, left foot planted forward
+        th = lerp(th, off === 0 ? 0.35 : 1.05, crouch);
+        kb = lerp(kb, off === 0 ? 1.95 : 1.55, crouch);
       }
       const sx = side * hw * (1 + sit * 0.4);
       const ky = hipY - Math.cos(th) * legL;

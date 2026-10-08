@@ -293,8 +293,9 @@ export class Weapons {
   }
 
   // ------------------------------------------------------------------ projectiles
-  spawnEnemyShot(x, y, z, dx, dy, dz, damage, speed = 40) {
-    this.projectiles.push({ kind: 'enemy', owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0 });
+  // ignore: the box the shooter is crouched behind (shots go over its hood)
+  spawnEnemyShot(x, y, z, dx, dy, dz, damage, speed = 40, ignore = null) {
+    this.projectiles.push({ kind: 'enemy', owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, ignore });
   }
 
   spawnShell(x, y, z, dx, dy, dz, owner, damage, radius, speed = 45) {
@@ -327,7 +328,7 @@ export class Weapons {
       const len = Math.hypot(dx, dy, dz);
       let hitT = 1;
       let hit = null;
-      const wh = col.raycast(ox, oy, oz, dx, dy, dz, len);
+      const wh = col.raycast(ox, oy, oz, dx, dy, dz, len, pr.ignore || null);
       if (wh) {
         hitT = wh.t / len;
         hit = { type: 'world', x: wh.x, y: wh.y, z: wh.z, nx: wh.nx, ny: wh.ny, nz: wh.nz };
@@ -362,6 +363,8 @@ export class Weapons {
         this.onHit(pr, hit, dx / len, dy / len, dz / len);
         continue;
       }
+      // a near miss makes them duck
+      if (pr.owner === 'player') game.enemies.whiz(ox, oy, oz, dx, dy, dz);
       pr.x = nx;
       pr.y = ny;
       pr.z = nz;

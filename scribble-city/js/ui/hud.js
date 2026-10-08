@@ -262,7 +262,7 @@ export class HUD {
       if (!e.alive) continue;
       const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
       if (d > 70) continue;
-      dot(e.pos.x, e.pos.z, e.state === 'chase' ? 3.4 : 2.4, e.state === 'chase' ? '#c81e24' : '#d98a8a', null);
+      dot(e.pos.x, e.pos.z, e.hostile ? 3.4 : 2.4, e.hostile ? '#c81e24' : '#d98a8a', null);
     }
     g.restore();
     // player arrow (always up)

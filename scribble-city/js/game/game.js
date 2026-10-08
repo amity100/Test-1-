@@ -14,6 +14,7 @@ import { Traffic } from './traffic.js';
 import { HUD } from '../ui/hud.js';
 import { Album } from '../ui/album.js';
 import { AirDraw } from '../ui/airdraw.js';
+import { Bubbles } from '../ui/bubbles.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { buildDrawnFlatModel } from './items.js';
 import { BLACK_INK } from '../render/LineBatch.js';
@@ -51,6 +52,7 @@ export class Game {
     this.audio = new Audio();
     this.camRig = new CameraRig(camera, world.collision);
     this.figures = new FigureRenderer(scene, this.atlas);
+    this.bubbles = new Bubbles(scene);
     this.fx = new Effects(this);
     this.vehicles = new Vehicles(this);
     this.traffic = new Traffic(this);
@@ -154,6 +156,7 @@ export class Game {
     this.weapons.select(0);
     this.weapons.projectiles = [];
     this.enemies.reset();
+    this.bubbles.clear();
     this.respawn();
     this.state = 'play';
     if (!this.touch) this.input.requestLock(true);
@@ -258,6 +261,7 @@ export class Game {
       this.camera.lookAt(o.look[0], o.look[1], o.look[2]);
     }
     this.camera.updateMatrixWorld();
+    this.bubbles.update(dt, this.camera);
     if (this.onFrame) this.onFrame(dt);
     this.airdraw.frame(dt);
     // render dynamic figures
@@ -535,7 +539,7 @@ export class Game {
     this.civilians.explosion(x, y, z, radius);
     this.traffic.explosion(x, z, radius);
     if (d < radius) p.hurt((owner === 'player' ? 0.25 : 1) * damage * 0.35 * (1 - d / radius), x, z);
-    this.enemies.noise(new THREE.Vector3(x, y, z), 60);
+    this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
     this.civilians.panic(new THREE.Vector3(x, y, z), 60);
   }
 
