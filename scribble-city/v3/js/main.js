@@ -95,7 +95,11 @@ async function boot() {
     itemLine: makeLineMaterial({ nudge: 0.0015, minWidth: 1.0 }),
     glass: makeGlassMaterial(),
     barSurface: makeSurfaceMaterial({ hatchScale: 1.3 }),
+    // the rooms behind the walls, under their lamps; the glass of the shop windows
+    interior: makeSurfaceMaterial({ indoor: true }),
+    shopGlass: makeGlassMaterial(),
   };
+  mats.shopGlass.uniforms.uAlpha.value = 0.22;
   mats.barSurface.uniforms.uTintAll.value.setRGB(1.0, 0.9, 0.78);
   mats.lineFaint = mats.line;
 

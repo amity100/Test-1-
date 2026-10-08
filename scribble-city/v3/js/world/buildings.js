@@ -4,6 +4,7 @@
 import { STYLE } from '../render/MeshBuilder.js';
 import { CURB } from './layout.js';
 import { dressShop } from './shopfronts.js';
+import { buildRoom, buildRooms, splitRooms } from './interiors.js';
 
 export const COL = {
   paper: [0.968, 0.958, 0.93],
@@ -203,29 +204,80 @@ function awning(ch, f, u0, u1, y, out, color, seed) {
   }
 }
 
+// the lobby of a tower, listed with the shops: the street life puts a guard at its desk
+function lobbyShop(W, f, doorU, yBase) {
+  if (!W.shops) return null;
+  const shop = {
+    kind: 'lobby',
+    id: W.shops.length,
+    nx: f.nx,
+    nz: f.nz,
+    rx: f.rx,
+    rz: f.rz,
+    face: Math.atan2(f.nx, f.nz),
+    door: f.p(doorU, yBase, 0.55),
+    inside: f.p(doorU, yBase, -0.4),
+    keeper: f.p(doorU + 1.15, yBase, 1.0),
+    win: f.p(doorU + 1.7, yBase, 0.7),
+    spots: {},
+  };
+  W.shops.push(shop);
+  return shop;
+}
+
 /**
  * Ground-floor shop: big window, door, striped awning and a sign.
+ * open: there is a room behind it (interiors.js): the door stands open and the window is real glass.
  */
-export function shopFront(W, ch, f, u0, u1, yBase, rng, signId) {
+export function shopLayout(u0, u1) {
   const w = u1 - u0;
-  if (w < 3) return;
   const doorU = u0 + Math.min(1.2, w * 0.25);
-  facadeQuad(ch, f, u0 + 0.35, yBase + 0.1, u1 - 0.35, yBase + 3.3, 0.02, COL.cream, STYLE.PLAIN, { lineW: 1.6 });
-  // display window
-  facadeQuad(ch, f, doorU + 0.8, yBase + 0.7, u1 - 0.7, yBase + 2.6, 0.05, COL.glass, STYLE.SHOPWIN, { lineW: 2 });
+  return { u0, u1, doorU, winU0: doorU + 0.8, winU1: u1 - 0.7 };
+}
+export function shopOpenings(plan, yBase) {
+  return [
+    { kind: 'door', u0: plan.doorU - 0.55, u1: plan.doorU + 0.55, y0: yBase + 0.02, y1: yBase + 2.42, hinge: 'left' },
+    { kind: 'window', u0: plan.winU0, u1: plan.winU1, y0: yBase + 0.7, y1: yBase + 2.6 },
+  ];
+}
+const holesOf = (openings) => openings.map((o) => [o.u0, o.y0, o.u1, o.y1]);
+
+export function shopFront(W, ch, f, u0, u1, yBase, rng, signId, open = false) {
+  const w = u1 - u0;
+  if (w < 3) return null;
+  const plan = shopLayout(u0, u1);
+  const doorU = plan.doorU;
+  if (open) {
+    // the painted panel round the door and the window
+    const p0 = u0 + 0.35;
+    const p1 = u1 - 0.35;
+    const holes = shopOpenings(plan, yBase).map((o) => [o.u0 - p0, o.y0, o.u1 - p0, o.y1]);
+    ch.mb.faceWithHoles((t, y) => f.p(p0 + t, y, 0.02), p1 - p0, yBase + 0.1, yBase + 3.3, yBase, f.normal, COL.cream, [STYLE.PLAIN, 3, 3, doorU], [p1 - p0, 3.2, 0, 0], holes);
+    ch.sl.poly([f.p(p0, yBase + 0.1, 0.03), f.p(p1, yBase + 0.1, 0.03), f.p(p1, yBase + 3.3, 0.03), f.p(p0, yBase + 3.3, 0.03)], true, { width: 1.6, overshoot: 0.08, wobble: 0.01 });
+    for (const o of shopOpenings(plan, yBase)) ch.sl.poly([f.p(o.u0, o.y0, 0.04), f.p(o.u1, o.y0, 0.04), f.p(o.u1, o.y1, 0.04), f.p(o.u0, o.y1, 0.04)], true, { width: 2, overshoot: 0.05, wobble: 0.01 });
+    // the transom over the door
+    ch.sl.seg(f.p(doorU - 0.55, yBase + 2.87, 0.04), f.p(doorU + 0.55, yBase + 2.87, 0.04), { width: 1.6, overshoot: 0.05 });
+  } else {
+    facadeQuad(ch, f, u0 + 0.35, yBase + 0.1, u1 - 0.35, yBase + 3.3, 0.02, COL.cream, STYLE.PLAIN, { lineW: 1.6 });
+    // display window
+    facadeQuad(ch, f, doorU + 0.8, yBase + 0.7, u1 - 0.7, yBase + 2.6, 0.05, COL.glass, STYLE.SHOPWIN, { lineW: 2 });
+  }
   const mid = (doorU + 0.8 + u1 - 0.7) / 2;
   ch.sl.seg(f.p(mid, yBase + 0.7, 0.06), f.p(mid, yBase + 2.6, 0.06), { width: 1.4, overshoot: 0.03 });
   // shine marks
   ch.sl.seg(f.p(doorU + 1.2, yBase + 2.0, 0.07), f.p(doorU + 1.7, yBase + 2.45, 0.07), { width: 1.1, overshoot: 0 });
   ch.sl.seg(f.p(doorU + 1.5, yBase + 1.9, 0.07), f.p(doorU + 1.9, yBase + 2.25, 0.07), { width: 1.0, overshoot: 0 });
-  door(ch, f, doorU, yBase + 0.05, 1.05, 2.35, rng.pick([COL.darkWood, COL.red, COL.darkGreen, COL.blue]));
+  if (!open) door(ch, f, doorU, yBase + 0.05, 1.05, 2.35, rng.pick([COL.darkWood, COL.red, COL.darkGreen, COL.blue]));
+  else rng.pick([0]);
   awning(ch, f, u0 + 0.2, u1 - 0.2, yBase + 3.7, 1.5, rng.pick(AWNING_COLORS), rng.float(0, 100));
+  let shop = null;
   if (signId) {
     const sw = Math.min(w - 0.8, 4.2);
     const c = f.p((u0 + u1) / 2, yBase + 4.25, 0.08);
     W.signs.push({ x: c[0], y: c[1], z: c[2], w: sw, h: sw / 4, rect: signId, axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
-    if (W.shops && u1 - 0.7 - (doorU + 0.8) > 1.2) dressShop(W, ch, f, signId, doorU, doorU + 0.8, u1 - 0.7, yBase);
+    if (W.shops && u1 - 0.7 - (doorU + 0.8) > 1.2) shop = dressShop(W, ch, f, signId, doorU, doorU + 0.8, u1 - 0.7, yBase, open);
   }
+  return { plan, shop };
 }
 
 // The Inkwell's street front: dark wood, warm windows, neon over the door.
@@ -264,9 +316,24 @@ export function brownstone(W, ch, lot, rng, o = {}) {
   const col = o.color || rng.pick([COL.brown, COL.brick, COL.brick2, COL.cream, COL.blueGray, COL.sand, COL.white]);
   const seed = rng.float(0, 500);
   const cellW = rng.pick([2.4, 2.7, 3.0]);
-  solidBox(W, ch, [x0, y0, z0], [x1, y0 + h, z1], { color: col, sideStyle: STYLE.WIN_BROWN, cell: [cellW, fh], groundH: 3.1, seed, baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2 });
   const fs = facadesOf(x0, z0, x1, z1);
   const f = fs[lot.front];
+  // the ground floor is a room: a shop you walk into, or someone's front room behind the wall; a
+  // corner house may have its shop round the side instead, on the avenue (o.side)
+  const room = !o.bar;
+  const roomTop = y0 + 3.2;
+  const plan = o.shop ? shopLayout(0, f.width) : null;
+  const sf = o.side && o.sideShop && !o.shop && !o.bar ? fs[o.side] : null;
+  const sU0 = sf ? Math.max(0, sf.width / 2 - 5) : 0;
+  const sU1 = sf ? Math.min(sf.width, sf.width / 2 + 5) : 0;
+  const sPlan = sf ? shopLayout(sU0 + 0.3, sU1 - 0.3) : null;
+  const holes = plan || sPlan ? {} : null;
+  if (plan) holes[lot.front] = holesOf(shopOpenings(plan, y0));
+  if (sPlan) holes[o.side] = holesOf(shopOpenings(sPlan, y0));
+  const hollow = !room ? null : sf ? { [o.side]: roomTop } : { [lot.front]: roomTop };
+  const frontHollow = room && !sf ? roomTop : 0;
+  solidBox(W, ch, [x0, y0, z0], [x1, y0 + h, z1], { color: col, sideStyle: STYLE.WIN_BROWN, cell: [cellW, fh], groundH: 3.1, seed, baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2, holes, hollow, collide: !room });
+  let shop = null;
   // cornice
   const cmin = f.box(-0.2, y0 + h - 0.75, 0, f.width + 0.2, y0 + h + 0.05, 0.5);
   solidBox(W, ch, cmin[0], cmin[1], { color: rng.pick([COL.cream, COL.white, COL.darkWood, COL.gray]), lineW: 1.8, collide: false });
@@ -275,7 +342,9 @@ export function brownstone(W, ch, lot, rng, o = {}) {
   if (o.bar) {
     barFront(W, ch, f, y0);
   } else if (o.shop) {
-    shopFront(W, ch, f, 0, f.width, y0, rng, o.shop);
+    ch.mb.hollow = roomTop;
+    shop = shopFront(W, ch, f, 0, f.width, y0, rng, o.shop, true).shop;
+    ch.mb.hollow = 0;
   } else {
     const du = rng.pick([f.width * 0.28, f.width * 0.72]);
     // stoop steps (walkable)
@@ -285,7 +354,9 @@ export function brownstone(W, ch, lot, rng, o = {}) {
       const b = f.box(du - 0.9, y0, 0.0, du + 0.9, y0 + sh, 1.9 - i * 0.55);
       solidBox(W, ch, b[0], b[1], { color: COL.concrete, lineW: 1.6, tag: 'step' });
     }
+    ch.mb.hollow = frontHollow;
     door(ch, f, du, y0 + 1.0, 1.15, 2.4);
+    ch.mb.hollow = 0;
     // railings
     for (const s of [-1, 1]) {
       ch.sl.seg(f.p(du + s * 0.9, y0 + 1.95, 0.05), f.p(du + s * 0.9, y0 + 0.9, 1.9), { width: 1.8, overshoot: 0.05 });
@@ -293,8 +364,22 @@ export function brownstone(W, ch, lot, rng, o = {}) {
     }
     // garden-level windows
     const wu = du < f.width / 2 ? f.width * 0.72 : f.width * 0.28;
+    ch.mb.hollow = frontHollow;
     facadeQuad(ch, f, wu - 0.6, y0 + 1.0, wu + 0.6, y0 + 2.4, 0.03, COL.glass, STYLE.PLAIN, { lineW: 1.8 });
+    ch.mb.hollow = 0;
     ch.sl.seg(f.p(wu, y0 + 1.0, 0.04), f.p(wu, y0 + 2.4, 0.04), { width: 1.2, overshoot: 0 });
+  }
+  if (sf) {
+    // the bodega round the corner
+    ch.mb.hollow = roomTop;
+    const ss = shopFront(W, ch, sf, sU0 + 0.3, sU1 - 0.3, y0, o.srng || rng, o.sideShop, true);
+    ch.mb.hollow = 0;
+    const sshop = ss ? ss.shop : null;
+    const bd2 = o.side === 'n' || o.side === 's' ? z1 - z0 : x1 - x0;
+    buildRoom(W, ch, sf, { u0: sU0, u1: sU1, depth: Math.min(8, bd2 - 0.8), y0, h: 3.2, kind: sshop ? sshop.kind : 'store', bw: sf.width, bd: bd2, top: y0 + h, openings: shopOpenings(sPlan, y0), shop: sshop, outside: col });
+  } else if (room) {
+    const bd = lot.front === 'n' || lot.front === 's' ? z1 - z0 : x1 - x0;
+    buildRoom(W, ch, f, { u0: 0, u1: f.width, depth: Math.min(8, bd - 0.8), y0, h: 3.2, kind: o.shop ? (shop ? shop.kind : o.shop) : 'home', bw: f.width, bd, top: y0 + h, openings: plan ? shopOpenings(plan, y0) : [], shop, outside: col });
   }
   if (rng.chance(o.fireEscape !== undefined ? o.fireEscape : 0.45) && floors >= 3) {
     const fu0 = f.width * 0.2;
@@ -323,21 +408,41 @@ export function loft(W, ch, lot, rng, o = {}) {
   const h = floors * fh + 1.2;
   const col = o.color || rng.pick([COL.sand, COL.cream, COL.gray, COL.brick, COL.mint, COL.blueGray, COL.white]);
   const style = rng.chance(0.5) ? STYLE.WIN_LOFT : STYLE.WIN_OFFICE;
-  solidBox(W, ch, [x0, y0, z0], [x1, y0 + h, z1], { color: col, sideStyle: style, cell: [rng.pick([2.8, 3.2, 3.6]), fh], groundH: 4.0, seed: rng.float(0, 500), baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2 });
   const fs = facadesOf(x0, z0, x1, z1);
   const f = fs[lot.front];
+  const roomTop = y0 + 3.8;
+  const plan = o.shop !== null ? shopLayout(0.3, Math.min(f.width - 0.3, 9)) : null;
+  const holes = plan ? { [lot.front]: holesOf(shopOpenings(plan, y0)) } : null;
+  solidBox(W, ch, [x0, y0, z0], [x1, y0 + h, z1], { color: col, sideStyle: style, cell: [rng.pick([2.8, 3.2, 3.6]), fh], groundH: 4.0, seed: rng.float(0, 500), baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2, holes, hollow: { [lot.front]: roomTop }, collide: false });
   // parapet line + cornice band
   const cb = f.box(-0.15, y0 + h - 0.6, 0, f.width + 0.15, y0 + h + 0.25, 0.35);
   solidBox(W, ch, cb[0], cb[1], { color: COL.white, lineW: 1.6, collide: false });
   // belt course above ground floor
   ch.sl.seg(f.p(0, y0 + 4.0, 0.02), f.p(f.width, y0 + 4.0, 0.02), { width: 1.8 });
-  if (o.shop !== null) shopFront(W, ch, f, 0.3, Math.min(f.width - 0.3, 9), y0, rng, o.shop || rng.pick(W.shopSigns));
+  let shop = null;
+  let kind = 'studio';
+  ch.mb.hollow = roomTop;
+  if (o.shop !== null) {
+    kind = o.shop || rng.pick(W.shopSigns);
+    shop = shopFront(W, ch, f, 0.3, Math.min(f.width - 0.3, 9), y0, rng, kind, true).shop;
+  }
   if (f.width > 12) {
     door(ch, f, f.width - 2.2, y0 + 0.05, 1.8, 2.8, COL.darkMetal);
   }
+  ch.mb.hollow = 0;
+  const bd = lot.front === 'n' || lot.front === 's' ? z1 - z0 : x1 - x0;
+  const shopEnd = plan ? Math.min(f.width, plan.u1 + 0.6) : 0;
+  const rooms = [];
+  if (plan) rooms.push({ u0: 0, u1: f.width - shopEnd < 3 ? f.width : shopEnd, kind: shop ? shop.kind : kind, openings: shopOpenings(plan, y0), shop });
+  const from = rooms.length ? rooms[0].u1 : 0;
+  if (f.width - from > 0.5) splitRooms(from, f.width, 10).forEach(([a, b], i) => rooms.push({ u0: a, u1: b, kind: (i + (plan ? 1 : 0)) % 2 ? 'home' : 'studio', openings: [] }));
+  buildRooms(W, ch, f, rooms, { depth: Math.min(9, bd - 0.8), y0, h: 3.8, bw: f.width, bd, top: y0 + h, outside: col });
   if (rng.chance(0.4)) {
-    const side = rng.chance(0.5) ? fs.e : fs.w;
-    if (side.width > 5) fireEscape(ch, side, side.width * 0.3, side.width * 0.3 + 3.4, y0, Math.min(floors, 7), fh);
+    // on a side wall only where it is open to the street (a wall shared with the next house
+    // would have it hanging into the room next door)
+    const east = rng.chance(0.5);
+    const side = east ? fs.e : fs.w;
+    if (side.width > 5 && o.open === (east ? 'e' : 'w')) fireEscape(ch, side, side.width * 0.3, side.width * 0.3 + 3.4, y0, Math.min(floors, 7), fh);
   } else if (rng.chance(0.5)) {
     fireEscape(ch, f, f.width * 0.45, Math.min(f.width - 0.5, f.width * 0.45 + 4), y0, Math.min(floors, 7), fh);
   }
@@ -359,21 +464,52 @@ export function tower(W, ch, lot, rng, o = {}) {
   const style = glass ? STYLE.WIN_GLASS : rng.pick([STYLE.WIN_TOWER, STYLE.WIN_OFFICE]);
   const cell = glass ? [3.0, 3.8] : style === STYLE.WIN_TOWER ? [2.4, 3.6] : [3.0, 3.6];
   const seed = rng.float(0, 500);
-  // podium
+  // podium: its ground floor is rooms you walk into, the lobby in the middle and a shop either
+  // side of it (when the front is wide enough)
   const podH = o.podium || rng.float(10, 16);
-  solidBox(W, ch, [x0, y0, z0], [x1, y0 + podH, z1], { color: o.podiumColor || COL.gray, sideStyle: STYLE.WIN_OFFICE, cell: [3.2, 4.2], groundH: 4.5, seed: seed + 1, baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2 });
   const fs = facadesOf(x0, z0, x1, z1);
   const f = fs[lot.front];
-  // entrance canopy
   const eu = f.width / 2;
+  const roomH = 4.0;
+  const roomTop = y0 + roomH;
+  const withShops = o.shops !== false && f.width > 22;
+  const a0 = Math.max(1, eu - 14);
+  const b1 = Math.min(f.width - 1, eu + 14);
+  const planA = withShops ? shopLayout(a0, eu - 4) : null;
+  const planB = withShops ? shopLayout(eu + 4, b1) : null;
+  const lobbyOpen = [
+    { kind: 'window', u0: eu - 2.4, u1: eu - 1.0, y0: y0 + 0.05, y1: y0 + 3.4 },
+    { kind: 'door', u0: eu - 0.85, u1: eu + 0.85, y0: y0 + 0.02, y1: y0 + 2.9, hinge: 'left' },
+    { kind: 'window', u0: eu + 1.0, u1: eu + 2.4, y0: y0 + 0.05, y1: y0 + 3.4 },
+  ];
+  const openA = planA ? shopOpenings(planA, y0) : [];
+  const openB = planB ? shopOpenings(planB, y0) : [];
+  const holes = { [lot.front]: holesOf([...lobbyOpen, ...openA, ...openB]) };
+  solidBox(W, ch, [x0, y0, z0], [x1, y0 + podH, z1], { color: o.podiumColor || COL.gray, sideStyle: STYLE.WIN_OFFICE, cell: [3.2, 4.2], groundH: 4.5, seed: seed + 1, baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2, holes, hollow: { [lot.front]: roomTop }, collide: false });
+  const bd = lot.front === 'n' || lot.front === 's' ? z1 - z0 : x1 - x0;
+  // entrance canopy, the glass doors' frames
   const cb = f.box(eu - 3, y0 + 3.6, 0, eu + 3, y0 + 4.0, 2.2);
   solidBox(W, ch, cb[0], cb[1], { color: COL.darkMetal, lineW: 1.8, collide: false });
-  facadeQuad(ch, f, eu - 2.4, y0 + 0.05, eu + 2.4, y0 + 3.4, 0.03, COL.glass, STYLE.PLAIN, { lineW: 2 });
-  for (let k = -1; k <= 1; k++) ch.sl.seg(f.p(eu + k * 1.2, y0 + 0.05, 0.04), f.p(eu + k * 1.2, y0 + 3.4, 0.04), { width: 1.3, overshoot: 0 });
-  if (o.shops !== false && f.width > 22) {
-    shopFront(W, ch, f, 1, eu - 4, y0, rng, rng.pick(W.shopSigns));
-    shopFront(W, ch, f, eu + 4, f.width - 1, y0, rng, rng.pick(W.shopSigns));
+  for (const op of lobbyOpen) ch.sl.poly([f.p(op.u0, op.y0, 0.04), f.p(op.u1, op.y0, 0.04), f.p(op.u1, op.y1, 0.04), f.p(op.u0, op.y1, 0.04)], true, { width: 2, overshoot: 0.05, wobble: 0.01 });
+  const lobby = lobbyShop(W, f, eu, y0);
+  const rooms = [];
+  if (withShops) {
+    ch.mb.hollow = roomTop;
+    const a = shopFront(W, ch, f, a0, eu - 4, y0, rng, rng.pick(W.shopSigns), true).shop;
+    const b = shopFront(W, ch, f, eu + 4, b1, y0, rng, rng.pick(W.shopSigns), true).shop;
+    ch.mb.hollow = 0;
+    // the shops' rooms (with a store room beside a wide one), the lobby between them
+    const aU = a0 - 1 >= 3 ? a0 - 0.5 : 0;
+    if (aU > 0) rooms.push({ u0: 0, u1: aU, kind: 'store', openings: [] });
+    rooms.push({ u0: aU, u1: eu - 4, kind: a ? a.kind : 'store', openings: openA, shop: a });
+    rooms.push({ u0: eu - 4, u1: eu + 4, kind: 'lobby', openings: lobbyOpen, shop: lobby });
+    const bU = f.width - 1 - b1 >= 3 ? b1 + 0.5 : f.width;
+    rooms.push({ u0: eu + 4, u1: bU, kind: b ? b.kind : 'store', openings: openB, shop: b });
+    if (bU < f.width) rooms.push({ u0: bU, u1: f.width, kind: 'store', openings: [] });
+  } else {
+    rooms.push({ u0: 0, u1: f.width, kind: 'lobby', openings: lobbyOpen, shop: lobby });
   }
+  buildRooms(W, ch, f, rooms, { depth: Math.min(9, bd - 0.8), y0, h: roomH, bw: f.width, bd, top: y0 + podH, outside: o.podiumColor || COL.gray });
   let y = y0 + podH;
   const inset0 = o.inset || rng.float(1.5, 3.5);
   x0 += inset0;
@@ -437,14 +573,19 @@ export function warehouse(W, ch, lot, rng, o = {}) {
   const y0 = CURB;
   const h = o.height || rng.float(8, 12);
   const col = rng.pick([COL.brick, COL.brick2, COL.brown, COL.sand]);
-  solidBox(W, ch, [x0, y0, z0], [x1, y0 + h, z1], { color: col, sideStyle: STYLE.WIN_BROWN, cell: [4.2, 3.6], groundH: 4.6, seed: rng.float(0, 500), baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2 });
   const f = facadesOf(x0, z0, x1, z1)[lot.front];
+  const roomTop = y0 + 4.2;
+  solidBox(W, ch, [x0, y0, z0], [x1, y0 + h, z1], { color: col, sideStyle: STYLE.WIN_BROWN, cell: [4.2, 3.6], groundH: 4.6, seed: rng.float(0, 500), baseY: y0, topStyle: STYLE.ROOF, topColor: COL.roof, lineW: 2.6, vStrokes: 2, hollow: { [lot.front]: roomTop }, collide: false });
   const n = Math.max(1, Math.floor(f.width / 7));
+  ch.mb.hollow = roomTop;
   for (let i = 0; i < n; i++) {
     const u = ((i + 0.5) * f.width) / n;
     facadeQuad(ch, f, u - 2, y0 + 0.05, u + 2, y0 + 3.8, 0.03, COL.metal, STYLE.PLAIN, { lineW: 2 });
     for (let k = 1; k < 9; k++) ch.sl.seg(f.p(u - 2, y0 + k * 0.42, 0.04), f.p(u + 2, y0 + k * 0.42, 0.04), { width: 1, overshoot: 0 });
   }
+  ch.mb.hollow = 0;
+  const bd = lot.front === 'n' || lot.front === 's' ? z1 - z0 : x1 - x0;
+  buildRoom(W, ch, f, { u0: 0, u1: f.width, depth: Math.min(12, bd - 0.8), y0, h: 4.2, kind: 'store', bw: f.width, bd, top: y0 + h, openings: [], outside: col });
   if (o.sign) {
     const c = f.p(f.width / 2, y0 + h - 1.6, 0.06);
     W.signs.push({ x: c[0], y: c[1], z: c[2], w: 6, h: 1.5, rect: o.sign, axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });

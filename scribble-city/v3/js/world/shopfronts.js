@@ -52,9 +52,9 @@ function prop(W, ch, kind, x, z, fn) {
 /**
  * Called by shopFront once the shop is built. f: facade, the window spans winU0..winU1.
  */
-export function dressShop(W, ch, f, kind, doorU, winU0, winU1, yBase) {
+export function dressShop(W, ch, f, kind, doorU, winU0, winU1, yBase, open = false) {
   const cfg = SHOP_KINDS[kind];
-  if (!cfg) return;
+  if (!cfg) return null;
   // its own dice, so dressing the shops never reshuffles the rest of the city
   const p0 = f.p(doorU, 0, 0);
   const rng = new RNG(Math.floor(Math.abs(p0[0] * 73.1 + p0[2] * 19.7)) + 7);
@@ -73,7 +73,8 @@ export function dressShop(W, ch, f, kind, doorU, winU0, winU1, yBase) {
     spots: {},
   };
   W.shops.push(shop);
-  windowDisplay(ch, f, cfg, winU0, winU1, yBase, rng);
+  // (a shop you can walk into has the real things inside, behind the glass)
+  if (!open) windowDisplay(ch, f, cfg, winU0, winU1, yBase, rng);
   // OPEN sign in the corner of the window
   const so = f.p(winU1 - 0.55, yBase + 2.25, 0.09);
   W.signs.push({ x: so[0], y: so[1], z: so[2], w: 0.78, h: 0.26, rect: 'open', axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
@@ -111,6 +112,8 @@ export function dressShop(W, ch, f, kind, doorU, winU0, winU1, yBase) {
       const pc = f.p(pu, yBase, 0.18);
       prop(W, ch, 'pole', pc[0], pc[2], () => barberPole(W, ch, f, pu, yBase));
       shop.spots.pole = { u: pu, f, yBase };
+      // (a shop you walk into cuts hair inside, in its own chairs)
+      if (open) break;
       const cu = Math.min(winU1 - 0.6, mid);
       const cc = f.p(cu, yBase, 1.5);
       prop(W, ch, 'chair', cc[0], cc[2], () => chair(W, ch, cc[0], cc[2], f.nx, f.nz, f.rx, f.rz, [0.85, 0.2, 0.22]));
@@ -140,6 +143,7 @@ export function dressShop(W, ch, f, kind, doorU, winU0, winU1, yBase) {
     const bc = f.p(bu, yBase, 2.2);
     prop(W, ch, 'aframe', bc[0], bc[2], () => aFrame(W, ch, bc[0], bc[2], f, cfg.board));
   }
+  return shop;
 }
 
 // --------------------------------------------------------------------------------------------

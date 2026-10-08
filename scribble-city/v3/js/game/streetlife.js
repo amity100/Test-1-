@@ -17,13 +17,13 @@ const _w = new THREE.Vector3();
 const ITEM = {
   pizza: 'pizzaBox', cafe: 'coffee', grocery: 'bag', deli: 'bag', bagel: 'bag', flowers: 'bouquet', books: 'book',
   icecream: 'icecream', hardware: 'bag', laundry: 'laundry', sushi: 'bag', falafel: 'bag', shop: 'bag', pharmacy: 'bag',
-  phones: 'phone', optics: null, gym: null, music: null, barber: null,
+  phones: 'phone', optics: null, gym: null, music: null, barber: null, lobby: null,
 };
 // what the shopkeeper holds while working
 const TOOL = {
   pizza: 'dough', cafe: 'tray', grocery: 'apple', deli: null, bagel: 'tray', flowers: 'bouquet', books: 'book',
   icecream: 'icecream', hardware: 'broom', laundry: 'laundry', sushi: null, falafel: null, shop: 'broom', pharmacy: null,
-  phones: 'phone', optics: null, gym: 'dumbbell', music: 'guitar', barber: 'scissors',
+  phones: 'phone', optics: null, gym: 'dumbbell', music: 'guitar', barber: 'scissors', lobby: null,
 };
 const CALLS = {
   pizza: ['Hot slice!', 'Fresh outta the oven!', 'Pizza! Pizza!'],
@@ -45,6 +45,7 @@ const CALLS = {
   gym: ['One more rep!', 'Feel the burn!'],
   music: ['This one\'s for you!', 'Any requests?'],
   barber: ['Snip snip!', 'Hold still...'],
+  lobby: ['Good evening.', 'Mind the floor, it\'s wet.', 'Lift\'s on the way.'],
 };
 
 // the hero's own look (hair, glasses, muscles) survives a reload
@@ -74,7 +75,7 @@ export class StreetLife {
 
   saveHero() {
     const L = this.game.player.fig.look;
-    const d = { hair: L.hair.style !== 'none' ? L.hair : null, glasses: L.face.glasses, bulk: this.game.player.fig.bulk, maxHp: this.game.player.maxHp };
+    const d = { hair: L.hair.style !== 'none' ? L.hair : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: this.game.player.fig.bulk, maxHp: this.game.player.maxHp };
     try {
       localStorage.setItem(HERO_KEY, JSON.stringify(d));
     } catch (e) {
@@ -86,6 +87,8 @@ export class StreetLife {
     const p = this.game.player;
     const L = p.fig.look;
     if (d.hair) L.hair = { style: d.hair.style, color: d.hair.color };
+    else if (d.bald) L.hair = { style: 'none', color: L.skin };
+    if (d.hat !== undefined) L.hat = d.hat;
     if (d.glasses !== undefined) L.face.glasses = d.glasses;
     if (d.bulk) p.fig.bulk = d.bulk;
     if (d.maxHp) {
@@ -174,6 +177,10 @@ export class StreetLife {
   sendIn(c, a) {
     const game = this.game;
     const s = a.shop;
+    if (a.room) {
+      a.admit(c);
+      return;
+    }
     a.customers++;
     let phase = 'go';
     let t = 0;
@@ -279,8 +286,11 @@ export class StreetLife {
     let bd = 2.4;
     for (const a of this.active.values()) {
       const s = a.shop;
-      const dd = Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
-      const dk = a.keeper && a.keeper.alive ? Math.hypot(a.keeper.pos.x - p.pos.x, a.keeper.pos.z - p.pos.z) : 99;
+      // a shop with a room: you walk in and talk to the keeper at his counter
+      const dd = a.room ? 99 : Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
+      const kp = a.keeper && a.keeper.alive && (a.open || !a.room) ? a.keeper.pos : a.home;
+      const dk = Math.hypot(kp.x - p.pos.x, kp.z - p.pos.z);
+      if (a.room && !a.room.inside(p.pos.x, p.pos.z, 0.2)) continue;
       const d = Math.min(dd, dk + 0.4);
       if (d < bd) {
         bd = d;
@@ -289,7 +299,7 @@ export class StreetLife {
     }
     if (!best) return null;
     const info = SERVICES[best.shop.kind];
-    return { shop: best, label: best.open ? `E — ${info.verb}` : 'החנות סגורה — המוכר ברח' };
+    return { shop: best, label: best.open ? `E — ${best.room ? info.ask || info.verb : info.verb}` : 'החנות סגורה — המוכר ברח' };
   }
 
   interact() {
@@ -328,40 +338,40 @@ const heal = (n, color, text) => (game) => {
 };
 
 const SERVICES = {
-  pizza: { verb: 'להיכנס לפיצרייה', who: 'השף ג\'ינו', greet: 'בואנה סרה! פרוסה חמה, ישר מהתנור?', offers: [['פרוסת פיצה (+35 חיים)', 'slice', heal(35, [0.95, 0.62, 0.25], 'יאמי! פיצה. +35 חיים')]] },
-  cafe: { verb: 'להזמין קפה', who: 'הבריסטה', greet: 'אספרסו כפול? יעיר אותך עד מחר בבוקר.', offers: [['אספרסו כפול (ריצה מהירה ל-30 שניות)', 'cup', (game) => {
+  pizza: { verb: 'להיכנס לפיצרייה', ask: 'להזמין פרוסה', who: 'השף ג\'ינו', greet: 'בואנה סרה! פרוסה חמה, ישר מהתנור?', offers: [['פרוסת פיצה (+35 חיים)', 'slice', heal(35, [0.95, 0.62, 0.25], 'יאמי! פיצה. +35 חיים')]] },
+  cafe: { verb: 'להזמין קפה', ask: 'להזמין קפה', who: 'הבריסטה', greet: 'אספרסו כפול? יעיר אותך עד מחר בבוקר.', offers: [['אספרסו כפול (ריצה מהירה ל-30 שניות)', 'cup', (game) => {
     const p = game.player;
     p.coffeeT = 30;
     p.fig.belly = Math.min(1, p.fig.belly + 0.3);
     p.fig.bellyColor = [0.42, 0.26, 0.14];
     game.hud.toast('קפאין! רצים מהר יותר ל-30 שניות', 'good', 2.6);
   }]] },
-  grocery: { verb: 'לקנות במכולת', who: 'המוכר במכולת', greet: 'הכל טרי, הכל צבעוני. מה תיקח?', offers: [['תפוח אדום (+15 חיים)', 'apple', heal(15, [0.85, 0.2, 0.2])]] },
-  deli: { verb: 'להזמין סנדוויץ\'', who: 'המוכר במעדנייה', greet: 'פסטרמה על לחם שיפון — הכי טוב בעיר.', offers: [['סנדוויץ\' פסטרמה (+40 חיים)', 'sandwich', heal(40, [0.8, 0.45, 0.4])]] },
-  bagel: { verb: 'לקנות במאפייה', who: 'האופה', greet: 'בייגל חם, יצא עכשיו!', offers: [['בייגל (+20 חיים)', 'bagel', heal(20, [0.86, 0.66, 0.36])]] },
-  icecream: { verb: 'לקנות גלידה', who: 'מוכרת הגלידה', greet: 'כדור אחד? שניים? שלושה?!', offers: [['גלידת תות (+15 חיים)', 'cone', (game) => {
+  grocery: { verb: 'לקנות במכולת', ask: 'לקנות משהו', who: 'המוכר במכולת', greet: 'הכל טרי, הכל צבעוני. מה תיקח?', offers: [['תפוח אדום (+15 חיים)', 'apple', heal(15, [0.85, 0.2, 0.2])]] },
+  deli: { verb: 'להזמין סנדוויץ\'', ask: 'להזמין סנדוויץ\'', who: 'המוכר במעדנייה', greet: 'פסטרמה על לחם שיפון — הכי טוב בעיר.', offers: [['סנדוויץ\' פסטרמה (+40 חיים)', 'sandwich', heal(40, [0.8, 0.45, 0.4])]] },
+  bagel: { verb: 'לקנות במאפייה', ask: 'לקנות בייגל', who: 'האופה', greet: 'בייגל חם, יצא עכשיו!', offers: [['בייגל (+20 חיים)', 'bagel', heal(20, [0.86, 0.66, 0.36])]] },
+  icecream: { verb: 'לקנות גלידה', ask: 'לקנות גלידה', who: 'מוכרת הגלידה', greet: 'כדור אחד? שניים? שלושה?!', offers: [['גלידת תות (+15 חיים)', 'cone', (game) => {
     heal(15, [0.98, 0.66, 0.74])(game);
     game.inkwell.tipsy = Math.max(game.inkwell.tipsy, 0.25);
     game.hud.toast('מוח קפוא!!', 'info', 1.8);
   }]] },
-  sushi: { verb: 'להזמין סושי', who: 'השף', greet: 'רולים טריים. דג משורבט, אבל טרי.', offers: [['מגש סושי (+30 חיים)', 'sushi', heal(30, [0.95, 0.5, 0.4])]] },
-  falafel: { verb: 'להזמין פלאפל', who: 'המוכר', greet: 'פלאפל בפיתה, עם הכל?', offers: [['פלאפל בפיתה (+45 חיים)', 'pita', heal(45, [0.55, 0.38, 0.18])]] },
-  shop: { verb: 'להיכנס לחנות', who: 'המוכר', greet: 'יש לנו הכל. כמעט הכל. מה צריך?', offers: [['מחק חדש לעיפרון', 'eraser', (game) => refillErasers(game)], ['חטיף (+10 חיים)', 'apple', heal(10, [0.6, 0.4, 0.25])], ['שרטוט: פלסטר ענק', 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
-  hardware: { verb: 'להיכנס לחנות כלי העבודה', who: 'המוכר בחנות', greet: 'מחקים, עפרונות, סרגלים, שדכנים, אקדחי דבק. מה חסר לך?', offers: [['מחק חדש (כל המחקים כמו חדשים)', 'eraser', (game) => refillErasers(game)], ['שרטוט: אקדח שדכן', 'stapler', (game) => giveBlueprint(game, 'stapler')], ['שרטוט: אקדח דבק', 'glue', (game) => giveBlueprint(game, 'glue')]] },
-  pharmacy: { verb: 'להיכנס לבית המרקחת', who: 'הרוקחת', greet: 'נמחקת קצת? יש לי בדיוק את מה שצריך.', offers: [['תחבושת (כל החיים, וממלאת את החורים)', 'bandage', (game) => {
+  sushi: { verb: 'להזמין סושי', ask: 'להזמין סושי', who: 'השף', greet: 'רולים טריים. דג משורבט, אבל טרי.', offers: [['מגש סושי (+30 חיים)', 'sushi', heal(30, [0.95, 0.5, 0.4])]] },
+  falafel: { verb: 'להזמין פלאפל', ask: 'להזמין פלאפל', who: 'המוכר', greet: 'פלאפל בפיתה, עם הכל?', offers: [['פלאפל בפיתה (+45 חיים)', 'pita', heal(45, [0.55, 0.38, 0.18])]] },
+  shop: { verb: 'להיכנס לחנות', ask: 'לדבר עם המוכר', who: 'המוכר', greet: 'יש לנו הכל. כמעט הכל. מה צריך?', offers: [['מחק חדש לעיפרון', 'eraser', (game) => refillErasers(game)], ['חטיף (+10 חיים)', 'apple', heal(10, [0.6, 0.4, 0.25])], ['שרטוט: פלסטר ענק', 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
+  hardware: { verb: 'להיכנס לחנות כלי העבודה', ask: 'לדבר עם המוכר', who: 'המוכר בחנות', greet: 'מחקים, עפרונות, סרגלים, שדכנים, אקדחי דבק. מה חסר לך?', offers: [['מחק חדש (כל המחקים כמו חדשים)', 'eraser', (game) => refillErasers(game)], ['שרטוט: אקדח שדכן', 'stapler', (game) => giveBlueprint(game, 'stapler')], ['שרטוט: אקדח דבק', 'glue', (game) => giveBlueprint(game, 'glue')]] },
+  pharmacy: { verb: 'להיכנס לבית המרקחת', ask: 'לדבר עם הרוקחת', who: 'הרוקחת', greet: 'נמחקת קצת? יש לי בדיוק את מה שצריך.', offers: [['תחבושת (כל החיים, וממלאת את החורים)', 'bandage', (game) => {
     const p = game.player;
     p.hp = p.maxHp;
     p.fig.holes.length = 0;
     game.hud.toast('כמו חדש!', 'good', 2);
   }], ['שרטוט: פלסטר ענק (לצייר כשצריך)', 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
-  laundry: { verb: 'להיכנס למכבסה', who: 'המכבסה', greet: 'כתמי צבע? דיו? מחק? הכל יורד.', offers: [['ניקוי מהיר (מוריד כתמים וחורים, +10 חיים)', 'bandage', (game) => {
+  laundry: { verb: 'להיכנס למכבסה', ask: 'לנקות את הבגדים', who: 'המכבסה', greet: 'כתמי צבע? דיו? מחק? הכל יורד.', offers: [['ניקוי מהיר (מוריד כתמים וחורים, +10 חיים)', 'bandage', (game) => {
     const p = game.player;
     p.fig.paintT = 0;
     p.fig.holes.length = 0;
     p.hp = Math.min(p.maxHp, p.hp + 10);
     game.hud.toast('נקי ומגוהץ', 'good', 2);
   }]] },
-  phones: { verb: 'להיכנס לחנות הטלפונים', who: 'המוכר', greet: 'רוצה להתקשר למשטרה ולהגיד שזו הייתה אזעקת שווא? אני לא שאלתי כלום.', offers: [['להתקשר (מוריד כוכב משטרה אחד)', 'phone', (game) => {
+  phones: { verb: 'להיכנס לחנות הטלפונים', ask: 'לדבר עם המוכר', who: 'המוכר', greet: 'רוצה להתקשר למשטרה ולהגיד שזו הייתה אזעקת שווא? אני לא שאלתי כלום.', offers: [['להתקשר (מוריד כוכב משטרה אחד)', 'phone', (game) => {
     const pol = game.police;
     if (pol.level <= 0) {
       game.hud.toast('אף אחד לא מחפש אותך... בינתיים', 'info', 2.2);
@@ -373,12 +383,12 @@ const SERVICES = {
     else game.hud.setWanted(pol.level, pol.searching);
     game.hud.toast('"זו הייתה אזעקת שווא, שוטר." — כוכב אחד פחות', 'good', 2.6);
   }]] },
-  optics: { verb: 'להיכנס לאופטיקה', who: 'האופטיקאית', greet: 'רואים טוב יותר — מציירים טוב יותר. איזה משקפיים?', offers: [
+  optics: { verb: 'להיכנס לאופטיקה', ask: 'לבחור משקפיים', who: 'האופטיקאית', greet: 'רואים טוב יותר — מציירים טוב יותר. איזה משקפיים?', offers: [
     ['משקפיים עגולים', 'glasses', (game) => heroLook(game, (L) => (L.face.glasses = 'round'), 'משקפיים חדשים!')],
     ['משקפי שמש', 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), 'קול.')],
     ['בלי משקפיים', null, (game) => heroLook(game, (L) => (L.face.glasses = null), 'בלי משקפיים')],
   ] },
-  gym: { verb: 'להיכנס לחדר הכושר', who: 'המאמן', greet: 'עשר חזרות ואתה בנאדם חדש. מוכן?', offers: [['אימון (+10 חיים מקסימליים)', 'dumbbell', (game) => {
+  gym: { verb: 'להיכנס לחדר הכושר', ask: 'להתאמן', who: 'המאמן', greet: 'עשר חזרות ואתה בנאדם חדש. מוכן?', offers: [['אימון (+10 חיים מקסימליים)', 'dumbbell', (game) => {
     const p = game.player;
     if (p.maxHp >= 150) {
       game.hud.toast('כבר שרירי לגמרי. אין לאן יותר', 'info', 2);
@@ -390,13 +400,13 @@ const SERVICES = {
     game.streetlife.saveHero();
     game.hud.toast(`שרירים! מקסימום חיים: ${p.maxHp}`, 'good', 2.4);
   }]] },
-  music: { verb: 'לבקש שיר מהנגן', who: 'הנגן', greet: 'יש לך בקשה?', offers: [['לבקש שיר ולרקוד', 'note', (game, a) => a.serenade(true)], ['רק להקשיב', 'note', (game, a) => a.serenade(false)]] },
-  books: { verb: 'להיכנס לחנות הספרים', who: 'המוכר בחנות הספרים', greet: 'מחפש משהו? יש לי ספר מפות ישן עם כל השלטים של העיר.', offers: [['לחפש בספר את השרטוט הבא', 'book', (game) => bookHint(game)]] },
-  flowers: { verb: 'להיכנס לחנות הפרחים', who: 'המוכרת', greet: 'זר בשביל מישהי מיוחדת?', offers: [['זר פרחים (אולי לבר?)', 'bouquet', (game) => {
+  music: { verb: 'לבקש שיר מהנגן', ask: 'לבקש שיר מהנגן', who: 'הנגן', greet: 'יש לך בקשה?', offers: [['לבקש שיר ולרקוד', 'note', (game, a) => a.serenade(true)], ['רק להקשיב', 'note', (game, a) => a.serenade(false)]] },
+  books: { verb: 'להיכנס לחנות הספרים', ask: 'לדבר עם המוכר', who: 'המוכר בחנות הספרים', greet: 'מחפש משהו? יש לי ספר מפות ישן עם כל השלטים של העיר.', offers: [['לחפש בספר את השרטוט הבא', 'book', (game) => bookHint(game)]] },
+  flowers: { verb: 'להיכנס לחנות הפרחים', ask: 'לקנות פרחים', who: 'המוכרת', greet: 'זר בשביל מישהי מיוחדת?', offers: [['זר פרחים (אולי לבר?)', 'bouquet', (game) => {
     game.player.fig.carryL = 'bouquet';
     game.hud.toast('זר ביד. אולי מישהי בבר תשמח לקבל אותו', 'good', 2.8);
   }]] },
-  barber: { verb: 'להסתפר', who: 'הספר', greet: 'שב, שב. מה עושים היום?', offers: [
+  barber: { verb: 'להסתפר', ask: 'להסתפר', who: 'הספר', greet: 'שב, שב. מה עושים היום?', offers: [
     ['מוהוק', 'hair:mohawk', (game) => heroHair(game, 'mohawk')],
     ['אפרו', 'hair:afro', (game) => heroHair(game, 'afro')],
     ['קוצים', 'hair:spiky', (game) => heroHair(game, 'spiky')],
@@ -406,11 +416,13 @@ const SERVICES = {
   ] },
 };
 
+SERVICES.lobby = { verb: 'להיכנס ללובי', ask: 'לדבר עם השומר', who: 'השומר בלובי', greet: 'ערב טוב. אתה לא גר פה, נכון? ...טוב, מה צריך?', offers: [['לשאול איפה יש שרטוט בסביבה', null, (game) => bookHint(game)], ['כוס מים (+10 חיים)', 'cup', heal(10, [0.6, 0.8, 0.95], 'מים קרים. +10 חיים')]] };
+
 const HERO_HAIR_COLORS = [[0.12, 0.1, 0.09], [0.42, 0.28, 0.16], [0.86, 0.72, 0.45], [0.75, 0.2, 0.22], [0.3, 0.45, 0.85], [0.55, 0.3, 0.75]];
 
-function heroHair(game, style) {
+function heroHair(game, style, color = null) {
   const L = game.player.fig.look;
-  L.hair = { style, color: style === 'none' ? L.skin : pick(HERO_HAIR_COLORS) };
+  L.hair = { style, color: style === 'none' ? L.skin : color || pick(HERO_HAIR_COLORS) };
   game.streetlife.saveHero();
   game.hud.toast(style === 'none' ? 'קרחת מבריקה' : 'תספורת חדשה!', 'good', 2.2);
 }
@@ -470,34 +482,360 @@ function bookHint(game) {
 }
 
 // ------------------------------------------------------------------ one open shop
+// how many people sit at the tables (or wait on the bench) when you come by
+const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1 };
+// the new hairdos the barber draws
+const CUTS_M = ['short', 'buzz', 'pompadour', 'spiky', 'curly', 'short', 'pompadour', 'mohawk'];
+const CUTS_F = ['long', 'bun', 'ponytail', 'braids', 'curly', 'beehive', 'long', 'spacebuns'];
+const FUN_HAIR = [[0.86, 0.72, 0.45], [0.75, 0.2, 0.22], [0.3, 0.45, 0.85], [0.55, 0.3, 0.75], [0.25, 0.65, 0.4]];
+const shuffled = (a) => {
+  const b = a.slice();
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+};
+
 class OpenShop {
   constructor(life, shop) {
     this.life = life;
     this.game = life.game;
     this.shop = shop;
+    // the room behind the door (interiors.js): the shopkeeper works in there and people come in
+    this.room = shop.room && shop.room.door ? shop.room : null;
     this.alive = true;
     this.customers = 0;
     this.doorT = 0;
     this.extras = [];
+    this.visitors = [];
     this.t = Math.random() * 10;
     this.cool = 0;
     const s = shop;
+    const R = this.room;
     const civs = this.game.civilians;
-    this.keeper = civs.spawnScripted(s.keeper[0], s.keeper[2], shopkeeperLook(s.kind), this);
-    this.keeper.yaw = s.face;
+    const k = R && R.keeper ? R.keeper : null;
+    const kx = k ? k.x : s.keeper[0];
+    const kz = k ? k.z : s.keeper[2];
+    this.keeper = civs.spawnScripted(kx, kz, shopkeeperLook(s.kind), this);
+    this.homeYaw = k ? k.yaw : s.face;
+    this.keeper.yaw = this.homeYaw;
     this.keeper.fig.carry = TOOL[s.kind] || null;
-    this.home = new THREE.Vector3(s.keeper[0], 0, s.keeper[2]);
+    this.home = new THREE.Vector3(kx, 0, kz);
     this.keeper.ctrl = (c, dt) => this.work(c, dt);
-    // a couple of people at the cafe tables, someone in the barber's chair
+    if (R) {
+      // behind the counter he keeps to his marks; if he runs, it is out of the door
+      this.keeper.noCollide = true;
+      this.keeper.exitRoom = R;
+      this.keeper.exitShop = s;
+      // where the customers pay: across the counter from him
+      if (ITEM[s.kind]) {
+        const px = kx + Math.sin(this.homeYaw) * 1.35;
+        const pz = kz + Math.cos(this.homeYaw) * 1.35;
+        const way = R.path(R.door.x, R.door.z, px, pz);
+        const end = way[way.length - 1];
+        this.paySpot = { x: end.x, z: end.z, yaw: Math.atan2(kx - end.x, kz - end.z) };
+      }
+    }
+    // a couple of people at the cafe tables out on the sidewalk
     if (s.spots.tables) {
       const n = this.game.touch ? 1 : s.spots.tables.length;
       for (let i = 0; i < n; i++) this.seat(s.spots.tables[i]);
     }
-    if (s.spots.chair) this.newCustomer(true);
+    if (R) this.populate();
+    else if (s.spots.chair) this.newCustomer(true);
   }
 
   get open() {
     return this.alive && this.keeper && this.keeper.alive && !this.keeper.headless && this.keeper.owner === this && this.keeper.panicT <= 0;
+  }
+
+  // ------------------------------------------------------------------ people inside
+  // already in the shop when you come by: at the tables, along the shelves, in the barber's chair
+  populate() {
+    const R = this.room;
+    const kind = this.shop.kind;
+    const touch = this.game.touch;
+    if (kind === 'barber' && R.chairs.length) this.addVisitor(null, { mode: 'chair', spot: R.chairs[0], already: true });
+    const seats = shuffled(R.seats);
+    const nSeat = Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : SEATED[kind] || 0);
+    for (let i = 0; i < nSeat; i++) this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
+    const browse = shuffled(R.browse);
+    const nb = Math.min(browse.length, touch ? 1 : 2);
+    for (let i = 0; i < nb; i++) this.addVisitor(null, { mode: browse[i].lift ? 'lift' : 'browse', spot: browse[i], already: true });
+  }
+
+  // a free place for somebody coming in
+  freeSpot() {
+    const R = this.room;
+    const kind = this.shop.kind;
+    const used = new Set(this.visitors.map((v) => v.spot));
+    const free = (list) => list.filter((p) => !used.has(p));
+    if (kind === 'barber') {
+      const ch = free(R.chairs.slice(0, 1));
+      if (ch.length && !this.heroJob) return { spot: ch[0], mode: 'chair' };
+      const se = free(R.seats);
+      return se.length ? { spot: se[0], mode: 'seat' } : null;
+    }
+    const seats = free(R.seats);
+    const browse = free(R.browse);
+    if (seats.length && SEATED[kind] && (Math.random() < 0.5 || !browse.length)) return { spot: pick(seats), mode: 'seat' };
+    if (browse.length) {
+      const sp = pick(browse);
+      return { spot: sp, mode: sp.lift ? 'lift' : 'browse' };
+    }
+    return null;
+  }
+
+  // somebody shopping here: c is a pedestrian walking in from the street, or null for a new
+  // person already inside (o.already) or coming to the door
+  addVisitor(c, o = {}) {
+    const R = this.room;
+    const s = this.shop;
+    let spot = o.spot || null;
+    let mode = o.mode || null;
+    if (!spot) {
+      const f = this.freeSpot();
+      if (!f) return null;
+      spot = f.spot;
+      mode = f.mode;
+    }
+    const own = !c;
+    if (!c) {
+      const at = o.already ? spot : { x: s.door[0] + s.nx * 1.4 + s.rx * (Math.random() - 0.5) * 3, z: s.door[2] + s.nz * 1.4 + s.rz * (Math.random() - 0.5) * 3 };
+      const look = civilianLook();
+      c = this.game.civilians.spawnScripted(at.x, at.z, look, this);
+      c.yaw = o.already ? spot.yaw : s.face + Math.PI;
+      if (o.already) c.noCollide = true;
+    }
+    const v = { c, spot, mode, own, phase: o.already ? 'at' : 'in', t: 0, pts: null, reachT: 1 + Math.random() * 3 };
+    v.stay = mode === 'seat' ? 25 + Math.random() * 40 : mode === 'lift' ? 6 + Math.random() * 8 : 7 + Math.random() * 9;
+    if (o.already) {
+      v.t = Math.random() * v.stay * 0.6;
+      if (mode === 'seat' || mode === 'chair') c.fig.sit = 1;
+    } else {
+      v.pts = [{ x: s.door[0], z: s.door[2], bell: true }, { x: R.door.x, z: R.door.z, inRoom: true }, ...R.path(R.door.x, R.door.z, spot.x, spot.z)];
+    }
+    if (mode === 'seat' && s.kind === 'cafe') c.fig.carry = 'coffee';
+    if (mode === 'seat' && s.kind === 'books') c.fig.carry = 'book';
+    if (mode === 'seat' && s.kind === 'lobby') c.fig.carry = 'newspaper';
+    c.exitRoom = R;
+    c.exitShop = s;
+    c.ctrl = (civ, dt) => this.visit(v, dt);
+    this.visitors.push(v);
+    return v;
+  }
+
+  // walk a list of waypoints; null once there
+  follow(v) {
+    const c = v.c;
+    const pts = v.pts;
+    while (pts && pts.length) {
+      const p = pts[0];
+      const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
+      if (d > (pts.length > 1 ? 0.45 : 0.14)) break;
+      pts.shift();
+      if (p.bell) this.life.ding(this.shop);
+      if (p.inRoom !== undefined) c.noCollide = p.inRoom;
+    }
+    if (!pts || !pts.length) return null;
+    // stuck behind something for too long: step through
+    if (v.t > 30) {
+      const p = pts[pts.length - 1];
+      c.pos.x = p.x;
+      c.pos.z = p.z;
+      pts.length = 0;
+      return null;
+    }
+    return { x: pts[0].x, z: pts[0].z, speed: c.speed };
+  }
+
+  visit(v, dt) {
+    const c = v.c;
+    v.t += dt;
+    if (v.phase !== 'at') c.fig.sit = Math.max(0, c.fig.sit - dt * 3);
+    switch (v.phase) {
+      case 'in':
+      case 'pay-go':
+      case 'out': {
+        const m = this.follow(v);
+        if (m) return m;
+        if (v.phase === 'in') {
+          v.phase = 'at';
+          v.t = 0;
+          if (v.mode === 'seat' || v.mode === 'chair') c.noCollide = true;
+        } else if (v.phase === 'pay-go') {
+          v.phase = 'pay';
+          v.t = 0;
+        } else {
+          this.done(v);
+        }
+        return null;
+      }
+      case 'pay':
+        return this.paying(v);
+      default:
+        return this.atSpot(v, dt);
+    }
+  }
+
+  atSpot(v, dt) {
+    const c = v.c;
+    const sp = v.spot;
+    c.faceYaw = sp.yaw;
+    if (v.mode === 'seat' || v.mode === 'chair') {
+      c.pos.x = sp.x;
+      c.pos.z = sp.z;
+      c.fig.sit = Math.min(1, c.fig.sit + dt * 3);
+      if (c.fig.carry === 'coffee') {
+        v.sip = (v.sip === undefined ? 2 + Math.random() * 4 : v.sip) - dt;
+        if (v.sip < 0) {
+          c.fig.drinkT = Math.min(1, -v.sip / 1.2);
+          if (v.sip < -1.2) {
+            v.sip = 3 + Math.random() * 5;
+            c.fig.drinkT = -1;
+          }
+        }
+      }
+      // the barber decides when the one in his chair is done
+      if (v.mode === 'chair') return null;
+      if (v.t > v.stay) this.leave(v);
+      return null;
+    }
+    if (v.mode === 'lift') {
+      if (v.t > v.stay) {
+        // ding: the lift is here, up they go
+        this.life.ding(this.shop);
+        this.vanish(v);
+      }
+      return null;
+    }
+    // browsing: now and then a hand goes to the shelf
+    const f = c.fig;
+    v.reachT -= dt;
+    if (v.reachT < 0 && !f.reachR) {
+      f.reachR = new THREE.Vector3(c.pos.x + Math.sin(sp.yaw) * 0.5 + (Math.random() - 0.5) * 0.3, c.pos.y + 0.8 + Math.random() * 0.8, c.pos.z + Math.cos(sp.yaw) * 0.5 + (Math.random() - 0.5) * 0.3);
+    }
+    if (v.reachT < -0.9) {
+      f.reachR = null;
+      v.reachT = 1.5 + Math.random() * 3;
+    }
+    if (v.t > v.stay) {
+      f.reachR = null;
+      const busy = this.visitors.some((o) => o !== v && (o.phase === 'pay' || o.phase === 'pay-go'));
+      if (this.paySpot && this.open && busy) {
+        v.stay += 2;
+        return null;
+      }
+      if (this.paySpot && this.open) {
+        v.phase = 'pay-go';
+        v.t = 0;
+        v.pts = this.room.path(c.pos.x, c.pos.z, this.paySpot.x, this.paySpot.z);
+      } else this.leave(v);
+    }
+    return null;
+  }
+
+  paying(v) {
+    const c = v.c;
+    c.faceYaw = this.paySpot.yaw;
+    this.payer = v;
+    if (v.t > 1.8 && !v.paid) {
+      v.paid = true;
+      const s = this.shop;
+      const item = ITEM[s.kind];
+      if (item) {
+        if (item === 'bag' || item === 'bouquet') c.fig.carryL = item;
+        else c.fig.carry = item;
+        c.fig.bagBread = s.kind === 'bagel' || s.kind === 'deli' || s.kind === 'grocery';
+        c.carryUntil = this.game.time + 50;
+      }
+      if (Math.random() < 0.6) this.say(this.keeper, pick(['Thank you!', 'Have a nice day!', 'Come again!', 'Enjoy!', 'Next, please!']));
+    }
+    if (v.t > 2.6) {
+      if (this.payer === v) this.payer = null;
+      if (Math.random() < 0.3) this.say(c, pick(['Thanks!', 'See ya!', 'Mmm!', 'Bye!']));
+      this.leave(v);
+    }
+    return null;
+  }
+
+  // up from the seat, round the furniture, out of the door and back onto the sidewalk
+  leave(v) {
+    const c = v.c;
+    const R = this.room;
+    const s = this.shop;
+    c.fig.reachR = null;
+    c.fig.drinkT = -1;
+    v.phase = 'out';
+    v.t = 0;
+    const side = (Math.random() - 0.5) * 2.4;
+    v.pts = [...R.path(c.pos.x, c.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2], bell: true, inRoom: false }, { x: s.door[0] + s.nx * 1.7 + s.rx * side, z: s.door[2] + s.nz * 1.7 + s.rz * side }];
+    if (this.payer === v) this.payer = null;
+  }
+
+  // out on the sidewalk: an ordinary pedestrian again
+  done(v) {
+    const c = v.c;
+    const i = this.visitors.indexOf(v);
+    if (i >= 0) this.visitors.splice(i, 1);
+    c.exitRoom = null;
+    c.exitShop = null;
+    if (v.own) this.game.civilians.release(c);
+    else {
+      c.ctrl = null;
+      c.faceYaw = null;
+      c.noCollide = false;
+      c.fig.sit = 0;
+      this.customers = Math.max(0, this.customers - 1);
+    }
+  }
+
+  // into the lift (or simply away)
+  vanish(v) {
+    const i = this.visitors.indexOf(v);
+    if (i >= 0) this.visitors.splice(i, 1);
+    if (!v.own) this.customers = Math.max(0, this.customers - 1);
+    this.game.fx.crumbs(v.c.pos.x, v.c.pos.y + 1, v.c.pos.z, 4, 0.6);
+    this.game.civilians.remove(v.c);
+  }
+
+  // a visitor scared off (or rubbed out): let them go (they find their own way out of the door)
+  drop(v) {
+    const i = this.visitors.indexOf(v);
+    if (i >= 0) this.visitors.splice(i, 1);
+    if (this.payer === v) this.payer = null;
+    const c = v.c;
+    if (c.owner === this) this.game.civilians.release(c);
+    else if (c.ctrl) {
+      c.ctrl = null;
+      c.faceYaw = null;
+      c.noCollide = false;
+      c.fig.sit = 0;
+    }
+    if (!v.own) this.customers = Math.max(0, this.customers - 1);
+    if (this.npcJob && this.npcJob.v === v) this.npcJob = null;
+  }
+
+  // a pedestrian popping in from the street
+  admit(c) {
+    if (!this.room) return false;
+    const v = this.addVisitor(c);
+    if (!v) return false;
+    this.customers++;
+    return true;
+  }
+
+  say(c, text) {
+    if (!c || !c.alive) return;
+    const p = this.game.player.pos;
+    if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 26) this.game.bubbles.say(c, text);
+  }
+
+  sound(name, vol, range = 14) {
+    const p = this.game.player.pos;
+    const d = Math.hypot(this.home.x - p.x, this.home.z - p.z);
+    if (d < range) this.game.audio.play(name, vol * (1 - d / range));
   }
 
   seat(tb) {
@@ -530,7 +868,7 @@ class OpenShop {
     this.extras.push(c);
   }
 
-  // the barber's next customer walks up and sits down
+  // the barber's next customer walks up and sits down (a barber on the sidewalk)
   newCustomer(already = false) {
     const s = this.shop;
     const ch = s.spots.chair;
@@ -564,6 +902,8 @@ class OpenShop {
     const s = this.shop;
     const fig = c.fig;
     this.t += dt;
+    // cutting the hero's hair comes before anything else
+    if (this.heroJob) return this.barberInside(c, dt);
     if (this.talking) {
       c.faceYaw = Math.atan2(this.game.player.pos.x - c.pos.x, this.game.player.pos.z - c.pos.z);
       fig.lookAt = this.game.player.fig.j.headC;
@@ -571,9 +911,10 @@ class OpenShop {
         this.talking = false;
         fig.lookAt = null;
       }
-      return null;
+      return this.room ? { x: c.pos.x, z: c.pos.z, speed: 0 } : null;
     }
     fig.lookAt = null;
+    if (this.room) return this.workInside(c, dt);
     switch (s.kind) {
       case 'barber':
         return this.barber(c, dt);
@@ -584,13 +925,7 @@ class OpenShop {
         return this.sweep(c, dt);
       case 'music':
         c.faceYaw = s.face;
-        if (Math.floor(this.t * 1.6) !== Math.floor((this.t - dt) * 1.6)) {
-          const j = fig.j.handR;
-          this.life.notes.push({ x: j.x + (Math.random() - 0.5) * 0.3, y: j.y + 0.3, z: j.z, t: 0, s: Math.random() * 100 });
-          const p = this.game.player.pos;
-          const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
-          if (d < 14 && Math.random() < 0.5) this.game.audio.play('strum', 0.8 * (1 - d / 14));
-        }
+        this.strum(c, dt);
         return null;
       default:
         // idle about the door: look out at the street, now and then a few steps
@@ -601,6 +936,217 @@ class OpenShop {
         }
         return { x: this.home.x, z: this.home.z, speed: 1 };
     }
+  }
+
+  strum(c, dt) {
+    if (Math.floor(this.t * 1.6) !== Math.floor((this.t - dt) * 1.6)) {
+      const j = c.fig.j.handR;
+      this.life.notes.push({ x: j.x + (Math.random() - 0.5) * 0.3, y: j.y + 0.3, z: j.z, t: 0, s: Math.random() * 100 });
+      const p = this.game.player.pos;
+      const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
+      if (d < 14 && Math.random() < 0.5) this.game.audio.play('strum', 0.8 * (1 - d / 14));
+    }
+  }
+
+  // inside the shop: behind the counter, at the barber's chair, between the cafe tables
+  workInside(c, dt) {
+    const s = this.shop;
+    const fig = c.fig;
+    if (s.kind === 'barber') return this.barberInside(c, dt);
+    if (s.kind === 'cafe' && this.room.seats.length >= 2) return this.waiterInside(c, dt);
+    if (s.kind === 'music') {
+      c.faceYaw = this.homeYaw;
+      this.strum(c, dt);
+      return { x: this.home.x, z: this.home.z, speed: 0.8 };
+    }
+    // a customer at the till: he turns to them
+    const pv = this.payer;
+    if (pv && pv.phase === 'pay' && pv.c.alive) {
+      fig.reachR = null;
+      c.faceYaw = Math.atan2(pv.c.pos.x - c.pos.x, pv.c.pos.z - c.pos.z);
+      fig.lookAt = pv.c.fig.j.headC;
+      return { x: this.home.x, z: this.home.z, speed: 0.8 };
+    }
+    // tidying the shelf behind, a look round the shop, a step along the counter
+    const k = Math.sin(this.t * 0.21 + s.id * 1.3);
+    const fx = Math.sin(this.homeYaw);
+    const fz = Math.cos(this.homeYaw);
+    if (k > 0.72) {
+      c.faceYaw = this.homeYaw + Math.PI;
+      if (!fig.reachR) fig.reachR = new THREE.Vector3();
+      fig.reachR.set(c.pos.x - fx * 0.5 + Math.sin(this.t * 1.7) * 0.15, c.pos.y + 1.15 + Math.sin(this.t * 1.1) * 0.25, c.pos.z - fz * 0.5 + Math.cos(this.t * 1.7) * 0.15);
+    } else {
+      fig.reachR = null;
+      c.faceYaw = this.homeYaw + Math.sin(this.t * 0.37) * 0.45;
+    }
+    const step = Math.sin(this.t * 0.13 + 1.7) > 0.55 ? Math.sin(this.t * 0.5) * 0.35 : 0;
+    return { x: this.home.x - fz * step, z: this.home.z + fx * step, speed: 0.6 };
+  }
+
+  // the cafe: from the counter to a table and back
+  waiterInside(c, dt) {
+    const R = this.room;
+    const s = this.shop;
+    if (!this.wStops) {
+      // in front of each table (the seats come in pairs, either side of it)
+      this.wStops = [];
+      for (let i = 0; i + 1 < R.seats.length; i += 2) {
+        const a = R.seats[i];
+        const b = R.seats[i + 1];
+        const x = (a.x + b.x) / 2;
+        const z = (a.z + b.z) / 2;
+        this.wStops.push({ x: x + s.nx * 0.75, z: z + s.nz * 0.75, yaw: Math.atan2(-s.nx, -s.nz) });
+      }
+      this.wI = -1;
+      this.wPts = [];
+      this.wT = 3;
+    }
+    const w = { c, pts: this.wPts, t: 0 };
+    const m = this.follow(w);
+    if (m) return { ...m, speed: 1.1 };
+    this.wT -= dt;
+    const stop = this.wI >= 0 ? this.wStops[this.wI] : { x: this.home.x, z: this.home.z, yaw: this.homeYaw };
+    c.faceYaw = stop.yaw;
+    if (this.wT <= 0 && this.wStops.length) {
+      // next: back to the counter, or out to the next table
+      if (this.wI >= 0) this.wI = -1;
+      else this.wI = Math.floor(Math.random() * this.wStops.length);
+      const to = this.wI >= 0 ? this.wStops[this.wI] : { x: this.home.x, z: this.home.z };
+      this.wPts = R.path(c.pos.x, c.pos.z, to.x, to.z);
+      this.wT = this.wI >= 0 ? 3 : 4 + Math.random() * 4;
+      if (this.wI >= 0 && Math.random() < 0.4) this.say(c, pick(['Here you go!', 'Another one?', 'Enjoy!']));
+    }
+    return null;
+  }
+
+  // the barber: rubs out the old hair, then draws the new one
+  barberInside(c, dt) {
+    const R = this.room;
+    const fig = c.fig;
+    let job = this.heroJob;
+    if (!job) {
+      // the next one from the bench takes the chair
+      const chair = R.chairs[0];
+      if (chair && !this.visitors.some((v) => v.spot === chair)) {
+        const w = this.visitors.find((v) => v.mode === 'seat' && v.phase === 'at');
+        if (w) {
+          w.mode = 'chair';
+          w.spot = chair;
+          w.phase = 'in';
+          w.t = 0;
+          w.pts = R.path(w.c.pos.x, w.c.pos.z, chair.x, chair.z);
+        }
+      }
+      const v = this.visitors.find((o) => o.mode === 'chair' && o.phase === 'at' && o.c.fig.sit > 0.8);
+      if (!v) {
+        this.npcJob = null;
+        fig.reachR = null;
+        fig.lookAt = null;
+        c.faceYaw = this.homeYaw;
+        return { x: this.home.x, z: this.home.z, speed: 0.9 };
+      }
+      if (!this.npcJob || this.npcJob.v !== v) {
+        const L = v.c.fig.look;
+        const style = pick(L.fem ? CUTS_F : CUTS_M);
+        const keep = L.hair && L.hair.style !== 'none' ? L.hair.color : [0.15, 0.12, 0.1];
+        this.npcJob = { v, who: v.c, npc: true, chair: v.spot, look: L, phase: 'start', t: 0, side: Math.random() < 0.5 ? 1 : -1, style, color: Math.random() < 0.25 ? pick(FUN_HAIR) : keep, head: () => v.c.fig.j.headC };
+      }
+      job = this.npcJob;
+    }
+    const ch = job.chair;
+    const fx = Math.sin(ch.yaw);
+    const fz = Math.cos(ch.yaw);
+    const sx = ch.x + fz * job.side * 0.62 - fx * 0.15;
+    const sz = ch.z - fx * job.side * 0.62 - fz * 0.15;
+    const head = job.head();
+    job.t += dt;
+    c.faceYaw = Math.atan2(head.x - c.pos.x, head.z - c.pos.z);
+    fig.lookAt = head;
+    const there = Math.hypot(c.pos.x - sx, c.pos.z - sz) < 0.3;
+    switch (job.phase) {
+      case 'start':
+        if (job.t > 1.0 && there) {
+          job.phase = 'erase';
+          job.t = 0;
+          fig.carry = 'eraser';
+          if (job.npc && Math.random() < 0.6) this.say(job.who, pick(['Something new, please!', 'Surprise me.', 'Not too short!', 'The usual.']));
+        }
+        break;
+      case 'erase': {
+        // the old hair rubbed out, crumbs everywhere
+        if (!fig.reachR) fig.reachR = new THREE.Vector3();
+        fig.reachR.set(head.x + Math.sin(job.t * 9) * 0.1, head.y + 0.16 + Math.sin(job.t * 13) * 0.04, head.z + Math.cos(job.t * 9) * 0.1);
+        if (Math.floor(job.t * 6) !== Math.floor((job.t - dt) * 6)) this.game.fx.crumbs(head.x, head.y + 0.2, head.z, 2, 0.9);
+        if (Math.floor(job.t * 2.5) !== Math.floor((job.t - dt) * 2.5)) this.sound('erase', 0.35, 12);
+        if (job.t > 2.2) {
+          job.look.hair = { style: 'none', color: job.look.skin };
+          if (job.hatOff) job.look.hat = null;
+          this.game.fx.crumbs(head.x, head.y + 0.2, head.z, 10, 1.6);
+          fig.reachR = null;
+          fig.carry = TOOL.barber;
+          job.t = 0;
+          if (job.npc && Math.random() < 0.4) this.say(job.who, pick(['Hey! My hair!', 'Uh... is that normal?', 'Feels breezy.']));
+          if (job.style === 'none') {
+            job.phase = 'admire';
+            if (job.onDone) job.onDone();
+            break;
+          }
+          job.phase = 'draw';
+          const style = job.style;
+          const color = job.color;
+          this.game.airsketch.draw({
+            shape: HAIR_SKETCH[style](color),
+            at: head.clone().setY(head.y + 0.06),
+            size: 0.58,
+            author: c,
+            target: head.clone(),
+            targetScale: 0.85,
+            dur: 1.5,
+            onPlop: () => {
+              job.look.hair = { style, color };
+              job.phase = 'admire';
+              job.t = 0;
+              if (job.onDone) job.onDone();
+            },
+          });
+        }
+        break;
+      }
+      case 'draw':
+        // the pencil does the work; if the drawing was lost, finish anyway
+        if (job.t > 6) {
+          job.look.hair = { style: job.style, color: job.color };
+          job.phase = 'admire';
+          job.t = 0;
+          if (job.onDone) job.onDone();
+        }
+        break;
+      default:
+        // admire: a look in the mirror
+        fig.lookAt = null;
+        fig.reachR = null;
+        if (job.t > 0.4 && !job.said) {
+          job.said = true;
+          if (job.npc) this.say(job.who, pick(['Looking sharp!', 'Love it!', 'Ten years younger!', 'Wow!']));
+          else this.say(c, pick(['Looking sharp!', 'Next!', 'A masterpiece.']));
+          if (job.npc) this.sound('cheer', 0.25, 10);
+        }
+        if (job.t > 2.2) {
+          if (job.npc) {
+            this.leave(job.v);
+            this.npcJob = null;
+          } else {
+            this.heroJob = null;
+            this.drawing = false;
+            this.talking = false;
+            const p = this.game.player;
+            if (p.seat) p.seat.lock = false;
+          }
+          fig.lookAt = null;
+        }
+        break;
+    }
+    return { x: sx, z: sz, speed: 1.1 };
   }
 
   sweep(c) {
@@ -669,7 +1215,7 @@ class OpenShop {
   talk() {
     const game = this.game;
     const info = SERVICES[this.shop.kind];
-    if (game.time < this.cool) {
+    if (game.time < this.cool || this.heroJob) {
       game.dialog.show(info.who, 'רגע, רגע — עוד לא סיימתי עם ההזמנה הקודמת. תחזור עוד מעט?', null);
       return;
     }
@@ -686,6 +1232,11 @@ class OpenShop {
     this.cool = game.time + 12;
     if (!sketch) {
       fn(game, this);
+      return;
+    }
+    // in the barber's shop: into the chair, the old hair rubbed out, the new one drawn on
+    if (sketch.startsWith('hair:') && this.room && this.room.chairs.length) {
+      this.heroCut(sketch.slice(5));
       return;
     }
     // the shopkeeper draws it in the air between you, and it plops into your hands (or onto your head)
@@ -725,6 +1276,36 @@ class OpenShop {
     });
   }
 
+  // the hero in the barber's chair
+  heroCut(style) {
+    const R = this.room;
+    const game = this.game;
+    const p = game.player;
+    const chair = R.chairs[R.chairs.length - 1];
+    // whoever sat there gets up for a moment
+    for (const v of this.visitors.slice()) if (v.spot === chair && v.phase !== 'out') this.leave(v);
+    if (this.npcJob && this.npcJob.chair === chair) this.npcJob = null;
+    p.seat = { x: chair.x, z: chair.z, yaw: chair.yaw, lock: true };
+    const L = p.fig.look;
+    const color = style === 'none' ? L.skin : pick(HERO_HAIR_COLORS);
+    this.drawing = true;
+    this.talking = true;
+    this.heroJob = {
+      who: p,
+      npc: false,
+      chair,
+      look: L,
+      phase: 'start',
+      t: 0,
+      side: -1,
+      style,
+      color,
+      hatOff: true,
+      head: () => p.fig.j.headC,
+      onDone: () => heroHair(game, style, color),
+    };
+  }
+
   serenade(dance) {
     const game = this.game;
     const k = this.keeper;
@@ -750,6 +1331,10 @@ class OpenShop {
     for (const c of this.extras) {
       if (c.owner === this && (c.panicT > 0 || !c.alive)) this.game.civilians.release(c);
     }
+    for (const v of this.visitors.slice()) {
+      const c = v.c;
+      if (!c.alive || c.panicT > 0 || c.headless || (v.own && c.owner !== this) || (!v.own && c.ctrl === null)) this.drop(v);
+    }
     if (this.chairGuy && this.chairGuy.owner === this && this.chairGuy.panicT > 0) {
       this.game.civilians.release(this.chairGuy);
       this.chairGuy = null;
@@ -758,12 +1343,28 @@ class OpenShop {
       this.game.civilians.release(k);
       k.fig.reachR = null;
     }
+    // the barber ran off in the middle of the hero's haircut: out of the chair
+    if (this.heroJob && !this.open) {
+      this.heroJob = null;
+      this.drawing = false;
+      this.talking = false;
+      const p = this.game.player;
+      if (p.seat) p.seat = null;
+    }
+    // now and then somebody new at the door
+    if (this.room && this.open && !this.game.touch) {
+      this.newT = (this.newT === undefined ? 8 + Math.random() * 10 : this.newT) - dt;
+      if (this.newT <= 0) {
+        this.newT = 14 + Math.random() * 16;
+        if (this.visitors.length < 4) this.addVisitor(null);
+      }
+    }
   }
 
   draw(fr) {
     const s = this.shop;
-    // the door swings open: warm light from inside
-    if (this.doorT > 0) {
+    // the door swings open: warm light from inside (a shop with a closed door)
+    if (this.doorT > 0 && !this.room) {
       const a = Math.min(1, this.doorT * 3);
       const x = s.door[0] - s.nx * 0.5;
       const z = s.door[2] - s.nz * 0.5;
@@ -809,7 +1410,22 @@ class OpenShop {
     drop(this.keeper);
     for (const c of this.extras) drop(c);
     drop(this.chairGuy);
+    for (const v of this.visitors) {
+      if (v.own) drop(v.c);
+      else if (v.c.ctrl) {
+        // a passer-by still inside: they find their own way out
+        v.c.ctrl = null;
+        v.c.faceYaw = null;
+        v.c.fig.sit = 0;
+      }
+    }
+    this.visitors = [];
     this.extras = [];
+    if (this.heroJob) {
+      const p = this.game.player;
+      if (p.seat) p.seat = null;
+      this.heroJob = null;
+    }
   }
 }
 

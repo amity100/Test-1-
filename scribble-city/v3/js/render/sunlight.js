@@ -82,7 +82,7 @@ export function followSun(now) {
  * the water) only ever receives shadows, so it is left out.
  */
 export function bakeSunShadows(renderer, group, size = 2048, bounds = null) {
-  const meshes = group.children.filter((o) => o.isMesh && o.geometry && o.geometry.getAttribute('aFace') && !o.geometry.isInstancedBufferGeometry && !o.userData.flatGround);
+  const meshes = group.children.filter((o) => o.isMesh && o.geometry && o.geometry.getAttribute('aFace') && !o.geometry.isInstancedBufferGeometry && !o.userData.flatGround && !o.userData.noShadow);
   if (!meshes.length) return null;
   const box = new THREE.Box3();
   for (const m of meshes) {

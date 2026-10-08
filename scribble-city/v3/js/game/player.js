@@ -41,6 +41,7 @@ export class Player {
     this.mode = 'foot';
     this.fig.dead = 0;
     this.fig.sit = 0;
+    this.seat = null;
     this.fig.setVisible(true);
     this.invuln = 2;
   }
@@ -90,6 +91,25 @@ export class Player {
         else this.game.traffic.seat(fig, v.pos, v.yaw, dt);
       }
       return;
+    }
+    // sitting (in the barber's chair): held to the seat until it lets go, then any step stands up
+    if (this.seat) {
+      const st = this.seat;
+      const mv = input.readMove();
+      if (!st.lock && (Math.hypot(mv.x, mv.y) > 0.3 || input.wasPressed('Space'))) {
+        this.seat = null;
+      } else {
+        this.pos.x = st.x;
+        this.pos.z = st.z;
+        this.vel.set(0, 0, 0);
+        this.yaw = dampAngle(this.yaw, st.yaw, 10, dt);
+        fig.yaw = this.yaw;
+        fig.speed = 0;
+        fig.air = false;
+        fig.sit = damp(fig.sit, 1, 8, dt);
+        fig.update(dt);
+        return;
+      }
     }
     // regen after a few calm seconds; the rubbed-out spots fill back in
     if (this.game.time - this.lastHurt > 4 && this.hp < this.maxHp) {

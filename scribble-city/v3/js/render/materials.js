@@ -216,7 +216,7 @@ export function surfaceDepthMaterial() {
   return surfDepth;
 }
 
-export function makeSurfaceMaterial({ side = THREE.FrontSide } = {}) {
+export function makeSurfaceMaterial({ side = THREE.FrontSide, indoor = false } = {}) {
   const m = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: {
@@ -225,6 +225,7 @@ export function makeSurfaceMaterial({ side = THREE.FrontSide } = {}) {
       uTintAll: { value: new THREE.Color(1, 1, 1) },
       uAlpha: { value: 1 },
       uMatId: { value: nextMatId() },
+      uIndoor: { value: indoor ? 1 : 0 },
     },
     vertexShader: COMMON + SURF_VERT,
     fragmentShader: COMMON + SURF_FRAG,

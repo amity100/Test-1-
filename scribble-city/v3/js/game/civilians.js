@@ -106,12 +106,19 @@ class Civilian {
       fig.armsUp = 0;
     } else if (this.panicT > 0) {
       this.panicT -= dt;
-      const fx = this.pos.x - this.fearX;
-      const fz = this.pos.z - this.fearZ;
-      const l = Math.hypot(fx, fz) || 1;
-      tx = this.pos.x + (fx / l) * 5;
-      tz = this.pos.z + (fz / l) * 5;
-      speed = 5.8;
+      // inside a shop: out of the door first (round the counter, not through the wall)
+      const ex = this.exitRoom && !this.ctrl ? this.exitTarget() : null;
+      if (ex) {
+        tx = ex.x;
+        tz = ex.z;
+      } else {
+        const fx = this.pos.x - this.fearX;
+        const fz = this.pos.z - this.fearZ;
+        const l = Math.hypot(fx, fz) || 1;
+        tx = this.pos.x + (fx / l) * 5;
+        tz = this.pos.z + (fz / l) * 5;
+      }
+      speed = ex ? 4.4 : 5.8;
       fig.armsUp = 1;
     } else if (this.ctrl) {
       fig.flail = 0;
@@ -126,6 +133,13 @@ class Civilian {
         tz = this.pos.z;
         speed = 0;
       }
+    } else if (this.exitRoom && this.exitTarget()) {
+      // let go inside a shop: out onto the sidewalk before the usual walk
+      fig.armsUp = 0;
+      fig.flail = 0;
+      const ex = this.exitTarget();
+      tx = ex.x;
+      tz = ex.z;
     } else {
       fig.armsUp = 0;
       fig.flail = 0;
@@ -166,6 +180,30 @@ class Civilian {
     fig.yaw = this.yaw;
     fig.speed = sp;
     fig.update(dt);
+  }
+
+  // the next step out of the shop they are in: round the furniture, out of the door, a step onto
+  // the sidewalk (null once outside)
+  exitTarget() {
+    const R = this.exitRoom;
+    const s = this.exitShop;
+    if (!this.exitPts) {
+      this.exitPts = [];
+      if (R && s && R.door && R.inside(this.pos.x, this.pos.z, 0.3)) {
+        this.exitPts = [...R.path(this.pos.x, this.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2] }, { x: s.door[0] + s.nx * 1.8, z: s.door[2] + s.nz * 1.8 }];
+        this.noCollide = true;
+      }
+    }
+    const pts = this.exitPts;
+    while (pts.length && Math.hypot(pts[0].x - this.pos.x, pts[0].z - this.pos.z) < 0.45) pts.shift();
+    if (pts.length <= 1) this.noCollide = false;
+    if (!pts.length) {
+      this.exitRoom = null;
+      this.exitShop = null;
+      this.exitPts = null;
+      return null;
+    }
+    return pts[0];
   }
 
   dispose() {

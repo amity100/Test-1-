@@ -162,6 +162,7 @@ in vec4 aFace;
 in vec4 aFace2;
 in float aObj;
 in float aPart;
+in float aHollow;
 uniform mat4 uReflMatrix;
 
 out vec3 vColor;
@@ -173,6 +174,7 @@ out vec3 vWPos;
 flat out float vObj;
 flat out float vGone;
 flat out float vPart;
+flat out float vHollow;
 out vec4 vRefl;
 
 void main() {
@@ -195,6 +197,7 @@ void main() {
   vFace = aFace;
   vFace2 = aFace2;
   vPart = mod(aPart, 4093.0);
+  vHollow = aHollow;
   vRefl = uReflMatrix * wp;
 }
 `;
@@ -206,6 +209,7 @@ uniform float uAlpha;
 uniform float uMatId;
 uniform sampler2D uRefl;
 uniform float uUseRefl;
+uniform float uIndoor;
 
 in vec3 vColor;
 in vec2 vUV;
@@ -216,6 +220,7 @@ in vec3 vWPos;
 flat in float vObj;
 flat in float vGone;
 flat in float vPart;
+flat in float vHollow;
 in vec4 vRefl;
 ${MRT_OUT}
 
@@ -273,7 +278,7 @@ void main() {
   vec2 p = uv;
   float lightBoost = max(uDusk * 0.6, uNight);
 
-  if (style < 9.5) {
+  if (style < 9.5 || style > 18.5) {
     // ------- solids: buildings, props -------
     if (style >= 0.5 && style < 5.5) {
       float cellW = vFace.y;
@@ -355,6 +360,82 @@ void main() {
       em += vec3(1.0, 0.82, 0.5) * (0.25 + 2.4 * lightBoost);
       dens = 0.4;
       lineW = 0.5;
+    } else if (style > 19.5) {
+      // a floor indoors, drawn whole in one quad (vFace.y: the size of a tile or a board,
+      // vFace.z: 0 chequered, 1 tiles, 2 rubber mats, 3 boards, 4 concrete)
+      float ts = max(vFace.y, 0.1);
+      float pat = floor(vFace.z + 0.5);
+      vec2 g = uv / ts;
+      vec2 c = floor(g);
+      vec2 f = fract(g);
+      vec2 dc = min(f, 1.0 - f) * ts;
+      float grout = min(dc.x, dc.y);
+      float th = hash12(c + seed);
+      if (pat < 0.5) {
+        alb = mix(alb, toLin(vec3(0.24, 0.24, 0.28)), mod(c.x + c.y, 2.0));
+        inkK = inkLine(grout, px, 0.7) * 0.35;
+      } else if (pat < 1.5) {
+        alb *= 0.94 + 0.1 * th;
+        inkK = inkLine(grout, px, 0.8) * 0.45;
+      } else if (pat < 2.5) {
+        alb *= mix(0.86, 1.06, mod(c.x + c.y, 2.0)) * (0.96 + 0.06 * th);
+        inkK = inkLine(grout, px, 1.0) * 0.5;
+      } else if (pat < 3.5) {
+        // boards along the room, their ends staggered
+        float bw = ts;
+        float bi = floor(uv.x / bw);
+        float bl = 2.4;
+        float off = hash12(vec2(bi, seed)) * bl;
+        float bj = floor((uv.y + off) / bl);
+        float bh = hash12(vec2(bi, bj) + seed * 1.3);
+        alb *= 0.86 + 0.24 * bh;
+        float side = min(fract(uv.x / bw), 1.0 - fract(uv.x / bw)) * bw;
+        float endD = min(fract((uv.y + off) / bl), 1.0 - fract((uv.y + off) / bl)) * bl;
+        inkK = max(inkLine(side, px, 0.8), inkLine(endD, px, 0.8)) * 0.4;
+        ang = 0.1;
+      } else {
+        alb *= 0.95 + 0.08 * n2(uv * 0.7 + seed);
+      }
+      dens = 0.85;
+      lineW = 0.35;
+    } else if (style > 18.5) {
+      // a shelf full of things, row upon row: tins and boxes, books, bottles, bread, flowers...
+      // (vFace.y: the height of a row, vFace.z: what is on the shelf)
+      float rowH = max(vFace.y, 0.15);
+      float pal = floor(vFace.z + 0.5);
+      float row = floor(uv.y / rowH);
+      float fy = fract(uv.y / rowH);
+      float cw = pal == 1.0 ? 0.055 : pal == 7.0 ? 0.03 : pal == 5.0 ? 0.1 : 0.13;
+      float cx = uv.x / cw;
+      // things of different widths: neighbouring cells sometimes belong together
+      float ci = floor(cx);
+      float h1 = hash12(vec2(ci, row) + seed * 3.1);
+      float h2 = hash12(vec2(ci * 1.7 + 4.0, row * 2.3) + seed);
+      float fx = fract(cx);
+      float prodH = pal == 1.0 ? mix(0.62, 0.93, h2) : pal == 5.0 ? mix(0.5, 0.95, h2) : mix(0.42, 0.88, h2);
+      float boardH = 0.08;
+      float inProd = step(boardH, fy) * step(fy, prodH) * step(0.07, h1) * step(0.05, fx) * step(fx, 0.95);
+      vec3 pc;
+      if (pal == 1.0) pc = hueShift(vec3(0.72, 0.28, 0.24), h1 * 6.2832) * mix(0.55, 1.0, h2);
+      else if (pal == 2.0) pc = mix(vec3(0.96, 0.96, 0.94), hueShift(vec3(0.5, 0.8, 0.65), h1 * 6.2832), step(0.55, h2) * 0.7);
+      else if (pal == 3.0) pc = h1 < 0.35 ? vec3(0.55, 0.56, 0.6) : h1 < 0.6 ? vec3(0.92, 0.52, 0.2) : h1 < 0.8 ? vec3(0.8, 0.24, 0.22) : vec3(0.3, 0.42, 0.75);
+      else if (pal == 4.0) pc = mix(vec3(0.86, 0.64, 0.36), vec3(0.62, 0.4, 0.22), h1);
+      else if (pal == 5.0) pc = hueShift(vec3(0.98, 0.35, 0.3), h1 * 3.0 - 0.5) * (0.85 + 0.25 * h2);
+      else if (pal == 6.0) pc = mix(vec3(0.96, 0.95, 0.92), vec3(0.62, 0.42, 0.3), step(0.8, h1));
+      else if (pal == 7.0) pc = h1 < 0.7 ? vec3(0.14, 0.13, 0.16) : hueShift(vec3(0.95, 0.35, 0.3), h2 * 6.2832);
+      else if (pal == 8.0) pc = hueShift(vec3(0.3, 0.68, 0.7), (h1 - 0.5) * 2.0) * (0.75 + 0.35 * h2);
+      else if (pal == 9.0) pc = h1 < 0.5 ? vec3(0.15, 0.15, 0.18) : hueShift(vec3(0.85, 0.3, 0.3), h2 * 6.2832);
+      else pc = hueShift(vec3(0.9, 0.32, 0.3), h1 * 6.2832) * (0.8 + 0.35 * h2);
+      // a label across the middle of the tins and boxes
+      float label = pal == 0.0 ? step(abs(fy - prodH * 0.55), 0.06) * step(0.5, h2) : 0.0;
+      pc = mix(pc, vec3(0.97, 0.95, 0.9), label * 0.85);
+      vec3 backC = alb * 0.42;
+      vec3 boardC = alb * 1.05;
+      alb = mix(backC, toLin(pc), inProd);
+      alb = mix(alb, boardC, step(fy, boardH));
+      inkK = inkLine((fy - boardH) * rowH, px, 1.2) * 0.6 + inkLine((fx - 0.05) * cw, px, 0.8) * inProd * 0.25;
+      dens = 0.8;
+      lineW = 0.3;
     } else if (style > 8.5) {
       // a shop window: the shop lit up inside behind the glass
       float sh = n2(uv * 0.6 + seed);
@@ -474,6 +555,12 @@ void main() {
   float ndl = dot(N, uSunDir);
   float light = clamp(ndl * 1.7 + 0.06, 0.0, 1.0) * sh * (1.0 - uNight) * (1.0 - uOvercast * 0.7);
   vec3 L = otherLight(vWPos, N);
+  if (uIndoor > 0.5) {
+    // inside: warm lamps from above, a little cool light from the street; the sun only where it
+    // comes in through the window
+    L = vec3(1.0, 0.84, 0.64) * (0.78 + 0.32 * max(N.y, 0.0) - 0.18 * max(-N.y, 0.0)) + uSkyTop * 0.22 + pointLights(vWPos, N);
+    light *= 0.85;
+  }
   vec3 shade = alb * L;
   vec3 lit = alb * (L + uSunCol);
   float back = clamp(dot(-V, uSunDir) * 1.3, 0.0, 1.0);
@@ -520,6 +607,8 @@ void main() {
   // rubbed out: blank paper shows through, with a grey eraser smudge on the rim
   if (vObj > -0.5 && uWEraseN > 0.5) {
     float er = erasedAt(vWPos);
+    // a wall with a room behind it: rubbed right through, you can see (and step) inside
+    if (vHollow > 0.0 && vWPos.y < vHollow - 0.04 && er > 0.62) discard;
     if (er > 0.0) {
       vec3 pp = uPaper * (0.92 + 0.08 * n2(vWPos.xz * 3.0 + vWPos.y));
       float rim = clamp(er * (1.0 - er) * 4.0, 0.0, 1.0);

@@ -32,6 +32,7 @@ import { BLUEPRINTS } from './blueprints.js';
 import { CAR_VARIANTS, DRIVER_SEAT } from './traffic.js';
 import { rebakeSunShadows } from '../render/sunlight.js';
 import { buildDrawnFlatModel } from './items.js';
+import { openWall } from '../world/interiors.js';
 import { BLACK_INK } from '../render/LineBatch.js';
 import { clamp } from '../core/util.js';
 
@@ -866,8 +867,16 @@ export class Game {
     } else if (box && box.tag === 'bound') return;
     // sit the spot a little inside the surface so the rim wraps around corners
     const k = hit && hit.nx !== undefined ? 0.12 : 0;
-    objs.addSpot(x - (hit ? hit.nx || 0 : 0) * k, y - (hit ? hit.ny || 0 : 0) * k, z - (hit ? hit.nz || 0 : 0) * k, r);
+    const spot = objs.addSpot(x - (hit ? hit.nx || 0 : 0) * k, y - (hit ? hit.ny || 0 : 0) * k, z - (hit ? hit.nz || 0 : 0) * k, r);
     this.fx.crumbs(x, y, z, 10, 2.4);
+    // a wall with a room behind it: rubbed through far enough, you can step inside
+    if (box && box.tag === 'roomwall' && spot && openWall(this.world.collision, this.world.nav, box, spot)) {
+      if (!this.wallTip) {
+        this.wallTip = true;
+        this.hud.toast('מחקת חור בקיר — אפשר להיכנס פנימה!', 'good', 2.6);
+      }
+      this.audio.play('crumble', 0.7);
+    }
   }
 
   onPropErased(o) {
@@ -890,7 +899,16 @@ export class Game {
       const d = Math.hypot((o.x0 + o.x1) / 2 - x, (o.z0 + o.z1) / 2 - z);
       if (objs.rub(o, power * (1.2 - Math.min(1, d / radius)))) this.onPropErased(o);
     }
-    objs.addSpot(x, y, z, radius * 0.55);
+    const spot = objs.addSpot(x, y, z, radius * 0.55);
+    // a blast against the front of a house blows a doorway into it
+    if (spot) {
+      const col = this.world.collision;
+      const walls = [];
+      col.forEachIn(x - spot.r, z - spot.r, x + spot.r, z + spot.r, (b) => {
+        if (b.tag === 'roomwall') walls.push(b);
+      });
+      for (const b of walls) openWall(col, this.world.nav, b, spot);
+    }
   }
 
   playerSegmentHit(ox, oy, oz, dx, dy, dz, maxT) {

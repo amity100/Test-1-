@@ -159,7 +159,15 @@ export class WorldObjects {
     const S = this.spots;
     for (const s of S) {
       const d = Math.hypot(s.x - x, s.y - y, s.z - z);
-      if (d + r <= s.r * 1.05) return; // already blank there
+      if (d + r <= s.r * 1.05) {
+        // already blank there: rubbing on and on wears the hole a little wider (up to about a
+        // doorway)
+        if (s.r < 1.25) {
+          s.r = Math.min(1.25, s.r + r * 0.22);
+          this.uploadSpots();
+        }
+        return s;
+      }
       if (d < s.r + r * 0.6 && r < s.r * 2) {
         // rubbing next to an old spot grows it (one slot for a whole rubbed patch)
         const nr = Math.min(12, (d + r + s.r) * 0.5);
@@ -171,7 +179,7 @@ export class WorldObjects {
           s.r = nr;
         }
         this.uploadSpots();
-        return;
+        return s;
       }
     }
     if (S.length >= MAX_SPOTS) {
@@ -180,8 +188,10 @@ export class WorldObjects {
       for (let i = 1; i < S.length; i++) if (S[i].r < S[mi].r) mi = i;
       S.splice(mi, 1);
     }
-    S.push({ x, y, z, r });
+    const ns = { x, y, z, r };
+    S.push(ns);
     this.uploadSpots();
+    return ns;
   }
 
   uploadSpots() {

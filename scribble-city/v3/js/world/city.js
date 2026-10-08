@@ -9,8 +9,7 @@ import { SHOP_SIGNS } from '../render/signs.js';
 import {
   AVES, STREETS, AVE_W, ST_W, SIDEWALK, CURB, BOUNDS, BLOCK_TYPES, blockRect, WATER_EAST_X, WATER_SOUTH_Z,
 } from './layout.js';
-import { COL, solidBox, brownstone, loft, tower, warehouse, facadesOf, facadeQuad, waterTower, door, FIRE_ESCAPES } from './buildings.js';
-import { dressShop } from './shopfronts.js';
+import { COL, solidBox, brownstone, loft, tower, warehouse, facadesOf, facadeQuad, waterTower, FIRE_ESCAPES } from './buildings.js';
 import * as P from './props.js';
 
 const PAPER = COL.paper;
@@ -51,9 +50,12 @@ export function buildCity(scene, atlas, signAtlas, mats) {
   };
   const chunk = (key) => {
     if (!W.chunks.has(key)) {
-      const ch = { mb: new MeshBuilder(), sl: new StrokeList() };
+      // mb: the city's surfaces, sl: its pen lines, rb: the rooms inside, gb: shop window glass
+      const ch = { mb: new MeshBuilder(), sl: new StrokeList(), rb: new MeshBuilder(), gb: new MeshBuilder() };
       ch.mb.obj = 0;
       ch.sl.obj = 0;
+      ch.rb.obj = 0;
+      ch.gb.obj = 0;
       W.chunks.set(key, ch);
     }
     return W.chunks.get(key);
@@ -85,6 +87,22 @@ export function buildCity(scene, atlas, signAtlas, mats) {
       mesh.name = key;
       group.add(mesh);
       verts += ch.mb.vcount;
+    }
+    if (!ch.rb.empty) {
+      const mesh = new THREE.Mesh(ch.rb.build(), mats.interior || mats.surface);
+      mesh.matrixAutoUpdate = false;
+      mesh.name = key + '_rooms';
+      mesh.renderOrder = 1;
+      group.add(mesh);
+      verts += ch.rb.vcount;
+    }
+    if (!ch.gb.empty) {
+      const mesh = new THREE.Mesh(ch.gb.build(), mats.shopGlass || mats.glass);
+      mesh.matrixAutoUpdate = false;
+      mesh.name = key + '_glass';
+      mesh.renderOrder = 20;
+      mesh.userData.noShadow = true;
+      group.add(mesh);
     }
     if (ch.sl.length) {
       const batch = ch.sl.toBatch(key === 'sketch' ? mats.lineFaint : mats.line);
@@ -338,9 +356,13 @@ function standardRows(W, ch, r, type, rng, opts = {}) {
         const shop = corner && rng.chance(0.55) ? rng.pick(SHOP_SIGNS) : rng.chance(0.15) ? rng.pick(SHOP_SIGNS) : null;
         // The Inkwell: third house of the start block's street side
         const bar = type === 'start' && row.front === 'n' && i === 2 && !W.bar;
-        brownstone(W, ch, lot, rng, { shop: bar ? null : shop, bar });
+        // a corner house without a shop of its own may have a bodega round the side, on the
+        // avenue: a room you walk into (its own dice, so the rest of the city stays as it was)
+        const srng = new RNG(Math.floor(Math.abs(x0 * 7.13 + row.z0 * 3.71)) + 17);
+        const side = corner && !shop && !bar && row.z1 - row.z0 > 12 && srng.chance(0.6) ? (i === 0 ? 'w' : 'e') : null;
+        brownstone(W, ch, lot, rng, { shop: bar ? null : shop, bar, side, sideShop: side ? srng.pick(SHOP_SIGNS) : null, srng });
       } else if (type === 'loft') {
-        loft(W, ch, lot, rng, {});
+        loft(W, ch, lot, rng, { open: i === 0 ? 'w' : i === lots.length - 1 ? 'e' : null });
       } else if (type === 'warehouse') {
         warehouse(W, ch, lot, rng, { sign: i === 0 ? 'warehouse' : null });
       } else if (type === 'theater') {
@@ -350,39 +372,18 @@ function standardRows(W, ch, r, type, rng, opts = {}) {
       } else {
         tower(W, ch, lot, rng, {});
       }
-      // corner bodegas on the avenue side
+      // (the corner bodegas painted on the side walls are rooms now, see above; the dice for them
+      // are still thrown so the rest of the city comes out the same)
       if (corner && (type === 'brown' || type === 'loft' || type === 'start') && rng.chance(0.5)) {
         const fs = facadesOf(x0, row.z0, x1, row.z1);
         const f = i === 0 ? fs.w : fs.e;
-        if (f.width > 6) {
-          const signId = rng.pick(SHOP_SIGNS);
-          import_shop(W, ch, f, rng, signId);
-        }
+        if (f.width > 6) rng.pick(SHOP_SIGNS);
       }
     });
   }
   alley(W, ch, ix0, ix1, zm, rng, opts.hide !== false);
   W.alleys.push({ x0: ix0, x1: ix1, z: zm, type });
   return { ix0, ix1, iz0, iz1, zm };
-}
-
-function import_shop(W, ch, f, rng, signId) {
-  // ground-floor shop on a side facade of a corner building
-  const u0 = Math.max(0.5, f.width / 2 - 4);
-  const u1 = Math.min(f.width - 0.5, f.width / 2 + 4);
-  facadeQuad(ch, f, u0, CURB + 0.6, u1, CURB + 2.6, 0.04, COL.glass, STYLE.SHOPWIN, { lineW: 2 });
-  ch.sl.seg(f.p((u0 + u1) / 2, CURB + 0.6, 0.05), f.p((u0 + u1) / 2, CURB + 2.6, 0.05), { width: 1.3 });
-  const c = f.p((u0 + u1) / 2, CURB + 3.2, 0.08);
-  W.signs.push({ x: c[0], y: c[1], z: c[2], w: Math.min(4, u1 - u0), h: Math.min(4, u1 - u0) / 4, rect: signId, axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
-  // a door beside the window, so people can go in
-  let du = null;
-  if (u0 - 1.0 > 0.4) du = u0 - 0.7;
-  else if (u1 + 1.0 < f.width - 0.4) du = u1 + 0.7;
-  if (du !== null) {
-    door(ch, f, du, CURB + 0.05, 1.0, 2.3, [COL.darkWood, COL.red, COL.darkGreen][Math.floor(Math.abs(du * 7.3 + f.ox)) % 3]);
-    // dressShop expects the window to the right of the door
-    if (du < u0) dressShop(W, ch, f, signId, du, u0, u1, CURB);
-  }
 }
 
 function theater(W, ch, lot, rng, i) {

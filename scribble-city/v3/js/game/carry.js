@@ -449,6 +449,17 @@ function strokesFor(fig, item, side, w) {
       line(fig, _a, _c, [0.95, 0.6, 0.66], w * 3.6, sd + 122);
       break;
     }
+    case 'eraser': {
+      // a pink-and-blue eraser block, rubbing
+      const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
+      _d.subVectors(h, el).normalize();
+      _a.copy(h).addScaledVector(_d, -0.02 * S);
+      _b.copy(h).addScaledVector(_d, 0.07 * S);
+      line(fig, _a, _b, [0.95, 0.6, 0.66], w * 6, sd + 125);
+      _c.copy(_b).addScaledVector(_d, 0.06 * S);
+      line(fig, _b, _c, [0.42, 0.55, 0.88], w * 6, sd + 126);
+      break;
+    }
     case 'leash':
       if (fig.leashTo) line(fig, h, fig.leashTo, [0.7, 0.2, 0.2], w * 1.1, sd + 130);
       break;

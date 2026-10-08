@@ -20,6 +20,8 @@ export const STYLE = {
   GRAPH: 16,
   DIRT: 17,
   PLAZA: 18,
+  GOODS: 19, // a shelf full of things (the shader draws the rows of products)
+  FLOOR: 20, // a floor indoors: tiles, chequers, boards (drawn by the shader)
 };
 
 /**
@@ -38,7 +40,11 @@ export class MeshBuilder {
     this.idx = [];
     this.ob = [];
     this.pt = [];
+    this.hl = [];
     this.vcount = 0;
+    // a wall with a room right behind it: below this height a rubbed-out spot is a hole you can
+    // see (and walk) through, instead of blank paper (0 = solid)
+    this.hollow = 0;
     // every box, quad or cylinder is a part of its own: the inker outlines where parts meet
     this.part = Math.floor(Math.random() * 50000);
     this.depth = 0;
@@ -69,6 +75,7 @@ export class MeshBuilder {
       this.f2.push(f2[0], f2[1], f2[2], f2[3]);
       this.ob.push(this.obj);
       this.pt.push(this.part);
+      this.hl.push(this.hollow);
     }
     this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     this.vcount += 4;
@@ -88,6 +95,7 @@ export class MeshBuilder {
       this.f2.push(f2[0], f2[1], f2[2], f2[3]);
       this.ob.push(this.obj);
       this.pt.push(this.part);
+      this.hl.push(this.hollow);
     }
     this.idx.push(base, base + 1, base + 2);
     this.vcount += 3;
@@ -115,20 +123,24 @@ export class MeshBuilder {
     const v1 = y1 - by;
     const faceH = y1 - by;
     const sides = o.sides || [true, true, true, true];
-    // +Z face (south), viewed from +z: left = x0, right = x1
+    const holes = o.holes || {};
+    const hollow = o.hollow || {};
     const w = x1 - x0;
     const d = z1 - z0;
-    if (sides[0]) this.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], c,
-      [[0, v0], [w, v0], [w, v1], [0, v1]], [st, cw, ch, seed + 0.11], [w, faceH, gh, h]);
+    // each side as a function from (u along the facade, height) to a point; openings cut out
+    const side = (key, P, len, n, sd) => {
+      this.hollow = hollow[key] || 0;
+      this.faceWithHoles(P, len, y0, y1, by, n, c, [st, cw, ch, seed + sd], [len, faceH, gh, h], holes[key]);
+      this.hollow = 0;
+    };
+    // +Z face (south), viewed from +z: left = x0, right = x1
+    if (sides[0]) side('s', (u, y) => [x0 + u, y, z1], w, [0, 0, 1], 0.11);
     // -Z face (north), viewed from -z: left = x1, right = x0
-    if (sides[1]) this.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], c,
-      [[0, v0], [w, v0], [w, v1], [0, v1]], [st, cw, ch, seed + 0.23], [w, faceH, gh, h]);
+    if (sides[1]) side('n', (u, y) => [x1 - u, y, z0], w, [0, 0, -1], 0.23);
     // +X face (east), viewed from +x: left = z1, right = z0
-    if (sides[2]) this.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], c,
-      [[0, v0], [d, v0], [d, v1], [0, v1]], [st, cw, ch, seed + 0.37], [d, faceH, gh, h]);
+    if (sides[2]) side('e', (u, y) => [x1, y, z1 - u], d, [1, 0, 0], 0.37);
     // -X face (west), viewed from -x: left = z0, right = z1
-    if (sides[3]) this.quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], c,
-      [[0, v0], [d, v0], [d, v1], [0, v1]], [st, cw, ch, seed + 0.41], [d, faceH, gh, h]);
+    if (sides[3]) side('w', (u, y) => [x0, y, z0 + u], d, [-1, 0, 0], 0.41);
     if (!o.skipTop) {
       const ts = o.topStyle !== undefined ? o.topStyle : 0;
       const tc = o.topColor || c;
@@ -138,6 +150,41 @@ export class MeshBuilder {
     if (o.bottom) {
       this.quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], c,
         [[0, 0], [w, 0], [w, d], [0, d]], [o.bottomStyle || 0, 3, 3, seed + 0.6], [w, d, 0, 0]);
+    }
+    this.end();
+  }
+
+  /**
+   * A vertical face (u 0..len along it, heights y0..y1) with rectangular openings cut out of it
+   * (holes: [[u0, ya, u1, yb], ...] in the same u and in world heights). The face keeps one set
+   * of window-grid parameters, so the windows stay where they were.
+   */
+  faceWithHoles(P, len, y0, y1, baseY, n, color, f1, f2, holes) {
+    if (!holes || !holes.length) {
+      this.quad(P(0, y0), P(len, y0), P(len, y1), P(0, y1), n, color, [[0, y0 - baseY], [len, y0 - baseY], [len, y1 - baseY], [0, y1 - baseY]], f1, f2);
+      return;
+    }
+    const us = [0, len];
+    const ys = [y0, y1];
+    for (const [a, ya, b, yb] of holes) {
+      us.push(Math.max(0, Math.min(len, a)), Math.max(0, Math.min(len, b)));
+      ys.push(Math.max(y0, Math.min(y1, ya)), Math.max(y0, Math.min(y1, yb)));
+    }
+    const U = [...new Set(us)].sort((p, q) => p - q);
+    const Y = [...new Set(ys)].sort((p, q) => p - q);
+    this.begin();
+    for (let i = 0; i < U.length - 1; i++) {
+      for (let j = 0; j < Y.length - 1; j++) {
+        const ua = U[i];
+        const ub = U[i + 1];
+        const ya = Y[j];
+        const yb = Y[j + 1];
+        if (ub - ua < 1e-4 || yb - ya < 1e-4) continue;
+        const uc = (ua + ub) / 2;
+        const yc = (ya + yb) / 2;
+        if (holes.some(([a, hy0, b, hy1]) => uc > a && uc < b && yc > hy0 && yc < hy1)) continue;
+        this.quad(P(ua, ya), P(ub, ya), P(ub, yb), P(ua, yb), n, color, [[ua, ya - baseY], [ub, ya - baseY], [ub, yb - baseY], [ua, yb - baseY]], f1, f2);
+      }
     }
     this.end();
   }
@@ -259,6 +306,7 @@ export class MeshBuilder {
     g.setAttribute('aFace2', new THREE.Float32BufferAttribute(this.f2, 4));
     g.setAttribute('aObj', new THREE.Float32BufferAttribute(this.ob, 1));
     g.setAttribute('aPart', new THREE.Float32BufferAttribute(this.pt, 1));
+    g.setAttribute('aHollow', new THREE.Float32BufferAttribute(this.hl, 1));
     const IndexArray = this.vcount > 65535 ? Uint32Array : Uint16Array;
     g.setIndex(new THREE.BufferAttribute(new IndexArray(this.idx), 1));
     g.computeBoundingSphere();
