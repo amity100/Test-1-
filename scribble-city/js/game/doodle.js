@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clamp, lerp } from '../core/util.js';
 import { FILL, MAX_HOLES } from '../render/bodies.js';
 import { GOLD } from './looks.js';
+import { carryShapes, carryStrokes, carryPose, heldIn } from './carry.js';
 
 // Volumetric doodle people: a procedural rig (walk / run / aim / melee / sit / crawl / fall)
 // dressed in ray-traced capsules and ellipsoids, with faces and details drawn as 3D pen strokes.
@@ -22,6 +23,8 @@ const LOWER = ['hip', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL'
 // approximate volumes (m³) of each erasable part of a 1.85 m adult
 const PART_VOL = { head: 0.0075, torso: 0.03, armL: 0.0055, armR: 0.0055, legL: 0.014, legR: 0.014 };
 export const PARTS = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'];
+// hair styles drawn over a cap of hair
+const CAPPED = new Set(['buzz', 'short', 'slick', 'cornrows', 'messy', 'long', 'bob', 'ponytail', 'bun', 'curly', 'spiky', 'pompadour', 'pigtails', 'spacebuns', 'braids', 'beehive']);
 
 function ik(root, target, l1, l2, pole, out) {
   const dx = target.x - root.x;
@@ -129,6 +132,12 @@ export class Doodle {
     this.dance = 0;
     this.drinkT = -1; // raising a glass to the mouth (0..1)
     this.reachR = null;
+    this.reachL = null;
+    this.hunch = 0; // old age: bent forward over the knees
+    this.carry = null; // what the right hand holds (see carry.js): 'cane', 'coffee', 'umbrella'...
+    this.carryL = null; // ...and the left
+    this.carryT = 0; // clock for the held things (steam, strumming, sweeping)
+    this.leashTo = null; // where a dog's leash ends
     this.lookAt = null; // world point the head turns toward
     this.visible = true;
     this.parts = { head: 1, torso: 1, armL: 1, armR: 1, legL: 1, legR: 1, pelvis: 1 };
@@ -182,6 +191,7 @@ export class Doodle {
   // ------------------------------------------------------------------ pose
   update(dt) {
     if (this.paintT > 0) this.paintT -= dt;
+    this.carryT += dt;
     const f = this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.right.set(-f.z, 0, f.x);
     const sp = this.speed;
@@ -204,7 +214,8 @@ export class Doodle {
     hipY = lerp(hipY, 0.5, sit);
     hipY = lerp(hipY, 0.25, crawl);
     hipY = lerp(hipY, 0.56, crouch);
-    const lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22;
+    hipY -= this.hunch * 0.05;
+    const lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22 + this.hunch * 0.42;
     const leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
     this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
     const spine = 0.5;
@@ -277,8 +288,10 @@ export class Doodle {
     for (const [shoulder, elbow, hand, side, off] of arms) {
       const tgt = _a;
       let useIK = false;
-      if (this.reachR && side === 1) {
-        const d = _w.copy(this.reachR).sub(shoulder);
+      const reach = side === 1 ? this.reachR : this.reachL;
+      const held = heldIn(this, side);
+      if (reach) {
+        const d = _w.copy(reach).sub(shoulder);
         const L = (armU + armF) * this.scale * 0.97;
         if (d.length() > L) d.setLength(L);
         tgt.copy(shoulder).add(d);
@@ -305,6 +318,8 @@ export class Doodle {
       } else if (this.dance > 0) {
         const a = ph + off;
         this.toWorld(side * (0.3 + Math.sin(a) * 0.1), ny + 0.15 + Math.sin(a * 2) * 0.3 * this.dance, nz + 0.15, tgt);
+        useIK = true;
+      } else if (held && carryPose(this, held, side, hipY, ny, nz, tgt)) {
         useIK = true;
       } else if (sit > 0.5) {
         this.toWorld(side * 0.16, hipY + 0.32, 0.36, tgt);
@@ -591,8 +606,9 @@ export class Doodle {
     const below = (s, off) => this.clip(s, _q.copy(hu).negate(), hc, -off * hs);
     // hair
     const st = hair.style;
-    if (st === 'buzz' || st === 'short' || st === 'slick' || st === 'cornrows' || st === 'messy' || st === 'long' || st === 'bob' || st === 'ponytail' || st === 'bun' || st === 'curly') {
-      const g = st === 'buzz' || st === 'cornrows' ? 1.03 : st === 'curly' ? 1.14 : 1.08;
+    const hair0 = this.shapes.length;
+    if (CAPPED.has(st)) {
+      const g = st === 'buzz' || st === 'cornrows' || st === 'spiky' ? 1.03 : st === 'curly' ? 1.14 : 1.08;
       _a.copy(hc).addScaledVector(hu, 0.012 * hs).addScaledVector(hf, -0.01 * hs);
       const cap = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * g, ry * g, rz * g, hcol);
       below(cap, st === 'long' || st === 'bob' ? 0.0 : 0.03);
@@ -613,7 +629,46 @@ export class Doodle {
       _a.copy(hc).addScaledVector(hu, 0.05 * hs).addScaledVector(hf, -0.02 * hs);
       const af = this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.19 * hs, 0.175 * hs, 0.19 * hs, hcol);
       front(af, 0.035);
+    } else if (st === 'mohawk') {
+      // shaved sides, one proud crest from the forehead to the neck
+      _a.copy(hc).addScaledVector(hu, 0.085 * hs).addScaledVector(hf, -0.01 * hs);
+      const m = this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.03 * hs, 0.11 * hs, 0.14 * hs, hcol);
+      below(m, 0.02);
+    } else if (st === 'spiky') {
+      // pointed tufts: long thin ellipsoids standing out of the head
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 6 - 0.5) * 2.2;
+        _c.copy(hu).multiplyScalar(Math.cos(a * 0.6)).addScaledVector(hr, Math.sin(a) * 0.55).addScaledVector(hf, i % 2 ? -0.35 : 0.15).normalize();
+        _a.copy(hc).addScaledVector(_c, 0.15 * hs);
+        _b.crossVectors(_c, hf).normalize();
+        _d.crossVectors(_b, _c).normalize();
+        this.ellipsoid('head', 'head', _a, _b, _c, _d, 0.03 * hs, 0.085 * hs, 0.03 * hs, hcol);
+      }
+    } else if (st === 'pompadour') {
+      _a.copy(hc).addScaledVector(hu, 0.105 * hs).addScaledVector(hf, 0.06 * hs);
+      this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.105 * hs, 0.075 * hs, 0.095 * hs, hcol);
+    } else if (st === 'pigtails') {
+      for (const sd of [-1, 1]) {
+        _a.copy(hc).addScaledVector(hr, sd * 0.155 * hs).addScaledVector(hu, -0.02 * hs).addScaledVector(hf, -0.03 * hs);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.05 * hs, 0.09 * hs, 0.05 * hs, hcol);
+      }
+    } else if (st === 'spacebuns') {
+      for (const sd of [-1, 1]) {
+        _a.copy(hc).addScaledVector(hr, sd * 0.078 * hs).addScaledVector(hu, 0.125 * hs).addScaledVector(hf, -0.01 * hs);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.056 * hs, 0.052 * hs, 0.056 * hs, hcol);
+      }
+    } else if (st === 'braids') {
+      for (const sd of [-1, 1]) {
+        _a.copy(hc).addScaledVector(hr, sd * 0.1 * hs).addScaledVector(hu, -0.03 * hs).addScaledVector(hf, -0.04 * hs);
+        _b.copy(hc).addScaledVector(hr, sd * 0.12 * hs).addScaledVector(hu, -0.3 * hs).addScaledVector(hf, 0.03 * hs);
+        this.capsule('head', 'head', _a, _b, 0.03 * hs, hcol);
+      }
+    } else if (st === 'beehive') {
+      _a.copy(hc).addScaledVector(hu, 0.16 * hs).addScaledVector(hf, -0.01 * hs);
+      this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.1 * hs, 0.15 * hs, 0.1 * hs, hcol);
     }
+    // the hero is a blank paper doodle, but a haircut from the barber comes in colour
+    if (L.hero) for (let i = hair0; i < this.shapes.length; i++) this.shapes[i].fill = FILL.MARKER;
     // hats
     if (hat) {
       const k = hat.kind;
@@ -645,6 +700,15 @@ export class Doodle {
         this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.118 * hs, 0.04 * hs, 0.125 * hs, [0.08, 0.08, 0.1]);
         _a.copy(hc).addScaledVector(hu, 0.055 * hs).addScaledVector(hf, 0.11 * hs);
         this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.085 * hs, 0.01 * hs, 0.06 * hs, [0.06, 0.06, 0.08]);
+      } else if (k === 'toque') {
+        // a chef's tall white hat
+        _a.copy(hc).addScaledVector(hu, 0.07 * hs);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.1, 0.045 * hs, rz * 1.1, hat.color);
+        _a.copy(hc).addScaledVector(hu, 0.2 * hs);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.125 * hs, 0.13 * hs, 0.125 * hs, hat.color);
+      } else if (k === 'beret') {
+        _a.copy(hc).addScaledVector(hu, 0.1 * hs).addScaledVector(hr, 0.03 * hs);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.135 * hs, 0.042 * hs, 0.13 * hs, hat.color);
       } else if (k === 'skimask') {
         this.ellipsoid('head', 'head', hc, hr, hu, hf, rx * 1.04, ry * 1.04, rz * 1.04, hat.color);
       } else if (k === 'helmet') {
@@ -699,6 +763,12 @@ export class Doodle {
 
   dressTorso(ax, rgt, fwd, S) {
     const L = this.look;
+    if (L.apron) {
+      _a.lerpVectors(this.j.hip, this.j.neck, 0.32).addScaledVector(fwd, 0.088 * this.bulk * S);
+      const ap = this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, 0.13 * this.bulk * S, 0.3 * S, 0.05 * S, L.apron);
+      this.clip(ap, _q.copy(fwd).negate(), this.j.hip, -0.02 * S);
+    }
+    if (this.carry || this.carryL) carryShapes(this, ax, rgt, fwd, S);
     if (L.acc.includes('scarf')) {
       _a.copy(this.j.neck).addScaledVector(ax, 0.01 * S);
       this.ellipsoid('torso', 'neck', _a, rgt, ax, fwd, 0.08 * S, 0.04 * S, 0.075 * S, L.top.inner || [0.8, 0.3, 0.3]);
@@ -1118,6 +1188,7 @@ export class Doodle {
         }
       }
     }
+    if (this.carry || this.carryL) carryStrokes(this, w);
     if (L.hero && this.parts.head > 0.5) {
       // the headband's tails flutter behind
       const t = this.phase * 0.5;

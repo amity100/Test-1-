@@ -9,7 +9,8 @@ import { SHOP_SIGNS } from '../render/signs.js';
 import {
   AVES, STREETS, AVE_W, ST_W, SIDEWALK, CURB, BOUNDS, BLOCK_TYPES, blockRect, WATER_EAST_X, WATER_SOUTH_Z,
 } from './layout.js';
-import { COL, solidBox, brownstone, loft, tower, warehouse, facadesOf, facadeQuad, waterTower } from './buildings.js';
+import { COL, solidBox, brownstone, loft, tower, warehouse, facadesOf, facadeQuad, waterTower, door } from './buildings.js';
+import { dressShop } from './shopfronts.js';
 import * as P from './props.js';
 
 const PAPER = COL.paper;
@@ -38,6 +39,7 @@ export function buildCity(scene, atlas, signAtlas, mats) {
     billboards: [],
     territories: [],
     shopSigns: SHOP_SIGNS,
+    shops: [],
     chunks: new Map(),
     spawn: { x: -150, z: 116, yaw: Math.PI / 2 },
     animated: [],
@@ -104,6 +106,7 @@ export function buildCity(scene, atlas, signAtlas, mats) {
     nav,
     objects: W.objects,
     bar: W.bar,
+    shops: W.shops,
     hideSpots: W.hideSpots,
     billboards: W.billboards,
     territories: W.territories,
@@ -362,6 +365,15 @@ function import_shop(W, ch, f, rng, signId) {
   ch.sl.seg(f.p((u0 + u1) / 2, CURB + 0.6, 0.05), f.p((u0 + u1) / 2, CURB + 2.6, 0.05), { width: 1.3 });
   const c = f.p((u0 + u1) / 2, CURB + 3.2, 0.08);
   W.signs.push({ x: c[0], y: c[1], z: c[2], w: Math.min(4, u1 - u0), h: Math.min(4, u1 - u0) / 4, rect: signId, axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
+  // a door beside the window, so people can go in
+  let du = null;
+  if (u0 - 1.0 > 0.4) du = u0 - 0.7;
+  else if (u1 + 1.0 < f.width - 0.4) du = u1 + 0.7;
+  if (du !== null) {
+    door(ch, f, du, CURB + 0.05, 1.0, 2.3, [COL.darkWood, COL.red, COL.darkGreen][Math.floor(Math.abs(du * 7.3 + f.ox)) % 3]);
+    // dressShop expects the window to the right of the door
+    if (du < u0) dressShop(W, ch, f, signId, du, u0, u1, CURB);
+  }
 }
 
 function theater(W, ch, lot, rng, i) {

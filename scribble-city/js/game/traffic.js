@@ -220,7 +220,7 @@ export class Traffic {
     for (const v of game.vehicles.list) if (!v.dead && test(v.pos.x, v.pos.z, v.radius * 0.6)) return v.driver ? 'player' : 'car';
     for (const o of this.list) if (o !== c && test(o.pos.x, o.pos.z, 0.8)) return 'car';
     for (const e of game.enemies.list) if (e.alive && test(e.pos.x, e.pos.z, 0.4)) return 'other';
-    for (const h of game.civilians.list) if (test(h.pos.x, h.pos.z, 0.3)) return 'other';
+    for (const h of game.civilians.list) if (!h.inside && test(h.pos.x, h.pos.z, 0.3)) return 'other';
     return null;
   }
 

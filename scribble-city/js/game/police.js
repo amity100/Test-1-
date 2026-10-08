@@ -102,7 +102,7 @@ export class Police {
       }
     }
     for (const c of game.civilians.list) {
-      if (!c.alive || c.headless) continue;
+      if (!c.alive || c.headless || c.inside) continue;
       const d = Math.hypot(c.pos.x - x, c.pos.z - z);
       if (d > 1.5 && d < 28 && col.lineOfSight(c.pos.x, c.pos.y + 1.6, c.pos.z, x, 1.2, z)) {
         civ = c;

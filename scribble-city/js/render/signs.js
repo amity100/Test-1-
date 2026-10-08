@@ -389,6 +389,49 @@ function barMenu(sk, ctx, w, h) {
   });
 }
 
+// ------------------------------------------------------------------ open shops
+function openNeon(sk, ctx, w, h) {
+  ctx.fillStyle = '#1d1a26';
+  ctx.fillRect(4, 4, w - 8, h - 8);
+  sk.poly([[5, 5], [w - 5, 5], [w - 5, h - 5], [5, h - 5]], true, { width: 3, color: '#0b0a10' });
+  neonText(ctx, 'OPEN', w / 2, h / 2 + 2, 46, '#ff4f6a', FONT_SIGN, 400);
+}
+
+// chalk board on a sidewalk A-frame
+function chalkBoard(sk, ctx, w, h, lines, icon) {
+  ctx.fillStyle = '#26332c';
+  ctx.fillRect(0, 0, w, h);
+  sk.fill([[10, 10], [w - 10, 10], [w - 10, h - 10], [10, h - 10]], '#33443b', { spacing: 5, alpha: 0.35, angle: 0.6 });
+  sk.poly([[5, 5], [w - 5, 5], [w - 5, h - 5], [5, h - 5]], true, { width: 10, color: '#6b4a2e' });
+  const chalk = 'rgba(245, 242, 230, 0.92)';
+  const n = lines.length;
+  lines.forEach((t, i) => {
+    const y = h * (icon ? 0.24 : 0.32) + i * (h * (icon ? 0.22 : 0.3)) + (n === 1 ? h * 0.12 : 0);
+    sk.text(t, w / 2, y, { size: i === 0 ? 50 : 40, color: i === 0 ? chalk : '#ffd76a', font: i === 0 ? FONT_SIGN : FONT_NOTE, dir: 'ltr', weight: i === 0 ? 400 : 700, maxWidth: w - 36 });
+  });
+  if (icon) icon(sk, ctx, w, h, chalk);
+}
+
+const CHALK = {
+  chalk_slice: [['PIZZA', 'SLICE $1'], (sk, c, w, h, col) => {
+    sk.poly([[w / 2 - 34, h - 72], [w / 2 + 34, h - 72], [w / 2, h - 22]], true, { width: 4, color: col });
+    sk.circle(w / 2 - 6, h - 58, 6, { width: 3, color: '#ff8a6a' });
+    sk.circle(w / 2 + 10, h - 50, 5, { width: 3, color: '#ff8a6a' });
+  }],
+  chalk_coffee: [['ESPRESSO', '$2'], (sk, c, w, h, col) => {
+    sk.poly([[w / 2 - 26, h - 74], [w / 2 - 20, h - 26], [w / 2 + 20, h - 26], [w / 2 + 26, h - 74]], false, { width: 4, color: col });
+    sk.circle(w / 2 + 34, h - 54, 11, { width: 3.4, color: col });
+  }],
+  chalk_fresh: [['FRESH', 'TODAY'], null],
+  chalk_icecream: [['ICE CREAM', '2 SCOOPS'], (sk, c, w, h, col) => {
+    sk.poly([[w / 2 - 22, h - 66], [w / 2, h - 20], [w / 2 + 22, h - 66]], false, { width: 4, color: '#e8c08a' });
+    sk.circle(w / 2, h - 76, 18, { width: 4, color: '#ff9ac0' });
+  }],
+  chalk_welcome: [['COME IN', 'WE\'RE OPEN'], null],
+  chalk_sale: [['SALE', '50% OFF'], null],
+  chalk_gym: [['NO PAIN', 'NO GAIN'], null],
+};
+
 function gigPoster(sk, ctx, w, h) {
   ctx.fillStyle = '#f2e6c9';
   ctx.fillRect(0, 0, w, h);
@@ -417,6 +460,7 @@ export function buildSignAtlas() {
     rects[name] = [cx / W, 1 - (cy + 64) / H, 256 / W, 64 / H];
   };
   for (const [id, text, bg] of SMALL_SIGNS) small(id, (sk) => smallSign(sk, 256, 64, text, bg));
+  small('open', (sk, c) => openNeon(sk, c, 256, 64));
   small('barSmall', (sk, c) => {
     c.fillStyle = '#1d1a26';
     c.fillRect(0, 0, 256, 64);
@@ -450,6 +494,20 @@ export function buildSignAtlas() {
   large('bar_neon', (sk, c) => barNeon(sk, c, 512, 256));
   large('bar_menu', (sk, c) => barMenu(sk, c, 512, 256));
   large('bar_poster', (sk, c) => gigPoster(sk, c, 512, 256));
+
+  // square tiles along the bottom row of the atlas
+  let med = 0;
+  const square = (name, fn) => {
+    const cx = (med % 8) * 256;
+    const cy = 1792;
+    med++;
+    const tmp = makeCanvas(256, 256);
+    const tctx = tmp.getContext('2d');
+    fn(new Sketcher(tctx, med * 577 + 11), tctx);
+    ctx.drawImage(tmp, cx, cy);
+    rects[name] = [cx / W, 1 - (cy + 256) / H, 256 / W, 256 / H];
+  };
+  for (const [id, [lines, icon]] of Object.entries(CHALK)) square(id, (sk, c) => chalkBoard(sk, c, 256, 256, lines, icon));
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.generateMipmaps = true;

@@ -3,6 +3,7 @@
 
 import { STYLE } from '../render/MeshBuilder.js';
 import { CURB } from './layout.js';
+import { dressShop } from './shopfronts.js';
 
 export const COL = {
   paper: [0.968, 0.958, 0.93],
@@ -214,6 +215,7 @@ export function shopFront(W, ch, f, u0, u1, yBase, rng, signId) {
     const sw = Math.min(w - 0.8, 4.2);
     const c = f.p((u0 + u1) / 2, yBase + 4.25, 0.08);
     W.signs.push({ x: c[0], y: c[1], z: c[2], w: sw, h: sw / 4, rect: signId, axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
+    if (W.shops && u1 - 0.7 - (doorU + 0.8) > 1.2) dressShop(W, ch, f, signId, doorU, doorU + 0.8, u1 - 0.7, yBase);
   }
 }
 

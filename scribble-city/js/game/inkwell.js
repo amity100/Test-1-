@@ -20,11 +20,11 @@ const PATRON_DRINKS = ['beer', 'beer', 'ink', 'shake', 'water', 'ink'];
 
 // who the people you can flirt with are
 const TRAITS = {
-  artsy: { drink: 10, joke: 8, style: 30, cheesy: -18, ask: 25, brag: 12, dance: 18 },
-  funny: { drink: 10, joke: 32, style: 8, cheesy: 12, ask: 10, brag: 5, dance: 20 },
-  romantic: { drink: 26, joke: 6, style: 16, cheesy: 18, ask: 12, brag: 2, dance: 26 },
-  cool: { drink: 16, joke: 6, style: 12, cheesy: -26, ask: 8, brag: -10, dance: 14 },
-  nerdy: { drink: 2, joke: 18, style: 14, cheesy: 6, ask: 28, brag: 26, dance: 6 },
+  artsy: { drink: 10, joke: 8, style: 30, cheesy: -18, ask: 25, brag: 12, dance: 18, flowers: 26 },
+  funny: { drink: 10, joke: 32, style: 8, cheesy: 12, ask: 10, brag: 5, dance: 20, flowers: 18 },
+  romantic: { drink: 26, joke: 6, style: 16, cheesy: 18, ask: 12, brag: 2, dance: 26, flowers: 42 },
+  cool: { drink: 16, joke: 6, style: 12, cheesy: -26, ask: 8, brag: -10, dance: 14, flowers: 10 },
+  nerdy: { drink: 2, joke: 18, style: 14, cheesy: 6, ask: 28, brag: 26, dance: 6, flowers: 24 },
 };
 const OPENERS = {
   artsy: 'הקווים שלך נראים כאילו צוירו בעט ג\'ל בשיעור היסטוריה. אני אוהבת את זה.',
@@ -531,6 +531,8 @@ export class Inkwell {
         ['style', 'להגיד לה שהיא הדבר הכי יפה בעמוד'],
       ];
     }
+    // flowers from the shop down the street
+    if (game.player.fig.carryL === 'bouquet') opts.unshift(['flowers', 'לתת לה את זר הפרחים']);
     const choices = opts.map(([kind, label]) => ({ label, fn: () => this.flirtAnswer(m, kind) }));
     choices.push({ label: 'להיפרד בנימוס', fn: () => this.flirtEnd(m, 'later') });
     game.dialog.show(f.name, text, choices);
@@ -542,12 +544,17 @@ export class Inkwell {
     let delta = TRAITS[f.trait][kind] + (Math.random() - 0.5) * 16;
     if (kind === 'dance' && f.interest < 40) delta -= 15; // too soon
     if (kind === 'drink') this.serve(pick(['beer', 'ink', 'shake']), m);
+    if (kind === 'flowers') {
+      game.player.fig.carryL = null;
+      m.fig.carryL = 'bouquet';
+    }
     f.interest = clamp(f.interest + delta, 0, 100);
     const tone = delta > 17 ? 'good' : delta > 3 ? 'ok' : 'bad';
     game.bubbles.say(m, pick(BUBBLE[tone]), tone === 'bad' ? 'plain' : 'plain');
     f.rounds++;
     let text = pick(REACT[tone]);
     if (kind === 'ask' && tone !== 'bad') text = pick(['ילד בכיתה ח\' צייר אותי בעט ג\'ל במהלך מבחן במתמטיקה. הוא נכשל, אבל אני יצאתי מושלמת.', 'מישהי ציירה אותי על שולי מחברת. היא אף פעם לא סיימה לי את הנעליים.', 'אני מקווה שמישהו עוד יצבע אותי יום אחד.']);
+    if (kind === 'flowers') text = tone === 'bad' ? 'פרחים? ...תודה, אני מניחה.' : tone === 'ok' ? 'אוו, פרחים. חמוד.' : 'פרחים?! אף אחד לא הביא לי פרחים מאז שציירו אותי. אתה מתוק.';
     if (kind === 'joke') text = (tone === 'good' ? 'חחחח! "למה המחק לא הלך למסיבה? כי הוא תמיד מוחק את עצמו!" זה גרוע. אני מתה.' : tone === 'ok' ? 'הבדיחה הזאת עם המחק... היא חמודה, נגיד.' : 'זאת הבדיחה הכי מחוקה ששמעתי השבוע.');
     if (f.interest < 18) return this.flirtEnd(m, 'no');
     if (f.rounds >= 3) return this.flirtEnd(m, f.interest >= 65 ? 'yes' : 'later');

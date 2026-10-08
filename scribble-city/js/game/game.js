@@ -19,6 +19,9 @@ import { Police } from './police.js';
 import { Inkwell } from './inkwell.js';
 import { Dialog } from '../ui/dialog.js';
 import { Pickups } from './pickups.js';
+import { AirSketches } from './airsketch.js';
+import { StreetLife } from './streetlife.js';
+import { Vignettes } from './vignettes.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { CAR_VARIANTS, DRIVER_SEAT } from './traffic.js';
 import { rebakeSunShadows } from '../render/sunlight.js';
@@ -76,6 +79,9 @@ export class Game {
     this.album = new Album(this);
     this.album.onAdd = (id) => this.onAlbumAdd(id);
     this.airdraw = new AirDraw(this);
+    this.airsketch = new AirSketches(this);
+    this.streetlife = new StreetLife(this);
+    this.vignettes = new Vignettes(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -285,6 +291,9 @@ export class Game {
       this.weapons.update(dt);
       this.enemies.update(dt);
       this.civilians.update(dt);
+      this.streetlife.update(dt);
+      this.vignettes.update(dt);
+      this.airsketch.update(dt);
       this.traffic.update(dt);
       this.world.objects.update(dt, rebakeSunShadows, this.camera.position);
       this.police.update(dt);
@@ -342,6 +351,9 @@ export class Game {
       this.weapons.updateModels();
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
+      this.streetlife.draw(fr);
+      this.vignettes.draw(fr);
+      this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
       this.drawStuckPencils(fr);
       this.pickups.draw(fr);
@@ -376,7 +388,7 @@ export class Game {
       if (p.inVehicle) this.exitVehicle();
       else if (this.inBar) this.inkwell.interact();
       else if (p.mode === 'foot' && this.inkwell.nearStreetDoor(p.pos)) this.inkwell.enter();
-      else if (p.mode === 'foot') this.tryEnter();
+      else if (p.mode === 'foot' && !this.streetlife.interact()) this.tryEnter();
     }
     if (input.wasPressed('KeyM')) this.hud.mapScale = this.hud.mapScale > 1 ? 0.55 : 1.1;
   }
@@ -825,6 +837,10 @@ export class Game {
     } else if (p.mode === 'foot' && this.inkwell.nearStreetDoor(p.pos)) {
       enter = true;
       prompt = this.touch ? '' : 'E — להיכנס לבר The Inkwell';
+    } else if (p.mode === 'foot' && this.streetlife.target()) {
+      const sh = this.streetlife.target();
+      enter = sh.shop.open;
+      prompt = this.touch ? sh.label.replace('E — ', '') : sh.label;
     } else if (p.mode === 'foot') {
       const et = this.enterTarget();
       if (et) {

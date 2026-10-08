@@ -310,6 +310,36 @@ export class Audio {
         for (let i = 0; i < 5; i++) this.tone('sine', 300 + Math.random() * 300, 500 + Math.random() * 400, 0.08, 0.05 * v, i * 0.09);
         this.hiss(0.5, 0.08 * v, 900, 2, 'bandpass');
         break;
+      case 'scribble':
+        // somebody else's pencil, quick strokes in the air
+        for (let i = 0; i < 4; i++) this.hiss(0.09, 0.12 * v, 3200 + Math.random() * 1200, 2.5, 'bandpass', i * 0.13);
+        break;
+      case 'bell':
+        // shop door bell
+        this.tone('sine', 1760, 1760, 0.5, 0.09 * v);
+        this.tone('sine', 2350, 2350, 0.45, 0.06 * v, 0.07);
+        break;
+      case 'bark':
+        this.tone('sawtooth', 520, 260, 0.09, 0.14 * v);
+        this.hiss(0.08, 0.18 * v, 900, 1.5, 'bandpass');
+        this.tone('sawtooth', 500, 240, 0.08, 0.12 * v, 0.17);
+        break;
+      case 'snip':
+        this.hiss(0.03, 0.18 * v, 5000, 3, 'highpass');
+        this.hiss(0.03, 0.14 * v, 4200, 3, 'highpass', 0.08);
+        break;
+      case 'pop':
+        this.tone('sine', 900, 200, 0.06, 0.25 * v);
+        this.hiss(0.05, 0.25 * v, 2500, 1, 'highpass');
+        break;
+      case 'cheer':
+        this.tone('triangle', 660, 990, 0.12, 0.1 * v);
+        this.tone('triangle', 880, 1320, 0.14, 0.08 * v, 0.1);
+        break;
+      case 'strum':
+        // a guitar chord, string by string
+        [196, 247, 294, 392, 494].forEach((f, i) => this.tone('triangle', f, f * 0.995, 0.9, 0.05 * v, i * 0.025));
+        break;
       case 'crumble':
         // a whole prop rubbed out of the page
         this.hiss(0.5, 0.4 * v, 2200, 1.5, 'bandpass', 0, 900);

@@ -13,10 +13,17 @@ const _rd = new THREE.Vector3();
  * Pedestrians walking around their block's sidewalk. They panic and run when shooting starts.
  */
 class Civilian {
-  constructor(mgr, bx, bz, look = null) {
+  constructor(mgr, bx, bz, look = null, figOpts = null) {
     this.mgr = mgr;
     this.game = mgr.game;
-    this.fig = new Doodle(mgr.game.figures, look || civilianLook(), { seed: Math.random() * 100, scale: look ? 1 : 0.93 + Math.random() * 0.1 });
+    this.fig = new Doodle(mgr.game.figures, look || civilianLook(), { seed: Math.random() * 100, scale: look ? 1 : 0.93 + Math.random() * 0.1, ...(figOpts || {}) });
+    // scripted people (shopkeepers, the little scenes on the street) are driven by ctrl(civ, dt),
+    // which returns where to walk ({ x, z, speed }) or null to stand; they still panic and bleed ink
+    this.ctrl = null;
+    this.scripted = false;
+    this.faceYaw = null;
+    this.hopY = 0;
+    this.inside = false; // gone into a shop for a moment
     this.pos = this.fig.pos;
     this.radius = 0.33;
     this.dying = -1;
@@ -55,6 +62,11 @@ class Civilian {
   update(dt) {
     const game = this.game;
     const fig = this.fig;
+    if (this.inside) {
+      // shopping: nobody sees you, the errand brings you back out
+      if (this.ctrl) this.ctrl(this, dt);
+      return;
+    }
     if (this.dying >= 0) {
       this.dying += dt;
       if (fig.split >= 0) {
@@ -101,6 +113,19 @@ class Civilian {
       tz = this.pos.z + (fz / l) * 5;
       speed = 5.8;
       fig.armsUp = 1;
+    } else if (this.ctrl) {
+      fig.flail = 0;
+      const m = this.ctrl(this, dt);
+      if (this.inside) return;
+      if (m) {
+        tx = m.x;
+        tz = m.z;
+        speed = m.speed;
+      } else {
+        tx = this.pos.x;
+        tz = this.pos.z;
+        speed = 0;
+      }
     } else {
       fig.armsUp = 0;
       fig.flail = 0;
@@ -123,16 +148,21 @@ class Civilian {
     const dx = tx - this.pos.x;
     const dz = tz - this.pos.z;
     const l = Math.hypot(dx, dz) || 1;
+    // slow down on arrival instead of overshooting (scripted people stop on their marks)
+    if (this.ctrl && l < 0.6) speed *= l / 0.6;
     this.vel.x = damp(this.vel.x, (dx / l) * speed, 6, dt) + this.dodgeV.x;
     this.vel.z = damp(this.vel.z, (dz / l) * speed, 6, dt) + this.dodgeV.z;
     this.dodgeV.multiplyScalar(Math.exp(-5 * dt));
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
-    game.world.collision.resolveCylinder(this.pos, 0.33, 1.7, 0.5);
+    if (!this.noCollide) game.world.collision.resolveCylinder(this.pos, 0.33, 1.7, 0.5);
     game.vehicles.pushOut(this.pos, 0.33);
-    this.pos.y = damp(this.pos.y, groundHeight(this.pos.x, this.pos.z), 20, dt);
+    const gy = groundHeight(this.pos.x, this.pos.z) + (this.baseY || 0);
+    this.pos.y = this.hopY > 0 ? gy + this.hopY : damp(this.pos.y, gy, 20, dt);
+    fig.air = this.hopY > 0.04;
     const sp = Math.hypot(this.vel.x, this.vel.z);
     if (sp > 0.2) this.yaw = dampAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), 8, dt);
+    else if (this.faceYaw !== null && this.ctrl) this.yaw = dampAngle(this.yaw, this.faceYaw, 6, dt);
     fig.yaw = this.yaw;
     fig.speed = sp;
     fig.update(dt);
@@ -161,15 +191,18 @@ export class Civilians {
     this.t -= dt;
     if (this.t <= 0) {
       this.t = 1;
-      const max = game.touch ? 10 : 18;
-      // despawn far ones
-      for (const c of this.list) if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 110) c.gone = true;
+      // a busy city: more people on the sidewalks around you
+      const max = game.touch ? 13 : 24;
+      // despawn far ones (scripted people belong to their scene, unless it let them go)
+      for (const c of this.list) if ((!c.scripted || !c.owner) && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 110) c.gone = true;
       this.list = this.list.filter((c) => {
         if (c.gone) c.dispose();
         return !c.gone;
       });
-      let tries = 6;
-      while (this.list.length < max && tries-- > 0) {
+      let free = 0;
+      for (const c of this.list) if (!c.scripted) free++;
+      let tries = 8;
+      while (free < max && tries-- > 0) {
         const bx = Math.floor(Math.random() * 5);
         const bz = Math.floor(Math.random() * 5);
         const type = BLOCK_TYPES[bz][bx];
@@ -178,13 +211,14 @@ export class Civilians {
         const cx = (r.x0 + r.x1) / 2;
         const cz = (r.z0 + r.z1) / 2;
         const d = Math.hypot(cx - p.x, cz - p.z);
-        if (d > 95) continue;
+        if (d > (tries > 3 ? 75 : 95)) continue;
         const c = new Civilian(this, bx, bz);
         if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 18) {
           c.dispose();
           continue;
         }
         this.list.push(c);
+        free++;
       }
     }
     for (const c of this.list) c.update(dt);
@@ -195,6 +229,62 @@ export class Civilians {
         return false;
       });
     }
+  }
+
+  // a scripted person for a shop or a street scene; owner is told when it is gone
+  spawnScripted(x, z, look, owner, figOpts = null) {
+    const [bx, bz] = this.nearestBlock(x, z);
+    const c = new Civilian(this, bx, bz, look, figOpts);
+    c.pos.set(x, groundHeight(x, z), z);
+    c.scripted = true;
+    c.owner = owner;
+    c.speed = 1.25;
+    this.list.push(c);
+    return c;
+  }
+
+  // hand a scripted person back to the city: from now on they just walk their block
+  release(c) {
+    if (!c) return;
+    c.ctrl = null;
+    c.owner = null;
+    c.faceYaw = null;
+    c.hopY = 0;
+    c.fig.reachR = null;
+    c.fig.reachL = null;
+    c.fig.lookAt = null;
+    c.fig.sit = 0;
+    c.fig.dance = 0;
+    c.fig.armsUp = 0;
+    c.noCollide = false;
+    c.baseY = 0;
+    if (c.inside) {
+      c.inside = false;
+      c.fig.setVisible(true);
+    }
+  }
+
+  remove(c) {
+    if (!c) return;
+    const i = this.list.indexOf(c);
+    if (i >= 0) this.list.splice(i, 1);
+    c.dispose();
+  }
+
+  nearestBlock(x, z) {
+    let best = [0, 0];
+    let bd = Infinity;
+    for (let bx = 0; bx < 5; bx++) {
+      for (let bz = 0; bz < 5; bz++) {
+        const r = blockRect(bx, bz);
+        const d = Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.z0 - z, 0, z - r.z1));
+        if (d < bd) {
+          bd = d;
+          best = [bx, bz];
+        }
+      }
+    }
+    return best;
   }
 
   // somebody who just got out of a car at (x, z): walks the sidewalk of the nearest block
@@ -226,7 +316,7 @@ export class Civilians {
     const rd = _rd.set(dx / len, dy / len, dz / len);
     const len2 = dx * dx + dz * dz;
     for (const c of this.list) {
-      if (!c.alive) continue;
+      if (!c.alive || c.inside) continue;
       let t = len2 > 1e-8 ? ((c.pos.x - ox) * dx + (c.pos.z - oz) * dz) / len2 : 0;
       t = Math.max(0, Math.min(maxT, t));
       if (Math.hypot(ox + dx * t - c.pos.x, oz + dz * t - c.pos.z) > 1.2) continue;
@@ -239,7 +329,7 @@ export class Civilians {
   inArc(pos, fwd, range, halfAngle) {
     const out = [];
     for (const c of this.list) {
-      if (!c.alive) continue;
+      if (!c.alive || c.inside) continue;
       const dx = c.pos.x - pos.x;
       const dz = c.pos.z - pos.z;
       const d = Math.hypot(dx, dz);
@@ -282,7 +372,7 @@ export class Civilians {
   explosion(x, y, z, radius) {
     const at = new THREE.Vector3();
     for (const c of this.list) {
-      if (!c.alive) continue;
+      if (!c.alive || c.inside) continue;
       const d = Math.hypot(c.pos.x - x, c.pos.y + 1 - y, c.pos.z - z);
       if (d > radius) continue;
       const f = 1 - d / radius;
@@ -312,6 +402,7 @@ export class Civilians {
 
   panic(pos, radius) {
     for (const c of this.list) {
+      if (c.inside) continue;
       if (Math.hypot(c.pos.x - pos.x, c.pos.z - pos.z) < radius) {
         if (c.panicT <= 0 && Math.random() < 0.3) this.game.fx.mark('fx_alert', c.pos.x, c.pos.y + 2.4, c.pos.z, 0.6, 0.8);
         c.panicT = 6 + Math.random() * 3;
@@ -340,6 +431,7 @@ export class Civilians {
 
   draw(camPos) {
     for (const c of this.list) {
+      if (c.inside) continue;
       const d = Math.hypot(c.pos.x - camPos.x, c.pos.z - camPos.z);
       c.fig.setVisible(d < 130);
       if (d < 130) c.fig.draw(camPos);

@@ -115,7 +115,8 @@ export class Player {
       wz /= wl;
     }
     const aiming = weapons.isAiming();
-    const speed = (mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl);
+    // a double espresso from the cafe: everything a bit faster for a while
+    const speed = (mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1);
     const accel = this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;

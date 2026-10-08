@@ -10,6 +10,7 @@ const INK = {
   lamp: 70, light: 90, hydrant: 45, trash: 40, mailbox: 55, bench: 55, dumpster: 130, car: 170,
   tree: 80, bush: 30, booth: 95, busStop: 110, barrier: 65, sandbags: 95, container: 320,
   crate: 45, cone: 18, cart: 85, signPole: 40,
+  cafe: 50, stand: 60, pole: 40, chair: 30, aframe: 25,
 };
 const MAX_IDS = 256 * 64;
 const MAX_SPOTS = 128; // remembered rubbed-out spots
