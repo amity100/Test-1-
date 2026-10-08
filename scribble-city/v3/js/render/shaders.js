@@ -325,6 +325,8 @@ void main() {
         vec3 trim = mix(vec3(0.94, 0.92, 0.88), alb * 1.25, 0.25);
         alb = mix(alb, toLin(trim), max(frame, max(sill, lint) * 0.85) * detail);
         glassK = inside;
+        // the glass itself is dark, a deep blue
+        alb = mix(alb, toLin(vec3(0.17, 0.17, 0.33)), inside);
         // lit from inside: a few at all times, most in the evening and at night
         float on = step(h, 0.12 + 0.62 * lightBoost);
         vec3 warm = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.84, 0.55), h2);
@@ -558,7 +560,7 @@ void main() {
   if (uIndoor > 0.5) {
     // inside: warm lamps from above, a little cool light from the street; the sun only where it
     // comes in through the window
-    L = vec3(1.0, 0.84, 0.64) * (0.78 + 0.32 * max(N.y, 0.0) - 0.18 * max(-N.y, 0.0)) + uSkyTop * 0.22 + pointLights(vWPos, N);
+    L = vec3(1.0, 0.84, 0.64) * (0.62 + 0.26 * max(N.y, 0.0) - 0.16 * max(-N.y, 0.0)) + uSkyTop * 0.2 + pointLights(vWPos, N);
     light *= 0.85;
   }
   vec3 shade = alb * L;
@@ -570,6 +572,8 @@ void main() {
     // glass: the sky in it
     vec3 R = reflect(-V, N);
     float fr = mix(0.3, 0.95, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0));
+    // the windows of the houses: dark panes with only a little of the sky in them
+    if (style > 0.5 && style < 5.5 && abs(style - 3.0) > 0.5) fr *= 0.55;
     vec3 env = skyColor(R);
     shade = mix(shade, env * 0.75 + em, glassK * fr);
     lit = mix(lit, env + em, glassK * fr);

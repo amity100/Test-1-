@@ -178,7 +178,7 @@ vec3 tonemap(vec3 c) {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   vec3 r = c * (aces1(l) / max(l, 1e-4));
   float m = max(r.r, max(r.g, r.b));
-  if (m > 1.0) r = mix(r / m, vec3(1.0), clamp((m - 1.0) * 0.6, 0.0, 1.0));
+  if (m > 1.0) r = mix(r / m, vec3(1.0), clamp((m - 1.0) * 0.3, 0.0, 0.55));
   return r;
 }
 vec3 toSRGB(vec3 c) {

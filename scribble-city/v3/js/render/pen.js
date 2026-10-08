@@ -287,12 +287,14 @@ vec2 penLayer(vec2 p, vec2 dpx, vec2 dpy, float ang, float gapPx, float wpx, flo
 vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, float hi, float dens, float ang, float wash, float onGround) {
   vec3 mid = mix(shade, lit, light);
   // the paper shows between the strokes only where the drawing is light; the shade is built up dark
-  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid));
+  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid)) * (1.0 - 0.45 * light * (1.0 - onGround));
   vec3 col = mix(mid, uPaper * 0.97, paperK);
   float wpx = 1.9;
   // on the ground the layers stay close to one direction: strokes turned towards the eye would
   // be foreshortened into ticks
   float spread = mix(1.0, 0.32, onGround);
+  // how fine the drawing is here: far off (or at a grazing angle) dark pens would turn to dust
+  float fine = 1.0 - smoothstep(0.03, 0.08, max(length(dpx), length(dpy)));
   // A: the local colour; each stroke is a pen of the light or a pen of the shade
   vec2 A = penLayer(p, dpx, dpy, ang, 4.2, wpx, 11.0, 1.0);
   vec3 pa = fract(A.y * 3.77) < light ? lit : shade;
@@ -301,7 +303,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   // B: cross-strokes deepening the shade, in a cooler pen
   vec2 B = penLayer(p, dpx, dpy, ang + 0.62 * spread, 4.6, wpx, 23.0, 0.85);
   // (in the full sun the few cross-strokes are a cooler tone of the light, not dark dashes)
-  vec3 pb = hueShift(mix(shade * 0.7, mid * 0.82, light * 0.6), -0.38 + (fract(B.y * 5.31) - 0.5) * 0.45);
+  vec3 pb = hueShift(mix(shade * 0.7, mid * 0.82, light * mix(0.25, 0.6 - 0.3 * fine, onGround)), -0.38 + (fract(B.y * 5.31) - 0.5) * 0.45);
   col = mix(col, pb, B.x * step(fract(B.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens));
   // C: a neighbouring colour now and then
   if (uQuality > 0.5) {
@@ -310,7 +312,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
     col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.2 * dens));
   }
   // D: dark ink pressed into the deepest places
-  float dk = smoothstep(0.3, 0.035, lum(mid)) * (1.0 - onGround);
+  float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35 * fine, onGround);
   if (dk > 0.0) {
     vec2 D = penLayer(p, dpx, dpy, ang - 1.22 * spread, 3.8, wpx * 1.1, 51.0, 1.2);
     col = mix(col, vec3(0.022, 0.016, 0.04), D.x * step(fract(D.y * 7.13), dk * 0.92));

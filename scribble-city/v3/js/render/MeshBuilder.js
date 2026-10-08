@@ -245,6 +245,44 @@ export class MeshBuilder {
     this.end();
   }
 
+  // a rounded lump (a squashed, slightly lumpy ball): the crowns of the trees
+  blob(cx, cy, cz, rx, ry, rz, color, o = {}) {
+    this.begin();
+    const nu = o.nu || 8;
+    const nv = o.nv || 5;
+    const seed = o.seed || 0;
+    const lumpy = o.lumpy !== undefined ? o.lumpy : 0.1;
+    const P = (i, j) => {
+      const u = (i / nu) * Math.PI * 2 + seed;
+      const v = (j / nv) * Math.PI - Math.PI / 2;
+      const w = 1 + lumpy * Math.sin(u * 3 + seed * 1.3) * Math.cos(v * 2 + seed * 0.7);
+      return [cx + Math.cos(v) * Math.cos(u) * rx * w, cy + Math.sin(v) * ry * w, cz + Math.cos(v) * Math.sin(u) * rz * w];
+    };
+    for (let j = 0; j < nv; j++) {
+      for (let i = 0; i < nu; i++) {
+        const a = P(i, j);
+        const b = P(i + 1, j);
+        const c = P(i + 1, j + 1);
+        const d = P(i, j + 1);
+        // the facet's normal, outwards (through an ellipsoid)
+        const mx = (a[0] + b[0] + c[0] + d[0]) / 4 - cx;
+        const my = (a[1] + b[1] + c[1] + d[1]) / 4 - cy;
+        const mz = (a[2] + b[2] + c[2] + d[2]) / 4 - cz;
+        let n = [mx / (rx * rx), my / (ry * ry), mz / (rz * rz)];
+        const l = Math.hypot(n[0], n[1], n[2]) || 1;
+        n = [n[0] / l, n[1] / l, n[2] / l];
+        const uvs = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([x, y]) => [x * 0.9, y * 0.9]);
+        // wound counter-clockwise seen from outside
+        const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        if (cr[0] * n[0] + cr[1] * n[1] + cr[2] * n[2] >= 0) this.quad(a, b, c, d, n, color, uvs, [o.style || 0, 3, 3, seed]);
+        else this.quad(a, d, c, b, n, color, [uvs[0], uvs[3], uvs[2], uvs[1]], [o.style || 0, 3, 3, seed]);
+      }
+    }
+    this.end();
+  }
+
   cone(cx, y0, cz, r, h, n, color, o = {}) {
     this.begin();
     for (let i = 0; i < n; i++) {

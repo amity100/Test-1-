@@ -251,13 +251,42 @@ export function parkedCar(W, ch, x, z, alongX, color, taxi = false) {
   if (id) W.objects.end(W, ch, id, { alongX, color: c, taxi });
 }
 
+// the crowns: summer greens, autumn, and now and then one in blossom
+const CROWNS = [
+  [[0.36, 0.66, 0.4], [0.44, 0.74, 0.38], [0.3, 0.58, 0.42], [0.52, 0.78, 0.42]],
+  [[0.96, 0.56, 0.28], [0.9, 0.38, 0.3], [0.98, 0.72, 0.3], [0.86, 0.48, 0.26]],
+  [[0.98, 0.7, 0.8], [0.96, 0.6, 0.74], [1.0, 0.82, 0.88], [0.92, 0.54, 0.7]],
+];
+const TRUNK = [0.48, 0.34, 0.27];
+
 function tree_(W, ch, x, z, kind, size = 1) {
   const y0 = CURB;
   // keep billboards readable
   for (const b of W.billboards) if (Math.hypot(b.x - x, b.z - z) < 9) return;
   const s = 0.6;
   ch.sl.poly([[x - s, y0 + 0.02, z - s], [x + s, y0 + 0.02, z - s], [x + s, y0 + 0.02, z + s], [x - s, y0 + 0.02, z + s]], true, L(1.4));
-  W.trees.push({ x, y: y0, z, w: 5.2 * size, h: 5.6 * size, rect: `tree${kind}` });
+  // a drawn tree: a trunk forking into branches, a crown of round lumps of leaves (its own dice,
+  // from where it stands)
+  const rnd = (k) => {
+    const v = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  const cols = CROWNS[kind] || CROWNS[0];
+  const h = (2.2 + rnd(1) * 0.6) * size;
+  ch.mb.cylinder(x, y0, z, 0.14 * size, h + 0.5 * size, 6, TRUNK, { cap: false, seed: rnd(2) * 50 });
+  for (let k = 0; k < 3; k++) {
+    const a = rnd(3 + k) * Math.PI * 2;
+    ch.sl.seg([x, y0 + h * 0.8, z], [x + Math.cos(a) * 0.95 * size, y0 + h + 0.75 * size, z + Math.sin(a) * 0.95 * size], { width: 2.4, color: [0.3, 0.2, 0.16], overshoot: 0 });
+  }
+  const cy = y0 + h + 1.35 * size;
+  ch.mb.blob(x, cy, z, 1.65 * size, 1.3 * size, 1.65 * size, cols[0], { seed: rnd(7) * 9, nu: 7, nv: 4 });
+  const n = 4 + Math.floor(rnd(8) * 2);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + rnd(9) * 2;
+    const r = (0.95 + rnd(10 + k) * 0.35) * size;
+    const rs = (0.75 + rnd(20 + k) * 0.35) * size;
+    ch.mb.blob(x + Math.cos(a) * r, cy + (rnd(30 + k) - 0.35) * 0.8 * size, z + Math.sin(a) * r, rs, rs * 0.82, rs, cols[1 + (k % 3)], { seed: rnd(40 + k) * 9, nu: 6, nv: 3 });
+  }
   W.collision.addCircle(x, z, 0.28, y0, y0 + 3, 'tree');
 }
 

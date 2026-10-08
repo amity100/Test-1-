@@ -711,8 +711,11 @@ function park(W, ch, r, ix0, iz0, ix1, iz1) {
     if (Math.hypot((x - px) / 11, (z - pz) / 7) < 1) continue;
     if (Math.abs(x - cx) < 6 && Math.abs(z - cz) < 6) continue;
     if (rng.chance(0.65)) {
-      W.trees.push({ x, y: CURB, z, w: rng.float(5, 7.5), h: rng.float(5.5, 8), rect: rng.pick(['tree0', 'tree0', 'tree1', 'tree2']) });
-      W.collision.addCircle(x, z, 0.3, CURB, CURB + 3, 'tree');
+      // (the same dice as ever, so the park stays as it was drawn)
+      rng.float(5, 7.5);
+      const h = rng.float(5.5, 8);
+      const rect = rng.pick(['tree0', 'tree0', 'tree1', 'tree2']);
+      P.tree(W, ch, x, z, +rect.slice(4), h / 5.6);
     } else {
       P.bush(W, x, z, rng.float(0.9, 1.4));
       W.hideSpots.push({ x, z, r: 1.6, kind: 'שיחים' });
