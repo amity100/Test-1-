@@ -46,7 +46,21 @@ export const shared = {
   uShadowTexel: { value: 1 / 2048 },
   uSunScreen: { value: new THREE.Vector3(0, 0, 0) },
   uHorizonY: { value: 0 },
+  // removable props: one texel per object id (r = rubbed out 0..1), see world/objects.js
+  uObjMask: { value: makeObjMask() },
+  // rubbed-out spots in the city drawing (xyz centre, w radius)
+  uWErase: { value: Array.from({ length: 16 }, () => new THREE.Vector4(0, -1000, 0, 0)) },
+  uWEraseN: { value: 0 },
 };
+
+function makeObjMask() {
+  const t = new THREE.DataTexture(new Uint8Array(256 * 64 * 4), 256, 64, THREE.RGBAFormat);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  return t;
+}
 
 // Two looks for the same notebook city: the original daylight one, and golden hour
 // (low sun, cast shadows drawn as hatching, warm/cool coloured pencil, lit windows).
@@ -102,6 +116,7 @@ export function makeSurfaceMaterial({ hatchScale = 1, side = THREE.FrontSide } =
       uHatchScale: { value: hatchScale },
       uFlash: { value: 0 },
       uTintAll: { value: new THREE.Color(1, 1, 1) },
+      uAlpha: { value: 1 },
     },
     vertexShader: SURF_VERT,
     fragmentShader: COMMON + SURF_FRAG,
@@ -110,6 +125,15 @@ export function makeSurfaceMaterial({ hatchScale = 1, side = THREE.FrontSide } =
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 2,
   });
+  return m;
+}
+
+// Car windows you can see the driver through.
+export function makeGlassMaterial() {
+  const m = makeSurfaceMaterial({ hatchScale: 1.7, side: THREE.DoubleSide });
+  m.transparent = true;
+  m.depthWrite = false;
+  m.uniforms.uAlpha.value = 0.42;
   return m;
 }
 

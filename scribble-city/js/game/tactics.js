@@ -295,6 +295,17 @@ export const LINES = {
     car: ['Whoa!', 'Watch it!'],
     suppress: ['Keep him down!', 'Light him up!'],
   },
+  civ: {
+    spot: ['Hey! That\'s my car!', 'Get outta my car!', 'Thief!!'],
+    taunt: ['Come back here!', 'Thief!', 'I\'ll get you!', 'That\'s MY car!'],
+    hit: ['Ow!', 'Help!'],
+    arm: ['My arm!!'],
+    leg: ['My leg!'],
+    lost: ['Where\'d he go?'],
+    giveup: ['Unbelievable...', 'My car...'],
+    flee: ['Forget it!', 'Help!!'],
+    car: ['Whoa!'],
+  },
   police: {
     spot: ['Freeze!', 'SCPD! Don\'t move!', 'Suspect sighted!', 'Hands up!'],
     huh: ['What was that?', 'Hello?', 'Shots fired?'],

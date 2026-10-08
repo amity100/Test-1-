@@ -299,29 +299,40 @@ export class NavGrid {
     this.w = Math.ceil((bounds.maxX - bounds.minX) / cell);
     this.h = Math.ceil((bounds.maxZ - bounds.minZ) / cell);
     this.blocked = new Uint8Array(this.w * this.h);
-    const pad = 0.45;
-    for (let j = 0; j < this.h; j++) {
-      for (let i = 0; i < this.w; i++) {
-        const x0 = this.x0 + i * cell;
-        const z0 = this.z0 + j * cell;
-        let solid = false;
-        collision.forEachIn(x0 - pad, z0 - pad, x0 + cell + pad, z0 + cell + pad, (b) => {
-          if (b.y1 > 0.7 && b.y0 < 1.6) {
-            // require real overlap (not just touching the padded border)
-            const ox = Math.min(b.x1, x0 + cell + pad) - Math.max(b.x0, x0 - pad);
-            const oz = Math.min(b.z1, z0 + cell + pad) - Math.max(b.z0, z0 - pad);
-            if (ox > 0.35 && oz > 0.35) {
-              solid = true;
-              return true;
-            }
-          }
-          return false;
-        });
-        this.blocked[j * this.w + i] = solid ? 1 : 0;
-      }
-    }
+    this.collision = collision;
+    for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) this.computeCell(i, j);
     this.dist = new Float32Array(this.w * this.h);
     this.queue = new Int32Array(this.w * this.h);
+  }
+
+  computeCell(i, j) {
+    const cell = this.cell;
+    const pad = 0.45;
+    const x0 = this.x0 + i * cell;
+    const z0 = this.z0 + j * cell;
+    let solid = false;
+    this.collision.forEachIn(x0 - pad, z0 - pad, x0 + cell + pad, z0 + cell + pad, (b) => {
+      if (b.alive && b.y1 > 0.7 && b.y0 < 1.6) {
+        // require real overlap (not just touching the padded border)
+        const ox = Math.min(b.x1, x0 + cell + pad) - Math.max(b.x0, x0 - pad);
+        const oz = Math.min(b.z1, z0 + cell + pad) - Math.max(b.z0, z0 - pad);
+        if (ox > 0.35 && oz > 0.35) {
+          solid = true;
+          return true;
+        }
+      }
+      return false;
+    });
+    this.blocked[j * this.w + i] = solid ? 1 : 0;
+  }
+
+  // something was removed (or added) in this area
+  refresh(x0, z0, x1, z1) {
+    const i0 = Math.max(0, Math.floor((x0 - this.x0) / this.cell));
+    const i1 = Math.min(this.w - 1, Math.floor((x1 - this.x0) / this.cell));
+    const j0 = Math.max(0, Math.floor((z0 - this.z0) / this.cell));
+    const j1 = Math.min(this.h - 1, Math.floor((z1 - this.z0) / this.cell));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) this.computeCell(i, j);
   }
 
   idx(x, z) {

@@ -20,6 +20,9 @@ uniform float uShadowOn;
 uniform float uShadowTexel;
 uniform vec3 uSunScreen;    // sun in device px (origin bottom-left); z = 1 when in front
 uniform float uHorizonY;    // device px from the bottom where the horizon sits
+uniform sampler2D uObjMask; // per prop (id): r = how far it has been rubbed out (1 = gone)
+uniform vec4 uWErase[16];   // rubbed-out spots near the camera: xyz centre, w radius
+uniform float uWEraseN;
 
 float n2(vec2 p) { return texture2D(uNoise, (p + 0.5) / 256.0).r; }
 float n2b(vec2 p) { return texture2D(uNoise, (p + 0.5) / 256.0).g; }
@@ -31,6 +34,29 @@ float hash12(vec2 p) {
 }
 
 float lum3(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+float objGone(float id) {
+  if (id < 0.5) return 0.0;
+  int i = int(id + 0.5);
+  return texelFetch(uObjMask, ivec2(i % 256, i / 256), 0).r;
+}
+
+// 0..1: how much of the drawing has been rubbed out at p, with a rough hand-made rim
+float erasedAt(vec3 p) {
+  float e = 0.0;
+  for (int i = 0; i < 16; i++) {
+    if (float(i) >= uWEraseN) break;
+    vec4 s = uWErase[i];
+    vec3 d = p - s.xyz;
+    float dd = dot(d, d);
+    if (dd > s.w * s.w * 1.6) continue;
+    float l = sqrt(dd);
+    float fi = float(i) * 7.31;
+    float wob = n2(p.xz * 1.9 + p.y * 1.3 + fi) * 0.32 + n2(vec2(p.z - p.x, p.y) * 5.3 + fi) * 0.14;
+    e = max(e, 1.0 - smoothstep(s.w * (0.7 + wob), s.w * (0.8 + wob), l));
+  }
+  return e;
+}
 
 // Sun visibility from the baked depth map of the city. Taps are spread in the receiver's own
 // plane (not in shadow-map space), which keeps grazing ground free of acne; a slow wobble
@@ -139,6 +165,7 @@ attribute vec3 iA;
 attribute vec3 iB;
 attribute vec4 iCol;
 attribute vec4 iPar; // x: width px, y: seed, z: overshoot (m), w: wobble (relative)
+attribute float iObj; // -1 not part of the city, 0 permanent, > 0 removable prop id
 
 uniform float uBoil;
 uniform float uBoilAmp;
@@ -153,10 +180,19 @@ varying float vT;
 varying float vDist;
 varying float vSeed;
 varying float vSun;
+varying float vObj;
+varying float vGone;
+varying vec3 vWP;
 
 ${'' /* COMMON is prepended in JS */}
 
 void main() {
+  vObj = iObj;
+  vGone = objGone(iObj);
+  if (vGone > 0.996) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    return;
+  }
   float t = position.x;
   float side = position.y;
   float seed = iPar.y;
@@ -193,6 +229,7 @@ void main() {
   if (vA.z > nearZ) t0 = (nearZ - vA.z) / (vB.z - vA.z);
   if (vB.z > nearZ) t1 = (nearZ - vA.z) / (vB.z - vA.z);
   float tc = mix(t0, t1, t);
+  vWP = (modelMatrix * vec4(mix(A, B, tc), 1.0)).xyz;
 
   float s = sin(tc * 3.14159265);
   float bow = (hash11(seed * 3.7 + 0.1) - 0.5) * 2.0 + (hash11(bs * 4.3) - 0.5) * 0.7 * uBoilAmp;
@@ -246,8 +283,13 @@ varying float vT;
 varying float vDist;
 varying float vSeed;
 varying float vSun;
+varying float vObj;
+varying float vGone;
+varying vec3 vWP;
 
 void main() {
+  if (vGone > 0.0 && n2(gl_FragCoord.xy / uPR * 0.45 + vSeed) < vGone * 1.1) discard;
+  if (vObj > -0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
   float d = abs(vSidePx);
   float a = clamp(vHalfW + 0.5 - d, 0.0, 1.0);
   vec2 p = gl_FragCoord.xy / uPR;
@@ -280,6 +322,8 @@ attribute vec3 color;
 attribute vec2 aUV;
 attribute vec4 aFace;
 attribute vec4 aFace2;
+attribute float aObj;
+uniform sampler2D uObjMask;
 
 varying vec3 vColor;
 varying vec2 vUV;
@@ -288,8 +332,20 @@ varying vec4 vFace2;
 varying vec3 vN;
 varying vec3 vWPos;
 varying float vDist;
+varying float vObj;
+varying float vGone;
 
 void main() {
+  vObj = aObj;
+  vGone = 0.0;
+  if (aObj > 0.5) {
+    int i = int(aObj + 0.5);
+    vGone = texelFetch(uObjMask, ivec2(i % 256, i / 256), 0).r;
+    if (vGone > 0.996) {
+      gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+      return;
+    }
+  }
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vWPos = wp.xyz;
   vN = normalize(mat3(modelMatrix) * normal);
@@ -308,6 +364,7 @@ uniform vec3 uSunDir;
 uniform float uHatchScale;
 uniform float uFlash;
 uniform vec3 uTintAll;
+uniform float uAlpha;
 
 varying vec3 vColor;
 varying vec2 vUV;
@@ -316,6 +373,8 @@ varying vec4 vFace2;
 varying vec3 vN;
 varying vec3 vWPos;
 varying float vDist;
+varying float vObj;
+varying float vGone;
 float gPx;   // metres per pixel (worst direction), set once at the top of main()
 
 float lineMask(float coord, float fw, float wpx) {
@@ -381,6 +440,11 @@ float pxLine(float sd, float px, float wpx) {
 }
 
 void main() {
+  if (vGone > 0.0) {
+    // the whole prop being rubbed out: crumbles away in eraser-shaped patches
+    float dn = n2(vWPos.xz * 6.0 + vWPos.y * 4.3) * 0.55 + n2(gl_FragCoord.xy / uPR * 0.3) * 0.45;
+    if (dn < vGone * 1.15) discard;
+  }
   vec3 N = normalize(vN);
   float style = floor(vFace.x + 0.5);
   float seed = vFace.w;
@@ -663,6 +727,17 @@ void main() {
     float pw = pencil(vWPos.xz * 0.9, 0.4, style, px);
     col = mix(col, col * vec3(1.0, 0.88, 0.7), pw * lt * 0.16);
   }
+  if (vObj > -0.5 && uWEraseN > 0.5) {
+    // rubbed out: blank notebook page shows through, with a faint grey eraser smudge on the rim
+    float er = erasedAt(vWPos);
+    if (er > 0.0) {
+      vec3 pp = paperAt(gl_FragCoord.xy);
+      float rim = clamp(er * (1.0 - er) * 4.0, 0.0, 1.0);
+      float streak = n2(vec2(dot(vWPos.xz, vec2(0.7)) * 5.0 + vWPos.y * 3.0, vWPos.y * 1.7));
+      vec3 sm = mix(pp, pp * vec3(0.9, 0.88, 0.91), rim * (0.45 + 0.55 * streak));
+      col = mix(col, sm, er);
+    }
+  }
   col *= uTintAll;
   col = mix(col, vec3(1.0), uFlash);
   if (uLook > 0.5) {
@@ -672,7 +747,7 @@ void main() {
   }
   float f = fogFactor(length(vWPos - cameraPosition));
   col = mix(col, paperAt(gl_FragCoord.xy), f);
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, uAlpha);
 }
 `;
 

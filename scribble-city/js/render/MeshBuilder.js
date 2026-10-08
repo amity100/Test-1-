@@ -34,7 +34,11 @@ export class MeshBuilder {
     this.f1 = [];
     this.f2 = [];
     this.idx = [];
+    this.ob = [];
     this.vcount = 0;
+    // object id stamped on every vertex: -1 = not part of the city (vehicles, items),
+    // 0 = permanent city (buildings, ground), > 0 = a removable prop (see world/objects.js)
+    this.obj = -1;
   }
 
   // p0..p3 counter-clockwise when seen from the front. uvs: 4 [u,v] pairs.
@@ -48,6 +52,7 @@ export class MeshBuilder {
       this.uv.push(uvs[i][0], uvs[i][1]);
       this.f1.push(f1[0], f1[1], f1[2], f1[3]);
       this.f2.push(f2[0], f2[1], f2[2], f2[3]);
+      this.ob.push(this.obj);
     }
     this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     this.vcount += 4;
@@ -63,6 +68,7 @@ export class MeshBuilder {
       this.uv.push(uvs[i][0], uvs[i][1]);
       this.f1.push(f1[0], f1[1], f1[2], f1[3]);
       this.f2.push(f2[0], f2[1], f2[2], f2[3]);
+      this.ob.push(this.obj);
     }
     this.idx.push(base, base + 1, base + 2);
     this.vcount += 3;
@@ -217,6 +223,7 @@ export class MeshBuilder {
     g.setAttribute('aUV', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('aFace', new THREE.Float32BufferAttribute(this.f1, 4));
     g.setAttribute('aFace2', new THREE.Float32BufferAttribute(this.f2, 4));
+    g.setAttribute('aObj', new THREE.Float32BufferAttribute(this.ob, 1));
     const IndexArray = this.vcount > 65535 ? Uint32Array : Uint16Array;
     g.setIndex(new THREE.BufferAttribute(new IndexArray(this.idx), 1));
     g.computeBoundingSphere();

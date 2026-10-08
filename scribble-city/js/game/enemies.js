@@ -15,6 +15,8 @@ const TYPES = {
   mask: { look: 'mask', walk: 2.2, run: 5.4, range: 28, dmg: 4, interval: 0.16, burst: 4, pause: 1.7, mag: 16, reload: 2.3, sight: 40, scale: 1, armor: 1, personas: { hothead: 2, standard: 2, veteran: 1 } },
   mob: { look: 'mob', walk: 1.9, run: 4.6, range: 40, dmg: 11, interval: 1.4, burst: 1, mag: 6, reload: 2.4, sight: 44, scale: 1, armor: 1.2, personas: { veteran: 3, standard: 1, lookout: 1 } },
   brute: { look: 'biker', walk: 1.8, run: 4.6, range: 2.4, dmg: 22, interval: 1.1, melee: true, sight: 34, scale: 1.06, armor: 1.6, personas: { hothead: 3, standard: 1 } },
+  // a driver you pulled out of their car, coming after you with bare fists
+  driver: { walk: 2.2, run: 5.4, range: 1.9, dmg: 6, interval: 0.85, melee: true, unarmed: true, sight: 32, scale: 1, armor: 0.85, personas: { hothead: 1 }, faction: 'civ' },
   scrib: { monster: 'scrib', hp: 120, walk: 2.4, run: 6.2, range: 2.6, dmg: 14, interval: 0.9, sight: 30, radius: 0.95 },
   stalk: { monster: 'stalk', hp: 150, walk: 1.8, run: 4.8, range: 3.2, dmg: 20, interval: 1.3, sight: 36, radius: 0.7 },
   spike: { monster: 'spike', hp: 90, walk: 3.0, run: 7.2, range: 2.4, dmg: 12, interval: 0.8, sight: 28, radius: 0.85 },
@@ -115,6 +117,7 @@ class Squad {
     if (vl > 1) pts.push([lk.x + (this.lastVel.x / vl) * 9, lk.z + (this.lastVel.z / vl) * 9]);
     // hiding places near the last sighting
     const spots = this.mgr.game.world.hideSpots
+      .filter((h) => !h.gone)
       .map((h) => ({ h, d: Math.hypot(h.x - lk.x, h.z - lk.z) }))
       .filter((o) => o.d < 16)
       .sort((a, b) => a.d - b.d)
@@ -159,7 +162,7 @@ class Squad {
 }
 
 class Enemy {
-  constructor(mgr, type, x, z, territory) {
+  constructor(mgr, type, x, z, territory, look = null) {
     this.mgr = mgr;
     this.game = mgr.game;
     this.id = nextId++;
@@ -174,7 +177,7 @@ class Enemy {
       this.radius = this.cfg.radius;
       this.height = this.fig.cfg.cy + this.fig.cfg.h * 0.5;
     } else {
-      this.fig = new Doodle(mgr.game.figures, gangLook(this.cfg.look), { seed: this.id * 3.7, scale: this.cfg.scale });
+      this.fig = new Doodle(mgr.game.figures, look || gangLook(this.cfg.look), { seed: this.id * 3.7, scale: this.cfg.scale });
       this.radius = 0.4 * this.fig.bulk;
       this.height = 1.85 * this.fig.scale;
     }
@@ -203,7 +206,7 @@ class Enemy {
     this.personaName = this.isMonster ? 'standard' : pickPersona(this.cfg.personas || { standard: 1 });
     this.persona = PERSONAS[this.personaName];
     this.faction = this.cfg.faction || (this.isMonster ? 'monster' : 'gang');
-    this.lines = LINES[this.faction === 'police' ? 'police' : 'gang'];
+    this.lines = LINES[this.faction === 'monster' ? 'gang' : this.faction];
     this.awareness = 0;
     this.onEdge = 0; // stays jumpy for a while after a fight
     this.maxMorale = 0.45 + this.persona.courage * 0.7;
@@ -573,7 +576,7 @@ class Enemy {
   callBackup() {
     const sq = this.squad;
     const t = this.game.time;
-    if (this.isMonster || sq.backupCalls >= 2 || t - sq.backupT < 25 || this.headless) return;
+    if (this.isMonster || this.faction === 'civ' || sq.backupCalls >= 2 || t - sq.backupT < 25 || this.headless) return;
     sq.backupCalls++;
     sq.backupT = t;
     this.say('backup', 'alarm');
@@ -1459,6 +1462,7 @@ class Enemy {
     const j = this.fig.j;
     if (this.fig.parts.armR < 0.5) return;
     const h = j.handR;
+    if (this.cfg.unarmed) return;
     if (this.cfg.melee) {
       const d = _v.copy(j.handR).sub(j.elbowR).normalize();
       fr.lineXYZ(h.x - d.x * 0.1, h.y - d.y * 0.1, h.z - d.z * 0.1, h.x + d.x * 0.85, h.y + d.y * 0.85, h.z + d.z * 0.85, [0.35, 0.25, 0.2], 7, this.id, 1, 0.02, 0);
@@ -1547,6 +1551,19 @@ export class Enemies {
       return e;
     }
     return null;
+  }
+
+  // the driver you just pulled out of the car wants it back
+  spawnAngry(x, z, look) {
+    const e = new Enemy(this, 'driver', x, z, null, look);
+    e.home.set(x, 0, z);
+    e.lastSeen.copy(this.game.player.pos);
+    e.squad.lastKnown.copy(this.game.player.pos);
+    e.squad.knowT = this.game.time;
+    e.awareness = 1;
+    this.list.push(e);
+    e.enterCombat(true);
+    return e;
   }
 
   debugSpawn(type, x, z, yaw = 0) {
@@ -1766,6 +1783,8 @@ export class Enemies {
       for (const e of this.list) {
         const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
         if (d > 170 && e.state !== 'combat') e.despawn = true;
+        // bystanders who calmed down go about their day
+        if (e.faction === 'civ' && e.state !== 'combat' && d > 40) e.despawn = true;
       }
     }
     // separation

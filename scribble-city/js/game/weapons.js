@@ -238,6 +238,31 @@ export class Weapons {
       game.civilians.damage(c, c.fig.closestSurfacePoint(tip, new THREE.Vector3()), 'melee', slot.def.damage);
       any = true;
     }
+    if (!any) {
+      // nobody there: the eraser rubs out whatever is in front (cars, lamps, walls, the street)
+      const c = game.traffic.inArc(p.pos, f, reach + 1.2);
+      if (c) {
+        game.traffic.rub(c, slot.def.damage, tip);
+        any = true;
+      } else {
+        const col = game.world.collision;
+        for (const hy of [1.25, 0.6]) {
+          const h = col.raycast(p.pos.x, p.pos.y + hy, p.pos.z, f.x, 0, f.z, reach + 0.4, 'bound');
+          if (h) {
+            game.eraseWorld(h.x, h.y, h.z, 0.42, slot.def.damage, h.box, h);
+            any = true;
+            break;
+          }
+        }
+        if (!any && game.camRig.pitch < -0.35) {
+          // looking down: rub out the ground in front of your feet
+          const gx = p.pos.x + f.x * 1.3;
+          const gz = p.pos.z + f.z * 1.3;
+          game.eraseWorld(gx, groundHeight(gx, gz), gz, 0.5, slot.def.damage, null, null);
+          any = true;
+        }
+      }
+    }
     if (any) {
       game.audio.play('erase');
       game.camRig.addShake(0.12);
@@ -331,7 +356,7 @@ export class Weapons {
       const wh = col.raycast(ox, oy, oz, dx, dy, dz, len, pr.ignore || null);
       if (wh) {
         hitT = wh.t / len;
-        hit = { type: 'world', x: wh.x, y: wh.y, z: wh.z, nx: wh.nx, ny: wh.ny, nz: wh.nz };
+        hit = { type: 'world', x: wh.x, y: wh.y, z: wh.z, nx: wh.nx, ny: wh.ny, nz: wh.nz, box: wh.box };
       }
       const gy = groundHeight(nx, nz);
       if (ny < gy && (!hit || true)) {
@@ -431,6 +456,8 @@ export class Weapons {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.7 + Math.random() * 0.4, pr.color);
       game.audio.play('splat', 0.4);
     } else if (pr.kind === 'pencil') {
+      // eraser first: a little blank patch where it lands
+      game.eraseWorld(hit.x, hit.y, hit.z, 0.28, pr.damage * 0.6, hit.box, hit);
       game.stuckPencil(hit.x, hit.y, hit.z, ux, uy, uz);
       fx.impact(hit.x, hit.y, hit.z, 0.5);
     } else {

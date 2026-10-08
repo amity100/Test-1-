@@ -33,6 +33,7 @@ export class LineBatch {
     this.b = new Float32Array(this.capacity * 3);
     this.col = new Float32Array(this.capacity * 4);
     this.par = new Float32Array(this.capacity * 4);
+    this.obj = new Float32Array(this.capacity).fill(-1);
     const geo = new THREE.InstancedBufferGeometry();
     geo.setAttribute('position', baseStrip.pos);
     geo.setIndex(baseStrip.idx);
@@ -41,10 +42,12 @@ export class LineBatch {
     this.attrB = new THREE.InstancedBufferAttribute(this.b, 3).setUsage(usage);
     this.attrC = new THREE.InstancedBufferAttribute(this.col, 4).setUsage(usage);
     this.attrP = new THREE.InstancedBufferAttribute(this.par, 4).setUsage(usage);
+    this.attrO = new THREE.InstancedBufferAttribute(this.obj, 1).setUsage(THREE.StaticDrawUsage);
     geo.setAttribute('iA', this.attrA);
     geo.setAttribute('iB', this.attrB);
     geo.setAttribute('iCol', this.attrC);
     geo.setAttribute('iPar', this.attrP);
+    geo.setAttribute('iObj', this.attrO);
     geo.instanceCount = 0;
     this.geometry = geo;
     this.mesh = new THREE.Mesh(geo, material);
@@ -53,9 +56,10 @@ export class LineBatch {
     this.mesh.matrixAutoUpdate = dynamic;
   }
 
-  push(ax, ay, az, bx, by, bz, r, g, b, a, width, seed, overshoot, wobble) {
+  push(ax, ay, az, bx, by, bz, r, g, b, a, width, seed, overshoot, wobble, obj) {
     if (this.count >= this.capacity) return -1;
     const i = this.count++;
+    if (obj !== undefined) this.obj[i] = obj;
     const i3 = i * 3;
     const i4 = i * 4;
     this.a[i3] = ax;
@@ -86,7 +90,7 @@ export class LineBatch {
   // Upload after filling. For static batches also computes bounds for culling.
   commit() {
     this.geometry.instanceCount = this.count;
-    for (const at of [this.attrA, this.attrB, this.attrC, this.attrP]) {
+    for (const at of this.dynamic ? [this.attrA, this.attrB, this.attrC, this.attrP] : [this.attrA, this.attrB, this.attrC, this.attrP, this.attrO]) {
       at.clearUpdateRanges();
       at.addUpdateRange(0, this.count * at.itemSize);
       at.needsUpdate = true;
@@ -119,10 +123,11 @@ export class StrokeList {
   constructor() {
     this.data = [];
     this.seed = 1;
+    this.obj = -1; // object id for every stroke (see MeshBuilder.obj)
   }
 
   get length() {
-    return this.data.length / 14;
+    return this.data.length / 15;
   }
 
   seg(a, b, o = {}) {
@@ -143,7 +148,7 @@ export class StrokeList {
         a[0] + jx, a[1] + jy, a[2] + jz,
         b[0] - jz, b[1] + jx, b[2] - jy,
         c[0], c[1], c[2], (o.alpha !== undefined ? o.alpha : 0.92) * (s === 0 ? 1 : 0.7),
-        (o.width || 2) * (s === 0 ? 1 : 0.8), sd, os, wob,
+        (o.width || 2) * (s === 0 ? 1 : 0.8), sd, os, wob, this.obj,
       );
     }
   }
@@ -191,8 +196,8 @@ export class StrokeList {
     const batch = new LineBatch(n + extra, material);
     const d = this.data;
     for (let i = 0; i < n; i++) {
-      const k = i * 14;
-      batch.push(d[k], d[k + 1], d[k + 2], d[k + 3], d[k + 4], d[k + 5], d[k + 6], d[k + 7], d[k + 8], d[k + 9], d[k + 10], d[k + 11], d[k + 12], d[k + 13]);
+      const k = i * 15;
+      batch.push(d[k], d[k + 1], d[k + 2], d[k + 3], d[k + 4], d[k + 5], d[k + 6], d[k + 7], d[k + 8], d[k + 9], d[k + 10], d[k + 11], d[k + 12], d[k + 13], d[k + 14]);
     }
     batch.commit();
     return batch;

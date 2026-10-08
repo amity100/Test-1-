@@ -192,6 +192,15 @@ export class Audio {
       case 'click':
         this.tone('triangle', 1000, 900, 0.03, 0.08 * v);
         break;
+      case 'alarm':
+        // car alarm: a few alternating whoops
+        for (let i = 0; i < 6; i++) this.tone('square', i % 2 ? 620 : 880, i % 2 ? 880 : 620, 0.22, 0.07 * v, i * 0.24);
+        break;
+      case 'crumble':
+        // a whole prop rubbed out of the page
+        this.hiss(0.5, 0.4 * v, 2200, 1.5, 'bandpass', 0, 900);
+        this.hiss(0.3, 0.25 * v, 700, 1, 'lowpass', 0.1);
+        break;
       default:
         break;
     }

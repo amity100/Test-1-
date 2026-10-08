@@ -73,7 +73,12 @@ export class Player {
       fig.update(dt);
       return;
     }
-    if (this.mode === 'vehicle') return;
+    if (this.mode === 'vehicle') {
+      // behind the wheel of an ordinary car: you can see him through the windows
+      const v = this.inVehicle;
+      if (v && v.seat) this.game.traffic.seat(fig, v.pos, v.yaw, dt);
+      return;
+    }
     // regen after a few calm seconds
     if (this.game.time - this.lastHurt > 4 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 9 * dt);
 
@@ -160,7 +165,7 @@ export class Player {
   }
 
   draw(camPos) {
-    if (this.mode === 'vehicle') return;
+    if (this.mode === 'vehicle' && !(this.inVehicle && this.inVehicle.seat)) return;
     this.fig.draw(camPos);
   }
 }

@@ -3,6 +3,7 @@ import { RNG } from '../core/util.js';
 import { MeshBuilder, STYLE } from '../render/MeshBuilder.js';
 import { StrokeList } from '../render/LineBatch.js';
 import { SpriteBatch } from '../render/SpriteBatch.js';
+import { WorldObjects } from './objects.js';
 import { Collision, NavGrid } from './collision.js';
 import { SHOP_SIGNS } from '../render/signs.js';
 import {
@@ -41,9 +42,15 @@ export function buildCity(scene, atlas, signAtlas, mats) {
     spawn: { x: -150, z: 116, yaw: Math.PI / 2 },
     animated: [],
     goo: [],
+    objects: new WorldObjects(),
   };
   const chunk = (key) => {
-    if (!W.chunks.has(key)) W.chunks.set(key, { mb: new MeshBuilder(), sl: new StrokeList() });
+    if (!W.chunks.has(key)) {
+      const ch = { mb: new MeshBuilder(), sl: new StrokeList() };
+      ch.mb.obj = 0;
+      ch.sl.obj = 0;
+      W.chunks.set(key, ch);
+    }
     return W.chunks.get(key);
   };
 
@@ -80,28 +87,31 @@ export function buildCity(scene, atlas, signAtlas, mats) {
       segs += batch.count;
     }
   }
-  const treeBatch = new SpriteBatch(W.trees.length + 4, atlas.texture, { nearFade: 6 });
+  const treeBatch = new SpriteBatch(W.trees.length + 4, atlas.texture, { nearFade: 6, erasable: true });
   for (const t of W.trees) treeBatch.add({ ...t, rect: atlas.rects[t.rect], pivot: [0.5, 0] });
   treeBatch.commit();
   group.add(treeBatch.mesh);
-  const signBatch = new SpriteBatch(W.signs.length + 8, signAtlas.texture, { polygonOffset: true });
+  const signBatch = new SpriteBatch(W.signs.length + 8, signAtlas.texture, { polygonOffset: true, erasable: true });
   for (const s of W.signs) signBatch.add({ ...s, rect: signAtlas.rects[s.rect] });
   signBatch.commit();
   group.add(signBatch.mesh);
   scene.add(group);
 
   const nav = new NavGrid(collision, BOUNDS, 2);
-  return {
+  const world = {
     group,
     collision,
     nav,
+    objects: W.objects,
     hideSpots: W.hideSpots,
     billboards: W.billboards,
     territories: W.territories,
     spawn: W.spawn,
     goo: W.goo,
-    stats: { segs, verts, trees: W.trees.length, signs: W.signs.length, boxes: collision.boxes.length },
+    stats: { segs, verts, trees: W.trees.length, signs: W.signs.length, boxes: collision.boxes.length, objects: W.objects.list.length },
   };
+  W.objects.attach(world, treeBatch, signBatch, W);
+  return world;
 }
 
 // --------------------------------------------------------------------------------------------

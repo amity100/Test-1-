@@ -1,9 +1,56 @@
 import * as THREE from 'three';
 import { shared } from './materials.js';
 
+// Depth-only material that leaves out props that have been rubbed out of the city.
+function makeDepthMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uObjMask: shared.uObjMask },
+    vertexShader: /* glsl */ `
+      attribute float aObj;
+      uniform sampler2D uObjMask;
+      void main() {
+        if (aObj > 0.5) {
+          int i = int(aObj + 0.5);
+          if (texelFetch(uObjMask, ivec2(i % 256, i / 256), 0).r > 0.5) {
+            gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+            return;
+          }
+        }
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `void main() { gl_FragColor = vec4(1.0); }`,
+    side: THREE.DoubleSide,
+  });
+}
+
+const bake = { renderer: null, meshes: null, cam: null, rt: null, mat: null };
+
+function renderBake() {
+  const { renderer, meshes, cam, rt, mat } = bake;
+  const scene = new THREE.Scene();
+  scene.overrideMaterial = mat;
+  const parents = meshes.map((m) => m.parent);
+  for (const m of meshes) scene.add(m);
+  const prev = renderer.getRenderTarget();
+  const clear = renderer.getClearColor(new THREE.Color());
+  const clearA = renderer.getClearAlpha();
+  renderer.setRenderTarget(rt);
+  renderer.setClearColor(0xffffff, 1);
+  renderer.clear(true, true, true);
+  renderer.render(scene, cam);
+  renderer.setRenderTarget(prev);
+  renderer.setClearColor(clear, clearA);
+  meshes.forEach((m, i) => parents[i].add(m));
+}
+
+// Props were rubbed out: redraw the sun's view so their shadows go too.
+export function rebakeSunShadows() {
+  if (bake.rt) renderBake();
+}
+
 /**
- * Bakes one depth map of the static city as seen from the sun. The city never moves,
- * so this happens once at startup.
+ * Bakes one depth map of the static city as seen from the sun. The city only changes
+ * when something is rubbed out, so this happens once at startup (and after erasing).
  */
 export function bakeSunShadows(renderer, group, sunDir, size = 2048) {
   const meshes = group.children.filter((o) => o.isMesh && o.geometry && o.geometry.getAttribute('aFace') && !o.geometry.isInstancedBufferGeometry);
@@ -39,22 +86,8 @@ export function bakeSunShadows(renderer, group, sunDir, size = 2048) {
   const rt = new THREE.WebGLRenderTarget(size, size, { depthBuffer: true });
   rt.texture.generateMipmaps = false;
   rt.depthTexture = new THREE.DepthTexture(size, size, THREE.UnsignedIntType);
-  const depthMat = new THREE.MeshDepthMaterial({ side: THREE.DoubleSide });
-  const scene = new THREE.Scene();
-  scene.overrideMaterial = depthMat;
-  const parents = meshes.map((m) => m.parent);
-  for (const m of meshes) scene.add(m);
-  const prev = renderer.getRenderTarget();
-  const clear = renderer.getClearColor(new THREE.Color());
-  const clearA = renderer.getClearAlpha();
-  renderer.setRenderTarget(rt);
-  renderer.setClearColor(0xffffff, 1);
-  renderer.clear(true, true, true);
-  renderer.render(scene, cam);
-  renderer.setRenderTarget(prev);
-  renderer.setClearColor(clear, clearA);
-  meshes.forEach((m, i) => parents[i].add(m));
-  depthMat.dispose();
+  Object.assign(bake, { renderer, meshes, cam, rt, mat: makeDepthMaterial() });
+  renderBake();
 
   shared.uShadowMap.value = rt.depthTexture;
   shared.uShadowMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);

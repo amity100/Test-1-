@@ -6,6 +6,7 @@ import { hexToRgb, setReveal } from './items.js';
 import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 import { COL } from '../world/buildings.js';
+import { buildCarModel, carGroup } from './traffic.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -93,7 +94,7 @@ function wheelGeom(mb, sl, r, w, color) {
  * into a solid "cut-out", and the player's own strokes are drawn on both sides.
  */
 class Vehicle {
-  constructor(mgr, kind, grade, score, aligned) {
+  constructor(mgr, kind, grade, score, aligned, stock = null) {
     this.mgr = mgr;
     this.game = mgr.game;
     this.kind = kind;
@@ -120,8 +121,26 @@ class Vehicle {
     this.radius = kind === 'tank' ? 2.4 : kind === 'ufo' ? 3.6 : 1.6;
     this.group = new THREE.Group();
     this.group.matrixAutoUpdate = true;
-    this.build(aligned);
+    this.stock = stock;
+    if (stock) this.buildStock(stock);
+    else this.build(aligned);
     mgr.game.scene.add(this.group);
+  }
+
+  // an ordinary city car (taken from traffic or the curb), with see-through windows
+  buildStock(stock) {
+    this.body = new THREE.Group();
+    this.group.add(this.body);
+    const g = carGroup(this.game.mats, this.mgr.carModel(stock.color, stock.taxi));
+    g.rotation.y = -Math.PI / 2; // the city car model points along +x
+    this.body.add(g);
+    this.reveal = 1;
+    this.wheels = [];
+    this.halfLen = 2.2;
+    this.halfWid = 0.95;
+    this.heightM = 1.45;
+    this.seat = true; // whoever drives shows through the windows
+    this.label = stock.taxi ? 'מונית' : 'מכונית';
   }
 
   // template (x right, y down) -> local (z forward, y up), bottom of the drawing on the ground
@@ -660,6 +679,12 @@ class Vehicle {
     const top = this.pos.y + 0.6;
     const g = Math.max(0.15, groundHeight(gx, gz));
     const r = 4.2;
+    // the beam rubs out the city under it
+    this.beamEraseT = (this.beamEraseT || 0) - dt;
+    if (this.beamEraseT <= 0) {
+      this.beamEraseT = 0.2;
+      game.eraseBlast(gx, g, gz, 3.4, power * 0.35);
+    }
     // beam cone drawn as wavy ink lines
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2 + this.time * 2;
@@ -694,6 +719,26 @@ export class Vehicles {
   constructor(game) {
     this.game = game;
     this.list = [];
+    this.models = new Map();
+  }
+
+  carModel(color, taxi) {
+    const key = color.join(',') + (taxi ? 't' : '');
+    let m = this.models.get(key);
+    if (!m) {
+      m = buildCarModel(this.game.mats, color, taxi);
+      this.models.set(key, m);
+    }
+    return m;
+  }
+
+  // a city car the player takes (no drawing needed)
+  spawnStock(stock, pos, yaw) {
+    const v = new Vehicle(this, 'car', 'good', 100, null, stock);
+    v.pos.set(pos.x, 0, pos.z);
+    v.yaw = yaw;
+    this.list.push(v);
+    return v;
   }
 
   spawn(kind, grade, score, aligned) {
@@ -723,8 +768,8 @@ export class Vehicles {
     if (kind === 'ufo') v.alt = 3;
     this.list.push(v);
     // keep at most 3 drawn vehicles around
-    while (this.list.length > 3) {
-      const old = this.list.find((o) => !o.driver);
+    while (this.list.filter((o) => !o.stock).length > 3) {
+      const old = this.list.find((o) => !o.driver && !o.stock);
       if (!old) break;
       old.dispose();
       this.list.splice(this.list.indexOf(old), 1);
@@ -736,9 +781,11 @@ export class Vehicles {
 
   update(dt) {
     const keep = [];
+    const pp = this.game.player.inVehicle ? this.game.player.inVehicle.pos : this.game.player.pos;
     for (const v of this.list) {
       v.update(dt);
-      if (v.dead && this.game.time > v.removeAt) {
+      const left = v.stock && !v.driver && Math.hypot(v.pos.x - pp.x, v.pos.z - pp.z) > 140;
+      if ((v.dead && this.game.time > v.removeAt) || left) {
         v.dispose();
         continue;
       }

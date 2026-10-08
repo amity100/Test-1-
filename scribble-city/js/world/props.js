@@ -5,7 +5,7 @@ import { COL, solidBox } from './buildings.js';
 
 const L = (w = 1.7) => ({ width: w, overshoot: 0.06, wobble: 0.015 });
 
-export function streetLamp(W, ch, x, z, dx, dz) {
+function streetLamp_(W, ch, x, z, dx, dz) {
   const y0 = CURB;
   const sl = ch.sl;
   sl.seg([x, y0, z], [x, y0 + 5.4, z], { ...L(2.4), strokes: 2, jitter: 0.03 });
@@ -26,7 +26,7 @@ export function streetLamp(W, ch, x, z, dx, dz) {
   W.collision.addCircle(x, z, 0.2, y0, y0 + 5.5, 'pole');
 }
 
-export function trafficLight(W, ch, x, z, dx, dz, armLen = 4.5) {
+function trafficLight_(W, ch, x, z, dx, dz, armLen = 4.5) {
   const y0 = CURB;
   const sl = ch.sl;
   sl.seg([x, y0, z], [x, y0 + 5.6, z], { ...L(2.6), strokes: 2, jitter: 0.03 });
@@ -51,7 +51,7 @@ export function trafficLight(W, ch, x, z, dx, dz, armLen = 4.5) {
   W.collision.addCircle(x, z, 0.2, y0, y0 + 5.6, 'pole');
 }
 
-export function hydrant(W, ch, x, z) {
+function hydrant_(W, ch, x, z) {
   const y0 = CURB;
   ch.mb.cylinder(x, y0, z, 0.2, 0.55, 8, COL.red, { cap: false });
   ch.mb.cone(x, y0 + 0.55, z, 0.24, 0.22, 8, COL.red);
@@ -65,7 +65,7 @@ export function hydrant(W, ch, x, z) {
   W.collision.addCircle(x, z, 0.28, y0, y0 + 0.85, 'prop');
 }
 
-export function trashCan(W, ch, x, z) {
+function trashCan_(W, ch, x, z) {
   const y0 = CURB;
   ch.mb.cylinder(x, y0, z, 0.36, 0.95, 9, COL.darkGreen, { cap: false });
   ch.mb.disc(x, y0 + 0.8, z, 0.35, 9, COL.black);
@@ -81,14 +81,14 @@ export function trashCan(W, ch, x, z) {
   W.collision.addCircle(x, z, 0.38, y0, y0 + 0.95, 'prop');
 }
 
-export function mailbox(W, ch, x, z) {
+function mailbox_(W, ch, x, z) {
   const y0 = CURB;
   solidBox(W, ch, [x - 0.32, y0 + 0.25, z - 0.3], [x + 0.32, y0 + 1.25, z + 0.3], { color: COL.blue, lineW: 1.7, tag: 'prop' });
   for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) ch.sl.seg([x + sx * 0.27, y0, z + sz * 0.25], [x + sx * 0.27, y0 + 0.25, z + sz * 0.25], L(1.5));
   ch.sl.seg([x - 0.15, y0 + 1.0, z + 0.31], [x + 0.15, y0 + 1.0, z + 0.31], L(2.4));
 }
 
-export function bench(W, ch, x, z, alongX = true) {
+function bench_(W, ch, x, z, alongX = true) {
   const y0 = CURB;
   const hx = alongX ? 1.0 : 0.3;
   const hz = alongX ? 0.3 : 1.0;
@@ -110,7 +110,7 @@ export function bench(W, ch, x, z, alongX = true) {
   W.collision.addBox(x - hx, z - hz, x + hx, z + hz, y0, y0 + 0.5, 'prop');
 }
 
-export function dumpster(W, ch, x, z, alongX = true, color = COL.darkGreen) {
+function dumpster_(W, ch, x, z, alongX = true, color = COL.darkGreen) {
   const y0 = CURB;
   const hx = alongX ? 1.15 : 0.65;
   const hz = alongX ? 0.65 : 1.15;
@@ -190,11 +190,13 @@ export function carShape(W, ch, x, z, alongX, color, taxi = false, collide = tru
   const rt = -0.85;
   const sw = 0.8;
   const glass = COL.glass;
+  // cars that can have someone inside put their windows in a see-through builder
+  const gm = ch.glass || ch.mb;
   for (const s of [-1, 1]) {
     const q = [P(rb, yb, s * sw), P(fb, yb, s * sw), P(ft, yt, s * sw * 0.96), P(rt, yt, s * sw * 0.96)];
     const n = alongX ? [0, 0, s] : [s, 0, 0];
-    if (s > 0) ch.mb.quad(q[0], q[1], q[2], q[3], n, glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-    else ch.mb.quad(q[1], q[0], q[3], q[2], n, glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+    if (s > 0) gm.quad(q[0], q[1], q[2], q[3], n, glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+    else gm.quad(q[1], q[0], q[3], q[2], n, glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
     ch.sl.poly(q, true, { width: 1.8, overshoot: 0.06, wobble: 0.01 });
     // window pillar
     ch.sl.seg(P(-0.15, yb, s * (sw + 0.01)), P(-0.12, yt, s * (sw * 0.96 + 0.01)), { width: 1.5, overshoot: 0.02 });
@@ -205,8 +207,8 @@ export function carShape(W, ch, x, z, alongX, color, taxi = false, collide = tru
   const wsF = [P(fb, yb, -sw), P(fb, yb, sw), P(ft, yt, sw * 0.96), P(ft, yt, -sw * 0.96)];
   const wsR = [P(rb, yb, sw), P(rb, yb, -sw), P(rt, yt, -sw * 0.96), P(rt, yt, sw * 0.96)];
   for (const q of [wsF, wsR]) {
-    ch.mb.quad(q[0], q[1], q[2], q[3], [0, 1, 0], glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
-    ch.mb.quad(q[3], q[2], q[1], q[0], [0, 1, 0], glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+    gm.quad(q[0], q[1], q[2], q[3], [0, 1, 0], glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+    gm.quad(q[3], q[2], q[1], q[0], [0, 1, 0], glass, [[0, 0], [1, 0], [1, 1], [0, 1]]);
     ch.sl.poly(q, true, { width: 1.8, overshoot: 0.06 });
   }
   // reflections on the windshield
@@ -243,10 +245,12 @@ const PARKED_COLORS = [COL.red, COL.blue, COL.green, COL.white, COL.gray, COL.da
 
 export function parkedCar(W, ch, x, z, alongX, color, taxi = false) {
   const c = color || PARKED_COLORS[Math.floor(Math.abs(x * 7 + z * 13)) % PARKED_COLORS.length];
+  const id = W.objects ? W.objects.begin(W, ch, 'car', x, z) : 0;
   carShape(W, ch, x, z, alongX, c, taxi, true);
+  if (id) W.objects.end(W, ch, id, { alongX, color: c, taxi });
 }
 
-export function tree(W, ch, x, z, kind, size = 1) {
+function tree_(W, ch, x, z, kind, size = 1) {
   const y0 = CURB;
   // keep billboards readable
   for (const b of W.billboards) if (Math.hypot(b.x - x, b.z - z) < 9) return;
@@ -256,11 +260,15 @@ export function tree(W, ch, x, z, kind, size = 1) {
   W.collision.addCircle(x, z, 0.28, y0, y0 + 3, 'tree');
 }
 
+const NO_GEOMETRY = { mb: { obj: 0, vcount: 0 }, sl: { obj: 0, length: 0 } };
+
 export function bush(W, x, z, size = 1) {
+  const id = W.objects ? W.objects.begin(W, NO_GEOMETRY, 'bush', x, z) : 0;
   W.trees.push({ x, y: CURB, z, w: 2.6 * size, h: 1.7 * size, rect: 'bush' });
+  if (id) W.objects.end(W, NO_GEOMETRY, id);
 }
 
-export function phoneBooth(W, ch, x, z, openDir) {
+function phoneBooth_(W, ch, x, z, openDir) {
   const y0 = CURB;
   const h = 2.5;
   const r = 0.6;
@@ -338,7 +346,7 @@ export function subwayEntrance(W, ch, x, z, alongX) {
   W.hideSpots.push({ x, z, r: 1.6, kind: 'כניסה לרכבת' });
 }
 
-export function busStop(W, ch, x, z, alongX, facing) {
+function busStop_(W, ch, x, z, alongX, facing) {
   const y0 = CURB;
   const hl = 1.8;
   const d = 0.9;
@@ -362,7 +370,7 @@ export function busStop(W, ch, x, z, alongX, facing) {
   W.signs.push({ x: alongX ? x - hl : x, y: y0 + 2.9, z: alongX ? z : z - hl, w: 1.0, h: 0.5, rect: 'parking', axis: alongX ? [1, 0, 0] : [0, 0, 1], pivot: [0.5, 0.5] });
 }
 
-export function barrier(W, ch, x, z, alongX, color = COL.concrete) {
+function barrier_(W, ch, x, z, alongX, color = COL.concrete) {
   const y0 = CURB;
   const hx = alongX ? 1.1 : 0.32;
   const hz = alongX ? 0.32 : 1.1;
@@ -371,7 +379,7 @@ export function barrier(W, ch, x, z, alongX, color = COL.concrete) {
   ch.sl.seg([st[0][0], y0 + 0.2, st[0][1]], [st[1][0], y0 + 0.7, st[1][1]], { width: 2.5, color: [0.72, 0.1, 0.12], overshoot: 0 });
 }
 
-export function sandbags(W, ch, x, z, alongX, len = 3) {
+function sandbags_(W, ch, x, z, alongX, len = 3) {
   const y0 = CURB;
   const hx = alongX ? len / 2 : 0.45;
   const hz = alongX ? 0.45 : len / 2;
@@ -392,7 +400,7 @@ export function sandbags(W, ch, x, z, alongX, len = 3) {
   W.collision.addBox(x - hx, z - hz, x + hx, z + hz, y0, y0 + 1.1, 'cover');
 }
 
-export function container(W, ch, x, z, alongX, color) {
+function container_(W, ch, x, z, alongX, color) {
   const y0 = CURB;
   const hx = alongX ? 3.0 : 1.2;
   const hz = alongX ? 1.2 : 3.0;
@@ -410,14 +418,14 @@ export function container(W, ch, x, z, alongX, color) {
   }
 }
 
-export function crate(W, ch, x, z, s = 1.1) {
+function crate_(W, ch, x, z, s = 1.1) {
   const y0 = CURB;
   solidBox(W, ch, [x - s / 2, y0, z - s / 2], [x + s / 2, y0 + s, z + s / 2], { color: COL.wood, lineW: 1.9, tag: 'cover' });
   ch.sl.seg([x - s / 2, y0, z + s / 2 + 0.01], [x + s / 2, y0 + s, z + s / 2 + 0.01], L(1.3));
   ch.sl.seg([x + s / 2 + 0.01, y0, z - s / 2], [x + s / 2 + 0.01, y0 + s, z + s / 2], L(1.3));
 }
 
-export function cone(W, ch, x, z) {
+function cone_(W, ch, x, z) {
   const y0 = CURB;
   ch.mb.cone(x, y0, z, 0.25, 0.75, 7, COL.orange);
   ch.sl.ring(x, y0 + 0.3, z, 0.16, 7, { width: 1.2, overshoot: 0 });
@@ -509,7 +517,7 @@ export function scaffolding(W, ch, x0, z0, x1, z1, h, alongX) {
   W.hideSpots.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, r: Math.min(len * 0.4, 4), kind: 'פיגומים' });
 }
 
-export function foodCart(W, ch, x, z) {
+function foodCart_(W, ch, x, z) {
   const y0 = CURB;
   solidBox(W, ch, [x - 1.0, y0 + 0.4, z - 0.6], [x + 1.0, y0 + 1.3, z + 0.6], { color: COL.white, lineW: 2, tag: 'prop' });
   ch.sl.seg([x - 1.0, y0 + 0.9, z + 0.61], [x + 1.0, y0 + 0.9, z + 0.61], { width: 1.6, overshoot: 0 });
@@ -528,7 +536,7 @@ export function foodCart(W, ch, x, z) {
   W.signs.push({ x, y: y0 + 1.65, z: z + 0.65, w: 1.6, h: 0.4, rect: 'hotdog', axis: [1, 0, 0], pivot: [0.5, 0.5] });
 }
 
-export function streetSignPole(W, ch, x, z, aveIdx, stIdx) {
+function streetSignPole_(W, ch, x, z, aveIdx, stIdx) {
   const y0 = CURB;
   ch.sl.seg([x, y0, z], [x, y0 + 3.4, z], L(2));
   W.signs.push({ x, y: y0 + 3.15, z, w: 2.0, h: 0.5, rect: `ave${aveIdx}`, axis: [0, 0, 1], pivot: [0.5, 0.5] });
@@ -540,5 +548,33 @@ export function manhole(ch, x, z) {
   ch.sl.ring(x, 0.025, z, 0.55, 10, { width: 1.8, overshoot: 0.03 });
   ch.sl.seg([x - 0.35, 0.025, z], [x + 0.35, 0.025, z], { width: 1.1, overshoot: 0 });
 }
+
+
+// Props that can be rubbed out of the city: each call registers one object (see world/objects.js).
+function reg(kind, fn) {
+  return (W, ch, x, z, ...rest) => {
+    const id = W && W.objects ? W.objects.begin(W, ch, kind, x, z) : 0;
+    const r = fn(W, ch, x, z, ...rest);
+    if (id) W.objects.end(W, ch, id);
+    return r;
+  };
+}
+export const streetLamp = reg('lamp', streetLamp_);
+export const trafficLight = reg('light', trafficLight_);
+export const hydrant = reg('hydrant', hydrant_);
+export const trashCan = reg('trash', trashCan_);
+export const mailbox = reg('mailbox', mailbox_);
+export const bench = reg('bench', bench_);
+export const dumpster = reg('dumpster', dumpster_);
+export const tree = reg('tree', tree_);
+export const phoneBooth = reg('booth', phoneBooth_);
+export const busStop = reg('busStop', busStop_);
+export const barrier = reg('barrier', barrier_);
+export const sandbags = reg('sandbags', sandbags_);
+export const container = reg('container', container_);
+export const crate = reg('crate', crate_);
+export const cone = reg('cone', cone_);
+export const foodCart = reg('cart', foodCart_);
+export const streetSignPole = reg('signPole', streetSignPole_);
 
 export { STYLE };

@@ -13,10 +13,10 @@ const _rd = new THREE.Vector3();
  * Pedestrians walking around their block's sidewalk. They panic and run when shooting starts.
  */
 class Civilian {
-  constructor(mgr, bx, bz) {
+  constructor(mgr, bx, bz, look = null) {
     this.mgr = mgr;
     this.game = mgr.game;
-    this.fig = new Doodle(mgr.game.figures, civilianLook(), { seed: Math.random() * 100, scale: 0.93 + Math.random() * 0.1 });
+    this.fig = new Doodle(mgr.game.figures, look || civilianLook(), { seed: Math.random() * 100, scale: look ? 1 : 0.93 + Math.random() * 0.1 });
     this.pos = this.fig.pos;
     this.radius = 0.33;
     this.dying = -1;
@@ -195,6 +195,26 @@ export class Civilians {
         return false;
       });
     }
+  }
+
+  // somebody who just got out of a car at (x, z): walks the sidewalk of the nearest block
+  spawnAt(x, z, look) {
+    let best = [0, 0];
+    let bd = Infinity;
+    for (let bx = 0; bx < 5; bx++) {
+      for (let bz = 0; bz < 5; bz++) {
+        const r = blockRect(bx, bz);
+        const d = Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.z0 - z, 0, z - r.z1));
+        if (d < bd) {
+          bd = d;
+          best = [bx, bz];
+        }
+      }
+    }
+    const c = new Civilian(this, best[0], best[1], look);
+    c.pos.set(x, groundHeight(x, z), z);
+    this.list.push(c);
+    return c;
   }
 
   // ------------------------------------------------------------------ getting hit

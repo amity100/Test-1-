@@ -243,7 +243,7 @@ export class HUD {
       }
     };
     for (const h of game.world.hideSpots) {
-      if (Math.abs(h.x - p.x) > 110 || Math.abs(h.z - p.z) > 110) continue;
+      if (h.gone || Math.abs(h.x - p.x) > 110 || Math.abs(h.z - p.z) > 110) continue;
       dot(h.x, h.z, 3, null, '#3a6ad6');
     }
     for (const b of game.world.billboards) {

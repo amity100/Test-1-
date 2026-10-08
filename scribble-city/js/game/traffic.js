@@ -4,10 +4,12 @@ import { StrokeList } from '../render/LineBatch.js';
 import { carShape } from '../world/props.js';
 import { blockRect } from '../world/layout.js';
 import { COL } from '../world/buildings.js';
+import { Doodle } from './doodle.js';
+import { civilianLook } from './looks.js';
 import { damp, dampAngle } from '../core/util.js';
 
 const LANE = 3.6;
-const VARIANTS = [
+export const CAR_VARIANTS = [
   { color: COL.yellow, taxi: true },
   { color: COL.yellow, taxi: true },
   { color: COL.blue, taxi: false },
@@ -16,25 +18,53 @@ const VARIANTS = [
   { color: COL.green, taxi: false },
 ];
 
+// Model of a city car (body, see-through windows, ink), built along +x like the parked ones.
+export function buildCarModel(mats, color, taxi) {
+  const ch = { mb: new MeshBuilder(), sl: new StrokeList(), glass: new MeshBuilder() };
+  carShape(null, ch, 0, 0, true, color, taxi, false);
+  return { geo: ch.mb.build(), glass: ch.glass.build(), lines: ch.sl.toBatch(mats.line) };
+}
+
+export function carGroup(mats, m) {
+  const group = new THREE.Group();
+  group.add(new THREE.Mesh(m.geo, mats.surface));
+  const gl = new THREE.Mesh(m.glass, mats.glass);
+  gl.renderOrder = 9;
+  group.add(gl);
+  const lm = new THREE.Mesh(m.lines.geometry, mats.line);
+  lm.frustumCulled = false;
+  lm.renderOrder = 10;
+  group.add(lm);
+  return group;
+}
+
+// where the driver sits, in car-local (x forward, z to the right)
+export const DRIVER_SEAT = { u: -0.32, s: -0.42 };
+
 /**
- * Ambient traffic: taxis and cars circling blocks clockwise in the right-hand lane.
- * They brake for anything in front of them and honk at the player.
+ * Ambient traffic: taxis and cars circling blocks clockwise in the right-hand lane, each
+ * with somebody at the wheel. They brake for anything in front of them and honk at the
+ * player, who can pull a driver out and take the car.
  */
 export class Traffic {
   constructor(game) {
     this.game = game;
-    this.models = VARIANTS.map((v) => {
-      const ch = { mb: new MeshBuilder(), sl: new StrokeList() };
-      carShape(null, ch, 0, 0, true, v.color, v.taxi, false);
-      return { geo: ch.mb.build(), lines: ch.sl.toBatch(game.mats.line) };
-    });
+    this.models = CAR_VARIANTS.map((v) => buildCarModel(game.mats, v.color, v.taxi));
     this.list = [];
     this.t = 0;
   }
 
   reset() {
-    for (const c of this.list) this.game.scene.remove(c.group);
+    for (const c of this.list) this.removeCar(c);
     this.list = [];
+  }
+
+  removeCar(c) {
+    this.game.scene.remove(c.group);
+    if (c.driver) {
+      c.driver.fig.dispose();
+      c.driver = null;
+    }
   }
 
   route(bx, bz) {
@@ -58,16 +88,12 @@ export class Traffic {
     const z = a[1] + (b[1] - a[1]) * t;
     // don't spawn on top of another car
     for (const c of this.list) if (Math.hypot(c.pos.x - x, c.pos.z - z) < 9) return null;
-    const m = this.models[Math.floor(Math.random() * this.models.length)];
-    const group = new THREE.Group();
-    group.add(new THREE.Mesh(m.geo, game.mats.surface));
-    const lm = new THREE.Mesh(m.lines.geometry, game.mats.line);
-    lm.frustumCulled = false;
-    lm.renderOrder = 10;
-    group.add(lm);
+    const variant = Math.floor(Math.random() * this.models.length);
+    const group = carGroup(game.mats, this.models[variant]);
     game.scene.add(group);
     const car = {
       group,
+      variant,
       route,
       target: (leg + 1) % 4,
       pos: new THREE.Vector3(x, 0, z),
@@ -78,7 +104,12 @@ export class Traffic {
       wrecked: false,
       halfLen: 2.2,
       halfWid: 0.95,
+      ink: 120,
+      driver: null,
     };
+    car.driver = { look: civilianLook(), fig: null };
+    car.driver.fig = new Doodle(game.figures, car.driver.look, { seed: Math.random() * 100 });
+    car.driver.fig.sit = 1;
     this.list.push(car);
     return car;
   }
@@ -91,7 +122,7 @@ export class Traffic {
       this.t = 1.2;
       for (const c of this.list) {
         if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 150) {
-          game.scene.remove(c.group);
+          this.removeCar(c);
           c.gone = true;
         }
       }
@@ -106,12 +137,19 @@ export class Traffic {
         if (d > 110) continue;
         const c = this.spawn(bx, bz);
         if (c && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 25) {
-          game.scene.remove(c.group);
+          this.removeCar(c);
           this.list.pop();
         }
       }
     }
     for (const c of this.list) this.updateCar(c, dt);
+    if (this.list.some((c) => c.poofT !== undefined && c.poofT > 0.45)) {
+      this.list = this.list.filter((c) => {
+        if (c.poofT === undefined || c.poofT <= 0.45) return true;
+        this.removeCar(c);
+        return false;
+      });
+    }
   }
 
   blocked(c) {
@@ -135,9 +173,15 @@ export class Traffic {
   }
 
   updateCar(c, dt) {
-    if (c.wrecked) {
-      c.speed = damp(c.speed, 0, 3, dt);
-      if (Math.random() < dt * 2) this.game.fx.smoke(c.pos.x, 1.6, c.pos.z, 1.2);
+    if (c.poofT !== undefined) {
+      // rubbed out: shrinks into a puff of eraser crumbs
+      c.poofT += dt;
+      const k = Math.max(0.01, 1 - c.poofT / 0.45);
+      c.group.scale.set(k, k * k, k);
+      c.speed = damp(c.speed, 0, 6, dt);
+    } else if (c.wrecked || c.stopped) {
+      c.speed = damp(c.speed, 0, c.stopped ? 8 : 3, dt);
+      if (c.wrecked && Math.random() < dt * 2) this.game.fx.smoke(c.pos.x, 1.6, c.pos.z, 1.2);
     } else {
       const t = c.route[c.target];
       const dx = t[0] - c.pos.x;
@@ -153,6 +197,7 @@ export class Traffic {
         if (c.blockedT > 1.2) {
           c.blockedT = -2.5;
           this.game.audio.play('honk', 0.6);
+          if (c.driver && Math.random() < 0.5) this.game.bubbles.say(c.driver, pick(['Move it!', 'Hey, buddy!', 'C\'mon!', 'Get outta the road!']));
         }
       } else c.blockedT = Math.min(c.blockedT, 0);
     }
@@ -160,11 +205,113 @@ export class Traffic {
     c.pos.z += Math.cos(c.yaw) * c.speed * dt;
     c.group.position.copy(c.pos);
     c.group.rotation.set(0, c.yaw - Math.PI / 2, 0);
+    if (c.driver) this.seat(c.driver.fig, c.pos, c.yaw, dt);
+  }
+
+  // put a seated figure behind the wheel of a car at pos/yaw (model front is +x)
+  seat(fig, pos, yaw, dt) {
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    const rx = -fz;
+    const rz = fx;
+    const u = DRIVER_SEAT.u;
+    const s = -DRIVER_SEAT.s; // seat is on the left: "right" vector points the other way
+    fig.pos.set(pos.x + fx * u - rx * s, pos.y + 0.02, pos.z + fz * u - rz * s);
+    fig.yaw = yaw;
+    fig.sit = 1;
+    fig.speed = 0;
+    if (!fig.wheel) fig.wheel = new THREE.Vector3();
+    fig.wheel.set(pos.x + fx * (u + 0.55) - rx * s, pos.y + 1.0, pos.z + fz * (u + 0.55) - rz * s);
+    fig.reachR = fig.wheel;
+    fig.update(dt);
+  }
+
+  draw(camPos) {
+    for (const c of this.list) {
+      if (!c.driver || c.poofT !== undefined) continue;
+      const d = Math.hypot(c.pos.x - camPos.x, c.pos.z - camPos.z);
+      c.driver.fig.setVisible(d < 70);
+      if (d < 70) c.driver.fig.draw(camPos);
+    }
+  }
+
+  // ------------------------------------------------------------------ the player and cars
+  // a car whose door the player is standing at
+  nearestDoor(pos, maxD = 1.6) {
+    let best = null;
+    let bd = maxD;
+    for (const c of this.list) {
+      if (c.poofT !== undefined) continue;
+      const d = this.boxDist(c, pos.x, pos.z);
+      if (d < bd) {
+        bd = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  boxDist(c, x, z) {
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    const dx = x - c.pos.x;
+    const dz = z - c.pos.z;
+    const along = Math.abs(dx * fx + dz * fz) - c.halfLen;
+    const side = Math.abs(dx * fz - dz * fx) - c.halfWid;
+    return Math.hypot(Math.max(0, along), Math.max(0, side));
+  }
+
+  // pull the car out of traffic for the player to drive (the caller makes the vehicle)
+  take(c) {
+    const i = this.list.indexOf(c);
+    if (i >= 0) this.list.splice(i, 1);
+    this.game.scene.remove(c.group);
+    const driver = c.driver;
+    c.driver = null;
+    return { variant: c.variant, pos: c.pos.clone(), yaw: c.yaw, driver };
+  }
+
+  // in front of the swinging eraser
+  inArc(pos, fwd, reach) {
+    let best = null;
+    let bd = reach;
+    for (const c of this.list) {
+      if (c.poofT !== undefined) continue;
+      const d = this.boxDist(c, pos.x, pos.z);
+      if (d > bd) continue;
+      const dx = c.pos.x - pos.x;
+      const dz = c.pos.z - pos.z;
+      if ((dx * fwd.x + dz * fwd.z) / (Math.hypot(dx, dz) || 1) < 0.2 && d > 0.5) continue;
+      bd = d;
+      best = c;
+    }
+    return best;
+  }
+
+  // the eraser rubs at a car; when it runs out of ink it is gone (the driver jumps out first)
+  rub(c, amount, at) {
+    c.ink -= amount;
+    c.stopped = true;
+    this.game.world.objects.addSpot(at.x, at.y, at.z, 0.4);
+    this.game.fx.crumbs(at.x, at.y, at.z, 12, 2.6);
+    if (c.driver && !c.driverOut) {
+      c.driverOut = true;
+      this.game.ejectDriver(c.driver, c.pos, c.yaw, false);
+      c.driver = null;
+    }
+    if (c.ink <= 0 && c.poofT === undefined) {
+      c.poofT = 0;
+      this.game.fx.crumbs(c.pos.x, 1, c.pos.z, 50, 4);
+      this.game.fx.smoke(c.pos.x, 1, c.pos.z, 2.4);
+      this.game.audio.play('erase', 1);
+      if (this.game.onCrime) this.game.onCrime('vandal', c.pos.x, c.pos.z);
+    }
   }
 
   // keep the player's vehicles out of traffic cars
   collideVehicle(v) {
     for (const c of this.list) {
+      if (c.poofT !== undefined) continue;
       const dx = v.pos.x - c.pos.x;
       const dz = v.pos.z - c.pos.z;
       const d = Math.hypot(dx, dz);
@@ -193,6 +340,7 @@ export class Traffic {
   // walkers bump into traffic like into parked cars
   pushOut(p, r) {
     for (const c of this.list) {
+      if (c.poofT !== undefined) continue;
       const dx = p.x - c.pos.x;
       const dz = p.z - c.pos.z;
       const fx = Math.sin(c.yaw);
@@ -222,4 +370,8 @@ export class Traffic {
       if (Math.hypot(c.pos.x - x, c.pos.z - z) < radius + 1.5) c.wrecked = true;
     }
   }
+}
+
+function pick(list) {
+  return list[Math.floor(Math.random() * list.length)];
 }

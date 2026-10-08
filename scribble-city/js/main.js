@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, makeLineMaterial, makeSurfaceMaterial, makeSkyMesh, setLook, savedLook, look, GOLDEN_SUN } from './render/materials.js';
+import { shared, makeLineMaterial, makeSurfaceMaterial, makeGlassMaterial, makeSkyMesh, setLook, savedLook, look, GOLDEN_SUN } from './render/materials.js';
 import { bakeSunShadows, updateSkyUniforms } from './render/sunlight.js';
 import { Steam } from './render/steam.js';
 import { buildAtlas } from './render/atlas.js';
@@ -79,6 +79,7 @@ async function boot() {
     line: makeLineMaterial({}),
     itemSurface: makeSurfaceMaterial({ hatchScale: 0.45, side: THREE.DoubleSide }),
     itemLine: makeLineMaterial({ nudge: 0.0015, minWidth: 1.0 }),
+    glass: makeGlassMaterial(),
   };
   mats.lineFaint = mats.line;
 

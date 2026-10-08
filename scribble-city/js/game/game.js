@@ -16,6 +16,8 @@ import { Album } from '../ui/album.js';
 import { AirDraw } from '../ui/airdraw.js';
 import { Bubbles } from '../ui/bubbles.js';
 import { BLUEPRINTS } from './blueprints.js';
+import { CAR_VARIANTS, DRIVER_SEAT } from './traffic.js';
+import { rebakeSunShadows } from '../render/sunlight.js';
 import { buildDrawnFlatModel } from './items.js';
 import { BLACK_INK } from '../render/LineBatch.js';
 import { clamp } from '../core/util.js';
@@ -224,6 +226,7 @@ export class Game {
       this.enemies.update(dt);
       this.civilians.update(dt);
       this.traffic.update(dt);
+      this.world.objects.update(dt, rebakeSunShadows, this.camera.position);
       this.updateHidden();
     }
     // camera
@@ -270,6 +273,7 @@ export class Game {
       this.weapons.updateModels();
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
+      this.traffic.draw(this.camera.position);
       this.drawStuckPencils(fr);
       this.fx.update(dt, fr);
       fr.end();
@@ -295,10 +299,7 @@ export class Game {
     if (input.wasPressed('KeyQ') || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else {
-        const v = this.vehicles.nearest(p.pos, 3.2);
-        if (v && p.mode === 'foot') this.enterVehicle(v);
-      }
+      else if (p.mode === 'foot') this.tryEnter();
     }
     if (input.wasPressed('KeyM')) this.hud.mapScale = this.hud.mapScale > 1 ? 0.55 : 1.1;
   }
@@ -309,7 +310,7 @@ export class Game {
     let spot = null;
     if (!p.inVehicle && p.mode !== 'dead') {
       for (const h of this.world.hideSpots) {
-        if (Math.hypot(p.pos.x - h.x, p.pos.z - h.z) < h.r) {
+        if (!h.gone && Math.hypot(p.pos.x - h.x, p.pos.z - h.z) < h.r) {
           spot = h;
           break;
         }
@@ -335,7 +336,7 @@ export class Game {
     for (const m of this.fx.marks) {
       if (!m.spot) continue;
       const d = Math.hypot(m.x - pp.x, m.z - pp.z);
-      m.visible = d < 32 && d > 1.5;
+      m.visible = d < 32 && d > 1.5 && !m.spot.gone;
       m.y = 2.4 + Math.sin(this.time * 2 + m.x) * 0.1;
       m.alpha = clamp(1 - (d - 20) / 12, 0, 0.85);
     }
@@ -482,12 +483,89 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ vehicles
+  // what E would get you into right now: { kind, target, label }
+  enterTarget() {
+    const p = this.player;
+    const v = this.vehicles.nearest(p.pos, 3.2);
+    if (v) return { kind: 'vehicle', target: v, label: v.label || BLUEPRINTS[v.kind].name };
+    const c = this.traffic.nearestDoor(p.pos, 1.7);
+    if (c) return { kind: 'carjack', target: c, label: CAR_VARIANTS[c.variant].taxi ? 'מונית' : 'מכונית' };
+    const o = this.world.objects.nearest(p.pos.x, p.pos.z, 1.4, 'car');
+    if (o && o.data) return { kind: 'parked', target: o, label: o.data.taxi ? 'מונית' : 'מכונית' };
+    return null;
+  }
+
+  tryEnter() {
+    const t = this.enterTarget();
+    if (!t) return;
+    if (t.kind === 'vehicle') this.enterVehicle(t.target);
+    else if (t.kind === 'carjack') this.carjack(t.target);
+    else this.stealParked(t.target);
+  }
+
+  // pull the driver out of a car in traffic and drive off with it
+  carjack(c) {
+    if (Math.abs(c.speed) > 7.5) {
+      this.hud.toast('המכונית נוסעת מהר מדי — עמדו מולה כדי שתעצור', 'info', 2.2);
+      return;
+    }
+    const t = this.traffic.take(c);
+    const v = this.vehicles.spawnStock(CAR_VARIANTS[t.variant], t.pos, t.yaw);
+    if (t.driver) this.ejectDriver(t.driver, t.pos, t.yaw, true);
+    this.audio.play('punch', 0.6);
+    this.enterVehicle(v);
+    if (this.onCrime) this.onCrime('carjack', t.pos.x, t.pos.z);
+  }
+
+  // drive off with a car parked at the curb
+  stealParked(o) {
+    const d = o.data;
+    const cx = (o.x0 + o.x1) / 2;
+    const cz = (o.z0 + o.z1) / 2;
+    this.world.objects.remove(o, false);
+    // head off along the curb, toward the side with more room
+    const p = this.player.pos;
+    let yaw = d.alongX ? Math.PI / 2 : 0;
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    if ((p.x - cx) * fx + (p.z - cz) * fz > 0) yaw += Math.PI;
+    const v = this.vehicles.spawnStock({ color: d.color, taxi: d.taxi }, new THREE.Vector3(cx, 0, cz), yaw);
+    this.enterVehicle(v);
+    if (Math.random() < 0.45) {
+      this.audio.play('alarm', 0.7);
+      this.hud.toast('אזעקה! מישהו בטח שמע…', 'bad', 1.8);
+      this.enemies.noise(v.pos, 35, 'alarm');
+    }
+    if (this.onCrime) this.onCrime('steal', cx, cz);
+  }
+
+  // the driver gets out on the left: runs off screaming, or (sometimes) wants the car back
+  ejectDriver(d, pos, yaw, pulled) {
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    const rx = -fz;
+    const rz = fx;
+    const x = pos.x + fx * DRIVER_SEAT.u - rx * 1.7;
+    const z = pos.z + fz * DRIVER_SEAT.u - rz * 1.7;
+    d.fig.dispose();
+    if (pulled && Math.random() < 0.3) {
+      this.enemies.spawnAngry(x, z, d.look);
+    } else {
+      const c = this.civilians.spawnAt(x, z, d.look);
+      c.panicT = 9;
+      c.fearX = pos.x;
+      c.fearZ = pos.z;
+      const lines = pulled ? ['Take it! Take it!', 'Help!! Thief!', 'Not my taxi!', 'Okay, okay!'] : ['Aaah!', 'What the...', 'My car!!'];
+      this.bubbles.say(c, lines[Math.floor(Math.random() * lines.length)], 'alarm');
+    }
+  }
+
   enterVehicle(v) {
     const p = this.player;
     p.inVehicle = v;
     p.mode = 'vehicle';
     v.driver = p;
-    p.fig.setVisible(false);
+    p.fig.setVisible(!!v.seat);
     this.camRig.yaw = v.yaw;
     this.goalFlags.drove = true;
     this.updateGoals();
@@ -504,6 +582,7 @@ export class Game {
     p.inVehicle = null;
     p.mode = 'foot';
     p.fig.setVisible(true);
+    p.fig.reachR = null;
     // step out on the left side (or wherever there is room)
     const fx = Math.sin(v.yaw);
     const fz = Math.cos(v.yaw);
@@ -537,10 +616,45 @@ export class Game {
     this.camRig.addShake(clamp(1.2 - d / 40, 0.1, 1));
     this.enemies.explosion(x, y, z, radius, damage);
     this.civilians.explosion(x, y, z, radius);
+    this.eraseBlast(x, y, z, radius, damage);
     this.traffic.explosion(x, z, radius);
     if (d < radius) p.hurt((owner === 'player' ? 0.25 : 1) * damage * 0.35 * (1 - d / radius), x, z);
     this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
     this.civilians.panic(new THREE.Vector3(x, y, z), 60);
+  }
+
+  // ------------------------------------------------------------------ rubbing out the world
+  // A spot of the drawing at (x, y, z) is rubbed back to blank paper; a prop hit there loses
+  // ink and crumbles away when it runs out.
+  eraseWorld(x, y, z, r, rub, box, hit) {
+    const objs = this.world.objects;
+    const o = box ? objs.ofBox(box) : null;
+    if (o) {
+      if (objs.rub(o, rub)) this.onPropErased(o);
+    } else if (box && box.tag === 'bound') return;
+    // sit the spot a little inside the surface so the rim wraps around corners
+    const k = hit && hit.nx !== undefined ? 0.12 : 0;
+    objs.addSpot(x - (hit ? hit.nx || 0 : 0) * k, y - (hit ? hit.ny || 0 : 0) * k, z - (hit ? hit.nz || 0 : 0) * k, r);
+    this.fx.crumbs(x, y, z, 10, 2.4);
+  }
+
+  onPropErased(o) {
+    const cx = (o.x0 + o.x1) / 2;
+    const cz = (o.z0 + o.z1) / 2;
+    this.fx.crumbs(cx, Math.min(2, o.y1 * 0.5), cz, 40, 3.6);
+    this.fx.smoke(cx, Math.min(2, o.y1 * 0.5), cz, 1.6);
+    this.audio.play('crumble', 1);
+    if (this.onCrime) this.onCrime('vandal', cx, cz);
+  }
+
+  // big rub: everything in the radius loses ink, the middle is wiped to paper
+  eraseBlast(x, y, z, radius, power) {
+    const objs = this.world.objects;
+    for (const o of objs.within(x, z, radius, this._objs || (this._objs = []))) {
+      const d = Math.hypot((o.x0 + o.x1) / 2 - x, (o.z0 + o.z1) / 2 - z);
+      if (objs.rub(o, power * (1.2 - Math.min(1, d / radius)))) this.onPropErased(o);
+    }
+    objs.addSpot(x, y, z, radius * 0.55);
   }
 
   playerSegmentHit(ox, oy, oz, dx, dy, dz, maxT) {
@@ -595,10 +709,11 @@ export class Game {
       enter = true;
       prompt = this.touch ? '' : p.inVehicle.kind === 'ufo' ? 'רווח/C — למעלה/למטה · קליק — קרן מחיקה · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
     } else if (p.mode === 'foot') {
-      const v = this.vehicles.nearest(p.pos, 3.2);
-      if (v) {
+      const et = this.enterTarget();
+      if (et) {
         enter = true;
-        prompt = this.touch ? '' : `E — להיכנס ל${BLUEPRINTS[v.kind].name}`;
+        const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? 'לגנוב את ה' : 'להיכנס ל';
+        prompt = this.touch ? '' : `E — ${verb}${et.label}`;
       } else {
         const b = this.photoTarget();
         if (b) {

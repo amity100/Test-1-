@@ -14,6 +14,7 @@ varying vec2 vUv;
 varying vec4 vTint;
 varying float vDist;
 varying float vSun;
+varying vec3 vWP;
 
 void main() {
   vec2 off = (position.xy - iPivot) * iSize;
@@ -32,6 +33,7 @@ void main() {
     up = dot(iUp, iUp) < 0.01 ? vec3(0.0, 1.0, 0.0) : iUp;
   }
   vec3 wp = iPos + right * off.x + up * off.y;
+  vWP = wp;
   vec4 mv = viewMatrix * vec4(wp, 1.0);
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
@@ -44,11 +46,14 @@ const FRAG = /* glsl */ `
 uniform sampler2D uMap;
 uniform float uNoFog;
 uniform float uNearFade;
+uniform float uErasable;
 varying vec2 vUv;
 varying vec4 vTint;
 varying float vDist;
 varying float vSun;
+varying vec3 vWP;
 void main() {
+  if (uErasable > 0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
   vec4 tex = texture2D(uMap, vUv);
   float a = tex.a * vTint.a;
   vec3 col = tex.rgb * vTint.rgb;
@@ -82,7 +87,7 @@ const quad = (() => {
  * (axis = 0) or a fixed quad oriented by right/up vectors (signs, ground decals).
  */
 export class SpriteBatch {
-  constructor(capacity, atlasTex, { dynamic = false, transparent = false, noFog = false, depthWrite = true, polygonOffset = false, nearFade = 0 } = {}) {
+  constructor(capacity, atlasTex, { dynamic = false, transparent = false, noFog = false, depthWrite = true, polygonOffset = false, nearFade = 0, erasable = false } = {}) {
     this.capacity = capacity;
     this.count = 0;
     this.dynamic = dynamic;
@@ -108,7 +113,7 @@ export class SpriteBatch {
     geo.instanceCount = 0;
     this.geometry = geo;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { ...shared, uMap: { value: atlasTex }, uNoFog: { value: noFog ? 1 : 0 }, uNearFade: { value: nearFade } },
+      uniforms: { ...shared, uMap: { value: atlasTex }, uNoFog: { value: noFog ? 1 : 0 }, uNearFade: { value: nearFade }, uErasable: { value: erasable ? 1 : 0 } },
       vertexShader: COMMON + VERT,
       fragmentShader: COMMON + FRAG,
       transparent,
