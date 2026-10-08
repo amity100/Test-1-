@@ -133,15 +133,15 @@ export function buildBoulevard(scene) {
   const st = new THREE.PlaneGeometry(STREET_X1 - STREET_X0, Z_NEAR - Z_FAR, 1, 1).rotateX(-Math.PI / 2);
   const suv = st.attributes.uv;
   for (let i = 0; i < suv.count; i++) suv.setXY(i, suv.getX(i), (suv.getY(i) * (Z_NEAR - Z_FAR)) / 16);
-  const street = new THREE.Mesh(st, B({ kind: 'street', map: streetTexture(), refl: true, wet: 0.7, ang: 1.5708, line: 0.6, wash: 0.6 }));
+  const street = new THREE.Mesh(st, B({ kind: 'street', map: streetTexture(), refl: true, wet: 0.7, ang: 0.12, line: 0.6, wash: 0.6 }));
   street.position.set((STREET_X0 + STREET_X1) / 2, 0, (Z_NEAR + Z_FAR) / 2);
   scene.add(street);
   const walkTex = paverTexture('#dcc6b6', 'rgba(110, 80, 90, 0.5)');
-  const walk = new THREE.Mesh(boxMetres(STREET_X0 - WALK_X0 + 14, 0.15, Z_NEAR - Z_FAR, 8), B({ kind: 'ground', map: walkTex, ang: 1.5708, refl: true, wet: 0.16, line: 0.6 }));
+  const walk = new THREE.Mesh(boxMetres(STREET_X0 - WALK_X0 + 14, 0.15, Z_NEAR - Z_FAR, 8), B({ kind: 'ground', map: walkTex, ang: -0.25, line: 0.6 }));
   walk.position.set((WALK_X0 - 14 + STREET_X0) / 2, 0.075, (Z_NEAR + Z_FAR) / 2);
   scene.add(walk);
   const promTex = paverTexture('#efd7c2', 'rgba(130, 90, 80, 0.45)');
-  const prom = new THREE.Mesh(boxMetres(PROM_X1 - STREET_X1, 0.15, Z_NEAR - Z_FAR, 8), B({ kind: 'ground', map: promTex, ang: 1.5708, refl: true, wet: 0.14, line: 0.6 }));
+  const prom = new THREE.Mesh(boxMetres(PROM_X1 - STREET_X1, 0.15, Z_NEAR - Z_FAR, 8), B({ kind: 'ground', map: promTex, ang: -0.25, line: 0.6 }));
   prom.position.set((STREET_X1 + PROM_X1) / 2, 0.075, (Z_NEAR + Z_FAR) / 2);
   scene.add(prom);
   // curbs

@@ -28,6 +28,8 @@ uniform float uFar;
 uniform float uBoil;
 uniform float uPR;
 uniform float uLineW;
+uniform mat4 uInvProj;
+uniform mat4 uCamWorld;
 
 float linZ(vec2 uv) {
   float d = texture(tDepth, uv).r;
@@ -70,12 +72,28 @@ float edgeAt(vec2 uv, float r, out float zc) {
   return e * a0.w;
 }
 
+// where in the world this pixel is (the nearest thing around it, so both sides of an outline
+// agree on where it is)
+vec3 worldAt(vec2 uv) {
+  vec2 o = uTexel * 2.0 * uPR;
+  float d = texture(tDepth, uv).r;
+  d = min(d, texture(tDepth, uv + vec2(o.x, 0.0)).r);
+  d = min(d, texture(tDepth, uv - vec2(o.x, 0.0)).r);
+  d = min(d, texture(tDepth, uv + vec2(0.0, o.y)).r);
+  d = min(d, texture(tDepth, uv - vec2(0.0, o.y)).r);
+  vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+  v /= v.w;
+  return (uCamWorld * vec4(v.xyz, 1.0)).xyz;
+}
+
 void main() {
   vec4 c = texture(tColor, vUv);
-  vec2 fc = gl_FragCoord.xy / uPR;
-  // the hand that inks the outlines wobbles, and redraws them a few times a second
-  vec2 j1 = (vec2(vn(fc * 0.035 + uBoil * 7.13), vn(fc * 0.035 + 41.0 + uBoil * 3.71)) - 0.5) * 2.4 * uPR;
-  vec2 j2 = (vec2(vn(fc * 0.05 + 13.0 + uBoil * 5.3), vn(fc * 0.05 + 77.0 + uBoil * 2.9)) - 0.5) * 3.2 * uPR;
+  // the hand that inks the outlines wobbles: the wobble belongs to the thing it outlines, so it
+  // travels with it as you walk (and, if the lines are alive, it is redrawn a few times a second)
+  vec3 w = worldAt(vUv);
+  vec2 q = vec2(w.x + w.y * 0.71, w.z - w.y * 0.53) * 1.7 + vec2(sin(uBoil * 1.7), cos(uBoil * 2.3)) * 0.3;
+  vec2 j1 = (vec2(vn(q), vn(q + 41.0)) - 0.5) * 2.0 * uPR;
+  vec2 j2 = (vec2(vn(q * 1.6 + 13.0), vn(q * 1.6 + 77.0)) - 0.5) * 2.6 * uPR;
   float z;
   float z2;
   float e1 = edgeAt(vUv + j1 * uTexel, uLineW * uPR, z);
@@ -147,6 +165,8 @@ uniform sampler2D uNoise;
 uniform float uBloom;
 uniform float uExposure;
 uniform float uPR;
+uniform vec2 uSrcTexel;
+uniform float uSharp;
 float aces1(float x) {
   return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
@@ -162,16 +182,26 @@ vec3 tonemap(vec3 c) {
 vec3 toSRGB(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
-void main() {
-  vec3 c = texture(tSrc, vUv).rgb + texture(tBloom, vUv).rgb * uBloom;
-  c = tonemap(c * uExposure);
+vec3 grade(vec2 uv) {
+  vec3 c = tonemap((texture(tSrc, uv).rgb + texture(tBloom, uv).rgb * uBloom) * uExposure);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  c = clamp(vec3(l) + (c - vec3(l)) * 1.25, 0.0, 1.0);
-  c = toSRGB(c);
-  // the paper's tooth and a breath of warmth at the edges of the page
-  vec2 fc = gl_FragCoord.xy / uPR;
-  float g = textureLod(uNoise, fc / 256.0, 0.0).b - 0.5;
-  c += g * 0.018;
+  return clamp(vec3(l) + (c - vec3(l)) * 1.25, 0.0, 1.0);
+}
+void main() {
+  // contrast-adaptive sharpening (after AMD's CAS): crisp pen lines even when the drawing was
+  // made at a lower resolution than the screen
+  vec3 b = grade(vUv + vec2(0.0, -uSrcTexel.y));
+  vec3 d = grade(vUv + vec2(-uSrcTexel.x, 0.0));
+  vec3 e = grade(vUv);
+  vec3 f = grade(vUv + vec2(uSrcTexel.x, 0.0));
+  vec3 h = grade(vUv + vec2(0.0, uSrcTexel.y));
+  vec3 mn = min(min(min(d, e), min(f, b)), h);
+  vec3 mx = max(max(max(d, e), max(f, b)), h);
+  vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0));
+  vec3 wgt = -amp * mix(0.125, 0.2, uSharp);
+  vec3 c = (e + (b + d + f + h) * wgt) / (1.0 + 4.0 * wgt);
+  c = toSRGB(clamp(c, 0.0, 1.0));
+  // a breath of shade at the edges of the page
   vec2 q = vUv - 0.5;
   c *= 1.0 - dot(q, q) * 0.28;
   fragColor = vec4(c, 1.0);
@@ -184,6 +214,11 @@ const _m = new THREE.Matrix4();
 const _target = new THREE.Vector3();
 const _look = new THREE.Vector3();
 const _normal = new THREE.Vector3(0, 1, 0);
+const _up = new THREE.Vector3(0, 1, 0);
+const _sx = new THREE.Vector3();
+const _sy = new THREE.Vector3();
+const _sz = new THREE.Vector3();
+const _sc = new THREE.Vector3();
 
 export class Pipeline {
   constructor(renderer, scene, camera, { low = false } = {}) {
@@ -219,18 +254,29 @@ export class Pipeline {
     this.mInk = mk(INK_FRAG, {
       tColor: { value: null }, tAux: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() },
       uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uPR: shared.uPR, uLineW: { value: 1 },
+      uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
     });
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 } });
     this.size = new THREE.Vector2(-1, -1);
     this.levels = low ? 4 : 5;
+    // the drawing is made at scale x the screen's pixels and brought up to the screen sharp
+    this.scale = 1;
+    this.screen = new THREE.Vector2();
+  }
+
+  // the screen's pixels per CSS pixel, times the drawing's own scale
+  get pixelsPerCss() {
+    return this.r.getPixelRatio() * this.scale;
   }
 
   ensure() {
     const r = this.r;
-    const s = r.getDrawingBufferSize(new THREE.Vector2());
+    r.getDrawingBufferSize(this.screen);
+    const s = new THREE.Vector2(Math.max(2, Math.round(this.screen.x * this.scale)), Math.max(2, Math.round(this.screen.y * this.scale)));
+    shared.uPR.value = this.pixelsPerCss;
     if (s.equals(this.size)) return;
     this.size.copy(s);
     const w = s.x;
@@ -249,7 +295,7 @@ export class Pipeline {
     }
     const rs = this.low ? 0.33 : 0.5;
     this.reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(w * rs)), Math.max(2, Math.round(h * rs)), { type: this.type, depthBuffer: true });
-    this.inkRT = new THREE.WebGLRenderTarget(w, h, { type: this.type, depthBuffer: false });
+    this.inkRT = new THREE.WebGLRenderTarget(w, h, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     const opt = { type: this.type, depthBuffer: false };
     this.mips = [];
     this.ups = [];
@@ -273,9 +319,19 @@ export class Pipeline {
   renderShadows(center) {
     const sun = shared.uSunDir.value;
     const cam = this.sunCam;
-    cam.position.copy(center).addScaledVector(sun, 260);
+    // the box follows you in whole texels of the shadow map, so the shadows' edges stay put
+    // instead of crawling as you walk
+    const texel = (cam.right - cam.left) / this.shadowRT.width;
+    const z = _sz.copy(sun).normalize();
+    const x = _sx.crossVectors(_up, z).normalize();
+    const y = _sy.crossVectors(z, x);
+    const cx = Math.round(center.dot(x) / texel) * texel;
+    const cy = Math.round(center.dot(y) / texel) * texel;
+    const cz = center.dot(z);
+    const snapped = _sc.copy(x).multiplyScalar(cx).addScaledVector(y, cy).addScaledVector(z, cz);
+    cam.position.copy(snapped).addScaledVector(sun, 260);
     cam.up.set(0, 1, 0);
-    cam.lookAt(center);
+    cam.lookAt(snapped);
     cam.updateMatrixWorld();
     cam.updateProjectionMatrix();
     shared.uShadowMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
@@ -380,6 +436,8 @@ export class Pipeline {
     ink.uNear.value = this.camera.near;
     ink.uFar.value = this.camera.far;
     ink.uLineW.value = this.lineW;
+    ink.uInvProj.value.copy(this.camera.projectionMatrixInverse);
+    ink.uCamWorld.value.copy(this.camera.matrixWorld);
     this.pass(this.mInk, this.inkRT);
     // 5. glow
     const b = this.mBright.uniforms;
@@ -405,6 +463,8 @@ export class Pipeline {
     f.tBloom.value = cur.texture;
     f.uBloom.value = this.bloom;
     f.uExposure.value = this.exposure;
+    f.uSrcTexel.value.set(1 / this.size.x, 1 / this.size.y);
+    f.uSharp.value = this.scale < 0.99 ? 0.85 : 0.5;
     this.pass(this.mFinal, null);
   }
 }

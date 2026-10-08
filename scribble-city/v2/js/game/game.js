@@ -13,7 +13,8 @@ export class Game {
     this.time = 0;
     this.state = 'title';
     this.clock = new THREE.Clock();
-    this.boilOn = true;
+    // the outlines redrawn a few times a second: lively on a big screen, calm on a phone
+    this.boilOn = !this.touch;
     this.input = new Input(this.renderer.domElement, this.touch);
     this.input.onEscape = () => this.toggleMenu();
     this.input.onUnlock = () => {
@@ -53,6 +54,7 @@ export class Game {
   bindUI() {
     $('resume').addEventListener('click', () => this.toggleMenu(false));
     $('menu-btn').addEventListener('click', () => this.toggleMenu(true));
+    $('opt-boil').checked = this.boilOn;
     $('opt-boil').addEventListener('change', (e) => (this.boilOn = e.target.checked));
     $('opt-hq').checked = shared.uQuality.value > 0.5;
     $('opt-hq').addEventListener('change', (e) => (shared.uQuality.value = e.target.checked ? 1 : 0));
@@ -95,29 +97,32 @@ export class Game {
       window.__frame(1);
       return;
     }
-    // the drawing keeps its pace: the resolution follows how long the frames take
-    const r = this.renderer;
-    const maxPR = r.getPixelRatio();
-    let pr = maxPR;
+    // the drawing keeps its pace: its own resolution follows how long the frames take (with
+    // some patience both ways, so it does not keep changing its mind)
+    const pipe = this.pipe;
     let acc = 0;
     let n = 0;
+    let slow = 0;
+    let fast = 0;
     const tick = () => {
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
       this.update(dt);
       this.render();
-      acc += raw;
-      n++;
-      if (acc > 1.2) {
+      if (this.state === 'play') {
+        acc += raw;
+        n++;
+      }
+      if (acc > 1.0) {
         const ms = (acc / n) * 1000;
-        let want = pr;
-        if (ms > 24) want = Math.max(0.55, pr - 0.15);
-        else if (ms < 15) want = Math.min(maxPR, pr + 0.1);
-        if (Math.abs(want - pr) > 0.01) {
-          pr = want;
-          r.setPixelRatio(pr);
-          r.setSize(window.innerWidth, window.innerHeight);
-          shared.uPR.value = pr;
+        slow = ms > 26 ? slow + 1 : 0;
+        fast = ms < 14 ? fast + 1 : 0;
+        if (slow >= 2 && pipe.scale > pipe.minScale) {
+          pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);
+          slow = 0;
+        } else if (fast >= 3 && pipe.scale < pipe.maxScale) {
+          pipe.scale = Math.min(pipe.maxScale, pipe.scale + 0.05);
+          fast = 0;
         }
         acc = 0;
         n = 0;
@@ -165,7 +170,7 @@ export class Game {
     if (this.state !== 'menu') {
       this.time += dt;
       shared.uTime.value = this.time;
-      if (this.boilOn) shared.uBoil.value = Math.floor(this.time * 8);
+      if (this.boilOn) shared.uBoil.value = Math.floor(this.time * 5);
       if (this.world.update) this.world.update(dt, this.time);
     } else dt = 0;
     // look

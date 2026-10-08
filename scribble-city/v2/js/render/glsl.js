@@ -122,6 +122,7 @@ vec3 pointLights(vec3 wp, vec3 n) {
 // One family of strokes at a spacing sp (metres): parallel rows, each row broken into strokes
 // of random length that wander a little and taper at the ends. mppA / mppL are metres per
 // pixel across / along the strokes. Returns the coverage and the stroke's own random number.
+// The strokes are stuck to the world and never move on their own.
 float gZig = 0.0; // > 0: the pen zigzags back and forth along the stroke (a scribble)
 vec2 strokeFamily(vec2 p, vec2 d, vec2 n, float sp, float mppA, float mppL, float wpx, float seed, float lenK) {
   float along = dot(p, d) / sp;
@@ -134,20 +135,27 @@ vec2 strokeFamily(vec2 p, vec2 d, vec2 n, float sp, float mppA, float mppL, floa
   float sid = floor(a / L);
   float t = a / L - sid;
   float rs = h11(sid * 2.7113 + row * 5.1372 + seed * 0.71 + 3.0);
-  float wob = (vnoise(vec2(along * 0.31 + r1 * 91.0, row * 7.31 + seed * 3.0 + uBoil * 0.37)) - 0.5) * 0.62 + (rs - 0.5) * 0.55 * (t - 0.5);
-  if (gZig > 0.0) wob += sin(along * (1.3 + 1.1 * rs) + rs * 40.0 + uBoil * 0.9) * gZig;
-  float c = abs(fract(across) - 0.5 - wob * 0.55);
+  float wob = (vnoise(vec2(along * 0.31 + r1 * 91.0, row * 7.31 + seed * 3.0)) - 0.5) * 0.62 + (rs - 0.5) * 0.55 * (t - 0.5);
+  if (gZig > 0.0) wob += sin(along * (1.3 + 1.1 * rs) + rs * 40.0) * gZig;
+  // (the wobble stays inside its own row, so no stroke is ever clipped by the next one)
+  float c = abs(fract(across) - 0.5 - clamp(wob * 0.4, -0.24, 0.24));
   float pxRow = sp / mppA;
   float taper = smoothstep(0.0, 0.12, t) * smoothstep(1.0, 0.8, t);
   float w = wpx * (0.6 + 0.55 * r2) * (0.45 + 0.55 * taper);
   float cov = clamp(w * 0.5 + 0.5 - c * pxRow, 0.0, 1.0);
+  // the ends of the stroke: a small gap between one stroke and the next, smooth on screen
   float lenPx = L * sp / mppL;
-  cov *= mix(1.0, step(0.025, t) * step(t, 0.975), smoothstep(8.0, 16.0, lenPx));
+  float tpx = 1.0 / max(lenPx, 1e-3);
+  float ends = smoothstep(0.0, tpx * 1.2, t - tpx * 0.6) * smoothstep(0.0, tpx * 1.2, 1.0 - tpx * 0.6 - t);
+  cov *= mix(1.0, ends, smoothstep(6.0, 12.0, lenPx));
+  // seen end-on, strokes would shrink to dots: the pen gives way to the wash instead
+  cov *= smoothstep(4.0, 11.0, lenPx);
   return vec2(cov, rs);
 }
 
 // A layer of strokes with a steady density on the page: the spacing level follows the pixel
-// footprint, and between two levels single strokes swap over (nothing ever fades).
+// footprint. Between two levels each stroke fades in or out on its own over a short range of
+// distance, so walking about nothing ever pops or swims.
 vec2 penLayer(vec2 p, vec2 dpx, vec2 dpy, float ang, float gapPx, float wpx, float seed, float lenK) {
   vec2 d = vec2(cos(ang), sin(ang));
   vec2 n = vec2(-d.y, d.x);
@@ -159,45 +167,50 @@ vec2 penLayer(vec2 p, vec2 dpx, vec2 dpy, float ang, float gapPx, float wpx, flo
   float s0 = 0.0015 * exp2(l0);
   vec2 A = strokeFamily(p, d, n, s0, mppA, mppL, wpx * uPR, seed + l0 * 13.7, lenK);
   vec2 B = strokeFamily(p, d, n, s0 * 2.0, mppA, mppL, wpx * uPR, seed + (l0 + 1.0) * 13.7, lenK);
-  float ca = A.x * step(f, fract(A.y * 13.37));
-  float cb = B.x * step(fract(B.y * 13.37), f);
+  // each stroke's own moment to come and go, kept inside the level so the levels join up
+  float ta = 0.12 + 0.76 * fract(A.y * 13.37);
+  float tb = 0.12 + 0.76 * fract(B.y * 13.37);
+  float ca = A.x * (1.0 - smoothstep(ta - 0.12, ta + 0.12, f));
+  float cb = B.x * smoothstep(tb - 0.12, tb + 0.12, f);
   return ca >= cb ? vec2(ca, A.y) : vec2(cb, B.y);
 }
 
 // The artist at work on one surface: a light wash of its colour on the paper, then the pens.
 //  lit / shade: the colour where the sun hits and in the shade, light: how much sun is here,
 //  hi: where the low sun catches an edge, dens: how busy the pens are, ang: stroke direction
-vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, float hi, float dens, float ang, float wash) {
+vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, float hi, float dens, float ang, float wash, float onGround) {
   vec3 mid = mix(shade, lit, light);
-  float grain = vnoise(gl_FragCoord.xy * 0.71) * 0.6 + vnoise(gl_FragCoord.xy * 0.23 + 9.0) * 0.4;
   // the paper shows between the strokes only where the drawing is light; the shade is built up dark
   float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid));
-  vec3 col = mix(mid * (0.9 + 0.2 * grain), uPaper * (0.93 + 0.1 * grain), paperK);
+  vec3 col = mix(mid, uPaper * 0.97, paperK);
   float wpx = 1.9;
+  // on the ground the layers stay close to one direction: strokes turned towards the eye would
+  // be foreshortened into ticks
+  float spread = mix(1.0, 0.32, onGround);
   // A: the local colour; each stroke is a pen of the light or a pen of the shade
   vec2 A = penLayer(p, dpx, dpy, ang, 4.2, wpx, 11.0, 1.0);
   vec3 pa = fract(A.y * 3.77) < light ? lit : shade;
   pa = hueShift(saturateC(pa, 1.15), (fract(A.y * 5.31) - 0.5) * 0.8) * (0.66 + 0.7 * fract(A.y * 9.71));
   col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.95 * dens));
   // B: cross-strokes deepening the shade, in a cooler pen
-  vec2 B = penLayer(p, dpx, dpy, ang + 0.62, 4.6, wpx, 23.0, 0.85);
+  vec2 B = penLayer(p, dpx, dpy, ang + 0.62 * spread, 4.6, wpx, 23.0, 0.85);
   vec3 pb = hueShift(shade * 0.7, -0.38 + (fract(B.y * 5.31) - 0.5) * 0.45);
   col = mix(col, pb, B.x * step(fract(B.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens));
   // C: a neighbouring colour now and then
   if (uQuality > 0.5) {
-    vec2 C = penLayer(p, dpx, dpy, ang - 0.4, 5.4, wpx, 37.0, 0.7);
+    vec2 C = penLayer(p, dpx, dpy, ang - 0.4 * spread, 5.4, wpx, 37.0, 0.7);
     vec3 pc = hueShift(mid, fract(C.y * 5.31) > 0.5 ? 0.85 : -0.85) * 1.08;
     col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.2 * dens));
   }
   // D: dark ink pressed into the deepest places
-  float dk = smoothstep(0.3, 0.035, lum(mid));
+  float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround);
   if (dk > 0.0) {
-    vec2 D = penLayer(p, dpx, dpy, ang + 1.22, 3.8, wpx * 1.1, 51.0, 1.2);
+    vec2 D = penLayer(p, dpx, dpy, ang - 1.22 * spread, 3.8, wpx * 1.1, 51.0, 1.2);
     col = mix(col, vec3(0.022, 0.016, 0.04), D.x * step(fract(D.y * 7.13), dk * 0.92));
   }
   // E: where the low sun catches an edge, quick strokes of a light, warm pen; and in the full
   // sun a few strokes of almost white, as if the paper showed through
-  float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12);
+  float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround));
   if (hiAll > 0.02) {
     vec2 E = penLayer(p, dpx, dpy, ang + 0.2, 4.4, wpx, 67.0, 0.9);
     vec3 pe = fract(E.y * 3.1) < 0.5 ? mix(lit, uSunCol, 0.45) * 1.25 : mix(uPaper * 1.2, lit, 0.25);
@@ -291,25 +304,11 @@ vec2 strokeCoords(vec3 n) {
   return vUv * uUvScale;
 }
 
-// the wet ground: reflections are mirror images of upright things, so they streak straight
-// down the page: across in screen pixels, along in distance from the eye
-vec2 streakCoords() {
-  return vec2(gl_FragCoord.x / uPR * 0.0025, length(vWP.xz - cameraPosition.xz) * 0.35);
-}
-
 void main() {
   vec3 Nw = normalize(vN);
   vec2 p = strokeCoords(Nw);
   vec2 dpx = dFdx(p);
   vec2 dpy = dFdy(p);
-  vec2 q = vec2(0.0);
-  vec2 dqx = vec2(0.0);
-  vec2 dqy = vec2(0.0);
-  if (uUseRefl > 0.5) {
-    q = streakCoords();
-    dqx = dFdx(q);
-    dqy = dFdy(q);
-  }
   vec4 tex = uUseMap > 0.5 ? texture(uMap, vUv) : vec4(1.0);
   if (tex.a < uAlphaTest) discard;
   vec3 N = gl_FrontFacing ? Nw : -Nw;
@@ -329,12 +328,12 @@ void main() {
   // the rim the low sun draws on edges turned towards it
   float hi = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0) * back * sh * smoothstep(-0.15, 0.35, ndl) * 0.9;
   if (N.y > 0.7) hi *= 0.25;
+  // pictures (shop windows, signs, murals) and glass keep their own light
+  if ((kind > 4.5 && kind < 6.5)) hi = 0.0;
   vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv).rgb : vec3(1.0));
   float ang = uAng;
   float dens = uDensity;
   float wash = uWash;
-  vec3 reflC = vec3(0.0);
-  float reflK = 0.0;
 
   if (uGloss > 0.0) {
     // glossy paint and glass: the sunset in them
@@ -366,10 +365,11 @@ void main() {
     r *= 0.2;
     float fr = mix(0.05, 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
     float wetK = uWetK * (kind > 8.5 ? 1.0 : 0.35 + 0.65 * smoothstep(0.3, 0.72, vnoise(vWP.xz * vec2(0.21, 0.09))));
-    reflC = r;
-    reflK = fr * wetK;
-    lit = mix(lit, r, reflK * 0.55);
-    shade = mix(shade, r * 0.7, reflK * 0.55);
+    // under the pens, the street holds the mirror image; the pens take their colours from it
+    float k = fr * wetK;
+    lit = mix(lit, r, k * 0.8);
+    shade = mix(shade, r * 0.8, k * 0.8);
+    light = mix(light, 0.5, k * 0.6);
   }
   if (kind > 7.5 && kind < 8.5) {
     // neon tubes: almost no pen, just light
@@ -377,16 +377,7 @@ void main() {
     wash = 0.9;
   }
 
-  vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash);
-  if (reflK > 0.01) {
-    // the reflections, in long strokes straight down the page
-    float rb = smoothstep(0.12, 0.9, lum(reflC));
-    vec2 S1 = penLayer(q, dqx, dqy, 1.5708, 3.6, 1.6, 81.0, 1.6);
-    vec3 ps = hueShift(reflC, (fract(S1.y * 5.31) - 0.5) * 0.6) * (0.8 + 0.5 * fract(S1.y * 9.71));
-    col = mix(col, ps, S1.x * step(fract(S1.y * 7.13), reflK * (0.12 + 0.75 * rb)));
-    vec2 S2 = penLayer(q, dqx, dqy, 1.52, 5.0, 1.3, 93.0, 2.2);
-    col = mix(col, reflC * 1.3, S2.x * step(fract(S2.y * 7.13), reflK * smoothstep(0.6, 1.8, lum(reflC))));
-  }
+  vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
   col += em;
   col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
@@ -442,8 +433,7 @@ void main() {
   float cn = fbm(vec2(az * 2.4 + uTime * 0.004, el * 13.0)) * 0.7 + fbm(vec2(az * 7.0, el * 34.0) + 3.0) * 0.3;
   float cl = smoothstep(0.5, 0.66, cn) * smoothstep(0.03, 0.08, el) * (1.0 - smoothstep(0.22, 0.45, el));
   // the page shows between the strokes, tinted by the sky
-  float grain = vnoise(gl_FragCoord.xy * 0.71) * 0.6 + vnoise(gl_FragCoord.xy * 0.23 + 9.0) * 0.4;
-  vec3 col = mix(uPaper * (0.94 + 0.08 * grain), sky, 0.62);
+  vec3 col = mix(uPaper * 0.97, sky, 0.62);
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDir), -1.0, 1.0)) * 6.0);
   // A: the main scribble, diagonal, every stroke its own pen
   gZig = 0.26;
@@ -469,7 +459,7 @@ void main() {
   // the sun: a white-hot disc low over the water, a ring of gold and orange strokes around it
   float sd = acos(clamp(dot(dir, uSunDir), -1.0, 1.0));
   vec2 sv = vec2(dot(dir - uSunDir, normalize(vec3(-uSunDir.z, 0.0, uSunDir.x))), dir.y - uSunDir.y);
-  float ringN = (vnoise(vec2(atan(sv.y, sv.x) * 7.0, uBoil * 0.7)) - 0.5) * 0.006;
+  float ringN = (vnoise(vec2(atan(sv.y, sv.x) * 7.0, 3.0)) - 0.5) * 0.006;
   float R = 0.03;
   float disc = 1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd);
   vec3 sunC = mix(lin(vec3(1.0, 0.72, 0.3)), lin(vec3(1.0, 0.97, 0.82)), 1.0 - smoothstep(R * 0.3, R, sd));
