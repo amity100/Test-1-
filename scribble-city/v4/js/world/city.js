@@ -9,6 +9,7 @@ import { buildGround } from './ground.js';
 import { buildFirstBoulevard } from './first.js';
 import { buildBlocks } from './blocks.js';
 import { buildRoom } from './rooms.js';
+import { buildStreets, turnWheel } from './streets.js';
 import { BOUNDS } from './layout.js';
 
 // The whole city: the first boulevard exactly as it was, and everything around it.
@@ -57,6 +58,7 @@ export function buildCity(scene, o = {}) {
   buildGround(ctx);
   buildFirstBoulevard(ctx);
   buildBlocks(ctx);
+  if (o.streets !== false) buildStreets(ctx);
   if (o.extra) o.extra(ctx);
   // the neon of every shop, in one texture
   M.signNeon.uniforms.uMap.value = neon.texture();
@@ -64,7 +66,7 @@ export function buildCity(scene, o = {}) {
   const meshes = ctx.B.flush(group, { static: true });
   const rooms = ctx.R.flush(group, { static: true, indoor: true });
   for (const m of rooms) m.renderOrder = 1;
-  const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n };
+  const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length };
 
   const world = {
     group,
@@ -90,7 +92,13 @@ export function buildCity(scene, o = {}) {
     spawn: { x: -6, z: 2, yaw: Math.PI },
     stats,
     signs: ctx.signs,
+    signals: ctx.signals || [],
+    parked: ctx.parked || [],
+    busStops: ctx.busStops || [],
+    helipad: ctx.helipad || null,
+    wheel: ctx.wheel || null,
     update(dt, t) {
+      if (ctx.wheel) turnWheel(ctx.wheel, dt);
       // a neon letter that flickers (TACOS 24/7, as it always did)
       const s = ctx.signs[2];
       if (s) {

@@ -91,6 +91,19 @@ export const CAR_COLORS = [
   [0.98, 0.45, 0.62], [0.3, 0.75, 0.55], [0.35, 0.5, 0.92], [0.98, 0.62, 0.3], [0.62, 0.86, 0.95], [0.85, 0.85, 0.82],
 ];
 
+export const TAXI_YELLOW = [1.0, 0.78, 0.18];
+const VAN_COLORS = [[0.95, 0.95, 0.96], [0.62, 0.86, 0.95], [1.0, 0.75, 0.25], [0.86, 0.12, 0.16], [0.3, 0.75, 0.55], [0.35, 0.5, 0.92]];
+
+// what drives around the city: mostly sedans, taxis, some vans and low sports cars
+export function randomCarSpec(r = Math.random) {
+  const pickR = (l) => l[Math.floor(r() * l.length)];
+  const k = r();
+  if (k < 0.22) return { kind: 'sedan', color: TAXI_YELLOW, taxi: true };
+  if (k < 0.36) return { kind: 'sports', color: pickR(CAR_COLORS) };
+  if (k < 0.5) return { kind: 'van', color: pickR(VAN_COLORS) };
+  return { kind: 'sedan', color: pickR(CAR_COLORS) };
+}
+
 function build(kind) {
   const K = KINDS[kind];
   const off = K.len / 2;
@@ -228,7 +241,7 @@ export class CarRenderer {
       trim: S({ kind: 'box', gloss: 0.3 }),
     };
     this.mats = mats;
-    const cap = 90;
+    const cap = 140;
     this.kinds = {};
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);

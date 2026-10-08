@@ -1,4 +1,4 @@
-import { BOUNDS, AVES, STREETS, AVE_W, ST_W, districtName, WATER_EAST_X, WATER_SOUTH_Z } from '../world/layout.js';
+import { BOUNDS, AVES, STREETS, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, STREET_X0, STREET_X1 } from '../world/layout.js';
 import { GRADE } from '../game/weapons.js';
 import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
 
@@ -45,43 +45,52 @@ export class HUD {
     this.root.classList.add('hidden');
   }
 
+  // the city from above, once: the bay, the roads, the parks, every building (from its walls)
   buildMap() {
-    const W = Math.ceil(BOUNDS.maxX - BOUNDS.minX) + 80;
-    const H = Math.ceil(BOUNDS.maxZ - BOUNDS.minZ) + 80;
+    const pad = 60;
+    const x0 = BOUNDS.minX - pad;
+    const x1 = PIER.x1 + pad;
+    const z0 = BOUNDS.minZ - pad;
+    const z1 = BOUNDS.maxZ + pad;
+    const W = Math.ceil(x1 - x0);
+    const H = Math.ceil(z1 - z0);
     const c = document.createElement('canvas');
     c.width = W;
     c.height = H;
     const g = c.getContext('2d');
-    const ox = -BOUNDS.minX + 40;
-    const oz = -BOUNDS.minZ + 40;
+    const ox = -x0;
+    const oz = -z0;
     this.mapOrigin = [ox, oz];
-    g.fillStyle = '#f2eee2';
-    g.fillRect(0, 0, W, H);
-    // water
-    g.fillStyle = '#c9d8ec';
-    g.fillRect(WATER_EAST_X + ox, 0, W, H);
-    g.fillRect(0, WATER_SOUTH_Z + oz, W, H);
-    // blocks (sidewalk color) then roads stay paper
-    g.fillStyle = '#e3ddcc';
-    for (let i = 0; i < 5; i++) {
-      for (let j = 0; j < 5; j++) {
-        const x0 = AVES[i] + AVE_W / 2;
-        const x1 = AVES[i + 1] - AVE_W / 2;
-        const z0 = STREETS[j] + ST_W / 2;
-        const z1 = STREETS[j + 1] - ST_W / 2;
-        g.fillRect(x0 + ox, z0 + oz, x1 - x0, z1 - z0);
-      }
+    const R = (ax, az, bx, bz, col) => {
+      g.fillStyle = col;
+      g.fillRect(ax + ox, az + oz, bx - ax, bz - az);
+    };
+    // the land (pavers), the bay to the east and the sea to the south
+    R(x0, z0, x1, z1, '#d9b9c4');
+    R(WATER_X, z0, x1, z1, '#34307a');
+    R(x0, SOUTH_EDGE + 36, x1, z1, '#34307a');
+    R(WEST_EDGE - 40, SOUTH_EDGE + 4, WATER_X, SOUTH_EDGE + 36, '#f0d9a8');
+    R(PIER.x0, PIER.z0, PIER.x1, PIER.z1, '#c98f68');
+    R(STREET_X1, NORTH_EDGE - 60, WATER_X, SOUTH_EDGE + 36, '#efc9b4');
+    // the roads
+    const road = '#4a4258';
+    for (const a of AVES) {
+      if (a.blvd) R(STREET_X0, NORTH_EDGE - 60, STREET_X1, SOUTH_EDGE + 30, road);
+      else R(a.x - a.half, NORTH_EDGE, a.x + a.half, SOUTH_EDGE, road);
     }
-    // park
-    g.fillStyle = '#cbd9b6';
-    g.fillRect(-36 + 4.5 + ox, -82 + 4.5 + oz, 72 - 9, 48 - 9);
-    // buildings from the collision boxes
-    g.strokeStyle = '#2a3260';
+    for (const st of STREETS) R(WEST_EDGE - 6, st.z - st.half, STREET_X0, st.z + st.half, road);
+    // parks, plazas, the market
+    const w = this.game.world;
+    for (const p of w.parks || []) R(p.x0, p.z0, p.x1, p.z1, '#7fc485');
+    for (const p of w.plazas || []) R(p.x0, p.z0, p.x1, p.z1, '#f2c9a0');
+    for (const p of w.markets || []) R(p.x0, p.z0, p.x1, p.z1, '#f2c9a0');
+    // the buildings, from their walls
+    g.strokeStyle = '#1b1430';
     g.lineWidth = 1;
-    for (const b of this.game.world.collision.boxes) {
+    for (const b of w.collision.boxes) {
       if (b.tag !== 'wall' || b.y1 - b.y0 < 3) continue;
       if (b.x1 - b.x0 > 120 || b.z1 - b.z0 > 120) continue;
-      g.fillStyle = b.y1 > 40 ? '#b9bfd6' : '#d0d3df';
+      g.fillStyle = b.y1 > 30 ? '#8e7fd0' : '#f4e6ec';
       g.fillRect(b.x0 + ox, b.z0 + oz, b.x1 - b.x0, b.z1 - b.z0);
       g.strokeRect(b.x0 + ox + 0.5, b.z0 + oz + 0.5, b.x1 - b.x0 - 1, b.z1 - b.z0 - 1);
     }
@@ -260,7 +269,7 @@ export class HUD {
     const yaw = game.camRig.yaw;
     const s = this.mapScale;
     g.save();
-    g.fillStyle = '#f2eee2';
+    g.fillStyle = '#34307a';
     g.fillRect(0, 0, W, H);
     g.translate(W / 2, H / 2);
     // rotate so the camera's forward points up
@@ -297,7 +306,8 @@ export class HUD {
       g.strokeRect(-5 / s, -4 / s, 10 / s, 8 / s);
       g.restore();
     }
-    const bar = game.world.bar;
+    const barShop = this.barShop || (this.barShop = (game.world.shops || []).find((sh) => sh.kind === 'bar') || null);
+    const bar = barShop ? { x: barShop.door[0], z: barShop.door[2] } : null;
     if (bar) {
       // a little martini glass for The Inkwell
       g.save();
@@ -351,7 +361,7 @@ export class HUD {
     g.translate(W / 2, H / 2);
     const nr = W / 2 - 14;
     g.font = 'bold 16px Rubik, sans-serif';
-    g.fillStyle = '#141418';
+    g.fillStyle = '#ffd23f';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('N', -Math.sin(yaw) * nr, Math.cos(yaw) * nr);

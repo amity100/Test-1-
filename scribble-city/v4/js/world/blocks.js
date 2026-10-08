@@ -402,10 +402,10 @@ function court(ctx, x0, x1, z0, z1) {
   ctx.courts.push({ x0, x1, z0, z1 });
 }
 
-export function bench(ctx, x, z, yaw) {
+export function bench(ctx, x, z, yaw, y0 = CURB) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'bench', x, z);
-  const m = new THREE.Matrix4().makeRotationY(yaw).setPosition(x, CURB, z);
+  const m = new THREE.Matrix4().makeRotationY(yaw).setPosition(x, y0, z);
   const wood = srgb(0.62, 0.4, 0.28);
   const iron = srgb(0.18, 0.16, 0.22);
   const part = (w, h, d, px, py, pz, col) => {

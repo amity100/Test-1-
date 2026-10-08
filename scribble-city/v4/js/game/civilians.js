@@ -2,15 +2,32 @@ import * as THREE from 'three';
 import { Doodle } from './doodle.js';
 import { civilianLook } from './looks.js';
 import { holeRadius } from './enemies.js';
-import { AVES, STREETS, AVE_W, ST_W, groundHeight, blockRect, BLOCK_TYPES } from '../world/layout.js';
+import { AVES, STREETS, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
 const _ro = new THREE.Vector3();
 const _rd = new THREE.Vector3();
 
+// The walk round a block: the middle of the sidewalks around it (col -1: the houses west of Coral
+// Ave, walked up and down along the avenue). Corners: NW, NE, SE, SW.
+export function sidewalkLoop(col, row) {
+  if (col < 0) {
+    const R = westRect(row);
+    const x = R.x1 + 2.5;
+    return [[x, R.z0 - 2.5], [x, R.z1 + 2.5]];
+  }
+  const R = blockRect(col, row);
+  const x1 = col === 2 ? R.x1 + 3.0 : R.x1 + 2.5;
+  return [[R.x0 - 2.5, R.z0 - 2.5], [x1, R.z0 - 2.5], [x1, R.z1 + 2.5], [R.x0 - 2.5, R.z1 + 2.5]];
+}
+
+// the promenade: up and down along the bay
+const PROM_LINES = [15.2, 17.6, 19.4];
+
 /**
- * Pedestrians walking around their block's sidewalk. They panic and run when shooting starts.
+ * Pedestrians walking the sidewalks round their block (now and then crossing to the next one at
+ * the zebra), or strolling on the promenade. They panic and run when shooting starts.
  */
 class Civilian {
   constructor(mgr, bx, bz, look = null, figOpts = null) {
@@ -28,27 +45,93 @@ class Civilian {
     this.radius = 0.33;
     this.dying = -1;
     this.headlessT = 0;
-    const r = blockRect(bx, bz);
-    const inset = 2.3;
-    this.loop = [
-      [r.x0 + inset, r.z0 + inset],
-      [r.x1 - inset, r.z0 + inset],
-      [r.x1 - inset, r.z1 - inset],
-      [r.x0 + inset, r.z1 - inset],
-    ];
     this.dir = Math.random() < 0.5 ? 1 : -1;
-    this.leg = Math.floor(Math.random() * 4);
-    const a = this.loop[this.leg];
-    const b = this.loop[(this.leg + 1) % 4];
-    const t = Math.random();
-    this.pos.set(a[0] + (b[0] - a[0]) * t, groundHeight(a[0], a[1]), a[1] + (b[1] - a[1]) * t);
-    this.target = this.dir > 0 ? (this.leg + 1) % 4 : this.leg;
+    if (bx === 'prom') this.setProm(bz);
+    else this.setBlock(bx, bz, true);
     this.speed = 1.2 + Math.random() * 0.5;
     this.panicT = 0;
     this.yaw = 0;
     this.vel = new THREE.Vector3();
     this.stopT = 0;
     this.dodgeV = new THREE.Vector3();
+  }
+
+  // walk round block (col, row); fresh: start somewhere along it
+  setBlock(col, row, fresh) {
+    this.col = col;
+    this.row = row;
+    this.prom = false;
+    this.loop = sidewalkLoop(col, row);
+    const n = this.loop.length;
+    if (fresh) {
+      this.leg = Math.floor(Math.random() * n);
+      const a = this.loop[this.leg];
+      const b = this.loop[(this.leg + 1) % n];
+      const t = Math.random();
+      this.pos.set(a[0] + (b[0] - a[0]) * t + (Math.random() - 0.5) * 1.2, groundHeight(a[0], a[1]), a[1] + (b[1] - a[1]) * t + (Math.random() - 0.5) * 1.2);
+      this.target = this.dir > 0 ? (this.leg + 1) % n : this.leg;
+    }
+  }
+
+  // somewhere along the walk between minD and maxD from p (false if the walk never comes that close)
+  placeNear(p, minD, maxD) {
+    const L = this.loop;
+    const n = L.length;
+    for (let tries = 0; tries < 12; tries++) {
+      const leg = Math.floor(Math.random() * n);
+      const a = L[leg];
+      const b = L[(leg + 1) % n];
+      const t = Math.random();
+      const x = a[0] + (b[0] - a[0]) * t + (Math.random() - 0.5) * 1.2;
+      const z = a[1] + (b[1] - a[1]) * t + (Math.random() - 0.5) * 1.2;
+      const d = Math.hypot(x - p.x, z - p.z);
+      if (d < minD || d > maxD) continue;
+      this.pos.set(x, groundHeight(x, z), z);
+      if (!this.prom) this.target = this.dir > 0 ? (leg + 1) % n : leg;
+      else this.target = this.dir > 0 ? 1 : 0;
+      return true;
+    }
+    return false;
+  }
+
+  setProm(z) {
+    this.prom = true;
+    const x = PROM_LINES[Math.floor(Math.random() * PROM_LINES.length)];
+    const za = Math.max(NORTH_EDGE + 4, z - 60 - Math.random() * 80);
+    const zb = Math.min(SOUTH_EDGE + 20, z + 60 + Math.random() * 80);
+    this.loop = [[x, za], [x, zb]];
+    this.pos.set(x + (Math.random() - 0.5) * 1.5, groundHeight(x, z), z);
+    this.target = this.dir > 0 ? 1 : 0;
+  }
+
+  // at a corner of the block: on round it, or across the road to the next block
+  nextCorner() {
+    const n = this.loop.length;
+    if (this.prom || n === 2) {
+      this.target = this.target ? 0 : 1;
+      return;
+    }
+    const k = this.target;
+    if (Math.random() < 0.28) {
+      // the corners: 0 NW, 1 NE, 2 SE, 3 SW; across the street (north/south) or the avenue
+      const north = k < 2;
+      const west = k === 0 || k === 3;
+      const opts = [];
+      if (north && this.row > 0) opts.push([this.col, this.row - 1, west ? 3 : 2]);
+      if (!north && this.row < 4) opts.push([this.col, this.row + 1, west ? 0 : 1]);
+      if (west && this.col > 0) opts.push([this.col - 1, this.row, north ? 1 : 2]);
+      if (west && this.col === 0) opts.push([-1, this.row, north ? 0 : 1]);
+      if (!west && this.col < 2) opts.push([this.col + 1, this.row, north ? 0 : 3]);
+      if (opts.length) {
+        const [c, r, corner] = opts[Math.floor(Math.random() * opts.length)];
+        this.setBlock(c, r, false);
+        this.target = corner;
+        this.crossing = true;
+        return;
+      }
+    }
+    this.crossing = false;
+    this.target = (this.target + this.dir + n) % n;
   }
 
   get alive() {
@@ -147,9 +230,11 @@ class Civilian {
       tx = t[0];
       tz = t[1];
       if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 0.8) {
-        this.target = (this.target + this.dir + 4) % 4;
-        if (Math.random() < 0.15) this.stopT = 1 + Math.random() * 3;
+        this.nextCorner();
+        if (!this.crossing && Math.random() < 0.15) this.stopT = 1 + Math.random() * 3;
       }
+      // hurry across the road
+      if (this.crossing) speed *= 1.35;
       if (this.stopT > 0) {
         this.stopT -= dt;
         speed = 0;
@@ -230,7 +315,7 @@ export class Civilians {
     if (this.t <= 0) {
       this.t = 1;
       // a busy city: more people on the sidewalks around you
-      const max = game.touch ? 13 : 24;
+      const max = game.touch ? 16 : 32;
       // despawn far ones (scripted people belong to their scene, unless it let them go)
       for (const c of this.list) if ((!c.scripted || !c.owner) && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 110) c.gone = true;
       this.list = this.list.filter((c) => {
@@ -239,19 +324,29 @@ export class Civilians {
       });
       let free = 0;
       for (const c of this.list) if (!c.scripted) free++;
-      let tries = 8;
+      let tries = 10;
+      const first = !this.filled;
+      this.filled = true;
       while (free < max && tries-- > 0) {
-        const bx = Math.floor(Math.random() * 5);
-        const bz = Math.floor(Math.random() * 5);
-        const type = BLOCK_TYPES[bz][bx];
-        if (type === 'alien' || type === 'fortress' || type === 'fortress2') continue;
-        const r = blockRect(bx, bz);
-        const cx = (r.x0 + r.x1) / 2;
-        const cz = (r.z0 + r.z1) / 2;
-        const d = Math.hypot(cx - p.x, cz - p.z);
-        if (d > (tries > 3 ? 75 : 95)) continue;
-        const c = new Civilian(this, bx, bz);
-        if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 18) {
+        // the promenade (when you are near the bay), or a block round you
+        let c;
+        if (p.x > -40 && Math.random() < 0.3) {
+          const z = Math.max(NORTH_EDGE + 10, Math.min(SOUTH_EDGE, p.z + (Math.random() - 0.5) * 160));
+          if (z > PIER.z0 - 4 && z < PIER.z1 + 4) continue;
+          c = new Civilian(this, 'prom', z);
+        } else {
+          const col = Math.floor(Math.random() * 4) - 1;
+          const row = Math.floor(Math.random() * 5);
+          const loop = sidewalkLoop(col, row);
+          // somewhere on the loop near you
+          let near = Infinity;
+          for (const q of loop) near = Math.min(near, Math.hypot(q[0] - p.x, q[1] - p.z));
+          if (near > (tries > 4 ? 70 : 100)) continue;
+          c = new Civilian(this, col, row);
+        }
+        // most of them close by (the street you are on is full of people)
+        const far = Math.random() < 0.35;
+        if (!c.placeNear(p, first ? 4 : far ? 45 : 24, far ? 100 : 60)) {
           c.dispose();
           continue;
         }
@@ -309,16 +404,26 @@ export class Civilians {
     c.dispose();
   }
 
+  // the block whose sidewalk loop passes nearest (x, z) (or the promenade)
   nearestBlock(x, z) {
+    if (x > 12) return ['prom', z];
     let best = [0, 0];
     let bd = Infinity;
-    for (let bx = 0; bx < 5; bx++) {
-      for (let bz = 0; bz < 5; bz++) {
-        const r = blockRect(bx, bz);
-        const d = Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.z0 - z, 0, z - r.z1));
-        if (d < bd) {
-          bd = d;
-          best = [bx, bz];
+    for (let col = -1; col < 3; col++) {
+      for (let row = 0; row < 5; row++) {
+        const L = sidewalkLoop(col, row);
+        for (let i = 0; i < L.length; i++) {
+          const a = L[i];
+          const b = L[(i + 1) % L.length];
+          const dx = b[0] - a[0];
+          const dz = b[1] - a[1];
+          const l2 = dx * dx + dz * dz || 1;
+          const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2));
+          const d = Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z);
+          if (d < bd) {
+            bd = d;
+            best = [col, row];
+          }
         }
       }
     }
@@ -327,19 +432,8 @@ export class Civilians {
 
   // somebody who just got out of a car at (x, z): walks the sidewalk of the nearest block
   spawnAt(x, z, look) {
-    let best = [0, 0];
-    let bd = Infinity;
-    for (let bx = 0; bx < 5; bx++) {
-      for (let bz = 0; bz < 5; bz++) {
-        const r = blockRect(bx, bz);
-        const d = Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.z0 - z, 0, z - r.z1));
-        if (d < bd) {
-          bd = d;
-          best = [bx, bz];
-        }
-      }
-    }
-    const c = new Civilian(this, best[0], best[1], look);
+    const [bx, bz] = this.nearestBlock(x, z);
+    const c = new Civilian(this, bx, bz, look);
     c.pos.set(x, groundHeight(x, z), z);
     this.list.push(c);
     return c;
@@ -479,4 +573,4 @@ export class Civilians {
   }
 }
 
-export { AVES, STREETS, AVE_W, ST_W };
+export { AVES, STREETS };

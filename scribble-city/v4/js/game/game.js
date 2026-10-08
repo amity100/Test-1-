@@ -23,7 +23,8 @@ import { StreetLife } from './streetlife.js';
 import { Vignettes } from './vignettes.js';
 import { Ambient } from './ambient.js';
 import { BLUEPRINTS } from './blueprints.js';
-import { CAR_VARIANTS, DRIVER_SEAT } from './traffic.js';
+import { DRIVER_SEAT } from './traffic.js';
+import { CarRenderer } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
@@ -55,14 +56,14 @@ export class Game {
   }
 
   async init() {
-    const { scene, camera, world, mats } = this;
-    mats.itemSurface = mats.itemSurface || mats.surface;
+    const { scene, camera, world } = this;
     this.input = new Input(this.renderer.domElement, this.touch);
     this.audio = new Audio();
     this.camRig = new CameraRig(camera, world.collision);
     this.figures = new FigureRenderer(scene);
     this.bubbles = new Bubbles(this.pipe.overlay);
     this.fx = new Effects(this);
+    this.cars = new CarRenderer(scene);
     this.vehicles = new Vehicles(this);
     this.traffic = new Traffic(this);
     this.player = new Player(this);
@@ -399,6 +400,8 @@ export class Game {
       this.vignettes.draw(fr);
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
+      this.vehicles.draw(this.cars);
+      this.cars.end();
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
       this.pickups.draw(fr);
@@ -437,6 +440,17 @@ export class Game {
   // ------------------------------------------------------------------ hiding
   updateHidden() {
     const p = this.player;
+    if (!this.goalFlags.bar) {
+      if (this.barRoom === undefined) {
+        const s = (this.world.shops || []).find((sh) => sh.kind === 'bar');
+        this.barRoom = s && s.room && s.room.inside ? s.room : null;
+      }
+      if (this.barRoom && !p.inVehicle && this.barRoom.inside(p.pos.x, p.pos.z, 0)) {
+        this.goalFlags.bar = true;
+        this.updateGoals();
+        this.hud.toast('ברוכים הבאים ל-Neon Bar!', 'good', 2.2);
+      }
+    }
     let spot = null;
     if (!p.inVehicle && p.mode !== 'dead') {
       for (const h of this.world.hideSpots) {
@@ -645,9 +659,10 @@ export class Game {
     const v = this.vehicles.nearest(p.pos, 3.2);
     if (v) return { kind: 'vehicle', target: v, label: v.label || BLUEPRINTS[v.kind].name };
     const c = this.traffic.nearestDoor(p.pos, 1.7);
-    if (c) return { kind: 'carjack', target: c, label: CAR_VARIANTS[c.variant].taxi ? 'מונית' : 'מכונית' };
-    const o = this.world.objects.nearest(p.pos.x, p.pos.z, 1.4, 'car');
-    if (o && o.data) return { kind: 'parked', target: o, label: o.data.taxi ? 'מונית' : 'מכונית' };
+    if (c && !c.wrecked) {
+      const s = c.spec;
+      return { kind: c.parkedCar ? 'parked' : 'carjack', target: c, label: s.police ? 'ניידת' : s.taxi ? 'מונית' : s.kind === 'van' ? 'טנדר' : 'מכונית' };
+    }
     return null;
   }
 
@@ -666,7 +681,7 @@ export class Game {
       return;
     }
     const t = this.traffic.take(c);
-    const v = this.vehicles.spawnStock(CAR_VARIANTS[t.variant], t.pos, t.yaw);
+    const v = this.vehicles.spawnStock(t.spec, t.pos, t.yaw);
     if (t.driver) this.ejectDriver(t.driver, t.pos, t.yaw, true);
     if (t.police) {
       this.onCrime('copcar', t.pos.x, t.pos.z);
@@ -675,7 +690,7 @@ export class Game {
         const fz = Math.cos(t.yaw);
         t.crew.forEach((m, i) => {
           const side = i === 0 ? 1 : -1;
-          m.fig.dispose();
+          if (m.fig) m.fig.dispose();
           this.enemies.spawnOfficer(m.type, t.pos.x + fz * side * 1.9, t.pos.z - fx * side * 1.9, m.look, this.player.pos);
         });
       }
@@ -686,18 +701,11 @@ export class Game {
   }
 
   // drive off with a car parked at the curb
-  stealParked(o) {
-    const d = o.data;
-    const cx = (o.x0 + o.x1) / 2;
-    const cz = (o.z0 + o.z1) / 2;
-    this.world.objects.remove(o, false);
-    // head off along the curb, toward the side with more room
-    const p = this.player.pos;
-    let yaw = d.alongX ? Math.PI / 2 : 0;
-    const fx = Math.sin(yaw);
-    const fz = Math.cos(yaw);
-    if ((p.x - cx) * fx + (p.z - cz) * fz > 0) yaw += Math.PI;
-    const v = this.vehicles.spawnStock({ color: d.color, taxi: d.taxi }, new THREE.Vector3(cx, 0, cz), yaw);
+  stealParked(c) {
+    const t = this.traffic.take(c);
+    const cx = t.pos.x;
+    const cz = t.pos.z;
+    const v = this.vehicles.spawnStock(t.spec, t.pos, t.yaw);
     this.enterVehicle(v);
     if (Math.random() < 0.45) {
       this.audio.play('alarm', 0.7);
@@ -715,7 +723,7 @@ export class Game {
     const rz = fx;
     const x = pos.x + fx * DRIVER_SEAT.u - rx * 1.7;
     const z = pos.z + fz * DRIVER_SEAT.u - rz * 1.7;
-    d.fig.dispose();
+    if (d.fig) d.fig.dispose();
     if (pulled && Math.random() < 0.3) {
       this.enemies.spawnAngry(x, z, d.look);
     } else {
@@ -935,15 +943,15 @@ export class Game {
   updateGoals() {
     const f = this.goalFlags;
     const all = [
-      { text: this.touch ? 'לצלם את השרטוט של אקדח הצבע (מצלמה)' : 'לצלם את השרטוט של אקדח הצבע (F)', done: f.photo },
-      { text: 'להתחבא ליד פח, תא טלפון או בשיחים', done: f.hidden },
+      { text: this.touch ? 'לצלם את השרטוט של אקדח הצבע בטיילת, ממול (מצלמה)' : 'לצלם את השרטוט של אקדח הצבע בטיילת, ממול (F)', done: f.photo },
+      { text: 'להתחבא ליד תא טלפון, פח אשפה או שיח', done: f.hidden },
       { text: this.touch ? 'לצייר את אקדח הצבע (עיפרון)' : 'לצייר את אקדח הצבע (Q)', done: f.drew },
-      { text: 'לקפוץ לבר The Inkwell (מעבר לפינה, ברחוב הצפוני)', done: f.bar },
-      { text: `למחוק 5 עבריינים (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
-      { text: 'למצוא את שרטוט המכונית בסוכנות (מזרח)', done: f.car },
+      { text: 'לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', done: f.bar },
+      { text: `למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
+      { text: 'למצוא את שרטוט המכונית בחניה של מוטל הכוכב (מערבה)', done: f.car },
       { text: this.touch ? 'לצייר מכונית ולנהוג בה' : 'לצייר מכונית ולנהוג בה (E)', done: f.drove },
-      { text: 'להשיג שרטוט טנק או חללית (צפון)', done: f.heavy },
-      { text: 'לצייר טנק או חללית', done: f.heavyDrawn },
+      { text: 'להשיג שרטוט טנק (מרכז העיר) או מסוק (בקצה המזח)', done: f.heavy },
+      { text: 'לצייר טנק או מסוק', done: f.heavyDrawn },
     ];
     const firstOpen = all.findIndex((g) => !g.done);
     const start = Math.max(0, (firstOpen < 0 ? all.length : firstOpen) - 1);

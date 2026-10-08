@@ -792,7 +792,7 @@ export function goodsTexture() {
 // Every shop's neon lettering in one texture: r is the glowing tube, g its white-hot core, the
 // colour comes from the sign itself (the vertex colour), so the texture is small.
 export class NeonAtlas {
-  constructor(cols = 4, rows = 16, cw = 512, ch = 128) {
+  constructor(cols = 4, rows = 32, cw = 512, ch = 128) {
     this.cols = cols;
     this.rows = rows;
     this.cw = cw;
@@ -815,7 +815,10 @@ export class NeonAtlas {
   add(text, { font = 'Caveat', size = 75, italic = false } = {}) {
     const key = `${text}|${font}|${size}|${italic}`;
     if (this.cache.has(key)) return this.cache.get(key);
-    if (this.full) return null;
+    if (this.full) {
+      this.missed = (this.missed || 0) + 1;
+      return null;
+    }
     const i = this.n++;
     const x0 = (i % this.cols) * this.cw;
     const y0 = Math.floor(i / this.cols) * this.ch;

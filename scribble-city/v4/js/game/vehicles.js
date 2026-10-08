@@ -694,4 +694,4 @@ export class Vehicles {
   }
 }
 
-export { angleDiff, _q, UP };
+export { angleDiff, _q, UP, copterModel };

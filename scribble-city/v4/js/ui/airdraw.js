@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BLUEPRINTS, drawBlueprint, blueprintBounds } from '../game/blueprints.js';
 import { scoreDrawing, gradeOf } from '../game/recognizer.js';
 import { LineBatch } from '../render/LineBatch.js';
-import { makeLineMaterial, makeSpriteMaterial, getSpriteGeometry } from '../render/materials.js';
+import { makeLineMaterial } from '../render/materials.js';
 import { Sketcher, FONT_HAND } from '../render/sketch2d.js';
 
 const PX = 250; // virtual pixels per metre handed to the recognizer (what the paper pad used)
@@ -56,26 +56,22 @@ export class AirDraw {
     this.mat = makeLineMaterial({ nudge: 0, minWidth: 1.4, depthTest: false });
     this.batch = new LineBatch(9000, this.mat, { dynamic: true });
     this.batch.mesh.renderOrder = 40;
-    game.scene.add(this.batch.mesh);
+    // drawn over the finished picture, crisp (the pen in the air is not part of the city)
+    (game.pipe && game.pipe.overlay ? game.pipe.overlay : game.scene).add(this.batch.mesh);
 
     // the teacher's grade, floating next to the drawing
     this.stickerCanvas = document.createElement('canvas');
     this.stickerCanvas.width = 512;
     this.stickerCanvas.height = 300;
     this.stickerTex = new THREE.CanvasTexture(this.stickerCanvas);
-    this.stickerTex.colorSpace = THREE.NoColorSpace;
-    const sm = makeSpriteMaterial(this.stickerTex, { noFog: true, transparent: true });
-    sm.uniforms.uRect.value.set(0, 0, 1, 1);
-    sm.uniforms.uPivot.value.set(0.5, 0.5);
-    sm.uniforms.uMode.value = 1;
-    sm.uniforms.uNightMode.value = 1;
-    sm.depthTest = false;
-    sm.depthWrite = false;
-    this.sticker = new THREE.Mesh(getSpriteGeometry(), sm);
+    this.stickerTex.colorSpace = THREE.SRGBColorSpace;
+    const sm = new THREE.SpriteMaterial({ map: this.stickerTex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
+    this.sticker = new THREE.Sprite(sm);
+    this.sticker.center.set(0.5, 0.5);
     this.sticker.frustumCulled = false;
     this.sticker.renderOrder = 41;
     this.sticker.visible = false;
-    game.scene.add(this.sticker);
+    (game.pipe && game.pipe.overlay ? game.pipe.overlay : game.scene).add(this.sticker);
 
     this.phase = 'idle'; // idle | draw | grade | plop | cancel
     this.t = 0;
@@ -359,7 +355,7 @@ export class AirDraw {
     if (this.traced) sk.text('(העתקה)', 150, 70, { size: 38, color: RED_CSS, font: FONT_HAND, weight: 400 });
     this.stickerTex.needsUpdate = true;
     const sw = this.W * 0.42;
-    this.sticker.material.uniforms.uSize.value.set(sw, sw * (c.height / c.width));
+    this.sticker.scale.set(sw, sw * (c.height / c.width), 1);
     this.world(this.W * 0.38, this.H * 0.36, this.sticker.position);
     this.sticker.visible = true;
   }

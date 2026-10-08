@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#f8f4e9">
+<meta name="theme-color" content="#1b1430">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>עיר השרבוטים בצבעים</title>
+<title>עיר השרבוטים</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&family=Rubik:wght@400;600;800&family=Caveat:wght@500;700&family=Permanent+Marker&display=swap" rel="stylesheet">
@@ -114,14 +114,14 @@
     <div class="cover">
       <div class="spiral"></div>
       <h1>עיר השרבוטים</h1>
-      <p class="sub">ציירת את זה? זה אמיתי.</p>
+      <p class="sub">עיר שלמה על המפרץ בשקיעה, מצוירת בעטים צבעוניים · מה שמציירים — אמיתי</p>
       <div class="howto">
         <div class="col desktop-only">
           <h3>מחשב</h3>
           <p><b>WASD</b> הליכה · <b>עכבר</b> הסתכלות · <b>קליק</b> ירי/מחיקה</p>
           <p><b>Shift</b> ריצה · <b>רווח</b> קפיצה · <b>1-0</b>, גלגלת או <b>X</b> החלפת נשק</p>
           <p><b>F</b> צילום שלט · <b>Q</b> ציור · <b>E</b> רכב / דלת / שיחה · <b>M</b> מפה</p>
-          <p>ברכב: <b>WASD</b> נהיגה · <b>קליק</b> תותח/קרן · <b>רווח/C</b> גובה בחללית · <b>Esc</b> הפסקה</p>
+          <p>ברכב: <b>WASD</b> נהיגה · <b>קליק</b> תותח · <b>רווח/C</b> גובה במסוק · <b>Esc</b> הפסקה</p>
         </div>
         <div class="col touch-only">
           <h3>טלפון</h3>
@@ -130,10 +130,10 @@
         </div>
         <div class="col">
           <h3>איך משחקים</h3>
-          <p>מצלמים שלטים עם ציורים, מתחבאים, ומציירים אותם באוויר — כמעט עשרים נשקים ורכבים מחכים בעיר: מרובה עפרונות וחרב סרגל ועד לייזר מרקר, מיניגאן מחדדים, אופנוע ומסוק נייר. ככה שהציור טוב יותר, הנשק טוב יותר! המחק מוחק כל דבר בעיר, גם קירות: משפשפים קיר של בית ונכנסים פנימה. אפשר להיכנס לכל חנות (המוכרים מציירים לכם מה שתבקשו), ובטיילת יש דוכן שבו מציירים לעצמכם חברה. כל מכונית אפשר לקחת — רק שהמשטרה לא תראה, ויש בר מעבר לפינה… שעה ומזג אוויר — בתפריט ההפסקה.</p>
+          <p>מצלמים שלטי שרטוטים ברחבי העיר, מתחבאים, ומציירים אותם באוויר — שבעה־עשר נשקים ורכבים מחכים: מאקדח צבע ורובה עפרונות, דרך חרב סרגל ולייזר מרקר, ועד מיניגאן מחדדים, טנק, אופנוע ומסוק. ככל שהציור טוב יותר — הנשק טוב יותר! המחק מוחק כל דבר בעיר, גם קירות: משפשפים קיר של בית ונכנסים פנימה. נכנסים לכל חנות, אצל הספר מוחקים ומציירים תספורת חדשה, ובטיילת יש דוכן שבו מציירים לעצמכם חברה. כל מכונית אפשר לקחת — רק שהמשטרה לא תראה.</p>
         </div>
       </div>
-      <button id="start-btn" class="btn primary huge" disabled>טוען את המחברת…</button>
+      <button id="start-btn" class="btn primary huge" disabled>טוען את העטים…</button>
       <div id="load-status"></div>
     </div>
   </div>
@@ -148,8 +148,6 @@
       <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים רועדים</label>
       <label class="opt"><input type="checkbox" id="opt-look" checked> השתקפויות ברחוב הרטוב</label>
       <label class="opt"><input type="checkbox" id="opt-magic" checked> איכות גבוהה (עוד צבעים בכל משיכה)</label>
-      <label class="opt">שעה <select id="opt-time"><option value="dusk">שקיעה</option><option value="cycle">מתחלפת</option><option value="day">יום</option><option value="night">לילה</option><option value="dawn">זריחה</option></select></label>
-      <label class="opt">מזג אוויר <select id="opt-weather"><option value="auto">משתנה</option><option value="clear">בהיר</option><option value="cloudy">מעונן</option><option value="rain">גשם</option><option value="storm">סערה</option><option value="fog">ערפל</option><option value="windy">רוח</option><option value="rainbow">קשת</option></select></label>
       <label class="opt">רגישות <input type="range" id="opt-sens" min="0.3" max="2.5" step="0.1" value="1"></label>
     </div>
   </div>

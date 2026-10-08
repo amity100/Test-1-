@@ -111,7 +111,7 @@ export function roadAt(x, z) {
 // Height of the walkable ground (sidewalks, blocks and the promenade are raised by a curb).
 export function groundHeight(x, z) {
   if (x > WATER_X) {
-    if (z > PIER.z0 && z < PIER.z1 && x < PIER.x1) return 1.2;
+    if (z > PIER.z0 && z < PIER.z1 && x < PIER.x1) return 0.35;
     return -0.8;
   }
   if (roadAt(x, z)) return 0;

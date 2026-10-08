@@ -354,6 +354,11 @@ export class PersonRenderer {
 
   begin() {}
 
+  // a plain ellipsoid at c in the frame (r, u, f) (the birds of the city, little things in the air)
+  blob(c, r, u, f, sx, sy, sz, col) {
+    this.p.ball.push(framed(c, r, u, f, sx, sy, sz), linC(col), 0, 0.5, 0);
+  }
+
   // a pen line of the old notebook, as a thin rod (a cane, an umbrella's pole, a gold chain)
   rod(a, b, r, col, fig) {
     capsuleTo(this.p, a, b, Math.max(0.003, r), linC(col), fig.owner + 1, (fig.seed * 0.13 + 0.5) % 1, fig.indoor ? 1 : 0, fig.brgt);

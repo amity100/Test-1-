@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { MonsterFigure } from './figure.js';
 import { Doodle } from './doodle.js';
 import { gangLook, copLook, swatLook } from './looks.js';
 import { PEN_BLUE, ERASER_PINK, ERASER_BLUE } from './items.js';
@@ -180,7 +179,11 @@ class Enemy {
     this.territory = territory;
     this.isMonster = !!this.cfg.monster;
     if (this.isMonster) {
-      this.fig = new MonsterFigure(mgr.game.figures, this.cfg.monster, { seed: this.id * 3.7 });
+      // (no monsters in this city: a monster kind becomes a thug)
+      this.cfg = TYPES.thug;
+      this.isMonster = false;
+    }
+    if (this.isMonster) {
       this.hp = this.cfg.hp;
       this.maxHp = this.cfg.hp;
       this.radius = this.cfg.radius;

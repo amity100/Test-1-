@@ -189,6 +189,8 @@ export function decoBuilding(ctx, spec) {
       win: f.p((sg0 + sg1) / 2, CURB, 0.9),
       signCol: spec.signCol,
       building: info,
+      room,
+      spots: s.spots || {},
     });
     ctx.shops.push(s);
     info.shop = s;

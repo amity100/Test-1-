@@ -18,13 +18,14 @@ const ITEM = {
   pizza: 'pizzaBox', cafe: 'coffee', grocery: 'bag', deli: 'bag', bagel: 'bag', flowers: 'bouquet', books: 'book',
   icecream: 'icecream', hardware: 'bag', laundry: 'laundry', sushi: 'bag', falafel: 'bag', shop: 'bag', pharmacy: 'bag',
   phones: 'phone', optics: null, gym: null, music: null, barber: null, lobby: null,
+  tacos: 'bag', diner: 'bag', juice: 'coffee', surf: null, boutique: 'bag', arcade: null, bar: null, cinema: 'coffee',
 };
 // what the shopkeeper holds while working
 const TOOL = {
   pizza: 'dough', cafe: 'tray', grocery: 'apple', deli: null, bagel: 'tray', flowers: 'bouquet', books: 'book',
   icecream: 'icecream', hardware: 'broom', laundry: 'laundry', sushi: null, falafel: null, shop: 'broom', pharmacy: null,
   phones: 'phone', optics: null, gym: 'dumbbell', music: 'guitar', barber: 'scissors', lobby: null,
-  friends: 'magicPencil',
+  friends: 'magicPencil', tacos: 'tray', diner: 'tray', juice: 'tray', surf: null, boutique: null, arcade: null, bar: 'tray', cinema: null,
 };
 const CALLS = {
   pizza: ['Hot slice!', 'Fresh outta the oven!', 'Pizza! Pizza!'],
@@ -48,6 +49,14 @@ const CALLS = {
   barber: ['Snip snip!', 'Hold still...'],
   lobby: ['Good evening.', 'Mind the floor, it\'s wet.', 'Lift\'s on the way.'],
   friends: ['Draw yourself a friend!', 'Magic pencils! One dollar!', 'Lonely? Draw a friend!', 'Every friend comes out different!'],
+  tacos: ['Tacos! Hot tacos!', 'Two for one, tonight!', 'Extra salsa?'],
+  diner: ['Burgers! Shakes!', 'Coffee refill?', 'Pie of the day!'],
+  juice: ['Fresh mango juice!', 'Smoothies! Ice cold!'],
+  surf: ['Surf\'s up!', 'Boards for rent!'],
+  boutique: ['New collection!', 'Try it on, darling!'],
+  arcade: ['New high score!', 'Insert coin!'],
+  bar: ['Happy hour!', 'One more round?', 'Live music tonight!'],
+  cinema: ['Tonight: THE ERASER!', 'Popcorn! Fresh popcorn!'],
 };
 
 // the hero's own look (hair, glasses, muscles) survives a reload
@@ -428,6 +437,32 @@ const SERVICES = {
   ] },
 };
 
+SERVICES.tacos = { verb: 'להזמין טאקו', ask: 'להזמין טאקו', who: 'הטאקרו', greet: 'טאקו פתוח עשרים וארבע שעות! חריף או חריף מאוד?', offers: [['שלושה טאקו (+35 חיים)', 'pita', heal(35, [0.95, 0.7, 0.3], 'טאקו! +35 חיים')]] };
+SERVICES.diner = { verb: 'להיכנס לדיינר', ask: 'להזמין המבורגר', who: 'המלצרית', greet: 'שב איפה שבא לך, מותק. המבורגר ומילקשייק?', offers: [['המבורגר (+45 חיים)', 'sandwich', heal(45, [0.7, 0.42, 0.25], 'המבורגר! +45 חיים')], ['מילקשייק תות (+20 חיים)', 'cup', heal(20, [0.98, 0.66, 0.74])]] };
+SERVICES.juice = { verb: 'לקנות מיץ', ask: 'לקנות מיץ', who: 'המוכר', greet: 'מנגו, אננס, תות — סחוט עכשיו!', offers: [['מיץ מנגו (+20 חיים, ריצה מהירה קצת)', 'cup', (game) => {
+  heal(20, [1.0, 0.7, 0.2], 'מיץ מנגו! +20 חיים')(game);
+  game.player.coffeeT = Math.max(game.player.coffeeT || 0, 15);
+}]] };
+SERVICES.surf = { verb: 'להיכנס לחנות הגלישה', ask: 'לדבר עם המוכר', who: 'הגולש', greet: 'אחי, הגלים היום מושלמים. מה צריך?', offers: [['שרטוט: אופנוע (כמו גלשן, רק על כביש)', 'bike', (game) => giveBlueprint(game, 'bike')], ['שרטוט: בומרנג סרגל', 'boomerang', (game) => giveBlueprint(game, 'boomerang')], ['משקפי שמש', 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), 'קול.')]] };
+SERVICES.boutique = { verb: 'להיכנס לבוטיק', ask: 'לבחור כובע', who: 'המוכרת', greet: 'הקולקציה החדשה הגיעה! משהו לראש?', offers: [
+  ['כובע מצחייה', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'cap', color: pick([[0.95, 0.3, 0.45], [0.2, 0.62, 0.66], [0.98, 0.78, 0.22]]) }), 'כובע חדש!')],
+  ['כובע רחב שוליים', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'fedora', color: [0.94, 0.9, 0.82] }), 'אלגנטי!')],
+  ['כומתה', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'beret', color: [0.62, 0.42, 0.85] }), 'כמו צייר אמיתי!')],
+  ['בלי כובע', null, (game) => heroLook(game, (L) => (L.hat = null), 'בלי כובע')],
+] };
+SERVICES.arcade = { verb: 'להיכנס לארקייד', ask: 'לשחק במכונה', who: 'המכונה', greet: 'INSERT COIN — מכה אחת במכונה וקורה משהו...', offers: [['לשחק (אולי זוכים בשרטוט)', 'note', (game) => {
+  const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun');
+  if (left.length && Math.random() < 0.5) giveBlueprint(game, left[Math.floor(Math.random() * left.length)]);
+  else {
+    heal(10, [0.4, 0.8, 0.95], 'כמעט! לפחות קיבלת סוכרייה. +10 חיים')(game);
+  }
+}]] };
+SERVICES.bar = { verb: 'להיכנס לבר', ask: 'להזמין משקה', who: 'הברמן', greet: 'ערב טוב! משהו זוהר בכוס?', offers: [['קוקטייל ניאון (+20 חיים, הדף קצת מתנדנד)', 'cup', (game) => {
+  heal(20, [0.85, 0.35, 0.85], 'קוקטייל ניאון! +20 חיים')(game);
+  game.inkwell.tipsy = Math.min(1, game.inkwell.tipsy + 0.45);
+}], ['כוס מים (+5 חיים)', 'cup', heal(5, [0.6, 0.8, 0.95], 'מים קרים. +5 חיים')]] };
+SERVICES.cinema = { verb: 'להיכנס לקולנוע', ask: 'לקנות פופקורן', who: 'הקופאית', greet: 'הערב: "המחק" — סרט אימה. פופקורן?', offers: [['פופקורן (+15 חיים)', 'cup', heal(15, [0.98, 0.9, 0.6], 'פופקורן! +15 חיים')]] };
+
 SERVICES.friends = { verb: 'לצייר לעצמך חברה', ask: 'לצייר לעצמך חברה', who: 'המוכרת בדוכן', greet: 'ציירו לעצמכם חברה! עיפרון קסם אחד — ומה שמציירים בו קם לחיים. רק לצייר בעדינות, כן?', offers: [['עיפרון קסם — לצייר חברה (היא תלך איתך)', null, (game, a) => a.heroFriend()]] };
 SERVICES.lobby = { verb: 'להיכנס ללובי', ask: 'לדבר עם השומר', who: 'השומר בלובי', greet: 'ערב טוב. אתה לא גר פה, נכון? ...טוב, מה צריך?', offers: [['לשאול איפה יש שרטוט בסביבה', null, (game) => bookHint(game)], ['כוס מים (+10 חיים)', 'cup', heal(10, [0.6, 0.8, 0.95], 'מים קרים. +10 חיים')]] };
 
@@ -496,7 +531,7 @@ function bookHint(game) {
 
 // ------------------------------------------------------------------ one open shop
 // how many people sit at the tables (or wait on the bench) when you come by
-const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1 };
+const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2 };
 // the new hairdos the barber draws
 const CUTS_M = ['short', 'buzz', 'pompadour', 'spiky', 'curly', 'short', 'pompadour', 'mohawk'];
 const CUTS_F = ['long', 'bun', 'ponytail', 'braids', 'curly', 'beehive', 'long', 'spacebuns'];

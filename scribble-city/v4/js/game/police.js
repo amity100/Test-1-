@@ -271,7 +271,7 @@ export class Police {
       const side = i === 0 ? -1 : 1;
       const x = car.pos.x + fx * -0.3 + rx * side * 1.8;
       const z = car.pos.z + fz * -0.3 + rz * side * 1.8;
-      m.fig.dispose();
+      if (m.fig) m.fig.dispose();
       const e = game.enemies.spawnOfficer(m.type, x, z, m.look, T);
       e.yaw = car.yaw;
     });
