@@ -57,6 +57,7 @@ export class Effects {
 
   boom(x, y, z, radius) {
     this.sprite('fx_boom', x, y + radius * 0.3, z, { size: radius * 1.4, grow: 0.9, life: 0.55 });
+    if (this.game.ambient) this.game.ambient.scare({ x, z }, radius * 6 + 10);
     for (let i = 0; i < 6; i++) {
       this.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', x + (Math.random() - 0.5) * radius, y + Math.random() * radius * 0.6, z + (Math.random() - 0.5) * radius, {
         size: radius * (0.5 + Math.random() * 0.5), grow: 1.2, life: 1.4 + Math.random(), vy: 1.2, alpha: 0.85,

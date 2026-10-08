@@ -165,6 +165,49 @@ export class Audio {
     this.sirGain.gain.setTargetAtTime(this.enabled ? level * level * 0.07 : 0, t, 0.1);
   }
 
+  // rain on the page and wind in the streets, 0..1 each (continuous)
+  weather(rain, wind) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (!this.rainGain) {
+      if (rain < 0.01 && wind < 0.3) return;
+      const loop = (type, freq, q) => {
+        const s = c.createBufferSource();
+        s.buffer = this.noise;
+        s.loop = true;
+        const f = c.createBiquadFilter();
+        f.type = type;
+        f.frequency.value = freq;
+        f.Q.value = q;
+        const g = c.createGain();
+        g.gain.value = 0;
+        s.connect(f).connect(g).connect(this.master);
+        s.start(0, Math.random() * 0.9);
+        return { g, f };
+      };
+      this.rainGain = loop('highpass', 1900, 0.4).g;
+      this.rainLow = loop('bandpass', 650, 0.6).g;
+      const w = loop('lowpass', 500, 1.4);
+      this.windGain = w.g;
+      this.windFilter = w.f;
+    }
+    const t = c.currentTime;
+    this.rainGain.gain.setTargetAtTime(rain * 0.05, t, 0.4);
+    this.rainLow.gain.setTargetAtTime(rain * 0.03, t, 0.4);
+    const wv = Math.max(0, wind - 0.25);
+    this.windGain.gain.setTargetAtTime(wv * 0.09, t, 0.5);
+    this.windFilter.frequency.setTargetAtTime(330 + wv * 520 + Math.sin(t * 0.7) * 110, t, 0.3);
+  }
+
+  // a roll of thunder (vol 0..1, louder when the bolt was close)
+  thunder(vol = 1) {
+    if (!this.ctx || !this.enabled) return;
+    const v = Math.max(0.3, Math.min(1, vol));
+    this.hiss(0.45, 0.2 * v, 1100, 0.5, 'lowpass', 0, 140);
+    this.hiss(2.8, 0.34 * v, 95, 0.7, 'lowpass', 0.05, 45);
+    this.hiss(1.8, 0.22 * v, 170, 0.8, 'lowpass', 0.4, 60);
+  }
+
   setEnabled(on) {
     this.enabled = on;
     if (this.master) this.master.gain.value = on ? 0.55 : 0;

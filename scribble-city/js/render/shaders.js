@@ -23,6 +23,32 @@ uniform float uHorizonY;    // device px from the bottom where the horizon sits
 uniform sampler2D uObjMask; // per prop (id): r = how far it has been rubbed out (1 = gone)
 uniform vec4 uWErase[16];   // rubbed-out spots near the camera: xyz centre, w radius
 uniform float uWEraseN;
+// ---- the magic world (uMagic 0 = the original look, untouched)
+uniform float uMagic;
+uniform float uNight;       // 0 day .. 1 night: the page goes dark and the ink turns to gel
+uniform float uDusk;        // sunset / sunrise
+uniform vec3 uSkyPaper;     // the page where you stand (sky and fog)
+uniform vec4 uPage;         // its ruled lines, grid, margin, halftone dots
+uniform vec3 uSkyHorizon;
+uniform vec3 uSkyMid;
+uniform vec3 uSkyZenith;
+uniform vec3 uSunDisc;
+uniform vec3 uMoonDir;
+uniform float uStars;
+uniform mat4 uInvViewProj;
+uniform sampler2D uLightMap;
+uniform vec4 uLightRect;
+uniform sampler2D uStyleTex;     // per drawing medium: paper, ink, line, fill, night (see districts.js)
+uniform sampler2D uDistrictTex;  // 5 x 5 blocks -> medium
+uniform float uWet;
+uniform float uRain;
+uniform float uOvercast;
+uniform float uMist;
+uniform float uRainbow;
+uniform vec3 uWind;
+uniform float uLightning;
+uniform vec4 uReveal;
+uniform vec4 uCarLight;
 
 float n2(vec2 p) { return texture2D(uNoise, (p + 0.5) / 256.0).r; }
 float n2b(vec2 p) { return texture2D(uNoise, (p + 0.5) / 256.0).g; }
@@ -128,8 +154,137 @@ vec3 skyGlow(vec2 fc, vec3 col) {
   return col;
 }
 
+// ------------------------------------------------------------------ the magic world
+// Which artist drew the block at xz: 0 is the classic ballpoint page (and every street).
+float districtAt(vec2 xz) {
+  if (uMagic < 0.5) return 0.0;
+  float bx = floor((xz.x + 210.0) / 84.0);
+  float bz = floor((xz.y + 145.0) / 58.0);
+  if (bx < 0.0 || bx > 4.0 || bz < 0.0 || bz > 4.0) return 0.0;
+  float lx = xz.x + 210.0 - bx * 84.0;
+  float lz = xz.y + 145.0 - bz * 58.0;
+  if (lx < 7.0 || lx > 77.0 || lz < 5.0 || lz > 53.0) return 0.0;
+  return floor(texelFetch(uDistrictTex, ivec2(int(bx), int(bz)), 0).r * 255.0 + 0.5);
+}
+
+// rows: 0 paper/tooth, 1 ink/softness, 2 line width/wobble/overshoot/pressure,
+// 3 line alpha/neon/fill saturation/fill value, 4 night ink/page rules, 5 night page
+vec4 styleP(float st, int row) { return texelFetch(uStyleTex, ivec2(row, int(st + 0.5)), 0); }
+
+vec3 saturateC(vec3 c, float k) {
+  float l = lum3(c);
+  return clamp(vec3(l) + (c - vec3(l)) * k, 0.0, 1.0);
+}
+
+// gel pens on a black page
+vec3 neonInk(float seed) {
+  float h = fract(seed * 0.618);
+  if (h < 0.25) return vec3(1.0, 0.36, 0.78);
+  if (h < 0.5) return vec3(0.32, 0.95, 1.0);
+  if (h < 0.75) return vec3(0.62, 1.0, 0.36);
+  return vec3(1.0, 0.9, 0.36);
+}
+
+// warm light pooled under the street lamps and in front of the shop windows (night)
+vec3 lampLight(vec3 wp) {
+  vec2 uv = (wp.xz - uLightRect.xy) * uLightRect.zw;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return vec3(0.0);
+  return texture2D(uLightMap, uv).rgb * (1.0 - smoothstep(0.6, 7.5, wp.y));
+}
+
+// the headlights of the car you drive: a cone on the road ahead of it
+float carLight(vec3 wp) {
+  if (uCarLight.w < 0.5) return 0.0;
+  vec2 d = wp.xz - uCarLight.xy;
+  vec2 f = vec2(sin(uCarLight.z), cos(uCarLight.z));
+  float along = dot(d, f);
+  float side = abs(dot(d, vec2(-f.y, f.x)));
+  float cone = (1.0 - smoothstep(along * 0.32 + 0.4, along * 0.45 + 1.0, side)) * smoothstep(1.2, 3.5, along) * (1.0 - smoothstep(13.0, 26.0, along));
+  return cone * (1.0 - smoothstep(0.3, 2.5, wp.y));
+}
+
+// A pool of lamp light on the night page: the day drawing shows through, in the lamp's colour.
+vec3 poolLight(vec3 nc, vec3 dayCol, vec3 L) {
+  float m = max(L.r, max(L.g, L.b));
+  if (m < 0.004) return nc;
+  float k = clamp(m * 1.1, 0.0, 0.86);
+  return mix(nc, dayCol * mix(vec3(1.0), L / m, 0.5), k);
+}
+
+// Night: the drawing flips onto a dark page. The paper becomes the night page, the dark pen
+// becomes a light gel pen, and the colours keep their hue, darker.
+vec3 nightFlipOn(vec3 col, vec3 paperD, vec3 inkD, vec3 gel, vec3 pageN) {
+  vec3 ax = paperD - inkD;
+  float t = clamp(dot(col - inkD, ax) / max(dot(ax, ax), 1e-4), 0.0, 1.0);
+  vec3 chroma = col - (inkD + ax * t);
+  // only the pen itself turns to light; washes and mid tones sink into the dark page
+  return mix(pageN, gel, smoothstep(0.4, 0.9, 1.0 - t)) + chroma * 0.55;
+}
+vec3 nightFlip(vec3 col, vec3 paperD, vec3 inkD, vec3 gel) { return nightFlipOn(col, paperD, inkD, gel, uSkyPaper); }
+
+// The page behind the city in the magic world: the paper of the district you stand in (or the
+// dark night page), its rules, and the sky in coloured pencil.
+vec3 magicPage(vec2 fc) {
+  vec2 p = fc / uPR;
+  float grain = n2(p * 0.85) * 0.6 + n2(p * 0.19 + 37.0) * 0.4;
+  vec3 col = uSkyPaper * (0.955 + 0.06 * grain) + vec3(0.02, 0.022, 0.03) * grain * uNight;
+  float H = uResolution.y / uPR;
+  float W = uResolution.x / uPR;
+  float y = H - p.y;
+  if (uPage.x > 0.01 && y > 58.0) {
+    float spacing = 34.0;
+    float d = abs(mod(y - 58.0 + spacing * 0.5, spacing) - spacing * 0.5);
+    float line = (1.0 - smoothstep(0.3, 1.2, d)) * (0.6 + 0.4 * n2(vec2(p.x * 0.04, floor((y - 58.0) / spacing) * 7.0)));
+    col = mix(col, mix(uRule, vec3(0.3, 0.42, 0.85), uNight), line * mix(0.5, 0.3, uNight) * uPage.x);
+  }
+  if (uPage.y > 0.01) {
+    // engineering paper: a fine grid and a heavier one every five squares
+    vec2 gd = abs(fract(p / 18.0 + 0.5) - 0.5) * 18.0;
+    vec2 gd5 = abs(fract(p / 90.0 + 0.5) - 0.5) * 90.0;
+    float gl = max((1.0 - smoothstep(0.25, 0.9, min(gd.x, gd.y))) * 0.2, (1.0 - smoothstep(0.3, 1.1, min(gd5.x, gd5.y))) * 0.36);
+    col = mix(col, mix(vec3(0.5, 0.72, 0.88), vec3(0.45, 0.62, 0.95), uNight), gl * uPage.y);
+  }
+  if (uPage.z > 0.01) {
+    vec3 mc = mix(uMarginCol, vec3(0.75, 0.3, 0.5), uNight);
+    col = mix(col, mc, (1.0 - smoothstep(0.35, 1.3, abs(p.x - (W - 64.0)))) * 0.55 * uPage.z);
+    col = mix(col, mc, (1.0 - smoothstep(0.35, 1.0, abs(p.x - (W - 69.0)))) * 0.25 * uPage.z);
+  }
+  if (uPage.w > 0.01) {
+    // a comic page: faint halftone
+    vec2 c = fract(p / 7.0) - 0.5;
+    col = mix(col, col * 0.88, (1.0 - smoothstep(0.18, 0.26, length(c))) * uPage.w * 0.55);
+  }
+  // the sky in coloured pencil: warm by the horizon (a burning band at sunset), cool above
+  float Hd = uResolution.y;
+  float hy = (fc.y - uHorizonY) / Hd;
+  float st = n2(vec2((p.x * 0.35 + p.y * 0.9) * 0.9, p.y * 0.12 - p.x * 0.05)) * 0.6 + n2(vec2(p.x * 1.7 + p.y * 0.6, p.y * 2.3)) * 0.4;
+  float strokes = smoothstep(0.26, 0.62, st);
+  float sunD = uSunScreen.z > 0.5 ? length((fc - uSunScreen.xy) / Hd) : 9.0;
+  float sunBoost = exp(-sunD * 2.4) * uSunScreen.z * (1.0 - uOvercast);
+  float band = exp(-max(hy, 0.0) * 6.0) * smoothstep(-0.3, 0.0, hy);
+  // a gradient in three pencils: horizon, middle, top (a burning sunset: orange, pink, violet)
+  float m0 = mix(0.16, 0.24, uDusk);
+  vec3 skyC = mix(uSkyHorizon, uSkyMid, smoothstep(0.0, m0, hy + (strokes - 0.5) * 0.04));
+  skyC = mix(skyC, uSkyZenith, smoothstep(m0, 0.78, hy + (strokes - 0.5) * 0.05));
+  skyC = mix(skyC, uSkyHorizon * vec3(1.0, 0.96, 0.86), clamp(sunBoost * 0.8, 0.0, 1.0));
+  float cover = smoothstep(-0.3, 0.0, hy) * mix(0.48 + 0.4 * sunBoost, 0.95, uDusk) * (1.0 - 0.6 * uOvercast);
+  col = mix(col, col * skyC, clamp(cover, 0.0, 1.0) * (0.5 + 0.5 * strokes));
+  // the city's lights glow on the horizon at night
+  col += vec3(0.24, 0.13, 0.3) * band * uNight * (0.4 + 0.6 * strokes) * 0.5 * (1.0 - 0.5 * uOvercast);
+  // overcast: grey pencil over the page
+  col = mix(col, mix(col, vec3(0.6, 0.62, 0.68) * (1.0 - 0.78 * uNight), 0.5 + 0.3 * strokes), uOvercast * 0.7);
+  // mist: graphite smudged across the page
+  if (uMist > 0.01) {
+    float sm = n2(vec2(p.x * 0.004 + uTime * 0.012, p.y * 0.03)) * 0.6 + n2(vec2(p.x * 0.011, p.y * 0.07) + 9.0) * 0.4;
+    col = mix(col, mix(col, vec3(0.74, 0.75, 0.78) * (1.0 - 0.72 * uNight), 0.65), uMist * (0.35 + 0.65 * smoothstep(0.3, 0.72, sm)));
+  }
+  col = mix(col, vec3(0.9, 0.92, 1.0), uLightning * 0.5);
+  return col;
+}
+
 // The notebook page: warm paper grain, blue ruled lines, red margin on the right (Hebrew notebook).
 vec3 paperAt(vec2 fc) {
+  if (uMagic > 0.5) return magicPage(fc);
   vec2 p = fc / uPR;
   float grain = n2(p * 0.85) * 0.6 + n2(p * 0.19 + 37.0) * 0.4;
   vec3 col = uPaper * (0.955 + 0.06 * grain);
@@ -183,6 +338,7 @@ varying float vSun;
 varying float vObj;
 varying float vGone;
 varying vec3 vWP;
+varying float vStyle;
 
 ${'' /* COMMON is prepended in JS */}
 
@@ -200,10 +356,23 @@ void main() {
 
   vec3 A = iA;
   vec3 B = iB;
+  // the artist of this district (city strokes only; people and effects keep their own pen)
+  vStyle = iObj > -0.5 ? districtAt((A.xz + B.xz) * 0.5) : 0.0;
+  vec4 SC = vStyle > 0.5 ? styleP(vStyle, 2) : vec4(1.0);
+  if (uReveal.w > 0.5 && iObj > -0.5) {
+    // the city drawing itself: each stroke is drawn out as the wave passes it
+    float dc = length((A.xz + B.xz) * 0.5 - uReveal.xy);
+    float k = clamp((uReveal.z - dc) / 16.0, 0.0, 1.0);
+    if (k <= 0.001) {
+      gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+      return;
+    }
+    B = mix(A, B, k);
+  }
   vec3 D = B - A;
   float L = length(D);
   vec3 dir = L > 1e-5 ? D / L : vec3(1.0, 0.0, 0.0);
-  float os = iPar.z;
+  float os = iPar.z * SC.z;
   float e0 = os * (hash11(seed * 1.17 + 0.31) * 1.25 - 0.2) + os * 0.2 * (hash11(bs * 1.7) - 0.5) * uBoilAmp;
   float e1 = os * (hash11(seed * 2.31 + 0.77) * 1.25 - 0.2) + os * 0.2 * (hash11(bs * 2.9) - 0.5) * uBoilAmp;
   A -= dir * e0;
@@ -212,7 +381,7 @@ void main() {
   vec3 up = abs(dir.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
   vec3 n1 = normalize(cross(dir, up));
   vec3 n2v = cross(dir, n1);
-  float amp = iPar.w * min(L + e0 + e1, 30.0);
+  float amp = iPar.w * SC.y * min(L + e0 + e1, 30.0);
 
   vec3 vA = (modelViewMatrix * vec4(A, 1.0)).xyz;
   vec3 vB = (modelViewMatrix * vec4(B, 1.0)).xyz;
@@ -251,9 +420,14 @@ void main() {
   vec2 sdir = sl > 1e-4 ? sd / sl : vec2(1.0, 0.0);
   vec2 snrm = vec2(-sdir.y, sdir.x);
 
-  float w = iPar.x * uWidthScale * uPR;
+  float w = iPar.x * uWidthScale * uPR * SC.x;
   float pressure = (0.78 + 0.44 * hash11(seed * 11.3)) * (0.86 + 0.28 * sin(t * 4.0 + seed * 3.0));
   float taper = mix(0.4, 1.0, smoothstep(0.0, 0.16, t) * smoothstep(1.0, 0.84, t));
+  // a technical pen draws an even line, start to end
+  if (SC.w < 0.5) {
+    pressure = 0.95;
+    taper = 1.0;
+  }
   w *= pressure * taper;
   w *= mix(1.0, 0.62, smoothstep(35.0, 260.0, dist));
   vSun = 1.0;
@@ -286,6 +460,7 @@ varying float vSun;
 varying float vObj;
 varying float vGone;
 varying vec3 vWP;
+varying float vStyle;
 
 void main() {
   if (vGone > 0.0 && n2(gl_FragCoord.xy / uPR * 0.45 + vSeed) < vGone * 1.1) discard;
@@ -301,9 +476,30 @@ void main() {
   a *= 1.0 - 0.5 * step(0.955, hash11(k + vSeed * 19.3));
   a *= vCol.a;
   vec3 lc = vCol.rgb;
+  float inkish = 1.0 - smoothstep(0.24, 0.42, lum3(lc)); // the dark pen, not a coloured stroke
+  if (vStyle > 0.5) {
+    // another artist's medium: their ink, grainy where it is chalk or crayon
+    vec4 SB = styleP(vStyle, 1);
+    vec4 SD = styleP(vStyle, 3);
+    vec3 ink = SD.y > 0.5 ? neonInk(vSeed) : SB.rgb;
+    lc = mix(lc, ink, inkish);
+    if (SB.w > 0.01) {
+      float tooth = n2(p * 0.9 + vSeed * 7.0) * 0.6 + n2(p * 2.7 + vSeed) * 0.4;
+      a *= mix(1.0, smoothstep(0.12, 0.55, tooth + 0.2 * (1.0 - SB.w)), SB.w);
+    }
+    a *= SD.x;
+  }
   if (uLook > 0.5) {
-    lc = mix(lc * vec3(0.95, 0.97, 1.08), lc * vec3(1.3, 1.05, 0.78), vSun);
+    lc = mix(lc * vec3(0.95, 0.97, 1.08), lc * vec3(1.3, 1.05, 0.78), vSun * (1.0 - uNight));
     a = min(1.0, a * 1.12) * (1.0 - edgeVig(gl_FragCoord.xy) * 0.25);
+  }
+  if (uMagic > 0.5 && uNight > 0.001) {
+    // night: the dark pen becomes a light gel pen; lamps, bulbs and neon keep glowing
+    vec3 gel = vStyle > 0.5 ? styleP(vStyle, 4).rgb : vec3(0.86, 0.89, 1.0);
+    if (vStyle > 0.5 && styleP(vStyle, 3).y > 0.5) gel = lc;
+    vec3 nl = mix(saturateC(lc, 1.25) * 1.3 + 0.04, gel, inkish);
+    lc = mix(lc, nl, uNight);
+    a *= mix(1.0, mix(1.0, 0.82, inkish), uNight);
   }
   float f = fogFactor(vDist);
   vec3 col = mix(lc, paperAt(gl_FragCoord.xy), f);
@@ -439,6 +635,16 @@ float pxLine(float sd, float px, float wpx) {
   return 1.0 - smoothstep(wpx * 0.5 - 0.5, wpx * 0.5 + 0.5, abs(sd) / px);
 }
 
+// Ben-Day dots: a printed halftone screen at 45 degrees, the dots growing with k; the screen
+// keeps about 7 px between dots on the page
+float benDay(vec2 p, float k, float mpp) {
+  float sp = 0.04 * exp2(floor(log2(max(mpp * 7.0 * uPR, 1e-4) / 0.04)));
+  vec2 q = vec2(p.x + p.y, p.y - p.x) * 0.7071 / sp;
+  float r = sqrt(clamp(k, 0.0, 1.0)) * 0.56;
+  float d = 1.0 - smoothstep(r - 0.08, r + 0.08, length(fract(q) - 0.5));
+  return d * (1.0 - smoothstep(0.3, 0.6, mpp / sp));
+}
+
 void main() {
   if (vGone > 0.0) {
     // the whole prop being rubbed out: crumbles away in eraser-shaped patches
@@ -451,6 +657,17 @@ void main() {
   vec2 uv = vUV;
   vec3 paper = uPaper;
   vec3 base = vColor;
+  // the artist who drew this block (0 = the classic ballpoint page)
+  float ds = districtAt(vWPos.xz);
+  vec3 inkC = uInk;
+  vec3 emis = vec3(0.0); // light of its own at night: windows, lamps, shop fronts
+  float nightLess = 1.0 - uNight * 0.75 * uMagic; // fewer ink strokes at night: the moon draws in light
+  if (ds > 0.5) {
+    vec4 SD = styleP(ds, 3);
+    paper = styleP(ds, 0).rgb;
+    inkC = styleP(ds, 1).rgb;
+    base = saturateC(base, SD.z) * SD.w;
+  }
   float colorful = clamp(length(base - paper) * 2.5, 0.0, 1.0);
 
   float ndl = dot(N, uSunDir);
@@ -492,6 +709,96 @@ void main() {
       col = mix(col, col * vec3(1.0, 0.86, 0.66), pw * lightAmt * 0.22);
       col = mix(col, vec3(0.5, 0.52, 0.78), pw * (1.0 - lightAmt) * 0.2 * step(0.35, shade));
     }
+    float tooth = 0.5;
+    float lit = uLook > 0.5 ? lightAmt : light;
+    if (ds > 0.5) {
+      tooth = n2(uv * 13.0 + seed) * 0.55 + n2(uv * 41.0 - seed) * 0.45;
+      tooth = mix(tooth, 0.5, smoothstep(0.004, 0.02, px));
+      float ed = 9.0;
+      if (fs.x > 0.0) ed = min(min(uv.x, fs.x - uv.x), fs.y - uv.y);
+      if (ds < 1.5) {
+        // charcoal and red chalk on toned paper: sanguine in the middle tones, broad strokes of
+        // white chalk where the light falls (the charcoal itself goes on in the shade, below)
+        vec3 sang = mix(vec3(0.6, 0.25, 0.16), vec3(0.8, 0.47, 0.33), lum3(base));
+        float c = smoothstep(0.3, 0.72, tooth + (cov - 0.5) * 0.6);
+        col = mix(paper, sang, c * mix(0.8, 0.42, lit) * mix(0.4, 1.0, colorful));
+        float wc = hatchPage(uv, 9.0, 1.1 + hash11(seed) * 0.35, seed + 2.0, 3.2);
+        float wl = smoothstep(0.3, 0.85, lit) * smoothstep(0.3, 0.62, tooth + 0.1);
+        col = mix(col, vec3(0.995, 0.985, 0.955), clamp(wc * 0.9 + 0.12, 0.0, 1.0) * wl * 0.8);
+      } else if (ds < 2.5) {
+        // a technical drawing: flat light washes in three tones, on drafting paper
+        float tl = lit > 0.62 ? 1.0 : lit > 0.22 ? 0.86 : 0.72;
+        col = mix(paper, mix(vec3(0.7, 0.8, 0.94), base, 0.25), 0.4) * mix(0.93, 1.0, tl);
+        vec2 gd = abs(fract(uv + 0.5) - 0.5);
+        float gl = 1.0 - smoothstep(0.0, 1.2 * px, min(gd.x, gd.y));
+        col = mix(col, vec3(0.5, 0.68, 0.9), gl * 0.28 * (1.0 - smoothstep(0.03, 0.1, px)));
+      } else if (ds < 3.5) {
+        // watercolour: a wash that pools along its edges, granulates, blooms, and skips the paper
+        float bl = n2(uv * 0.35 + seed * 3.0) * 0.6 + n2(uv * 1.1 - seed) * 0.4;
+        float gran = mix(n2(uv * 37.0 + seed * 9.0), 0.5, smoothstep(0.004, 0.02, px));
+        float edge = 1.0 - smoothstep(0.05, 0.5, ed);
+        float wash = clamp(0.45 + 0.3 * bl + 0.28 * edge + (gran - 0.5) * 0.2, 0.0, 1.0);
+        col = mix(paper, base, wash * mix(0.55, 1.0, colorful));
+        col *= 1.0 - edge * 0.1;
+        col = mix(col, paper, smoothstep(0.8, 0.88, n2(uv * 2.3 + seed * 5.0)) * 0.85 * (1.0 - edge));
+        col = mix(col, col * vec3(0.8, 0.78, 0.93), (1.0 - lit) * 0.6);
+      } else if (ds < 4.5) {
+        // glowing gel pens on a black page: dark faces, neon scribbles where the light falls
+        vec3 ne = neonInk(seed * 1.7 + floor(uv.y * 0.25));
+        float sc = pencil(uv * 1.6, ang + 0.4, seed + 5.0, px);
+        col = paper + base * 0.07;
+        col = mix(col, ne, sc * (0.15 + 0.35 * lit));
+      } else if (ds < 5.5) {
+        // spray paint over concrete: soft overspray, speckles, drips running down
+        float spray = smoothstep(0.25, 0.75, n2(uv * 0.6 + seed) * 0.7 + tooth * 0.3);
+        col = mix(paper, base, (0.5 + 0.45 * spray) * mix(0.4, 1.0, colorful));
+        col = mix(col, base * 0.78, step(0.82, mix(n2(uv * 61.0 + seed), 0.0, smoothstep(0.01, 0.03, px))) * 0.4);
+        float dc = floor(uv.x / 0.33);
+        float dr = hash11(dc + seed * 3.1);
+        float top = 1.2 + dr * 3.0;
+        float dripX = abs(fract(uv.x / 0.33) - 0.5) * 0.33;
+        float drip = step(0.82, dr) * (1.0 - smoothstep(0.012, 0.02, dripX)) * step(uv.y, top) * step(top - 0.4 - dr * 1.6, uv.y);
+        col = mix(col, base * 0.6, drip * 0.8 * colorful);
+        if (abs(N.y) < 0.3 && fs.x > 0.0) {
+          // tags sprayed along the bottom of the walls
+          float tx = floor(uv.x / 4.0);
+          float ht = hash11(tx * 7.7 + seed);
+          float yc = 1.15 + 0.35 * sin(uv.x * 2.1 + ht * 30.0) + 0.16 * sin(uv.x * 6.7 + seed);
+          float tg = abs(uv.y - yc);
+          float on = step(0.45, ht) * step(0.6, fract(uv.x / 4.0)) * (1.0 - step(0.97, fract(uv.x / 4.0)));
+          vec3 tc = neonInk(ht * 9.0) * 0.85;
+          col = mix(col, inkC, (1.0 - smoothstep(0.07, 0.09, tg)) * on);
+          col = mix(col, tc, (1.0 - smoothstep(0.045, 0.06, tg)) * on);
+        }
+      } else if (ds < 6.5) {
+        // comic: flat printed colours in two tones of light
+        vec3 b = saturateC(base, 1.15);
+        col = mix(b * 0.74, b, step(0.42, lit));
+        col = mix(paper, col, mix(0.3, 1.0, colorful));
+      } else if (ds < 7.5) {
+        // wax crayon: bold colour scribbled back and forth in two directions, skipping over the tooth
+        vec2 d1 = vec2(cos(ang), sin(ang));
+        float a1 = dot(uv, d1) * 5.0 + 0.7 * n2(uv * 0.8 + seed);
+        float z1 = abs(fract(a1 + 0.3 * sin(dot(uv, vec2(-d1.y, d1.x)) * 2.3 + seed)) - 0.5);
+        vec2 d2 = vec2(cos(ang + 1.25), sin(ang + 1.25));
+        float z2 = abs(fract(dot(uv, d2) * 3.6 + 0.6 * n2(uv * 0.5 - seed)) - 0.5);
+        float sc = max(1.0 - smoothstep(0.16, 0.42, z1), (1.0 - smoothstep(0.2, 0.45, z2)) * 0.75);
+        sc = mix(sc, 0.72, smoothstep(0.01, 0.04, px));
+        float wax = smoothstep(0.3, 0.72, tooth * 0.55 + sc * 0.62);
+        col = mix(paper, base, wax * 0.95 * mix(0.45, 1.0, colorful));
+      } else {
+        // graphite: a study in grey, blended smooth with a stump, lifted out with an eraser where
+        // the light falls; a breath of the local colour
+        float g = lum3(base);
+        float tone = mix(0.9, 0.44, smoothstep(0.15, 0.95, 1.0 - g));
+        float sheen = pencil(uv * 1.2, ang, seed, px);
+        col = mix(paper, vec3(tone) * vec3(0.97, 0.98, 1.02), 0.5 + 0.42 * sheen);
+        col = mix(col, base, 0.14 * colorful);
+        col *= mix(0.74, 1.0, lit);
+        float lift = hatchPage(uv, 15.0, ang + 0.25, seed + 9.0, 2.4);
+        col = mix(col, paper, lift * smoothstep(0.45, 0.9, lit) * 0.55);
+      }
+    }
 
     if (style >= 0.5 && style < 5.5) {
       float cellW = vFace.y;
@@ -530,13 +837,14 @@ void main() {
         float kind = h;
         vec3 glass = mix(paper, vec3(0.66, 0.76, 0.88), 0.85);
         if (uLook > 0.5) glass = mix(mix(vec3(0.6, 0.71, 0.9), vec3(1.0, 0.8, 0.6), lightAmt), paper, 0.15);
+        if (ds > 0.5) glass = ds > 3.5 && ds < 4.5 ? paper * 1.6 + neonInk(seed) * 0.12 : mix(paper, mix(glass, inkC, 0.2), 0.75);
         vec3 fillC = col;
         if (kind < 0.36) {
           // dark interior: dense cross-hatching in ink
           float hsp = 0.11 * exp2(ceil(log2(max(1.0, 4.5 * px / 0.11))));
           float d1 = hatchLayer(uv, hsp, 0.78, seed + h * 9.0, 1.0);
           float d2 = hatchLayer(uv, hsp, -0.78, seed + h * 5.0, 1.0);
-          fillC = mix(col, uInk, clamp(max(d1, d2 * step(0.18, kind)), 0.0, 1.0) * 0.85 * detail + (1.0 - detail) * 0.35);
+          fillC = mix(col, inkC, clamp(max(d1, d2 * step(0.18, kind)), 0.0, 1.0) * 0.85 * detail + (1.0 - detail) * 0.35);
           if (uLook > 0.5 && h2 > 0.55 && lightAmt < 0.35) {
             // somebody is home: a warm lit window in the shade
             float wl = pencil(uv * 1.4 + c * 3.0, 1.1, seed + c.y, px);
@@ -552,15 +860,34 @@ void main() {
             float shm = (1.0 - smoothstep(0.012, 0.035, sh)) * step(0.5, lq.y) * step(lq.x, 0.6) * step(0.1, lq.x);
             float sh2 = abs((lq.x - lq.y * 0.9) - 0.42);
             shm += (1.0 - smoothstep(0.01, 0.03, sh2)) * step(0.62, lq.y) * step(lq.x, 0.66) * step(0.32, lq.x);
-            fillC = mix(fillC, uInk, clamp(shm, 0.0, 1.0) * 0.7 * detail * step(0.45, h2));
+            fillC = mix(fillC, inkC, clamp(shm, 0.0, 1.0) * 0.7 * detail * step(0.45, h2));
           }
         } else {
           // blank glass with one diagonal stroke
           vec2 lq = (q + hm) / max(hm * 2.0, 1e-3);
           float sh = abs((lq.x - lq.y) - 0.0);
-          fillC = mix(col, uInk, (1.0 - smoothstep(0.01, 0.03, sh)) * 0.6 * detail * step(0.2, lq.y) * step(lq.y, 0.8));
+          fillC = mix(col, inkC, (1.0 - smoothstep(0.01, 0.03, sh)) * 0.6 * detail * step(0.2, lq.y) * step(lq.y, 0.8));
         }
         col = mix(col, fillC, inside * mix(0.6, 1.0, detail));
+        if (uMagic > 0.5 && uNight + uDusk > 0.001) {
+          // evening and night: the lights are on in most windows, somebody stands in a few
+          float hl = hash12(c * 1.37 + seed * 2.9 + 0.7);
+          float lw = step(hl, 0.6);
+          vec3 wc = mix(vec3(1.0, 0.7, 0.3), vec3(1.0, 0.88, 0.55), hash12(c + seed * 1.3));
+          if (hl < 0.07) wc = vec3(0.5, 0.72, 1.0) * (0.72 + 0.28 * sin(uTime * 9.0 + c.x * 3.1) * sin(uTime * 2.3 + c.y));
+          vec2 lq = (q + hm) / max(hm * 2.0, vec2(1e-3));
+          float asp = hm.x / max(hm.y, 1e-3);
+          float glowIn = 0.8 + 0.25 * (1.0 - lq.y) + 0.15 * (n2(uv * 2.0 + c) - 0.5);
+          float sil = 0.0;
+          if (hash12(c + seed * 5.1) < 0.2 && !curtain) {
+            float hx = 0.3 + 0.4 * hash12(c + 2.3);
+            float headS = 1.0 - smoothstep(0.1, 0.13, length((lq - vec2(hx, 0.52)) * vec2(asp, 1.0)));
+            float body = 1.0 - smoothstep(-0.01, 0.02, sdBox((lq - vec2(hx, 0.08)) * vec2(asp, 1.0), vec2(0.22, 0.3)));
+            sil = max(headS, body);
+          }
+          col = mix(col, paper, inside * uNight);
+          emis += wc * lw * inside * glowIn * (1.0 - sil * 0.92) * (curtain ? 0.55 : 1.0);
+        }
         // outline (doubled stroke for a sketchy look) + panes
         float ol = pxLine(sd, px, 1.4);
         ol = max(ol, pxLine(sd + 0.045 * (h2 - 0.3), px, 1.0) * 0.7);
@@ -578,27 +905,27 @@ void main() {
           float band = pxLine((f.y - 0.04) * cellH, px, 1.2);
           ol = max(ol, band * 0.8);
         }
-        col = mix(col, uInk, ol * 0.88 * detail);
-        col = mix(col, mix(col, uInk, 0.18), (1.0 - detail) * 0.7);
+        col = mix(col, inkC, ol * 0.88 * detail);
+        col = mix(col, mix(col, inkC, 0.18), (1.0 - detail) * 0.7);
         if (style > 4.5 && detail > 0.01) {
           // a few brick marks
           vec2 bq = (f - vec2(0.18, 0.15)) * vec2(cellW, cellH);
           float bsd = sdBox(bq, vec2(0.18, 0.07));
-          col = mix(col, uInk, pxLine(bsd, px, 1.0) * step(0.7, h2) * 0.55 * detail);
+          col = mix(col, inkC, pxLine(bsd, px, 1.0) * step(0.7, h2) * 0.55 * detail);
           vec2 bq2 = (f - vec2(0.8, 0.86)) * vec2(cellW, cellH);
           float bsd2 = min(sdBox(bq2, vec2(0.16, 0.07)), sdBox(bq2 - vec2(0.2, -0.17), vec2(0.16, 0.07)));
-          col = mix(col, uInk, pxLine(bsd2, px, 1.0) * step(0.62, h) * 0.55 * detail);
+          col = mix(col, inkC, pxLine(bsd2, px, 1.0) * step(0.62, h) * 0.55 * detail);
         }
       }
     } else if (style > 5.5 && style < 6.5) {
       // roof: stipple
       float st = step(0.86, n2(vWPos.xz * 3.1)) * 0.35;
-      col = mix(col, uInk, st * smoothstep(0.08, 0.02, px));
+      col = mix(col, inkC, st * smoothstep(0.08, 0.02, px));
     } else if (style > 6.5 && style < 7.5) {
       // awning stripes
       float sx = fract(uv.x / 0.55);
       col = mix(col, paper, step(0.5, sx) * 0.8);
-      col = mix(col, uInk, pxLine((sx - 0.5) * 0.55, px, 1.0) * 0.5);
+      col = mix(col, inkC, pxLine((sx - 0.5) * 0.55, px, 1.0) * 0.5);
     }
 
     // pen hatching on shaded faces
@@ -612,8 +939,46 @@ void main() {
     ink = max(ink, h3 * smoothstep(0.88, 0.95, shade) * 0.7);
     float ao = (1.0 - smoothstep(0.0, 1.4, vWPos.y)) * step(0.5, style) * step(style, 5.5);
     ink = max(ink, h2l * ao * 0.55);
-    if (uLook < 0.5) {
-      col = mix(col, uInk, ink * 0.8);
+    float s4m = (shade + ao * 0.35) * (1.0 - step(0.7, N.y) * 0.6);
+    if (ds > 0.5) {
+      if (ds < 1.5) {
+        // charcoal pressed into the shade: velvet dark, smudged with a finger, the paper's tooth
+        // showing through; broad strokes of the stick over it, darkest where the wall meets the ground
+        float smudge = n2(uv * 0.21 + seed * 3.0) * 0.6 + n2(uv * 0.83 - seed) * 0.4;
+        float dens = smoothstep(0.28, 0.8, s4m) * (0.55 + 0.5 * smudge);
+        float grain = smoothstep(0.2, 0.62, tooth + dens * 0.45);
+        col = mix(col, inkC, clamp(dens * mix(0.5, 0.95, grain), 0.0, 0.94) * nightLess);
+        float stick = hatchPage(uv, 13.0, 0.78 + hash11(seed * 1.3) * 0.3, seed, 3.4);
+        col = mix(col, inkC, stick * smoothstep(0.38, 0.7, s4m) * 0.42 * (0.45 + tooth) * nightLess);
+        col = mix(col, inkC, ao * (0.35 + 0.3 * smudge) * nightLess);
+      } else if (ds < 2.5) {
+        // ruled hatching: even, precise, at 45 degrees, only on the faces turned from the light
+        float rs = 0.05 * exp2(floor(log2(max(gPx * 12.0 * uPR, 1e-4) / 0.05)));
+        float rc = dot(uv, vec2(0.7071)) / rs;
+        float rh = lineMask(rc, gPx / rs, 1.0) * (1.0 - smoothstep(0.25, 0.5, gPx / rs));
+        col = mix(col, inkC, rh * smoothstep(0.55, 0.7, s4m) * 0.5 * nightLess);
+      } else if (ds < 3.5 || (ds > 3.5 && ds < 4.5)) {
+        // watercolour and gel: no pen hatching
+      } else if (ds < 6.5 && ds > 5.5) {
+        // Ben-Day dots in the shadows, fixed to the wall like printed paper
+        float dot2 = benDay(uv, (s4m - 0.25) * 1.5, gPx);
+        col = mix(col, mix(inkC, col, 0.45), dot2 * 0.85 * nightLess);
+      } else if (ds < 7.5 && ds > 6.5) {
+        // crayon: the shade scribbled over in a darker, cooler crayon, broken up by the tooth
+        float sc2 = hatchPage(uv, 8.0, 0.55 + hash11(seed) * 0.4, seed + 4.0, 3.4);
+        sc2 = max(sc2, hatchPage(uv, 11.0, -0.4, seed + 8.0, 2.6) * smoothstep(0.7, 0.9, s4m));
+        sc2 *= smoothstep(0.25, 0.6, tooth + 0.15);
+        col = mix(col, col * vec3(0.6, 0.54, 0.72), sc2 * smoothstep(0.4, 0.68, s4m) * 0.9 * nightLess);
+      } else {
+        // spray and graphite: the pen hatching, in their own ink
+        float h1p = hatchPage(uv, 7.0, a0, seed, ds < 5.5 ? 1.8 : 1.1);
+        float h2b = hatchPage(uv, 8.0, a0 - 0.95, seed + 3.0, ds < 5.5 ? 1.6 : 1.0);
+        float i4 = max(h1p * smoothstep(0.36, 0.46, s4m) * 0.6, h2b * smoothstep(0.72, 0.82, s4m) * 0.4);
+        col = mix(col, inkC, i4 * 0.75 * nightLess);
+        if (ds > 7.5) col = mix(col, inkC, smoothstep(0.3, 0.95, s4m) * 0.18);
+      }
+    } else if (uLook < 0.5) {
+      col = mix(col, inkC, ink * 0.8 * nightLess);
     } else {
       // lighter touch: colour carries the shade, the pen only accents it
       float s4 = (shade + ao * 0.35) * (1.0 - step(0.7, N.y) * 0.6);
@@ -623,61 +988,72 @@ void main() {
       float i4 = h1p * smoothstep(0.36, 0.46, s4) * 0.55;
       i4 = max(i4, h2b * smoothstep(0.72, 0.82, s4) * 0.32);
       i4 = max(i4, h3p * smoothstep(0.88, 0.94, s4) * 0.25);
-      col = mix(col, uInk * vec3(0.95, 0.97, 1.1), i4 * 0.7);
+      col = mix(col, inkC * vec3(0.95, 0.97, 1.1), i4 * 0.7 * nightLess);
     }
+    // lamp glass and shop windows light up at night
+    if (style > 7.5 && style < 8.5) emis += vec3(1.0, 0.86, 0.5) * 1.15;
+    if (style > 8.5) emis += vec3(1.0, 0.7, 0.36) * (0.4 + 0.22 * n2(uv * 0.6 + seed));
   } else if (style < 10.5) {
     // ------- avenue road (u across, v along) -------
     float w = vFace2.x;
     float len = vFace2.y;
     float hh = hatchLayer(vWPos.xz, 0.9, 0.35, 3.0, 1.0);
-    col = mix(paper, uInk, 0.05 + hh * 0.2 + 0.04 * n2(vWPos.xz * 0.2));
+    col = mix(paper, inkC, 0.05 + hh * 0.2 + 0.04 * n2(vWPos.xz * 0.2));
     float cl = max(pxLine(uv.x - w * 0.5 - 0.16, px, 1.6), pxLine(uv.x - w * 0.5 + 0.16, px, 1.6));
     col = mix(col, vec3(0.78, 0.6, 0.15), cl * 0.9);
     float dash = step(0.45, fract(uv.y / 6.0));
     float lanes = max(pxLine(uv.x - w * 0.25, px, 1.4), pxLine(uv.x - w * 0.75, px, 1.4)) * dash;
-    col = mix(col, uInk, lanes * 0.75);
+    col = mix(col, inkC, lanes * 0.75);
     float endD = min(uv.y, len - uv.y);
     float zb = step(endD, 3.2) * step(0.6, endD);
     float fz = fract(uv.x / 1.1) * 1.1;
     col = mix(col, paper, zb * step(0.55, fz) * 0.9);
-    col = mix(col, uInk, zb * (pxLine(fz - 0.55, px, 1.0) + pxLine(fz - 1.1, px, 1.0)) * 0.6);
+    col = mix(col, inkC, zb * (pxLine(fz - 0.55, px, 1.0) + pxLine(fz - 1.1, px, 1.0)) * 0.6);
   } else if (style < 11.5) {
     // ------- street road -------
     float w = vFace2.x;
     float len = vFace2.y;
     float hh = hatchLayer(vWPos.xz, 0.9, 0.35, 5.0, 1.0);
-    col = mix(paper, uInk, 0.05 + hh * 0.2 + 0.04 * n2(vWPos.xz * 0.2));
+    col = mix(paper, inkC, 0.05 + hh * 0.2 + 0.04 * n2(vWPos.xz * 0.2));
     float dash = step(0.5, fract(uv.y / 5.0));
-    col = mix(col, uInk, pxLine(uv.x - w * 0.5, px, 1.4) * dash * 0.75);
+    col = mix(col, inkC, pxLine(uv.x - w * 0.5, px, 1.4) * dash * 0.75);
     float endD = min(uv.y, len - uv.y);
     float zb = step(endD, 3.2) * step(0.6, endD);
     float fz = fract(uv.x / 1.1) * 1.1;
     col = mix(col, paper, zb * step(0.55, fz) * 0.9);
-    col = mix(col, uInk, zb * (pxLine(fz - 0.55, px, 1.0) + pxLine(fz - 1.1, px, 1.0)) * 0.6);
+    col = mix(col, inkC, zb * (pxLine(fz - 0.55, px, 1.0) + pxLine(fz - 1.1, px, 1.0)) * 0.6);
   } else if (style < 12.5) {
     // ------- intersection -------
     float hh = hatchLayer(vWPos.xz, 0.9, 0.35, 7.0, 1.0);
-    col = mix(paper, uInk, 0.05 + hh * 0.2 + 0.04 * n2(vWPos.xz * 0.2));
+    col = mix(paper, inkC, 0.05 + hh * 0.2 + 0.04 * n2(vWPos.xz * 0.2));
     vec2 cc = uv - vFace2.xy * 0.5;
     float man = pxLine(length(cc - vec2(2.5, -1.8)) - 0.55, px, 1.4);
-    col = mix(col, uInk, man * 0.8);
+    col = mix(col, inkC, man * 0.8);
   } else if (style < 13.5) {
     // ------- sidewalk tiles -------
     vec2 g = vWPos.xz / 1.6;
     vec2 fwg = fwidth(g);
     float gl = max(lineMask(g.x, fwg.x, 1.0), lineMask(g.y, fwg.y, 1.0));
-    col = mix(paper, uInk, gl * 0.22 * (1.0 - smoothstep(0.15, 0.4, max(fwg.x, fwg.y))));
+    col = mix(paper, inkC, gl * 0.22 * (1.0 - smoothstep(0.15, 0.4, max(fwg.x, fwg.y))));
   } else if (style < 14.5) {
     // ------- grass: muted green pencil + ink tufts -------
     float cov = pencil(vWPos.xz * 0.8, 0.5, 2.0, px);
     col = mix(paper, base, 0.25 + 0.55 * cov);
+    if (ds > 2.5 && ds < 3.5) {
+      // the park in watercolour: greens and yellows bleeding into each other
+      float bl = n2(vWPos.xz * 0.05) * 0.6 + n2(vWPos.xz * 0.17 + 3.0) * 0.4;
+      vec3 g1 = vec3(0.45, 0.7, 0.36);
+      vec3 g2 = vec3(0.78, 0.82, 0.38);
+      col = mix(paper, mix(g1, g2, smoothstep(0.35, 0.7, bl)), 0.5 + 0.3 * smoothstep(0.2, 0.8, n2(vWPos.xz * 0.6)));
+      col = mix(col, paper, smoothstep(0.8, 0.86, n2(vWPos.xz * 0.9 + 7.0)) * 0.8);
+    }
     vec2 cell = floor(vWPos.xz / 0.9);
     vec2 fc = fract(vWPos.xz / 0.9);
     float hr = hash12(cell);
     vec2 tp = fc - vec2(0.3 + 0.4 * hr, 0.3 + 0.4 * hash12(cell + 3.1));
     float tuft = (1.0 - smoothstep(0.0, 0.03, abs(tp.x + tp.y * 0.25))) * step(abs(tp.y), 0.12) * step(0.45, hr);
     float tuft2 = (1.0 - smoothstep(0.0, 0.03, abs(tp.x - 0.08 - tp.y * 0.35))) * step(abs(tp.y), 0.1) * step(0.45, hr);
-    col = mix(col, uInk, clamp(tuft + tuft2, 0.0, 1.0) * 0.6 * (1.0 - smoothstep(0.02, 0.06, px)));
+    col = mix(col, inkC, clamp(tuft + tuft2, 0.0, 1.0) * 0.6 * (1.0 - smoothstep(0.02, 0.06, px)));
   } else if (style < 15.5) {
     // ------- water: light blue pencil + ink waves -------
     vec2 p = vWPos.xz;
@@ -687,7 +1063,7 @@ void main() {
     float row = floor(wv + 0.5);
     float seg = step(0.62, hash12(vec2(floor(p.x / 6.0 + row * 0.37), row)));
     float wl = lineMask(wv, fwidth(wv), 1.3) * seg;
-    col = mix(col, uInk, wl * 0.7 * (1.0 - smoothstep(0.06, 0.3, fwidth(wv))));
+    col = mix(col, inkC, wl * 0.7 * (1.0 - smoothstep(0.06, 0.3, fwidth(wv))));
     if (uLook > 0.5 && uSunScreen.z > 0.5) {
       // the sun's path on the water in orange pencil
       float band = exp(-pow((gl_FragCoord.x - uSunScreen.x) / (uResolution.x * 0.08), 2.0));
@@ -707,25 +1083,59 @@ void main() {
     float cov = pencil(vWPos.xz * 0.7, 1.1, 6.0, px);
     col = mix(paper, base, 0.25 + 0.45 * cov);
     float st = step(0.88, n2(vWPos.xz * 2.3));
-    col = mix(col, uInk, st * 0.45 * (1.0 - smoothstep(0.05, 0.15, px)));
+    col = mix(col, inkC, st * 0.45 * (1.0 - smoothstep(0.05, 0.15, px)));
   } else {
     // ------- plaza pavement -------
     vec2 g = vWPos.xz / 3.0;
     vec2 fwg = fwidth(g);
     float gl = max(lineMask(g.x + 0.5 * step(0.5, fract(g.y * 0.5)), fwg.x, 1.0), lineMask(g.y, fwg.y, 1.0));
-    col = mix(mix(paper, base, 0.35), uInk, gl * 0.25 * (1.0 - smoothstep(0.15, 0.4, max(fwg.x, fwg.y))));
+    col = mix(mix(paper, base, 0.35), inkC, gl * 0.25 * (1.0 - smoothstep(0.15, 0.4, max(fwg.x, fwg.y))));
   }
 
   if (style > 9.5 && uLook > 0.5) {
     // ground: cool cross-hatched cast shadows, warm sunlit pavement
     float lt = sunVis;
     col *= mix(vec3(0.85, 0.89, 1.03), vec3(1.025, 0.995, 0.95), lt);
-    float gh1 = hatchPage(vWPos.xz, 7.0, 0.62, style * 1.7, 1.0);
-    float gh2 = hatchPage(vWPos.xz, 8.0, -0.62, style * 2.3, 0.9);
     float sh = 1.0 - lt;
-    col = mix(col, uInk * vec3(0.95, 0.97, 1.1), (gh1 * 0.42 + gh2 * 0.12) * sh * 0.5);
+    if (ds > 5.5 && ds < 6.5) {
+      // the comic page: shadows printed as a halftone screen
+      col = mix(col, mix(inkC, vec3(0.2, 0.3, 0.75), 0.5), benDay(vWPos.xz, sh * 0.2, gPx) * 0.6 * nightLess);
+    } else {
+      float gh1 = hatchPage(vWPos.xz, ds > 0.5 && ds < 1.5 ? 11.0 : 7.0, 0.62, style * 1.7, ds > 0.5 && ds < 1.5 ? 2.6 : 1.0);
+      float gh2 = hatchPage(vWPos.xz, 8.0, -0.62, style * 2.3, 0.9);
+      col = mix(col, inkC * vec3(0.95, 0.97, 1.1), (gh1 * 0.42 + gh2 * 0.12) * sh * 0.5 * nightLess);
+    }
     float pw = pencil(vWPos.xz * 0.9, 0.4, style, px);
     col = mix(col, col * vec3(1.0, 0.88, 0.7), pw * lt * 0.16);
+  }
+  if (uMagic > 0.5 && uWet > 0.01 && N.y > 0.7) {
+    // after the rain: wet paper is a little darker and bluer, puddles lie in the dips
+    col = mix(col, col * vec3(0.84, 0.87, 0.95), uWet * 0.55);
+    float pm = n2(vWPos.xz * 0.11) * 0.5 + n2(vWPos.xz * 0.31 + 4.0) * 0.3 + n2(vWPos.xz * 0.93 + 9.0) * 0.2;
+    float thr = 0.66 - 0.06 * uWet;
+    float puddle = smoothstep(thr, thr + 0.025, pm) * smoothstep(0.0, 0.3, uWet);
+    if (puddle > 0.0) {
+      // a puddle: darker and bluer, the sky in it drawn as a few flat strokes
+      vec3 pc = mix(col * vec3(0.72, 0.78, 0.9), vec3(0.45, 0.55, 0.74) * mix(1.0, 0.4, uNight), 0.35);
+      float refl = smoothstep(0.55, 0.8, n2(vec2(vWPos.x * 0.6 + vWPos.z * 0.1, vWPos.z * 3.1)));
+      pc = mix(pc, mix(vec3(0.9, 0.93, 1.0), vec3(0.3, 0.36, 0.6), uNight), refl * 0.5 * (1.0 - smoothstep(0.02, 0.07, px)));
+      // rings where the drops land
+      vec2 rc = vWPos.xz / 0.9;
+      vec2 ci = floor(rc);
+      float rings = 0.0;
+      for (int k = 0; k < 2; k++) {
+        vec2 o = ci + vec2(float(k) * 0.5);
+        float ph = fract(uTime * 0.9 + hash12(o) * 7.0);
+        vec2 cc = o + vec2(hash12(o + 1.3), hash12(o + 2.9));
+        float d = length(rc - cc);
+        rings = max(rings, (1.0 - smoothstep(0.0, 0.05, abs(d - ph * 0.45))) * (1.0 - ph));
+      }
+      pc = mix(pc, inkC, rings * uRain * 0.6 * (1.0 - smoothstep(0.02, 0.06, px)));
+      float rim = smoothstep(thr, thr + 0.01, pm) * (1.0 - smoothstep(thr + 0.01, thr + 0.025, pm));
+      col = mix(col, pc, puddle);
+      col = mix(col, inkC, rim * 0.35 * (1.0 - smoothstep(0.02, 0.08, px)));
+      emis += lampLight(vWPos) * puddle * 0.35 * uNight;
+    }
   }
   if (vObj > -0.5 && uWEraseN > 0.5) {
     // rubbed out: blank notebook page shows through, with a faint grey eraser smudge on the rim
@@ -739,6 +1149,21 @@ void main() {
     }
   }
   col *= uTintAll;
+  if (uMagic > 0.5 && uDusk > 0.001) {
+    // sunset: orange where the low sun hits, violet in the shade, the first lights coming on
+    float lt = uLook > 0.5 ? lightAmt : light;
+    col = mix(col, col * mix(vec3(0.85, 0.8, 0.95), vec3(1.08, 0.87, 0.72), lt), uDusk * 0.75 * (1.0 - uNight));
+    col += emis * uDusk * (1.0 - uNight) * 0.55;
+  }
+  if (uMagic > 0.5 && uNight > 0.001) {
+    // night: the drawing flips onto the dark page, the lamps pool warm light on it
+    vec3 gel = ds > 0.5 ? styleP(ds, 4).rgb : vec3(0.86, 0.89, 1.0);
+    vec3 nc = nightFlipOn(col, paper, inkC, gel, styleP(ds, 5).rgb);
+    nc *= 0.85 + 0.3 * clamp(ndl, 0.0, 1.0);
+    vec3 L = lampLight(vWPos) * (N.y > 0.5 ? 1.0 : 0.85) + vec3(1.0, 0.94, 0.78) * carLight(vWPos);
+    nc = poolLight(nc, col, L);
+    col = mix(col, nc + emis, uNight);
+  }
   col = mix(col, vec3(1.0), uFlash);
   if (uLook > 0.5) {
     float ev = edgeVig(gl_FragCoord.xy);
@@ -746,7 +1171,16 @@ void main() {
     col = mix(col, pp + (col - pp) * 0.22, ev);
   }
   float f = fogFactor(length(vWPos - cameraPosition));
+  // lit windows shine through the dark a little further
+  if (uMagic > 0.5) f *= 1.0 - clamp(lum3(emis) * 0.4, 0.0, 0.5) * uNight;
   col = mix(col, paperAt(gl_FragCoord.xy), f);
+  if (uReveal.w > 0.5) {
+    // the city drawing itself: colour floods in behind the pen lines
+    float dc = length(vWPos.xz - uReveal.xy);
+    float k = clamp((uReveal.z - 16.0 - dc) / 26.0, 0.0, 1.0);
+    float sc = n2(vWPos.xz * 0.7 + vWPos.y * 1.3) * 0.6 + 0.2;
+    col = mix(paperAt(gl_FragCoord.xy), col, smoothstep(sc - 0.1, sc + 0.1, k));
+  }
   gl_FragColor = vec4(col, uAlpha);
 }
 `;
@@ -805,6 +1239,7 @@ uniform vec4 uHoles[8];
 uniform float uErase;
 uniform float uNoFog;
 uniform float uWhiten;
+uniform float uNightMode; // 0: onto the night page, 1: keep (pages of the hero's own drawing UI)
 varying vec2 vUv;
 varying vec2 vLocal;
 varying float vDist;
@@ -833,8 +1268,14 @@ void main() {
     float edge = (1.0 - smoothstep(thr, thr + 0.12, n)) * step(0.001, uErase);
     col = mix(col, vec3(0.95, 0.6, 0.66), edge * 0.6);
   }
-  if (uLook > 0.5 && uNoFog < 0.5) col *= mix(vec3(0.85, 0.89, 1.03), vec3(1.05, 0.985, 0.9), vSun);
-  if (uLook > 0.5 && uNoFog > 0.5) col *= mix(vec3(1.0, 0.8, 0.66), vec3(0.93, 0.95, 1.02), smoothstep(0.15, 0.85, vLocal.y));
+  float dayK = 1.0 - uNight * uMagic;
+  if (uLook > 0.5 && uNoFog < 0.5) col *= mix(vec3(1.0), mix(vec3(0.85, 0.89, 1.03), vec3(1.05, 0.985, 0.9), vSun), dayK);
+  if (uLook > 0.5 && uNoFog > 0.5 && (uNightMode < 0.5 || uMagic < 0.5)) col *= mix(vec3(1.0), mix(mix(vec3(1.0, 0.8, 0.66), uSkyHorizon * vec3(1.0, 0.98, 1.1), uMagic), vec3(0.93, 0.95, 1.02), smoothstep(0.15, 0.85, vLocal.y)), dayK);
+  if (uMagic > 0.5 && uNightMode < 0.5) {
+    // clouds and drawings in the world turn dark with light outlines at night, grey when overcast
+    if (uNoFog > 0.5) col = mix(col, col * vec3(0.72, 0.74, 0.8), uOvercast * 0.8);
+    col = mix(col, nightFlip(col, uPaper, uInk, vec3(0.86, 0.89, 1.0)), uNight);
+  }
   if (uNoFog < 0.5) {
     float f = fogFactor(vDist);
     col = mix(col, paperAt(gl_FragCoord.xy), f);
@@ -852,7 +1293,93 @@ void main() {
 `;
 
 export const SKY_FRAG = /* glsl */ `
+// The magic world's sky, drawn on the page: a pencil sun that sets, a gel-pen moon and stars
+// at night, a crayon rainbow after the rain.
+vec3 skyAt(vec2 fc) {
+  vec3 col = magicPage(fc);
+  vec2 p = fc / uPR;
+  float Hd = uResolution.y;
+  vec2 ndc = fc / uResolution * 2.0 - 1.0;
+  vec4 wq = uInvViewProj * vec4(ndc, 1.0, 1.0);
+  vec3 dir = normalize(wq.xyz / wq.w - cameraPosition);
+  float clear = 1.0 - uOvercast * 0.85;
+  // the sun, drawn: a wobbly ring and a coloured-pencil fill (redder as it sinks)
+  if (uSunScreen.z > 0.5 && uNight < 0.97) {
+    float r = Hd * mix(0.042, 0.055, uDusk);
+    vec2 dv = fc - uSunScreen.xy;
+    float d = length(dv);
+    float st = n2(vec2((p.x * 0.35 + p.y * 0.9) * 0.9, p.y * 0.12 - p.x * 0.05)) * 0.6 + n2(vec2(p.x * 1.7 + p.y * 0.6, p.y * 2.3)) * 0.4;
+    float wob = (n2(vec2(atan(dv.y, dv.x) * 5.0, 3.0)) - 0.5) * 3.0 * uPR;
+    float ring = 1.0 - smoothstep(0.9 * uPR, 2.2 * uPR, abs(d - r + wob));
+    float fill = 1.0 - smoothstep(r - 2.0 * uPR, r, d);
+    float k = (1.0 - uNight) * clear;
+    vec3 sunC = mix(vec3(1.0, 0.9, 0.62), vec3(1.0, 0.55, 0.32), uDusk);
+    col = mix(col, col * sunC, fill * (0.45 + 0.4 * smoothstep(0.26, 0.62, st)) * k);
+    col = mix(col, mix(vec3(0.85, 0.46, 0.26), vec3(0.85, 0.25, 0.2), uDusk), ring * 0.55 * k);
+  }
+  if (dir.y > -0.02) {
+    // stars: little four-point gel stars, twinkling
+    if (uStars > 0.01) {
+      float az = atan(dir.z, dir.x);
+      float el = asin(clamp(dir.y, 0.0, 1.0));
+      vec2 g = vec2(az * 40.0, el * 40.0);
+      vec2 c = floor(g);
+      float h = hash12(c + 17.0);
+      if (h > 0.82) {
+        vec2 sp = c + 0.5 + (vec2(hash12(c + 3.1), hash12(c + 7.7)) - 0.5) * 0.6;
+        vec2 d = g - sp;
+        d.x *= cos(el);
+        float px = max(fwidth(g.y), 1e-4);
+        float size = (1.5 + 3.5 * hash12(c + 1.9) * hash12(c + 4.2)) * px;
+        float tw = 0.6 + 0.4 * sin(uTime * (1.3 + 3.0 * hash12(c + 5.5)) + h * 40.0);
+        float arms = max(1.0 - smoothstep(0.0, 0.7 * px, abs(d.x)), 1.0 - smoothstep(0.0, 0.7 * px, abs(d.y)));
+        float star = max(arms * (1.0 - smoothstep(size * 0.3, size, length(d))), 1.0 - smoothstep(size * 0.18, size * 0.32, length(d)));
+        vec3 sc = mix(vec3(1.0, 0.95, 0.78), vec3(0.75, 0.86, 1.0), hash12(c + 9.3));
+        col = mix(col, sc * 1.25, star * tw * uStars * clear * smoothstep(0.0, 0.1, dir.y));
+      }
+    }
+    // the moon: a crescent in pale yellow pencil, a gel outline, a soft halo
+    if (uNight > 0.02) {
+      float md = acos(clamp(dot(dir, uMoonDir), -1.0, 1.0));
+      float R = 0.05;
+      if (md < R * 6.0) {
+        vec3 ms = normalize(cross(uMoonDir, vec3(0.0, 1.0, 0.0)));
+        vec3 mu = cross(ms, uMoonDir);
+        vec2 q = vec2(dot(dir, ms), dot(dir, mu));
+        float px = max(fwidth(q.x), 1e-5);
+        float disc = length(q) - R;
+        float bite = length(q - vec2(R * 0.5, R * 0.22)) - R * 0.92;
+        float cres = max(disc, -bite);
+        float fillM = 1.0 - smoothstep(-px, px, cres);
+        float pen = n2(q * 900.0) * 0.5 + 0.5;
+        vec3 mc = mix(vec3(0.98, 0.93, 0.7), vec3(1.0, 0.98, 0.86), pen);
+        float k = uNight * clear;
+        col += vec3(0.38, 0.38, 0.32) * exp(-md / R * 1.4) * 0.35 * k;
+        col = mix(col, mc * 1.1, fillM * k);
+        float edge = 1.0 - smoothstep(0.6 * px, 1.8 * px, abs(cres + (n2(q * 300.0) - 0.5) * px * 1.5));
+        col = mix(col, vec3(1.0, 0.97, 0.85), edge * k * 0.9);
+      }
+    }
+    // a rainbow in wax crayon, opposite the sun, after the rain
+    if (uRainbow > 0.01) {
+      // (drawn as if the sun were low, so the bow stands tall over the roofs)
+      vec3 anti = normalize(vec3(-uSunDisc.x, 0.0, -uSunDisc.z) * 0.994 + vec3(0.0, -0.11, 0.0));
+      float a = acos(clamp(dot(dir, anti), -1.0, 1.0));
+      float k = (a - 0.66) / 0.12;
+      if (k > 0.0 && k < 1.0) {
+        vec3 rb = k < 0.143 ? vec3(0.55, 0.35, 0.8) : k < 0.286 ? vec3(0.3, 0.4, 0.9) : k < 0.429 ? vec3(0.35, 0.7, 0.95)
+          : k < 0.571 ? vec3(0.4, 0.78, 0.4) : k < 0.714 ? vec3(0.98, 0.88, 0.3) : k < 0.857 ? vec3(0.98, 0.6, 0.25) : vec3(0.92, 0.28, 0.25);
+        float wax = smoothstep(0.25, 0.65, n2(vec2(a * 900.0, atan(dir.z, dir.x) * 60.0)) * 0.7 + n2(p * 0.9) * 0.3);
+        float fade = smoothstep(0.0, 0.08, dir.y) * (1.0 - smoothstep(0.85, 1.0, abs(k - 0.5) * 2.0));
+        col = mix(col, col * rb * 1.15, wax * fade * uRainbow * 0.85 * (1.0 - uNight));
+      }
+    }
+  }
+  return col;
+}
+
 void main() {
-  gl_FragColor = vec4(paperAt(gl_FragCoord.xy), 1.0);
+  vec3 col = uMagic > 0.5 ? skyAt(gl_FragCoord.xy) : paperAt(gl_FragCoord.xy);
+  gl_FragColor = vec4(col, 1.0);
 }
 `;

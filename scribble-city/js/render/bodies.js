@@ -268,11 +268,17 @@ void main() {
     float l2 = 1.0 - smoothstep(inkW * 0.25, inkW * 0.25 + pxw, abs(edge - inkW * (0.8 + n1)));
     line = max(line * 0.8, l2 * 0.6);
   }
+  // at night the dark pen becomes a light gel pen (coloured pens get brighter)
+  vec3 inkN = vInk.rgb;
+  if (uMagic > 0.5 && uNight > 0.001) {
+    vec3 gelB = mix(saturateC(vInk.rgb, 1.25) * 1.3 + 0.04, vec3(0.86, 0.89, 1.0), 1.0 - smoothstep(0.24, 0.42, lum3(vInk.rgb)));
+    inkN = mix(vInk.rgb, gelB, uNight);
+  }
   if (outer > 0.5) {
     if (line < 0.3) discard;
     vec3 dp = projDepth(hit - rd * vExtra.x);
     gl_FragDepth = dp.z * 0.5 + 0.5;
-    gl_FragColor = vec4(vInk.rgb, line);
+    gl_FragColor = vec4(inkN, line);
     return;
   }
 
@@ -325,6 +331,13 @@ void main() {
   // eraser smudge around holes
   col = mix(col, mix(col, vec3(0.72, 0.7, 0.72), 0.5), rim * 0.6);
   col = mix(col, vInk.rgb, line * (1.0 - rim * 0.6));
+  if (uMagic > 0.5 && uNight > 0.001) {
+    // night: onto the dark page, lit by the lamps and a little moonlight on the rim
+    vec3 nc = nightFlip(col, uPaper, vInk.rgb, inkN);
+    nc = poolLight(nc, col * 0.8, lampLight(hit) + vec3(1.0, 0.94, 0.78) * carLight(hit));
+    nc += vec3(0.22, 0.28, 0.45) * pow(1.0 - abs(dot(N, -rd)), 3.0) * 0.7;
+    col = mix(col, nc, uNight);
+  }
   float f = fogFactor(length(hit - cameraPosition));
   col = mix(col, paperAt(gl_FragCoord.xy), f);
   vec3 dp = projDepth(hit - rd * vExtra.x);

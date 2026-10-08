@@ -68,6 +68,7 @@ export class AirDraw {
     sm.uniforms.uRect.value.set(0, 0, 1, 1);
     sm.uniforms.uPivot.value.set(0.5, 0.5);
     sm.uniforms.uMode.value = 1;
+    sm.uniforms.uNightMode.value = 1;
     sm.depthTest = false;
     sm.depthWrite = false;
     this.sticker = new THREE.Mesh(getSpriteGeometry(), sm);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSpriteMaterial, getSpriteGeometry, makeLineMaterial } from './materials.js';
+import { makeSpriteMaterial, getSpriteGeometry, makeLineMaterial, shared } from './materials.js';
 import { LineBatch } from './LineBatch.js';
 import { RNG } from '../core/util.js';
 
@@ -28,6 +28,14 @@ export class Sky {
       const c = mk(rng.chance(0.5) ? 'cloud0' : 'cloud1', w, w * 0.5);
       this.clouds.push({ mesh: c, az: rng.float(0, Math.PI * 2), el: rng.float(0.1, 0.32), dist: rng.float(800, 950), speed: rng.float(0.004, 0.012) });
     }
+    // the magic world's weather: more (and lower) clouds come in as the sky clouds over
+    this.rainClouds = [];
+    for (let i = 0; i < 16; i++) {
+      const w = rng.float(220, 380);
+      const c = mk(rng.chance(0.5) ? 'cloud0' : 'cloud1', w, w * 0.45);
+      c.visible = false;
+      this.rainClouds.push({ mesh: c, az: rng.float(0, Math.PI * 2), el: rng.float(0.05, 0.22), dist: rng.float(700, 900), speed: rng.float(0.006, 0.016), th: 0.12 + (i / 16) * 0.6 });
+    }
     this.birdMat = makeLineMaterial({ widthScale: 1 });
     this.birds = new LineBatch(80, this.birdMat, { dynamic: true });
     scene.add(this.birds.mesh);
@@ -42,6 +50,15 @@ export class Sky {
     const cp = camera.position;
     for (const c of this.clouds) {
       c.az += c.speed * dt;
+      c.mesh.position.set(cp.x + Math.cos(c.az) * Math.cos(c.el) * c.dist, cp.y + Math.sin(c.el) * c.dist, cp.z + Math.sin(c.az) * Math.cos(c.el) * c.dist);
+    }
+    const over = shared.uMagic.value > 0.5 ? shared.uOvercast.value : 0;
+    for (const c of this.rainClouds) {
+      const a = Math.min(1, Math.max(0, (over - c.th) * 3));
+      c.mesh.visible = a > 0.01;
+      if (!c.mesh.visible) continue;
+      c.az += c.speed * dt * (1 + shared.uWind.value.z);
+      c.mesh.material.uniforms.uAlpha.value = a;
       c.mesh.position.set(cp.x + Math.cos(c.az) * Math.cos(c.el) * c.dist, cp.y + Math.sin(c.el) * c.dist, cp.z + Math.sin(c.az) * Math.cos(c.el) * c.dist);
     }
     // birds circle around a slowly following center

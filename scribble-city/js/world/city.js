@@ -9,7 +9,7 @@ import { SHOP_SIGNS } from '../render/signs.js';
 import {
   AVES, STREETS, AVE_W, ST_W, SIDEWALK, CURB, BOUNDS, BLOCK_TYPES, blockRect, WATER_EAST_X, WATER_SOUTH_Z,
 } from './layout.js';
-import { COL, solidBox, brownstone, loft, tower, warehouse, facadesOf, facadeQuad, waterTower, door } from './buildings.js';
+import { COL, solidBox, brownstone, loft, tower, warehouse, facadesOf, facadeQuad, waterTower, door, FIRE_ESCAPES } from './buildings.js';
 import { dressShop } from './shopfronts.js';
 import * as P from './props.js';
 
@@ -40,6 +40,9 @@ export function buildCity(scene, atlas, signAtlas, mats) {
     territories: [],
     shopSigns: SHOP_SIGNS,
     shops: [],
+    lamps: [],
+    lights: [], // other night lights for the light map: { x, z, r, col, i }
+    alleys: [], // the back alleys between the rows of houses: { x0, x1, z, type }
     chunks: new Map(),
     spawn: { x: -150, z: 116, yaw: Math.PI / 2 },
     animated: [],
@@ -89,11 +92,11 @@ export function buildCity(scene, atlas, signAtlas, mats) {
       segs += batch.count;
     }
   }
-  const treeBatch = new SpriteBatch(W.trees.length + 4, atlas.texture, { nearFade: 6, erasable: true });
+  const treeBatch = new SpriteBatch(W.trees.length + 4, atlas.texture, { nearFade: 6, erasable: true, city: true, sway: true });
   for (const t of W.trees) treeBatch.add({ ...t, rect: atlas.rects[t.rect], pivot: [0.5, 0] });
   treeBatch.commit();
   group.add(treeBatch.mesh);
-  const signBatch = new SpriteBatch(W.signs.length + 8, signAtlas.texture, { polygonOffset: true, erasable: true });
+  const signBatch = new SpriteBatch(W.signs.length + 8, signAtlas.texture, { polygonOffset: true, erasable: true, city: true, lit: true });
   for (const s of W.signs) signBatch.add({ ...s, rect: signAtlas.rects[s.rect] });
   signBatch.commit();
   group.add(signBatch.mesh);
@@ -107,6 +110,10 @@ export function buildCity(scene, atlas, signAtlas, mats) {
     objects: W.objects,
     bar: W.bar,
     shops: W.shops,
+    lamps: W.lamps,
+    lights: W.lights,
+    alleys: W.alleys,
+    fireEscapes: FIRE_ESCAPES,
     hideSpots: W.hideSpots,
     billboards: W.billboards,
     territories: W.territories,
@@ -354,6 +361,7 @@ function standardRows(W, ch, r, type, rng, opts = {}) {
     });
   }
   alley(W, ch, ix0, ix1, zm, rng, opts.hide !== false);
+  W.alleys.push({ x0: ix0, x1: ix1, z: zm, type });
   return { ix0, ix1, iz0, iz1, zm };
 }
 
@@ -361,7 +369,7 @@ function import_shop(W, ch, f, rng, signId) {
   // ground-floor shop on a side facade of a corner building
   const u0 = Math.max(0.5, f.width / 2 - 4);
   const u1 = Math.min(f.width - 0.5, f.width / 2 + 4);
-  facadeQuad(ch, f, u0, CURB + 0.6, u1, CURB + 2.6, 0.04, COL.glass, STYLE.PLAIN, { lineW: 2 });
+  facadeQuad(ch, f, u0, CURB + 0.6, u1, CURB + 2.6, 0.04, COL.glass, STYLE.SHOPWIN, { lineW: 2 });
   ch.sl.seg(f.p((u0 + u1) / 2, CURB + 0.6, 0.05), f.p((u0 + u1) / 2, CURB + 2.6, 0.05), { width: 1.3 });
   const c = f.p((u0 + u1) / 2, CURB + 3.2, 0.08);
   W.signs.push({ x: c[0], y: c[1], z: c[2], w: Math.min(4, u1 - u0), h: Math.min(4, u1 - u0) / 4, rect: signId, axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
@@ -390,6 +398,9 @@ function theater(W, ch, lot, rng, i) {
   }
   const c = f.p(u, CURB + 4.3, 2.65);
   W.signs.push({ x: c[0], y: c[1], z: c[2], w: 9.4, h: 1.25, rect: i % 2 ? 'cinema' : 'theater', axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
+  // the marquee bulbs light the sidewalk under them
+  const ml = f.p(u, 0, 2.2);
+  W.lights.push({ x: ml[0], z: ml[2], r: 8, col: [1, 0.78, 0.4], i: 1.1 });
   // vertical blade sign
   const bs = f.p(u + 6.5, CURB + 9, 0.9);
   W.signs.push({ x: bs[0], y: bs[1], z: bs[2], w: 6, h: 1.5, rect: 'theater', axis: [0, 1, 0], up: [f.nx, 0, f.nz], pivot: [0.5, 0.5] });

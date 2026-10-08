@@ -22,6 +22,13 @@ import { Pickups } from './pickups.js';
 import { AirSketches } from './airsketch.js';
 import { StreetLife } from './streetlife.js';
 import { Vignettes } from './vignettes.js';
+import { DayNight, savedMagic } from './daynight.js';
+import { LightMap } from '../render/lightmap.js';
+import { PostFX } from '../render/post.js';
+import { NightLights } from '../render/nightlights.js';
+import { Weather } from './weather.js';
+import { Ambient } from './ambient.js';
+import { Intro } from './intro.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { CAR_VARIANTS, DRIVER_SEAT } from './traffic.js';
 import { rebakeSunShadows } from '../render/sunlight.js';
@@ -59,6 +66,15 @@ export class Game {
     mats.itemSurface = mats.itemSurface || mats.surface;
     this.input = new Input(this.renderer.domElement, this.touch);
     this.audio = new Audio();
+    // the magic world: day and night, the districts' artists, glow (off = the original look)
+    this.daynight = new DayNight(this);
+    this.lightmap = new LightMap(world);
+    this.post = new PostFX(this.renderer, { lowEnd: this.touch || this.params.has('low') });
+    this.nightlights = new NightLights(scene, world);
+    const mp = this.params.get('magic');
+    this.daynight.setMagic(mp !== null ? mp !== '0' : savedMagic());
+    const tp0 = this.params.get('time');
+    if (tp0) this.daynight.setMode(tp0);
     this.camRig = new CameraRig(camera, world.collision);
     this.figures = new FigureRenderer(scene, this.atlas);
     this.bubbles = new Bubbles(scene);
@@ -82,6 +98,14 @@ export class Game {
     this.airsketch = new AirSketches(this);
     this.streetlife = new StreetLife(this);
     this.vignettes = new Vignettes(this);
+    this.weather = new Weather(this);
+    this.ambient = new Ambient(this);
+    this.intro = new Intro(this);
+    const wp0 = this.params.get('weather');
+    if (wp0) {
+      this.weather.setMode(wp0);
+      this.weather.snap();
+    }
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -95,6 +119,8 @@ export class Game {
     this.updateGoals();
     this.hud.updateWeapon();
     this.bindUI();
+    const ip = this.params.get('intro');
+    if (this.daynight.on && ip !== '0' && (!this.params.has('autostart') || ip === '1')) this.intro.showDesk();
     const free = this.params.get('free');
     if (free) {
       const v = free.split(',').map(Number);
@@ -122,6 +148,12 @@ export class Game {
       shared.uBoilAmp.value = e.target.checked ? 1 : 0;
     });
     $('opt-look').addEventListener('change', (e) => setLook(e.target.checked ? 1 : 0));
+    $('opt-magic').checked = this.daynight.on;
+    $('opt-magic').addEventListener('change', (e) => this.daynight.setMagic(e.target.checked));
+    $('opt-time').value = this.daynight.mode;
+    $('opt-time').addEventListener('change', (e) => this.daynight.setMode(e.target.value));
+    $('opt-weather').value = this.weather.mode;
+    $('opt-weather').addEventListener('change', (e) => this.weather.setMode(e.target.value));
     $('opt-sens').addEventListener('input', (e) => (this.input.sensitivity = parseFloat(e.target.value)));
     this.input.on('lock', (locked) => {
       if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !this.inkwell.flipping && !this.touch && !this.input.lockFailed) this.pause();
@@ -129,13 +161,19 @@ export class Game {
   }
 
   start() {
-    $('title').classList.add('hidden');
+    const intro = this.intro.phase === 'desk';
+    const title = $('title');
+    if (intro) {
+      // the title card slides off the desk, then the camera dives into the notebook
+      title.classList.add('leaving');
+      setTimeout(() => title.classList.add('hidden'), 480);
+    } else title.classList.add('hidden');
     this.audio.init();
     this.state = 'play';
-    this.input.enabled = true;
-    this.hud.show();
+    this.input.enabled = !intro;
+    if (!intro) this.hud.show();
     if (this.touch) {
-      $('touch').classList.remove('hidden');
+      if (!intro) $('touch').classList.remove('hidden');
       try {
         if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
         if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
@@ -145,10 +183,21 @@ export class Game {
     } else {
       this.input.requestLock(true);
     }
-    this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
-    setTimeout(() => {
-      if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
-    }, 2600);
+    const welcome = () => {
+      this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
+      setTimeout(() => {
+        if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
+      }, 2600);
+    };
+    if (intro) {
+      this.intro.onDone = () => {
+        this.input.enabled = true;
+        this.hud.show();
+        if (this.touch) $('touch').classList.remove('hidden');
+        welcome();
+      };
+      setTimeout(() => this.intro.dive(), 560);
+    } else welcome();
   }
 
   pause() {
@@ -249,11 +298,27 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ main loop
+  renderFrame() {
+    if (this.intro.drawsDesk) {
+      this.intro.render(this.renderer);
+      return;
+    }
+    const dn = this.daynight;
+    const post = this.post;
+    if (dn.on) {
+      post.strength = dn.bloom;
+      post.thr = 0.95 - dn.night * 0.17;
+      post.lumK = dn.night;
+      post.neonK = Math.max(0.5 * dn.night, dn.pageDark * 0.9);
+    } else post.strength = 0;
+    post.render(this.scene, this.camera);
+  }
+
   loop() {
     if (this.params.has('test')) {
       window.__frame = (n = 1, dt = 1 / 30) => {
         for (let i = 0; i < n; i++) this.update(dt);
-        this.renderer.render(this.scene, this.camera);
+        this.renderFrame();
         return true;
       };
       window.__frame(1);
@@ -262,7 +327,7 @@ export class Game {
     const tick = () => {
       const dt = Math.min(this.clock.getDelta(), 0.05);
       this.update(dt);
-      this.renderer.render(this.scene, this.camera);
+      this.renderFrame();
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -274,6 +339,11 @@ export class Game {
     this.time += dt;
     shared.uTime.value = this.time;
     shared.uBoil.value = Math.floor(this.time * 7);
+    this.intro.update(dt);
+    this.daynight.update(dt);
+    this.weather.update(dt);
+    this.ambient.update(dt);
+    this.nightlights.update(this);
     const input = this.input;
     const player = this.player;
     const fr = this.figures;
@@ -335,6 +405,8 @@ export class Game {
       this.camera.rotation.z += Math.sin(this.time * 1.1) * 0.045 * tipsy;
       this.camera.rotation.x += Math.sin(this.time * 0.7 + 1) * 0.02 * tipsy;
     }
+    // the opening: the camera comes down out of the page into the street
+    if (this.intro.phase === 'reveal') this.intro.applyCamera(this.camera);
     if (this.params.has('test') && window.__camOverride) {
       // test hook: fixed camera for screenshots
       const o = window.__camOverride;
@@ -356,6 +428,8 @@ export class Game {
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
       this.drawStuckPencils(fr);
+      this.weather.draw(fr);
+      this.ambient.draw(fr);
       this.pickups.draw(fr);
       this.inkwell.draw(this.camera.position);
       this.fx.update(dt, fr);
@@ -761,6 +835,10 @@ export class Game {
   }
 
   onPropErased(o) {
+    if (o.kind === 'lamp') {
+      this.lightmap.refresh();
+      this.nightlights.refresh();
+    }
     const cx = (o.x0 + o.x1) / 2;
     const cz = (o.z0 + o.z1) / 2;
     this.fx.crumbs(cx, Math.min(2, o.y1 * 0.5), cz, 40, 3.6);

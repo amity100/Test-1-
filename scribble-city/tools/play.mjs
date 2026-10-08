@@ -13,6 +13,19 @@ const browser = await launch();
 const mobile = !!process.env.MOBILE;
 const page = await browser.newPage(mobile ? { viewport: { width: +w, height: +h }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : { viewport: { width: +w, height: +h } });
 const cdp = mobile ? await page.context().newCDPSession(page) : null;
+// SEED=n: a repeatable Math.random, so two builds can be compared frame for frame
+if (process.env.SEED) {
+  await page.addInitScript((seed) => {
+    let a = seed >>> 0;
+    Math.random = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }, +process.env.SEED);
+}
 const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));

@@ -280,6 +280,7 @@ html, body {
 .sheet h2 { font-family: var(--font-hand); font-size: 38px; margin: 0 0 10px; }
 .sheet-foot { display: flex; justify-content: center; margin-top: 12px; }
 .opt { display: flex; gap: 10px; align-items: center; justify-content: center; margin: 12px 0; font-size: 18px; }
+.opt select { font: inherit; font-size: 16px; padding: 2px 8px; border: 2px solid var(--ink); border-radius: 8px; background: var(--paper-2); color: var(--ink); }
 
 #album-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 .album-item { cursor: pointer; transition: transform 0.1s; }
@@ -319,6 +320,12 @@ body.air-drawing #toasts { top: auto; bottom: max(70px, calc(env(safe-area-inset
 
 /* ---------- title ---------- */
 #title { background: rgba(248, 244, 233, 0.35); }
+/* the magic world's title: the card lies on a real desk */
+#title.desk { background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(10, 6, 2, 0.35) 100%); }
+#title.desk .cover { transform: rotate(-1.4deg); box-shadow: 0 28px 60px rgba(12, 6, 0, 0.55), 0 4px 10px rgba(12, 6, 0, 0.35); transition: transform 0.45s ease-in, opacity 0.45s ease-in; }
+#title.desk.leaving .cover { transform: translate(-6vw, 70vh) rotate(-9deg); opacity: 0; }
+#title.desk.leaving { background: transparent; transition: background 0.4s; }
+#intro-flash { position: fixed; inset: 0; z-index: 4; pointer-events: none; background: #f8f5ec; }
 .cover {
   position: relative;
   width: min(880px, 94vw);

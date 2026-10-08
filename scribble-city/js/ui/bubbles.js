@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Sketcher, makeCanvas, FONT_NOTE, BLACK2D, RED2D, INK2D } from '../render/sketch2d.js';
+import { shared } from '../render/materials.js';
 
 // Hand-drawn speech bubbles over people's heads (what they shout, in English).
 
@@ -108,6 +109,8 @@ export class Bubbles {
       s.position.set(x, y + b.rise + Math.min(0.15, b.t * 0.1), z);
       s.scale.set(size, size * (H / W), 1);
       s.material.opacity = Math.min(1, b.t / 0.08) * Math.min(1, (b.life + 0.25 - b.t) / 0.25);
+      // a shade dimmer at night (the magic world), so the paper does not glare
+      s.material.color.setScalar(1 - 0.24 * shared.uNight.value * shared.uMagic.value);
       s.visible = d < 70;
     }
     this.list = keep;

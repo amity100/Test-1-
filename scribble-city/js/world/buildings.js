@@ -131,9 +131,18 @@ export function waterTower(W, ch, cx, cz, y, scale = 1) {
   W.collision.addCircle(cx, cz, r, ty, ty + th * 1.4, 'roof');
 }
 
+// every fire escape landing in the city (cats like to sit on them): filled while the city is built
+export const FIRE_ESCAPES = [];
+
 function fireEscape(ch, f, u0, u1, yBase, floors, fh) {
   const sl = ch.sl;
   const dep = 1.05;
+  for (let k = 1; k < floors; k++) {
+    const y = yBase + k * fh + 0.08;
+    const a = f.p(u0 + 0.3, y, dep * 0.55);
+    const b = f.p(u1 - 0.3, y, dep * 0.55);
+    FIRE_ESCAPES.push({ x0: a[0], z0: a[2], x1: b[0], z1: b[2], y, nx: f.nx, nz: f.nz, k });
+  }
   const o = { width: 1.5, overshoot: 0.06, wobble: 0.01, color: [0.1, 0.1, 0.13] };
   for (let k = 1; k < floors; k++) {
     const y = yBase + k * fh + 0.08;
@@ -203,7 +212,7 @@ export function shopFront(W, ch, f, u0, u1, yBase, rng, signId) {
   const doorU = u0 + Math.min(1.2, w * 0.25);
   facadeQuad(ch, f, u0 + 0.35, yBase + 0.1, u1 - 0.35, yBase + 3.3, 0.02, COL.cream, STYLE.PLAIN, { lineW: 1.6 });
   // display window
-  facadeQuad(ch, f, doorU + 0.8, yBase + 0.7, u1 - 0.7, yBase + 2.6, 0.05, COL.glass, STYLE.PLAIN, { lineW: 2 });
+  facadeQuad(ch, f, doorU + 0.8, yBase + 0.7, u1 - 0.7, yBase + 2.6, 0.05, COL.glass, STYLE.SHOPWIN, { lineW: 2 });
   const mid = (doorU + 0.8 + u1 - 0.7) / 2;
   ch.sl.seg(f.p(mid, yBase + 0.7, 0.06), f.p(mid, yBase + 2.6, 0.06), { width: 1.4, overshoot: 0.03 });
   // shine marks
@@ -225,7 +234,7 @@ function barFront(W, ch, f, y0) {
   const doorU = 1.7;
   facadeQuad(ch, f, 0.25, y0 + 0.05, w - 0.25, y0 + 3.6, 0.03, [0.2, 0.17, 0.2], STYLE.PLAIN, { lineW: 2.2 });
   // warm windows with people inside (blurry silhouettes)
-  facadeQuad(ch, f, doorU + 1.0, y0 + 0.7, w - 0.8, y0 + 2.9, 0.05, [0.98, 0.8, 0.45], STYLE.PLAIN, { lineW: 2.4 });
+  facadeQuad(ch, f, doorU + 1.0, y0 + 0.7, w - 0.8, y0 + 2.9, 0.05, [0.98, 0.8, 0.45], STYLE.SHOPWIN, { lineW: 2.4 });
   const mid = (doorU + 1.0 + w - 0.8) / 2;
   ch.sl.seg(f.p(mid, y0 + 0.7, 0.06), f.p(mid, y0 + 2.9, 0.06), { width: 1.6 });
   for (let i = 0; i < 4; i++) {

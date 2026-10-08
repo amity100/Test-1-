@@ -98,6 +98,7 @@ export function bakeSunShadows(renderer, group, sunDir, size = 2048) {
 const tmp = new THREE.Vector3();
 const fwd = new THREE.Vector3();
 const look = new THREE.Vector3();
+const vp = new THREE.Matrix4();
 
 // Screen positions of the horizon and the sun, for the coloured-pencil sky glow.
 export function updateSkyUniforms(camera) {
@@ -109,8 +110,11 @@ export function updateSkyUniforms(camera) {
   fwd.normalize();
   tmp.copy(camera.position).addScaledVector(fwd, 5000).project(camera);
   shared.uHorizonY.value = (tmp.y * 0.5 + 0.5) * r.y;
-  const s = shared.uSunDir.value;
-  const inFront = s.dot(look) > 0.05;
+  // the magic world draws its own sun (it sets in the evening); the shadows keep the golden one
+  const s = shared.uMagic.value > 0.5 ? shared.uSunDisc.value : shared.uSunDir.value;
+  const inFront = s.dot(look) > 0.05 && (shared.uMagic.value < 0.5 || s.y > -0.06);
+  vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  shared.uInvViewProj.value.copy(vp).invert();
   tmp.copy(camera.position).addScaledVector(s, 5000).project(camera);
   shared.uSunScreen.value.set((tmp.x * 0.5 + 0.5) * r.x, (tmp.y * 0.5 + 0.5) * r.y, inFront ? 1 : 0);
 }

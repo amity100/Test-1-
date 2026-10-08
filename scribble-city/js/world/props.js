@@ -19,7 +19,8 @@ function streetLamp_(W, ch, x, z, dx, dz) {
   const hx = x + dx * 1.4;
   const hz = z + dz * 1.4;
   ch.mb.box([hx - 0.25, y0 + 5.45, hz - 0.25], [hx + 0.25, y0 + 5.75, hz + 0.25], { color: COL.darkMetal, bottom: true });
-  ch.mb.box([hx - 0.18, y0 + 5.2, hz - 0.18], [hx + 0.18, y0 + 5.45, hz + 0.18], { color: COL.yellow, skipTop: true, bottom: true });
+  ch.mb.box([hx - 0.18, y0 + 5.2, hz - 0.18], [hx + 0.18, y0 + 5.45, hz + 0.18], { color: COL.yellow, skipTop: true, bottom: true, sideStyle: STYLE.GLOW, bottomStyle: STYLE.GLOW });
+  if (W.lamps) W.lamps.push({ x: hx, z: hz, obj: ch.mb.obj });
   sl.boxEdges([hx - 0.25, y0 + 5.2, hz - 0.25], [hx + 0.25, y0 + 5.75, hz + 0.25], L(1.4));
   ch.mb.box([x - 0.16, y0, z - 0.16], [x + 0.16, y0 + 0.45, z + 0.16], { color: COL.darkMetal });
   sl.boxEdges([x - 0.16, y0, z - 0.16], [x + 0.16, y0 + 0.45, z + 0.16], { width: 1.2, overshoot: 0.02, noBottom: true });

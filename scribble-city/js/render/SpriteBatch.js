@@ -15,9 +15,13 @@ varying vec4 vTint;
 varying float vDist;
 varying float vSun;
 varying vec3 vWP;
+varying float vStyle;
+uniform float uCity;
+uniform float uSway;
 
 void main() {
   vec2 off = (position.xy - iPivot) * iSize;
+  vStyle = uCity > 0.5 ? districtAt(iPos.xz) : 0.0;
   vSun = uLook > 0.5 ? shadowFast(iPos + vec3(0.0, iSize.y * 0.5, 0.0)) : 1.0;
   vec3 right;
   vec3 up;
@@ -33,6 +37,13 @@ void main() {
     up = dot(iUp, iUp) < 0.01 ? vec3(0.0, 1.0, 0.0) : iUp;
   }
   vec3 wp = iPos + right * off.x + up * off.y;
+  if (uSway > 0.5 && uMagic > 0.5) {
+    // trees lean with the wind
+    float hh = clamp(position.y, 0.0, 1.0);
+    float k = hh * hh * uWind.z * (0.55 + 0.45 * sin(uTime * 1.9 + iPos.x * 0.37 + iPos.z * 0.21)) * iSize.y * 0.06;
+    wp.x += uWind.x * k;
+    wp.z += uWind.y * k;
+  }
   vWP = wp;
   vec4 mv = viewMatrix * vec4(wp, 1.0);
   vDist = length(mv.xyz);
@@ -47,19 +58,51 @@ uniform sampler2D uMap;
 uniform float uNoFog;
 uniform float uNearFade;
 uniform float uErasable;
+uniform float uCity;
+uniform float uNightMode; // 0: drawn onto the night page (trees, effects); 1: lit (signs)
 varying vec2 vUv;
 varying vec4 vTint;
 varying float vDist;
 varying float vSun;
 varying vec3 vWP;
+varying float vStyle;
 void main() {
   if (uErasable > 0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
   vec4 tex = texture2D(uMap, vUv);
   float a = tex.a * vTint.a;
   vec3 col = tex.rgb * vTint.rgb;
   if (uNearFade > 0.0) a *= smoothstep(uNearFade * 0.45, uNearFade, vDist);
+  vec3 P = uPaper;
+  vec3 K = uInk;
+  if (vStyle > 0.5) {
+    // drawn in the district's medium: its paper and ink, the colours kept
+    P = styleP(vStyle, 0).rgb;
+    K = styleP(vStyle, 1).rgb;
+    if (styleP(vStyle, 3).y > 0.5) K = neonInk(floor(vWP.x * 0.3) + floor(vWP.z * 0.7));
+    vec3 ax = uPaper - uInk;
+    float t = clamp(dot(col - uInk, ax) / dot(ax, ax), 0.0, 1.0);
+    vec3 chroma = col - (uInk + ax * t);
+    col = mix(K, P, t) + chroma * styleP(vStyle, 3).z * 0.8;
+  }
+  if (uMagic > 0.5 && uNight > 0.001) {
+    vec3 nc;
+    if (uNightMode < 0.5) {
+      vec3 gel = vStyle > 0.5 ? styleP(vStyle, 4).rgb : vec3(0.86, 0.89, 1.0);
+      nc = poolLight(nightFlipOn(col, P, K, gel, styleP(vStyle, 5).rgb), col, lampLight(vWP));
+    } else {
+      // a sign has its own little lamp, and neon keeps glowing
+      float mx = max(col.r, max(col.g, col.b));
+      float sat = mx > 0.01 ? (mx - min(col.r, min(col.g, col.b))) / mx : 0.0;
+      float neon = smoothstep(0.35, 0.6, sat) * smoothstep(0.55, 0.9, mx);
+      nc = col * 0.6 + col * lampLight(vWP) * 0.5;
+      nc = mix(nc, col * 1.4, neon);
+    }
+    col = mix(col, nc, uNight);
+  }
+  if (uReveal.w > 0.5 && uCity > 0.5) a *= clamp((uReveal.z - 26.0 - length(vWP.xz - uReveal.xy)) / 14.0, 0.0, 1.0);
   if (uLook > 0.5) {
-    col *= mix(vec3(0.85, 0.89, 1.03), vec3(1.05, 0.985, 0.9), vSun);
+    col *= mix(vec3(1.0), mix(vec3(0.85, 0.89, 1.03), vec3(1.05, 0.985, 0.9), vSun), 1.0 - uNight);
+    if (uMagic > 0.5) col = mix(col, col * mix(vec3(0.85, 0.8, 0.95), vec3(1.08, 0.87, 0.72), vSun), uDusk * 0.7 * (1.0 - uNight));
     float ev = edgeVig(gl_FragCoord.xy);
     vec3 pp = paperAt(gl_FragCoord.xy);
     col = mix(col, pp + (col - pp) * 0.3, ev);
@@ -87,7 +130,7 @@ const quad = (() => {
  * (axis = 0) or a fixed quad oriented by right/up vectors (signs, ground decals).
  */
 export class SpriteBatch {
-  constructor(capacity, atlasTex, { dynamic = false, transparent = false, noFog = false, depthWrite = true, polygonOffset = false, nearFade = 0, erasable = false } = {}) {
+  constructor(capacity, atlasTex, { dynamic = false, transparent = false, noFog = false, depthWrite = true, polygonOffset = false, nearFade = 0, erasable = false, city = false, sway = false, lit = false } = {}) {
     this.capacity = capacity;
     this.count = 0;
     this.dynamic = dynamic;
@@ -113,7 +156,7 @@ export class SpriteBatch {
     geo.instanceCount = 0;
     this.geometry = geo;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { ...shared, uMap: { value: atlasTex }, uNoFog: { value: noFog ? 1 : 0 }, uNearFade: { value: nearFade }, uErasable: { value: erasable ? 1 : 0 } },
+      uniforms: { ...shared, uMap: { value: atlasTex }, uNoFog: { value: noFog ? 1 : 0 }, uNearFade: { value: nearFade }, uErasable: { value: erasable ? 1 : 0 }, uCity: { value: city ? 1 : 0 }, uSway: { value: sway ? 1 : 0 }, uNightMode: { value: lit ? 1 : 0 } },
       vertexShader: COMMON + VERT,
       fragmentShader: COMMON + FRAG,
       transparent,

@@ -9,6 +9,8 @@ export const STYLE = {
   WIN_BROWN: 5,
   ROOF: 6,
   AWNING: 7,
+  GLOW: 8, // lamp glass: lights up at night
+  SHOPWIN: 9, // shop windows: warm light inside at night
   ROAD_AVE: 10,
   ROAD_ST: 11,
   INTERSECTION: 12,
@@ -116,7 +118,7 @@ export class MeshBuilder {
     }
     if (o.bottom) {
       this.quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], c,
-        [[0, 0], [w, 0], [w, d], [0, d]], [0, 3, 3, seed + 0.6], [w, d, 0, 0]);
+        [[0, 0], [w, 0], [w, d], [0, d]], [o.bottomStyle || 0, 3, 3, seed + 0.6], [w, d, 0, 0]);
     }
   }
 

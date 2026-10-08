@@ -203,7 +203,7 @@ export function buildBar(scene, mats, signAtlas, collision) {
   const lines = sl.toBatch(mats.line);
   group.add(lines.mesh);
   // signs: neon over the west wall, the chalk menu above the bottles, a gig poster, the exit
-  const signs = new SpriteBatch(8, signAtlas.texture, { polygonOffset: true });
+  const signs = new SpriteBatch(8, signAtlas.texture, { polygonOffset: true, lit: true });
   const add = (rect, x, y, z, w, h, axis) => signs.add({ x: ox + x, y: FLOOR + y, z: oz + z, w, h, rect: signAtlas.rects[rect], axis, pivot: [0.5, 0.5] });
   add('bar_neon', -W + 0.06, 2.6, -0.5, 4.2, 2.1, [0, 0, -1]);
   add('bar_menu', -1.2, 3.35, -D + 0.06, 2.4, 1.2, [1, 0, 0]);

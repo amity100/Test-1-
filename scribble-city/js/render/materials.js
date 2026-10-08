@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { COMMON, LINE_VERT, LINE_FRAG, SURF_VERT, SURF_FRAG, SPRITE_VERT, SPRITE_FRAG, SKY_VERT, SKY_FRAG } from './shaders.js';
 import { mulberry32 } from '../core/util.js';
+import { makeStyleTexture, makeDistrictTexture } from './districts.js';
 
 // Colors of the notebook world.
 export const PALETTE = {
@@ -51,6 +52,32 @@ export const shared = {
   // rubbed-out spots in the city drawing (xyz centre, w radius)
   uWErase: { value: Array.from({ length: 16 }, () => new THREE.Vector4(0, -1000, 0, 0)) },
   uWEraseN: { value: 0 },
+  // ---- the magic world (all off = the original look; see game/daynight.js, render/districts.js)
+  uMagic: { value: 0 },
+  uNight: { value: 0 }, // 0 day .. 1 night: the page turns dark and the ink glows
+  uDusk: { value: 0 }, // sunset / sunrise glow on the horizon
+  uSkyPaper: { value: new THREE.Color(0.968, 0.958, 0.93) }, // the page where you stand (sky, fog)
+  uPage: { value: new THREE.Vector4(1, 0, 1, 0) }, // rules, grid, margin, halftone dots on that page
+  uSkyHorizon: { value: new THREE.Color(1, 0.8, 0.56) },
+  uSkyMid: { value: new THREE.Color(1, 0.94, 0.86) },
+  uSkyZenith: { value: new THREE.Color(0.87, 0.92, 1.03) },
+  uSunDisc: { value: new THREE.Vector3(-0.86, 0.47, 0.15).normalize() }, // where the drawn sun is
+  uMoonDir: { value: new THREE.Vector3(0.6, 0.5, -0.6).normalize() },
+  uStars: { value: 0 },
+  uInvViewProj: { value: new THREE.Matrix4() },
+  uLightMap: { value: (() => { const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); t.needsUpdate = true; return t; })() },
+  uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) }, // x0, z0, 1/width, 1/depth
+  uStyleTex: { value: makeStyleTexture() },
+  uDistrictTex: { value: makeDistrictTexture() },
+  uWet: { value: 0 }, // puddles and dark wet paper
+  uRain: { value: 0 },
+  uOvercast: { value: 0 },
+  uMist: { value: 0 }, // smudged-pencil fog
+  uRainbow: { value: 0 },
+  uWind: { value: new THREE.Vector3(1, 0, 0) }, // xz direction, strength
+  uLightning: { value: 0 },
+  uReveal: { value: new THREE.Vector4(0, 0, 1e5, 0) }, // the city drawing itself: centre xz, radius, on
+  uCarLight: { value: new THREE.Vector4(0, 0, 0, 0) }, // headlights: x, z, yaw, on
 };
 
 function makeObjMask() {
@@ -168,6 +195,7 @@ export function makeSpriteMaterial(atlasTex, { noFog = false, transparent = fals
       uErase: { value: 0 },
       uNoFog: { value: noFog ? 1 : 0 },
       uWhiten: { value: 0 },
+      uNightMode: { value: 0 },
     },
     vertexShader: COMMON + SPRITE_VERT,
     fragmentShader: COMMON + SPRITE_FRAG,

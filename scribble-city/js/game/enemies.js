@@ -1714,6 +1714,7 @@ export class Enemies {
   // a shot, a crash, an explosion: whoever hears it reacts
   noise(pos, radius, kind = 'shot') {
     const t = this.game.time;
+    if (this.game.ambient) this.game.ambient.scare(pos, radius * 0.6);
     for (const e of this.list) {
       if (!e.alive || e.headless || e.state === 'flee') continue;
       const d = Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);

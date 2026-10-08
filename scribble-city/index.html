@@ -130,13 +130,15 @@
         </div>
         <div class="col">
           <h3>איך משחקים</h3>
-          <p>מצלמים שלטים עם ציורים, מתחבאים, ומציירים אותם באוויר. ככה שהציור טוב יותר, הנשק או הרכב טובים יותר! המחק מוחק כל דבר בעיר, כל מכונית אפשר לקחת — רק שהמשטרה לא תראה. החנויות פתוחות (המוכרים מציירים לכם מה שתבקשו), ויש בר מעבר לפינה…</p>
+          <p>מצלמים שלטים עם ציורים, מתחבאים, ומציירים אותם באוויר. ככה שהציור טוב יותר, הנשק או הרכב טובים יותר! המחק מוחק כל דבר בעיר, כל מכונית אפשר לקחת — רק שהמשטרה לא תראה. החנויות פתוחות (המוכרים מציירים לכם מה שתבקשו), ויש בר מעבר לפינה… העיר עוברת יום ולילה ומזג אוויר, וכל רובע מצויר בסגנון אחר (אפשר לכבות בתפריט ההפסקה).</p>
         </div>
       </div>
       <button id="start-btn" class="btn primary huge" disabled>טוען את המחברת…</button>
       <div id="load-status"></div>
     </div>
   </div>
+
+  <div id="intro-flash" class="hidden"></div>
 
   <div id="pause" class="overlay hidden">
     <div class="sheet small">
@@ -145,6 +147,9 @@
       <label class="opt"><input type="checkbox" id="opt-sound" checked> צלילים</label>
       <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים רועדים</label>
       <label class="opt"><input type="checkbox" id="opt-look" checked> מראה משודרג (שקיעה)</label>
+      <label class="opt"><input type="checkbox" id="opt-magic" checked> עולם קסום (יום ולילה, רובעים, מזג אוויר)</label>
+      <label class="opt">שעה <select id="opt-time"><option value="cycle">מתחלפת</option><option value="day">יום</option><option value="dusk">שקיעה</option><option value="night">לילה</option></select></label>
+      <label class="opt">מזג אוויר <select id="opt-weather"><option value="auto">משתנה</option><option value="clear">בהיר</option><option value="cloudy">מעונן</option><option value="rain">גשם</option><option value="storm">סערה</option><option value="fog">ערפל</option><option value="windy">רוח</option><option value="rainbow">קשת</option></select></label>
       <label class="opt">רגישות <input type="range" id="opt-sens" min="0.3" max="2.5" step="0.1" value="1"></label>
     </div>
   </div>
