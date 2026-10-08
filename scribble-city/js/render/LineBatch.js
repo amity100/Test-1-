@@ -158,6 +158,15 @@ export class StrokeList {
     for (let i = 0; i < n - (closed ? 0 : 1); i++) this.seg(points[i], points[(i + 1) % n], o);
   }
 
+  // A round blob of colour (a lamp, a bulb): short crossing dashes. A pen stroke is only as wide as
+  // its pixels, so a point needs a little length in every direction to show from anywhere.
+  dot(x, y, z, r, o = {}) {
+    const q = { overshoot: 0, wobble: 0.002, ...o };
+    this.seg([x, y - r, z], [x, y + r, z], q);
+    this.seg([x - r, y, z], [x + r, y, z], q);
+    this.seg([x, y, z - r], [x, y, z + r], q);
+  }
+
   // Horizontal circle (ring) around a vertical axis.
   ring(cx, cy, cz, r, segs, o = {}) {
     const pts = [];

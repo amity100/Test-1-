@@ -386,7 +386,7 @@ function theater(W, ch, lot, rng, i) {
   const n = 14;
   for (let k = 0; k <= n; k++) {
     const p = f.p(u - 5 + (10 * k) / n, CURB + 5.05, 2.62);
-    ch.sl.ring(p[0], p[1], p[2], 0.001, 3, { width: 6, color: [1, 0.85, 0.25], overshoot: 0 });
+    ch.sl.dot(p[0], p[1], p[2], 0.08, { width: 6, color: [1, 0.85, 0.25] });
   }
   const c = f.p(u, CURB + 4.3, 2.65);
   W.signs.push({ x: c[0], y: c[1], z: c[2], w: 9.4, h: 1.25, rect: i % 2 ? 'cinema' : 'theater', axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
@@ -837,7 +837,7 @@ function alienSite(W, ch, r, ix0, iz0, ix1, iz1) {
   ch.mb.cone(ux, yb + 3.5, uz, 3.4, 2.2, 12, [0.8, 0.9, 0.92]);
   sl.ring(ux, yb + 3.5, uz, 3.4, 12, { width: 2 });
   // lights on the rim
-  for (let i = 0; i < 20; i += 3) sl.ring(rim[i][0], rim[i][1], rim[i][2], 0.001, 3, { width: 8, color: [1, 0.85, 0.2], overshoot: 0 });
+  for (let i = 0; i < 20; i += 3) sl.dot(rim[i][0], rim[i][1], rim[i][2], 0.15, { width: 8, color: [1, 0.85, 0.2] });
   W.collision.addBox(ux - 8, uz - 8, ux + 8, uz + 8, CURB, yb + 4, 'wall');
   // goo puddles
   for (let i = 0; i < 9; i++) {

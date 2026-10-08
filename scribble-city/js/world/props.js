@@ -45,7 +45,7 @@ function trafficLight_(W, ch, x, z, dx, dz, armLen = 4.5) {
     for (const s of [-1, 1]) {
       const ox = Math.abs(dx) > 0.5 ? 0 : s * (px + 0.01);
       const oz = Math.abs(dx) > 0.5 ? s * (pz + 0.01) : 0;
-      ch.sl.ring(hx + ox, y, hz + oz, 0.001, 3, { width: 7, color: cols[i], alpha: 0.95, overshoot: 0 });
+      ch.sl.dot(hx + ox, y, hz + oz, 0.07, { width: 7, color: cols[i], alpha: 0.95 });
     }
   }
   W.collision.addCircle(x, z, 0.2, y0, y0 + 5.6, 'pole');
@@ -222,9 +222,9 @@ export function carShape(W, ch, x, z, alongX, color, taxi = false, collide = tru
   // lights
   for (const s of [-1, 1]) {
     const hl = P(L + 0.01, 0.68, s * 0.6);
-    ch.sl.ring(hl[0], hl[1], hl[2], 0.001, 3, { width: 5, color: [0.95, 0.88, 0.5], overshoot: 0 });
+    ch.sl.dot(hl[0], hl[1], hl[2], 0.06, { width: 5, color: [0.95, 0.88, 0.5] });
     const tl = P(-L - 0.01, 0.68, s * 0.6);
-    ch.sl.ring(tl[0], tl[1], tl[2], 0.001, 3, { width: 5, color: [0.75, 0.2, 0.2], overshoot: 0 });
+    ch.sl.dot(tl[0], tl[1], tl[2], 0.06, { width: 5, color: [0.75, 0.2, 0.2] });
   }
   if (taxi) {
     const t0 = P(-0.35, yt, -0.18);
@@ -521,7 +521,7 @@ function foodCart_(W, ch, x, z) {
   const y0 = CURB;
   solidBox(W, ch, [x - 1.0, y0 + 0.4, z - 0.6], [x + 1.0, y0 + 1.3, z + 0.6], { color: COL.white, lineW: 2, tag: 'prop' });
   ch.sl.seg([x - 1.0, y0 + 0.9, z + 0.61], [x + 1.0, y0 + 0.9, z + 0.61], { width: 1.6, overshoot: 0 });
-  for (const s of [-1, 1]) ch.sl.ring(x + s * 0.6, y0 + 0.3, z + 0.62, 0.001, 3, { width: 9, color: [0.1, 0.1, 0.12], overshoot: 0 });
+  for (const s of [-1, 1]) ch.sl.dot(x + s * 0.6, y0 + 0.3, z + 0.62, 0.12, { width: 9, color: [0.1, 0.1, 0.12] });
   ch.sl.seg([x, y0 + 1.3, z], [x, y0 + 2.4, z], L(1.8));
   // umbrella
   const n = 8;
