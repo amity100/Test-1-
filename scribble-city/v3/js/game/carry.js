@@ -4,6 +4,7 @@ import * as THREE from 'three';
 // Poses put the hands where the thing needs them; shapes are the solid parts (ray-traced like
 // the bodies), strokes the pen lines drawn over them.
 
+const RAINBOW = [[0.92, 0.3, 0.32], [0.98, 0.62, 0.22], [0.98, 0.86, 0.3], [0.42, 0.75, 0.4], [0.35, 0.58, 0.92], [0.62, 0.42, 0.85]];
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
@@ -447,6 +448,28 @@ function strokesFor(fig, item, side, w) {
       line(fig, _b, _c, [0.25, 0.22, 0.2], w * 2, sd + 121);
       _c.copy(_a).addScaledVector(_d, -0.05 * S);
       line(fig, _a, _c, [0.95, 0.6, 0.66], w * 3.6, sd + 122);
+      break;
+    }
+    case 'magicPencil': {
+      // a pencil striped in every colour, a twinkle at its tip
+      const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
+      _d.subVectors(h, el).normalize();
+      for (let i = 0; i < 6; i++) {
+        _a.copy(h).addScaledVector(_d, (-0.1 + i * 0.05) * S);
+        _b.copy(h).addScaledVector(_d, (-0.05 + i * 0.05) * S);
+        line(fig, _a, _b, RAINBOW[i], w * 3.4, sd + 160 + i);
+      }
+      _a.copy(h).addScaledVector(_d, 0.2 * S);
+      _c.copy(_a).addScaledVector(_d, 0.06 * S);
+      line(fig, _a, _c, [0.96, 0.84, 0.66], w * 2.2, sd + 167);
+      const k = 0.5 + 0.5 * Math.sin(t * 9);
+      const s2 = (0.03 + 0.035 * k) * S;
+      _a.copy(_c).addScaledVector(UP, s2);
+      _b.copy(_c).addScaledVector(UP, -s2);
+      line(fig, _a, _b, [1, 0.86, 0.3], w * 1.3, sd + 168);
+      _a.copy(_c).addScaledVector(X, s2);
+      _b.copy(_c).addScaledVector(X, -s2);
+      line(fig, _a, _b, [1, 0.86, 0.3], w * 1.3, sd + 169);
       break;
     }
     case 'eraser': {

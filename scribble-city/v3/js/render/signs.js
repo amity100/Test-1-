@@ -442,6 +442,70 @@ function gigPoster(sk, ctx, w, h) {
   for (let i = 0; i < 3; i++) sk.circle(420 + i * 18, 60 + i * 9, 10 + i * 4, { width: 2.5, color: BLACK2D });
 }
 
+// a doodled heart: points around (cx, cy), s wide
+function heartPts(cx, cy, s, n = 28) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = (i / n) * PI * 2;
+    const x = 16 * Math.pow(Math.sin(t), 3);
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    pts.push([cx + (x / 32) * s, cy - (y / 32) * s]);
+  }
+  return pts;
+}
+
+// the board over the stand on the promenade
+function friendBoard(sk, ctx, w, h) {
+  const frame = [[8, 10], [w - 8, 8], [w - 10, h - 8], [10, h - 10]];
+  sk.paper(frame, '#fff5f7');
+  sk.fill(frame, '#ffc2d4', { spacing: 3, alpha: 0.6, overshoot: 0, angle: -0.4 });
+  sk.poly(frame, true, { width: 6, color: '#7a2848' });
+  sk.text('DRAW YOURSELF', w / 2 + 34, 74, { size: 58, color: '#4a1636', font: FONT_SIGN, dir: 'ltr', weight: 400, maxWidth: w - 150 });
+  sk.text('A FRIEND', w / 2 + 34, 160, { size: 96, color: '#d8265a', font: FONT_SIGN, dir: 'ltr', weight: 400, maxWidth: w - 150, rotate: -0.03 });
+  sk.text('magic pencils · $1', w / 2 + 34, 224, { size: 30, color: '#4a1636', font: FONT_NOTE, dir: 'ltr', weight: 700 });
+  // a pencil drawing a heart
+  const px = 70;
+  const py = 150;
+  const pen = [[px - 14, py - 70], [px + 6, py - 76], [px + 26, py - 10], [px + 6, py - 4]];
+  sk.fill(pen, '#f5c242', { spacing: 2.4, alpha: 0.95, overshoot: 0, angle: 1.2 });
+  sk.poly(pen, true, { width: 3.5, color: '#3a2a1a' });
+  sk.poly([[px + 6, py - 4], [px + 26, py - 10], [px + 22, py + 14]], true, { width: 3.5, color: '#3a2a1a' });
+  const hp = heartPts(px + 2, py + 52, 64);
+  sk.fill(hp, '#ff4f78', { spacing: 3, alpha: 0.9, angle: -0.6 });
+  sk.poly(hp, true, { width: 4, color: '#a3123c' });
+  for (const [x, y, s] of [[w - 34, 34, 30], [w - 54, h - 34, 22], [130, 34, 20]]) sk.poly(heartPts(x, y, s, 20), true, { width: 3, color: '#d8265a' });
+}
+
+// a sample of what you get: a friend drawn on a sheet on the easel
+function friendSketch(sk, ctx, w, h) {
+  ctx.fillStyle = '#fbf8f0';
+  ctx.fillRect(0, 0, w, h);
+  sk.poly([[6, 6], [w - 6, 6], [w - 6, h - 6], [6, h - 6]], true, { width: 4, color: '#6b4a2e' });
+  const ink = '#2a2230';
+  // long hair, the face, a smile
+  sk.fill([[100, 52], [156, 52], [164, 126], [92, 126]], '#6b3d22', { spacing: 2.4, alpha: 0.85, overshoot: 0, angle: 1.4 });
+  sk.circle(128, 70, 24, { width: 4, color: ink });
+  sk.stroke([[104, 62], [112, 46], [128, 42], [144, 46], [152, 62]], { width: 4, color: '#6b3d22' });
+  sk.line(119, 66, 119, 70, { width: 4, color: ink });
+  sk.line(137, 66, 137, 70, { width: 4, color: ink });
+  sk.stroke([[118, 79], [128, 84], [138, 79]], { width: 3, color: '#c2265a' });
+  // a long dress with long sleeves, down to the ankles
+  const dress = [[110, 98], [146, 98], [166, 222], [90, 222]];
+  sk.fill(dress, '#8fb8f0', { spacing: 2.6, alpha: 0.9, overshoot: 0, angle: -0.5 });
+  sk.poly(dress, true, { width: 4, color: ink });
+  sk.stroke([[112, 100], [96, 140], [92, 168]], { width: 7, color: '#8fb8f0' });
+  sk.stroke([[112, 100], [96, 140], [92, 168]], { width: 2.5, color: ink });
+  sk.stroke([[144, 100], [170, 82], [182, 54]], { width: 7, color: '#8fb8f0' });
+  sk.stroke([[144, 100], [170, 82], [182, 54]], { width: 2.5, color: ink });
+  sk.circle(183, 48, 6, { width: 3, color: ink });
+  sk.line(112, 222, 110, 236, { width: 4, color: ink });
+  sk.line(144, 222, 146, 236, { width: 4, color: ink });
+  sk.text('Hi!', 206, 40, { size: 40, color: '#d8265a', font: FONT_NOTE, dir: 'ltr', weight: 700 });
+  const hp = heartPts(206, 96, 34, 20);
+  sk.fill(hp, '#ff4f78', { spacing: 3, alpha: 0.9 });
+  sk.poly(hp, true, { width: 3, color: '#a3123c' });
+}
+
 export function buildSignAtlas() {
   const W = 2048;
   const H = 3072;
@@ -494,6 +558,7 @@ export function buildSignAtlas() {
   large('bar_neon', (sk, c) => barNeon(sk, c, 512, 256));
   large('bar_menu', (sk, c) => barMenu(sk, c, 512, 256));
   large('bar_poster', (sk, c) => gigPoster(sk, c, 512, 256));
+  large('friend_stand', (sk, c) => friendBoard(sk, c, 512, 256));
 
   // square tiles along the bottom row of the atlas
   let med = 0;
@@ -508,6 +573,7 @@ export function buildSignAtlas() {
     rects[name] = [cx / W, 1 - (cy + 256) / H, 256 / W, 256 / H];
   };
   for (const [id, [lines, icon]] of Object.entries(CHALK)) square(id, (sk, c) => chalkBoard(sk, c, 256, 256, lines, icon));
+  square('friend_easel', (sk, c) => friendSketch(sk, c, 256, 256));
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.generateMipmaps = true;

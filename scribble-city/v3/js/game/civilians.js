@@ -386,7 +386,7 @@ export class Civilians {
     game.fx.crumbs(point.x, point.y, point.z, 8, 2.5);
     game.audio.play('erase', 0.5);
     this.panic(c.pos, 30);
-    c.panicT = 8;
+    c.panicT = c.brave ? 0 : 8;
     if (game.onCivilianHurt) game.onCivilianHurt(c);
     if (!res) return;
     const part = res.part;
@@ -441,6 +441,8 @@ export class Civilians {
   panic(pos, radius) {
     for (const c of this.list) {
       if (c.inside) continue;
+      // (the friend you drew stays by your side)
+      if (c.brave) continue;
       if (Math.hypot(c.pos.x - pos.x, c.pos.z - pos.z) < radius) {
         if (c.panicT <= 0 && Math.random() < 0.3) this.game.fx.mark('fx_alert', c.pos.x, c.pos.y + 2.4, c.pos.z, 0.6, 0.8);
         c.panicT = 6 + Math.random() * 3;

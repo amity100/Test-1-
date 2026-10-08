@@ -380,6 +380,22 @@ export function shopkeeperLook(kind) {
       L.hat = { kind: 'bandanaHead', color: [0.75, 0.15, 0.18] };
       apron([0.2, 0.2, 0.3]);
       break;
+    case 'friends':
+      // the girl who sells the magic pencils: a pink sweater, a beret, an apron of every colour
+      L.fem = true;
+      L.top = { kind: 'sweater', color: [0.98, 0.68, 0.78], sleeves: 'long' };
+      L.bottom = { kind: 'skirt', color: [0.3, 0.32, 0.52] };
+      L.hat = { kind: 'beret', color: [0.85, 0.2, 0.35] };
+      L.hair = { style: pick(['long', 'ponytail', 'curly']), color: pick(HAIR) };
+      L.face.beard = null;
+      L.face.mouth = 'smile';
+      apron([0.98, 0.94, 0.86]);
+      break;
+    case 'lobby':
+      L.top = { kind: fem ? 'blazer' : 'suit', color: [0.16, 0.2, 0.32], sleeves: 'long', shirt: [0.95, 0.95, 0.94], tie: fem ? null : [0.62, 0.12, 0.14] };
+      L.bottom = { kind: 'pants', color: [0.16, 0.2, 0.32] };
+      L.hat = { kind: 'cap', color: [0.16, 0.2, 0.32] };
+      break;
     case 'pharmacy':
     case 'optics':
       L.top = { kind: 'blazer', color: WHITE, sleeves: 'long', shirt: [0.6, 0.75, 0.9] };
@@ -390,6 +406,16 @@ export function shopkeeperLook(kind) {
       apron(pick([[0.3, 0.42, 0.6], [0.55, 0.36, 0.22]]));
       break;
   }
+  return modest(L);
+}
+
+// somebody drawn with a magic pencil at a DRAW YOURSELF A FRIEND stand: a nice, ordinary woman,
+// dressed like everybody else (modest: sleeves, long skirts)
+export function friendLook() {
+  const L = civilianLook({ fem: true, kind: pick(['dress', 'dress', 'casual', 'office', 'artsy']) });
+  L.face.mouth = 'smile';
+  L.face.eyes = pick(['lashes', 'oval', 'anime']);
+  L.hair = { style: pick(['long', 'long', 'ponytail', 'bun', 'curly', 'bob']), color: L.hair.color };
   return modest(L);
 }
 

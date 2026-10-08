@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shopkeeperLook, civilianLook } from './looks.js';
+import { shopkeeperLook, civilianLook, friendLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
@@ -24,6 +24,7 @@ const TOOL = {
   pizza: 'dough', cafe: 'tray', grocery: 'apple', deli: null, bagel: 'tray', flowers: 'bouquet', books: 'book',
   icecream: 'icecream', hardware: 'broom', laundry: 'laundry', sushi: null, falafel: null, shop: 'broom', pharmacy: null,
   phones: 'phone', optics: null, gym: 'dumbbell', music: 'guitar', barber: 'scissors', lobby: null,
+  friends: 'magicPencil',
 };
 const CALLS = {
   pizza: ['Hot slice!', 'Fresh outta the oven!', 'Pizza! Pizza!'],
@@ -46,6 +47,7 @@ const CALLS = {
   music: ['This one\'s for you!', 'Any requests?'],
   barber: ['Snip snip!', 'Hold still...'],
   lobby: ['Good evening.', 'Mind the floor, it\'s wet.', 'Lift\'s on the way.'],
+  friends: ['Draw yourself a friend!', 'Magic pencils! One dollar!', 'Lonely? Draw a friend!', 'Every friend comes out different!'],
 };
 
 // the hero's own look (hair, glasses, muscles) survives a reload
@@ -112,7 +114,7 @@ export class StreetLife {
       const near = [];
       for (const s of this.shops) {
         const d = Math.hypot(s.door[0] - p.x, s.door[2] - p.z);
-        if (d < 62) near.push([d, s]);
+        if (d < 62) near.push([d - (s.stand ? 25 : 0), s]);
       }
       near.sort((a, b) => a[0] - b[0]);
       const want = new Set(near.slice(0, this.budget).map((n) => n[1]));
@@ -126,6 +128,7 @@ export class StreetLife {
       for (const s of want) if (!this.active.has(s.id)) this.active.set(s.id, new OpenShop(this, s));
     }
     for (const a of this.active.values()) a.update(dt);
+    if (this.companion && !this.companion.alive) this.companion = null;
     this.updateErrands(dt);
     this.updateCalls(dt);
     this.tidyT = (this.tidyT || 0) - dt;
@@ -324,6 +327,15 @@ export class StreetLife {
   clear() {
     for (const a of this.active.values()) a.dispose();
     this.active.clear();
+    if (this.companion) this.companion.dispose();
+    this.companion = null;
+  }
+
+  // the friend you drew at a stand: she walks with you
+  newCompanion(x, z) {
+    if (this.companion) this.companion.dispose();
+    this.companion = new Companion(this, x, z);
+    return this.companion;
   }
 }
 
@@ -416,6 +428,7 @@ const SERVICES = {
   ] },
 };
 
+SERVICES.friends = { verb: 'לצייר לעצמך חברה', ask: 'לצייר לעצמך חברה', who: 'המוכרת בדוכן', greet: 'ציירו לעצמכם חברה! עיפרון קסם אחד — ומה שמציירים בו קם לחיים. רק לצייר בעדינות, כן?', offers: [['עיפרון קסם — לצייר חברה (היא תלך איתך)', null, (game, a) => a.heroFriend()]] };
 SERVICES.lobby = { verb: 'להיכנס ללובי', ask: 'לדבר עם השומר', who: 'השומר בלובי', greet: 'ערב טוב. אתה לא גר פה, נכון? ...טוב, מה צריך?', offers: [['לשאול איפה יש שרטוט בסביבה', null, (game) => bookHint(game)], ['כוס מים (+10 חיים)', 'cup', heal(10, [0.6, 0.8, 0.95], 'מים קרים. +10 חיים')]] };
 
 const HERO_HAIR_COLORS = [[0.12, 0.1, 0.09], [0.42, 0.28, 0.16], [0.86, 0.72, 0.45], [0.75, 0.2, 0.22], [0.3, 0.45, 0.85], [0.55, 0.3, 0.75]];
@@ -523,6 +536,12 @@ class OpenShop {
     this.keeper.fig.carry = TOOL[s.kind] || null;
     this.home = new THREE.Vector3(kx, 0, kz);
     this.keeper.ctrl = (c, dt) => this.work(c, dt);
+    if (s.kind === 'friends') {
+      // the stand on the promenade: she sells magic pencils, people draw themselves friends
+      this.keeper.noCollide = true;
+      this.script = this.friendScene();
+      this.sWait = 1 + Math.random() * 2;
+    }
     if (R) {
       // behind the counter he keeps to his marks; if he runs, it is out of the door
       this.keeper.noCollide = true;
@@ -914,6 +933,7 @@ class OpenShop {
       return this.room ? { x: c.pos.x, z: c.pos.z, speed: 0 } : null;
     }
     fig.lookAt = null;
+    if (s.kind === 'friends') return this.vendor(c, dt);
     if (this.room) return this.workInside(c, dt);
     switch (s.kind) {
       case 'barber':
@@ -1211,6 +1231,172 @@ class OpenShop {
     return { x: sx, z: sz, speed: 1 };
   }
 
+  // ------------------------------------------------------------------ DRAW YOURSELF A FRIEND
+  // the girl at the stand: an eye on her customer, a smile for the promenade
+  vendor(c) {
+    const fig = c.fig;
+    const cust = this.fCust;
+    if (cust && cust.alive && cust.owner === this && Math.hypot(cust.pos.x - c.pos.x, cust.pos.z - c.pos.z) < 4) {
+      c.faceYaw = Math.atan2(cust.pos.x - c.pos.x, cust.pos.z - c.pos.z);
+      fig.lookAt = cust.fig.j.headC;
+    } else {
+      fig.lookAt = null;
+      c.faceYaw = this.homeYaw + Math.sin(this.t * 0.4) * 0.5;
+    }
+    return { x: this.home.x, z: this.home.z, speed: 0.8 };
+  }
+
+  // walk a scene actor somewhere (a friend at his side if given); for use with yield*
+  *walkTo(a, x, z, speed = 1.2, friend = null) {
+    a.goal = { x, z, speed };
+    let t = 0;
+    while (a.alive && a.owner === this && Math.hypot(a.pos.x - x, a.pos.z - z) > 0.35 && t < 30) {
+      if (friend && friend.alive && friend.owner === this) {
+        // at his side, half a step behind
+        const r = a.fig.right;
+        const f = a.fig.forward;
+        friend.goal = { x: a.pos.x + r.x * 0.8 - f.x * 0.25, z: a.pos.z + r.z * 0.8 - f.z * 0.25, speed: speed * 1.2 };
+      }
+      t += 0.1;
+      yield 0.1;
+    }
+    a.goal = null;
+    if (friend) friend.goal = null;
+  }
+
+  // the scene's people go back to the city (or, if they were never seen, simply go)
+  endScene() {
+    for (const c of [this.fCust, this.fFriend]) {
+      if (c && c.owner === this) {
+        c.goal = null;
+        this.game.civilians.release(c);
+      }
+    }
+    this.fCust = null;
+    this.fFriend = null;
+    this.extras = this.extras.filter((c) => c.owner === this);
+  }
+
+  hearts(x, y, z, n = 4) {
+    for (let i = 0; i < n; i++) {
+      this.game.fx.sprite('fx_heart', x + (Math.random() - 0.5) * 0.7, y + Math.random() * 0.4, z + (Math.random() - 0.5) * 0.7, { size: 0.3 + Math.random() * 0.15, grow: 0.25, life: 1.4 + Math.random() * 0.6, vy: 0.55, fadeIn: 0.15 });
+    }
+  }
+
+  *friendScene() {
+    const s = this.shop;
+    const sp = s.spots;
+    const civs = this.game.civilians;
+    for (;;) {
+      this.endScene();
+      yield 3 + Math.random() * 6;
+      if (!this.open) continue;
+      // somebody comes along the promenade for a magic pencil
+      const from = Math.random() < 0.5 ? 1 : -1;
+      const a = civs.spawnScripted(s.door[0] + s.rx * from * 9 + s.nx * 2.2, s.door[2] + s.rz * from * 9 + s.nz * 2.2, civilianLook(), this);
+      a.goal = null;
+      a.ctrl = (civ) => civ.goal;
+      this.extras.push(a);
+      this.fCust = a;
+      const ok = () => a.alive && a.owner === this && this.open;
+      yield* this.walkTo(a, sp.counter.x, sp.counter.z, 1.4);
+      if (!ok()) continue;
+      a.faceYaw = Math.atan2(this.home.x - a.pos.x, this.home.z - a.pos.z);
+      this.say(a, pick(['One magic pencil, please!', 'Is it true? Any friend I draw?', 'I\'d like a friend, please.', 'One friend, please!']));
+      yield 2;
+      if (!ok()) continue;
+      this.say(this.keeper, pick(['Here you go! Draw her with love.', 'Draw carefully!', 'Smile while you draw!', 'She\'ll be lovely.']));
+      a.fig.carry = 'magicPencil';
+      this.sound('pageflip', 0.6);
+      yield 1.4;
+      if (!ok()) continue;
+      // off to the side, facing the promenade, and draw
+      const spot = sp.draw[Math.random() < 0.5 ? 0 : 1];
+      yield* this.walkTo(a, spot.x, spot.z, 1.1);
+      if (!ok()) continue;
+      a.faceYaw = spot.yaw;
+      yield 0.9;
+      const fx = Math.sin(spot.yaw);
+      const fz = Math.cos(spot.yaw);
+      const at = new THREE.Vector3(spot.x + fx * 1.35, a.pos.y + 0.88, spot.z + fz * 1.35);
+      let plopped = false;
+      this.game.airsketch.draw({ shape: 'friend', at, size: 1.75, author: a, pen: 'magicPencil', target: at.clone(), targetScale: 1, dur: 3.2, hold: 0.5, width: 3.6, onPlop: () => (plopped = true) });
+      for (let t = 0; !plopped && t < 10 && ok(); t += 0.1) yield 0.1;
+      if (!ok() || !plopped) continue;
+      // she's real
+      const b = civs.spawnScripted(at.x, at.z, friendLook(), this);
+      b.goal = null;
+      b.ctrl = (civ) => civ.goal;
+      b.yaw = spot.yaw + Math.PI;
+      b.faceYaw = spot.yaw + Math.PI;
+      this.extras.push(b);
+      this.fFriend = b;
+      this.game.fx.confetti(at.x, at.y + 0.6, at.z, 26, 3);
+      this.hearts(at.x, at.y + 1.0, at.z, 5);
+      this.sound('cheer', 0.5, 20);
+      a.fig.carry = null;
+      yield 0.8;
+      this.say(b, pick(['Hi!', 'Hello there!', 'Nice to meet you!', 'Oh! Hi!']));
+      yield 1.8;
+      if (!ok()) continue;
+      this.say(a, pick(['Wow...', 'Hi! I\'m Sam.', 'You look wonderful!', 'Want to take a walk?']));
+      this.hearts(a.pos.x, a.pos.y + 2.0, a.pos.z, 2);
+      yield 1.8;
+      if (!ok() || !b.alive || b.owner !== this) continue;
+      this.say(b, pick(['Let\'s go!', 'I\'d love to!', 'Where to?', 'Lead the way!']));
+      yield 0.6;
+      // the two of them walk off along the promenade together
+      yield* this.walkTo(a, spot.x + fx * 26, spot.z + fz * 26, 1.15, b);
+    }
+  }
+
+  // the hero draws one (the stand's service)
+  heroFriend() {
+    const game = this.game;
+    const life = this.life;
+    const p = game.player;
+    if (life.companion && life.companion.alive) {
+      game.hud.toast('כבר יש לך חברה מצוירת — היא כאן לידך', 'info', 2.4);
+      return;
+    }
+    // you turn to the promenade and draw her there, out in the open
+    const s = this.shop;
+    const at = new THREE.Vector3(p.pos.x + s.nx * 1.7, p.pos.y + 0.88, p.pos.z + s.nz * 1.7);
+    const yaw = Math.atan2(s.nx, s.nz);
+    p.yaw = yaw;
+    p.fig.yaw = yaw;
+    // a magic pencil in your hand, and you draw her
+    const author = { fig: p.fig, alive: true, panicT: 0, owner: null };
+    this.drawing = true;
+    this.talking = true;
+    p.seat = { x: p.pos.x, z: p.pos.z, yaw, lock: true, stand: true };
+    game.hud.toast('מציירים... בעדינות!', 'info', 2.2);
+    game.airsketch.draw({
+      shape: 'friend',
+      at,
+      size: 1.75,
+      author,
+      pen: 'magicPencil',
+      target: at.clone(),
+      targetScale: 1,
+      dur: 3.0,
+      hold: 0.4,
+      width: 3.6,
+      onPlop: () => {
+        if (p.seat && p.seat.stand) p.seat = null;
+        this.drawing = false;
+        this.talking = false;
+        const c = life.newCompanion(at.x, at.z).c;
+        c.yaw = p.yaw + Math.PI;
+        this.game.fx.confetti(at.x, at.y + 0.6, at.z, 30, 3);
+        this.hearts(at.x, at.y + 1.0, at.z, 6);
+        this.sound('cheer', 0.7, 20);
+        game.hud.toast('ציירת לעצמך חברה! היא תלך איתך, ותצייר לך לב כשקשה', 'good', 3.6);
+        this.say(c, pick(['Hi! I\'m yours truly.', 'Hello, artist!', 'Nice drawing. Me, I mean.']));
+      },
+    });
+  }
+
   // ------------------------------------------------------------------ serving the hero
   talk() {
     const game = this.game;
@@ -1351,6 +1537,23 @@ class OpenShop {
       const p = this.game.player;
       if (p.seat) p.seat = null;
     }
+    // the stand's little play goes on
+    if (this.script) {
+      if (this.sWait > 0) this.sWait -= dt;
+      else {
+        for (let guard = 0; guard < 12; guard++) {
+          const r = this.script.next();
+          if (r.done) {
+            this.script = null;
+            break;
+          }
+          if (r.value > 0) {
+            this.sWait = r.value;
+            break;
+          }
+        }
+      }
+    }
     // now and then somebody new at the door
     if (this.room && this.open && !this.game.touch) {
       this.newT = (this.newT === undefined ? 8 + Math.random() * 10 : this.newT) - dt;
@@ -1426,6 +1629,122 @@ class OpenShop {
       if (p.seat) p.seat = null;
       this.heroJob = null;
     }
+  }
+}
+
+// ------------------------------------------------------------------ the friend you drew
+const COMPANION_LINES = ['I love this city!', 'Where are we going?', 'You draw well, you know.', 'Look, a pigeon!', 'Nice pencil.', 'Careful out there!', 'Wait for me!'];
+
+class Companion {
+  constructor(life, x, z) {
+    this.life = life;
+    this.game = life.game;
+    this.c = this.game.civilians.spawnScripted(x, z, friendLook(), this);
+    // she stays by you when it gets loud
+    this.c.brave = true;
+    this.c.speed = 1.6;
+    this.c.ctrl = (civ, dt) => this.step(civ, dt);
+    this.talkT = 14 + Math.random() * 10;
+    this.healT = 6;
+    this.waitT = 0;
+  }
+
+  get alive() {
+    return this.c && this.c.alive && this.c.owner === this;
+  }
+
+  say(text) {
+    const p = this.game.player.pos;
+    if (Math.hypot(this.c.pos.x - p.x, this.c.pos.z - p.z) < 26) this.game.bubbles.say(this.c, text);
+  }
+
+  step(c, dt) {
+    const game = this.game;
+    const p = game.player;
+    const anchor = p.inVehicle ? p.inVehicle.pos : p.pos;
+    const d = Math.hypot(anchor.x - c.pos.x, anchor.z - c.pos.z);
+    if (d > 75 || game.inBar || p.mode === 'dead') {
+      // left behind: back to her own life
+      this.say(pick(['Call me!', 'Bye-bye!', 'See you around!']));
+      this.dispose(true);
+      return null;
+    }
+    if (p.inVehicle) {
+      // waits on the sidewalk, waving
+      c.faceYaw = Math.atan2(anchor.x - c.pos.x, anchor.z - c.pos.z);
+      return null;
+    }
+    // chatter
+    this.talkT -= dt;
+    if (this.talkT <= 0) {
+      this.talkT = 25 + Math.random() * 30;
+      this.say(pick(COMPANION_LINES));
+    }
+    // a heart drawn for you when you are hurt
+    this.healT -= dt;
+    if (this.healT <= 0 && !this.drawing && p.hp < p.maxHp * 0.55 && d < 4) this.drawHeart();
+    // at your left, half a step behind
+    const r = p.fig.right;
+    const f = p.fig.forward;
+    const tx = p.pos.x - r.x * 1.05 - f.x * 0.5;
+    const tz = p.pos.z - r.z * 1.05 - f.z * 0.5;
+    const dd = Math.hypot(tx - c.pos.x, tz - c.pos.z);
+    // stuck behind something while you walk on: she catches up (somewhere you are not looking)
+    this.stuckT = (this.stuckT || 0) + dt;
+    if (this.stuckT > 2) {
+      const moved = this.lastPos ? Math.hypot(c.pos.x - this.lastPos.x, c.pos.z - this.lastPos.z) : 9;
+      if (dd > 4 && moved < 0.5 && !game.world.collision.pointInside(tx, p.pos.y + 1, tz, 0.3)) {
+        // (a drawn friend: a puff of crumbs and she's beside you again)
+        game.fx.crumbs(c.pos.x, c.pos.y + 1, c.pos.z, 8, 1.4);
+        c.pos.x = tx;
+        c.pos.z = tz;
+        game.fx.crumbs(tx, p.pos.y + 1, tz, 10, 1.6);
+      }
+      this.stuckT = 0;
+      this.lastPos = { x: c.pos.x, z: c.pos.z };
+    }
+    if (this.drawing || dd < 0.45) {
+      c.faceYaw = this.drawing ? Math.atan2(p.pos.x - c.pos.x, p.pos.z - c.pos.z) : p.yaw;
+      return null;
+    }
+    return { x: tx, z: tz, speed: dd > 7 ? 5.4 : dd > 2.5 ? 3.4 : 1.6 };
+  }
+
+  drawHeart() {
+    const game = this.game;
+    const c = this.c;
+    const p = game.player;
+    this.drawing = true;
+    this.healT = 24;
+    const h = c.fig.j.headC;
+    const at = new THREE.Vector3((h.x + p.pos.x) / 2, h.y + 0.15, (h.z + p.pos.z) / 2);
+    this.say(pick(['Hold on, I\'ve got you!', 'Here, a little love.', 'Oh no, you\'re hurt!']));
+    game.airsketch.draw({
+      shape: 'heart',
+      at,
+      size: 0.5,
+      author: c,
+      pen: 'magicPencil',
+      target: p.fig.center.clone(),
+      targetScale: 0.3,
+      dur: 1.1,
+      onPlop: () => {
+        this.drawing = false;
+        p.hp = Math.min(p.maxHp, p.hp + 25);
+        if (p.fig.holes.length) p.fig.holes.pop();
+        game.hud.toast('החברה שלך ציירה לך לב: +25 חיים', 'good', 2.2);
+        const at2 = p.fig.center;
+        for (let i = 0; i < 3; i++) game.fx.sprite('fx_heart', at2.x + (Math.random() - 0.5) * 0.5, at2.y + 0.6 + Math.random() * 0.3, at2.z + (Math.random() - 0.5) * 0.5, { size: 0.3, grow: 0.25, life: 1.3, vy: 0.6, fadeIn: 0.1 });
+      },
+    });
+  }
+
+  dispose(release = false) {
+    const c = this.c;
+    if (!c || c.owner !== this) return;
+    c.brave = false;
+    if (release) this.game.civilians.release(c);
+    else this.game.civilians.remove(c);
   }
 }
 

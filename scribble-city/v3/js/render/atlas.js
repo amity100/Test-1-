@@ -691,6 +691,19 @@ export function buildAtlas() {
     sk.text('JAMMED!', 128, 128, { size: 60, color: RED2D, font: FONT_SIGN, weight: 400, dir: 'ltr', maxWidth: 230, rotate: -0.08 });
     sk.stroke([[30, 180], [128, 190], [226, 176]], { width: 5, color: RED2D, passes: 1 });
   });
+  cell('fx_heart', (sk) => {
+    // a doodled heart (the drawn friends, the hero's friend who draws you one)
+    const pts = [];
+    for (let i = 0; i <= 44; i++) {
+      const t = (i / 44) * PI * 2;
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      pts.push([128 + x * 5.8, 122 - y * 5.8]);
+    }
+    sk.fill(pts, '#ff4f78', { spacing: 3.2, alpha: 0.95, angle: -0.6 });
+    sk.poly(pts, true, { width: 7, color: '#a3123c' });
+    sk.stroke([[92, 82], [104, 72], [118, 74]], { width: 6, color: '#ffe3ea', passes: 1 });
+  });
   cell('splat0', (sk) => splat(sk, 0));
   cell('splat1', (sk) => splat(sk, 1));
   cell('smoke0', smoke, 901);

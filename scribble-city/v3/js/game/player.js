@@ -106,7 +106,7 @@ export class Player {
         fig.yaw = this.yaw;
         fig.speed = 0;
         fig.air = false;
-        fig.sit = damp(fig.sit, 1, 8, dt);
+        fig.sit = damp(fig.sit, st.stand ? 0 : 1, 8, dt);
         fig.update(dt);
         return;
       }

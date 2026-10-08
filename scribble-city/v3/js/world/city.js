@@ -11,6 +11,7 @@ import {
 } from './layout.js';
 import { COL, solidBox, brownstone, loft, tower, warehouse, facadesOf, facadeQuad, waterTower, FIRE_ESCAPES } from './buildings.js';
 import * as P from './props.js';
+import { friendStand } from './stands.js';
 
 const PAPER = COL.paper;
 
@@ -70,6 +71,11 @@ export function buildCity(scene, atlas, signAtlas, mats) {
   }
   arsenalBoards(W, chunk);
   buildOuterSidewalks(W, chunk('outer'));
+  // two DRAW YOURSELF A FRIEND stands on the promenade: across from where you wake up, and at
+  // the end of Sketch Ave (between the lamps and the benches)
+  const railZ = WATER_SOUTH_Z - 0.6;
+  friendStand(W, chunk('outer'), -181, railZ - 2.0, 0, -1);
+  friendStand(W, chunk('outer'), -37, railZ - 2.0, 0, -1);
   buildBridge(W, chunk('bridge'));
   buildStatue(W, chunk('statue'));
   buildUnfinished(W, chunk('sketch'));

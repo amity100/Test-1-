@@ -54,6 +54,16 @@ function bumpy(cx, cy, r, bumps) {
   return pts;
 }
 const P = (pts, col = INK, w = 1) => ({ pts, col, w });
+const DRESS = [0.42, 0.6, 0.92];
+// a heart around (cx, cy), s wide
+function heartPts(cx, cy, s, n = 20) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = (i / n) * Math.PI * 2;
+    pts.push([cx + ((16 * Math.pow(Math.sin(t), 3)) / 32) * s, cy + ((13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 32) * s]);
+  }
+  return pts;
+}
 
 // hairdos drawn around a head at (0, 0) with radius ~0.3 (the sketch is centred on the head)
 const top = (c) => P(arc(0, 0.02, 0.32, 0.3, 0.2, Math.PI - 0.2, 12), c, 1.4);
@@ -122,6 +132,26 @@ export const SHAPES = {
   hammock: [P(arc(0, 0.25, 0.5, 0.42, Math.PI, Math.PI * 2, 14), [0.85, 0.35, 0.3], 1.8), P(arc(0, 0.25, 0.5, 0.3, Math.PI, Math.PI * 2, 14), [0.85, 0.35, 0.3], 1.2)],
   sunglasses: [P(oval(-0.2, 0, 0.16, 0.1, 10), INK, 2.6), P(oval(0.2, 0, 0.16, 0.1, 10), INK, 2.6), P([[-0.05, 0.04], [0.05, 0.04]])],
   hat: [P(arc(0, 0, 0.3, 0.32, 0, Math.PI, 10), INK, 1.6), P([[-0.5, 0], [0.5, 0]], INK, 1.8), P([[-0.3, 0.06], [0.3, 0.06]], RED, 2.2)],
+  heart: [P(heartPts(0, 0, 0.8, 24), RED, 2.2)],
+  // a friend, life size: long hair, a long dress with long sleeves, waving hello
+  friend: [
+    P(ring(0, 0.38, 0.065, 14), INK, 1.4),
+    P(arc(0, 0.385, 0.09, 0.08, 0.15, Math.PI - 0.15, 10), BROWN, 1.8),
+    P([[-0.085, 0.37], [-0.1, 0.28], [-0.092, 0.2]], BROWN, 1.8),
+    P([[0.085, 0.37], [0.1, 0.28], [0.092, 0.2]], BROWN, 1.8),
+    P([[-0.025, 0.392], [-0.025, 0.384]], INK, 1.6),
+    P([[0.025, 0.392], [0.025, 0.384]], INK, 1.6),
+    P(arc(0, 0.368, 0.026, 0.016, Math.PI + 0.4, Math.PI * 2 - 0.4, 6), PINK, 1.4),
+    P([[-0.07, 0.3], [0.07, 0.3], [0.17, -0.42], [-0.17, -0.42], [-0.07, 0.3]], DRESS, 1.7),
+    P([[-0.11, 0.0], [0.11, 0.0]], DRESS, 1.2),
+    P([[-0.075, 0.28], [-0.13, 0.12], [-0.12, -0.02]], DRESS, 1.5),
+    P(ring(-0.12, -0.045, 0.022, 6), INK, 1.2),
+    P([[0.075, 0.28], [0.16, 0.36], [0.2, 0.45]], DRESS, 1.5),
+    P(ring(0.205, 0.475, 0.022, 6), INK, 1.2),
+    P([[-0.06, -0.42], [-0.07, -0.5]], INK, 1.4),
+    P([[0.06, -0.42], [0.07, -0.5]], INK, 1.4),
+    P(heartPts(0.3, 0.3, 0.12, 14), RED, 1.6),
+  ],
 };
 
 // any blueprint, sketched in the air by someone else (a shopkeeper shows you how it goes)
@@ -176,9 +206,10 @@ export class AirSketches {
       pen: new THREE.Vector3(),
       hold: o.hold !== undefined ? o.hold : 0.35,
     };
+    sk.penItem = o.pen || 'pencil';
     if (sk.author) {
       sk.prevCarry = sk.author.fig.carry;
-      sk.author.fig.carry = 'pencil';
+      sk.author.fig.carry = sk.penItem;
     }
     const p = this.game.player.pos;
     const d = Math.hypot(sk.at.x - p.x, sk.at.z - p.z);
@@ -210,7 +241,7 @@ export class AirSketches {
   release(sk) {
     const a = sk.author;
     if (!a) return;
-    if (a.fig.carry === 'pencil') a.fig.carry = sk.prevCarry || null;
+    if (a.fig.carry === sk.penItem) a.fig.carry = sk.prevCarry === sk.penItem ? null : sk.prevCarry || null;
     a.fig.reachR = null;
     a.fig.lookAt = null;
     sk.author = null;
