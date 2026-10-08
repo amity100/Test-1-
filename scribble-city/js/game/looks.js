@@ -214,3 +214,84 @@ export function patronLook(o = {}) {
 }
 
 export { GOLD };
+
+// ------------------------------------------------------------------ the bar crowd
+// Each one looks like a different kid doodled them in the margin of their notebook.
+const BAR_STYLES = {
+  // a teenage girl's gel pens: big sparkly eyes, cute proportions
+  gelGirl: () => {
+    const L = civilianLook({ fem: true, pen: pick(['gelPurple', 'gelGreen']), build: 'chibi', kind: pick(['dress', 'casual', 'artsy']) });
+    L.face.eyes = 'anime';
+    L.face.mouth = pick(['smile', 'o']);
+    L.face.lips = pick([[0.85, 0.3, 0.5], [0.7, 0.25, 0.45]]);
+    L.hair = { style: pick(['long', 'ponytail', 'bun']), color: pick([[0.62, 0.32, 0.72], [0.95, 0.55, 0.7], [0.3, 0.2, 0.15], [0.9, 0.78, 0.45]]) };
+    L.acc.push('earrings');
+    return L;
+  },
+  // a teenage boy's comic-book marker: heavy outline, flat colours, cap backwards
+  comicBoy: () => {
+    const L = civilianLook({ fem: false, pen: 'comic', build: pick(['normal', 'stocky']), kind: pick(['sporty', 'casual']) });
+    L.hat = { kind: 'capBack', color: pick(BRIGHT) };
+    L.face.mouth = 'smirk';
+    L.face.brows = 'up';
+    return L;
+  },
+  // a guy sketching in blue ballpoint during class
+  ballpointGuy: () => {
+    const L = civilianLook({ fem: false, pen: 'ballpoint', build: pick(['lanky', 'normal']), kind: pick(['casual', 'artsy', 'office']) });
+    L.face.beard = pick(['stubble', null, 'goatee']);
+    return L;
+  },
+  // clean manga lines
+  manga: () => {
+    const fem = chance(0.6);
+    const L = civilianLook({ fem, pen: 'manga', build: 'lanky', kind: 'office' });
+    L.face.eyes = fem ? 'anime' : 'oval';
+    L.hair = { style: fem ? pick(['long', 'bob']) : 'messy', color: pick([[0.12, 0.1, 0.12], [0.2, 0.25, 0.6], [0.9, 0.88, 0.85]]) };
+    return L;
+  },
+  // art-school marker sketch
+  artsy: () => {
+    const fem = chance(0.5);
+    const L = civilianLook({ fem, pen: 'marker', build: 'normal', kind: 'artsy' });
+    L.face.glasses = pick(['round', 'square', null]);
+    return L;
+  },
+  // grey pencil, a bit old-fashioned
+  pencil: () => {
+    const L = civilianLook({ fem: chance(0.4), pen: 'pencil', build: pick(['normal', 'stocky']), kind: 'office' });
+    if (!L.fem && chance(0.6)) L.hat = { kind: 'fedora', color: [0.3, 0.28, 0.3] };
+    return L;
+  },
+  // red pen punk
+  punk: () => {
+    const fem = chance(0.5);
+    const L = civilianLook({ fem, pen: 'redPen', build: 'lanky', kind: 'casual' });
+    L.top = { kind: 'jacket', color: [0.12, 0.12, 0.14], sleeves: 'long', inner: [0.85, 0.2, 0.25] };
+    L.bottom = { kind: 'pants', color: [0.16, 0.16, 0.18] };
+    L.hair = { style: fem ? 'bob' : 'messy', color: pick([[0.9, 0.2, 0.45], [0.2, 0.75, 0.6], [0.1, 0.1, 0.1]]) };
+    L.acc.push('chain');
+    return L;
+  },
+  // sepia, like an old sketchbook
+  sepia: () => civilianLook({ fem: chance(0.5), pen: 'sepia', build: 'normal', kind: pick(['dress', 'office', 'casual']) }),
+};
+
+export function barLook(style, o = {}, tries = 0) {
+  const L = (BAR_STYLES[style] || BAR_STYLES.ballpointGuy)();
+  if (o.fem !== undefined && L.fem !== o.fem && tries < 8) return barLook(style, o, tries + 1);
+  return L;
+}
+
+export const BAR_STYLE_NAMES = Object.keys(BAR_STYLES);
+
+// the bartender: white shirt, black vest, a proud moustache
+export function bartenderLook() {
+  const L = baseLook({ pen: 'fineliner', build: 'stocky' });
+  L.top = { kind: 'vest', color: [0.12, 0.12, 0.14], sleeves: 'long', under: [0.96, 0.95, 0.92] };
+  L.bottom = { kind: 'pants', color: [0.14, 0.14, 0.16] };
+  L.shoes = [0.1, 0.08, 0.07];
+  L.hair = { style: 'slick', color: [0.15, 0.12, 0.1] };
+  L.face = { eyes: 'dot', brows: 'up', mouth: 'smile', beard: 'mustache', glasses: null };
+  return L;
+}

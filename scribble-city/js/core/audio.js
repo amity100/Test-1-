@@ -1,5 +1,12 @@
 // Tiny WebAudio synth: every sound is generated, no audio files.
 
+// jukebox songs: chords (MIDI), bass hits [step, interval], chord stabs
+const SONGS = [
+  { bpm: 84, prog: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], bass: [[0, 0], [3, 0], [4, 7], [6, 0]], stabs: [0, 3], stabLen: 0.6 },
+  { bpm: 138, prog: [[52, 56, 59], [57, 61, 64], [52, 56, 59], [59, 63, 66]], bass: [[0, 0], [2, 4], [4, 7], [6, 9]], stabs: [1, 3, 5, 7], stabLen: 0.12 },
+  { bpm: 118, prog: [[50, 53, 57], [55, 58, 62], [48, 52, 55], [53, 57, 60]], bass: [[0, 0], [1, 12], [2, 0], [3, 12], [4, 0], [5, 12], [6, 0], [7, 12]], stabs: [2, 6], stabLen: 0.18, four: true },
+];
+
 export class Audio {
   constructor() {
     this.ctx = null;
@@ -64,6 +71,89 @@ export class Audio {
     this.sirGain.gain.value = 0;
     this.sirOsc.connect(this.sirGain).connect(this.master);
     this.sirOsc.start();
+  }
+
+  // ------------------------------------------------------------------ the jukebox at the Inkwell
+  music(on, song = 0) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (!this.musicGain) {
+      this.musicGain = c.createGain();
+      this.musicGain.gain.value = 0;
+      this.musicGain.connect(this.master);
+    }
+    const t = c.currentTime;
+    if (on) {
+      this.song = SONGS[song % SONGS.length];
+      this.step = 0;
+      this.nextNote = t + 0.05;
+      if (!this.musicTimer) this.musicTimer = setInterval(() => this.schedule(), 60);
+      this.musicGain.gain.setTargetAtTime(0.85, t, 0.4);
+    } else {
+      this.musicGain.gain.setTargetAtTime(0, t, 0.3);
+      clearTimeout(this.musicStop);
+      this.musicStop = setTimeout(() => {
+        clearInterval(this.musicTimer);
+        this.musicTimer = null;
+      }, 1500);
+    }
+  }
+
+  schedule() {
+    const c = this.ctx;
+    if (!c || !this.song) return;
+    const spb = 60 / this.song.bpm / 2;
+    while (this.nextNote < c.currentTime + 0.25) {
+      this.playStep(this.step, this.nextNote);
+      this.nextNote += spb;
+      this.step++;
+    }
+  }
+
+  playStep(i, t) {
+    const s = this.song;
+    const c = this.ctx;
+    const out = this.musicGain;
+    const beat = i % 8;
+    const chord = s.prog[Math.floor(i / 8) % s.prog.length];
+    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    const note = (type, f, dur, vol, f1 = null, filt = 0) => {
+      const o = c.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(f, t);
+      if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      if (filt) {
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = filt;
+        o.connect(lp).connect(g).connect(out);
+      } else o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    };
+    const noise = (dur, vol, freq, type) => {
+      const src = c.createBufferSource();
+      src.buffer = this.noise;
+      const f = c.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f).connect(g).connect(out);
+      src.start(t, Math.random() * 0.5);
+      src.stop(t + dur + 0.05);
+    };
+    if (beat === 0 || beat === 4 || (s.four && beat % 2 === 0)) note('sine', 130, 0.18, 0.22, 42);
+    if (beat === 2 || beat === 6) noise(0.13, 0.09, 1900, 'bandpass');
+    if (beat % 2 === 1 || s.four) noise(0.03, s.four ? 0.035 : 0.025, 7500, 'highpass');
+    for (const b of s.bass) if (b[0] === beat) note('triangle', hz(chord[0] - 24 + b[1]), 0.22, 0.16);
+    if (s.stabs.includes(beat)) for (const m of chord) note('sawtooth', hz(m), s.stabLen, 0.022, null, 1300);
   }
 
   // 0..1: how close the nearest siren is
@@ -211,6 +301,14 @@ export class Audio {
       case 'alarm':
         // car alarm: a few alternating whoops
         for (let i = 0; i < 6; i++) this.tone('square', i % 2 ? 620 : 880, i % 2 ? 880 : 620, 0.22, 0.07 * v, i * 0.24);
+        break;
+      case 'pageflip':
+        this.hiss(0.32, 0.3 * v, 1800, 0.8, 'bandpass', 0, 600);
+        this.hiss(0.12, 0.2 * v, 3500, 1, 'highpass', 0.2);
+        break;
+      case 'pour':
+        for (let i = 0; i < 5; i++) this.tone('sine', 300 + Math.random() * 300, 500 + Math.random() * 400, 0.08, 0.05 * v, i * 0.09);
+        this.hiss(0.5, 0.08 * v, 900, 2, 'bandpass');
         break;
       case 'crumble':
         // a whole prop rubbed out of the page

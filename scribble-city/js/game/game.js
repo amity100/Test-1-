@@ -16,6 +16,8 @@ import { Album } from '../ui/album.js';
 import { AirDraw } from '../ui/airdraw.js';
 import { Bubbles } from '../ui/bubbles.js';
 import { Police } from './police.js';
+import { Inkwell } from './inkwell.js';
+import { Dialog } from '../ui/dialog.js';
 import { Pickups } from './pickups.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { CAR_VARIANTS, DRIVER_SEAT } from './traffic.js';
@@ -67,6 +69,10 @@ export class Game {
     this.hud = new HUD(this);
     this.police = new Police(this);
     this.pickups = new Pickups(this);
+    this.inkwell = new Inkwell(this);
+    this.dialog = new Dialog(this);
+    this.inBar = false;
+    this.boilOn = true;
     this.album = new Album(this);
     this.airdraw = new AirDraw(this);
     // eyes over hiding spots
@@ -100,11 +106,14 @@ export class Game {
     $('resume-btn').addEventListener('click', () => this.resume());
     $('respawn-btn').addEventListener('click', () => this.respawnFromDeath());
     $('opt-sound').addEventListener('change', (e) => this.audio.setEnabled(e.target.checked));
-    $('opt-boil').addEventListener('change', (e) => (shared.uBoilAmp.value = e.target.checked ? 1 : 0));
+    $('opt-boil').addEventListener('change', (e) => {
+      this.boilOn = e.target.checked;
+      shared.uBoilAmp.value = e.target.checked ? 1 : 0;
+    });
     $('opt-look').addEventListener('change', (e) => setLook(e.target.checked ? 1 : 0));
     $('opt-sens').addEventListener('input', (e) => (this.input.sensitivity = parseFloat(e.target.value)));
     this.input.on('lock', (locked) => {
-      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !this.inkwell.flipping && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -164,6 +173,13 @@ export class Game {
     this.enemies.reset();
     this.bubbles.clear();
     this.police.reset();
+    if (this.inBar) {
+      this.inBar = false;
+      this.inkwell.inside = false;
+      this.inkwell.room.group.visible = false;
+      document.body.classList.remove('in-bar');
+      this.audio.music(false);
+    }
     for (const c of this.traffic.list) if (c.police) c.mode = c.crew && c.crew.length ? 'patrol' : 'leave';
     this.respawn();
     this.state = 'play';
@@ -209,6 +225,16 @@ export class Game {
 
   onCivilianKilled(c) {
     this.onCrime('killCiv', c.pos.x, c.pos.z);
+  }
+
+  // where the city simulation centres itself (in the bar: its street door)
+  anchorPos() {
+    const p = this.player;
+    if (this.inBar && this.world.bar) {
+      this._anchor = this._anchor || new THREE.Vector3();
+      return this._anchor.set(this.world.bar.x, 0, this.world.bar.z);
+    }
+    return p.inVehicle ? p.inVehicle.pos : p.pos;
   }
 
   // ------------------------------------------------------------------ main loop
@@ -258,6 +284,7 @@ export class Game {
       this.world.objects.update(dt, rebakeSunShadows, this.camera.position);
       this.police.update(dt);
       this.pickups.update(dt);
+      this.inkwell.update(dt);
       this.updateHidden();
     }
     // camera
@@ -286,7 +313,13 @@ export class Game {
       this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
-      else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: 4.4 });
+      else this.camRig.update(dt, player.pos, { aim: !this.inBar && this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: this.inBar ? 3.1 : 4.4 });
+    }
+    const tipsy = this.inkwell.tipsy;
+    if (tipsy > 0.05 && this.state === 'play') {
+      // a few drinks in: the page sways
+      this.camera.rotation.z += Math.sin(this.time * 1.1) * 0.045 * tipsy;
+      this.camera.rotation.x += Math.sin(this.time * 0.7 + 1) * 0.02 * tipsy;
     }
     if (this.params.has('test') && window.__camOverride) {
       // test hook: fixed camera for screenshots
@@ -307,6 +340,7 @@ export class Game {
       this.traffic.draw(this.camera.position);
       this.drawStuckPencils(fr);
       this.pickups.draw(fr);
+      this.inkwell.draw(this.camera.position);
       this.fx.update(dt, fr);
       fr.end();
     }
@@ -321,6 +355,10 @@ export class Game {
   handleKeys() {
     const input = this.input;
     const p = this.player;
+    if (this.dialog.open) {
+      this.dialog.update();
+      return;
+    }
     if (input.wasPressed('Escape')) {
       if (this.album.open) this.album.hide();
       else if (!this.airdraw.open && this.state === 'play') this.pause();
@@ -331,6 +369,8 @@ export class Game {
     if (input.wasPressed('KeyQ') || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
+      else if (this.inBar) this.inkwell.interact();
+      else if (p.mode === 'foot' && this.inkwell.nearStreetDoor(p.pos)) this.inkwell.enter();
       else if (p.mode === 'foot') this.tryEnter();
     }
     if (input.wasPressed('KeyM')) this.hud.mapScale = this.hud.mapScale > 1 ? 0.55 : 1.1;
@@ -752,6 +792,13 @@ export class Game {
     if (p.inVehicle) {
       enter = true;
       prompt = this.touch ? '' : p.inVehicle.kind === 'ufo' ? 'רווח/C — למעלה/למטה · קליק — קרן מחיקה · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+    } else if (p.mode === 'foot' && this.inBar) {
+      const t = this.inkwell.target();
+      prompt = t ? (this.touch ? '' : t.label) : '';
+      enter = !!t;
+    } else if (p.mode === 'foot' && this.inkwell.nearStreetDoor(p.pos)) {
+      enter = true;
+      prompt = this.touch ? '' : 'E — להיכנס לבר The Inkwell';
     } else if (p.mode === 'foot') {
       const et = this.enterTarget();
       if (et) {
@@ -781,6 +828,7 @@ export class Game {
       { text: 'לצלם את השרטוט של אקדח הצבע (F)', done: f.photo },
       { text: 'להתחבא ליד פח, תא טלפון או בשיחים', done: f.hidden },
       { text: 'לצייר את אקדח הצבע (Q)', done: f.drew },
+      { text: 'לקפוץ לבר The Inkwell (מעבר לפינה, ברחוב הצפוני)', done: f.bar },
       { text: `למחוק 5 עבריינים (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
       { text: 'למצוא את שרטוט המכונית בסוכנות (מזרח)', done: f.car },
       { text: 'לצייר מכונית ולנהוג בה (E)', done: f.drove },

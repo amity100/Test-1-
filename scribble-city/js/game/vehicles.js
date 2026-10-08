@@ -781,7 +781,7 @@ export class Vehicles {
 
   update(dt) {
     const keep = [];
-    const pp = this.game.player.inVehicle ? this.game.player.inVehicle.pos : this.game.player.pos;
+    const pp = this.game.anchorPos();
     for (const v of this.list) {
       v.update(dt);
       const left = v.stock && !v.driver && Math.hypot(v.pos.x - pp.x, v.pos.z - pp.z) > 140;

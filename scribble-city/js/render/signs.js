@@ -42,6 +42,7 @@ export const SMALL_SIGNS = [
   ['parking', 'BUS STOP', '#c8d4ea'],
   ['phones', 'PHONES', '#d3e3ec'],
   ['optics', 'OPTICIAN', '#f1eee6'],
+  ['exit', 'EXIT', '#cfe0c8'],
 ];
 
 export const SHOP_SIGNS = ['pizza', 'deli', 'cafe', 'grocery', 'books', 'flowers', 'barber', 'bagel', 'icecream', 'hardware', 'laundry', 'sushi', 'falafel', 'shop', 'gym', 'music', 'pharmacy', 'phones', 'optics'];
@@ -319,6 +320,85 @@ function ferrySign(sk, ctx, w, h) {
   sk.text('every 30 minutes', w * 0.74, 166, { size: 32, color: INK2D, font: FONT_NOTE, weight: 700, dir: 'ltr', maxWidth: w * 0.46 });
 }
 
+// ------------------------------------------------------------------ The Inkwell (the bar)
+function neonText(ctx, text, x, y, size, color, font = FONT_NOTE, weight = 700) {
+  ctx.save();
+  ctx.font = `${weight} ${size}px ${font}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.direction = 'ltr';
+  ctx.lineJoin = 'round';
+  // glow, then the tube, then a hot white core
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 22;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 7;
+  ctx.strokeText(text, x, y);
+  ctx.shadowBlur = 8;
+  ctx.lineWidth = 3.4;
+  ctx.strokeText(text, x, y);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = 1.2;
+  ctx.strokeText(text, x, y);
+  ctx.restore();
+}
+
+function barNeon(sk, ctx, w, h) {
+  ctx.fillStyle = '#1d1a26';
+  ctx.fillRect(0, 0, w, h);
+  sk.poly([[6, 6], [w - 6, 6], [w - 6, h - 6], [6, h - 6]], true, { width: 4, color: '#0b0a10' });
+  neonText(ctx, 'The Inkwell', w / 2 + 30, h / 2 - 14, 82, '#ff5fa8');
+  neonText(ctx, 'COCKTAILS · BEER · MUSIC', w / 2 + 30, h - 44, 26, '#62e6ff', FONT_SIGN, 400);
+  // a little neon martini glass
+  ctx.save();
+  ctx.shadowColor = '#62e6ff';
+  ctx.shadowBlur = 16;
+  ctx.strokeStyle = '#62e6ff';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(30, 70);
+  ctx.lineTo(96, 70);
+  ctx.lineTo(63, 116);
+  ctx.closePath();
+  ctx.moveTo(63, 116);
+  ctx.lineTo(63, 168);
+  ctx.moveTo(42, 172);
+  ctx.lineTo(84, 172);
+  ctx.stroke();
+  ctx.strokeStyle = '#ffe36a';
+  ctx.beginPath();
+  ctx.arc(80, 64, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function barMenu(sk, ctx, w, h) {
+  // chalkboard
+  ctx.fillStyle = '#26332c';
+  ctx.fillRect(0, 0, w, h);
+  sk.poly([[5, 5], [w - 5, 5], [w - 5, h - 5], [5, h - 5]], true, { width: 9, color: '#6b4a2e' });
+  const chalk = 'rgba(245, 242, 230, 0.92)';
+  sk.text('TONIGHT', w / 2, 40, { size: 40, color: chalk, font: FONT_SIGN, dir: 'ltr', weight: 400 });
+  const rows = [['Draft Beer', '3'], ['Ink Special', '7'], ['Strawberry Shake', '4'], ['Tap Water', '0']];
+  rows.forEach(([n, p], i) => {
+    const y = 92 + i * 40;
+    sk.text(n, 40, y, { size: 32, color: chalk, font: FONT_NOTE, dir: 'ltr', align: 'left', weight: 700 });
+    sk.text(`$${p}`, w - 46, y, { size: 32, color: '#ffd76a', font: FONT_NOTE, dir: 'ltr', align: 'right', weight: 700 });
+    sk.line(250, y + 6, w - 100, y + 6, { width: 1.4, color: 'rgba(245, 242, 230, 0.35)', jitter: 1.5 });
+  });
+}
+
+function gigPoster(sk, ctx, w, h) {
+  ctx.fillStyle = '#f2e6c9';
+  ctx.fillRect(0, 0, w, h);
+  sk.fill([[0, 0], [w, 0], [w, h], [0, h]], '#e9a23b', { spacing: 3, alpha: 0.5, angle: 0.4 });
+  sk.text('LIVE', 120, 70, { size: 70, color: '#c2261f', font: FONT_SIGN, dir: 'ltr', weight: 400, rotate: -0.08 });
+  sk.text('THE ERASERS', w / 2 + 40, 140, { size: 60, color: BLACK2D, font: FONT_SIGN, dir: 'ltr', weight: 400 });
+  sk.text('friday · no cover', w / 2 + 40, 200, { size: 32, color: INK2D, font: FONT_NOTE, dir: 'ltr', weight: 700 });
+  for (let i = 0; i < 3; i++) sk.circle(420 + i * 18, 60 + i * 9, 10 + i * 4, { width: 2.5, color: BLACK2D });
+}
+
 export function buildSignAtlas() {
   const W = 2048;
   const H = 2048;
@@ -337,13 +417,18 @@ export function buildSignAtlas() {
     rects[name] = [cx / W, 1 - (cy + 64) / H, 256 / W, 64 / H];
   };
   for (const [id, text, bg] of SMALL_SIGNS) small(id, (sk) => smallSign(sk, 256, 64, text, bg));
+  small('barSmall', (sk, c) => {
+    c.fillStyle = '#1d1a26';
+    c.fillRect(0, 0, 256, 64);
+    neonText(c, 'BAR', 128, 34, 46, '#ff5fa8', FONT_SIGN, 400);
+  });
   AVE_SIGNS.forEach((n, i) => small(`ave${i}`, (sk) => streetSign(sk, 256, 64, n)));
   STREET_SIGNS.forEach((n, i) => small(`st${i}`, (sk) => streetSign(sk, 256, 64, n)));
 
   let big = 0;
   const large = (name, fn) => {
     const cx = (big % 4) * 512;
-    const cy = 1024 + Math.floor(big / 4) * 256;
+    const cy = 512 + Math.floor(big / 4) * 256;
     big++;
     const tmp = makeCanvas(512, 256);
     const tctx = tmp.getContext('2d');
@@ -362,6 +447,9 @@ export function buildSignAtlas() {
   large('ad_parking', (sk, c) => adParking(sk, c, 512, 256));
   large('marquee', (sk, c) => marquee(sk, c, 512, 256));
   large('ferry_big', (sk, c) => ferrySign(sk, c, 512, 256));
+  large('bar_neon', (sk, c) => barNeon(sk, c, 512, 256));
+  large('bar_menu', (sk, c) => barMenu(sk, c, 512, 256));
+  large('bar_poster', (sk, c) => gigPoster(sk, c, 512, 256));
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.generateMipmaps = true;

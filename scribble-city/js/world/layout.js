@@ -10,6 +10,9 @@ export const CURB = 0.15;
 
 // Playable bounds (outer sidewalks / promenades included).
 export const BOUNDS = { minX: -221.5, maxX: 226.5, minZ: -154.5, maxZ: 159 };
+// The Inkwell's interior is built out over the river, past the edge of the map: you only
+// ever see it from inside (the street door takes you there).
+export const BAR_ZONE = { x0: 258, x1: 292, z0: 228, z1: 262, cx: 275, cz: 245, floor: 0.15 };
 export const WATER_EAST_X = 228;
 export const WATER_SOUTH_Z = 160.5;
 
@@ -68,6 +71,7 @@ export function blockAt(x, z) {
 
 // Height of the walkable ground (sidewalk slabs are raised by a curb).
 export function groundHeight(x, z) {
+  if (x > BAR_ZONE.x0 && x < BAR_ZONE.x1 && z > BAR_ZONE.z0 && z < BAR_ZONE.z1) return BAR_ZONE.floor;
   if (x > BOUNDS.maxX + 2 || z > BOUNDS.maxZ + 2) return -3;
   for (let bx = 0; bx < 5; bx++) {
     const ax0 = AVES[bx] + AVE_W / 2;
@@ -110,6 +114,7 @@ export function nearestRoadInfo(x, z) {
 }
 
 export function districtName(x, z) {
+  if (x > BAR_ZONE.x0 && x < BAR_ZONE.x1 && z > BAR_ZONE.z0 && z < BAR_ZONE.z1) return 'בר The Inkwell';
   const b = blockAt(x, z);
   if (b) return DISTRICT_NAMES[b.type] || '';
   const r = nearestRoadInfo(x, z);

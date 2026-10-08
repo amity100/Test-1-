@@ -93,7 +93,8 @@ export class Player {
     }
 
     const drawing = this.mode === 'draw';
-    const mv = drawing ? { x: 0, y: 0, sprint: false } : input.readMove();
+    const talking = this.game.dialog && this.game.dialog.open;
+    const mv = drawing || talking ? { x: 0, y: 0, sprint: false } : input.readMove();
     const cy = camRig.yaw;
     const fx = Math.sin(cy);
     const fz = Math.cos(cy);
@@ -101,6 +102,13 @@ export class Player {
     const rz = fx;
     let wx = fx * mv.y + rx * mv.x;
     let wz = fz * mv.y + rz * mv.x;
+    const tipsy = this.game.inkwell ? this.game.inkwell.tipsy : 0;
+    if (tipsy > 0.3 && (mv.x || mv.y)) {
+      // walking a little crooked
+      const k = Math.sin(this.game.time * 1.7) * (tipsy - 0.3) * 0.45;
+      wx += -fz * k;
+      wz += fx * k;
+    }
     const wl = Math.hypot(wx, wz);
     if (wl > 1) {
       wx /= wl;
@@ -155,6 +163,7 @@ export class Player {
     fig.speed = Math.hypot(this.vel.x, this.vel.z);
     fig.air = !this.onGround;
     fig.sit = damp(fig.sit, 0, 8, dt);
+    fig.stagger = this.game.inkwell ? Math.min(1, Math.max(0, this.game.inkwell.tipsy - 0.4)) : 0;
     fig.aimPitch = camRig.pitch + 0.08;
     fig.update(dt);
   }

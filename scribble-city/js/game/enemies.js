@@ -339,7 +339,7 @@ class Enemy {
   canSeePlayer() {
     const game = this.game;
     const p = game.player;
-    if (p.mode === 'dead' || this.headless) return false;
+    if (p.mode === 'dead' || this.headless || game.inBar) return false;
     const tp = this.targetPos();
     const dx = tp.x - this.pos.x;
     const dz = tp.z - this.pos.z;
@@ -1812,7 +1812,7 @@ export class Enemies {
 
   update(dt) {
     const game = this.game;
-    const p = game.player.inVehicle ? game.player.inVehicle.pos : game.player.pos;
+    const p = game.anchorPos();
     this.pf.resetBudget();
     // flow field toward the player for the ones charging straight in
     this.flowT -= dt;

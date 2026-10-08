@@ -80,7 +80,9 @@ async function boot() {
     itemSurface: makeSurfaceMaterial({ hatchScale: 0.45, side: THREE.DoubleSide }),
     itemLine: makeLineMaterial({ nudge: 0.0015, minWidth: 1.0 }),
     glass: makeGlassMaterial(),
+    barSurface: makeSurfaceMaterial({ hatchScale: 1.3 }),
   };
+  mats.barSurface.uniforms.uTintAll.value.setRGB(1.0, 0.9, 0.78);
   mats.lineFaint = mats.line;
 
   setStatus('מציירים את העיר…');

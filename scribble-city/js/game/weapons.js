@@ -128,7 +128,7 @@ export class Weapons {
     if (this.jam > 0) this.jam -= dt;
     const slot = this.current;
     const def = slot.def;
-    const canAct = player.mode === 'foot';
+    const canAct = player.mode === 'foot' && !game.inBar && !game.dialog.open;
     // weapon switching
     if (canAct) {
       for (let k = 1; k <= 6; k++) if (input.wasPressed(`Digit${k}`)) this.select(k - 1);
@@ -293,7 +293,7 @@ export class Weapons {
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (!s.model || !s.model.group) continue;
-      s.model.group.visible = drawing ? i === 0 : i === this.index && p.mode === 'foot';
+      s.model.group.visible = drawing ? i === 0 : i === this.index && p.mode === 'foot' && !this.game.inBar;
     }
     const fig = p.fig;
     const j = fig.j;

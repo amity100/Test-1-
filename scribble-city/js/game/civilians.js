@@ -157,7 +157,7 @@ export class Civilians {
 
   update(dt) {
     const game = this.game;
-    const p = game.player.inVehicle ? game.player.inVehicle.pos : game.player.pos;
+    const p = game.anchorPos();
     this.t -= dt;
     if (this.t <= 0) {
       this.t = 1;

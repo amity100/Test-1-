@@ -217,6 +217,30 @@ export function shopFront(W, ch, f, u0, u1, yBase, rng, signId) {
   }
 }
 
+// The Inkwell's street front: dark wood, warm windows, neon over the door.
+function barFront(W, ch, f, y0) {
+  const w = f.width;
+  const doorU = 1.7;
+  facadeQuad(ch, f, 0.25, y0 + 0.05, w - 0.25, y0 + 3.6, 0.03, [0.2, 0.17, 0.2], STYLE.PLAIN, { lineW: 2.2 });
+  // warm windows with people inside (blurry silhouettes)
+  facadeQuad(ch, f, doorU + 1.0, y0 + 0.7, w - 0.8, y0 + 2.9, 0.05, [0.98, 0.8, 0.45], STYLE.PLAIN, { lineW: 2.4 });
+  const mid = (doorU + 1.0 + w - 0.8) / 2;
+  ch.sl.seg(f.p(mid, y0 + 0.7, 0.06), f.p(mid, y0 + 2.9, 0.06), { width: 1.6 });
+  for (let i = 0; i < 4; i++) {
+    const u = doorU + 1.5 + i * ((w - doorU - 2.6) / 4);
+    ch.sl.seg(f.p(u, y0 + 0.75, 0.07), f.p(u + 0.05, y0 + 1.75, 0.07), { width: 7, overshoot: 0, color: [0.35, 0.22, 0.2], alpha: 0.55 });
+    ch.sl.seg(f.p(u + 0.05, y0 + 1.85, 0.07), f.p(u + 0.06, y0 + 2.0, 0.07), { width: 11, overshoot: 0, color: [0.35, 0.22, 0.2], alpha: 0.55 });
+  }
+  door(ch, f, doorU, y0 + 0.05, 1.3, 2.5, [0.36, 0.22, 0.14]);
+  // lamp over the door
+  ch.sl.seg(f.p(doorU, y0 + 2.95, 0.05), f.p(doorU, y0 + 2.95, 0.45), { width: 2, overshoot: 0 });
+  ch.sl.seg(f.p(doorU, y0 + 2.9, 0.45), f.p(doorU, y0 + 2.75, 0.45), { width: 9, overshoot: 0, color: [1, 0.85, 0.45] });
+  const c = f.p(w / 2, y0 + 4.5, 0.12);
+  W.signs.push({ x: c[0], y: c[1], z: c[2], w: Math.min(4.6, w - 0.6), h: Math.min(4.6, w - 0.6) / 2, rect: 'bar_neon', axis: [f.rx, 0, f.rz], pivot: [0.5, 0.5] });
+  const dp = f.p(doorU, y0, 1.3);
+  W.bar = { x: dp[0], z: dp[2], nx: f.nx, nz: f.nz };
+}
+
 /**
  * Brownstone / walk-up with stoop, cornice, maybe fire escape and water tower.
  */
@@ -236,8 +260,10 @@ export function brownstone(W, ch, lot, rng, o = {}) {
   const cmin = f.box(-0.2, y0 + h - 0.75, 0, f.width + 0.2, y0 + h + 0.05, 0.5);
   solidBox(W, ch, cmin[0], cmin[1], { color: rng.pick([COL.cream, COL.white, COL.darkWood, COL.gray]), lineW: 1.8, collide: false });
   for (let u = 0.5; u < f.width - 0.3; u += 1.1) ch.sl.seg(f.p(u, y0 + h - 0.75, 0.42), f.p(u, y0 + h - 1.15, 0.05), { width: 1.2, overshoot: 0 });
-  // ground floor: shop or stoop
-  if (o.shop) {
+  // ground floor: the bar, a shop or a stoop
+  if (o.bar) {
+    barFront(W, ch, f, y0);
+  } else if (o.shop) {
     shopFront(W, ch, f, 0, f.width, y0, rng, o.shop);
   } else {
     const du = rng.pick([f.width * 0.28, f.width * 0.72]);

@@ -103,6 +103,7 @@ export function buildCity(scene, atlas, signAtlas, mats) {
     collision,
     nav,
     objects: W.objects,
+    bar: W.bar,
     hideSpots: W.hideSpots,
     billboards: W.billboards,
     territories: W.territories,
@@ -324,7 +325,9 @@ function standardRows(W, ch, r, type, rng, opts = {}) {
       if (opts.skipLot && opts.skipLot(lot, i, row)) return;
       if (type === 'brown' || type === 'start') {
         const shop = corner && rng.chance(0.55) ? rng.pick(SHOP_SIGNS) : rng.chance(0.15) ? rng.pick(SHOP_SIGNS) : null;
-        brownstone(W, ch, lot, rng, { shop });
+        // The Inkwell: third house of the start block's street side
+        const bar = type === 'start' && row.front === 'n' && i === 2 && !W.bar;
+        brownstone(W, ch, lot, rng, { shop: bar ? null : shop, bar });
       } else if (type === 'loft') {
         loft(W, ch, lot, rng, {});
       } else if (type === 'warehouse') {

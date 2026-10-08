@@ -107,7 +107,7 @@ export class HUD {
     const dmgA = Math.max(0, 1 - (game.time - p.lastHurt) / 0.6);
     this.damageEl.style.opacity = `${Math.max(dmgA * 0.9, p.hp < 30 ? 0.35 + Math.sin(game.time * 6) * 0.15 : 0)}`;
     this.crosshair.classList.toggle('melee', game.weapons.current.def.kind === 'melee');
-    this.crosshair.style.display = p.mode === 'foot' || (v && v.kind !== 'car') ? '' : 'none';
+    this.crosshair.style.display = (p.mode === 'foot' && !game.inBar) || (v && v.kind !== 'car') ? '' : 'none';
     this.drawMinimap();
   }
 
@@ -289,6 +289,30 @@ export class HUD {
       g.lineWidth = 1.5 / s;
       g.fillRect(-5 / s, -4 / s, 10 / s, 8 / s);
       g.strokeRect(-5 / s, -4 / s, 10 / s, 8 / s);
+      g.restore();
+    }
+    const bar = game.world.bar;
+    if (bar) {
+      // a little martini glass for The Inkwell
+      g.save();
+      g.translate(bar.x - p.x, bar.z - p.z);
+      g.rotate(-(Math.PI + yaw)); // keep the glass upright on the rotating map
+      g.strokeStyle = '#e0408a';
+      g.fillStyle = '#ff9cc8';
+      g.lineWidth = 2 / s;
+      g.beginPath();
+      g.moveTo(-6 / s, -6 / s);
+      g.lineTo(6 / s, -6 / s);
+      g.lineTo(0, 1 / s);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.beginPath();
+      g.moveTo(0, 1 / s);
+      g.lineTo(0, 6 / s);
+      g.moveTo(-3.5 / s, 6 / s);
+      g.lineTo(3.5 / s, 6 / s);
+      g.stroke();
       g.restore();
     }
     for (const v of game.vehicles.list) dot(v.pos.x, v.pos.z, 4, '#5f8be8', '#141418');

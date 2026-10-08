@@ -467,3 +467,53 @@ body.touch #goals { top: auto; bottom: 12px; right: auto; left: 50%; transform: 
 }
 @keyframes splat-fade { 0% { transform: scale(0.4); } 8% { transform: scale(1.05); } 60% { opacity: 0.8; } 100% { opacity: 0; transform: translateY(14px); } }
 @media (max-width: 760px) { #wanted { font-size: 26px; top: max(56px, env(safe-area-inset-top)); } }
+
+/* ---------- conversations (bar) ---------- */
+#dialog {
+  position: absolute;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  transform: translateX(-50%) rotate(-0.4deg);
+  width: min(640px, 92vw);
+  padding: 12px 18px 14px;
+  pointer-events: auto;
+  z-index: 20;
+}
+#dialog .who { font-family: var(--font-hand); font-size: 24px; color: #b3191e; margin-bottom: 2px; }
+#dialog .text { font-size: 18px; line-height: 1.45; margin-bottom: 10px; min-height: 26px; }
+#dialog .choices { display: flex; flex-direction: column; gap: 6px; }
+#dialog .choices button {
+  text-align: right;
+  font: inherit;
+  font-size: 16px;
+  padding: 6px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 10px 6px 12px 7px;
+  background: #fffdf6;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 rgba(36, 36, 44, 0.2);
+}
+#dialog .choices button:hover { background: #fff3b0; }
+#dialog .choices button .k { display: inline-block; min-width: 22px; font-weight: 800; color: #3a6ad6; }
+/* ---------- page flip between the street and the bar ---------- */
+#pageflip { position: fixed; inset: 0; pointer-events: none; perspective: 1800px; z-index: 60; }
+#pageflip .page {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0) 12%),
+    repeating-linear-gradient(180deg, transparent 0 33px, rgba(110, 150, 210, 0.45) 33px 34px),
+    #f7f4ec;
+  transform-origin: 100% 50%;
+  transform: rotateY(-100deg);
+  opacity: 0;
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.25);
+}
+#pageflip.on .page { animation: page-turn 0.9s ease-in-out forwards; }
+@keyframes page-turn {
+  0% { transform: rotateY(-100deg); opacity: 1; }
+  45% { transform: rotateY(0deg); opacity: 1; }
+  55% { transform: rotateY(0deg); opacity: 1; }
+  100% { transform: rotateY(100deg); opacity: 1; }
+}
+body.in-bar #minimap-wrap { display: none; }
