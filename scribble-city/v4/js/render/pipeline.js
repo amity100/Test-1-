@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, BLANK } from './materials.js';
+import { shared, BLANK, LAYERS } from './materials.js';
 
 // One frame of the drawing:
 //  1. the sun's view of the street (shadows)
@@ -237,6 +237,12 @@ const _sy = new THREE.Vector3();
 const _sz = new THREE.Vector3();
 const _sc = new THREE.Vector3();
 
+// the layer of what is never seen in the mirror under the street (the main camera and the sun
+// see it; the mirror's camera does not), and the one only the sun sees
+const MIRRORLESS = LAYERS.MIRRORLESS;
+const SUN = LAYERS.SUN;
+const notInMirror = (o) => !!((o.material.userData && o.material.userData.reflective) || o.userData.noReflect || o.userData.indoor);
+
 export class Pipeline {
   constructor(renderer, scene, camera, { low = false } = {}) {
     this.r = renderer;
@@ -250,12 +256,35 @@ export class Pipeline {
     const ext = renderer.extensions;
     this.hdr = ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float');
     this.type = this.hdr ? THREE.HalfFloatType : THREE.UnsignedByteType;
-    // 1. the sun's depth
+    // 1. the sun's depth, in two maps: what moves (around you, every frame) and the still city
+    //    (setStatic: a bigger map on the same grid of texels, drawn again only when you have gone
+    //    far enough from where it was drawn, or something in it was rubbed out)
     const S = low ? 1024 : 2048;
-    this.shadowRT = new THREE.WebGLRenderTarget(S, S, { depthBuffer: true, depthTexture: new THREE.DepthTexture(S, S) });
+    // (only the depth is read: the colour beside it is the smallest there is)
+    this.shadowRT = new THREE.WebGLRenderTarget(S, S, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(S, S) });
     this.sunCam = new THREE.OrthographicCamera(-60, 60, 60, -60, 1, 520);
+    this.sunCam.layers.enable(MIRRORLESS);
+    this.sunCam.layers.enable(SUN);
+    camera.layers.enable(MIRRORLESS);
     shared.uShadowMap.value = this.shadowRT.depthTexture;
     shared.uShadowTexel.value = 1 / S;
+    this.shadowS = S;
+    // the still city's map: the near box's half again on each side across the sun, a little more
+    // up and down (walking hardly moves it there), and 60 m more depth each way along the sun
+    this.stMx = S / 2;
+    this.stMy = Math.round(S * 0.08);
+    this.stMz = 60;
+    this.staticCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 520 + 2 * this.stMz);
+    this.staticCam.layers.enable(MIRRORLESS);
+    this.staticCam.layers.enable(SUN);
+    this.staticRT = null;
+    this.staticRoot = null;
+    this.st = { on: false, sx: 0, sy: 0, sz: 0, ver: -1, sun: new THREE.Vector3(), builds: 0 };
+    this.lead = new THREE.Vector3();
+    this.lastCam = new THREE.Vector3();
+    this.lastT = 0;
+    this._swap = [];
+    this._hide = [];
     // 2. the mirror
     this.reflCam = new THREE.PerspectiveCamera();
     this.mirrorY = 0;
@@ -340,6 +369,74 @@ export class Pipeline {
     this.r.render(this.quadScene, this.quadCam);
   }
 
+  // The still city (root: its parts that never move; the ones that do are marked
+  // userData.dynamic). cull(p): the city's small things as seen from p (they are left out of the
+  // sun's view far away, as they are on the screen); version(): changes when a prop is rubbed out.
+  setStatic(root, { cull = null, version = null } = {}) {
+    const S = this.shadowS;
+    const W = S + 2 * this.stMx;
+    const H = S + 2 * this.stMy;
+    if (W > this.r.capabilities.maxTextureSize) return;
+    this.staticRoot = root;
+    this.staticCull = cull;
+    this.staticVersion = version;
+    // the city's moving parts (the big wheel): drawn with what moves
+    this.staticSkip = [];
+    for (const c of root.children) {
+      let dyn = !!c.userData.dynamic;
+      c.traverse((o) => {
+        if (o.userData.dynamic) dyn = true;
+      });
+      if (dyn) this.staticSkip.push(c);
+    }
+    this.staticRT = new THREE.WebGLRenderTarget(W, H, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) });
+    shared.uShadowStatic.value = this.staticRT.depthTexture;
+    shared.uShadowStaticTexel.value.set(1 / W, 1 / H);
+    this.st.on = false;
+    // what of the still city is never in the mirror under the street (the reflective ground
+    // itself, the small things, the rooms) is on a layer of its own that the mirror's camera does
+    // not see: no hiding and showing a thousand things every frame
+    const skip = new Set(this.staticSkip);
+    const visit = (o) => {
+      if (skip.has(o)) return;
+      if (o.isMesh && notInMirror(o)) o.layers.set(MIRRORLESS);
+      for (const c of o.children) visit(c);
+    };
+    visit(root);
+    this.mirrorLayered = true;
+  }
+
+  // the depth materials on (or the thing hidden from the sun) for everything visible under o
+  // that casts, skipping the still city's parts when skip is given
+  swapDepth(o, skip) {
+    if (!o.visible) return;
+    if (skip && o === this.staticRoot) {
+      for (const c of this.staticSkip) this.swapDepth(c, null);
+      return;
+    }
+    if (o.isMesh) {
+      const d = o.material.userData && o.material.userData.depth;
+      if (d === null || o.userData.noShadow || o.userData.indoor) {
+        o.visible = false;
+        this._hide.push(o);
+        return;
+      } else if (d) {
+        this._swap.push(o, o.material);
+        o.material = d;
+      }
+    }
+    const ch = o.children;
+    for (let i = 0; i < ch.length; i++) this.swapDepth(ch[i], skip);
+  }
+
+  unswapDepth() {
+    const sw = this._swap;
+    for (let i = 0; i < sw.length; i += 2) sw[i].material = sw[i + 1];
+    for (const o of this._hide) o.visible = true;
+    sw.length = 0;
+    this._hide.length = 0;
+  }
+
   // the sun looks down the street from low over the bay; its box follows you
   renderShadows(center) {
     const sun = shared.uSunDir.value;
@@ -360,27 +457,118 @@ export class Pipeline {
     cam.updateMatrixWorld();
     cam.updateProjectionMatrix();
     shared.uShadowMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-    const swapped = [];
-    this.scene.traverse((o) => {
-      if (!o.isMesh || !o.visible) return;
-      const d = o.material.userData && o.material.userData.depth;
-      if (d === null || o.userData.noShadow || o.userData.indoor) {
-        o.visible = false;
-        swapped.push([o, null]);
-      } else if (d) {
-        swapped.push([o, o.material]);
-        o.material = d;
-      }
-    });
     shared.uShadowOn.value = 0;
+    const root = this.staticRoot;
+    if (root) {
+      // the still city's map: still good while the box above is inside it
+      const st = this.st;
+      const ver = this.staticVersion ? this.staticVersion() : 0;
+      const ok = st.on && ver === st.ver && st.sun.equals(sun) && Math.abs(cx - st.sx) <= this.stMx * texel + 1e-4 && Math.abs(cy - st.sy) <= this.stMy * texel + 1e-4 && Math.abs(cz - st.sz) <= this.stMz;
+      if (!ok) this.renderStatic(x, y, z, texel, ver);
+    }
     this.r.setRenderTarget(this.shadowRT);
     this.r.clear();
-    this.r.render(this.scene, cam);
-    for (const [o, m] of swapped) {
-      if (m) o.material = m;
-      else o.visible = true;
+    if (root) {
+      // what moves: everything but the still city
+      this.swapDepth(this.scene, true);
+      root.visible = false;
+      this.r.render(this.scene, cam);
+      root.visible = true;
+      if (this.staticSkip.length) {
+        this.r.autoClear = false;
+        for (const c of this.staticSkip) this.r.render(c, cam);
+        this.r.autoClear = true;
+      }
+    } else {
+      this.swapDepth(this.scene, false);
+      this.r.render(this.scene, cam);
     }
+    this.unswapDepth();
     shared.uShadowOn.value = 1;
+  }
+
+  // the still city as the sun sees it, around where you are (and a little ahead of you: you
+  // usually keep going the way you go)
+  renderStatic(x, y, z, texel, ver) {
+    const st = this.st;
+    const sun = shared.uSunDir.value;
+    const camPos = this.camera.position;
+    const now = performance.now();
+    const p = _v.set(camPos.x + this.lead.x, 0, camPos.z + this.lead.z);
+    st.sx = Math.round(p.dot(x) / texel) * texel;
+    st.sy = Math.round(p.dot(y) / texel) * texel;
+    st.sz = p.dot(z);
+    st.ver = ver;
+    st.sun.copy(sun);
+    st.on = true;
+    st.builds++;
+    st.at = now;
+    const cam = this.staticCam;
+    const hx = (this.shadowS / 2 + this.stMx) * texel;
+    const hy = (this.shadowS / 2 + this.stMy) * texel;
+    cam.left = -hx;
+    cam.right = hx;
+    cam.top = hy;
+    cam.bottom = -hy;
+    const c = _sc.copy(x).multiplyScalar(st.sx).addScaledVector(y, st.sy).addScaledVector(z, st.sz);
+    cam.position.copy(c).addScaledVector(sun, 260 + this.stMz);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(c);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    shared.uShadowStaticMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    // the same bias in metres as the near map's (its depth is spread over a longer way)
+    shared.uShadowStaticBias.value = (0.0012 * 519) / (cam.far - cam.near);
+    shared.uShadowStaticOn.value = 1;
+    // the small things as they would be seen from there
+    if (this.staticCull) this.staticCull(_v.set(p.x, camPos.y, p.z));
+    const root = this.staticRoot;
+    const skipVis = this._skipVis || (this._skipVis = []);
+    skipVis.length = 0;
+    for (const s of this.staticSkip) {
+      skipVis.push(s.visible);
+      s.visible = false;
+    }
+    this.swapDepth(root, false);
+    this.r.setRenderTarget(this.staticRT);
+    this.r.clear();
+    this.r.render(root, cam);
+    this.unswapDepth();
+    this.staticSkip.forEach((s, i) => (s.visible = skipVis[i]));
+    if (this.staticCull) this.staticCull(camPos);
+  }
+
+  // where the camera is heading (for the still city's map): about a second ahead, at most 20 m
+  trackCamera() {
+    const now = performance.now();
+    const c = this.camera.position;
+    const dt = (now - this.lastT) / 1000;
+    if (this.lastT && dt > 0 && dt < 0.25) {
+      const k = Math.min(1, dt * 3);
+      const vx = (c.x - this.lastCam.x) / dt;
+      const vz = (c.z - this.lastCam.z) / dt;
+      this.lead.x += (vx - this.lead.x) * k;
+      this.lead.z += (vz - this.lead.z) * k;
+    } else this.lead.set(0, 0, 0);
+    this.lastCam.copy(c);
+    this.lastT = now;
+    const l = Math.hypot(this.lead.x, this.lead.z);
+    if (l > 20) this.lead.multiplyScalar(20 / l);
+  }
+
+  hideFromMirror(o, hidden) {
+    if (!o.visible) return;
+    if (o === this.staticRoot && this.mirrorLayered) {
+      for (const c of this.staticSkip) this.hideFromMirror(c, hidden);
+      return;
+    }
+    if (o.isMesh && notInMirror(o)) {
+      o.visible = false;
+      hidden.push(o);
+      return;
+    }
+    const ch = o.children;
+    for (let i = 0; i < ch.length; i++) this.hideFromMirror(ch[i], hidden);
   }
 
   // the mirror camera under the street (three.js Reflector, by hand)
@@ -425,14 +613,11 @@ export class Pipeline {
     pm.elements[10] = cp.z + 1.0 - 0.003;
     pm.elements[14] = cp.w;
     rc.projectionMatrixInverse.copy(pm).invert();
-    // the reflective surfaces are not in their own mirror
-    const hidden = [];
-    this.scene.traverse((o) => {
-      if (o.isMesh && o.visible && o.material.userData && (o.material.userData.reflective || o.userData.noReflect || o.userData.indoor)) {
-        o.visible = false;
-        hidden.push(o);
-      }
-    });
+    // the reflective surfaces are not in their own mirror (nor the small things, nor the rooms):
+    // the still city's are on their own layer already, the rest are hidden for the moment
+    const hidden = this._mirrorHide || (this._mirrorHide = []);
+    hidden.length = 0;
+    this.hideFromMirror(this.scene, hidden);
     const keep = shared.uRefl.value;
     shared.uRefl.value = BLANK;
     shared.uMirror.value = 1;
@@ -450,12 +635,13 @@ export class Pipeline {
     const T = this.timer;
     this.ensure();
     r.autoClear = true;
-    // on a phone the sun's view and the mirror under the street are drawn every other frame
-    // (each in turn), so a frame has two passes over the city instead of three
+    // on a phone the mirror under the street is drawn every other frame (and so was the sun's
+    // view, before the still city got a map of its own: now only what moves is drawn each frame)
     this.frameN = (this.frameN || 0) + 1;
     const every = this.low ? 2 : 1;
     const phase = this.frameN % every;
-    if (every === 1 || phase === 0 || !this.shadowDone) {
+    this.trackCamera();
+    if (every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) {
       if (T) T.begin('shadow');
       this.renderShadows(center);
       if (T) T.end();
@@ -561,6 +747,7 @@ export class Pipeline {
     if (this.farRT) this.farRT.dispose();
     this.farRT = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) });
     const cam = new THREE.OrthographicCamera(x0, x1, y1, y0, 1, z1 - z0 + 20);
+    cam.layers.enable(MIRRORLESS);
     const eye = new THREE.Vector3().copy(z).multiplyScalar(z1 + 10);
     cam.position.copy(eye);
     cam.up.copy(y);

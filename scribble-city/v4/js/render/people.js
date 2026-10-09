@@ -353,6 +353,9 @@ export class PersonRenderer {
       ball: P(new THREE.SphereGeometry(1, 10, 6), M.hair, 2048),
       boxP: P(new THREE.BoxGeometry(1, 1, 1), M.box, 512),
     };
+    // (the little things of a face, the soles and the pockets are inside the shadow of what they
+    // are on: the sun's view leaves them out)
+    for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'sole', 'pocket']) this.p[k].mesh.userData.noShadow = true;
     // eraser holes and fading per person
     this.owners = new Array(MAX_OWNERS).fill(false);
     this.holeTex = shared.uHoles.value;

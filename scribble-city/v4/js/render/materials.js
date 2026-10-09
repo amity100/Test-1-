@@ -62,6 +62,10 @@ function holeTexture() {
   return t;
 }
 
+// the layers beyond the default one: what the mirror under the street never shows, and what
+// only the sun sees (a car's parts in one shape, for its shadow)
+export const LAYERS = { MIRRORLESS: 1, SUN: 2 };
+
 // uniforms shared by reference between every material
 export const shared = {
   uNoise: { value: noiseTexture() },
@@ -86,6 +90,12 @@ export const shared = {
   uShadowFarMatrix: { value: new THREE.Matrix4() },
   uShadowFarTexel: { value: new THREE.Vector2(1 / 4096, 1 / 1024) },
   uShadowFarOn: { value: 0 },
+  // the still city's own map of the sun's view (bigger, drawn again only when you have gone far)
+  uShadowStatic: { value: blank },
+  uShadowStaticMatrix: { value: new THREE.Matrix4() },
+  uShadowStaticTexel: { value: new THREE.Vector2(1 / 4096, 1 / 2048) },
+  uShadowStaticBias: { value: 0.0012 },
+  uShadowStaticOn: { value: 0 },
   uLightPos: { value: Array.from({ length: MAX_LIGHTS }, () => new THREE.Vector4()) },
   uLightCol: { value: Array.from({ length: MAX_LIGHTS }, () => new THREE.Vector4()) },
   uLightN: { value: 0 },

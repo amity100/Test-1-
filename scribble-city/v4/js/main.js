@@ -98,6 +98,9 @@ async function boot() {
   } catch (err) {
     console.warn('shadow bake failed', err);
   }
+  // the still city's own map of the sun's view around you (drawn again only when you have gone far
+  // enough, or a prop was rubbed out): each frame only what moves is drawn for the sun
+  if (!params.has('noshadowcache')) pipe.setStatic(world.group, { cull: (p) => world.cull(p), version: () => world.objects.castVersion });
   setStatus('מסמנים דרכים…');
   await frame();
   world.buildNav();

@@ -27,6 +27,8 @@ export class WorldObjects {
     this.maskDirty = false;
     this.shadowDirty = false;
     this.shadowT = 0;
+    // bumped whenever a prop appears in or leaves the sun's view
+    this.castVersion = 0;
     this.world = null;
   }
 
@@ -134,7 +136,11 @@ export class WorldObjects {
 
   setMask(o) {
     const data = shared.uObjMask.value.image.data;
-    data[o.id * 4] = Math.round(Math.min(1, o.gone) * 255);
+    const v = Math.round(Math.min(1, o.gone) * 255);
+    // (the sun's view keeps a prop until it is more than half gone: the cached map of the still
+    // city is drawn again when one crosses that line)
+    if (data[o.id * 4] > 127 !== v > 127) this.castVersion++;
+    data[o.id * 4] = v;
     this.maskDirty = true;
   }
 

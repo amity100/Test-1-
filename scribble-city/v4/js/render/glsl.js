@@ -41,6 +41,11 @@ uniform sampler2D uShadowFar;
 uniform mat4 uShadowFarMatrix;
 uniform vec2 uShadowFarTexel;
 uniform float uShadowFarOn;
+uniform sampler2D uShadowStatic;
+uniform mat4 uShadowStaticMatrix;
+uniform vec2 uShadowStaticTexel;
+uniform float uShadowStaticBias;
+uniform float uShadowStaticOn;
 uniform vec4 uLightPos[MAX_LIGHTS];
 uniform vec4 uLightCol[MAX_LIGHTS];
 uniform float uLightN;
@@ -169,10 +174,23 @@ float sunShadow(vec3 wp, vec3 n) {
   if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) return sunShadowFar(wp, n);
   float t = uShadowTexel;
   float v = 0.0;
-  v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, -0.6) * t, 0.0).r);
-  v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, -0.6) * t, 0.0).r);
-  v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, 0.6) * t, 0.0).r);
-  v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, 0.6) * t, 0.0).r);
+  if (uShadowStaticOn > 0.5) {
+    // what moves (around you, every frame) and the still city (its own bigger map, the same size
+    // of texel on the same grid): in shadow where either one is in the way
+    vec4 sc2 = uShadowStaticMatrix * vec4(wp + n * 0.06, 1.0);
+    vec3 s2 = sc2.xyz / sc2.w * 0.5 + 0.5;
+    vec2 t2 = uShadowStaticTexel;
+    float z2 = s2.z - uShadowStaticBias;
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, -0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(-0.6, -0.6) * t2, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, -0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(0.6, -0.6) * t2, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, 0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(-0.6, 0.6) * t2, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, 0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(0.6, 0.6) * t2, 0.0).r);
+  } else {
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, -0.6) * t, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, -0.6) * t, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, 0.6) * t, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, 0.6) * t, 0.0).r);
+  }
   // the edge of the box blends into the city's own shadow so it never shows
   vec2 e = min(s.xy, 1.0 - s.xy);
   float fade = smoothstep(0.0, 0.08, min(e.x, e.y));

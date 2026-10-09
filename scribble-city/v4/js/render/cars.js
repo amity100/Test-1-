@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, lin3 } from './materials.js';
+import { makeSurface, srgb, lin3, LAYERS } from './materials.js';
 
 // The cars of the city: the first boulevard's low sports car (glossy paint full of the sunset, a
 // bar of red light across the back), and its family - a sedan, a taxi, a police cruiser with its
@@ -364,6 +364,7 @@ class Pool {
   }
 }
 
+const PARTS = ['body', 'glass', 'tail', 'head', 'trim', 'plate'];
 const _m = new THREE.Matrix4();
 const _w = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -393,7 +394,11 @@ export class CarRenderer {
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);
       const n = kind === 'bus' ? 12 : cap;
-      this.kinds[kind] = {
+      // (what the sun sees of a car: all its parts in one shape, drawn with the body's own
+      // instances - every part of a car has the car's matrix - so a kind of car is one draw in
+      // the sun's view instead of six)
+      const sun = merge([b.body, b.glass, b.tail, b.head, b.trim, b.plate]);
+      const P = (this.kinds[kind] = {
         b,
         body: new Pool(scene, b.body, mats.paint, n),
         glass: new Pool(scene, b.glass, mats.glass, n),
@@ -401,7 +406,16 @@ export class CarRenderer {
         head: new Pool(scene, b.head, mats.head, n),
         trim: new Pool(scene, b.trim, mats.dark, n),
         plate: new Pool(scene, b.plate, mats.plate, n),
-      };
+      });
+      for (const k of PARTS) P[k].mesh.userData.noShadow = true;
+      P.sun = new THREE.InstancedMesh(sun, mats.paint.userData.depth, n);
+      P.sun.instanceMatrix = P.body.mesh.instanceMatrix;
+      P.sun.frustumCulled = false;
+      P.sun.count = 0;
+      P.sun.visible = false;
+      P.sun.layers.set(LAYERS.SUN);
+      P.sun.userData.dynamic = true;
+      scene.add(P.sun);
     }
     const tyre = new THREE.CylinderGeometry(1, 1, 0.3, 20).rotateZ(Math.PI / 2);
     // the rim: a dished disc and five spokes
@@ -415,6 +429,8 @@ export class CarRenderer {
     const rim = merge(rimParts);
     this.tyres = new Pool(scene, tyre, mats.tyre, cap * 4);
     this.rims = new Pool(scene, rim, mats.rim, cap * 4);
+    // (a rim's shadow is inside its tyre's)
+    this.rims.mesh.userData.noShadow = true;
     // a taxi's sign, a police car's light bar and its stripe, a van's roof rack
     this.lightBox = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), mats.light, cap * 3);
     this.trimBox = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), mats.trim, cap * 4);
@@ -498,7 +514,11 @@ export class CarRenderer {
   }
 
   end() {
-    for (const P of Object.values(this.kinds)) for (const k of ['body', 'glass', 'tail', 'head', 'trim', 'plate']) P[k].end();
+    for (const P of Object.values(this.kinds)) {
+      for (const k of PARTS) P[k].end();
+      P.sun.count = P.body.mesh.count;
+      P.sun.visible = P.body.mesh.visible;
+    }
     this.tyres.end();
     this.rims.end();
     this.lightBox.end();

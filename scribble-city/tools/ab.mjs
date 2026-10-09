@@ -4,6 +4,9 @@
 //                                             builds see the same moment) and counts each pass's
 //                                             draw calls and triangles -> <outDir>/stats.json
 //   node tools/ab.mjs diff <dirA> <dirB>      compares the photographs of two runs, spot by spot
+//   node tools/ab.mjs heat <a.png> <b.png> <out.png>   shows where two photographs differ
+//
+// AB_SPOTS=blvd,park picks spots, AB_MOBILE=1 shoots as a phone, AB_QUERY=low adds to the address.
 //
 // A build passes when every spot differs by less than 1% of its pixels (see ROADMAP.md).
 import fs from 'node:fs';
@@ -31,7 +34,8 @@ async function shoot(outDir, page = 'v4/index.html') {
   fs.mkdirSync(outDir, { recursive: true });
   const server = await startServer();
   const browser = await launch();
-  const pg = await browser.newPage({ viewport: { width: W, height: H } });
+  // AB_MOBILE=1: a phone held sideways (the phone's own settings: touch, a smaller drawing)
+  const pg = await browser.newPage(process.env.AB_MOBILE === '1' ? { viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } : { viewport: { width: W, height: H } });
   await pg.addInitScript((seed) => {
     let a = seed >>> 0;
     Math.random = () => {
@@ -42,9 +46,24 @@ async function shoot(outDir, page = 'v4/index.html') {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }, SEED);
+  // three.js draws on the same dice for the id of every new object: a build that makes one more
+  // object would shift every roll after it. Its ids get dice of their own.
+  await pg.addInitScript(() => {
+    let u = 99991;
+    globalThis.__uuidRand = () => {
+      u = (u * 16807) % 2147483647;
+      return u / 2147483647;
+    };
+  });
+  await pg.route('**/three.module.min.js', async (route) => {
+    const resp = await route.fetch();
+    const body = (await resp.text()).replaceAll('4294967295*Math.random()', '4294967295*(globalThis.__uuidRand||Math.random)()');
+    await route.fulfill({ response: resp, body });
+  });
   const errors = [];
   pg.on('pageerror', (e) => errors.push(e.message));
-  await pg.goto(`http://127.0.0.1:${server.address().port}/${page}?test=1&autostart=1`);
+  const extra = process.env.AB_QUERY ? `&${process.env.AB_QUERY}` : '';
+  await pg.goto(`http://127.0.0.1:${server.address().port}/${page}?test=1&autostart=1${extra}`);
   await pg.waitForFunction('window.__ready === true', null, { timeout: 120000 });
   // count each pass's draw calls and triangles
   await pg.evaluate(() => {
@@ -67,10 +86,17 @@ async function shoot(outDir, page = 'v4/index.html') {
     };
     for (const [n, l] of [['renderShadows', 'shadow'], ['renderReflection', 'reflection'], ['render', 'all']]) if (g.pipe[n]) wrap(n, l);
     g.enemies.spawnT = 1e9;
+    // the music runs on the wall clock and draws on the same (seeded) dice as the city: silenced,
+    // so a faster build sees exactly the same moment as a slower one
+    g.audio.schedule = () => {};
+    // (and the mouse lock, refused or granted whenever the browser gets to it, never pauses it)
+    g.pause = () => {};
   });
   await pg.evaluate('window.__frame(20, 1 / 30)');
   const stats = {};
+  const only = process.env.AB_SPOTS ? process.env.AB_SPOTS.split(',') : null;
   for (const [name, px, pz, yaw, pos, look] of SPOTS) {
+    if (only && !only.includes(name)) continue;
     await pg.evaluate(([px, pz, yaw, pos, look]) => {
       const g = window.__game;
       g.player.spawn(px, pz, yaw);
@@ -88,6 +114,8 @@ async function shoot(outDir, page = 'v4/index.html') {
       }
       const out = {};
       for (const [k, v] of Object.entries(S.pass)) out[k] = { calls: Math.round(v.calls / v.n), ktris: Math.round(v.tris / v.n / 1000) };
+      // (the moment it is in the game: two builds must agree on it)
+      out.t = +g.time.toFixed(4);
       return out;
     });
     stats[name] = st;
@@ -149,7 +177,49 @@ async function diff(dirA, dirB) {
   return worst < 1 ? 0 : 1;
 }
 
-const [, , cmd, a, b] = process.argv;
+// where two photographs differ: the first one dimmed, the differing pixels in red
+async function heat(a, b, out) {
+  const browser = await launch();
+  const pg = await browser.newPage();
+  const url = await pg.evaluate(async ([da, db]) => {
+    const load = (src) => new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = src;
+    });
+    const [ia, ib] = await Promise.all([load(da), load(db)]);
+    const c = document.createElement('canvas');
+    c.width = ia.width;
+    c.height = ia.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(ib, 0, 0);
+    const pb = g.getImageData(0, 0, c.width, c.height).data;
+    g.drawImage(ia, 0, 0);
+    const img = g.getImageData(0, 0, c.width, c.height);
+    const pa = img.data;
+    for (let i = 0; i < pa.length; i += 4) {
+      const d = Math.max(Math.abs(pa[i] - pb[i]), Math.abs(pa[i + 1] - pb[i + 1]), Math.abs(pa[i + 2] - pb[i + 2]));
+      if (d > 24) {
+        pa[i] = 255;
+        pa[i + 1] = 0;
+        pa[i + 2] = 0;
+      } else {
+        pa[i] *= 0.35;
+        pa[i + 1] *= 0.35;
+        pa[i + 2] *= 0.35;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return c.toDataURL('image/png');
+  }, ['data:image/png;base64,' + fs.readFileSync(a).toString('base64'), 'data:image/png;base64,' + fs.readFileSync(b).toString('base64')]);
+  fs.writeFileSync(out, Buffer.from(url.split(',')[1], 'base64'));
+  await browser.close();
+  return 0;
+}
+
+const [, , cmd, a, b, c] = process.argv;
 if (cmd === 'shoot') process.exitCode = await shoot(a, b);
 else if (cmd === 'diff') process.exitCode = await diff(a, b);
-else console.log('usage: node tools/ab.mjs shoot <outDir> [page] | diff <dirA> <dirB>');
+else if (cmd === 'heat') process.exitCode = await heat(a, b, c);
+else console.log('usage: node tools/ab.mjs shoot <outDir> [page] | diff <dirA> <dirB> | heat <a.png> <b.png> <out.png>');
