@@ -702,3 +702,38 @@ html, body { background: #1b1430; }
   .btn.huge { font-size: 22px; padding: 8px 26px; }
   #load-status { margin-top: 2px; min-height: 0; }
 }
+
+/* ---------- the performance numbers (F3) and the test route's report ---------- */
+#perf {
+  position: fixed;
+  top: calc(max(10px, env(safe-area-inset-top)) + 184px);
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 30;
+  width: min(460px, 70vw);
+  box-sizing: border-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(16, 12, 30, 0.72);
+  color: #f4efe1;
+  font: 12px/1.45 "Rubik", system-ui, sans-serif;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+#perf b { color: #ffd23f; font-size: 14px; }
+#perf .perf-sys { direction: ltr; unicode-bidi: isolate; display: inline-block; opacity: 0.8; font-size: 11px; }
+#perf-report { z-index: 40; }
+#perf-report pre {
+  direction: rtl;
+  text-align: right;
+  white-space: pre-wrap;
+  font: 13px/1.6 "Rubik", system-ui, sans-serif;
+  max-height: 60vh;
+  overflow: auto;
+  user-select: text;
+  margin: 8px 0;
+}
+@media (max-height: 520px) {
+  #perf { top: calc(max(10px, env(safe-area-inset-top)) + 132px); font-size: 11px; }
+}

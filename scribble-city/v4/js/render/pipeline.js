@@ -287,6 +287,8 @@ export class Pipeline {
     // the drawing is made at scale x the screen's pixels and brought up to the screen sharp
     this.scale = 1;
     this.screen = new THREE.Vector2();
+    // the performance numbers (game/perf.js) time each pass while they are shown
+    this.timer = null;
   }
 
   // the screen's pixels per CSS pixel, times the drawing's own scale
@@ -445,6 +447,7 @@ export class Pipeline {
 
   render(center) {
     const r = this.r;
+    const T = this.timer;
     this.ensure();
     r.autoClear = true;
     // on a phone the sun's view and the mirror under the street are drawn every other frame
@@ -453,17 +456,23 @@ export class Pipeline {
     const every = this.low ? 2 : 1;
     const phase = this.frameN % every;
     if (every === 1 || phase === 0 || !this.shadowDone) {
+      if (T) T.begin('shadow');
       this.renderShadows(center);
+      if (T) T.end();
       this.shadowDone = true;
     }
     if (every === 1 || phase === 1 || !this.reflDone) {
+      if (T) T.begin('reflection');
       this.renderReflection();
+      if (T) T.end();
       this.reflDone = true;
     }
     // 3. the drawing
+    if (T) T.begin('main');
     r.setRenderTarget(this.gRT);
     r.clear();
     r.render(this.scene, this.camera);
+    if (T) T.end();
     // 4. the ink
     const ink = this.mInk.uniforms;
     ink.tColor.value = this.gRT.textures[0];
@@ -475,8 +484,11 @@ export class Pipeline {
     ink.uLineW.value = this.lineW;
     ink.uInvProj.value.copy(this.camera.projectionMatrixInverse);
     ink.uCamWorld.value.copy(this.camera.matrixWorld);
+    if (T) T.begin('ink');
     this.pass(this.mInk, this.inkRT);
+    if (T) T.end();
     // 5. glow
+    if (T) T.begin('glow');
     const b = this.mBright.uniforms;
     b.tSrc.value = this.inkRT.texture;
     b.uTexel.value.set(1 / this.size.x, 1 / this.size.y);
@@ -495,6 +507,7 @@ export class Pipeline {
       this.pass(this.mUp, this.ups[i]);
       cur = this.ups[i];
     }
+    if (T) T.end();
     const f = this.mFinal.uniforms;
     f.tSrc.value = this.inkRT.texture;
     f.tBloom.value = cur.texture;
@@ -502,6 +515,7 @@ export class Pipeline {
     f.uExposure.value = this.exposure;
     f.uSrcTexel.value.set(1 / this.size.x, 1 / this.size.y);
     f.uSharp.value = this.scale < 0.99 ? 0.85 : 0.5;
+    if (T) T.begin('final');
     this.pass(this.mFinal, null);
     if (this.overlay.children.length) {
       r.autoClear = false;
@@ -510,6 +524,7 @@ export class Pipeline {
       r.render(this.overlay, this.camera);
       r.autoClear = true;
     }
+    if (T) T.end();
   }
 
   // The sun's view of the whole city, made once: the long evening shadows reach across every

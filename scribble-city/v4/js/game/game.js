@@ -17,6 +17,7 @@ import { HUD } from '../ui/hud.js';
 import { Album, ALL_OPEN } from '../ui/album.js';
 import { Materialize } from './materialize.js';
 import { Signals } from './signals.js';
+import { Perf } from './perf.js';
 import { AirDraw } from '../ui/airdraw.js';
 import { Bubbles } from '../ui/bubbles.js';
 import { Police } from './police.js';
@@ -75,6 +76,7 @@ export class Game {
     this.traffic = new Traffic(this);
     this.signals = new Signals(this);
     this.player = new Player(this);
+    this.perf = new Perf(this);
     this.civilians = new Civilians(this);
     this.enemies = new Enemies(this);
     this.weapons = new Weapons(this);
@@ -160,8 +162,13 @@ export class Game {
     $('opt-magic').checked = shared.uQuality.value > 0.5;
     $('opt-magic').addEventListener('change', (e) => (shared.uQuality.value = e.target.checked ? 1 : 0));
     $('opt-sens').addEventListener('input', (e) => (this.input.sensitivity = parseFloat(e.target.value)));
+    $('opt-perf').addEventListener('change', (e) => this.perf.toggle(e.target.checked));
+    $('bench-btn').addEventListener('click', () => {
+      this.resume();
+      this.perf.startBench();
+    });
     this.input.on('lock', (locked) => {
-      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !this.inkwell.flipping && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -300,8 +307,11 @@ export class Game {
     if (this.params.has('test')) {
       window.__test = { buildWeaponModel, WEAPON_DEFS, BLUEPRINTS };
       window.__frame = (n = 1, dt = 1 / 30) => {
+        this.perf.frameStart();
         for (let i = 0; i < n; i++) this.update(dt);
+        this.perf.afterUpdate();
         this.renderFrame();
+        this.perf.frameEnd(dt);
         return true;
       };
       window.__frame(1);
@@ -323,9 +333,14 @@ export class Game {
     const tick = () => {
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
+      const perf = this.perf;
+      perf.frameStart();
       this.update(dt);
+      perf.afterUpdate();
       this.renderFrame();
-      if (this.state === 'play') {
+      perf.frameEnd(raw);
+      // (the test route is measured at the drawing's full quality: the resolution waits)
+      if (this.state === 'play' && !perf.bench) {
         acc += raw;
         n++;
       }
@@ -437,13 +452,15 @@ export class Game {
       this.camera.position.set(o.pos[0], o.pos[1], o.pos[2]);
       this.camera.lookAt(o.look[0], o.look[1], o.look[2]);
     }
+    // the performance test route drives the camera (and the city's life follows it)
+    if (this.perf.bench) this.perf.benchCamera(dt);
     this.camera.updateMatrixWorld();
     this.bubbles.update(dt, this.camera);
     if (this.onFrame) this.onFrame(dt);
     this.airdraw.frame(dt);
     // render dynamic figures
     if (dt > 0) {
-      player.draw(this.camera.position);
+      if (!this.perf.bench) player.draw(this.camera.position);
       this.weapons.updateModels();
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
