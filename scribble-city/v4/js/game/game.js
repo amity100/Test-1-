@@ -36,6 +36,7 @@ import { BLACK_INK } from '../render/LineBatch.js';
 import { clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
+import { Weather } from './weather.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -107,6 +108,8 @@ export class Game {
     this.dialog = new Dialog(this);
     // the hour of the day: the sun, the moon, the lamps (game/daynight.js)
     this.daynight = new DayNight(this);
+    // and the weather (game/weather.js): grey skies, rain, storms, the morning fog
+    this.weather = new Weather(this);
     this.inBar = false;
     // the outlines redrawn a few times a second: lively on a big screen, calm on a phone
     this.boilOn = !this.touch;
@@ -177,6 +180,10 @@ export class Game {
         $('clock-now').textContent = dn.clock;
       });
     }
+    // the weather: let the sky decide, or keep one
+    const ws = $('opt-weather');
+    ws.value = this.weather.mode;
+    ws.addEventListener('change', (e) => this.weather.setMode(e.target.value));
     $('bench-btn').addEventListener('click', () => {
       this.resume();
       this.perf.startBench();
@@ -394,6 +401,7 @@ export class Game {
     if (this.state === 'paused') dt = 0;
     this.time += dt;
     shared.uTime.value = this.time;
+    if (this.weather) this.weather.update(dt);
     if (this.daynight) this.daynight.update(dt);
     if (this.boilOn) shared.uBoil.value = Math.floor(this.time * 5);
     this.ambient.update(dt);
@@ -491,6 +499,7 @@ export class Game {
       this.ambient.draw(fr);
       this.chute.draw(fr);
       this.pickups.draw(fr);
+      this.weather.draw(fr);
       this.fx.update(dt, fr);
       fr.end();
     }

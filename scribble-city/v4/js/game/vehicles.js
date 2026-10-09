@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight } from '../world/layout.js';
+import { drawWipers, wiperSweep } from '../render/cars.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
 // The things you drive: the city's own cars (taken from the traffic or from the curb), and the
@@ -396,6 +397,9 @@ class Vehicle {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
       lift: wob, roll: this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0, reveal: rv,
     });
+    // in the rain the wipers go (once somebody is at the wheel)
+    const w = this.game.weather;
+    if (w && w.cur.rain > 0.15 && this.driver && !rv) drawWipers(this.game.figures, this.carKind, this.pos.x, this.pos.y, this.pos.z, this.yaw, wiperSweep(this.game.time, w.cur.rain, 0.3), 991);
     if (this.racing) {
       // the drawn car has racing stripes over the bonnet and the roof
       const fx = Math.sin(this.yaw);

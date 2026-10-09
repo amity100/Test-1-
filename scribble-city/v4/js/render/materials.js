@@ -158,6 +158,14 @@ export const shared = {
   uMoonDir: { value: new THREE.Vector3(-0.3, 0.6, 1).normalize() },
   uMoonK: { value: 0 },
   uStars: { value: 0 },
+  // the weather (game/weather.js; all 0 under a clear sky): how grey the sky is (the light comes
+  // from all of it), how hard it rains, how wet the ground is (the puddles fill and dry slowly),
+  // the fog, a flash of lightning
+  uOvercast: { value: 0 },
+  uRain: { value: 0 },
+  uWet: { value: 0 },
+  uMist: { value: 0 },
+  uFlash: { value: 0 },
 };
 
 // ------------------------------------------------------------------ lights near you

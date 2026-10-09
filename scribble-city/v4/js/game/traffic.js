@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { NODES, lightAt, laneOffsets, stopDist, lanePoint, exitsFrom } from '../world/roads.js';
-import { randomCarSpec } from '../render/cars.js';
+import { randomCarSpec, drawWipers, wiperSweep } from '../render/cars.js';
 import { civilianLook, copLook, swatLook } from './looks.js';
 import { damp, dampAngle, angleDiff } from '../core/util.js';
 
@@ -658,6 +658,22 @@ export class Traffic {
     this._blink = Math.floor(this.game.time * 5) % 2;
     const list = this.list;
     for (let i = 0; i < list.length; i++) if (this.inSight(list[i], 260, camPos, fwd)) this.drawOne(cars, list[i]);
+    // in the rain the wipers of the cars near you go (the parked ones' stay down)
+    const w = this.game.weather;
+    const rain = w ? w.cur.rain : 0;
+    if (rain > 0.15) {
+      const fr = this.game.figures;
+      const t = this.game.time;
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        if (c.wrecked || c.poofT !== undefined || c.spec.kind === 'bus') continue;
+        const dx = c.pos.x - camPos.x;
+        const dz = c.pos.z - camPos.z;
+        if (dx * dx + dz * dz > 26 * 26 || dx * fwd.x + dz * fwd.z < -4) continue;
+        if (c.wipeOff === undefined) c.wipeOff = Math.random();
+        drawWipers(fr, c.spec.kind, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, wiperSweep(t, rain, c.wipeOff), i * 7.1);
+      }
+    }
     const parked = this.parked;
     for (let i = 0; i < parked.length; i++) {
       const c = parked[i];

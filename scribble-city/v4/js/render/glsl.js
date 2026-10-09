@@ -62,6 +62,11 @@ uniform sampler2D uHoles;
 uniform vec3 uWind;
 uniform vec3 uSunDisc;
 uniform float uLitK;
+uniform float uOvercast;
+uniform float uRain;
+uniform float uWet;
+uniform float uMist;
+uniform float uFlash;
 `;
 
 export const FUNCS = /* glsl */ `
@@ -232,7 +237,10 @@ vec3 ambientLight(vec3 n) {
   vec3 a = mix(uBounce, uSkyTop * 1.2, n.y * 0.5 + 0.5) * 1.1;
   vec2 h = normalize(n.xz + vec2(1e-5));
   float toSun = max(dot(h, normalize(uSunDisc.xz)), 0.0) * (1.0 - abs(n.y));
-  return a + uSkyHorizon * 0.45 * toSun + uSkyMid * 0.16 * (1.0 - abs(n.y));
+  vec3 c = a + uSkyHorizon * 0.45 * toSun + uSkyMid * 0.16 * (1.0 - abs(n.y));
+  // a flash of lightning lights everything for a moment, most of all what faces the sky
+  if (uFlash > 0.0) c += vec3(0.62, 0.68, 0.9) * uFlash * (0.4 + 0.4 * max(n.y, 0.0));
+  return c;
 }
 
 // the neon signs and lamps glow on what is near them
@@ -444,6 +452,15 @@ void main() {
 #endif
     wp.x += sin(uTime * 1.3 + wp.z * 0.21 + wp.x * 0.07) * 0.06 * k;
     wp.y += sin(uTime * 1.7 + wp.x * 0.3) * 0.04 * k;
+    if (uWind.z > 0.0) {
+      // in a strong wind (game/weather.js: its direction in xy, how strong in z) they stream
+      // away from it in gusts, and thrash
+      float g = uWind.z * k;
+      wp.xz += uWind.xy * g * (1.6 + 0.8 * sin(uTime * 2.1 + wp.x * 0.11 + wp.z * 0.07));
+      wp.x += sin(uTime * 4.3 + wp.z * 0.9 + wp.y * 1.7) * 0.5 * g;
+      wp.z += sin(uTime * 3.7 + wp.x * 0.8 + wp.y * 1.3) * 0.5 * g;
+      wp.y -= 0.4 * g;
+    }
   }
   // a drawing turning into a thing: pressed flat onto the plane it was drawn on, puffing up
   if (uMatOn > 0.5) wp.xyz -= uMatFlat.xyz * (dot(wp.xyz, uMatFlat.xyz) - uMatFlat.w) * (1.0 - uMatK);
@@ -605,6 +622,40 @@ uniform float uMatOn;    // a drawing turning into a thing: the sweep that bring
 uniform vec4 uMatSweep;  // (direction, where the sweep is along it)
 uniform vec4 uMatBand;   // (width of the band of light, paper ahead of it 0..1, glow, -)
 
+// raindrops falling into a puddle: a ring spreading from each one (xy: which way it pushes the
+// mirror image, z: how much of a ring is at p). Two grids of cells a little over half a metre
+// across, a drop now and then in each (more of them the harder it rains), each ring inside its
+// own cell.
+vec3 rainRings(vec2 p, float dist) {
+  vec3 o = vec3(0.0);
+  // (a pixel's size in cells, taken before anything branches)
+  float px = length(fwidth(p)) * 1.6;
+  float fade = 1.0 - smoothstep(12.0, 34.0, dist);
+  if (fade <= 0.0) return o;
+  for (int k = 0; k < 2; k++) {
+    vec2 q = p * 1.6 + float(k) * vec2(0.5, 0.37);
+    vec2 cell = floor(q);
+    float h = h11(cell.x * 91.7 + cell.y * 13.3 + float(k) * 37.0);
+    float t = uTime * 2.2 + h * 7.0;
+    float n = floor(t);
+    float ph = t - n;
+    // (a drop falls into only so many of the cells each time round: more, the harder it rains)
+    if (h11(n * 3.1 + h * 51.0) > uRain * 0.42) continue;
+    vec2 c = cell + 0.5 + (vec2(h11(n + h * 17.0), h11(n * 1.7 + h * 29.0)) - 0.5) * 0.3;
+    vec2 d = q - c;
+    float l = length(d);
+    // a thin ring of the pen, spreading and fading (and a second one inside it)
+    float R = 0.04 + ph * 0.3;
+    float w = max(0.012, px * 0.7);
+    float a = 1.0 - smoothstep(w * 0.5, w * 1.5, abs(l - R));
+    a = max(a, (1.0 - smoothstep(w * 0.5, w * 1.5, abs(l - R * 0.55))) * 0.6 * step(0.3, ph));
+    a *= (1.0 - ph) * smoothstep(0.0, 0.08, ph) * fade;
+    o.xy += d / max(l, 1e-3) * a;
+    o.z = max(o.z, a);
+  }
+  return o;
+}
+
 // kinds: 0 wall, 1 ground, 2 wet street, 3 cylinder part, 4 box part, 5 uv, 6 glass,
 //        7 leaf, 8 neon, 9 water, 10 skin, 11 car paint
 vec2 strokeCoords(vec3 n) {
@@ -691,6 +742,10 @@ void main() {
   float sh = sunShadow(vWP, N);
   float ndl = dot(N, uSunDir);
   float light = clamp(ndl * 1.7 + 0.06, 0.0, 1.0) * sh;
+  // under a grey sky the light comes from all of it: soft, a little more on what faces up
+  if (uOvercast > 0.0) light = mix(light, 0.32 + 0.3 * max(N.y, 0.0), uOvercast * 0.85);
+  // in the rain what is flat and outdoors gets darker and deeper in colour
+  if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= 1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y);
   vec3 amb = ambientLight(N);
   vec3 pts = pointLights(vWP, N);
   vec3 key = uSunCol;
@@ -710,6 +765,7 @@ void main() {
   // the rim the low sun draws on edges turned towards it
   float hi = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0) * back * sh * smoothstep(-0.15, 0.35, ndl) * 0.9;
   if (N.y > 0.7) hi *= 0.25;
+  if (uOvercast > 0.0) hi *= 1.0 - uOvercast;
   // pictures (shop windows, signs, murals) and glass keep their own light
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
   vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv).rgb : vec3(1.0));
@@ -739,11 +795,17 @@ void main() {
     lit = mix(lit, warm * 1.4, on * 0.8);
     shade = mix(shade, warm * 1.1, on * 0.8);
   }
+  vec3 rings = vec3(0.0);
   if (uUseRefl > 0.5) {
     // the wet street and the bay: the city upside down, smeared into streaks
     vec2 ruv = vRefl.xy / vRefl.w;
     float rip = kind > 8.5 ? 0.012 : 0.004;
     vec2 wob = (vec2(vnoise(vWP.xz * vec2(0.9, 0.25) + uTime * vec2(0.0, 0.3)), vnoise(vWP.xz * 0.6 + 7.0)) - 0.5) * rip;
+    if (uRain > 0.0) {
+      // the rain falling into it: rings that push the mirror image about
+      rings = rainRings(vWP.xz, length(cameraPosition - vWP));
+      wob += rings.xy * 0.006;
+    }
     vec3 r = vec3(0.0);
     for (int i = 0; i < 5; i++) {
       float o = (float(i) - 2.0) * (kind > 8.5 ? 0.006 : 0.012);
@@ -751,7 +813,9 @@ void main() {
     }
     r *= 0.2;
     float fr = mix(0.05, 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
-    float wetK = uWetK * (kind > 8.5 ? 1.0 : 0.35 + 0.65 * smoothstep(0.3, 0.72, vnoise(vWP.xz * vec2(0.21, 0.09))));
+    // (in the rain the puddles spread until the whole street is one)
+    float wetK = uWetK * (kind > 8.5 ? 1.0 : 0.35 + 0.65 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))));
+    if (uWet > 0.0 && kind < 8.5) wetK = mix(wetK, 1.0, 0.4 * uWet);
     // under the pens, the street holds the mirror image; the pens take their colours from it
     float k = fr * wetK;
     lit = mix(lit, r, k * 0.8);
@@ -775,6 +839,8 @@ void main() {
   }
   gFar = smoothstep(32.0, 190.0, length(cameraPosition - vWP));
   vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
+  // the rings on the puddles: a pale pen, the sky caught in their slopes
+  if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * 0.42);
   col += em;
   col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
@@ -834,6 +900,11 @@ void main() {
   // clouds: long bands over the horizon, dark bellies, bright where they face the sun
   float cn = fbm(vec2(az * 2.4 + uTime * 0.004, el * 13.0)) * 0.7 + fbm(vec2(az * 7.0, el * 34.0) + 3.0) * 0.3;
   float cl = smoothstep(0.5, 0.66, cn) * smoothstep(0.03, 0.08, el) * (1.0 - smoothstep(0.22, 0.45, el));
+  if (uOvercast > 0.0) {
+    // a grey sky (game/weather.js): the clouds close over all of it, lumpy, drifting
+    float cv = fbm(vec2(az * 1.3 + uTime * 0.01, el * 4.2) + 11.0) * 0.6 + cn * 0.4;
+    cl = max(cl, smoothstep(0.62 - 0.4 * uOvercast, 0.8 - 0.36 * uOvercast, cv) * smoothstep(0.0, 0.05, el) * uOvercast);
+  }
   // the page shows between the strokes, tinted by the sky
   vec3 col = mix(uPaper * 0.97, sky, 0.62);
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
@@ -889,6 +960,12 @@ void main() {
     col = mix(col, mc, disc * uMoonK);
     col += vec3(0.42, 0.5, 0.75) * exp(-md * 18.0) * 0.35 * uMoonK;
   }
+  if (uMist > 0.0) {
+    // fog: the page washed over in the colour of the haze, most of all low down (the sun shows
+    // through it as a pale disc)
+    vec3 fc = mix(skyColor(normalize(vec3(dir.x, max(dir.y, 0.0) * 0.3 + 0.05, dir.z))), uSkyTop, 0.62) * 0.85;
+    col = mix(col, fc, uMist * (0.92 - 0.5 * smoothstep(0.05, 0.9, el)));
+  }
   // the sun: a white-hot disc, a ring of strokes around it, its glow
   float sd = acos(clamp(dot(dir, uSunDisc), -1.0, 1.0));
   vec2 sv = vec2(dot(dir - uSunDisc, normalize(vec3(-uSunDisc.z, 0.0, uSunDisc.x))), dir.y - uSunDisc.y);
@@ -899,6 +976,8 @@ void main() {
   col = mix(col, sunC * 2.6, disc);
   col += lin(uSunGlow) * exp(-sd * 20.0) * 0.45 * uSunDiscK;
   float glow = disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK;
+  // a flash of lightning: the clouds light up from inside
+  if (uFlash > 0.0) col += vec3(0.62, 0.68, 0.95) * uFlash * (0.25 + 0.5 * cl);
   gColor = vec4(col, clamp(glow, 0.0, 1.0));
   gAux = vec4(0.5, 0.5, 0.0, 0.0);
 }

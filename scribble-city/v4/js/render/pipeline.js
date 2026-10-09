@@ -345,6 +345,9 @@ export class Pipeline {
     this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 } });
     this.size = new THREE.Vector2(-1, -1);
     this.levels = low ? 4 : 5;
+    // things drawn over the inked picture, before its glow (the rain): no outlines round them,
+    // and each looks up the drawing's depth itself to hide behind what is in front of it
+    this.afterInk = new THREE.Scene();
     // things drawn over the finished picture (speech bubbles)
     this.overlay = new THREE.Scene();
     this.reflections = true;
@@ -990,6 +993,17 @@ export class Pipeline {
     if (T) T.begin('ink');
     this.pass(this.mInk, this.inkRT);
     if (T) T.end();
+    const after = this.afterInk.children;
+    let any = false;
+    for (let i = 0; i < after.length; i++) if (after[i].visible) any = true;
+    if (any) {
+      if (T) T.begin('rain');
+      r.autoClear = false;
+      r.setRenderTarget(this.inkRT);
+      r.render(this.afterInk, this.camera);
+      r.autoClear = true;
+      if (T) T.end();
+    }
     // 5. glow
     if (T) T.begin('glow');
     const b = this.mBright.uniforms;

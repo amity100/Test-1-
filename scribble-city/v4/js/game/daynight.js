@@ -281,16 +281,20 @@ export class DayNight {
     shared.uMoonDir.value.copy(this.moon);
     shared.uMoonK.value = Math.min(1, this.stars * 1.5) * smoothstep(-1 * RAD, 2 * RAD, -el);
     shared.uLitK.value = lerp(A.lit, B.lit, k);
-    const lamp = lerp(A.lamp, B.lamp, k);
+    const game = this.game;
+    // (a dark grey day turns the lamps on: game/weather.js)
+    let lamp = lerp(A.lamp, B.lamp, k);
+    if (game.weather) lamp = game.weather.lamps(this, lamp);
     setLampK(lamp);
     this.setLampGlass(lamp);
-    const game = this.game;
     if (game.pipe) {
       game.pipe.bloom = lerp(A.bloom, B.bloom, k);
       game.pipe.exposure = lerp(A.exp, B.exp, k);
       // the shadows follow the light (in steps: render/pipeline.js)
       game.pipe.setShadowDir(shared.uSunDir.value);
     }
+    // the weather changes what the hour has set (grey skies, the fog)
+    if (game.weather) game.weather.apply(this);
   }
 
   // the street lamps' glass: dark by day, bright at night (one row of the pens' table)

@@ -386,6 +386,76 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3(1, 1, 1);
 const WHITE = [1, 1, 1];
 
+// ---- the wipers (in the rain): two pen strokes sweeping the windscreen, pivoting at its foot
+const wiperRigs = {};
+function wiperRig(kind) {
+  if (wiperRigs[kind]) return wiperRigs[kind];
+  const K = KINDS[kind] || KINDS.sedan;
+  const G = K.glass;
+  const belt = curve(K.belt);
+  const hw = curve(K.halfW);
+  const L = K.len;
+  // the windscreen runs from its foot (tD) up to the roof (tC)
+  const zD = G.tD * L - L / 2;
+  const yD = belt(G.tD) - 0.04;
+  const zC = G.tC * L - L / 2;
+  const S = Math.hypot(zD - zC, G.R - yD);
+  const half = hw(G.tD) * G.w0;
+  const rig = { zD, yD, zC, yC: G.R, S, len: Math.min(0.62, half * 0.62), x0: [-half * 0.55, half * 0.08] };
+  wiperRigs[kind] = rig;
+  return rig;
+}
+const _wa = new THREE.Vector3();
+const _wb = new THREE.Vector3();
+const WIPER = [0.05, 0.05, 0.07];
+// (the light caught along the blade: on the dark glass a black line alone would not show)
+const WIPER_GLINT = [0.78, 0.82, 0.92];
+// a point of the windscreen: x across it, s metres up its slope (in the car's own frame)
+function onGlass(rig, x, s, out) {
+  const k = Math.max(0, Math.min(1, s / rig.S));
+  out.set(x, rig.yD + (rig.yC - rig.yD) * Math.sin(k * Math.PI * 0.5) + 0.03, rig.zD - (rig.zD - rig.zC) * k);
+  return out;
+}
+// how far up the glass the wipers are at time t in this rain: in a drizzle a sweep now and then,
+// in the rain back and forth all the time (quicker the harder it rains)
+export function wiperSweep(t, rain, off) {
+  if (rain < 0.45) {
+    const f = (t * 0.45 + off) % 1;
+    return f < 0.5 ? Math.sin(2 * Math.PI * f) : 0;
+  }
+  return 0.5 - 0.5 * Math.cos(2 * Math.PI * (t * (0.55 + 0.6 * rain) + off));
+}
+
+/**
+ * A car's wipers (fr: game/figure.js lines), at the car's place and heading; sweep: 0 lying at
+ * the foot of the glass .. 1 standing up it
+ */
+export function drawWipers(fr, kind, x, y, z, yaw, sweep, seed) {
+  const rig = wiperRig(kind);
+  const c = Math.cos(yaw);
+  const sn = Math.sin(yaw);
+  const th = sweep * 1.45;
+  const ct = Math.cos(th);
+  const st = Math.sin(th);
+  const toWorld = (v) => v.set(x + v.x * c + v.z * sn, y + v.y, z - v.x * sn + v.z * c);
+  for (let i = 0; i < 2; i++) {
+    const x0 = rig.x0[i];
+    const s0 = 0.06;
+    // the blade, in two strokes so it follows the glass's curve, and the light along its top
+    for (let pass = 0; pass < 2; pass++) {
+      const lift = pass ? 0.025 : 0;
+      toWorld(onGlass(rig, x0 - st * lift, s0 + ct * lift, _wa));
+      for (let j = 1; j <= 2; j++) {
+        const r = (rig.len * j) / 2;
+        toWorld(onGlass(rig, x0 + r * ct - st * lift, s0 + r * st + ct * lift, _wb));
+        if (pass) fr.lineXYZ(_wa.x, _wa.y, _wa.z, _wb.x, _wb.y, _wb.z, WIPER_GLINT, 1.3, seed + i * 3 + j + 40, 0.8, 0.005, 0.01);
+        else fr.lineXYZ(_wa.x, _wa.y, _wa.z, _wb.x, _wb.y, _wb.z, WIPER, 3.4, seed + i * 3 + j, 1, 0.005, 0.01);
+        _wa.copy(_wb);
+      }
+    }
+  }
+}
+
 export class CarRenderer {
   constructor(scene) {
     const S = (o) => makeSurface(o);

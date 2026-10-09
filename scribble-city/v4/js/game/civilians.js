@@ -8,6 +8,8 @@ import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
+// the umbrellas of the city (sRGB): red, navy, yellow, black, green, plum, pink
+const UMBRELLAS = [[0.82, 0.22, 0.24], [0.2, 0.3, 0.6], [0.95, 0.75, 0.2], [0.15, 0.15, 0.18], [0.3, 0.6, 0.45], [0.55, 0.3, 0.6], [0.92, 0.45, 0.6]];
 const _ro = new THREE.Vector3();
 const _rd = new THREE.Vector3();
 
@@ -53,6 +55,8 @@ class Civilian {
     if (bx === 'prom') this.setProm(bz);
     else this.setBlock(bx, bz, true);
     this.speed = 1.2 + Math.random() * 0.5;
+    // (quicker in the rain: game/weather.js, Civilians.rainCheck)
+    this.rush = 1;
     this.panicT = 0;
     this.yaw = 0;
     this.vel = new THREE.Vector3();
@@ -176,7 +180,7 @@ class Civilian {
     }
     let tx;
     let tz;
-    let speed = this.speed;
+    let speed = this.speed * this.rush;
     const legless = fig.parts.legL < 0.5 && fig.parts.legR < 0.5;
     const limping = (fig.parts.legL < 0.5) !== (fig.parts.legR < 0.5);
     if (this.headless) {
@@ -452,6 +456,12 @@ export class Civilians {
       c.update(step);
       if (c.dog) this.walkDog(c, step);
     }
+    // the rain: umbrellas open, people hurry, some wait under an awning for it to stop
+    this.rainT = (this.rainT || 0) - dt;
+    if (this.rainT <= 0) {
+      this.rainT = 0.5;
+      this.rainCheck();
+    }
     if (this.list.some((c) => c.fig.dissolve >= 1)) {
       this.list = this.list.filter((c) => {
         if (c.fig.dissolve < 1) return true;
@@ -679,6 +689,92 @@ export class Civilians {
       c.fig.draw(camPos);
       if (c.dog && d < 90) drawDog(bodies, c.dog);
     }
+  }
+
+  // ------------------------------------------------------------------ in the rain
+  // Once it rains, everyone out walking decides once what to do about it: open an umbrella (if a
+  // hand is free), hurry, or wait under a shop's awning nearby; a few just walk on. When it
+  // stops, the umbrellas close one by one and the waiting come out again.
+  rainCheck() {
+    const game = this.game;
+    const rain = game.weather ? game.weather.cur.rain : 0;
+    const raining = this.raining ? rain > 0.12 : rain > 0.22;
+    if (!raining && !this.raining) return;
+    this.raining = raining;
+    for (const c of this.list) {
+      if (c.scripted || !c.alive || c.headless || c.inside) continue;
+      if (!raining) {
+        if (c.rainMood === 'umbrella' && c.fig.carry === 'umbrella' && Math.random() < 0.25) {
+          c.fig.carry = null;
+          c.rainMood = null;
+        } else if (c.rainMood && c.rainMood !== 'umbrella') {
+          c.rush = 1;
+          c.rainMood = null;
+        }
+        continue;
+      }
+      if (c.rainMood || c.ctrl || c.panicT > 0) continue;
+      const r = Math.random();
+      if (c.jog) c.rainMood = 'brave';
+      else if (!c.fig.carry && r < 0.55) {
+        c.rainMood = 'umbrella';
+        c.fig.carry = 'umbrella';
+        c.fig.umbrellaColor = UMBRELLAS[Math.floor(Math.random() * UMBRELLAS.length)];
+      } else if (r < 0.75 && !c.dog && !c.buddy && !c.buddyOf && this.shelter(c)) c.rainMood = 'shelter';
+      else if (r < 0.93) {
+        c.rainMood = 'hurry';
+        c.rush = 1.45 + Math.random() * 0.3;
+      } else c.rainMood = 'brave';
+    }
+  }
+
+  // somewhere dry to wait: under the awning of a shop front on this side of the street
+  shelter(c) {
+    const shops = this.game.world.shops || [];
+    let best = null;
+    let bd = 26;
+    for (const s of shops) {
+      if (!s.room || s.stand) continue;
+      const dx = c.pos.x - s.door[0];
+      const dz = c.pos.z - s.door[2];
+      // (in front of that shop front, not behind its building)
+      if (dx * s.nx + dz * s.nz < -0.2) continue;
+      if (Math.abs(dx) > bd || Math.abs(dz) > bd) continue;
+      if (!s.shelter) {
+        // four places to stand, either side of the door, under the canvas
+        s.shelter = [-2.4, -1.5, 1.5, 2.4].map((u) => ({ x: s.door[0] + s.rx * u - s.nx * 0.45, z: s.door[2] + s.rz * u - s.nz * 0.45, yaw: s.face, by: null }));
+      }
+      for (const sp of s.shelter) {
+        if (sp.by && !sp.by.gone && sp.by.alive && sp.by.shelterAt === sp) continue;
+        const d = Math.hypot(sp.x - c.pos.x, sp.z - c.pos.z);
+        if (d < bd) {
+          bd = d;
+          best = sp;
+        }
+      }
+    }
+    if (!best) return false;
+    const sp = best;
+    sp.by = c;
+    c.shelterAt = sp;
+    c.ctrl = (me) => {
+      const rain = this.game.weather ? this.game.weather.cur.rain : 0;
+      if (rain < 0.12) {
+        // dry again: back to the walk
+        me.ctrl = null;
+        me.faceYaw = null;
+        me.shelterAt = null;
+        sp.by = null;
+        return null;
+      }
+      if (Math.hypot(sp.x - me.pos.x, sp.z - me.pos.z) < 0.3) {
+        // under the awning, looking out at the rain
+        me.faceYaw = sp.yaw;
+        return null;
+      }
+      return { x: sp.x, z: sp.z, speed: me.speed * 1.6 };
+    };
+    return true;
   }
 
   // ------------------------------------------------------------------ the life of the sidewalk
