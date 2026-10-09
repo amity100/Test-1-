@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, makeSky, lightList } from '../render/materials.js';
+import { makeSurface, makeSky, lightList, mergedSurface, penPictures } from '../render/materials.js';
 import { Batch, seeded } from './kit.js';
 import { NeonAtlas } from './paint.js';
 import { cityMaterials } from './mats.js';
@@ -64,6 +64,7 @@ export function buildCity(scene, o = {}) {
   scene.add(sky);
 
   const t0 = performance.now();
+  let penGroups = 0;
   buildGround(ctx);
   buildFirstBoulevard(ctx);
   buildBlocks(ctx);
@@ -72,25 +73,64 @@ export function buildCity(scene, o = {}) {
   // the neon of every shop, in one texture
   M.signNeon.uniforms.uMap.value = neon.texture();
   M.signNeon.uniforms.uUseMap.value = 1;
-  const meshes = ctx.B.flush(group, { static: true });
-  const rooms = ctx.R.flush(group, { static: true, indoor: true });
-  for (const m of rooms) m.renderOrder = 1;
   // what is not worth drawing from far away: the rooms behind the shop windows, the small things
   // on the sidewalks (the buildings, the palms' crowns and the city across the bay always stay)
   const small = new Set([M.prop, M.propCyl, M.propPaint, M.pole, M.rail, M.bulb, M.glint, M.leaf, M.nut, M.board, M.lampGlass, M.court]);
   const far = new Set([M.trunk, M.frond, M.steel, M.awning, M.frame, M.adWall]);
+  // the plain pens (no picture of their own) share their draws, a chunk at a time: the ones that
+  // are drawn and hidden alike (the same side, room, mirror, distance) become one draw
+  const sharedPens = new Map();
+  // the wet streets (their pictures in one texture array): one draw a chunk for the avenues, the
+  // crossings, the asphalt and the zebras (the zebras in the sun's view too: flat on the street,
+  // they hide nothing)
+  const wet = [M.street, M.ave, M.cross, M.asphalt, M.crosswalk];
+  let wetPen = null;
+  // pens with the same pictures (the towers' windows in seven colours) share as plain pens do
+  const pictureOf = (mat) => {
+    const u = mat.uniforms;
+    if (!u || !u.uUseMap) return null;
+    return `${u.uUseMap.value ? u.uMap.value.uuid : '-'}/${u.uUseEmMap.value ? u.uEmMap.value.uuid : '-'}`;
+  };
+  const sharing = new Map();
+  for (const mat of [...ctx.B.groups.keys(), ...ctx.R.groups.keys()]) {
+    const k = pictureOf(mat);
+    if (k) sharing.set(k, (sharing.get(k) || 0) + 1);
+  }
+  const merge = o.merge === false ? null : (mat) => {
+    const u = mat.uniforms;
+    if (wet.includes(mat)) {
+      if (!wetPen) wetPen = mergedSurface(M.street, { pictures: penPictures(wet) });
+      return wetPen;
+    }
+    if (!u || !u.uUseMap || u.uAlphaTest.value || u.uSway.value || u.uCells.value || u.uNeonMask.value) return null;
+    const pic = pictureOf(mat);
+    // (a picture of its own: nothing to share it with)
+    if ((u.uUseMap.value || u.uUseEmMap.value) && sharing.get(pic) < 2) return null;
+    const cls = mat === M.lampGlass ? 'lamp' : small.has(mat) ? 'small' : far.has(mat) ? 'far' : 'all';
+    // (the small things share with the props the eraser rubs out)
+    const obj = (mat.defines && mat.defines.USE_OBJ !== undefined) || cls === 'small';
+    const key = [mat.side, obj, u.uIndoor.value, u.uUseRefl.value, u.uUvScale.value, mat.userData.depth === null, cls, pic].join('|');
+    if (!sharedPens.has(key)) sharedPens.set(key, mergedSurface(mat, { obj }));
+    return sharedPens.get(key);
+  };
+  const meshes = ctx.B.flush(group, { static: true, merge });
+  const rooms = ctx.R.flush(group, { static: true, indoor: true, merge });
+  for (const m of rooms) m.renderOrder = 1;
   const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN']);
   const cull = [];
   for (const m of rooms) cull.push({ m, r: 55 });
   for (const m of meshes) {
     if (special.has(m.name)) continue;
+    // (a shared draw's pens are all of one kind here)
+    const pen = m.userData.pens ? m.userData.pens[0] : m.material;
     // (the little things are not worth a mirror image in the wet street)
-    if (small.has(m.material) && m.material !== M.lampGlass) m.userData.noReflect = true;
-    if (o.low && (m.material === M.frame || m.material === M.awning || m.material === M.steel)) m.userData.noReflect = true;
-    if (small.has(m.material)) cull.push({ m, r: o.low ? 110 : 150 });
-    else if (far.has(m.material)) cull.push({ m, r: o.low ? 200 : 260 });
+    if (small.has(pen) && pen !== M.lampGlass) m.userData.noReflect = true;
+    if (o.low && (pen === M.frame || pen === M.awning || pen === M.steel)) m.userData.noReflect = true;
+    if (small.has(pen)) cull.push({ m, r: o.low ? 110 : 150 });
+    else if (far.has(pen)) cull.push({ m, r: o.low ? 200 : 260 });
   }
-  const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length };
+  penGroups = sharedPens.size;
+  const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, pens: penGroups, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length };
 
   const world = {
     group,

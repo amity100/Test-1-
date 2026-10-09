@@ -66,6 +66,18 @@ function holeTexture() {
 // only the sun sees (a car's parts in one shape, for its shadow)
 export const LAYERS = { MIRRORLESS: 1, SUN: 2 };
 
+// the table of the pens that share draws (see mergedSurface): a row of 6 texels per pen
+const TAB_W = 6;
+const TAB_ROWS = 256;
+function penTable() {
+  const t = new THREE.DataTexture(new Float32Array(TAB_W * TAB_ROWS * 4), TAB_W, TAB_ROWS, THREE.RGBAFormat, THREE.FloatType);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  return t;
+}
+
 // uniforms shared by reference between every material
 export const shared = {
   uNoise: { value: noiseTexture() },
@@ -104,6 +116,7 @@ export const shared = {
   uRefl: { value: blank },
   uReflMatrix: { value: new THREE.Matrix4() },
   uObjMask: { value: objMask() },
+  uMatTab: { value: penTable() },
   uWErase: { value: Array.from({ length: MAX_SPOTS }, () => new THREE.Vector4(0, -1000, 0, 0)) },
   uWEraseN: { value: 0 },
   uHoles: { value: holeTexture() },
@@ -267,6 +280,70 @@ export function makeSurface(o = {}) {
   m.userData.reflective = !!o.refl;
   m.userData.kind = kind;
   return m;
+}
+
+// ------------------------------------------------------------------ many pens, one draw
+// The city's plain pens (no picture of their own) share draws: a chunk's walls, glass, neon, trims
+// and props become a few draws instead of thirty. Each vertex carries the row of its pen in a
+// small table (uMatTab); the pens' own uniforms are written there once (penRow), and again with
+// refreshPen if a pen changes (a light at night).
+let penRows = 0;
+export function penRow(m) {
+  if (m.userData.penRow === undefined) {
+    if (penRows >= TAB_ROWS) throw new Error('pen table full');
+    m.userData.penRow = penRows++;
+    refreshPen(m);
+  }
+  return m.userData.penRow;
+}
+
+export function refreshPen(m) {
+  const r = m.userData.penRow;
+  if (r === undefined) return;
+  const u = m.uniforms;
+  const t = shared.uMatTab.value;
+  const d = t.image.data;
+  const o = r * TAB_W * 4;
+  const al = u.uAlbedo.value;
+  const em = u.uEmissive.value;
+  const pic = m.userData.picture || { layer: 0, size: 1 };
+  d.set([al.r, al.g, al.b, u.uKind.value, em.r, em.g, em.b, u.uAng.value, u.uDensity.value, u.uWash.value, u.uGloss.value, u.uObj.value, u.uLine.value, u.uPartR.value, u.uLit.value, u.uWetK.value, u.uErasable.value, u.uEmVColor.value, 0, 0, u.uAlphaTest.value, pic.layer, pic.size, 0], o);
+  t.needsUpdate = true;
+}
+
+// the shared pen for a group of plain pens like m (same side, same kind of room, same mirror):
+// its own uniforms are the group's; the rest come from each vertex's row. obj: the group has
+// props the eraser can rub out (aObj)
+export function mergedSurface(m, { obj = false, pictures = null } = {}) {
+  const defines = { ...m.defines, USE_MATTAB: '' };
+  if (obj) defines.USE_OBJ = '';
+  if (pictures) defines.USE_MAPSET = '';
+  const c = new THREE.ShaderMaterial({
+    glslVersion: m.glslVersion,
+    uniforms: { ...m.uniforms },
+    defines,
+    vertexColors: true,
+    vertexShader: m.vertexShader,
+    fragmentShader: m.fragmentShader,
+    side: m.side,
+  });
+  c.userData = { ...m.userData, merged: true };
+  delete c.userData.penRow;
+  delete c.userData.picture;
+  if (pictures) pictures.forEach((t, i) => (c.uniforms[`uMapS${i}`] = { value: t }));
+  if (m.userData.depth !== null) c.userData.depth = depthMaterial({ objMask: obj });
+  return c;
+}
+
+// The pictures of pens that share a draw (up to five, see USE_MAPSET): each pen learns its number
+// and its picture's size
+export function penPictures(pens) {
+  if (pens.length > 5) throw new Error('at most five pictures share a pen');
+  return pens.map((p, i) => {
+    const t = p.uniforms.uMap.value;
+    p.userData.picture = { layer: i, size: t.image.width };
+    return t;
+  });
 }
 
 // A surface's private copy for one thing's moment (a drawing turning into it): the same pens and

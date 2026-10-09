@@ -359,8 +359,15 @@ in float aObj;
 in vec4 iX;
 in vec4 iClip;
 #endif
+#ifdef USE_MATTAB
+in float aMat;
+flat out float vMat;
+#endif
 void main() {
   vec3 pos = position;
+#ifdef USE_MATTAB
+  vMat = aMat;
+#endif
   mat4 M = modelMatrix;
 #ifdef USE_INSTANCING
   M = modelMatrix * instanceMatrix;
@@ -433,12 +440,75 @@ flat in vec4 vClip;
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
 
+#ifdef USE_MATTAB
+// many plain pens in one draw: each vertex carries the row of its pen in the table (the values
+// below are read from it at the start of main, materials.js mergedSurface)
+flat in float vMat;
+uniform highp sampler2D uMatTab;
+vec3 uAlbedo;
+vec3 uEmissive;
+float uKind;
+float uAng;
+float uDensity;
+float uWash;
+float uGloss;
+float uObj;
+float uLine;
+float uPartR;
+float uLit;
+float uWetK;
+float uErasable;
+float uEmVColor;
+float uAlphaTest;
+float uLayer;
+float uTexSize;
+void loadPen() {
+  int r = int(vMat + 0.5);
+  vec4 a = texelFetch(uMatTab, ivec2(0, r), 0);
+  vec4 b = texelFetch(uMatTab, ivec2(1, r), 0);
+  vec4 c = texelFetch(uMatTab, ivec2(2, r), 0);
+  vec4 d = texelFetch(uMatTab, ivec2(3, r), 0);
+  vec4 e = texelFetch(uMatTab, ivec2(4, r), 0);
+  vec4 f = texelFetch(uMatTab, ivec2(5, r), 0);
+  uAlbedo = a.rgb;
+  uKind = a.a;
+  uEmissive = b.rgb;
+  uAng = b.a;
+  uDensity = c.x;
+  uWash = c.y;
+  uGloss = c.z;
+  uObj = c.w;
+  uLine = d.x;
+  uPartR = d.y;
+  uLit = d.z;
+  uWetK = d.w;
+  uErasable = e.x;
+  uEmVColor = e.y;
+  uAlphaTest = f.x;
+  uLayer = f.y;
+  uTexSize = f.z;
+}
+#ifdef USE_MAPSET
+// the pictures of the pens that share a draw (up to five), each pen's by its number
+uniform sampler2D uMapS0;
+uniform sampler2D uMapS1;
+uniform sampler2D uMapS2;
+uniform sampler2D uMapS3;
+uniform sampler2D uMapS4;
+vec4 penPicture(vec2 uv) {
+  vec2 gx = dFdx(uv);
+  vec2 gy = dFdy(uv);
+  int l = int(uLayer + 0.5);
+  if (l == 0) return textureGrad(uMapS0, uv, gx, gy);
+  if (l == 1) return textureGrad(uMapS1, uv, gx, gy);
+  if (l == 2) return textureGrad(uMapS2, uv, gx, gy);
+  if (l == 3) return textureGrad(uMapS3, uv, gx, gy);
+  return textureGrad(uMapS4, uv, gx, gy);
+}
+#endif
+#else
 uniform vec3 uAlbedo;
-uniform sampler2D uMap;
-uniform float uUseMap;
 uniform vec3 uEmissive;
-uniform sampler2D uEmMap;
-uniform float uUseEmMap;
 uniform float uKind;
 uniform float uAng;
 uniform float uDensity;
@@ -446,16 +516,21 @@ uniform float uWash;
 uniform float uGloss;
 uniform float uObj;
 uniform float uLine;
-uniform float uAlphaTest;
-uniform sampler2D uRefl;
-uniform float uUseRefl;
-uniform float uUvScale;
 uniform float uPartR;
 uniform float uLit;      // windows: a share of them lit from inside
 uniform float uWetK;     // how wet the ground is (the bay: 1)
-uniform float uIndoor;   // a room under its lamps (no sun, warm light)
 uniform float uErasable; // the eraser can rub holes in it
 uniform float uEmVColor; // neon in batches: the vertex colour is the colour of the light too
+uniform float uAlphaTest;
+#endif
+uniform sampler2D uMap;
+uniform float uUseMap;
+uniform sampler2D uEmMap;
+uniform float uUseEmMap;
+uniform sampler2D uRefl;
+uniform float uUseRefl;
+uniform float uUvScale;
+uniform float uIndoor;   // a room under its lamps (no sun, warm light)
 uniform float uCells;    // a texture of stacked cells: v = cell * 64 + v in the cell (shelves of goods)
 uniform float uNeonMask; // the neon sign atlas: r is the tube, g its white-hot core
 uniform float uMatOn;    // a drawing turning into a thing: the sweep that brings its colours
@@ -483,6 +558,9 @@ vec2 strokeCoords(vec3 n) {
 }
 
 void main() {
+#ifdef USE_MATTAB
+  loadPen();
+#endif
   // rubbed out: a prop crumbling away, a hole in a wall, a hole in somebody
   if (vGone > 0.0 && n2(vWP.xz * 3.1 + vWP.y * 5.7) * 0.7 + n2(vWP.xy * 9.3) * 0.3 < vGone * 1.12) discard;
   if (uErasable > 0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
@@ -513,12 +591,22 @@ void main() {
       vec2 g1 = dFdx(vUv) * vec2(1.0, 1.0 / uCells);
       vec2 g2 = dFdy(vUv) * vec2(1.0, 1.0 / uCells);
       tex = textureGrad(uMap, vec2(fract(l.x), (cell + clamp(fract(l.y), 0.01, 0.99)) / uCells), g1, g2);
-    } else tex = texture(uMap, vUv);
+    } else {
+#ifdef USE_MAPSET
+      tex = penPicture(vUv);
+#else
+      tex = texture(uMap, vUv);
+#endif
+    }
     if (uNeonMask > 0.5) tex = vec4(mix(vCol, vec3(1.0), tex.g * 0.55), tex.r);
     if (uAlphaTest > 0.0) {
       // far away a leaf's leaflets blur together in the texture's smaller copies, and what is
       // left of them would fall under the cut-off in specks: keep the leaf whole instead
+#ifdef USE_MAPSET
+      vec2 ts = vec2(uTexSize);
+#else
       vec2 ts = vec2(textureSize(uMap, 0));
+#endif
       vec2 gx = dFdx(vUv) * ts;
       vec2 gy = dFdy(vUv) * ts;
       float lod = 0.5 * log2(max(max(dot(gx, gx), dot(gy, gy)), 1e-8));

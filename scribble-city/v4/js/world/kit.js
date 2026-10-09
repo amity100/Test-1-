@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { penRow } from '../render/materials.js';
 
 // Building kit: geometry merged per material and per piece of the city (one draw per material
 // per chunk, so whatever is behind you is skipped), each part keeping an id of its own so the
@@ -63,9 +64,25 @@ export class Batch {
     return this.add(material, g, null, id, o);
   }
 
+  // opts.merge(mat): the shared pen mat draws with (materials.js mergedSurface), or null
   flush(parent, opts = {}) {
     const meshes = [];
+    const draws = new Map();
     for (const [mat, byChunk] of this.groups) {
+      const dm = (opts.merge && opts.merge(mat)) || mat;
+      if (!draws.has(dm)) draws.set(dm, new Map());
+      const dc = draws.get(dm);
+      for (const [key, list] of byChunk) {
+        if (!dc.has(key)) dc.set(key, []);
+        const out = dc.get(key);
+        for (const it of list) {
+          it.src = mat;
+          out.push(it);
+        }
+      }
+    }
+    for (const [mat, byChunk] of draws) {
+      const tab = !!(mat.defines && mat.defines.USE_MATTAB !== undefined);
       for (const [key, list] of byChunk) {
         let n = 0;
         for (const it of list) n += it.geo.attributes.position.count;
@@ -78,16 +95,25 @@ export class Batch {
         let sway = null;
         if (mat.defines && mat.defines.USE_OBJ !== undefined) objs = new Float32Array(n);
         if (mat.defines && mat.defines.SWAY_ATTR !== undefined) sway = new Float32Array(n);
+        const rows = tab ? new Float32Array(n) : null;
+        const pens = new Set();
         let o = 0;
         for (const it of list) {
           const g = it.geo;
           const c = g.attributes.position.count;
+          const src = it.src;
+          pens.add(src);
           pos.set(g.attributes.position.array, o * 3);
           nor.set(g.attributes.normal.array, o * 3);
           uv.set(g.attributes.uv.array, o * 2);
           ids.fill(it.id, o, o + c);
-          if (vc) for (let i = 0; i < c; i++) vc.set(it.color, (o + i) * 3);
-          if (objs) objs.fill(it.obj, o, o + c);
+          // (a pen of its own colour, sharing a draw with coloured parts: white, as it was)
+          if (vc) {
+            const col = src.vertexColors ? it.color : WHITE;
+            for (let i = 0; i < c; i++) vc.set(col, (o + i) * 3);
+          }
+          if (objs) objs.fill(src.defines && src.defines.USE_OBJ !== undefined ? it.obj : 0, o, o + c);
+          if (rows) rows.fill(penRow(src), o, o + c);
           if (sway) {
             if (typeof it.sway === 'function') {
               const p = g.attributes.position.array;
@@ -104,11 +130,15 @@ export class Batch {
         if (vc) geo.setAttribute('color', new THREE.BufferAttribute(vc, 3));
         if (objs) geo.setAttribute('aObj', new THREE.BufferAttribute(objs, 1));
         if (sway) geo.setAttribute('aSway', new THREE.BufferAttribute(sway, 1));
+        if (rows) geo.setAttribute('aMat', new THREE.BufferAttribute(rows, 1));
         geo.computeBoundingSphere();
         const m = new THREE.Mesh(geo, mat);
         m.matrixAutoUpdate = false;
         m.name = key;
         Object.assign(m.userData, opts);
+        delete m.userData.merge;
+        // the pens drawn in it (more than one when they share)
+        m.userData.pens = [...pens];
         parent.add(m);
         meshes.push(m);
       }

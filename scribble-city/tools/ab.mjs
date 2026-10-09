@@ -96,7 +96,18 @@ async function shoot(outDir, page = 'v4/index.html') {
   const stats = {};
   const only = process.env.AB_SPOTS ? process.env.AB_SPOTS.split(',') : null;
   for (const [name, px, pz, yaw, pos, look] of SPOTS) {
-    if (only && !only.includes(name)) continue;
+    if (only && !only.includes(name)) {
+      // (a spot left out still takes its time, without pictures: the spots after it see the
+      // same moment as in a full run)
+      await pg.evaluate(([px, pz, yaw, pos, look]) => {
+        const g = window.__game;
+        g.player.spawn(px, pz, yaw);
+        g.camRig.yaw = yaw;
+        window.__camOverride = { pos, look };
+        for (let i = 0; i < 32; i++) g.update(1 / 30);
+      }, [px, pz, yaw, pos, look]);
+      continue;
+    }
     await pg.evaluate(([px, pz, yaw, pos, look]) => {
       const g = window.__game;
       g.player.spawn(px, pz, yaw);
