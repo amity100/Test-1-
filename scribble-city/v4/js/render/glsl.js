@@ -883,8 +883,9 @@ void main() {
     vec3 my = cross(uMoonDir, mx);
     vec2 mv = vec2(dot(dir, mx), dot(dir, my)) / MR;
     float disc = 1.0 - smoothstep(MR, MR + 0.003, md);
-    float seas = smoothstep(0.45, 0.7, vnoise(mv * 2.2 + 11.0)) * step(0.5, fract((mv.x + mv.y) * 3.5));
-    vec3 mc = mix(vec3(1.0, 0.97, 0.88), vec3(0.62, 0.66, 0.78), seas * 0.7) * 1.7;
+    float seas = smoothstep(0.45, 0.6, vnoise(mv * 2.6 + 11.0));
+    float hatch = step(0.45, fract((mv.x + mv.y) * 4.5));
+    vec3 mc = mix(vec3(1.0, 0.97, 0.88), vec3(0.55, 0.6, 0.74), seas * (0.55 + 0.35 * hatch)) * 1.25;
     col = mix(col, mc, disc * uMoonK);
     col += vec3(0.42, 0.5, 0.75) * exp(-md * 18.0) * 0.35 * uMoonK;
   }
