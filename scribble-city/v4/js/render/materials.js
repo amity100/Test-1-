@@ -314,15 +314,16 @@ export function refreshPen(m) {
 // the shared pen for a group of plain pens like m (same side, same kind of room, same mirror):
 // its own uniforms are the group's; the rest come from each vertex's row. obj: the group has
 // props the eraser can rub out (aObj)
-export function mergedSurface(m, { obj = false, pictures = null } = {}) {
+export function mergedSurface(m, { obj = false, pictures = null, vcolor = true, tint = false } = {}) {
   const defines = { ...m.defines, USE_MATTAB: '' };
   if (obj) defines.USE_OBJ = '';
   if (pictures) defines.USE_MAPSET = '';
+  if (tint) defines.USE_TINT = '';
   const c = new THREE.ShaderMaterial({
     glslVersion: m.glslVersion,
     uniforms: { ...m.uniforms },
     defines,
-    vertexColors: true,
+    vertexColors: vcolor,
     vertexShader: m.vertexShader,
     fragmentShader: m.fragmentShader,
     side: m.side,

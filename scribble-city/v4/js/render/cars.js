@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, lin3, LAYERS } from './materials.js';
+import { makeSurface, srgb, lin3, LAYERS, mergedSurface, penRow } from './materials.js';
 
 // The cars of the city: the first boulevard's low sports car (glossy paint full of the sunset, a
 // bar of red light across the back), and its family - a sedan, a taxi, a police cruiser with its
@@ -364,7 +364,7 @@ class Pool {
   }
 }
 
-const PARTS = ['body', 'glass', 'tail', 'head', 'trim', 'plate'];
+const PARTS = ['shell', 'glass'];
 const _m = new THREE.Matrix4();
 const _w = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -391,25 +391,42 @@ export class CarRenderer {
     this.mats = mats;
     const cap = 140;
     this.kinds = {};
+    // a car's shell (body, lamps, trims, plates) is one shape: each part keeps its own pen (a row
+    // of the pen table) and its own number for the ink, and only the body takes the car's colour
+    // - a kind of car is two draws (the shell and the glass, which is seen from both sides)
+    const shellPen = mergedSurface(mats.paint, { vcolor: false, tint: true });
+    const shellParts = [['body', mats.paint, 0, 1], ['tail', mats.tail, 0.5, 0], ['head', mats.head, 0.6, 0], ['trim', mats.dark, 0.55, 0], ['plate', mats.plate, 0.65, 0]];
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);
       const n = kind === 'bus' ? 12 : cap;
-      // (what the sun sees of a car: all its parts in one shape, drawn with the body's own
+      const shell = merge(shellParts.map(([k]) => b[k]));
+      const cnt = shell.attributes.position.count;
+      const ids = new Float32Array(cnt);
+      const rows = new Float32Array(cnt);
+      const tint = new Float32Array(cnt);
+      let o = 0;
+      for (const [k, mat, part, t] of shellParts) {
+        const c = (b[k].index ? b[k].index.count : b[k].attributes.position.count);
+        ids.fill(part, o, o + c);
+        rows.fill(penRow(mat), o, o + c);
+        tint.fill(t, o, o + c);
+        o += c;
+      }
+      shell.setAttribute('aId', new THREE.BufferAttribute(ids, 1));
+      shell.setAttribute('aMat', new THREE.BufferAttribute(rows, 1));
+      shell.setAttribute('aTint', new THREE.BufferAttribute(tint, 1));
+      // (what the sun sees of a car: all its parts in one shape, drawn with the shell's own
       // instances - every part of a car has the car's matrix - so a kind of car is one draw in
-      // the sun's view instead of six)
+      // the sun's view)
       const sun = merge([b.body, b.glass, b.tail, b.head, b.trim, b.plate]);
       const P = (this.kinds[kind] = {
         b,
-        body: new Pool(scene, b.body, mats.paint, n),
+        shell: new Pool(scene, shell, shellPen, n),
         glass: new Pool(scene, b.glass, mats.glass, n),
-        tail: new Pool(scene, b.tail, mats.tail, n),
-        head: new Pool(scene, b.head, mats.head, n),
-        trim: new Pool(scene, b.trim, mats.dark, n),
-        plate: new Pool(scene, b.plate, mats.plate, n),
       });
       for (const k of PARTS) P[k].mesh.userData.noShadow = true;
       P.sun = new THREE.InstancedMesh(sun, mats.paint.userData.depth, n);
-      P.sun.instanceMatrix = P.body.mesh.instanceMatrix;
+      P.sun.instanceMatrix = P.shell.mesh.instanceMatrix;
       P.sun.frustumCulled = false;
       P.sun.count = 0;
       P.sun.visible = false;
@@ -429,8 +446,9 @@ export class CarRenderer {
     const rim = merge(rimParts);
     this.tyres = new Pool(scene, tyre, mats.tyre, cap * 4);
     this.rims = new Pool(scene, rim, mats.rim, cap * 4);
-    // (a rim's shadow is inside its tyre's)
+    // (a rim's shadow is inside its tyre's; in the mirror it is a smear inside the tyre's)
     this.rims.mesh.userData.noShadow = true;
+    this.rims.mesh.userData.noReflect = true;
     // a taxi's sign, a police car's light bar and its stripe, a van's roof rack
     this.lightBox = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), mats.light, cap * 3);
     this.trimBox = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), mats.trim, cap * 4);
@@ -469,12 +487,8 @@ export class CarRenderer {
     _m.compose(_p.set(x, y + (o.lift || 0), z), _q, _s.set(s, s * (o.squash || 1), s));
     if (rv) _m.premultiply(rv.pre);
     const part = ((Math.abs(x * 0.37 + z * 0.11) % 1) + 1) % 1;
-    P.body.push(_m, this.col(color), part, rv);
+    P.shell.push(_m, this.col(color), part, rv);
     P.glass.push(_m, WHITE, part + 0.3, rv);
-    P.tail.push(_m, WHITE, part + 0.5, rv);
-    P.head.push(_m, WHITE, part + 0.6, rv);
-    P.trim.push(_m, WHITE, part + 0.55, rv);
-    P.plate.push(_m, WHITE, part + 0.65, rv);
     // the wheels: they roll, the front ones steer
     for (const w of P.b.wheels) {
       _e.set(o.spin || 0, w.z > 0 ? o.steer || 0 : 0, 0, 'YXZ');
@@ -516,8 +530,8 @@ export class CarRenderer {
   end() {
     for (const P of Object.values(this.kinds)) {
       for (const k of PARTS) P[k].end();
-      P.sun.count = P.body.mesh.count;
-      P.sun.visible = P.body.mesh.visible;
+      P.sun.count = P.shell.mesh.count;
+      P.sun.visible = P.shell.mesh.visible;
     }
     this.tyres.end();
     this.rims.end();

@@ -363,6 +363,9 @@ in vec4 iClip;
 in float aMat;
 flat out float vMat;
 #endif
+#ifdef USE_TINT
+in float aTint; // (a car's shell: only the body takes the car's colour)
+#endif
 void main() {
   vec3 pos = position;
 #ifdef USE_MATTAB
@@ -403,7 +406,11 @@ void main() {
   vCol *= color.rgb;
 #endif
 #ifdef USE_INSTANCING_COLOR
+#ifdef USE_TINT
+  vCol *= mix(vec3(1.0), instanceColor, aTint);
+#else
   vCol *= instanceColor;
+#endif
 #endif
   vX = vec4(0.0);
   vClip = vec4(0.0);

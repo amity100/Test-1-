@@ -354,7 +354,11 @@ export class PersonRenderer {
     };
     // (the little things of a face, the soles and the pockets are inside the shadow of what they
     // are on: the sun's view leaves them out)
-    for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'sole', 'pocket']) this.p[k].mesh.userData.noShadow = true;
+    // (and in the wet street's mirror, at half the pixels and smeared, they are not there either)
+    for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'sole', 'pocket']) {
+      this.p[k].mesh.userData.noShadow = true;
+      this.p[k].mesh.userData.noReflect = true;
+    }
     // eraser holes and fading per person
     this.owners = new Array(MAX_OWNERS).fill(false);
     this.holeTex = shared.uHoles.value;
