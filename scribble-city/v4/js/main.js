@@ -101,6 +101,12 @@ async function boot() {
   // the still city's own map of the sun's view around you (drawn again only when you have gone far
   // enough, or a prop was rubbed out): each frame only what moves is drawn for the sun
   if (!params.has('noshadowcache')) pipe.setStatic(world.group, { cull: (p) => world.cull(p), version: () => world.objects.castVersion });
+  // what is behind the buildings' bodies is not drawn (the city's still pieces, not the moving ones)
+  if (!params.has('noocclusion')) {
+    const skip = new Set(pipe.staticSkip || []);
+    const pieces = world.group.children.filter((o) => o.isMesh && !skip.has(o));
+    pipe.setOcclusion(world.occluders, pieces, () => world.objects.spots);
+  }
   setStatus('מסמנים דרכים…');
   await frame();
   world.buildNav();

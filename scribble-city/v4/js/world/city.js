@@ -46,6 +46,7 @@ export function buildCity(scene, o = {}) {
     lamps: [],
     billboards: [],
     territories: [],
+    occluders: [],
     room: null,
     lightCount: () => lightList().length,
   };
@@ -161,6 +162,8 @@ export function buildCity(scene, o = {}) {
     busStops: ctx.busStops || [],
     queues: ctx.queues || [],
     helipad: ctx.helipad || null,
+    // the buildings' bodies, for leaving out what is behind them (render/occlusion.js)
+    occluders: ctx.occluders,
     wheel: ctx.wheel || null,
     // hide what is too far to matter (by the chunks' bounding spheres)
     cull(cam) {

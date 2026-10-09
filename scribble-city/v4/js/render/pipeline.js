@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { shared, BLANK, LAYERS } from './materials.js';
+import { Occlusion } from './occlusion.js';
 
 // One frame of the drawing:
 //  1. the sun's view of the street (shadows)
@@ -318,6 +319,9 @@ export class Pipeline {
     this.screen = new THREE.Vector2();
     // the performance numbers (game/perf.js) time each pass while they are shown
     this.timer = null;
+    // leaving out what is behind the buildings (setOcclusion)
+    this.occlusion = null;
+    this.occlusionOn = true;
   }
 
   // the screen's pixels per CSS pixel, times the drawing's own scale
@@ -404,6 +408,48 @@ export class Pipeline {
     };
     visit(root);
     this.mirrorLayered = true;
+  }
+
+  // What is behind the buildings is left out (render/occlusion.js): boxes, the buildings' bodies;
+  // pieces, the still city's meshes that may be left out; holes(), the rubbed-out spots
+  setOcclusion(boxes, pieces, holes = null) {
+    this.occlusion = new Occlusion(this.low ? 128 : 160, this.low ? 72 : 90);
+    this.occlusion.setOccluders(boxes);
+    this.occHoles = holes;
+    this.occPieces = [];
+    for (const o of pieces) {
+      o.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(o);
+      if (b.isEmpty()) continue;
+      this.occPieces.push({ o, b });
+    }
+    this._occHidden = [];
+  }
+
+  // leave out (for this one pass) the pieces surely behind the buildings, as cam sees them
+  occlude(cam) {
+    const occ = this.occlusion;
+    const hidden = this._occHidden;
+    hidden.length = 0;
+    if (!occ || !this.occlusionOn) return hidden;
+    occ.begin(cam, this.occHoles ? this.occHoles() : null);
+    for (const p of this.occPieces) {
+      const o = p.o;
+      if (!o.visible) continue;
+      const b = p.b;
+      if (occ.hidden(b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z)) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    }
+    return hidden;
+  }
+
+  unocclude() {
+    const hidden = this._occHidden;
+    if (!hidden) return;
+    for (const o of hidden) o.visible = true;
+    hidden.length = 0;
   }
 
   // the depth materials on (or the thing hidden from the sun) for everything visible under o
@@ -621,9 +667,11 @@ export class Pipeline {
     const keep = shared.uRefl.value;
     shared.uRefl.value = BLANK;
     shared.uMirror.value = 1;
+    this.occlude(rc);
     this.r.setRenderTarget(this.reflRT);
     this.r.clear();
     this.r.render(this.scene, rc);
+    this.unocclude();
     shared.uMirror.value = 0;
     shared.uRefl.value = this.reflRT.texture;
     for (const o of hidden) o.visible = true;
@@ -653,11 +701,13 @@ export class Pipeline {
       if (T) T.end();
       this.reflDone = true;
     }
-    // 3. the drawing
+    // 3. the drawing (what is surely behind the buildings left out)
     if (T) T.begin('main');
+    this.occlude(this.camera);
     r.setRenderTarget(this.gRT);
     r.clear();
     r.render(this.scene, this.camera);
+    this.unocclude();
     if (T) T.end();
     // 4. the ink
     const ink = this.mInk.uniforms;

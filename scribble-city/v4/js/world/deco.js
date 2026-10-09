@@ -31,7 +31,10 @@ function rbox(ctx, f, mat, u0, v0, w0, u1, v1, w1, color, id, o) {
 function fcol(ctx, f, u0, v0, w0, u1, v1, w1, tag = 'wall', data = null) {
   if (Math.abs(u1 - u0) < 1e-3 || Math.abs(w1 - w0) < 1e-3) return -1;
   const [mn, mx] = f.box(u0, v0, w0, u1, v1, w1);
-  return ctx.col.addBox(mn[0], mn[2], mx[0], mx[2], mn[1], mx[1], tag, data);
+  const id = ctx.col.addBox(mn[0], mn[2], mx[0], mx[2], mn[1], mx[1], tag, data);
+  // (a building's body is as solid to the eye as to a walker: what is behind it is not drawn)
+  if (tag === 'wall' && ctx.occluders) ctx.occluders.push(ctx.col.boxes[id]);
+  return id;
 }
 
 // a slab of striped canvas, sloping down away from the wall (the awnings): built in its own
