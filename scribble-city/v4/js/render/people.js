@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, shared, canvasTexture, lin3 } from './materials.js';
+import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, penPictures } from './materials.js';
 import { MAX_HOLES, MAX_OWNERS } from './glsl.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
@@ -172,27 +172,42 @@ const _y = new THREE.Vector3();
 const _z = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
-class Pool {
-  constructor(scene, geo, mat, cap = 512) {
+// ------------------------------------------------------------------ the shapes, in one texture
+// Every kind of part is a row of one texture (two texels a point: position and u, normal and v),
+// and the whole crowd is drawn in a few draws: an instance says which shape it is, how many points
+// it has, which pen draws it, and what it is left out of. Shapes go to the class of their size (a
+// shape with fewer points than its class leaves the rest of them empty) and of their side (a
+// coat's skirts are seen from inside too).
+const CLASS_SIZES = [60, 300, 504, 1020, 1404];
+// left out of: the wet street's mirror (1), the sun's view (2)
+const NO_MIRROR = 1;
+const NO_SUN = 2;
+
+class DrawClass {
+  constructor(scene, verts, mat, cap) {
     this.cap = cap;
-    const g = geo.index ? geo.toNonIndexed() : geo;
-    if (!g.attributes.aId) g.setAttribute('aId', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count), 1));
-    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    this.verts = verts;
+    const g = new THREE.BufferGeometry();
+    // (the points come from the shapes' texture: these only say how many)
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts * 3), 3));
     this.iX = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.iClip = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    this.iS = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('iX', this.iX);
     g.setAttribute('iClip', this.iClip);
+    g.setAttribute('iS', this.iS);
     this.mesh = new THREE.InstancedMesh(g, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
+    this.mesh.visible = false;
     this.mesh.userData.dynamic = true;
     scene.add(this.mesh);
     this.n = 0;
   }
 
-  push(m, color, owner, part, indoor = 0, clip = null) {
+  push(sh, m, color, owner, part, indoor, clip) {
     if (this.n >= this.cap) return -1;
     const i = this.n++;
     m.toArray(this.mesh.instanceMatrix.array, i * 16);
@@ -212,20 +227,44 @@ class Pool {
       k[i * 4 + 2] = clip[2];
       k[i * 4 + 3] = clip[3];
     } else k[i * 4] = k[i * 4 + 1] = k[i * 4 + 2] = k[i * 4 + 3] = 0;
+    const S = this.iS.array;
+    S[i * 4] = sh.row;
+    S[i * 4 + 1] = sh.count;
+    S[i * 4 + 2] = sh.pen;
+    S[i * 4 + 3] = sh.flags;
     return i;
   }
 
   end() {
     this.mesh.count = this.n;
-    // (nothing of this kind on the screen: no draw call at all)
+    // (nothing of this class on the screen: no draw call at all)
     this.mesh.visible = this.n > 0;
     const n = Math.max(1, this.n);
-    for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]) {
+    for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS]) {
       at.clearUpdateRanges();
       at.addUpdateRange(0, n * at.itemSize);
       at.needsUpdate = true;
     }
     this.n = 0;
+  }
+}
+
+// one kind of part: its row in the shapes' texture, its pen, its class
+class Shape {
+  constructor(geo, pen, cap) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    this.geo = g;
+    this.count = g.attributes.position.count;
+    this.penMat = pen;
+    this.pen = 0;
+    this.cap = cap;
+    this.row = 0;
+    this.flags = 0;
+    this.cls = null;
+  }
+
+  push(m, color, owner, part, indoor = 0, clip = null) {
+    return this.cls.push(this, m, color, owner, part, indoor, clip);
   }
 }
 
@@ -301,7 +340,7 @@ export class PersonRenderer {
       dark: S({ kind: 'box' }),
     };
     for (const m of Object.values(this.mats)) m.vertexColors = false;
-    const P = (geo, mat, n = 512) => new Pool(scene, geo, mat, n);
+    const P = (geo, mat, n = 512) => new Shape(geo, mat, n);
     const M = this.mats;
     // canonical parts (a person of 1.78 m: k = 1)
     this.p = {
@@ -353,16 +392,74 @@ export class PersonRenderer {
       boxP: P(new THREE.BoxGeometry(1, 1, 1), M.box, 512),
     };
     // (the little things of a face, the soles and the pockets are inside the shadow of what they
-    // are on: the sun's view leaves them out)
-    // (and in the wet street's mirror, at half the pixels and smeared, they are not there either)
-    for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'sole', 'pocket']) {
-      this.p[k].mesh.userData.noShadow = true;
-      this.p[k].mesh.userData.noReflect = true;
-    }
+    // are on: the sun's view leaves them out; and in the wet street's mirror, at half the pixels
+    // and smeared, they are not there either)
+    for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'sole', 'pocket']) this.p[k].flags = NO_MIRROR | NO_SUN;
+    this.buildShapes(scene);
     // eraser holes and fading per person
     this.owners = new Array(MAX_OWNERS).fill(false);
     this.holeTex = shared.uHoles.value;
     this.dirty = false;
+  }
+
+  // every shape into the texture, every shape into its class (a draw each)
+  buildShapes(scene) {
+    const M = this.mats;
+    const shapes = Object.values(this.p);
+    // the pens: the folds of the cloth are five pictures in one pen; the coat (seen from inside
+    // too) has its own
+    const front = mergedSurface(M.plain, { vcolor: false, pictures: penPictures([M.tee, M.shirt, M.cargo, M.skirt, M.plain]), pull: true });
+    const coatPics = penPictures([M.coat]);
+    const back = mergedSurface(M.coat, { vcolor: false, pictures: [coatPics[0], coatPics[0], coatPics[0], coatPics[0], coatPics[0]], pull: true });
+    let wide = 0;
+    shapes.forEach((sh, i) => {
+      sh.row = i;
+      sh.pen = penRow(sh.penMat);
+      wide = Math.max(wide, sh.count);
+    });
+    // the texture: a row a shape, two texels a point
+    const W = wide * 2;
+    const data = new Float32Array(W * shapes.length * 4);
+    for (const sh of shapes) {
+      const g = sh.geo;
+      const pos = g.attributes.position.array;
+      const nor = g.attributes.normal.array;
+      const uv = g.attributes.uv ? g.attributes.uv.array : null;
+      for (let v = 0; v < sh.count; v++) {
+        const o = (sh.row * W + v * 2) * 4;
+        data[o] = pos[v * 3];
+        data[o + 1] = pos[v * 3 + 1];
+        data[o + 2] = pos[v * 3 + 2];
+        data[o + 3] = uv ? uv[v * 2] : 0;
+        data[o + 4] = nor[v * 3];
+        data[o + 5] = nor[v * 3 + 1];
+        data[o + 6] = nor[v * 3 + 2];
+        data[o + 7] = uv ? uv[v * 2 + 1] : 0;
+      }
+      sh.geo = null;
+    }
+    const tex = new THREE.DataTexture(data, W, shapes.length, THREE.RGBAFormat, THREE.FloatType);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.needsUpdate = true;
+    shared.uShapes.value = tex;
+    // the classes: by side, then by size
+    this.classes = [];
+    const groups = new Map();
+    for (const sh of shapes) {
+      const side = sh.penMat === M.coat ? 'back' : 'front';
+      const size = CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
+      const key = `${side}:${size}`;
+      if (!groups.has(key)) groups.set(key, { side, size, list: [] });
+      groups.get(key).list.push(sh);
+    }
+    for (const { side, size, list } of groups.values()) {
+      const cap = list.reduce((a, sh) => a + sh.cap, 0);
+      const cls = new DrawClass(scene, size, side === 'back' ? back : front, cap);
+      for (const sh of list) sh.cls = cls;
+      this.classes.push(cls);
+    }
   }
 
   allocOwner() {
@@ -422,7 +519,7 @@ export class PersonRenderer {
   }
 
   end() {
-    for (const p of Object.values(this.p)) p.end();
+    for (const c of this.classes) c.end();
     if (this.dirty) {
       this.holeTex.needsUpdate = true;
       this.dirty = false;

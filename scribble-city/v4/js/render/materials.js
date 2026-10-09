@@ -117,6 +117,8 @@ export const shared = {
   uReflMatrix: { value: new THREE.Matrix4() },
   uObjMask: { value: objMask() },
   uMatTab: { value: penTable() },
+  // the people's shapes, every one in a row (render/people.js)
+  uShapes: { value: blank },
   uWErase: { value: Array.from({ length: MAX_SPOTS }, () => new THREE.Vector4(0, -1000, 0, 0)) },
   uWEraseN: { value: 0 },
   uHoles: { value: holeTexture() },
@@ -192,14 +194,16 @@ const depthCache = new Map();
 function depthMaterial(o) {
   const obj = !!o.objMask;
   if (!o.alphaTest) {
-    const key = obj ? 'obj' : 'plain';
+    const key = (obj ? 'obj' : 'plain') + (o.pull ? '+pull' : '');
     if (!depthCache.has(key)) {
+      const defines = obj ? { USE_OBJ: '' } : {};
+      if (o.pull) defines.USE_PULL = '';
       depthCache.set(key, new THREE.ShaderMaterial({
         glslVersion: THREE.GLSL3,
-        uniforms: { uMap: { value: blank }, uAlphaTest: { value: 0 }, uObjMask: shared.uObjMask },
+        uniforms: { uMap: { value: blank }, uAlphaTest: { value: 0 }, uObjMask: shared.uObjMask, uShapes: shared.uShapes },
         vertexShader: 'uniform sampler2D uObjMask;\n' + OBJ_FUNC + DEPTH_VERT,
         fragmentShader: DEPTH_FRAG,
-        defines: obj ? { USE_OBJ: '' } : {},
+        defines,
         side: THREE.DoubleSide,
       }));
     }
@@ -307,18 +311,19 @@ export function refreshPen(m) {
   const al = u.uAlbedo.value;
   const em = u.uEmissive.value;
   const pic = m.userData.picture || { layer: 0, size: 1 };
-  d.set([al.r, al.g, al.b, u.uKind.value, em.r, em.g, em.b, u.uAng.value, u.uDensity.value, u.uWash.value, u.uGloss.value, u.uObj.value, u.uLine.value, u.uPartR.value, u.uLit.value, u.uWetK.value, u.uErasable.value, u.uEmVColor.value, 0, 0, u.uAlphaTest.value, pic.layer, pic.size, 0], o);
+  d.set([al.r, al.g, al.b, u.uKind.value, em.r, em.g, em.b, u.uAng.value, u.uDensity.value, u.uWash.value, u.uGloss.value, u.uObj.value, u.uLine.value, u.uPartR.value, u.uLit.value, u.uWetK.value, u.uErasable.value, u.uEmVColor.value, 0, 0, u.uAlphaTest.value, pic.layer, pic.size, u.uUseMap.value], o);
   t.needsUpdate = true;
 }
 
 // the shared pen for a group of plain pens like m (same side, same kind of room, same mirror):
 // its own uniforms are the group's; the rest come from each vertex's row. obj: the group has
 // props the eraser can rub out (aObj)
-export function mergedSurface(m, { obj = false, pictures = null, vcolor = true, tint = false } = {}) {
+export function mergedSurface(m, { obj = false, pictures = null, vcolor = true, tint = false, pull = false } = {}) {
   const defines = { ...m.defines, USE_MATTAB: '' };
   if (obj) defines.USE_OBJ = '';
   if (pictures) defines.USE_MAPSET = '';
   if (tint) defines.USE_TINT = '';
+  if (pull) defines.USE_PULL = '';
   const c = new THREE.ShaderMaterial({
     glslVersion: m.glslVersion,
     uniforms: { ...m.uniforms },
@@ -332,7 +337,7 @@ export function mergedSurface(m, { obj = false, pictures = null, vcolor = true, 
   delete c.userData.penRow;
   delete c.userData.picture;
   if (pictures) pictures.forEach((t, i) => (c.uniforms[`uMapS${i}`] = { value: t }));
-  if (m.userData.depth !== null) c.userData.depth = depthMaterial({ objMask: obj });
+  if (m.userData.depth !== null) c.userData.depth = depthMaterial({ objMask: obj, pull });
   return c;
 }
 

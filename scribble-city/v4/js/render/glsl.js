@@ -366,10 +366,39 @@ flat out float vMat;
 #ifdef USE_TINT
 in float aTint; // (a car's shell: only the body takes the car's colour)
 #endif
+#ifdef USE_PULL
+// the people's parts: every shape in one texture (two texels a point: position and u, normal and
+// v), each instance saying which shape it is, how many points it has, its pen, and what it is
+// left out of (1: the mirror, 2: the sun's view)
+uniform highp sampler2D uShapes;
+in vec4 iS;
+#endif
 void main() {
-  vec3 pos = position;
+#ifdef USE_PULL
+  // (past the shape's own points, or left out of this pass: nothing)
+  if (float(gl_VertexID) >= iS.y || (uMirror > 0.5 && mod(iS.w, 2.0) > 0.5)) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  vec4 s0 = texelFetch(uShapes, ivec2(gl_VertexID * 2, int(iS.x)), 0);
+  vec4 s1 = texelFetch(uShapes, ivec2(gl_VertexID * 2 + 1, int(iS.x)), 0);
+  vec3 sPos = s0.xyz;
+  vec3 sNor = s1.xyz;
+  vec2 sUv = vec2(s0.w, s1.w);
+  float sId = 0.0;
+#else
+  vec3 sPos = position;
+  vec3 sNor = normal;
+  vec2 sUv = uv;
+  float sId = aId;
+#endif
+  vec3 pos = sPos;
 #ifdef USE_MATTAB
+#ifdef USE_PULL
+  vMat = iS.z;
+#else
   vMat = aMat;
+#endif
 #endif
   mat4 M = modelMatrix;
 #ifdef USE_INSTANCING
@@ -391,16 +420,16 @@ void main() {
   vWP = wp.xyz;
 #ifdef USE_INSTANCING
   // (parts are stretched along their length: the normals need the inverse transpose)
-  vN = normalize(transpose(inverse(mat3(M))) * normal);
+  vN = normalize(transpose(inverse(mat3(M))) * sNor);
 #else
-  vN = normalize(mat3(M) * normal);
+  vN = normalize(mat3(M) * sNor);
 #endif
   // (pressed flat, every face turns towards the plane)
   if (uMatOn > 0.5) vN = normalize(vN + uMatFlat.xyz * dot(vN, uMatFlat.xyz) * (1.0 / max(uMatK, 0.03) - 1.0));
-  vUv = uv;
+  vUv = sUv;
   vLP = pos;
-  vLN = normal;
-  vId = aId;
+  vLN = sNor;
+  vId = sId;
   vCol = vec3(1.0);
 #ifdef USE_COLOR
   vCol *= color.rgb;
@@ -469,6 +498,7 @@ float uEmVColor;
 float uAlphaTest;
 float uLayer;
 float uTexSize;
+float uUseMap;
 void loadPen() {
   int r = int(vMat + 0.5);
   vec4 a = texelFetch(uMatTab, ivec2(0, r), 0);
@@ -494,6 +524,7 @@ void loadPen() {
   uAlphaTest = f.x;
   uLayer = f.y;
   uTexSize = f.z;
+  uUseMap = f.w;
 }
 #ifdef USE_MAPSET
 // the pictures of the pens that share a draw (up to five), each pen's by its number
@@ -529,9 +560,9 @@ uniform float uWetK;     // how wet the ground is (the bay: 1)
 uniform float uErasable; // the eraser can rub holes in it
 uniform float uEmVColor; // neon in batches: the vertex colour is the colour of the light too
 uniform float uAlphaTest;
+uniform float uUseMap;
 #endif
 uniform sampler2D uMap;
-uniform float uUseMap;
 uniform sampler2D uEmMap;
 uniform float uUseEmMap;
 uniform sampler2D uRefl;
@@ -813,13 +844,27 @@ out vec2 vUv;
 #ifdef USE_OBJ
 in float aObj;
 #endif
+#ifdef USE_PULL
+uniform highp sampler2D uShapes;
+in vec4 iS;
+#endif
 void main() {
+#ifdef USE_PULL
+  if (float(gl_VertexID) >= iS.y || mod(floor(iS.w / 2.0), 2.0) > 0.5) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  vec3 sPos = texelFetch(uShapes, ivec2(gl_VertexID * 2, int(iS.x)), 0).xyz;
+  vUv = vec2(0.0);
+#else
+  vec3 sPos = position;
   vUv = uv;
+#endif
   mat4 M = modelMatrix;
 #ifdef USE_INSTANCING
   M = modelMatrix * instanceMatrix;
 #endif
-  gl_Position = projectionMatrix * viewMatrix * M * vec4(position, 1.0);
+  gl_Position = projectionMatrix * viewMatrix * M * vec4(sPos, 1.0);
 #ifdef USE_OBJ
   if (objGone(aObj) > 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 #endif
