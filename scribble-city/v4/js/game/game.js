@@ -14,7 +14,9 @@ import { Nightlife } from './nightlife.js';
 import { Civilians } from './civilians.js';
 import { Traffic } from './traffic.js';
 import { HUD } from '../ui/hud.js';
-import { Album } from '../ui/album.js';
+import { Album, ALL_OPEN } from '../ui/album.js';
+import { Materialize } from './materialize.js';
+import { Signals } from './signals.js';
 import { AirDraw } from '../ui/airdraw.js';
 import { Bubbles } from '../ui/bubbles.js';
 import { Police } from './police.js';
@@ -69,7 +71,9 @@ export class Game {
     this.cars = new CarRenderer(scene);
     this.vehicles = new Vehicles(this);
     this.chute = new Parachute(this);
+    this.materialize = new Materialize(this);
     this.traffic = new Traffic(this);
+    this.signals = new Signals(this);
     this.player = new Player(this);
     this.civilians = new Civilians(this);
     this.enemies = new Enemies(this);
@@ -78,7 +82,25 @@ export class Game {
     this.police = new Police(this);
     this.pickups = new Pickups(this);
     // a few drinks at the Neon Bar (or one ice cream too fast): the page sways for a while
-    this.inkwell = { tipsy: 0, flipping: false, update(dt) { this.tipsy = Math.max(0, this.tipsy - dt * 0.02); } };
+    // (after(t, fn): something to do t seconds from now, game time - the busker's dance ends)
+    this.inkwell = {
+      tipsy: 0,
+      flipping: false,
+      timers: [],
+      after(t, fn) {
+        this.timers.push({ t, fn });
+      },
+      update(dt) {
+        this.tipsy = Math.max(0, this.tipsy - dt * 0.02);
+        if (!this.timers.length) return;
+        for (const tm of this.timers) tm.t -= dt;
+        const due = this.timers.filter((tm) => tm.t <= 0);
+        if (due.length) {
+          this.timers = this.timers.filter((tm) => tm.t > 0);
+          due.forEach((tm) => tm.fn());
+        }
+      },
+    };
     this.dialog = new Dialog(this);
     this.inBar = false;
     // the outlines redrawn a few times a second: lively on a big screen, calm on a phone
@@ -101,6 +123,8 @@ export class Game {
     }
     this.respawn();
     if (this.album.has('paint')) this.goalFlags.photo = true;
+    // (every blueprint open: the goals about finding them are done already)
+    if (ALL_OPEN) this.goalFlags.car = this.goalFlags.heavy = true;
     this.updateGoals();
     this.hud.updateWeapon();
     this.bindUI();
@@ -167,7 +191,8 @@ export class Game {
     const welcome = () => {
       this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
       setTimeout(() => {
-        if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
+        if (ALL_OPEN) this.hud.toast(this.touch ? 'כל השרטוטים פתוחים: לוחצים על העיפרון ✏ ובוחרים מה לצייר' : 'כל השרטוטים פתוחים: Q — בוחרים מה לצייר', 'info', 4);
+        else if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
       }, 2600);
     };
     welcome();
@@ -216,7 +241,7 @@ export class Game {
   onPlayerDeath() {
     if (this.player.inVehicle) this.exitVehicle(true);
     this.player.mode = 'dead';
-    if (this.airdraw.open) this.airdraw.close(false);
+    if (this.airdraw.open) this.airdraw.close(false, true);
     this.state = 'dead';
     this.audio.play('fail');
     setTimeout(() => {
@@ -357,6 +382,7 @@ export class Game {
       player.update(dt, input, this.camRig, this.weapons);
       this.chute.update(dt);
       this.vehicles.update(dt);
+      this.materialize.update(dt);
       this.weapons.update(dt);
       this.enemies.update(dt);
       this.civilians.update(dt);
@@ -425,6 +451,7 @@ export class Game {
       this.vignettes.draw(fr);
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
+      this.signals.draw(this.camera.position);
       this.vehicles.draw(this.cars);
       this.cars.end();
       this.drawStuckPencils(fr);
@@ -611,6 +638,16 @@ export class Game {
       return;
     }
     this.input.releaseLock();
+    if (ALL_OPEN) {
+      // the whole library is open: pick what to draw
+      this.album.show(
+        (id) => this.beginDrawing(id),
+        () => {
+          if (!this.touch && this.state === 'play' && !this.airdraw.open) this.input.requestLock();
+        },
+      );
+      return;
+    }
     // straight into the air with the newest photo; the arrows on the reference switch photos
     const ids = this.album.ids();
     this.beginDrawing(this.album.has(this.drawPick) ? this.drawPick : ids[ids.length - 1]);
@@ -643,43 +680,72 @@ export class Game {
     if (this.player.mode === 'draw') this.player.mode = 'foot';
   }
 
-  onDrawingDone(bp, res, strokes) {
+  // plan: what the drawing became and where (game/materialize.js), the strokes landed on it
+  onDrawingDone(bp, res, strokes, plan = null) {
     const p = this.player;
     if (p.mode === 'draw') p.mode = 'foot';
     this.album.recordGrade(bp.id, res.score);
     const grade = res.grade;
     const msg = GRADE_TEXT[grade](bp.name);
-    this.hud.toast(msg, grade === 'fail' ? 'bad' : grade === 'wonky' ? 'info' : 'good', 3.2);
+    // (what the drawing became is said once it is all there, not over the show)
+    const said = [];
+    const say = (...a) => (plan ? said.push(a) : this.hud.toast(...a));
+    const onReal = () => said.forEach((a) => this.hud.toast(...a));
+    say(msg, grade === 'fail' ? 'bad' : grade === 'wonky' ? 'info' : 'good', 3.2);
+    const pts = (plan && plan.pts) || [];
+    // a thing that flies to the hero once it is real (the plaster, the parachute)
+    const toHero = (where, then) => {
+      if (!plan || !plan.model) return then();
+      const root = plan.model.group;
+      root.matrixAutoUpdate = false;
+      root.matrix.copy(plan.frame.matrix);
+      root.matrixWorldNeedsUpdate = true;
+      this.scene.add(root);
+      this.materialize.begin({ frame: plan.frame, root, toHero: where, pts, onArrive: then, onReal });
+    };
     if (bp.kind === 'heal') {
-      // the giant band-aid: every rubbed-out spot fills back in
-      const q = { perfect: 1, good: 1, wonky: 0.7, fail: 0.35 }[grade];
-      p.hp = Math.min(p.maxHp, Math.max(p.hp, p.maxHp * q));
-      if (q >= 1) p.fig.holes.length = 0;
-      else p.fig.holes.length = Math.floor(p.fig.holes.length * 0.5);
-      this.hud.toast(q >= 1 ? 'הפלסטר הענק סגר את כל החורים — חיים מלאים!' : 'הפלסטר עקום… אבל עזר קצת', q >= 1 ? 'good' : 'info', 2.8);
-      this.audio.play('cheer');
+      toHero('chest', () => {
+        // the giant band-aid: every rubbed-out spot fills back in
+        const q = { perfect: 1, good: 1, wonky: 0.7, fail: 0.35 }[grade];
+        p.hp = Math.min(p.maxHp, Math.max(p.hp, p.maxHp * q));
+        if (q >= 1) p.fig.holes.length = 0;
+        else p.fig.holes.length = Math.floor(p.fig.holes.length * 0.5);
+        this.hud.toast(q >= 1 ? 'הפלסטר הענק סגר את כל החורים — חיים מלאים!' : 'הפלסטר עקום… אבל עזר קצת', q >= 1 ? 'good' : 'info', 2.8);
+        this.audio.play('cheer');
+      });
     } else if (bp.kind === 'gear') {
-      // the parachute: on your back from now on
-      p.parachute = { grade };
-      this.hud.toast(this.touch ? 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה' : 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'good', 4);
-      this.audio.play('cheer');
+      toHero('back', () => {
+        // the parachute: on your back from now on
+        p.parachute = { grade };
+        this.hud.toast(this.touch ? 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה' : 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'good', 4);
+        this.audio.play('cheer');
+      });
     } else if (bp.kind === 'weapon') {
       const def = WEAPON_DEFS[bp.id];
-      const model = buildWeaponModel(bp.id, grade, { seed: res.score });
+      const model = plan && plan.model ? plan.model : buildWeaponModel(bp.id, grade, { seed: res.score });
       this.weapons.add(def, grade, model, res.score);
-      this.weapons.current.strokes = strokes;
-      this.weapons.current.popAt = this.time;
+      const slot = this.weapons.current;
+      slot.strokes = strokes;
+      if (plan) {
+        // it hangs in the air where it was drawn, turns real, then flies into the hand
+        slot.present = { matrix: plan.frame.matrix.clone(), k: 0 };
+        this.materialize.begin({ frame: plan.frame, root: model.group, held: slot, pts, onReal });
+      } else slot.popAt = this.time;
       this.hud.updateWeapon();
     } else {
-      const v = this.vehicles.spawn(bp.id, grade, res.score, res.aligned);
-      this.hud.toast(this.touch ? `לחצו על כפתור הרכב הירוק כדי להיכנס ל${bp.name}` : `לחצו E כדי להיכנס ל${bp.name}`, 'info', 3);
+      let v;
+      if (plan && plan.vehicle) {
+        v = this.vehicles.add(plan.vehicle);
+        this.materialize.begin({ frame: plan.frame, root: v.kind === 'car' ? null : v.group, car: v.kind === 'car' ? v : null, vehicle: v, pts, onReal });
+      } else v = this.vehicles.spawn(bp.id, grade, res.score);
+      say(this.touch ? `לחצו על כפתור הרכב הירוק כדי להיכנס ל${bp.name}` : `לחצו E כדי להיכנס ל${bp.name}`, 'info', 3);
       v.strokes = strokes;
       if (bp.id === 'car') this.goalFlags.car = true;
     }
     this.goalFlags.drew = true;
     if (bp.id === 'tank' || bp.id === 'copter') this.goalFlags.heavyDrawn = true;
     this.updateGoals();
-    this.fx.crumbs(p.pos.x, p.pos.y + 1, p.pos.z, 16, 3);
+    if (!plan) this.fx.crumbs(p.pos.x, p.pos.y + 1, p.pos.z, 16, 3);
     if (!this.touch) setTimeout(() => this.input.requestLock(), 50);
   }
 

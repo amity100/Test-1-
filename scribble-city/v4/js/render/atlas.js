@@ -688,6 +688,26 @@ export function buildAtlas() {
   cell('smoke1', smoke, 902);
   cell('muzzle', muzzle);
   cell('eye', eyeIcon);
+  cell('fx_star', (sk, g) => {
+    // a twinkle: a four-pointed star of light in a soft glow (tinted when it is used)
+    const glow = g.createRadialGradient(128, 128, 0, 128, 128, 112);
+    glow.addColorStop(0, 'rgba(255,255,255,0.85)');
+    glow.addColorStop(0.22, 'rgba(255,255,255,0.32)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(128, 128, 112, 0, PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * PI * 2 - PI / 2;
+      const r = i % 2 ? 15 : i % 4 ? 70 : 120;
+      g.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r);
+    }
+    g.closePath();
+    g.fill();
+  });
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.generateMipmaps = true;

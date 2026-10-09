@@ -4,6 +4,7 @@ import { scoreDrawing, gradeOf } from '../game/recognizer.js';
 import { LineBatch } from '../render/LineBatch.js';
 import { makeLineMaterial } from '../render/materials.js';
 import { Sketcher, FONT_HAND } from '../render/sketch2d.js';
+import { planDrawing } from '../game/materialize.js';
 
 const PX = 250; // virtual pixels per metre handed to the recognizer (what the paper pad used)
 const INK_C = [0.07, 0.07, 0.11];
@@ -11,6 +12,11 @@ const RED = [0.8, 0.12, 0.15];
 const GUIDE = [0.32, 0.34, 0.46];
 const GHOST = [0.36, 0.56, 0.86]; // non-photo blue, like an artist's tracing guide
 const HALO = [1.0, 0.97, 0.9];
+const GOLD = [1.0, 0.8, 0.3]; // the strokes as they come alive
+const GOLD_HALO = [1.0, 0.9, 0.62];
+const FLY_T = 0.5; // the strokes flying onto the thing
+const FADE_T = 0.45; // ...and fading into it
+const SHOW_T = 0.95; // the camera stays on the thing while it turns real
 const RED_CSS = '#c81e24';
 const TRACED_MAX = 70; // tracing over the ghost never makes a perfect item
 
@@ -27,13 +33,14 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _d = new THREE.Vector3();
 
-// ease-in with a little wind-up before the jump
-const easeIn = (t) => 2.70158 * t * t * t - 1.70158 * t * t;
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const mix3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
 /**
  * Drawing happens in the game's own world: the hero raises the pencil and draws on an
  * invisible sheet of air in front of him, the strokes hang there as ink, the teacher's red pen
- * marks them, and then they "plop" into the real thing.
+ * marks them, and then they come alive: they glow, fly to where the thing is going to be and
+ * stretch over its outline, and the thing grows out of them (game/materialize.js).
  */
 export class AirDraw {
   constructor(game) {
@@ -74,7 +81,7 @@ export class AirDraw {
     this.sticker.visible = false;
     (game.pipe && game.pipe.overlay ? game.pipe.overlay : game.scene).add(this.sticker);
 
-    this.phase = 'idle'; // idle | draw | grade | plop | cancel
+    this.phase = 'idle'; // idle | draw | grade | fly | fade | cancel
     this.t = 0;
     this.strokes = [];
     this.current = null;
@@ -88,8 +95,7 @@ export class AirDraw {
     this.H = 1.4;
     this.pen = null; // last pen position on the sheet [u, v]
     this.penWorld = new THREE.Vector3();
-    this.target = new THREE.Vector3();
-    this.targetScale = 0.12;
+    this.plan = null; // what the drawing is becoming, and where (see startPlop)
     this.camOpts = { dist: 2.3, height: 1.72, shoulder: 0.95 };
     this._bind();
   }
@@ -361,39 +367,52 @@ export class AirDraw {
     this.sticker.visible = true;
   }
 
+  // the drawing comes alive: it glows and flies onto the thing it is about to become
   startPlop() {
     if (this.phase !== 'grade') return;
     const g = this.game;
-    const p = g.player;
-    this.phase = 'plop';
+    this.phase = 'fly';
     this.t = 0;
     this.sticker.visible = false;
-    if (this.bp.kind === 'weapon' || this.bp.kind === 'gear') {
-      this.target.copy(p.fig.j.handR);
-      this.targetScale = 0.1;
-    } else {
-      const f = p.fig.forward;
-      const len = { car: 4.4, tank: 7.2, ufo: 9 }[this.bp.id] || 5;
-      const d = len * 0.5 + 3;
-      this.target.set(p.pos.x + f.x * d, p.pos.y + 1.0, p.pos.z + f.z * d);
-      this.targetScale = Math.max(0.5, len / this.W);
+    this.plan = planDrawing(g, this.bp, this.res, { C: this.C, W: this.W, H: this.H });
+    let u0 = Infinity;
+    let u1 = -Infinity;
+    let v0 = Infinity;
+    let v1 = -Infinity;
+    for (const st of this.strokes) {
+      for (const [u, v] of st) {
+        u0 = Math.min(u0, u);
+        u1 = Math.max(u1, u);
+        v0 = Math.min(v0, v);
+        v1 = Math.max(v1, v);
+      }
     }
-    g.audio.play('swing', 0.6);
+    this.plan.setDrawing(u0, u1, v0, v1);
+    // (a little hop on the way, more for a long way)
+    this.plan.map((u0 + u1) / 2, (v0 + v1) / 2, _d);
+    this.arc = Math.min(0.9, 0.12 + _d.distanceTo(this.C) * 0.12);
+    g.audio.play('magic');
   }
 
-  finishPlop() {
+  // the strokes are on the thing: it is there now, still a drawing (game/materialize.js)
+  land() {
     const g = this.game;
-    const res = this.res;
-    const bp = this.bp;
-    const strokesPx = this.strokesPx;
-    g.audio.play('plop');
-    g.fx.crumbs(this.target.x, this.target.y, this.target.z, 26, 4.5);
-    this.hide();
-    g.onDrawingDone(bp, res, strokesPx);
+    const plan = this.plan;
+    plan.pts = [];
+    let i = 0;
+    for (const st of this.strokes) for (const [u, v] of st) if (i++ % 2 === 0) plan.pts.push(plan.map(u, v, new THREE.Vector3()));
+    plan.landed = true;
+    this.phase = 'fade';
+    this.t = 0;
+    this.hideUI();
+    g.onDrawingDone(this.bp, this.res, this.strokesPx, plan);
   }
 
-  close(cancelled = false) {
+  // force: even a drawing coming alive (the hero is down)
+  close(cancelled = false, force = false) {
     if (!this.open) return;
+    // (once the drawing is coming alive, it does)
+    if (!force && (this.phase === 'fly' || this.phase === 'fade')) return;
     if (cancelled && this.phase === 'draw' && this.strokes.length) {
       // the ink fades out of the air
       this.phase = 'cancel';
@@ -412,6 +431,15 @@ export class AirDraw {
     this.phase = 'idle';
     this.current = null;
     this.pen = null;
+    this.hideUI();
+    // (a drawing that never landed: the vehicle made for it goes)
+    if (this.plan && !this.plan.landed && this.plan.vehicle) this.plan.vehicle.dispose();
+    this.plan = null;
+    this.batch.clear();
+    this.batch.commit();
+  }
+
+  hideUI() {
     this.el.classList.add('hidden');
     this.refEl.classList.remove('zoom');
     if (this.game.album.open) this.game.album.hide();
@@ -419,8 +447,6 @@ export class AirDraw {
     this.sticker.visible = false;
     this.game.audio.scratchStop();
     this.game.player.fig.reachR = null;
-    this.batch.clear();
-    this.batch.commit();
   }
 
   // called every frame by the game
@@ -438,12 +464,21 @@ export class AirDraw {
         this.drawCorrections(b, Math.min(1, this.t * 3));
         if (this.t > 1.8) this.startPlop();
       }
-    } else if (this.phase === 'plop') {
-      const k = Math.min(1, this.t / 0.42);
-      this.drawStrokes(b, 1, k);
+    } else if (this.phase === 'fly') {
+      const k = Math.min(1, this.t / FLY_T);
+      this.drawStrokes(b, 1, k, Math.min(1, k * 2.5));
       if (k >= 1) {
         b.commit();
-        this.finishPlop();
+        this.land();
+        return;
+      }
+    } else if (this.phase === 'fade') {
+      // on the thing, glowing, fading into it as it turns real; the camera stays a moment
+      const k = Math.min(1, this.t / FADE_T);
+      if (k < 1) this.drawStrokes(b, 1 - k * k, 1, 1);
+      if (this.t >= SHOW_T) {
+        b.commit();
+        this.hide();
         return;
       }
     } else if (this.phase === 'cancel') {
@@ -511,38 +546,40 @@ export class AirDraw {
     }
   }
 
-  seg(b, u0, v0, u1, v1, col, a, w, seed, plopK = -1) {
-    this.world(u0, v0, _a);
-    this.world(u1, v1, _b);
-    if (plopK >= 0) {
-      this.plopPoint(_a, plopK);
-      this.plopPoint(_b, plopK);
-    }
+  seg(b, u0, v0, u1, v1, col, a, w, seed, flyK = -1) {
+    this.at(u0, v0, flyK, _a);
+    this.at(u1, v1, flyK, _b);
     b.push(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, col[0], col[1], col[2], a, w, seed, 0.01, 0.004);
   }
 
-  // during the plop every point flies to the target, shrinking (weapon) or growing (vehicle)
-  plopPoint(p, k) {
-    const e = easeIn(k);
-    const s = 1 + (this.targetScale - 1) * k;
-    _d.copy(p).sub(this.C).multiplyScalar(s).add(this.target);
-    p.lerp(_d, e);
+  // where a point of the drawing is: on the sheet, or k of the way to its place on the thing
+  at(u, v, k, out) {
+    this.world(u, v, out);
+    if (k <= 0 || !this.plan || !this.plan.map) return out;
+    this.plan.map(u, v, _d);
+    out.lerp(_d, easeInOut(k));
+    out.y += Math.sin(k * Math.PI) * (this.arc || 0);
+    return out;
   }
 
-  // a bold marker line with a pale halo, so it reads over the busy, colourful street
-  drawStrokes(b, alpha, plopK) {
+  // a bold marker line with a pale halo, so it reads over the busy, colourful street; coming
+  // alive (glow 0..1) the ink turns to gold and the halo widens into a glow
+  drawStrokes(b, alpha, flyK = -1, glow = 0) {
     if (alpha <= 0) return;
+    const ink = glow > 0 ? mix3(INK_C, GOLD, glow) : INK_C;
+    const halo = glow > 0 ? mix3(HALO, GOLD_HALO, glow) : HALO;
+    const wide = 1 + glow * 0.9;
     for (const pass of [0, 1]) {
       let seed = 11;
-      const col = pass ? INK_C : HALO;
-      const a = pass ? alpha : alpha * 0.85;
+      const col = pass ? ink : halo;
+      const a = pass ? alpha : alpha * (0.85 - glow * 0.25);
       for (const s of this.strokes) {
         if (s.length === 1) {
           const [u, v] = s[0];
-          this.seg(b, u - 0.01, v, u + 0.01, v + 0.005, col, a, pass ? 5.4 : 9.5, seed++, plopK);
+          this.seg(b, u - 0.01, v, u + 0.01, v + 0.005, col, a, pass ? 5.4 : 9.5 * wide, seed++, flyK);
           continue;
         }
-        for (let i = 1; i < s.length; i++) this.seg(b, s[i - 1][0], s[i - 1][1], s[i][0], s[i][1], col, a, pass ? 5.0 : 9.0, seed++, plopK);
+        for (let i = 1; i < s.length; i++) this.seg(b, s[i - 1][0], s[i - 1][1], s[i][0], s[i][1], col, a, pass ? 5.0 : 9.0 * wide, seed++, flyK);
       }
     }
   }

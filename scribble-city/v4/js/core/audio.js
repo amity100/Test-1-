@@ -441,6 +441,22 @@ export class Audio {
         this.hiss(0.5, 0.4 * v, 2200, 1.5, 'bandpass', 0, 900);
         this.hiss(0.3, 0.25 * v, 700, 1, 'lowpass', 0.1);
         break;
+      case 'magic':
+        // the drawing lifts off the air: a rising shimmer of little bells
+        [784, 988, 1175, 1568, 1976, 2349].forEach((f, i) => this.tone('sine', f, f * 1.01, 0.32, 0.075 * v, i * 0.055));
+        this.hiss(0.55, 0.12 * v, 5000, 2, 'bandpass', 0, 9000);
+        break;
+      case 'poof':
+        // ...and puffs up into the real thing
+        this.tone('sine', 140, 420, 0.16, 0.38 * v);
+        this.tone('triangle', 420, 260, 0.22, 0.1 * v, 0.1);
+        this.hiss(0.3, 0.3 * v, 600, 0.8, 'lowpass', 0, 2400);
+        break;
+      case 'tada':
+        // its colours all in: a bright chord
+        [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.55, 0.07 * v, i * 0.03));
+        this.tone('sine', 2093, 2093, 0.4, 0.04 * v, 0.12);
+        break;
       default:
         break;
     }

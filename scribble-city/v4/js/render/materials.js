@@ -98,6 +98,12 @@ export const shared = {
   uWEraseN: { value: 0 },
   uHoles: { value: holeTexture() },
   uWind: { value: new THREE.Vector3(1, 0, 0) },
+  // a drawing turning into a thing (game/materialize.js gives that thing its own): off for the rest
+  uMatOn: { value: 0 },
+  uMatFlat: { value: new THREE.Vector4(0, 1, 0, 0) },
+  uMatK: { value: 1 },
+  uMatSweep: { value: new THREE.Vector4(1, 0, 0, -1e5) },
+  uMatBand: { value: new THREE.Vector4(1, 0, 0, 0) },
 };
 
 // ------------------------------------------------------------------ lights near you
@@ -251,6 +257,25 @@ export function makeSurface(o = {}) {
   m.userData.reflective = !!o.refl;
   m.userData.kind = kind;
   return m;
+}
+
+// A surface's private copy for one thing's moment (a drawing turning into it): the same pens and
+// the same shader program, the shared uniforms still shared, a few of its own (extra).
+export function surfaceVariant(m, extra) {
+  const c = new THREE.ShaderMaterial({
+    glslVersion: m.glslVersion,
+    uniforms: { ...m.uniforms, ...extra },
+    defines: { ...m.defines },
+    vertexColors: m.vertexColors,
+    vertexShader: m.vertexShader,
+    fragmentShader: m.fragmentShader,
+    side: m.side,
+    transparent: m.transparent,
+    depthWrite: m.depthWrite,
+    depthTest: m.depthTest,
+  });
+  c.userData = { ...m.userData, depth: null };
+  return c;
 }
 
 export function makeSky() {

@@ -29,7 +29,7 @@ function canopyMat() {
   return MAT;
 }
 
-function canopyModel(grade) {
+export function canopyModel(grade) {
   const K = new Kit();
   const cols = [linC(1.0, 0.5, 0.18), linC(0.98, 0.96, 0.9), linC(0.95, 0.3, 0.42), linC(0.98, 0.96, 0.9), linC(0.3, 0.55, 0.92)];
   const M = canopyMat();

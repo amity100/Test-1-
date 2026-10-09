@@ -328,6 +328,9 @@ flat out vec4 vX;
 flat out vec4 vClip;
 uniform mat4 uReflMatrix;
 uniform float uSway;
+uniform float uMatOn;   // a drawing turning into a thing (game/materialize.js)
+uniform vec4 uMatFlat;  // the plane it was drawn on (n, c)
+uniform float uMatK;    // how much of its depth it has: 0.03 flat as the paper .. 1 whole
 #ifdef SWAY_ATTR
 in float aSway;
 #endif
@@ -355,6 +358,8 @@ void main() {
     wp.x += sin(uTime * 1.3 + wp.z * 0.21 + wp.x * 0.07) * 0.06 * k;
     wp.y += sin(uTime * 1.7 + wp.x * 0.3) * 0.04 * k;
   }
+  // a drawing turning into a thing: pressed flat onto the plane it was drawn on, puffing up
+  if (uMatOn > 0.5) wp.xyz -= uMatFlat.xyz * (dot(wp.xyz, uMatFlat.xyz) - uMatFlat.w) * (1.0 - uMatK);
   vWP = wp.xyz;
 #ifdef USE_INSTANCING
   // (parts are stretched along their length: the normals need the inverse transpose)
@@ -362,6 +367,8 @@ void main() {
 #else
   vN = normalize(mat3(M) * normal);
 #endif
+  // (pressed flat, every face turns towards the plane)
+  if (uMatOn > 0.5) vN = normalize(vN + uMatFlat.xyz * dot(vN, uMatFlat.xyz) * (1.0 / max(uMatK, 0.03) - 1.0));
   vUv = uv;
   vLP = pos;
   vLN = normal;
@@ -433,6 +440,9 @@ uniform float uErasable; // the eraser can rub holes in it
 uniform float uEmVColor; // neon in batches: the vertex colour is the colour of the light too
 uniform float uCells;    // a texture of stacked cells: v = cell * 64 + v in the cell (shelves of goods)
 uniform float uNeonMask; // the neon sign atlas: r is the tube, g its white-hot core
+uniform float uMatOn;    // a drawing turning into a thing: the sweep that brings its colours
+uniform vec4 uMatSweep;  // (direction, where the sweep is along it)
+uniform vec4 uMatBand;   // (width of the band of light, paper ahead of it 0..1, glow, -)
 
 // kinds: 0 wall, 1 ground, 2 wet street, 3 cylinder part, 4 box part, 5 uv, 6 glass,
 //        7 leaf, 8 neon, 9 water, 10 skin, 11 car paint
@@ -459,7 +469,19 @@ void main() {
   if (vGone > 0.0 && n2(vWP.xz * 3.1 + vWP.y * 5.7) * 0.7 + n2(vWP.xy * 9.3) * 0.3 < vGone * 1.12) discard;
   if (uErasable > 0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
   if (vX.x > 0.5 && inPersonHole(vX.x, vWP)) discard;
-  if (dot(vClip.xyz, vClip.xyz) > 0.0 && dot(vWP, vClip.xyz) > vClip.w) discard;
+  if (vX.w < 0.5 && dot(vClip.xyz, vClip.xyz) > 0.0 && dot(vWP, vClip.xyz) > vClip.w) discard;
+  // a drawing turning into a thing: ahead of the sweep still the white paper it was drawn on
+  // (its outlines are all there is of it), a band of light where its colours come in, and the
+  // real thing behind (the drawn car among the city's cars: in its instance, iX.w = 1 + band)
+  float mPaper = 0.0;
+  float mGlow = 0.0;
+  if (uMatOn > 0.5 || vX.w > 0.5) {
+    vec4 sw = vX.w > 0.5 ? vClip : uMatSweep;
+    vec4 bd = vX.w > 0.5 ? vec4(vX.w - 1.0, 1.0, 1.0, 0.0) : uMatBand;
+    float sb = (dot(vWP, sw.xyz) - sw.w) / max(bd.x, 1e-3);
+    mPaper = smoothstep(-0.5, 0.5, sb) * bd.y;
+    mGlow = exp(-5.0 * sb * sb) * bd.z;
+  }
   bool inside = uIndoor > 0.5 || vX.z > 0.5;
   vec3 Nw = normalize(vN);
   vec2 p = strokeCoords(Nw);
@@ -568,6 +590,16 @@ void main() {
     wash = 0.9;
   }
 
+  if (mPaper + mGlow > 0.0) {
+    // the paper: white, a little pencil shading; the band: the light of the pencil's magic
+    lit = mix(lit, uPaper * 1.1, mPaper);
+    shade = mix(shade, uPaper * 0.62, mPaper);
+    light = mix(light, 0.45 + 0.5 * light, mPaper);
+    hi *= 1.0 - mPaper;
+    em *= 1.0 - mPaper;
+    vec3 mc = mix(vec3(1.0, 0.76, 0.3), vec3(0.55, 0.85, 1.0), 0.5 + 0.5 * sin(dot(vWP, vec3(3.1, 4.7, 2.3)) + uTime * 9.0));
+    em += mc * mGlow * 1.5;
+  }
   gFar = smoothstep(32.0, 190.0, length(cameraPosition - vWP));
   vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
   col += em;

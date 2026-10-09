@@ -289,6 +289,9 @@ html, body {
 .album-item .meta { font-size: 14px; text-align: center; margin-top: 4px; }
 .album-item .stars { color: #c18a00; letter-spacing: 2px; }
 .album-item .go { margin: 6px auto 0; width: fit-content; font: 700 15px/1 Rubik, sans-serif; padding: 5px 10px; border: 2px solid var(--ink); border-radius: 9px; background: var(--yellow); }
+.album-shelf { grid-column: 1 / -1; font-family: var(--font-hand); font-size: 28px; line-height: 1.1; margin: 8px 0 -4px; border-bottom: 2.5px solid var(--ink); }
+.album-shelf:first-child { margin-top: 0; }
+.album-item.last .polaroid { box-shadow: 0 0 0 4px var(--yellow), 4px 6px 0 rgba(27, 20, 48, 0.55); }
 
 /* ---------- drawing in the air ---------- */
 #airdraw { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
@@ -443,6 +446,7 @@ body:not(.touch) .touch-only { display: none; }
   #air-title { font-size: 22px; }
   #air-foot .btn { font-size: 16px; padding: 4px 9px; }
   #album-list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .album-shelf { font-size: 22px; }
   .polaroid .caption { font-size: 17px; }
 }
 body.touch #air-ref { width: min(300px, 34vw); }

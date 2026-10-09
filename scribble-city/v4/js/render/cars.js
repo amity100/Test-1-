@@ -318,8 +318,9 @@ class Pool {
     const g = geo.index ? geo.toNonIndexed() : geo;
     if (!g.attributes.aId) g.setAttribute('aId', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count), 1));
     this.iX = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    this.iClip = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('iX', this.iX);
-    g.setAttribute('iClip', new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4));
+    g.setAttribute('iClip', this.iClip);
     this.mesh = new THREE.InstancedMesh(g, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage);
@@ -330,7 +331,8 @@ class Pool {
     this.n = 0;
   }
 
-  push(m, color, part = 0) {
+  // rv: a drawn car still turning from the drawing into the car ({ sweep: [x, y, z, front], band })
+  push(m, color, part = 0, rv = null) {
     if (this.n >= this.cap) return;
     const i = this.n++;
     m.toArray(this.mesh.instanceMatrix.array, i * 16);
@@ -339,13 +341,21 @@ class Pool {
     c[i * 3 + 1] = color[1];
     c[i * 3 + 2] = color[2];
     this.iX.array[i * 4 + 1] = part;
+    this.iX.array[i * 4 + 3] = rv ? 1 + rv.band : 0;
+    const k = this.iClip.array;
+    if (rv) {
+      k[i * 4] = rv.sweep[0];
+      k[i * 4 + 1] = rv.sweep[1];
+      k[i * 4 + 2] = rv.sweep[2];
+      k[i * 4 + 3] = rv.sweep[3];
+    } else k[i * 4] = k[i * 4 + 1] = k[i * 4 + 2] = k[i * 4 + 3] = 0;
   }
 
   end() {
     this.mesh.count = this.n;
     // (nothing of this kind on the screen: no draw call at all)
     this.mesh.visible = this.n > 0;
-    for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX]) {
+    for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]) {
       at.clearUpdateRanges();
       at.addUpdateRange(0, Math.max(1, this.n) * at.itemSize);
       at.needsUpdate = true;
@@ -411,6 +421,12 @@ export class CarRenderer {
     this.paintColor = new Map();
   }
 
+  // the box round a car of this kind, in its own frame
+  boxOf(kind) {
+    const K = (this.kinds[kind] || this.kinds.sedan).b.K;
+    return new THREE.Box3(new THREE.Vector3(-K.W / 2, 0, -K.len / 2), new THREE.Vector3(K.W / 2, K.roofY + 0.04, K.len / 2));
+  }
+
   col(c) {
     const key = c.join(',');
     let v = this.paintColor.get(key);
@@ -424,58 +440,61 @@ export class CarRenderer {
   /**
    * One car: kind (sports | sedan | van), its colour (sRGB), where it is and where it points.
    * o: { spin (wheel angle), steer, extra: 'taxi' | 'police', siren: 0..1 blink phase, scale,
-   *      lift (bounce), tilt, roll }
+   *      lift (bounce), tilt, roll, reveal: a drawn car turning from the drawing into the car
+   *      ({ pre: world matrix pressing it flat, sweep, band }) }
    */
   draw(kind, color, x, y, z, yaw, o = {}) {
     const P = this.kinds[kind] || this.kinds.sedan;
     const K = P.b.K;
     const s = o.scale || 1;
+    const rv = o.reveal || null;
     _e.set(o.tilt || 0, yaw, o.roll || 0, 'YXZ');
     _q.setFromEuler(_e);
     _m.compose(_p.set(x, y + (o.lift || 0), z), _q, _s.set(s, s * (o.squash || 1), s));
+    if (rv) _m.premultiply(rv.pre);
     const part = ((Math.abs(x * 0.37 + z * 0.11) % 1) + 1) % 1;
-    P.body.push(_m, this.col(color), part);
-    P.glass.push(_m, WHITE, part + 0.3);
-    P.tail.push(_m, WHITE, part + 0.5);
-    P.head.push(_m, WHITE, part + 0.6);
-    P.trim.push(_m, WHITE, part + 0.55);
-    P.plate.push(_m, WHITE, part + 0.65);
+    P.body.push(_m, this.col(color), part, rv);
+    P.glass.push(_m, WHITE, part + 0.3, rv);
+    P.tail.push(_m, WHITE, part + 0.5, rv);
+    P.head.push(_m, WHITE, part + 0.6, rv);
+    P.trim.push(_m, WHITE, part + 0.55, rv);
+    P.plate.push(_m, WHITE, part + 0.65, rv);
     // the wheels: they roll, the front ones steer
     for (const w of P.b.wheels) {
       _e.set(o.spin || 0, w.z > 0 ? o.steer || 0 : 0, 0, 'YXZ');
       _q.setFromEuler(_e);
       _w.compose(_p.set(w.x, w.r, w.z), _q, _s.set(1, w.r, w.r));
       _w.premultiply(_m);
-      this.tyres.push(_w, WHITE, part + 0.7);
+      this.tyres.push(_w, WHITE, part + 0.7, rv);
       _w.compose(_p.set(w.x + w.sd * 0.165, w.r, w.z), _q, _s.set(1, w.r, w.r));
       _w.premultiply(_m);
-      this.rims.push(_w, WHITE, part + 0.8);
+      this.rims.push(_w, WHITE, part + 0.8, rv);
     }
     const top = K.roofY;
     if (o.extra === 'taxi') {
-      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, [0.85, 0.7, 0.22]);
+      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, [0.85, 0.7, 0.22], rv);
     } else if (o.extra === 'police') {
       const blink = o.siren !== undefined ? o.siren : -1;
       const red = blink < 0 ? [0.5, 0.06, 0.08] : blink ? [3.2, 0.25, 0.3] : [0.5, 0.06, 0.08];
       const blue = blink < 0 ? [0.08, 0.12, 0.5] : blink ? [0.08, 0.12, 0.5] : [0.3, 0.5, 3.2];
-      this.box(this.lightBox, _m, -0.32, top + 0.1, -0.15, 0.6, 0.16, 0.3, red);
-      this.box(this.lightBox, _m, 0.32, top + 0.1, -0.15, 0.6, 0.16, 0.3, blue);
+      this.box(this.lightBox, _m, -0.32, top + 0.1, -0.15, 0.6, 0.16, 0.3, red, rv);
+      this.box(this.lightBox, _m, 0.32, top + 0.1, -0.15, 0.6, 0.16, 0.3, blue, rv);
       // the black stripe along the doors (the car itself is white)
-      for (const sd of [-1, 1]) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 0.66, 0, 0.04, 0.3, K.len * 0.5, [0.04, 0.05, 0.1]);
+      for (const sd of [-1, 1]) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 0.66, 0, 0.04, 0.3, K.len * 0.5, [0.04, 0.05, 0.1], rv);
     } else if (o.extra === 'bus') {
       // the band of colour under the windows, the route sign over the windscreen, the doors
-      for (const sd of [-1, 1]) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 1.55, -0.2, 0.04, 0.22, K.len * 0.94, [0.97, 0.96, 0.92]);
-      this.box(this.lightBox, _m, 0, 2.86, K.len / 2 - 0.12, 1.5, 0.26, 0.06, [1.6, 1.2, 0.3]);
-      for (const z of [K.len / 2 - 1.4, -0.4]) this.box(this.trimBox, _m, K.W / 2 + 0.005, 1.5, z, 0.02, 2.2, 1.1, [0.2, 0.22, 0.28]);
+      for (const sd of [-1, 1]) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 1.55, -0.2, 0.04, 0.22, K.len * 0.94, [0.97, 0.96, 0.92], rv);
+      this.box(this.lightBox, _m, 0, 2.86, K.len / 2 - 0.12, 1.5, 0.26, 0.06, [1.6, 1.2, 0.3], rv);
+      for (const z of [K.len / 2 - 1.4, -0.4]) this.box(this.trimBox, _m, K.W / 2 + 0.005, 1.5, z, 0.02, 2.2, 1.1, [0.2, 0.22, 0.28], rv);
     } else if (kind === 'van' && o.extra !== 'plain') {
-      this.box(this.trimBox, _m, 0, top + 0.06, -0.3, K.W * 0.8, 0.06, K.len * 0.55, [0.25, 0.25, 0.3]);
+      this.box(this.trimBox, _m, 0, top + 0.06, -0.3, K.W * 0.8, 0.06, K.len * 0.55, [0.25, 0.25, 0.3], rv);
     }
   }
 
-  box(pool, base, x, y, z, w, h, d, color) {
+  box(pool, base, x, y, z, w, h, d, color, rv = null) {
     _w.makeScale(w, h, d).setPosition(x, y, z);
     _w.premultiply(base);
-    pool.push(_w, color);
+    pool.push(_w, color, 0, rv);
   }
 
   end() {

@@ -474,6 +474,20 @@ const BUILD = {
     K.box(M.matte, -0.06, -0.05, -0.08, -0.015, 0.05, 0.08, C(0.3, 0.25, 0.22));
     return { tip: new THREE.Vector3(0.1, 0, 0), length: 0.6 };
   },
+  bandage(K, M) {
+    // the giant sticking plaster: one strip with round ends, the pad on its face (-x, the side
+    // it is shown by), the little holes
+    const sh = new THREE.Shape();
+    sh.absarc(0.27, 0, 0.11, -Math.PI / 2, Math.PI / 2, false);
+    sh.absarc(-0.27, 0, 0.11, Math.PI / 2, Math.PI * 1.5, false);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.024, bevelEnabled: false, curveSegments: 10 });
+    // (the shape is drawn in x-y and pushed out along z: turn it so its length runs along z)
+    g.translate(0, 0, -0.012).rotateY(-Math.PI / 2);
+    K.add(M.round, g, C(0.96, 0.8, 0.64));
+    K.box(M.matte, -0.02, -0.075, -0.1, -0.012, 0.075, 0.1, C(0.99, 0.95, 0.92));
+    for (const z of [-0.3, -0.22, 0.22, 0.3]) for (const y of [-0.045, 0.045]) K.sphere(M.matte, 0.01, -0.013, y, z, C(0.8, 0.6, 0.48), 0.4, 1, 1, 6);
+    return { tip: new THREE.Vector3(-0.05, 0, 0), length: 0.6 };
+  },
 };
 
 /**

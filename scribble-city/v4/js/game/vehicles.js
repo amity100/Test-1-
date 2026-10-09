@@ -11,6 +11,7 @@ import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _stripe = new THREE.Matrix4();
 const UP = new THREE.Vector3(0, 1, 0);
 
 const VEH = {
@@ -338,6 +339,14 @@ class Vehicle {
 
   update(dt) {
     this.time += dt;
+    if (this.materializing) {
+      // (still turning from the drawing into the thing: it stands still where it was drawn)
+      if (this.kind !== 'car') {
+        this.group.position.copy(this.pos);
+        this.group.rotation.set(0, this.yaw, 0);
+      }
+      return;
+    }
     let pop = 1;
     if (this.reveal < 1) {
       // freshly drawn: it plops into the world with a little overshoot
@@ -381,9 +390,11 @@ class Vehicle {
     if (this.kind !== 'car' || this.dead) return;
     const wob = this.grade === 'fail' || this.grade === 'wonky' ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3) : 0;
     const siren = this.extra === 'police' && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
+    // (just drawn: still turning from the drawing into the car)
+    const rv = this.mat ? this.mat.carRV : null;
     cars.draw(this.carKind, this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: wob, roll: this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0,
+      lift: wob, roll: this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0, reveal: rv,
     });
     if (this.racing) {
       // the drawn car has racing stripes over the bonnet and the roof
@@ -394,7 +405,9 @@ class Vehicle {
       for (const s of [-0.22, 0.22]) {
         const x = this.pos.x + rx * s;
         const z = this.pos.z + rz * s;
-        cars.box(cars.trimBox, new THREE.Matrix4().makeRotationY(this.yaw).setPosition(x, this.pos.y, z), 0, 0.98, 1.0, 0.18, 0.05, 2.0, [0.98, 0.95, 0.88]);
+        const base = _stripe.makeRotationY(this.yaw).setPosition(x, this.pos.y, z);
+        if (rv) base.premultiply(rv.pre);
+        cars.box(cars.trimBox, base, 0, 0.98, 1.0, 0.18, 0.05, 2.0, [0.98, 0.95, 0.88], rv);
       }
     }
   }
@@ -670,6 +683,49 @@ export class Vehicles {
     return v;
   }
 
+  // a drawn vehicle about to land (see game/materialize.js): made now, out of sight until add()
+  create(kind, grade, score) {
+    const v = new Vehicle(this, kind, grade, score);
+    v.reveal = 1;
+    v.group.visible = false;
+    return v;
+  }
+
+  add(v) {
+    // (in place from its first frame: its update only runs next frame)
+    v.group.position.copy(v.pos);
+    v.group.rotation.set(0, v.yaw, 0);
+    v.group.visible = true;
+    this.list.push(v);
+    // keep at most 3 drawn vehicles around
+    while (this.list.filter((o) => !o.stock).length > 3) {
+      const old = this.list.find((o) => !o.driver && !o.stock && o !== v);
+      if (!old) break;
+      old.dispose();
+      this.list.splice(this.list.indexOf(old), 1);
+    }
+    return v;
+  }
+
+  // in front of the player, on free ground (or just in front, if nothing is free)
+  placeNear(v) {
+    const game = this.game;
+    const p = game.player.pos;
+    const f = game.player.fig.forward;
+    for (const d of [4.5, 6, 3.5, 8]) {
+      for (const side of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5]) {
+        const ang = Math.atan2(f.x, f.z) + side * 0.6;
+        const x = p.x + Math.sin(ang) * d;
+        const z = p.z + Math.cos(ang) * d;
+        if (groundHeight(x, z) >= 0 && !game.world.collision.pointInside(x, 1.0, z, v.radius * 0.8)) {
+          v.pos.set(x, v.flies ? 0 : groundHeight(x, z) * 0.5, z);
+          return;
+        }
+      }
+    }
+    v.pos.set(p.x + f.x * 4, 0, p.z + f.z * 4);
+  }
+
   spawn(kind, grade, score) {
     const game = this.game;
     const v = new Vehicle(this, kind, grade, score);
@@ -731,7 +787,7 @@ export class Vehicles {
     let best = null;
     let bd = maxD;
     for (const v of this.list) {
-      if (v.dead) continue;
+      if (v.dead || v.materializing) continue;
       const d = Math.hypot(v.pos.x - pos.x, v.pos.z - pos.z) - v.radius;
       if (d < bd) {
         bd = d;

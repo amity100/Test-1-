@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildPencilModel, PEN_BLUE } from './items.js';
 import { BLACK_INK, RED_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
+import { blendMatrix } from './materialize.js';
 
 // kind: melee (swung), gun (fires projectiles), throw (the thing itself flies), beam (a ray while
 // the trigger is held). The first ones are the original arsenal; the rest are drawn from the new
@@ -169,7 +170,8 @@ export class Weapons {
     if (this.jam > 0) this.jam -= dt;
     const slot = this.current;
     const def = slot.def;
-    const canAct = player.mode === 'foot' && !game.inBar && !game.dialog.open;
+    // (a thing just drawn is still turning real in the air: it is not in the hand yet)
+    const canAct = player.mode === 'foot' && !game.inBar && !game.dialog.open && !slot.present;
     this.beam = null;
     // weapon switching (1..9, 0 for the tenth)
     if (canAct) {
@@ -566,7 +568,10 @@ export class Weapons {
         m.multiply(_sm.makeTranslation(0, Math.sin(this.game.time * 70) * 0.002 * slot.spin, 0));
       }
     }
-    if (slot.popAt !== undefined) {
+    if (slot.present) {
+      // just drawn: it hangs in the air where it was drawn (turning real), then into the hand
+      blendMatrix(slot.present.matrix, m, slot.present.k, m, 0.3);
+    } else if (slot.popAt !== undefined) {
       // freshly drawn: plops into the hand with a little overshoot
       const t = (this.game.time - slot.popAt) / 0.45;
       if (t < 1) {
