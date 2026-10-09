@@ -113,7 +113,7 @@ function build(kind) {
   // profile x -> forward (z), extrude depth -> across (x)
   const toCar = new THREE.Matrix4().makeRotationY(-Math.PI / 2);
   ext.applyMatrix4(toCar);
-  const body = ext.toNonIndexed();
+  const body = ext.index ? ext.toNonIndexed() : ext;
   const glassParts = [];
   for (const sd of [-1, 1]) {
     const g = new THREE.ShapeGeometry(sideWindow(kind));
