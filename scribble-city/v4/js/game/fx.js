@@ -137,6 +137,22 @@ export class Effects {
     }
   }
 
+  // drops of something wet thrown up and out (correction fluid, paint)
+  splash(x, y, z, n = 20, speed = 4, color = [1, 1, 0.98]) {
+    for (let i = 0; i < n; i++) {
+      if (this.particles.length > 420) this.particles.shift();
+      const a = Math.random() * Math.PI * 2;
+      const up = Math.random();
+      const sp = speed * (0.35 + Math.random() * 0.8);
+      this.particles.push({
+        x, y, z,
+        vx: Math.cos(a) * sp * (1 - up * 0.4), vy: 2 + up * sp * 0.9, vz: Math.sin(a) * sp * (1 - up * 0.4),
+        life: 0.6 + Math.random() * 0.7, t: 0, len: 0.08 + Math.random() * 0.1,
+        color, seed: Math.random() * 50, spin: 0, streak: true, wide: 4,
+      });
+    }
+  }
+
   sparks(x, y, z, n = 6, color = [0.1, 0.1, 0.14]) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
@@ -201,7 +217,7 @@ export class Effects {
       const fade = 1 - Math.max(0, (p.t - p.life * 0.6) / (p.life * 0.4));
       if (p.streak) {
         const l = Math.hypot(p.vx, p.vy, p.vz) || 1;
-        figures.lineXYZ(p.x, p.y, p.z, p.x - (p.vx / l) * p.len, p.y - (p.vy / l) * p.len, p.z - (p.vz / l) * p.len, p.color, 1.6, p.seed, fade, 0.01, 0);
+        figures.lineXYZ(p.x, p.y, p.z, p.x - (p.vx / l) * p.len, p.y - (p.vy / l) * p.len, p.z - (p.vz / l) * p.len, p.color, p.wide || 1.6, p.seed, fade, 0.01, 0);
       } else {
         const a = p.spin + p.t * 8;
         const dx = Math.cos(a) * p.len;

@@ -10,7 +10,9 @@ import { AVES, STREETS } from './layout.js';
 const PI = Math.PI;
 const HIGHLIGHT = 'rgba(255, 226, 60, 0.55)';
 const W = 2048;
-const H = 2560;
+// twelve rows of big cells (blueprints, ads), then the little plates
+const BIG_ROWS = 12;
+const H = BIG_ROWS * 256 + 512;
 const BIG_W = 512;
 const BIG_H = 256;
 const SMALL_W = 256;
@@ -116,7 +118,7 @@ function blueprintBoard(sk, ctx, w, h, bp) {
   sk.poly([[tx0, ty0], [tx1, ty0], [tx1, ty1], [tx0, ty1]], true, { width: 2, color: INK2D });
   sk.line(tx0, ty0 + 54, tx1, ty0 + 54, { width: 1.4, color: INK2D });
   sk.line(tx0, ty0 + 102, tx1, ty0 + 102, { width: 1.4, color: INK2D });
-  sk.text(bp.kind === 'vehicle' ? 'VEHICLE' : bp.kind === 'heal' ? 'FIRST AID' : 'WEAPON', (tx0 + tx1) / 2, ty0 + 28, { size: 22, color: BLACK2D, font: FONT_SIGN, weight: 400, dir: 'ltr', maxWidth: tx1 - tx0 - 12 });
+  sk.text(bp.kind === 'vehicle' ? 'VEHICLE' : bp.kind === 'heal' ? 'FIRST AID' : bp.kind === 'gear' ? 'GEAR' : 'WEAPON', (tx0 + tx1) / 2, ty0 + 28, { size: 22, color: BLACK2D, font: FONT_SIGN, weight: 400, dir: 'ltr', maxWidth: tx1 - tx0 - 12 });
   sk.text('DIFFICULTY', (tx0 + tx1) / 2, ty0 + 66, { size: 20, color: INK2D, font: FONT_NOTE, weight: 700, dir: 'ltr' });
   for (let i = 0; i < 5; i++) {
     const x = (tx0 + tx1) / 2 + (i - 2) * 20;
@@ -332,6 +334,7 @@ export function boardAtlas() {
   const rects = {};
   let big = 0;
   const large = (name, fn) => {
+    if (big >= BIG_ROWS * 4) throw new Error('board atlas full');
     const cx = (big % 4) * BIG_W;
     const cy = Math.floor(big / 4) * BIG_H;
     big++;
@@ -344,7 +347,7 @@ export function boardAtlas() {
   let small = 0;
   const smallCell = (name, fn) => {
     const cx = (small % 8) * SMALL_W;
-    const cy = 8 * BIG_H + Math.floor(small / 8) * SMALL_H;
+    const cy = BIG_ROWS * BIG_H + Math.floor(small / 8) * SMALL_H;
     small++;
     const tmp = makeCanvas(SMALL_W, SMALL_H);
     const tctx = tmp.getContext('2d');

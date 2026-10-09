@@ -26,6 +26,10 @@ export const WEAPON_DEFS = {
   boomerang: { id: 'boomerang', name: 'מספריים בומרנג', kind: 'throw', projectile: 'scissors', damage: 58, rate: 1.4, speed: 27, gravity: 0, range: 22, hands: 1 },
   minigun: { id: 'minigun', name: 'מיניגאן מחדדים', kind: 'gun', projectile: 'shaving', damage: 9, rate: 20, speed: 96, gravity: 2, spread: 0.04, ammo: 450, hands: 2, spin: true, sound: 'mini' },
   shield: { id: 'shield', name: 'מגן קרטון', kind: 'melee', damage: 24, rate: 1.5, range: 2.1, block: 0.85, uses: 80 },
+  // the machine guns that rub the city out: correction fluid, little erasers, paint
+  tippex: { id: 'tippex', name: 'מקלע טיפקס', kind: 'gun', projectile: 'tippex', damage: 13, rate: 11, speed: 64, gravity: 5, spread: 0.026, ammo: 280, hands: 2, sound: 'tippex' },
+  erasermg: { id: 'erasermg', name: 'מקלע מחקים', kind: 'gun', projectile: 'rubber', damage: 15, rate: 12, speed: 82, gravity: 3, spread: 0.03, ammo: 320, hands: 2, sound: 'rubber' },
+  paintmg: { id: 'paintmg', name: 'מקלע צבע', kind: 'gun', projectile: 'paintmg', damage: 11, rate: 14, speed: 58, gravity: 5, spread: 0.034, ammo: 380, hands: 2, sound: 'paint' },
 };
 
 export const GRADE = {
@@ -38,6 +42,9 @@ export const GRADE = {
 const PAINT_COLORS = [[0.85, 0.35, 0.3], [0.3, 0.5, 0.85], [0.35, 0.7, 0.4], [0.9, 0.72, 0.25], [0.6, 0.4, 0.75]];
 const CRAYONS = [[0.92, 0.3, 0.28], [0.98, 0.75, 0.18], [0.25, 0.55, 0.92], [0.35, 0.75, 0.38], [0.95, 0.5, 0.75], [0.6, 0.38, 0.85], [0.98, 0.55, 0.2]];
 const GLUE = [0.97, 0.97, 0.94];
+// correction fluid: whiter than the paper
+const WHITE_OUT = [1.0, 1.0, 0.98];
+const WHITE_TINT = [1.15, 1.15, 1.12];
 const STEEL = [0.78, 0.8, 0.86];
 const HIGHLIGHT = [2.6, 3.2, 0.55]; // brighter than white: the beam glows
 const HIGHLIGHT_CORE = [3.4, 3.6, 2.4];
@@ -231,7 +238,7 @@ export class Weapons {
       damage: def.damage * g.dmg,
       radius: def.radius ? def.radius * (slot.grade === 'perfect' ? 1.2 : slot.grade === 'fail' ? 0.5 : 1) : 0,
       life: sad ? 1.5 : 4,
-      color: def.projectile === 'ink' ? PEN_BLUE : def.projectile === 'crayon' ? CRAYONS[Math.floor(Math.random() * CRAYONS.length)] : PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)],
+      color: def.projectile === 'ink' ? PEN_BLUE : def.projectile === 'crayon' || def.projectile === 'paintmg' ? CRAYONS[Math.floor(Math.random() * CRAYONS.length)] : def.projectile === 'tippex' ? WHITE_OUT : PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)],
       wobble: slot.grade === 'wonky' ? 1 : slot.grade === 'fail' ? 2 : 0,
       seed: Math.random() * 100,
       t: 0,
@@ -580,8 +587,8 @@ export class Weapons {
     this.projectiles.push({ kind, owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, ignore, color });
   }
 
-  spawnShell(x, y, z, dx, dy, dz, owner, damage, radius, speed = 45) {
-    this.projectiles.push({ kind: 'shell', owner, x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 3, damage, radius, life: 4, t: 0, seed: Math.random() * 100, wobble: 0 });
+  spawnShell(x, y, z, dx, dy, dz, owner, damage, radius, speed = 45, kind = 'shell') {
+    this.projectiles.push({ kind, owner, x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 3, damage, radius, life: 4, t: 0, seed: Math.random() * 100, wobble: 0 });
   }
 
   // a paper plane looks for someone to fly at (a little ahead of it, not behind)
@@ -910,6 +917,27 @@ export class Weapons {
       // a blob of hot glue with a string trailing behind it
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, GLUE, 12, pr.seed, 0.95, 0.06, 0);
       fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * 0.6, pr.y - uy * 0.6 + 0.05, pr.z - uz * 0.6, GLUE, 2, pr.seed + 1, 0.7, 0.08, 0);
+    } else if (pr.kind === 'tippex') {
+      // a blob of correction fluid, a thin white string behind it
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, WHITE_OUT, 10, pr.seed, 1, 0.08, 0);
+      fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.75, pr.y - uy * 0.75, pr.z - uz * 0.75, WHITE_OUT, 2, pr.seed + 1, 0.7, 0.05, 0);
+    } else if (pr.kind === 'rubber') {
+      // a little two-tone eraser, tumbling
+      const a = pr.t * 22 + pr.seed;
+      const px = -uz * Math.cos(a) * 0.05;
+      const py = Math.sin(a) * 0.05;
+      const pz = ux * Math.cos(a) * 0.05;
+      fr.lineXYZ(pr.x - px, pr.y - py, pr.z - pz, pr.x, pr.y, pr.z, [0.93, 0.5, 0.56], 7, pr.seed, 1, 0.005, 0);
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x + px, pr.y + py, pr.z + pz, [0.36, 0.48, 0.82], 7, pr.seed + 1, 1, 0.005, 0);
+      fr.lineXYZ(pr.x - ux * 0.2, pr.y - uy * 0.2, pr.z - uz * 0.2, pr.x - ux * 0.8, pr.y - uy * 0.8, pr.z - uz * 0.8, [0.93, 0.5, 0.56], 1.1, pr.seed + 2, 0.45, 0.03, 0);
+    } else if (pr.kind === 'paintmg') {
+      const c = pr.color;
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, c, 9, pr.seed, 1, 0.1, 0);
+      fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.6, pr.y - uy * 0.6, pr.z - uz * 0.6, c, 1.6, pr.seed + 1, 0.5, 0.05, 0);
+    } else if (pr.kind === 'whiteShell') {
+      // the tank's round: a big wobbling glob of correction fluid
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.3, pr.y - uy * 0.3, pr.z - uz * 0.3, WHITE_OUT, 26, pr.seed, 1, 0.12, 0);
+      fr.lineXYZ(pr.x - ux * 0.3, pr.y - uy * 0.3, pr.z - uz * 0.3, pr.x - ux * 2.2, pr.y - uy * 2.2, pr.z - uz * 2.2, WHITE_OUT, 5, pr.seed + 1, 0.6, 0.08, 0);
     } else if (pr.kind === 'eraser' || pr.kind === 'shell') {
       const s = pr.kind === 'shell' ? 0.5 : 0.35;
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * s, pr.y - uy * s, pr.z - uz * s, [0.9, 0.58, 0.64], 16, pr.seed, 1, 0.02, 0);
@@ -940,22 +968,29 @@ export class Weapons {
       this.inkBurst(pr, hit.x, hit.y, hit.z);
       return;
     }
+    if (pr.kind === 'whiteShell') {
+      game.whiteOut(hit.x, hit.y, hit.z, pr.radius || 6, pr.damage, pr.owner, hit);
+      return;
+    }
     if (pr.radius > 0) {
       game.explosion(hit.x, hit.y, hit.z, pr.radius, pr.damage, pr.owner);
       return;
     }
     const kind = pr.kind;
+    // (to the people it hits, correction fluid and the little erasers rub out like a pencil's
+    // eraser; the paint machine gun's paint is paint)
+    const hurtKind = kind === 'tippex' || kind === 'rubber' ? 'pencil' : kind === 'paintmg' ? 'paint' : kind;
     if (hit.type === 'civ') {
-      game.civilians.damage(hit.civ, new THREE.Vector3(hit.x, hit.y, hit.z), kind, pr.damage);
-      if (kind === 'paint' || kind === 'crayon') hit.civ.fig.paint(pr.color);
+      game.civilians.damage(hit.civ, new THREE.Vector3(hit.x, hit.y, hit.z), hurtKind, pr.damage);
+      if (kind === 'paint' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') hit.civ.fig.paint(pr.color);
       if (kind === 'glue') hit.civ.glueT = pr.stick;
       fx.impact(hit.x, hit.y, hit.z, 0.6);
       return;
     }
     if (hit.type === 'enemy') {
       const e = hit.enemy;
-      game.enemies.damage(e, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), kind);
-      if (kind === 'paint' || kind === 'ink' || kind === 'crayon') e.paint(kind === 'ink' ? PEN_BLUE : pr.color);
+      game.enemies.damage(e, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), hurtKind);
+      if (kind === 'paint' || kind === 'ink' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') e.paint(kind === 'ink' ? PEN_BLUE : pr.color);
       if (kind === 'staple') e.pinT = Math.max(e.pinT || 0, pr.pin || 0.4);
       if (kind === 'glue') {
         e.glueT = pr.stick || 4;
@@ -982,7 +1017,20 @@ export class Weapons {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, kind === 'ink' ? 0.45 : 0.5 + Math.random() * 0.3, pr.color);
       return;
     }
-    if (kind === 'paint' || kind === 'crayon') {
+    if (kind === 'tippex') {
+      // a splash of correction fluid: what it covers is gone from the page
+      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.5 + Math.random() * 0.3, WHITE_TINT);
+      game.eraseWorld(hit.x, hit.y, hit.z, 0.42, pr.damage * 1.5, hit.box, hit);
+      game.audio.play('splat', 0.3);
+    } else if (kind === 'rubber') {
+      game.eraseWorld(hit.x, hit.y, hit.z, 0.36, pr.damage * 1.3, hit.box, hit);
+      fx.impact(hit.x, hit.y, hit.z, 0.35);
+    } else if (kind === 'paintmg') {
+      // drenched in paint, a thing runs off the page
+      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.55 + Math.random() * 0.4, pr.color);
+      game.eraseWorld(hit.x, hit.y, hit.z, 0.2, pr.damage * 1.1, hit.box, hit);
+      game.audio.play('splat', 0.25);
+    } else if (kind === 'paint' || kind === 'crayon') {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, (kind === 'crayon' ? 0.35 : 0.7) + Math.random() * 0.4, pr.color);
       if (kind === 'crayon') game.eraseWorld(hit.x, hit.y, hit.z, 0.12, pr.damage * 0.3, hit.box, hit);
       game.audio.play('splat', 0.4);

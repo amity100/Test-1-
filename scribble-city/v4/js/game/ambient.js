@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Batch, nextId } from '../world/kit.js';
 import { srgb } from '../render/materials.js';
 import { AVES, STREETS, CURB, PROM_X1, STREET_X1, NORTH_EDGE, SOUTH_EDGE, PIER, groundHeight } from '../world/layout.js';
-import { copterModel } from './vehicles.js';
+import { cityCopterModel } from './vehicles.js';
 
 // The small life of the city: pigeons pecking on the sidewalks that burst up when you run through
 // them or a shot goes off, gulls wheeling over the promenade, boats crossing the bay in the last of
@@ -12,6 +12,7 @@ const PIGEON = [0.5, 0.52, 0.62];
 const PIGEON_HEAD = [0.32, 0.34, 0.44];
 const GULL = [0.97, 0.96, 0.95];
 const GULL_WING = [0.66, 0.68, 0.76];
+const BLADE = [0.1, 0.1, 0.13];
 const _c = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _u = new THREE.Vector3();
@@ -42,10 +43,12 @@ export class Ambient {
     // boats on the bay
     this.boats = [];
     for (let i = 0; i < 6; i++) this.boats.push(this.makeBoat(M, i));
-    // the helicopter over downtown, the blimp over the bay
-    const heli = copterModel('good');
-    heli.body.scale.setScalar(1.15);
-    this.heli = { group: new THREE.Group(), m: heli, a: 0 };
+    // the news helicopter over downtown (a real one's size, high over the towers), the blimp
+    // over the bay
+    const heli = cityCopterModel('news');
+    // (it circles a point that wanders after you, so now and then it comes over your street; with
+    // the police after you it is a police helicopter, low and close)
+    this.heli = { group: new THREE.Group(), m: heli, a: 0, cx: -100, cz: -160, r: 140, y: 78, livery: 'news', models: { news: heli } };
     this.heli.group.add(heli.body);
     game.scene.add(this.heli.group);
     this.blimp = this.makeBlimp(M);
@@ -243,15 +246,39 @@ export class Ambient {
       b.group.position.set(b.x, -0.8 + Math.sin(b.bob * 1.3) * 0.08, b.z);
       b.group.rotation.set(Math.sin(b.bob * 0.9) * 0.03, b.dir > 0 ? 0 : Math.PI, Math.sin(b.bob * 1.1) * 0.05);
     }
-    // the helicopter circling downtown
+    // the helicopter circling, nose down a little, leaning into its turn
     const h = this.heli;
-    h.a += dt * 0.07;
-    const hx = -110 + Math.cos(h.a) * 150;
-    const hz = -170 + Math.sin(h.a) * 190;
-    h.group.position.set(hx, 62 + Math.sin(h.a * 3) * 4, hz);
-    h.group.rotation.set(0.08, Math.atan2(-Math.sin(h.a), Math.cos(h.a)) + Math.PI / 2, -0.12);
-    if (h.m.rotor) h.m.rotor.rotation.y += dt * 24;
-    if (h.m.tailRotor) h.m.tailRotor.rotation.x += dt * 30;
+    const chase = game.police && game.police.level >= 3 && game.state === 'play';
+    const livery = chase ? 'police' : 'news';
+    if (livery !== h.livery) {
+      h.group.remove(h.m.body);
+      if (!h.models[livery]) h.models[livery] = cityCopterModel(livery);
+      h.m = h.models[livery];
+      h.group.add(h.m.body);
+      h.livery = livery;
+    }
+    const pp = game.anchorPos ? game.anchorPos() : game.player.pos;
+    // the point it circles drifts after you (slowly over the news, fast in a chase)
+    const tx = chase ? pp.x : Math.max(-200, Math.min(10, pp.x * 0.6 - 40));
+    const tz = chase ? pp.z : Math.max(-330, Math.min(250, pp.z * 0.7 - 50));
+    const follow = 1 - Math.exp(-dt * (chase ? 0.6 : 0.03));
+    h.cx += (tx - h.cx) * follow;
+    h.cz += (tz - h.cz) * follow;
+    h.r += ((chase ? 42 : 130) - h.r) * (1 - Math.exp(-dt * 0.3));
+    h.y += ((chase ? 46 : 78) - h.y) * (1 - Math.exp(-dt * 0.3));
+    h.a += (dt * (chase ? 9 : 7)) / h.r;
+    const hx = h.cx + Math.cos(h.a) * h.r;
+    const hz = h.cz + Math.sin(h.a) * h.r * 1.2;
+    h.group.position.set(hx, h.y + Math.sin(h.a * 3) * 2, hz);
+    const vx = -Math.sin(h.a);
+    const vz = Math.cos(h.a) * 1.2;
+    const yaw = Math.atan2(vx, vz);
+    // (the centre of the turn is to its right when (-cos yaw, sin yaw) points at it)
+    const side = Math.sign((h.cx - hx) * -Math.cos(yaw) + (h.cz - hz) * Math.sin(yaw));
+    h.group.rotation.set(0.09, yaw, side * 0.16, 'YXZ');
+    // (the blades turn slowly enough to be seen as blades)
+    if (h.m.rotor) h.m.rotor.rotation.y += dt * 9.5;
+    if (h.m.tailRotor) h.m.tailRotor.rotation.x += dt * 14;
     // the blimp
     const bl = this.blimp;
     bl.a += dt * 0.012;
@@ -262,6 +289,19 @@ export class Ambient {
   draw() {
     const bodies = this.game.figures.bodies;
     const cam = this.game.camera.position;
+    // the helicopter's blades are drawn with the pen too: far away a blade is thinner than a
+    // pixel and would break up into dashes, a pen line never does
+    const hm = this.heli.m;
+    if (hm.rotor) {
+      hm.rotor.updateWorldMatrix(true, false);
+      const e = hm.rotor.matrixWorld;
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2;
+        _c.set(Math.sin(a) * 5.7, 0.04, Math.cos(a) * 5.7).applyMatrix4(e);
+        _r.set(Math.sin(a) * 0.3, 0.04, Math.cos(a) * 0.3).applyMatrix4(e);
+        this.game.figures.lineXYZ(_r.x, _r.y, _r.z, _c.x, _c.y, _c.z, BLADE, 2.2, 31 + k, 0.95, 0.002, 0);
+      }
+    }
     for (const f of this.flocks) {
       if (Math.hypot(f.x - cam.x, f.z - cam.z) > 80) continue;
       for (const b of f.birds) this.pigeon(bodies, b, f.up);

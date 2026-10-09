@@ -368,7 +368,7 @@ export class AirDraw {
     this.phase = 'plop';
     this.t = 0;
     this.sticker.visible = false;
-    if (this.bp.kind === 'weapon') {
+    if (this.bp.kind === 'weapon' || this.bp.kind === 'gear') {
       this.target.copy(p.fig.j.handR);
       this.targetScale = 0.1;
     } else {

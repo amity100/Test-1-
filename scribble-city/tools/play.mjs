@@ -40,7 +40,7 @@ for (const st of steps) {
   try {
     if (st.js) {
       const r = await page.evaluate(st.js);
-      if (r !== undefined && r !== null) logs.push('[eval] ' + JSON.stringify(r).slice(0, 600));
+      if (r !== undefined && r !== null) logs.push('[eval] ' + JSON.stringify(r).slice(0, +process.env.MAXLOG || 600));
     }
     // real taps / touch drags (MOBILE=1): { tap: '#btn-draw' } or { touch: [[x, y], [x, y], ...] }
     if (st.tap) {

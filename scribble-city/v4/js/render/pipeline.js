@@ -43,8 +43,10 @@ vec3 nrm(vec2 e) {
 float vn(vec2 p) { return textureLod(uNoise, (p + 0.5) / 256.0, 0.0).r; }
 
 // how much of an outline passes through uv: a step back in depth (planes seen edge-on do not
-// count: 1/z is flat across a plane), a fold between two faces, the edge of another object
-float edgeAt(vec2 uv, float r, out float zc) {
+// count: 1/z is flat across a plane), a fold between two faces, the edge of another object.
+// far: 0 near .. 1 far away, where the artist draws the shapes and leaves out most of the folds
+// and seams inside them (a small far thing drawn with every line would be a black knot)
+float edgeAt(vec2 uv, float r, float far, out float zc) {
   vec4 a0 = texture(tAux, uv);
   float z0 = linZ(uv);
   zc = z0;
@@ -65,16 +67,16 @@ float edgeAt(vec2 uv, float r, out float zc) {
   vec4 ad = texture(tAux, uv - oy);
   vec4 au = texture(tAux, uv + oy);
   float dn = max(max(1.0 - dot(n0, nrm(al.xy)), 1.0 - dot(n0, nrm(ar.xy))), max(1.0 - dot(n0, nrm(ad.xy)), 1.0 - dot(n0, nrm(au.xy))));
-  e = max(e, smoothstep(0.1, 0.32, dn) * 0.85);
+  e = max(e, smoothstep(0.1, 0.32, dn) * 0.85 * (1.0 - 0.6 * far));
   float id = max(max(step(0.002, abs(al.z - a0.z)) * step(z0, zl + 0.08), step(0.002, abs(ar.z - a0.z)) * step(z0, zr + 0.08)),
                  max(step(0.002, abs(ad.z - a0.z)) * step(z0, zd + 0.08), step(0.002, abs(au.z - a0.z)) * step(z0, zu + 0.08)));
-  e = max(e, id * 0.9);
+  e = max(e, id * 0.9 * (1.0 - 0.45 * far));
   return e * a0.w;
 }
 
 // where in the world this pixel is (the nearest thing around it, so both sides of an outline
-// agree on where it is)
-vec3 worldAt(vec2 uv) {
+// agree on where it is), and how far that is
+vec3 worldAt(vec2 uv, out float dist) {
   vec2 o = uTexel * 2.0 * uPR;
   float d = texture(tDepth, uv).r;
   d = min(d, texture(tDepth, uv + vec2(o.x, 0.0)).r);
@@ -83,25 +85,36 @@ vec3 worldAt(vec2 uv) {
   d = min(d, texture(tDepth, uv - vec2(0.0, o.y)).r);
   vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
   v /= v.w;
+  dist = -v.z;
   return (uCamWorld * vec4(v.xyz, 1.0)).xyz;
 }
 
 void main() {
   vec4 c = texture(tColor, vUv);
   // the hand that inks the outlines wobbles: the wobble belongs to the thing it outlines, so it
-  // travels with it as you walk (and, if the lines are alive, it is redrawn a few times a second)
-  vec3 w = worldAt(vUv);
-  vec2 q = vec2(w.x + w.y * 0.71, w.z - w.y * 0.53) * 1.7 + vec2(sin(uBoil * 1.7), cos(uBoil * 2.3)) * 0.3;
-  vec2 j1 = (vec2(vn(q), vn(q + 41.0)) - 0.5) * 2.0 * uPR;
-  vec2 j2 = (vec2(vn(q * 1.6 + 13.0), vn(q * 1.6 + 77.0)) - 0.5) * 2.6 * uPR;
+  // travels with it as you walk (and, if the lines are alive, it is redrawn a few times a second).
+  // Far away the hand is steadier and the pen finer: a wobble the size of a near line's would
+  // tear a small far thing (a palm down the avenue, a helicopter over the towers) to pieces.
+  float zn;
+  vec3 w = worldAt(vUv, zn);
+  float far = smoothstep(20.0, 130.0, zn);
+  float steady = mix(1.0, 0.16, far);
+  vec2 q = vec2(w.x + w.y * 0.71, w.z - w.y * 0.53) * mix(1.7, 0.5, far) + vec2(sin(uBoil * 1.7), cos(uBoil * 2.3)) * 0.3;
+  vec2 j1 = (vec2(vn(q), vn(q + 41.0)) - 0.5) * 2.0 * uPR * steady;
+  float r = max(uLineW * uPR * mix(1.0, 0.6, far), 1.0);
   float z;
-  float z2;
-  float e1 = edgeAt(vUv + j1 * uTexel, uLineW * uPR, z);
-  float e2 = edgeAt(vUv + j2 * uTexel, uLineW * uPR * 0.7, z2) * 0.55;
-  float e = max(e1, e2);
-  // far away the lines get thin and pale, then give way to the haze
-  e *= mix(1.0, 0.35, smoothstep(40.0, 420.0, z));
+  float e = edgeAt(vUv + j1 * uTexel, r, far, z);
+  // the second, lighter pass of the pen that makes a near line sketchy (not for far things)
+  if (far < 0.97) {
+    vec2 j2 = (vec2(vn(q * 1.6 + 13.0), vn(q * 1.6 + 77.0)) - 0.5) * 2.6 * uPR * steady;
+    float z2;
+    e = max(e, edgeAt(vUv + j2 * uTexel, max(r * 0.7, 1.0), far, z2) * 0.55 * (1.0 - far));
+  }
+  // far away the lines get pale and take the colour of what they outline, then give way to the haze
+  float fz = smoothstep(30.0, 380.0, z);
+  e *= mix(1.0, 0.45, fz);
   vec3 ink = mix(vec3(0.018, 0.012, 0.04), c.rgb * 0.12, 0.2);
+  ink = mix(ink, c.rgb * 0.38, fz * 0.55);
   vec3 col = mix(c.rgb, ink, clamp(e * 1.15, 0.0, 1.0) * 0.95);
   fragColor = vec4(col, c.a);
 }`;

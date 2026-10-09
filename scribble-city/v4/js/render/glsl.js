@@ -208,6 +208,9 @@ vec3 pointLights(vec3 wp, vec3 n) {
 // pixel across / along the strokes. Returns the coverage and the stroke's own random number.
 // The strokes are stuck to the world and never move on their own.
 float gZig = 0.0; // > 0: the pen zigzags back and forth along the stroke (a scribble)
+// 0 near .. 1 far away: an artist draws the far end of a street with fewer, calmer strokes (a
+// wash of its colour), so a far window, a far palm, a far face still reads as what it is
+float gFar = 0.0;
 vec2 strokeFamily(vec2 p, vec2 d, vec2 n, float sp, float mppA, float mppL, float wpx, float seed, float lenK) {
   float along = dot(p, d) / sp;
   float across = dot(p, n) / sp;
@@ -264,37 +267,39 @@ vec2 penLayer(vec2 p, vec2 dpx, vec2 dpy, float ang, float gapPx, float wpx, flo
 //  hi: where the low sun catches an edge, dens: how busy the pens are, ang: stroke direction
 vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, float hi, float dens, float ang, float wash, float onGround) {
   vec3 mid = mix(shade, lit, light);
+  float far = gFar;
   // the paper shows between the strokes only where the drawing is light; the shade is built up dark
-  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid));
+  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid)) * (1.0 - 0.55 * far);
   vec3 col = mix(mid, uPaper * 0.97, paperK);
   float wpx = 1.9;
   // on the ground the layers stay close to one direction: strokes turned towards the eye would
   // be foreshortened into ticks
   float spread = mix(1.0, 0.32, onGround);
-  // A: the local colour; each stroke is a pen of the light or a pen of the shade
+  // A: the local colour; each stroke is a pen of the light or a pen of the shade (far away the
+  // pens are closer to each other in colour and in strength)
   vec2 A = penLayer(p, dpx, dpy, ang, 4.2, wpx, 11.0, 1.0);
   vec3 pa = fract(A.y * 3.77) < light ? lit : shade;
-  pa = hueShift(saturateC(pa, 1.15), (fract(A.y * 5.31) - 0.5) * 0.8) * (0.66 + 0.7 * fract(A.y * 9.71));
-  col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.95 * dens));
+  pa = hueShift(saturateC(pa, 1.15), (fract(A.y * 5.31) - 0.5) * mix(0.8, 0.3, far)) * mix(0.66 + 0.7 * fract(A.y * 9.71), 1.0, far * 0.65);
+  col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.95 * dens) * (1.0 - 0.5 * far));
   // B: cross-strokes deepening the shade, in a cooler pen
   vec2 B = penLayer(p, dpx, dpy, ang + 0.62 * spread, 4.6, wpx, 23.0, 0.85);
   vec3 pb = hueShift(shade * 0.7, -0.38 + (fract(B.y * 5.31) - 0.5) * 0.45);
-  col = mix(col, pb, B.x * step(fract(B.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens));
+  col = mix(col, pb, B.x * step(fract(B.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens) * (1.0 - 0.7 * far));
   // C: a neighbouring colour now and then
-  if (uQuality > 0.5) {
+  if (uQuality > 0.5 && far < 0.95) {
     vec2 C = penLayer(p, dpx, dpy, ang - 0.4 * spread, 5.4, wpx, 37.0, 0.7);
     vec3 pc = hueShift(mid, fract(C.y * 5.31) > 0.5 ? 0.85 : -0.85) * 1.08;
-    col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.2 * dens));
+    col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.2 * dens) * (1.0 - far));
   }
   // D: dark ink pressed into the deepest places
-  float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround);
+  float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
   if (dk > 0.0) {
     vec2 D = penLayer(p, dpx, dpy, ang - 1.22 * spread, 3.8, wpx * 1.1, 51.0, 1.2);
     col = mix(col, vec3(0.022, 0.016, 0.04), D.x * step(fract(D.y * 7.13), dk * 0.92));
   }
   // E: where the low sun catches an edge, quick strokes of a light, warm pen; and in the full
   // sun a few strokes of almost white, as if the paper showed through
-  float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround));
+  float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
   if (hiAll > 0.02) {
     vec2 E = penLayer(p, dpx, dpy, ang + 0.2, 4.4, wpx, 67.0, 0.9);
     vec3 pe = fract(E.y * 3.1) < 0.5 ? mix(lit, uSunCol, 0.45) * 1.25 : mix(uPaper * 1.2, lit, 0.25);
@@ -470,6 +475,15 @@ void main() {
       tex = textureGrad(uMap, vec2(fract(l.x), (cell + clamp(fract(l.y), 0.01, 0.99)) / uCells), g1, g2);
     } else tex = texture(uMap, vUv);
     if (uNeonMask > 0.5) tex = vec4(mix(vCol, vec3(1.0), tex.g * 0.55), tex.r);
+    if (uAlphaTest > 0.0) {
+      // far away a leaf's leaflets blur together in the texture's smaller copies, and what is
+      // left of them would fall under the cut-off in specks: keep the leaf whole instead
+      vec2 ts = vec2(textureSize(uMap, 0));
+      vec2 gx = dFdx(vUv) * ts;
+      vec2 gy = dFdy(vUv) * ts;
+      float lod = 0.5 * log2(max(max(dot(gx, gx), dot(gy, gy)), 1e-8));
+      tex.a *= 1.0 + max(0.0, lod) * 0.3;
+    }
   }
   if (tex.a < uAlphaTest) discard;
   vec3 N = gl_FrontFacing ? Nw : -Nw;
@@ -554,6 +568,7 @@ void main() {
     wash = 0.9;
   }
 
+  gFar = smoothstep(32.0, 190.0, length(cameraPosition - vWP));
   vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
   col += em;
   col = applyFog(col, vWP);
@@ -616,7 +631,7 @@ void main() {
   gZig = 0.26;
   vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
   vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
-  pa = mix(pa, lin(vec3(0.4, 0.22, 0.55)), cl * step(0.4, fract(A.y * 2.3)) * (1.0 - toSun * 0.6));
+  pa = mix(pa, lin(vec3(0.66, 0.44, 0.74)), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
   pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
   col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9));
   // B: across it, looser

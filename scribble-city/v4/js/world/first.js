@@ -62,6 +62,8 @@ export function buildFirstBoulevard(ctx) {
 
   // ---- palms
   const skip = (x, z) => onCross(z);
+  // (a palm leans any way but out over the road)
+  const away = (x) => ({ away: [x < STREET_X0 ? -1 : 1, 0] });
   const palmAt = (x, z, h) => {
     if (skip(x, z)) {
       // (a palm that would stand in the crossing: its numbers are drawn and thrown away)
@@ -69,10 +71,13 @@ export function buildFirstBoulevard(ctx) {
       palm(dry, rand, x, z, h);
       return;
     }
-    palm(ctx, rand, x, z, h);
+    palm(ctx, rand, x, z, h, away(x));
   };
+  // (every other palm of the promenade stands back by the sea wall; the old count was
+  // negative north of the start, and those palms stood out in the northbound lanes)
+  const row = (z) => ((Math.floor(z / 11) % 2) + 2) % 2;
   for (let z = 6; z > Z_FAR + 30; z -= 13) palmAt(STREET_X0 - 0.75, z + rand.range(-1, 1), rand.range(9, 12.5));
-  for (let z = 12; z > Z_FAR + 30; z -= 11) palmAt(STREET_X1 + 1.3 + (Math.floor(z / 11) % 2) * 5, z + rand.range(-1.5, 1.5), rand.range(10, 14));
+  for (let z = 12; z > Z_FAR + 30; z -= 11) palmAt(STREET_X1 + 1.3 + row(z) * 5, z + rand.range(-1.5, 1.5), rand.range(10, 14));
 
   // ---- lamps, banners, the road sign
   const poleCol = srgb(0.16, 0.14, 0.22);
@@ -80,19 +85,19 @@ export function buildFirstBoulevard(ctx) {
   addLight(STREET_X1 + 2.3, 5.5, -19, 9, srgb(1, 0.8, 0.55), 0.9);
   banner(ctx, -19, ['GOOD', 'PEOPLE', 'BETTER', 'DAYS'], '#f6e9d6', '#2a1a3a');
   banner(ctx, -38, ['DREAM', 'BIG'], '#ff5aa5', '#fff3e6');
-  // the gantry and the big green sign over the northbound lanes
+  // the big green sign over the northbound lanes, on an arm from its post on the promenade
+  // (nothing stands in the road)
   const gz = -44;
   const steel = srgb(0.62, 0.62, 0.68);
-  ctx.B.box(M.steel, STREET_X1 + 0.6, 0.15, gz - 0.2, STREET_X1 + 1.0, 8.4, gz + 0.2, nextId(), { color: steel });
-  ctx.B.box(M.steel, STREET_X0 + 8.6, 0, gz - 0.2, STREET_X0 + 9.0, 8.4, gz + 0.2, nextId(), { color: steel });
-  ctx.B.box(M.steel, STREET_X0 + 8.6, 8.0, gz - 0.25, STREET_X1 + 1.0, 8.4, gz + 0.25, nextId(), { color: steel });
+  ctx.B.box(M.steel, STREET_X1 + 0.5, 0.15, gz - 0.3, STREET_X1 + 1.1, 8.6, gz + 0.3, nextId(), { color: steel });
+  ctx.B.box(M.steel, STREET_X0 + 8.6, 8.0, gz - 0.25, STREET_X1 + 1.1, 8.4, gz + 0.25, nextId(), { color: steel });
+  brace(ctx, M.steel, STREET_X1 + 0.5, 6.2, STREET_X1 - 2.6, 8.0, gz, steel);
   const signTex = roadSign();
   const rs = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 3.8), makeSurface({ kind: 'uv', map: signTex, emMap: signTex, emissive: new THREE.Color(0.32, 0.32, 0.3), uvScale: 7, ang: 1.4, wash: 0.88, gloss: 0.15 }));
   rs.position.set(STREET_X0 + 12.4, 5.95, gz + 0.3);
   ctx.parent.add(rs);
   ctx.B.box(M.steel, STREET_X0 + 8.5, 3.95, gz + 0.05, STREET_X0 + 16.3, 7.95, gz + 0.28, nextId(), { color: steel });
-  ctx.col.addBox(STREET_X1 + 0.6, gz - 0.2, STREET_X1 + 1.0, gz + 0.2, 0, 8.4, 'pole');
-  ctx.col.addBox(STREET_X0 + 8.6, gz - 0.2, STREET_X0 + 9.0, gz + 0.2, 0, 8.4, 'pole');
+  ctx.col.addBox(STREET_X1 + 0.5, gz - 0.3, STREET_X1 + 1.1, gz + 0.3, 0, 8.6, 'pole');
 
   // ---- across the bay
   buildSkyline(ctx);
@@ -100,10 +105,10 @@ export function buildFirstBoulevard(ctx) {
   // ---- the boulevard goes on, north past the old end and south past the start: more palms
   // and lamps the same way (from the city's own random numbers)
   const r = ctx.rng;
-  for (let z = Z_FAR + 30 - 13; z > -385; z -= 13) if (!onCross(z)) palm(ctx, r, STREET_X0 - 0.75, z + r.range(-1, 1), r.range(9, 12.5));
-  for (let z = 6 + 13; z < 300; z += 13) if (!onCross(z)) palm(ctx, r, STREET_X0 - 0.75, z + r.range(-1, 1), r.range(9, 12.5));
-  for (let z = Z_FAR + 30 - 11; z > -395; z -= 11) palm(ctx, r, STREET_X1 + 1.3 + (Math.floor(z / 11) % 2 ? 5 : 0), z + r.range(-1.5, 1.5), r.range(10, 14));
-  for (let z = 12 + 11; z < 330; z += 11) if (z < 228 || z > 258) palm(ctx, r, STREET_X1 + 1.3 + (Math.floor(z / 11) % 2 ? 5 : 0), z + r.range(-1.5, 1.5), r.range(10, 14));
+  for (let z = Z_FAR + 30 - 13; z > -385; z -= 13) if (!onCross(z)) palm(ctx, r, STREET_X0 - 0.75, z + r.range(-1, 1), r.range(9, 12.5), away(-9));
+  for (let z = 6 + 13; z < 300; z += 13) if (!onCross(z)) palm(ctx, r, STREET_X0 - 0.75, z + r.range(-1, 1), r.range(9, 12.5), away(-9));
+  for (let z = Z_FAR + 30 - 11; z > -395; z -= 11) palm(ctx, r, STREET_X1 + 1.3 + (Math.floor(z / 11) % 2 ? 5 : 0), z + r.range(-1.5, 1.5), r.range(10, 14), away(20));
+  for (let z = 12 + 11; z < 330; z += 11) if (z < 228 || z > 258) palm(ctx, r, STREET_X1 + 1.3 + (Math.floor(z / 11) % 2 ? 5 : 0), z + r.range(-1.5, 1.5), r.range(10, 14), away(20));
   for (let z = Z_FAR + 20 - 19; z > -395; z -= 19) promLamp(ctx, STREET_X1 + 3.8, z, poleCol);
   for (let z = 19; z < 330; z += 19) if (z < 230 || z > 256) promLamp(ctx, STREET_X1 + 3.8, z, poleCol);
   // a few more banners up and down the promenade
@@ -111,21 +116,29 @@ export function buildFirstBoulevard(ctx) {
   banner(ctx, -266, ['BAYVIEW', 'BLVD'], '#ffd23f', '#2a1a3a');
   banner(ctx, 57, ['STAY', 'GOLDEN'], '#ff8a3c', '#fff3e6');
   banner(ctx, 152, ['LOVE', 'THIS', 'CITY'], '#f6e9d6', '#c2185b');
-  // another gantry further north, over the southbound lanes
+  // another sign further north, over the southbound lanes, on an arm from the shops' sidewalk
   {
     const g2 = -205;
-    ctx.B.box(M.steel, STREET_X0 - 0.9, 0.15, g2 - 0.2, STREET_X0 - 0.5, 8.4, g2 + 0.2, nextId(), { color: steel });
-    ctx.B.box(M.steel, STREET_X0 + 7.0, 0, g2 - 0.2, STREET_X0 + 7.4, 8.4, g2 + 0.2, nextId(), { color: steel });
-    ctx.B.box(M.steel, STREET_X0 - 0.9, 8.0, g2 - 0.25, STREET_X0 + 7.4, 8.4, g2 + 0.25, nextId(), { color: steel });
+    ctx.B.box(M.steel, STREET_X0 - 1.0, 0.15, g2 - 0.3, STREET_X0 - 0.4, 8.6, g2 + 0.3, nextId(), { color: steel });
+    ctx.B.box(M.steel, STREET_X0 - 1.0, 8.0, g2 - 0.25, STREET_X0 + 7.0, 8.4, g2 + 0.25, nextId(), { color: steel });
+    brace(ctx, M.steel, STREET_X0 - 0.4, 6.2, STREET_X0 + 2.7, 8.0, g2, steel);
     const t2 = roadSign(['Pier', '↓'], ['Downtown', '↑'], ['Coral Ave', '←']);
     const rs2 = new THREE.Mesh(new THREE.PlaneGeometry(7.0, 3.5), makeSurface({ kind: 'uv', map: t2, emMap: t2, emissive: new THREE.Color(0.32, 0.32, 0.3), uvScale: 7, ang: 1.4, wash: 0.88, gloss: 0.15, side: THREE.DoubleSide }));
     rs2.position.set(STREET_X0 + 3.3, 5.9, g2 - 0.3);
     rs2.rotation.y = Math.PI;
     ctx.parent.add(rs2);
     ctx.B.box(M.steel, STREET_X0 - 0.3, 4.05, g2 - 0.28, STREET_X0 + 6.9, 7.8, g2 - 0.05, nextId(), { color: steel });
-    ctx.col.addBox(STREET_X0 - 0.9, g2 - 0.2, STREET_X0 - 0.5, g2 + 0.2, 0, 8.4, 'pole');
-    ctx.col.addBox(STREET_X0 + 7.0, g2 - 0.2, STREET_X0 + 7.4, g2 + 0.2, 0, 8.4, 'pole');
+    ctx.col.addBox(STREET_X0 - 1.0, g2 - 0.3, STREET_X0 - 0.4, g2 + 0.3, 0, 8.6, 'pole');
   }
+}
+
+// a slanted strut from a post up to the arm it holds (x0, y0) -> (x1, y1) at z
+function brace(ctx, mat, x0, y0, x1, y1, z, color) {
+  const L = Math.hypot(x1 - x0, y1 - y0);
+  const g = new THREE.BoxGeometry(L, 0.18, 0.18);
+  g.rotateZ(Math.atan2(y1 - y0, x1 - x0));
+  g.translate((x0 + x1) / 2, (y0 + y1) / 2, z);
+  ctx.B.add(mat, g, null, nextId(), { color });
 }
 
 // a lamp of the promenade: a dark pole, an arm over the walk, a glowing head

@@ -93,7 +93,8 @@ function signalPole(ctx, n, dx, dz, blades) {
   const face = Math.atan2(-dx, -dz);
   const heads = [
     [px - rx * (L - 0.25), CURB + H - 1.05, pz - rz * (L - 0.25)],
-    [px - rx * 0.32, CURB + 2.9, pz - rz * 0.32],
+    // (the low one on the pole's near side, facing the cars: not out over the road)
+    [px - dx * 0.3, CURB + 2.9, pz - dz * 0.3],
   ];
   const lamps = [];
   for (const [hx, hy, hz] of heads) lamps.push(signalHead(ctx, hx, hy, hz, face));
@@ -345,7 +346,9 @@ function avenues(ctx) {
           const z = z0 + k * 5.5;
           if (z > z1) break;
           if (k % 4 === 0) {
-            if (free(ctx, xl, z, 0.6)) palm(ctx, r, xl, z + r.range(-0.6, 0.6), r.range(8.5, 12));
+            // (a palm stands back from the curb and leans away from the road)
+            const xp = a.x + side * (a.half + 1.4);
+            if (free(ctx, xp, z, 0.6)) palm(ctx, r, xp, z + r.range(-0.6, 0.6), r.range(8.5, 12), { away: [side, 0] });
           } else if (k % 4 === 2) {
             if (free(ctx, xl, z, 0.4)) streetLamp(ctx, xl, z, ax, 0, { light: k % 8 === 2 });
           } else {
@@ -520,10 +523,20 @@ function boards(ctx) {
     [2, 2, 'north', 'west', 'ad_movers'],
     [0, 1, 'north', 'west', 'ad_gym'],
     [1, 4, 'south', 'east', 'ad_coffee'],
+    // the machine guns that rub the city out, the parachute, more helicopters and another tank
+    [0, 0, 'south', 'east', 'bb_tippex'],
+    [1, 3, 'south', 'west', 'bb_erasermg'],
+    [0, 2, 'north', 'west', 'bb_paintmg'],
+    [2, 0, 'north', 'west', 'bb_parachute'],
+    [2, 1, 'south', 'east', 'bb_parachute'],
+    [2, 3, 'north', 'east', 'bb_copter'],
+    [0, 4, 'south', 'west', 'bb_copter'],
+    [2, 4, 'south', 'east', 'bb_tank'],
   ];
   for (const [col, row, end, rowSide, cell, o = {}] of ends) {
     const R = blockRect(col, row);
-    const D = cell === 'bb_tank' || cell === 'bb_laser' ? 18 : 16;
+    // (the towers downtown are deeper than the rest)
+    const D = col === 1 && row === 0 ? 18 : 16;
     const x = rowSide === 'west' ? R.x0 + D / 2 : R.x1 - D / 2;
     const z = end === 'north' ? R.z0 : R.z1;
     const nz = end === 'north' ? -1 : 1;
@@ -788,6 +801,8 @@ function pier(ctx, world) {
     ctx.B.add(M.court, ring, null, nextId(), { color: srgb(0.98, 0.85, 0.3) });
     for (const [w, d, ox] of [[0.5, 4, -1.3], [0.5, 4, 1.3], [2.1, 0.5, 0]]) ctx.B.box(M.court, hx + ox - w / 2, top + 0.014, hz - d / 2, hx + ox + w / 2, top + 0.02, hz + d / 2, nextId(), { color: srgb(0.97, 0.97, 0.95) });
     billboard(ctx, x1 - 18, z1 - 1.9, 0, -1, 'bb_copter', { w: 7, legH: 2.6, y0: top });
+    // (and the parachute's, for the way down)
+    billboard(ctx, x1 - 27, z1 - 1.9, 0, -1, 'bb_parachute', { w: 7, legH: 2.6, y0: top });
     ctx.helipad = { x: hx, z: hz, y: top };
   }
   // the big wheel, turning slowly (its own meshes, outside the city's batches)

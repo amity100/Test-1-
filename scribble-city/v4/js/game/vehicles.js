@@ -172,6 +172,82 @@ function copterModel(grade) {
   return { body, rotor, tailRotor };
 }
 
+// The city's own helicopters (the evening news over downtown, the police when it gets hot): a
+// real one's size and shape, so even far over the towers it reads as a helicopter. livery:
+// 'news' (white, an orange band) or 'police' (navy, white).
+function cityCopterModel(livery = 'news') {
+  const M = itemMats();
+  const K = new Kit();
+  const police = livery === 'police';
+  const top = police ? linC(0.13, 0.17, 0.4) : linC(0.96, 0.95, 0.96);
+  const belly = police ? linC(0.94, 0.94, 0.97) : linC(0.18, 0.2, 0.34);
+  const band = police ? linC(0.35, 0.62, 0.98) : linC(1.0, 0.5, 0.14);
+  const dark = linC(0.12, 0.12, 0.15);
+  const glass = linC(0.34, 0.5, 0.72);
+  // the cabin: a long egg, darker underneath, a band along its side, the glass nose
+  K.sphere(M.paint, 1, 0, 1.6, 0.5, top, 1.22, 1.18, 2.3, 16);
+  K.sphere(M.paint, 1, 0, 1.22, 0.5, belly, 1.26, 0.62, 2.34, 16);
+  K.sphere(M.paint, 1, 0, 1.55, 0.35, band, 1.245, 0.16, 2.18, 16);
+  K.sphere(M.glass, 1, 0, 1.92, 1.75, glass, 1.0, 0.82, 1.2, 14);
+  for (const sx of [-1, 1]) K.sphere(M.glass, 0.5, sx * 0.98, 1.85, 0.05, glass, 0.32, 0.75, 1.15, 10);
+  // the engine on its back, the mast, the hub
+  K.cyl(M.paint, 0.55, 0.42, -1.5, 1.0, top, { y: 2.72, segs: 12 });
+  K.cyl(M.metal, 0.11, 0.11, 2.9, 3.45, dark, { axis: 'y', z: 0.1, segs: 8 });
+  K.sphere(M.metal, 0.24, 0, 3.45, 0.1, dark, 1, 0.6, 1, 10);
+  // the tail boom, the fin, the little wings at the back
+  K.cyl(M.paint, 0.17, 0.44, -7.5, -1.4, top, { y: 1.95, segs: 10 });
+  const fin = new THREE.BoxGeometry(0.1, 1.6, 0.9);
+  fin.rotateX(-0.35);
+  fin.translate(0, 2.55, -7.35);
+  K.add(M.paint, fin, police ? band : belly);
+  K.box(M.paint, -1.15, 1.88, -6.4, 1.15, 1.98, -5.8, police ? band : belly);
+  // the skids
+  for (const sx of [-1, 1]) {
+    K.cyl(M.metal, 0.07, 0.07, -1.9, 2.4, dark, { x: sx * 1.15, y: 0.1, segs: 6 });
+    const tip = new THREE.CylinderGeometry(0.07, 0.07, 0.6, 6);
+    tip.rotateX(Math.PI / 2 - 0.7);
+    tip.translate(sx * 1.15, 0.28, 2.6);
+    K.add(M.metal, tip, dark);
+    for (const z of [-1.0, 1.4]) {
+      const st = new THREE.CylinderGeometry(0.05, 0.05, 0.9, 5);
+      st.rotateZ(sx * 0.45);
+      st.translate(sx * 0.98, 0.5, z);
+      K.add(M.metal, st, dark);
+    }
+  }
+  // the camera ball under the nose, the lights (red to the left, green to the right, a beacon)
+  K.sphere(M.metal, 0.26, 0, 0.62, 2.35, dark, 1, 1, 1, 10);
+  K.sphere(M.glow, 0.09, 1.15, 1.93, -6.1, linC(1.0, 0.2, 0.2), 1, 1, 1, 8);
+  K.sphere(M.glow, 0.09, -1.15, 1.93, -6.1, linC(0.3, 1.0, 0.4), 1, 1, 1, 8);
+  K.sphere(M.glow, 0.1, 0, 3.05, -1.3, linC(1.0, 0.25, 0.2), 1, 1, 1, 8);
+  if (police) K.box(M.glow, -0.5, 3.0, 0.6, 0.5, 3.1, 0.9, linC(0.4, 0.6, 1.0));
+  const body = K.build({ seed: 0.31 });
+  // four long blades, and two at the tail
+  const R = new Kit();
+  for (let k = 0; k < 4; k++) {
+    const b = new THREE.BoxGeometry(0.34, 0.05, 5.6);
+    b.translate(0, 0, 2.95);
+    b.rotateY((k * Math.PI) / 2);
+    R.add(M.metal, b, dark);
+  }
+  const rotor = R.build();
+  rotor.matrixAutoUpdate = true;
+  rotor.position.set(0, 3.5, 0.1);
+  body.add(rotor);
+  const T = new Kit();
+  for (const a of [0, Math.PI]) {
+    const b = new THREE.BoxGeometry(0.04, 0.85, 0.18);
+    b.translate(0, 0.45, 0);
+    b.rotateX(a);
+    T.add(M.metal, b, dark);
+  }
+  const tailRotor = T.build();
+  tailRotor.matrixAutoUpdate = true;
+  tailRotor.position.set(0.18, 2.55, -7.45);
+  body.add(tailRotor);
+  return { body, rotor, tailRotor };
+}
+
 // ------------------------------------------------------------------ one vehicle
 class Vehicle {
   constructor(mgr, kind, grade, score, stock = null) {
@@ -465,19 +541,20 @@ class Vehicle {
     this.turret.localToWorld(mw);
     const aim = game.weapons.aimPoint;
     const dir = aim.clone().sub(mw).normalize();
+    // the tank fires correction fluid: what the glob splashes over is wiped off the page
     if (this.grade === 'fail') {
       dir.set(Math.sin(this.yaw + this.turretYaw), 0.3, Math.cos(this.yaw + this.turretYaw)).normalize();
-      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', 60, 3, 9);
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', 60, 3, 9, 'whiteShell');
     } else {
       const spread = this.grade === 'wonky' ? 0.06 : 0.008;
       dir.x += (Math.random() - 0.5) * spread;
       dir.y += (Math.random() - 0.5) * spread;
       dir.z += (Math.random() - 0.5) * spread;
       dir.normalize();
-      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', this.grade === 'perfect' ? 260 : 200, this.grade === 'perfect' ? 8.5 : 7, 48);
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', this.grade === 'perfect' ? 260 : 200, this.grade === 'perfect' ? 8.5 : 7, 48, 'whiteShell');
     }
     game.fx.muzzle(mw.x, mw.y, mw.z, 3);
-    game.fx.smoke(mw.x, mw.y, mw.z, 2);
+    game.fx.splash(mw.x, mw.y, mw.z, 8, 3, [1, 1, 0.98]);
     game.audio.play('cannon');
     game.camRig.addShake(0.45);
     game.enemies.noise(this.pos, 60, 'boom');
@@ -694,4 +771,4 @@ export class Vehicles {
   }
 }
 
-export { angleDiff, _q, UP, copterModel };
+export { angleDiff, _q, UP, copterModel, cityCopterModel };

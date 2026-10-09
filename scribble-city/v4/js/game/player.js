@@ -141,9 +141,17 @@ export class Player {
       wz /= wl;
     }
     const aiming = weapons.isAiming();
+    const chute = this.game.chute;
+    // falling with a parachute on your back: it opens on its own once the fall gets fast (or
+    // at a press of the jump button, high enough)
+    if (this.parachute && chute && !chute.open && !this.onGround) {
+      const above = this.pos.y - groundHeight(this.pos.x, this.pos.z);
+      if (above > 5 && this.vel.y < -3 && (input.wasPressed('Space') || (this.vel.y < -13 && above > 8))) chute.deploy(this.parachute.grade);
+    }
+    const gliding = chute && chute.open;
     // a double espresso from the cafe: everything a bit faster for a while
-    const speed = (mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1);
-    const accel = this.onGround ? 40 : 9;
+    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1);
+    const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;
     this.vel.x = damp(this.vel.x, tx, accel / 4, dt);
@@ -153,7 +161,8 @@ export class Player {
       this.onGround = false;
       this.game.audio.play('jump');
     }
-    this.vel.y -= GRAVITY * dt;
+    if (gliding) this.vel.y = damp(this.vel.y, -chute.fly.sink, 2.5, dt);
+    else this.vel.y -= GRAVITY * dt;
     const p = this.pos;
     p.x += this.vel.x * dt;
     p.z += this.vel.z * dt;
@@ -165,6 +174,15 @@ export class Player {
     if (col.floor > ground) ground = col.floor;
     if (p.y <= ground + 0.02) {
       if (this.vel.y <= 0) {
+        // a hard landing hurts (a jump out of the helicopter without a parachute hurts a lot)
+        const fall = -this.vel.y;
+        if (gliding) chute.land();
+        else if (fall > 17 && !this.onGround) {
+          this.hurt(Math.min(85, (fall - 17) * 3.2), p.x, p.z);
+          this.game.camRig.addShake(0.5);
+          this.game.fx.crumbs(p.x, p.y + 0.2, p.z, 20, 3);
+          this.game.audio.play('punch', 0.8);
+        }
         // step up smoothly
         p.y = ground - p.y > 0.05 ? damp(p.y, ground, 30, dt) : ground;
         if (ground - p.y < 0.01) p.y = ground;

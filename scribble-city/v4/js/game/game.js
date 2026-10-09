@@ -9,6 +9,7 @@ import { Player } from './player.js';
 import { Weapons, WEAPON_DEFS, GRADE } from './weapons.js';
 import { Enemies } from './enemies.js';
 import { Vehicles } from './vehicles.js';
+import { Parachute } from './parachute.js';
 import { Civilians } from './civilians.js';
 import { Traffic } from './traffic.js';
 import { HUD } from '../ui/hud.js';
@@ -29,6 +30,7 @@ import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
 import { clamp } from '../core/util.js';
+import { groundHeight } from '../world/layout.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -65,6 +67,7 @@ export class Game {
     this.fx = new Effects(this);
     this.cars = new CarRenderer(scene);
     this.vehicles = new Vehicles(this);
+    this.chute = new Parachute(this);
     this.traffic = new Traffic(this);
     this.player = new Player(this);
     this.civilians = new Civilians(this);
@@ -277,13 +280,19 @@ export class Game {
       window.__frame(1);
       return;
     }
-    // the drawing keeps its pace: its own resolution follows how long the frames take (with
-    // some patience both ways, so it does not keep changing its mind)
+    // the drawing keeps its pace: its own resolution follows how long the frames take, with
+    // some patience both ways. The screen's own refresh caps how fast a frame can come (16.7 ms
+    // at 60 Hz), so keeping up with it counts as fast: a drawing that had to get coarser for a
+    // busy moment (an explosion, a chase) gets its sharpness back once the moment has passed.
     const pipe = this.pipe;
     let acc = 0;
     let n = 0;
     let slow = 0;
     let fast = 0;
+    let settle = 3;
+    // the scale that was last too slow, and when (it is not tried again for a while)
+    let ceiling = Infinity;
+    let ceilingAt = -1e9;
     const tick = () => {
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
@@ -295,14 +304,25 @@ export class Game {
       }
       if (acc > 1.0) {
         const ms = (acc / n) * 1000;
-        slow = ms > 26 ? slow + 1 : 0;
-        fast = ms < 14 ? fast + 1 : 0;
-        if (slow >= 2 && pipe.scale > pipe.minScale) {
-          pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);
-          slow = 0;
-        } else if (fast >= 3 && pipe.scale < pipe.maxScale) {
-          pipe.scale = Math.min(pipe.maxScale, pipe.scale + 0.05);
-          fast = 0;
+        if (settle > 0) settle--;
+        else {
+          // slow: under 40 frames a second; fast: keeping up with a 60 Hz screen
+          slow = ms > 25 ? slow + 1 : 0;
+          fast = ms < 18.5 ? fast + 1 : 0;
+          const now = this.time;
+          const cap = now - ceilingAt < 40 ? Math.min(pipe.maxScale, ceiling - 0.05) : pipe.maxScale;
+          if (slow >= 2 && pipe.scale > pipe.minScale) {
+            ceiling = pipe.scale;
+            ceilingAt = now;
+            pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);
+            slow = 0;
+            fast = 0;
+            settle = 2;
+          } else if (fast >= 3 && pipe.scale < cap - 0.001) {
+            pipe.scale = Math.min(cap, pipe.scale + 0.05);
+            fast = 0;
+            settle = 1;
+          }
         }
         acc = 0;
         n = 0;
@@ -333,6 +353,7 @@ export class Game {
     }
     if (dt > 0) {
       player.update(dt, input, this.camRig, this.weapons);
+      this.chute.update(dt);
       this.vehicles.update(dt);
       this.weapons.update(dt);
       this.enemies.update(dt);
@@ -371,6 +392,7 @@ export class Game {
       this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
+      else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
       else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: this.player.indoor ? 2.6 : 3.3 });
     }
     const tipsy = this.inkwell.tipsy;
@@ -404,6 +426,7 @@ export class Game {
       this.cars.end();
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
+      this.chute.draw(fr);
       this.pickups.draw(fr);
       this.fx.update(dt, fr);
       fr.end();
@@ -603,7 +626,7 @@ export class Game {
 
   beginDrawing(id) {
     const p = this.player;
-    if (p.mode !== 'foot') return;
+    if (p.mode !== 'foot' || this.chute.open) return;
     p.mode = 'draw';
     p.vel.set(0, 0, 0);
     this.nudgeDraw = false;
@@ -631,6 +654,11 @@ export class Game {
       if (q >= 1) p.fig.holes.length = 0;
       else p.fig.holes.length = Math.floor(p.fig.holes.length * 0.5);
       this.hud.toast(q >= 1 ? 'הפלסטר הענק סגר את כל החורים — חיים מלאים!' : 'הפלסטר עקום… אבל עזר קצת', q >= 1 ? 'good' : 'info', 2.8);
+      this.audio.play('cheer');
+    } else if (bp.kind === 'gear') {
+      // the parachute: on your back from now on
+      p.parachute = { grade };
+      this.hud.toast(this.touch ? 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה' : 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'good', 4);
       this.audio.play('cheer');
     } else if (bp.kind === 'weapon') {
       const def = WEAPON_DEFS[bp.id];
@@ -776,7 +804,11 @@ export class Game {
     }
     if (!placed) p.pos.set(v.pos.x, v.pos.y + 2, v.pos.z);
     p.vel.set(0, 0, 0);
-    if (v.flies && v.alt > 3) p.vel.y = 0;
+    if (v.flies && v.alt > 3) {
+      p.vel.y = 0;
+      // out of the helicopter high over the city
+      if (v.alt > 9) this.hud.toast(p.parachute ? 'קופצים! המצנח ייפתח בעוד רגע' : 'קפצתם בלי מצנח! (יש שלט של מצנח ליד המסוק)', p.parachute ? 'info' : 'bad', 2.6);
+    }
     $('btn-up').classList.add('hidden');
     $('btn-down').classList.add('hidden');
     if (!force) this.audio.play('click');
@@ -797,6 +829,37 @@ export class Game {
     if (d < radius) p.hurt((owner === 'player' ? 0.25 : 1) * damage * 0.35 * (1 - d / radius), x, z);
     this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
     this.civilians.panic(new THREE.Vector3(x, y, z), 60);
+  }
+
+  // the tank's glob of correction fluid bursts: a white splash over everything around, and what
+  // it covers is wiped off the page (props crumble, walls open, cars vanish, people are rubbed
+  // out where it lands on them)
+  whiteOut(x, y, z, radius, damage, owner, hit = null) {
+    const fx = this.fx;
+    const W = [1.15, 1.15, 1.12];
+    const gy = groundHeight(x, z) + 0.02;
+    for (let i = 0; i < 4; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.4;
+      fx.decal(Math.random() < 0.5 ? 'splat0' : 'splat1', x + Math.cos(a) * r, gy + 0.01 * i, z + Math.sin(a) * r, radius * (1.25 - i * 0.22), W, 0.95, [1, 0, 0], [0, 0, -1]);
+    }
+    if (hit && hit.nx !== undefined && Math.abs(hit.ny || 0) < 0.7) fx.splatAt(x, y, z, hit.nx, hit.ny, hit.nz, radius * 0.9, W);
+    fx.splash(x, y + 0.3, z, 46, radius * 1.3, [1, 1, 0.98]);
+    fx.crumbs(x, y + 0.5, z, 24, radius);
+    this.audio.play('splat', 1);
+    this.audio.play('boom', 0.45);
+    const p = this.player;
+    const pp = p.inVehicle ? p.inVehicle.pos : p.pos;
+    const d = Math.hypot(pp.x - x, pp.z - z);
+    this.camRig.addShake(clamp(0.8 - d / 50, 0.05, 0.6));
+    this.enemies.explosion(x, y, z, radius, damage);
+    this.civilians.explosion(x, y, z, radius);
+    this.eraseBlast(x, y, z, radius * 1.15, damage * 1.2);
+    this.traffic.whiteOut(x, y, z, radius + 1.5, damage * 1.3);
+    if (d < radius * 0.6 && !p.inVehicle) p.hurt((owner === 'player' ? 0.15 : 0.8) * damage * 0.3 * (1 - d / radius), x, z);
+    this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
+    this.civilians.panic(new THREE.Vector3(x, y, z), 60);
+    if (this.onCrime) this.onCrime('vandal', x, z);
   }
 
   // ------------------------------------------------------------------ rubbing out the world

@@ -417,6 +417,21 @@ export class Audio {
         this.tone('square', 520 + Math.random() * 80, 300, 0.035, 0.05 * v);
         this.hiss(0.03, 0.14 * v, 2600, 1.4, 'bandpass');
         break;
+      case 'tippex':
+        // a wet squirt from the bottle
+        this.hiss(0.05, 0.16 * v, 1400 + Math.random() * 300, 2, 'bandpass', 0, 600);
+        this.tone('sine', 380 + Math.random() * 60, 200, 0.04, 0.06 * v);
+        break;
+      case 'rubber':
+        // a rubber thwack
+        this.tone('triangle', 300 + Math.random() * 60, 140, 0.04, 0.09 * v);
+        this.hiss(0.025, 0.1 * v, 3000, 1.5, 'bandpass');
+        break;
+      case 'chute':
+        // the canopy snaps open
+        this.hiss(0.35, 0.45 * v, 900, 1, 'bandpass', 0, 300);
+        this.tone('sine', 110, 70, 0.2, 0.25 * v);
+        break;
       case 'block':
         this.hiss(0.12, 0.45 * v, 500, 1, 'lowpass');
         this.tone('sine', 120, 80, 0.1, 0.3 * v);

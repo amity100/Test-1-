@@ -766,6 +766,22 @@ export class Traffic {
     }
   }
 
+  // correction fluid over the cars: rubbed off the page (more the nearer they are)
+  whiteOut(x, y, z, radius, power) {
+    const at = { x, y: 1, z };
+    for (const list of [this.list, this.parked]) {
+      for (const c of list) {
+        if (c.taken || c.poofT !== undefined) continue;
+        const d = Math.hypot(c.pos.x - x, c.pos.z - z);
+        if (d > radius) continue;
+        at.x = c.pos.x + (x - c.pos.x) * 0.3;
+        at.z = c.pos.z + (z - c.pos.z) * 0.3;
+        c.path = null;
+        this.rub(c, power * (1.1 - (d / radius) * 0.6), at);
+      }
+    }
+  }
+
   explosion(x, z, radius) {
     for (const c of this.list) {
       if (Math.hypot(c.pos.x - x, c.pos.z - z) < radius + 1.5) {

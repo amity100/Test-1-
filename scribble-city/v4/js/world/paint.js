@@ -249,31 +249,64 @@ export function mural() {
 export function frondTexture() {
   const w = 256;
   const h = 1024;
+  // the colour and the leaf's shape are painted apart: the green reaches into the gaps between
+  // the leaflets too (where the leaf is see-through), so the smaller copies of the texture that
+  // the far palms are drawn with stay green instead of going black at their edges
   const c = canvas(w, h);
   const g = c.getContext('2d');
-  g.clearRect(0, 0, w, h);
-  g.lineCap = 'round';
+  g.fillStyle = '#3d9455';
+  g.fillRect(0, 0, w, h);
+  const m = canvas(w, h);
+  const k = m.getContext('2d');
+  k.fillStyle = '#000';
+  k.fillRect(0, 0, w, h);
+  for (const q of [g, k]) q.lineCap = 'round';
   for (let i = 0; i < 70; i++) {
     const t = i / 70;
     const y = 40 + t * (h - 80);
     const len = Math.sin(Math.min(1, t * 1.2) * Math.PI * 0.9) * (w * 0.48) * (0.75 + Math.random() * 0.3);
     for (const s of [-1, 1]) {
       const col = Math.random() < 0.5 ? '#2f8a4f' : Math.random() < 0.5 ? '#3fa15a' : '#6fbf5a';
-      g.strokeStyle = col;
-      g.lineWidth = 9 - t * 4;
-      g.beginPath();
-      g.moveTo(w / 2, y);
-      g.quadraticCurveTo(w / 2 + s * len * 0.6, y + 20, w / 2 + s * len, y + 60 + t * 40);
-      g.stroke();
+      for (const [q, st] of [[g, col], [k, '#fff']]) {
+        q.strokeStyle = st;
+        q.lineWidth = 9 - t * 4;
+        q.beginPath();
+        q.moveTo(w / 2, y);
+        q.quadraticCurveTo(w / 2 + s * len * 0.6, y + 20, w / 2 + s * len, y + 60 + t * 40);
+        q.stroke();
+      }
     }
   }
-  g.strokeStyle = '#4d6b2e';
-  g.lineWidth = 10;
-  g.beginPath();
-  g.moveTo(w / 2, 10);
-  g.lineTo(w / 2, h - 10);
-  g.stroke();
-  return canvasTexture(c);
+  for (const [q, st] of [[g, '#4d6b2e'], [k, '#fff']]) {
+    q.strokeStyle = st;
+    q.lineWidth = 10;
+    q.beginPath();
+    q.moveTo(w / 2, 10);
+    q.lineTo(w / 2, h - 10);
+    q.stroke();
+  }
+  const ci = g.getImageData(0, 0, w, h).data;
+  const mi = k.getImageData(0, 0, w, h).data;
+  const d = new Uint8Array(w * h * 4);
+  // (rows bottom-up, the way a canvas texture is turned)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const j = ((h - 1 - y) * w + x) * 4;
+      d[j] = ci[i];
+      d[j + 1] = ci[i + 1];
+      d[j + 2] = ci[i + 2];
+      d[j + 3] = mi[i];
+    }
+  }
+  const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.anisotropy = 4;
+  t.needsUpdate = true;
+  return t;
 }
 
 // what you see through a shop window at dusk: a warm room, shelves of colour, lamps, a counter

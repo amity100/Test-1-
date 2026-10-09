@@ -492,7 +492,111 @@ export const BLUEPRINTS = {
   },
 };
 
-export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shield', 'stapler', 'bandage', 'shotgun', 'katana', 'glue', 'inkbomb', 'boomerang', 'planes', 'bike', 'laser', 'copter', 'minigun'];
+// the parachute's canopy: the top of an ellipse, closed by its scalloped hem
+const CANOPY_TOP = ellipse(50, 34, 40, 26, 24, PI, PI * 2);
+const CANOPY_HEM = [[90, 34], [76, 39], [63, 35], [50, 39], [37, 35], [24, 39], [10, 34]];
+
+Object.assign(BLUEPRINTS, {
+  tippex: {
+    id: 'tippex',
+    name: 'מקלע טיפקס',
+    nameEn: 'CORRECTOR MG',
+    kind: 'weapon',
+    difficulty: 3,
+    desc: 'מקלע שיורה צרורות של טיפקס לבן. כל מה שהוא פוגע בו נמחק מהדף — קירות, פנסים, מכוניות.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close([[8, 36], [70, 36], [70, 48], [40, 48], [36, 66], [24, 66], [28, 48], [8, 48]]) },
+      { label: 'בקבוק טיפקס', en: 'fluid bottle', pts: close([[34, 14], [52, 14], [55, 36], [31, 36]]) },
+      { label: 'מכסה', en: 'cap', pts: close([[38, 5], [48, 5], [48, 14], [38, 14]]) },
+      { label: 'קנה', en: 'barrel', pts: close([[70, 39], [90, 39], [90, 45], [70, 45]]) },
+      { label: 'פיה', en: 'nozzle', pts: [[90, 37], [98, 42], [90, 47]] },
+      { label: 'טיפה', en: 'drop', pts: circle(94, 58, 4, 12) },
+    ],
+    fills: [
+      { poly: [[8, 36], [70, 36], [70, 48], [40, 48], [36, 66], [24, 66], [28, 48], [8, 48]], color: '#9aa6c0' },
+      { poly: [[34, 14], [52, 14], [55, 36], [31, 36]], color: '#fbfaf4' },
+      { poly: [[38, 5], [48, 5], [48, 14], [38, 14]], color: '#d8463b' },
+      { poly: [[70, 39], [90, 39], [90, 45], [70, 45]], color: '#8b909c' },
+      { poly: circle(94, 58, 4, 12), color: '#ffffff' },
+    ],
+    anchors: { muzzle: [98, 42], grip: [30, 58] },
+    scale: 1.2,
+  },
+  erasermg: {
+    id: 'erasermg',
+    name: 'מקלע מחקים',
+    nameEn: 'ERASER MG',
+    kind: 'weapon',
+    difficulty: 3,
+    desc: 'מקלע שיורה מחקים קטנים בצרורות. מוחק חורים בקירות, בחפצים ובאויבים.',
+    strokes: [
+      { label: 'גוף-מחק', en: 'eraser body', pts: close([[6, 34], [64, 34], [64, 50], [38, 50], [34, 68], [22, 68], [26, 50], [6, 50]]) },
+      { label: 'פס', en: 'stripe', pts: [[22, 34], [22, 50]] },
+      { label: 'תוף', en: 'drum', pts: circle(46, 60, 9, 16) },
+      { label: 'קנה', en: 'barrel', pts: close([[64, 38], [88, 38], [88, 46], [64, 46]]) },
+      { label: 'מחק בקנה', en: 'eraser round', pts: close([[88, 36], [97, 36], [97, 48], [88, 48]]) },
+    ],
+    fills: [
+      { poly: [[6, 34], [22, 34], [22, 50], [6, 50]], color: '#6f8fd6' },
+      { poly: [[22, 34], [64, 34], [64, 50], [38, 50], [34, 68], [22, 68], [26, 50], [22, 50]], color: '#ec95a2' },
+      { poly: circle(46, 60, 9, 16), color: '#6f8fd6' },
+      { poly: [[64, 38], [88, 38], [88, 46], [64, 46]], color: '#7d7d88' },
+      { poly: [[88, 36], [97, 36], [97, 48], [88, 48]], color: '#ec95a2' },
+    ],
+    anchors: { muzzle: [97, 42], grip: [28, 60] },
+    scale: 1.2,
+  },
+  paintmg: {
+    id: 'paintmg',
+    name: 'מקלע צבע',
+    nameEn: 'PAINT MG',
+    kind: 'weapon',
+    difficulty: 3,
+    desc: 'שלוש פחיות צבע ומקלע אחד: מרסס צבע על כל העיר, וחפצים שנצבעים מספיק — נמסים מהדף.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close([[6, 36], [66, 36], [66, 50], [40, 50], [36, 68], [24, 68], [28, 50], [6, 50]]) },
+      { label: 'פחית', en: 'can', pts: close([[12, 18], [25, 18], [25, 36], [12, 36]]) },
+      { label: 'פחית', en: 'can', pts: close([[29, 18], [42, 18], [42, 36], [29, 36]]) },
+      { label: 'פחית', en: 'can', pts: close([[46, 18], [59, 18], [59, 36], [46, 36]]) },
+      { label: 'קנה', en: 'barrel', pts: close([[66, 40], [88, 40], [88, 46], [66, 46]]) },
+      { label: 'כתם', en: 'splash', pts: circle(94, 43, 5, 12) },
+    ],
+    fills: [
+      { poly: [[6, 36], [66, 36], [66, 50], [40, 50], [36, 68], [24, 68], [28, 50], [6, 50]], color: '#4a5778' },
+      { poly: [[12, 18], [25, 18], [25, 36], [12, 36]], color: '#e84a5f' },
+      { poly: [[29, 18], [42, 18], [42, 36], [29, 36]], color: '#ffd23f' },
+      { poly: [[46, 18], [59, 18], [59, 36], [46, 36]], color: '#3fa7d6' },
+      { poly: [[66, 40], [88, 40], [88, 46], [66, 46]], color: '#8b909c' },
+      { poly: circle(94, 43, 5, 12), color: '#e84a5f' },
+    ],
+    anchors: { muzzle: [90, 43], grip: [30, 60] },
+    scale: 1.2,
+  },
+  parachute: {
+    id: 'parachute',
+    name: 'מצנח',
+    nameEn: 'PARACHUTE',
+    kind: 'gear',
+    difficulty: 2,
+    desc: 'קופצים מהמסוק או מגובה — המצנח נפתח (או לוחצים רווח / קפיצה) ודואים בשקט מעל העיר.',
+    strokes: [
+      { label: 'כיפה', en: 'canopy', pts: [...CANOPY_TOP, ...CANOPY_HEM.slice(1)] },
+      { label: 'תפר', en: 'seam', pts: [[50, 8], [50, 38]] },
+      { label: 'חבל', en: 'line', pts: [[10, 34], [46, 74]] },
+      { label: 'חבל', en: 'line', pts: [[90, 34], [54, 74]] },
+      { label: 'חבל', en: 'line', pts: [[37, 36], [48, 74]] },
+      { label: 'חבל', en: 'line', pts: [[63, 36], [52, 74]] },
+      { label: 'רתמה', en: 'harness', pts: close([[44, 74], [56, 74], [56, 86], [44, 86]]) },
+    ],
+    fills: [
+      { poly: [...CANOPY_TOP, ...CANOPY_HEM.slice(1)], color: '#ff8a3c' },
+      { poly: [[44, 74], [56, 74], [56, 86], [44, 86]], color: '#3a3a46' },
+    ],
+    scale: 2.4,
+  },
+});
+
+export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shield', 'stapler', 'bandage', 'shotgun', 'katana', 'glue', 'inkbomb', 'boomerang', 'planes', 'bike', 'laser', 'copter', 'minigun', 'tippex', 'erasermg', 'paintmg', 'parachute'];
 
 export function blueprintBounds(bp) {
   let x0 = Infinity;

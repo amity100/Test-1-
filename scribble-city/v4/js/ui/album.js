@@ -95,7 +95,7 @@ export class Album {
       const meta = document.createElement('div');
       meta.className = 'meta';
       const best = got && this.items.get(id).best !== null ? ` · שיא: ${this.items.get(id).best}` : '';
-      meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? 'כלי רכב' : 'נשק') : ''}${best}`;
+      meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? 'כלי רכב' : bp.kind === 'gear' ? 'ציוד' : bp.kind === 'heal' ? 'עזרה ראשונה' : 'נשק') : ''}${best}`;
       item.appendChild(meta);
       if (got) {
         const go = document.createElement('div');

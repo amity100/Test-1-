@@ -79,6 +79,14 @@ const _s = new THREE.Vector3(1, 1, 1);
 const _p = new THREE.Vector3();
 export function palm(ctx, r, x, z, height, o = {}) {
   const lean = new THREE.Vector2(r.range(-1.2, 1.2), r.range(-0.8, 0.8));
+  if (o.away) {
+    // by a road: it leans any way but out over the traffic
+    const d = lean.x * o.away[0] + lean.y * o.away[1];
+    if (d < 0) {
+      lean.x -= o.away[0] * d * 2;
+      lean.y -= o.away[1] * d * 2;
+    }
+  }
   const y0 = o.y0 !== undefined ? o.y0 : CURB;
   const M = ctx.M;
   const id = ctx.objects ? ctx.objects.begin(ctx, 'tree', x, z) : 0;

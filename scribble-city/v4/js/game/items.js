@@ -400,6 +400,71 @@ const BUILD = {
     o.barrel = B;
     return { muzzle: new THREE.Vector3(0, 0.02, 0.62), length: 0.95 };
   },
+  // the correction-fluid machine gun: a grey gun, a big white bottle of the stuff for a magazine
+  tippex(K, M) {
+    const body = C(0.6, 0.66, 0.78);
+    const dark = C(0.22, 0.22, 0.28);
+    const white = C(0.98, 0.98, 0.95);
+    K.box(M.paint, -0.042, -0.03, -0.2, 0.042, 0.07, 0.3, body);
+    const stock = new THREE.BoxGeometry(0.05, 0.1, 0.28);
+    stock.rotateX(0.1);
+    stock.translate(0, -0.01, -0.33);
+    K.add(M.matte, stock, dark);
+    const grip = new THREE.BoxGeometry(0.045, 0.13, 0.05);
+    grip.rotateX(-0.3);
+    grip.translate(0, -0.08, -0.04);
+    K.add(M.matte, grip, dark);
+    K.box(M.matte, -0.02, -0.1, 0.12, 0.02, -0.03, 0.18, dark);
+    // the bottle, its label and its red cap with the brush
+    K.cyl(M.paint, 0.062, 0.056, 0.07, 0.25, white, { axis: 'y', z: 0.05, segs: 14 });
+    K.cyl(M.paint, 0.064, 0.063, 0.13, 0.18, C(0.3, 0.55, 0.92), { axis: 'y', z: 0.05, segs: 14 });
+    K.cyl(M.paint, 0.034, 0.03, 0.25, 0.31, C(0.86, 0.22, 0.2), { axis: 'y', z: 0.05, segs: 10 });
+    // the barrel and the nozzle, a white drop hanging from it
+    K.cyl(M.metal, 0.022, 0.022, 0.3, 0.6, C(0.55, 0.56, 0.62), { y: 0.025, segs: 10 });
+    K.cyl(M.paint, 0.034, 0.014, 0.6, 0.7, white, { y: 0.025, segs: 10 });
+    K.sphere(M.paint, 0.016, 0, 0.0, 0.66, white, 1, 1.4, 1, 8);
+    return { muzzle: new THREE.Vector3(0, 0.025, 0.72), length: 1.1 };
+  },
+  // the eraser machine gun: a big two-tone eraser for a body, a drum of little erasers
+  erasermg(K, M) {
+    const dark = C(0.22, 0.22, 0.28);
+    K.box(M.round, -0.05, -0.04, -0.14, 0.05, 0.07, 0.26, C(...ERASER_PINK));
+    K.box(M.round, -0.05, -0.04, -0.42, 0.05, 0.07, -0.14, C(...ERASER_BLUE));
+    K.box(M.matte, -0.054, -0.044, -0.2, 0.054, 0.074, -0.1, C(0.96, 0.95, 0.9));
+    const drum = new THREE.CylinderGeometry(0.085, 0.085, 0.07, 16).rotateZ(Math.PI / 2);
+    drum.translate(0, -0.1, 0.1);
+    K.add(M.paint, drum, C(...ERASER_BLUE));
+    const grip = new THREE.BoxGeometry(0.045, 0.13, 0.05);
+    grip.rotateX(-0.3);
+    grip.translate(0, -0.09, -0.08);
+    K.add(M.matte, grip, dark);
+    K.cyl(M.metal, 0.024, 0.024, 0.26, 0.6, C(0.55, 0.56, 0.62), { y: 0.015, segs: 10 });
+    K.box(M.round, -0.03, -0.012, 0.6, 0.03, 0.045, 0.67, C(...ERASER_PINK));
+    return { muzzle: new THREE.Vector3(0, 0.015, 0.69), length: 1.1 };
+  },
+  // the paint machine gun: three cans of paint on its back, a nozzle ringed with colour
+  paintmg(K, M) {
+    const body = C(0.24, 0.3, 0.44);
+    const dark = C(0.2, 0.2, 0.25);
+    K.box(M.paint, -0.045, -0.03, -0.18, 0.045, 0.07, 0.3, body);
+    const stock = new THREE.BoxGeometry(0.05, 0.1, 0.26);
+    stock.translate(0, -0.01, -0.31);
+    K.add(M.matte, stock, dark);
+    const grip = new THREE.BoxGeometry(0.045, 0.13, 0.05);
+    grip.rotateX(-0.3);
+    grip.translate(0, -0.08, -0.05);
+    K.add(M.matte, grip, dark);
+    const cans = [C(0.92, 0.3, 0.36), C(0.98, 0.8, 0.22), C(0.25, 0.62, 0.86)];
+    cans.forEach((c, i) => {
+      const z = -0.11 + i * 0.12;
+      K.cyl(M.paint, 0.042, 0.042, 0.07, 0.19, c, { axis: 'y', z, segs: 12 });
+      K.cyl(M.metal, 0.044, 0.044, 0.19, 0.205, C(0.75, 0.75, 0.8), { axis: 'y', z, segs: 12 });
+    });
+    K.cyl(M.metal, 0.022, 0.022, 0.3, 0.6, C(0.55, 0.56, 0.62), { y: 0.025, segs: 10 });
+    K.torus(M.glow, 0.026, 0.008, 0, 0.025, 0.6, C(1.0, 0.35, 0.6));
+    K.cyl(M.paint, 0.03, 0.02, 0.6, 0.66, C(0.98, 0.8, 0.22), { y: 0.025, segs: 10 });
+    return { muzzle: new THREE.Vector3(0, 0.025, 0.68), length: 1.05 };
+  },
   // the cardboard shield: a flat of a box with tape and a handle (its face is the x side)
   shield(K, M) {
     K.box(M.round, -0.015, -0.4, -0.3, 0.015, 0.4, 0.3, C(0.78, 0.62, 0.42));
