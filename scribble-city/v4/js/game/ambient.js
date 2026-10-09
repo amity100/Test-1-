@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Batch, nextId } from '../world/kit.js';
-import { srgb } from '../render/materials.js';
+import { srgb, mergeMoving } from '../render/materials.js';
 import { AVES, STREETS, CURB, PROM_X1, STREET_X1, NORTH_EDGE, SOUTH_EDGE, PIER, groundHeight } from '../world/layout.js';
 import { cityCopterModel } from './vehicles.js';
 
@@ -83,7 +83,7 @@ export class Ambient {
       B.add(M.lampGlass, new THREE.BoxGeometry(0.16, 0.16, 0.16).translate(0, 1.6, -0.6), null, nextId());
     }
     const group = new THREE.Group();
-    B.flush(group, { dynamic: true });
+    B.flush(group, { dynamic: true, merge: mergeMoving });
     this.game.scene.add(group);
     // a long slow line across the bay (to and fro)
     const x = PROM_X1 + 40 + Math.random() * 260;
@@ -129,7 +129,7 @@ export class Ambient {
       }
     }
     const group = new THREE.Group();
-    B.flush(group, { dynamic: true });
+    B.flush(group, { dynamic: true, merge: mergeMoving });
     this.game.scene.add(group);
     return { group, a: 0 };
   }

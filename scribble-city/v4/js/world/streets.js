@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, hex, addLight } from '../render/materials.js';
+import { makeSurface, srgb, hex, addLight, mergeMoving } from '../render/materials.js';
 import { nextId, quadGeo, seeded } from './kit.js';
 import { AVES, STREETS, STREET_X0, STREET_X1, WALK_X0, PROM_X1, WEST_EDGE, CURB, PIER, blockRect, westRect } from './layout.js';
 import { NODES, stopDist, parkingSpots } from './roads.js';
@@ -865,7 +865,7 @@ function pier(ctx, world) {
   ctx.parent.add(wheel);
   const holder = new THREE.Group();
   wheel.add(holder);
-  B.flush(holder, { dynamic: true });
+  B.flush(holder, { dynamic: true, merge: mergeMoving });
   // the legs (static), the gondolas (they hang level as it turns)
   for (const s of [-1, 1]) {
     for (const dz of [-1, 1]) {
@@ -899,7 +899,7 @@ function pier(ctx, world) {
     const win = new THREE.BoxGeometry(2.04, 0.5, 1.2);
     win.translate(0, -0.85, 0);
     B2.add(M.winGlass, win, null, nextId());
-    B2.flush(holderG, { dynamic: true });
+    B2.flush(holderG, { dynamic: true, merge: mergeMoving });
     gondolaGroup.add(holderG);
     gondolas.push({ g: holderG, a: (k / N) * Math.PI * 2 });
   }

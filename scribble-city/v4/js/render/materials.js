@@ -341,6 +341,20 @@ export function mergedSurface(m, { obj = false, pictures = null, vcolor = true, 
   return c;
 }
 
+// The things that move (a boat, a gondola of the big wheel, the blimp) share their draws as the
+// city's pieces do: their plain pens (no picture of their own, nothing that sways or cuts out)
+// of the same side, room and mirror draw together, with the props the eraser rubs out (the
+// others' parts mark no prop). One draw a thing instead of one a pen.
+const movingPens = new Map();
+export function mergeMoving(mat) {
+  const u = mat.uniforms;
+  if (!u || !u.uUseMap || u.uUseMap.value || u.uUseEmMap.value || u.uAlphaTest.value || u.uSway.value || u.uCells.value || u.uNeonMask.value) return null;
+  if (mat.transparent || mat.polygonOffset || (mat.defines && mat.defines.SWAY_ATTR !== undefined)) return null;
+  const key = [mat.side, u.uIndoor.value, u.uUseRefl.value, u.uUvScale.value, mat.userData.depth === null].join('|');
+  if (!movingPens.has(key)) movingPens.set(key, mergedSurface(mat, { obj: true }));
+  return movingPens.get(key);
+}
+
 // The pictures of pens that share a draw (up to five, see USE_MAPSET): each pen learns its number
 // and its picture's size
 export function penPictures(pens) {
