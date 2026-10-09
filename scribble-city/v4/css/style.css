@@ -113,7 +113,9 @@ html, body {
   border-radius: 50% 46% 52% 48%;
   overflow: hidden;
 }
-#minimap { width: 100%; height: 100%; border-radius: 50%; display: block; }
+#minimap { width: 100%; height: 100%; border-radius: 50%; display: block; position: relative; }
+/* the city under the minimap's markers, turned by a transform */
+.minimap-city { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 
 #weapon {
   position: absolute;

@@ -27,6 +27,8 @@ export function sidewalkLoop(col, row) {
 // the promenade: up and down along the bay
 const PROM_LINES = [15.2, 17.6, 19.4];
 
+// beyond this far from the camera a walker steps every other frame (see Civilians.update)
+const FAR_STEP = 40;
 /**
  * Pedestrians walking the sidewalks round their block (now and then crossing to the next one at
  * the zebra), or strolling on the promenade. They panic and run when shooting starts.
@@ -56,6 +58,8 @@ class Civilian {
     this.vel = new THREE.Vector3();
     this.stopT = 0;
     this.dodgeV = new THREE.Vector3();
+    // time not yet walked (far away they step every other frame)
+    this.owed = 0;
   }
 
   // walk round block (col, row); fresh: start somewhere along it
@@ -428,9 +432,25 @@ export class Civilians {
         }
       }
     }
-    for (const c of this.list) {
-      c.update(dt);
-      if (c.dog) this.walkDog(c, dt);
+    // far from the camera a plain walker takes its steps every other frame, twice as long (from
+    // there nobody can tell; it halves their share of the work). Half of them move on even
+    // frames, half on odd ones.
+    const cam = game.camera.position;
+    this.frameN = (this.frameN || 0) + 1;
+    for (let i = 0; i < this.list.length; i++) {
+      const c = this.list[i];
+      let step = dt + c.owed;
+      if (!c.ctrl && !c.scripted && c.dying < 0 && !(c.panicT > 0) && !c.headless && !c.inside) {
+        const dx = c.pos.x - cam.x;
+        const dz = c.pos.z - cam.z;
+        if (dx * dx + dz * dz > FAR_STEP * FAR_STEP && ((this.frameN + i) & 1)) {
+          c.owed = step;
+          continue;
+        }
+      }
+      c.owed = 0;
+      c.update(step);
+      if (c.dog) this.walkDog(c, step);
     }
     if (this.list.some((c) => c.fig.dissolve >= 1)) {
       this.list = this.list.filter((c) => {
@@ -587,6 +607,7 @@ export class Civilians {
       const f = 1 - d / radius;
       const n = 2 + Math.round(f * 3);
       for (let i = 0; i < n && c.alive; i++) {
+        c.fig.ensureShapes();
         const s = c.fig.shapes[Math.floor(Math.random() * c.fig.shapes.length)];
         if (!s) break;
         at.set(x, y, z).lerp(s.c, 0.92);

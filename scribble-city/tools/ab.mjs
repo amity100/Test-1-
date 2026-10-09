@@ -130,6 +130,13 @@ async function shoot(outDir, page = 'v4/index.html') {
       return out;
     });
     stats[name] = st;
+    // (the picture of the city only: the screen's cards and notes are not what is compared)
+    await pg.evaluate(() => {
+      for (const id of ['hud', 'touch']) {
+        const el = document.getElementById(id);
+        if (el) el.style.visibility = 'hidden';
+      }
+    });
     await pg.screenshot({ path: path.join(outDir, `${name}.png`), timeout: 180000 });
     process.stdout.write(`${name}: ${JSON.stringify(st)}\n`);
   }

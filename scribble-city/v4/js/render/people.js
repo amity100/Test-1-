@@ -266,19 +266,18 @@ const OPEN = new Set(['suit', 'blazer', 'jacket', 'denim', 'bomber', 'cardigan',
 
 const L3 = (c) => lin3(c[0], c[1], c[2]);
 const lc = new Map();
-const lcW = new WeakMap();
 function linC(c) {
-  // (colours of looks are sRGB arrays: cached by the array itself, and by value for the ones
-  // made on the fly)
-  let v = lcW.get(c);
+  // (colours of looks are sRGB arrays: the linear colour is kept on the array itself, out of
+  // sight of copies and saves; one made on the fly is looked up by value, to a thousandth)
+  let v = c._lin;
   if (v) return v;
-  const key = `${c[0].toFixed(3)},${c[1].toFixed(3)},${c[2].toFixed(3)}`;
+  const key = Math.round(c[0] * 1000) * 1e8 + Math.round(c[1] * 1000) * 1e4 + Math.round(c[2] * 1000);
   v = lc.get(key);
   if (!v) {
     v = L3(c);
     lc.set(key, v);
   }
-  lcW.set(c, v);
+  Object.defineProperty(c, '_lin', { value: v, writable: true });
   return v;
 }
 

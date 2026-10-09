@@ -105,8 +105,11 @@ async function boot() {
   await frame();
   world.buildNav();
   // every pen of the city made ready now, not in the middle of the first walk down the street
+  // (the graphics card compiles them side by side where it can, and the page stays alive)
+  setStatus('מכינים את העטים…');
   try {
-    renderer.compile(scene, camera);
+    if (renderer.compileAsync && renderer.extensions.has('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
+    else renderer.compile(scene, camera);
   } catch (err) {
     console.warn('precompile failed', err);
   }

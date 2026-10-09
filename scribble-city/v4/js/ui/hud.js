@@ -35,6 +35,13 @@ export class HUD {
     this.prompt = '';
     this.mapCanvas = this.buildMap();
     this.mapScale = 1.1;
+    // the city's map lies under the markers and is turned and slid by the browser itself (a
+    // transform on the page, nothing drawn): each frame only the markers are drawn
+    this.mapCanvas.className = 'minimap-city';
+    this.minimap.parentNode.insertBefore(this.mapCanvas, this.minimap);
+    this.mapK = 0;
+    this.mapKey = '';
+    window.addEventListener('resize', () => (this.mapK = 0));
   }
 
   show() {
@@ -268,15 +275,21 @@ export class HUD {
     const p = game.player.inVehicle ? game.player.inVehicle.pos : game.player.pos;
     const yaw = game.camRig.yaw;
     const s = this.mapScale;
+    // (page pixels per pixel of the markers' canvas: measured again after a resize)
+    if (!this.mapK) this.mapK = this.minimap.clientWidth / W || 1;
+    const k = this.mapK;
+    const [ox, oz] = this.mapOrigin;
+    // the city's map: the camera's forward points up
+    const key = `translate(${((W / 2) * k).toFixed(2)}px, ${((H / 2) * k).toFixed(2)}px) rotate(${(Math.PI + yaw).toFixed(4)}rad) scale(${(s * k).toFixed(4)}) translate(${(-(p.x + ox)).toFixed(2)}px, ${(-(p.z + oz)).toFixed(2)}px)`;
+    if (key !== this.mapKey) {
+      this.mapKey = key;
+      this.mapCanvas.style.transform = key;
+    }
+    g.clearRect(0, 0, W, H);
     g.save();
-    g.fillStyle = '#34307a';
-    g.fillRect(0, 0, W, H);
     g.translate(W / 2, H / 2);
-    // rotate so the camera's forward points up
     g.rotate(Math.PI + yaw);
     g.scale(s, s);
-    const [ox, oz] = this.mapOrigin;
-    g.drawImage(this.mapCanvas, -(p.x + ox), -(p.z + oz));
     // markers in world coords
     const dot = (x, z, r, fill, stroke) => {
       g.beginPath();

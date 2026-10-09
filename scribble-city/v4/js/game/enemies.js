@@ -2104,6 +2104,7 @@ export class Enemies {
         const n = 2 + Math.round(f * 3);
         let lost = null;
         for (let i = 0; i < n && e.alive; i++) {
+          fig.ensureShapes();
           const s2 = fig.shapes[Math.floor(Math.random() * fig.shapes.length)];
           if (!s2) break;
           _sp.set(x, y, z).lerp(s2.c, 0.92);

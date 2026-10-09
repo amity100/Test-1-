@@ -166,6 +166,7 @@ export class Doodle {
     this.hr = new THREE.Vector3(-1, 0, 0);
     this.pool = [];
     this.shapes = [];
+    this.shapesDirty = false;
     this.bones = {};
     this.center = new THREE.Vector3();
   }
@@ -411,6 +412,15 @@ export class Doodle {
         p.set(pivot.x + perpX + f.x * al2, pivot.y + Math.max(0.06, ny2), pivot.z + perpZ + f.z * al2);
       }
     }
+    // the body's shapes (for drawing it and for what hits it) are made when they are next needed:
+    // nobody asks for those of somebody out of sight
+    this.center.lerpVectors(j.hip, j.neck, 0.5);
+    this.shapesDirty = true;
+  }
+
+  ensureShapes() {
+    if (!this.shapesDirty) return;
+    this.shapesDirty = false;
     this.buildShapes();
   }
 
@@ -894,6 +904,7 @@ export class Doodle {
   }
 
   inHole(p) {
+    this.ensureShapes();
     for (const h of this.holes) {
       if (h && p.distanceTo(h.w) < h.r * 0.9) return true;
     }
@@ -902,6 +913,7 @@ export class Doodle {
 
   /** Ray against the body. Returns { t, point, part, bone } or null. Passes through holes. */
   raycast(ro, rd, maxT) {
+    this.ensureShapes();
     let best = null;
     for (const s of this.shapes) {
       if (!s.solid) continue;
@@ -925,6 +937,7 @@ export class Doodle {
   }
 
   nearestShape(p) {
+    this.ensureShapes();
     let best = null;
     let bd = Infinity;
     for (const s of this.shapes) {
@@ -940,6 +953,7 @@ export class Doodle {
 
   // the point of the body surface closest to p (where an eraser swung at p would rub)
   closestSurfacePoint(p, out) {
+    this.ensureShapes();
     const s = this.nearestShape(p);
     if (!s) return out.copy(this.center);
     if (s.type === 0) {
@@ -966,6 +980,7 @@ export class Doodle {
    * Erase a sphere at a world point. Returns the part that lost ink and how much of it is gone.
    */
   erase(p, r) {
+    this.ensureShapes();
     const s = this.nearestShape(p);
     if (!s) return null;
     const b = this.bones[s.bone];
@@ -1002,6 +1017,7 @@ export class Doodle {
 
   // point on the head surface from a local direction (x right, y up, z forward)
   headPt(x, y, z, out, lift = 1.035) {
+    this.ensureShapes();
     const l = Math.hypot(x, y, z) || 1;
     const hs = this.headScale * this.scale;
     return out.copy(this.j.headC)
@@ -1269,6 +1285,7 @@ export class Doodle {
 
   draw(camPos, alphaMul = 1) {
     if (!this.visible || alphaMul <= 0.02) return;
+    this.ensureShapes();
     const camDist = camPos.distanceTo(this.pos);
     this.fr.bodies.draw(this, camDist);
     if (camDist < 60) this.drawDetails();
