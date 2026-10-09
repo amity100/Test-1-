@@ -890,17 +890,21 @@ export class NeonAtlas {
 
   texture() {
     if (this.tex) return this.tex;
-    const img = this.g.getImageData(0, 0, this.W, this.H).data;
-    const d = new Uint8Array(this.W * this.H * 2);
-    for (let i = 0, j = 0; i < img.length; i += 4, j += 2) {
-      d[j] = img[i];
-      d[j + 1] = img[i + 1];
-    }
-    const t = new THREE.DataTexture(d, this.W, this.H, THREE.RGFormat, THREE.UnsignedByteType);
+    // (the canvas goes up as it is, its red and green kept: no reading it back, pixel by pixel,
+    // which took seconds on a slow machine; rows from the top, as the rects say)
+    const t = new THREE.CanvasTexture(this.c);
+    t.format = THREE.RGFormat;
+    t.flipY = false;
     t.magFilter = THREE.LinearFilter;
     t.minFilter = THREE.LinearFilter;
     t.generateMipmaps = false;
     t.needsUpdate = true;
+    // (once it is on the graphics card the canvas is not needed: 32 MB back)
+    t.onUpdate = () => {
+      this.c.width = 1;
+      this.c.height = 1;
+      t.onUpdate = null;
+    };
     this.tex = t;
     return t;
   }

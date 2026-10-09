@@ -30,7 +30,9 @@ export class Batch {
   // add a geometry (already placed in world space, or with a matrix) with a part id
   // o: { color: [r,g,b] linear | THREE.Color, obj: prop id, sway: number | (x,y,z)=>number, chunk: key }
   add(material, geo, matrix = null, id = nextId(), o = {}) {
-    let g = geo.index ? geo.toNonIndexed() : geo.clone();
+    // (shared corners stay shared: a box is 24 corners, not 36; but a shape without normals of
+    // its own gets flat ones, face by face, as it always did)
+    let g = geo.index && !geo.attributes.normal ? geo.toNonIndexed() : geo.clone();
     if (matrix) g.applyMatrix4(matrix);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
     if (!g.attributes.normal) g.computeVertexNormals();
@@ -85,7 +87,13 @@ export class Batch {
       const tab = !!(mat.defines && mat.defines.USE_MATTAB !== undefined);
       for (const [key, list] of byChunk) {
         let n = 0;
-        for (const it of list) n += it.geo.attributes.position.count;
+        let ni = 0;
+        for (const it of list) {
+          n += it.geo.attributes.position.count;
+          ni += it.geo.index ? it.geo.index.count : it.geo.attributes.position.count;
+        }
+        const index = n > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+        let io = 0;
         const pos = new Float32Array(n * 3);
         const nor = new Float32Array(n * 3);
         const uv = new Float32Array(n * 2);
@@ -106,6 +114,14 @@ export class Batch {
           pos.set(g.attributes.position.array, o * 3);
           nor.set(g.attributes.normal.array, o * 3);
           uv.set(g.attributes.uv.array, o * 2);
+          if (g.index) {
+            const ia = g.index.array;
+            for (let k = 0; k < ia.length; k++) index[io + k] = ia[k] + o;
+            io += ia.length;
+          } else {
+            for (let k = 0; k < c; k++) index[io + k] = o + k;
+            io += c;
+          }
           ids.fill(it.id, o, o + c);
           // (a pen of its own colour, sharing a draw with coloured parts: white, as it was)
           if (vc) {
@@ -123,6 +139,7 @@ export class Batch {
           o += c;
         }
         const geo = new THREE.BufferGeometry();
+        geo.setIndex(new THREE.BufferAttribute(index, 1));
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
         geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
