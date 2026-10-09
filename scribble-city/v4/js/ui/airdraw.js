@@ -10,6 +10,7 @@ const INK_C = [0.07, 0.07, 0.11];
 const RED = [0.8, 0.12, 0.15];
 const GUIDE = [0.32, 0.34, 0.46];
 const GHOST = [0.36, 0.56, 0.86]; // non-photo blue, like an artist's tracing guide
+const HALO = [1.0, 0.97, 0.9];
 const RED_CSS = '#c81e24';
 const TRACED_MAX = 70; // tracing over the ghost never makes a perfect item
 
@@ -506,7 +507,7 @@ export class AirDraw {
     }
     let seed = 500;
     for (const pts of this.ghostPts) {
-      for (let i = 1; i < pts.length; i++) this.seg(b, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], GHOST, 0.8 * alpha, 3.4, seed++);
+      for (let i = 1; i < pts.length; i++) this.seg(b, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], GHOST, 0.8 * alpha, 4.6, seed++);
     }
   }
 
@@ -528,16 +529,21 @@ export class AirDraw {
     p.lerp(_d, e);
   }
 
+  // a bold marker line with a pale halo, so it reads over the busy, colourful street
   drawStrokes(b, alpha, plopK) {
     if (alpha <= 0) return;
-    let seed = 11;
-    for (const s of this.strokes) {
-      if (s.length === 1) {
-        const [u, v] = s[0];
-        this.seg(b, u - 0.01, v, u + 0.01, v + 0.005, INK_C, alpha, 3.6, seed++, plopK);
-        continue;
+    for (const pass of [0, 1]) {
+      let seed = 11;
+      const col = pass ? INK_C : HALO;
+      const a = pass ? alpha : alpha * 0.85;
+      for (const s of this.strokes) {
+        if (s.length === 1) {
+          const [u, v] = s[0];
+          this.seg(b, u - 0.01, v, u + 0.01, v + 0.005, col, a, pass ? 5.4 : 9.5, seed++, plopK);
+          continue;
+        }
+        for (let i = 1; i < s.length; i++) this.seg(b, s[i - 1][0], s[i - 1][1], s[i][0], s[i][1], col, a, pass ? 5.0 : 9.0, seed++, plopK);
       }
-      for (let i = 1; i < s.length; i++) this.seg(b, s[i - 1][0], s[i - 1][1], s[i][0], s[i][1], INK_C, alpha, 3.4, seed++, plopK);
     }
   }
 

@@ -430,8 +430,19 @@ export class Pipeline {
     const r = this.r;
     this.ensure();
     r.autoClear = true;
-    this.renderShadows(center);
-    this.renderReflection();
+    // on a phone the sun's view and the mirror under the street are drawn every other frame
+    // (each in turn), so a frame has two passes over the city instead of three
+    this.frameN = (this.frameN || 0) + 1;
+    const every = this.low ? 2 : 1;
+    const phase = this.frameN % every;
+    if (every === 1 || phase === 0 || !this.shadowDone) {
+      this.renderShadows(center);
+      this.shadowDone = true;
+    }
+    if (every === 1 || phase === 1 || !this.reflDone) {
+      this.renderReflection();
+      this.reflDone = true;
+    }
     // 3. the drawing
     r.setRenderTarget(this.gRT);
     r.clear();

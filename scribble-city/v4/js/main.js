@@ -96,6 +96,12 @@ async function boot() {
   setStatus('מסמנים דרכים…');
   await frame();
   world.buildNav();
+  // every pen of the city made ready now, not in the middle of the first walk down the street
+  try {
+    renderer.compile(scene, camera);
+  } catch (err) {
+    console.warn('precompile failed', err);
+  }
 
   const resize = () => {
     const w = window.innerWidth;
@@ -112,7 +118,10 @@ async function boot() {
 
   const game = new Game({ renderer, scene, camera, pipe, world, atlas, touch, params });
   window.__game = game;
-  if (params.has('test')) window.__shared = shared;
+  if (params.has('test')) {
+    window.__shared = shared;
+    window.__THREE = THREE;
+  }
   await game.init();
   setStatus('');
   const startBtn = document.getElementById('start-btn');
