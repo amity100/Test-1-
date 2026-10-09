@@ -452,11 +452,6 @@ export class Audio {
         this.tone('triangle', 420, 260, 0.22, 0.1 * v, 0.1);
         this.hiss(0.3, 0.3 * v, 600, 0.8, 'lowpass', 0, 2400);
         break;
-      case 'tada':
-        // its colours all in: a bright chord
-        [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.55, 0.07 * v, i * 0.03));
-        this.tone('sine', 2093, 2093, 0.4, 0.04 * v, 0.12);
-        break;
       default:
         break;
     }

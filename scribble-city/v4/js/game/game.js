@@ -692,7 +692,6 @@ export class Game {
     const say = (...a) => (plan ? said.push(a) : this.hud.toast(...a));
     const onReal = () => said.forEach((a) => this.hud.toast(...a));
     say(msg, grade === 'fail' ? 'bad' : grade === 'wonky' ? 'info' : 'good', 3.2);
-    const pts = (plan && plan.pts) || [];
     // a thing that flies to the hero once it is real (the plaster, the parachute)
     const toHero = (where, then) => {
       if (!plan || !plan.model) return then();
@@ -701,7 +700,7 @@ export class Game {
       root.matrix.copy(plan.frame.matrix);
       root.matrixWorldNeedsUpdate = true;
       this.scene.add(root);
-      this.materialize.begin({ frame: plan.frame, root, toHero: where, pts, onArrive: then, onReal });
+      this.materialize.begin({ frame: plan.frame, root, toHero: where, onArrive: then, onReal });
     };
     if (bp.kind === 'heal') {
       toHero('chest', () => {
@@ -729,14 +728,14 @@ export class Game {
       if (plan) {
         // it hangs in the air where it was drawn, turns real, then flies into the hand
         slot.present = { matrix: plan.frame.matrix.clone(), k: 0 };
-        this.materialize.begin({ frame: plan.frame, root: model.group, held: slot, pts, onReal });
+        this.materialize.begin({ frame: plan.frame, root: model.group, held: slot, onReal });
       } else slot.popAt = this.time;
       this.hud.updateWeapon();
     } else {
       let v;
       if (plan && plan.vehicle) {
         v = this.vehicles.add(plan.vehicle);
-        this.materialize.begin({ frame: plan.frame, root: v.kind === 'car' ? null : v.group, car: v.kind === 'car' ? v : null, vehicle: v, pts, onReal });
+        this.materialize.begin({ frame: plan.frame, root: v.kind === 'car' ? null : v.group, car: v.kind === 'car' ? v : null, vehicle: v, onReal });
       } else v = this.vehicles.spawn(bp.id, grade, res.score);
       say(this.touch ? `לחצו על כפתור הרכב הירוק כדי להיכנס ל${bp.name}` : `לחצו E כדי להיכנס ל${bp.name}`, 'info', 3);
       v.strokes = strokes;

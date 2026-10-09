@@ -10,9 +10,8 @@ import { groundHeight, BOUNDS } from '../world/layout.js';
 // outline (ui/airdraw.js). The thing appears right there, pressed flat onto the plane of the
 // drawing and as white as the paper - only its outlines show, so what you see is still your
 // drawing, standing in the street now - then it puffs up into its depth with a boing, and a band
-// of light sweeps across it, leaving its real colours behind and throwing sparks off the lines it
-// passes. A thing for the hand then flies into the hand; the plaster and the parachute fly to the
-// hero (onto the hurt, onto the back).
+// of light sweeps across it, leaving its real colours behind. A thing for the hand then flies
+// into the hand; the plaster and the parachute fly to the hero (onto the hurt, onto the back).
 
 const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
@@ -222,8 +221,8 @@ export class Materialize {
   }
 
   /**
-   * o: { frame, pts (points along the strokes, in the world), root (a Kit-built thing: its
-   *      surfaces get their own copies for the moment), car (a drawn car of the car batches),
+   * o: { frame, root (a Kit-built thing: its surfaces get their own copies for the moment),
+   *      car (a drawn car of the car batches),
    *      held (a weapon slot: flies into the hand), toHero: 'chest' | 'back', onArrive, vehicle,
    *      onReal (all its colours in) }
    */
@@ -243,7 +242,6 @@ export class Materialize {
     r.band = THREE.MathUtils.clamp(size * 0.06, 0.05, 0.4);
     r.d0 = d0 - r.band;
     r.d1 = d1 + r.band;
-    r.size = size;
     r.flatC = f.O.dot(f.an) + (f.n0 + f.n1) / 2;
     r.U = {
       uMatOn: { value: 1 },
@@ -272,13 +270,6 @@ export class Materialize {
       o.car.mat = r;
     }
     if (o.vehicle) o.vehicle.materializing = true;
-    // the strokes' points, in the order the sweep reaches them (the sparks fly off them)
-    r.pts = (o.pts || []).map((p) => ({ p, d: p.dot(r.dir) })).sort((a, b) => a.d - b.d);
-    // the moment the strokes land on it: a burst of twinkles along them
-    for (let i = 0; i < Math.min(14, r.pts.length); i++) {
-      const q = r.pts[Math.floor(Math.random() * r.pts.length)].p;
-      this.game.fx.twinkle(q.x, q.y, q.z, THREE.MathUtils.clamp(size * 0.06, 0.1, 0.4), [1, 0.86, 0.45], 0.35);
-    }
     this.list.push(r);
     this.apply(r, 0);
     return r;
@@ -288,12 +279,12 @@ export class Materialize {
     if (!this.list.length) return;
     for (const r of this.list) {
       r.t += dt;
-      this.apply(r, dt);
+      this.apply(r);
     }
     this.list = this.list.filter((r) => !r.done);
   }
 
-  apply(r, dt) {
+  apply(r) {
     const g = this.game;
     const t = r.t;
     // its depth: flat for a moment, then it puffs up with a boing (a bit too much, then settles)
@@ -310,33 +301,6 @@ export class Materialize {
     if (!r.flags.poof && t >= HOLD) {
       r.flags.poof = true;
       g.audio.play('poof');
-    }
-    // sparks off the lines the band of light is passing
-    if (dt > 0 && t > SWEEP0 && t < SWEEP1 + 0.05 && r.pts.length) {
-      const lo = this.lowerBound(r.pts, front - r.band);
-      const hi = this.lowerBound(r.pts, front + r.band);
-      const n = Math.min(hi - lo, Math.max(1, Math.round(dt * 70)));
-      for (let i = 0; i < n; i++) {
-        const q = r.pts[lo + Math.floor(Math.random() * (hi - lo))].p;
-        if (Math.random() < 0.6) g.fx.twinkle(q.x, q.y, q.z, THREE.MathUtils.clamp(r.size * 0.07, 0.12, 0.5), Math.random() < 0.7 ? [1, 0.82, 0.4] : [0.6, 0.86, 1]);
-        else g.fx.glints(q.x, q.y, q.z, 2, Math.random() < 0.5 ? [1, 0.88, 0.5] : [0.7, 0.9, 1]);
-      }
-    }
-    if (!r.flags.tada && t >= SWEEP1) {
-      r.flags.tada = true;
-      g.audio.play('tada');
-      const c = _v.copy(f.O).addScaledVector(f.ax, (f.x0 + f.x1) / 2).addScaledVector(f.ay, (f.y0 + f.y1) / 2).addScaledVector(f.an, (f.n0 + f.n1) / 2);
-      g.fx.confetti(c.x, c.y + r.size * 0.1, c.z, r.vehicle ? 36 : 18, r.vehicle ? 4.5 : 2.6);
-      for (let i = 0; i < (r.vehicle ? 7 : 4); i++) {
-        g.fx.twinkle(c.x + (Math.random() - 0.5) * (f.x1 - f.x0), c.y + (Math.random() - 0.3) * (f.y1 - f.y0), c.z + (Math.random() - 0.5) * 0.6, THREE.MathUtils.clamp(r.size * 0.12, 0.18, 0.8), [1, 0.9, 0.55], 0.6);
-      }
-      if (r.vehicle && !r.vehicle.flies) {
-        // it settles on the street: a puff of dust round its wheels
-        const v = r.vehicle;
-        g.fx.crumbs(v.pos.x, v.pos.y + 0.2, v.pos.z, 18, 3);
-        for (const sd of [-1, 1]) g.fx.smoke(v.pos.x + Math.sin(v.yaw) * v.halfLen * sd, v.pos.y + 0.3, v.pos.z + Math.cos(v.yaw) * v.halfLen * sd, 1.2);
-        g.camRig.addShake(0.12);
-      }
     }
     if (!r.flags.real && t >= END) {
       // all real now: its own surfaces back
@@ -371,8 +335,6 @@ export class Materialize {
     root.matrixWorldNeedsUpdate = true;
     if (k >= 1) {
       g.scene.remove(root);
-      g.fx.twinkle(to.x, to.y, to.z, 0.5, [1, 0.9, 0.6], 0.5);
-      g.fx.glints(to.x, to.y, to.z, 6, [1, 0.9, 0.55]);
       if (r.onArrive) r.onArrive();
       r.done = true;
     }
@@ -387,16 +349,5 @@ export class Materialize {
     }
     if (r.car && r.car.mat === r) r.car.mat = null;
     if (r.vehicle) r.vehicle.materializing = false;
-  }
-
-  lowerBound(arr, d) {
-    let lo = 0;
-    let hi = arr.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (arr[mid].d < d) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
   }
 }

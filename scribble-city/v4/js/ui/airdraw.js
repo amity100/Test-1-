@@ -398,9 +398,6 @@ export class AirDraw {
   land() {
     const g = this.game;
     const plan = this.plan;
-    plan.pts = [];
-    let i = 0;
-    for (const st of this.strokes) for (const [u, v] of st) if (i++ % 2 === 0) plan.pts.push(plan.map(u, v, new THREE.Vector3()));
     plan.landed = true;
     this.phase = 'fade';
     this.t = 0;

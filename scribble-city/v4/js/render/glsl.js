@@ -591,14 +591,13 @@ void main() {
   }
 
   if (mPaper + mGlow > 0.0) {
-    // the paper: white, a little pencil shading; the band: the light of the pencil's magic
+    // the paper: white, a little pencil shading; the band: a warm light where the colours come in
     lit = mix(lit, uPaper * 1.1, mPaper);
     shade = mix(shade, uPaper * 0.62, mPaper);
     light = mix(light, 0.45 + 0.5 * light, mPaper);
     hi *= 1.0 - mPaper;
     em *= 1.0 - mPaper;
-    vec3 mc = mix(vec3(1.0, 0.76, 0.3), vec3(0.55, 0.85, 1.0), 0.5 + 0.5 * sin(dot(vWP, vec3(3.1, 4.7, 2.3)) + uTime * 9.0));
-    em += mc * mGlow * 1.5;
+    em += vec3(1.0, 0.84, 0.58) * mGlow * 1.5;
   }
   gFar = smoothstep(32.0, 190.0, length(cameraPosition - vWP));
   vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));

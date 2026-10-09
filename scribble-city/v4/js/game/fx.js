@@ -153,26 +153,6 @@ export class Effects {
     }
   }
 
-  // a star of light that twinkles and is gone (a drawing turning into a thing throws them off)
-  twinkle(x, y, z, size = 0.35, color = [1, 0.85, 0.45], life = 0.45) {
-    const k = 2.6;
-    this.sprite('fx_star', x, y, z, {
-      size, grow: -0.7, life, tint: [color[0] * k, color[1] * k, color[2] * k],
-      vx: (Math.random() - 0.5) * 0.8, vy: 0.5 + Math.random() * 0.9, vz: (Math.random() - 0.5) * 0.8,
-    });
-  }
-
-  // little bright streaks thrown off a line of light
-  glints(x, y, z, n = 4, color = [1, 0.9, 0.55]) {
-    for (let i = 0; i < n; i++) {
-      if (this.particles.length > 420) this.particles.shift();
-      const a = Math.random() * Math.PI * 2;
-      const b = Math.random() * 1.1;
-      const sp = 1.5 + Math.random() * 3;
-      this.particles.push({ x, y, z, vx: Math.cos(a) * Math.cos(b) * sp, vy: Math.sin(b) * sp + 1, vz: Math.sin(a) * Math.cos(b) * sp, life: 0.3 + Math.random() * 0.35, t: 0, len: 0.12 + Math.random() * 0.12, color, seed: Math.random() * 50, spin: 0, streak: true, wide: 2.4 });
-    }
-  }
-
   sparks(x, y, z, n = 6, color = [0.1, 0.1, 0.14]) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
