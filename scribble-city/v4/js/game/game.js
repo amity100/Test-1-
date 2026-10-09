@@ -10,6 +10,7 @@ import { Weapons, WEAPON_DEFS, GRADE } from './weapons.js';
 import { Enemies } from './enemies.js';
 import { Vehicles } from './vehicles.js';
 import { Parachute } from './parachute.js';
+import { Nightlife } from './nightlife.js';
 import { Civilians } from './civilians.js';
 import { Traffic } from './traffic.js';
 import { HUD } from '../ui/hud.js';
@@ -89,6 +90,7 @@ export class Game {
     this.streetlife = new StreetLife(this);
     this.vignettes = new Vignettes(this);
     this.ambient = new Ambient(this);
+    this.nightlife = new Nightlife(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -359,6 +361,7 @@ export class Game {
       this.enemies.update(dt);
       this.civilians.update(dt);
       this.streetlife.update(dt);
+      this.nightlife.update(dt);
       this.vignettes.update(dt);
       this.airsketch.update(dt);
       this.traffic.update(dt);

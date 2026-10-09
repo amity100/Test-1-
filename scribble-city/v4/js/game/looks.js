@@ -62,16 +62,30 @@ function baseLook(o = {}) {
   };
 }
 
-// Every woman in the city is dressed modestly: sleeves to the wrist, skirts and dresses to the
-// ankle (doodle.js draws them long), never shorts or a tank top.
+// Every woman in the city dresses the way women dress in a city today - jeans and wide trousers,
+// hoodies, blazers, denim and trench coats, sneakers and boots - and nothing revealing: sleeves
+// to the wrist, never shorts, a tank top or a bare midriff. (No old-fashioned long dresses: a
+// skirt is a midi skirt, worn with boots.)
+const BOOT_COLS = [[0.12, 0.1, 0.1], [0.36, 0.24, 0.17], [0.55, 0.4, 0.26], [0.92, 0.9, 0.86]];
 export function modest(L) {
   if (!L || !L.fem) return L;
   const t = L.top;
+  const b = L.bottom;
   if (t) {
     if (t.kind === 'tank') t.kind = 'tee';
+    if (t.kind === 'dress') {
+      // (a dress becomes a blouse of its colour over wide trousers)
+      t.kind = 'blouse';
+      L.bottom = { kind: 'wide', color: pick([[0.12, 0.12, 0.14], [0.92, 0.9, 0.84], [0.33, 0.42, 0.6], [0.5, 0.45, 0.4]]) };
+    }
     t.sleeves = 'long';
   }
-  if (L.bottom && L.bottom.kind === 'shorts') L.bottom = { kind: 'skirt', color: L.bottom.color };
+  if (b && L.bottom === b) {
+    if (b.kind === 'shorts') L.bottom = { kind: 'wide', color: b.color };
+    else if (b.kind === 'skirt' || b.kind === 'dress') L.bottom = { kind: 'midi', color: b.color };
+  }
+  if (L.bottom.kind === 'midi' && !L.boots) L.boots = pick(BOOT_COLS);
+  if (L.boots) L.shoes = L.boots;
   return L;
 }
 
@@ -174,52 +188,122 @@ export function swatLook() {
 }
 
 // ------------------------------------------------------------------ city people
+// The way people dress in a city now: blazers and trench coats, oversized hoodies and bomber
+// jackets, denim, wide-leg trousers and long pleated skirts, white sneakers, crossbody bags,
+// caps and bucket hats. The women dress modestly (long sleeves, skirts and dresses to the ankle,
+// never a bare midriff) and in fashion.
+const NEUTRAL = [[0.95, 0.94, 0.9], [0.12, 0.12, 0.14], [0.78, 0.66, 0.5], [0.5, 0.45, 0.4], [0.36, 0.4, 0.3], [0.62, 0.64, 0.66], [0.22, 0.24, 0.34], [0.9, 0.84, 0.72]];
+const PASTEL = [[0.8, 0.72, 0.92], [0.7, 0.9, 0.82], [0.72, 0.84, 0.96], [0.98, 0.9, 0.62], [0.98, 0.78, 0.82], [0.95, 0.82, 0.7]];
+const MODERN = [[0.56, 0.66, 0.52], [0.8, 0.42, 0.3], [0.2, 0.25, 0.42], [0.62, 0.46, 0.72], [0.86, 0.66, 0.26], [0.52, 0.16, 0.22], [0.25, 0.48, 0.5], [0.12, 0.12, 0.14]];
+const CAMEL = [[0.78, 0.6, 0.4], [0.86, 0.76, 0.6], [0.12, 0.12, 0.14], [0.5, 0.52, 0.4], [0.9, 0.86, 0.78]];
+const SNEAKERS = [[0.97, 0.97, 0.96], [0.97, 0.97, 0.96], [0.97, 0.97, 0.96], [0.12, 0.12, 0.14], [0.9, 0.45, 0.4], [0.5, 0.62, 0.9]];
+const BOOTS = [[0.12, 0.1, 0.1], [0.45, 0.3, 0.2], [0.55, 0.4, 0.26]];
+const BAGS = [[0.12, 0.11, 0.13], [0.6, 0.42, 0.28], [0.92, 0.88, 0.8], [0.62, 0.2, 0.26], [0.8, 0.72, 0.92]];
+
 export function civilianLook(o = {}) {
   const fem = o.fem !== undefined ? o.fem : chance(0.5);
   const pen = o.pen || pick(['fineliner', 'fineliner', 'ballpoint', 'marker', 'pencil', 'comic']);
   const L = baseLook({ pen, build: o.build || pick(['normal', 'normal', 'normal', 'lanky', 'stocky']), fem });
-  const kind = o.kind || pick(fem ? ['casual', 'dress', 'office', 'sporty', 'artsy'] : ['casual', 'office', 'sporty', 'artsy', 'worker']);
-  if (kind === 'casual') {
-    L.top = { kind: pick(['tee', 'tee', 'sweater', 'jacket']), color: pick(BRIGHT), sleeves: chance(0.5) ? 'short' : 'long', inner: pick(BRIGHT) };
-    L.bottom = { kind: fem && chance(0.4) ? 'skirt' : 'pants', color: chance(0.6) ? pick(DENIM) : pick(BRIGHT) };
-  } else if (kind === 'dress') {
-    L.top = { kind: 'dress', color: pick(BRIGHT), sleeves: 'long' };
-    L.bottom = { kind: 'dress', color: L.top.color };
+  // (the older wardrobe's names still work, dressed the new way)
+  const OLD = { casual: 'street', dress: fem ? 'chic' : 'smart', artsy: fem ? 'knit' : 'denim', worker: fem ? 'street' : 'worker', summer: fem ? 'street' : 'summer', bomber: fem ? 'puffer' : 'bomber' };
+  let kind = o.kind || pick(fem ? ['street', 'street', 'chic', 'denim', 'trench', 'knit', 'puffer', 'sporty', 'office', 'smart'] : ['street', 'street', 'smart', 'denim', 'bomber', 'office', 'sporty', 'summer', 'worker', 'puffer']);
+  kind = OLD[kind] || kind;
+  L.shoes = pick(SNEAKERS);
+  // jeans in every wash, black jeans, cargo, chinos
+  const JEANS = [...DENIM, [0.12, 0.12, 0.14], [0.55, 0.65, 0.8]];
+  const TROUSERS = [[0.12, 0.12, 0.14], [0.92, 0.9, 0.84], [0.78, 0.7, 0.56], [0.5, 0.45, 0.4], [0.36, 0.4, 0.3], [0.45, 0.46, 0.5]];
+  // what a modern woman wears below: mostly jeans and wide trousers, now and then a midi skirt
+  // with boots
+  const herBottom = (skirtChance = 0.15) => {
+    if (chance(skirtChance)) {
+      L.boots = pick(BOOTS);
+      return { kind: 'midi', color: pick([...NEUTRAL, ...MODERN]) };
+    }
+    return chance(0.5) ? { kind: 'wide', color: pick(chance(0.5) ? JEANS : TROUSERS) } : { kind: chance(0.25) ? 'cargo' : 'pants', color: pick(JEANS) };
+  };
+  if (kind === 'chic') {
+    L.top = { kind: 'blazer', color: pick(CAMEL), sleeves: 'long', inner: pick([[0.96, 0.95, 0.92], [0.12, 0.12, 0.14], [0.9, 0.84, 0.72]]) };
+    L.bottom = fem ? herBottom(0.2) : { kind: 'pants', color: pick(TROUSERS) };
+    L.shoes = chance(0.6) ? [0.97, 0.97, 0.96] : [0.12, 0.1, 0.1];
+    L.acc.push(fem ? 'handbag' : 'bag');
+    if (chance(0.35)) L.face.glasses = 'shades';
+  } else if (kind === 'street') {
+    L.top = { kind: pick(['hoodie', 'sweatshirt', 'oversized']), color: pick(fem ? [...PASTEL, ...NEUTRAL, ...MODERN] : [...NEUTRAL, ...MODERN]), sleeves: fem ? 'long' : pick(['long', 'short']) };
+    L.bottom = fem ? herBottom(0.08) : { kind: pick(['cargo', 'pants', 'baggy']), color: pick([[0.36, 0.4, 0.3], [0.12, 0.12, 0.14], [0.78, 0.7, 0.56], [0.45, 0.46, 0.5], ...DENIM]) };
+    if (chance(0.45)) L.acc.push('crossbody');
+    if (chance(0.35)) L.hat = { kind: pick(['cap', 'bucket', 'beanie', 'capBack']), color: pick([...NEUTRAL, ...MODERN]) };
+    if (chance(0.2)) L.acc.push('headphones');
+  } else if (kind === 'denim') {
+    L.top = { kind: 'denim', color: pick(DENIM), sleeves: 'long', inner: pick([[0.96, 0.95, 0.92], [0.12, 0.12, 0.14], ...PASTEL]) };
+    if (fem) {
+      L.bottom = chance(0.6) ? { kind: 'pants', color: pick([[0.12, 0.12, 0.14], [0.92, 0.9, 0.84]]) } : { kind: 'wide', color: pick(TROUSERS) };
+      L.acc.push('tote');
+    } else {
+      L.bottom = { kind: 'pants', color: pick([[0.12, 0.12, 0.14], [0.78, 0.7, 0.56]]) };
+      L.shoes = pick(BOOTS);
+    }
+  } else if (kind === 'trench') {
+    L.top = { kind: 'trench', color: pick([[0.78, 0.66, 0.48], [0.86, 0.78, 0.62], [0.12, 0.12, 0.14], [0.5, 0.52, 0.4]]), sleeves: 'long', inner: pick([[0.96, 0.95, 0.92], [0.12, 0.12, 0.14]]) };
+    L.bottom = chance(0.55) ? { kind: 'pants', color: pick(JEANS) } : { kind: 'wide', color: pick(TROUSERS) };
+    L.shoes = pick(BOOTS);
+    L.acc.push(fem ? 'handbag' : 'bag');
+    if (chance(0.3)) L.face.glasses = 'shades';
+  } else if (kind === 'knit') {
+    L.top = { kind: 'cardigan', color: pick([...PASTEL, [0.9, 0.84, 0.72], [0.62, 0.46, 0.36]]), sleeves: 'long', inner: pick([[0.96, 0.95, 0.92], ...PASTEL]) };
+    L.bottom = fem ? herBottom(0.25) : { kind: 'pants', color: pick(JEANS) };
+    L.shoes = pick([[0.12, 0.1, 0.1], [0.97, 0.97, 0.96], [0.6, 0.42, 0.28]]);
+    L.acc.push('tote');
+    L.face.glasses = chance(0.3) ? 'round' : null;
+  } else if (kind === 'puffer') {
+    L.top = { kind: 'puffer', color: pick([[0.12, 0.12, 0.14], [0.92, 0.9, 0.84], ...PASTEL, [0.36, 0.4, 0.3], [0.86, 0.66, 0.26]]), sleeves: 'long' };
+    L.bottom = fem ? herBottom(0.05) : { kind: 'pants', color: pick([[0.12, 0.12, 0.14], [0.45, 0.46, 0.5], ...DENIM]) };
+    if (chance(0.35)) L.hat = { kind: 'beanie', color: pick([...NEUTRAL, ...MODERN]) };
+    if (chance(0.4)) L.acc.push('crossbody');
+  } else if (kind === 'smart') {
+    L.top = { kind: 'overshirt', color: pick([[0.5, 0.52, 0.4], [0.78, 0.6, 0.4], [0.22, 0.24, 0.34], [0.52, 0.16, 0.22], [0.45, 0.46, 0.5], [0.95, 0.94, 0.9], [0.72, 0.84, 0.96]]), sleeves: 'long', inner: pick([[0.96, 0.95, 0.92], [0.12, 0.12, 0.14]]) };
+    L.bottom = fem ? { kind: 'wide', color: pick(JEANS) } : { kind: 'pants', color: pick([[0.86, 0.78, 0.62], [0.22, 0.24, 0.34], [0.12, 0.12, 0.14]]) };
+    L.shoes = chance(0.5) ? [0.97, 0.97, 0.96] : pick(BOOTS);
+    if (fem && chance(0.4)) L.acc.push('crossbody');
+  } else if (kind === 'bomber') {
+    L.top = { kind: 'bomber', color: pick([[0.12, 0.12, 0.14], [0.36, 0.4, 0.3], [0.2, 0.25, 0.42], [0.52, 0.16, 0.22]]), sleeves: 'long', inner: pick([[0.96, 0.95, 0.92], [0.45, 0.46, 0.5]]) };
+    L.bottom = { kind: 'pants', color: pick([[0.12, 0.12, 0.14], [0.45, 0.46, 0.5], ...DENIM]) };
+    if (chance(0.3)) L.hat = { kind: 'beanie', color: pick(NEUTRAL) };
+  } else if (kind === 'summer') {
+    L.top = { kind: pick(['polo', 'tee', 'oversized']), color: pick([...PASTEL, ...BRIGHT, [0.96, 0.95, 0.92]]), sleeves: 'short' };
+    L.bottom = chance(0.5) ? { kind: 'shorts', color: pick([[0.86, 0.78, 0.62], [0.22, 0.24, 0.34], [0.5, 0.52, 0.4]]) } : { kind: 'pants', color: pick([[0.86, 0.78, 0.62], [0.95, 0.94, 0.9]]) };
+    if (chance(0.5)) L.face.glasses = 'shades';
+    if (chance(0.3)) L.hat = { kind: pick(['cap', 'bucket']), color: pick(NEUTRAL) };
   } else if (kind === 'office') {
-    const suit = pick([[0.2, 0.22, 0.3], [0.3, 0.3, 0.33], [0.5, 0.45, 0.4], [0.16, 0.16, 0.18]]);
-    L.top = { kind: fem ? 'blazer' : 'suit', color: suit, sleeves: 'long', shirt: [0.95, 0.95, 0.94], tie: fem ? null : pick(BRIGHT) };
-    L.bottom = { kind: fem && chance(0.5) ? 'skirt' : 'pants', color: suit };
-    L.shoes = pick([[0.1, 0.08, 0.07], [0.3, 0.2, 0.14]]);
-    if (chance(0.4)) L.acc.push('bag');
+    const suit = pick([[0.2, 0.22, 0.3], [0.3, 0.3, 0.33], [0.5, 0.45, 0.4], [0.16, 0.16, 0.18], [0.78, 0.66, 0.5]]);
+    L.top = { kind: fem ? 'blazer' : 'suit', color: suit, sleeves: 'long', shirt: pick([[0.95, 0.95, 0.94], [0.72, 0.84, 0.96]]), tie: fem || chance(0.5) ? null : pick(MODERN) };
+    L.bottom = fem ? (chance(0.25) ? { kind: 'midi', color: suit } : { kind: 'wide', color: suit }) : { kind: 'pants', color: suit };
+    if (L.bottom.kind === 'midi') L.boots = pick(BOOTS);
+    L.shoes = pick([[0.1, 0.08, 0.07], [0.3, 0.2, 0.14], [0.97, 0.97, 0.96]]);
+    L.acc.push(fem ? 'handbag' : 'bag');
   } else if (kind === 'sporty') {
-    const c = pick(BRIGHT);
+    const c = pick([...MODERN, ...BRIGHT]);
     L.top = { kind: 'track', color: c, sleeves: 'long' };
     L.bottom = { kind: 'pants', color: chance(0.5) ? c : pick(DARK) };
     L.hat = chance(0.4) ? { kind: 'cap', color: pick(BRIGHT) } : null;
     if (chance(0.4)) L.acc.push('headphones');
-  } else if (kind === 'artsy') {
-    L.top = { kind: pick(['sweater', 'tee']), color: pick(BRIGHT), sleeves: 'long' };
-    L.bottom = { kind: fem && chance(0.4) ? 'skirt' : 'pants', color: pick(DARK) };
-    L.hat = chance(0.5) ? { kind: 'beanie', color: pick(BRIGHT) } : null;
-    L.face.glasses = chance(0.6) ? 'round' : null;
-    if (chance(0.5)) L.acc.push('scarf');
   } else {
     L.top = { kind: 'vest', color: [0.95, 0.55, 0.15], sleeves: 'short', under: pick([[0.9, 0.9, 0.88], [0.3, 0.42, 0.6]]) };
     L.bottom = { kind: 'pants', color: pick(DENIM) };
     L.hat = chance(0.6) ? { kind: 'hardhat', color: [0.96, 0.8, 0.2] } : null;
     L.shoes = [0.4, 0.3, 0.2];
   }
+  L.bagColor = pick(BAGS);
   L.hair = fem
-    ? { style: pick(['long', 'long', 'ponytail', 'bun', 'bob', 'curly', 'afro']), color: pick(HAIR) }
-    : { style: pick(['short', 'short', 'buzz', 'curly', 'afro', 'none', 'messy', 'long']), color: pick(HAIR) };
+    ? { style: pick(['long', 'long', 'ponytail', 'bun', 'bob', 'curly', 'long', 'braids']), color: pick(HAIR) }
+    : { style: pick(['short', 'short', 'buzz', 'curly', 'messy', 'pompadour', 'short', 'afro']), color: pick(HAIR) };
   L.face = {
-    eyes: pick(fem ? ['oval', 'lashes', 'dot', 'anime'] : ['dot', 'oval', 'dot', 'narrow']),
+    eyes: pick(fem ? ['oval', 'lashes', 'dot'] : ['dot', 'oval', 'dot', 'narrow']),
     brows: pick(['flat', 'up', 'flat']),
-    mouth: pick(['line', 'smile', 'smile', 'o', 'smirk']),
-    beard: !fem && chance(0.25) ? pick(['stubble', 'full', 'goatee', 'mustache']) : null,
-    glasses: L.face.glasses || (chance(0.15) ? pick(['round', 'square']) : null),
+    mouth: pick(['line', 'smile', 'smile', 'smirk']),
+    beard: !fem && chance(0.3) ? pick(['stubble', 'full', 'goatee', 'stubble']) : null,
+    glasses: L.face.glasses || (chance(0.12) ? pick(['round', 'square']) : null),
   };
-  if (fem && chance(0.4)) L.acc.push('earrings');
+  if (fem && chance(0.5)) L.acc.push('earrings');
   if (fem && chance(0.5)) L.face.lips = pick([[0.78, 0.2, 0.26], [0.65, 0.3, 0.35]]);
   return modest(L);
 }
@@ -302,6 +386,19 @@ export function barLook(style, o = {}, tries = 0) {
 }
 
 export const BAR_STYLE_NAMES = Object.keys(BAR_STYLES);
+
+// the club's bouncer: big, all in black, shades after dark
+export function bouncerLook() {
+  const L = baseLook({ pen: 'marker', build: 'big' });
+  L.top = { kind: 'bomber', color: [0.08, 0.08, 0.1], sleeves: 'long', inner: [0.1, 0.1, 0.12] };
+  L.bottom = { kind: 'pants', color: [0.08, 0.08, 0.1] };
+  L.shoes = [0.06, 0.06, 0.08];
+  L.hair = { style: 'buzz', color: [0.1, 0.08, 0.07] };
+  L.skin = pick(SKIN);
+  L.face = { eyes: 'narrow', brows: 'angry', mouth: 'line', beard: chance(0.5) ? 'stubble' : null, glasses: 'shades' };
+  L.acc = [];
+  return L;
+}
 
 // the bartender: white shirt, black vest, a proud moustache
 export function bartenderLook() {
@@ -388,7 +485,7 @@ export function shopkeeperLook(kind) {
       // the girl who sells the magic pencils: a pink sweater, a beret, an apron of every colour
       L.fem = true;
       L.top = { kind: 'sweater', color: [0.98, 0.68, 0.78], sleeves: 'long' };
-      L.bottom = { kind: 'skirt', color: [0.3, 0.32, 0.52] };
+      L.bottom = { kind: 'wide', color: [0.42, 0.5, 0.72] };
       L.hat = { kind: 'beret', color: [0.85, 0.2, 0.35] };
       L.hair = { style: pick(['long', 'ponytail', 'curly']), color: pick(HAIR) };
       L.face.beard = null;
@@ -414,9 +511,9 @@ export function shopkeeperLook(kind) {
 }
 
 // somebody drawn with a magic pencil at a DRAW YOURSELF A FRIEND stand: a nice, ordinary woman,
-// dressed like everybody else (modest: sleeves, long skirts)
+// dressed like everybody else (in fashion, nothing revealing)
 export function friendLook() {
-  const L = civilianLook({ fem: true, kind: pick(['dress', 'dress', 'casual', 'office', 'artsy']) });
+  const L = civilianLook({ fem: true, kind: pick(['chic', 'street', 'knit', 'denim', 'trench', 'puffer']) });
   L.face.mouth = 'smile';
   L.face.eyes = pick(['lashes', 'oval', 'anime']);
   L.hair = { style: pick(['long', 'long', 'ponytail', 'bun', 'curly', 'bob']), color: L.hair.color };
@@ -430,8 +527,8 @@ export function kidLook(fem = chance(0.5)) {
   L.face.lips = null;
   L.face.eyes = fem ? pick(['oval', 'anime']) : pick(['dot', 'oval']);
   L.face.mouth = 'smile';
-  L.top = { kind: 'tee', color: pick(BRIGHT), sleeves: 'short' };
-  L.bottom = fem && chance(0.6) ? { kind: 'skirt', color: pick(BRIGHT) } : { kind: 'shorts', color: pick(DENIM) };
+  L.top = { kind: chance(0.5) ? 'tee' : 'hoodie', color: pick(BRIGHT), sleeves: 'short' };
+  L.bottom = fem ? { kind: 'pants', color: pick([...DENIM, [0.95, 0.55, 0.65], [0.6, 0.45, 0.8]]) } : { kind: chance(0.5) ? 'shorts' : 'pants', color: pick(DENIM) };
   L.hair = fem ? { style: 'short', color: pick(HAIR.slice(0, 5)) } : { style: pick(['short', 'messy', 'curly']), color: pick(HAIR.slice(0, 5)) };
   L.acc = [];
   L.hat = null;
@@ -443,7 +540,10 @@ export function elderLook(fem) {
   const L = civilianLook({ fem, kind: 'casual', pen: pick(['pencil', 'sepia', 'ballpoint']) });
   const grey = pick([[0.78, 0.78, 0.8], [0.9, 0.9, 0.88], [0.62, 0.62, 0.65]]);
   L.top = { kind: 'sweater', color: pick([[0.55, 0.45, 0.35], [0.45, 0.5, 0.6], [0.6, 0.35, 0.38], [0.4, 0.5, 0.4]]), sleeves: 'long' };
-  L.bottom = fem ? { kind: 'skirt', color: pick([[0.3, 0.3, 0.38], [0.4, 0.3, 0.3]]) } : { kind: 'pants', color: pick([[0.4, 0.38, 0.35], [0.3, 0.3, 0.34]]) };
+  L.top.kind = fem ? 'cardigan' : 'sweater';
+  L.top.inner = [0.95, 0.94, 0.9];
+  L.bottom = fem ? (chance(0.5) ? { kind: 'midi', color: pick([[0.3, 0.3, 0.38], [0.4, 0.3, 0.3]]) } : { kind: 'wide', color: pick([[0.3, 0.3, 0.38], [0.5, 0.45, 0.4]]) }) : { kind: 'pants', color: pick([[0.4, 0.38, 0.35], [0.3, 0.3, 0.34]]) };
+  if (fem) L.boots = [0.2, 0.16, 0.14];
   L.hair = fem ? { style: 'bun', color: grey } : { style: pick(['short', 'none']), color: grey };
   L.face = { eyes: 'dot', brows: 'up', mouth: 'smile', beard: !fem && chance(0.6) ? 'mustache' : null, glasses: fem ? 'round' : null };
   L.hat = !fem && chance(0.5) ? { kind: 'cap', color: [0.45, 0.42, 0.38] } : null;

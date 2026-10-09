@@ -6,6 +6,7 @@ import { NODES, stopDist, parkingSpots } from './roads.js';
 import { palm } from './palms.js';
 import { bench } from './blocks.js';
 import { boardAtlas } from './boards.js';
+import { STREET_ADS } from './ads.js';
 import { randomCarSpec } from '../render/cars.js';
 import { Batch } from './kit.js';
 
@@ -297,7 +298,7 @@ function busStop(ctx, x, z, yaw) {
   put(ctx, M.prop, new THREE.BoxGeometry(2.4, 0.08, 0.42), bx, CURB + 0.48, bz, yaw, srgb(0.62, 0.4, 0.28));
   put(ctx, M.prop, new THREE.BoxGeometry(2.4, 0.45, 0.06), local(0.2, -0.55)[0], CURB + 0.78, local(0.2, -0.55)[1], yaw, srgb(0.62, 0.4, 0.28));
   // the ad panel at the end, lit from inside
-  const ad = ctx.rng.pick(['ad_cola', 'ad_surf', 'ad_coffee', 'ad_gym', 'ad_phone', 'ad_sale']);
+  const ad = ctx.rng.pick(STREET_ADS);
   const [ax, az] = local(-1.8, -0.05);
   put(ctx, M.prop, new THREE.BoxGeometry(0.12, 1.5, 1.1), ax, CURB + 1.3, az, yaw, frame);
   const A = ctx.atlas.rects[ad];
@@ -532,6 +533,19 @@ function boards(ctx) {
     [2, 3, 'north', 'east', 'bb_copter'],
     [0, 4, 'south', 'west', 'bb_copter'],
     [2, 4, 'south', 'east', 'bb_tank'],
+    // and the city's advertising
+    [0, 0, 'north', 'west', 'ad_movie'],
+    [1, 0, 'north', 'west', 'ad_car'],
+    [2, 0, 'north', 'east', 'ad_perfume'],
+    [2, 0, 'south', 'east', 'ad_bank'],
+    [1, 1, 'north', 'west', 'ad_shoes'],
+    [2, 1, 'north', 'east', 'ad_phone2'],
+    [0, 2, 'south', 'east', 'ad_burger'],
+    [0, 3, 'north', 'west', 'ad_lawyer'],
+    [1, 3, 'north', 'west', 'ad_radio'],
+    [2, 3, 'south', 'east', 'ad_airline'],
+    [1, 4, 'north', 'east', 'ad_concert'],
+    [2, 4, 'north', 'east', 'ad_glasses'],
   ];
   for (const [col, row, end, rowSide, cell, o = {}] of ends) {
     const R = blockRect(col, row);
@@ -589,7 +603,7 @@ function boards(ctx) {
     if (p) billboard(ctx, p[0], p[1], -1, 0, 'bb_bike', { w: 7, legH: 2.6 });
   }
   // ads along the promenade
-  for (const [z, cell] of [[-120, 'ad_surf'], [-300, 'ad_cola'], [110, 'ad_coffee'], [190, 'ad_gym']]) {
+  for (const [z, cell] of [[-120, 'ad_surf'], [-300, 'ad_cola'], [110, 'ad_coffee'], [190, 'ad_gym'], [-200, 'ad_airline'], [60, 'ad_glasses'], [150, 'ad_concert'], [-70, 'ad_tv']]) {
     const p = near(ctx, 18.6, z, 0, 1, 1.4, 12);
     if (p) billboard(ctx, p[0], p[1], -1, 0, cell, { w: 7, legH: 2.8, light: false });
   }
@@ -910,9 +924,9 @@ function gangs(ctx) {
 
 // ------------------------------------------------------------------ all of it
 export function buildStreets(ctx) {
-  const atlas = boardAtlas();
-  ctx.atlas = atlas;
-  ctx.M.board = makeSurface({ kind: 'box', map: atlas.texture, emMap: atlas.texture, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1, objMask: true });
+  // (the city made the board atlas and its pens before the blocks went up)
+  if (!ctx.atlas) ctx.atlas = boardAtlas();
+  if (!ctx.M.board) ctx.M.board = makeSurface({ kind: 'box', map: ctx.atlas.texture, emMap: ctx.atlas.texture, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1, objMask: true });
   ctx.signals = ctx.signals || [];
   ctx.parked = ctx.parked || [];
   ctx.busStops = ctx.busStops || [];

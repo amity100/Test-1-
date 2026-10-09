@@ -3,6 +3,8 @@ import { Doodle } from './doodle.js';
 import { civilianLook } from './looks.js';
 import { holeRadius } from './enemies.js';
 import { AVES, STREETS, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
+import { NODES, CYCLE } from '../world/roads.js';
+import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
@@ -231,10 +233,21 @@ class Civilian {
       tz = t[1];
       if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 0.8) {
         this.nextCorner();
-        if (!this.crossing && Math.random() < 0.15) this.stopT = 1 + Math.random() * 3;
+        this.crossOK = false;
+        if (!this.crossing && Math.random() < (this.chatty ? 0.4 : 0.15)) this.stopT = 1 + Math.random() * (this.chatty ? 6 : 3);
+      }
+      if (this.crossing && !this.crossOK) {
+        // at the curb: across only when the cars of that road have the red light
+        const t2 = this.loop[this.target];
+        if (this.mayCross(t2[0], t2[1])) this.crossOK = true;
+        else {
+          speed = 0;
+          this.faceYaw = Math.atan2(t2[0] - this.pos.x, t2[1] - this.pos.z);
+          this.yaw = dampAngle(this.yaw, this.faceYaw, 4, dt);
+        }
       }
       // hurry across the road
-      if (this.crossing) speed *= 1.35;
+      if (this.crossing && this.crossOK) speed *= this.jog ? 1 : 1.35;
       if (this.stopT > 0) {
         this.stopT -= dt;
         speed = 0;
@@ -265,6 +278,29 @@ class Civilian {
     fig.yaw = this.yaw;
     fig.speed = sp;
     fig.update(dt);
+  }
+
+  // may they step off the curb towards (tx, tz)? Across an avenue when its cars wait at the red
+  // light, across a street when its cars do (with time enough left to reach the other side)
+  mayCross(tx, tz) {
+    const mx = (this.pos.x + tx) / 2;
+    const mz = (this.pos.z + tz) / 2;
+    let n = null;
+    let bd = 30;
+    for (const m of NODES) {
+      const d = Math.hypot(m.x - mx, m.z - mz);
+      if (d < bd) {
+        bd = d;
+        n = m;
+      }
+    }
+    if (!n || !n.signal) return true;
+    const time = this.game.traffic ? this.game.traffic.time : 0;
+    const ph = (((time + n.offset) % CYCLE) + CYCLE) % CYCLE;
+    const acrossAve = Math.abs(tx - this.pos.x) > Math.abs(tz - this.pos.z);
+    // the avenue's cars: green 0..11, yellow ..13.5, red 13.5..26; the street's: green 14.5..23
+    const left = acrossAve ? (ph >= 13.5 ? CYCLE - ph : -1) : ph < 14.5 ? 14.5 - ph : ph >= 25.5 ? CYCLE - ph + 14.5 : -1;
+    return left > 6;
   }
 
   // the next step out of the shop they are in: round the furniture, out of the door, a step onto
@@ -351,14 +387,21 @@ export class Civilians {
       while (free < max && tries-- > 0) {
         // the promenade (when you are near the bay), or a block round you
         let c;
+        // (a jogger is dressed for it)
+        const jog = Math.random() < 0.07;
+        const look = jog ? civilianLook({ kind: 'sporty' }) : null;
         if (p.x > -40 && (Math.random() < 0.3 || !near.length) && prom < max * 0.35) {
           const z = Math.max(NORTH_EDGE + 10, Math.min(SOUTH_EDGE, p.z + (Math.random() - 0.5) * 160));
           if (z > PIER.z0 - 4 && z < PIER.z1 + 4) continue;
-          c = new Civilian(this, 'prom', z);
+          c = new Civilian(this, 'prom', z, look);
         } else if (near.length) {
           const [col, row] = near[Math.floor(Math.random() * near.length)];
-          c = new Civilian(this, col, row);
+          c = new Civilian(this, col, row, look);
         } else continue;
+        if (jog) {
+          c.jog = true;
+          c.speed = 3.1 + Math.random() * 0.8;
+        }
         // most of them close by (the street you are on is full of people)
         const far = Math.random() < 0.3;
         if (!c.placeNear(p, first ? 3 : far ? 45 : 16, far ? 100 : 60)) {
@@ -376,9 +419,19 @@ export class Civilians {
         if (c.prom) prom++;
         this.list.push(c);
         free++;
+        // who they are out there: a dog walker, a jogger, on the phone, with friends...
+        if (!c.jog) {
+          this.dressUp(c);
+          if (!c.dog && !c.jog && Math.random() < 0.14 && free < max) {
+            if (this.addBuddy(c)) free++;
+          }
+        }
       }
     }
-    for (const c of this.list) c.update(dt);
+    for (const c of this.list) {
+      c.update(dt);
+      if (c.dog) this.walkDog(c, dt);
+    }
     if (this.list.some((c) => c.fig.dissolve >= 1)) {
       this.list = this.list.filter((c) => {
         if (c.fig.dissolve < 1) return true;
@@ -588,12 +641,100 @@ export class Civilians {
   }
 
   draw(camPos) {
+    const bodies = this.game.figures.bodies;
+    const fwd = this.game.camera.getWorldDirection(this._cf || (this._cf = new THREE.Vector3()));
     for (const c of this.list) {
       if (c.inside) continue;
-      const d = Math.hypot(c.pos.x - camPos.x, c.pos.z - camPos.z);
-      c.fig.setVisible(d < 130);
-      if (d < 130) c.fig.draw(camPos);
+      const dx = c.pos.x - camPos.x;
+      const dz = c.pos.z - camPos.z;
+      const d = Math.hypot(dx, dz);
+      // (nobody behind the camera is drawn, beyond a step or two: their shadows fall away from
+      // the low sun anyway)
+      const seen = d < 130 && (d < 8 || (dx * fwd.x + dz * fwd.z) / d > -0.35);
+      c.fig.setVisible(seen);
+      if (!seen) continue;
+      c.fig.draw(camPos);
+      if (c.dog && d < 90) drawDog(bodies, c.dog);
     }
+  }
+
+  // ------------------------------------------------------------------ the life of the sidewalk
+  // A new face on the street is somebody: out walking the dog, jogging, on the phone, back from
+  // the shops with a bag, with a coffee, or two friends walking and talking.
+  dressUp(c) {
+    const r = Math.random();
+    if (c.jog) return;
+    c.jog = false;
+    if (r < 0.08) {
+      c.dog = newDog(c.pos.x + 1, c.pos.z);
+      c.dog.y = c.pos.y;
+      c.fig.carryL = 'leash';
+      c.fig.leashTo = new THREE.Vector3();
+      c.speed = 1.05;
+    } else if (r < 0.18) {
+      c.fig.carry = 'phone';
+      c.speed = 0.95 + Math.random() * 0.3;
+      c.chatty = true;
+    } else if (r < 0.33) {
+      c.fig.carry = 'coffee';
+    } else if (r < 0.42) {
+      c.fig.carry = 'bag';
+    }
+  }
+
+  // a friend walking alongside c (and stopping with them to talk)
+  addBuddy(c) {
+    if (c.prom || c.loop.length < 4) return null;
+    const b = new Civilian(this, c.col, c.row);
+    b.pos.set(c.pos.x + 0.8, c.pos.y, c.pos.z);
+    b.scripted = false;
+    b.buddyOf = c;
+    c.chatty = true;
+    c.buddy = b;
+    const lines = ['No way!', 'Ha ha ha!', 'Seriously?', 'I know, right?', 'Let\'s get pizza.', 'Did you see that?', 'Tell me more!'];
+    let talkT = 2 + Math.random() * 4;
+    b.ctrl = (me, dt) => {
+      const L = me.buddyOf;
+      if (!L || !L.alive || L.gone || L.panicT > 0) {
+        me.ctrl = null;
+        me.buddyOf = null;
+        return null;
+      }
+      const f = L.fig.forward;
+      const side = L.fig.right;
+      const tx = L.pos.x + side.x * 0.85 - f.x * 0.1;
+      const tz = L.pos.z + side.z * 0.85 - f.z * 0.1;
+      const d = Math.hypot(tx - me.pos.x, tz - me.pos.z);
+      const lsp = Math.hypot(L.vel.x, L.vel.z);
+      talkT -= dt;
+      if (talkT < 0) {
+        talkT = 3 + Math.random() * 5;
+        const p = this.game.player.pos;
+        const who = Math.random() < 0.5 ? me : L;
+        if (Math.hypot(who.pos.x - p.x, who.pos.z - p.z) < 18) this.game.bubbles.say(who, lines[Math.floor(Math.random() * lines.length)]);
+      }
+      if (lsp < 0.2 && d < 1.4) {
+        // stopped: turned to each other, talking
+        me.faceYaw = Math.atan2(L.pos.x - me.pos.x, L.pos.z - me.pos.z);
+        return null;
+      }
+      return { x: tx, z: tz, speed: Math.min(4, lsp + d * 1.2) };
+    };
+    this.list.push(b);
+    return b;
+  }
+
+  walkDog(c, dt) {
+    const dog = c.dog;
+    const f = c.fig.forward;
+    const rt = c.fig.right;
+    const moving = Math.hypot(c.vel.x, c.vel.z) > 0.25;
+    // trotting a little ahead and to the side; sniffing about when they stop
+    const tx = c.pos.x + (moving ? f.x * 1.3 : f.x * 0.9) + rt.x * 0.45;
+    const tz = c.pos.z + (moving ? f.z * 1.3 : f.z * 0.9) + rt.z * 0.45;
+    steerDog(dog, tx, tz, c.panicT > 0 ? 6 : Math.max(1.4, Math.hypot(c.vel.x, c.vel.z) + 0.5), dt);
+    dog.y = groundHeight(dog.x, dog.z);
+    if (c.fig.leashTo) dogCollar(dog, c.fig.leashTo);
   }
 }
 

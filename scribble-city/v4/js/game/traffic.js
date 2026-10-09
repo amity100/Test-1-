@@ -13,6 +13,8 @@ import { damp, dampAngle, angleDiff } from '../core/util.js';
 // one that is wrecked, chasing you or taken off its path moves on its own.
 
 const POLICE_WHITE = [0.95, 0.95, 0.97];
+// the city's buses: orange, with a blue band along the windows (drawn by the car batches)
+const BUS_COLORS = [[0.98, 0.56, 0.22], [0.25, 0.55, 0.85], [0.95, 0.3, 0.38]];
 const WRECK = [0.13, 0.11, 0.13];
 
 // where the driver sits, in car-local (forward u, to the right s)
@@ -121,14 +123,16 @@ export class Traffic {
 
   // ------------------------------------------------------------------ lanes
   newCar(spec, o = {}) {
+    const bus = spec.kind === 'bus';
     return {
       spec,
+      bus,
       pos: new THREE.Vector3(),
       yaw: 0,
       speed: o.speed || 0,
-      maxSpeed: o.maxSpeed || 9.5 + Math.random() * 4.5,
-      halfLen: 2.3,
-      halfWid: 0.98,
+      maxSpeed: o.maxSpeed || (bus ? 8.5 : 9.5 + Math.random() * 4.5),
+      halfLen: bus ? 5.8 : spec.kind === 'van' ? 2.5 : 2.3,
+      halfWid: bus ? 1.25 : 0.98,
       ink: 120,
       driver: o.driver === false ? null : { look: civilianLook(), fig: null },
       crew: null,
@@ -187,7 +191,7 @@ export class Traffic {
     }
     const offs = laneOffsets(B, e.dx, e.dz);
     let off2 = offs[0];
-    if (e.turn > 0) off2 = offs[offs.length - 1];
+    if (e.turn > 0 || c.bus) off2 = offs[offs.length - 1];
     else if (e.turn === 0) off2 = offs.reduce((a, b) => (Math.abs(b - off) < Math.abs(a - off) ? b : a), offs[0]);
     const vmax = c.maxSpeed;
     const X = lanePoint(B, e.dx, e.dz, off2, stopDist(B, e.dz !== 0));
@@ -231,7 +235,8 @@ export class Traffic {
       const dx = Math.sign(B.x - A.x);
       const dz = Math.sign(B.z - A.z);
       const offs = laneOffsets(A, dx, dz);
-      const li = Math.floor(Math.random() * offs.length);
+      // (a bus keeps to the curb lane, where its stops are)
+      const li = spec && spec.kind === 'bus' ? offs.length - 1 : Math.floor(Math.random() * offs.length);
       const q = lanePoint(A, dx, dz, offs[li], t);
       const d = Math.hypot(q[0] - p.x, q[1] - p.z);
       if (d < minD || d > maxD) continue;
@@ -241,7 +246,7 @@ export class Traffic {
         const vz = q[1] - cam.position.z;
         if ((vx * fwd.x + vz * fwd.z) / (Math.hypot(vx, vz) || 1) > 0.2) continue;
       }
-      if (this.list.some((c) => Math.hypot(c.pos.x - q[0], c.pos.z - q[1]) < 10)) continue;
+      if (this.list.some((c) => Math.hypot(c.pos.x - q[0], c.pos.z - q[1]) < (spec && spec.kind === 'bus' ? 18 : 10))) continue;
       const c = this.newCar(spec || randomCarSpec(), o);
       this.placeOnEdge(c, A, B, li, t);
       this.list.push(c);
@@ -294,12 +299,21 @@ export class Traffic {
         }
       }
       this.list = this.list.filter((c) => !c.gone);
-      const max = game.touch ? 13 : 22;
+      const max = game.touch ? 14 : 26;
       let n = 0;
-      for (const c of this.list) if (!c.police) n++;
+      let buses = 0;
+      for (const c of this.list) {
+        if (!c.police) n++;
+        if (c.bus) buses++;
+      }
       const first = game.state === 'title' || this.time < 3;
       for (let k = 0; k < 3 && n < max; k++) {
-        if (this.spawnCar(p, first ? 30 : 60, 190, null, { anywhere: first })) n++;
+        // now and then a city bus
+        const spec = buses < 2 && Math.random() < 0.1 ? { kind: 'bus', color: BUS_COLORS[Math.floor(Math.random() * BUS_COLORS.length)] } : null;
+        if (this.spawnCar(p, first ? 30 : 60, 190, spec, { anywhere: first })) {
+          n++;
+          if (spec) buses++;
+        }
       }
     }
     for (const c of this.list) this.updateCar(c, dt);
@@ -320,13 +334,15 @@ export class Traffic {
     const fz = Math.cos(c.yaw);
     let best = Infinity;
     let why = null;
-    const test = (x, z, r, w) => {
+    // (distances from c's nose to the back of what is in front)
+    const nose = c.halfLen - 2.3;
+    const test = (x, z, r, w, back = 0) => {
       const dx = x - c.pos.x;
       const dz = z - c.pos.z;
-      const along = dx * fx + dz * fz;
+      const along = dx * fx + dz * fz - nose - back;
       if (along < 0.5 || along > 13 || along > best) return;
       const side = Math.abs(dx * fz - dz * fx);
-      if (side < 1.45 + r) {
+      if (side < 1.45 + r + (c.halfWid - 0.98)) {
         best = along;
         why = w;
       }
@@ -334,7 +350,7 @@ export class Traffic {
     const pl = game.player;
     if (!pl.inVehicle && pl.mode !== 'dead') test(pl.pos.x, pl.pos.z, 0.3, 'player');
     for (const v of game.vehicles.list) if (!v.dead && !(v.flies && v.alt > 2)) test(v.pos.x, v.pos.z, v.radius * 0.6, v.driver ? 'player' : 'car');
-    for (const o of this.list) if (o !== c) test(o.pos.x, o.pos.z, 0.8, 'car');
+    for (const o of this.list) if (o !== c) test(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
     for (const e of game.enemies.list) if (e.alive) test(e.pos.x, e.pos.z, 0.4, 'other');
     for (const h of game.civilians.list) if (!h.inside && h.alive !== false) test(h.pos.x, h.pos.z, 0.3, 'other');
     return why ? { d: best, why } : null;
@@ -388,6 +404,8 @@ export class Traffic {
         if (light === 'r' || canStop) want = Math.min(want, dist < 0.3 ? 0 : Math.sqrt(2 * DECEL * dist) * 0.9);
       }
     }
+    // a bus pulls up at its stops
+    if (c.bus) want = Math.min(want, this.busStop(c, dt));
     // whatever is in front
     const a = this.ahead(c);
     if (a) {
@@ -414,6 +432,45 @@ export class Traffic {
     const yaw = Math.atan2(_b[0] - _a[0], _b[1] - _a[1]);
     c.steer = damp(c.steer, angleDiff(c.yaw, yaw) * 6, 8, dt);
     c.yaw = yaw;
+  }
+
+  // how fast a bus may go to stop at the next bus stop on its right (and wait there a while)
+  busStop(c, dt) {
+    if (c.dwell > 0) {
+      c.dwell -= dt;
+      if (c.dwell <= 0) this.game.audio.play && this.near(c, 30) && this.game.audio.play('click', 0.3);
+      return 0;
+    }
+    const stops = this.game.world.busStops || [];
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    let best = null;
+    let bd = 40;
+    for (const st of stops) {
+      if (st === c.lastStop) continue;
+      const dx = st.x - c.pos.x;
+      const dz = st.z - c.pos.z;
+      const along = dx * fx + dz * fz;
+      // (its right is (-fz, fx))
+      const right = -dx * fz + dz * fx;
+      if (right < 1.5 || right > 4.8 || along < 0 || along > bd) continue;
+      bd = along;
+      best = st;
+    }
+    if (!best) return Infinity;
+    // the front doors by the shelter
+    const dist = bd - (c.halfLen - 1.5);
+    if (dist < 0.6 && c.speed < 0.6) {
+      c.dwell = 4 + Math.random() * 3;
+      c.lastStop = best;
+      return 0;
+    }
+    return Math.max(0, Math.sqrt(2 * DECEL * Math.max(0, dist)) * 0.85);
+  }
+
+  near(c, r) {
+    const p = this.game.player.pos;
+    return Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < r;
   }
 
   // a talking point above the car (for the driver's shouting)
@@ -585,7 +642,7 @@ export class Traffic {
       cars.draw(spec.kind, c.wrecked ? WRECK : spec.color, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, {
         spin: c.wheel || 0,
         steer: Math.max(-0.5, Math.min(0.5, c.steer || 0)),
-        extra: spec.police ? 'police' : spec.taxi ? 'taxi' : spec.kind === 'van' ? null : 'plain',
+        extra: spec.police ? 'police' : spec.taxi ? 'taxi' : spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain',
         siren: spec.police ? (c.siren ? blink : -1) : undefined,
         scale,
         squash,
@@ -609,7 +666,8 @@ export class Traffic {
     let best = null;
     let bd = maxD;
     for (const c of this.all()) {
-      if (c.flat) continue;
+      // (nobody drives off with a bus)
+      if (c.flat || c.bus) continue;
       const d = this.boxDist(c, pos.x, pos.z);
       if (d < bd) {
         bd = d;

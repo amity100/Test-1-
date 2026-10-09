@@ -86,8 +86,10 @@ export function decoBuilding(ctx, spec) {
   fbox(ctx, f, M.wall, 0.7, h - 0.2, -0.2, L - 0.7, h + 0.75, 0.22, trim, trimId);
   fbox(ctx, f, M.wall, 0.7, h + 0.75, -0.2, L - 0.7, h + 1.1, 0.06, color, wallId);
   const signCol = hex(spec.signCol);
-  // a thin neon line along the parapet
+  // a thin neon line along the parapet, and the cornice over it
   fbox(ctx, f, M.neon, 0.9, h + 0.05, 0.22, L - 0.9, h + 0.13, 0.32, signCol);
+  fbox(ctx, f, M.wall, 0.2, h + 1.1, -0.3, L - 0.2, h + 1.32, 0.5, trim, trimId);
+  fbox(ctx, f, M.wall, 0.5, h + 0.95, -0.2, L - 0.5, h + 1.1, 0.3, trim, trimId);
   // an Art Deco fin rising over the middle of the front
   const fin = spec.fin !== undefined ? spec.fin : !spec.hotel;
   if (fin) {
@@ -165,6 +167,7 @@ export function decoBuilding(ctx, spec) {
     ctx.parent.add(m);
   }
   if (spec.hotel) hotelBlade(ctx, f, { h, uc: 4, trim, signCol: spec.signCol, word: spec.hotelWord || 'HOTEL', bladeTex: spec.bladeTex });
+  if (ctx.rng && spec.roofStuff !== false) roofStuff(ctx, f, L, D, top + 0.75, spec);
   // the sides and the back
   if (spec.sides) {
     if (spec.sides.a) sideFront(ctx, f, 0, D, h, color, trim, -1, spec);
@@ -199,6 +202,82 @@ export function decoBuilding(ctx, spec) {
   return info;
 }
 
+// what stands on a flat roof in a real city: the stairs' little house, a water tank on its
+// legs, air conditioners humming, an aerial, a dish
+function roofStuff(ctx, f, L, D, y, spec) {
+  const M = ctx.M;
+  const r = ctx.rng;
+  const grey = srgb(0.72, 0.7, 0.76);
+  const back = -D + 2.2;
+  // the stairs come up in a little house of their own
+  if (L > 10) {
+    const u = r.range(2.5, L - 5);
+    fbox(ctx, f, M.steel, u, y, back, u + 2.6, y + 2.7, back + 2.6, spec.color);
+    fbox(ctx, f, M.steel, u - 0.1, y + 2.7, back - 0.1, u + 2.7, y + 2.85, back + 2.7, spec.trim);
+    fbox(ctx, f, M.frame, u + 0.8, y, back + 2.6, u + 1.8, y + 2.1, back + 2.66, FRAME);
+  }
+  // a water tank on its legs (the old buildings)
+  if (spec.floors >= 3 && !spec.hotel && r() < 0.45) {
+    const u = r.range(3, Math.max(3.2, L - 3));
+    const c = f.p(u, 0, -D * r.range(0.45, 0.7));
+    const wood = srgb(0.62, 0.42, 0.3);
+    const tank = new THREE.CylinderGeometry(1.25, 1.35, 2.6, 14);
+    tank.translate(c[0], y + 1.8 + 1.3, c[2]);
+    ctx.B.add(M.steel, tank, null, nextId(), { color: wood });
+    const cap = new THREE.ConeGeometry(1.45, 0.9, 14);
+    cap.translate(c[0], y + 1.8 + 2.6 + 0.45, c[2]);
+    ctx.B.add(M.steel, cap, null, nextId(), { color: srgb(0.45, 0.32, 0.26) });
+    for (const [dx, dz] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) ctx.B.box(M.steel, c[0] + dx - 0.07, y, c[2] + dz - 0.07, c[0] + dx + 0.07, y + 1.85, c[2] + dz + 0.07, nextId(), { color: srgb(0.3, 0.28, 0.32) });
+  }
+  // air conditioners
+  const n = r.int(1, 3);
+  for (let k = 0; k < n; k++) {
+    const u = r.range(1.5, L - 2.5);
+    const w = r.range(-D + 2, -3);
+    fbox(ctx, f, M.steel, u, y, w, u + 1.3, y + 1.0, w + 1.1, grey);
+    fbox(ctx, f, M.frame, u + 0.2, y + 1.0, w + 0.2, u + 1.1, y + 1.04, w + 0.9, srgb(0.3, 0.3, 0.36));
+  }
+  // an aerial, now and then a dish
+  if (r() < 0.5) {
+    const c = f.p(r.range(1, L - 1), 0, -r.range(3, D - 3));
+    ctx.B.box(M.steel, c[0] - 0.05, y, c[2] - 0.05, c[0] + 0.05, y + r.range(3, 6), c[2] + 0.05, nextId(), { color: srgb(0.35, 0.34, 0.4) });
+  }
+  if (r() < 0.3) {
+    const c = f.p(r.range(1.5, L - 1.5), 0, -r.range(3, D - 3));
+    const dish = new THREE.SphereGeometry(0.6, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.35);
+    dish.rotateX(-Math.PI * 0.6);
+    dish.translate(c[0], y + 1.1, c[2]);
+    ctx.B.add(M.steel, dish, null, nextId(), { color: srgb(0.9, 0.9, 0.92) });
+    ctx.B.box(M.steel, c[0] - 0.05, y, c[2] - 0.05, c[0] + 0.05, y + 1.1, c[2] + 0.05, nextId(), { color: srgb(0.35, 0.34, 0.4) });
+  }
+}
+
+// a fire escape up a side wall: a landing at every floor, railings, steep stairs between
+function fireEscape(ctx, sf, u0, floors) {
+  const M = ctx.M;
+  const iron = srgb(0.16, 0.14, 0.2);
+  const w = 3.6;
+  for (let fl = 1; fl < floors; fl++) {
+    const y = CURB + GROUND + (fl - 1) * FH + 0.55;
+    fbox(ctx, sf, M.frame, u0, y - 0.06, 0, u0 + w, y, 1.15, iron);
+    fbox(ctx, sf, M.frame, u0, y + 0.95, 1.1, u0 + w, y + 1.0, 1.15, iron);
+    for (let u = u0; u <= u0 + w + 0.01; u += w / 6) fbox(ctx, sf, M.frame, u - 0.02, y, 1.11, u + 0.02, y + 0.95, 1.15, iron);
+    fbox(ctx, sf, M.frame, u0, y, 0.05, u0 + 0.05, y + 1.0, 1.15, iron);
+    fbox(ctx, sf, M.frame, u0 + w - 0.05, y, 0.05, u0 + w, y + 1.0, 1.15, iron);
+    // the stairs down to the landing below (not from the first)
+    if (fl > 1) {
+      const a = sf.p(u0 + w - 0.4, y - FH + 0.1, 0.6);
+      const b = sf.p(u0 + 0.6, y - 0.05, 0.6);
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const g = new THREE.BoxGeometry(0.7, 0.07, len);
+      const dir = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize();
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir));
+      g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+      ctx.B.add(M.frame, g, null, nextId(), { color: iron });
+    }
+  }
+}
+
 // rows of framed windows on the floors above the shop, between u0 and u1 of the front
 export function windowRows(ctx, f, o) {
   const M = ctx.M;
@@ -217,22 +296,45 @@ export function windowRows(ctx, f, o) {
       const uc = u1 - (1 + step * (k + 0.5));
       if (o.mural && fl >= 2 && k > 0 && k < n - 1) continue; // the mural goes here
       const ww = o.hotel && k % 2 ? 0.7 : o.narrow ? 0.9 : 1.35;
-      windowAt(ctx, f, uc, y0, y1, ww);
+      windowAt(ctx, f, uc, y0, y1, ww, { trim });
       if (o.balcony && fl % 2 === 0 && k % 2 === 0) balcony(ctx, f, uc, y0, Math.min(step * 1.7, 3.2), trim);
+      else if (ctx.rng) {
+        // the life of the flats behind: an air conditioner here, a box of flowers there
+        const q = ctx.rng();
+        if (q < 0.1 && !o.hotel) airCon(ctx, f, uc, y0);
+        else if (q < 0.16 && fl <= 3) flowerBox(ctx, f, uc, y0, ww, ctx.rng);
+      }
     }
   }
 }
 
-// one window: dark glass (some of them lit from inside), a frame, a bar across
-export function windowAt(ctx, f, uc, y0, y1, ww) {
+// one window: dark glass (some of them lit from inside), its frame, a stone sill under it that
+// stands out of the wall, a lintel over it, a bar across
+export function windowAt(ctx, f, uc, y0, y1, ww, o = {}) {
   const M = ctx.M;
   const wid = nextId();
+  const stone = o.trim || WHITE;
   ctx.B.add(M.winGlass, f.quad(uc - ww / 2, y0, uc + ww / 2, y1, 0.01), null, wid);
-  fbox(ctx, f, M.frame, uc - ww / 2 - 0.1, y0 - 0.12, 0, uc + ww / 2 + 0.1, y0, 0.1, FRAME);
-  fbox(ctx, f, M.frame, uc - ww / 2 - 0.1, y1, 0, uc + ww / 2 + 0.1, y1 + 0.1, 0.1, FRAME);
-  fbox(ctx, f, M.frame, uc + ww / 2, y0, 0, uc + ww / 2 + 0.1, y1, 0.1, FRAME);
-  fbox(ctx, f, M.frame, uc - ww / 2 - 0.1, y0, 0, uc - ww / 2, y1, 0.1, FRAME);
+  fbox(ctx, f, M.frame, uc - ww / 2 - 0.18, y0 - 0.16, 0, uc + ww / 2 + 0.18, y0, 0.24, stone);
+  fbox(ctx, f, M.frame, uc - ww / 2 - 0.14, y1, 0, uc + ww / 2 + 0.14, y1 + 0.16, 0.16, stone);
+  fbox(ctx, f, M.frame, uc + ww / 2, y0, 0, uc + ww / 2 + 0.09, y1, 0.09, FRAME);
+  fbox(ctx, f, M.frame, uc - ww / 2 - 0.09, y0, 0, uc - ww / 2, y1, 0.09, FRAME);
   fbox(ctx, f, M.frame, uc - ww / 2, y0 + 1.1, 0, uc + ww / 2, y0 + 1.16, 0.06, FRAME);
+}
+
+// an air conditioner hanging under a window
+function airCon(ctx, f, uc, y0) {
+  fbox(ctx, f, ctx.M.steel, uc - 0.38, y0 - 0.72, 0, uc + 0.38, y0 - 0.2, 0.5, srgb(0.86, 0.86, 0.9));
+  fbox(ctx, f, ctx.M.frame, uc - 0.3, y0 - 0.64, 0.5, uc + 0.3, y0 - 0.28, 0.52, srgb(0.3, 0.3, 0.36));
+}
+
+// a box of flowers on a window's sill
+function flowerBox(ctx, f, uc, y0, ww, r) {
+  fbox(ctx, f, ctx.M.prop, uc - ww / 2, y0 - 0.02, 0.1, uc + ww / 2, y0 + 0.2, 0.42, srgb(0.62, 0.38, 0.26));
+  for (let u = uc - ww / 2 + 0.12; u < uc + ww / 2 - 0.05; u += 0.2) {
+    const c = r.pick([srgb(0.95, 0.3, 0.45), srgb(1.0, 0.82, 0.3), srgb(0.98, 0.98, 0.95), srgb(0.75, 0.4, 0.9)]);
+    fbox(ctx, f, ctx.M.leaf, u - 0.08, y0 + 0.2, 0.16, u + 0.08, y0 + 0.36, 0.36, c);
+  }
 }
 
 // a little balcony under a window: a slab and a rail
@@ -310,6 +412,18 @@ function sideFront(ctx, f, uEdge, D, h, color, trim, dir, spec) {
   const sf = new Facade(p0[0], p0[2], ux, uz, nx, nz);
   // (the wall itself is the body's side; the windows sit on it)
   windowRows(ctx, sf, { L: D, floors: spec.floors, trim, u0: 0.6, u1: D - 0.4, eyebrow: true, narrow: true });
+  if (ctx.rng && spec.floors >= 3 && !spec.hotel && ctx.rng() < 0.45) fireEscape(ctx, sf, D * 0.5 - 1.8, spec.floors);
+  // posters pasted up along the street, at eye height
+  if (ctx.atlas && ctx.posters) {
+    const r = ctx.rng;
+    const n = D > 12 ? 2 : 1;
+    for (let k = 0; k < n; k++) {
+      if (r() < 0.35) continue;
+      const u = D * (n === 2 ? (k ? 0.72 : 0.36) : 0.5);
+      const c = sf.p(u, CURB + 1.85, 0.04);
+      adQuad(ctx, ctx.M.board, c[0], c[1], c[2], sf.nx, sf.nz, 2.6, 1.3, r.pick(ctx.posters));
+    }
+  }
   return sf;
 }
 
@@ -329,6 +443,43 @@ function backFront(ctx, f, L, D, h, color, spec) {
   // an air conditioner hanging off the wall
   if (spec.floors > 2) fbox(ctx, bf, M.steel, L * 0.7 - 0.45, CURB + GROUND + 0.4, 0, L * 0.7 + 0.45, CURB + GROUND + 1.0, 0.55, srgb(0.82, 0.82, 0.86));
   return bf;
+}
+
+// an ad (a cell of the board atlas) as a flat picture facing (nx, nz), centred at (x, y, z)
+export function adQuad(ctx, mat, x, y, z, nx, nz, w, h, cell) {
+  const uv = ctx.atlas && ctx.atlas.rects[cell];
+  if (!uv) return;
+  const rx = nz;
+  const rz = -nx;
+  const a = [x - rx * w / 2, y - h / 2, z - rz * w / 2];
+  const b = [x + rx * w / 2, y - h / 2, z + rz * w / 2];
+  const c = [x + rx * w / 2, y + h / 2, z + rz * w / 2];
+  const d = [x - rx * w / 2, y + h / 2, z - rz * w / 2];
+  ctx.B.add(mat, quadGeo(a, b, c, d, [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]]), null, nextId());
+}
+
+// a billboard standing on a roof (top: the roof's height), facing the street the front faces
+export function roofBoard(ctx, f, L, top, cell, o = {}) {
+  const M = ctx.M;
+  const w = o.w || Math.min(L - 4, 11);
+  const h = w / 2;
+  const uc = L / 2;
+  const wd = -2.2;
+  const y0 = top + 1.4;
+  const steel = srgb(0.42, 0.4, 0.48);
+  // the posts and the struts behind them
+  for (const du of [-w * 0.36, 0, w * 0.36]) {
+    fbox(ctx, f, M.steel, uc + du - 0.12, top, wd - 0.12, uc + du + 0.12, y0 + h, wd + 0.12, steel);
+    fbox(ctx, f, M.steel, uc + du - 0.08, top, wd - 2.4, uc + du + 0.08, top + 0.16, wd, steel);
+  }
+  fbox(ctx, f, M.steel, uc - w / 2 - 0.15, y0 - 0.15, wd - 0.1, uc + w / 2 + 0.15, y0 + h + 0.15, wd, srgb(0.95, 0.94, 0.92));
+  // the catwalk and its lamps
+  fbox(ctx, f, M.steel, uc - w / 2, y0 - 0.25, wd, uc + w / 2, y0 - 0.15, wd + 0.9, steel);
+  for (const du of [-w * 0.3, w * 0.3]) fbox(ctx, f, M.lampGlass, uc + du - 0.2, y0 + h + 0.35, wd + 0.6, uc + du + 0.2, y0 + h + 0.5, wd + 0.9);
+  const c = f.p(uc, y0 + h / 2, wd + 0.02);
+  adQuad(ctx, M.adWall, c[0], c[1], c[2], f.nx, f.nz, w, h, cell);
+  const lp = f.p(uc, y0 + h / 2, wd + 3);
+  addLight(lp[0], lp[1], lp[2], 12, srgb(1, 0.9, 0.75), 0.6);
 }
 
 export { FH, GROUND, FRAME, fbox, rbox, fcol, frontMatrix };

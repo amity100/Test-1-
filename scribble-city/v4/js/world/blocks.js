@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { srgb, hex, addLight } from '../render/materials.js';
 import { nextId, Facade } from './kit.js';
-import { decoBuilding, fbox, windowRows, neonSign, FH, GROUND } from './deco.js';
+import { decoBuilding, fbox, windowRows, neonSign, adQuad, roofBoard, FH, GROUND } from './deco.js';
+import { AD_IDS } from './ads.js';
+import { skyscraper } from './skyline.js';
 import { palm } from './palms.js';
 import { slab } from './ground.js';
 import { BLOCK_TYPES, blockRect, westRect, CURB, AVES, STREETS, STREET_X0 } from './layout.js';
@@ -133,11 +135,20 @@ function rowOfShops(ctx, x, z0, z1, side, o = {}) {
     const lk = look(ctx, o);
     const hotel = o.hotels && L >= 22 && r() < 0.75;
     if (hotel) {
-      lk.floors = r.int(6, 9);
+      // (the hotels on the bay: tall, like the real ones)
+      lk.floors = r.int(7, 15);
       lk.color = r.pick([WALLS[3], WALLS[10], WALLS[0], WALLS[6], WALLS[12]]);
     }
-    const kind = hotel ? 'lobby' : o.kinds ? r.pick(o.kinds) : ctx.kindDeck();
-    const name = hotel ? HOTELS[(ctx.hotelN = (ctx.hotelN || 0) + 1) % HOTELS.length] : ctx.nameFor(kind);
+    // (a lot can be given to something special: the cinema, the club)
+    const special = o.special && o.special[i];
+    if (special) {
+      lk.floors = Math.max(lk.floors, special.floors || 3);
+      if (special.color) lk.color = special.color;
+      if (special.awning) lk.awning = special.awning;
+      if (special.signCol) lk.signCol = special.signCol;
+    }
+    const kind = special ? special.kind : hotel ? 'lobby' : o.kinds ? r.pick(o.kinds) : ctx.kindDeck();
+    const name = special ? special.name : hotel ? HOTELS[(ctx.hotelN = (ctx.hotelN || 0) + 1) % HOTELS.length] : ctx.nameFor(kind);
     // the corners: north end and south end of the row
     // (the lots run north to south; an east front's u runs north, a west front's south)
     const north = first;
@@ -151,7 +162,7 @@ function rowOfShops(ctx, x, z0, z1, side, o = {}) {
       color: lk.color,
       trim: lk.trim,
       signCol: lk.signCol,
-      sign: name,
+      sign: special && special.noSign ? null : name,
       signFont: lk.signFont,
       awning: lk.awning,
       hotel,
@@ -162,10 +173,160 @@ function rowOfShops(ctx, x, z0, z1, side, o = {}) {
       back: o.back !== false,
       eyebrow: true,
     });
+    if (special && special.front) special.front(ctx, f, L, info, lk);
     if (hotel) rooftopName(ctx, f, L, info.top, name, lk.signCol);
+    // now and then a billboard on the roof, over the avenue
+    else if (!special && L >= 15 && lk.floors <= 4 && r() < 0.24) roofBoard(ctx, f, L, info.top, r.pick(AD_IDS));
+    info.z0 = a;
+    info.z1 = b;
     out.push(info);
   });
+  // where a building stands taller than its neighbour, the bare side wall above the neighbour's
+  // roof carries a big painted ad (the way the side walls of a real city do)
+  for (let i = 0; i + 1 < out.length; i++) {
+    const A = out[i];
+    const B = out[i + 1];
+    const tall = A.top > B.top ? A : B;
+    const low = tall === A ? B : A;
+    const free = tall.top - low.top;
+    if (free < 6.5 || r() < 0.25) continue;
+    const D = Math.min(A.D, B.D);
+    let w = Math.min(D - 3, 12);
+    let h = w / 2;
+    if (h > free - 1.6) {
+      h = free - 1.6;
+      w = h * 2;
+    }
+    if (w < 7) continue;
+    // (the shared wall is at the north end of B, the south end of A)
+    const z = A.z1;
+    const nz = tall === A ? 1 : -1;
+    const ax = x - side * D * 0.5;
+    const y = low.top + 1.0 + h / 2;
+    adQuad(ctx, ctx.M.adWall, ax, y, z + nz * 0.04, 0, nz, w, h, r.pick(AD_IDS));
+  }
   return out;
+}
+
+// ------------------------------------------------------------------ the cinema and the club
+const BULB_COLS = [[1.0, 0.9, 0.6], [1.0, 0.75, 0.4]].map(([r, g, b]) => srgb(r, g, b));
+
+// the cinema: a marquee over the sidewalk, ringed with bulbs, tonight's films on it; a blade with
+// CINEMA up the front; the posters by the door; a queue for the tickets
+function cinemaFront(ctx, f, L, info, lk) {
+  const M = ctx.M;
+  const uc = L / 2;
+  const mw = Math.min(L - 3, 11);
+  const trim = srgb(0.95, 0.86, 0.6);
+  // the marquee: a deep box hung over the door, its underside lit
+  fbox(ctx, f, M.wall, uc - mw / 2, 3.65, 0.2, uc + mw / 2, 5.6, 3.4, trim);
+  fbox(ctx, f, M.lampGlass, uc - mw / 2 + 0.3, 3.62, 0.5, uc + mw / 2 - 0.3, 3.66, 3.1);
+  // the letter board on its face and sides
+  fbox(ctx, f, M.wall, uc - mw / 2 + 0.25, 3.95, 3.4, uc + mw / 2 - 0.25, 5.3, 3.45, srgb(0.98, 0.97, 0.92));
+  neonSign(ctx, f, 'ERASED 3', uc, 4.95, 3.5, mw * 0.62, hex('#d8265a'), { font: 'Permanent Marker', size: 80 });
+  neonSign(ctx, f, '7:00  9:30  MIDNIGHT', uc, 4.25, 3.5, mw * 0.72, hex('#1b1430'), { font: 'Rubik', size: 60 });
+  // the name in lights along the top of the marquee
+  neonSign(ctx, f, 'BAY CINEMA', uc, 5.64 + (mw * 0.8) / 8, 2.2, mw * 0.8, hex(lk.signCol), { font: 'Rubik', size: 90 });
+  // bulbs round the board
+  let k = 0;
+  for (let u = uc - mw / 2 + 0.2; u <= uc + mw / 2 - 0.2; u += 0.42) {
+    for (const v of [3.78, 5.48]) {
+      const p0 = f.p(u, v, 3.48);
+      ctx.B.box(M.bulb, p0[0] - 0.06, p0[1] - 0.06, p0[2] - 0.06, p0[0] + 0.06, p0[1] + 0.06, p0[2] + 0.06, nextId(), { color: BULB_COLS[k++ % 2] });
+    }
+  }
+  // a tall blade with CINEMA down it
+  hotelBladeAt(ctx, f, info.h, L - 2.2, 'CINEMA', lk.signCol);
+  // the posters either side of the door
+  for (const u of [1.0, L - 1.0]) {
+    const c = f.p(u, CURB + 1.7, 0.32);
+    adQuad(ctx, M.adWall, c[0], c[1], c[2], f.nx, f.nz, 1.3, 1.9 * 0.5 * 2, 'ad_movie');
+  }
+  const lp = f.p(uc, 3.4, 3);
+  addLight(lp[0], lp[1], lp[2], 12, srgb(1, 0.85, 0.6), 1.4);
+  queueAt(ctx, f, info, 'cinema', 6);
+}
+
+// the club: a black canopy, INK CLUB in pink neon, a velvet rope on brass posts, a bouncer and
+// the queue along the wall
+function clubFront(ctx, f, L, info, lk) {
+  const M = ctx.M;
+  const uc = L / 2;
+  // the canopy over the door
+  fbox(ctx, f, M.wall, uc - 2.2, 3.3, 0.2, uc + 2.2, 3.55, 3.2, srgb(0.06, 0.05, 0.08));
+  fbox(ctx, f, M.neon, uc - 2.2, 3.28, 3.18, uc + 2.2, 3.36, 3.26, hex(lk.signCol));
+  for (const du of [-2.0, 2.0]) fbox(ctx, f, M.steel, uc + du - 0.05, CURB, 3.0, uc + du + 0.05, 3.3, 3.1, srgb(0.85, 0.75, 0.4));
+  // big letters over it, and a strip of light up the wall
+  neonSign(ctx, f, 'INK CLUB', uc, 6.3, 0.35, Math.min(L - 3, 10), hex(lk.signCol), { font: 'Permanent Marker', size: 90 });
+  fbox(ctx, f, M.neon, 0.9, CURB + 0.3, 0.3, 1.02, info.h - 0.4, 0.4, hex('#3fe8ff'));
+  fbox(ctx, f, M.neon, L - 1.02, CURB + 0.3, 0.3, L - 0.9, info.h - 0.4, 0.4, hex('#3fe8ff'));
+  // the velvet rope: brass posts, a red rope sagging between them
+  const brass = srgb(0.86, 0.7, 0.3);
+  const posts = [];
+  for (let k = 0; k < 4; k++) {
+    const u = uc + 1.4 + k * 1.3;
+    const p0 = f.p(u, CURB, 1.9);
+    const post = new THREE.CylinderGeometry(0.05, 0.07, 0.95, 8);
+    post.translate(p0[0], CURB + 0.47, p0[2]);
+    ctx.B.add(M.steel, post, null, nextId(), { color: brass });
+    const knob = new THREE.SphereGeometry(0.08, 8, 6);
+    knob.translate(p0[0], CURB + 1.0, p0[2]);
+    ctx.B.add(M.steel, knob, null, nextId(), { color: brass });
+    posts.push(p0);
+  }
+  for (let k = 0; k + 1 < posts.length; k++) {
+    const a = posts[k];
+    const b = posts[k + 1];
+    for (let i = 0; i < 6; i++) {
+      const t0 = i / 6;
+      const t1 = (i + 1) / 6;
+      const y0 = CURB + 0.9 - Math.sin(t0 * Math.PI) * 0.18;
+      const y1 = CURB + 0.9 - Math.sin(t1 * Math.PI) * 0.18;
+      const x0 = a[0] + (b[0] - a[0]) * t0;
+      const z0 = a[2] + (b[2] - a[2]) * t0;
+      const x1 = a[0] + (b[0] - a[0]) * t1;
+      const z1 = a[2] + (b[2] - a[2]) * t1;
+      const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+      const g = new THREE.CylinderGeometry(0.03, 0.03, len, 6);
+      const dir = new THREE.Vector3(x1 - x0, y1 - y0, z1 - z0).normalize();
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir));
+      g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      ctx.B.add(M.prop, g, null, nextId(), { color: srgb(0.7, 0.08, 0.14) });
+    }
+  }
+  const lp = f.p(uc, 3.0, 2.5);
+  addLight(lp[0], lp[1], lp[2], 12, hex(lk.signCol), 1.6);
+  queueAt(ctx, f, info, 'club', 7);
+}
+
+// where a queue forms: from the door along the front (u growing), a step out from the wall
+function queueAt(ctx, f, info, kind, n) {
+  if (!ctx.queues) ctx.queues = [];
+  const shop = info.shop;
+  const door = shop ? shop.door : f.p(info.L / 2, CURB, 1.1);
+  ctx.queues.push({ kind, n, door: [door[0], door[2]], ux: f.ux, uz: f.uz, nx: f.nx, nz: f.nz });
+}
+
+// a vertical sign standing out of the front, a word on both of its faces
+function hotelBladeAt(ctx, f, h, uc, word, signCol) {
+  const M = ctx.M;
+  fbox(ctx, f, M.wall, uc - 0.22, h - 8.5, 0, uc + 0.22, h + 0.8, 1.5, srgb(0.98, 0.96, 0.92));
+  const r = ctx.neon.add(word, { font: 'Rubik', size: 96 });
+  if (!r) return;
+  const col = hex(signCol);
+  for (const sd of [-1, 1]) {
+    const c0 = f.p(uc + sd * 0.24, h - 8, 0.75);
+    const n = [f.ux * sd, 0, f.uz * sd];
+    const across = [f.nx * 0.62 * sd, 0, f.nz * 0.62 * sd];
+    const a = [c0[0] - across[0], h - 8, c0[2] - across[2]];
+    const b = [c0[0] - across[0], h + 0.4, c0[2] - across[2]];
+    const cc = [c0[0] + across[0], h + 0.4, c0[2] + across[2]];
+    const d = [c0[0] + across[0], h - 8, c0[2] + across[2]];
+    const g = f.facing(a, b, cc, d, [[r[0], r[3]], [r[2], r[3]], [r[2], r[1]], [r[0], r[1]]], n);
+    ctx.B.add(M.signNeon, g, null, nextId(), { color: col });
+  }
+  const lp = f.p(uc, h - 4, 2.2);
+  addLight(lp[0], lp[1], lp[2], 12, col, 1.0);
 }
 
 // big letters on the roof of a hotel, lit up
@@ -223,7 +384,9 @@ function buildBlock(ctx, col, row, type) {
     market(ctx, { x0: R.x0 + 13, x1: R.x1 - 13, z0: R.z0, z1: R.z1 });
     return;
   }
-  // a row along each avenue, the alley between them
+  // a row along each avenue, the alley between them (on the boulevard: the cinema, the club)
+  if (col === 2 && row === 1) eastOpt.special = { 1: { kind: 'cinema', name: 'Bay Cinema', noSign: true, floors: 4, color: srgb(0.36, 0.16, 0.28), awning: srgb(0.62, 0.12, 0.2), signCol: '#ffd23f', front: cinemaFront } };
+  if (col === 2 && row === 3) eastOpt.special = { 1: { kind: 'bar', name: 'INK CLUB', noSign: true, floors: 3, color: srgb(0.16, 0.12, 0.22), awning: srgb(0.08, 0.06, 0.1), signCol: '#ff3fa4', front: clubFront } };
   if (type !== 'first') rowOfShops(ctx, R.x1, R.z0, R.z1, 1, eastOpt);
   rowOfShops(ctx, R.x0, R.z0, R.z1, -1, westOpt);
   alleyGround(ctx, alley);
@@ -294,49 +457,39 @@ function westRow(ctx, row) {
 }
 
 // ------------------------------------------------------------------ downtown towers
+// a podium of shops along the avenue, and out of it a skyscraper of glass (world/skyline.js)
 function towers(ctx, R) {
   const r = ctx.rng;
   const len = R.z1 - R.z0;
   const parts = [[R.z0, R.z0 + len * 0.5], [R.z0 + len * 0.5, R.z1]];
-  for (const [a, b] of parts) {
+  parts.forEach(([a, b], pi) => {
     const L = b - a;
     const f = new Facade(R.x1, b, 0, -1, 1, 0);
     const lk = look(ctx);
-    const floors = r.int(10, 14);
+    const floors = r.int(4, 6);
     const kind = r.pick(['lobby', 'cafe', 'pharmacy', 'phones', 'books']);
     const color = r.pick([WALLS[3], WALLS[10], WALLS[6], WALLS[5]]);
+    const D = 18;
     const info = decoBuilding(ctx, {
-      f, L, D: 18, floors, color, trim: lk.trim, signCol: lk.signCol,
+      f, L, D, floors, color, trim: lk.trim, signCol: lk.signCol,
       sign: kind === 'lobby' ? r.pick(['Sun Tower', 'Bay Plaza', 'Coral Building']) : ctx.nameFor(kind), signFont: 'Rubik',
-      awning: lk.awning, fin: true, shop: { kind, name: 'tower' }, sides: { a: true, b: true }, back: true, balcony: false,
+      awning: lk.awning, fin: false, shop: { kind, name: 'tower' }, sides: { a: true, b: true }, back: true, balcony: false,
     });
-    // setbacks: two smaller boxes on top, a spire and a neon crown
-    const M = ctx.M;
+    // the tower: set back from the street, its glass in the city's own window texture
     const top = info.top;
-    const c = lk.trim;
-    fbox(ctx, f, M.wall, 2.5, top, -15.5, L - 2.5, top + 7.2, -2.5, color);
-    windowRows2(ctx, f, 2.5, L - 2.5, top, 2, -2.5);
-    fbox(ctx, f, M.wall, 5, top + 7.2, -12.5, L - 5, top + 12.6, -5.5, c);
-    const sp = new THREE.CylinderGeometry(0.15, 0.6, 9, 6);
-    const pc = f.p(L / 2, top + 12.6 + 4.5, -9);
-    sp.translate(pc[0], pc[1], pc[2]);
-    ctx.B.add(M.steel, sp, null, nextId(), { color: srgb(0.85, 0.82, 0.9) });
-    fbox(ctx, f, M.neon, 5.1, top + 12.0, -5.45, L - 5.1, top + 12.2, -5.3, hex(lk.signCol));
-    fbox(ctx, f, M.neon, 2.6, top + 6.7, -2.45, L - 2.6, top + 6.9, -2.3, hex(lk.signCol));
-    ctx.col.addBox(Math.min(f.p(2.5, 0, -15.5)[0], f.p(L - 2.5, 0, -2.5)[0]), Math.min(f.p(2.5, 0, -15.5)[2], f.p(L - 2.5, 0, -2.5)[2]), Math.max(f.p(2.5, 0, -15.5)[0], f.p(L - 2.5, 0, -2.5)[0]), Math.max(f.p(2.5, 0, -15.5)[2], f.p(L - 2.5, 0, -2.5)[2]), top, top + 12.6, 'wall');
-  }
-}
-
-// windows on a setback (no shop under them)
-function windowRows2(ctx, f, u0, u1, v0, floors, w) {
-  const M = ctx.M;
-  for (let fl = 0; fl < floors; fl++) {
-    const y0 = v0 + 0.7 + fl * FH;
-    for (let u = u0 + 1.8; u < u1 - 1.2; u += 3.1) {
-      const g = f.quad(u - 0.6, y0, u + 0.6, y0 + 1.9, w + 0.01);
-      ctx.B.add(M.winGlass, g, null, nextId());
-    }
-  }
+    const xc = R.x1 - D / 2 - 1;
+    const zc = (a + b) / 2;
+    const tw = D - 3;
+    const td = Math.min(L - 10, 30);
+    const h = r.range(80, 150) + pi * 20;
+    const opts = {
+      mats: ctx.towerMats || [ctx.M.wall], steel: ctx.M.steel, neon: ctx.M.neon, rand: r, chunk: undefined,
+      trimCol: srgb(0.88, 0.84, 0.94), crownCol: hex(lk.signCol), y0: top, podium: false, style: pi === 0 ? 'deco' : 'cut',
+    };
+    const peak = skyscraper(ctx, xc, zc, tw, td, h, opts);
+    ctx.col.addBox(xc - tw / 2, zc - td / 2, xc + tw / 2, zc + td / 2, top, peak, 'wall');
+    fbox(ctx, f, ctx.M.neon, 2.6, top - 0.3, -0.05, L - 2.6, top - 0.1, 0.1, hex(lk.signCol));
+  });
 }
 
 // ------------------------------------------------------------------ a park of palms

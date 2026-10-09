@@ -37,6 +37,10 @@ async function loadFonts() {
         document.fonts.load('700 40px "Rubik"', 'אבג'),
         document.fonts.load('400 20px "Rubik"', 'אבג'),
         document.fonts.load('40px "Permanent Marker"', 'ABC'),
+        // (the ads in the city are English: the Latin letters of Rubik too)
+        document.fonts.load('800 40px "Rubik"', 'ABC'),
+        document.fonts.load('600 40px "Rubik"', 'ABC'),
+        document.fonts.load('400 40px "Rubik"', 'ABC'),
         document.fonts.load('700 40px "Caveat"', 'ABC'),
       ]),
       wait(4000),

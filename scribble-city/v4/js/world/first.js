@@ -4,6 +4,7 @@ import { nextId, rand, Facade, boxMetres } from './kit.js';
 import { neonText, paintedSign, roadSign, mural } from './paint.js';
 import { decoBuilding } from './deco.js';
 import { palm } from './palms.js';
+import { buildSkyline as buildTowers } from './skyline.js';
 import { STREET_X0, STREET_X1, WALK_X0, PROM_X1, STREETS, CURB } from './layout.js';
 
 // The first boulevard, exactly as it was: five Art Deco shops on the left, palms, the wet street,
@@ -198,48 +199,14 @@ function towerWindows() {
   return [canvasTexture(a, { repeat: true }), canvasTexture(e, { repeat: true })];
 }
 
-// the city across the bay, and the long bridge with its lights (the first boulevard's own)
+// the city across the bay and the bridge (world/skyline.js), in the towers' own glass
 function buildSkyline(ctx) {
   const B = (o) => makeSurface(o);
   const [winAlb, winTex] = towerWindows();
-  const towerCols = [srgb(0.26, 0.26, 0.52), srgb(0.4, 0.28, 0.52), srgb(0.22, 0.32, 0.55), srgb(0.48, 0.34, 0.55), srgb(0.32, 0.28, 0.6)];
+  const towerCols = [srgb(0.26, 0.26, 0.52), srgb(0.4, 0.28, 0.52), srgb(0.22, 0.32, 0.55), srgb(0.48, 0.34, 0.55), srgb(0.32, 0.28, 0.6), srgb(0.55, 0.4, 0.62), srgb(0.3, 0.38, 0.62)];
   const towerMats = towerCols.map((c) => B({ kind: 'uv', color: c, emMap: winTex, map: winAlb, emissive: new THREE.Color(1.3, 1.0, 0.75), uvScale: 6, ang: 1.45, line: 0.6, gloss: 0.55 }));
-  const steelM = ctx.M.steel;
-  const steel = srgb(0.62, 0.62, 0.68);
-  const tower = (x, z, w, d, h) => {
-    const g = boxMetres(w, h, d, 30);
-    g.translate(x, h / 2 - 1, z);
-    ctx.B.add(rand.pick(towerMats), g, null, nextId(), { chunk: 'skyline' });
-    if (h > 120 && rand() < 0.6) {
-      const sp = new THREE.CylinderGeometry(0.3, 1.2, h * 0.18, 6);
-      sp.translate(x, h + h * 0.09 - 1, z);
-      ctx.B.add(steelM, sp, null, nextId(), { color: steel, chunk: 'skyline' });
-    }
-  };
-  for (let i = 0; i < 70; i++) {
-    const x = rand.range(330, 950);
-    const z = rand.range(-1150, 60);
-    if (Math.abs(x - -z * 0.305) < 60) continue;
-    tower(x, z, rand.range(22, 50), rand.range(22, 50), rand.range(30, 210) * (1 - Math.abs(z + 450) / 1400));
-  }
-  for (let i = 0; i < 40; i++) {
-    const x = rand.range(-260, 260);
-    const z = rand.range(-1300, -560);
-    // leave a gap where the sun goes down
-    if (Math.abs(x - -z * 0.305) < 70) continue;
-    tower(x, z, rand.range(26, 56), rand.range(26, 56), rand.range(60, 260));
-  }
-  // the long bridge over the bay, with its lights
-  const deckCol = srgb(0.72, 0.66, 0.84);
-  const deck = ctx.M.wallSolid;
-  const bz = -430;
-  ctx.B.box(deck, PROM_X1 + 10, 11, bz - 6, 950, 13.2, bz + 6, nextId(), { color: deckCol, chunk: 'bridge' });
-  for (let x = PROM_X1 + 40; x < 950; x += 55) ctx.B.box(deck, x - 2.5, -1, bz - 3, x + 2.5, 11, bz + 3, nextId(), { color: deckCol, chunk: 'bridge' });
-  // where it comes ashore: a ramp down into the north of the city, on a tower of its own
-  ctx.B.box(deck, PROM_X1 - 6, 0, bz - 7, PROM_X1 + 11, 13.6, bz + 7, nextId(), { color: srgb(0.78, 0.7, 0.88), chunk: 'bridge' });
-  ctx.B.box(deck, PROM_X1 - 4, 13.6, bz - 2, PROM_X1 + 9, 26, bz + 2, nextId(), { color: srgb(0.82, 0.74, 0.92), chunk: 'bridge' });
-  const bl = ctx.M.bridgeLight;
-  for (let x = PROM_X1 + 20; x < 950; x += 11) ctx.B.box(bl, x - 0.35, 13.2, bz + 5.4, x + 0.35, 13.9, bz + 6.1, nextId(), { chunk: 'bridge' });
+  ctx.towerMats = towerMats;
+  buildTowers(ctx, rand, towerMats);
 }
 
 export { onCross, CURB };

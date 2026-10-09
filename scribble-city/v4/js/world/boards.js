@@ -2,6 +2,7 @@ import { Sketcher, makeCanvas, FONT_SIGN, FONT_NOTE, INK2D, BLACK2D, RED2D } fro
 import { canvasTexture } from '../render/materials.js';
 import { BLUEPRINT_ORDER, BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { AVES, STREETS } from './layout.js';
+import { ADS2 } from './ads.js';
 
 // Everything printed on a board in the city, in one texture: the blueprints you photograph (a
 // technical drawing pinned up on a billboard), the ads, DRAW YOURSELF A FRIEND, the street names.
@@ -265,30 +266,45 @@ function friendBoard(sk, ctx, w, h) {
   for (const [x, y, s] of [[w - 34, 34, 30], [w - 54, h - 34, 22], [130, 34, 20]]) sk.poly(heartPts(x, y, s, 20), true, { width: 3, color: '#d8265a' });
 }
 
-// a sample of what you get: a friend drawn on a sheet (a nice, ordinary woman in a long dress)
+// a sample of what you get: a friend drawn on a sheet (a nice, ordinary woman in a denim jacket
+// and jeans, waving)
 function friendSketch(sk, ctx, w, h) {
   ctx.fillStyle = '#fbf8f0';
   ctx.fillRect(0, 0, w, h);
   sk.poly([[6, 6], [w - 6, 6], [w - 6, h - 6], [6, h - 6]], true, { width: 4, color: '#6b4a2e' });
   const ink = '#2a2230';
-  sk.fill([[100, 52], [156, 52], [164, 126], [92, 126]], '#6b3d22', { spacing: 2.4, alpha: 0.85, overshoot: 0, angle: 1.4 });
+  // the hair, the face
+  sk.fill([[100, 52], [156, 52], [162, 112], [94, 112]], '#6b3d22', { spacing: 2.4, alpha: 0.85, overshoot: 0, angle: 1.4 });
   sk.circle(128, 70, 24, { width: 4, color: ink });
   sk.stroke([[104, 62], [112, 46], [128, 42], [144, 46], [152, 62]], { width: 4, color: '#6b3d22' });
   sk.line(119, 66, 119, 70, { width: 4, color: ink });
   sk.line(137, 66, 137, 70, { width: 4, color: ink });
   sk.stroke([[118, 79], [128, 84], [138, 79]], { width: 3, color: '#c2265a' });
-  const dress = [[110, 98], [146, 98], [166, 222], [90, 222]];
-  sk.fill(dress, '#8fb8f0', { spacing: 2.6, alpha: 0.9, overshoot: 0, angle: -0.5 });
-  sk.poly(dress, true, { width: 4, color: ink });
-  sk.stroke([[112, 100], [96, 140], [92, 168]], { width: 7, color: '#8fb8f0' });
-  sk.stroke([[112, 100], [96, 140], [92, 168]], { width: 2.5, color: ink });
-  sk.stroke([[144, 100], [170, 82], [182, 54]], { width: 7, color: '#8fb8f0' });
-  sk.stroke([[144, 100], [170, 82], [182, 54]], { width: 2.5, color: ink });
-  sk.circle(183, 48, 6, { width: 3, color: ink });
-  sk.line(112, 222, 110, 236, { width: 4, color: ink });
-  sk.line(144, 222, 146, 236, { width: 4, color: ink });
-  sk.text('Hi!', 206, 40, { size: 40, color: '#d8265a', font: FONT_NOTE, dir: 'ltr', weight: 700 });
-  const hp = heartPts(206, 96, 34, 20);
+  // a white tee under an open denim jacket
+  const tee = [[116, 98], [140, 98], [142, 158], [114, 158]];
+  sk.fill(tee, '#f4f2ec', { spacing: 2.6, alpha: 0.9, overshoot: 0 });
+  sk.poly(tee, true, { width: 2.5, color: ink });
+  for (const sd of [-1, 1]) {
+    const x0 = 128 + sd * 12;
+    const jacket = [[x0, 96], [128 + sd * 30, 100], [128 + sd * 32, 162], [x0 + sd * 2, 162]];
+    sk.fill(jacket, '#5f86c9', { spacing: 2.6, alpha: 0.9, overshoot: 0, angle: -0.5 });
+    sk.poly(jacket, true, { width: 3.5, color: ink });
+  }
+  // the jeans, the sneakers
+  for (const sd of [-1, 1]) {
+    const leg = [[128 + sd * 2, 160], [128 + sd * 26, 160], [128 + sd * 24, 228], [128 + sd * 8, 228]];
+    sk.fill(leg, '#2f3f6e', { spacing: 2.6, alpha: 0.9, overshoot: 0, angle: 1.2 });
+    sk.poly(leg, true, { width: 3.5, color: ink });
+    sk.poly([[128 + sd * 6, 228], [128 + sd * 28, 228], [128 + sd * 30, 238], [128 + sd * 4, 238]], true, { width: 3, color: ink });
+  }
+  // one arm down, one waving
+  sk.stroke([[100, 104], [92, 136], [90, 160]], { width: 8, color: '#5f86c9' });
+  sk.stroke([[100, 104], [92, 136], [90, 160]], { width: 2.5, color: ink });
+  sk.stroke([[156, 104], [176, 84], [184, 56]], { width: 8, color: '#5f86c9' });
+  sk.stroke([[156, 104], [176, 84], [184, 56]], { width: 2.5, color: ink });
+  sk.circle(185, 50, 6, { width: 3, color: ink });
+  sk.text('Hi!', 210, 40, { size: 40, color: '#d8265a', font: FONT_NOTE, dir: 'ltr', weight: 700 });
+  const hp = heartPts(210, 96, 34, 20);
   sk.fill(hp, '#ff4f78', { spacing: 3, alpha: 0.9 });
   sk.poly(hp, true, { width: 3, color: '#a3123c' });
 }
@@ -357,6 +373,7 @@ export function boardAtlas() {
   };
   for (const id of BLUEPRINT_ORDER) large(`bb_${id}`, (sk, c, w, h) => blueprintBoard(sk, c, w, h, BLUEPRINTS[id]));
   for (const [k, fn] of Object.entries(ADS)) large(k, fn);
+  for (const [k, fn] of Object.entries(ADS2)) large(k, fn);
   large('friend_stand', (sk, c, w, h) => friendBoard(sk, c, w, h));
   // the drawn friend: a 256 square, twice (in a big cell)
   large('friend_sketch', (sk, c) => {

@@ -507,7 +507,7 @@ export class Doodle {
     const upperArmC = sleeves === 'none' ? skin : topC;
     const foreArmC = sleeves === 'long' ? topC : skin;
     // skirts and dresses reach the ankle: the legs under them are the fabric
-    const longSkirt = bot.kind === 'skirt' || bot.kind === 'dress';
+    const longSkirt = bot.kind === 'skirt' || bot.kind === 'dress' || bot.kind === 'midi';
     const pantsC = bot.color;
     const shinC = bot.kind === 'shorts' ? skin : bot.color;
     const legR = bot.kind === 'baggy' ? 1.2 : 1;
@@ -515,7 +515,7 @@ export class Doodle {
     // pelvis (stays with the legs if the waist gets erased)
     if (P.pelvis > 0.5) {
       _a.copy(j.hip).addScaledVector(ax, 0.02);
-      this.ellipsoid('pelvis', 'pelvis', _a, rgt, ax, fwd, 0.155 * bulk * (L.fem ? 1.08 : 1) * S, 0.11 * S, 0.105 * bulk * S, bot.kind === 'skirt' || bot.kind === 'dress' ? bot.color : pantsC);
+      this.ellipsoid('pelvis', 'pelvis', _a, rgt, ax, fwd, 0.155 * bulk * (L.fem ? 1.08 : 1) * S, 0.11 * S, 0.105 * bulk * S, longSkirt ? bot.color : pantsC);
     }
     // torso
     if (P.torso > 0.5) {
@@ -727,6 +727,13 @@ export class Doodle {
         this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.1, 0.045 * hs, rz * 1.1, hat.color);
         _a.copy(hc).addScaledVector(hu, 0.2 * hs);
         this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.125 * hs, 0.13 * hs, 0.125 * hs, hat.color);
+      } else if (k === 'bucket') {
+        // a bucket hat: a soft crown and a brim sloping down all round
+        _a.copy(hc).addScaledVector(hu, 0.06 * hs);
+        const crown = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.1, ry * 0.75, rz * 1.1, hat.color);
+        below(crown, -0.02);
+        _a.copy(hc).addScaledVector(hu, 0.035 * hs);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.17 * hs, 0.022 * hs, 0.17 * hs, hat.color);
       } else if (k === 'beret') {
         _a.copy(hc).addScaledVector(hu, 0.1 * hs).addScaledVector(hr, 0.03 * hs);
         this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.135 * hs, 0.042 * hs, 0.13 * hs, hat.color);
@@ -796,7 +803,31 @@ export class Doodle {
     }
     if (L.acc.includes('bag')) {
       _a.copy(this.j.handL).addScaledVector(ax, -0.12 * S);
-      this.ellipsoid('armL', 'handL', _a, rgt, ax, fwd, 0.035 * S, 0.11 * S, 0.14 * S, [0.4, 0.26, 0.18]);
+      this.ellipsoid('armL', 'handL', _a, rgt, ax, fwd, 0.035 * S, 0.11 * S, 0.14 * S, L.bagColor || [0.4, 0.26, 0.18]);
+    }
+    const j = this.j;
+    const bagC = L.bagColor || [0.16, 0.14, 0.16];
+    if (L.acc.includes('crossbody')) {
+      // a little bag on a strap across the body, from the right shoulder to the left hip
+      _a.copy(j.shoulderR).addScaledVector(fwd, 0.03 * S).addScaledVector(ax, 0.02 * S);
+      _b.copy(j.hipL).addScaledVector(ax, 0.06 * S).addScaledVector(fwd, 0.1 * this.bulk * S).addScaledVector(rgt, -0.05 * S);
+      this.capsule('torso', 'chest', _a, _b, 0.012 * S, bagC);
+      _b.addScaledVector(ax, -0.04 * S).addScaledVector(fwd, 0.02 * S);
+      this.ellipsoid('torso', 'chest', _b, rgt, ax, fwd, 0.1 * S, 0.075 * S, 0.035 * S, bagC);
+    }
+    if (L.acc.includes('handbag')) {
+      // a handbag on the crook of the left arm
+      _a.lerpVectors(j.elbowL, j.handL, 0.25).addScaledVector(ax, -0.1 * S).addScaledVector(rgt, -0.05 * S);
+      this.ellipsoid('armL', 'handL', _a, rgt, ax, fwd, 0.05 * S, 0.1 * S, 0.14 * S, bagC);
+      _b.copy(j.elbowL).addScaledVector(ax, 0.02 * S);
+      this.capsule('armL', 'handL', _b, _a, 0.01 * S, bagC);
+    }
+    if (L.acc.includes('tote')) {
+      // a big tote bag on the left shoulder, hanging at the hip
+      _a.copy(j.shoulderL).addScaledVector(rgt, -0.04 * S);
+      _b.copy(j.hipL).addScaledVector(rgt, -0.13 * S).addScaledVector(ax, 0.02 * S);
+      this.capsule('torso', 'chest', _a, _b, 0.011 * S, bagC);
+      this.ellipsoid('torso', 'chest', _b, rgt, ax, fwd, 0.04 * S, 0.17 * S, 0.17 * S, bagC);
     }
   }
 

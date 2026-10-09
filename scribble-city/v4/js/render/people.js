@@ -19,7 +19,8 @@ const cap = (r, len, segs = 10) => {
 
 // a body part that tapers (thighs, forearms): a lathe from the joint downwards, rounded at both
 // ends like a capsule, so two of them meet smoothly at the joint
-function limb(r0, r1, len, segs = 10) {
+// (bulge: how much fuller it is a third of the way down - a calf, a forearm's muscle)
+function limb(r0, r1, len, segs = 10, bulge = 0) {
   const pts = [];
   for (let i = 0; i <= 4; i++) {
     const a = (Math.PI / 2) * (1 - i / 4);
@@ -27,7 +28,7 @@ function limb(r0, r1, len, segs = 10) {
   }
   for (let i = 1; i < 8; i++) {
     const t = i / 8;
-    pts.push(new THREE.Vector2(r0 + (r1 - r0) * t, -t * len));
+    pts.push(new THREE.Vector2(r0 + (r1 - r0) * t + bulge * Math.sin(Math.PI * Math.min(1, t * 1.4)), -t * len));
   }
   for (let i = 0; i <= 4; i++) {
     const a = (Math.PI / 2) * (i / 4);
@@ -65,10 +66,28 @@ function torsoGeo(waist, chest, shoulders, len, hem = 0, boxy = false) {
   return g;
 }
 
-function skirtGeo(top, bottom, len) {
+function skirtGeo(top, bottom, len, gap = 0) {
   const pts = [new THREE.Vector2(top, 0.02), new THREE.Vector2(top * 1.05, -len * 0.15), new THREE.Vector2(bottom * 0.92, -len * 0.75), new THREE.Vector2(bottom, -len)];
-  const g = new THREE.LatheGeometry(pts, 16);
+  // (gap: an opening at the front, like a coat's)
+  const g = new THREE.LatheGeometry(pts, 16, gap / 2, Math.PI * 2 - gap);
   g.scale(1, 1, 0.8);
+  return g;
+}
+
+// a short sleeve: a tube from the shoulder, open at its hem (it flares a little there)
+function sleeveGeo(r0, r1, len, segs = 12) {
+  const pts = [];
+  for (let i = 0; i <= 4; i++) {
+    const a = (Math.PI / 2) * (1 - i / 4);
+    pts.push(new THREE.Vector2(Math.max(0.0001, Math.cos(a) * r0), Math.sin(a) * r0));
+  }
+  for (let i = 1; i <= 6; i++) {
+    const t = i / 6;
+    pts.push(new THREE.Vector2(r0 + (r1 - r0) * t + (t > 0.85 ? (t - 0.85) * 0.06 : 0), -t * len));
+  }
+  // (the hem turns inwards a little, so the tube has a lip and no hole to see through)
+  pts.push(new THREE.Vector2(r1 * 0.82, -len));
+  const g = new THREE.LatheGeometry(pts, segs);
   return g;
 }
 
@@ -234,23 +253,40 @@ function framed(c, r, u, f, sx, sy, sz, out = _m) {
   return out;
 }
 
+const SOLE = [0.95, 0.95, 0.93];
+const EYE_WHITE = [0.96, 0.95, 0.92];
+const PUPIL = [0.06, 0.05, 0.08];
+const MASK_EYE = [0.95, 0.92, 0.85];
+const BROW_BALD = [0.2, 0.16, 0.14];
+const LIPS_F = [0.72, 0.3, 0.34];
+const LIPS_M = [0.45, 0.22, 0.22];
+
+// the tops that are worn open over another layer
+const OPEN = new Set(['suit', 'blazer', 'jacket', 'denim', 'bomber', 'cardigan', 'overshirt', 'trench', 'coat']);
+
 const L3 = (c) => lin3(c[0], c[1], c[2]);
 const lc = new Map();
+const lcW = new WeakMap();
 function linC(c) {
-  // (colours of looks are sRGB arrays; cached by value)
+  // (colours of looks are sRGB arrays: cached by the array itself, and by value for the ones
+  // made on the fly)
+  let v = lcW.get(c);
+  if (v) return v;
   const key = `${c[0].toFixed(3)},${c[1].toFixed(3)},${c[2].toFixed(3)}`;
-  let v = lc.get(key);
+  v = lc.get(key);
   if (!v) {
     v = L3(c);
     lc.set(key, v);
   }
+  lcW.set(c, v);
   return v;
 }
 
 export class PersonRenderer {
   constructor(scene) {
     this.scene = scene;
-    const S = (o) => makeSurface({ ...o });
+    // (line 0.97 marks a person for the ink: their outlines, but no seams at the joints)
+    const S = (o) => makeSurface({ line: 0.97, ...o });
     // the pens of the people (the first boulevard's): skin, cloth with folds, plain cloth, shoes
     this.mats = {
       skin: S({ kind: 'skin', partR: 0.06 }),
@@ -259,6 +295,7 @@ export class PersonRenderer {
       cargo: S({ kind: 'cyl', map: folds('cargo'), partR: 0.09 }),
       skirt: S({ kind: 'cyl', map: folds('skirt'), partR: 0.25 }),
       plain: S({ kind: 'cyl', map: folds('plain'), partR: 0.09 }),
+      coat: S({ kind: 'cyl', map: folds('skirt'), partR: 0.2, side: THREE.DoubleSide }),
       hair: S({ kind: 'cyl', partR: 0.1 }),
       box: S({ kind: 'box' }),
       gloss: S({ kind: 'paint', partR: 0.05, gloss: 0.8 }),
@@ -277,17 +314,17 @@ export class PersonRenderer {
       pelvisSkirt: P(new THREE.SphereGeometry(0.17, 12, 8).scale(1.05, 0.72, 0.78), M.skirt),
       upperSkin: P(limb(0.056, 0.045, 0.29), M.skin),
       upperShirt: P(limb(0.056, 0.045, 0.29), M.shirt),
-      foreSkin: P(limb(0.045, 0.034, 0.26), M.skin),
+      foreSkin: P(limb(0.045, 0.031, 0.26, 10, 0.006), M.skin),
       foreShirt: P(limb(0.045, 0.034, 0.26), M.shirt),
-      sleeveTee: P(limb(0.085, 0.078, 0.21), M.tee),
+      sleeveTee: P(sleeveGeo(0.08, 0.07, 0.15), M.tee),
       ballTee: P(new THREE.SphereGeometry(0.07, 12, 8), M.tee),
       hand: P(new THREE.SphereGeometry(0.05, 10, 8).scale(0.75, 1.3, 0.6), M.skin),
       thigh: P(limb(0.082, 0.064, 0.45), M.plain),
       thighCargo: P(limb(0.1, 0.082, 0.45), M.cargo),
       thighSkin: P(limb(0.082, 0.064, 0.45), M.skin),
-      shin: P(limb(0.062, 0.05, 0.43), M.plain),
+      shin: P(limb(0.062, 0.046, 0.43, 10, 0.008), M.plain),
       shinCargo: P(limb(0.082, 0.078, 0.43), M.cargo),
-      shinSkin: P(limb(0.062, 0.05, 0.43), M.skin),
+      shinSkin: P(limb(0.06, 0.042, 0.43, 10, 0.012), M.skin),
       pocket: P(new THREE.BoxGeometry(0.06, 0.12, 0.1), M.cargo),
       shoe: P(new THREE.CapsuleGeometry(0.052, 0.15, 4, 10).rotateX(Math.PI / 2).scale(1, 0.72, 1), M.box),
       sole: P(new THREE.BoxGeometry(0.105, 0.025, 0.26), M.box),
@@ -296,7 +333,19 @@ export class PersonRenderer {
       jaw: P(new THREE.SphereGeometry(0.075, 12, 8).scale(1, 0.8, 1.05), M.skin),
       ear: P(new THREE.SphereGeometry(0.025, 8, 6).scale(0.5, 1, 0.8), M.skin),
       eye: P(new THREE.SphereGeometry(0.012, 6, 4), M.dark),
+      // the face: the whites of the eyes, brows, a nose, a mouth
+      eyeWhite: P(new THREE.SphereGeometry(0.017, 8, 6).scale(1, 0.62, 0.5), M.box),
+      brow: P(new THREE.BoxGeometry(0.036, 0.0075, 0.012), M.box),
+      nose: P(new THREE.SphereGeometry(0.016, 8, 6).scale(0.8, 1.6, 1.15), M.skin),
+      mouth: P(new THREE.BoxGeometry(0.038, 0.008, 0.01), M.box),
       skirt: P(skirtGeo(0.17, 0.3, 0.86), M.skirt),
+      // a midi skirt (below the knee, boots under it)
+      midi: P(skirtGeo(0.17, 0.25, 0.58), M.skirt),
+      // a coat's skirts (to the knee, open in front) and wide-leg trousers
+      coatSkirt: P(skirtGeo(0.18, 0.27, 0.62, 0.7), M.coat),
+      thighWide: P(limb(0.1, 0.098, 0.45), M.plain),
+      shinWide: P(limb(0.098, 0.122, 0.43), M.plain),
+      collar: P(new THREE.TorusGeometry(0.075, 0.028, 6, 14).rotateX(Math.PI / 2), M.plain),
       // the shapes of hair, hats and the things people hold (ellipsoids and capsules)
       sphere: P(new THREE.SphereGeometry(1, 14, 10), M.hair, 2048),
       sphereGloss: P(new THREE.SphereGeometry(1, 12, 8), M.gloss, 256),
@@ -404,38 +453,66 @@ export class PersonRenderer {
     const topC = linC(topCol);
     const botC = linC(bot.color);
     const longSkirt = bot.kind === 'skirt' || bot.kind === 'dress' || top.kind === 'dress';
+    const midi = bot.kind === 'midi';
     const skirtC = top.kind === 'dress' ? topC : botC;
-    const tee = top.kind === 'tee' || top.kind === 'tank';
+    const bootC = linC(L.boots || L.shoes);
+    const tee = top.kind === 'tee' || top.kind === 'tank' || top.kind === 'polo';
     const sleeves = top.sleeves || (tee ? 'short' : 'long');
     const cargo = bot.kind === 'baggy' || bot.kind === 'cargo';
+    const wide = bot.kind === 'wide';
     const shorts = bot.kind === 'shorts';
-    const br = Math.max(0.9, bulk * 0.96);
+    // jackets and coats: open in front over what is under them
+    const open = OPEN.has(top.kind);
+    const puffy = top.kind === 'puffer';
+    const br = Math.max(0.9, bulk * 0.96) * (puffy ? 1.14 : 1);
+    fig.headId = (seed * 7.77 + 0.31) % 1;
 
     // ---- the torso and the hips
     if (P.torso > 0.5) {
       _a.copy(j.hip).addScaledVector(ax, 0.04 * S);
       const len = Math.max(0.2, _b.subVectors(j.neck, _a).length());
       const sy = len / 0.5;
-      const pool = tee && top.kind !== 'tank' ? p.torsoTee : top.kind === 'shirt' || top.kind === 'blouse' || top.kind === 'dress' ? p.torsoFit : top.kind === 'hoodie' || top.kind === 'jacket' || top.kind === 'suit' || top.kind === 'blazer' || top.kind === 'track' ? p.torsoBoxy : p.torsoPlain;
+      const pool = tee && top.kind !== 'tank' ? p.torsoTee : top.kind === 'shirt' || top.kind === 'blouse' || top.kind === 'dress' ? p.torsoFit : open || top.kind === 'hoodie' || top.kind === 'track' || top.kind === 'sweatshirt' ? p.torsoBoxy : p.torsoPlain;
       const w = (L.fem ? 0.95 : 1.05) * br * k;
       pool.push(framed(_a, rgt, ax, fwd, w, sy, w * (L.fem ? 1.05 : 1)), topC, own, id(), ind);
-      // a jacket's open front, a suit's shirt and tie
-      if (top.kind === 'suit' || top.kind === 'blazer' || top.kind === 'jacket') {
-        _c.lerpVectors(j.hip, j.neck, 0.7).addScaledVector(fwd, 0.118 * bulk * S);
-        p.boxP.push(framed(_c, rgt, ax, fwd, 0.07 * S, 0.24 * S, 0.012 * S), linC(top.shirt || top.inner || [0.92, 0.92, 0.9]), own, id(), ind);
+      // a jacket's open front over the shirt or the tee under it, a suit's tie
+      if (open) {
+        const inC = linC(top.shirt || top.inner || [0.92, 0.92, 0.9]);
+        _c.lerpVectors(j.hip, j.neck, 0.62).addScaledVector(fwd, 0.118 * br * S);
+        p.boxP.push(framed(_c, rgt, ax, fwd, (top.kind === 'suit' ? 0.07 : 0.1) * S, 0.34 * S, 0.012 * S), inC, own, id(), ind);
         if (top.tie) {
-          _c.addScaledVector(fwd, 0.01 * S).addScaledVector(ax, -0.02 * S);
+          _c.copy(j.neck).lerp(j.hip, 0.3).addScaledVector(fwd, 0.13 * br * S);
           p.boxP.push(framed(_c, rgt, ax, fwd, 0.028 * S, 0.2 * S, 0.012 * S), linC(top.tie), own, id(), ind);
         }
+        // the collar standing round the neck
+        _c.copy(j.neck).addScaledVector(ax, -0.01 * S);
+        p.collar.push(framed(_c, rgt, ax, fwd, k * br, k, k * br * 0.95), topC, own, id(), ind);
+        // a coat goes on down to the knees, open in front
+        if ((top.kind === 'trench' || top.kind === 'coat') && P.pelvis > 0.5 && fig.sit < 0.3) {
+          _c.copy(j.hip).addScaledVector(ax, 0.06 * S);
+          const sw = Math.sin(fig.phase) * 0.05 * Math.min(1, fig.speed / 1.4);
+          _d.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+          p.coatSkirt.push(framed(_c, rgt, _d, _x.crossVectors(rgt, _d), k * br, k, k * br), topC, own, id(), ind);
+        }
+      } else if (top.kind === 'hoodie' || top.kind === 'sweatshirt' || top.kind === 'polo') {
+        _c.copy(j.neck).addScaledVector(ax, -0.015 * S);
+        p.collar.push(framed(_c, rgt, ax, fwd, k * br * 0.9, k * 0.8, k * br * 0.85), topC, own, id(), ind);
       }
       // the neck
       _c.copy(j.headC).addScaledVector(fig.hu, -0.06 * S);
-      p.neck.push(along(_c, j.neck, 0.13, k * Math.max(1, bulk * 0.9), rgt), skin, own, id(), ind);
+      p.neck.push(along(_c, j.neck, 0.13, k * 1.18 * Math.max(1, bulk * 0.9), rgt), skin, own, fig.headId, ind);
     }
     if (P.pelvis > 0.5) {
       _a.copy(j.hip).addScaledVector(ax, 0.02 * S);
       const pc = longSkirt ? skirtC : botC;
-      (longSkirt ? p.pelvisSkirt : cargo ? p.pelvis : p.pelvis).push(framed(_a, rgt, ax, fwd, k * bulk * (L.fem ? 1.06 : 1), k, k * bulk), pc, own, id(), ind);
+      (longSkirt || midi ? p.pelvisSkirt : cargo ? p.pelvis : p.pelvis).push(framed(_a, rgt, ax, fwd, k * bulk * (L.fem ? 1.06 : 1), k, k * bulk), pc, own, id(), ind);
+      if (midi && P.torso > 0.5 && fig.sit < 0.3) {
+        // a midi skirt, swinging a little as she walks
+        _a.copy(j.hip).addScaledVector(ax, 0.05 * S);
+        const sw = Math.sin(fig.phase) * 0.06 * Math.min(1, fig.speed / 1.4);
+        _c.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+        p.midi.push(framed(_a, rgt, _c, _d.crossVectors(rgt, _c), k * bulk, k * (1 - fig.crouch * 0.4), k * bulk), botC, own, id(), ind);
+      }
       if (longSkirt && P.torso > 0.5) {
         // a long skirt from the waist to the ankles; sitting, it drapes over the knees
         const sit = fig.sit;
@@ -462,20 +539,24 @@ export class PersonRenderer {
       ['armR', j.shoulderR, j.elbowR, j.handR, 1],
       ['armL', j.shoulderL, j.elbowL, j.handL, -1],
     ];
-    const armK = k * Math.max(1, bulk * 0.85) * (fig.limbs || 1);
+    const armK = k * Math.max(1, bulk * 0.85) * (fig.limbs || 1) * (puffy ? 1.3 : open ? 1.08 : 1);
     for (const [pn, sh, el, hd] of arms) {
       if (P[pn] < 0.5) continue;
       const shortS = sleeves === 'short' && !L.fem;
       const noS = sleeves === 'none' && !L.fem;
       const upperSkin = shortS || noS;
-      (upperSkin ? p.upperSkin : p.upperShirt).push(along(sh, el, 0.29, armK, fwd), upperSkin ? skin : topC, own, id(), ind);
+      // (one arm in one sleeve is one drawn shape: the upper arm and the forearm share their
+      // id, so the ink draws its outline, not a doll's joints)
+      const armId = id();
+      (upperSkin ? p.upperSkin : p.upperShirt).push(along(sh, el, 0.29, armK, fwd), upperSkin ? skin : topC, own, armId, ind);
       if (shortS) {
-        p.sleeveTee.push(along(sh, el, 0.29, armK * 0.98, fwd, _m), topC, own, id(), ind);
+        const slId = id();
+        p.sleeveTee.push(along(sh, el, 0.29, armK * 0.98, fwd, _m), topC, own, slId, ind);
         // (the sleeve reaches a bit more than half way)
-        p.ballTee.push(framed(sh, rgt, ax, fwd, armK * br, armK * br, armK * br), topC, own, id(), ind);
+        p.ballTee.push(framed(sh, rgt, ax, fwd, armK * br, armK * br, armK * br), topC, own, slId, ind);
       }
       const foreSkin = shortS || noS || L.rolled || top.rolled;
-      (foreSkin ? p.foreSkin : p.foreShirt).push(along(el, hd, 0.26, armK, fwd), foreSkin ? skin : topC, own, id(), ind);
+      (foreSkin ? p.foreSkin : p.foreShirt).push(along(el, hd, 0.26, armK, fwd), foreSkin ? skin : topC, own, foreSkin === upperSkin ? armId : id(), ind);
       _c.subVectors(hd, el).normalize();
       _d.copy(hd).addScaledVector(_c, 0.035 * S);
       p.hand.push(along(_d, _a.copy(_d).addScaledVector(_c, 0.05), 0.05, k, fwd), skin, own, id(), ind);
@@ -489,13 +570,18 @@ export class PersonRenderer {
     const shoeC = linC(L.shoes);
     for (const [pn, hp, kn, ft, to, sx] of legs) {
       if (P[pn] < 0.5) continue;
-      if (!longSkirt || fig.sit > 0.3 || fig.crawl > 0.3 || fig.dead > 0.3) {
-        (cargo ? p.thighCargo : p.thigh).push(along(hp, kn, 0.45, legK, fwd), longSkirt ? skirtC : botC, own, id(), ind);
+      const legId = id();
+      if (midi) {
+        // under a midi skirt: the boots (and over the knees when she sits)
+        if (fig.sit > 0.3 || fig.crawl > 0.3 || fig.dead > 0.3) p.thigh.push(along(hp, kn, 0.45, legK * 1.15, fwd), botC, own, legId, ind);
+        p.shin.push(along(kn, ft, 0.43, legK * 1.06, fwd), bootC, own, id(), ind);
+      } else if (!longSkirt || fig.sit > 0.3 || fig.crawl > 0.3 || fig.dead > 0.3) {
+        (wide ? p.thighWide : cargo ? p.thighCargo : p.thigh).push(along(hp, kn, 0.45, legK, fwd), longSkirt ? skirtC : botC, own, legId, ind);
         if (cargo && !far) {
           _c.lerpVectors(hp, kn, 0.55).addScaledVector(rgt, sx * 0.085 * S);
           p.pocket.push(framed(_c, rgt, _d.subVectors(hp, kn).normalize(), fwd, k, k, k), botC, own, id(), ind);
         }
-        (shorts ? p.shinSkin : cargo ? p.shinCargo : p.shin).push(along(kn, ft, 0.43, legK, fwd), shorts ? skin : longSkirt ? skirtC : botC, own, id(), ind);
+        (shorts ? p.shinSkin : wide ? p.shinWide : cargo ? p.shinCargo : p.shin).push(along(kn, ft, 0.43, legK, fwd), shorts ? skin : longSkirt ? skirtC : botC, own, shorts ? id() : legId, ind);
       }
       // a sneaker: a rounded sole and a toe, pointing where the foot points
       _z.subVectors(to, ft);
@@ -508,7 +594,7 @@ export class PersonRenderer {
       p.shoe.push(framed(_c, _x, UP, _z, k, k, k), shoeC, own, id(), ind);
       if (!far) {
         _c.y -= 0.032 * S;
-        p.sole.push(framed(_c, _x, UP, _z, k, k, k), linC([0.95, 0.95, 0.93]), own, id(), ind);
+        p.sole.push(framed(_c, _x, UP, _z, k, k, k), linC(SOLE), own, id(), ind);
       }
     }
     // ---- the head (the first boulevard's: a skull, a jaw, ears, two eyes)
@@ -518,20 +604,43 @@ export class PersonRenderer {
       const hr = fig.hr;
       const hu = fig.hu;
       const hf = fig.hf;
-      p.head.push(framed(hc, hr, hu, hf, 1.0 * hs * 1.06, 1.14 * hs * 1.06, 1.0 * hs * 1.12), skin, own, id(), ind);
+      // (the skull, the jaw, the nose and the neck are one drawn face: one id between them)
+      const headId = fig.headId !== undefined ? fig.headId : id();
+      p.head.push(framed(hc, hr, hu, hf, 1.0 * hs * 0.98, 1.14 * hs * 1.0, 1.0 * hs * 1.06), skin, own, headId, ind);
       _c.copy(hc).addScaledVector(hu, -0.065 * hs).addScaledVector(hf, 0.03 * hs);
-      p.jaw.push(framed(_c, hr, hu, hf, hs * 1.05, hs, hs * 1.05), skin, own, id(), ind);
+      p.jaw.push(framed(_c, hr, hu, hf, hs * 1.05, hs, hs * 1.05), skin, own, headId, ind);
       if (!far) {
         for (const sd of [-1, 1]) {
           _c.copy(hc).addScaledVector(hr, sd * 0.1 * hs).addScaledVector(hf, -0.005 * hs);
           p.ear.push(framed(_c, hr, hu, hf, hs, hs, hs), skin, own, id(), ind);
         }
         const masked = L.hat && L.hat.kind === 'skimask';
-        if (!(L.face && L.face.glasses === 'shades')) {
-          for (const sd of [-1, 1]) {
-            _c.copy(hc).addScaledVector(hr, sd * 0.038 * hs).addScaledVector(hu, 0.02 * hs).addScaledVector(hf, 0.104 * hs);
-            p.eye.push(framed(_c, hr, hu, hf, hs * (masked ? 1.3 : 1), hs * (masked ? 1.3 : 1), hs), masked ? linC([0.95, 0.92, 0.85]) : linC([0.06, 0.05, 0.08]), own, id(), ind);
+        const shades = L.face && L.face.glasses === 'shades';
+        if (!L._brow || L._browOf !== L.hair) {
+          L._browOf = L.hair;
+          L._brow = L.hair && L.hair.style !== 'none' ? L.hair.color.map((v) => v * 0.8) : BROW_BALD;
+        }
+        const browC = linC(L._brow);
+        for (const sd of [-1, 1]) {
+          if (!shades) {
+            _c.copy(hc).addScaledVector(hr, sd * 0.036 * hs).addScaledVector(hu, 0.02 * hs).addScaledVector(hf, 0.098 * hs);
+            if (!masked) p.eyeWhite.push(framed(_c, hr, hu, hf, hs, hs, hs), linC(EYE_WHITE), own, id(), ind);
+            _c.addScaledVector(hf, 0.006 * hs);
+            p.eye.push(framed(_c, hr, hu, hf, hs * (masked ? 1.3 : 0.8), hs * (masked ? 1.3 : 0.8), hs * 0.8), linC(masked ? MASK_EYE : PUPIL), own, id(), ind);
           }
+          if (!masked) {
+            // the brows, a little apart and a little tilted
+            _c.copy(hc).addScaledVector(hr, sd * 0.038 * hs).addScaledVector(hu, 0.047 * hs).addScaledVector(hf, 0.096 * hs);
+            _d.copy(hr).addScaledVector(hu, -sd * 0.12).normalize();
+            _x.crossVectors(hf, _d).normalize();
+            p.brow.push(framed(_c, _d, _x, hf, hs * (L.fem ? 0.9 : 1.05), hs * (L.fem ? 0.8 : 1.15), hs), browC, own, id(), ind);
+          }
+        }
+        if (!masked) {
+          _c.copy(hc).addScaledVector(hu, -0.012 * hs).addScaledVector(hf, 0.104 * hs);
+          p.nose.push(framed(_c, hr, hu, hf, hs, hs, hs), skin, own, headId, ind);
+          _c.copy(hc).addScaledVector(hu, -0.056 * hs).addScaledVector(hf, 0.094 * hs);
+          p.mouth.push(framed(_c, hr, hu, hf, hs, hs, hs), linC(L.fem ? LIPS_F : LIPS_M), own, id(), ind);
         }
       }
     }

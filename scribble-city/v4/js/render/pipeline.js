@@ -61,13 +61,17 @@ float edgeAt(vec2 uv, float r, float far, out float zc) {
   float w0 = 1.0 / z0;
   float lap = abs(1.0 / zl + 1.0 / zr - 2.0 * w0) + abs(1.0 / zu + 1.0 / zd - 2.0 * w0);
   float behind = step(z0 * 1.02, max(max(zl, zr), max(zu, zd)));
-  float e = smoothstep(0.025, 0.09, lap / w0) * (0.45 + 0.55 * behind);
+  // (the people's bodies are drawn in one line round each shape: no seams where an arm bends at
+  // the elbow or a leg at the knee - their line weight is marked 0.97; their outlines against
+  // what is behind them and between their parts stay)
+  float person = step(0.955, a0.w) * step(a0.w, 0.985);
+  float e = smoothstep(0.025, 0.09, lap / w0) * (0.45 + 0.55 * behind) * mix(1.0, behind, person);
   vec4 al = texture(tAux, uv - ox);
   vec4 ar = texture(tAux, uv + ox);
   vec4 ad = texture(tAux, uv - oy);
   vec4 au = texture(tAux, uv + oy);
   float dn = max(max(1.0 - dot(n0, nrm(al.xy)), 1.0 - dot(n0, nrm(ar.xy))), max(1.0 - dot(n0, nrm(ad.xy)), 1.0 - dot(n0, nrm(au.xy))));
-  e = max(e, smoothstep(0.1, 0.32, dn) * 0.85 * (1.0 - 0.6 * far));
+  e = max(e, smoothstep(0.1, 0.32, dn) * 0.85 * (1.0 - 0.6 * far) * (1.0 - person));
   float id = max(max(step(0.002, abs(al.z - a0.z)) * step(z0, zl + 0.08), step(0.002, abs(ar.z - a0.z)) * step(z0, zr + 0.08)),
                  max(step(0.002, abs(ad.z - a0.z)) * step(z0, zd + 0.08), step(0.002, abs(au.z - a0.z)) * step(z0, zu + 0.08)));
   e = max(e, id * 0.9 * (1.0 - 0.45 * far));

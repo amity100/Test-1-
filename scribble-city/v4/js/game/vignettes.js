@@ -514,7 +514,7 @@ function* hairScene(sc, def) {
   const g = sc.game;
   const mx = def.x;
   const mz = def.z;
-  const mum = sc.spawn(civilianLook({ fem: true, kind: pick(['casual', 'dress', 'artsy']) }), mx, mz, Math.PI / 2);
+  const mum = sc.spawn(civilianLook({ fem: true, kind: pick(['street', 'knit', 'denim', 'puffer']) }), mx, mz, Math.PI / 2);
   const kid = sc.spawn(kidLook(true), mx + 1.0, mz + 0.1, -Math.PI / 2, { scale: 0.62 });
   sc.face(mum, kid);
   sc.face(kid, mum);

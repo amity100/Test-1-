@@ -10,6 +10,8 @@ import { buildFirstBoulevard } from './first.js';
 import { buildBlocks } from './blocks.js';
 import { buildRoom } from './rooms.js';
 import { buildStreets, turnWheel } from './streets.js';
+import { boardAtlas } from './boards.js';
+import { STREET_ADS } from './ads.js';
 import { BOUNDS } from './layout.js';
 
 // The whole city: the first boulevard exactly as it was, and everything around it.
@@ -48,6 +50,13 @@ export function buildCity(scene, o = {}) {
     lightCount: () => lightList().length,
   };
   if (o.rooms !== false) ctx.room = (f, spec) => buildRoom(ctx, f, spec);
+  // everything printed in the city (blueprints, ads, street names) is one texture; the big ads on
+  // the roofs and the walls are seen from far away, the little boards only up close
+  ctx.atlas = boardAtlas();
+  const boardOpts = { kind: 'box', map: ctx.atlas.texture, emMap: ctx.atlas.texture, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1 };
+  M.board = makeSurface({ ...boardOpts, objMask: true });
+  M.adWall = makeSurface({ ...boardOpts, emissive: new THREE.Color(0.24, 0.23, 0.21) });
+  ctx.posters = STREET_ADS;
   // the sky
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 48, 24), makeSky());
   sky.frustumCulled = false;
@@ -69,7 +78,7 @@ export function buildCity(scene, o = {}) {
   // what is not worth drawing from far away: the rooms behind the shop windows, the small things
   // on the sidewalks (the buildings, the palms' crowns and the city across the bay always stay)
   const small = new Set([M.prop, M.propCyl, M.propPaint, M.pole, M.rail, M.bulb, M.glint, M.leaf, M.nut, M.board, M.lampGlass, M.court]);
-  const far = new Set([M.trunk, M.frond, M.steel, M.awning, M.frame]);
+  const far = new Set([M.trunk, M.frond, M.steel, M.awning, M.frame, M.adWall]);
   const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN']);
   const cull = [];
   for (const m of rooms) cull.push({ m, r: 55 });
@@ -110,6 +119,7 @@ export function buildCity(scene, o = {}) {
     signals: ctx.signals || [],
     parked: ctx.parked || [],
     busStops: ctx.busStops || [],
+    queues: ctx.queues || [],
     helipad: ctx.helipad || null,
     wheel: ctx.wheel || null,
     // hide what is too far to matter (by the chunks' bounding spheres)
