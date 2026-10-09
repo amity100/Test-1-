@@ -237,10 +237,15 @@ const _sx = new THREE.Vector3();
 const _sy = new THREE.Vector3();
 const _sz = new THREE.Vector3();
 const _sc = new THREE.Vector3();
+const _f = new THREE.Vector3();
 
 // the layer of what is never seen in the mirror under the street (the main camera and the sun
 // see it; the mirror's camera does not), and the one only the sun sees
 const MIRRORLESS = LAYERS.MIRRORLESS;
+// the still city's next shadow map is drawn in this many slices, one a frame, once the box has
+// less than this share of the map's room left (12 m: four frames even at 90 m/s)
+const STATIC_SLICES = 4;
+const STATIC_SOON = 0.2;
 const SUN = LAYERS.SUN;
 const notInMirror = (o) => !!((o.material.userData && o.material.userData.reflective) || o.userData.noReflect || o.userData.indoor);
 
@@ -275,12 +280,10 @@ export class Pipeline {
     this.stMx = S / 2;
     this.stMy = Math.round(S * 0.08);
     this.stMz = 60;
-    this.staticCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 520 + 2 * this.stMz);
-    this.staticCam.layers.enable(MIRRORLESS);
-    this.staticCam.layers.enable(SUN);
     this.staticRT = null;
     this.staticRoot = null;
-    this.st = { on: false, sx: 0, sy: 0, sz: 0, ver: -1, sun: new THREE.Vector3(), builds: 0 };
+    // (how many maps were drawn, slices of them, and maps drawn whole in one frame)
+    this.st = { builds: 0, slices: 0, full: 0 };
     this.lead = new THREE.Vector3();
     this.lastCam = new THREE.Vector3();
     this.lastT = 0;
@@ -393,10 +396,31 @@ export class Pipeline {
       });
       if (dyn) this.staticSkip.push(c);
     }
-    this.staticRT = new THREE.WebGLRenderTarget(W, H, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) });
-    shared.uShadowStatic.value = this.staticRT.depthTexture;
+    // two maps: the one in use, and the next one, drawn in the background a quarter at a time
+    // before the one in use runs out
+    const map = () => ({
+      rt: new THREE.WebGLRenderTarget(W, H, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) }),
+      cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 520 + 2 * this.stMz),
+      on: false,
+      sx: 0,
+      sy: 0,
+      sz: 0,
+      ver: -1,
+      sun: new THREE.Vector3(),
+      matrix: new THREE.Matrix4(),
+      p: new THREE.Vector3(),
+      slice: 0,
+    });
+    this.stMaps = [map(), map()];
+    for (const m of this.stMaps) {
+      m.cam.layers.enable(MIRRORLESS);
+      m.cam.layers.enable(SUN);
+    }
+    this.stCur = this.stMaps[0];
+    this.stBuild = null;
+    this.staticRT = this.stCur.rt;
+    shared.uShadowStatic.value = this.stCur.rt.depthTexture;
     shared.uShadowStaticTexel.value.set(1 / W, 1 / H);
-    this.st.on = false;
     // what of the still city is never in the mirror under the street (the reflective ground
     // itself, the small things, the rooms) is on a layer of its own that the mirror's camera does
     // not see: no hiding and showing a thousand things every frame
@@ -506,11 +530,27 @@ export class Pipeline {
     shared.uShadowOn.value = 0;
     const root = this.staticRoot;
     if (root) {
-      // the still city's map: still good while the box above is inside it
-      const st = this.st;
+      // the still city's map: good while the box above is inside it. Before it runs out the next
+      // one is drawn, a quarter a frame; if it runs out first (or something in it was rubbed
+      // out), the next one is drawn whole at once
       const ver = this.staticVersion ? this.staticVersion() : 0;
-      const ok = st.on && ver === st.ver && st.sun.equals(sun) && Math.abs(cx - st.sx) <= this.stMx * texel + 1e-4 && Math.abs(cy - st.sy) <= this.stMy * texel + 1e-4 && Math.abs(cz - st.sz) <= this.stMz;
-      if (!ok) this.renderStatic(x, y, z, texel, ver);
+      const left = this.staticLeft(this.stCur, cx, cy, cz, texel, ver);
+      const b = this.stBuild;
+      if (left < 0) {
+        const next = b && this.staticLeft(b, cx, cy, cz, texel, ver) >= 0.2 ? b : this.beginStatic(x, y, z, cx, cy, cz, texel, ver);
+        this.drawStatic(next, STATIC_SLICES);
+        this.useStatic(next);
+        this.st.full++;
+      } else if (b) {
+        this.drawStatic(b, 1);
+        // (the camera may have turned meanwhile: the new map only if it holds the box better)
+        if (b.slice >= STATIC_SLICES) {
+          if (this.staticLeft(b, cx, cy, cz, texel, ver) > left) this.useStatic(b);
+          else this.stBuild = null;
+        }
+      } else if (left < STATIC_SOON) {
+        this.drawStatic(this.beginStatic(x, y, z, cx, cy, cz, texel, ver), 1);
+      }
     }
     this.r.setRenderTarget(this.shadowRT);
     this.r.clear();
@@ -533,55 +573,100 @@ export class Pipeline {
     shared.uShadowOn.value = 1;
   }
 
-  // the still city as the sun sees it, around where you are (and a little ahead of you: you
-  // usually keep going the way you go)
-  renderStatic(x, y, z, texel, ver) {
-    const st = this.st;
+  // how much of the map's room is left around the box (0 at its edge), or -1 when it does not
+  // hold it (or was drawn before something was rubbed out, or for another sun)
+  staticLeft(m, cx, cy, cz, texel, ver) {
+    if (!m.on || m.ver !== ver || !m.sun.equals(shared.uSunDir.value)) return -1;
+    const fx = 1 - Math.abs(cx - m.sx) / (this.stMx * texel);
+    const fy = 1 - Math.abs(cy - m.sy) / (this.stMy * texel);
+    const fz = 1 - Math.abs(cz - m.sz) / this.stMz;
+    const f = Math.min(fx, fy, fz);
+    return f < -1e-6 ? -1 : Math.max(0, f);
+  }
+
+  // the next map, around where you are, a little the way you look and the way you go (where
+  // the box goes), but never with the box (cx, cy, cz) more than 60% of the way to its edge:
+  // turning around on the spot stays inside it, and so does backing up
+  beginStatic(x, y, z, cx, cy, cz, texel, ver) {
+    const m = this.stMaps[0] === this.stCur ? this.stMaps[1] : this.stMaps[0];
     const sun = shared.uSunDir.value;
     const camPos = this.camera.position;
-    const now = performance.now();
-    const p = _v.set(camPos.x + this.lead.x, 0, camPos.z + this.lead.z);
-    st.sx = Math.round(p.dot(x) / texel) * texel;
-    st.sy = Math.round(p.dot(y) / texel) * texel;
-    st.sz = p.dot(z);
-    st.ver = ver;
-    st.sun.copy(sun);
-    st.on = true;
-    st.builds++;
-    st.at = now;
-    const cam = this.staticCam;
+    const f = this.camera.getWorldDirection(_f);
+    const p = _v.set(camPos.x + this.lead.x + f.x * 10, 0, camPos.z + this.lead.z + f.z * 10);
+    const near = (v, c, room) => c + Math.max(-0.6 * room, Math.min(0.6 * room, v - c));
+    const sx = near(p.dot(x), cx, this.stMx * texel);
+    const sy = near(p.dot(y), cy, this.stMy * texel);
+    const sz = near(p.dot(z), cz, this.stMz);
+    m.sx = Math.round(sx / texel) * texel;
+    m.sy = Math.round(sy / texel) * texel;
+    m.sz = sz;
+    m.ver = ver;
+    m.sun.copy(sun);
+    m.on = true;
+    m.slice = 0;
+    // (the small things as they would be seen from where you are heading)
+    m.p.set(camPos.x + this.lead.x, camPos.y, camPos.z + this.lead.z);
+    const c = _sc.copy(x).multiplyScalar(m.sx).addScaledVector(y, m.sy).addScaledVector(z, m.sz);
+    const cam = m.cam;
     const hx = (this.shadowS / 2 + this.stMx) * texel;
     const hy = (this.shadowS / 2 + this.stMy) * texel;
     cam.left = -hx;
     cam.right = hx;
     cam.top = hy;
     cam.bottom = -hy;
-    const c = _sc.copy(x).multiplyScalar(st.sx).addScaledVector(y, st.sy).addScaledVector(z, st.sz);
     cam.position.copy(c).addScaledVector(sun, 260 + this.stMz);
     cam.up.set(0, 1, 0);
     cam.lookAt(c);
     cam.updateMatrixWorld();
     cam.updateProjectionMatrix();
-    shared.uShadowStaticMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-    // the same bias in metres as the near map's (its depth is spread over a longer way)
-    shared.uShadowStaticBias.value = (0.0012 * 519) / (cam.far - cam.near);
-    shared.uShadowStaticOn.value = 1;
-    // the small things as they would be seen from there
-    if (this.staticCull) this.staticCull(_v.set(p.x, camPos.y, p.z));
+    m.matrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.stBuild = m;
+    this.st.builds++;
+    return m;
+  }
+
+  // n more slices of the map being drawn (each slice a quarter of the still city's pieces)
+  drawStatic(m, n) {
     const root = this.staticRoot;
-    const skipVis = this._skipVis || (this._skipVis = []);
-    skipVis.length = 0;
-    for (const s of this.staticSkip) {
-      skipVis.push(s.visible);
-      s.visible = false;
+    const pieces = root.children;
+    const camPos = this.camera.position;
+    const skip = this.staticSkip;
+    const hid = this._sliceHid || (this._sliceHid = []);
+    for (let k = 0; k < n && m.slice < STATIC_SLICES; k++) {
+      if (this.staticCull) this.staticCull(m.p);
+      hid.length = 0;
+      for (let i = 0; i < pieces.length; i++) {
+        const o = pieces[i];
+        if (!o.visible) continue;
+        if (i % STATIC_SLICES !== m.slice || skip.includes(o)) {
+          o.visible = false;
+          hid.push(o);
+        }
+      }
+      this.swapDepth(root, false);
+      this.r.setRenderTarget(m.rt);
+      if (m.slice === 0) this.r.clear();
+      this.r.autoClear = false;
+      this.r.render(root, m.cam);
+      this.r.autoClear = true;
+      this.unswapDepth();
+      for (const o of hid) o.visible = true;
+      if (this.staticCull) this.staticCull(camPos);
+      m.slice++;
+      this.st.slices++;
     }
-    this.swapDepth(root, false);
-    this.r.setRenderTarget(this.staticRT);
-    this.r.clear();
-    this.r.render(root, cam);
-    this.unswapDepth();
-    this.staticSkip.forEach((s, i) => (s.visible = skipVis[i]));
-    if (this.staticCull) this.staticCull(camPos);
+  }
+
+  // the map the shader reads
+  useStatic(m) {
+    this.stCur = m;
+    this.staticRT = m.rt;
+    if (this.stBuild === m) this.stBuild = null;
+    shared.uShadowStatic.value = m.rt.depthTexture;
+    shared.uShadowStaticMatrix.value.copy(m.matrix);
+    // the same bias in metres as the near map's (its depth is spread over a longer way)
+    shared.uShadowStaticBias.value = (0.0012 * 519) / (m.cam.far - m.cam.near);
+    shared.uShadowStaticOn.value = 1;
   }
 
   // where the camera is heading (for the still city's map): about a second ahead, at most 20 m
