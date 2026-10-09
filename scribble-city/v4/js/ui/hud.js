@@ -12,6 +12,8 @@ export class HUD {
     this.vehWrap = $('vehicle-hp');
     this.vehFill = document.querySelector('#vehicle-hp .fill');
     this.districtEl = $('district');
+    this.clockEl = $('clock');
+    this.lastClock = -1;
     this.goalsEl = $('goals');
     this.weaponName = $('weapon-name');
     this.weaponAmmo = $('weapon-ammo');
@@ -117,6 +119,15 @@ export class HUD {
       this.lastDistrict = dn;
       this.districtEl.textContent = dn || '…';
       this.districtEl.classList.toggle('hidden', !dn);
+    }
+    // the hour in the city (written only when the minute changes)
+    const dnc = game.daynight;
+    if (dnc && this.clockEl) {
+      const m = Math.floor(dnc.hour * 60);
+      if (m !== this.lastClock) {
+        this.lastClock = m;
+        this.clockEl.textContent = dnc.clock;
+      }
     }
     this.hiddenTag.classList.toggle('hidden', !p.hidden);
     this.vignette.classList.toggle('on', p.hidden);

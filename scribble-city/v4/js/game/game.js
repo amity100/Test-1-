@@ -35,6 +35,7 @@ import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
 import { clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
+import { DayNight } from './daynight.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -104,6 +105,8 @@ export class Game {
       },
     };
     this.dialog = new Dialog(this);
+    // the hour of the day: the sun, the moon, the lamps (game/daynight.js)
+    this.daynight = new DayNight(this);
     this.inBar = false;
     // the outlines redrawn a few times a second: lively on a big screen, calm on a phone
     this.boilOn = !this.touch;
@@ -163,6 +166,17 @@ export class Game {
     $('opt-magic').addEventListener('change', (e) => (shared.uQuality.value = e.target.checked ? 1 : 0));
     $('opt-sens').addEventListener('input', (e) => (this.input.sensitivity = parseFloat(e.target.value)));
     $('opt-perf').addEventListener('change', (e) => this.perf.toggle(e.target.checked));
+    // the city's clock: how long a day is (or the hour standing still), and a jump to an hour
+    const dn = this.daynight;
+    const sel = $('opt-clock');
+    sel.value = [24, 48, 96, 0].includes(dn.dayMin) ? String(dn.dayMin) : '48';
+    sel.addEventListener('change', (e) => dn.setDayLength(parseFloat(e.target.value)));
+    for (const b of document.querySelectorAll('#pause .hours [data-h]')) {
+      b.addEventListener('click', () => {
+        dn.setHour(parseFloat(b.dataset.h));
+        $('clock-now').textContent = dn.clock;
+      });
+    }
     $('bench-btn').addEventListener('click', () => {
       this.resume();
       this.perf.startBench();
@@ -208,6 +222,7 @@ export class Game {
   pause() {
     if (this.state !== 'play') return;
     this.state = 'paused';
+    $('clock-now').textContent = this.daynight.clock;
     $('pause').classList.remove('hidden');
     this.input.releaseLock();
   }
@@ -379,6 +394,7 @@ export class Game {
     if (this.state === 'paused') dt = 0;
     this.time += dt;
     shared.uTime.value = this.time;
+    if (this.daynight) this.daynight.update(dt);
     if (this.boilOn) shared.uBoil.value = Math.floor(this.time * 5);
     this.ambient.update(dt);
     if (this.world.update) this.world.update(dt, this.time);

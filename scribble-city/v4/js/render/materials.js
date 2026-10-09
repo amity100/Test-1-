@@ -78,6 +78,13 @@ function penTable() {
   return t;
 }
 
+// the evening's sky pens (sRGB): low over the horizon, in the middle, high up (four of each)
+export const SKY_PENS = [
+  [1.0, 0.84, 0.36], [1.0, 0.6, 0.22], [1.0, 0.45, 0.32], [1.0, 0.95, 0.78],
+  [1.0, 0.52, 0.22], [1.0, 0.36, 0.4], [0.9, 0.3, 0.62], [1.0, 0.72, 0.3],
+  [0.58, 0.3, 0.82], [0.9, 0.36, 0.62], [0.34, 0.36, 0.84], [1.0, 0.5, 0.36],
+];
+
 // uniforms shared by reference between every material
 export const shared = {
   uNoise: { value: noiseTexture() },
@@ -108,6 +115,12 @@ export const shared = {
   uShadowStaticTexel: { value: new THREE.Vector2(1 / 4096, 1 / 2048) },
   uShadowStaticBias: { value: 0.0012 },
   uShadowStaticOn: { value: 0 },
+  // a map of the sun's view fading out under its new one as the sun goes over (render/pipeline.js:
+  // mode 1 the still city's, 2 the far one; K how much of it is left)
+  uShadowOld: { value: blank },
+  uShadowOldMatrix: { value: new THREE.Matrix4() },
+  uShadowOldMode: { value: 0 },
+  uShadowOldK: { value: 0 },
   uLightPos: { value: Array.from({ length: MAX_LIGHTS }, () => new THREE.Vector4()) },
   uLightCol: { value: Array.from({ length: MAX_LIGHTS }, () => new THREE.Vector4()) },
   uLightN: { value: 0 },
@@ -129,6 +142,22 @@ export const shared = {
   uMatK: { value: 1 },
   uMatSweep: { value: new THREE.Vector4(1, 0, 0, -1e5) },
   uMatBand: { value: new THREE.Vector4(1, 0, 0, 0) },
+  // the hour of the day (game/daynight.js moves these; as they are here, it is the evening the
+  // city was drawn in): where the sun is drawn (at night the light comes from the moon), how
+  // many windows are lit, the sky's pens in sRGB (low, middle, top: four of each), the clouds
+  // (their bellies, their edges in the sun), the sun's disc (core, ring, glow), the moon and the
+  // stars
+  uSunDisc: { value: new THREE.Vector3(0.3, 0.085, -1).normalize() },
+  uSunDiscK: { value: 1 },
+  uLitK: { value: 1 },
+  uSkyPen: { value: SKY_PENS.map((c) => new THREE.Vector3(c[0], c[1], c[2])) },
+  uCloudC: { value: [new THREE.Vector3(0.66, 0.44, 0.74), new THREE.Vector3(1.0, 0.72, 0.4)] },
+  uSunCore: { value: new THREE.Vector3(1.0, 0.97, 0.82) },
+  uSunRing: { value: new THREE.Vector3(1.0, 0.72, 0.3) },
+  uSunGlow: { value: new THREE.Vector3(1.0, 0.75, 0.4) },
+  uMoonDir: { value: new THREE.Vector3(-0.3, 0.6, 1).normalize() },
+  uMoonK: { value: 0 },
+  uStars: { value: 0 },
 };
 
 // ------------------------------------------------------------------ lights near you
@@ -152,6 +181,11 @@ export function flashLight(x, y, z, radius, color, intensity) {
 }
 let lastPick = { x: 1e9, z: 1e9 };
 let near = [];
+// how bright the city's lamps and neon light their surroundings at this hour (1: the evening)
+let lampK = 1;
+export function setLampK(k) {
+  lampK = k;
+}
 // The lights nearest the camera go to the shaders; one about to be dropped for a nearer one
 // fades out first, so nothing ever pops.
 export function pickLights(cam) {
@@ -181,7 +215,7 @@ export function pickLights(cam) {
     const fade = Math.min(1, Math.max(0, (cut - l.d) / 10));
     if (fade <= 0) break;
     P[n].set(l.x, l.y, l.z, l.r);
-    C[n].set(l.c.r, l.c.g, l.c.b, l.i * fade);
+    C[n].set(l.c.r, l.c.g, l.c.b, l.i * fade * lampK);
     n++;
   }
   shared.uLightN.value = n;

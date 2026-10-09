@@ -87,6 +87,10 @@ html, body {
 }
 #vehicle-hp .bar .fill { background: repeating-linear-gradient(-55deg, #3a6ad6 0 6px, #5f8be8 6px 9px); }
 #district { padding: 6px 12px; font-family: var(--font-hand); font-size: 22px; white-space: nowrap; }
+#clock { padding: 6px 10px; font-family: var(--font-hand); font-size: 22px; white-space: nowrap; direction: ltr; }
+.opt.hours { flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.opt.hours #clock-now { font-family: var(--font-hand); font-size: 22px; direction: ltr; min-width: 58px; }
+.btn.mini { font-size: 16px; padding: 4px 10px; box-shadow: 2px 3px 0 var(--ink); }
 
 #goals {
   position: absolute;
@@ -320,7 +324,7 @@ html, body {
 @keyframes pulse { to { transform: scale(1.06); } }
 #air-foot { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; pointer-events: auto; }
 #air-foot .btn { font-size: 20px; padding: 6px 14px; }
-body.air-drawing #touch, body.air-drawing #crosshair, body.air-drawing #goals, body.air-drawing #weapon, body.air-drawing #prompt, body.air-drawing #district, body.air-drawing #hidden-tag { display: none !important; }
+body.air-drawing #touch, body.air-drawing #crosshair, body.air-drawing #goals, body.air-drawing #weapon, body.air-drawing #prompt, body.air-drawing #district, body.air-drawing #clock, body.air-drawing #hidden-tag { display: none !important; }
 body.air-drawing #toasts { top: auto; bottom: max(70px, calc(env(safe-area-inset-bottom) + 64px)); }
 
 /* ---------- title ---------- */
@@ -438,6 +442,7 @@ body:not(.touch) .touch-only { display: none; }
   #minimap-wrap { width: 118px; height: 118px; }
   #health, #vehicle-hp { min-width: 120px; padding: 4px 8px; }
   #district { font-size: 17px; padding: 4px 8px; }
+  #clock { font-size: 17px; padding: 4px 8px; }
   #weapon { min-width: 150px; padding: 4px 8px; }
   #weapon-icon { width: 64px; height: 38px; }
   #weapon-name { font-size: 18px; }
@@ -618,6 +623,8 @@ html, body { background: #1b1430; }
 .bar .fill { background: linear-gradient(90deg, #ff4fa3, #ff9a3c); }
 #vehicle-hp .bar .fill { background: linear-gradient(90deg, #2ec4c4, #6b4bd6); }
 #district { background: var(--ink); color: #ffd23f; text-shadow: 2px 2px 0 #ff4fa3; border-color: var(--ink); box-shadow: 4px 5px 0 #ff4fa3; }
+#clock { background: var(--paper); color: var(--ink); border-color: var(--ink); box-shadow: 4px 5px 0 #6b4bd6; }
+.btn.mini { font-size: 16px; padding: 4px 10px; box-shadow: 2px 3px 0 var(--ink); }
 
 #goals { width: 260px; }
 #goals h4 { color: #c2185b; }

@@ -246,6 +246,34 @@ const MIRRORLESS = LAYERS.MIRRORLESS;
 // less than this share of the map's room left (12 m: four frames even at 90 m/s)
 const STATIC_SLICES = 4;
 const STATIC_SOON = 0.2;
+// as the sun goes over, the shadows follow it in steps: the still city's map every 0.25 degree,
+// the far one every degree, each new map drawn in the background and faded in over FADE_MS
+const SUN_STEP = Math.cos((0.25 * Math.PI) / 180);
+const FAR_STEP = Math.cos((1.0 * Math.PI) / 180);
+const FAR_SLICES = 4;
+const FADE_MS = 800;
+const _fx = new THREE.Vector3();
+const _fy = new THREE.Vector3();
+const _fz = new THREE.Vector3();
+// the parts of the still city that move (the big wheel): drawn with what moves
+function movingParts(root) {
+  const out = [];
+  for (const c of root.children) {
+    let dyn = !!c.userData.dynamic;
+    c.traverse((o) => {
+      if (o.userData.dynamic) dyn = true;
+    });
+    if (dyn) out.push(c);
+  }
+  return out;
+}
+
+// the sun's frame (x across it, level; y up its face; z along it towards the sun)
+function sunFrame(dir, x, y, z) {
+  z.copy(dir).normalize();
+  x.crossVectors(_up, z).normalize();
+  y.crossVectors(z, x);
+}
 const SUN = LAYERS.SUN;
 const notInMirror = (o) => !!((o.material.userData && o.material.userData.reflective) || o.userData.noReflect || o.userData.indoor);
 
@@ -275,11 +303,16 @@ export class Pipeline {
     shared.uShadowMap.value = this.shadowRT.depthTexture;
     shared.uShadowTexel.value = 1 / S;
     this.shadowS = S;
-    // the still city's map: the near box's half again on each side across the sun, a little more
-    // up and down (walking hardly moves it there), and 60 m more depth each way along the sun
-    this.stMx = S / 2;
-    this.stMy = Math.round(S * 0.08);
+    // the still city's map: 45 m more each side across the sun and 40 m up and down (enough for
+    // a sun high in the sky, and for turning round on the spot), and 60 m more depth each way
+    // along it
+    this.stMx = Math.round((45 * S) / 120);
+    this.stMy = Math.round((40 * S) / 120);
     this.stMz = 60;
+    // where the shadows are drawn from (setShadowDir): the maps follow it in steps
+    this.shadowDir = shared.uSunDir.value.clone();
+    // the map fading out as a new one fades in (the still city's or the far one)
+    this.fade = null;
     this.staticRT = null;
     this.staticRoot = null;
     // (how many maps were drawn, slices of them, and maps drawn whole in one frame)
@@ -388,16 +421,10 @@ export class Pipeline {
     this.staticCull = cull;
     this.staticVersion = version;
     // the city's moving parts (the big wheel): drawn with what moves
-    this.staticSkip = [];
-    for (const c of root.children) {
-      let dyn = !!c.userData.dynamic;
-      c.traverse((o) => {
-        if (o.userData.dynamic) dyn = true;
-      });
-      if (dyn) this.staticSkip.push(c);
-    }
+    this.staticSkip = movingParts(root);
     // two maps: the one in use, and the next one, drawn in the background a quarter at a time
     // before the one in use runs out
+    // (24-bit depth: at 16 bits a few lit pixels on walls the low sun grazes came out different)
     const map = () => ({
       rt: new THREE.WebGLRenderTarget(W, H, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) }),
       cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 520 + 2 * this.stMz),
@@ -507,51 +534,40 @@ export class Pipeline {
     this._hide.length = 0;
   }
 
+  // where the shadows are drawn from (game/daynight.js: the sun, or the moon at night)
+  setShadowDir(d) {
+    this.shadowDir.copy(d);
+  }
+
   // the sun looks down the street from low over the bay; its box follows you
   renderShadows(center) {
-    const sun = shared.uSunDir.value;
+    const root = this.staticRoot;
+    // the still city's map (and the city's far one): drawn again, faded, swapped
+    if (root) this.updateStatic(center);
+    if (this.farMaps) this.updateFar();
+    this.updateFade();
+    // the box is drawn from the direction of the still city's map in use, on its grid
+    const st = this.stCur;
+    const sun = st && st.on ? st.sun : this.shadowDir;
     const cam = this.sunCam;
     // the box follows you in whole texels of the shadow map, so the shadows' edges stay put
     // instead of crawling as you walk
     const texel = (cam.right - cam.left) / this.shadowRT.width;
-    const z = _sz.copy(sun).normalize();
-    const x = _sx.crossVectors(_up, z).normalize();
-    const y = _sy.crossVectors(z, x);
+    const z = _sz;
+    const x = _sx;
+    const y = _sy;
+    sunFrame(sun, x, y, z);
     const cx = Math.round(center.dot(x) / texel) * texel;
     const cy = Math.round(center.dot(y) / texel) * texel;
     const cz = center.dot(z);
     const snapped = _sc.copy(x).multiplyScalar(cx).addScaledVector(y, cy).addScaledVector(z, cz);
-    cam.position.copy(snapped).addScaledVector(sun, 260);
+    cam.position.copy(snapped).addScaledVector(z, 260);
     cam.up.set(0, 1, 0);
     cam.lookAt(snapped);
     cam.updateMatrixWorld();
     cam.updateProjectionMatrix();
     shared.uShadowMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     shared.uShadowOn.value = 0;
-    const root = this.staticRoot;
-    if (root) {
-      // the still city's map: good while the box above is inside it. Before it runs out the next
-      // one is drawn, a quarter a frame; if it runs out first (or something in it was rubbed
-      // out), the next one is drawn whole at once
-      const ver = this.staticVersion ? this.staticVersion() : 0;
-      const left = this.staticLeft(this.stCur, cx, cy, cz, texel, ver);
-      const b = this.stBuild;
-      if (left < 0) {
-        const next = b && this.staticLeft(b, cx, cy, cz, texel, ver) >= 0.2 ? b : this.beginStatic(x, y, z, cx, cy, cz, texel, ver);
-        this.drawStatic(next, STATIC_SLICES);
-        this.useStatic(next);
-        this.st.full++;
-      } else if (b) {
-        this.drawStatic(b, 1);
-        // (the camera may have turned meanwhile: the new map only if it holds the box better)
-        if (b.slice >= STATIC_SLICES) {
-          if (this.staticLeft(b, cx, cy, cz, texel, ver) > left) this.useStatic(b);
-          else this.stBuild = null;
-        }
-      } else if (left < STATIC_SOON) {
-        this.drawStatic(this.beginStatic(x, y, z, cx, cy, cz, texel, ver), 1);
-      }
-    }
     this.r.setRenderTarget(this.shadowRT);
     this.r.clear();
     if (root) {
@@ -573,10 +589,51 @@ export class Pipeline {
     shared.uShadowOn.value = 1;
   }
 
+  // the still city's map: good while the box is inside it. Before it runs out (or once the
+  // sun has gone on a step) the next one is drawn, a quarter a frame, and takes over (fading in
+  // if the sun has moved); if it runs out first, or something in it was rubbed out, the next
+  // one is drawn whole at once
+  updateStatic(center) {
+    const ver = this.staticVersion ? this.staticVersion() : 0;
+    const cur = this.stCur;
+    const want = this.shadowDir;
+    const b = this.stBuild;
+    const left = this.staticLeft(cur, center, ver);
+    if (left < 0) {
+      // (a map fading out cannot be faded into one that has run out: stop it)
+      if (this.fade) this.endFade();
+      const next = b && b.sun.equals(cur.on ? cur.sun : want) && this.staticLeft(b, center, ver) >= 0.2 ? b : this.beginStatic(want, center, ver);
+      this.drawStatic(next, STATIC_SLICES);
+      this.useStatic(next);
+      this.st.full++;
+      return;
+    }
+    if (b) {
+      this.drawStatic(b, 1);
+      if (b.slice < STATIC_SLICES) return;
+      if (!b.sun.equals(cur.sun)) {
+        // the sun has gone on: the new map fades in over the old one (when the fade is free)
+        if (this.fade) return;
+        this.startFade('static', cur);
+        this.useStatic(b);
+      } else if (this.staticLeft(b, center, ver) > left) this.useStatic(b);
+      else this.stBuild = null;
+      return;
+    }
+    // (the map fading out is not free to be drawn into)
+    if (this.fade && this.fade.kind === 'static') return;
+    if (cur.sun.dot(want) < SUN_STEP || left < STATIC_SOON) this.drawStatic(this.beginStatic(want, center, ver), 1);
+  }
+
   // how much of the map's room is left around the box (0 at its edge), or -1 when it does not
-  // hold it (or was drawn before something was rubbed out, or for another sun)
-  staticLeft(m, cx, cy, cz, texel, ver) {
-    if (!m.on || m.ver !== ver || !m.sun.equals(shared.uSunDir.value)) return -1;
+  // hold it (or was drawn before something was rubbed out)
+  staticLeft(m, center, ver) {
+    if (!m.on || m.ver !== ver) return -1;
+    const texel = (this.sunCam.right - this.sunCam.left) / this.shadowS;
+    sunFrame(m.sun, _fx, _fy, _fz);
+    const cx = Math.round(center.dot(_fx) / texel) * texel;
+    const cy = Math.round(center.dot(_fy) / texel) * texel;
+    const cz = center.dot(_fz);
     const fx = 1 - Math.abs(cx - m.sx) / (this.stMx * texel);
     const fy = 1 - Math.abs(cy - m.sy) / (this.stMy * texel);
     const fz = 1 - Math.abs(cz - m.sz) / this.stMz;
@@ -584,12 +641,19 @@ export class Pipeline {
     return f < -1e-6 ? -1 : Math.max(0, f);
   }
 
-  // the next map, around where you are, a little the way you look and the way you go (where
-  // the box goes), but never with the box (cx, cy, cz) more than 60% of the way to its edge:
+  // the next map, seen from dir, around where you are, a little the way you look and the way
+  // you go (where the box goes), but never with the box more than 60% of the way to its edge:
   // turning around on the spot stays inside it, and so does backing up
-  beginStatic(x, y, z, cx, cy, cz, texel, ver) {
+  beginStatic(dir, center, ver) {
     const m = this.stMaps[0] === this.stCur ? this.stMaps[1] : this.stMaps[0];
-    const sun = shared.uSunDir.value;
+    const texel = (this.sunCam.right - this.sunCam.left) / this.shadowS;
+    const x = _fx;
+    const y = _fy;
+    const z = _fz;
+    sunFrame(dir, x, y, z);
+    const cx = Math.round(center.dot(x) / texel) * texel;
+    const cy = Math.round(center.dot(y) / texel) * texel;
+    const cz = center.dot(z);
     const camPos = this.camera.position;
     const f = this.camera.getWorldDirection(_f);
     const p = _v.set(camPos.x + this.lead.x + f.x * 10, 0, camPos.z + this.lead.z + f.z * 10);
@@ -601,7 +665,7 @@ export class Pipeline {
     m.sy = Math.round(sy / texel) * texel;
     m.sz = sz;
     m.ver = ver;
-    m.sun.copy(sun);
+    m.sun.copy(dir);
     m.on = true;
     m.slice = 0;
     // (the small things as they would be seen from where you are heading)
@@ -614,7 +678,7 @@ export class Pipeline {
     cam.right = hx;
     cam.top = hy;
     cam.bottom = -hy;
-    cam.position.copy(c).addScaledVector(sun, 260 + this.stMz);
+    cam.position.copy(c).addScaledVector(z, 260 + this.stMz);
     cam.up.set(0, 1, 0);
     cam.lookAt(c);
     cam.updateMatrixWorld();
@@ -628,33 +692,42 @@ export class Pipeline {
   // n more slices of the map being drawn (each slice a quarter of the still city's pieces)
   drawStatic(m, n) {
     const root = this.staticRoot;
-    const pieces = root.children;
     const camPos = this.camera.position;
-    const skip = this.staticSkip;
-    const hid = this._sliceHid || (this._sliceHid = []);
     for (let k = 0; k < n && m.slice < STATIC_SLICES; k++) {
       if (this.staticCull) this.staticCull(m.p);
-      hid.length = 0;
-      for (let i = 0; i < pieces.length; i++) {
-        const o = pieces[i];
-        if (!o.visible) continue;
-        if (i % STATIC_SLICES !== m.slice || skip.includes(o)) {
-          o.visible = false;
-          hid.push(o);
-        }
-      }
-      this.swapDepth(root, false);
-      this.r.setRenderTarget(m.rt);
-      if (m.slice === 0) this.r.clear();
-      this.r.autoClear = false;
-      this.r.render(root, m.cam);
-      this.r.autoClear = true;
-      this.unswapDepth();
-      for (const o of hid) o.visible = true;
+      this.drawSlice(root, m.slice, STATIC_SLICES, m.rt, m.cam);
       if (this.staticCull) this.staticCull(camPos);
       m.slice++;
       this.st.slices++;
     }
+  }
+
+  // one slice of the still city (every n-th piece from the i-th) into a map of the sun's view
+  drawSlice(root, i, n, rt, cam) {
+    const pieces = root.children;
+    // (the far map is first drawn before setStatic: its moving parts are found here then)
+    const skip = this.staticSkip || (this.staticSkip = movingParts(root));
+    const hid = this._sliceHid || (this._sliceHid = []);
+    hid.length = 0;
+    for (let k = 0; k < pieces.length; k++) {
+      const o = pieces[k];
+      if (!o.visible) continue;
+      if (k % n !== i || skip.includes(o)) {
+        o.visible = false;
+        hid.push(o);
+      }
+    }
+    const keep = shared.uShadowOn.value;
+    shared.uShadowOn.value = 0;
+    this.swapDepth(root, false);
+    this.r.setRenderTarget(rt);
+    if (i === 0) this.r.clear();
+    this.r.autoClear = false;
+    this.r.render(root, cam);
+    this.r.autoClear = true;
+    this.unswapDepth();
+    shared.uShadowOn.value = keep;
+    for (const o of hid) o.visible = true;
   }
 
   // the map the shader reads
@@ -667,6 +740,115 @@ export class Pipeline {
     // the same bias in metres as the near map's (its depth is spread over a longer way)
     shared.uShadowStaticBias.value = (0.0012 * 519) / (m.cam.far - m.cam.near);
     shared.uShadowStaticOn.value = 1;
+  }
+
+  // the map that was in use fades out under the new one (one at a time: the still city's or the
+  // far one)
+  startFade(kind, m) {
+    this.fade = { kind, m, t0: performance.now() };
+    shared.uShadowOld.value = m.rt.depthTexture;
+    shared.uShadowOldMatrix.value.copy(m.matrix);
+    shared.uShadowOldMode.value = kind === 'static' ? 1 : 2;
+    shared.uShadowOldK.value = 1;
+  }
+
+  updateFade() {
+    const f = this.fade;
+    if (!f) return;
+    const k = (performance.now() - f.t0) / FADE_MS;
+    if (k >= 1) this.endFade();
+    else shared.uShadowOldK.value = 1 - k * k * (3 - 2 * k);
+  }
+
+  endFade() {
+    this.fade = null;
+    shared.uShadowOldMode.value = 0;
+    shared.uShadowOldK.value = 0;
+    shared.uShadowOld.value = BLANK;
+  }
+
+  // the city's far map (beyond the box): drawn again in the background when the sun has gone on
+  // a degree, or something was rubbed out, and faded in
+  updateFar() {
+    const want = this.shadowDir;
+    const cur = this.farCur;
+    const b = this.farBuild;
+    if (b) {
+      this.drawFar(b, 1);
+      if (b.slice < FAR_SLICES || this.fade) return;
+      this.startFade('far', cur);
+      this.useFar(b);
+      return;
+    }
+    if (this.fade && this.fade.kind === 'far') return;
+    if (this.farDirty || cur.sun.dot(want) < FAR_STEP) {
+      this.farDirty = false;
+      this.drawFar(this.beginFar(want), 1);
+    }
+  }
+
+  beginFar(dir) {
+    const m = this.farMaps[0] === this.farCur ? this.farMaps[1] : this.farMaps[0];
+    const box = this.farBox;
+    const z = _fz;
+    const x = _fx;
+    const y = _fy;
+    sunFrame(dir, x, y, z);
+    // the city's box in the sun's frame
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    const p = _v;
+    for (let i = 0; i < 8; i++) {
+      p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      const a = p.dot(x);
+      const bb = p.dot(y);
+      const c = p.dot(z);
+      x0 = Math.min(x0, a);
+      x1 = Math.max(x1, a);
+      y0 = Math.min(y0, bb);
+      y1 = Math.max(y1, bb);
+      z0 = Math.min(z0, c);
+      z1 = Math.max(z1, c);
+    }
+    const cam = m.cam;
+    cam.near = 1;
+    cam.far = z1 - z0 + 20;
+    cam.position.copy(z).multiplyScalar(z1 + 10);
+    cam.up.copy(y);
+    cam.lookAt(_sc.copy(cam.position).sub(z));
+    cam.updateMatrixWorld();
+    // the frame above is centred on the sun's axis through the origin: shift the box onto it
+    cam.left = x0;
+    cam.right = x1;
+    cam.top = y1;
+    cam.bottom = y0;
+    cam.updateProjectionMatrix();
+    m.matrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    m.sun.copy(dir);
+    m.slice = 0;
+    this.farBuild = m;
+    return m;
+  }
+
+  drawFar(m, n) {
+    for (let k = 0; k < n && m.slice < FAR_SLICES; k++) {
+      this.drawSlice(this.farRoot, m.slice, FAR_SLICES, m.rt, m.cam);
+      m.slice++;
+    }
+  }
+
+  useFar(m) {
+    this.farCur = m;
+    this.farRT = m.rt;
+    if (this.farBuild === m) this.farBuild = null;
+    shared.uShadowFar.value = m.rt.depthTexture;
+    shared.uShadowFarMatrix.value.copy(m.matrix);
+    shared.uShadowFarTexel.value.set(1 / m.rt.width, 1 / m.rt.height);
+    shared.uShadowFarOn.value = 1;
   }
 
   // where the camera is heading (for the still city's map): about a second ahead, at most 20 m
@@ -848,79 +1030,48 @@ export class Pipeline {
     if (T) T.end();
   }
 
-  // The sun's view of the whole city, made once: the long evening shadows reach across every
-  // street, not only the ones around you. (Only what never moves is in it.)
+  // The sun's view of the whole city (for what is beyond the box around you), on two maps:
+  // the first call draws one whole at once; later ones (something was rubbed out) have it drawn
+  // again in the background, as the sun's going on does (updateFar)
   bakeFarShadows(root, box, size = 4096) {
-    const sun = shared.uSunDir.value;
-    const z = new THREE.Vector3().copy(sun).normalize();
-    const x = new THREE.Vector3().crossVectors(_up, z).normalize();
-    const y = new THREE.Vector3().crossVectors(z, x);
-    // the city's box in the sun's frame
+    if (this.farMaps) {
+      this.farDirty = true;
+      return;
+    }
+    this.farRoot = root;
+    this.farBox = box.clone();
+    // a texture shaped like the city as the sun sees it now (long and low in the evening)
+    sunFrame(this.shadowDir, _fx, _fy, _fz);
     let x0 = Infinity;
     let x1 = -Infinity;
     let y0 = Infinity;
     let y1 = -Infinity;
-    let z0 = Infinity;
-    let z1 = -Infinity;
-    const p = new THREE.Vector3();
     for (let i = 0; i < 8; i++) {
-      p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
-      const a = p.dot(x);
-      const b = p.dot(y);
-      const c = p.dot(z);
-      x0 = Math.min(x0, a);
-      x1 = Math.max(x1, a);
-      y0 = Math.min(y0, b);
-      y1 = Math.max(y1, b);
-      z0 = Math.min(z0, c);
-      z1 = Math.max(z1, c);
+      _v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      x0 = Math.min(x0, _v.dot(_fx));
+      x1 = Math.max(x1, _v.dot(_fx));
+      y0 = Math.min(y0, _v.dot(_fy));
+      y1 = Math.max(y1, _v.dot(_fy));
     }
-    // a texture shaped like the city as the sun sees it (long and low)
     const aspect = (x1 - x0) / Math.max(1, y1 - y0);
     const W = size;
     const H = Math.max(512, Math.min(size, Math.pow(2, Math.round(Math.log2(size / Math.max(1, aspect))))));
-    if (this.farRT) this.farRT.dispose();
-    this.farRT = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) });
-    const cam = new THREE.OrthographicCamera(x0, x1, y1, y0, 1, z1 - z0 + 20);
-    cam.layers.enable(MIRRORLESS);
-    const eye = new THREE.Vector3().copy(z).multiplyScalar(z1 + 10);
-    cam.position.copy(eye);
-    cam.up.copy(y);
-    cam.lookAt(eye.clone().sub(z));
-    cam.updateMatrixWorld();
-    // the frame above is centred on the sun's axis through the origin: shift the box onto it
-    cam.left = x0;
-    cam.right = x1;
-    cam.top = y1;
-    cam.bottom = y0;
-    cam.updateProjectionMatrix();
-    shared.uShadowFarMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-    shared.uShadowFarTexel.value.set(1 / W, 1 / H);
-    const hidden = [];
-    const swapped = [];
-    this.scene.traverse((o) => {
-      if (!o.isMesh || !o.visible) return;
-      let inCity = false;
-      for (let q = o; q; q = q.parent) if (q === root) inCity = true;
-      const d = o.material.userData && o.material.userData.depth;
-      if (!inCity || d === null || o.userData.noShadow || o.userData.indoor || o.userData.dynamic) {
-        o.visible = false;
-        hidden.push(o);
-      } else if (d) {
-        swapped.push([o, o.material]);
-        o.material = d;
-      }
-    });
-    const keep = shared.uShadowOn.value;
-    shared.uShadowOn.value = 0;
-    this.r.setRenderTarget(this.farRT);
-    this.r.clear();
-    this.r.render(this.scene, cam);
+    const far = () => {
+      const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2);
+      cam.layers.enable(MIRRORLESS);
+      return {
+        rt: new THREE.WebGLRenderTarget(W, H, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) }),
+        cam,
+        sun: new THREE.Vector3(),
+        matrix: new THREE.Matrix4(),
+        slice: 0,
+      };
+    };
+    this.farMaps = [far(), far()];
+    this.farCur = null;
+    const m = this.beginFar(this.shadowDir);
+    this.drawFar(m, FAR_SLICES);
+    this.useFar(m);
     this.r.setRenderTarget(null);
-    for (const o of hidden) o.visible = true;
-    for (const [o, m] of swapped) o.material = m;
-    shared.uShadowOn.value = keep;
-    shared.uShadowFar.value = this.farRT.depthTexture;
-    shared.uShadowFarOn.value = 1;
   }
 }

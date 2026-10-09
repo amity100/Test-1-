@@ -40,6 +40,7 @@
         <div class="bar"><div class="fill"></div></div>
       </div>
       <div id="district" class="paper-card"></div>
+      <div id="clock" class="paper-card" aria-label="השעה בעיר"></div>
     </div>
 
     <div id="goals" class="sticky"></div>
@@ -149,6 +150,20 @@
       <label class="opt"><input type="checkbox" id="opt-look" checked> השתקפויות ברחוב הרטוב</label>
       <label class="opt"><input type="checkbox" id="opt-magic" checked> איכות גבוהה (עוד צבעים בכל משיכה)</label>
       <label class="opt">רגישות <input type="range" id="opt-sens" min="0.3" max="2.5" step="0.1" value="1"></label>
+      <label class="opt">שעון העיר
+        <select id="opt-clock">
+          <option value="24">יום של 24 דקות</option>
+          <option value="48">יום של 48 דקות</option>
+          <option value="96">יום של 96 דקות</option>
+          <option value="0">השעה עומדת</option>
+        </select>
+      </label>
+      <div class="opt hours"><span id="clock-now"></span>
+        <button class="btn mini" data-h="7.2">בוקר</button>
+        <button class="btn mini" data-h="12.5">צהריים</button>
+        <button class="btn mini" data-h="18.3">שקיעה</button>
+        <button class="btn mini" data-h="22.5">לילה</button>
+      </div>
       <label class="opt"><input type="checkbox" id="opt-perf"> מסך ביצועים (F3)</label>
       <button id="bench-btn" class="btn">מסלול מבחן ביצועים (דקה)</button>
     </div>

@@ -46,6 +46,10 @@ uniform mat4 uShadowStaticMatrix;
 uniform vec2 uShadowStaticTexel;
 uniform float uShadowStaticBias;
 uniform float uShadowStaticOn;
+uniform sampler2D uShadowOld;
+uniform mat4 uShadowOldMatrix;
+uniform float uShadowOldMode;
+uniform float uShadowOldK;
 uniform vec4 uLightPos[MAX_LIGHTS];
 uniform vec4 uLightCol[MAX_LIGHTS];
 uniform float uLightN;
@@ -56,6 +60,8 @@ uniform vec4 uWErase[MAX_SPOTS];
 uniform float uWEraseN;
 uniform sampler2D uHoles;
 uniform vec3 uWind;
+uniform vec3 uSunDisc;
+uniform float uLitK;
 `;
 
 export const FUNCS = /* glsl */ `
@@ -130,10 +136,10 @@ bool inPersonHole(float owner, vec3 p) {
 // the sunset: deep violet above, magenta and pink lower down, burning orange along the horizon
 vec3 skyColor(vec3 dir) {
   float el = dir.y;
-  float s = max(dot(dir, uSunDir), 0.0);
+  float s = max(dot(dir, uSunDisc), 0.0);
   vec3 c = mix(uSkyHorizon, uSkyMid, smoothstep(0.02, 0.2, el));
   c = mix(c, uSkyTop, smoothstep(0.17, 0.56, el));
-  float az = max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDir.xz)), 0.0);
+  float az = max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDisc.xz)), 0.0);
   float band = (1.0 - smoothstep(0.0, 0.24, abs(el))) * (0.25 + 0.75 * pow(az, 4.0));
   c = mix(c, uSkySun, band * 0.5);
   c += uSkySun * (pow(s, 16.0) * 0.55 + pow(s, 260.0) * 1.4);
@@ -152,19 +158,25 @@ vec3 applyFog(vec3 col, vec3 wp) {
   return mix(col, fc, clamp(k, 0.0, 1.0));
 }
 
-// the sun's own view of the street around you (every frame) and of the whole city (once)
-float sunShadowFar(vec3 wp, vec3 n) {
-  if (uShadowFarOn < 0.5) return 1.0;
-  vec4 sc = uShadowFarMatrix * vec4(wp + n * 0.15, 1.0);
+// the sun's own view of the street around you (every frame) and of the whole city (now and then)
+float farTaps(sampler2D map, mat4 m, vec3 wp, vec3 n) {
+  vec4 sc = m * vec4(wp + n * 0.15, 1.0);
   vec3 s = sc.xyz / sc.w * 0.5 + 0.5;
   if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) return 1.0;
   vec2 t = uShadowFarTexel;
   float v = 0.0;
-  v += step(s.z - 0.0009, textureLod(uShadowFar, s.xy + vec2(-0.6, -0.6) * t, 0.0).r);
-  v += step(s.z - 0.0009, textureLod(uShadowFar, s.xy + vec2(0.6, -0.6) * t, 0.0).r);
-  v += step(s.z - 0.0009, textureLod(uShadowFar, s.xy + vec2(-0.6, 0.6) * t, 0.0).r);
-  v += step(s.z - 0.0009, textureLod(uShadowFar, s.xy + vec2(0.6, 0.6) * t, 0.0).r);
+  v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(-0.6, -0.6) * t, 0.0).r);
+  v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(0.6, -0.6) * t, 0.0).r);
+  v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(-0.6, 0.6) * t, 0.0).r);
+  v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(0.6, 0.6) * t, 0.0).r);
   return v * 0.25;
+}
+float sunShadowFar(vec3 wp, vec3 n) {
+  if (uShadowFarOn < 0.5) return 1.0;
+  float v = farTaps(uShadowFar, uShadowFarMatrix, wp, n);
+  // (the map of a moment ago, fading out as the sun goes over)
+  if (uShadowOldMode > 1.5) v = mix(v, farTaps(uShadowOld, uShadowOldMatrix, wp, n), uShadowOldK);
+  return v;
 }
 
 float sunShadow(vec3 wp, vec3 n) {
@@ -174,6 +186,10 @@ float sunShadow(vec3 wp, vec3 n) {
   if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) return sunShadowFar(wp, n);
   float t = uShadowTexel;
   float v = 0.0;
+  vec2 o0 = vec2(-0.6, -0.6);
+  vec2 o1 = vec2(0.6, -0.6);
+  vec2 o2 = vec2(-0.6, 0.6);
+  vec2 o3 = vec2(0.6, 0.6);
   if (uShadowStaticOn > 0.5) {
     // what moves (around you, every frame) and the still city (its own bigger map, the same size
     // of texel on the same grid): in shadow where either one is in the way
@@ -181,15 +197,29 @@ float sunShadow(vec3 wp, vec3 n) {
     vec3 s2 = sc2.xyz / sc2.w * 0.5 + 0.5;
     vec2 t2 = uShadowStaticTexel;
     float z2 = s2.z - uShadowStaticBias;
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, -0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(-0.6, -0.6) * t2, 0.0).r);
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, -0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(0.6, -0.6) * t2, 0.0).r);
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, 0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(-0.6, 0.6) * t2, 0.0).r);
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, 0.6) * t, 0.0).r) * step(z2, textureLod(uShadowStatic, s2.xy + vec2(0.6, 0.6) * t2, 0.0).r);
+    float a0 = step(z2, textureLod(uShadowStatic, s2.xy + o0 * t2, 0.0).r);
+    float a1 = step(z2, textureLod(uShadowStatic, s2.xy + o1 * t2, 0.0).r);
+    float a2 = step(z2, textureLod(uShadowStatic, s2.xy + o2 * t2, 0.0).r);
+    float a3 = step(z2, textureLod(uShadowStatic, s2.xy + o3 * t2, 0.0).r);
+    if (uShadowOldMode > 0.5 && uShadowOldMode < 1.5) {
+      // (the still city's map of a moment ago, fading out as the sun goes over)
+      vec4 sco = uShadowOldMatrix * vec4(wp + n * 0.06, 1.0);
+      vec3 so = sco.xyz / sco.w * 0.5 + 0.5;
+      float zo = so.z - uShadowStaticBias;
+      a0 = mix(a0, step(zo, textureLod(uShadowOld, so.xy + o0 * t2, 0.0).r), uShadowOldK);
+      a1 = mix(a1, step(zo, textureLod(uShadowOld, so.xy + o1 * t2, 0.0).r), uShadowOldK);
+      a2 = mix(a2, step(zo, textureLod(uShadowOld, so.xy + o2 * t2, 0.0).r), uShadowOldK);
+      a3 = mix(a3, step(zo, textureLod(uShadowOld, so.xy + o3 * t2, 0.0).r), uShadowOldK);
+    }
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o0 * t, 0.0).r) * a0;
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o1 * t, 0.0).r) * a1;
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o2 * t, 0.0).r) * a2;
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o3 * t, 0.0).r) * a3;
   } else {
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, -0.6) * t, 0.0).r);
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, -0.6) * t, 0.0).r);
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(-0.6, 0.6) * t, 0.0).r);
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + vec2(0.6, 0.6) * t, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o0 * t, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o1 * t, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o2 * t, 0.0).r);
+    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o3 * t, 0.0).r);
   }
   // the edge of the box blends into the city's own shadow so it never shows
   vec2 e = min(s.xy, 1.0 - s.xy);
@@ -201,7 +231,7 @@ float sunShadow(vec3 wp, vec3 n) {
 vec3 ambientLight(vec3 n) {
   vec3 a = mix(uBounce, uSkyTop * 1.2, n.y * 0.5 + 0.5) * 1.1;
   vec2 h = normalize(n.xz + vec2(1e-5));
-  float toSun = max(dot(h, normalize(uSunDir.xz)), 0.0) * (1.0 - abs(n.y));
+  float toSun = max(dot(h, normalize(uSunDisc.xz)), 0.0) * (1.0 - abs(n.y));
   return a + uSkyHorizon * 0.45 * toSun + uSkyMid * 0.16 * (1.0 - abs(n.y));
 }
 
@@ -703,7 +733,7 @@ void main() {
   }
   if (kind > 5.5 && kind < 6.5) {
     // windows: dark glass, the sky in it, some lit from inside
-    float on = step(h11(vId * 17.31 + uObj * 91.0), uLit);
+    float on = step(h11(vId * 17.31 + uObj * 91.0), uLit * uLitK);
     vec3 warm = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.82, 0.5), h11(vId * 7.7 + 3.0));
     em += warm * on * 1.25;
     lit = mix(lit, warm * 1.4, on * 0.8);
@@ -768,21 +798,26 @@ export const SKY_FRAG = /* glsl */ `
 in vec3 vWP;
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
+// the hour's pens (sRGB: low, middle, top, four of each), the clouds (bellies, edges in the sun),
+// the sun's disc (core, ring, glow), the moon and the stars (game/daynight.js)
+uniform vec3 uSkyPen[12];
+uniform vec3 uCloudC[2];
+uniform vec3 uSunCore;
+uniform vec3 uSunRing;
+uniform vec3 uSunGlow;
+uniform float uSunDiscK;
+uniform vec3 uMoonDir;
+uniform float uMoonK;
+uniform float uStars;
 
 vec3 lin(vec3 c) { return c * c * (c * 0.3 + 0.7); } // about sRGB -> linear
 
-// the pens the artist reaches for at this height of the sunset (r picks one)
+// the pens the artist reaches for at this height of the sky (r picks one)
 vec3 skyPen(float el, float r, float toSun) {
-  vec3 low0 = lin(vec3(1.0, 0.84, 0.36)), low1 = lin(vec3(1.0, 0.6, 0.22)), low2 = lin(vec3(1.0, 0.45, 0.32)), low3 = lin(vec3(1.0, 0.95, 0.78));
-  vec3 mid0 = lin(vec3(1.0, 0.52, 0.22)), mid1 = lin(vec3(1.0, 0.36, 0.4)), mid2 = lin(vec3(0.9, 0.3, 0.62)), mid3 = lin(vec3(1.0, 0.72, 0.3));
-  vec3 top0 = lin(vec3(0.58, 0.3, 0.82)), top1 = lin(vec3(0.9, 0.36, 0.62)), top2 = lin(vec3(0.34, 0.36, 0.84)), top3 = lin(vec3(1.0, 0.5, 0.36));
   float a = smoothstep(0.03, 0.2, el - toSun * 0.06);
   float b = smoothstep(0.26, 0.55, el);
-  vec3 c0 = mix(mix(low0, mid0, a), top0, b);
-  vec3 c1 = mix(mix(low1, mid1, a), top1, b);
-  vec3 c2 = mix(mix(low2, mid2, a), top2, b);
-  vec3 c3 = mix(mix(low3, mid3, a), top3, b);
-  return r < 0.3 ? c0 : r < 0.58 ? c1 : r < 0.84 ? c2 : c3;
+  int i = r < 0.3 ? 0 : r < 0.58 ? 1 : r < 0.84 ? 2 : 3;
+  return mix(mix(lin(uSkyPen[i]), lin(uSkyPen[4 + i]), a), lin(uSkyPen[8 + i]), b);
 }
 
 void main() {
@@ -795,25 +830,25 @@ void main() {
   if (abs(dpx.x) > 100.0) dpx.x = 0.0;
   if (abs(dpy.x) > 100.0) dpy.x = 0.0;
   vec3 sky = skyColor(dir);
-  float toSun = pow(max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDir.xz)), 0.0), 2.0);
-  // clouds: long bands over the horizon, dark violet bellies, gold where they face the sun
+  float toSun = pow(max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDisc.xz)), 0.0), 2.0);
+  // clouds: long bands over the horizon, dark bellies, bright where they face the sun
   float cn = fbm(vec2(az * 2.4 + uTime * 0.004, el * 13.0)) * 0.7 + fbm(vec2(az * 7.0, el * 34.0) + 3.0) * 0.3;
   float cl = smoothstep(0.5, 0.66, cn) * smoothstep(0.03, 0.08, el) * (1.0 - smoothstep(0.22, 0.45, el));
   // the page shows between the strokes, tinted by the sky
   vec3 col = mix(uPaper * 0.97, sky, 0.62);
-  float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDir), -1.0, 1.0)) * 6.0);
+  float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
   // A: the main scribble, diagonal, every stroke its own pen
   gZig = 0.26;
   vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
   vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
-  pa = mix(pa, lin(vec3(0.66, 0.44, 0.74)), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
+  pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
   pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
   col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9));
   // B: across it, looser
   gZig = 0.38;
   vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
   vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
-  pb = mix(pb, lin(vec3(1.0, 0.72, 0.4)) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
+  pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
   col = mix(col, pb, B.x * step(fract(B.y * 7.13), 0.62 + 0.3 * cl));
   if (uQuality > 0.5) {
     // C: a few steep accents in a darker pen
@@ -823,16 +858,46 @@ void main() {
     col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.22 + 0.3 * cl));
   }
   gZig = 0.0;
-  // the sun: a white-hot disc low over the water, a ring of gold and orange strokes around it
-  float sd = acos(clamp(dot(dir, uSunDir), -1.0, 1.0));
-  vec2 sv = vec2(dot(dir - uSunDir, normalize(vec3(-uSunDir.z, 0.0, uSunDir.x))), dir.y - uSunDir.y);
+  if (uStars > 0.01 && el > 0.03) {
+    // the stars: little pen crosses scattered over the night, none in the clouds, few low down
+    vec2 q = vec2(az, el) * 57.3;
+    vec2 cell = floor(q);
+    float r = h11(cell.x * 157.31 + cell.y * 113.97);
+    if (r > 0.86) {
+      vec2 f = fract(q) - 0.5 - (vec2(h11(r * 71.3), h11(r * 33.7)) - 0.5) * 0.5;
+      float px = max(length(vec2(dpx.y, dpy.y)) / 220.0 * 57.3, 1e-4);
+      float sz = (0.06 + 0.12 * h11(r * 19.1)) * (r > 0.985 ? 1.8 : 1.0);
+      float w = px * 0.9;
+      float arm = (1.0 - smoothstep(w * 0.5, w * 1.5, abs(f.y))) * (1.0 - smoothstep(sz, sz + w, abs(f.x)));
+      arm = max(arm, (1.0 - smoothstep(w * 0.5, w * 1.5, abs(f.x))) * (1.0 - smoothstep(sz, sz + w, abs(f.y))));
+      float k = uStars * smoothstep(0.03, 0.2, el) * (1.0 - cl * 0.9) * (0.55 + 0.45 * sin(uTime * (1.0 + 3.0 * h11(r * 5.3)) + r * 40.0));
+      vec3 sc = mix(vec3(1.0, 0.95, 0.8), vec3(0.75, 0.85, 1.0), h11(r * 9.9));
+      col = mix(col, sc * 1.6, arm * k);
+    }
+  }
+  if (uMoonK > 0.01) {
+    // the moon: a pale disc, hatched where its seas are, with a cool halo
+    float md = acos(clamp(dot(dir, uMoonDir), -1.0, 1.0));
+    float MR = 0.026;
+    vec3 mx = normalize(vec3(-uMoonDir.z, 0.0, uMoonDir.x));
+    vec3 my = cross(uMoonDir, mx);
+    vec2 mv = vec2(dot(dir, mx), dot(dir, my)) / MR;
+    float disc = 1.0 - smoothstep(MR, MR + 0.003, md);
+    float seas = smoothstep(0.45, 0.7, vnoise(mv * 2.2 + 11.0)) * step(0.5, fract((mv.x + mv.y) * 3.5));
+    vec3 mc = mix(vec3(1.0, 0.97, 0.88), vec3(0.62, 0.66, 0.78), seas * 0.7) * 1.7;
+    col = mix(col, mc, disc * uMoonK);
+    col += vec3(0.42, 0.5, 0.75) * exp(-md * 18.0) * 0.35 * uMoonK;
+  }
+  // the sun: a white-hot disc, a ring of strokes around it, its glow
+  float sd = acos(clamp(dot(dir, uSunDisc), -1.0, 1.0));
+  vec2 sv = vec2(dot(dir - uSunDisc, normalize(vec3(-uSunDisc.z, 0.0, uSunDisc.x))), dir.y - uSunDisc.y);
   float ringN = (vnoise(vec2(atan(sv.y, sv.x) * 7.0, 3.0)) - 0.5) * 0.006;
   float R = 0.03;
-  float disc = 1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd);
-  vec3 sunC = mix(lin(vec3(1.0, 0.72, 0.3)), lin(vec3(1.0, 0.97, 0.82)), 1.0 - smoothstep(R * 0.3, R, sd));
+  float disc = (1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd)) * uSunDiscK;
+  vec3 sunC = mix(lin(uSunRing), lin(uSunCore), 1.0 - smoothstep(R * 0.3, R, sd));
   col = mix(col, sunC * 2.6, disc);
-  col += lin(vec3(1.0, 0.75, 0.4)) * exp(-sd * 20.0) * 0.45;
-  float glow = disc * 0.6 + exp(-sd * 40.0) * 0.25;
+  col += lin(uSunGlow) * exp(-sd * 20.0) * 0.45 * uSunDiscK;
+  float glow = disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK;
   gColor = vec4(col, clamp(glow, 0.0, 1.0));
   gAux = vec4(0.5, 0.5, 0.0, 0.0);
 }
