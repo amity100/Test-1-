@@ -10,6 +10,10 @@ const quad = {
  * Many atlas pictures in one draw call. Each one can turn to face you around its upright
  * (axis = 0), face the camera fully (axis = [2, 0, 0]), or keep its own right / up vectors.
  */
+const ONE4 = [1, 1, 1, 1];
+const ZERO3 = [0, 0, 0];
+const PIVOT_FOOT = [0.5, 0];
+
 export class SpriteBatch {
   constructor(capacity, atlasTex, { dynamic = false, transparent = false, noFog = false, nearFade = 0, lit = true } = {}) {
     this.capacity = capacity;
@@ -42,16 +46,26 @@ export class SpriteBatch {
     return i;
   }
 
+  // (written straight into the buffers: nothing new made for each sprite)
   set(i, o) {
     const a = this.attrs;
-    a.iPos.array.set([o.x, o.y, o.z], i * 3);
-    a.iSize.array.set([o.w, o.h], i * 2);
+    const p = a.iPos.array;
+    p[i * 3] = o.x;
+    p[i * 3 + 1] = o.y;
+    p[i * 3 + 2] = o.z;
+    const sz = a.iSize.array;
+    sz[i * 2] = o.w;
+    sz[i * 2 + 1] = o.h;
     a.iRect.array.set(o.rect, i * 4);
-    const t = o.tint || [1, 1, 1, 1];
-    a.iTint.array.set([t[0], t[1], t[2], t[3] === undefined ? 1 : t[3]], i * 4);
-    a.iAxis.array.set(o.axis || [0, 0, 0], i * 3);
-    a.iUp.array.set(o.up || [0, 0, 0], i * 3);
-    a.iPivot.array.set(o.pivot || [0.5, 0], i * 2);
+    const t = o.tint || ONE4;
+    const ti = a.iTint.array;
+    ti[i * 4] = t[0];
+    ti[i * 4 + 1] = t[1];
+    ti[i * 4 + 2] = t[2];
+    ti[i * 4 + 3] = t[3] === undefined ? 1 : t[3];
+    a.iAxis.array.set(o.axis || ZERO3, i * 3);
+    a.iUp.array.set(o.up || ZERO3, i * 3);
+    a.iPivot.array.set(o.pivot || PIVOT_FOOT, i * 2);
   }
 
   setPos(i, x, y, z) {

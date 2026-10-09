@@ -108,13 +108,24 @@ export function roadAt(x, z) {
   return null;
 }
 
+// on a road at all? (roadAt without the answer: asked for every walker every frame)
+function onRoad(x, z) {
+  if (z > NORTH_EDGE && z < SOUTH_EDGE) {
+    for (let i = 0; i < AVES.length; i++) if (Math.abs(x - AVES[i].x) < AVES[i].half) return true;
+  }
+  if (x > WEST_EDGE && x < STREET_X0) {
+    for (let i = 0; i < STREETS.length; i++) if (Math.abs(z - STREETS[i].z) < STREETS[i].half) return true;
+  }
+  return false;
+}
+
 // Height of the walkable ground (sidewalks, blocks and the promenade are raised by a curb).
 export function groundHeight(x, z) {
   if (x > WATER_X) {
     if (z > PIER.z0 && z < PIER.z1 && x < PIER.x1) return 0.35;
     return -0.8;
   }
-  if (roadAt(x, z)) return 0;
+  if (onRoad(x, z)) return 0;
   return CURB;
 }
 

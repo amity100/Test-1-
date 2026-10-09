@@ -664,7 +664,9 @@ export class Civilians {
   draw(camPos) {
     const bodies = this.game.figures.bodies;
     const fwd = this.game.camera.getWorldDirection(this._cf || (this._cf = new THREE.Vector3()));
-    for (const c of this.list) {
+    const list = this.list;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
       if (c.inside) continue;
       const dx = c.pos.x - camPos.x;
       const dz = c.pos.z - camPos.z;

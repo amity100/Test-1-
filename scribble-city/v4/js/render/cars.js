@@ -355,7 +355,9 @@ class Pool {
     this.mesh.count = this.n;
     // (nothing of this kind on the screen: no draw call at all)
     this.mesh.visible = this.n > 0;
-    for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]) {
+    const ats = this._ats || (this._ats = [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]);
+    for (let i = 0; i < 4; i++) {
+      const at = ats[i];
       at.clearUpdateRanges();
       at.addUpdateRange(0, Math.max(1, this.n) * at.itemSize);
       at.needsUpdate = true;
@@ -365,6 +367,17 @@ class Pool {
 }
 
 const PARTS = ['shell', 'glass'];
+// the lights and trims (the same arrays every frame)
+const TAXI_LIGHT = [0.85, 0.7, 0.22];
+const RED_OFF = [0.5, 0.06, 0.08];
+const RED_ON = [3.2, 0.25, 0.3];
+const BLUE_OFF = [0.08, 0.12, 0.5];
+const BLUE_ON = [0.3, 0.5, 3.2];
+const POLICE_STRIPE = [0.04, 0.05, 0.1];
+const BUS_BAND = [0.97, 0.96, 0.92];
+const BUS_SIGN = [1.6, 1.2, 0.3];
+const BUS_DOOR = [0.2, 0.22, 0.28];
+const VAN_RACK = [0.25, 0.25, 0.3];
 const _m = new THREE.Matrix4();
 const _w = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -462,12 +475,15 @@ export class CarRenderer {
   }
 
   col(c) {
+    // (a car's colour array keeps its linear copy: no key to build every frame)
+    if (c._carLin) return c._carLin;
     const key = c.join(',');
     let v = this.paintColor.get(key);
     if (!v) {
       v = lin3(c[0], c[1], c[2]);
       this.paintColor.set(key, v);
     }
+    c._carLin = v;
     return v;
   }
 
@@ -490,7 +506,9 @@ export class CarRenderer {
     P.shell.push(_m, this.col(color), part, rv);
     P.glass.push(_m, WHITE, part + 0.3, rv);
     // the wheels: they roll, the front ones steer
-    for (const w of P.b.wheels) {
+    const wheels = P.b.wheels;
+    for (let wi = 0; wi < wheels.length; wi++) {
+      const w = wheels[wi];
       _e.set(o.spin || 0, w.z > 0 ? o.steer || 0 : 0, 0, 'YXZ');
       _q.setFromEuler(_e);
       _w.compose(_p.set(w.x, w.r, w.z), _q, _s.set(1, w.r, w.r));
@@ -502,22 +520,23 @@ export class CarRenderer {
     }
     const top = K.roofY;
     if (o.extra === 'taxi') {
-      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, [0.85, 0.7, 0.22], rv);
+      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, TAXI_LIGHT, rv);
     } else if (o.extra === 'police') {
       const blink = o.siren !== undefined ? o.siren : -1;
-      const red = blink < 0 ? [0.5, 0.06, 0.08] : blink ? [3.2, 0.25, 0.3] : [0.5, 0.06, 0.08];
-      const blue = blink < 0 ? [0.08, 0.12, 0.5] : blink ? [0.08, 0.12, 0.5] : [0.3, 0.5, 3.2];
+      const red = blink < 0 ? RED_OFF : blink ? RED_ON : RED_OFF;
+      const blue = blink < 0 ? BLUE_OFF : blink ? BLUE_OFF : BLUE_ON;
       this.box(this.lightBox, _m, -0.32, top + 0.1, -0.15, 0.6, 0.16, 0.3, red, rv);
       this.box(this.lightBox, _m, 0.32, top + 0.1, -0.15, 0.6, 0.16, 0.3, blue, rv);
       // the black stripe along the doors (the car itself is white)
-      for (const sd of [-1, 1]) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 0.66, 0, 0.04, 0.3, K.len * 0.5, [0.04, 0.05, 0.1], rv);
+      for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 0.66, 0, 0.04, 0.3, K.len * 0.5, POLICE_STRIPE, rv);
     } else if (o.extra === 'bus') {
       // the band of colour under the windows, the route sign over the windscreen, the doors
-      for (const sd of [-1, 1]) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 1.55, -0.2, 0.04, 0.22, K.len * 0.94, [0.97, 0.96, 0.92], rv);
-      this.box(this.lightBox, _m, 0, 2.86, K.len / 2 - 0.12, 1.5, 0.26, 0.06, [1.6, 1.2, 0.3], rv);
-      for (const z of [K.len / 2 - 1.4, -0.4]) this.box(this.trimBox, _m, K.W / 2 + 0.005, 1.5, z, 0.02, 2.2, 1.1, [0.2, 0.22, 0.28], rv);
+      for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 1.55, -0.2, 0.04, 0.22, K.len * 0.94, BUS_BAND, rv);
+      this.box(this.lightBox, _m, 0, 2.86, K.len / 2 - 0.12, 1.5, 0.26, 0.06, BUS_SIGN, rv);
+      this.box(this.trimBox, _m, K.W / 2 + 0.005, 1.5, K.len / 2 - 1.4, 0.02, 2.2, 1.1, BUS_DOOR, rv);
+      this.box(this.trimBox, _m, K.W / 2 + 0.005, 1.5, -0.4, 0.02, 2.2, 1.1, BUS_DOOR, rv);
     } else if (kind === 'van' && o.extra !== 'plain') {
-      this.box(this.trimBox, _m, 0, top + 0.06, -0.3, K.W * 0.8, 0.06, K.len * 0.55, [0.25, 0.25, 0.3], rv);
+      this.box(this.trimBox, _m, 0, top + 0.06, -0.3, K.W * 0.8, 0.06, K.len * 0.55, VAN_RACK, rv);
     }
   }
 
@@ -528,8 +547,11 @@ export class CarRenderer {
   }
 
   end() {
-    for (const P of Object.values(this.kinds)) {
-      for (const k of PARTS) P[k].end();
+    const kinds = this._kindList || (this._kindList = Object.values(this.kinds));
+    for (let i = 0; i < kinds.length; i++) {
+      const P = kinds[i];
+      P.shell.end();
+      P.glass.end();
       P.sun.count = P.shell.mesh.count;
       P.sun.visible = P.shell.mesh.visible;
     }

@@ -523,7 +523,9 @@ export class Game {
     }
     let spot = null;
     if (!p.inVehicle && p.mode !== 'dead') {
-      for (const h of this.world.hideSpots) {
+      const hs = this.world.hideSpots;
+      for (let i = 0; i < hs.length; i++) {
+        const h = hs[i];
         if (!h.gone && Math.hypot(p.pos.x - h.x, p.pos.z - h.z) < h.r) {
           spot = h;
           break;
@@ -532,7 +534,9 @@ export class Game {
     }
     let close = false;
     if (spot) {
-      for (const e of this.enemies.list) {
+      const es = this.enemies.list;
+      for (let i = 0; i < es.length; i++) {
+        const e = es[i];
         if (e.alive && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < 3.2) close = true;
       }
     }

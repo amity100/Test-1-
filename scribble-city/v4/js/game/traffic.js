@@ -85,6 +85,24 @@ const _a = [0, 0];
 const _b = [0, 0];
 const _p = [0, 0];
 
+// what is in front of a car (Traffic.ahead): its state, the test of one thing, the answer
+const _ahead = { c: null, fx: 0, fz: 0, best: Infinity, why: null, nose: 0 };
+const _aheadOut = { d: 0, why: null };
+function aheadTest(x, z, r, w, back) {
+  const A = _ahead;
+  const c = A.c;
+  const dx = x - c.pos.x;
+  const dz = z - c.pos.z;
+  const along = dx * A.fx + dz * A.fz - A.nose - back;
+  if (along < 0.5 || along > 13 || along > A.best) return;
+  const side = Math.abs(dx * A.fz - dz * A.fx);
+  if (side < 1.45 + r + (c.halfWid - 0.98)) {
+    A.best = along;
+    A.why = w;
+  }
+}
+const _drawOpts = { spin: 0, steer: 0, extra: null, siren: undefined, scale: 1, squash: 1 };
+
 export class Traffic {
   constructor(game) {
     this.game = game;
@@ -316,8 +334,12 @@ export class Traffic {
         }
       }
     }
-    for (const c of this.list) this.updateCar(c, dt);
-    if (this.list.some((c) => c.poofT !== undefined && c.poofT > 0.45)) {
+    // (the list as it was when the loop began, as for...of would)
+    const cars = this.list;
+    for (let i = 0; i < cars.length; i++) this.updateCar(cars[i], dt);
+    let gone = false;
+    for (let i = 0; i < this.list.length; i++) if (this.list[i].poofT !== undefined && this.list[i].poofT > 0.45) gone = true;
+    if (gone) {
       this.list = this.list.filter((c) => {
         if (c.poofT === undefined || c.poofT <= 0.45) return true;
         this.removeCar(c);
@@ -327,33 +349,44 @@ export class Traffic {
     for (const c of this.parked) if (c.poofT !== undefined && c.poofT <= 0.45) c.poofT += dt;
   }
 
-  // what is in front of c (within 9 m, in its lane): { d, why }
+  // what is in front of c (within 9 m, in its lane): { d, why } (the same object every time:
+  // read it at once), or null
   ahead(c) {
     const game = this.game;
-    const fx = Math.sin(c.yaw);
-    const fz = Math.cos(c.yaw);
-    let best = Infinity;
-    let why = null;
+    const A = _ahead;
+    A.c = c;
+    A.fx = Math.sin(c.yaw);
+    A.fz = Math.cos(c.yaw);
+    A.best = Infinity;
+    A.why = null;
     // (distances from c's nose to the back of what is in front)
-    const nose = c.halfLen - 2.3;
-    const test = (x, z, r, w, back = 0) => {
-      const dx = x - c.pos.x;
-      const dz = z - c.pos.z;
-      const along = dx * fx + dz * fz - nose - back;
-      if (along < 0.5 || along > 13 || along > best) return;
-      const side = Math.abs(dx * fz - dz * fx);
-      if (side < 1.45 + r + (c.halfWid - 0.98)) {
-        best = along;
-        why = w;
-      }
-    };
+    A.nose = c.halfLen - 2.3;
     const pl = game.player;
-    if (!pl.inVehicle && pl.mode !== 'dead') test(pl.pos.x, pl.pos.z, 0.3, 'player');
-    for (const v of game.vehicles.list) if (!v.dead && !(v.flies && v.alt > 2)) test(v.pos.x, v.pos.z, v.radius * 0.6, v.driver ? 'player' : 'car');
-    for (const o of this.list) if (o !== c) test(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
-    for (const e of game.enemies.list) if (e.alive) test(e.pos.x, e.pos.z, 0.4, 'other');
-    for (const h of game.civilians.list) if (!h.inside && h.alive !== false) test(h.pos.x, h.pos.z, 0.3, 'other');
-    return why ? { d: best, why } : null;
+    if (!pl.inVehicle && pl.mode !== 'dead') aheadTest(pl.pos.x, pl.pos.z, 0.3, 'player', 0);
+    const vs = game.vehicles.list;
+    for (let i = 0; i < vs.length; i++) {
+      const v = vs[i];
+      if (!v.dead && !(v.flies && v.alt > 2)) aheadTest(v.pos.x, v.pos.z, v.radius * 0.6, v.driver ? 'player' : 'car', 0);
+    }
+    const os = this.list;
+    for (let i = 0; i < os.length; i++) {
+      const o = os[i];
+      if (o !== c) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
+    }
+    const es = game.enemies.list;
+    for (let i = 0; i < es.length; i++) {
+      const e = es[i];
+      if (e.alive) aheadTest(e.pos.x, e.pos.z, 0.4, 'other', 0);
+    }
+    const hs = game.civilians.list;
+    for (let i = 0; i < hs.length; i++) {
+      const h = hs[i];
+      if (!h.inside && h.alive !== false) aheadTest(h.pos.x, h.pos.z, 0.3, 'other', 0);
+    }
+    if (!A.why) return null;
+    _aheadOut.d = A.best;
+    _aheadOut.why = A.why;
+    return _aheadOut;
   }
 
   updateCar(c, dt) {
@@ -622,37 +655,43 @@ export class Traffic {
     if (!cars) return;
     const cam = this.game.camera;
     const fwd = cam.getWorldDirection(this._fwd3 || (this._fwd3 = new THREE.Vector3()));
-    const blink = Math.floor(this.game.time * 5) % 2;
-    const show = (c, far) => {
-      const vx = c.pos.x - camPos.x;
-      const vz = c.pos.z - camPos.z;
-      const d = Math.hypot(vx, vz);
-      return d < far && (d < 14 || vx * fwd.x + vz * fwd.z > -12);
-    };
-    const one = (c) => {
-      const spec = c.spec;
-      let scale = 1;
-      let squash = 1;
-      if (c.poofT !== undefined) {
-        const k = Math.max(0.01, 1 - c.poofT / 0.45);
-        scale = k;
-        squash = k;
-      }
-      if (c.flat) squash = 0.42;
-      cars.draw(spec.kind, c.wrecked ? WRECK : spec.color, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, {
-        spin: c.wheel || 0,
-        steer: Math.max(-0.5, Math.min(0.5, c.steer || 0)),
-        extra: spec.police ? 'police' : spec.taxi ? 'taxi' : spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain',
-        siren: spec.police ? (c.siren ? blink : -1) : undefined,
-        scale,
-        squash,
-      });
-    };
-    for (const c of this.list) if (show(c, 260)) one(c);
-    for (const c of this.parked) {
+    this._blink = Math.floor(this.game.time * 5) % 2;
+    const list = this.list;
+    for (let i = 0; i < list.length; i++) if (this.inSight(list[i], 260, camPos, fwd)) this.drawOne(cars, list[i]);
+    const parked = this.parked;
+    for (let i = 0; i < parked.length; i++) {
+      const c = parked[i];
       if (c.taken || (c.poofT !== undefined && c.poofT > 0.45)) continue;
-      if (show(c, 190)) one(c);
+      if (this.inSight(c, 190, camPos, fwd)) this.drawOne(cars, c);
     }
+  }
+
+  inSight(c, far, camPos, fwd) {
+    const vx = c.pos.x - camPos.x;
+    const vz = c.pos.z - camPos.z;
+    const d = Math.hypot(vx, vz);
+    return d < far && (d < 14 || vx * fwd.x + vz * fwd.z > -12);
+  }
+
+  drawOne(cars, c) {
+    const spec = c.spec;
+    let scale = 1;
+    let squash = 1;
+    if (c.poofT !== undefined) {
+      const k = Math.max(0.01, 1 - c.poofT / 0.45);
+      scale = k;
+      squash = k;
+    }
+    if (c.flat) squash = 0.42;
+    // (one set of options for every car: the cars read it at once)
+    const o = _drawOpts;
+    o.spin = c.wheel || 0;
+    o.steer = Math.max(-0.5, Math.min(0.5, c.steer || 0));
+    o.extra = spec.police ? 'police' : spec.taxi ? 'taxi' : spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain';
+    o.siren = spec.police ? (c.siren ? this._blink : -1) : undefined;
+    o.scale = scale;
+    o.squash = squash;
+    cars.draw(spec.kind, c.wrecked ? WRECK : spec.color, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, o);
   }
 
   // ------------------------------------------------------------------ the player and cars
@@ -665,13 +704,18 @@ export class Traffic {
   nearestDoor(pos, maxD = 1.6) {
     let best = null;
     let bd = maxD;
-    for (const c of this.all()) {
-      // (nobody drives off with a bus)
-      if (c.flat || c.bus) continue;
-      const d = this.boxDist(c, pos.x, pos.z);
-      if (d < bd) {
-        bd = d;
-        best = c;
+    for (let li = 0; li < 2; li++) {
+      const list = li === 0 ? this.list : this.parked;
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        if (c.poofT !== undefined || (li === 1 && c.taken)) continue;
+        // (nobody drives off with a bus)
+        if (c.flat || c.bus) continue;
+        const d = this.boxDist(c, pos.x, pos.z);
+        if (d < bd) {
+          bd = d;
+          best = c;
+        }
       }
     }
     return best;
@@ -710,6 +754,7 @@ export class Traffic {
     let best = null;
     let bd = reach;
     for (const c of this.all()) {
+      // (in front of the eraser only now and then: the plain loop is not needed here)
       const d = this.boxDist(c, pos.x, pos.z);
       if (d > bd) continue;
       const dx = c.pos.x - pos.x;
@@ -797,7 +842,9 @@ export class Traffic {
 
   // walkers bump into traffic like into parked cars
   pushOut(p, r) {
-    for (const c of this.list) {
+    const list = this.list;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
       if (c.poofT !== undefined) continue;
       const dx = p.x - c.pos.x;
       const dz = p.z - c.pos.z;

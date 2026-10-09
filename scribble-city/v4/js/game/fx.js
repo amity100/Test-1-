@@ -166,8 +166,13 @@ export class Effects {
     // sprites
     const sb = this.sprites;
     sb.count = 0;
-    const keep = [];
-    for (const s of this.list) {
+    // (two lists in turn, and one sprite description filled for each: nothing new every frame)
+    const keep = this._keep || (this._keep = []);
+    keep.length = 0;
+    const list = this.list;
+    const o = _spr;
+    for (let si = 0; si < list.length; si++) {
+      const s = list[si];
       s.t += dt;
       if (s.t >= s.life) continue;
       keep.push(s);
@@ -179,12 +184,37 @@ export class Effects {
       const size = s.size * (1 + s.grow * k);
       let a = s.alpha * (k > 0.6 ? 1 - (k - 0.6) / 0.4 : 1);
       if (s.fadeIn > 0 && s.t < s.fadeIn) a *= s.t / s.fadeIn;
-      sb.add({ x: s.x, y: s.y, z: s.z, w: size * s.aspect, h: size, rect: s.rect, tint: [s.tint[0], s.tint[1], s.tint[2], a], pivot: s.pivot });
+      o.x = s.x;
+      o.y = s.y;
+      o.z = s.z;
+      o.w = size * s.aspect;
+      o.h = size;
+      o.rect = s.rect;
+      o.tint[0] = s.tint[0];
+      o.tint[1] = s.tint[1];
+      o.tint[2] = s.tint[2];
+      o.tint[3] = a;
+      o.pivot = s.pivot;
+      sb.add(o);
     }
+    this._keep = list;
     this.list = keep;
-    for (const m of this.marks) {
+    const marks = this.marks;
+    for (let mi = 0; mi < marks.length; mi++) {
+      const m = marks[mi];
       if (!m.visible) continue;
-      sb.add({ x: m.x, y: m.y, z: m.z, w: m.size, h: m.size, rect: this.atlas.rects[m.rect], tint: [1, 1, 1, m.alpha === undefined ? 1 : m.alpha], pivot: [0.5, 0.5] });
+      o.x = m.x;
+      o.y = m.y;
+      o.z = m.z;
+      o.w = m.size;
+      o.h = m.size;
+      o.rect = this.atlas.rects[m.rect];
+      o.tint[0] = 1;
+      o.tint[1] = 1;
+      o.tint[2] = 1;
+      o.tint[3] = m.alpha === undefined ? 1 : m.alpha;
+      o.pivot = PIVOT_MID;
+      sb.add(o);
     }
     sb.commit();
     if (this.decalsDirty) {
@@ -192,8 +222,11 @@ export class Effects {
       this.decalsDirty = false;
     }
     // particles
-    const ps = [];
-    for (const p of this.particles) {
+    const ps = this._ps || (this._ps = []);
+    ps.length = 0;
+    const parts = this.particles;
+    for (let pi = 0; pi < parts.length; pi++) {
+      const p = parts[pi];
       p.t += dt;
       if (p.t >= p.life) continue;
       if (p.flutter) {
@@ -225,8 +258,13 @@ export class Effects {
         figures.lineXYZ(p.x - dx, p.y, p.z - dz, p.x + dx, p.y + p.len * 0.6, p.z + dz, p.color, 3.2, p.seed, fade, 0.2, 0.01);
       }
     }
+    this._ps = parts;
     this.particles = ps;
   }
 }
+
+// the one sprite description the sprites and marks are filled into in turn
+const _spr = { x: 0, y: 0, z: 0, w: 0, h: 0, rect: null, tint: [1, 1, 1, 1], pivot: null };
+const PIVOT_MID = [0.5, 0.5];
 
 export { RED_INK };

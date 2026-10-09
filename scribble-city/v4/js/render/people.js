@@ -300,6 +300,12 @@ const BROW_BALD = [0.2, 0.16, 0.14];
 const LIPS_F = [0.72, 0.3, 0.34];
 const LIPS_M = [0.45, 0.22, 0.22];
 
+// (the parts each arm and leg belongs to, and the running part id of the person being drawn)
+const ARM_PART = ['armR', 'armL'];
+const LEG_PART = ['legR', 'legL'];
+let _part = 0;
+const nextPart = () => (_part = (_part + 0.1173) % 1);
+
 // the tops that are worn open over another layer
 const OPEN = new Set(['suit', 'blazer', 'jacket', 'denim', 'bomber', 'cardigan', 'overshirt', 'trench', 'coat']);
 
@@ -539,8 +545,8 @@ export class PersonRenderer {
     const k = S * 0.98;
     const bulk = fig.bulk;
     const seed = (fig.seed % 1) * 0.37 + 0.11;
-    let part = seed;
-    const id = () => (part = (part + 0.1173) % 1);
+    _part = seed;
+    const id = nextPart;
     const ax = fig.ax;
     const rgt = fig.brgt;
     const fwd = fig.bfwd;
@@ -638,13 +644,14 @@ export class PersonRenderer {
       }
     }
     // ---- arms
-    const arms = [
-      ['armR', j.shoulderR, j.elbowR, j.handR, 1],
-      ['armL', j.shoulderL, j.elbowL, j.handL, -1],
-    ];
+    // (the joints never change: their lists are made once)
+    const arms = fig._armJ || (fig._armJ = [[j.shoulderR, j.elbowR, j.handR], [j.shoulderL, j.elbowL, j.handL]]);
     const armK = k * Math.max(1, bulk * 0.85) * (fig.limbs || 1) * (puffy ? 1.3 : open ? 1.08 : 1);
-    for (const [pn, sh, el, hd] of arms) {
-      if (P[pn] < 0.5) continue;
+    for (let ai = 0; ai < 2; ai++) {
+      if (P[ARM_PART[ai]] < 0.5) continue;
+      const sh = arms[ai][0];
+      const el = arms[ai][1];
+      const hd = arms[ai][2];
       const shortS = sleeves === 'short' && !L.fem;
       const noS = sleeves === 'none' && !L.fem;
       const upperSkin = shortS || noS;
@@ -665,14 +672,16 @@ export class PersonRenderer {
       p.hand.push(along(_d, _a.copy(_d).addScaledVector(_c, 0.05), 0.05, k, fwd), skin, own, id(), ind);
     }
     // ---- legs
-    const legs = [
-      ['legR', j.hipR, j.kneeR, j.footR, j.toeR, 1],
-      ['legL', j.hipL, j.kneeL, j.footL, j.toeL, -1],
-    ];
+    const legs = fig._legJ || (fig._legJ = [[j.hipR, j.kneeR, j.footR, j.toeR], [j.hipL, j.kneeL, j.footL, j.toeL]]);
     const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
     const shoeC = linC(L.shoes);
-    for (const [pn, hp, kn, ft, to, sx] of legs) {
-      if (P[pn] < 0.5) continue;
+    for (let li = 0; li < 2; li++) {
+      if (P[LEG_PART[li]] < 0.5) continue;
+      const hp = legs[li][0];
+      const kn = legs[li][1];
+      const ft = legs[li][2];
+      const to = legs[li][3];
+      const sx = li === 0 ? 1 : -1;
       const legId = id();
       if (midi) {
         // under a midi skirt: the boots (and over the knees when she sits)
@@ -713,7 +722,7 @@ export class PersonRenderer {
       _c.copy(hc).addScaledVector(hu, -0.065 * hs).addScaledVector(hf, 0.03 * hs);
       p.jaw.push(framed(_c, hr, hu, hf, hs * 1.05, hs, hs * 1.05), skin, own, headId, ind);
       if (!far) {
-        for (const sd of [-1, 1]) {
+        for (let sd = -1; sd <= 1; sd += 2) {
           _c.copy(hc).addScaledVector(hr, sd * 0.1 * hs).addScaledVector(hf, -0.005 * hs);
           p.ear.push(framed(_c, hr, hu, hf, hs, hs, hs), skin, own, id(), ind);
         }
@@ -724,7 +733,7 @@ export class PersonRenderer {
           L._brow = L.hair && L.hair.style !== 'none' ? L.hair.color.map((v) => v * 0.8) : BROW_BALD;
         }
         const browC = linC(L._brow);
-        for (const sd of [-1, 1]) {
+        for (let sd = -1; sd <= 1; sd += 2) {
           if (!shades) {
             _c.copy(hc).addScaledVector(hr, sd * 0.036 * hs).addScaledVector(hu, 0.02 * hs).addScaledVector(hf, 0.098 * hs);
             if (!masked) p.eyeWhite.push(framed(_c, hr, hu, hf, hs, hs, hs), linC(EYE_WHITE), own, id(), ind);

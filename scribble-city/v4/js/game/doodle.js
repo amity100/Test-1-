@@ -19,6 +19,24 @@ const _w = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _q = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+// the parts of each arm and leg and the names of their bones (the same strings every time)
+const ARM_BONES = [['armR', 'uarmR', 'farmR', 'handR'], ['armL', 'uarmL', 'farmL', 'handL']];
+const LEG_BONES = [['legR', 'thighR', 'shinR', 'footR'], ['legL', 'thighL', 'shinL', 'footL']];
+const SHIRT_WHITE = [0.92, 0.92, 0.9];
+// colours of the small things drawn every frame (one array each, never changed: the linear
+// copy of each is worked out once)
+const COL_08_08_1 = [0.08, 0.08, 0.1];
+const COL_06_06_08 = [0.06, 0.06, 0.08];
+const COL_42_5_62 = [0.42, 0.5, 0.62];
+const COL_7_12_14 = [0.7, 0.12, 0.14];
+const COL_84_14_16 = [0.84, 0.14, 0.16];
+const COL_15_15_18 = [0.15, 0.15, 0.18];
+const COL_8_3_3 = [0.8, 0.3, 0.3];
+const COL_4_26_18 = [0.4, 0.26, 0.18];
+const COL_16_14_16 = [0.16, 0.14, 0.16];
+const COL_92_88_8 = [0.92, 0.88, 0.8];
+const COL_45_3_2 = [0.45, 0.3, 0.2];
+const COL_15_25_45 = [0.15, 0.25, 0.45];
 const UPPER = ['neck', 'headC', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'];
 const LOWER = ['hip', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'];
 
@@ -236,11 +254,13 @@ export class Doodle {
 
     // legs
     const legL = 0.47 * (this.look.build.legs || 1);
-    const legs = [
-      [j.hipR, j.kneeR, j.footR, j.toeR, 0, this.parts.legR],
-      [j.hipL, j.kneeL, j.footL, j.toeL, Math.PI, this.parts.legL],
-    ];
-    for (const [, knee, foot, toe, off] of legs) {
+    // (the joints never change: the lists are made once)
+    const legs = this._legs || (this._legs = [[j.kneeR, j.footR, j.toeR, 0], [j.kneeL, j.footL, j.toeL, Math.PI]]);
+    for (let li = 0; li < 2; li++) {
+      const knee = legs[li][0];
+      const foot = legs[li][1];
+      const toe = legs[li][2];
+      const off = legs[li][3];
       const side = off === 0 ? 1 : -1;
       let th = Math.sin(ph + off) * (0.18 + 0.62 * A);
       let kb = Math.max(0, Math.sin(ph + off - Math.PI * 0.5)) * (0.25 + 0.9 * A) + 0.05;
@@ -281,14 +301,16 @@ export class Doodle {
     const armU = 0.31 * (this.look.build.arms || 1);
     const armF = 0.29 * (this.look.build.arms || 1);
     const swing = (0.15 + 0.7 * A) * (1 - sit);
-    const arms = [
-      [j.shoulderR, j.elbowR, j.handR, 1, 0],
-      [j.shoulderL, j.elbowL, j.handL, -1, Math.PI],
-    ];
+    const arms = this._arms || (this._arms = [[j.shoulderR, j.elbowR, j.handR, 1, 0], [j.shoulderL, j.elbowL, j.handL, -1, Math.PI]]);
     const aimP = this.aimPitch;
     const ay = this.yaw + this.aimYaw;
     this.aimDir.set(Math.sin(ay) * Math.cos(aimP), Math.sin(aimP), Math.cos(ay) * Math.cos(aimP));
-    for (const [shoulder, elbow, hand, side, off] of arms) {
+    for (let ai = 0; ai < 2; ai++) {
+      const shoulder = arms[ai][0];
+      const elbow = arms[ai][1];
+      const hand = arms[ai][2];
+      const side = arms[ai][3];
+      const off = arms[ai][4];
       const tgt = _a;
       let useIK = false;
       const reach = side === 1 ? this.reachR : this.reachL;
@@ -540,7 +562,7 @@ export class Doodle {
       // clothing details with volume
       if (top.kind === 'suit' || top.kind === 'blazer' || top.kind === 'jacket') {
         _a.lerpVectors(j.hip, j.neck, 0.62).addScaledVector(fwd, 0.09 * bulk * S);
-        this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, 0.045 * S, 0.17 * S, 0.04 * S, top.shirt || top.inner || [0.92, 0.92, 0.9]);
+        this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, 0.045 * S, 0.17 * S, 0.04 * S, top.shirt || top.inner || SHIRT_WHITE);
       }
       if (top.kind === 'vest' && top.under) {
         // sleeve stubs of the shirt under the vest
@@ -573,30 +595,33 @@ export class Doodle {
         dr.solid = false;
       }
     }
-    // arms
-    const armSide = [
-      ['armR', j.shoulderR, j.elbowR, j.handR],
-      ['armL', j.shoulderL, j.elbowL, j.handL],
-    ];
-    for (const [part, sh, el, hd] of armSide) {
+    // arms (the joints never change: their lists are made once)
+    const armSide = this._armS || (this._armS = [[j.shoulderR, j.elbowR, j.handR], [j.shoulderL, j.elbowL, j.handL]]);
+    for (let ai = 0; ai < 2; ai++) {
+      const B = ARM_BONES[ai];
+      const part = B[0];
       if (P[part] < 0.5) continue;
-      const side = part === 'armR' ? 'R' : 'L';
-      this.capsule(part, 'uarm' + side, sh, el, 0.05 * lim * Math.max(1, bulk * 0.85), upperArmC);
-      this.capsule(part, 'farm' + side, el, hd, 0.042 * lim * Math.max(1, bulk * 0.8), foreArmC);
+      const sh = armSide[ai][0];
+      const el = armSide[ai][1];
+      const hd = armSide[ai][2];
+      this.capsule(part, B[1], sh, el, 0.05 * lim * Math.max(1, bulk * 0.85), upperArmC);
+      this.capsule(part, B[2], el, hd, 0.042 * lim * Math.max(1, bulk * 0.8), foreArmC);
       _a.subVectors(hd, el).normalize();
       _b.copy(hd).addScaledVector(_a, 0.025 * S);
-      this.ellipsoid(part, 'hand' + side, _b, rgt, ax, fwd, 0.042 * S, 0.046 * S, 0.042 * S, skin);
+      this.ellipsoid(part, B[3], _b, rgt, ax, fwd, 0.042 * S, 0.046 * S, 0.042 * S, skin);
     }
     // legs
-    const legSide = [
-      ['legR', j.hipR, j.kneeR, j.footR, j.toeR],
-      ['legL', j.hipL, j.kneeL, j.footL, j.toeL],
-    ];
-    for (const [part, hp, kn, ft, to] of legSide) {
+    const legSide = this._legS || (this._legS = [[j.hipR, j.kneeR, j.footR, j.toeR], [j.hipL, j.kneeL, j.footL, j.toeL]]);
+    for (let li = 0; li < 2; li++) {
+      const B = LEG_BONES[li];
+      const part = B[0];
       if (P[part] < 0.5) continue;
-      const side = part === 'legR' ? 'R' : 'L';
-      this.capsule(part, 'thigh' + side, hp, kn, 0.072 * lim * legR * Math.max(1, bulk * 0.9), pantsC);
-      this.capsule(part, 'shin' + side, kn, ft, 0.056 * lim * legR * Math.max(1, bulk * 0.85), shinC);
+      const hp = legSide[li][0];
+      const kn = legSide[li][1];
+      const ft = legSide[li][2];
+      const to = legSide[li][3];
+      this.capsule(part, B[1], hp, kn, 0.072 * lim * legR * Math.max(1, bulk * 0.9), pantsC);
+      this.capsule(part, B[2], kn, ft, 0.056 * lim * legR * Math.max(1, bulk * 0.85), shinC);
       // shoe: points where the foot points
       _a.subVectors(to, ft);
       if (_a.lengthSq() < 1e-6) _a.copy(fwd);
@@ -606,7 +631,7 @@ export class Doodle {
       _b.normalize();
       _c.crossVectors(_b, _a).normalize();
       _d.copy(ft).addScaledVector(_a, 0.055 * S).addScaledVector(_c, 0.0);
-      this.ellipsoid(part, 'foot' + side, _d, _b, _c, _a, 0.056 * S, 0.046 * S, 0.12 * S, L.shoes);
+      this.ellipsoid(part, B[3], _d, _b, _c, _a, 0.056 * S, 0.046 * S, 0.12 * S, L.shoes);
     }
     // head, hair, hats
     if (P.head > 0.5) {
@@ -633,8 +658,7 @@ export class Doodle {
     const hat = L.hat;
     const hcol = hair.color;
     const S = this.scale;
-    const front = (s, off) => this.clip(s, hf, hc, off * hs);
-    const below = (s, off) => this.clip(s, _q.copy(hu).negate(), hc, -off * hs);
+    // (front: cut the shape at a plane in front of the head; below: under it - see clip)
     // hair
     const st = hair.style;
     const hair0 = this.shapes.length;
@@ -642,13 +666,13 @@ export class Doodle {
       const g = st === 'buzz' || st === 'cornrows' || st === 'spiky' ? 1.03 : st === 'curly' ? 1.14 : 1.08;
       _a.copy(hc).addScaledVector(hu, 0.012 * hs).addScaledVector(hf, -0.01 * hs);
       const cap = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * g, ry * g, rz * g, hcol);
-      below(cap, st === 'long' || st === 'bob' ? 0.0 : 0.03);
+      this.clip(cap, _q.copy(hu).negate(), hc, -(st === 'long' || st === 'bob' ? 0.0 : 0.03) * hs);
     }
     if (st === 'long' || st === 'bob') {
       const len = st === 'long' ? 0.2 : 0.12;
       _a.copy(hc).addScaledVector(hf, -0.06 * hs).addScaledVector(hu, -len * 0.55 * hs);
       const back = this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.125 * hs, len * hs, 0.08 * hs, hcol);
-      front(back, 0.02);
+      this.clip(back, hf, hc, (0.02) * hs);
     } else if (st === 'ponytail') {
       _a.copy(hc).addScaledVector(hf, -0.1 * hs).addScaledVector(hu, 0.06 * hs);
       _b.copy(hc).addScaledVector(hf, -0.19 * hs).addScaledVector(hu, -0.12 * hs);
@@ -659,12 +683,12 @@ export class Doodle {
     } else if (st === 'afro') {
       _a.copy(hc).addScaledVector(hu, 0.05 * hs).addScaledVector(hf, -0.02 * hs);
       const af = this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.19 * hs, 0.175 * hs, 0.19 * hs, hcol);
-      front(af, 0.035);
+      this.clip(af, hf, hc, (0.035) * hs);
     } else if (st === 'mohawk') {
       // shaved sides, one proud crest from the forehead to the neck
       _a.copy(hc).addScaledVector(hu, 0.085 * hs).addScaledVector(hf, -0.01 * hs);
       const m = this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.03 * hs, 0.11 * hs, 0.14 * hs, hcol);
-      below(m, 0.02);
+      this.clip(m, _q.copy(hu).negate(), hc, -(0.02) * hs);
     } else if (st === 'spiky') {
       // pointed tufts: long thin ellipsoids standing out of the head
       for (let i = 0; i < 7; i++) {
@@ -707,7 +731,7 @@ export class Doodle {
         const g = k === 'hardhat' ? 1.16 : k === 'bandanaHead' ? 1.04 : 1.09;
         _a.copy(hc).addScaledVector(hu, 0.01 * hs);
         const dome = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * g, ry * g, rz * g, hat.color);
-        below(dome, k === 'beanie' ? 0.0 : 0.035);
+        this.clip(dome, _q.copy(hu).negate(), hc, -(k === 'beanie' ? 0.0 : 0.035) * hs);
         if (k === 'cap' || k === 'capBack') {
           const dir = k === 'cap' ? 1 : -1;
           _a.copy(hc).addScaledVector(hu, 0.04 * hs).addScaledVector(hf, 0.12 * dir * hs);
@@ -728,9 +752,9 @@ export class Doodle {
         _a.copy(hc).addScaledVector(hu, 0.125 * hs);
         this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.13 * hs, 0.05 * hs, 0.14 * hs, hat.color);
         _a.copy(hc).addScaledVector(hu, 0.075 * hs);
-        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.118 * hs, 0.04 * hs, 0.125 * hs, [0.08, 0.08, 0.1]);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.118 * hs, 0.04 * hs, 0.125 * hs, COL_08_08_1);
         _a.copy(hc).addScaledVector(hu, 0.055 * hs).addScaledVector(hf, 0.11 * hs);
-        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.085 * hs, 0.01 * hs, 0.06 * hs, [0.06, 0.06, 0.08]);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.085 * hs, 0.01 * hs, 0.06 * hs, COL_06_06_08);
       } else if (k === 'toque') {
         // a chef's tall white hat
         _a.copy(hc).addScaledVector(hu, 0.07 * hs);
@@ -741,7 +765,7 @@ export class Doodle {
         // a bucket hat: a soft crown and a brim sloping down all round
         _a.copy(hc).addScaledVector(hu, 0.06 * hs);
         const crown = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.1, ry * 0.75, rz * 1.1, hat.color);
-        below(crown, -0.02);
+        this.clip(crown, _q.copy(hu).negate(), hc, -(-0.02) * hs);
         _a.copy(hc).addScaledVector(hu, 0.035 * hs);
         this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.17 * hs, 0.022 * hs, 0.17 * hs, hat.color);
       } else if (k === 'beret') {
@@ -753,9 +777,9 @@ export class Doodle {
         // riot helmet: a big dome and a smoky visor over the eyes
         _a.copy(hc).addScaledVector(hu, 0.03 * hs);
         const dome = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.22, ry * 1.18, rz * 1.22, hat.color);
-        below(dome, -0.01);
+        this.clip(dome, _q.copy(hu).negate(), hc, -(-0.01) * hs);
         _a.copy(hc).addScaledVector(hf, rz * 0.55).addScaledVector(hu, 0.0);
-        const visor = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.05, 0.06 * hs, rz * 0.62, [0.42, 0.5, 0.62]);
+        const visor = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.05, 0.06 * hs, rz * 0.62, COL_42_5_62);
         visor.fill = FILL.FLAT;
       }
     }
@@ -764,7 +788,7 @@ export class Doodle {
       if (L.top.hoodUp) {
         _a.copy(hc).addScaledVector(hu, 0.01 * hs).addScaledVector(hf, -0.025 * hs);
         const hood = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.28, ry * 1.22, rz * 1.25, L.top.color);
-        front(hood, 0.035);
+        this.clip(hood, hf, hc, (0.035) * hs);
       } else {
         _a.copy(this.j.neck).addScaledVector(hf, -0.08 * S).addScaledVector(hu, 0.01 * S);
         this.ellipsoid('torso', 'neck', _a, hr, hu, hf, 0.13 * S, 0.06 * S, 0.075 * S, L.top.color);
@@ -773,7 +797,7 @@ export class Doodle {
     // bandana over the mouth, a full beard, shades
     if (L.acc.includes('bandanaMouth')) {
       _a.copy(hc).addScaledVector(hf, 0.035 * hs).addScaledVector(hu, -0.06 * hs);
-      const b = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.06, 0.07 * hs, rz * 1.02, L.bandana || [0.7, 0.12, 0.14]);
+      const b = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.06, 0.07 * hs, rz * 1.02, L.bandana || COL_7_12_14);
       this.clip(b, _q.copy(hf).negate(), hc, 0.0);
     }
     if (L.face.beard === 'full') {
@@ -784,17 +808,17 @@ export class Doodle {
     if (L.face.glasses === 'shades') {
       for (const sd of [-1, 1]) {
         _a.copy(hc).addScaledVector(hr, sd * 0.042 * hs).addScaledVector(hu, 0.018 * hs).addScaledVector(hf, rz * 0.98);
-        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.03 * hs, 0.02 * hs, 0.008 * hs, [0.06, 0.06, 0.08]).gloss = true;
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.03 * hs, 0.02 * hs, 0.008 * hs, COL_06_06_08).gloss = true;
       }
     }
     if (L.acc.includes('headband')) {
       _a.copy(hc).addScaledVector(hu, 0.035 * hs);
-      this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.05, 0.025 * hs, rz * 1.05, [0.84, 0.14, 0.16]);
+      this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.05, 0.025 * hs, rz * 1.05, COL_84_14_16);
     }
     if (L.acc.includes('headphones')) {
       for (const sd of [-1, 1]) {
         _a.copy(hc).addScaledVector(hr, sd * rx * 1.02);
-        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.025 * hs, 0.045 * hs, 0.045 * hs, [0.15, 0.15, 0.18]);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.025 * hs, 0.045 * hs, 0.045 * hs, COL_15_15_18);
       }
     }
   }
@@ -809,14 +833,14 @@ export class Doodle {
     if (this.carry || this.carryL) carryShapes(this, ax, rgt, fwd, S);
     if (L.acc.includes('scarf')) {
       _a.copy(this.j.neck).addScaledVector(ax, 0.01 * S);
-      this.ellipsoid('torso', 'neck', _a, rgt, ax, fwd, 0.08 * S, 0.04 * S, 0.075 * S, L.top.inner || [0.8, 0.3, 0.3]);
+      this.ellipsoid('torso', 'neck', _a, rgt, ax, fwd, 0.08 * S, 0.04 * S, 0.075 * S, L.top.inner || COL_8_3_3);
     }
     if (L.acc.includes('bag')) {
       _a.copy(this.j.handL).addScaledVector(ax, -0.12 * S);
-      this.ellipsoid('armL', 'handL', _a, rgt, ax, fwd, 0.035 * S, 0.11 * S, 0.14 * S, L.bagColor || [0.4, 0.26, 0.18]);
+      this.ellipsoid('armL', 'handL', _a, rgt, ax, fwd, 0.035 * S, 0.11 * S, 0.14 * S, L.bagColor || COL_4_26_18);
     }
     const j = this.j;
-    const bagC = L.bagColor || [0.16, 0.14, 0.16];
+    const bagC = L.bagColor || COL_16_14_16;
     if (L.acc.includes('crossbody')) {
       // a little bag on a strap across the body, from the right shoulder to the left hip
       _a.copy(j.shoulderR).addScaledVector(fwd, 0.03 * S).addScaledVector(ax, 0.02 * S);
@@ -843,7 +867,9 @@ export class Doodle {
 
   // ------------------------------------------------------------------ bones & holes
   updateBones() {
-    for (const s of this.shapes) {
+    const shapes = this.shapes;
+    for (let si = 0; si < shapes.length; si++) {
+      const s = shapes[si];
       if (this.bones[s.bone] && this.bones[s.bone].stamp === this.stampN) continue;
       let b = this.bones[s.bone];
       if (!b) {
@@ -1045,7 +1071,7 @@ export class Doodle {
           const a1 = ((i + 1) / 6) * Math.PI * 2;
           P(ex + Math.cos(a0) * 0.14, ey + Math.sin(a0) * 0.1, 0.92, _a);
           P(ex + Math.cos(a1) * 0.14, ey + Math.sin(a1) * 0.1, 0.92, _b);
-          this.stroke(_a, _b, [0.92, 0.88, 0.8], w * 1.2, 40 + i + sd);
+          this.stroke(_a, _b, COL_92_88_8, w * 1.2, 40 + i + sd);
         }
         P(ex, ey, 0.95, _a);
         P(ex + 0.02, ey - 0.02, 0.95, _b);
@@ -1179,7 +1205,7 @@ export class Doodle {
     if (L.acc.includes('cigar')) {
       P(0.12, -0.44, 0.92, _a);
       _b.copy(_a).addScaledVector(this.hf, 0.12 * this.scale).addScaledVector(this.hr, 0.03);
-      this.stroke(_a, _b, [0.45, 0.3, 0.2], w * 2.4, 68);
+      this.stroke(_a, _b, COL_45_3_2, w * 2.4, 68);
     }
   }
 
@@ -1239,7 +1265,7 @@ export class Doodle {
       }
       if (L.acc.includes('belt') || L.bottom.kind === 'pants' || L.bottom.kind === 'baggy') {
         const n = 8;
-        const beltC = L.acc.includes('belt') ? [0.08, 0.08, 0.1] : ink;
+        const beltC = L.acc.includes('belt') ? COL_08_08_1 : ink;
         for (let i = 0; i < n; i++) {
           const a0 = (i / n) * Math.PI * 2;
           const a1 = ((i + 1) / n) * Math.PI * 2;
@@ -1257,7 +1283,7 @@ export class Doodle {
         for (let i = 0; i < 3; i++) {
           _a.copy(el).addScaledVector(_d, 0.2 + i * 0.2).addScaledVector(fwd, 0.044 * S);
           _b.copy(_a).addScaledVector(_d, 0.1).addScaledVector(rgt, (i % 2 ? 1 : -1) * 0.03 * S);
-          this.stroke(_a, _b, [0.15, 0.25, 0.45], w, 120 + i + (part === 'armR' ? 0 : 5));
+          this.stroke(_a, _b, COL_15_25_45, w, 120 + i + (part === 'armR' ? 0 : 5));
         }
       }
     }
@@ -1268,7 +1294,7 @@ export class Doodle {
       _a.copy(j.headC).addScaledVector(this.hu, 0.035 * this.headScale * S).addScaledVector(this.hf, -0.12 * this.headScale * S);
       for (const sd of [-1, 1]) {
         _b.copy(_a).addScaledVector(this.hf, -0.16 * S).addScaledVector(this.hr, sd * 0.05 * S).addScaledVector(this.hu, -0.05 * S + Math.sin(t + sd) * 0.03 * S);
-        this.stroke(_a, _b, [0.84, 0.14, 0.16], w * 2.2, 130 + sd);
+        this.stroke(_a, _b, COL_84_14_16, w * 2.2, 130 + sd);
       }
     }
     if (this.parts.head < 0.5) {

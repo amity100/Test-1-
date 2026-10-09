@@ -38,14 +38,18 @@ export class Signals {
     const time = this.game.traffic ? this.game.traffic.time : 0;
     const m = this.mesh;
     let n = 0;
-    for (const s of this.list) {
+    const list = this.list;
+    for (let si = 0; si < list.length; si++) {
+      const s = list[si];
       if (Math.abs(s.x - cam.x) > NEAR || Math.abs(s.z - cam.z) > NEAR) continue;
       // (a light rubbed out of the page is out)
       const o = s.obj ? objs.list[s.obj] : null;
       if (o && o.state !== 'here') continue;
       const light = lightAt(NODES[s.node], s.axis, time);
       const c = COLOR[light];
-      for (const head of s.lamps) {
+      const lamps = s.lamps;
+      for (let li = 0; li < lamps.length; li++) {
+        const head = lamps[li];
         if (n >= this.cap) break;
         m.setMatrixAt(n, head[ROW[light]]);
         m.setColorAt(n, _c.setRGB(c[0], c[1], c[2]));
