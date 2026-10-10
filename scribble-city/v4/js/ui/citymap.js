@@ -259,7 +259,9 @@ export class CityMap {
     this.hideCard();
     this.centreOnPlayer(false, this.lastK || clamp(this.H / 300, this.kMin(), K_MAX));
     this.updateHead();
-    $('map-hint').textContent = this.game.touch
+    $('map-hint').textContent = this.game.pad && this.game.pad.active
+      ? 'סטיק — הזזה · RT/LT — זום · Ⓐ — יעד, או מה זה · Ⓧ — בלי יעד · Ⓨ — אליכם · Ⓑ — סגירה'
+      : this.game.touch
       ? 'גרירה — הזזה · שתי אצבעות — זום · נגיעה — יעד, או מה זה'
       : 'גרירה — הזזה · גלגלת — זום · קליק — יעד · קליק ימני — בלי יעד · M — סגירה';
     this.render();

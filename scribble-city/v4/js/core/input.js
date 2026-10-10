@@ -15,6 +15,9 @@ export class Input {
     this.move = { x: 0, y: 0 }; // x right, y forward
     this.sensitivity = 1;
     this.invertY = false;
+    this.pad = null; // { x, y, sprint } from a gamepad
+    this.flyUp = false;
+    this.flyDown = false;
     this.enabled = false;
     this.locked = false;
     this.lockFailed = false;
@@ -267,8 +270,10 @@ export class Input {
     btn('btn-pause', 'Escape');
   }
 
-  // Movement vector from keys or stick.
+  // Movement vector from keys or stick (a gamepad's, core/gamepad.js, while it is pushed).
   readMove() {
+    const pad = this.pad;
+    if (pad && (pad.x || pad.y || pad.sprint)) return pad;
     if (this.touch) return { x: this.move.x, y: this.move.y, sprint: (this.stickMag || 0) > 0.92 };
     let x = 0;
     let y = 0;

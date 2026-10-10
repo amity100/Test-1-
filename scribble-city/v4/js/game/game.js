@@ -44,6 +44,7 @@ import { Radio } from './radio.js';
 import { CityMap } from '../ui/citymap.js';
 import { GPS } from './gps.js';
 import { Settings } from '../core/settings.js';
+import { Pad } from '../core/gamepad.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -140,6 +141,8 @@ export class Game {
     this.citymap = new CityMap(this);
     // and the way to a destination marked on it (game/gps.js)
     this.gps = new GPS(this);
+    // a gamepad, if there is one (core/gamepad.js)
+    this.pad = new Pad(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -508,6 +511,8 @@ export class Game {
     if (this.state === 'paused') dt = 0;
     this.time += dt;
     shared.uTime.value = this.time;
+    // the gamepad first: it presses the same keys the keyboard does
+    this.pad.update();
     if (this.weather) this.weather.update(dt);
     if (this.daynight) this.daynight.update(dt);
     if (this.rhythm) this.rhythm.update();
@@ -1191,26 +1196,28 @@ export class Game {
     let prompt = '';
     let photo = false;
     let enter = false;
+    // (on a phone the buttons are on the screen; with a gamepad the prompt says which to press)
+    const touch = this.touch && !this.pad.active;
     if (p.inVehicle) {
       enter = true;
-      prompt = this.touch ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+      prompt = touch ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
     } else if (p.mode === 'foot' && this.streetlife.target()) {
       const sh = this.streetlife.target();
       enter = sh.shop.open;
-      prompt = this.touch ? sh.label.replace('E — ', '') : sh.label;
+      prompt = touch ? sh.label.replace('E — ', '') : sh.label;
     } else if (p.mode === 'foot') {
       const et = this.enterTarget();
       if (et) {
         enter = true;
         const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? 'לגנוב את ה' : 'להיכנס ל';
-        prompt = this.touch ? '' : `E — ${verb}${et.label}`;
+        prompt = touch ? '' : `E — ${verb}${et.label}`;
       } else {
         const b = this.photoTarget();
         if (b) {
           photo = true;
-          prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : this.touch ? 'לצלם את השרטוט' : 'F — לצלם את השרטוט';
+          prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : touch ? 'לצלם את השרטוט' : 'F — לצלם את השרטוט';
         } else if (p.hidden && this.album.size) {
-          prompt = this.touch ? 'מוסתרים — זה הזמן לצייר' : 'מוסתרים — Q כדי לצייר';
+          prompt = touch ? 'מוסתרים — זה הזמן לצייר' : 'מוסתרים — Q כדי לצייר';
         }
       }
     }

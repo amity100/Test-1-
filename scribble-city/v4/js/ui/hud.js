@@ -151,7 +151,9 @@ export class HUD {
   setPrompt(text) {
     if (text === this.prompt) return;
     this.prompt = text;
-    this.promptEl.textContent = text || '';
+    // (with a gamepad in hand, its buttons instead of the keys)
+    const pad = this.game.pad;
+    this.promptEl.textContent = (pad ? pad.text(text) : text) || '';
     this.promptEl.classList.toggle('hidden', !text);
   }
 

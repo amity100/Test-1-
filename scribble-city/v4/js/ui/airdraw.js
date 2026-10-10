@@ -118,12 +118,7 @@ export class AirDraw {
       } catch (err) {
         // synthetic pointers may not be capturable
       }
-      const p = this.toSheet(e.clientX, e.clientY);
-      if (!p) return;
-      this.current = [p];
-      this.strokes.push(this.current);
-      this.pen = p;
-      this.game.audio.scratchStart();
+      this.penDown(e.clientX, e.clientY);
     });
     el.addEventListener('pointermove', (e) => {
       if (!this.current || this.phase !== 'draw') return;
@@ -131,25 +126,11 @@ export class AirDraw {
       // coalesced points give smoother lines at low frame rates; some browsers return none
       let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
       if (!evs.length) evs = [e];
-      const minStep = this.W / 700;
       let moved = 0;
-      for (const ev of evs) {
-        const p = this.toSheet(ev.clientX, ev.clientY);
-        if (!p) continue;
-        const last = this.current[this.current.length - 1];
-        const d = Math.hypot(p[0] - last[0], p[1] - last[1]);
-        if (d < minStep) continue;
-        this.current.push(p);
-        this.pen = p;
-        moved += d * PX * 0.5;
-      }
+      for (const ev of evs) moved += this.penTo(ev.clientX, ev.clientY);
       this.game.audio.scratch(moved);
     });
-    const end = () => {
-      if (!this.current) return;
-      this.current = null;
-      this.game.audio.scratchStop();
-    };
+    const end = () => this.penUp();
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
     document.getElementById('air-done').addEventListener('click', () => this.finish());
@@ -197,6 +178,40 @@ export class AirDraw {
     });
   }
 
+  // the pen on the paper at a point of the screen (a finger, the mouse, a gamepad's pencil)
+  penDown(x, y) {
+    if (this.phase !== 'draw') return;
+    const p = this.toSheet(x, y);
+    if (!p) return;
+    this.current = [p];
+    this.strokes.push(this.current);
+    this.pen = p;
+    this.game.audio.scratchStart();
+  }
+
+  // the line goes on to a point; returns how far the pen went (for the pencil's scratch)
+  penTo(x, y) {
+    if (!this.current || this.phase !== 'draw') return 0;
+    const p = this.toSheet(x, y);
+    if (!p) return 0;
+    const last = this.current[this.current.length - 1];
+    const d = Math.hypot(p[0] - last[0], p[1] - last[1]);
+    if (d < this.W / 700) return 0;
+    this.current.push(p);
+    this.pen = p;
+    return d * PX * 0.5;
+  }
+
+  penMove(x, y) {
+    this.game.audio.scratch(this.penTo(x, y));
+  }
+
+  penUp() {
+    if (!this.current) return;
+    this.current = null;
+    this.game.audio.scratchStop();
+  }
+
   // screen point -> position on the floating sheet, in metres from its centre (u right, v up)
   toSheet(clientX, clientY) {
     const cam = this.game.camera;
@@ -219,6 +234,7 @@ export class AirDraw {
 
   show(bpId) {
     const g = this.game;
+    if (g.pad) g.pad.startDrawing();
     this.strokes = [];
     this.current = null;
     this.res = null;
