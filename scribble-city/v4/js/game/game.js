@@ -39,6 +39,7 @@ import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
 import { Rhythm } from './rhythm.js';
 import { Shutters } from './shutters.js';
+import { Soundscape } from './soundscape.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -127,6 +128,8 @@ export class Game {
     this.nightlife = new Nightlife(this);
     // the shops' shutters (made last: what was there before keeps its numbers)
     this.shutters = new Shutters(this);
+    // the sounds of the city around you (game/soundscape.js)
+    this.soundscape = new Soundscape(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -515,6 +518,7 @@ export class Game {
     if (this.state !== 'title') this.hud.update(dt);
     this.updatePrompts();
     this.audio.tick();
+    if (this.soundscape) this.soundscape.update(dt);
     input.endFrame();
   }
 

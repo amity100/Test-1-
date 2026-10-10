@@ -1,7 +1,7 @@
 // Tiny WebAudio synth: every sound is generated, no audio files.
 
 // jukebox songs: chords (MIDI), bass hits [step, interval], chord stabs
-const SONGS = [
+export const SONGS = [
   { bpm: 84, prog: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], bass: [[0, 0], [3, 0], [4, 7], [6, 0]], stabs: [0, 3], stabLen: 0.6 },
   { bpm: 138, prog: [[52, 56, 59], [57, 61, 64], [52, 56, 59], [59, 63, 66]], bass: [[0, 0], [2, 4], [4, 7], [6, 9]], stabs: [1, 3, 5, 7], stabLen: 0.12 },
   { bpm: 118, prog: [[50, 53, 57], [55, 58, 62], [48, 52, 55], [53, 57, 60]], bass: [[0, 0], [1, 12], [2, 0], [3, 12], [4, 0], [5, 12], [6, 0], [7, 12]], stabs: [2, 6], stabLen: 0.18, four: true },
