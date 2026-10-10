@@ -70,6 +70,8 @@ import { Heli } from './heli.js';
 import { Arrest } from './arrest.js';
 import { Lose } from './lose.js';
 import { Gangs } from './gangs.js';
+import { Arsenal } from './arsenal.js';
+import { Wheel } from '../ui/wheel.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -237,6 +239,9 @@ export class Game {
     this.lose = this.classic ? null : new Lose(this);
     // (the Inkblots and the Erasers: their turf, their wars, what the Erasers rub out; ROADMAP 6.5)
     this.gangs = this.classic ? null : new Gangs(this);
+    // (magazines and reloading, the stationery shops' refills, the weapon wheel: ROADMAP 6.6)
+    this.arsenal = this.classic ? null : new Arsenal(this);
+    this.wheel = this.classic ? null : new Wheel(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -735,6 +740,11 @@ export class Game {
   update(dt) {
     const playing = this.state === 'play' || this.state === 'dead';
     if (this.state === 'paused') dt = 0;
+    // (the weapon wheel open: the city slows right down, ROADMAP 6.6)
+    if (this.wheel) {
+      this.wheel.update();
+      dt *= this.wheel.slow;
+    }
     this.time += dt;
     shared.uTime.value = this.time;
     // the gamepad first: it presses the same keys the keyboard does
@@ -753,7 +763,9 @@ export class Game {
     if (dt > 0) fr.begin(this.camera);
     if (playing) this.handleKeys();
     const look = input.consumeLook();
-    if (playing && !this.airdraw.open) {
+    // (the weapon wheel open: the mouse points at a weapon, not the camera; ROADMAP 6.6)
+    if (this.wheel && this.wheel.open) this.wheel.look(look.x, look.y);
+    else if (playing && !this.airdraw.open) {
       this.camRig.applyLook(look.x, look.y);
       if (look.x || look.y) this.lastLookInput = this.time;
     }
@@ -764,6 +776,7 @@ export class Game {
       if (!this.classic && player.mode === 'vehicle') player.seatIn(dt);
       this.materialize.update(dt);
       this.weapons.update(dt);
+      if (this.arsenal) this.arsenal.update(dt);
       this.enemies.update(dt);
       this.civilians.update(dt);
       if (this.ragdolls) this.ragdolls.update();

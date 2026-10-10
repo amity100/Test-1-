@@ -478,6 +478,15 @@ body:not(.touch) .touch-only { display: none; }
 body.nc #btn-up { bottom: max(204px, calc(env(safe-area-inset-bottom) + 194px)); }
 body.nc #btn-down { bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); }
 #btn-guard { right: max(116px, calc(env(safe-area-inset-right) + 96px)); bottom: max(196px, calc(env(safe-area-inset-bottom) + 186px)); background: #ffe1cc; }
+/* (not with ?classic) the weapon wheel: hold Tab, or hold the swap button (ROADMAP 6.6) */
+#wheel { position: fixed; left: 50%; top: 50%; width: 0; height: 0; z-index: 30; pointer-events: none; }
+#wheel::before { content: ''; position: absolute; left: -205px; top: -205px; width: 410px; height: 410px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 253, 246, 0.82) 0 38%, rgba(255, 253, 246, 0.55) 39% 70%, rgba(255, 253, 246, 0) 71%); }
+#wheel .wheel-mid { position: absolute; left: -80px; top: -34px; width: 160px; height: 68px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-family: var(--font-hand); color: var(--ink); }
+#wheel .wheel-mid b { font-size: 24px; line-height: 1.05; }
+#wheel .wheel-mid span { font: 600 13px Rubik, sans-serif; opacity: 0.8; }
+#wheel .wheel-item { position: absolute; left: -40px; top: -27px; width: 80px; height: 54px; border-radius: 12px; border: 2.5px solid var(--ink); background: var(--paper-2); box-shadow: 2px 3px 0 rgba(36, 36, 44, 0.25); transition: transform 0.08s; }
+#wheel .wheel-item canvas { width: 76px; height: 46px; display: block; margin: 2px auto 0; }
+#wheel .wheel-item.on { background: #ffe9a8; border-color: var(--red); outline: 3px solid rgba(255, 196, 30, 0.6); }
 /* (not with ?classic) hands up, with the police after you on foot (ROADMAP 6.3) */
 #btn-hands { right: max(262px, calc(env(safe-area-inset-right) + 242px)); bottom: max(128px, calc(env(safe-area-inset-bottom) + 118px)); background: #dfe9ff; }
 #btn-hands.on { background: #ffd9a0; }

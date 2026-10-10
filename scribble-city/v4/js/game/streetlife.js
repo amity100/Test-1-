@@ -480,6 +480,11 @@ SERVICES_NC.boutique = { ...SERVICES.boutique, ask: 'למדוד בגדים', gre
   ['אביזרים', 'menu', (game, a) => a.shelf('משהו קטן לסיום?', 'acc', ACCS, 'chain')],
 ] };
 SERVICES_NC.barber = { ...SERVICES.barber, offers: [...SERVICES.barber.offers, ['קעקוע מצויר', 'menu', (game, a) => a.shelf('איזה קעקוע לצייר לך על היד?', 'tattoo', TATTOOS, (it) => TATTOO_SKETCH[it.tattoo])]] };
+// (ROADMAP 6.6) the stationery shops: ink, lead and rubber for every weapon you drew
+SERVICES_NC.books = { ...SERVICES.books, greet: 'דיו, עופרת, מחקים ושרטוטים. מה צריך?', offers: [...SERVICES.books.offers, ['מילוי דיו, עופרת ומחקים לכל הנשק', 'book', (game) => {
+  const n = game.arsenal ? game.arsenal.refill() : 0;
+  game.hud.toast(n ? 'כל הנשק שציירתם מלא שוב!' : 'הכול כבר מלא. בואו כשייגמר', n ? 'good' : 'info', 2.6);
+}]] };
 SERVICES_NC.hardware = { ...SERVICES.hardware, offers: [...SERVICES.hardware.offers, ['אפוד מגן מכריכות של מחברות', 'vest', (game) => {
   armorUp(game);
   game.hud.toast('אפוד מגן! הוא סופג את רוב המכות והיריות עד שהוא נקרע', 'good', 3.2);

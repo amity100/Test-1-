@@ -268,15 +268,21 @@ export class HUD {
       : d.kind === 'beam' ? `${Math.ceil(s.ammo)} שניות של אור`
       : d.projectile === 'scissors' ? (s.out ? 'באוויר… חוזרים אליך' : 'זורקים — וחוזרים')
       : d.projectile === 'inkbomb' ? `${s.ammo} בקבוקי דיו`
-      : s.ammo === Infinity ? 'תמיד איתך' : `${s.ammo} יריות`;
+      : s.ammo === Infinity ? 'תמיד איתך' : (this.game.arsenal && this.game.arsenal.ammoText(s)) || `${s.ammo} יריות`;
     this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear || d.bare ? '' : s.grade;
     this.weaponGrade.textContent = s.def.id === 'pencil' || d.bare ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
     const c = this.weaponIcon;
     const g = c.getContext('2d');
     g.clearRect(0, 0, c.width, c.height);
+    this.drawIcon(g, s, c.width, c.height);
+  }
+
+  // a weapon's picture (the HUD's; the weapon wheel's, ROADMAP 6.6)
+  drawIcon(g, s, w, h) {
+    const d = s.def;
     if (s.def.id === 'pencil') {
       g.save();
-      g.translate(c.width / 2, c.height / 2);
+      g.translate(w / 2, h / 2);
       g.rotate(-0.25);
       g.fillStyle = '#e6cf7a';
       g.fillRect(-44, -7, 70, 14);
@@ -298,13 +304,13 @@ export class HUD {
       g.stroke();
       g.restore();
     } else if (d.bare) {
-      drawFist(g, c.width, c.height);
+      drawFist(g, w, h);
     } else if (s.def.gear) {
-      drawGearIcon(g, s.def.id, c.width, c.height, s.uses !== undefined ? s.uses / s.def.uses : 1);
+      drawGearIcon(g, s.def.id, w, h, s.uses !== undefined ? s.uses / s.def.uses : 1);
     } else if (s.strokes) {
-      this.drawStrokesInto(g, s.strokes, c.width, c.height);
+      this.drawStrokesInto(g, s.strokes, w, h);
     } else {
-      drawBlueprint(g, BLUEPRINTS[s.def.id], 0, 0, c.width, c.height, { width: 2 });
+      drawBlueprint(g, BLUEPRINTS[s.def.id], 0, 0, w, h, { width: 2 });
     }
   }
 

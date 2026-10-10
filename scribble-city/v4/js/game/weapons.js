@@ -113,6 +113,8 @@ export class Weapons {
   add(def, grade, model, drawingScore) {
     const g = GRADE[grade];
     const slot = { def, grade, ammo: def.ammo ? Math.round(def.ammo * g.ammo) : Infinity, uses: def.uses, model, score: drawingScore, spin: 0 };
+    // (a full magazine: ROADMAP 6.6)
+    if (this.game.arsenal) this.game.arsenal.arm(slot);
     // replace an existing weapon of the same type
     const i = this.slots.findIndex((s) => s.def.id === def.id);
     if (i > 0) {
@@ -242,7 +244,8 @@ export class Weapons {
     } else if (canAct && (def.kind === 'gun' || def.kind === 'throw')) {
       const ready = !def.spin || slot.spin > 0.4;
       const out = def.projectile === 'scissors' && slot.out;
-      if (input.fire && this.cooldown <= 0 && ready && !out) {
+      // (not while it reloads, nor with its magazine empty: ROADMAP 6.6)
+      if (input.fire && this.cooldown <= 0 && ready && !out && (!game.arsenal || game.arsenal.ready(slot))) {
         if (this.jam > 0) {
           // still jammed
         } else if (Math.random() < GRADE[slot.grade].jam) {
@@ -336,6 +339,7 @@ export class Weapons {
       this.launch(slot, muzzle.x, muzzle.y, muzzle.z, dir.x * sp, dir.y * sp + (sad ? 1 : 0), dir.z * sp, extra);
     }
     slot.ammo--;
+    if (game.arsenal) game.arsenal.fired(slot);
     game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
     game.audio.play(def.sound || (def.projectile === 'paint' ? 'paint' : def.projectile === 'pencil' ? 'pencilShot' : 'bazooka'));
     game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * (game.skills ? game.skills.kickMul : 1));
