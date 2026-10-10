@@ -3,6 +3,7 @@ import { Doodle } from './doodle.js';
 import { heroLook } from './looks.js';
 import { groundHeight, WATER_X } from '../world/layout.js';
 import { clamp, damp, dampAngle } from '../core/util.js';
+import { downStep } from './fists.js';
 
 const GRAVITY = 24;
 const _m = new THREE.Matrix4();
@@ -36,6 +37,39 @@ export class Player {
     this.coverBox = null;
     this.coverPop = 0;
     this.coverSlide = null;
+    // (ROADMAP 5.5, not with ?classic) thrown by a car or a blast (mode 'rag'): lying still this
+    // long; then getting up (game/fists.js's downStep)
+    this.lieT = 0;
+    this.downT = 0;
+    this.upT = 0;
+  }
+
+  // thrown by a car or a blast (game/ragdoll.js): the body flies and falls as it will
+  thrown() {
+    this.setCrouch(false);
+    this.mode = 'rag';
+    this.lieT = 0;
+    this.vel.set(0, 0, 0);
+    this.onGround = false;
+  }
+
+  updateRag(dt) {
+    const fig = this.fig;
+    if (fig.rag) {
+      fig.update(dt);
+      if (fig.rag.done) {
+        this.lieT += dt;
+        if (this.lieT > 0.7) this.game.ragdolls.release(this, 0.8);
+      } else this.lieT = 0;
+      return;
+    }
+    if (downStep(this, dt)) {
+      fig.speed = 0;
+      fig.update(dt);
+      return;
+    }
+    this.mode = 'foot';
+    this.onGround = true;
   }
 
   setCrouch(on) {
@@ -78,6 +112,12 @@ export class Player {
     this.mode = 'foot';
     this.fig.dead = 0;
     this.fig.sit = 0;
+    // (out of a ragdoll, ROADMAP 5.5)
+    this.fig.rag = null;
+    this.fig.unragT = 0;
+    this.fig.crouch = 0;
+    this.downT = 0;
+    this.upT = 0;
     this.seat = null;
     this.fig.setVisible(true);
     this.invuln = 2;
@@ -135,6 +175,11 @@ export class Player {
       fig.dead = Math.min(1, fig.dead + dt * 2.5);
       fig.speed = 0;
       fig.update(dt);
+      return;
+    }
+    // (thrown: ROADMAP 5.5)
+    if (this.mode === 'rag') {
+      this.updateRag(dt);
       return;
     }
     if (this.mode === 'vehicle') {
@@ -280,6 +325,24 @@ export class Player {
     let floor = col.floor;
     // (up on the roofs, what stands there: world/roofs.js)
     if (climb && climb.col && p.y > 3.5) floor = Math.max(floor, climb.col.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25, prevY).floor);
+    // (not with ?classic: a car in the street coming at you too fast to stop - thrown over its
+    // bonnet, ROADMAP 5.5)
+    const R = this.game.ragdolls;
+    if (R && this.onGround) {
+      const hit = this.game.traffic.hitter(p, this.radius, 6);
+      if (hit) {
+        const sp = hit.speed;
+        this.hurt(Math.min(70, Math.abs(sp) * 2.6), hit.pos.x, hit.pos.z);
+        this.game.fx.sprite('fx_crash', p.x, p.y + 1, p.z, { size: 1.5, life: 0.3 });
+        this.game.audio.play('crash', 0.7);
+        this.game.camRig.addShake(0.4);
+        // (the driver stamps on the brake; you go over the bonnet, alive or not)
+        hit.speed *= 0.5;
+        R.carHit(this, hit, sp);
+        if (this.mode === 'foot') this.thrown();
+        return;
+      }
+    }
     // dynamic obstacles (vehicles)
     this.game.vehicles.pushOut(p, this.radius);
     let ground = groundHeight(p.x, p.z);

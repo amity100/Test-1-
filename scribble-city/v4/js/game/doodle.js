@@ -164,6 +164,12 @@ export class Doodle {
     this.guard = 0;
     this.recoil = 0;
     this.recoilSide = 0;
+    // thrown by a car or a blast (ROADMAP 5.5, game/ragdoll.js): the ragdoll has the joints; just
+    // up off the street, the pose eases out of how the body lay
+    this.rag = null;
+    this.unragT = 0;
+    this.unragDur = 0;
+    this.unragJ = null;
     this.dead = 0;
     this.crawl = 0;
     this.stagger = 0;
@@ -236,6 +242,10 @@ export class Doodle {
     if (this.paintT > 0) this.paintT -= dt;
     if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 4);
     this.carryT += dt;
+    if (this.rag) {
+      this.rag.pose(dt);
+      return;
+    }
     const f = this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.right.set(-f.z, 0, f.x);
     const sp = this.speed;
@@ -511,10 +521,25 @@ export class Doodle {
         p.set(pivot.x + perpX + f.x * al2, pivot.y + Math.max(0.06, ny2), pivot.z + perpZ + f.z * al2);
       }
     }
+    if (this.unragT > 0) {
+      this.unragT = Math.max(0, this.unragT - dt);
+      const k = 1 - this.unragT / this.unragDur;
+      const e = k * k * (3 - 2 * k);
+      const from = this.unragJ;
+      for (const key in j) j[key].lerpVectors(from[key], j[key], e);
+    }
     // the body's shapes (for drawing it and for what hits it) are made when they are next needed:
     // nobody asks for those of somebody out of sight
     this.center.lerpVectors(j.hip, j.neck, 0.5);
     this.shapesDirty = true;
+  }
+
+  // let go of a ragdoll: the next moments of the pose start from where the joints are now
+  unrag(dur) {
+    const from = this.unragJ || (this.unragJ = {});
+    for (const key in this.j) (from[key] || (from[key] = new THREE.Vector3())).copy(this.j[key]);
+    this.unragDur = dur;
+    this.unragT = dur;
   }
 
   ensureShapes() {

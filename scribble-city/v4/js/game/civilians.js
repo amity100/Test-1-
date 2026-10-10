@@ -12,6 +12,9 @@ import { downStep, drawStars, CIV_KO } from './fists.js';
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
 // what somebody punched in the street says (ROADMAP 5.4)
 const STRUCK_LINES = ['Ow!', 'Hey!!', 'What was that for?!', 'Help!', 'Are you crazy?!', 'Ouch!'];
+// (ROADMAP 5.5) thrown and fallen: how long they lie before getting up, and the getting up
+const LIE = 0.9;
+const RISE = 0.85;
 // the umbrellas of the city (sRGB): red, navy, yellow, black, green, plum, pink
 const UMBRELLAS = [[0.82, 0.22, 0.24], [0.2, 0.3, 0.6], [0.95, 0.75, 0.2], [0.15, 0.15, 0.18], [0.3, 0.6, 0.45], [0.55, 0.3, 0.6], [0.92, 0.45, 0.6]];
 const _ro = new THREE.Vector3();
@@ -75,6 +78,10 @@ class Civilian {
     this.downT = 0;
     this.upT = 0;
     this.ko = false;
+    // thrown by a car or a blast (ROADMAP 5.5, game/ragdoll.js): lying still this long; killed by
+    // it (fades later)
+    this.lieT = 0;
+    this.ragKill = false;
   }
 
   // walk round block (col, row); fresh: start somewhere along it
@@ -184,9 +191,20 @@ class Civilian {
       } else {
         fig.dead = Math.min(1, this.dying * 2.2);
         fig.speed = 0;
-        fig.dissolve = clamp((this.dying - 1.2) / 0.9, 0, 1);
+        // (thrown and dead: the flight first, ROADMAP 5.5)
+        fig.dissolve = this.ragKill ? clamp((this.dying - 3.5) / 1.2, 0, 1) : clamp((this.dying - 1.2) / 0.9, 0, 1);
       }
       fig.update(dt);
+      return;
+    }
+    // (thrown by a car or a blast: the body falls as it will, lies a moment, gets up and runs;
+    // ROADMAP 5.5)
+    if (fig.rag) {
+      fig.update(dt);
+      if (fig.rag.done) {
+        this.lieT += dt;
+        if (this.lieT > LIE) this.game.ragdolls.release(this, RISE);
+      } else this.lieT = 0;
       return;
     }
     // (knocked down in a fist fight - or out cold, seeing stars - then up and away: ROADMAP 5.4)
@@ -801,6 +819,7 @@ export class Civilians {
 
   explosion(x, y, z, radius) {
     const at = new THREE.Vector3();
+    const R = this.game.ragdolls;
     for (const c of this.list) {
       if (!c.alive || c.inside) continue;
       const d = Math.hypot(c.pos.x - x, c.pos.y + 1 - y, c.pos.z - z);
@@ -815,12 +834,56 @@ export class Civilians {
         c.fig.closestSurfacePoint(at, at);
         this.damage(c, at, 'blast', 60 + 140 * f);
       }
+      // (not with ?classic: thrown by it, ROADMAP 5.5)
+      if (R && f > 0.3 && this.throwable(c)) {
+        R.blast(c, x, z, f);
+        if (!c.alive) c.ragKill = true;
+      }
+    }
+  }
+
+  // (ROADMAP 5.5) who can be thrown about: not one riding along, inside, held in a scene
+  throwable(c) {
+    return !c.riding && !c.inside && !c.noCollide && !(c.brave && !c.criminal) && c.fig.sit < 0.3;
+  }
+
+  // (ROADMAP 5.5, not with ?classic: game/ragdoll.js) the hero's car at speed, and somebody right at
+  // its bumper with no time to jump clear: thrown over the bonnet. Fast, for good; slower, hurt,
+  // and up and running after
+  runOver(v) {
+    const game = this.game;
+    const sp = Math.abs(v.speed);
+    const sg = Math.sign(v.speed) || 1;
+    const fx = Math.sin(v.yaw) * sg;
+    const fz = Math.cos(v.yaw) * sg;
+    for (const c of this.list) {
+      if (!c.alive || c.fig.rag || !this.throwable(c)) continue;
+      const dx = c.pos.x - v.pos.x;
+      const dz = c.pos.z - v.pos.z;
+      const along = dx * fx + dz * fz;
+      const side = Math.abs(dx * fz - dz * fx);
+      if (along < 0 || along > v.halfLen + 0.35 || side > v.halfWid + 0.3) continue;
+      game.ragdolls.carHit(c, v, v.speed);
+      game.fx.sprite('fx_crash', c.pos.x, c.pos.y + 1, c.pos.z, { size: 1.4, life: 0.3 });
+      game.audio.play('crash', 0.5);
+      if (v.kind === 'car' || v.kind === 'bike') v.hurt(3);
+      this.panic(c.pos, 30);
+      c.panicT = 8;
+      c.fearX = v.pos.x;
+      c.fearZ = v.pos.z;
+      if (sp > 15) {
+        c.ragKill = true;
+        this.kill(c);
+      } else if (game.onCivilianHurt) game.onCivilianHurt(c);
     }
   }
 
   kill(c, how) {
     if (!c.alive) return;
     c.dying = 0;
+    // (out of a getting-up or a lying-down of a fist fight: ROADMAP 5.4)
+    c.downT = 0;
+    c.upT = 0;
     if (how === 'split') {
       c.fig.split = 0;
       c.fig.splitDir = Math.random() < 0.5 ? 1 : -1;

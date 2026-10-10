@@ -7,6 +7,9 @@ import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle, angleDiff, RNG } from '../core/util.js';
 import { CoverMap, PathFinder, PERSONAS, LINES, pick, pickPersona } from './tactics.js';
 import { downStep, drawStars, KO_T } from './fists.js';
+// (ROADMAP 5.5) thrown and fallen: how long the living lie before getting up, and the getting up
+const LIE = 0.6;
+const RISE = 0.8;
 
 // armor: how much of an eraser hit actually rubs out (bigger guys take more rubbing)
 // mag / reload: shots before they have to duck and reload
@@ -260,6 +263,9 @@ class Enemy {
     this.upT = 0;
     this.reelT = 0;
     this.guardT = 0;
+    // thrown (ROADMAP 5.5, game/ragdoll.js): lying still this long; killed by it (fades later)
+    this.lieT = 0;
+    this.ragKill = false;
     this.squad = mgr.squadFor(territory, x, z, this.faction);
     this.squad.members.push(this);
   }
@@ -389,6 +395,15 @@ class Enemy {
     const fig = this.fig;
     if (this.dying >= 0) {
       this.updateDying(dt);
+      return;
+    }
+    // (thrown by a car or a blast: the body falls as it will, lies a moment, gets up; ROADMAP 5.5)
+    if (fig.rag) {
+      fig.update(dt);
+      if (fig.rag.done) {
+        this.lieT += dt;
+        if (this.lieT > LIE) game.ragdolls.release(this, RISE);
+      } else this.lieT = 0;
       return;
     }
     // (knocked off their feet in a fist fight: down a moment, then back up; ROADMAP 5.4)
@@ -542,7 +557,8 @@ class Enemy {
         fig.speed = 0;
         // (out cold from a fist fight: a while seeing stars before the drawing fades; the blow
         // slides the body back along the ground)
-        fig.dissolve = this.ko ? clamp((this.dying - KO_T) / 1.4, 0, 1) : clamp((this.dying - 0.9) / 0.9, 0, 1);
+        // (thrown and dead: the flight first, ROADMAP 5.5)
+        fig.dissolve = this.ko ? clamp((this.dying - KO_T) / 1.4, 0, 1) : this.ragKill ? clamp((this.dying - 3.5) / 1.2, 0, 1) : clamp((this.dying - 0.9) / 0.9, 0, 1);
         if (this.ko) this.slide(dt);
       }
     }
@@ -2095,6 +2111,26 @@ export class Enemies {
     if (e.alive) e.onHurt(lost);
   }
 
+  // (ROADMAP 5.5, not with ?classic: game/ragdoll.js) run into by the hero's car: thrown over the
+  // bonnet. Fast, for good; slower, a patch rubbed where it met them, and back up after
+  runOver(e, v) {
+    const game = this.game;
+    const sp = Math.abs(v.speed);
+    const dir = _v.set(Math.sin(v.yaw), 0, Math.cos(v.yaw)).multiplyScalar(Math.sign(v.speed) || 1);
+    game.ragdolls.carHit(e, v, v.speed);
+    e.leaveCover();
+    e.attackT = -1;
+    e.pendingHit = null;
+    if (sp > 9 || e.headless) {
+      e.ragKill = true;
+      this.kill(e, 'rag');
+      return;
+    }
+    this.damage(e, 'torso', sp * 9, e.fig.center.clone(), dir.clone(), 'run');
+    e.knockV.set(0, 0, 0);
+    if (!e.alive) e.ragKill = true;
+  }
+
   // (ROADMAP 5.4, not with ?classic: game/fists.js) a fist or a foot: no ink rubbed out - they
   // reel back, a kick puts them down, and enough of it leaves them out cold. A fighter squared up
   // to you takes a punch on the arms now and then. Returns 'hit', 'blocked', 'down' or 'ko'
@@ -2271,6 +2307,12 @@ export class Enemies {
           e.onHurt(lost);
           e.morale -= 0.15;
         }
+      }
+      // (not with ?classic: thrown by it, ROADMAP 5.5)
+      if (this.game.ragdolls && !e.isMonster && f > 0.3) {
+        this.game.ragdolls.blast(e, x, z, f);
+        if (!e.alive) e.ragKill = true;
+        continue;
       }
       e.knock(dir.x * 9 * f, dir.z * 9 * f);
     }

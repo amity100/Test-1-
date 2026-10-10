@@ -642,11 +642,18 @@ class Vehicle {
       const along = dx * f.x + dz * f.z;
       const side = Math.abs(dx * f.z - dz * f.x);
       if (Math.abs(along) < this.halfLen + 0.4 && side < this.halfWid + 0.4) {
-        game.enemies.damage(e, 'torso', 999, e.pos.clone().setY(e.pos.y + 1), f.clone(), 'run');
+        // (not with ?classic: thrown over the bonnet, ROADMAP 5.5; one already flying is left be;
+        // the tank still crushes)
+        if (game.ragdolls && !e.isMonster && this.kind !== 'tank') {
+          if (e.fig.rag) continue;
+          game.enemies.runOver(e, this);
+        } else game.enemies.damage(e, 'torso', 999, e.pos.clone().setY(e.pos.y + 1), f.clone(), 'run');
         game.fx.sprite('fx_crash', e.pos.x, e.pos.y + 1, e.pos.z, { size: 1.6, life: 0.35 });
         if (this.kind === 'car' || this.kind === 'bike') this.hurt(this.kind === 'bike' ? 6 : 4);
       }
     }
+    // (not with ?classic: at speed, somebody right at the bumper has no time to jump clear)
+    if (game.ragdolls && Math.abs(this.speed) > 7) game.civilians.runOver(this);
     game.civilians.dodge(this.pos, f, this.halfLen + 1.5, this.halfWid + 1.2, this.speed);
   }
 

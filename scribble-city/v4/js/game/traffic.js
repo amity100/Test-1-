@@ -1287,6 +1287,25 @@ export class Traffic {
     }
   }
 
+  // (ROADMAP 5.5) a car going faster than min (m/s) that runs into somebody at p: its front at them
+  hitter(p, r, min) {
+    const list = this.list;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (c.poofT !== undefined || Math.abs(c.speed) < min) continue;
+      const dx = p.x - c.pos.x;
+      const dz = p.z - c.pos.z;
+      if (dx * dx + dz * dz > 16) continue;
+      const sg = Math.sign(c.speed);
+      const fx = Math.sin(c.yaw) * sg;
+      const fz = Math.cos(c.yaw) * sg;
+      const along = dx * fx + dz * fz;
+      const side = Math.abs(dx * fz - dz * fx);
+      if (along > c.halfLen * 0.3 && along < c.halfLen + r && side < c.halfWid + r && p.y < 1.5) return c;
+    }
+    return null;
+  }
+
   // correction fluid over the cars: rubbed off the page (more the nearer they are)
   whiteOut(x, y, z, radius, power) {
     const at = { x, y: 1, z };

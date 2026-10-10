@@ -62,6 +62,7 @@ import { shoreNear } from './rides.js';
 import { PaintShop } from '../ui/paintshop.js';
 import { Climb } from './climb.js';
 import { Swim } from './swim.js';
+import { Ragdolls } from './ragdoll.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
@@ -215,6 +216,8 @@ export class Game {
     this.swim = this.classic ? null : new Swim(this);
     // (the bare fists, second after the pencil: ROADMAP 5.4)
     if (!this.classic) this.weapons.addFists();
+    // (bodies thrown by a car or a blast fall like real ones: ROADMAP 5.5)
+    this.ragdolls = this.classic ? null : new Ragdolls(this);
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
     this.drawPick = null; // the photo the pencil opens with
@@ -737,6 +740,7 @@ export class Game {
       this.weapons.update(dt);
       this.enemies.update(dt);
       this.civilians.update(dt);
+      if (this.ragdolls) this.ragdolls.update();
       this.farCrowd.update(dt);
       this.streetlife.update(dt);
       this.routines.update(dt);
@@ -793,6 +797,12 @@ export class Game {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
       else if (this.swim && player.mode === 'swim') this.camRig.update(dt, player.pos, this.swim.camOpts);
+      // (thrown: a step further back, the body in the middle, up in the air too; ROADMAP 5.5)
+      else if (player.mode === 'rag') {
+        const hip = player.fig.j.hip;
+        const t = this._ragCam || (this._ragCam = new THREE.Vector3());
+        this.camRig.update(dt, t.set(hip.x, Math.max(player.pos.y, hip.y - 0.75), hip.z), { height: 1.3, dist: 4.6, shoulder: 0 });
+      }
       else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
     }
     const tipsy = this.inkwell.tipsy;
@@ -1385,6 +1395,11 @@ export class Game {
     this.eraseBlast(x, y, z, radius, damage);
     this.traffic.explosion(x, z, radius);
     if (d < radius) p.hurt((owner === 'player' ? 0.25 : 1) * damage * 0.35 * (1 - d / radius), x, z);
+    // (not with ?classic: close to it on foot, the hero is thrown too, ROADMAP 5.5)
+    if (this.ragdolls && d < radius * 0.7 && (p.mode === 'foot' || p.mode === 'rag') && !p.inVehicle) {
+      this.ragdolls.blast(p, x, z, 1 - d / radius);
+      if (p.mode === 'foot') p.thrown();
+    }
     this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
     this.civilians.panic(new THREE.Vector3(x, y, z), 60);
     this.reactions.note('blast', x, z);
