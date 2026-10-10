@@ -112,6 +112,8 @@ export class Traffic {
     this.list = [];
     this.t = 0;
     this.time = 0;
+    // (counted for the tests: ROADMAP 4.4)
+    this.stats = { overtakes: 0, bailed: 0, crashes: 0 };
     // the cars along the curbs (the city placed them; they stay where they are until taken)
     this.parked = (game.world.parked || []).map((sp) => ({
       ...sp,
@@ -173,7 +175,11 @@ export class Traffic {
       stopped: false,
     };
     // (a truck, a motorbike, an ambulance...: game/fleet.js)
-    if (!this.game.classic && this.game.fleet) this.game.fleet.dress(c);
+    if (!this.game.classic && this.game.fleet) {
+      this.game.fleet.dress(c);
+      // (one driver in twenty takes the amber, and a red just turned: ROADMAP 4.4)
+      if (!c.police && !c.emergency && Math.random() < 0.05) c.runner = true;
+    }
     return c;
   }
 
@@ -188,7 +194,7 @@ export class Traffic {
     path.push(lanePoint(A, dx, dz, off, t - 2), c.maxSpeed);
     const end = len - stopDist(B, dz !== 0);
     path.push(lanePoint(A, dx, dz, off, Math.max(end, t + 1)), c.maxSpeed);
-    path.gates.push({ s: path.len, node: B, axis: dz !== 0 ? 'ns' : 'ew' });
+    path.gates.push({ s: path.len, node: B, axis: dz !== 0 ? 'ns' : 'ew', from: A, dx, dz, off });
     c.path = path;
     c.route = { to: B, dx, dz, off };
     c.s = 2;
@@ -244,7 +250,7 @@ export class Traffic {
     const D = e.to;
     const len = Math.abs(D.x - B.x) + Math.abs(D.z - B.z);
     path.push(lanePoint(B, e.dx, e.dz, off2, len - stopDist(D, e.dz !== 0)), vmax);
-    path.gates.push({ s: path.len, node: D, axis: e.dz !== 0 ? 'ns' : 'ew' });
+    path.gates.push({ s: path.len, node: D, axis: e.dz !== 0 ? 'ns' : 'ew', from: B, dx: e.dx, dz: e.dz, off: off2 });
     c.route = { to: D, dx: e.dx, dz: e.dz, off: off2 };
     return true;
   }
@@ -368,7 +374,14 @@ export class Traffic {
     }
     // (the list as it was when the loop began, as for...of would)
     const cars = this.list;
+    if (!game.classic) {
+      // (the sirens about, for the drivers to make way: ROADMAP 4.4)
+      const S = this._sirens || (this._sirens = []);
+      S.length = 0;
+      for (let i = 0; i < cars.length; i++) if (cars[i].emergency && cars[i].siren && !cars[i].wrecked) S.push(cars[i]);
+    }
     for (let i = 0; i < cars.length; i++) this.updateCar(cars[i], dt);
+    if (!game.classic) this.crashes(dt);
     let gone = false;
     for (let i = 0; i < this.list.length; i++) if (this.list[i].poofT !== undefined && this.list[i].poofT > 0.45) gone = true;
     if (gone) {
@@ -401,9 +414,11 @@ export class Traffic {
       if (!v.dead && !(v.flies && v.alt > 2)) aheadTest(v.pos.x, v.pos.z, v.radius * 0.6, v.driver ? 'player' : 'car', 0);
     }
     const os = this.list;
+    // (the one it is swinging out round, ROADMAP 4.4: not in the way)
+    const by = c.passBy && c.s < c.passUntil ? c.passBy : null;
     for (let i = 0; i < os.length; i++) {
       const o = os[i];
-      if (o !== c) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
+      if (o !== c && o !== by) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
     }
     const es = game.enemies.list;
     for (let i = 0; i < es.length; i++) {
@@ -434,6 +449,12 @@ export class Traffic {
       c.speed = damp(c.speed, 0, 6, dt);
       this.moveFree(c, dt);
     } else if (c.wrecked || c.stopped || !c.path) {
+      // (after a crash the drivers get out: ROADMAP 4.4)
+      if (c.outT && this.game.time > c.outT && c.driver && !c.driverOut) {
+        c.driverOut = true;
+        this.game.ejectDriver(c.driver, c.pos, c.yaw, false);
+        c.driver = null;
+      }
       c.speed = damp(c.speed, 0, c.wrecked ? 3 : 8, dt);
       if (c.wrecked && Math.random() < dt * 2) this.game.fx.smoke(c.pos.x, 1.6, c.pos.z, 1.2);
       this.moveFree(c, dt);
@@ -490,7 +511,9 @@ export class Traffic {
     if (g && !c.reckless) {
       const light = lightAt(g.node, g.axis, this.time);
       const dist = g.s - front - 0.4;
-      if (light !== 'g' && dist < 45) {
+      // (a few drivers take the amber, and a red just turned: ROADMAP 4.4)
+      const runs = c.runner && (light === 'y' || (light === 'r' && lightAt(g.node, g.axis, this.time - 1.2) !== 'r'));
+      if (light !== 'g' && dist < 45 && !runs) {
         if (c.emergency) {
           // (an ambulance, a fire engine: slow, a look, and through: game/fleet.js)
           want = Math.min(want, Math.max(5, dist * 0.45));
@@ -510,6 +533,8 @@ export class Traffic {
       c.brakeT -= dt;
       want = 0;
     }
+    // (ROADMAP 4.4: round what is stopped, honking in a jam, out of the way of a siren)
+    if (!this.game.classic) want = Math.min(want, this.mind(c, dt, a, g, front));
     if (a) {
       const keep = a.why === 'car' ? 6.4 : 4.6;
       want = Math.min(want, Math.max(0, (a.d - keep) * 1.3));
@@ -539,6 +564,210 @@ export class Traffic {
     const yaw = Math.atan2(_b[0] - _a[0], _b[1] - _a[1]);
     c.steer = damp(c.steer, angleDiff(c.yaw, yaw) * 6, 8, dt);
     c.yaw = yaw;
+    // (pulled over to the right for a siren; a siren passing on the left)
+    if (c.side) {
+      c.pos.x += -Math.cos(yaw) * c.side;
+      c.pos.z += Math.sin(yaw) * c.side;
+    }
+  }
+
+  // ------------------------------------------------------------------ the drivers (ROADMAP 4.4)
+  // How fast this one may go, by what its driver makes of the road: a siren behind (pull over
+  // to the right and stop; the siren swings out to pass), stuck behind something stopped on a
+  // green light (honk; on a road of two lanes, over into the other one and round it), fleeing
+  // shots (faster, through the lights). (?classic: none of it)
+  mind(c, dt, a, g, front) {
+    let want = Infinity;
+    // a siren coming up behind
+    const S = this._sirens;
+    let yieldTo = false;
+    let passing = false;
+    if (S && S.length) {
+      const fx = Math.sin(c.yaw);
+      const fz = Math.cos(c.yaw);
+      for (const e of S) {
+        if (e === c) continue;
+        const dx = c.pos.x - e.pos.x;
+        const dz = c.pos.z - e.pos.z;
+        const along = dx * fx + dz * fz;
+        const side = Math.abs(-dx * fz + dz * fx);
+        const same = Math.sin(e.yaw) * fx + Math.cos(e.yaw) * fz > 0.7;
+        if (same && along > 0 && along < 45 && side < 3.5) yieldTo = true;
+      }
+      if (c.emergency) {
+        // (swinging out round the ones that pulled over)
+        for (const o of this.list) {
+          if (o === c || !(o.yieldK > 0.3)) continue;
+          const d = Math.hypot(o.pos.x - c.pos.x, o.pos.z - c.pos.z);
+          if (d < 16) passing = true;
+        }
+      }
+    }
+    c.yieldK = THREE.MathUtils.damp(c.yieldK || 0, yieldTo ? 1 : 0, yieldTo ? 2.2 : 1.2, dt);
+    const passK = c.emergency ? (c.passK = THREE.MathUtils.damp(c.passK || 0, passing ? 1 : 0, 3, dt)) : 0;
+    c.side = 1.5 * c.yieldK - 1.0 * passK;
+    if (c.yieldK > 0.05) want = Math.min(want, 9 * (1 - c.yieldK) + 0.5);
+    // fleeing shots: faster, the lights be damned
+    if (c.fleeT > 0) {
+      c.fleeT -= dt;
+      c.reckless = c.fleeT > 0;
+      if (c.fleeT <= 0) c.maxSpeed = c.maxSpeed0 || c.maxSpeed;
+    }
+    // stuck behind a car that does not go on a green light
+    const light = g ? lightAt(g.node, g.axis, this.time) : 'g';
+    const toGate = g ? g.s - front : 99;
+    if (a && a.why === 'car' && c.speed < 0.6 && (light === 'g' || toGate > 30)) {
+      c.jamT = (c.jamT || 0) + dt;
+      if (c.jamT > 1.8 && !c.laneTried && g && toGate > 22) {
+        c.laneTried = true;
+        this.overtake(c, g);
+      }
+      if (c.jamT > 5 && c.driver) {
+        c.jamT = 2.5 + Math.random() * 2;
+        if (this.near(c, 45)) {
+          this.game.audio.play('honk', 0.45);
+          if (Math.random() < 0.3) this.game.bubbles.say(this.driverAnchor(c), pick(['Come on!', 'Move!', 'Unbelievable...', 'Today, please!']));
+        }
+      }
+    } else {
+      c.jamT = 0;
+      if (!a) c.laneTried = false;
+    }
+    return want;
+  }
+
+  // over into the other lane of this road, round what is stopped in front (a road of two lanes
+  // going this way, the other lane clear by it)
+  overtake(c, g) {
+    const offs = laneOffsets(g.from, g.dx, g.dz);
+    if (offs.length < 2 || g.off === undefined) return false;
+    const off = offs.reduce((b, o) => (Math.abs(o - g.off) > Math.abs(b - g.off) ? o : b), offs[0]);
+    if (Math.abs(off - g.off) < 0.5) return false;
+    const A = g.from;
+    const B = g.node;
+    const along = (c.pos.x - A.x) * g.dx + (c.pos.z - A.z) * g.dz;
+    // the other lane clear from a little behind to well in front
+    const tx = A.x + g.dx * along;
+    const tz = A.z + g.dz * along;
+    for (const o of this.list) {
+      if (o === c) continue;
+      const oa = (o.pos.x - A.x) * g.dx + (o.pos.z - A.z) * g.dz;
+      if (oa < along - 10 || oa > along + 16) continue;
+      // (its offset to the right of the road's middle)
+      const os = (o.pos.x - tx) * -g.dz + (o.pos.z - tz) * g.dx;
+      if (Math.abs(os - off) < 2.4) return false;
+    }
+    const len = Math.abs(B.x - A.x) + Math.abs(B.z - A.z);
+    const end = len - stopDist(B, g.dz !== 0);
+    if (end - along < 20) return false;
+    // what it is going round: the nearest in front, in its lane
+    let by = null;
+    let bd = 16;
+    for (const o of this.list) {
+      if (o === c) continue;
+      const oa = (o.pos.x - A.x) * g.dx + (o.pos.z - A.z) * g.dz - along;
+      const os = (o.pos.x - tx) * -g.dz + (o.pos.z - tz) * g.dx;
+      if (oa > 0 && oa < bd && Math.abs(os - g.off) < 1.6) {
+        bd = oa;
+        by = o;
+      }
+    }
+    const path = new Path();
+    path.push(lanePoint(A, g.dx, g.dz, g.off, along - 2), c.maxSpeed);
+    path.push(lanePoint(A, g.dx, g.dz, g.off, along), c.maxSpeed);
+    for (let k = 1; k <= 5; k++) {
+      const u = k / 5;
+      const sm = u * u * (3 - 2 * u);
+      path.push(lanePoint(A, g.dx, g.dz, g.off + (off - g.off) * sm, along + k * 1.8), 5.5);
+    }
+    path.push(lanePoint(A, g.dx, g.dz, off, end), c.maxSpeed);
+    path.gates.push({ s: path.len, node: B, axis: g.axis, from: A, dx: g.dx, dz: g.dz, off });
+    c.path = path;
+    c.s = 2;
+    c.route = { to: B, dx: g.dx, dz: g.dz, off };
+    c.turns = [];
+    c.signal = 0;
+    c.passBy = by;
+    c.passUntil = c.s + 9 + (by ? by.halfLen * 2 + 4 : 0);
+    this.extend(c);
+    this.stats.overtakes++;
+    return true;
+  }
+
+  // shots, a bang near the street (Civilians.panic): some put their foot down, some get out
+  // and run, some freeze
+  scare(pos, radius) {
+    const game = this.game;
+    if (game.classic) return;
+    const r = Math.min(radius, 35);
+    for (const c of this.list) {
+      if (!c.driver || c.police || c.emergency || c.mode !== 'drive' || c.wrecked || c.stopped || (c.scaredT || 0) > game.time) continue;
+      if (Math.hypot(c.pos.x - pos.x, c.pos.z - pos.z) > r) continue;
+      c.scaredT = game.time + 12;
+      const k = Math.random();
+      if (k < 0.45) {
+        c.fleeT = 8;
+        c.maxSpeed0 = c.maxSpeed0 || c.maxSpeed;
+        c.maxSpeed = c.maxSpeed0 * 1.45;
+        if (this.near(c, 40)) game.audio.play('honk', 0.4);
+      } else if (k < 0.75 && c.speed < 7) {
+        c.stopped = true;
+        c.driverOut = true;
+        game.ejectDriver(c.driver, c.pos, c.yaw, false);
+        c.driver = null;
+        this.stats.bailed++;
+      } else c.brakeT = 3 + Math.random() * 3;
+    }
+  }
+
+  // two cars of the traffic run into each other (a red light taken, a car pushed off its lane):
+  // a crunch, both stopped with their hazards going, the drivers out
+  crashes(dt) {
+    const L = this.list;
+    for (let i = 0; i < L.length; i++) {
+      const A = L[i];
+      if (A.poofT !== undefined || A.spec.kind === 'moto' || A.speed < 2.5 || A.crashed || A.police || A.tail) continue;
+      for (let j = 0; j < L.length; j++) {
+        const B = L[j];
+        if (B === A || B.poofT !== undefined || B.crashed || B.spec.kind === 'moto' || B.police || B.tail) continue;
+        const dx = B.pos.x - A.pos.x;
+        const dz = B.pos.z - A.pos.z;
+        const reach = A.halfLen + B.halfLen;
+        if (dx * dx + dz * dz > reach * reach) continue;
+        // (the boxes: does the corner of one reach into the other?)
+        if (this.boxDist(B, A.pos.x + Math.sin(A.yaw) * A.halfLen * 0.8, A.pos.z + Math.cos(A.yaw) * A.halfLen * 0.8) > 0.1) continue;
+        // (one behind the other in a queue is not a crash)
+        if (Math.abs(Math.sin(A.yaw - B.yaw)) < 0.4 && Math.cos(A.yaw - B.yaw) > 0) continue;
+        this.crash(A, B);
+        break;
+      }
+    }
+  }
+
+  crash(A, B) {
+    const game = this.game;
+    const x = (A.pos.x + B.pos.x) / 2;
+    const z = (A.pos.z + B.pos.z) / 2;
+    const v = Math.max(A.speed, B.speed);
+    for (const c of [A, B]) {
+      c.crashed = true;
+      c.stopped = true;
+      c.path = null;
+      c.speed *= 0.2;
+      c.hazard = true;
+    }
+    this.stats.crashes++;
+    const d = Math.hypot(x - game.player.pos.x, z - game.player.pos.z);
+    if (d < 70) game.audio.play('crash', Math.max(0.25, 1 - d / 70));
+    game.fx.sparks(x, 0.7, z, 10, [0.9, 0.9, 0.95]);
+    game.fx.crumbs(x, 0.5, z, 12, 2.4);
+    if (game.damage) {
+      game.damage.hit(A, x, 0.7, z, v * 1.6);
+      game.damage.hit(B, x, 0.7, z, v * 1.6);
+    }
+    if (game.reactions) game.reactions.note('crash', x, z);
+    // the drivers get out a moment later
+    for (const c of [A, B]) c.outT = game.time + 1.8 + Math.random() * 1.5;
   }
 
   // how fast a bus may go to stop at the next bus stop on its right (and wait there a while)
@@ -781,9 +1010,9 @@ export class Traffic {
     o.steer = Math.max(-0.5, Math.min(0.5, c.steer || 0));
     o.extra = spec.police ? 'police' : spec.taxi ? 'taxi' : spec.extra || (spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain');
     o.siren = spec.police || spec.siren ? (c.siren ? this._blink : -1) : undefined;
-    // (dents, the glass, a flat: game/damage.js; the turn signal)
+    // (dents, the glass, a flat: game/damage.js; the turn signal, or the hazards)
     o.dmg = c.dmg || null;
-    o.signal = c.signal || 0;
+    o.signal = c.hazard ? 2 : c.signal || 0;
     // (a taxi with somebody in it: the sign on the roof dark)
     o.busy = !!c.fare;
     o.scale = scale;

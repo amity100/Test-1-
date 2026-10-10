@@ -443,6 +443,9 @@ const PARTS = ['shell', 'glass'];
 const TAXI_LIGHT = [0.85, 0.7, 0.22];
 const TAXI_BUSY = [0.32, 0.27, 0.12];
 const AMBER_ON = [3.2, 1.7, 0.25];
+const HAZARD_SIDES = [-1, 1];
+const LEFT_SIDE = [1];
+const RIGHT_SIDE = [-1];
 const AMBER_OFF = [0.45, 0.28, 0.08];
 // the glass of a car that was hit (game/damage.js): crazed white, or gone (the dark inside)
 const GLASS_CRACKED = [3.1, 3.0, 2.5];
@@ -693,10 +696,12 @@ export class CarRenderer {
     // the turn signal blinking on that side (1: its left, -1: its right)
     if (o.signal) {
       const on = Math.floor(performance.now() / 350) % 2 === 0;
-      const sd = o.signal;
       const S = K.sig;
-      this.box(this.lightBox, _m, sd * S.fx, S.fy, S.fz, 0.16, 0.08, 0.05, on ? AMBER_ON : AMBER_OFF, rv);
-      this.box(this.lightBox, _m, sd * S.rx, S.ry, S.rz, 0.16, 0.08, 0.05, on ? AMBER_ON : AMBER_OFF, rv);
+      // (2: both sides, the hazards)
+      for (const sd of o.signal === 2 ? HAZARD_SIDES : o.signal > 0 ? LEFT_SIDE : RIGHT_SIDE) {
+        this.box(this.lightBox, _m, sd * S.fx, S.fy, S.fz, 0.16, 0.08, 0.05, on ? AMBER_ON : AMBER_OFF, rv);
+        this.box(this.lightBox, _m, sd * S.rx, S.ry, S.rz, 0.16, 0.08, 0.05, on ? AMBER_ON : AMBER_OFF, rv);
+      }
     }
     if (o.extra === 'taxi') {
       this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, o.busy ? TAXI_BUSY : TAXI_LIGHT, rv);

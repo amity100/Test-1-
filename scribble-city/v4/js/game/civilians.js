@@ -742,8 +742,9 @@ export class Civilians {
   }
 
   panic(pos, radius) {
-    // (the cats and the birds round there are off too)
+    // (the cats and the birds round there are off too; the drivers react: ROADMAP 4.4)
     if (!this.game.classic && this.game.animals) this.game.animals.scare(pos, radius);
+    if (!this.game.classic && this.game.traffic) this.game.traffic.scare(pos, radius);
     for (const c of this.list) {
       if (c.inside) continue;
       // (the friend you drew stays by your side)
