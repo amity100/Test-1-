@@ -2,7 +2,8 @@
 // PlayStation pad has the same buttons in the same places). Laid out like GTA:
 //
 //   on foot   left stick walk · right stick look · RT fire · LT aim · A run · X jump
-//             Y car/door/talk · B photo · LB/RB (and the d-pad's sides) weapon · d-pad up draw
+//             Y car/door/talk · B photo · LB/RB (and d-pad right) weapon · d-pad up draw
+//             d-pad left the phone (the phone's camera: A or RT takes the picture, B goes back)
 //   driving   RT gas · LT brake/back · A handbrake · RB fire · d-pad down radio
 //   flying    left stick fly · RT up · LT down · RB fire
 //   anywhere  View the map · Menu pause
@@ -130,7 +131,12 @@ export class Pad {
     if (!this.active) return;
     const game = this.game;
     if (game.citymap && game.citymap.open) this.mapPad(dt);
-    else if (game.airdraw && game.airdraw.open) this.drawPad(dt);
+    else if (game.phoneCam) {
+      // the phone's camera: walk and look as ever, A (or RT) takes the picture, B goes back
+      this.playPad(dt);
+      if (this.pressed(B.A)) game.phone.shoot();
+      if (this.pressed(B.B)) game.phone.camBack();
+    } else if (game.airdraw && game.airdraw.open) this.drawPad(dt);
     else if (this.menuRoot()) this.menuPad(dt);
     else if (game.state === 'play') this.playPad(dt);
     if (!(game.airdraw && game.airdraw.open) && this.cursorEl) this.cursorEl.classList.add('hidden');
@@ -190,7 +196,7 @@ export class Pad {
         this.aim = aim;
         inp.aim = aim;
       }
-      if (this.pressed(B.LB) || this.pressed(B.LEFT)) inp.wheel -= 1;
+      if (this.pressed(B.LB)) inp.wheel -= 1;
       if (this.pressed(B.RB) || this.pressed(B.RIGHT)) inp.wheel += 1;
       key(B.UP, 'KeyQ');
     }
@@ -201,6 +207,7 @@ export class Pad {
     }
     key(B.Y, 'KeyE');
     key(B.B, 'KeyF');
+    key(B.LEFT, 'KeyP');
     key(B.VIEW, 'KeyM');
     key(B.MENU, 'Escape');
   }
@@ -222,6 +229,7 @@ export class Pad {
   // ------------------------------------------------------------------ menus
   menuRoot() {
     const g = this.game;
+    if (g.phone && g.phone.isOpen) return $('phone');
     if (g.dialog && g.dialog.open) return $('dialog');
     if (g.album && g.album.open) return $('album');
     for (const id of ['death', 'pause', 'title']) {
@@ -332,7 +340,8 @@ export class Pad {
       else if (!range && !select) el.click();
     }
     if (this.pressed(B.B) || (this.pressed(B.MENU) && root.id === 'pause')) {
-      if (game.dialog && game.dialog.open) game.dialog.close(true);
+      if (root.id === 'phone') game.phone.back();
+      else if (game.dialog && game.dialog.open) game.dialog.close(true);
       else if (game.album && game.album.open) game.album.hide();
       else if (root.id === 'pause') game.resume(false);
     }

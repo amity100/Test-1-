@@ -3,6 +3,7 @@ import { buildWeaponModel } from './items.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { openWall } from '../world/rooms.js';
 import { districtName } from '../world/layout.js';
+import * as store from '../core/store.js';
 
 // The full save (ROADMAP 2.5): where you are, what you hold (every drawn weapon, its grade and
 // what is left in it), the vehicles you drew or took and where you left them, your look, and the
@@ -16,61 +17,14 @@ import { districtName } from '../world/layout.js';
 // Loading in the middle of a game starts the page again and loads into a fresh city (nothing
 // rubbed out yet, so the save's city is exactly the save's).
 
-const DB = 'scribble-city';
-const STORE = 'saves';
 const VERSION = 1;
 const PENDING = 'scribble-city-load';
 export const SLOTS = ['auto', 'slot1', 'slot2', 'slot3'];
 export const SLOT_NAMES = { auto: 'שמירה אוטומטית', slot1: 'משבצת 1', slot2: 'משבצת 2', slot3: 'משבצת 3' };
 const AUTO_EVERY = 120;
 
-// ------------------------------------------------------------------ the shelf the saves sit on
-let dbp = null;
-function db() {
-  if (dbp) return dbp;
-  dbp = new Promise((resolve) => {
-    try {
-      if (!window.indexedDB) return resolve(null);
-      const r = indexedDB.open(DB, 1);
-      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
-      r.onsuccess = () => resolve(r.result);
-      r.onerror = () => resolve(null);
-      r.onblocked = () => resolve(null);
-    } catch (e) {
-      resolve(null);
-    }
-  });
-  return dbp;
-}
-
-async function put(key, value) {
-  const d = await db();
-  if (!d) {
-    localStorage.setItem(`${DB}-${key}`, JSON.stringify(value));
-    return;
-  }
-  await new Promise((resolve, reject) => {
-    const tx = d.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(value, key);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
-  });
-}
-
-async function get(key) {
-  const d = await db();
-  if (!d) {
-    const s = localStorage.getItem(`${DB}-${key}`);
-    return s ? JSON.parse(s) : null;
-  }
-  return new Promise((resolve) => {
-    const tx = d.transaction(STORE, 'readonly');
-    const r = tx.objectStore(STORE).get(key);
-    r.onsuccess = () => resolve(r.result || null);
-    r.onerror = () => resolve(null);
-  });
-}
+const put = (key, value) => store.put('saves', key, value);
+const get = (key) => store.get('saves', key);
 
 // an older save's shape brought up to this one (nothing to do yet: this is the first)
 function migrate(s) {

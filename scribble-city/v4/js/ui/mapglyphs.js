@@ -480,6 +480,57 @@ export const GLYPHS = {
     circle(g, -3.8, 3, 1.7, true);
     circle(g, 3.8, 3, 1.7, true);
   },
+  // the phone's apps
+  mapApp(g) {
+    g.fillStyle = '#fffaf0';
+    shape(g, [-7, -5, -2.4, -7, 2.4, -5, 7, -7, 7, 5, 2.4, 7, -2.4, 5, -7, 7]);
+    line(g, -2.4, -7, -2.4, 5);
+    line(g, 2.4, -5, 2.4, 7);
+    g.strokeStyle = '#e2335f';
+    g.beginPath();
+    g.moveTo(-5, 3);
+    g.quadraticCurveTo(-1, -4, 4.6, -2);
+    g.stroke();
+    g.strokeStyle = '#1b1430';
+  },
+  camera(g) {
+    g.fillStyle = '#5a5470';
+    rrect(g, -7.4, -4, 14.8, 10, 2);
+    rrect(g, -3, -6.6, 6, 3, 1);
+    g.fillStyle = '#9fd0ff';
+    circle(g, 0, 1, 3.4, true);
+    g.fillStyle = '#ffd23f';
+    g.fillRect(4, -2.6, 2, 1.4);
+  },
+  photos(g) {
+    g.fillStyle = '#fffaf0';
+    g.save();
+    g.rotate(-0.2);
+    rrect(g, -6.4, -6, 11, 10, 1);
+    g.restore();
+    g.save();
+    g.rotate(0.15);
+    rrect(g, -4.6, -4.4, 11, 10, 1);
+    g.fillStyle = '#9fd0ff';
+    g.fillRect(-3.2, -3, 8.2, 5.4);
+    g.fillStyle = '#5cbf4a';
+    shape(g, [-3.2, 2.4, 0, -0.8, 2.4, 1.2, 5, -1.4, 5, 2.4]);
+    g.restore();
+  },
+  gear(g) {
+    g.fillStyle = '#d2c0f3';
+    g.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * TAU;
+      const r = i % 2 ? 5 : 7.2;
+      g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#fffaf0';
+    circle(g, 0, 0, 2.4, true);
+  },
   gang(g) {
     g.fillStyle = '#ff8a8a';
     g.beginPath();

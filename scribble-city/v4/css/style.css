@@ -865,3 +865,63 @@ html, body { background: #1b1430; }
 #saving.on { animation: savedFade 2.2s ease-out; }
 @keyframes savedFade { 0% { opacity: 0; transform: translateY(-4px); } 12% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; } }
 @media (max-height: 520px) { #saving { left: calc(max(12px, env(safe-area-inset-left)) + 128px); } }
+/* ---------- the phone (P): drawn in pen, out of the pocket at the bottom of the page ---------- */
+#phone { position: fixed; inset: 0; z-index: 28; background: radial-gradient(ellipse at 70% 80%, rgba(27, 20, 48, 0.1), rgba(27, 20, 48, 0.45)); }
+.phone-body { position: absolute; right: max(40px, calc(env(safe-area-inset-right) + 24px)); bottom: max(18px, env(safe-area-inset-bottom)); width: 272px; height: min(540px, calc(100% - 36px)); display: flex; flex-direction: column; padding: 12px 12px 10px; border: 4px solid var(--ink); border-radius: 38px; background: linear-gradient(160deg, #ff9ccc, #ff7eb6); box-shadow: 6px 8px 0 var(--ink); transform: rotate(-2.5deg); }
+#phone.up .phone-body { animation: phoneUp 0.24s ease-out; }
+@keyframes phoneUp { from { transform: translateY(70%) rotate(4deg); opacity: 0.4; } to { transform: rotate(-2.5deg); opacity: 1; } }
+.phone-notch { width: 74px; height: 14px; margin: 0 auto 6px; border-radius: 0 0 10px 10px; background: var(--ink); }
+.phone-status { display: flex; align-items: center; gap: 8px; padding: 0 10px 6px; font: 700 13px/1 var(--font-ui); color: var(--ink); direction: rtl; }
+#phone-clock { direction: ltr; }
+#phone-sky { flex: 1; font-weight: 600; }
+.phone-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+.phone-bars i { display: block; width: 3px; background: var(--ink); border-radius: 1px; }
+.phone-bars i:nth-child(1) { height: 5px; } .phone-bars i:nth-child(2) { height: 8px; } .phone-bars i:nth-child(3) { height: 11px; }
+.phone-bat { width: 22px; height: 11px; border: 2px solid var(--ink); border-radius: 3px; background: linear-gradient(90deg, #3fbf6a 70%, transparent 70%); position: relative; }
+.phone-bat::after { content: ""; position: absolute; left: -4px; top: 2px; width: 2px; height: 4px; background: var(--ink); }
+.phone-screen { flex: 1; overflow: hidden; border: 3px solid var(--ink); border-radius: 22px; background: repeating-linear-gradient(180deg, transparent 0 25px, var(--rule) 25px 26px), var(--paper); position: relative; }
+.phone-page { position: absolute; inset: 0; overflow-y: auto; padding: 10px 10px 12px; }
+.phone-hello { text-align: center; font: 400 26px/1.1 var(--font-hand); color: #c2185b; margin: 4px 0 10px; }
+#phone-apps { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; }
+#phone .app { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; border: 0; background: none; color: var(--ink); font: 600 15px/1.2 var(--font-ui); cursor: pointer; border-radius: 14px; }
+#phone .app canvas { width: 64px; height: 64px; }
+#phone .app:hover, #phone .app:focus-visible { background: rgba(255, 210, 63, 0.35); outline: none; }
+.phone-soon { margin: 16px 6px 0; text-align: center; font-size: 12.5px; color: var(--ink-soft); }
+.phone-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font: 400 22px/1.1 var(--font-hand); }
+.phone-head b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-back { width: 32px; height: 32px; flex: none; border: 2.5px solid var(--ink); border-radius: 50%; background: var(--paper); box-shadow: 2px 2px 0 var(--ink); font: 700 20px/1 var(--font-ui); color: var(--ink); cursor: pointer; padding: 0; }
+#phone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#phone .photo { padding: 0; border: 2px solid var(--ink); border-radius: 4px; background: #fbf7ee; cursor: pointer; box-shadow: 2px 2px 0 rgba(27, 20, 48, 0.5); }
+#phone .photo img { display: block; width: 100%; }
+.phone-empty { text-align: center; color: var(--ink-soft); margin-top: 30px; }
+#phone-view-img { display: block; width: 100%; border: 2px solid var(--ink); border-radius: 4px; box-shadow: 3px 3px 0 rgba(27, 20, 48, 0.5); }
+.phone-actions { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+.phone-actions .btn { text-decoration: none; }
+#phone-home-btn { width: 54px; height: 8px; margin: 8px auto 0; flex: none; border: 0; border-radius: 4px; background: var(--ink); cursor: pointer; }
+#btn-phone { left: calc(50% + 32px); top: max(8px, env(safe-area-inset-top)); }
+body.touch #btn-pause { left: calc(50% - 26px); }
+/* the camera's viewfinder over the game */
+#phone-cam { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+.vf-frame { position: absolute; inset: 7% 6%; }
+.vf-frame i { position: absolute; width: 48px; height: 48px; border: 5px solid #fff8ec; filter: drop-shadow(2px 2px 0 var(--ink)); }
+.vf-frame i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; }
+.vf-frame i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+.vf-frame i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; }
+.vf-frame i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
+#vf-hint { position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 3px 12px; border-radius: 10px; background: rgba(27, 20, 48, 0.7); color: #fff8ec; font-size: 14px; white-space: nowrap; }
+#vf-hint:empty { display: none; }
+#vf-shoot, #vf-back { pointer-events: auto; display: none; }
+body.touch #vf-shoot { display: block; right: max(30px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); background: #fff8ec; }
+body.touch #vf-back { display: block; left: max(20px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); }
+body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio { display: none !important; }
+#phone-flash { position: fixed; inset: 0; z-index: 13; background: #fff; opacity: 0; pointer-events: none; }
+#phone-flash.on { animation: phoneFlash 0.35s ease-out; }
+@keyframes phoneFlash { from { opacity: 0.85; } to { opacity: 0; } }
+@media (max-height: 520px) {
+  .phone-body { width: 236px; padding: 8px 9px 7px; border-radius: 30px; }
+  .phone-hello { font-size: 20px; margin: 0 0 6px; }
+  #phone .app canvas { width: 46px; height: 46px; }
+  #phone-apps { gap: 4px 6px; }
+  .phone-soon { margin-top: 6px; }
+  #phone-home-btn { margin-top: 5px; }
+}

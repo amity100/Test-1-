@@ -42,6 +42,7 @@ import { Shutters } from './shutters.js';
 import { Soundscape } from './soundscape.js';
 import { Radio } from './radio.js';
 import { CityMap } from '../ui/citymap.js';
+import { Phone } from '../ui/phone.js';
 import { GPS } from './gps.js';
 import { Settings } from '../core/settings.js';
 import { Pad } from '../core/gamepad.js';
@@ -140,6 +141,9 @@ export class Game {
     this.radio = new Radio(this);
     // the map of the whole city (ui/citymap.js): M, a tap on the minimap, the pause menu
     this.citymap = new CityMap(this);
+    // the phone (ui/phone.js): the map, a camera, its photos, the settings
+    this.phone = new Phone(this);
+    this.phoneCam = false;
     // and the way to a destination marked on it (game/gps.js)
     this.gps = new GPS(this);
     // a gamepad, if there is one (core/gamepad.js)
@@ -206,6 +210,11 @@ export class Game {
       this.perf.startBench();
     });
     this.input.on('lock', (locked) => {
+      // (the phone's camera: losing the pointer takes it down, back to the phone)
+      if (this.phoneCam) {
+        if (!locked && !this.touch) this.phone.camBack();
+        return;
+      }
       if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
@@ -317,6 +326,27 @@ export class Game {
     welcome();
   }
 
+  // the phone: out of the pocket (the game waits), and back in
+  openPhone() {
+    if (this.phone.isOpen || this.state !== 'play') return;
+    if (this.airdraw.open || this.album.open || this.dialog.open || this.perf.bench || this.citymap.open) return;
+    this.state = 'paused';
+    this.input.releaseLock();
+    this.phone.open();
+  }
+
+  onPhoneClosed() {
+    this.resume(false);
+  }
+
+  // the pause menu over a game already waiting (the phone's settings)
+  showPauseMenu() {
+    this.state = 'paused';
+    this.refreshSaves();
+    $('clock-now').textContent = this.daynight.clock;
+    $('pause').classList.remove('hidden');
+  }
+
   // ------------------------------------------------------------------ saves
   // the title page: a save to go on from (the newest, or the one asked for before the page
   // started again to load it)
@@ -403,10 +433,13 @@ export class Game {
     if (!this.touch) this.input.requestLock(gesture);
   }
 
-  // the city's map: the game waits under it (from the pause menu, closing it goes back there)
-  openMap() {
+  // the city's map: the game waits under it (from the pause menu or the phone, closing it goes
+  // back there)
+  openMap(from = null) {
     if (this.citymap.open) return;
-    if (this.state === 'play') {
+    if (from === 'phone') {
+      this.mapFrom = 'phone';
+    } else if (this.state === 'play') {
       if (this.airdraw.open || this.album.open || this.dialog.open || this.perf.bench) return;
       this.state = 'paused';
       this.mapFrom = 'play';
@@ -419,7 +452,8 @@ export class Game {
   }
 
   onMapClosed() {
-    if (this.mapFrom === 'pause') {
+    if (this.mapFrom === 'phone') this.phone.open();
+    else if (this.mapFrom === 'pause') {
       $('clock-now').textContent = this.daynight.clock;
       $('pause').classList.remove('hidden');
     } else this.resume(false);
@@ -706,6 +740,10 @@ export class Game {
   handleKeys() {
     const input = this.input;
     const p = this.player;
+    if (this.phoneCam) {
+      this.phone.camKeys(input);
+      return;
+    }
     if (this.dialog.open) {
       this.dialog.update();
       return;
@@ -723,6 +761,7 @@ export class Game {
       else if (p.mode === 'foot' && !this.streetlife.interact()) this.tryEnter();
     }
     if (input.wasPressed('KeyM')) this.openMap();
+    if (input.wasPressed('KeyP')) this.openPhone();
     // the car radio's dial
     if (input.wasPressed('KeyR') && p.inVehicle && p.inVehicle.kind === 'car') this.radio.next();
   }

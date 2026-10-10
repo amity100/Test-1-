@@ -268,6 +268,7 @@ export class Input {
     btn('btn-up', 'Space', true);
     btn('btn-down', 'KeyC', true);
     btn('btn-pause', 'Escape');
+    btn('btn-phone', 'KeyP');
   }
 
   // Movement vector from keys or stick (a gamepad's, core/gamepad.js, while it is pushed).

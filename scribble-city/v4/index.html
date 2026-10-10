@@ -79,6 +79,7 @@
     <button id="btn-up" class="tbtn small hidden">▲</button>
     <button id="btn-down" class="tbtn small hidden">▼</button>
     <button id="btn-pause" class="tbtn small" aria-label="הפסקה"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
+    <button id="btn-phone" class="tbtn small" aria-label="הטלפון"><svg class="ico" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></button>
   </div>
 
   <div id="flash"></div>
@@ -126,15 +127,15 @@
           <h3>מחשב</h3>
           <p><b>WASD</b> הליכה · <b>עכבר</b> הסתכלות · <b>קליק</b> ירי/מחיקה</p>
           <p><b>Shift</b> ריצה · <b>רווח</b> קפיצה · <b>1-0</b>, גלגלת או <b>X</b> החלפת נשק</p>
-          <p><b>F</b> צילום שלט · <b>Q</b> ציור · <b>E</b> רכב / דלת / שיחה · <b>M</b> מפה</p>
+          <p><b>F</b> צילום שלט · <b>Q</b> ציור · <b>E</b> רכב / דלת / שיחה · <b>M</b> מפה · <b>P</b> טלפון</p>
           <p>ברכב: <b>WASD</b> נהיגה · <b>קליק</b> תותח · <b>רווח/C</b> גובה במסוק · <b>Esc</b> הפסקה</p>
-          <p><b>שלט משחק</b>: כמו ב־GTA. <b>RT</b> ירי · <b>LT</b> כיוון · <b>Ⓐ</b> ריצה · <b>Ⓧ</b> קפיצה · <b>Ⓨ</b> רכב/דלת · <b>Ⓑ</b> צילום · <b>⬆</b> ציור · <b>View</b> מפה</p>
+          <p><b>שלט משחק</b>: כמו ב־GTA. <b>RT</b> ירי · <b>LT</b> כיוון · <b>Ⓐ</b> ריצה · <b>Ⓧ</b> קפיצה · <b>Ⓨ</b> רכב/דלת · <b>Ⓑ</b> צילום · <b>⬆</b> ציור · <b>⬅</b> טלפון · <b>View</b> מפה</p>
         </div>
         <div class="col touch-only">
           <h3>טלפון</h3>
           <p>ג׳ויסטיק משמאל · גרירה מימין להסתכלות</p>
           <p>מצלמה — צילום שלט · עיפרון "לצייר" — ציור באוויר · כוונת — ירי</p>
-          <p>נגיעה במפה הקטנה — מפת העיר כולה</p>
+          <p>נגיעה במפה הקטנה — מפת העיר כולה · כפתור הטלפון למעלה</p>
         </div>
         <div class="col">
           <h3>איך משחקים</h3>
@@ -167,6 +168,37 @@
     <div id="map-cross" class="hidden"></div>
     <div id="map-hint"></div>
   </div>
+
+  <div id="phone" class="hidden" aria-label="הטלפון">
+    <div class="phone-body">
+      <div class="phone-notch"></div>
+      <div class="phone-status"><span id="phone-clock"></span><span id="phone-sky"></span><span class="phone-bars"><i></i><i></i><i></i></span><span class="phone-bat"></span></div>
+      <div class="phone-screen">
+        <div id="phone-home" class="phone-page">
+          <div class="phone-hello">עיר השרבוטים</div>
+          <div id="phone-apps"></div>
+          <p class="phone-soon">אנשי קשר ומשימות — בקרוב</p>
+        </div>
+        <div id="phone-photos" class="phone-page hidden">
+          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b>תמונות</b></div>
+          <div id="phone-grid"></div>
+        </div>
+        <div id="phone-view" class="phone-page hidden">
+          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b id="phone-view-title"></b></div>
+          <img id="phone-view-img" alt="">
+          <div class="phone-actions"><a id="phone-dl" class="btn mini" download>שמירה למכשיר</a><button id="phone-del" class="btn mini">מחיקה</button></div>
+        </div>
+      </div>
+      <button id="phone-home-btn" aria-label="סגירת הטלפון"></button>
+    </div>
+  </div>
+  <div id="phone-cam" class="hidden">
+    <div class="vf-frame"><i></i><i></i><i></i><i></i></div>
+    <div id="vf-hint"></div>
+    <button id="vf-shoot" class="tbtn big" aria-label="צילום"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg></button>
+    <button id="vf-back" class="tbtn small" aria-label="חזרה לטלפון"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+  </div>
+  <div id="phone-flash"></div>
 
   <div id="pause" class="overlay hidden">
     <div class="sheet small settings">
