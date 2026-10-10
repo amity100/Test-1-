@@ -881,6 +881,8 @@ export class Traffic {
           } else {
             this.game.audio.play('crash', 0.5);
           }
+          // (people come to look: game/reactions.js)
+          if (this.game.reactions) this.game.reactions.note('crash', c.pos.x, c.pos.z);
           if (v.kind !== 'tank') v.hurt(Math.abs(v.speed) * 0.8);
           v.speed *= v.kind === 'tank' ? 0.8 : 0.4;
         }

@@ -51,6 +51,7 @@ import { Routines } from './routines.js';
 import { Workers } from './workers.js';
 import { Crowds } from './crowds.js';
 import { Events } from './events.js';
+import { Reactions } from './reactions.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -167,6 +168,9 @@ export class Game {
     // what happens now and then: a hold-up, a bump in the traffic, a chase, somebody who fell, a
     // street show, a protest, a wedding in the park (game/events.js)
     this.events = new Events(this);
+    // how people react: they gather round, film it, help the hurt; now and then a scuffle
+    // (game/reactions.js)
+    this.reactions = new Reactions(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -535,6 +539,7 @@ export class Game {
   }
 
   onCivilianHurt(c) {
+    this.reactions.note('hurt', c.pos.x, c.pos.z);
     // (stopping a robber is no crime: game/events.js)
     if (c.criminal) {
       this.events.hurt(c);
@@ -544,6 +549,7 @@ export class Game {
   }
 
   onCivilianKilled(c) {
+    this.reactions.note('hurt', c.pos.x, c.pos.z);
     if (c.criminal) {
       this.events.hurt(c);
       return;
@@ -685,6 +691,7 @@ export class Game {
       this.world.objects.update(dt, this.world.bakeShadows, this.camera.position);
       this.police.update(dt);
       this.events.update(dt);
+      this.reactions.update(dt);
       this.pickups.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -1211,6 +1218,7 @@ export class Game {
     if (d < radius) p.hurt((owner === 'player' ? 0.25 : 1) * damage * 0.35 * (1 - d / radius), x, z);
     this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
     this.civilians.panic(new THREE.Vector3(x, y, z), 60);
+    this.reactions.note('blast', x, z);
   }
 
   // the tank's glob of correction fluid bursts: a white splash over everything around, and what
@@ -1241,6 +1249,7 @@ export class Game {
     if (d < radius * 0.6 && !p.inVehicle) p.hurt((owner === 'player' ? 0.15 : 0.8) * damage * 0.3 * (1 - d / radius), x, z);
     this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
     this.civilians.panic(new THREE.Vector3(x, y, z), 60);
+    this.reactions.note('blast', x, z);
     if (this.onCrime) this.onCrime('vandal', x, z);
   }
 

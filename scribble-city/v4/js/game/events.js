@@ -566,6 +566,7 @@ function* bumpScene(sc, def) {
   if (d < 60) game.audio.play('crash', Math.max(0.2, 1 - d / 60));
   game.fx.sparks(cx, 0.6, cz, 8, [0.9, 0.9, 0.95]);
   game.fx.crumbs(cx, 0.5, cz, 10, 2);
+  if (game.reactions) game.reactions.note('crash', cx, cz);
   sc.props.hazard = { draw: (fr) => drawHazards(fr, sc, [A, B]) };
   yield 1.6;
   if (!alive(A) || !alive(B) || !A.driver || !B.driver) {
