@@ -146,6 +146,7 @@ async function boot() {
   startBtn.textContent = 'יוצאים לעיר';
   game.loop();
   if (params.has('autostart')) game.start();
+  else game.showContinue();
   window.__ready = true;
 }
 

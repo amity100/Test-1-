@@ -47,6 +47,7 @@
 
     <div id="minimap-wrap" class="paper-card"><canvas id="minimap" width="200" height="200"></canvas></div>
     <div id="gps-dist" class="hidden" aria-label="המרחק ליעד"></div>
+    <div id="saving" class="hidden">נשמר ✓</div>
 
     <div id="weapon" class="paper-card">
       <canvas id="weapon-icon" width="120" height="72"></canvas>
@@ -140,7 +141,10 @@
           <p>מצלמים שלטי שרטוטים ברחבי העיר, מתחבאים, ומציירים אותם באוויר — שבעה־עשר נשקים ורכבים מחכים: מאקדח צבע ורובה עפרונות, דרך חרב סרגל ולייזר מרקר, ועד מיניגאן מחדדים, טנק, אופנוע ומסוק. ככל שהציור טוב יותר — הנשק טוב יותר! המחק מוחק כל דבר בעיר, גם קירות: משפשפים קיר של בית ונכנסים פנימה. נכנסים לכל חנות, אצל הספר מוחקים ומציירים תספורת חדשה, ובטיילת יש דוכן שבו מציירים לעצמכם חברה. כל מכונית אפשר לקחת — רק שהמשטרה לא תראה.</p>
         </div>
       </div>
-      <button id="start-btn" class="btn primary huge" disabled>טוען את העטים…</button>
+      <div class="cover-btns">
+        <button id="continue-btn" class="btn primary huge hidden">המשך מאיפה שהפסקתם<span id="continue-meta"></span></button>
+        <button id="start-btn" class="btn primary huge" disabled>טוען את העטים…</button>
+      </div>
       <div id="load-status"></div>
     </div>
   </div>
@@ -219,6 +223,10 @@
               <option value="fog">ערפל</option>
             </select>
           </label>
+        </section>
+        <section class="opt-group saves">
+          <h3>שמירה</h3>
+          <div id="save-rows"></div>
         </section>
       </div>
       <div class="pause-foot">

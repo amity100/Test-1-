@@ -45,6 +45,7 @@ import { CityMap } from '../ui/citymap.js';
 import { GPS } from './gps.js';
 import { Settings } from '../core/settings.js';
 import { Pad } from '../core/gamepad.js';
+import { SaveGame, SLOTS, SLOT_NAMES } from './save.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -143,6 +144,8 @@ export class Game {
     this.gps = new GPS(this);
     // a gamepad, if there is one (core/gamepad.js)
     this.pad = new Pad(this);
+    // the saves (game/save.js): the autosave, three slots, "continue" on the title page
+    this.saves = new SaveGame(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -179,6 +182,7 @@ export class Game {
     $('start-btn').addEventListener('click', () => this.start());
     $('resume-btn').addEventListener('click', () => this.resume());
     $('map-btn').addEventListener('click', () => this.openMap());
+    $('continue-btn').addEventListener('click', () => this.continueGame());
     $('minimap-wrap').addEventListener('click', () => this.openMap());
     $('respawn-btn').addEventListener('click', () => this.respawnFromDeath());
     this.bindSettings();
@@ -313,9 +317,80 @@ export class Game {
     welcome();
   }
 
+  // ------------------------------------------------------------------ saves
+  // the title page: a save to go on from (the newest, or the one asked for before the page
+  // started again to load it)
+  async showContinue() {
+    const S = this.saves;
+    const want = S.takePending();
+    const h = want ? await S.header(want) : await S.latest();
+    if (!h || this.state !== 'title') return;
+    this.continueSlot = h.slot;
+    $('continue-meta').textContent = `${SLOT_NAMES[h.slot]} · ${h.text}`;
+    $('continue-btn').classList.remove('hidden');
+    const sb = $('start-btn');
+    sb.classList.remove('primary');
+    sb.textContent = 'משחק חדש';
+  }
+
+  async continueGame() {
+    if (!this.continueSlot || this.state !== 'title') return;
+    this.start();
+    await this.saves.load(this.continueSlot);
+  }
+
+  // the pause menu's saves: each slot, what is in it, save / load (loading asks twice)
+  async refreshSaves() {
+    const box = $('save-rows');
+    const rows = [];
+    for (const slot of SLOTS) rows.push([slot, await this.saves.header(slot)]);
+    box.innerHTML = '';
+    for (const [slot, h] of rows) {
+      const row = document.createElement('div');
+      row.className = 'save-row';
+      const name = document.createElement('div');
+      name.className = 'save-name';
+      name.innerHTML = `<b>${SLOT_NAMES[slot]}</b><span>${h ? h.text : 'ריקה'}</span>`;
+      row.appendChild(name);
+      // (a slot's buttons are always in the same places: what it cannot do is only not seen)
+      {
+        const sv = document.createElement('button');
+        sv.className = 'btn mini';
+        sv.textContent = 'שמירה';
+        if (slot === 'auto') sv.style.visibility = 'hidden';
+        sv.addEventListener('click', async () => {
+          if (!this.saves.canSave()) {
+            this.hud.toast(this.police.level > 0 ? 'אי אפשר לשמור כשהמשטרה מחפשת אתכם' : 'אי אפשר לשמור עכשיו', 'bad', 2.2);
+            return;
+          }
+          await this.saves.save(slot);
+          this.refreshSaves();
+        });
+        row.appendChild(sv);
+      }
+      {
+        const ld = document.createElement('button');
+        ld.className = 'btn mini';
+        ld.textContent = 'טעינה';
+        if (!h) ld.style.visibility = 'hidden';
+        ld.addEventListener('click', () => {
+          if (!ld.classList.contains('sure')) {
+            ld.classList.add('sure');
+            ld.textContent = 'בטוח? שוב';
+            return;
+          }
+          this.saves.loadFresh(slot);
+        });
+        row.appendChild(ld);
+      }
+      box.appendChild(row);
+    }
+  }
+
   pause() {
     if (this.state !== 'play') return;
     this.state = 'paused';
+    this.refreshSaves();
     $('clock-now').textContent = this.daynight.clock;
     $('pause').classList.remove('hidden');
     this.input.releaseLock();
@@ -550,6 +625,7 @@ export class Game {
       this.inkwell.update(dt);
       this.updateHidden();
       this.gps.update(dt);
+      if (this.state === 'play') this.saves.update(dt);
     }
     // camera
     if (this.state === 'title' && !this.freeCam) {

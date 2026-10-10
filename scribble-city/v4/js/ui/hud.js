@@ -181,6 +181,18 @@ export class HUD {
     el.classList.remove('hidden');
   }
 
+  // a quiet word that the game saved itself
+  saving() {
+    const el = this.savingEl || (this.savingEl = document.getElementById('saving'));
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.classList.remove('on');
+    void el.offsetWidth;
+    el.classList.add('on');
+    clearTimeout(this.savingT);
+    this.savingT = setTimeout(() => el.classList.add('hidden'), 2200);
+  }
+
   big(text, ms = 1600) {
     this.bigEl.textContent = text;
     this.bigEl.classList.remove('hidden');
