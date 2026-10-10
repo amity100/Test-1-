@@ -3,6 +3,7 @@ import { GRADE } from '../game/weapons.js';
 import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
 import { pin } from './mapglyphs.js';
 import { searchArea } from '../game/heli.js';
+import { drawSight } from '../game/lose.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -448,6 +449,8 @@ export class HUD {
       g.stroke();
       g.restore();
     }
+    // (their eyes while they search, the helicopter's light: ROADMAP 6.4)
+    if (!game.classic) drawSight(game, g, p);
     // (where the police are looking for you: ROADMAP 6.2)
     const sa = searchArea(game);
     if (sa) {

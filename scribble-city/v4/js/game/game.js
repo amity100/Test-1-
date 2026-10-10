@@ -68,6 +68,7 @@ import { dress, armorBar } from './wardrobe.js';
 import { Chase } from './chase.js';
 import { Heli } from './heli.js';
 import { Arrest } from './arrest.js';
+import { Lose } from './lose.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -231,6 +232,8 @@ export class Game {
     this.heli = this.classic ? null : new Heli(this);
     // (hands up, arrested instead of killed, a night at the police station: ROADMAP 6.3)
     this.arrest = this.classic ? null : new Arrest(this);
+    // (getting away: their eyes, and another car or other clothes; ROADMAP 6.4)
+    this.lose = this.classic ? null : new Lose(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -779,6 +782,7 @@ export class Game {
       this.police.update(dt);
       if (this.heli) this.heli.update(dt);
       if (this.arrest) this.arrest.update(dt);
+      if (this.lose) this.lose.update(dt);
       this.events.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);

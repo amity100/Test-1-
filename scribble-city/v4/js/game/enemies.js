@@ -375,6 +375,8 @@ class Enemy {
     const low = p.crouched && !p.inVehicle ? 1 - (p.coverPop || 0) : 0;
     if (d > this.cfg.sight * (1 + this.onEdge * 0.2) * (this.state === 'combat' ? 1 : 1 - 0.45 * low)) return false;
     if (p.hidden && d > 3.2 && !p.inVehicle) return false;
+    // (in another car, or other clothes, while they search: known only from close by, ROADMAP 6.4)
+    if (this.faction === 'police' && game.lose && game.lose.disguised && d > game.lose.near) return false;
     if (d > 6) {
       // they only notice what is in front of them unless they are already fighting
       const a = Math.abs(angleDiff(this.yaw, Math.atan2(dx, dz)));

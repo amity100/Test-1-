@@ -233,7 +233,8 @@ export class Garage {
       if (res) {
         game.audio.play('paint', 0.8);
         this.applyPaint(v, res);
-        game.hud.toast('צבע חדש! ✓', 'good', 1.8);
+        // (while the police search for you: they lose you, ROADMAP 6.4)
+        if (!(game.lose && game.lose.repainted(v))) game.hud.toast('צבע חדש! ✓', 'good', 1.8);
       }
       this.menu(v);
     });
