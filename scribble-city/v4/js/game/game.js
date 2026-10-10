@@ -50,6 +50,7 @@ import { SaveGame, SLOTS, SLOT_NAMES } from './save.js';
 import { Routines } from './routines.js';
 import { Workers } from './workers.js';
 import { Crowds } from './crowds.js';
+import { Events } from './events.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -163,6 +164,9 @@ export class Game {
     // who walks where: suits downtown, tourists on the promenade, grandparents and families in the
     // park, young people on the alleys' corners (game/crowds.js)
     this.crowds = new Crowds(this);
+    // what happens now and then: a hold-up, a bump in the traffic, a chase, somebody who fell, a
+    // street show, a protest, a wedding in the park (game/events.js)
+    this.events = new Events(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -531,10 +535,19 @@ export class Game {
   }
 
   onCivilianHurt(c) {
+    // (stopping a robber is no crime: game/events.js)
+    if (c.criminal) {
+      this.events.hurt(c);
+      return;
+    }
     this.onCrime('hurtCiv', c.pos.x, c.pos.z);
   }
 
   onCivilianKilled(c) {
+    if (c.criminal) {
+      this.events.hurt(c);
+      return;
+    }
     this.onCrime('killCiv', c.pos.x, c.pos.z);
   }
 
@@ -671,6 +684,7 @@ export class Game {
       this.traffic.update(dt);
       this.world.objects.update(dt, this.world.bakeShadows, this.camera.position);
       this.police.update(dt);
+      this.events.update(dt);
       this.pickups.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -731,6 +745,7 @@ export class Game {
       this.civilians.draw(this.camera.position);
       this.streetlife.draw(fr);
       this.workers.draw(fr);
+      this.events.draw(fr);
       this.vignettes.draw(fr);
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
@@ -775,7 +790,7 @@ export class Game {
     if (input.wasPressed('KeyQ') || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.streetlife.interact()) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact()) this.tryEnter();
     }
     if (input.wasPressed('KeyM')) this.openMap();
     if (input.wasPressed('KeyP')) this.openPhone();
@@ -1333,6 +1348,10 @@ export class Game {
     if (p.inVehicle) {
       enter = true;
       prompt = touch ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+    } else if (p.mode === 'foot' && this.events.prompt()) {
+      // somebody near you needs a hand (game/events.js)
+      enter = true;
+      prompt = touch ? this.events.prompt() : `E — ${this.events.prompt()}`;
     } else if (p.mode === 'foot' && this.streetlife.target()) {
       const sh = this.streetlife.target();
       enter = sh.shop.open;

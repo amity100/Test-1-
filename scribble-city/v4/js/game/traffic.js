@@ -407,7 +407,10 @@ export class Traffic {
   }
 
   updateCar(c, dt) {
-    if (c.police && c.mode !== 'patrol' && c.mode !== 'drive' && c.poofT === undefined && !c.wrecked) {
+    if (c.tail && c.poofT === undefined && !c.wrecked) {
+      // after another car, the way it went (game/events.js: the police after a getaway car)
+      this.follow(c, dt);
+    } else if (c.police && c.mode !== 'patrol' && c.mode !== 'drive' && c.poofT === undefined && !c.wrecked) {
       this.updatePolice(c, dt);
       this.moveFree(c, dt);
     } else if (c.poofT !== undefined) {
@@ -430,6 +433,29 @@ export class Traffic {
     c.pos.z += Math.cos(c.yaw) * c.speed * dt;
   }
 
+  // keep 9-14 m behind c.tail along the points it passed (so through the same turns)
+  follow(c, dt) {
+    const L = c.tail;
+    if (L.gone || L.poofT !== undefined || this.list.indexOf(L) < 0) {
+      c.tail = null;
+      c.mode = 'leave';
+      c.siren = false;
+      return;
+    }
+    const tr = c.trail || (c.trail = []);
+    const last = tr[tr.length - 1];
+    if (!last || Math.hypot(L.pos.x - last[0], L.pos.z - last[1]) > 1.5) tr.push([L.pos.x, L.pos.z]);
+    while (tr.length > 1 && Math.hypot(tr[0][0] - c.pos.x, tr[0][1] - c.pos.z) < 3.5) tr.shift();
+    const gap = Math.hypot(L.pos.x - c.pos.x, L.pos.z - c.pos.z);
+    const want = L.wrecked || L.stopped ? (gap > 9 ? 4 : 0) : gap > 15 ? L.speed + 3 : gap < 9 ? Math.max(0, L.speed - 3) : L.speed;
+    c.speed = damp(c.speed, want, 2.5, dt);
+    const tgt = tr[0];
+    const yaw = Math.atan2(tgt[0] - c.pos.x, tgt[1] - c.pos.z);
+    c.steer = damp(c.steer, angleDiff(c.yaw, yaw) * 4, 8, dt);
+    if (c.speed > 0.3) c.yaw = dampAngle(c.yaw, yaw, 5, dt);
+    this.moveFree(c, dt);
+  }
+
   // along the lane: slow for the curves, stop for the lights and for whatever is in front
   drive(c, dt) {
     const path = c.path;
@@ -442,11 +468,11 @@ export class Traffic {
       if (d > 40) break;
       if (path.cap[i] < want) want = Math.min(want, Math.sqrt(path.cap[i] * path.cap[i] + 2 * DECEL * Math.max(0, d)));
     }
-    // the lights
+    // the lights (a getaway car runs them: game/events.js)
     const front = c.s + c.halfLen;
     while (path.gates.length && path.gates[0].s < front - 0.6) path.gates.shift();
     const g = path.gates[0];
-    if (g) {
+    if (g && !c.reckless) {
       const light = lightAt(g.node, g.axis, this.time);
       const dist = g.s - front - 0.4;
       if (light !== 'g' && dist < 45) {
@@ -456,8 +482,12 @@ export class Traffic {
     }
     // a bus pulls up at its stops
     if (c.bus) want = Math.min(want, this.busStop(c, dt));
-    // whatever is in front
-    const a = this.ahead(c);
+    // whatever is in front (not for a driver looking elsewhere: game/events.js, the bump)
+    const a = c.distracted ? null : this.ahead(c);
+    if (c.brakeT > 0) {
+      c.brakeT -= dt;
+      want = 0;
+    }
     if (a) {
       const keep = a.why === 'car' ? 6.4 : 4.6;
       want = Math.min(want, Math.max(0, (a.d - keep) * 1.3));

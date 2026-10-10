@@ -191,7 +191,8 @@ function freeSpot(col, x, z, ax, az, r) {
 }
 
 // ------------------------------------------------------------------ a running scene
-class Scene {
+// (game/events.js runs its scenes on the same machinery)
+export class Scene {
   constructor(dir, def) {
     this.dir = dir;
     this.game = dir.game;
@@ -227,6 +228,7 @@ class Scene {
       }
     }
     if (this.broken) {
+      if (this.onBreak) this.onBreak();
       this.letGo();
       this.finished = true;
       return;
