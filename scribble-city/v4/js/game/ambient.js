@@ -156,6 +156,36 @@ export class Ambient {
     if (Math.hypot(f.x - this.game.player.pos.x, f.z - this.game.player.pos.z) < 20) this.game.audio.play('flap', 0.6);
   }
 
+  // (ROADMAP 5.1, not with ?classic) up on a roof, a flock on it too, a way off from you
+  roofFlock(p) {
+    const fp = this.game.world.footprints;
+    let roof = null;
+    for (const b of fp) {
+      if (p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1 && Math.abs(b.top - p.y) < 1.5) {
+        roof = b;
+        break;
+      }
+    }
+    if (!roof || this.flocks.some((f) => f.roof !== undefined && Math.hypot(f.x - p.x, f.z - p.z) < 30)) return;
+    const col = this.game.climb && this.game.climb.col;
+    for (let tries = 0; tries < 8; tries++) {
+      const x = roof.x0 + 2 + Math.random() * (roof.x1 - roof.x0 - 4);
+      const z = roof.z0 + 2 + Math.random() * (roof.z1 - roof.z0 - 4);
+      const d = Math.hypot(x - p.x, z - p.z);
+      if (d < 6) continue;
+      if (col && col.pointInside(x, roof.top + 0.3, z, 1.2)) continue;
+      const birds = [];
+      const n = 3 + Math.floor(Math.random() * 5);
+      for (let i = 0; i < n; i++) {
+        const bx = x + (Math.random() - 0.5) * 2.4;
+        const bz = z + (Math.random() - 0.5) * 2.4;
+        birds.push({ x: bx, z: bz, y: roof.top, yaw: Math.random() * 6.28, peck: Math.random() * 5, hop: 0, vx: 0, vy: 0, vz: 0, flap: Math.random() * 6 });
+      }
+      this.flocks.push({ x, z, birds, up: false, upT: 0, roof: roof.top });
+      return;
+    }
+  }
+
   // a flock pecking on a sidewalk near you
   spawnFlock(p) {
     for (let tries = 0; tries < 6; tries++) {
@@ -200,12 +230,16 @@ export class Ambient {
       this.spawnT = 1.5;
       this.flocks = this.flocks.filter((f) => Math.hypot(f.x - p.x, f.z - p.z) < 95 && !(f.up && f.upT > 6));
       if (this.flocks.length < (game.touch ? 3 : 6)) this.spawnFlock(p);
+      const pl = game.player;
+      if (game.climb && pl.mode === 'foot' && pl.pos.y > 5) this.roofFlock(pl.pos);
     }
     const pl = game.player;
     const running = pl.mode === 'foot' && pl.fig.speed > 3.2;
     for (const f of this.flocks) {
       if (!f.up) {
-        const d = Math.hypot(f.x - pl.pos.x, f.z - pl.pos.z);
+        // (a flock on a roof is not scared from the street under it, nor one on the street from up
+        // on a roof: ROADMAP 5.1)
+        const d = f.roof !== undefined || (game.climb && pl.pos.y > 5) ? Math.hypot(f.x - pl.pos.x, (f.roof !== undefined ? f.roof : 0) - pl.pos.y, f.z - pl.pos.z) : Math.hypot(f.x - pl.pos.x, f.z - pl.pos.z);
         const v = pl.inVehicle;
         if ((running && d < 6) || d < 2.2 || (v && Math.hypot(f.x - v.pos.x, f.z - v.pos.z) < 9)) this.takeOff(f, pl.inVehicle ? pl.inVehicle.pos : pl.pos);
         for (const b of f.birds) {

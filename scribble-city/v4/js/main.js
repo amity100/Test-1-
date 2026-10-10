@@ -4,6 +4,7 @@ import { Pipeline } from './render/pipeline.js';
 import { buildAtlas } from './render/atlas.js';
 import { buildCity } from './world/city.js';
 import { buildGarages } from './world/garages.js';
+import { buildRoofs } from './world/roofs.js';
 import { Game } from './game/game.js';
 import { isTouchDevice } from './core/util.js';
 
@@ -87,8 +88,13 @@ async function boot() {
   await frame();
   const atlas = buildAtlas();
   const t0 = performance.now();
-  // (not with ?classic: the service station on Flamingo Ave, ROADMAP 4.6)
-  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra: buildGarages, neonRows: 36 });
+  // (not with ?classic: the service station on Flamingo Ave, ROADMAP 4.6; the roofs to climb onto,
+  // ROADMAP 5.1)
+  const extra = (ctx) => {
+    buildGarages(ctx);
+    buildRoofs(ctx);
+  };
+  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 36, roofs: true });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
 
   setStatus('השמש שוקעת על העיר…');

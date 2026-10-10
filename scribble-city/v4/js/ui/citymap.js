@@ -441,7 +441,7 @@ export class CityMap {
     for (const b of w.billboards || []) {
       const bp = BLUEPRINTS[b.id];
       if (!bp) continue;
-      add({ cat: 'blueprint', glyph: 'board', x: b.x, z: b.z, name: bp.name, bp, board: b });
+      add({ cat: 'blueprint', glyph: 'board', x: b.x, z: b.z, name: bp.name, bp, board: b, note: b.roof ? 'על גג. עולים במדרגות החירום או בסולם, ומצלמים מלמעלה' : undefined });
     }
     // the places worth a visit
     if (w.wheel) add({ cat: 'place', glyph: 'wheel', x: w.wheel.x, z: w.wheel.z, name: 'הגלגל הענק', note: 'על המזח' });

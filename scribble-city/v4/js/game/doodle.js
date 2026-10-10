@@ -147,6 +147,8 @@ export class Doodle {
     this.melee = -1;
     this.sit = 0;
     this.crouch = 0; // kneeling behind cover
+    this.climb = 0; // up a ladder (ROADMAP 5.1, game/climb.js): a foot up a rung, then the other
+    this.climbPh = 0;
     this.dead = 0;
     this.crawl = 0;
     this.stagger = 0;
@@ -293,6 +295,12 @@ export class Doodle {
         // right knee down, left foot planted forward
         th = lerp(th, off === 0 ? 0.35 : 1.05, crouch);
         kb = lerp(kb, off === 0 ? 1.95 : 1.55, crouch);
+      }
+      if (this.climb > 0) {
+        // up a ladder: one foot up on a rung, the other on the one below, the knees to the wall
+        const up = Math.max(0, Math.sin(this.climbPh + off));
+        th = lerp(th, 0.35 + up * 0.75, this.climb);
+        kb = lerp(kb, 0.45 + up * 1.15, this.climb);
       }
       const sx = side * hw * (1 + sit * 0.4);
       const ky = hipY - Math.cos(th) * legL;

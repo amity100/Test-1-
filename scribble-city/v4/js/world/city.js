@@ -13,6 +13,7 @@ import { buildStreets, turnWheel } from './streets.js';
 import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
 import { BOUNDS } from './layout.js';
+import { BLUEPRINT_MORE } from '../game/blueprints.js';
 
 // The whole city: the first boulevard exactly as it was, and everything around it.
 export function buildCity(scene, o = {}) {
@@ -54,9 +55,12 @@ export function buildCity(scene, o = {}) {
     lightCount: () => lightList().length,
   };
   if (o.rooms !== false) ctx.room = (f, spec) => buildRoom(ctx, f, spec);
+  // (ROADMAP 5.1, not with ?classic: the roofs to walk on, gathered as the buildings go up)
+  if (o.roofs) ctx.roofs = { buildings: [], escapes: [], backs: [], cur: null };
   // everything printed in the city (blueprints, ads, street names) is one texture; the big ads on
   // the roofs and the walls are seen from far away, the little boards only up close
-  ctx.atlas = boardAtlas();
+  // (the album's new pages are on boards up on the roofs, ROADMAP 5.1: not with ?classic)
+  ctx.atlas = boardAtlas(o.roofs ? BLUEPRINT_MORE : null);
   const boardOpts = { kind: 'box', map: ctx.atlas.texture, emMap: ctx.atlas.texture, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1 };
   M.board = makeSurface({ ...boardOpts, objMask: true });
   M.adWall = makeSurface({ ...boardOpts, emissive: new THREE.Color(0.24, 0.23, 0.21) });
@@ -171,6 +175,8 @@ export function buildCity(scene, o = {}) {
     wheel: ctx.wheel || null,
     // (the service station: its bays, pumps and your parking, world/garages.js)
     garages: ctx.garages || null,
+    // (the roofs: what is solid up there, the ways up, ROADMAP 5.1)
+    roofs: ctx.roofWorld || null,
     // hide what is too far to matter (by the chunks' bounding spheres)
     cull(cam) {
       for (const c of cull) {

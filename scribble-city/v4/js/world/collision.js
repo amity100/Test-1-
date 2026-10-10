@@ -82,9 +82,11 @@ export class Collision {
   /**
    * Push a vertical cylinder (feet at pos.y, given height) out of boxes.
    * Boxes whose top is within stepUp of the feet become floor instead.
+   * prevY: where the feet were a step ago (a fall that came down through the top of a box lands
+   * on it, however fast; ROADMAP 5.1, not with ?classic).
    * Returns { floor, hitWall, nx, nz }.
    */
-  resolveCylinder(pos, radius, height, stepUp = 0.45) {
+  resolveCylinder(pos, radius, height, stepUp = 0.45, prevY = null) {
     const out = { floor: -Infinity, hitWall: false, nx: 0, nz: 0, box: null };
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
@@ -106,8 +108,8 @@ export class Collision {
         let dz = pos.z - cz;
         const d2 = dx * dx + dz * dz;
         if (d2 >= radius * radius) return false;
-        // can we step onto it?
-        if (b.y1 - pos.y <= stepUp && b.tag !== 'water') {
+        // can we step onto it? (or did we come down onto it?)
+        if ((b.y1 - pos.y <= stepUp || (prevY !== null && prevY >= b.y1 - 0.02)) && b.tag !== 'water') {
           out.floor = Math.max(out.floor, b.y1);
           return false;
         }

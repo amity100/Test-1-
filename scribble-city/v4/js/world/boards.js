@@ -13,7 +13,7 @@ const HIGHLIGHT = 'rgba(255, 226, 60, 0.55)';
 const W = 2048;
 // twelve rows of big cells (blueprints, ads), then the little plates
 const BIG_ROWS = 12;
-const H = BIG_ROWS * 256 + 512;
+let H = BIG_ROWS * 256 + 512;
 const BIG_W = 512;
 const BIG_H = 256;
 const SMALL_W = 256;
@@ -341,8 +341,12 @@ function plate(sk, ctx, w, h, text, bg, fg = '#141418') {
 
 let ATLAS = null;
 
-export function boardAtlas() {
+// more: the album's new pages (ROADMAP 4.8) for their boards up on the roofs (ROADMAP 5.1; not
+// with ?classic): two more rows of big cells
+export function boardAtlas(more = null) {
   if (ATLAS) return ATLAS;
+  const rows = more ? BIG_ROWS + 2 : BIG_ROWS;
+  H = rows * 256 + 512;
   const canvas = makeCanvas(W, H);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f7f4ec';
@@ -350,7 +354,7 @@ export function boardAtlas() {
   const rects = {};
   let big = 0;
   const large = (name, fn) => {
-    if (big >= BIG_ROWS * 4) throw new Error('board atlas full');
+    if (big >= rows * 4) throw new Error('board atlas full');
     const cx = (big % 4) * BIG_W;
     const cy = Math.floor(big / 4) * BIG_H;
     big++;
@@ -363,7 +367,7 @@ export function boardAtlas() {
   let small = 0;
   const smallCell = (name, fn) => {
     const cx = (small % 8) * SMALL_W;
-    const cy = BIG_ROWS * BIG_H + Math.floor(small / 8) * SMALL_H;
+    const cy = rows * BIG_H + Math.floor(small / 8) * SMALL_H;
     small++;
     const tmp = makeCanvas(SMALL_W, SMALL_H);
     const tctx = tmp.getContext('2d');
@@ -382,6 +386,7 @@ export function boardAtlas() {
     c.restore();
   });
   rects.friend_sketch = cell(rects.friend_sketch.px[0], rects.friend_sketch.px[1], 256, 256);
+  if (more) for (const id of more) large(`bb_${id}`, (sk, c, w, h) => blueprintBoard(sk, c, w, h, BLUEPRINTS[id]));
   for (const a of AVES) smallCell(`ave_${a.sign}`, (sk, c, w, h) => streetBlade(c, w, h, a.sign));
   for (const s of STREETS) smallCell(`st_${s.sign}`, (sk, c, w, h) => streetBlade(c, w, h, s.sign));
   smallCell('bus', (sk, c, w, h) => plate(sk, c, w, h, 'BUS STOP', '#ffd23f'));

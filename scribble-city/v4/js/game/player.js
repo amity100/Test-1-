@@ -99,6 +99,12 @@ export class Player {
       if (this.game.classic) this.seatIn(dt);
       return;
     }
+    // up a ladder, on a fire escape, pulling yourself up onto something (ROADMAP 5.1, game/climb.js)
+    if (this.mode === 'climb') {
+      if (this.game.climb) this.game.climb.update(dt, input);
+      else this.mode = 'foot';
+      return;
+    }
     // sitting (in the barber's chair): held to the seat until it lets go, then any step stands up
     if (this.seat) {
       const st = this.seat;
@@ -156,6 +162,9 @@ export class Player {
       if (above > 5 && this.vel.y < -3 && (input.wasPressed('Space') || (this.vel.y < -13 && above > 8))) chute.deploy(this.parachute.grade);
     }
     const gliding = chute && chute.open;
+    // (a jump in front of something you can get up onto: you climb up onto it, ROADMAP 5.1)
+    const climb = this.game.climb;
+    if (climb && !drawing && !talking && !gliding && input.wasPressed('Space') && climb.tryMantle(wx, wz)) return;
     // a double espresso from the cafe: everything a bit faster for a while
     const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1);
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
@@ -171,14 +180,19 @@ export class Player {
     if (gliding) this.vel.y = damp(this.vel.y, -chute.fly.sink, 2.5, dt);
     else this.vel.y -= GRAVITY * dt;
     const p = this.pos;
+    // (a fall lands on whatever it comes down onto, however fast: ROADMAP 5.1, not with ?classic)
+    const prevY = this.game.classic ? null : p.y;
     p.x += this.vel.x * dt;
     p.z += this.vel.z * dt;
     p.y += this.vel.y * dt;
-    const col = this.game.world.collision.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25);
+    const col = this.game.world.collision.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25, prevY);
+    let floor = col.floor;
+    // (up on the roofs, what stands there: world/roofs.js)
+    if (climb && climb.col && p.y > 3.5) floor = Math.max(floor, climb.col.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25, prevY).floor);
     // dynamic obstacles (vehicles)
     this.game.vehicles.pushOut(p, this.radius);
     let ground = groundHeight(p.x, p.z);
-    if (col.floor > ground) ground = col.floor;
+    if (floor > ground) ground = floor;
     if (p.y <= ground + 0.02) {
       if (this.vel.y <= 0) {
         // a hard landing hurts (a jump out of the helicopter without a parachute hurts a lot)
@@ -195,6 +209,8 @@ export class Player {
         if (ground - p.y < 0.01) p.y = ground;
         this.vel.y = 0;
         this.onGround = true;
+        // (down onto a fire escape's landing: you are on it)
+        if (climb && p.y > 3.5 && climb.catchFall()) return;
       }
     } else if (p.y > ground + 0.08) {
       this.onGround = false;

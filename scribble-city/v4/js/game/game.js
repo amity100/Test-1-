@@ -60,6 +60,7 @@ import { Damage } from './damage.js';
 import { Garage } from './garage.js';
 import { shoreNear } from './rides.js';
 import { PaintShop } from '../ui/paintshop.js';
+import { Climb } from './climb.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
@@ -207,6 +208,8 @@ export class Game {
     // (game/garage.js, ui/paintshop.js; not with ?classic: then there is no station)
     this.garage = new Garage(this);
     this.paintshop = this.classic ? null : new PaintShop(this);
+    // (up walls and fences, up the fire escapes and the ladders onto the roofs: ROADMAP 5.1)
+    this.climb = this.classic ? null : new Climb(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -899,7 +902,7 @@ export class Game {
     if (input.wasPressed('KeyQ') || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact()) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact() && !(this.climb && this.climb.interact())) this.tryEnter();
     }
     if (input.wasPressed('KeyM')) this.openMap();
     if (input.wasPressed('KeyP')) this.openPhone();
@@ -977,6 +980,8 @@ export class Game {
       const dz = b.z - cam.position.z;
       const d = Math.hypot(dx, dy, dz);
       if (d > 85) continue;
+      // (a board up on a roof is photographed from up there: ROADMAP 5.1)
+      if (b.roof && (cam.position.y < b.top - 1 || d > 30)) continue;
       // in view: within ~25 degrees of the centre, more when the board fills the frame
       const cos = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / d;
       if (Math.acos(Math.min(1, cos)) > 0.45 + Math.atan2(b.w * 0.5, d) * 0.8) continue;
@@ -1521,6 +1526,13 @@ export class Game {
       const sh = this.streetlife.target();
       enter = sh.shop.open;
       prompt = touch ? sh.label.replace('E — ', '') : sh.label;
+    } else if (p.mode === 'climb') {
+      // (on a fire escape, up a ladder: ROADMAP 5.1)
+      prompt = (this.climb && this.climb.prompt) || '';
+    } else if (p.mode === 'foot' && this.climb && this.climb.target()) {
+      const ct = this.climb.target();
+      enter = true;
+      prompt = touch ? ct.label : `E — ${ct.label}`;
     } else if (p.mode === 'foot') {
       const et = this.enterTarget();
       if (et) {
@@ -1536,6 +1548,9 @@ export class Game {
           prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : touch ? 'לצלם את השרטוט' : 'F — לצלם את השרטוט';
         } else if (p.hidden && this.album.size) {
           prompt = touch ? 'מוסתרים — זה הזמן לצייר' : 'מוסתרים — Q כדי לצייר';
+        } else if (this.climb && this.climb.hint) {
+          // (something you could climb, right in front of you: ROADMAP 5.1)
+          prompt = this.climb.hint;
         }
       }
     }

@@ -336,6 +336,9 @@ function rooftopName(ctx, f, L, top, name, col) {
   // a steel frame holding the letters
   const len = Math.min(L - 3, 14);
   fbox(ctx, f, M.steel, L / 2 - len / 2, top + 0.6, -3.2, L / 2 + len / 2, top + 0.75, -3.0, srgb(0.4, 0.38, 0.46));
+  // (ROADMAP 5.1: the frame of the letters is a wall up there)
+  const cur = ctx.roofs && ctx.roofs.cur;
+  if (cur && cur.f === f) cur.props.push(f.box(L / 2 - len / 2 - 0.1, top, -3.3, L / 2 + len / 2 + 0.1, top + 3.6, -2.9));
   for (let u = L / 2 - len / 2; u <= L / 2 + len / 2 + 0.01; u += len / 4) fbox(ctx, f, M.steel, u - 0.06, top, -3.2, u + 0.06, top + 3.6, -3.0, srgb(0.4, 0.38, 0.46));
   neonSign(ctx, f, name, L / 2, top + 2.0, -2.95, len, c, { font: 'Caveat', size: 80 });
   const p = f.p(L / 2, top + 2, 0);
