@@ -540,6 +540,29 @@ export const GLYPHS = {
     g.lineTo(6.2, 5.4);
     g.stroke();
   },
+  // (the police station, ROADMAP 6.3: a badge with its star)
+  police(g) {
+    g.fillStyle = '#3a6ad6';
+    g.beginPath();
+    g.moveTo(0, -7);
+    g.lineTo(6, -4.6);
+    g.lineTo(5.2, 2.2);
+    g.quadraticCurveTo(3.4, 5.6, 0, 7.2);
+    g.quadraticCurveTo(-3.4, 5.6, -5.2, 2.2);
+    g.lineTo(-6, -4.6);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const r = i % 2 ? 1.3 : 3.1;
+      g.lineTo(Math.cos(a) * r, -0.2 + Math.sin(a) * r);
+    }
+    g.closePath();
+    g.fill();
+  },
   wrench(g) {
     g.fillStyle = '#c9c9d2';
     g.save();

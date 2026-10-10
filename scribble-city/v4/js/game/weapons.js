@@ -198,7 +198,8 @@ export class Weapons {
     const slot = this.current;
     const def = slot.def;
     // (a thing just drawn is still turning real in the air: it is not in the hand yet)
-    const onFoot = player.mode === 'foot' && !game.inBar && !game.dialog.open && !slot.present;
+    // (hands up, or cuffed: nothing in them, ROADMAP 6.3)
+    const onFoot = player.mode === 'foot' && !game.inBar && !game.dialog.open && !slot.present && !(game.arrest && game.arrest.frozen);
     // (ROADMAP 4.7; not with ?classic) in a car or on a bike: a gun out of the window
     const v = player.inVehicle;
     const seated = !game.classic && player.mode === 'vehicle' && v && (v.kind === 'car' || v.kind === 'bike') && !v.dead && !game.dialog.open && !(game.garage && game.garage.state) && !(game.paintshop && game.paintshop.open);
@@ -643,9 +644,10 @@ export class Weapons {
   // ------------------------------------------------------------------ projectiles
   // ignore: the box the shooter is crouched behind (shots go over its hood)
   // kind: 'enemy' (scribble bullet), 'ink' (police pen-pistol), 'paintball' (paint M4)
-  spawnEnemyShot(x, y, z, dx, dy, dz, damage, speed = 40, ignore = null, kind = 'enemy') {
+  // (from: who fired it, ROADMAP 6.3 - the police would rather take you alive)
+  spawnEnemyShot(x, y, z, dx, dy, dz, damage, speed = 40, ignore = null, kind = 'enemy', from = null) {
     const color = kind === 'paintball' ? PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)] : kind === 'ink' ? PEN_BLUE : null;
-    this.projectiles.push({ kind, owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, ignore, color });
+    this.projectiles.push({ kind, owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, ignore, color, from });
   }
 
   spawnShell(x, y, z, dx, dy, dz, owner, damage, radius, speed = 45, kind = 'shell') {
@@ -1094,7 +1096,7 @@ export class Weapons {
     if (hit.type === 'player') {
       const p = game.player;
       const hp0 = p.hp;
-      p.hurt(pr.damage, pr.x - ux * 5, pr.z - uz * 5, new THREE.Vector3(hit.x, hit.y, hit.z));
+      p.hurt(pr.damage, pr.x - ux * 5, pr.z - uz * 5, new THREE.Vector3(hit.x, hit.y, hit.z), null, pr.from);
       fx.impact(hit.x, hit.y, hit.z, 0.6);
       if (pr.color && !p.inVehicle && hp0 - p.hp > pr.damage * 0.5) game.hud.splat(pr.color);
       return;

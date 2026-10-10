@@ -455,6 +455,9 @@ class Enemy {
     this.checkVehicle(tp, dist);
 
     const mv = this.isMonster ? this.monsterBrain(dt, tp, dist) : this.brain(dt, tp, dist);
+    // (your hands up, or cuffed: one comes with the cuffs, the others keep their guns on you;
+    // ROADMAP 6.3)
+    if (this.faction === 'police' && game.arrest && game.arrest.state) game.arrest.walk(this, mv);
     let { x: moveX, z: moveZ, speed } = mv;
     if (this.dodgeT > 0) {
       this.dodgeT -= dt;
@@ -1465,6 +1468,7 @@ class Enemy {
     const cfg = this.cfg;
     const game = this.game;
     if (!this.sees || this.headless || this.reelT > 0) return;
+    if (this.faction === 'police' && game.arrest && game.arrest.holdFire) return;
     this.fireT -= dt;
     const range = this.armless ? 1.8 : cfg.range;
     if (dist < range + (game.player.inVehicle ? 1.6 : 0) && this.fireT <= 0) {
@@ -1479,6 +1483,7 @@ class Enemy {
     const cfg = this.cfg;
     const game = this.game;
     if (!this.gunman || this.reloadT > 0 || this.reelT > 0) return;
+    if (this.faction === 'police' && game.arrest && game.arrest.holdFire) return;
     this.fireT -= dt;
     if (this.fireT > 0 && !force) return;
     if (this.mag <= 0) return;
@@ -1509,7 +1514,7 @@ class Enemy {
     const dirz = dzz / l + (Math.random() - 0.5) * miss * 2;
     const dl = Math.hypot(dirx, diry, dirz);
     const shotKind = cfg.gun === 'pen' ? 'ink' : cfg.gun === 'm4' ? 'paintball' : 'enemy';
-    game.weapons.spawnEnemyShot(hand.x, hand.y, hand.z, dirx / dl, diry / dl, dirz / dl, cfg.dmg, cfg.gun === 'm4' ? 50 : 42, this.inCover && this.cover ? this.cover.box : null, shotKind);
+    game.weapons.spawnEnemyShot(hand.x, hand.y, hand.z, dirx / dl, diry / dl, dirz / dl, cfg.dmg, cfg.gun === 'm4' ? 50 : 42, this.inCover && this.cover ? this.cover.box : null, shotKind, this);
     this.shots = (this.shots || 0) + 1;
     game.fx.muzzle(hand.x, hand.y, hand.z, 0.6);
     game.audio.play('enemyShot', clamp(1 - dist / 60, 0.15, 0.7));

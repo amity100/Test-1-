@@ -202,6 +202,8 @@ export class Pad {
       key(B.UP, 'KeyQ');
       // (the right stick pressed in: down low, ROADMAP 5.3; nothing with ?classic)
       key(B.R3, 'KeyC');
+      // (down on the cross: hands up with the police after you, ROADMAP 6.3; nothing with ?classic)
+      key(B.DOWN, 'KeyH');
     }
     if (fire !== this.fire) {
       this.fire = fire;

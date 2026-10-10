@@ -392,7 +392,11 @@ export class Doodle {
       let useIK = false;
       const reach = side === 1 ? this.reachR : this.reachL;
       const held = heldIn(this, side);
-      if (reach) {
+      if (this.surrender > 0) {
+        // (hands up: given up to the police, ROADMAP 6.3)
+        this.toWorld(side * 0.32, ny + 0.48, nz + 0.12, tgt);
+        useIK = true;
+      } else if (reach) {
         const d = _w.copy(reach).sub(shoulder);
         const L = (armU + armF) * this.scale * 0.97;
         if (d.length() > L) d.setLength(L);

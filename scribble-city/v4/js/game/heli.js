@@ -80,7 +80,8 @@ export class Heli {
       this.told = true;
       game.hud.toast('המסוק רואה אתכם! להיכנס מתחת לגג, או לברוח מהאור', 'bad', 2.8);
     }
-    // the marksman in the door
+    // the marksman in the door (not at somebody with their hands up: ROADMAP 6.3)
+    if (game.arrest && game.arrest.holdFire) return;
     this.fireT -= dt;
     if (this.fireT <= 0) {
       this.fireT = 1.5 + Math.random() * 0.8;

@@ -270,6 +270,8 @@ export class Input {
     btn('btn-down', 'KeyC', true);
     btn('btn-pause', 'Escape');
     btn('btn-phone', 'KeyP');
+    // (not with ?classic: hands up, ROADMAP 6.3)
+    btn('btn-hands', 'KeyH');
     // (not with ?classic: the fists' guard while it is held - the right click's aim; ROADMAP 5.4)
     const guard = document.getElementById('btn-guard');
     if (guard) {

@@ -478,6 +478,9 @@ body:not(.touch) .touch-only { display: none; }
 body.nc #btn-up { bottom: max(204px, calc(env(safe-area-inset-bottom) + 194px)); }
 body.nc #btn-down { bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); }
 #btn-guard { right: max(116px, calc(env(safe-area-inset-right) + 96px)); bottom: max(196px, calc(env(safe-area-inset-bottom) + 186px)); background: #ffe1cc; }
+/* (not with ?classic) hands up, with the police after you on foot (ROADMAP 6.3) */
+#btn-hands { right: max(262px, calc(env(safe-area-inset-right) + 242px)); bottom: max(128px, calc(env(safe-area-inset-bottom) + 118px)); background: #dfe9ff; }
+#btn-hands.on { background: #ffd9a0; }
 #btn-pause { left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); }
 
 #fatal { position: fixed; inset: 20px; z-index: 99; padding: 20px; background: #fff; border: 3px solid var(--red); font-family: monospace; white-space: pre-wrap; overflow: auto; direction: ltr; }
@@ -953,7 +956,7 @@ body.touch #btn-pause { left: calc(50% - 26px); }
 #vf-shoot, #vf-back { pointer-events: auto; display: none; }
 body.touch #vf-shoot { display: block; right: max(30px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); background: #fff8ec; }
 body.touch #vf-back { display: block; left: max(20px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); }
-body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio, body.phone-cam #btn-view, body.phone-cam #btn-guard { display: none !important; }
+body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio, body.phone-cam #btn-view, body.phone-cam #btn-guard, body.phone-cam #btn-hands { display: none !important; }
 #phone-flash { position: fixed; inset: 0; z-index: 13; background: #fff; opacity: 0; pointer-events: none; }
 #phone-flash.on { animation: phoneFlash 0.35s ease-out; }
 @keyframes phoneFlash { from { opacity: 0.85; } to { opacity: 0; } }

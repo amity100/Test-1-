@@ -463,6 +463,8 @@ export class CityMap {
       const pk = G.parking[1] || G.parking[0];
       if (pk) add({ cat: 'car', glyph: 'parking', x: pk.x, z: pk.z, name: 'החניה שלכם', note: 'רכב שמשאירים באחד משלושת המקומות הכחולים נשמר כאן' });
     }
+    // the police station (ROADMAP 6.3; none with ?classic)
+    if (w.station) add({ cat: 'place', glyph: 'police', x: w.station.x, z: w.station.z, name: 'תחנת המשטרה', note: 'בכיכר המזרקה. כאן משחררים אתכם אחרי מעצר' });
     // where nobody sees you
     for (const h of w.hideSpots || []) add({ cat: 'hide', glyph: 'hide', x: h.x, z: h.z, name: 'מחבוא', note: `${HIDE_NOTE[h.kind] || ''}${HIDE_NOTE[h.kind] ? '. ' : ''}כאן לא רואים אתכם, ואפשר לצייר בשקט`, spot: h });
     for (const b of w.busStops || []) add({ cat: 'bus', glyph: 'bus', x: b.x, z: b.z, name: 'תחנת אוטובוס', note: districtName(b.x, b.z) });

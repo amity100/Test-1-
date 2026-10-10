@@ -175,6 +175,8 @@ export function buildCity(scene, o = {}) {
     wheel: ctx.wheel || null,
     // (the service station: its bays, pumps and your parking, world/garages.js)
     garages: ctx.garages || null,
+    // (the police station on the fountain plaza, ROADMAP 6.3)
+    station: ctx.station || null,
     // (the roofs: what is solid up there, the ways up, ROADMAP 5.1)
     roofs: ctx.roofWorld || null,
     // hide what is too far to matter (by the chunks' bounding spheres)

@@ -67,6 +67,7 @@ import { Skills } from './skills.js';
 import { dress, armorBar } from './wardrobe.js';
 import { Chase } from './chase.js';
 import { Heli } from './heli.js';
+import { Arrest } from './arrest.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -228,6 +229,8 @@ export class Game {
     this.chase = this.classic ? null : new Chase(this);
     // (the police helicopter's searchlight and marksman: ROADMAP 6.2)
     this.heli = this.classic ? null : new Heli(this);
+    // (hands up, arrested instead of killed, a night at the police station: ROADMAP 6.3)
+    this.arrest = this.classic ? null : new Arrest(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -775,6 +778,7 @@ export class Game {
       this.world.objects.update(dt, this.world.bakeShadows, this.camera.position);
       this.police.update(dt);
       if (this.heli) this.heli.update(dt);
+      if (this.arrest) this.arrest.update(dt);
       this.events.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);
@@ -1304,7 +1308,8 @@ export class Game {
       this.hud.toast('אזעקה! מישהו בטח שמע…', 'bad', 1.8);
       this.enemies.noise(v.pos, 35, 'alarm');
     }
-    if (this.onCrime) this.onCrime('steal', cx, cz);
+    // (one of the police station's own cars: ROADMAP 6.3)
+    if (this.onCrime) this.onCrime(t.spec && t.spec.police && !this.classic ? 'copcar' : 'steal', cx, cz);
   }
 
   // the driver gets out on the left: runs off screaming, or (sometimes) wants the car back

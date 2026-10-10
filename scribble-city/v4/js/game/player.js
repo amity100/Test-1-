@@ -161,6 +161,8 @@ export class Player {
     this.lastHurt = this.game.time;
     this.game.hud.hurtFlash(amount, fromX, fromZ);
     this.game.audio.play('hurt');
+    // (one or two stars: the police would rather take you alive - cuffed where you fell, ROADMAP 6.3)
+    if (this.hp <= 0 && this.game.arrest && this.game.arrest.spare(src)) this.hp = 1;
     if (this.hp <= 0) {
       this.hp = 0;
       this.game.onPlayerDeath();
@@ -243,7 +245,9 @@ export class Player {
 
     const drawing = this.mode === 'draw';
     const talking = this.game.dialog && this.game.dialog.open;
-    const mv = drawing || talking ? { x: 0, y: 0, sprint: false } : input.readMove();
+    // (hands up, or cuffed: ROADMAP 6.3)
+    const held = this.game.arrest && this.game.arrest.frozen;
+    const mv = drawing || talking || held ? { x: 0, y: 0, sprint: false } : input.readMove();
     const cy = camRig.yaw;
     const fx = Math.sin(cy);
     const fz = Math.cos(cy);
