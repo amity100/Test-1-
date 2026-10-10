@@ -2,13 +2,15 @@ import { AVES, STREETS, BLOCK_TYPES, DISTRICT_NAMES, blockRect, westRect, distri
 import { NODES } from '../world/roads.js';
 import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';
-import { sticker } from './mapglyphs.js';
+import { sticker, pin } from './mapglyphs.js';
 
 // The city's map (ROADMAP 2.1). The whole city drawn in pen on a page of graph paper: the bay with
 // its waves, the beach, the pier with the big wheel, the park, every building from above in its own
 // colours with its shadow, the streets with their names, the districts, and little drawn stickers
 // for the shops, the blueprints' boards and the places worth a visit. Zoom with the wheel or two
 // fingers, drag to move; a sticker tells what it is (with the hours, open or shut right now).
+// A click on the map marks a destination there (or a sticker's card offers its place): the way
+// to it along the roads is drawn on the map and on the minimap (game/gps.js).
 //
 // Opened with M, a tap on the minimap or from the pause menu. The game waits while it is open, and
 // the 3D city is not drawn under it (the map covers the screen). It is drawn again only when the
@@ -215,7 +217,23 @@ export class CityMap {
       this.anim = null;
       this.zoomAt(e.clientX - r.left, e.clientY - r.top, this.view.k * f);
     }, { passive: false });
-    c.addEventListener('contextmenu', (e) => e.preventDefault());
+    // a right click lets the destination go
+    c.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (this.game.gps.target) this.clearTarget();
+    });
+    this.card.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const it = this.sel;
+      if (b.dataset.act === 'go' && it) {
+        const at = it.vehicle ? it.vehicle.pos : it;
+        this.game.gps.set(at.x, at.z, it.vehicle ? it.name : it.name || it.he || null);
+        this.updateHead();
+      } else if (b.dataset.act === 'clear') this.clearTarget();
+      this.hideCard();
+      this.dirty();
+    });
     window.addEventListener('keydown', (e) => this.onKey(e));
     window.addEventListener('resize', () => {
       if (this.open) {
@@ -242,8 +260,8 @@ export class CityMap {
     this.centreOnPlayer(false, this.lastK || clamp(this.H / 300, this.kMin(), K_MAX));
     this.updateHead();
     $('map-hint').textContent = this.game.touch
-      ? 'גרירה — הזזה · שתי אצבעות — זום · נגיעה בסמל — מה זה'
-      : 'גרירה — הזזה · גלגלת — זום · ריחוף על סמל — מה זה · M — סגירה';
+      ? 'גרירה — הזזה · שתי אצבעות — זום · נגיעה — יעד, או מה זה'
+      : 'גרירה — הזזה · גלגלת — זום · קליק — יעד · קליק ימני — בלי יעד · M — סגירה';
     this.render();
   }
 
@@ -308,7 +326,10 @@ export class CityMap {
     const sky = w ? SKY_NAME[w.kind] || '' : '';
     // (in Hebrew "in the market" drops the article: השוק -> בשוק)
     const inn = where ? `אתם ב${where.startsWith('ה') ? where.slice(1) : where}` : 'אתם מחוץ לעיר';
-    $('map-where').textContent = `${inn} · ${dn ? dn.clock : ''}${sky ? ` · ${sky}` : ''}`;
+    const gps = this.game.gps;
+    const r = gps && gps.target && gps.route;
+    const to = r ? ` · ⚑ ${r.len < 1000 ? `${Math.max(10, Math.round(r.len / 10) * 10)} מ׳` : `${(r.len / 1000).toFixed(1)} ק״מ`}` : '';
+    $('map-where').textContent = `${inn} · ${dn ? dn.clock : ''}${sky ? ` · ${sky}` : ''}${to}`;
   }
 
   // ------------------------------------------------------------------ the view
@@ -462,6 +483,7 @@ export class CityMap {
     this.drawBuildings(g, vis, px);
     this.drawTrees(g, vis, px);
     if (!this.off.has('gang')) this.drawGangs(g, px);
+    this.drawRoute(g, px);
     // the page, in pixels
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.drawLabels(g);
@@ -1057,6 +1079,46 @@ export class CityMap {
     }
   }
 
+  // the way to the destination, in a highlighter's pink over an ink line; dots where it is on foot
+  drawRoute(g, px) {
+    const gps = this.game.gps;
+    const r = gps && gps.target ? gps.route : null;
+    if (!r) return;
+    const pts = r.pts;
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    g.strokeStyle = COL.ink;
+    g.lineWidth = Math.max(9 * px, 2.2);
+    g.stroke();
+    g.strokeStyle = '#ff4fa3';
+    g.lineWidth = Math.max(5.6 * px, 1.4);
+    g.stroke();
+    g.setLineDash([0.1, 9 * px]);
+    g.strokeStyle = '#ff4fa3';
+    g.lineWidth = 5 * px;
+    g.beginPath();
+    if (r.lead > 2) {
+      g.moveTo(r.from[0], r.from[1]);
+      g.lineTo(pts[0][0], pts[0][1]);
+    }
+    if (r.tail > 2) {
+      const e = pts[pts.length - 1];
+      g.moveTo(e[0], e[1]);
+      g.lineTo(r.to[0], r.to[1]);
+    }
+    g.stroke();
+    g.setLineDash([]);
+  }
+
+  clearTarget() {
+    this.game.gps.clear();
+    this.updateHead();
+    this.dirty();
+  }
+
   // ------------------------------------------------------------------ the writing on the map
   text(g, s, x, y, o = {}) {
     g.save();
@@ -1293,6 +1355,14 @@ export class CityMap {
       sticker(g, x, y, 'car', '#cfe0ff', R, { ring: this.hover === v || this.sel === v });
       this.placed.unshift({ x, y, it: { vehicle: v, cat: 'vehicle', name: VEHICLE_NAME[v.kind] || 'כלי הרכב שלכם' }, r: R });
     }
+    // the destination: a pin (it can be pointed at like a sticker)
+    const tg = game.gps && game.gps.target;
+    if (tg) {
+      const x = this.sx(tg.x);
+      const y = this.sy(tg.z);
+      pin(g, x, y, 1);
+      this.placed.unshift({ x, y: y - 23, it: { waypoint: true, cat: 'waypoint', name: tg.name || 'היעד שלכם', x: tg.x, z: tg.z }, r: 13 });
+    }
     // you: an arrow the way you face
     const p = this.playerPos();
     const x = this.sx(p.x);
@@ -1390,13 +1460,16 @@ export class CityMap {
     const it = p ? p.it.vehicle || p.it : null;
     if (it === this.hover) return;
     this.hover = it;
-    if (p) this.showCard(p);
-    else if (!this.sel) this.hideCard();
     this.canvas.style.cursor = p ? 'pointer' : '';
+    // (a card opened by a click stays until the next click)
+    if (!this.sel) {
+      if (p) this.showCard(p);
+      else this.card.classList.add('hidden');
+    }
     this.dirty();
   }
 
-  showCard(p) {
+  showCard(p, pinned = false) {
     const it = p.it;
     const c = this.card;
     const pl = this.playerPos();
@@ -1418,12 +1491,21 @@ export class CityMap {
       rows.push('<div class="s">שלט שרטוט</div>');
       const got = this.game.album.items && this.game.album.items.has(it.bp.id);
       rows.push(got ? '<div class="h open">צילמתם אותו ✓</div>' : `<div class="h">עוד לא צולם · ${this.game.touch ? 'כפתור המצלמה' : 'F'} ליד השלט</div>`);
+    } else if (it.waypoint) {
+      rows.push(`<div class="t">${it.name}</div>`);
+      rows.push('<div class="s">היעד שלכם</div>');
     } else {
       rows.push(`<div class="t">${it.name}</div>`);
       if (it.note) rows.push(`<div class="s">${it.note}</div>`);
     }
     rows.push(`<div class="d">${far}</div>`);
+    if (pinned) {
+      const tg = this.game.gps.target;
+      const here = it.waypoint || (tg && Math.abs(tg.x - tx) < 0.5 && Math.abs(tg.z - tz) < 0.5);
+      rows.push(here ? '<button class="card-btn" data-act="clear">✕ בלי יעד</button>' : '<button class="card-btn go" data-act="go">⚑ סמנו כיעד</button>');
+    }
     c.innerHTML = rows.join('');
+    c.classList.toggle('pinned', pinned);
     c.classList.remove('hidden');
     // beside the sticker, kept on the page
     const cw = c.offsetWidth;
@@ -1437,6 +1519,7 @@ export class CityMap {
 
   hideCard() {
     this.card.classList.add('hidden');
+    this.card.classList.remove('pinned');
     if (this.sel || this.hover) {
       this.sel = null;
       this.hover = null;
@@ -1451,7 +1534,11 @@ export class CityMap {
 
   onDown(e) {
     const p = this.pos(e);
-    this.canvas.setPointerCapture(e.pointerId);
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch (err) {
+      // (a pointer the browser does not know: the events still come)
+    }
     this.pointers.set(e.pointerId, { x: p.x, y: p.y, x0: p.x, y0: p.y, t: performance.now(), moved: false });
     this.anim = null;
     if (this.pointers.size === 2) {
@@ -1511,10 +1598,17 @@ export class CityMap {
     if (!q || cancel || q.moved || this.pointers.size) return;
     const p = this.pos(e);
     const now = performance.now();
-    // a second tap at the same place: closer
+    // a mouse's click acts at once (it zooms with its wheel)
+    if (e.pointerType === 'mouse') {
+      if (e.button === 0) this.tap(p.x, p.y);
+      return;
+    }
+    // a finger: a second tap at the same place comes closer (so a tap on the open map waits a
+    // moment before it marks a destination: it may be the first of two)
     const last = this.lastTap;
     if (last && now - last.t < 320 && Math.hypot(last.x - p.x, last.y - p.y) < 24) {
       this.lastTap = null;
+      clearTimeout(this.tapTimer);
       const v = this.view;
       const k = clamp(v.k * 2, this.kMin(), K_MAX);
       const wx = (p.x - this.W / 2) / v.k + v.cx;
@@ -1523,16 +1617,35 @@ export class CityMap {
       return;
     }
     this.lastTap = { t: now, x: p.x, y: p.y };
-    this.tap(p.x, p.y);
+    if (this.hit(p.x, p.y) || this.sel) this.tap(p.x, p.y);
+    else {
+      clearTimeout(this.tapTimer);
+      this.tapTimer = setTimeout(() => {
+        if (this.open) this.tap(p.x, p.y);
+      }, 300);
+    }
   }
 
+  // a sticker: its card (with its place as a destination); the first click after a card only
+  // closes it; anywhere else: the destination is there
   tap(x, y) {
     const p = this.hit(x, y);
     if (p) {
-      this.sel = p.it.vehicle || p.it;
-      this.showCard(p);
+      this.sel = p.it.vehicle ? { ...p.it, x: p.it.vehicle.pos.x, z: p.it.vehicle.pos.z } : p.it;
+      this.showCard(p, true);
       this.dirty();
-    } else this.hideCard();
+      return;
+    }
+    if (this.sel) {
+      this.hideCard();
+      return;
+    }
+    const v = this.view;
+    const wx = (x - this.W / 2) / v.k + v.cx;
+    const wz = (y - this.H / 2) / v.k + v.cz;
+    this.game.gps.set(wx, wz, null);
+    this.updateHead();
+    this.dirty();
   }
 
   onKey(e) {
@@ -1558,6 +1671,7 @@ export class CityMap {
     else if (code === 'ArrowUp' || code === 'KeyW') this.animateTo(this.clampView({ ...v, cz: v.cz - pan }), 160);
     else if (code === 'ArrowDown' || code === 'KeyS') this.animateTo(this.clampView({ ...v, cz: v.cz + pan }), 160);
     else if (code === 'Space' || code === 'KeyC') this.centreOnPlayer(true);
+    else if (code === 'Delete' || code === 'Backspace') this.clearTarget();
     else return;
     eat();
   }

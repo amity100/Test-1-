@@ -495,6 +495,43 @@ export const GLYPHS = {
   },
 };
 
+// the destination: a pin whose point is at (0, 0), with a flag in it
+export function pin(g, x, y, size = 1) {
+  g.save();
+  g.translate(x, y);
+  g.scale(size, size);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  const body = () => {
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.bezierCurveTo(-4, -9, -12, -14, -12, -23);
+    g.arc(0, -23, 12, Math.PI, 0);
+    g.bezierCurveTo(12, -14, 4, -9, 0, 0);
+    g.closePath();
+  };
+  g.fillStyle = 'rgba(27, 20, 48, 0.85)';
+  g.translate(1.6, 2);
+  body();
+  g.fill();
+  g.translate(-1.6, -2);
+  g.fillStyle = '#ff4fa3';
+  g.strokeStyle = '#1b1430';
+  g.lineWidth = 2.2;
+  body();
+  g.fill();
+  g.stroke();
+  g.fillStyle = '#fffaf0';
+  g.beginPath();
+  g.arc(0, -23, 7.6, 0, TAU);
+  g.fill();
+  g.lineWidth = 1.6;
+  line(g, -2.8, -17.6, -2.8, -29);
+  g.fillStyle = '#ffd23f';
+  shape(g, [-2.8, -29, 4.4, -26.4, -2.8, -23.6]);
+  g.restore();
+}
+
 // a sticker: the group's colour in a circle (a rounded square for the blueprints and the buses),
 // an ink edge and its shadow, the drawing inside
 export function sticker(g, x, y, kind, fill, size = 11, o = {}) {

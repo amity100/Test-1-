@@ -1,6 +1,7 @@
 import { BOUNDS, AVES, STREETS, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, STREET_X0, STREET_X1 } from '../world/layout.js';
 import { GRADE } from '../game/weapons.js';
 import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
+import { pin } from './mapglyphs.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -293,6 +294,36 @@ export class HUD {
     }
   }
 
+  drawRoute(g, route, p, s) {
+    const pts = route.pts;
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(pts[0][0] - p.x, pts[0][1] - p.z);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0] - p.x, pts[i][1] - p.z);
+    g.strokeStyle = '#1b1430';
+    g.lineWidth = 8 / s;
+    g.stroke();
+    g.strokeStyle = '#ff4fa3';
+    g.lineWidth = 5 / s;
+    g.stroke();
+    // (on foot to the road, and from the road to the place: dots)
+    g.setLineDash([0.1, 7 / s]);
+    g.lineWidth = 4.5 / s;
+    g.beginPath();
+    if (route.lead > 2) {
+      g.moveTo(route.from[0] - p.x, route.from[1] - p.z);
+      g.lineTo(pts[0][0] - p.x, pts[0][1] - p.z);
+    }
+    if (route.tail > 2) {
+      const e = pts[pts.length - 1];
+      g.moveTo(e[0] - p.x, e[1] - p.z);
+      g.lineTo(route.to[0] - p.x, route.to[1] - p.z);
+    }
+    g.stroke();
+    g.setLineDash([]);
+  }
+
   setGoals(goals) {
     const html = ['<h4>מה עושים עכשיו?</h4>'];
     for (const g of goals) html.push(`<div class="g ${g.done ? 'done' : ''}"><span class="box"></span><span>${g.text}</span></div>`);
@@ -341,6 +372,9 @@ export class HUD {
       if (h.gone || Math.abs(h.x - p.x) > 110 || Math.abs(h.z - p.z) > 110) continue;
       dot(h.x, h.z, 3, null, '#3a6ad6');
     }
+    // the way to the destination (game/gps.js), a highlighter's pink over an ink line
+    const route = game.gps && game.gps.target ? game.gps.route : null;
+    if (route) this.drawRoute(g, route, p, s);
     for (const b of game.world.billboards) {
       const got = game.album.has(b.id);
       g.save();
@@ -402,6 +436,23 @@ export class HUD {
     g.fill();
     g.stroke();
     g.restore();
+    // the destination's pin: where it is, or at the edge in its direction
+    const tg = game.gps && game.gps.target;
+    if (tg) {
+      const a = Math.PI + yaw;
+      const dx = (tg.x - p.x) * s;
+      const dz = (tg.z - p.z) * s;
+      let x = dx * Math.cos(a) - dz * Math.sin(a);
+      let y = dx * Math.sin(a) + dz * Math.cos(a);
+      const R = W / 2 - 16;
+      const d = Math.hypot(x, y);
+      const out = d > R;
+      if (out) {
+        x *= R / d;
+        y *= R / d;
+      }
+      pin(g, W / 2 + x, H / 2 + y + (out ? 8 : 0), out ? 0.62 : 0.75);
+    }
     // north marker
     g.save();
     g.translate(W / 2, H / 2);

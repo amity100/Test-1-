@@ -42,6 +42,7 @@ import { Shutters } from './shutters.js';
 import { Soundscape } from './soundscape.js';
 import { Radio } from './radio.js';
 import { CityMap } from '../ui/citymap.js';
+import { GPS } from './gps.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -136,6 +137,8 @@ export class Game {
     this.radio = new Radio(this);
     // the map of the whole city (ui/citymap.js): M, a tap on the minimap, the pause menu
     this.citymap = new CityMap(this);
+    // and the way to a destination marked on it (game/gps.js)
+    this.gps = new GPS(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -477,6 +480,7 @@ export class Game {
       this.pickups.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
+      this.gps.update(dt);
     }
     // camera
     if (this.state === 'title' && !this.freeCam) {
