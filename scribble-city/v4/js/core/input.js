@@ -270,6 +270,21 @@ export class Input {
     btn('btn-down', 'KeyC', true);
     btn('btn-pause', 'Escape');
     btn('btn-phone', 'KeyP');
+    // (not with ?classic: the fists' guard while it is held - the right click's aim; ROADMAP 5.4)
+    const guard = document.getElementById('btn-guard');
+    if (guard) {
+      guard.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        guard.classList.add('on');
+        this.aim = true;
+      }, { passive: false });
+      const off = () => {
+        guard.classList.remove('on');
+        this.aim = false;
+      };
+      guard.addEventListener('touchend', off);
+      guard.addEventListener('touchcancel', off);
+    }
   }
 
   // Movement vector from keys or stick (a gamepad's, core/gamepad.js, while it is pushed).

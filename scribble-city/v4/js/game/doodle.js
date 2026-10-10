@@ -42,6 +42,11 @@ const UPPER = ['neck', 'headC', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 
 // crank's centre and its length; game/workers.js draws the bike round the same points
 export const RIDE = { hip: 0.9, crankY: 0.3, crankZ: 0.16, crank: 0.17 };
 const LOWER = ['hip', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'];
+// a fist fight (ROADMAP 5.4, game/fists.js): how far out the punching hand is (0..1) as the punch
+// goes (0..1); in a kick, how high the knee is and how far out the foot
+const punchOut = (t) => (t < 0.38 ? Math.sin((t / 0.38) * Math.PI * 0.5) : t < 0.55 ? 1 : Math.max(0, 1 - (t - 0.55) / 0.45));
+const kickUp = (t) => (t < 0.28 ? t / 0.28 : t < 0.66 ? 1 : Math.max(0, 1 - (t - 0.66) / 0.34));
+const kickOut = (t) => (t < 0.3 ? 0 : t < 0.48 ? (t - 0.3) / 0.18 : t < 0.62 ? 1 : Math.max(0, 1 - (t - 0.62) / 0.2));
 
 // approximate volumes (m³) of each erasable part of a 1.85 m adult
 const PART_VOL = { head: 0.0075, torso: 0.03, armL: 0.0055, armR: 0.0055, legL: 0.014, legR: 0.014 };
@@ -150,6 +155,15 @@ export class Doodle {
     this.climb = 0; // up a ladder (ROADMAP 5.1, game/climb.js): a foot up a rung, then the other
     this.climbPh = 0;
     this.sneak = 0; // walking bent low and quiet (ROADMAP 5.3)
+    // a fist fight (ROADMAP 5.4, game/fists.js): a punch going out and back (0..1; the hand: 1 the
+    // right, -1 the left), a kick (0..1), the guard up (0..1), a blow just taken (1, fading; the
+    // side the head goes)
+    this.punch = -1;
+    this.punchSide = 1;
+    this.kick = -1;
+    this.guard = 0;
+    this.recoil = 0;
+    this.recoilSide = 0;
     this.dead = 0;
     this.crawl = 0;
     this.stagger = 0;
@@ -220,6 +234,7 @@ export class Doodle {
   // ------------------------------------------------------------------ pose
   update(dt) {
     if (this.paintT > 0) this.paintT -= dt;
+    if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 4);
     this.carryT += dt;
     const f = this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.right.set(-f.z, 0, f.x);
@@ -253,7 +268,19 @@ export class Doodle {
       hipY = lerp(hipY, RIDE.hip, this.ride);
       lean += this.ride * 0.3;
     }
-    const leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
+    // (a fist fight) into the punch, the shoulders turning with it; back off the kick; the head
+    // snapped back by a blow
+    let twist = 0;
+    if (this.punch >= 0) {
+      const out = punchOut(this.punch);
+      lean += out * 0.14;
+      twist = out * this.punchSide * 0.1;
+    } else if (this.kick >= 0) lean -= kickUp(this.kick) * 0.22;
+    let leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
+    if (this.recoil > 0) {
+      lean -= this.recoil * this.recoil * 0.42;
+      leanSide += this.recoil * this.recoilSide * 0.12;
+    }
     this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
     const spine = 0.5;
     const nx = leanSide;
@@ -262,8 +289,8 @@ export class Doodle {
     this.toWorld(nx, ny, nz, j.neck);
     const hOff = 0.1 + 0.12 * this.headScale;
     this.toWorld(nx * 1.2, ny + hOff * Math.cos(lean), nz + hOff * Math.sin(lean), j.headC);
-    this.toWorld(nx + sw, ny - 0.07, nz, j.shoulderR);
-    this.toWorld(nx - sw, ny - 0.07, nz, j.shoulderL);
+    this.toWorld(nx + sw, ny - 0.07, nz + twist, j.shoulderR);
+    this.toWorld(nx - sw, ny - 0.07, nz - twist, j.shoulderL);
     j.shoulder.copy(j.shoulderR);
     this.toWorld(hw, hipY, 0, j.hipR);
     this.toWorld(-hw, hipY, 0, j.hipL);
@@ -311,6 +338,17 @@ export class Doodle {
         const up = Math.max(0, Math.sin(this.climbPh + off));
         th = lerp(th, 0.35 + up * 0.75, this.climb);
         kb = lerp(kb, 0.45 + up * 1.15, this.climb);
+      }
+      if (this.kick >= 0) {
+        // the kick: the right knee up, the foot snapped out and back; the left leg braced under
+        const up = kickUp(this.kick);
+        if (off === 0) {
+          th = lerp(th, 1.42, up);
+          kb = lerp(kb, lerp(1.85, 0.15, kickOut(this.kick)), up);
+        } else {
+          th = lerp(th, -0.12, up);
+          kb = lerp(kb, 0.28, up);
+        }
       }
       const sx = side * hw * (1 + sit * 0.4);
       const ky = hipY - Math.cos(th) * legL;
@@ -362,6 +400,17 @@ export class Doodle {
         const reach = side === 1 ? 0.55 : 0.42;
         tgt.copy(j.neck).addScaledVector(this.aimDir, reach * this.scale).addScaledVector(this.right, (side === 1 ? 0.08 : 0.03) * this.scale);
         tgt.y -= 0.12 * this.scale;
+        useIK = true;
+      } else if (this.punch >= 0 && side === this.punchSide) {
+        // the punch: straight out from the shoulder at the height of a face, and back to the guard
+        const out = punchOut(this.punch);
+        this.toWorld(nx + side * lerp(0.13, 0.04, out), ny + lerp(-0.03, 0.1, out), nz + lerp(0.25, 0.68, out), tgt);
+        useIK = true;
+      } else if (this.guard > 0.01 || this.punch >= 0 || this.kick >= 0) {
+        // the guard: both fists up by the chin (the other hand while one punches, both in a kick);
+        // a loose guard lower down
+        const g = this.punch >= 0 || this.kick >= 0 ? 1 : this.guard;
+        this.toWorld(nx + side * lerp(sw + 0.03, 0.13, g), lerp(ny - 0.62, ny - 0.03, g), lerp(nz + 0.08, nz + 0.25, g), tgt);
         useIK = true;
       } else if (this.melee >= 0 && side === 1) {
         const t = this.melee;

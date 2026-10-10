@@ -213,6 +213,10 @@ export class Game {
     this.climb = this.classic ? null : new Climb(this);
     // (in the bay and under it: ROADMAP 5.2)
     this.swim = this.classic ? null : new Swim(this);
+    // (the bare fists, second after the pencil: ROADMAP 5.4)
+    if (!this.classic) this.weapons.addFists();
+    // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
+    document.body.classList.toggle('nc', !this.classic);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -538,7 +542,7 @@ export class Game {
   respawnFromDeath() {
     $('death').classList.add('hidden');
     // drawn weapons are lost (you need to draw them again), the album stays
-    while (this.weapons.slots.length > 1) {
+    while (this.weapons.slots.length > this.weapons.keep) {
       const sl = this.weapons.slots.pop();
       this.weapons.removeModel(sl);
     }
@@ -1582,11 +1586,15 @@ export class Game {
     // (not with ?classic, on a phone: ▼ crouches on foot and dives in the water; ▲ comes up)
     if (this.touch && !this.classic) {
       const fl = p.inVehicle && p.inVehicle.flies;
-      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}`;
+      // (the fists' guard: on foot with the fists out, ROADMAP 5.4)
+      const fists = p.mode === 'foot' && !!this.weapons.current.def.bare;
+      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}`;
       if (key !== this.upDownKey) {
         this.upDownKey = key;
         $('btn-down').classList.toggle('hidden', !(p.mode === 'foot' || p.mode === 'swim' || fl));
         $('btn-up').classList.toggle('hidden', !(p.mode === 'swim' || fl));
+        $('btn-guard').classList.toggle('hidden', !fists);
+        if (!fists) this.input.aim = false;
       }
     }
     if (this.touch) {

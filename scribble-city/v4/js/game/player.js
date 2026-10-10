@@ -87,14 +87,15 @@ export class Player {
     return new THREE.Vector3(this.pos.x, this.pos.y + 1.6, this.pos.z);
   }
 
-  hurt(amount, fromX, fromZ, at = null) {
+  // kind: 'melee' for a blow (a fist, a club, a bite); src: who dealt it
+  hurt(amount, fromX, fromZ, at = null, kind = null, src = null) {
     if (this.mode === 'dead' || this.invuln > 0) return;
     if (this.inVehicle) {
       this.inVehicle.hurt(amount);
       return;
     }
     const full = amount;
-    if (this.game.weapons) amount = this.game.weapons.block(amount, fromX, fromZ);
+    if (this.game.weapons) amount = this.game.weapons.block(amount, fromX, fromZ, kind, src);
     if (amount < full * 0.5) at = null;
     this.hp -= amount;
     if (at) {
@@ -233,12 +234,22 @@ export class Player {
     const climb = this.game.climb;
     if (climb && !stoodUp && !drawing && !talking && !gliding && input.wasPressed('Space') && climb.tryMantle(wx, wz)) return;
     // a double espresso from the cafe: everything a bit faster for a while
-    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1);
+    // (the fists, ROADMAP 5.4: slow behind the guard, and half pace while a blow goes out)
+    const fists = weapons.fists;
+    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1);
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;
     this.vel.x = damp(this.vel.x, tx, accel / 4, dt);
     this.vel.z = damp(this.vel.z, tz, accel / 4, dt);
+    // (a step into a punch, this frame only: game/fists.js)
+    let lx = 0;
+    let lz = 0;
+    if (this.lunge) {
+      lx = this.lunge.x;
+      lz = this.lunge.z;
+      this.lunge = null;
+    }
     // (sliding in against the cover you went down beside)
     if (this.coverSlide) {
       const cs = this.coverSlide;
@@ -262,8 +273,8 @@ export class Player {
     const p = this.pos;
     // (a fall lands on whatever it comes down onto, however fast: ROADMAP 5.1, not with ?classic)
     const prevY = this.game.classic ? null : p.y;
-    p.x += this.vel.x * dt;
-    p.z += this.vel.z * dt;
+    p.x += (this.vel.x + lx) * dt;
+    p.z += (this.vel.z + lz) * dt;
     p.y += this.vel.y * dt;
     const col = this.game.world.collision.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25, prevY);
     let floor = col.floor;
@@ -309,13 +320,15 @@ export class Player {
       p.z = Math.min(p.z, 157);
     }
     // facing
-    if (aiming || weapons.swinging()) {
-      this.yaw = dampAngle(this.yaw, cy, 18, dt);
+    if (aiming || weapons.swinging() || weapons.guarding) {
+      // (a punch turns you to whoever it is for: game/fists.js)
+      const fy = weapons.faceYaw;
+      this.yaw = dampAngle(this.yaw, fy === null ? cy : fy, 18, dt);
     } else if (wl > 0.05) {
       this.yaw = dampAngle(this.yaw, Math.atan2(wx, wz), 10, dt);
     }
     fig.yaw = this.yaw;
-    fig.speed = Math.hypot(this.vel.x, this.vel.z);
+    fig.speed = Math.hypot(this.vel.x + lx, this.vel.z + lz);
     fig.air = !this.onGround;
     fig.sit = damp(fig.sit, 0, 8, dt);
     if (!this.game.classic) {

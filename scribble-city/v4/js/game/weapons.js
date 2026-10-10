@@ -3,6 +3,7 @@ import { buildPencilModel, PEN_BLUE } from './items.js';
 import { BLACK_INK, RED_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
 import { blendMatrix } from './materialize.js';
+import { Fists, FISTS } from './fists.js';
 
 // kind: melee (swung), gun (fires projectiles), throw (the thing itself flies), beam (a ray while
 // the trigger is held). The first ones are the original arsenal; the rest are drawn from the new
@@ -73,6 +74,25 @@ export class Weapons {
     this.aimPoint = new THREE.Vector3();
     this.aimHitEnemy = null;
     this.beam = null; // the highlighter's ray this frame: { a, b, hit }
+    // the slots that are always there (not with ?classic: the pencil and the bare fists)
+    this.keep = 1;
+    this.fists = null;
+  }
+
+  // (ROADMAP 5.4, not with ?classic) the bare fists: second in the list, always there
+  addFists() {
+    this.fists = new Fists(this.game);
+    this.slots.splice(1, 0, { def: FISTS, grade: 'good', ammo: Infinity, model: null });
+    this.keep = 2;
+  }
+
+  // (the fists: where the strike turns you, and the guard; game/fists.js)
+  get faceYaw() {
+    return this.fists ? this.fists.faceYaw : null;
+  }
+
+  get guarding() {
+    return this.fists !== null && this.fists.guarding;
   }
 
   get current() {
@@ -87,7 +107,7 @@ export class Weapons {
   }
 
   swinging() {
-    return this.swingT >= 0;
+    return this.swingT >= 0 || (this.fists !== null && this.fists.busy);
   }
 
   add(def, grade, model, drawingScore) {
@@ -126,6 +146,12 @@ export class Weapons {
     this.jam = 0;
     this.game.hud.updateWeapon();
     this.game.audio.play('switch');
+    // (the first time the fists come out: how a fight goes, ROADMAP 5.4)
+    if (this.slots[i].def.bare && !this.fistsTold) {
+      this.fistsTold = true;
+      const touch = this.game.touch;
+      this.game.hud.toast(touch ? 'אגרופים! לחיצה — מכה, שלוש ברצף — בעיטה · כפתור המגן — הגנה' : 'אגרופים! קליק — מכה, שלוש ברצף — בעיטה · קליק ימני — הגנה', 'info', 3.4);
+    }
   }
 
   cycle(d = 1) {
@@ -229,6 +255,10 @@ export class Weapons {
       }
     } else if (canAct && def.kind === 'beam') {
       if (input.fire && slot.ammo > 0) this.fireBeam(slot, dt);
+    }
+    if (this.fists) {
+      if (onFoot && def.bare) this.fists.update(dt, input);
+      else this.fists.idle(player.fig, dt);
     }
     if (this.swingT >= 0) {
       this.swingT += dt / (def.slash ? 0.3 : 0.36);
@@ -494,9 +524,11 @@ export class Weapons {
     }
   }
 
-  // the cardboard shield: a hit from the front is mostly stopped by it (returns what gets through)
-  block(amount, fromX, fromZ) {
+  // the cardboard shield: a hit from the front is mostly stopped by it (returns what gets through);
+  // kind: 'melee' for a blow (the fists' guard takes only those), src: who swung it
+  block(amount, fromX, fromZ, kind = null, src = null) {
     const slot = this.current;
+    if (slot.def.bare && this.fists) return this.fists.block(amount, fromX, fromZ, kind, src);
     const p = this.game.player;
     if (!slot.def.block || p.mode !== 'foot' || this.swingT >= 0) return amount;
     const dx = fromX - p.pos.x;

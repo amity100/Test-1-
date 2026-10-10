@@ -149,7 +149,7 @@ export class HUD {
     this.vignette.classList.toggle('on', p.hidden);
     const dmgA = Math.max(0, 1 - (game.time - p.lastHurt) / 0.6);
     this.damageEl.style.opacity = `${Math.max(dmgA * 0.9, p.hp < 30 ? 0.35 + Math.sin(game.time * 6) * 0.15 : 0)}`;
-    this.crosshair.classList.toggle('melee', game.weapons.current.def.kind === 'melee');
+    this.crosshair.classList.toggle('melee', game.weapons.current.def.kind === 'melee' || game.weapons.current.def.kind === 'fists');
     // (in a car: while a gun is out of the window, ROADMAP 4.7)
     // (on a boat, in the plane: nothing to aim, ROADMAP 4.8)
     this.crosshair.style.display = (p.mode === 'foot' && !game.inBar) || (v && v.kind !== 'car' && v.kind !== 'boat' && v.kind !== 'plane') || game.weapons.shootOut ? '' : 'none';
@@ -259,14 +259,16 @@ export class HUD {
     const s = this.game.weapons.current;
     this.weaponName.textContent = s.def.name;
     const d = s.def;
-    this.weaponAmmo.textContent = d.block ? `המגן יחזיק עוד ${s.uses} מכות`
+    // (the bare fists, ROADMAP 5.4: how the combo goes)
+    this.weaponAmmo.textContent = d.bare ? (this.game.touch ? 'שלוש מכות ברצף — בעיטה' : 'שלוש ברצף — בעיטה · קליק ימני — הגנה')
+      : d.block ? `המגן יחזיק עוד ${s.uses} מכות`
       : s.uses !== undefined ? `נשארו ${s.uses} מחיקות`
       : d.kind === 'beam' ? `${Math.ceil(s.ammo)} שניות של אור`
       : d.projectile === 'scissors' ? (s.out ? 'באוויר… חוזרים אליך' : 'זורקים — וחוזרים')
       : d.projectile === 'inkbomb' ? `${s.ammo} בקבוקי דיו`
       : s.ammo === Infinity ? 'תמיד איתך' : `${s.ammo} יריות`;
-    this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear ? '' : s.grade;
-    this.weaponGrade.textContent = s.def.id === 'pencil' ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
+    this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear || d.bare ? '' : s.grade;
+    this.weaponGrade.textContent = s.def.id === 'pencil' || d.bare ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
     const c = this.weaponIcon;
     const g = c.getContext('2d');
     g.clearRect(0, 0, c.width, c.height);
@@ -293,6 +295,8 @@ export class HUD {
       g.lineTo(-44, 7);
       g.stroke();
       g.restore();
+    } else if (d.bare) {
+      drawFist(g, c.width, c.height);
     } else if (s.def.gear) {
       drawGearIcon(g, s.def.id, c.width, c.height, s.uses !== undefined ? s.uses / s.def.uses : 1);
     } else if (s.strokes) {
@@ -499,6 +503,55 @@ export class HUD {
 }
 
 // little drawings of police gear for the weapon card
+// the bare fists (ROADMAP 5.4): a fist seen from the front, knuckles up, the thumb across
+function drawFist(g, w, h) {
+  g.save();
+  g.translate(w / 2, h / 2 + 2);
+  g.rotate(-0.1);
+  g.lineWidth = 2.2;
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  g.strokeStyle = '#141418';
+  g.fillStyle = '#efc9a4';
+  // the back of the hand and the wrist
+  g.beginPath();
+  g.moveTo(-20, -14);
+  g.quadraticCurveTo(-24, 10, -14, 22);
+  g.lineTo(10, 24);
+  g.quadraticCurveTo(22, 14, 22, -6);
+  g.lineTo(18, -16);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  // four curled fingers across the top
+  for (let i = 0; i < 4; i++) {
+    const x = -20 + i * 10;
+    g.beginPath();
+    g.ellipse(x + 5, -16, 6, 7.5, 0, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+  }
+  // the thumb folded over them
+  g.beginPath();
+  g.moveTo(-22, -2);
+  g.quadraticCurveTo(-4, 6, 12, -4);
+  g.quadraticCurveTo(16, -9, 8, -10);
+  g.quadraticCurveTo(-6, -4, -21, -9);
+  g.fill();
+  g.stroke();
+  // the cuff
+  g.fillStyle = '#3a5cc6';
+  g.beginPath();
+  g.moveTo(-14, 22);
+  g.lineTo(-13, 32);
+  g.lineTo(11, 33);
+  g.lineTo(10, 24);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  g.restore();
+}
+
 function drawGearIcon(g, id, w, h, wear = 1) {
   g.save();
   g.translate(w / 2, h / 2);

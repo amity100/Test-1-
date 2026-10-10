@@ -17,6 +17,9 @@ const CRIMES = {
   killCiv: { heat: 1.2, civ: true },
   hurtCop: { heat: 0.8, always: true },
   killCop: { heat: 1.8, always: true },
+  // (knocked out cold in a fist fight: ROADMAP 5.4)
+  koCop: { heat: 1.2, always: true },
+  koCiv: { heat: 0.8, civ: true },
   shoot: { heat: 0.2 },
   killGang: { heat: 0.4 },
   copcar: { heat: 1.8, always: true },

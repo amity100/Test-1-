@@ -6,6 +6,7 @@ import { BLACK_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle, angleDiff, RNG } from '../core/util.js';
 import { CoverMap, PathFinder, PERSONAS, LINES, pick, pickPersona } from './tactics.js';
+import { downStep, drawStars, KO_T } from './fists.js';
 
 // armor: how much of an eraser hit actually rubs out (bigger guys take more rubbing)
 // mag / reload: shots before they have to duck and reload
@@ -251,6 +252,14 @@ class Enemy {
     this.searchPt = null;
     this.lookT = 0;
     this.hurtT = -10;
+    // a fist fight (ROADMAP 5.4, game/fists.js): how dazed (out cold at this.grit), on the ground,
+    // getting back up, reeling from a blow, the guard up
+    this.daze = 0;
+    this.dazeT = -10;
+    this.downT = 0;
+    this.upT = 0;
+    this.reelT = 0;
+    this.guardT = 0;
     this.squad = mgr.squadFor(territory, x, z, this.faction);
     this.squad.members.push(this);
   }
@@ -288,6 +297,11 @@ class Enemy {
 
   get doneDying() {
     return this.isMonster ? this.dying >= 1.2 : this.fig.dissolve >= 1;
+  }
+
+  // how much a fist fight takes before they are out cold (the bigger ones take more)
+  get grit() {
+    return 80 * (this.cfg.armor || 1);
   }
 
   knock(x, z) {
@@ -377,12 +391,18 @@ class Enemy {
       this.updateDying(dt);
       return;
     }
+    // (knocked off their feet in a fist fight: down a moment, then back up; ROADMAP 5.4)
+    if ((this.downT > 0 || this.upT > 0) && this.updateDown(dt)) return;
     this.stateT += dt;
     this.thinkT -= dt;
     this.decideT -= dt;
     if (this.paintT > 0) this.paintT -= dt;
     if (this.onEdge > 0) this.onEdge = Math.max(0, this.onEdge - dt / 40);
     if (this.morale < this.maxMorale && game.time - this.hurtT > 5) this.morale = Math.min(this.maxMorale, this.morale + dt * 0.03);
+    // (a fist fight) the head clears; reeling from a blow; the guard up
+    if (this.daze > 0 && game.time - this.dazeT > 3) this.daze = Math.max(0, this.daze - dt * 8);
+    if (this.reelT > 0) this.reelT -= dt;
+    if (this.guardT > 0) this.guardT -= dt;
     if (this.headless) {
       this.blindT = (this.blindT || 0) + dt;
       // a headless body keeps going for a while and then folds
@@ -434,6 +454,7 @@ class Enemy {
       this.flinch -= dt;
       speed *= 0.3;
     }
+    if (this.reelT > 0) speed *= 0.25;
     // stapled for a moment, or glued to the pavement
     if (this.pinT > 0) {
       this.pinT -= dt;
@@ -488,8 +509,10 @@ class Enemy {
         const ady = aimY - (this.pos.y + (fig.crouch > 0.5 ? 1.0 : 1.4));
         fig.aimPitch = Math.atan2(ady, Math.max(1, Math.hypot(ax - this.pos.x, az - this.pos.z)));
         fig.armsUp = 0;
-        fig.stagger = this.limping ? 0.6 : 0;
+        fig.stagger = this.reelT > 0 ? 0.8 : this.limping ? 0.6 : 0;
         if (!this.armless) fig.flail = 0;
+        if (this.guardT > 0) fig.guard = 1;
+        else if (fig.guard > 0) fig.guard = Math.max(0, fig.guard - dt * 5);
       }
     }
     this.updateMelee(dt);
@@ -515,12 +538,42 @@ class Enemy {
         }
         fig.dissolve = clamp((this.dying - 1.8) / 0.9, 0, 1);
       } else {
-        fig.dead = Math.min(1, this.dying * 2.2);
+        fig.dead = Math.min(1, this.ko ? Math.max(fig.dead, this.dying * 2.2) : this.dying * 2.2);
         fig.speed = 0;
-        fig.dissolve = clamp((this.dying - 0.9) / 0.9, 0, 1);
+        // (out cold from a fist fight: a while seeing stars before the drawing fades; the blow
+        // slides the body back along the ground)
+        fig.dissolve = this.ko ? clamp((this.dying - KO_T) / 1.4, 0, 1) : clamp((this.dying - 0.9) / 0.9, 0, 1);
+        if (this.ko) this.slide(dt);
       }
     }
     fig.update(dt);
+  }
+
+  // on the ground after a kick (game/fists.js), and back up
+  updateDown(dt) {
+    if (!downStep(this, dt)) return false;
+    this.slide(dt);
+    this.vel.set(0, 0, 0);
+    this.attackT = -1;
+    this.pendingHit = null;
+    const fig = this.fig;
+    fig.yaw = this.yaw;
+    fig.stagger = 0;
+    fig.guard = 0;
+    fig.update(dt);
+    return true;
+  }
+
+  // knocked down or out: the blow slides the body along the ground
+  slide(dt) {
+    const k = this.knockV;
+    if (k.x === 0 && k.z === 0) return;
+    this.pos.x += k.x * dt;
+    this.pos.z += k.z * dt;
+    k.multiplyScalar(Math.exp(-5 * dt));
+    if (k.lengthSq() < 0.01) k.set(0, 0, 0);
+    this.game.world.collision.resolveCylinder(this.pos, this.radius, this.height, 0.5);
+    this.pos.y = damp(this.pos.y, groundHeight(this.pos.x, this.pos.z), 20, dt);
   }
 
   updateMelee(dt) {
@@ -534,18 +587,22 @@ class Enemy {
         const pl = game.player;
         const pp = pl.inVehicle ? pl.inVehicle.pos : pl.pos;
         if (Math.hypot(pp.x - this.pos.x, pp.z - this.pos.z) < ph.range + 0.8 + (pl.inVehicle ? 1.6 : 0)) {
-          pl.hurt(ph.dmg, this.pos.x, this.pos.z, this.fig.j ? this.fig.j.handR : null);
+          pl.hurt(ph.dmg, this.pos.x, this.pos.z, this.fig.j ? this.fig.j.handR : null, 'melee', this);
           game.audio.play(this.isMonster ? 'bite' : 'punch');
         }
       }
     }
     if (this.attackT >= 0) {
       this.attackT += dt * 2.2;
+      // (bare fists throw a real punch: ROADMAP 5.4, not with ?classic)
+      const fist = this.cfg.unarmed && !game.classic;
       if (this.isMonster) fig.attack = this.attackT;
+      else if (fist) fig.punch = Math.min(1, this.attackT);
       else fig.melee = this.attackT;
       if (this.attackT >= 1) {
         this.attackT = -1;
         if (this.isMonster) fig.attack = -1;
+        else if (fist) fig.punch = -1;
         else fig.melee = -1;
       }
     }
@@ -1391,7 +1448,7 @@ class Enemy {
   attack(dt, dist, tp) {
     const cfg = this.cfg;
     const game = this.game;
-    if (!this.sees || this.headless) return;
+    if (!this.sees || this.headless || this.reelT > 0) return;
     this.fireT -= dt;
     const range = this.armless ? 1.8 : cfg.range;
     if (dist < range + (game.player.inVehicle ? 1.6 : 0) && this.fireT <= 0) {
@@ -1405,7 +1462,7 @@ class Enemy {
   shoot(dt, T, dist, mode, force = false) {
     const cfg = this.cfg;
     const game = this.game;
-    if (!this.gunman || this.reloadT > 0) return;
+    if (!this.gunman || this.reloadT > 0 || this.reelT > 0) return;
     this.fireT -= dt;
     if (this.fireT > 0 && !force) return;
     if (this.mag <= 0) return;
@@ -1516,6 +1573,9 @@ class Enemy {
       const j = this.fig.j;
       for (const k of [j.kneeL, j.kneeR]) fr.lineXYZ(k.x, k.y, k.z, k.x + 0.05, p.y + 0.05, k.z, [0.96, 0.96, 0.93], 4, this.id + 7, 0.7 * a, 0.03, 0);
     }
+    // (out cold, or nearly: stars round the head; ROADMAP 5.4)
+    if (this.ko && this.dying < KO_T) drawStars(this.game, this.fig.j.headC, this.game.time, Math.min(1, this.dying * 2, (KO_T - this.dying) * 2), this.id);
+    else if (this.daze > this.grit * 0.6 && this.dying < 0) drawStars(this.game, this.fig.j.headC, this.game.time, 0.6, this.id);
     if (this.isMonster || this.dying >= 0) return;
     // held weapon
     const fr = this.game.figures;
@@ -2035,6 +2095,76 @@ export class Enemies {
     if (e.alive) e.onHurt(lost);
   }
 
+  // (ROADMAP 5.4, not with ?classic: game/fists.js) a fist or a foot: no ink rubbed out - they
+  // reel back, a kick puts them down, and enough of it leaves them out cold. A fighter squared up
+  // to you takes a punch on the arms now and then. Returns 'hit', 'blocked', 'down' or 'ko'
+  strike(e, s, dir, power = 1) {
+    if (!e.alive) return null;
+    const game = this.game;
+    if (e.isMonster) {
+      // (a scribble monster takes it as a hit like any other)
+      this.damage(e, 'body', s.dmg * 0.8 * power, e.fig.center.clone(), dir, 'punch');
+      return 'hit';
+    }
+    game.hud.hitMarker();
+    if (e.faction === 'police') game.onCrime('hurtCop', e.pos.x, e.pos.z);
+    else if (e.faction === 'civ') game.onCrime('hurtCiv', e.pos.x, e.pos.z);
+    if (e.state !== 'combat' && e.state !== 'flee') {
+      e.lastSeen.copy(game.player.pos);
+      e.seeT = game.time;
+      e.awareness = 1;
+      e.squad.lastKnown.copy(game.player.pos);
+      e.squad.knowT = game.time;
+      e.enterCombat(false);
+    }
+    const fig = e.fig;
+    const facing = -(Math.sin(e.yaw) * dir.x + Math.cos(e.yaw) * dir.z);
+    if (e.cfg.melee && !e.armless && !e.headless && e.reelT <= 0 && !s.down && facing > 0.5 && Math.random() < (e.persona.courage > 0.6 ? 0.45 : 0.3)) {
+      e.guardT = 0.5;
+      e.daze += s.dmg * 0.15 * power;
+      e.dazeT = game.time;
+      e.vel.x += dir.x * 1.2;
+      e.vel.z += dir.z * 1.2;
+      return 'blocked';
+    }
+    e.daze += s.dmg * power;
+    e.dazeT = game.time;
+    e.guardT = 0;
+    e.reelT = s.down ? 0.9 : 0.6;
+    e.flinch = 0.35;
+    // (the blow cuts their own swing short)
+    e.attackT = -1;
+    e.pendingHit = null;
+    fig.melee = -1;
+    fig.punch = -1;
+    fig.recoil = 1;
+    fig.recoilSide = s.limb === 'L' ? 1 : s.limb === 'R' ? -1 : 0;
+    // shoved back a step (knocked down or out: slid along the ground, Enemy.slide)
+    e.vel.x += dir.x * s.push;
+    e.vel.z += dir.z * s.push;
+    e.knockV.set(0, 0, 0);
+    const slide = () => e.knockV.set(dir.x * s.push * 0.7, 0, dir.z * s.push * 0.7);
+    if (e.daze >= e.grit) {
+      // out cold: they fall away from the blow
+      e.yaw = Math.atan2(-dir.x, -dir.z);
+      fig.yaw = e.yaw;
+      slide();
+      this.kill(e, 'ko');
+      return 'ko';
+    }
+    e.onHurt(null);
+    // the kick puts them down (a big one only reels, unless it is nearly out)
+    if (s.down && ((e.cfg.armor || 1) < 1.5 || e.daze > e.grit * 0.55)) {
+      e.downT = 1.3 + Math.random() * 0.5;
+      e.yaw = Math.atan2(-dir.x, -dir.z);
+      slide();
+      e.leaveCover();
+      e.say('hit', 'alarm');
+      return 'down';
+    }
+    return 'hit';
+  }
+
   // parts that lost enough ink disappear; the body reacts to what is missing
   checkParts(e, part, at) {
     const game = this.game;
@@ -2073,6 +2203,18 @@ export class Enemies {
   kill(e, how) {
     if (!e.alive) return;
     e.dying = 0;
+    // (out cold from a fist fight, ROADMAP 5.4: seeing stars a while before the drawing fades; the
+    // arms let go)
+    if (how === 'ko') {
+      e.ko = true;
+      const f = e.fig;
+      f.aim = 0;
+      f.guard = 0;
+      f.punch = -1;
+      f.melee = -1;
+      f.armsUp = 0;
+      f.flail = 0;
+    }
     e.leaveCover();
     if (e.squad.flanker === e) e.squad.flanker = null;
     if (!e.isMonster && how === 'split') {
@@ -2087,7 +2229,8 @@ export class Enemies {
     fx.smoke(e.pos.x, e.pos.y + 1.0, e.pos.z, 1.6);
     this.game.audio.play('erase', 1);
     if (!e.isMonster) this.allyDown(e);
-    const crime = e.faction === 'police' ? 'killCop' : e.faction === 'civ' ? 'killCiv' : e.faction === 'gang' ? 'killGang' : null;
+    const ko = how === 'ko';
+    const crime = e.faction === 'police' ? (ko ? 'koCop' : 'killCop') : e.faction === 'civ' ? (ko ? 'koCiv' : 'killCiv') : e.faction === 'gang' ? 'killGang' : null;
     if (crime) this.game.onCrime(crime, e.pos.x, e.pos.z);
     this.game.onEnemyKilled(e);
   }

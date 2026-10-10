@@ -116,6 +116,7 @@ export class Reactions {
     f.sit = 0;
     f.dead = 0;
     f.melee = -1;
+    f.punch = -1;
     c.baseY = 0;
     c.goal = null;
     if (c.filming === 'took') f.carry = null;
@@ -346,10 +347,22 @@ export class Reactions {
       f.swingT -= dt;
       const who = f.turn % 2 ? b : a;
       const other = f.turn % 2 ? a : b;
-      // the swing: the arm round, the other one rocked back a step
-      if (f.swingT < 0.6 && f.swingT > 0) who.fig.melee = (0.6 - f.swingT) * 1.5;
+      // the swing: the arm round, the other one rocked back a step (not with ?classic: a real punch,
+      // one hand then the other, and the head snaps back: ROADMAP 5.4)
+      const fists = !game.classic;
+      if (f.swingT < 0.6 && f.swingT > 0) {
+        if (fists) {
+          who.fig.punch = Math.min(1, (0.6 - f.swingT) * 1.7);
+          who.fig.punchSide = f.turn % 4 < 2 ? 1 : -1;
+        } else who.fig.melee = (0.6 - f.swingT) * 1.5;
+      }
       if (f.swingT <= 0) {
         who.fig.melee = -1;
+        if (fists) {
+          who.fig.punch = -1;
+          other.fig.recoil = 1;
+          other.fig.recoilSide = f.turn % 4 < 2 ? -1 : 1;
+        }
         const ux = other.pos.x - who.pos.x;
         const uz = other.pos.z - who.pos.z;
         const ul = Math.hypot(ux, uz) || 1;

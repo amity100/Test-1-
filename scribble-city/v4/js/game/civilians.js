@@ -7,8 +7,11 @@ import { NODES, CYCLE } from '../world/roads.js';
 import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
 import { WORK_CLOTHES, NIGHT_CLOTHES } from './rhythm.js';
+import { downStep, drawStars, CIV_KO } from './fists.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
+// what somebody punched in the street says (ROADMAP 5.4)
+const STRUCK_LINES = ['Ow!', 'Hey!!', 'What was that for?!', 'Help!', 'Are you crazy?!', 'Ouch!'];
 // the umbrellas of the city (sRGB): red, navy, yellow, black, green, plum, pink
 const UMBRELLAS = [[0.82, 0.22, 0.24], [0.2, 0.3, 0.6], [0.95, 0.75, 0.2], [0.15, 0.15, 0.18], [0.3, 0.6, 0.45], [0.55, 0.3, 0.6], [0.92, 0.45, 0.6]];
 const _ro = new THREE.Vector3();
@@ -65,6 +68,13 @@ class Civilian {
     this.dodgeV = new THREE.Vector3();
     // time not yet walked (far away they step every other frame)
     this.owed = 0;
+    // a fist fight (ROADMAP 5.4, game/fists.js): how dazed, reeling from a blow, on the ground (out
+    // cold: ko), getting up
+    this.daze = 0;
+    this.reelT = 0;
+    this.downT = 0;
+    this.upT = 0;
+    this.ko = false;
   }
 
   // walk round block (col, row); fresh: start somewhere along it
@@ -179,6 +189,8 @@ class Civilian {
       fig.update(dt);
       return;
     }
+    // (knocked down in a fist fight - or out cold, seeing stars - then up and away: ROADMAP 5.4)
+    if ((this.downT > 0 || this.upT > 0) && this.updateDown(dt)) return;
     let tx;
     let tz;
     let speed = this.speed * this.rush;
@@ -264,8 +276,13 @@ class Civilian {
     }
     if (legless) speed = Math.min(speed, 0.8);
     else if (limping) speed = Math.min(speed * 0.45, 1.8);
+    // (rocked by a punch: a stagger before the run, ROADMAP 5.4)
+    if (this.reelT > 0) {
+      this.reelT -= dt;
+      speed *= 0.2;
+    }
     fig.crawl = damp(fig.crawl, legless ? 1 : 0, 6, dt);
-    if (!this.headless) fig.stagger = limping ? 0.6 : 0;
+    if (!this.headless) fig.stagger = this.reelT > 0 ? 0.8 : limping ? 0.6 : 0;
     const dx = tx - this.pos.x;
     const dz = tz - this.pos.z;
     const l = Math.hypot(dx, dz) || 1;
@@ -289,6 +306,34 @@ class Civilian {
     fig.yaw = this.yaw;
     fig.speed = sp;
     fig.update(dt);
+  }
+
+  // on the ground after a punch or a kick (game/fists.js), and back up; then off, away from you
+  updateDown(dt) {
+    const fig = this.fig;
+    if (!downStep(this, dt)) {
+      this.ko = false;
+      this.daze = 0;
+      const p = this.game.player.pos;
+      this.panicT = this.brave ? 0 : 8;
+      this.fearX = p.x;
+      this.fearZ = p.z;
+      return false;
+    }
+    // the blow slides the body along the ground
+    const v = this.dodgeV;
+    this.pos.x += v.x * dt;
+    this.pos.z += v.z * dt;
+    v.multiplyScalar(Math.exp(-5 * dt));
+    this.game.world.collision.resolveCylinder(this.pos, 0.33, 1.7, 0.5);
+    this.pos.y = damp(this.pos.y, groundHeight(this.pos.x, this.pos.z), 20, dt);
+    this.vel.set(0, 0, 0);
+    fig.yaw = this.yaw;
+    fig.armsUp = 0;
+    fig.flail = 0;
+    fig.stagger = 0;
+    fig.update(dt);
+    return true;
   }
 
   // may they step off the curb towards (tx, tz)? Across an avenue when its cars wait at the red
@@ -711,6 +756,49 @@ export class Civilians {
     if (lost >= 1.4 || (c.headless && fig.erased.torso > 0.25)) this.kill(c);
   }
 
+  // (ROADMAP 5.4, not with ?classic: game/fists.js) a punch or a kick: no ink rubbed out - they
+  // reel back, a kick (or enough of it) puts them down, more leaves them out cold a while; up
+  // again, they run. Somebody busy (at work, at a table) only reels. Returns 'hit', 'down' or 'ko'
+  struck(c, s, dir, power = 1) {
+    if (!c.alive) return null;
+    const game = this.game;
+    const fig = c.fig;
+    game.hud.hitMarker();
+    fig.recoil = 1;
+    fig.recoilSide = s.limb === 'L' ? 1 : s.limb === 'R' ? -1 : 0;
+    c.daze += s.dmg * power;
+    c.reelT = 0.7;
+    this.panic(c.pos, 30);
+    c.panicT = c.brave ? 0 : 8;
+    c.fearX = game.player.pos.x;
+    c.fearZ = game.player.pos.z;
+    if (game.onCivilianHurt) game.onCivilianHurt(c);
+    if (Math.random() < 0.45 && game.bubbles) game.bubbles.say(c, STRUCK_LINES[Math.floor(Math.random() * STRUCK_LINES.length)], 'alarm');
+    const free = !c.scripted && !c.ctrl && !c.riding && !c.noCollide && fig.sit < 0.3;
+    // shoved back a step (knocked down or out: slid along the ground, Civilian.updateDown)
+    const k = s.push * (free ? 1 : 0.4);
+    c.vel.x += dir.x * k;
+    c.vel.z += dir.z * k;
+    if (!free) return 'hit';
+    if (c.downT <= 0 && c.upT <= 0) c.yaw = Math.atan2(-dir.x, -dir.z);
+    const slide = () => c.dodgeV.set(dir.x * s.push * 0.7, 0, dir.z * s.push * 0.7);
+    if (c.daze >= 60 && !c.ko) {
+      c.ko = true;
+      c.downT = CIV_KO;
+      c.upT = 0;
+      slide();
+      if (!c.criminal) game.onCrime('koCiv', c.pos.x, c.pos.z);
+      return 'ko';
+    }
+    if (s.down || c.daze >= 40) {
+      c.downT = Math.max(c.downT, 1.6 + Math.random() * 0.6);
+      c.upT = 0;
+      slide();
+      return 'down';
+    }
+    return 'hit';
+  }
+
   explosion(x, y, z, radius) {
     const at = new THREE.Vector3();
     for (const c of this.list) {
@@ -798,6 +886,8 @@ export class Civilians {
       if (!seen) continue;
       c.fig.draw(camPos);
       if (c.dog && d < 90) drawDog(bodies, c.dog);
+      // (out cold: ROADMAP 5.4)
+      if (c.ko && c.downT > 0) drawStars(this.game, c.fig.j.headC, this.game.time, Math.min(1, c.downT * 2, (CIV_KO - c.downT) * 2), i);
     }
   }
 

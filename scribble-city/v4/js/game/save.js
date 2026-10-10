@@ -95,8 +95,9 @@ export class SaveGame {
       playTime: Math.round(this.playTime),
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade } : null },
       hero: { hair: L.hair.style !== 'none' ? { style: L.hair.style, color: L.hair.color } : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: p.fig.bulk, maxHp: p.maxHp },
-      weapons: g.weapons.slots.slice(1).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score })),
+      weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score })),
       weapon: g.weapons.index,
+      weaponId: g.weapons.current.def.id,
       vehicles: g.vehicles.list.filter((o) => !o.dead).map((o) => ({
         kind: o.model || o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
         x: o.pos.x, y: o.pos.y, z: o.pos.z, yaw: o.yaw, hp: o.hp, alt: o.alt || 0, mine: o === v,
@@ -212,7 +213,7 @@ export class SaveGame {
     g.camRig.yaw = P.yaw;
     // what you held
     const W = g.weapons;
-    while (W.slots.length > 1) W.removeModel(W.slots.pop());
+    while (W.slots.length > W.keep) W.removeModel(W.slots.pop());
     for (const it of s.weapons || []) {
       const def = WEAPON_DEFS[it.id];
       if (!def) continue;
@@ -222,7 +223,9 @@ export class SaveGame {
       slot.ammo = it.ammo < 0 ? Infinity : it.ammo;
       if (it.uses !== null && it.uses !== undefined) slot.uses = it.uses;
     }
-    W.select(Math.min(s.weapon || 0, W.slots.length - 1));
+    // (by what it was: not with ?classic the fists come second, ROADMAP 5.4)
+    const wi = s.weaponId ? W.slots.findIndex((sl) => sl.def.id === s.weaponId) : -1;
+    W.select(wi >= 0 ? wi : Math.min((s.weapon || 0) + (s.weapon > 0 ? W.keep - 1 : 0), W.slots.length - 1));
     // the vehicles where they were left (and the one you sat in)
     const V = g.vehicles;
     for (const o of V.list) o.dispose();
