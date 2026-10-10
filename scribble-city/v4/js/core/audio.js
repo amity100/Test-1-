@@ -255,7 +255,7 @@ export class Audio {
     o.stop(t + dur + 0.05);
   }
 
-  hiss(dur, vol, freq, q = 1, type = 'bandpass', at = 0, f1 = null) {
+  hiss(dur, vol, freq, q = 1, type = 'bandpass', at = 0, f1 = null, off = null) {
     const c = this.ctx;
     const t = c.currentTime + at;
     const s = c.createBufferSource();
@@ -268,7 +268,8 @@ export class Audio {
     const g = c.createGain();
     this.env(g, t, 0.004, vol, dur);
     s.connect(f).connect(g).connect(this.fx);
-    s.start(t, Math.random() * 0.5);
+    // (where in the noise it starts: any, unless asked; the pigeons' wings draw no dice)
+    s.start(t, off === null ? Math.random() * 0.5 : off);
     s.stop(t + dur + 0.05);
   }
 
@@ -407,6 +408,42 @@ export class Audio {
       case 'sweep':
         // a broom's swish on the pavement
         this.hiss(0.32, 0.05 * v, 2400, 0.7, 'bandpass', 0, 1200);
+        break;
+      case 'meow': {
+        // a cat: "mi-aow", up and down, through a mouth opening and closing
+        const c = this.ctx;
+        const t = c.currentTime;
+        const o = c.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(560, t);
+        o.frequency.linearRampToValueAtTime(820, t + 0.16);
+        o.frequency.linearRampToValueAtTime(700, t + 0.34);
+        o.frequency.linearRampToValueAtTime(460, t + 0.55);
+        const f = c.createBiquadFilter();
+        f.type = 'bandpass';
+        f.Q.value = 3;
+        f.frequency.setValueAtTime(900, t);
+        f.frequency.linearRampToValueAtTime(1700, t + 0.2);
+        f.frequency.linearRampToValueAtTime(800, t + 0.55);
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.1 * v), t + 0.06);
+        g.gain.setValueAtTime(Math.max(0.0002, 0.1 * v), t + 0.38);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+        o.connect(f).connect(g).connect(this.fx);
+        o.start(t);
+        o.stop(t + 0.65);
+        break;
+      }
+      case 'chirp':
+        // a little bird: three quick high notes
+        this.tone('sine', 3600, 5200, 0.05, 0.05 * v);
+        this.tone('sine', 4200, 5600, 0.04, 0.04 * v, 0.08);
+        this.tone('sine', 3900, 3000, 0.06, 0.035 * v, 0.15);
+        break;
+      case 'flap':
+        // wings: a quick run of soft whumps
+        for (let i = 0; i < 7; i++) this.hiss(0.05, 0.1 * v * (1 - i / 9), 900, 0.7, 'bandpass', i * 0.065, null, i * 0.05);
         break;
       case 'bark':
         this.tone('sawtooth', 520, 260, 0.09, 0.14 * v);

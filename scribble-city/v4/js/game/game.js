@@ -53,6 +53,7 @@ import { Crowds } from './crowds.js';
 import { Events } from './events.js';
 import { Reactions } from './reactions.js';
 import { FarCrowd } from './farcrowd.js';
+import { Animals } from './animals.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -174,6 +175,8 @@ export class Game {
     this.reactions = new Reactions(this);
     // the crowd further down the street, drawn cheaply (game/farcrowd.js)
     this.farCrowd = new FarCrowd(this);
+    // cats in the alleys, little birds on the park's lawns (game/animals.js)
+    this.animals = new Animals(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -696,6 +699,7 @@ export class Game {
       this.police.update(dt);
       this.events.update(dt);
       this.reactions.update(dt);
+      this.animals.update(dt);
       this.pickups.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -766,6 +770,7 @@ export class Game {
       this.cars.end();
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
+      this.animals.draw(fr);
       this.chute.draw(fr);
       this.pickups.draw(fr);
       this.weather.draw(fr);

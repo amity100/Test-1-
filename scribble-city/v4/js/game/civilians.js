@@ -742,6 +742,8 @@ export class Civilians {
   }
 
   panic(pos, radius) {
+    // (the cats and the birds round there are off too)
+    if (!this.game.classic && this.game.animals) this.game.animals.scare(pos, radius);
     for (const c of this.list) {
       if (c.inside) continue;
       // (the friend you drew stays by your side)
