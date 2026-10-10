@@ -73,6 +73,7 @@ import { Gangs } from './gangs.js';
 import { Arsenal } from './arsenal.js';
 import { Wheel } from '../ui/wheel.js';
 import { Money, fmt } from './money.js';
+import { Ink } from './ink.js';
 import { Properties } from './properties.js';
 import { Knock } from './knock.js';
 import { Fire } from './fire.js';
@@ -248,6 +249,8 @@ export class Game {
     this.wheel = this.classic ? null : new Wheel(this);
     // (the wallet and the bank, the prices, what comes in and what goes out: ROADMAP 8.1)
     this.money = this.classic ? null : new Money(this);
+    // (what the drawings are drawn with, and better tools to draw them: ROADMAP 9.4)
+    this.ink = this.classic ? null : new Ink(this);
     // (the club, the motel, the arcade and the café that can be yours: ROADMAP 8.2)
     this.props = this.classic ? null : new Properties(this);
     // (bins, benches, newspaper boxes, mailboxes, crates and the roadblocks' cones fly when a car
@@ -645,6 +648,8 @@ export class Game {
     if (e && e.faction === 'police') this.dropWeapon(e);
     // (a gang member's cash, on the ground: ROADMAP 8.1)
     if (this.money) this.money.fromEnemy(e);
+    // (an Eraser leaves some ink behind: ROADMAP 9.4)
+    if (this.ink) this.ink.fromEnemy(e);
     if (e && e.faction !== 'gang' && e.faction !== 'monster') return;
     this.goalFlags.kills++;
     this.updateGoals();
@@ -847,6 +852,7 @@ export class Game {
       if (this.knock) this.knock.update(dt);
       if (this.fire) this.fire.update(dt);
       if (this.money) this.money.update(dt);
+      if (this.ink) this.ink.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();

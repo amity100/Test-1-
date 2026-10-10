@@ -57,6 +57,8 @@ export class AirDraw {
     this.refCaption = this.refEl.querySelector('.caption');
     this.countEl = $('air-count');
     this.ghostBtn = $('air-ghost');
+    // (the ink in the pen, over the sheet: ROADMAP 9.4)
+    this.inkEl = $('air-ink');
     this.ids = [];
     this.ghost = false;
     this.traced = false;
@@ -181,6 +183,11 @@ export class AirDraw {
   // the pen on the paper at a point of the screen (a finger, the mouse, a gamepad's pencil)
   penDown(x, y) {
     if (this.phase !== 'draw') return;
+    // (out of ink: the pen draws no more - ROADMAP 9.4)
+    if (this.game.ink && this.game.ink.dry) {
+      this.dry();
+      return;
+    }
     const p = this.toSheet(x, y);
     if (!p) return;
     this.current = [p];
@@ -197,9 +204,37 @@ export class AirDraw {
     const last = this.current[this.current.length - 1];
     const d = Math.hypot(p[0] - last[0], p[1] - last[1]);
     if (d < this.W / 700) return 0;
+    // (every bit of line takes ink: ROADMAP 9.4)
+    const ink = this.game.ink;
+    if (ink && !ink.use(d, this.inkRate())) {
+      this.dry();
+      return 0;
+    }
     this.current.push(p);
     this.pen = p;
     return d * PX * 0.5;
+  }
+
+  // the ink a metre of line takes on this sheet, for this blueprint (worked out once a sheet: the
+  // blueprint's own lines, as long as the ghost draws them)
+  inkRate() {
+    if (this.rate) return this.rate;
+    const bb = blueprintBounds(this.bp);
+    const s = Math.min((this.W * 0.8) / bb.w, (this.H * 0.8) / bb.h);
+    let len = 0;
+    for (const st of this.bp.strokes) for (let i = 1; i < st.pts.length; i++) len += Math.hypot(st.pts[i][0] - st.pts[i - 1][0], st.pts[i][1] - st.pts[i - 1][1]) * s;
+    this.rate = this.game.ink.rate(this.bp, len);
+    return this.rate;
+  }
+
+  // out of ink: the line stops where it is
+  dry() {
+    if (this.current) this.penUp();
+    if (this.dryShown) return;
+    this.dryShown = true;
+    const g = this.game;
+    g.hud.toast(g.money ? 'הדיו נגמר! ✓ מסיימים במה שיש, או ממלאים: בקבוק דיו בחנויות הכתיבה, ועם הזמן הוא חוזר לבד' : 'הדיו נגמר!', 'info', 4);
+    this.inkEl.classList.add('dry');
   }
 
   penMove(x, y) {
@@ -249,6 +284,10 @@ export class AirDraw {
     this.footEl.classList.remove('hidden');
     document.body.classList.add('air-drawing');
     this.setBp(bpId);
+    // (the ink in the pen: ROADMAP 9.4, not with ?classic)
+    this.dryShown = false;
+    this.inkEl.classList.toggle('hidden', !g.ink);
+    this.inkEl.classList.remove('dry');
     // camera behind the hero's right shoulder, looking where he faces; the sheet hangs in front
     const p = g.player;
     g.camRig.yaw = p.yaw;
@@ -265,6 +304,7 @@ export class AirDraw {
     const bp = BLUEPRINTS[id];
     this.bp = bp;
     this.ghostPts = null;
+    this.rate = 0;
     this.ids = this.game.album.ids();
     if (!this.ids.includes(id)) this.ids.push(id);
     const i = this.ids.indexOf(id);
@@ -352,6 +392,12 @@ export class AirDraw {
         res.grade = gradeOf(res.score);
       }
       sk.add('draw', res.grade === 'perfect' ? 8 : res.grade === 'good' ? 6 : res.grade === 'wonky' ? 4 : 2);
+    }
+    // (a better pencil, a set of markers, an artist's kit: points onto it - ROADMAP 9.4)
+    const tool = this.game.ink;
+    if (tool && tool.bonus > 0 && res.score > 0) {
+      res.score = Math.min(100, res.score + tool.bonus);
+      res.grade = gradeOf(res.score);
     }
     if (this.traced && res.score > TRACED_MAX) {
       res.score = TRACED_MAX;

@@ -7,6 +7,7 @@ import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
 import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn } from './wardrobe.js';
 import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 import { BOSS } from './properties.js';
+import { TOOLS, BOTTLE } from './ink.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -486,7 +487,21 @@ SERVICES_NC.barber = { ...SERVICES.barber, offers: [...SERVICES.barber.offers, [
 SERVICES_NC.books = { ...SERVICES.books, greet: 'דיו, עופרת, מחקים ושרטוטים. מה צריך?', offers: [...SERVICES.books.offers, ['מילוי דיו, עופרת ומחקים לכל הנשק', 'book', (game) => {
   const n = game.arsenal ? game.arsenal.refill() : 0;
   game.hud.toast(n ? 'כל הנשק שציירתם מלא שוב!' : 'הכול כבר מלא. בואו כשייגמר', n ? 'good' : 'info', 2.6);
-}]] };
+}], ['דיו לעט, ועפרונות וטושים טובים יותר', 'menu', (game, a) => inkShelf(game, a)]] };
+
+// (ROADMAP 9.4) the ink for drawing: a bottle fills the pen up; a better tool holds more ink and
+// makes every drawing better
+function inkShelf(game, a) {
+  const I = game.ink;
+  const info = svc(game, a.shop.kind);
+  const choices = [];
+  const full = I.level >= I.cap - 0.5;
+  choices.push({ label: full ? 'בקבוק דיו (העט מלא)' : `בקבוק דיו: העט מלא שוב · ${fmt(BOTTLE)}`, fn: full ? () => inkShelf(game, a) : () => a.buy(BOTTLE, 'בקבוק דיו', () => I.refill(), () => inkShelf(game, a)) });
+  const next = TOOLS[I.tool + 1];
+  if (next) choices.push({ label: `${next.name}: עד ${next.cap} דיו, ו־${next.bonus}+ לכל ציור · ${fmt(next.price)}`, fn: () => a.buy(next.price, next.name, () => I.upgrade(I.tool + 1), () => inkShelf(game, a)) });
+  choices.push({ label: 'משהו אחר', fn: () => a.talk() });
+  game.dialog.show(info.who, `בעט שלכם: ${I.toolName}, ${Math.round(I.level)} מתוך ${I.cap} דיו.`, choices);
+}
 SERVICES_NC.hardware = { ...SERVICES.hardware, offers: [...SERVICES.hardware.offers, ['אפוד מגן מכריכות של מחברות', 'vest', (game) => {
   armorUp(game);
   game.hud.toast('אפוד מגן! הוא סופג את רוב המכות והיריות עד שהוא נקרע', 'good', 3.2);

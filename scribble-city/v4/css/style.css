@@ -91,6 +91,17 @@ html, body {
 /* (ROADMAP 8.1) the wallet, and what comes in and goes out floating up from it */
 #money { position: relative; padding: 6px 10px; font-family: var(--font-hand); font-size: 22px; white-space: nowrap; color: #1d7a3c; }
 #money.bump { animation: money-bump 0.35s ease-out; }
+/* (ROADMAP 9.4) the ink in the pen: a bottle by the wallet, a bar over the sheet while drawing */
+#ink { padding: 5px 8px; display: flex; align-items: center; }
+#ink .bottle { position: relative; display: block; width: 14px; height: 22px; border: 2.5px solid var(--ink); border-radius: 3px 3px 6px 6px; overflow: hidden; background: var(--paper-2); }
+#ink .bottle::before { content: ''; position: absolute; top: -2px; left: 3px; width: 4px; height: 4px; border: 2px solid var(--ink); border-bottom: 0; background: var(--paper-2); z-index: 1; }
+#ink-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; background: #2a3a8c; transition: height 0.3s; }
+#ink.low #ink-fill { background: #c81e24; }
+#air-ink { width: 180px; height: 10px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper-2); overflow: hidden; }
+#air-ink-fill { display: block; height: 100%; width: 100%; background: #2a3a8c; }
+#air-ink.low #air-ink-fill { background: #c81e24; }
+#air-ink.dry { animation: pulse 0.6s infinite alternate; }
+body.air-drawing #ink { display: none !important; }
 @keyframes money-bump { from { transform: scale(1.12); } to { transform: scale(1); } }
 .money-float { position: absolute; left: 50%; top: 100%; font-size: 19px; white-space: nowrap; pointer-events: none; direction: ltr; text-shadow: 0 0 3px #fffaf0, 0 1px 0 #fffaf0; animation: money-float 1.6s ease-out forwards; }
 .money-float.in { color: #1d8a3c; }

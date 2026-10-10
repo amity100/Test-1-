@@ -103,6 +103,7 @@ export class SaveGame {
       skills: g.skills ? g.skills.save() : null,
       // (the wallet and the bank: ROADMAP 8.1)
       money: g.money ? g.money.save() : null,
+      ink: g.ink ? g.ink.save() : null,
       // (the railing's broken stretches: ROADMAP 8.4)
       knock: g.knock ? g.knock.save() : null,
       // (the places that are yours: ROADMAP 8.2)
@@ -227,6 +228,7 @@ export class SaveGame {
     g.camRig.yaw = P.yaw;
     if (g.skills && s.skills) g.skills.load(s.skills);
     if (g.money && s.money) g.money.load(s.money);
+    if (g.ink && s.ink) g.ink.load(s.ink);
     if (g.knock && s.knock) g.knock.load(s.knock);
     if (g.props && s.props) g.props.load(s.props);
     // what you held
