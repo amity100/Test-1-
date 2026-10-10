@@ -4,7 +4,7 @@ import { HAIR_SKETCH } from './airsketch.js';
 import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
-import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn } from './wardrobe.js';
+import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn, ownTattoo } from './wardrobe.js';
 import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 import { BOSS } from './properties.js';
 import { TOOLS, BOTTLE } from './ink.js';
@@ -482,7 +482,33 @@ SERVICES_NC.boutique = { ...SERVICES.boutique, ask: 'למדוד בגדים', gre
   ['כובעים', 'menu', (game, a) => a.shelf('איזה כובע?', 'hat', HATS, 'hat')],
   ['אביזרים', 'menu', (game, a) => a.shelf('משהו קטן לסיום?', 'acc', ACCS, 'chain')],
 ] };
-SERVICES_NC.barber = { ...SERVICES.barber, offers: [...SERVICES.barber.offers, ['קעקוע מצויר', 'menu', (game, a) => a.shelf('איזה קעקוע לצייר לך על היד?', 'tattoo', TATTOOS, (it) => TATTOO_SKETCH[it.tattoo])]] };
+SERVICES_NC.barber = { ...SERVICES.barber, offers: [...SERVICES.barber.offers, ['קעקוע מצויר', 'menu', (game, a) => a.shelf('איזה קעקוע לצייר לך על היד?', 'tattoo', TATTOOS, (it) => TATTOO_SKETCH[it.tattoo])], ['לצייר קעקוע משלכם', 'menu', (game, a) => drawTattoo(game, a)]] };
+
+// (ROADMAP 9.3) a tattoo of your own: you draw it, the barber puts it on your forearm
+const TATTOO_PEN = [{ css: '#29407f', c: [0.16, 0.24, 0.5], name: 'דיו של קעקועים', px: 9 }];
+function drawTattoo(game, a) {
+  game.sketchpad.show({
+    title: 'קעקוע משלכם',
+    hint: 'מה שמציירים כאן יעלה על האמה הימנית (בשרוולים קצרים רואים אותו)',
+    done: 'לקעקע!',
+    aspect: 2.8,
+    pens: TATTOO_PEN,
+    bg: (c, w, h) => {
+      c.fillStyle = '#f1d3bd';
+      c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(120, 80, 60, 0.25)';
+      c.lineWidth = 3;
+      c.strokeRect(6, 6, w - 12, h - 12);
+    },
+  }, (strokes) => {
+    if (!strokes) return a.talk();
+    const n = game.money ? SHELF_PRICES.tattoo || 0 : 0;
+    a.buy(n, 'קעקוע משלכם', () => a.serve(null, (g) => {
+      ownTattoo(g, strokes);
+      g.hud.toast('קעקוע חדש, משלכם!', 'good', 2.2);
+    }));
+  });
+}
 // (ROADMAP 6.6) the stationery shops: ink, lead and rubber for every weapon you drew
 SERVICES_NC.books = { ...SERVICES.books, greet: 'דיו, עופרת, מחקים ושרטוטים. מה צריך?', offers: [...SERVICES.books.offers, ['מילוי דיו, עופרת ומחקים לכל הנשק', 'book', (game) => {
   const n = game.arsenal ? game.arsenal.refill() : 0;

@@ -507,6 +507,21 @@ export const GLYPHS = {
     line(g, 4.6, 2.6, 6, 2.6);
   },
   // (the places that can be yours, ROADMAP 8.2): a little house with a dollar on its front
+  // (ROADMAP 9.3) the graffiti: a spray can and its cloud
+  spray(g) {
+    g.fillStyle = '#fffaf0';
+    shape(g, [-4.4, -3, 1.6, -3, 1.6, 7.4, -4.4, 7.4]);
+    g.fillStyle = '#1b1622';
+    shape(g, [-3, -6, 0.2, -6, 0.2, -3, -3, -3]);
+    g.fillStyle = '#e2335f';
+    shape(g, [-4.4, 1, 1.6, 1, 1.6, 3.6, -4.4, 3.6]);
+    g.fillStyle = '#33a6e8';
+    for (const [x, y, r] of [[4.2, -6.4, 1.3], [6.4, -4.2, 1.1], [4.8, -3.4, 0.9], [7, -7, 0.8]]) {
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+  },
   deed(g) {
     g.fillStyle = '#fffaf0';
     shape(g, [-5.6, -0.8, 5.6, -0.8, 5.6, 6.6, -5.6, 6.6]);

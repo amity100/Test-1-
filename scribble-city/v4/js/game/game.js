@@ -76,6 +76,8 @@ import { Money, fmt } from './money.js';
 import { Ink } from './ink.js';
 import { Properties } from './properties.js';
 import { Knock } from './knock.js';
+import { Graffiti } from './graffiti.js';
+import { SketchPad } from '../ui/sketchpad.js';
 import { Fire } from './fire.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
@@ -256,6 +258,10 @@ export class Game {
     // (bins, benches, newspaper boxes, mailboxes, crates and the roadblocks' cones fly when a car
     // hits them; a hydrant knocked off sprays: ROADMAP 8.3)
     this.knock = this.classic ? null : new Knock(this);
+    // (drawing on the world: graffiti on the walls, a tattoo of your own - ROADMAP 9.3)
+    this.sketchpad = this.classic ? null : new SketchPad(this);
+    this.graffiti = this.classic ? null : new Graffiti(this);
+    if (this.graffiti) this.phone.addApp({ id: 'graffiti', name: 'גרפיטי', glyph: 'spray', fill: '#ffd0a6' });
     // (fire that spreads, and the fire engine that comes: ROADMAP 8.4)
     this.fire = this.classic ? null : new Fire(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
@@ -330,7 +336,7 @@ export class Game {
         if (!locked && !this.touch) this.phone.camBack();
         return;
       }
-      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -459,6 +465,19 @@ export class Game {
       }, 2600);
     };
     welcome();
+  }
+
+  // (ROADMAP 9.3) the sheet for a graffiti over the wall in front of you: the game waits under it
+  spray(fromPhone = false) {
+    if (!this.graffiti || (this.state !== 'play' && !fromPhone)) return;
+    if (!this.graffiti.wallAhead()) {
+      this.graffiti.start();
+      if (fromPhone) this.resume(false);
+      return;
+    }
+    this.state = 'paused';
+    this.voices.hush();
+    this.graffiti.start(() => this.resume(false));
   }
 
   // the phone: out of the pocket (the game waits), and back in
@@ -964,6 +983,7 @@ export class Game {
       this.pickups.draw(fr);
       if (this.money) this.money.draw(fr);
       if (this.knock) this.knock.draw(fr);
+      if (this.graffiti) this.graffiti.draw(fr);
       if (this.fire) this.fire.draw(fr);
       this.weather.draw(fr);
       this.fx.update(dt, fr);
@@ -1030,6 +1050,8 @@ export class Game {
     }
     if (this.state !== 'play') return;
     if (input.wasPressed('KeyF')) this.takePhoto();
+    // (a graffiti on the wall in front of you: ROADMAP 9.3)
+    if (this.graffiti && input.wasPressed('KeyG')) this.spray();
     if (input.wasPressed('KeyQ') || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();

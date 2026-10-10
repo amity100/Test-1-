@@ -1422,7 +1422,8 @@ export class Doodle {
       }
     }
     // (a tattoo of the wardrobe's, on the right forearm: ROADMAP 5.7)
-    const tat = L.tattoo && TATTOO_LINES[L.tattoo];
+    // (or one of your own drawing: ROADMAP 9.3)
+    const tat = L.tattoo && (L.tattoo === 'custom' ? L.tattooLines : TATTOO_LINES[L.tattoo]);
     if (tat && this.parts.armR > 0.5 && L.top.sleeves !== 'long') {
       const el = j.elbowR;
       _d.subVectors(j.handR, el);

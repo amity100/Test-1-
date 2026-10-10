@@ -170,6 +170,11 @@ export class Phone {
     else if (id === 'skills') this.page('skills');
     else if (id === 'bank') this.page('bank');
     else if (id === 'props') this.page('props');
+    else if (id === 'graffiti') {
+      // (ROADMAP 9.3: over the wall in front of you)
+      this.close(true);
+      g.spray(true);
+    }
     else if (id === 'settings') {
       this.close(true);
       g.showPauseMenu();

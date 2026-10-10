@@ -102,7 +102,10 @@ export function armorUp(game) {
 // the hero's outfit for keeping, and back on from it
 export function outfitOf(L) {
   const worn = L.wornTop || L.top;
-  return { top: worn, bottom: L.bottom, shoes: L.shoes, acc: L.acc.filter((a) => a === 'tattoo' || ACCS.some((x) => x.acc === a)), tattoo: L.tattoo || null };
+  const o = { top: worn, bottom: L.bottom, shoes: L.shoes, acc: L.acc.filter((a) => a === 'tattoo' || ACCS.some((x) => x.acc === a)), tattoo: L.tattoo || null };
+  // (one of your own drawing: ROADMAP 9.3)
+  if (L.tattoo === 'custom' && L.tattooLines) o.tattooLines = L.tattooLines;
+  return o;
 }
 
 export function putOn(game, o) {
@@ -114,7 +117,27 @@ export function putOn(game, o) {
   if (o.shoes) L.shoes = o.shoes;
   if (o.acc) L.acc = L.acc.filter((a) => a !== 'tattoo' && !ACCS.some((x) => x.acc === a)).concat(o.acc);
   L.tattoo = o.tattoo || null;
+  L.tattooLines = o.tattoo === 'custom' && Array.isArray(o.tattooLines) ? o.tattooLines : null;
   dress(L, p.armor > 0);
+}
+
+// (ROADMAP 9.3) a tattoo of your own: the strokes drawn on the sheet (u along the forearm, v
+// round it, 0..1) onto the forearm, from the elbow to the wrist
+export function ownTattoo(game, strokes) {
+  const L = game.player.fig.look;
+  L.tattooLines = strokes.map((s) => {
+    const out = [];
+    for (const [u, v] of s.pts) {
+      const q = [Math.round((0.22 + u * 0.62) * 1000) / 1000, Math.round((v - 0.5) * 1.7 * 1000) / 1000];
+      const prev = out[out.length - 1];
+      if (!prev || Math.hypot(q[0] - prev[0], (q[1] - prev[1]) * 0.25) > 0.012) out.push(q);
+    }
+    return out;
+  }).filter((l) => l.length >= 2).slice(0, 40);
+  L.tattoo = 'custom';
+  L.acc = L.acc.filter((a) => a !== 'tattoo');
+  L.acc.push('tattoo');
+  game.streetlife.saveHero();
 }
 
 // the HUD's row for the vest: there while there is some of it left
