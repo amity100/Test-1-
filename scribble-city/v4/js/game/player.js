@@ -161,6 +161,8 @@ export class Player {
     this.lastHurt = this.game.time;
     this.game.hud.hurtFlash(amount, fromX, fromZ);
     this.game.audio.play('hurt');
+    // (a blow from one of the Erasers can rub out the weapon in your hands: ROADMAP 6.5)
+    if (kind === 'melee' && src && src.cfg && src.cfg.erases && this.game.gangs) this.game.gangs.rubbedBy();
     // (one or two stars: the police would rather take you alive - cuffed where you fell, ROADMAP 6.3)
     if (this.hp <= 0 && this.game.arrest && this.game.arrest.spare(src)) this.hp = 1;
     if (this.hp <= 0) {

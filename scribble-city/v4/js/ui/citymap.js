@@ -4,6 +4,7 @@ import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';
 import { sticker, pin } from './mapglyphs.js';
 import { searchArea } from '../game/heli.js';
+import { GANGS } from '../game/gangs.js';
 
 // The city's map (ROADMAP 2.1). The whole city drawn in pen on a page of graph paper: the bay with
 // its waves, the beach, the pier with the big wheel, the park, every building from above in its own
@@ -1072,13 +1073,15 @@ export class CityMap {
 
   drawGangs(g, px) {
     for (const t of this.gangs) {
+      // (each gang in its own colour: ROADMAP 6.5)
+      const G = t.gang ? GANGS[t.gang] : null;
       g.save();
       g.beginPath();
       g.arc(t.x, t.z, t.r, 0, TAU);
-      g.fillStyle = 'rgba(226, 51, 95, 0.08)';
+      g.fillStyle = G ? G.fill : 'rgba(226, 51, 95, 0.08)';
       g.fill();
       g.clip();
-      g.strokeStyle = 'rgba(226, 51, 95, 0.32)';
+      g.strokeStyle = G ? G.hatch : 'rgba(226, 51, 95, 0.32)';
       g.lineWidth = 1.4 * px;
       g.beginPath();
       for (let d = -t.r * 2; d < t.r * 2; d += 5) {
@@ -1087,7 +1090,7 @@ export class CityMap {
       }
       g.stroke();
       g.restore();
-      g.strokeStyle = 'rgba(226, 51, 95, 0.75)';
+      g.strokeStyle = G ? G.line : 'rgba(226, 51, 95, 0.75)';
       g.lineWidth = 1.6 * px;
       g.setLineDash([6 * px, 4 * px]);
       g.beginPath();
@@ -1213,6 +1216,16 @@ export class CityMap {
         const x = this.sx((xa + xb) / 2 + (c === 0 ? 4 : 0));
         const y = this.sy(s.z);
         if (on(x, y, 120)) this.text(g, name, x, y, { font, haloCol: COL.road, halo: 3.5, color: '#3d3358' });
+      }
+    }
+    // the gangs' names over their turf (ROADMAP 6.5)
+    if (!this.off.has('gang')) {
+      for (const t of this.gangs) {
+        const G = t.gang ? GANGS[t.gang] : null;
+        if (!G) continue;
+        const x = this.sx(t.x);
+        const y = this.sy(t.z - t.r * 0.62);
+        if (on(x, y, 120)) this.text(g, G.name, x, y, { font: `${clamp(13 + k * 3, 16, 30)}px ${hand}`, color: G.color, halo: 4, alpha: 0.95 });
       }
     }
     // the districts, written big across their blocks (on two lines when the block is narrow)

@@ -148,6 +148,19 @@ export function gangLook(kind = 'street') {
     if (chance(0.5)) L.acc.push('chain');
     return modest(L);
   }
+  // (ROADMAP 6.5) the Erasers: in a school eraser's colours - pink and white, a blue stripe
+  if (kind === 'eraser') {
+    const L = baseLook({ pen: pick(['fineliner', 'marker', 'comic']), build: pick(['normal', 'stocky', 'lanky']), fem: chance(0.25) });
+    L.top = { kind: 'hoodie', color: pick([[0.98, 0.62, 0.7], [0.96, 0.96, 0.94]]), sleeves: 'long', hoodUp: chance(0.35) };
+    L.bottom = { kind: 'baggy', color: pick([[0.3, 0.45, 0.85], [0.96, 0.96, 0.94]]) };
+    L.shoes = [0.98, 0.62, 0.7];
+    L.hair = { style: pick(['buzz', 'short', 'none']), color: pick(HAIR.slice(0, 4)) };
+    if (!L.top.hoodUp) L.hat = chance(0.6) ? { kind: pick(['beanie', 'capBack']), color: [0.98, 0.62, 0.7] } : null;
+    L.bandana = [0.3, 0.45, 0.85];
+    if (chance(0.5)) L.acc.push('bandanaMouth');
+    L.face = { eyes: pick(['dot', 'angry', 'narrow']), brows: 'angry', mouth: pick(['line', 'smirk']), beard: null, glasses: chance(0.2) ? 'shades' : null };
+    return modest(L);
+  }
   // masked robbers
   const L = baseLook({ pen: pick(['fineliner', 'comic']), build: pick(['normal', 'lanky']) });
   L.top = { kind: 'jacket', color: pick([[0.16, 0.16, 0.2], [0.3, 0.3, 0.33], [0.25, 0.3, 0.22]]), sleeves: 'long', inner: [0.9, 0.9, 0.88] };

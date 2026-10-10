@@ -23,6 +23,10 @@ const TYPES = {
   cop: { look: 'cop', walk: 2.0, run: 5.2, range: 30, dmg: 8, interval: 0.5, burst: 3, pause: 1.6, mag: 12, reload: 1.8, sight: 42, scale: 1, armor: 1.1, personas: { standard: 3, veteran: 2, hothead: 1 }, faction: 'police', gun: 'pen' },
   copEraser: { look: 'cop', walk: 2.0, run: 5.0, range: 2.5, dmg: 18, interval: 1.0, melee: true, sight: 38, scale: 1.03, armor: 1.3, personas: { hothead: 2, standard: 1 }, faction: 'police', club: 'eraser' },
   swat: { look: 'swat', walk: 2.0, run: 5.2, range: 38, dmg: 6, interval: 0.11, burst: 5, pause: 1.3, mag: 30, reload: 2.4, sight: 46, scale: 1.02, armor: 1.5, personas: { veteran: 3, standard: 1 }, faction: 'police', gun: 'm4' },
+  // (ROADMAP 6.5, game/gangs.js) the Erasers: a school eraser for a club (a blow can rub the weapon
+  // out of your hands), a rubber machine gun whose shots rub the city out
+  eraser: { look: 'eraser', walk: 2.1, run: 5.2, range: 2.5, dmg: 16, interval: 1.0, melee: true, sight: 36, scale: 1.02, armor: 1.2, personas: { hothead: 2, standard: 1 }, club: 'eraser', erases: true },
+  eraserGun: { look: 'eraser', walk: 2.0, run: 5.0, range: 30, dmg: 5, interval: 0.12, burst: 4, pause: 1.6, mag: 20, reload: 2.2, sight: 40, scale: 1, armor: 1, personas: { standard: 2, hothead: 1 }, gun: 'm4', rubber: true },
   // a driver you pulled out of their car, coming after you with bare fists
   driver: { walk: 2.2, run: 5.4, range: 1.9, dmg: 6, interval: 0.85, melee: true, unarmed: true, sight: 32, scale: 1, armor: 0.85, personas: { hothead: 1 }, faction: 'civ' },
   scrib: { monster: 'scrib', hp: 120, walk: 2.4, run: 6.2, range: 2.6, dmg: 14, interval: 0.9, sight: 30, radius: 0.95 },
@@ -460,6 +464,8 @@ class Enemy {
     // (your hands up, or cuffed: one comes with the cuffs, the others keep their guns on you;
     // ROADMAP 6.3)
     if (this.faction === 'police' && game.arrest && game.arrest.state) game.arrest.walk(this, mv);
+    // (two gangs at war: at each other, not at you; ROADMAP 6.5)
+    if (this.war && game.gangs) game.gangs.warStep(this, mv, dt);
     let { x: moveX, z: moveZ, speed } = mv;
     if (this.dodgeT > 0) {
       this.dodgeT -= dt;
@@ -1469,7 +1475,7 @@ class Enemy {
   attack(dt, dist, tp) {
     const cfg = this.cfg;
     const game = this.game;
-    if (!this.sees || this.headless || this.reelT > 0) return;
+    if (!this.sees || this.headless || this.reelT > 0 || this.war) return;
     if (this.faction === 'police' && game.arrest && game.arrest.holdFire) return;
     this.fireT -= dt;
     const range = this.armless ? 1.8 : cfg.range;
@@ -1484,7 +1490,7 @@ class Enemy {
   shoot(dt, T, dist, mode, force = false) {
     const cfg = this.cfg;
     const game = this.game;
-    if (!this.gunman || this.reloadT > 0 || this.reelT > 0) return;
+    if (!this.gunman || this.reloadT > 0 || this.reelT > 0 || this.war) return;
     if (this.faction === 'police' && game.arrest && game.arrest.holdFire) return;
     this.fireT -= dt;
     if (this.fireT > 0 && !force) return;
@@ -1515,7 +1521,8 @@ class Enemy {
     const diry = dyy / l + (Math.random() - 0.5) * miss * 2;
     const dirz = dzz / l + (Math.random() - 0.5) * miss * 2;
     const dl = Math.hypot(dirx, diry, dirz);
-    const shotKind = cfg.gun === 'pen' ? 'ink' : cfg.gun === 'm4' ? 'paintball' : 'enemy';
+    // (the Erasers' rubber: ROADMAP 6.5)
+    const shotKind = cfg.rubber ? 'rubber' : cfg.gun === 'pen' ? 'ink' : cfg.gun === 'm4' ? 'paintball' : 'enemy';
     game.weapons.spawnEnemyShot(hand.x, hand.y, hand.z, dirx / dl, diry / dl, dirz / dl, cfg.dmg, cfg.gun === 'm4' ? 50 : 42, this.inCover && this.cover ? this.cover.box : null, shotKind, this);
     this.shots = (this.shots || 0) + 1;
     game.fx.muzzle(hand.x, hand.y, hand.z, 0.6);
@@ -1693,6 +1700,8 @@ export class Enemies {
   typeFor(kind) {
     if (kind === 'crim') return this.rng.pick(['thug', 'thug', 'mask', 'mob']);
     if (kind === 'brute') return 'brute';
+    // (the Erasers' own: ROADMAP 6.5)
+    if (TYPES[kind]) return kind;
     return this.rng.pick(['scrib', 'scrib', 'stalk', 'spike']);
   }
 
@@ -1717,6 +1726,14 @@ export class Enemies {
       return e;
     }
     return null;
+  }
+
+  // (a gang's crew somewhere else than on their turf: a raid, ROADMAP 6.5)
+  spawnAt(type, x, z, territory) {
+    const e = new Enemy(this, type, x, z, territory);
+    this.list.push(e);
+    if (territory) territory.alive++;
+    return e;
   }
 
   // an officer getting out of a patrol car, already after you

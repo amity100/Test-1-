@@ -1113,7 +1113,8 @@ export class Weapons {
       game.eraseWorld(hit.x, hit.y, hit.z, 0.42, pr.damage * 1.5, hit.box, hit);
       game.audio.play('splat', 0.3);
     } else if (kind === 'rubber') {
-      game.eraseWorld(hit.x, hit.y, hit.z, 0.36, pr.damage * 1.3, hit.box, hit);
+      // (a gang war's rubber leaves the city as it is: ROADMAP 6.5)
+      if (!pr.soft) game.eraseWorld(hit.x, hit.y, hit.z, 0.36, pr.damage * 1.3, hit.box, hit);
       fx.impact(hit.x, hit.y, hit.z, 0.35);
     } else if (kind === 'paintmg') {
       // drenched in paint, a thing runs off the page

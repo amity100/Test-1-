@@ -69,6 +69,7 @@ import { Chase } from './chase.js';
 import { Heli } from './heli.js';
 import { Arrest } from './arrest.js';
 import { Lose } from './lose.js';
+import { Gangs } from './gangs.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -234,6 +235,8 @@ export class Game {
     this.arrest = this.classic ? null : new Arrest(this);
     // (getting away: their eyes, and another car or other clothes; ROADMAP 6.4)
     this.lose = this.classic ? null : new Lose(this);
+    // (the Inkblots and the Erasers: their turf, their wars, what the Erasers rub out; ROADMAP 6.5)
+    this.gangs = this.classic ? null : new Gangs(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -783,6 +786,7 @@ export class Game {
       if (this.heli) this.heli.update(dt);
       if (this.arrest) this.arrest.update(dt);
       if (this.lose) this.lose.update(dt);
+      if (this.gangs) this.gangs.update(dt);
       this.events.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);
