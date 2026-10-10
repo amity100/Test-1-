@@ -121,7 +121,10 @@ export class StreetLife {
     if (this.scanT <= 0) {
       this.scanT = 0.6;
       const near = [];
+      const R = game.rhythm;
       for (const s of this.shops) {
+        // (a shop that is closed at this hour stays dark: game/rhythm.js, game/shutters.js)
+        if (R && !R.open(s.kind)) continue;
         const d = Math.hypot(s.door[0] - p.x, s.door[2] - p.z);
         if (d < 62) near.push([d - (s.stand ? 25 : 0), s]);
       }
@@ -129,7 +132,10 @@ export class StreetLife {
       const want = new Set(near.slice(0, this.budget).map((n) => n[1]));
       for (const [id, a] of this.active) {
         const d = Math.hypot(a.shop.door[0] - p.x, a.shop.door[2] - p.z);
-        if (!want.has(a.shop) && (d > 75 || this.active.size > this.budget + 1)) {
+        // (closing: let go once the shutter is down and nobody sees them go; a stand packs up when
+        // you are not looking)
+        const shut = a.shop.shut || ((a.shop.stand || !a.shop.room) && R && !R.open(a.shop.kind) && d > 30);
+        if (!want.has(a.shop) && (d > 75 || this.active.size > this.budget + 1 || shut)) {
           a.dispose();
           this.active.delete(id);
         }
@@ -167,7 +173,8 @@ export class StreetLife {
     this.errandT -= dt;
     if (this.errandT > 0 || !this.active.size) return;
     this.errandT = 1.6 + Math.random() * 2.2;
-    const shops = [...this.active.values()].filter((a) => a.open && ITEM[a.shop.kind] !== undefined);
+    const R = game.rhythm;
+    const shops = [...this.active.values()].filter((a) => a.open && ITEM[a.shop.kind] !== undefined && (!R || R.open(a.shop.kind)));
     if (!shops.length) return;
     const a = pick(shops);
     const s = a.shop;

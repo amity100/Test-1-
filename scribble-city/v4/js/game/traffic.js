@@ -317,12 +317,29 @@ export class Traffic {
         }
       }
       this.list = this.list.filter((c) => !c.gone);
-      const max = game.touch ? 14 : 26;
+      // (the rush hours: the most cars there are; at night few: game/rhythm.js)
+      const max = Math.round((game.touch ? 14 : 26) * (game.rhythm ? game.rhythm.cars : 1));
       let n = 0;
       let buses = 0;
       for (const c of this.list) {
         if (!c.police) n++;
         if (c.bus) buses++;
+      }
+      if (n > max + 1) {
+        // (fewer cars about at this hour than there were: some of those out of sight go home)
+        for (const c of this.list) {
+          if (n <= max) break;
+          if (c.police || c.mode !== 'drive' || !c.driver || c.wrecked || c.poofT !== undefined) continue;
+          const vx = c.pos.x - cam.x;
+          const vz = c.pos.z - cam.z;
+          const d = Math.hypot(vx, vz) || 1;
+          if (d < 50 || (vx * fwd.x + vz * fwd.z) / d > 0) continue;
+          this.removeCar(c);
+          c.gone = true;
+          n--;
+          if (c.bus) buses--;
+        }
+        this.list = this.list.filter((c) => !c.gone);
       }
       const first = game.state === 'title' || this.time < 3;
       for (let k = 0; k < 3 && n < max; k++) {

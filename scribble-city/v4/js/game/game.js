@@ -37,6 +37,8 @@ import { clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
+import { Rhythm } from './rhythm.js';
+import { Shutters } from './shutters.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -110,6 +112,8 @@ export class Game {
     this.daynight = new DayNight(this);
     // and the weather (game/weather.js): grey skies, rain, storms, the morning fog
     this.weather = new Weather(this);
+    // and the life of the city by the hour (game/rhythm.js): rush hours, who is out, shops shut
+    this.rhythm = new Rhythm(this);
     this.inBar = false;
     // the outlines redrawn a few times a second: lively on a big screen, calm on a phone
     this.boilOn = !this.touch;
@@ -121,6 +125,8 @@ export class Game {
     this.vignettes = new Vignettes(this);
     this.ambient = new Ambient(this);
     this.nightlife = new Nightlife(this);
+    // the shops' shutters (made last: what was there before keeps its numbers)
+    this.shutters = new Shutters(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -403,6 +409,8 @@ export class Game {
     shared.uTime.value = this.time;
     if (this.weather) this.weather.update(dt);
     if (this.daynight) this.daynight.update(dt);
+    if (this.rhythm) this.rhythm.update();
+    if (this.shutters) this.shutters.update(dt);
     if (this.boilOn) shared.uBoil.value = Math.floor(this.time * 5);
     this.ambient.update(dt);
     if (this.world.update) this.world.update(dt, this.time);

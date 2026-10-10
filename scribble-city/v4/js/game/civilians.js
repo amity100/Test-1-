@@ -6,6 +6,7 @@ import { AVES, STREETS, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOU
 import { NODES, CYCLE } from '../world/roads.js';
 import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
+import { WORK_CLOTHES, NIGHT_CLOTHES } from './rhythm.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
 // the umbrellas of the city (sRGB): red, navy, yellow, black, green, plum, pink
@@ -358,8 +359,9 @@ export class Civilians {
     this.t -= dt;
     if (this.t <= 0) {
       this.t = 1;
-      // a busy city: more people on the sidewalks around you
-      const max = game.touch ? 16 : 32;
+      // a busy city: more people on the sidewalks around you (fewer late at night: game/rhythm.js)
+      const R = game.rhythm;
+      const max = Math.round((game.touch ? 16 : 32) * (R ? R.people : 1));
       // despawn far ones (scripted people belong to their scene, unless it let them go)
       for (const c of this.list) if ((!c.scripted || !c.owner) && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 110) c.gone = true;
       this.list = this.list.filter((c) => {
@@ -368,6 +370,25 @@ export class Civilians {
       });
       let free = 0;
       for (const c of this.list) if (!c.scripted) free++;
+      if (free > max + 1) {
+        // (fewer people are out at this hour than there were: some of those out of sight go home)
+        const cp = game.camera.position;
+        const fw = game.camera.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
+        for (const c of this.list) {
+          if (free <= max) break;
+          if (c.scripted || c.ctrl || c.buddy || c.buddyOf || c.dog || !c.alive) continue;
+          const dx = c.pos.x - cp.x;
+          const dz = c.pos.z - cp.z;
+          const d = Math.hypot(dx, dz) || 1;
+          if (d < 30 || (dx * fw.x + dz * fw.z) / d > 0) continue;
+          c.gone = true;
+          free--;
+        }
+        this.list = this.list.filter((c) => {
+          if (c.gone) c.dispose();
+          return !c.gone;
+        });
+      }
       const first = !this.filled;
       this.filled = true;
       let tries = first ? 60 : 8;
@@ -395,9 +416,15 @@ export class Civilians {
       while (free < max && tries-- > 0) {
         // the promenade (when you are near the bay), or a block round you
         let c;
-        // (a jogger is dressed for it)
-        const jog = Math.random() < 0.07;
-        const look = jog ? civilianLook({ kind: 'sporty' }) : null;
+        // (a jogger is dressed for it; in the morning many are out running, and the others are
+        // dressed for work; late at night for going out)
+        const jog = Math.random() < (R ? R.jog : 0.07);
+        let look = jog ? civilianLook({ kind: 'sporty' }) : null;
+        const dress = R ? Math.max(R.commute, R.night) * 0.6 : 0;
+        if (!look && dress > 0 && Math.random() < dress) {
+          const kinds = R.commute > R.night ? WORK_CLOTHES : NIGHT_CLOTHES;
+          look = civilianLook({ kind: kinds[Math.floor(Math.random() * kinds.length)] });
+        }
         if (p.x > -40 && (Math.random() < 0.3 || !near.length) && prom < max * 0.35) {
           const z = Math.max(NORTH_EDGE + 10, Math.min(SOUTH_EDGE, p.z + (Math.random() - 0.5) * 160));
           if (z > PIER.z0 - 4 && z < PIER.z1 + 4) continue;
@@ -410,6 +437,8 @@ export class Civilians {
           c.jog = true;
           c.speed = 3.1 + Math.random() * 0.8;
         }
+        // (on the way to work: in a hurry)
+        else if (R && R.commute > 0) c.speed *= 1 + 0.3 * R.commute;
         // most of them close by (the street you are on is full of people)
         const far = Math.random() < 0.3;
         if (!c.placeNear(p, first ? 3 : far ? 45 : 16, far ? 100 : 60)) {
@@ -782,6 +811,8 @@ export class Civilians {
   // the shops with a bag, with a coffee, or two friends walking and talking.
   dressUp(c) {
     const r = Math.random();
+    // (on the way to work, a coffee or a bag in hand)
+    const m = this.game.rhythm ? this.game.rhythm.commute : 0;
     if (c.jog) return;
     c.jog = false;
     if (r < 0.08) {
@@ -794,9 +825,9 @@ export class Civilians {
       c.fig.carry = 'phone';
       c.speed = 0.95 + Math.random() * 0.3;
       c.chatty = true;
-    } else if (r < 0.33) {
+    } else if (r < 0.33 + 0.17 * m) {
       c.fig.carry = 'coffee';
-    } else if (r < 0.42) {
+    } else if (r < 0.42 + 0.25 * m) {
       c.fig.carry = 'bag';
     }
   }

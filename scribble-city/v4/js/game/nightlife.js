@@ -17,9 +17,12 @@ export class Nightlife {
   update(dt) {
     const game = this.game;
     const p = game.anchorPos();
+    const R = game.rhythm;
     for (const q of this.spots) {
       const d = Math.hypot(q.door[0] - p.x, q.door[1] - p.z);
-      if (!q.active && d < 70) this.open(q);
+      // (a line only while the doors are open: game/rhythm.js)
+      q.isOpen = !R || R.open(q.kind);
+      if (!q.active && d < 70 && q.isOpen) this.open(q);
       else if (q.active && d > 95) this.close(q);
       if (q.active) this.tick(q, dt);
     }
@@ -131,8 +134,11 @@ export class Nightlife {
           if (Math.hypot(q.bouncer.pos.x - p.x, q.bouncer.pos.z - p.z) < 16) game.bubbles.say(q.bouncer, BOUNCER[Math.floor(Math.random() * BOUNCER.length)]);
         }
       }
-      // and somebody new walks up to the end of the line
-      if (q.people.length < q.n + 1) {
+      // and somebody new walks up to the end of the line (late at night the club's line is
+      // longer; once the doors close nobody new comes)
+      const R = game.rhythm;
+      const more = q.kind === 'club' && R ? Math.round(4 * R.night) : 0;
+      if (q.isOpen && q.people.length < q.n + 1 + more) {
         const k = q.people.length;
         const [x, z] = this.spot(q, k + 14);
         const c = this.person(q, x, z);

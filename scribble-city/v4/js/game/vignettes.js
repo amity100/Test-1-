@@ -38,7 +38,7 @@ export class Vignettes {
       this.scanT = 0.5;
       const near = this.defs
         .map((d) => [Math.hypot(d.x - p.x, d.z - p.z), d])
-        .filter(([dist, d]) => dist < 55 && !(this.cool.get(d.id) > game.time))
+        .filter(([dist, d]) => dist < 55 && !(this.cool.get(d.id) > game.time) && this.inHours(d))
         .sort((a, b) => a[0] - b[0])
         .slice(0, this.budget)
         .map((n) => n[1]);
@@ -72,6 +72,13 @@ export class Vignettes {
 
   draw(fr) {
     for (const sc of this.active.values()) sc.draw(fr);
+  }
+
+  // (the children and the old are home at night, and nobody paints a wall in the dark)
+  inHours(d) {
+    if (!d.hours || !this.game.daynight) return true;
+    const h = this.game.daynight.hour;
+    return h >= d.hours[0] && h < d.hours[1];
   }
 
   clear() {
@@ -154,10 +161,10 @@ export class Vignettes {
 function sceneDefs(world) {
   const col = world.collision;
   return [
-    { id: 'cane', x: -6.2, z: -24, script: caneScene, path: { x: -6.2, z0: -30, z1: -12 } },
-    { id: 'painter', x: -17, z: 19, script: painterScene, wall: { x: -17, z: 18 }, exit: { x: -8, z: 21 } },
-    { id: 'hairdo', ...freeSpot(col, -5.2, -58, 0, 1, 0.9), script: hairScene },
-    { id: 'balloon', ...freeSpot(col, 15.4, -64, 0, 1, 0.5), script: balloonScene },
+    { id: 'cane', x: -6.2, z: -24, script: caneScene, path: { x: -6.2, z0: -30, z1: -12 }, hours: [7, 21] },
+    { id: 'painter', x: -17, z: 19, script: painterScene, wall: { x: -17, z: 18 }, exit: { x: -8, z: 21 }, hours: [8, 20.5] },
+    { id: 'hairdo', ...freeSpot(col, -5.2, -58, 0, 1, 0.9), script: hairScene, hours: [9, 20] },
+    { id: 'balloon', ...freeSpot(col, 15.4, -64, 0, 1, 0.5), script: balloonScene, hours: [8.5, 20] },
     { id: 'dog', x: 15.4, z: -100, script: dogScene, path: { x: 15.4, z0: -104, z1: -90 } },
     { id: 'rain', x: 16.4, z: 48, script: rainScene, path: { x: 16.4, z0: 40, z1: 52 } },
   ];
