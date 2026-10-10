@@ -1,11 +1,27 @@
 import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, drawBlueprint } from '../game/blueprints.js';
 import { GRADE } from '../game/weapons.js';
+import { AVES, STREETS, nearestRoadInfo, districtName } from '../world/layout.js';
 
 const KEY = 'scribble-city-album-v1';
 
-// For now every blueprint is open to draw from the start (to try them all); how the player
-// finds them in the city comes later. Off: only what you photographed (or were given).
+// For now every blueprint is open to draw from the start (to try them all). Off (ROADMAP 9.1: the
+// settings' "every blueprint open", not with ?classic): only what was found in the city -
+// photographed on a board in the street or up on a roof, bought in a shop, won at the arcade,
+// given for a good deed or with a place you bought. The album says where the missing ones are.
 export const ALL_OPEN = true;
+
+// (ROADMAP 9.1) where the ones not on a board of their own are to be had, besides the boards
+const FOUND_IN = {
+  bandage: 'במכולות שבשדרות',
+  stapler: 'בחנות כלי העבודה',
+  glue: 'בחנות כלי העבודה',
+  bike: 'בחנות הגלישה',
+  boomerang: 'בחנות הגלישה',
+  inkbomb: 'מתנה למי שקונה את INK CLUB',
+  parachute: 'מתנה למי שקונה את Star Motel',
+  laser: 'מתנה למי שקונה את Pixel Arcade',
+  planes: 'מתנה למי שקונה את Bay Cafe',
+};
 
 // the library's shelves
 const SHELVES = [
@@ -21,6 +37,8 @@ export class Album {
   constructor(game) {
     this.game = game;
     this.items = new Map(); // id -> { best }
+    // (the settings' "every blueprint open", ROADMAP 9.1: game/game.js)
+    this.allOpen = ALL_OPEN;
     this.el = document.getElementById('album');
     this.list = document.getElementById('album-list');
     document.getElementById('album-close').addEventListener('click', () => this.hide());
@@ -47,21 +65,74 @@ export class Album {
   }
 
   has(id) {
-    return ALL_OPEN ? !!BLUEPRINTS[id] : this.items.has(id);
+    return this.allOpen ? !!BLUEPRINTS[id] : this.items.has(id);
+  }
+
+  // (ROADMAP 9.1, not with ?classic: all open, or found one by one)
+  setOpen(on) {
+    if (!this.game.classic) this.allOpen = on;
   }
 
   add(id) {
-    if (this.has(id)) return false;
+    if (this.items.has(id) || (this.game.classic && this.has(id))) return false;
     this.items.set(id, { best: null });
     this.save();
+    // (everything open anyway: it is kept for the day it is not - ROADMAP 9.1)
+    if (this.allOpen) return false;
     if (this.onAdd) this.onAdd(id);
     return true;
+  }
+
+  // a blueprint given (ROADMAP 9.1: with a place you bought, for a robber caught...): into the
+  // album, and you are told; false if it was there already
+  gift(id, from) {
+    const bp = BLUEPRINTS[id];
+    if (!bp || !this.add(id)) return false;
+    const g = this.game;
+    g.hud.toast(`שרטוט חדש באלבום: ${bp.name}, ${from}! ${g.touch ? 'העיפרון ✏' : 'Q'} — לצייר אותו`, 'good', 3.6);
+    g.audio.play('pageflip');
+    return true;
+  }
+
+  // one of the light ones still missing (not the tank, the copter, the minigun, the plane)
+  giftAny(from) {
+    if (this.allOpen) return false;
+    const left = this.order.filter((id) => !this.items.has(id) && BLUEPRINTS[id].difficulty <= 3);
+    if (!left.length) return false;
+    return this.gift(left[Math.floor(Math.random() * left.length)], from);
+  }
+
+  // where one not yet in the album is to be found: its nearest board (in the street, or up on a
+  // roof) and the shops or deeds that give it
+  where(id) {
+    const g = this.game;
+    const p = g.player.pos;
+    let best = null;
+    let bd = Infinity;
+    for (const b of g.world.billboards || []) {
+      if (b.id !== id) continue;
+      const d = Math.hypot(b.x - p.x, b.z - p.z);
+      if (d < bd) {
+        bd = d;
+        best = b;
+      }
+    }
+    const out = [];
+    if (best) {
+      const r = nearestRoadInfo(best.x, best.z);
+      const road = r.aveDist < r.streetDist ? AVES[r.ave].name : STREETS[r.street].name;
+      const area = districtName(best.x, best.z);
+      out.push(`${best.roof ? 'על גג' : 'על שלט'} ליד ${road}${area && area !== road ? `, ${area}` : ''}`);
+    }
+    if (FOUND_IN[id]) out.push(FOUND_IN[id]);
+    if (!out.length) out.push('אולי במכונה בארקייד, עם קצת מזל');
+    return out.join(' · ');
   }
 
   recordGrade(id, score) {
     let it = this.items.get(id);
     if (!it) {
-      if (!ALL_OPEN) return;
+      if (!this.allOpen) return;
       it = { best: null };
       this.items.set(id, it);
     }
@@ -75,7 +146,7 @@ export class Album {
   }
 
   get size() {
-    return ALL_OPEN ? this.order.length : this.items.size;
+    return this.allOpen ? this.order.length : this.items.size;
   }
 
   // in the order of the shelves (the arrows in the drawing go through them like this)
@@ -129,6 +200,13 @@ export class Album {
     cap.textContent = got ? bp.name : 'עוד לא צולם';
     pol.appendChild(cap);
     item.appendChild(pol);
+    // (not found yet: where it is - ROADMAP 9.1)
+    if (!got && !this.game.classic) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = this.where(id);
+      item.appendChild(hint);
+    }
     const meta = document.createElement('div');
     meta.className = 'meta';
     const rec = this.items.get(id);

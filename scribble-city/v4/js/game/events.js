@@ -492,6 +492,8 @@ function* robberyScene(sc, def) {
     if (game.money) {
       game.money.earn(REWARD, `תודה מ-${s.name}`);
       game.hud.toast(`עצרתם את השודד! הכסף חוזר לחנות, ו-${fmt(REWARD)} מהקופה בשבילכם`, 'good', 3.2);
+      // (and the shopkeeper sketches you a blueprint on the back of a receipt: ROADMAP 9.1)
+      game.inkwell.after(3.4, () => game.album.giftAny(`תודה מ-${s.name}`));
     } else game.hud.toast('עצרתם את השודד! הכסף חוזר לחנות', 'good', 3);
     yield 2.5;
     if (k && k.alive && k.owner === a) sc.say(k, pick(['Thank you, hero!', 'You got him! Thank you!']));

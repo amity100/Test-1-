@@ -350,9 +350,12 @@ export class Game {
       this.pipe.reflections = pick('reflections');
       shared.uQuality.value = pick('quality') ? 1 : 0;
       if (!!v.perf !== !!this.perf.on) this.perf.toggle(v.perf);
+      // (every blueprint open, or found in the city: ROADMAP 9.1, not with ?classic)
+      if (!this.classic) this.setAllOpen(v.allOpen);
     };
     const show = () => {
       const v = S.v;
+      $('opt-allbp').checked = v.allOpen;
       $('opt-sound').checked = v.sound;
       $('opt-vol-fx').value = v.fx;
       $('opt-vol-music').value = v.music;
@@ -394,6 +397,7 @@ export class Game {
     box('opt-look', 'reflections');
     box('opt-magic', 'quality');
     box('opt-perf', 'perf');
+    box('opt-allbp', 'allOpen');
     // F3 keeps its choice too
     this.perf.onToggle = (on) => {
       if (!this.perf.bench) S.set('perf', on);
@@ -406,6 +410,19 @@ export class Game {
     });
     apply();
     show();
+  }
+
+  // (ROADMAP 9.1) every blueprint open to draw, or found in the city: the goals about finding them
+  // follow
+  setAllOpen(on) {
+    if (this.album.allOpen === on && this._openSet) return;
+    this._openSet = true;
+    this.album.setOpen(on);
+    const has = (id) => this.album.has(id);
+    this.goalFlags.car = on || has('car');
+    this.goalFlags.heavy = on || has('tank') || has('copter');
+    this.goalFlags.photo = this.goalFlags.photo || has('paint');
+    this.updateGoals();
   }
 
   start() {
@@ -434,7 +451,7 @@ export class Game {
     const welcome = () => {
       this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
       setTimeout(() => {
-        if (ALL_OPEN) this.hud.toast(this.touch ? 'כל השרטוטים פתוחים: לוחצים על העיפרון ✏ ובוחרים מה לצייר' : 'כל השרטוטים פתוחים: Q — בוחרים מה לצייר', 'info', 4);
+        if (this.album.allOpen) this.hud.toast(this.touch ? 'כל השרטוטים פתוחים: לוחצים על העיפרון ✏ ובוחרים מה לצייר' : 'כל השרטוטים פתוחים: Q — בוחרים מה לצייר', 'info', 4);
         else if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
       }, 2600);
     };
@@ -1175,7 +1192,8 @@ export class Game {
     if (p.mode !== 'foot') return;
     if (this.album.size === 0) {
       this.hud.toast(this.touch ? 'האלבום ריק — קודם מצלמים שלט עם שרטוט (כפתור המצלמה ליד שלט)' : 'האלבום ריק — קודם מצלמים שלט עם שרטוט (F)', 'info', 3);
-      return;
+      // (not with ?classic: the album all the same, with where each one is - ROADMAP 9.1)
+      if (this.classic) return;
     }
     this.input.releaseLock();
     if (ALL_OPEN) {

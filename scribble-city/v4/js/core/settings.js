@@ -23,6 +23,9 @@ export const DEFAULTS = {
   boil: null,
   reflections: null,
   quality: null,
+  // (ROADMAP 9.1, not with ?classic) every blueprint open to draw from the start; off, they are
+  // found in the city (photographed, bought, won, given: ui/album.js)
+  allOpen: true,
 };
 
 export class Settings {

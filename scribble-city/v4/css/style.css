@@ -341,7 +341,13 @@ html, body {
 #album-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
 .album-item { cursor: pointer; transition: transform 0.1s; }
 .album-item:hover { transform: rotate(-1.5deg) scale(1.02); }
-.album-item.locked { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.8); }
+.album-item.locked { cursor: not-allowed; }
+.album-item.locked .polaroid, .album-item.locked .meta { opacity: 0.45; filter: grayscale(0.8); }
+/* (ROADMAP 9.1: where a missing one is to be found) */
+.album-item .hint { font-size: 13px; line-height: 1.25; text-align: center; margin-top: 4px; color: var(--ink); }
+/* (the settings that are not with ?classic) */
+.opt.nc-only { display: none; }
+body.nc .opt.nc-only { display: flex; }
 .album-item .meta { font-size: 14px; text-align: center; margin-top: 4px; }
 .album-item .stars { color: #c18a00; letter-spacing: 2px; }
 .album-item .go { margin: 6px auto 0; width: fit-content; font: 700 15px/1 Rubik, sans-serif; padding: 5px 10px; border: 2px solid var(--ink); border-radius: 9px; background: var(--yellow); }

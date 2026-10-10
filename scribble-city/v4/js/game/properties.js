@@ -13,10 +13,10 @@ import { fmt } from './money.js';
 const PAY_HOUR = 8;
 const STOPPED_DAY = 48 * 60; // seconds between takings with the clock stopped
 export const PROPS = [
-  { id: 'club', name: 'INK CLUB', kind: 'bar', he: 'מועדון הלילה', price: 8000, income: 500 },
-  { id: 'motel', name: 'Star Motel', kind: 'lobby', he: 'המוטל והחניון שלו', price: 5000, income: 350 },
-  { id: 'arcade', name: 'Pixel Arcade', kind: 'arcade', he: 'הארקייד', price: 3000, income: 200 },
-  { id: 'cafe', name: 'Bay Cafe', kind: 'cafe', he: 'בית הקפה בשדרה הראשונה', price: 2000, income: 150 },
+  { id: 'club', name: 'INK CLUB', kind: 'bar', he: 'מועדון הלילה', price: 8000, income: 500, gift: 'inkbomb' },
+  { id: 'motel', name: 'Star Motel', kind: 'lobby', he: 'המוטל והחניון שלו', price: 5000, income: 350, gift: 'parachute' },
+  { id: 'arcade', name: 'Pixel Arcade', kind: 'arcade', he: 'הארקייד', price: 3000, income: 200, gift: 'laser' },
+  { id: 'cafe', name: 'Bay Cafe', kind: 'cafe', he: 'בית הקפה בשדרה הראשונה', price: 2000, income: 150, gift: 'planes' },
 ];
 export const BOSS = ['Hey, boss!', 'Morning, boss.', 'Good to see you, boss!', 'All quiet here, boss.', 'The boss is in!'];
 
@@ -76,6 +76,8 @@ export class Properties {
     game.audio.play('cheer', 0.6);
     game.hud.big(`${p.name} שלכם!`, 2200);
     game.hud.toast(`מעכשיו ${p.name} מכניס ${fmt(p.income)} לבנק בכל בוקר, ושם הכול על חשבון הבית`, 'good', 4);
+    // (and a blueprint in a drawer of the office, ROADMAP 9.1)
+    if (p.gift) game.inkwell.after(2.4, () => game.album.gift(p.gift, `מהמגירה של ${p.name}`));
     return true;
   }
 
