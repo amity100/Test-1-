@@ -771,6 +771,8 @@ export class Traffic {
     o.steer = Math.max(-0.5, Math.min(0.5, c.steer || 0));
     o.extra = spec.police ? 'police' : spec.taxi ? 'taxi' : spec.extra || (spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain');
     o.siren = spec.police || spec.siren ? (c.siren ? this._blink : -1) : undefined;
+    // (dents, the glass, a flat: game/damage.js)
+    o.dmg = c.dmg || null;
     // (a taxi with somebody in it: the sign on the roof dark)
     o.busy = !!c.fare;
     o.scale = scale;
@@ -821,7 +823,7 @@ export class Traffic {
     if (c.parkedCar) {
       c.taken = true;
       this.unpark(c);
-      return { spec: c.spec, pos: c.pos.clone(), yaw: c.yaw, driver: null, crew: null, police: false, parked: true, wrecked: c.wrecked };
+      return { spec: c.spec, pos: c.pos.clone(), yaw: c.yaw, driver: null, crew: null, police: false, parked: true, wrecked: c.wrecked, dmg: c.dmg };
     }
     const i = this.list.indexOf(c);
     if (i >= 0) this.list.splice(i, 1);
@@ -831,7 +833,7 @@ export class Traffic {
     const crew = c.crew;
     c.driver = null;
     c.crew = null;
-    return { spec: c.spec, pos: c.pos.clone(), yaw: c.yaw, driver, crew, police: !!c.police, wrecked: c.wrecked };
+    return { spec: c.spec, pos: c.pos.clone(), yaw: c.yaw, driver, crew, police: !!c.police, wrecked: c.wrecked, dmg: c.dmg };
   }
 
   // in front of the swinging eraser
@@ -890,6 +892,8 @@ export class Traffic {
         // knocked off its lane: it stays where it was hit
         c.path = null;
         if (Math.abs(v.speed) > 6) {
+          // (dented where they met: game/damage.js)
+          if (!this.game.classic && this.game.damage) this.game.damage.crash(v, c, Math.abs(v.speed));
           if (!c.wrecked && (v.kind === 'tank' || Math.abs(v.speed) > 14)) {
             c.wrecked = true;
             this.game.fx.sprite('fx_crash', c.pos.x, 1.2, c.pos.z, { size: 2.4, life: 0.4 });
@@ -975,15 +979,21 @@ export class Traffic {
   }
 
   explosion(x, z, radius) {
+    // (dents and broken glass; close to it, a fire that blows up in turn: game/damage.js)
+    const dmg = !this.game.classic && this.game.damage;
     for (const c of this.list) {
       if (Math.hypot(c.pos.x - x, c.pos.z - z) < radius + 1.5) {
-        c.wrecked = true;
+        if (dmg) dmg.blast(c, x, z, radius);
+        else c.wrecked = true;
         c.path = null;
       }
     }
     for (const c of this.parked) {
       if (c.taken || c.poofT !== undefined) continue;
-      if (Math.hypot(c.pos.x - x, c.pos.z - z) < radius + 1.5) c.wrecked = true;
+      if (Math.hypot(c.pos.x - x, c.pos.z - z) < radius + 1.5) {
+        if (dmg) dmg.blast(c, x, z, radius);
+        else c.wrecked = true;
+      }
     }
   }
 }

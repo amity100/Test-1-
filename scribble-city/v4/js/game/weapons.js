@@ -1017,7 +1017,8 @@ export class Weapons {
       if (pr.color && !p.inVehicle && hp0 - p.hp > pr.damage * 0.5) game.hud.splat(pr.color);
       return;
     }
-    // world
+    // world (a parked car's box: dented, its glass, its tyres... game/damage.js)
+    if (hit.box && hit.box.tag === 'car' && game.damage && !game.classic) game.damage.shot(hit.box, hit, pr.damage);
     if (kind === 'ink' || kind === 'paintball') {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, kind === 'ink' ? 0.45 : 0.5 + Math.random() * 0.3, pr.color);
       return;

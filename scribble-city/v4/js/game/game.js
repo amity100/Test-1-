@@ -56,6 +56,7 @@ import { FarCrowd } from './farcrowd.js';
 import { Animals } from './animals.js';
 import { Voices } from './voices.js';
 import { Fleet } from './fleet.js';
+import { Damage } from './damage.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -184,6 +185,9 @@ export class Game {
     // the rest of the street's traffic: trucks, motorbikes, the garbage truck, taxis waved down,
     // an ambulance, a fire engine (game/fleet.js)
     this.fleet = new Fleet(this);
+    // the cars' damage you can see: dents, the glass, a flat, a bumper off, smoke, fire
+    // (game/damage.js)
+    this.damage = new Damage(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -709,6 +713,7 @@ export class Game {
       this.airsketch.update(dt);
       this.traffic.update(dt);
       this.fleet.update(dt);
+      this.damage.update(dt);
       this.world.objects.update(dt, this.world.bakeShadows, this.camera.position);
       this.police.update(dt);
       this.events.update(dt);
@@ -781,6 +786,7 @@ export class Game {
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
       this.fleet.draw(fr);
+      this.damage.draw(fr);
       this.signals.draw(this.camera.position);
       this.vehicles.draw(this.cars);
       this.cars.end();
@@ -1123,6 +1129,11 @@ export class Game {
     }
     const t = this.traffic.take(c);
     const v = this.vehicles.spawnStock(t.spec, t.pos, t.yaw);
+    // (its dents and all come along: game/damage.js)
+    if (t.dmg && !this.classic) {
+      v.dmg = t.dmg;
+      this.damage.cars.add(v);
+    }
     if (t.driver) this.ejectDriver(t.driver, t.pos, t.yaw, true);
     if (t.police) {
       this.onCrime('copcar', t.pos.x, t.pos.z);
@@ -1147,6 +1158,10 @@ export class Game {
     const cx = t.pos.x;
     const cz = t.pos.z;
     const v = this.vehicles.spawnStock(t.spec, t.pos, t.yaw);
+    if (t.dmg && !this.classic) {
+      v.dmg = t.dmg;
+      this.damage.cars.add(v);
+    }
     this.enterVehicle(v);
     if (Math.random() < 0.45) {
       this.audio.play('alarm', 0.7);

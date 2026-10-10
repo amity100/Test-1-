@@ -362,7 +362,7 @@ function merge(list) {
 }
 
 class Pool {
-  constructor(scene, geo, mat, cap) {
+  constructor(scene, geo, mat, cap, dents = false) {
     this.cap = cap;
     const g = geo.index ? geo.toNonIndexed() : geo;
     if (!g.attributes.aId) g.setAttribute('aId', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count), 1));
@@ -370,6 +370,15 @@ class Pool {
     this.iClip = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('iX', this.iX);
     g.setAttribute('iClip', this.iClip);
+    // (a car's shell and glass: its dents, game/damage.js)
+    this.iD0 = null;
+    this.iD1 = null;
+    if (dents) {
+      this.iD0 = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      this.iD1 = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      g.setAttribute('iDent0', this.iD0);
+      g.setAttribute('iDent1', this.iD1);
+    }
     this.mesh = new THREE.InstancedMesh(g, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage);
@@ -381,9 +390,21 @@ class Pool {
   }
 
   // rv: a drawn car still turning from the drawing into the car ({ sweep: [x, y, z, front], band })
-  push(m, color, part = 0, rv = null) {
+  push(m, color, part = 0, rv = null, dmg = null) {
     if (this.n >= this.cap) return;
     const i = this.n++;
+    if (this.iD0) {
+      const a = this.iD0.array;
+      const b = this.iD1.array;
+      const d0 = dmg && dmg.d0;
+      const d1 = dmg && dmg.d1;
+      for (let k = 0; k < 4; k++) {
+        a[i * 4 + k] = d0 ? d0[k] : 0;
+        b[i * 4 + k] = d1 ? d1[k] : 0;
+      }
+      // (burnt out: the shader turns its lamps off)
+      if (dmg && dmg.burnt) b[i * 4 + 3] += 10;
+    }
     m.toArray(this.mesh.instanceMatrix.array, i * 16);
     const c = this.mesh.instanceColor.array;
     c[i * 3] = color[0];
@@ -404,8 +425,8 @@ class Pool {
     this.mesh.count = this.n;
     // (nothing of this kind on the screen: no draw call at all)
     this.mesh.visible = this.n > 0;
-    const ats = this._ats || (this._ats = [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]);
-    for (let i = 0; i < 4; i++) {
+    const ats = this._ats || (this._ats = this.iD0 ? [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iD0, this.iD1] : [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]);
+    for (let i = 0; i < ats.length; i++) {
       const at = ats[i];
       at.clearUpdateRanges();
       at.addUpdateRange(0, Math.max(1, this.n) * at.itemSize);
@@ -419,6 +440,9 @@ const PARTS = ['shell', 'glass'];
 // the lights and trims (the same arrays every frame)
 const TAXI_LIGHT = [0.85, 0.7, 0.22];
 const TAXI_BUSY = [0.32, 0.27, 0.12];
+// the glass of a car that was hit (game/damage.js): crazed white, or gone (the dark inside)
+const GLASS_CRACKED = [3.1, 3.0, 2.5];
+const GLASS_BROKEN = [0.3, 0.3, 0.32];
 const RED_OFF = [0.5, 0.06, 0.08];
 const RED_ON = [3.2, 0.25, 0.3];
 const BLUE_OFF = [0.08, 0.12, 0.5];
@@ -537,6 +561,9 @@ export class CarRenderer {
     // of the pen table) and its own number for the ink, and only the body takes the car's colour
     // - a kind of car is two draws (the shell and the glass, which is seen from both sides)
     const shellPen = mergedSurface(mats.paint, { vcolor: false, tint: true });
+    // (dents: the shell and the glass pressed in where a car was hit, game/damage.js)
+    shellPen.defines.USE_DENTS = '';
+    mats.glass.defines.USE_DENTS = '';
     const shellParts = [['body', mats.paint, 0, 1], ['tail', mats.tail, 0.5, 0], ['head', mats.head, 0.6, 0], ['trim', mats.dark, 0.55, 0], ['plate', mats.plate, 0.65, 0]];
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);
@@ -563,8 +590,8 @@ export class CarRenderer {
       const sun = merge([b.body, b.glass, b.tail, b.head, b.trim, b.plate]);
       const P = (this.kinds[kind] = {
         b,
-        shell: new Pool(scene, shell, shellPen, n),
-        glass: new Pool(scene, b.glass, mats.glass, n),
+        shell: new Pool(scene, shell, shellPen, n, true),
+        glass: new Pool(scene, b.glass, mats.glass, n, true),
       });
       for (const k of PARTS) P[k].mesh.userData.noShadow = true;
       P.sun = new THREE.InstancedMesh(sun, mats.paint.userData.depth, n);
@@ -627,23 +654,34 @@ export class CarRenderer {
     const K = P.b.K;
     const s = o.scale || 1;
     const rv = o.reveal || null;
-    _e.set(o.tilt || 0, yaw, o.roll || 0, 'YXZ');
+    // (damage, game/damage.js: dents, the glass, a flat tyre that drops its corner)
+    const D = o.dmg || null;
+    let tilt = o.tilt || 0;
+    let roll = o.roll || 0;
+    const flat = D && D.flat >= 0 ? P.b.wheels[D.flat] : null;
+    if (flat) {
+      tilt += flat.z > 0 ? 0.035 : -0.035;
+      roll -= flat.sd * 0.04;
+    }
+    _e.set(tilt, yaw, roll, 'YXZ');
     _q.setFromEuler(_e);
     _m.compose(_p.set(x, y + (o.lift || 0), z), _q, _s.set(s, s * (o.squash || 1), s));
     if (rv) _m.premultiply(rv.pre);
     const part = ((Math.abs(x * 0.37 + z * 0.11) % 1) + 1) % 1;
-    P.shell.push(_m, this.col(color), part, rv);
-    P.glass.push(_m, WHITE, part + 0.3, rv);
+    P.shell.push(_m, this.col(color), part, rv, D);
+    P.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D);
     // the wheels: they roll, the front ones steer
     const wheels = P.b.wheels;
     for (let wi = 0; wi < wheels.length; wi++) {
       const w = wheels[wi];
       _e.set(o.spin || 0, w.z > 0 ? o.steer || 0 : 0, 0, 'YXZ');
       _q.setFromEuler(_e);
-      _w.compose(_p.set(w.x, w.r, w.z), _q, _s.set(1, w.r, w.r));
+      // (a flat one sits squashed on its rim)
+      const wr = w === flat ? w.r * 0.74 : w.r;
+      _w.compose(_p.set(w.x, wr, w.z), _q, _s.set(1, wr, w.r));
       _w.premultiply(_m);
       this.tyres.push(_w, WHITE, part + 0.7, rv);
-      _w.compose(_p.set(w.x + w.sd * 0.165, w.r, w.z), _q, _s.set(1, w.r, w.r));
+      _w.compose(_p.set(w.x + w.sd * 0.165, wr, w.z), _q, _s.set(1, w.r, w.r));
       _w.premultiply(_m);
       this.rims.push(_w, WHITE, part + 0.8, rv);
     }

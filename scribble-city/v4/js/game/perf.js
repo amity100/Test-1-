@@ -24,7 +24,7 @@ const SYSTEMS = [
   ['nightlife', 'update'], ['vignettes', 'update'], ['vignettes', 'draw'], ['police', 'update'], ['ambient', 'update'], ['ambient', 'draw'],
   ['fx', 'update'], ['hud', 'update'], ['signals', 'draw'], ['cars', 'end'], ['figures', 'end'],
   ['weather', 'update'], ['shutters', 'update'], ['soundscape', 'update'],
-  ['routines', 'update'], ['workers', 'update'], ['workers', 'draw'], ['farCrowd', 'update'], ['farCrowd', 'draw'], ['animals', 'update'], ['animals', 'draw'], ['voices', 'update'], ['fleet', 'update'], ['fleet', 'draw'],
+  ['routines', 'update'], ['workers', 'update'], ['workers', 'draw'], ['farCrowd', 'update'], ['farCrowd', 'draw'], ['animals', 'update'], ['animals', 'draw'], ['voices', 'update'], ['fleet', 'update'], ['fleet', 'draw'], ['damage', 'update'], ['damage', 'draw'],
 ];
 const PASSES = ['shadow', 'reflection', 'main', 'ink', 'rain', 'glow', 'final'];
 const PASS_HE = { shadow: 'צל', reflection: 'השתקפות', main: 'ציור', ink: 'דיו', rain: 'גשם', glow: 'זוהר', final: 'סיום' };

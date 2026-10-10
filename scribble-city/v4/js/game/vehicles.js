@@ -395,7 +395,7 @@ class Vehicle {
     const rv = this.mat ? this.mat.carRV : null;
     cars.draw(this.carKind, this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: wob, roll: this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0, reveal: rv,
+      lift: wob, roll: this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0, reveal: rv, dmg: this.dmg || null,
     });
     // in the rain the wipers go (once somebody is at the wheel)
     const w = this.game.weather;
@@ -439,6 +439,8 @@ class Vehicle {
     if (hit) {
       if (impact > 7) {
         this.hurt(impact * 1.6);
+        // (the front, or the back, dented: game/damage.js)
+        if (this.game.damage && !this.game.classic) this.game.damage.wall(this, impact);
         this.game.fx.sprite('fx_crash', this.pos.x + f.x * this.halfLen, this.pos.y + 1, this.pos.z + f.z * this.halfLen, { size: 2.2, life: 0.4 });
         this.game.camRig.addShake(Math.min(0.6, impact * 0.03));
         this.game.audio.play('crash', Math.min(1, impact / 20));

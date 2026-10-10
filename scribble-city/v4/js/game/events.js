@@ -567,6 +567,11 @@ function* bumpScene(sc, def) {
   game.fx.sparks(cx, 0.6, cz, 8, [0.9, 0.9, 0.95]);
   game.fx.crumbs(cx, 0.5, cz, 10, 2);
   if (game.reactions) game.reactions.note('crash', cx, cz);
+  // (the back of the one, the front of the other, dented: game/damage.js)
+  if (game.damage) {
+    game.damage.hit(A, cx, 0.6, cz, 9);
+    game.damage.hit(B, cx, 0.6, cz, 8);
+  }
   sc.props.hazard = { draw: (fr) => drawHazards(fr, sc, [A, B]) };
   yield 1.6;
   if (!alive(A) || !alive(B) || !A.driver || !B.driver) {

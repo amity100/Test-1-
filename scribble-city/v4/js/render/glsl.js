@@ -397,6 +397,22 @@ in float aObj;
 in vec4 iX;
 in vec4 iClip;
 #endif
+#ifdef USE_DENTS
+// a car's dents (game/damage.js): two points of its own frame and how deep, the skin pressed in
+// round them (none: nothing moves)
+in vec4 iDent0;
+in vec4 iDent1;
+// (burnt out: its lamps dark; iDent1.w carries 10 more)
+out float vBurnt;
+vec3 dentAt(vec3 p, vec3 n, vec4 D) {
+  if (D.w <= 0.0) return p;
+  vec3 d = p - D.xyz;
+  // (a harder knock: wider; the skin crumpled, not smooth)
+  float f = exp(-dot(d, d) * 3.5 / (1.0 + D.w * 8.0));
+  float crumple = 0.75 + 0.25 * sin(p.x * 23.0 + p.y * 7.0) * sin(p.z * 19.0);
+  return p - (n * 0.85 + vec3(0.0, 0.3, 0.0)) * (D.w * f * crumple);
+}
+#endif
 #ifdef USE_MATTAB
 in float aMat;
 flat out float vMat;
@@ -431,6 +447,10 @@ void main() {
   float sId = aId;
 #endif
   vec3 pos = sPos;
+#ifdef USE_DENTS
+  vBurnt = step(9.0, iDent1.w);
+  pos = dentAt(dentAt(pos, sNor, iDent0), sNor, vec4(iDent1.xyz, iDent1.w - 10.0 * vBurnt));
+#endif
 #ifdef USE_MATTAB
 #ifdef USE_PULL
   vMat = iS.z;
@@ -518,6 +538,9 @@ in float vId;
 in vec4 vRefl;
 in vec3 vCol;
 in float vGone;
+#ifdef USE_DENTS
+in float vBurnt;
+#endif
 flat in vec4 vX;
 flat in vec4 vClip;
 layout(location = 0) out vec4 gColor;
@@ -773,6 +796,10 @@ void main() {
   if (inside) em += alb * vec3(0.32, 0.2, 0.1);
   if (uNeonMask > 0.5) em = uEmissive * tex.rgb;
   else if (uEmVColor > 0.5) em *= vCol;
+#ifdef USE_DENTS
+  // (a burnt-out car's lamps are out)
+  em *= 1.0 - vBurnt;
+#endif
   float ang = uAng;
   float dens = uDensity;
   float wash = uWash;
