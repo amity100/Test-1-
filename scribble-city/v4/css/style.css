@@ -470,6 +470,8 @@ body:not(.touch) .touch-only { display: none; }
 #btn-enter { right: max(190px, calc(env(safe-area-inset-right) + 170px)); bottom: max(60px, env(safe-area-inset-bottom)); background: #d9f5c8; }
 #btn-swap { right: max(34px, env(safe-area-inset-right)); bottom: max(238px, calc(env(safe-area-inset-bottom) + 228px)); }
 #btn-up { right: max(200px, calc(env(safe-area-inset-right) + 180px)); bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); }
+/* the view from the car (ROADMAP 4.3): where the copter's "up" is, in a car or on a bike */
+#btn-view { right: max(200px, calc(env(safe-area-inset-right) + 180px)); bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); }
 #btn-down { right: max(200px, calc(env(safe-area-inset-right) + 180px)); bottom: max(96px, calc(env(safe-area-inset-bottom) + 86px)); }
 #btn-pause { left: 50%; top: max(8px, env(safe-area-inset-top)); transform: translateX(-50%); }
 
@@ -936,7 +938,7 @@ body.touch #btn-pause { left: calc(50% - 26px); }
 #vf-shoot, #vf-back { pointer-events: auto; display: none; }
 body.touch #vf-shoot { display: block; right: max(30px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); background: #fff8ec; }
 body.touch #vf-back { display: block; left: max(20px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); }
-body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio { display: none !important; }
+body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio, body.phone-cam #btn-view { display: none !important; }
 #phone-flash { position: fixed; inset: 0; z-index: 13; background: #fff; opacity: 0; pointer-events: none; }
 #phone-flash.on { animation: phoneFlash 0.35s ease-out; }
 @keyframes phoneFlash { from { opacity: 0.85; } to { opacity: 0; } }

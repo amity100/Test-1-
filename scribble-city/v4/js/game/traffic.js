@@ -216,6 +216,11 @@ export class Traffic {
         }
       }
     }
+    // (the turn signal, from 35 m before the crossing: game/fleet.js... ROADMAP 4.3)
+    if (e.turn !== 0 && !this.game.classic) {
+      const gs = path.gates.length ? path.gates[path.gates.length - 1].s : path.len;
+      (c.turns || (c.turns = [])).push({ s: gs, dir: e.turn > 0 ? -1 : 1 });
+    }
     const offs = laneOffsets(B, e.dx, e.dz);
     let off2 = offs[0];
     if (e.turn > 0 || c.bus || c.curb) off2 = offs[offs.length - 1];
@@ -521,6 +526,11 @@ export class Traffic {
     else c.speed = Math.min(want, c.speed + 3.0 * dt);
     c.stuckT = a && c.speed < 0.3 && a.why !== 'player' ? c.stuckT + dt : 0;
     c.s += c.speed * dt;
+    if (c.turns) {
+      c.signal = 0;
+      for (const t of c.turns) if (c.s > t.s - 35 && c.s < t.s + 10) c.signal = t.dir;
+      if (c.turns.length && c.turns[0].s < c.s - 12) c.turns.shift();
+    }
     path.trim(c.s);
     path.sample(c.s, _p);
     path.sample(c.s - LOOK_AHEAD, _a);
@@ -771,8 +781,9 @@ export class Traffic {
     o.steer = Math.max(-0.5, Math.min(0.5, c.steer || 0));
     o.extra = spec.police ? 'police' : spec.taxi ? 'taxi' : spec.extra || (spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain');
     o.siren = spec.police || spec.siren ? (c.siren ? this._blink : -1) : undefined;
-    // (dents, the glass, a flat: game/damage.js)
+    // (dents, the glass, a flat: game/damage.js; the turn signal)
     o.dmg = c.dmg || null;
+    o.signal = c.signal || 0;
     // (a taxi with somebody in it: the sign on the roof dark)
     o.busy = !!c.fare;
     o.scale = scale;

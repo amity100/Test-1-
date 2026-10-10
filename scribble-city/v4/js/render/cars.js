@@ -335,6 +335,8 @@ function build(kind) {
   const plates = [box(0.52, 0.12, 0.02, 0, tailY - 0.2, -off - 0.01), box(0.52, 0.12, 0.02, 0, hb * 0.38, off + 0.01)];
   const wheels = K.wheels.flatMap((t) => [-1, 1].map((sd) => ({ z: t * L - off, x: sd * (hw(t) - 0.16), r: K.r, sd })));
   K.roofY = K.glass.R;
+  // where the turn signals blink: the front and back corners (ROADMAP 4.3)
+  K.sig = { fx: hw(0.97) - 0.14, fy: hb + K.head.y, fz: off - 0.05, rx: hw(0.03) - 0.14, ry: tailY, rz: -off + 0.05 };
   return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K };
 }
 
@@ -440,6 +442,8 @@ const PARTS = ['shell', 'glass'];
 // the lights and trims (the same arrays every frame)
 const TAXI_LIGHT = [0.85, 0.7, 0.22];
 const TAXI_BUSY = [0.32, 0.27, 0.12];
+const AMBER_ON = [3.2, 1.7, 0.25];
+const AMBER_OFF = [0.45, 0.28, 0.08];
 // the glass of a car that was hit (game/damage.js): crazed white, or gone (the dark inside)
 const GLASS_CRACKED = [3.1, 3.0, 2.5];
 const GLASS_BROKEN = [0.3, 0.3, 0.32];
@@ -686,6 +690,14 @@ export class CarRenderer {
       this.rims.push(_w, WHITE, part + 0.8, rv);
     }
     const top = K.roofY;
+    // the turn signal blinking on that side (1: its left, -1: its right)
+    if (o.signal) {
+      const on = Math.floor(performance.now() / 350) % 2 === 0;
+      const sd = o.signal;
+      const S = K.sig;
+      this.box(this.lightBox, _m, sd * S.fx, S.fy, S.fz, 0.16, 0.08, 0.05, on ? AMBER_ON : AMBER_OFF, rv);
+      this.box(this.lightBox, _m, sd * S.rx, S.ry, S.rz, 0.16, 0.08, 0.05, on ? AMBER_ON : AMBER_OFF, rv);
+    }
     if (o.extra === 'taxi') {
       this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, o.busy ? TAXI_BUSY : TAXI_LIGHT, rv);
     } else if (o.extra === 'police') {

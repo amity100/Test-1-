@@ -185,6 +185,7 @@ export class Pad {
         inp.aim = false;
       }
       key(B.DOWN, 'KeyR');
+      key(B.R3, 'KeyV');
     } else {
       inp.pad = { x: lx, y: -ly, sprint: this.down[B.A] };
       inp.flyUp = false;

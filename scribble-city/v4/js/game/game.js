@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, pickLights } from '../render/materials.js';
+import { shared, pickLights, flashLight } from '../render/materials.js';
 import { Input } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { CameraRig } from './camera.js';
@@ -29,7 +29,7 @@ import { Vignettes } from './vignettes.js';
 import { Ambient } from './ambient.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { DRIVER_SEAT } from './traffic.js';
-import { CarRenderer } from '../render/cars.js';
+import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
@@ -57,6 +57,9 @@ import { Animals } from './animals.js';
 import { Voices } from './voices.js';
 import { Fleet } from './fleet.js';
 import { Damage } from './damage.js';
+
+// (your headlights' colour on the road at night: ROADMAP 4.3)
+const HEADLIGHT = [1.0, 0.92, 0.74];
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -736,6 +739,8 @@ export class Game {
       const v = this.freeCam;
       this.camera.position.set(v[0], v[1], v[2]);
       this.camera.rotation.set(v[4] || 0, v[3] || 0, 0, 'YXZ');
+    } else if (player.inVehicle && this.hoodCam && !this.classic && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike')) {
+      this.hoodView(player.inVehicle, dt);
     } else if (player.inVehicle) {
       const v = player.inVehicle;
       if (v.kind === 'car' && this.time - this.lastLookInput > 1.2 && Math.abs(v.speed) > 2) {
@@ -774,7 +779,15 @@ export class Game {
     this.airdraw.frame(dt);
     // render dynamic figures
     if (dt > 0) {
-      if (!this.perf.bench) player.draw(this.camera.position);
+      // (riding a bike seen from your own eyes: not your own head in the way)
+      if (!this.perf.bench && !(this.hoodCam && player.inVehicle && player.inVehicle.kind === 'bike')) player.draw(this.camera.position);
+      // your headlights on the road ahead at night (ROADMAP 4.3)
+      if (!this.classic && player.inVehicle && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike') && this.daynight && this.daynight.night > 0.3) {
+        const v = player.inVehicle;
+        const fx = Math.sin(v.yaw);
+        const fz = Math.cos(v.yaw);
+        flashLight(v.pos.x + fx * 7, (v.pos.y || 0) + 0.9, v.pos.z + fz * 7, 13, HEADLIGHT, 1.9 * Math.min(1, this.daynight.night));
+      }
       this.weapons.updateModels();
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
@@ -808,6 +821,40 @@ export class Game {
     input.endFrame();
   }
 
+  // the view from the car (V): over the top of the windscreen, the hood below; on a bike, from
+  // the rider's eyes. It looks where the car goes unless you look round; the body's pitch and
+  // roll move it. (ROADMAP 4.3)
+  hoodView(v, dt) {
+    const rig = this.camRig;
+    if (this.time - this.lastLookInput > 1.2) {
+      let d = v.yaw - rig.yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      rig.yaw += d * (1 - Math.exp(-6 * dt));
+      rig.pitch += (-0.08 - rig.pitch) * (1 - Math.exp(-4 * dt));
+    }
+    const K = v.kind === 'car' ? KINDS[v.carKind] : null;
+    const fx = Math.sin(v.yaw);
+    const fz = Math.cos(v.yaw);
+    const up = K ? K.glass.R + 0.18 : 1.72;
+    const fwd = K ? K.glass.tD * K.len - K.len / 2 + 0.15 : 0.25;
+    const cam = this.camera;
+    cam.position.set(v.pos.x + fx * fwd, (v.pos.y || 0) + up, v.pos.z + fz * fwd);
+    if (rig.shake > 0) {
+      rig.shake = Math.max(0, rig.shake - dt * 2.5);
+      const s = rig.shake * 0.12;
+      cam.position.x += (Math.random() - 0.5) * s;
+      cam.position.y += (Math.random() - 0.5) * s;
+      cam.position.z += (Math.random() - 0.5) * s;
+    }
+    cam.rotation.set(rig.pitch - (v.bodyPitch || 0), rig.yaw + Math.PI, -(v.bodyRoll || 0) * 0.5, 'YXZ');
+    const fov = rig.baseFov * (1.08 + Math.min(0.15, (v.speedAbs || 0) / 200));
+    if (Math.abs(cam.fov - fov) > 0.05) {
+      cam.fov += (fov - cam.fov) * (1 - Math.exp(-6 * dt));
+      cam.updateProjectionMatrix();
+    }
+  }
+
   handleKeys() {
     const input = this.input;
     const p = this.player;
@@ -835,6 +882,11 @@ export class Game {
     if (input.wasPressed('KeyP')) this.openPhone();
     // the car radio's dial
     if (input.wasPressed('KeyR') && p.inVehicle && p.inVehicle.kind === 'car') this.radio.next();
+    // the view from the car, or from behind it (ROADMAP 4.3)
+    if (input.wasPressed('KeyV') && !this.classic && p.inVehicle && (p.inVehicle.kind === 'car' || p.inVehicle.kind === 'bike')) {
+      this.hoodCam = !this.hoodCam;
+      this.hud.toast(this.hoodCam ? 'מבט מהרכב (V)' : 'מבט מאחור (V)', 'info', 1.4);
+    }
   }
 
   // ------------------------------------------------------------------ hiding
@@ -1205,6 +1257,12 @@ export class Game {
     $('btn-up').classList.toggle('hidden', !v.flies);
     $('btn-down').classList.toggle('hidden', !v.flies);
     $('btn-radio').classList.toggle('hidden', v.kind !== 'car');
+    $('btn-view').classList.toggle('hidden', this.classic || (v.kind !== 'car' && v.kind !== 'bike'));
+    // (the first time: the view from the car, the handbrake)
+    if (!this.classic && !this.touch && !this.driveHint && (v.kind === 'car' || v.kind === 'bike')) {
+      this.driveHint = true;
+      this.hud.toast('V — מבט מהרכב · רווח — בלם יד', 'info', 3.2);
+    }
   }
 
   exitVehicle(force = false) {
@@ -1241,6 +1299,7 @@ export class Game {
     $('btn-up').classList.add('hidden');
     $('btn-down').classList.add('hidden');
     $('btn-radio').classList.add('hidden');
+    $('btn-view').classList.add('hidden');
     if (!force) this.audio.play('click');
   }
 

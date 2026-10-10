@@ -357,7 +357,8 @@ class Vehicle {
     }
     this.pop = pop;
     const input = this.driver ? this.game.input : null;
-    if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
+    if ((this.kind === 'car' || this.kind === 'bike') && !this.game.classic) this.drive(dt, input);
+    else if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
     else if (this.kind === 'tank') this.updateTank(dt, input);
     else this.updateCopter(dt, input);
     this.wheelSpin += (this.speed * dt) / 0.36;
@@ -395,7 +396,7 @@ class Vehicle {
     const rv = this.mat ? this.mat.carRV : null;
     cars.draw(this.carKind, this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: wob, roll: this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0, reveal: rv, dmg: this.dmg || null,
+      lift: wob, roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
     });
     // in the rain the wipers go (once somebody is at the wheel)
     const w = this.game.weather;
@@ -518,6 +519,171 @@ class Vehicle {
     this.collideWorld(dt);
     this.runOver();
     if (input) this.game.audio.engine(this.speedAbs / maxF, bike ? 'bike' : 'car');
+  }
+
+  // ------------------------------------------------------------------ driving (ROADMAP 4.3)
+  // The tyres grip: the car's speed along where it points pushed by the engine and slowed by the
+  // brakes, its sideways slip dying away (slowly with the handbrake on: it drifts); it turns as
+  // quick as its weight lets it; its body pitches when it speeds up or brakes and rolls in the
+  // turns; off a ramp (or a drop) it flies, and lands on its springs.
+  drive(dt, input) {
+    const q = this.q;
+    const bike = this.kind === 'bike';
+    const H = HANDLING[bike ? 'bike' : this.carKind] || HANDLING.sedan;
+    const top = (this.racing ? 33 : H.top) * q.speed;
+    const power = H.power * q.accel;
+    let throttle = 0;
+    let steer = 0;
+    let hand = false;
+    if (input) {
+      const mv = input.readMove();
+      throttle = mv.y;
+      steer = -mv.x;
+      hand = input.keys.has('Space');
+      if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
+    }
+    if (this.stall > 0) {
+      this.stall -= dt;
+      throttle *= 0.1;
+      if (Math.random() < dt * 4) this.game.fx.smoke(this.pos.x - Math.sin(this.yaw) * 2, this.pos.y + 0.6, this.pos.z - Math.cos(this.yaw) * 2, 0.8);
+    }
+    if (this.vx === undefined || this.physT === undefined || this.game.time - this.physT > 1) {
+      // (from where it is: its speed along where it points)
+      this.vx = Math.sin(this.yaw) * this.speed;
+      this.vz = Math.cos(this.yaw) * this.speed;
+      this.yawRate = 0;
+      this.vy = 0;
+      this.air = false;
+      this.bodyPitch = this.bodyPitch || 0;
+      this.pitchV = 0;
+      this.bodyRoll = this.bodyRoll || 0;
+      this.rollV = 0;
+      this.climb = 0;
+    }
+    this.physT = this.game.time;
+    // the steering: how quick it turns (less as it goes faster; more with the handbrake on)
+    const fx0 = Math.sin(this.yaw);
+    const fz0 = Math.cos(this.yaw);
+    let vL = this.vx * fx0 + this.vz * fz0;
+    if (!this.air) {
+      const k = Math.min(1, Math.abs(vL) / 5) * (1 - 0.45 * Math.min(1, Math.abs(vL) / top)) * (hand ? 1.55 : 1);
+      const pull = input ? q.pull * 0.5 : 0;
+      const want = (steer + pull) * H.steer * k * Math.sign(vL || 1);
+      this.yawRate = damp(this.yawRate, want, 9 / H.mass, dt);
+    } else this.yawRate *= Math.exp(-0.8 * dt);
+    this.yaw += this.yawRate * dt;
+    // its speed along where it now points, and across
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    vL = this.vx * fx + this.vz * fz;
+    let vS = -this.vx * fz + this.vz * fx;
+    const v0 = vL;
+    if (!this.air) {
+      // the engine, the brakes, the reverse
+      if (throttle > 0) {
+        if (vL < -0.5) vL = Math.min(0, vL + 22 * throttle * dt);
+        else vL += power * throttle * dt * Math.pow(Math.max(0, 1 - Math.max(0, vL) / top), 0.6);
+      } else if (throttle < 0) {
+        if (vL > 0.5) vL = Math.max(0, vL + 24 * throttle * dt);
+        else vL = Math.max(-9 * q.speed, vL + power * 0.6 * throttle * dt);
+      } else vL -= vL * (0.35 + 0.002 * Math.abs(vL)) * dt;
+      // the handbrake: the back wheels locked
+      if (hand) vL -= vL * 0.6 * dt;
+      // the tyres' grip across: the slip dies away (hardly, with the handbrake on)
+      const grip = hand ? H.slide : H.grip * (1 - 0.25 * Math.min(1, (Math.abs(steer) * Math.abs(vL)) / top));
+      vS *= Math.exp(-grip * dt);
+    }
+    this.vx = fx * vL - fz * vS;
+    this.vz = fz * vL + fx * vS;
+    this.pos.x += this.vx * dt;
+    this.pos.z += this.vz * dt;
+    // up and down: on the ground (and up the ramps), or flying
+    const g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z));
+    if (this.air) {
+      this.vy -= 20 * dt;
+      this.pos.y += this.vy * dt;
+      this.bodyPitch = damp(this.bodyPitch, 0.12, 1.2, dt);
+      if (this.pos.y <= g) {
+        const hit = -this.vy;
+        this.pos.y = g;
+        this.air = false;
+        this.vy = 0;
+        this.pitchV -= hit * 0.04 * H.pitch;
+        if (hit > 3) {
+          this.game.audio.play('crash', Math.min(0.6, hit / 20));
+          this.game.camRig.addShake(Math.min(0.5, hit * 0.035));
+        }
+        if (hit > 10) this.hurt((hit - 10) * 2);
+      }
+    } else if (g < this.pos.y - 0.3) {
+      // off the edge: flying, as fast upwards as it was climbing
+      this.air = true;
+      this.vy = Math.max(0, this.climb);
+    } else {
+      const y0 = this.pos.y;
+      this.pos.y = g > y0 ? g : damp(y0, g, 14, dt);
+      this.climb = THREE.MathUtils.damp(this.climb, (this.pos.y - y0) / Math.max(dt, 1e-3), 20, dt);
+    }
+    this.speed = vL;
+    this.speedAbs = Math.abs(vL);
+    this.turn = this.yawRate;
+    this.slip = vS;
+    // the body on its springs: the nose down braking, up speeding up; leaning out of the turn
+    if (!bike) {
+      const aL = (vL - v0) / Math.max(dt, 1e-3);
+      const aS = this.yawRate * vL;
+      const pw = clamp(-aL * 0.006 * H.pitch, -0.07, 0.07);
+      const rw = clamp(-aS * 0.005 * H.roll, -0.09, 0.09);
+      this.pitchV += ((pw - this.bodyPitch) * 60 - this.pitchV * 9) * dt;
+      this.bodyPitch += this.pitchV * dt;
+      this.rollV += ((rw - this.bodyRoll) * 50 - this.rollV * 8) * dt;
+      this.bodyRoll += this.rollV * dt;
+    }
+    // the turn signals (slow, the wheel over), the skids, the tyres' screech
+    this.signal = input && Math.abs(steer) > 0.5 && this.speedAbs > 0.5 && this.speedAbs < 9 ? Math.sign(steer) : 0;
+    const sliding = !this.air && (Math.abs(vS) > 2.2 || (hand && this.speedAbs > 4) || (throttle < 0 && vL > 9));
+    this.skids(dt, sliding);
+    this.collideWorld(dt);
+    // (a wall or a car stopped it, or threw it back)
+    if (this.speed !== vL) {
+      this.vx = fx * this.speed - fz * vS * 0.3;
+      this.vz = fz * this.speed + fx * vS * 0.3;
+    }
+    this.runOver();
+    if (input) this.game.audio.engine(this.speedAbs / top, bike ? 'bike' : 'car');
+  }
+
+  // dark marks behind the back wheels while it slides (a long trail the city keeps a while)
+  skids(dt, on) {
+    const S = this.mgr.skidList || (this.mgr.skidList = []);
+    if (!on) {
+      this.skidPrev = null;
+      return;
+    }
+    this.skidT = (this.skidT || 0) - dt;
+    if (this.skidT > 0) return;
+    this.skidT = 0.05;
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const back = this.kind === 'bike' ? 0.62 : (this.halfLen || 2.3) * 0.62;
+    const half = this.kind === 'bike' ? 0 : (this.halfWid || 0.98) * 0.78;
+    const pts = [];
+    for (const s of this.kind === 'bike' ? [0] : [-1, 1]) pts.push([this.pos.x - fx * back - fz * half * s, this.pos.z - fz * back + fx * half * s]);
+    if (this.skidPrev) {
+      for (let i = 0; i < pts.length; i++) S.push({ a: this.skidPrev[i], b: pts[i], y: this.pos.y + 0.02, t: this.game.time });
+      while (S.length > 500) S.shift();
+    }
+    // and the tyres' smoke
+    if (Math.random() < 0.6) {
+      const p = pts[Math.floor(Math.random() * pts.length)];
+      this.game.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', p[0], this.pos.y + 0.35, p[1], { size: 0.9 + Math.random() * 0.6, grow: 1.6, life: 0.9, vy: 0.5, alpha: 0.5, tint: TYRE_SMOKE });
+    }
+    this.skidPrev = pts;
+    this.screechT = (this.screechT || 0) - 0.05;
+    if (this.screechT <= 0 && this.driver) {
+      this.screechT = 0.22;
+      this.game.audio.play('skid', Math.min(1, Math.abs(this.slip || 0) / 6 + 0.35));
+    }
   }
 
   updateTank(dt, input) {
@@ -677,6 +843,56 @@ class Vehicle {
 // the traffic's bigger cars (game/fleet.js), taken
 const BIG_STOCK = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', 'firetruck']);
 
+// How each kind handles (ROADMAP 4.3; not with ?classic): how heavy (slow to start turning, slow
+// to stop turning), how strong, how fast, how much the tyres grip sideways (and with the
+// handbrake on: a drift), how quick the steering, how much the body rolls and pitches
+const HANDLING = {
+  sports: { mass: 1.0, power: 16, top: 33, grip: 9.5, slide: 1.12, steer: 1.6, roll: 0.45, pitch: 0.35 },
+  sedan: { mass: 1.25, power: 14, top: 28, grip: 8, slide: 1.01, steer: 1.4, roll: 0.75, pitch: 0.5 },
+  suv: { mass: 1.6, power: 13.5, top: 28, grip: 7, slide: 0.94, steer: 1.25, roll: 1.05, pitch: 0.6 },
+  van: { mass: 1.8, power: 11.5, top: 25, grip: 6.5, slide: 0.9, steer: 1.15, roll: 1.15, pitch: 0.65 },
+  ambulance: { mass: 1.9, power: 13, top: 29, grip: 6.5, slide: 0.9, steer: 1.15, roll: 1.15, pitch: 0.65 },
+  limo: { mass: 2.1, power: 12, top: 27, grip: 7, slide: 0.9, steer: 0.95, roll: 0.8, pitch: 0.45 },
+  classic: { mass: 1.5, power: 12.5, top: 28, grip: 5.8, slide: 0.98, steer: 1.3, roll: 1.4, pitch: 0.9 },
+  truck: { mass: 3.0, power: 8.5, top: 22, grip: 5.5, slide: 0.83, steer: 0.85, roll: 1.2, pitch: 0.55 },
+  garbage: { mass: 3.4, power: 7.5, top: 20, grip: 5.5, slide: 0.83, steer: 0.8, roll: 1.2, pitch: 0.55 },
+  firetruck: { mass: 3.6, power: 9, top: 25, grip: 5.5, slide: 0.83, steer: 0.8, roll: 1.1, pitch: 0.5 },
+  bike: { mass: 0.6, power: 20, top: 36, grip: 11, slide: 1.8, steer: 1.9, roll: 0, pitch: 0.4 },
+};
+
+// the stunt ramps in the alleys (with their wooden planks, drawn by the car batches)
+export const RAMPS = [
+  { x: -31.5, z: 70, yaw: 0, len: 5.5, w: 3.2, h: 1.35 },
+  { x: -100.5, z: 125, yaw: Math.PI, len: 5.5, w: 3.2, h: 1.35 },
+  { x: -31.5, z: 215, yaw: 0, len: 6.5, w: 3.2, h: 1.7 },
+];
+
+// how high a ramp's top is at (x, z), coming up it from its low end (0: not on one)
+export function rampAt(x, z) {
+  for (const r of RAMPS) {
+    const dx = x - r.x;
+    const dz = z - r.z;
+    const fx = Math.sin(r.yaw);
+    const fz = Math.cos(r.yaw);
+    const along = dx * fx + dz * fz;
+    const across = -dx * fz + dz * fx;
+    if (along >= 0 && along <= r.len && Math.abs(across) <= r.w / 2) return (along / r.len) * r.h;
+  }
+  return 0;
+}
+
+// (the dark pen comes out as the road's own ink: the marks are drawn grey, rubbed in)
+const SKID = [0.44, 0.43, 0.5];
+const TYRE_SMOKE = [0.9, 0.9, 0.93];
+const RAMP_WOOD = [0.8, 0.64, 0.42];
+const RAMP_STRIPE = [0.98, 0.8, 0.12];
+const RAMP_LEG = [0.24, 0.24, 0.27];
+const _rm = new THREE.Matrix4();
+const _rq = new THREE.Quaternion();
+const _re = new THREE.Euler();
+const _rp = new THREE.Vector3();
+const _rs = new THREE.Vector3();
+
 export class Vehicles {
   constructor(game) {
     this.game = game;
@@ -806,6 +1022,47 @@ export class Vehicles {
 
   draw(cars) {
     for (const v of this.list) v.draw(cars);
+    if (!this.game.classic) this.drawExtras(cars);
+  }
+
+  // (ROADMAP 4.3) the skid marks, fading; the stunt ramps in the alleys
+  drawExtras(cars) {
+    const game = this.game;
+    const cam = game.camera.position;
+    const S = this.skidList;
+    if (S && S.length) {
+      const fr = game.figures;
+      const t = game.time;
+      for (let i = 0; i < S.length; i++) {
+        const k = S[i];
+        const age = t - k.t;
+        if (age > 40) continue;
+        const d = Math.hypot(k.a[0] - cam.x, k.a[1] - cam.z);
+        if (d > 70) continue;
+        fr.lineXYZ(k.a[0], k.y, k.a[1], k.b[0], k.y, k.b[1], SKID, Math.max(1.4, Math.min(8, 120 / Math.max(1, d))), 4000 + (i & 63), 0.6 * (1 - age / 40), 0.005, 0);
+      }
+    }
+    for (const r of RAMPS) {
+      if (Math.hypot(r.x - cam.x, r.z - cam.z) > 160) continue;
+      const slope = Math.atan2(r.h, r.len);
+      const plank = Math.hypot(r.h, r.len);
+      // the plank (tilted up its length), two stripes across it, the trestle under its high end
+      _rq.setFromEuler(_re.set(-slope, r.yaw, 0, 'YXZ'));
+      const fx = Math.sin(r.yaw);
+      const fz = Math.cos(r.yaw);
+      const mid = (r.len / 2);
+      _rm.compose(_rp.set(r.x + fx * mid, r.h / 2 + 0.06, r.z + fz * mid), _rq, _rs.set(r.w, 0.12, plank));
+      cars.trimBox.push(_rm, RAMP_WOOD, 0);
+      for (const u of [0.3, 0.62, 0.9]) {
+        _rm.compose(_rp.set(r.x + fx * r.len * u, r.h * u + 0.13, r.z + fz * r.len * u), _rq, _rs.set(r.w * 0.96, 0.02, 0.22));
+        cars.trimBox.push(_rm, RAMP_STRIPE, 0);
+      }
+      _rq.setFromEuler(_re.set(0, r.yaw, 0, 'YXZ'));
+      for (const s of [-1, 1]) {
+        _rm.compose(_rp.set(r.x + fx * (r.len - 0.2) - fz * s * (r.w / 2 - 0.2), r.h / 2, r.z + fz * (r.len - 0.2) + fx * s * (r.w / 2 - 0.2)), _rq, _rs.set(0.16, r.h, 0.16));
+        cars.trimBox.push(_rm, RAMP_LEG, 0);
+      }
+    }
   }
 
   nearest(pos, maxD) {

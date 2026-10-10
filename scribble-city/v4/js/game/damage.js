@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { KINDS } from '../render/cars.js';
+import { flashLight } from '../render/materials.js';
 
 // Damage you can see on the cars (ROADMAP 4.2): the city's traffic, the cars parked along the
 // curbs, and the one you drive.
@@ -20,6 +21,7 @@ const SMOKE_BLACK = [0.22, 0.22, 0.24];
 // (brighter than white: they glow)
 const FLAME = [[2.6, 2.1, 0.7], [2.4, 1.3, 0.3], [2.2, 0.7, 0.16], [1.6, 0.35, 0.1]];
 const FIRE_PUFF = [1.5, 0.62, 0.16];
+const FIRE_LIGHT = [1.0, 0.5, 0.16];
 const BUMPER = [0.07, 0.07, 0.09];
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -280,8 +282,14 @@ export class Damage {
     const game = this.game;
     if (game.classic || !this.cars.size) return;
     const cam = game.camera.position;
+    let lit = 0;
     for (const c of this.cars) {
       const D = c.dmg;
+      // (a burning car lights up the street round it, flickering: the two nearest)
+      if (D && D.burning && D.burnT >= 0 && lit < 2 && !c.gone && Math.hypot(c.pos.x - cam.x, c.pos.z - cam.z) < 70) {
+        lit++;
+        flashLight(c.pos.x, 1.8, c.pos.z, 10, FIRE_LIGHT, 1.5 + 0.5 * Math.sin(game.time * 13 + lit) + 0.3 * Math.sin(game.time * 31));
+      }
       if (!D || c.gone || c.dead || c.taken || c.poofT !== undefined) {
         // (gone from the street, or driven off by you: the player's car carries its own)
         if (!c.taken) this.cars.delete(c);

@@ -465,6 +465,11 @@ export class Audio {
         // wings: a quick run of soft whumps
         for (let i = 0; i < 7; i++) this.hiss(0.05, 0.1 * v * (1 - i / 9), 900, 0.7, 'bandpass', i * 0.065, null, i * 0.05);
         break;
+      case 'skid':
+        // tyres sliding on the asphalt (game/vehicles.js)
+        this.hiss(0.24, 0.05 * v, 2600, 5, 'bandpass', 0, 2100);
+        this.tone('sawtooth', 820, 740, 0.22, 0.01 * v);
+        break;
       case 'bark':
         this.tone('sawtooth', 520, 260, 0.09, 0.14 * v);
         this.hiss(0.08, 0.18 * v, 900, 1.5, 'bandpass');
