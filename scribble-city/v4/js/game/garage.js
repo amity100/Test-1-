@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeSurface, srgb, flashLight } from '../render/materials.js';
 import { clamp } from '../core/util.js';
+import { fmt } from './money.js';
 
 // (ROADMAP 4.6; not with ?classic) The service station on Flamingo Ave (world/garages.js):
 //  - the body shop: drive into its bay and stop - the door comes down and the mechanic asks what
@@ -13,12 +14,22 @@ import { clamp } from '../core/util.js';
 //    driven; with an empty tank it only crawls);
 //  - your parking: a car left in one of the three blue bays is kept (it stays there however far
 //    you go, and it is in the save).
-// Nothing costs anything yet (money: ROADMAP 8.1).
+// (ROADMAP 8.1) What it costs: the paint, the upgrades, a repair, the wash, the fuel that goes in.
+// And the body shop buys a car off the street (one a day; not a police car, an ambulance or a fire
+// engine, and not one you drew).
 
 const FUEL_RANGE = 14000; // metres on a full tank
 const DIRT_RANGE = 9000; // metres until it is as dusty as it gets (a third of that on a wet road)
 const WASH_T = 4.6;
 const FILL_T = 3.2;
+// (ROADMAP 8.1) the prices
+const PAINT_PRICE = 120;
+const UP_PRICES = [150, 300, 500];
+const WASH_PRICE = 8;
+const TANK_PRICE = 40; // a full tank
+// what the body shop pays for a car off the street in perfect shape (less as it is battered)
+const CAR_VALUE = { sports: 900, sedan: 350, suv: 500, van: 300, bus: 400, truck: 450, garbage: 200, limo: 1200, classic: 800 };
+const NO_SALE = new Set(['ambulance', 'firetruck']);
 
 export const PAINTS = [
   { name: 'אדום דובדבן', c: [0.86, 0.12, 0.16] },
@@ -122,7 +133,7 @@ export class Garage {
       return;
     }
     if (!v) {
-      this.fill = null;
+      if (this.fill) this.settle();
       this.stillT = 0;
       return;
     }
@@ -174,13 +185,20 @@ export class Garage {
     let at = null;
     for (const p of this.W.pumps) if (Math.hypot(v.pos.x - p.x, v.pos.z - p.z) < 2.4) at = p;
     if (!at || v.speedAbs > 0.4 || v.fuel === undefined) {
-      if (this.fill && this.fill.full) this.fill = null;
-      if (this.fill && !this.fill.full) this.fill = null;
+      if (this.fill) this.settle();
       return;
     }
     if (!this.fill || this.fill.pump !== at) {
+      if (this.fill) this.settle();
       if (v.fuel > 0.985) return;
-      this.fill = { pump: at, t: 0, full: false };
+      // (ROADMAP 8.1: no more than you can pay for)
+      const M = game.money;
+      this.fill = { pump: at, car: v, t: 0, full: false, from: v.fuel, cap: M ? Math.min(1, v.fuel + M.total / TANK_PRICE) : 1 };
+      if (this.fill.cap < v.fuel + 0.01) {
+        this.fill.full = true;
+        game.hud.toast(`אין לכם כסף לדלק (${fmt(TANK_PRICE)} למיכל מלא)`, 'bad', 2.6);
+        return;
+      }
       game.audio.play('click', 0.6);
       this.stats.fills++;
     }
@@ -188,17 +206,31 @@ export class Garage {
     if (F.full) return;
     F.t += dt;
     if (F.t > 0.5) {
-      v.fuel = Math.min(1, v.fuel + dt / FILL_T);
+      v.fuel = Math.min(F.cap, v.fuel + dt / FILL_T);
       if ((F.pourT = (F.pourT || 0) - dt) <= 0) {
         F.pourT = 0.9;
         game.audio.play('pour', 0.45);
       }
     }
-    if (v.fuel >= 1) {
+    if (v.fuel >= F.cap - 1e-6) {
       F.full = true;
+      const paid = this.settle(true);
       game.audio.play('ding', 0.6);
-      game.hud.toast('המיכל מלא ✓', 'good', 1.8);
+      if (F.cap < 1) game.hud.toast(`נגמר הכסף: דלק ב-${fmt(paid)}`, 'bad', 2.4);
+      else game.hud.toast(paid ? `המיכל מלא ✓ (${fmt(paid)})` : 'המיכל מלא ✓', 'good', 1.8);
     }
+  }
+
+  // (ROADMAP 8.1) the fuel that went in, paid for as the hose comes out
+  settle(keep = false) {
+    const F = this.fill;
+    if (!keep) this.fill = null;
+    const M = this.game.money;
+    if (!F || F.paid || !M || !F.car) return 0;
+    F.paid = true;
+    const n = Math.min(M.total, Math.round(Math.max(0, F.car.fuel - F.from) * TANK_PRICE));
+    if (n > 0) M.pay(n, 'דלק');
+    return n;
   }
 
   // ------------------------------------------------------------------ the body shop
@@ -216,20 +248,28 @@ export class Garage {
     const U = v.up || {};
     const n = UPS.reduce((a, u) => a + (U[u.id] || 0), 0);
     const hurt = v.hp < v.maxHp - 0.5 || (v.dmg && (v.dmg.d0 || v.dmg.glass || v.dmg.flat >= 0 || v.dmg.bumper || v.dmg.burning));
+    const M = game.money;
+    const fix = M && hurt ? this.repairPrice(v) : 0;
     const choices = [
       { label: `שדרוגים (${n} מתוך ${UPS.length * 3})`, fn: () => this.upgrades(v) },
-      { label: hurt ? 'תיקון: פחחות, זכוכית, צמיגים' : 'תיקון (הרכב שלם)', fn: () => this.repair(v) },
+      { label: hurt ? `תיקון: פחחות, זכוכית, צמיגים${fix ? ` · ${fmt(fix)}` : ''}` : 'תיקון (הרכב שלם)', fn: () => this.repair(v) },
       { label: 'לנסוע', fn: () => this.leave() },
     ];
     // (the paint shop is for cars: a motorbike's paint is its own)
-    if (v.kind === 'car') choices.unshift({ label: 'צבע חדש וציור על הרכב', fn: () => this.paint(v) });
-    game.dialog.show('מוסך INK & IRON', 'שלום! מה עושים לרכב היום? (בינתיים הכול בחינם)', choices);
+    if (v.kind === 'car') choices.unshift({ label: `צבע חדש וציור על הרכב${M ? ` · ${fmt(PAINT_PRICE)}` : ''}`, fn: () => this.paint(v) });
+    // (ROADMAP 8.1) or sell it
+    if (M) choices.splice(choices.length - 1, 0, { label: this.saleLabel(v), fn: () => this.sell(v) });
+    game.dialog.show('מוסך INK & IRON', M ? 'שלום! מה עושים לרכב היום?' : 'שלום! מה עושים לרכב היום? (בינתיים הכול בחינם)', choices);
   }
 
   paint(v) {
     const game = this.game;
     if (!game.paintshop) return this.menu(v);
+    // (ROADMAP 8.1) can you pay for it? (paid when the car is painted)
+    const M = game.money;
+    if (M && !M.can(PAINT_PRICE)) return M.refuse('מוסך INK & IRON', PAINT_PRICE, false, () => this.menu(v));
     game.paintshop.show(v, (res) => {
+      if (res && M && !M.pay(PAINT_PRICE, 'צבע חדש לרכב')) res = null;
       if (res) {
         game.audio.play('paint', 0.8);
         this.applyPaint(v, res);
@@ -254,13 +294,16 @@ export class Garage {
     const game = this.game;
     v.up = v.up || { engine: 0, brakes: 0, tires: 0, armor: 0 };
     const U = v.up;
+    const M = game.money;
     const choices = UPS.map((u) => {
       const l = U[u.id] || 0;
       const dots = '●'.repeat(l) + '○'.repeat(3 - l);
+      const price = M && l < 3 ? UP_PRICES[l] : 0;
       return {
-        label: `${u.name} ${dots} — ${l < 3 ? u.note : 'מקסימום'}`,
+        label: `${u.name} ${dots} — ${l < 3 ? u.note : 'מקסימום'}${price ? ` · ${fmt(price)}` : ''}`,
         fn: () => {
           if (l < 3) {
+            if (price && !M.pay(price, `שדרוג ${u.name}`)) return M.refuse('מוסך INK & IRON', price, false, () => this.upgrades(v));
             U[u.id] = l + 1;
             this.applyUps(v);
             game.audio.play('drill', 0.6);
@@ -285,6 +328,9 @@ export class Garage {
 
   repair(v) {
     const game = this.game;
+    // (ROADMAP 8.1) by how battered it is
+    const price = game.money ? this.repairPrice(v) : 0;
+    if (price && !game.money.pay(price, 'תיקון במוסך')) return game.money.refuse('מוסך INK & IRON', price, false, () => this.menu(v));
     v.hp = v.maxHp;
     const D = v.dmg;
     if (D) Object.assign(D, { hp: D.hp > 100 ? D.hp : 100, d0: null, d1: null, glass: 0, flat: -1, bumper: 0, burning: false, burnT: 0, fuse: 0, burnt: false, puffT: 0 });
@@ -292,6 +338,47 @@ export class Garage {
     game.audio.play('clang', 0.5);
     game.hud.toast('הרכב כמו חדש ✓', 'good', 1.8);
     this.menu(v);
+  }
+
+  repairPrice(v) {
+    const D = v.dmg || {};
+    const hurt = v.hp < v.maxHp - 0.5 || D.d0 || D.glass || D.flat >= 0 || D.bumper || D.burning;
+    if (!hurt) return 0;
+    return Math.round(30 + 220 * clamp(1 - v.hp / v.maxHp, 0, 1) + (D.glass ? 25 : 0) + (D.flat >= 0 ? 20 : 0) + (D.bumper ? 15 : 0) + (D.burning ? 40 : 0));
+  }
+
+  // ------------------------------------------------------------------ selling (ROADMAP 8.1)
+  // what the body shop pays for it, or why it won't
+  saleOf(v) {
+    if (!v.stock) return { why: 'את זה ציירתם בעצמכם. קונים רק רכבים של העיר' };
+    if (v.stock.police || NO_SALE.has(v.carKind)) return { why: 'רכב חירום? לא נוגעים' };
+    if (!this.game.money.canSell()) return { why: 'כבר קנינו היום רכב אחד. בואו מחר' };
+    const base = v.kind === 'bike' || v.stock.taxi ? 250 : CAR_VALUE[v.carKind] || 300;
+    const U = v.up || {};
+    const ups = UPS.reduce((a, u) => a + (U[u.id] || 0), 0);
+    return { n: Math.round((base * (0.35 + 0.65 * clamp(v.hp / v.maxHp, 0, 1)) + 100 * ups) / 5) * 5 };
+  }
+
+  saleLabel(v) {
+    const s = this.saleOf(v);
+    return s.n ? `למכור את הרכב · ${fmt(s.n)}` : 'למכור את הרכב';
+  }
+
+  sell(v) {
+    const game = this.game;
+    const s = this.saleOf(v);
+    if (!s.n) {
+      game.dialog.show('מוסך INK & IRON', s.why, [{ label: 'חזרה', fn: () => this.menu(v) }]);
+      return;
+    }
+    this.leave();
+    game.exitVehicle(true);
+    v.dead = true;
+    v.removeAt = game.time;
+    v.kept = false;
+    this.stats.sold = (this.stats.sold || 0) + 1;
+    game.money.sold(s.n, 'מכרתם רכב למוסך');
+    game.hud.toast(`המוסך קנה את הרכב ב-${fmt(s.n)}`, 'good', 2.8);
   }
 
   leave() {
@@ -308,6 +395,12 @@ export class Garage {
   // ------------------------------------------------------------------ the wash
   startWash(v) {
     const game = this.game;
+    // (ROADMAP 8.1) paid at the door
+    if (game.money && !game.money.pay(WASH_PRICE, 'שטיפה')) {
+      game.hud.toast(`שטיפה עולה ${fmt(WASH_PRICE)}, ואין לכם מספיק כסף`, 'bad', 2.6);
+      this.car = null;
+      return;
+    }
     this.state = 'wash';
     this.washT = 0;
     this.stats.washes++;

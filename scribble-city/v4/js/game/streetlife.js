@@ -5,6 +5,7 @@ import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
 import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn } from './wardrobe.js';
+import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -505,6 +506,11 @@ SERVICES.cinema = { verb: 'להיכנס לקולנוע', ask: 'לקנות פופ
 
 SERVICES.friends = { verb: 'לצייר לעצמך חברה', ask: 'לצייר לעצמך חברה', who: 'המוכרת בדוכן', greet: 'ציירו לעצמכם חברה! עיפרון קסם אחד — ומה שמציירים בו קם לחיים. רק לצייר בעדינות, כן?', offers: [['עיפרון קסם — לצייר חברה (היא תלך איתך)', null, (game, a) => a.heroFriend()]] };
 SERVICES.lobby = { verb: 'להיכנס ללובי', ask: 'לדבר עם השומר', who: 'השומר בלובי', greet: 'ערב טוב. אתה לא גר פה, נכון? ...טוב, מה צריך?', offers: [['לשאול איפה יש שרטוט בסביבה', null, (game) => bookHint(game)], ['כוס מים (+10 חיים)', 'cup', heal(10, [0.6, 0.8, 0.95], 'מים קרים. +10 חיים')]] };
+
+// (ROADMAP 8.1) the ATMs: in the convenience stores and the hotels' lobbies
+const ATM = ['כספומט PAPERTRUST', 'menu', (game, a) => game.money && game.money.atm(() => a.talk())];
+SERVICES_NC.shop = { ...SERVICES.shop, offers: [...SERVICES.shop.offers, ATM] };
+SERVICES_NC.lobby = { ...SERVICES.lobby, offers: [...SERVICES.lobby.offers, ATM] };
 
 const HERO_HAIR_COLORS = [[0.12, 0.1, 0.09], [0.42, 0.28, 0.16], [0.86, 0.72, 0.45], [0.75, 0.2, 0.22], [0.3, 0.45, 0.85], [0.55, 0.3, 0.75]];
 
@@ -1512,8 +1518,14 @@ class OpenShop {
       return;
     }
     this.talking = true;
-    // (a shelf of the wardrobe opens its own choices: ROADMAP 5.7)
-    const choices = info.offers.map(([label, sketch, fn]) => ({ label, fn: sketch === 'menu' ? () => fn(game, this) : () => this.serve(sketch, fn) }));
+    // (a shelf of the wardrobe opens its own choices: ROADMAP 5.7; what each costs: ROADMAP 8.1)
+    const M = game.money;
+    const prices = (M && PRICES[this.shop.kind]) || [];
+    const choices = info.offers.map(([label, sketch, fn], i) => {
+      if (sketch === 'menu') return { label, fn: () => fn(game, this) };
+      const n = M ? M.priceOf(prices[i]) : 0;
+      return { label: n ? `${label} · ${fmt(n)}` : label, fn: () => this.buy(n, label, () => this.serve(sketch, fn)) };
+    });
     choices.push({ label: 'רק מסתכל, תודה', fn: null });
     game.dialog.show(info.who, info.greet, choices);
   }
@@ -1522,16 +1534,34 @@ class OpenShop {
   shelf(text, part, items, sketch) {
     const game = this.game;
     const info = svc(game, this.shop.kind);
-    const choices = items.map((it) => ({
-      label: it.name,
-      fn: () => this.serve(it[part] === null || it[part] === undefined ? null : typeof sketch === 'function' ? sketch(it) : sketch, (g) => {
-        wear(g, part, it);
-        g.hud.toast(it[part] === null || it[part] === undefined ? `${it.name}` : PRAISE[Math.floor(Math.random() * PRAISE.length)], 'good', 2);
-      }),
-    }));
+    const choices = items.map((it) => {
+      const off = it[part] === null || it[part] === undefined;
+      // (ROADMAP 8.1: taking something off is free)
+      const n = game.money && !off ? SHELF_PRICES[part] || 0 : 0;
+      return {
+        label: n ? `${it.name} · ${fmt(n)}` : it.name,
+        fn: () => this.buy(n, it.name, () => this.serve(off ? null : typeof sketch === 'function' ? sketch(it) : sketch, (g) => {
+          wear(g, part, it);
+          g.hud.toast(off ? `${it.name}` : PRAISE[Math.floor(Math.random() * PRAISE.length)], 'good', 2);
+        }), () => this.shelf(text, part, items, sketch)),
+      };
+    });
     choices.push({ label: 'משהו אחר', fn: () => this.talk() });
     game.dialog.show(info.who, text, choices);
     this.trying = true;
+  }
+
+  // (ROADMAP 8.1) paid first, with cash or the card; or the shop's no, and back to its offers
+  buy(n, what, go, back = () => this.talk()) {
+    const game = this.game;
+    const M = game.money;
+    if (!M || n <= 0) return go();
+    const cashOnly = CASH_ONLY.has(this.shop.kind);
+    if (!M.pay(n, what.replace(/\s*\(.*?\)/g, '').trim(), cashOnly)) {
+      M.refuse(svc(game, this.shop.kind).who, n, cashOnly, back);
+      return;
+    }
+    go();
   }
 
   serve(sketch, fn) {

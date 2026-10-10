@@ -98,6 +98,16 @@ export class Arsenal {
     return `${slot.mag} / ${rest}${slot.mag < this.magOf(slot) && rest > 0 && !this.game.touch ? ' · R לטעון' : ''}`;
   }
 
+  // anything to refill? (the stationery shop asks only then: game/money.js)
+  wants() {
+    for (const s of this.game.weapons.slots) {
+      const d = s.def;
+      if (d.ammo && s.ammo !== Infinity && s.ammo < Math.round(d.ammo * GRADE[s.grade].ammo)) return true;
+      if (d.uses && s.uses < d.uses) return true;
+    }
+    return false;
+  }
+
   // the stationery shop's refill (game/streetlife.js): every weapon you carry, full again
   refill() {
     const W = this.game.weapons;

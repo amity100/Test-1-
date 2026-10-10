@@ -4,6 +4,7 @@ import { civilianLook, copLook, elderLook, modest } from './looks.js';
 import { sidewalkLoop } from './civilians.js';
 import { groundHeight, BLOCK_TYPES } from '../world/layout.js';
 import { randomCarSpec } from '../render/cars.js';
+import { fmt } from './money.js';
 
 // Things that happen in the city now and then, not on any map (ROADMAP 3.4). Every 20-45 s the
 // city may start one near you, picked by where you are, the hour and how busy it is:
@@ -416,6 +417,9 @@ function robberLook() {
   return L;
 }
 
+// (ROADMAP 8.1) the shop's thanks for a robber stopped
+const REWARD = 40;
+
 function* robberyScene(sc, def) {
   const game = sc.game;
   const a = def.open;
@@ -484,7 +488,11 @@ function* robberyScene(sc, def) {
     r.fig.armsUp = 1;
     sc.props.bag = { x: r.pos.x + 0.5, z: r.pos.z, draw: drawDroppedBag };
     sc.say(r, pick(['Okay! Okay! Take it!', "Don't hurt me! Here!", 'Fine, fine, I give up!']), 'alarm');
-    game.hud.toast('עצרתם את השודד! הכסף חוזר לחנות', 'good', 3);
+    // (ROADMAP 8.1) and something from the till for your trouble
+    if (game.money) {
+      game.money.earn(REWARD, `תודה מ-${s.name}`);
+      game.hud.toast(`עצרתם את השודד! הכסף חוזר לחנות, ו-${fmt(REWARD)} מהקופה בשבילכם`, 'good', 3.2);
+    } else game.hud.toast('עצרתם את השודד! הכסף חוזר לחנות', 'good', 3);
     yield 2.5;
     if (k && k.alive && k.owner === a) sc.say(k, pick(['Thank you, hero!', 'You got him! Thank you!']));
     // he sits down on the curb to wait for the police

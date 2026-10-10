@@ -278,6 +278,8 @@ export class Gangs {
     this.game.fx.crumbs(e.pos.x, e.pos.y + 1.1, e.pos.z, 26, 3);
     this.game.audio.play('erase', 0.6);
     this.stats.down++;
+    // (their cash, for whoever comes by: ROADMAP 8.1)
+    if (this.game.money) this.game.money.fromEnemy(e);
   }
 
   join(war) {

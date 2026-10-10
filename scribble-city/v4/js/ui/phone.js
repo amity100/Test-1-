@@ -1,6 +1,7 @@
 import { sticker } from './mapglyphs.js';
 import { districtName } from '../world/layout.js';
 import * as store from '../core/store.js';
+import { fmt } from '../game/money.js';
 
 // The phone (ROADMAP 2.6): a phone drawn in the notebook's pen, out of your pocket with P (the
 // d-pad's left, or the phone button on a touch screen). Its apps:
@@ -10,6 +11,8 @@ import * as store from '../core/store.js';
 //   the photos   the pictures, big, to keep on the device or to throw away
 //   settings     the pause menu's settings
 //   skills       (ROADMAP 5.6, not with ?classic) what the hero got better at (game/skills.js)
+//   the bank     (ROADMAP 8.1, not with ?classic) the bank and the cash, what came in and went
+//                out (game/money.js)
 // Contacts and missions come later. The game waits while the phone is in your hand (not while
 // the camera is up).
 
@@ -134,6 +137,7 @@ export class Phone {
     for (const p of this.el.querySelectorAll('.phone-page')) p.classList.toggle('hidden', p.id !== `phone-${name}`);
     if (name === 'photos') this.fillPhotos();
     if (name === 'skills') this.fillSkills();
+    if (name === 'bank') this.fillBank();
   }
 
   status() {
@@ -161,6 +165,7 @@ export class Phone {
     } else if (id === 'camera') this.startCam();
     else if (id === 'photos') this.page('photos');
     else if (id === 'skills') this.page('skills');
+    else if (id === 'bank') this.page('bank');
     else if (id === 'settings') {
       this.close(true);
       g.showPauseMenu();
@@ -283,6 +288,43 @@ export class Phone {
       what.className = 'skill-what';
       what.textContent = r.what;
       d.append(top, bars, what);
+      box.appendChild(d);
+    }
+  }
+
+  // ------------------------------------------------------------------ the bank (ROADMAP 8.1)
+  fillBank() {
+    const M = this.game.money;
+    const sum = $('phone-bank-sum');
+    const box = $('phone-bank-list');
+    sum.innerHTML = '';
+    box.innerHTML = '';
+    if (!M) return;
+    for (const [name, n] of [['בבנק', M.bank], ['בכיס', M.cash]]) {
+      const d = document.createElement('div');
+      d.className = 'bank-sum';
+      const b = document.createElement('b');
+      b.textContent = name;
+      const s = document.createElement('span');
+      s.textContent = fmt(n);
+      d.append(b, s);
+      sum.appendChild(d);
+    }
+    if (!M.log.length) {
+      box.innerHTML = '<p class="phone-empty">עוד לא היו תנועות</p>';
+      return;
+    }
+    for (const it of M.log) {
+      const d = document.createElement('div');
+      d.className = `bank-row ${it.move ? 'move' : it.n > 0 ? 'in' : 'out'}`;
+      const w = document.createElement('span');
+      w.textContent = it.what;
+      const n = document.createElement('b');
+      n.textContent = `${it.move ? '' : it.n > 0 ? '+' : '−'}${fmt(Math.abs(it.n))}`;
+      const via = document.createElement('span');
+      via.className = 'bank-via';
+      via.textContent = `${it.at ? `${it.at} · ` : ''}${it.via}`;
+      d.append(w, n, via);
       box.appendChild(d);
     }
   }

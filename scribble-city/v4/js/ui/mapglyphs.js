@@ -492,6 +492,20 @@ export const GLYPHS = {
     g.fillStyle = '#fffaf0';
     shape(g, [-5, -7.4, -4.2, -5.3, -2, -5.2, -3.7, -3.8, -3.1, -1.6, -5, -2.9, -6.9, -1.6, -6.3, -3.8, -8, -5.2, -5.8, -5.3]);
   },
+  // (the phone's bank, ROADMAP 8.1): a green bill
+  bank(g) {
+    g.fillStyle = '#7fcf8a';
+    rrect(g, -8, -4.8, 16, 9.6, 1.2);
+    g.fillStyle = '#fffaf0';
+    circle(g, 0, 0, 3.4, true);
+    g.fillStyle = '#1b1430';
+    g.font = '800 6.4px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('$', 0, 0.4);
+    line(g, -6, -2.6, -4.6, -2.6);
+    line(g, 4.6, 2.6, 6, 2.6);
+  },
   mapApp(g) {
     g.fillStyle = '#fffaf0';
     shape(g, [-7, -5, -2.4, -7, 2.4, -5, 7, -7, 7, 5, 2.4, 7, -2.4, 5, -7, 7]);

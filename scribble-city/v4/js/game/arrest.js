@@ -1,4 +1,5 @@
 import { dress } from './wardrobe.js';
+import { fmt } from './money.js';
 
 // (ROADMAP 6.3, not with ?classic) Arrested instead of killed.
 //   - H (on a phone, the hands button) with the police after you: your hands go up. They hold
@@ -190,6 +191,8 @@ export class Arrest {
     this.cuffer = e || this.officerNear(p.pos, 80);
     this.shownT = 0;
     this.stats.busts++;
+    // (ROADMAP 8.1) the fine: $50 a star
+    this.fine = game.money ? 50 * Math.max(1, game.police.level) : 0;
     p.fig.surrender = 1;
     p.fig.crouch = reason === 'down' ? 1 : 0;
     game.state = 'busted';
@@ -220,6 +223,8 @@ export class Arrest {
       this.sheet = document.getElementById('busted');
       const why = document.getElementById('busted-why');
       if (why) why.textContent = WHY[this.reason] || WHY.hands;
+      const fine = document.getElementById('busted-fine');
+      if (fine) fine.textContent = this.fine ? `הקנס: ${fmt(this.fine)}, מהמזומן (ואם אין מספיק, מהבנק).` : '';
       if (this.sheet) this.sheet.classList.remove('hidden');
     }
   }
@@ -260,7 +265,9 @@ export class Arrest {
     game.state = 'play';
     if (!game.touch) game.input.requestLock(true);
     const what = lost > 0 && vest ? 'הנשק והאפוד הוחרמו' : lost > 0 ? 'הנשק הוחרם' : vest ? 'האפוד הוחרם' : 'לא היה מה להחרים';
-    game.hud.toast(`שוחררתם מתחנת המשטרה. ${what}`, 'info', 3.4);
+    const paid = game.money && this.fine ? game.money.take(this.fine, 'קנס במשטרה') : 0;
+    this.fine = 0;
+    game.hud.toast(`שוחררתם מתחנת המשטרה. ${what}${paid ? `, ושילמתם קנס של ${fmt(paid)}` : ''}`, 'info', 3.4);
   }
 
   // ------------------------------------------------------------------ the hands button (phones)

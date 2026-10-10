@@ -5,6 +5,7 @@ import { shopOpen, shopHours } from '../game/rhythm.js';
 import { sticker, pin } from './mapglyphs.js';
 import { searchArea } from '../game/heli.js';
 import { GANGS } from '../game/gangs.js';
+import { ATM_KINDS } from '../game/money.js';
 
 // The city's map (ROADMAP 2.1). The whole city drawn in pen on a page of graph paper: the bay with
 // its waves, the beach, the pier with the big wheel, the park, every building from above in its own
@@ -437,7 +438,9 @@ export class CityMap {
       const k = KINDS[kind];
       if (!k) continue;
       const d = s.door;
-      add({ cat: k[0], glyph: kind, x: d[0], z: d[2], name: s.name === 'tower' ? null : s.name, he: k[1], hours: kind === 'club' ? 'club' : kind === 'motel' ? 'lobby' : kind, shop: s });
+      // (ROADMAP 8.1: where the ATMs are)
+      const atm = game.money && ATM_KINDS.has(s.kind) ? 'יש כאן כספומט PAPERTRUST' : undefined;
+      add({ cat: k[0], glyph: kind, x: d[0], z: d[2], name: s.name === 'tower' ? null : s.name, he: k[1], hours: kind === 'club' ? 'club' : kind === 'motel' ? 'lobby' : kind, shop: s, note: atm });
     }
     // the blueprints' boards
     for (const b of w.billboards || []) {

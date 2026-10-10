@@ -101,6 +101,8 @@ export class SaveGame {
       weaponId: g.weapons.current.def.id,
       // (what the hero got better at: ROADMAP 5.6)
       skills: g.skills ? g.skills.save() : null,
+      // (the wallet and the bank: ROADMAP 8.1)
+      money: g.money ? g.money.save() : null,
       vehicles: g.vehicles.list.filter((o) => !o.dead).map((o) => ({
         kind: o.model || o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
         x: o.pos.x, y: o.pos.y, z: o.pos.z, yaw: o.yaw, hp: o.hp, alt: o.alt || 0, mine: o === v,
@@ -220,6 +222,7 @@ export class SaveGame {
     }
     g.camRig.yaw = P.yaw;
     if (g.skills && s.skills) g.skills.load(s.skills);
+    if (g.money && s.money) g.money.load(s.money);
     // what you held
     const W = g.weapons;
     while (W.slots.length > W.keep) W.removeModel(W.slots.pop());

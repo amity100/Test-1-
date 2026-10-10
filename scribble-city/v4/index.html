@@ -46,6 +46,7 @@
       </div>
       <div id="district" class="paper-card"></div>
       <div id="clock" class="paper-card" aria-label="השעה בעיר"></div>
+      <div id="money" class="paper-card hidden" aria-label="מזומן"><span id="money-cash" dir="ltr"></span></div>
     </div>
 
     <div id="goals" class="sticky"></div>
@@ -207,6 +208,12 @@
           <div id="phone-skill-list"></div>
           <p class="phone-soon">משתפרים במה שעושים: רצים, יורים, נוהגים, מציירים ומרביצים</p>
         </div>
+        <div id="phone-bank" class="phone-page hidden">
+          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b>בנק PAPERTRUST</b></div>
+          <div id="phone-bank-sum"></div>
+          <div id="phone-bank-list"></div>
+          <p class="phone-soon">הכסף בבנק שמור גם כשנמחקים. מושכים ומפקידים בכספומט: בחנויות הנוחות ובלובי של המלונות</p>
+        </div>
         <div id="phone-view" class="phone-page hidden">
           <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b id="phone-view-title"></b></div>
           <img id="phone-view-img" alt="">
@@ -301,6 +308,7 @@
       <h2>נעצרתם!</h2>
       <p id="busted-why">נכנעתם, והשוטרים אזקו אתכם.</p>
       <p>לילה בתא המעצר בתחנת המשטרה שבכיכר המזרקה. הנשק שציירתם והאפוד מוחרמים, ואפשר לצייר אותם שוב.</p>
+      <p id="busted-fine" class="money-note"></p>
       <button id="busted-btn" class="btn primary">לצאת מהתחנה</button>
     </div>
   </div>
@@ -309,6 +317,7 @@
     <div class="sheet small">
       <h2>נמחקת!</h2>
       <p>מישהו מחק אותך מהמחברת… אבל אפשר לצייר אותך מחדש.</p>
+      <p id="death-money" class="money-note"></p>
       <button id="respawn-btn" class="btn primary">צייר אותי מחדש</button>
     </div>
   </div>

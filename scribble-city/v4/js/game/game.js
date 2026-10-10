@@ -72,6 +72,7 @@ import { Lose } from './lose.js';
 import { Gangs } from './gangs.js';
 import { Arsenal } from './arsenal.js';
 import { Wheel } from '../ui/wheel.js';
+import { Money, fmt } from './money.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -242,9 +243,12 @@ export class Game {
     // (magazines and reloading, the stationery shops' refills, the weapon wheel: ROADMAP 6.6)
     this.arsenal = this.classic ? null : new Arsenal(this);
     this.wheel = this.classic ? null : new Wheel(this);
+    // (the wallet and the bank, the prices, what comes in and what goes out: ROADMAP 8.1)
+    this.money = this.classic ? null : new Money(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
+    if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
     this.drawPick = null; // the photo the pencil opens with
@@ -595,6 +599,11 @@ export class Game {
   onPlayerDeath() {
     if (this.player.inVehicle) this.exitVehicle(true);
     this.player.mode = 'dead';
+    // (ROADMAP 8.1) half the cash in your pockets is erased with you; the bank keeps the rest
+    if (this.money) {
+      const lost = this.money.onDeath();
+      $('death-money').textContent = lost ? `חצי מהמזומן שבכיס נמחק: ${fmt(lost)}. הכסף בבנק שמור.` : '';
+    }
     if (this.airdraw.open) this.airdraw.close(false, true);
     this.state = 'dead';
     this.audio.play('fail');
@@ -606,6 +615,8 @@ export class Game {
 
   onEnemyKilled(e) {
     if (e && e.faction === 'police') this.dropWeapon(e);
+    // (a gang member's cash, on the ground: ROADMAP 8.1)
+    if (this.money) this.money.fromEnemy(e);
     if (e && e.faction !== 'gang' && e.faction !== 'monster') return;
     this.goalFlags.kills++;
     this.updateGoals();
@@ -805,6 +816,7 @@ export class Game {
       this.animals.update(dt);
       this.voices.update(dt);
       this.pickups.update(dt);
+      if (this.money) this.money.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
       this.gps.update(dt);
@@ -913,6 +925,7 @@ export class Game {
       this.animals.draw(fr);
       this.chute.draw(fr);
       this.pickups.draw(fr);
+      if (this.money) this.money.draw(fr);
       this.weather.draw(fr);
       this.fx.update(dt, fr);
       fr.end();
