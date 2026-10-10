@@ -343,6 +343,16 @@ export class AirDraw {
       return;
     }
     const res = scoreDrawing(strokesPx, this.bp);
+    // (the drawing skill: points onto the score, and every drawing adds to it; ROADMAP 5.6)
+    const sk = this.game.skills;
+    if (sk) {
+      const bonus = sk.drawBonus;
+      if (bonus > 0 && res.score > 0) {
+        res.score = Math.min(100, res.score + bonus);
+        res.grade = gradeOf(res.score);
+      }
+      sk.add('draw', res.grade === 'perfect' ? 8 : res.grade === 'good' ? 6 : res.grade === 'wonky' ? 4 : 2);
+    }
     if (this.traced && res.score > TRACED_MAX) {
       res.score = TRACED_MAX;
       res.grade = gradeOf(res.score);

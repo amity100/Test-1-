@@ -481,6 +481,17 @@ export const GLYPHS = {
     circle(g, 3.8, 3, 1.7, true);
   },
   // the phone's apps
+  // (the phone's skills, ROADMAP 5.6): three bars going up and a star
+  skills(g) {
+    g.fillStyle = '#5cbf4a';
+    rrect(g, -6.6, 0.6, 3.4, 5.8, 0.6);
+    g.fillStyle = '#ffd23f';
+    rrect(g, -1.7, -2.6, 3.4, 9, 0.6);
+    g.fillStyle = '#e2335f';
+    rrect(g, 3.2, -5.6, 3.4, 12, 0.6);
+    g.fillStyle = '#fffaf0';
+    shape(g, [-5, -7.4, -4.2, -5.3, -2, -5.2, -3.7, -3.8, -3.1, -1.6, -5, -2.9, -6.9, -1.6, -6.3, -3.8, -8, -5.2, -5.8, -5.3]);
+  },
   mapApp(g) {
     g.fillStyle = '#fffaf0';
     shape(g, [-7, -5, -2.4, -7, 2.4, -5, 7, -7, 7, 5, 2.4, 7, -2.4, 5, -7, 7]);

@@ -198,8 +198,10 @@ export class Fists {
         }
       }
     }
-    // (a strike straight after a blow was blocked: the counter, harder)
-    const power = game.time - this.blockT < 0.8 ? 1.6 : 1;
+    // (a strike straight after a blow was blocked: the counter, harder; the fighting skill, ROADMAP
+    // 5.6)
+    const sk = game.skills;
+    const power = (game.time - this.blockT < 0.8 ? 1.6 : 1) * (sk ? sk.fightMul : 1);
     if (who) {
       const res = who.mgr === game.enemies ? game.enemies.strike(who, s, f, power) : game.civilians.struck(who, s, f, power);
       if (!res) return;
@@ -210,6 +212,7 @@ export class Fists {
         game.audio.play('block', 0.8);
       } else {
         this.stats.hits++;
+        if (sk) sk.add('fight', 1);
         game.audio.play('punch', s.vol * power);
         if (res === 'down') this.stats.downs++;
         if (res === 'ko') this.stats.kos++;

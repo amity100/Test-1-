@@ -924,6 +924,16 @@ html, body { background: #1b1430; }
 #phone .photo { padding: 0; border: 2px solid var(--ink); border-radius: 4px; background: #fbf7ee; cursor: pointer; box-shadow: 2px 2px 0 rgba(27, 20, 48, 0.5); }
 #phone .photo img { display: block; width: 100%; }
 .phone-empty { text-align: center; color: var(--ink-soft); margin-top: 30px; }
+/* (ROADMAP 5.6) the skills page */
+.skill { margin: 0 2px 10px; }
+.skill-top { display: flex; align-items: baseline; gap: 6px; font: 400 21px/1.1 var(--font-hand); color: var(--ink); }
+.skill-top b { font-weight: 400; flex: 1; }
+.skill-top span { font: 600 12px/1 var(--font-ui); color: var(--ink-soft); }
+.skill-lv { display: flex; gap: 3px; margin: 3px 0 2px; }
+.skill-lv i { flex: 1; height: 9px; border: 2px solid var(--ink); border-radius: 3px; background: var(--paper); }
+.skill-lv i.on { background: linear-gradient(90deg, #5cbf4a, #a6e58c); }
+.skill-lv i.part { background: linear-gradient(270deg, #ffd23f var(--k), var(--paper) var(--k)); }
+.skill-what { font: 500 12px/1.2 var(--font-ui); color: var(--ink-soft); }
 #phone-view-img { display: block; width: 100%; border: 2px solid var(--ink); border-radius: 4px; box-shadow: 3px 3px 0 rgba(27, 20, 48, 0.5); }
 .phone-actions { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
 .phone-actions .btn { text-decoration: none; }
@@ -1005,3 +1015,12 @@ body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.ph
 #breath .bar { flex: 1; height: 7px; }
 #breath .bar .fill { background: linear-gradient(90deg, #3fa9d6, #8fe3ff); }
 #breath.low .bar .fill { animation: fuelblink 0.6s steps(2) infinite; background: #e8333d; }
+/* (ROADMAP 5.6) the stamina: down while sprinting, out of breath at the bottom */
+#stamina { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+#stamina.hidden { display: none; }
+#stamina .ico { font-size: 13px; line-height: 1; color: #e08a1e; font-weight: 800; }
+#stamina .bar { flex: 1; height: 7px; }
+#stamina .bar .fill { background: linear-gradient(90deg, #f0a030, #ffd96a); }
+#stamina.low .bar .fill { background: #b9b3c4; }
+/* (the air or the stamina under the health: the goals card steps down out of their way) */
+body:has(#stamina:not(.hidden)) #goals, body:has(#breath:not(.hidden)) #goals { top: max(78px, calc(env(safe-area-inset-top) + 72px)); }

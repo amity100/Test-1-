@@ -63,6 +63,7 @@ import { PaintShop } from '../ui/paintshop.js';
 import { Climb } from './climb.js';
 import { Swim } from './swim.js';
 import { Ragdolls } from './ragdoll.js';
+import { Skills } from './skills.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
@@ -218,6 +219,9 @@ export class Game {
     if (!this.classic) this.weapons.addFists();
     // (bodies thrown by a car or a blast fall like real ones: ROADMAP 5.5)
     this.ragdolls = this.classic ? null : new Ragdolls(this);
+    // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
+    this.skills = this.classic ? null : new Skills(this);
+    if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
     this.drawPick = null; // the photo the pencil opens with
@@ -741,6 +745,7 @@ export class Game {
       this.enemies.update(dt);
       this.civilians.update(dt);
       if (this.ragdolls) this.ragdolls.update();
+      if (this.skills && this.state === 'play') this.skills.update(dt);
       this.farCrowd.update(dt);
       this.streetlife.update(dt);
       this.routines.update(dt);

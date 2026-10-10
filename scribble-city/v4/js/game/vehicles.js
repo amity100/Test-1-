@@ -711,7 +711,10 @@ class Vehicle {
     const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1);
     const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1);
     const brakeK = U ? 1 + 0.18 * U.brakes : 1;
-    const gripK = U ? 1 + 0.08 * U.tires : 1;
+    // (the driving skill: ROADMAP 5.6)
+    const S = this.driver === this.game.player ? this.game.skills : null;
+    const gripK = (U ? 1 + 0.08 * U.tires : 1) * (S ? S.gripMul : 1);
+    const steerK = S ? S.steerMul : 1;
     let throttle = 0;
     let steer = 0;
     let hand = false;
@@ -749,7 +752,7 @@ class Vehicle {
       const k = Math.min(1, Math.abs(vL) / 5) * (1 - 0.45 * Math.min(1, Math.abs(vL) / top)) * (hand ? 1.55 : 1);
       const pull = input ? q.pull * 0.5 : 0;
       const want = (steer + pull) * H.steer * k * Math.sign(vL || 1);
-      this.yawRate = damp(this.yawRate, want, 9 / H.mass, dt);
+      this.yawRate = damp(this.yawRate, want, (9 / H.mass) * steerK, dt);
     } else this.yawRate *= Math.exp(-0.8 * dt);
     this.yaw += this.yawRate * dt;
     // its speed along where it now points, and across

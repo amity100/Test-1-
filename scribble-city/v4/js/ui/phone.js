@@ -9,6 +9,7 @@ import * as store from '../core/store.js';
 //                you see. It is kept in the phone with where and when it was taken.
 //   the photos   the pictures, big, to keep on the device or to throw away
 //   settings     the pause menu's settings
+//   skills       (ROADMAP 5.6, not with ?classic) what the hero got better at (game/skills.js)
 // Contacts and missions come later. The game waits while the phone is in your hand (not while
 // the camera is up).
 
@@ -32,24 +33,7 @@ export class Phone {
     this.viewKey = null;
     this.el = $('phone');
     this.vf = $('phone-cam');
-    const apps = $('phone-apps');
-    for (const a of APPS) {
-      const b = document.createElement('button');
-      b.className = 'app';
-      b.dataset.app = a.id;
-      const c = document.createElement('canvas');
-      c.width = 128;
-      c.height = 128;
-      const g = c.getContext('2d');
-      g.scale(4, 4);
-      sticker(g, 16, 15.5, a.glyph, a.fill, 13, { square: true, scale: 1.15 });
-      b.appendChild(c);
-      const s = document.createElement('span');
-      s.textContent = a.name;
-      b.appendChild(s);
-      b.addEventListener('click', () => this.app(a.id));
-      apps.appendChild(b);
-    }
+    for (const a of APPS) this.addApp(a);
     for (const b of this.el.querySelectorAll('.phone-back')) b.addEventListener('click', () => this.back());
     $('phone-home-btn').addEventListener('click', () => this.close());
     $('phone-del').addEventListener('click', () => this.deleteViewed());
@@ -95,6 +79,24 @@ export class Phone {
     });
   }
 
+  addApp(a) {
+    const b = document.createElement('button');
+    b.className = 'app';
+    b.dataset.app = a.id;
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 128;
+    const g = c.getContext('2d');
+    g.scale(4, 4);
+    sticker(g, 16, 15.5, a.glyph, a.fill, 13, { square: true, scale: 1.15 });
+    b.appendChild(c);
+    const s = document.createElement('span');
+    s.textContent = a.name;
+    b.appendChild(s);
+    b.addEventListener('click', () => this.app(a.id));
+    $('phone-apps').appendChild(b);
+  }
+
   // ------------------------------------------------------------------ in and out of the pocket
   open() {
     if (this.isOpen) return;
@@ -131,6 +133,7 @@ export class Phone {
     this.pageName = name;
     for (const p of this.el.querySelectorAll('.phone-page')) p.classList.toggle('hidden', p.id !== `phone-${name}`);
     if (name === 'photos') this.fillPhotos();
+    if (name === 'skills') this.fillSkills();
   }
 
   status() {
@@ -157,6 +160,7 @@ export class Phone {
       g.openMap('phone');
     } else if (id === 'camera') this.startCam();
     else if (id === 'photos') this.page('photos');
+    else if (id === 'skills') this.page('skills');
     else if (id === 'settings') {
       this.close(true);
       g.showPauseMenu();
@@ -246,6 +250,41 @@ export class Phone {
   async prune() {
     const ks = await store.keys('photos');
     for (let i = 0; i < ks.length - MAX_PHOTOS; i++) await store.del('photos', ks[i]);
+  }
+
+  // ------------------------------------------------------------------ the skills (ROADMAP 5.6)
+  fillSkills() {
+    const sk = this.game.skills;
+    const box = $('phone-skill-list');
+    box.innerHTML = '';
+    if (!sk) return;
+    for (const r of sk.rows()) {
+      const d = document.createElement('div');
+      d.className = 'skill';
+      const top = document.createElement('div');
+      top.className = 'skill-top';
+      const b = document.createElement('b');
+      b.textContent = r.name;
+      const lv = document.createElement('span');
+      lv.textContent = `רמה ${r.level} מתוך 5`;
+      top.append(b, lv);
+      const bars = document.createElement('div');
+      bars.className = 'skill-lv';
+      for (let i = 0; i < 5; i++) {
+        const k = document.createElement('i');
+        if (i < r.level) k.className = 'on';
+        else if (i === r.level && r.next > 0) {
+          k.className = 'part';
+          k.style.setProperty('--k', `${Math.round(r.next * 100)}%`);
+        }
+        bars.appendChild(k);
+      }
+      const what = document.createElement('div');
+      what.className = 'skill-what';
+      what.textContent = r.what;
+      d.append(top, bars, what);
+      box.appendChild(d);
+    }
   }
 
   // ------------------------------------------------------------------ the photos

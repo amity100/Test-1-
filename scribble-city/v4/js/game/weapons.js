@@ -311,7 +311,8 @@ export class Weapons {
     const n = def.pellets || 1;
     for (let i = 0; i < n; i++) {
       const dir = _v.copy(this.aimPoint).sub(muzzle).normalize();
-      const spread = def.spread * g.spread;
+      // (the shooting skill: ROADMAP 5.6, not with ?classic)
+      const spread = def.spread * g.spread * (game.skills ? game.skills.spreadMul : 1);
       dir.x += (Math.random() - 0.5) * spread * 2;
       dir.y += (Math.random() - 0.5) * spread * 2;
       dir.z += (Math.random() - 0.5) * spread * 2;
@@ -336,7 +337,7 @@ export class Weapons {
     slot.ammo--;
     game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
     game.audio.play(def.sound || (def.projectile === 'paint' ? 'paint' : def.projectile === 'pencil' ? 'pencilShot' : 'bazooka'));
-    game.camRig.addShake(def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04));
+    game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * (game.skills ? game.skills.kickMul : 1));
     const at = player.inVehicle ? player.inVehicle.pos : player.pos;
     game.enemies.noise(at, 32);
     game.civilians.panic(at, 40);
@@ -1057,6 +1058,8 @@ export class Weapons {
     }
     if (hit.type === 'enemy') {
       const e = hit.enemy;
+      // (a hit of yours: the shooting skill, ROADMAP 5.6)
+      if (game.skills && pr.owner === 'player' && e.alive) game.skills.add('shoot', Math.min(1.5, pr.damage / 25));
       game.enemies.damage(e, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), hurtKind);
       if (kind === 'paint' || kind === 'ink' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') e.paint(kind === 'ink' ? PEN_BLUE : pr.color);
       if (kind === 'staple') e.pinT = Math.max(e.pinT || 0, pr.pin || 0.4);

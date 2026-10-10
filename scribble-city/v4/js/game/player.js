@@ -281,7 +281,12 @@ export class Player {
     // a double espresso from the cafe: everything a bit faster for a while
     // (the fists, ROADMAP 5.4: slow behind the guard, and half pace while a blow goes out)
     const fists = weapons.fists;
-    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1);
+    // (ROADMAP 5.6, not with ?classic: a sprint runs the stamina down; out of breath, you jog -
+    // and the more you have run, the faster the sprint)
+    const skills = this.game.skills;
+    const sprint = mv.sprint && !aiming && (!skills || skills.canSprint);
+    this.sprinting = sprint && wl > 0.3 && this.onGround && !this.crouched && !gliding;
+    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? 8.2 + (skills ? skills.sprintBonus : 0) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1);
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;

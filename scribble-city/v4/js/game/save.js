@@ -98,6 +98,8 @@ export class SaveGame {
       weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score })),
       weapon: g.weapons.index,
       weaponId: g.weapons.current.def.id,
+      // (what the hero got better at: ROADMAP 5.6)
+      skills: g.skills ? g.skills.save() : null,
       vehicles: g.vehicles.list.filter((o) => !o.dead).map((o) => ({
         kind: o.model || o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
         x: o.pos.x, y: o.pos.y, z: o.pos.z, yaw: o.yaw, hp: o.hp, alt: o.alt || 0, mine: o === v,
@@ -211,6 +213,7 @@ export class SaveGame {
     p.invuln = 3;
     p.parachute = P.parachute ? { grade: P.parachute.grade } : null;
     g.camRig.yaw = P.yaw;
+    if (g.skills && s.skills) g.skills.load(s.skills);
     // what you held
     const W = g.weapons;
     while (W.slots.length > W.keep) W.removeModel(W.slots.pop());
