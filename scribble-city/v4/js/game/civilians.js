@@ -442,9 +442,12 @@ export class Civilians {
         }
         // (on the way to work: in a hurry)
         else if (R && R.commute > 0) c.speed *= 1 + 0.3 * R.commute;
-        // most of them close by (the street you are on is full of people)
+        // most of them close by (the street you are on is full of people; with the far crowd,
+        // game/farcrowd.js, everybody whole is close by and the rest are its)
         const far = Math.random() < 0.3;
-        if (!c.placeNear(p, first ? 3 : far ? 45 : 16, far ? 100 : 60)) {
+        const lo = first ? 3 : game.classic ? (far ? 45 : 16) : 16;
+        const hi = game.classic ? (far ? 100 : 60) : 42;
+        if (!c.placeNear(p, lo, hi)) {
           c.dispose();
           continue;
         }
@@ -603,6 +606,36 @@ export class Civilians {
       }
     }
     return best;
+  }
+
+  // a walker nobody has a use for (the far crowd may take them over: game/farcrowd.js)
+  plain(c) {
+    if (c.scripted || c.ctrl || c.owner || !c.alive || c.headless || c.panicT > 0 || c.inside || c.dog || c.buddy || c.buddyOf || c.crossing || c.photo || c.exitRoom) return false;
+    const P = c.fig.parts;
+    return P.legL > 0.5 && P.legR > 0.5 && P.armL > 0.5 && P.armR > 0.5 && P.torso > 0.5;
+  }
+
+  // one of the far crowd coming near (game/farcrowd.js): a whole person, the same look, step and
+  // way, if the street near you has room for one more
+  fromFar(w) {
+    const R = this.game.rhythm;
+    const max = Math.round((this.game.touch ? 16 : 32) * (R ? R.people : 1));
+    let free = 0;
+    for (const c of this.list) if (!c.scripted) free++;
+    if (free >= max) return null;
+    const c = new Civilian(this, w.prom ? 'prom' : w.col, w.prom ? w.z : w.row, w.look);
+    c.loop = w.loop;
+    const n = w.loop.length;
+    c.dir = w.dir;
+    c.target = n === 2 ? (w.dir > 0 ? 1 : 0) : w.dir > 0 ? (w.leg + 1) % n : w.leg;
+    c.pos.set(w.x, w.y, w.z);
+    c.yaw = w.yaw;
+    c.fig.yaw = w.yaw;
+    c.fig.phase = w.phase;
+    c.speed = w.speed;
+    if (this.game.crowds && w.look.role) this.game.crowds.dress(c);
+    this.list.push(c);
+    return c;
   }
 
   // somebody who just got out of a car at (x, z): walks the sidewalk of the nearest block

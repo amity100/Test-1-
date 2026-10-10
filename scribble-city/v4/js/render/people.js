@@ -37,6 +37,26 @@ function limb(r0, r1, len, segs = 10, bulge = 0) {
   return new THREE.LatheGeometry(pts, segs);
 }
 
+// the far-off walkers' torso and limbs (PersonRenderer.drawCheap): the same outline in fewer points
+function lowTorsoGeo(waist, chest, shoulders, len, hem) {
+  const pts = [
+    new THREE.Vector2(0.0001, -hem - 0.01),
+    new THREE.Vector2(waist * 1.04, -hem),
+    new THREE.Vector2(chest * 0.98, len * 0.6),
+    new THREE.Vector2(shoulders, len * 0.86),
+    new THREE.Vector2(shoulders * 0.4, len * 1.0),
+    new THREE.Vector2(0.0001, len * 1.01),
+  ];
+  const g = new THREE.LatheGeometry(pts, 8);
+  g.scale(1, 1, 0.66);
+  return g;
+}
+
+function lowLimb(r0, r1, len) {
+  const pts = [new THREE.Vector2(0.0001, r0), new THREE.Vector2(r0, 0), new THREE.Vector2(r1, -len), new THREE.Vector2(0.0001, -len - r1)];
+  return new THREE.LatheGeometry(pts, 6);
+}
+
 function torsoGeo(waist, chest, shoulders, len, hem = 0, boxy = false) {
   const pts = boxy
     ? [
@@ -66,10 +86,10 @@ function torsoGeo(waist, chest, shoulders, len, hem = 0, boxy = false) {
   return g;
 }
 
-function skirtGeo(top, bottom, len, gap = 0) {
+function skirtGeo(top, bottom, len, gap = 0, segs = 16) {
   const pts = [new THREE.Vector2(top, 0.02), new THREE.Vector2(top * 1.05, -len * 0.15), new THREE.Vector2(bottom * 0.92, -len * 0.75), new THREE.Vector2(bottom, -len)];
   // (gap: an opening at the front, like a coat's)
-  const g = new THREE.LatheGeometry(pts, 16, gap / 2, Math.PI * 2 - gap);
+  const g = new THREE.LatheGeometry(pts, segs, gap / 2, Math.PI * 2 - gap);
   g.scale(1, 1, 0.8);
   return g;
 }
@@ -171,6 +191,12 @@ const _x = new THREE.Vector3();
 const _y = new THREE.Vector3();
 const _z = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+// (for the far-off walkers, drawCheap)
+const _cF = new THREE.Vector3();
+const _cR = new THREE.Vector3();
+const _cJ = { hip: new THREE.Vector3(), neck: new THREE.Vector3(), head: new THREE.Vector3() };
+const _cClip = [0, 0, 0, 0];
+const _cClip2 = [0, 0, 0, 0];
 
 // ------------------------------------------------------------------ the shapes, in one texture
 // Every kind of part is a row of one texture (two texels a point: position and u, normal and v),
@@ -396,6 +422,23 @@ export class PersonRenderer {
       tube: P(new THREE.CylinderGeometry(1, 1, 1, 10, 1, true), M.hair, 1024),
       ball: P(new THREE.SphereGeometry(1, 10, 6), M.hair, 2048),
       boxP: P(new THREE.BoxGeometry(1, 1, 1), M.box, 512),
+      // the far-off walkers' parts (game/farcrowd.js): the same sizes, a fifth of the points
+      lowTorsoTee: P(lowTorsoGeo(0.15, 0.19, 0.205, 0.54, 0.14), M.tee),
+      lowTorsoPlain: P(lowTorsoGeo(0.15, 0.19, 0.205, 0.54, 0.04), M.plain),
+      lowPelvis: P(new THREE.SphereGeometry(0.17, 8, 5).scale(1.05, 0.72, 0.78), M.plain),
+      lowUpper: P(lowLimb(0.056, 0.045, 0.29), M.plain),
+      lowUpperSkin: P(lowLimb(0.056, 0.045, 0.29), M.skin),
+      lowFore: P(lowLimb(0.045, 0.034, 0.26), M.plain),
+      lowForeSkin: P(lowLimb(0.045, 0.031, 0.26), M.skin),
+      lowThigh: P(lowLimb(0.085, 0.066, 0.45), M.plain),
+      lowShin: P(lowLimb(0.064, 0.048, 0.43), M.plain),
+      lowShinSkin: P(lowLimb(0.06, 0.042, 0.43), M.skin),
+      lowHead: P(new THREE.SphereGeometry(0.1, 8, 6), M.skin),
+      lowNeck: P(lowLimb(0.05, 0.05, 0.13), M.skin),
+      lowSphere: P(new THREE.SphereGeometry(1, 8, 6), M.hair, 512),
+      lowShoe: P(new THREE.CapsuleGeometry(0.052, 0.15, 1, 6).rotateX(Math.PI / 2).scale(1, 0.72, 1), M.box),
+      lowSkirt: P(skirtGeo(0.17, 0.3, 0.86, 0, 8), M.skirt),
+      lowMidi: P(skirtGeo(0.17, 0.25, 0.58, 0, 8), M.skirt),
     };
     // (the little things of a face, the soles and the pockets are inside the shadow of what they
     // are on: the sun's view leaves them out; and in the wet street's mirror, at half the pixels
@@ -529,6 +572,157 @@ export class PersonRenderer {
     if (this.dirty) {
       this.holeTex.needsUpdate = true;
       this.dirty = false;
+    }
+  }
+
+  // ------------------------------------------------------------------ somebody far off
+  // A walker far down the street, cheaply (game/farcrowd.js): the body, the head with its hair
+  // or hat, the arms and legs swinging with the walk, the shoes; no face, nothing held. The same
+  // pens and the same proportions as a whole person, so the one becomes the other unnoticed.
+  // w: { x, y, z, yaw, phase, speed, look, scale }
+  drawCheap(w) {
+    const L = w.look;
+    const p = this.p;
+    const S = w.scale;
+    const k = S * 0.98;
+    const fem = L.fem;
+    const bulk = L.build.bulk;
+    const fx = Math.sin(w.yaw);
+    const fz = Math.cos(w.yaw);
+    const F = _cF.set(fx, 0, fz);
+    const R = _cR.set(-fz, 0, fx);
+    const A = Math.min(1, w.speed / 7.5);
+    const ph = w.phase;
+    const J = _cJ;
+    // the joints (the rig's walk, game/doodle.js, without the rig)
+    const at = (out, x, y, z) => out.set(w.x + (R.x * x + F.x * z) * S, w.y + y * S, w.z + (R.z * x + F.z * z) * S);
+    const hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A;
+    const lean = A * 0.12;
+    at(J.hip, 0, hipY, 0);
+    const ny = hipY + 0.5 * Math.cos(lean);
+    const nz = 0.5 * Math.sin(lean);
+    at(J.neck, 0, ny, nz);
+    const hOff = 0.1 + 0.12 * L.build.head;
+    at(J.head, 0, ny + hOff, nz + hOff * Math.sin(lean));
+    const sw = (fem ? 0.15 : 0.17) * Math.max(0.9, bulk * 0.96);
+    const hw = (fem ? 0.095 : 0.085) * bulk;
+    const own = 0;
+    const ind = 0;
+    const seed = (w.seed % 1) * 0.37 + 0.11;
+    const bodyId = seed;
+    const armId = (seed + 0.31) % 1;
+    const headId = (seed + 0.62) % 1;
+    const top = L.top;
+    const bot = L.bottom;
+    const skin = linC(L.skin);
+    const topC = linC(top.color);
+    const botC = linC(bot.color);
+    const longSkirt = bot.kind === 'skirt' || bot.kind === 'dress' || top.kind === 'dress';
+    const midi = bot.kind === 'midi';
+    const tee = top.kind === 'tee' || top.kind === 'tank' || top.kind === 'polo';
+    const sleeves = top.sleeves || (tee ? 'short' : 'long');
+    const open = OPEN.has(top.kind);
+    const br = Math.max(0.9, bulk * 0.96) * (top.kind === 'puffer' ? 1.14 : 1);
+    // the torso and the hips
+    _a.copy(J.hip).addScaledVector(UP, 0.04 * S);
+    const sy = Math.max(0.2, _b.subVectors(J.neck, _a).length()) / 0.5;
+    const pool = tee && top.kind !== 'tank' ? p.lowTorsoTee : p.lowTorsoPlain;
+    const tw = (fem ? 0.95 : 1.05) * br * k;
+    pool.push(framed(_a, R, UP, F, tw, sy, tw * (fem ? 1.05 : 1)), topC, own, bodyId, ind);
+    _a.copy(J.hip).addScaledVector(UP, 0.02 * S);
+    p.lowPelvis.push(framed(_a, R, UP, F, k * bulk * (fem ? 1.06 : 1), k, k * bulk), longSkirt && top.kind === 'dress' ? topC : botC, own, bodyId, ind);
+    if (longSkirt) {
+      _a.copy(J.hip).addScaledVector(UP, 0.05 * S);
+      p.lowSkirt.push(framed(_a, R, UP, F, k * bulk, k, k * bulk), top.kind === 'dress' ? topC : botC, own, bodyId, ind);
+    } else if (midi) {
+      _a.copy(J.hip).addScaledVector(UP, 0.05 * S);
+      p.lowMidi.push(framed(_a, R, UP, F, k * bulk, k, k * bulk), botC, own, bodyId, ind);
+    }
+    // the neck and the head, its hair or hat
+    const hs = L.build.head * S;
+    _c.copy(J.head).addScaledVector(UP, -0.06 * S);
+    p.lowNeck.push(along(_c, J.neck, 0.13, k * 1.18, R), skin, own, headId, ind);
+    p.lowHead.push(framed(J.head, R, UP, F, 0.98 * hs, 1.14 * hs, 1.06 * hs), skin, own, headId, ind);
+    const hair = L.hair && L.hair.style !== 'none' ? linC(L.hair.color) : null;
+    if (L.hat) {
+      _c.copy(J.head).addScaledVector(UP, 0.05 * hs);
+      const cl = _cClip;
+      cl[0] = 0;
+      cl[1] = -1;
+      cl[2] = 0;
+      cl[3] = -(J.head.y + 0.02 * hs);
+      p.lowSphere.push(framed(_c, R, UP, F, 0.118 * hs, 0.1 * hs, 0.122 * hs), linC(L.hat.color), own, headId, ind, cl);
+    } else if (hair) {
+      const cl = _cClip;
+      cl[0] = 0;
+      cl[1] = -1;
+      cl[2] = 0;
+      cl[3] = -(J.head.y + 0.03 * hs);
+      _c.copy(J.head).addScaledVector(F, -0.008 * hs);
+      p.lowSphere.push(framed(_c, R, UP, F, 0.11 * hs, 0.125 * hs, 0.116 * hs), hair, own, headId, ind, cl);
+    }
+    if (hair && /long|ponytail|braids|curly|afro|bob/.test(L.hair.style)) {
+      // down the back of the head
+      const cl = _cClip2;
+      cl[0] = F.x;
+      cl[1] = 0;
+      cl[2] = F.z;
+      cl[3] = J.head.x * F.x + J.head.z * F.z - 0.02 * hs;
+      const long = /long|braids/.test(L.hair.style);
+      _c.copy(J.head).addScaledVector(F, -0.05 * hs).addScaledVector(UP, long ? -0.08 * hs : -0.02 * hs);
+      p.lowSphere.push(framed(_c, R, UP, F, 0.11 * hs, (long ? 0.17 : 0.11) * hs, 0.08 * hs), hair, own, headId, ind, cl);
+    }
+    // the arms, swinging
+    const armU = 0.31;
+    const armF = 0.29;
+    const swing = 0.15 + 0.7 * A;
+    const armK = k * Math.max(1, bulk * 0.85) * (open ? 1.08 : 1);
+    const shortS = sleeves === 'short' && !fem;
+    const noS = sleeves === 'none' && !fem;
+    for (let ai = 0; ai < 2; ai++) {
+      const side = ai === 0 ? 1 : -1;
+      const off = ai === 0 ? 0 : Math.PI;
+      const a = -Math.sin(ph + off) * swing;
+      const sx = side * (sw + 0.02);
+      at(_a, sx, ny - 0.07, nz);
+      const ey = ny - 0.07 - Math.cos(a) * armU;
+      const ez = nz + Math.sin(a) * armU;
+      at(_b, sx, ey, ez);
+      const b = a + 0.35 + A * 0.5;
+      at(_c, sx + side * 0.02, ey - Math.cos(b) * armF, ez + Math.sin(b) * armF);
+      (shortS || noS ? p.lowUpperSkin : p.lowUpper).push(along(_a, _b, 0.29, armK, F), shortS || noS ? skin : topC, own, armId, ind);
+      (shortS || noS ? p.lowForeSkin : p.lowFore).push(along(_b, _c, 0.26, armK, F), shortS || noS ? skin : topC, own, armId, ind);
+    }
+    // the legs, the shoes
+    const legL = 0.47 * (L.build.legs || 1);
+    const legK = k * Math.max(1, bulk * 0.9);
+    const shoeC = linC(L.boots || L.shoes);
+    const wide = bot.kind === 'wide';
+    const cargo = bot.kind === 'baggy' || bot.kind === 'cargo';
+    const shorts = bot.kind === 'shorts';
+    for (let li = 0; li < 2; li++) {
+      const off = li === 0 ? 0 : Math.PI;
+      const sx = (li === 0 ? 1 : -1) * hw;
+      const th = Math.sin(ph + off) * (0.18 + 0.62 * A);
+      const kb = Math.max(0, Math.sin(ph + off - Math.PI * 0.5)) * (0.25 + 0.9 * A) + 0.05;
+      at(_a, sx, hipY, 0);
+      const ky = hipY - Math.cos(th) * legL;
+      const kz = Math.sin(th) * legL;
+      at(_b, sx, ky, kz);
+      const sh = th - kb;
+      const fy = Math.max(ky - Math.cos(sh) * legL, 0.04);
+      const fz2 = kz + Math.sin(sh) * legL;
+      at(_c, sx, fy, fz2);
+      // (wide and cargo trousers a little wider)
+      const tk = wide || cargo ? 1.2 : 1;
+      if (midi) p.lowShin.push(along(_b, _c, 0.43, legK * 1.06, F), shoeC, own, bodyId, ind);
+      else if (!longSkirt) {
+        p.lowThigh.push(along(_a, _b, 0.45, legK * tk, F), botC, own, bodyId, ind);
+        (shorts ? p.lowShinSkin : p.lowShin).push(along(_b, _c, 0.43, legK * tk, F), shorts ? skin : botC, own, bodyId, ind);
+      }
+      _d.copy(_c).addScaledVector(F, 0.05 * S);
+      _d.y = Math.max(_d.y - 0.02 * S, w.y + 0.035);
+      p.lowShoe.push(framed(_d, R, UP, F, k, k, k), shoeC, own, bodyId, ind);
     }
   }
 
