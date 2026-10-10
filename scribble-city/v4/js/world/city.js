@@ -20,7 +20,8 @@ export function buildCity(scene, o = {}) {
   group.name = 'city';
   scene.add(group);
   const M = cityMaterials();
-  const neon = new NeonAtlas();
+  // (the service station's signs, ROADMAP 4.6, want a few more lines of it: not with ?classic)
+  const neon = o.neonRows ? new NeonAtlas(4, o.neonRows) : new NeonAtlas();
   M.signNeon = makeSurface({ kind: 'neon', neonMask: true, vcolor: true, alphaTest: 0.5, emissive: new THREE.Color(2.0, 2.0, 2.0), line: 0.15, side: THREE.DoubleSide, noShadow: true });
   const ctx = {
     B: new Batch(),
@@ -168,6 +169,8 @@ export function buildCity(scene, o = {}) {
     occluders: ctx.occluders,
     footprints: ctx.footprints,
     wheel: ctx.wheel || null,
+    // (the service station: its bays, pumps and your parking, world/garages.js)
+    garages: ctx.garages || null,
     // hide what is too far to matter (by the chunks' bounding spheres)
     cull(cam) {
       for (const c of cull) {

@@ -57,6 +57,8 @@ import { Animals } from './animals.js';
 import { Voices } from './voices.js';
 import { Fleet } from './fleet.js';
 import { Damage } from './damage.js';
+import { Garage } from './garage.js';
+import { PaintShop } from '../ui/paintshop.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
@@ -191,6 +193,10 @@ export class Game {
     // the cars' damage you can see: dents, the glass, a flat, a bumper off, smoke, fire
     // (game/damage.js)
     this.damage = new Damage(this);
+    // the service station: the body shop, the paint shop, the wash, the pumps, your parking
+    // (game/garage.js, ui/paintshop.js; not with ?classic: then there is no station)
+    this.garage = new Garage(this);
+    this.paintshop = this.classic ? null : new PaintShop(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -256,7 +262,7 @@ export class Game {
         if (!locked && !this.touch) this.phone.camBack();
         return;
       }
-      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -718,6 +724,7 @@ export class Game {
       this.traffic.update(dt);
       this.fleet.update(dt);
       this.damage.update(dt);
+      this.garage.update(dt);
       this.world.objects.update(dt, this.world.bakeShadows, this.camera.position);
       this.police.update(dt);
       this.events.update(dt);
@@ -801,6 +808,7 @@ export class Game {
       this.traffic.draw(this.camera.position);
       this.fleet.draw(fr);
       this.damage.draw(fr);
+      this.garage.draw(fr);
       this.signals.draw(this.camera.position);
       this.vehicles.draw(this.cars);
       this.cars.end();
@@ -1271,6 +1279,8 @@ export class Game {
     const v = p.inVehicle;
     if (!v) return;
     v.driver = null;
+    // (left in one of your bays at the station: kept, game/garage.js)
+    this.garage.onExit(v);
     p.inVehicle = null;
     p.mode = 'foot';
     p.fig.setVisible(true);
@@ -1458,6 +1468,9 @@ export class Game {
     if (p.inVehicle) {
       enter = true;
       prompt = touch ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+      // (at the service station: what stopping here does, game/garage.js)
+      const gp = this.garage.prompt();
+      if (gp) prompt = gp;
     } else if (p.mode === 'foot' && this.events.prompt()) {
       // somebody near you needs a hand (game/events.js)
       enter = true;

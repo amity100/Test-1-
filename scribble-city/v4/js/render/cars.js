@@ -364,11 +364,81 @@ function build(kind) {
   const ts = (u + off) / L;
   K.seat = { u, y: belt(ts) - 0.97, s: hw(ts) * 0.45 };
   K.cab = { zr, zf };
+  // (the hood's middle, for a scoop: ROADMAP 4.6)
+  K.hood = { z: (zf + off) / 2, y: belt((G.tD + 1) / 2) };
   // the inside: the body's skin again, a little in from it, seen from within (dark, the seats'
   // colour; it dents with the body)
   const inside = merge([lower, gh.inRoof]);
   shrink(inside, 0.965);
   return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside };
+}
+
+// (ROADMAP 4.6) a point on a car's side, from a picture of it from the side: z along it (forward),
+// y up - x on its skin there (side 1: its left, -1: its right), a hair out of it; null where the
+// side is not the body (the windows, the wheels, above or below it)
+const _sideCurves = new Map();
+export function sidePoint(kind, z, y, side = 1) {
+  const K = KINDS[kind] || KINDS.sedan;
+  let C = _sideCurves.get(K);
+  if (!C) {
+    C = { hw: curve(K.halfW), belt: curve(K.belt) };
+    _sideCurves.set(K, C);
+  }
+  const L = K.len;
+  const t = (z + L / 2) / L;
+  if (t < 0.015 || t > 0.985) return null;
+  const top = C.belt(t);
+  let b = K.clear;
+  for (const tw of K.wheels) {
+    const dz = (z - (tw * L - L / 2)) / (K.r * 1.22);
+    if (Math.abs(dz) < 1) b = Math.max(b, K.r * 1.12 * Math.sqrt(1 - dz * dz) + K.r * 0.15);
+  }
+  const bot = Math.min(b, top - 0.08);
+  if (y < bot + 0.03 || y > top - 0.015) return null;
+  const yc = (top + bot) / 2;
+  const hb = (top - bot) / 2;
+  const s = (y - yc) / hb;
+  const sn = Math.sign(s) * Math.pow(Math.abs(s), K.n / 2);
+  const cs = Math.sqrt(Math.max(0, 1 - sn * sn));
+  const x = C.hw(t) * Math.pow(cs, 2 / K.n) * (sn < 0 ? 1 - 0.06 * -sn : 1);
+  // (out along the skin's normal, about: sideways where it is upright, up where it rounds over)
+  return [side * (x + 0.016 + 0.01 * cs), y + 0.016 * Math.max(0, sn), z];
+}
+
+// the outline of a car from the side (for the paint shop's sheet): the body's top and bottom
+// along it, the windows' band and the roof, the wheels
+export function sideProfile(kind) {
+  const K = KINDS[kind] || KINDS.sedan;
+  const hw = curve(K.halfW);
+  const belt = curve(K.belt);
+  const L = K.len;
+  const G = K.glass;
+  const body = [];
+  const N = 80;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const z = t * L - L / 2;
+    let b = K.clear;
+    for (const tw of K.wheels) {
+      const dz = (z - (tw * L - L / 2)) / (K.r * 1.22);
+      if (Math.abs(dz) < 1) b = Math.max(b, K.r * 1.12 * Math.sqrt(1 - dz * dz) + K.r * 0.15);
+    }
+    body.push({ z, top: belt(t), bot: Math.min(b, belt(t) - 0.08) });
+  }
+  const roof = [];
+  const roofAt = (t) => {
+    if (t <= G.tA || t >= G.tD) return 0;
+    if (t < G.tB) return Math.sin(((t - G.tA) / (G.tB - G.tA)) * Math.PI * 0.5);
+    if (t > G.tC) return Math.sin(((G.tD - t) / (G.tD - G.tC)) * Math.PI * 0.5);
+    return 1;
+  };
+  for (let i = 0; i <= 40; i++) {
+    const t = G.tA + ((G.tD - G.tA) * i) / 40;
+    const yb = belt(t) - 0.04;
+    roof.push({ z: t * L - L / 2, y: Math.max(yb + 0.02, yb + (G.R - yb) * roofAt(t)), yb });
+  }
+  void hw;
+  return { L, R: G.R, body, roof, wheels: K.wheels.map((tw) => ({ z: tw * L - L / 2, r: K.r })), pillars: (G.pillars || []).map((p) => p * L - L / 2) };
 }
 
 // a shape drawn in from its skin a little (its inside faces are the ones drawn: BackSide)
@@ -753,8 +823,12 @@ export class CarRenderer {
       this.tyres.push(_w, WHITE, part + 0.7, rv);
       _w.compose(_p.set(w.x + w.sd * 0.165, wr, w.z), _q, _s.set(1, w.r, w.r));
       _w.premultiply(_m);
-      this.rims.push(_w, WHITE, part + 0.8, rv);
+      this.rims.push(_w, o.rim || WHITE, part + 0.8, rv);
     }
+    // (ROADMAP 4.6) the car's own frame, for what is drawn on it (game/vehicles.js); the garage's
+    // upgrades you can see: a scoop on the hood and pipes, a bull bar, skirts, a roof rack
+    if (o.matrixOut) o.matrixOut.copy(_m);
+    if (o.mods) this.mods(K, _m, o.mods, rv);
     const top = K.roofY;
     // the turn signal blinking on that side (1: its left, -1: its right)
     if (o.signal) {
@@ -821,6 +895,27 @@ export class CarRenderer {
       for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.01), 0.62, 0.1, 0.03, 0.07, K.len * 0.78, FIRE_BAND, rv);
     } else if (o.extra === 'limo') {
       for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.03), 0.6, 0, 0.03, 0.05, K.len * 0.86, CHROME, rv);
+    }
+  }
+
+  mods(K, m, U, rv) {
+    const L = K.len;
+    if (U.engine >= 1) {
+      // (the scoop: black, its mouth chrome from the third step)
+      this.box(this.trimBox, m, 0, K.hood.y + 0.035, K.hood.z, 0.46, 0.08, 0.62, GARBAGE_DARK, rv);
+      if (U.engine >= 2) this.box(this.trimBox, m, 0, K.hood.y + 0.05, K.hood.z + 0.31, 0.4, 0.05, 0.03, CHROME, rv);
+    }
+    if (U.engine >= 3) for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, m, sd * 0.42, K.clear + 0.12, -L / 2 - 0.1, 0.13, 0.13, 0.3, CHROME, rv);
+    if (U.armor >= 1) {
+      for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, m, sd * 0.42, 0.62, L / 2 + 0.14, 0.08, 0.6, 0.08, GARBAGE_DARK, rv);
+      this.box(this.trimBox, m, 0, 0.86, L / 2 + 0.14, 1.0, 0.08, 0.08, GARBAGE_DARK, rv);
+      this.box(this.trimBox, m, 0, 0.5, L / 2 + 0.14, 1.0, 0.08, 0.08, GARBAGE_DARK, rv);
+    }
+    if (U.armor >= 2) for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, m, sd * (K.W / 2 - 0.04), K.clear + 0.14, 0, 0.07, 0.16, L * 0.5, GARBAGE_DARK, rv);
+    if (U.armor >= 3) {
+      const y = K.roofY + 0.09;
+      for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, m, sd * 0.45, y, (K.cab.zr + K.cab.zf) / 2, 0.05, 0.05, (K.cab.zf - K.cab.zr) * 0.45, CHROME, rv);
+      for (const k of [-1, 0, 1]) this.box(this.trimBox, m, 0, y, (K.cab.zr + K.cab.zf) / 2 + k * (K.cab.zf - K.cab.zr) * 0.18, 0.95, 0.05, 0.05, CHROME, rv);
     }
   }
 

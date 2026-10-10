@@ -517,6 +517,50 @@ export const GLYPHS = {
     shape(g, [-3.2, 2.4, 0, -0.8, 2.4, 1.2, 5, -1.4, 5, 2.4]);
     g.restore();
   },
+  // (the service station, ROADMAP 4.6)
+  pump(g) {
+    g.fillStyle = '#e8333d';
+    rrect(g, -5.6, -6.6, 7.6, 13, 1.4);
+    g.fillStyle = '#dff6ff';
+    rrect(g, -4.2, -5.2, 4.8, 3.6, 0.8);
+    g.beginPath();
+    g.moveTo(2, -1);
+    g.quadraticCurveTo(6.4, -1, 6.2, 3);
+    g.lineTo(6.2, 5.4);
+    g.stroke();
+  },
+  wrench(g) {
+    g.fillStyle = '#c9c9d2';
+    g.save();
+    g.rotate(-0.78);
+    rrect(g, -1.5, -2.5, 3, 9.5, 1.2);
+    g.beginPath();
+    g.arc(0, -4.5, 3.4, 0.65, Math.PI * 2 - 0.65 + Math.PI * 0.0);
+    g.lineTo(0, -4.5);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.restore();
+  },
+  wash(g) {
+    g.fillStyle = '#7fd8ff';
+    for (const [x, y, r] of [[-3, 1.5, 3.2], [2.6, -0.8, 3.8], [3.4, 4, 2.2], [-3.6, -4, 2]]) circle(g, x, y, r, true);
+  },
+  parking(g) {
+    g.fillStyle = '#3f6fe8';
+    rrect(g, -6.4, -6.4, 12.8, 12.8, 2);
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 2.4;
+    line(g, -2, 4.4, -2, -4);
+    g.beginPath();
+    g.moveTo(-2, -4);
+    g.lineTo(1.2, -4);
+    g.quadraticCurveTo(4, -4, 4, -1.2);
+    g.quadraticCurveTo(4, 1.4, 1.2, 1.4);
+    g.lineTo(-2, 1.4);
+    g.stroke();
+    g.strokeStyle = '#1b1430';
+  },
   gear(g) {
     g.fillStyle = '#d2c0f3';
     g.beginPath();

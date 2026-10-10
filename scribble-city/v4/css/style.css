@@ -950,3 +950,30 @@ body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.ph
   .phone-soon { margin-top: 6px; }
   #phone-home-btn { margin-top: 5px; }
 }
+
+/* ---- the paint shop (ROADMAP 4.6) */
+#paintshop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(27, 20, 48, 0.45); pointer-events: auto; padding: 12px; }
+#paintshop.hidden { display: none; }
+#paintshop .ps-sheet { width: min(1040px, 96vw); max-height: 96vh; overflow: auto; padding: 12px 16px 14px; transform: rotate(-0.4deg); }
+#paintshop .ps-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+#paintshop .ps-title { font-family: var(--font-hand); font-size: 30px; color: #b3191e; }
+#paintshop .ps-hint { font-size: 15px; opacity: 0.8; }
+#ps-canvas { width: 100%; height: auto; display: block; background: repeating-linear-gradient(0deg, rgba(90, 120, 200, 0.12) 0 1px, transparent 1px 26px), #fbf8f0; border: 2px solid var(--ink); border-radius: 8px; touch-action: none; cursor: crosshair; }
+#paintshop .ps-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+#paintshop .ps-label { font-family: var(--font-hand); font-size: 20px; min-width: 74px; }
+#paintshop .ps-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+#paintshop .ps-sw { width: 30px; height: 30px; border-radius: 50%; border: 2.5px solid var(--ink); cursor: pointer; padding: 0; box-shadow: 1px 2px 0 rgba(36, 36, 44, 0.25); }
+#paintshop .ps-sw.pen { border-radius: 30% 50% 40% 50%; }
+#paintshop .ps-sw.glow { box-shadow: 0 0 9px 2px currentColor, 1px 2px 0 rgba(36, 36, 44, 0.25); }
+#paintshop .ps-sw.sel { outline: 3px solid #ffd23f; outline-offset: 2px; transform: scale(1.12); }
+#paintshop .ps-btn { font: 600 16px Rubik, sans-serif; padding: 6px 14px; border: 2px solid var(--ink); border-radius: 9px 12px 8px 11px; background: var(--paper-2); color: var(--ink); cursor: pointer; }
+#paintshop .ps-btn.sel { background: #ffd23f; }
+#paintshop .ps-btn.primary { background: #b3191e; color: #fff; }
+#paintshop .ps-gap { flex: 1; }
+#fuel { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+#fuel.hidden { display: none; }
+#fuel .ico { font-size: 13px; line-height: 1; }
+#fuel .bar { flex: 1; height: 7px; }
+#vehicle-hp #fuel .bar .fill { background: linear-gradient(90deg, #e8333d, #ffd23f 30%, #4ee06a); }
+#vehicle-hp #fuel.low .bar .fill { animation: fuelblink 0.8s steps(2) infinite; }
+@keyframes fuelblink { 50% { opacity: 0.3; } }

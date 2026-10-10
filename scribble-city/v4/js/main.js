@@ -3,6 +3,7 @@ import { shared } from './render/materials.js';
 import { Pipeline } from './render/pipeline.js';
 import { buildAtlas } from './render/atlas.js';
 import { buildCity } from './world/city.js';
+import { buildGarages } from './world/garages.js';
 import { Game } from './game/game.js';
 import { isTouchDevice } from './core/util.js';
 
@@ -86,7 +87,8 @@ async function boot() {
   await frame();
   const atlas = buildAtlas();
   const t0 = performance.now();
-  const world = buildCity(scene, { low });
+  // (not with ?classic: the service station on Flamingo Ave, ROADMAP 4.6)
+  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra: buildGarages, neonRows: 36 });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
 
   setStatus('השמש שוקעת על העיר…');

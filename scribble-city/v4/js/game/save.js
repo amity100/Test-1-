@@ -100,6 +100,9 @@ export class SaveGame {
       vehicles: g.vehicles.list.filter((o) => !o.dead).map((o) => ({
         kind: o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
         x: o.pos.x, y: o.pos.y, z: o.pos.z, yaw: o.yaw, hp: o.hp, alt: o.alt || 0, mine: o === v,
+        // (the garage's work, the tank, the dust, your parking: ROADMAP 4.6)
+        paint: o.kind === 'car' && o.color ? o.color.slice() : null, design: o.design || null, up: o.up || null,
+        fuel: o.fuel === undefined ? null : o.fuel, dirt: o.dirt === undefined ? null : o.dirt, kept: !!o.kept,
       })),
       world: { gone, spots: objs.spots.map((s) => ({ x: s.x, y: s.y, z: s.z, r: s.r })) },
       hour: g.daynight ? g.daynight.hour : 18.3,
@@ -235,6 +238,15 @@ export class SaveGame {
         v.yaw = it.yaw;
         V.add(v);
       }
+      if (it.paint) v.color = it.paint;
+      if (it.design) v.design = it.design;
+      if (it.up) {
+        v.up = it.up;
+        g.garage.applyUps(v);
+      }
+      if (typeof it.fuel === 'number') v.fuel = it.fuel;
+      if (typeof it.dirt === 'number') v.dirt = it.dirt;
+      v.kept = !!it.kept;
       v.hp = Math.min(v.maxHp, it.hp);
       v.alt = it.alt || 0;
       if (it.mine) mine = v;

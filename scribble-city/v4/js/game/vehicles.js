@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight } from '../world/layout.js';
-import { drawWipers, wiperSweep, KINDS } from '../render/cars.js';
+import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
 // The things you drive: the city's own cars (taken from the traffic or from the curb), and the
@@ -13,6 +13,17 @@ import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _stripe = new THREE.Matrix4();
+// (ROADMAP 4.6) the car's own frame this frame (render/cars.js), for what is drawn on it
+const _cm = new THREE.Matrix4();
+const _pa = new THREE.Vector3();
+const _pb = new THREE.Vector3();
+const MUD = [0.42, 0.33, 0.24];
+const MUD_INK = [0.36, 0.27, 0.2];
+const SHINE = [3.2, 3.2, 3.0];
+const RIM_UP = [null, [0.86, 0.86, 0.9], [0.2, 0.2, 0.24], [1.0, 0.78, 0.3]];
+const SIDES = [1, -1];
+const SIDE_L = [1];
+const SIDE_R = [-1];
 const UP = new THREE.Vector3(0, 1, 0);
 
 const VEH = {
@@ -399,12 +410,16 @@ class Vehicle {
     const siren = this.extra === 'police' && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
     // (just drawn: still turning from the drawing into the car)
     const rv = this.mat ? this.mat.carRV : null;
-    cars.draw(this.carKind, this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
+    const U = this.up;
+    cars.draw(this.carKind, this.dirt > 0.05 ? this.dustyColor() : this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
       lift: wob, roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
       // (yours: the side windows down, you and whoever rides with you seen through them)
       open: !this.game.classic && !rv,
+      // (the garage's work: ROADMAP 4.6)
+      mods: U && !rv ? U : null, rim: U && U.tires ? RIM_UP[U.tires] : null, matrixOut: (this.design || this.dirt > 0.2 || this.shineT) && !rv ? _cm : null,
     });
+    if (!rv && (this.design || this.dirt > 0.2 || this.shineT)) this.drawOn(_cm);
     // in the rain the wipers go (once somebody is at the wheel)
     const w = this.game.weather;
     if (w && w.cur.rain > 0.15 && this.driver && !rv) drawWipers(this.game.figures, this.carKind, this.pos.x, this.pos.y, this.pos.z, this.yaw, wiperSweep(this.game.time, w.cur.rain, 0.3), 991);
@@ -420,6 +435,113 @@ class Vehicle {
         const base = _stripe.makeRotationY(this.yaw).setPosition(x, this.pos.y, z);
         if (rv) base.premultiply(rv.pre);
         cars.box(cars.trimBox, base, 0, 0.98, 1.0, 0.18, 0.05, 2.0, [0.98, 0.95, 0.88], rv);
+      }
+    }
+  }
+
+  // (ROADMAP 4.6) the dust on it: its colour gone a little brown (a step at a time, so the city's
+  // cache of colours stays small)
+  dustyColor() {
+    const q = Math.round(Math.min(1, this.dirt) * 8) / 8;
+    if (this._dq !== q || this._dc0 !== this.color) {
+      this._dq = q;
+      this._dc0 = this.color;
+      const k = q * 0.38;
+      this._dcol = this.color.map((c, i) => c + (MUD[i] - c) * k);
+    }
+    return this._dcol;
+  }
+
+  // what is drawn on the car (render/cars.js gave its frame, m): the design you drew in the paint
+  // shop, on both its sides; mud splashed behind the wheels; the sparkle of a fresh wash
+  drawOn(m) {
+    const game = this.game;
+    const fr = game.figures;
+    const cam = game.camera.position;
+    const d = Math.hypot(this.pos.x - cam.x, this.pos.z - cam.z);
+    if (d > 80) return;
+    // (a design keeps its size on the car: a little thinner from far away)
+    const wk = clamp(9 / Math.max(1, d), 0.4, 1.25);
+    // only the side that faces you (the other is behind the car), in fewer, longer strokes as it
+    // gets further away
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const camSide = (cam.x - this.pos.x) * fz - (cam.z - this.pos.z) * fx;
+    const along = Math.abs((cam.x - this.pos.x) * fx + (cam.z - this.pos.z) * fz);
+    const one = Math.abs(camSide) > along * 0.25;
+    const sides = one ? (camSide > 0 ? SIDE_L : SIDE_R) : SIDES;
+    // (seen from behind or in front, both sides are thin slivers: coarser still)
+    const step = (d < 18 ? 1 : d < 36 ? 2 : 3) * (one ? 3 : 6);
+    const D = this.design;
+    if (D) {
+      let seed = 3100;
+      for (const st of D.strokes) {
+        const P = st.p;
+        for (const side of sides) {
+          // (each point put in the world once: the end of one stroke is the start of the next)
+          let have = false;
+          for (let i = 0; i + step < P.length; i += step) {
+            seed++;
+            // (a break in the line: it went over a window or a wheel)
+            let j = i + step;
+            for (let k = i + 3; k <= j; k += 3) if (P[k] === null) j = -1;
+            if (j < 0 || P[i] === null) {
+              have = false;
+              continue;
+            }
+            if (!have) _pa.set(P[i] * side, P[i + 1], P[i + 2]).applyMatrix4(m);
+            _pb.set(P[j] * side, P[j + 1], P[j + 2]).applyMatrix4(m);
+            fr.lineXYZ(_pa.x, _pa.y, _pa.z, _pb.x, _pb.y, _pb.z, st.c, st.w * wk, seed, 1, 0.002, 0.01);
+            _pa.copy(_pb);
+            have = true;
+          }
+        }
+      }
+    }
+    if (this.dirt > 0.2) {
+      const K = KINDS[this.carKind] || KINDS.sedan;
+      if (!this._mud || this._mudKind !== this.carKind) {
+        // (behind each wheel, low down: the same splashes every time)
+        this._mudKind = this.carKind;
+        this._mud = [];
+        let r = 0.37;
+        const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+        for (const tw of K.wheels) {
+          const zw = tw * K.len - K.len / 2;
+          for (let k = 0; k < 5; k++) {
+            const z0 = zw - K.r * (1.25 + rnd() * 0.5);
+            const y0 = K.clear + 0.08 + rnd() * 0.3;
+            const a = sidePoint(this.carKind, z0, y0, 1);
+            const b = sidePoint(this.carKind, z0 - 0.15 - rnd() * 0.3, y0 + (rnd() - 0.6) * 0.18, 1);
+            if (a && b) this._mud.push(a, b);
+          }
+        }
+      }
+      const a = Math.min(1, (this.dirt - 0.2) * 1.6);
+      const M = this._mud;
+      for (const side of sides) {
+        for (let i = 0; i < M.length; i += 2) {
+          _pa.set(M[i][0] * side, M[i][1], M[i][2]).applyMatrix4(m);
+          _pb.set(M[i + 1][0] * side, M[i + 1][1], M[i + 1][2]).applyMatrix4(m);
+          fr.lineXYZ(_pa.x, _pa.y, _pa.z, _pb.x, _pb.y, _pb.z, i % 4 ? MUD : MUD_INK, 3.2 * wk, 4400 + i, a, 0.01, 0.02);
+        }
+      }
+    }
+    if (this.shineT) {
+      // (just washed: a few glints running over it)
+      const t = game.time - this.shineT;
+      if (t > 3) this.shineT = 0;
+      else {
+        const K = KINDS[this.carKind] || KINDS.sedan;
+        for (let k = 0; k < 4; k++) {
+          const ph = (t * 0.9 + k * 0.27) % 1;
+          const p = sidePoint(this.carKind, (k / 3 - 0.5) * K.len * 0.7, (K.clear + K.roofY) * 0.4, k % 2 ? 1 : -1);
+          if (!p) continue;
+          const s = Math.sin(ph * Math.PI) * 0.16;
+          _pa.set(p[0], p[1], p[2]).applyMatrix4(m);
+          fr.lineXYZ(_pa.x - s, _pa.y, _pa.z, _pa.x + s, _pa.y, _pa.z, SHINE, 2.2, 4600 + k, 1, 0, 0);
+          fr.lineXYZ(_pa.x, _pa.y - s, _pa.z, _pa.x, _pa.y + s, _pa.z, SHINE, 2.2, 4610 + k, 1, 0, 0);
+        }
       }
     }
   }
@@ -537,8 +659,13 @@ class Vehicle {
     const q = this.q;
     const bike = this.kind === 'bike';
     const H = HANDLING[bike ? 'bike' : this.carKind] || HANDLING.sedan;
-    const top = (this.racing ? 33 : H.top) * q.speed;
-    const power = H.power * q.accel;
+    // (the garage's upgrades, and the tank: game/garage.js, ROADMAP 4.6)
+    const U = this.up;
+    const dry = this.fuel === 0 ? 1 : 0;
+    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1);
+    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1);
+    const brakeK = U ? 1 + 0.18 * U.brakes : 1;
+    const gripK = U ? 1 + 0.08 * U.tires : 1;
     let throttle = 0;
     let steer = 0;
     let hand = false;
@@ -591,13 +718,15 @@ class Vehicle {
         if (vL < -0.5) vL = Math.min(0, vL + 22 * throttle * dt);
         else vL += power * throttle * dt * Math.pow(Math.max(0, 1 - Math.max(0, vL) / top), 0.6);
       } else if (throttle < 0) {
-        if (vL > 0.5) vL = Math.max(0, vL + 24 * throttle * dt);
+        if (vL > 0.5) vL = Math.max(0, vL + 24 * brakeK * throttle * dt);
         else vL = Math.max(-9 * q.speed, vL + power * 0.6 * throttle * dt);
       } else vL -= vL * (0.35 + 0.002 * Math.abs(vL)) * dt;
+      // (an empty tank: the engine coughs, the car slows to a crawl)
+      if (dry && vL > top) vL = Math.max(top, vL - 5 * dt);
       // the handbrake: the back wheels locked
       if (hand) vL -= vL * 0.6 * dt;
       // the tyres' grip across: the slip dies away (hardly, with the handbrake on)
-      const grip = hand ? H.slide : H.grip * (1 - 0.25 * Math.min(1, (Math.abs(steer) * Math.abs(vL)) / top));
+      const grip = (hand ? H.slide : H.grip * (1 - 0.25 * Math.min(1, (Math.abs(steer) * Math.abs(vL)) / top))) * gripK;
       vS *= Math.exp(-grip * dt);
     }
     this.vx = fx * vL - fz * vS;
@@ -1017,7 +1146,8 @@ export class Vehicles {
     const pp = this.game.anchorPos();
     for (const v of this.list) {
       v.update(dt);
-      const left = v.stock && !v.driver && Math.hypot(v.pos.x - pp.x, v.pos.z - pp.z) > 140;
+      // (a car in your parking stays: game/garage.js)
+      const left = v.stock && !v.driver && !v.kept && Math.hypot(v.pos.x - pp.x, v.pos.z - pp.z) > 140;
       if ((v.dead && this.game.time > v.removeAt) || left) {
         v.dispose();
         continue;
@@ -1025,6 +1155,11 @@ export class Vehicles {
       keep.push(v);
     }
     this.list = keep;
+  }
+
+  // (its colour changed: the dusty copy made again)
+  dirty(v) {
+    v._dq = -1;
   }
 
   draw(cars) {

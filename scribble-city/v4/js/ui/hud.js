@@ -12,6 +12,9 @@ export class HUD {
     this.healthFill = document.querySelector('#health .fill');
     this.vehWrap = $('vehicle-hp');
     this.vehFill = document.querySelector('#vehicle-hp .fill');
+    // (the tank: ROADMAP 4.6)
+    this.fuelEl = $('fuel');
+    this.fuelFill = this.fuelEl ? this.fuelEl.querySelector('.fill') : null;
     this.districtEl = $('district');
     this.clockEl = $('clock');
     this.lastClock = -1;
@@ -114,6 +117,18 @@ export class HUD {
     const v = p.inVehicle;
     this.vehWrap.classList.toggle('hidden', !v);
     if (v) this.vehFill.style.width = `${Math.max(0, (v.hp / v.maxHp) * 100)}%`;
+    if (this.fuelEl) {
+      const f = v && v.fuel !== undefined ? v.fuel : -1;
+      const q = f < 0 ? -1 : Math.round(f * 100);
+      if (q !== this.fuelQ) {
+        this.fuelQ = q;
+        this.fuelEl.classList.toggle('hidden', q < 0);
+        if (q >= 0) {
+          this.fuelFill.style.width = `${q}%`;
+          this.fuelEl.classList.toggle('low', q < 15);
+        }
+      }
+    }
     const pos = v ? v.pos : p.pos;
     const dn = districtName(pos.x, pos.z);
     if (dn !== this.lastDistrict) {

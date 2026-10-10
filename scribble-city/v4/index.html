@@ -38,6 +38,7 @@
       <div id="vehicle-hp" class="paper-card hidden">
         <div class="label">כלי</div>
         <div class="bar"><div class="fill"></div></div>
+        <div id="fuel" class="hidden" aria-label="דלק"><span class="ico">⛽</span><div class="bar"><div class="fill"></div></div></div>
       </div>
       <div id="district" class="paper-card"></div>
       <div id="clock" class="paper-card" aria-label="השעה בעיר"></div>
@@ -65,6 +66,16 @@
     <div id="dialog" class="paper-card hidden"><div class="who"></div><div class="text"></div><div class="choices"></div></div>
   </div>
   <div id="pageflip"><div class="page"></div></div>
+  <!-- the paint shop (ROADMAP 4.6): the car from the side, its colour, a design drawn on it -->
+  <div id="paintshop" class="hidden">
+    <div class="ps-sheet paper-card">
+      <div class="ps-head"><span class="ps-title">צבעייה</span><span class="ps-hint">בוחרים צבע ומציירים על הרכב. הציור יופיע על שני הצדדים</span></div>
+      <canvas id="ps-canvas" width="1000" height="400"></canvas>
+      <div class="ps-row"><span class="ps-label">צבע הרכב</span><div id="ps-paints" class="ps-swatches"></div></div>
+      <div class="ps-row"><span class="ps-label">עט</span><div id="ps-pens" class="ps-swatches"></div><button id="ps-thin" class="ps-btn">דק</button><button id="ps-thick" class="ps-btn">עבה</button></div>
+      <div class="ps-row ps-actions"><button id="ps-undo" class="ps-btn">בטל קו</button><button id="ps-clear" class="ps-btn">נקה ציור</button><span class="ps-gap"></span><button id="ps-cancel" class="ps-btn">ביטול</button><button id="ps-done" class="ps-btn primary">צבעו את הרכב!</button></div>
+    </div>
+  </div>
 
   <div id="touch" class="hidden">
     <div id="stick-zone"><div id="stick-base"><div id="stick-knob"></div></div></div>

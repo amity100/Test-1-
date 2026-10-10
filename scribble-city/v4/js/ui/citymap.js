@@ -91,6 +91,7 @@ const KINDS = {
 // the legend: each group's sticker, its name, and from how close it shows (pixels a metre)
 const CATS = [
   { id: 'blueprint', name: 'שלטי שרטוטים', glyph: 'board', fill: '#ffd23f', square: true, k: 0 },
+  { id: 'car', name: 'מוסך, דלק וחניה', glyph: 'pump', fill: '#ffd0c8', k: 0 },
   { id: 'fun', name: 'בילוי ולילה', glyph: 'bar', fill: '#ff9ccc', k: 0 },
   { id: 'place', name: 'מקומות מיוחדים', glyph: 'wheel', fill: '#fff3c4', k: 0 },
   { id: 'hotel', name: 'מלונות', glyph: 'lobby', fill: '#aec6f6', k: 1.4 },
@@ -102,7 +103,7 @@ const CATS = [
   { id: 'gang', name: 'שטחי כנופיות', glyph: 'gang', fill: '#ffd0d0', k: 0 },
 ];
 const CAT = Object.fromEntries(CATS.map((c) => [c.id, c]));
-const ORDER = ['blueprint', 'fun', 'place', 'hotel', 'food', 'shop', 'service', 'hide', 'bus'];
+const ORDER = ['blueprint', 'car', 'fun', 'place', 'hotel', 'food', 'shop', 'service', 'hide', 'bus'];
 
 const HIDE_NOTE = {
   alley: 'בקצה הסמטה',
@@ -449,6 +450,18 @@ export class CityMap {
     for (const c of w.courts || []) add({ cat: 'place', glyph: 'court', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: 'מגרש הכדורסל', note: 'בפארק הדקלים' });
     for (const m of w.markets || []) add({ cat: 'place', glyph: 'market', x: (m.x0 + m.x1) / 2, z: (m.z0 + m.z1) / 2, name: 'השוק', note: 'דוכנים של פירות, פרחים, דגים ובגדים' });
     add({ cat: 'place', glyph: 'beach', x: -150, z: SOUTH_EDGE + 20, name: 'החוף', note: 'חול, ים, ושקיעה מול המפרץ' });
+    // the service station (ROADMAP 4.6; none with ?classic)
+    const G = w.garages;
+    if (G) {
+      for (const b of G.bays) {
+        if (b.kind === 'garage') add({ cat: 'car', glyph: 'wrench', x: b.x + 4, z: b.z, name: 'מוסך INK & IRON', note: 'צבע חדש וציור על הרכב, שדרוגים ותיקונים. נכנסים ברכב לתא ועוצרים' });
+        else add({ cat: 'car', glyph: 'wash', x: b.x + 4, z: b.z, name: 'שטיפת SPLASH WASH', note: 'נכנסים ברכב לתא ועוצרים: מברשות, קצף, והרכב יוצא נקי' });
+      }
+      const c = G.canopy;
+      add({ cat: 'car', glyph: 'pump', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: 'תחנת הדלק PENCIL PETROL', note: 'עוצרים ליד משאבה, והמיכל מתמלא' });
+      const pk = G.parking[1] || G.parking[0];
+      if (pk) add({ cat: 'car', glyph: 'parking', x: pk.x, z: pk.z, name: 'החניה שלכם', note: 'רכב שמשאירים באחד משלושת המקומות הכחולים נשמר כאן' });
+    }
     // where nobody sees you
     for (const h of w.hideSpots || []) add({ cat: 'hide', glyph: 'hide', x: h.x, z: h.z, name: 'מחבוא', note: `${HIDE_NOTE[h.kind] || ''}${HIDE_NOTE[h.kind] ? '. ' : ''}כאן לא רואים אתכם, ואפשר לצייר בשקט`, spot: h });
     for (const b of w.busStops || []) add({ cat: 'bus', glyph: 'bus', x: b.x, z: b.z, name: 'תחנת אוטובוס', note: districtName(b.x, b.z) });
