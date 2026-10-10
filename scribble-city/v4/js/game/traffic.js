@@ -818,20 +818,22 @@ export class Traffic {
     return c._anchor;
   }
 
-  // put a seated figure in a car at pos/yaw: side 1 = driver (left), -1 = passenger
-  seat(fig, pos, yaw, dt, side = 1) {
+  // put a seated figure in a car at pos/yaw: side 1 = driver (left), -1 = passenger; S: the
+  // kind's own seat (render/cars.js K.seat: the car you drive, its windows down, ROADMAP 4.5)
+  seat(fig, pos, yaw, dt, side = 1, S = null) {
     const fx = Math.sin(yaw);
     const fz = Math.cos(yaw);
     const rx = -fz;
     const rz = fx;
-    const u = DRIVER_SEAT.u;
-    const s = -DRIVER_SEAT.s * side; // "right" points away from the driver's seat
-    fig.pos.set(pos.x + fx * u - rx * s, pos.y - 0.12, pos.z + fz * u - rz * s);
+    const u = S ? S.u : DRIVER_SEAT.u;
+    const s = (S ? S.s : -DRIVER_SEAT.s) * side; // "right" points away from the driver's seat
+    const y = S ? S.y : -0.12;
+    fig.pos.set(pos.x + fx * u - rx * s, pos.y + y, pos.z + fz * u - rz * s);
     fig.yaw = yaw;
     fig.sit = 1;
     fig.speed = 0;
     if (!fig.wheel) fig.wheel = new THREE.Vector3();
-    fig.wheel.set(pos.x + fx * (u + 0.55) - rx * s, pos.y + 0.92, pos.z + fz * (u + 0.55) - rz * s);
+    fig.wheel.set(pos.x + fx * (u + 0.55) - rx * s, pos.y + y + 1.04, pos.z + fz * (u + 0.55) - rz * s);
     fig.reachR = side > 0 ? fig.wheel : null;
     fig.update(dt);
   }

@@ -702,6 +702,7 @@ export class Game {
       player.update(dt, input, this.camRig, this.weapons);
       this.chute.update(dt);
       this.vehicles.update(dt);
+      if (!this.classic && player.mode === 'vehicle') player.seatIn(dt);
       this.materialize.update(dt);
       this.weapons.update(dt);
       this.enemies.update(dt);

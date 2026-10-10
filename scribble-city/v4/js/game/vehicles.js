@@ -333,6 +333,11 @@ class Vehicle {
     this.removeAt = game.time + 0.2;
   }
 
+  // (a car: its kind's seats, render/cars.js K.seat; ROADMAP 4.5)
+  seatOf() {
+    return (KINDS[this.carKind] || KINDS.sedan).seat;
+  }
+
   // forward unit vector
   get fwd() {
     return _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
@@ -397,6 +402,8 @@ class Vehicle {
     cars.draw(this.carKind, this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
       lift: wob, roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      // (yours: the side windows down, you and whoever rides with you seen through them)
+      open: !this.game.classic && !rv,
     });
     // in the rain the wipers go (once somebody is at the wheel)
     const w = this.game.weather;

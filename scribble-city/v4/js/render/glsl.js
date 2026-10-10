@@ -708,6 +708,11 @@ void main() {
   if (uErasable > 0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
   if (vX.x > 0.5 && inPersonHole(vX.x, vWP)) discard;
   if (vX.w < 0.5 && dot(vClip.xyz, vClip.xyz) > 0.0 && dot(vWP, vClip.xyz) > vClip.w) discard;
+#ifdef USE_CABIN
+  // (the car you drive, iX.z = -1: its side windows down, and the trim under them; both are
+  // marked v = 1 in their uv, render/cars.js. ROADMAP 4.5)
+  if (vX.z < -0.5 && vUv.y > 0.5) discard;
+#endif
   // a drawing turning into a thing: ahead of the sweep still the white paper it was drawn on
   // (its outlines are all there is of it), a band of light where its colours come in, and the
   // real thing behind (the drawn car among the city's cars: in its instance, iX.w = 1 + band)

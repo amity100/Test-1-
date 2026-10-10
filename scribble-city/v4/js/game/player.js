@@ -74,6 +74,16 @@ export class Player {
     }
   }
 
+  // behind the wheel of an ordinary car: you can see him through the windows (not with ?classic:
+  // its side windows down, in its own kind's seat - a van's or a truck's up in the cab)
+  seatIn(dt) {
+    const v = this.inVehicle;
+    if (v && v.seat) {
+      if (v.kind === 'bike') v.seatRider(this.fig, dt);
+      else this.game.traffic.seat(this.fig, v.pos, v.yaw, dt, 1, this.game.classic ? null : v.seatOf());
+    }
+  }
+
   update(dt, input, camRig, weapons) {
     const fig = this.fig;
     if (this.invuln > 0) this.invuln -= dt;
@@ -84,12 +94,9 @@ export class Player {
       return;
     }
     if (this.mode === 'vehicle') {
-      // behind the wheel of an ordinary car: you can see him through the windows
-      const v = this.inVehicle;
-      if (v && v.seat) {
-        if (v.kind === 'bike') v.seatRider(fig, dt);
-        else this.game.traffic.seat(fig, v.pos, v.yaw, dt);
-      }
+      // (not with ?classic: seated once the car has moved this frame, game.js; else he sat a
+      // frame behind it, half a metre at speed, and the friend beside him would too: ROADMAP 4.5)
+      if (this.game.classic) this.seatIn(dt);
       return;
     }
     // sitting (in the barber's chair): held to the seat until it lets go, then any step stands up

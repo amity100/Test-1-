@@ -261,8 +261,10 @@ function glassHouse(K) {
     }
   }
   const glass = [];
+  const sideFlags = [];
   const paint = [];
   const frames = [];
+  const sillFlags = [];
   const fr = G.frame || 0.035;
   for (let i = 0; i < NT; i++) {
     const tm = (ts[i] + ts[i + 1]) / 2;
@@ -279,7 +281,10 @@ function glassHouse(K) {
       const c = a + NH + 1;
       const d = c + 1;
       // (the roof in the body's colour, the frames round the glass in black trim)
-      (roof ? paint : edge || pillar || sill ? frames : glass).push(a, b, c, b, d, c);
+      const to = roof ? paint : edge || pillar || sill ? frames : glass;
+      to.push(a, b, c, b, d, c);
+      if (to === glass) for (let q = 0; q < 6; q++) sideFlags.push(side ? 1 : 0);
+      else if (to === frames) for (let q = 0; q < 6; q++) sillFlags.push(sill && !edge && !pillar ? 1 : 0);
     }
   }
   const make = (idx) => {
@@ -289,7 +294,18 @@ function glassHouse(K) {
     g.computeVertexNormals();
     return g.toNonIndexed();
   };
-  return { glass: make(glass), roof: make(paint), frames: make(frames) };
+  // (ROADMAP 4.5) the side windows, wound down in the car you drive, and the band of trim under
+  // them (deep on a van's tall windows): v = 1 in their uv, which nothing else of a car reads
+  const flagged = (idx, flags) => {
+    const g = make(idx);
+    const uv = new Float32Array(flags.length * 2);
+    for (let i = 0; i < flags.length; i++) uv[i * 2 + 1] = flags[i];
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return g;
+  };
+  // (the roof again, for the inside of the car: build)
+  const inRoof = make(paint);
+  return { glass: flagged(glass, sideFlags), roof: make(paint), frames: flagged(frames, sillFlags), inRoof };
 }
 
 const box = (w, h, d, x, y, z, rx = 0) => {
@@ -337,7 +353,32 @@ function build(kind) {
   K.roofY = K.glass.R;
   // where the turn signals blink: the front and back corners (ROADMAP 4.3)
   K.sig = { fx: hw(0.97) - 0.14, fy: hb + K.head.y, fz: off - 0.05, rx: hw(0.03) - 0.14, ry: tailY, rz: -off + 0.05 };
-  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K };
+  // (ROADMAP 4.5) where the one at the wheel sits: under the top of the windscreen, inside the
+  // cab (a van's, a truck's: up front), as high as its sills (u forward of the middle, y the seat
+  // under the figure's feet, s out to the side); and the cab's extent, for the seats seen through
+  // the windows of the car you drive
+  const G = K.glass;
+  const zr = G.tA * L - off;
+  const zf = G.tD * L - off;
+  const u = Math.max(zr + 0.5, G.tC * L - off - 0.4);
+  const ts = (u + off) / L;
+  K.seat = { u, y: belt(ts) - 0.97, s: hw(ts) * 0.45 };
+  K.cab = { zr, zf };
+  // the inside: the body's skin again, a little in from it, seen from within (dark, the seats'
+  // colour; it dents with the body)
+  const inside = merge([lower, gh.inRoof]);
+  shrink(inside, 0.965);
+  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside };
+}
+
+// a shape drawn in from its skin a little (its inside faces are the ones drawn: BackSide)
+function shrink(g, k) {
+  const p = g.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) {
+    p[i] *= k;
+    p[i + 1] = p[i + 1] * k + 0.02;
+    p[i + 2] *= k;
+  }
 }
 
 function merge(list) {
@@ -392,7 +433,7 @@ class Pool {
   }
 
   // rv: a drawn car still turning from the drawing into the car ({ sweep: [x, y, z, front], band })
-  push(m, color, part = 0, rv = null, dmg = null) {
+  push(m, color, part = 0, rv = null, dmg = null, flag = 0) {
     if (this.n >= this.cap) return;
     const i = this.n++;
     if (this.iD0) {
@@ -413,6 +454,9 @@ class Pool {
     c[i * 3 + 1] = color[1];
     c[i * 3 + 2] = color[2];
     this.iX.array[i * 4 + 1] = part;
+    // (iX.z: 1 a thing indoors, under the lamps; -1 the glass of the car you drive, its side
+    // windows down)
+    this.iX.array[i * 4 + 2] = flag;
     this.iX.array[i * 4 + 3] = rv ? 1 + rv.band : 0;
     const k = this.iClip.array;
     if (rv) {
@@ -475,6 +519,9 @@ const _e = new THREE.Euler();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3(1, 1, 1);
 const WHITE = [1, 1, 1];
+// (the inside of the car you drive)
+const SEAT = [0.09, 0.085, 0.1];
+const DASH = [0.05, 0.05, 0.06];
 
 // ---- the wipers (in the rain): two pen strokes sweeping the windscreen, pivoting at its foot
 const wiperRigs = {};
@@ -560,6 +607,9 @@ export class CarRenderer {
       trim: S({ kind: 'box', gloss: 0.3 }),
       dark: S({ kind: 'box', color: srgb(0.06, 0.06, 0.08), gloss: 0.4, line: 0.7 }),
       plate: S({ kind: 'box', color: srgb(0.95, 0.94, 0.86), line: 0.6 }),
+      // (ROADMAP 4.5) the inside of the car you drive, seen through its open side windows: the
+      // body's skin from within, dark (its own number for the ink: it takes none from the rest)
+      cabin: S({ kind: 'box', color: srgb(0.27, 0.25, 0.29), gloss: 0.1, line: 0.55, side: THREE.BackSide, obj: 0.7731, noShadow: true }),
     };
     this.mats = mats;
     const cap = 140;
@@ -571,6 +621,10 @@ export class CarRenderer {
     // (dents: the shell and the glass pressed in where a car was hit, game/damage.js)
     shellPen.defines.USE_DENTS = '';
     mats.glass.defines.USE_DENTS = '';
+    mats.cabin.defines.USE_DENTS = '';
+    // (the side windows wound down in the car you drive: ROADMAP 4.5)
+    mats.glass.defines.USE_CABIN = '';
+    shellPen.defines.USE_CABIN = '';
     const shellParts = [['body', mats.paint, 0, 1], ['tail', mats.tail, 0.5, 0], ['head', mats.head, 0.6, 0], ['trim', mats.dark, 0.55, 0], ['plate', mats.plate, 0.65, 0]];
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);
@@ -599,6 +653,8 @@ export class CarRenderer {
         b,
         shell: new Pool(scene, shell, shellPen, n, true),
         glass: new Pool(scene, b.glass, mats.glass, n, true),
+        // (only the cars you drive: a few)
+        inside: new Pool(scene, b.inside, mats.cabin, 6, true),
       });
       for (const k of PARTS) P[k].mesh.userData.noShadow = true;
       P.sun = new THREE.InstancedMesh(sun, mats.paint.userData.depth, n);
@@ -609,6 +665,8 @@ export class CarRenderer {
       P.sun.layers.set(LAYERS.SUN);
       P.sun.userData.dynamic = true;
       scene.add(P.sun);
+      P.inside.mesh.userData.noShadow = true;
+      P.inside.mesh.userData.noReflect = true;
     }
     const tyre = new THREE.CylinderGeometry(1, 1, 0.3, 20).rotateZ(Math.PI / 2);
     // the rim: a dished disc and five spokes
@@ -675,8 +733,13 @@ export class CarRenderer {
     _m.compose(_p.set(x, y + (o.lift || 0), z), _q, _s.set(s, s * (o.squash || 1), s));
     if (rv) _m.premultiply(rv.pre);
     const part = ((Math.abs(x * 0.37 + z * 0.11) % 1) + 1) % 1;
-    P.shell.push(_m, this.col(color), part, rv, D);
-    P.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D);
+    P.shell.push(_m, this.col(color), part, rv, D, o.open ? -1 : 0);
+    P.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D, o.open ? -1 : 0);
+    // (ROADMAP 4.5) the car you drive: its side windows down, the inside seen through them
+    if (o.open) {
+      P.inside.push(_m, WHITE, part + 0.5, null, D);
+      this.seats(K, _m);
+    }
     // the wheels: they roll, the front ones steer
     const wheels = P.b.wheels;
     for (let wi = 0; wi < wheels.length; wi++) {
@@ -761,6 +824,24 @@ export class CarRenderer {
     }
   }
 
+  // the seats seen through the open windows: the two in front (their backs, the headrests), the
+  // bench behind them if there is room, the wheel, the dashboard under the windscreen
+  seats(K, m) {
+    const S = K.seat;
+    const C = K.cab;
+    const y0 = S.y + 0.42;
+    for (let sd = -1; sd <= 1; sd += 2) {
+      this.box(this.trimBox, m, sd * S.s, y0 + 0.3, S.u - 0.3, 0.46, 0.66, 0.12, SEAT, null);
+      this.box(this.trimBox, m, sd * S.s, y0 + 0.74, S.u - 0.33, 0.26, 0.17, 0.1, SEAT, null);
+      this.box(this.trimBox, m, sd * S.s, y0 - 0.04, S.u - 0.05, 0.46, 0.12, 0.5, SEAT, null);
+    }
+    // (kept inside the body where it rounds in under the windows)
+    if (S.u - C.zr > 1.25) this.box(this.trimBox, m, 0, S.y + 0.6, C.zr + 0.32, S.s * 2 + 0.3, 0.5, 0.14, SEAT, null);
+    // (the wheel: on the driver's side, its left: +x)
+    this.box(this.trimBox, m, S.s, S.y + 1.0, S.u + 0.6, 0.34, 0.3, 0.04, DASH, null);
+    this.box(this.trimBox, m, 0, S.y + 0.83, Math.min(S.u + 0.85, C.zf - 0.15), S.s * 2 + 0.2, 0.14, 0.3, DASH, null);
+  }
+
   box(pool, base, x, y, z, w, h, d, color, rv = null) {
     _w.makeScale(w, h, d).setPosition(x, y, z);
     _w.premultiply(base);
@@ -773,6 +854,7 @@ export class CarRenderer {
       const P = kinds[i];
       P.shell.end();
       P.glass.end();
+      P.inside.end();
       P.sun.count = P.shell.mesh.count;
       P.sun.visible = P.shell.mesh.visible;
     }

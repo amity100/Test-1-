@@ -1783,6 +1783,12 @@ class OpenShop {
 
 // ------------------------------------------------------------------ the friend you drew
 const COMPANION_LINES = ['I love this city!', 'Where are we going?', 'You draw well, you know.', 'Look, a pigeon!', 'Nice pencil.', 'Careful out there!', 'Wait for me!'];
+// riding with you (ROADMAP 4.5)
+const RIDE_IN = ['Shotgun!', "Let's go!", 'Where to?', 'Buckle up!'];
+const RIDE_LINES = ['Turn up the radio!', 'Nice ride!', 'I love this song!', 'Are we there yet?', 'Look at the sunset...', 'Left here! No, right!', 'You drive like you draw.'];
+const RIDE_AIR = ['Wheeee!', 'Whoa!!', 'Again! Again!'];
+const RIDE_HIT = ['Ow! Careful!', 'Watch the road!', 'My hair!', 'Easy!'];
+const RIDE_OUT = ['Thanks for the ride!', 'Fun!', "Let's walk a bit."];
 
 class Companion {
   constructor(life, x, z) {
@@ -1817,6 +1823,65 @@ class Companion {
       this.say(pick(['Call me!', 'Bye-bye!', 'See you around!']));
       this.dispose(true);
       return null;
+    }
+    // (ROADMAP 4.5) riding with you in a car, or behind you on a bike
+    const v = p.inVehicle;
+    const fire = v && v.dmg && v.dmg.burning;
+    const canRide = v && !game.classic && (v.kind === 'car' || v.kind === 'bike') && !v.dead;
+    if (this.riding) {
+      if (!canRide || v !== this.ride) return this.getOut(c, p);
+      if (fire) {
+        // on fire: out as soon as it is slow enough, yelling till then
+        if (v.speedAbs < 4) {
+          this.say(pick(['FIRE!!', 'Get out! Get out!']));
+          this.getOut(c, p, true);
+          c.panicT = 3;
+          c.fearX = v.pos.x;
+          c.fearZ = v.pos.z;
+          return null;
+        }
+        if (!this.fireSaid) {
+          this.fireSaid = true;
+          this.say('Stop the car! FIRE!');
+        }
+      }
+      return this.sit(c, v, dt);
+    }
+    this.fireSaid = false;
+    if (!(canRide && !fire && d < 16 && !this.drawing)) this.doorT = 0;
+    if (canRide && !fire && d < 16 && !this.drawing) {
+      // over to the door on the passenger's side (on a bike: behind it), and in
+      const fx = Math.sin(v.yaw);
+      const fz = Math.cos(v.yaw);
+      const side = v.kind === 'bike' ? 0 : 1;
+      const back = v.kind === 'bike' ? -1.2 : v.seatOf().u;
+      const half = v.kind === 'bike' ? 0.6 : (v.halfWid || 0.98) + 0.55;
+      const tx = v.pos.x + fx * back - fz * half * side;
+      const tz = v.pos.z + fz * back + fx * half * side;
+      const dd = Math.hypot(tx - c.pos.x, tz - c.pos.z);
+      if (v.speedAbs > 3) {
+        // (it went without her)
+        if (!this.leftT || game.time - this.leftT > 8) {
+          this.leftT = game.time;
+          this.say(pick(['Wait for me!', 'Hey! Without me?!', 'Rude!']));
+        }
+        c.faceYaw = Math.atan2(anchor.x - c.pos.x, anchor.z - c.pos.z);
+        return null;
+      }
+      // (the door against a wall, a hydrant in the way: she climbs in over your seat)
+      this.doorT = (this.doorT || 0) + dt;
+      if (dd < 0.8 || (this.doorT > 6 && d < 5)) {
+        this.doorT = 0;
+        this.riding = true;
+        this.ride = v;
+        c.riding = true;
+        c.noCollide = true;
+        this.say(pick(RIDE_IN));
+        this.rideT = 20 + Math.random() * 15;
+        game.audio.play('click', 0.4);
+        return this.sit(c, v, dt);
+      }
+      return { x: tx, z: tz, speed: dd > 3 ? 3.6 : 1.8 };
     }
     if (p.inVehicle) {
       // waits on the sidewalk, waving
@@ -1857,6 +1922,67 @@ class Companion {
       return null;
     }
     return { x: tx, z: tz, speed: dd > 7 ? 5.4 : dd > 2.5 ? 3.4 : 1.6 };
+  }
+
+  // in the seat beside yours (or behind you on the bike), holding on; a word now and then
+  sit(c, v, dt) {
+    const game = this.game;
+    const fx = Math.sin(v.yaw);
+    const fz = Math.cos(v.yaw);
+    const bike = v.kind === 'bike';
+    // (the car's seat on the passenger's side: game/traffic.js seat(), side -1)
+    const S = bike ? null : v.seatOf();
+    const u = bike ? -0.78 : S.u;
+    const s = bike ? 0 : S.s;
+    c.pos.set(v.pos.x + fx * u - fz * s, (v.pos.y || 0) + (bike ? 0.55 : S.y), v.pos.z + fz * u + fx * s);
+    c.vel.set(0, 0, 0);
+    c.dodgeV.set(0, 0, 0);
+    c.yaw = v.yaw;
+    c.faceYaw = v.yaw;
+    c.baseY = bike ? 0.55 : S.y;
+    c.fig.sit = 1;
+    // on the bike: her hands on your waist
+    if (bike) {
+      const pf = game.player.fig;
+      c.fig.reachR = pf.j.hipR || null;
+      c.fig.reachL = pf.j.hipL || null;
+    }
+    this.rideT -= dt;
+    if (v.air && !this.airSaid) {
+      this.airSaid = true;
+      this.say(pick(RIDE_AIR));
+    } else if (!v.air) this.airSaid = false;
+    if (v.hp !== undefined) {
+      if (this.lastHp !== undefined && this.lastHp - v.hp > 4) this.say(pick(RIDE_HIT));
+      this.lastHp = v.hp;
+    }
+    if (this.rideT <= 0) {
+      this.rideT = 25 + Math.random() * 20;
+      this.say(pick(RIDE_LINES));
+    }
+    return null;
+  }
+
+  // out on her side when you get out (or when the ride is done for)
+  getOut(c, p, quiet) {
+    const v = this.ride;
+    this.riding = false;
+    this.ride = null;
+    this.lastHp = undefined;
+    c.riding = false;
+    c.noCollide = false;
+    c.baseY = 0;
+    c.fig.sit = 0;
+    c.fig.reachR = null;
+    c.fig.reachL = null;
+    if (v) {
+      const fx = Math.sin(v.yaw);
+      const fz = Math.cos(v.yaw);
+      const half = v.kind === 'bike' ? 0.8 : (v.halfWid || 0.98) + 0.7;
+      c.pos.set(v.pos.x - fz * half, v.pos.y || 0, v.pos.z + fx * half);
+    }
+    if (!quiet && (!v || !v.dead)) this.say(pick(RIDE_OUT));
+    return null;
   }
 
   drawHeart() {

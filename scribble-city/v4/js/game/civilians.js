@@ -277,9 +277,11 @@ class Civilian {
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     if (!this.noCollide) game.world.collision.resolveCylinder(this.pos, 0.33, 1.7, 0.5);
-    game.vehicles.pushOut(this.pos, 0.33);
+    // (the friend riding with you is in the car on purpose: ROADMAP 4.5)
+    if (!this.riding) game.vehicles.pushOut(this.pos, 0.33);
     const gy = groundHeight(this.pos.x, this.pos.z) + (this.baseY || 0);
-    this.pos.y = this.hopY > 0 ? gy + this.hopY : damp(this.pos.y, gy, 20, dt);
+    // (riding: the seat holds her, over a ramp too)
+    if (!this.riding) this.pos.y = this.hopY > 0 ? gy + this.hopY : damp(this.pos.y, gy, 20, dt);
     fig.air = this.hopY > 0.04;
     const sp = Math.hypot(this.vel.x, this.vel.z);
     if (sp > 0.2) this.yaw = dampAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), 8, dt);
@@ -761,6 +763,8 @@ export class Civilians {
   dodge(pos, f, halfLen, halfWid, speed) {
     if (Math.abs(speed) < 2) return;
     for (const c of this.list) {
+      // (not the one riding in it)
+      if (c.riding) continue;
       const dx = c.pos.x - pos.x;
       const dz = c.pos.z - pos.z;
       const along = dx * f.x + dz * f.z;
