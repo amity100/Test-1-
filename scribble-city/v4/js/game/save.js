@@ -106,6 +106,8 @@ export class SaveGame {
       // (the graffiti on the walls: ROADMAP 9.3)
       graffiti: g.graffiti ? g.graffiti.save() : null,
       ink: g.ink ? g.ink.save() : null,
+      // (the ladders, ramps and bridges you drew; the umbrella, the key: ROADMAP 9.2)
+      gadgets: g.gadgets ? g.gadgets.save() : null,
       // (the railing's broken stretches: ROADMAP 8.4)
       knock: g.knock ? g.knock.save() : null,
       // (the places that are yours: ROADMAP 8.2)
@@ -232,6 +234,7 @@ export class SaveGame {
     if (g.money && s.money) g.money.load(s.money);
     if (g.graffiti && s.graffiti) g.graffiti.load(s.graffiti);
     if (g.ink && s.ink) g.ink.load(s.ink);
+    if (g.gadgets && s.gadgets) g.gadgets.load(s.gadgets);
     if (g.knock && s.knock) g.knock.load(s.knock);
     if (g.props && s.props) g.props.load(s.props);
     // what you held

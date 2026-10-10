@@ -23,6 +23,11 @@ const CRIMES = {
   shoot: { heat: 0.2 },
   killGang: { heat: 0.4 },
   copcar: { heat: 1.8, always: true },
+  // (the drawn key, ROADMAP 9.2: a car opened with it - only the police think anything of it; a
+  // shop's alarm going off; its till emptied)
+  quietSteal: { heat: 0.6 },
+  alarm: { heat: 1.0, always: true },
+  burglary: { heat: 0.8, civ: true },
 };
 // who comes in each car, by stars
 const CREWS = [

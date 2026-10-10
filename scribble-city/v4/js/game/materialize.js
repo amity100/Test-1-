@@ -187,11 +187,25 @@ export function planDrawing(game, bp, res, sheet) {
     v.yaw = so.yaw;
     plan.vehicle = v;
     plan.frame = makeFrame(game.camera, v.pos, so.q, 1, box);
+  } else if (bp.kind === 'tool' && game.gadgets && game.gadgets.places(bp.id)) {
+    // (ROADMAP 9.2) a ladder, a ramp, a bridge: where it goes from here (or the drawing comes to
+    // nothing: the strokes crumble where they were drawn)
+    const sp = game.gadgets.spot(bp.id);
+    if (sp.ok) {
+      const m = game.gadgets.model(bp.id, res.grade, sp);
+      plan.model = { group: m.group };
+      plan.spot = sp;
+      plan.frame = makeFrame(game.camera, m.O, m.q, 1, localBox(m.group));
+    } else {
+      plan.fizzle = sp.why;
+      plan.frame = makeFrame(game.camera, sheet.C, so.q, 1, new THREE.Box3(new THREE.Vector3(-0.4, -0.4, -0.4), new THREE.Vector3(0.4, 0.4, 0.4)));
+    }
   } else {
     // a thing for the hand, the plaster, the parachute: shown first as big as it was drawn, in
     // the air right where it was drawn
     let model;
-    if (bp.kind === 'gear') {
+    if (bp.kind === 'tool' && game.gadgets) model = { group: game.gadgets.model(bp.id, res.grade, null).group };
+    else if (bp.kind === 'gear') {
       model = { group: canopyModel(res.grade) };
       model.group.matrixAutoUpdate = false;
     } else model = buildWeaponModel(bp.id, res.grade, { seed: res.score });

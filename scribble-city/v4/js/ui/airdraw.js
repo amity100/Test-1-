@@ -399,6 +399,15 @@ export class AirDraw {
       res.score = Math.min(100, res.score + tool.bonus);
       res.grade = gradeOf(res.score);
     }
+    // (out in the rain the rain runs the ink: points off it, unless under the drawn umbrella or
+    // a roof - ROADMAP 9.2)
+    const G = this.game.gadgets;
+    const wet = G && res.score > 0 ? G.smudge() : 0;
+    if (wet > 0) {
+      res.score = Math.max(1, res.score - wet);
+      res.grade = gradeOf(res.score);
+      res.smudged = wet;
+    }
     if (this.traced && res.score > TRACED_MAX) {
       res.score = TRACED_MAX;
       res.grade = gradeOf(res.score);
@@ -432,6 +441,7 @@ export class AirDraw {
     });
     if (missing.length) sk.text(`חסר: ${missing.slice(0, 3).join(', ')}`, 300, 268, { size: 34, color: RED_CSS, font: FONT_HAND, align: 'right', weight: 400 });
     if (this.traced) sk.text('(העתקה)', 150, 70, { size: 38, color: RED_CSS, font: FONT_HAND, weight: 400 });
+    if (res.smudged) sk.text('(הגשם מרח)', 150, this.traced ? 118 : 70, { size: 36, color: RED_CSS, font: FONT_HAND, weight: 400 });
     this.stickerTex.needsUpdate = true;
     const sw = this.W * 0.42;
     this.sticker.scale.set(sw, sw * (c.height / c.width), 1);

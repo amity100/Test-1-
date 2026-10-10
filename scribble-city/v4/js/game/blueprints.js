@@ -717,9 +717,120 @@ Object.assign(BLUEPRINTS, {
   },
 });
 
+// (ROADMAP 9.2, not with ?classic) drawings that solve problems: a ladder up to a roof, a ramp to
+// jump off, a bridge over a gap, an umbrella for the rain, a key for what is locked (game/gadgets.js)
+const UMB_TOP = ellipse(50, 46, 44, 38, 16, PI, PI * 2);
+const UMB_HEM = (() => {
+  const pts = [[94, 46]];
+  for (let i = 0; i < 4; i++) pts.push(...ellipse(83 - 22 * i, 46, 11, 5, 6, 0, -PI).slice(1));
+  return pts;
+})();
+Object.assign(BLUEPRINTS, {
+  ladder: {
+    id: 'ladder',
+    name: 'סולם',
+    the: 'הסולם',
+    g: 'm',
+    nameEn: 'LADDER',
+    kind: 'tool',
+    difficulty: 1,
+    desc: 'מציירים מול קיר של בניין, והסולם עומד עליו עד הגג. E למטה, ומטפסים.',
+    strokes: [
+      { label: 'רגל', en: 'rail', pts: [[32, 4], [32, 96]] },
+      { label: 'רגל', en: 'rail', pts: [[68, 4], [68, 96]] },
+      { label: 'שלב', en: 'rung', pts: [[32, 18], [68, 18]] },
+      { label: 'שלב', en: 'rung', pts: [[32, 36], [68, 36]] },
+      { label: 'שלב', en: 'rung', pts: [[32, 54], [68, 54]] },
+      { label: 'שלב', en: 'rung', pts: [[32, 72], [68, 72]] },
+      { label: 'שלב', en: 'rung', pts: [[32, 90], [68, 90]] },
+    ],
+    fills: [
+      { poly: [[29, 4], [35, 4], [35, 96], [29, 96]], color: '#b07a47' },
+      { poly: [[65, 4], [71, 4], [71, 96], [65, 96]], color: '#b07a47' },
+    ],
+    scale: 1,
+  },
+  ramp: {
+    id: 'ramp',
+    name: 'רמפה',
+    the: 'הרמפה',
+    g: 'f',
+    nameEn: 'STUNT RAMP',
+    kind: 'tool',
+    difficulty: 1,
+    desc: 'מציירים על הכביש, מול שטח ישר ופנוי. עולים עליה ברכב, מהר, ועפים.',
+    strokes: [
+      { label: 'משטח', en: 'deck', pts: close([[4, 82], [88, 30], [96, 36], [14, 84]]) },
+      { label: 'רגל', en: 'leg', pts: [[90, 36], [90, 84]] },
+      { label: 'רגל', en: 'leg', pts: [[56, 54], [56, 84]] },
+      { label: 'בסיס', en: 'base', pts: [[40, 84], [96, 84]] },
+    ],
+    fills: [{ poly: [[4, 82], [88, 30], [96, 36], [14, 84]], color: '#d8b07a' }],
+    scale: 1,
+  },
+  bridge: {
+    id: 'bridge',
+    name: 'גשר',
+    the: 'הגשר',
+    g: 'm',
+    nameEn: 'PLANK BRIDGE',
+    kind: 'tool',
+    difficulty: 2,
+    desc: 'מציירים בקצה (של גג, של הטיילת), מול הצד השני, והגשר נמתח עד אליו. מעל המים בלי צד שני: מזח.',
+    strokes: [
+      { label: 'משטח', en: 'deck', pts: close([[4, 56], [96, 56], [96, 64], [4, 64]]) },
+      { label: 'מעקה', en: 'rail', pts: [[4, 30], [96, 30]] },
+      { label: 'עמוד', en: 'post', pts: [[6, 30], [6, 56]] },
+      { label: 'עמוד', en: 'post', pts: [[36, 30], [36, 56]] },
+      { label: 'עמוד', en: 'post', pts: [[64, 30], [64, 56]] },
+      { label: 'עמוד', en: 'post', pts: [[94, 30], [94, 56]] },
+      { label: 'קשת', en: 'arch', pts: ellipse(50, 96, 44, 30, 16, PI, PI * 2) },
+    ],
+    fills: [{ poly: [[4, 56], [96, 56], [96, 64], [4, 64]], color: '#b98a55' }],
+    scale: 1,
+  },
+  umbrella: {
+    id: 'umbrella',
+    name: 'מטריה',
+    the: 'המטריה',
+    g: 'f',
+    nameEn: 'UMBRELLA',
+    kind: 'tool',
+    difficulty: 1,
+    desc: 'בגשם היא נפתחת מעליכם, והציורים באוויר לא נמרחים. ובנפילה מגובה היא מאטה אתכם.',
+    strokes: [
+      { label: 'כיפה', en: 'canopy', pts: [...UMB_TOP, ...UMB_HEM.slice(1)] },
+      { label: 'מוט', en: 'shaft', pts: [[50, 8], [50, 86]] },
+      { label: 'ידית', en: 'handle', pts: [[50, 86], ...ellipse(43, 86, 7, 7, 8, 0, PI).slice(1)] },
+    ],
+    fills: [{ poly: [...UMB_TOP, ...UMB_HEM.slice(1)], color: '#3d55b8' }],
+    scale: 1,
+  },
+  key: {
+    id: 'key',
+    name: 'מפתח',
+    the: 'המפתח',
+    g: 'm',
+    nameEn: 'SKELETON KEY',
+    kind: 'tool',
+    difficulty: 2,
+    desc: 'פותח כל מנעול: מכונית חונה בלי אזעקה, וחנות סגורה בלילה. מפתח עקום מתעקם מהר.',
+    strokes: [
+      { label: 'ראש', en: 'bow', pts: circle(22, 50, 15, 18) },
+      { label: 'חור', en: 'hole', pts: circle(22, 50, 6, 10) },
+      { label: 'מוט', en: 'shaft', pts: [[37, 50], [94, 50]] },
+      { label: 'שיניים', en: 'bit', pts: [[78, 50], [78, 66], [86, 66], [86, 60], [94, 60], [94, 50]] },
+    ],
+    fills: [{ poly: circle(22, 50, 15, 18), color: '#e0b046' }],
+    scale: 1,
+  },
+});
+
 export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shield', 'stapler', 'bandage', 'shotgun', 'katana', 'glue', 'inkbomb', 'boomerang', 'planes', 'bike', 'laser', 'copter', 'minigun', 'tippex', 'erasermg', 'paintmg', 'parachute'];
 // (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
 export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
+// (ROADMAP 9.2: in the album, not with ?classic; to be had in the shops, no boards of their own)
+export const BLUEPRINT_TOOLS = ['ladder', 'ramp', 'bridge', 'umbrella', 'key'];
 
 export function blueprintBounds(bp) {
   let x0 = Infinity;

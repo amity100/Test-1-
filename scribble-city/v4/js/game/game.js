@@ -79,6 +79,7 @@ import { Knock } from './knock.js';
 import { Graffiti } from './graffiti.js';
 import { SketchPad } from '../ui/sketchpad.js';
 import { Fire } from './fire.js';
+import { Gadgets } from './gadgets.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -264,6 +265,8 @@ export class Game {
     if (this.graffiti) this.phone.addApp({ id: 'graffiti', name: 'גרפיטי', glyph: 'spray', fill: '#ffd0a6' });
     // (fire that spreads, and the fire engine that comes: ROADMAP 8.4)
     this.fire = this.classic ? null : new Fire(this);
+    // (drawings that solve problems: a ladder, a ramp, a bridge, an umbrella, a key - ROADMAP 9.2)
+    this.gadgets = this.classic ? null : new Gadgets(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -872,6 +875,7 @@ export class Game {
       if (this.fire) this.fire.update(dt);
       if (this.money) this.money.update(dt);
       if (this.ink) this.ink.update(dt);
+      if (this.gadgets) this.gadgets.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -1055,7 +1059,7 @@ export class Game {
     if (input.wasPressed('KeyQ') || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact() && !(this.climb && this.climb.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -1253,6 +1257,15 @@ export class Game {
   beginDrawing(id) {
     const p = this.player;
     if (p.mode !== 'foot' || this.chute.open) return;
+    // (a ladder needs a wall in front of you, a ramp the road, a bridge an edge: said before the
+    // ink is spent - ROADMAP 9.2)
+    const why = this.gadgets ? this.gadgets.cannot(id) : null;
+    if (why) {
+      this.hud.toast(why, 'info', 3.2);
+      if (!this.touch && this.state === 'play') this.input.requestLock();
+      return;
+    }
+    if (this.gadgets) this.gadgets.rainHint();
     p.mode = 'draw';
     p.vel.set(0, 0, 0);
     this.nudgeDraw = false;
@@ -1305,6 +1318,30 @@ export class Game {
         this.hud.toast(this.touch ? 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה' : 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'good', 4);
         this.audio.play('cheer');
       });
+    } else if (bp.kind === 'tool' && this.gadgets) {
+      // (ROADMAP 9.2) put up where it goes; the umbrella and the key fly into your hands
+      const G = this.gadgets;
+      if (plan && plan.fizzle) {
+        onReal();
+        this.hud.toast(plan.fizzle, 'bad', 3.2);
+        const O = plan.frame.O;
+        this.fx.crumbs(O.x, O.y, O.z, 22, 3);
+        this.audio.play('crumble', 0.6);
+        G.stats.fizzled++;
+      } else if (G.places(bp.id)) {
+        if (plan && plan.model) {
+          const root = plan.model.group;
+          root.matrix.copy(plan.frame.matrix);
+          root.matrixWorldNeedsUpdate = true;
+          this.scene.add(root);
+          this.materialize.begin({ frame: plan.frame, root, onReal });
+          G.place(bp.id, grade, plan.spot, root);
+        } else {
+          const s = G.spot(bp.id);
+          if (s.ok) G.build(bp.id, grade, s);
+          else this.hud.toast(s.why, 'bad', 3);
+        }
+      } else toHero('chest', () => G.take(bp.id, grade));
     } else if (bp.kind === 'weapon') {
       const def = WEAPON_DEFS[bp.id];
       const model = plan && plan.model ? plan.model : buildWeaponModel(bp.id, grade, { seed: res.score });
@@ -1399,13 +1436,16 @@ export class Game {
       this.damage.cars.add(v);
     }
     this.enterVehicle(v);
-    if (Math.random() < 0.45) {
+    // (the drawn key: no alarm, and nobody who sees it thinks twice - ROADMAP 9.2)
+    const quiet = this.gadgets ? this.gadgets.useKey() : false;
+    if (quiet) this.hud.toast('המפתח נכנס, הדלת נפתחת. אף אחד לא חושד', 'good', 2);
+    else if (Math.random() < 0.45) {
       this.audio.play('alarm', 0.7);
       this.hud.toast('אזעקה! מישהו בטח שמע…', 'bad', 1.8);
       this.enemies.noise(v.pos, 35, 'alarm');
     }
     // (one of the police station's own cars: ROADMAP 6.3)
-    if (this.onCrime) this.onCrime(t.spec && t.spec.police && !this.classic ? 'copcar' : 'steal', cx, cz);
+    if (this.onCrime) this.onCrime(t.spec && t.spec.police && !this.classic ? 'copcar' : quiet ? 'quietSteal' : 'steal', cx, cz);
   }
 
   // the driver gets out on the left: runs off screaming, or (sometimes) wants the car back
@@ -1703,11 +1743,16 @@ export class Game {
       const ct = this.climb.target();
       enter = true;
       prompt = touch ? ct.label : `E — ${ct.label}`;
+    } else if (p.mode === 'foot' && this.gadgets && this.gadgets.target()) {
+      // (a shop shut for the night, the drawn key in your pocket; its till: ROADMAP 9.2)
+      enter = true;
+      const gt = this.gadgets.target();
+      prompt = touch ? gt.label : `E — ${gt.label}`;
     } else if (p.mode === 'foot') {
       const et = this.enterTarget();
       if (et) {
         enter = true;
-        const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? 'לגנוב את ה' : 'להיכנס ל';
+        const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? (this.gadgets && this.gadgets.key ? 'לפתוח במפתח את ה' : 'לגנוב את ה') : 'להיכנס ל';
         // (onto the new rides, ROADMAP 4.8: you get on them)
         const on = et.kind === 'vehicle' && et.target.model ? BLUEPRINTS[et.target.model].the : null;
         prompt = touch ? '' : on ? `E — לעלות על ${on}` : `E — ${verb}${et.label}`;

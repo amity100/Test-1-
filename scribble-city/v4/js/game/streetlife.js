@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shopkeeperLook, civilianLook, friendLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
-import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
+import { BLUEPRINTS, BLUEPRINT_MORE, BLUEPRINT_TOOLS } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
 import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn, ownTattoo } from './wardrobe.js';
@@ -531,10 +531,24 @@ function inkShelf(game, a) {
 SERVICES_NC.hardware = { ...SERVICES.hardware, offers: [...SERVICES.hardware.offers, ['אפוד מגן מכריכות של מחברות', 'vest', (game) => {
   armorUp(game);
   game.hud.toast('אפוד מגן! הוא סופג את רוב המכות והיריות עד שהוא נקרע', 'good', 3.2);
-}]] };
+}], ['שרטוטים: סולם, רמפה, גשר, מפתח', 'menu', (game, a) => toolShelf(game, a)]] };
+
+// (ROADMAP 9.2) the blueprints of the things that solve problems on the way
+const TOOL_PRICES = { ladder: 30, ramp: 40, bridge: 55, key: 70 };
+function toolShelf(game, a) {
+  const info = svc(game, a.shop.kind);
+  const choices = [];
+  for (const [id, price] of Object.entries(TOOL_PRICES)) {
+    const bp = BLUEPRINTS[id];
+    if (game.album.has(id)) choices.push({ label: `${bp.name} (כבר באלבום)`, fn: () => toolShelf(game, a) });
+    else choices.push({ label: `שרטוט: ${bp.name} · ${fmt(price)}`, fn: () => a.buy(price, `שרטוט: ${bp.name}`, () => giveBlueprint(game, id)) });
+  }
+  choices.push({ label: 'משהו אחר', fn: () => a.talk() });
+  game.dialog.show(info.who, 'סולם לגג, רמפה לקפיצות, גשר מעל מה שבאמצע, ומפתח שמתאים לכל מנעול.', choices);
+}
 
 SERVICES.arcade = { verb: 'להיכנס לארקייד', ask: 'לשחק במכונה', who: 'המכונה', greet: 'INSERT COIN — מכה אחת במכונה וקורה משהו...', offers: [['לשחק (אולי זוכים בשרטוט)', 'note', (game) => {
-  const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun' && (!game.classic || !BLUEPRINT_MORE.includes(id)));
+  const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun' && (!game.classic || (!BLUEPRINT_MORE.includes(id) && !BLUEPRINT_TOOLS.includes(id))));
   if (left.length && Math.random() < 0.5) giveBlueprint(game, left[Math.floor(Math.random() * left.length)]);
   else {
     heal(10, [0.4, 0.8, 0.95], 'כמעט! לפחות קיבלת סוכרייה. +10 חיים')(game);
@@ -551,7 +565,7 @@ SERVICES.lobby = { verb: 'להיכנס ללובי', ask: 'לדבר עם השומ
 
 // (ROADMAP 8.1) the ATMs: in the convenience stores and the hotels' lobbies
 const ATM = ['כספומט PAPERTRUST', 'menu', (game, a) => game.money && game.money.atm(() => a.talk())];
-SERVICES_NC.shop = { ...SERVICES.shop, offers: [...SERVICES.shop.offers, ATM] };
+SERVICES_NC.shop = { ...SERVICES.shop, offers: [...SERVICES.shop.offers, ATM, ['שרטוט: מטריה (לגשם, ולנפילות)', 'umbrella', (game) => giveBlueprint(game, 'umbrella')]] };
 SERVICES_NC.lobby = { ...SERVICES.lobby, offers: [...SERVICES.lobby.offers, ATM] };
 
 const HERO_HAIR_COLORS = [[0.12, 0.1, 0.09], [0.42, 0.28, 0.16], [0.86, 0.72, 0.45], [0.75, 0.2, 0.22], [0.3, 0.45, 0.85], [0.55, 0.3, 0.75]];

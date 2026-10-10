@@ -105,14 +105,15 @@ export class Shutters {
     let n = 0;
     for (let i = 0; i < this.list.length; i++) {
       const e = this.list[i];
-      let want = R.open(e.shop.kind) ? 0 : 1;
+      // (opened with the drawn key, ROADMAP 9.2: up until you are well away)
+      let want = R.open(e.shop.kind) || e.forced ? 0 : 1;
       // (not while you are in there: they wait for you to go)
       if (want && !pl.inVehicle && e.room.inside(pl.pos.x, pl.pos.z, 0.4)) want = 0;
       const far = Math.abs(e.x - cam.x) > FAR || Math.abs(e.z - cam.z) > FAR;
       if (e.down < 0 || far) e.down = want;
       else if (e.down !== want) e.down = want > e.down ? Math.min(want, e.down + ROLL * dt) : Math.max(want, e.down - ROLL * dt);
       // the shop is shut once its shutter is all the way down (game/streetlife.js lets it go)
-      e.shop.shut = e.down >= 1;
+      e.shop.shut = e.down >= 1 || !!e.forced;
       const wall = e.down > 0.5;
       const b = col.boxes[e.box];
       if (b.alive !== wall) b.alive = wall;

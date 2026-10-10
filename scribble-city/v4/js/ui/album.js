@@ -1,4 +1,4 @@
-import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, drawBlueprint } from '../game/blueprints.js';
+import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, BLUEPRINT_TOOLS, drawBlueprint } from '../game/blueprints.js';
 import { GRADE } from '../game/weapons.js';
 import { AVES, STREETS, nearestRoadInfo, districtName } from '../world/layout.js';
 
@@ -21,6 +21,12 @@ const FOUND_IN = {
   parachute: 'מתנה למי שקונה את Star Motel',
   laser: 'מתנה למי שקונה את Pixel Arcade',
   planes: 'מתנה למי שקונה את Bay Cafe',
+  // (ROADMAP 9.2)
+  ladder: 'בחנות כלי העבודה',
+  ramp: 'בחנות כלי העבודה',
+  bridge: 'בחנות כלי העבודה',
+  key: 'בחנות כלי העבודה',
+  umbrella: 'במכולות שבשדרות',
 };
 
 // the library's shelves
@@ -28,6 +34,8 @@ const SHELVES = [
   ['כלי רכב', (bp) => bp.kind === 'vehicle'],
   ['נשק', (bp) => bp.kind === 'weapon'],
   ['ציוד ועזרה ראשונה', (bp) => bp.kind === 'gear' || bp.kind === 'heal'],
+  // (ROADMAP 9.2, not with ?classic)
+  ['כלים לבעיות בדרך', (bp) => bp.kind === 'tool'],
 ];
 
 /**
@@ -142,7 +150,7 @@ export class Album {
 
   // (the new ones, ROADMAP 4.8: not with ?classic)
   get order() {
-    return this.game.classic ? BLUEPRINT_ORDER : this._order || (this._order = [...BLUEPRINT_ORDER, ...BLUEPRINT_MORE]);
+    return this.game.classic ? BLUEPRINT_ORDER : this._order || (this._order = [...BLUEPRINT_ORDER, ...BLUEPRINT_MORE, ...BLUEPRINT_TOOLS]);
   }
 
   get size() {
@@ -163,6 +171,8 @@ export class Album {
     this.list.innerHTML = '';
     const last = this.game.drawPick;
     for (const [title, fits] of SHELVES) {
+      // (a shelf with nothing on it in this edition: not shown - the tools are not with ?classic)
+      if (!this.order.some((id) => fits(BLUEPRINTS[id]))) continue;
       const head = document.createElement('div');
       head.className = 'album-shelf';
       head.textContent = title;
@@ -211,7 +221,7 @@ export class Album {
     meta.className = 'meta';
     const rec = this.items.get(id);
     const best = got && rec && rec.best !== null ? ` · שיא: ${rec.best}` : '';
-    meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? 'כלי רכב' : bp.kind === 'gear' ? 'ציוד' : bp.kind === 'heal' ? 'עזרה ראשונה' : 'נשק') : ''}${best}`;
+    meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? 'כלי רכב' : bp.kind === 'gear' ? 'ציוד' : bp.kind === 'heal' ? 'עזרה ראשונה' : bp.kind === 'tool' ? 'כלי' : 'נשק') : ''}${best}`;
     item.appendChild(meta);
     if (got) {
       const go = document.createElement('div');

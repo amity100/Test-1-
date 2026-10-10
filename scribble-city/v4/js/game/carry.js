@@ -42,8 +42,9 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
       [x, y, z] = [0.2, hipY - 0.06, 0.24];
       break;
     case 'umbrella':
-      if (!R) return false;
-      [x, y, z] = [0.1, ny - 0.12, 0.22];
+      // (the hero's drawn umbrella in the left hand, held up high in a fall: ROADMAP 9.2)
+      if (!R && fig.carryL !== 'umbrella') return false;
+      [x, y, z] = [side * 0.1, ny - 0.12 + (fig.umbrellaUp || 0) * 0.45, 0.22 - (fig.umbrellaUp || 0) * 0.1];
       break;
     case 'coffee':
       [x, y, z] = [side * 0.17, hipY + 0.2, 0.24];

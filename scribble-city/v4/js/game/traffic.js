@@ -437,6 +437,9 @@ export class Traffic {
       const e = es[i];
       if (e.alive) aheadTest(e.pos.x, e.pos.z, 0.4, 'other', 0);
     }
+    // (a ramp drawn in the road, ROADMAP 9.2: in the way like a car stopped there)
+    const G = game.gadgets;
+    if (G) for (let i = 0; i < G.ramps.length; i++) aheadTest(G.ramps[i].cx, G.ramps[i].cz, G.ramps[i].r, 'car', G.ramps[i].back);
     const hs = game.civilians.list;
     for (let i = 0; i < hs.length; i++) {
       const h = hs[i];

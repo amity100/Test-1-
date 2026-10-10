@@ -1258,7 +1258,8 @@ export class Vehicles {
       }
     }
     for (const r of RAMPS) {
-      if (Math.hypot(r.x - cam.x, r.z - cam.z) > 160) continue;
+      // (a drawn one has a body of its own: game/gadgets.js)
+      if (r.drawn || Math.hypot(r.x - cam.x, r.z - cam.z) > 160) continue;
       const slope = Math.atan2(r.h, r.len);
       const plank = Math.hypot(r.h, r.len);
       // the plank (tilted up its length), two stripes across it, the trestle under its high end

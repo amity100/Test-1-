@@ -36,7 +36,7 @@ export const PRICES = {
   tacos: [8],
   diner: [11, 6],
   juice: [5],
-  shop: [3, 2, 25],
+  shop: [3, 2, 25, 0, 15],
   hardware: [4, 60, 45, 90],
   pharmacy: [20, 25],
   laundry: [6],
