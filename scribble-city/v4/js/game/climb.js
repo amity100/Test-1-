@@ -15,7 +15,9 @@ import { groundHeight } from '../world/layout.js';
 // While on one the hero is in the 'climb' mode (game/player.js hands the frame over to here).
 
 const _p = { x: 0, y: 0, z: 0, seg: null };
-const CAN_HOLD = new Set(['wall', 'prop', 'car', 'furniture', 'board', 'roomwall']);
+// (the low bounds too: the promenade's railing and the pier's sides, over into the bay - with
+// swimming, ROADMAP 5.2; the city's high edges are out of reach anyway)
+const CAN_HOLD = new Set(['wall', 'prop', 'car', 'furniture', 'board', 'roomwall', 'bound']);
 // (a rung's step: the legs' turn every two of them)
 const LEGS = 0.64;
 
@@ -248,7 +250,8 @@ export class Climb {
     // over it, if it is thin and there is room past it and no great drop
     let to = null;
     let vault = false;
-    if (depth < 0.9) {
+    // (the promenade's railing stands on the sea wall's broad top: over both, into the bay)
+    if (depth < (best.tag === 'bound' ? 1.5 : 0.9)) {
       const vx = ex + fx * (depth + 0.5);
       const vz = ez + fz * (depth + 0.5);
       const below = this.floorAt(vx, vz, top);

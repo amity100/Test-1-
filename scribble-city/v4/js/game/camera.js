@@ -49,7 +49,10 @@ export class CameraRig {
     this.curDist = want < this.curDist ? want : damp(this.curDist, want, 6, dt);
     const cam = this.camera;
     cam.position.copy(this.pivot).addScaledVector(this.fwd, -this.curDist);
-    if (cam.position.y < 0.35) cam.position.y = 0.35;
+    // (in the bay, ROADMAP 5.2: over the water or under it, never in the surface itself)
+    const minY = opts.minY !== undefined ? opts.minY : 0.35;
+    if (cam.position.y < minY) cam.position.y = minY;
+    if (opts.maxY !== undefined && cam.position.y > opts.maxY) cam.position.y = opts.maxY;
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt * 2.5);
       const s = this.shake * 0.25;

@@ -61,6 +61,7 @@ import { Garage } from './garage.js';
 import { shoreNear } from './rides.js';
 import { PaintShop } from '../ui/paintshop.js';
 import { Climb } from './climb.js';
+import { Swim } from './swim.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
@@ -210,6 +211,8 @@ export class Game {
     this.paintshop = this.classic ? null : new PaintShop(this);
     // (up walls and fences, up the fire escapes and the ladders onto the roofs: ROADMAP 5.1)
     this.climb = this.classic ? null : new Climb(this);
+    // (in the bay and under it: ROADMAP 5.2)
+    this.swim = this.classic ? null : new Swim(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -617,7 +620,11 @@ export class Game {
     pickLights(c);
     if (this.world.cull) this.world.cull(c);
     this.world.sky.position.copy(c);
+    // (under the water you see a few metres: ROADMAP 5.2)
+    const fog = shared.uFogDensity.value;
+    if (this.swim && this.swim.wasUnder) shared.uFogDensity.value = 0.075;
     this.pipe.render(this._sc.set(c.x + f.x * 35, 0, c.z + f.z * 35));
+    shared.uFogDensity.value = fog;
   }
 
   loop() {
@@ -781,6 +788,7 @@ export class Game {
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
+      else if (this.swim && player.mode === 'swim') this.camRig.update(dt, player.pos, this.swim.camOpts);
       else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: this.player.indoor ? 2.6 : 3.3 });
     }
     const tipsy = this.inkwell.tipsy;
@@ -799,6 +807,8 @@ export class Game {
     // the performance test route drives the camera (and the city's life follows it)
     if (this.perf.bench) this.perf.benchCamera(dt);
     this.camera.updateMatrixWorld();
+    // (the camera under the bay: the world down there, ROADMAP 5.2)
+    if (this.swim) this.swim.frame(dt);
     this.bubbles.update(dt, this.camera);
     if (this.onFrame) this.onFrame(dt);
     this.airdraw.frame(dt);
@@ -831,6 +841,10 @@ export class Game {
       this.cars.end();
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
+      if (this.swim) {
+        this.swim.draw();
+        this.swim.ripples(fr);
+      }
       this.animals.draw(fr);
       this.chute.draw(fr);
       this.pickups.draw(fr);
@@ -903,6 +917,7 @@ export class Game {
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
       else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact() && !(this.climb && this.climb.interact())) this.tryEnter();
+      else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
     if (input.wasPressed('KeyP')) this.openPhone();
@@ -1302,7 +1317,8 @@ export class Game {
     let shore = null;
     if (v.kind === 'boat' && !v.dead) {
       shore = shoreNear(v);
-      if (!shore && !force) {
+      // (far from the shore: with swimming, ROADMAP 5.2, you jump in)
+      if (!shore && !force && !this.swim) {
         this.hud.toast('אין לאן לרדת כאן — שוטים לטיילת או למזח', 'info', 2.2);
         return;
       }
@@ -1529,6 +1545,10 @@ export class Game {
     } else if (p.mode === 'climb') {
       // (on a fire escape, up a ladder: ROADMAP 5.1)
       prompt = (this.climb && this.climb.prompt) || '';
+    } else if (p.mode === 'swim' && this.swim) {
+      // (in the bay: ROADMAP 5.2)
+      prompt = this.swim.prompt || '';
+      enter = !!(this.swim.boat() || this.swim.shore());
     } else if (p.mode === 'foot' && this.climb && this.climb.target()) {
       const ct = this.climb.target();
       enter = true;

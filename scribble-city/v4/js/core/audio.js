@@ -194,6 +194,22 @@ export class Audio {
     this.sir2Gain.gain.setTargetAtTime(this.enabled ? level * level * 0.05 : 0, t, 0.1);
   }
 
+  // (ROADMAP 5.2) under the water everything is muffled and far away
+  muffle(on) {
+    const c = this.ctx;
+    if (!c || !this.master) return;
+    if (!this.muff) {
+      if (!on) return;
+      this.muff = c.createBiquadFilter();
+      this.muff.type = 'lowpass';
+      this.muff.frequency.value = 20000;
+      this.master.disconnect();
+      this.master.connect(this.muff);
+      this.muff.connect(c.destination);
+    }
+    this.muff.frequency.setTargetAtTime(on ? 420 : 20000, c.currentTime, 0.08);
+  }
+
   // rain on the page and wind in the streets, 0..1 each (continuous)
   weather(rain, wind) {
     if (!this.ctx) return;

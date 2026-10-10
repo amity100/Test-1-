@@ -977,3 +977,26 @@ body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.ph
 #vehicle-hp #fuel .bar .fill { background: linear-gradient(90deg, #e8333d, #ffd23f 30%, #4ee06a); }
 #vehicle-hp #fuel.low .bar .fill { animation: fuelblink 0.8s steps(2) infinite; }
 @keyframes fuelblink { 50% { opacity: 0.3; } }
+
+/* (ROADMAP 5.2) under the water: the bay's green-blue over everything, light rippling down from
+   the surface; how much air is left */
+#underwater {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(100deg, rgba(190, 245, 255, 0.07) 0 14px, transparent 14px 46px),
+    radial-gradient(ellipse at 50% 20%, rgba(70, 180, 190, 0.12), rgba(8, 40, 70, 0.5) 85%),
+    linear-gradient(rgba(40, 140, 160, 0.28), rgba(10, 50, 80, 0.45));
+  mix-blend-mode: multiply;
+  animation: caustic 3.5s linear infinite;
+  background-size: 160px 100%, 100% 100%, 100% 100%;
+}
+#underwater.hidden { display: none; }
+@keyframes caustic { to { background-position: 160px 0, 0 0, 0 0; } }
+#breath { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+#breath.hidden { display: none; }
+#breath .ico { font-size: 12px; line-height: 1; color: #3fa9d6; font-weight: 700; }
+#breath .bar { flex: 1; height: 7px; }
+#breath .bar .fill { background: linear-gradient(90deg, #3fa9d6, #8fe3ff); }
+#breath.low .bar .fill { animation: fuelblink 0.6s steps(2) infinite; background: #e8333d; }

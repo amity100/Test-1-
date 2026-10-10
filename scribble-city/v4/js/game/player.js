@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Doodle } from './doodle.js';
 import { heroLook } from './looks.js';
-import { groundHeight } from '../world/layout.js';
+import { groundHeight, WATER_X } from '../world/layout.js';
 import { clamp, damp, dampAngle } from '../core/util.js';
 
 const GRAVITY = 24;
@@ -105,6 +105,12 @@ export class Player {
       else this.mode = 'foot';
       return;
     }
+    // in the bay (ROADMAP 5.2, game/swim.js)
+    if (this.mode === 'swim') {
+      if (this.game.swim) this.game.swim.update(dt, input);
+      else this.mode = 'foot';
+      return;
+    }
     // sitting (in the barber's chair): held to the seat until it lets go, then any step stands up
     if (this.seat) {
       const st = this.seat;
@@ -193,6 +199,13 @@ export class Player {
     this.game.vehicles.pushOut(p, this.radius);
     let ground = groundHeight(p.x, p.z);
     if (floor > ground) ground = floor;
+    // (down into the bay: you swim, ROADMAP 5.2 - the water takes a fall, however high)
+    const swim = this.game.swim;
+    if (swim && p.x > WATER_X && ground < -0.5 && floor < -0.5 && p.y <= ground + 0.02) {
+      if (gliding) chute.land();
+      swim.enter();
+      return;
+    }
     if (p.y <= ground + 0.02) {
       if (this.vel.y <= 0) {
         // a hard landing hurts (a jump out of the helicopter without a parachute hurts a lot)
