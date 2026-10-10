@@ -154,8 +154,9 @@ export class Weapons {
       t = e.t;
       this.aimHitEnemy = e.enemy;
     }
-    // never aim behind the player
-    const p = this.game.player.pos;
+    // never aim behind the player (in a car: where he sits)
+    const P = this.game.player;
+    const p = P.mode === 'vehicle' ? P.fig.pos : P.pos;
     const along = (p.x - o.x) * dir.x + (p.y + 1.4 - o.y) * dir.y + (p.z - o.z) * dir.z;
     if (t < along + 1.5) t = along + 1.5;
     this.aimPoint.set(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t);
@@ -171,16 +172,33 @@ export class Weapons {
     const slot = this.current;
     const def = slot.def;
     // (a thing just drawn is still turning real in the air: it is not in the hand yet)
-    const canAct = player.mode === 'foot' && !game.inBar && !game.dialog.open && !slot.present;
+    const onFoot = player.mode === 'foot' && !game.inBar && !game.dialog.open && !slot.present;
+    // (ROADMAP 4.7; not with ?classic) in a car or on a bike: a gun out of the window
+    const v = player.inVehicle;
+    const seated = !game.classic && player.mode === 'vehicle' && v && (v.kind === 'car' || v.kind === 'bike') && !v.dead && !game.dialog.open && !(game.garage && game.garage.state) && !(game.paintshop && game.paintshop.open);
+    const driveBy = seated && def.kind === 'gun' && !slot.present;
+    const canAct = onFoot || driveBy;
     this.beam = null;
-    // weapon switching (1..9, 0 for the tenth)
-    if (canAct) {
+    // weapon switching (1..9, 0 for the tenth; in a car the wheel is the camera's)
+    if (onFoot || seated) {
       for (let k = 1; k <= 9; k++) if (input.wasPressed(`Digit${k}`)) this.select(k - 1);
       if (input.wasPressed('Digit0')) this.select(9);
-      if (input.wheel) this.cycle(input.wheel > 0 ? 1 : -1);
+      if (input.wheel && onFoot) this.cycle(input.wheel > 0 ? 1 : -1);
       if (input.wasPressed('KeyX')) this.cycle(1);
     }
     this.computeAim();
+    // out of the window: the arm out to where you aim (the other hand stays on the wheel)
+    this.shootOut = driveBy && (input.fire || input.aim || game.time - this.lastFire < 1.2);
+    const fig = player.fig;
+    if (this.shootOut) {
+      const n = fig.j.neck;
+      const a = this.aimPoint;
+      let dy = Math.atan2(a.x - n.x, a.z - n.z) - fig.yaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      fig.aimYaw = dy;
+      fig.aimPitch = Math.atan2(a.y - n.y, Math.hypot(a.x - n.x, a.z - n.z));
+    } else if (fig.shootOut) fig.aimYaw = 0;
+    fig.shootOut = this.shootOut;
     // the minigun's barrels spin up while the trigger is held, and wind down after
     if (def.spin) {
       const want = canAct && input.fire ? 1 : 0;
@@ -222,7 +240,7 @@ export class Weapons {
       if (this.swingT >= 1) this.swingT = -1;
     }
     player.fig.melee = this.swingT;
-    player.fig.aim = (def.kind === 'gun' || def.kind === 'beam') && this.isAiming() && canAct ? def.hands : 0;
+    player.fig.aim = this.shootOut ? 1 : (def.kind === 'gun' || def.kind === 'beam') && this.isAiming() && canAct ? def.hands : 0;
     this.updateProjectiles(dt);
   }
 
@@ -279,15 +297,18 @@ export class Weapons {
       }
       if (def.projectile === 'glue') extra.stick = def.stick;
       if (def.projectile === 'staple') extra.pin = def.pin;
+      // (out of a car's window: not into the car itself)
+      if (player.inVehicle) extra.ignoreCar = player.inVehicle;
       this.launch(slot, muzzle.x, muzzle.y, muzzle.z, dir.x * sp, dir.y * sp + (sad ? 1 : 0), dir.z * sp, extra);
     }
     slot.ammo--;
     game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
     game.audio.play(def.sound || (def.projectile === 'paint' ? 'paint' : def.projectile === 'pencil' ? 'pencilShot' : 'bazooka'));
     game.camRig.addShake(def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04));
-    game.enemies.noise(player.pos, 32);
-    game.civilians.panic(player.pos, 40);
-    game.onCrime('shoot', player.pos.x, player.pos.z);
+    const at = player.inVehicle ? player.inVehicle.pos : player.pos;
+    game.enemies.noise(at, 32);
+    game.civilians.panic(at, 40);
+    game.onCrime('shoot', at.x, at.z);
     if (slot.ammo <= 0) this.drop(slot, `ה${def.name} נגמר — אפשר לצייר אותו שוב`);
     game.hud.updateWeapon();
   }
@@ -525,7 +546,7 @@ export class Weapons {
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (!s.model || !s.model.group) continue;
-      s.model.group.visible = drawing ? i === 0 : i === this.index && p.mode === 'foot' && !this.game.inBar && !s.out;
+      s.model.group.visible = drawing ? i === 0 : i === this.index && (p.mode === 'foot' || this.shootOut) && !this.game.inBar && !s.out;
     }
     const fig = p.fig;
     const j = fig.j;
@@ -539,7 +560,7 @@ export class Weapons {
       return;
     }
     const slot = this.current;
-    if (!slot.model || p.mode !== 'foot') return;
+    if (!slot.model || (p.mode !== 'foot' && !this.shootOut)) return;
     let m;
     const def = slot.def;
     if (def.kind === 'melee' || def.kind === 'throw') {
@@ -733,6 +754,14 @@ export class Weapons {
         if (ph) {
           hitT = ph.t;
           hit = { type: 'player', x: ox + dx * ph.t, y: oy + dy * ph.t, z: oz + dz * ph.t };
+        }
+      }
+      // (ROADMAP 4.7) the cars going by stop shots too, and take them (not the one shot from)
+      if (!game.classic && pr.kind !== 'scissors') {
+        const vh = game.traffic.segmentHit(ox, oy, oz, dx, dy, dz, hitT, pr.ignoreCar || null);
+        if (vh) {
+          hitT = vh.t;
+          hit = { type: 'car', car: vh.car, own: vh.own, x: ox + dx * vh.t, y: oy + dy * vh.t, z: oz + dz * vh.t, nx: vh.nx, ny: vh.ny, nz: vh.nz };
         }
       }
       if (hit && pr.kind === 'scissors') {
@@ -1007,6 +1036,22 @@ export class Weapons {
         game.audio.play('snip', 0.8);
       }
       fx.impact(hit.x, hit.y, hit.z, kind === 'staple' || kind === 'shaving' ? 0.4 : 0.7);
+      return;
+    }
+    if (hit.type === 'car') {
+      // a car hit: dented, its glass, a tyre... (game/damage.js); yours keep their own count
+      const c = hit.car;
+      if (hit.own) {
+        // (yours: the one you sit in takes what was meant for you)
+        c.hurt(pr.owner === 'player' ? pr.damage * 0.5 : pr.damage);
+        game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.6, true);
+      } else {
+        game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.7);
+        game.traffic.shotAt(c, pr.owner);
+      }
+      fx.sparks(hit.x, hit.y, hit.z, 4, STEEL);
+      fx.impact(hit.x, hit.y, hit.z, 0.45);
+      if (Math.hypot(hit.x - game.camera.position.x, hit.z - game.camera.position.z) < 45) game.audio.play('clang', 0.35);
       return;
     }
     if (hit.type === 'player') {

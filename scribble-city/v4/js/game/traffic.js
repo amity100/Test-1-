@@ -720,6 +720,87 @@ export class Traffic {
     }
   }
 
+  // (ROADMAP 4.7) a shot's path (o + d t, t from 0 to maxT) through a car of the traffic, or
+  // through one of yours standing about (not skip, the one the shooter sits in): the nearest,
+  // where, the side it went in by (in the world), and whether the car is yours
+  segmentHit(ox, oy, oz, dx, dy, dz, maxT, skip = null) {
+    let best = null;
+    let bt = maxT;
+    const dd = dx * dx + dz * dz || 1e-9;
+    const test = (c, hl, hw, h, own) => {
+      if (c === skip) return;
+      const cx = c.pos.x;
+      const cz = c.pos.z;
+      // (nowhere near the shot's path)
+      const tq = Math.max(0, Math.min(bt, ((cx - ox) * dx + (cz - oz) * dz) / dd));
+      if (Math.hypot(ox + dx * tq - cx, oz + dz * tq - cz) > hl + 0.8) return;
+      const cy = Math.cos(c.yaw);
+      const sy = Math.sin(c.yaw);
+      const px = ox - cx;
+      const pz = oz - cz;
+      const lo = [px * cy - pz * sy, oy - (c.pos.y || 0), px * sy + pz * cy];
+      const ld = [dx * cy - dz * sy, dy, dx * sy + dz * cy];
+      const lo0 = [-hw, 0.12, -hl];
+      const hi0 = [hw, h, hl];
+      let t0 = 0;
+      let t1 = bt;
+      let axis = -1;
+      let sgn = 0;
+      for (let k = 0; k < 3; k++) {
+        if (Math.abs(ld[k]) < 1e-9) {
+          if (lo[k] < lo0[k] || lo[k] > hi0[k]) return;
+          continue;
+        }
+        let ta = (lo0[k] - lo[k]) / ld[k];
+        let tb = (hi0[k] - lo[k]) / ld[k];
+        let s0 = -1;
+        if (ta > tb) {
+          const tt = ta;
+          ta = tb;
+          tb = tt;
+          s0 = 1;
+        }
+        if (ta > t0) {
+          t0 = ta;
+          axis = k;
+          sgn = s0;
+        }
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) return;
+      }
+      if (t0 < bt) {
+        bt = t0;
+        // (the face it went in by, back in the world: local x is the car's left, z its front)
+        const nx = axis === 0 ? sgn * cy : axis === 2 ? sgn * sy : 0;
+        const nz = axis === 0 ? -sgn * sy : axis === 2 ? sgn * cy : 0;
+        best = { car: c, t: t0, own, nx, ny: axis === 1 ? sgn : 0, nz };
+      }
+    };
+    for (const c of this.list) {
+      if (c.gone || c.poofT !== undefined) continue;
+      const K = KINDS[c.spec.kind];
+      test(c, c.halfLen, c.halfWid, K ? K.roofY || 1.5 : 1.4, false);
+    }
+    for (const v of this.game.vehicles.list) {
+      if (v.kind !== 'car' || v.dead) continue;
+      const K = KINDS[v.carKind] || KINDS.sedan;
+      test(v, v.halfLen || K.len / 2, v.halfWid || K.W / 2, K.roofY || 1.45, true);
+    }
+    return best;
+  }
+
+  // a car of the traffic shot at: the driver runs or floors it (the police take it personally)
+  shotAt(c, owner) {
+    const game = this.game;
+    if (owner !== 'player') return;
+    if (c.police) {
+      game.onCrime('hurtCop', c.pos.x, c.pos.z);
+      return;
+    }
+    if ((c.scaredT || 0) > game.time) return;
+    this.scare(c.pos, 3);
+  }
+
   // two cars of the traffic run into each other (a red light taken, a car pushed off its lane):
   // a crunch, both stopped with their hazards going, the drivers out
   crashes(dt) {
@@ -834,7 +915,9 @@ export class Traffic {
     fig.speed = 0;
     if (!fig.wheel) fig.wheel = new THREE.Vector3();
     fig.wheel.set(pos.x + fx * (u + 0.55) - rx * s, pos.y + y + 1.04, pos.z + fz * (u + 0.55) - rz * s);
-    fig.reachR = side > 0 ? fig.wheel : null;
+    fig.reachR = side > 0 && !fig.shootOut ? fig.wheel : null;
+    // (shooting out of the window: the left hand on the wheel instead, ROADMAP 4.7)
+    if (fig.shootOut) fig.reachL = side > 0 ? fig.wheel : null;
     fig.update(dt);
   }
 

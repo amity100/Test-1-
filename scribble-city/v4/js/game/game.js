@@ -1285,6 +1285,12 @@ export class Game {
     p.mode = 'foot';
     p.fig.setVisible(true);
     p.fig.reachR = null;
+    // (the gun back in from the window: ROADMAP 4.7)
+    if (p.fig.shootOut) {
+      p.fig.shootOut = false;
+      p.fig.reachL = null;
+      p.fig.aimYaw = 0;
+    }
     // step out on the left side (or wherever there is room)
     const fx = Math.sin(v.yaw);
     const fz = Math.cos(v.yaw);
@@ -1421,6 +1427,8 @@ export class Game {
     const len2 = dx * dx + dz * dz;
     if (p.inVehicle) {
       const v = p.inVehicle;
+      // (a car's own shape takes the shots: game/traffic.js segmentHit, ROADMAP 4.7)
+      if (!this.classic && v.kind === 'car') return null;
       let t = len2 > 1e-8 ? ((v.pos.x - ox) * dx + (v.pos.z - oz) * dz) / len2 : 0;
       t = clamp(t, 0, maxT);
       const hx = ox + dx * t - v.pos.x;
@@ -1468,6 +1476,9 @@ export class Game {
     if (p.inVehicle) {
       enter = true;
       prompt = touch ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+      // (a gun in hand: out of the window, ROADMAP 4.7)
+      const pv = p.inVehicle;
+      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && this.weapons.current.def.kind === 'gun') prompt = 'קליק — ירי מהחלון · E — לצאת';
       // (at the service station: what stopping here does, game/garage.js)
       const gp = this.garage.prompt();
       if (gp) prompt = gp;

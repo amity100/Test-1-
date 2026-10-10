@@ -971,7 +971,9 @@ class Vehicle {
     fig.speed = 0;
     if (!fig.wheel) fig.wheel = new THREE.Vector3();
     fig.wheel.set(this.pos.x + fx * b[2], this.pos.y + b[1], this.pos.z + fz * b[2]);
-    fig.reachR = fig.wheel;
+    // (shooting off the bike: one hand on the bars, ROADMAP 4.7)
+    fig.reachR = fig.shootOut ? null : fig.wheel;
+    if (fig.shootOut) fig.reachL = fig.wheel;
     fig.update(dt);
   }
 }
