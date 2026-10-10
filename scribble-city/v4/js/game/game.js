@@ -48,6 +48,7 @@ import { Settings } from '../core/settings.js';
 import { Pad } from '../core/gamepad.js';
 import { SaveGame, SLOTS, SLOT_NAMES } from './save.js';
 import { Routines } from './routines.js';
+import { Workers } from './workers.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -155,6 +156,9 @@ export class Game {
     // ?classic leaves the street as it was before (the "same picture" check)
     this.classic = this.params.has('classic');
     this.routines = new Routines(this);
+    // people at work in the street: sweepers, the postman, couriers, a traffic officer, road
+    // works, the market's sellers (game/workers.js)
+    this.workers = new Workers(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -655,6 +659,7 @@ export class Game {
       this.civilians.update(dt);
       this.streetlife.update(dt);
       this.routines.update(dt);
+      this.workers.update(dt);
       this.nightlife.update(dt);
       this.vignettes.update(dt);
       this.airsketch.update(dt);
@@ -720,6 +725,7 @@ export class Game {
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
       this.streetlife.draw(fr);
+      this.workers.draw(fr);
       this.vignettes.draw(fr);
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);

@@ -384,6 +384,30 @@ export class Audio {
         this.tone('sine', 1760, 1760, 0.5, 0.09 * v);
         this.tone('sine', 2350, 2350, 0.45, 0.06 * v, 0.07);
         break;
+      case 'bikebell':
+        // a bicycle's bell: two quick rings
+        for (const at of [0, 0.16]) {
+          this.tone('triangle', 2900, 2850, 0.22, 0.08 * v, at);
+          this.tone('sine', 4100, 4050, 0.18, 0.04 * v, at);
+        }
+        break;
+      case 'whistle': {
+        // the traffic officer's whistle: a trill, then a long blast
+        for (let i = 0; i < 5; i++) this.tone('sine', 2700, 2600, 0.05, 0.07 * v, i * 0.06);
+        this.tone('sine', 2650, 2550, 0.45, 0.08 * v, 0.32);
+        break;
+      }
+      case 'drill':
+        // a jackhammer: a quick run of hard knocks
+        for (let i = 0; i < 9; i++) {
+          this.hiss(0.03, 0.16 * v, 700, 0.8, 'lowpass', i * 0.05);
+          this.tone('square', 95, 70, 0.025, 0.05 * v, i * 0.05);
+        }
+        break;
+      case 'sweep':
+        // a broom's swish on the pavement
+        this.hiss(0.32, 0.05 * v, 2400, 0.7, 'bandpass', 0, 1200);
+        break;
       case 'bark':
         this.tone('sawtooth', 520, 260, 0.09, 0.14 * v);
         this.hiss(0.08, 0.18 * v, 900, 1.5, 'bandpass');

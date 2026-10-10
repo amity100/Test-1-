@@ -38,6 +38,9 @@ const COL_92_88_8 = [0.92, 0.88, 0.8];
 const COL_45_3_2 = [0.45, 0.3, 0.2];
 const COL_15_25_45 = [0.15, 0.25, 0.45];
 const UPPER = ['neck', 'headC', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'];
+// a bike under somebody (body units, from their feet: up y, forward z): the saddle's height, the
+// crank's centre and its length; game/workers.js draws the bike round the same points
+export const RIDE = { hip: 0.9, crankY: 0.3, crankZ: 0.16, crank: 0.17 };
 const LOWER = ['hip', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'];
 
 // approximate volumes (m³) of each erasable part of a 1.85 m adult
@@ -154,6 +157,8 @@ export class Doodle {
     this.reachR = null;
     this.reachL = null;
     this.hunch = 0; // old age: bent forward over the knees
+    this.ride = 0; // on a bike (game/workers.js): on the saddle, feet on the pedals
+    this.crank = 0; // the pedals' turn (radians)
     this.carry = null; // what the right hand holds (see carry.js): 'cane', 'coffee', 'umbrella'...
     this.carryL = null; // ...and the left
     this.carryT = 0; // clock for the held things (steam, strumming, sweeping)
@@ -236,7 +241,11 @@ export class Doodle {
     hipY = lerp(hipY, 0.25, crawl);
     hipY = lerp(hipY, 0.56, crouch);
     hipY -= this.hunch * 0.05;
-    const lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22 + this.hunch * 0.42;
+    let lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22 + this.hunch * 0.42;
+    if (this.ride > 0) {
+      hipY = lerp(hipY, RIDE.hip, this.ride);
+      lean += this.ride * 0.3;
+    }
     const leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
     this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
     const spine = 0.5;
@@ -296,6 +305,7 @@ export class Doodle {
       this.toWorld(sx, fy, fz, foot);
       this.toWorld(sx, Math.max(0.03, fy - 0.01), fz + 0.13, toe);
     }
+    if (this.ride > 0) this.pedal(hw, legL);
 
     // arms
     const armU = 0.31 * (this.look.build.arms || 1);
@@ -444,6 +454,31 @@ export class Doodle {
     if (!this.shapesDirty) return;
     this.shapesDirty = false;
     this.buildShapes();
+  }
+
+  // on a bike: each foot on its pedal going round the crank, the knee where the leg bends to it
+  pedal(hw, legL) {
+    const j = this.j;
+    const L = legL * this.scale;
+    const pole = _q.copy(this.forward).multiplyScalar(0.8).add(UP);
+    for (let li = 0; li < 2; li++) {
+      const side = li === 0 ? 1 : -1;
+      const a = this.crank + (li === 0 ? 0 : Math.PI);
+      const hip = li === 0 ? j.hipR : j.hipL;
+      const knee = li === 0 ? j.kneeR : j.kneeL;
+      const foot = li === 0 ? j.footR : j.footL;
+      const toe = li === 0 ? j.toeR : j.toeL;
+      const sx = side * (hw + 0.03);
+      const py = RIDE.crankY - Math.cos(a) * RIDE.crank;
+      const pz = RIDE.crankZ - Math.sin(a) * RIDE.crank;
+      // (blended from wherever the walk put the foot, as they get on and off)
+      this.toWorld(sx, py, pz, _e);
+      foot.lerp(_e, this.ride);
+      ik(hip, foot, L, L, pole, _p);
+      knee.lerp(_p, this.ride);
+      this.toWorld(sx, py - 0.01, pz + 0.12, _e);
+      toe.lerp(_e, this.ride);
+    }
   }
 
   // ------------------------------------------------------------------ body shapes

@@ -81,6 +81,9 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
     case 'newspaper':
       [x, y, z] = [side * 0.21, ny - 0.1, 0.32];
       break;
+    case 'letters':
+      [x, y, z] = [side * 0.17, hipY + 0.22, 0.25];
+      break;
     case 'dough': {
       // tossing: the hands bounce up as the dough flies
       const k = Math.max(0, Math.sin(t * 4.2));
@@ -181,6 +184,10 @@ function shapesFor(fig, item, side, S) {
     case 'bag':
       _a.copy(h).addScaledVector(UP, -0.14 * S);
       e(_a, 0.11, 0.15, 0.07, CARD);
+      break;
+    case 'letters':
+      _a.copy(h).addScaledVector(UP, 0.06 * S).addScaledVector(Z, 0.02 * S);
+      e(_a, 0.105, 0.065, 0.022, [0.97, 0.95, 0.9]);
       break;
     case 'laundry': {
       if (side !== 1) break;
@@ -402,6 +409,26 @@ function strokesFor(fig, item, side, w) {
     }
     case 'laundry':
       break;
+    case 'letters': {
+      // the bundle's edges, the rubber band round it, the top envelope's flap
+      _m.copy(h).addScaledVector(UP, 0.06 * S).addScaledVector(Z, 0.045 * S);
+      const hw = 0.1 * S;
+      const hh = 0.06 * S;
+      for (const [u0, v0, u1, v1] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]]) {
+        _a.copy(_m).addScaledVector(X, u0 * hw).addScaledVector(UP, v0 * hh);
+        _b.copy(_m).addScaledVector(X, u1 * hw).addScaledVector(UP, v1 * hh);
+        line(fig, _a, _b, ink, w * 0.8, sd + 140 + u0 + v0 * 2);
+      }
+      _a.copy(_m).addScaledVector(UP, -hh * 1.05);
+      _b.copy(_m).addScaledVector(UP, hh * 1.05);
+      line(fig, _a, _b, [0.85, 0.2, 0.2], w * 1.4, sd + 146);
+      _a.copy(_m).addScaledVector(X, -hw).addScaledVector(UP, hh);
+      _b.copy(_m).addScaledVector(UP, hh * 0.1);
+      line(fig, _a, _b, ink, w * 0.6, sd + 147);
+      _a.copy(_m).addScaledVector(X, hw).addScaledVector(UP, hh);
+      line(fig, _b, _a, ink, w * 0.6, sd + 148);
+      break;
+    }
     case 'broom': {
       if (side !== 1) break;
       const hl = fig.j.handL;
