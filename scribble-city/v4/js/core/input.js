@@ -260,6 +260,7 @@ export class Input {
     btn('btn-photo', 'KeyF');
     btn('btn-enter', 'KeyE');
     btn('btn-swap', 'KeyX');
+    btn('btn-radio', 'KeyR');
     btn('btn-up', 'Space', true);
     btn('btn-down', 'KeyC', true);
     btn('btn-pause', 'Escape');

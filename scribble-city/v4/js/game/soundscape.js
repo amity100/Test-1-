@@ -1,5 +1,5 @@
 import { WATER_X, PIER, SOUTH_EDGE } from '../world/layout.js';
-import { SONGS } from '../core/audio.js';
+import { Band, makeSong } from '../core/music.js';
 
 // The sounds of the city (ROADMAP 1.4), made on the spot like every other sound of the game (no
 // sound files). Layers that come and go with where you are: the waves along the bay, gulls over
@@ -19,8 +19,13 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-// the shops that play music out of their door, and which of the jukebox's songs
-const SHOP_SONG = { cafe: 0, juice: 0, books: 0, diner: 0, icecream: 0, boutique: 2, gym: 2, arcade: 2, music: 1, bar: 1, surf: 1, pizza: 1, tacos: 1 };
+// the shops that play music out of their door, and how it goes (core/music.js); the club plays
+// its own, loud, out into the street
+const SHOP_STYLE = {
+  cafe: 'jazz', books: 'jazz', diner: 'jazz', icecream: 'lofi', juice: 'lofi', surf: 'lofi', boutique: 'synth', arcade: 'synth', gym: 'disco',
+  music: 'rock', bar: 'rock', pizza: 'rock', tacos: 'rock',
+};
+const CLUB = 'INK CLUB';
 // how loud each layer is at its fullest
 const FULL = { waves: 0.12, foam: 0.05, traffic: 0.1, hiss: 0.035, crowd: 0.045, crowd2: 0.02 };
 // how often the slow part looks around (seconds)
@@ -38,9 +43,7 @@ export class Soundscape {
     this.wait = { bird: 1, cricket: 1, gull: 3, siren: 25, dog: 12, horn: 9 };
     this.stepK = null;
     this.shop = null;
-    this.song = null;
-    this.mNext = 0;
-    this.mStep = 0;
+    this.band = null;
     this.rx = 1;
     this.rz = 0;
   }
@@ -246,64 +249,37 @@ export class Soundscape {
   shopMusic(cam, now) {
     const game = this.game;
     let best = null;
-    let bd = 17;
+    let bd = 34;
     const R = game.rhythm;
     for (const s of game.streetlife.active.values()) {
       const kind = s.shop.kind;
-      if (SHOP_SONG[kind] === undefined || !s.open || (R && !R.open(kind))) continue;
-      const d = Math.hypot(s.shop.door[0] - cam.x, s.shop.door[2] - cam.z);
-      if (d < bd) {
+      if (SHOP_STYLE[kind] === undefined || !s.open || (R && !R.open(kind))) continue;
+      const club = s.shop.name === CLUB;
+      // (the club is heard from across the street; a shop from its door)
+      const d = Math.hypot(s.shop.door[0] - cam.x, s.shop.door[2] - cam.z) * (club ? 0.5 : 1);
+      if (d < bd && d < 17) {
         bd = d;
         best = s;
       }
     }
     const inRoom = best && best.room && best.room.inside(cam.x, cam.z, 0.2);
-    const vol = best ? (inRoom ? 0.32 : 0.22 * (1 - smoothstep(4, 17, bd))) : 0;
+    const club = best && best.shop.name === CLUB;
+    const vol = best ? (inRoom ? 0.32 : (club ? 0.34 : 0.22) * (1 - smoothstep(4, 17, bd))) : 0;
     this.shopOut.gain.setTargetAtTime(vol, now, 0.6);
-    this.shopFilter.frequency.setTargetAtTime(inRoom ? 4000 : 1300, now, 0.3);
+    this.shopFilter.frequency.setTargetAtTime(inRoom ? 4000 : club ? 900 : 1300, now, 0.3);
     if (best) this.shopPan.pan.setTargetAtTime(inRoom ? 0 : this.panTo(best.shop.door[0], best.shop.door[2]), now, 0.3);
+    if (!this.band) this.band = new Band(this.c, this.shopFilter, this.a.noise);
     if (best && best !== this.shop) {
+      // (each shop its own song, the same one every time you come by)
       this.shop = best;
-      this.song = SONGS[SHOP_SONG[best.shop.kind] % SONGS.length];
-      this.mNext = now + 0.05;
-      this.mStep = 0;
+      this.band.play(makeSong(club ? 'disco' : SHOP_STYLE[best.shop.kind], 500 + best.shop.id), now + 0.05);
     }
-    if (!best) {
-      // (it goes on a moment as it fades, then stops)
-      if (this.shop && this.shopOut.gain.value < 0.002) this.shop = null;
-      if (!this.shop) return;
+    if (!best && this.shop && this.shopOut.gain.value < 0.002) {
+      // (it went on a moment as it faded, then stopped)
+      this.shop = null;
+      this.band.stop();
     }
-    const s = this.song;
-    const spb = 60 / s.bpm / 2;
-    while (this.mNext < now + 0.35) {
-      this.note(this.mStep, this.mNext);
-      this.mNext += spb;
-      this.mStep++;
-    }
-  }
-
-  // one step of the shop's song: a soft kick, the bass, the chord
-  note(i, t) {
-    const s = this.song;
-    const c = this.c;
-    const beat = i % 8;
-    const chord = s.prog[Math.floor(i / 8) % s.prog.length];
-    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
-    const play = (type, f, dur, vol) => {
-      const o = c.createOscillator();
-      o.type = type;
-      o.frequency.setValueAtTime(f, t);
-      const g = c.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g).connect(this.shopFilter);
-      o.start(t);
-      o.stop(t + dur + 0.05);
-    };
-    if (beat === 0 || beat === 4 || (s.four && beat % 2 === 0)) play('sine', 70, 0.16, 0.3);
-    for (const b of s.bass) if (b[0] === beat) play('triangle', hz(chord[0] - 24 + b[1]), 0.22, 0.2);
-    if (s.stabs.includes(beat)) for (const m of chord) play('triangle', hz(m), s.stabLen, 0.05);
+    this.band.update(now);
   }
 
   // ------------------------------------------------------------------ now and then

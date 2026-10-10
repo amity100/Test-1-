@@ -40,6 +40,7 @@ import { Weather } from './weather.js';
 import { Rhythm } from './rhythm.js';
 import { Shutters } from './shutters.js';
 import { Soundscape } from './soundscape.js';
+import { Radio } from './radio.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -130,6 +131,8 @@ export class Game {
     this.shutters = new Shutters(this);
     // the sounds of the city around you (game/soundscape.js)
     this.soundscape = new Soundscape(this);
+    // the car radio (game/radio.js)
+    this.radio = new Radio(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -519,6 +522,7 @@ export class Game {
     this.updatePrompts();
     this.audio.tick();
     if (this.soundscape) this.soundscape.update(dt);
+    if (this.radio) this.radio.update(dt);
     input.endFrame();
   }
 
@@ -542,6 +546,8 @@ export class Game {
       else if (p.mode === 'foot' && !this.streetlife.interact()) this.tryEnter();
     }
     if (input.wasPressed('KeyM')) this.hud.mapScale = this.hud.mapScale > 1 ? 0.55 : 1.1;
+    // the car radio's dial
+    if (input.wasPressed('KeyR') && p.inVehicle && p.inVehicle.kind === 'car') this.radio.next();
   }
 
   // ------------------------------------------------------------------ hiding
@@ -902,6 +908,7 @@ export class Game {
     this.audio.play('click');
     $('btn-up').classList.toggle('hidden', !v.flies);
     $('btn-down').classList.toggle('hidden', !v.flies);
+    $('btn-radio').classList.toggle('hidden', v.kind !== 'car');
   }
 
   exitVehicle(force = false) {
@@ -937,6 +944,7 @@ export class Game {
     }
     $('btn-up').classList.add('hidden');
     $('btn-down').classList.add('hidden');
+    $('btn-radio').classList.add('hidden');
     if (!force) this.audio.play('click');
   }
 

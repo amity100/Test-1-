@@ -155,6 +155,19 @@ export class HUD {
     setTimeout(() => el.remove(), (life + 0.6) * 1000);
   }
 
+  // the car radio's line (the station's name, what the DJ says, an ad); null hides it
+  radio(text, kind = null) {
+    const el = this.radioEl || (this.radioEl = document.getElementById('radio'));
+    if (!el) return;
+    if (!text) {
+      el.classList.add('hidden');
+      return;
+    }
+    el.textContent = text;
+    el.classList.toggle('ad', kind === 'ad');
+    el.classList.remove('hidden');
+  }
+
   big(text, ms = 1600) {
     this.bigEl.textContent = text;
     this.bigEl.classList.remove('hidden');
