@@ -74,6 +74,55 @@ const KINDS = {
     glass: { tA: 0.004, tB: 0.012, tC: 0.975, tD: 0.997, R: 3.05, w0: 1.0, w1: 0.99, pillars: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.85], frame: 0.06 },
     tail: { y: -0.4, w: 0.8, low: 0.7 }, head: { y: -0.4, w: 0.36, h: 0.12 },
   },
+  // (ROADMAP 4.1: the rest of the street's traffic)
+  // a box truck: a tall box behind, the cab in front, two axles at the back
+  truck: {
+    len: 7.4, W: 2.35, r: 0.46, wheels: [0.14, 0.27, 0.84], clear: 0.36, n: 6,
+    halfW: [[0, 1.17], [0.01, 1.18], [0.97, 1.16], [1, 1.06]],
+    belt: [[0, 3.1], [0.01, 3.18], [0.68, 3.18], [0.695, 1.42], [0.8, 1.4], [0.92, 1.32], [0.97, 1.18], [1, 0.98]],
+    glass: { tA: 0.705, tB: 0.72, tC: 0.83, tD: 0.93, R: 2.72, w0: 0.99, w1: 0.95, pillars: [] },
+    tail: { y: -2.5, w: 0.8, low: 0.95 }, head: { y: -0.16, w: 0.44, h: 0.13 },
+  },
+  // a garbage truck: the rounded body of the compactor, the cab in front
+  garbage: {
+    len: 8.2, W: 2.45, r: 0.5, wheels: [0.13, 0.27, 0.85], clear: 0.4, n: 3.4,
+    halfW: [[0, 1.16], [0.02, 1.22], [0.97, 1.2], [1, 1.1]],
+    belt: [[0, 2.7], [0.03, 3.1], [0.72, 3.2], [0.735, 1.5], [0.86, 1.46], [0.95, 1.36], [1, 1.1]],
+    glass: { tA: 0.745, tB: 0.76, tC: 0.86, tD: 0.95, R: 2.75, w0: 0.99, w1: 0.95, pillars: [] },
+    tail: { y: -2.2, w: 0.85, low: 0.9 }, head: { y: -0.18, w: 0.46, h: 0.14 },
+  },
+  // a stretched limousine: a long run of dark windows
+  limo: {
+    len: 7.1, W: 1.96, r: 0.35, wheels: [0.13, 0.87], clear: 0.22, n: 3.4,
+    halfW: [[0, 0.84], [0.04, 0.93], [0.15, 0.96], [0.5, 0.96], [0.85, 0.96], [0.96, 0.9], [1, 0.78]],
+    belt: [[0, 0.82], [0.03, 0.95], [0.15, 0.98], [0.3, 0.97], [0.75, 0.95], [0.9, 0.9], [0.98, 0.84], [1, 0.7]],
+    glass: { tA: 0.14, tB: 0.22, tC: 0.71, tD: 0.8, R: 1.44, w0: 0.92, w1: 0.74, pillars: [0.33, 0.46, 0.6] },
+    tail: { y: -0.12, w: 0.9 }, head: { y: -0.1, w: 0.4, h: 0.08 },
+  },
+  // a fifties cruiser: a long hood, a short deck with fins, round everywhere
+  classic: {
+    len: 5.4, W: 2.0, r: 0.36, wheels: [0.19, 0.78], clear: 0.2, n: 2.6,
+    halfW: [[0, 0.86], [0.04, 0.96], [0.2, 0.98], [0.5, 0.97], [0.8, 0.97], [0.95, 0.92], [1, 0.8]],
+    belt: [[0, 0.98], [0.035, 1.04], [0.11, 0.92], [0.3, 0.86], [0.6, 0.86], [0.82, 0.83], [0.96, 0.78], [1, 0.62]],
+    glass: { tA: 0.29, tB: 0.37, tC: 0.54, tD: 0.63, R: 1.42, w0: 0.9, w1: 0.74, pillars: [0.46] },
+    tail: { y: -0.22, w: 0.5 }, head: { y: -0.16, w: 0.3, h: 0.14 },
+  },
+  // an ambulance: the box of the back, the cab in front
+  ambulance: {
+    len: 6.1, W: 2.2, r: 0.38, wheels: [0.17, 0.82], clear: 0.32, n: 5,
+    halfW: [[0, 1.07], [0.02, 1.1], [0.88, 1.08], [0.96, 1.0], [1, 0.88]],
+    belt: [[0, 2.5], [0.02, 2.6], [0.66, 2.6], [0.675, 1.3], [0.8, 1.24], [0.9, 1.14], [0.97, 1.0], [1, 0.84]],
+    glass: { tA: 0.69, tB: 0.71, tC: 0.8, tD: 0.9, R: 2.25, w0: 0.99, w1: 0.95, pillars: [] },
+    tail: { y: -1.9, w: 0.8, low: 0.95 }, head: { y: -0.12, w: 0.42, h: 0.1 },
+  },
+  // a fire engine: a long red body, the crew cab in front, the ladder on top
+  firetruck: {
+    len: 8.6, W: 2.5, r: 0.5, wheels: [0.14, 0.28, 0.84], clear: 0.42, n: 6,
+    halfW: [[0, 1.2], [0.01, 1.25], [0.97, 1.23], [1, 1.12]],
+    belt: [[0, 2.15], [0.02, 2.3], [0.7, 2.3], [0.715, 1.62], [0.88, 1.56], [0.96, 1.42], [1, 1.16]],
+    glass: { tA: 0.725, tB: 0.74, tC: 0.9, tD: 0.965, R: 2.95, w0: 0.99, w1: 0.96, pillars: [0.82] },
+    tail: { y: -1.4, w: 0.85, low: 0.95 }, head: { y: -0.2, w: 0.46, h: 0.14 },
+  },
 };
 
 // the colours of the city's cars (sRGB), and which kinds they come in
@@ -369,6 +418,7 @@ class Pool {
 const PARTS = ['shell', 'glass'];
 // the lights and trims (the same arrays every frame)
 const TAXI_LIGHT = [0.85, 0.7, 0.22];
+const TAXI_BUSY = [0.32, 0.27, 0.12];
 const RED_OFF = [0.5, 0.06, 0.08];
 const RED_ON = [3.2, 0.25, 0.3];
 const BLUE_OFF = [0.08, 0.12, 0.5];
@@ -378,6 +428,15 @@ const BUS_BAND = [0.97, 0.96, 0.92];
 const BUS_SIGN = [1.6, 1.2, 0.3];
 const BUS_DOOR = [0.2, 0.22, 0.28];
 const VAN_RACK = [0.25, 0.25, 0.3];
+const AMB_RED = [0.86, 0.1, 0.14];
+const AMB_ORANGE = [1.0, 0.55, 0.12];
+const WHITE_ON = [3.0, 3.0, 2.9];
+const WHITE_OFF = [0.5, 0.5, 0.52];
+const STEEL_BAR = [0.78, 0.8, 0.84];
+const CHROME = [0.9, 0.91, 0.95];
+const FIRE_BAND = [0.97, 0.95, 0.88];
+const GARBAGE_DARK = [0.05, 0.05, 0.06];
+const GARBAGE_STRIPE = [0.98, 0.84, 0.2];
 const _m = new THREE.Matrix4();
 const _w = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -590,7 +649,7 @@ export class CarRenderer {
     }
     const top = K.roofY;
     if (o.extra === 'taxi') {
-      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, TAXI_LIGHT, rv);
+      this.box(this.lightBox, _m, 0, top + 0.13, -0.1, 0.8, 0.24, 0.3, o.busy ? TAXI_BUSY : TAXI_LIGHT, rv);
     } else if (o.extra === 'police') {
       const blink = o.siren !== undefined ? o.siren : -1;
       const red = blink < 0 ? RED_OFF : blink ? RED_ON : RED_OFF;
@@ -607,6 +666,43 @@ export class CarRenderer {
       this.box(this.trimBox, _m, K.W / 2 + 0.005, 1.5, -0.4, 0.02, 2.2, 1.1, BUS_DOOR, rv);
     } else if (kind === 'van' && o.extra !== 'plain') {
       this.box(this.trimBox, _m, 0, top + 0.06, -0.3, K.W * 0.8, 0.06, K.len * 0.55, VAN_RACK, rv);
+    } else if (o.extra === 'ambulance') {
+      // a red band and an orange one along the box, the lights on its front corners and on the cab
+      const blink = o.siren !== undefined ? o.siren : -1;
+      for (let sd = -1; sd <= 1; sd += 2) {
+        this.box(this.trimBox, _m, sd * (K.W / 2 - 0.0), 1.05, -0.35, 0.04, 0.24, K.len * 0.62, AMB_RED, rv);
+        this.box(this.trimBox, _m, sd * (K.W / 2 - 0.0), 1.86, -0.35, 0.04, 0.12, K.len * 0.62, AMB_ORANGE, rv);
+        this.box(this.lightBox, _m, sd * 0.78, 2.66, K.len * 0.16, 0.34, 0.14, 0.22, blink < 0 ? RED_OFF : (blink ? sd > 0 : sd < 0) ? RED_ON : RED_OFF, rv);
+      }
+      this.box(this.lightBox, _m, 0, top + 0.08, K.len / 2 - 1.55, 0.9, 0.13, 0.26, blink < 0 ? WHITE_OFF : blink ? WHITE_ON : RED_ON, rv);
+    } else if (o.extra === 'fire') {
+      // the white band along the body, the ladder on top, the light bar on the cab
+      const blink = o.siren !== undefined ? o.siren : -1;
+      // (the ladder lies on two supports over the body, out over the cab's roof)
+      const ly = top + 0.16;
+      const lz = -0.35;
+      const ll = K.len * 0.8;
+      for (let sd = -1; sd <= 1; sd += 2) {
+        this.box(this.trimBox, _m, sd * (K.W / 2 - 0.0), 1.28, -0.4, 0.04, 0.16, K.len * 0.66, FIRE_BAND, rv);
+        this.box(this.trimBox, _m, sd * 0.42, ly, lz, 0.08, 0.14, ll, STEEL_BAR, rv);
+      }
+      const n = 16;
+      for (let i = 0; i <= n; i++) this.box(this.trimBox, _m, 0, ly, lz - ll / 2 + (ll * i) / n, 0.84, 0.06, 0.06, STEEL_BAR, rv);
+      for (const z of [-K.len * 0.38, K.len * 0.02]) this.box(this.trimBox, _m, 0, (2.3 + ly) / 2, z, 0.5, ly - 2.3, 0.18, GARBAGE_DARK, rv);
+      this.box(this.lightBox, _m, -0.36, top + 0.09, K.len * 0.4 - 0.15, 0.62, 0.16, 0.26, blink < 0 ? RED_OFF : blink ? RED_ON : RED_OFF, rv);
+      this.box(this.lightBox, _m, 0.36, top + 0.09, K.len * 0.4 - 0.15, 0.62, 0.16, 0.26, blink < 0 ? RED_OFF : blink ? RED_OFF : RED_ON, rv);
+    } else if (o.extra === 'garbage') {
+      // the hopper at the back, a yellow stripe along the body
+      this.box(this.trimBox, _m, 0, 1.25, -K.len / 2 - 0.25, K.W * 0.92, 1.7, 0.5, GARBAGE_DARK, rv);
+      this.box(this.trimBox, _m, 0, 0.62, -K.len / 2 - 0.42, K.W * 0.9, 0.08, 0.4, STEEL_BAR, rv);
+      for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 + 0.01), 1.1, -0.6, 0.04, 0.16, K.len * 0.6, GARBAGE_STRIPE, rv);
+    } else if (o.extra === 'classic') {
+      // chrome bumpers, a white stripe down the sides
+      this.box(this.trimBox, _m, 0, K.clear + 0.2, K.len / 2 + 0.03, K.W * 0.92, 0.13, 0.12, CHROME, rv);
+      this.box(this.trimBox, _m, 0, K.clear + 0.2, -K.len / 2 - 0.03, K.W * 0.92, 0.13, 0.12, CHROME, rv);
+      for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.01), 0.62, 0.1, 0.03, 0.07, K.len * 0.78, FIRE_BAND, rv);
+    } else if (o.extra === 'limo') {
+      for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.03), 0.6, 0, 0.03, 0.05, K.len * 0.86, CHROME, rv);
     }
   }
 

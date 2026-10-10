@@ -80,6 +80,16 @@ export class Audio {
     this.sirGain.gain.value = 0;
     this.sirOsc.connect(this.sirGain).connect(this.fx);
     this.sirOsc.start();
+    // the ambulance's and the fire engine's (a quicker, harder wail: game/fleet.js)
+    this.sir2Osc = c.createOscillator();
+    this.sir2Osc.type = 'sawtooth';
+    const lp2 = c.createBiquadFilter();
+    lp2.type = 'lowpass';
+    lp2.frequency.value = 1800;
+    this.sir2Gain = c.createGain();
+    this.sir2Gain.gain.value = 0;
+    this.sir2Osc.connect(lp2).connect(this.sir2Gain).connect(this.fx);
+    this.sir2Osc.start();
   }
 
   // ------------------------------------------------------------------ the jukebox at the Inkwell
@@ -172,6 +182,16 @@ export class Audio {
     const wail = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 0.45);
     this.sirOsc.frequency.setTargetAtTime(560 + wail * 380, t, 0.05);
     this.sirGain.gain.setTargetAtTime(this.enabled ? level * level * 0.07 : 0, t, 0.1);
+  }
+
+  // 0..1: how close the nearest ambulance or fire engine is (kind: 'yelp' quick, 'wail' slow)
+  siren2(level, kind = 'yelp') {
+    if (!this.ctx || !this.sir2Osc) return;
+    const t = this.ctx.currentTime;
+    const rate = kind === 'yelp' ? 2.6 : 0.35;
+    const w = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * rate);
+    this.sir2Osc.frequency.setTargetAtTime(kind === 'yelp' ? 640 + w * 520 : 480 + w * 520, t, 0.04);
+    this.sir2Gain.gain.setTargetAtTime(this.enabled ? level * level * 0.05 : 0, t, 0.1);
   }
 
   // rain on the page and wind in the streets, 0..1 each (continuous)

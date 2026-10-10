@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { NODES, lightAt, laneOffsets, stopDist, lanePoint, exitsFrom } from '../world/roads.js';
-import { randomCarSpec, drawWipers, wiperSweep } from '../render/cars.js';
+import { randomCarSpec, drawWipers, wiperSweep, KINDS } from '../render/cars.js';
 import { civilianLook, copLook, swatLook } from './looks.js';
 import { damp, dampAngle, angleDiff } from '../core/util.js';
 
@@ -19,6 +19,9 @@ const WRECK = [0.13, 0.11, 0.13];
 
 // where the driver sits, in car-local (forward u, to the right s)
 export const DRIVER_SEAT = { u: -0.2, s: -0.42 };
+
+// the rest of the street's traffic (game/fleet.js): as long and as wide as their shapes
+const BIG = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', 'firetruck']);
 
 const LOOK_AHEAD = 1.3;
 const DECEL = 3.6;
@@ -132,6 +135,7 @@ export class Traffic {
   }
 
   removeCar(c) {
+    if ((c.rider || c.garbage || c.pickup) && this.game.fleet) this.game.fleet.forget(c);
     if (c.driver && c.driver.fig) c.driver.fig.dispose();
     c.driver = null;
     if (c.crew) for (const m of c.crew) if (m.fig) m.fig.dispose();
@@ -142,15 +146,17 @@ export class Traffic {
   // ------------------------------------------------------------------ lanes
   newCar(spec, o = {}) {
     const bus = spec.kind === 'bus';
-    return {
+    const K = BIG.has(spec.kind) ? KINDS[spec.kind] : null;
+    const moto = spec.kind === 'moto';
+    const c = {
       spec,
       bus,
       pos: new THREE.Vector3(),
       yaw: 0,
       speed: o.speed || 0,
       maxSpeed: o.maxSpeed || (bus ? 8.5 : 9.5 + Math.random() * 4.5),
-      halfLen: bus ? 5.8 : spec.kind === 'van' ? 2.5 : 2.3,
-      halfWid: bus ? 1.25 : 0.98,
+      halfLen: bus ? 5.8 : K ? K.len / 2 : moto ? 1.1 : spec.kind === 'van' ? 2.5 : 2.3,
+      halfWid: bus ? 1.25 : K ? K.W / 2 : moto ? 0.45 : 0.98,
       ink: 120,
       driver: o.driver === false ? null : { look: civilianLook(), fig: null },
       crew: null,
@@ -166,6 +172,9 @@ export class Traffic {
       wrecked: false,
       stopped: false,
     };
+    // (a truck, a motorbike, an ambulance...: game/fleet.js)
+    if (!this.game.classic && this.game.fleet) this.game.fleet.dress(c);
+    return c;
   }
 
   // put c on the lane from node A to node B, t metres out of A
@@ -209,7 +218,7 @@ export class Traffic {
     }
     const offs = laneOffsets(B, e.dx, e.dz);
     let off2 = offs[0];
-    if (e.turn > 0 || c.bus) off2 = offs[offs.length - 1];
+    if (e.turn > 0 || c.bus || c.curb) off2 = offs[offs.length - 1];
     else if (e.turn === 0) off2 = offs.reduce((a, b) => (Math.abs(b - off) < Math.abs(a - off) ? b : a), offs[0]);
     const vmax = c.maxSpeed;
     const X = lanePoint(B, e.dx, e.dz, off2, stopDist(B, e.dz !== 0));
@@ -254,7 +263,7 @@ export class Traffic {
       const dz = Math.sign(B.z - A.z);
       const offs = laneOffsets(A, dx, dz);
       // (a bus keeps to the curb lane, where its stops are)
-      const li = spec && spec.kind === 'bus' ? offs.length - 1 : Math.floor(Math.random() * offs.length);
+      const li = spec && (spec.kind === 'bus' || spec.curb) ? offs.length - 1 : Math.floor(Math.random() * offs.length);
       const q = lanePoint(A, dx, dz, offs[li], t);
       const d = Math.hypot(q[0] - p.x, q[1] - p.z);
       if (d < minD || d > maxD) continue;
@@ -264,8 +273,9 @@ export class Traffic {
         const vz = q[1] - cam.position.z;
         if ((vx * fwd.x + vz * fwd.z) / (Math.hypot(vx, vz) || 1) > 0.2) continue;
       }
-      if (this.list.some((c) => Math.hypot(c.pos.x - q[0], c.pos.z - q[1]) < (spec && spec.kind === 'bus' ? 18 : 10))) continue;
-      const c = this.newCar(spec || randomCarSpec(), o);
+      if (this.list.some((c) => Math.hypot(c.pos.x - q[0], c.pos.z - q[1]) < (spec && (spec.kind === 'bus' || spec.curb || spec.emergency) ? 18 : 10))) continue;
+      // (what drives about: the city's own mix; with the trucks, the motorbikes... game/fleet.js)
+      const c = this.newCar(spec || (this.game.classic || !this.game.fleet ? randomCarSpec() : this.game.fleet.spec()), o);
       this.placeOnEdge(c, A, B, li, t);
       this.list.push(c);
       return c;
@@ -476,12 +486,19 @@ export class Traffic {
       const light = lightAt(g.node, g.axis, this.time);
       const dist = g.s - front - 0.4;
       if (light !== 'g' && dist < 45) {
-        const canStop = dist > (c.speed * c.speed) / (2 * 6.5);
-        if (light === 'r' || canStop) want = Math.min(want, dist < 0.3 ? 0 : Math.sqrt(2 * DECEL * dist) * 0.9);
+        if (c.emergency) {
+          // (an ambulance, a fire engine: slow, a look, and through: game/fleet.js)
+          want = Math.min(want, Math.max(5, dist * 0.45));
+        } else {
+          const canStop = dist > (c.speed * c.speed) / (2 * 6.5);
+          if (light === 'r' || canStop) want = Math.min(want, dist < 0.3 ? 0 : Math.sqrt(2 * DECEL * dist) * 0.9);
+        }
       }
     }
     // a bus pulls up at its stops
     if (c.bus) want = Math.min(want, this.busStop(c, dt));
+    // a taxi pulling over, the garbage truck at a bin (game/fleet.js)
+    if (c.garbage || c.pickup || c.dropT !== undefined) want = Math.min(want, this.game.fleet.want(c, dt));
     // whatever is in front (not for a driver looking elsewhere: game/events.js, the bump)
     const a = c.distracted ? null : this.ahead(c);
     if (c.brakeT > 0) {
@@ -713,7 +730,7 @@ export class Traffic {
       const t = this.game.time;
       for (let i = 0; i < list.length; i++) {
         const c = list[i];
-        if (c.wrecked || c.poofT !== undefined || c.spec.kind === 'bus') continue;
+        if (c.wrecked || c.poofT !== undefined || c.spec.kind === 'bus' || c.spec.kind === 'moto') continue;
         const dx = c.pos.x - camPos.x;
         const dz = c.pos.z - camPos.z;
         if (dx * dx + dz * dz > 26 * 26 || dx * fwd.x + dz * fwd.z < -4) continue;
@@ -738,6 +755,8 @@ export class Traffic {
 
   drawOne(cars, c) {
     const spec = c.spec;
+    // (a motorbike and its rider: game/fleet.js)
+    if (spec.kind === 'moto') return;
     let scale = 1;
     let squash = 1;
     if (c.poofT !== undefined) {
@@ -750,8 +769,10 @@ export class Traffic {
     const o = _drawOpts;
     o.spin = c.wheel || 0;
     o.steer = Math.max(-0.5, Math.min(0.5, c.steer || 0));
-    o.extra = spec.police ? 'police' : spec.taxi ? 'taxi' : spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain';
-    o.siren = spec.police ? (c.siren ? this._blink : -1) : undefined;
+    o.extra = spec.police ? 'police' : spec.taxi ? 'taxi' : spec.extra || (spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain');
+    o.siren = spec.police || spec.siren ? (c.siren ? this._blink : -1) : undefined;
+    // (a taxi with somebody in it: the sign on the roof dark)
+    o.busy = !!c.fare;
     o.scale = scale;
     o.squash = squash;
     cars.draw(spec.kind, c.wrecked ? WRECK : spec.color, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, o);
@@ -805,6 +826,7 @@ export class Traffic {
     const i = this.list.indexOf(c);
     if (i >= 0) this.list.splice(i, 1);
     this.unpark(c);
+    if ((c.rider || c.garbage || c.pickup) && this.game.fleet) this.game.fleet.forget(c);
     const driver = c.driver;
     const crew = c.crew;
     c.driver = null;

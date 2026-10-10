@@ -19,6 +19,7 @@ const INK = [0.08, 0.08, 0.1];
 const WOOD = [0.38, 0.24, 0.13];
 const CARD = [0.78, 0.62, 0.42];
 const STEAM = [0.55, 0.55, 0.6];
+const TRASH = [0.1, 0.1, 0.12];
 
 // held with both hands (the left hand follows the right one's item)
 const TWO_HANDED = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell']);
@@ -188,6 +189,13 @@ function shapesFor(fig, item, side, S) {
     case 'bag':
       _a.copy(h).addScaledVector(UP, -0.14 * S);
       e(_a, 0.11, 0.15, 0.07, CARD);
+      break;
+    case 'trashbag':
+      // a black bin bag, tied at the top (the garbage truck's crew: game/fleet.js)
+      _a.copy(h).addScaledVector(UP, -0.22 * S);
+      e(_a, 0.17, 0.22, 0.15, TRASH);
+      _a.copy(h).addScaledVector(UP, -0.03 * S);
+      e(_a, 0.04, 0.05, 0.04, TRASH);
       break;
     case 'letters':
       _a.copy(h).addScaledVector(UP, 0.06 * S).addScaledVector(Z, 0.02 * S);

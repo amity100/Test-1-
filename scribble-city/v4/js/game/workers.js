@@ -24,6 +24,8 @@ import { NODES, lightAt } from '../world/roads.js';
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const POST_BLUE = [0.22, 0.4, 0.72];
 const HIVIS = [0.97, 0.55, 0.16];
+// a bike of one's own: the frame's colour
+const BIKES = [[0.2, 0.55, 0.86], [0.95, 0.95, 0.96], [0.12, 0.12, 0.14], [0.3, 0.7, 0.45], [0.98, 0.5, 0.6], [0.92, 0.28, 0.24]];
 const COURIERS = [[0.98, 0.55, 0.18], [0.16, 0.62, 0.58], [0.86, 0.24, 0.32]];
 const INK = [0.12, 0.11, 0.14];
 const STEEL = [0.55, 0.56, 0.6];
@@ -304,7 +306,7 @@ export class Workers {
     const n = (k) => this.crew.filter((w) => w.kind === k).length;
     if (h > 6 && h < 19.5 && rain < 0.3 && n('sweep') < 1) this.newSweeper(p);
     else if (h > 8 && h < 17.5 && rain < 0.5 && n('post') < 1) this.newPostie(p);
-    else if (h > 7 && h < 23 && rain < 0.4 && n('bike') < (this.game.touch ? 1 : 2)) this.newCourier(p);
+    else if (h > 7 && h < 23 && rain < 0.4 && n('bike') < (this.game.touch ? 1 : 3)) this.newCourier(p);
   }
 
   // the crew: the frightened or hurt drop what they do; the far ones go home
@@ -333,7 +335,7 @@ export class Workers {
     const c = w.c;
     this.crew.splice(this.crew.indexOf(w), 1);
     if (w.kind === 'bike') {
-      this.fallen.push({ x: c.pos.x, z: c.pos.z, yaw: c.yaw, color: w.color, t: 0 });
+      this.fallen.push({ x: c.pos.x, z: c.pos.z, yaw: c.yaw, color: w.color, t: 0, box: !w.casual });
       c.fig.ride = 0;
       c.fig.reachR = null;
       c.fig.reachL = null;
@@ -526,14 +528,16 @@ export class Workers {
       if (z < NORTH_EDGE + 25 || z > SOUTH_EDGE - 25) continue;
       if (STREETS.some((s) => Math.abs(z - s.z) < s.half + 7)) continue;
       if (!this.unseen(x, z)) continue;
-      const color = pick(COURIERS);
-      const c = this.game.civilians.spawnScripted(x, z, courierLook(color), this);
+      // (now and then just somebody riding a bike, no box on the back: ROADMAP 4.1)
+      const casual = Math.random() < 0.5;
+      const color = casual ? pick(BIKES) : pick(COURIERS);
+      const c = this.game.civilians.spawnScripted(x, z, casual ? civilianLook({ kind: pick(['sporty', 'street', 'denim', 'summer']) }) : courierLook(color), this);
       c.scripted = false;
       c.noCollide = true;
       c.fig.ride = 1;
       c.yaw = dz > 0 ? 0 : Math.PI;
       const nodes = STREETS.map((s) => NODES.find((m) => m.ave === ave && m.street === s));
-      const w = { kind: 'bike', c, ave, x, dz, nodes, v: 3, want: 5.2 + Math.random() * 1.8, color, bellT: 0, spin: 0, life: 240, gripR: new THREE.Vector3(), gripL: new THREE.Vector3() };
+      const w = { kind: 'bike', casual, c, ave, x, dz, nodes, v: 3, want: casual ? 4.2 + Math.random() * 1.2 : 5.2 + Math.random() * 1.8, color, bellT: 0, spin: 0, life: 240, gripR: new THREE.Vector3(), gripL: new THREE.Vector3() };
       c.ctrl = (civ, dt) => this.ride(w, dt);
       this.crew.push(w);
       this.stats.rode++;
@@ -987,10 +991,10 @@ export class Workers {
       return d < far && (d < 8 || dx * fwd.x + dz * fwd.z > -4);
     };
     for (const w of this.crew) {
-      if (w.kind === 'bike' && seen(w.c.pos.x, w.c.pos.z, 120)) this.drawBike(fr, w.c.fig, w.color, w.spin, null);
+      if (w.kind === 'bike' && seen(w.c.pos.x, w.c.pos.z, 120)) this.drawBike(fr, w.c.fig, w.color, w.spin, null, !w.casual);
       else if (w.kind === 'sweep' && seen(w.bin.x, w.bin.z, 70)) this.drawBin(fr, w);
     }
-    for (const b of this.fallen) if (seen(b.x, b.z, 100)) this.drawBike(fr, null, b.color, 0, b);
+    for (const b of this.fallen) if (seen(b.x, b.z, 100)) this.drawBike(fr, null, b.color, 0, b, b.box !== false);
     for (const s of this.sites) {
       if (!seen(s.x, s.z, 110)) continue;
       this.drawSite(fr, s);
@@ -1000,7 +1004,7 @@ export class Workers {
 
   // a bike: two wheels, the frame in the courier's colour, the bars, the saddle, the cranks, and
   // the box on the rack; under its rider (fig), or lying in the road (lie: { x, z, yaw })
-  drawBike(fr, fig, color, spin, lie) {
+  drawBike(fr, fig, color, spin, lie, box = true) {
     let P;
     if (fig) P = (x, y, z, out) => fig.toWorld(x, y, z, out);
     else {
@@ -1057,6 +1061,7 @@ export class Workers {
       L(s * 0.07, cy, cz, s * 0.08, py, pz, STEEL, 2.2, 70 + (s > 0 ? 0 : 2));
       L(s * 0.05, py, pz, s * 0.15, py, pz, INK, 3, 71 + (s > 0 ? 0 : 2));
     }
+    if (!box) return;
     // the box on the rack: its edges, its sides filled with strokes of the colour (close enough
     // together to fill it from where you look), a white stripe
     const x0 = -0.2;

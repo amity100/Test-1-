@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight } from '../world/layout.js';
-import { drawWipers, wiperSweep } from '../render/cars.js';
+import { drawWipers, wiperSweep, KINDS } from '../render/cars.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
 // The things you drive: the city's own cars (taken from the traffic or from the curb), and the
@@ -672,6 +672,9 @@ class Vehicle {
   }
 }
 
+// the traffic's bigger cars (game/fleet.js), taken
+const BIG_STOCK = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', 'firetruck']);
+
 export class Vehicles {
   constructor(game) {
     this.game = game;
@@ -680,7 +683,23 @@ export class Vehicles {
 
   // a city car the player takes (no drawing needed)
   spawnStock(stock, pos, yaw) {
+    // (a motorbike out of the traffic rides like the drawn one: game/fleet.js)
+    if (stock && stock.kind === 'moto') {
+      const b = new Vehicle(this, 'bike', 'good', 100);
+      b.pos.set(pos.x, 0, pos.z);
+      b.yaw = yaw;
+      b.reveal = 1;
+      b.stock = stock;
+      return this.add(b);
+    }
     const v = new Vehicle(this, 'car', 'good', 100, stock);
+    // (a truck, a limousine...: as big as it is)
+    const K = BIG_STOCK.has(v.carKind) ? KINDS[v.carKind] : null;
+    if (K) {
+      v.halfLen = K.len / 2;
+      v.halfWid = K.W / 2;
+      v.heightM = K.glass.R;
+    }
     v.pos.set(pos.x, 0, pos.z);
     v.yaw = yaw;
     this.list.push(v);

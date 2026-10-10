@@ -55,6 +55,7 @@ import { Reactions } from './reactions.js';
 import { FarCrowd } from './farcrowd.js';
 import { Animals } from './animals.js';
 import { Voices } from './voices.js';
+import { Fleet } from './fleet.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -180,6 +181,9 @@ export class Game {
     this.animals = new Animals(this);
     // what people say, and answer; aloud too, if asked for (game/voices.js)
     this.voices = new Voices(this);
+    // the rest of the street's traffic: trucks, motorbikes, the garbage truck, taxis waved down,
+    // an ambulance, a fire engine (game/fleet.js)
+    this.fleet = new Fleet(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -704,6 +708,7 @@ export class Game {
       this.vignettes.update(dt);
       this.airsketch.update(dt);
       this.traffic.update(dt);
+      this.fleet.update(dt);
       this.world.objects.update(dt, this.world.bakeShadows, this.camera.position);
       this.police.update(dt);
       this.events.update(dt);
@@ -775,6 +780,7 @@ export class Game {
       this.vignettes.draw(fr);
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
+      this.fleet.draw(fr);
       this.signals.draw(this.camera.position);
       this.vehicles.draw(this.cars);
       this.cars.end();
