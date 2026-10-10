@@ -84,6 +84,10 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
     case 'letters':
       [x, y, z] = [side * 0.17, hipY + 0.22, 0.25];
       break;
+    case 'camera':
+      if (!R) return false;
+      [x, y, z] = [0.1, ny - 0.24, 0.2];
+      break;
     case 'dough': {
       // tossing: the hands bounce up as the dough flies
       const k = Math.max(0, Math.sin(t * 4.2));
@@ -242,6 +246,13 @@ function shapesFor(fig, item, side, S) {
     case 'phone':
       _a.copy(h).addScaledVector(Z, 0.01 * S);
       e(_a, 0.02, 0.055, 0.03, [0.1, 0.1, 0.12]);
+      break;
+    case 'camera':
+      // a black camera, its lens forward
+      _a.copy(h).addScaledVector(Z, 0.02 * S);
+      e(_a, 0.065, 0.042, 0.035, [0.12, 0.12, 0.14]);
+      _b.copy(_a).addScaledVector(Z, 0.04 * S);
+      e(_b, 0.026, 0.026, 0.026, [0.34, 0.34, 0.38]);
       break;
     default:
       break;
@@ -523,6 +534,10 @@ function strokesFor(fig, item, side, w) {
       break;
     }
     case 'phone':
+      break;
+    case 'camera':
+      // its strap round the neck
+      line(fig, h, fig.j.neck, [0.15, 0.15, 0.18], w * 0.8, sd + 150);
       break;
     default:
       break;

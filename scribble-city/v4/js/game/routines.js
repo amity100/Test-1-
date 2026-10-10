@@ -1,5 +1,5 @@
-import { civilianLook } from './looks.js';
-import { groundHeight } from '../world/layout.js';
+import { civilianLook, elderLook } from './looks.js';
+import { groundHeight, blockAt } from '../world/layout.js';
 
 // Everyday life on the street (ROADMAP 3.1). The benches, the bus stops and the café tables on
 // the plaza are used:
@@ -37,7 +37,8 @@ export class Routines {
       const fx = Math.sin(b.yaw);
       const fz = Math.cos(b.yaw);
       const seats = [-0.42, 0.42].map((u) => ({ x: b.x + fz * u + fx * 0.04, z: b.z - fx * u + fz * 0.04, yaw: b.yaw, who: null }));
-      this.places.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false });
+      const at = blockAt(b.x, b.z);
+      this.places.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false, park: !!at && at.type === 'park' });
     }
     // a bus stop: its bench's three seats, and two places to stand by the sign, facing the road
     const stops = w.busStops || [];
@@ -163,7 +164,8 @@ export class Routines {
   // somebody already there when you came by
   sitNew(pl, spot, what) {
     if (!spot || spot.who || this.people.size >= this.most) return null;
-    const c = this.game.civilians.spawnScripted(spot.x, spot.z, civilianLook(), this);
+    // (the park's benches are more often the grandparents': game/crowds.js)
+    const c = this.game.civilians.spawnScripted(spot.x, spot.z, pl.park && Math.random() < 0.45 ? elderLook(Math.random() < 0.5) : civilianLook(), this);
     c.pos.set(spot.x, groundHeight(spot.x, spot.z), spot.z);
     c.yaw = spot.yaw;
     c.noCollide = true;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Doodle } from './doodle.js';
 import { civilianLook } from './looks.js';
 import { holeRadius } from './enemies.js';
-import { AVES, STREETS, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
+import { AVES, STREETS, BLOCK_TYPES, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
 import { NODES, CYCLE } from '../world/roads.js';
 import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
@@ -428,9 +428,12 @@ export class Civilians {
         if (p.x > -40 && (Math.random() < 0.3 || !near.length) && prom < max * 0.35) {
           const z = Math.max(NORTH_EDGE + 10, Math.min(SOUTH_EDGE, p.z + (Math.random() - 0.5) * 160));
           if (z > PIER.z0 - 4 && z < PIER.z1 + 4) continue;
+          // (who walks here: game/crowds.js; ?classic: anybody, as before)
+          if (!look && !game.classic) look = game.crowds.lookFor('prom');
           c = new Civilian(this, 'prom', z, look);
         } else if (near.length) {
           const [col, row] = near[Math.floor(Math.random() * near.length)];
+          if (!look && !game.classic) look = game.crowds.lookFor(col < 0 ? 'west' : BLOCK_TYPES[row][col]);
           c = new Civilian(this, col, row, look);
         } else continue;
         if (jog) {
@@ -459,7 +462,10 @@ export class Civilians {
         // who they are out there: a dog walker, a jogger, on the phone, with friends...
         if (!c.jog) {
           this.dressUp(c);
-          if (!c.dog && !c.jog && Math.random() < 0.14 && free < max) {
+          if (!game.classic && c.fig.look.role) {
+            game.crowds.dress(c);
+            if (c.buddy) free++;
+          } else if (!c.dog && !c.jog && Math.random() < 0.14 && free < max) {
             if (this.addBuddy(c)) free++;
           }
         }

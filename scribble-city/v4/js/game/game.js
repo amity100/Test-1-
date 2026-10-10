@@ -49,6 +49,7 @@ import { Pad } from '../core/gamepad.js';
 import { SaveGame, SLOTS, SLOT_NAMES } from './save.js';
 import { Routines } from './routines.js';
 import { Workers } from './workers.js';
+import { Crowds } from './crowds.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -159,6 +160,9 @@ export class Game {
     // people at work in the street: sweepers, the postman, couriers, a traffic officer, road
     // works, the market's sellers (game/workers.js)
     this.workers = new Workers(this);
+    // who walks where: suits downtown, tourists on the promenade, grandparents and families in the
+    // park, young people on the alleys' corners (game/crowds.js)
+    this.crowds = new Crowds(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -660,6 +664,7 @@ export class Game {
       this.streetlife.update(dt);
       this.routines.update(dt);
       this.workers.update(dt);
+      this.crowds.update(dt);
       this.nightlife.update(dt);
       this.vignettes.update(dt);
       this.airsketch.update(dt);
