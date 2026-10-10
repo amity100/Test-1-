@@ -351,7 +351,9 @@ class Enemy {
     const dx = tp.x - this.pos.x;
     const dz = tp.z - this.pos.z;
     const d = Math.hypot(dx, dz);
-    if (d > this.cfg.sight * (1 + this.onEdge * 0.2)) return false;
+    // (down low, ROADMAP 5.3: seen less far off, unless they are already fighting you)
+    const low = p.crouched && !p.inVehicle ? 1 - (p.coverPop || 0) : 0;
+    if (d > this.cfg.sight * (1 + this.onEdge * 0.2) * (this.state === 'combat' ? 1 : 1 - 0.45 * low)) return false;
     if (p.hidden && d > 3.2 && !p.inVehicle) return false;
     if (d > 6) {
       // they only notice what is in front of them unless they are already fighting
@@ -360,11 +362,11 @@ class Enemy {
       if (a > cone) return false;
     }
     const ey = this.pos.y + this.height * (this.fig.crouch > 0.5 ? 0.62 : 0.9);
-    const ty = p.inVehicle ? p.inVehicle.pos.y + 1.2 : tp.y + 1.3;
+    const ty = p.inVehicle ? p.inVehicle.pos.y + 1.2 : tp.y + 1.3 - 0.55 * low;
     const col = game.world.collision;
     if (col.lineOfSight(this.pos.x, ey, this.pos.z, tp.x, ty, tp.z)) return true;
     // just the head showing over something
-    return !p.inVehicle && col.lineOfSight(this.pos.x, ey, this.pos.z, tp.x, tp.y + 1.65, tp.z);
+    return !p.inVehicle && col.lineOfSight(this.pos.x, ey, this.pos.z, tp.x, tp.y + 1.65 - 0.6 * low, tp.z);
   }
 
   // ------------------------------------------------------------------ main update
@@ -568,7 +570,8 @@ class Enemy {
     if (this.state === 'flee') return;
     if (this.state === 'suspicious') this.target.copy(tp);
     // suspicion builds up: fast when you are close, sprinting, shooting or driving
-    const moving = p.inVehicle ? 1.6 : Math.hypot(p.vel.x, p.vel.z) > 6 ? 1.4 : 1;
+    // (bent low and quiet, ROADMAP 5.3: slow to be noticed)
+    const moving = (p.inVehicle ? 1.6 : Math.hypot(p.vel.x, p.vel.z) > 6 ? 1.4 : 1) * (p.crouched && !p.inVehicle ? 0.45 + 0.55 * (p.coverPop || 0) : 1);
     const loud = game.time - game.weapons.lastFire < 1.5 ? 2.5 : 1;
     const rate = (2.4 / (0.45 + dist / 9)) * moving * loud * (1 + this.onEdge) * (this.isMonster ? 3 : 1) * (this.state === 'search' ? 4 : 1);
     this.awareness += rate * step;
@@ -1411,7 +1414,8 @@ class Enemy {
     if (!force && !this.mgr.takeToken(this)) return;
     const hand = this.fig.j.handR;
     const p = game.player;
-    const tgt = _v.set(T.x, T.y + (p.inVehicle ? 1.0 : 1.2), T.z);
+    // (at what shows of you: less of you when you are low behind something, ROADMAP 5.3)
+    const tgt = _v.set(T.x, T.y + (p.inVehicle ? 1.0 : p.crouched ? 1.2 - 0.45 * (1 - (p.coverPop || 0)) : 1.2), T.z);
     // a buddy in the line of fire: hold it and shuffle sideways
     if (mode !== 'blind' && this.mgr.allyInLine(this, hand, tgt)) {
       this.fireT = 0.3;

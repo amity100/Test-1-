@@ -395,7 +395,8 @@ export class Soundscape {
       return;
     }
     this.stepK = k;
-    this.footstep(this.surface(p.pos.x, p.pos.z), fig.speed, k & 1 ? 0.12 : -0.12);
+    // (bent low, ROADMAP 5.3: soft steps)
+    this.footstep(this.surface(p.pos.x, p.pos.z), p.crouched ? fig.speed * 0.35 : fig.speed, k & 1 ? 0.12 : -0.12);
   }
 
   surface(x, z) {

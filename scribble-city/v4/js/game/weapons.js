@@ -299,6 +299,8 @@ export class Weapons {
       if (def.projectile === 'staple') extra.pin = def.pin;
       // (out of a car's window: not into the car itself)
       if (player.inVehicle) extra.ignoreCar = player.inVehicle;
+      // (risen from behind cover, ROADMAP 5.3: over its top, not into it)
+      if (player.coverBox && player.coverPop > 0.3) extra.ignore = player.coverBox;
       this.launch(slot, muzzle.x, muzzle.y, muzzle.z, dir.x * sp, dir.y * sp + (sad ? 1 : 0), dir.z * sp, extra);
     }
     slot.ammo--;

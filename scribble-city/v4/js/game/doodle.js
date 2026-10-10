@@ -149,6 +149,7 @@ export class Doodle {
     this.crouch = 0; // kneeling behind cover
     this.climb = 0; // up a ladder (ROADMAP 5.1, game/climb.js): a foot up a rung, then the other
     this.climbPh = 0;
+    this.sneak = 0; // walking bent low and quiet (ROADMAP 5.3)
     this.dead = 0;
     this.crawl = 0;
     this.stagger = 0;
@@ -244,6 +245,10 @@ export class Doodle {
     hipY = lerp(hipY, 0.56, crouch);
     hipY -= this.hunch * 0.05;
     let lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22 + this.hunch * 0.42;
+    if (this.sneak > 0) {
+      hipY = lerp(hipY, 0.66, this.sneak);
+      lean += this.sneak * 0.38;
+    }
     if (this.ride > 0) {
       hipY = lerp(hipY, RIDE.hip, this.ride);
       lean += this.ride * 0.3;
@@ -295,6 +300,11 @@ export class Doodle {
         // right knee down, left foot planted forward
         th = lerp(th, off === 0 ? 0.35 : 1.05, crouch);
         kb = lerp(kb, off === 0 ? 1.95 : 1.55, crouch);
+      }
+      if (this.sneak > 0) {
+        // bent low: short steps on bent knees
+        th = lerp(th, 0.42 + Math.sin(ph + off) * 0.38, this.sneak);
+        kb = lerp(kb, 1.22 + Math.max(0, Math.sin(ph + off - Math.PI * 0.5)) * 0.45, this.sneak);
       }
       if (this.climb > 0) {
         // up a ladder: one foot up on a rung, the other on the one below, the knees to the wall

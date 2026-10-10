@@ -30,6 +30,43 @@ export class Player {
     this.hidden = false;
     this.hideSpot = null;
     this.invuln = 0;
+    // (ROADMAP 5.3, not with ?classic) down low; the box you are low behind; risen out of it to
+    // shoot (0..1)
+    this.crouched = false;
+    this.coverBox = null;
+    this.coverPop = 0;
+    this.coverSlide = null;
+  }
+
+  setCrouch(on) {
+    if (this.crouched === on) return;
+    this.crouched = on;
+    this.height = on ? 1.25 : 1.8;
+    if (!on) {
+      this.coverBox = null;
+      this.coverSlide = null;
+    }
+  }
+
+  // a box to be low behind, beside you (a car, a low wall, a planter, a crate...): { box, x, z, nx, nz }
+  coverNear(reach = 0.65) {
+    const p = this.pos;
+    const r = this.radius + reach;
+    let best = null;
+    let bd = r;
+    this.game.world.collision.forEachIn(p.x - r, p.z - r, p.x + r, p.z + r, (b) => {
+      if (b.tag === 'bound' || b.tag === 'tree' || b.tag === 'water') return false;
+      if (b.y0 > p.y + 0.4 || b.y1 < p.y + 0.85) return false;
+      const cx = Math.max(b.x0, Math.min(p.x, b.x1));
+      const cz = Math.max(b.z0, Math.min(p.z, b.z1));
+      const d = Math.hypot(p.x - cx, p.z - cz);
+      if (d < bd && d > 1e-4) {
+        bd = d;
+        best = { box: b, x: cx, z: cz, nx: (p.x - cx) / d, nz: (p.z - cz) / d, low: b.y1 < p.y + 2.1 };
+      }
+      return false;
+    });
+    return best;
   }
 
   spawn(x, z, yaw) {
@@ -86,6 +123,12 @@ export class Player {
 
   update(dt, input, camRig, weapons) {
     const fig = this.fig;
+    // (no crouching in a car, on a ladder, in the water: ROADMAP 5.3)
+    if (this.crouched && this.mode !== 'foot') {
+      this.setCrouch(false);
+      fig.crouch = 0;
+      fig.sneak = 0;
+    }
     if (this.invuln > 0) this.invuln -= dt;
     if (this.mode === 'dead') {
       fig.dead = Math.min(1, fig.dead + dt * 2.5);
@@ -168,17 +211,48 @@ export class Player {
       if (above > 5 && this.vel.y < -3 && (input.wasPressed('Space') || (this.vel.y < -13 && above > 8))) chute.deploy(this.parachute.grade);
     }
     const gliding = chute && chute.open;
+    // (ROADMAP 5.3, not with ?classic) down low with C, close up against what is beside you; up
+    // again with C, a jump, or a run
+    let stoodUp = false;
+    if (!this.game.classic && !drawing && !talking) {
+      if (input.wasPressed('KeyC') && this.onGround && !gliding) {
+        if (this.crouched) this.setCrouch(false);
+        else {
+          this.setCrouch(true);
+          const c = this.coverNear(1.1);
+          if (c) this.coverSlide = { x: c.x + c.nx * (this.radius + 0.06), z: c.z + c.nz * (this.radius + 0.06), t: 0.35 };
+        }
+      }
+      // (a real fall stands you up; a curb's little step down does not)
+      if (this.crouched && (input.wasPressed('Space') || (mv.sprint && wl > 0.3) || this.vel.y < -5)) {
+        this.setCrouch(false);
+        stoodUp = input.wasPressed('Space');
+      }
+    }
     // (a jump in front of something you can get up onto: you climb up onto it, ROADMAP 5.1)
     const climb = this.game.climb;
-    if (climb && !drawing && !talking && !gliding && input.wasPressed('Space') && climb.tryMantle(wx, wz)) return;
+    if (climb && !stoodUp && !drawing && !talking && !gliding && input.wasPressed('Space') && climb.tryMantle(wx, wz)) return;
     // a double espresso from the cafe: everything a bit faster for a while
-    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1);
+    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : mv.sprint && !aiming ? 8.2 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1);
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;
     this.vel.x = damp(this.vel.x, tx, accel / 4, dt);
     this.vel.z = damp(this.vel.z, tz, accel / 4, dt);
-    if (input.wasPressed('Space') && this.onGround && !drawing) {
+    // (sliding in against the cover you went down beside)
+    if (this.coverSlide) {
+      const cs = this.coverSlide;
+      cs.t -= dt;
+      const dx = cs.x - this.pos.x;
+      const dz = cs.z - this.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (cs.t <= 0 || d < 0.04 || wl > 0.3) this.coverSlide = null;
+      else {
+        this.vel.x = (dx / d) * Math.min(5, d / dt);
+        this.vel.z = (dz / d) * Math.min(5, d / dt);
+      }
+    }
+    if (input.wasPressed('Space') && this.onGround && !drawing && !stoodUp) {
       this.vel.y = 8.4;
       this.onGround = false;
       this.game.audio.play('jump');
@@ -244,6 +318,16 @@ export class Player {
     fig.speed = Math.hypot(this.vel.x, this.vel.z);
     fig.air = !this.onGround;
     fig.sit = damp(fig.sit, 0, 8, dt);
+    if (!this.game.classic) {
+      // (down low: kneeling still, bent low on the move; behind cover, up to shoot when you aim)
+      const cover = this.crouched ? this.coverNear() : null;
+      this.coverBox = cover && cover.low ? cover.box : null;
+      this.coverPop = damp(this.coverPop, this.crouched && this.coverBox && aiming ? 1 : 0, 9, dt);
+      const low = this.crouched ? 1 - this.coverPop : 0;
+      const moving = fig.speed > 0.4;
+      fig.crouch = damp(fig.crouch, low * (moving ? 0 : 1), 10, dt);
+      fig.sneak = damp(fig.sneak, low * (moving ? 1 : 0), 10, dt);
+    }
     fig.stagger = this.game.inkwell ? Math.min(1, Math.max(0, this.game.inkwell.tipsy - 0.4)) : 0;
     fig.aimPitch = camRig.pitch + 0.08;
     fig.update(dt);

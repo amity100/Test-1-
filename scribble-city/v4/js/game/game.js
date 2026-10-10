@@ -789,7 +789,7 @@ export class Game {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
       else if (this.swim && player.mode === 'swim') this.camRig.update(dt, player.pos, this.swim.camOpts);
-      else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7, dist: this.player.indoor ? 2.6 : 3.3 });
+      else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
     }
     const tipsy = this.inkwell.tipsy;
     if (tipsy > 0.05 && this.state === 'play') {
@@ -1568,6 +1568,10 @@ export class Game {
           prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : touch ? 'לצלם את השרטוט' : 'F — לצלם את השרטוט';
         } else if (p.hidden && this.album.size) {
           prompt = touch ? 'מוסתרים — זה הזמן לצייר' : 'מוסתרים — Q כדי לצייר';
+        } else if (p.crouched) {
+          // (down low: behind cover, or sneaking - ROADMAP 5.3)
+          if (p.coverBox) prompt = touch ? 'במחסה — כוונו כדי להתרומם ולירות' : 'במחסה · קליק ימני — להתרומם ולירות · C — לקום';
+          else prompt = touch ? 'כפופים — קשה יותר לראות ולשמוע אתכם' : 'כפופים — קשה יותר לראות ולשמוע אתכם · C — לקום';
         } else if (this.climb && this.climb.hint) {
           // (something you could climb, right in front of you: ROADMAP 5.1)
           prompt = this.climb.hint;
@@ -1575,6 +1579,16 @@ export class Game {
       }
     }
     this.hud.setPrompt(prompt);
+    // (not with ?classic, on a phone: ▼ crouches on foot and dives in the water; ▲ comes up)
+    if (this.touch && !this.classic) {
+      const fl = p.inVehicle && p.inVehicle.flies;
+      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}`;
+      if (key !== this.upDownKey) {
+        this.upDownKey = key;
+        $('btn-down').classList.toggle('hidden', !(p.mode === 'foot' || p.mode === 'swim' || fl));
+        $('btn-up').classList.toggle('hidden', !(p.mode === 'swim' || fl));
+      }
+    }
     if (this.touch) {
       $('btn-photo').classList.toggle('hidden', !photo);
       $('btn-enter').classList.toggle('hidden', !enter);

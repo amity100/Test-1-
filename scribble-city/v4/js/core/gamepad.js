@@ -200,6 +200,8 @@ export class Pad {
       if (this.pressed(B.LB)) inp.wheel -= 1;
       if (this.pressed(B.RB) || this.pressed(B.RIGHT)) inp.wheel += 1;
       key(B.UP, 'KeyQ');
+      // (the right stick pressed in: down low, ROADMAP 5.3; nothing with ?classic)
+      key(B.R3, 'KeyC');
     }
     if (fire !== this.fire) {
       this.fire = fire;
