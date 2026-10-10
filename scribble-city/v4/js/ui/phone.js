@@ -13,6 +13,8 @@ import { fmt } from '../game/money.js';
 //   skills       (ROADMAP 5.6, not with ?classic) what the hero got better at (game/skills.js)
 //   the bank     (ROADMAP 8.1, not with ?classic) the bank and the cash, what came in and went
 //                out (game/money.js)
+//   properties   (ROADMAP 8.2, not with ?classic) the places that can be yours: buy one, or find
+//                it on the map (game/properties.js)
 // Contacts and missions come later. The game waits while the phone is in your hand (not while
 // the camera is up).
 
@@ -138,6 +140,7 @@ export class Phone {
     if (name === 'photos') this.fillPhotos();
     if (name === 'skills') this.fillSkills();
     if (name === 'bank') this.fillBank();
+    if (name === 'props') this.fillProps();
   }
 
   status() {
@@ -166,6 +169,7 @@ export class Phone {
     else if (id === 'photos') this.page('photos');
     else if (id === 'skills') this.page('skills');
     else if (id === 'bank') this.page('bank');
+    else if (id === 'props') this.page('props');
     else if (id === 'settings') {
       this.close(true);
       g.showPauseMenu();
@@ -325,6 +329,52 @@ export class Phone {
       via.className = 'bank-via';
       via.textContent = `${it.at ? `${it.at} · ` : ''}${it.via}`;
       d.append(w, n, via);
+      box.appendChild(d);
+    }
+  }
+
+  // ------------------------------------------------------------------ the properties (ROADMAP 8.2)
+  fillProps() {
+    const g = this.game;
+    const PR = g.props;
+    const box = $('phone-prop-list');
+    box.innerHTML = '';
+    if (!PR) return;
+    for (const p of PR.list) {
+      const d = document.createElement('div');
+      d.className = `prop${p.owned ? ' owned' : ''}`;
+      const top = document.createElement('div');
+      top.className = 'prop-top';
+      const b = document.createElement('b');
+      b.textContent = p.name;
+      const s = document.createElement('span');
+      s.textContent = p.owned ? 'שלכם' : fmt(p.price);
+      top.append(b, s);
+      const what = document.createElement('div');
+      what.className = 'prop-what';
+      what.textContent = `${p.he} · ${fmt(p.income)} לבנק בכל בוקר`;
+      const row = document.createElement('div');
+      row.className = 'prop-btns';
+      if (!p.owned) {
+        const buy = document.createElement('button');
+        buy.className = 'btn mini';
+        const can = g.money.can(p.price);
+        buy.textContent = can ? 'לקנות' : `חסרים ${fmt(p.price - g.money.total)}`;
+        buy.disabled = !can;
+        buy.addEventListener('click', () => {
+          if (PR.buy(p)) this.fillProps();
+        });
+        row.appendChild(buy);
+      }
+      const go = document.createElement('button');
+      go.className = 'btn mini';
+      go.textContent = 'לסמן במפה';
+      go.addEventListener('click', () => {
+        g.gps.set(p.x, p.z, p.name);
+        g.hud.toast(`${p.name} מסומן במפה`, 'info', 2);
+      });
+      row.appendChild(go);
+      d.append(top, what, row);
       box.appendChild(d);
     }
   }

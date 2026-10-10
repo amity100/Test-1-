@@ -506,6 +506,18 @@ export const GLYPHS = {
     line(g, -6, -2.6, -4.6, -2.6);
     line(g, 4.6, 2.6, 6, 2.6);
   },
+  // (the places that can be yours, ROADMAP 8.2): a little house with a dollar on its front
+  deed(g) {
+    g.fillStyle = '#fffaf0';
+    shape(g, [-5.6, -0.8, 5.6, -0.8, 5.6, 6.6, -5.6, 6.6]);
+    g.fillStyle = '#e2335f';
+    shape(g, [-7.6, 0, 0, -7, 7.6, 0]);
+    g.fillStyle = '#1d7a3c';
+    g.font = '800 7px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('$', 0, 3.2);
+  },
   mapApp(g) {
     g.fillStyle = '#fffaf0';
     shape(g, [-7, -5, -2.4, -7, 2.4, -5, 7, -7, 7, 5, 2.4, 7, -2.4, 5, -7, 7]);

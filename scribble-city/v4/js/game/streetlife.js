@@ -6,6 +6,7 @@ import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
 import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn } from './wardrobe.js';
 import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
+import { BOSS } from './properties.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -1521,13 +1522,24 @@ class OpenShop {
     // (a shelf of the wardrobe opens its own choices: ROADMAP 5.7; what each costs: ROADMAP 8.1)
     const M = game.money;
     const prices = (M && PRICES[this.shop.kind]) || [];
+    // (ROADMAP 8.2: at a place of yours it is all on the house)
+    const PR = game.props;
+    const own = !!(PR && PR.owns(this.shop));
     const choices = info.offers.map(([label, sketch, fn], i) => {
       if (sketch === 'menu') return { label, fn: () => fn(game, this) };
-      const n = M ? M.priceOf(prices[i]) : 0;
-      return { label: n ? `${label} · ${fmt(n)}` : label, fn: () => this.buy(n, label, () => this.serve(sketch, fn)) };
+      const p = M ? M.priceOf(prices[i]) : 0;
+      const n = own ? 0 : p;
+      return { label: n ? `${label} · ${fmt(n)}` : p ? `${label} · על חשבון הבית` : label, fn: () => this.buy(n, label, () => this.serve(sketch, fn)) };
     });
+    // (ROADMAP 8.2) the place itself, for sale; for its owner, the motel's room
+    if (PR) {
+      const deal = PR.offer(this.shop, () => this.talk());
+      if (deal) choices.push(deal);
+      if (own && PR.of(this.shop).id === 'motel') choices.push({ label: 'לישון בחדר עד הבוקר', fn: () => PR.sleep() });
+      if (own) this.say(this.keeper, BOSS[Math.floor(Math.random() * BOSS.length)]);
+    }
     choices.push({ label: 'רק מסתכל, תודה', fn: null });
-    game.dialog.show(info.who, info.greet, choices);
+    game.dialog.show(info.who, own ? 'הבוס הגיע! הכול על חשבון הבית. מה תרצו?' : info.greet, choices);
   }
 
   // (ROADMAP 5.7) a shelf: each thing on it drawn in the air for you, and put on

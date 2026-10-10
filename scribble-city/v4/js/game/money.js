@@ -150,6 +150,15 @@ export class Money {
     this.float(n);
   }
 
+  // straight into the bank (the properties' takings, ROADMAP 8.2)
+  income(n, what) {
+    n = Math.round(n);
+    if (n <= 0) return;
+    this.bank += n;
+    this.stats.earned += n;
+    this.note(what, n, 'בנק');
+  }
+
   // taken from you: the cash first, then the bank (a fine), as much as there is
   take(n, what, cashOnly = false) {
     n = Math.round(Math.min(n, this.cash + (cashOnly ? 0 : this.bank)));

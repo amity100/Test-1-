@@ -73,6 +73,7 @@ import { Gangs } from './gangs.js';
 import { Arsenal } from './arsenal.js';
 import { Wheel } from '../ui/wheel.js';
 import { Money, fmt } from './money.js';
+import { Properties } from './properties.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -245,10 +246,13 @@ export class Game {
     this.wheel = this.classic ? null : new Wheel(this);
     // (the wallet and the bank, the prices, what comes in and what goes out: ROADMAP 8.1)
     this.money = this.classic ? null : new Money(this);
+    // (the club, the motel, the arcade and the café that can be yours: ROADMAP 8.2)
+    this.props = this.classic ? null : new Properties(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
+    if (this.props) this.phone.addApp({ id: 'props', name: 'נכסים', glyph: 'deed', fill: '#c8f0b0' });
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
     this.drawPick = null; // the photo the pencil opens with
@@ -817,6 +821,7 @@ export class Game {
       this.voices.update(dt);
       this.pickups.update(dt);
       if (this.money) this.money.update(dt);
+      if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
       this.gps.update(dt);

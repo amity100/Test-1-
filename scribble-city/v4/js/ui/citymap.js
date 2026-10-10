@@ -5,7 +5,7 @@ import { shopOpen, shopHours } from '../game/rhythm.js';
 import { sticker, pin } from './mapglyphs.js';
 import { searchArea } from '../game/heli.js';
 import { GANGS } from '../game/gangs.js';
-import { ATM_KINDS } from '../game/money.js';
+import { ATM_KINDS, fmt } from '../game/money.js';
 
 // The city's map (ROADMAP 2.1). The whole city drawn in pen on a page of graph paper: the bay with
 // its waves, the beach, the pier with the big wheel, the park, every building from above in its own
@@ -94,6 +94,8 @@ const KINDS = {
 // the legend: each group's sticker, its name, and from how close it shows (pixels a metre)
 const CATS = [
   { id: 'blueprint', name: 'שלטי שרטוטים', glyph: 'board', fill: '#ffd23f', square: true, k: 0 },
+  // (ROADMAP 8.2; none with ?classic) the places that can be yours (gold: yours)
+  { id: 'prop', name: 'נכסים', glyph: 'deed', fill: '#c8f0b0', k: 0, nc: true },
   { id: 'car', name: 'מוסך, דלק וחניה', glyph: 'pump', fill: '#ffd0c8', k: 0 },
   { id: 'fun', name: 'בילוי ולילה', glyph: 'bar', fill: '#ff9ccc', k: 0 },
   { id: 'place', name: 'מקומות מיוחדים', glyph: 'wheel', fill: '#fff3c4', k: 0 },
@@ -106,7 +108,7 @@ const CATS = [
   { id: 'gang', name: 'שטחי כנופיות', glyph: 'gang', fill: '#ffd0d0', k: 0 },
 ];
 const CAT = Object.fromEntries(CATS.map((c) => [c.id, c]));
-const ORDER = ['blueprint', 'car', 'fun', 'place', 'hotel', 'food', 'shop', 'service', 'hide', 'bus'];
+const ORDER = ['prop', 'blueprint', 'car', 'fun', 'place', 'hotel', 'food', 'shop', 'service', 'hide', 'bus'];
 
 const HIDE_NOTE = {
   alley: 'בקצה הסמטה',
@@ -179,6 +181,8 @@ export class CityMap {
     $('map-legend-btn').addEventListener('click', () => this.el.classList.toggle('legend-open'));
     const list = $('map-legend-list');
     for (const cat of CATS) {
+      // (made before the game knows it is ?classic)
+      if (cat.nc && this.game.params.has('classic')) continue;
       const row = document.createElement('button');
       row.className = 'lg-row';
       row.dataset.cat = cat.id;
@@ -466,6 +470,10 @@ export class CityMap {
       add({ cat: 'car', glyph: 'pump', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: 'תחנת הדלק PENCIL PETROL', note: 'עוצרים ליד משאבה, והמיכל מתמלא' });
       const pk = G.parking[1] || G.parking[0];
       if (pk) add({ cat: 'car', glyph: 'parking', x: pk.x, z: pk.z, name: 'החניה שלכם', note: 'רכב שמשאירים באחד משלושת המקומות הכחולים נשמר כאן' });
+    }
+    // the places that can be yours (ROADMAP 8.2; none with ?classic)
+    for (const p of (game.props && game.props.list) || []) {
+      add({ cat: 'prop', glyph: 'deed', x: p.x, z: p.z, name: p.name, prop: p, note: () => (p.owned ? `שלכם · ${fmt(p.income)} לבנק בכל בוקר` : `${p.he}. למכירה: ${fmt(p.price)} · מכניס ${fmt(p.income)} בכל בוקר`) });
     }
     // the police station (ROADMAP 6.3; none with ?classic)
     if (w.station) add({ cat: 'place', glyph: 'police', x: w.station.x, z: w.station.z, name: 'תחנת המשטרה', note: 'בכיכר המזרקה. כאן משחררים אתכם אחרי מעצר' });
@@ -1328,7 +1336,7 @@ export class CityMap {
       const sel = this.sel === it || this.hover === it;
       const shut = it.hours && !this.isOpen(it);
       if (shut) g.globalAlpha = 0.55;
-      sticker(g, p.x, p.y, it.glyph, cat.fill, R, { square: cat.square, dashed: cat.dashed, ring: sel });
+      sticker(g, p.x, p.y, it.glyph, it.prop && it.prop.owned ? '#ffd23f' : cat.fill, R, { square: cat.square, dashed: cat.dashed, ring: sel });
       g.globalAlpha = 1;
       // a board already photographed: a tick in its corner
       if (it.bp && this.game.album.items && this.game.album.items.has(it.bp.id)) {
@@ -1544,7 +1552,7 @@ export class CityMap {
       rows.push('<div class="s">היעד שלכם</div>');
     } else {
       rows.push(`<div class="t">${it.name}</div>`);
-      if (it.note) rows.push(`<div class="s">${it.note}</div>`);
+      if (it.note) rows.push(`<div class="s">${typeof it.note === 'function' ? it.note() : it.note}</div>`);
     }
     rows.push(`<div class="d">${far}</div>`);
     if (pinned) {
