@@ -2,6 +2,7 @@ import { BOUNDS, AVES, STREETS, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_E
 import { GRADE } from '../game/weapons.js';
 import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
 import { pin } from './mapglyphs.js';
+import { searchArea } from '../game/heli.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -444,6 +445,20 @@ export class HUD {
       g.lineTo(0, 6 / s);
       g.moveTo(-3.5 / s, 6 / s);
       g.lineTo(3.5 / s, 6 / s);
+      g.stroke();
+      g.restore();
+    }
+    // (where the police are looking for you: ROADMAP 6.2)
+    const sa = searchArea(game);
+    if (sa) {
+      g.save();
+      g.beginPath();
+      g.arc(sa.x - p.x, sa.z - p.z, sa.r, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(226, 51, 95, 0.16)';
+      g.fill();
+      g.setLineDash([6 / s, 5 / s]);
+      g.strokeStyle = '#e2335f';
+      g.lineWidth = 2 / s;
       g.stroke();
       g.restore();
     }

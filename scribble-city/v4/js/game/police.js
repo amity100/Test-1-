@@ -142,6 +142,11 @@ export class Police {
     return this.game.time - this.seenT < 2 ? (p.inVehicle ? p.inVehicle.pos : p.pos) : this.lastSeen;
   }
 
+  // (ROADMAP 6.2) the helicopter's light on you (game/heli.js): as good as an officer seeing you
+  spotted() {
+    this.airT = this.game.time;
+  }
+
   requestBackup() {
     this.dispatchT = Math.min(this.dispatchT, 2);
   }
@@ -190,6 +195,7 @@ export class Police {
         }
       }
     }
+    if (!seen && this.airT !== undefined && t - this.airT < 0.2) seen = true;
     if (seen) {
       this.seenT = t;
       this.lastSeen.copy(pp);

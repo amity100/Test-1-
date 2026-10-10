@@ -293,8 +293,10 @@ export class Ambient {
     }
     const pp = game.anchorPos ? game.anchorPos() : game.player.pos;
     // the point it circles drifts after you (slowly over the news, fast in a chase)
-    const tx = chase ? pp.x : Math.max(-200, Math.min(10, pp.x * 0.6 - 40));
-    const tz = chase ? pp.z : Math.max(-330, Math.min(250, pp.z * 0.7 - 50));
+    // (where they think you are, while its searchlight looks for you: ROADMAP 6.2, game/heli.js)
+    const at = chase && game.heli ? game.police.target() : pp;
+    const tx = chase ? at.x : Math.max(-200, Math.min(10, pp.x * 0.6 - 40));
+    const tz = chase ? at.z : Math.max(-330, Math.min(250, pp.z * 0.7 - 50));
     const follow = 1 - Math.exp(-dt * (chase ? 0.6 : 0.03));
     h.cx += (tx - h.cx) * follow;
     h.cz += (tz - h.cz) * follow;

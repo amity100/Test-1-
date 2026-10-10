@@ -66,7 +66,10 @@ import { Ragdolls } from './ragdoll.js';
 import { Skills } from './skills.js';
 import { dress, armorBar } from './wardrobe.js';
 import { Chase } from './chase.js';
+import { Heli } from './heli.js';
 
+// (the police helicopter's searchlight on the ground: ROADMAP 6.2)
+const HELI_LIGHT = [1.0, 0.95, 0.8];
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
 
@@ -223,6 +226,8 @@ export class Game {
     this.ragdolls = this.classic ? null : new Ragdolls(this);
     // (the police after you in a car: shoves, cars across the road, roadblocks; ROADMAP 6.1)
     this.chase = this.classic ? null : new Chase(this);
+    // (the police helicopter's searchlight and marksman: ROADMAP 6.2)
+    this.heli = this.classic ? null : new Heli(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -769,6 +774,7 @@ export class Game {
       this.garage.update(dt);
       this.world.objects.update(dt, this.world.bakeShadows, this.camera.position);
       this.police.update(dt);
+      if (this.heli) this.heli.update(dt);
       this.events.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);
@@ -869,6 +875,12 @@ export class Game {
       this.cars.end();
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
+      if (this.heli && this.heli.on) {
+        this.heli.draw();
+        // (its light on the ground, after dark)
+        const night = this.daynight ? this.daynight.night : 0;
+        if (night > 0.2) flashLight(this.heli.spot.x, this.heli.spot.y + 3, this.heli.spot.z, 11, HELI_LIGHT, 2.2 * night);
+      }
       if (this.swim) {
         this.swim.draw();
         this.swim.ripples(fr);

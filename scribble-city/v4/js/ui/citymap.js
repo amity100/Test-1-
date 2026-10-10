@@ -3,6 +3,7 @@ import { NODES } from '../world/roads.js';
 import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';
 import { sticker, pin } from './mapglyphs.js';
+import { searchArea } from '../game/heli.js';
 
 // The city's map (ROADMAP 2.1). The whole city drawn in pen on a page of graph paper: the bay with
 // its waves, the beach, the pier with the big wheel, the park, every building from above in its own
@@ -1339,6 +1340,20 @@ export class CityMap {
   drawMoving(g) {
     const game = this.game;
     const k = this.view.k;
+    // (where they are looking for you, out of sight: ROADMAP 6.2)
+    const sa = searchArea(game);
+    if (sa) {
+      g.save();
+      g.beginPath();
+      g.arc(this.sx(sa.x), this.sy(sa.z), Math.abs(this.sx(sa.r) - this.sx(0)), 0, TAU);
+      g.fillStyle = 'rgba(226, 51, 95, 0.16)';
+      g.fill();
+      g.setLineDash([7, 6]);
+      g.strokeStyle = '#e2335f';
+      g.lineWidth = 2.2;
+      g.stroke();
+      g.restore();
+    }
     // the police, while they look for you
     if (game.police && game.police.level > 0) {
       for (const c of game.traffic.list) {
