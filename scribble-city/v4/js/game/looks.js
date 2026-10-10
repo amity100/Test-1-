@@ -186,6 +186,19 @@ export function copLook() {
   return modest(L);
 }
 
+// (ROADMAP 8.4) a firefighter: the red helmet, the long tan coat and trousers
+export function firefighterLook() {
+  const L = baseLook({ pen: pick(['marker', 'fineliner', 'ballpoint']), build: pick(['normal', 'stocky', 'big']), fem: chance(0.25) });
+  const coat = jit([0.6, 0.48, 0.24], 0.04);
+  L.top = { kind: 'vest', color: coat, under: jit([0.56, 0.44, 0.22], 0.03), sleeves: 'long' };
+  L.bottom = { kind: 'pants', color: jit([0.56, 0.45, 0.24], 0.03) };
+  L.shoes = [0.08, 0.08, 0.1];
+  L.hat = { kind: 'fire', color: [0.84, 0.12, 0.12] };
+  L.hair = { style: 'short', color: pick(HAIR) };
+  L.face = { eyes: pick(['dot', 'narrow']), brows: 'flat', mouth: 'line', beard: null, glasses: null };
+  return modest(L);
+}
+
 // riot unit: helmet with a visor, padded vest
 export function swatLook() {
   const L = baseLook({ pen: pick(['marker', 'fineliner', 'comic']), build: pick(['stocky', 'big', 'normal']), fem: chance(0.2) });

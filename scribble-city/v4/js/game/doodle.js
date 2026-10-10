@@ -38,6 +38,7 @@ const COL_16_14_16 = [0.16, 0.14, 0.16];
 const COL_92_88_8 = [0.92, 0.88, 0.8];
 const COL_45_3_2 = [0.45, 0.3, 0.2];
 const COL_15_25_45 = [0.15, 0.25, 0.45];
+const COL_95_78_3 = [0.95, 0.78, 0.3];
 const UPPER = ['neck', 'headC', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'];
 // a bike under somebody (body units, from their feet: up y, forward z): the saddle's height, the
 // crank's centre and its length; game/workers.js draws the bike round the same points
@@ -915,6 +916,16 @@ export class Doodle {
         _a.copy(hc).addScaledVector(hf, rz * 0.55).addScaledVector(hu, 0.0);
         const visor = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.05, 0.06 * hs, rz * 0.62, COL_42_5_62);
         visor.fill = FILL.FLAT;
+      } else if (k === 'fire') {
+        // a firefighter's helmet (ROADMAP 8.4): a high dome, a brim all round that is longer at
+        // the back, a gold badge in front
+        _a.copy(hc).addScaledVector(hu, 0.05 * hs);
+        const dome = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * 1.14, ry * 1.12, rz * 1.16, hat.color);
+        this.clip(dome, _q.copy(hu).negate(), hc, 0.01 * hs);
+        _a.copy(hc).addScaledVector(hu, 0.025 * hs).addScaledVector(hf, -0.045 * hs);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.165 * hs, 0.016 * hs, 0.215 * hs, hat.color);
+        _a.copy(hc).addScaledVector(hu, 0.1 * hs).addScaledVector(hf, rz * 1.08);
+        this.ellipsoid('head', 'head', _a, hr, hu, hf, 0.036 * hs, 0.042 * hs, 0.014 * hs, COL_95_78_3);
       }
     }
     // a hoodie's hood (up frames the face, down rolls behind the neck)

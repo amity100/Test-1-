@@ -59,6 +59,8 @@ export function buildCity(scene, o = {}) {
   if (o.roofs) ctx.roofs = { buildings: [], escapes: [], backs: [], cur: null };
   // (ROADMAP 8.3, not with ?classic: the shop windows' panes, gathered as the fronts go up)
   if (o.glass) ctx.panes = [];
+  // (ROADMAP 8.4, not with ?classic: where the sea wall's railing is, by its parts)
+  if (o.fences) ctx.fences = { posts: [], rails: [] };
   // everything printed in the city (blueprints, ads, street names) is one texture; the big ads on
   // the roofs and the walls are seen from far away, the little boards only up close
   // (the album's new pages are on boards up on the roofs, ROADMAP 5.1: not with ?classic)
@@ -183,6 +185,8 @@ export function buildCity(scene, o = {}) {
     roofs: ctx.roofWorld || null,
     // (the shop windows' panes, ROADMAP 8.3: world/glass.js)
     glass: ctx.glass || null,
+    // (the sea wall's railing, its posts and rails: ROADMAP 8.4, game/knock.js)
+    fences: ctx.fences || null,
     // hide what is too far to matter (by the chunks' bounding spheres)
     cull(cam) {
       for (const c of cull) {

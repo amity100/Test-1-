@@ -75,6 +75,7 @@ import { Wheel } from '../ui/wheel.js';
 import { Money, fmt } from './money.js';
 import { Properties } from './properties.js';
 import { Knock } from './knock.js';
+import { Fire } from './fire.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -252,6 +253,8 @@ export class Game {
     // (bins, benches, newspaper boxes, mailboxes, crates and the roadblocks' cones fly when a car
     // hits them; a hydrant knocked off sprays: ROADMAP 8.3)
     this.knock = this.classic ? null : new Knock(this);
+    // (fire that spreads, and the fire engine that comes: ROADMAP 8.4)
+    this.fire = this.classic ? null : new Fire(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -825,6 +828,7 @@ export class Game {
       this.voices.update(dt);
       this.pickups.update(dt);
       if (this.knock) this.knock.update(dt);
+      if (this.fire) this.fire.update(dt);
       if (this.money) this.money.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
@@ -937,6 +941,7 @@ export class Game {
       this.pickups.draw(fr);
       if (this.money) this.money.draw(fr);
       if (this.knock) this.knock.draw(fr);
+      if (this.fire) this.fire.draw(fr);
       this.weather.draw(fr);
       this.fx.update(dt, fr);
       fr.end();
@@ -1463,6 +1468,8 @@ export class Game {
     this.fx.boom(x, y, z, radius * 0.75);
     // (the shop windows round it break: ROADMAP 8.3)
     if (this.knock) this.knock.blast(x, y, z, radius * 1.3);
+    // (and what burns round it catches: ROADMAP 8.4)
+    if (this.fire) this.fire.blast(x, z, radius);
     this.audio.play('boom', 0.9);
     const p = this.player;
     const pp = p.inVehicle ? p.inVehicle.pos : p.pos;

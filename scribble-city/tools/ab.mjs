@@ -86,6 +86,16 @@ async function shoot(outDir, page = 'v4/index.html') {
     };
     for (const [n, l] of [['renderShadows', 'shadow'], ['renderReflection', 'reflection'], ['render', 'all']]) if (g.pipe[n]) wrap(n, l);
     g.enemies.spawnT = 1e9;
+    // (the still city's shadow map looks ahead of the camera by how fast it moved between two
+    // frames, on the wall clock: a jump to the next spot after a quick frame would look 20 m ahead,
+    // after a slow one not at all. Never here: the same moment must look the same)
+    if (g.pipe.trackCamera) {
+      const track = g.pipe.trackCamera.bind(g.pipe);
+      g.pipe.trackCamera = () => {
+        g.pipe.lastT = 0;
+        track();
+      };
+    }
     // the music runs on the wall clock and draws on the same (seeded) dice as the city: silenced,
     // so a faster build sees exactly the same moment as a slower one
     g.audio.schedule = () => {};

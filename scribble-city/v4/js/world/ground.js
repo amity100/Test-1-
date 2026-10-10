@@ -107,17 +107,22 @@ export function buildGround(ctx) {
   curb(ctx, STREET_X1, STREET_X1 + 0.18, ZN - 60, ZS + 30);
   ctx.B.box(M.wallSolid, PROM_X1, -1.6, ZN - 60, PROM_X1 + 0.6, 0.35, ZS + 30, nextId(), { color: srgb(0.86, 0.8, 0.74) });
   const rail = M.rail;
+  // (ROADMAP 8.4, not with ?classic: where the railing's posts and rails are, by their numbers, so
+  // a car can break a stretch of it - game/knock.js. The railing itself is drawn as it always was)
+  const fence = ctx.fences;
   for (let z = ZN - 60; z < ZS + 30; z += 2.4) {
     if (z > PIER.z0 - 0.5 && z < PIER.z1 + 0.5) continue;
     const g = new THREE.CylinderGeometry(0.035, 0.035, 1.05, 6);
     g.translate(PROM_X1 - 0.2, 0.15 + 0.52, z);
-    ctx.B.add(rail, g, null, nextId(), { color: srgb(0.92, 0.92, 0.94) });
+    const id = ctx.B.add(rail, g, null, nextId(), { color: srgb(0.92, 0.92, 0.94) });
+    if (fence) fence.posts.push({ z, id });
   }
   for (const [za, zb] of [[ZN - 60, PIER.z0 - 0.5], [PIER.z1 + 0.5, ZS + 30]]) {
     for (const y of [0.62, 1.15]) {
       const g = new THREE.CylinderGeometry(0.04, 0.04, zb - za, 6).rotateX(Math.PI / 2);
       g.translate(PROM_X1 - 0.2, y + 0.15, (za + zb) / 2);
-      ctx.B.add(rail, g, null, nextId(), { color: srgb(0.92, 0.92, 0.94) });
+      const id = ctx.B.add(rail, g, null, nextId(), { color: srgb(0.92, 0.92, 0.94) });
+      if (fence) fence.rails.push({ za, zb, y, id });
     }
   }
   ctx.col.addBox(PROM_X1 - 0.6, ZN - 60, PROM_X1 + 0.6, PIER.z0 - 0.2, -2, 1.3, 'bound');

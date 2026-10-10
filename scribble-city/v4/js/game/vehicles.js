@@ -607,6 +607,8 @@ class Vehicle {
         impact = Math.max(impact, Math.abs(this.speed) * along);
         // (a shop window, hard enough: it breaks - ROADMAP 8.3)
         if (this.game.knock && res.box && res.box.tag === 'roomwall' && Math.abs(this.speed) * along > 5) this.game.knock.glassHit(p.x - res.nx * r, 1.3, p.z - res.nz * r);
+        // (the sea wall's railing: off into the bay - ROADMAP 8.4)
+        if (this.game.knock && res.box && res.box.tag === 'bound' && Math.abs(this.speed) * along > 5) this.game.knock.fence(p.x - res.nx * r, p.z - res.nz * r, this);
       }
     }
     if (hit) {

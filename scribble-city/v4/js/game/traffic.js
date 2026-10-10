@@ -174,6 +174,8 @@ export class Traffic {
       wrecked: false,
       stopped: false,
     };
+    // (a fire engine on its way to a fire: its turns, from the first one - ROADMAP 8.4)
+    if (o.respond) c.respond = o.respond;
     // (a truck, a motorbike, an ambulance...: game/fleet.js)
     if (!this.game.classic && this.game.fleet) {
       this.game.fleet.dress(c);
@@ -211,7 +213,13 @@ export class Traffic {
     const ex = exitsFrom(B, dx, dz);
     if (!ex.length) return false;
     let e = ex[0];
-    if (ex.length > 1) {
+    if (c.respond) {
+      // (ROADMAP 8.4: a fire engine on its way - at each crossing the way that takes it nearer,
+      // across the traffic too)
+      const R = c.respond;
+      const far = (o) => Math.abs(o.to.x - R.x) + Math.abs(o.to.z - R.z);
+      e = exitsFrom(B, dx, dz, true).reduce((a, b) => (far(b) < far(a) ? b : a));
+    } else if (ex.length > 1) {
       const w = ex.map((o) => (o.turn === 0 ? 0.55 : o.turn > 0 ? 0.3 : 0.3));
       let r = Math.random() * w.reduce((a, b) => a + b, 0);
       for (let i = 0; i < ex.length; i++) {
@@ -261,9 +269,11 @@ export class Traffic {
     const fwd = cam.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
     const near = NODES.filter((n) => Math.hypot(n.x - p.x, n.z - p.z) < maxD + 80);
     if (!near.length) return null;
-    for (let tries = 0; tries < 8; tries++) {
+    // (o.toward: heading for p - the fire engine, ROADMAP 8.4)
+    for (let tries = 0; tries < (o.toward ? 30 : 8); tries++) {
       const A = near[Math.floor(Math.random() * near.length)];
       const B = A.nb[Math.floor(Math.random() * A.nb.length)];
+      if (o.toward && Math.hypot(B.x - p.x, B.z - p.z) >= Math.hypot(A.x - p.x, A.z - p.z)) continue;
       const alongZ = B.z !== A.z;
       const len = Math.abs(B.x - A.x) + Math.abs(B.z - A.z);
       const t0 = stopDist(A, alongZ) + 3;
@@ -416,9 +426,11 @@ export class Traffic {
     const os = this.list;
     // (the one it is swinging out round, ROADMAP 4.4: not in the way)
     const by = c.passBy && c.s < c.passUntil ? c.passBy : null;
+    // (a siren swung out to pass: not the ones pulled over for it - ROADMAP 8.4)
+    const pass = c.emergency && c.passK > 0.5;
     for (let i = 0; i < os.length; i++) {
       const o = os[i];
-      if (o !== c && o !== by) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
+      if (o !== c && o !== by && !(pass && o.yieldK > 0.5)) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
     }
     const es = game.enemies.list;
     for (let i = 0; i < es.length; i++) {

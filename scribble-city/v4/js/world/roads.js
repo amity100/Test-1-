@@ -69,7 +69,8 @@ export function lanePoint(n, dx, dz, off, t) {
 
 // every way out of n for a car that came in going (dx, dz): straight on, right, and left only
 // where no traffic comes the other way (so nobody turns across anybody)
-export function exitsFrom(n, dx, dz) {
+// (any: left turns too, where the straight way goes on - a fire engine's, ROADMAP 8.4)
+export function exitsFrom(n, dx, dz, any = false) {
   const out = [];
   let straight = false;
   for (const m of n.nb) {
@@ -82,7 +83,7 @@ export function exitsFrom(n, dx, dz) {
     } else if (ex === -dz && ez === dx) out.push({ to: m, dx: ex, dz: ez, turn: 1 });
     else out.push({ to: m, dx: ex, dz: ez, turn: -1 });
   }
-  return straight ? out.filter((e) => e.turn >= 0) : out;
+  return straight && !any ? out.filter((e) => e.turn >= 0) : out;
 }
 
 // where the cars park: both curbs of every cross street, the shop curb of the boulevard

@@ -43,6 +43,9 @@ const BK = { rear: -0.46, front: 0.62, seatY: 0.86, seatZ: -0.06, headY: 0.95, h
 const _fwd = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _p = new THREE.Vector3();
+// (ROADMAP 8.4) a car through the road works' fence: put back up when nobody has looked for a while
+const REPAIR_T = 150;
 
 // a seeded dice (the road works are where they are, every time)
 function dice(seed) {
@@ -229,7 +232,7 @@ export class Workers {
     this.shoppers = [];
     this.shopT = 2;
     // (counted for the tests)
-    this.stats = { swept: 0, posted: 0, rode: 0, sold: 0, waved: 0 };
+    this.stats = { swept: 0, posted: 0, rode: 0, sold: 0, waved: 0, crashed: 0 };
   }
 
   get hour() {
@@ -711,12 +714,161 @@ export class Workers {
     const working = h > 7 && h < 17.5 && this.rain < 0.3;
     for (const s of this.sites) {
       const d = Math.hypot(s.x - p.x, s.z - p.z);
+      // (driven through: the boards fly and come down; put back up later - ROADMAP 8.4)
+      if (s.broken) {
+        this.boardsStep(s, dt);
+        if (this.game.time - s.broken.t > REPAIR_T && d > 60 && this.unseen(s.x, s.z)) this.repair(s);
+        continue;
+      }
       if (s.men) {
         const lost = s.men.some((m) => !m.c.alive || m.c.panicT > 0 || m.c.owner !== this || this.game.civilians.list.indexOf(m.c) < 0);
         if (lost || d > 100 || (!working && this.unseen(s.x, s.z))) this.leaveSite(s, lost);
         else this.digging(s, dt, d);
       } else if (working && d < 75 && d > 14 && this.unseen(s.x, s.z, 40)) this.staffSite(s);
     }
+  }
+
+  // ------------------------------------------------------------------ (ROADMAP 8.4) through the fence
+  // a car driven through the fence round a hole (game/knock.js sweep): the boards fly and come
+  // down in the road, the legs go over, the cones go off on their own (game/knock.js), the men
+  // run. The hole stays, open now
+  crash(s, v) {
+    if (s.broken) return;
+    const game = this.game;
+    const w = game.world;
+    w.collision.remove(s.box);
+    if (w.nav) w.nav.refresh(s.x0 - 1, s.z0 - 1, s.x1 + 1, s.z1 + 1);
+    const sp = Math.abs(v.speed);
+    const sg = Math.sign(v.speed) || 1;
+    const fx = v.fwd.x * sg;
+    const fz = v.fwd.z * sg;
+    const gy = groundHeight(s.x, s.z);
+    const B = { t: game.time, boards: [], legs: [], gone: false };
+    const C = [[s.x0, s.z0], [s.x1, s.z0], [s.x1, s.z1], [s.x0, s.z1]];
+    for (let i = 0; i < 4; i++) {
+      const [ax, az] = C[i];
+      const [bx, bz] = C[(i + 1) % 4];
+      const len = Math.hypot(bx - ax, bz - az);
+      const n = Math.max(2, Math.round(len / 0.45));
+      // each side's two rails, in one piece or two
+      const parts = n > 4 ? 2 : 1;
+      for (const y of [0.55, 0.95]) {
+        for (let j = 0; j < parts; j++) {
+          const k0 = Math.round((n * j) / parts);
+          const k1 = Math.round((n * (j + 1)) / parts);
+          const t0 = k0 / n;
+          const t1 = k1 / n;
+          const cx = ax + ((bx - ax) * (t0 + t1)) / 2;
+          const cz = az + ((bz - az) * (t0 + t1)) / 2;
+          // flung the way the car went, the harder the nearer its bumper
+          const near = Math.max(0.3, 1 - Math.hypot(cx - v.pos.x, cz - v.pos.z) / 6);
+          const push = sp * (0.55 + Math.random() * 0.45) * near;
+          B.boards.push({
+            x: cx, y: gy + y, z: cz,
+            d: new THREE.Vector3((bx - ax) / len, 0, (bz - az) / len),
+            hl: (len * (t1 - t0)) / 2,
+            v: new THREE.Vector3(fx * push + (Math.random() - 0.5) * 2, 1.4 + Math.random() * 2.2 + sp * 0.08, fz * push + (Math.random() - 0.5) * 2),
+            w: new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 10),
+            k0, k1, n, rest: false, seed: i * 40 + k0 + y * 10,
+          });
+        }
+      }
+      // the legs: over, the way the car went
+      B.legs.push({ x: ax, z: az, yaw: Math.atan2(fx + (Math.random() - 0.5) * 0.9, fz + (Math.random() - 0.5) * 0.9), a: 0.08, w: 1.5 + Math.random() * 2 });
+    }
+    s.broken = B;
+    // the cones at the ends: on their own now (the one the car hit, off it goes)
+    const KN = game.knock;
+    if (KN) {
+      for (const e of [-1, 1]) {
+        const cx = s.x + s.ux * e * 2.15 - s.ox * 0.3;
+        const cz = s.z + s.uz * e * 2.15 - s.oz * 0.3;
+        const c = KN.cone(cx, cz, B);
+        if (c && Math.hypot(cx - v.pos.x, cz - v.pos.z) < 4) KN.launch(c, v);
+      }
+    }
+    if (s.men) this.leaveSite(s, true);
+    this.stats.crashed++;
+    game.audio.play('crash', Math.min(1, 0.4 + sp / 25));
+    game.audio.play('clang', 0.5);
+    game.fx.crumbs(s.x, gy + 0.6, s.z, 12, 3);
+    game.camRig.addShake(0.25);
+    game.civilians.panic(new THREE.Vector3(s.x, 0, s.z), 9);
+    // (the car feels it, a little)
+    v.speed *= 0.86;
+    if (v.vx !== undefined) {
+      v.vx *= 0.86;
+      v.vz *= 0.86;
+    }
+    if (v.hurt) v.hurt(4);
+  }
+
+  // the boards in the air: down, turning, a bounce or two, and they lie flat in the road; the legs
+  // go over round their feet
+  boardsStep(s, dt) {
+    const B = s.broken;
+    const col = this.game.world.collision;
+    for (const b of B.boards) {
+      if (b.rest) continue;
+      b.v.y -= 14 * dt;
+      b.x += b.v.x * dt;
+      b.y += b.v.y * dt;
+      b.z += b.v.z * dt;
+      b.d.addScaledVector(_w.copy(b.w).cross(b.d), dt).normalize();
+      // (off the walls)
+      _p.set(b.x, b.y - 0.1, b.z);
+      const res = col.resolveCylinder(_p, 0.15, 0.2, 0.3);
+      if (res.hitWall) {
+        b.x = _p.x;
+        b.z = _p.z;
+        const vn = b.v.x * res.nx + b.v.z * res.nz;
+        if (vn < 0) {
+          b.v.x -= 1.5 * vn * res.nx;
+          b.v.z -= 1.5 * vn * res.nz;
+        }
+      }
+      const g = groundHeight(b.x, b.z) + 0.04;
+      const low = b.y - Math.abs(b.d.y) * b.hl;
+      if (low < g) {
+        b.y += g - low;
+        if (b.v.y < -2.2) {
+          b.v.y *= -0.3;
+          b.v.x *= 0.6;
+          b.v.z *= 0.6;
+          b.w.multiplyScalar(0.45);
+          b.d.y *= 0.5;
+          b.d.normalize();
+        } else {
+          b.v.y = Math.max(0, b.v.y);
+          const fr = Math.exp(-6 * dt);
+          b.v.x *= fr;
+          b.v.z *= fr;
+          b.w.multiplyScalar(Math.exp(-6 * dt));
+          b.d.y *= Math.exp(-8 * dt);
+          b.d.normalize();
+          if (b.v.x * b.v.x + b.v.z * b.v.z < 0.04) {
+            b.rest = true;
+            b.d.y = 0;
+            b.d.normalize();
+            b.y = g;
+          }
+        }
+      }
+    }
+    for (const L of B.legs) {
+      if (L.a >= Math.PI / 2 - 0.06) continue;
+      L.w += 9 * Math.sin(L.a) * dt;
+      L.a = Math.min(Math.PI / 2 - 0.06, L.a + L.w * dt);
+    }
+  }
+
+  // put back up, as it was (the cones by it go when you are far: game/knock.js)
+  repair(s) {
+    const w = this.game.world;
+    s.broken.gone = true;
+    s.broken = null;
+    s.box = w.collision.addBox(s.x0, s.z0, s.x1, s.z1, 0, 1.1, 'prop');
+    if (w.nav) w.nav.refresh(s.x0 - 1, s.z0 - 1, s.x1 + 1, s.z1 + 1);
   }
 
   staffSite(s) {
@@ -1171,7 +1323,9 @@ export class Workers {
     const seed = s.x * 3.1 + s.z;
     const gy = groundHeight(s.x, s.z);
     const C = [[s.x0, s.z0], [s.x1, s.z0], [s.x1, s.z1], [s.x0, s.z1]];
-    for (let i = 0; i < 4; i++) {
+    // (driven through: its pieces where they lie - ROADMAP 8.4)
+    if (s.broken) this.drawBroken(fr, s, gy, seed);
+    for (let i = 0; i < 4 && !s.broken; i++) {
       const [ax, az] = C[i];
       const [bx, bz] = C[(i + 1) % 4];
       const len = Math.hypot(bx - ax, bz - az);
@@ -1206,7 +1360,7 @@ export class Workers {
     // the cones, one past each end (on the sidewalk side): strokes from the tip down round the
     // side facing you, close enough together to fill it, a white band
     const cam = this.game.camera.position;
-    for (const e of [-1, 1]) {
+    for (const e of s.broken ? [] : [-1, 1]) {
       const cx = s.x + s.ux * e * 2.15 - s.ox * 0.3;
       const cz = s.z + s.uz * e * 2.15 - s.oz * 0.3;
       const vx = cam.x - cx;
@@ -1237,6 +1391,23 @@ export class Workers {
     }
     fr.lineXYZ(px - s.ux * 0.07, gy + 1.22, pz - s.uz * 0.07, px + s.ux * 0.05, gy + 1.38, pz + s.uz * 0.05, INK, 2.4, seed + 450, 1, 0.003, 0);
     fr.lineXYZ(px + s.ux * 0.05, gy + 1.38, pz + s.uz * 0.05, px + s.ux * 0.02, gy + 1.48, pz + s.uz * 0.02, INK, 2.4, seed + 451, 1, 0.003, 0);
+  }
+
+  // the fence driven through: the boards (red and white as they were) where they flew, the legs over
+  drawBroken(fr, s, gy, seed) {
+    for (const b of s.broken.boards) {
+      const m = b.k1 - b.k0;
+      for (let k = 0; k < m; k++) {
+        const t0 = ((k / m) * 2 - 1) * b.hl;
+        const t1 = (((k + 1) / m) * 2 - 1) * b.hl;
+        fr.lineXYZ(b.x + b.d.x * t0, b.y + b.d.y * t0, b.z + b.d.z * t0, b.x + b.d.x * t1, b.y + b.d.y * t1, b.z + b.d.z * t1, (b.k0 + k) % 2 ? WHITE : RED, 7, seed + b.seed + k, 1, 0.002, 0);
+      }
+    }
+    for (let i = 0; i < s.broken.legs.length; i++) {
+      const L = s.broken.legs[i];
+      const r = Math.sin(L.a) * 1.02;
+      fr.lineXYZ(L.x, gy, L.z, L.x + Math.sin(L.yaw) * r, gy + Math.cos(L.a) * 1.02 + 0.03, L.z + Math.cos(L.yaw) * r, STEEL, 2.6, seed + 200 + i, 1, 0.003, 0);
+    }
   }
 
   // the jackhammer and the shovel in the workers' hands
