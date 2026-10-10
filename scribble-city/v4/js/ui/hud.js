@@ -165,11 +165,12 @@ export class HUD {
     setTimeout(() => el.remove(), (life + 0.6) * 1000);
   }
 
-  // the car radio's line (the station's name, what the DJ says, an ad); null hides it
+  // the car radio's line (the station's name, what the DJ says, an ad); null hides it. The words
+  // said on the air (kind given) are subtitles: they show only while subtitles are on.
   radio(text, kind = null) {
     const el = this.radioEl || (this.radioEl = document.getElementById('radio'));
     if (!el) return;
-    if (!text) {
+    if (!text || (kind && this.subtitles === false)) {
       el.classList.add('hidden');
       return;
     }

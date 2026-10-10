@@ -43,6 +43,7 @@ import { Soundscape } from './soundscape.js';
 import { Radio } from './radio.js';
 import { CityMap } from '../ui/citymap.js';
 import { GPS } from './gps.js';
+import { Settings } from '../core/settings.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -177,18 +178,7 @@ export class Game {
     $('map-btn').addEventListener('click', () => this.openMap());
     $('minimap-wrap').addEventListener('click', () => this.openMap());
     $('respawn-btn').addEventListener('click', () => this.respawnFromDeath());
-    $('opt-sound').addEventListener('change', (e) => this.audio.setEnabled(e.target.checked));
-    $('opt-boil').checked = this.boilOn;
-    $('opt-boil').addEventListener('change', (e) => {
-      this.boilOn = e.target.checked;
-      shared.uBoilAmp.value = e.target.checked ? 1 : 0;
-    });
-    $('opt-look').checked = this.pipe.reflections;
-    $('opt-look').addEventListener('change', (e) => (this.pipe.reflections = e.target.checked));
-    $('opt-magic').checked = shared.uQuality.value > 0.5;
-    $('opt-magic').addEventListener('change', (e) => (shared.uQuality.value = e.target.checked ? 1 : 0));
-    $('opt-sens').addEventListener('input', (e) => (this.input.sensitivity = parseFloat(e.target.value)));
-    $('opt-perf').addEventListener('change', (e) => this.perf.toggle(e.target.checked));
+    this.bindSettings();
     // the city's clock: how long a day is (or the hour standing still), and a jump to an hour
     const dn = this.daynight;
     const sel = $('opt-clock');
@@ -211,6 +201,80 @@ export class Game {
     this.input.on('lock', (locked) => {
       if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
+  }
+
+  // the settings (core/settings.js): as they were kept, shown in the pause menu, kept again when
+  // changed. What the device decides by itself (null) follows the device.
+  bindSettings() {
+    const S = (this.settings = new Settings());
+    const dev = { boil: this.boilOn, reflections: this.pipe.reflections, quality: shared.uQuality.value > 0.5 };
+    const pick = (k) => (S.v[k] === null ? dev[k] : S.v[k]);
+    const apply = () => {
+      const v = S.v;
+      this.audio.setEnabled(v.sound);
+      for (const k of ['fx', 'music', 'radio']) this.audio.setVolume(k, v[k]);
+      this.input.sensitivity = v.sens;
+      this.input.invertY = v.invertY;
+      this.hud.subtitles = v.subtitles;
+      if (!v.subtitles) this.hud.radio(null);
+      this.boilOn = pick('boil');
+      this.pipe.reflections = pick('reflections');
+      shared.uQuality.value = pick('quality') ? 1 : 0;
+      if (!!v.perf !== !!this.perf.on) this.perf.toggle(v.perf);
+    };
+    const show = () => {
+      const v = S.v;
+      $('opt-sound').checked = v.sound;
+      $('opt-vol-fx').value = v.fx;
+      $('opt-vol-music').value = v.music;
+      $('opt-vol-radio').value = v.radio;
+      $('opt-sens').value = v.sens;
+      $('opt-invert').checked = v.invertY;
+      $('opt-subs').checked = v.subtitles;
+      $('opt-boil').checked = pick('boil');
+      $('opt-look').checked = pick('reflections');
+      $('opt-magic').checked = pick('quality');
+      $('opt-perf').checked = v.perf;
+    };
+    const box = (id, k) => $(id).addEventListener('change', (e) => {
+      S.set(k, e.target.checked);
+      apply();
+    });
+    // (a slider is heard while it moves, and kept when it is let go)
+    const slider = (id, k) => {
+      const el = $(id);
+      el.addEventListener('input', () => {
+        S.v[k] = parseFloat(el.value);
+        apply();
+      });
+      el.addEventListener('change', () => {
+        S.v[k] = parseFloat(el.value);
+        S.save();
+      });
+    };
+    box('opt-sound', 'sound');
+    slider('opt-vol-fx', 'fx');
+    slider('opt-vol-music', 'music');
+    slider('opt-vol-radio', 'radio');
+    slider('opt-sens', 'sens');
+    box('opt-invert', 'invertY');
+    box('opt-subs', 'subtitles');
+    box('opt-boil', 'boil');
+    box('opt-look', 'reflections');
+    box('opt-magic', 'quality');
+    box('opt-perf', 'perf');
+    // F3 keeps its choice too
+    this.perf.onToggle = (on) => {
+      if (!this.perf.bench) S.set('perf', on);
+    };
+    $('reset-btn').addEventListener('click', () => {
+      S.reset();
+      apply();
+      show();
+      this.hud.toast('ההגדרות חזרו להתחלה', 'info', 1.8);
+    });
+    apply();
+    show();
   }
 
   start() {

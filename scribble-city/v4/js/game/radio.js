@@ -106,7 +106,7 @@ export class Radio {
     this.pan = c.createStereoPanner();
     this.vol = c.createGain();
     this.vol.gain.value = 0;
-    this.input.connect(this.speaker).connect(this.pan).connect(this.vol).connect(a.master);
+    this.input.connect(this.speaker).connect(this.pan).connect(this.vol).connect(a.radioBus);
     this.band = new Band(c, this.input, a.noise);
     this.ready = true;
   }

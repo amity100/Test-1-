@@ -14,6 +14,7 @@ export class Input {
     this.wheel = 0;
     this.move = { x: 0, y: 0 }; // x right, y forward
     this.sensitivity = 1;
+    this.invertY = false;
     this.enabled = false;
     this.locked = false;
     this.lockFailed = false;
@@ -284,7 +285,7 @@ export class Input {
   }
 
   consumeLook() {
-    const d = { x: this.lookDX * this.sensitivity, y: this.lookDY * this.sensitivity };
+    const d = { x: this.lookDX * this.sensitivity, y: this.lookDY * this.sensitivity * (this.invertY ? -1 : 1) };
     this.lookDX = 0;
     this.lookDY = 0;
     return d;

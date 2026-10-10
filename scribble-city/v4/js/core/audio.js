@@ -14,6 +14,8 @@ export class Audio {
     this.master = null;
     this.engineKind = null;
     this.engineT = 0;
+    // the player's three volumes (core/settings.js), 0..1
+    this.vol = { fx: 1, music: 1, radio: 1 };
   }
 
   init() {
@@ -30,8 +32,15 @@ export class Audio {
     }
     const c = this.ctx;
     this.master = c.createGain();
-    this.master.gain.value = 0.55;
+    this.master.gain.value = this.enabled ? 0.55 : 0;
     this.master.connect(c.destination);
+    // everything goes to one of three volumes: the effects (and the city's sounds), the music in
+    // places, the car radio
+    this.fx = c.createGain();
+    this.musicBus = c.createGain();
+    this.radioBus = c.createGain();
+    for (const b of [this.fx, this.musicBus, this.radioBus]) b.connect(this.master);
+    this.applyVolumes();
     const len = c.sampleRate;
     this.noise = c.createBuffer(1, len, c.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -46,7 +55,7 @@ export class Audio {
     bp.Q.value = 0.9;
     this.scratchGain = c.createGain();
     this.scratchGain.gain.value = 0;
-    this.scratchSrc.connect(bp).connect(this.scratchGain).connect(this.master);
+    this.scratchSrc.connect(bp).connect(this.scratchGain).connect(this.fx);
     this.scratchSrc.start();
     // engine
     this.engOsc = c.createOscillator();
@@ -61,7 +70,7 @@ export class Audio {
     this.engGain.gain.value = 0;
     this.engOsc.connect(lp);
     this.engOsc2.connect(lp);
-    lp.connect(this.engGain).connect(this.master);
+    lp.connect(this.engGain).connect(this.fx);
     this.engOsc.start();
     this.engOsc2.start();
     // police siren (wails up and down)
@@ -69,7 +78,7 @@ export class Audio {
     this.sirOsc.type = 'triangle';
     this.sirGain = c.createGain();
     this.sirGain.gain.value = 0;
-    this.sirOsc.connect(this.sirGain).connect(this.master);
+    this.sirOsc.connect(this.sirGain).connect(this.fx);
     this.sirOsc.start();
   }
 
@@ -80,7 +89,7 @@ export class Audio {
     if (!this.musicGain) {
       this.musicGain = c.createGain();
       this.musicGain.gain.value = 0;
-      this.musicGain.connect(this.master);
+      this.musicGain.connect(this.musicBus);
     }
     const t = c.currentTime;
     if (on) {
@@ -181,7 +190,7 @@ export class Audio {
         f.Q.value = q;
         const g = c.createGain();
         g.gain.value = 0;
-        s.connect(f).connect(g).connect(this.master);
+        s.connect(f).connect(g).connect(this.fx);
         s.start(0, Math.random() * 0.9);
         return { g, f };
       };
@@ -213,6 +222,19 @@ export class Audio {
     if (this.master) this.master.gain.value = on ? 0.55 : 0;
   }
 
+  // a volume, 0..1 (heard as the square: the slider's middle is a quarter as loud)
+  setVolume(kind, v) {
+    this.vol[kind] = Math.max(0, Math.min(1, v));
+    this.applyVolumes();
+  }
+
+  applyVolumes() {
+    if (!this.fx) return;
+    this.fx.gain.value = this.vol.fx * this.vol.fx;
+    this.musicBus.gain.value = this.vol.music * this.vol.music;
+    this.radioBus.gain.value = this.vol.radio * this.vol.radio;
+  }
+
   env(g, t, a, peak, dec) {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a);
@@ -228,7 +250,7 @@ export class Audio {
     o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
     const g = c.createGain();
     this.env(g, t, 0.005, vol, dur);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(this.fx);
     o.start(t);
     o.stop(t + dur + 0.05);
   }
@@ -245,7 +267,7 @@ export class Audio {
     f.Q.value = q;
     const g = c.createGain();
     this.env(g, t, 0.004, vol, dur);
-    s.connect(f).connect(g).connect(this.master);
+    s.connect(f).connect(g).connect(this.fx);
     s.start(t, Math.random() * 0.5);
     s.stop(t + dur + 0.05);
   }

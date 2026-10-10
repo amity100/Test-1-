@@ -824,3 +824,21 @@ html, body { background: #1b1430; }
 @media (max-height: 520px) {
   #gps-dist { top: calc(max(10px, env(safe-area-inset-top)) + 124px); left: calc(max(12px, env(safe-area-inset-left)) + 59px); font-size: 13px; }
 }
+/* the pause menu's settings, in groups (two columns on a wide screen) */
+.sheet.settings { width: min(820px, 94vw); }
+.pause-btns, .pause-foot { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.pause-foot { margin-top: 6px; }
+.opt-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; margin-top: 10px; text-align: right; }
+.opt-group { padding: 4px 4px 2px; }
+.opt-group h3 { margin: 4px 0 2px; font: 400 24px/1.1 var(--font-hand); color: #c2185b; border-bottom: 2px solid rgba(27, 20, 48, 0.25); }
+.opt-group .opt { justify-content: flex-start; margin: 8px 0; font-size: 16px; }
+.opt-group .opt.vol { justify-content: space-between; }
+.opt-group .opt.vol input[type=range] { width: 46%; accent-color: #ff4fa3; }
+.opt-group .opt input[type=checkbox] { width: 18px; height: 18px; accent-color: #ff4fa3; }
+.opt-group .opt.hours { justify-content: flex-start; margin-top: -2px; }
+.saved-note { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+@media (max-width: 680px) { .opt-groups { grid-template-columns: 1fr; } }
+@media (max-height: 520px) {
+  .opt-group .opt { margin: 5px 0; font-size: 14px; }
+  .opt-group h3 { font-size: 20px; }
+}

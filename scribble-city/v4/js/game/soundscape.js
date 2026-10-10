@@ -60,7 +60,7 @@ export class Soundscape {
     this.muffle = c.createBiquadFilter();
     this.muffle.type = 'lowpass';
     this.muffle.frequency.value = 16000;
-    this.bus.connect(this.muffle).connect(a.master);
+    this.bus.connect(this.muffle).connect(a.fx);
     const loop = (type, freq, q) => {
       const s = c.createBufferSource();
       s.buffer = a.noise;
@@ -91,10 +91,10 @@ export class Soundscape {
     this.shopFilter.type = 'lowpass';
     this.shopFilter.frequency.value = 1400;
     this.shopPan = c.createStereoPanner();
-    this.shopFilter.connect(this.shopOut).connect(this.shopPan).connect(a.master);
+    this.shopFilter.connect(this.shopOut).connect(this.shopPan).connect(a.musicBus);
     this.near = c.createGain();
     this.near.gain.value = 1;
-    this.near.connect(a.master);
+    this.near.connect(a.fx);
     this.ready = true;
   }
 

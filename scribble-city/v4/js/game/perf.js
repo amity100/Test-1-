@@ -133,6 +133,7 @@ export class Perf {
     this.el.classList.toggle('hidden', !on);
     const box = document.getElementById('opt-perf');
     if (box) box.checked = on;
+    if (this.onToggle) this.onToggle(on);
     const pipe = this.game.pipe;
     pipe.timer = on || this.bench ? this : null;
     this.game.renderer.info.autoReset = !(on || this.bench);
