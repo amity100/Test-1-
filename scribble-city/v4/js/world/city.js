@@ -47,6 +47,8 @@ export function buildCity(scene, o = {}) {
     billboards: [],
     territories: [],
     occluders: [],
+    // every building from above, in its own colours, for the city's map (ui/citymap.js)
+    footprints: [],
     room: null,
     lightCount: () => lightList().length,
   };
@@ -164,6 +166,7 @@ export function buildCity(scene, o = {}) {
     helipad: ctx.helipad || null,
     // the buildings' bodies, for leaving out what is behind them (render/occlusion.js)
     occluders: ctx.occluders,
+    footprints: ctx.footprints,
     wheel: ctx.wheel || null,
     // hide what is too far to matter (by the chunks' bounding spheres)
     cull(cam) {

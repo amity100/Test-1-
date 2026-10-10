@@ -68,6 +68,10 @@ export function decoBuilding(ctx, spec) {
   const sg0 = 1.4;
   const sg1 = L - 1.4;
   const info = { f, L, D, h, top, floors, doors: [], shop: null };
+  if (ctx.footprints) {
+    const [mn, mx] = f.box(0, 0, -D, L, 0, 0);
+    ctx.footprints.push({ x0: mn[0], z0: mn[2], x1: mx[0], z1: mx[2], top, color, trim, awning: spec.awning, nx: f.nx, nz: f.nz });
+  }
 
   // ---- the body: solid above the shop, solid behind the room, hollow where the room is
   fbox(ctx, f, M.wall, 0.15, 3.55, -D, L - 0.15, top, 0, color, wallId);

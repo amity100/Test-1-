@@ -488,6 +488,7 @@ function towers(ctx, R) {
     };
     const peak = skyscraper(ctx, xc, zc, tw, td, h, opts);
     ctx.col.addBox(xc - tw / 2, zc - td / 2, xc + tw / 2, zc + td / 2, top, peak, 'wall');
+    if (ctx.footprints) ctx.footprints.push({ x0: xc - tw / 2, z0: zc - td / 2, x1: xc + tw / 2, z1: zc + td / 2, top: peak, tower: true, style: opts.style });
     fbox(ctx, f, ctx.M.neon, 2.6, top - 0.3, -0.05, L - 2.6, top - 0.1, 0.1, hex(lk.signCol));
   });
 }
@@ -681,6 +682,10 @@ function motel(ctx, R) {
   const doorCol = [srgb(0.18, 0.72, 0.72), srgb(0.98, 0.45, 0.55), srgb(1.0, 0.82, 0.3)];
   fbox(ctx, f, M.wall, 0, CURB, -10, L, CURB + 6.6, 0, wall);
   ctx.col.addBox(R.x0, R.z0 + 26, R.x0 + 10, R.z0 + 26 + L, 0, 7, 'wall');
+  if (ctx.footprints) {
+    ctx.footprints.push({ x0: R.x0, z0: R.z0 + 26, x1: R.x0 + 10, z1: R.z0 + 26 + L, top: CURB + 6.6, color: wall, nx: 1, nz: 0 });
+    ctx.footprints.push({ x0: R.x0, z0: R.z0, x1: R.x1, z1: R.z1, lot: true });
+  }
   for (let fl = 0; fl < 2; fl++) {
     const y = CURB + fl * 3.3;
     for (let u = 1.5, k = 0; u < L - 2; u += 3.6, k++) {
@@ -706,6 +711,7 @@ function motel(ctx, R) {
   water.translate((px0 + px1) / 2, CURB + 0.51, (pz0 + pz1) / 2);
   ctx.B.add(M.pool, water, null, nextId());
   ctx.col.addBox(px0, pz0, px1, pz1, 0, CURB + 0.5, 'prop');
+  if (ctx.footprints) ctx.footprints.push({ x0: px0, z0: pz0, x1: px1, z1: pz1, pool: true });
   // the tall sign with its star
   const sx = R.x1 - 2.5;
   const sz = R.z0 + 30;
@@ -794,6 +800,7 @@ function farBlocks(ctx) {
       const h = r.range(10, 34);
       const col = far[(i + Math.round(x0)) % far.length];
       ctx.B.box(M.wallSolid, x0, 0.15, z - len + 0.3, x1, 0.15 + h, z - 0.3, nextId(), { color: col, chunk: 'farN' });
+      if (ctx.footprints) ctx.footprints.push({ x0, z0: z - len + 0.3, x1, z1: z - 0.3, top: 0.15 + h, color: col, far: true });
       const fx = x1 > -10 ? x1 : x1;
       for (let y = 5; y < h - 2; y += 3.4) {
         for (let zz = z - 2; zz > z - len + 2; zz -= 3) {

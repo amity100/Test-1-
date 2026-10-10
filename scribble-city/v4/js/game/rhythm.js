@@ -55,6 +55,12 @@ export function shopOpen(kind, h) {
   return (h >= a && h < b) || (b > 24 && h < b - 24);
 }
 
+// [from, until] for a kind (until past 24 is after midnight), null when it never closes
+export function shopHours(kind) {
+  const r = SHOP_HOURS[kind];
+  return r === null ? null : r || [8, 22];
+}
+
 // does a shop of this kind ever close?
 export function shopCloses(kind) {
   return SHOP_HOURS[kind] !== null;

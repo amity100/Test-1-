@@ -130,6 +130,7 @@
           <h3>טלפון</h3>
           <p>ג׳ויסטיק משמאל · גרירה מימין להסתכלות</p>
           <p>מצלמה — צילום שלט · עיפרון "לצייר" — ציור באוויר · כוונת — ירי</p>
+          <p>נגיעה במפה הקטנה — מפת העיר כולה</p>
         </div>
         <div class="col">
           <h3>איך משחקים</h3>
@@ -143,10 +144,27 @@
 
   <div id="intro-flash" class="hidden"></div>
 
+  <div id="citymap" class="hidden" aria-label="מפת העיר">
+    <canvas id="map-canvas"></canvas>
+    <div id="map-me"></div>
+    <div id="map-head" class="paper-card"><h2>מפת העיר</h2><div id="map-where"></div></div>
+    <div id="map-legend" class="paper-card"><h3>מקרא <small>(לחיצה מסתירה)</small></h3><div id="map-legend-list"></div></div>
+    <button id="map-close" class="mbtn" aria-label="סגירת המפה"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <button id="map-legend-btn" class="mbtn" aria-label="מקרא"><svg class="ico" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg></button>
+    <div id="map-tools">
+      <button id="map-in" class="mbtn" aria-label="התקרבות"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button id="map-out" class="mbtn" aria-label="התרחקות"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button id="map-home" class="mbtn" aria-label="למקום שלכם"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.8"/><path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22"/></svg></button>
+    </div>
+    <div id="map-card" class="paper-card hidden"></div>
+    <div id="map-hint"></div>
+  </div>
+
   <div id="pause" class="overlay hidden">
     <div class="sheet small">
       <h2>הפסקה</h2>
       <button id="resume-btn" class="btn primary">המשך</button>
+      <button id="map-btn" class="btn">מפת העיר <span class="desktop-only">(M)</span></button>
       <label class="opt"><input type="checkbox" id="opt-sound" checked> צלילים</label>
       <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים רועדים</label>
       <label class="opt"><input type="checkbox" id="opt-look" checked> השתקפויות ברחוב הרטוב</label>

@@ -135,6 +135,15 @@ export class HUD {
     this.damageEl.style.opacity = `${Math.max(dmgA * 0.9, p.hp < 30 ? 0.35 + Math.sin(game.time * 6) * 0.15 : 0)}`;
     this.crosshair.classList.toggle('melee', game.weapons.current.def.kind === 'melee');
     this.crosshair.style.display = (p.mode === 'foot' && !game.inBar) || (v && v.kind !== 'car') ? '' : 'none';
+    // the minimap looks further around the faster you go (and closer again on foot)
+    const sp = v ? v.speedAbs || Math.abs(v.speed || 0) : 0;
+    if (sp > 9) this.mapFar = true;
+    else if (sp < 5) this.mapFar = false;
+    const want = this.mapFar ? 0.62 : 1.1;
+    if (this.mapScale !== want) {
+      this.mapScale += (want - this.mapScale) * (1 - Math.exp(-dt * 1.6));
+      if (Math.abs(want - this.mapScale) < 0.002) this.mapScale = want;
+    }
     this.drawMinimap();
   }
 

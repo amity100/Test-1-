@@ -41,6 +41,7 @@ import { Rhythm } from './rhythm.js';
 import { Shutters } from './shutters.js';
 import { Soundscape } from './soundscape.js';
 import { Radio } from './radio.js';
+import { CityMap } from '../ui/citymap.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -133,6 +134,8 @@ export class Game {
     this.soundscape = new Soundscape(this);
     // the car radio (game/radio.js)
     this.radio = new Radio(this);
+    // the map of the whole city (ui/citymap.js): M, a tap on the minimap, the pause menu
+    this.citymap = new CityMap(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -168,6 +171,8 @@ export class Game {
   bindUI() {
     $('start-btn').addEventListener('click', () => this.start());
     $('resume-btn').addEventListener('click', () => this.resume());
+    $('map-btn').addEventListener('click', () => this.openMap());
+    $('minimap-wrap').addEventListener('click', () => this.openMap());
     $('respawn-btn').addEventListener('click', () => this.respawnFromDeath());
     $('opt-sound').addEventListener('change', (e) => this.audio.setEnabled(e.target.checked));
     $('opt-boil').checked = this.boilOn;
@@ -246,11 +251,33 @@ export class Game {
     this.input.releaseLock();
   }
 
-  resume() {
+  resume(gesture = true) {
     $('pause').classList.add('hidden');
     this.state = 'play';
     this.audio.init();
-    if (!this.touch) this.input.requestLock(true);
+    if (!this.touch) this.input.requestLock(gesture);
+  }
+
+  // the city's map: the game waits under it (from the pause menu, closing it goes back there)
+  openMap() {
+    if (this.citymap.open) return;
+    if (this.state === 'play') {
+      if (this.airdraw.open || this.album.open || this.dialog.open || this.perf.bench) return;
+      this.state = 'paused';
+      this.mapFrom = 'play';
+    } else if (this.state === 'paused') {
+      $('pause').classList.add('hidden');
+      this.mapFrom = 'pause';
+    } else return;
+    this.input.releaseLock();
+    this.citymap.show();
+  }
+
+  onMapClosed() {
+    if (this.mapFrom === 'pause') {
+      $('clock-now').textContent = this.daynight.clock;
+      $('pause').classList.remove('hidden');
+    } else this.resume(false);
   }
 
   respawn() {
@@ -371,7 +398,8 @@ export class Game {
       perf.frameStart();
       this.update(dt);
       perf.afterUpdate();
-      this.renderFrame();
+      // (under the open map the city is not drawn: the map covers all of it)
+      if (!this.citymap.covering) this.renderFrame();
       perf.frameEnd(raw);
       // (the test route is measured at the drawing's full quality: the resolution waits)
       if (this.state === 'play' && !perf.bench) {
@@ -545,7 +573,7 @@ export class Game {
       if (p.inVehicle) this.exitVehicle();
       else if (p.mode === 'foot' && !this.streetlife.interact()) this.tryEnter();
     }
-    if (input.wasPressed('KeyM')) this.hud.mapScale = this.hud.mapScale > 1 ? 0.55 : 1.1;
+    if (input.wasPressed('KeyM')) this.openMap();
     // the car radio's dial
     if (input.wasPressed('KeyR') && p.inVehicle && p.inVehicle.kind === 'car') this.radio.next();
   }
