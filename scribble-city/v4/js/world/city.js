@@ -57,6 +57,8 @@ export function buildCity(scene, o = {}) {
   if (o.rooms !== false) ctx.room = (f, spec) => buildRoom(ctx, f, spec);
   // (ROADMAP 5.1, not with ?classic: the roofs to walk on, gathered as the buildings go up)
   if (o.roofs) ctx.roofs = { buildings: [], escapes: [], backs: [], cur: null };
+  // (ROADMAP 8.3, not with ?classic: the shop windows' panes, gathered as the fronts go up)
+  if (o.glass) ctx.panes = [];
   // everything printed in the city (blueprints, ads, street names) is one texture; the big ads on
   // the roofs and the walls are seen from far away, the little boards only up close
   // (the album's new pages are on boards up on the roofs, ROADMAP 5.1: not with ?classic)
@@ -83,7 +85,7 @@ export function buildCity(scene, o = {}) {
   M.signNeon.uniforms.uUseMap.value = 1;
   // what is not worth drawing from far away: the rooms behind the shop windows, the small things
   // on the sidewalks (the buildings, the palms' crowns and the city across the bay always stay)
-  const small = new Set([M.prop, M.propCyl, M.propPaint, M.pole, M.rail, M.bulb, M.glint, M.leaf, M.nut, M.board, M.lampGlass, M.court]);
+  const small = new Set([M.prop, M.propCyl, M.propPaint, M.pole, M.rail, M.bulb, M.glint, M.glintObj, M.leaf, M.nut, M.board, M.lampGlass, M.court]);
   const far = new Set([M.trunk, M.frond, M.steel, M.awning, M.frame, M.adWall]);
   // the plain pens (no picture of their own) share their draws, a chunk at a time: the ones that
   // are drawn and hidden alike (the same side, room, mirror, distance) become one draw
@@ -179,6 +181,8 @@ export function buildCity(scene, o = {}) {
     station: ctx.station || null,
     // (the roofs: what is solid up there, the ways up, ROADMAP 5.1)
     roofs: ctx.roofWorld || null,
+    // (the shop windows' panes, ROADMAP 8.3: world/glass.js)
+    glass: ctx.glass || null,
     // hide what is too far to matter (by the chunks' bounding spheres)
     cull(cam) {
       for (const c of cull) {

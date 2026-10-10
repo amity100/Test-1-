@@ -136,6 +136,14 @@ export function decoBuilding(ctx, spec) {
   // the glass: a few quick strokes where the light catches it
   for (const [a, b] of [[sg0 + 0.1, uDoor - 0.8], [uDoor + 0.8, sg1 - 0.1]]) {
     if (b - a < 0.6) continue;
+    // (ROADMAP 8.3, not with ?classic: each pane a prop of its own, drawn at the end of the city
+    // with the same numbers, world/glass.js)
+    if (ctx.panes) {
+      const ids = [];
+      for (let u = a; u < b - 0.5; u += 2.2) ids.push(nextId());
+      ctx.panes.push({ f, a, b, ids });
+      continue;
+    }
     for (let u = a; u < b - 0.5; u += 2.2) ctx.B.add(M.glint, f.quad(u, 0.9, Math.min(b, u + 1.6), 2.9, 0.07), null, nextId());
   }
   // the room behind it

@@ -58,6 +58,9 @@ const _sm = new THREE.Matrix4();
 /**
  * The hero's arsenal (pencil + weapons he drew), firing logic, projectiles of everyone.
  */
+// (what does not break glass: paint, ink, glue, rubber... ROADMAP 8.3)
+const SOFT_SHOTS = new Set(['ink', 'paintball', 'paint', 'crayon', 'glue', 'tippex', 'rubber', 'paintmg']);
+
 export class Weapons {
   constructor(game) {
     this.game = game;
@@ -1107,6 +1110,8 @@ export class Weapons {
     }
     // world (a parked car's box: dented, its glass, its tyres... game/damage.js)
     if (hit.box && hit.box.tag === 'car' && game.damage && !game.classic) game.damage.shot(hit.box, hit, pr.damage);
+    // (a shop window: a hard shot breaks it, ROADMAP 8.3, game/knock.js)
+    if (game.knock && hit.box && hit.box.tag === 'roomwall' && !SOFT_SHOTS.has(kind)) game.knock.glassHit(hit.x, hit.y, hit.z);
     if (kind === 'ink' || kind === 'paintball') {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, kind === 'ink' ? 0.45 : 0.5 + Math.random() * 0.3, pr.color);
       return;

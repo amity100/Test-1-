@@ -586,6 +586,8 @@ class Vehicle {
   }
 
   collideWorld(dt) {
+    // (what flies when it is hit is no wall: ROADMAP 8.3, game/knock.js)
+    if (this.game.knock) this.game.knock.sweep(this);
     // three circles along the body
     const col = this.game.world.collision;
     const f = this.fwd.clone();
@@ -603,6 +605,8 @@ class Vehicle {
         this.pos.z += p.z - before.z;
         const along = Math.abs(f.x * res.nx + f.z * res.nz);
         impact = Math.max(impact, Math.abs(this.speed) * along);
+        // (a shop window, hard enough: it breaks - ROADMAP 8.3)
+        if (this.game.knock && res.box && res.box.tag === 'roomwall' && Math.abs(this.speed) * along > 5) this.game.knock.glassHit(p.x - res.nx * r, 1.3, p.z - res.nz * r);
       }
     }
     if (hit) {

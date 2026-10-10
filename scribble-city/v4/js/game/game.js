@@ -74,6 +74,7 @@ import { Arsenal } from './arsenal.js';
 import { Wheel } from '../ui/wheel.js';
 import { Money, fmt } from './money.js';
 import { Properties } from './properties.js';
+import { Knock } from './knock.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -248,6 +249,9 @@ export class Game {
     this.money = this.classic ? null : new Money(this);
     // (the club, the motel, the arcade and the café that can be yours: ROADMAP 8.2)
     this.props = this.classic ? null : new Properties(this);
+    // (bins, benches, newspaper boxes, mailboxes, crates and the roadblocks' cones fly when a car
+    // hits them; a hydrant knocked off sprays: ROADMAP 8.3)
+    this.knock = this.classic ? null : new Knock(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
@@ -820,6 +824,7 @@ export class Game {
       this.animals.update(dt);
       this.voices.update(dt);
       this.pickups.update(dt);
+      if (this.knock) this.knock.update(dt);
       if (this.money) this.money.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
@@ -931,6 +936,7 @@ export class Game {
       this.chute.draw(fr);
       this.pickups.draw(fr);
       if (this.money) this.money.draw(fr);
+      if (this.knock) this.knock.draw(fr);
       this.weather.draw(fr);
       this.fx.update(dt, fr);
       fr.end();
@@ -1455,6 +1461,8 @@ export class Game {
   // ------------------------------------------------------------------ combat helpers
   explosion(x, y, z, radius, damage, owner) {
     this.fx.boom(x, y, z, radius * 0.75);
+    // (the shop windows round it break: ROADMAP 8.3)
+    if (this.knock) this.knock.blast(x, y, z, radius * 1.3);
     this.audio.play('boom', 0.9);
     const p = this.player;
     const pp = p.inVehicle ? p.inVehicle.pos : p.pos;

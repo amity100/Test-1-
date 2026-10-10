@@ -416,6 +416,12 @@ export class Audio {
         // somebody else's pencil, quick strokes in the air
         for (let i = 0; i < 4; i++) this.hiss(0.09, 0.12 * v, 3200 + Math.random() * 1200, 2.5, 'bandpass', i * 0.13);
         break;
+      case 'glass':
+        // (ROADMAP 8.3) a window breaking: the crash, then the pieces tinkling down
+        this.hiss(0.32, 0.45 * v, 3800, 0.7, 'highpass');
+        this.hiss(0.1, 0.3 * v, 1800, 1.2, 'bandpass');
+        for (let i = 0; i < 8; i++) this.tone('sine', 2800 + Math.random() * 2400, 2500 + Math.random() * 2000, 0.06, 0.045 * v, 0.07 + i * 0.055 + Math.random() * 0.05);
+        break;
       case 'till':
         // (ROADMAP 8.1) a till: the drawer's clack and its bell
         this.hiss(0.05, 0.25 * v, 1400, 1.2, 'bandpass');

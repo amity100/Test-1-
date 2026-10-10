@@ -22,6 +22,8 @@ export function cityMaterials() {
     }
     return canvasTexture(c, { repeat: true });
   })();
+  // (the shop windows' glint: one picture for the two pens below)
+  const glintTex = glintTexture();
   M = {
     // the ground
     street: B({ kind: 'street', map: streetTexture(), refl: true, wet: 0.7, ang: 0.12, line: 0.6, wash: 0.6 }),
@@ -51,7 +53,9 @@ export function cityMaterials() {
     bridgeLight: B({ kind: 'neon', color: srgb(1, 0.85, 0.7), emissive: srgb(1, 0.78, 0.5).multiplyScalar(4), line: 0 }),
     neonSoft: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.95, 0.9), emissive: new THREE.Color(1.6, 1.6, 1.6), line: 0.5 }),
     bulb: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.95, 0.85), emissive: new THREE.Color(2.2, 2.2, 2.2), line: 0.5, objMask: true }),
-    glint: B({ kind: 'neon', map: glintTexture(), alphaTest: 0.5, color: srgb(0.9, 0.95, 1), emissive: new THREE.Color(0.35, 0.4, 0.5), line: 0, noShadow: true, side: THREE.DoubleSide }),
+    glint: B({ kind: 'neon', map: glintTex, alphaTest: 0.5, color: srgb(0.9, 0.95, 1), emissive: new THREE.Color(0.35, 0.4, 0.5), line: 0, noShadow: true, side: THREE.DoubleSide }),
+    // (ROADMAP 8.3, not with ?classic: the same, a pane a prop that can break, world/glass.js)
+    glintObj: B({ kind: 'neon', map: glintTex, alphaTest: 0.5, color: srgb(0.9, 0.95, 1), emissive: new THREE.Color(0.35, 0.4, 0.5), line: 0, noShadow: true, side: THREE.DoubleSide, objMask: true }),
     steel: B({ kind: 'box', vcolor: true, gloss: 0.2 }),
     // props (the eraser can rub them out)
     prop: B({ kind: 'box', vcolor: true, objMask: true, erasable: true }),

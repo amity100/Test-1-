@@ -339,6 +339,16 @@ export class Chase {
       e.yaw = road.along === 'z' ? (dir > 0 ? Math.PI : 0) : dir > 0 ? -Math.PI / 2 : Math.PI / 2;
       b.officers.push(e);
     });
+    // (ROADMAP 8.3) a row of cones across the road on your side of the cars: they fly
+    if (game.knock) {
+      const nc = road.half > 7.5 ? 6 : 4;
+      for (let i = 0; i < nc; i++) {
+        const off = (i / (nc - 1) - 0.5) * road.half * 1.45;
+        const cx = road.along === 'z' ? x + off : x - dir * 5.5;
+        const cz = road.along === 'z' ? z - dir * 5.5 : z + off;
+        game.knock.cone(cx, cz, b);
+      }
+    }
     this.blocks.push(b);
     this.stats.roadblocks++;
     game.hud.toast('מחסום משטרה לפניכם!', 'bad', 2.4);

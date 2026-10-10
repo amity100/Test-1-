@@ -6,6 +6,7 @@ import { buildCity } from './world/city.js';
 import { buildGarages } from './world/garages.js';
 import { buildStation } from './world/station.js';
 import { buildRoofs } from './world/roofs.js';
+import { buildPanes } from './world/glass.js';
 import { Game } from './game/game.js';
 import { isTouchDevice } from './core/util.js';
 
@@ -95,8 +96,10 @@ async function boot() {
     buildGarages(ctx);
     buildStation(ctx);
     buildRoofs(ctx);
+    // (the shop windows' panes, last: ROADMAP 8.3)
+    buildPanes(ctx);
   };
-  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 36, roofs: true });
+  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 36, roofs: true, glass: true });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
 
   setStatus('השמש שוקעת על העיר…');
