@@ -480,6 +480,15 @@ export class Civilians {
           c.owed = step;
           continue;
         }
+      } else if (c.still && c.dying < 0 && !(c.panicT > 0)) {
+        // somebody sitting or waiting (game/routines.js): beyond a few metres their small moves
+        // are drawn in steps of three frames
+        const dx = c.pos.x - cam.x;
+        const dz = c.pos.z - cam.z;
+        if (dx * dx + dz * dz > 18 * 18 && (this.frameN + i) % 3) {
+          c.owed = step;
+          continue;
+        }
       }
       c.owed = 0;
       c.update(step);
@@ -531,6 +540,30 @@ export class Civilians {
       c.inside = false;
       c.fig.setVisible(true);
     }
+  }
+
+  // somebody let go where they stand (a bench, a shop's door, the bus): on along the side of the
+  // block they are on, not across it to wherever their walk last pointed
+  rejoin(c) {
+    if (!c || c.prom) return;
+    const L = c.loop;
+    const n = L.length;
+    let leg = 0;
+    let bd = Infinity;
+    for (let i = 0; i < n; i++) {
+      const a = L[i];
+      const b = L[(i + 1) % n];
+      const dx = b[0] - a[0];
+      const dz = b[1] - a[1];
+      const t = Math.max(0, Math.min(1, ((c.pos.x - a[0]) * dx + (c.pos.z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+      const d = Math.hypot(a[0] + dx * t - c.pos.x, a[1] + dz * t - c.pos.z);
+      if (d < bd) {
+        bd = d;
+        leg = i;
+      }
+    }
+    c.target = c.dir > 0 ? (leg + 1) % n : leg;
+    c.crossing = false;
   }
 
   remove(c) {

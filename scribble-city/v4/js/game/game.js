@@ -47,6 +47,7 @@ import { GPS } from './gps.js';
 import { Settings } from '../core/settings.js';
 import { Pad } from '../core/gamepad.js';
 import { SaveGame, SLOTS, SLOT_NAMES } from './save.js';
+import { Routines } from './routines.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -150,6 +151,10 @@ export class Game {
     this.pad = new Pad(this);
     // the saves (game/save.js): the autosave, three slots, "continue" on the title page
     this.saves = new SaveGame(this);
+    // everyday life on the benches, at the bus stops, at the café tables (game/routines.js);
+    // ?classic leaves the street as it was before (the "same picture" check)
+    this.classic = this.params.has('classic');
+    this.routines = new Routines(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -649,6 +654,7 @@ export class Game {
       this.enemies.update(dt);
       this.civilians.update(dt);
       this.streetlife.update(dt);
+      this.routines.update(dt);
       this.nightlife.update(dt);
       this.vignettes.update(dt);
       this.airsketch.update(dt);

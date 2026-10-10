@@ -10,6 +10,10 @@ import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
 // coffee, and you can walk up to any door: they draw what you ask for, right there in the air.
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+// an open lift: the dim car between the doors (hatched), the light in its ceiling, the doors' edges
+const LIFT_CAR = [0.3, 0.24, 0.21];
+const LIFT_LIGHT = [1, 0.9, 0.62];
+const INK = [0.16, 0.15, 0.2];
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 
@@ -605,6 +609,14 @@ class OpenShop {
     }
     if (R) this.populate();
     else if (s.spots.chair) this.newCustomer(true);
+    // a tower's lifts: the doors slide open for whoever goes up, and now and then somebody comes
+    // down and out into the street (not in ?classic)
+    this.lifts = null;
+    if (R && s.kind === 'lobby' && !this.game.classic) {
+      // (the lift's doors: on the back wall, 1.15 m behind the place where you wait for it)
+      this.lifts = R.browse.filter((b) => b.lift).map((b) => ({ x: b.x - s.nx * 1.15 - s.rx * 0.3, z: b.z - s.nz * 1.15 - s.rz * 0.3, open: 0, hold: 0, down: false }));
+      this.liftT = 3 + Math.random() * 8;
+    }
   }
 
   get open() {
@@ -764,10 +776,28 @@ class OpenShop {
       return null;
     }
     if (v.mode === 'lift') {
-      if (v.t > v.stay) {
+      if (v.t > v.stay && !this.lifts) {
         // ding: the lift is here, up they go
         this.life.ding(this.shop);
         this.vanish(v);
+      } else if (v.t > v.stay) {
+        // the lift is called; when its doors are open, in they step
+        const l = v.lift || (v.lift = this.nearLift(c));
+        if (!v.called) {
+          v.called = true;
+          l.hold = Math.max(l.hold, 3.2);
+          this.life.ding(this.shop);
+        }
+        if (l.open > 0.75) {
+          const s = this.shop;
+          const tx = l.x + s.nx * 0.2;
+          const tz = l.z + s.nz * 0.2;
+          if (Math.hypot(c.pos.x - tx, c.pos.z - tz) < 0.3 || v.t > v.stay + 8) {
+            this.vanish(v, true);
+            return null;
+          }
+          return { x: tx, z: tz, speed: 1.1 };
+        }
       }
       return null;
     }
@@ -850,14 +880,19 @@ class OpenShop {
       c.fig.sit = 0;
       this.customers = Math.max(0, this.customers - 1);
     }
+    // (down from the lift: one of the street's own from now on, on along this sidewalk)
+    if (v.street) {
+      c.scripted = false;
+      this.game.civilians.rejoin(c);
+    }
   }
 
-  // into the lift (or simply away)
-  vanish(v) {
+  // into the lift (or simply away; quiet: through the lift's open doors)
+  vanish(v, quiet = false) {
     const i = this.visitors.indexOf(v);
     if (i >= 0) this.visitors.splice(i, 1);
     if (!v.own) this.customers = Math.max(0, this.customers - 1);
-    this.game.fx.crumbs(v.c.pos.x, v.c.pos.y + 1, v.c.pos.z, 4, 0.6);
+    if (!quiet) this.game.fx.crumbs(v.c.pos.x, v.c.pos.y + 1, v.c.pos.z, 4, 0.6);
     this.game.civilians.remove(v.c);
   }
 
@@ -1604,10 +1639,82 @@ class OpenShop {
         if (this.visitors.length < 4) this.addVisitor(null);
       }
     }
+    if (this.lifts && this.lifts.length) this.liftLife(dt);
+  }
+
+  // ------------------------------------------------------------------ the lifts
+  liftLife(dt) {
+    for (const l of this.lifts) {
+      if (l.hold > 0) {
+        l.hold -= dt;
+        l.open = Math.min(1, l.open + dt * 1.4);
+      } else l.open = Math.max(0, l.open - dt * 1.1);
+      if (l.down && l.open > 0.7) {
+        l.down = false;
+        this.fromLift(l);
+      }
+    }
+    this.liftT -= dt;
+    if (this.liftT > 0) return;
+    this.liftT = (this.game.touch ? 24 : 12) + Math.random() * 16;
+    if (!this.open || this.visitors.length >= 5) return;
+    const l = pick(this.lifts);
+    if (l.hold > 0) return;
+    l.hold = 3.4;
+    l.down = true;
+    this.life.ding(this.shop);
+  }
+
+  // the lift nearest to somebody waiting for it
+  nearLift(c) {
+    let best = this.lifts[0];
+    for (const l of this.lifts) if (Math.hypot(l.x - c.pos.x, l.z - c.pos.z) < Math.hypot(best.x - c.pos.x, best.z - c.pos.z)) best = l;
+    return best;
+  }
+
+  // somebody down in the lift: across the lobby, out of the door, on along the sidewalk
+  fromLift(l) {
+    const s = this.shop;
+    const c = this.game.civilians.spawnScripted(l.x + s.nx * 0.35, l.z + s.nz * 0.35, civilianLook(), this);
+    c.yaw = s.face;
+    c.noCollide = true;
+    if (Math.random() < 0.3) c.fig.carry = pick(['phone', 'coffee', 'newspaper']);
+    const v = { c, spot: null, mode: 'browse', own: true, phase: 'out', t: 0, pts: null, reachT: 9, stay: 0, street: true };
+    c.exitRoom = this.room;
+    c.exitShop = s;
+    c.ctrl = (civ, dt) => this.visit(v, dt);
+    this.visitors.push(v);
+    this.leave(v);
+  }
+
+  // an open lift: the doors slid apart and the lit car between them, hatched in pen
+  drawLift(fr, l, k) {
+    const s = this.shop;
+    const o = l.open * l.open * (3 - 2 * l.open);
+    const g = 0.7 * o;
+    const y0 = this.room.floor;
+    const x = l.x + s.nx * 0.07;
+    const z = l.z + s.nz * 0.07;
+    // (the strokes close enough together to fill it from where you look)
+    const cam = this.game.camera.position;
+    const gap = Math.min(0.06, Math.max(0.012, Math.hypot(cam.x - x, cam.z - z) * 0.004));
+    const n = Math.max(1, Math.round(g / gap));
+    for (let i = -n; i <= n; i++) {
+      const u = (i / n) * g;
+      fr.lineXYZ(x + s.rx * u, y0 + 0.04, z + s.rz * u, x + s.rx * u, y0 + 2.44, z + s.rz * u, LIFT_CAR, 10, 1300 + k * 50 + (i & 31), 1, 0.003, 0);
+    }
+    for (const u of [-g, g]) fr.lineXYZ(x + s.rx * u, y0 + 0.02, z + s.rz * u, x + s.rx * u, y0 + 2.48, z + s.rz * u, INK, 2.6, 1290 + k * 50 + (u > 0 ? 1 : 0), 1, 0.004, 0);
+    if (g > 0.15) {
+      const w = g - 0.12;
+      fr.lineXYZ(x - s.rx * w, y0 + 2.3, z - s.rz * w, x + s.rx * w, y0 + 2.3, z + s.rz * w, LIFT_LIGHT, 9, 1292 + k * 50, 1, 0.003, 0);
+    }
   }
 
   draw(fr) {
     const s = this.shop;
+    if (this.lifts) {
+      for (let k = 0; k < this.lifts.length; k++) if (this.lifts[k].open > 0.01) this.drawLift(fr, this.lifts[k], k);
+    }
     // the door swings open: warm light from inside (a shop with a closed door)
     if (this.doorT > 0 && !this.room) {
       const a = Math.min(1, this.doorT * 3);
