@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shopkeeperLook, civilianLook, friendLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
-import { BLUEPRINTS } from './blueprints.js';
+import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
 
@@ -462,7 +462,7 @@ SERVICES.boutique = { verb: 'להיכנס לבוטיק', ask: 'לבחור כוב
   ['בלי כובע', null, (game) => heroLook(game, (L) => (L.hat = null), 'בלי כובע')],
 ] };
 SERVICES.arcade = { verb: 'להיכנס לארקייד', ask: 'לשחק במכונה', who: 'המכונה', greet: 'INSERT COIN — מכה אחת במכונה וקורה משהו...', offers: [['לשחק (אולי זוכים בשרטוט)', 'note', (game) => {
-  const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun');
+  const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun' && (!game.classic || !BLUEPRINT_MORE.includes(id)));
   if (left.length && Math.random() < 0.5) giveBlueprint(game, left[Math.floor(Math.random() * left.length)]);
   else {
     heal(10, [0.4, 0.8, 0.95], 'כמעט! לפחות קיבלת סוכרייה. +10 חיים')(game);
@@ -1827,7 +1827,7 @@ class Companion {
     // (ROADMAP 4.5) riding with you in a car, or behind you on a bike
     const v = p.inVehicle;
     const fire = v && v.dmg && v.dmg.burning;
-    const canRide = v && !game.classic && (v.kind === 'car' || v.kind === 'bike') && !v.dead;
+    const canRide = v && !game.classic && (v.kind === 'car' || (v.kind === 'bike' && !v.model)) && !v.dead;
     if (this.riding) {
       if (!canRide || v !== this.ride) return this.getOut(c, p);
       if (fire) {

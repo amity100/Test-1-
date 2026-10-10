@@ -79,7 +79,7 @@ export class Player {
   seatIn(dt) {
     const v = this.inVehicle;
     if (v && v.seat) {
-      if (v.kind === 'bike') v.seatRider(this.fig, dt);
+      if (v.kind === 'bike' || v.model) v.seatRider(this.fig, dt);
       else this.game.traffic.seat(this.fig, v.pos, v.yaw, dt, 1, this.game.classic ? null : v.seatOf());
     }
   }

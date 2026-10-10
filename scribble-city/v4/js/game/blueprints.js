@@ -596,7 +596,130 @@ Object.assign(BLUEPRINTS, {
   },
 });
 
+// (ROADMAP 4.8) more to draw and ride: a bicycle, a kick scooter, a jet ski, a boat, a light plane
+Object.assign(BLUEPRINTS, {
+  bicycle: {
+    id: 'bicycle',
+    name: 'אופניים',
+    the: 'האופניים',
+    g: 'p',
+    nameEn: 'BICYCLE',
+    kind: 'vehicle',
+    difficulty: 2,
+    desc: 'אופניים בעיפרון. שקטים, זריזים בסמטאות, ומצלצלים בפעמון (H).',
+    strokes: [
+      { label: 'גלגל', en: 'wheel', pts: circle(20, 64, 17, 18) },
+      { label: 'גלגל', en: 'wheel', pts: circle(80, 64, 17, 18) },
+      { label: 'שלדה', en: 'frame', pts: close([[44, 64], [36, 34], [72, 36]]) },
+      { label: 'מזלג', en: 'fork', pts: [[72, 36], [80, 64]] },
+      { label: 'מושב', en: 'saddle', pts: [[28, 28], [44, 28]] },
+      { label: 'כידון', en: 'handlebar', pts: [[70, 36], [70, 22], [80, 20]] },
+      { label: 'שרשרת', en: 'chain', pts: [[44, 64], [20, 64]] },
+    ],
+    fills: [
+      { poly: [[44, 64], [36, 34], [72, 36]], color: '#3fa7d6' },
+    ],
+    wheels: [[20, 64, 17], [80, 64, 17]],
+    scale: 1.85,
+  },
+  scooter: {
+    id: 'scooter',
+    name: 'קורקינט',
+    the: 'הקורקינט',
+    g: 'm',
+    nameEn: 'KICK SCOOTER',
+    kind: 'vehicle',
+    difficulty: 1,
+    desc: 'קורקינט קטן. נעמדים עליו ובועטים, ומשתחלים בין האנשים במדרכה.',
+    strokes: [
+      { label: 'קרש', en: 'deck', pts: close([[14, 70], [74, 70], [76, 76], [12, 76]]) },
+      { label: 'מוט', en: 'stem', pts: [[76, 72], [70, 14]] },
+      { label: 'כידון', en: 'T-bar', pts: [[58, 14], [82, 14]] },
+      { label: 'גלגל', en: 'wheel', pts: circle(18, 82, 7, 12) },
+      { label: 'גלגל', en: 'wheel', pts: circle(80, 82, 7, 12) },
+    ],
+    fills: [
+      { poly: [[14, 70], [74, 70], [76, 76], [12, 76]], color: '#9be564' },
+    ],
+    wheels: [[18, 82, 7], [80, 82, 7]],
+    scale: 1.1,
+  },
+  jetski: {
+    id: 'jetski',
+    name: 'אופנוע ים',
+    the: 'אופנוע הים',
+    g: 'm',
+    nameEn: 'JET SKI',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: 'אופנוע ים מהיר. מציירים אותו ליד הטיילת או המזח, והוא נוחת במים. מקפץ על הגלים ומתיז רסס.',
+    strokes: [
+      { label: 'גוף', en: 'hull', pts: close([[8, 64], [70, 64], [96, 52], [84, 46], [40, 46], [10, 54]]) },
+      { label: 'מושב', en: 'seat', pts: close([[22, 46], [52, 46], [50, 38], [24, 38]]) },
+      { label: 'עמוד', en: 'column', pts: [[62, 46], [68, 26]] },
+      { label: 'כידון', en: 'handlebar', pts: [[60, 24], [76, 24]] },
+      { label: 'פס', en: 'stripe', pts: [[20, 56], [80, 54]] },
+    ],
+    fills: [
+      { poly: [[8, 64], [70, 64], [96, 52], [84, 46], [40, 46], [10, 54]], color: '#ffd23f' },
+      { poly: [[22, 46], [52, 46], [50, 38], [24, 38]], color: '#2f3038' },
+    ],
+    scale: 3.0,
+  },
+  boat: {
+    id: 'boat',
+    name: 'סירת מנוע',
+    the: 'סירת המנוע',
+    g: 'f',
+    nameEn: 'SPEEDBOAT',
+    kind: 'vehicle',
+    difficulty: 4,
+    desc: 'סירת מנוע קטנה. נוחתת במים ליד הטיילת או המזח, ושטה בכל המפרץ.',
+    strokes: [
+      { label: 'גוף', en: 'hull', pts: close([[6, 52], [78, 52], [98, 40], [74, 66], [12, 66]]) },
+      { label: 'שמשה', en: 'windscreen', pts: [[44, 52], [52, 34], [62, 36], [66, 52]] },
+      { label: 'מנוע', en: 'outboard', pts: close([[2, 44], [10, 44], [10, 70], [4, 76], [2, 70]]) },
+      { label: 'פס', en: 'stripe', pts: [[14, 60], [84, 58]] },
+      { label: 'מעקה', en: 'rail', pts: [[70, 46], [90, 40]] },
+    ],
+    fills: [
+      { poly: [[6, 52], [78, 52], [98, 40], [74, 66], [12, 66]], color: '#f4f1e8' },
+      { poly: [[44, 52], [52, 34], [62, 36], [66, 52]], color: '#bcd8ea' },
+      { poly: [[2, 44], [10, 44], [10, 70], [4, 76], [2, 70]], color: '#2f3038' },
+    ],
+    scale: 5.4,
+  },
+  plane: {
+    id: 'plane',
+    name: 'מטוס קל',
+    the: 'המטוס הקל',
+    g: 'm',
+    nameEn: 'LIGHT PLANE',
+    kind: 'vehicle',
+    difficulty: 5,
+    desc: 'מטוס קל עם מדחף. צריך מסלול ישר וארוך להמראה (השדרה, הטיילת), מהירות, ואז רווח כדי לעלות.',
+    strokes: [
+      { label: 'גוף', en: 'fuselage', pts: close([[8, 46], [72, 42], [92, 46], [90, 54], [72, 58], [10, 52]]) },
+      { label: 'כנף', en: 'wing', pts: close([[40, 48], [64, 48], [58, 54], [36, 54]]) },
+      { label: 'זנב', en: 'tail fin', pts: close([[8, 46], [6, 26], [18, 28], [24, 45]]) },
+      { label: 'מדחף', en: 'propeller', pts: [[94, 36], [94, 64]] },
+      { label: 'תא טייס', en: 'cockpit', pts: [[56, 43], [62, 34], [74, 36], [78, 43]] },
+      { label: 'גלגל', en: 'wheel', pts: circle(62, 70, 5, 10) },
+      { label: 'רגל', en: 'gear leg', pts: [[62, 56], [62, 65]] },
+    ],
+    fills: [
+      { poly: [[8, 46], [72, 42], [92, 46], [90, 54], [72, 58], [10, 52]], color: '#f4f1e8' },
+      { poly: [[40, 48], [64, 48], [58, 54], [36, 54]], color: '#d8463b' },
+      { poly: [[8, 46], [6, 26], [18, 28], [24, 45]], color: '#d8463b' },
+      { poly: [[56, 43], [62, 34], [74, 36], [78, 43]], color: '#bcd8ea' },
+    ],
+    scale: 8.0,
+  },
+});
+
 export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shield', 'stapler', 'bandage', 'shotgun', 'katana', 'glue', 'inkbomb', 'boomerang', 'planes', 'bike', 'laser', 'copter', 'minigun', 'tippex', 'erasermg', 'paintmg', 'parachute'];
+// (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
+export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
 
 export function blueprintBounds(bp) {
   let x0 = Infinity;

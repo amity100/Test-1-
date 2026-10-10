@@ -1,4 +1,4 @@
-import { BLUEPRINTS, BLUEPRINT_ORDER, drawBlueprint } from '../game/blueprints.js';
+import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, drawBlueprint } from '../game/blueprints.js';
 import { GRADE } from '../game/weapons.js';
 
 const KEY = 'scribble-city-album-v1';
@@ -69,14 +69,19 @@ export class Album {
     this.save();
   }
 
+  // (the new ones, ROADMAP 4.8: not with ?classic)
+  get order() {
+    return this.game.classic ? BLUEPRINT_ORDER : this._order || (this._order = [...BLUEPRINT_ORDER, ...BLUEPRINT_MORE]);
+  }
+
   get size() {
-    return ALL_OPEN ? BLUEPRINT_ORDER.length : this.items.size;
+    return ALL_OPEN ? this.order.length : this.items.size;
   }
 
   // in the order of the shelves (the arrows in the drawing go through them like this)
   ids() {
     const out = [];
-    for (const [, fits] of SHELVES) for (const id of BLUEPRINT_ORDER) if (fits(BLUEPRINTS[id]) && this.has(id)) out.push(id);
+    for (const [, fits] of SHELVES) for (const id of this.order) if (fits(BLUEPRINTS[id]) && this.has(id)) out.push(id);
     return out;
   }
 
@@ -91,7 +96,7 @@ export class Album {
       head.className = 'album-shelf';
       head.textContent = title;
       this.list.appendChild(head);
-      for (const id of BLUEPRINT_ORDER) if (fits(BLUEPRINTS[id])) this.addItem(id, id === last);
+      for (const id of this.order) if (fits(BLUEPRINTS[id])) this.addItem(id, id === last);
     }
     this.el.classList.remove('hidden');
     this.open = true;

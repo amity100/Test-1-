@@ -605,6 +605,18 @@ export class Audio {
       f = 220 + Math.sin(t * 6) * 30 + level * 80;
       vol = 0.03;
       this.engFilter.frequency.setTargetAtTime(1200, t, 0.05);
+    } else if (kind === 'boat') {
+      // (ROADMAP 4.8) an outboard's deep thrum; a propeller's flutter; pedals: quiet
+      f = 42 + level * 95;
+      vol = 0.06 + level * 0.03;
+      this.engFilter.frequency.setTargetAtTime(380 + level * 600, t, 0.06);
+    } else if (kind === 'prop') {
+      f = 70 + level * 150 + Math.sin(t * 40) * 6;
+      vol = 0.05 + level * 0.04;
+      this.engFilter.frequency.setTargetAtTime(700 + level * 1100, t, 0.05);
+    } else if (kind === 'pedal') {
+      f = 60;
+      vol = 0;
     } else if (kind === 'beam') {
       f = 440 + Math.sin(t * 30) * 60;
       vol = 0.05;

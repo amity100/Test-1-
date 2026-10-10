@@ -3,6 +3,7 @@ import { surfaceVariant } from '../render/materials.js';
 import { buildWeaponModel } from './items.js';
 import { canopyModel } from './parachute.js';
 import { groundHeight, BOUNDS } from '../world/layout.js';
+import { waterSpot } from './rides.js';
 
 // A drawing turning into the real thing.
 //
@@ -145,8 +146,9 @@ function findSpot(game, v, so, box) {
       for (const b of [-halfWid, 0, halfWid]) {
         const px = x + fx * a + so.an.x * b;
         const pz = z + fz * a + so.an.z * b;
-        // on the city's ground (not in the bay), clear of walls and things
-        if (px < BOUNDS.minX || pz < BOUNDS.minZ || pz > BOUNDS.maxZ || groundHeight(px, pz) < 0) return false;
+        // on the city's ground (not in the bay), clear of walls and things (a boat: on the bay)
+        if (px < BOUNDS.minX || pz < BOUNDS.minZ || pz > BOUNDS.maxZ) return false;
+        if (v.kind === 'boat' ? groundHeight(px, pz) > -0.5 : groundHeight(px, pz) < 0) return false;
         if (col.pointInside(px, 1.0, pz, 0.3)) return false;
       }
     }
@@ -174,8 +176,14 @@ export function planDrawing(game, bp, res, sheet) {
     const v = game.vehicles.create(bp.id, res.grade, res.score);
     const box = v.kind === 'car' ? game.cars.boxOf(v.carKind) : localBox(v.group);
     const spot = findSpot(game, v, so, box);
-    if (spot) v.pos.set(spot.x, v.flies ? 0 : groundHeight(spot.x, spot.z) * 0.5, spot.z);
-    else game.vehicles.placeNear(v);
+    if (spot) v.pos.set(spot.x, v.flies ? 0 : v.kind === 'boat' ? -0.8 : groundHeight(spot.x, spot.z) * 0.5, spot.z);
+    else if (v.kind === 'boat') {
+      // (ROADMAP 4.8) drawn away from the water: it lands in the bay, by the wall nearest you
+      const p = game.player.pos;
+      const w = waterSpot(p.x, p.z, v.halfWid || 1) || { x: 24, z: Math.max(-380, Math.min(300, p.z)) };
+      v.pos.set(w.x, -0.8, w.z);
+      if (Math.hypot(w.x - p.x, w.z - p.z) > 15) game.hud.toast(`${bp.the || v.label} מחכה לך במים, ליד הטיילת`, 'info', 2.6);
+    } else game.vehicles.placeNear(v);
     v.yaw = so.yaw;
     plan.vehicle = v;
     plan.frame = makeFrame(game.camera, v.pos, so.q, 1, box);

@@ -151,7 +151,8 @@ export class HUD {
     this.damageEl.style.opacity = `${Math.max(dmgA * 0.9, p.hp < 30 ? 0.35 + Math.sin(game.time * 6) * 0.15 : 0)}`;
     this.crosshair.classList.toggle('melee', game.weapons.current.def.kind === 'melee');
     // (in a car: while a gun is out of the window, ROADMAP 4.7)
-    this.crosshair.style.display = (p.mode === 'foot' && !game.inBar) || (v && v.kind !== 'car') || game.weapons.shootOut ? '' : 'none';
+    // (on a boat, in the plane: nothing to aim, ROADMAP 4.8)
+    this.crosshair.style.display = (p.mode === 'foot' && !game.inBar) || (v && v.kind !== 'car' && v.kind !== 'boat' && v.kind !== 'plane') || game.weapons.shootOut ? '' : 'none';
     // the minimap looks further around the faster you go (and closer again on foot)
     const sp = v ? v.speedAbs || Math.abs(v.speed || 0) : 0;
     if (sp > 9) this.mapFar = true;

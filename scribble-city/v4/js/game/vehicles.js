@@ -3,6 +3,7 @@ import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight } from '../world/layout.js';
 import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
+import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake } from './rides.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
 // The things you drive: the city's own cars (taken from the traffic or from the curb), and the
@@ -31,6 +32,9 @@ const VEH = {
   tank: { width: 3.2, hp: 520, len: 3.3 },
   bike: { width: 0.6, hp: 120, len: 1.1 },
   copter: { width: 1.6, hp: 320, len: 3.0 },
+  // (ROADMAP 4.8: a jet ski's and a boat's, a light plane's)
+  boat: { width: 1.9, hp: 160, len: 2.6 },
+  plane: { width: 9.6, hp: 170, len: 3.8 },
 };
 
 const QUALITY = {
@@ -266,11 +270,15 @@ class Vehicle {
   constructor(mgr, kind, grade, score, stock = null) {
     this.mgr = mgr;
     this.game = mgr.game;
+    // (ROADMAP 4.8: the new drawings ride as one of the kinds - a bicycle as a bike, a jet ski
+    // as a boat - with a model of their own)
+    this.model = RIDES[kind] ? kind : null;
+    if (this.model) kind = RIDES[kind];
     this.kind = kind;
     this.grade = grade;
     this.score = score;
     this.q = QUALITY[grade];
-    this.bp = BLUEPRINTS[kind];
+    this.bp = BLUEPRINTS[this.model || kind];
     this.cfg = VEH[kind];
     this.maxHp = Math.round(this.cfg.hp * this.q.hp);
     this.hp = this.maxHp;
@@ -304,6 +312,16 @@ class Vehicle {
       this.label = stock ? (stock.police ? 'ניידת' : stock.taxi ? 'מונית' : 'מכונית') : BLUEPRINTS.car.name;
       if (!stock) this.racing = true;
       this.reveal = stock ? 1 : 0;
+    } else if (this.model) {
+      const m = MODELS[this.model](grade);
+      Object.assign(this, m);
+      this.body.matrixAutoUpdate = true;
+      this.group.add(this.body);
+      this.seat = true;
+      this.label = this.bp.name;
+      this.flies = kind === 'plane';
+      if (kind === 'boat') this.pos.y = -0.8;
+      mgr.game.scene.add(this.group);
     } else {
       const m = kind === 'tank' ? tankModel(grade) : kind === 'bike' ? bikeModel(grade) : copterModel(grade);
       Object.assign(this, m);
@@ -376,12 +394,33 @@ class Vehicle {
     if ((this.kind === 'car' || this.kind === 'bike') && !this.game.classic) this.drive(dt, input);
     else if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
     else if (this.kind === 'tank') this.updateTank(dt, input);
-    else this.updateCopter(dt, input);
+    else if (this.kind === 'boat') updateBoat(this, dt, input);
+    else if (this.kind === 'plane') {
+      updatePlane(this, dt, input);
+      if (this.dead) return;
+    } else this.updateCopter(dt, input);
     this.wheelSpin += (this.speed * dt) / 0.36;
     if (this.kind === 'car') return;
     this.group.position.copy(this.pos);
     this.group.rotation.set(0, this.yaw, 0);
     this.group.scale.setScalar(pop);
+    if (this.model) {
+      // (ROADMAP 4.8) the pedals going round, the boat on the waves, the plane pitched and banked
+      if (this.crank) {
+        this.crankA = (this.crankA || 0) + (this.speed * dt) / (0.34 * 2.4);
+        this.crank.rotation.x = this.crankA;
+      }
+      if (this.kind === 'boat') {
+        this.body.rotation.x = this.pitchV || 0;
+        this.body.rotation.z = this.rollV || 0;
+      } else if (this.kind === 'plane') {
+        this.body.rotation.x = -(this.pitch || 0);
+        this.body.rotation.z = -(this.roll || 0);
+        this.prop.rotation.z += dt * (4 + (this.thr || 0) * 60);
+        for (const w of this.wheels) w.rotation.x = this.flying ? w.rotation.x : this.wheelSpin;
+        return;
+      }
+    }
     if (this.kind === 'copter') {
       // the rotor whirls (fast when someone flies it), the body leans into where it goes
       const spin = this.driver ? 26 : this.alt > 1.2 ? 14 : 2;
@@ -658,7 +697,7 @@ class Vehicle {
   drive(dt, input) {
     const q = this.q;
     const bike = this.kind === 'bike';
-    const H = HANDLING[bike ? 'bike' : this.carKind] || HANDLING.sedan;
+    const H = HANDLING[bike ? this.model || 'bike' : this.carKind] || HANDLING.sedan;
     // (the garage's upgrades, and the tank: game/garage.js, ROADMAP 4.6)
     const U = this.up;
     const dry = this.fuel === 0 ? 1 : 0;
@@ -786,7 +825,9 @@ class Vehicle {
       this.vz = fz * this.speed + fx * vS * 0.3;
     }
     this.runOver();
-    if (input) this.game.audio.engine(this.speedAbs / top, bike ? 'bike' : 'car');
+    // (a bicycle's, a scooter's: no engine; a bicycle's bell on H)
+    if (input) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike ? 'bike' : 'car');
+    if (input && this.model === 'bicycle' && input.wasPressed('KeyH')) this.game.audio.play('bikebell', 0.7);
   }
 
   // dark marks behind the back wheels while it slides (a long trail the city keeps a while)
@@ -961,6 +1002,11 @@ class Vehicle {
 
   // the bike's rider: astride the seat, hands on the bars
   seatRider(fig, dt) {
+    // (ROADMAP 4.8: on the saddle, the deck, at the helm, in the cockpit: game/rides.js)
+    if (this.model) {
+      seatOn(this, fig, dt);
+      return;
+    }
     const fx = Math.sin(this.yaw);
     const fz = Math.cos(this.yaw);
     const s = this.seat === true ? [0, 1.0, -0.3] : this.seatPos || [0, 1.0, -0.3];
@@ -996,6 +1042,9 @@ const HANDLING = {
   garbage: { mass: 3.4, power: 7.5, top: 20, grip: 5.5, slide: 0.83, steer: 0.8, roll: 1.2, pitch: 0.55 },
   firetruck: { mass: 3.6, power: 9, top: 25, grip: 5.5, slide: 0.83, steer: 0.8, roll: 1.1, pitch: 0.5 },
   bike: { mass: 0.6, power: 20, top: 36, grip: 11, slide: 1.8, steer: 1.9, roll: 0, pitch: 0.4 },
+  // (ROADMAP 4.8: pedalled, kicked)
+  bicycle: { mass: 0.45, power: 4.2, top: 9.5, grip: 10, slide: 1.6, steer: 2.1, roll: 0, pitch: 0.2 },
+  scooter: { mass: 0.35, power: 3.0, top: 6.5, grip: 9, slide: 1.4, steer: 2.3, roll: 0, pitch: 0.15 },
 };
 
 // the stunt ramps in the alleys (with their wooden planks, drawn by the car batches)
@@ -1172,6 +1221,8 @@ export class Vehicles {
   // (ROADMAP 4.3) the skid marks, fading; the stunt ramps in the alleys
   drawExtras(cars) {
     const game = this.game;
+    // (the boats' wakes: game/rides.js)
+    for (const v of this.list) if (v.kind === 'boat' && v.wake) drawWake(v, game.figures, game.time);
     const cam = game.camera.position;
     const S = this.skidList;
     if (S && S.length) {

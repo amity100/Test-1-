@@ -58,6 +58,7 @@ import { Voices } from './voices.js';
 import { Fleet } from './fleet.js';
 import { Damage } from './damage.js';
 import { Garage } from './garage.js';
+import { shoreNear } from './rides.js';
 import { PaintShop } from '../ui/paintshop.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
@@ -74,6 +75,15 @@ const GRADE_TEXT = {
   good: (n) => `ציור טוב — ה${n} מוכן`,
   wonky: (n) => `יצא עקום… ה${n} יעבוד רק חלקית`,
   fail: (n) => `ציירת לא טוב — יצא ${n} מקולקל`,
+};
+// (the new pages, ROADMAP 4.8, say it the way Hebrew does: the name made definite (bp.the), the
+// words agreeing with it (bp.g: m, f, or p for plural))
+const AGREE = { m: ['חזק', 'מוכן', 'יעבוד', 'יצא', 'מקולקל'], f: ['חזקה', 'מוכנה', 'תעבוד', 'יצאה', 'מקולקלת'], p: ['חזקים', 'מוכנים', 'יעבדו', 'יצאו', 'מקולקלים'] };
+const GRADE_THE = {
+  perfect: (bp, a) => `ציור מושלם! ${bp.the} ${a[0]} במיוחד`,
+  good: (bp, a) => `ציור טוב — ${bp.the} ${a[1]}`,
+  wonky: (bp, a) => `יצא עקום… ${bp.the} ${a[2]} רק חלקית`,
+  fail: (bp, a) => `ציירת לא טוב — ${a[3]} ${bp.name} ${a[4]}`,
 };
 
 export class Game {
@@ -759,7 +769,11 @@ export class Game {
         while (d < -Math.PI) d += Math.PI * 2;
         this.camRig.yaw += d * (1 - Math.exp(-2.5 * dt));
       }
-      const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'copter' ? { dist: 13, height: 3.2, shoulder: 0 } : v.kind === 'bike' ? { dist: 5.2, height: 2.2, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 150) } : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
+      const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'copter' ? { dist: 13, height: 3.2, shoulder: 0 } : v.kind === 'bike' ? { dist: v.model ? 4.6 : 5.2, height: v.model ? 2.0 : 2.2, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 150) }
+        // (ROADMAP 4.8: on the water, in the air)
+        : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
+        : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
+        : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
       this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
@@ -1098,7 +1112,7 @@ export class Game {
     if (p.mode === 'draw') p.mode = 'foot';
     this.album.recordGrade(bp.id, res.score);
     const grade = res.grade;
-    const msg = GRADE_TEXT[grade](bp.name);
+    const msg = bp.the ? GRADE_THE[grade](bp, AGREE[bp.g || 'm']) : GRADE_TEXT[grade](bp.name);
     // (what the drawing became is said once it is all there, not over the show)
     const said = [];
     const say = (...a) => (plan ? said.push(a) : this.hud.toast(...a));
@@ -1149,7 +1163,8 @@ export class Game {
         v = this.vehicles.add(plan.vehicle);
         this.materialize.begin({ frame: plan.frame, root: v.kind === 'car' ? null : v.group, car: v.kind === 'car' ? v : null, vehicle: v, onReal });
       } else v = this.vehicles.spawn(bp.id, grade, res.score);
-      say(this.touch ? `לחצו על כפתור הרכב הירוק כדי להיכנס ל${bp.name}` : `לחצו E כדי להיכנס ל${bp.name}`, 'info', 3);
+      const getIn = bp.the ? `לעלות על ${bp.the}` : `להיכנס ל${bp.name}`;
+      say(this.touch ? `לחצו על כפתור הרכב הירוק כדי ${getIn}` : `לחצו E כדי ${getIn}`, 'info', 3);
       v.strokes = strokes;
       if (bp.id === 'car') this.goalFlags.car = true;
     }
@@ -1278,6 +1293,15 @@ export class Game {
     const p = this.player;
     const v = p.inVehicle;
     if (!v) return;
+    // (ROADMAP 4.8) out of a boat: onto the promenade or the pier, if one is a step away
+    let shore = null;
+    if (v.kind === 'boat' && !v.dead) {
+      shore = shoreNear(v);
+      if (!shore && !force) {
+        this.hud.toast('אין לאן לרדת כאן — שוטים לטיילת או למזח', 'info', 2.2);
+        return;
+      }
+    }
     v.driver = null;
     // (left in one of your bays at the station: kept, game/garage.js)
     this.garage.onExit(v);
@@ -1307,6 +1331,9 @@ export class Game {
       }
     }
     if (!placed) p.pos.set(v.pos.x, v.pos.y + 2, v.pos.z);
+    if (shore) p.pos.set(shore.x, shore.y, shore.z);
+    // (off the saddle: the legs walk again)
+    p.fig.ride = 0;
     p.vel.set(0, 0, 0);
     if (v.flies && v.alt > 3) {
       p.vel.y = 0;
@@ -1476,8 +1503,12 @@ export class Game {
     if (p.inVehicle) {
       enter = true;
       prompt = touch ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
-      // (a gun in hand: out of the window, ROADMAP 4.7)
+      // (ROADMAP 4.8: the plane's controls; out of a boat only by the shore; the bicycle's bell)
       const pv = p.inVehicle;
+      if (!touch && pv.kind === 'plane') prompt = pv.flying ? 'W/S — מצערת · A/D — הטיה · רווח/C — האף למעלה/למטה · E — לקפוץ' : 'W — מצערת (מסלול ישר!) · במהירות: רווח להמראה · E — לצאת';
+      else if (!touch && pv.kind === 'boat') prompt = 'E — לצאת (ליד הטיילת או המזח)';
+      else if (!touch && pv.model === 'bicycle') prompt = 'H — פעמון · E — לצאת';
+      // (a gun in hand: out of the window, ROADMAP 4.7)
       if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && this.weapons.current.def.kind === 'gun') prompt = 'קליק — ירי מהחלון · E — לצאת';
       // (at the service station: what stopping here does, game/garage.js)
       const gp = this.garage.prompt();
@@ -1495,7 +1526,9 @@ export class Game {
       if (et) {
         enter = true;
         const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? 'לגנוב את ה' : 'להיכנס ל';
-        prompt = touch ? '' : `E — ${verb}${et.label}`;
+        // (onto the new rides, ROADMAP 4.8: you get on them)
+        const on = et.kind === 'vehicle' && et.target.model ? BLUEPRINTS[et.target.model].the : null;
+        prompt = touch ? '' : on ? `E — לעלות על ${on}` : `E — ${verb}${et.label}`;
       } else {
         const b = this.photoTarget();
         if (b) {

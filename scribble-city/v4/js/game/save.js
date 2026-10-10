@@ -1,6 +1,6 @@
 import { WEAPON_DEFS } from './weapons.js';
 import { buildWeaponModel } from './items.js';
-import { BLUEPRINTS } from './blueprints.js';
+import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { openWall } from '../world/rooms.js';
 import { districtName } from '../world/layout.js';
 import * as store from '../core/store.js';
@@ -98,7 +98,7 @@ export class SaveGame {
       weapons: g.weapons.slots.slice(1).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score })),
       weapon: g.weapons.index,
       vehicles: g.vehicles.list.filter((o) => !o.dead).map((o) => ({
-        kind: o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
+        kind: o.model || o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
         x: o.pos.x, y: o.pos.y, z: o.pos.z, yaw: o.yaw, hp: o.hp, alt: o.alt || 0, mine: o === v,
         // (the garage's work, the tank, the dust, your parking: ROADMAP 4.6)
         paint: o.kind === 'car' && o.color ? o.color.slice() : null, design: o.design || null, up: o.up || null,
@@ -232,7 +232,8 @@ export class SaveGame {
       let v;
       if (it.stock) v = V.spawnStock(it.stock, { x: it.x, z: it.z }, it.yaw);
       else {
-        if (!BLUEPRINTS[it.kind]) continue;
+        // (the new rides, ROADMAP 4.8, are not in ?classic)
+        if (!BLUEPRINTS[it.kind] || (g.classic && BLUEPRINT_MORE.includes(it.kind))) continue;
         v = V.create(it.kind, it.grade, it.score);
         v.pos.set(it.x, it.y, it.z);
         v.yaw = it.yaw;

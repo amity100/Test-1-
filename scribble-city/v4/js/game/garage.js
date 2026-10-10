@@ -78,7 +78,8 @@ export class Garage {
   // the car you are in, if it is one the station can work on
   carOf() {
     const v = this.game.player.inVehicle;
-    return v && (v.kind === 'car' || v.kind === 'bike') && !v.dead && !v.materializing ? v : null;
+    // (a bicycle, a scooter: nothing here for them, ROADMAP 4.8)
+    return v && (v.kind === 'car' || (v.kind === 'bike' && !v.model)) && !v.dead && !v.materializing ? v : null;
   }
 
   // inside a bay's door (and not just driving past its front)
@@ -215,12 +216,14 @@ export class Garage {
     const U = v.up || {};
     const n = UPS.reduce((a, u) => a + (U[u.id] || 0), 0);
     const hurt = v.hp < v.maxHp - 0.5 || (v.dmg && (v.dmg.d0 || v.dmg.glass || v.dmg.flat >= 0 || v.dmg.bumper || v.dmg.burning));
-    game.dialog.show('מוסך INK & IRON', 'שלום! מה עושים לרכב היום? (בינתיים הכול בחינם)', [
-      { label: 'צבע חדש וציור על הרכב', fn: () => this.paint(v) },
+    const choices = [
       { label: `שדרוגים (${n} מתוך ${UPS.length * 3})`, fn: () => this.upgrades(v) },
       { label: hurt ? 'תיקון: פחחות, זכוכית, צמיגים' : 'תיקון (הרכב שלם)', fn: () => this.repair(v) },
       { label: 'לנסוע', fn: () => this.leave() },
-    ]);
+    ];
+    // (the paint shop is for cars: a motorbike's paint is its own)
+    if (v.kind === 'car') choices.unshift({ label: 'צבע חדש וציור על הרכב', fn: () => this.paint(v) });
+    game.dialog.show('מוסך INK & IRON', 'שלום! מה עושים לרכב היום? (בינתיים הכול בחינם)', choices);
   }
 
   paint(v) {
