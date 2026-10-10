@@ -163,6 +163,8 @@ export class Police {
       this.reports = this.reports.filter((r) => !r.done);
     }
     this.updatePatrols(dt);
+    // (roadblocks ahead of you in a car: ROADMAP 6.1, game/chase.js)
+    if (game.chase) game.chase.update(dt);
     if (this.level <= 0) {
       game.audio.siren(0);
       return;
@@ -219,7 +221,9 @@ export class Police {
     if (this.dispatchT <= 0) {
       this.dispatchT = Math.max(3, 8 - this.level);
       let active = 0;
-      for (const e of game.enemies.list) if (e.faction === 'police' && e.alive && e.state !== 'flee') active++;
+      // (you driving off: the officers left far behind on foot are out of it, ROADMAP 6.1)
+      const away = game.chase && game.chase.quarry() ? 60 : Infinity;
+      for (const e of game.enemies.list) if (e.faction === 'police' && e.alive && e.state !== 'flee' && Math.hypot(e.pos.x - pp.x, e.pos.z - pp.z) < away) active++;
       for (const c of game.traffic.list) if (c.police && c.crew) active += c.crew.length;
       if (active < UNITS[this.level]) this.dispatch();
     }

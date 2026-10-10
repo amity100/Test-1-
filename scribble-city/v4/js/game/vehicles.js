@@ -752,7 +752,11 @@ class Vehicle {
       const k = Math.min(1, Math.abs(vL) / 5) * (1 - 0.45 * Math.min(1, Math.abs(vL) / top)) * (hand ? 1.55 : 1);
       const pull = input ? q.pull * 0.5 : 0;
       const want = (steer + pull) * H.steer * k * Math.sign(vL || 1);
-      this.yawRate = damp(this.yawRate, want, (9 / H.mass) * steerK, dt);
+      // (shoved round by a police car: for a moment the tyres let go - ROADMAP 6.1, game/chase.js)
+      if (this.spinT > 0) {
+        this.spinT -= dt;
+        this.yawRate *= Math.exp(-1.6 * dt);
+      } else this.yawRate = damp(this.yawRate, want, (9 / H.mass) * steerK, dt);
     } else this.yawRate *= Math.exp(-0.8 * dt);
     this.yaw += this.yawRate * dt;
     // its speed along where it now points, and across
@@ -775,7 +779,7 @@ class Vehicle {
       // the handbrake: the back wheels locked
       if (hand) vL -= vL * 0.6 * dt;
       // the tyres' grip across: the slip dies away (hardly, with the handbrake on)
-      const grip = (hand ? H.slide : H.grip * (1 - 0.25 * Math.min(1, (Math.abs(steer) * Math.abs(vL)) / top))) * gripK;
+      const grip = (hand || this.spinT > 0 ? H.slide : H.grip * (1 - 0.25 * Math.min(1, (Math.abs(steer) * Math.abs(vL)) / top))) * gripK;
       vS *= Math.exp(-grip * dt);
     }
     this.vx = fx * vL - fz * vS;

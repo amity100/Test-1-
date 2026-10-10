@@ -65,6 +65,7 @@ import { Swim } from './swim.js';
 import { Ragdolls } from './ragdoll.js';
 import { Skills } from './skills.js';
 import { dress, armorBar } from './wardrobe.js';
+import { Chase } from './chase.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
@@ -220,6 +221,8 @@ export class Game {
     if (!this.classic) this.weapons.addFists();
     // (bodies thrown by a car or a blast fall like real ones: ROADMAP 5.5)
     this.ragdolls = this.classic ? null : new Ragdolls(this);
+    // (the police after you in a car: shoves, cars across the road, roadblocks; ROADMAP 6.1)
+    this.chase = this.classic ? null : new Chase(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });

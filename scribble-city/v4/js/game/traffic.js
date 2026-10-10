@@ -962,6 +962,8 @@ export class Traffic {
   updatePolice(c, dt) {
     const game = this.game;
     const P = game.police;
+    // (with you in a car: up behind you and into your back wheel - ROADMAP 6.1, game/chase.js)
+    if (c.mode === 'pursuit' && game.chase && game.chase.drive(c, dt)) return;
     if (c.mode === 'pursuit') {
       c.siren = true;
       c.path = null;
@@ -1000,7 +1002,8 @@ export class Traffic {
           P.deploy(c);
         }
       } else {
-        const vmax = d < 35 ? 9 : 17;
+        // (after you in a car: as fast as the stars let it, ROADMAP 6.1)
+        const vmax = (game.chase && game.chase.pathSpeed()) || (d < 35 ? 9 : 17);
         c.speed = damp(c.speed, vmax * (turn > 0.9 ? 0.3 : turn > 0.4 ? 0.65 : 1), why ? 6 : 1.4, dt);
         if (why === 'car' || why === 'other') c.speed = Math.min(c.speed, 3);
       }
@@ -1216,6 +1219,8 @@ export class Traffic {
         c.pos.z -= (dz / d) * push * 0.3;
         // knocked off its lane: it stays where it was hit
         c.path = null;
+        // (a police car after you shoves you round instead: ROADMAP 6.1, game/chase.js)
+        if (this.game.chase && this.game.chase.contact(v, c)) continue;
         if (Math.abs(v.speed) > 6) {
           // (dented where they met: game/damage.js)
           if (!this.game.classic && this.game.damage) this.game.damage.crash(v, c, Math.abs(v.speed));
