@@ -120,7 +120,13 @@ export class Nightlife {
       const c = q.people[Math.floor(Math.random() * q.people.length)];
       c.talkT = 3;
       const p = game.player.pos;
-      if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 16) game.bubbles.say(c, CHAT[Math.floor(Math.random() * CHAT.length)]);
+      if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 16) {
+        // (the one next in the line answers: game/voices.js)
+        const k = q.people.indexOf(c);
+        const o = q.people[k + 1] || q.people[k - 1];
+        if (!game.classic && o && !o.going && game.voices.chat([c, o], q.kind === 'club' ? 'queue' : 'cinema')) c.talkT = 6;
+        else game.bubbles.say(c, CHAT[Math.floor(Math.random() * CHAT.length)]);
+      }
     }
     // the next one goes in
     q.t -= dt;

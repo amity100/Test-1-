@@ -13,8 +13,10 @@ export const DEFAULTS = {
   radio: 1,
   sens: 1,
   invertY: false,
-  // the radio's words on the screen (and, later, what people say)
+  // the radio's words on the screen, and what people say (near you, behind you, or aloud)
   subtitles: true,
+  // what people say, aloud in the browser's own voice (game/voices.js)
+  voices: false,
   perf: false,
   // null: as the device likes it (the lines tremble with a mouse and keep still on a phone, a
   // phone draws with fewer colours a stroke)

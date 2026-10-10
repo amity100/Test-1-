@@ -770,6 +770,8 @@ export class Civilians {
         c.panicT = 4;
         c.fearX = pos.x;
         c.fearZ = pos.z;
+        // ("Slow down!": game/voices.js)
+        if (!this.game.classic) this.game.voices.dodged(c);
       }
     }
   }
@@ -935,7 +937,12 @@ export class Civilians {
         talkT = 3 + Math.random() * 5;
         const p = this.game.player.pos;
         const who = Math.random() < 0.5 ? me : L;
-        if (Math.hypot(who.pos.x - p.x, who.pos.z - p.z) < 18) this.game.bubbles.say(who, lines[Math.floor(Math.random() * lines.length)]);
+        if (Math.hypot(who.pos.x - p.x, who.pos.z - p.z) < 18) {
+          // (and the other one answers: game/voices.js)
+          if (!this.game.classic) {
+            if (this.game.voices.chat([who, who === me ? L : me])) talkT += 6;
+          } else this.game.bubbles.say(who, lines[Math.floor(Math.random() * lines.length)]);
+        }
       }
       if (lsp < 0.2 && d < 1.4) {
         // stopped: turned to each other, talking

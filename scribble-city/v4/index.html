@@ -57,6 +57,7 @@
     </div>
 
     <div id="radio" class="hidden" dir="ltr"></div>
+    <div id="subs" class="hidden" dir="ltr"></div>
     <div id="hidden-tag" class="hidden">מוסתר</div>
     <div id="prompt" class="hidden"></div>
     <div id="toasts"></div>
@@ -214,6 +215,7 @@
           <label class="opt vol"><span>אפקטים וקולות העיר</span><input type="range" id="opt-vol-fx" min="0" max="1" step="0.05" value="1"></label>
           <label class="opt vol"><span>מוזיקה במקומות</span><input type="range" id="opt-vol-music" min="0" max="1" step="0.05" value="1"></label>
           <label class="opt vol"><span>רדיו</span><input type="range" id="opt-vol-radio" min="0" max="1" step="0.05" value="1"></label>
+          <label class="opt"><input type="checkbox" id="opt-voices"> קולות: אנשים מדברים בקול (באנגלית, בקול של הדפדפן)</label>
         </section>
         <section class="opt-group">
           <h3>שליטה</h3>
@@ -222,7 +224,7 @@
         </section>
         <section class="opt-group">
           <h3>תצוגה</h3>
-          <label class="opt"><input type="checkbox" id="opt-subs" checked> כתוביות (המילים ברדיו)</label>
+          <label class="opt"><input type="checkbox" id="opt-subs" checked> כתוביות (ברדיו, ומה שאנשים אומרים)</label>
           <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים רועדים</label>
           <label class="opt"><input type="checkbox" id="opt-look" checked> השתקפויות ברחוב הרטוב</label>
           <label class="opt"><input type="checkbox" id="opt-magic" checked> איכות גבוהה (עוד צבעים בכל משיכה)</label>

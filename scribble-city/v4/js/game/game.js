@@ -54,6 +54,7 @@ import { Events } from './events.js';
 import { Reactions } from './reactions.js';
 import { FarCrowd } from './farcrowd.js';
 import { Animals } from './animals.js';
+import { Voices } from './voices.js';
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -177,6 +178,8 @@ export class Game {
     this.farCrowd = new FarCrowd(this);
     // cats in the alleys, little birds on the park's lawns (game/animals.js)
     this.animals = new Animals(this);
+    // what people say, and answer; aloud too, if asked for (game/voices.js)
+    this.voices = new Voices(this);
     this.drawPick = null; // the photo the pencil opens with
     this.nudgeDraw = false; // a new photo nobody drew yet: the pencil button wiggles
     this.drewOnce = false;
@@ -260,6 +263,7 @@ export class Game {
       this.input.invertY = v.invertY;
       this.hud.subtitles = v.subtitles;
       if (!v.subtitles) this.hud.radio(null);
+      this.voices.setSpoken(v.voices && v.sound);
       this.boilOn = pick('boil');
       this.pipe.reflections = pick('reflections');
       shared.uQuality.value = pick('quality') ? 1 : 0;
@@ -274,6 +278,7 @@ export class Game {
       $('opt-sens').value = v.sens;
       $('opt-invert').checked = v.invertY;
       $('opt-subs').checked = v.subtitles;
+      $('opt-voices').checked = v.voices;
       $('opt-boil').checked = pick('boil');
       $('opt-look').checked = pick('reflections');
       $('opt-magic').checked = pick('quality');
@@ -302,6 +307,7 @@ export class Game {
     slider('opt-sens', 'sens');
     box('opt-invert', 'invertY');
     box('opt-subs', 'subtitles');
+    box('opt-voices', 'voices');
     box('opt-boil', 'boil');
     box('opt-look', 'reflections');
     box('opt-magic', 'quality');
@@ -358,6 +364,7 @@ export class Game {
     if (this.phone.isOpen || this.state !== 'play') return;
     if (this.airdraw.open || this.album.open || this.dialog.open || this.perf.bench || this.citymap.open) return;
     this.state = 'paused';
+    this.voices.hush();
     this.input.releaseLock();
     this.phone.open();
   }
@@ -447,6 +454,7 @@ export class Game {
   pause() {
     if (this.state !== 'play') return;
     this.state = 'paused';
+    this.voices.hush();
     this.refreshSaves();
     $('clock-now').textContent = this.daynight.clock;
     $('pause').classList.remove('hidden');
@@ -469,6 +477,7 @@ export class Game {
     } else if (this.state === 'play') {
       if (this.airdraw.open || this.album.open || this.dialog.open || this.perf.bench) return;
       this.state = 'paused';
+      this.voices.hush();
       this.mapFrom = 'play';
     } else if (this.state === 'paused') {
       $('pause').classList.add('hidden');
@@ -700,6 +709,7 @@ export class Game {
       this.events.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);
+      this.voices.update(dt);
       this.pickups.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();

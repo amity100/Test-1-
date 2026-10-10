@@ -247,7 +247,15 @@ export class Routines {
       v.talkT = v.what === 'chat' ? 4 + Math.random() * 6 : 9 + Math.random() * 14;
       const near = Math.hypot(c.pos.x - this.game.player.pos.x, c.pos.z - this.game.player.pos.z) < 22;
       if (near && this.game.bubbles) {
-        if (v.what === 'chat') this.game.bubbles.say(c, pick(CHAT));
+        if (v.what === 'chat') {
+          // (and the friend answers: game/voices.js)
+          let o = null;
+          for (const sp of v.pl.seats) if (sp.who && sp.who !== v && sp.who.what === 'chat' && sp.who.c && sp.who.c.alive) o = sp.who;
+          if (o && this.game.voices && this.game.voices.chat([c, o.c])) {
+            v.talkT += 8;
+            o.talkT = Math.max(o.talkT, 8);
+          } else this.game.bubbles.say(c, pick(CHAT));
+        }
         else if (v.what === 'phone') this.game.bubbles.say(c, pick(PHONE));
         else if (v.pl.kind === 'bus' && Math.random() < 0.4) this.game.bubbles.say(c, pick(WAIT));
       }

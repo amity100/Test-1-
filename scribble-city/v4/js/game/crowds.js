@@ -163,7 +163,8 @@ export class Crowds {
       if (talkT < 0) {
         talkT = 6 + Math.random() * 10;
         const p = this.game.player.pos;
-        if (Math.hypot(me.pos.x - p.x, me.pos.z - p.z) < 16) this.game.bubbles.say(me, pick(lines));
+        // (and the parent answers: game/voices.js)
+        if (Math.hypot(me.pos.x - p.x, me.pos.z - p.z) < 16 && !(this.game.voices && this.game.voices.chat([me, P], 'kid'))) this.game.bubbles.say(me, pick(lines));
       }
       if (psp < 0.2 && d < 0.8) {
         me.faceYaw = P.yaw;
@@ -300,7 +301,11 @@ export class Crowds {
     s.talkT = 3 + Math.random() * 6;
     const c = pick(s.who);
     const p = this.game.player.pos;
-    if (c && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 20 && this.game.bubbles) this.game.bubbles.say(c, pick(YOUTH_LINES));
+    if (!c || Math.hypot(c.pos.x - p.x, c.pos.z - p.z) >= 20 || !this.game.bubbles) return;
+    // (the others answer: game/voices.js)
+    const rest = s.who.filter((o) => o !== c && o.alive);
+    if (rest.length && this.game.voices && this.game.voices.chat([c, ...rest], 'youth')) s.talkT += 8;
+    else this.game.bubbles.say(c, pick(YOUTH_LINES));
   }
 
   leave(s, lost) {

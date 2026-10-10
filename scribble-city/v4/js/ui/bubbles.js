@@ -81,6 +81,8 @@ export class Bubbles {
     s.material.opacity = 0;
     this.scene.add(s);
     this.list.push({ who, sprite: s, t: 0, life, rise: Math.random() * 0.1 });
+    // (said aloud, subtitled: game/voices.js)
+    if (this.onSay) this.onSay(who, text, tone);
   }
 
   update(dt, camera) {
