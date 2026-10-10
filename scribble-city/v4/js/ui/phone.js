@@ -53,6 +53,21 @@ export class Phone {
     for (const b of this.el.querySelectorAll('.phone-back')) b.addEventListener('click', () => this.back());
     $('phone-home-btn').addEventListener('click', () => this.close());
     $('phone-del').addEventListener('click', () => this.deleteViewed());
+    // keeping a photo on the device: a plain link in a browser of its own; in the claude.ai viewer
+    // the page asks the viewer through its downloads capability (and shows no button without it)
+    this.framed = !!(window.claude && window.claude.use);
+    this.dlCap = null;
+    if (this.framed) {
+      window.claude
+        .use('downloads')
+        .then((d) => (this.dlCap = d))
+        .catch(() => (this.dlCap = null));
+    }
+    $('phone-dl').addEventListener('click', (e) => {
+      if (!this.framed) return;
+      e.preventDefault();
+      this.saveViewed();
+    });
     $('vf-shoot').addEventListener('click', (e) => {
       e.stopPropagation();
       this.shoot();
@@ -262,9 +277,39 @@ export class Phone {
     $('phone-view-img').src = ph.url;
     $('phone-view-title').textContent = `${ph.where} · ${ph.clock}`;
     const dl = $('phone-dl');
-    dl.href = ph.url;
     const d = new Date(ph.at);
-    dl.download = `scribble-city-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.jpg`;
+    this.viewed = ph;
+    this.viewedName = `scribble-city-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.jpg`;
+    if (this.framed) {
+      dl.removeAttribute('href');
+      dl.classList.toggle('hidden', !this.dlCap);
+    } else {
+      dl.href = ph.url;
+      dl.download = this.viewedName;
+    }
+  }
+
+  // the viewer is asked to keep the photo (they may say no: then nothing happens)
+  async saveViewed() {
+    const ph = this.viewed;
+    if (!ph || !this.dlCap) return;
+    const b64 = ph.url.slice(ph.url.indexOf(',') + 1);
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    try {
+      await this.dlCap.save({ filename: this.viewedName, data: new Blob([bytes], { type: 'image/jpeg' }) });
+    } catch (err) {
+      const code = err && err.code;
+      if (code === 'declined') return;
+      if (code === 'rate_limited') this.game.hud.toast('רגע, עוד שאלה פתוחה', 'info', 1.6);
+      else if (code === 'too_large' || code === 'bad_request' || code === 'transform_error' || code === 'rejected_extension') this.game.hud.toast('לא הצלחנו לשמור את התמונה', 'bad', 1.8);
+      else {
+        // (saving is not possible in this view: the button goes)
+        this.dlCap = null;
+        $('phone-dl').classList.add('hidden');
+      }
+    }
   }
 
   async deleteViewed() {
