@@ -1,4 +1,5 @@
 import { WEAPON_DEFS } from './weapons.js';
+import { dress } from './wardrobe.js';
 import { buildWeaponModel } from './items.js';
 import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { openWall } from '../world/rooms.js';
@@ -93,7 +94,7 @@ export class SaveGame {
       where: districtName(at.x, at.z) || '',
       clock: g.daynight ? g.daynight.clock : '',
       playTime: Math.round(this.playTime),
-      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade } : null },
+      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade } : null, armor: p.armor || 0 },
       hero: { hair: L.hair.style !== 'none' ? { style: L.hair.style, color: L.hair.color } : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: p.fig.bulk, maxHp: p.maxHp },
       weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score })),
       weapon: g.weapons.index,
@@ -212,6 +213,11 @@ export class SaveGame {
     p.hp = Math.max(1, Math.min(p.maxHp, P.hp));
     p.invuln = 3;
     p.parachute = P.parachute ? { grade: P.parachute.grade } : null;
+    // (the vest, ROADMAP 5.7)
+    if (!g.classic) {
+      p.armor = P.armor || 0;
+      dress(p.fig.look, p.armor > 0);
+    }
     g.camRig.yaw = P.yaw;
     if (g.skills && s.skills) g.skills.load(s.skills);
     // what you held

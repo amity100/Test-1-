@@ -4,6 +4,7 @@ import { MAX_HOLES } from '../render/glsl.js';
 import { FILL } from './looks.js';
 import { GOLD } from './looks.js';
 import { carryShapes, carryStrokes, carryPose, heldIn } from './carry.js';
+import { TATTOO_LINES, TATTOO_INK } from './wardrobe.js';
 
 // The people's rig: joints for every pose (walk / run / aim / melee / sit / crawl / fall / dance /
 // carry), and the solid shapes of the body for bullets and the eraser (render/people.js dresses
@@ -663,8 +664,10 @@ export class Doodle {
     let topC = top.color;
     if (this.paintT > 0) topC = topC.map((v, i) => lerp(v, this.paintColor[i], 0.7));
     const sleeves = top.sleeves;
-    const upperArmC = sleeves === 'none' ? skin : topC;
-    const foreArmC = sleeves === 'long' ? topC : skin;
+    // (the armour vest over a shirt: the sleeves are the shirt's, ROADMAP 5.7)
+    const sleeveC = top.armor && top.under ? top.under : topC;
+    const upperArmC = sleeves === 'none' ? skin : sleeveC;
+    const foreArmC = sleeves === 'long' ? sleeveC : skin;
     // skirts and dresses reach the ankle: the legs under them are the fabric
     const longSkirt = bot.kind === 'skirt' || bot.kind === 'dress' || bot.kind === 'midi';
     const pantsC = bot.color;
@@ -1403,7 +1406,24 @@ export class Doodle {
         }
       }
     }
-    if (L.acc.includes('tattoo')) {
+    // (a tattoo of the wardrobe's, on the right forearm: ROADMAP 5.7)
+    const tat = L.tattoo && TATTOO_LINES[L.tattoo];
+    if (tat && this.parts.armR > 0.5 && L.top.sleeves !== 'long') {
+      const el = j.elbowR;
+      _d.subVectors(j.handR, el);
+      const len = _d.length();
+      _c.crossVectors(_d, rgt).normalize();
+      if (_c.dot(fwd) < 0) _c.negate();
+      _e.crossVectors(_d, _c).normalize();
+      for (let li = 0; li < tat.length; li++) {
+        const pl = tat[li];
+        for (let i = 0; i + 1 < pl.length; i++) {
+          _a.copy(el).addScaledVector(_d, pl[i][0]).addScaledVector(_c, 0.042 * S).addScaledVector(_e, pl[i][1] * 0.035 * S);
+          _b.copy(el).addScaledVector(_d, pl[i + 1][0]).addScaledVector(_c, 0.042 * S).addScaledVector(_e, pl[i + 1][1] * 0.035 * S);
+          this.stroke(_a, _b, TATTOO_INK, w * 0.8, 140 + li * 7 + i);
+        }
+      }
+    } else if (L.acc.includes('tattoo')) {
       for (const [part, el, hd] of [['armR', j.elbowR, j.handR], ['armL', j.elbowL, j.handL]]) {
         if (this.parts[part] < 0.5 || L.top.sleeves === 'long') continue;
         _d.subVectors(hd, el);

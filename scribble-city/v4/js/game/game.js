@@ -64,6 +64,7 @@ import { Climb } from './climb.js';
 import { Swim } from './swim.js';
 import { Ragdolls } from './ragdoll.js';
 import { Skills } from './skills.js';
+import { dress, armorBar } from './wardrobe.js';
 
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
@@ -555,6 +556,10 @@ export class Game {
     }
     this.weapons.select(0);
     this.weapons.projectiles = [];
+    if (this.player.armor > 0) {
+      this.player.armor = 0;
+      dress(this.player.fig.look, false);
+    }
     this.enemies.reset();
     this.bubbles.clear();
     this.police.reset();
@@ -746,6 +751,7 @@ export class Game {
       this.civilians.update(dt);
       if (this.ragdolls) this.ragdolls.update();
       if (this.skills && this.state === 'play') this.skills.update(dt);
+      if (!this.classic) armorBar(this);
       this.farCrowd.update(dt);
       this.streetlife.update(dt);
       this.routines.update(dt);

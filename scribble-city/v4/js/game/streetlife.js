@@ -4,6 +4,7 @@ import { HAIR_SKETCH } from './airsketch.js';
 import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
+import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn } from './wardrobe.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -91,6 +92,8 @@ export class StreetLife {
   saveHero() {
     const L = this.game.player.fig.look;
     const d = { hair: L.hair.style !== 'none' ? L.hair : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: this.game.player.fig.bulk, maxHp: this.game.player.maxHp };
+    // (what he wears: ROADMAP 5.7, not with ?classic)
+    if (!this.game.classic) d.outfit = outfitOf(L);
     try {
       localStorage.setItem(HERO_KEY, JSON.stringify(d));
     } catch (e) {
@@ -106,6 +109,7 @@ export class StreetLife {
     if (d.hat !== undefined) L.hat = d.hat;
     if (d.glasses !== undefined) L.face.glasses = d.glasses;
     if (d.bulk) p.fig.bulk = d.bulk;
+    if (d.outfit && !this.game.classic) putOn(this.game, d.outfit);
     if (d.maxHp) {
       p.maxHp = d.maxHp;
       p.hp = Math.min(p.hp, p.maxHp);
@@ -321,7 +325,7 @@ export class StreetLife {
       }
     }
     if (!best) return null;
-    const info = SERVICES[best.shop.kind];
+    const info = svc(this.game, best.shop.kind);
     return { shop: best, label: best.open ? `E — ${best.room ? info.ask || info.verb : info.verb}` : 'החנות סגורה — המוכר ברח' };
   }
 
@@ -448,6 +452,13 @@ const SERVICES = {
   ] },
 };
 
+// (ROADMAP 5.7, not with ?classic: the wardrobe, game/wardrobe.js) the boutique's shelves, the
+// barber's tattoos, the hardware store's vest
+const PRAISE = ['מתאים לך!', 'נראה מעולה!', 'וואו, איזה סטייל!', 'כמו מהמגזין!'];
+const TATTOO_SKETCH = { anchor: 'tattooAnchor', heart: 'tattooHeart', star: 'tattooStar', pencil: 'tattooPencil' };
+const SERVICES_NC = {};
+const svc = (game, kind) => (!game.classic && SERVICES_NC[kind]) || SERVICES[kind];
+
 SERVICES.tacos = { verb: 'להזמין טאקו', ask: 'להזמין טאקו', who: 'הטאקרו', greet: 'טאקו פתוח עשרים וארבע שעות! חריף או חריף מאוד?', offers: [['שלושה טאקו (+35 חיים)', 'pita', heal(35, [0.95, 0.7, 0.3], 'טאקו! +35 חיים')]] };
 SERVICES.diner = { verb: 'להיכנס לדיינר', ask: 'להזמין המבורגר', who: 'המלצרית', greet: 'שב איפה שבא לך, מותק. המבורגר ומילקשייק?', offers: [['המבורגר (+45 חיים)', 'sandwich', heal(45, [0.7, 0.42, 0.25], 'המבורגר! +45 חיים')], ['מילקשייק תות (+20 חיים)', 'cup', heal(20, [0.98, 0.66, 0.74])]] };
 SERVICES.juice = { verb: 'לקנות מיץ', ask: 'לקנות מיץ', who: 'המוכר', greet: 'מנגו, אננס, תות — סחוט עכשיו!', offers: [['מיץ מנגו (+20 חיים, ריצה מהירה קצת)', 'cup', (game) => {
@@ -461,6 +472,19 @@ SERVICES.boutique = { verb: 'להיכנס לבוטיק', ask: 'לבחור כוב
   ['כומתה', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'beret', color: [0.62, 0.42, 0.85] }), 'כמו צייר אמיתי!')],
   ['בלי כובע', null, (game) => heroLook(game, (L) => (L.hat = null), 'בלי כובע')],
 ] };
+SERVICES_NC.boutique = { ...SERVICES.boutique, ask: 'למדוד בגדים', greet: 'הקולקציה החדשה הגיעה! מה מודדים היום?', offers: [
+  ['חולצות', 'menu', (game, a) => a.shelf('איזו חולצה?', 'top', TOPS, 'shirt')],
+  ['מכנסיים', 'menu', (game, a) => a.shelf('אילו מכנסיים?', 'bottom', BOTTOMS, 'pants')],
+  ['נעליים', 'menu', (game, a) => a.shelf('אילו נעליים?', 'shoes', SHOES, 'shoe')],
+  ['כובעים', 'menu', (game, a) => a.shelf('איזה כובע?', 'hat', HATS, 'hat')],
+  ['אביזרים', 'menu', (game, a) => a.shelf('משהו קטן לסיום?', 'acc', ACCS, 'chain')],
+] };
+SERVICES_NC.barber = { ...SERVICES.barber, offers: [...SERVICES.barber.offers, ['קעקוע מצויר', 'menu', (game, a) => a.shelf('איזה קעקוע לצייר לך על היד?', 'tattoo', TATTOOS, (it) => TATTOO_SKETCH[it.tattoo])]] };
+SERVICES_NC.hardware = { ...SERVICES.hardware, offers: [...SERVICES.hardware.offers, ['אפוד מגן מכריכות של מחברות', 'vest', (game) => {
+  armorUp(game);
+  game.hud.toast('אפוד מגן! הוא סופג את רוב המכות והיריות עד שהוא נקרע', 'good', 3.2);
+}]] };
+
 SERVICES.arcade = { verb: 'להיכנס לארקייד', ask: 'לשחק במכונה', who: 'המכונה', greet: 'INSERT COIN — מכה אחת במכונה וקורה משהו...', offers: [['לשחק (אולי זוכים בשרטוט)', 'note', (game) => {
   const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun' && (!game.classic || !BLUEPRINT_MORE.includes(id)));
   if (left.length && Math.random() < 0.5) giveBlueprint(game, left[Math.floor(Math.random() * left.length)]);
@@ -1477,22 +1501,41 @@ class OpenShop {
   // ------------------------------------------------------------------ serving the hero
   talk() {
     const game = this.game;
-    const info = SERVICES[this.shop.kind];
+    const info = svc(game, this.shop.kind);
     if (game.time < this.cool || this.heroJob) {
       game.dialog.show(info.who, 'רגע, רגע — עוד לא סיימתי עם ההזמנה הקודמת. תחזור עוד מעט?', null);
       return;
     }
     this.talking = true;
-    const choices = info.offers.map(([label, sketch, fn]) => ({ label, fn: () => this.serve(sketch, fn) }));
+    // (a shelf of the wardrobe opens its own choices: ROADMAP 5.7)
+    const choices = info.offers.map(([label, sketch, fn]) => ({ label, fn: sketch === 'menu' ? () => fn(game, this) : () => this.serve(sketch, fn) }));
     choices.push({ label: 'רק מסתכל, תודה', fn: null });
     game.dialog.show(info.who, info.greet, choices);
+  }
+
+  // (ROADMAP 5.7) a shelf: each thing on it drawn in the air for you, and put on
+  shelf(text, part, items, sketch) {
+    const game = this.game;
+    const info = svc(game, this.shop.kind);
+    const choices = items.map((it) => ({
+      label: it.name,
+      fn: () => this.serve(it[part] === null || it[part] === undefined ? null : typeof sketch === 'function' ? sketch(it) : sketch, (g) => {
+        wear(g, part, it);
+        g.hud.toast(it[part] === null || it[part] === undefined ? `${it.name}` : PRAISE[Math.floor(Math.random() * PRAISE.length)], 'good', 2);
+      }),
+    }));
+    choices.push({ label: 'משהו אחר', fn: () => this.talk() });
+    game.dialog.show(info.who, text, choices);
+    this.trying = true;
   }
 
   serve(sketch, fn) {
     const game = this.game;
     const k = this.keeper;
     const p = game.player;
-    this.cool = game.time + 12;
+    // (trying things on in the wardrobe: the next one in a moment, ROADMAP 5.7)
+    this.cool = game.time + (this.trying ? 2.5 : 12);
+    this.trying = false;
     if (!sketch) {
       fn(game, this);
       return;

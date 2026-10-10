@@ -4,6 +4,7 @@ import { heroLook } from './looks.js';
 import { groundHeight, WATER_X } from '../world/layout.js';
 import { clamp, damp, dampAngle } from '../core/util.js';
 import { downStep } from './fists.js';
+import { dress } from './wardrobe.js';
 
 const GRAVITY = 24;
 const _m = new THREE.Matrix4();
@@ -42,6 +43,9 @@ export class Player {
     this.lieT = 0;
     this.downT = 0;
     this.upT = 0;
+    // (ROADMAP 5.7, not with ?classic) the vest of notebook covers (game/wardrobe.js): what is
+    // left of it (0..100)
+    this.armor = 0;
   }
 
   // thrown by a car or a blast (game/ragdoll.js): the body flies and falls as it will
@@ -136,6 +140,17 @@ export class Player {
     }
     const full = amount;
     if (this.game.weapons) amount = this.game.weapons.block(amount, fromX, fromZ, kind, src);
+    // (the vest takes most of a blow, a shot, a blast - not the water, not a fall; ROADMAP 5.7)
+    if (this.armor > 0 && kind !== 'drown' && kind !== 'fall') {
+      const a = Math.min(this.armor, amount * 0.65);
+      this.armor -= a;
+      amount -= a;
+      if (this.armor <= 0.5) {
+        this.armor = 0;
+        dress(this.fig.look, false);
+        this.game.hud.toast('האפוד נקרע', 'bad', 1.8);
+      }
+    }
     if (amount < full * 0.5) at = null;
     this.hp -= amount;
     if (at) {
@@ -365,7 +380,7 @@ export class Player {
         const fall = -this.vel.y;
         if (gliding) chute.land();
         else if (fall > 17 && !this.onGround) {
-          this.hurt(Math.min(85, (fall - 17) * 3.2), p.x, p.z);
+          this.hurt(Math.min(85, (fall - 17) * 3.2), p.x, p.z, null, 'fall');
           this.game.camRig.addShake(0.5);
           this.game.fx.crumbs(p.x, p.y + 0.2, p.z, 20, 3);
           this.game.audio.play('punch', 0.8);

@@ -267,7 +267,7 @@ export class Swim {
       this.hurtT -= dt;
       if (this.hurtT <= 0) {
         this.hurtT = 1;
-        p.hurt(9, p.pos.x, p.pos.z);
+        p.hurt(9, p.pos.x, p.pos.z, null, 'drown');
       }
     }
     if (headUnder) {

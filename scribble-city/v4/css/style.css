@@ -1022,5 +1022,12 @@ body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.ph
 #stamina .bar { flex: 1; height: 7px; }
 #stamina .bar .fill { background: linear-gradient(90deg, #f0a030, #ffd96a); }
 #stamina.low .bar .fill { background: #b9b3c4; }
-/* (the air or the stamina under the health: the goals card steps down out of their way) */
-body:has(#stamina:not(.hidden)) #goals, body:has(#breath:not(.hidden)) #goals { top: max(78px, calc(env(safe-area-inset-top) + 72px)); }
+/* (ROADMAP 5.7) the vest of notebook covers: what is left of it */
+#armor { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+#armor.hidden { display: none; }
+#armor .ico { font-size: 12px; line-height: 1; color: #56607a; font-weight: 800; }
+#armor .bar { flex: 1; height: 7px; }
+#armor .bar .fill { background: repeating-linear-gradient(-55deg, #56607a 0 5px, #8a93ab 5px 8px); }
+/* (the air, the stamina or the vest under the health: the goals card steps down out of their way) */
+body:has(#stamina:not(.hidden)) #goals, body:has(#breath:not(.hidden)) #goals, body:has(#armor:not(.hidden)) #goals { top: max(78px, calc(env(safe-area-inset-top) + 72px)); }
+body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor:not(.hidden)):has(#breath:not(.hidden)) #goals { top: max(90px, calc(env(safe-area-inset-top) + 84px)); }

@@ -30,7 +30,7 @@ export class Skills {
     this.stamina = 100;
     this.winded = false;
     this.restT = 0;
-    this.fullT = 0;
+    this.fullT = 1;
     this.ui = {
       el: document.getElementById('stamina'),
       fill: document.querySelector('#stamina .fill'),
