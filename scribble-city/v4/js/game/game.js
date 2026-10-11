@@ -364,6 +364,12 @@ export class Game {
       if (!!v.perf !== !!this.perf.on) this.perf.toggle(v.perf);
       // (every blueprint open, or found in the city: ROADMAP 9.1, not with ?classic)
       if (!this.classic) this.setAllOpen(v.allOpen);
+      // the clear look (not with ?classic; ?clear=0 / ?clear=1 for a test). The people and the
+      // cars stand out only where the drawing keeps a sign below zero (a float picture)
+      const cq = this.params.get('clear');
+      const clear = !this.classic && (cq === null ? v.clear : cq !== '0');
+      shared.uClear.value = clear ? 1 : 0;
+      shared.uClearActor.value = clear && this.pipe.hdr ? 1 : 0;
     };
     const show = () => {
       const v = S.v;
@@ -380,6 +386,7 @@ export class Game {
       $('opt-look').checked = pick('reflections');
       $('opt-magic').checked = pick('quality');
       $('opt-perf').checked = v.perf;
+      $('opt-clear').checked = v.clear;
     };
     const box = (id, k) => $(id).addEventListener('change', (e) => {
       S.set(k, e.target.checked);
@@ -410,6 +417,7 @@ export class Game {
     box('opt-magic', 'quality');
     box('opt-perf', 'perf');
     box('opt-allbp', 'allOpen');
+    box('opt-clear', 'clear');
     // F3 keeps its choice too
     this.perf.onToggle = (on) => {
       if (!this.perf.bench) S.set('perf', on);

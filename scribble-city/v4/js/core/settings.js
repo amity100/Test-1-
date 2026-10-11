@@ -26,6 +26,9 @@ export const DEFAULTS = {
   // (ROADMAP 9.1, not with ?classic) every blueprint open to draw from the start; off, they are
   // found in the city (photographed, bought, won, given: ui/album.js)
   allOpen: true,
+  // (not with ?classic) the clear look: calmer pens, a calm sky, the far city paler, the people
+  // and the cars standing out (render/glsl.js drawPens, render/pipeline.js the ink)
+  clear: true,
 };
 
 export class Settings {

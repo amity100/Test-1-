@@ -356,7 +356,7 @@ export class PersonRenderer {
   constructor(scene) {
     this.scene = scene;
     // (line 0.97 marks a person for the ink: their outlines, but no seams at the joints)
-    const S = (o) => makeSurface({ line: 0.97, ...o });
+    const S = (o) => makeSurface({ line: 0.97, actor: true, ...o });
     // the pens of the people (the first boulevard's): skin, cloth with folds, plain cloth, shoes
     this.mats = {
       skin: S({ kind: 'skin', partR: 0.06 }),

@@ -166,6 +166,10 @@ export const shared = {
   uWet: { value: 0 },
   uMist: { value: 0 },
   uFlash: { value: 0 },
+  // the clear look (settings 'clear', not with ?classic): calmer pens, a calm sky, the far city
+  // paler; uClearActor: the people and the cars stand out (a stronger line, the paper round them)
+  uClear: { value: 0 },
+  uClearActor: { value: 0 },
 };
 
 // ------------------------------------------------------------------ lights near you
@@ -315,6 +319,8 @@ export function makeSurface(o = {}) {
       uEmVColor: { value: o.emVColor ? 1 : 0 },
       uCells: { value: o.cells || 0 },
       uNeonMask: { value: o.neonMask ? 1 : 0 },
+      // (the clear look) one of the things you play with: a person, a car, a drawn thing
+      uActor: { value: o.actor ? 1 : 0 },
     },
     defines,
     vertexColors: !!o.vcolor,
@@ -353,7 +359,7 @@ export function refreshPen(m) {
   const al = u.uAlbedo.value;
   const em = u.uEmissive.value;
   const pic = m.userData.picture || { layer: 0, size: 1 };
-  d.set([al.r, al.g, al.b, u.uKind.value, em.r, em.g, em.b, u.uAng.value, u.uDensity.value, u.uWash.value, u.uGloss.value, u.uObj.value, u.uLine.value, u.uPartR.value, u.uLit.value, u.uWetK.value, u.uErasable.value, u.uEmVColor.value, 0, 0, u.uAlphaTest.value, pic.layer, pic.size, u.uUseMap.value], o);
+  d.set([al.r, al.g, al.b, u.uKind.value, em.r, em.g, em.b, u.uAng.value, u.uDensity.value, u.uWash.value, u.uGloss.value, u.uObj.value, u.uLine.value, u.uPartR.value, u.uLit.value, u.uWetK.value, u.uErasable.value, u.uEmVColor.value, u.uActor ? u.uActor.value : 0, 0, u.uAlphaTest.value, pic.layer, pic.size, u.uUseMap.value], o);
   t.needsUpdate = true;
 }
 

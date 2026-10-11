@@ -31,6 +31,9 @@ uniform float uPR;
 uniform float uLineW;
 uniform mat4 uInvProj;
 uniform mat4 uCamWorld;
+uniform float uClear;
+uniform float uClearActor;
+uniform vec3 uPaper;
 
 float linZ(vec2 uv) {
   float d = texture(tDepth, uv).r;
@@ -42,6 +45,7 @@ vec3 nrm(vec2 e) {
   return vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy))));
 }
 float vn(vec2 p) { return textureLod(uNoise, (p + 0.5) / 256.0, 0.0).r; }
+#define HALO 0.55
 
 // how much of an outline passes through uv: a step back in depth (planes seen edge-on do not
 // count: 1/z is flat across a plane), a fold between two faces, the edge of another object.
@@ -51,7 +55,9 @@ float edgeAt(vec2 uv, float r, float far, out float zc) {
   vec4 a0 = texture(tAux, uv);
   float z0 = linZ(uv);
   zc = z0;
-  if (a0.w < 0.01) return 0.0;
+  // (the clear look marks the people and the cars with their line weight below zero)
+  float lw = abs(a0.w);
+  if (lw < 0.01) return 0.0;
   vec3 n0 = nrm(a0.xy);
   vec2 ox = vec2(r * uTexel.x, 0.0);
   vec2 oy = vec2(0.0, r * uTexel.y);
@@ -65,7 +71,7 @@ float edgeAt(vec2 uv, float r, float far, out float zc) {
   // (the people's bodies are drawn in one line round each shape: no seams where an arm bends at
   // the elbow or a leg at the knee - their line weight is marked 0.97; their outlines against
   // what is behind them and between their parts stay)
-  float person = step(0.955, a0.w) * step(a0.w, 0.985);
+  float person = step(0.955, lw) * step(lw, 0.985);
   float e = smoothstep(0.025, 0.09, lap / w0) * (0.45 + 0.55 * behind) * mix(1.0, behind, person);
   vec4 al = texture(tAux, uv - ox);
   vec4 ar = texture(tAux, uv + ox);
@@ -76,7 +82,41 @@ float edgeAt(vec2 uv, float r, float far, out float zc) {
   float id = max(max(step(0.002, abs(al.z - a0.z)) * step(z0, zl + 0.08), step(0.002, abs(ar.z - a0.z)) * step(z0, zr + 0.08)),
                  max(step(0.002, abs(ad.z - a0.z)) * step(z0, zd + 0.08), step(0.002, abs(au.z - a0.z)) * step(z0, zu + 0.08)));
   e = max(e, id * 0.9 * (1.0 - 0.45 * far));
-  return e * a0.w;
+  if (a0.w < -0.001) {
+    // (the clear look) a person or a car: where it meets what is behind it, a heavier pen (the
+    // folds and seams inside it keep the usual one, so its colours still show)
+    float R = r * mix(2.1, 1.0, far);
+    float s = 0.0;
+    for (int i = 0; i < 8; i++) {
+      float t = float(i) * 0.7853982;
+      vec2 o = vec2(cos(t), sin(t)) * R * uTexel;
+      vec4 a = texture(tAux, uv + o);
+      s = max(s, step(-0.001, a.w) * step(z0 * 1.03 + 0.2, linZ(uv + o)));
+    }
+    return max(e * lw, s);
+  }
+  return e * lw;
+}
+
+// (the clear look) the paper round a person or a car: how much this pixel, just behind one,
+// is left white so the figure stands clear of a busy street behind it
+float haloAt(vec2 uv, float z0) {
+  vec4 a0 = texture(tAux, uv);
+  if (a0.w < -0.001) return 0.0;
+  float h = 0.0;
+  for (int i = 0; i < 12; i++) {
+    float ring = float(i / 6);
+    float t = float(i) * 1.0471976 + ring * 0.5235988;
+    vec2 o = vec2(cos(t), sin(t)) * (2.0 + 2.6 * ring) * uPR * uTexel;
+    vec4 a = texture(tAux, uv + o);
+    if (a.w < -0.001) {
+      float z = linZ(uv + o);
+      // (a person all of it; a car or a drawn thing, big already, less)
+      float who = mix(0.45, 1.0, step(0.955, -a.w) * step(-a.w, 0.985));
+      h = max(h, step(z * 1.04 + 0.3, z0) * (1.0 - smoothstep(35.0, 70.0, z)) * (1.0 - 0.5 * ring) * who);
+    }
+  }
+  return h;
 }
 
 // where in the world this pixel is (the nearest thing around it, so both sides of an outline
@@ -109,18 +149,22 @@ void main() {
   float r = max(uLineW * uPR * mix(1.0, 0.6, far), 1.0);
   float z;
   float e = edgeAt(vUv + j1 * uTexel, r, far, z);
-  // the second, lighter pass of the pen that makes a near line sketchy (not for far things)
+  // the second, lighter pass of the pen that makes a near line sketchy (not for far things; in
+  // the clear look lighter still)
   if (far < 0.97) {
     vec2 j2 = (vec2(vn(q * 1.6 + 13.0), vn(q * 1.6 + 77.0)) - 0.5) * 2.6 * uPR * steady;
     float z2;
-    e = max(e, edgeAt(vUv + j2 * uTexel, max(r * 0.7, 1.0), far, z2) * 0.55 * (1.0 - far));
+    e = max(e, edgeAt(vUv + j2 * uTexel, max(r * 0.7, 1.0), far, z2) * (uClear > 0.5 ? 0.4 : 0.55) * (1.0 - far));
   }
   // far away the lines get pale and take the colour of what they outline, then give way to the haze
-  float fz = smoothstep(30.0, 380.0, z);
-  e *= mix(1.0, 0.45, fz);
+  // (in the clear look sooner)
+  float fz = uClear > 0.5 ? smoothstep(25.0, 260.0, z) : smoothstep(30.0, 380.0, z);
+  e *= mix(1.0, uClear > 0.5 ? 0.32 : 0.45, fz);
   vec3 ink = mix(vec3(0.018, 0.012, 0.04), c.rgb * 0.12, 0.2);
   ink = mix(ink, c.rgb * 0.38, fz * 0.55);
-  vec3 col = mix(c.rgb, ink, clamp(e * 1.15, 0.0, 1.0) * 0.95);
+  // (the clear look) the paper round the people and the cars
+  vec3 base = uClearActor > 0.5 ? mix(c.rgb, uPaper * 0.97, haloAt(vUv, linZ(vUv)) * HALO) : c.rgb;
+  vec3 col = mix(base, ink, clamp(e * 1.15, 0.0, 1.0) * 0.95);
   fragColor = vec4(col, c.a);
 }`;
 
@@ -338,6 +382,7 @@ export class Pipeline {
       tColor: { value: null }, tAux: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() },
       uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uPR: shared.uPR, uLineW: { value: 1 },
       uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
+      uClear: shared.uClear, uClearActor: shared.uClearActor, uPaper: shared.uPaper,
     });
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
