@@ -22,12 +22,12 @@ let MATS = null;
 function mats() {
   if (MATS) return MATS;
   MATS = {
-    paint: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.55, ang: 0.1, actor: true }),
-    matte: makeSurface({ kind: 'box', vcolor: true, actor: true }),
-    round: makeSurface({ kind: 'cyl', vcolor: true, partR: 0.05, actor: true }),
-    metal: makeSurface({ kind: 'box', vcolor: true, gloss: 0.75, actor: true }),
-    glass: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.95, ang: 0.5, actor: true }),
-    glow: makeSurface({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.95, 0.9), emissive: new THREE.Color(2.2, 2.2, 2.2), line: 0.4, actor: true }),
+    paint: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.55, ang: 0.1 }),
+    matte: makeSurface({ kind: 'box', vcolor: true }),
+    round: makeSurface({ kind: 'cyl', vcolor: true, partR: 0.05 }),
+    metal: makeSurface({ kind: 'box', vcolor: true, gloss: 0.75 }),
+    glass: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.95, ang: 0.5 }),
+    glow: makeSurface({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.95, 0.9), emissive: new THREE.Color(2.2, 2.2, 2.2), line: 0.4 }),
   };
   for (const m of Object.values(MATS)) m.userData.depth = m.userData.depth || null;
   return MATS;

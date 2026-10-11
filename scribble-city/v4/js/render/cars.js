@@ -665,7 +665,7 @@ export function drawWipers(fr, kind, x, y, z, yaw, sweep, seed) {
 
 export class CarRenderer {
   constructor(scene) {
-    const S = (o) => makeSurface({ actor: true, ...o });
+    const S = (o) => makeSurface(o);
     const mats = {
       paint: S({ kind: 'paint', gloss: 0.55, ang: 0.1 }),
       glass: S({ kind: 'glass', color: srgb(0.24, 0.26, 0.4), gloss: 0.95, lit: 0, line: 0.8, side: THREE.DoubleSide }),

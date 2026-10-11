@@ -67,8 +67,6 @@ uniform float uRain;
 uniform float uWet;
 uniform float uMist;
 uniform float uFlash;
-uniform float uClear;
-uniform float uClearActor;
 `;
 
 export const FUNCS = /* glsl */ `
@@ -155,12 +153,11 @@ vec3 skyColor(vec3 dir) {
 }
 
 // the haze takes the colour of the sky low down in that direction
-#define CLEAR_FOG 1.6
 vec3 applyFog(vec3 col, vec3 wp) {
   vec3 d = wp - cameraPosition;
   float dist = length(d);
   vec3 dir = d / max(dist, 1e-4);
-  float k = 1.0 - exp(-dist * (uClear > 0.5 ? uFogDensity * CLEAR_FOG : uFogDensity));
+  float k = 1.0 - exp(-dist * uFogDensity);
   k *= mix(1.0, 0.6, smoothstep(15.0, 160.0, wp.y));
   vec3 fc = mix(skyColor(normalize(vec3(dir.x, max(dir.y, 0.0) * 0.3 + 0.05, dir.z))), uSkyTop, 0.62) * 0.85;
   return mix(col, fc, clamp(k, 0.0, 1.0));
@@ -338,32 +335,20 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   // pens are closer to each other in colour and in strength)
   vec2 A = penLayer(p, dpx, dpy, ang, 4.2, wpx, 11.0, 1.0);
   vec3 pa = fract(A.y * 3.77) < light ? lit : shade;
-  if (uClear > 0.5) {
-    // (the clear look) the pens keep to the thing's own colour, and most of them go where the
-    // shade is: a sunny wall is a calm wash with a few strokes on it
-    pa = hueShift(saturateC(pa, 1.1), (fract(A.y * 5.31) - 0.5) * mix(0.26, 0.12, far)) * mix(0.88 + 0.24 * fract(A.y * 9.71), 1.0, far * 0.65);
-    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.95 * dens * mix(0.3, 1.0, 1.0 - light)) * (1.0 - 0.6 * far));
-  } else {
-    pa = hueShift(saturateC(pa, 1.15), (fract(A.y * 5.31) - 0.5) * mix(0.8, 0.3, far)) * mix(0.66 + 0.7 * fract(A.y * 9.71), 1.0, far * 0.65);
-    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.95 * dens) * (1.0 - 0.5 * far));
-  }
+  pa = hueShift(saturateC(pa, 1.15), (fract(A.y * 5.31) - 0.5) * mix(0.8, 0.3, far)) * mix(0.66 + 0.7 * fract(A.y * 9.71), 1.0, far * 0.65);
+  col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.95 * dens) * (1.0 - 0.5 * far));
   // B: cross-strokes deepening the shade, in a cooler pen
   vec2 B = penLayer(p, dpx, dpy, ang + 0.62 * spread, 4.6, wpx, 23.0, 0.85);
-  if (uClear > 0.5) {
-    vec3 pb = hueShift(shade * 0.7, -0.3 + (fract(B.y * 5.31) - 0.5) * 0.18);
-    col = mix(col, pb, B.x * step(fract(B.y * 7.13), (1.0 - light) * 0.8 * dens) * (1.0 - 0.75 * far));
-  } else {
-    vec3 pb = hueShift(shade * 0.7, -0.38 + (fract(B.y * 5.31) - 0.5) * 0.45);
-    col = mix(col, pb, B.x * step(fract(B.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens) * (1.0 - 0.7 * far));
-  }
-  // C: a neighbouring colour now and then (not in the clear look)
-  if (uQuality > 0.5 && far < 0.95 && uClear < 0.5) {
+  vec3 pb = hueShift(shade * 0.7, -0.38 + (fract(B.y * 5.31) - 0.5) * 0.45);
+  col = mix(col, pb, B.x * step(fract(B.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens) * (1.0 - 0.7 * far));
+  // C: a neighbouring colour now and then
+  if (uQuality > 0.5 && far < 0.95) {
     vec2 C = penLayer(p, dpx, dpy, ang - 0.4 * spread, 5.4, wpx, 37.0, 0.7);
     vec3 pc = hueShift(mid, fract(C.y * 5.31) > 0.5 ? 0.85 : -0.85) * 1.08;
     col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.2 * dens) * (1.0 - far));
   }
   // D: dark ink pressed into the deepest places
-  float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, uClear > 0.5 ? 0.18 : 0.35, onGround) * (1.0 - 0.75 * far);
+  float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
   if (dk > 0.0) {
     vec2 D = penLayer(p, dpx, dpy, ang - 1.22 * spread, 3.8, wpx * 1.1, 51.0, 1.2);
     col = mix(col, vec3(0.022, 0.016, 0.04), D.x * step(fract(D.y * 7.13), dk * 0.92));
@@ -584,7 +569,6 @@ float uAlphaTest;
 float uLayer;
 float uTexSize;
 float uUseMap;
-float uActor;
 void loadPen() {
   int r = int(vMat + 0.5);
   vec4 a = texelFetch(uMatTab, ivec2(0, r), 0);
@@ -607,7 +591,6 @@ void loadPen() {
   uWetK = d.w;
   uErasable = e.x;
   uEmVColor = e.y;
-  uActor = e.z;
   uAlphaTest = f.x;
   uLayer = f.y;
   uTexSize = f.z;
@@ -646,7 +629,6 @@ uniform float uLit;      // windows: a share of them lit from inside
 uniform float uWetK;     // how wet the ground is (the bay: 1)
 uniform float uErasable; // the eraser can rub holes in it
 uniform float uEmVColor; // neon in batches: the vertex colour is the colour of the light too
-uniform float uActor;    // (the clear look) a person, a car, a drawn thing
 uniform float uAlphaTest;
 uniform float uUseMap;
 #endif
@@ -887,7 +869,7 @@ void main() {
     em *= 1.0 - mPaper;
     em += vec3(1.0, 0.84, 0.58) * mGlow * 1.5;
   }
-  gFar = uClear > 0.5 ? smoothstep(24.0, 150.0, length(cameraPosition - vWP)) : smoothstep(32.0, 190.0, length(cameraPosition - vWP));
+  gFar = smoothstep(32.0, 190.0, length(cameraPosition - vWP));
   vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
   // the rings on the puddles: a pale pen, the sky caught in their slopes
   if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * 0.42);
@@ -895,9 +877,7 @@ void main() {
   col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
   vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
-  // (the clear look: the people and the cars mark their line weight below zero, for the ink)
-  float lw = uClearActor > 0.5 && uActor > 0.5 && uLine > 0.01 ? -uLine : uLine;
-  gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * 0.6180339), lw);
+  gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * 0.6180339), uLine);
 }
 `;
 
@@ -958,43 +938,27 @@ void main() {
     cl = max(cl, smoothstep(0.62 - 0.4 * uOvercast, 0.8 - 0.36 * uOvercast, cv) * smoothstep(0.0, 0.05, el) * uOvercast);
   }
   // the page shows between the strokes, tinted by the sky
-  vec3 col = mix(uPaper * 0.97, sky, uClear > 0.5 ? 0.9 : 0.62);
+  vec3 col = mix(uPaper * 0.97, sky, 0.62);
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
-  if (uClear > 0.5) {
-    // (the clear look) long calm strokes close to the sky's own colour; the clouds drawn more
-    gZig = 0.12;
-    vec2 A = penLayer(p, dpx, dpy, 0.3, 5.2, 2.2, 5.0, 2.4);
-    vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.05, fract(A.y * 5.31), toSun);
-    pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
-    pa = mix(pa * (0.9 + 0.18 * fract(A.y * 9.71)) * boost, sky, 0.3);
-    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.52 + 0.35 * cl));
-    gZig = 0.2;
-    vec2 B = penLayer(p, dpx, dpy, -0.18, 6.0, 1.8, 9.0, 1.6);
-    vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.06, fract(B.y * 5.31), toSun) * boost;
-    pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
-    pb = mix(pb, sky, 0.3);
-    col = mix(col, pb, B.x * step(fract(B.y * 7.13), 0.18 + 0.45 * cl));
-  } else {
-    // A: the main scribble, diagonal, every stroke its own pen
-    gZig = 0.26;
-    vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
-    vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
-    pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
-    pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
-    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9));
-    // B: across it, looser
-    gZig = 0.38;
-    vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
-    vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
-    pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
-    col = mix(col, pb, B.x * step(fract(B.y * 7.13), 0.62 + 0.3 * cl));
-    if (uQuality > 0.5) {
-      // C: a few steep accents in a darker pen
-      gZig = 0.18;
-      vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
-      vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
-      col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.22 + 0.3 * cl));
-    }
+  // A: the main scribble, diagonal, every stroke its own pen
+  gZig = 0.26;
+  vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
+  vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
+  pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
+  pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
+  col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9));
+  // B: across it, looser
+  gZig = 0.38;
+  vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
+  vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
+  pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
+  col = mix(col, pb, B.x * step(fract(B.y * 7.13), 0.62 + 0.3 * cl));
+  if (uQuality > 0.5) {
+    // C: a few steep accents in a darker pen
+    gZig = 0.18;
+    vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
+    vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
+    col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.22 + 0.3 * cl));
   }
   gZig = 0.0;
   if (uStars > 0.01 && el > 0.03) {
