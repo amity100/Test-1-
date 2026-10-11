@@ -104,7 +104,10 @@ void main() {
   vec3 w = worldAt(vUv, zn);
   float far = smoothstep(20.0, 130.0, zn);
   float steady = mix(1.0, 0.16, far);
-  vec2 q = vec2(w.x + w.y * 0.71, w.z - w.y * 0.53) * mix(1.7, 0.5, far) + vec2(sin(uBoil * 1.7), cos(uBoil * 2.3)) * 0.3;
+  // (the boil: uBoil counts the redraws; each thing takes its own moment within one, by its id,
+  // so its lines are redrawn when its clock says. Whole counts, ?classic: all at once)
+  float tick = floor(uBoil + fract(texture(tAux, vUv).z * 7.13));
+  vec2 q = vec2(w.x + w.y * 0.71, w.z - w.y * 0.53) * mix(1.7, 0.5, far) + vec2(sin(tick * 1.7), cos(tick * 2.3)) * 0.3;
   vec2 j1 = (vec2(vn(q), vn(q + 41.0)) - 0.5) * 2.0 * uPR * steady;
   float r = max(uLineW * uPR * mix(1.0, 0.6, far), 1.0);
   float z;
@@ -238,6 +241,7 @@ const _sy = new THREE.Vector3();
 const _sz = new THREE.Vector3();
 const _sc = new THREE.Vector3();
 const _f = new THREE.Vector3();
+const _md = new THREE.Vector3();
 
 // the layer of what is never seen in the mirror under the street (the main camera and the sun
 // see it; the mirror's camera does not), and the one only the sun sees
@@ -351,6 +355,15 @@ export class Pipeline {
     // things drawn over the finished picture (speech bubbles)
     this.overlay = new THREE.Scene();
     this.reflections = true;
+    // the street's depth first (render): the pens are worked out once a pixel. Faster on most
+    // graphics cards, slower on some: the game tries both in play and keeps the faster
+    // (render/depthtrial.js); depthFixed: ?depth / ?nodepth, no trying. mainTimer: the trial's
+    // clock on the graphics card for this pass
+    this.depthFirst = false;
+    this.depthFixed = false;
+    this.mainTimer = null;
+    // where the camera was when the mirror under the street was last drawn (render)
+    this._mirrorAt = { p: new THREE.Vector3(1e9, 0, 0), d: new THREE.Vector3() };
     // the sun's view of the whole city, made once (see bakeFarShadows)
     this.farRT = null;
     // the drawing is made at scale x the screen's pixels and brought up to the screen sharp
@@ -376,6 +389,7 @@ export class Pipeline {
     shared.uResolution.value.set(s.x, s.y);
     if (s.equals(this.size)) return;
     this.size.copy(s);
+    this.reflDone = false;
     const w = s.x;
     const h = s.y;
     const dispose = (t) => t && t.dispose();
@@ -887,6 +901,13 @@ export class Pipeline {
     for (let i = 0; i < ch.length; i++) this.hideFromMirror(ch[i], hidden);
   }
 
+  // the camera far from where the mirror last saw the street from (2 m, 10 degrees)
+  mirrorStale() {
+    const m = this._mirrorAt;
+    this.camera.getWorldDirection(_md);
+    return m.p.distanceToSquared(this.camera.position) > 4 || m.d.dot(_md) < 0.985;
+  }
+
   // the mirror camera under the street (three.js Reflector, by hand)
   renderReflection() {
     const camera = this.camera;
@@ -953,11 +974,16 @@ export class Pipeline {
     const T = this.timer;
     this.ensure();
     r.autoClear = true;
-    // on a phone the mirror under the street is drawn every other frame (and so was the sun's
-    // view, before the still city got a map of its own: now only what moves is drawn each frame)
+    // (on a phone the sun's view was drawn every other frame, before the still city got a map of
+    // its own: now only what moves is drawn, each frame)
     this.frameN = (this.frameN || 0) + 1;
     const every = this.low ? 2 : 1;
     const phase = this.frameN % every;
+    // the mirror under the street: every reflEvery-th frame (main.js; game.js makes it rarer
+    // before it makes the drawing coarser). The street keeps reading it through the matrix it was
+    // drawn with, so the reflection stays in place; only what moves in it is a frame behind. A
+    // jump of the camera (a cut, a teleport) draws it at once.
+    const re = this.reflEvery || 1;
     this.trackCamera();
     if (every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) {
       if (T) T.begin('shadow');
@@ -965,19 +991,46 @@ export class Pipeline {
       if (T) T.end();
       this.shadowDone = true;
     }
-    if (every === 1 || phase === 1 || !this.reflDone) {
+    if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale()) {
       if (T) T.begin('reflection');
       this.renderReflection();
       if (T) T.end();
       this.reflDone = true;
+      this.camera.getWorldDirection(_md);
+      this._mirrorAt.p.copy(this.camera.position);
+      this._mirrorAt.d.copy(_md);
     }
-    // 3. the drawing (what is surely behind the buildings left out)
+    // 3. the drawing (what is surely behind the buildings left out). With depthFirst, first only
+    //    how near every surface is (the shaders stop as soon as they know whether a pixel of
+    //    theirs is there), then the drawing itself against that depth, not writing it again: the
+    //    pens are worked out once a pixel, for the surface that is seen, instead of also for every
+    //    surface a nearer one then covers (1.2 to 1.7 times a pixel in the street). The same
+    //    picture as drawn in one go: what shows is still the last thing drawn at the nearest depth.
     if (T) T.begin('main');
+    const mt = T ? null : this.mainTimer;
+    if (mt) mt.begin(this.depthFirst ? 'on' : 'off');
     this.occlude(this.camera);
     r.setRenderTarget(this.gRT);
     r.clear();
-    r.render(this.scene, this.camera);
+    if (this.depthFirst) {
+      const buf = r.state.buffers;
+      r.autoClear = false;
+      shared.uDepthOnly.value = 1;
+      buf.color.setMask(false);
+      buf.color.setLocked(true);
+      r.render(this.scene, this.camera);
+      buf.color.setLocked(false);
+      buf.color.setMask(true);
+      shared.uDepthOnly.value = 0;
+      buf.depth.setMask(false);
+      buf.depth.setLocked(true);
+      r.render(this.scene, this.camera);
+      buf.depth.setLocked(false);
+      buf.depth.setMask(true);
+      r.autoClear = true;
+    } else r.render(this.scene, this.camera);
     this.unocclude();
+    if (mt) mt.end();
     if (T) T.end();
     // 4. the ink
     const ink = this.mInk.uniforms;

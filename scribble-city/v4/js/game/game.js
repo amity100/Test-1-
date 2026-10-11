@@ -33,7 +33,7 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp } from '../core/util.js';
+import { clamp, smoothstep } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -45,6 +45,7 @@ import { CityMap } from '../ui/citymap.js';
 import { Phone } from '../ui/phone.js';
 import { GPS } from './gps.js';
 import { Settings } from '../core/settings.js';
+import { DepthTrial } from '../render/depthtrial.js';
 import { Pad } from '../core/gamepad.js';
 import { SaveGame, SLOTS, SLOT_NAMES } from './save.js';
 import { Routines } from './routines.js';
@@ -750,6 +751,8 @@ export class Game {
     // at 60 Hz), so keeping up with it counts as fast: a drawing that had to get coarser for a
     // busy moment (an explosion, a chase) gets its sharpness back once the moment has passed.
     const pipe = this.pipe;
+    // (the depth first, or not: tried in play, render/depthtrial.js)
+    const trial = (this.depthTrial = new DepthTrial(pipe, this.renderer.getContext()));
     let acc = 0;
     let n = 0;
     let slow = 0;
@@ -768,8 +771,11 @@ export class Game {
       // (under the open map the city is not drawn: the map covers all of it)
       if (!this.citymap.covering) this.renderFrame();
       perf.frameEnd(raw);
-      // (the test route is measured at the drawing's full quality: the resolution waits)
-      if (this.state === 'play' && !perf.bench) {
+      // (the test route is measured at the drawing's full quality: the resolution waits; and
+      // while the depth first is being tried)
+      const live = this.state === 'play' && !perf.bench;
+      trial.frame(raw, live);
+      if (live && !trial.busy) {
         acc += raw;
         n++;
       }
@@ -782,7 +788,15 @@ export class Game {
           fast = ms < 18.5 ? fast + 1 : 0;
           const now = this.time;
           const cap = now - ceilingAt < 40 ? Math.min(pipe.maxScale, ceiling - 0.05) : pipe.maxScale;
-          if (slow >= 2 && pipe.scale > pipe.minScale) {
+          // (slow: first the mirror under the street every third frame, hardly seen; only then
+          // the whole drawing coarser. Fast again: the other way round)
+          const mirror = !this.classic && pipe.reflEvery === 2;
+          if (slow >= 2 && mirror) {
+            pipe.reflEvery = 3;
+            slow = 0;
+            fast = 0;
+            settle = 2;
+          } else if (slow >= 2 && pipe.scale > pipe.minScale) {
             ceiling = pipe.scale;
             ceilingAt = now;
             pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);
@@ -791,6 +805,10 @@ export class Game {
             settle = 2;
           } else if (fast >= 3 && pipe.scale < cap - 0.001) {
             pipe.scale = Math.min(cap, pipe.scale + 0.05);
+            fast = 0;
+            settle = 1;
+          } else if (fast >= 3 && pipe.reflEvery === 3) {
+            pipe.reflEvery = 2;
             fast = 0;
             settle = 1;
           }
@@ -819,7 +837,18 @@ export class Game {
     if (this.daynight) this.daynight.update(dt);
     if (this.rhythm) this.rhythm.update();
     if (this.shutters) this.shutters.update(dt);
-    if (this.boilOn) shared.uBoil.value = Math.floor(this.time * 5);
+    // the lines' boil: redrawn about five times a second, each thing on a clock of its own (the
+    // ink, render/pipeline.js), so the page never jumps all at once; slower at speed in a car.
+    // (?classic: whole ticks, the page all at once, as it was)
+    if (this.boilOn) {
+      if (this.classic) shared.uBoil.value = Math.floor(this.time * 5);
+      else {
+        const car = this.player.inVehicle;
+        const sp = car ? Math.abs(car.speed || 0) : 0;
+        this.boilClock = (this.boilClock || 0) + dt * 5 * (1 - 0.6 * smoothstep(8, 25, sp));
+        shared.uBoil.value = this.boilClock;
+      }
+    }
     this.ambient.update(dt);
     if (this.world.update) this.world.update(dt, this.time);
     const input = this.input;

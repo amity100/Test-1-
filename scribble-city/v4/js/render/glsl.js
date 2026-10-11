@@ -67,6 +67,7 @@ uniform float uRain;
 uniform float uWet;
 uniform float uMist;
 uniform float uFlash;
+uniform float uDepthOnly;
 `;
 
 export const FUNCS = /* glsl */ `
@@ -761,6 +762,13 @@ void main() {
     }
   }
   if (tex.a < uAlphaTest) discard;
+  // (the street's depth first, render/pipeline.js: here only how near the surface is counts; its
+  // pens are worked out afterwards, once, if it is the one that is seen)
+  if (uDepthOnly > 0.5) {
+    gColor = vec4(0.0);
+    gAux = vec4(0.0);
+    return;
+  }
   vec3 N = gl_FrontFacing ? Nw : -Nw;
   vec3 V = normalize(cameraPosition - vWP);
   vec3 alb = uAlbedo * tex.rgb * (uNeonMask > 0.5 || uEmVColor > 0.5 ? vec3(1.0) : vCol);
@@ -919,6 +927,7 @@ vec3 skyPen(float el, float r, float toSun) {
 }
 
 void main() {
+  if (uDepthOnly > 0.5) discard;
   vec3 dir = normalize(vWP - cameraPosition);
   float az = atan(dir.x, -dir.z);
   float el = asin(clamp(dir.y, -1.0, 1.0));
@@ -1172,6 +1181,7 @@ layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
 uniform float uGlow;
 void main() {
+  if (uDepthOnly > 0.5) discard;
   if (vGone > 0.0 && n2(gl_FragCoord.xy / uPR * 0.45 + vSeed) < vGone * 1.1) discard;
   if (vObj > -0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
   float d = abs(vSidePx);
@@ -1260,6 +1270,12 @@ void main() {
   vec4 tex = texture(uMap, vUv);
   float a = tex.a * vTint.a;
   if (uNearFade > 0.0) a *= smoothstep(uNearFade * 0.4, uNearFade, vDist);
+  if (uDepthOnly > 0.5) {
+    if (uOpaque < 0.5 || a < 0.5) discard;
+    gColor = vec4(0.0);
+    gAux = vec4(0.0);
+    return;
+  }
   vec3 col = toLin(tex.rgb) * vTint.rgb;
   if (uLitByEvening > 0.5) col *= mix(vec3(1.0), (uSkyHorizon * 0.5 + uSunCol * 0.35 + uSkyTop * 0.3), 0.55);
   if (uNoFog < 0.5) col = applyFog(col, vWP);

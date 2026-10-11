@@ -166,6 +166,8 @@ export const shared = {
   uWet: { value: 0 },
   uMist: { value: 0 },
   uFlash: { value: 0 },
+  // (render/pipeline.js) the street's depth first: the shaders only say how near they are
+  uDepthOnly: { value: 0 },
 };
 
 // ------------------------------------------------------------------ lights near you

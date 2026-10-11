@@ -31,7 +31,7 @@ const PASS_HE = { shadow: 'צל', reflection: 'השתקפות', main: 'ציור'
 
 // time on the graphics card, pass by pass (EXT_disjoint_timer_query_webgl2; the answers come a
 // few frames late, so they are averaged)
-class GpuTimer {
+export class GpuTimer {
   constructor(gl) {
     this.gl = gl;
     this.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
@@ -261,7 +261,7 @@ export class Perf {
       `מעבד: משחק ${s.upd.toFixed(1)}ms · שליחת הציור ${s.ren.toFixed(1)}ms`,
       gpuLine,
       `draw calls ${Math.round(s.calls)} (${passes}) · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
-      `קנה מידה ${g.pipe.scale.toFixed(2)} · אנשים ${g.civilians.list ? g.civilians.list.length : 0} · מכוניות ${g.traffic.list.length}`,
+      `קנה מידה ${g.pipe.scale.toFixed(2)} · עומק קודם ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (${g.depthTrial.result.on} מול ${g.depthTrial.result.off}ms)` : ''} · אנשים ${g.civilians.list ? g.civilians.list.length : 0} · מכוניות ${g.traffic.list.length}`,
       `<span class="perf-sys">${top}</span>`,
     ].join('<br>');
   }
@@ -280,10 +280,11 @@ export class Perf {
     // the length along the route (for an even speed)
     const acc = [0];
     for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z));
-    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, warm: 1.5, secs: seconds, from: [pl.pos.x, pl.pos.z, pl.yaw] };
+    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, reflEvery: g.pipe.reflEvery, warm: 1.5, secs: seconds, from: [pl.pos.x, pl.pos.z, pl.yaw] };
     this.gpu.take(true);
     // the test is at the drawing's full quality: the self-adjusting resolution waits
     g.pipe.scale = g.pipe.defaultScale || g.pipe.scale;
+    if (g.pipe.reflEvery === 3) g.pipe.reflEvery = 2;
     g.player.invuln = 1e9;
     this.toggle(this.on);
     g.hud.toast('מסלול מבחן: 60 שניות, בלי לגעת…', 'info', 3);
@@ -342,6 +343,7 @@ export class Perf {
     const gpu = this.gpu.ok ? this.gpu.take(true) : null;
     this.bench = null;
     g.pipe.scale = b.scale;
+    g.pipe.reflEvery = b.reflEvery;
     g.player.spawn(b.from[0], b.from[1], b.from[2]);
     g.camRig.yaw = b.from[2];
     this.toggle(this.on);

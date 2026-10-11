@@ -84,6 +84,11 @@ async function boot() {
   pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.55, 1.25 / pr) : 0.7);
   pipe.maxScale = 1;
   if (params.has('norefl')) pipe.reflections = false;
+  if (params.has('depth') || params.has('nodepth')) {
+    pipe.depthFirst = params.has('depth');
+    pipe.depthFixed = true;
+  }
+  pipe.reflEvery = low || !params.has('classic') ? 2 : 1;
   shared.uPR.value = pipe.pixelsPerCss;
 
   setStatus('מציירים את העיר…');
