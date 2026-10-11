@@ -82,13 +82,25 @@ async function boot() {
   pipe.scale = Math.min(1, want / pr);
   // (never coarser than this: a drawing made at too few pixels turns to mush in the distance)
   pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.55, 1.25 / pr) : 0.7);
+  // which graphics card draws (where the browser tells): none, in software (SwiftShader, llvmpipe,
+  // the basic render driver), and every frame takes seconds
+  const gl0 = renderer.getContext();
+  const dbg = gl0.getExtension('WEBGL_debug_renderer_info');
+  pipe.gpuName = String((dbg && gl0.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) || gl0.getParameter(gl0.RENDERER) || '');
+  pipe.software = /swiftshader|llvmpipe|softpipe|basic render|software rasterizer/i.test(pipe.gpuName);
+  if (pipe.software) {
+    const note = document.getElementById('gpu-note');
+    note.textContent = 'הדפדפן מצייר את המשחק בלי כרטיס המסך, ולכן הוא איטי מאוד. כדי שירוץ חלק מדליקים בהגדרות של הדפדפן את "האצת החומרה" (בכרום: הגדרות ← מערכת), ופותחים את הדפדפן מחדש.';
+    note.classList.remove('hidden');
+  }
   pipe.maxScale = 1;
   if (params.has('norefl')) pipe.reflections = false;
   if (params.has('depth') || params.has('nodepth')) {
     pipe.depthFirst = params.has('depth');
     pipe.depthFixed = true;
   }
-  pipe.reflEvery = low || !params.has('classic') ? 2 : 1;
+  // (the mirror under the street every frame; a phone every other one, as it always was)
+  pipe.reflEvery = low ? 2 : 1;
   shared.uPR.value = pipe.pixelsPerCss;
 
   setStatus('מציירים את העיר…');

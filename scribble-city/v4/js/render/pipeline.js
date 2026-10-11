@@ -979,10 +979,10 @@ export class Pipeline {
     this.frameN = (this.frameN || 0) + 1;
     const every = this.low ? 2 : 1;
     const phase = this.frameN % every;
-    // the mirror under the street: every reflEvery-th frame (main.js; game.js makes it rarer
-    // before it makes the drawing coarser). The street keeps reading it through the matrix it was
-    // drawn with, so the reflection stays in place; only what moves in it is a frame behind. A
-    // jump of the camera (a cut, a teleport) draws it at once.
+    // the mirror under the street: every reflEvery-th frame (main.js: every frame, a phone every
+    // other one). In between the street reads the last one through the matrix it was drawn with;
+    // but a reflection depends on where you stand, so what is near in it slides a little until
+    // the next. A jump of the camera (a cut, a teleport) draws it at once.
     const re = this.reflEvery || 1;
     this.trackCamera();
     if (every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) {

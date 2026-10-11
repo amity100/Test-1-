@@ -217,10 +217,12 @@ float sunShadow(vec3 wp, vec3 n) {
       a2 = mix(a2, step(zo, textureLod(uShadowOld, so.xy + o2 * t2, 0.0).r), uShadowOldK);
       a3 = mix(a3, step(zo, textureLod(uShadowOld, so.xy + o3 * t2, 0.0).r), uShadowOldK);
     }
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o0 * t, 0.0).r) * a0;
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o1 * t, 0.0).r) * a1;
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o2 * t, 0.0).r) * a2;
-    v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o3 * t, 0.0).r) * a3;
+    if (a0 + a1 + a2 + a3 > 0.0) {
+      v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o0 * t, 0.0).r) * a0;
+      v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o1 * t, 0.0).r) * a1;
+      v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o2 * t, 0.0).r) * a2;
+      v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o3 * t, 0.0).r) * a3;
+    }
   } else {
     v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o0 * t, 0.0).r);
     v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + o1 * t, 0.0).r);
@@ -251,6 +253,7 @@ vec3 pointLights(vec3 wp, vec3 n) {
     if (float(i) >= uLightN) break;
     vec4 lp = uLightPos[i];
     vec3 d = lp.xyz - wp;
+    if (dot(d, d) >= lp.w * lp.w) continue;
     float l = length(d);
     float fall = 1.0 - smoothstep(0.0, lp.w, l);
     float ndl = max(dot(n, d / max(l, 1e-4)) * 0.75 + 0.25, 0.0);
@@ -774,9 +777,11 @@ void main() {
   vec3 alb = uAlbedo * tex.rgb * (uNeonMask > 0.5 || uEmVColor > 0.5 ? vec3(1.0) : vCol);
   float kind = uKind;
 
-  // light: the sun low over the bay, the violet sky, the neon
-  float sh = sunShadow(vWP, N);
+  // light: the sun low over the bay, the violet sky, the neon. (The shadow is not looked up where
+  // it changes nothing: indoors, the room's own light; facing away from the sun, the light and
+  // the rim both 0 whatever it is; glossy paint's glint still asks)
   float ndl = dot(N, uSunDir);
+  float sh = inside || (ndl <= -0.15 && uGloss <= 0.0) ? 1.0 : sunShadow(vWP, N);
   float light = clamp(ndl * 1.7 + 0.06, 0.0, 1.0) * sh;
   // under a grey sky the light comes from all of it: soft, a little more on what faces up
   if (uOvercast > 0.0) light = mix(light, 0.32 + 0.3 * max(N.y, 0.0), uOvercast * 0.85);

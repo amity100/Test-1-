@@ -469,6 +469,8 @@ export class Game {
       }, 2600);
     };
     welcome();
+    // (drawn in software, main.js: said once more, in play)
+    if (this.pipe.software && !this.params.has('test')) setTimeout(() => this.hud.toast('המשחק מצויר בלי כרטיס מסך, ולכן הוא איטי: מדליקים "האצת חומרה" בהגדרות הדפדפן', 'warn', 10), 7000);
   }
 
   // (ROADMAP 9.3) the sheet for a graffiti over the wall in front of you: the game waits under it
@@ -788,15 +790,7 @@ export class Game {
           fast = ms < 18.5 ? fast + 1 : 0;
           const now = this.time;
           const cap = now - ceilingAt < 40 ? Math.min(pipe.maxScale, ceiling - 0.05) : pipe.maxScale;
-          // (slow: first the mirror under the street every third frame, hardly seen; only then
-          // the whole drawing coarser. Fast again: the other way round)
-          const mirror = !this.classic && pipe.reflEvery === 2;
-          if (slow >= 2 && mirror) {
-            pipe.reflEvery = 3;
-            slow = 0;
-            fast = 0;
-            settle = 2;
-          } else if (slow >= 2 && pipe.scale > pipe.minScale) {
+          if (slow >= 2 && pipe.scale > pipe.minScale) {
             ceiling = pipe.scale;
             ceilingAt = now;
             pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);
@@ -805,10 +799,6 @@ export class Game {
             settle = 2;
           } else if (fast >= 3 && pipe.scale < cap - 0.001) {
             pipe.scale = Math.min(cap, pipe.scale + 0.05);
-            fast = 0;
-            settle = 1;
-          } else if (fast >= 3 && pipe.reflEvery === 3) {
-            pipe.reflEvery = 2;
             fast = 0;
             settle = 1;
           }

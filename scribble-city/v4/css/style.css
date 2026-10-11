@@ -435,6 +435,7 @@ body.air-drawing #toasts { top: auto; bottom: max(70px, calc(env(safe-area-inset
 body.touch .desktop-only { display: none; }
 body:not(.touch) .touch-only { display: none; }
 #load-status { margin-top: 8px; font-size: 14px; color: var(--ink-soft); min-height: 18px; }
+#gpu-note { margin: 10px auto 0; max-width: 560px; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 6px 9px 7px 10px; background: var(--sticky); color: var(--ink); font-size: 15px; line-height: 1.45; }
 
 /* ---------- touch controls ---------- */
 #touch { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
