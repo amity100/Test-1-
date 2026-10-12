@@ -86,6 +86,24 @@ export const SKY_PENS = [
 ];
 
 // uniforms shared by reference between every material
+// a vec4[n] uniform kept flat, its slots set like vectors (slots[i].set(x, y, z, w))
+function flat4(n, x = 0, y = 0, z = 0, w = 0) {
+  const a = new Float32Array(n * 4);
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    const set = (sx, sy, sz, sw) => {
+      a[o] = sx;
+      a[o + 1] = sy;
+      a[o + 2] = sz;
+      a[o + 3] = sw;
+    };
+    set(x, y, z, w);
+    slots.push({ set });
+  }
+  return { value: a, slots };
+}
+
 export const shared = {
   uNoise: { value: noiseTexture() },
   uTime: { value: 0 },
@@ -121,8 +139,8 @@ export const shared = {
   uShadowOldMatrix: { value: new THREE.Matrix4() },
   uShadowOldMode: { value: 0 },
   uShadowOldK: { value: 0 },
-  uLightPos: { value: Array.from({ length: MAX_LIGHTS }, () => new THREE.Vector4()) },
-  uLightCol: { value: Array.from({ length: MAX_LIGHTS }, () => new THREE.Vector4()) },
+  uLightPos: flat4(MAX_LIGHTS),
+  uLightCol: flat4(MAX_LIGHTS),
   uLightN: { value: 0 },
   uQuality: { value: 1 },
   uMirror: { value: 0 },
@@ -132,7 +150,7 @@ export const shared = {
   uMatTab: { value: penTable() },
   // the people's shapes, every one in a row (render/people.js)
   uShapes: { value: blank },
-  uWErase: { value: Array.from({ length: MAX_SPOTS }, () => new THREE.Vector4(0, -1000, 0, 0)) },
+  uWErase: flat4(MAX_SPOTS, 0, -1000, 0, 0),
   uWEraseN: { value: 0 },
   uHoles: { value: holeTexture() },
   uWind: { value: new THREE.Vector3(1, 0, 0) },
@@ -215,8 +233,8 @@ export function pickLights(cam) {
     lastPick = { x: cx, z: cz };
     near = staticLights.filter((l) => Math.abs(l.x - cx) < 160 && Math.abs(l.z - cz) < 160);
   }
-  const P = shared.uLightPos.value;
-  const C = shared.uLightCol.value;
+  const P = shared.uLightPos.slots;
+  const C = shared.uLightCol.slots;
   let n = 0;
   for (const l of dynLights) {
     if (n >= MAX_LIGHTS - 4) break;

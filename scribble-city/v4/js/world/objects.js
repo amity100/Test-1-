@@ -191,7 +191,7 @@ export class WorldObjects {
   // only the spots near the camera are worth testing in every pixel
   pickSpots(cam) {
     const S = this.spots;
-    const u = shared.uWErase.value;
+    const u = shared.uWErase.slots;
     let list = S;
     if (S.length > SHADER_SPOTS) {
       for (const s of S) s._d = Math.hypot(s.x - cam.x, s.z - cam.z) - s.r;

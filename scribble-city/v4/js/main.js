@@ -80,6 +80,8 @@ async function boot() {
   // drawing pixels per CSS pixel: 1.75 on a phone, 1.5 on a computer (less if the screen has less)
   const want = params.has('pr') ? +params.get('pr') : low ? 1.75 : 1.5;
   pipe.scale = Math.min(1, want / pr);
+  // (the test route is drawn at this, whatever the resolution has come down to: game/perf.js)
+  pipe.defaultScale = pipe.scale;
   // (never coarser than this: a drawing made at too few pixels turns to mush in the distance)
   pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.55, 1.25 / pr) : 0.7);
   // which graphics card draws (where the browser tells): none, in software (SwiftShader, llvmpipe,

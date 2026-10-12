@@ -10,6 +10,11 @@
 import { groundHeight } from '../world/layout.js';
 
 const ROUTE_SECONDS = 60;
+// after the route, standing at its start a few seconds each way, to see what holds the frames up
+// on the device: as it is, the drawing at its coarsest (the pixels), without the mirror, and not
+// drawn at all (the game alone, on the processor)
+const STILL = [['רגיל', null], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי ציור', 'draw']];
+const STILL_SECONDS = 5;
 // the route: along the boulevard, through the shops and the park, up the avenue into downtown,
 // over the towers and out over the bay to the pier (x, height, z)
 const ROUTE = [
@@ -152,10 +157,10 @@ export class Perf {
       const f = o[m].bind(o);
       const label = `${k}.${m}`;
       const self = this;
-      o[m] = function wrapped(...a) {
-        if (!self.on && !self.bench) return f(...a);
+      o[m] = function wrapped(a, b, c, d) {
+        if (!self.on && !self.bench) return f(a, b, c, d);
         const t0 = performance.now();
-        const r = f(...a);
+        const r = f(a, b, c, d);
         self.sys[label] = (self.sys[label] || 0) + performance.now() - t0;
         return r;
       };
@@ -208,7 +213,7 @@ export class Perf {
     this.passTris = {};
     this.frameMs.push(f);
     if (this.frameMs.length > 240) this.frameMs.shift();
-    if (this.bench) this.bench.frames.push(f);
+    if (this.bench) (this.bench.still ? this.bench.still.frames : this.bench.frames).push(f);
     if (this.on && now - this.shownAt > 250) {
       this.shownAt = now;
       this.show();
@@ -268,7 +273,7 @@ export class Perf {
   }
 
   // ---------------------------------------------------------------- the test route
-  startBench(seconds = ROUTE_SECONDS) {
+  startBench(seconds = ROUTE_SECONDS, stillSeconds = STILL_SECONDS) {
     const g = this.game;
     if (this.bench) return;
     const pl = g.player;
@@ -281,14 +286,33 @@ export class Perf {
     // the length along the route (for an even speed)
     const acc = [0];
     for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z));
-    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, from: [pl.pos.x, pl.pos.z, pl.yaw] };
+    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0 };
     this.gpu.take(true);
+    // the shaders made ready on the way (each a pause where it is first seen: on a phone, long)
+    const b = this.bench;
+    const gl = g.renderer.getContext();
+    const cs = gl.compileShader;
+    const gp = gl.getProgramParameter;
+    gl.compileShader = function compileShader(s) {
+      b.compiles++;
+      return cs.call(this, s);
+    };
+    gl.getProgramParameter = function getProgramParameter(p, k) {
+      const t0 = performance.now();
+      const r = gp.call(this, p, k);
+      b.compileMs += performance.now() - t0;
+      return r;
+    };
+    b.unhook = () => {
+      delete gl.compileShader;
+      delete gl.getProgramParameter;
+    };
     // the test is at the drawing's full quality: the self-adjusting resolution waits
     g.pipe.scale = g.pipe.defaultScale || g.pipe.scale;
     g.pipe.taaFrac = 0.67;
     g.player.invuln = 1e9;
     this.toggle(this.on);
-    g.hud.toast('מסלול מבחן: 60 שניות, בלי לגעת…', 'info', 3);
+    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד 20 שניות במקום. בלי לגעת…', 'info', 3);
   }
 
   // where the camera is at distance d along the route (Catmull-Rom through the points)
@@ -316,7 +340,8 @@ export class Perf {
     if (!b) return false;
     b.t += dt;
     const cam = this.game.camera;
-    const d = (Math.max(0, b.t - b.warm) / b.secs) * b.len;
+    // (after the route: standing still at its start)
+    const d = b.still ? 0 : (Math.max(0, b.t - b.warm) / b.secs) * b.len;
     const p = this.routeAt(d, this._p || (this._p = {}));
     const q = this.routeAt(d + 14, this._q || (this._q = {}));
     cam.position.set(p.x, p.y, p.z);
@@ -333,18 +358,62 @@ export class Perf {
       b.frames.length = 0;
       this.gpu.take(true);
     }
-    if (b.t >= b.warm + b.secs) this.endBench();
+    if (b.still) this.stillStep(dt);
+    else if (b.t >= b.warm + b.secs) this.beginStill();
     return true;
+  }
+
+  // the route is done: standing at its start, a few seconds each way (STILL)
+  beginStill() {
+    const b = this.bench;
+    b.gpuRoute = this.gpu.ok ? this.gpu.take(true) : null;
+    b.still = { i: -1, t: 0, frames: [], fps: [] };
+    this.nextStill();
+  }
+
+  nextStill() {
+    const b = this.bench;
+    const s = b.still;
+    const pipe = this.game.pipe;
+    if (s.i >= 0) s.fps.push(this.summary(s.frames).fps);
+    // (back as it was)
+    pipe.scale = pipe.defaultScale || b.scale;
+    pipe.reflections = b.refl;
+    b.noDraw = false;
+    s.i++;
+    s.t = 0;
+    s.frames = [];
+    if (s.i >= STILL.length) {
+      this.endBench();
+      return;
+    }
+    const what = STILL[s.i][1];
+    if (what === 'scale') pipe.scale = pipe.minScale;
+    else if (what === 'mirror') pipe.reflections = false;
+    else if (what === 'draw') b.noDraw = true;
+  }
+
+  stillStep(dt) {
+    const s = this.bench.still;
+    s.t += dt;
+    // (the first second settles: not counted)
+    if (s.t < 1) s.frames.length = 0;
+    if (s.t >= this.bench.stillSecs) this.nextStill();
   }
 
   endBench() {
     const g = this.game;
     const b = this.bench;
     const s = this.summary(b.frames);
-    const gpu = this.gpu.ok ? this.gpu.take(true) : null;
+    const gpu = b.gpuRoute !== undefined ? b.gpuRoute : this.gpu.ok ? this.gpu.take(true) : null;
     this.bench = null;
+    if (b.unhook) b.unhook();
     g.pipe.scale = b.scale;
     g.pipe.taaFrac = b.taaFrac;
+    g.pipe.reflections = b.refl;
+    // how the frames came: in time for a 60 Hz screen, for 30, or later
+    const dts = b.frames.map((f) => f.dt);
+    const share = (lo, hi) => Math.round((100 * dts.filter((x) => x > lo && x <= hi).length) / Math.max(1, dts.length));
     g.player.spawn(b.from[0], b.from[1], b.from[2]);
     g.camRig.yaw = b.from[2];
     this.toggle(this.on);
@@ -362,13 +431,15 @@ export class Perf {
       `מכשיר: ${device || 'לא ידוע'}`,
       `מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'}`,
       `FPS ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
+      `פריימים: עד 17ms ${share(0, 17.5)}% · עד 34ms ${share(17.5, 34.5)}% · יותר ${share(34.5, 1e9)}% · הכנת שיידרים ${b.compiles} (${Math.round(b.compileMs)}ms)`,
+      b.still && b.still.fps.length === STILL.length ? `עומדים במקום, פריימים בשנייה: ${STILL.map(([name], i) => `${name} ${b.still.fps[i].toFixed(1)}`).join(' · ')}` : '',
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
       `לפי מעבר: ${PASSES.filter((p) => s.pass[p] !== undefined).map((p) => `${PASS_HE[p]} ${Math.round(s.pass[p])}`).join(' · ')}`,
       `מערכות (ms): ${Object.entries(s.sys).sort((a, b2) => b2[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(' · ')}`,
     ];
-    this.report(lines.join('\n'));
+    this.report(lines.filter(Boolean).join('\n'));
   }
 
   report(text) {

@@ -335,6 +335,13 @@ class Shape {
   }
 }
 
+// drawCheap's joints: x across, y up, z ahead of the walker _aw (scale _aS) in its frame (_cR, _cF)
+let _aw = null;
+let _aS = 1;
+function atW(out, x, y, z) {
+  return out.set(_aw.x + (_cR.x * x + _cF.x * z) * _aS, _aw.y + y * _aS, _aw.z + (_cR.z * x + _cF.z * z) * _aS);
+}
+
 // a matrix that takes a part hanging down its local -y from a joint at a to b, as thick as k
 function along(a, b, len0, k, side, out = _m) {
   _y.subVectors(a, b);
@@ -638,7 +645,9 @@ export class PersonRenderer {
     const ph = w.phase;
     const J = _cJ;
     // the joints (the rig's walk, game/doodle.js, without the rig)
-    const at = (out, x, y, z) => out.set(w.x + (R.x * x + F.x * z) * S, w.y + y * S, w.z + (R.z * x + F.z * z) * S);
+    _aw = w;
+    _aS = S;
+    const at = atW;
     const hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A;
     const lean = A * 0.12;
     at(J.hip, 0, hipY, 0);

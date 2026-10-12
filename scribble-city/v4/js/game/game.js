@@ -774,6 +774,13 @@ export class Game {
     // (the same for the smart drawing's share)
     let ceilingT = Infinity;
     let ceilingTAt = -1e9;
+    // a step down has to pay for itself: if a second later the frames are no faster, what holds
+    // them up is the processor, not the pixels (a phone often), and the drawing goes back to as
+    // sharp as it was. That step is not tried again for a while (a minute, longer each time it
+    // does not help), unless the frames get much slower than they were
+    let tried = null;
+    const hold = { scale: { v: 0, at: -1e9, for: 0, ms: 0 }, taa: { v: 0, at: -1e9, for: 0, ms: 0 } };
+    const held = (h, v, now, ms) => v <= h.v + 0.001 && now - h.at < h.for && ms < h.ms * 1.3;
     const tick = () => {
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
@@ -781,8 +788,9 @@ export class Game {
       perf.frameStart();
       this.update(dt);
       perf.afterUpdate();
-      // (under the open map the city is not drawn: the map covers all of it)
-      if (!this.citymap.covering) this.renderFrame();
+      // (under the open map the city is not drawn: the map covers all of it; nor for a moment of
+      // the test route, to time the game alone)
+      if (!this.citymap.covering && !(perf.bench && perf.bench.noDraw)) this.renderFrame();
       perf.frameEnd(raw);
       // (the test route is measured at the drawing's full quality: the resolution waits; and
       // while the depth first is being tried)
@@ -795,21 +803,43 @@ export class Game {
       if (acc > 1.0) {
         const ms = (acc / n) * 1000;
         if (settle > 0) settle--;
-        else {
+        else if (tried) {
+          // (the first second after a step down: did it make the frames faster?)
+          const h = hold[tried.kind];
+          if (ms > tried.ms * 0.92) {
+            if (tried.kind === 'taa') {
+              pipe.taaFrac = tried.from;
+              ceilingT = Infinity;
+            } else {
+              pipe.scale = tried.from;
+              ceiling = Infinity;
+            }
+            h.v = tried.from;
+            h.at = this.time;
+            h.for = Math.min(600, h.for ? h.for * 2 : 60);
+            h.ms = ms;
+            settle = 1;
+          } else h.for = 0;
+          tried = null;
+          slow = 0;
+          fast = 0;
+        } else {
           // slow: under 40 frames a second; fast: keeping up with a 60 Hz screen
           slow = ms > 25 ? slow + 1 : 0;
           fast = ms < 18.5 ? fast + 1 : 0;
           const now = this.time;
           const cap = now - ceilingAt < 40 ? Math.min(pipe.maxScale, ceiling - 0.05) : pipe.maxScale;
           const capT = now - ceilingTAt < 40 ? Math.min(pipe.taaMax, ceilingT - 0.05) : pipe.taaMax;
-          if (slow >= 2 && pipe.taa && pipe.taaFrac > pipe.taaMin + 0.001) {
+          if (slow >= 2 && pipe.taa && pipe.taaFrac > pipe.taaMin + 0.001 && !held(hold.taa, pipe.taaFrac, now, ms)) {
+            tried = { kind: 'taa', from: pipe.taaFrac, ms };
             ceilingT = pipe.taaFrac;
             ceilingTAt = now;
             pipe.taaFrac = Math.max(pipe.taaMin, pipe.taaFrac - 0.1);
             slow = 0;
             fast = 0;
             settle = 2;
-          } else if (slow >= 2 && pipe.scale > pipe.minScale) {
+          } else if (slow >= 2 && pipe.scale > pipe.minScale && !held(hold.scale, pipe.scale, now, ms)) {
+            tried = { kind: 'scale', from: pipe.scale, ms };
             ceiling = pipe.scale;
             ceilingAt = now;
             pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);

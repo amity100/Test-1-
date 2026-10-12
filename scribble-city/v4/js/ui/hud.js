@@ -419,7 +419,10 @@ export class HUD {
     // the way to the destination (game/gps.js), a highlighter's pink over an ink line
     const route = game.gps && game.gps.target ? game.gps.route : null;
     if (route) this.drawRoute(g, route, p, s);
+    // (the farthest a marker of up to 8 pixels can be and still touch the canvas)
+    const reach = (Math.hypot(W, H) / 2 + 8) / s;
     for (const b of game.world.billboards) {
+      if (Math.abs(b.x - p.x) > reach || Math.abs(b.z - p.z) > reach) continue;
       const got = game.album.has(b.id);
       g.save();
       g.translate(b.x - p.x, b.z - p.z);
@@ -471,7 +474,7 @@ export class HUD {
       g.stroke();
       g.restore();
     }
-    for (const v of game.vehicles.list) dot(v.pos.x, v.pos.z, 4, '#5f8be8', '#141418');
+    for (const v of game.vehicles.list) if (Math.abs(v.pos.x - p.x) <= reach && Math.abs(v.pos.z - p.z) <= reach) dot(v.pos.x, v.pos.z, 4, '#5f8be8', '#141418');
     for (const e of game.enemies.list) {
       if (!e.alive) continue;
       const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);

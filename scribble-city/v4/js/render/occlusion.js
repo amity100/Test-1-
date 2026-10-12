@@ -55,7 +55,9 @@ export class Occlusion {
     const cam = camera.position;
     const r2 = range * range;
     let n = 0;
-    for (const b of this.boxes) {
+    const boxes = this.boxes;
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
       if (b.alive === false) continue;
       // near enough, and not round the camera
       const cx = Math.max(b.x0, Math.min(cam.x, b.x1));
@@ -157,7 +159,6 @@ export class Occlusion {
       _order[j + 1] = k;
     }
     let n = 0;
-    const cross = (a, b, c) => (_hull[b * 2] - _hull[a * 2]) * (_p[c * 3 + 1] - _hull[a * 2 + 1]) - (_hull[b * 2 + 1] - _hull[a * 2 + 1]) * (_p[c * 3] - _hull[a * 2]);
     // lower hull
     for (let i = 0; i < 8; i++) {
       const k = _order[i];
@@ -267,6 +268,11 @@ export class Occlusion {
   }
 }
 
+// which way the hull turns at b on the way from a (hull points) to c (a projected corner)
+function cross(a, b, c) {
+  return (_hull[b * 2] - _hull[a * 2]) * (_p[c * 3 + 1] - _hull[a * 2 + 1]) - (_hull[b * 2 + 1] - _hull[a * 2 + 1]) * (_p[c * 3] - _hull[a * 2]);
+}
+
 // the outline's x extent on the horizontal line y (spanL, spanR), or null if it misses it
 let spanL = 0;
 let spanR = 0;
@@ -293,7 +299,8 @@ function spanAt(n, y) {
 }
 
 function nearHole(b, holes) {
-  for (const s of holes) {
+  for (let i = 0; i < holes.length; i++) {
+    const s = holes[i];
     const dx = Math.max(b.x0 - s.x, 0, s.x - b.x1);
     const dy = Math.max(b.y0 - s.y, 0, s.y - b.y1);
     const dz = Math.max(b.z0 - s.z, 0, s.z - b.z1);
