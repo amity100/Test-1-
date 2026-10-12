@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeSurface, srgb, lin3, LAYERS, mergedSurface, penRow } from './materials.js';
+import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 
 // The cars of the city: the first boulevard's low sports car (glossy paint full of the sunset, a
 // bar of red light across the back), and its family - a sedan, a taxi, a police cruiser with its
@@ -474,6 +475,13 @@ function merge(list) {
   return g;
 }
 
+// (the smart drawing, render/motion.js) the car being put down: how it has moved since the last
+// frame (its parts were where this takes them back to)
+const _carD = new THREE.Matrix4();
+const _carInv = new THREE.Matrix4();
+const _carPm = new THREE.Matrix4();
+let _carDOn = false;
+
 class Pool {
   constructor(scene, geo, mat, cap, dents = false) {
     this.cap = cap;
@@ -500,6 +508,12 @@ class Pool {
     this.mesh.userData.dynamic = true;
     scene.add(this.mesh);
     this.n = 0;
+    // (the smart drawing: where each was a frame ago)
+    mat.defines.USE_PREV = '';
+    this.prev = new Float32Array(cap * 12);
+    this.motionBase = 0;
+    this.motionGen = -1;
+    bindMotion(this.mesh, this);
   }
 
   // rv: a drawn car still turning from the drawing into the car ({ sweep: [x, y, z, front], band })
@@ -519,6 +533,7 @@ class Pool {
       if (dmg && dmg.burnt) b[i * 4 + 3] += 10;
     }
     m.toArray(this.mesh.instanceMatrix.array, i * 16);
+    if (motion.on) rowsOf((_carDOn ? _carPm.multiplyMatrices(_carD, m) : m).elements, this.prev, i * 12);
     const c = this.mesh.instanceColor.array;
     c[i * 3] = color[0];
     c[i * 3 + 1] = color[1];
@@ -547,6 +562,10 @@ class Pool {
       at.clearUpdateRanges();
       at.addUpdateRange(0, Math.max(1, this.n) * at.itemSize);
       at.needsUpdate = true;
+    }
+    if (motion.on && this.n) {
+      this.motionBase = motionRows(this.prev, this.n);
+      this.motionGen = motion.gen;
     }
     this.n = 0;
   }
@@ -785,6 +804,44 @@ export class CarRenderer {
    *      ({ pre: world matrix pressing it flat, sweep, band }) }
    */
   draw(kind, color, x, y, z, yaw, o = {}) {
+    this.drawCar(kind, color, x, y, z, yaw, o);
+    // (what is put down after it is not part of this car)
+    _carDOn = false;
+  }
+
+  // (the smart drawing, render/motion.js) the same car a frame ago: the nearest of its kind within
+  // 4 m of where it is; its parts were where the way it has moved since takes them back to
+  carWas(kind, x, y, z) {
+    const was = this._was || (this._was = []);
+    const now = this._now || (this._now = []);
+    const spare = this._spare || (this._spare = []);
+    let best = null;
+    let bd = 16;
+    for (let i = 0; i < was.length; i++) {
+      const c = was[i];
+      if (c.used || c.kind !== kind) continue;
+      const d = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y) + (c.z - z) * (c.z - z);
+      if (d < bd) {
+        bd = d;
+        best = c;
+      }
+    }
+    const rec = spare.pop() || { kind: '', x: 0, y: 0, z: 0, used: false, m: new THREE.Matrix4() };
+    rec.kind = kind;
+    rec.x = x;
+    rec.y = y;
+    rec.z = z;
+    rec.used = false;
+    rec.m.copy(_m);
+    now.push(rec);
+    _carDOn = !!best;
+    if (best) {
+      best.used = true;
+      _carD.multiplyMatrices(best.m, _carInv.copy(_m).invert());
+    }
+  }
+
+  drawCar(kind, color, x, y, z, yaw, o) {
     const P = this.kinds[kind] || this.kinds.sedan;
     const K = P.b.K;
     const s = o.scale || 1;
@@ -802,6 +859,7 @@ export class CarRenderer {
     _q.setFromEuler(_e);
     _m.compose(_p.set(x, y + (o.lift || 0), z), _q, _s.set(s, s * (o.squash || 1), s));
     if (rv) _m.premultiply(rv.pre);
+    if (motion.on) this.carWas(kind, x, y, z);
     const part = ((Math.abs(x * 0.37 + z * 0.11) % 1) + 1) % 1;
     P.shell.push(_m, this.col(color), part, rv, D, o.open ? -1 : 0);
     P.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D, o.open ? -1 : 0);
@@ -957,6 +1015,14 @@ export class CarRenderer {
     this.rims.end();
     this.lightBox.end();
     this.trimBox.end();
+    // (the smart drawing: this frame's cars are the last frame's for the next)
+    if (this._now) {
+      const was = this._was;
+      for (let i = 0; i < was.length; i++) this._spare.push(was[i]);
+      was.length = 0;
+      this._was = this._now;
+      this._now = was;
+    }
   }
 }
 

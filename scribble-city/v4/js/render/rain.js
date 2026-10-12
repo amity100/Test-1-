@@ -76,6 +76,7 @@ void main() {
 
 const RAIN_FRAG = /* glsl */ `
 uniform highp sampler2D tDepth;
+uniform float uDepthK;
 uniform vec3 uPenA;
 uniform vec3 uPenB;
 uniform float uAlpha;
@@ -87,7 +88,7 @@ flat in float vPen;
 layout(location = 0) out vec4 fragColor;
 void main() {
   // behind something in the drawing: hidden
-  if (gl_FragCoord.z > texelFetch(tDepth, ivec2(gl_FragCoord.xy), 0).r) discard;
+  if (gl_FragCoord.z > texelFetch(tDepth, ivec2(gl_FragCoord.xy * uDepthK), 0).r) discard;
   float a = clamp(vHalfW + 0.5 - abs(vSide), 0.0, 1.0);
   // a pen stroke: thin where it starts, full where the drop is
   a *= smoothstep(0.0, 0.3, vT) * (0.4 + 0.6 * vT);
@@ -100,6 +101,7 @@ const SPLASH_VERT = /* glsl */ `
 in vec4 iSplash;
 uniform highp sampler2D tDepth;
 uniform highp sampler2D tAux;
+uniform float uDepthK;
 uniform mat4 uInvProj;
 uniform mat4 uCamWorld;
 uniform float uRate;
@@ -113,7 +115,7 @@ void main() {
   vPh = t - cyc;
   // each time round a new place: a point of the drawing, if it is flat, near, and the sky's
   vec2 uv = vec2(h11(cyc * 1.31 + iSplash.x * 97.0), h11(cyc * 2.17 + iSplash.y * 61.0));
-  ivec2 px = ivec2(uv * uResolution);
+  ivec2 px = ivec2(uv * uResolution * uDepthK);
   float d = texelFetch(tDepth, px, 0).r;
   vec4 aux = texelFetch(tAux, px, 0);
   vec2 nxy = aux.xy * 2.0 - 1.0;
@@ -143,6 +145,7 @@ void main() {
 
 const SPLASH_FRAG = /* glsl */ `
 uniform highp sampler2D tDepth;
+uniform float uDepthK;
 uniform vec3 uPenA;
 uniform float uAlpha;
 in vec2 vQ;
@@ -156,7 +159,7 @@ float segD(vec2 p, vec2 a, vec2 b) {
   return length(pa - ba * h);
 }
 void main() {
-  if (gl_FragCoord.z > texelFetch(tDepth, ivec2(gl_FragCoord.xy), 0).r + 0.00002) discard;
+  if (gl_FragCoord.z > texelFetch(tDepth, ivec2(gl_FragCoord.xy * uDepthK), 0).r + 0.00002) discard;
   float k = vPh / 0.28;
   vec2 p = vQ;
   float w = max(fwidth(p.x), 1e-4);
@@ -219,6 +222,7 @@ export class RainRenderer {
       tAux: ink.tAux,
       uInvProj: ink.uInvProj,
       uCamWorld: ink.uCamWorld,
+      uDepthK: pipe.rainDepthK,
       // the roofs' map in use
       uRoof: { value: BLANK },
       uRoofMatrix: { value: new THREE.Matrix4() },

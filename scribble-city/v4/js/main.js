@@ -94,6 +94,7 @@ async function boot() {
     note.classList.remove('hidden');
   }
   pipe.maxScale = 1;
+  if (params.has('taafrac')) pipe.taaFrac = Math.min(1, Math.max(0.4, +params.get('taafrac') || 0.67));
   if (params.has('norefl')) pipe.reflections = false;
   if (params.has('depth') || params.has('nodepth')) {
     pipe.depthFirst = params.has('depth');

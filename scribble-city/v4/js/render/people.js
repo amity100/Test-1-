@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, penPictures } from './materials.js';
 import { MAX_HOLES, MAX_OWNERS } from './glsl.js';
+import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
 // (the first boulevard's own people: a shaped torso, tapering limbs, a head with a jaw and ears,
@@ -209,6 +210,35 @@ const CLASS_SIZES = [60, 300, 504, 1020, 1404];
 const NO_MIRROR = 1;
 const NO_SUN = 2;
 
+// (the smart drawing, render/motion.js) where each part of a person was a frame ago: known by the
+// person and the order the parts are put down in, the same every frame (a part that was not there
+// the last time is where it is now)
+const PARTS = 128;
+const _seq = new Int32Array(MAX_OWNERS + 2);
+const _was = new Map();
+function partWas(out, i, m, owner, shape) {
+  const o = i * 12;
+  let s = null;
+  let k = -1;
+  if (owner > 0 && owner < _seq.length) {
+    k = _seq[owner]++;
+    if (k < PARTS) {
+      s = _was.get(owner);
+      if (!s) {
+        s = { m: new Float32Array(PARTS * 12), shape: new Int32Array(PARTS).fill(-1), gen: new Int32Array(PARTS).fill(-9) };
+        _was.set(owner, s);
+      }
+    }
+  }
+  if (s && s.shape[k] === shape && s.gen[k] >= motion.gen - 1) out.set(s.m.subarray(k * 12, k * 12 + 12), o);
+  else rowsOf(m.elements, out, o);
+  if (s) {
+    rowsOf(m.elements, s.m, k * 12);
+    s.shape[k] = shape;
+    s.gen[k] = motion.gen;
+  }
+}
+
 class DrawClass {
   constructor(scene, verts, mat, cap) {
     this.cap = cap;
@@ -231,12 +261,19 @@ class DrawClass {
     this.mesh.userData.dynamic = true;
     scene.add(this.mesh);
     this.n = 0;
+    // (the smart drawing: where each part was a frame ago)
+    mat.defines.USE_PREV = '';
+    this.prev = new Float32Array(cap * 12);
+    this.motionBase = 0;
+    this.motionGen = -1;
+    bindMotion(this.mesh, this);
   }
 
   push(sh, m, color, owner, part, indoor, clip) {
     if (this.n >= this.cap) return -1;
     const i = this.n++;
     m.toArray(this.mesh.instanceMatrix.array, i * 16);
+    if (motion.on) partWas(this.prev, i, m, owner, sh.row);
     const c = this.mesh.instanceColor.array;
     c[i * 3] = color[0];
     c[i * 3 + 1] = color[1];
@@ -270,6 +307,10 @@ class DrawClass {
       at.clearUpdateRanges();
       at.addUpdateRange(0, n * at.itemSize);
       at.needsUpdate = true;
+    }
+    if (motion.on && this.n) {
+      this.motionBase = motionRows(this.prev, this.n);
+      this.motionGen = motion.gen;
     }
     this.n = 0;
   }
@@ -569,6 +610,8 @@ export class PersonRenderer {
 
   end() {
     for (const c of this.classes) c.end();
+    // (the next frame's parts counted from the first again)
+    _seq.fill(0);
     if (this.dirty) {
       this.holeTex.needsUpdate = true;
       this.dirty = false;

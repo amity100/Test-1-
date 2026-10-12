@@ -68,6 +68,13 @@ uniform float uWet;
 uniform float uMist;
 uniform float uFlash;
 uniform float uDepthOnly;
+uniform float uPxK;
+uniform float uMipBias;
+uniform float uPRo;
+uniform mat4 uPrevVP;
+uniform vec2 uJitNdc;
+uniform highp sampler2D uPrevInst;
+uniform vec2 uMotion;
 `;
 
 export const FUNCS = /* glsl */ `
@@ -308,12 +315,12 @@ vec2 penLayer(vec2 p, vec2 dpx, vec2 dpy, float ang, float gapPx, float wpx, flo
   vec2 n = vec2(-d.y, d.x);
   float mppA = max(length(vec2(dot(dpx, n), dot(dpy, n))), 1e-7);
   float mppL = max(length(vec2(dot(dpx, d), dot(dpy, d))), 1e-7);
-  float lv = log2(mppA * gapPx * uPR / 0.0015);
+  float lv = log2(mppA * gapPx * uPRo / 0.0015);
   float l0 = floor(lv);
   float f = lv - l0;
   float s0 = 0.0015 * exp2(l0);
-  vec2 A = strokeFamily(p, d, n, s0, mppA, mppL, wpx * uPR, seed + l0 * 13.7, lenK);
-  vec2 B = strokeFamily(p, d, n, s0 * 2.0, mppA, mppL, wpx * uPR, seed + (l0 + 1.0) * 13.7, lenK);
+  vec2 A = strokeFamily(p, d, n, s0, mppA, mppL, wpx * uPRo, seed + l0 * 13.7, lenK);
+  vec2 B = strokeFamily(p, d, n, s0 * 2.0, mppA, mppL, wpx * uPRo, seed + (l0 + 1.0) * 13.7, lenK);
   // each stroke's own moment to come and go, kept inside the level so the levels join up
   float ta = 0.12 + 0.76 * fract(A.y * 13.37);
   float tb = 0.12 + 0.76 * fract(B.y * 13.37);
@@ -424,6 +431,12 @@ flat out float vMat;
 #ifdef USE_TINT
 in float aTint; // (a car's shell: only the body takes the car's colour)
 #endif
+#ifdef USE_PREV
+// (the smart drawing, render/motion.js) how far this point has gone on the screen since the last
+// frame (its part's matrix then, the camera then), and 1 for an instance of a thing that moves
+// on its own
+out vec3 vVel;
+#endif
 #ifdef USE_PULL
 // the people's parts: every shape in one texture (two texels a point: position and u, normal and
 // v), each instance saying which shape it is, how many points it has, its pen, and what it is
@@ -529,6 +542,21 @@ void main() {
 #endif
   vRefl = uReflMatrix * wp;
   gl_Position = projectionMatrix * viewMatrix * wp;
+#ifdef USE_PREV
+#ifdef USE_INSTANCING
+  vec4 pw = wp;
+  if (uMotion.y > 0.5) {
+    int row = int(uMotion.x + 0.5) + gl_InstanceID;
+    ivec2 t = ivec2((row & 1023) * 3, row >> 10);
+    vec4 lp = vec4(pos, 1.0);
+    pw = modelMatrix * vec4(dot(texelFetch(uPrevInst, t, 0), lp), dot(texelFetch(uPrevInst, t + ivec2(1, 0), 0), lp), dot(texelFetch(uPrevInst, t + ivec2(2, 0), 0), lp), 1.0);
+  }
+  vec4 pc = uPrevVP * pw;
+  vVel = vec3((gl_Position.xy / max(gl_Position.w, 0.05) - uJitNdc) - pc.xy / max(pc.w, 0.05), 1.0);
+#else
+  vVel = vec3(0.0);
+#endif
+#endif
 }
 `;
 
@@ -547,8 +575,14 @@ in float vBurnt;
 #endif
 flat in vec4 vX;
 flat in vec4 vClip;
+#ifdef USE_PREV
+in vec3 vVel;
+#endif
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
+// (the smart drawing, render/pipeline.js) xy: how far it went on the screen since the last frame,
+// w: 1 for a thing that moves on its own (0: the camera alone moved it)
+layout(location = 2) out vec4 gVel;
 
 #ifdef USE_MATTAB
 // many plain pens in one draw: each vertex carries the row of its pen in the table (the values
@@ -608,8 +642,8 @@ uniform sampler2D uMapS2;
 uniform sampler2D uMapS3;
 uniform sampler2D uMapS4;
 vec4 penPicture(vec2 uv) {
-  vec2 gx = dFdx(uv);
-  vec2 gy = dFdy(uv);
+  vec2 gx = dFdx(uv) * uPxK;
+  vec2 gy = dFdy(uv) * uPxK;
   int l = int(uLayer + 0.5);
   if (l == 0) return textureGrad(uMapS0, uv, gx, gy);
   if (l == 1) return textureGrad(uMapS1, uv, gx, gy);
@@ -656,7 +690,7 @@ uniform vec4 uMatBand;   // (width of the band of light, paper ahead of it 0..1,
 vec3 rainRings(vec2 p, float dist) {
   vec3 o = vec3(0.0);
   // (a pixel's size in cells, taken before anything branches)
-  float px = length(fwidth(p)) * 1.6;
+  float px = length(fwidth(p)) * 1.6 * uPxK;
   float fade = 1.0 - smoothstep(12.0, 34.0, dist);
   if (fade <= 0.0) return o;
   for (int k = 0; k < 2; k++) {
@@ -732,21 +766,22 @@ void main() {
   bool inside = uIndoor > 0.5 || vX.z > 0.5;
   vec3 Nw = normalize(vN);
   vec2 p = strokeCoords(Nw);
-  vec2 dpx = dFdx(p);
-  vec2 dpy = dFdy(p);
+  // (uPxK, render/pipeline.js: the drawing's pixel in the screen's; 1 when it is drawn whole)
+  vec2 dpx = dFdx(p) * uPxK;
+  vec2 dpy = dFdy(p) * uPxK;
   vec4 tex = vec4(1.0);
   if (uUseMap > 0.5) {
     if (uCells > 0.5) {
       float cell = floor(vUv.y / 64.0);
       vec2 l = vec2(vUv.x, vUv.y - cell * 64.0);
-      vec2 g1 = dFdx(vUv) * vec2(1.0, 1.0 / uCells);
-      vec2 g2 = dFdy(vUv) * vec2(1.0, 1.0 / uCells);
+      vec2 g1 = dFdx(vUv) * vec2(1.0, 1.0 / uCells) * uPxK;
+      vec2 g2 = dFdy(vUv) * vec2(1.0, 1.0 / uCells) * uPxK;
       tex = textureGrad(uMap, vec2(fract(l.x), (cell + clamp(fract(l.y), 0.01, 0.99)) / uCells), g1, g2);
     } else {
 #ifdef USE_MAPSET
       tex = penPicture(vUv);
 #else
-      tex = texture(uMap, vUv);
+      tex = texture(uMap, vUv, uMipBias);
 #endif
     }
     if (uNeonMask > 0.5) tex = vec4(mix(vCol, vec3(1.0), tex.g * 0.55), tex.r);
@@ -758,8 +793,8 @@ void main() {
 #else
       vec2 ts = vec2(textureSize(uMap, 0));
 #endif
-      vec2 gx = dFdx(vUv) * ts;
-      vec2 gy = dFdy(vUv) * ts;
+      vec2 gx = dFdx(vUv) * ts * uPxK;
+      vec2 gy = dFdy(vUv) * ts * uPxK;
       float lod = 0.5 * log2(max(max(dot(gx, gx), dot(gy, gy)), 1e-8));
       tex.a *= 1.0 + max(0.0, lod) * 0.3;
     }
@@ -770,6 +805,7 @@ void main() {
   if (uDepthOnly > 0.5) {
     gColor = vec4(0.0);
     gAux = vec4(0.0);
+    gVel = vec4(0.0);
     return;
   }
   vec3 N = gl_FrontFacing ? Nw : -Nw;
@@ -809,7 +845,7 @@ void main() {
   if (uOvercast > 0.0) hi *= 1.0 - uOvercast;
   // pictures (shop windows, signs, murals) and glass keep their own light
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
-  vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv).rgb : vec3(1.0));
+  vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv, uMipBias).rgb : vec3(1.0));
   // a room glows a little out into the evening
   if (inside) em += alb * vec3(0.32, 0.2, 0.1);
   if (uNeonMask > 0.5) em = uEmissive * tex.rgb;
@@ -891,6 +927,12 @@ void main() {
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
   vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
   gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * 0.6180339), uLine);
+#ifdef USE_PREV
+  gVel = vec4(vVel.xy, 0.0, vVel.z);
+#else
+  // (z: what changes by itself, the water's ripples)
+  gVel = vec4(0.0, 0.0, kind > 8.5 && kind < 9.5 ? 0.6 : 0.0, 0.0);
+#endif
 }
 `;
 
@@ -909,6 +951,7 @@ export const SKY_FRAG = /* glsl */ `
 in vec3 vWP;
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
+layout(location = 2) out vec4 gVel;
 // the hour's pens (sRGB: low, middle, top, four of each), the clouds (bellies, edges in the sun),
 // the sun's disc (core, ring, glow), the moon and the stars (game/daynight.js)
 uniform vec3 uSkyPen[12];
@@ -937,8 +980,8 @@ void main() {
   float az = atan(dir.x, -dir.z);
   float el = asin(clamp(dir.y, -1.0, 1.0));
   vec2 p = vec2(az, el) * 220.0;
-  vec2 dpx = dFdx(p);
-  vec2 dpy = dFdy(p);
+  vec2 dpx = dFdx(p) * uPxK;
+  vec2 dpy = dFdy(p) * uPxK;
   if (abs(dpx.x) > 100.0) dpx.x = 0.0;
   if (abs(dpy.x) > 100.0) dpy.x = 0.0;
   vec3 sky = skyColor(dir);
@@ -1026,6 +1069,7 @@ void main() {
   if (uFlash > 0.0) col += vec3(0.62, 0.68, 0.95) * uFlash * (0.25 + 0.5 * cl);
   gColor = vec4(col, clamp(glow, 0.0, 1.0));
   gAux = vec4(0.5, 0.5, 0.0, 0.0);
+  gVel = vec4(0.0);
 }
 `;
 
@@ -1184,6 +1228,7 @@ flat in float vGone;
 in vec3 vWP;
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
+layout(location = 2) out vec4 gVel;
 uniform float uGlow;
 void main() {
   if (uDepthOnly > 0.5) discard;
@@ -1208,6 +1253,9 @@ void main() {
   if (a < 0.015) discard;
   gColor = vec4(lc, a);
   gAux = vec4(0.0);
+  // (the smart drawing: a line in the world is here this frame, nothing gathered before is kept
+  // under it; blended in by its own cover)
+  gVel = vec4(0.0, 0.0, 1.0, a);
 }
 `;
 
@@ -1271,14 +1319,16 @@ in vec3 vWP;
 in vec2 vLoc;
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
+layout(location = 2) out vec4 gVel;
 void main() {
-  vec4 tex = texture(uMap, vUv);
+  vec4 tex = texture(uMap, vUv, uMipBias);
   float a = tex.a * vTint.a;
   if (uNearFade > 0.0) a *= smoothstep(uNearFade * 0.4, uNearFade, vDist);
   if (uDepthOnly > 0.5) {
     if (uOpaque < 0.5 || a < 0.5) discard;
     gColor = vec4(0.0);
     gAux = vec4(0.0);
+    gVel = vec4(0.0);
     return;
   }
   vec3 col = toLin(tex.rgb) * vTint.rgb;
@@ -1290,5 +1340,8 @@ void main() {
   } else if (a < 0.02) discard;
   gColor = vec4(col, a);
   gAux = vec4(0.0);
+  // (the smart drawing: smoke and sparks are here this frame, nothing gathered before is kept
+  // under them; the opaque pictures stay with the camera's move, as the walls do)
+  gVel = uOpaque > 0.5 ? vec4(0.0) : vec4(0.0, 0.0, 1.0, a);
 }
 `;

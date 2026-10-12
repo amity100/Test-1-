@@ -23,6 +23,9 @@ export const DEFAULTS = {
   boil: null,
   reflections: null,
   quality: null,
+  // (render/pipeline.js) the smart drawing: fewer pixels each frame, the sharpness gathered from
+  // the frames before. A choice to make: faster, but softer as you move (off to begin with)
+  smart: false,
   // (ROADMAP 9.1, not with ?classic) every blueprint open to draw from the start; off, they are
   // found in the city (photographed, bought, won, given: ui/album.js)
   allOpen: true,

@@ -26,8 +26,8 @@ const SYSTEMS = [
   ['weather', 'update'], ['shutters', 'update'], ['soundscape', 'update'],
   ['routines', 'update'], ['workers', 'update'], ['workers', 'draw'], ['farCrowd', 'update'], ['farCrowd', 'draw'], ['animals', 'update'], ['animals', 'draw'], ['voices', 'update'], ['fleet', 'update'], ['fleet', 'draw'], ['damage', 'update'], ['damage', 'draw'], ['garage', 'update'], ['garage', 'draw'],
 ];
-const PASSES = ['shadow', 'reflection', 'main', 'ink', 'rain', 'glow', 'final'];
-const PASS_HE = { shadow: 'צל', reflection: 'השתקפות', main: 'ציור', ink: 'דיו', rain: 'גשם', glow: 'זוהר', final: 'סיום' };
+const PASSES = ['shadow', 'reflection', 'main', 'ink', 'taa', 'rain', 'glow', 'final'];
+const PASS_HE = { shadow: 'צל', reflection: 'השתקפות', main: 'ציור', ink: 'דיו', taa: 'איחוד', rain: 'גשם', glow: 'זוהר', final: 'סיום' };
 
 // time on the graphics card, pass by pass (EXT_disjoint_timer_query_webgl2; the answers come a
 // few frames late, so they are averaged)
@@ -261,7 +261,7 @@ export class Perf {
       `מעבד: משחק ${s.upd.toFixed(1)}ms · שליחת הציור ${s.ren.toFixed(1)}ms`,
       gpuLine,
       `draw calls ${Math.round(s.calls)} (${passes}) · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
-      `קנה מידה ${g.pipe.scale.toFixed(2)} · עומק קודם ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (${g.depthTrial.result.on} מול ${g.depthTrial.result.off}ms)` : ''} · אנשים ${g.civilians.list ? g.civilians.list.length : 0} · מכוניות ${g.traffic.list.length}`,
+      `קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · עומק קודם ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (${g.depthTrial.result.on} מול ${g.depthTrial.result.off}ms)` : ''} · אנשים ${g.civilians.list ? g.civilians.list.length : 0} · מכוניות ${g.traffic.list.length}`,
       `<span class="perf-sys">${top}</span>`,
       `<span class="perf-sys">${g.pipe.software ? 'בלי כרטיס מסך (תוכנה): ' : ''}${g.pipe.gpuName || ''}</span>`,
     ].join('<br>');
@@ -281,10 +281,11 @@ export class Perf {
     // the length along the route (for an even speed)
     const acc = [0];
     for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z));
-    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, warm: 1.5, secs: seconds, from: [pl.pos.x, pl.pos.z, pl.yaw] };
+    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, from: [pl.pos.x, pl.pos.z, pl.yaw] };
     this.gpu.take(true);
     // the test is at the drawing's full quality: the self-adjusting resolution waits
     g.pipe.scale = g.pipe.defaultScale || g.pipe.scale;
+    g.pipe.taaFrac = 0.67;
     g.player.invuln = 1e9;
     this.toggle(this.on);
     g.hud.toast('מסלול מבחן: 60 שניות, בלי לגעת…', 'info', 3);
@@ -343,6 +344,7 @@ export class Perf {
     const gpu = this.gpu.ok ? this.gpu.take(true) : null;
     this.bench = null;
     g.pipe.scale = b.scale;
+    g.pipe.taaFrac = b.taaFrac;
     g.player.spawn(b.from[0], b.from[1], b.from[2]);
     g.camRig.yaw = b.from[2];
     this.toggle(this.on);
@@ -358,7 +360,7 @@ export class Perf {
     const lines = [
       `עיר השרבוטים — מסלול מבחן (${Math.round(b.secs)} שניות, ${b.frames.length} פריימים)`,
       `מכשיר: ${device || 'לא ידוע'}`,
-      `מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'}`,
+      `מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'}`,
       `FPS ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',

@@ -348,6 +348,10 @@ export class Game {
   // changed. What the device decides by itself (null) follows the device.
   bindSettings() {
     const S = (this.settings = new Settings());
+    // (the smart drawing, render/pipeline.js: the player's choice, where the drawing has float
+    // pixels and not with ?classic; ?taa=0 or ?taa=1 decides instead of the setting)
+    const smartCan = !this.classic && this.pipe.hdr;
+    const smartForced = this.params.has('taa') ? this.params.get('taa') !== '0' : null;
     const dev = { boil: this.boilOn, reflections: this.pipe.reflections, quality: shared.uQuality.value > 0.5 };
     const pick = (k) => (S.v[k] === null ? dev[k] : S.v[k]);
     const apply = () => {
@@ -362,6 +366,7 @@ export class Game {
       this.boilOn = pick('boil');
       this.pipe.reflections = pick('reflections');
       shared.uQuality.value = pick('quality') ? 1 : 0;
+      this.pipe.taa = smartCan && (smartForced !== null ? smartForced : !!v.smart);
       if (!!v.perf !== !!this.perf.on) this.perf.toggle(v.perf);
       // (every blueprint open, or found in the city: ROADMAP 9.1, not with ?classic)
       if (!this.classic) this.setAllOpen(v.allOpen);
@@ -380,6 +385,8 @@ export class Game {
       $('opt-boil').checked = pick('boil');
       $('opt-look').checked = pick('reflections');
       $('opt-magic').checked = pick('quality');
+      $('opt-smart').checked = this.pipe.taa;
+      $('opt-smart').disabled = !smartCan;
       $('opt-perf').checked = v.perf;
     };
     const box = (id, k) => $(id).addEventListener('change', (e) => {
@@ -409,6 +416,7 @@ export class Game {
     box('opt-boil', 'boil');
     box('opt-look', 'reflections');
     box('opt-magic', 'quality');
+    box('opt-smart', 'smart');
     box('opt-perf', 'perf');
     box('opt-allbp', 'allOpen');
     // F3 keeps its choice too
@@ -763,6 +771,9 @@ export class Game {
     // the scale that was last too slow, and when (it is not tried again for a while)
     let ceiling = Infinity;
     let ceilingAt = -1e9;
+    // (the same for the smart drawing's share)
+    let ceilingT = Infinity;
+    let ceilingTAt = -1e9;
     const tick = () => {
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
@@ -790,7 +801,15 @@ export class Game {
           fast = ms < 18.5 ? fast + 1 : 0;
           const now = this.time;
           const cap = now - ceilingAt < 40 ? Math.min(pipe.maxScale, ceiling - 0.05) : pipe.maxScale;
-          if (slow >= 2 && pipe.scale > pipe.minScale) {
+          const capT = now - ceilingTAt < 40 ? Math.min(pipe.taaMax, ceilingT - 0.05) : pipe.taaMax;
+          if (slow >= 2 && pipe.taa && pipe.taaFrac > pipe.taaMin + 0.001) {
+            ceilingT = pipe.taaFrac;
+            ceilingTAt = now;
+            pipe.taaFrac = Math.max(pipe.taaMin, pipe.taaFrac - 0.1);
+            slow = 0;
+            fast = 0;
+            settle = 2;
+          } else if (slow >= 2 && pipe.scale > pipe.minScale) {
             ceiling = pipe.scale;
             ceilingAt = now;
             pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);
@@ -799,6 +818,10 @@ export class Game {
             settle = 2;
           } else if (fast >= 3 && pipe.scale < cap - 0.001) {
             pipe.scale = Math.min(cap, pipe.scale + 0.05);
+            fast = 0;
+            settle = 1;
+          } else if (fast >= 3 && pipe.taa && pipe.taaFrac < capT - 0.001) {
+            pipe.taaFrac = Math.min(capT, pipe.taaFrac + 0.05);
             fast = 0;
             settle = 1;
           }
