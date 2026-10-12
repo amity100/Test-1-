@@ -1,0 +1,1546 @@
+import * as THREE from 'three';
+import { shared, BLANK, LAYERS } from './materials.js';
+import { Occlusion } from './occlusion.js';
+import { motion, motionUpload } from './motion.js';
+
+// One frame of the drawing:
+//  1. the sun's view of the street (shadows)
+//  2. the city upside down in the wet street and the bay (a mirror camera)
+//  3. the scene, every surface already drawn with its pens (colour + normals/ids for the outlines)
+//  4. the outlines, inked over the whole picture with a hand that never quite repeats itself
+//  5. the glow of the neon and the sun, the paper, the colours of the evening
+// With the smart drawing (taa) 3 and 4 are drawn at fewer pixels than the picture's, a fraction of
+// a pixel aside each frame, and put together with the frames before at the picture's own size
+// before 5; the rain then goes over the finished picture.
+
+const QUAD_VERT = /* glsl */ `
+out vec2 vUv;
+void main() {
+  vUv = position.xy * 0.5 + 0.5;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`;
+
+const INK_FRAG = /* glsl */ `
+in vec2 vUv;
+layout(location = 0) out vec4 fragColor;
+uniform sampler2D tColor;
+uniform sampler2D tAux;
+uniform sampler2D tDepth;
+uniform sampler2D uNoise;
+uniform vec2 uTexel;
+uniform float uNear;
+uniform float uFar;
+uniform float uBoil;
+uniform float uBoilPrev;
+uniform float uTaa;
+uniform float uPR;
+uniform float uLineW;
+uniform mat4 uInvProj;
+uniform mat4 uCamWorld;
+
+float linZ(vec2 uv) {
+  float d = texture(tDepth, uv).r;
+  float z = d * 2.0 - 1.0;
+  return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear));
+}
+vec3 nrm(vec2 e) {
+  vec2 xy = e * 2.0 - 1.0;
+  return vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy))));
+}
+float vn(vec2 p) { return textureLod(uNoise, (p + 0.5) / 256.0, 0.0).r; }
+
+// how much of an outline passes through uv: a step back in depth (planes seen edge-on do not
+// count: 1/z is flat across a plane), a fold between two faces, the edge of another object.
+// far: 0 near .. 1 far away, where the artist draws the shapes and leaves out most of the folds
+// and seams inside them (a small far thing drawn with every line would be a black knot)
+float edgeAt(vec2 uv, float r, float far, out float zc) {
+  vec4 a0 = texture(tAux, uv);
+  float z0 = linZ(uv);
+  zc = z0;
+  if (a0.w < 0.01) return 0.0;
+  vec3 n0 = nrm(a0.xy);
+  vec2 ox = vec2(r * uTexel.x, 0.0);
+  vec2 oy = vec2(0.0, r * uTexel.y);
+  float zl = linZ(uv - ox);
+  float zr = linZ(uv + ox);
+  float zd = linZ(uv - oy);
+  float zu = linZ(uv + oy);
+  float w0 = 1.0 / z0;
+  float lap = abs(1.0 / zl + 1.0 / zr - 2.0 * w0) + abs(1.0 / zu + 1.0 / zd - 2.0 * w0);
+  float behind = step(z0 * 1.02, max(max(zl, zr), max(zu, zd)));
+  // (the people's bodies are drawn in one line round each shape: no seams where an arm bends at
+  // the elbow or a leg at the knee - their line weight is marked 0.97; their outlines against
+  // what is behind them and between their parts stay)
+  float person = step(0.955, a0.w) * step(a0.w, 0.985);
+  float e = smoothstep(0.025, 0.09, lap / w0) * (0.45 + 0.55 * behind) * mix(1.0, behind, person);
+  vec4 al = texture(tAux, uv - ox);
+  vec4 ar = texture(tAux, uv + ox);
+  vec4 ad = texture(tAux, uv - oy);
+  vec4 au = texture(tAux, uv + oy);
+  float dn = max(max(1.0 - dot(n0, nrm(al.xy)), 1.0 - dot(n0, nrm(ar.xy))), max(1.0 - dot(n0, nrm(ad.xy)), 1.0 - dot(n0, nrm(au.xy))));
+  e = max(e, smoothstep(0.1, 0.32, dn) * 0.85 * (1.0 - 0.6 * far) * (1.0 - person));
+  float id = max(max(step(0.002, abs(al.z - a0.z)) * step(z0, zl + 0.08), step(0.002, abs(ar.z - a0.z)) * step(z0, zr + 0.08)),
+                 max(step(0.002, abs(ad.z - a0.z)) * step(z0, zd + 0.08), step(0.002, abs(au.z - a0.z)) * step(z0, zu + 0.08)));
+  e = max(e, id * 0.9 * (1.0 - 0.45 * far));
+  return e * a0.w;
+}
+
+// how much of the pen's line passes here at the boil's redraw tick (w: where this is in the world;
+// far, steady: how far away and how still the hand; r: the pen's reach; z: how far what it
+// outlines is). The hand that inks the outlines wobbles: the wobble belongs to the thing it
+// outlines, so it travels with it as you walk (and, if the lines are alive, it is redrawn a few
+// times a second). Far away the hand is steadier and the pen finer: a wobble the size of a near
+// line's would tear a small far thing (a palm down the avenue, a helicopter over the towers) to
+// pieces.
+float lineAt(float tick, vec3 w, float far, float steady, float r, out float z) {
+  vec2 q = vec2(w.x + w.y * 0.71, w.z - w.y * 0.53) * mix(1.7, 0.5, far) + vec2(sin(tick * 1.7), cos(tick * 2.3)) * 0.3;
+  vec2 j1 = (vec2(vn(q), vn(q + 41.0)) - 0.5) * 2.0 * uPR * steady;
+  float e = edgeAt(vUv + j1 * uTexel, r, far, z);
+  // the second, lighter pass of the pen that makes a near line sketchy (not for far things)
+  if (far < 0.97) {
+    vec2 j2 = (vec2(vn(q * 1.6 + 13.0), vn(q * 1.6 + 77.0)) - 0.5) * 2.6 * uPR * steady;
+    float z2;
+    e = max(e, edgeAt(vUv + j2 * uTexel, max(r * 0.7, 1.0), far, z2) * 0.55 * (1.0 - far));
+  }
+  return e;
+}
+
+// where in the world this pixel is (the nearest thing around it, so both sides of an outline
+// agree on where it is), and how far that is
+vec3 worldAt(vec2 uv, out float dist) {
+  vec2 o = uTexel * 2.0 * uPR;
+  float d = texture(tDepth, uv).r;
+  d = min(d, texture(tDepth, uv + vec2(o.x, 0.0)).r);
+  d = min(d, texture(tDepth, uv - vec2(o.x, 0.0)).r);
+  d = min(d, texture(tDepth, uv + vec2(0.0, o.y)).r);
+  d = min(d, texture(tDepth, uv - vec2(0.0, o.y)).r);
+  vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+  v /= v.w;
+  dist = -v.z;
+  return (uCamWorld * vec4(v.xyz, 1.0)).xyz;
+}
+
+void main() {
+  vec4 c = texture(tColor, vUv);
+  float zn;
+  vec3 w = worldAt(vUv, zn);
+  float far = smoothstep(20.0, 130.0, zn);
+  float steady = mix(1.0, 0.16, far);
+  // (the boil: uBoil counts the redraws; each thing takes its own moment within one, by its id,
+  // so its lines are redrawn when its clock says. Whole counts, ?classic: all at once)
+  float ph = fract(texture(tAux, vUv).z * 7.13);
+  float tick = floor(uBoil + ph);
+  float r = max(uLineW * uPR * mix(1.0, 0.6, far), 1.0);
+  float z;
+  float e = lineAt(tick, w, far, steady, r, z);
+  // (the smart drawing: where this thing's line was drawn anew this frame and is not where it
+  // was, marked for render/pipeline.js: the alpha over 2)
+  float anew = 0.0;
+  if (uTaa > 0.5) {
+    float tick0 = floor(uBoilPrev + ph);
+    if (tick0 != tick) {
+      float z0;
+      anew = step(0.05, abs(lineAt(tick0, w, far, steady, r, z0) - e));
+    }
+  }
+  // far away the lines get pale and take the colour of what they outline, then give way to the haze
+  float fz = smoothstep(30.0, 380.0, z);
+  e *= mix(1.0, 0.45, fz);
+  vec3 ink = mix(vec3(0.018, 0.012, 0.04), c.rgb * 0.12, 0.2);
+  ink = mix(ink, c.rgb * 0.38, fz * 0.55);
+  vec3 col = mix(c.rgb, ink, clamp(e * 1.15, 0.0, 1.0) * 0.95);
+  fragColor = vec4(col, c.a + 2.0 * anew);
+}`;
+
+const BRIGHT_FRAG = /* glsl */ `
+in vec2 vUv;
+layout(location = 0) out vec4 fragColor;
+uniform sampler2D tSrc;
+uniform vec2 uTexel;
+vec3 pick(vec2 uv) {
+  vec4 c = texture(tSrc, uv);
+  float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+  return c.rgb * clamp(smoothstep(1.1, 2.6, l) + c.a * 0.7, 0.0, 2.0);
+}
+void main() {
+  vec2 o = uTexel * 0.5;
+  vec3 c = pick(vUv + vec2(-o.x, -o.y)) + pick(vUv + vec2(o.x, -o.y)) + pick(vUv + vec2(-o.x, o.y)) + pick(vUv + vec2(o.x, o.y));
+  fragColor = vec4(c * 0.25, 1.0);
+}`;
+
+const DOWN_FRAG = /* glsl */ `
+in vec2 vUv;
+layout(location = 0) out vec4 fragColor;
+uniform sampler2D tSrc;
+uniform vec2 uTexel;
+void main() {
+  vec2 o = uTexel;
+  vec3 c = texture(tSrc, vUv).rgb * 4.0;
+  c += texture(tSrc, vUv + vec2(-o.x, -o.y)).rgb;
+  c += texture(tSrc, vUv + vec2(o.x, -o.y)).rgb;
+  c += texture(tSrc, vUv + vec2(-o.x, o.y)).rgb;
+  c += texture(tSrc, vUv + vec2(o.x, o.y)).rgb;
+  fragColor = vec4(c / 8.0, 1.0);
+}`;
+
+const UP_FRAG = /* glsl */ `
+in vec2 vUv;
+layout(location = 0) out vec4 fragColor;
+uniform sampler2D tSrc;
+uniform sampler2D tAdd;
+uniform vec2 uTexel;
+void main() {
+  vec2 o = uTexel;
+  vec3 c = texture(tSrc, vUv + vec2(-o.x * 2.0, 0.0)).rgb;
+  c += texture(tSrc, vUv + vec2(-o.x, o.y)).rgb * 2.0;
+  c += texture(tSrc, vUv + vec2(0.0, o.y * 2.0)).rgb;
+  c += texture(tSrc, vUv + vec2(o.x, o.y)).rgb * 2.0;
+  c += texture(tSrc, vUv + vec2(o.x * 2.0, 0.0)).rgb;
+  c += texture(tSrc, vUv + vec2(o.x, -o.y)).rgb * 2.0;
+  c += texture(tSrc, vUv + vec2(0.0, -o.y * 2.0)).rgb;
+  c += texture(tSrc, vUv + vec2(-o.x, -o.y)).rgb * 2.0;
+  fragColor = vec4(c / 12.0 + texture(tAdd, vUv).rgb, 1.0);
+}`;
+
+const FINAL_FRAG = /* glsl */ `
+in vec2 vUv;
+layout(location = 0) out vec4 fragColor;
+uniform sampler2D tSrc;
+uniform sampler2D tBloom;
+uniform sampler2D uNoise;
+uniform float uBloom;
+uniform float uExposure;
+uniform float uPR;
+uniform vec2 uSrcTexel;
+uniform float uSharp;
+uniform sampler2D tRain;
+uniform float uRainOn;
+float aces1(float x) {
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+// keeps the hue of the pens: the curve works on the brightness, and only what is still too
+// bright after it rolls over into white
+vec3 tonemap(vec3 c) {
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  vec3 r = c * (aces1(l) / max(l, 1e-4));
+  float m = max(r.r, max(r.g, r.b));
+  if (m > 1.0) r = mix(r / m, vec3(1.0), clamp((m - 1.0) * 0.6, 0.0, 1.0));
+  return r;
+}
+vec3 toSRGB(vec3 c) {
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+vec3 grade(vec2 uv) {
+  vec3 s = texture(tSrc, uv).rgb;
+  // (the smart drawing: the rain, drawn over the finished picture at its own size)
+  if (uRainOn > 0.5) {
+    vec4 rn = texture(tRain, uv);
+    s = s * (1.0 - rn.a) + rn.rgb;
+  }
+  vec3 c = tonemap((s + texture(tBloom, uv).rgb * uBloom) * uExposure);
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  return clamp(vec3(l) + (c - vec3(l)) * 1.25, 0.0, 1.0);
+}
+void main() {
+  // contrast-adaptive sharpening (after AMD's CAS): crisp pen lines even when the drawing was
+  // made at a lower resolution than the screen
+  vec3 b = grade(vUv + vec2(0.0, -uSrcTexel.y));
+  vec3 d = grade(vUv + vec2(-uSrcTexel.x, 0.0));
+  vec3 e = grade(vUv);
+  vec3 f = grade(vUv + vec2(uSrcTexel.x, 0.0));
+  vec3 h = grade(vUv + vec2(0.0, uSrcTexel.y));
+  vec3 mn = min(min(min(d, e), min(f, b)), h);
+  vec3 mx = max(max(max(d, e), max(f, b)), h);
+  vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0));
+  vec3 wgt = -amp * mix(0.125, 0.2, uSharp);
+  vec3 c = (e + (b + d + f + h) * wgt) / (1.0 + 4.0 * wgt);
+  c = toSRGB(clamp(c, 0.0, 1.0));
+  // a breath of shade at the edges of the page
+  vec2 q = vUv - 0.5;
+  c *= 1.0 - dot(q, q) * 0.28;
+  fragColor = vec4(c, 1.0);
+}`;
+
+// The smart drawing (render, taa): the frame was drawn at fewer pixels than the picture's, each
+// sample a fraction of a pixel aside (a different place each frame). Here it is put together with
+// what was gathered before, at the picture's size: every pixel looks up where it was a frame ago
+// (the camera's move, or the thing's own: tVel) and takes what was gathered there, kept inside the
+// colours this frame shows around it (what is not there any more is let go), and adds this frame's
+// samples by how near they fall to it. Lines drawn anew (the boil) leave nothing of the old ones.
+const TAA_FRAG = /* glsl */ `
+in vec2 vUv;
+layout(location = 0) out vec4 oColor;
+layout(location = 1) out vec4 oMeta;
+uniform sampler2D tCur;
+uniform highp sampler2D tDepth;
+uniform sampler2D tVel;
+uniform sampler2D tHist;
+uniform sampler2D tHistMeta;
+uniform vec2 uIn;
+uniform vec2 uOut;
+uniform vec2 uJit;
+uniform mat4 uInvVP;
+uniform mat4 uPrevVP;
+uniform float uNear;
+uniform float uFar;
+uniform float uFresh;
+uniform float uMaxW;
+uniform float uMinK;
+uniform float uMoveLo;
+uniform float uMoveHi;
+uniform float uMaxWMove;
+
+vec3 ycc(vec3 c) { return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.r - 0.5 * c.b, -0.25 * c.r + 0.5 * c.g - 0.25 * c.b); }
+vec3 unycc(vec3 y) { return vec3(y.x + y.y - y.z, y.x + y.z, y.x - y.y - y.z); }
+// c pulled towards the middle of the box (bl, bh) until it is inside it
+vec3 clip(vec3 c, vec3 bl, vec3 bh) {
+  vec3 cen = 0.5 * (bh + bl);
+  vec3 ext = 0.5 * (bh - bl) + 1e-4;
+  vec3 off = c - cen;
+  vec3 ts = abs(off / ext);
+  float t = max(ts.x, max(ts.y, ts.z));
+  return t > 1.0 ? cen + off / t : c;
+}
+float lz(float d) {
+  float z = d * 2.0 - 1.0;
+  return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear));
+}
+// what was gathered at uv, through a sharp filter (Catmull-Rom, in five taps), not a blur
+vec4 histAt(vec2 uv) {
+  vec2 pos = uv * uOut;
+  vec2 c = floor(pos - 0.5) + 0.5;
+  vec2 f = pos - c;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 t0 = (c - 1.0) / uOut;
+  vec2 t3 = (c + 2.0) / uOut;
+  vec2 t12 = (c + w2 / w12) / uOut;
+  vec4 r = texture(tHist, vec2(t12.x, t0.y)) * (w12.x * w0.y);
+  r += texture(tHist, vec2(t0.x, t12.y)) * (w0.x * w12.y);
+  r += texture(tHist, t12) * (w12.x * w12.y);
+  r += texture(tHist, vec2(t3.x, t12.y)) * (w3.x * w12.y);
+  r += texture(tHist, vec2(t12.x, t3.y)) * (w12.x * w3.y);
+  float ws = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  return max(r / ws, vec4(0.0));
+}
+void main() {
+  // this pixel's middle on the drawing's grid, and the sample nearest it (sample i sits at
+  // i + 0.5 + uJit)
+  vec2 p = vUv * uIn;
+  ivec2 c0 = ivec2(floor(p - uJit));
+  ivec2 lim = ivec2(uIn) - 1;
+  float k = uOut.x / uIn.x;
+  vec3 sum = vec3(0.0);
+  float sumA = 0.0;
+  float ws = 0.0;
+  vec3 m1 = vec3(0.0);
+  vec3 m2 = vec3(0.0);
+  float aLo = 1e9;
+  float aHi = -1e9;
+  float dz = 1.0;
+  ivec2 cz = c0;
+  float redrawn = 0.0;
+  float react = 0.0;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      ivec2 q = clamp(c0 + ivec2(x, y), ivec2(0), lim);
+      vec4 s = texelFetch(tCur, q, 0);
+      // (a line drawn anew here this frame: marked by the outlines' pass, over the glow's share)
+      float anew = step(1.5, s.a);
+      s.a -= 2.0 * anew;
+      redrawn = max(redrawn, anew);
+      // (how near this sample falls to the pixel, in the picture's pixels)
+      vec2 d = (vec2(q) + 0.5 + uJit - p) * k;
+      float w = exp(-2.29 * dot(d, d));
+      sum += s.rgb * w;
+      sumA += s.a * w;
+      ws += w;
+      vec3 yc = ycc(s.rgb);
+      m1 += yc;
+      m2 += yc * yc;
+      aLo = min(aLo, s.a);
+      aHi = max(aHi, s.a);
+      float z = texelFetch(tDepth, q, 0).r;
+      if (z < dz) {
+        dz = z;
+        cz = q;
+      }
+      // (what changes by itself from frame to frame: sparks and smoke, the water)
+      react = max(react, texelFetch(tVel, q, 0).z);
+    }
+  }
+  vec3 cur = sum / ws;
+  float curA = sumA / ws;
+  float wc = min(ws, 1.0);
+  // where it was a frame ago: its own move (people, cars), or the camera's, by the depth nearest
+  // the eye around here (an edge goes with what is in front of it)
+  vec4 v = texelFetch(tVel, cz, 0);
+  float zNow = lz(dz);
+  vec2 prev;
+  float zWas;
+  if (v.w > 0.5) {
+    prev = vUv - v.xy * 0.5;
+    zWas = zNow;
+  } else {
+    vec4 wp = uInvVP * vec4(vUv * 2.0 - 1.0, dz * 2.0 - 1.0, 1.0);
+    wp /= wp.w;
+    vec4 pc = uPrevVP * wp;
+    prev = pc.xy / pc.w * 0.5 + 0.5;
+    zWas = pc.w;
+  }
+  // (and how far the camera alone moved this pixel's own sample: the street beside you as you
+  // walk moves, though you keep your place on the screen)
+  vec4 wq = uInvVP * vec4(vUv * 2.0 - 1.0, texelFetch(tDepth, clamp(c0, ivec2(0), lim), 0).r * 2.0 - 1.0, 1.0);
+  wq /= wq.w;
+  vec4 pq = uPrevVP * wq;
+  float mv = max(length((vUv - prev) * uOut), length((vUv - (pq.xy / pq.w * 0.5 + 0.5)) * uOut));
+  float moving = smoothstep(uMoveLo, uMoveHi, mv);
+  float W = uFresh > 0.5 ? 0.0 : 1.0;
+  if (prev.x < 0.0 || prev.y < 0.0 || prev.x > 1.0 || prev.y > 1.0) W = 0.0;
+  // the same surface there then? (as far away as it should have been; else it was behind
+  // something and has just come out)
+  ivec2 hm = ivec2(floor(prev * uOut - 0.5));
+  ivec2 hl = ivec2(uOut) - 1;
+  vec4 a00 = texelFetch(tHistMeta, clamp(hm, ivec2(0), hl), 0);
+  vec4 a10 = texelFetch(tHistMeta, clamp(hm + ivec2(1, 0), ivec2(0), hl), 0);
+  vec4 a01 = texelFetch(tHistMeta, clamp(hm + ivec2(0, 1), ivec2(0), hl), 0);
+  vec4 a11 = texelFetch(tHistMeta, clamp(hm + ivec2(1, 1), ivec2(0), hl), 0);
+  float tol = 0.03 * zWas + 0.05;
+  float dmin = min(min(abs(a00.y - zWas), abs(a10.y - zWas)), min(abs(a01.y - zWas), abs(a11.y - zWas)));
+  if (dmin > tol) W = 0.0;
+  // (lines drawn anew this frame where they were not: nothing of the old ones)
+  if (redrawn > 0.5) W = 0.0;
+  W *= min(max(max(a00.x, a10.x), max(a01.x, a11.x)), mix(uMaxW, uMaxWMove, moving)) * (1.0 - react);
+  vec4 h = histAt(prev);
+  vec3 mu = m1 / 9.0;
+  vec3 sg = sqrt(max(m2 / 9.0 - mu * mu, vec3(0.0)));
+  vec3 hy = ycc(h.rgb);
+  // what was gathered is not clipped to this frame's colours (a pen stroke too thin for this
+  // frame's samples to have caught is still a stroke): where the picture around here has changed
+  // (the light, the shade, the mirror in the street) it is just given less say, by how far the
+  // two differ beyond what this frame's samples can tell
+  vec2 ho = vec2(0.75 * k) / uOut;
+  vec3 hn = 0.25 * (ycc(texture(tHist, prev + ho).rgb) + ycc(texture(tHist, prev - ho).rgb) + ycc(texture(tHist, prev + vec2(ho.x, -ho.y)).rgb) + ycc(texture(tHist, prev + vec2(-ho.x, ho.y)).rgb));
+  vec3 dd = abs(hn - mu) - sg * 0.5 - vec3(0.015 + 0.04 * mu.x);
+  float change = max(dd.x, max(dd.y, dd.z) * 1.5) / (0.03 + 0.1 * mu.x);
+  W *= clamp(1.0 - change, uMinK, 1.0);
+  // (in motion, and what changes by itself (react): held to this frame's colours. Standing
+  // still nothing is gained by it, and the finest strokes are kept)
+  hy = mix(hy, clip(hy, mu - sg * 1.25, mu + sg * 1.25), max(react, moving));
+  float ha = clamp(h.a, aLo, aHi);
+  vec3 cy = ycc(cur);
+  // (a bright light counts for no more than its share: weighed by the inverse of its brightness)
+  float wh = W / (1.0 + max(hy.x, 0.0));
+  float wn = wc / (1.0 + max(cy.x, 0.0));
+  vec3 o = (unycc(hy) * wh + cur * wn) / (wh + wn);
+  float oa = (ha * wh + curA * wn) / (wh + wn);
+  oColor = vec4(max(o, vec3(0.0)), oa);
+  oMeta = vec4(W + wc, zNow, 0.0, 0.0);
+}`;
+
+// the places each frame's samples take inside a pixel, over 16 frames (Halton 2, 3)
+function halton(i, b) {
+  let f = 1;
+  let r = 0;
+  while (i > 0) {
+    f /= b;
+    r += f * (i % b);
+    i = Math.floor(i / b);
+  }
+  return r;
+}
+
+const _v = new THREE.Vector3();
+const _q = new THREE.Vector4();
+const _plane = new THREE.Plane();
+const _m = new THREE.Matrix4();
+const _target = new THREE.Vector3();
+const _look = new THREE.Vector3();
+const _normal = new THREE.Vector3(0, 1, 0);
+const _up = new THREE.Vector3(0, 1, 0);
+const _sx = new THREE.Vector3();
+const _sy = new THREE.Vector3();
+const _sz = new THREE.Vector3();
+const _sc = new THREE.Vector3();
+const _f = new THREE.Vector3();
+const _md = new THREE.Vector3();
+const _s2 = new THREE.Vector2();
+
+// the layer of what is never seen in the mirror under the street (the main camera and the sun
+// see it; the mirror's camera does not), and the one only the sun sees
+const MIRRORLESS = LAYERS.MIRRORLESS;
+// the still city's next shadow map is drawn in this many slices, one a frame, once the box has
+// less than this share of the map's room left (12 m: four frames even at 90 m/s)
+const STATIC_SLICES = 4;
+const STATIC_SOON = 0.2;
+// as the sun goes over, the shadows follow it in steps: the still city's map every 0.25 degree,
+// the far one every degree, each new map drawn in the background and faded in over FADE_MS
+const SUN_STEP = Math.cos((0.25 * Math.PI) / 180);
+const FAR_STEP = Math.cos((1.0 * Math.PI) / 180);
+const FAR_SLICES = 4;
+const FADE_MS = 800;
+const _fx = new THREE.Vector3();
+const _fy = new THREE.Vector3();
+const _fz = new THREE.Vector3();
+// the parts of the still city that move (the big wheel): drawn with what moves
+function movingParts(root) {
+  const out = [];
+  for (const c of root.children) {
+    let dyn = !!c.userData.dynamic;
+    c.traverse((o) => {
+      if (o.userData.dynamic) dyn = true;
+    });
+    if (dyn) out.push(c);
+  }
+  return out;
+}
+
+// the sun's frame (x across it, level; y up its face; z along it towards the sun)
+function sunFrame(dir, x, y, z) {
+  z.copy(dir).normalize();
+  x.crossVectors(_up, z).normalize();
+  y.crossVectors(z, x);
+}
+const SUN = LAYERS.SUN;
+const notInMirror = (o) => !!((o.material.userData && o.material.userData.reflective) || o.userData.noReflect || o.userData.indoor);
+
+export class Pipeline {
+  constructor(renderer, scene, camera, { low = false } = {}) {
+    this.r = renderer;
+    this.scene = scene;
+    this.camera = camera;
+    this.low = low;
+    this.bloom = 0.42;
+    this.exposure = 1.0;
+    this.lineW = 1.25;
+    const gl = renderer.getContext();
+    const ext = renderer.extensions;
+    this.hdr = ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float');
+    this.type = this.hdr ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    // 1. the sun's depth, in two maps: what moves (around you, every frame) and the still city
+    //    (setStatic: a bigger map on the same grid of texels, drawn again only when you have gone
+    //    far enough from where it was drawn, or something in it was rubbed out)
+    const S = low ? 1024 : 2048;
+    // (only the depth is read: the colour beside it is the smallest there is)
+    this.shadowRT = new THREE.WebGLRenderTarget(S, S, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(S, S) });
+    this.sunCam = new THREE.OrthographicCamera(-60, 60, 60, -60, 1, 520);
+    this.sunCam.layers.enable(MIRRORLESS);
+    this.sunCam.layers.enable(SUN);
+    camera.layers.enable(MIRRORLESS);
+    shared.uShadowMap.value = this.shadowRT.depthTexture;
+    shared.uShadowTexel.value = 1 / S;
+    this.shadowS = S;
+    // the still city's map: 45 m more each side across the sun and 40 m up and down (enough for
+    // a sun high in the sky, and for turning round on the spot), and 60 m more depth each way
+    // along it
+    this.stMx = Math.round((45 * S) / 120);
+    this.stMy = Math.round((40 * S) / 120);
+    this.stMz = 60;
+    // where the shadows are drawn from (setShadowDir): the maps follow it in steps
+    this.shadowDir = shared.uSunDir.value.clone();
+    // the map fading out as a new one fades in (the still city's or the far one)
+    this.fade = null;
+    this.staticRT = null;
+    this.staticRoot = null;
+    // (how many maps were drawn, slices of them, and maps drawn whole in one frame)
+    this.st = { builds: 0, slices: 0, full: 0 };
+    this.lead = new THREE.Vector3();
+    this.lastCam = new THREE.Vector3();
+    this.lastT = 0;
+    this._swap = [];
+    this._hide = [];
+    // 2. the mirror
+    this.reflCam = new THREE.PerspectiveCamera();
+    this.mirrorY = 0;
+    // fullscreen passes
+    this.quadScene = new THREE.Scene();
+    this.quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const tri = new THREE.BufferGeometry();
+    tri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+    this.quad = new THREE.Mesh(tri, null);
+    this.quad.frustumCulled = false;
+    this.quadScene.add(this.quad);
+    const mk = (frag, uniforms) => new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: QUAD_VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+    this.mInk = mk(INK_FRAG, {
+      tColor: { value: null }, tAux: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() },
+      uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uBoilPrev: { value: 0 }, uTaa: { value: 0 }, uPR: shared.uPR, uLineW: { value: 1 },
+      uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
+    });
+    this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+    this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+    this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 } });
+    this.mTaa = mk(TAA_FRAG, {
+      tCur: { value: null }, tDepth: { value: null }, tVel: { value: null }, tHist: { value: null }, tHistMeta: { value: null },
+      uIn: { value: new THREE.Vector2() }, uOut: { value: new THREE.Vector2() }, uJit: { value: new THREE.Vector2() },
+      uInvVP: { value: new THREE.Matrix4() }, uPrevVP: { value: new THREE.Matrix4() }, uNear: { value: 0.1 }, uFar: { value: 3000 },
+      uFresh: { value: 1 }, uMaxW: { value: 8 }, uMinK: { value: 0.15 }, uMoveLo: { value: 0.1 }, uMoveHi: { value: 1.0 }, uMaxWMove: { value: 4 },
+    });
+    // the smart drawing (render): fewer pixels drawn each frame, a fraction of a pixel aside each
+    // time, put together at the picture's size with the frames before (game.js turns it on;
+    // taaFrac: the drawing's side against the picture's, which the pace moves between taaMin and
+    // taaMax)
+    this.taa = false;
+    this.taaFrac = 0.67;
+    this.taaMin = 0.5;
+    this.taaMax = 1;
+    this.taaN = 0;
+    this.taaReset = true;
+    this.hist = null;
+    this.histI = 0;
+    this.rainRT = null;
+    this.outSize = new THREE.Vector2(-1, -1);
+    this.jit = new THREE.Vector2();
+    this.boilPrev = 0;
+    this._vpCur = new THREE.Matrix4();
+    this._vpPrev = new THREE.Matrix4();
+    this._projKeep = new THREE.Matrix4();
+    this._projInvKeep = new THREE.Matrix4();
+    this._taaAt = { p: new THREE.Vector3(1e9, 0, 0), d: new THREE.Vector3() };
+    // (the rain's look-up into the drawing's depth, render/rain.js: 1, or the drawing's pixel in
+    // the picture's while the rain is drawn over the finished picture)
+    this.rainDepthK = { value: 1 };
+    this.size = new THREE.Vector2(-1, -1);
+    this.levels = low ? 4 : 5;
+    // things drawn over the inked picture, before its glow (the rain): no outlines round them,
+    // and each looks up the drawing's depth itself to hide behind what is in front of it
+    this.afterInk = new THREE.Scene();
+    // things drawn over the finished picture (speech bubbles)
+    this.overlay = new THREE.Scene();
+    this.reflections = true;
+    // the street's depth first (render): the pens are worked out once a pixel. Faster on most
+    // graphics cards, slower on some: the game tries both in play and keeps the faster
+    // (render/depthtrial.js); depthFixed: ?depth / ?nodepth, no trying. mainTimer: the trial's
+    // clock on the graphics card for this pass
+    this.depthFirst = false;
+    this.depthFixed = false;
+    this.mainTimer = null;
+    // where the camera was when the mirror under the street was last drawn (render)
+    this._mirrorAt = { p: new THREE.Vector3(1e9, 0, 0), d: new THREE.Vector3() };
+    // the sun's view of the whole city, made once (see bakeFarShadows)
+    this.farRT = null;
+    // the drawing is made at scale x the screen's pixels and brought up to the screen sharp
+    this.scale = 1;
+    this.screen = new THREE.Vector2();
+    // the performance numbers (game/perf.js) time each pass while they are shown
+    this.timer = null;
+    // leaving out what is behind the buildings (setOcclusion)
+    this.occlusion = null;
+    this.occlusionOn = true;
+  }
+
+  // the screen's pixels per CSS pixel, times the drawing's own scale (and its share of the
+  // picture's, with the smart drawing)
+  get pixelsPerCss() {
+    return this.r.getPixelRatio() * this.scale * (this.taa ? this.taaFrac : 1);
+  }
+
+  ensure() {
+    const r = this.r;
+    r.getDrawingBufferSize(this.screen);
+    // the picture: the screen's pixels at the drawing's scale. It is drawn at that, or (the smart
+    // drawing) at taaFrac of it and put together over the frames
+    const ow = Math.max(2, Math.round(this.screen.x * this.scale));
+    const oh = Math.max(2, Math.round(this.screen.y * this.scale));
+    const taa = this.taa;
+    const f = taa ? this.taaFrac : 1;
+    const s = _s2.set(Math.max(2, Math.round(ow * f)), Math.max(2, Math.round(oh * f)));
+    const k = s.x / ow;
+    shared.uPR.value = r.getPixelRatio() * this.scale * k;
+    shared.uPRo.value = r.getPixelRatio() * this.scale;
+    shared.uPxK.value = k;
+    shared.uMipBias.value = Math.log2(k);
+    shared.uResolution.value.set(s.x, s.y);
+    const dispose = (t) => t && t.dispose();
+    if (!s.equals(this.size) || taa !== this._inTaa) {
+      this.size.copy(s);
+      this._inTaa = taa;
+      this.reflDone = false;
+      const w = s.x;
+      const h = s.y;
+      dispose(this.gRT);
+      dispose(this.reflRT);
+      dispose(this.inkRT);
+      // (the smart drawing: a third picture, how far each pixel moved since the last frame)
+      this.gRT = new THREE.WebGLRenderTarget(w, h, { count: taa ? 3 : 2, type: this.type, depthBuffer: true, depthTexture: new THREE.DepthTexture(w, h) });
+      for (const t of this.gRT.textures) {
+        t.minFilter = THREE.NearestFilter;
+        t.magFilter = THREE.NearestFilter;
+        t.generateMipmaps = false;
+      }
+      const rs = this.low ? 0.33 : 0.5;
+      this.reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(w * rs)), Math.max(2, Math.round(h * rs)), { type: this.type, depthBuffer: true });
+      this.inkRT = new THREE.WebGLRenderTarget(w, h, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    }
+    if (ow === this.outSize.x && oh === this.outSize.y && taa === this._outTaa) return;
+    this.outSize.set(ow, oh);
+    this._outTaa = taa;
+    (this.mips || []).forEach(dispose);
+    (this.ups || []).forEach(dispose);
+    (this.hist || []).forEach(dispose);
+    dispose(this.rainRT);
+    this.hist = null;
+    this.rainRT = null;
+    const opt = { type: this.type, depthBuffer: false };
+    this.mips = [];
+    this.ups = [];
+    let mw = Math.max(1, ow >> 1);
+    let mh = Math.max(1, oh >> 1);
+    for (let i = 0; i < this.levels; i++) {
+      this.mips.push(new THREE.WebGLRenderTarget(mw, mh, opt));
+      this.ups.push(new THREE.WebGLRenderTarget(mw, mh, opt));
+      mw = Math.max(1, mw >> 1);
+      mh = Math.max(1, mh >> 1);
+    }
+    if (taa) {
+      // what was gathered (its colour; how much is gathered and how far away it is), the last
+      // frame's and this one's; the rain over the finished picture
+      const gather = () => {
+        const t = new THREE.WebGLRenderTarget(ow, oh, { count: 2, type: this.type, depthBuffer: false });
+        t.textures[0].minFilter = THREE.LinearFilter;
+        t.textures[0].magFilter = THREE.LinearFilter;
+        t.textures[1].minFilter = THREE.NearestFilter;
+        t.textures[1].magFilter = THREE.NearestFilter;
+        for (const x of t.textures) x.generateMipmaps = false;
+        return t;
+      };
+      this.hist = [gather(), gather()];
+      this.rainRT = new THREE.WebGLRenderTarget(ow, oh, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+      this.taaReset = true;
+    }
+  }
+
+  // (the smart drawing) this frame's samples a fraction of a pixel aside: the camera's projection
+  // shifted for the frame (and back after it, taaEnd)
+  taaBegin() {
+    const cam = this.camera;
+    cam.updateMatrixWorld();
+    this._projKeep.copy(cam.projectionMatrix);
+    this._projInvKeep.copy(cam.projectionMatrixInverse);
+    this._vpCur.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    // a jump of the camera (a cut, a teleport): nothing to gather from
+    cam.getWorldDirection(_md);
+    const at = this._taaAt;
+    if (at.p.distanceToSquared(cam.position) > 64 || at.d.dot(_md) < 0.9) this.taaReset = true;
+    at.p.copy(cam.position);
+    at.d.copy(_md);
+    if (this.taaReset) this._vpPrev.copy(this._vpCur);
+    this.taaN = (this.taaN % 16) + 1;
+    const jx = halton(this.taaN, 2) - 0.5;
+    const jy = halton(this.taaN, 3) - 0.5;
+    this.jit.set(jx, jy);
+    // (pixel i of the drawing now sees what is at i + 0.5 + jx of it unshifted)
+    const e = cam.projectionMatrix.elements;
+    e[8] += (2 * jx) / this.size.x;
+    e[9] += (2 * jy) / this.size.y;
+    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    shared.uJitNdc.value.set((-2 * jx) / this.size.x, (-2 * jy) / this.size.y);
+    shared.uPrevVP.value.copy(this._vpPrev);
+    motionUpload();
+  }
+
+  taaEnd() {
+    const cam = this.camera;
+    cam.projectionMatrix.copy(this._projKeep);
+    cam.projectionMatrixInverse.copy(this._projInvKeep);
+    this._vpPrev.copy(this._vpCur);
+  }
+
+  // (the smart drawing) this frame put together with the ones before: the picture's size
+  resolve() {
+    const u = this.mTaa.uniforms;
+    const h0 = this.hist[this.histI];
+    const h1 = this.hist[1 - this.histI];
+    u.tCur.value = this.inkRT.texture;
+    u.tDepth.value = this.gRT.depthTexture;
+    u.tVel.value = this.gRT.textures[2];
+    u.tHist.value = h0.textures[0];
+    u.tHistMeta.value = h0.textures[1];
+    u.uIn.value.copy(this.size);
+    u.uOut.value.copy(this.outSize);
+    u.uJit.value.copy(this.jit);
+    u.uInvVP.value.copy(this._vpCur).invert();
+    u.uPrevVP.value.copy(this._vpPrev);
+    u.uNear.value = this.camera.near;
+    u.uFar.value = this.camera.far;
+    u.uFresh.value = this.taaReset ? 1 : 0;
+    this.pass(this.mTaa, h1);
+    this.histI = 1 - this.histI;
+    this.taaReset = false;
+    // (the boil's clock this frame: the outlines' pass of the next one knows where its lines were)
+    this.boilPrev = shared.uBoil.value;
+    return h1;
+  }
+
+  pass(mat, target) {
+    this.quad.material = mat;
+    this.r.setRenderTarget(target);
+    this.r.render(this.quadScene, this.quadCam);
+  }
+
+  // The still city (root: its parts that never move; the ones that do are marked
+  // userData.dynamic). cull(p): the city's small things as seen from p (they are left out of the
+  // sun's view far away, as they are on the screen); version(): changes when a prop is rubbed out.
+  setStatic(root, { cull = null, version = null } = {}) {
+    const S = this.shadowS;
+    const W = S + 2 * this.stMx;
+    const H = S + 2 * this.stMy;
+    if (W > this.r.capabilities.maxTextureSize) return;
+    this.staticRoot = root;
+    this.staticCull = cull;
+    this.staticVersion = version;
+    // the city's moving parts (the big wheel): drawn with what moves
+    this.staticSkip = movingParts(root);
+    // two maps: the one in use, and the next one, drawn in the background a quarter at a time
+    // before the one in use runs out
+    // (24-bit depth: at 16 bits a few lit pixels on walls the low sun grazes came out different)
+    const map = () => ({
+      rt: new THREE.WebGLRenderTarget(W, H, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) }),
+      cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 520 + 2 * this.stMz),
+      on: false,
+      sx: 0,
+      sy: 0,
+      sz: 0,
+      ver: -1,
+      sun: new THREE.Vector3(),
+      matrix: new THREE.Matrix4(),
+      p: new THREE.Vector3(),
+      slice: 0,
+    });
+    this.stMaps = [map(), map()];
+    for (const m of this.stMaps) {
+      m.cam.layers.enable(MIRRORLESS);
+      m.cam.layers.enable(SUN);
+    }
+    this.stCur = this.stMaps[0];
+    this.stBuild = null;
+    this.staticRT = this.stCur.rt;
+    shared.uShadowStatic.value = this.stCur.rt.depthTexture;
+    shared.uShadowStaticTexel.value.set(1 / W, 1 / H);
+    // what of the still city is never in the mirror under the street (the reflective ground
+    // itself, the small things, the rooms) is on a layer of its own that the mirror's camera does
+    // not see: no hiding and showing a thousand things every frame
+    const skip = new Set(this.staticSkip);
+    const visit = (o) => {
+      if (skip.has(o)) return;
+      if (o.isMesh && notInMirror(o)) o.layers.set(MIRRORLESS);
+      for (const c of o.children) visit(c);
+    };
+    visit(root);
+    this.mirrorLayered = true;
+  }
+
+  // What is behind the buildings is left out (render/occlusion.js): boxes, the buildings' bodies;
+  // pieces, the still city's meshes that may be left out; holes(), the rubbed-out spots
+  setOcclusion(boxes, pieces, holes = null) {
+    this.occlusion = new Occlusion(this.low ? 128 : 160, this.low ? 72 : 90);
+    this.occlusion.setOccluders(boxes);
+    this.occHoles = holes;
+    this.occPieces = [];
+    for (const o of pieces) {
+      o.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(o);
+      if (b.isEmpty()) continue;
+      this.occPieces.push({ o, b });
+    }
+    this._occHidden = [];
+  }
+
+  // leave out (for this one pass) the pieces surely behind the buildings, as cam sees them
+  occlude(cam) {
+    const occ = this.occlusion;
+    const hidden = this._occHidden;
+    hidden.length = 0;
+    if (!occ || !this.occlusionOn) return hidden;
+    occ.begin(cam, this.occHoles ? this.occHoles() : null);
+    for (const p of this.occPieces) {
+      const o = p.o;
+      if (!o.visible) continue;
+      const b = p.b;
+      if (occ.hidden(b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z)) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    }
+    return hidden;
+  }
+
+  unocclude() {
+    const hidden = this._occHidden;
+    if (!hidden) return;
+    for (const o of hidden) o.visible = true;
+    hidden.length = 0;
+  }
+
+  // the depth materials on (or the thing hidden from the sun) for everything visible under o
+  // that casts, skipping the still city's parts when skip is given
+  swapDepth(o, skip) {
+    if (!o.visible) return;
+    if (skip && o === this.staticRoot) {
+      for (const c of this.staticSkip) this.swapDepth(c, null);
+      return;
+    }
+    if (o.isMesh) {
+      const d = o.material.userData && o.material.userData.depth;
+      if (d === null || o.userData.noShadow || o.userData.indoor) {
+        o.visible = false;
+        this._hide.push(o);
+        return;
+      } else if (d) {
+        this._swap.push(o, o.material);
+        o.material = d;
+      }
+    }
+    const ch = o.children;
+    for (let i = 0; i < ch.length; i++) this.swapDepth(ch[i], skip);
+  }
+
+  unswapDepth() {
+    const sw = this._swap;
+    for (let i = 0; i < sw.length; i += 2) sw[i].material = sw[i + 1];
+    for (const o of this._hide) o.visible = true;
+    sw.length = 0;
+    this._hide.length = 0;
+  }
+
+  // where the shadows are drawn from (game/daynight.js: the sun, or the moon at night)
+  setShadowDir(d) {
+    this.shadowDir.copy(d);
+  }
+
+  // the sun looks down the street from low over the bay; its box follows you
+  renderShadows(center) {
+    const root = this.staticRoot;
+    // the still city's map (and the city's far one): drawn again, faded, swapped
+    if (root) this.updateStatic(center);
+    if (this.farMaps) this.updateFar();
+    this.updateFade();
+    // the box is drawn from the direction of the still city's map in use, on its grid
+    const st = this.stCur;
+    const sun = st && st.on ? st.sun : this.shadowDir;
+    const cam = this.sunCam;
+    // the box follows you in whole texels of the shadow map, so the shadows' edges stay put
+    // instead of crawling as you walk
+    const texel = (cam.right - cam.left) / this.shadowRT.width;
+    const z = _sz;
+    const x = _sx;
+    const y = _sy;
+    sunFrame(sun, x, y, z);
+    const cx = Math.round(center.dot(x) / texel) * texel;
+    const cy = Math.round(center.dot(y) / texel) * texel;
+    const cz = center.dot(z);
+    const snapped = _sc.copy(x).multiplyScalar(cx).addScaledVector(y, cy).addScaledVector(z, cz);
+    cam.position.copy(snapped).addScaledVector(z, 260);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(snapped);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    shared.uShadowMatrix.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    shared.uShadowOn.value = 0;
+    this.r.setRenderTarget(this.shadowRT);
+    this.r.clear();
+    if (root) {
+      // what moves: everything but the still city
+      this.swapDepth(this.scene, true);
+      root.visible = false;
+      this.r.render(this.scene, cam);
+      root.visible = true;
+      if (this.staticSkip.length) {
+        this.r.autoClear = false;
+        for (const c of this.staticSkip) this.r.render(c, cam);
+        this.r.autoClear = true;
+      }
+    } else {
+      this.swapDepth(this.scene, false);
+      this.r.render(this.scene, cam);
+    }
+    this.unswapDepth();
+    shared.uShadowOn.value = 1;
+  }
+
+  // the still city's map: good while the box is inside it. Before it runs out (or once the
+  // sun has gone on a step) the next one is drawn, a quarter a frame, and takes over (fading in
+  // if the sun has moved); if it runs out first, or something in it was rubbed out, the next
+  // one is drawn whole at once
+  updateStatic(center) {
+    const ver = this.staticVersion ? this.staticVersion() : 0;
+    const cur = this.stCur;
+    const want = this.shadowDir;
+    const b = this.stBuild;
+    const left = this.staticLeft(cur, center, ver);
+    if (left < 0) {
+      // (a map fading out cannot be faded into one that has run out: stop it)
+      if (this.fade) this.endFade();
+      const next = b && b.sun.equals(cur.on ? cur.sun : want) && this.staticLeft(b, center, ver) >= 0.2 ? b : this.beginStatic(want, center, ver);
+      this.drawStatic(next, STATIC_SLICES);
+      this.useStatic(next);
+      this.st.full++;
+      return;
+    }
+    if (b) {
+      this.drawStatic(b, 1);
+      if (b.slice < STATIC_SLICES) return;
+      if (!b.sun.equals(cur.sun)) {
+        // the sun has gone on: the new map fades in over the old one (when the fade is free)
+        if (this.fade) return;
+        this.startFade('static', cur);
+        this.useStatic(b);
+      } else if (this.staticLeft(b, center, ver) > left) this.useStatic(b);
+      else this.stBuild = null;
+      return;
+    }
+    // (the map fading out is not free to be drawn into)
+    if (this.fade && this.fade.kind === 'static') return;
+    if (cur.sun.dot(want) < SUN_STEP || left < STATIC_SOON) this.drawStatic(this.beginStatic(want, center, ver), 1);
+  }
+
+  // how much of the map's room is left around the box (0 at its edge), or -1 when it does not
+  // hold it (or was drawn before something was rubbed out)
+  staticLeft(m, center, ver) {
+    if (!m.on || m.ver !== ver) return -1;
+    const texel = (this.sunCam.right - this.sunCam.left) / this.shadowS;
+    sunFrame(m.sun, _fx, _fy, _fz);
+    const cx = Math.round(center.dot(_fx) / texel) * texel;
+    const cy = Math.round(center.dot(_fy) / texel) * texel;
+    const cz = center.dot(_fz);
+    const fx = 1 - Math.abs(cx - m.sx) / (this.stMx * texel);
+    const fy = 1 - Math.abs(cy - m.sy) / (this.stMy * texel);
+    const fz = 1 - Math.abs(cz - m.sz) / this.stMz;
+    const f = Math.min(fx, fy, fz);
+    return f < -1e-6 ? -1 : Math.max(0, f);
+  }
+
+  // the next map, seen from dir, around where you are, a little the way you look and the way
+  // you go (where the box goes), but never with the box more than 60% of the way to its edge:
+  // turning around on the spot stays inside it, and so does backing up
+  beginStatic(dir, center, ver) {
+    const m = this.stMaps[0] === this.stCur ? this.stMaps[1] : this.stMaps[0];
+    const texel = (this.sunCam.right - this.sunCam.left) / this.shadowS;
+    const x = _fx;
+    const y = _fy;
+    const z = _fz;
+    sunFrame(dir, x, y, z);
+    const cx = Math.round(center.dot(x) / texel) * texel;
+    const cy = Math.round(center.dot(y) / texel) * texel;
+    const cz = center.dot(z);
+    const camPos = this.camera.position;
+    const f = this.camera.getWorldDirection(_f);
+    const p = _v.set(camPos.x + this.lead.x + f.x * 10, 0, camPos.z + this.lead.z + f.z * 10);
+    const near = (v, c, room) => c + Math.max(-0.6 * room, Math.min(0.6 * room, v - c));
+    const sx = near(p.dot(x), cx, this.stMx * texel);
+    const sy = near(p.dot(y), cy, this.stMy * texel);
+    const sz = near(p.dot(z), cz, this.stMz);
+    m.sx = Math.round(sx / texel) * texel;
+    m.sy = Math.round(sy / texel) * texel;
+    m.sz = sz;
+    m.ver = ver;
+    m.sun.copy(dir);
+    m.on = true;
+    m.slice = 0;
+    // (the small things as they would be seen from where you are heading)
+    m.p.set(camPos.x + this.lead.x, camPos.y, camPos.z + this.lead.z);
+    const c = _sc.copy(x).multiplyScalar(m.sx).addScaledVector(y, m.sy).addScaledVector(z, m.sz);
+    const cam = m.cam;
+    const hx = (this.shadowS / 2 + this.stMx) * texel;
+    const hy = (this.shadowS / 2 + this.stMy) * texel;
+    cam.left = -hx;
+    cam.right = hx;
+    cam.top = hy;
+    cam.bottom = -hy;
+    cam.position.copy(c).addScaledVector(z, 260 + this.stMz);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(c);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    m.matrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.stBuild = m;
+    this.st.builds++;
+    return m;
+  }
+
+  // n more slices of the map being drawn (each slice a quarter of the still city's pieces)
+  drawStatic(m, n) {
+    const root = this.staticRoot;
+    const camPos = this.camera.position;
+    for (let k = 0; k < n && m.slice < STATIC_SLICES; k++) {
+      if (this.staticCull) this.staticCull(m.p);
+      this.drawSlice(root, m.slice, STATIC_SLICES, m.rt, m.cam);
+      if (this.staticCull) this.staticCull(camPos);
+      m.slice++;
+      this.st.slices++;
+    }
+  }
+
+  // one slice of the still city (every n-th piece from the i-th) into a map of the sun's view
+  drawSlice(root, i, n, rt, cam) {
+    const pieces = root.children;
+    // (the far map is first drawn before setStatic: its moving parts are found here then)
+    const skip = this.staticSkip || (this.staticSkip = movingParts(root));
+    const hid = this._sliceHid || (this._sliceHid = []);
+    hid.length = 0;
+    for (let k = 0; k < pieces.length; k++) {
+      const o = pieces[k];
+      if (!o.visible) continue;
+      if (k % n !== i || skip.includes(o)) {
+        o.visible = false;
+        hid.push(o);
+      }
+    }
+    const keep = shared.uShadowOn.value;
+    shared.uShadowOn.value = 0;
+    this.swapDepth(root, false);
+    this.r.setRenderTarget(rt);
+    if (i === 0) this.r.clear();
+    this.r.autoClear = false;
+    this.r.render(root, cam);
+    this.r.autoClear = true;
+    this.unswapDepth();
+    shared.uShadowOn.value = keep;
+    for (const o of hid) o.visible = true;
+  }
+
+  // the map the shader reads
+  useStatic(m) {
+    this.stCur = m;
+    this.staticRT = m.rt;
+    if (this.stBuild === m) this.stBuild = null;
+    shared.uShadowStatic.value = m.rt.depthTexture;
+    shared.uShadowStaticMatrix.value.copy(m.matrix);
+    // the same bias in metres as the near map's (its depth is spread over a longer way)
+    shared.uShadowStaticBias.value = (0.0012 * 519) / (m.cam.far - m.cam.near);
+    shared.uShadowStaticOn.value = 1;
+  }
+
+  // the map that was in use fades out under the new one (one at a time: the still city's or the
+  // far one)
+  startFade(kind, m) {
+    this.fade = { kind, m, t0: performance.now() };
+    shared.uShadowOld.value = m.rt.depthTexture;
+    shared.uShadowOldMatrix.value.copy(m.matrix);
+    shared.uShadowOldMode.value = kind === 'static' ? 1 : 2;
+    shared.uShadowOldK.value = 1;
+  }
+
+  updateFade() {
+    const f = this.fade;
+    if (!f) return;
+    const k = (performance.now() - f.t0) / FADE_MS;
+    if (k >= 1) this.endFade();
+    else shared.uShadowOldK.value = 1 - k * k * (3 - 2 * k);
+  }
+
+  endFade() {
+    this.fade = null;
+    shared.uShadowOldMode.value = 0;
+    shared.uShadowOldK.value = 0;
+    shared.uShadowOld.value = BLANK;
+  }
+
+  // the city's far map (beyond the box): drawn again in the background when the sun has gone on
+  // a degree, or something was rubbed out, and faded in
+  updateFar() {
+    const want = this.shadowDir;
+    const cur = this.farCur;
+    const b = this.farBuild;
+    if (b) {
+      this.drawFar(b, 1);
+      if (b.slice < FAR_SLICES || this.fade) return;
+      this.startFade('far', cur);
+      this.useFar(b);
+      return;
+    }
+    if (this.fade && this.fade.kind === 'far') return;
+    if (this.farDirty || cur.sun.dot(want) < FAR_STEP) {
+      this.farDirty = false;
+      this.drawFar(this.beginFar(want), 1);
+    }
+  }
+
+  beginFar(dir) {
+    const m = this.farMaps[0] === this.farCur ? this.farMaps[1] : this.farMaps[0];
+    const box = this.farBox;
+    const z = _fz;
+    const x = _fx;
+    const y = _fy;
+    sunFrame(dir, x, y, z);
+    // the city's box in the sun's frame
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    const p = _v;
+    for (let i = 0; i < 8; i++) {
+      p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      const a = p.dot(x);
+      const bb = p.dot(y);
+      const c = p.dot(z);
+      x0 = Math.min(x0, a);
+      x1 = Math.max(x1, a);
+      y0 = Math.min(y0, bb);
+      y1 = Math.max(y1, bb);
+      z0 = Math.min(z0, c);
+      z1 = Math.max(z1, c);
+    }
+    const cam = m.cam;
+    cam.near = 1;
+    cam.far = z1 - z0 + 20;
+    cam.position.copy(z).multiplyScalar(z1 + 10);
+    cam.up.copy(y);
+    cam.lookAt(_sc.copy(cam.position).sub(z));
+    cam.updateMatrixWorld();
+    // the frame above is centred on the sun's axis through the origin: shift the box onto it
+    cam.left = x0;
+    cam.right = x1;
+    cam.top = y1;
+    cam.bottom = y0;
+    cam.updateProjectionMatrix();
+    m.matrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    m.sun.copy(dir);
+    m.slice = 0;
+    this.farBuild = m;
+    return m;
+  }
+
+  drawFar(m, n) {
+    for (let k = 0; k < n && m.slice < FAR_SLICES; k++) {
+      this.drawSlice(this.farRoot, m.slice, FAR_SLICES, m.rt, m.cam);
+      m.slice++;
+    }
+  }
+
+  useFar(m) {
+    this.farCur = m;
+    this.farRT = m.rt;
+    if (this.farBuild === m) this.farBuild = null;
+    shared.uShadowFar.value = m.rt.depthTexture;
+    shared.uShadowFarMatrix.value.copy(m.matrix);
+    shared.uShadowFarTexel.value.set(1 / m.rt.width, 1 / m.rt.height);
+    shared.uShadowFarOn.value = 1;
+  }
+
+  // where the camera is heading (for the still city's map): about a second ahead, at most 20 m
+  trackCamera() {
+    const now = performance.now();
+    const c = this.camera.position;
+    const dt = (now - this.lastT) / 1000;
+    if (this.lastT && dt > 0 && dt < 0.25) {
+      const k = Math.min(1, dt * 3);
+      const vx = (c.x - this.lastCam.x) / dt;
+      const vz = (c.z - this.lastCam.z) / dt;
+      this.lead.x += (vx - this.lead.x) * k;
+      this.lead.z += (vz - this.lead.z) * k;
+    } else this.lead.set(0, 0, 0);
+    this.lastCam.copy(c);
+    this.lastT = now;
+    const l = Math.hypot(this.lead.x, this.lead.z);
+    if (l > 20) this.lead.multiplyScalar(20 / l);
+  }
+
+  hideFromMirror(o, hidden) {
+    if (!o.visible) return;
+    if (o === this.staticRoot && this.mirrorLayered) {
+      for (const c of this.staticSkip) this.hideFromMirror(c, hidden);
+      return;
+    }
+    if (o.isMesh && notInMirror(o)) {
+      o.visible = false;
+      hidden.push(o);
+      return;
+    }
+    const ch = o.children;
+    for (let i = 0; i < ch.length; i++) this.hideFromMirror(ch[i], hidden);
+  }
+
+  // the camera far from where the mirror last saw the street from (2 m, 10 degrees)
+  mirrorStale() {
+    const m = this._mirrorAt;
+    this.camera.getWorldDirection(_md);
+    return m.p.distanceToSquared(this.camera.position) > 4 || m.d.dot(_md) < 0.985;
+  }
+
+  // the mirror camera under the street (three.js Reflector, by hand)
+  renderReflection() {
+    const camera = this.camera;
+    const y = this.mirrorY;
+    const rc = this.reflCam;
+    const camPos = camera.position;
+    if (camPos.y <= y || !this.reflections) {
+      shared.uRefl.value = BLANK;
+      return;
+    }
+    const P = _v.set(0, y, 0);
+    // position
+    rc.position.set(camPos.x, 2 * y - camPos.y, camPos.z);
+    // looking where the camera looks, mirrored
+    _m.extractRotation(camera.matrixWorld);
+    _look.set(0, 0, -1).applyMatrix4(_m).add(camPos);
+    _target.copy(_look);
+    _target.y = 2 * y - _target.y;
+    rc.up.set(0, 1, 0).applyMatrix4(_m);
+    rc.up.y = -rc.up.y;
+    rc.lookAt(_target);
+    rc.near = camera.near;
+    rc.far = camera.far;
+    rc.updateMatrixWorld();
+    rc.projectionMatrix.copy(camera.projectionMatrix);
+    // texture matrix for the surfaces that show the reflection
+    const tm = shared.uReflMatrix.value;
+    tm.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+    tm.multiply(rc.projectionMatrix);
+    tm.multiply(rc.matrixWorldInverse);
+    // clip everything under the mirror (oblique near plane)
+    _plane.setFromNormalAndCoplanarPoint(_normal, P);
+    _plane.applyMatrix4(rc.matrixWorldInverse);
+    const cp = _q.set(_plane.normal.x, _plane.normal.y, _plane.normal.z, _plane.constant);
+    const pm = rc.projectionMatrix;
+    const q = new THREE.Vector4((Math.sign(cp.x) + pm.elements[8]) / pm.elements[0], (Math.sign(cp.y) + pm.elements[9]) / pm.elements[5], -1.0, (1.0 + pm.elements[10]) / pm.elements[14]);
+    cp.multiplyScalar(2.0 / cp.dot(q));
+    pm.elements[2] = cp.x;
+    pm.elements[6] = cp.y;
+    pm.elements[10] = cp.z + 1.0 - 0.003;
+    pm.elements[14] = cp.w;
+    rc.projectionMatrixInverse.copy(pm).invert();
+    // the reflective surfaces are not in their own mirror (nor the small things, nor the rooms):
+    // the still city's are on their own layer already, the rest are hidden for the moment
+    const hidden = this._mirrorHide || (this._mirrorHide = []);
+    hidden.length = 0;
+    this.hideFromMirror(this.scene, hidden);
+    const keep = shared.uRefl.value;
+    shared.uRefl.value = BLANK;
+    shared.uMirror.value = 1;
+    this.occlude(rc);
+    this.r.setRenderTarget(this.reflRT);
+    this.r.clear();
+    this.r.render(this.scene, rc);
+    this.unocclude();
+    shared.uMirror.value = 0;
+    shared.uRefl.value = this.reflRT.texture;
+    for (const o of hidden) o.visible = true;
+    void keep;
+  }
+
+  render(center) {
+    const r = this.r;
+    const T = this.timer;
+    this.ensure();
+    r.autoClear = true;
+    const taa = this.taa;
+    if (taa) this.taaBegin();
+    // (on a phone the sun's view was drawn every other frame, before the still city got a map of
+    // its own: now only what moves is drawn, each frame)
+    this.frameN = (this.frameN || 0) + 1;
+    const every = this.low ? 2 : 1;
+    const phase = this.frameN % every;
+    // the mirror under the street: every reflEvery-th frame (main.js: every frame, a phone every
+    // other one). In between the street reads the last one through the matrix it was drawn with;
+    // but a reflection depends on where you stand, so what is near in it slides a little until
+    // the next. A jump of the camera (a cut, a teleport) draws it at once.
+    const re = this.reflEvery || 1;
+    this.trackCamera();
+    if (every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) {
+      if (T) T.begin('shadow');
+      this.renderShadows(center);
+      if (T) T.end();
+      this.shadowDone = true;
+    }
+    if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale()) {
+      if (T) T.begin('reflection');
+      this.renderReflection();
+      if (T) T.end();
+      this.reflDone = true;
+      this.camera.getWorldDirection(_md);
+      this._mirrorAt.p.copy(this.camera.position);
+      this._mirrorAt.d.copy(_md);
+    }
+    // 3. the drawing (what is surely behind the buildings left out). With depthFirst, first only
+    //    how near every surface is (the shaders stop as soon as they know whether a pixel of
+    //    theirs is there), then the drawing itself against that depth, not writing it again: the
+    //    pens are worked out once a pixel, for the surface that is seen, instead of also for every
+    //    surface a nearer one then covers (1.2 to 1.7 times a pixel in the street). The same
+    //    picture as drawn in one go: what shows is still the last thing drawn at the nearest depth.
+    if (T) T.begin('main');
+    const mt = T ? null : this.mainTimer;
+    if (mt) mt.begin(this.depthFirst ? 'on' : 'off');
+    this.occlude(this.camera);
+    r.setRenderTarget(this.gRT);
+    r.clear();
+    if (this.depthFirst) {
+      const buf = r.state.buffers;
+      r.autoClear = false;
+      shared.uDepthOnly.value = 1;
+      buf.color.setMask(false);
+      buf.color.setLocked(true);
+      r.render(this.scene, this.camera);
+      buf.color.setLocked(false);
+      buf.color.setMask(true);
+      shared.uDepthOnly.value = 0;
+      buf.depth.setMask(false);
+      buf.depth.setLocked(true);
+      r.render(this.scene, this.camera);
+      buf.depth.setLocked(false);
+      buf.depth.setMask(true);
+      r.autoClear = true;
+    } else r.render(this.scene, this.camera);
+    this.unocclude();
+    if (mt) mt.end();
+    if (T) T.end();
+    // 4. the ink
+    const ink = this.mInk.uniforms;
+    ink.tColor.value = this.gRT.textures[0];
+    ink.tAux.value = this.gRT.textures[1];
+    ink.tDepth.value = this.gRT.depthTexture;
+    ink.uTexel.value.set(1 / this.size.x, 1 / this.size.y);
+    ink.uNear.value = this.camera.near;
+    ink.uFar.value = this.camera.far;
+    ink.uLineW.value = this.lineW;
+    ink.uInvProj.value.copy(this.camera.projectionMatrixInverse);
+    ink.uCamWorld.value.copy(this.camera.matrixWorld);
+    ink.uTaa.value = taa ? 1 : 0;
+    ink.uBoilPrev.value = this.boilPrev;
+    if (T) T.begin('ink');
+    this.pass(this.mInk, this.inkRT);
+    if (T) T.end();
+    const after = this.afterInk.children;
+    let any = false;
+    for (let i = 0; i < after.length; i++) if (after[i].visible) any = true;
+    if (any && !taa) {
+      if (T) T.begin('rain');
+      r.autoClear = false;
+      r.setRenderTarget(this.inkRT);
+      r.render(this.afterInk, this.camera);
+      r.autoClear = true;
+      if (T) T.end();
+    }
+    // (the smart drawing: this frame put together with the ones before, at the picture's size; then
+    // the rain over it, at that size, from the camera unshifted)
+    let src = this.inkRT.texture;
+    let sw = this.size;
+    if (taa) {
+      if (T) T.begin('taa');
+      src = this.resolve().textures[0];
+      sw = this.outSize;
+      if (T) T.end();
+      this.taaEnd();
+      if (any) {
+        if (T) T.begin('rain');
+        const pr = shared.uPR.value;
+        shared.uPR.value = shared.uPRo.value;
+        shared.uResolution.value.set(sw.x, sw.y);
+        this.rainDepthK.value = this.size.x / sw.x;
+        // (its coverage kept too: it goes over the picture by it)
+        for (let i = 0; i < after.length; i++) {
+          const m = after[i].material;
+          m.blendSrcAlpha = THREE.OneFactor;
+          m.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+        }
+        r.setRenderTarget(this.rainRT);
+        r.clear();
+        r.autoClear = false;
+        r.render(this.afterInk, this.camera);
+        r.autoClear = true;
+        for (let i = 0; i < after.length; i++) {
+          const m = after[i].material;
+          m.blendSrcAlpha = THREE.ZeroFactor;
+          m.blendDstAlpha = THREE.OneFactor;
+        }
+        this.rainDepthK.value = 1;
+        shared.uResolution.value.set(this.size.x, this.size.y);
+        shared.uPR.value = pr;
+        if (T) T.end();
+      }
+    }
+    // 5. glow
+    if (T) T.begin('glow');
+    const b = this.mBright.uniforms;
+    b.tSrc.value = src;
+    b.uTexel.value.set(1 / sw.x, 1 / sw.y);
+    this.pass(this.mBright, this.mips[0]);
+    for (let i = 1; i < this.mips.length; i++) {
+      const src = this.mips[i - 1];
+      this.mDown.uniforms.tSrc.value = src.texture;
+      this.mDown.uniforms.uTexel.value.set(1 / src.width, 1 / src.height);
+      this.pass(this.mDown, this.mips[i]);
+    }
+    let cur = this.mips[this.mips.length - 1];
+    for (let i = this.mips.length - 2; i >= 0; i--) {
+      this.mUp.uniforms.tSrc.value = cur.texture;
+      this.mUp.uniforms.tAdd.value = this.mips[i].texture;
+      this.mUp.uniforms.uTexel.value.set(0.5 / cur.width, 0.5 / cur.height);
+      this.pass(this.mUp, this.ups[i]);
+      cur = this.ups[i];
+    }
+    if (T) T.end();
+    const f = this.mFinal.uniforms;
+    f.tSrc.value = src;
+    f.tBloom.value = cur.texture;
+    f.uBloom.value = this.bloom;
+    f.uExposure.value = this.exposure;
+    f.uSrcTexel.value.set(1 / sw.x, 1 / sw.y);
+    f.uSharp.value = taa || this.scale < 0.99 ? 0.85 : 0.5;
+    f.uRainOn.value = taa && any ? 1 : 0;
+    f.tRain.value = taa && any ? this.rainRT.texture : BLANK;
+    if (T) T.begin('final');
+    this.pass(this.mFinal, null);
+    if (this.overlay.children.length) {
+      r.autoClear = false;
+      r.setRenderTarget(null);
+      r.clearDepth();
+      r.render(this.overlay, this.camera);
+      r.autoClear = true;
+    }
+    if (T) T.end();
+    // (the things that move on their own: the next frame's rows, render/motion.js)
+    motion.gen++;
+    motion.on = taa;
+  }
+
+  // The sun's view of the whole city (for what is beyond the box around you), on two maps:
+  // the first call draws one whole at once; later ones (something was rubbed out) have it drawn
+  // again in the background, as the sun's going on does (updateFar)
+  bakeFarShadows(root, box, size = 4096) {
+    if (this.farMaps) {
+      this.farDirty = true;
+      return;
+    }
+    this.farRoot = root;
+    this.farBox = box.clone();
+    // a texture shaped like the city as the sun sees it now (long and low in the evening)
+    sunFrame(this.shadowDir, _fx, _fy, _fz);
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      _v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      x0 = Math.min(x0, _v.dot(_fx));
+      x1 = Math.max(x1, _v.dot(_fx));
+      y0 = Math.min(y0, _v.dot(_fy));
+      y1 = Math.max(y1, _v.dot(_fy));
+    }
+    const aspect = (x1 - x0) / Math.max(1, y1 - y0);
+    const W = size;
+    const H = Math.max(512, Math.min(size, Math.pow(2, Math.round(Math.log2(size / Math.max(1, aspect))))));
+    const far = () => {
+      const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2);
+      cam.layers.enable(MIRRORLESS);
+      return {
+        rt: new THREE.WebGLRenderTarget(W, H, { format: THREE.RedFormat, depthBuffer: true, depthTexture: new THREE.DepthTexture(W, H) }),
+        cam,
+        sun: new THREE.Vector3(),
+        matrix: new THREE.Matrix4(),
+        slice: 0,
+      };
+    };
+    this.farMaps = [far(), far()];
+    this.farCur = null;
+    const m = this.beginFar(this.shadowDir);
+    this.drawFar(m, FAR_SLICES);
+    this.useFar(m);
+    this.r.setRenderTarget(null);
+  }
+}
