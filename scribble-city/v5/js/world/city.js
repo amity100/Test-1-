@@ -130,10 +130,12 @@ export function buildCity(scene, o = {}) {
     if (!sharedPens.has(key)) sharedPens.set(key, mergedSurface(mat, { obj }));
     return sharedPens.get(key);
   };
-  const meshes = ctx.B.flush(group, { static: true, merge });
+  // (v5: the pens with little of them in the whole city, one draw each, kit.js; not the ones
+  // hidden by distance, nor the rooms)
+  const meshes = ctx.B.flush(group, { static: true, merge, whole: { max: 25000, ok: (pens) => !pens.some((p) => small.has(p) || far.has(p)) } });
   const rooms = ctx.R.flush(group, { static: true, indoor: true, merge });
   for (const m of rooms) m.renderOrder = 1;
-  const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN', 'beach']);
+  const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN', 'beach', 'whole']);
   const cull = [];
   for (const m of rooms) cull.push({ m, r: 55 });
   for (const m of meshes) {

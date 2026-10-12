@@ -907,7 +907,11 @@ function surf(ctx, z0, z1) {
     g.position.y = -0.78;
     ctx.parent.add(g);
     B.flush(g, { dynamic: true, merge: mergeMoving });
-    for (const m of g.children) m.userData.noReflect = true;
+    // (flat on the water, the foam covers its own shadow: not in the sun's view either)
+    for (const m of g.children) {
+      m.userData.noReflect = true;
+      m.userData.noShadow = true;
+    }
     lines.push({ g, k });
   }
   ctx.surf = { lines, t: 0 };

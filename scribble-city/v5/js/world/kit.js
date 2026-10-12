@@ -25,6 +25,9 @@ export class Batch {
     this.groups = new Map(); // material -> Map(chunk -> [{ geo, id, color, obj, sway }])
     this.obj = 0; // the prop being built (its id goes on every part added meanwhile)
     this.vcount = 0;
+    // (the order the parts were added in: what is painted over something else, a crossing over the
+    // avenue, comes after it)
+    this.seq = 0;
   }
 
   // add a geometry (already placed in world space, or with a matrix) with a part id
@@ -48,7 +51,7 @@ export class Batch {
     const byChunk = this.groups.get(material);
     if (!byChunk.has(key)) byChunk.set(key, []);
     const col = o.color ? (o.color.isColor ? [o.color.r, o.color.g, o.color.b] : o.color) : WHITE;
-    byChunk.get(key).push({ geo: g, id, color: col, obj: o.obj !== undefined ? o.obj : this.obj, sway: o.sway || 0 });
+    byChunk.get(key).push({ geo: g, id, color: col, obj: o.obj !== undefined ? o.obj : this.obj, sway: o.sway || 0, seq: this.seq++ });
     this.vcount += g.attributes.position.count;
     return id;
   }
@@ -81,6 +84,32 @@ export class Batch {
           it.src = mat;
           out.push(it);
         }
+      }
+    }
+    // (v5) a pen with little of it in the whole city (opts.whole: { max corners, ok(pens): not
+    // one hidden by distance }) is one draw for all of it, not one in every chunk it is in: where
+    // it is hardly matters to the graphics card, a draw more or less does (the city's street
+    // paint was 34 draws of 616 corners)
+    if (opts.whole) {
+      for (const [, byChunk] of draws) {
+        if (byChunk.size < 2) continue;
+        let n = 0;
+        const pens = new Set();
+        for (const [, list] of byChunk) {
+          for (const it of list) {
+            n += it.geo.attributes.position.count;
+            pens.add(it.src);
+          }
+        }
+        if (n > opts.whole.max || !opts.whole.ok([...pens])) continue;
+        const all = [];
+        for (const [, list] of byChunk) for (const it of list) all.push(it);
+        // (in the order they were added. Seen from high up, a few hundred metres, two flat pieces
+        // at the same height can come out the other way round than in chunks of their own, where
+        // the farther chunk was drawn last; from the street the picture is the same)
+        all.sort((a, b) => a.seq - b.seq);
+        byChunk.clear();
+        byChunk.set('whole', all);
       }
     }
     // (v5: a draw of more than 65535 corners would need 32-bit indices, which a browser drawing
@@ -164,22 +193,23 @@ export class Batch {
           }
           o += c;
         }
+        // (v5) the corners the same in everything, one corner (shareCorners)
+        const att = [['position', pos, 3], ['normal', nor, 3], ['uv', uv, 2], ['aId', ids, 1]];
+        if (vc) att.push(['color', vc, 3]);
+        if (objs) att.push(['aObj', objs, 1]);
+        if (sway) att.push(['aSway', sway, 1]);
+        if (rows) att.push(['aMat', rows, 1]);
+        const kept = shareCorners(n, index, att);
         const geo = new THREE.BufferGeometry();
         geo.setIndex(new THREE.BufferAttribute(index, 1));
-        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-        geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-        geo.setAttribute('aId', new THREE.BufferAttribute(ids, 1));
-        if (vc) geo.setAttribute('color', new THREE.BufferAttribute(vc, 3));
-        if (objs) geo.setAttribute('aObj', new THREE.BufferAttribute(objs, 1));
-        if (sway) geo.setAttribute('aSway', new THREE.BufferAttribute(sway, 1));
-        if (rows) geo.setAttribute('aMat', new THREE.BufferAttribute(rows, 1));
+        for (const [name, a, w] of att) geo.setAttribute(name, new THREE.BufferAttribute(kept ? compact(a, w, kept) : a, w));
         geo.computeBoundingSphere();
         const m = new THREE.Mesh(geo, mat);
         m.matrixAutoUpdate = false;
         m.name = key;
         Object.assign(m.userData, opts);
         delete m.userData.merge;
+        delete m.userData.whole;
         // the pens drawn in it (more than one when they share)
         m.userData.pens = [...pens];
         parent.add(m);
@@ -189,6 +219,64 @@ export class Batch {
     this.groups.clear();
     return meshes;
   }
+}
+
+// (v5) The corners of a draw that are the same in everything (the place, the direction, the
+// picture, the part, the prop, the pen) made one: the graphics card works a corner out once, not
+// once for every triangle it is in (the two triangles of a flat quad share two of its corners; a
+// box's faces keep their own, their directions differ). The same triangles, the same picture.
+// Renumbers index in place; returns the corners kept (or null: none shared).
+function shareCorners(n, index, att) {
+  const views = att.map(([, a, w]) => ({ u: new Uint32Array(a.buffer, a.byteOffset, a.length), w }));
+  let size = 1;
+  while (size < n * 2) size <<= 1;
+  const mask = size - 1;
+  const table = new Int32Array(size).fill(-1);
+  const keep = new Int32Array(n);
+  const remap = new Int32Array(n);
+  let m = 0;
+  const same = (i, j) => {
+    for (const v of views) {
+      const a = i * v.w;
+      const b = j * v.w;
+      for (let k = 0; k < v.w; k++) if (v.u[a + k] !== v.u[b + k]) return false;
+    }
+    return true;
+  };
+  for (let i = 0; i < n; i++) {
+    let h = 2166136261;
+    for (const v of views) {
+      const o = i * v.w;
+      for (let k = 0; k < v.w; k++) h = Math.imul(h ^ v.u[o + k], 16777619);
+    }
+    let slot = (h ^ (h >>> 15)) & mask;
+    for (;;) {
+      const j = table[slot];
+      if (j < 0) {
+        table[slot] = m;
+        keep[m] = i;
+        remap[i] = m++;
+        break;
+      }
+      if (same(keep[j], i)) {
+        remap[i] = j;
+        break;
+      }
+      slot = (slot + 1) & mask;
+    }
+  }
+  if (m === n) return null;
+  for (let k = 0; k < index.length; k++) index[k] = remap[index[k]];
+  return keep.subarray(0, m);
+}
+
+function compact(a, w, kept) {
+  const out = new Float32Array(kept.length * w);
+  for (let j = 0; j < kept.length; j++) {
+    const s = kept[j] * w;
+    for (let k = 0; k < w; k++) out[j * w + k] = a[s + k];
+  }
+  return out;
 }
 
 // UVs in metres on a box (for the window grids and pavers)

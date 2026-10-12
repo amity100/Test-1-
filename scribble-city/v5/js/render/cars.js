@@ -452,6 +452,59 @@ function shrink(g, k) {
   }
 }
 
+// (v5) A shape of triangles that each have three corners of their own, made into one drawn by its
+// corners: the corners that are the same in everything (the place, the direction, the picture,
+// the part) are one, worked out once by the graphics card instead of once for every triangle they
+// are in. The same triangles, the same picture.
+function byCorners(g) {
+  if (g.index) return g;
+  const names = Object.keys(g.attributes);
+  const views = names.map((k) => {
+    const a = g.attributes[k];
+    return { a, w: a.itemSize, u: a.array instanceof Float32Array ? new Uint32Array(a.array.buffer, a.array.byteOffset, a.array.length) : null };
+  });
+  if (views.some((v) => !v.u || v.a.isInterleavedBufferAttribute)) return g;
+  const n = g.attributes.position.count;
+  const first = new Map();
+  const remap = new Uint32Array(n);
+  const keep = [];
+  const same = (i, j) => {
+    for (const v of views) for (let k = 0; k < v.w; k++) if (v.u[i * v.w + k] !== v.u[j * v.w + k]) return false;
+    return true;
+  };
+  for (let i = 0; i < n; i++) {
+    let h = 2166136261;
+    for (const v of views) for (let k = 0; k < v.w; k++) h = Math.imul(h ^ v.u[i * v.w + k], 16777619);
+    const list = first.get(h);
+    let j = -1;
+    if (list) {
+      for (const c of list) {
+        if (same(keep[c], i)) {
+          j = c;
+          break;
+        }
+      }
+    }
+    if (j < 0) {
+      j = keep.length;
+      keep.push(i);
+      if (list) list.push(j);
+      else first.set(h, [j]);
+    }
+    remap[i] = j;
+  }
+  if (keep.length === n) return g;
+  const out = new THREE.BufferGeometry();
+  names.forEach((k, ai) => {
+    const { a, w } = views[ai];
+    const arr = new Float32Array(keep.length * w);
+    for (let j = 0; j < keep.length; j++) for (let q = 0; q < w; q++) arr[j * w + q] = a.array[keep[j] * w + q];
+    out.setAttribute(k, new THREE.BufferAttribute(arr, w, a.normalized));
+  });
+  out.setIndex(new THREE.BufferAttribute(keep.length > 65535 ? remap : Uint16Array.from(remap), 1));
+  return out;
+}
+
 function merge(list) {
   let n = 0;
   for (const g of list) n += g.attributes.position.count;
@@ -485,8 +538,9 @@ let _carDOn = false;
 class Pool {
   constructor(scene, geo, mat, cap, dents = false) {
     this.cap = cap;
-    const g = geo.index ? geo.toNonIndexed() : geo;
-    if (!g.attributes.aId) g.setAttribute('aId', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+    const g0 = geo.index ? geo.toNonIndexed() : geo;
+    if (!g0.attributes.aId) g0.setAttribute('aId', new THREE.Float32BufferAttribute(new Float32Array(g0.attributes.position.count), 1));
+    const g = byCorners(g0);
     this.iX = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.iClip = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('iX', this.iX);
@@ -737,7 +791,7 @@ export class CarRenderer {
       // (what the sun sees of a car: all its parts in one shape, drawn with the shell's own
       // instances - every part of a car has the car's matrix - so a kind of car is one draw in
       // the sun's view)
-      const sun = merge([b.body, b.glass, b.tail, b.head, b.trim, b.plate]);
+      const sun = byCorners(merge([b.body, b.glass, b.tail, b.head, b.trim, b.plate]));
       const P = (this.kinds[kind] = {
         b,
         shell: new Pool(scene, shell, shellPen, n, true),

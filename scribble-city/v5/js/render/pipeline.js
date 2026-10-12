@@ -480,7 +480,9 @@ const STATIC_SOON = 0.2;
 // the far one every degree, each new map drawn in the background and faded in over FADE_MS
 const SUN_STEP = Math.cos((0.25 * Math.PI) / 180);
 const FAR_STEP = Math.cos((1.0 * Math.PI) / 180);
-const FAR_SLICES = 4;
+// (v5: the far map is the whole city, every 13 seconds or so: in eight slices, not four, so each
+// frame that draws one is only a little slower than the rest)
+const FAR_SLICES = 8;
 const FADE_MS = 800;
 const _fx = new THREE.Vector3();
 const _fy = new THREE.Vector3();
@@ -1342,7 +1344,10 @@ export class Pipeline {
     // the next. A jump of the camera (a cut, a teleport) draws it at once.
     const re = this.reflEvery || 1;
     this.trackCamera();
-    if (every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) {
+    // (v5: the test route's moments without the people and the cars, or without the sun's view of
+    // what moves, game/perf.js: what they cost on this device)
+    const life = this.hideLife ? this.hideMoving() : null;
+    if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone)) {
       if (T) T.begin('shadow');
       this.renderShadows(center);
       if (T) T.end();
@@ -1494,9 +1499,24 @@ export class Pipeline {
       r.autoClear = true;
     }
     if (T) T.end();
+    if (life) for (const o of life) o.visible = true;
     // (the things that move on their own: the next frame's rows, render/motion.js)
     motion.gen++;
     motion.on = taa;
+  }
+
+  // (v5, the test route) the people, the cars and everything else drawn anew every frame, hidden
+  // for this frame; returns them
+  hideMoving() {
+    const out = this._lifeHid || (this._lifeHid = []);
+    out.length = 0;
+    for (const o of this.scene.children) {
+      if (o.visible && o.userData.dynamic) {
+        o.visible = false;
+        out.push(o);
+      }
+    }
+    return out;
   }
 
   // The sun's view of the whole city (for what is beyond the box around you), on two maps:

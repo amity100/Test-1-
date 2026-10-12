@@ -206,6 +206,15 @@ const _cClip2 = [0, 0, 0, 0];
 // shape with fewer points than its class leaves the rest of them empty) and of their side (a
 // coat's skirts are seen from inside too).
 const CLASS_SIZES = [60, 300, 504, 1020, 1404];
+// (v5) Shapes with the same layout of triangles (every limb, every ball, every head of hair...)
+// are drawn by their corners instead: each corner of a part is worked out once, not once for
+// every triangle it is in (a sixth of the work for the graphics card, the same picture). A
+// layout is drawn on its own when that saves enough corners an instance; the small shapes stay
+// in their class.
+const OWN_LAYOUT = 100;
+// (the shapes drawn too rarely for a draw of their own: they stay in their class, unless they
+// are alone in it)
+const IN_CLASS = new Set(['eye', 'lowShoe', 'lowPelvis', 'lowTorsoTee', 'lowTorsoPlain', 'skirt', 'midi', 'coatSkirt', 'lowSkirt', 'lowMidi']);
 // left out of: the wet street's mirror (1), the sun's view (2)
 const NO_MIRROR = 1;
 const NO_SUN = 2;
@@ -240,12 +249,14 @@ function partWas(out, i, m, owner, shape) {
 }
 
 class DrawClass {
-  constructor(scene, verts, mat, cap) {
+  // index: the shared layout of triangles of the shapes drawn by their corners (or none)
+  constructor(scene, verts, mat, cap, index = null) {
     this.cap = cap;
     this.verts = verts;
     const g = new THREE.BufferGeometry();
     // (the points come from the shapes' texture: these only say how many)
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts * 3), 3));
+    if (index) g.setIndex(new THREE.BufferAttribute(verts > 65535 ? Uint32Array.from(index) : Uint16Array.from(index), 1));
     this.iX = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.iClip = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.iS = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
@@ -319,6 +330,8 @@ class DrawClass {
 // one kind of part: its row in the shapes' texture, its pen, its class
 class Shape {
   constructor(geo, pen, cap) {
+    // (its corners and their triangles, kept for drawing it by its corners)
+    this.igeo = geo.index ? geo : null;
     const g = geo.index ? geo.toNonIndexed() : geo;
     this.geo = g;
     this.count = g.attributes.position.count;
@@ -508,6 +521,48 @@ export class PersonRenderer {
     const front = mergedSurface(M.plain, { vcolor: false, pictures: penPictures([M.tee, M.shirt, M.cargo, M.skirt, M.plain]), pull: true });
     const coatPics = penPictures([M.coat]);
     const back = mergedSurface(M.coat, { vcolor: false, pictures: [coatPics[0], coatPics[0], coatPics[0], coatPics[0], coatPics[0]], pull: true });
+    // (v5) the shapes drawn by their corners (OWN_LAYOUT): their row of the texture holds their
+    // corners, and they share a draw with the shapes of the same layout of triangles
+    const layouts = [];
+    const layoutOf = (ig) => {
+      const corners = ig.attributes.position.count;
+      const ix = ig.index.array;
+      let L = layouts.find((l) => l.corners === corners && l.index.length === ix.length && l.index.every((v, i) => v === ix[i]));
+      if (!L) {
+        L = { corners, index: Array.from(ix), id: layouts.length };
+        layouts.push(L);
+      }
+      return L;
+    };
+    // (the little things of a face share draws of their own, left out of the sun's view and the
+    // mirror as a whole: they are in neither)
+    const face = (sh) => (sh.flags & (NO_MIRROR | NO_SUN)) === (NO_MIRROR | NO_SUN);
+    const sideOf = (sh) => (sh.penMat === M.coat ? 'back' : 'front') + (face(sh) ? '-face' : '');
+    const classOf = (sh) => CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
+    const byCorners = (sh) => {
+      sh.layout = layoutOf(sh.igeo);
+      sh.geo = sh.igeo;
+      sh.count = sh.layout.corners;
+    };
+    const names = new Map(Object.entries(this.p).map(([k, v]) => [v, k]));
+    for (const sh of shapes) {
+      sh.layout = null;
+      if (sh.igeo && !IN_CLASS.has(names.get(sh)) && classOf(sh) - sh.igeo.attributes.position.count >= OWN_LAYOUT) byCorners(sh);
+    }
+    // (a class left with the shapes of one layout only: drawn by their corners, for nothing)
+    const rest = new Map();
+    for (const sh of shapes) {
+      if (sh.layout) continue;
+      const k = `${sideOf(sh)}:${classOf(sh)}`;
+      if (!rest.has(k)) rest.set(k, []);
+      rest.get(k).push(sh);
+    }
+    for (const list of rest.values()) {
+      if (!list.every((sh) => sh.igeo)) continue;
+      const L0 = layoutOf(list[0].igeo);
+      if (list.every((sh) => layoutOf(sh.igeo) === L0)) list.forEach(byCorners);
+    }
+    for (const sh of shapes) sh.igeo = null;
     let wide = 0;
     shapes.forEach((sh, i) => {
       sh.row = i;
@@ -541,19 +596,24 @@ export class PersonRenderer {
     tex.generateMipmaps = false;
     tex.needsUpdate = true;
     shared.uShapes.value = tex;
-    // the classes: by side, then by size
+    // the classes: by side, then by layout (drawn by corners) or by size
     this.classes = [];
     const groups = new Map();
     for (const sh of shapes) {
-      const side = sh.penMat === M.coat ? 'back' : 'front';
-      const size = CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
-      const key = `${side}:${size}`;
-      if (!groups.has(key)) groups.set(key, { side, size, list: [] });
+      const side = sideOf(sh);
+      const L = sh.layout;
+      const size = L ? L.corners : CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
+      const key = L ? `${side}:L${L.id}` : `${side}:${size}`;
+      if (!groups.has(key)) groups.set(key, { side, size, index: L ? L.index : null, list: [] });
       groups.get(key).list.push(sh);
     }
-    for (const { side, size, list } of groups.values()) {
+    for (const { side, size, index, list } of groups.values()) {
       const cap = list.reduce((a, sh) => a + sh.cap, 0);
-      const cls = new DrawClass(scene, size, side === 'back' ? back : front, cap);
+      const cls = new DrawClass(scene, size, side.startsWith('back') ? back : front, cap, index);
+      if (side.endsWith('-face')) {
+        cls.mesh.userData.noShadow = true;
+        cls.mesh.userData.noReflect = true;
+      }
       for (const sh of list) sh.cls = cls;
       this.classes.push(cls);
     }

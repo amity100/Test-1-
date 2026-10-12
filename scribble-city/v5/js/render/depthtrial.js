@@ -81,9 +81,13 @@ export class DepthTrial {
     // the card's own time for the pass, where it can be measured: with, only if it saves a
     // tenth of it and the frames are no slower (the extra pass costs the processor a little).
     // Otherwise the frames themselves, if they differ by more than 5%; else as it was
+    // (v5: where only the frames tell, the depth first has to be clearly faster, 7%, to be kept: on
+    // a phone the frames come and go by more than the 5% it was, and a depth first chosen by
+    // chance draws everything twice)
     let pick = r.keep;
     if (gpu.on && gpu.off) pick = gpu.on < gpu.off * 0.9 && on < off * 1.05;
-    else if (Math.abs(on - off) > 0.05 * Math.min(on, off)) pick = on < off;
+    else if (on < off * 0.93) pick = true;
+    else if (off < on * 0.97) pick = false;
     pipe.depthFirst = pick;
     this.result = { on: +on.toFixed(1), off: +off.toFixed(1), gpuOn: gpu.on ? +gpu.on.toFixed(2) : null, gpuOff: gpu.off ? +gpu.off.toFixed(2) : null, pick };
   }

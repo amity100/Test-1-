@@ -11,9 +11,10 @@ import { groundHeight } from '../world/layout.js';
 
 const ROUTE_SECONDS = 60;
 // after the route, standing at its start a few seconds each way, to see what holds the frames up
-// on the device: as it is, the drawing at its coarsest (the pixels), without the mirror, and not
-// drawn at all (the game alone, on the processor)
-const STILL = [['רגיל', null], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי ציור', 'draw']];
+// on the device: as it is, the drawing at its coarsest (the pixels), without the mirror, without
+// the sun's view of what moves (v5), without the people and the cars (v5), and not drawn at all
+// (the game alone, on the processor)
+const STILL = [['רגיל', null], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי צל', 'shadow'], ['בלי אנשים ומכוניות', 'life'], ['בלי ציור', 'draw']];
 const STILL_SECONDS = 5;
 // the route: along the boulevard, through the shops and the park, up the avenue into downtown,
 // over the towers and out over the bay to the pier (x, height, z)
@@ -312,7 +313,7 @@ export class Perf {
     g.pipe.taaFrac = 0.67;
     g.player.invuln = 1e9;
     this.toggle(this.on);
-    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד 20 שניות במקום. בלי לגעת…', 'info', 3);
+    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד חצי דקה במקום. בלי לגעת…', 'info', 3);
   }
 
   // where the camera is at distance d along the route (Catmull-Rom through the points)
@@ -379,6 +380,8 @@ export class Perf {
     // (back as it was)
     pipe.scale = pipe.defaultScale || b.scale;
     pipe.reflections = b.refl;
+    pipe.noSunPass = false;
+    pipe.hideLife = false;
     b.noDraw = false;
     s.i++;
     s.t = 0;
@@ -390,6 +393,8 @@ export class Perf {
     const what = STILL[s.i][1];
     if (what === 'scale') pipe.scale = pipe.minScale;
     else if (what === 'mirror') pipe.reflections = false;
+    else if (what === 'shadow') pipe.noSunPass = true;
+    else if (what === 'life') pipe.hideLife = true;
     else if (what === 'draw') b.noDraw = true;
   }
 
@@ -411,6 +416,8 @@ export class Perf {
     g.pipe.scale = b.scale;
     g.pipe.taaFrac = b.taaFrac;
     g.pipe.reflections = b.refl;
+    g.pipe.noSunPass = false;
+    g.pipe.hideLife = false;
     // how the frames came: in time for a 60 Hz screen, for 30, or later
     const dts = b.frames.map((f) => f.dt);
     const share = (lo, hi) => Math.round((100 * dts.filter((x) => x > lo && x <= hi).length) / Math.max(1, dts.length));
@@ -434,6 +441,7 @@ export class Perf {
       `פריימים: עד 17ms ${share(0, 17.5)}% · עד 34ms ${share(17.5, 34.5)}% · יותר ${share(34.5, 1e9)}% · הכנת שיידרים ${b.compiles} (${Math.round(b.compileMs)}ms)`,
       b.still && b.still.fps.length === STILL.length ? `עומדים במקום, פריימים בשנייה: ${STILL.map(([name], i) => `${name} ${b.still.fps[i].toFixed(1)}`).join(' · ')}` : '',
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
+      `עומק קודם: ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (נבדק: עם ${g.depthTrial.result.on}ms, בלי ${g.depthTrial.result.off}ms)` : ''}`,
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
       `לפי מעבר: ${PASSES.filter((p) => s.pass[p] !== undefined).map((p) => `${PASS_HE[p]} ${Math.round(s.pass[p])}`).join(' · ')}`,
