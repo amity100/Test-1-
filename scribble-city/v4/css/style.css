@@ -1000,6 +1000,7 @@ html, body { background: #1b1430; }
 .phone-actions .btn { text-decoration: none; }
 #phone-home-btn { width: 54px; height: 8px; margin: 8px auto 0; flex: none; border: 0; border-radius: 4px; background: var(--ink); cursor: pointer; }
 #btn-phone { left: calc(50% + 32px); top: max(8px, env(safe-area-inset-top)); }
+#btn-radio { left: calc(50% + 90px); top: max(8px, env(safe-area-inset-top)); }
 body.touch #btn-pause { left: calc(50% - 26px); }
 /* the camera's viewfinder over the game */
 #phone-cam { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
@@ -1094,3 +1095,86 @@ body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.ph
 /* (the air, the stamina or the vest under the health: the goals card steps down out of their way) */
 body:has(#stamina:not(.hidden)) #goals, body:has(#breath:not(.hidden)) #goals, body:has(#armor:not(.hidden)) #goals { top: max(78px, calc(env(safe-area-inset-top) + 72px)); }
 body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor:not(.hidden)):has(#breath:not(.hidden)) #goals { top: max(90px, calc(env(safe-area-inset-top) + 84px)); }
+
+/* ---------- a phone held sideways (ROADMAP 10.6): less over the city. Everything smaller, the
+   messages up at the top instead of across the middle, the pause and the phone beside the map
+   (the top bar to itself), the weapon's swap under its card ---------- */
+@media (max-height: 520px) {
+  /* the top bar: the life, the hour, the wallet, the ink (the district's name: on the map) */
+  body.touch #hud .paper-card { border-width: 2px; box-shadow: 2px 3px 0 var(--ink); }
+  body.touch #topbar { top: max(6px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); gap: 6px; }
+  body.touch #health, body.touch #vehicle-hp { min-width: 84px; padding: 2px 6px 4px; }
+  body.touch #vehicle-hp { position: absolute; top: calc(100% + 4px); right: 0; }
+  body.touch #health .label, body.touch #vehicle-hp .label { font-size: 12px; margin-bottom: 2px; }
+  body.touch #hud .bar { height: 8px; border-width: 2px; }
+  body.touch #breath, body.touch #stamina, body.touch #armor { margin-top: 2px; gap: 3px; }
+  body.touch #breath .bar, body.touch #stamina .bar, body.touch #armor .bar { height: 5px; }
+  body.touch #breath .ico, body.touch #stamina .ico, body.touch #armor .ico { font-size: 9px; }
+  body.touch #district { display: none; }
+  body.touch #clock, body.touch #money { font-size: 14px; padding: 2px 6px; }
+  body.touch #clock { box-shadow: 2px 3px 0 #6b4bd6; }
+  body.touch #ink { padding: 2px 5px; }
+  body.touch #ink .bottle { width: 10px; height: 16px; border-width: 2px; }
+  body.touch .money-float { font-size: 13px; }
+  /* the map, and beside it the pause, the phone (and in a car the radio) */
+  body.touch #minimap-wrap { top: max(6px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); width: 84px; height: 84px; border-width: 3px; box-shadow: 2px 3px 0 var(--ink), inset 0 0 0 2px #ffd23f; }
+  body.touch #btn-pause, body.touch #btn-phone, body.touch #btn-radio { top: max(8px, env(safe-area-inset-top)); width: 32px; height: 32px; transform: none; border-width: 2px; }
+  body.touch #btn-pause { left: calc(max(10px, env(safe-area-inset-left)) + 92px); }
+  body.touch #btn-phone { left: calc(max(10px, env(safe-area-inset-left)) + 132px); }
+  body.touch #btn-radio { left: calc(max(10px, env(safe-area-inset-left)) + 172px); }
+  body.touch #btn-pause.on, body.touch #btn-phone.on, body.touch #btn-radio.on { transform: scale(0.92); }
+  body.touch #gps-dist { top: calc(max(6px, env(safe-area-inset-top)) + 46px); left: calc(max(10px, env(safe-area-inset-left)) + 92px); transform: rotate(-1.5deg); padding: 0 6px 1px; border-width: 2px; box-shadow: 2px 2px 0 var(--ink); font-size: 11px; }
+  body.touch #saving { top: calc(max(8px, env(safe-area-inset-top)) + 4px); left: calc(max(10px, env(safe-area-inset-left)) + 216px); font-size: 11px; }
+  /* the weapon under the map, its swap under it (a tap: the next; held: the wheel) */
+  body.touch #weapon { top: calc(max(6px, env(safe-area-inset-top)) + 96px); left: max(10px, env(safe-area-inset-left)); min-width: 0; padding: 2px 6px 3px; column-gap: 6px; }
+  body.touch #weapon-icon { width: 40px; height: 24px; }
+  body.touch #weapon-name { font-size: 13px; }
+  body.touch #weapon-ammo, body.touch #weapon-grade { font-size: 10px; }
+  body.touch #btn-swap { right: auto; bottom: auto; top: calc(max(6px, env(safe-area-inset-top)) + 142px); left: calc(max(10px, env(safe-area-inset-left)) + 2px); width: 34px; height: 34px; border-width: 2px; }
+  body.touch #wheel { transform: scale(0.72); }
+  /* (the performance numbers, F3: under the swap, clear of the map and the weapon) */
+  body.touch #perf { top: calc(max(6px, env(safe-area-inset-top)) + 190px); left: max(10px, env(safe-area-inset-left)); width: min(460px, 60vw); }
+  /* the police's stars and the messages: small, at the top */
+  body.touch #wanted { top: max(6px, env(safe-area-inset-top)); gap: 2px; font-size: 18px; }
+  body.touch #wanted span, body.touch #wanted span.on { -webkit-text-stroke-width: 1.5px; }
+  body.touch #toasts { top: calc(max(6px, env(safe-area-inset-top)) + 40px); gap: 4px; }
+  body.touch.air-drawing #toasts { top: auto; }
+  body.touch .toast { max-width: 46vw; padding: 2px 10px; border-width: 2px; border-radius: 9px 7px 10px 6px; box-shadow: 2px 3px 0 var(--ink); font-size: 14px; }
+  body.touch #bigmsg { top: 18%; font-size: 34px; }
+  body.touch #prompt { bottom: max(30px, calc(env(safe-area-inset-bottom) + 24px)); padding: 2px 10px; border-width: 2px; font-size: 15px; }
+  body.touch #hidden-tag { bottom: max(64px, calc(env(safe-area-inset-bottom) + 58px)); padding: 2px 10px; border-width: 2px; font-size: 15px; }
+  body.touch #radio { bottom: max(58px, calc(env(safe-area-inset-bottom) + 52px)); max-width: 40vw; padding: 2px 10px; border-width: 2px; font-size: 13px; }
+  body.touch #subs { bottom: max(92px, calc(env(safe-area-inset-bottom) + 86px)); max-width: 40vw; }
+  body.touch #subs > div { padding: 1px 8px; font-size: 13px; }
+  body.touch #crosshair { transform: translate(-50%, -50%) scale(0.8); }
+  body.touch #dialog { width: min(520px, 64vw); padding: 6px 12px 8px; }
+  body.touch #dialog .who { font-size: 17px; }
+  body.touch #dialog .text { min-height: 0; margin-bottom: 6px; font-size: 14px; }
+  /* the buttons: a quarter smaller, in the same places a quarter nearer the corner */
+  body.touch .tbtn { width: 46px; height: 46px; border-width: 2.5px; font-size: 21px; }
+  body.touch .tbtn.big { width: 64px; height: 64px; font-size: 28px; }
+  body.touch .tbtn.small { width: 34px; height: 34px; border-width: 2px; font-size: 15px; }
+  body.touch .tbtn.small::after, body.touch #btn-swap::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
+  body.touch .tbtn .lbl { bottom: -12px; padding: 1px 5px; border-width: 1px; font-size: 10px; }
+  body.touch .tbtn .badge { top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 3px; border-width: 1.5px; border-radius: 9px; font-size: 10px; line-height: 14px; }
+  body.touch #stick-base { left: 54px; bottom: 46px; width: 96px; height: 96px; border-width: 2.5px; }
+  body.touch #stick-knob { width: 42px; height: 42px; margin: -21px 0 0 -21px; border-width: 2.5px; }
+  body.touch #btn-fire { right: max(18px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); }
+  body.touch #btn-jump { right: max(92px, calc(env(safe-area-inset-right) + 74px)); bottom: max(20px, env(safe-area-inset-bottom)); }
+  body.touch #btn-draw { right: max(22px, env(safe-area-inset-right)); bottom: max(110px, calc(env(safe-area-inset-bottom) + 102px)); width: 52px; height: 52px; }
+  body.touch #draw-hint { right: max(88px, calc(env(safe-area-inset-right) + 80px)); bottom: max(152px, calc(env(safe-area-inset-bottom) + 144px)); width: 128px; font-size: 15px; }
+  body.touch #draw-hint svg { right: -38px; width: 40px; height: 30px; }
+  body.touch #btn-photo { right: max(82px, calc(env(safe-area-inset-right) + 66px)); bottom: max(88px, calc(env(safe-area-inset-bottom) + 80px)); }
+  body.touch #btn-enter { right: max(142px, calc(env(safe-area-inset-right) + 126px)); bottom: max(44px, env(safe-area-inset-bottom)); }
+  body.touch #btn-up, body.touch #btn-view { right: max(150px, calc(env(safe-area-inset-right) + 134px)); bottom: max(112px, calc(env(safe-area-inset-bottom) + 104px)); }
+  body.touch #btn-down { right: max(150px, calc(env(safe-area-inset-right) + 134px)); bottom: max(72px, calc(env(safe-area-inset-bottom) + 64px)); }
+  body.touch.nc #btn-up { bottom: max(152px, calc(env(safe-area-inset-bottom) + 144px)); }
+  body.touch.nc #btn-down { bottom: max(112px, calc(env(safe-area-inset-bottom) + 104px)); }
+  body.touch #btn-guard { right: max(86px, calc(env(safe-area-inset-right) + 72px)); bottom: max(146px, calc(env(safe-area-inset-bottom) + 138px)); }
+  body.touch #btn-hands { right: max(196px, calc(env(safe-area-inset-right) + 180px)); bottom: max(96px, calc(env(safe-area-inset-bottom) + 88px)); }
+  /* the menus: smaller print, more of them on the screen */
+  body.touch .sheet h2 { margin-bottom: 6px; font-size: 24px; }
+  body.touch .sheet .btn { padding: 6px 14px; box-shadow: 3px 3px 0 var(--ink); font-size: 17px; }
+  body.touch .opt-group h3 { font-size: 17px; }
+  body.touch .opt-group .opt { margin: 4px 0; font-size: 13px; }
+}
