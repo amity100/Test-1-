@@ -952,7 +952,9 @@ class OpenShop {
     v.phase = 'out';
     v.t = 0;
     const side = (Math.random() - 0.5) * 2.4;
-    v.pts = [...R.path(c.pos.x, c.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2], bell: true, inRoom: false }, { x: s.door[0] + s.nx * 1.7 + s.rx * side, z: s.door[2] + s.nz * 1.7 + s.rz * side }];
+    // (v5, ROADMAP 11.2ג: out past the forecourt, if the door stands back from the sidewalk)
+    const out = 1.7 + (s.yard || 0);
+    v.pts = [...R.path(c.pos.x, c.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2], bell: true, inRoom: false }, { x: s.door[0] + s.nx * out + s.rx * side, z: s.door[2] + s.nz * out + s.rz * side }];
     if (this.payer === v) this.payer = null;
   }
 

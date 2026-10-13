@@ -386,7 +386,8 @@ class Civilian {
     if (!this.exitPts) {
       this.exitPts = [];
       if (R && s && R.door && R.inside(this.pos.x, this.pos.z, 0.3)) {
-        this.exitPts = [...R.path(this.pos.x, this.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2] }, { x: s.door[0] + s.nx * 1.8, z: s.door[2] + s.nz * 1.8 }];
+        const out = 1.8 + (s.yard || 0);
+        this.exitPts = [...R.path(this.pos.x, this.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2] }, { x: s.door[0] + s.nx * out, z: s.door[2] + s.nz * out }];
         this.noCollide = true;
       }
     }

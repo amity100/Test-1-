@@ -38,9 +38,11 @@ function limb(ctx, mat, a, b, r, r1, color, sides = 6) {
 
 // a clump of leaves: a ball pushed in and out a little (the same push where its faces meet), lit
 // as a ball, so the pen draws its edge and not its facets
-function clump(ctx, r, cx, cy, cz, rad, squash, color) {
+// (mat: the pen, the leaves' by default; a tree's crown is drawn from farther away, M.canopy;
+// fine: finer than its size would have it)
+function clump(ctx, r, cx, cy, cz, rad, squash, color, mat = null, fine = null) {
   // (a big one finer, so its edge is round and not a polygon; the little ones coarser)
-  const g = new THREE.IcosahedronGeometry(rad, rad > 0.9 ? 2 : 1);
+  const g = new THREE.IcosahedronGeometry(rad, (fine !== null ? fine : rad > 0.9) ? 2 : 1);
   const p = g.attributes.position;
   const n = g.attributes.normal;
   const seed = r() * 1000;
@@ -55,13 +57,15 @@ function clump(ctx, r, cx, cy, cz, rad, squash, color) {
     n.setXYZ(i, x / l, y / l, z / l);
   }
   g.translate(cx, cy, cz);
-  ctx.B.add(ctx.M.leaf, g, null, nextId(), { color });
+  ctx.B.add(mat || ctx.M.leaf, g, null, nextId(), { color });
 }
 
 // A shade tree, the kind that roofs over the streets where people live: a live oak (wide, low,
 // dark), a mahogany (taller, rounder) or a sea grape (low and bushy, a paler green, round leaves).
 // A short trunk, limbs out and up from its fork, the crown in clumps of leaves over them. s: its
-// size against an ordinary one; o.kind picks the kind (else by chance), o.away: away from the road
+// size against an ordinary one; o.kind picks the kind (else by chance), o.away: away from the road;
+// (v5, ROADMAP 11.2ג) o.lite: a lighter one for the yards (fewer limbs, one clump over the middle,
+// the clumps coarser but the top one)
 export function shadeTree(ctx, r, x, z, o = {}) {
   const M = ctx.M;
   const y0 = o.y0 !== undefined ? o.y0 : CURB;
@@ -71,13 +75,18 @@ export function shadeTree(ctx, r, x, z, o = {}) {
   const id = ctx.objects ? ctx.objects.begin(ctx, 'tree', x, z) : 0;
   const bark = r.pick(BARK);
   const green = r.pick(K.greens);
+  // (a poinciana in flower: most of its crown flame red, a little green through it)
+  const flame = K.flame && r() < 0.5 ? r.pick(K.flame) : null;
+  const leafCol = (k) => (flame && k % 3 !== 2 ? flame : green);
   // (it leans away from the road a little, the way the light pulls it)
   const away = o.away || [0, 0];
   const fx = x + away[0] * r.range(0.1, 0.45) * s + r.range(-0.2, 0.2);
   const fz = z + away[1] * r.range(0.1, 0.45) * s + r.range(-0.2, 0.2);
   const fy = y0 + (K.fork + r.range(0, 0.6)) * s;
-  limb(ctx, M.pole, [x, y0, z], [fx, fy, fz], K.trunk * s, K.trunk * 0.72 * s, bark, 8);
-  const n = r.int(K.limbs[0], K.limbs[1]);
+  const lite = !!o.lite;
+  const crownPen = M.canopy || M.leaf;
+  limb(ctx, M.pole, [x, y0, z], [fx, fy, fz], K.trunk * s, K.trunk * 0.72 * s, bark, lite ? 6 : 8);
+  const n = lite ? K.limbs[0] : r.int(K.limbs[0], K.limbs[1]);
   const a0 = r() * Math.PI * 2;
   const ends = [];
   for (let k = 0; k < n; k++) {
@@ -87,21 +96,22 @@ export function shadeTree(ctx, r, x, z, o = {}) {
     const reach = r.range(K.reach[0], K.reach[1]) * s * (toward < -0.3 ? 0.75 : 1);
     const rise = r.range(K.rise[0], K.rise[1]) * s;
     const e = [fx + Math.cos(a) * reach, fy + rise, fz + Math.sin(a) * reach];
-    limb(ctx, M.pole, [fx, fy, fz], e, K.trunk * 0.55 * s, K.trunk * 0.26 * s, bark);
+    limb(ctx, M.pole, [fx, fy, fz], e, K.trunk * 0.55 * s, K.trunk * 0.26 * s, bark, lite ? 5 : 6);
     ends.push(e);
   }
   // the crown: a clump at the end of every limb, one or two over the middle
   let top = fy;
-  for (const e of ends) {
-    const rad = r.range(K.clump[0], K.clump[1]) * s;
-    clump(ctx, r, e[0], e[1] + 0.3 * s, e[2], rad, K.squash, green.clone().multiplyScalar(r.range(0.88, 1.1)));
+  for (let k = 0; k < ends.length; k++) {
+    const e = ends[k];
+    const rad = r.range(K.clump[0], K.clump[1]) * s * (lite ? 1.08 : 1);
+    clump(ctx, r, e[0], e[1] + 0.3 * s, e[2], rad, K.squash, leafCol(k).clone().multiplyScalar(r.range(0.88, 1.1)), crownPen, lite ? false : null);
     top = Math.max(top, e[1] + rad);
   }
-  const m = r.int(K.crown[0], K.crown[1]);
+  const m = lite ? 1 : r.int(K.crown[0], K.crown[1]);
   for (let k = 0; k < m; k++) {
     const a = r() * Math.PI * 2;
     const d = r.range(0, 0.8) * s;
-    clump(ctx, r, fx + Math.cos(a) * d, fy + r.range(K.rise[1] * 0.9, K.rise[1] * 1.3) * s, fz + Math.sin(a) * d, r.range(K.clump[0], K.clump[1]) * 1.1 * s, K.squash, green.clone().multiplyScalar(r.range(0.98, 1.16)));
+    clump(ctx, r, fx + Math.cos(a) * d, fy + r.range(K.rise[1] * 0.9, K.rise[1] * 1.3) * s, fz + Math.sin(a) * d, r.range(K.clump[0], K.clump[1]) * (lite ? 1.2 : 1.1) * s, K.squash, leafCol(k).clone().multiplyScalar(r.range(0.98, 1.16)), crownPen);
   }
   ctx.col.addCircle(x, z, K.trunk * 1.05 * s, 0, fy + 1, 'tree');
   if (ctx.objects) ctx.objects.end(ctx, id);
@@ -114,6 +124,9 @@ const TREE_KINDS = {
   oak: { size: 1.05, fork: 2.0, trunk: 0.3, limbs: [4, 5], reach: [1.8, 2.8], rise: [1.2, 2.0], clump: [1.35, 1.8], squash: 0.66, crown: [1, 2], greens: [srgb(0.2, 0.4, 0.22), srgb(0.24, 0.45, 0.24), srgb(0.22, 0.43, 0.3)] },
   mahogany: { size: 1.0, fork: 2.6, trunk: 0.26, limbs: [3, 4], reach: [1.2, 1.9], rise: [1.8, 2.8], clump: [1.4, 1.85], squash: 0.82, crown: [2, 2], greens: [srgb(0.27, 0.5, 0.25), srgb(0.32, 0.54, 0.28), srgb(0.3, 0.48, 0.22)] },
   grape: { size: 0.8, fork: 1.2, trunk: 0.2, limbs: [3, 4], reach: [1.1, 1.7], rise: [0.8, 1.3], clump: [1.1, 1.45], squash: 0.8, crown: [1, 2], greens: [srgb(0.42, 0.62, 0.3), srgb(0.46, 0.66, 0.32), srgb(0.38, 0.6, 0.34)] },
+  // (v5, ROADMAP 11.2ג) the royal poinciana of the yards: a wide flat umbrella on a high fork,
+  // half of them in flower (flame red)
+  poinciana: { size: 1.1, fork: 2.9, trunk: 0.3, limbs: [4, 5], reach: [2.4, 3.3], rise: [1.4, 2.1], clump: [1.45, 1.9], squash: 0.52, crown: [1, 1], greens: [srgb(0.26, 0.48, 0.24), srgb(0.3, 0.52, 0.26)], flame: [srgb(0.9, 0.3, 0.16), srgb(0.95, 0.4, 0.18), srgb(0.86, 0.22, 0.14)] },
 };
 
 // a strip of grass along the curb (where people live: the trees stand in it)

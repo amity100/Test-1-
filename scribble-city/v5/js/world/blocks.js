@@ -5,10 +5,11 @@ import { decoBuilding, fbox, windowRows, neonSign, adQuad, FH, GROUND } from './
 import { skyscraper } from './skyline.js';
 import { palm } from './palms.js';
 import { slab } from './ground.js';
-import { BLOCK_TYPES, blockRect, westRect, CURB, AVES, STREETS, STREET_X0 } from './layout.js';
+import { BLOCK_TYPES, blockRect, westRect, CURB, AVES, STREETS, STREET_X0, WEST_EDGE } from './layout.js';
 import { sobeRow } from './sobe.js';
 import { strut } from './kits.js';
 import { alleyLife } from './alleys.js';
+import { bayEdge } from './yards.js';
 
 // The rest of the city, block by block: a row of buildings along each avenue, back to back with
 // an alley between them, corner buildings turning onto the cross streets (v5: each row cut into
@@ -420,8 +421,14 @@ function trashBags(ctx, x, z) {
 // ------------------------------------------------------------------ the west edge of the city
 function westRow(ctx, row) {
   const R = westRect(row);
-  // the houses face Meridian Ave; their backs are the edge of the city
-  sobeRow(ctx, { x: R.x1, z0: R.z0, z1: R.z1, side: 1, D: 17, street: 'west', type: 'west', col: -1, row, rowSide: 'east', back: false });
+  // the houses face Meridian Ave; their backs are the edge of the city (v5, ROADMAP 11.2ג: their
+  // gardens go back to it, the bay's edge beyond, world/yards.js)
+  sobeRow(ctx, { x: R.x1, z0: R.z0, z1: R.z1, side: 1, D: R.x1 - R.x0, street: 'west', type: 'west', col: -1, row, rowSide: 'east', back: true });
+  bayEdge(ctx, WEST_EDGE - 30, R.x0 - 0.2, R.z0 - 4.6, R.z1 + 4.6);
+  // (and where the cross street ends at the bay)
+  const s = STREETS[row + 1];
+  if (s) bayEdge(ctx, WEST_EDGE - 30, WEST_EDGE - 6.5, s.z - s.half - 0.4, s.z + s.half + 0.4);
+  if (row === 0) bayEdge(ctx, WEST_EDGE - 30, WEST_EDGE - 6.5, STREETS[0].z - STREETS[0].half - 0.4, STREETS[0].z + STREETS[0].half + 0.4);
 }
 
 // ------------------------------------------------------------------ downtown towers

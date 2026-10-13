@@ -107,7 +107,7 @@ export function buildCity(scene, o = {}) {
   // what is not worth drawing from far away: the rooms behind the shop windows, the small things
   // on the sidewalks (the buildings, the palms' crowns and the city across the bay always stay)
   const small = new Set([M.prop, M.propCyl, M.propPaint, M.pole, M.rail, M.bulb, M.glint, M.glintObj, M.leaf, M.nut, M.board, M.lampGlass, M.court]);
-  const far = new Set([M.trunk, M.frond, M.steel, M.awning, M.frame, M.adWall]);
+  const far = new Set([M.trunk, M.frond, M.steel, M.awning, M.frame, M.adWall, M.canopy]);
   // the plain pens (no picture of their own) share their draws, a chunk at a time: the ones that
   // are drawn and hidden alike (the same side, room, mirror, distance) become one draw
   const sharedPens = new Map();

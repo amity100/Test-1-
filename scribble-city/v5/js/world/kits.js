@@ -78,7 +78,7 @@ function plateOn(ctx, f, cell, uc, vc, w, width) {
 }
 
 // the same front pushed back by w (a building behind its yard, a ground floor under an overhang)
-function shifted(f, w) {
+export function shifted(f, w) {
   const p = f.p(0, 0, w);
   return new Facade(p[0], p[2], f.ux, f.uz, f.nx, f.nz);
 }
@@ -1619,4 +1619,476 @@ export function museum(ctx, spec) {
   footprint(ctx, f, 0, -D, L, 0, info.top, stone, carve);
   ctx.museum = { x: f.p(uc, 0, 0)[0], z: f.p(uc, 0, 0)[2] };
   return info;
+}
+
+// ------------------------------------------------------------------ (v5, ROADMAP 11.2ג)
+// a car parked on a lot's own ground (a real one: you can take it); its middle at (u, w) of f, its
+// nose out of the front (dir +1) or into it (dir -1)
+export function parkCar(ctx, r, f, u, w, dir) {
+  const c = f.p(u, 0, w);
+  if (ctx.col.pointInside(c[0], 1.0, c[2], 1.3)) return null;
+  const yaw = Math.atan2(f.nx * dir, f.nz * dir);
+  const alongX = Math.abs(f.nx) > 0.5;
+  const hx = alongX ? 2.3 : 1.0;
+  const hz = alongX ? 1.0 : 2.3;
+  ctx.parked = ctx.parked || [];
+  const box = ctx.col.addBox(c[0] - hx, c[2] - hz, c[0] + hx, c[2] + hz, 0, 1.45, 'car', { parked: true });
+  ctx.parked.push({ x: c[0], z: c[2], yaw, spec: randomCarSpec(r), box });
+  return { x: c[0], z: c[2] };
+}
+
+// ------------------------------------------------------------------ a roof of red tiles
+const TILE = srgb(0.76, 0.36, 0.26);
+/**
+ * A roof of red barrel tiles sloping down on all four sides (a hip roof) over u0..u1, w0..w1 of a
+ * front (w0 < w1), its eaves at v: four faces from the eaves up to the ridge, a course of tiles a
+ * hand's width up them all the way (the strokes the pen finds), the ridge and the hips capped, the
+ * eaves standing out by o.over with the soffit under them. o: { pitch (rise over run), over, color }
+ * returns the ridge's height
+ */
+export function hipRoof(ctx, f, u0, w0, u1, w1, v, o = {}) {
+  const M = ctx.M;
+  const pitch = o.pitch || 0.42;
+  const over = o.over !== undefined ? o.over : 0.55;
+  const col = o.color || TILE;
+  const a0 = u0 - over;
+  const a1 = u1 + over;
+  const b0 = w0 - over;
+  const b1 = w1 + over;
+  const A = a1 - a0;
+  const B = b1 - b0;
+  const run = Math.min(A, B) / 2;
+  const ve = v - over * pitch;
+  const vr = ve + run * pitch;
+  const along = A >= B;
+  const R0 = along ? [a0 + run, (b0 + b1) / 2] : [(a0 + a1) / 2, b0 + run];
+  const R1 = along ? [a1 - run, (b0 + b1) / 2] : [(a0 + a1) / 2, b1 - run];
+  const c00 = f.p(a0, ve, b0);
+  const c10 = f.p(a1, ve, b0);
+  const c11 = f.p(a1, ve, b1);
+  const c01 = f.p(a0, ve, b1);
+  const r0 = f.p(R0[0], vr, R0[1]);
+  const r1 = f.p(R1[0], vr, R1[1]);
+  const pos = [];
+  const nor = [];
+  // a triangle, wound so that its face looks up (down: the soffit's, looking down)
+  const tri = (a, b, c, down = false) => {
+    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    let q = [a, b, c];
+    if ((n[1] < 0) !== down) {
+      q = [a, c, b];
+      n = [-n[0], -n[1], -n[2]];
+    }
+    const l = Math.hypot(n[0], n[1], n[2]) || 1;
+    for (const p of q) {
+      pos.push(p[0], p[1], p[2]);
+      nor.push(n[0] / l, n[1] / l, n[2] / l);
+    }
+  };
+  if (along) {
+    tri(c00, c10, r1);
+    tri(c00, r1, r0);
+    tri(c01, r0, r1);
+    tri(c01, r1, c11);
+    tri(c00, r0, c01);
+    tri(c10, c11, r1);
+  } else {
+    tri(c00, r0, r1);
+    tri(c00, r1, c01);
+    tri(c10, c11, r1);
+    tri(c10, r1, r0);
+    tri(c00, c10, r0);
+    tri(c01, r1, c11);
+  }
+  // the soffit under the eaves
+  const s00 = f.p(a0, ve - 0.02, b0);
+  const s10 = f.p(a1, ve - 0.02, b0);
+  const s11 = f.p(a1, ve - 0.02, b1);
+  const s01 = f.p(a0, ve - 0.02, b1);
+  tri(s00, s10, s11, true);
+  tri(s00, s11, s01, true);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  ctx.B.add(M.wallSolid, g, null, nextId(), { color: col });
+  // the courses of tiles: on each side, a step every 0.3 m up from the eaves, as long as the face
+  // is wide there (the hips draw it in)
+  const S = [];
+  const step = 0.3;
+  const box = (ua, va, wa, ub, vb, wb) => S.push(f.box(ua, va, wa, ub, vb, wb));
+  for (let t = step; t < run - 0.12; t += step) {
+    const y = ve + t * pitch;
+    if (a1 - a0 - 2 * t > 0.3) {
+      box(a0 + t, y - 0.02, b1 - t - 0.06, a1 - t, y + 0.05, b1 - t + 0.05);
+      box(a0 + t, y - 0.02, b0 + t - 0.05, a1 - t, y + 0.05, b0 + t + 0.06);
+    }
+    if (b1 - b0 - 2 * t > 0.3) {
+      box(a0 + t - 0.05, y - 0.02, b0 + t, a0 + t + 0.06, y + 0.05, b1 - t);
+      box(a1 - t - 0.06, y - 0.02, b0 + t, a1 - t + 0.05, y + 0.05, b1 - t);
+    }
+  }
+  const tg = new THREE.BufferGeometry();
+  const tp = [];
+  const tn = [];
+  const ti = [];
+  for (const [mn, mx] of S) {
+    const [x0, y0, z0] = mn;
+    const [x1, y1, z1] = mx;
+    const quad = (a, b, c, d, n) => {
+      const k = tp.length / 3;
+      tp.push(...a, ...b, ...c, ...d);
+      for (let i = 0; i < 4; i++) tn.push(...n);
+      ti.push(k, k + 1, k + 2, k, k + 2, k + 3);
+    };
+    quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [1, 0, 0]);
+    quad([x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0], [-1, 0, 0]);
+    quad([x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [0, 1, 0]);
+    quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1]);
+    quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1]);
+  }
+  if (tp.length) {
+    tg.setAttribute('position', new THREE.Float32BufferAttribute(tp, 3));
+    tg.setAttribute('normal', new THREE.Float32BufferAttribute(tn, 3));
+    tg.setIndex(ti);
+    ctx.B.add(M.awning, tg, null, nextId(), { color: col.clone().multiplyScalar(0.9) });
+  }
+  // the ridge and the hips, capped
+  const cap = col.clone().multiplyScalar(0.8);
+  const cid = nextId();
+  strut(ctx, M.awning, [r0[0], r0[1] + 0.04, r0[2]], [r1[0], r1[1] + 0.04, r1[2]], 0.16, cap, cid);
+  for (const [c, rr] of [[c00, r0], [c01, along ? r0 : r1], [c10, along ? r1 : r0], [c11, r1]]) strut(ctx, M.awning, [c[0], c[1] + 0.03, c[2]], [rr[0], rr[1] + 0.04, rr[2]], 0.12, cap, cid);
+  return vr;
+}
+
+// a little awning of striped canvas over a window (uc, its top at v), w wide
+function windowAwning(ctx, f, uc, v, w, col) {
+  const M = ctx.M;
+  const g = new THREE.BoxGeometry(0.8, 0.04, w);
+  g.rotateZ(-0.55);
+  ctx.B.add(M.awning, g, frontMatrix(f, uc, v, 0.33), nextId(), { color: col });
+  fbox(ctx, f, M.awning, uc - w / 2, v - 0.42, 0.64, uc + w / 2, v - 0.2, 0.69, col.clone().lerp(WHITE, 0.5));
+}
+
+// ------------------------------------------------------------------ a house
+/**
+ * (v5, ROADMAP 11.2ג) A house where people live, the way the streets west of the avenues are full
+ * of them: one floor or two of stucco under a roof of red barrel tiles sloping down on all four
+ * sides (now and then a wing of one floor beside the two), a porch on slim columns over the door,
+ * windows in white frames under striped awnings or between shutters, the driveway down one side
+ * and the car on it. Its garden round it is world/yards.js's.
+ * spec: { f (the lot's front, on the sidewalk), L, floors, pal: { wall, trim, acc } (THREE.Color),
+ *   front (how far back it stands), depth, drive: 'a' | 'b' | null }
+ * returns info (f: its own front; drive: [u0, u1] on the lot's front, driveIn: how far in past the
+ * house's front the drive goes)
+ */
+export function house(ctx, spec) {
+  const M = ctx.M;
+  const r = ctx.rng;
+  const { f, L } = spec;
+  const front = spec.front;
+  const depth = spec.depth;
+  const floors = spec.floors;
+  const { wall, trim, acc } = spec.pal;
+  const DW = 3.0;
+  const drive = spec.drive && L >= 12 ? spec.drive : null;
+  const u0 = drive === 'a' ? DW + 0.7 : 1.1;
+  const u1 = drive === 'b' ? L - DW - 0.7 : L - 1.1;
+  const W = u1 - u0;
+  const hf = shifted(f, -front);
+  const FL = 3.1;
+  const base = 0.45;
+  const h = base + floors * FL;
+  const top = CURB + h;
+  const info = { f: hf, L, D: depth, h, top, floors, doors: [], shop: null, kit: 'house', pal: spec.pal };
+  if (ctx.roofs) ctx.roofs.cur = null;
+  const wid = nextId();
+  const tid = nextId();
+  // (two floors over part of it, one over the rest: a wing to one side, standing back a little)
+  const wing = floors === 2 && W >= 10 && r() < 0.55 ? (r() < 0.5 ? 'a' : 'b') : null;
+  const ww = wing ? Math.min(5.2, W * 0.4) : 0;
+  const m0 = wing === 'a' ? u0 + ww : u0;
+  const m1 = wing === 'b' ? u1 - ww : u1;
+  const parts = [{ a: m0, b: m1, wf: 0, wb: -depth, fl: floors }];
+  if (wing) parts.push({ a: wing === 'a' ? u0 : m1, b: wing === 'a' ? m0 : u1, wf: -0.9, wb: -depth + 0.8, fl: 1 });
+  const pitch = r.range(0.36, 0.48);
+  let ridge = top;
+  for (const p of parts) {
+    const t = CURB + base + p.fl * FL;
+    fbox(ctx, hf, M.wall, p.a, CURB, p.wb, p.b, t, p.wf, wall, wid);
+    fcol(ctx, hf, p.a, CURB, p.wb, p.b, t, p.wf);
+    fbox(ctx, hf, M.wall, p.a - 0.04, CURB, p.wb - 0.04, p.b + 0.04, CURB + base, p.wf + 0.04, trim, tid);
+    // (a band of trim under the eaves)
+    fbox(ctx, hf, M.wall, p.a - 0.03, t - 0.22, p.wb - 0.03, p.b + 0.03, t, p.wf + 0.03, trim, tid);
+    ridge = Math.max(ridge, hipRoof(ctx, hf, p.a, p.wb, p.b, p.wf, t, { pitch, over: 0.5 }));
+  }
+  // ---- the windows: white frames, striped awnings or shutters in the accent colour
+  const dressing = r() < 0.45 ? 'awning' : r() < 0.6 ? 'shutters' : 'plain';
+  const awCol = r.pick([acc, srgb(0.2, 0.55, 0.5), srgb(0.85, 0.3, 0.3), srgb(0.25, 0.4, 0.7)]);
+  const jal = r() < 0.4;
+  const winRow = (sf, a, b, fl, skip = null) => {
+    const span = b - a;
+    if (span < 1.6) return;
+    const n = Math.max(1, Math.floor(span / 2.6));
+    const step = span / n;
+    for (let k = 0; k < n; k++) {
+      const uc = a + step * (k + 0.5);
+      if (skip !== null && Math.abs(uc - skip) < 1.5) continue;
+      const v0 = CURB + base + fl * FL + 0.85;
+      flatWindow(ctx, sf, uc, v0, 1.15, 1.35, { jalousie: jal, ac: fl === 0 });
+      if (dressing === 'awning') windowAwning(ctx, sf, uc, v0 + 1.62, 1.5, awCol);
+      else if (dressing === 'shutters') for (const sd of [-1, 1]) fbox(ctx, sf, M.frame, uc + sd * 0.86 - 0.22, v0 - 0.05, 0, uc + sd * 0.86 + 0.22, v0 + 1.42, 0.06, acc);
+    }
+  };
+  // the door: in the middle of the main part, or off to one side of it
+  const uDoor = Math.max(m0 + 1.2, Math.min(m1 - 1.2, (m0 + m1) / 2 + (m1 - m0 > 7 ? r.range(-1.5, 1.5) : 0)));
+  for (const p of parts) {
+    const pf = p.wf ? shifted(hf, p.wf) : hf;
+    for (let fl = 0; fl < p.fl; fl++) winRow(pf, p.a + 0.3, p.b - 0.3, fl, fl === 0 && p.wf === 0 ? uDoor : null);
+  }
+  // the sides and the back: windows on every floor
+  for (const [uEdge, dir] of [[u0, -1], [u1, 1]]) {
+    const own = parts.find((p) => (dir < 0 ? p.a === u0 : p.b === u1));
+    const sf = sideOf(shifted(hf, own.wf), uEdge, dir);
+    const len = own.wf - own.wb;
+    for (let fl = 0; fl < own.fl; fl++) winRow(sf, 0.6, len - 0.6, fl);
+  }
+  {
+    // (the back's own front: its u runs from u1 back toward u0; the back door in line with the
+    // yard's gate, world/yards.js)
+    const p0 = hf.p(u1, 0, -depth);
+    const bf = new Facade(p0[0], p0[2], -hf.ux, -hf.uz, -hf.nx, -hf.nz);
+    const hd = Math.min(m1 - 0.9, Math.max(m0 + 0.9, L * 0.65));
+    const bd = u1 - hd;
+    for (let fl = 0; fl < floors; fl++) winRow(bf, u1 - m1 + 0.3, u1 - m0 - 0.3, fl, fl === 0 ? bd : null);
+    fbox(ctx, bf, M.frame, bd - 0.45, CURB + base, 0, bd + 0.45, CURB + base + 2.1, 0.06, r.pick([WHITE, acc, srgb(0.4, 0.3, 0.26)]));
+    fbox(ctx, bf, M.prop, bd - 0.7, CURB, 0, bd + 0.7, CURB + base, 0.8, trim);
+  }
+  // ---- the door and its porch: two slim columns, a flat roof over it, two steps up
+  {
+    const doorCol = r.pick([srgb(0.42, 0.3, 0.24), acc, srgb(0.18, 0.5, 0.52), WHITE]);
+    fbox(ctx, hf, M.frame, uDoor - 0.55, CURB + base, 0, uDoor + 0.55, CURB + base + 2.2, 0.06, doorCol);
+    fbox(ctx, hf, M.frame, uDoor - 0.68, CURB + base, 0, uDoor + 0.68, CURB + base + 2.34, 0.04, trim);
+    const pw = Math.min(2.0, (m1 - m0) / 2 - 0.2);
+    const py = CURB + base + 2.75;
+    if (r() < 0.65) {
+      fbox(ctx, hf, M.wall, uDoor - pw, py, 0, uDoor + pw, py + 0.22, 1.95, trim, tid);
+      for (const sd of [-1, 1]) {
+        fbox(ctx, hf, M.wall, uDoor + sd * (pw - 0.2) - 0.1, CURB + base, 1.65, uDoor + sd * (pw - 0.2) + 0.1, py, 1.85, trim, tid);
+        fcol(ctx, hf, uDoor + sd * (pw - 0.2) - 0.1, CURB, 1.65, uDoor + sd * (pw - 0.2) + 0.1, py, 1.85, 'pole');
+      }
+      fbox(ctx, hf, M.prop, uDoor - pw, CURB, 0, uDoor + pw, CURB + base, 1.9, srgb(0.86, 0.82, 0.76));
+    } else {
+      // (a little roof of tiles over the door, on brackets)
+      fbox(ctx, hf, M.wall, uDoor - 1.0, py - 0.1, 0, uDoor + 1.0, py + 0.1, 0.75, trim, tid);
+      const g = new THREE.BoxGeometry(0.95, 0.06, 2.3);
+      g.rotateZ(-0.45);
+      ctx.B.add(M.awning, g, frontMatrix(hf, uDoor, py + 0.38, 0.4), nextId(), { color: TILE });
+    }
+    fbox(ctx, hf, M.prop, uDoor - 0.9, CURB, 0, uDoor + 0.9, CURB + base * 0.5, 1.1, srgb(0.86, 0.82, 0.76));
+    info.doors.push(hf.p(uDoor, CURB, 1.2));
+    info.uDoor = uDoor;
+    // a lamp by the door, a house number
+    const lp = hf.p(uDoor + 0.95, CURB + base + 1.9, 0.25);
+    addLight(lp[0], lp[1], lp[2], 6, srgb(1, 0.85, 0.6), 0.5);
+    fbox(ctx, hf, M.lampGlass, uDoor + 0.85, CURB + base + 1.75, 0.04, uDoor + 1.05, CURB + base + 2.05, 0.2);
+  }
+  // ---- the condenser of its air conditioning beside it, a dish on the roof now and then
+  {
+    const sd = drive === 'a' ? 1 : -1;
+    const ue = sd > 0 ? u1 + 0.55 : u0 - 0.55;
+    const c = hf.p(ue, 0, -depth * 0.6);
+    fbox(ctx, hf, M.steel, ue - 0.4, CURB, -depth * 0.6 - 0.4, ue + 0.4, CURB + 0.8, -depth * 0.6 + 0.4, srgb(0.82, 0.82, 0.84));
+    ctx.col.addBox(c[0] - 0.45, c[2] - 0.45, c[0] + 0.45, c[2] + 0.45, 0, CURB + 0.8, 'prop');
+  }
+  // ---- the drive and the car on it (nose to the house)
+  if (drive) {
+    const da = drive === 'a' ? 0.4 : L - 0.4 - DW;
+    info.drive = [da, da + DW];
+    info.driveIn = Math.min(depth - 1, 6.5);
+    if (r() < 0.8) parkCar(ctx, r, f, da + DW / 2, -(front + 2.7), -1);
+  }
+  footprint(ctx, hf, u0, -depth, u1, 0, ridge, TILE, trim);
+  return info;
+}
+
+// ------------------------------------------------------------------ a tower of flats
+/**
+ * (v5, ROADMAP 11.2ג) A block of flats of the sixties to now, six to fifteen floors, the kind that
+ * stands up out of the low streets all over Miami: a lobby of glass under a canopy flying out over
+ * the drive, its name on it; the floors over it with a balcony to every flat (a white slab, a rail
+ * of glass or of white bars) and the glass doors behind them, or by turns a balcony and a window
+ * in the wall; the stairs and the lifts in a plain shaft up one side, over the roof; on the roof a
+ * pool, its deck, the loungers, a shade.
+ * spec: { f, L, D, floors, pal: { wall, acc } (THREE.Color), neon (hex), name, font, rail: 'glass'
+ *   | 'bars', variant: 'ribbon' | 'checker', core: 'a' | 'b', sides: { a, b }, back }
+ */
+export function condo(ctx, spec) {
+  const M = ctx.M;
+  const r = ctx.rng;
+  const { f, L, D, floors } = spec;
+  const { wall, acc } = spec.pal;
+  const FHc = 3.05;
+  const G = G1 + 0.6;
+  const h = G + (floors - 1) * FHc;
+  const top = CURB + h;
+  const info = { f, L, D, h, top, floors, doors: [], shop: null, kit: 'condo' };
+  const wid = nextId();
+  const sid = nextId();
+  const BD = 1.7;
+  const cw = Math.min(4.4, L * 0.24);
+  const coreA = spec.core ? spec.core === 'a' : r() < 0.5;
+  const c0 = coreA ? 0 : L - cw;
+  const c1 = coreA ? cw : L;
+  const b0 = coreA ? cw : 0;
+  const b1 = coreA ? L : L - cw;
+  const lobbyD = Math.min(D - 3, 9);
+  const glassRail = spec.rail !== 'bars';
+  const railCol = glassRail ? srgb(0.6, 0.79, 0.83) : WHITE;
+  const checker = spec.variant === 'checker';
+  // ---- the body: the flats behind their balconies, the lobby's back, the shaft up over the roof
+  fbox(ctx, f, M.wall, b0, CURB + G, -D, b1, top, -BD, wall, wid);
+  fcol(ctx, f, b0, CURB + G, -D, b1, top, -BD);
+  fbox(ctx, f, M.wall, b0, CURB, -D, b1, CURB + G, -lobbyD - 0.25, wall, wid);
+  fcol(ctx, f, b0, CURB, -D, b1, CURB + G, -lobbyD - 0.25);
+  const ct = top + 3.2;
+  // (the shaft in a softer cousin of the accent: a colour up the side, not a slab of paint)
+  const shaft = acc.clone().lerp(wall, 0.4);
+  fbox(ctx, f, M.wall, c0, CURB, -D, c1, ct, 0.15, shaft, wid);
+  fcol(ctx, f, c0, CURB, -D, c1, ct, 0.15);
+  // (a slot of glass up the shaft, the stairs' landings behind it)
+  {
+    const um = (c0 + c1) / 2;
+    ctx.B.add(M.winGlass, f.quad(um - 0.35, CURB + G + 0.4, um + 0.35, top - 0.6, 0.16), null, nextId());
+    for (let y = CURB + G + FHc; y < top - 0.6; y += FHc) fbox(ctx, f, M.frame, um - 0.4, y - 0.05, 0.15, um + 0.4, y + 0.05, 0.2, shaft.clone().multiplyScalar(0.85));
+  }
+  // ---- the lobby: glass under the first floor's slab, the canopy over the drive, the name on it
+  storefront(ctx, f, b0 + 0.15, b1 - 0.15, { kind: 'lobby', name: spec.name, signCol: spec.neon || '#ffffff', font: spec.font || 'Rubik', awning: 'none', sign: 'none', color: wall, depth: lobbyD, doorAt: 0.5, frame: srgb(0.3, 0.32, 0.36) }, info);
+  fbox(ctx, f, M.wall, b0, G1, -lobbyD - 0.25, b1, CURB + G, 0, wall, wid);
+  fcol(ctx, f, b0, G1, -lobbyD - 0.25, b1, CURB + G, 0);
+  {
+    const uc = (b0 + b1) / 2;
+    const cw2 = Math.min(3.4, (b1 - b0) / 2 - 0.4);
+    fbox(ctx, f, M.wall, uc - cw2, CURB + 3.25, 0, uc + cw2, CURB + 3.5, 3.8, WHITE, sid);
+    for (const sd of [-1, 1]) {
+      fbox(ctx, f, M.frame, uc + sd * (cw2 - 0.35) - 0.09, CURB, 3.35, uc + sd * (cw2 - 0.35) + 0.09, CURB + 3.25, 3.53, srgb(0.75, 0.77, 0.8));
+      fcol(ctx, f, uc + sd * (cw2 - 0.35) - 0.09, CURB, 3.35, uc + sd * (cw2 - 0.35) + 0.09, CURB + 3.25, 3.53, 'pole');
+    }
+    fbox(ctx, f, M.lampGlass, uc - cw2 + 0.3, CURB + 3.23, 0.4, uc + cw2 - 0.3, CURB + 3.26, 3.4);
+    if (spec.name) neonSign(ctx, f, spec.name, uc, CURB + 3.5 + Math.min(4.2, cw2 * 1.3) / 8 + 0.05, 3.55, Math.min(4.2, cw2 * 1.3), hex(spec.neon || '#ffffff'), { font: spec.font || 'Rubik' });
+    const lp = f.p(uc, CURB + 3, 2.4);
+    addLight(lp[0], lp[1], lp[2], 10, srgb(1, 0.88, 0.7), 1.0);
+  }
+  // ---- the floors: a slab and a rail to every one; the glass doors behind them (or, by turns, a
+  // window in the wall), the walls between the flats
+  const nb = Math.max(2, Math.round((b1 - b0) / 3.6));
+  const bw = (b1 - b0) / nb;
+  const life = [srgb(0.3, 0.55, 0.3), srgb(0.95, 0.95, 0.92), srgb(0.95, 0.55, 0.6), srgb(0.3, 0.5, 0.85), srgb(1.0, 0.85, 0.3)];
+  for (let fl = 1; fl < floors; fl++) {
+    const y = CURB + G + (fl - 1) * FHc;
+    for (let k = 0; k < nb; k++) {
+      const a = b0 + bw * k;
+      const b = a + bw;
+      const open = !checker || (k + fl) % 2 === 0;
+      if (open) {
+        fbox(ctx, f, M.wall, a, y - 0.26, -BD, b, y, 0, WHITE, sid);
+        if (glassRail) fbox(ctx, f, M.frame, a + 0.03, y, -0.07, b - 0.03, y + 1.0, -0.02, railCol);
+        else for (const dv of [0.35, 0.68]) fbox(ctx, f, M.frame, a, y + dv, -0.07, b, y + dv + 0.05, -0.02, railCol);
+        fbox(ctx, f, M.frame, a, y + 1.0, -0.09, b, y + 1.06, 0.0, glassRail ? srgb(0.78, 0.8, 0.83) : WHITE);
+        // the glass doors, a frame across them
+        ctx.B.add(M.winGlass, f.quad(a + 0.3, y + 0.05, b - 0.3, y + FHc - 0.6, -BD + 0.02), null, nextId());
+        fbox(ctx, f, M.frame, (a + b) / 2 - 0.04, y + 0.05, -BD, (a + b) / 2 + 0.04, y + FHc - 0.6, -BD + 0.07, srgb(0.86, 0.87, 0.89));
+        fbox(ctx, f, M.frame, a + 0.25, y + FHc - 0.64, -BD, b - 0.25, y + FHc - 0.56, -BD + 0.07, srgb(0.86, 0.87, 0.89));
+        // (somebody's life out there now and then: a plant, a towel over the rail, a chair)
+        const q = r();
+        if (q < 0.22) fbox(ctx, f, M.leaf, a + 0.3, y, -BD + 0.25, a + 0.75, y + r.range(0.5, 1.0), -BD + 0.7, life[0]);
+        else if (q < 0.34) fbox(ctx, f, M.prop, (a + b) / 2 - 0.35, y + 0.45, -0.03, (a + b) / 2 + 0.35, y + 1.08, 0.02, r.pick(life.slice(1)));
+        else if (q < 0.42) fbox(ctx, f, M.prop, b - 0.9, y, -BD + 0.4, b - 0.4, y + 0.85, -BD + 0.9, WHITE);
+      } else {
+        // the wall out to the front, a window in it
+        fbox(ctx, f, M.wall, a, y - 0.26, -BD, b, y + FHc - 0.26, 0, wall, wid);
+        fcol(ctx, f, a, y - 0.26, -BD, b, y + FHc - 0.26, 0);
+        flatWindow(ctx, f, (a + b) / 2, y + 0.75, Math.min(1.9, bw - 1.0), 1.45, { blinds: true });
+      }
+      // the wall between this flat and the next
+      if (k < nb - 1 && (open || ((k + 1 + fl) % 2 === 0) || !checker)) fbox(ctx, f, M.wall, b - 0.1, y, -BD, b + 0.1, y + FHc - 0.26, -0.25, wall, wid);
+    }
+    // (the slabs are what a fall stops at, out there)
+    fcol(ctx, f, b0, y - 0.26, -BD, b1, y, 0, 'prop');
+  }
+  // ---- the roof: its slab over the top balconies, a rail of glass round it, the pool and its deck
+  fbox(ctx, f, M.wall, b0, top - 0.26, -D, b1, top + 0.24, 0, WHITE, sid);
+  fcol(ctx, f, b0, top - 0.26, -D, b1, top + 0.24, 0);
+  info.top = top + 0.24;
+  info.h = info.top - CURB;
+  info.towerTop = ct;
+  const RF = roofOf(ctx, info);
+  const rt = info.top;
+  fbox(ctx, f, M.frame, b0 + 0.05, rt, -0.12, b1 - 0.05, rt + 1.1, -0.05, railCol);
+  fbox(ctx, f, M.frame, b0 + 0.05, rt + 1.1, -0.14, b1 - 0.05, rt + 1.16, -0.03, srgb(0.78, 0.8, 0.83));
+  for (const u of coreA ? [b1 - 0.12] : [b0 + 0.05]) fbox(ctx, f, M.frame, u, rt, -D + 0.1, u + 0.07, rt + 1.1, -0.1, railCol);
+  fbox(ctx, f, M.frame, b0 + 0.05, rt, -D + 0.05, b1 - 0.05, rt + 1.1, -D + 0.12, railCol);
+  {
+    // the pool, the deck round it, loungers along it, a shade or two
+    const pu0 = b0 + 1.3;
+    const pu1 = Math.min(b1 - 1.3, pu0 + Math.max(4.5, (b1 - b0) * 0.62));
+    const pw0 = -D + 1.4;
+    const pw1 = Math.min(-D + 1.4 + Math.min(6, D * 0.4), -4.5);
+    const deck = srgb(0.78, 0.64, 0.5);
+    fbox(ctx, f, M.court, b0 + 0.3, rt, -D + 0.3, b1 - 0.3, rt + 0.03, Math.min(-1.0, pw1 + 3.2), deck);
+    if (pu1 - pu0 > 3 && pw1 - pw0 > 2.4) {
+      fbox(ctx, f, M.wallSolid, pu0, rt, pw0, pu1, rt + 0.42, pw1, srgb(0.97, 0.97, 0.95));
+      ctx.B.add(M.poolTop || M.pool, flatQuad(f, pu0 + 0.25, pw0 + 0.25, pu1 - 0.25, pw1 - 0.25, rt + 0.43), null, nextId());
+      if (RF) RF.props.push(f.box(pu0, rt, pw0, pu1, rt + 0.42, pw1));
+      for (let u = pu0 + 0.5; u < pu1 - 0.4; u += 1.15) {
+        if (r() < 0.25) continue;
+        const col = r() < 0.6 ? WHITE : r.pick(life.slice(2));
+        fbox(ctx, f, M.prop, u - 0.32, rt + 0.25, pw1 + 0.5, u + 0.32, rt + 0.33, pw1 + 2.3, col);
+        fbox(ctx, f, M.prop, u - 0.32, rt + 0.3, pw1 + 1.95, u + 0.32, rt + 0.85, pw1 + 2.3, col);
+        fbox(ctx, f, M.prop, u - 0.28, rt, pw1 + 0.6, u + 0.28, rt + 0.25, pw1 + 2.2, srgb(0.7, 0.7, 0.72));
+        if (RF) RF.props.push(f.box(u - 0.32, rt, pw1 + 0.5, u + 0.32, rt + 0.85, pw1 + 2.3));
+      }
+      for (let k = r.int(1, 2); k > 0; k--) {
+        const u = r.range(pu0 + 1, pu1 - 1);
+        const c = f.p(u, 0, pw1 + 3.0);
+        const pole = new THREE.CylinderGeometry(0.03, 0.03, 2.3, 6);
+        pole.translate(c[0], rt + 1.15, c[2]);
+        ctx.B.add(M.pole, pole, null, nextId(), { color: WHITE });
+        const shade = new THREE.ConeGeometry(1.4, 0.5, 10, 1, true);
+        shade.translate(c[0], rt + 2.45, c[2]);
+        ctx.B.add(M.awning, shade, null, nextId(), { color: r.pick([srgb(0.96, 0.95, 0.9), srgb(0.25, 0.65, 0.84), srgb(0.95, 0.35, 0.4)]) });
+        if (RF) RF.props.push(f.box(u - 0.1, rt, pw1 + 2.9, u + 0.1, rt + 2.3, pw1 + 3.1));
+      }
+    }
+    // the machines on the shaft's roof
+    for (let k = 0; k < 2; k++) {
+      const u = c0 + 0.6 + k * 1.6;
+      if (u + 1.2 > c1) break;
+      fbox(ctx, f, M.steel, u, ct, -D + 1.5, u + 1.2, ct + 1.0, -D + 2.6, srgb(0.72, 0.7, 0.76));
+    }
+    if (RF) RF.props.push(f.box(c0, rt, -D, c1, ct, 0.15));
+  }
+  // ---- the sides: windows where they show
+  for (const [k, uEdge, dir] of [['a', 0, -1], ['b', L, 1]]) {
+    if (!spec.sides || !spec.sides[k]) continue;
+    const sf = sideOf(f, uEdge, dir);
+    const core = (k === 'a') === coreA;
+    for (let fl = 1; fl < floors; fl++) {
+      const y = CURB + G + (fl - 1) * FHc;
+      for (let u = (core ? 1.0 : BD + 1.0); u < D - 1.2; u += core ? 4.2 : 2.9) flatWindow(ctx, sf, u + 0.6, y + 0.75, core ? 0.6 : 1.4, core ? 1.6 : 1.45, { blinds: true });
+    }
+  }
+  if (spec.back !== false) backFront(ctx, f, L, D, h, wall, { floors });
+  footprint(ctx, f, 0, -D, L, 0, ct, wall, acc);
+  return info;
+}
+
+// a flat quad lying in a front's plane at height y, u0..u1 by w0..w1 (the water of a pool)
+function flatQuad(f, u0, w0, u1, w1, y) {
+  const g = new THREE.PlaneGeometry(u1 - u0, w1 - w0).rotateX(-Math.PI / 2);
+  g.rotateY(Math.atan2(f.nx, f.nz));
+  const c = f.p((u0 + u1) / 2, 0, (w0 + w1) / 2);
+  g.translate(c[0], y, c[2]);
+  return g;
 }

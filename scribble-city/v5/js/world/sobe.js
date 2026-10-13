@@ -2,7 +2,9 @@ import { hex } from '../render/materials.js';
 import { Facade } from './kit.js';
 import { decoBuilding, adQuad, roofBoard } from './deco.js';
 import { oceanHotel } from './hotels.js';
-import { shopStrip, apartments, mimo, modern, garage, parkingLot, vacantLot, postOffice, diner, museum } from './kits.js';
+import { shopStrip, apartments, mimo, modern, garage, parkingLot, vacantLot, postOffice, diner, museum, condo, house, shifted } from './kits.js';
+import { rowYards } from './yards.js';
+import { seeded } from './kit.js';
 import { rooftopName } from './blocks.js';
 import { AD_IDS } from './ads.js';
 import { CURB } from './layout.js';
@@ -39,15 +41,19 @@ const KIT = {
   // (v5, ROADMAP 11.2ב: the landmarks of Washington Avenue, world/kits.js)
   diner: { hw: [3], corner: true, once: true },
   museum: { hw: [4], corner: true, once: true },
+  // (v5, ROADMAP 11.2ג: a tower of flats standing up out of the low street; a house of its own)
+  condo: { hw: [3, 4], corner: true, once: true },
+  house: { hw: [2, 3], corner: true },
 };
 
 // how often each turns up on each avenue
 // (ROADMAP 11.2: about half Deco, a fifth Miami Modern, a fifth Spanish, the rest new and open)
+// (v5, ROADMAP 11.2ג: and now and then a tower of flats over them all; houses where people live)
 const MIX = {
-  washington: { strip: 4, deco: 3, narrow: 1.2, hotel: 1.1, med: 1.4, mimo: 1.4, modern: 1.0, garage: 0.45, lot: 0.9, vacant: 0.35 },
-  collins: { hotel: 3.2, mimo: 3.0, strip: 1.3, deco: 1.2, modern: 1.1, med: 0.9, garage: 0.4, lot: 0.5, narrow: 0.4 },
-  meridian: { apt: 3, aptU: 2.4, med: 1.8, mimo: 1.9, deco: 1.4, strip: 0.8, lot: 0.4, vacant: 0.35 },
-  west: { apt: 3, aptU: 2.2, med: 1.8, mimo: 1.5, deco: 1.0, vacant: 0.3 },
+  washington: { strip: 4, deco: 3, narrow: 1.2, hotel: 1.1, med: 1.4, mimo: 1.4, modern: 1.0, garage: 0.45, lot: 0.9, vacant: 0.35, condo: 0.45 },
+  collins: { hotel: 3.2, mimo: 3.0, strip: 1.3, deco: 1.2, modern: 1.1, med: 0.9, garage: 0.4, lot: 0.5, narrow: 0.4, condo: 1.3 },
+  meridian: { apt: 3, aptU: 2.4, med: 1.8, mimo: 1.9, deco: 1.4, strip: 0.8, lot: 0.4, vacant: 0.35, condo: 1.2, house: 1.6 },
+  west: { apt: 2.2, aptU: 1.4, med: 1.6, mimo: 1.2, deco: 0.8, vacant: 0.3, condo: 2.0, house: 5.0 },
 };
 // (where people live, the shops are on the corners)
 const CORNER_ONLY = { meridian: ['deco', 'strip'], west: ['deco'] };
@@ -110,6 +116,19 @@ const MODERN_PALS = [
 const CONC = ['#cfccc5', '#bdb9b1', '#d8d3c8', '#c7c9cc'];
 const STRIPES = ['#2f6fd0', '#e2a33a', '#d0453a', '#3aa06a', '#8a5ad0'];
 const PRICES = ['$20 ALL DAY', '$5 FIRST HOUR', 'PARK $10', 'EVENTS $25'];
+
+// the towers of flats: white or a pale stucco, a colour up the shaft of their stairs
+const CONDO_PALS = [
+  { wall: '#f4f2ec', acc: '#2fa8a0', neon: '#3fe8ff' },
+  { wall: '#eef2f4', acc: '#5a7fd6', neon: '#4f9dff' },
+  { wall: '#f6e7d2', acc: '#d9895a', neon: '#ffb43f' },
+  { wall: '#fde9e4', acc: '#e85a8a', neon: '#ff5ad1' },
+  { wall: '#e8f3ea', acc: '#3cb8a2', neon: '#5aff8a' },
+  { wall: '#f2f2ef', acc: '#8a8f99', neon: '#ffffff' },
+  { wall: '#fff3cf', acc: '#e0a020', neon: '#ffe14f' },
+];
+const CONDO_NAMES = ['Bayview Tower', 'Coral Crest', 'The Palm Crest', 'Seabreeze', 'Harbor Light', 'The Isles', 'Sunrise Tower', 'Bay Terrace', 'Aqua Vista', 'The Tropicana', 'Sandpiper', 'Blue Heron'];
+const HOUSE_TRIMS = ['#ffffff', '#fff6e6', '#f2efe8', '#fbf1dc'];
 
 const INLAND_HOTELS = ['Hotel Albatross', 'The Seahorse', 'Hotel Bermuda', 'Hotel Coquina', 'The Lagoon', 'Hotel Starlite', 'Hotel Mariposa', 'The Sea Grape', 'The Wavecrest', 'Hotel Cabana', 'Hotel Bimini', 'The Coral Reef', 'Hotel Laguna', 'The Sunbeam', 'Hotel Capri', 'The Pink Flamingo'];
 const MIMO_NAMES = ['Sahara', 'Casablanca', 'Sea Isle', 'Golden Sands', 'Thunderbird', 'Castaway', 'Monte Carlo', 'Starliner', 'Bel Air', 'Satellite'];
@@ -174,9 +193,16 @@ function mixFor(o) {
     delete m.aptU;
     delete m.garage;
     delete m.tall;
+    delete m.condo;
+    delete m.house;
   }
+  // (the towers' block has its own towers; the rows on a square, a market, keep their low fronts)
+  if (o.type === 'towers' || o.type === 'plaza' || o.type === 'market') delete m.condo;
   return m;
 }
+
+// (v5, ROADMAP 11.2ג) a house may have a house for a neighbour: a street of them is what it is
+const SAME_OK = new Set(['house']);
 
 function planRow(r, n, o) {
   const mix = mixFor(o);
@@ -210,7 +236,7 @@ function planRow(r, n, o) {
       out[out.length - 1].w += 1;
       break;
     }
-    const ok = (k) => k !== prev && !cornerOnly.includes(k) && !(KIT[k].once && used.has(k)) && KIT[k].hw[0] <= left;
+    const ok = (k) => (k !== prev || SAME_OK.has(k)) && !cornerOnly.includes(k) && !(KIT[k].once && used.has(k)) && KIT[k].hw[0] <= left;
     let k = pick(ok);
     if (!k) {
       out[out.length - 1].w += left;
@@ -234,7 +260,7 @@ function planRow(r, n, o) {
   out.push(last);
   // no two the same side by side: the one in the middle takes another kind that fits its lot
   for (let i = 1; i < out.length; i++) {
-    if (out[i].kind !== out[i - 1].kind) continue;
+    if (out[i].kind !== out[i - 1].kind || SAME_OK.has(out[i].kind)) continue;
     const j = i === out.length - 1 ? i - 1 : i;
     if (j === 0 || LANDMARKS.has(out[j].kind)) continue;
     const a = out[j - 1] ? out[j - 1].kind : null;
@@ -453,7 +479,100 @@ const BUILD = {
     a.lot.wall = '#ecdcb8';
     return museum(ctx, { f: a.f, L: a.L, D: a.D, corner: a.corner.a ? 'a' : 'b', sides: a.sides, back: a.env.back });
   },
+
+  // (v5, ROADMAP 11.2ג) a tower of flats standing up out of the low street, the bay's the tallest
+  condo(ctx, a) {
+    const r = ctx.rng;
+    const { f, L, D, sides, env } = a;
+    const st = env.street;
+    const floors = st === 'west' ? r.int(9, 15) : st === 'collins' ? r.int(8, 12) : st === 'washington' ? r.int(6, 8) : r.int(6, 11);
+    const name = nextName(ctx, 'condo', CONDO_NAMES);
+    const pals = CONDO_PALS.filter((p) => p.wall !== env.prevWall);
+    const p = r.pick(pals.length ? pals : CONDO_PALS);
+    a.lot.wall = p.wall;
+    return condo(ctx, {
+      f, L, D, floors, pal: { wall: hex(p.wall), acc: hex(p.acc) }, neon: p.neon, name, font: r.pick(['Rubik', 'Caveat', 'Rubik']),
+      rail: r() < 0.65 ? 'glass' : 'bars', variant: r() < 0.6 ? 'ribbon' : 'checker', sides, back: env.back,
+    });
+  },
+
+  // a house of its own: its garden round it (world/yards.js), the drive down one side
+  house(ctx, a) {
+    const r = ctx.rng;
+    const { f, L, D, env } = a;
+    const wallHex = pickNot(r, R_WALLS, env.prevWall);
+    a.lot.wall = wallHex;
+    // (the deeper lots by the bay keep a garden behind big enough for a pool)
+    const front = r.range(4.0, 5.8);
+    const depth = Math.max(7.5, Math.min(D - front - 3.2, D >= 21 ? r.range(8.5, 10.5) : r.range(9, 12)));
+    const floors = r() < 0.55 ? 1 : 2;
+    const info = house(ctx, {
+      f, L, floors, front, depth, pal: { wall: hex(wallHex), trim: hex(r.pick(HOUSE_TRIMS)), acc: hex(r.pick(R_ACCS)) }, drive: L >= 12 ? (r() < 0.5 ? 'a' : 'b') : null,
+    });
+    // (where it stands on its lot is its own: the setbacks below leave a house alone)
+    a.lot.front = front;
+    a.lot.back = front + depth;
+    return info;
+  },
 };
+
+// ------------------------------------------------------------------ (v5, ROADMAP 11.2ג) the yards
+// how far a building stands back from the sidewalk (sb), how deep a yard it keeps behind it on the
+// alley (by), and a tower how wide a strip of lawn either side of it (ga at u = 0, gb at u = L):
+// the shops stay on the sidewalk, their customers walk in off it; the hotels, the towers and the
+// flats where people live stand back behind a forecourt or a garden; most keep a yard behind
+const MIN_D = { strip: 11, deco: 12, narrow: 11, hotel: 12, tall: 13, med: 11, mimo: 12, modern: 11, apt: 12.5, condo: 11 };
+function yardsFor(r, kind, o, L) {
+  const home = o.street === 'meridian' || o.street === 'west';
+  const coll = o.street === 'collins';
+  const may = (p, a, b) => (r() < p ? r.range(a, b) : 0);
+  let sb = 0;
+  let by = 0;
+  let ga = 0;
+  let gb = 0;
+  if (kind === 'strip') by = may(home ? 0.7 : 0.55, 3, 7);
+  else if (kind === 'deco' || kind === 'narrow') by = may(home ? 0.6 : 0.5, 2.5, 6);
+  else if (kind === 'hotel') {
+    sb = may(coll ? 0.35 : 0.12, 1.6, 3);
+    by = may(0.5, 2.5, 5);
+  } else if (kind === 'tall') {
+    sb = may(0.6, 1.6, 3.5);
+    by = may(0.4, 2.5, 4.5);
+  } else if (kind === 'med') {
+    sb = home ? may(0.65, 1.8, 4) : 0;
+    by = may(home ? 0.65 : 0.5, 2.5, 6);
+  } else if (kind === 'mimo') {
+    sb = may(home ? 0.55 : 0.45, 2, 4.5);
+    by = may(0.5, 2, 5);
+  } else if (kind === 'modern') by = may(0.4, 2.5, 5);
+  else if (kind === 'apt') by = may(0.65, 2.5, 6);
+  else if (kind === 'condo') {
+    sb = r.range(3, 5.5);
+    by = may(0.75, 1.5, 3.5);
+    if (L >= 22) {
+      const q = r();
+      if (q < 0.5) {
+        ga = r.range(2, 3.2);
+        gb = r.range(2, 3.2);
+      } else if (q < 0.72) ga = r.range(2, 3.2);
+      else if (q < 0.94) gb = r.range(2, 3.2);
+    }
+  }
+  // (no yard behind a row whose backs are on a square, a market, the motel's lot, the towers)
+  if (o.type === 'plaza' || o.type === 'motel' || o.type === 'towers' || o.type === 'market') by = 0;
+  // (deep enough to build in: the yard behind gives way first, then the one in front)
+  const minD = MIN_D[kind] || 11;
+  let over = sb + by - (o.D - minD);
+  if (over > 0) {
+    const cut = Math.min(by, over);
+    by -= cut;
+    over -= cut;
+    if (over > 0) sb = Math.max(0, sb - over);
+  }
+  if (by < 1.6) by = 0;
+  if (sb < 1.5) sb = 0;
+  return { sb, by, ga, gb };
+}
 
 // ------------------------------------------------------------------ a row
 /**
@@ -487,32 +606,65 @@ export function sobeRow(ctx, o) {
   const env = { ...o, prevWall: null, arcadeDone: false };
   // (facing east u runs north, its u = 0 the south end; facing west u runs south)
   const aIsNorth = o.side < 0;
+  // (v5, ROADMAP 11.2ג) how far back each stands, the yard it keeps (by dice of the row's own, so
+  // the buildings are the ones they were)
+  const yr = seeded(5501 + (o.col + 2) * 97 + o.row * 13 + (o.rowSide === 'east' ? 7 : 0));
+  for (const lot of lots) {
+    const y = yardsFor(yr, lot.kind, o, lot.zb - lot.za);
+    // (no strip of lawn on a corner's end: the cross street sees the tower's side wall there)
+    if (lot.north) y[aIsNorth ? 'ga' : 'gb'] = 0;
+    if (lot.south) y[aIsNorth ? 'gb' : 'ga'] = 0;
+    lot.sb = y.sb;
+    lot.by = y.by;
+    lot.gapA = y.ga;
+    lot.gapB = y.gb;
+    lot.gapN = aIsNorth ? y.ga : y.gb;
+    lot.gapS = aIsNorth ? y.gb : y.ga;
+  }
   for (const lot of lots) {
     const L = lot.zb - lot.za;
-    const f = o.side > 0 ? new Facade(o.x, lot.zb, 0, -1, 1, 0) : new Facade(o.x, lot.za, 0, 1, -1, 0);
-    const sN = lot.north || lot.winN;
-    const sS = lot.south || lot.winS;
+    const f0 = o.side > 0 ? new Facade(o.x, lot.zb, 0, -1, 1, 0) : new Facade(o.x, lot.za, 0, 1, -1, 0);
+    // (the building's own front: in from the lot's ends by its strips of lawn, back from the
+    // sidewalk by its forecourt)
+    let f = f0;
+    if (lot.gapA) {
+      const p = f0.p(lot.gapA, 0, 0);
+      f = new Facade(p[0], p[2], f0.ux, f0.uz, f0.nx, f0.nz);
+    }
+    if (lot.sb) f = shifted(f, -lot.sb);
+    const Lb = L - lot.gapA - lot.gapB;
+    const Dk = o.D - lot.sb - lot.by;
+    const sN = lot.north || lot.winN || lot.gapN > 0;
+    const sS = lot.south || lot.winS || lot.gapS > 0;
     const sides = { a: aIsNorth ? sN : sS, b: aIsNorth ? sS : sN };
     const corner = { a: aIsNorth ? lot.north : lot.south, b: aIsNorth ? lot.south : lot.north };
-    lot.f = f;
+    lot.f = f0;
     lot.L = L;
-    lot.info = BUILD[lot.kind](ctx, { f, L, D: o.D, sides, corner, lot, env });
+    lot.info = BUILD[lot.kind](ctx, { f, L: Lb, D: Dk, sides, corner, lot, env });
     lot.info.z0 = lot.za;
     lot.info.z1 = lot.zb;
+    // where the building stands on its lot: how far back its front is, how far back it reaches
+    if (lot.front === undefined) lot.front = lot.sb + (lot.setback || 0);
+    if (lot.back === undefined) lot.back = OPEN.has(lot.kind) ? 0 : lot.sb + Dk;
+    lot.setback = lot.front;
+    // (a lobby back behind its forecourt: the people coming out of it walk on to the sidewalk)
+    if (lot.info.shop && lot.front > 0.5) lot.info.shop.yard = lot.front;
     env.prevWall = lot.wall;
     env.prevStyle = lot.style || null;
   }
   partyWalls(ctx, lots, o);
+  // (v5, ROADMAP 11.2ג) the forecourts, the gardens, the yards behind, their fences, the trees
+  rowYards(ctx, lots, { ...o, alley: o.street !== 'west' });
   // (every lot of the city, for the map and the tests)
   ctx.lots = ctx.lots || [];
-  for (const lot of lots) ctx.lots.push({ kind: lot.kind, style: lot.style, x: o.x, side: o.side, D: o.D, z0: lot.za, z1: lot.zb, street: o.street, top: lot.info.top });
+  for (const lot of lots) ctx.lots.push({ kind: lot.kind, style: lot.style, x: o.x, side: o.side, D: o.D, z0: lot.za, z1: lot.zb, street: o.street, top: lot.info.top, front: lot.front, back: lot.back, use: lot.use || null, gapN: lot.gapN, gapS: lot.gapS });
   // the ends on the cross streets: where their walls are, for the boards (world/streets.js)
   if (ctx.blockEnds && o.rowSide) {
     for (const [lot, end] of [[lots[0], 'north'], [lots[lots.length - 1], 'south']]) {
       const info = lot.info;
       const uEdge = (end === 'north') === aIsNorth ? 0 : lot.L;
-      const back = o.D;
-      const front = (lot.setback || 0) + (lot.rr || 0);
+      const back = OPEN.has(lot.kind) ? o.D : lot.back;
+      const front = (lot.front || 0) + (lot.rr || 0);
       const p0 = lot.f.p(uEdge, 0, -front);
       const p1 = lot.f.p(uEdge, 0, -back);
       ctx.blockEnds[`${o.col},${o.row},${end},${o.rowSide}`] = { x0: Math.min(p0[0], p1[0]), x1: Math.max(p0[0], p1[0]), top: info.top, wall: !lot.noWall && !OPEN.has(lot.kind), kind: lot.kind };
@@ -533,6 +685,8 @@ function partyWalls(ctx, lots, o) {
     const tall = ta > tb ? A : B;
     const low = tall === A ? B : A;
     if (tall.kind === 'post' || OPEN.has(tall.kind)) continue;
+    // (a tower standing free of its neighbour has windows on that side, not a wall for an ad)
+    if ((tall === A ? A.gapS : B.gapN) > 0) continue;
     // (the tall one's side has windows there: no ad over them; a garage's has none)
     if (tall.kind !== 'garage' && ((tall === A && A.winS) || (tall === B && B.winN))) continue;
     const open = OPEN.has(low.kind);
@@ -540,8 +694,8 @@ function partyWalls(ctx, lots, o) {
     const free = tall.info.top - lowTop;
     if (free < 6.5 || r() < (open ? 0.15 : 0.35)) continue;
     // the wall's depth: from behind the tall one's yard to its back
-    const w0 = (tall.setback || 0) + 1.5;
-    const w1 = o.D - 1.5;
+    const w0 = (tall.front || 0) + 1.5;
+    const w1 = (tall.back || o.D) - 1.5;
     let w = Math.min(w1 - w0, 12);
     let h = w / 2;
     if (h > free - 1.2) {

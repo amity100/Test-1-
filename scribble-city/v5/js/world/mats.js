@@ -40,6 +40,8 @@ export function cityMaterials() {
     deck: B({ kind: 'ground', map: woodDeckTexture(), ang: 1.5708, line: 0.7 }),
     water: B({ kind: 'water', color: srgb(0.18, 0.2, 0.42), refl: true, wet: 1, line: 0 }),
     pool: B({ kind: 'water', color: srgb(0.2, 0.62, 0.78), refl: true, wet: 0.9, line: 0.3 }),
+    // (v5, ROADMAP 11.2ג) a pool up on a roof: the street's mirror is not under it
+    poolTop: B({ kind: 'water', color: srgb(0.24, 0.68, 0.82), line: 0.3 }),
     land: B({ kind: 'ground', color: srgb(0.4, 0.32, 0.42), line: 0 }),
     // buildings: walls and trims (kind wall), frames and awnings (box), glass, neon
     wall: B({ kind: 'wall', vcolor: true, erasable: true, side: THREE.DoubleSide }),
@@ -69,6 +71,8 @@ export function cityMaterials() {
     frond: B({ kind: 'leaf', map: frondTexture(), alphaTest: 0.45, side: THREE.DoubleSide, uvScale: 5, sway: 0.06, ang: 0.15, line: 0.55, swayAttr: true, objMask: true }),
     nut: B({ kind: 'cyl', color: srgb(0.4, 0.28, 0.16), partR: 0.12, objMask: true }),
     leaf: B({ kind: 'leaf', vcolor: true, ang: 0.6, line: 0.6, objMask: true }),
+    // (v5, ROADMAP 11.2ג) the shade trees' crowns: the same pen, drawn as far as the palms' crowns
+    canopy: B({ kind: 'leaf', vcolor: true, ang: 0.6, line: 0.6, objMask: true }),
     // rooms behind the shop windows (warm light, no sun)
     inWall: B({ kind: 'wall', vcolor: true, indoor: true, erasable: true, wash: 0.7 }),
     inBox: B({ kind: 'box', vcolor: true, indoor: true, wash: 0.7 }),

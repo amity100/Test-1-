@@ -162,8 +162,14 @@ export function alleyLife(ctx, a) {
   for (const lot of ctx.lots || []) {
     if (lot.z1 < a.z0 - 1 || lot.z0 > a.z1 + 1) continue;
     const bx = lot.x - lot.side * lot.D;
-    if (Math.abs(bx - a.x0) < 0.6) backs.push({ lot, x: a.x0, face: 1 });
-    else if (Math.abs(bx - a.x1) < 0.6) backs.push({ lot, x: a.x1, face: -1 });
+    let face = 0;
+    if (Math.abs(bx - a.x0) < 0.6) face = 1;
+    else if (Math.abs(bx - a.x1) < 0.6) face = -1;
+    else continue;
+    // (v5, ROADMAP 11.2ג: a building that keeps a yard behind it: its back wall is over the yard's
+    // fence, the meters and the air conditioners there)
+    const back = lot.back !== undefined && lot.back > 0.5 ? lot.back : lot.D;
+    backs.push({ lot, x: back < lot.D - 0.6 ? lot.x - lot.side * back : face > 0 ? a.x0 : a.x1, face });
   }
   const walls = [];
   for (const b of backs) {
@@ -191,15 +197,17 @@ export function alleyLife(ctx, a) {
       }
     }
   }
-  // the tags on the walls: low, where an arm reaches, now and then higher up from a stair
-  if (M.tag && walls.length) {
+  // the tags on the walls (and on the yards' walls on the alley): low, where an arm reaches, now and
+  // then higher up from a stair
+  const tagged = walls.concat((ctx.alleyFences || []).filter((w) => w.z1 > a.z0 && w.z0 < a.z1 && (Math.abs(w.x - a.x0) < 0.8 || Math.abs(w.x - a.x1) < 0.8)));
+  if (M.tag && tagged.length) {
     const n = a.gang || a.type === 'gang' ? r.int(7, 11) : r.int(2, 5);
     for (let k = 0; k < n; k++) {
-      const w = r.pick(walls);
+      const w = r.pick(tagged);
       const tw = r.range(1.6, 3.2);
       if (w.z1 - w.z0 < tw + 0.4) continue;
       const z = r.range(w.z0 + tw / 2, w.z1 - tw / 2);
-      const y = CURB + r.range(0.9, Math.min(2.6, w.top - 1.5));
+      const y = w.top > 4 ? CURB + r.range(0.9, Math.min(2.6, w.top - 1.5)) : CURB + Math.max(0.5, r.range(0.5, w.top - CURB - 0.35 - tw / 8));
       wallCell(ctx, M.tag, w.x, w.face, y, z, tw, tw / 4, r.pick(TAGS));
     }
   }
