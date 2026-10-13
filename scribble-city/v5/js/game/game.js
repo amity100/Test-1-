@@ -127,6 +127,9 @@ export class Game {
     this.audio = new Audio();
     this.camRig = new CameraRig(camera, world.collision);
     this.figures = new FigureRenderer(scene);
+    // (v5: from how far a person is drawn in the simple shapes, render/people.js: on a phone's
+    // small screen a person 40 m away is some 20 pixels tall)
+    this.figures.bodies.lodFar = this.pipe.low ? 40 : 55;
     this.bubbles = new Bubbles(this.pipe.overlay);
     this.fx = new Effects(this);
     this.cars = new CarRenderer(scene);

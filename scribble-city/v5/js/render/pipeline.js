@@ -476,13 +476,17 @@ const MIRRORLESS = LAYERS.MIRRORLESS;
 // less than this share of the map's room left (12 m: four frames even at 90 m/s)
 const STATIC_SLICES = 4;
 const STATIC_SOON = 0.2;
+// (v5: a new map for the sun having gone on, with room enough left in the old one, is drawn in eight
+// slices, so the frames that draw one are only a little slower than the rest; one for the box
+// running out of room, in four)
+const STATIC_SLICES_CALM = 8;
 // as the sun goes over, the shadows follow it in steps: the still city's map every 0.25 degree,
 // the far one every degree, each new map drawn in the background and faded in over FADE_MS
 const SUN_STEP = Math.cos((0.25 * Math.PI) / 180);
 const FAR_STEP = Math.cos((1.0 * Math.PI) / 180);
-// (v5: the far map is the whole city, every 13 seconds or so: in eight slices, not four, so each
+// (v5: the far map is the whole city, every 13 seconds or so: in sixteen slices, not four, so each
 // frame that draws one is only a little slower than the rest)
-const FAR_SLICES = 8;
+const FAR_SLICES = 16;
 const FADE_MS = 800;
 const _fx = new THREE.Vector3();
 const _fy = new THREE.Vector3();
@@ -531,6 +535,7 @@ export class Pipeline {
     this.sunCam = new THREE.OrthographicCamera(-60, 60, 60, -60, 1, 520);
     this.sunCam.layers.enable(MIRRORLESS);
     this.sunCam.layers.enable(SUN);
+    this.sunCam.layers.enable(LAYERS.AUX);
     camera.layers.enable(MIRRORLESS);
     shared.uShadowMap.value = this.shadowRT.depthTexture;
     shared.uShadowTexel.value = 1 / S;
@@ -556,6 +561,7 @@ export class Pipeline {
     this._hide = [];
     // 2. the mirror
     this.reflCam = new THREE.PerspectiveCamera();
+    this.reflCam.layers.enable(LAYERS.AUX);
     this.mirrorY = 0;
     // fullscreen passes
     this.quadScene = new THREE.Scene();
@@ -977,14 +983,15 @@ export class Pipeline {
       // (a map fading out cannot be faded into one that has run out: stop it)
       if (this.fade) this.endFade();
       const next = b && b.sun.equals(cur.on ? cur.sun : want) && this.staticLeft(b, center, ver) >= 0.2 ? b : this.beginStatic(want, center, ver);
-      this.drawStatic(next, STATIC_SLICES);
+      this.drawStatic(next, next.n);
       this.useStatic(next);
       this.st.full++;
       return;
     }
     if (b) {
-      this.drawStatic(b, 1);
-      if (b.slice < STATIC_SLICES) return;
+      // (a calm map being drawn when the box has come near the edge after all: two slices a frame)
+      this.drawStatic(b, left < STATIC_SOON && b.n > STATIC_SLICES ? 2 : 1);
+      if (b.slice < b.n) return;
       if (!b.sun.equals(cur.sun)) {
         // the sun has gone on: the new map fades in over the old one (when the fade is free)
         if (this.fade) return;
@@ -996,7 +1003,8 @@ export class Pipeline {
     }
     // (the map fading out is not free to be drawn into)
     if (this.fade && this.fade.kind === 'static') return;
-    if (cur.sun.dot(want) < SUN_STEP || left < STATIC_SOON) this.drawStatic(this.beginStatic(want, center, ver), 1);
+    if (left < STATIC_SOON) this.drawStatic(this.beginStatic(want, center, ver), 1);
+    else if (cur.sun.dot(want) < SUN_STEP) this.drawStatic(this.beginStatic(want, center, ver, STATIC_SLICES_CALM), 1);
   }
 
   // how much of the map's room is left around the box (0 at its edge), or -1 when it does not
@@ -1018,8 +1026,9 @@ export class Pipeline {
   // the next map, seen from dir, around where you are, a little the way you look and the way
   // you go (where the box goes), but never with the box more than 60% of the way to its edge:
   // turning around on the spot stays inside it, and so does backing up
-  beginStatic(dir, center, ver) {
+  beginStatic(dir, center, ver, n = STATIC_SLICES) {
     const m = this.stMaps[0] === this.stCur ? this.stMaps[1] : this.stMaps[0];
+    m.n = n;
     const texel = (this.sunCam.right - this.sunCam.left) / this.shadowS;
     const x = _fx;
     const y = _fy;
@@ -1063,13 +1072,14 @@ export class Pipeline {
     return m;
   }
 
-  // n more slices of the map being drawn (each slice a quarter of the still city's pieces)
+  // n more slices of the map being drawn (each slice a quarter of the still city's pieces, or an
+  // eighth: m.n)
   drawStatic(m, n) {
     const root = this.staticRoot;
     const camPos = this.camera.position;
-    for (let k = 0; k < n && m.slice < STATIC_SLICES; k++) {
+    for (let k = 0; k < n && m.slice < m.n; k++) {
       if (this.staticCull) this.staticCull(m.p);
-      this.drawSlice(root, m.slice, STATIC_SLICES, m.rt, m.cam);
+      this.drawSlice(root, m.slice, m.n, m.rt, m.cam);
       if (this.staticCull) this.staticCull(camPos);
       m.slice++;
       this.st.slices++;

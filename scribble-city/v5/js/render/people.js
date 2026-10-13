@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, penPictures } from './materials.js';
+import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, penPictures, LAYERS } from './materials.js';
 import { MAX_HOLES, MAX_OWNERS } from './glsl.js';
 import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 
@@ -39,15 +39,24 @@ function limb(r0, r1, len, segs = 10, bulge = 0) {
 }
 
 // the far-off walkers' torso and limbs (PersonRenderer.drawCheap): the same outline in fewer points
-function lowTorsoGeo(waist, chest, shoulders, len, hem) {
-  const pts = [
-    new THREE.Vector2(0.0001, -hem - 0.01),
-    new THREE.Vector2(waist * 1.04, -hem),
-    new THREE.Vector2(chest * 0.98, len * 0.6),
-    new THREE.Vector2(shoulders, len * 0.86),
-    new THREE.Vector2(shoulders * 0.4, len * 1.0),
-    new THREE.Vector2(0.0001, len * 1.01),
-  ];
+function lowTorsoGeo(waist, chest, shoulders, len, hem, boxy = false) {
+  const pts = boxy
+    ? [
+        new THREE.Vector2(0.0001, -hem - 0.01),
+        new THREE.Vector2(chest * 1.02, -hem),
+        new THREE.Vector2(chest * 1.03, len * 0.72),
+        new THREE.Vector2(shoulders, len * 0.86),
+        new THREE.Vector2(shoulders * 0.42, len * 1.0),
+        new THREE.Vector2(0.0001, len * 1.01),
+      ]
+    : [
+        new THREE.Vector2(0.0001, -hem - 0.01),
+        new THREE.Vector2(waist * 1.04, -hem),
+        new THREE.Vector2(chest * 0.98, len * 0.6),
+        new THREE.Vector2(shoulders, len * 0.86),
+        new THREE.Vector2(shoulders * 0.4, len * 1.0),
+        new THREE.Vector2(0.0001, len * 1.01),
+      ];
   const g = new THREE.LatheGeometry(pts, 8);
   g.scale(1, 1, 0.66);
   return g;
@@ -55,6 +64,12 @@ function lowTorsoGeo(waist, chest, shoulders, len, hem) {
 
 function lowLimb(r0, r1, len) {
   const pts = [new THREE.Vector2(0.0001, r0), new THREE.Vector2(r0, 0), new THREE.Vector2(r1, -len), new THREE.Vector2(0.0001, -len - r1)];
+  return new THREE.LatheGeometry(pts, 6);
+}
+
+// (v5) a short sleeve in as few points as a far limb (and the same layout of triangles)
+function lowSleeveGeo(r0, r1, len) {
+  const pts = [new THREE.Vector2(0.0001, r0), new THREE.Vector2(r0, 0), new THREE.Vector2(r1, -len), new THREE.Vector2(r1 * 0.82, -len)];
   return new THREE.LatheGeometry(pts, 6);
 }
 
@@ -205,7 +220,7 @@ const _cClip2 = [0, 0, 0, 0];
 // it has, which pen draws it, and what it is left out of. Shapes go to the class of their size (a
 // shape with fewer points than its class leaves the rest of them empty) and of their side (a
 // coat's skirts are seen from inside too).
-const CLASS_SIZES = [60, 300, 504, 1020, 1404];
+const CLASS_SIZES = [60, 192, 300, 504, 1020, 1404];
 // (v5) Shapes with the same layout of triangles (every limb, every ball, every head of hair...)
 // are drawn by their corners instead: each corner of a part is worked out once, not once for
 // every triangle it is in (a sixth of the work for the graphics card, the same picture). A
@@ -214,10 +229,18 @@ const CLASS_SIZES = [60, 300, 504, 1020, 1404];
 const OWN_LAYOUT = 100;
 // (the shapes drawn too rarely for a draw of their own: they stay in their class, unless they
 // are alone in it)
-const IN_CLASS = new Set(['eye', 'lowShoe', 'lowPelvis', 'lowTorsoTee', 'lowTorsoPlain', 'skirt', 'midi', 'coatSkirt', 'lowSkirt', 'lowMidi']);
+const IN_CLASS = new Set(['eye', 'lowPelvis', 'skirt', 'midi', 'coatSkirt', 'lowSkirt', 'lowMidi', 'lowCoatSkirt']);
 // left out of: the wet street's mirror (1), the sun's view (2)
 const NO_MIRROR = 1;
 const NO_SUN = 2;
+// (v5) Three kinds of shape. A person near the camera is drawn in the picture in full ('full', the
+// picture only) and, for the sun's view and the wet street's mirror, in the simple shapes of the
+// far-off walkers ('low' ones on a layer of their own, LAYERS.AUX): the sun's view is a texel of
+// 12 cm and the mirror a third of the pixels, smeared, where the two cannot be told apart. Farther
+// than lodFar a person is drawn in the simple shapes everywhere, smaller than the detail they
+// leave out. The little things anybody may hold or be ('shared': a ball, a tube, a box) are drawn
+// once, everywhere.
+const SHARED = new Set(['ball', 'tube', 'boxP']);
 
 // (the smart drawing, render/motion.js) where each part of a person was a frame ago: known by the
 // person and the order the parts are put down in, the same every frame (a part that was not there
@@ -249,10 +272,12 @@ function partWas(out, i, m, owner, shape) {
 }
 
 class DrawClass {
-  // index: the shared layout of triangles of the shapes drawn by their corners (or none)
-  constructor(scene, verts, mat, cap, index = null) {
+  // index: the shared layout of triangles of the shapes drawn by their corners (or none); aux: the
+  // sun's view's and the mirror's own (no smart drawing's motion)
+  constructor(scene, verts, mat, cap, index = null, aux = false) {
     this.cap = cap;
     this.verts = verts;
+    this.aux = aux;
     const g = new THREE.BufferGeometry();
     // (the points come from the shapes' texture: these only say how many)
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts * 3), 3));
@@ -270,21 +295,24 @@ class DrawClass {
     this.mesh.count = 0;
     this.mesh.visible = false;
     this.mesh.userData.dynamic = true;
+    // (v5: the people are drawn before the city: the street and the walls behind them are then
+    // left out where they are covered, instead of drawn and drawn over. The same picture)
+    this.mesh.renderOrder = -1;
     scene.add(this.mesh);
     this.n = 0;
     // (the smart drawing: where each part was a frame ago)
     mat.defines.USE_PREV = '';
-    this.prev = new Float32Array(cap * 12);
+    this.prev = aux ? null : new Float32Array(cap * 12);
     this.motionBase = 0;
     this.motionGen = -1;
-    bindMotion(this.mesh, this);
+    if (!aux) bindMotion(this.mesh, this);
   }
 
   push(sh, m, color, owner, part, indoor, clip) {
     if (this.n >= this.cap) return -1;
     const i = this.n++;
     m.toArray(this.mesh.instanceMatrix.array, i * 16);
-    if (motion.on) partWas(this.prev, i, m, owner, sh.row);
+    if (motion.on && !this.aux) partWas(this.prev, i, m, owner, sh.row);
     const c = this.mesh.instanceColor.array;
     c[i * 3] = color[0];
     c[i * 3 + 1] = color[1];
@@ -319,7 +347,7 @@ class DrawClass {
       at.addUpdateRange(0, n * at.itemSize);
       at.needsUpdate = true;
     }
-    if (motion.on && this.n) {
+    if (motion.on && this.n && !this.aux) {
       this.motionBase = motionRows(this.prev, this.n);
       this.motionGen = motion.gen;
     }
@@ -341,10 +369,18 @@ class Shape {
     this.row = 0;
     this.flags = 0;
     this.cls = null;
+    // (v5) 'full', 'low' or 'shared' (SHARED); a low shape's draws for the sun's view and the mirror
+    this.lod = 'full';
+    this.auxCls = null;
   }
 
   push(m, color, owner, part, indoor = 0, clip = null) {
     return this.cls.push(this, m, color, owner, part, indoor, clip);
+  }
+
+  // (aux: into the sun's view's and the mirror's own draws)
+  put(aux, m, color, owner, part, indoor = 0, clip = null) {
+    return (aux ? this.auxCls : this.cls).push(this, m, color, owner, part, indoor, clip);
   }
 }
 
@@ -503,7 +539,23 @@ export class PersonRenderer {
       lowShoe: P(new THREE.CapsuleGeometry(0.052, 0.15, 1, 6).rotateX(Math.PI / 2).scale(1, 0.72, 1), M.box),
       lowSkirt: P(skirtGeo(0.17, 0.3, 0.86, 0, 8), M.skirt),
       lowMidi: P(skirtGeo(0.17, 0.25, 0.58, 0, 8), M.skirt),
+      // (v5) the rest of a whole person in simple shapes (PersonRenderer.drawLow), each like its
+      // detailed one in size, in the layouts of triangles above (no draws of their own)
+      lowTorsoBoxy: P(lowTorsoGeo(0.15, 0.19, 0.205, 0.54, 0.1, true), M.plain),
+      lowTorsoTeeBoxy: P(lowTorsoGeo(0.15, 0.19, 0.205, 0.54, 0.14, true), M.tee),
+      lowHand: P(new THREE.SphereGeometry(0.05, 8, 6).scale(0.75, 1.3, 0.6), M.skin),
+      lowJaw: P(new THREE.SphereGeometry(0.075, 8, 6).scale(1, 0.8, 1.05), M.skin),
+      lowThighWide: P(lowLimb(0.1, 0.098, 0.45), M.plain),
+      lowShinWide: P(lowLimb(0.098, 0.122, 0.43), M.plain),
+      lowThighCargo: P(lowLimb(0.1, 0.082, 0.45), M.cargo),
+      lowShinCargo: P(lowLimb(0.082, 0.078, 0.43), M.cargo),
+      lowSleeve: P(lowSleeveGeo(0.08, 0.07, 0.15), M.tee),
+      lowCoatSkirt: P(skirtGeo(0.18, 0.27, 0.62, 0, 8), M.plain),
     };
+    for (const [k, sh] of Object.entries(this.p)) sh.lod = SHARED.has(k) ? 'shared' : k.startsWith('low') ? 'low' : 'full';
+    // (farther than this a person is drawn in the simple shapes in the picture too: game.js sets
+    // it for a phone and a computer)
+    this.lodFar = 40;
     // (the little things of a face, the soles and the pockets are inside the shadow of what they
     // are on: the sun's view leaves them out; and in the wet street's mirror, at half the pixels
     // and smeared, they are not there either)
@@ -537,10 +589,9 @@ export class PersonRenderer {
       }
       return L;
     };
-    // (the little things of a face share draws of their own, left out of the sun's view and the
-    // mirror as a whole: they are in neither)
-    const face = (sh) => (sh.flags & (NO_MIRROR | NO_SUN)) === (NO_MIRROR | NO_SUN);
-    const sideOf = (sh) => (sh.penMat === M.coat ? 'back' : 'front') + (face(sh) ? '-face' : '');
+    // (by side, and by kind: 'full' shapes are drawn in the picture alone, 'low' ones everywhere
+    // and again, for those drawn in full, in the sun's view and the mirror alone)
+    const sideOf = (sh) => `${sh.penMat === M.coat ? 'back' : 'front'}-${sh.lod}`;
     const classOf = (sh) => CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
     const byCorners = (sh) => {
       sh.layout = layoutOf(sh.igeo);
@@ -612,13 +663,21 @@ export class PersonRenderer {
     }
     for (const { side, size, index, list } of groups.values()) {
       const cap = list.reduce((a, sh) => a + sh.cap, 0);
-      const cls = new DrawClass(scene, size, side.startsWith('back') ? back : front, cap, index);
-      if (side.endsWith('-face')) {
+      const mat = side.startsWith('back') ? back : front;
+      const cls = new DrawClass(scene, size, mat, cap, index);
+      if (side.endsWith('-full')) {
+        // (the picture alone: not on the mirror's layer, and left out of the sun's view)
+        cls.mesh.layers.set(LAYERS.MIRRORLESS);
         cls.mesh.userData.noShadow = true;
-        cls.mesh.userData.noReflect = true;
       }
       for (const sh of list) sh.cls = cls;
       this.classes.push(cls);
+      if (side.endsWith('-low')) {
+        const aux = new DrawClass(scene, size, mat, cap, index, true);
+        aux.mesh.layers.set(LAYERS.AUX);
+        for (const sh of list) sh.auxCls = aux;
+        this.classes.push(aux);
+      }
     }
   }
 
@@ -842,8 +901,18 @@ export class PersonRenderer {
   }
 
   // ------------------------------------------------------------------ one person
-  // fig: a Doodle (its joints, its look, its body frames); near: how close to the camera
+  // fig: a Doodle (its joints, its look, its body frames); camDist: how far from the camera
   draw(fig, camDist) {
+    if (camDist > this.lodFar) {
+      this.drawLow(fig, false);
+      return;
+    }
+    this.drawFull(fig, camDist);
+    this.drawLow(fig, true);
+  }
+
+  // in full, in the picture
+  drawFull(fig, camDist) {
     const L = fig.look;
     const j = fig.j;
     const P = fig.parts;
@@ -1075,6 +1144,178 @@ export class PersonRenderer {
       else {
         _m.set(s.x.x, s.y.x, s.z.x, s.c.x, s.x.y, s.y.y, s.z.y, s.c.y, s.x.z, s.y.z, s.z.z, s.c.z, 0, 0, 0, 1);
         (s.gloss ? p.sphereGloss : p.sphere).push(_m, col, own, id(), ind, s.clip);
+      }
+    }
+  }
+
+  // (v5) A person in the simple shapes, on their own rig: their pose, what they wear and what they
+  // hold, as drawFull draws them, without the little things of a face. In the picture too when far
+  // away (aux false); for somebody drawn in full, only in the sun's view and the mirror (aux true:
+  // what is drawn everywhere anyway, the shared shapes, is not drawn again)
+  drawLow(fig, aux) {
+    const L = fig.look;
+    const j = fig.j;
+    const P = fig.parts;
+    const p = this.p;
+    const own = fig.owner + 1;
+    const ind = fig.indoor ? 1 : 0;
+    const S = fig.scale;
+    const k = S * 0.98;
+    const bulk = fig.bulk;
+    const seed = (fig.seed % 1) * 0.37 + 0.11;
+    _part[0] = seed;
+    const id = nextPart;
+    const ax = fig.ax;
+    const rgt = fig.brgt;
+    const fwd = fig.bfwd;
+    const top = L.top;
+    const bot = L.bottom;
+    const skin = linC(L.skin);
+    let topCol = top.color;
+    if (fig.paintT > 0) {
+      const t = Math.min(1, fig.paintT / 2.5) * 0.7;
+      topCol = topCol.map((v, i) => v + (fig.paintColor[i] - v) * t);
+    }
+    const topC = linC(topCol);
+    const botC = linC(bot.color);
+    const longSkirt = bot.kind === 'skirt' || bot.kind === 'dress' || top.kind === 'dress';
+    const midi = bot.kind === 'midi';
+    const skirtC = top.kind === 'dress' ? topC : botC;
+    const bootC = linC(L.boots || L.shoes);
+    const tee = top.kind === 'tee' || top.kind === 'tank' || top.kind === 'polo';
+    const sleeves = top.sleeves || (tee ? 'short' : 'long');
+    const cargo = bot.kind === 'baggy' || bot.kind === 'cargo';
+    const wide = bot.kind === 'wide';
+    const shorts = bot.kind === 'shorts';
+    const open = OPEN.has(top.kind);
+    const puffy = top.kind === 'puffer';
+    const br = Math.max(0.9, bulk * 0.96) * (puffy ? 1.14 : 1);
+    fig.headId = (seed * 7.77 + 0.31) % 1;
+
+    // ---- the torso and the hips
+    if (P.torso > 0.5) {
+      _a.copy(j.hip).addScaledVector(ax, 0.04 * S);
+      const len = Math.max(0.2, _b.subVectors(j.neck, _a).length());
+      const sy = len / 0.5;
+      const pool = tee && top.kind !== 'tank' ? p.lowTorsoTeeBoxy : open || top.kind === 'hoodie' || top.kind === 'track' || top.kind === 'sweatshirt' ? p.lowTorsoBoxy : p.lowTorsoPlain;
+      const w = (L.fem ? 0.95 : 1.05) * br * k;
+      pool.put(aux, framed(_a, rgt, ax, fwd, w, sy, w * (L.fem ? 1.05 : 1)), topC, own, id(), ind);
+      if (open) {
+        if (!aux) {
+          const inC = linC(top.shirt || top.inner || [0.92, 0.92, 0.9]);
+          _c.lerpVectors(j.hip, j.neck, 0.62).addScaledVector(fwd, 0.118 * br * S);
+          p.boxP.push(framed(_c, rgt, ax, fwd, (top.kind === 'suit' ? 0.07 : 0.1) * S, 0.34 * S, 0.012 * S), inC, own, id(), ind);
+          if (top.tie) {
+            _c.copy(j.neck).lerp(j.hip, 0.3).addScaledVector(fwd, 0.13 * br * S);
+            p.boxP.push(framed(_c, rgt, ax, fwd, 0.028 * S, 0.2 * S, 0.012 * S), linC(top.tie), own, id(), ind);
+          }
+        }
+        if ((top.kind === 'trench' || top.kind === 'coat') && P.pelvis > 0.5 && fig.sit < 0.3) {
+          _c.copy(j.hip).addScaledVector(ax, 0.06 * S);
+          const sw = Math.sin(fig.phase) * 0.05 * Math.min(1, fig.speed / 1.4);
+          _d.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+          p.lowCoatSkirt.put(aux, framed(_c, rgt, _d, _x.crossVectors(rgt, _d), k * br, k, k * br), topC, own, id(), ind);
+        }
+      }
+      _c.copy(j.headC).addScaledVector(fig.hu, -0.06 * S);
+      p.lowNeck.put(aux, along(_c, j.neck, 0.13, k * 1.18 * Math.max(1, bulk * 0.9), rgt), skin, own, fig.headId, ind);
+    }
+    if (P.pelvis > 0.5) {
+      _a.copy(j.hip).addScaledVector(ax, 0.02 * S);
+      p.lowPelvis.put(aux, framed(_a, rgt, ax, fwd, k * bulk * (L.fem ? 1.06 : 1), k, k * bulk), longSkirt ? skirtC : botC, own, id(), ind);
+      if (midi && P.torso > 0.5 && fig.sit < 0.3) {
+        _a.copy(j.hip).addScaledVector(ax, 0.05 * S);
+        const sw = Math.sin(fig.phase) * 0.06 * Math.min(1, fig.speed / 1.4);
+        _c.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+        p.lowMidi.put(aux, framed(_a, rgt, _c, _d.crossVectors(rgt, _c), k * bulk, k * (1 - fig.crouch * 0.4), k * bulk), botC, own, id(), ind);
+      }
+      if (longSkirt && P.torso > 0.5) {
+        _a.copy(j.hip).addScaledVector(ax, 0.05 * S);
+        const kk = k * bulk;
+        if (fig.sit < 0.3) {
+          const sw = Math.sin(fig.phase) * 0.05 * Math.min(1, fig.speed / 1.4);
+          _c.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+          p.lowSkirt.put(aux, framed(_a, rgt, _c, _d.crossVectors(rgt, _c), kk, k * (1 - fig.crouch * 0.4), kk), skirtC, own, id(), ind);
+        } else {
+          p.lowSkirt.put(aux, framed(_a, rgt, ax, fwd, kk, k * 0.32, kk), skirtC, own, id(), ind);
+          if (!aux) {
+            _c.lerpVectors(j.kneeL, j.kneeR, 0.5);
+            _d.lerpVectors(j.footL, j.footR, 0.5);
+            _b.copy(j.hip).addScaledVector(fwd, 0.04 * S);
+            capsuleTo(p, _b, _c, 0.19 * kk, skirtC, own, id(), ind, rgt);
+            capsuleTo(p, _c, _d, 0.17 * kk, skirtC, own, id(), ind, rgt);
+          }
+        }
+      }
+    }
+    // ---- arms
+    const arms = fig._armJ || (fig._armJ = [[j.shoulderR, j.elbowR, j.handR], [j.shoulderL, j.elbowL, j.handL]]);
+    const armK = k * Math.max(1, bulk * 0.85) * (fig.limbs || 1) * (puffy ? 1.3 : open ? 1.08 : 1);
+    for (let ai = 0; ai < 2; ai++) {
+      if (P[ARM_PART[ai]] < 0.5) continue;
+      const sh = arms[ai][0];
+      const el = arms[ai][1];
+      const hd = arms[ai][2];
+      const shortS = sleeves === 'short' && !L.fem;
+      const noS = sleeves === 'none' && !L.fem;
+      const upperSkin = shortS || noS;
+      const armId = id();
+      (upperSkin ? p.lowUpperSkin : p.lowUpper).put(aux, along(sh, el, 0.29, armK, fwd), upperSkin ? skin : topC, own, armId, ind);
+      if (shortS) p.lowSleeve.put(aux, along(sh, el, 0.29, armK * 0.98, fwd, _m), topC, own, id(), ind);
+      const foreSkin = shortS || noS || L.rolled || top.rolled;
+      (foreSkin ? p.lowForeSkin : p.lowFore).put(aux, along(el, hd, 0.26, armK, fwd), foreSkin ? skin : topC, own, foreSkin === upperSkin ? armId : id(), ind);
+      _c.subVectors(hd, el).normalize();
+      _d.copy(hd).addScaledVector(_c, 0.035 * S);
+      p.lowHand.put(aux, along(_d, _a.copy(_d).addScaledVector(_c, 0.05), 0.05, k, fwd), skin, own, id(), ind);
+    }
+    // ---- legs
+    const legs = fig._legJ || (fig._legJ = [[j.hipR, j.kneeR, j.footR, j.toeR], [j.hipL, j.kneeL, j.footL, j.toeL]]);
+    const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
+    const shoeC = linC(L.shoes);
+    for (let li = 0; li < 2; li++) {
+      if (P[LEG_PART[li]] < 0.5) continue;
+      const hp = legs[li][0];
+      const kn = legs[li][1];
+      const ft = legs[li][2];
+      const to = legs[li][3];
+      const legId = id();
+      if (midi) {
+        if (fig.sit > 0.3 || fig.crawl > 0.3 || fig.dead > 0.3) p.lowThigh.put(aux, along(hp, kn, 0.45, legK * 1.15, fwd), botC, own, legId, ind);
+        p.lowShin.put(aux, along(kn, ft, 0.43, legK * 1.06, fwd), bootC, own, id(), ind);
+      } else if (!longSkirt || fig.sit > 0.3 || fig.crawl > 0.3 || fig.dead > 0.3) {
+        (wide ? p.lowThighWide : cargo ? p.lowThighCargo : p.lowThigh).put(aux, along(hp, kn, 0.45, legK, fwd), longSkirt ? skirtC : botC, own, legId, ind);
+        (shorts ? p.lowShinSkin : wide ? p.lowShinWide : cargo ? p.lowShinCargo : p.lowShin).put(aux, along(kn, ft, 0.43, legK, fwd), shorts ? skin : longSkirt ? skirtC : botC, own, shorts ? id() : legId, ind);
+      }
+      _z.subVectors(to, ft);
+      _z.y = 0;
+      if (_z.lengthSq() < 1e-6) _z.copy(fwd);
+      _z.normalize();
+      _x.crossVectors(UP, _z).normalize();
+      _c.copy(ft).addScaledVector(_z, 0.05 * S);
+      _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.035);
+      p.lowShoe.put(aux, framed(_c, _x, UP, _z, k, k, k), shoeC, own, id(), ind);
+    }
+    // ---- the head (no face: smaller than a pixel from where this is drawn)
+    if (P.head > 0.5) {
+      const hs = fig.headScale * S;
+      const hc = j.headC;
+      const hr = fig.hr;
+      const hu = fig.hu;
+      const hf = fig.hf;
+      p.lowHead.put(aux, framed(hc, hr, hu, hf, 1.0 * hs * 0.98, 1.14 * hs * 1.0, 1.0 * hs * 1.06), skin, own, fig.headId, ind);
+      _c.copy(hc).addScaledVector(hu, -0.065 * hs).addScaledVector(hf, 0.03 * hs);
+      p.lowJaw.put(aux, framed(_c, hr, hu, hf, hs * 1.05, hs, hs * 1.05), skin, own, fig.headId, ind);
+    }
+    // ---- hair, hats, beards, held things: the rig's own shapes (its capsules are shared)
+    const shapes = fig.shapes;
+    for (let i = fig.dressFrom || 0; i < shapes.length; i++) {
+      const s = shapes[i];
+      if (!s.dress || P[s.part === 'pelvis' ? 'pelvis' : s.part] < 0.5) continue;
+      if (s.type === 0) {
+        if (!aux) capsuleTo(p, _a.copy(s.c).sub(s.y), _b.copy(s.c).add(s.y), s.x.x, linC(s.col), own, id(), ind, rgt, s.clip);
+      } else {
+        _m.set(s.x.x, s.y.x, s.z.x, s.c.x, s.x.y, s.y.y, s.z.y, s.c.y, s.x.z, s.y.z, s.z.z, s.c.z, 0, 0, 0, 1);
+        p.lowSphere.put(aux, _m, linC(s.col), own, id(), ind, s.clip);
       }
     }
   }

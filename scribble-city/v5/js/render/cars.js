@@ -148,7 +148,9 @@ export function randomCarSpec(r = Math.random) {
 }
 
 // the body below the windows: closed rounded sections (sills, wheel arches, hood, deck)
-function lowerBody(K) {
+// (lo, v5: the same body in a third of the sections and half the points round each, for the sun's
+// view: a texel of 12 cm, where the two cast the same shadow)
+function lowerBody(K, lo = false) {
   const L = K.len;
   const hw = curve(K.halfW);
   const belt = curve(K.belt);
@@ -162,11 +164,13 @@ function lowerBody(K) {
   };
   // the sections: closer together round the wheels, so the arches come out round
   const ts = [];
-  for (let i = 0; i <= 44; i++) ts.push(i / 44);
-  for (const t of K.wheels) for (let k = -6; k <= 6; k++) ts.push(t + (k / 6) * ((K.r * 1.3) / L));
+  const NS = lo ? 14 : 44;
+  const NW = lo ? 2 : 6;
+  for (let i = 0; i <= NS; i++) ts.push(i / NS);
+  for (const t of K.wheels) for (let k = -NW; k <= NW; k++) ts.push(t + (k / NW) * ((K.r * 1.3) / L));
   ts.sort((a, b) => a - b);
   const uniq = ts.filter((t, i) => t >= 0 && t <= 1 && (i === 0 || t - ts[i - 1] > 1e-4));
-  const N = 22;
+  const N = lo ? 10 : 22;
   const pos = [];
   for (const t of uniq) {
     const z = t * L - L / 2;
@@ -224,7 +228,7 @@ function lowerBody(K) {
 
 // the glasshouse: one surface from sill to sill over the roof; its quads go to the glass or to
 // the paint (the roof, the frames round the windows, the pillars)
-function glassHouse(K) {
+function glassHouse(K, lo = false) {
   const L = K.len;
   const G = K.glass;
   const hw = curve(K.halfW);
@@ -241,8 +245,8 @@ function glassHouse(K) {
     }
     return 1;
   };
-  const NT = 26;
-  const NH = 14;
+  const NT = lo ? 8 : 26;
+  const NH = lo ? 6 : 14;
   const ts = [];
   for (let i = 0; i <= NT; i++) ts.push(G.tA + ((G.tD - G.tA) * i) / NT);
   const pos = [];
@@ -371,7 +375,11 @@ function build(kind) {
   // colour; it dents with the body)
   const inside = merge([lower, gh.inRoof]);
   shrink(inside, 0.965);
-  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside };
+  // (v5) what the sun sees of it: the body and the glasshouse in fewer points (lowerBody's lo); the
+  // lamps, the trims and the plates are inside its shadow by less than a texel
+  const ghLo = glassHouse(K, true);
+  const sunBody = merge([lowerBody(K, true).toNonIndexed(), ghLo.roof, ghLo.frames, ghLo.glass]);
+  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside, sunBody };
 }
 
 // (ROADMAP 4.6) a point on a car's side, from a picture of it from the side: z along it (forward),
@@ -560,6 +568,8 @@ class Pool {
     this.mesh.frustumCulled = false;
     this.mesh.count = 0;
     this.mesh.userData.dynamic = true;
+    // (v5: the cars are drawn before the city, as the people are: render/people.js)
+    this.mesh.renderOrder = -1;
     scene.add(this.mesh);
     this.n = 0;
     // (the smart drawing: where each was a frame ago)
@@ -788,10 +798,10 @@ export class CarRenderer {
       shell.setAttribute('aId', new THREE.BufferAttribute(ids, 1));
       shell.setAttribute('aMat', new THREE.BufferAttribute(rows, 1));
       shell.setAttribute('aTint', new THREE.BufferAttribute(tint, 1));
-      // (what the sun sees of a car: all its parts in one shape, drawn with the shell's own
-      // instances - every part of a car has the car's matrix - so a kind of car is one draw in
-      // the sun's view)
-      const sun = byCorners(merge([b.body, b.glass, b.tail, b.head, b.trim, b.plate]));
+      // (what the sun sees of a car: its body and glasshouse in one shape, in fewer points (build's
+      // sunBody), drawn with the shell's own instances - every part of a car has the car's matrix -
+      // so a kind of car is one draw in the sun's view)
+      const sun = byCorners(b.sunBody);
       const P = (this.kinds[kind] = {
         b,
         shell: new Pool(scene, shell, shellPen, n, true),

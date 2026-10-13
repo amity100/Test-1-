@@ -239,6 +239,8 @@ float sunShadow(vec3 wp, vec3 n) {
   // the edge of the box blends into the city's own shadow so it never shows
   vec2 e = min(s.xy, 1.0 - s.xy);
   float fade = smoothstep(0.0, 0.08, min(e.x, e.y));
+  // (v5: well inside the box the city's far map is not looked up at all: it would be mixed in by 0)
+  if (fade >= 1.0) return v * 0.25;
   return mix(sunShadowFar(wp, n), v * 0.25, fade);
 }
 
