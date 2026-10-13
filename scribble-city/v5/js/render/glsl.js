@@ -744,10 +744,16 @@ void main() {
   loadPen();
 #endif
   // rubbed out: a prop crumbling away, a hole in a wall, a hole in somebody
+  // (v5, SOLID: a piece of the still city that has none of these now, render/solid.js: no pixel
+  // of it is thrown away, so the graphics card can leave out what is hidden before the pens are
+  // worked out. A shader that may throw one away makes most phones work out every pixel of every
+  // triangle, hidden or not)
+#ifndef SOLID
   if (vGone > 0.0 && n2(vWP.xz * 3.1 + vWP.y * 5.7) * 0.7 + n2(vWP.xy * 9.3) * 0.3 < vGone * 1.12) discard;
   if (uErasable > 0.5 && uWEraseN > 0.5 && erasedAt(vWP) > 0.5) discard;
   if (vX.x > 0.5 && inPersonHole(vX.x, vWP)) discard;
   if (vX.w < 0.5 && dot(vClip.xyz, vClip.xyz) > 0.0 && dot(vWP, vClip.xyz) > vClip.w) discard;
+#endif
 #ifdef USE_CABIN
   // (the car you drive, iX.z = -1: its side windows down, and the trim under them; both are
   // marked v = 1 in their uv, render/cars.js. ROADMAP 4.5)
@@ -801,7 +807,9 @@ void main() {
       tex.a *= 1.0 + max(0.0, lod) * 0.3;
     }
   }
+#ifndef SOLID
   if (tex.a < uAlphaTest) discard;
+#endif
   // (the street's depth first, render/pipeline.js: here only how near the surface is counts; its
   // pens are worked out afterwards, once, if it is the one that is seen)
   if (uDepthOnly > 0.5) {

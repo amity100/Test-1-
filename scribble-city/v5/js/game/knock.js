@@ -3,6 +3,9 @@ import { groundHeight, WATER_X, PROM_X1 } from '../world/layout.js';
 import { Batch, nextId } from '../world/kit.js';
 import { cityMaterials } from '../world/mats.js';
 import { srgb } from '../render/materials.js';
+// (a piece of the still city may wear a twin of its pen without the scissors, render/solid.js: a
+// thing made from it takes its own pen)
+import { ownPen } from '../render/solid.js';
 
 // (ROADMAP 8.3, not with ?classic) The street's light things fly when a car hits them: trash cans
 // and trash bags, benches, newspaper boxes, mailboxes, the crates in the alleys. The prop leaves
@@ -183,7 +186,7 @@ export class Knock {
       }
       geo.setIndex(tri);
       geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, m.material);
+      const mesh = new THREE.Mesh(geo, ownPen(m.material));
       mesh.layers.mask = m.layers.mask;
       mesh.userData.pens = m.userData.pens;
       meshes.push(mesh);
@@ -474,7 +477,7 @@ export class Knock {
       }
       piece(a, r.zb);
     }
-    this.railMesh = B.flush(src.parent, { static: true, merge: (mat) => (mat === M.rail ? src.material : null) });
+    this.railMesh = B.flush(src.parent, { static: true, merge: (mat) => (mat === M.rail ? ownPen(src.material) : null) });
     for (const m of this.railMesh) {
       m.layers.mask = src.layers.mask;
       m.userData.pens = src.userData.pens;
@@ -505,7 +508,7 @@ export class Knock {
       g.translate(0, r.y + 0.15 - cy, (a + b) / 2 - cz);
       B.add(M.rail, g, null, nextId(), { color: RAIL_COLOR, chunk: 'piece' });
     }
-    const parts = B.flush(new THREE.Group(), { merge: (mat) => (mat === M.rail ? src.material : null) });
+    const parts = B.flush(new THREE.Group(), { merge: (mat) => (mat === M.rail ? ownPen(src.material) : null) });
     for (const m of parts) m.layers.mask = src.layers.mask;
     return this.piece('railing', parts, new THREE.Vector3(RAIL_X, cy, cz), new THREE.Vector3(0.1, 0.6, Math.max(0.3, len / 2)));
   }
@@ -802,7 +805,7 @@ export class Knock {
     const T = this.coneTpl || (this.coneTpl = this.makeCone());
     if (!T) return null;
     const meshes = T.parts.map((m) => {
-      const c = new THREE.Mesh(m.geometry, m.material);
+      const c = new THREE.Mesh(m.geometry, ownPen(m.material));
       c.layers.mask = m.layers.mask;
       return c;
     });
@@ -832,7 +835,7 @@ export class Knock {
     add(new THREE.CylinderGeometry(0.035, 0.17, 0.62, 12), 0.35, srgb(1.0, 0.36, 0.06));
     add(new THREE.CylinderGeometry(0.106, 0.126, 0.11, 12), 0.38, srgb(0.96, 0.96, 0.94));
     add(new THREE.BoxGeometry(0.42, 0.04, 0.42), 0.02, srgb(0.12, 0.12, 0.14));
-    const parts = B.flush(new THREE.Group(), { merge: (mat) => (mat === M.propCyl ? src.material : null) });
+    const parts = B.flush(new THREE.Group(), { merge: (mat) => (mat === M.propCyl ? ownPen(src.material) : null) });
     for (const m of parts) m.layers.mask = src.layers.mask;
     return { parts, geo: parts[0] ? parts[0].geometry : null, half: new THREE.Vector3(0.21, 0.33, 0.21) };
   }

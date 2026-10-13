@@ -406,7 +406,8 @@ export class Perf {
     g.pipe.taaFrac = 0.67;
     g.player.invuln = 1e9;
     this.toggle(this.on);
-    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בלי לגעת…', 'info', 3);
+    // (v5: and at the very end a few seconds with the picture still, each pass timed on its own)
+    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בסוף התמונה עומדת כמה שניות. בלי לגעת…', 'info', 4);
   }
 
   // where the camera is at distance d along the route (Catmull-Rom through the points)
@@ -486,6 +487,12 @@ export class Perf {
     s.t = 0;
     s.frames = [];
     if (s.i >= STILL.length) {
+      // (v5) and each pass on its own, timed straight (render/pipeline.js profile)
+      try {
+        b.stages = this.stages();
+      } catch (e) {
+        b.stages = null;
+      }
       this.endBench();
       return;
     }
@@ -495,6 +502,17 @@ export class Perf {
     else if (what === 'shadow') pipe.noSunPass = true;
     else if (what === 'life') pipe.hideLife = true;
     else if (what === 'draw') b.noDraw = true;
+  }
+
+  // the passes timed one by one where the test stands (as the game draws it: the sun's box ahead of
+  // the camera)
+  stages() {
+    const g = this.game;
+    const cam = g.camera;
+    cam.updateMatrixWorld();
+    const f = cam.getWorldDirection(this._f || (this._f = new THREE.Vector3()));
+    const c = cam.position;
+    return g.pipe.profile(new THREE.Vector3(c.x + f.x * 35, 0, c.z + f.z * 35));
   }
 
   stillStep(dt) {
@@ -536,6 +554,8 @@ export class Perf {
       device = '';
     }
     const c = g.renderer.domElement;
+    const st = b.stages;
+    const ms = (v) => (v || 0).toFixed(1);
     const lines = [
       `עיר השרבוטים — מסלול מבחן (${Math.round(b.secs)} שניות, ${b.frames.length} פריימים)`,
       `מכשיר: ${device || 'לא ידוע'}`,
@@ -548,7 +568,9 @@ export class Perf {
       `מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${b.cpu[0].toFixed(1)}, בסוף ${b.cpu[1].toFixed(1)} · כרטיס מסך בהתחלה ${b.gpuMs[0].toFixed(1)}, בסוף ${b.gpuMs[1].toFixed(1)}`,
       b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד',
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
-      `עומק קודם: ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (נבדק: עם ${g.depthTrial.result.on}ms, בלי ${g.depthTrial.result.off}ms)` : ''}`,
+      `עומק קודם: ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (נבדק: עם ${g.depthTrial.result.on}ms, בלי ${g.depthTrial.result.off}ms)` : ''} · עומק הקירות קודם: ${g.pipe.wallsFirst && g.pipe.walls ? 'כן' : 'לא'}`,
+      st ? `כל שלב לבד, נמדד ישירות בסוף (ms): צל ${ms(st.shadow)} · השתקפות ${ms(st.reflection)} · ציור ${ms(st.main)} · דיו ${ms(st.ink)} · זוהר ${ms(st.glow)} · סיום ${ms(st.final)} · פריים שלם ${ms(st.frame)}` : 'כל שלב לבד: המדידה לא הצליחה',
+      st ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)} · ב-1/16 מהפיקסלים ${ms(st.tiny)} · ${g.pipe.wallsFirst ? 'בלי' : 'עם'} עומק הקירות קודם ${ms(st.walls)} · ${g.pipe.depthFirst ? 'בלי' : 'עם'} עומק קודם מלא ${ms(st.flip)}${st.kill !== undefined ? ` · בחומרים הישנים (עם discard) ${ms(st.kill)}` : ''}` : '',
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
       `לפי מעבר: ${PASSES.filter((p) => s.pass[p] !== undefined).map((p) => `${PASS_HE[p]} ${Math.round(s.pass[p])}`).join(' · ')}`,

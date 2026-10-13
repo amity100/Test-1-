@@ -140,6 +140,14 @@ async function boot() {
     const pieces = world.group.children.filter((o) => o.isMesh && !skip.has(o));
     pipe.setOcclusion(world.occluders, pieces, () => world.objects.spots);
   }
+  // (v5) the walls' depth first, alone: their backs and what is behind them are not worked out
+  // with the pens (render/pipeline.js setWalls: off for now, timed by the test route; ?walls: on)
+  pipe.setWalls(world.group);
+  if (params.has('walls')) pipe.wallsFirst = true;
+  // (v5) and the still city's pens without their scissors wherever nothing of them is rubbed out
+  // or crumbling: the graphics card leaves out what is hidden before the pens are worked out
+  // (render/solid.js; ?nosolid: as it was)
+  if (!params.has('nosolid')) pipe.setSolid(world.group, () => world.objects.spots, () => world.objects.fading.length > 0);
   setStatus('מסמנים דרכים…');
   await frame();
   world.buildNav();
@@ -147,8 +155,12 @@ async function boot() {
   // (the graphics card compiles them side by side where it can, and the page stays alive)
   setStatus('מכינים את העטים…');
   try {
-    if (renderer.compileAsync && renderer.extensions.has('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
-    else renderer.compile(scene, camera);
+    if (renderer.compileAsync && renderer.extensions.has('KHR_parallel_shader_compile')) {
+      await renderer.compileAsync(scene, camera);
+      // (the still city's own pens, with their scissors, for the first rubbed-out spot: in the
+      // background, render/solid.js)
+      if (pipe.solid) renderer.compileAsync(pipe.solid.standIns(), camera).catch(() => {});
+    } else renderer.compile(scene, camera);
   } catch (err) {
     console.warn('precompile failed', err);
   }

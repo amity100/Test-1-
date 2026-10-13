@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { shared, BLANK, LAYERS } from './materials.js';
 import { Occlusion } from './occlusion.js';
 import { motion, motionUpload } from './motion.js';
+import { Solid } from './solid.js';
 
 // One frame of the drawing:
 //  1. the sun's view of the street (shadows)
@@ -626,6 +627,17 @@ export class Pipeline {
     this.depthFirst = false;
     this.depthFixed = false;
     this.mainTimer = null;
+    // (v5) without it, the walls' depth alone first (setWalls): the still city's walls are drawn
+    // from both sides, and their backs, the floors and ceilings inside them and whatever stands
+    // behind them are worked out with the pens and then drawn over (at the test route's spot a
+    // pixel that passes the depth test is worked out 1.49 times on average; with the walls first
+    // 1.13). Off for now: on the software card the pass of its own costs more than it saves, and
+    // with the pens that throw nothing away (setSolid) a phone's card leaves out what is hidden by
+    // itself. The test route times it both ways on the device (profile); ?walls: on
+    this.wallsFirst = false;
+    this.walls = 0;
+    // (v5) the still city's pens without their scissors where nothing is rubbed out (setSolid)
+    this.solid = null;
     // where the camera was when the mirror under the street was last drawn (render)
     this._mirrorAt = { p: new THREE.Vector3(1e9, 0, 0), d: new THREE.Vector3() };
     // the sun's view of the whole city, made once (see bakeFarShadows)
@@ -839,6 +851,36 @@ export class Pipeline {
     };
     visit(root);
     this.mirrorLayered = true;
+  }
+
+  // (v5) The still city's double-sided walls (the pen of the walls, drawn from both sides so a
+  // hole rubbed in one shows the inside): their depth is drawn alone before the picture (render).
+  // Then only the face of a wall that is seen is worked out with the pens, not its back, the floors
+  // and ceilings inside it or what stands behind it. The picture is the same: what is in front of
+  // a wall or on it is drawn as before, in the same order, and the wall itself again at the very
+  // depth it left (the same draw, the same program).
+  setWalls(root) {
+    let n = 0;
+    root.traverse((o) => {
+      if (!o.isMesh || o.userData.dynamic || Array.isArray(o.material)) return;
+      const m = o.material;
+      if (m.side !== THREE.DoubleSide || m.transparent || !m.depthWrite || !m.uniforms || !m.uniforms.uKind || m.uniforms.uKind.value !== 0) return;
+      o.layers.enable(LAYERS.WALLS);
+      n++;
+    });
+    this.walls = n;
+  }
+
+  // (v5) the still city's pieces in pens that throw no pixel away, wherever nothing of them can be
+  // (render/solid.js): spots(), the rubbed-out spots; fading(), is a prop crumbling away
+  setSolid(root, spots, fading) {
+    this.solid = new Solid();
+    this.solid.setup(root, spots, fading);
+    // (three.js draws what is solid pen by pen, in the order the pens were made: a twin is drawn
+    // where its own pen would be, so where two surfaces lie at the same depth the same one is
+    // drawn last, and seen, as before. Otherwise its own sort, painterSortStable)
+    const pen = (m) => (m.solidOf || m).id;
+    this.r.setOpaqueSort((a, b) => a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder || pen(a.material) - pen(b.material) || a.z - b.z || a.id - b.id);
   }
 
   // What is behind the buildings is left out (render/occlusion.js): boxes, the buildings' bodies;
@@ -1340,6 +1382,7 @@ export class Pipeline {
     const r = this.r;
     const T = this.timer;
     this.ensure();
+    if (this.solid) this.solid.update();
     r.autoClear = true;
     const taa = this.taa;
     if (taa) this.taaBegin();
@@ -1381,27 +1424,7 @@ export class Pipeline {
     if (T) T.begin('main');
     const mt = T ? null : this.mainTimer;
     if (mt) mt.begin(this.depthFirst ? 'on' : 'off');
-    this.occlude(this.camera);
-    r.setRenderTarget(this.gRT);
-    r.clear();
-    if (this.depthFirst) {
-      const buf = r.state.buffers;
-      r.autoClear = false;
-      shared.uDepthOnly.value = 1;
-      buf.color.setMask(false);
-      buf.color.setLocked(true);
-      r.render(this.scene, this.camera);
-      buf.color.setLocked(false);
-      buf.color.setMask(true);
-      shared.uDepthOnly.value = 0;
-      buf.depth.setMask(false);
-      buf.depth.setLocked(true);
-      r.render(this.scene, this.camera);
-      buf.depth.setLocked(false);
-      buf.depth.setMask(true);
-      r.autoClear = true;
-    } else r.render(this.scene, this.camera);
-    this.unocclude();
+    this.drawMain();
     if (mt) mt.end();
     if (T) T.end();
     // 4. the ink
@@ -1471,24 +1494,8 @@ export class Pipeline {
     }
     // 5. glow
     if (T) T.begin('glow');
-    const b = this.mBright.uniforms;
-    b.tSrc.value = src;
-    b.uTexel.value.set(1 / sw.x, 1 / sw.y);
-    this.pass(this.mBright, this.mips[0]);
-    for (let i = 1; i < this.mips.length; i++) {
-      const src = this.mips[i - 1];
-      this.mDown.uniforms.tSrc.value = src.texture;
-      this.mDown.uniforms.uTexel.value.set(1 / src.width, 1 / src.height);
-      this.pass(this.mDown, this.mips[i]);
-    }
-    let cur = this.mips[this.mips.length - 1];
-    for (let i = this.mips.length - 2; i >= 0; i--) {
-      this.mUp.uniforms.tSrc.value = cur.texture;
-      this.mUp.uniforms.tAdd.value = this.mips[i].texture;
-      this.mUp.uniforms.uTexel.value.set(0.5 / cur.width, 0.5 / cur.height);
-      this.pass(this.mUp, this.ups[i]);
-      cur = this.ups[i];
-    }
+    this._glowSize = sw;
+    const cur = this.drawGlow(src, sw);
     if (T) T.end();
     const f = this.mFinal.uniforms;
     f.tSrc.value = src;
@@ -1513,6 +1520,138 @@ export class Pipeline {
     // (the things that move on their own: the next frame's rows, render/motion.js)
     motion.gen++;
     motion.on = taa;
+  }
+
+  // 3. the drawing itself (render)
+  drawMain() {
+    const r = this.r;
+    const cam = this.camera;
+    this.occlude(cam);
+    r.setRenderTarget(this.gRT);
+    r.clear();
+    if (this.depthFirst) {
+      const buf = r.state.buffers;
+      r.autoClear = false;
+      shared.uDepthOnly.value = 1;
+      buf.color.setMask(false);
+      buf.color.setLocked(true);
+      r.render(this.scene, cam);
+      buf.color.setLocked(false);
+      buf.color.setMask(true);
+      shared.uDepthOnly.value = 0;
+      buf.depth.setMask(false);
+      buf.depth.setLocked(true);
+      r.render(this.scene, cam);
+      buf.depth.setLocked(false);
+      buf.depth.setMask(true);
+      r.autoClear = true;
+    } else if (this.wallsFirst && this.walls) {
+      // (v5) the walls' depth alone first (setWalls), then the picture as it always was
+      const buf = r.state.buffers;
+      const mask = cam.layers.mask;
+      r.autoClear = false;
+      shared.uDepthOnly.value = 1;
+      buf.color.setMask(false);
+      buf.color.setLocked(true);
+      cam.layers.mask = 1 << LAYERS.WALLS;
+      r.render(this.scene, cam);
+      cam.layers.mask = mask;
+      buf.color.setLocked(false);
+      buf.color.setMask(true);
+      shared.uDepthOnly.value = 0;
+      r.render(this.scene, cam);
+      r.autoClear = true;
+    } else r.render(this.scene, cam);
+    this.unocclude();
+  }
+
+  // 5. the glow of what is bright in the picture src (its size sw): the last of its levels
+  drawGlow(src, sw) {
+    const b = this.mBright.uniforms;
+    b.tSrc.value = src;
+    b.uTexel.value.set(1 / sw.x, 1 / sw.y);
+    this.pass(this.mBright, this.mips[0]);
+    for (let i = 1; i < this.mips.length; i++) {
+      const m = this.mips[i - 1];
+      this.mDown.uniforms.tSrc.value = m.texture;
+      this.mDown.uniforms.uTexel.value.set(1 / m.width, 1 / m.height);
+      this.pass(this.mDown, this.mips[i]);
+    }
+    let cur = this.mips[this.mips.length - 1];
+    for (let i = this.mips.length - 2; i >= 0; i--) {
+      this.mUp.uniforms.tSrc.value = cur.texture;
+      this.mUp.uniforms.tAdd.value = this.mips[i].texture;
+      this.mUp.uniforms.uTexel.value.set(0.5 / cur.width, 0.5 / cur.height);
+      this.pass(this.mUp, this.ups[i]);
+      cur = this.ups[i];
+    }
+    return cur;
+  }
+
+  // (v5, the test route) How long each pass takes on this device, by the wall clock: each drawn
+  // a few times in a row, the graphics card waited for before and after (a phone's browser has no
+  // clock on the card). The drawing also without the people and the cars, at a sixteenth of its
+  // pixels (what its points and draws cost by themselves), with the walls' depth first the other
+  // way round, with the whole depth first the other way round, and in the pens that may throw
+  // pixels away (setSolid). center: as for render, right after a frame. ms, the least of two.
+  profile(center, reps = 6) {
+    const r = this.r;
+    const T = this.timer;
+    this.timer = null;
+    if (!this._syncRT) this._syncRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const px = new Uint8Array(4);
+    const sync = () => {
+      r.setRenderTarget(this._syncRT);
+      r.clear();
+      r.readRenderTargetPixels(this._syncRT, 0, 0, 1, 1, px);
+    };
+    const time = (fn) => {
+      let best = Infinity;
+      for (let k = 0; k < 2; k++) {
+        sync();
+        const t0 = performance.now();
+        for (let i = 0; i < reps; i++) fn();
+        sync();
+        best = Math.min(best, (performance.now() - t0) / reps);
+      }
+      return best;
+    };
+    const out = {};
+    out.shadow = time(() => this.renderShadows(center));
+    out.reflection = this.reflections ? time(() => this.renderReflection()) : 0;
+    out.main = time(() => this.drawMain());
+    const life = this.hideMoving().slice();
+    out.city = time(() => this.drawMain());
+    for (const o of life) o.visible = true;
+    const vp = this.gRT.viewport;
+    const keep = vp.clone();
+    vp.set(0, 0, Math.max(1, Math.floor(keep.z / 4)), Math.max(1, Math.floor(keep.w / 4)));
+    out.tiny = time(() => this.drawMain());
+    vp.copy(keep);
+    const wf = this.wallsFirst;
+    const df = this.depthFirst;
+    // (the walls' depth first the other way round from how it is, and the whole depth first)
+    this.wallsFirst = !wf;
+    this.depthFirst = false;
+    out.walls = this.walls ? time(() => this.drawMain()) : 0;
+    this.wallsFirst = wf;
+    this.depthFirst = !df;
+    out.flip = time(() => this.drawMain());
+    this.depthFirst = df;
+    // (and every piece in its own pen, the one that may throw pixels away: render/solid.js)
+    if (this.solid && this.solid.list.length) {
+      this.solid.forceFull = true;
+      this.solid.update();
+      out.kill = time(() => this.drawMain());
+      this.solid.forceFull = false;
+      this.solid.update();
+    }
+    out.ink = time(() => this.pass(this.mInk, this.inkRT));
+    out.glow = time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize));
+    out.final = time(() => this.pass(this.mFinal, null));
+    out.frame = time(() => this.render(center));
+    this.timer = T;
+    return out;
   }
 
   // (v5, the test route) the people, the cars and everything else drawn anew every frame, hidden

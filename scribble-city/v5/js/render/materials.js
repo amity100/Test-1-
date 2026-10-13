@@ -66,7 +66,9 @@ function holeTexture() {
 // only the sun sees (a car's parts in one shape, for its shadow)
 // (v5: AUX, what only the sun's view and the wet street's mirror see: the people's simple shapes
 // for those of them drawn in full in the picture, render/people.js)
-export const LAYERS = { MIRRORLESS: 1, SUN: 2, AUX: 3 };
+// (v5: WALLS, the still city's double-sided walls, whose depth is drawn alone before the picture,
+// render/pipeline.js setWalls; no camera sees it but for that)
+export const LAYERS = { MIRRORLESS: 1, SUN: 2, AUX: 3, WALLS: 4 };
 
 // the table of the pens that share draws (see mergedSurface): a row of 6 texels per pen
 const TAB_W = 6;
