@@ -119,7 +119,7 @@ async function boot() {
     // (the shop windows' panes, last: ROADMAP 8.3)
     buildPanes(ctx);
   };
-  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 44, roofs: true, glass: true, fences: false });
+  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
 
   setStatus('השמש שוקעת על העיר…');

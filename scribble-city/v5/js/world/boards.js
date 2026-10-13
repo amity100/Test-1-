@@ -395,6 +395,15 @@ export function boardAtlas(more = null) {
   smallCell('police', (sk, c, w, h) => plate(sk, c, w, h, 'POLICE', '#2a4fa0', '#ffffff'));
   smallCell('pier', (sk, c, w, h) => plate(sk, c, w, h, 'PIER', '#ff8a3c'));
   smallCell('heli', (sk, c, w, h) => plate(sk, c, w, h, 'HELIPAD', '#f6f2e8'));
+  // (v5, the lots of the city: world/kits.js)
+  smallCell('parking', (sk, c, w, h) => plate(sk, c, w, h, 'PARKING', '#2a5fc0', '#ffffff'));
+  smallCell('pubpark', (sk, c, w, h) => plate(sk, c, w, h, 'PUBLIC PARKING', '#2a5fc0', '#ffffff'));
+  smallCell('forsale', (sk, c, w, h) => plate(sk, c, w, h, 'FOR SALE', '#f6f2e8', '#c8283c'));
+  smallCell('lease', (sk, c, w, h) => plate(sk, c, w, h, 'FOR LEASE', '#ffd23f'));
+  smallCell('usps', (sk, c, w, h) => plate(sk, c, w, h, 'POST OFFICE', '#f6f2e8', '#1e3c7a'));
+  smallCell('enter', (sk, c, w, h) => plate(sk, c, w, h, 'ENTER', '#3fa860', '#ffffff'));
+  smallCell('valet', (sk, c, w, h) => plate(sk, c, w, h, 'VALET', '#141418', '#ffd23f'));
+  smallCell('soon', (sk, c, w, h) => plate(sk, c, w, h, 'COMING SOON', '#f6f2e8', '#2a1a3a'));
   ATLAS = { texture: canvasTexture(canvas), rects, canvas };
   return ATLAS;
 }

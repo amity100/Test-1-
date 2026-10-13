@@ -525,7 +525,8 @@ function boards(ctx) {
     [0, 1, 'north', 'west', 'ad_gym'],
     [1, 4, 'south', 'east', 'ad_coffee'],
     // the machine guns that rub the city out, the parachute, more helicopters and another tank
-    [0, 0, 'south', 'east', 'bb_tippex'],
+    // (v5: the south end of that row is the post office's rotunda, world/kits.js)
+    [0, 0, 'north', 'east', 'bb_tippex'],
     [1, 3, 'south', 'west', 'bb_erasermg'],
     [0, 2, 'north', 'west', 'bb_paintmg'],
     [2, 0, 'north', 'west', 'bb_parachute'],
@@ -553,24 +554,40 @@ function boards(ctx) {
     const R = blockRect(col, row);
     // (the towers downtown are deeper than the rest)
     const D = col === 1 && row === 0 ? 18 : 16;
-    const x = rowSide === 'west' ? R.x0 + D / 2 : R.x1 - D / 2;
+    let x = rowSide === 'west' ? R.x0 + D / 2 : R.x1 - D / 2;
     const z = end === 'north' ? R.z0 : R.z1;
     const nz = end === 'north' ? -1 : 1;
-    wallBoard(ctx, x, CURB + (o.y || 6.4), z, 0, nz, cell, { w: o.w || 7.5 });
+    let w = o.w || 7.5;
+    let y = CURB + (o.y || 6.4);
+    // (v5: where the corner building's end wall really is, and how high, world/sobe.js)
+    const e = ctx.blockEnds && ctx.blockEnds[`${col},${row},${end},${rowSide}`];
+    if (e) {
+      x = (e.x0 + e.x1) / 2;
+      w = Math.min(w, e.x1 - e.x0 - 1.2);
+      // a wall too low (a row of shops of one floor) or none (the rotunda): up on its legs on the
+      // roof, at the edge over the street
+      if (!e.wall || e.top < CURB + 4.4 + w / 2 + 0.6 || w < 5) {
+        w = Math.min(o.w || 7.5, 8);
+        billboard(ctx, x, z - nz * 2.2, 0, nz, cell, { w, legH: 1.6, y0: e.top });
+        continue;
+      }
+      y = Math.min(y, e.top - w / 4 - 0.7);
+    }
+    wallBoard(ctx, x, y, z, 0, nz, cell, { w });
   }
-  // the gangs' alleys: the good stuff where it is dangerous
+  // the gangs' alleys: the good stuff where it is dangerous (against the alley's walls)
   {
     const R = blockRect(0, 0);
-    const ax = R.x0 + 16 + 6.5;
-    const p = near(ctx, ax + 4.6, R.z0 + 30, 0, 1, 1.0);
+    const a = ctx.alleys.find((q) => q.col === 0 && q.row === 0);
+    const p = near(ctx, a.x1 - 1.25, R.z0 + 30, 0, 1, 1.0);
     if (p) billboard(ctx, p[0], p[1], -1, 0, 'bb_rifle', { w: 6.5, legH: 2.6 });
   }
   {
     const R = blockRect(0, 3);
-    const ax = R.x0 + 16 + 6.5;
-    let p = near(ctx, ax - 4.6, R.z0 + 34, 0, 1, 1.0);
+    const a = ctx.alleys.find((q) => q.col === 0 && q.row === 3);
+    let p = near(ctx, a.x0 + 1.25, R.z0 + 34, 0, 1, 1.0);
     if (p) billboard(ctx, p[0], p[1], 1, 0, 'bb_bazooka', { w: 6.5, legH: 2.6 });
-    p = near(ctx, ax + 4.6, R.z1 - 26, 0, 1, 1.0);
+    p = near(ctx, a.x1 - 1.25, R.z1 - 26, 0, 1, 1.0);
     if (p) billboard(ctx, p[0], p[1], -1, 0, 'bb_minigun', { w: 6.5, legH: 2.6 });
   }
   // the motel's lot: the car (and the Star Motel's sign over it)

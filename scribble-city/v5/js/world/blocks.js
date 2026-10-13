@@ -1,15 +1,17 @@
 import * as THREE from 'three';
 import { srgb, hex, addLight } from '../render/materials.js';
 import { nextId, Facade } from './kit.js';
-import { decoBuilding, fbox, windowRows, neonSign, adQuad, roofBoard, FH, GROUND } from './deco.js';
-import { AD_IDS } from './ads.js';
+import { decoBuilding, fbox, windowRows, neonSign, adQuad, FH, GROUND } from './deco.js';
 import { skyscraper } from './skyline.js';
 import { palm } from './palms.js';
 import { slab } from './ground.js';
 import { BLOCK_TYPES, blockRect, westRect, CURB, AVES, STREETS, STREET_X0 } from './layout.js';
+import { sobeRow } from './sobe.js';
+import { strut } from './kits.js';
 
-// The rest of the city, block by block: a row of Art Deco shops along each avenue, back to back
-// with an alley between them, corner buildings turning onto the cross streets. Every block has a
+// The rest of the city, block by block: a row of buildings along each avenue, back to back with
+// an alley between them, corner buildings turning onto the cross streets (v5: each row cut into
+// real lots, each lot its own building, each avenue its own mix: world/sobe.js). Every block has a
 // character of its own (the hotels on the bay, the towers downtown, the motel, the market, the
 // alleys where the gangs hang out, a park of palms, a plaza with a fountain).
 
@@ -58,16 +60,23 @@ export const SHOP_NAMES = {
   boutique: ['Bella Boutique', 'Pink Closet'],
   arcade: ['Pixel Arcade', 'Joystick'],
 };
-const HOTELS = ['Hotel Coral', 'The Seabreeze', 'Hotel Aurora', 'Pink Pearl', 'Hotel Flamingo', 'Ocean Star', 'Hotel Riviera', 'The Driftwood'];
 // how often each kind of shop turns up
 const KIND_W = {
   cafe: 5, pizza: 4, grocery: 3, bagel: 3, icecream: 3, tacos: 2, sushi: 2, falafel: 2, shop: 3, hardware: 2, pharmacy: 2, laundry: 2,
   phones: 2, optics: 2, gym: 2, books: 2, flowers: 2, barber: 4, deli: 2, music: 2, diner: 2, juice: 2, surf: 2, boutique: 2, arcade: 1,
 };
 
+// (v5, ROADMAP 11.2) how deep a row of the city's own streets is: the alley between two of them a
+// lane of 7 m (the blocks with something of their own keep their 16 m)
+const DEEP = 19;
+// the avenue each row faces: a block's west row, its east row (col 2's east row is Ocean Drive's)
+const STREET_OF = [['meridian', 'washington'], ['washington', 'collins'], ['collins', null]];
+
 export function buildBlocks(ctx) {
   const r = ctx.rng;
   ctx.nameUse = new Map();
+  // (where the rows' end walls are on the cross streets, for the boards: world/streets.js)
+  ctx.blockEnds = ctx.blockEnds || {};
   // a fair deck of kinds: every kind turns up, the common ones more often
   const deck = [];
   for (const [k, w] of Object.entries(KIND_W)) for (let i = 0; i < w; i++) deck.push(k);
@@ -105,107 +114,6 @@ function look(ctx, o = {}) {
     signFont: r.pick(FONTS),
     floors: o.floors || r.int(o.minF || 2, o.maxF || 5),
   };
-}
-
-// split [a, b] into lots between min and max long
-function lots(r, a, b, min, max) {
-  const out = [];
-  let x = a;
-  while (x < b - 0.1) {
-    let w = r.range(min, max);
-    if (b - (x + w) < min) w = b - x;
-    out.push([x, x + w]);
-    x += w;
-  }
-  return out;
-}
-
-// One row of buildings along an avenue. side: +1 the row faces east (its front at x), -1 west.
-// z0..z1 the length of the row (north to south).
-function rowOfShops(ctx, x, z0, z1, side, o = {}) {
-  const r = ctx.rng;
-  const list = lots(r, z0, z1, o.min || 16, o.max || 27);
-  const out = [];
-  list.forEach(([a, b], i) => {
-    const L = b - a;
-    // facing east: u runs north (origin at the south end); facing west: u runs south
-    const f = side > 0 ? new Facade(x, b, 0, -1, 1, 0) : new Facade(x, a, 0, 1, -1, 0);
-    const first = i === 0;
-    const last = i === list.length - 1;
-    const lk = look(ctx, o);
-    const hotel = o.hotels && L >= 22 && r() < 0.75;
-    if (hotel) {
-      // (the hotels on the bay: tall, like the real ones)
-      lk.floors = r.int(7, 15);
-      lk.color = r.pick([WALLS[3], WALLS[10], WALLS[0], WALLS[6], WALLS[12]]);
-    }
-    // (a lot can be given to something special: the cinema, the club)
-    const special = o.special && o.special[i];
-    if (special) {
-      lk.floors = Math.max(lk.floors, special.floors || 3);
-      if (special.color) lk.color = special.color;
-      if (special.awning) lk.awning = special.awning;
-      if (special.signCol) lk.signCol = special.signCol;
-    }
-    const kind = special ? special.kind : hotel ? 'lobby' : o.kinds ? r.pick(o.kinds) : ctx.kindDeck();
-    const name = special ? special.name : hotel ? HOTELS[(ctx.hotelN = (ctx.hotelN || 0) + 1) % HOTELS.length] : ctx.nameFor(kind);
-    // the corners: north end and south end of the row
-    // (the lots run north to south; an east front's u runs north, a west front's south)
-    const north = first;
-    const south = last;
-    const sides = side > 0 ? { a: south && o.ends, b: north && o.ends } : { a: north && o.ends, b: south && o.ends };
-    const info = decoBuilding(ctx, {
-      f,
-      L,
-      D: o.depth || 16,
-      floors: lk.floors,
-      color: lk.color,
-      trim: lk.trim,
-      signCol: lk.signCol,
-      sign: special && special.noSign ? null : name,
-      signFont: lk.signFont,
-      awning: lk.awning,
-      hotel,
-      hotelWord: 'HOTEL',
-      fin: !hotel && r() < 0.6,
-      shop: { kind, name },
-      sides,
-      back: o.back !== false,
-      eyebrow: true,
-    });
-    if (special && special.front) special.front(ctx, f, L, info, lk);
-    if (hotel) rooftopName(ctx, f, L, info.top, name, lk.signCol);
-    // now and then a billboard on the roof, over the avenue
-    else if (!special && L >= 15 && lk.floors <= 4 && r() < 0.24) roofBoard(ctx, f, L, info.top, r.pick(AD_IDS));
-    info.z0 = a;
-    info.z1 = b;
-    out.push(info);
-  });
-  // where a building stands taller than its neighbour, the bare side wall above the neighbour's
-  // roof carries a big painted ad (the way the side walls of a real city do)
-  for (let i = 0; i + 1 < out.length; i++) {
-    const A = out[i];
-    const B = out[i + 1];
-    const tall = A.top > B.top ? A : B;
-    const low = tall === A ? B : A;
-    const free = tall.top - low.top;
-    if (free < 6.5 || r() < 0.25) continue;
-    const D = Math.min(A.D, B.D);
-    let w = Math.min(D - 3, 12);
-    let h = w / 2;
-    if (h > free - 1.6) {
-      h = free - 1.6;
-      w = h * 2;
-    }
-    if (w < 7) continue;
-    // (the shared wall is at the north end of B, the south end of A)
-    const z = A.z1;
-    const nz = tall === A ? 1 : -1;
-    const ax = x - side * D * 0.5;
-    const y = low.top + 1.0 + h / 2;
-    adQuad(ctx, ctx.M.adWall, ax, y, z + nz * 0.04, 0, nz, w, h, r.pick(AD_IDS));
-  }
-  return out;
 }
 
 // ------------------------------------------------------------------ the cinema and the club
@@ -347,53 +255,53 @@ export function rooftopName(ctx, f, L, top, name, col) {
 
 function buildBlock(ctx, col, row, type) {
   const R = blockRect(col, row);
-  const r = ctx.rng;
-  const M = ctx.M;
   const blvd = col === 2;
-  const D = 16;
-  // the alley between the rows, and its asphalt
-  const ax0 = R.x0 + D;
   // (v5: on Ocean Drive the hotels stand deeper, world/ocean.js; the alley behind them is narrow)
   const ocean = blvd && ctx.oceanDrive;
+  const special = type === 'park' || type === 'plaza' || type === 'motel' || type === 'towers' || type === 'market';
+  const D = ocean || special ? 16 : DEEP;
+  // the alley between the rows, and its asphalt
+  const ax0 = R.x0 + D;
   const ax1 = ocean ? R.x1 - 18.5 : R.x1 - D;
   const alley = { x0: ax0, x1: ax1, z0: R.z0, z1: R.z1, type, col, row };
   ctx.alleys.push(alley);
-  const eastOpt = blvd
-    ? { min: 18, max: 28, minF: 3, maxF: 6, hotels: type === 'hotels', ends: true }
-    : { min: 15, max: 26, minF: 2, maxF: 5, ends: true };
-  const westOpt = { min: 15, max: 26, minF: 2, maxF: 5, ends: true };
+  // a row of lots along the avenue on the block's west side (facing west) or east side
+  const rowOf = (rowSide, o = {}) => sobeRow(ctx, {
+    x: rowSide === 'west' ? R.x0 : R.x1, z0: R.z0, z1: R.z1, side: rowSide === 'west' ? -1 : 1, D,
+    street: STREET_OF[col][rowSide === 'west' ? 0 : 1], type, col, row, rowSide, back: true,
+    // (the post office on its corner, Washington and 13th; the arcade on Washington)
+    post: col === 0 && row === 0 && rowSide === 'east', arcade: col === 0 && row === 2 && rowSide === 'east', ...o,
+  });
   if (type === 'park') {
     park(ctx, R);
     return;
   }
   if (type === 'plaza') {
-    rowOfShops(ctx, R.x0, R.z0, R.z1, -1, westOpt);
+    rowOf('west');
     plaza(ctx, { x0: ax0, x1: R.x1, z0: R.z0, z1: R.z1 });
     return;
   }
   if (type === 'motel') {
-    rowOfShops(ctx, R.x0, R.z0, R.z1, -1, westOpt);
+    rowOf('west');
     motel(ctx, { x0: ax0, x1: R.x1, z0: R.z0, z1: R.z1 });
     return;
   }
   if (type === 'towers') {
     // downtown: two towers on the avenue side, shops on the other
-    rowOfShops(ctx, R.x0, R.z0, R.z1, -1, westOpt);
+    rowOf('west');
     towers(ctx, R);
     alleyGround(ctx, alley);
     return;
   }
   if (type === 'market') {
-    rowOfShops(ctx, R.x0, R.z0, R.z1, -1, { ...westOpt, depth: 13 });
-    rowOfShops(ctx, R.x1, R.z0, R.z1, 1, { ...eastOpt, depth: 13 });
+    rowOf('west', { D: 13 });
+    rowOf('east', { D: 13 });
     market(ctx, { x0: R.x0 + 13, x1: R.x1 - 13, z0: R.z0, z1: R.z1 });
     return;
   }
-  // a row along each avenue, the alley between them (on the boulevard: the cinema, the club)
-  if (col === 2 && row === 1) eastOpt.special = { 1: { kind: 'cinema', name: 'Bay Cinema', noSign: true, floors: 4, color: srgb(0.36, 0.16, 0.28), awning: srgb(0.62, 0.12, 0.2), signCol: '#ffd23f', front: cinemaFront } };
-  if (col === 2 && row === 3) eastOpt.special = { 1: { kind: 'bar', name: 'INK CLUB', noSign: true, floors: 3, color: srgb(0.16, 0.12, 0.22), awning: srgb(0.08, 0.06, 0.1), signCol: '#ff3fa4', front: clubFront } };
-  if (type !== 'first' && !ocean) rowOfShops(ctx, R.x1, R.z0, R.z1, 1, eastOpt);
-  rowOfShops(ctx, R.x0, R.z0, R.z1, -1, westOpt);
+  // a row along each avenue, the alley between them
+  if (type !== 'first' && !ocean) rowOf('east');
+  rowOf('west');
   alleyGround(ctx, alley);
   if (type === 'gang') alley.gang = true;
 }
@@ -419,6 +327,49 @@ function alleyGround(ctx, a) {
   }
   ctx.hideSpots.push({ x: (a.x0 + a.x1) / 2, z: a.z0 + 8, r: 2.2, kind: 'alley' });
   ctx.hideSpots.push({ x: (a.x0 + a.x1) / 2, z: a.z1 - 8, r: 2.2, kind: 'alley' });
+  // (v5) the power comes down the alley, the way it does behind every street in Miami: wooden
+  // poles along one wall, a crossarm and its insulators, the wires sagging from pole to pole, a
+  // transformer on every other one
+  if (a.x1 - a.x0 < 9) powerLine(ctx, a);
+}
+
+function powerLine(ctx, a) {
+  const M = ctx.M;
+  const r = ctx.rng;
+  const x = a.x0 + 0.45;
+  const wood = srgb(0.42, 0.33, 0.27);
+  const wire = srgb(0.12, 0.11, 0.14);
+  const H = 8.6;
+  const tops = [];
+  for (let z = a.z0 + 3, k = 0; z < a.z1 - 1; z += r.range(24, 30), k++) {
+    // (not where a dumpster or a crate stands)
+    if (ctx.col.pointInside(x, 1.0, z, 0.4)) z += 3;
+    const pole = new THREE.CylinderGeometry(0.11, 0.15, H, 8);
+    pole.translate(x, CURB + H / 2, z);
+    ctx.B.add(M.pole, pole, null, nextId(), { color: wood });
+    // the crossarm across the alley, and its three insulators
+    ctx.B.box(M.pole, x - 0.08, CURB + H - 0.55, z - 0.9, x + 0.08, CURB + H - 0.42, z + 0.9, nextId(), { color: wood });
+    for (const dz of [-0.75, 0, 0.75]) ctx.B.box(M.pole, x - 0.05, CURB + H - 0.42, z + dz - 0.05, x + 0.05, CURB + H - 0.22, z + dz + 0.05, nextId(), { color: srgb(0.55, 0.62, 0.6) });
+    if (k % 2 === 0) {
+      const can = new THREE.CylinderGeometry(0.32, 0.32, 0.95, 10);
+      can.translate(x + 0.42, CURB + H - 2.2, z);
+      ctx.B.add(M.pole, can, null, nextId(), { color: srgb(0.58, 0.6, 0.6) });
+    }
+    ctx.col.addCircle(x, z, 0.16, 0, CURB + H, 'pole');
+    tops.push(z);
+  }
+  // the wires, three of them, a little slack between the poles
+  for (let i = 0; i + 1 < tops.length; i++) {
+    for (const dz of [-0.75, 0, 0.75]) {
+      const y = CURB + H - 0.25;
+      const za = tops[i] + dz;
+      const zb = tops[i + 1] + dz;
+      const zm = (za + zb) / 2;
+      const sag = 0.55;
+      strut(ctx, M.rail, [x, y, za], [x, y - sag, zm], 0.05, wire);
+      strut(ctx, M.rail, [x, y - sag, zm], [x, y, zb], 0.05, wire);
+    }
+  }
 }
 
 export function dumpster(ctx, x, z, west) {
@@ -457,8 +408,8 @@ function trashBags(ctx, x, z) {
 // ------------------------------------------------------------------ the west edge of the city
 function westRow(ctx, row) {
   const R = westRect(row);
-  // the houses face Coral Ave; their backs are the edge of the city
-  rowOfShops(ctx, R.x1, R.z0, R.z1, 1, { min: 14, max: 24, minF: 2, maxF: 4, depth: 17, back: false, ends: true });
+  // the houses face Meridian Ave; their backs are the edge of the city
+  sobeRow(ctx, { x: R.x1, z0: R.z0, z1: R.z1, side: 1, D: 17, street: 'west', type: 'west', col: -1, row, rowSide: 'east', back: false });
 }
 
 // ------------------------------------------------------------------ downtown towers

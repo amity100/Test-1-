@@ -82,7 +82,16 @@ export function buildCity(scene, o = {}) {
   let penGroups = 0;
   buildGround(ctx);
   buildFirstBoulevard(ctx);
-  buildBlocks(ctx);
+  // (v5, ROADMAP 11.2: the city behind Ocean Drive throws dice of its own; Ocean Drive, the beach
+  // and the streets after it get the city's dice where the old rows of shops left them - 9296
+  // throws on - so they stay exactly as they were)
+  {
+    const dice = ctx.rng;
+    ctx.rng = seeded(20261013);
+    buildBlocks(ctx);
+    ctx.rng = dice;
+    for (let i = 0; i < 9296; i++) dice();
+  }
   // (v5) Ocean Drive: its hotels, its sidewalk cafés, the park, the dunes, the beach
   buildOceanDrive(ctx);
   if (o.streets !== false) buildStreets(ctx);

@@ -51,6 +51,7 @@ const COL = {
   plaza: '#f6d6b4',
   deck: '#d9a676',
   lot: '#d2cbd9',
+  vacant: '#e6d3ad',
   alley: '#ddd2dc',
   pool: '#86d4ea',
   shadow: 'rgba(27, 20, 48, 0.16)',
@@ -657,6 +658,24 @@ export class CityMap {
     for (const a of this.alleys) g.fillRect(a.x0, a.z0, a.x1 - a.x0, a.z1 - a.z0);
     // the motel's parking lot (its bays painted) and its pool
     for (const l of this.lots) {
+      // (v5: the city's own parking lots, their bays across them; the empty lots, dry ground)
+      if (l.kind) {
+        g.fillStyle = l.kind === 'vacant' ? COL.vacant : COL.lot;
+        g.fillRect(l.x0, l.z0, l.x1 - l.x0, l.z1 - l.z0);
+        if (l.kind === 'parking' && this.view.k > 2.4) {
+          g.strokeStyle = '#fffbf3';
+          g.lineWidth = 1.2 * px;
+          g.beginPath();
+          for (let z = l.z0 + 0.4; z < l.z1 - 0.4; z += 2.7) {
+            g.moveTo(l.x0 + 0.6, z);
+            g.lineTo(l.x0 + 5.2, z);
+            g.moveTo(l.x1 - 5.2, z);
+            g.lineTo(l.x1 - 0.6, z);
+          }
+          g.stroke();
+        }
+        continue;
+      }
       g.fillStyle = COL.lot;
       g.fillRect(l.x0 + 10, l.z0, l.x1 - l.x0 - 10, l.z1 - l.z0);
       if (this.view.k > 2.4) {
