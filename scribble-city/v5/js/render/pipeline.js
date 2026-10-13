@@ -38,9 +38,18 @@ uniform float uPR;
 uniform float uLineW;
 uniform mat4 uInvProj;
 uniform mat4 uCamWorld;
+// (the steady pace, DYN: the drawing made in the corner of its pictures, uUvK of each side of them;
+// looked up there, and never past its edge, as if the edge were the pictures' own)
+#ifdef DYN
+uniform vec2 uUvK;
+uniform vec2 uUvLo;
+#define TC(uv) (clamp(uv, uUvLo, 1.0 - uUvLo) * uUvK)
+#else
+#define TC(uv) (uv)
+#endif
 
 float linZ(vec2 uv) {
-  float d = texture(tDepth, uv).r;
+  float d = texture(tDepth, TC(uv)).r;
   float z = d * 2.0 - 1.0;
   return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear));
 }
@@ -55,7 +64,7 @@ float vn(vec2 p) { return textureLod(uNoise, (p + 0.5) / 256.0, 0.0).r; }
 // far: 0 near .. 1 far away, where the artist draws the shapes and leaves out most of the folds
 // and seams inside them (a small far thing drawn with every line would be a black knot)
 float edgeAt(vec2 uv, float r, float far, out float zc) {
-  vec4 a0 = texture(tAux, uv);
+  vec4 a0 = texture(tAux, TC(uv));
   float z0 = linZ(uv);
   zc = z0;
   if (a0.w < 0.01) return 0.0;
@@ -74,10 +83,10 @@ float edgeAt(vec2 uv, float r, float far, out float zc) {
   // what is behind them and between their parts stay)
   float person = step(0.955, a0.w) * step(a0.w, 0.985);
   float e = smoothstep(0.025, 0.09, lap / w0) * (0.45 + 0.55 * behind) * mix(1.0, behind, person);
-  vec4 al = texture(tAux, uv - ox);
-  vec4 ar = texture(tAux, uv + ox);
-  vec4 ad = texture(tAux, uv - oy);
-  vec4 au = texture(tAux, uv + oy);
+  vec4 al = texture(tAux, TC(uv - ox));
+  vec4 ar = texture(tAux, TC(uv + ox));
+  vec4 ad = texture(tAux, TC(uv - oy));
+  vec4 au = texture(tAux, TC(uv + oy));
   float dn = max(max(1.0 - dot(n0, nrm(al.xy)), 1.0 - dot(n0, nrm(ar.xy))), max(1.0 - dot(n0, nrm(ad.xy)), 1.0 - dot(n0, nrm(au.xy))));
   e = max(e, smoothstep(0.1, 0.32, dn) * 0.85 * (1.0 - 0.6 * far) * (1.0 - person));
   float id = max(max(step(0.002, abs(al.z - a0.z)) * step(z0, zl + 0.08), step(0.002, abs(ar.z - a0.z)) * step(z0, zr + 0.08)),
@@ -110,11 +119,11 @@ float lineAt(float tick, vec3 w, float far, float steady, float r, out float z) 
 // agree on where it is), and how far that is
 vec3 worldAt(vec2 uv, out float dist) {
   vec2 o = uTexel * 2.0 * uPR;
-  float d = texture(tDepth, uv).r;
-  d = min(d, texture(tDepth, uv + vec2(o.x, 0.0)).r);
-  d = min(d, texture(tDepth, uv - vec2(o.x, 0.0)).r);
-  d = min(d, texture(tDepth, uv + vec2(0.0, o.y)).r);
-  d = min(d, texture(tDepth, uv - vec2(0.0, o.y)).r);
+  float d = texture(tDepth, TC(uv)).r;
+  d = min(d, texture(tDepth, TC(uv + vec2(o.x, 0.0))).r);
+  d = min(d, texture(tDepth, TC(uv - vec2(o.x, 0.0))).r);
+  d = min(d, texture(tDepth, TC(uv + vec2(0.0, o.y))).r);
+  d = min(d, texture(tDepth, TC(uv - vec2(0.0, o.y))).r);
   vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
   v /= v.w;
   dist = -v.z;
@@ -122,14 +131,14 @@ vec3 worldAt(vec2 uv, out float dist) {
 }
 
 void main() {
-  vec4 c = texture(tColor, vUv);
+  vec4 c = texture(tColor, TC(vUv));
   float zn;
   vec3 w = worldAt(vUv, zn);
   float far = smoothstep(20.0, 130.0, zn);
   float steady = mix(1.0, 0.16, far);
   // (the boil: uBoil counts the redraws; each thing takes its own moment within one, by its id,
   // so its lines are redrawn when its clock says. Whole counts, ?classic: all at once)
-  float ph = fract(texture(tAux, vUv).z * 7.13);
+  float ph = fract(texture(tAux, TC(vUv)).z * 7.13);
   float tick = floor(uBoil + ph);
   float r = max(uLineW * uPR * mix(1.0, 0.6, far), 1.0);
   float z;
@@ -158,8 +167,16 @@ in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
 uniform sampler2D tSrc;
 uniform vec2 uTexel;
+// (the steady pace, DYN: the picture in the corner of the drawing's, as in the ink)
+#ifdef DYN
+uniform vec2 uUvK;
+uniform vec2 uUvLo;
+#define TC(uv) (clamp(uv, uUvLo, 1.0 - uUvLo) * uUvK)
+#else
+#define TC(uv) (uv)
+#endif
 vec3 pick(vec2 uv) {
-  vec4 c = texture(tSrc, uv);
+  vec4 c = texture(tSrc, TC(uv));
   float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   return c.rgb * clamp(smoothstep(1.1, 2.6, l) + c.a * 0.7, 0.0, 2.0);
 }
@@ -216,6 +233,14 @@ uniform vec2 uSrcTexel;
 uniform float uSharp;
 uniform sampler2D tRain;
 uniform float uRainOn;
+// (the steady pace, DYN: the picture in the corner of the drawing's, as in the ink)
+#ifdef DYN
+uniform vec2 uUvK;
+uniform vec2 uUvLo;
+#define TC(uv) (clamp(uv, uUvLo, 1.0 - uUvLo) * uUvK)
+#else
+#define TC(uv) (uv)
+#endif
 float aces1(float x) {
   return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
@@ -232,7 +257,7 @@ vec3 toSRGB(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
 vec3 grade(vec2 uv) {
-  vec3 s = texture(tSrc, uv).rgb;
+  vec3 s = texture(tSrc, TC(uv)).rgb;
   // (the smart drawing: the rain, drawn over the finished picture at its own size)
   if (uRainOn > 0.5) {
     vec4 rn = texture(tRain, uv);
@@ -481,6 +506,8 @@ const STATIC_SOON = 0.2;
 // slices, so the frames that draw one are only a little slower than the rest; one for the box
 // running out of room, in four)
 const STATIC_SLICES_CALM = 8;
+// (the steady pace, game/pace.js: every next map in eight slices, begun with more room left)
+const STATIC_SOON_STEADY = 0.35;
 // as the sun goes over, the shadows follow it in steps: the still city's map every 0.25 degree,
 // the far one every degree, each new map drawn in the background and faded in over FADE_MS
 const SUN_STEP = Math.cos((0.25 * Math.PI) / 180);
@@ -572,16 +599,31 @@ export class Pipeline {
     this.quad = new THREE.Mesh(tri, null);
     this.quad.frustumCulled = false;
     this.quadScene.add(this.quad);
-    const mk = (frag, uniforms) => new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: QUAD_VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+    const mk = (frag, uniforms, defines) => new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: QUAD_VERT, fragmentShader: frag, uniforms, ...(defines ? { defines } : {}), depthTest: false, depthWrite: false });
+    // (the steady pace, game/pace.js: the drawing made at dyn of its size, in the corner of pictures
+    // made big enough for the most it may be (dynMax); uvK: its share of them, uvLo: half its pixel)
+    this.steady = false;
+    this.dyn = 1;
+    this.dynMax = 1;
+    this.alloc = new THREE.Vector2(-1, -1);
+    this.uvK = new THREE.Vector2(1, 1);
+    this.uvLo = new THREE.Vector2();
+    const uvK = { value: this.uvK };
+    const uvLo = { value: this.uvLo };
     this.mInk = mk(INK_FRAG, {
       tColor: { value: null }, tAux: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() },
       uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uBoilPrev: { value: 0 }, uTaa: { value: 0 }, uPR: shared.uPR, uLineW: { value: 1 },
-      uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
+      uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uUvK: uvK, uUvLo: uvLo,
     });
-    this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+    this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo });
+    // (and the same three passes that look up the drawing in its corner: the same uniforms; only
+    // with the steady pace, so as it always was the passes are just what they were)
+    this.mInkD = mk(INK_FRAG, this.mInk.uniforms, { DYN: '' });
+    this.mBrightD = mk(BRIGHT_FRAG, this.mBright.uniforms, { DYN: '' });
+    this.mFinalD = mk(FINAL_FRAG, this.mFinal.uniforms, { DYN: '' });
     this.mTaa = mk(TAA_FRAG, {
       tCur: { value: null }, tDepth: { value: null }, tVel: { value: null }, tHist: { value: null }, tHistMeta: { value: null },
       uIn: { value: new THREE.Vector2() }, uOut: { value: new THREE.Vector2() }, uJit: { value: new THREE.Vector2() },
@@ -655,7 +697,7 @@ export class Pipeline {
   // the screen's pixels per CSS pixel, times the drawing's own scale (and its share of the
   // picture's, with the smart drawing)
   get pixelsPerCss() {
-    return this.r.getPixelRatio() * this.scale * (this.taa ? this.taaFrac : 1);
+    return this.r.getPixelRatio() * this.scale * (this.taa ? this.taaFrac : 1) * (this.steady ? this.dyn : 1);
   }
 
   ensure() {
@@ -668,33 +710,55 @@ export class Pipeline {
     const taa = this.taa;
     const f = taa ? this.taaFrac : 1;
     const s = _s2.set(Math.max(2, Math.round(ow * f)), Math.max(2, Math.round(oh * f)));
+    // (the steady pace, game/pace.js: the drawing's pictures made big enough for the most it may be,
+    // dynMax of its size, and the drawing made at dyn of it in their corner. Its size moves a pixel
+    // or two at a time, and nothing is made anew for it, nor anything gathered by the smart drawing
+    // lost: no jumps)
+    const nw = s.x;
+    const nh = s.y;
+    const dm = this.steady ? Math.max(1, this.dynMax) : 1;
+    const aw = dm > 1 ? Math.round(nw * dm) : nw;
+    const ah = dm > 1 ? Math.round(nh * dm) : nh;
+    const d = this.steady ? this.dyn : 1;
+    if (d !== 1) s.set(Math.min(aw, Math.max(2, Math.round(nw * d))), Math.min(ah, Math.max(2, Math.round(nh * d))));
     const k = s.x / ow;
+    // (without the smart drawing the picture is the drawing itself, whatever its size)
+    const kp = taa ? k : 1;
     shared.uPR.value = r.getPixelRatio() * this.scale * k;
-    shared.uPRo.value = r.getPixelRatio() * this.scale;
-    shared.uPxK.value = k;
-    shared.uMipBias.value = Math.log2(k);
+    shared.uPRo.value = r.getPixelRatio() * this.scale * (taa ? 1 : k);
+    shared.uPxK.value = kp;
+    shared.uMipBias.value = Math.log2(kp);
     shared.uResolution.value.set(s.x, s.y);
+    this.size.copy(s);
     const dispose = (t) => t && t.dispose();
-    if (!s.equals(this.size) || taa !== this._inTaa) {
-      this.size.copy(s);
+    if (aw !== this.alloc.x || ah !== this.alloc.y || nw !== this._nomW || nh !== this._nomH || taa !== this._inTaa) {
+      this.alloc.set(aw, ah);
+      this._nomW = nw;
+      this._nomH = nh;
       this._inTaa = taa;
       this.reflDone = false;
-      const w = s.x;
-      const h = s.y;
       dispose(this.gRT);
       dispose(this.reflRT);
       dispose(this.inkRT);
       // (the smart drawing: a third picture, how far each pixel moved since the last frame)
-      this.gRT = new THREE.WebGLRenderTarget(w, h, { count: taa ? 3 : 2, type: this.type, depthBuffer: true, depthTexture: new THREE.DepthTexture(w, h) });
+      this.gRT = new THREE.WebGLRenderTarget(aw, ah, { count: taa ? 3 : 2, type: this.type, depthBuffer: true, depthTexture: new THREE.DepthTexture(aw, ah) });
       for (const t of this.gRT.textures) {
         t.minFilter = THREE.NearestFilter;
         t.magFilter = THREE.NearestFilter;
         t.generateMipmaps = false;
       }
+      // (the mirror at its share of the drawing's own size, whatever dyn is)
       const rs = this.low ? 0.33 : 0.5;
-      this.reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(w * rs)), Math.max(2, Math.round(h * rs)), { type: this.type, depthBuffer: true });
-      this.inkRT = new THREE.WebGLRenderTarget(w, h, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+      this.reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(nw * rs)), Math.max(2, Math.round(nh * rs)), { type: this.type, depthBuffer: true });
+      this.inkRT = new THREE.WebGLRenderTarget(aw, ah, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     }
+    // the drawing in the corner of its pictures (the whole of them, as it always was, but with the
+    // steady pace); only there are they cleared
+    const sub = s.x !== aw || s.y !== ah;
+    this.corner(this.gRT, s, sub);
+    this.corner(this.inkRT, s, sub);
+    this.uvK.set(s.x / aw, s.y / ah);
+    this.uvLo.set(0.5 / s.x, 0.5 / s.y);
     if (ow === this.outSize.x && oh === this.outSize.y && taa === this._outTaa) return;
     this.outSize.set(ow, oh);
     this._outTaa = taa;
@@ -799,6 +863,13 @@ export class Pipeline {
     this.quad.material = mat;
     this.r.setRenderTarget(target);
     this.r.render(this.quadScene, this.quadCam);
+  }
+
+  // (the steady pace) a picture drawn into its corner of size s only (sub: less than the whole)
+  corner(rt, s, sub) {
+    rt.viewport.set(0, 0, s.x, s.y);
+    rt.scissor.set(0, 0, s.x, s.y);
+    rt.scissorTest = sub;
   }
 
   // The still city (root: its parts that never move; the ones that do are marked
@@ -1021,6 +1092,20 @@ export class Pipeline {
     const want = this.shadowDir;
     const b = this.stBuild;
     const left = this.staticLeft(cur, center, ver);
+    // (the steady pace: something rubbed out, with room enough left in the map: the map in use stays
+    // a few frames more, with what was rubbed out still in it, while the next one is drawn in eight
+    // slices, a frame each, and not whole in one frame)
+    if (left < 0 && this.steady && cur.on && cur.ver !== ver && this.staticRoom(cur, center) >= STATIC_SOON) {
+      if (b && b.ver === ver && b.sun.equals(cur.sun)) {
+        this.drawStatic(b, 1);
+        if (b.slice >= b.n) this.useStatic(b);
+        return;
+      }
+      // (the map fading out is the one the next is drawn into)
+      if (this.fade && this.fade.kind === 'static') this.endFade();
+      this.drawStatic(this.beginStatic(cur.sun, center, ver, STATIC_SLICES_CALM), 1);
+      return;
+    }
     if (left < 0) {
       // (a map fading out cannot be faded into one that has run out: stop it)
       if (this.fade) this.endFade();
@@ -1045,7 +1130,9 @@ export class Pipeline {
     }
     // (the map fading out is not free to be drawn into)
     if (this.fade && this.fade.kind === 'static') return;
-    if (left < STATIC_SOON) this.drawStatic(this.beginStatic(want, center, ver), 1);
+    // (the steady pace: the next map begun sooner, in eight slices, and not four)
+    if (this.steady && left < STATIC_SOON_STEADY) this.drawStatic(this.beginStatic(want, center, ver, STATIC_SLICES_CALM), 1);
+    else if (left < STATIC_SOON) this.drawStatic(this.beginStatic(want, center, ver), 1);
     else if (cur.sun.dot(want) < SUN_STEP) this.drawStatic(this.beginStatic(want, center, ver, STATIC_SLICES_CALM), 1);
   }
 
@@ -1053,6 +1140,11 @@ export class Pipeline {
   // hold it (or was drawn before something was rubbed out)
   staticLeft(m, center, ver) {
     if (!m.on || m.ver !== ver) return -1;
+    return this.staticRoom(m, center);
+  }
+
+  // (the same, whatever was rubbed out since it was drawn)
+  staticRoom(m, center) {
     const texel = (this.sunCam.right - this.sunCam.left) / this.shadowS;
     sunFrame(m.sun, _fx, _fy, _fz);
     const cx = Math.round(center.dot(_fx) / texel) * texel;
@@ -1441,7 +1533,7 @@ export class Pipeline {
     ink.uTaa.value = taa ? 1 : 0;
     ink.uBoilPrev.value = this.boilPrev;
     if (T) T.begin('ink');
-    this.pass(this.mInk, this.inkRT);
+    this.pass(this.steady ? this.mInkD : this.mInk, this.inkRT);
     if (T) T.end();
     const after = this.afterInk.children;
     let any = false;
@@ -1495,6 +1587,8 @@ export class Pipeline {
     // 5. glow
     if (T) T.begin('glow');
     this._glowSize = sw;
+    // (the steady pace without the smart drawing: the picture is the drawing, in its corner)
+    this._corner = this.steady && !taa;
     const cur = this.drawGlow(src, sw);
     if (T) T.end();
     const f = this.mFinal.uniforms;
@@ -1503,11 +1597,14 @@ export class Pipeline {
     f.uBloom.value = this.bloom;
     f.uExposure.value = this.exposure;
     f.uSrcTexel.value.set(1 / sw.x, 1 / sw.y);
-    f.uSharp.value = taa || this.scale < 0.99 ? 0.85 : 0.5;
+    let sharp = taa || this.scale < 0.99 ? 0.85 : 0.5;
+    // (the steady pace: the picture sharpened more as it is made smaller, a little at a time)
+    if (this._corner) sharp = 0.5 + 0.35 * Math.min(1, Math.max(0, (0.99 - this.scale * this.dyn) / 0.09));
+    f.uSharp.value = sharp;
     f.uRainOn.value = taa && any ? 1 : 0;
     f.tRain.value = taa && any ? this.rainRT.texture : BLANK;
     if (T) T.begin('final');
-    this.pass(this.mFinal, null);
+    this.pass(this._corner ? this.mFinalD : this.mFinal, null);
     if (this.overlay.children.length) {
       r.autoClear = false;
       r.setRenderTarget(null);
@@ -1570,7 +1667,7 @@ export class Pipeline {
     const b = this.mBright.uniforms;
     b.tSrc.value = src;
     b.uTexel.value.set(1 / sw.x, 1 / sw.y);
-    this.pass(this.mBright, this.mips[0]);
+    this.pass(this._corner ? this.mBrightD : this.mBright, this.mips[0]);
     for (let i = 1; i < this.mips.length; i++) {
       const m = this.mips[i - 1];
       this.mDown.uniforms.tSrc.value = m.texture;
@@ -1646,9 +1743,9 @@ export class Pipeline {
       this.solid.forceFull = false;
       this.solid.update();
     }
-    out.ink = time(() => this.pass(this.mInk, this.inkRT));
+    out.ink = time(() => this.pass(this.steady ? this.mInkD : this.mInk, this.inkRT));
     out.glow = time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize));
-    out.final = time(() => this.pass(this.mFinal, null));
+    out.final = time(() => this.pass(this._corner ? this.mFinalD : this.mFinal, null));
     out.frame = time(() => this.render(center));
     this.timer = T;
     return out;

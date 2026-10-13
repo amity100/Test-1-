@@ -2,7 +2,7 @@ import { hex } from '../render/materials.js';
 import { Facade } from './kit.js';
 import { decoBuilding, adQuad, roofBoard } from './deco.js';
 import { oceanHotel } from './hotels.js';
-import { shopStrip, apartments, mimo, modern, garage, parkingLot, vacantLot, postOffice } from './kits.js';
+import { shopStrip, apartments, mimo, modern, garage, parkingLot, vacantLot, postOffice, diner, museum } from './kits.js';
 import { rooftopName } from './blocks.js';
 import { AD_IDS } from './ads.js';
 import { CURB } from './layout.js';
@@ -18,6 +18,7 @@ import { CURB } from './layout.js';
 
 const HALF = 7.6; // half a lot: 25 feet
 const OPEN = new Set(['lot', 'vacant']);
+const LANDMARKS = new Set(['post', 'diner', 'museum']);
 
 // what each building takes (in half lots), whether it may stand on a corner, at most one a row
 const KIT = {
@@ -35,6 +36,9 @@ const KIT = {
   apt: { hw: [2, 3], corner: true },
   aptU: { hw: [3, 4], corner: true },
   post: { hw: [4], corner: true, once: true },
+  // (v5, ROADMAP 11.2ב: the landmarks of Washington Avenue, world/kits.js)
+  diner: { hw: [3], corner: true, once: true },
+  museum: { hw: [4], corner: true, once: true },
 };
 
 // how often each turns up on each avenue
@@ -193,8 +197,8 @@ function planRow(r, n, o) {
     return last;
   };
   const cornerOk = (k) => KIT[k].corner;
-  const north = o.north || pick(cornerOk);
-  const south = o.post ? 'post' : pick((k) => cornerOk(k) && k !== north && !(KIT[k].once && k === north));
+  const north = o.diner ? 'diner' : o.north || pick(cornerOk);
+  const south = o.post ? 'post' : o.museum ? 'museum' : pick((k) => cornerOk(k) && k !== north && !(KIT[k].once && k === north));
   const out = [{ kind: north, w: r.pick(KIT[north].hw) }];
   const last = { kind: south, w: r.pick(KIT[south].hw) };
   const used = new Set([north, south]);
@@ -232,14 +236,17 @@ function planRow(r, n, o) {
   for (let i = 1; i < out.length; i++) {
     if (out[i].kind !== out[i - 1].kind) continue;
     const j = i === out.length - 1 ? i - 1 : i;
-    if (j === 0) continue;
+    if (j === 0 || LANDMARKS.has(out[j].kind)) continue;
     const a = out[j - 1] ? out[j - 1].kind : null;
     const b = out[j + 1] ? out[j + 1].kind : null;
     const k = pick((q) => q !== a && q !== b && !cornerOnly.includes(q) && !(KIT[q].once && out.some((x) => x.kind === q)) && KIT[q].hw[0] <= out[j].w);
     if (k) out[j].kind = k;
   }
-  // (the arcade's row has a row of shops, or a shop under flats, to have it in)
-  if (o.arcade && !out.some((x) => x.kind === 'strip' || x.kind === 'deco')) out[0].kind = 'strip';
+  // (the arcade's row has a row of shops, or a shop under flats, to have it in; not a landmark's lot)
+  if (o.arcade && !out.some((x) => x.kind === 'strip' || x.kind === 'deco')) {
+    const i = out.findIndex((x) => !LANDMARKS.has(x.kind));
+    if (i >= 0) out[i].kind = 'strip';
+  }
   return out;
 }
 
@@ -432,6 +439,19 @@ const BUILD = {
     a.lot.noWall = true;
     a.lot.wall = '#f7eed1';
     return postOffice(ctx, { f: a.f, L: a.L, D: a.D, corner: a.corner.a ? 'a' : 'b' });
+  },
+
+  // (v5, ROADMAP 11.2ב) the silver diner on the corner of 11th, its little lot beside it
+  diner(ctx, a) {
+    a.lot.noWall = true;
+    a.lot.wall = '#cfd4dc';
+    return diner(ctx, { f: a.f, L: a.L, D: a.D, corner: a.corner.a ? 'a' : 'b', name: 'Silver Star Diner' });
+  },
+
+  // the museum's seven floors of stone on the corner of 9th, its carved door
+  museum(ctx, a) {
+    a.lot.wall = '#ecdcb8';
+    return museum(ctx, { f: a.f, L: a.L, D: a.D, corner: a.corner.a ? 'a' : 'b', sides: a.sides, back: a.env.back });
   },
 };
 

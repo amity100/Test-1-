@@ -94,10 +94,18 @@ export function palm(ctx, r, x, z, height, o = {}) {
   const id = ctx.objects ? ctx.objects.begin(ctx, 'tree', x, z) : 0;
   const { geo, top } = palmGeometry(height, lean);
   geo.translate(x, y0, z);
-  ctx.B.add(M.trunk, geo, null, nextId());
+  // (v5: a royal palm, o.royal its trunk's colour: smooth and grey, straight, a green shaft under
+  // its crown, no coconuts)
+  if (o.royal) ctx.B.add(M.pole, geo, null, nextId(), { color: o.royal });
+  else ctx.B.add(M.trunk, geo, null, nextId());
   const cx = x + top.x;
   const cy = y0 + top.y;
   const cz = z + top.z;
+  if (o.royal) {
+    const shaft = new THREE.CylinderGeometry(0.2, 0.27, 1.7, 10);
+    shaft.translate(cx, cy - 0.85, cz);
+    ctx.B.add(M.pole, shaft, null, nextId(), { color: new THREE.Color(0.2, 0.42, 0.16) });
+  }
   const n = 11;
   for (let k = 0; k < n; k++) {
     const len = r.range(4.2, 5.6);
@@ -117,7 +125,7 @@ export function palm(ctx, r, x, z, height, o = {}) {
     let vi = 0;
     ctx.B.add(M.frond, fg, null, nextId(), { sway: () => list[vi++] });
   }
-  for (let k = 0; k < 5; k++) {
+  for (let k = 0; k < (o.royal ? 0 : 5); k++) {
     const a = (k / 5) * Math.PI * 2;
     const nut = new THREE.SphereGeometry(0.17, 6, 4);
     nut.translate(cx + Math.cos(a) * 0.25, cy - 0.3, cz + Math.sin(a) * 0.25);

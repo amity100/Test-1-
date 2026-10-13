@@ -372,12 +372,47 @@ export function windowAt(ctx, f, uc, y0, y1, ww, o = {}) {
   fbox(ctx, f, M.frame, uc + ww / 2, y0, 0, uc + ww / 2 + 0.09, y1, 0.09, FRAME);
   fbox(ctx, f, M.frame, uc - ww / 2 - 0.09, y0, 0, uc - ww / 2, y1, 0.09, FRAME);
   fbox(ctx, f, M.frame, uc - ww / 2, y0 + 1.1, 0, uc + ww / 2, y0 + 1.16, 0.06, FRAME);
+  if (ctx.wear) lived(ctx, f, uc, y0, y1, ww);
+}
+
+// (v5, ROADMAP 11.2ב) The life behind a window of the city behind Ocean Drive (ctx.wear: its own
+// dice, so the city is built just as it was): the curtains drawn to a side or both, a blind half
+// down, now and then plywood where the glass was (where the gangs are), and under some sills a
+// rusty streak the rain has drawn down the wall
+const CURTAINS = [srgb(0.96, 0.92, 0.82), srgb(0.98, 0.98, 0.96), srgb(0.92, 0.7, 0.72), srgb(0.72, 0.82, 0.92), srgb(0.75, 0.9, 0.8), srgb(0.98, 0.88, 0.6), srgb(0.62, 0.2, 0.24), srgb(0.22, 0.26, 0.42)];
+function lived(ctx, f, uc, y0, y1, ww) {
+  const M = ctx.M;
+  const w = ctx.wear;
+  const q = w();
+  const u0 = uc - ww / 2;
+  const u1 = uc + ww / 2;
+  if (q < 0.17) {
+    const col = CURTAINS[Math.floor(w() * CURTAINS.length)];
+    const both = w() < 0.45;
+    const a = ww * (both ? 0.2 + w() * 0.12 : 0.3 + w() * 0.18);
+    if (both || w() < 0.5) fbox(ctx, f, M.frame, u0, y0 + 0.04, 0.012, u0 + a, y1 - 0.04, 0.02, col);
+    if (both || u0 + a > u0 + ww / 2 || w() < 0.5) fbox(ctx, f, M.frame, u1 - a, y0 + 0.04, 0.012, u1, y1 - 0.04, 0.02, col);
+  } else if (q < 0.29) {
+    const yb = y1 - (y1 - y0) * (0.3 + w() * 0.4);
+    const col = w() < 0.6 ? srgb(0.95, 0.92, 0.84) : srgb(0.86, 0.86, 0.84);
+    fbox(ctx, f, M.frame, u0, yb, 0.012, u1, y1, 0.02, col);
+    for (let v = yb + 0.12; v < y1 - 0.05; v += 0.14) fbox(ctx, f, M.frame, u0, v, 0.02, u1, v + 0.012, 0.024, col.clone().multiplyScalar(0.8));
+  } else if (q < 0.33 && ctx.wearGang) {
+    fbox(ctx, f, M.frame, u0 - 0.04, y0 - 0.02, 0.012, u1 + 0.04, y1 + 0.02, 0.05, srgb(0.66, 0.5, 0.34));
+  }
+  if (w() < 0.07) {
+    const sw = 0.06 + w() * 0.14;
+    const su = uc + (w() - 0.5) * ww * 0.6;
+    fbox(ctx, f, M.frame, su - sw / 2, y0 - 0.16 - (0.6 + w() * 1.0), 0.003, su + sw / 2, y0 - 0.16, 0.008, srgb(0.44, 0.38, 0.36));
+  }
 }
 
 // an air conditioner hanging under a window
 function airCon(ctx, f, uc, y0) {
   fbox(ctx, f, ctx.M.steel, uc - 0.38, y0 - 0.72, 0, uc + 0.38, y0 - 0.2, 0.5, srgb(0.86, 0.86, 0.9));
   fbox(ctx, f, ctx.M.frame, uc - 0.3, y0 - 0.64, 0.5, uc + 0.3, y0 - 0.28, 0.52, srgb(0.3, 0.3, 0.36));
+  // (v5, ROADMAP 11.2ב: what it drips has drawn a streak down the wall under it)
+  if (ctx.wear && ctx.wear() < 0.55) fbox(ctx, f, ctx.M.frame, uc - 0.06, y0 - 0.72 - (0.7 + ctx.wear() * 1.2), 0.003, uc + 0.04, y0 - 0.72, 0.008, srgb(0.45, 0.4, 0.37));
 }
 
 // a box of flowers on a window's sill

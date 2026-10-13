@@ -46,6 +46,7 @@ import { Phone } from '../ui/phone.js';
 import { GPS } from './gps.js';
 import { Settings } from '../core/settings.js';
 import { DepthTrial } from '../render/depthtrial.js';
+import { Pace } from './pace.js';
 import { Pad } from '../core/gamepad.js';
 import { SaveGame, SLOTS, SLOT_NAMES } from './save.js';
 import { Routines } from './routines.js';
@@ -140,6 +141,8 @@ export class Game {
     this.signals = new Signals(this);
     this.player = new Player(this);
     this.perf = new Perf(this);
+    // (the frames' pace: as many as can be, or a steady beat - game/pace.js, a choice in the settings)
+    this.pace = new Pace(this);
     this.civilians = new Civilians(this);
     this.enemies = new Enemies(this);
     this.weapons = new Weapons(this);
@@ -355,6 +358,8 @@ export class Game {
     // pixels and not with ?classic; ?taa=0 or ?taa=1 decides instead of the setting)
     const smartCan = !this.classic && this.pipe.hdr;
     const smartForced = this.params.has('taa') ? this.params.get('taa') !== '0' : null;
+    // (?pace=auto, 60, 30 or free decides instead of the setting)
+    const paceForced = this.params.has('pace') ? this.params.get('pace') : null;
     const dev = { boil: this.boilOn, reflections: this.pipe.reflections, quality: shared.uQuality.value > 0.5 };
     const pick = (k) => (S.v[k] === null ? dev[k] : S.v[k]);
     const apply = () => {
@@ -370,6 +375,7 @@ export class Game {
       this.pipe.reflections = pick('reflections');
       shared.uQuality.value = pick('quality') ? 1 : 0;
       this.pipe.taa = smartCan && (smartForced !== null ? smartForced : !!v.smart);
+      this.pace.setMode(paceForced !== null ? paceForced : v.pace);
       if (!!v.perf !== !!this.perf.on) this.perf.toggle(v.perf);
       // (every blueprint open, or found in the city: ROADMAP 9.1, not with ?classic)
       if (!this.classic) this.setAllOpen(v.allOpen);
@@ -390,6 +396,7 @@ export class Game {
       $('opt-magic').checked = pick('quality');
       $('opt-smart').checked = this.pipe.taa;
       $('opt-smart').disabled = !smartCan;
+      $('opt-pace').value = this.pace.mode;
       $('opt-perf').checked = v.perf;
     };
     const box = (id, k) => $(id).addEventListener('change', (e) => {
@@ -422,6 +429,10 @@ export class Game {
     box('opt-smart', 'smart');
     box('opt-perf', 'perf');
     box('opt-allbp', 'allOpen');
+    $('opt-pace').addEventListener('change', (e) => {
+      S.set('pace', e.target.value);
+      apply();
+    });
     // F3 keeps its choice too
     this.perf.onToggle = (on) => {
       if (!this.perf.bench) S.set('perf', on);
@@ -784,10 +795,44 @@ export class Game {
     let tried = null;
     const hold = { scale: { v: 0, at: -1e9, for: 0, ms: 0 }, taa: { v: 0, at: -1e9, for: 0, ms: 0 } };
     const held = (h, v, now, ms) => v <= h.v + 0.001 && now - h.at < h.for && ms < h.ms * 1.3;
-    const tick = () => {
+    const pace = this.pace;
+    const tick = (ts) => {
+      const perf = this.perf;
+      // (the steady pace instead, a choice in the settings, game/pace.js: a frame drawn on a fixed
+      // beat of the screen's refreshes, the game moved on by just that much, the drawing's
+      // resolution moving a little at a time. Not on the test route, measured as it always was)
+      pace.engage(pace.on && !perf.bench);
+      if (pace.engaged) {
+        const step = pace.beat(ts);
+        if (step > 0) {
+          this.clock.getDelta();
+          perf.frameStart();
+          this.update(step);
+          perf.afterUpdate();
+          const drawn = !this.citymap.covering;
+          if (drawn) this.renderFrame();
+          pace.sent(ts, performance.now(), drawn);
+          const real = pace.interval / 1000;
+          perf.frameEnd(real);
+          trial.frame(real, this.state === 'play', pace.cost);
+          pace.frozen = trial.busy;
+        }
+        requestAnimationFrame(tick);
+        return;
+      }
+      if (pace.justFreed) {
+        // (back from the steady pace: the resolution's own pace starts over, a few seconds on)
+        pace.justFreed = false;
+        acc = 0;
+        n = 0;
+        slow = 0;
+        fast = 0;
+        settle = 3;
+        tried = null;
+        pace.frozen = false;
+      }
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
-      const perf = this.perf;
       perf.frameStart();
       this.update(dt);
       perf.afterUpdate();

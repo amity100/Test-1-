@@ -1265,3 +1265,358 @@ export function postOffice(ctx, spec) {
   ctx.postOffice = { x: c[0], z: c[2], r: R };
   return info;
 }
+
+// ------------------------------------------------------------------ the silver diner
+/**
+ * (v5, ROADMAP 11.2ב) The diner on the corner of 11th, the way the real one came on a truck in the
+ * forties: a long body of stainless steel under a barrel roof, a band of windows round it over an
+ * enamel stripe, the doors in a little vestibule, DINER in neon on a frame over the roof. Inside the
+ * counter and the booths (world/rooms.js). Beside it, its own little lot.
+ * spec: { f, L, D, corner: 'a' | 'b' (the corner's end), name }
+ */
+export function diner(ctx, spec) {
+  const M = ctx.M;
+  const { f, L, D } = spec;
+  const steel = srgb(0.8, 0.83, 0.88);
+  const steel2 = srgb(0.68, 0.71, 0.77);
+  const stripe = srgb(0.86, 0.18, 0.24);
+  const info = { f, L, D, h: 4.3, top: CURB + 4.3, floors: 1, doors: [], shop: null, kit: 'diner' };
+  if (ctx.roofs) ctx.roofs.cur = null;
+  const Ld = Math.min(17.5, L - 6);
+  const atA = spec.corner !== 'b';
+  const u0 = atA ? 0.8 : L - 0.8 - Ld;
+  const u1 = u0 + Ld;
+  // the body's own front, set back from the sidewalk behind a step and a strip of planting
+  const back = 2.4;
+  const fd = shifted(f, -back);
+  const dep = 5.6;
+  const id = nextId();
+  const yB = CURB + 0.45;
+  const yW0 = CURB + 1.35;
+  const yW1 = CURB + 2.45;
+  const yT = CURB + 3.05;
+  // ---- the skirt, the panels, the stripe, the flutes
+  fbox(ctx, fd, M.frame, u0, CURB, -dep, u1, yB, 0.06, srgb(0.2, 0.22, 0.3), id);
+  fbox(ctx, fd, M.wall, u0, yB, -dep, u1, yW0, 0, steel, id);
+  fbox(ctx, fd, M.wall, u0, yW1, -dep, u1, yT, 0, steel, id);
+  fbox(ctx, fd, M.frame, u0, yW0 - 0.2, 0, u1, yW0 - 0.04, 0.04, stripe, id);
+  for (const v of [yB + 0.18, yB + 0.4, yB + 0.62]) fbox(ctx, fd, M.frame, u0, v, 0, u1, v + 0.035, 0.03, steel2, id);
+  for (const v of [yW1 + 0.12, yT - 0.12]) fbox(ctx, fd, M.frame, u0, v - 0.02, 0, u1, v + 0.02, 0.03, steel2, id);
+  // ---- the windows all along, steel between them (and the vestibule in the middle)
+  const uc = (u0 + u1) / 2;
+  const uDoor = uc;
+  const wins = [[u0 + 0.5, uc - 1.6], [uc + 1.6, u1 - 0.5]];
+  for (const [a, b] of wins) {
+    ctx.B.add(M.winGlass, fd.quad(a, yW0, b, yW1, -0.02), null, nextId());
+    const n = Math.max(1, Math.round((b - a) / 1.15));
+    for (let k = 0; k <= n; k++) {
+      const u = a + ((b - a) * k) / n;
+      fbox(ctx, fd, M.frame, u - 0.05, yW0, -0.02, u + 0.05, yW1, 0.04, steel2, id);
+    }
+  }
+  fbox(ctx, fd, M.wall, u0, yW0, -dep, u0 + 0.5, yW1, 0, steel, id);
+  fbox(ctx, fd, M.wall, u1 - 0.5, yW0, -dep, u1, yW1, 0, steel, id);
+  fbox(ctx, fd, M.wall, uc - 1.6, yW0, -0.3, uc + 1.6, yW1, 0, steel, id);
+  // (the ends: windows round the corners, steel under and over)
+  for (const [ue, dir] of [[u0, -1], [u1, 1]]) {
+    const se = sideOf(fd, ue, dir);
+    ctx.B.add(M.winGlass, se.quad(0.6, yW0, dep - 0.8, yW1, 0.02), null, nextId());
+    drum(ctx, M.wall, ...(() => {
+      const p = fd.p(ue - dir * 0.35, 0, -0.35);
+      return [p[0], yB, p[2]];
+    })(), 0.36, yT - yB, steel, 16, { id });
+  }
+  // ---- the barrel roof along it, closed at both ends
+  {
+    const Rw = dep / 2;
+    const Rv = 1.05;
+    const n = 18;
+    const pos = [];
+    const nor = [];
+    const push = (u, t) => {
+      const w = -Rw + Rw * Math.cos(t);
+      const v = yT + Rv * Math.sin(t);
+      const p = fd.p(u, v, w);
+      pos.push(p[0], p[1], p[2]);
+      let nw = Math.cos(t) / Rw;
+      let nv = Math.sin(t) / Rv;
+      const l = Math.hypot(nw, nv);
+      nw /= l;
+      nv /= l;
+      nor.push(fd.nx * nw, nv, fd.nz * nw);
+    };
+    for (let k = 0; k < n; k++) {
+      const ta = (Math.PI * k) / n;
+      const tb = (Math.PI * (k + 1)) / n;
+      push(u0 - 0.15, ta);
+      push(u1 + 0.15, ta);
+      push(u1 + 0.15, tb);
+      push(u0 - 0.15, ta);
+      push(u1 + 0.15, tb);
+      push(u0 - 0.15, tb);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    ctx.B.add(M.wall, g, null, id, { color: steel2 });
+    for (const ue of [u0 - 0.15, u1 + 0.15]) {
+      const cap = [];
+      const cn = [];
+      const s = ue < uc ? -1 : 1;
+      for (let k = 0; k < n; k++) {
+        const ta = (Math.PI * k) / n;
+        const tb = (Math.PI * (k + 1)) / n;
+        for (const [w, v] of [[-Rw, yT], [-Rw + Rw * Math.cos(ta), yT + Rv * Math.sin(ta)], [-Rw + Rw * Math.cos(tb), yT + Rv * Math.sin(tb)]]) {
+          const p = fd.p(ue, v, w);
+          cap.push(p[0], p[1], p[2]);
+          cn.push(fd.ux * s, 0, fd.uz * s);
+        }
+      }
+      const cg = new THREE.BufferGeometry();
+      cg.setAttribute('position', new THREE.Float32BufferAttribute(cap, 3));
+      cg.setAttribute('normal', new THREE.Float32BufferAttribute(cn, 3));
+      ctx.B.add(M.wall, cg, null, id, { color: steel });
+    }
+  }
+  // ---- the vestibule: its glass doors, a canopy, the steps up to it
+  fbox(ctx, fd, M.wall, uc - 1.5, CURB, 0, uc - 1.0, CURB + 3.0, 1.6, steel, id);
+  fbox(ctx, fd, M.wall, uc + 1.0, CURB, 0, uc + 1.5, CURB + 3.0, 1.6, steel, id);
+  fbox(ctx, fd, M.wall, uc - 1.6, CURB + 2.6, 0, uc + 1.6, CURB + 3.15, 1.75, steel2, id);
+  fbox(ctx, fd, M.frame, uc - 1.6, CURB + 2.5, 1.7, uc + 1.6, CURB + 2.62, 1.78, stripe, id);
+  ctx.B.add(M.winGlass, fd.quad(uc - 1.0, CURB + 0.05, uc + 1.0, CURB + 2.55, 1.55), null, nextId());
+  fbox(ctx, fd, M.frame, uc - 0.04, CURB, 1.55, uc + 0.04, CURB + 2.55, 1.62, steel2, id);
+  fbox(ctx, fd, M.frame, uc - 1.0, CURB + 1.05, 1.55, uc + 1.0, CURB + 1.12, 1.62, steel2, id);
+  fbox(ctx, fd, M.wall, uc - 1.8, CURB, 1.6, uc + 1.8, CURB + 0.12, 2.4, srgb(0.82, 0.8, 0.76), id);
+  // (a strip of planting along its front, either side of the steps)
+  for (const [a, b] of [[u0, uc - 2.0], [uc + 2.0, u1]]) {
+    fbox(ctx, fd, M.wall, a, CURB, 0.2, b, CURB + 0.35, 1.3, srgb(0.86, 0.84, 0.8), id);
+    for (let u = a + 0.6; u < b - 0.4; u += 1.1) {
+      const p = fd.p(u, CURB + 0.6, 0.75);
+      const g = new THREE.IcosahedronGeometry(0.42, 1);
+      g.scale(1, 0.75, 1);
+      g.translate(p[0], p[1], p[2]);
+      ctx.B.add(M.leaf, g, null, nextId(), { color: srgb(0.3, 0.58, 0.32) });
+    }
+    const [mn, mx] = fd.box(a, 0, 0.2, b, 0, 1.3);
+    ctx.col.addBox(mn[0], mn[2], mx[0], mx[2], 0, CURB + 0.35, 'prop');
+  }
+  // ---- the name along the top, DINER on its frame over the roof, OPEN 24 HOURS in a window
+  neonSign(ctx, fd, spec.name, uc, yT - 0.31, 0.06, Math.min(Ld - 4, 8.5), hex('#3fe8ff'), { font: 'Caveat' });
+  {
+    const yS = yT + 1.35;
+    for (const u of [uc - 2.6, uc + 2.6]) fbox(ctx, fd, M.steel, u - 0.08, yT + 0.5, -2.2, u + 0.08, yS + 1.9, -2.0, srgb(0.3, 0.3, 0.36));
+    fbox(ctx, fd, M.frame, uc - 2.9, yS, -2.2, uc + 2.9, yS + 1.6, -2.0, srgb(0.86, 0.2, 0.26), id);
+    fbox(ctx, fd, M.frame, uc - 2.9, yS - 0.06, -2.22, uc + 2.9, yS, -1.98, srgb(0.95, 0.95, 0.96), id);
+    fbox(ctx, fd, M.frame, uc - 2.9, yS + 1.6, -2.22, uc + 2.9, yS + 1.66, -1.98, srgb(0.95, 0.95, 0.96), id);
+    neonSign(ctx, fd, 'DINER', uc, yS + 0.8, -1.98, 5.0, hex('#fff2a8'), { font: 'Rubik' });
+    if (ctx.roofs) ctx.roofs.cur = null;
+    const lp = fd.p(uc, yS + 0.8, 1.5);
+    addLight(lp[0], lp[1], lp[2], 16, hex('#ff5a6a'), 1.2);
+  }
+  plateOn(ctx, fd, 'open24', (wins[0][0] + wins[0][1]) / 2, yW1 - 0.35, -0.01, 1.4);
+  // ---- inside: the counter, the stools, the booths (world/rooms.js), and the people in it
+  const room = ctx.room ? ctx.room(fd, {
+    u0: u0 + 0.4, u1: u1 - 0.4, depth: dep - 0.4, y0: CURB, h: 3.0, kind: 'diner',
+    openings: [{ kind: 'door', u0: uDoor - 0.7, u1: uDoor + 0.7, y0: CURB, y1: 2.5 }, { kind: 'window', u0: wins[0][0], u1: wins[0][1], y0: yW0, y1: yW1 }, { kind: 'window', u0: wins[1][0], u1: wins[1][1], y0: yW0, y1: yW1 }],
+    outside: steel,
+    shop: { kind: 'diner', name: spec.name },
+  }) : null;
+  const wallData = { f: fd, d0: -0.25, d1: 0, y0: CURB, y1: yT, room };
+  fcol(ctx, fd, u0, CURB, -0.3, uDoor - 0.7, yT, 0.05, 'roomwall', wallData);
+  fcol(ctx, fd, uDoor + 0.7, CURB, -0.3, u1, yT, 0.05, 'roomwall', wallData);
+  fcol(ctx, fd, u0, CURB, -dep, u0 + 0.3, yT, 0);
+  fcol(ctx, fd, u1 - 0.3, CURB, -dep, u1, yT, 0);
+  fcol(ctx, fd, u0, CURB, -dep, u1, yT + 1.05, -dep + 0.3);
+  fcol(ctx, fd, u0, yT - 0.1, -dep, u1, yT + 1.05, 0);
+  fcol(ctx, fd, uc - 1.5, CURB, 0, uc - 1.0, CURB + 3.0, 1.6);
+  fcol(ctx, fd, uc + 1.0, CURB, 0, uc + 1.5, CURB + 3.0, 1.6);
+  info.doors.push(fd.p(uDoor, CURB, 2.6));
+  registerShop(ctx, fd, { kind: 'diner', name: spec.name, signCol: '#3fe8ff' }, info, uDoor, wins[0][0], wins[1][1], room);
+  // ---- the kitchen behind it: white stucco, its door to the alley, the hood's flue on its roof
+  {
+    const w0 = -back - dep - 0.1;
+    const w1 = -D + 0.3;
+    if (w0 - w1 > 2) {
+      const ka = u0 + 1.5;
+      const kb = u1 - 1.5;
+      fbox(ctx, f, M.wall, ka, CURB, w1, kb, CURB + 4.2, w0, srgb(0.95, 0.94, 0.9), nextId());
+      fcol(ctx, f, ka, CURB, w1, kb, CURB + 4.2, w0);
+      const p = f.p((ka + kb) / 2, 0, (w0 + w1) / 2);
+      ctx.B.box(M.steel, p[0] - 0.8, CURB + 4.2, p[2] - 0.8, p[0] + 0.8, CURB + 4.9, p[2] + 0.8, nextId(), { color: steel2 });
+      drum(ctx, M.steel, p[0], CURB + 4.9, p[2], 0.25, 1.4, steel2, 12);
+      if (ctx.footprints) footprint(ctx, f, ka, w1, kb, w0, CURB + 4.2, srgb(0.95, 0.94, 0.9), steel2);
+    }
+  }
+  footprint(ctx, f, u0, -back - dep, u1, -back + 1.6, CURB + 4.1, steel, stripe);
+  // ---- its own lot beside it, the far side from the corner
+  {
+    const la = atA ? u1 + 0.6 : 0;
+    const lb = atA ? L : u0 - 0.6;
+    if (lb - la > 5) {
+      const p = f.p(la, 0, 0);
+      parkingLot(ctx, { f: new Facade(p[0], p[2], f.ux, f.uz, f.nx, f.nz), L: lb - la, D, edge: 'hedge', fill: 0.7, price: 'DINER PARKING', wallCol: srgb(0.95, 0.94, 0.9), accent: stripe });
+    }
+  }
+  ctx.diner = { x: f.p(uc, 0, 0)[0], z: f.p(uc, 0, 0)[2] };
+  return info;
+}
+
+// ------------------------------------------------------------------ the museum
+/**
+ * (v5, ROADMAP 11.2ב) The museum on the corner of 9th: seven floors of a storage house of the
+ * twenties in stone-coloured stucco, small windows in rows, a rusticated base, a heavy cornice, and
+ * at its foot the door everybody photographs: two towers of carved stone either side of an arch, a
+ * bronze grille in it, the name over it, a crest on top. Banners of the season's shows on the front.
+ * spec: { f, L, D, corner: 'a' | 'b', sides: { a, b }, back }
+ */
+export function museum(ctx, spec) {
+  const M = ctx.M;
+  const { f, L, D } = spec;
+  const stone = srgb(0.93, 0.85, 0.7);
+  const base = srgb(0.84, 0.75, 0.6);
+  const carve = srgb(0.96, 0.9, 0.78);
+  const groove = srgb(0.62, 0.54, 0.42);
+  const bronze = srgb(0.36, 0.26, 0.16);
+  const floors = 7;
+  const h = GROUND + (floors - 1) * FH + 1.2;
+  const top = CURB + h;
+  const info = { f, L, D, h, top, floors, doors: [], shop: null, kit: 'museum' };
+  const id = nextId();
+  const yBase = CURB + 8.2;
+  // ---- the body, the base in its darker stone with its grooves
+  fbox(ctx, f, M.wall, 0, CURB, -D, L, top, 0, stone, id);
+  fcol(ctx, f, 0, CURB, -D, L, top, 0);
+  if (ctx.occluders) ctx.occluders.push(ctx.col.boxes[ctx.col.boxes.length - 1]);
+  fbox(ctx, f, M.wall, -0.05, CURB, -D, L + 0.05, yBase, 0.18, base, id);
+  for (let v = CURB + 0.6; v < yBase - 0.2; v += 0.62) fbox(ctx, f, M.frame, -0.05, v, 0.17, L + 0.05, v + 0.045, 0.2, groove, id);
+  fbox(ctx, f, M.wall, -0.2, yBase, -D, L + 0.2, yBase + 0.45, 0.42, carve, id);
+  // ---- the windows of the floors over it: small, deep, in rows; tall barred ones in the base
+  const uc = L / 2;
+  const portal = 4.6;
+  const nW = Math.max(3, Math.round((L - 2) / 3.6));
+  const step = (L - 2) / nW;
+  const win = (sf, u, y0, y1, w) => {
+    ctx.B.add(M.winGlass, sf.quad(u - w / 2, y0, u + w / 2, y1, -0.24), null, nextId());
+    fbox(ctx, sf, M.frame, u - w / 2 - 0.16, y0 - 0.2, -0.24, u + w / 2 + 0.16, y0, 0.1, carve, id);
+    fbox(ctx, sf, M.frame, u - w / 2 - 0.12, y1, -0.24, u + w / 2 + 0.12, y1 + 0.16, 0.06, carve, id);
+    fbox(ctx, sf, M.frame, u - w / 2 - 0.12, y0, -0.24, u - w / 2, y1, 0.04, carve, id);
+    fbox(ctx, sf, M.frame, u + w / 2, y0, -0.24, u + w / 2 + 0.12, y1, 0.04, carve, id);
+  };
+  for (let fl = 2; fl < floors; fl++) {
+    const y0 = yBase + 0.9 + (fl - 2) * FH + (fl === 2 ? 0.3 : 0);
+    for (let k = 0; k < nW; k++) {
+      const u = 1 + step * (k + 0.5);
+      win(f, u, y0, y0 + 1.6, 1.15);
+    }
+  }
+  for (let k = 0; k < nW; k++) {
+    const u = 1 + step * (k + 0.5);
+    if (Math.abs(u - uc) < portal + 0.6) continue;
+    win(f, u, CURB + 1.6, CURB + 6.4, 1.3);
+    for (let b = u - 0.5; b <= u + 0.51; b += 0.25) fbox(ctx, f, M.frame, b - 0.025, CURB + 1.6, 0.0, b + 0.025, CURB + 6.4, 0.06, IRON, id);
+  }
+  // ---- the cornice: a slab out over the street on its brackets, a parapet over it
+  fbox(ctx, f, M.wall, -0.4, top - 1.0, -D, L + 0.4, top - 0.55, 1.0, carve, id);
+  for (let u = 0.4; u < L; u += 0.9) fbox(ctx, f, M.frame, u - 0.14, top - 1.45, 0, u + 0.14, top - 1.0, 0.75, carve, id);
+  fbox(ctx, f, M.wall, -0.1, top - 0.55, -D, L + 0.1, top + 0.35, 0.25, stone, id);
+  info.top = top + 0.35;
+  info.h = info.top - CURB;
+  // ---- the door: the two carved towers, the arch, the grille, the name, the crest
+  {
+    const tiers = [[1.1, 1.35, 1.0], [2.0, 1.0, 0.75], [0.35, 1.5, 1.15], [2.4, 1.1, 0.85], [0.35, 1.45, 1.1], [1.8, 0.95, 0.7], [0.5, 1.3, 1.0], [1.2, 0.8, 0.6]];
+    for (const s of [-1, 1]) {
+      const uT = uc + s * 3.4;
+      let y = CURB;
+      tiers.forEach(([th, tw, td], i) => {
+        fbox(ctx, f, M.wall, uT - tw / 2, y, -0.1, uT + tw / 2, y + th, td, i % 2 ? carve : base, id);
+        // (a rosette on the tall tiers)
+        if (th > 1.5) {
+          const p = f.p(uT, y + th / 2, td + 0.08);
+          const g = new THREE.SphereGeometry(0.18, 10, 6);
+          g.translate(p[0], p[1], p[2]);
+          ctx.B.add(M.wall, g, null, id, { color: carve });
+        }
+        y += th;
+      });
+      const [mn, mx] = f.box(uT - 0.75, 0, -0.1, uT + 0.75, 0, 1.15);
+      ctx.col.addBox(mn[0], mn[2], mx[0], mx[2], 0, y, 'wall');
+    }
+    // the doorway, deep in the wall, its bronze doors, the arch over it with its grille
+    const dw = 2.1;
+    const dh = CURB + 4.6;
+    fbox(ctx, f, M.frame, uc - dw, CURB, -0.6, uc + dw, dh, -0.55, srgb(0.16, 0.13, 0.12), id);
+    for (const s of [-1, 1]) {
+      fbox(ctx, f, M.frame, uc + s * 0.05, CURB, -0.55, uc + s * (dw - 0.1), dh - 0.3, -0.45, bronze, id);
+      for (let v = CURB + 0.6; v < dh - 0.5; v += 0.9) fbox(ctx, f, M.frame, uc + s * 0.2, v, -0.45, uc + s * (dw - 0.25), v + 0.08, -0.4, srgb(0.62, 0.48, 0.26), id);
+    }
+    fbox(ctx, f, M.wall, uc - dw - 0.5, CURB, -0.6, uc - dw, dh, 0.05, carve, id);
+    fbox(ctx, f, M.wall, uc + dw, CURB, -0.6, uc + dw + 0.5, dh, 0.05, carve, id);
+    const arch = new THREE.TorusGeometry(dw + 0.25, 0.32, 8, 22, Math.PI);
+    arch.rotateY(Math.atan2(f.nx, f.nz));
+    const ap = f.p(uc, dh, 0.0);
+    arch.translate(ap[0], ap[1], ap[2]);
+    ctx.B.add(M.wall, arch, null, id, { color: carve });
+    const tym = new THREE.CircleGeometry(dw, 16, 0, Math.PI);
+    tym.rotateY(Math.atan2(f.nx, f.nz));
+    const tp = f.p(uc, dh, -0.5);
+    tym.translate(tp[0], tp[1], tp[2]);
+    ctx.B.add(M.frame, tym, null, nextId(), { color: bronze });
+    for (let k = -3; k <= 3; k++) {
+      const a = Math.PI / 2 + (k / 3.5) * (Math.PI / 2) * 0.9;
+      const q0 = f.p(uc, dh, -0.48);
+      const q1 = f.p(uc + Math.cos(a) * dw * 0.95, dh + Math.sin(a) * dw * 0.95, -0.48);
+      strut(ctx, M.frame, q0, q1, 0.07, srgb(0.62, 0.48, 0.26));
+    }
+    // the name on its beam, the crest over it
+    const yN = dh + dw + 0.9;
+    fbox(ctx, f, M.wall, uc - 4.3, yN - 0.5, -0.1, uc + 4.3, yN + 0.55, 1.2, carve, id);
+    fbox(ctx, f, M.wall, uc - 4.5, yN + 0.55, -0.1, uc + 4.5, yN + 0.8, 1.35, base, id);
+    plateOn(ctx, f, 'museum', uc, yN, 1.22, 5.6);
+    let y = yN + 0.8;
+    for (const [th, tw, td] of [[0.9, 3.4, 1.0], [0.7, 2.4, 0.85], [0.6, 1.5, 0.7], [0.5, 0.8, 0.55]]) {
+      fbox(ctx, f, M.wall, uc - tw / 2, y, -0.1, uc + tw / 2, y + th, td, carve, id);
+      y += th;
+    }
+    const sp = f.p(uc, y + 0.3, 0.4);
+    const ball = new THREE.SphereGeometry(0.3, 12, 8);
+    ball.translate(sp[0], sp[1], sp[2]);
+    ctx.B.add(M.wall, ball, null, id, { color: srgb(0.82, 0.66, 0.34) });
+    info.doors.push(f.p(uc, CURB, 1.4));
+    for (const s of [-1, 1]) {
+      const lp = f.p(uc + s * 3.4, CURB + 0.6, 2.2);
+      addLight(lp[0], lp[1] + 3, lp[2], 11, srgb(1, 0.82, 0.55), 1.0);
+    }
+  }
+  // ---- the banners of the season's shows, hanging on the front
+  {
+    const cols = [[srgb(0.82, 0.16, 0.22), srgb(0.98, 0.94, 0.86)], [srgb(0.12, 0.5, 0.56), srgb(0.98, 0.82, 0.32)], [srgb(0.2, 0.2, 0.26), srgb(0.95, 0.42, 0.62)]];
+    const at = [L * 0.17, L * 0.83];
+    at.forEach((u, i) => {
+      const [c1, c2] = cols[i % cols.length];
+      const y0 = yBase + 1.5;
+      fbox(ctx, f, M.awning, u - 0.7, y0, 0.22, u + 0.7, y0 + 7.2, 0.3, c1, nextId());
+      fbox(ctx, f, M.awning, u - 0.7, y0 + 4.6, 0.3, u + 0.7, y0 + 5.4, 0.32, c2, nextId());
+      fbox(ctx, f, M.awning, u - 0.7, y0 + 1.2, 0.3, u + 0.7, y0 + 1.5, 0.32, c2, nextId());
+      fbox(ctx, f, M.frame, u - 0.8, y0 + 7.2, 0.0, u + 0.8, y0 + 7.32, 0.4, IRON, nextId());
+    });
+  }
+  // ---- the corner's side and the back
+  for (const [k, uEdge, dir] of [['a', 0, -1], ['b', L, 1]]) {
+    if (!spec.sides || !spec.sides[k]) continue;
+    const sf = sideOf(f, uEdge, dir);
+    const nS = Math.max(2, Math.round((D - 2) / 3.6));
+    const st = (D - 2) / nS;
+    for (let fl = 2; fl < floors; fl++) {
+      const y0 = yBase + 0.9 + (fl - 2) * FH + (fl === 2 ? 0.3 : 0);
+      for (let q = 0; q < nS; q++) win(sf, 1 + st * (q + 0.5), y0, y0 + 1.6, 1.15);
+    }
+    fbox(ctx, sf, M.wall, 0, CURB, -0.1, D, yBase, 0.18, base, id);
+    for (let v = CURB + 0.6; v < yBase - 0.2; v += 0.62) fbox(ctx, sf, M.frame, 0, v, 0.17, D, v + 0.045, 0.2, groove, id);
+  }
+  const RF = roofOf(ctx, info);
+  roofStuff(ctx, f, L, D, info.top, { floors, color: stone, trim: carve, hotel: true }, RF);
+  if (spec.back !== false) backFront(ctx, f, L, D, h, stone, { floors });
+  footprint(ctx, f, 0, -D, L, 0, info.top, stone, carve);
+  ctx.museum = { x: f.p(uc, 0, 0)[0], z: f.p(uc, 0, 0)[2] };
+  return info;
+}

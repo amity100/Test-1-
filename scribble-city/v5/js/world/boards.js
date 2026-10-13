@@ -339,6 +339,73 @@ function plate(sk, ctx, w, h, text, bg, fg = '#141418') {
   ctx.fillText(text, w / 2, h / 2 + 2, w - 24);
 }
 
+// (v5) a chalkboard's line: white chalk on the dark board, in a wooden frame (the shops' sandwich
+// boards, world/shopfronts.js)
+function chalk(sk, ctx, w, h, text, fg = '#f4f1e6') {
+  ctx.fillStyle = '#7a5434';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#26302b';
+  ctx.fillRect(6, 6, w - 12, h - 12);
+  ctx.fillStyle = fg;
+  ctx.font = `700 36px ${FONT_NOTE}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.direction = 'ltr';
+  ctx.fillText(text, w / 2, h / 2 + 3, w - 22);
+}
+
+// (v5) a tag sprayed on a wall: the letters in a marker's hand, a fat dark outline, two colours
+// sprayed into them, a drip or two; nothing round them (the alleys, world/alleys.js)
+function sprayTag(ctx, w, h, text, fill, fill2, seed) {
+  let a = seed;
+  const rnd = () => {
+    a = (a * 16807) % 2147483647;
+    return (a - 1) / 2147483646;
+  };
+  ctx.save();
+  ctx.translate(w / 2, h / 2 + 2);
+  ctx.rotate((rnd() - 0.5) * 0.12);
+  ctx.transform(1, 0, -0.18 - rnd() * 0.12, 1, 0, 0);
+  ctx.font = `400 46px ${FONT_SIGN}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.direction = 'ltr';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 9;
+  ctx.strokeStyle = '#141018';
+  ctx.strokeText(text, 0, 0, w - 30);
+  const g = ctx.createLinearGradient(0, -20, 0, 20);
+  g.addColorStop(0, fill);
+  g.addColorStop(1, fill2);
+  ctx.fillStyle = g;
+  ctx.fillText(text, 0, 0, w - 30);
+  // a highlight along the top of the letters, and the drips under them
+  ctx.globalAlpha = 0.7;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeText(text, -1, -2, w - 30);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = fill2;
+  for (let k = 0; k < 3; k++) {
+    const x = (rnd() - 0.5) * (w - 80);
+    ctx.fillRect(x, 10, 3, 8 + rnd() * 12);
+  }
+  ctx.restore();
+}
+
+// (v5) letters cut in a stone plaque (the museum's name over its door, world/kits.js)
+function carved(sk, ctx, w, h, text) {
+  ctx.fillStyle = '#e6d6b2';
+  ctx.fillRect(0, 0, w, h);
+  sk.poly([[5, 5], [w - 5, 5], [w - 5, h - 5], [5, h - 5]], true, { width: 2.5, color: '#7a6040' });
+  ctx.fillStyle = '#4a3418';
+  ctx.font = '700 30px Georgia, "Times New Roman", serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.direction = 'ltr';
+  ctx.fillText(text.split('').join(String.fromCharCode(8202)), w / 2, h / 2 + 2, w - 26);
+}
+
 let ATLAS = null;
 
 // more: the album's new pages (ROADMAP 4.8) for their boards up on the roofs (ROADMAP 5.1; not
@@ -404,6 +471,26 @@ export function boardAtlas(more = null) {
   smallCell('enter', (sk, c, w, h) => plate(sk, c, w, h, 'ENTER', '#3fa860', '#ffffff'));
   smallCell('valet', (sk, c, w, h) => plate(sk, c, w, h, 'VALET', '#141418', '#ffd23f'));
   smallCell('soon', (sk, c, w, h) => plate(sk, c, w, h, 'COMING SOON', '#f6f2e8', '#2a1a3a'));
+  // (v5, ROADMAP 11.2ב: the street's furniture, world/streetscape.js)
+  smallCell('pay', (sk, c, w, h) => plate(sk, c, w, h, 'P  PAY HERE', '#2a5fc0', '#ffffff'));
+  // (the shops' sandwich boards and the ice chests, world/shopfronts.js)
+  const CHALK = [['ch_specials', 'Specials Today'], ['ch_coffee', 'Fresh Coffee'], ['ch_slice', '$3 a Slice'], ['ch_happy', 'Happy Hour 4-7'], ['ch_open', "Come in, we're open"], ['ch_sale', 'SALE 50% off'], ['ch_tacos', 'Taco Tuesday'], ['ch_juice', 'Fresh Juice $5'], ['ch_cuts', 'Walk-ins Welcome'], ['ch_scoop', '2 Scoops $4'], ['ch_soup', 'Soup of the Day'], ['ch_brunch', 'Brunch till 3']];
+  for (const [k, t] of CHALK) smallCell(k, (sk, c, w, h) => chalk(sk, c, w, h, t, k === 'ch_sale' ? '#ffd2d8' : '#f4f1e6'));
+  smallCell('ice', (sk, c, w, h) => plate(sk, c, w, h, 'ICE', '#2a5fc0', '#ffffff'));
+  smallCell('nopark', (sk, c, w, h) => plate(sk, c, w, h, 'NO PARKING - TOW AWAY', '#f6f2e8', '#c8283c'));
+  smallCell('museum', (sk, c, w, h) => carved(sk, c, w, h, 'THE WOLCOTT'));
+  smallCell('open24', (sk, c, w, h) => plate(sk, c, w, h, 'OPEN 24 HOURS', '#16141c', '#ff5a6a'));
+  // the tags of the alleys: on nothing (the atlas cleared under them), for a pen that cuts them out
+  const TAGS = [['KAOS', '#ff3fa4', '#9b2bd6'], ['ZEPH', '#3fe8ff', '#2a6fe0'], ['OMEN', '#ffe14f', '#ff6a3f'], ['RAZE', '#5aff8a', '#1f9a6a'], ['SKIZ', '#ff6a3f', '#d61f3a'], ['NEKO', '#c9a0ff', '#6a3fd6'], ['BLAZE', '#ffb43f', '#e0402a'], ['DUST', '#f4f1e6', '#8a8f9a'], ['VEX', '#ff4f6a', '#7a1f4a'], ['MISFIT', '#4f9dff', '#2a3f9a']];
+  TAGS.forEach(([t, f1, f2], i) => {
+    const cx = (small % 8) * SMALL_W;
+    const cy = rows * BIG_H + Math.floor(small / 8) * SMALL_H;
+    ctx.clearRect(cx, cy, SMALL_W, SMALL_H);
+    smallCell(`tag_${t.toLowerCase()}`, (sk, c, w, h) => {
+      c.clearRect(0, 0, w, h);
+      sprayTag(c, w, h, t, f1, f2, 1013 + i * 7919);
+    });
+  });
   ATLAS = { texture: canvasTexture(canvas), rects, canvas };
   return ATLAS;
 }

@@ -5,6 +5,8 @@ import { AVES, STREETS, STREET_X0, STREET_X1, WALK_X0, PROM_X1, WEST_EDGE, CURB,
 import { NODES, stopDist, parkingSpots } from './roads.js';
 import { palm } from './palms.js';
 import { bench } from './blocks.js';
+import { shadeTree, grassStrip, treeGrate, payStation, bikeRack, planter, globeLamp, valetStand } from './streetscape.js';
+import { shopFronts } from './shopfronts.js';
 import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
 import { randomCarSpec } from '../render/cars.js';
@@ -322,55 +324,175 @@ function busStop(ctx, x, z, yaw) {
 }
 
 // ------------------------------------------------------------------ along the avenues
+// (v5, ROADMAP 11.2ב) Each avenue its own street, as in the real city: Meridian, where people live,
+// under shade trees standing in a strip of grass along the curb; Washington, the main street, royal
+// palms in iron grates, the parking pay stations, newspaper boxes at the corners, a bike rack;
+// Collins, the hotels' street, coconut palms in round planters and lamps with two globes. The bus
+// stops where it always did, one block side in two.
+const AVE_STYLE = { 'Meridian Ave': 'home', 'Washington Ave': 'main', 'Collins Ave': 'hotels' };
+const ROYAL = srgb(0.8, 0.78, 0.74);
+
 function avenues(ctx) {
-  const r = ctx.rng;
   for (const a of AVES) {
     if (a.blvd) continue;
+    const style = AVE_STYLE[a.sign] || 'main';
     for (const side of [-1, 1]) {
-      const xl = a.x + side * (a.half + 0.95);
-      // the road is the other way: furniture faces it
-      const yaw = side > 0 ? -Math.PI / 2 : Math.PI / 2;
-      const ax = -side;
       for (let j = 0; j < STREETS.length - 1; j++) {
         const z0 = STREETS[j].z + 13.5;
         const z1 = STREETS[j + 1].z - 13.5;
-        const n = Math.floor((z1 - z0) / 5.5);
-        // odd slots: one of these, shuffled
-        const misc = ['booth', 'hydrant', 'trash', 'trash', 'news', 'bench', 'hedge', 'mailbox', 'bench', 'trash'];
-        if ((j + (side > 0 ? 1 : 0) + Math.round(a.x)) % 2 === 0) misc[0] = 'bus';
-        for (let i = misc.length - 1; i > 0; i--) {
-          const k = Math.floor(r() * (i + 1));
-          [misc[i], misc[k]] = [misc[k], misc[i]];
-        }
-        let mi = 0;
-        for (let k = 0; k <= n; k++) {
-          const z = z0 + k * 5.5;
-          if (z > z1) break;
-          if (k % 4 === 0) {
-            // (a palm stands back from the curb and leans away from the road)
-            const xp = a.x + side * (a.half + 1.4);
-            if (free(ctx, xp, z, 0.6)) palm(ctx, r, xp, z + r.range(-0.6, 0.6), r.range(8.5, 12), { away: [side, 0] });
-          } else if (k % 4 === 2) {
-            if (free(ctx, xl, z, 0.4)) streetLamp(ctx, xl, z, ax, 0, { light: k % 8 === 2 });
-          } else {
-            const what = misc[mi++ % misc.length];
-            if (!free(ctx, xl, z, 1.4)) continue;
-            if (what === 'bus') busStop(ctx, xl - side * 0.15, z, yaw);
-            else if (what === 'booth') phoneBooth(ctx, xl + side * 0.2, z, yaw);
-            else if (what === 'hydrant') hydrant(ctx, xl - side * 0.35, z);
-            else if (what === 'trash') trashCan(ctx, xl, z + r.range(-1, 1));
-            else if (what === 'news') newsBox(ctx, xl, z, yaw);
-            else if (what === 'bench') bench(ctx, xl + side * 0.15, z, yaw);
-            else if (what === 'hedge') hedge(ctx, xl + side * 0.2, z, true);
-            else if (what === 'mailbox') mailbox(ctx, xl, z, yaw);
-          }
-        }
+        const bus = (j + (side > 0 ? 1 : 0) + Math.round(a.x)) % 2 === 0;
+        const o = { a, side, z0, z1, bus, j, xl: a.x + side * (a.half + 0.95), yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2, ax: -side };
+        if (style === 'home') homeSide(ctx, o);
+        else if (style === 'hotels') hotelSide(ctx, o);
+        else mainSide(ctx, o);
       }
     }
   }
 }
 
+// the things of a block side, each at its place along it (z) where there is room for it
+function lay(ctx, o, items) {
+  items.sort((p, q) => p.z - q.z);
+  for (const it of items) {
+    if (it.z < o.z0 - 0.5 || it.z > o.z1 + 0.5) continue;
+    if (!free(ctx, it.x !== undefined ? it.x : o.xl, it.z, it.r || 1.0)) continue;
+    it.fn(it.z);
+  }
+}
+
+// Meridian: the trees over the sidewalk, a lamp now and then, the bus, a hydrant, a mailbox
+function homeSide(ctx, o) {
+  const r = ctx.rng;
+  const { a, side, z0, z1, xl, yaw, ax } = o;
+  const zb = o.bus ? r.range(z0 + 25, z1 - 25) : null;
+  // the strip of grass, in pieces: a path to the doors crosses it every so often, and the bus stops
+  // on a pad of its own
+  const g0 = a.x + side * (a.half + 0.15);
+  const g1 = a.x + side * (a.half + 1.85);
+  let z = z0 - 9;
+  while (z < z1 + 9) {
+    const len = r.range(11, 19);
+    let za = z;
+    let zc = Math.min(z + len, z1 + 9);
+    if (zb !== null && zc > zb - 3 && za < zb + 3) {
+      if (zb - 3 - za > 2) grassStrip(ctx, Math.min(g0, g1), za, Math.max(g0, g1), zb - 3);
+      za = zb + 3;
+    }
+    if (zc - za > 1) grassStrip(ctx, Math.min(g0, g1), za, Math.max(g0, g1), zc);
+    z = zc + 1.6;
+  }
+  const items = [];
+  if (zb !== null) {
+    items.push({ z: zb, r: 2.2, x: xl - side * 0.15, fn: (q) => busStop(ctx, xl - side * 0.15, q, yaw) });
+    items.push({ z: zb + 3.4, r: 0.6, fn: (q) => trashCan(ctx, xl, q) });
+  }
+  // the trees, eight to eleven metres apart (a palm now and then where somebody planted one)
+  for (let t = z0 + r.range(1, 5); t < z1; t += r.range(8, 11)) {
+    if (zb !== null && Math.abs(t - zb) < 4.5) continue;
+    const zz = t;
+    if (r() < 0.22) items.push({ z: zz, r: 1.2, fn: (q) => palm(ctx, r, a.x + side * (a.half + 1.0), q, r.range(8.5, 11.5), { away: [side, 0] }) });
+    else items.push({ z: zz, r: 1.2, fn: (q) => shadeTree(ctx, r, a.x + side * (a.half + 1.0), q, { away: [side, 0], size: r.range(0.85, 1.2) }) });
+  }
+  // a lamp on its pole every thirty metres or so, between two trees
+  let li = 0;
+  for (let t = z0 + r.range(10, 16); t < z1; t += r.range(28, 34)) {
+    const light = li++ % 2 === 0;
+    items.push({ z: t, r: 0.5, fn: (q) => streetLamp(ctx, xl, q, ax, 0, { light }) });
+  }
+  // a hydrant or two, a mailbox, a bench, a hedge by a gate (a place to hide)
+  const free1 = () => r.range(z0 + 4, z1 - 4);
+  for (let k = r.int(1, 2); k > 0; k--) items.push({ z: free1(), r: 0.6, fn: (q) => hydrant(ctx, xl - side * 0.35, q) });
+  if (r() < 0.5) items.push({ z: free1(), r: 0.7, fn: (q) => mailbox(ctx, xl, q, yaw) });
+  if (r() < 0.6) items.push({ z: free1(), r: 1.2, fn: (q) => bench(ctx, xl + side * 0.15, q, yaw) });
+  if (r() < 0.5) items.push({ z: free1(), r: 1.6, fn: (q) => hedge(ctx, xl + side * 0.2, q, true) });
+  lay(ctx, o, items);
+}
+
+// Washington: royal palms in iron grates with the lamps between them, the parking pay stations,
+// newspaper boxes at the corners, the trash cans, a bike rack, a bench, the phone, the bus
+function mainSide(ctx, o) {
+  const r = ctx.rng;
+  const { a, side, z0, z1, xl, yaw, ax } = o;
+  const zb = o.bus ? r.range(z0 + 20, z1 - 20) : null;
+  const items = [];
+  if (zb !== null) items.push({ z: zb, r: 2.2, x: xl - side * 0.15, fn: (q) => busStop(ctx, xl - side * 0.15, q, yaw) });
+  // the palms and the lamps, turn about
+  const xp = a.x + side * (a.half + 1.3);
+  let k = 0;
+  for (let t = z0 + 2; t <= z1; t += 8.25, k++) {
+    if (zb !== null && Math.abs(t - zb) < 3.2) continue;
+    if (k % 2 === 0) {
+      items.push({ z: t, r: 0.9, x: xp, fn: (q) => {
+        treeGrate(ctx, xp, q);
+        palm(ctx, r, xp, q, r.range(10, 13), { away: [side, 0], lean: 0.12, royal: ROYAL });
+      } });
+    } else {
+      const light = k % 4 === 1;
+      items.push({ z: t, r: 0.5, fn: (q) => streetLamp(ctx, xl, q, ax, 0, { light }) });
+    }
+  }
+  // the pay stations, a third and two thirds of the way along
+  for (const f of [0.3, 0.68]) items.push({ z: z0 + (z1 - z0) * f + r.range(-3, 3), r: 0.6, fn: (q) => payStation(ctx, xl - side * 0.1, q, yaw) });
+  // the newspaper boxes in a row by the corners
+  for (const [zc, n] of [[z0 + 1.2, r.int(2, 3)], [z1 - 1.2 - 1.2, r.int(1, 3)]]) {
+    items.push({ z: zc, r: 1.4, fn: (q) => {
+      for (let i = 0; i < n; i++) newsBox(ctx, xl + side * 0.05, q + i * 0.62, yaw);
+    } });
+  }
+  for (let t = z0 + r.range(14, 20); t < z1 - 6; t += r.range(20, 26)) items.push({ z: t, r: 0.6, fn: (q) => trashCan(ctx, xl, q) });
+  if (r() < 0.75) items.push({ z: r.range(z0 + 10, z1 - 10), r: 1.6, fn: (q) => bikeRack(ctx, r, xl, q, true, r.int(1, 2)) });
+  items.push({ z: r.range(z0 + 8, z1 - 8), r: 1.2, fn: (q) => bench(ctx, xl + side * 0.15, q, yaw) });
+  if ((o.j + (side > 0 ? 0 : 1)) % 2 === 0) items.push({ z: r.range(z0 + 8, z1 - 8), r: 1.4, fn: (q) => phoneBooth(ctx, xl + side * 0.2, q, yaw) });
+  items.push({ z: r.range(z0 + 6, z1 - 6), r: 0.6, fn: (q) => hydrant(ctx, xl - side * 0.35, q) });
+  if (r() < 0.5) items.push({ z: r.range(z0 + 6, z1 - 6), r: 0.7, fn: (q) => mailbox(ctx, xl, q, yaw) });
+  lay(ctx, o, items);
+}
+
+// Collins: coconut palms in round planters, lamps with two globes between them, benches, the bus,
+// a hedge or two (to hide in), a hydrant, the paper
+function hotelSide(ctx, o) {
+  const r = ctx.rng;
+  const { a, side, z0, z1, xl, yaw } = o;
+  const zb = o.bus ? r.range(z0 + 20, z1 - 20) : null;
+  const items = [];
+  if (zb !== null) items.push({ z: zb, r: 2.2, x: xl - side * 0.15, fn: (q) => busStop(ctx, xl - side * 0.15, q, yaw) });
+  const xp = a.x + side * (a.half + 1.35);
+  let k = 0;
+  for (let t = z0 + 1.5; t <= z1; t += 11, k++) {
+    if (zb !== null && Math.abs(t - zb) < 4) continue;
+    items.push({ z: t, r: 1.3, x: xp, fn: (q) => planter(ctx, r, xp, q, { palm: (x, z, y0) => palm(ctx, r, x, z, r.range(8, 11.5), { away: [side, 0], y0 }) }) });
+    const light = k % 2 === 0;
+    items.push({ z: t + 5.5, r: 0.5, fn: (q) => globeLamp(ctx, xl, q, { light, alongZ: true }) });
+  }
+  for (let n = r.int(1, 2); n > 0; n--) items.push({ z: r.range(z0 + 6, z1 - 6), r: 1.2, fn: (q) => bench(ctx, xl + side * 0.15, q, yaw) });
+  for (let n = r.int(1, 2); n > 0; n--) items.push({ z: r.range(z0 + 6, z1 - 6), r: 1.6, fn: (q) => hedge(ctx, xl + side * 0.2, q, true) });
+  items.push({ z: r.range(z0 + 6, z1 - 6), r: 0.6, fn: (q) => trashCan(ctx, xl, q) });
+  items.push({ z: r.range(z0 + 6, z1 - 6), r: 0.6, fn: (q) => hydrant(ctx, xl - side * 0.35, q) });
+  if (r() < 0.6) items.push({ z: r.range(z0 + 6, z1 - 6), r: 0.6, fn: (q) => newsBox(ctx, xl, q, yaw) });
+  if ((o.j + (side > 0 ? 1 : 0)) % 3 === 0) items.push({ z: r.range(z0 + 8, z1 - 8), r: 1.4, fn: (q) => phoneBooth(ctx, xl + side * 0.2, q, yaw) });
+  lay(ctx, o, items);
+}
+
+// the valet's stand at the door of every hotel on Collins (after the hotels are built)
+function valets(ctx) {
+  const ave = AVES.find((a) => a.sign === 'Collins Ave');
+  if (!ave) return;
+  for (const s of ctx.shops) {
+    if (s.kind !== 'lobby' || !s.door) continue;
+    // (the hotels facing Collins itself: their fronts on its sidewalks)
+    if (Math.abs(Math.abs(s.door[0] - ave.x) - (ave.half + ave.walk) + 1.1) > 1.2 || Math.abs(s.nz) > 0.1) continue;
+    const x = s.door[0] + s.nx * 1.0 + s.rx * 1.6;
+    const z = s.door[2] + s.nz * 1.0 + s.rz * 1.6;
+    if (!free(ctx, x, z, 0.8)) continue;
+    valetStand(ctx, x, z, s.face);
+  }
+}
+
 // ------------------------------------------------------------------ along the cross streets
+// (v5, ROADMAP 11.2ב) each street its own trees: shade trees down 13th and 9th, royal palms down
+// 11th, coconut palms down 15th and 7th; 5th, the busy one, has the pay stations instead
+const STREET_STYLE = { '15th St': 'palms', '13th St': 'shade', '11th St': 'royal', '9th St': 'shade', '7th St': 'palms', '5th St': 'main' };
+
 function streets(ctx) {
   const r = ctx.rng;
   const spans = [];
@@ -381,6 +503,7 @@ function streets(ctx) {
   }
   spans.push([WEST_EDGE + 1, AVES[0].x - AVES[0].half - AVES[0].walk]);
   for (const s of STREETS) {
+    const style = STREET_STYLE[s.sign] || 'palms';
     for (const side of [-1, 1]) {
       const zl = s.z + side * (s.half + 0.95);
       const az = -side;
@@ -408,6 +531,18 @@ function streets(ctx) {
           else if (what === 'mailbox') mailbox(ctx, x, zl, yaw);
           else if (what === 'news') newsBox(ctx, x, zl, yaw);
           else if (side < 0 && (s.z > -300 || r() < 0.5)) bench(ctx, x, zl + side * 0.1, yaw);
+        }
+        // the street's trees, between the lamps and the alley
+        const zt = s.z + side * (s.half + 1.15);
+        for (const u of [14.5, L - 14.5]) {
+          const x = x0 + u + r.range(-0.8, 0.8);
+          if (!free(ctx, x, zt, 1.2)) continue;
+          if (style === 'shade') shadeTree(ctx, r, x, zt, { away: [0, side], size: r.range(0.8, 1.05) });
+          else if (style === 'royal') {
+            treeGrate(ctx, x, zt);
+            palm(ctx, r, x, zt, r.range(10, 12.5), { away: [0, side], lean: 0.12, royal: ROYAL });
+          } else if (style === 'palms') palm(ctx, r, x, zt, r.range(8, 11), { away: [0, side] });
+          else payStation(ctx, x, zl, yaw);
         }
       }
     }
@@ -955,8 +1090,19 @@ export function buildStreets(ctx) {
   boards(ctx);
   friendStands(ctx);
   pier(ctx);
-  avenues(ctx);
-  streets(ctx);
+  // (v5, ROADMAP 11.2ב: the avenues and the cross streets throw dice of their own; what comes after
+  // them gets the city's where the old furniture left them - 8414 throws on - and stays as it was)
+  {
+    const dice = ctx.rng;
+    ctx.rng = seeded(20261014);
+    avenues(ctx);
+    streets(ctx);
+    valets(ctx);
+    // (what each shop puts out on the sidewalk, world/shopfronts.js)
+    shopFronts(ctx);
+    ctx.rng = dice;
+    for (let i = 0; i < 8414; i++) dice();
+  }
   gangs(ctx);
 }
 

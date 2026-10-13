@@ -26,8 +26,10 @@ export class DepthTrial {
     return !!this.run;
   }
 
-  // every frame (raw: how long it really took, s; playing: in play, not the test route)
-  frame(raw, playing) {
+  // every frame (raw: how long it really took, s; playing: in play, not the test route; cost: what
+  // the frame cost, s - with the steady pace the frames come on a fixed beat, and what they cost is
+  // measured instead, game/pace.js)
+  frame(raw, playing, cost = raw) {
     const pipe = this.pipe;
     if (pipe.depthFixed) return;
     if (this.run) {
@@ -39,7 +41,7 @@ export class DepthTrial {
         this.at.unshift(this.played + 5);
         return;
       }
-      this.step(raw);
+      this.step(cost);
       return;
     }
     if (!playing) return;

@@ -8,6 +8,7 @@ import { slab } from './ground.js';
 import { BLOCK_TYPES, blockRect, westRect, CURB, AVES, STREETS, STREET_X0 } from './layout.js';
 import { sobeRow } from './sobe.js';
 import { strut } from './kits.js';
+import { alleyLife } from './alleys.js';
 
 // The rest of the city, block by block: a row of buildings along each avenue, back to back with
 // an alley between them, corner buildings turning onto the cross streets (v5: each row cut into
@@ -255,6 +256,8 @@ export function rooftopName(ctx, f, L, top, name, col) {
 
 function buildBlock(ctx, col, row, type) {
   const R = blockRect(col, row);
+  // (where the gangs are, a window boarded up now and then: world/deco.js)
+  ctx.wearGang = type === 'gang';
   const blvd = col === 2;
   // (v5: on Ocean Drive the hotels stand deeper, world/ocean.js; the alley behind them is narrow)
   const ocean = blvd && ctx.oceanDrive;
@@ -269,8 +272,10 @@ function buildBlock(ctx, col, row, type) {
   const rowOf = (rowSide, o = {}) => sobeRow(ctx, {
     x: rowSide === 'west' ? R.x0 : R.x1, z0: R.z0, z1: R.z1, side: rowSide === 'west' ? -1 : 1, D,
     street: STREET_OF[col][rowSide === 'west' ? 0 : 1], type, col, row, rowSide, back: true,
-    // (the post office on its corner, Washington and 13th; the arcade on Washington)
-    post: col === 0 && row === 0 && rowSide === 'east', arcade: col === 0 && row === 2 && rowSide === 'east', ...o,
+    // (the post office on its corner, Washington and 13th; the arcade on Washington; v5, ROADMAP
+    // 11.2ב: the silver diner on the corner of 11th, the museum on the corner of 9th)
+    post: col === 0 && row === 0 && rowSide === 'east', arcade: col === 0 && row === 2 && rowSide === 'east',
+    diner: col === 0 && row === 2 && rowSide === 'east', museum: col === 0 && row === 2 && rowSide === 'east', ...o,
   });
   if (type === 'park') {
     park(ctx, R);
@@ -331,6 +336,9 @@ function alleyGround(ctx, a) {
   // poles along one wall, a crossarm and its insulators, the wires sagging from pole to pole, a
   // transformer on every other one
   if (a.x1 - a.x0 < 9) powerLine(ctx, a);
+  // (v5, ROADMAP 11.2ב) the backs' meters and pipes, the air conditioners, a stair, the tags
+  // (world/alleys.js: dice of its own)
+  alleyLife(ctx, a);
 }
 
 function powerLine(ctx, a) {
@@ -358,6 +366,10 @@ function powerLine(ctx, a) {
     ctx.col.addCircle(x, z, 0.16, 0, CURB + H, 'pole');
     tops.push(z);
   }
+  // (where the poles stand, for the wires down to the walls: world/alleys.js)
+  a.poles = tops.slice();
+  a.poleX = x;
+  a.poleH = H;
   // the wires, three of them, a little slack between the poles
   for (let i = 0; i + 1 < tops.length; i++) {
     for (const dz of [-0.75, 0, 0.75]) {

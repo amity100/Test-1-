@@ -71,6 +71,8 @@ export function buildCity(scene, o = {}) {
   const boardOpts = { kind: 'box', map: ctx.atlas.texture, emMap: ctx.atlas.texture, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1 };
   M.board = makeSurface({ ...boardOpts, objMask: true });
   M.adWall = makeSurface({ ...boardOpts, emissive: new THREE.Color(0.24, 0.23, 0.21) });
+  // (v5, ROADMAP 11.2ב) the tags on the alleys' walls: cut out of the same picture
+  M.tag = makeSurface({ kind: 'box', map: ctx.atlas.texture, alphaTest: 0.5, ang: 0.6, wash: 0.82, line: 0.3, gloss: 0.05, noShadow: true });
   ctx.posters = STREET_ADS;
   // the sky
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 48, 24), makeSky());
@@ -88,7 +90,10 @@ export function buildCity(scene, o = {}) {
   {
     const dice = ctx.rng;
     ctx.rng = seeded(20261013);
+    // (v5, ROADMAP 11.2ב: the life and the wear of its windows, by dice of their own, world/deco.js)
+    if (o.roofs) ctx.wear = seeded(4242421);
     buildBlocks(ctx);
+    ctx.wear = null;
     ctx.rng = dice;
     for (let i = 0; i < 9296; i++) dice();
   }

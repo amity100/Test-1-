@@ -97,6 +97,8 @@ async function boot() {
   }
   pipe.maxScale = 1;
   if (params.has('taafrac')) pipe.taaFrac = Math.min(1, Math.max(0.4, +params.get('taafrac') || 0.67));
+  // (the steady pace begins from these, game/pace.js)
+  pipe.defaultTaaFrac = pipe.taaFrac;
   if (params.has('norefl')) pipe.reflections = false;
   if (params.has('depth') || params.has('nodepth')) {
     pipe.depthFirst = params.has('depth');
@@ -104,6 +106,7 @@ async function boot() {
   }
   // (the mirror under the street every frame; a phone every other one, as it always was)
   pipe.reflEvery = low ? 2 : 1;
+  pipe.reflEveryDefault = pipe.reflEvery;
   shared.uPR.value = pipe.pixelsPerCss;
 
   setStatus('מציירים את העיר…');
