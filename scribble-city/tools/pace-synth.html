@@ -1,0 +1,93 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>pace synth</title>
+<!-- the steady pace against a graphics card made busy on purpose: tools/pace-synth.mjs -->
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { Pace } from '/v5/js/game/pace.js';
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 960), H = +(q.get('h') || 540);
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+cv.style.width = W + 'px'; cv.style.height = H + 'px';
+const gl = cv.getContext('webgl2', { antialias: false, powerPreference: 'high-performance' });
+const vs = `#version 300 es
+in vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }`;
+const fs = `#version 300 es
+precision highp float;
+uniform float uK; uniform vec2 uRes; out vec4 o;
+void main(){
+  vec2 p = gl_FragCoord.xy / uRes;
+  float a = 0.0;
+  for (int i = 0; i < 2000; i++) {
+    if (float(i) >= uK) break;
+    a += sin(p.x * float(i) * 0.37 + a) * cos(p.y * 1.3 + float(i) * 0.11);
+  }
+  o = vec4(fract(a), p, 1.0);
+}`;
+function sh(t, s) { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; }
+const pr = gl.createProgram();
+gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr);
+gl.useProgram(pr);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const uK = gl.getUniformLocation(pr, 'uK'), uRes = gl.getUniformLocation(pr, 'uRes');
+// the mirror: its own picture at half the size
+const mw = Math.round(W * 0.5), mh = Math.round(H * 0.5);
+const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, mw, mh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+const pipe = { scale: 1, defaultScale: 1, minScale: 0.7, minScaleSteady: 0.5, maxScale: 1, taa: false, dyn: 1, steady: false, reflEvery: 1, reflEveryDefault: 1, reflShare: 1, dynMax: 1 };
+const game = { pipe, renderer: { getContext: () => gl } };
+const pace = new Pace(game);
+window.__pace = pace; window.__pipe = pipe;
+const S = { K: +(q.get('k') || 60), KM: 0, cpu: +(q.get('cpu') || 8) };
+S.KM = S.K * (+(q.get('mir') || 1.44));
+window.__S = S;
+function draw() {
+  const d = pipe.steady ? pipe.dyn : 1;
+  const s = pipe.scale * d;
+  // the mirror
+  const k = pipe.steady ? Math.min(1, pipe.dyn) * (pipe.reflShare || 1) : 1;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.viewport(0, 0, Math.max(2, Math.round(mw * pipe.scale * k)), Math.max(2, Math.round(mh * pipe.scale * k)));
+  gl.uniform1f(uK, S.KM); gl.uniform2f(uRes, mw, mh);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, Math.max(2, Math.round(W * s)), Math.max(2, Math.round(H * s)));
+  gl.uniform1f(uK, S.K); gl.uniform2f(uRes, W, H);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+function busy(ms) { const e = performance.now() + ms; let x = 0; while (performance.now() < e) x += Math.sqrt(x + 1); return x; }
+// one frame alone, timed to the card's end
+const px = new Uint8Array(4);
+window.__time1 = (dyn) => { const ps = pipe.steady, pd = pipe.dyn; pipe.steady = true; pipe.dyn = dyn; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t = performance.now(); draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const r = performance.now() - t; pipe.steady = ps; pipe.dyn = pd; return r; };
+window.__frames = [];
+window.__mode = 'free';
+let last = 0;
+function tick(ts) {
+  pace.engage(pace.on);
+  if (pace.engaged) {
+    const step = pace.beat(ts);
+    if (step > 0) {
+      const t0 = performance.now();
+      busy(S.cpu);
+      draw();
+      pace.sent(t0, performance.now(), true);
+      window.__frames.push([ts, pace.interval, pace.late, pace.calib]);
+    }
+  } else {
+    if (last) pace.freeFrame((ts - last) / 1000);
+    busy(S.cpu);
+    draw();
+    window.__frames.push([ts, last ? ts - last : 0, 0, 0]);
+    last = ts;
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+window.__ready = true;
+</script></body></html>

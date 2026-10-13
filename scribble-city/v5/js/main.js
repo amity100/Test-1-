@@ -84,6 +84,9 @@ async function boot() {
   pipe.defaultScale = pipe.scale;
   // (never coarser than this: a drawing made at too few pixels turns to mush in the distance)
   pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.55, 1.25 / pr) : 0.7);
+  // (the steady pace, when it is chosen, may come down further on a computer: a weak graphics
+  // card that cannot keep the beat otherwise; game/pace.js)
+  pipe.minScaleSteady = low ? pipe.minScale : Math.min(pipe.scale, 0.5);
   // which graphics card draws (where the browser tells): none, in software (SwiftShader, llvmpipe,
   // the basic render driver), and every frame takes seconds
   const gl0 = renderer.getContext();

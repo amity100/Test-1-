@@ -805,13 +805,16 @@ export class Game {
       if (pace.engaged) {
         const step = pace.beat(ts);
         if (step > 0) {
+          // (the frame's own time from here, not from the animation frame's stamp: a browser held
+          // up by the card calls it late, and that wait is not the processor's)
+          const t0 = performance.now();
           this.clock.getDelta();
           perf.frameStart();
           this.update(step);
           perf.afterUpdate();
           const drawn = !this.citymap.covering;
           if (drawn) this.renderFrame();
-          pace.sent(ts, performance.now(), drawn);
+          pace.sent(t0, performance.now(), drawn);
           const real = pace.interval / 1000;
           perf.frameEnd(real);
           trial.frame(real, this.state === 'play', pace.cost);
@@ -833,6 +836,8 @@ export class Game {
       }
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
+      // (how long the free pace's frames take: where the steady pace's auto beat begins, pace.js)
+      pace.freeFrame(raw);
       perf.frameStart();
       this.update(dt);
       perf.afterUpdate();

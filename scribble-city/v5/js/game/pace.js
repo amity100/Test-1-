@@ -21,14 +21,24 @@
 
 // the screens' refresh rates (Hz), to snap a measured one to
 const SNAP = [24, 30, 48, 50, 60, 72, 75, 85, 90, 100, 120, 144, 165, 180, 240];
-// a steady beat is between these (frames a second)
+// a steady beat is between these (frames a second: 20 for a card that cannot hold 30 even at the
+// fewest pixels - a steady 20 is smoother than 30 that keeps missing)
 const MAX_FPS = 92;
-const MIN_FPS = 27;
+const MIN_FPS = 19;
 // a frame against its time (N refreshes): over HI it has to get lighter, under LO it may get
 // heavier, and a change aims at MID
 const HI = 0.82;
 const MID = 0.72;
 const LO = 0.6;
+// (the lighter frames, when the fewest pixels are not enough: 1 the mirror under the street at two
+// thirds of its share, 2 at half of it - render/pipeline.js; game/pace.js toPipe. Still drawn every
+// frame: a mirror drawn every other one slides under the street. With a beat that was chosen, 60
+// or 30, then 3 and 4: the drawing a little further down, a step each, rather than the frames
+// late - the auto pace takes a slower beat instead)
+export const LITE_MAX = 2;
+const LITE_DEEP = 4;
+const DEEP_STEP = 0.05;
+const DEEP_MIN = 0.38;
 export const PACE_MODES = ['free', 'auto', '60', '30'];
 
 // The decisions alone (no browser in them: tools/pace-sim.mjs runs them against a made-up device).
@@ -55,6 +65,11 @@ export class PaceControl {
     this.retryAt = [];
     this.backoff = [];
     this.upAt = -1e9;
+    // the lighter frames (0: none), and when the next step back up may be tried
+    this.lite = 0;
+    this.liteBack = 0;
+    this.liteRetryAt = 0;
+    this.liteBackAt = -1e9;
   }
 
   reset() {
@@ -72,6 +87,8 @@ export class PaceControl {
     this.ease = 0;
     this.boost = 0;
     this.cpuBound = false;
+    this.liteStrain = 0;
+    this.liteEase = 0;
   }
 
   setRefresh(R) {
@@ -98,12 +115,18 @@ export class PaceControl {
     }
   }
 
+  // the drawing's floor as it is now: its own, or a step or two under it (the lighter frames 3, 4)
+  get floorLo() {
+    const deep = Math.max(0, this.lite - LITE_MAX) * DEEP_STEP;
+    return deep > 0 ? Math.max(Math.min(this.lo, DEEP_MIN), this.lo - deep) : this.lo;
+  }
+
   // the drawing's limits (render/pipeline.js), and whether it is the smart drawing
   setLimits(lo, hi, taa) {
     this.lo = lo;
     this.hi = hi;
     this.taa = taa;
-    this.want = Math.min(hi, Math.max(lo, this.want));
+    this.want = Math.min(hi, Math.max(this.floorLo, this.want));
     if (this.apply()) this.changedAt = this.frame + 1;
   }
 
@@ -113,8 +136,9 @@ export class PaceControl {
   apply() {
     let d = this.want;
     if (!this.taa) {
-      const q = Math.min(this.hi, Math.max(this.lo, Math.round(d * 40) / 40));
-      const atEnd = (d <= this.lo + 1e-6 && this.dyn > this.lo + 1e-6) || (d >= this.hi - 1e-6 && this.dyn < this.hi - 1e-6);
+      const lo = this.floorLo;
+      const q = Math.min(this.hi, Math.max(lo, Math.round(d * 40) / 40));
+      const atEnd = (d <= lo + 1e-6 && this.dyn > lo + 1e-6) || (d >= this.hi - 1e-6 && this.dyn < this.hi - 1e-6);
       d = Math.abs(d - this.dyn) >= 0.02 || atEnd ? q : this.dyn;
     }
     if (d === this.dyn) return false;
@@ -140,13 +164,16 @@ export class PaceControl {
     const card = Math.max(0.3, this.ema - this.cpuE);
     const over = this.ema > HI * B && this.hot >= 2;
     let w = this.want;
-    // (the processor alone fills the frame's time: fewer pixels would not make it shorter)
-    this.cpuBound = this.cpuE > HI * B * 0.92;
+    // (the processor alone fills the frame's time: fewer pixels would not make it shorter. Not
+    // when the card is far behind it: frames waiting on the card make the processor wait too, in
+    // the drawing's own calls, and that time is the card's)
+    this.cpuBound = this.cpuE > HI * B * 0.92 && card < 0.4 * B;
     if (over) {
       this.calm = 0;
-      // (the card's part made as short as leaves the frame at MID, or at least a tenth of it)
+      // (the card's part made as short as leaves the frame at MID, or at least a tenth of it; a
+      // bigger step while the frames take twice their time, late as they are anyway)
       const room = Math.max(MID * B, this.cpuE + 0.1 * B) - this.cpuE;
-      if (!this.cpuBound) w *= Math.max(0.92, Math.min(0.99, Math.sqrt(room / card)));
+      if (!this.cpuBound) w *= Math.max(this.ema > 2 * B ? 0.85 : 0.92, Math.min(0.99, Math.sqrt(room / card)));
     } else {
       this.calm++;
       // (more pixels only after a while of frames with room to spare, and slowly: while the frame
@@ -160,19 +187,62 @@ export class PaceControl {
       }
     }
     if (this.boost > 0) this.boost--;
-    this.want = Math.min(this.hi, Math.max(this.lo, w));
+    this.want = Math.min(this.hi, Math.max(this.floorLo, w));
+    const lite = this.liteStep(now, over, B);
     const beat = this.mode === 'auto' ? this.autoBeat(now, card, over) : false;
-    const changed = this.apply() || beat;
+    const changed = this.apply() || beat || lite;
     if (changed) this.changedAt = this.frame + 1;
     return changed;
+  }
+
+  // (the fewest pixels and still over the frame's time, the card the reason: a lighter frame, the
+  // way the biggest games turn down a costly effect before they give up the beat. Back to the full
+  // frame once the drawing has come all the way back up with room to spare, for a good while - a
+  // step back that does not hold is not tried again for longer each time)
+  liteStep(now, over, B) {
+    const floor = this.want <= this.floorLo + 1e-3;
+    const most = this.mode === 'auto' ? LITE_MAX : LITE_DEEP;
+    // (the drawing itself further down only for frames that do come late, or run past their time:
+    // close to it, they still come on their beat)
+    const need = this.lite < LITE_MAX || this.ema > B || this.lateHeat > 0.5;
+    // (far over it: the next one sooner)
+    if (over && floor && !this.cpuBound && need) this.liteStrain += this.ema > 1.25 * B ? 2 : 1;
+    else this.liteStrain = Math.max(0, this.liteStrain - 1);
+    if (this.liteStrain >= 24 && this.lite < most) {
+      this.lite++;
+      this.liteStrain = 0;
+      this.liteEase = 0;
+      // (stepped back down soon after going up: the next try waits longer)
+      if (now - this.liteBackAt < 15000) this.liteBack = Math.min(240000, (this.liteBack || 15000) * 2);
+      this.liteRetryAt = now + (this.liteBack || 15000);
+      return true;
+    }
+    const full = this.want >= Math.min(1, this.hi) - 1e-3;
+    if (this.lite > 0 && full && !over && this.ema < MID * B && now >= this.liteRetryAt) {
+      if (++this.liteEase >= 180) {
+        this.lite--;
+        this.liteEase = 0;
+        this.liteBackAt = now;
+        return true;
+      }
+    } else this.liteEase = 0;
+    return false;
+  }
+
+  // (a new beat: the frames as full as they were drawn, the lighter ones found again if need be)
+  liteReset() {
+    this.lite = 0;
+    this.liteStrain = 0;
+    this.liteEase = 0;
   }
 
   // (auto) a slower beat when even the fewest pixels do not fit the frames in it; a faster one when
   // they would fit it with most of the pixels, for a few seconds on end
   autoBeat(now, card, over) {
     const c = this.choices;
-    const floor = this.want <= this.lo + 1e-3;
-    if (over && (floor || this.cpuBound)) this.strain++;
+    const floor = this.want <= this.floorLo + 1e-3 && this.lite >= LITE_MAX;
+    // (and frames that do come late, or run past their time: close to it, the beat still holds)
+    if (over && (floor || this.cpuBound) && (this.ema > this.N * this.R || this.lateHeat > 0.5)) this.strain++;
     else this.strain = Math.max(0, this.strain - 2);
     if (this.strain >= 40 && this.level < c.length - 1) {
       // (a faster beat tried a moment ago that did not hold: not again for a while, longer each time)
@@ -185,13 +255,14 @@ export class PaceControl {
       this.strain = 0;
       this.ease = 0;
       this.calm = 0;
-      // (the pixels come back quicker after it)
+      // (the pixels come back quicker after it, and the full frames)
       this.boost = 90;
+      this.liteReset();
       return true;
     }
     if (this.level > 0 && now >= (this.retryAt[this.level - 1] || 0)) {
       const Bf = c[this.level - 1] * this.R;
-      const d = Math.max(this.lo, 0.8);
+      const d = Math.max(this.floorLo, 0.8);
       const pred = this.cpuE + card * (d / this.dyn) ** 2;
       this.ease = pred < MID * Bf ? this.ease + 1 : 0;
       if (this.ease >= 150) {
@@ -199,7 +270,7 @@ export class PaceControl {
         this.N = c[this.level];
         // (the drawing as big as the faster beat leaves room for, and no bigger than it was)
         const room = Math.max(0.05, MID * Bf - this.cpuE);
-        this.want = Math.max(this.lo, Math.min(this.want, this.dyn * Math.sqrt(room / card)));
+        this.want = Math.max(this.floorLo, Math.min(this.want, this.dyn * Math.sqrt(room / card)));
         this.ease = 0;
         this.strain = 0;
         this.calm = 0;
@@ -215,11 +286,11 @@ export class PaceControl {
     this.calm = 0;
     this.lateHeat += 1;
     if (this.lateHeat < 1.6) return;
-    if (!this.cpuBound && this.want > this.lo) {
-      this.want = Math.max(this.lo, this.want * 0.97);
+    if (!this.cpuBound && this.want > this.floorLo) {
+      this.want = Math.max(this.floorLo, this.want * 0.97);
       if (this.apply()) this.changedAt = this.frame + 1;
     }
-    if (this.mode === 'auto' && (this.want <= this.lo + 1e-3 || this.cpuBound)) this.strain += 4 * Math.min(k, 3);
+    if (this.mode === 'auto' && ((this.want <= this.floorLo + 1e-3 && this.lite >= LITE_MAX) || this.cpuBound)) this.strain += 4 * Math.min(k, 3);
   }
 }
 
@@ -247,13 +318,19 @@ export class Pace {
     this.cb = 0;
     this.skipped = false;
     // (drawn every other refresh for a few frames, to measure it: when it is turned on, and when the
-    // time between frames stops matching it)
+    // time between frames stops matching it; idleSkip: the card had nothing to do at the frame
+    // left out)
     this.calib = 0;
+    this.calibAt = -1e9;
+    this.idleSkip = false;
+    this.gotGap = false;
     this.drift = 1;
     this.lateRun = 0;
     // the real time from the last drawn frame to this one (ms), refreshes it was late by
     this.interval = 1000 / 60;
     this.late = 0;
+    // (the free pace's frames: how long they take, ms - where the auto pace begins)
+    this.freeMs = 0;
     // the fences in the card's queue (records kept for reuse: nothing made each frame)
     this.q = [];
     this.pool = [];
@@ -281,14 +358,40 @@ export class Pace {
     if (m === this.mode) return;
     this.mode = m;
     const c = this.ctl;
+    const ms = c.ema;
+    const at = c.dyn;
     c.mode = m === 'free' ? 'auto' : m;
     c.level = 0;
     c.retryAt.length = 0;
     c.backoff.length = 0;
     c.upAt = -1e9;
     c.pickBeat();
-    // (the beat begins afresh, measured again)
-    if (this.engaged) this.begin();
+    // (the beat begins afresh, measured again, from the resolution it was at)
+    if (this.engaged) {
+      this.begin(at);
+      this.startLevel(ms, at);
+    }
+  }
+
+  // a frame of the free pace (s): how long they take
+  freeFrame(dt) {
+    const ms = dt * 1000;
+    if (ms > 0 && ms < 1000) this.freeMs = this.freeMs ? this.freeMs + (ms - this.freeMs) * 0.05 : ms;
+  }
+
+  // (auto) the beat to begin with: the fastest one that frames taking ms at the drawing's size at
+  // would keep at the fewest pixels. A weak card is not first made to fall behind at 60 a second
+  // (none known: the fastest; the auto pace tries a faster one when it would hold)
+  startLevel(ms, at) {
+    const c = this.ctl;
+    if (c.mode !== 'auto' || !(ms > 0) || !(at > 0)) return;
+    const least = ms * Math.min(1, (c.floorLo / at) ** 2);
+    let i = 0;
+    while (i < c.choices.length - 1 && least > HI * c.choices[i] * c.R) i++;
+    if (i === c.level) return;
+    c.level = i;
+    c.N = c.choices[i];
+    this.toPipe();
   }
 
   // the pipeline in the steady pace, or as it always was (each animation frame, game.js loop)
@@ -297,29 +400,38 @@ export class Pace {
     this.engaged = on;
     const p = this.pipe;
     if (on) {
-      // (the drawing at its own size to begin with: the steady pace moves it from there)
+      // (the drawing at its own size, at the resolution the free pace had come to to begin with: a
+      // weak card is not first given the full drawing again. The steady pace moves it from there)
+      const from = (p.defaultScale ? p.scale / p.defaultScale : 1) * (p.taa && p.defaultTaaFrac ? p.taaFrac / p.defaultTaaFrac : 1);
       if (p.defaultScale) p.scale = p.defaultScale;
       if (p.defaultTaaFrac) p.taaFrac = p.defaultTaaFrac;
       p.steady = true;
-      this.begin();
+      this.begin(from);
+      this.startLevel(this.freeMs, from);
     } else {
       p.steady = false;
       p.dyn = 1;
+      p.reflShare = 1;
       if (p.reflEveryDefault) p.reflEvery = p.reflEveryDefault;
       this.justFreed = true;
       this.drain();
     }
   }
 
-  begin() {
+  // (start: the drawing's size to begin with, against its own)
+  begin(start = 1) {
     const c = this.ctl;
-    c.want = 1;
+    c.want = start > 0 ? start : 1;
     c.dyn = 1;
+    c.lite = 0;
+    c.liteBack = 0;
+    c.liteRetryAt = 0;
     c.reset();
     c.changedAt = c.frame + 1;
     this.pipe.dyn = 1;
     this.limits();
     this.calib = 6;
+    this.gotGap = false;
     this.pureN = 0;
     this.pureNew = 0;
     this.lastDrawTs = 0;
@@ -333,7 +445,8 @@ export class Pace {
   // dyn's limits: those of the resolution the drawing may come down to and go up to (main.js)
   limits() {
     const p = this.pipe;
-    const lo = p.taa ? p.taaMin / p.taaFrac : (p.minScale || p.scale) / p.scale;
+    // (the steady pace may come down further than the free one: a steady beat first, main.js)
+    const lo = p.taa ? p.taaMin / p.taaFrac : (p.minScaleSteady || p.minScale || p.scale) / p.scale;
     const hi = p.taa ? p.taaMax / p.taaFrac : (p.maxScale || p.scale) / p.scale;
     this.ctl.setLimits(Math.min(1, lo), Math.max(1, hi), p.taa);
     p.dynMax = this.ctl.hi;
@@ -345,17 +458,26 @@ export class Pace {
     const c = this.ctl;
     p.dyn = c.dyn;
     // (the mirror under the street every frame when there is time for it: a phone draws it every
-    // other one at 60 a second, main.js)
+    // other one at 60 a second, main.js; and with the lighter frames, smaller)
     if (p.reflEveryDefault) p.reflEvery = c.N * c.R >= 25 ? 1 : p.reflEveryDefault;
+    p.reflShare = c.lite >= 2 ? 0.5 : c.lite >= 1 ? 0.67 : 1;
   }
 
   // Each animation frame (ts: its time, ms): 0 to leave it out, else the game's step for it (s)
   beat(ts) {
     const iv = this.lastTs ? ts - this.lastTs : 0;
     this.lastTs = ts;
-    if (this.skipped && iv > 2 && iv < 70) this.refresh(iv);
     // (the card's answers looked at here too, between the quick looks after each frame)
     if (this.q.length && !this.pollT) this.poll();
+    // (the gap since an animation frame left out is the screen's own only if the card had nothing
+    // left to do meanwhile: a card behind holds the animation frames back, and a gap of 30 ms is
+    // then the card's, not the screen's)
+    const idle = this.q.length === 0;
+    if (this.skipped && this.idleSkip && idle && iv > 2 && iv < 70) {
+      this.refresh(iv);
+      this.gotGap = true;
+    }
+    this.idleSkip = false;
     const c = this.ctl;
     const R = c.R;
     if (!this.lastDrawTs || ts - this.lastDrawTs > 1000) {
@@ -375,10 +497,15 @@ export class Pace {
     // refreshes since the last drawn frame (counted, or by the time, if the page held some up)
     const vb = Math.max(this.cb, Math.floor(el / R + 0.3));
     const n = this.calib > 0 ? 2 : c.N;
-    if (vb < n) {
+    // (while the screen is measured, a frame only once a gap was measured since the last one: a
+    // frame left out with the card at nothing, and the animation frame after it. Half a second at
+    // most: a card that is never done is left to it)
+    if (vb < n || (this.calib > 0 && !this.gotGap && el < 500)) {
       this.skipped = true;
+      this.idleSkip = idle;
       return 0;
     }
+    this.gotGap = false;
     this.skipped = false;
     if (this.calib > 0) this.calib--;
     this.lastDrawTs = ts;
@@ -392,8 +519,10 @@ export class Pace {
     // browser itself gives fewer frames than the screen shows - a phone saving its battery)
     this.drift += (el / (vb * R) - this.drift) * 0.05;
     this.lateRun = this.late > 0 && c.ema < 0.5 * n * R ? this.lateRun + 1 : 0;
-    if (this.calib === 0 && (this.drift < 0.85 || this.drift > 1.18 || this.lateRun > 30)) {
+    // (not again and again: a card that keeps falling behind moves the time between frames too)
+    if (this.calib === 0 && ts - this.calibAt > 20000 && (this.drift < 0.85 || this.drift > 1.18 || this.lateRun > 30)) {
       this.calib = 6;
+      this.calibAt = ts;
       this.drift = 1;
       this.lateRun = 0;
       this.pureN = 0;
@@ -434,6 +563,10 @@ export class Pace {
       a[j] = v;
     }
     const med = a[n >> 1];
+    // (a screen refreshes 24 to 250 times a second - and a browser saving the battery gives 30
+    // animation frames a second, the screen as far as the steady pace goes: a gap outside that is
+    // not a screen's)
+    if (med < 4 || med > 1000 / 23) return;
     let R = med;
     for (const hz of SNAP) {
       const r = 1000 / hz;
@@ -511,6 +644,10 @@ export class Pace {
     const name = { auto: 'יציב, אוטומטי', 60: 'יציב 60', 30: 'יציב 30' }[this.mode];
     const ot = this.otN ? Math.round((this.otSum / this.otN) * 100) : 100;
     const hz = Math.round(1000 / c.R);
-    return `קצב: ${name} · ${fps.toFixed(fps < 50 && fps % 1 > 0.05 ? 1 : 0)} בשנייה (מסך ${hz}Hz) · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}% · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${c.cpuBound ? ' · המעבד מגביל' : ''}${this.calib > 0 ? ' · מודד את המסך' : ''}`;
+    // (the card not enough: at the fewest pixels and the lightest frames, frames late)
+    const floor = !c.cpuBound && c.want <= c.floorLo + 1e-3 && c.lite >= (this.mode === 'auto' ? LITE_MAX : LITE_DEEP) && c.ema > HI * c.N * c.R && ot < 90;
+    const why = c.cpuBound ? ' · המעבד מגביל' : floor ? ` · כרטיס המסך לא מספיק ל-${Math.round(fps)} גם ברזולוציה הנמוכה ביותר${this.mode === 'auto' ? '' : ' (באוטומטי: קצב איטי יותר)'}` : '';
+    const lite = c.lite >= 2 ? ' · השתקפות ברזולוציה נמוכה מאוד' : c.lite >= 1 ? ' · השתקפות ברזולוציה נמוכה' : '';
+    return `קצב: ${name} · ${fps.toFixed(fps < 50 && fps % 1 > 0.05 ? 1 : 0)} בשנייה (מסך ${hz}Hz) · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}%${lite} · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${why}${this.calib > 0 ? ' · מודד את המסך' : ''}`;
   }
 }

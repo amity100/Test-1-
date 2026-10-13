@@ -494,6 +494,7 @@ const _sc = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const _md = new THREE.Vector3();
 const _s2 = new THREE.Vector2();
+const _s3 = new THREE.Vector2();
 
 // the layer of what is never seen in the mirror under the street (the main camera and the sun
 // see it; the mirror's camera does not), and the one only the sun sees
@@ -1460,7 +1461,17 @@ export class Pipeline {
     shared.uRefl.value = BLANK;
     shared.uMirror.value = 1;
     this.occlude(rc);
-    this.r.setRenderTarget(this.reflRT);
+    // (the steady pace: the mirror at its share of the drawing's size as it is now, in the corner
+    // of its picture, as the drawing is in its own: what the drawing gives up in a heavy moment
+    // the mirror gives up too - on a weak card it is as much work as the drawing)
+    const rt = this.reflRT;
+    const k = this.steady ? Math.min(1, this.dyn) * (this.reflShare || 1) : 1;
+    const w = Math.max(2, Math.round(rt.width * k));
+    const h = Math.max(2, Math.round(rt.height * k));
+    this.corner(rt, _s3.set(w, h), w !== rt.width || h !== rt.height);
+    shared.uReflK.value.set(w / rt.width, h / rt.height);
+    shared.uReflLo.value.set(0.5 / w, 0.5 / h);
+    this.r.setRenderTarget(rt);
     this.r.clear();
     this.r.render(this.scene, rc);
     this.unocclude();

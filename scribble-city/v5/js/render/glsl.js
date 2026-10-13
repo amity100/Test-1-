@@ -676,6 +676,8 @@ uniform sampler2D uMap;
 uniform sampler2D uEmMap;
 uniform float uUseEmMap;
 uniform sampler2D uRefl;
+uniform vec2 uReflK;
+uniform vec2 uReflLo;
 uniform float uUseRefl;
 uniform float uUvScale;
 uniform float uIndoor;   // a room under its lamps (no sun, warm light)
@@ -900,7 +902,7 @@ void main() {
     vec3 r = vec3(0.0);
     for (int i = 0; i < 5; i++) {
       float o = (float(i) - 2.0) * (kind > 8.5 ? 0.006 : 0.012);
-      r += texture(uRefl, ruv + wob + vec2(0.0, o)).rgb;
+      r += texture(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK).rgb;
     }
     r *= 0.2;
     float fr = mix(0.05, 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
