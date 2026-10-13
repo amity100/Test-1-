@@ -667,6 +667,11 @@ export class Pipeline {
     // the street and the bay, and with them it looked the same - on a weak graphics card they
     // were most of its work. ?mirrorpens: with them, as it was)
     this.mirrorPlain = true;
+    // (the sea, the bay and the pools: the only ones to look at the mirror in dry weather - a dry
+    // street holds none, render/glsl.js. Each tells, a frame or two late, whether any of it was
+    // seen in the drawing: setWaters)
+    this.waters = [];
+    this.qWater = false;
     // the street's depth first (render): the pens are worked out once a pixel. Faster on most
     // graphics cards, slower on some: the game tries both in play and keeps the faster
     // (render/depthtrial.js); depthFixed: ?depth / ?nodepth, no trying. mainTimer: the trial's
@@ -945,6 +950,50 @@ export class Pipeline {
       n++;
     });
     this.walls = n;
+  }
+
+  // The water under root (the sea, the bay, the pools: a mirror in their pens, and the kind of the
+  // water): around each one's draw in the drawing a question to the graphics card, did any of it
+  // show. The mirror is drawn only while some water has been seen lately, or the streets are wet.
+  setWaters(root) {
+    const gl = this.r.getContext();
+    if (typeof gl.createQuery !== 'function') return;
+    const isWater = (m) => !!(m && m.uniforms && m.uniforms.uKind && m.uniforms.uKind.value > 8.5 && m.uniforms.uKind.value < 9.5 && m.uniforms.uUseRefl && m.uniforms.uUseRefl.value > 0.5);
+    root.traverse((o) => {
+      if (!o.isMesh || Array.isArray(o.material)) return;
+      if (!isWater(o.material) && !(o.userData.pens || []).some(isWater)) return;
+      const w = { q: [], free: [], open: null, seen: -1e9 };
+      this.waters.push(w);
+      o.onBeforeRender = () => {
+        if (!this.qWater || w.open || w.q.length > 3) return;
+        const q = w.free.pop() || gl.createQuery();
+        gl.beginQuery(gl.ANY_SAMPLES_PASSED_CONSERVATIVE, q);
+        w.open = q;
+      };
+      o.onAfterRender = () => {
+        if (!w.open) return;
+        gl.endQuery(gl.ANY_SAMPLES_PASSED_CONSERVATIVE);
+        w.q.push(w.open);
+        w.open = null;
+      };
+    });
+  }
+
+  // the mirror wanted this frame: wet streets, or water seen in the last second or so (no waters
+  // known: always, as it was)
+  mirrorWanted() {
+    if (!this.waters.length || shared.uWet.value > 0 || this.mirrorAlways) return true;
+    const gl = this.r.getContext();
+    let seen = false;
+    for (const w of this.waters) {
+      while (w.q.length && gl.getQueryParameter(w.q[0], gl.QUERY_RESULT_AVAILABLE)) {
+        const q = w.q.shift();
+        if (gl.getQueryParameter(q, gl.QUERY_RESULT)) w.seen = this.frameN;
+        w.free.push(q);
+      }
+      if (this.frameN - w.seen < 45) seen = true;
+    }
+    return seen;
   }
 
   // (v5) the still city's pieces in pens that throw no pixel away, wherever nothing of them can be
@@ -1526,7 +1575,12 @@ export class Pipeline {
       if (T) T.end();
       this.shadowDone = true;
     }
-    if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale()) {
+    // (not at all while no water is in sight and the streets are dry: the water seen again
+    // reflects the sky until the mirror is there, a frame or two later - mirrorWanted)
+    const want = this.mirrorWanted();
+    shared.uReflOn.value = want ? 1 : 0;
+    if (!want) this.reflDone = false;
+    else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale()) {
       if (T) T.begin('reflection');
       this.renderReflection();
       if (T) T.end();
@@ -1666,7 +1720,9 @@ export class Pipeline {
       shared.uDepthOnly.value = 0;
       buf.depth.setMask(false);
       buf.depth.setLocked(true);
+      this.qWater = true;
       r.render(this.scene, cam);
+      this.qWater = false;
       buf.depth.setLocked(false);
       buf.depth.setMask(true);
       r.autoClear = true;
@@ -1684,9 +1740,15 @@ export class Pipeline {
       buf.color.setLocked(false);
       buf.color.setMask(true);
       shared.uDepthOnly.value = 0;
+      this.qWater = true;
       r.render(this.scene, cam);
+      this.qWater = false;
       r.autoClear = true;
-    } else r.render(this.scene, cam);
+    } else {
+      this.qWater = true;
+      r.render(this.scene, cam);
+      this.qWater = false;
+    }
     this.unocclude();
   }
 

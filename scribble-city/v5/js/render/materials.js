@@ -149,6 +149,9 @@ export const shared = {
   uQuality: { value: 1 },
   uMirror: { value: 0 },
   uRefl: { value: blank },
+  // (0: no mirror drawn this frame - no water in sight, the streets dry: the water reflects the
+  // sky meanwhile, render/pipeline.js mirrorWanted)
+  uReflOn: { value: 1 },
   uReflMatrix: { value: new THREE.Matrix4() },
   // (the steady pace draws the mirror in the corner of its picture, at the drawing's size as it is
   // now: its share of the picture, and half a pixel of it, render/pipeline.js)

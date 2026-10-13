@@ -150,6 +150,10 @@ async function boot() {
   // (v5) the walls' depth first, alone: their backs and what is behind them are not worked out
   // with the pens (render/pipeline.js setWalls: off for now, timed by the test route; ?walls: on)
   pipe.setWalls(world.group);
+  // (the sea, the bay and the pools: the mirror is drawn only while some of them is in sight, or
+  // the streets are wet - render/pipeline.js setWaters; ?mirroralways: every frame, as it was)
+  pipe.setWaters(world.group);
+  if (params.has('mirroralways')) pipe.mirrorAlways = true;
   if (params.has('walls')) pipe.wallsFirst = true;
   // (v5) and the still city's pens without their scissors wherever nothing of them is rubbed out
   // or crumbling: the graphics card leaves out what is hidden before the pens are worked out

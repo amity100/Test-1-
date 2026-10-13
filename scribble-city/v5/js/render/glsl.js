@@ -680,6 +680,7 @@ uniform sampler2D uMap;
 uniform sampler2D uEmMap;
 uniform float uUseEmMap;
 uniform sampler2D uRefl;
+uniform float uReflOn;
 uniform vec2 uReflK;
 uniform vec2 uReflLo;
 uniform float uUseRefl;
@@ -900,10 +901,20 @@ void main() {
     shade = mix(shade, warm * 1.1, on * 0.8);
   }
   vec3 rings = vec3(0.0);
-  if (uUseRefl > 0.5 && (probe & 32) == 0) {
+  // the street is asphalt, not glass: dry, it holds no mirror image at all - a sheen of the sky at
+  // a low angle, no more (and the mirror is not looked up, nor drawn for it: render/pipeline.js).
+  // In the rain its puddles spread and hold the city upside down, the more the wetter. The bay,
+  // the sea and the pools are water: the mirror always
+  bool street = kind < 8.5;
+  if (uUseRefl > 0.5 && street && uWet <= 0.0 && (probe & 32) == 0) {
+    vec3 sky = skyColor(reflect(-V, N));
+    float sk = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0) * 0.12;
+    lit = mix(lit, sky, sk);
+    shade = mix(shade, sky * 0.8, sk * 0.7);
+  } else if (uUseRefl > 0.5 && (probe & 32) == 0) {
     // the wet street and the bay: the city upside down, smeared into streaks
     vec2 ruv = vRefl.xy / vRefl.w;
-    float rip = kind > 8.5 ? 0.012 : 0.004;
+    float rip = street ? 0.004 : 0.012;
     vec2 wob = (vec2(vnoise(vWP.xz * vec2(0.9, 0.25) + uTime * vec2(0.0, 0.3)), vnoise(vWP.xz * 0.6 + 7.0)) - 0.5) * rip;
     if (uRain > 0.0) {
       // the rain falling into it: rings that push the mirror image about
@@ -911,17 +922,16 @@ void main() {
       wob += rings.xy * 0.006;
     }
     vec3 r = vec3(0.0);
-    for (int i = 0; i < 5; i++) {
-      float o = (float(i) - 2.0) * (kind > 8.5 ? 0.006 : 0.012);
-      r += texture(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK).rgb;
-    }
-    r *= 0.2;
-    // (the street is asphalt, not glass: between its puddles only a sheen, and in them less of the
-    // mirror than on the bay - a road that shone like glass was too much)
-    float fr = mix(0.05, kind > 8.5 ? 0.92 : 0.72, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
-    // (in the rain the puddles spread until the whole street is one)
-    float wetK = uWetK * (kind > 8.5 ? 1.0 : 0.2 + 0.8 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))));
-    if (uWet > 0.0 && kind < 8.5) wetK = mix(wetK, 1.0, 0.4 * uWet);
+    if (uReflOn > 0.5) {
+      for (int i = 0; i < 5; i++) {
+        float o = (float(i) - 2.0) * (street ? 0.012 : 0.006);
+        r += texture(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK).rgb;
+      }
+      r *= 0.2;
+    } else r = skyColor(reflect(-V, N)) * 0.9;
+    float fr = mix(0.05, street ? 0.72 : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
+    // (a wet street: puddles, wider the wetter, and between them a thin film)
+    float wetK = street ? uWetK * uWet * (0.25 + 0.75 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09)))) : uWetK;
     // under the pens, the street holds the mirror image; the pens take their colours from it
     float k = fr * wetK;
     lit = mix(lit, r, k * 0.8);
