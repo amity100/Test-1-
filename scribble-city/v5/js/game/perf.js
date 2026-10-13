@@ -7,6 +7,7 @@
 // the city, the same every time, that ends in a report to copy (so two builds, or two devices,
 // can be compared on the same streets).
 
+import * as THREE from 'three';
 import { groundHeight } from '../world/layout.js';
 
 const ROUTE_SECONDS = 60;
@@ -14,7 +15,9 @@ const ROUTE_SECONDS = 60;
 // on the device: as it is, the drawing at its coarsest (the pixels), without the mirror, without
 // the sun's view of what moves (v5), without the people and the cars (v5), and not drawn at all
 // (the game alone, on the processor)
-const STILL = [['רגיל', null], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי צל', 'shadow'], ['בלי אנשים ומכוניות', 'life'], ['בלי ציור', 'draw']];
+// (and as it is once more at the end: if the device has slowed down on its own meanwhile, warming
+// up, the first and the last tell)
+const STILL = [['רגיל', null], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי צל', 'shadow'], ['בלי אנשים ומכוניות', 'life'], ['בלי ציור', 'draw'], ['שוב רגיל', null]];
 const STILL_SECONDS = 5;
 // the route: along the boulevard, through the shops and the park, up the avenue into downtown,
 // over the towers and out over the bay to the pier (x, height, z)
@@ -34,6 +37,68 @@ const SYSTEMS = [
 ];
 const PASSES = ['shadow', 'reflection', 'main', 'ink', 'taa', 'rain', 'glow', 'final'];
 const PASS_HE = { shadow: 'צל', reflection: 'השתקפות', main: 'ציור', ink: 'דיו', taa: 'איחוד', rain: 'גשם', glow: 'זוהר', final: 'סיום' };
+
+// (v5) What the device itself was like during the test: its browser, how fast its processor and
+// its graphics card were at the start and at the end (the same fixed work each time: a phone that
+// has warmed up slows down, and two tests on one phone are only comparable at the same speed), and
+// how much of each second the browser spent on other things than the game (the page around it).
+function browserName() {
+  const ua = navigator.userAgent;
+  const v = (re) => {
+    const m = ua.match(re);
+    return m ? m[1] : '';
+  };
+  if (/SamsungBrowser\//.test(ua)) return `Samsung Internet ${v(/SamsungBrowser\/(\d+)/)}`;
+  if (/Firefox\//.test(ua)) return `Firefox ${v(/Firefox\/(\d+)/)}`;
+  if (/EdgA?\//.test(ua)) return `Edge ${v(/EdgA?\/(\d+)/)}`;
+  // (an app's own browser, WebView, says "wv")
+  if (/Chrome\//.test(ua)) return `${/; wv\)/.test(ua) ? 'WebView (דפדפן בתוך אפליקציה)' : 'Chrome'} ${v(/Chrome\/(\d+)/)}`;
+  if (/Safari\//.test(ua)) return `Safari ${v(/Version\/([\d.]+)/)}`;
+  return 'לא ידוע';
+}
+
+// the processor: a fixed sum (ms)
+function cpuSpeed() {
+  const t0 = performance.now();
+  let x = 0;
+  for (let i = 1; i < 3000000; i++) x += Math.sqrt(i) * (i & 7);
+  cpuSpeed.sink = x;
+  return performance.now() - t0;
+}
+
+// the graphics card: a fixed picture drawn 16 times into a square of 512, waited for (ms)
+let gpuTest = null;
+function gpuSpeed(r) {
+  if (!gpuTest) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uK: { value: 1 } },
+      vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: 'uniform float uK; void main() { vec2 p = gl_FragCoord.xy * 0.01; float a = 0.0; for (int i = 0; i < 32; i++) { float f = float(i); a += sin(p.x * f + uK) * cos(p.y - f); } gl_FragColor = vec4(a * 0.01, 0.0, 0.0, 1.0); }',
+      depthTest: false,
+      depthWrite: false,
+    });
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+    quad.frustumCulled = false;
+    const scene = new THREE.Scene();
+    scene.add(quad);
+    gpuTest = { rt: new THREE.WebGLRenderTarget(512, 512, { depthBuffer: false }), scene, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), px: new Uint8Array(4) };
+  }
+  const t = gpuTest;
+  const keep = r.getRenderTarget();
+  const auto = r.autoClear;
+  r.autoClear = false;
+  r.setRenderTarget(t.rt);
+  // (what the card still has to do first, and the picture made ready: not counted)
+  r.render(t.scene, t.cam);
+  r.readRenderTargetPixels(t.rt, 0, 0, 1, 1, t.px);
+  const t0 = performance.now();
+  for (let i = 0; i < 16; i++) r.render(t.scene, t.cam);
+  r.readRenderTargetPixels(t.rt, 0, 0, 1, 1, t.px);
+  const ms = performance.now() - t0;
+  r.setRenderTarget(keep);
+  r.autoClear = auto;
+  return ms;
+}
 
 // time on the graphics card, pass by pass (EXT_disjoint_timer_query_webgl2; the answers come a
 // few frames late, so they are averaged)
@@ -287,6 +352,10 @@ export class Perf {
     // the length along the route (for an even speed)
     const acc = [0];
     for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z));
+    // (the device's speed before anything else: its own little picture is not one of the game's
+    // shaders counted below)
+    const cpu0 = cpuSpeed();
+    const gpu0 = gpuSpeed(g.renderer);
     this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0 };
     this.gpu.take(true);
     // the shaders made ready on the way (each a pause where it is first seen: on a phone, long)
@@ -308,12 +377,36 @@ export class Perf {
       delete gl.compileShader;
       delete gl.getProgramParameter;
     };
+    // (v5) the device: its browser, its speed now (and again at the end), the long tasks of the
+    // page around the game, how long the game has been open, the battery
+    b.open = performance.now() / 60000;
+    b.cpu = [cpu0];
+    b.gpuMs = [gpu0];
+    b.busy = { self: 0, other: 0 };
+    try {
+      b.po = new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) {
+          if (e.name === 'self') b.busy.self += e.duration;
+          else b.busy.other += e.duration;
+        }
+      });
+      b.po.observe({ type: 'longtask' });
+    } catch (e) {
+      b.po = null;
+    }
+    b.battery = null;
+    try {
+      if (navigator.getBattery) navigator.getBattery().then((bt) => (b.battery = { level: bt.level, charging: bt.charging })).catch(() => {});
+    } catch (e) {
+      b.battery = null;
+    }
+    b.t0 = performance.now();
     // the test is at the drawing's full quality: the self-adjusting resolution waits
     g.pipe.scale = g.pipe.defaultScale || g.pipe.scale;
     g.pipe.taaFrac = 0.67;
     g.player.invuln = 1e9;
     this.toggle(this.on);
-    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד חצי דקה במקום. בלי לגעת…', 'info', 3);
+    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בלי לגעת…', 'info', 3);
   }
 
   // where the camera is at distance d along the route (Catmull-Rom through the points)
@@ -376,7 +469,13 @@ export class Perf {
     const b = this.bench;
     const s = b.still;
     const pipe = this.game.pipe;
-    if (s.i >= 0) s.fps.push(this.summary(s.frames).fps);
+    if (s.i >= 0) {
+      const sm = this.summary(s.frames);
+      s.fps.push(sm.fps);
+      // (of each frame, the time not in the game's own code: the browser, the page around it, and
+      // waiting for the graphics card)
+      (s.gap || (s.gap = [])).push(Math.max(0, sm.ms - sm.upd - sm.ren));
+    }
     // (back as it was)
     pipe.scale = pipe.defaultScale || b.scale;
     pipe.reflections = b.refl;
@@ -410,6 +509,10 @@ export class Perf {
     const g = this.game;
     const b = this.bench;
     const s = this.summary(b.frames);
+    b.cpu.push(cpuSpeed());
+    b.gpuMs.push(gpuSpeed(g.renderer));
+    if (b.po) b.po.disconnect();
+    const secs = Math.max(1, (performance.now() - b.t0) / 1000);
     const gpu = b.gpuRoute !== undefined ? b.gpuRoute : this.gpu.ok ? this.gpu.take(true) : null;
     this.bench = null;
     if (b.unhook) b.unhook();
@@ -440,6 +543,10 @@ export class Perf {
       `FPS ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
       `פריימים: עד 17ms ${share(0, 17.5)}% · עד 34ms ${share(17.5, 34.5)}% · יותר ${share(34.5, 1e9)}% · הכנת שיידרים ${b.compiles} (${Math.round(b.compileMs)}ms)`,
       b.still && b.still.fps.length === STILL.length ? `עומדים במקום, פריימים בשנייה: ${STILL.map(([name], i) => `${name} ${b.still.fps[i].toFixed(1)}`).join(' · ')}` : '',
+      b.still && b.still.gap && b.still.gap.length === STILL.length ? `מזה, זמן בכל פריים מחוץ לקוד המשחק (ms): ${STILL.map(([name], i) => `${name} ${b.still.gap[i].toFixed(0)}`).join(' · ')}` : '',
+      `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}`,
+      `מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${b.cpu[0].toFixed(1)}, בסוף ${b.cpu[1].toFixed(1)} · כרטיס מסך בהתחלה ${b.gpuMs[0].toFixed(1)}, בסוף ${b.gpuMs[1].toFixed(1)}`,
+      b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד',
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
       `עומק קודם: ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (נבדק: עם ${g.depthTrial.result.on}ms, בלי ${g.depthTrial.result.off}ms)` : ''}`,
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',

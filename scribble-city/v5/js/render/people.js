@@ -350,9 +350,12 @@ class Shape {
 
 // drawCheap's joints: x across, y up, z ahead of the walker _aw (scale _aS) in its frame (_cR, _cF)
 let _aw = null;
-let _aS = 1;
+// (v5: numbers kept in arrays, not in variables of the module: a number put in one of those is a
+// new object every time, garbage for the phone to clear)
+const _aS = new Float64Array([1]);
 function atW(out, x, y, z) {
-  return out.set(_aw.x + (_cR.x * x + _cF.x * z) * _aS, _aw.y + y * _aS, _aw.z + (_cR.z * x + _cF.z * z) * _aS);
+  const S = _aS[0];
+  return out.set(_aw.x + (_cR.x * x + _cF.x * z) * S, _aw.y + y * S, _aw.z + (_cR.z * x + _cF.z * z) * S);
 }
 
 // a matrix that takes a part hanging down its local -y from a joint at a to b, as thick as k
@@ -390,8 +393,8 @@ const LIPS_M = [0.45, 0.22, 0.22];
 // (the parts each arm and leg belongs to, and the running part id of the person being drawn)
 const ARM_PART = ['armR', 'armL'];
 const LEG_PART = ['legR', 'legL'];
-let _part = 0;
-const nextPart = () => (_part = (_part + 0.1173) % 1);
+const _part = new Float64Array(1);
+const nextPart = () => (_part[0] = (_part[0] + 0.1173) % 1);
 
 // the tops that are worn open over another layer
 const OPEN = new Set(['suit', 'blazer', 'jacket', 'denim', 'bomber', 'cardigan', 'overshirt', 'trench', 'coat']);
@@ -706,7 +709,7 @@ export class PersonRenderer {
     const J = _cJ;
     // the joints (the rig's walk, game/doodle.js, without the rig)
     _aw = w;
-    _aS = S;
+    _aS[0] = S;
     const at = atW;
     const hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A;
     const lean = A * 0.12;
@@ -851,7 +854,7 @@ export class PersonRenderer {
     const k = S * 0.98;
     const bulk = fig.bulk;
     const seed = (fig.seed % 1) * 0.37 + 0.11;
-    _part = seed;
+    _part[0] = seed;
     const id = nextPart;
     const ax = fig.ax;
     const rgt = fig.brgt;

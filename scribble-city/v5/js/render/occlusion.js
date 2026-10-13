@@ -192,11 +192,11 @@ export class Occlusion {
       // the outline's extent at the cell row's two edges: the row is covered between them
       const a = spanAt(n, r);
       if (a === null) continue;
-      const aL = spanL;
-      const aR = spanR;
+      const aL = _span[0];
+      const aR = _span[1];
       if (spanAt(n, r + 1) === null) continue;
-      const xl = Math.max(aL, spanL);
-      const xr = Math.min(aR, spanR);
+      const xl = Math.max(aL, _span[0]);
+      const xr = Math.min(aR, _span[1]);
       const c0 = Math.max(0, Math.ceil(xl));
       const c1 = Math.min(w, Math.floor(xr));
       const row = r * w;
@@ -273,9 +273,10 @@ function cross(a, b, c) {
   return (_hull[b * 2] - _hull[a * 2]) * (_p[c * 3 + 1] - _hull[a * 2 + 1]) - (_hull[b * 2 + 1] - _hull[a * 2 + 1]) * (_p[c * 3] - _hull[a * 2]);
 }
 
-// the outline's x extent on the horizontal line y (spanL, spanR), or null if it misses it
-let spanL = 0;
-let spanR = 0;
+// the outline's x extent on the horizontal line y (_span[0], _span[1]), or null if it misses it
+// (v5: in an array, not in two variables of the module: a number put in one of those is a new
+// object every time, garbage for the phone to clear, thousands a frame)
+const _span = new Float64Array(2);
 function spanAt(n, y) {
   let l = Infinity;
   let r = -Infinity;
@@ -293,8 +294,8 @@ function spanAt(n, y) {
     }
   }
   if (l > r) return null;
-  spanL = l;
-  spanR = r;
+  _span[0] = l;
+  _span[1] = r;
   return true;
 }
 
