@@ -3,8 +3,10 @@
 // half the size, mir times as costly a pixel), the processor busy cpu ms a frame. In software
 // (SwiftShader) a frame of the city takes seconds, too long for the beat's own logic to run.
 //
-//   node tools/pace-synth.mjs <outLog> [k=60] [cpu=8] [mir=1.44] [phases=free:3,30:20,auto:20]
+//   node tools/pace-synth.mjs <outLog> [k=60] [cpu=8] [mir=1.44] [phases=free:3,30:20,auto:20] [throttle=1]
 //
+// throttle: no animation frame while two frames wait on the card, as a browser with a real card
+// does (0: as the software one does, its queue growing to seconds).
 // phases: mode:seconds, one after another (free at the free pace's lowest resolution, 0.7). Each
 // second: frames drawn and late, the screen's refresh as measured, the beat, the resolution, the
 // lighter frames, the frame's time to the card's end, and the time between frames.
@@ -14,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch } from './shot.mjs';
 
-const [outLog, K = '60', CPU = '8', MIR = '1.44', PHASE = 'free:3,30:20,auto:20'] = process.argv.slice(2);
+const [outLog, K = '60', CPU = '8', MIR = '1.44', PHASE = 'free:3,30:20,auto:20', THROTTLE = '1'] = process.argv.slice(2);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..');
 const server = http.createServer((req, res) => {
@@ -33,7 +35,7 @@ const pg = await browser.newPage({ viewport: { width: 960, height: 540 } });
 const errors = [];
 pg.on('pageerror', (e) => errors.push(e.message));
 pg.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await pg.goto(`http://127.0.0.1:${port}/tools/pace-synth.html?k=${K}&cpu=${CPU}&mir=${MIR}`);
+await pg.goto(`http://127.0.0.1:${port}/tools/pace-synth.html?k=${K}&cpu=${CPU}&mir=${MIR}&throttle=${THROTTLE}`);
 await pg.waitForFunction('window.__ready === true', null, { timeout: 60000 });
 const out = [];
 const log = (s) => { out.push(s); console.log(s); };

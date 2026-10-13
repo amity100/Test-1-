@@ -68,7 +68,25 @@ window.__time1 = (dyn) => { const ps = pipe.steady, pd = pipe.dyn; pipe.steady =
 window.__frames = [];
 window.__mode = 'free';
 let last = 0;
+// (as a browser with a real graphics card does: no animation frame while two frames wait on the
+// card - in software the browser does not hold them back, and the card's queue grows to seconds;
+// ?throttle=0: as the software browser does)
+const throttle = q.get('throttle') !== '0';
+const mine = [];
+function behind() {
+  while (mine.length && gl.getSyncParameter(mine[0], gl.SYNC_STATUS) === gl.SIGNALED) gl.deleteSync(mine.shift());
+  return mine.length >= 2;
+}
+function mark() {
+  const f = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  if (f) mine.push(f);
+  gl.flush();
+}
 function tick(ts) {
+  if (throttle && behind()) {
+    requestAnimationFrame(tick);
+    return;
+  }
   pace.engage(pace.on);
   if (pace.engaged) {
     const step = pace.beat(ts);
@@ -77,12 +95,14 @@ function tick(ts) {
       busy(S.cpu);
       draw();
       pace.sent(t0, performance.now(), true);
+      mark();
       window.__frames.push([ts, pace.interval, pace.late, pace.calib]);
     }
   } else {
     if (last) pace.freeFrame((ts - last) / 1000);
     busy(S.cpu);
     draw();
+    mark();
     window.__frames.push([ts, last ? ts - last : 0, 0, 0]);
     last = ts;
   }

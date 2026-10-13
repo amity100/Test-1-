@@ -33,8 +33,9 @@ const LO = 0.6;
 // (the lighter frames, when the fewest pixels are not enough: 1 the mirror under the street at two
 // thirds of its share, 2 at half of it - render/pipeline.js; game/pace.js toPipe. Still drawn every
 // frame: a mirror drawn every other one slides under the street. With a beat that was chosen, 60
-// or 30, then 3 and 4: the drawing a little further down, a step each, rather than the frames
-// late - the auto pace takes a slower beat instead)
+// or 30, then 3 and 4: the drawing a little further down, a step each, for frames that do come
+// late - the auto pace takes a slower beat instead. And when even that does not hold, a beat that
+// was chosen takes a slower one too: steady first)
 export const LITE_MAX = 2;
 const LITE_DEEP = 4;
 const DEEP_STEP = 0.05;
@@ -98,21 +99,32 @@ export class PaceControl {
 
   pickBeat() {
     const R = this.R;
+    // (60 or 30: the beat of the screen's nearest to it, the faster one if between two - and the
+    // slower ones after it, for a device that cannot keep it even at the fewest pixels: a steady
+    // pace first, 20 that holds rather than 30 that keeps missing)
+    const fixed = (fps) => Math.max(1, Math.floor(1000 / fps / R + 0.15));
+    const top = this.mode === '60' ? fixed(60) : this.mode === '30' ? fixed(30) : 1;
     const c = [];
-    for (let n = 1; n <= 10; n++) {
+    for (let n = top; n <= 10; n++) {
       const f = 1000 / (n * R);
       if (f <= MAX_FPS + 0.5 && f >= MIN_FPS) c.push(n);
     }
-    if (!c.length) c.push(1);
+    if (!c.length) c.push(top);
     this.choices = c;
-    // (60 or 30: the beat of the screen's nearest to it, the faster one if between two)
-    const fixed = (fps) => Math.max(1, Math.floor(1000 / fps / R + 0.15));
-    if (this.mode === '60') this.N = fixed(60);
-    else if (this.mode === '30') this.N = fixed(30);
-    else {
-      this.level = Math.min(this.level, c.length - 1);
-      this.N = c[this.level];
-    }
+    this.level = Math.min(this.level, c.length - 1);
+    this.N = c[this.level];
+  }
+
+  // the lighter frames as far as they go: the auto pace takes a slower beat sooner (game/pace.js
+  // LITE_MAX), a beat that was chosen goes on to the drawing further down first
+  get liteMost() {
+    return this.mode === 'auto' ? LITE_MAX : LITE_DEEP;
+  }
+
+  // frames that do come late (or a card ever further behind): close to the frame's time, the beat
+  // still holds - the card works on one frame while the processor makes the next
+  get trouble() {
+    return this.lateHeat > 0.5 || this.ema > 3 * this.N * this.R;
   }
 
   // the drawing's floor as it is now: its own, or a step or two under it (the lighter frames 3, 4)
@@ -189,7 +201,7 @@ export class PaceControl {
     if (this.boost > 0) this.boost--;
     this.want = Math.min(this.hi, Math.max(this.floorLo, w));
     const lite = this.liteStep(now, over, B);
-    const beat = this.mode === 'auto' ? this.autoBeat(now, card, over) : false;
+    const beat = this.beatStep(now, card, over);
     const changed = this.apply() || beat || lite;
     if (changed) this.changedAt = this.frame + 1;
     return changed;
@@ -201,10 +213,9 @@ export class PaceControl {
   // step back that does not hold is not tried again for longer each time)
   liteStep(now, over, B) {
     const floor = this.want <= this.floorLo + 1e-3;
-    const most = this.mode === 'auto' ? LITE_MAX : LITE_DEEP;
-    // (the drawing itself further down only for frames that do come late, or run past their time:
-    // close to it, they still come on their beat)
-    const need = this.lite < LITE_MAX || this.ema > B || this.lateHeat > 0.5;
+    const most = this.liteMost;
+    // (the drawing itself further down only for frames that do come late)
+    const need = this.lite < LITE_MAX || this.trouble;
     // (far over it: the next one sooner)
     if (over && floor && !this.cpuBound && need) this.liteStrain += this.ema > 1.25 * B ? 2 : 1;
     else this.liteStrain = Math.max(0, this.liteStrain - 1);
@@ -236,13 +247,13 @@ export class PaceControl {
     this.liteEase = 0;
   }
 
-  // (auto) a slower beat when even the fewest pixels do not fit the frames in it; a faster one when
+  // a slower beat when even the fewest pixels and the lightest frames do not keep the frames on it
+  // (the auto pace, and a beat that was chosen as well); a faster one, up to the one chosen, when
   // they would fit it with most of the pixels, for a few seconds on end
-  autoBeat(now, card, over) {
+  beatStep(now, card, over) {
     const c = this.choices;
-    const floor = this.want <= this.floorLo + 1e-3 && this.lite >= LITE_MAX;
-    // (and frames that do come late, or run past their time: close to it, the beat still holds)
-    if (over && (floor || this.cpuBound) && (this.ema > this.N * this.R || this.lateHeat > 0.5)) this.strain++;
+    const floor = this.want <= this.floorLo + 1e-3 && this.lite >= this.liteMost;
+    if (over && (floor || this.cpuBound) && this.trouble) this.strain++;
     else this.strain = Math.max(0, this.strain - 2);
     if (this.strain >= 40 && this.level < c.length - 1) {
       // (a faster beat tried a moment ago that did not hold: not again for a while, longer each time)
@@ -290,7 +301,7 @@ export class PaceControl {
       this.want = Math.max(this.floorLo, this.want * 0.97);
       if (this.apply()) this.changedAt = this.frame + 1;
     }
-    if (this.mode === 'auto' && ((this.want <= this.floorLo + 1e-3 && this.lite >= LITE_MAX) || this.cpuBound)) this.strain += 4 * Math.min(k, 3);
+    if ((this.want <= this.floorLo + 1e-3 && this.lite >= this.liteMost) || this.cpuBound) this.strain += 4 * Math.min(k, 3);
   }
 }
 
@@ -326,9 +337,11 @@ export class Pace {
     this.gotGap = false;
     this.drift = 1;
     this.lateRun = 0;
-    // the real time from the last drawn frame to this one (ms), refreshes it was late by
+    // the real time from the last drawn frame to this one (ms), refreshes it was late by, and on
+    // the average (the panel: how many frames a second there really are)
     this.interval = 1000 / 60;
     this.late = 0;
+    this.ivE = 0;
     // (the free pace's frames: how long they take, ms - where the auto pace begins)
     this.freeMs = 0;
     // the fences in the card's queue (records kept for reuse: nothing made each frame)
@@ -387,7 +400,7 @@ export class Pace {
     if (c.mode !== 'auto' || !(ms > 0) || !(at > 0)) return;
     const least = ms * Math.min(1, (c.floorLo / at) ** 2);
     let i = 0;
-    while (i < c.choices.length - 1 && least > HI * c.choices[i] * c.R) i++;
+    while (i < c.choices.length - 1 && least > c.choices[i] * c.R) i++;
     if (i === c.level) return;
     c.level = i;
     c.N = c.choices[i];
@@ -435,6 +448,7 @@ export class Pace {
     this.pureN = 0;
     this.pureNew = 0;
     this.lastDrawTs = 0;
+    this.ivE = 0;
     this.drift = 1;
     this.lateRun = 0;
     this.otN = 0;
@@ -511,6 +525,7 @@ export class Pace {
     this.lastDrawTs = ts;
     this.cb = 0;
     this.interval = el;
+    this.ivE = this.ivE ? this.ivE + (el - this.ivE) * 0.1 : el;
     this.late = vb - n;
     c.frame++;
     this.limits();
@@ -640,14 +655,24 @@ export class Pace {
     if (!this.on) return 'קצב: רגיל (כמה שיותר פריימים)';
     if (!this.engaged) return 'קצב: יציב (עומד בזמן מסלול המבחן)';
     const c = this.ctl;
+    // (a tenth only where there is one: 1000 / (2 * 16.67) is 30, not 30.0)
+    const f1 = (v) => {
+      const r = v < 50 ? Math.round(v * 10) / 10 : Math.round(v);
+      return r % 1 ? r.toFixed(1) : String(r);
+    };
     const fps = 1000 / (c.N * c.R);
     const name = { auto: 'יציב, אוטומטי', 60: 'יציב 60', 30: 'יציב 30' }[this.mode];
     const ot = this.otN ? Math.round((this.otSum / this.otN) * 100) : 100;
     const hz = Math.round(1000 / c.R);
-    // (the card not enough: at the fewest pixels and the lightest frames, frames late)
-    const floor = !c.cpuBound && c.want <= c.floorLo + 1e-3 && c.lite >= (this.mode === 'auto' ? LITE_MAX : LITE_DEEP) && c.ema > HI * c.N * c.R && ot < 90;
-    const why = c.cpuBound ? ' · המעבד מגביל' : floor ? ` · כרטיס המסך לא מספיק ל-${Math.round(fps)} גם ברזולוציה הנמוכה ביותר${this.mode === 'auto' ? '' : ' (באוטומטי: קצב איטי יותר)'}` : '';
+    // (a beat that was chosen, and a slower one kept: it did not hold here)
+    const top = 1000 / (c.choices[0] * c.R);
+    const held = this.mode !== 'auto' && c.level > 0 ? ` (${f1(top)} לא מחזיק במחשב הזה)` : '';
+    // (how many frames a second there really are)
+    const real = this.ivE > 0 ? ` · בפועל ${(1000 / this.ivE).toFixed(1)}` : '';
+    // (the card not enough: the slowest beat, the fewest pixels and the lightest frames, frames late)
+    const floor = !c.cpuBound && c.level >= c.choices.length - 1 && c.want <= c.floorLo + 1e-3 && c.lite >= c.liteMost && c.ema > HI * c.N * c.R && ot < 90;
+    const why = c.cpuBound ? ' · המעבד מגביל' : floor ? ` · כרטיס המסך לא מספיק ל-${Math.round(fps)} גם ברזולוציה הנמוכה ביותר` : '';
     const lite = c.lite >= 2 ? ' · השתקפות ברזולוציה נמוכה מאוד' : c.lite >= 1 ? ' · השתקפות ברזולוציה נמוכה' : '';
-    return `קצב: ${name} · ${fps.toFixed(fps < 50 && fps % 1 > 0.05 ? 1 : 0)} בשנייה (מסך ${hz}Hz) · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}%${lite} · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${why}${this.calib > 0 ? ' · מודד את המסך' : ''}`;
+    return `קצב: ${name} · ${f1(fps)} בשנייה${held}${real} · מסך ${hz}Hz · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}%${lite} · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${why}${this.calib > 0 ? ' · מודד את המסך' : ''}`;
   }
 }

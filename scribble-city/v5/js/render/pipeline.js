@@ -1463,9 +1463,17 @@ export class Pipeline {
     this.occlude(rc);
     // (the steady pace: the mirror at its share of the drawing's size as it is now, in the corner
     // of its picture, as the drawing is in its own: what the drawing gives up in a heavy moment
-    // the mirror gives up too - on a weak card it is as much work as the drawing)
+    // the mirror gives up too - on a weak card it is as much work as the drawing. In steps of an
+    // eighth, a step only once the size wanted is well past it, and never under a quarter: a
+    // mirror whose size moved with the drawing's, a pixel or two a frame, would shimmer)
     const rt = this.reflRT;
-    const k = this.steady ? Math.min(1, this.dyn) * (this.reflShare || 1) : 1;
+    let k = 1;
+    if (this.steady) {
+      const want = Math.min(1, this.dyn) * (this.reflShare || 1);
+      k = this.reflK || 1;
+      if (Math.abs(want - k) > 0.09) k = Math.min(1, Math.max(0.25, Math.round(want * 8) / 8));
+    }
+    this.reflK = k;
     const w = Math.max(2, Math.round(rt.width * k));
     const h = Math.max(2, Math.round(rt.height * k));
     this.corner(rt, _s3.set(w, h), w !== rt.width || h !== rt.height);
