@@ -103,6 +103,7 @@ async function boot() {
   // (the steady pace begins from these, game/pace.js)
   pipe.defaultTaaFrac = pipe.taaFrac;
   if (params.has('norefl')) pipe.reflections = false;
+  if (params.has('mirrorpens')) pipe.mirrorPlain = false;
   if (params.has('depth') || params.has('nodepth')) {
     pipe.depthFirst = params.has('depth');
     pipe.depthFixed = true;

@@ -68,6 +68,10 @@ uniform float uWet;
 uniform float uMist;
 uniform float uFlash;
 uniform float uDepthOnly;
+// (the graphics card's own test, game/perf.js: parts of the drawing left out, one at a time, to time
+// each one - 1 the pens, 2 the sun's shadow, 4 the lamps, 8 the haze, 16 all but the colour, 32 the
+// mirror image in the street. Always 0 but then)
+uniform float uProbe;
 uniform float uPxK;
 uniform float uMipBias;
 uniform float uPRo;
@@ -824,19 +828,26 @@ void main() {
   vec3 V = normalize(cameraPosition - vWP);
   vec3 alb = uAlbedo * tex.rgb * (uNeonMask > 0.5 || uEmVColor > 0.5 ? vec3(1.0) : vCol);
   float kind = uKind;
+  int probe = int(uProbe + 0.5);
+  if ((probe & 16) != 0) {
+    gColor = vec4(alb, 0.0);
+    gAux = vec4(0.5, 0.5, fract(uObj + vId * 0.6180339), uLine);
+    gVel = vec4(0.0);
+    return;
+  }
 
   // light: the sun low over the bay, the violet sky, the neon. (The shadow is not looked up where
   // it changes nothing: indoors, the room's own light; facing away from the sun, the light and
   // the rim both 0 whatever it is; glossy paint's glint still asks)
   float ndl = dot(N, uSunDir);
-  float sh = inside || (ndl <= -0.15 && uGloss <= 0.0) ? 1.0 : sunShadow(vWP, N);
+  float sh = inside || (ndl <= -0.15 && uGloss <= 0.0) || (probe & 2) != 0 ? 1.0 : sunShadow(vWP, N);
   float light = clamp(ndl * 1.7 + 0.06, 0.0, 1.0) * sh;
   // under a grey sky the light comes from all of it: soft, a little more on what faces up
   if (uOvercast > 0.0) light = mix(light, 0.32 + 0.3 * max(N.y, 0.0), uOvercast * 0.85);
   // in the rain what is flat and outdoors gets darker and deeper in colour
   if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= 1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y);
   vec3 amb = ambientLight(N);
-  vec3 pts = pointLights(vWP, N);
+  vec3 pts = (probe & 4) != 0 ? vec3(0.0) : pointLights(vWP, N);
   vec3 key = uSunCol;
   if (inside) {
     // a room under its lamps at dusk: warm golden light from above, rosy in the corners, no sun;
@@ -889,7 +900,7 @@ void main() {
     shade = mix(shade, warm * 1.1, on * 0.8);
   }
   vec3 rings = vec3(0.0);
-  if (uUseRefl > 0.5) {
+  if (uUseRefl > 0.5 && (probe & 32) == 0) {
     // the wet street and the bay: the city upside down, smeared into streaks
     vec2 ruv = vRefl.xy / vRefl.w;
     float rip = kind > 8.5 ? 0.012 : 0.004;
@@ -905,9 +916,11 @@ void main() {
       r += texture(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK).rgb;
     }
     r *= 0.2;
-    float fr = mix(0.05, 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
+    // (the street is asphalt, not glass: between its puddles only a sheen, and in them less of the
+    // mirror than on the bay - a road that shone like glass was too much)
+    float fr = mix(0.05, kind > 8.5 ? 0.92 : 0.72, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
     // (in the rain the puddles spread until the whole street is one)
-    float wetK = uWetK * (kind > 8.5 ? 1.0 : 0.35 + 0.65 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))));
+    float wetK = uWetK * (kind > 8.5 ? 1.0 : 0.2 + 0.8 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))));
     if (uWet > 0.0 && kind < 8.5) wetK = mix(wetK, 1.0, 0.4 * uWet);
     // under the pens, the street holds the mirror image; the pens take their colours from it
     float k = fr * wetK;
@@ -931,11 +944,11 @@ void main() {
     em += vec3(1.0, 0.84, 0.58) * mGlow * 1.5;
   }
   gFar = smoothstep(32.0, 190.0, length(cameraPosition - vWP));
-  vec3 col = drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
+  vec3 col = (probe & 1) != 0 ? mix(shade, lit, light) : drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
   // the rings on the puddles: a pale pen, the sky caught in their slopes
   if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * 0.42);
   col += em;
-  col = applyFog(col, vWP);
+  if ((probe & 8) == 0) col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
   vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
   gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * 0.6180339), uLine);
@@ -1009,25 +1022,28 @@ void main() {
   // the page shows between the strokes, tinted by the sky
   vec3 col = mix(uPaper * 0.97, sky, 0.62);
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
-  // A: the main scribble, diagonal, every stroke its own pen
-  gZig = 0.26;
-  vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
-  vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
-  pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
-  pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
-  col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9));
-  // B: across it, looser
-  gZig = 0.38;
-  vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
-  vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
-  pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
-  col = mix(col, pb, B.x * step(fract(B.y * 7.13), 0.62 + 0.3 * cl));
-  if (uQuality > 0.5) {
-    // C: a few steep accents in a darker pen
-    gZig = 0.18;
-    vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
-    vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
-    col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.22 + 0.3 * cl));
+  // (the graphics card's own test: the sky's pens left out, game/perf.js)
+  if ((int(uProbe + 0.5) & 1) == 0) {
+    // A: the main scribble, diagonal, every stroke its own pen
+    gZig = 0.26;
+    vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
+    vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
+    pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
+    pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
+    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9));
+    // B: across it, looser
+    gZig = 0.38;
+    vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
+    vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
+    pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
+    col = mix(col, pb, B.x * step(fract(B.y * 7.13), 0.62 + 0.3 * cl));
+    if (uQuality > 0.5) {
+      // C: a few steep accents in a darker pen
+      gZig = 0.18;
+      vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
+      vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
+      col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.22 + 0.3 * cl));
+    }
   }
   gZig = 0.0;
   if (uStars > 0.01 && el > 0.03) {

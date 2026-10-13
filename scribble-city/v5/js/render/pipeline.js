@@ -663,6 +663,10 @@ export class Pipeline {
     // things drawn over the finished picture (speech bubbles)
     this.overlay = new THREE.Scene();
     this.reflections = true;
+    // (the mirror under the street drawn without the pens: its picture is smeared into streaks in
+    // the street and the bay, and with them it looked the same - on a weak graphics card they
+    // were most of its work. ?mirrorpens: with them, as it was)
+    this.mirrorPlain = true;
     // the street's depth first (render): the pens are worked out once a pixel. Faster on most
     // graphics cards, slower on some: the game tries both in play and keeps the faster
     // (render/depthtrial.js); depthFixed: ?depth / ?nodepth, no trying. mainTimer: the trial's
@@ -1460,6 +1464,10 @@ export class Pipeline {
     const keep = shared.uRefl.value;
     shared.uRefl.value = BLANK;
     shared.uMirror.value = 1;
+    // (mirrorPlain: the mirror's surfaces in their colours without the pens - its picture is
+    // smeared into streaks in the street and the bay anyway. render/glsl.js uProbe 1)
+    const probe0 = shared.uProbe.value;
+    if (this.mirrorPlain) shared.uProbe.value = probe0 | 1;
     this.occlude(rc);
     // (the steady pace: the mirror at its share of the drawing's size as it is now, in the corner
     // of its picture, as the drawing is in its own: what the drawing gives up in a heavy moment
@@ -1483,6 +1491,7 @@ export class Pipeline {
     this.r.clear();
     this.r.render(this.scene, rc);
     this.unocclude();
+    shared.uProbe.value = probe0;
     shared.uMirror.value = 0;
     shared.uRefl.value = this.reflRT.texture;
     for (const o of hidden) o.visible = true;
@@ -1762,6 +1771,19 @@ export class Pipeline {
       this.solid.forceFull = false;
       this.solid.update();
     }
+    // (the drawing with one part of the pens' work left out at a time, render/glsl.js uProbe: what
+    // each part costs on this graphics card - the pens, the sun's shadow, the lamps, the haze, all
+    // but the colour, the mirror image in the street; and the mirror the other way round from how
+    // it is drawn, with its pens or without them)
+    const probe = shared.uProbe;
+    for (const [k, bit] of [['noPens', 1], ['noSun', 2], ['noLamps', 4], ['noHaze', 8], ['flat', 16], ['noReflImg', 32]]) {
+      probe.value = bit;
+      out[k] = time(() => this.drawMain());
+    }
+    probe.value = 0;
+    this.mirrorPlain = !this.mirrorPlain;
+    out.reflFlip = this.reflections ? time(() => this.renderReflection()) : 0;
+    this.mirrorPlain = !this.mirrorPlain;
     out.ink = time(() => this.pass(this.steady ? this.mInkD : this.mInk, this.inkRT));
     out.glow = time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize));
     out.final = time(() => this.pass(this._corner ? this.mFinalD : this.mFinal, null));

@@ -194,6 +194,8 @@ export const shared = {
   uFlash: { value: 0 },
   // (render/pipeline.js) the street's depth first: the shaders only say how near they are
   uDepthOnly: { value: 0 },
+  // (the graphics card's own test, game/perf.js: parts of the drawing left out to time them)
+  uProbe: { value: 0 },
   // (render/pipeline.js) the smart drawing: the drawing's pixel in the screen's (1: drawn whole),
   // and log2 of it for the pictures; the screen's pixels per CSS pixel; the last frame's view (no
   // shift), how far this frame's samples are shifted; what moves on its own (render/motion.js)
