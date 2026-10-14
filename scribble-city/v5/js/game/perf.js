@@ -198,13 +198,82 @@ export class GpuTimer {
   }
 }
 
+// (where the browser has no clock on the graphics card - a phone's, an app's own browser) the same
+// by the wall clock: the card waited for before and after (render/pipeline.js profile), so what is
+// timed is the processor sending it and the card drawing it, together. Each time the frame stops
+// until the card has done all it was given: only now and then, for a few seconds after the numbers
+// are opened (Perf.diagDue)
+export class ClockTimer {
+  constructor(r) {
+    this.r = r;
+    this.rt = null;
+    this.px = new Uint8Array(4);
+    // (as GpuTimer: nothing comes late here)
+    this.pending = [];
+    this.open = null;
+    this.sum = {};
+    this.n = {};
+  }
+
+  get ok() {
+    return true;
+  }
+
+  sync() {
+    const r = this.r;
+    if (!this.rt) this.rt = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const keep = r.getRenderTarget();
+    r.setRenderTarget(this.rt);
+    r.clear();
+    r.readRenderTargetPixels(this.rt, 0, 0, 1, 1, this.px);
+    r.setRenderTarget(keep);
+  }
+
+  begin(label) {
+    if (this.open) return;
+    this.sync();
+    this.open = { label, t0: performance.now() };
+  }
+
+  end() {
+    const o = this.open;
+    if (!o) return;
+    this.open = null;
+    this.sync();
+    this.sum[o.label] = (this.sum[o.label] || 0) + performance.now() - o.t0;
+    this.n[o.label] = (this.n[o.label] || 0) + 1;
+  }
+
+  poll() {}
+
+  // average ms of each since the last take(); peek: without starting over
+  take(peek = false) {
+    const out = {};
+    for (const k of Object.keys(this.sum)) out[k] = this.sum[k] / Math.max(1, this.n[k]);
+    if (!peek) {
+      this.sum = {};
+      this.n = {};
+    }
+    return out;
+  }
+}
+
 export class Perf {
   constructor(game) {
     this.game = game;
     this.on = false;
     this.gpu = new GpuTimer(game.renderer.getContext());
-    // (what each part of the drawing costs here: diagStep)
-    this.diag = { timer: new GpuTimer(game.renderer.getContext()), until: 0, last: 0, i: 0, n: 0, res: null };
+    // (what each part of the drawing costs here: diagStep. Where the card has no clock, by the wall
+    // clock: the parts, and the frame's own passes on the frames they are timed - clock)
+    const gt = new GpuTimer(game.renderer.getContext());
+    this.diag = { timer: gt.ok ? gt : new ClockTimer(game.renderer), until: 0, last: 0, i: 0, n: 0, res: null };
+    this.clock = this.gpu.ok ? null : new ClockTimer(game.renderer);
+    this.passRes = null;
+    // a frame that is timed (diagDue), and how many more are left out of what the frames are said to
+    // take - the panel's, the resolution's pace's and the trials' (game.js): the timing made them slower
+    this.probing = false;
+    this.probeLeft = 0;
+    this.probed = false;
     this.frameMs = [];
     this.sys = {};
     this.passCalls = {};
@@ -243,8 +312,27 @@ export class Perf {
       d.timer.take();
       d.res = null;
       d.i = 0;
+      if (this.clock) {
+        this.clock.take();
+        this.passRes = null;
+      }
       pipe.diag = (p) => this.diagStep(p);
     } else pipe.diag = null;
+  }
+
+  // (as a frame begins) whether a part of the drawing is timed in this one: a third of a second
+  // apart, not on the test route, not while two ways of drawing are being tried in play
+  // (render/depthtrial.js), until every part was timed often enough
+  diagDue(now) {
+    const d = this.diag;
+    if (!this.game.pipe.diag || this.bench || now > d.until || now - d.last < 330) return false;
+    if (this.game.depthTrial && this.game.depthTrial.busy) {
+      d.until = Math.max(d.until, now + 2000);
+      return false;
+    }
+    if (d.i >= DIAG.length * DIAG_N) return false;
+    d.last = now;
+    return true;
   }
 
   // (render/pipeline.js render, before the frame's own drawing) once in a while the drawing with one
@@ -254,26 +342,18 @@ export class Perf {
     const now = performance.now();
     d.timer.poll();
     if (this.bench) return;
+    // (every part timed often enough: the answers wanted a moment, then shown)
+    if (d.i >= DIAG.length * DIAG_N) d.until = Math.min(d.until, now);
     if (now > d.until) {
       // (the card's last answers come a few frames late: all of them waited for, a few seconds at most)
       if (!d.timer.pending.length || now > d.until + 5000) {
         d.res = d.timer.take();
+        if (this.clock) this.passRes = this.clock.take();
         pipe.diag = null;
       }
       return;
     }
-    if (now - d.last < 330) return;
-    // (not while two ways of drawing are being tried in play: render/depthtrial.js)
-    if (this.game.depthTrial && this.game.depthTrial.busy) {
-      d.until = Math.max(d.until, now + 2000);
-      return;
-    }
-    // (every part timed often enough: the answers wanted a moment, then shown)
-    if (d.i >= DIAG.length * DIAG_N) {
-      d.until = Math.min(d.until, now);
-      return;
-    }
-    d.last = now;
+    if (!this.probing) return;
     const [k, bit] = DIAG[d.i++ % DIAG.length];
     const probe = shared.uProbe;
     probe.value = bit;
@@ -292,17 +372,54 @@ export class Perf {
     if (life) for (const o of life) o.visible = true;
   }
 
+  // (ROADMAP 11.5) What the browser said while it made the game's shaders, once it said anything. On
+  // Windows it turns each one into Direct3D's own, and where that fails with the usual settings it
+  // quietly tries again with fewer ("skip optimization": the same picture, drawn much slower).
+  // Looked at again only when more shaders were made
+  shaderNotes() {
+    const r = this.game.renderer;
+    const progs = r.info.programs || [];
+    if (this._notes && this._notesN === progs.length) return this._notes;
+    this._notesN = progs.length;
+    const gl = r.getContext();
+    let n = 0;
+    let retry = 0;
+    let first = '';
+    for (const p of progs) {
+      let log = '';
+      try {
+        log = (gl.getProgramInfoLog(p.program) || '').trim();
+      } catch (e) {
+        log = '';
+      }
+      if (!log) continue;
+      n++;
+      if (/retrying|failed/i.test(log)) retry++;
+      if (!first) first = log.replace(/\s+/g, ' ').slice(0, 200);
+    }
+    this._notes = { n, retry, first, of: progs.length };
+    return this._notes;
+  }
+
+  shaderLine(html = true) {
+    const t = this.shaderNotes();
+    if (!t.n) return '';
+    const esc = (x) => (html ? x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : x);
+    const txt = `הכנת השיידרים: ${t.n} מתוך ${t.of} עם הערות של הדפדפן${t.retry ? ` (${t.retry} נבנו שוב בהגדרות חלשות יותר)` : ''}: ${esc(t.first)}`;
+    return html ? `<span class="perf-sys">${txt}</span>` : txt;
+  }
+
   // the line of the numbers that says what each part of the drawing costs here
   diagLine() {
     const d = this.diag;
     if (!d.timer.ok) return '';
     if (!d.res) {
       const done = Math.min(100, Math.round((d.i / (DIAG.length * DIAG_N)) * 100));
-      return d.until > 0 ? `<span class="perf-sys">מודדים כמה כל חלק בציור עולה במחשב הזה… ${done}%</span>` : '';
+      return d.until > 0 ? `<span class="perf-sys">מודדים כמה כל חלק בציור עולה במחשב הזה… ${done}%${this.clock ? ' (בזמן המדידה התמונה נעצרת לרגע כמה פעמים)' : ''}</span>` : '';
     }
     const r = d.res;
     const parts = DIAG.filter(([k]) => r[k] !== undefined).map(([k]) => `${DIAG_HE[k]} ${r[k].toFixed(1)}`);
-    return `הציור, כל חלק לבד (ms בכרטיס): ${parts.join(' · ')}`;
+    return `הציור, כל חלק לבד (${this.clock ? 'ms בשעון, מעבד וכרטיס יחד' : 'ms בכרטיס'}): ${parts.join(' · ')}`;
   }
 
   // time the game's systems by wrapping their methods (nothing is wrapped until the numbers are
@@ -334,6 +451,8 @@ export class Perf {
     this._t0 = info.triangles;
     this._label = label;
     this.gpu.begin(label);
+    // (no clock on the card: on the frames that are timed, each pass by the wall clock)
+    if (this.probing && this.clock) this.clock.begin(label);
   }
 
   end() {
@@ -342,11 +461,15 @@ export class Perf {
     this.passCalls[l] = (this.passCalls[l] || 0) + info.calls - this._c0;
     this.passTris[l] = (this.passTris[l] || 0) + info.triangles - this._t0;
     this.gpu.end();
+    if (this.clock && this.clock.open) this.clock.end();
   }
 
   // ---------------------------------------------------------------- every frame
   frameStart() {
     this._fs = performance.now();
+    // (a frame where a part of the drawing is timed: it and the two after it are not counted)
+    this.probing = this.diagDue(this._fs);
+    if (this.probing) this.probeLeft = Math.max(this.probeLeft, 3);
     if (this.on || this.bench) this.game.renderer.info.reset();
   }
 
@@ -355,12 +478,16 @@ export class Perf {
   }
 
   frameEnd(rawDt) {
+    // (game.js: this frame left out of the resolution's pace and of the trials)
+    this.probed = this.probeLeft > 0;
+    if (this.probeLeft > 0) this.probeLeft--;
+    this.probing = false;
     if (!this.on && !this.bench) return;
     const now = performance.now();
     const upd = this._fu - this._fs;
     const ren = now - this._fu;
     this.gpu.poll();
-    const f = { dt: rawDt * 1000, upd, ren, calls: 0, tris: 0, pass: {} };
+    const f = { dt: rawDt * 1000, upd, ren, calls: 0, tris: 0, pass: {}, probe: this.probed };
     for (const k of Object.keys(this.passCalls)) {
       f.pass[k] = this.passCalls[k];
       f.calls += this.passCalls[k];
@@ -381,6 +508,9 @@ export class Perf {
 
   // ---------------------------------------------------------------- the panel
   summary(frames) {
+    // (the frames the panel's own timing made slower, left out)
+    const fair = frames.filter((f) => !f.probe);
+    if (fair.length) frames = fair;
     const n = Math.max(1, frames.length);
     const dts = frames.map((f) => f.dt).filter((d) => d > 0);
     const avgDt = dts.reduce((a, b) => a + b, 0) / Math.max(1, dts.length);
@@ -414,6 +544,12 @@ export class Perf {
     const top = Object.entries(s.sys).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(' · ');
     const passes = PASSES.filter((p) => s.pass[p] !== undefined).map((p) => `${PASS_HE[p]} ${Math.round(s.pass[p])}`).join(' · ');
     let gpuLine = 'כרטיס מסך: הדפדפן לא מאפשר למדוד';
+    // (no clock on the card: each pass by the wall clock, on the frames that were timed)
+    const c = this.clock ? this.passRes || this.clock.take(true) : null;
+    if (c && Object.keys(c).length) {
+      const tot = PASSES.reduce((a, p) => a + (c[p] || 0), 0);
+      gpuLine = `כל שלב בשעון (מעבד וכרטיס יחד) ${tot.toFixed(1)}ms: ` + PASSES.filter((p) => c[p] !== undefined).map((p) => `${PASS_HE[p]} ${c[p].toFixed(1)}`).join(' · ');
+    } else if (this.clock && this.diag.until > performance.now()) gpuLine = 'כרטיס מסך: הדפדפן לא מאפשר למדוד ישירות – מודדים בשעון…';
     if (gpu && !Object.keys(gpu).length) gpuLine = this.gpuLine || 'כרטיס מסך: מודדים…';
     else if (gpu) {
       const tot = PASSES.reduce((a, p) => a + (gpu[p] || 0), 0);
@@ -421,7 +557,7 @@ export class Perf {
       this.gpuLine = gpuLine;
     }
     this.el.innerHTML = [
-      `<b>${s.fps.toFixed(0)} FPS</b> · 1% האיטיים ${s.low1.toFixed(0)} · ${s.ms.toFixed(1)}ms`,
+      `<b>${s.fps.toFixed(0)} פריימים בשנייה</b> · 1% האיטיים ${s.low1.toFixed(0)} · ${s.ms.toFixed(1)}ms`,
       `מעבד: משחק ${s.upd.toFixed(1)}ms · שליחת הציור ${s.ren.toFixed(1)}ms`,
       gpuLine,
       this.diagLine(),
@@ -430,7 +566,8 @@ export class Perf {
       g.pace ? g.pace.line() : '',
       `<span class="perf-sys">${top}</span>`,
       `<span class="perf-sys">${g.pipe.software ? 'בלי כרטיס מסך (תוכנה): ' : ''}${g.pipe.gpuName || ''}</span>`,
-    ].join('<br>');
+      this.shaderLine(),
+    ].filter(Boolean).join('<br>');
   }
 
   // ---------------------------------------------------------------- the test route
@@ -655,7 +792,7 @@ export class Perf {
       `עיר השרבוטים — מסלול מבחן (${Math.round(b.secs)} שניות, ${b.frames.length} פריימים)`,
       `מכשיר: ${device || 'לא ידוע'}`,
       `מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'}`,
-      `FPS ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
+      `פריימים בשנייה, ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
       g.pace && g.pace.on ? `קצב הפריימים במשחק: יציב (${{ auto: 'אוטומטי', 60: '60', 30: '30' }[g.pace.mode]}) · המסלול עצמו נמדד בקצב הרגיל` : 'קצב הפריימים במשחק: רגיל',
       `פריימים: עד 17ms ${share(0, 17.5)}% · עד 34ms ${share(17.5, 34.5)}% · יותר ${share(34.5, 1e9)}% · הכנת שיידרים ${b.compiles} (${Math.round(b.compileMs)}ms)`,
       b.still && b.still.fps.length === STILL.length ? `עומדים במקום, פריימים בשנייה: ${STILL.map(([name], i) => `${name} ${b.still.fps[i].toFixed(1)}`).join(' · ')}` : '',
@@ -674,6 +811,7 @@ export class Perf {
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
       `לפי מעבר: ${PASSES.filter((p) => s.pass[p] !== undefined).map((p) => `${PASS_HE[p]} ${Math.round(s.pass[p])}`).join(' · ')}`,
       `מערכות (ms): ${Object.entries(s.sys).sort((a, b2) => b2[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(' · ')}`,
+      this.shaderLine(false) || `הכנת השיידרים: בלי הערות של הדפדפן (${this.shaderNotes().of})`,
     ];
     this.report(lines.filter(Boolean).join('\n'));
   }

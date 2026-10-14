@@ -721,10 +721,8 @@ uniform vec4 uMatBand;   // (width of the band of light, paper ahead of it 0..1,
 // mirror image, z: how much of a ring is at p). Two grids of cells a little over half a metre
 // across, a drop now and then in each (more of them the harder it rains), each ring inside its
 // own cell.
-vec3 rainRings(vec2 p, float dist) {
+vec3 rainRings(vec2 p, float dist, float px) {
   vec3 o = vec3(0.0);
-  // (a pixel's size in cells, taken before anything branches)
-  float px = length(fwidth(p)) * 1.6 * uPxK;
   float fade = 1.0 - smoothstep(12.0, 34.0, dist);
   if (fade <= 0.0) return o;
   for (int k = 0; k < 2; k++) {
@@ -813,6 +811,10 @@ void main() {
   // (uPxK, render/pipeline.js: the drawing's pixel in the screen's; 1 when it is drawn whole)
   vec2 dpx = dFdx(p) * uPxK;
   vec2 dpy = dFdy(p) * uPxK;
+  // (the rain's rings: a pixel's size in their cells, taken here before anything branches. On
+  // Windows the browser's translation into Direct3D cannot take it inside a branch: it would have
+  // to work the whole branch out for every pixel of every surface)
+  float ringPx = length(fwidth(vWP.xz)) * 1.6 * uPxK;
   vec4 tex = vec4(1.0);
   if (uUseMap > 0.5) {
     if (uCells > 0.5) {
@@ -947,14 +949,18 @@ void main() {
     vec2 wob = (vec2(vnoise(vWP.xz * vec2(0.9, 0.25) + uTime * vec2(0.0, 0.3)), vnoise(vWP.xz * 0.6 + 7.0)) - 0.5) * rip;
     if (uRain > 0.0) {
       // the rain falling into it: rings that push the mirror image about
-      rings = rainRings(vWP.xz, length(cameraPosition - vWP));
+      rings = rainRings(vWP.xz, length(cameraPosition - vWP), ringPx);
       wob += rings.xy * 0.006;
     }
     vec3 r = vec3(0.0);
     if (uReflOn > 0.5) {
+      // (textureLod: the mirror's picture has one size only, so it is the very same colour; but a
+      // loop that asks for the plain texture() is one that the browser's translation into Direct3D,
+      // on Windows, has to work out for every pixel of every surface, mirror or not - its branches
+      // all flattened)
       for (int i = 0; i < 5; i++) {
         float o = (float(i) - 2.0) * (street ? 0.012 : 0.006);
-        r += texture(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK).rgb;
+        r += textureLod(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK, 0.0).rgb;
       }
       r *= 0.2;
     } else r = skyColor(reflect(-V, N)) * 0.9;

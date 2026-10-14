@@ -826,10 +826,11 @@ export class Game {
           perf.afterUpdate();
           const drawn = !this.citymap.covering;
           if (drawn) this.renderFrame();
-          pace.sent(t0, performance.now(), drawn);
+          // (a frame the numbers' own timing made slower, and the two after it, not counted: perf.js)
+          pace.sent(t0, performance.now(), drawn && !perf.probeLeft);
           const real = pace.interval / 1000;
           perf.frameEnd(real);
-          trial.frame(real, this.state === 'play', pace.cost);
+          if (!perf.probed) trial.frame(real, this.state === 'play', pace.cost);
           pace.frozen = trial.busy;
         }
         requestAnimationFrame(tick);
@@ -849,7 +850,7 @@ export class Game {
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
       // (how long the free pace's frames take: where the steady pace's auto beat begins, pace.js)
-      pace.freeFrame(raw);
+      if (!perf.probeLeft) pace.freeFrame(raw);
       perf.frameStart();
       this.update(dt);
       perf.afterUpdate();
@@ -860,8 +861,8 @@ export class Game {
       // (the test route is measured at the drawing's full quality: the resolution waits; and
       // while the depth first is being tried)
       const live = this.state === 'play' && !perf.bench;
-      trial.frame(raw, live);
-      if (live && !trial.busy) {
+      if (!perf.probed) trial.frame(raw, live);
+      if (live && !trial.busy && !perf.probed) {
         acc += raw;
         n++;
       }
