@@ -718,6 +718,9 @@ export class Pipeline {
     this.keepSpare = false;
     this.over = [];
     this.mainKey = null;
+    // (game/perf.js, while its numbers are shown: the drawing once more now and then with one part
+    // left out, timed on the graphics card - what each part costs on this computer)
+    this.diag = null;
     // (every pen's shader for the other way made, to try the two in play: prepareOtherPens, from
     // otherAt on - main.js, after the game has begun)
     this.pensOtherReady = false;
@@ -1782,12 +1785,16 @@ export class Pipeline {
     //    pens are worked out once a pixel, for the surface that is seen, instead of also for every
     //    surface a nearer one then covers (1.2 to 1.7 times a pixel in the street). The same
     //    picture as drawn in one go: what shows is still the last thing drawn at the nearest depth.
-    if (T) T.begin('main');
-    const mt = T ? null : this.mainTimer;
+    if (this.diag) this.diag(this);
+    // (while two ways are tried in play, render/depthtrial.js, its clock on the graphics card has the
+    // drawing - the numbers' own clock leaves it out for those few seconds: one clock at a time)
+    const mt = this.mainTimer;
+    const TM = mt ? null : T;
+    if (TM) TM.begin('main');
     if (mt) mt.begin(this.mainKey ? this.mainKey() : this.depthFirst ? 'on' : 'off');
-    this.drawMain(T);
+    this.drawMain(TM);
     if (mt) mt.end();
-    if (T) T.end();
+    if (TM) TM.end();
     // 4. the ink (over the pens' own picture, drawn the second way)
     const ink = this.mInk.uniforms;
     ink.tColor.value = this.deferred ? this.G.pen.texture : this.gRT.textures[0];

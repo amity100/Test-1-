@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { groundHeight } from '../world/layout.js';
+import { shared } from '../render/materials.js';
 
 const ROUTE_SECONDS = 60;
 // after the route, standing at its start a few seconds each way, to see what holds the frames up
@@ -38,6 +39,17 @@ const SYSTEMS = [
 // (pens: drawn in two passes, ROADMAP 11.4 - the pens over the whole picture after the surfaces)
 const PASSES = ['shadow', 'reflection', 'main', 'pens', 'ink', 'taa', 'rain', 'glow', 'final'];
 const PASS_HE = { shadow: 'צל', reflection: 'השתקפות', main: 'ציור', pens: 'עטים', ink: 'דיו', taa: 'איחוד', rain: 'גשם', glow: 'זוהר', final: 'סיום' };
+// (ROADMAP 11.4) What each part of the drawing costs on this graphics card, found by itself while the
+// numbers are shown (diagStep): for a while after they are opened, now and then the drawing is made
+// once more before the frame's own, with one part left out (render/glsl.js uProbe), and timed on
+// the card. The frame shown is the frame as it is. tiny: at a sixteenth of its pixels (what its
+// points and draws cost by themselves); city: without the people and the cars
+const DIAG = [['all', 0], ['noPens', 1], ['noSun', 2], ['noLamps', 4], ['noHaze', 8], ['flat', 16], ['tiny', 0], ['city', 0]];
+const DIAG_HE = { all: 'כמו שהוא', noPens: 'בלי העטים', noSun: 'בלי הצל', noLamps: 'בלי הפנסים', noHaze: 'בלי הערפל', flat: 'רק צבע', tiny: 'ב־1/16 מהפיקסלים', city: 'בלי אנשים ומכוניות' };
+// (until each part was timed three times, no longer than a minute and a half)
+const DIAG_N = 3;
+const DIAG_MS = 90000;
+
 // how the drawing is made now, and what trying the two ways found (render/depthtrial.js)
 function pensLine(g, short) {
   const p = g.pipe;
@@ -191,6 +203,8 @@ export class Perf {
     this.game = game;
     this.on = false;
     this.gpu = new GpuTimer(game.renderer.getContext());
+    // (what each part of the drawing costs here: diagStep)
+    this.diag = { timer: new GpuTimer(game.renderer.getContext()), until: 0, last: 0, i: 0, n: 0, res: null };
     this.frameMs = [];
     this.sys = {};
     this.passCalls = {};
@@ -222,6 +236,73 @@ export class Perf {
     pipe.timer = on || this.bench ? this : null;
     this.game.renderer.info.autoReset = !(on || this.bench);
     if ((on || this.bench) && !this.wrapped) this.wrap();
+    // (each part of the drawing timed by itself for a while, each time the numbers are opened)
+    const d = this.diag;
+    if (on && d.timer.ok) {
+      d.until = performance.now() + DIAG_MS;
+      d.timer.take();
+      d.res = null;
+      d.i = 0;
+      pipe.diag = (p) => this.diagStep(p);
+    } else pipe.diag = null;
+  }
+
+  // (render/pipeline.js render, before the frame's own drawing) once in a while the drawing with one
+  // part left out, timed on the graphics card; the frame's own is drawn over it as it always is
+  diagStep(pipe) {
+    const d = this.diag;
+    const now = performance.now();
+    d.timer.poll();
+    if (this.bench) return;
+    if (now > d.until) {
+      // (the card's last answers come a few frames late: all of them waited for, a few seconds at most)
+      if (!d.timer.pending.length || now > d.until + 5000) {
+        d.res = d.timer.take();
+        pipe.diag = null;
+      }
+      return;
+    }
+    if (now - d.last < 330) return;
+    // (not while two ways of drawing are being tried in play: render/depthtrial.js)
+    if (this.game.depthTrial && this.game.depthTrial.busy) {
+      d.until = Math.max(d.until, now + 2000);
+      return;
+    }
+    // (every part timed often enough: the answers wanted a moment, then shown)
+    if (d.i >= DIAG.length * DIAG_N) {
+      d.until = Math.min(d.until, now);
+      return;
+    }
+    d.last = now;
+    const [k, bit] = DIAG[d.i++ % DIAG.length];
+    const probe = shared.uProbe;
+    probe.value = bit;
+    let vps = null;
+    let life = null;
+    if (k === 'tiny') {
+      vps = [pipe.gRT, pipe.G.pen, pipe.G.over].filter(Boolean).map((t) => [t.viewport, t.viewport.clone()]);
+      for (const [vp, keep] of vps) vp.set(0, 0, Math.max(1, Math.floor(keep.z / 4)), Math.max(1, Math.floor(keep.w / 4)));
+    }
+    if (k === 'city') life = pipe.hideMoving().slice();
+    d.timer.begin(k);
+    pipe.drawMain();
+    d.timer.end();
+    probe.value = 0;
+    if (vps) for (const [vp, keep] of vps) vp.copy(keep);
+    if (life) for (const o of life) o.visible = true;
+  }
+
+  // the line of the numbers that says what each part of the drawing costs here
+  diagLine() {
+    const d = this.diag;
+    if (!d.timer.ok) return '';
+    if (!d.res) {
+      const done = Math.min(100, Math.round((d.i / (DIAG.length * DIAG_N)) * 100));
+      return d.until > 0 ? `<span class="perf-sys">מודדים כמה כל חלק בציור עולה במחשב הזה… ${done}%</span>` : '';
+    }
+    const r = d.res;
+    const parts = DIAG.filter(([k]) => r[k] !== undefined).map(([k]) => `${DIAG_HE[k]} ${r[k].toFixed(1)}`);
+    return `הציור, כל חלק לבד (ms בכרטיס): ${parts.join(' · ')}`;
   }
 
   // time the game's systems by wrapping their methods (nothing is wrapped until the numbers are
@@ -343,6 +424,7 @@ export class Perf {
       `<b>${s.fps.toFixed(0)} FPS</b> · 1% האיטיים ${s.low1.toFixed(0)} · ${s.ms.toFixed(1)}ms`,
       `מעבד: משחק ${s.upd.toFixed(1)}ms · שליחת הציור ${s.ren.toFixed(1)}ms`,
       gpuLine,
+      this.diagLine(),
       `draw calls ${Math.round(s.calls)} (${passes}) · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
       `קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · עומק קודם ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (${g.depthTrial.result.on} מול ${g.depthTrial.result.off}ms)` : ''}${pensLine(g, true)} · אנשים ${g.civilians.list ? g.civilians.list.length : 0} · מכוניות ${g.traffic.list.length}`,
       g.pace ? g.pace.line() : '',
