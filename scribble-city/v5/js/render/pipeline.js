@@ -2392,6 +2392,74 @@ export class Pipeline {
     return out;
   }
 
+  // (11.5, game/telemetry.js) one part of profile() by itself, while the picture stands still (the
+  // pause menu, the start screen): its ms, the faster of two rounds of two; undefined where it has
+  // nothing to time here
+  profileOne(key, center) {
+    const r = this.r;
+    const T = this.timer;
+    this.timer = null;
+    if (!this._syncRT) this._syncRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const px = this._syncPx || (this._syncPx = new Uint8Array(4));
+    const sync = () => {
+      r.setRenderTarget(this._syncRT);
+      r.clear();
+      r.readRenderTargetPixels(this._syncRT, 0, 0, 1, 1, px);
+    };
+    const time = (fn) => {
+      let best = Infinity;
+      for (let k = 0; k < 2; k++) {
+        sync();
+        const t0 = performance.now();
+        fn();
+        fn();
+        sync();
+        best = Math.min(best, (performance.now() - t0) / 2);
+      }
+      return best;
+    };
+    const bits = { noPens: 1, noSun: 2, noLamps: 4, noHaze: 8, flat: 16, noReflImg: 32 };
+    let out;
+    try {
+      if (key === 'shadow') out = time(() => this.renderShadows(center));
+      else if (key === 'reflection') out = this.reflections ? time(() => this.renderReflection()) : undefined;
+      else if (key === 'main') out = time(() => this.drawMain());
+      else if (key === 'city') {
+        const life = this.hideMoving().slice();
+        out = time(() => this.drawMain());
+        for (const o of life) o.visible = true;
+      } else if (key === 'tiny') {
+        const vps = [this.gRT, this.G.pen, this.G.over].filter(Boolean).map((t) => [t.viewport, t.viewport.clone()]);
+        for (const [vp, keep] of vps) vp.set(0, 0, Math.max(1, Math.floor(keep.z / 4)), Math.max(1, Math.floor(keep.w / 4)));
+        out = time(() => this.drawMain());
+        for (const [vp, keep] of vps) vp.copy(keep);
+      } else if (key in bits) {
+        shared.uProbe.value = bits[key];
+        out = time(() => this.drawMain());
+      } else if (key === 'flip') {
+        const df = this.depthFirst;
+        this.depthFirst = !df;
+        out = time(() => this.drawMain());
+        this.depthFirst = df;
+      } else if (key === 'walls') {
+        if (this.walls && !this.depthFirst) {
+          const wf = this.wallsFirst;
+          this.wallsFirst = !wf;
+          out = time(() => this.drawMain());
+          this.wallsFirst = wf;
+        }
+      } else if (key === 'pens') out = this.deferred ? time(() => this.drawPens()) : undefined;
+      else if (key === 'ink') out = time(() => this.pass(this.steady ? this.mInkD : this.mInk, this.inkRT));
+      else if (key === 'glow') out = this._glowSize ? time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize)) : undefined;
+      else if (key === 'final') out = time(() => this.pass(this._corner ? this.mFinalD : this.mFinal, null));
+      else if (key === 'frame') out = time(() => this.render(center));
+    } finally {
+      shared.uProbe.value = 0;
+      this.timer = T;
+    }
+    return out;
+  }
+
   // (v5, the test route) the people, the cars and everything else drawn anew every frame, hidden
   // for this frame; returns them
   hideMoving() {

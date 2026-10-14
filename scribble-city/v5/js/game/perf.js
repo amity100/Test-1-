@@ -66,7 +66,7 @@ function pensLine(g, short) {
 // its graphics card were at the start and at the end (the same fixed work each time: a phone that
 // has warmed up slows down, and two tests on one phone are only comparable at the same speed), and
 // how much of each second the browser spent on other things than the game (the page around it).
-function browserName() {
+export function browserName() {
   const ua = navigator.userAgent;
   const v = (re) => {
     const m = ua.match(re);
@@ -350,6 +350,7 @@ export class Perf {
         d.res = d.timer.take();
         if (this.clock) this.passRes = this.clock.take();
         pipe.diag = null;
+        if (this.game.tele) this.game.tele.noteF3();
       }
       return;
     }
@@ -482,10 +483,13 @@ export class Perf {
     this.probed = this.probeLeft > 0;
     if (this.probeLeft > 0) this.probeLeft--;
     this.probing = false;
-    if (!this.on && !this.bench) return;
+    // (game/telemetry.js: the processor's share of every frame, the numbers shown or not)
     const now = performance.now();
-    const upd = this._fu - this._fs;
-    const ren = now - this._fu;
+    this.lastUpd = this._fu - this._fs;
+    this.lastRen = now - this._fu;
+    if (!this.on && !this.bench) return;
+    const upd = this.lastUpd;
+    const ren = this.lastRen;
     this.gpu.poll();
     const f = { dt: rawDt * 1000, upd, ren, calls: 0, tris: 0, pass: {}, probe: this.probed };
     for (const k of Object.keys(this.passCalls)) {
@@ -555,6 +559,7 @@ export class Perf {
       const tot = PASSES.reduce((a, p) => a + (gpu[p] || 0), 0);
       gpuLine = `כרטיס מסך ${tot.toFixed(1)}ms: ` + PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(1)}`).join(' · ');
       this.gpuLine = gpuLine;
+      this.lastGpu = Object.fromEntries(Object.entries(gpu).map(([k, v]) => [k, Math.round(v * 100) / 100]));
     }
     this.el.innerHTML = [
       `<b>${s.fps.toFixed(0)} פריימים בשנייה</b> · 1% האיטיים ${s.low1.toFixed(0)} · ${s.ms.toFixed(1)}ms`,
@@ -567,6 +572,7 @@ export class Perf {
       `<span class="perf-sys">${top}</span>`,
       `<span class="perf-sys">${g.pipe.software ? 'בלי כרטיס מסך (תוכנה): ' : ''}${g.pipe.gpuName || ''}</span>`,
       this.shaderLine(),
+      g.tele && g.tele.line() ? `<span class="perf-sys">${g.tele.line()}</span>` : '',
     ].filter(Boolean).join('<br>');
   }
 
@@ -813,7 +819,9 @@ export class Perf {
       `מערכות (ms): ${Object.entries(s.sys).sort((a, b2) => b2[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(' · ')}`,
       this.shaderLine(false) || `הכנת השיידרים: בלי הערות של הדפדפן (${this.shaderNotes().of})`,
     ];
-    this.report(lines.filter(Boolean).join('\n'));
+    const text = lines.filter(Boolean).join('\n');
+    this.report(text);
+    if (g.tele) g.tele.bench(text, st);
   }
 
   report(text) {

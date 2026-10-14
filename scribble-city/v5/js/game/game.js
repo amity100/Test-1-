@@ -18,6 +18,7 @@ import { Album, ALL_OPEN } from '../ui/album.js';
 import { Materialize } from './materialize.js';
 import { Signals } from './signals.js';
 import { Perf } from './perf.js';
+import { Telemetry } from './telemetry.js';
 import { AirDraw } from '../ui/airdraw.js';
 import { Bubbles } from '../ui/bubbles.js';
 import { Police } from './police.js';
@@ -141,6 +142,8 @@ export class Game {
     this.signals = new Signals(this);
     this.player = new Player(this);
     this.perf = new Perf(this);
+    // (what the game is like on this device, kept where it can be read: game/telemetry.js)
+    this.tele = this.params && this.params.has('test') ? null : new Telemetry(this);
     // (the frames' pace: as many as can be, or a steady beat - game/pace.js, a choice in the settings)
     this.pace = new Pace(this);
     this.civilians = new Civilians(this);
@@ -764,7 +767,16 @@ export class Game {
     // (under the water you see a few metres: ROADMAP 5.2)
     const fog = shared.uFogDensity.value;
     if (this.swim && this.swim.wasUnder) shared.uFogDensity.value = 0.075;
-    this.pipe.render(this._sc.set(c.x + f.x * 35, 0, c.z + f.z * 35));
+    const sc = this._sc.set(c.x + f.x * 35, 0, c.z + f.z * 35);
+    // (game/telemetry.js: while the picture stands still, a part of the drawing timed by itself; and
+    // the graphics card's clock on the frame)
+    const tele = this.tele;
+    if (tele) {
+      tele.idleStep(sc);
+      tele.frameBegin();
+    }
+    this.pipe.render(sc);
+    if (tele) tele.frameEnd();
     shared.uFogDensity.value = fog;
   }
 
@@ -830,6 +842,7 @@ export class Game {
           pace.sent(t0, performance.now(), drawn && !perf.probeLeft);
           const real = pace.interval / 1000;
           perf.frameEnd(real);
+          if (this.tele) this.tele.frame(real, this.state === 'play' && drawn && !perf.probed);
           if (!perf.probed) trial.frame(real, this.state === 'play', pace.cost);
           pace.frozen = trial.busy;
         }
@@ -861,6 +874,7 @@ export class Game {
       // (the test route is measured at the drawing's full quality: the resolution waits; and
       // while the depth first is being tried)
       const live = this.state === 'play' && !perf.bench;
+      if (this.tele) this.tele.frame(raw, live && !perf.probed && !this.citymap.covering);
       if (!perf.probed) trial.frame(raw, live);
       if (live && !trial.busy && !perf.probed) {
         acc += raw;
