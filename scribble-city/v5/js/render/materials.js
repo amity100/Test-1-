@@ -291,12 +291,44 @@ function syncPens(m) {
   if (want === has) return false;
   if (want) m.defines.DEFERRED = '';
   else delete m.defines.DEFERRED;
+  sortDefines(m);
   m.needsUpdate = true;
   return true;
+}
+// (11.5) A shader's defines in one order, whatever order they were given in. three.js makes a
+// program for each different list of them, in the order they come: the same pen with DEFERRED
+// taken away and put back (at the end), or two pens with the same defines given in another order,
+// had programs of their own, made again from the start - on Windows a second or more each, the
+// picture standing still. In place: whoever holds the defines still holds them
+export function sortDefines(m) {
+  const d = m && m.defines;
+  if (!d) return m;
+  const keys = Object.keys(d);
+  let sorted = true;
+  for (let i = 1; i < keys.length && sorted; i++) if (keys[i - 1] > keys[i]) sorted = false;
+  if (sorted) return m;
+  const vals = keys.map((k) => d[k]);
+  for (const k of keys) delete d[k];
+  const order = keys.map((k, i) => i).sort((a, b) => (keys[a] < keys[b] ? -1 : 1));
+  for (const i of order) d[keys[i]] = vals[i];
+  m.needsUpdate = true;
+  return m;
+}
+// (main.js, before every shader is made) every material under root in that order, and its pen for
+// the sun's view (render/pipeline.js swapDepth)
+export function canonDefines(root) {
+  root.traverse((o) => {
+    const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of ms) {
+      sortDefines(m);
+      if (m.userData && m.userData.depth) sortDefines(m.userData.depth);
+    }
+  });
 }
 export function trackPens(m) {
   if (!m.defines) m.defines = {};
   syncPens(m);
+  sortDefines(m);
   const ref = pensRef(m);
   pensTracked.add(ref);
   m.addEventListener('dispose', () => pensTracked.delete(ref));

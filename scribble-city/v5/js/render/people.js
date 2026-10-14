@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, penPictures, LAYERS } from './materials.js';
+import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, penPictures, LAYERS, sortDefines } from './materials.js';
 import { MAX_HOLES, MAX_OWNERS } from './glsl.js';
 import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 
@@ -302,6 +302,7 @@ class DrawClass {
     this.n = 0;
     // (the smart drawing: where each part was a frame ago)
     mat.defines.USE_PREV = '';
+    sortDefines(mat);
     this.prev = aux ? null : new Float32Array(cap * 12);
     this.motionBase = 0;
     this.motionGen = -1;

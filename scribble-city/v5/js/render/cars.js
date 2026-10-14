@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, lin3, LAYERS, mergedSurface, penRow } from './materials.js';
+import { makeSurface, srgb, lin3, LAYERS, mergedSurface, penRow, sortDefines } from './materials.js';
 import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 
 // The cars of the city: the first boulevard's low sports car (glossy paint full of the sunset, a
@@ -574,6 +574,7 @@ class Pool {
     this.n = 0;
     // (the smart drawing: where each was a frame ago)
     mat.defines.USE_PREV = '';
+    sortDefines(mat);
     this.prev = new Float32Array(cap * 12);
     this.motionBase = 0;
     this.motionGen = -1;
@@ -778,6 +779,7 @@ export class CarRenderer {
     // (the side windows wound down in the car you drive: ROADMAP 4.5)
     mats.glass.defines.USE_CABIN = '';
     shellPen.defines.USE_CABIN = '';
+    for (const m of [shellPen, mats.glass, mats.cabin]) sortDefines(m);
     const shellParts = [['body', mats.paint, 0, 1], ['tail', mats.tail, 0.5, 0], ['head', mats.head, 0.6, 0], ['trim', mats.dark, 0.55, 0], ['plate', mats.plate, 0.65, 0]];
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);

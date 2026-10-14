@@ -9,13 +9,39 @@
 // left it to the game: render/pipeline.js setPensMode)
 import { GpuTimer } from '../game/perf.js';
 
+// (11.5) What the trying chose on this device, kept for the next time the game is opened on it, in
+// this build of the game and this browser (the same graphics card): then the same, without trying,
+// and without the other way's shaders made in the background while the game begins - on a phone
+// much work for its processor just then. A new build tries again. main.js reads it (the drawing's
+// way is chosen before the city's pens are made); finish keeps each answer as it comes
+const MEMO = 'sc5-trials';
+export function readMemo(build, dev) {
+  try {
+    const m = JSON.parse(localStorage.getItem(MEMO) || 'null');
+    return m && m.build === build && m.dev === dev ? m : null;
+  } catch (e) {
+    return null;
+  }
+}
+function keepMemo(build, dev, key, pick) {
+  try {
+    const m = readMemo(build, dev) || { build, dev };
+    m[key] = pick;
+    localStorage.setItem(MEMO, JSON.stringify(m));
+  } catch (e) {
+    // (not kept: tried again next time)
+  }
+}
+
 const TURN = 20; // frames a turn
 const TURNS = 8; // four with, four without, in turns
 const SKIP = 3; // the first frames of a turn are not counted (the change settling)
 
 export class DepthTrial {
-  constructor(pipe, gl) {
+  constructor(pipe, gl, memo = null) {
     this.pipe = pipe;
+    // (where the answers are kept: { build, dev }, main.js)
+    this.memo = memo;
     // (the card's own time for the pass, where the browser lets it be measured)
     this.timer = new GpuTimer(gl);
     this.at = [4, 120];
@@ -159,6 +185,7 @@ export class DepthTrial {
     const pick = r.k.pick(r.keep, on, off, gpu);
     r.k.set(pick);
     pipe.keepSpare = false;
+    if (this.memo) keepMemo(this.memo.build, this.memo.dev, r.k.key, pick);
     const res = { on: +on.toFixed(1), off: +off.toFixed(1), gpuOn: gpu.on ? +gpu.on.toFixed(2) : null, gpuOff: gpu.off ? +gpu.off.toFixed(2) : null, pick };
     if (r.k.key === 'pens') this.pens = res;
     else if (r.k.key === 'walls') this.walls = res;

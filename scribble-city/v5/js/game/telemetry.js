@@ -1,6 +1,6 @@
 // (ROADMAP 11.5) What the game is like on each device it is played on, kept where it can be read
 // without a screenshot: the page's own store on claude.ai (the artifact's db, "perf" - one document
-// for each time the game is opened, written again about once a minute of play; "bench" - each test
+// for each time the game is opened, written again every minute or less of play; "bench" - each test
 // route's report). Nothing here changes the picture, and nothing is kept anywhere else: opened as a
 // file, or anywhere without that store, all of it stays off.
 //
@@ -15,19 +15,27 @@ import { GpuTimer, browserName } from './perf.js';
 import { shared, pens } from '../render/materials.js';
 import { provokeState } from '../render/provoke.js';
 
-const BUILD = 'v18';
+export const BUILD = 'v19';
 // frames by how long they took (ms): up to 8.5 (120 Hz), 12.5, 17.5 (60 Hz), 21, 25, 34.5 (30 Hz),
 // 50, 67, 100, 200, longer
 const EDGES = [8.5, 12.5, 17.5, 21, 25, 34.5, 50, 67, 100, 200];
-// a minute of play, and the last 90 of them kept
-const MINUTE = 60;
+// the play summed up after its first 15 seconds, then every 45 (v19: a phone's few minutes of play
+// were often over before the first whole minute), and the last 90 of them kept
+const FIRST_S = 15;
+const EVERY_S = 45;
 const KEEP = 90;
 // the parts of the drawing timed by themselves, one a frame (pipeline.js profileOne)
 // (split, splitRefl: the drawing and the mirror once each, timed three ways - the processor sending
 // it, the wall clock until the card is done, the card's own clock; basic: in the plainest material;
-// half, empty: every other thing drawn, or none; pvLast, pvLastRefl: the drawing and the mirror with
-// the last corner's flat values, as before - render/provoke.js)
-const IDLE = ['split', 'splitRefl', 'shadow', 'reflection', 'main', 'pvLast', 'pvLastRefl', 'city', 'tiny', 'basic', 'half', 'empty', 'noPens', 'noSun', 'noLamps', 'noHaze', 'flat', 'noReflImg', 'flip', 'walls', 'pens', 'ink', 'glow', 'final', 'frame'];
+// half, empty: every other thing drawn, or none; floor: nothing at all, only the waits for the card
+// (every other part's own time is over it); cityRefl, cityShadow: the mirror and the sun's view
+// without the people and the cars. The ones that tell most first: a set cut short is kept as far
+// as it went. v19: no more pvLast, pvLastRefl - the drawing the old way, with the last corner's
+// flat values, had Windows make shaders of its own for it, the picture standing still for seconds;
+// it was 2.3 times slower there, and that is known now - render/provoke.js)
+const IDLE = ['main', 'tiny', 'flat', 'empty', 'floor', 'basic', 'shadow', 'reflection', 'split', 'splitRefl', 'frame', 'city', 'cityRefl', 'cityShadow', 'half', 'noPens', 'noSun', 'noLamps', 'noHaze', 'noReflImg', 'flip', 'walls', 'pens', 'ink', 'glow', 'final'];
+// (a set cut short is kept if it got this far)
+const IDLE_PART = 4;
 // (a few times each time the game is opened, a minute apart at least)
 const IDLE_SETS = 4;
 const IDLE_GAP = 60000;
@@ -75,11 +83,13 @@ export class Telemetry {
     this.gtN = 0;
     this.gtOpen = false;
     this.probe = { set: null, i: 0, since: 0, last: -1e9, state: '' };
+    // the shaders made so far (frame: how many more each summary)
+    this.progs = -1;
     this.start();
   }
 
   fresh() {
-    return { n: 0, live: 0, ms: new Float32Array(8192), cpu: new Float32Array(8192), hist: new Array(EDGES.length + 1).fill(0), upd: 0, ren: 0, scale: 0, scaleMin: 9, dyn: 0, refl: 0, gpu: 0, gpuN: 0, worst: 0 };
+    return { n: 0, live: 0, ms: new Float32Array(8192), cpu: new Float32Array(8192), hist: new Array(EDGES.length + 1).fill(0), upd: 0, ren: 0, scale: 0, scaleMin: 9, dyn: 0, refl: 0, gpu: 0, gpuN: 0, worst: 0, made: 0, madeWorst: 0 };
   }
 
   async start() {
@@ -140,6 +150,14 @@ export class Telemetry {
     const p = g.pipe;
     const m = this.m;
     const ms = dt * 1000;
+    // (shaders made since the frame before: how many, and the slowest frame that made some)
+    const progs = g.renderer.info.programs ? g.renderer.info.programs.length : 0;
+    if (this.progs < 0) this.progs = progs;
+    if (progs > this.progs) {
+      m.made += progs - this.progs;
+      if (ms > m.madeWorst) m.madeWorst = ms;
+    }
+    this.progs = progs;
     const perf = g.perf;
     const cpu = (perf.lastUpd || 0) + (perf.lastRen || 0);
     if (m.n < m.ms.length) {
@@ -158,7 +176,7 @@ export class Telemetry {
     if (p.scale < m.scaleMin) m.scaleMin = p.scale;
     m.dyn += p.dyn || 1;
     m.refl += shared.uReflOn.value ? 1 : 0;
-    if (m.live >= MINUTE) {
+    if (m.live >= (this.minutes.length ? EVERY_S : FIRST_S)) {
       this.roll();
       this.write();
     }
@@ -206,6 +224,7 @@ export class Telemetry {
     const secs = Math.max(1, (now - lt.t) / 1000);
     this.minutes.push({
       at: Math.round((now - this.t0) / 1000),
+      s: r1(m.live),
       n: m.n,
       fps: r1(1 / avg),
       p50: r1(pct(ms, 0.5)),
@@ -226,6 +245,12 @@ export class Telemetry {
       mirror: r2(g.pipe.mirrorShare === undefined ? 1 : g.pipe.mirrorShare),
       taa: g.pipe.taa ? r2(g.pipe.taaFrac) : 0,
       pace: g.pace ? (g.pace.engaged ? g.pace.mode : 'free') : '',
+      // (the steady pace: its beat as it is now, ms a frame)
+      beat: g.pace && g.pace.engaged && g.pace.ctl ? r1(g.pace.ctl.N * g.pace.ctl.R) : null,
+      // (shaders made in these frames, the slowest such frame, and how many there are now)
+      made: m.made,
+      madeWorst: r1(m.madeWorst),
+      progs: this.progs,
       people: g.civilians && g.civilians.list ? g.civilians.list.length : 0,
       cars: g.traffic && g.traffic.list ? g.traffic.list.length : 0,
       x: Math.round(pl.pos.x),
@@ -255,15 +280,24 @@ export class Telemetry {
     const pr = this.probe;
     const now = performance.now();
     const pauseEl = document.getElementById('pause');
-    const still = (g.state === 'title' && now - this.t0 > 4000) || (g.state === 'paused' && pauseEl && !pauseEl.classList.contains('hidden'));
+    const paused = g.state === 'paused' && pauseEl && !pauseEl.classList.contains('hidden');
+    const still = (g.state === 'title' && now - this.t0 > 2500) || paused;
+    // (v19: the play so far summed up and kept as the pause menu opens - a phone's game is often
+    // left from it)
+    if (paused && this.m.n >= 30) {
+      this.roll();
+      this.write();
+    }
     const ok = still && !document.hidden && !g.perf.bench && !g.pipe.diag && !(g.depthTrial && g.depthTrial.busy) && !(g.citymap && g.citymap.covering);
     if (!ok || pr.state !== g.state) {
+      // (a set cut short: kept as far as it went, if that is far enough)
+      if (pr.set && pr.i >= IDLE_PART) this.keepSet(true);
       pr.state = ok ? g.state : '';
       pr.since = now;
       pr.set = null;
       return;
     }
-    if (this.idle.length >= IDLE_SETS || now - pr.last < IDLE_GAP || now - pr.since < 1500) return;
+    if (this.idle.length >= IDLE_SETS || now - pr.last < IDLE_GAP || now - pr.since < 1000) return;
     const p = g.pipe;
     if (!pr.set) {
       pr.set = { at: Math.round((now - this.t0) / 1000), where: g.state, ms: {} };
@@ -280,8 +314,18 @@ export class Telemetry {
     if (v !== undefined) pr.set.ms[key] = r2(v);
     g.perf.probeLeft = Math.max(g.perf.probeLeft, 3);
     if (pr.i < IDLE.length) return;
+    this.keepSet(false);
+  }
+
+  // a set of the parts timed kept (part: cut short), with where and how it was drawn
+  keepSet(part) {
+    const g = this.game;
+    const p = g.pipe;
+    const pr = this.probe;
+    const now = performance.now();
     const s = pr.set;
     const pl = g.player;
+    if (part) s.part = pr.i;
     // (the card's own clock on the split ones: its answers came while the rest was timed)
     if (this.gt.ok) {
       this.gt.poll();
@@ -392,6 +436,10 @@ export class Telemetry {
         hz: ctl && ctl.R ? Math.round(1000 / ctl.R) : null,
         // (render/provoke.js: whether the browser lets the game choose the corner, and it does)
         provoke: provokeState(),
+        // (whether the card makes shaders alongside the game - without it the other way of drawing
+        // the pens is never tried, render/pipeline.js prepareOtherPens - and draws many in one call)
+        parallel: !!gl.getExtension('KHR_parallel_shader_compile'),
+        multiDraw: !!gl.getExtension('WEBGL_multi_draw'),
       },
       setup: {
         low: !!p.low,
@@ -409,6 +457,8 @@ export class Telemetry {
         reflEvery: p.reflEvery || 1,
         taa: !!p.taa,
         pace: g.pace ? g.pace.mode : '',
+        // (what trying the ways chose here before, used without trying: render/depthtrial.js)
+        kept: p.trialMemo && p.trialMemo.kept ? { pens: p.trialMemo.kept.pens, walls: p.trialMemo.kept.walls, depth: p.trialMemo.kept.depth } : null,
       },
       trials: t ? { depth: t.result || null, pens: t.pens || null, walls: t.walls || null } : null,
       shaders: { n: n.n, of: n.of, retry: n.retry, first: n.first },
@@ -456,6 +506,6 @@ export class Telemetry {
   // the numbers' panel's line
   line() {
     if (this.status === 'off') return '';
-    return this.status === 'on' ? `המדידות נשמרות לקריאה (${this.minutes.length} דקות, ${this.idle.length} מדידות בעמידה)` : `שמירת המדידות לא הצליחה: ${this.status}`;
+    return this.status === 'on' ? `המדידות נשמרות לקריאה (${this.minutes.length} סיכומים, ${this.idle.length} מדידות בעמידה)` : `שמירת המדידות לא הצליחה: ${this.status}`;
   }
 }

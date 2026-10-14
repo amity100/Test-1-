@@ -800,7 +800,7 @@ export class Game {
     // busy moment (an explosion, a chase) gets its sharpness back once the moment has passed.
     const pipe = this.pipe;
     // (the depth first, or not: tried in play, render/depthtrial.js)
-    const trial = (this.depthTrial = new DepthTrial(pipe, this.renderer.getContext()));
+    const trial = (this.depthTrial = new DepthTrial(pipe, this.renderer.getContext(), pipe.trialMemo));
     let acc = 0;
     let n = 0;
     let slow = 0;

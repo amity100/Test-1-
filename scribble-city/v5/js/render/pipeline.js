@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, BLANK, LAYERS, pens, setPensOn } from './materials.js';
+import { shared, BLANK, LAYERS, pens, setPensOn, canonDefines } from './materials.js';
 import { setProvokeLast } from './provoke.js';
 import { HEAD, FUNCS, PENS_FRAG } from './glsl.js';
 import { Occlusion } from './occlusion.js';
@@ -781,6 +781,10 @@ export class Pipeline {
     this.pensOtherReady = false;
     this.otherAt = Infinity;
     this._otherAsked = false;
+    // (11.5) the way tried here before and kept (main.js, render/depthtrial.js readMemo): not tried
+    // again, nor the other way's shaders made
+    this.pensKnown = false;
+    this.trialMemo = null;
     // where the camera was when the mirror under the street was last drawn (render)
     this._mirrorAt = { p: new THREE.Vector3(1e9, 0, 0), d: new THREE.Vector3() };
     // (11.5) the mirror drawn only where the water in sight reads it (mirrorPart; ?mirrorfull: all of
@@ -1026,8 +1030,11 @@ export class Pipeline {
     if (!this.pensCan || !r.extensions.has('KHR_parallel_shader_compile')) return;
     const was = this.deferred;
     let progs = null;
+    // (11.5: made as they are drawn, into a picture of the game's own - see precompile)
+    const prev = r.getRenderTarget();
     try {
       setPensOn(!was);
+      r.setRenderTarget(this.compileRT());
       const mats = r.compile(this.scene, this.camera);
       if (this.solid) for (const m of r.compile(this.solid.standIns(), this.camera)) mats.add(m);
       if (!was) for (const m of r.compile(this.pensScene(), this.quadCam)) mats.add(m);
@@ -1035,6 +1042,7 @@ export class Pipeline {
     } catch (err) {
       console.warn('pens precompile failed', err);
     }
+    r.setRenderTarget(prev);
     setPensOn(was);
     if (!progs) return;
     const check = () => {
@@ -1050,6 +1058,80 @@ export class Pipeline {
     return this.quadScene;
   }
 
+  // (11.5) A picture of one pixel, for making shaders as the game draws with them: into a picture of
+  // its own and not straight onto the page (three.js gives those another shader: the colours as
+  // the page shows them, not as they are worked with)
+  compileRT() {
+    if (!this._compileRT) this._compileRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    return this._compileRT;
+  }
+
+  // (11.5, main.js: once the game's people, cars and the rest are there, while the page still says
+  // the pens are being made ready) Every shader the frames will draw with, made now and not by the
+  // first frames that use them - on Windows a second or more each, the picture standing still, and
+  // they were all made then: the ones made before were made for drawing onto the page, and the
+  // game draws into pictures of its own (all but the last pass). So: the scene into a picture of
+  // the game's own, the sun's view with its own pens (swapDepth), the city's pens with scissors
+  // (render/solid.js), the rain over the ink, every pass over the whole picture; the last one and
+  // the speech bubbles onto the page. The defines first in one order (materials.js sortDefines).
+  // Returns their programs, to wait for where the card makes them alongside the game
+  precompile() {
+    const r = this.r;
+    const prev = r.getRenderTarget();
+    const keep = this.quad.material;
+    const mats = new Set();
+    const add = (set) => {
+      for (const m of set) mats.add(m);
+    };
+    const quad = (list) => {
+      for (const m of list) {
+        if (!m) continue;
+        this.quad.material = m;
+        add(r.compile(this.quadScene, this.quadCam));
+      }
+    };
+    try {
+      canonDefines(this.scene);
+      canonDefines(this.afterInk);
+      if (this.solid) canonDefines(this.solid.standIns());
+      r.setRenderTarget(this.compileRT());
+      add(r.compile(this.scene, this.camera));
+      // (the sun's own pens, for whatever may be seen by it - hidden now or not)
+      const sw = this._swap;
+      this.scene.traverse((o) => {
+        const d = o.isMesh && o.material && o.material.userData && o.material.userData.depth;
+        if (d) {
+          sw.push(o, o.material);
+          o.material = d;
+        }
+      });
+      try {
+        add(r.compile(this.scene, this.sunCam));
+      } finally {
+        this.unswapDepth();
+      }
+      if (this.solid) add(r.compile(this.solid.standIns(), this.camera));
+      if (this.afterInk.children.length) add(r.compile(this.afterInk, this.camera));
+      quad([this.mInk, this.mInkD, this.mBright, this.mBrightD, this.mDown, this.mUp, this.mTaa, this.deferred ? this.mPens : null]);
+      r.setRenderTarget(null);
+      quad([this.mFinal, this.mFinalD]);
+      // (and a speech bubble's, ui/bubbles.js - made by the first one said, in play - a stand-in
+      // with a picture of its own, the same kind; its material stays, and with it the shader)
+      const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: BLANK, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
+      this.overlay.add(bubble);
+      try {
+        add(r.compile(this.overlay, this.camera));
+      } finally {
+        this.overlay.remove(bubble);
+      }
+    } catch (err) {
+      console.warn('precompile failed', err);
+    }
+    this.quad.material = keep;
+    r.setRenderTarget(prev);
+    return [...mats].map((m) => r.properties.get(m).currentProgram).filter(Boolean);
+  }
+
   // (game/perf.js) can this computer draw the second way
   get pensCan() {
     return pens.can && !this.pensBroken;
@@ -1057,7 +1139,7 @@ export class Pipeline {
 
   // the way it is drawn is not to be tried in play
   get pensFixed() {
-    return this.pensMode !== 'auto' || !pens.can || this.pensBroken;
+    return this.pensMode !== 'auto' || !pens.can || this.pensBroken || this.pensKnown;
   }
 
   // (the smart drawing) this frame's samples a fraction of a pixel aside: the camera's projection
@@ -1970,7 +2052,7 @@ export class Pipeline {
     // (the pens once a pixel could not be drawn on this graphics card: in one pass from now on)
     if (this.pensBroken && this.deferred) this.setPens(false);
     // (left to the game: the other way's shaders made ready, a little after it begins)
-    if (this.pensMode === 'auto' && !this._otherAsked && performance.now() > this.otherAt) this.prepareOtherPens();
+    if (this.pensMode === 'auto' && !this.pensKnown && !this._otherAsked && performance.now() > this.otherAt) this.prepareOtherPens();
     this.ensure();
     if (this.solid) this.solid.update();
     r.autoClear = true;
@@ -2428,9 +2510,14 @@ export class Pipeline {
       if (key === 'shadow') out = time(() => this.renderShadows(center));
       else if (key === 'reflection') out = this.reflections ? time(() => this.renderReflection()) : undefined;
       else if (key === 'main') out = time(() => this.drawMain());
-      else if (key === 'city') {
+      else if (key === 'floor') out = time(() => {});
+      else if (key === 'city' || key === 'cityRefl' || key === 'cityShadow') {
+        // (without the people, the cars and the rest drawn anew every frame: in the drawing, in the
+        // mirror, in the sun's view - what they cost there)
         const life = this.hideMoving().slice();
-        out = time(() => this.drawMain());
+        if (key === 'city') out = time(() => this.drawMain());
+        else if (key === 'cityRefl') out = this.reflections ? time(() => this.renderReflection()) : undefined;
+        else out = time(() => this.renderShadows(center));
         for (const o of life) o.visible = true;
       } else if (key === 'tiny') {
         const vps = [this.gRT, this.G.pen, this.G.over].filter(Boolean).map((t) => [t.viewport, t.viewport.clone()]);

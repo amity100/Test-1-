@@ -11,6 +11,9 @@ import { buildPanes } from './world/glass.js';
 import { Game } from './game/game.js';
 import { isTouchDevice } from './core/util.js';
 import { initProvoke } from './render/provoke.js';
+import { readMemo } from './render/depthtrial.js';
+import { BUILD } from './game/telemetry.js';
+import { browserName } from './game/perf.js';
 
 // עיר השרבוטים: the first boulevard on the water at sunset, and the whole city around it, drawn
 // with coloured pens. Everything you draw becomes real.
@@ -116,6 +119,16 @@ async function boot() {
     pipe.depthFirst = params.has('depth');
     pipe.depthFixed = true;
   }
+  // (11.5) what trying the ways in play chose here before, in this build of the game and this
+  // browser: kept, and not tried again (render/depthtrial.js readMemo). ?trials: tried again
+  const trialDev = `${pipe.gpuName}|${browserName()}`;
+  const memo = params.has('trials') ? null : readMemo(BUILD, trialDev);
+  pipe.trialMemo = { build: BUILD, dev: trialDev, kept: memo };
+  const memoOf = (k) => (memo && typeof memo[k] === 'boolean' ? memo[k] : null);
+  if (!pipe.depthFixed && memoOf('depth') !== null) {
+    pipe.depthFirst = memoOf('depth');
+    pipe.depthFixed = true;
+  }
   // (the mirror under the street every frame; a phone every other one, as it always was)
   pipe.reflEvery = low ? 2 : 1;
   pipe.reflEveryDefault = pipe.reflEvery;
@@ -136,7 +149,10 @@ async function boot() {
     const kept = new Settings().get('pens');
     const mode = ways.includes(pp) ? pp : ways.includes(kept) ? kept : 'auto';
     pipe.pensMode = pens.can ? mode : 'one';
-    pipe.setPens(pipe.pensMode === 'two' || (pipe.pensMode === 'auto' && !low));
+    // (the two ways tried here before: the one kept, from the start - render/depthtrial.js)
+    const was = memoOf('pens');
+    if (pipe.pensMode === 'auto' && was !== null) pipe.pensKnown = true;
+    pipe.setPens(pipe.pensMode === 'two' || (pipe.pensMode === 'auto' && (was !== null ? was : !low)));
   }
 
   setStatus('מציירים את העיר…');
@@ -186,6 +202,9 @@ async function boot() {
   if (params.has('walls') || params.has('nowalls')) {
     pipe.wallsFirst = params.has('walls');
     pipe.wallsFixed = true;
+  } else if (memoOf('walls') !== null) {
+    pipe.wallsFirst = memoOf('walls');
+    pipe.wallsFixed = true;
   }
   // (v5) and the still city's pens without their scissors wherever nothing of them is rubbed out
   // or crumbling: the graphics card leaves out what is hidden before the pens are worked out
@@ -195,23 +214,11 @@ async function boot() {
   await frame();
   world.buildNav();
   // every pen of the city made ready now, not in the middle of the first walk down the street
-  // (the graphics card compiles them side by side where it can, and the page stays alive)
+  // (the graphics card compiles them side by side where it can, and the page stays alive): asked
+  // for now, while the game's people and cars are made; theirs after, and all of them waited for
+  // (11.5: render/pipeline.js precompile - made as the frames draw with them)
   setStatus('מכינים את העטים…');
-  try {
-    if (renderer.compileAsync && renderer.extensions.has('KHR_parallel_shader_compile')) {
-      // (drawn in two passes, the pens' own pass too)
-      if (pipe.deferred) await renderer.compileAsync(pipe.pensScene(), pipe.quadCam);
-      await renderer.compileAsync(scene, camera);
-      // (the still city's own pens, with their scissors, for the first rubbed-out spot: in the
-      // background, render/solid.js)
-      if (pipe.solid) renderer.compileAsync(pipe.solid.standIns(), camera).catch(() => {});
-    } else {
-      if (pipe.deferred) renderer.compile(pipe.pensScene(), pipe.quadCam);
-      renderer.compile(scene, camera);
-    }
-  } catch (err) {
-    console.warn('precompile failed', err);
-  }
+  const progs = pipe.precompile();
 
   const resize = () => {
     const w = window.innerWidth;
@@ -233,6 +240,8 @@ async function boot() {
     window.__THREE = THREE;
   }
   await game.init();
+  for (const p of pipe.precompile()) progs.push(p);
+  await shadersReady(renderer, [...new Set(progs)]);
   setStatus('');
   const startBtn = document.getElementById('start-btn');
   startBtn.disabled = false;
@@ -244,6 +253,22 @@ async function boot() {
   // (the pens' shaders for the other way of drawing, made ready in the background a little after the
   // game begins - for trying the two in play: render/pipeline.js prepareOtherPens)
   pipe.otherAt = performance.now() + 1500;
+}
+
+// (11.5) the shaders asked for (render/pipeline.js precompile) all made, where the graphics card
+// makes them alongside the game - counted on the loading page; elsewhere they were made as asked.
+// Never more than two minutes: then the frames make what is left, as before
+async function shadersReady(renderer, progs) {
+  if (!renderer.extensions.has('KHR_parallel_shader_compile')) return;
+  const t0 = performance.now();
+  const n = progs.length;
+  for (;;) {
+    let left = 0;
+    for (const p of progs) if (!p.isReady()) left++;
+    if (!left || performance.now() - t0 > 120000) return;
+    setStatus(`מכינים את העטים… ${n - left}/${n}`);
+    await new Promise((r) => setTimeout(r, 60));
+  }
 }
 
 boot().catch(fatal);
