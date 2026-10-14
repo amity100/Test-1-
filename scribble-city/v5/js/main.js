@@ -10,6 +10,7 @@ import { buildRoofs } from './world/roofs.js';
 import { buildPanes } from './world/glass.js';
 import { Game } from './game/game.js';
 import { isTouchDevice } from './core/util.js';
+import { initProvoke } from './render/provoke.js';
 
 // עיר השרבוטים: the first boulevard on the water at sunset, and the whole city around it, drawn
 // with coloured pens. Everything you draw becomes real.
@@ -91,6 +92,12 @@ async function boot() {
   // which graphics card draws (where the browser tells): none, in software (SwiftShader, llvmpipe,
   // the basic render driver), and every frame takes seconds
   const gl0 = renderer.getContext();
+  // (11.5) the surfaces' flat values from a triangle's first corner, where the browser lets the game
+  // choose: on Windows that takes the geometry shader the browser put in front of every triangle
+  // out of the drawing and the mirror (render/provoke.js; ?provokelast: as it was). And again if the
+  // graphics context is lost and comes back
+  initProvoke(gl0, params.has('provokelast'));
+  renderer.domElement.addEventListener('webglcontextrestored', () => initProvoke(renderer.getContext(), params.has('provokelast')));
   const dbg = gl0.getExtension('WEBGL_debug_renderer_info');
   pipe.gpuName = String((dbg && gl0.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) || gl0.getParameter(gl0.RENDERER) || '');
   pipe.software = /swiftshader|llvmpipe|softpipe|basic render|software rasterizer/i.test(pipe.gpuName);

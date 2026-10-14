@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { shared, BLANK, LAYERS, pens, setPensOn } from './materials.js';
+import { setProvokeLast } from './provoke.js';
 import { HEAD, FUNCS, PENS_FRAG } from './glsl.js';
 import { Occlusion } from './occlusion.js';
 import { motion, motionUpload } from './motion.js';
@@ -2472,6 +2473,12 @@ export class Pipeline {
         this.scene.overrideMaterial = m;
         out = time(() => this.drawMain());
         this.scene.overrideMaterial = null;
+      } else if (key === 'pvLast' || key === 'pvLastRefl') {
+        // (render/provoke.js) the surfaces with the last corner's flat values, as before 11.5: on
+        // Windows each triangle through the browser's geometry shader again
+        setProvokeLast(true);
+        out = time(() => (key === 'pvLast' ? this.drawMain() : this.renderReflection()));
+        setProvokeLast(false);
       } else if (key === 'half' || key === 'empty') {
         // (every other thing drawn, or none: what a draw costs by itself)
         const hid = [];

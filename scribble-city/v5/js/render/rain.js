@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { shared, BLANK } from './materials.js';
 import { HEAD, FUNCS } from './glsl.js';
+import { provokeLast } from './provoke.js';
 
 // The rain (game/weather.js), drawn over the inked picture: slanted pen strokes falling in a box
 // around the camera, and little crowns where the drops land - on whatever is flat and in the
@@ -261,12 +262,16 @@ export class RainRenderer {
     rg.setAttribute('iDrop', randAttr(this.dropN));
     rg.instanceCount = 0;
     this.dropMat = mk(RAIN_VERT, RAIN_FRAG, { uSpan: { value: 36 }, uHeight: { value: 22 }, uSpeed: { value: 15 }, uLen: { value: 1 }, uWidth: { value: 1 }, uAlpha: { value: 1 } });
+    // (a drop's corners differ in their flat values - its fade with distance: the last corner's, as
+    // WebGL has it, render/provoke.js; and the splashes' the same)
+    this.dropMat.onBeforeRender = provokeLast;
     this.drops = new THREE.Mesh(rg, this.dropMat);
     // the crowns where they land: a card each
     const sg = quad(-1, 1, -0.3, 1);
     sg.setAttribute('iSplash', randAttr(this.splashN));
     sg.instanceCount = 0;
     this.splashMat = mk(SPLASH_VERT, SPLASH_FRAG, { uRate: { value: 1.7 }, uSize: { value: 0.13 }, uAlpha: { value: 1 } });
+    this.splashMat.onBeforeRender = provokeLast;
     this.splash = new THREE.Mesh(sg, this.splashMat);
     for (const m of [this.drops, this.splash]) {
       m.frustumCulled = false;

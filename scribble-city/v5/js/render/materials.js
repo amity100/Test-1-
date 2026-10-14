@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { provokeFirst, provokeLast } from './provoke.js';
 import { HEAD, FUNCS, SURF_VERT, SURF_FRAG, SKY_VERT, SKY_FRAG, DEPTH_VERT, DEPTH_FRAG, LINE_VERT, LINE_FRAG, SPRITE_BATCH_VERT, SPRITE_BATCH_FRAG, MAX_LIGHTS, MAX_HOLES, MAX_OWNERS, MAX_SPOTS } from './glsl.js';
 
 // The pens every material draws with, and the light of the sunset they draw by.
@@ -410,6 +411,9 @@ export function makeSurface(o = {}) {
   m.userData.depth = o.noShadow ? null : depthMaterial(o);
   m.userData.reflective = !!o.refl;
   m.userData.kind = kind;
+  // (11.5, render/provoke.js: its flat values are the same on a triangle's three corners, so it is
+  // drawn with the first corner's, where the browser lets the game choose)
+  m.onBeforeRender = provokeFirst;
   return trackPens(m);
 }
 
@@ -465,6 +469,8 @@ export function mergedSurface(m, { obj = false, pictures = null, vcolor = true, 
   delete c.userData.picture;
   if (pictures) pictures.forEach((t, i) => (c.uniforms[`uMapS${i}`] = { value: t }));
   if (m.userData.depth !== null) c.userData.depth = depthMaterial({ objMask: obj, pull });
+  // (as makeSurface's: drawn with the first corner's flat values, render/provoke.js)
+  c.onBeforeRender = provokeFirst;
   return trackPens(c);
 }
 
@@ -549,6 +555,9 @@ export function makeLineMaterial(o = {}) {
     side: THREE.DoubleSide,
   });
   m.userData.depth = null;
+  // (a line's corners differ in their flat values - its width, tapering along it: the last corner's,
+  // as WebGL has it, render/provoke.js)
+  m.onBeforeRender = provokeLast;
   return m;
 }
 

@@ -13,8 +13,9 @@
 
 import { GpuTimer, browserName } from './perf.js';
 import { shared, pens } from '../render/materials.js';
+import { provokeState } from '../render/provoke.js';
 
-const BUILD = 'v17';
+const BUILD = 'v18';
 // frames by how long they took (ms): up to 8.5 (120 Hz), 12.5, 17.5 (60 Hz), 21, 25, 34.5 (30 Hz),
 // 50, 67, 100, 200, longer
 const EDGES = [8.5, 12.5, 17.5, 21, 25, 34.5, 50, 67, 100, 200];
@@ -24,8 +25,9 @@ const KEEP = 90;
 // the parts of the drawing timed by themselves, one a frame (pipeline.js profileOne)
 // (split, splitRefl: the drawing and the mirror once each, timed three ways - the processor sending
 // it, the wall clock until the card is done, the card's own clock; basic: in the plainest material;
-// half, empty: every other thing drawn, or none)
-const IDLE = ['split', 'splitRefl', 'shadow', 'reflection', 'main', 'city', 'tiny', 'basic', 'half', 'empty', 'noPens', 'noSun', 'noLamps', 'noHaze', 'flat', 'noReflImg', 'flip', 'walls', 'pens', 'ink', 'glow', 'final', 'frame'];
+// half, empty: every other thing drawn, or none; pvLast, pvLastRefl: the drawing and the mirror with
+// the last corner's flat values, as before - render/provoke.js)
+const IDLE = ['split', 'splitRefl', 'shadow', 'reflection', 'main', 'pvLast', 'pvLastRefl', 'city', 'tiny', 'basic', 'half', 'empty', 'noPens', 'noSun', 'noLamps', 'noHaze', 'flat', 'noReflImg', 'flip', 'walls', 'pens', 'ink', 'glow', 'final', 'frame'];
 // (a few times each time the game is opened, a minute apart at least)
 const IDLE_SETS = 4;
 const IDLE_GAP = 60000;
@@ -388,6 +390,8 @@ export class Telemetry {
         framed: window.top !== window,
         timer: !!gl.getExtension('EXT_disjoint_timer_query_webgl2'),
         hz: ctl && ctl.R ? Math.round(1000 / ctl.R) : null,
+        // (render/provoke.js: whether the browser lets the game choose the corner, and it does)
+        provoke: provokeState(),
       },
       setup: {
         low: !!p.low,
