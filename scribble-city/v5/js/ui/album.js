@@ -97,7 +97,7 @@ export class Album {
     const bp = BLUEPRINTS[id];
     if (!bp || !this.add(id)) return false;
     const g = this.game;
-    g.hud.toast(`שרטוט חדש באלבום: ${bp.name}, ${from}! ${g.touch ? 'העיפרון ✏' : 'Q'} — לצייר אותו`, 'good', 3.6);
+    g.hud.toast(`שרטוט חדש באלבום: ${bp.name}, ${from}! ${g.touch ? g.drawTap : g.drawKey} — לצייר אותו`, 'good', 3.6);
     g.audio.play('pageflip');
     return true;
   }

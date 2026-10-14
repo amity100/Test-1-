@@ -134,6 +134,8 @@ export class Input {
   }
 
   releaseLock() {
+    // (let go on purpose - for a page over the game: the mouse coming back is no pause)
+    this.releasedAt = performance.now();
     if (document.pointerLockElement) document.exitPointerLock();
   }
 

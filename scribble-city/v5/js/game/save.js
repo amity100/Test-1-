@@ -118,6 +118,8 @@ export class SaveGame {
         // (the garage's work, the tank, the dust, your parking: ROADMAP 4.6)
         paint: o.kind === 'car' && o.color ? o.color.slice() : null, design: o.design || null, up: o.up || null,
         fuel: o.fuel === undefined ? null : o.fuel, dirt: o.dirt === undefined ? null : o.dirt, kept: !!o.kept,
+        // (one drawn in the workshop: its drawing, to build it again - ROADMAP 11.6)
+        drawn: o.drawn || null,
       })),
       world: { gone, spots: objs.spots.map((s) => ({ x: s.x, y: s.y, z: s.z, r: s.r })) },
       hour: g.daynight ? g.daynight.hour : 18.3,
@@ -259,7 +261,10 @@ export class SaveGame {
     let mine = null;
     for (const it of s.vehicles || []) {
       let v;
-      if (it.stock) v = V.spawnStock(it.stock, { x: it.x, z: it.z }, it.yaw);
+      if (it.drawn) {
+        v = g.workshop ? g.workshop.respawn(it.drawn, it.x, it.z, it.yaw) : null;
+        if (!v) continue;
+      } else if (it.stock) v = V.spawnStock(it.stock, { x: it.x, z: it.z }, it.yaw);
       else {
         // (the new rides, ROADMAP 4.8, are not in ?classic)
         if (!BLUEPRINTS[it.kind] || (g.classic && BLUEPRINT_MORE.includes(it.kind))) continue;

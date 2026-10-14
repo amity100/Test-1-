@@ -34,9 +34,13 @@ export class CameraRig {
    * target: feet position of the followed object. opts: { dist, height, shoulder, aim }
    */
   update(dt, target, opts = {}) {
-    const dist = (opts.dist || this.dist) * (opts.aim ? 0.62 : 1);
-    const height = opts.height || this.height;
-    const shoulder = opts.shoulder !== undefined ? opts.shoulder : this.shoulder;
+    // (the pen out on the world, ROADMAP 11.6 - ui/inkpen.js: a step back and up, to see what to
+    // draw on; in real time, the city's own slowed right down)
+    const pk = this.penK || 0;
+    if (pk > 0 && this.penDt) dt = this.penDt;
+    const dist = (opts.dist || this.dist) * (opts.aim ? 0.62 : 1) + pk * 3.6;
+    const height = (opts.height || this.height) + pk * 1.5;
+    const shoulder = (opts.shoulder !== undefined ? opts.shoulder : this.shoulder) * (1 - pk);
     const cp = Math.cos(this.pitch);
     this.fwd.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
     this.right.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));

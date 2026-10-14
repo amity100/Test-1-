@@ -587,11 +587,11 @@ function heroLook(game, fn, text) {
 function giveBlueprint(game, id) {
   const bp = BLUEPRINTS[id];
   if (game.album.has(id)) {
-    game.hud.toast(`ה${bp.name} כבר באלבום — לחצו ${game.touch ? 'על העיפרון ✏' : 'Q'} כדי לצייר`, 'info', 2.6);
+    game.hud.toast(`ה${bp.name} כבר באלבום — לחצו ${game.touch ? `על ${game.drawTap}` : game.drawKey} כדי לצייר`, 'info', 2.6);
     return;
   }
   game.album.add(id);
-  game.hud.toast(`שרטוט חדש באלבום: ${bp.name}! ${game.touch ? 'העיפרון ✏' : 'Q'} — לצייר אותו באוויר`, 'good', 3.4);
+  game.hud.toast(`שרטוט חדש באלבום: ${bp.name}! ${game.touch ? game.drawTap : game.drawKey} — לצייר אותו באוויר`, 'good', 3.4);
   game.audio.play('pageflip');
 }
 

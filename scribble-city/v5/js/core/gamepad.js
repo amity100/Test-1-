@@ -137,9 +137,10 @@ export class Pad {
       if (this.pressed(B.A)) game.phone.shoot();
       if (this.pressed(B.B)) game.phone.camBack();
     } else if (game.airdraw && game.airdraw.open) this.drawPad(dt);
+    else if (game.inkpen && game.inkpen.open && game.state === 'play') this.penPad(dt);
     else if (this.menuRoot()) this.menuPad(dt);
     else if (game.state === 'play') this.playPad(dt);
-    if (!(game.airdraw && game.airdraw.open) && this.cursorEl) this.cursorEl.classList.add('hidden');
+    if (!(game.airdraw && game.airdraw.open) && !(game.inkpen && game.inkpen.open) && this.cursorEl) this.cursorEl.classList.add('hidden');
   }
 
   // ------------------------------------------------------------------ playing
@@ -392,6 +393,42 @@ export class Pad {
     if (this.pressed(B.LB)) ad.cycle(-1);
     if (this.pressed(B.RB)) ad.cycle(1);
     if (this.pressed(B.VIEW)) ad.toggleGhost();
+  }
+
+  // ------------------------------------------------------------------ the pen on the world
+  // (ROADMAP 11.6, ui/inkpen.js) the pencil: the left stick; RT down draws; the right stick turns
+  // the camera; LB/RB the ink; X takes the last one back; B (or up) puts the pen away
+  penPad(dt) {
+    const game = this.game;
+    const P = game.inkpen;
+    this.release();
+    this.blur();
+    if (P.cardOpen) {
+      if (this.pressed(B.A) || this.pressed(B.B)) P.tips(false);
+      return;
+    }
+    const [lx, ly, rx, ry] = this.ax;
+    const c = (a) => a * Math.abs(a);
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const sp = Math.min(W, H) * 1.1;
+    this.cursor.x = Math.min(W - 4, Math.max(4, this.cursor.x + c(lx) * sp * dt));
+    this.cursor.y = Math.min(H - 4, Math.max(4, this.cursor.y + c(ly) * sp * dt));
+    if (rx || ry) game.camRig.applyLook(c(rx) * 900 * dt, c(ry) * 650 * dt);
+    if (this.cursorEl) {
+      this.cursorEl.classList.remove('hidden');
+      this.cursorEl.classList.toggle('down', this.pen);
+      this.cursorEl.style.transform = `translate(${this.cursor.x.toFixed(1)}px, ${this.cursor.y.toFixed(1)}px)`;
+    }
+    const down = this.rt > 0.35;
+    if (down && !this.pen) P.penDown(this.cursor.x, this.cursor.y);
+    else if (down) P.penMove(this.cursor.x, this.cursor.y);
+    else if (this.pen) P.penUp();
+    this.pen = down;
+    if (this.pressed(B.LB)) P.cycle(-1);
+    if (this.pressed(B.RB)) P.cycle(1);
+    if (this.pressed(B.X)) P.undo();
+    if (this.pressed(B.B) || this.pressed(B.UP)) P.close();
   }
 
   // the pencil starts in the middle of the paper

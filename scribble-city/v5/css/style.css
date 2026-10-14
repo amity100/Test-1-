@@ -1178,3 +1178,146 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch .opt-group h3 { font-size: 17px; }
   body.touch .opt-group .opt { margin: 4px 0; font-size: 13px; }
 }
+
+/* ================================================================ ROADMAP 11.6 (a test)
+   The pen on the world (ui/inkpen.js): the page laid over the city while the pen is out - the
+   line drawn on the city, a word by the pen, the inks, the card of what lines become, the tries. */
+#inkpen { position: fixed; inset: 0; z-index: 16; pointer-events: none; --pen: #43454f; }
+#inkpen::before { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 3px rgba(27, 20, 48, 0.5), inset 0 0 80px 8px rgba(255, 248, 236, 0.4); background: repeating-linear-gradient(0deg, rgba(110, 140, 210, 0.07) 0 1px, transparent 1px 34px); }
+#ip-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; touch-action: none; cursor: crosshair; }
+#ip-head { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 5px; pointer-events: none; max-width: 64vw; }
+#ip-title { font-family: var(--font-hand); font-size: 30px; line-height: 1; color: var(--ink); text-shadow: 0 0 6px var(--paper-2), 0 0 12px var(--paper-2); white-space: nowrap; }
+#ip-ink { position: relative; width: 220px; height: 12px; border: 2px solid var(--ink); border-radius: 7px; background: var(--paper-2); overflow: hidden; }
+#ip-ink-fill { position: absolute; top: 0; bottom: 0; right: 0; width: 100%; background: var(--pen); }
+#ip-ink-cost { position: absolute; top: 0; bottom: 0; width: 0; background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.8) 0 4px, rgba(255, 255, 255, 0.25) 4px 8px); }
+#ip-ink-cost.over { background: repeating-linear-gradient(-45deg, rgba(226, 51, 95, 0.95) 0 4px, rgba(255, 210, 220, 0.9) 4px 8px); }
+#ip-ink.flash { animation: ip-flash 0.4s 3; }
+@keyframes ip-flash { 50% { box-shadow: 0 0 0 4px var(--red); } }
+#ip-hint { font: 600 14px/1.3 var(--font-ui); text-align: center; background: rgba(255, 248, 236, 0.93); border: 2px solid var(--ink); border-radius: 9px 11px 8px 10px; padding: 2px 10px; }
+#ip-hint:empty { display: none; }
+#ip-tag { position: absolute; left: 0; top: 0; width: max-content; max-width: 250px; font: 700 15px/1.25 var(--font-ui); color: var(--ink); padding: 4px 10px; background: var(--paper-2); border: 2px solid var(--ink); border-right: 7px solid var(--pen); border-radius: 10px 12px 9px 11px; box-shadow: 2px 3px 0 var(--ink); pointer-events: none; }
+#ip-tag.soft { font-weight: 600; background: #f1ece2; opacity: 0.9; }
+#ip-tag.dear { background: #ffd0dc; }
+#ip-tag.good { font: 700 24px/1.1 var(--font-hand); background: #d8fbe8; animation: ip-pop 0.35s ease-out; }
+#ip-tag.bad { background: #ffd0e4; border-right-color: var(--red); animation: ip-shake 0.4s; }
+#ip-tag.hidden { display: none; }
+@keyframes ip-pop { 0% { scale: 0.6; } 60% { scale: 1.12; } 100% { scale: 1; } }
+@keyframes ip-shake { 0%, 100% { translate: 0; } 20% { translate: -6px; } 40% { translate: 6px; } 60% { translate: -4px; } 80% { translate: 3px; } }
+#ip-inks { position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 9px; pointer-events: auto; }
+.ip-ink { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; padding: 6px 8px 5px; border: 3px solid var(--ink); border-radius: 12px 14px 11px 13px; background: var(--paper); box-shadow: 3px 4px 0 var(--ink); cursor: pointer; color: var(--ink); font-family: var(--font-ui); transition: transform 0.12s; }
+.ip-ink i { width: 28px; height: 9px; border-radius: 5px; background: var(--c); border: 2px solid var(--ink); }
+.ip-ink b { font: 700 18px/1.05 var(--font-hand); }
+.ip-ink small { font-size: 11px; opacity: 0.75; }
+.ip-ink kbd { position: absolute; top: -10px; left: -10px; width: 21px; height: 21px; border-radius: 50%; border: 2px solid var(--ink); background: var(--paper-2); font: 700 12px/17px var(--font-ui); text-align: center; }
+.ip-ink.sel { background: #fff3c4; transform: translateY(-6px) rotate(-1.5deg); box-shadow: 3px 8px 0 var(--ink); outline: 3px solid var(--c); outline-offset: 1px; }
+#ip-side { position: absolute; right: max(12px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: stretch; gap: 8px; pointer-events: auto; }
+.ip-btn { font: 700 15px/1 var(--font-ui); padding: 8px 12px; border: 2.5px solid var(--ink); border-radius: 10px 12px 9px 11px; background: var(--paper); box-shadow: 2px 3px 0 var(--ink); color: var(--ink); cursor: pointer; text-align: right; white-space: nowrap; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ip-btn:active, .ip-ink:active { translate: 1px 2px; box-shadow: 1px 1px 0 var(--ink); }
+.ip-btn kbd { font: 600 11px/1 var(--font-ui); border: 1.5px solid var(--ink-soft); border-radius: 4px; padding: 2px 4px; opacity: 0.75; }
+#ip-close { background: #ffd0dc; }
+#ip-shop.hidden { display: none; }
+#ip-tries { position: absolute; left: max(12px, env(safe-area-inset-left)); top: max(192px, calc(env(safe-area-inset-top) + 188px)); width: 250px; padding: 8px 12px 10px; font-size: 14px; line-height: 1.35; pointer-events: auto; cursor: pointer; }
+#ip-tries h4 { margin: 0 0 4px; font-family: var(--font-hand); font-size: 21px; }
+#ip-tries .g { display: flex; gap: 6px; align-items: baseline; }
+#ip-tries .g.done { text-decoration: line-through; opacity: 0.55; }
+#ip-tries .box { flex: none; width: 13px; height: 13px; border: 2px solid var(--ink); border-radius: 3px; display: inline-block; position: relative; top: 2px; }
+#ip-tries .g.done .box::after { content: "✓"; position: absolute; top: -9px; right: -3px; font-size: 17px; color: var(--red); }
+#ip-card { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(27, 20, 48, 0.38); pointer-events: auto; z-index: 2; }
+#ip-card.hidden { display: none; }
+.ip-sheet { width: min(740px, 96vw); max-height: 94vh; overflow: auto; padding: 14px 18px; transform: rotate(-0.5deg); }
+.ip-card-title { font-family: var(--font-hand); font-size: 34px; line-height: 1; color: #b3191e; }
+.ip-card-sub { font-size: 15px; margin: 6px 0 10px; }
+.ip-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.ip-row { display: flex; gap: 10px; align-items: center; }
+.ip-row div { display: flex; flex-direction: column; gap: 1px; }
+.ip-row b { font-size: 15px; }
+.ip-row span { font-size: 13px; opacity: 0.78; }
+.ip-ico { flex: none; width: 64px; height: 40px; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; background: #fbf8f0; border: 1.5px solid rgba(27, 20, 48, 0.35); border-radius: 6px; }
+.ip-ico .w { stroke: #8a7fa0; }
+.ip-ico .l { stroke: #ff4fa3; stroke-width: 3; }
+.ip-ico .d { stroke: #ff4fa3; stroke-dasharray: 3 3; opacity: 0.75; }
+.ip-card-inks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 6px; font-size: 14px; }
+.ip-card-inks span { display: inline-flex; align-items: center; gap: 6px; }
+.ip-card-inks i { width: 20px; height: 8px; border-radius: 4px; background: var(--c); border: 1.5px solid var(--ink); }
+.ip-card-keys { font-size: 13px; opacity: 0.82; margin-bottom: 10px; }
+.ip-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+body.touch #inkpen kbd { display: none; }
+body.touch #ip-tries { top: auto; bottom: max(10px, env(safe-area-inset-bottom)); left: max(10px, env(safe-area-inset-left)); width: auto; max-width: 30vw; padding: 5px 10px 6px; }
+body.touch #ip-tries h4 { margin: 0; font-size: 18px; }
+body.touch #ip-tries:not(.open) .g { display: none; }
+body.touch #ip-tries.open { max-width: 46vw; }
+@media (max-height: 520px), (max-width: 760px) {
+  #ip-title { font-size: 22px; }
+  #ip-ink { width: 170px; height: 10px; }
+  #ip-hint { font-size: 12px; }
+  #ip-inks { gap: 6px; }
+  .ip-ink { min-width: 60px; padding: 4px 6px 3px; }
+  .ip-ink b { font-size: 15px; }
+  .ip-ink small { display: none; }
+  .ip-btn { font-size: 13px; padding: 6px 10px; }
+  #ip-side { gap: 6px; }
+  .ip-sheet { padding: 8px 12px; }
+  .ip-card-title { font-size: 26px; }
+  .ip-card-sub { font-size: 13px; margin: 3px 0 6px; }
+  .ip-rows { gap: 4px 10px; }
+  .ip-ico { width: 48px; height: 30px; }
+  .ip-row b { font-size: 13px; }
+  .ip-row span { font-size: 11.5px; }
+  .ip-card-inks { font-size: 12px; margin: 6px 0 4px; }
+  .ip-card-keys, .ip-card-foot { font-size: 11.5px; }
+  .ip-card-foot .btn { font-size: 18px; padding: 6px 14px; }
+}
+
+/* ================================================================ ROADMAP 11.6 (a test)
+   The workshop (ui/workshop.js): a vehicle drawn from the side on a sheet, what it is beside it. */
+#workshop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(27, 20, 48, 0.45); pointer-events: auto; padding: 10px; }
+#workshop.hidden { display: none; }
+.ws-sheet { width: min(1120px, 97vw); max-height: 96vh; overflow: auto; padding: 10px 14px 12px; transform: rotate(-0.3deg); }
+.ws-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.ws-title { font-family: var(--font-hand); font-size: 32px; line-height: 1; color: #b3191e; }
+.ws-hint { font-size: 14px; opacity: 0.82; flex: 1 1 300px; }
+.ws-main { display: flex; gap: 12px; align-items: stretch; margin-top: 8px; }
+#ws-canvas { flex: 1 1 auto; min-width: 0; width: 100%; aspect-ratio: 2.1 / 1; display: block; background: #fbf8f0; border: 2px solid var(--ink); border-radius: 8px; touch-action: none; cursor: crosshair; }
+.ws-side { flex: 0 0 230px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ws-kind { font-family: var(--font-hand); font-size: 30px; line-height: 1; }
+.ws-stat { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 6px; font-size: 13px; margin: 3px 0; }
+.ws-bar { height: 11px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper-2); overflow: hidden; }
+.ws-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--violet), var(--pink)); }
+.ws-tip { font-size: 13px; line-height: 1.35; background: #fff3c4; border: 2px dashed var(--ink-soft); border-radius: 8px; padding: 5px 8px; }
+.ws-why { color: #b3191e; font-weight: 700; }
+.ws-dim { opacity: 0.7; font-size: 12px; }
+.ws-legend { display: flex; flex-wrap: wrap; gap: 3px 9px; font-size: 12px; margin-top: auto; }
+.ws-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--c); margin-inline-end: 4px; vertical-align: -1px; }
+.ws-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ws-label { font-family: var(--font-hand); font-size: 20px; }
+.ws-sws { display: flex; gap: 6px; flex-wrap: wrap; }
+.ws-sw { width: 28px; height: 28px; border-radius: 50%; border: 2.5px solid var(--ink); cursor: pointer; padding: 0; box-shadow: 1px 2px 0 rgba(36, 36, 44, 0.25); }
+.ws-sw.sel { outline: 3px solid #ffd23f; outline-offset: 2px; transform: scale(1.12); }
+.ws-gap { flex: 1; }
+.ws-btn { font: 600 16px Rubik, sans-serif; padding: 6px 14px; border: 2px solid var(--ink); border-radius: 9px 12px 8px 11px; background: var(--paper-2); color: var(--ink); cursor: pointer; }
+.ws-btn.primary { background: #b3191e; color: #fff; font-size: 18px; }
+.ws-btn:disabled { opacity: 0.5; cursor: default; }
+.ws-x { background: #ffd0dc; }
+.ws-saved { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ws-saved canvas { width: 76px; height: 38px; border: 2px solid var(--ink); border-radius: 6px; cursor: pointer; box-shadow: 1px 2px 0 rgba(36, 36, 44, 0.25); }
+.ws-saved canvas:hover { transform: translateY(-2px); }
+@media (max-height: 520px), (max-width: 760px) {
+  .ws-sheet { padding: 6px 10px 8px; }
+  .ws-title { font-size: 24px; }
+  .ws-hint { font-size: 12px; }
+  .ws-main { gap: 8px; margin-top: 4px; }
+  #ws-canvas { aspect-ratio: 2.3 / 1; }
+  .ws-side { flex-basis: 168px; gap: 5px; }
+  .ws-kind { font-size: 22px; }
+  .ws-stat { grid-template-columns: 50px 1fr; font-size: 11px; margin: 1px 0; }
+  .ws-tip { font-size: 11px; padding: 3px 6px; }
+  .ws-legend { display: none; }
+  .ws-row { margin-top: 5px; gap: 6px; }
+  .ws-label { font-size: 16px; }
+  .ws-sw { width: 22px; height: 22px; }
+  .ws-btn { font-size: 13px; padding: 4px 10px; }
+  .ws-btn.primary { font-size: 14px; }
+  .ws-saved canvas { width: 56px; height: 28px; }
+}
+/* (the pen out: the phone's buttons put away under its page - a finger there draws) */
+body.pen-open #touch { display: none !important; }

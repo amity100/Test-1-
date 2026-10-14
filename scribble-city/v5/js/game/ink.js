@@ -17,6 +17,8 @@ export const TOOLS = [
 ];
 export const BOTTLE = 20; // $: a bottle of ink, the pen full again
 const TRICKLE = 0.25; // ink a second, by itself
+// (the pen on the world, ROADMAP 11.6: quicker, a wall's ink back in half a minute)
+const PEN_TRICKLE = 1.1;
 const ENEMY_INK = 12; // what an Eraser leaves behind
 // what a drawing of its own length costs, by how hard the thing is (1..5)
 const COST = [0, 16, 22, 30, 40, 50];
@@ -114,7 +116,7 @@ export class Ink {
 
   update(dt) {
     if (this.level < this.cap) {
-      this.level = Math.min(this.cap, this.level + TRICKLE * dt);
+      this.level = Math.min(this.cap, this.level + (this.game.inkWorld ? PEN_TRICKLE : TRICKLE) * dt);
       this.render();
     }
   }

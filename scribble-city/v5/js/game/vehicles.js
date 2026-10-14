@@ -435,7 +435,7 @@ class Vehicle {
     } else if (this.kind === 'bike') {
       for (const w of this.wheels) w.rotation.x = this.wheelSpin * (this.grade === 'fail' ? 0.6 : 1);
       // leaning into the turns
-      this.body.rotation.z = damp(this.body.rotation.z, clamp(-(this.turn || 0) * Math.min(1, this.speedAbs / 10) * 0.35, -0.5, 0.5), 6, dt);
+      this.body.rotation.z = damp(this.body.rotation.z, clamp(-(this.turn || 0) * Math.min(1, this.speedAbs / 10) * 0.35 * (this.leanK === undefined ? 1 : this.leanK), -0.5, 0.5), 6, dt);
     }
     if ((this.grade === 'fail' || this.grade === 'wonky') && this.kind !== 'copter') {
       this.body.position.y = Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3);
@@ -593,12 +593,21 @@ class Vehicle {
     const f = this.fwd.clone();
     let hit = false;
     let impact = 0;
-    const offs = this.kind === 'tank' ? [-2, 0, 2] : this.kind === 'bike' ? [-0.7, 0, 0.7] : [-1.2, 0, 1.2];
-    const r = this.kind === 'tank' ? 1.7 : this.kind === 'bike' ? 0.55 : 1.0;
+    const offs = this.circles || (this.kind === 'tank' ? [-2, 0, 2] : this.kind === 'bike' ? [-0.7, 0, 0.7] : [-1.2, 0, 1.2]);
+    const r = this.circleR || (this.kind === 'tank' ? 1.7 : this.kind === 'bike' ? 0.55 : 1.0);
     for (const o of offs) {
       const p = new THREE.Vector3(this.pos.x + f.x * o, this.pos.y + 0.2, this.pos.z + f.z * o);
       const before = p.clone();
-      const res = col.resolveCylinder(p, r, 1.5, 0.45);
+      let res = col.resolveCylinder(p, r, 1.5, 0.45, null, overSteps);
+      // (up on the roofs, what stands there: world/roofs.js - a car only gets there over a bridge
+      // drawn with the pen, ROADMAP 11.6)
+      if (!res.hitWall && this.pos.y > 3 && this.game.climb && this.game.climb.col) res = this.game.climb.col.resolveCylinder(p, r, 1.5, 0.45);
+      // (a wall drawn in rubber throws the car back, unhurt: game/inkworld.js, ROADMAP 11.6)
+      if (res.hitWall && res.box && res.box.tag === 'ink' && this.game.inkWorld && this.game.inkWorld.vehicleHit(this, res)) {
+        this.pos.x += p.x - before.x;
+        this.pos.z += p.z - before.z;
+        continue;
+      }
       if (res.hitWall) {
         hit = true;
         this.pos.x += p.x - before.x;
@@ -710,12 +719,16 @@ class Vehicle {
   drive(dt, input) {
     const q = this.q;
     const bike = this.kind === 'bike';
-    const H = HANDLING[bike ? this.model || 'bike' : this.carKind] || HANDLING.sedan;
+    // (one drawn in the workshop: its handling from its drawing, game/drawncar.js - ROADMAP 11.6)
+    const H = this.handling || HANDLING[bike ? this.model || 'bike' : this.carKind] || HANDLING.sedan;
     // (the garage's upgrades, and the tank: game/garage.js, ROADMAP 4.6)
     const U = this.up;
     const dry = this.fuel === 0 ? 1 : 0;
-    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1);
-    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1);
+    // (its jets, Shift held: game/drawncar.js)
+    const boost = this.jets && input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || (input.touch && (input.stickMag || 0) > 0.92) || (input.pad && input.pad.sprint)) ? 1 : 0;
+    this.boosting = boost;
+    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1) * (1 + 0.4 * boost);
+    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1) * (1 + 1.2 * boost);
     const brakeK = U ? 1 + 0.18 * U.brakes : 1;
     // (the driving skill: ROADMAP 5.6)
     const S = this.driver === this.game.player ? this.game.skills : null;
@@ -792,10 +805,17 @@ class Vehicle {
     this.vz = fz * vL + fx * vS;
     this.pos.x += this.vx * dt;
     this.pos.z += this.vz * dt;
-    // up and down: on the ground (and up the ramps), or flying
-    const g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z));
+    // up and down: on the ground (and up the ramps, and on what was drawn to drive on: a bridge, a
+    // pillar's top - game/inkworld.js), or flying
+    const IW = this.game.inkWorld;
+    let g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z), IW ? IW.deckAt(this.pos.x, this.pos.z, this.pos.y) : -Infinity);
+    // (up off the street - over a drawn bridge's end, flying off a ramp: a roof, or the top of
+    // whatever it comes down on, is the ground there; ROADMAP 11.6)
+    if (IW && this.pos.y > 1 && this.game.climb) g = Math.max(g, this.game.climb.floorAt(this.pos.x, this.pos.z, this.pos.y + 0.5));
     if (this.air) {
-      this.vy -= 20 * dt;
+      // (wings drawn on it, game/drawncar.js: it glides, coming down slower)
+      this.vy -= 20 * dt * (this.glide ? 1 - this.glide * (this.vy < 0 ? 1 : 0.4) : 1);
+      if (this.glide && this.vy < -6 * (1 - this.glide)) this.vy = damp(this.vy, -6 * (1 - this.glide), 3, dt);
       this.pos.y += this.vy * dt;
       this.bodyPitch = damp(this.bodyPitch, 0.12, 1.2, dt);
       if (this.pos.y <= g) {
@@ -839,14 +859,18 @@ class Vehicle {
     const sliding = !this.air && (Math.abs(vS) > 2.2 || (hand && this.speedAbs > 4) || (throttle < 0 && vL > 9));
     this.skids(dt, sliding);
     this.collideWorld(dt);
-    // (a wall or a car stopped it, or threw it back)
-    if (this.speed !== vL) {
+    // (a wall or a car stopped it, or threw it back; a rubber one, the way it bounced)
+    if (this.bounceV) {
+      this.vx = this.bounceV[0];
+      this.vz = this.bounceV[1];
+      this.bounceV = null;
+    } else if (this.speed !== vL) {
       this.vx = fx * this.speed - fz * vS * 0.3;
       this.vz = fz * this.speed + fx * vS * 0.3;
     }
     this.runOver();
     // (a bicycle's, a scooter's: no engine; a bicycle's bell on H)
-    if (input) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike ? 'bike' : 'car');
+    if (input) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car');
     if (input && this.model === 'bicycle' && input.wasPressed('KeyH')) this.game.audio.play('bikebell', 0.7);
   }
 
@@ -1073,6 +1097,10 @@ export const RAMPS = [
   { x: -100.5, z: 125, yaw: Math.PI, len: 5.5, w: 3.2, h: 1.35 },
   { x: -31.5, z: 215, yaw: 0, len: 6.5, w: 3.2, h: 1.7 },
 ];
+
+// (ROADMAP 11.6) the steps a walker goes up a drawn ramp or bridge on: a car rides them by their
+// height (rampAt, game/inkworld.js deckAt), not into them
+const overSteps = (b) => b.tag === 'ink' && b.data !== null && b.data.step === true;
 
 // how high a ramp's top is at (x, z), coming up it from its low end (0: not on one)
 export function rampAt(x, z) {

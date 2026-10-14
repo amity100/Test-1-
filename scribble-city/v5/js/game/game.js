@@ -83,6 +83,9 @@ import { Graffiti } from './graffiti.js';
 import { SketchPad } from '../ui/sketchpad.js';
 import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
+import { InkWorld } from './inkworld.js';
+import { InkPen } from '../ui/inkpen.js';
+import { Workshop } from '../ui/workshop.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -279,6 +282,12 @@ export class Game {
     this.gadgets = this.classic ? null : new Gadgets(this);
     // (running, shooting, driving, drawing and fighting get better with doing them: ROADMAP 5.6)
     this.skills = this.classic ? null : new Skills(this);
+    // (ROADMAP 11.6, a test: the pen on the world - a line drawn over the city becomes a thing in
+    // it. Q; the album's drawing in the air is T)
+    this.inkWorld = this.classic ? null : new InkWorld(this);
+    // (and the workshop: a vehicle drawn from the side, made to ride - B, or from the pen)
+    this.workshop = this.inkWorld ? new Workshop(this) : null;
+    this.inkpen = this.inkWorld ? new InkPen(this) : null;
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
     if (this.props) this.phone.addApp({ id: 'props', name: 'נכסים', glyph: 'deed', fill: '#c8f0b0' });
@@ -349,7 +358,7 @@ export class Game {
         if (!locked && !this.touch) this.phone.camBack();
         return;
       }
-      if (!locked && this.state === 'play' && !this.airdraw.open && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && performance.now() - (this.input.releasedAt || -1e9) > 600 && !this.airdraw.open && !(this.inkpen && this.inkpen.open) && !(this.workshop && this.workshop.open) && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -501,7 +510,7 @@ export class Game {
     const welcome = () => {
       this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
       setTimeout(() => {
-        if (this.album.allOpen) this.hud.toast(this.touch ? 'כל השרטוטים פתוחים: לוחצים על העיפרון ✏ ובוחרים מה לצייר' : 'כל השרטוטים פתוחים: Q — בוחרים מה לצייר', 'info', 4);
+        if (this.album.allOpen) this.hud.toast(this.touch ? `כל השרטוטים פתוחים: לוחצים על ${this.drawTap} ובוחרים מה לצייר` : `כל השרטוטים פתוחים: ${this.drawKey} — בוחרים מה לצייר`, 'info', 4);
         else if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
       }, 2600);
     };
@@ -946,11 +955,20 @@ export class Game {
 
   update(dt) {
     const playing = this.state === 'play' || this.state === 'dead';
-    if (this.state === 'paused') dt = 0;
+    // (the workshop's sheet out: the city waits, ROADMAP 11.6)
+    if (this.state === 'paused' || (this.workshop && this.workshop.open)) dt = 0;
     // (the weapon wheel open: the city slows right down, ROADMAP 6.6)
     if (this.wheel) {
       this.wheel.update();
       dt *= this.wheel.slow;
+    }
+    // (the pen out on the world, ROADMAP 11.6: slower still - the camera keeps the real time)
+    const realDt = dt;
+    if (this.inkpen) {
+      this.inkpen.update(dt);
+      dt *= this.inkpen.slow;
+      this.camRig.penK = this.inkpen.k;
+      this.camRig.penDt = realDt;
     }
     this.time += dt;
     shared.uTime.value = this.time;
@@ -983,7 +1001,7 @@ export class Game {
     const look = input.consumeLook();
     // (the weapon wheel open: the mouse points at a weapon, not the camera; ROADMAP 6.6)
     if (this.wheel && this.wheel.open) this.wheel.look(look.x, look.y);
-    else if (playing && !this.airdraw.open) {
+    else if (playing && !this.airdraw.open && !(this.inkpen && this.inkpen.open)) {
       this.camRig.applyLook(look.x, look.y);
       if (look.x || look.y) this.lastLookInput = this.time;
     }
@@ -1028,6 +1046,8 @@ export class Game {
       if (this.money) this.money.update(dt);
       if (this.ink) this.ink.update(dt);
       if (this.gadgets) this.gadgets.update(dt);
+      if (this.inkWorld) this.inkWorld.update(dt);
+      if (this.workshop) this.workshop.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -1044,7 +1064,7 @@ export class Game {
       const v = this.freeCam;
       this.camera.position.set(v[0], v[1], v[2]);
       this.camera.rotation.set(v[4] || 0, v[3] || 0, 0, 'YXZ');
-    } else if (player.inVehicle && this.hoodCam && !this.classic && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike')) {
+    } else if (player.inVehicle && this.hoodCam && !this.classic && !player.inVehicle.drawn && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike')) {
       this.hoodView(player.inVehicle, dt);
     } else if (player.inVehicle) {
       const v = player.inVehicle;
@@ -1056,7 +1076,8 @@ export class Game {
         while (d < -Math.PI) d += Math.PI * 2;
         this.camRig.yaw += d * (1 - Math.exp(-2.5 * dt));
       }
-      const opt = v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'copter' ? { dist: 13, height: 3.2, shoulder: 0 } : v.kind === 'bike' ? { dist: v.model ? 4.6 : 5.2, height: v.model ? 2.0 : 2.2, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 150) }
+      // (one drawn in the workshop: as far back as it is big, game/drawncar.js)
+      const opt = v.camOpt ? v.camOpt : v.kind === 'tank' ? { dist: 11, height: 3.4, shoulder: 0 } : v.kind === 'copter' ? { dist: 13, height: 3.2, shoulder: 0 } : v.kind === 'bike' ? { dist: v.model ? 4.6 : 5.2, height: v.model ? 2.0 : 2.2, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 150) }
         // (ROADMAP 4.8: on the water, in the air)
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
@@ -1095,6 +1116,7 @@ export class Game {
     this.bubbles.update(dt, this.camera);
     if (this.onFrame) this.onFrame(dt);
     this.airdraw.frame(dt);
+    if (this.inkpen) this.inkpen.frame(dt);
     // render dynamic figures
     if (dt > 0) {
       // (riding a bike seen from your own eyes: not your own head in the way)
@@ -1191,6 +1213,7 @@ export class Game {
   handleKeys() {
     const input = this.input;
     const p = this.player;
+    if (this.workshop && this.workshop.open) return;
     if (this.phoneCam) {
       this.phone.camKeys(input);
       return;
@@ -1205,10 +1228,23 @@ export class Game {
       return;
     }
     if (this.state !== 'play') return;
+    // (the pen on the world, ROADMAP 11.6: Q. While it is out, only its own keys - and the
+    // album's drawing, T, or the workshop, B, from it)
+    if (this.inkpen) {
+      if (input.wasPressed('KeyQ')) this.inkpen.toggle();
+      if (this.inkpen.open) {
+        if (input.wasPressed('KeyT')) {
+          this.inkpen.close(false);
+          this.openDraw();
+        } else if (input.wasPressed('KeyB')) this.inkpen.toShop();
+        return;
+      }
+      if (input.wasPressed('KeyB') && this.workshop) this.workshop.show();
+    }
     if (input.wasPressed('KeyF')) this.takePhoto();
     // (a graffiti on the wall in front of you: ROADMAP 9.3)
     if (this.graffiti && input.wasPressed('KeyG')) this.spray();
-    if (input.wasPressed('KeyQ') || input.wasPressed('KeyT')) this.openDraw();
+    if ((!this.inkpen && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
       else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
@@ -1358,7 +1394,7 @@ export class Game {
       pol.style.setProperty('--fly-y', `${r.top + r.height / 2 - window.innerHeight / 2}px`);
     }
     if (isNew) {
-      this.hud.toast(this.touch ? `שרטוט חדש באלבום: ${bp.name}! לחצו על העיפרון ✏ כדי לצייר אותו באוויר` : `שרטוט חדש באלבום: ${bp.name}! לחצו Q כדי לצייר`, 'good', 3.8);
+      this.hud.toast(this.touch ? `שרטוט חדש באלבום: ${bp.name}! לחצו על ${this.drawTap} כדי לצייר אותו באוויר` : `שרטוט חדש באלבום: ${bp.name}! לחצו ${this.drawKey} כדי לצייר`, 'good', 3.8);
       if (b.id === 'paint') this.goalFlags.photo = true;
       if (b.id === 'car') this.goalFlags.car = true;
       if (b.id === 'tank' || b.id === 'copter') this.goalFlags.heavy = true;
@@ -1367,6 +1403,16 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ drawing
+  // (how the album's drawing is opened, for the words that say so: with the pen on the world,
+  // ROADMAP 11.6, Q and the pencil open the pen and the album is a button on it)
+  get drawKey() {
+    return this.inkpen ? 'T' : 'Q';
+  }
+
+  get drawTap() {
+    return this.inkpen ? 'העיפרון ✏ ואז "שרטוטים"' : 'העיפרון ✏';
+  }
+
   openDraw() {
     const p = this.player;
     if (p.inVehicle) {
@@ -1400,6 +1446,7 @@ export class Game {
     this.nudgeDraw = true;
     if (this.touch && !this.drewOnce) {
       const hint = $('draw-hint');
+      if (this.inkpen) hint.querySelector('span').textContent = 'העיפרון ← "שרטוטים": לצייר אותו באוויר!';
       hint.classList.remove('hidden');
       clearTimeout(this.hintT);
       this.hintT = setTimeout(() => hint.classList.add('hidden'), 9000);
@@ -1636,7 +1683,9 @@ export class Game {
     $('btn-radio').classList.toggle('hidden', v.kind !== 'car');
     $('btn-view').classList.toggle('hidden', this.classic || (v.kind !== 'car' && v.kind !== 'bike'));
     // (the first time: the view from the car, the handbrake)
-    if (!this.classic && !this.touch && !this.driveHint && (v.kind === 'car' || v.kind === 'bike')) {
+    // (one drawn in the workshop: how it goes, the first time - ROADMAP 11.6)
+    if (v.drawn && this.workshop) this.workshop.onEnter(v);
+    else if (!this.classic && !this.touch && !this.driveHint && (v.kind === 'car' || v.kind === 'bike')) {
       this.driveHint = true;
       this.hud.toast('V — מבט מהרכב · רווח — בלם יד', 'info', 3.2);
     }
@@ -1906,7 +1955,8 @@ export class Game {
         enter = true;
         const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? (this.gadgets && this.gadgets.key ? 'לפתוח במפתח את ה' : 'לגנוב את ה') : 'להיכנס ל';
         // (onto the new rides, ROADMAP 4.8: you get on them)
-        const on = et.kind === 'vehicle' && et.target.model ? BLUEPRINTS[et.target.model].the : null;
+        // (one drawn in the workshop: by its own name, ROADMAP 11.6)
+        const on = et.kind === 'vehicle' && et.target.drawn ? `ה${et.target.label}` : et.kind === 'vehicle' && et.target.model && BLUEPRINTS[et.target.model] ? BLUEPRINTS[et.target.model].the : null;
         prompt = touch ? '' : on ? `E — לעלות על ${on}` : `E — ${verb}${et.label}`;
       } else {
         const b = this.photoTarget();
@@ -1914,7 +1964,7 @@ export class Game {
           photo = true;
           prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : touch ? 'לצלם את השרטוט' : 'F — לצלם את השרטוט';
         } else if (p.hidden && this.album.size) {
-          prompt = touch ? 'מוסתרים — זה הזמן לצייר' : 'מוסתרים — Q כדי לצייר';
+          prompt = touch ? 'מוסתרים — זה הזמן לצייר' : `מוסתרים — ${this.drawKey} כדי לצייר`;
         } else if (p.crouched) {
           // (down low: behind cover, or sneaking - ROADMAP 5.3)
           if (p.coverBox) prompt = touch ? 'במחסה — כוונו כדי להתרומם ולירות' : 'במחסה · קליק ימני — להתרומם ולירות · C — לקום';
@@ -1949,7 +1999,8 @@ export class Game {
       if (key !== this.drawBtnKey) {
         this.drawBtnKey = key;
         const btn = $('btn-draw');
-        btn.classList.toggle('empty', n === 0);
+        // (the pen on the world, ROADMAP 11.6: never empty)
+        btn.classList.toggle('empty', n === 0 && !this.inkpen);
         btn.classList.toggle('nudge', this.nudgeDraw && n > 0);
         const badge = btn.querySelector('.badge');
         badge.textContent = n;
