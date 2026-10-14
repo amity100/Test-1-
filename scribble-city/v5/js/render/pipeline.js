@@ -498,6 +498,56 @@ const _f = new THREE.Vector3();
 const _md = new THREE.Vector3();
 const _s2 = new THREE.Vector2();
 const _s3 = new THREE.Vector2();
+// (11.5) the mirror drawn only where the water in sight reads it: mirrorPart
+const _pm = new THREE.Matrix4();
+const _sub = new THREE.Matrix4();
+const _frustum = new THREE.Frustum();
+const _frustum2 = new THREE.Frustum();
+const _box = new THREE.Box3();
+const _sph = new THREE.Sphere();
+// how far the water's ripples, the rain's rings and the five taps down the water reach from where a
+// pixel of the water reads the mirror's picture (render/glsl.js: 0.006 + 0.012 across, and 0.012
+// more up and down), and a little more
+const MIRROR_MX = 0.02;
+const MIRROR_MY = 0.032;
+// a triangle cut down by the camera's planes (Sutherland-Hodgman): the corners left, in a list used
+// again by the next call
+const _clipA = [];
+const _clipB = [];
+const _clipPool = [];
+let _clipUsed = 0;
+function clipV() {
+  if (_clipUsed === _clipPool.length) _clipPool.push(new THREE.Vector3());
+  return _clipPool[_clipUsed++];
+}
+function clipTri(t, i, planes) {
+  _clipUsed = 0;
+  let a = _clipA;
+  let b = _clipB;
+  a.length = 0;
+  a.push(clipV().set(t[i], t[i + 1], t[i + 2]), clipV().set(t[i + 3], t[i + 4], t[i + 5]), clipV().set(t[i + 6], t[i + 7], t[i + 8]));
+  for (let k = 0; k < planes.length && a.length; k++) {
+    const pl = planes[k];
+    b.length = 0;
+    for (let j = 0; j < a.length; j++) {
+      const p = a[j];
+      const q = a[(j + 1) % a.length];
+      const dp = pl.distanceToPoint(p);
+      const dq = pl.distanceToPoint(q);
+      if (dp >= 0) b.push(p);
+      if (dp >= 0 !== dq >= 0) b.push(clipV().copy(p).lerp(q, dp / (dp - dq)));
+    }
+    const c = a;
+    a = b;
+    b = c;
+  }
+  return a;
+}
+// o and all it hangs from shown
+function shown(o) {
+  for (let x = o; x; x = x.parent) if (!x.visible) return false;
+  return true;
+}
 
 // the layer of what is never seen in the mirror under the street (the main camera and the sun
 // see it; the mirror's camera does not), and the one only the sun sees
@@ -698,8 +748,12 @@ export class Pipeline {
     // pixel that passes the depth test is worked out 1.49 times on average; with the walls first
     // 1.13). Off for now: on the software card the pass of its own costs more than it saves, and
     // with the pens that throw nothing away (setSolid) a phone's card leaves out what is hidden by
-    // itself. The test route times it both ways on the device (profile); ?walls: on
+    // itself. The test route times it both ways on the device (profile); ?walls: on.
+    // (11.5) But a phone's card measured faster with the whole depth first (40.5 against 44.5 ms):
+    // it does not leave out all that is hidden. So it is tried in play as the depth first is
+    // (render/depthtrial.js), and kept where it is faster; wallsFixed: ?walls / ?nowalls
     this.wallsFirst = false;
+    this.wallsFixed = false;
     this.walls = 0;
     // (v5) the still city's pens without their scissors where nothing is rubbed out (setSolid)
     this.solid = null;
@@ -728,6 +782,18 @@ export class Pipeline {
     this._otherAsked = false;
     // where the camera was when the mirror under the street was last drawn (render)
     this._mirrorAt = { p: new THREE.Vector3(1e9, 0, 0), d: new THREE.Vector3() };
+    // (11.5) the mirror drawn only where the water in sight reads it (mirrorPart; ?mirrorfull: all of
+    // it, as it was): the water's own triangles, the rectangle of the mirror's picture last drawn
+    // (null: all of it), how much of the picture that was, and what was left out for being outside it
+    this.waterMeshes = [];
+    this.mirrorPartOn = true;
+    this._mirrorRect = null;
+    this.mirrorShare = 1;
+    this._reg = { x0: 0, y0: 0, x1: 0, y1: 0, empty: true };
+    this._reg2 = { x0: 0, y0: 0, x1: 0, y1: 0, empty: true };
+    this._rect = { x0: 0, y0: 0, x1: 0, y1: 0, w: 0, h: 0, empty: false };
+    this._drawn = { x0: 0, y0: 0, x1: 0, y1: 0, w: 0, h: 0, empty: false };
+    this._outside = [];
     // the sun's view of the whole city, made once (see bakeFarShadows)
     this.farRT = null;
     // the drawing is made at scale x the screen's pixels and brought up to the screen sharp
@@ -1150,6 +1216,7 @@ export class Pipeline {
       if (!isWater(o.material) && !(o.userData.pens || []).some(isWater)) return;
       const w = { q: [], free: [], open: null, seen: -1e9 };
       this.waters.push(w);
+      this.waterMeshes.push({ o, tris: null, mw: new THREE.Matrix4() });
       o.onBeforeRender = () => {
         if (!this.qWater || w.open || w.q.length > 3) return;
         const q = w.free.pop() || gl.createQuery();
@@ -1201,11 +1268,13 @@ export class Pipeline {
     this.occlusion.setOccluders(boxes);
     this.occHoles = holes;
     this.occPieces = [];
+    this._pieceBox = new Map();
     for (const o of pieces) {
       o.updateMatrixWorld(true);
       const b = new THREE.Box3().setFromObject(o);
       if (b.isEmpty()) continue;
       this.occPieces.push({ o, b });
+      this._pieceBox.set(o, b);
     }
     this._occHidden = [];
   }
@@ -1642,6 +1711,131 @@ export class Pipeline {
     for (let i = 0; i < ch.length; i++) this.hideFromMirror(ch[i], hidden);
   }
 
+  // (11.5) The mirror drawn only where the water in sight reads it. Dry, only the water does (the sea,
+  // the bay, the pools: setWaters): each of its triangles cut down to what the camera sees, and its
+  // corners taken through the mirror's own matrix tm (render/glsl.js vRefl) - the part of the
+  // mirror's picture it reads, into out (0..1 of the picture, before the ripples' reach; out.empty:
+  // none of it in sight). False: all of it (the streets are wet and read it too; or a corner fell
+  // behind the mirror's eye, and the cut is not trusted). Nothing outside that part is ever read,
+  // so drawing only it is the same picture.
+  waterRegion(tm, out) {
+    if (!this.waterMeshes.length || shared.uWet.value > 0) return false;
+    const cam = this.camera;
+    _pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_pm);
+    const planes = _frustum.planes;
+    const e = tm.elements;
+    out.empty = true;
+    out.x0 = Infinity;
+    out.y0 = Infinity;
+    out.x1 = -Infinity;
+    out.y1 = -Infinity;
+    for (const w of this.waterMeshes) {
+      if (!shown(w.o)) continue;
+      const t = this.waterTris(w);
+      if (!t) return false;
+      for (let i = 0; i < t.length; i += 9) {
+        const poly = clipTri(t, i, planes);
+        for (let j = 0; j < poly.length; j++) {
+          const p = poly[j];
+          const W = e[3] * p.x + e[7] * p.y + e[11] * p.z + e[15];
+          if (!(W > 1e-6)) return false;
+          const u = (e[0] * p.x + e[4] * p.y + e[8] * p.z + e[12]) / W;
+          const v = (e[1] * p.x + e[5] * p.y + e[9] * p.z + e[13]) / W;
+          if (u < out.x0) out.x0 = u;
+          if (u > out.x1) out.x1 = u;
+          if (v < out.y0) out.y0 = v;
+          if (v > out.y1) out.y1 = v;
+          out.empty = false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // the water's triangles in the world (made again if it was moved); null: not plain triangles
+  waterTris(w) {
+    const o = w.o;
+    if (w.tris && w.mw.equals(o.matrixWorld)) return w.tris;
+    if (o.isInstancedMesh || o.isSkinnedMesh || !o.geometry || !o.geometry.attributes.position) return null;
+    w.mw.copy(o.matrixWorld);
+    const pos = o.geometry.attributes.position;
+    const idx = o.geometry.index;
+    const n = idx ? idx.count : pos.count;
+    const t = new Float32Array(n * 3 - ((n * 3) % 9));
+    for (let i = 0; i < t.length / 3; i++) {
+      _v.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(o.matrixWorld);
+      t[i * 3] = _v.x;
+      t[i * 3 + 1] = _v.y;
+      t[i * 3 + 2] = _v.z;
+    }
+    w.tris = t;
+    return t;
+  }
+
+  // the rectangle of a mirror's picture of w x h pixels that region reg reads, ripples and the
+  // filter's neighbours included (pixels). What falls outside the picture reads its edge
+  // (render/glsl.js: clamped), so the region is held to the picture first: never empty
+  mirrorPixels(reg, w, h, out) {
+    const cl = (x) => Math.min(1, Math.max(0, x));
+    out.x0 = Math.max(0, Math.floor(cl(reg.x0 - MIRROR_MX) * w) - 2);
+    out.y0 = Math.max(0, Math.floor(cl(reg.y0 - MIRROR_MY) * h) - 2);
+    out.x1 = Math.min(w, Math.ceil(cl(reg.x1 + MIRROR_MX) * w) + 2);
+    out.y1 = Math.min(h, Math.ceil(cl(reg.y1 + MIRROR_MY) * h) + 2);
+    out.w = w;
+    out.h = h;
+    out.empty = out.x1 <= out.x0 || out.y1 <= out.y0;
+    return out;
+  }
+
+  // (11.5) the mirror as it was last drawn still covers all that the water in sight reads now (the
+  // camera has moved since; the mirror's matrix has not, until it is drawn again)
+  mirrorCovers() {
+    const m = this._mirrorRect;
+    if (!m) return true;
+    const reg = this._reg2;
+    if (!this.waterRegion(shared.uReflMatrix.value, reg)) return false;
+    if (reg.empty) return true;
+    // (not drawn at all last time, no water was in sight: now there is)
+    if (m.empty) return false;
+    const r = this.mirrorPixels(reg, m.w, m.h, this._rect);
+    return r.x0 >= m.x0 && r.y0 >= m.y0 && r.x1 <= m.x1 && r.y1 <= m.y1;
+  }
+
+  // (for this one pass) what lies wholly outside the frustum fr is not drawn at all: every mesh three.js
+  // would test itself (frustumCulled), and only those with nothing hung under them. The still city's
+  // pieces by their boxes (setOcclusion: much tighter than the ball three.js tests a long block by);
+  // and every box and ball 2 m bigger all round, for what the shaders move (fronds in the wind)
+  hideOutside(o, fr, list) {
+    if (!o.visible) return;
+    const ch = o.children;
+    if ((o.isMesh || o.isLine || o.isPoints) && o.frustumCulled && !ch.length && !this.mayShow(o, fr)) {
+      o.visible = false;
+      list.push(o);
+      return;
+    }
+    for (let i = 0; i < ch.length; i++) this.hideOutside(ch[i], fr, list);
+  }
+
+  mayShow(o, fr) {
+    const box = this._pieceBox && this._pieceBox.get(o);
+    if (box) return fr.intersectsBox(_box.copy(box).expandByScalar(2));
+    let sph = o.boundingSphere;
+    if (sph === null && o.computeBoundingSphere) {
+      o.computeBoundingSphere();
+      sph = o.boundingSphere;
+    }
+    if (!sph) {
+      const g = o.geometry;
+      if (!g) return true;
+      if (g.boundingSphere === null) g.computeBoundingSphere();
+      sph = g.boundingSphere;
+    }
+    _sph.copy(sph).applyMatrix4(o.matrixWorld);
+    _sph.radius += 2;
+    return fr.intersectsSphere(_sph);
+  }
+
   // the camera far from where the mirror last saw the street from (2 m, 10 degrees)
   mirrorStale() {
     const m = this._mirrorAt;
@@ -1657,6 +1851,7 @@ export class Pipeline {
     const camPos = camera.position;
     if (camPos.y <= y || !this.reflections) {
       shared.uRefl.value = BLANK;
+      this._mirrorRect = null;
       return;
     }
     const P = _v.set(0, y, 0);
@@ -1679,6 +1874,17 @@ export class Pipeline {
     tm.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
     tm.multiply(rc.projectionMatrix);
     tm.multiply(rc.matrixWorldInverse);
+    // (11.5) the part of its picture the water in sight reads (false: all of it)
+    const reg = this._reg;
+    const part = this.mirrorPartOn && this.waterRegion(tm, reg);
+    if (part && reg.empty) {
+      // (no water in sight just now, seen a moment ago: nothing reads the mirror, nothing is drawn)
+      this._drawn.empty = true;
+      this._mirrorRect = this._drawn;
+      this.mirrorShare = 0;
+      shared.uRefl.value = this.reflRT.texture;
+      return;
+    }
     // clip everything under the mirror (oblique near plane)
     _plane.setFromNormalAndCoplanarPoint(_normal, P);
     _plane.applyMatrix4(rc.matrixWorldInverse);
@@ -1722,9 +1928,33 @@ export class Pipeline {
     this.corner(rt, _s3.set(w, h), w !== rt.width || h !== rt.height);
     shared.uReflK.value.set(w / rt.width, h / rt.height);
     shared.uReflLo.value.set(0.5 / w, 0.5 / h);
+    // (11.5) only the part the water in sight reads: drawn within its rectangle, and what lies wholly
+    // outside it not drawn at all (the rest of the picture is never read: the same picture)
+    const out = this._outside;
+    out.length = 0;
+    if (part) {
+      const m = (this._mirrorRect = this.mirrorPixels(reg, w, h, this._drawn));
+      rt.scissor.set(m.x0, m.y0, m.x1 - m.x0, m.y1 - m.y0);
+      rt.scissorTest = true;
+      this.mirrorShare = ((m.x1 - m.x0) * (m.y1 - m.y0)) / (w * h);
+      // (the rectangle as the mirror's eye sees it: a frustum of its own)
+      const x0 = (m.x0 / w) * 2 - 1;
+      const x1 = (m.x1 / w) * 2 - 1;
+      const y0 = (m.y0 / h) * 2 - 1;
+      const y1 = (m.y1 / h) * 2 - 1;
+      _sub.set(2 / (x1 - x0), 0, 0, -(x1 + x0) / (x1 - x0), 0, 2 / (y1 - y0), 0, -(y1 + y0) / (y1 - y0), 0, 0, 1, 0, 0, 0, 0, 1);
+      _pm.multiplyMatrices(_sub, rc.projectionMatrix).multiply(rc.matrixWorldInverse);
+      _frustum2.setFromProjectionMatrix(_pm);
+      this.hideOutside(this.scene, _frustum2, out);
+    } else {
+      this._mirrorRect = null;
+      this.mirrorShare = 1;
+    }
     this.r.setRenderTarget(rt);
     this.r.clear();
     this.r.render(this.scene, rc);
+    for (const o of out) o.visible = true;
+    out.length = 0;
     this.unocclude();
     shared.uProbe.value = probe0;
     shared.uMirror.value = 0;
@@ -1770,7 +2000,7 @@ export class Pipeline {
     const want = this.mirrorWanted();
     shared.uReflOn.value = want ? 1 : 0;
     if (!want) this.reflDone = false;
-    else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale()) {
+    else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale() || !this.mirrorCovers()) {
       if (T) T.begin('reflection');
       this.renderReflection();
       if (T) T.end();

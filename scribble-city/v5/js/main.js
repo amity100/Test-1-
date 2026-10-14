@@ -169,7 +169,13 @@ async function boot() {
   // the streets are wet - render/pipeline.js setWaters; ?mirroralways: every frame, as it was)
   pipe.setWaters(world.group);
   if (params.has('mirroralways')) pipe.mirrorAlways = true;
-  if (params.has('walls')) pipe.wallsFirst = true;
+  // (11.5: the mirror drawn only where the water in sight reads it; ?mirrorfull: all of it, as it was)
+  if (params.has('mirrorfull')) pipe.mirrorPartOn = false;
+  // (the walls' depth first: tried in play, render/depthtrial.js; ?walls / ?nowalls: fixed, no trying)
+  if (params.has('walls') || params.has('nowalls')) {
+    pipe.wallsFirst = params.has('walls');
+    pipe.wallsFixed = true;
+  }
   // (v5) and the still city's pens without their scissors wherever nothing of them is rubbed out
   // or crumbling: the graphics card leaves out what is hidden before the pens are worked out
   // (render/solid.js; ?nosolid: as it was)

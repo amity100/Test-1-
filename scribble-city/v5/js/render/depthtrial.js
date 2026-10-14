@@ -24,7 +24,9 @@ export class DepthTrial {
     this.hold = 0;
     this.run = null;
     // what is tried, one after the other: the drawing in two passes (until its other shaders are
-    // ready, render/pipeline.js pensOtherReady, it waits), then the depth first
+    // ready, render/pipeline.js pensOtherReady, it waits), then (11.5) the walls' depth alone first
+    // (render/pipeline.js setWalls: a pass of depth much cheaper than the whole one, that leaves out
+    // most of what is hidden behind them), then the whole depth first against what that chose
     this.knobs = [
       {
         key: 'pens',
@@ -33,6 +35,17 @@ export class DepthTrial {
         get: () => pipe.deferred,
         set: (v) => pipe.setPens(v),
         pick: pickPens,
+      },
+      {
+        key: 'walls',
+        // (not while the whole depth is drawn first: then the walls' changes nothing)
+        skip: () => pipe.wallsFixed || !pipe.walls || pipe.depthFirst,
+        wait: () => false,
+        get: () => pipe.wallsFirst,
+        set: (v) => {
+          pipe.wallsFirst = v;
+        },
+        pick: pickDepth,
       },
       {
         key: 'depth',
@@ -47,9 +60,10 @@ export class DepthTrial {
     ];
     this.queue = [];
     // the last answers: frame ms with and without, the card's ms, which was kept (result: the depth
-    // first's, pens: the two passes')
+    // first's, pens: the two passes', walls: the walls' depth first)
     this.result = null;
     this.pens = null;
+    this.walls = null;
   }
 
   get busy() {
@@ -147,6 +161,7 @@ export class DepthTrial {
     pipe.keepSpare = false;
     const res = { on: +on.toFixed(1), off: +off.toFixed(1), gpuOn: gpu.on ? +gpu.on.toFixed(2) : null, gpuOff: gpu.off ? +gpu.off.toFixed(2) : null, pick };
     if (r.k.key === 'pens') this.pens = res;
+    else if (r.k.key === 'walls') this.walls = res;
     else this.result = res;
   }
 }
