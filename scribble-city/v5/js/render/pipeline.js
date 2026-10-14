@@ -2392,20 +2392,23 @@ export class Pipeline {
     return out;
   }
 
+  // (11.5) wait until the graphics card has done everything it was given
+  syncGpu() {
+    const r = this.r;
+    if (!this._syncRT) this._syncRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const px = this._syncPx || (this._syncPx = new Uint8Array(4));
+    r.setRenderTarget(this._syncRT);
+    r.clear();
+    r.readRenderTargetPixels(this._syncRT, 0, 0, 1, 1, px);
+  }
+
   // (11.5, game/telemetry.js) one part of profile() by itself, while the picture stands still (the
   // pause menu, the start screen): its ms, the faster of two rounds of two; undefined where it has
   // nothing to time here
   profileOne(key, center) {
-    const r = this.r;
     const T = this.timer;
     this.timer = null;
-    if (!this._syncRT) this._syncRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
-    const px = this._syncPx || (this._syncPx = new Uint8Array(4));
-    const sync = () => {
-      r.setRenderTarget(this._syncRT);
-      r.clear();
-      r.readRenderTargetPixels(this._syncRT, 0, 0, 1, 1, px);
-    };
+    const sync = () => this.syncGpu();
     const time = (fn) => {
       let best = Infinity;
       for (let k = 0; k < 2; k++) {
@@ -2453,6 +2456,35 @@ export class Pipeline {
       else if (key === 'glow') out = this._glowSize ? time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize)) : undefined;
       else if (key === 'final') out = time(() => this.pass(this._corner ? this.mFinalD : this.mFinal, null));
       else if (key === 'frame') out = time(() => this.render(center));
+      else if (key === 'basic') {
+        // (the same draws, each in the plainest material three.js has: what the draws cost apart
+        // from the pens' own shaders)
+        // (writing every picture the drawing writes, of its own kind: a draw that leaves one out is
+        // refused by the browser)
+        const m =
+          this._basicMat ||
+          (this._basicMat = new THREE.ShaderMaterial({
+            glslVersion: THREE.GLSL3,
+            vertexShader: 'void main() {\n  vec4 p = vec4(position, 1.0);\n#ifdef USE_INSTANCING\n  p = instanceMatrix * p;\n#endif\n  gl_Position = projectionMatrix * modelViewMatrix * p;\n}',
+            fragmentShader:
+              'layout(location = 0) out vec4 o0;\nlayout(location = 1) out vec4 o1;\nlayout(location = 2) out vec4 o2;\nlayout(location = 3) out uvec4 o3;\nlayout(location = 4) out uvec4 o4;\nlayout(location = 5) out vec4 o5;\nvoid main() {\n  o0 = vec4(0.5);\n  o1 = vec4(0.0);\n  o2 = vec4(0.0);\n  o3 = uvec4(0u);\n  o4 = uvec4(0u);\n  o5 = vec4(0.0);\n}',
+          }));
+        this.scene.overrideMaterial = m;
+        out = time(() => this.drawMain());
+        this.scene.overrideMaterial = null;
+      } else if (key === 'half' || key === 'empty') {
+        // (every other thing drawn, or none: what a draw costs by itself)
+        const hid = [];
+        let k = 0;
+        this.scene.traverseVisible((o) => {
+          if (o.isMesh || o.isLine || o.isPoints) {
+            if (key === 'empty' || k++ % 2) hid.push(o);
+          }
+        });
+        for (const o of hid) o.visible = false;
+        out = time(() => this.drawMain());
+        for (const o of hid) o.visible = true;
+      }
     } finally {
       shared.uProbe.value = 0;
       this.timer = T;

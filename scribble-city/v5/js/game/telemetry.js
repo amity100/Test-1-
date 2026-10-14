@@ -22,7 +22,10 @@ const EDGES = [8.5, 12.5, 17.5, 21, 25, 34.5, 50, 67, 100, 200];
 const MINUTE = 60;
 const KEEP = 90;
 // the parts of the drawing timed by themselves, one a frame (pipeline.js profileOne)
-const IDLE = ['shadow', 'reflection', 'main', 'city', 'tiny', 'noPens', 'noSun', 'noLamps', 'noHaze', 'flat', 'noReflImg', 'flip', 'walls', 'pens', 'ink', 'glow', 'final', 'frame'];
+// (split, splitRefl: the drawing and the mirror once each, timed three ways - the processor sending
+// it, the wall clock until the card is done, the card's own clock; basic: in the plainest material;
+// half, empty: every other thing drawn, or none)
+const IDLE = ['split', 'splitRefl', 'shadow', 'reflection', 'main', 'city', 'tiny', 'basic', 'half', 'empty', 'noPens', 'noSun', 'noLamps', 'noHaze', 'flat', 'noReflImg', 'flip', 'walls', 'pens', 'ink', 'glow', 'final', 'frame'];
 // (a few times each time the game is opened, a minute apart at least)
 const IDLE_SETS = 4;
 const IDLE_GAP = 60000;
@@ -267,7 +270,8 @@ export class Telemetry {
     const key = IDLE[pr.i++];
     let v;
     try {
-      v = p.profileOne(key, center);
+      if (key === 'split' || key === 'splitRefl') this.split(key, pr.set.ms);
+      else v = p.profileOne(key, center);
     } catch (e) {
       v = undefined;
     }
@@ -276,6 +280,15 @@ export class Telemetry {
     if (pr.i < IDLE.length) return;
     const s = pr.set;
     const pl = g.player;
+    // (the card's own clock on the split ones: its answers came while the rest was timed)
+    if (this.gt.ok) {
+      this.gt.poll();
+      for (const k of ['split', 'splitRefl']) {
+        if (this.gt.n[k]) s.ms[k + 'Gpu'] = r2(this.gt.sum[k] / this.gt.n[k]);
+        this.gt.sum[k] = 0;
+        this.gt.n[k] = 0;
+      }
+    }
     s.size = p.size ? `${p.size.x}x${p.size.y}` : '';
     s.scale = r2(p.scale);
     s.deferred = !!p.deferred;
@@ -292,6 +305,36 @@ export class Telemetry {
     pr.set = null;
     pr.last = now;
     this.write();
+  }
+
+  // the drawing (or the mirror) once, timed three ways: the processor sending it (Js), the wall
+  // clock until the card has done it (Wall), and the card's own clock where it has one (Gpu, read a
+  // few frames later). Js near Wall and Gpu small: the time is in sending, not in drawing
+  split(key, ms) {
+    const p = this.game.pipe;
+    const fn = key === 'split' ? () => p.drawMain() : () => p.renderReflection();
+    const T = p.timer;
+    p.timer = null;
+    // (and how many draws, how many triangles)
+    const info = this.game.renderer.info;
+    const auto = info.autoReset;
+    info.autoReset = false;
+    p.syncGpu();
+    info.reset();
+    const t0 = performance.now();
+    const timed = this.gt.ok && !this.gtOpen;
+    if (timed) this.gt.begin(key);
+    fn();
+    if (timed) this.gt.end();
+    const t1 = performance.now();
+    ms[key + 'Calls'] = info.render.calls;
+    ms[key + 'KTris'] = Math.round(info.render.triangles / 1000);
+    p.syncGpu();
+    const t2 = performance.now();
+    info.autoReset = auto;
+    p.timer = T;
+    ms[key + 'Js'] = r2(t1 - t0);
+    ms[key + 'Wall'] = r2(t2 - t0);
   }
 
   // ---------------------------------------------------------------- the rest

@@ -13,11 +13,14 @@ export const MAX_LIGHTS = 12;
 export const MAX_HOLES = 10;
 export const MAX_OWNERS = 192;
 export const MAX_SPOTS = 16;
+// (11.5, drawPens: ?pensunrolled draws the five pens written out one by one, as they were)
+const PENS_UNROLLED = typeof location !== 'undefined' && new URLSearchParams(location.search).has('pensunrolled');
 
 // uniforms shared by every material (see materials.js: shared)
 export const HEAD = /* glsl */ `
 #define MAX_LIGHTS ${MAX_LIGHTS}
 #define MAX_HOLES ${MAX_HOLES}
+${PENS_UNROLLED ? '#define PENS_UNROLLED' : ''}
 #define MAX_SPOTS ${MAX_SPOTS}
 uniform sampler2D uNoise;
 uniform float uTime;
@@ -335,10 +338,9 @@ vec2 penLayer(vec2 p, vec2 dpx, vec2 dpy, float ang, float gapPx, float wpx, flo
   return ca >= cb ? vec2(ca, A.y) : vec2(cb, B.y);
 }
 
-// The artist at work on one surface: a light wash of its colour on the paper, then the pens.
-//  lit / shade: the colour where the sun hits and in the shade, light: how much sun is here,
-//  hi: where the low sun catches an edge, dens: how busy the pens are, ang: stroke direction
-vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, float hi, float dens, float ang, float wash, float onGround) {
+// (the five pens written out one by one, as they were before 11.5: ?pensunrolled)
+#ifdef PENS_UNROLLED
+vec3 drawPensUnrolled(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, float hi, float dens, float ang, float wash, float onGround) {
   vec3 mid = mix(shade, lit, light);
   float far = gFar;
   // the paper shows between the strokes only where the drawing is light; the shade is built up dark
@@ -379,6 +381,100 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
     col = mix(col, pe, E.x * step(fract(E.y * 7.13), hiAll));
   }
   return col;
+}
+#endif
+
+// The artist at work on one surface: a light wash of its colour on the paper, then the pens.
+//  lit / shade: the colour where the sun hits and in the shade, light: how much sun is here,
+//  hi: where the low sun catches an edge, dens: how busy the pens are, ang: stroke direction
+//
+// (ROADMAP 11.5) The five pens one after another in one loop, each with its own direction, spacing,
+// colour and say in where it goes - the same strokes and the same colours as five pens written out
+// one by one (drawPensUnrolled, ?pensunrolled). Written out, the graphics card's compiler keeps
+// room for the working out of all five at once: on a phone's card (Adreno 660, Mesa's compiler)
+// 32 registers a pixel, so 4 groups of pixels at work at a time; as one loop 16, and 8 groups -
+// twice as many pixels to switch to while one waits. (The loop's length is not known to the
+// compiler - uQuality is never below -1 - so it cannot write it out again)
+vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, float hi, float dens, float ang, float wash, float onGround) {
+#ifdef PENS_UNROLLED
+  return drawPensUnrolled(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, onGround);
+#else
+  vec3 mid = mix(shade, lit, light);
+  float far = gFar;
+  // the paper shows between the strokes only where the drawing is light; the shade is built up dark
+  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid)) * (1.0 - 0.55 * far);
+  vec3 col = mix(mid, uPaper * 0.97, paperK);
+  float wpx = 1.9;
+  // on the ground the layers stay close to one direction: strokes turned towards the eye would
+  // be foreshortened into ticks
+  float spread = mix(1.0, 0.32, onGround);
+  // (D's and E's say in where they go)
+  float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
+  float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
+  int pensN = uQuality > -1.0 ? 5 : 0;
+  for (int i = 0; i < pensN; i++) {
+    // the pen: its direction, the spacing of its strokes (pixels), their width, its own dice, their length
+    float a = ang;
+    float gap = 4.2;
+    float w = wpx;
+    float seed = 11.0;
+    float lenK = 1.0;
+    if (i == 1) {
+      a = ang + 0.62 * spread;
+      gap = 4.6;
+      seed = 23.0;
+      lenK = 0.85;
+    } else if (i == 2) {
+      if (!(uQuality > 0.5 && far < 0.95)) continue;
+      a = ang - 0.4 * spread;
+      gap = 5.4;
+      seed = 37.0;
+      lenK = 0.7;
+    } else if (i == 3) {
+      if (!(dk > 0.0)) continue;
+      a = ang - 1.22 * spread;
+      gap = 3.8;
+      w = wpx * 1.1;
+      seed = 51.0;
+      lenK = 1.2;
+    } else if (i == 4) {
+      if (!(hiAll > 0.02)) continue;
+      a = ang + 0.2;
+      gap = 4.4;
+      seed = 67.0;
+      lenK = 0.9;
+    }
+    vec2 L = penLayer(p, dpx, dpy, a, gap, w, seed, lenK);
+    vec3 pc;
+    float k;
+    if (i == 0) {
+      // A: the local colour; each stroke is a pen of the light or a pen of the shade (far away the
+      // pens are closer to each other in colour and in strength)
+      pc = fract(L.y * 3.77) < light ? lit : shade;
+      pc = hueShift(saturateC(pc, 1.15), (fract(L.y * 5.31) - 0.5) * mix(0.8, 0.3, far)) * mix(0.66 + 0.7 * fract(L.y * 9.71), 1.0, far * 0.65);
+      k = L.x * step(fract(L.y * 7.13), 0.95 * dens) * (1.0 - 0.5 * far);
+    } else if (i == 1) {
+      // B: cross-strokes deepening the shade, in a cooler pen
+      pc = hueShift(shade * 0.7, -0.38 + (fract(L.y * 5.31) - 0.5) * 0.45);
+      k = L.x * step(fract(L.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens) * (1.0 - 0.7 * far);
+    } else if (i == 2) {
+      // C: a neighbouring colour now and then
+      pc = hueShift(mid, fract(L.y * 5.31) > 0.5 ? 0.85 : -0.85) * 1.08;
+      k = L.x * step(fract(L.y * 7.13), 0.2 * dens) * (1.0 - far);
+    } else if (i == 3) {
+      // D: dark ink pressed into the deepest places
+      pc = vec3(0.022, 0.016, 0.04);
+      k = L.x * step(fract(L.y * 7.13), dk * 0.92);
+    } else {
+      // E: where the low sun catches an edge, quick strokes of a light, warm pen; and in the full
+      // sun a few strokes of almost white, as if the paper showed through
+      pc = fract(L.y * 3.1) < 0.5 ? mix(lit, uSunCol, 0.45) * 1.25 : mix(uPaper * 1.2, lit, 0.25);
+      k = L.x * step(fract(L.y * 7.13), hiAll);
+    }
+    col = mix(col, pc, k);
+  }
+  return col;
+#endif
 }
 `;
 
