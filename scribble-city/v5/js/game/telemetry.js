@@ -14,7 +14,7 @@
 import { GpuTimer, browserName } from './perf.js';
 import { shared, pens } from '../render/materials.js';
 
-const BUILD = 'v16';
+const BUILD = 'v17';
 // frames by how long they took (ms): up to 8.5 (120 Hz), 12.5, 17.5 (60 Hz), 21, 25, 34.5 (30 Hz),
 // 50, 67, 100, 200, longer
 const EDGES = [8.5, 12.5, 17.5, 21, 25, 34.5, 50, 67, 100, 200];
