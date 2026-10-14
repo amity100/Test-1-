@@ -118,14 +118,18 @@ async function boot() {
   // colours: as the player chose it (the settings: 'auto' tries it in play against the one pass,
   // render/depthtrial.js; 'two'; 'one', as it always was), decided before the city's pens are made.
   // ?pens=auto, two or one decides instead; ?pens=off: the pens' shaders exactly as they were
+  // (11.5: a phone too - it begins in one pass, as it always was, and tries the two in play. Its
+  // compiler keeps the pens' work far apart from the rest's there: on a Mali the surfaces' pass
+  // spills nothing to memory and the pens' own pass little. Six pictures a pixel are much for a
+  // phone's memory, so only the trial decides)
   {
     const pp = params.get('pens');
-    pens.can = !low && pipe.hdr && pp !== 'off' && gl0.getParameter(gl0.MAX_DRAW_BUFFERS) >= 6 && gl0.getParameter(gl0.MAX_COLOR_ATTACHMENTS) >= 6;
+    pens.can = pipe.hdr && pp !== 'off' && gl0.getParameter(gl0.MAX_DRAW_BUFFERS) >= 6 && gl0.getParameter(gl0.MAX_COLOR_ATTACHMENTS) >= 6;
     const ways = ['auto', 'two', 'one'];
     const kept = new Settings().get('pens');
     const mode = ways.includes(pp) ? pp : ways.includes(kept) ? kept : 'auto';
     pipe.pensMode = pens.can ? mode : 'one';
-    pipe.setPens(pipe.pensMode !== 'one');
+    pipe.setPens(pipe.pensMode === 'two' || (pipe.pensMode === 'auto' && !low));
   }
 
   setStatus('מציירים את העיר…');
