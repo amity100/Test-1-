@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { trackPens } from './materials.js';
 
 // (v5) The still city's pens without their scissors (ROADMAP 11.1ה).
 //
@@ -27,7 +28,8 @@ function twin(m) {
   for (const k of COPY) if (m[k] !== undefined) t[k] = m[k];
   t.userData = m.userData;
   t.solidOf = m;
-  return t;
+  // (the pens once a pixel or not, as its pen: ROADMAP 11.4)
+  return trackPens(t);
 }
 
 // the pen a piece of the still city really has (its own, even while it wears the twin): for a

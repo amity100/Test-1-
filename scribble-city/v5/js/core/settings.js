@@ -29,6 +29,10 @@ export const DEFAULTS = {
   // (game/pace.js) the frames' pace: free (as many as can be, as it always was), or steady: auto,
   // 60, 30 a second
   pace: 'free',
+  // (ROADMAP 11.4, render/pipeline.js) how the drawing is made on a computer: 'auto' - in two passes
+  // (the surfaces, then the pens over the whole picture, once a pixel) or in one, whichever is
+  // faster here, tried in play; 'two'; 'one', as it always was
+  pens: 'auto',
   // (ROADMAP 9.1, not with ?classic) every blueprint open to draw from the start; off, they are
   // found in the city (photographed, bought, won, given: ui/album.js)
   allOpen: true,

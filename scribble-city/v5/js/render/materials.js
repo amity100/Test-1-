@@ -197,6 +197,9 @@ export const shared = {
   uFlash: { value: 0 },
   // (render/pipeline.js) the street's depth first: the shaders only say how near they are
   uDepthOnly: { value: 0 },
+  // (ROADMAP 11.4, render/pipeline.js drawMain) the drawing's own pass, the pens drawn after it: the
+  // surfaces write what their pens need (pens below; render/glsl.js DEFER_OUT)
+  uDefer: { value: 0 },
   // (the graphics card's own test, game/perf.js: parts of the drawing left out to time them)
   uProbe: { value: 0 },
   // (render/pipeline.js) the smart drawing: the drawing's pixel in the screen's (1: drawn whole),
@@ -272,6 +275,44 @@ export function pickLights(cam) {
   shared.uLightN.value = n;
 }
 
+// (ROADMAP 11.4) How the drawing is made (render/pipeline.js): in one pass, every surface with its
+// pens, as it always was; or in two, the surfaces writing what their pens need (DEFERRED,
+// render/glsl.js) and the pens drawn over the whole picture after them, once a pixel. can: this
+// computer can draw the second way (main.js decides it before the city is built); on: it is drawn
+// so now. Every pen that draws into the picture is kept track of: its shader is the one or the
+// other, and setPensOn changes all of them at once (the graphics card keeps both, once made).
+export const pens = { can: false, on: false };
+const pensTracked = new Set();
+const pensRef = typeof WeakRef === 'function' ? (m) => new WeakRef(m) : (m) => ({ deref: () => m });
+function syncPens(m) {
+  const want = pens.can && pens.on;
+  const has = m.defines.DEFERRED !== undefined;
+  if (want === has) return false;
+  if (want) m.defines.DEFERRED = '';
+  else delete m.defines.DEFERRED;
+  m.needsUpdate = true;
+  return true;
+}
+export function trackPens(m) {
+  if (!m.defines) m.defines = {};
+  syncPens(m);
+  const ref = pensRef(m);
+  pensTracked.add(ref);
+  m.addEventListener('dispose', () => pensTracked.delete(ref));
+  return m;
+}
+// the one way or the other for every pen (how many changed)
+export function setPensOn(on) {
+  pens.on = !!on;
+  let n = 0;
+  for (const ref of pensTracked) {
+    const m = ref.deref();
+    if (!m) pensTracked.delete(ref);
+    else if (syncPens(m)) n++;
+  }
+  return n;
+}
+
 const DEF_ANG = { wall: 1.36, ground: 1.5708, street: 1.5708, cyl: 1.5708, box: 0.6, uv: 1.5708, glass: 0.9, leaf: 0.0, neon: 1.36, water: 0.02, skin: 1.5708, paint: 0.12 };
 
 // the sun's view only needs to know where things are (and the holes in leaves)
@@ -329,6 +370,7 @@ export function makeSurface(o = {}) {
   const defines = {};
   if (o.objMask) defines.USE_OBJ = '';
   if (o.swayAttr) defines.SWAY_ATTR = '';
+  if (pens.can && pens.on) defines.DEFERRED = '';
   const m = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: {
@@ -368,7 +410,7 @@ export function makeSurface(o = {}) {
   m.userData.depth = o.noShadow ? null : depthMaterial(o);
   m.userData.reflective = !!o.refl;
   m.userData.kind = kind;
-  return m;
+  return trackPens(m);
 }
 
 // ------------------------------------------------------------------ many pens, one draw
@@ -423,7 +465,7 @@ export function mergedSurface(m, { obj = false, pictures = null, vcolor = true, 
   delete c.userData.picture;
   if (pictures) pictures.forEach((t, i) => (c.uniforms[`uMapS${i}`] = { value: t }));
   if (m.userData.depth !== null) c.userData.depth = depthMaterial({ objMask: obj, pull });
-  return c;
+  return trackPens(c);
 }
 
 // The things that move (a boat, a gondola of the big wheel, the blimp) share their draws as the
@@ -467,7 +509,7 @@ export function surfaceVariant(m, extra) {
     depthTest: m.depthTest,
   });
   c.userData = { ...m.userData, depth: null };
-  return c;
+  return trackPens(c);
 }
 
 export function makeSky() {
@@ -480,7 +522,7 @@ export function makeSky() {
     depthWrite: false,
   });
   m.userData.depth = null;
-  return m;
+  return trackPens(m);
 }
 
 // pen lines in the world (LineBatch): blended over the drawing, never in the sun's view
@@ -534,7 +576,7 @@ export function makeSpriteBatchMaterial(texture, o = {}) {
     side: THREE.DoubleSide,
   });
   m.userData.depth = null;
-  return m;
+  return o.opaque ? trackPens(m) : m;
 }
 
 // sRGB canvas -> texture

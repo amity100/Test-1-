@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { shared, BLANK, LAYERS } from './materials.js';
+import { shared, BLANK, LAYERS, pens, setPensOn } from './materials.js';
+import { HEAD, FUNCS, PENS_FRAG } from './glsl.js';
 import { Occlusion } from './occlusion.js';
 import { motion, motionUpload } from './motion.js';
 import { Solid } from './solid.js';
@@ -13,6 +14,8 @@ import { Solid } from './solid.js';
 // With the smart drawing (taa) 3 and 4 are drawn at fewer pixels than the picture's, a fraction of
 // a pixel aside each frame, and put together with the frames before at the picture's own size
 // before 5; the rain then goes over the finished picture.
+// (ROADMAP 11.4: 3 may be drawn in two passes - the surfaces writing what their pens need, then the
+// pens over the whole picture, once a pixel, then what is see-through over them. drawMain)
 
 const QUAD_VERT = /* glsl */ `
 out vec2 vUv;
@@ -540,6 +543,10 @@ function sunFrame(dir, x, y, z) {
   y.crossVectors(z, x);
 }
 const SUN = LAYERS.SUN;
+const byOrder = (a, b) => a.renderOrder - b.renderOrder || a.id - b.id;
+const ZERO4 = new Float32Array(4);
+const ZERO4U = new Uint32Array(4);
+const ONE1 = new Float32Array([1]);
 const notInMirror = (o) => !!((o.material.userData && o.material.userData.reflective) || o.userData.noReflect || o.userData.indoor);
 
 export class Pipeline {
@@ -625,6 +632,12 @@ export class Pipeline {
     this.mInkD = mk(INK_FRAG, this.mInk.uniforms, { DYN: '' });
     this.mBrightD = mk(BRIGHT_FRAG, this.mBright.uniforms, { DYN: '' });
     this.mFinalD = mk(FINAL_FRAG, this.mFinal.uniforms, { DYN: '' });
+    // (ROADMAP 11.4) the pens over the whole picture, once a pixel (drawPens)
+    this.mPens = mk('#define cameraPosition uCamPos\nuniform vec3 uCamPos;\n' + HEAD + FUNCS + PENS_FRAG, {
+      ...shared,
+      tLit: { value: null }, tWhere: { value: null }, tShade: { value: null }, tOwn: { value: null }, tDepth: { value: null },
+      uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uCamPos: { value: new THREE.Vector3() },
+    });
     this.mTaa = mk(TAA_FRAG, {
       tCur: { value: null }, tDepth: { value: null }, tVel: { value: null }, tHist: { value: null }, tHistMeta: { value: null },
       uIn: { value: new THREE.Vector2() }, uOut: { value: new THREE.Vector2() }, uJit: { value: new THREE.Vector2() },
@@ -690,6 +703,26 @@ export class Pipeline {
     this.walls = 0;
     // (v5) the still city's pens without their scissors where nothing is rubbed out (setSolid)
     this.solid = null;
+    // (ROADMAP 11.4) the pens once a pixel: the surfaces first, writing what their pens need, then
+    // the pens over the whole picture (drawMain). deferred: drawn so now (setPens; materials.js
+    // pens); pensMode: 'auto' (tried in play, render/depthtrial.js), 'two', or 'one' as it always
+    // was. G: the drawing's pictures for the way it is drawn now (makeG); spareG: the other way's,
+    // kept while the two are tried (keepSpare). over: what is see-through, drawn over the pens.
+    // pensBroken: this graphics card could not draw the second way (overFrame). mainKey: what the
+    // trial's clock calls this frame's drawing (render/depthtrial.js)
+    this.deferred = false;
+    this.pensMode = 'one';
+    this.pensBroken = false;
+    this.G = null;
+    this.spareG = null;
+    this.keepSpare = false;
+    this.over = [];
+    this.mainKey = null;
+    // (every pen's shader for the other way made, to try the two in play: prepareOtherPens, from
+    // otherAt on - main.js, after the game has begun)
+    this.pensOtherReady = false;
+    this.otherAt = Infinity;
+    this._otherAsked = false;
     // where the camera was when the mirror under the street was last drawn (render)
     this._mirrorAt = { p: new THREE.Vector3(1e9, 0, 0), d: new THREE.Vector3() };
     // the sun's view of the whole city, made once (see bakeFarShadows)
@@ -747,25 +780,41 @@ export class Pipeline {
       this._nomH = nh;
       this._inTaa = taa;
       this.reflDone = false;
-      dispose(this.gRT);
+      this.dropG(this.G);
+      this.dropG(this.spareG);
+      this.G = null;
+      this.spareG = null;
       dispose(this.reflRT);
       dispose(this.inkRT);
-      // (the smart drawing: a third picture, how far each pixel moved since the last frame)
-      this.gRT = new THREE.WebGLRenderTarget(aw, ah, { count: taa ? 3 : 2, type: this.type, depthBuffer: true, depthTexture: new THREE.DepthTexture(aw, ah) });
-      for (const t of this.gRT.textures) {
-        t.minFilter = THREE.NearestFilter;
-        t.magFilter = THREE.NearestFilter;
-        t.generateMipmaps = false;
-      }
       // (the mirror at its share of the drawing's own size, whatever dyn is)
       const rs = this.low ? 0.33 : 0.5;
       this.reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(nw * rs)), Math.max(2, Math.round(nh * rs)), { type: this.type, depthBuffer: true });
       this.inkRT = new THREE.WebGLRenderTarget(aw, ah, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     }
+    // the drawing's own pictures, for the way it is drawn now (makeG; the other way's kept while the
+    // two are tried)
+    if (!this.G || this.G.def !== this.deferred) {
+      const was = this.G;
+      if (this.spareG && this.spareG.def === this.deferred) this.G = this.spareG;
+      else {
+        this.dropG(this.spareG);
+        this.G = this.makeG(this.deferred, taa, aw, ah);
+      }
+      this.spareG = null;
+      if (this.keepSpare) this.spareG = was;
+      else this.dropG(was);
+      this.gRT = this.G.rt;
+    }
+    // (the trying over: the other way's let go)
+    if (this.spareG && !this.keepSpare) this.trimG();
     // the drawing in the corner of its pictures (the whole of them, as it always was, but with the
     // steady pace); only there are they cleared
     const sub = s.x !== aw || s.y !== ah;
     this.corner(this.gRT, s, sub);
+    if (this.G.pen) {
+      this.corner(this.G.pen, s, sub);
+      this.corner(this.G.over, s, sub);
+    }
     this.corner(this.inkRT, s, sub);
     this.uvK.set(s.x / aw, s.y / ah);
     this.uvLo.set(0.5 / s.x, 0.5 / s.y);
@@ -805,6 +854,140 @@ export class Pipeline {
       this.rainRT = new THREE.WebGLRenderTarget(ow, oh, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
       this.taaReset = true;
     }
+  }
+
+  // The drawing's own pictures (ensure): its colour, its outlines' picture (normals, ids, how heavy
+  // the line), how far each pixel moved (the smart drawing), its depth. Drawn in two passes (def,
+  // ROADMAP 11.4) also what the pens need (render/glsl.js DEFER_OUT: six pictures in all, the fourth
+  // and fifth of whole numbers), the picture the pens are drawn into, and the frame what is
+  // see-through is drawn over them in (overFrame)
+  makeG(def, taa, w, h) {
+    const rt = new THREE.WebGLRenderTarget(w, h, { count: def ? 6 : taa ? 3 : 2, type: this.type, depthBuffer: true, depthTexture: new THREE.DepthTexture(w, h) });
+    for (const t of rt.textures) {
+      t.minFilter = THREE.NearestFilter;
+      t.magFilter = THREE.NearestFilter;
+      t.generateMipmaps = false;
+    }
+    if (def) {
+      for (const t of [rt.textures[3], rt.textures[4]]) {
+        t.format = THREE.RGBAIntegerFormat;
+        t.type = THREE.UnsignedIntType;
+        t.internalFormat = 'RGBA32UI';
+      }
+    }
+    const G = { def, rt, pen: null, over: null, fb: null };
+    if (def) {
+      G.pen = new THREE.WebGLRenderTarget(w, h, { type: this.type, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+      G.pen.texture.generateMipmaps = false;
+      G.over = new THREE.WebGLRenderTarget(w, h, { depthBuffer: false });
+    }
+    return G;
+  }
+
+  dropG(G) {
+    if (!G) return;
+    if (G.fb) {
+      this.r.getContext().deleteFramebuffer(G.fb);
+      this.r.properties.remove(G.over);
+    }
+    G.rt.dispose();
+    if (G.pen) G.pen.dispose();
+  }
+
+  // the other way's pictures, kept while the two ways were tried, let go
+  trimG() {
+    this.dropG(this.spareG);
+    this.spareG = null;
+  }
+
+  // The frame what is see-through is drawn into, over the pens (drawOver): the pens' picture, the
+  // outlines' and the smart drawing's pictures, the drawing's depth - all of them the drawing's own,
+  // so three.js has no such frame: it is made here and handed to it. False: this graphics card
+  // cannot have it
+  overFrame(G) {
+    if (G.fb !== null) return !!G.fb;
+    const r = this.r;
+    const gl = r.getContext();
+    r.initRenderTarget(G.rt);
+    r.initRenderTarget(G.pen);
+    const tex = (t) => r.properties.get(t).__webglTexture;
+    const fb = gl.createFramebuffer();
+    r.state.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex(G.pen.texture), 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, tex(G.rt.textures[1]), 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, tex(G.rt.textures[2]), 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, tex(G.rt.depthTexture), 0);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    r.state.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) {
+      gl.deleteFramebuffer(fb);
+      G.fb = false;
+      return false;
+    }
+    G.fb = fb;
+    r.setRenderTargetFramebuffer(G.over, fb);
+    return true;
+  }
+
+  // (ROADMAP 11.4) The pens once a pixel, or in one pass as it always was: every pen's shader made
+  // the one way or the other (materials.js setPensOn; the graphics card keeps both, once made)
+  setPens(on) {
+    on = !!on && pens.can && !this.pensBroken;
+    if (on === this.deferred) return;
+    this.deferred = on;
+    setPensOn(on);
+  }
+
+  // the player's choice (the settings): 'auto' - tried in play, render/depthtrial.js - 'two' or 'one'
+  setPensMode(mode) {
+    this.pensMode = pens.can ? mode : 'one';
+    if (this.pensMode === 'auto') return;
+    this.setPens(this.pensMode === 'two');
+  }
+
+  // (ROADMAP 11.4) Every pen's shader for the way the drawing is not made now, where the graphics card
+  // makes shaders alongside the game (KHR_parallel_shader_compile): asked for at once, between two
+  // frames (render), and waited for - pensOtherReady once they are all there, for trying the two
+  // ways in play (render/depthtrial.js). Elsewhere there is nothing to try: the way it began stays
+  prepareOtherPens() {
+    const r = this.r;
+    this._otherAsked = true;
+    if (!this.pensCan || !r.extensions.has('KHR_parallel_shader_compile')) return;
+    const was = this.deferred;
+    let progs = null;
+    try {
+      setPensOn(!was);
+      const mats = r.compile(this.scene, this.camera);
+      if (this.solid) for (const m of r.compile(this.solid.standIns(), this.camera)) mats.add(m);
+      if (!was) for (const m of r.compile(this.pensScene(), this.quadCam)) mats.add(m);
+      progs = [...mats].map((m) => r.properties.get(m).currentProgram).filter(Boolean);
+    } catch (err) {
+      console.warn('pens precompile failed', err);
+    }
+    setPensOn(was);
+    if (!progs) return;
+    const check = () => {
+      if (progs.every((p) => p.isReady())) this.pensOtherReady = true;
+      else setTimeout(check, 250);
+    };
+    check();
+  }
+
+  // (main.js) the pens' own pass, to be made ready with the rest
+  pensScene() {
+    this.quad.material = this.mPens;
+    return this.quadScene;
+  }
+
+  // (game/perf.js) can this computer draw the second way
+  get pensCan() {
+    return pens.can && !this.pensBroken;
+  }
+
+  // the way it is drawn is not to be tried in play
+  get pensFixed() {
+    return this.pensMode !== 'auto' || !pens.can || this.pensBroken;
   }
 
   // (the smart drawing) this frame's samples a fraction of a pixel aside: the camera's projection
@@ -1550,6 +1733,10 @@ export class Pipeline {
   render(center) {
     const r = this.r;
     const T = this.timer;
+    // (the pens once a pixel could not be drawn on this graphics card: in one pass from now on)
+    if (this.pensBroken && this.deferred) this.setPens(false);
+    // (left to the game: the other way's shaders made ready, a little after it begins)
+    if (this.pensMode === 'auto' && !this._otherAsked && performance.now() > this.otherAt) this.prepareOtherPens();
     this.ensure();
     if (this.solid) this.solid.update();
     r.autoClear = true;
@@ -1597,13 +1784,13 @@ export class Pipeline {
     //    picture as drawn in one go: what shows is still the last thing drawn at the nearest depth.
     if (T) T.begin('main');
     const mt = T ? null : this.mainTimer;
-    if (mt) mt.begin(this.depthFirst ? 'on' : 'off');
-    this.drawMain();
+    if (mt) mt.begin(this.mainKey ? this.mainKey() : this.depthFirst ? 'on' : 'off');
+    this.drawMain(T);
     if (mt) mt.end();
     if (T) T.end();
-    // 4. the ink
+    // 4. the ink (over the pens' own picture, drawn the second way)
     const ink = this.mInk.uniforms;
-    ink.tColor.value = this.gRT.textures[0];
+    ink.tColor.value = this.deferred ? this.G.pen.texture : this.gRT.textures[0];
     ink.tAux.value = this.gRT.textures[1];
     ink.tDepth.value = this.gRT.depthTexture;
     ink.uTexel.value.set(1 / this.size.x, 1 / this.size.y);
@@ -1701,13 +1888,89 @@ export class Pipeline {
     motion.on = taa;
   }
 
-  // 3. the drawing itself (render)
-  drawMain() {
+  // 3. the drawing itself (render): every surface with its pens, in one pass as it always was; or
+  // (ROADMAP 11.4) the surfaces first, writing what their pens need, then the pens over the whole
+  // picture, once a pixel, then what is see-through over them. T: the passes' clock on the graphics
+  // card, its pass 'main' open ('pens' after the surfaces)
+  drawMain(T = null) {
+    if (!this.deferred) {
+      this.drawSurfaces();
+      return;
+    }
+    const over = this.findOver();
+    for (let i = 0; i < over.length; i++) over[i].visible = false;
+    shared.uDefer.value = 1;
+    this.drawSurfaces();
+    shared.uDefer.value = 0;
+    for (let i = 0; i < over.length; i++) over[i].visible = true;
+    if (T) {
+      T.end();
+      T.begin('pens');
+    }
+    this.drawPens();
+    this.drawOver(over);
+  }
+
+  // the see-through things among the scene's own (the pen lines in the world, the effects' smoke,
+  // sparks and splats): in the surfaces' pass they would write over what the surfaces wrote for
+  // their pens. Drawn after the pens instead (drawOver), in the order three.js would draw them
+  findOver() {
+    const out = this.over;
+    out.length = 0;
+    const ch = this.scene.children;
+    for (let i = 0; i < ch.length; i++) {
+      const o = ch[i];
+      if (o.visible && o.isMesh && o.material && o.material.transparent) out.push(o);
+    }
+    if (out.length > 1) out.sort(byOrder);
+    return out;
+  }
+
+  // the pens over the whole picture, once a pixel (render/glsl.js PENS_FRAG): into their own picture,
+  // the drawing's size, in its corner
+  drawPens() {
+    const G = this.G;
+    const u = this.mPens.uniforms;
+    const t = G.rt.textures;
+    u.tLit.value = t[0];
+    u.tWhere.value = t[3];
+    u.tShade.value = t[4];
+    u.tOwn.value = t[5];
+    u.tDepth.value = G.rt.depthTexture;
+    const cam = this.camera;
+    u.uInvProj.value.copy(cam.projectionMatrixInverse);
+    u.uCamWorld.value.copy(cam.matrixWorld);
+    u.uCamPos.value.setFromMatrixPosition(cam.matrixWorld);
+    this.pass(this.mPens, G.pen);
+  }
+
+  // what is see-through, over the pens (findOver): as in the one pass, after all that is solid,
+  // against its depth, into the colour, the outlines' picture and the smart drawing's
+  drawOver(over) {
+    if (!over.length) return;
+    const G = this.G;
+    if (!this.overFrame(G)) {
+      // (no such frame on this graphics card: drawn in one pass from the next frame on)
+      this.pensBroken = true;
+      return;
+    }
+    const r = this.r;
+    r.setRenderTarget(G.over);
+    r.autoClear = false;
+    for (let i = 0; i < over.length; i++) r.render(over[i], this.camera);
+    r.autoClear = true;
+  }
+
+  // the surfaces (drawMain): what is surely behind the buildings left out; with depthFirst or
+  // wallsFirst a pass of depth before
+  drawSurfaces() {
     const r = this.r;
     const cam = this.camera;
+    const def = this.deferred;
     this.occlude(cam);
     r.setRenderTarget(this.gRT);
-    r.clear();
+    if (def) this.clearG();
+    else r.clear();
     if (this.depthFirst) {
       const buf = r.state.buffers;
       r.autoClear = false;
@@ -1746,10 +2009,29 @@ export class Pipeline {
       r.autoClear = true;
     } else {
       this.qWater = true;
+      // (drawn the second way, cleared already: clearG)
+      if (def) r.autoClear = false;
       r.render(this.scene, cam);
+      r.autoClear = true;
       this.qWater = false;
     }
     this.unocclude();
+  }
+
+  // (drawn the second way) the drawing's pictures cleared one by one, as three.js would clear them
+  // all at once: two of them hold whole numbers, and those cannot be cleared with the rest
+  clearG() {
+    const gl = this.r.getContext();
+    const b = this.r.state.buffers;
+    b.color.setMask(true);
+    b.depth.setMask(true);
+    gl.clearBufferfv(gl.COLOR, 0, ZERO4);
+    gl.clearBufferfv(gl.COLOR, 1, ZERO4);
+    gl.clearBufferfv(gl.COLOR, 2, ZERO4);
+    gl.clearBufferuiv(gl.COLOR, 3, ZERO4U);
+    gl.clearBufferuiv(gl.COLOR, 4, ZERO4U);
+    gl.clearBufferfv(gl.COLOR, 5, ZERO4);
+    gl.clearBufferfv(gl.DEPTH, 0, ONE1);
   }
 
   // 5. the glow of what is bright in the picture src (its size sw): the last of its levels
@@ -1810,11 +2092,12 @@ export class Pipeline {
     const life = this.hideMoving().slice();
     out.city = time(() => this.drawMain());
     for (const o of life) o.visible = true;
-    const vp = this.gRT.viewport;
-    const keep = vp.clone();
-    vp.set(0, 0, Math.max(1, Math.floor(keep.z / 4)), Math.max(1, Math.floor(keep.w / 4)));
+    // (the drawing's pictures at a sixteenth: its own, and drawn the second way the pens' and the
+    // see-through things')
+    const vps = [this.gRT, this.G.pen, this.G.over].filter(Boolean).map((t) => [t.viewport, t.viewport.clone()]);
+    for (const [vp, keep] of vps) vp.set(0, 0, Math.max(1, Math.floor(keep.z / 4)), Math.max(1, Math.floor(keep.w / 4)));
     out.tiny = time(() => this.drawMain());
-    vp.copy(keep);
+    for (const [vp, keep] of vps) vp.copy(keep);
     const wf = this.wallsFirst;
     const df = this.depthFirst;
     // (the walls' depth first the other way round from how it is, and the whole depth first)
@@ -1846,6 +2129,24 @@ export class Pipeline {
     this.mirrorPlain = !this.mirrorPlain;
     out.reflFlip = this.reflections ? time(() => this.renderReflection()) : 0;
     this.mirrorPlain = !this.mirrorPlain;
+    // (ROADMAP 11.4) drawn the second way, the pens' pass alone; and the drawing the other way round
+    // from how it is drawn now, in one pass or in two (the first time each pen's other shader may be
+    // made: the faster of the two rounds counts)
+    out.pens = this.deferred ? time(() => this.drawPens()) : 0;
+    out.other = 0;
+    if (pens.can && !this.pensBroken) {
+      const was = this.deferred;
+      this.keepSpare = true;
+      this.setPens(!was);
+      this.ensure();
+      out.other = time(() => this.drawMain());
+      this.setPens(was);
+      this.ensure();
+      this.keepSpare = false;
+      this.trimG();
+      // (the program for each pen chosen again before the frame below is timed)
+      this.drawMain();
+    }
     out.ink = time(() => this.pass(this.steady ? this.mInkD : this.mInk, this.inkRT));
     out.glow = time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize));
     out.final = time(() => this.pass(this._corner ? this.mFinalD : this.mFinal, null));

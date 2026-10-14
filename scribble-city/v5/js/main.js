@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { shared } from './render/materials.js';
+import { shared, pens } from './render/materials.js';
+import { Settings } from './core/settings.js';
 import { Pipeline } from './render/pipeline.js';
 import { buildAtlas } from './render/atlas.js';
 import { buildCity } from './world/city.js';
@@ -112,6 +113,20 @@ async function boot() {
   pipe.reflEvery = low ? 2 : 1;
   pipe.reflEveryDefault = pipe.reflEvery;
   shared.uPR.value = pipe.pixelsPerCss;
+  // (ROADMAP 11.4) the drawing in two passes - the surfaces, then the pens over the whole picture,
+  // once a pixel - on a computer whose graphics card writes six pictures at once, in float
+  // colours: as the player chose it (the settings: 'auto' tries it in play against the one pass,
+  // render/depthtrial.js; 'two'; 'one', as it always was), decided before the city's pens are made.
+  // ?pens=auto, two or one decides instead; ?pens=off: the pens' shaders exactly as they were
+  {
+    const pp = params.get('pens');
+    pens.can = !low && pipe.hdr && pp !== 'off' && gl0.getParameter(gl0.MAX_DRAW_BUFFERS) >= 6 && gl0.getParameter(gl0.MAX_COLOR_ATTACHMENTS) >= 6;
+    const ways = ['auto', 'two', 'one'];
+    const kept = new Settings().get('pens');
+    const mode = ways.includes(pp) ? pp : ways.includes(kept) ? kept : 'auto';
+    pipe.pensMode = pens.can ? mode : 'one';
+    pipe.setPens(pipe.pensMode !== 'one');
+  }
 
   setStatus('מציירים את העיר…');
   await frame();
@@ -167,11 +182,16 @@ async function boot() {
   setStatus('מכינים את העטים…');
   try {
     if (renderer.compileAsync && renderer.extensions.has('KHR_parallel_shader_compile')) {
+      // (drawn in two passes, the pens' own pass too)
+      if (pipe.deferred) await renderer.compileAsync(pipe.pensScene(), pipe.quadCam);
       await renderer.compileAsync(scene, camera);
       // (the still city's own pens, with their scissors, for the first rubbed-out spot: in the
       // background, render/solid.js)
       if (pipe.solid) renderer.compileAsync(pipe.solid.standIns(), camera).catch(() => {});
-    } else renderer.compile(scene, camera);
+    } else {
+      if (pipe.deferred) renderer.compile(pipe.pensScene(), pipe.quadCam);
+      renderer.compile(scene, camera);
+    }
   } catch (err) {
     console.warn('precompile failed', err);
   }
@@ -204,6 +224,9 @@ async function boot() {
   if (params.has('autostart')) game.start();
   else game.showContinue();
   window.__ready = true;
+  // (the pens' shaders for the other way of drawing, made ready in the background a little after the
+  // game begins - for trying the two in play: render/pipeline.js prepareOtherPens)
+  pipe.otherAt = performance.now() + 1500;
 }
 
 boot().catch(fatal);

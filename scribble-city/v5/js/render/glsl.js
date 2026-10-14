@@ -382,6 +382,25 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
 }
 `;
 
+// (ROADMAP 11.4: the pens once a pixel, DEFERRED - render/pipeline.js drawPens) In the drawing's own
+// pass a surface does not draw its pens: it writes what they need into three more pictures, and the
+// pens are drawn over the whole picture afterwards, once a pixel (PENS_FRAG). Into gColor the colour
+// where the sun hits and how much sun there is. gWhere, whole numbers: where on the surface the pen
+// is and its direction, exactly (the bits of the floats: a pen's stroke is a hair's breadth across
+// a street of hundreds of metres), and in two halves how busy it is and 1 + how much of the paper
+// shows, negative where the surface lies flat (0: no pens here, gColor is the colour as it is - the
+// sky, a picture, the paper itself). gShade, in halves: the colour in the shade and the low sun's
+// rim, how far the pen's place moves from one pixel to the next. gOwn: the surface's own light and
+// the rain's rings on it. Whatever draws into the picture says so (NO_PENS).
+const DEFER_OUT = /* glsl */ `
+#ifdef DEFERRED
+layout(location = 3) out uvec4 gWhere;
+layout(location = 4) out uvec4 gShade;
+layout(location = 5) out vec4 gOwn;
+#define NO_PENS() gWhere = uvec4(0u); gShade = uvec4(0u); gOwn = vec4(0.0)
+#endif
+`;
+
 // ---------------------------------------------------------------- surfaces
 // Optional parts (defines): USE_COLOR (a colour per vertex), USE_INSTANCING (+ USE_INSTANCING_COLOR,
 // and iX: owner / part id, iClip: a plane cutting the part), USE_OBJ (aObj: a prop's id),
@@ -589,6 +608,12 @@ layout(location = 1) out vec4 gAux;
 // (the smart drawing, render/pipeline.js) xy: how far it went on the screen since the last frame,
 // w: 1 for a thing that moves on its own (0: the camera alone moved it)
 layout(location = 2) out vec4 gVel;
+${DEFER_OUT}
+#ifdef DEFERRED
+// (1: the drawing's own pass, what the pens need written for them; 0: the mirror under the street,
+// drawn in its colours alone as it always is - render/pipeline.js mirrorPlain)
+uniform float uDefer;
+#endif
 
 #ifdef USE_MATTAB
 // many plain pens in one draw: each vertex carries the row of its pen in the table (the values
@@ -747,6 +772,10 @@ vec2 strokeCoords(vec3 n) {
 }
 
 void main() {
+#ifdef DEFERRED
+  // (no pens here, until the end says otherwise)
+  NO_PENS();
+#endif
 #ifdef USE_MATTAB
   loadPen();
 #endif
@@ -953,8 +982,28 @@ void main() {
     em *= 1.0 - mPaper;
     em += vec3(1.0, 0.84, 0.58) * mGlow * 1.5;
   }
+#ifdef DEFERRED
+  if (uDefer > 0.5) {
+    // what the pens need, for PENS_FRAG (see DEFER_OUT)
+    gColor = vec4(lit, light);
+    gWhere = uvec4(floatBitsToUint(p.x), floatBitsToUint(p.y), floatBitsToUint(ang), packHalf2x16(vec2(dens, (1.0 + wash) * (N.y >= 0.7 ? -1.0 : 1.0))));
+    gShade = uvec4(packHalf2x16(shade.rg), packHalf2x16(vec2(shade.b, hi)), packHalf2x16(dpx), packHalf2x16(dpy));
+    gOwn = vec4(em, rings.z);
+    vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
+    gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * 0.6180339), uLine);
+#ifdef USE_PREV
+    gVel = vec4(vVel.xy, 0.0, vVel.z);
+#else
+    gVel = vec4(0.0, 0.0, kind > 8.5 && kind < 9.5 ? 0.6 : 0.0, 0.0);
+#endif
+    return;
+  }
+  // (the mirror under the street: its colours, without the pens)
+  vec3 col = mix(shade, lit, light);
+#else
   gFar = smoothstep(32.0, 190.0, length(cameraPosition - vWP));
   vec3 col = (probe & 1) != 0 ? mix(shade, lit, light) : drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
+#endif
   // the rings on the puddles: a pale pen, the sky caught in their slopes
   if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * 0.42);
   col += em;
@@ -987,7 +1036,7 @@ in vec3 vWP;
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
 layout(location = 2) out vec4 gVel;
-// the hour's pens (sRGB: low, middle, top, four of each), the clouds (bellies, edges in the sun),
+${DEFER_OUT}// the hour's pens (sRGB: low, middle, top, four of each), the clouds (bellies, edges in the sun),
 // the sun's disc (core, ring, glow), the moon and the stars (game/daynight.js)
 uniform vec3 uSkyPen[12];
 uniform vec3 uCloudC[2];
@@ -1011,6 +1060,10 @@ vec3 skyPen(float el, float r, float toSun) {
 
 void main() {
   if (uDepthOnly > 0.5) discard;
+#ifdef DEFERRED
+  // (the sky draws its own pens: its colour is done)
+  NO_PENS();
+#endif
   vec3 dir = normalize(vWP - cameraPosition);
   float az = atan(dir.x, -dir.z);
   float el = asin(clamp(dir.y, -1.0, 1.0));
@@ -1358,7 +1411,12 @@ in vec2 vLoc;
 layout(location = 0) out vec4 gColor;
 layout(location = 1) out vec4 gAux;
 layout(location = 2) out vec4 gVel;
+${DEFER_OUT}
 void main() {
+#ifdef DEFERRED
+  // (a picture has no pens: its colour is done)
+  NO_PENS();
+#endif
   vec4 tex = texture(uMap, vUv, uMipBias);
   float a = tex.a * vTint.a;
   if (uNearFade > 0.0) a *= smoothstep(uNearFade * 0.4, uNearFade, vDist);
@@ -1381,5 +1439,57 @@ void main() {
   // (the smart drawing: smoke and sparks are here this frame, nothing gathered before is kept
   // under them; the opaque pictures stay with the camera's move, as the walls do)
   gVel = uOpaque > 0.5 ? vec4(0.0) : vec4(0.0, 0.0, 1.0, a);
+}
+`;
+
+// ---------------------------------------------------------------- the pens, once a pixel
+// (ROADMAP 11.4, render/pipeline.js drawPens) What each surface wrote for its pens (SURF_FRAG with
+// DEFERRED, see DEFER_OUT), drawn over the whole picture in one go: the same pens, the rain's rings,
+// the surface's own light and the haze, as the surface draws them itself in one pass. No pixel of
+// a surface that another hides, nor of the edge of a small triangle (the graphics card works in
+// squares of 2x2 pixels, and a triangle's pixels in the square's other corners are worked out too,
+// to be thrown away), is drawn with the pens. The picture's pixels are read one by one at the
+// same place (render/pipeline.js: the same size, the same corner).
+// (cameraPosition, uCamPos: the camera that drew the picture - the pass's own is not it)
+export const PENS_FRAG = /* glsl */ `
+layout(location = 0) out vec4 oColor;
+uniform highp sampler2D tLit;
+uniform highp usampler2D tWhere;
+uniform highp usampler2D tShade;
+uniform highp sampler2D tOwn;
+uniform highp sampler2D tDepth;
+uniform mat4 uInvProj;
+uniform mat4 uCamWorld;
+void main() {
+  ivec2 ip = ivec2(gl_FragCoord.xy);
+  vec4 g = texelFetch(tLit, ip, 0);
+  uvec4 wh = texelFetch(tWhere, ip, 0);
+  vec2 dw = unpackHalf2x16(wh.w);
+  // (the sky, a picture, the paper: the colour is done)
+  if (dw.y == 0.0) {
+    oColor = g;
+    return;
+  }
+  uvec4 sh = texelFetch(tShade, ip, 0);
+  vec2 s0 = unpackHalf2x16(sh.x);
+  vec2 s1 = unpackHalf2x16(sh.y);
+  vec4 own = texelFetch(tOwn, ip, 0);
+  // where it is in the world: its depth, back through the camera that drew it
+  float d = texelFetch(tDepth, ip, 0).r;
+  vec4 v = uInvProj * vec4(gl_FragCoord.xy / uResolution * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+  v.xyz /= v.w;
+  vec3 wp = (uCamWorld * vec4(v.xyz, 1.0)).xyz;
+  gFar = smoothstep(32.0, 190.0, length(v.xyz));
+  vec3 lit = g.rgb;
+  float light = g.a;
+  vec3 shade = vec3(s0, s1.x);
+  int probe = int(uProbe + 0.5);
+  vec2 p = vec2(uintBitsToFloat(wh.x), uintBitsToFloat(wh.y));
+  vec3 col = (probe & 1) != 0 ? mix(shade, lit, light) : drawPens(p, unpackHalf2x16(sh.z), unpackHalf2x16(sh.w), lit, shade, light, s1.y, dw.x, uintBitsToFloat(wh.z), abs(dw.y) - 1.0, dw.y < 0.0 ? 1.0 : 0.0);
+  // the rings on the puddles, the surface's own light, the haze (as SURF_FRAG)
+  if (own.a > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, own.a * 0.42);
+  col += own.rgb;
+  if ((probe & 8) == 0) col = applyFog(col, wp);
+  oColor = vec4(col, clamp(lum(own.rgb) * 0.3 - 0.15, 0.0, 1.0));
 }
 `;

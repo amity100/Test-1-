@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, pickLights, flashLight } from '../render/materials.js';
+import { shared, pickLights, flashLight, pens } from '../render/materials.js';
 import { Input } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { CameraRig } from './camera.js';
@@ -360,6 +360,10 @@ export class Game {
     const smartForced = this.params.has('taa') ? this.params.get('taa') !== '0' : null;
     // (?pace=auto, 60, 30 or free decides instead of the setting)
     const paceForced = this.params.has('pace') ? this.params.get('pace') : null;
+    // (the drawing in two passes or in one, render/pipeline.js setPensMode: on a computer whose
+    // graphics card can, main.js; ?pens=auto, two or one decides instead of the setting)
+    const pensCan = pens.can;
+    const pensForced = ['auto', 'two', 'one'].includes(this.params.get('pens')) ? this.params.get('pens') : null;
     const dev = { boil: this.boilOn, reflections: this.pipe.reflections, quality: shared.uQuality.value > 0.5 };
     const pick = (k) => (S.v[k] === null ? dev[k] : S.v[k]);
     const apply = () => {
@@ -376,6 +380,7 @@ export class Game {
       shared.uQuality.value = pick('quality') ? 1 : 0;
       this.pipe.taa = smartCan && (smartForced !== null ? smartForced : !!v.smart);
       this.pace.setMode(paceForced !== null ? paceForced : v.pace);
+      this.pipe.setPensMode(pensForced !== null ? pensForced : v.pens);
       if (!!v.perf !== !!this.perf.on) this.perf.toggle(v.perf);
       // (every blueprint open, or found in the city: ROADMAP 9.1, not with ?classic)
       if (!this.classic) this.setAllOpen(v.allOpen);
@@ -397,6 +402,9 @@ export class Game {
       $('opt-smart').checked = this.pipe.taa;
       $('opt-smart').disabled = !smartCan;
       $('opt-pace').value = this.pace.mode;
+      $('opt-pens').value = this.pipe.pensMode;
+      $('opt-pens').disabled = !pensCan;
+      $('opt-pens-row').classList.toggle('hidden', !pensCan);
       $('opt-perf').checked = v.perf;
     };
     const box = (id, k) => $(id).addEventListener('change', (e) => {
@@ -431,6 +439,10 @@ export class Game {
     box('opt-allbp', 'allOpen');
     $('opt-pace').addEventListener('change', (e) => {
       S.set('pace', e.target.value);
+      apply();
+    });
+    $('opt-pens').addEventListener('change', (e) => {
+      S.set('pens', e.target.value);
       apply();
     });
     // F3 keeps its choice too
