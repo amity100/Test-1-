@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
-import { readParts, specOf, shapeOf, thin, shade, inkOn, ribbon, KIND_NAME } from './drawncar.js';
+import { readParts, specOf, shapeOf, thin, shade, inkOn, ribbon, solid, KIND_NAME } from './drawncar.js';
 
 // (ROADMAP 11.6) Drawing freehand, on the move (ui/freedraw.js). Nothing to choose first: what is
 // drawn on the little page is read from its shape alone, and becomes a thing made of the drawing
@@ -966,7 +966,7 @@ export function buildWeapon(R) {
     if (loop.length < 3) continue;
     const sm = chaikin(loop);
     const shape = new THREE.Shape(sm.map(([z, y]) => new THREE.Vector2(z, y)));
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.002, D - bev * 2), bevelEnabled: true, bevelThickness: bev, bevelSize: Math.min(bev, cell * s * 0.9), bevelSegments: R.kind === 'bomb' ? 4 : 2, curveSegments: 3 });
+    const geo = solid(new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.002, D - bev * 2), bevelEnabled: true, bevelThickness: bev, bevelSize: Math.min(bev, cell * s * 0.9), bevelSegments: R.kind === 'bomb' ? 4 : 2, curveSegments: 3 }));
     geo.rotateY(-Math.PI / 2);
     geo.translate(D / 2 - bev, 0, 0);
     Kt.add(bodyMat, geo, linC(...base));
@@ -980,7 +980,7 @@ export function buildWeapon(R) {
     const shape = new THREE.Shape(pts.map(([z, y]) => new THREE.Vector2(z, y)));
     const d = D + lift * 2;
     const b2 = Math.min(bev, 0.012);
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.002, d - b2 * 2), bevelEnabled: true, bevelThickness: b2, bevelSize: Math.min(b2, cell * s * 0.5), bevelSegments: 1, curveSegments: 2 });
+    const geo = solid(new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.002, d - b2 * 2), bevelEnabled: true, bevelThickness: b2, bevelSize: Math.min(b2, cell * s * 0.5), bevelSegments: 1, curveSegments: 2 }));
     geo.rotateY(-Math.PI / 2);
     geo.translate(d / 2 - b2, 0, 0);
     Kt.add(o.ink.neon ? M.glow : M.paint, geo, linC(...o.ink.c));

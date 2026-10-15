@@ -311,6 +311,35 @@ export function thin(pts, d, max = 40) {
   return out.slice(0, max);
 }
 
+// a drawn shape made solid (three.js's extrusion), without its triangles that are only a line -
+// three points of a hand-drawn outline almost in a row - or not numbers at all: such a triangle
+// has no side to face, its normal is nothing, and in the pen's shader that is no number at all,
+// which the glow then spreads into a black blot. They covered nothing, so the shape looks the same
+export function solid(g) {
+  const p = g.attributes.position;
+  const n = g.attributes.normal;
+  if (g.index || !n) return g;
+  const keep = [];
+  for (let t = 0; t + 2 < p.count; t += 3) {
+    let ok = true;
+    for (let i = t; i < t + 3 && ok; i++) {
+      const l = n.getX(i) * n.getX(i) + n.getY(i) * n.getY(i) + n.getZ(i) * n.getZ(i);
+      ok = l > 0.5 && Number.isFinite(p.getX(i) + p.getY(i) + p.getZ(i));
+    }
+    if (ok) keep.push(t);
+  }
+  if (keep.length * 3 === p.count) return g;
+  const out = new THREE.BufferGeometry();
+  for (const [name, a] of Object.entries(g.attributes)) {
+    const k = a.itemSize;
+    const arr = new a.array.constructor(keep.length * 3 * k);
+    keep.forEach((t, j) => arr.set(a.array.subarray(t * k, (t + 3) * k), j * 3 * k));
+    out.setAttribute(name, new THREE.BufferAttribute(arr, k, a.normalized));
+  }
+  g.dispose();
+  return out;
+}
+
 const _ta = new THREE.Vector3();
 const _tq = new THREE.Quaternion();
 const _UP = new THREE.Vector3(0, 1, 0);
@@ -397,7 +426,7 @@ export function buildModel(design, spec) {
     const o = outline(s.pts);
     if (o.length < 3) return;
     const shape = new THREE.Shape(o.map(([z, y]) => new THREE.Vector2(Z(z), Y(y))));
-    const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.02, w - bev * 2), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 2, curveSegments: 4 });
+    const g = solid(new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.02, w - bev * 2), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 2, curveSegments: 4 }));
     // (shape x - forward - to z; its depth across, centred)
     g.rotateY(-Math.PI / 2);
     g.translate(w / 2 - bev, 0, 0);
@@ -453,14 +482,14 @@ export function buildModel(design, spec) {
     const c = colOf(s, design);
     const P = sh.closed ? outline(s.pts) : null;
     if (P && P.length >= 3) {
-      const g = new THREE.ExtrudeGeometry(new THREE.Shape(P.map(([z, y]) => new THREE.Vector2(Z(z), Y(y)))), { depth: 0.08, bevelEnabled: false, curveSegments: 2 });
+      const g = solid(new THREE.ExtrudeGeometry(new THREE.Shape(P.map(([z, y]) => new THREE.Vector2(Z(z), Y(y)))), { depth: 0.08, bevelEnabled: false, curveSegments: 2 }));
       g.rotateY(-Math.PI / 2);
       g.translate(0.04, 0, 0);
       K.add(M.paint, g, shade(c, 1.1));
     } else {
       const top = s.pts.reduce((a, p) => (p[1] > a[1] ? p : a), s.pts[0]);
       const shp = new THREE.Shape([new THREE.Vector2(Z(sh.x0), Y(spec.y1) - 0.1), new THREE.Vector2(Z(sh.x1 + 0.15), Y(spec.y1) - 0.1), new THREE.Vector2(Z(top[0]), Y(top[1]))]);
-      const g = new THREE.ExtrudeGeometry(shp, { depth: 0.08, bevelEnabled: false, curveSegments: 2 });
+      const g = solid(new THREE.ExtrudeGeometry(shp, { depth: 0.08, bevelEnabled: false, curveSegments: 2 }));
       g.rotateY(-Math.PI / 2);
       g.translate(0.04, 0, 0);
       K.add(M.paint, g, shade(c, 1.1));
@@ -516,7 +545,7 @@ export function buildModel(design, spec) {
       if (o.length < 3) return;
       const w = W * 0.72;
       const shape = new THREE.Shape(o.map(([z, y]) => new THREE.Vector2(Z(z) - pz, Y(y) - py)));
-      const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.02, w - bev * 2), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 2, curveSegments: 4 });
+      const geo = solid(new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.02, w - bev * 2), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 2, curveSegments: 4 }));
       geo.rotateY(-Math.PI / 2);
       geo.translate(w / 2 - bev, 0, 0);
       T.add(M.paint, geo, linC(...colOf(s, design)));
