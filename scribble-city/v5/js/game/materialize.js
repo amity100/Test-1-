@@ -130,9 +130,14 @@ export function findSpot(game, v, so, box) {
   const halfLen = (box.max.z - box.min.z) / 2 + 0.3;
   const halfWid = (box.max.x - box.min.x) / 2 + 0.25;
   const mid = (box.max.z + box.min.z) / 2;
-  const tanX = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect;
-  // its near side far enough for all of it to fit across the screen, and clear of the hero
-  const dFit = halfLen / (0.82 * tanX) + halfWid;
+  const half = THREE.MathUtils.degToRad(cam.fov) / 2;
+  const tanX = Math.tan(half) * cam.aspect;
+  // its near side far enough for all of it to fit across the screen - and its top under the top
+  // of the screen, a tall one's too (a drawing as tall as it is long, made as long as its kind) -
+  // and clear of the hero
+  const up = Math.max(0.15, half * 0.85 + Math.asin(THREE.MathUtils.clamp(cam.getWorldDirection(_v).y, -1, 1)));
+  const dTall = Math.max(0, p.y + box.max.y + 0.3 - c.y) / Math.tan(up);
+  const dFit = Math.max(halfLen / (0.82 * tanX), dTall) + halfWid;
   const dHero = (p.x - c.x) * so.an.x + (p.z - c.z) * so.an.z + halfWid + 1.4;
   const d0 = Math.max(dFit, dHero);
   const col = game.world.collision;
