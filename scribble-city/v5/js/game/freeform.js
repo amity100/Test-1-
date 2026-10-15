@@ -2033,6 +2033,11 @@ function gearOf(S, grp, cls) {
   return readGear(S, grp, cls);
 }
 
+// (ROADMAP 11.9) a line as the hand drew it: the game draws each line again, steadier
+// (game/inkclean.js), and builds the thing from that - but the network learnt from people's own
+// lines, and reads those best
+const asDrawn = (s) => s.raw || s.p;
+
 // what the drawing is: what the network sees in it (game/sketchnet.js) - the shape then says
 // which way it faces, its parts and its numbers. When the network is not that sure, what the
 // shape alone reads has a say; when it sees nothing it knows, the shape alone decides: a vehicle
@@ -2060,7 +2065,7 @@ export function readFree(strokes, force = null, cats = null) {
 
 // one thing, of what is allowed (a Set of the network's groups; null: anything)
 function readOne(S, pk, allowed = null) {
-  const net = look(S.map((s) => s.p), allowed);
+  const net = look(S.map(asDrawn), allowed);
   const can = (set) => !allowed || [...allowed].some((g) => set.has(g));
   const canV = can(VEHICLE_GROUPS);
   const canW = can(WEAPON_SET);
@@ -2197,10 +2202,9 @@ function rideName(baseName, grp, A) {
 // any of them together (it drives, flies and floats, each where it can) - armed if they chose a
 // weapon too, with its gear if they chose gear
 function readRide(S, pk, C) {
-  const P = S.map((s) => s.p);
   const VC = VEHICLE_CATS.filter((c) => C.has(c));
   const allowed = groupsOf(new Set(VC));
-  const net = look(P, allowed);
+  const net = look(S.map(asDrawn), allowed);
   const alts = altsOf(net);
   // what it is at heart: the player's pick (of the kinds chosen), else what the network sees most
   let grp;
@@ -2302,7 +2306,7 @@ function seenIn(S) {
   }).join(',');
   let o = seen.get(key);
   if (o) return o;
-  const raw = chances(picture(ready(S.map((s) => s.p))));
+  const raw = chances(picture(ready(S.map(asDrawn))));
   const by = {};
   o = { w: 0, g: 0, weapon: null, gear: null, by };
   for (let i = 0; i < raw.length; i++) {
@@ -2415,7 +2419,7 @@ function readArmed(S, pk) {
   }
   // (no two things in it: gear alone, if that is all the network sees in it; else the weapon -
   // with the knack of the gear picked, if it can take it on)
-  const n = look(S.map((s) => s.p), ARMED_SET);
+  const n = look(S.map(asDrawn), ARMED_SET);
   if (n.gear > n.weapon * 1.5 && !pk.weapon) return readOne(S, onlyGear(pk), GEAR_GROUPS);
   const w = readOne(S, onlyWeapon(pk), WEAPON_SET);
   if (!w || w.cat !== 'weapon') return w;

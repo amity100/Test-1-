@@ -7,6 +7,7 @@ import { canopyModel } from '../game/parachute.js';
 import { waterSpot } from '../game/rides.js';
 import { angleDiff, clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
+import { cleanStroke, joinStroke, morphPair } from '../game/inkclean.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -28,6 +29,21 @@ const picksOf = (force) => (force ? force.split('|').filter(Boolean) : []);
 const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+
+// (ROADMAP 11.9) what was decided, as picks: read again from the steadied lines with these, it is
+// the same thing (its weapon, its vehicle, its gear - and the gear with a weapon)
+function forceOf(R) {
+  if (!R || !R.cat) return null;
+  const out = [];
+  if (R.cat === 'weapon') {
+    out.push(R.kind === 'shield' ? 'g:shield' : R.kind);
+    const gear = R.extra ? R.extra.kind : R.knack;
+    if (gear && R.kind !== 'shield') out.push(`g:${gear}`);
+  } else if (R.choice) out.push(R.choice);
+  return out.length ? out.join('|') : null;
+}
+// how long a line takes to turn into its steadied self (s)
+const MORPH_T = 0.24;
 
 // what it can be made into instead (the tag's menu), by what the player says they draw (ROADMAP
 // 11.8): the weapons, the vehicles by kind, on the water, in the air, the gear
@@ -76,6 +92,13 @@ export class FreeDraw {
       <div class="fd-cats" id="fd-cats"><span class="fd-cats-t">מה מציירים?</span>${cats}</div>
       <div class="fd-zone" id="fd-zone-a"></div><div class="fd-zone" id="fd-zone-b"></div>
       <div class="fd-hint" id="fd-hint"></div>
+      <div class="fd-signs hidden" id="fd-signs"><b>סימנים מהירים</b>
+        <div><svg viewBox="0 0 24 24"><path d="M12 20 C4 14 2.5 8.5 6.2 6 C9 4.2 11.3 6 12 8.2 C12.7 6 15 4.2 17.8 6 C21.5 8.5 20 14 12 20 Z"/></svg>לב — ריפוי</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 15 L4 11 L8 10 L10 7 L16 7 L18 10 L21 11 L21 15 Z M7 15.5 a1.8 1.8 0 1 0 0.01 0 M17 15.5 a1.8 1.8 0 1 0 0.01 0"/><path class="red" d="M7 4 L17 20 M17 4 L7 20"/></svg>איקס על מכונית — עוצרת</div>
+        <div><svg viewBox="0 0 24 24"><path d="M12 5 a1.6 1.6 0 1 0 0.01 0 M12 8 L12 14 M9 10.5 L15 10.5 M12 14 L10 19 M12 14 L14 19"/><ellipse class="red" cx="12" cy="12" rx="7.5" ry="9.5"/></svg>לולאה סביב אויבים — קשורים</div>
+        <div><svg viewBox="0 0 24 24"><path class="red" d="M6 15 C3 9 10 4 14 7 C18 10 11 18 7 14 C4 10 13 4 17 9 C21 14 13 21 9 17 C6 13 15 7 19 12 C21 16 15 20 12 18"/></svg>קשקוש — ענן דיו</div>
+        <div><svg viewBox="0 0 24 24"><path d="M14 4 L21 4 L21 21 M14 4 L14 21"/><path d="M5 17 a1.4 1.4 0 1 0 0.01 0 M5 19 L5 22"/><path class="red" d="M6 18 L15 5"/></svg>קו מכם לגג — חבל</div>
+      </div>
       <div class="fd-tag hidden" id="fd-tag">
         <button class="fd-kind" id="fd-kind" title="משהו אחר"><b id="fd-name"></b><span id="fd-stats"></span><em id="fd-note"></em></button>
         <div class="fd-alts" id="fd-alts"></div>
@@ -99,6 +122,7 @@ export class FreeDraw {
     this.noteEl = $('fd-note');
     this.altsEl = $('fd-alts');
     this.hintEl = $('fd-hint');
+    this.signsEl = $('fd-signs');
     this.toolsEl = $('fd-tools');
     this.makeBtn = $('fd-make');
     this.menuEl = $('fd-menu');
@@ -321,7 +345,42 @@ export class FreeDraw {
       c.p = [];
       for (let i = 0; i <= 8; i++) c.p.push([x + Math.cos((i / 8) * Math.PI * 2) * 0.008, y + Math.sin((i / 8) * Math.PI * 2) * 0.008]);
     }
+    if (this.game.lab) {
+      this.steady(c);
+      return;
+    }
     this.strokes.push({ p: c.p, c: c.c });
+    this.bake();
+    this.read();
+    this.render();
+  }
+
+  // (ROADMAP 11.9) the line just lifted: a quick sign (game/signs.js) - it acts, and goes; else
+  // it stays on the page, drawn again steadier (game/inkclean.js), turning into that
+  steady(c) {
+    const raw = c.p;
+    this.strokes.push({ p: raw, raw, c: c.c });
+    const sg = this.game.signs;
+    const m = sg && sg.match(this.strokes.map((s) => s.raw || s.p), this.U);
+    if (m) {
+      this.flyAway();
+      this.strokes = [];
+      this.force = null;
+      this.bake();
+      this.read();
+      this.render();
+      sg.run(m);
+      return;
+    }
+    const s = this.strokes[this.strokes.length - 1];
+    const unit = 1 / this.U;
+    const prev = this.strokes.slice(0, -1).map((o) => ({ p: o.p, kind: o.k || 'curve', closed: !!o.closed, c: o.circ }));
+    const C = joinStroke(cleanStroke(raw, { unit }), prev, { unit });
+    s.p = C.p;
+    s.k = C.kind;
+    s.closed = C.closed;
+    s.circ = C.c;
+    if (C.kind !== 'dot' && C.kind !== 'scribble') s.morph = { ...morphPair(raw, C.p, C.closed), t: 0 };
     this.bake();
     this.read();
     this.render();
@@ -439,8 +498,23 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ reading it
   read() {
-    this.R = this.strokes.length ? readFree(this.strokes, this.force, this.cats) : null;
+    this.R = this.strokes.length ? this.readNow() : null;
     this.info();
+  }
+
+  readNow() {
+    if (!this.game.lab) return readFree(this.strokes, this.force, this.cats);
+    // (ROADMAP 11.9) what it is: read off the lines as they were drawn, as it always was...
+    const R0 = readFree(this.strokes.map((s) => ({ p: s.raw || s.p, c: s.c })), this.force, this.cats);
+    const force = forceOf(R0);
+    if (!force) return R0;
+    // ...and built from the steadied lines: the same thing (else as it was)
+    const R1 = readFree(this.strokes, force, this.cats);
+    if (!R1 || R1.cat !== R0.cat || R1.kind !== R0.kind) return R0;
+    R1.alts = R0.alts;
+    R1.choice = R0.choice;
+    R1.decided = force;
+    return R1;
   }
 
   // what the tag says of it: what it is becoming, what it can do, the ink it takes, what else
@@ -454,6 +528,7 @@ export class FreeDraw {
     const has = this.strokes.length > 0;
     this.tagEl.classList.toggle('hidden', !has);
     this.hintEl.classList.toggle('gone', has || !!this.cur);
+    this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur);
     this.hintEl.textContent = game.touch ? 'ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ' : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
     // (what was chosen and is not in the drawing yet: on a line of its own)
     this.noteEl.textContent = has && R && R.cat && R.note ? R.note : '';
@@ -563,7 +638,7 @@ export class FreeDraw {
     g.setTransform(dpr * U, 0, 0, dpr * U, 0, 0);
     g.lineCap = 'round';
     g.lineJoin = 'round';
-    for (const s of this.strokes) this.line(g, s);
+    for (const s of this.strokes) if (!s.morph) this.line(g, s);
   }
 
   render() {
@@ -577,6 +652,14 @@ export class FreeDraw {
     g.setTransform(dpr * U, 0, 0, dpr * U, 0, 0);
     g.lineCap = 'round';
     g.lineJoin = 'round';
+    // (ROADMAP 11.9) the lines turning into their steadied selves
+    for (const s of this.strokes) {
+      if (!s.morph) continue;
+      const k = Math.min(1, s.morph.t / MORPH_T);
+      const e = k * k * (3 - 2 * k);
+      const { a, b } = s.morph;
+      this.line(g, { p: a.map((q, i) => [q[0] + (b[i][0] - q[0]) * e, q[1] + (b[i][1] - q[1]) * e]), c: s.c });
+    }
     if (this.cur) this.line(g, this.cur);
     // which way it points (its muzzle, its tip, its nose)
     const R = this.R;
@@ -624,7 +707,7 @@ export class FreeDraw {
   make() {
     const game = this.game;
     if (this.cur) this.penUp();
-    const R = this.strokes.length ? readFree(this.strokes, this.force, this.cats) : null;
+    const R = this.strokes.length ? this.readNow() : null;
     const shake = (why) => {
       this.stats.failed++;
       this.tagEl.classList.remove('shake');
@@ -714,7 +797,7 @@ export class FreeDraw {
     const slot = W.current;
     // (the HUD's picture of it, and the drawing again for a save: game/save.js)
     slot.strokes = this.strokes.map((s) => s.p);
-    slot.free = { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), force: this.force, cats: [...this.cats] };
+    slot.free = { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), force: R.decided || this.force, cats: [...this.cats] };
     // it hangs in the air where it was drawn, beside you, as it turns real; then into the hand
     const cam = game.camera;
     const D = 2.3;
@@ -915,6 +998,20 @@ export class FreeDraw {
     const v = p.inVehicle;
     if (v && v.drawn) jetFlames(game, v, dt);
     if (!this.isOpen) return;
+    // (ROADMAP 11.9) the lines turning: on with it, and onto the page when done
+    let turning = false;
+    let done = false;
+    for (const s of this.strokes) {
+      if (!s.morph) continue;
+      s.morph.t += dt;
+      turning = true;
+      if (s.morph.t >= MORPH_T) {
+        s.morph = null;
+        done = true;
+      }
+    }
+    if (done) this.bake();
+    if (turning) this.render();
     // not on foot any more (in a car, swimming, down...), or the game stopped: the pen goes
     if (p.mode !== 'foot' || p.inVehicle || game.state !== 'play' || (game.dialog && game.dialog.open)) {
       this.close();
@@ -937,12 +1034,12 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), ink: this.ink, cats: [...this.cats] };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats] };
   }
 
   load(o) {
     if (!o) return;
-    this.strokes = Array.isArray(o.s) ? o.s.filter((s) => Array.isArray(s.p) && s.p.length).map((s) => ({ p: s.p, c: Number.isInteger(s.c) && INKS[s.c] ? s.c : 0 })) : [];
+    this.strokes = Array.isArray(o.s) ? o.s.filter((s) => Array.isArray(s.p) && s.p.length).map((s) => ({ p: s.p, c: Number.isInteger(s.c) && INKS[s.c] ? s.c : 0, raw: Array.isArray(s.r) && s.r.length ? s.r : undefined, k: typeof s.k === 'string' ? s.k : undefined })) : [];
     if (Number.isInteger(o.ink) && INKS[o.ink]) this.pickInk(o.ink);
     this.cats = new Set(Array.isArray(o.cats) ? o.cats.filter((c) => CATEGORY_ORDER.includes(c)) : []);
     this.showCats();

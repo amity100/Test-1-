@@ -379,6 +379,8 @@ class Enemy {
     const low = p.crouched && !p.inVehicle ? 1 - (p.coverPop || 0) : 0;
     if (d > this.cfg.sight * (1 + this.onEdge * 0.2) * (this.state === 'combat' ? 1 : 1 - 0.45 * low)) return false;
     if (p.hidden && d > 3.2 && !p.inVehicle) return false;
+    // (a cloud of ink between: ROADMAP 11.9, game/signs.js)
+    if (game.signs && game.signs.clouds.length && game.signs.blocks(this.pos.x, this.pos.z, tp.x, tp.z)) return false;
     // (in another car, or other clothes, while they search: known only from close by, ROADMAP 6.4)
     if (this.faction === 'police' && game.lose && game.lose.disguised && d > game.lose.near) return false;
     if (d > 6) {

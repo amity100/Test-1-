@@ -207,6 +207,11 @@ export class Player {
       if (this.game.classic) this.seatIn(dt);
       return;
     }
+    // (ROADMAP 11.9) up an ink rope to a roof: carried along it (game/signs.js)
+    if (this.mode === 'zip') {
+      if (this.game.signs && this.game.signs.zipStep(dt)) return;
+      this.mode = 'foot';
+    }
     // up a ladder, on a fire escape, pulling yourself up onto something (ROADMAP 5.1, game/climb.js)
     if (this.mode === 'climb') {
       if (this.game.climb) this.game.climb.update(dt, input);

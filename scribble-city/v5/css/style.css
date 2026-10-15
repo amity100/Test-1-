@@ -1223,6 +1223,12 @@ body.touch .fd-zone { display: block; }
 .fd-btn.primary.off { background: #e6e0d2; opacity: 0.8; }
 .fd-fly { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 17; pointer-events: none; transition: transform 0.5s ease-out, opacity 0.5s ease-in; transform-origin: 50% 50%; }
 body.fd-open #crosshair { opacity: 0; }
+/* the quick signs card (lab sample), under the minimap; drawing passes through it */
+.fd-signs { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 186px); display: flex; flex-direction: column; gap: 3px; padding: 6px 9px 7px; background: rgba(255, 252, 244, 0.9); border: 2.5px solid var(--ink); border-radius: 11px 9px 12px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; transition: opacity 0.2s; }
+.fd-signs b { font-family: var(--font-hand); font-size: 19px; line-height: 1.1; margin-bottom: 1px; }
+.fd-signs div { display: flex; align-items: center; gap: 7px; font: 600 13.5px var(--font-ui); white-space: nowrap; }
+.fd-signs svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.fd-signs svg .red { stroke: #e8336f; stroke-width: 2.3; }
 /* (ROADMAP 11.8) what is drawn: anything, or one of five, or several together (a combination) */
 .fd-cats { position: absolute; z-index: 3; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); display: flex; align-items: center; gap: 5px; padding: 5px 8px; background: rgba(255, 252, 244, 0.92); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; white-space: nowrap; }
 .fd-cats-t { font-family: var(--font-hand); font-size: 18px; color: var(--ink); margin-left: 3px; }
@@ -1242,6 +1248,10 @@ body.touch .fd-cats-t { display: none; }
 body.touch .fd-cat { font-size: 13px; padding: 4px 8px; }
 body.touch.fd-open #btn-fire, body.touch.fd-open #btn-jump, body.touch.fd-open #btn-draw, body.touch.fd-open #btn-photo, body.touch.fd-open #btn-swap, body.touch.fd-open #btn-guard, body.touch.fd-open #btn-hands, body.touch.fd-open #btn-up, body.touch.fd-open #btn-down, body.touch.fd-open #btn-enter, body.touch.fd-open #draw-hint, body.touch.fd-open #look-zone { display: none !important; }
 body.touch.fd-open #toasts { left: 24%; }
+body.touch .fd-signs { top: calc(max(6px, env(safe-area-inset-top)) + 96px); left: max(10px, env(safe-area-inset-left)); padding: 4px 7px 5px; gap: 2px; }
+body.touch .fd-signs b { font-size: 15px; }
+body.touch .fd-signs div { font-size: 11.5px; gap: 5px; }
+body.touch .fd-signs svg { width: 17px; height: 17px; }
 @media (max-height: 520px) {
   .fd-kind b { font-size: 20px; }
   .fd-kind span { font-size: 11.5px; }

@@ -84,6 +84,7 @@ import { SketchPad } from '../ui/sketchpad.js';
 import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
+import { Signs } from './signs.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -282,6 +283,10 @@ export class Game {
     this.skills = this.classic ? null : new Skills(this);
     // (ROADMAP 11.6: drawing freehand, on the move - whatever is drawn becomes a weapon or a
     // vehicle by its shape. Q; the album's drawing in the air is T)
+    // (ROADMAP 11.9, the sample: ?lab, or the page that sets SC_LAB) the steadied hand and the
+    // quick signs
+    this.lab = !this.classic && (this.params.has('lab') || (typeof window !== 'undefined' && !!window.SC_LAB));
+    this.signs = this.lab ? new Signs(this) : null;
     this.freedraw = this.classic ? null : new FreeDraw(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
@@ -1040,6 +1045,7 @@ export class Game {
       if (this.ink) this.ink.update(dt);
       if (this.gadgets) this.gadgets.update(dt);
       if (this.freedraw) this.freedraw.update(dt);
+      if (this.signs) this.signs.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
