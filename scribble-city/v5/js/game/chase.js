@@ -36,21 +36,6 @@ function wayTest(x, z, w, car) {
   W.car = car;
 }
 
-// (ROADMAP 11.6) you, in a police car's sight - through a wall drawn with the pen a moment ago
-// too: they have not seen it, they keep on at you, into it (game/inkworld.js unseen)
-function inSight(game, c, v, d) {
-  const col = game.world.collision;
-  if (col.lineOfSight(c.pos.x, 1.2, c.pos.z, v.pos.x, 1.2, v.pos.z)) return true;
-  const IW = game.inkWorld;
-  if (!IW || !IW.blocks.length || d < 1) return false;
-  const dx = (v.pos.x - c.pos.x) / d;
-  const dz = (v.pos.z - c.pos.z) / d;
-  const h = col.raycast(c.pos.x, 1.2, c.pos.z, dx, 0, dz, d - 0.2);
-  if (!h || !IW.unseen(h.box)) return false;
-  const k = h.t + 0.8;
-  return k >= d - 0.5 || col.lineOfSight(c.pos.x + dx * k, 1.2, c.pos.z + dz * k, v.pos.x, 1.2, v.pos.z);
-}
-
 export class Chase {
   constructor(game) {
     this.game = game;
@@ -84,7 +69,7 @@ export class Chase {
     const dz = v.pos.z - c.pos.z;
     const d = Math.hypot(dx, dz);
     // far, or round a corner: the old way
-    if (d > 40 || !inSight(game, c, v, d)) return false;
+    if (d > 40 || !game.world.collision.lineOfSight(c.pos.x, 1.2, c.pos.z, v.pos.x, 1.2, v.pos.z)) return false;
     c.siren = true;
     c.path = null;
     const sp = Math.abs(v.speed);
@@ -156,9 +141,7 @@ export class Chase {
     c.speed = damp(c.speed, goal, goal > c.speed ? 1.6 : 4, dt);
     // a wall in front: it brakes (and goes round it on the path the next time)
     const look = 2.4 + c.speed * 0.2;
-    // (not one drawn with the pen a moment ago: unseen, it is driven into - game/inkworld.js)
-    const wall = game.world.collision.pointInside(c.pos.x + Math.sin(c.yaw) * look, 0.8, c.pos.z + Math.cos(c.yaw) * look, 0.3);
-    if (wall && !(game.inkWorld && game.inkWorld.unseen(wall))) c.speed = damp(c.speed, 2, 8, dt);
+    if (game.world.collision.pointInside(c.pos.x + Math.sin(c.yaw) * look, 0.8, c.pos.z + Math.cos(c.yaw) * look, 0.3)) c.speed = damp(c.speed, 2, 8, dt);
     return true;
   }
 

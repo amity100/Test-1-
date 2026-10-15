@@ -137,10 +137,10 @@ export class Pad {
       if (this.pressed(B.A)) game.phone.shoot();
       if (this.pressed(B.B)) game.phone.camBack();
     } else if (game.airdraw && game.airdraw.open) this.drawPad(dt);
-    else if (game.inkpen && game.inkpen.open && game.state === 'play') this.penPad(dt);
+    else if (game.freedraw && game.freedraw.open && game.state === 'play') this.freePad(dt);
     else if (this.menuRoot()) this.menuPad(dt);
     else if (game.state === 'play') this.playPad(dt);
-    if (!(game.airdraw && game.airdraw.open) && !(game.inkpen && game.inkpen.open) && this.cursorEl) this.cursorEl.classList.add('hidden');
+    if (!(game.airdraw && game.airdraw.open) && !(game.freedraw && game.freedraw.open) && this.cursorEl) this.cursorEl.classList.add('hidden');
   }
 
   // ------------------------------------------------------------------ playing
@@ -395,40 +395,57 @@ export class Pad {
     if (this.pressed(B.VIEW)) ad.toggleGhost();
   }
 
-  // ------------------------------------------------------------------ the pen on the world
-  // (ROADMAP 11.6, ui/inkpen.js) the pencil: the left stick; RT down draws; the right stick turns
-  // the camera; LB/RB the ink; X takes the last one back; B (or up) puts the pen away
-  penPad(dt) {
+  // ------------------------------------------------------------------ drawing freehand, on the run
+  // (ROADMAP 11.6, ui/freedraw.js) the left stick keeps running (pushed all the way: a sprint), the
+  // right stick moves the pencil over the page and RT puts it down; A makes it, X takes the last
+  // line back, Y: something else, LB/RB the inks, B (or up) puts the page away
+  freePad(dt) {
     const game = this.game;
-    const P = game.inkpen;
-    this.release();
-    this.blur();
-    if (P.cardOpen) {
-      if (this.pressed(B.A) || this.pressed(B.B)) P.tips(false);
-      return;
-    }
+    const F = game.freedraw;
+    const inp = game.input;
+    if (this.focus) this.blur();
     const [lx, ly, rx, ry] = this.ax;
+    inp.pad = { x: lx, y: -ly, sprint: Math.hypot(lx, ly) > 0.92 };
+    inp.flyUp = false;
+    inp.flyDown = false;
+    if (this.fire) {
+      this.fire = false;
+      inp.fire = false;
+    }
+    if (this.aim) {
+      this.aim = false;
+      inp.aim = false;
+    }
     const c = (a) => a * Math.abs(a);
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const sp = Math.min(W, H) * 1.1;
-    this.cursor.x = Math.min(W - 4, Math.max(4, this.cursor.x + c(lx) * sp * dt));
-    this.cursor.y = Math.min(H - 4, Math.max(4, this.cursor.y + c(ly) * sp * dt));
-    if (rx || ry) game.camRig.applyLook(c(rx) * 900 * dt, c(ry) * 650 * dt);
+    const r = F.cv.getBoundingClientRect();
+    const sp = Math.max(r.width, r.height) * 1.1;
+    this.cursor.x = Math.min(r.right - 2, Math.max(r.left + 2, this.cursor.x + c(rx) * sp * dt));
+    this.cursor.y = Math.min(r.bottom - 2, Math.max(r.top + 2, this.cursor.y + c(ry) * sp * dt));
     if (this.cursorEl) {
       this.cursorEl.classList.remove('hidden');
       this.cursorEl.classList.toggle('down', this.pen);
       this.cursorEl.style.transform = `translate(${this.cursor.x.toFixed(1)}px, ${this.cursor.y.toFixed(1)}px)`;
     }
     const down = this.rt > 0.35;
-    if (down && !this.pen) P.penDown(this.cursor.x, this.cursor.y);
-    else if (down) P.penMove(this.cursor.x, this.cursor.y);
-    else if (this.pen) P.penUp();
+    if (down || this.pen) F.padPen(this.cursor.x, this.cursor.y, down);
     this.pen = down;
-    if (this.pressed(B.LB)) P.cycle(-1);
-    if (this.pressed(B.RB)) P.cycle(1);
-    if (this.pressed(B.X)) P.undo();
-    if (this.pressed(B.B) || this.pressed(B.UP)) P.close();
+    if (this.pressed(B.A)) F.make();
+    if (this.pressed(B.X)) F.undo();
+    if (this.pressed(B.Y)) F.cycleKind();
+    if (this.pressed(B.LB)) F.cycleInk(-1);
+    if (this.pressed(B.RB)) F.cycleInk(1);
+    if (this.pressed(B.B) || this.pressed(B.UP)) F.close();
+    if (this.pressed(B.MENU)) {
+      F.close();
+      inp.pressed.add('Escape');
+    }
+  }
+
+  // the pencil starts in the middle of the free drawing's page
+  startFree(rect) {
+    this.cursor.x = rect.left + rect.width / 2;
+    this.cursor.y = rect.top + rect.height / 2;
+    this.pen = false;
   }
 
   // the pencil starts in the middle of the paper

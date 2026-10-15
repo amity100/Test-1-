@@ -17,8 +17,8 @@ export const TOOLS = [
 ];
 export const BOTTLE = 20; // $: a bottle of ink, the pen full again
 const TRICKLE = 0.25; // ink a second, by itself
-// (the pen on the world, ROADMAP 11.6: quicker, a wall's ink back in half a minute)
-const PEN_TRICKLE = 1.1;
+// (with the free drawing, ROADMAP 11.6: quicker - a pistol's ink back in ten seconds)
+const FREE_TRICKLE = 1.2;
 const ENEMY_INK = 12; // what an Eraser leaves behind
 // what a drawing of its own length costs, by how hard the thing is (1..5)
 const COST = [0, 16, 22, 30, 40, 50];
@@ -70,6 +70,15 @@ export class Ink {
     return true;
   }
 
+  // (ROADMAP 11.6, ui/freedraw.js) a drawing made freehand: what it is worth, all at once
+  spend(n) {
+    const k = Math.min(this.level, n);
+    this.level -= k;
+    this.stats.used += k;
+    this.render();
+    return k;
+  }
+
   get dry() {
     return this.level <= 0.01;
   }
@@ -116,7 +125,7 @@ export class Ink {
 
   update(dt) {
     if (this.level < this.cap) {
-      this.level = Math.min(this.cap, this.level + (this.game.inkWorld ? PEN_TRICKLE : TRICKLE) * dt);
+      this.level = Math.min(this.cap, this.level + (this.game.freedraw ? FREE_TRICKLE : TRICKLE) * dt);
       this.render();
     }
   }

@@ -84,16 +84,13 @@ export class Collision {
    * Boxes whose top is within stepUp of the feet become floor instead.
    * prevY: where the feet were a step ago (a fall that came down through the top of a box lands
    * on it, however fast; ROADMAP 5.1, not with ?classic).
-   * skip(box): true for a box this one goes through (a car, the steps a walker goes up a drawn
-   * ramp on: game/vehicles.js, ROADMAP 11.6).
    * Returns { floor, hitWall, nx, nz }.
    */
-  resolveCylinder(pos, radius, height, stepUp = 0.45, prevY = null, skip = null) {
+  resolveCylinder(pos, radius, height, stepUp = 0.45, prevY = null) {
     const out = { floor: -Infinity, hitWall: false, nx: 0, nz: 0, box: null };
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
       this.forEachIn(pos.x - radius, pos.z - radius, pos.x + radius, pos.z + radius, (b) => {
-        if (skip !== null && skip(b)) return false;
         if (pos.y + height <= b.y0 || pos.y >= b.y1) {
           // above or below; may be a floor candidate
           if (pos.y >= b.y1 - 0.02) {

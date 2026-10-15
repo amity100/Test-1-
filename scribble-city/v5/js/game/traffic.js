@@ -440,10 +440,6 @@ export class Traffic {
     // (a ramp drawn in the road, ROADMAP 9.2: in the way like a car stopped there)
     const G = game.gadgets;
     if (G) for (let i = 0; i < G.ramps.length; i++) aheadTest(G.ramps[i].cx, G.ramps[i].cz, G.ramps[i].r, 'car', G.ramps[i].back);
-    // (what was drawn in the road with the pen, ROADMAP 11.6: once seen - a wall that has just come
-    // up, they drive into; game/inkworld.js)
-    const IW = game.inkWorld;
-    if (IW) for (let i = 0; i < IW.blocks.length; i++) if (game.time - IW.blocks[i].t > 1.6) aheadTest(IW.blocks[i].x, IW.blocks[i].z, IW.blocks[i].r, 'other', 0);
     const hs = game.civilians.list;
     for (let i = 0; i < hs.length; i++) {
       const h = hs[i];
@@ -1028,9 +1024,7 @@ export class Traffic {
       }
       // the world's walls stop a car like anybody else
       const col = game.world.collision;
-      // (not one drawn with the pen so a moment ago they have not seen it: into it they go)
-      const w = col.pointInside(c.pos.x + Math.sin(c.yaw) * 2.4, 0.8, c.pos.z + Math.cos(c.yaw) * 2.4, 0.3);
-      if (w && !(game.inkWorld && game.inkWorld.unseen(w))) c.speed = Math.min(c.speed, 1.5);
+      if (col.pointInside(c.pos.x + Math.sin(c.yaw) * 2.4, 0.8, c.pos.z + Math.cos(c.yaw) * 2.4, 0.3)) c.speed = Math.min(c.speed, 1.5);
     } else {
       // parked with the lights on while the chase lasts, or leaving
       c.siren = c.mode === 'parked' && P.hostile;

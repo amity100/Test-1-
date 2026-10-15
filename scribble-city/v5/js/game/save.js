@@ -1,6 +1,8 @@
 import { WEAPON_DEFS } from './weapons.js';
 import { dress } from './wardrobe.js';
 import { buildWeaponModel } from './items.js';
+import { readFree, buildWeapon } from './freeform.js';
+import { spawnDrawn } from './drawncar.js';
 import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { openWall } from '../world/rooms.js';
 import { districtName } from '../world/layout.js';
@@ -96,7 +98,8 @@ export class SaveGame {
       playTime: Math.round(this.playTime),
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade } : null, armor: p.armor || 0 },
       hero: { hair: L.hair.style !== 'none' ? { style: L.hair.style, color: L.hair.color } : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: p.fig.bulk, maxHp: p.maxHp },
-      weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score })),
+      // (one drawn freehand: its drawing, to make it again - ROADMAP 11.6)
+      weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score, free: s.free || null })),
       weapon: g.weapons.index,
       weaponId: g.weapons.current.def.id,
       // (what the hero got better at: ROADMAP 5.6)
@@ -112,13 +115,15 @@ export class SaveGame {
       knock: g.knock ? g.knock.save() : null,
       // (the places that are yours: ROADMAP 8.2)
       props: g.props ? g.props.save() : null,
+      // (what is on the free drawing's page: ROADMAP 11.6)
+      free: g.freedraw ? g.freedraw.save() : null,
       vehicles: g.vehicles.list.filter((o) => !o.dead).map((o) => ({
         kind: o.model || o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
         x: o.pos.x, y: o.pos.y, z: o.pos.z, yaw: o.yaw, hp: o.hp, alt: o.alt || 0, mine: o === v,
         // (the garage's work, the tank, the dust, your parking: ROADMAP 4.6)
         paint: o.kind === 'car' && o.color ? o.color.slice() : null, design: o.design || null, up: o.up || null,
         fuel: o.fuel === undefined ? null : o.fuel, dirt: o.dirt === undefined ? null : o.dirt, kept: !!o.kept,
-        // (one drawn in the workshop: its drawing, to build it again - ROADMAP 11.6)
+        // (one drawn freehand: its drawing, to build it again - ROADMAP 11.6)
         drawn: o.drawn || null,
       })),
       world: { gone, spots: objs.spots.map((s) => ({ x: s.x, y: s.y, z: s.z, r: s.r })) },
@@ -239,15 +244,28 @@ export class SaveGame {
     if (g.gadgets && s.gadgets) g.gadgets.load(s.gadgets);
     if (g.knock && s.knock) g.knock.load(s.knock);
     if (g.props && s.props) g.props.load(s.props);
+    if (g.freedraw && s.free) g.freedraw.load(s.free);
     // what you held
     const W = g.weapons;
     while (W.slots.length > W.keep) W.removeModel(W.slots.pop());
     for (const it of s.weapons || []) {
-      const def = WEAPON_DEFS[it.id];
-      if (!def) continue;
-      const model = buildWeaponModel(it.id, it.grade, { seed: it.score || 0 });
-      W.add(def, it.grade, model, it.score === null ? undefined : it.score);
-      const slot = W.current;
+      let slot;
+      if (it.free && Array.isArray(it.free.s)) {
+        // (drawn freehand: read and made again from its drawing, game/freeform.js)
+        if (g.classic) continue;
+        const R = readFree(it.free.s, it.free.force || null);
+        if (!R || R.cat !== 'weapon') continue;
+        W.add(R.def, 'good', buildWeapon(R), undefined);
+        slot = W.current;
+        slot.free = it.free;
+        slot.strokes = it.free.s.map((o) => o.p);
+      } else {
+        const def = WEAPON_DEFS[it.id];
+        if (!def) continue;
+        const model = buildWeaponModel(it.id, it.grade, { seed: it.score || 0 });
+        W.add(def, it.grade, model, it.score === null ? undefined : it.score);
+        slot = W.current;
+      }
       slot.ammo = it.ammo < 0 ? Infinity : it.ammo;
       if (it.uses !== null && it.uses !== undefined) slot.uses = it.uses;
     }
@@ -262,7 +280,7 @@ export class SaveGame {
     for (const it of s.vehicles || []) {
       let v;
       if (it.drawn) {
-        v = g.workshop ? g.workshop.respawn(it.drawn, it.x, it.z, it.yaw) : null;
+        v = g.classic || !Array.isArray(it.drawn.strokes) ? null : spawnDrawn(g, it.drawn, it.x, it.z, it.yaw);
         if (!v) continue;
       } else if (it.stock) v = V.spawnStock(it.stock, { x: it.x, z: it.z }, it.yaw);
       else {

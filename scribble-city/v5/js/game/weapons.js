@@ -208,7 +208,8 @@ export class Weapons {
     // (ROADMAP 4.7; not with ?classic) in a car or on a bike: a gun out of the window
     const v = player.inVehicle;
     const seated = !game.classic && player.mode === 'vehicle' && v && (v.kind === 'car' || v.kind === 'bike') && !v.dead && !game.dialog.open && !(game.garage && game.garage.state) && !(game.paintshop && game.paintshop.open);
-    const driveBy = seated && def.kind === 'gun' && !slot.present;
+    // (not from one with a cannon drawn on it: the click is the cannon's, ROADMAP 11.6)
+    const driveBy = seated && def.kind === 'gun' && !slot.present && !v.turret;
     const canAct = onFoot || driveBy;
     this.beam = null;
     // weapon switching (1..9, 0 for the tenth; in a car the wheel is the camera's)
@@ -295,10 +296,13 @@ export class Weapons {
       damage: def.damage * g.dmg,
       radius: def.radius ? def.radius * (slot.grade === 'perfect' ? 1.2 : slot.grade === 'fail' ? 0.5 : 1) : 0,
       life: sad ? 1.5 : 4,
-      color: def.projectile === 'ink' ? PEN_BLUE : def.projectile === 'crayon' || def.projectile === 'paintmg' ? CRAYONS[Math.floor(Math.random() * CRAYONS.length)] : def.projectile === 'tippex' ? WHITE_OUT : PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)],
+      // (a gun drawn freehand in colour fires its own colours: game/freeform.js)
+      color: def.colors ? def.colors[Math.floor(Math.random() * def.colors.length)] : def.projectile === 'ink' ? PEN_BLUE : def.projectile === 'crayon' || def.projectile === 'paintmg' ? CRAYONS[Math.floor(Math.random() * CRAYONS.length)] : def.projectile === 'tippex' ? WHITE_OUT : PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)],
       wobble: slot.grade === 'wonky' ? 1 : slot.grade === 'fail' ? 2 : 0,
       seed: Math.random() * 100,
       t: 0,
+      // (a thing drawn freehand to throw flies as its own drawing)
+      shape: slot.model && slot.model.shape ? slot.model.shape : null,
       ...extra,
     };
     this.projectiles.push(pr);
@@ -487,7 +491,9 @@ export class Weapons {
           game.enemies.damage(e, null, def.damage * 0.6, e.fig.closestSurfacePoint(c, new THREE.Vector3()), f, kind);
         }
       }
-      e.knock(f.x * (def.slash ? 3 : 5), f.z * (def.slash ? 3 : 5));
+      // (a heavy head drawn on a hammer sends them further: game/freeform.js)
+      const kn = def.knock || (def.slash ? 3 : 5);
+      e.knock(f.x * kn, f.z * kn);
       any = true;
     }
     for (const c of game.civilians.inArc(p.pos, f, reach, half)) {
@@ -913,7 +919,59 @@ export class Weapons {
     }
   }
 
+  // a thing drawn freehand, thrown (game/freeform.js): its own lines, the boomerang spinning flat,
+  // the bomb tumbling over and over
+  drawShape(fr, pr) {
+    const sh = pr.shape;
+    const flat = pr.kind === 'scissors';
+    const a = flat ? pr.spin || 0 : pr.t * 9;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    let ux;
+    let uy;
+    let uz;
+    let wx;
+    let wy;
+    let wz;
+    if (flat) {
+      ux = ca;
+      uy = 0;
+      uz = sa;
+      wx = -sa;
+      wy = 0;
+      wz = ca;
+    } else {
+      let hx = pr.vx;
+      let hz = pr.vz;
+      const hl = Math.hypot(hx, hz) || 1;
+      hx /= hl;
+      hz /= hl;
+      ux = hx * ca;
+      uy = sa;
+      uz = hz * ca;
+      wx = -hx * sa;
+      wy = ca;
+      wz = -hz * sa;
+    }
+    const S = sh.segs;
+    const w = flat ? 3.4 : 4.2;
+    if (!flat) fr.lineXYZ(pr.x - ux * sh.size * 0.12, pr.y - uy * sh.size * 0.12, pr.z - uz * sh.size * 0.12, pr.x + ux * sh.size * 0.12, pr.y + uy * sh.size * 0.12, pr.z + uz * sh.size * 0.12, sh.cols[0] || BLACK_INK, 18, pr.seed, 1, 0.01, 0);
+    for (let i = 0, k = 0; i < S.length; i += 4, k++) {
+      const z0 = S[i];
+      const y0 = S[i + 1];
+      const z1 = S[i + 2];
+      const y1 = S[i + 3];
+      fr.lineXYZ(pr.x + ux * z0 + wx * y0, pr.y + uy * z0 + wy * y0, pr.z + uz * z0 + wz * y0, pr.x + ux * z1 + wx * y1, pr.y + uy * z1 + wy * y1, pr.z + uz * z1 + wz * y1, sh.cols[k] || BLACK_INK, w, pr.seed + k, 1, 0.004, 0);
+    }
+    // (the bomb's fuse spits sparks as ever)
+    if (!flat && pr.fuse && Math.sin(pr.t * 50) > -0.3) fr.lineXYZ(pr.x + wx * sh.size * 0.55, pr.y + wy * sh.size * 0.55, pr.z + wz * sh.size * 0.55, pr.x + wx * sh.size * 0.7 + (Math.random() - 0.5) * 0.12, pr.y + wy * sh.size * 0.7 + 0.1, pr.z + wz * sh.size * 0.7 + (Math.random() - 0.5) * 0.12, [2.4, 1.6, 0.4], 3, pr.seed + 99, 1, 0.01, 0);
+  }
+
   drawProjectile(fr, pr) {
+    if (pr.shape) {
+      this.drawShape(fr, pr);
+      return;
+    }
     const l = Math.hypot(pr.vx, pr.vy, pr.vz) || 1;
     const ux = pr.vx / l;
     const uy = pr.vy / l;

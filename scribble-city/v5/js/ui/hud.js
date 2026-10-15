@@ -1,5 +1,6 @@
 import { BOUNDS, AVES, STREETS, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, STREET_X0, STREET_X1, PROM_X1, PARK_X1, SAND_X0 } from '../world/layout.js';
 import { GRADE } from '../game/weapons.js';
+import { INKS } from '../game/freeform.js';
 import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
 import { pin } from './mapglyphs.js';
 import { searchArea } from '../game/heli.js';
@@ -275,8 +276,9 @@ export class HUD {
       : d.projectile === 'scissors' ? (s.out ? 'באוויר… חוזרים אליך' : 'זורקים — וחוזרים')
       : d.projectile === 'inkbomb' ? `${s.ammo} בקבוקי דיו`
       : s.ammo === Infinity ? 'תמיד איתך' : (this.game.arsenal && this.game.arsenal.ammoText(s)) || `${s.ammo} יריות`;
-    this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear || d.bare ? '' : s.grade;
-    this.weaponGrade.textContent = s.def.id === 'pencil' || d.bare ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
+    this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear || d.bare || d.free ? '' : s.grade;
+    // (one drawn freehand, ROADMAP 11.6: no blueprint to measure it by)
+    this.weaponGrade.textContent = s.def.id === 'pencil' || d.bare ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : d.free ? 'ציור חופשי' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
     const c = this.weaponIcon;
     const g = c.getContext('2d');
     g.clearRect(0, 0, c.width, c.height);
@@ -313,6 +315,9 @@ export class HUD {
       drawFist(g, w, h);
     } else if (s.def.gear) {
       drawGearIcon(g, s.def.id, w, h, s.uses !== undefined ? s.uses / s.def.uses : 1);
+    } else if (d.free) {
+      // (drawn freehand: its drawing, in its inks - once it is there, ui/freedraw.js)
+      if (s.free) this.drawStrokesInto(g, s.free.s.map((o) => o.p), w, h, s.free.s.map((o) => INKS[o.c] || INKS[0]));
     } else if (s.strokes) {
       this.drawStrokesInto(g, s.strokes, w, h);
     } else {
@@ -320,7 +325,8 @@ export class HUD {
     }
   }
 
-  drawStrokesInto(g, strokes, w, h) {
+  // (inks: each line's own, game/freeform.js INKS)
+  drawStrokesInto(g, strokes, w, h, inks = null) {
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
@@ -337,11 +343,18 @@ export class HUD {
     g.strokeStyle = '#1c2650';
     g.lineWidth = 2;
     g.lineCap = 'round';
-    for (const s of strokes) {
+    strokes.forEach((s, k) => {
       g.beginPath();
       s.forEach(([x, y], i) => (i ? g.lineTo(x * sc + ox, y * sc + oy) : g.moveTo(x * sc + ox, y * sc + oy)));
+      if (inks) {
+        const ink = inks[k];
+        g.strokeStyle = ink.pencil ? '#1c2650' : ink.css === '#f4efe4' ? '#b9b2a2' : ink.css;
+        g.shadowColor = ink.css;
+        g.shadowBlur = ink.neon ? 6 : 0;
+      }
       g.stroke();
-    }
+    });
+    g.shadowBlur = 0;
   }
 
   drawRoute(g, route, p, s) {

@@ -80,7 +80,7 @@ function flattenMatrix(n, c, k, out) {
 
 // How a thing stands to be shown: its own origin O, turned by q and scaled by s; the axes of
 // the screen there (ax right, ay up, an into the screen, all level); its outline along them.
-function makeFrame(camera, O, q, s, box) {
+export function makeFrame(camera, O, q, s, box) {
   const an = new THREE.Vector3();
   camera.getWorldDirection(an);
   an.y = 0;
@@ -123,7 +123,7 @@ function sideOn(camera, id) {
 // somewhere free in front of the camera for a drawn vehicle, side on, all of it in view (box:
 // the vehicle in its own frame, the tank's barrel and the helicopter's blades too). Returns
 // where its own origin goes.
-function findSpot(game, v, so, box) {
+export function findSpot(game, v, so, box) {
   const cam = game.camera;
   const c = cam.position;
   const p = game.player.pos;
@@ -146,9 +146,10 @@ function findSpot(game, v, so, box) {
       for (const b of [-halfWid, 0, halfWid]) {
         const px = x + fx * a + so.an.x * b;
         const pz = z + fz * a + so.an.z * b;
-        // on the city's ground (not in the bay), clear of walls and things (a boat: on the bay)
+        // on the city's ground (not in the bay - the beach slopes a little below 0), clear of walls
+        // and things (a boat: on the bay)
         if (px < BOUNDS.minX || pz < BOUNDS.minZ || pz > BOUNDS.maxZ) return false;
-        if (v.kind === 'boat' ? groundHeight(px, pz) > -0.5 : groundHeight(px, pz) < 0) return false;
+        if (v.kind === 'boat' ? groundHeight(px, pz) > -0.5 : groundHeight(px, pz) < -0.45) return false;
         if (col.pointInside(px, 1.0, pz, 0.3)) return false;
       }
     }
@@ -246,7 +247,8 @@ export class Materialize {
    * o: { frame, root (a Kit-built thing: its surfaces get their own copies for the moment),
    *      car (a drawn car of the car batches),
    *      held (a weapon slot: flies into the hand), toHero: 'chest' | 'back', onArrive, vehicle,
-   *      onReal (all its colours in) }
+   *      onReal (all its colours in), follow (a Vector3: how far it has moved since - one drawn on
+   *      the run goes along with you, ui/freedraw.js) }
    */
   begin(o) {
     const f = o.frame;
@@ -314,7 +316,8 @@ export class Materialize {
     const k = ti <= 0 ? 0.03 : 1 - 0.97 * Math.exp(-ti * 10) * Math.cos(ti * 16);
     const front = r.d0 + (r.d1 - r.d0) * smooth((t - SWEEP0) / (SWEEP1 - SWEEP0));
     r.U.uMatK.value = Math.max(0.03, k);
-    r.U.uMatSweep.value.w = front;
+    r.U.uMatSweep.value.w = front + (r.follow ? r.follow.dot(r.dir) : 0);
+    if (r.follow) r.U.uMatFlat.value.w = r.flatC + r.follow.dot(r.frame.an);
     const f = r.frame;
     if (r.carRV) {
       flattenMatrix(f.an, r.flatC, Math.max(0.03, k), r.carRV.pre);
