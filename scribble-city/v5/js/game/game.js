@@ -1661,8 +1661,9 @@ export class Game {
     this.goalFlags.drove = true;
     this.updateGoals();
     this.audio.play('click');
-    $('btn-up').classList.toggle('hidden', !v.flies);
-    $('btn-down').classList.toggle('hidden', !v.flies);
+    // (ROADMAP 11.8: one drawn to take off, to jump on its spring, to dive)
+    $('btn-up').classList.toggle('hidden', !(v.flies || v.canLift || v.spring || v.dive));
+    $('btn-down').classList.toggle('hidden', !(v.flies || v.canLift || v.dive));
     $('btn-radio').classList.toggle('hidden', v.kind !== 'car');
     $('btn-view').classList.toggle('hidden', this.classic || (v.kind !== 'car' && v.kind !== 'bike'));
     // (the first time: the view from the car, the handbrake)
@@ -1901,10 +1902,21 @@ export class Game {
       // (ROADMAP 4.8: the plane's controls; out of a boat only by the shore; the bicycle's bell)
       const pv = p.inVehicle;
       if (!touch && pv.kind === 'plane') prompt = pv.flying ? 'W/S — מצערת · A/D — הטיה · רווח/C — האף למעלה/למטה · E — לקפוץ' : 'W — מצערת (מסלול ישר!) · במהירות: רווח להמראה · E — לצאת';
-      else if (!touch && pv.kind === 'boat') prompt = 'E — לצאת (ליד החוף או המזח)';
+      else if (!touch && pv.kind === 'boat') prompt = pv.dive ? 'C — לצלול · רווח — לעלות · E — לצאת (ליד החוף)' : 'E — לצאת (ליד החוף או המזח)';
+      else if (!touch && pv.kind === 'balloon') prompt = 'רווח — המבער (למעלה) · C — למטה · WASD — להטות · E — לצאת';
       else if (!touch && pv.model === 'bicycle') prompt = 'H — פעמון · E — לצאת';
+      // (ROADMAP 11.8: one drawn to go more than one way, a gun on it, a spring under it)
+      if (!touch && pv.drawn) {
+        const more = [];
+        if (pv.canLift && (pv.kind === 'bike' || pv.kind === 'boat')) more.push(pv.modes.plane && !pv.modes.copter && !pv.modes.balloon ? 'במהירות: רווח — המראה' : 'רווח — המראה');
+        else if (pv.canLift && pv.kind === 'copter') more.push('C למטה עד הסוף — נחיתה');
+        if (pv.spring && !pv.canLift && pv.kind === 'bike') more.push('רווח — קפיצה');
+        if (pv.turret) more.push(pv.gunType === 'mg' ? 'קליק — מקלע' : 'קליק — תותח');
+        if (more.length && pv.kind === 'copter') more.unshift('רווח/C — למעלה/למטה');
+        if (more.length && pv.kind !== 'plane' && pv.kind !== 'balloon') prompt = `${more.join(' · ')} · E — לצאת`;
+      }
       // (a gun in hand: out of the window, ROADMAP 4.7)
-      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && this.weapons.current.def.kind === 'gun') prompt = 'קליק — ירי מהחלון · E — לצאת';
+      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && !pv.turret && this.weapons.current.def.kind === 'gun') prompt = 'קליק — ירי מהחלון · E — לצאת';
       // (at the service station: what stopping here does, game/garage.js)
       const gp = this.garage.prompt();
       if (gp) prompt = gp;

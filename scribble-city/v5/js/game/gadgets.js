@@ -18,10 +18,14 @@ import { RAMPS, rampAt } from './vehicles.js';
 //   - a key that fits every lock: a parked car opens with no alarm and nobody thinks twice; a shop
 //     shut for the night rolls its shutter up for it - and the till inside is there for the taking
 //     (a crime: the alarm may go off, and anyone who sees calls the police).
+//   - (ROADMAP 11.8, drawn freehand: ui/freedraw.js) a spring: on the ground in front of you -
+//     step on it (or drive over it) and it throws you up, as high as its coils say (up onto a
+//     roof); come down on it again and it throws you again, no fall to hurt you. A ramp drawn
+//     freehand is as steep as it was drawn.
 // What is put up stays where it was put, three of each at most (a fourth takes the place of the
 // oldest), and in the save.
 
-export const PLACED = new Set(['ladder', 'ramp', 'bridge']);
+export const PLACED = new Set(['ladder', 'ramp', 'bridge', 'spring']);
 const MAX_EACH = 3;
 const RUNG = 0.32;
 // how fast a drawn umbrella lets you come down (m/s; a fall hurts from 17)
@@ -43,6 +47,7 @@ const WHY = {
   roof: 'אין על הגג הזה איפה לרדת מהסולם',
   near: 'כבר יש כאן סולם',
   ramp: 'רמפה מציירים על הכביש, מול שטח ישר ופנוי (בלי מכוניות)',
+  spring: 'קפיץ מציירים על קרקע פנויה ממש לפניכם (לא במים, לא בתוך קיר)',
   edge: 'גשר מציירים בקצה: של גג או של המזח',
   far: 'אין צד שני קרוב מספיק (עד 28 מטר), בגובה שלכם',
   short: 'הצד השני קרוב מאוד: אפשר פשוט לקפוץ',
@@ -150,13 +155,32 @@ function bridgeModel(K, M, s, grade) {
   }
 }
 
+// (ROADMAP 11.8) the spring, in its own frame: a plate on the ground, the coil, a plate on top
+function springModel(K, M, s, grade, top = null) {
+  const r = 0.42;
+  const h = 0.62;
+  const n = Math.max(3, Math.min(9, s.coils || 4));
+  K.cyl(M.matte, r * 1.25, r * 1.25, 0, 0.06, RAMP_LEG, { axis: 'y', segs: 18 });
+  const P = [];
+  const steps = n * 16;
+  // (one drawn badly leans)
+  const lean = grade === 'fail' ? 0.12 : grade === 'wonky' ? 0.06 : 0;
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * n * Math.PI * 2;
+    const t = i / steps;
+    P.push(new THREE.Vector3(Math.cos(a) * r + lean * t, 0.06 + t * (h - 0.12), Math.sin(a) * r));
+  }
+  K.add(M.metal, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P), steps, 0.035, 6, false), linC(0.72, 0.74, 0.8));
+  K.cyl(M.paint, r * 1.2, r * 1.2, h - 0.06, h, top || RAMP_STRIPE, { axis: 'y', x: lean, segs: 18 });
+}
+
 // the umbrella and the key, as they fly to you (as drawn, side on: x across, y up, z the way the
 // drawing points)
-function umbrellaModel(K, M) {
+function umbrellaModel(K, M, colour = null) {
   const g = new THREE.SphereGeometry(0.62, 16, 6, 0, Math.PI * 2, 0, Math.PI * 0.45);
   g.scale(1, 0.55, 1);
   g.translate(0, 0.86, 0);
-  K.add(M.paint, g, linC(...CANOPY));
+  K.add(M.paint, g, linC(...(colour || CANOPY)));
   K.cyl(M.metal, 0.014, 0.014, 0, 1.24, linC(0.2, 0.2, 0.24), { axis: 'y' });
   K.torus(M.round, 0.055, 0.014, 0.055, 0, 0, WOOD_DARK, 0, 0);
 }
@@ -213,18 +237,60 @@ export class Gadgets {
 
   // ---------------------------------------------------------------- where it would go
   // a thing to put up: where it goes from here ({ ok, ... }), or why it cannot ({ why })
-  spot(id) {
+  // (par: a freehand drawing's own numbers - a ramp's slope, a spring's power: ROADMAP 11.8)
+  spot(id, par = null) {
     if (id === 'ladder') return this.ladderSpot();
-    if (id === 'ramp') return this.rampSpot();
+    if (id === 'ramp') return this.rampSpot(par);
     if (id === 'bridge') return this.bridgeSpot();
+    if (id === 'spring') return this.springSpot(par);
     return { ok: true };
   }
 
   // before the drawing starts: why it would come to nothing here (null: it would not)
-  cannot(id) {
+  cannot(id, par = null) {
     if (!PLACED.has(id)) return null;
-    const s = this.spot(id);
+    const s = this.spot(id, par);
     return s.ok ? null : s.why;
+  }
+
+  // a spring: on the floor right in front of you (the street, the sand, a roof), not in a wall
+  springSpot(par) {
+    const g = this.game;
+    const P = g.player;
+    const col = g.world.collision;
+    const d = this.look();
+    for (const a of [1.5, 2.1, 2.7, 1.1]) {
+      const x = P.pos.x + d.x * a;
+      const z = P.pos.z + d.z * a;
+      if (groundHeight(x, z) < -0.5) continue;
+      const y = this.floorAt(x, z, P.pos.y + 0.6);
+      if (Math.abs(y - P.pos.y) > 0.7) continue;
+      if (col.pointInside(x, y + 0.4, z, 0.35) || col.pointInside(x, y + 1.2, z, 0.35)) continue;
+      if (this.placed.some((it) => it.pad && Math.hypot(it.pad.x - x, it.pad.z - z) < 1.2)) continue;
+      const r2 = (v) => Math.round(v * 100) / 100;
+      return { ok: true, id: 'spring', x: r2(x), y: r2(y), z: r2(z), yaw: Math.round(Math.atan2(d.x, d.z) * 1e4) / 1e4, power: par && par.power ? par.power : 16, coils: par && par.coils ? par.coils : 4 };
+    }
+    return { why: WHY.spring };
+  }
+
+  // (a spring under your feet - game/player.js, as you come down or step on it: up you go)
+  bounce(P, ground) {
+    for (const it of this.placed) {
+      const pad = it.pad;
+      if (!pad || Math.abs(ground - pad.y) > 0.35) continue;
+      if (Math.hypot(P.pos.x - pad.x, P.pos.z - pad.z) > 0.62) continue;
+      if (this.game.time - (pad.at || -9) < 0.25) continue;
+      pad.at = this.game.time;
+      P.pos.y = Math.max(P.pos.y, ground + 0.05);
+      P.vel.y = pad.power;
+      P.onGround = false;
+      it.squash = 1;
+      this.stats.springs = (this.stats.springs || 0) + 1;
+      this.game.audio.play('jump', 0.9);
+      this.game.audio.play('whoosh', 0.35);
+      return true;
+    }
+    return false;
   }
 
   ladderSpot() {
@@ -313,7 +379,7 @@ export class Gadgets {
     return { ok: true, id: 'ladder', x: r2(x), z: r2(z), nx, nz, y: r2(fy), top: r2(top), over: r2(over), W: r2(W), lw };
   }
 
-  rampSpot() {
+  rampSpot(par = null) {
     const g = this.game;
     const P = g.player;
     const col = g.world.collision;
@@ -322,9 +388,10 @@ export class Gadgets {
     const fz = d.z;
     const rx = fz;
     const rz = -fx;
-    const L = 5.5;
+    // (one drawn freehand: as long and as high as it was drawn steep - ROADMAP 11.8)
+    const L = par && par.len ? par.len : 5.5;
     const W = 3.2;
-    const H = 1.35;
+    const H = par && par.h ? par.h : 1.35;
     const cars = [...g.traffic.list, ...(g.traffic.parked || []), ...g.vehicles.list.filter((v) => !v.dead)];
     for (const a0 of [1.6, 3, 4.5, 6]) {
       const x0 = P.pos.x + fx * a0;
@@ -417,7 +484,7 @@ export class Gadgets {
   // ---------------------------------------------------------------- the thing itself
   // { group (built in its own frame), O (where its origin goes), q (its turn) }; s null: one to
   // show in the air (a drawing that came to nothing here)
-  model(id, grade, s) {
+  model(id, grade, s, colour = null) {
     const M = itemMats();
     const K = new Kit();
     const O = new THREE.Vector3();
@@ -444,7 +511,13 @@ export class Gadgets {
         O.set(s.x + s.dx * s.sA, s.yA, s.z + s.dz * s.sA);
         q.setFromAxisAngle(UP, Math.atan2(s.dx, s.dz));
       }
-    } else if (id === 'umbrella') umbrellaModel(K, M);
+    } else if (id === 'spring') {
+      springModel(K, M, s || { coils: 4 }, grade);
+      if (s) {
+        O.set(s.x, s.y, s.z);
+        q.setFromAxisAngle(UP, s.yaw || 0);
+      }
+    } else if (id === 'umbrella') umbrellaModel(K, M, colour);
     else keyModel(K, M);
     const group = K.build({ seed: 0.31 });
     group.matrixAutoUpdate = false;
@@ -480,6 +553,9 @@ export class Gadgets {
       const fz = Math.cos(s.yaw);
       it.near = { cx: s.x + fx * (s.len / 2), cz: s.z + fz * (s.len / 2), r: s.w / 2 - 0.98 + 0.8, back: s.len / 2 - 2.3 + 0.3 };
       this.ramps.push(it.near);
+    } else if (id === 'spring') {
+      it.pad = { x: s.x, y: s.y, z: s.z, power: s.power || 16 };
+      it.base = group.matrix.clone();
     } else if (id === 'bridge') {
       // the deck to walk on and the rails either side, in short lengths (up its slope)
       const col = g.world.collision;
@@ -555,10 +631,10 @@ export class Gadgets {
   }
 
   // the umbrella or the key, in your hands now (game/game.js, once it has flown to you)
-  take(id, grade) {
+  take(id, grade, colour = null) {
     const g = this.game;
     if (id === 'umbrella') {
-      this.umbrella = { grade };
+      this.umbrella = { grade, colour: colour ? colour.slice() : null };
       g.hud.toast('יש לכם מטריה! בגשם היא נפתחת מעליכם (והציורים באוויר לא נמרחים), ובנפילה מגובה היא מאטה אתכם', 'good', 4.2);
     } else if (id === 'key') {
       this.key = { grade, uses: KEY_USES[grade] || KEY_USES.good };
@@ -704,11 +780,31 @@ export class Gadgets {
       const want = (P.mode === 'foot' || P.mode === 'draw') && !P.inVehicle && !busy && (this.falling || (rain > 0.12 && !P.indoor));
       if (want && (!fig.carryL || fig.carryL === 'umbrella')) {
         fig.carryL = 'umbrella';
-        fig.umbrellaColor = FIG_CANOPY;
+        fig.umbrellaColor = this.umbrella.colour || FIG_CANOPY;
       } else if (!want && fig.carryL === 'umbrella') fig.carryL = null;
       fig.umbrellaUp = damp(fig.umbrellaUp || 0, this.falling ? 1 : 0, 8, dt);
     }
     if (P.onGround || P.mode !== 'foot') this.falling = false;
+    // (the springs: squashed as they throw, back up; a car driven onto one goes flying)
+    for (const it of this.placed) {
+      if (!it.pad) continue;
+      if (it.squash > 0) {
+        it.squash = Math.max(0, it.squash - dt * 3);
+        const k = 1 - 0.45 * Math.sin(it.squash * Math.PI);
+        it.group.matrix.copy(it.base).multiply(_m.makeScale(1, k, 1));
+        it.group.matrixWorldNeedsUpdate = true;
+      }
+      for (const v of g.vehicles.list) {
+        if (v.dead || v.air || (v.kind !== 'car' && v.kind !== 'bike') || Math.abs(v.pos.y - it.pad.y) > 0.8) continue;
+        if (Math.hypot(v.pos.x - it.pad.x, v.pos.z - it.pad.z) > 0.55 + (v.halfWid || 1) * 0.6) continue;
+        if (g.time - (it.pad.at || -9) < 0.5) continue;
+        it.pad.at = g.time;
+        it.squash = 1;
+        v.air = true;
+        v.vy = it.pad.power * 0.75;
+        g.audio.play('jump', 0.9);
+      }
+    }
     // the shops opened with the key: shut again once you are well away, or open in the morning
     if (this.forced.length) {
       const R = g.rhythm;
@@ -730,6 +826,7 @@ export class Gadgets {
     return {
       placed: this.placed.map((it) => ({ id: it.id, grade: it.grade, s: it.s })),
       umbrella: this.umbrella ? this.umbrella.grade : null,
+      umbrellaColour: this.umbrella && this.umbrella.colour ? this.umbrella.colour : null,
       key: this.key ? { grade: this.key.grade, uses: this.key.uses } : null,
     };
   }
@@ -744,7 +841,7 @@ export class Gadgets {
         // (a spot that no longer fits: left out)
       }
     }
-    if (s.umbrella) this.umbrella = { grade: s.umbrella };
+    if (s.umbrella) this.umbrella = { grade: s.umbrella, colour: Array.isArray(s.umbrellaColour) ? s.umbrellaColour : null };
     if (s.key && s.key.uses > 0) this.key = { grade: s.key.grade || 'good', uses: s.key.uses };
   }
 }

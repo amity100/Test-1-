@@ -270,7 +270,7 @@ export class HUD {
     const d = s.def;
     // (the bare fists, ROADMAP 5.4: how the combo goes)
     this.weaponAmmo.textContent = d.bare ? (this.game.touch ? 'שלוש מכות ברצף — בעיטה' : 'שלוש ברצף — בעיטה · קליק ימני — הגנה')
-      : d.block ? `המגן יחזיק עוד ${s.uses} מכות`
+      : d.block && s.uses !== undefined ? `המגן יחזיק עוד ${s.uses} מכות`
       : s.uses !== undefined ? `נשארו ${s.uses} מחיקות`
       : d.kind === 'beam' ? `${Math.ceil(s.ammo)} שניות של אור`
       : d.projectile === 'scissors' ? (s.out ? 'באוויר… חוזרים אליך' : 'זורקים — וחוזרים')

@@ -57,7 +57,7 @@ def normalize(strokes):
 # how far each kind is turned in training: a blade, a hammer, a bat are drawn any way up (the
 # dataset's mostly stand upright); a boomerang, a bomb any way round; guns and planes now and then
 # aimed up or down; the rest as they come, a little crooked
-SPIN = {'sword': 100, 'knife': 100, 'axe': 100, 'hammer': 100, 'baseball bat': 100, 'boomerang': 180, 'bomb': 180}
+SPIN = {'sword': 100, 'knife': 100, 'axe': 100, 'hammer': 100, 'baseball bat': 100, 'boomerang': 180, 'bomb': 180, 'key': 100, 'spring': 20}
 GUN_CLASSES = {'rifle', 'pistol', 'smg', 'shotgun', 'minigun', 'launcher'}
 
 
@@ -483,4 +483,96 @@ def gen_plane_side(rng):
     return [wobble(s, rng, amp=0.008, step=0.025) for s in strokes]
 
 
-SYNTH = {'pistol': gen_pistol, 'bomb': gen_bomb, 'tank': gen_tank, 'smg': gen_smg, 'shotgun': gen_shotgun, 'minigun': gen_minigun, 'launcher': gen_launcher}
+
+def gen_shield(rng):
+    """a shield, as held to the front: round (a boss in its middle), a knight's (pointed at the
+    bottom), a riot shield (tall, a window), or a kite; a cross or a band on it now and then"""
+    strokes = []
+    r = rng.random()
+    if r < 0.32:
+        asp = rng.uniform(0.9, 1.1)
+        strokes.append(arc(0, 0, 1, asp, 0, 2 * np.pi, int(rng.integers(20, 34))))
+        if rng.random() < 0.7:
+            b = rng.uniform(0.15, 0.32)
+            strokes.append(arc(0, 0, b, b * asp, 0, 2 * np.pi, 12))
+        if rng.random() < 0.4:
+            rr = rng.uniform(0.7, 0.85)
+            strokes.append(arc(0, 0, rr, rr * asp, 0, 2 * np.pi, 22))
+        top, bot, half = -asp, asp, 1.0
+    elif r < 0.62:
+        # the knight's: a flat (or curved) top, sides down, to a point
+        w = rng.uniform(0.75, 1.0)
+        h = rng.uniform(1.15, 1.5)
+        mid = rng.uniform(0.15, 0.45) * h
+        bow = rng.uniform(0, 0.12)
+        pts = [(-w, -h / 2), (-w, -h / 2 + mid)]
+        for t in np.linspace(0.15, 1, 7):
+            pts.append((-w * (1 - t) ** 1.4, -h / 2 + mid + (h - mid) * t))
+        for t in np.linspace(0.85, 0, 7):
+            pts.append((w * (1 - t) ** 1.4, -h / 2 + mid + (h - mid) * t))
+        pts.append((w, -h / 2))
+        for x in np.linspace(w, -w, 9)[1:]:
+            pts.append((x, -h / 2 - bow * np.sin(np.pi * (x + w) / (2 * w))))
+        strokes.append(np.array(pts))
+        top, bot, half = -h / 2, h / 2, w
+    elif r < 0.85:
+        # a riot shield: tall, rounded, a window near its top
+        w = rng.uniform(0.5, 0.7)
+        h = rng.uniform(1.4, 2.0)
+        rr = rng.uniform(0.08, 0.2)
+        strokes.append(np.array([(-w + rr, -h / 2), (w - rr, -h / 2), (w, -h / 2 + rr), (w, h / 2 - rr), (w - rr, h / 2), (-w + rr, h / 2), (-w, h / 2 - rr), (-w, -h / 2 + rr), (-w + rr, -h / 2)]))
+        if rng.random() < 0.75:
+            y0 = -h / 2 + h * rng.uniform(0.12, 0.2)
+            strokes.append(np.array(rect(-w * 0.6, y0, w * 0.6, y0 + h * rng.uniform(0.1, 0.16))))
+        top, bot, half = -h / 2, h / 2, w
+    else:
+        # a kite: round top, long point down
+        w = rng.uniform(0.6, 0.85)
+        h = rng.uniform(1.6, 2.1)
+        cap = arc(0, -h / 2 + w, w, w, np.pi, 2 * np.pi, 12)
+        strokes.append(np.concatenate([cap, [(w, -h / 2 + w), (0, h / 2), (-w, -h / 2 + w)]]))
+        top, bot, half = -h / 2, h / 2, w
+    if rng.random() < 0.35:
+        # a cross on it
+        strokes.append(np.array([(0, top + 0.18 * (bot - top)), (0, bot - 0.2 * (bot - top))]))
+        y = top + rng.uniform(0.3, 0.45) * (bot - top)
+        strokes.append(np.array([(-half * 0.6, y), (half * 0.6, y)]))
+    elif rng.random() < 0.3:
+        y = top + rng.uniform(0.35, 0.55) * (bot - top)
+        strokes.append(np.array([(-half * 0.85, y), (half * 0.85, y)]))
+    return [wobble(s, rng, amp=0.02, step=0.06) for s in strokes]
+
+
+def gen_spring(rng):
+    """a spring: a coil (loops, or a zigzag) standing up or lying down, a plate at an end or both
+    now and then (a spring to jump on)"""
+    strokes = []
+    n = int(rng.integers(4, 10))
+    L = rng.uniform(1.4, 3.0)
+    W = rng.uniform(0.35, 0.7)
+    if rng.random() < 0.55:
+        # loops: a helix seen from the side
+        t = np.linspace(0, n * 2 * np.pi, n * 14)
+        tilt = rng.uniform(0.15, 0.45)
+        x = W * np.sin(t)
+        y = -L / 2 + L * t / t[-1] + tilt * W * np.cos(t)
+        strokes.append(np.stack([x, y], 1))
+    else:
+        ys = np.linspace(-L / 2, L / 2, n * 2 + 1)
+        xs = np.array([(-W if i % 2 else W) if 0 < i < len(ys) - 1 else 0 for i in range(len(ys))])
+        strokes.append(np.stack([xs, ys], 1))
+    plates = rng.random()
+    if plates < 0.6:
+        pw = W * rng.uniform(1.3, 2.2)
+        strokes.append(np.array([(-pw, -L / 2 - 0.05), (pw, -L / 2 - 0.05)]))
+        if plates < 0.35:
+            strokes.append(np.array([(-pw, L / 2 + 0.05), (pw, L / 2 + 0.05)]))
+    out = [wobble(s, rng, amp=0.015, step=0.05) for s in strokes]
+    if rng.random() < 0.45:
+        # lying down
+        out = [s[:, ::-1] for s in out]
+    return out
+
+SYNTH = {'pistol': gen_pistol, 'bomb': gen_bomb, 'tank': gen_tank, 'smg': gen_smg, 'shotgun': gen_shotgun, 'minigun': gen_minigun, 'launcher': gen_launcher, 'shield': gen_shield, 'spring': gen_spring}
+# (made up after the first ones: after the dataset's second lot in the classes' order - build.py)
+SYNTH_NEW = ('shield', 'spring')

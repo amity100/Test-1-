@@ -348,6 +348,16 @@ export function updateBoat(v, dt, input) {
     v.vz = 0;
     v.yawRate = 0;
   }
+  // (ROADMAP 11.8) a submarine drawn: C takes it down under the waves (no one sees it there), Space
+  // brings it up again
+  if (v.dive && input) {
+    if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || input.flyDown) v.diveT = 1;
+    if (input.keys.has('Space') || input.flyUp) v.diveT = 0;
+  }
+  if (v.dive) {
+    v.depth = damp(v.depth || 0, v.diveT || 0, 0.8, dt);
+    v.submerged = v.depth > 0.6;
+  }
   const fx = Math.sin(v.yaw);
   const fz = Math.cos(v.yaw);
   let vL = v.vx * fx + v.vz * fz;
@@ -369,11 +379,14 @@ export function updateBoat(v, dt, input) {
   const oz = v.pos.z;
   v.pos.x += v.vx * dt;
   v.pos.z += v.vz * dt;
-  // the wall, the pier: it stops (and bumps) where the water ends
+  // the wall, the pier: it stops (and bumps) where the water ends - its middle or its bow on the
+  // sand, or a side that comes onto it (a side touching already does not hold it there: it gets
+  // off along the shore)
   const bow = (v.halfLen || 1.5) * 0.85;
   const sx = Math.sin(v.yaw) * Math.sign(vL || 1);
   const sz = Math.cos(v.yaw) * Math.sign(vL || 1);
-  if (!isWater(v.pos.x, v.pos.z) || !isWater(v.pos.x + sx * bow, v.pos.z + sz * bow) || !isWater(v.pos.x - nz * v.halfWid, v.pos.z + nx * v.halfWid) || !isWater(v.pos.x + nz * v.halfWid, v.pos.z - nx * v.halfWid)) {
+  const sides = (x, z) => (isWater(x - nz * v.halfWid, z + nx * v.halfWid) ? 0 : 1) + (isWater(x + nz * v.halfWid, z - nx * v.halfWid) ? 0 : 1);
+  if (!isWater(v.pos.x, v.pos.z) || !isWater(v.pos.x + sx * bow, v.pos.z + sz * bow) || sides(v.pos.x, v.pos.z) > sides(ox, oz)) {
     v.pos.x = ox;
     v.pos.z = oz;
     const hit = Math.abs(vL);
@@ -390,13 +403,16 @@ export function updateBoat(v, dt, input) {
   const t = game.time;
   const wave = Math.sin(t * 1.6 + v.pos.x * 0.13 + v.pos.z * 0.07) * 0.07 + Math.sin(t * 2.3 + v.pos.z * 0.11) * 0.04;
   const plane = Math.min(1, Math.abs(vL) / top) * (jet ? 0.18 : 0.14);
-  v.pos.y = -0.8 + wave + plane;
+  // (a drawn hull sits a third of its height in the water: game/drawncar.js; a submarine, under)
+  // (dived: all of it under but the top of its tower)
+  const sub = (v.depth || 0) * Math.max(0, (v.heightM || 2) - 0.6 - 0.35 - (v.draft || 0));
+  v.pos.y = -0.8 - (v.draft || 0) + (wave + plane) * (1 - (v.depth || 0)) - sub;
   v.pitchV = damp(v.pitchV || 0, -Math.min(0.12, Math.abs(vL) * 0.007) + Math.cos(t * 1.6 + v.pos.x * 0.13) * 0.03, 3, dt);
   v.rollV = damp(v.rollV || 0, -steer * k * (jet ? 0.32 : 0.12) + Math.sin(t * 1.3 + v.pos.z * 0.09) * 0.035, 3, dt);
   v.speed = vL;
   v.speedAbs = Math.abs(vL);
   // the spray at the stern: drops thrown up, a wisp of white mist behind
-  if (v.speedAbs > 3 && Math.random() < dt * (6 + v.speedAbs * 0.6)) {
+  if (v.speedAbs > 3 && (v.depth || 0) < 0.4 && Math.random() < dt * (6 + v.speedAbs * 0.6)) {
     const back = (v.halfLen || 1.5) * 0.9;
     const sx = v.pos.x - nx * back + (Math.random() - 0.5) * 0.5;
     const sz = v.pos.z - nz * back + (Math.random() - 0.5) * 0.5;
@@ -412,7 +428,8 @@ export function updateBoat(v, dt, input) {
       if (v.wake.length > 40) v.wake.shift();
     }
   }
-  if (input) game.audio.engine(0.2 + v.speedAbs / top, jet ? 'bike' : 'boat');
+  // (a sail, a paddle: no engine)
+  if (input) game.audio.engine(0.2 + v.speedAbs / top, v.sail || v.paddle ? 'pedal' : jet ? 'bike' : 'boat');
 }
 
 // the wake: a V of white lines spreading behind it, fading
@@ -492,6 +509,8 @@ export function updatePlane(v, dt, input) {
     v.yaw += v.roll * 0.85 * dt * clamp(s / 26, 0.4, 1.4);
     const lift = clamp((s - stall) / 10, 0, 1);
     v.vy = s * Math.sin(v.pitch) - (1 - lift) * 7;
+    // (a parachute drawn on it: down slowly however slow it flies - ROADMAP 11.8)
+    if (v.chute) v.vy = Math.max(v.vy, -v.chute.sink);
     v.pos.y += v.vy * dt;
     if (v.pos.y > 230) {
       v.pos.y = 230;
@@ -500,7 +519,18 @@ export function updatePlane(v, dt, input) {
     // down: a landing, or a crash
     const gnd = groundHeight(v.pos.x, v.pos.z);
     if (v.pos.y <= Math.max(gnd, -0.8)) {
-      if (gnd < -0.5 || v.vy < -5.5 || Math.abs(v.roll) > 0.5) {
+      // (one drawn to float too, gently enough: it sets down on the water - ROADMAP 11.8)
+      if (gnd < -0.5 && v.modes && v.modes.boat && v.vy >= -8 && Math.abs(v.roll) < 0.7) {
+        game.fx.splash(v.pos.x, -0.75, v.pos.z, 26, 4.5, [0.88, 0.95, 1]);
+        game.audio.play('jump', 0.5);
+        v.flying = false;
+        v.splashed = true;
+        v.pos.y = -0.8;
+        v.vy = 0;
+        v.speed = s * 0.6;
+        return;
+      }
+      if (gnd < -0.5 || v.vy < -5.5 || Math.abs(v.roll) > (v.chute ? 0.9 : 0.5)) {
         if (gnd < -0.5) game.fx.splash(v.pos.x, -0.8, v.pos.z, 30, 6);
         v.destroy();
         return;

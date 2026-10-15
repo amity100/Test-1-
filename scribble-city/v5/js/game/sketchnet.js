@@ -45,13 +45,47 @@ const AS = {
   'baseball bat': ['club', 'מחבט'],
   boomerang: ['boomerang', 'בומרנג'],
   bomb: ['bomb', 'פצצה'],
+  // (ROADMAP 11.8: on the water, in the air, under the feet, and the gear)
+  sailboat: ['boat', 'סירת מפרש'],
+  speedboat: ['boat', 'סירת מנוע'],
+  canoe: ['boat', 'קאנו'],
+  submarine: ['boat', 'צוללת'],
+  'cruise ship': ['boat', 'ספינה'],
+  'hot air balloon': ['balloon', 'כדור פורח'],
+  skateboard: ['skate', 'סקייטבורד'],
+  shield: ['shield', 'מגן'],
+  parachute: ['parachute', 'מצנח'],
+  umbrella: ['umbrella', 'מטרייה'],
+  ladder: ['ladder', 'סולם'],
+  bridge: ['bridge', 'גשר'],
+  key: ['key', 'מפתח'],
+  spring: ['spring', 'קפיץ'],
 };
 export const GROUP_OF = (c) => (AS[c] ? AS[c][0] : 'other');
 export const NAME_OF = (c) => (AS[c] ? AS[c][1] : null);
-export const VEHICLE_GROUPS = new Set(['plane', 'copter', 'car', 'truck', 'bus', 'moto', 'bicycle', 'tractor', 'tank']);
+export const VEHICLE_GROUPS = new Set(['plane', 'copter', 'car', 'truck', 'bus', 'moto', 'bicycle', 'tractor', 'tank', 'boat', 'balloon', 'skate']);
 // a car, a truck, a bus, a motorbike, a bicycle, a tractor: one family (all driven alike)
 export const CAR_FAMILY = new Set(['car', 'truck', 'bus', 'moto', 'bicycle', 'tractor']);
-export const GROUP_NAME = { plane: 'מטוס', copter: 'מסוק', car: 'מכונית', truck: 'משאית', bus: 'אוטובוס', moto: 'אופנוע', bicycle: 'אופניים', tractor: 'טרקטור', tank: 'טנק', gun: 'אקדח או רובה', sword: 'חרב', club: 'פטיש', boomerang: 'בומרנג', bomb: 'פצצה' };
+export const GROUP_NAME = { plane: 'מטוס', copter: 'מסוק', car: 'מכונית', truck: 'משאית', bus: 'אוטובוס', moto: 'אופנוע', bicycle: 'אופניים', tractor: 'טרקטור', tank: 'טנק', gun: 'אקדח או רובה', sword: 'חרב', club: 'פטיש', boomerang: 'בומרנג', bomb: 'פצצה', boat: 'סירה', balloon: 'כדור פורח', skate: 'סקייטבורד', shield: 'מגן', parachute: 'מצנח', umbrella: 'מטרייה', ladder: 'סולם', bridge: 'גשר', key: 'מפתח', spring: 'קפיץ' };
+// (ROADMAP 11.8) what the player says they draw: five kinds of thing, any of them together
+export const CATEGORIES = {
+  weapon: ['gun', 'sword', 'club', 'bomb', 'boomerang'],
+  car: ['car', 'truck', 'bus', 'moto', 'bicycle', 'tractor', 'tank', 'skate'],
+  air: ['plane', 'copter', 'balloon'],
+  sea: ['boat'],
+  gear: ['shield', 'parachute', 'umbrella', 'ladder', 'bridge', 'key', 'spring'],
+};
+export const CATEGORY_ORDER = ['weapon', 'car', 'air', 'sea', 'gear'];
+export const GEAR_GROUPS = new Set(CATEGORIES.gear);
+export const CATEGORY_NAME = { weapon: 'נשק', car: 'רכב', air: 'כלי טיס', sea: 'כלי שייט', gear: 'ציוד' };
+export const CATEGORY_OF = (grp) => CATEGORY_ORDER.find((c) => CATEGORIES[c].includes(grp)) || null;
+// the groups a choice of categories allows (null: any)
+export function groupsOf(cats) {
+  if (!cats || !cats.size) return null;
+  const out = new Set();
+  for (const c of cats) for (const g of CATEGORIES[c] || []) out.add(g);
+  return out;
+}
 
 // ------------------------------------------------------------------ the weights, unpacked once
 let L = null;
@@ -305,19 +339,42 @@ function surest(p) {
   return Math.max(...f.values());
 }
 
+// only what is allowed (a set of groups; null: all), its chances made whole again; none of it
+// seen at all: all nothing
+function restrict(p, allowed) {
+  if (!allowed) return p;
+  const out = new Float32Array(p.length);
+  let s = 0;
+  for (let i = 0; i < p.length; i++) {
+    if (!allowed.has(GROUP_OF(CLASSES[i]))) continue;
+    out[i] = p[i];
+    s += p[i];
+  }
+  if (s > 0) for (let i = 0; i < p.length; i++) out[i] /= s;
+  return out;
+}
+
 // what the drawing looks like: { p (each class), groups: { plane: .., gun: .., other: .. } (by
-// chance, highest first: [[group, p, class], ...]), vehicle, weapon (their shares), best }
-export function look(strokes) {
+// chance, highest first: [[group, p, class], ...]), vehicle, weapon (their shares), best, none
+// (nothing allowed is known to it), share (how much of what it sees is what is allowed) }.
+// allowed: the groups it may be (the categories the player chose - ROADMAP 11.8), null: any
+export function look(strokes, allowed = null) {
   const img = picture(ready(strokes));
-  let p = chances(img);
-  if (surest(p) < MIRROR_BELOW) {
+  let raw = chances(img);
+  if (surest(restrict(raw, allowed)) < MIRROR_BELOW) {
     // (not that sure: looked at mirrored too - a vehicle faces either way - and the two looks'
     // chances taken together)
     const m = new Float32Array(G * G);
     for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) m[y * G + x] = img[y * G + G - 1 - x];
     const q = chances(m);
-    p = p.map((v, i) => (v + q[i]) / 2);
+    raw = raw.map((v, i) => (v + q[i]) / 2);
   }
+  let share = 1;
+  if (allowed) {
+    share = 0;
+    for (let i = 0; i < raw.length; i++) if (allowed.has(GROUP_OF(CLASSES[i]))) share += raw[i];
+  }
+  const p = restrict(raw, allowed);
   const g = new Map();
   const bestOf = new Map();
   for (let i = 0; i < p.length; i++) {
@@ -328,10 +385,12 @@ export function look(strokes) {
   const groups = [...g.entries()].map(([grp, q]) => [grp, q, CLASSES[bestOf.get(grp)]]).sort((a, b) => b[1] - a[1]);
   let vehicle = 0;
   let weapon = 0;
+  let gear = 0;
   for (const [grp, q] of groups) {
     if (grp === 'other') continue;
     if (VEHICLE_GROUPS.has(grp)) vehicle += q;
+    else if (GEAR_GROUPS.has(grp)) gear += q;
     else weapon += q;
   }
-  return { p, groups, vehicle, weapon, best: groups[0] };
+  return { p, groups, vehicle, weapon, gear, best: groups[0], none: !(groups[0] && groups[0][1] > 0), share };
 }

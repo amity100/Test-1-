@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
-import { groundHeight } from '../world/layout.js';
+import { setupDrawn, startMode } from './hybrid.js';
 
 // (ROADMAP 11.6) A vehicle drawn freehand from the side (ui/freedraw.js, read by
 // game/freeform.js), its shape what it does. Each line drawn is read as a part of it:
@@ -21,7 +21,7 @@ import { groundHeight } from '../world/layout.js';
 // off the mark, jets give it a boost, wings let it glide off a ramp). It rides as one of the kinds
 // the city has, with a model built from the drawing, in the colours it was drawn in.
 
-export const KIND_NAME = { car: 'מכונית', glider: 'מכונית עם כנפיים', jetcar: 'מכונית סילון', copter: 'מסוק', plane: 'מטוס', still: 'פסל', bike: 'אופנוע', bus: 'אוטובוס', monster: 'מכונית מפלצת', tank: 'טנק' };
+export const KIND_NAME = { car: 'מכונית', glider: 'מכונית עם כנפיים', jetcar: 'מכונית סילון', copter: 'מסוק', plane: 'מטוס', still: 'פסל', bike: 'אופנוע', bus: 'אוטובוס', monster: 'מכונית מפלצת', tank: 'טנק', boat: 'סירה', balloon: 'כדור פורח', skate: 'סקייטבורד' };
 
 // ------------------------------------------------------------------ reading the lines
 // a stroke's shape: [z, y] points in metres (z forward, y up from the ground)
@@ -74,6 +74,56 @@ export function shapeOf(pts) {
   // (round: no corners - a square's area fills more of its box than a circle's)
   const fillE = Math.abs(area) / 2 / Math.max(1e-6, (Math.PI / 4) * w * h);
   return { x0, x1, y0, y1, w, h, size, cx, cy, mx, my, r, round: closed && sd < r * 0.22 && w > h * 0.6 && h > w * 0.6 && fillE > 0.8 && fillE < 1.14, closed, area: Math.abs(area) / 2, len, dev: dev / cl };
+}
+
+// (ROADMAP 11.8) how often a line turns back: across (x) and up and down (y), wobbles smaller than
+// eps of its size left out - a zigzag or a coil (a spring) turns back again and again, a wheel twice
+export function turns(vals, e) {
+  let n = 0;
+  let dir = 0;
+  let hi = vals[0];
+  let lo = vals[0];
+  let ext = vals[0];
+  for (const v of vals) {
+    if (dir === 0) {
+      hi = Math.max(hi, v);
+      lo = Math.min(lo, v);
+      if (v >= lo + e) {
+        dir = 1;
+        ext = v;
+      } else if (v <= hi - e) {
+        dir = -1;
+        ext = v;
+      }
+    } else if (dir > 0) {
+      if (v > ext) ext = v;
+      else if (v < ext - e) {
+        n++;
+        dir = -1;
+        ext = v;
+      }
+    } else if (v < ext) ext = v;
+    else if (v > ext + e) {
+      n++;
+      dir = 1;
+      ext = v;
+    }
+  }
+  return n;
+}
+export function wiggles(pts, eps = 0.07) {
+  const sh = shapeOf(pts);
+  const e = Math.max(1e-6, sh.size * eps);
+  return { x: turns(pts.map((p) => p[0]), e), y: turns(pts.map((p) => p[1]), e) };
+}
+// a spring drawn: a zigzag (up and down it, or along it) or a coil of loops, not closed
+export function springy(pts) {
+  const sh = shapeOf(pts);
+  if (sh.closed || sh.len < sh.size * 2.2) return 0;
+  const w = wiggles(pts);
+  if ((w.x >= 3 && w.y <= 1) || (w.y >= 3 && w.x <= 1)) return Math.max(w.x, w.y);
+  if (w.x + w.y >= 7) return Math.round((w.x + w.y) / 2);
+  return 0;
 }
 
 // what each stroke is (by itself and by where it is on the body); `fixed` ones keep their type
@@ -138,7 +188,10 @@ function guess(sh, B, isMain, inside) {
 }
 
 // ------------------------------------------------------------------ what it is
-// design: { strokes: [{ pts, type, col }], color }. -> { ok, why, kind, base, label, stats, ... }
+// design: { strokes: [{ pts, type, col }], color, force?, abil? }. -> { ok, why, kind, base, label,
+// stats, ... }. (ROADMAP 11.8) abil: what else it does (game/freeform.js) - what it needs for each
+// way it goes is worked out then too: its handling on wheels, its rotor, its wings, its hull, its
+// balloon (spec.modes)
 export function specOf(design) {
   const P = design.strokes;
   const bodies = P.filter((s) => s.type === 'body');
@@ -161,7 +214,7 @@ export function specOf(design) {
   if (L < (design.force ? 0.15 : 0.4)) return { ok: false, why: 'הגוף קטן מדי' };
   const wheels = P.filter((s) => s.type === 'wheel').map((s) => {
     const sh = shapeOf(s.pts);
-    return { z: sh.mx, y: sh.my, r: clamp((sh.w + sh.h) / 4, 0.15, 1.3) };
+    return { z: sh.mx, y: sh.my, r: clamp((sh.w + sh.h) / 4, design.force === 'skate' ? 0.03 : 0.15, 1.3) };
   });
   const wings = P.filter((s) => s.type === 'wing').map((s) => shapeOf(s.pts));
   const rotors = P.filter((s) => s.type === 'rotor').map((s) => shapeOf(s.pts));
@@ -173,22 +226,35 @@ export function specOf(design) {
   let kind;
   // (what the network saw it as: game/freeform.js has made sure of its parts)
   const force = design.force;
+  const A = design.abil || null;
   if (force === 'copter' || (!force && rotors.length)) kind = 'copter';
   // (wings and something to push it - or, with no wheels to drive on, a tail: a jet plane)
   else if (force === 'plane' || (!force && chord >= L * 0.22 && (props.length || jets.length || (fins.length && wheels.length < 2)))) kind = 'plane';
+  else if (force === 'boat' || force === 'balloon' || force === 'skate') kind = force;
   else if (wheels.length) kind = jets.length ? 'jetcar' : chord > L * 0.2 && force !== 'car' ? 'glider' : 'car';
   else kind = force === 'car' ? 'car' : 'still';
-  // as wide as it is long - a plane's body as wide as it is high
-  const W = kind === 'plane' ? clamp(H * 1.05, 0.8, 1.9) : clamp(0.55 + L * 0.24, 0.9, 2.3);
+  // as wide as it is long - a plane's body as wide as it is high, a boat's hull a third of its
+  // length, a skateboard's deck a hand's width, a balloon's basket square
+  const W = kind === 'plane' ? clamp(H * 1.05, 0.8, 1.9) : kind === 'boat' ? clamp(L * 0.32, 0.9, 4.2) : kind === 'skate' ? 0.24 : kind === 'balloon' ? clamp(L, 0.9, 2.2) : clamp(0.55 + L * 0.24, 0.9, 2.3);
   // its weight (a car's about 1: game/vehicles.js HANDLING)
-  const mass = clamp((area * W) / 4.2 + wheels.length * 0.04 + jets.length * 0.08, 0.35, 3.2);
-  const base = kind === 'copter' ? 'copter' : kind === 'plane' ? 'plane' : kind === 'still' ? null : 'car';
+  const mass = clamp((area * W) / 4.2 + wheels.length * 0.04 + jets.length * 0.08, kind === 'skate' ? 0.1 : 0.35, 3.2);
+  const base = kind === 'copter' || kind === 'plane' || kind === 'boat' || kind === 'balloon' ? kind : kind === 'still' ? null : 'car';
   const out = { ok: !!base, kind, base, label: KIND_NAME[kind], L, H, W, mass, area, wheels, wings, rotors, props, jets, guns, chord, x0, x1, y0, y1 };
   if (!base) {
     out.why = 'בלי גלגלים, רוטור, או כנפיים עם מדחף — הוא לא יזוז';
     out.stats = { speed: 0, grip: 0, steady: 0, air: 0 };
     return out;
   }
+  // the ways it goes (more than one: ROADMAP 11.8)
+  const modes = {
+    drive: base === 'car' || !!(A && A.drive),
+    copter: base === 'copter' || !!(A && A.fly === 'rotor'),
+    plane: base === 'plane' || !!(A && A.fly === 'wings'),
+    boat: base === 'boat' || !!(A && A.float),
+    balloon: base === 'balloon' || !!(A && A.fly === 'balloon'),
+  };
+  out.modes = modes;
+  if (A) out.abil = A;
   // the wheels: their size, how far apart; the ground under them
   const rAvg = wheels.length ? wheels.reduce((a, w) => a + w.r, 0) / wheels.length : 0;
   let base0 = 0;
@@ -198,38 +264,106 @@ export function specOf(design) {
     base1 = Math.max(...wheels.map((w) => w.z));
   }
   const wheelbase = base1 - base0;
-  if (base === 'car') {
+  if (modes.drive) {
     const nW = wheels.length;
     const grip = clamp(4.5 + Math.min(4, nW) * 1.1 + rAvg * 2.2 - (wheelbase < L * 0.35 ? 1.2 : 0), 3.5, 11);
     const top = clamp(26 + jets.length * 5 - mass * 3 + (rAvg > 0.5 ? 2 : 0) - (nW === 1 ? 6 : 0), 12, 42);
     const power = clamp(15 + jets.length * 2.5 - mass * 2.2, 6, 22);
     const steer = clamp(1.9 - L * 0.1 - (wheelbase > 4 ? 0.2 : 0), 0.8, 2.1);
     out.handling = { mass: clamp(mass, 0.5, 3), power, top, grip, slide: clamp(0.8 + grip * 0.03, 0.85, 1.2), steer, roll: clamp(H * 0.45, 0.2, 1.4), pitch: 0.5 };
-    out.glide = chord > 0 ? clamp(chord / L, 0.15, 0.75) : 0;
-    out.stats = { speed: top / 42, grip: grip / 11, steady: clamp((nW >= 4 ? 0.8 : nW === 3 ? 0.65 : nW === 2 ? 0.45 : 0.2) + (wheelbase / L) * 0.25 - H * 0.05, 0, 1), air: out.glide };
+    // (a skateboard: kicked along, light and quick to turn - and it hops, Space: an ollie)
+    if (kind === 'skate') {
+      out.handling = { mass: 0.5, power: 8.5, top: 14, grip: 6.5, slide: 1.0, steer: 2.3, roll: 0.2, pitch: 0.3 };
+      out.spring = { jump: 5.4, ollie: true };
+    }
+    out.glide = chord > 0 && !modes.plane ? clamp(chord / L, 0.15, 0.75) : 0;
+  }
+  if (modes.copter) {
+    const R = clamp((rotors.length ? Math.max(...rotors.map((r) => r.w)) / 2 : L * 0.5) * 1.4, 1.0, 4.5);
+    out.rotorR = R;
+    out.qCopter = { speed: clamp(0.65 + R * 0.12 - mass * 0.08, 0.5, 1.35), accel: clamp(0.8 + R * 0.1, 0.7, 1.3) };
+  }
+  if (modes.plane) out.qPlane = { speed: clamp(0.75 + jets.length * 0.18 + props.length * 0.05 - mass * 0.05, 0.6, 1.3), accel: clamp(1.15 + props.length * 0.1 + jets.length * 0.3, 1.0, 1.9) };
+  if (modes.boat) {
+    // on the water: an engine (at its back) fast; a sail as fast as it is big for the hull; with
+    // neither, paddled - slow. How deep it sits: a third of its hull. A submarine dives.
+    const hull = P.find((s) => s.hull && s.type === 'body');
+    const hb = hull ? shapeOf(hull.pts) : { h: H, w: L };
+    const sailA = P.filter((s) => s.type === 'sail').reduce((a, s) => {
+      const sh = shapeOf(s.pts);
+      return a + (sh.area || sh.w * sh.h * 0.5);
+    }, 0);
+    // (a submarine, a ship: engines inside them)
+    const motors = jets.length || (design.cls === 'submarine' || design.cls === 'cruise ship' ? 1 : 0);
+    let speed = motors ? clamp(1.0 + motors * 0.12 - mass * 0.03, 0.85, 1.35) : sailA > 0 ? clamp(0.55 + (sailA / Math.max(1, hb.w * hb.w)) * 1.4, 0.6, 1.15) : 0.5;
+    if (design.cls === 'cruise ship') speed = Math.min(speed, 0.7);
+    if (design.cls === 'submarine') speed = Math.min(speed, 0.85);
+    // (a submarine sits low even up at the top, half of it under)
+    const sink = design.cls === 'submarine' ? 0.55 : 0.38;
+    out.boat = { q: { speed, accel: motors ? 1.25 : sailA ? 0.75 : 0.85 }, sail: sailA > 0 && !jets.length, motor: motors > 0, paddle: !motors && !sailA, jet: jets.length > 0 && hb.w < 4.5, dive: design.cls === 'submarine', draft: clamp(hb.h * sink, 0.15, 2.6) };
+  }
+  if (modes.balloon) {
+    // the hotter its air, the higher it goes: how fast, by the size of its envelope for its weight
+    const env = P.filter((s) => s.type === 'envelope').map((s) => shapeOf(s.pts));
+    const E = env.length ? env[0] : { w: L * 2, h: L * 2.2 };
+    const vol = (Math.PI / 6) * E.w * E.w * E.h;
+    const lift = clamp(vol / (mass * 45 + 25), 0.5, 1.6);
+    out.balloon = { lift, climb: clamp(1.8 + lift * 2.4, 2, 5.5), drift: clamp(3 + lift * 2.5, 3.5, 7) };
+    out.envR = E.w / 2;
+  }
+  // its gun (any of them; armed, ROADMAP 11.8): a thick barrel a cannon, a thin one a machine gun -
+  // or what the player picked
+  if (guns.length) {
+    const g = guns[0];
+    const r = clamp(g.h * 0.5, 0.05, 0.3);
+    const gk = A && A.gunKind;
+    const cannon = gk ? gk === 'launcher' || gk === 'bomb' : !A && base === 'car' ? true : r >= 0.13;
+    out.gun = { r, len: g.w, type: cannon ? 'cannon' : 'mg' };
+  }
+  // its gear (ROADMAP 11.8): a spring - it jumps (higher, the more it coils); a parachute - it
+  // comes down slowly (the wider, the slower); armour - hits hurt it less
+  const springs = P.filter((s) => s.type === 'spring');
+  if (springs.length) {
+    const sh = shapeOf(springs[0].pts);
+    const n = springy(springs[0].pts);
+    out.spring = { jump: clamp(7 + n * 0.45 + sh.h * 0.6, 7, 13) };
+  }
+  const chutes = P.filter((s) => s.type === 'chute').map((s) => shapeOf(s.pts));
+  if (chutes.length) out.chute = { sink: clamp(4.4 - (chutes[0].w / Math.max(0.5, L)) * 1.1, 2.4, 4.4) };
+  const armor = P.filter((s) => s.type === 'armor').length;
+  if (armor || (A && A.gear === 'shield')) out.armor = clamp(0.3 + armor * 0.04, 0.3, 0.5);
+  // how it goes on its own kind, for the tag (game/freeform.js statLine)
+  if (base === 'car') {
+    const nW = wheels.length;
+    out.stats = { speed: out.handling.top / 42, grip: out.handling.grip / 11, steady: clamp((nW >= 4 ? 0.8 : nW === 3 ? 0.65 : nW === 2 ? 0.45 : 0.2) + (wheelbase / L) * 0.25 - H * 0.05, 0, 1), air: out.glide };
     // what it is called, by the look of it
     if (guns.length) out.label = KIND_NAME.tank;
     else if (rAvg > 0.62 && kind === 'car') out.label = KIND_NAME.monster;
     else if (nW === 2 && kind === 'car' && rAvg > H * 0.33) out.label = KIND_NAME.bike;
     else if (L > 6.6 && kind === 'car') out.label = KIND_NAME.bus;
-    if (guns.length) {
+    if (guns.length && (!out.gun || out.gun.type === 'cannon')) {
       const g = guns[0];
       out.cannon = { r: clamp(g.h * 0.5, 0.07, 0.3), len: g.w };
       out.stats.gun = clamp(out.cannon.r / 0.25, 0.3, 1);
     }
   } else if (base === 'copter') {
-    const R = clamp((rotors.length ? Math.max(...rotors.map((r) => r.w)) / 2 : L * 0.5) * 1.4, 1.0, 4.5);
-    out.rotorR = R;
-    out.q = { speed: clamp(0.65 + R * 0.12 - mass * 0.08, 0.5, 1.35), accel: clamp(0.8 + R * 0.1, 0.7, 1.3) };
-    out.stats = { speed: out.q.speed / 1.35, grip: 0.5, steady: clamp(0.4 + R * 0.12, 0, 1), air: 1 };
-  } else {
-    out.q = { speed: clamp(0.75 + jets.length * 0.18 + props.length * 0.05 - mass * 0.05, 0.6, 1.3), accel: clamp(1.15 + props.length * 0.1 + jets.length * 0.3, 1.0, 1.9) };
+    out.q = out.qCopter;
+    out.stats = { speed: out.q.speed / 1.35, grip: 0.5, steady: clamp(0.4 + out.rotorR * 0.12, 0, 1), air: 1 };
+  } else if (base === 'plane') {
+    out.q = out.qPlane;
     out.stats = { speed: out.q.speed / 1.3, grip: 0.4, steady: clamp(chord / L, 0, 1), air: 1 };
+  } else if (base === 'boat') {
+    out.q = out.boat.q;
+    out.stats = { speed: out.q.speed / 1.35, grip: 0.5, steady: clamp(0.35 + L / 20, 0, 1), air: 0 };
+  } else {
+    out.q = { speed: 1, accel: 1 };
+    out.stats = { speed: out.balloon.drift / 7, grip: 0.3, steady: clamp(out.balloon.lift / 1.6, 0, 1), air: 1 };
   }
   // (its name as the network called it: a truck, a bus, a tractor...)
   if (design.name) out.label = design.name;
-  out.hp = Math.round(clamp(90 + mass * 60 + (base === 'copter' ? 60 : 0) + (guns.length ? 80 : 0), 80, 400));
-  out.cost = Math.round(clamp(24 + P.length * 1.5 + jets.length * 4 + guns.length * 10 + (base === 'copter' ? 14 : base === 'plane' ? 10 : 0), 24, 70));
+  const nModes = Object.values(modes).filter(Boolean).length;
+  out.hp = Math.round(clamp(90 + mass * 60 + (base === 'copter' ? 60 : 0) + (guns.length ? 80 : 0), 80, 400) * (out.armor ? 1.35 : 1));
+  out.cost = Math.round(clamp(24 + P.length * 1.5 + jets.length * 4 + guns.length * 10 + (base === 'copter' ? 14 : base === 'plane' ? 10 : 0) + (nModes - 1) * 8 + (out.spring && kind !== 'skate' ? 6 : 0) + (out.chute ? 6 : 0) + (out.armor ? 6 : 0), 24, 90));
   return out;
 }
 
@@ -408,6 +542,180 @@ function wheelModel(M, r, w, rim) {
   return g;
 }
 
+// ------------------------------------------------------------------ (ROADMAP 11.8) boats, balloons
+// the outline's top and bottom at z (o: a closed outline of [z, y]); null: not over it
+function spanAt(o, z) {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0, j = o.length - 1; i < o.length; j = i++) {
+    const [za, ya] = o[j];
+    const [zb, yb] = o[i];
+    if ((za <= z && zb >= z) || (zb <= z && za >= z)) {
+      const t = Math.abs(zb - za) < 1e-9 ? 0.5 : (z - za) / (zb - za);
+      const y = ya + (yb - ya) * t;
+      lo = Math.min(lo, y);
+      hi = Math.max(hi, y);
+    }
+  }
+  return lo <= hi ? [lo, hi] : null;
+}
+
+// a boat's hull from its outline drawn side on (o: [z, y] in the model's frame, the bow at +z):
+// at each station along it from the deck down to the keel and up again, round-bottomed, as wide
+// as the boat amidships, narrowing to an edge at the bow and a little at the stern (a transom).
+// Returns { geo, deck, half(z, y): how far its side is out from its middle there }
+function hullGeometry(o, W) {
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const [z] of o) {
+    z0 = Math.min(z0, z);
+    z1 = Math.max(z1, z);
+  }
+  const NZ = 28;
+  const K2 = 16;
+  const taper = (u) => (u > 0.55 ? 1 - Math.pow((u - 0.55) / 0.45, 1.7) * 0.92 : u < 0.1 ? 0.8 + (u / 0.1) * 0.2 : 1);
+  const pos = [];
+  const idx = [];
+  const rows = [];
+  let last = [0, 0.1];
+  for (let i = 0; i <= NZ; i++) {
+    const u = i / NZ;
+    const z = z0 + (z1 - z0) * (0.003 + u * 0.994);
+    const sp = spanAt(o, z) || last;
+    last = sp;
+    const hw = (W / 2) * taper(u);
+    const row = [];
+    for (let k = 0; k <= K2; k++) {
+      const th = (-1 + (2 * k) / K2) * (Math.PI / 2);
+      row.push(pos.length / 3);
+      pos.push(hw * Math.sin(th), sp[1] - (sp[1] - sp[0]) * Math.cos(th), z);
+    }
+    rows.push({ row, sp, hw, z });
+  }
+  for (let i = 0; i < NZ; i++) {
+    for (let k = 0; k < K2; k++) {
+      const a = rows[i].row[k];
+      const b = rows[i].row[k + 1];
+      const c = rows[i + 1].row[k];
+      const d = rows[i + 1].row[k + 1];
+      idx.push(a, b, c, b, d, c);
+    }
+  }
+  // the transom and the bow's last sliver: closed by a fan from their middles (their own points,
+  // for a sharp edge round them)
+  for (const [ri, dir] of [[0, -1], [NZ, 1]]) {
+    const R = rows[ri];
+    const c = pos.length / 3;
+    pos.push(0, (R.sp[0] + R.sp[1]) / 2, R.z);
+    const own = R.row.map((v) => {
+      pos.push(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]);
+      return pos.length / 3 - 1;
+    });
+    for (let k = 0; k < K2; k++) {
+      if (dir < 0) idx.push(c, own[k + 1], own[k]);
+      else idx.push(c, own[k], own[k + 1]);
+    }
+    if (dir < 0) idx.push(c, own[0], own[K2]);
+    else idx.push(c, own[K2], own[0]);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+  // the deck: flat across its top, station to station
+  const dp = [];
+  const dn = [];
+  for (let i = 0; i < NZ; i++) {
+    const A = rows[i];
+    const B = rows[i + 1];
+    const L0 = [-A.hw, A.sp[1], A.z];
+    const R0 = [A.hw, A.sp[1], A.z];
+    const L1 = [-B.hw, B.sp[1], B.z];
+    const R1 = [B.hw, B.sp[1], B.z];
+    for (const v of [L0, L1, R0, R0, L1, R1]) {
+      dp.push(v[0], v[1], v[2]);
+      dn.push(0, 1, 0);
+    }
+  }
+  const deck = new THREE.BufferGeometry();
+  deck.setAttribute('position', new THREE.Float32BufferAttribute(dp, 3));
+  deck.setAttribute('normal', new THREE.Float32BufferAttribute(dn, 3));
+  deck.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((dp.length / 3) * 2), 2));
+  const half = (z, y) => {
+    const u = clamp((z - z0) / Math.max(1e-3, z1 - z0), 0, 1);
+    const sp = spanAt(o, z) || last;
+    const c = clamp((sp[1] - y) / Math.max(1e-3, sp[1] - sp[0]), 0, 1);
+    return (W / 2) * taper(u) * Math.sqrt(1 - c * c);
+  };
+  return { geo, deck, half };
+}
+
+// a hot air balloon's envelope from its outline (o: [z, y]): turned round its upright middle - as
+// wide at each height as it was drawn there - in gores of its colours. Returns { geos: [[geo,
+// colour]], axis (its z), r(y), y0, y1 }
+function envelopeGeometry(o, cols) {
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  let za = Infinity;
+  let zb = -Infinity;
+  for (const [z, y] of o) {
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+    za = Math.min(za, z);
+    zb = Math.max(zb, z);
+  }
+  const axis = (za + zb) / 2;
+  const N = 22;
+  const prof = [];
+  for (let i = 0; i <= N; i++) {
+    const y = y0 + ((y1 - y0) * i) / N;
+    // (across the outline at this height: where it is crossed)
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let a = 0, b = o.length - 1; a < o.length; b = a++) {
+      const [zA, yA] = o[b];
+      const [zB, yB] = o[a];
+      if ((yA <= y && yB >= y) || (yB <= y && yA >= y)) {
+        const t = Math.abs(yB - yA) < 1e-9 ? 0.5 : (y - yA) / (yB - yA);
+        const z = zA + (zB - zA) * t;
+        lo = Math.min(lo, z);
+        hi = Math.max(hi, z);
+      }
+    }
+    prof.push(lo <= hi ? (hi - lo) / 2 : 0);
+  }
+  // (closed at the crown, the mouth left a little open at the bottom; smoothed a little)
+  const r = prof.map((v, i) => (i === 0 || i === N ? v : (prof[i - 1] + v * 2 + prof[i + 1]) / 4));
+  r[N] = 0;
+  r[0] = Math.max(r[0], Math.max(...r) * 0.16);
+  const pts = r.map((v, i) => new THREE.Vector2(Math.max(0.001, v), y0 + ((y1 - y0) * i) / N));
+  const G = 12;
+  const geos = [];
+  for (let k = 0; k < G; k++) {
+    const g = new THREE.LatheGeometry(pts, 3, (k / G) * Math.PI * 2, (Math.PI * 2) / G);
+    g.translate(0, 0, axis);
+    geos.push([g, cols[k % cols.length]]);
+  }
+  const rAt = (y) => {
+    const t = clamp((y - y0) / Math.max(1e-3, y1 - y0), 0, 1) * N;
+    const i = Math.min(N - 1, Math.floor(t));
+    return r[i] + (r[i + 1] - r[i]) * (t - i);
+  };
+  return { geos, axis, rAt, y0, y1, pts, G };
+}
+
+// a coil spring standing from y0 up to y1 at z, r round
+function helixGeometry(z, y0, y1, r, turns) {
+  const P = [];
+  const n = Math.max(24, Math.round(turns * 16));
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * turns * Math.PI * 2;
+    P.push(new THREE.Vector3(Math.cos(a) * r, y0 + ((y1 - y0) * i) / n, z + Math.sin(a) * r));
+  }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P), n, clamp(r * 0.14, 0.02, 0.07), 6, false);
+}
+
 // a stroke's colour ([r, g, b], 0..1); one drawn in pencil takes the vehicle's own paint
 const colOf = (s, design) => (s.col && !s.pencil ? s.col : design.color);
 
@@ -418,9 +726,10 @@ export function buildModel(design, spec) {
   const base = design.color;
   const W = spec.W;
   const zc = (spec.x0 + spec.x1) / 2;
-  // what touches the ground: the wheels' bottoms (else the body's)
+  // what touches the ground: the wheels' bottoms (else the body's; a spring under it, its foot)
   let floor = spec.y0;
   if (spec.wheels.length) floor = Math.min(...spec.wheels.map((w) => w.y - w.r));
+  for (const s of design.strokes) if (s.type === 'spring') floor = Math.min(floor, shapeOf(s.pts).y0);
   const Z = (z) => z - zc;
   const Y = (y) => y - floor;
   const K = new Kit();
@@ -439,15 +748,40 @@ export function buildModel(design, spec) {
   // (the biggest first; a part on it a little narrower, so both show)
   // (a bicycle's frame of lines: slim)
   const bodies = design.strokes.filter((s) => s.type === 'body').map((s) => ({ s, a: shapeOf(s.pts).area })).sort((a, b) => b.a - a.a);
+  // (ROADMAP 11.8) a boat's hull: shaped like one (narrowing to its bow), its deck flat; what stands
+  // on it (a cabin, a tower) narrower
+  let hull = null;
+  const hullS = spec.base === 'boat' ? bodies.find((o) => o.s.hull) || bodies[0] : null;
   bodies.forEach((o, i) => {
-    o.w = o.s.slim ? W * 0.3 : i ? W * 0.94 : W;
+    if (o === hullS) {
+      const ol = outline(o.s.pts).map(([z, y]) => [Z(z), Y(y)]);
+      if (ol.length >= 3) {
+        hull = hullGeometry(ol, W);
+        const c = colOf(o.s, design);
+        K.add(M.paint, hull.geo, linC(...c));
+        K.add(M.matte, hull.deck, shade(c, 0.62));
+        o.w = W;
+        return;
+      }
+    }
+    o.w = o.s.slim ? W * 0.3 : hullS ? W * 0.58 : i ? W * 0.94 : W;
     slab(K, o.s, o.w, M.paint);
   });
-  // the lines drawn on it, on both its sides (a flat band on each)
-  const lineOn = (pts, w, c, out = 0.02) => {
+  // the lines drawn on it, on both its sides (a flat band on each - on a boat's hull, on its side
+  // as it curves in)
+  const lineOn = (pts, w, c, out = 0.02, onHull = false) => {
     const P = pts.map(([z, y]) => [Z(z), Y(y)]);
-    for (const sx of [-1, 1]) K.add(M.matte, ribbon(P, sx * (W / 2 + out), w, sx), c);
+    for (const sx of [-1, 1]) {
+      const g = ribbon(P, sx * (W / 2 + out), w, sx);
+      if (onHull && hull) {
+        const a = g.attributes.position;
+        for (let i = 0; i < a.count; i++) a.setX(i, sx * (hull.half(a.getZ(i), a.getY(i)) + out));
+      }
+      K.add(M.matte, g, c);
+    }
   };
+  const hullOl = hullS ? outline(hullS.s.pts) : null;
+  const onHullP = (p) => hullOl && inPoly(p[0], p[1], hullOl);
   // (a line on the body is drawn on both its sides; one off it - a tail, an aerial, skids under
   // it - is a rod of its own: two under it, one anywhere else)
   const outl = bodies.map((o) => outline(o.s.pts));
@@ -456,16 +790,62 @@ export function buildModel(design, spec) {
     const P = thin(pts, 0.06);
     for (let i = 1; i < P.length; i++) tube(K, M.matte, [x, Y(P[i - 1][1]), Z(P[i - 1][0])], [x, Y(P[i][1]), Z(P[i][0])], r, c);
   };
+  // (a balloon's envelope: turned round, in gores of its colours - the lines drawn on it, on its
+  // skin front and back)
+  let env = null;
+  const envS = design.strokes.find((s) => s.type === 'envelope');
+  if (envS) {
+    const ol = outline(envS.pts).map(([z, y]) => [Z(z), Y(y)]);
+    const inks = [...new Set(design.strokes.filter((s) => s.type === 'line' && s.col && !s.pencil && !s.neon && shapeOf(s.pts).cy > shapeOf(envS.pts).y0).map((s) => s.col.join(',')))].map((k) => k.split(',').map(Number));
+    const c0 = colOf(envS, design);
+    const cols = [c0, inks[0] || [0.98, 0.95, 0.86], inks[1] || c0.map((v) => v * 0.72)];
+    if (ol.length >= 3) {
+      env = envelopeGeometry(ol, cols.map((c) => linC(...c)));
+      for (const [g, col] of env.geos) K.add(M.paint, g, col);
+      // its seams down the gores, the burner under its mouth
+      const dark = linC(0.07, 0.06, 0.1);
+      for (let k = 0; k < env.G; k++) {
+        const a = (k / env.G) * Math.PI * 2;
+        const P = env.pts.map((v) => [Math.sin(a) * v.x * 1.004, v.y, env.axis + Math.cos(a) * v.x * 1.004]);
+        for (let i = 1; i < P.length; i++) tube(K, M.matte, P[i - 1], P[i], 0.022, dark, 5);
+      }
+      K.cyl(M.metal, 0.22, 0.22, env.y0 - 0.5, env.y0 - 0.15, linC(0.45, 0.45, 0.5), { axis: 'y', z: env.axis, segs: 10 });
+    }
+  }
+  const onEnv = (p) => env && Math.abs(Z(p[0]) - env.axis) < env.rAt(Y(p[1])) * 0.98 && Y(p[1]) > env.y0 && Y(p[1]) < env.y1;
   for (const s of design.strokes) {
-    if (s.type !== 'line') continue;
+    if (s.type !== 'line' && s.type !== 'armor') continue;
     const c = s.col && !s.pencil ? s.col : [0.07, 0.06, 0.1];
+    if (env && s.type === 'line' && s.pts.filter(onEnv).length / s.pts.length >= 0.7) {
+      const P = thin(s.pts, 0.08, 60).filter(onEnv);
+      const ink = s.neon ? linC(...c) : inkOn(c, colOf(envS, design));
+      for (const sx of [-1, 1]) {
+        const at = ([z, y]) => {
+          const dz = Z(z) - env.axis;
+          const r = env.rAt(Y(y));
+          return [sx * Math.sqrt(Math.max(0, r * r - dz * dz)) * 1.01, Y(y), Z(z)];
+        };
+        for (let i = 1; i < P.length; i++) tube(K, M.matte, at(P[i - 1]), at(P[i]), 0.035, ink, 5);
+      }
+      continue;
+    }
     const inside = s.pts.filter(onBody).length / s.pts.length;
-    if (inside >= 0.6) lineOn(thin(s.pts, 0.04, 80), 0.06, s.neon ? linC(...c) : inkOn(c, base));
+    // (on a part narrower than the body - a boat's cabin: on its sides)
+    let host = null;
+    for (let i = bodies.length - 1; i >= 0; i--) {
+      if (bodies[i].w < W - 0.01 && s.pts.filter((p) => inPoly(p[0], p[1], outl[i])).length / s.pts.length >= 0.6) {
+        host = bodies[i];
+        break;
+      }
+    }
+    if (s.type === 'armor') lineOn(thin(s.pts, 0.04, 80), 0.11, inkOn(s.col && !s.pencil ? s.col : [0.32, 0.33, 0.36], base), 0.03, s.pts.some(onHullP));
+    else if (host) lineOn(thin(s.pts, 0.04, 80), 0.06, s.neon ? linC(...c) : inkOn(c, colOf(host.s, design)), 0.02 - (W - host.w) / 2);
+    else if (inside >= 0.6) lineOn(thin(s.pts, 0.04, 80), 0.06, s.neon ? linC(...c) : inkOn(c, base), 0.02, s.pts.filter(onHullP).length / s.pts.length >= 0.6);
     else if (Math.max(...s.pts.map((p) => p[1])) < spec.y0 + 0.15) for (const x of [-W * 0.35, W * 0.35]) rod(s.pts, x, 0.05, shade(colOf(s, design), 0.45));
     else rod(s.pts, 0, 0.07, shade(colOf(s, design), 0.45));
   }
   // the outlines of the closed parts, a dark edge on both sides
-  for (const o of bodies) if (!o.s.slim) lineOn(thin(outline(o.s.pts).concat([outline(o.s.pts)[0]]), 0.05, 80), 0.045, inkOn([0.07, 0.06, 0.1], colOf(o.s, design)), 0.02 - (W - o.w) / 2);
+  for (const o of bodies) if (!o.s.slim) lineOn(thin(outline(o.s.pts).concat([outline(o.s.pts)[0]]), 0.05, 80), 0.045, inkOn([0.07, 0.06, 0.1], colOf(o.s, design)), 0.02 - (W - o.w) / 2, o === hullS);
   // wings: flat across, as deep as drawn; in their colour, the tips darker
   const parts = { wheels: [], jetsAt: [] };
   for (const s of design.strokes) {
@@ -499,10 +879,62 @@ export function buildModel(design, spec) {
       K.add(M.paint, g, shade(c, 1.1));
     }
   }
-  // jets: a tube out of its back, the glow at its end
+  // (ROADMAP 11.8) sails: a thin sheet where it was drawn (in pencil: sailcloth white)
+  for (const s of design.strokes) {
+    if (s.type !== 'sail') continue;
+    const P = outline(s.pts);
+    if (P.length < 3) continue;
+    const g = solid(new THREE.ExtrudeGeometry(new THREE.Shape(P.map(([z, y]) => new THREE.Vector2(Z(z), Y(y)))), { depth: 0.05, bevelEnabled: false, curveSegments: 2 }));
+    g.rotateY(-Math.PI / 2);
+    g.translate(0.025, 0, 0);
+    K.add(M.paint, g, s.col && !s.pencil ? linC(...s.col) : linC(0.97, 0.95, 0.9));
+    lineOn(thin(P.concat([P[0]]), 0.06, 60), 0.04, linC(0.07, 0.06, 0.1), 0.03 - W / 2);
+  }
+  // a parachute over it: a dome in gores, on its lines (the lines are rods: drawn as they were)
+  for (const s of design.strokes) {
+    if (s.type !== 'chute') continue;
+    const sh = shapeOf(s.pts);
+    const rx = clamp(sh.w / 2, 0.6, 7);
+    const ry = clamp(sh.closed ? sh.h : sh.h * 0.9, rx * 0.25, rx * 0.8);
+    const c = colOf(s, design);
+    for (let k = 0; k < 10; k++) {
+      const g = new THREE.SphereGeometry(1, 3, 6, (k / 10) * Math.PI * 2, Math.PI / 5, 0, Math.PI / 2);
+      g.scale(rx, ry, rx * 0.86);
+      g.translate(0, Y(sh.y0), Z(sh.mx));
+      K.add(M.paint, g, k % 2 ? linC(0.98, 0.96, 0.9) : linC(...c));
+    }
+    const under = new THREE.CircleGeometry(1, 20).rotateX(Math.PI / 2);
+    under.scale(rx, 1, rx * 0.86);
+    under.translate(0, Y(sh.y0), Z(sh.mx));
+    K.add(M.matte, under, shade(c, 0.55));
+  }
+  // a spring under it: a coil, steel
+  for (const s of design.strokes) {
+    if (s.type !== 'spring') continue;
+    const sh = shapeOf(s.pts);
+    const r = clamp(Math.min(sh.w, sh.h) / 2, 0.12, 0.55);
+    const n = clamp(Math.round(springy(s.pts) / 2), 3, 9);
+    for (const x of spec.base === 'car' && W > 0.6 ? [-W * 0.22, W * 0.22] : [0]) {
+      const g = helixGeometry(Z(sh.mx), Y(sh.y0), Y(sh.y1), r, n);
+      g.translate(x, 0, 0);
+      K.add(M.metal, g, linC(0.7, 0.72, 0.78));
+    }
+  }
+  // jets: a tube out of its back, the glow at its end (on a boat: its outboard motor, its leg down
+  // in the water)
   for (const s of design.strokes) {
     if (s.type !== 'jet') continue;
     const sh = shapeOf(s.pts);
+    if (spec.base === 'boat') {
+      const zc2 = Z(Math.min(sh.cx, spec.x0 + 0.3));
+      const top2 = Y(Math.max(sh.y1, spec.y0 + 0.3));
+      const c = s.col && !s.pencil ? linC(...s.col) : linC(0.36, 0.37, 0.42);
+      K.box(M.paint, -0.22, top2 - 0.55, zc2 - 0.3, 0.22, top2, zc2 + 0.18, c);
+      K.sphere(M.paint, 0.26, 0, top2, zc2 - 0.06, c, 0.9, 0.7, 1.2, 10);
+      K.box(M.matte, -0.06, -0.55, zc2 - 0.12, 0.06, top2 - 0.5, zc2, linC(0.12, 0.12, 0.15));
+      parts.jetsAt.push([0, -0.3, zc2 - 0.3]);
+      continue;
+    }
     const r = clamp(sh.size / 2, 0.15, 0.6);
     const z1 = Z(Math.max(sh.x1, spec.x0 + 0.2));
     const z0 = Z(sh.x0) - 0.2;
@@ -517,8 +949,10 @@ export function buildModel(design, spec) {
   for (const s of design.strokes) {
     if (s.type !== 'wheel') continue;
     const sh = shapeOf(s.pts);
-    const r = clamp((sh.w + sh.h) / 4, 0.15, 1.3);
-    const ww = Math.min(0.42, r * 0.7);
+    // (a skateboard's: little ones on their trucks, under its deck)
+    const skate = spec.kind === 'skate';
+    const r = clamp((sh.w + sh.h) / 4, skate ? 0.025 : 0.15, 1.3);
+    const ww = skate ? 0.045 : Math.min(0.42, r * 0.7);
     const rim = s.col && !s.pencil ? shade(s.col, 1) : linC(0.78, 0.78, 0.82);
     const key = `${r.toFixed(2)}:${rim.join(',')}`;
     for (const sx of [-1, 1]) {
@@ -528,7 +962,7 @@ export function buildModel(design, spec) {
         g = wheelModel(M, r, ww, rim);
         made.set(key, g);
       }
-      g.position.set(sx * (W / 2 + ww / 2 + 0.02), Y(sh.my), Z(sh.mx));
+      g.position.set(sx * (skate ? W * 0.42 : W / 2 + ww / 2 + 0.02), Y(sh.my), Z(sh.mx));
       body.add(g);
       parts.wheels.push(g);
     }
@@ -603,11 +1037,39 @@ export function buildModel(design, spec) {
     prop.position.set(0, Y(p.cy), Z(Math.max(p.x1, spec.x1)) + 0.08);
     body.add(prop);
   }
-  // where the rider sits: on its top, about its middle (out of it from the chest up)
+  // where the rider sits: on its top, about its middle (out of it from the chest up) - on a
+  // skateboard standing on its deck, arms out; in a balloon's basket standing, hands on its rim
   const top = Y(spec.y1);
   const seatY = Math.max(Y(spec.y0) + 0.5, top - 0.55);
   const seatZ = clamp(-spec.L * 0.08, -1.2, 0);
   const halfWid = Math.max(W / 2 + 0.3, (parts.span || 0) / 2);
+  let pose = 'pilot';
+  let deck = 0;
+  let bar = [0, seatY + 0.95, seatZ + 0.55];
+  let grip = 0.22;
+  if (spec.kind === 'skate') {
+    pose = 'stand';
+    deck = top;
+    bar = [0, top + 1.0, 0.05];
+    grip = 0.5;
+  } else if (spec.base === 'balloon') {
+    pose = 'stand';
+    deck = Y(spec.y0) + 0.1;
+    bar = [0, top + 0.02, Z(spec.x1) - 0.18];
+    grip = clamp(W * 0.3, 0.2, 0.4);
+  }
+  // (a balloon's burner: its flame, on while it heats - game/hybrid.js)
+  let flame = null;
+  if (env) {
+    const F = new Kit();
+    F.add(M.glow, new THREE.ConeGeometry(0.2, 0.9, 10).translate(0, 0.45, 0), linC(1.0, 0.62, 0.2));
+    F.add(M.glow, new THREE.ConeGeometry(0.1, 0.55, 8).translate(0, 0.3, 0), linC(1.0, 0.92, 0.55));
+    flame = F.build();
+    flame.matrixAutoUpdate = true;
+    flame.position.set(0, env.y0 - 0.15, env.axis);
+    flame.scale.setScalar(0.01);
+    body.add(flame);
+  }
   return {
     body,
     wheels: parts.wheels,
@@ -616,11 +1078,13 @@ export function buildModel(design, spec) {
     tailRotor: new THREE.Object3D(),
     turret,
     muzzle,
+    flame,
     jetsAt: parts.jetsAt,
-    pose: 'pilot',
+    pose,
+    deck,
     seatAt: [0, seatY + 0.5, seatZ],
-    bar: [0, seatY + 0.95, seatZ + 0.55],
-    grip: 0.22,
+    bar,
+    grip,
     halfLen: Math.max(0.8, spec.L / 2),
     halfWid,
     heightM: Math.max(1.2, top + 0.6),
@@ -634,7 +1098,7 @@ export function buildModel(design, spec) {
 // ------------------------------------------------------------------ into the city
 // a drawn vehicle at (x, z), facing yaw: one of the city's kinds, with the drawing's model and
 // handling (null: it is no vehicle). design.strokes: [{ pts, type, col, pencil, neon }]
-export function spawnDrawn(game, design, x, z, yaw, add = true) {
+export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   const spec = specOf(design);
   if (!spec.ok) return null;
   const V = game.vehicles;
@@ -647,10 +1111,14 @@ export function spawnDrawn(game, design, x, z, yaw, add = true) {
   v.group.add(v.body);
   v.model = 'drawn';
   v.drawn = {
-    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined })),
+    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined })),
     color: design.color.slice(),
     force: design.force || null,
     name: design.name || null,
+    // (ROADMAP 11.8: what the network called it, and what else it does)
+    group: design.group || null,
+    cls: design.cls || null,
+    abil: design.abil || null,
   };
   v.spec = spec;
   v.seat = true;
@@ -663,19 +1131,23 @@ export function spawnDrawn(game, design, x, z, yaw, add = true) {
   v.turretYaw = 0;
   v.reload = 0;
   v.q = Object.assign({}, v.q, { reload: 1 });
-  if (spec.base === 'car') {
+  if (spec.handling) {
     v.handling = spec.handling;
     v.glide = spec.glide;
-    v.jets = spec.jets.length;
-  } else {
-    Object.assign(v.q, spec.q);
-    v.jets = spec.jets.length;
   }
-  v.flies = spec.base === 'copter' || spec.base === 'plane';
-  v.camOpt = { dist: clamp(spec.L * 1.3 + 3.2, 5.5, 14), height: clamp(spec.H + 1.4, 2.3, 5), shoulder: 0, fovMul: 1 };
-  v.pos.set(x, v.flies ? 0 : Math.max(0, groundHeight(x, z) * 0.5), z);
+  if (spec.base !== 'car') Object.assign(v.q, spec.q);
+  v.jets = spec.jets.length;
+  // (a machine gun's paint: the colour the gun was drawn in)
+  const gunS = design.strokes.find((s) => s.type === 'gun');
+  if (gunS && gunS.col && !gunS.pencil) v.mgColor = gunS.col.slice();
+  // (a big boat, a balloon: the camera further back)
+  v.camOpt = spec.base === 'balloon' ? { dist: 19, height: 5.5, shoulder: 0, fovMul: 1 } : { dist: clamp(spec.L * 1.3 + 3.2, 5.5, spec.base === 'boat' ? 26 : 14), height: clamp(spec.H + 1.4, 2.3, 5), shoulder: 0, fovMul: 1 };
+  // (ROADMAP 11.8: how it goes each of its ways, its gear and its gun - game/hybrid.js - and the
+  // way it starts where it stands)
+  setupDrawn(v, spec);
+  v.pos.set(x, 0, z);
   v.yaw = yaw;
-  if (spec.base === 'copter') v.alt = 1.05;
+  startMode(v, alt);
   v.reveal = 0;
   if (add) V.add(v);
   return v;

@@ -54,6 +54,8 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _u = new THREE.Vector3();
 const _sm = new THREE.Matrix4();
+const _om = new THREE.Matrix4();
+const _UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * The hero's arsenal (pencil + weapons he drew), firing logic, projectiles of everyone.
@@ -303,6 +305,7 @@ export class Weapons {
       t: 0,
       // (a thing drawn freehand to throw flies as its own drawing)
       shape: slot.model && slot.model.shape ? slot.model.shape : null,
+      bounce: def.bounce || 0,
       ...extra,
     };
     this.projectiles.push(pr);
@@ -543,22 +546,69 @@ export class Weapons {
   // kind: 'melee' for a blow (the fists' guard takes only those), src: who swung it
   block(amount, fromX, fromZ, kind = null, src = null) {
     const slot = this.current;
-    if (slot.def.bare && this.fists) return this.fists.block(amount, fromX, fromZ, kind, src);
+    if (slot.def.bare && this.fists && !this.off) return this.fists.block(amount, fromX, fromZ, kind, src);
     const p = this.game.player;
-    if (!slot.def.block || p.mode !== 'foot' || this.swingT >= 0) return amount;
+    // (the shield in the hand - or a drawn one in the other hand, whatever this one is: ROADMAP 11.8)
+    const S = slot.def.block ? slot : this.off;
+    if (!S || p.mode !== 'foot' || (S === slot && this.swingT >= 0)) return amount;
     const dx = fromX - p.pos.x;
     const dz = fromZ - p.pos.z;
     const d = Math.hypot(dx, dz) || 1;
     const f = p.fig.forward;
     if ((dx * f.x + dz * f.z) / d < 0.3) return amount;
     const game = this.game;
-    const h = p.fig.j.handR;
+    const h = S === slot ? p.fig.j.handR : p.fig.j.handL;
     game.fx.sparks(h.x + f.x * 0.3, h.y + 0.2, h.z + f.z * 0.3, 5, [0.62, 0.45, 0.25]);
     game.audio.play('block');
-    slot.uses--;
-    if (slot.uses <= 0) this.drop(slot, 'המגן נקרע — אפשר לצייר חדש');
-    game.hud.updateWeapon();
-    return amount * (1 - slot.def.block * (slot.grade === 'fail' ? 0.5 : 1));
+    // (a shield wears down; one drawn on a weapon, its knack, lasts as long as the weapon does)
+    if (S.uses !== undefined) {
+      S.uses--;
+      if (S.uses <= 0) {
+        if (S === this.off) {
+          this.clearOff();
+          game.hud.toast('המגן נקרע — אפשר לצייר חדש', 'info');
+        } else this.drop(slot, 'המגן נקרע — אפשר לצייר חדש');
+      }
+      game.hud.updateWeapon();
+    }
+    return amount * (1 - S.def.block * (S.grade === 'fail' ? 0.5 : 1));
+  }
+
+  // (ROADMAP 11.8) a shield drawn together with a weapon (game/freeform.js readArmed): in the other
+  // hand, whatever is in this one - held up in front of you, it stops most of a hit from the front
+  setOff(def, grade, model, free = null) {
+    this.clearOff();
+    this.off = { def, grade, uses: def.uses, model, free };
+    model.group.matrixAutoUpdate = false;
+    this.game.scene.add(model.group);
+  }
+
+  clearOff() {
+    if (!this.off) return;
+    this.game.scene.remove(this.off.model.group);
+    const fig = this.game.player.fig;
+    if (fig && fig.carryL === 'dshield') fig.carryL = null;
+    this.off = null;
+  }
+
+  // the shield in the other hand: up in front of the chest on the left, its face to the front
+  // (game/carry.js puts the hand there)
+  offModel(p, drawing) {
+    const fig = p.fig;
+    const g = this.off.model.group;
+    const on = !drawing && p.mode === 'foot' && !p.inVehicle && !this.game.inBar;
+    g.visible = on;
+    if (on && (!fig.carryL || fig.carryL === 'dshield')) fig.carryL = 'dshield';
+    else if (!on && fig.carryL === 'dshield') fig.carryL = null;
+    if (!on) return;
+    const f = _u.copy(fig.forward).setY(0).normalize();
+    const side = _w.set(0, 1, 0).cross(f).negate();
+    const h = fig.j.handL;
+    _om.makeBasis(f, _UP, side);
+    _om.setPosition(h.x + f.x * 0.16 - fig.right.x * 0.04, h.y + 0.1, h.z + f.z * 0.16 - fig.right.z * 0.04);
+    g.matrix.copy(_om);
+    g.matrixWorldNeedsUpdate = true;
+    g.updateMatrixWorld(true);
   }
 
   // the ruler's edge leaves a bright arc in the air
@@ -592,6 +642,7 @@ export class Weapons {
   updateModels() {
     const p = this.game.player;
     const drawing = p.mode === 'draw';
+    if (this.off) this.offModel(p, drawing);
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (!s.model || !s.model.group) continue;
@@ -619,7 +670,7 @@ export class Weapons {
       // idle: rests diagonally, the business end up and out
       if (this.swingT < 0) dir.lerp(_w.set(fig.forward.x * 0.35, 0.85, fig.forward.z * 0.35).addScaledVector(fig.right, 0.25), 0.7).normalize();
       m = p.holdMatrix(dir);
-      if (def.block) {
+      if (def.block && !def.knack) {
         // the shield: held up in front of the chest, its face to the front (pushed out for a bash)
         const f = _u.copy(fig.forward).setY(0).normalize();
         const up = _w.set(0, 1, 0);
@@ -834,6 +885,24 @@ export class Weapons {
           pr.vy *= -0.3;
           pr.vz *= -0.3;
           hit = null;
+          keep.push(pr);
+          this.drawProjectile(fr, pr);
+          continue;
+        }
+      }
+      // (ROADMAP 11.8) a gun drawn on a spring: its shots bounce off the walls and the ground
+      if (hit && hit.type === 'world' && pr.bounce > 0) {
+        const n = _u.set(hit.nx || 0, hit.ny || 0, hit.nz || 0);
+        if (n.lengthSq() > 0.5) {
+          const vn = pr.vx * n.x + pr.vy * n.y + pr.vz * n.z;
+          pr.vx = (pr.vx - 2 * vn * n.x) * 0.85;
+          pr.vy = (pr.vy - 2 * vn * n.y) * 0.85;
+          pr.vz = (pr.vz - 2 * vn * n.z) * 0.85;
+          pr.x = hit.x + n.x * 0.06;
+          pr.y = hit.y + n.y * 0.06;
+          pr.z = hit.z + n.z * 0.06;
+          pr.bounce--;
+          game.fx.sparks(hit.x, hit.y, hit.z, 3, [1, 0.9, 0.6]);
           keep.push(pr);
           this.drawProjectile(fr, pr);
           continue;

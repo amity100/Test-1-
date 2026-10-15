@@ -96,10 +96,12 @@ export class SaveGame {
       where: districtName(at.x, at.z) || '',
       clock: g.daynight ? g.daynight.clock : '',
       playTime: Math.round(this.playTime),
-      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade } : null, armor: p.armor || 0 },
+      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade, colours: p.parachute.colours || null } : null, armor: p.armor || 0 },
       hero: { hair: L.hair.style !== 'none' ? { style: L.hair.style, color: L.hair.color } : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: p.fig.bulk, maxHp: p.maxHp },
       // (one drawn freehand: its drawing, to make it again - ROADMAP 11.6)
       weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score, free: s.free || null })),
+      // (a shield drawn with a weapon, in the other hand: ROADMAP 11.8)
+      offhand: g.weapons.off && g.weapons.off.free ? { free: g.weapons.off.free, uses: g.weapons.off.uses } : null,
       weapon: g.weapons.index,
       weaponId: g.weapons.current.def.id,
       // (what the hero got better at: ROADMAP 5.6)
@@ -230,7 +232,7 @@ export class SaveGame {
     p.maxHp = P.maxHp || p.maxHp;
     p.hp = Math.max(1, Math.min(p.maxHp, P.hp));
     p.invuln = 3;
-    p.parachute = P.parachute ? { grade: P.parachute.grade } : null;
+    p.parachute = P.parachute ? { grade: P.parachute.grade, colours: Array.isArray(P.parachute.colours) ? P.parachute.colours : null } : null;
     // (the vest, ROADMAP 5.7)
     if (!g.classic) {
       p.armor = P.armor || 0;
@@ -253,7 +255,7 @@ export class SaveGame {
       if (it.free && Array.isArray(it.free.s)) {
         // (drawn freehand: read and made again from its drawing, game/freeform.js)
         if (g.classic) continue;
-        const R = readFree(it.free.s, it.free.force || null);
+        const R = readFree(it.free.s, it.free.force || null, new Set(Array.isArray(it.free.cats) ? it.free.cats : []));
         if (!R || R.cat !== 'weapon') continue;
         W.add(R.def, 'good', buildWeapon(R), undefined);
         slot = W.current;
@@ -269,6 +271,14 @@ export class SaveGame {
       slot.ammo = it.ammo < 0 ? Infinity : it.ammo;
       if (it.uses !== null && it.uses !== undefined) slot.uses = it.uses;
     }
+    if (W.off) W.clearOff();
+    if (s.offhand && s.offhand.free && Array.isArray(s.offhand.free.s) && !g.classic) {
+      const R = readFree(s.offhand.free.s, 'g:shield', new Set(['gear']));
+      if (R && R.cat === 'weapon' && R.kind === 'shield') {
+        W.setOff(R.def, 'good', buildWeapon(R), s.offhand.free);
+        if (typeof s.offhand.uses === 'number') W.off.uses = s.offhand.uses;
+      }
+    }
     // (by what it was: not with ?classic the fists come second, ROADMAP 5.4)
     const wi = s.weaponId ? W.slots.findIndex((sl) => sl.def.id === s.weaponId) : -1;
     W.select(wi >= 0 ? wi : Math.min((s.weapon || 0) + (s.weapon > 0 ? W.keep - 1 : 0), W.slots.length - 1));
@@ -280,7 +290,7 @@ export class SaveGame {
     for (const it of s.vehicles || []) {
       let v;
       if (it.drawn) {
-        v = g.classic || !Array.isArray(it.drawn.strokes) ? null : spawnDrawn(g, it.drawn, it.x, it.z, it.yaw);
+        v = g.classic || !Array.isArray(it.drawn.strokes) ? null : spawnDrawn(g, it.drawn, it.x, it.z, it.yaw, true, it.alt || 0);
         if (!v) continue;
       } else if (it.stock) v = V.spawnStock(it.stock, { x: it.x, z: it.z }, it.yaw);
       else {

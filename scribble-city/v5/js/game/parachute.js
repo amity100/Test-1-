@@ -29,9 +29,11 @@ function canopyMat() {
   return MAT;
 }
 
-export function canopyModel(grade) {
+// (ROADMAP 11.8: one drawn freehand, in the colours it was drawn in - between white gores)
+export function canopyModel(grade, colours = null) {
   const K = new Kit();
-  const cols = [linC(1.0, 0.5, 0.18), linC(0.98, 0.96, 0.9), linC(0.95, 0.3, 0.42), linC(0.98, 0.96, 0.9), linC(0.3, 0.55, 0.92)];
+  const own = colours && colours.length ? colours.slice(0, 3).map((c) => linC(...c)) : null;
+  const cols = own ? own.flatMap((c) => [c, linC(0.98, 0.96, 0.9)]) : [linC(1.0, 0.5, 0.18), linC(0.98, 0.96, 0.9), linC(0.95, 0.3, 0.42), linC(0.98, 0.96, 0.9), linC(0.3, 0.55, 0.92)];
   const M = canopyMat();
   for (let k = 0; k < GORES; k++) {
     const g = new THREE.SphereGeometry(1, 4, 6, (k / GORES) * Math.PI * 2, (Math.PI * 2) / GORES, 0, Math.PI * 0.42);
@@ -64,12 +66,12 @@ export class Parachute {
     return FLY[this.grade] || FLY.good;
   }
 
-  deploy(grade) {
+  deploy(grade, colours = null) {
     if (this.open) return;
     const game = this.game;
     this.grade = grade || 'good';
     if (this.group) game.scene.remove(this.group);
-    this.group = canopyModel(this.grade);
+    this.group = canopyModel(this.grade, colours);
     game.scene.add(this.group);
     this.open = true;
     this.k = 0;

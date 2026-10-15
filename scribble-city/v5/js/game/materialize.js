@@ -3,7 +3,7 @@ import { surfaceVariant } from '../render/materials.js';
 import { buildWeaponModel } from './items.js';
 import { canopyModel } from './parachute.js';
 import { groundHeight, BOUNDS } from '../world/layout.js';
-import { waterSpot } from './rides.js';
+import { waterSpot, isWater } from './rides.js';
 
 // A drawing turning into the real thing.
 //
@@ -154,7 +154,8 @@ export function findSpot(game, v, so, box) {
         // on the city's ground (not in the bay - the beach slopes a little below 0), clear of walls
         // and things (a boat: on the bay)
         if (px < BOUNDS.minX || pz < BOUNDS.minZ || pz > BOUNDS.maxZ) return false;
-        if (v.kind === 'boat' ? groundHeight(px, pz) > -0.5 : groundHeight(px, pz) < -0.45) return false;
+        // (a boat: where it floats - game/rides.js - or it would sit there, stuck)
+        if (v.kind === 'boat' ? !isWater(px, pz) : groundHeight(px, pz) < -0.45) return false;
         if (col.pointInside(px, 1.0, pz, 0.3)) return false;
       }
     }

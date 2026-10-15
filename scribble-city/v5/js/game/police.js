@@ -183,13 +183,15 @@ export class Police {
     const p = game.player;
     const pp = p.inVehicle ? p.inVehicle.pos : p.pos;
     let seen = false;
+    // (down under the waves in a drawn submarine: nobody sees you - ROADMAP 11.8)
+    const under = !!(p.inVehicle && p.inVehicle.submerged);
     for (const e of game.enemies.list) {
-      if (e.faction === 'police' && e.alive && e.sees) {
+      if (!under && e.faction === 'police' && e.alive && e.sees) {
         seen = true;
         break;
       }
     }
-    if (!seen) {
+    if (!seen && !under) {
       const col = game.world.collision;
       for (const c of game.traffic.list) {
         if (!c.police || c.mode !== 'pursuit') continue;
@@ -201,7 +203,7 @@ export class Police {
         }
       }
     }
-    if (!seen && this.airT !== undefined && t - this.airT < 0.2) seen = true;
+    if (!seen && !under && this.airT !== undefined && t - this.airT < 0.2) seen = true;
     if (seen) {
       this.seenT = t;
       this.lastSeen.copy(pp);

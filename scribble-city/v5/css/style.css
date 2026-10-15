@@ -1198,6 +1198,8 @@ body.touch .fd-zone { display: block; }
 .fd-kind { display: flex; flex-direction: column; align-items: flex-start; text-align: right; max-width: 100%; padding: 3px 10px 4px; border: 2.5px solid var(--ink); border-radius: 10px 12px 9px 11px; background: rgba(255, 252, 244, 0.94); box-shadow: 2px 3px 0 var(--ink); cursor: pointer; color: var(--ink); font-family: var(--font-ui); }
 .fd-kind b { font-family: var(--font-hand); font-size: 26px; line-height: 1.05; }
 .fd-kind span { font-size: 13px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.fd-kind em { font-style: normal; font-size: 12.5px; font-weight: 700; line-height: 1.2; color: #a2341f; }
+.fd-kind em:empty { display: none; }
 .fd-alts { display: flex; flex-wrap: wrap; gap: 5px; }
 .fd-chip { font: 600 14px var(--font-ui); padding: 3px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 252, 244, 0.94); cursor: pointer; color: var(--ink); }
 .fd-chip.more { opacity: 0.8; }
@@ -1221,6 +1223,13 @@ body.touch .fd-zone { display: block; }
 .fd-btn.primary.off { background: #e6e0d2; opacity: 0.8; }
 .fd-fly { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 17; pointer-events: none; transition: transform 0.5s ease-out, opacity 0.5s ease-in; transform-origin: 50% 50%; }
 body.fd-open #crosshair { opacity: 0; }
+/* (ROADMAP 11.8) what is drawn: anything, or one of five, or several together (a combination) */
+.fd-cats { position: absolute; z-index: 3; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); display: flex; align-items: center; gap: 5px; padding: 5px 8px; background: rgba(255, 252, 244, 0.92); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; white-space: nowrap; }
+.fd-cats-t { font-family: var(--font-hand); font-size: 18px; color: var(--ink); margin-left: 3px; }
+.fd-cat { font: 700 14px var(--font-ui); padding: 4px 10px; border: 2px solid var(--ink); border-radius: 12px; background: var(--paper-2); cursor: pointer; color: var(--ink); }
+.fd-cat.on { background: #ffe2a8; border-color: #ff4fa3; box-shadow: inset 0 -3px 0 #ff9a3c; }
+.fd-cats.combo .fd-cat.on { background: #d9f2ff; border-color: #2b7de0; box-shadow: inset 0 -3px 0 #33b5ff; }
+.fd-cat.cur { outline: 3px dashed #7c5cff; outline-offset: 2px; }
 /* (a phone: the tools down the right edge, one colour button for the colours; the stick's corner
    stays the thumb's; the game's own buttons out of the way) */
 body.touch .fd-tools { left: auto; right: max(8px, env(safe-area-inset-right)); top: 50%; bottom: auto; transform: translateY(-50%); flex-direction: column; gap: 6px; padding: 6px; }
@@ -1228,6 +1237,9 @@ body.touch .fd-inks { display: none; }
 body.touch .fd-color { display: block; padding: 4px 6px; }
 body.touch .fd-ink { width: 46px; }
 body.touch .fd-hint { font-size: 21px; top: 22%; left: 58%; width: 60vw; }
+body.touch .fd-cats { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); left: 56%; padding: 4px 6px; gap: 4px; }
+body.touch .fd-cats-t { display: none; }
+body.touch .fd-cat { font-size: 13px; padding: 4px 8px; }
 body.touch.fd-open #btn-fire, body.touch.fd-open #btn-jump, body.touch.fd-open #btn-draw, body.touch.fd-open #btn-photo, body.touch.fd-open #btn-swap, body.touch.fd-open #btn-guard, body.touch.fd-open #btn-hands, body.touch.fd-open #btn-up, body.touch.fd-open #btn-down, body.touch.fd-open #btn-enter, body.touch.fd-open #draw-hint, body.touch.fd-open #look-zone { display: none !important; }
 body.touch.fd-open #toasts { left: 24%; }
 @media (max-height: 520px) {
@@ -1237,4 +1249,5 @@ body.touch.fd-open #toasts { left: 24%; }
   .fd-btn.primary { font-size: 17px; }
   .fd-sw { width: 19px; height: 19px; }
   .fd-chip { font-size: 12.5px; padding: 3px 8px; }
+  .fd-cat { font-size: 12.5px; padding: 3px 7px; }
 }

@@ -46,6 +46,11 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
       if (!R && fig.carryL !== 'umbrella') return false;
       [x, y, z] = [side * 0.1, ny - 0.12 + (fig.umbrellaUp || 0) * 0.45, 0.22 - (fig.umbrellaUp || 0) * 0.1];
       break;
+    case 'dshield':
+      // (ROADMAP 11.8: a drawn shield in the left hand, held up in front - game/weapons.js offModel)
+      if (R) return false;
+      [x, y, z] = [side * 0.2, ny - 0.24, 0.3];
+      break;
     case 'coffee':
       [x, y, z] = [side * 0.17, hipY + 0.2, 0.24];
       break;

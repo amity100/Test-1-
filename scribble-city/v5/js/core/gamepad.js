@@ -175,7 +175,8 @@ export class Pad {
     inp.lookDY += c(ry) * 700 * dt;
     let fire;
     if (v) {
-      const flying = v.kind === 'copter';
+      // (a helicopter, a balloon: up and down on the triggers - ROADMAP 11.8)
+      const flying = v.kind === 'copter' || v.kind === 'balloon';
       inp.pad = flying ? { x: lx, y: -ly, sprint: false } : { x: lx, y: this.rt - this.lt, sprint: false };
       inp.flyUp = flying && this.rt > 0.3;
       inp.flyDown = flying && this.lt > 0.3;
@@ -435,6 +436,10 @@ export class Pad {
     if (this.pressed(B.Y)) F.cycleKind();
     if (this.pressed(B.LB)) F.cycleInk(-1);
     if (this.pressed(B.RB)) F.cycleInk(1);
+    // (what is drawn, ROADMAP 11.8: left and right along the categories, down one on or off)
+    if (this.pressed(B.LEFT)) F.padCat(1);
+    if (this.pressed(B.RIGHT)) F.padCat(-1);
+    if (this.pressed(B.DOWN)) F.padCat(0);
     if (this.pressed(B.B) || this.pressed(B.UP)) F.close();
     if (this.pressed(B.MENU)) {
       F.close();

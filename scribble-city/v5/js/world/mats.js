@@ -37,6 +37,10 @@ export function cityMaterials() {
     court: B({ kind: 'ground', vcolor: true, color: new THREE.Color(1, 1, 1), ang: 0.4, line: 0.7 }),
     grass: B({ kind: 'ground', vcolor: true, color: srgb(0.5, 0.78, 0.45), ang: 1.2, line: 0.4, density: 1.1 }),
     sand: B({ kind: 'ground', map: sandTexture(), ang: 0.3, line: 0.4 }),
+    // (the wet sand along the water and the surf's foam: their colour is all their parts' own - the
+    // grass's pen would make them green)
+    wetSand: B({ kind: 'ground', vcolor: true, color: new THREE.Color(1, 1, 1), ang: 0.3, line: 0.4 }),
+    foam: B({ kind: 'ground', vcolor: true, color: new THREE.Color(1, 1, 1), ang: 1.2, line: 0.4, density: 1.1 }),
     deck: B({ kind: 'ground', map: woodDeckTexture(), ang: 1.5708, line: 0.7 }),
     water: B({ kind: 'water', color: srgb(0.18, 0.2, 0.42), refl: true, wet: 1, line: 0 }),
     pool: B({ kind: 'water', color: srgb(0.2, 0.62, 0.78), refl: true, wet: 0.9, line: 0.3 }),

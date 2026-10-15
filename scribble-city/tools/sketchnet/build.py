@@ -1,11 +1,12 @@
-# The training set: every class's drawings (the dataset's, or made here for what it lacks),
+# The training set: every class's drawings (the dataset's, or made here for pistol, bomb, tank),
 # each rendered twice with a different augmentation; a held-out set rendered plainly.
 import json, sys, time, numpy as np
 from multiprocessing import Pool
-from render import render, normalize, augment, qd, SYNTH
+from render import render, normalize, augment, qd, SYNTH, SYNTH_NEW
 
 REAL = [l.strip() for l in open('classes.txt') if l.strip()]
-CLASSES = REAL + list(SYNTH)
+REAL2 = [l.strip() for l in open("classes2.txt") if l.strip()]
+CLASSES = REAL + [c for c in SYNTH if c not in SYNTH_NEW] + REAL2 + list(SYNTH_NEW)
 NVAL = 1500
 NTRAIN = 19500
 COPIES = 2

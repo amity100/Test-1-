@@ -1,7 +1,10 @@
 import * as THREE from 'three';
-import { INKS, KINDS, WEAPON_ORDER, readFree, buildWeapon, statLine } from '../game/freeform.js';
+import { INKS, KINDS, WEAPON_ORDER, readFree, buildWeapon, statLine, keyKind } from '../game/freeform.js';
+import { CATEGORY_ORDER, CATEGORY_NAME, CATEGORY_OF } from '../game/sketchnet.js';
 import { spawnDrawn, jetFlames } from '../game/drawncar.js';
 import { makeFrame, findSpot, localBox } from '../game/materialize.js';
+import { canopyModel } from '../game/parachute.js';
+import { waterSpot } from '../game/rides.js';
 import { angleDiff, clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 
@@ -18,12 +21,23 @@ import { groundHeight } from '../world/layout.js';
 // neon glows, and a gun drawn in it is a laser).
 
 const $ = (id) => document.getElementById(id);
+// (ROADMAP 11.8) what a pick is of: its category (a vehicle's by its kind)
+const keyCat = (k) => (!k ? null : k.startsWith('v:') ? CATEGORY_OF(k.split(':')[1]) : k.startsWith('g:') ? 'gear' : k === 'vehicle' ? 'car' : 'weapon');
+// several picks, one of each kind (a vehicle, gear, a weapon): '|' between them
+const picksOf = (force) => (force ? force.split('|').filter(Boolean) : []);
 const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 
-// what it can be made into instead (the tag's menu): the vehicles by kind, the weapons
-const VEH_CHOICES = [['v:car', 'מכונית'], ['v:truck', 'משאית'], ['v:bus', 'אוטובוס'], ['v:moto', 'אופנוע'], ['v:tank', 'טנק'], ['v:copter', 'מסוק'], ['v:plane', 'מטוס']];
+// what it can be made into instead (the tag's menu), by what the player says they draw (ROADMAP
+// 11.8): the weapons, the vehicles by kind, on the water, in the air, the gear
+const CHOICES = {
+  weapon: WEAPON_ORDER.map((k) => [k, KINDS[k].name]),
+  car: [['v:car', 'מכונית'], ['v:truck', 'משאית'], ['v:bus', 'אוטובוס'], ['v:moto', 'אופנוע'], ['v:bicycle', 'אופניים'], ['v:tank', 'טנק'], ['v:skate', 'סקייטבורד']],
+  air: [['v:plane', 'מטוס'], ['v:copter', 'מסוק'], ['v:balloon', 'כדור פורח']],
+  sea: [['v:boat:sailboat', 'סירת מפרש'], ['v:boat:speedboat', 'סירת מנוע'], ['v:boat:canoe', 'קאנו'], ['v:boat:submarine', 'צוללת'], ['v:boat:cruise ship', 'ספינה']],
+  gear: [['g:shield', 'מגן'], ['g:parachute', 'מצנח'], ['g:umbrella', 'מטרייה'], ['g:ladder', 'סולם'], ['g:ramp', 'רמפה'], ['g:bridge', 'גשר'], ['g:key', 'מפתח'], ['g:spring', 'קפיץ']],
+};
 
 export class FreeDraw {
   constructor(game) {
@@ -34,6 +48,9 @@ export class FreeDraw {
     this.cur = null;
     this.ink = 0;
     this.force = null;
+    // (ROADMAP 11.8) what the player says they draw: none - anything; one; or several together
+    this.cats = new Set();
+    this.catCursor = 0;
     this.R = null;
     this.presenting = null;
     this.shutAt = -1e9;
@@ -54,14 +71,15 @@ export class FreeDraw {
 
   build() {
     const sw = INKS.map((c, i) => `<button class="fd-sw${c.neon ? ' neon' : ''}${c.pencil ? ' pencil' : ''}" data-i="${i}" style="--c:${c.css}" title="${c.name}" aria-label="${c.name}"></button>`).join('');
-    const chips = [['', 'אוטומטי'], ...VEH_CHOICES, ...WEAPON_ORDER.map((k) => [k, KINDS[k].name])].map(([k, n]) => `<button class="fd-chip" data-k="${k}">${n}</button>`).join('');
+    const cats = [['', 'כל דבר'], ...CATEGORY_ORDER.map((c) => [c, CATEGORY_NAME[c]])].map(([c, n], i) => `<button class="fd-cat" data-c="${c}"${i ? ` title="${i}"` : ' title="0"'}>${n}</button>`).join('');
     this.el.innerHTML = `<canvas id="fd-air"></canvas>
+      <div class="fd-cats" id="fd-cats"><span class="fd-cats-t">מה מציירים?</span>${cats}</div>
       <div class="fd-zone" id="fd-zone-a"></div><div class="fd-zone" id="fd-zone-b"></div>
       <div class="fd-hint" id="fd-hint"></div>
       <div class="fd-tag hidden" id="fd-tag">
-        <button class="fd-kind" id="fd-kind" title="משהו אחר"><b id="fd-name"></b><span id="fd-stats"></span></button>
+        <button class="fd-kind" id="fd-kind" title="משהו אחר"><b id="fd-name"></b><span id="fd-stats"></span><em id="fd-note"></em></button>
         <div class="fd-alts" id="fd-alts"></div>
-        <div class="fd-menu hidden" id="fd-menu">${chips}</div>
+        <div class="fd-menu hidden" id="fd-menu"></div>
       </div>
       <div class="fd-tools" id="fd-tools">
         <div class="fd-inks" id="fd-inks">${sw}</div>
@@ -78,6 +96,7 @@ export class FreeDraw {
     this.tagEl = $('fd-tag');
     this.nameEl = $('fd-name');
     this.statsEl = $('fd-stats');
+    this.noteEl = $('fd-note');
     this.altsEl = $('fd-alts');
     this.hintEl = $('fd-hint');
     this.toolsEl = $('fd-tools');
@@ -86,7 +105,9 @@ export class FreeDraw {
     this.inkFill = $('fd-ink-fill');
     this.inkCost = $('fd-ink-cost');
     this.colorBtn = $('fd-color');
+    this.catsEl = $('fd-cats');
     this.pickInk(0);
+    this.showCats();
   }
 
   bind() {
@@ -166,6 +187,10 @@ export class FreeDraw {
       this.close();
       game.openDraw();
     });
+    press(this.catsEl, (e) => {
+      const b = e.target.closest('.fd-cat');
+      if (b) this.toggleCat(b.dataset.c || null);
+    });
     press($('fd-kind'), () => this.menu(this.menuEl.classList.contains('hidden')));
     press(this.altsEl, (e) => {
       const b = e.target.closest('.fd-chip');
@@ -199,6 +224,11 @@ export class FreeDraw {
       } else if (k === 'Delete') {
         mine();
         this.clear();
+      } else if (/^(Digit|Numpad)[0-5]$/.test(k)) {
+        // (what is drawn: 1-5 each of the five, together; 0 anything - the weapons wait)
+        mine();
+        const i = +k.slice(-1);
+        this.toggleCat(i ? CATEGORY_ORDER[i - 1] : null);
       }
     });
     window.addEventListener('resize', () => {
@@ -336,15 +366,59 @@ export class FreeDraw {
     this.colorBtn.classList.toggle('neon', !!ink.neon);
   }
 
+  // the choices there are: those of what is drawn (all of them, when anything)
+  choices() {
+    const cs = this.cats.size ? CATEGORY_ORDER.filter((c) => this.cats.has(c)) : CATEGORY_ORDER;
+    return cs.flatMap((c) => CHOICES[c]);
+  }
+
   menu(on) {
     this.menuEl.classList.toggle('hidden', !on);
-    if (on) this.menuEl.querySelectorAll('.fd-chip').forEach((b) => b.classList.toggle('on', (b.dataset.k || null) === this.force));
+    if (on) {
+      const on = picksOf(this.force);
+      this.menuEl.innerHTML = [['', 'אוטומטי'], ...this.choices()].map(([k, n]) => `<button class="fd-chip${(k ? on.includes(k) : !on.length) ? ' on' : ''}" data-k="${k}">${n}</button>`).join('');
+    }
     if (this.isOpen) this.place();
+  }
+
+  // ------------------------------------------------------------------ what is drawn (ROADMAP 11.8)
+  // a category on or off (several on: a thing of them all together); null: anything
+  toggleCat(c) {
+    if (!c) this.cats.clear();
+    else if (this.cats.has(c)) this.cats.delete(c);
+    else this.cats.add(c);
+    // (a pick of something none of them is: let go)
+    const keep = picksOf(this.force).filter((k) => !this.cats.size || this.cats.has(keyCat(k)));
+    this.force = keep.length ? keep.join('|') : null;
+    this.showCats();
+    this.menu(false);
+    this.read();
+    this.render();
+  }
+
+  showCats() {
+    const cur = this.padCats ? this.catCursor : -1;
+    this.catsEl.querySelectorAll('.fd-cat').forEach((b, i) => {
+      const c = b.dataset.c || null;
+      b.classList.toggle('on', c ? this.cats.has(c) : this.cats.size === 0);
+      b.classList.toggle('cur', i === cur);
+    });
+    this.catsEl.classList.toggle('combo', this.cats.size > 1);
+  }
+
+  // (the pad's d-pad: left and right along them, down turns one on or off)
+  padCat(d) {
+    this.padCats = true;
+    if (d) this.catCursor = (this.catCursor + d + CATEGORY_ORDER.length + 1) % (CATEGORY_ORDER.length + 1);
+    else this.toggleCat(this.catCursor ? CATEGORY_ORDER[this.catCursor - 1] : null);
+    this.showCats();
   }
 
   // it is something else: what the player picked (null: what it looks like)
   choose(k) {
-    this.force = k;
+    // (several kinds of thing together: a pick of each - the vehicle, its gear, its weapon)
+    if (k && this.cats.size > 1) this.force = [...picksOf(this.force).filter((x) => keyKind(x) !== keyKind(k)), k].join('|');
+    else this.force = k;
     this.menu(false);
     this.read();
     this.render();
@@ -357,7 +431,7 @@ export class FreeDraw {
   // (the pad's Y) it is something else: the next of what it could be, then the rest
   cycleKind() {
     const alts = this.R && this.R.alts ? this.R.alts.map((a) => a.key) : [];
-    const list = [...new Set([null, ...alts, ...VEH_CHOICES.map((v) => v[0]), ...WEAPON_ORDER])];
+    const list = [...new Set([null, ...alts, ...this.choices().map((v) => v[0])])];
     this.force = list[(list.indexOf(this.force) + 1) % list.length];
     this.read();
     this.render();
@@ -365,7 +439,7 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ reading it
   read() {
-    this.R = this.strokes.length ? readFree(this.strokes, this.force) : null;
+    this.R = this.strokes.length ? readFree(this.strokes, this.force, this.cats) : null;
     this.info();
   }
 
@@ -380,22 +454,28 @@ export class FreeDraw {
     const has = this.strokes.length > 0;
     this.tagEl.classList.toggle('hidden', !has);
     this.hintEl.classList.toggle('gone', has || !!this.cur);
-    this.hintEl.textContent = game.touch ? 'ציירו באוויר — נשק או רכב · האגודל ממשיך לרוץ' : 'ציירו באוויר — נשק או רכב · WASD ממשיכים לרוץ · Q יוצרים · Esc סוגרים';
+    this.hintEl.textContent = game.touch ? 'ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ' : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
+    // (what was chosen and is not in the drawing yet: on a line of its own)
+    this.noteEl.textContent = has && R && R.cat && R.note ? R.note : '';
     if (has) {
       if (!R || !R.cat) {
         this.nameEl.textContent = '…';
         this.statsEl.textContent = R && R.why ? R.why : 'עוד קצת';
       } else {
         this.nameEl.textContent = (this.force ? '✎ ' : '') + R.name;
-        this.statsEl.textContent = `${statLine(R)} · ${cost} דיו`;
+        // (gear that needs its place: why it would not go here, before the ink is spent)
+        const why = this.cannotMake(R);
+        this.statsEl.textContent = why ? `⚠ ${why}` : `${statLine(R)} · ${cost} דיו`;
+        this.nowhere = !!why;
       }
       // what else it could be (the network's next guesses), and the rest of the list
       const alts = R && R.alts ? R.alts.filter((a) => a.key !== (R.choice || null)).slice(0, 2) : [];
       this.altsEl.innerHTML = alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + '<button class="fd-chip more" data-k="…">עוד…</button>';
     }
     const short = R && R.cat && cost > level;
-    this.makeBtn.textContent = short ? 'אין מספיק דיו' : R && R.cat ? `✓ ${R.name}!` : '✓ צרו!';
-    this.makeBtn.classList.toggle('off', !R || !R.cat || short);
+    const nowhere = has && R && R.cat && this.nowhere;
+    this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : R && R.cat ? `✓ ${R.name}!` : '✓ צרו!';
+    this.makeBtn.classList.toggle('off', !R || !R.cat || short || nowhere);
     if (ink) {
       this.inkFill.style.width = `${clamp((level / ink.cap) * 100, 0, 100)}%`;
       const c = Math.min(cost, level);
@@ -406,7 +486,8 @@ export class FreeDraw {
     if (has) this.place();
   }
 
-  // the tag by the drawing: over it, or under it when there is no room (never under the tools)
+  // the tag by the drawing: over it, or under it when there is no room (never under the tools,
+  // or the bar of what is drawn - at the top, or at the bottom on a phone)
   place() {
     const b = this.bounds();
     if (!b) return;
@@ -416,12 +497,15 @@ export class FreeDraw {
     const W = window.innerWidth;
     const H = window.innerHeight;
     const tr = this.toolsEl.getBoundingClientRect();
+    const cr = this.catsEl.getBoundingClientRect();
+    const top = cr.height && cr.top < H / 2 ? cr.bottom + 6 : 8;
+    const bottom = cr.height && cr.top >= H / 2 ? cr.top - 8 : H - 8;
     const right = this.game.touch ? tr.left - 8 : W - 8;
     let x = clamp(b.x0, 8, Math.max(8, right - w));
     let y = b.y0 - h - 14;
-    if (y < 8) y = Math.min(b.y1 + 14, H - h - 8);
+    if (y < top) y = Math.min(b.y1 + 14, bottom - h);
     if (!this.game.touch) y = Math.min(y, tr.top - h - 8);
-    tag.style.transform = `translate(${Math.round(x)}px, ${Math.round(Math.max(8, y))}px)`;
+    tag.style.transform = `translate(${Math.round(x)}px, ${Math.round(Math.max(top, y))}px)`;
   }
 
   // the drawing's box on the screen (px)
@@ -540,7 +624,7 @@ export class FreeDraw {
   make() {
     const game = this.game;
     if (this.cur) this.penUp();
-    const R = this.strokes.length ? readFree(this.strokes, this.force) : null;
+    const R = this.strokes.length ? readFree(this.strokes, this.force, this.cats) : null;
     const shake = (why) => {
       this.stats.failed++;
       this.tagEl.classList.remove('shake');
@@ -550,7 +634,7 @@ export class FreeDraw {
       game.audio.play('meh', 0.5);
     };
     if (!R || !R.cat) {
-      shake(!this.strokes.length ? 'עוד לא צויר כלום — ציירו נשק או רכב' : R && R.why ? R.why : 'זה עוד לא נראה כמו כלום — עוד כמה קווים');
+      shake(!this.strokes.length ? 'עוד לא צויר כלום — ציירו נשק, רכב או ציוד' : R && R.why ? R.why : 'זה עוד לא נראה כמו כלום — עוד כמה קווים');
       return;
     }
     const p = game.player;
@@ -565,10 +649,22 @@ export class FreeDraw {
       }
       return;
     }
+    // (gear put up somewhere - a ladder, a ramp, a bridge, a spring - needs its place here: said
+    // before any ink is spent)
+    const why = this.cannotMake(R);
+    if (why) {
+      shake(why);
+      return;
+    }
     const where = this.drawnAt();
     let ok;
     if (R.cat === 'vehicle') ok = this.makeVehicle(R);
-    else ok = this.makeWeapon(R, where);
+    else if (R.cat === 'gear') ok = this.makeGear(R, where);
+    else {
+      ok = this.makeWeapon(R, where);
+      // (drawn with gear: that too - a shield in the other hand, a parachute on the back...)
+      if (ok && R.extra) this.makeExtra(R.extra, where);
+    }
     if (!ok) return;
     if (ink) ink.spend(R.cost);
     this.stats.made[R.kind] = (this.stats.made[R.kind] || 0) + 1;
@@ -618,7 +714,7 @@ export class FreeDraw {
     const slot = W.current;
     // (the HUD's picture of it, and the drawing again for a save: game/save.js)
     slot.strokes = this.strokes.map((s) => s.p);
-    slot.free = { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), force: this.force };
+    slot.free = { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), force: this.force, cats: [...this.cats] };
     // it hangs in the air where it was drawn, beside you, as it turns real; then into the hand
     const cam = game.camera;
     const D = 2.3;
@@ -652,16 +748,105 @@ export class FreeDraw {
     v.group.updateMatrixWorld(true);
     const box = localBox(v.group);
     const spot = findSpot(game, v, so, box);
-    if (spot) v.pos.set(spot.x, v.flies ? 0 : groundHeight(spot.x, spot.z) * 0.5, spot.z);
-    else V.placeNear(v);
+    const boat = v.kind === 'boat';
+    if (spot) v.pos.set(spot.x, v.flies ? 0 : boat ? -0.8 - (v.draft || 0) : groundHeight(spot.x, spot.z) * 0.5, spot.z);
+    else if (boat) {
+      // (drawn away from the water: it waits in the bay, by the beach nearest you - ROADMAP 11.8)
+      const p = game.player.pos;
+      const w = waterSpot(p.x, p.z, v.halfWid || 1) || { x: 116, z: Math.max(-380, Math.min(300, p.z)) };
+      v.pos.set(w.x, -0.8 - (v.draft || 0), w.z);
+      if (Math.hypot(w.x - p.x, w.z - p.z) > 15) this.farBoat = true;
+    } else V.placeNear(v);
     v.yaw = so.yaw;
     if (v.kind === 'copter') v.pos.y = Math.max(0, groundHeight(v.pos.x, v.pos.z)) + v.alt - 1.0;
+    if (v.kind === 'balloon') v.pos.y = Math.max(0, groundHeight(v.pos.x, v.pos.z));
     V.add(v);
     const frame = makeFrame(game.camera, v.pos, so.q, 1, box);
     const getIn = game.touch ? 'כפתור הרכב הירוק — לעלות' : 'E — לעלות';
-    const say = `${v.label}! ${getIn}`;
+    const say = this.farBoat ? `${v.label} מחכה לכם במים, ליד החוף` : `${v.label}! ${getIn}`;
+    this.farBoat = false;
     game.materialize.begin({ frame, root: v.group, vehicle: v, onReal: () => game.hud.toast(say, 'good', 3) });
     v.strokes = this.strokes.map((s) => s.p);
+    return true;
+  }
+
+  // (ROADMAP 11.8) why what is drawn cannot be made here (a ladder needs a wall, a ramp the road...)
+  cannotMake(R) {
+    const G = this.game.gadgets;
+    const g = R.cat === 'gear' ? R : R.extra && R.extra.cat === 'gear' ? R.extra : null;
+    if (!G || !g || !g.place) return null;
+    return G.cannot(g.kind, g.params);
+  }
+
+  // gear: a parachute onto your back, an umbrella or a key into your hands; a ladder, a ramp, a
+  // bridge, a spring put up where it goes from here (game/gadgets.js)
+  makeGear(R, where) {
+    const game = this.game;
+    const G = game.gadgets;
+    const k = R.kind;
+    if (k === 'parachute') {
+      return this.toHero(canopyModel(R.grade, R.colors), where, 'back', () => {
+        game.player.parachute = { grade: R.grade, colours: R.colors.length ? R.colors : null };
+        game.hud.toast(game.touch ? 'יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או בכפתור הקפיצה' : 'יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או ברווח', 'good', 3.6);
+        game.audio.play('cheer', 0.6);
+      });
+    }
+    if (!G) return false;
+    if (k === 'umbrella' || k === 'key') {
+      const colour = k === 'umbrella' && R.colors.length ? R.colors[0] : null;
+      return this.toHero(G.model(k, R.grade, null, colour).group, where, 'chest', () => G.take(k, R.grade, colour));
+    }
+    const sp = G.spot(k, R.params);
+    if (!sp.ok) {
+      game.hud.toast(sp.why, 'bad', 3);
+      return false;
+    }
+    const m = G.model(k, R.grade, sp);
+    const frame = makeFrame(game.camera, m.O, m.q, 1, localBox(m.group));
+    m.group.matrix.copy(frame.matrix);
+    m.group.matrixWorldNeedsUpdate = true;
+    game.scene.add(m.group);
+    const say = `${R.name}! ${R.line}`;
+    game.materialize.begin({ frame, root: m.group, onReal: () => game.hud.toast(say, 'good', 2.8) });
+    G.place(k, R.grade, sp, m.group);
+    return true;
+  }
+
+  // what came with a weapon: a shield into the other hand; other gear as gear is made
+  makeExtra(E, where) {
+    const game = this.game;
+    if (E.cat === 'weapon' && E.kind === 'shield') {
+      const free = { s: E.strokes.map((s) => ({ p: s.p, c: s.c })), force: 'g:shield', cats: ['gear'] };
+      game.weapons.setOff(E.def, 'good', buildWeapon(E), free);
+      game.hud.toast(`ו${E.def.name} ביד השנייה: חוסם ${Math.round(E.def.block * 100)}% מפגיעה מלפנים`, 'good', 3);
+      return true;
+    }
+    if (E.cat === 'gear') return this.makeGear(E, where);
+    return false;
+  }
+
+  // a thing that hangs in the air where it was drawn, as big, turns real and flies to you (onto
+  // your back, into your hands), then: then
+  toHero(root, where, to, then) {
+    const game = this.game;
+    const cam = game.camera;
+    const D = 2.3;
+    const ndc = _v.set((where.x / window.innerWidth) * 2 - 1, -(where.y / window.innerHeight) * 2 + 1, 0.5).unproject(cam);
+    const dir = ndc.sub(cam.position).normalize();
+    const C = cam.position.clone().addScaledVector(dir, D);
+    const perPx = (2 * D * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / window.innerHeight;
+    root.updateMatrixWorld(true);
+    const box = localBox(root);
+    const size = box.getSize(new THREE.Vector3());
+    const so = this.sideOn(1);
+    const sc = clamp((Math.max(where.w, where.h) * perPx) / Math.max(0.05, size.x, size.y, size.z), 0.2, 5);
+    const centre = box.getCenter(new THREE.Vector3()).multiplyScalar(sc).applyQuaternion(so.q);
+    const frame = makeFrame(cam, C.sub(centre), so.q, sc, box);
+    root.matrixAutoUpdate = false;
+    root.matrix.copy(frame.matrix);
+    root.matrixWorldNeedsUpdate = true;
+    game.scene.add(root);
+    game.materialize.begin({ frame, root, toHero: to, onArrive: then });
     return true;
   }
 
@@ -685,18 +870,32 @@ export class FreeDraw {
   }
 
   // a drawn vehicle got into (game/game.js enterVehicle): how it goes, the first time
+  // (ROADMAP 11.8: told once for each kind of thing - a boat, a balloon, one that flies and drives...)
   onEnter(v) {
     const game = this.game;
     const s = v.spec;
-    if (!s || this.toldRide) return;
-    this.toldRide = true;
+    if (!s) return;
+    const key = `${s.kind}:${v.hybrid ? Object.keys(v.modes || {}).filter((k) => v.modes[k]).join('') : ''}:${v.turret ? v.gunType : ''}`;
+    this.toldRides = this.toldRides || new Set();
+    if (this.toldRides.has(key)) return;
+    this.toldRides.add(key);
     const t = game.touch;
-    const tip = s.base === 'copter' ? (t ? 'כפתורי ▲▼: גובה · ירי: מטוסי נייר' : 'רווח ו־C: למעלה ולמטה · קליק: מטוסי נייר')
-      : s.base === 'plane' ? (t ? 'קדימה: מצערת · צריך כביש ארוך להמראה' : 'W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה')
-      : s.cannon ? (t ? 'הצריח מסתובב אחרי המבט · ירי: התותח' : 'הצריח מסתובב אחרי העכבר · קליק: התותח')
-      : s.jets.length ? (t ? 'ג׳ויסטיק עד הסוף: טורבו' : 'Shift: טורבו מהסילון')
-      : s.glide ? 'הכנפיים: אחרי קפיצה מרמפה הוא גולש' : null;
-    if (tip) game.hud.toast(tip, 'info', 3.4);
+    const M = v.modes || {};
+    const tips = [];
+    if (v.canLift) tips.push(M.plane && !M.copter && !M.balloon ? (t ? 'במהירות, ▲: להמריא' : 'במהירות, רווח: להמריא') : t ? '▲: להמריא · ▼ עד למטה: לנחות' : 'רווח: להמריא · C עד למטה: לנחות');
+    else if (s.base === 'balloon') tips.push(t ? '▲: המבער, למעלה · ▼: למטה · הרוח לוקחת אותו' : 'רווח: המבער, למעלה · C: למטה · הרוח לוקחת אותו');
+    else if (s.base === 'copter') tips.push(t ? 'כפתורי ▲▼: גובה' : 'רווח ו־C: למעלה ולמטה');
+    else if (s.base === 'plane') tips.push(t ? 'קדימה: מצערת · צריך כביש ארוך להמראה' : 'W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה');
+    if (M.drive && M.boat) tips.push('נוסעים ישר לתוך המים ושטים, ועולים לחוף');
+    if (v.dive) tips.push(t ? '▼: לצלול, אף אחד לא רואה אתכם · ▲: לעלות' : 'C: לצלול, אף אחד לא רואה אתכם · רווח: לעלות');
+    if (v.spring && !v.canLift) tips.push(s.kind === 'skate' ? (t ? '▲: קפיצה' : 'רווח: קפיצה') : t ? '▲: קפיצה על הקפיץ' : 'רווח: קפיצה על הקפיץ');
+    if (v.chute) tips.push('המצנח: נוחת לאט מכל גובה');
+    if (v.armor) tips.push('משוריין: פגיעות כואבות לו פחות');
+    if (v.turret) tips.push(v.gunType === 'mg' ? (t ? 'ירי: המקלע' : 'קליק (להחזיק): המקלע') : t ? 'ירי: התותח' : 'קליק: התותח');
+    else if (s.base === 'copter') tips.push(t ? 'ירי: מטוסי נייר' : 'קליק: מטוסי נייר');
+    if (s.jets.length && s.base === 'car') tips.push(t ? 'ג׳ויסטיק עד הסוף: טורבו' : 'Shift: טורבו מהסילון');
+    else if (s.glide && !v.canLift) tips.push('הכנפיים: אחרי קפיצה מרמפה הוא גולש');
+    if (tips.length) game.hud.toast(tips.slice(0, 3).join(' · '), 'info', 4);
   }
 
   // ------------------------------------------------------------------ each frame
@@ -738,12 +937,14 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), ink: this.ink };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), ink: this.ink, cats: [...this.cats] };
   }
 
   load(o) {
     if (!o) return;
     this.strokes = Array.isArray(o.s) ? o.s.filter((s) => Array.isArray(s.p) && s.p.length).map((s) => ({ p: s.p, c: Number.isInteger(s.c) && INKS[s.c] ? s.c : 0 })) : [];
     if (Number.isInteger(o.ink) && INKS[o.ink]) this.pickInk(o.ink);
+    this.cats = new Set(Array.isArray(o.cats) ? o.cats.filter((c) => CATEGORY_ORDER.includes(c)) : []);
+    this.showCats();
   }
 }

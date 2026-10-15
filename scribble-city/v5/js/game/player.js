@@ -275,7 +275,7 @@ export class Player {
     // at a press of the jump button, high enough)
     if (this.parachute && chute && !chute.open && !this.onGround) {
       const above = this.pos.y - groundHeight(this.pos.x, this.pos.z);
-      if (above > 5 && this.vel.y < -3 && (input.wasPressed('Space') || (this.vel.y < -13 && above > 8))) chute.deploy(this.parachute.grade);
+      if (above > 5 && this.vel.y < -3 && (input.wasPressed('Space') || (this.vel.y < -13 && above > 8))) chute.deploy(this.parachute.grade, this.parachute.colours);
     }
     const gliding = chute && chute.open;
     // (ROADMAP 5.3, not with ?classic) down low with C, close up against what is beside you; up
@@ -384,7 +384,11 @@ export class Player {
       swim.enter();
       return;
     }
-    if (p.y <= ground + 0.02) {
+    // (a drawn spring under your feet: up you go, however you came down on it - ROADMAP 11.8)
+    const G = this.game.gadgets;
+    if (G && this.vel.y <= 0 && p.y <= ground + 0.25 && !gliding && G.bounce(this, ground)) {
+      // (thrown up: no landing)
+    } else if (p.y <= ground + 0.02) {
       if (this.vel.y <= 0) {
         // a hard landing hurts (a jump out of the helicopter without a parachute hurts a lot)
         const fall = -this.vel.y;

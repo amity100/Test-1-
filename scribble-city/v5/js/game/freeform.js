@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
-import { readParts, specOf, shapeOf, thin, shade, inkOn, ribbon, solid, KIND_NAME } from './drawncar.js';
-import { look, CLASSES, GROUP_OF, GROUP_NAME, NAME_OF, VEHICLE_GROUPS, CAR_FAMILY } from './sketchnet.js';
+import { readParts, specOf, shapeOf, thin, shade, inkOn, ribbon, solid, springy, outline, inPoly, KIND_NAME } from './drawncar.js';
+import { look, chances, picture, ready, CLASSES, GROUP_OF, GROUP_NAME, NAME_OF, VEHICLE_GROUPS, CAR_FAMILY, GEAR_GROUPS, CATEGORIES, CATEGORY_OF, groupsOf } from './sketchnet.js';
+import { readGear, GEAR } from './freegear.js';
 
 // (ROADMAP 11.6) Drawing freehand, on the move (ui/freedraw.js). Nothing to choose first: what is
 // drawn on the little page is read from its shape alone, and becomes a thing made of the drawing
@@ -53,6 +54,8 @@ export const KINDS = {
   club: { name: 'פטיש', len: 0.95, depth: 0.075, cost: 10, glyph: 'blade' },
   bomb: { name: 'פצצה', len: 0.26, depth: 0.2, cost: 14, glyph: 'throw' },
   boomerang: { name: 'בומרנג', len: 0.52, depth: 0.024, cost: 10, glyph: 'throw' },
+  // (ROADMAP 11.8: drawn as gear - held up in front, it blocks)
+  shield: { name: 'מגן', len: 0.8, depth: 0.05, cost: 12, glyph: 'blade' },
 };
 export const WEAPON_ORDER = ['pistol', 'smg', 'assault', 'rifle', 'shotgun', 'minigun', 'launcher', 'laser', 'sword', 'club', 'bomb', 'boomerang'];
 const GUNS = new Set(['pistol', 'smg', 'assault', 'rifle', 'shotgun', 'minigun', 'launcher', 'laser']);
@@ -536,7 +539,9 @@ export function readWeapon(strokes, force = null, variant = null, odds = null) {
   let fold = pc.theta;
   if (fold > Math.PI / 2) fold -= Math.PI;
   if (fold < -Math.PI / 2) fold += Math.PI;
-  if (pc.e >= 2.6 && Math.abs(fold) > 0.42) theta = fold;
+  // (a shield is held as it was drawn, upright)
+  if (force === 'shield') theta = 0;
+  else if (pc.e >= 2.6 && Math.abs(fold) > 0.42) theta = fold;
   else {
     // (drawn a little tilted: what is straight along its top - a gun's slide, a blade's back -
     // levelled; a top with no straight edge along it is left as it is)
@@ -631,6 +636,8 @@ export function readWeapon(strokes, force = null, variant = null, odds = null) {
   const cells = [];
   for (let j = r0; j <= r1; j++) for (let i = c0; i <= c1; i++) if (G.solid[j * G.nx + i]) cells.push([i, j]);
   const hullFill = C.area / Math.max(1, hullArea(cells));
+  // (how much of its box it fills: a shield drawn closed covers it well)
+  const fill = cells.length / Math.max(1, L * H);
   const bent = !round && topFlat < 0.5 && botFlat < 0.5 && hullFill < 0.62 && A < 4;
   // a guard: across it both ways, narrow, nearer one end
   let guard = null;
@@ -881,6 +888,7 @@ export function readWeapon(strokes, force = null, variant = null, odds = null) {
     main,
     coloured,
     fi,
+    fill,
   };
   out.variant = (kind === 'sword' && variant === 'knife') || (kind === 'club' && (variant === 'axe' || variant === 'baseball bat')) ? variant : null;
   out.len = kind === 'laser' && A < 2.5 ? 0.42 : out.variant === 'knife' ? 0.5 : KINDS[kind].len;
@@ -941,6 +949,13 @@ function makeDef(R) {
     case 'bomb':
       Object.assign(d, { kind: 'throw', projectile: 'inkbomb', damage: 130, radius: 5.5, rate: 1.1, speed: 17, gravity: 16, ammo: 6, fuse: 1.6 });
       break;
+    case 'shield': {
+      // (ROADMAP 11.8) what it stops of a hit from the front: as much as it covers - a round one,
+      // a kite, a riot shield drawn closed, most of it; a frame of lines, less. A push with it hurts
+      const f = clamp(R.fill, 0.3, 1);
+      Object.assign(d, { kind: 'melee', damage: r(18 + Math.min(A, 2) * 4), rate: 1.5, range: 2.1, block: clamp(0.5 + f * 0.42, 0.55, 0.9), uses: r(50 + f * 60) });
+      break;
+    }
     default:
       Object.assign(d, { kind: 'throw', projectile: 'scissors', damage: r(clamp(48 + A * 4, 50, 72)), rate: 1.4, speed: 27, gravity: 0, range: 24 });
   }
@@ -963,12 +978,15 @@ export function statLine(R) {
     if (R.spec.base === 'car') return `מהירות ${star(s.speed)} · אחיזה ${star(s.grip)}${s.air ? ' · גולש' : ''}${R.spec.cannon ? ' · תותח' : ''}${R.spec.jets.length ? ' · טורבו' : ''}`;
     return `מהירות ${star(s.speed)} · יציבות ${star(s.steady)}`;
   }
+  if (R.cat === 'gear') return R.line || '';
   const d = R.def;
-  if (d.kind === 'melee') return `נזק ${d.damage} · טווח ${d.range.toFixed(1)} מ׳${d.knock ? ' · הודף' : ''}`;
-  if (d.kind === 'beam') return `קרן · נזק ${d.damage} · ${d.ammo} שניות`;
-  if (d.kind === 'throw') return d.projectile === 'inkbomb' ? `פיצוץ ${d.radius} מ׳ · ${d.ammo} פצצות` : `נזק ${d.damage} · חוזר ליד`;
+  const plus = R.extra ? ` · ${R.extra.name}` : '';
+  if (d.block && d.free === 'shield') return `חוסם ${Math.round(d.block * 100)}% מפגיעה מלפנים · ${d.uses} מכות`;
+  if (d.kind === 'melee') return `נזק ${d.damage} · טווח ${d.range.toFixed(1)} מ׳${d.knock ? ' · הודף' : ''}${d.block ? ' · חוסם' : ''}${plus}`;
+  if (d.kind === 'beam') return `קרן · נזק ${d.damage} · ${d.ammo} שניות${plus}`;
+  if (d.kind === 'throw') return (d.projectile === 'inkbomb' ? `פיצוץ ${d.radius} מ׳ · ${d.ammo} פצצות` : `נזק ${d.damage} · חוזר ליד`) + plus;
   const rate = d.rate >= 10 ? Math.round(d.rate) : d.rate.toFixed(1).replace(/\.0$/, '');
-  return `נזק ${d.damage}${d.pellets ? `×${d.pellets}` : ''} · ${rate} בשנייה · מחסנית ${d.mag}${d.radius ? ` · פיצוץ ${d.radius.toFixed(1)} מ׳` : ''}`;
+  return `נזק ${d.damage}${d.pellets ? `×${d.pellets}` : ''} · ${rate} בשנייה · מחסנית ${d.mag}${d.radius ? ` · פיצוץ ${d.radius.toFixed(1)} מ׳` : ''}${d.block ? ' · חוסם' : ''}${d.bounce ? ' · קליעים קופצים' : ''}${plus}`;
 }
 
 // ------------------------------------------------------------------ the model in the hand
@@ -990,7 +1008,7 @@ export function buildWeapon(R) {
   const rot = R.theta ? ([x, y]) => [R.cx + (x - R.cx) * ct - (y - R.cy) * st, R.cy + (x - R.cx) * st + (y - R.cy) * ct] : (p) => p;
   const strokes = R.strokes.map((o) => ({ pts: o.p.map((p) => toM(rot(p))), ink: INKS[o.c] || INKS[0], closed: closedPage(o.p) }));
   // its colours: as drawn; in pencil only, a gun is gunmetal, a blade steel, a hammer wood...
-  const dflt = { pistol: [0.3, 0.31, 0.36], smg: [0.28, 0.29, 0.33], assault: [0.32, 0.34, 0.3], rifle: [0.46, 0.33, 0.22], shotgun: [0.5, 0.34, 0.2], minigun: [0.3, 0.31, 0.36], launcher: [0.42, 0.5, 0.32], laser: [0.86, 0.88, 0.92], sword: [0.82, 0.84, 0.88], club: [0.52, 0.38, 0.24], bomb: [0.14, 0.14, 0.17], boomerang: [0.78, 0.5, 0.26] }[R.kind];
+  const dflt = { pistol: [0.3, 0.31, 0.36], smg: [0.28, 0.29, 0.33], assault: [0.32, 0.34, 0.3], rifle: [0.46, 0.33, 0.22], shotgun: [0.5, 0.34, 0.2], minigun: [0.3, 0.31, 0.36], launcher: [0.42, 0.5, 0.32], laser: [0.86, 0.88, 0.92], sword: [0.82, 0.84, 0.88], club: [0.52, 0.38, 0.24], bomb: [0.14, 0.14, 0.17], boomerang: [0.78, 0.5, 0.26], shield: [0.62, 0.45, 0.25] }[R.kind];
   const base = R.coloured ? INKS[R.main].c : dflt;
   const surf = (ink) => (ink.pencil ? base : ink.c);
   const D = K.depth;
@@ -1124,21 +1142,31 @@ function chaikin(loop) {
 
 // ------------------------------------------------------------------ reading a vehicle
 // how long each kind is (m), when the network has said which (else: by its wheels, its rotor...)
-const VEH_LEN = { car: 4.4, truck: 6.8, bus: 10, moto: 2.1, bicycle: 1.8, tractor: 3.8, tank: 6.4 };
-const VEH_BASE = { plane: 'plane', copter: 'copter' };
+const VEH_LEN = { car: 4.4, truck: 6.8, bus: 10, moto: 2.1, bicycle: 1.8, tractor: 3.8, tank: 6.4, skate: 0.85 };
+const VEH_BASE = { plane: 'plane', copter: 'copter', boat: 'boat', balloon: 'balloon', skate: 'skate' };
+// (ROADMAP 11.8) a boat's hull, how long by what boat it is; a hot air balloon, how tall (m)
+const BOAT_LEN = { sailboat: 6.5, speedboat: 6, canoe: 4.2, submarine: 11, 'cruise ship': 17 };
+const BALLOON_H = 10;
 
 // the page drawing as a vehicle seen from the side (game/drawncar.js), its nose to the right
 // (or the left, if its propeller, its jet, its cannon or its tail say so). group: what the
 // network (or the player) says it is - 'copter', 'plane', 'car', 'truck', 'bus', 'moto',
-// 'bicycle', 'tractor', 'tank' - and then it is that, its parts found in the drawing or, missing,
-// added (a rotor over a helicopter, a wing on a plane, wheels under a car). name: its name then.
-// Returns null (or { cat: null, why }) when it is none.
-export function readVehicle(strokes, group = null, name = null) {
+// 'bicycle', 'tractor', 'tank', 'boat', 'balloon', 'skate' - and then it is that, its parts found
+// in the drawing or, missing, added (a rotor over a helicopter, a wing on a plane, wheels under a
+// car, a sail on a sailboat, the basket under a balloon). name: its name then; cls: the network's
+// own class for it (which boat).
+// abil (ROADMAP 11.8, the player chose more than one kind of thing): what else it must do -
+// { drive, fly: 'rotor' | 'wings' | 'balloon' | 'any' (flyNet: the network's guess), float, gun,
+// gear: true | 'spring' | 'parachute' | 'shield' } - the parts for that found among its lines too,
+// or added. Returns null (or { cat: null, why }) when it is none.
+export function readVehicle(strokes, group = null, name = null, abil = null, cls = null) {
   const S = strokes.filter((s) => s.p.length > 1 && pathLen(s.p) > 0.012);
   if (!S.length) return null;
   const base = group ? VEH_BASE[group] || 'car' : null;
-  // (a plane drawn from above, as most are: made into the same plane from the side)
-  if (base === 'plane') {
+  // (a plane drawn from above, as most are: made into the same plane from the side - not one that
+  // must also drive, float or carry something: that one is drawn from the side)
+  const plain = !abil || (!abil.drive && !abil.float && !abil.gun && !abil.gear);
+  if (base === 'plane' && plain) {
     const tv = topView(S);
     if (tv) {
       const top = planeFromAbove(S) || planeFromAboveGrid(S, tv);
@@ -1170,7 +1198,7 @@ export function readVehicle(strokes, group = null, name = null) {
   const read = (mirror) => {
     const st = S.map((o) => ({ pts: o.p.map(([x, y]) => [(mirror ? x1 - x : x - x0) * s0, (y1 - y) * s0]), ink: o.c }));
     readParts(st);
-    if (base) ensure(st, base, group);
+    const got = base ? ensure(st, base, group, abil, cls) : null;
     let score = 0;
     const bodies = st.filter((o) => o.type === 'body').map((o) => shapeOf(o.pts));
     const bx0 = bodies.length ? Math.min(...bodies.map((b) => b.x0)) : 0;
@@ -1188,7 +1216,19 @@ export function readVehicle(strokes, group = null, name = null) {
         if (sh.x0 < bx0 + bL * 0.05 && sh.x1 < bx0 + bL * 0.45 && sh.w > sh.h * 1.5) score += 1;
       }
     }
-    return { st, score };
+    // (a boat's bow: the end of its hull that rises higher)
+    const hull = base === 'boat' ? st.find((o) => o.hull) : null;
+    if (hull) {
+      const sh = shapeOf(hull.pts);
+      let yl = -Infinity;
+      let yr = -Infinity;
+      for (const [x, y] of hull.pts) {
+        if (x < sh.x0 + sh.w * 0.15) yl = Math.max(yl, y);
+        if (x > sh.x1 - sh.w * 0.15) yr = Math.max(yr, y);
+      }
+      if (yr > yl + sh.h * 0.08) score += 1;
+    }
+    return { st, score, got };
   };
   const a = read(false);
   const b = read(true);
@@ -1229,7 +1269,17 @@ export function readVehicle(strokes, group = null, name = null) {
   let k;
   if (base === 'copter' || (!base && rotors.length)) k = clamp(5.2 / bL, 6 / all, 12 / all);
   else if (base === 'plane' || (!base && wings.length && fly.length)) k = clamp(7.5 / bL, 6 / all, 13 / all);
-  else if (group && VEH_LEN[group]) k = VEH_LEN[group] / all;
+  else if (base === 'boat') k = (BOAT_LEN[cls] || 6) / bL;
+  else if (base === 'balloon') {
+    // (as tall as a balloon is, all of it: what was added too)
+    let h0 = Infinity;
+    let h1 = -Infinity;
+    for (const o of st) for (const [, y] of o.pts) {
+      h0 = Math.min(h0, y);
+      h1 = Math.max(h1, y);
+    }
+    k = BALLOON_H / Math.max(0.1, h1 - h0);
+  } else if (group && VEH_LEN[group]) k = VEH_LEN[group] / all;
   else {
     const r = onGround.reduce((a2, w) => a2 + (w.w + w.h) / 4, 0) / Math.max(1, onGround.length);
     k = 0.36 / Math.max(0.05, r);
@@ -1258,124 +1308,415 @@ export function readVehicle(strokes, group = null, name = null) {
     color: color.slice(),
     strokes: st.map((o) => {
       const ink = INKS[o.ink] || INKS[0];
-      return { type: o.type, fixed: true, pts: o.pts.map(([z, y]) => [z * k, y * k]), col: ink.c.slice(), pencil: !!ink.pencil, neon: !!ink.neon, slim: !!o.slim };
+      return { type: o.type, fixed: true, pts: o.pts.map(([z, y]) => [z * k, y * k]), col: ink.c.slice(), pencil: !!ink.pencil, neon: !!ink.neon, slim: !!o.slim, hull: !!o.hull || undefined };
     }),
   };
   if (base) design.force = base;
   if (name) design.name = name;
+  if (group) design.group = group;
+  if (cls) design.cls = cls;
+  if (abil && pick.got) design.abil = pick.got;
   const spec = specOf(design);
   if (!spec.ok) return { cat: null, why: spec.why };
   return { cat: 'vehicle', kind: spec.kind, name: spec.label, design, spec, cost: spec.cost, mirror: pick === b, group };
 }
 
-// what the network says it is, made sure of in the drawing: the parts it needs - found among the
-// lines where they can be (st: as readParts typed them; metres, y up), else added
-function ensure(st, base, group) {
-  // a body: the biggest closed shape there is (not a wheel) - unless it is small for the whole
-  // (a seat on a bicycle, a window on a car drawn open): then what its lines all go round
-  let ax0 = Infinity;
-  let ax1 = -Infinity;
-  for (const o of st) for (const [x] of o.pts) {
-    ax0 = Math.min(ax0, x);
-    ax1 = Math.max(ax1, x);
+// a closed ring of points round (cx, cy)
+const ring = (cx, cy, rx, ry, n = 16) => {
+  const out = [];
+  for (let i = 0; i <= n; i++) out.push([cx + Math.cos((i / n) * Math.PI * 2) * rx, cy + Math.sin((i / n) * Math.PI * 2) * ry]);
+  return out;
+};
+
+// (ROADMAP 11.8) a hot air balloon's envelope: a big roundish closed shape up over the rest (on a
+// balloon the biggest such shape; on something that flies by one, only with more under it)
+function findEnvelope(st, must, E) {
+  let best = null;
+  for (const o of st) {
+    const sh = shapeOf(o.pts);
+    if (!sh.closed || sh.w < E.w * (must ? 0.3 : 0.4) || sh.h < sh.w * 0.55 || sh.h > sh.w * 1.9) continue;
+    const under = st.some((p) => p !== o && shapeOf(p.pts).cy < sh.y0 + sh.h * 0.1);
+    if (!must && (!under || sh.cy < E.y0 + E.h * 0.5)) continue;
+    if (!best || sh.area > best.sh.area) best = { o, sh };
   }
-  const allW = Math.max(0.1, ax1 - ax0);
+  return best ? best.o : null;
+}
+
+// a parachute over it: a wide bow (or a closed dome) up top, lines down from it to the rest
+function findChute(st, E) {
+  let best = null;
+  for (const o of st) {
+    const sh = shapeOf(o.pts);
+    if (sh.w < E.w * 0.3 || sh.w < sh.h * 1.25 || sh.y0 < E.y0 + E.h * 0.45) continue;
+    if (!(sh.closed ? sh.h > sh.w * 0.18 : sh.dev > 0.16)) continue;
+    if (!st.some((p) => p !== o && shapeOf(p.pts).y1 < sh.y0 + sh.h * 0.4)) continue;
+    if (!best || sh.w > best.sh.w) best = { o, sh };
+  }
+  return best ? best.o : null;
+}
+
+// what the network says it is, made sure of in the drawing: the parts it needs - found among the
+// lines where they can be (st: as readParts typed them; metres, y up), else added. And what else
+// it must do (abil, ROADMAP 11.8). Returns what it can do after all: { drive, fly, float, gun, gear }
+function ensure(st, base, group, abil = null, cls = null) {
+  const A = abil || {};
+  const extent = () => {
+    const e = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+    for (const o of st) for (const [x, y] of o.pts) {
+      e.x0 = Math.min(e.x0, x);
+      e.x1 = Math.max(e.x1, x);
+      e.y0 = Math.min(e.y0, y);
+      e.y1 = Math.max(e.y1, y);
+    }
+    e.w = Math.max(0.1, e.x1 - e.x0);
+    e.h = Math.max(0.1, e.y1 - e.y0);
+    return e;
+  };
+  const E0 = extent();
+  const allW = E0.w;
+  const res = {
+    drive: !!A.drive || base === 'car' || base === 'skate',
+    fly: base === 'copter' ? 'rotor' : base === 'plane' ? 'wings' : base === 'balloon' ? 'balloon' : A.fly || null,
+    float: !!A.float || base === 'boat',
+    gun: !!A.gun || group === 'tank',
+    gear: null,
+  };
+  // ---- up over the rest, and not its body: a balloon's envelope, a parachute
+  let refix = false;
+  if (base === 'balloon' || res.fly === 'balloon' || res.fly === 'any') {
+    const env = findEnvelope(st, base === 'balloon', E0);
+    if (env) {
+      env.type = 'envelope';
+      env.fixed = true;
+      refix = true;
+      if (res.fly === 'any') res.fly = 'balloon';
+    }
+  }
+  if (A.gear === true || A.gear === 'parachute' || A.gear === 'umbrella') {
+    const ch = findChute(st, E0);
+    if (ch) {
+      ch.type = 'chute';
+      ch.fixed = true;
+      refix = true;
+      res.gear = 'parachute';
+    }
+  }
+  // (the rest read again without them)
+  if (refix) readParts(st);
+  // ---- its body
   const span = (list) => (list.length ? Math.max(...list.map((o) => shapeOf(o.pts).x1)) - Math.min(...list.map((o) => shapeOf(o.pts).x0)) : 0);
+  if (base === 'boat') {
+    // the hull: the lowest closed shape about as long as the boat, longer than it is high (a sail
+    // can be the biggest shape there is); what stands on it closed is a cabin, a tower
+    let hull = null;
+    for (const o of st) {
+      if (o.fixed) continue;
+      const sh = shapeOf(o.pts);
+      if (!sh.closed || sh.w < allW * 0.4 || sh.w < sh.h * 1.1) continue;
+      if (!hull || sh.cy < hull.sh.cy - E0.h * 0.05 || (Math.abs(sh.cy - hull.sh.cy) <= E0.h * 0.05 && sh.area > hull.sh.area)) hull = { o, sh };
+    }
+    if (hull) {
+      for (const o of st) if (o.type === 'body' && o !== hull.o && !shapeOf(o.pts).closed) o.type = 'line';
+      hull.o.type = 'body';
+      hull.o.hull = true;
+    } else {
+      // (drawn open: what its lower lines go round - not the sail over it)
+      const low = st.filter((o) => !o.fixed && shapeOf(o.pts).cy < E0.y0 + E0.h * 0.45);
+      const hp = hullPts(low.flatMap((o) => o.pts));
+      if (low.length && hp.length >= 3) {
+        for (const o of st) if (o.type === 'body') o.type = 'line';
+        st.push({ pts: hp.concat([hp[0]]), ink: low[0].ink, type: 'body', made: true, hull: true });
+      }
+    }
+  } else if (base === 'balloon') {
+    let env = st.find((o) => o.type === 'envelope');
+    if (!env) {
+      // (drawn open, in more than one line: what all of it up top goes round, made whole - the
+      // lines drawn on it; nothing up there: a round one)
+      const ups = st.filter((o) => shapeOf(o.pts).cy >= E0.y0 + E0.h * 0.4);
+      const hp = hullPts(ups.flatMap((o) => o.pts));
+      const hs = hp.length >= 3 ? shapeOf(hp.concat([hp[0]])) : null;
+      if (hs && hs.w > allW * 0.3) {
+        const big = ups.reduce((a, o) => (shapeOf(o.pts).len > shapeOf(a.pts).len ? o : a), ups[0]);
+        env = { pts: hp.concat([hp[0]]), ink: big.ink, type: 'envelope', made: true };
+        for (const o of ups) o.type = 'line';
+      } else {
+        const r = allW * 0.45;
+        env = { pts: ring((E0.x0 + E0.x1) / 2, E0.y1 + r * 1.2, r, r * 1.15), ink: st[0].ink, type: 'envelope', made: true };
+      }
+      st.push(env);
+    }
+    const EN = shapeOf(env.pts);
+    // the basket: a closed shape under the envelope (what else was taken for its body is a line on
+    // it); none: one of its own on its ropes
+    let basket = null;
+    for (const o of st) {
+      if (o === env) continue;
+      const sh = shapeOf(o.pts);
+      if (o.type === 'body') o.type = 'line';
+      if (sh.closed && sh.y1 < EN.y0 + EN.h * 0.25 && sh.w < EN.w * 0.9 && (!basket || sh.area > basket.sh.area)) basket = { o, sh };
+    }
+    if (basket) basket.o.type = 'body';
+    else {
+      const bw = EN.w * 0.3;
+      const bh = bw * 0.72;
+      const top = EN.y0 - EN.h * 0.32;
+      const cx = EN.cx;
+      st.push({ pts: [[cx - bw / 2, top], [cx, top], [cx + bw / 2, top], [cx + bw * 0.42, top - bh], [cx, top - bh], [cx - bw * 0.42, top - bh], [cx - bw / 2, top]], ink: env.ink, type: 'body', made: true });
+      for (const s of [-1, 1]) st.push({ pts: [[cx + s * EN.w * 0.28, EN.y0 + EN.h * 0.1], [cx + (s * bw) / 2, top]], ink: 1, type: 'line', made: true });
+    }
+  }
   let bodies = st.filter((o) => o.type === 'body');
-  if (!bodies.length || span(bodies) < allW * 0.3) {
+  if (base !== 'balloon' && (!bodies.length || span(bodies) < allW * 0.3)) {
+    // a body: the biggest closed shape there is (not a wheel) - unless it is small for the whole
+    // (a seat on a bicycle, a window on a car drawn open): then what its lines all go round
     let best = null;
     for (const o of st) {
-      if (o.type === 'wheel' && base === 'car') continue;
+      if (o.fixed) continue;
+      if (o.type === 'wheel' && (base === 'car' || base === 'skate' || res.drive)) continue;
       const sh = shapeOf(o.pts);
       if (sh.closed && sh.area > 0.05 && sh.w >= allW * 0.4 && (!best || sh.area > best.sh.area)) best = { o, sh };
     }
     for (const o of bodies) o.type = 'line';
-    if (best) best.o.type = 'body';
-    else {
-      const cand = st.filter((o) => o.type !== 'wheel' && o.type !== 'rotor');
+    if (best) {
+      best.o.type = 'body';
+      if (base === 'boat') best.o.hull = true;
+    } else {
+      const cand = st.filter((o) => !o.fixed && o.type !== 'wheel' && o.type !== 'rotor');
       const pts = (cand.length ? cand : st).flatMap((o) => o.pts);
       const hp = hullPts(pts);
-      if (hp.length >= 3) st.push({ pts: hp.concat([hp[0]]), ink: (cand[0] || st[0]).ink, type: 'body', slim: group === 'moto' || group === 'bicycle', made: true });
+      if (hp.length >= 3) st.push({ pts: hp.concat([hp[0]]), ink: (cand[0] || st[0]).ink, type: 'body', slim: group === 'moto' || group === 'bicycle', made: true, hull: base === 'boat' || undefined });
     }
     bodies = st.filter((o) => o.type === 'body');
   }
-  if (!bodies.length) return;
+  if (!bodies.length) return res;
   const sb = bodies.map((o) => shapeOf(o.pts));
   const B = { x0: Math.min(...sb.map((b) => b.x0)), x1: Math.max(...sb.map((b) => b.x1)), y0: Math.min(...sb.map((b) => b.y0)), y1: Math.max(...sb.map((b) => b.y1)) };
-  const L = Math.max(0.2, B.x1 - B.x0);
+  // (a boat: its hull is what it floats on)
+  const hullO = st.find((o) => o.hull && o.type === 'body');
+  const HB = hullO ? shapeOf(hullO.pts) : null;
+  const L = Math.max(0.2, (HB || B).x1 - (HB || B).x0);
   const Hb = Math.max(0.1, B.y1 - B.y0);
   const ink = bodies[0].ink;
-  const free = (o) => o.type !== 'body' && o.type !== 'wheel' && o.type !== 'turret';
-  if (base === 'copter') {
-    for (const o of st) if (o.type === 'wheel' || o.type === 'wing' || o.type === 'prop') o.type = 'line';
-    if (!st.some((o) => o.type === 'rotor')) {
-      // the flattest long line up over it (the highest); else one of its own
-      let best = null;
-      for (const o of st) {
-        if (!free(o)) continue;
-        const sh = shapeOf(o.pts);
-        if (sh.cy > B.y0 + Hb * 0.55 && sh.w > sh.h * 2 && sh.w > L * 0.25 && (!best || sh.cy > best.sh.cy)) best = { o, sh };
-      }
-      if (best) best.o.type = 'rotor';
-      else st.push({ pts: [[B.x0 + L * 0.08, B.y1 + Hb * 0.22], [B.x1 - L * 0.08, B.y1 + Hb * 0.22]], ink, type: 'rotor', made: true });
-    }
-    return;
-  }
-  if (base === 'plane') {
-    for (const o of st) if (o.type === 'rotor') o.type = 'line';
-    if (!st.some((o) => o.type === 'wing')) {
-      // a flat wide line or a thin shape across its middle; else one of its own
-      let best = null;
-      for (const o of st) {
-        if (!free(o)) continue;
-        const sh = shapeOf(o.pts);
-        if (sh.w > sh.h * 1.5 && sh.w > L * 0.15 && sh.cy > B.y0 - Hb && sh.cy < B.y1 + Hb * 0.5 && (!best || sh.w > best.sh.w)) best = { o, sh };
-      }
-      if (best) best.o.type = 'wing';
-      else {
-        const cz = B.x0 + L * 0.55;
-        st.push({ pts: [[cz - L * 0.16, B.y0 + Hb * 0.45], [cz + L * 0.16, B.y0 + Hb * 0.45]], ink, type: 'wing', made: true });
-      }
-    }
-    return;
-  }
-  // on wheels: no rotor, no wings to fly with; a cannon only on a tank (a motorbike's exhaust, a
-  // fire engine's ladder are lines)
-  for (const o of st) if (o.type === 'rotor' || o.type === 'wing' || o.type === 'prop' || (o.type === 'gun' && group !== 'tank')) o.type = 'line';
-  if (group !== 'tank') for (const o of st) if (o.type === 'turret') o.type = 'body';
-  let wheels = st.filter((o) => o.type === 'wheel');
-  if (wheels.length < 2) {
-    // small closed (or roundish) shapes low down: the wheels as drawn
-    for (const o of st) {
-      if (o.type === 'wheel' || o.type === 'body' || o.type === 'turret') continue;
-      const sh = shapeOf(o.pts);
-      if (sh.y0 < B.y0 + Hb * 0.3 && sh.size < L * 0.45 && sh.size > L * 0.05 && sh.w < sh.h * 2.2 && sh.h < sh.w * 2.2 && (sh.closed || sh.len > sh.size * 2.2)) o.type = 'wheel';
-    }
-    wheels = st.filter((o) => o.type === 'wheel');
-  }
-  if (wheels.length < 2) {
-    // still none: a pair of its own under its ends
-    const r = clamp(Hb * 0.3, L * 0.07, L * 0.16);
-    const circle = (cx, cy) => {
-      const out = [];
-      for (let i = 0; i <= 16; i++) out.push([cx + Math.cos((i / 16) * Math.PI * 2) * r, cy + Math.sin((i / 16) * Math.PI * 2) * r]);
-      return out;
-    };
-    const two = group === 'moto' || group === 'bicycle';
-    const zs = wheels.length ? [L * 0.5 < shapeOf(wheels[0].pts).mx - B.x0 ? B.x0 + L * 0.2 : B.x1 - L * 0.2] : two ? [B.x0 + r, B.x1 - r] : [B.x0 + L * 0.2, B.x1 - L * 0.2];
-    for (const z of zs) st.push({ pts: circle(z, B.y0 + r * 0.25), ink: 1, type: 'wheel', made: true });
-  }
-  if (group === 'tank' && !st.some((o) => o.type === 'gun')) {
-    // the longest straight line off its upper part; else a barrel of its own over its front
+  const free = (o) => o.type !== 'body' && o.type !== 'wheel' && o.type !== 'turret' && !o.fixed;
+  // ---- what flies it: a rotor, wings, an envelope - which, if the player left it open: what is
+  // drawn, else what the network sees in it
+  if (res.fly === 'any') res.fly = st.some((o) => o.type === 'rotor') ? 'rotor' : st.some((o) => o.type === 'wing') ? 'wings' : A.flyNet || 'rotor';
+  if (res.fly === 'rotor' && !st.some((o) => o.type === 'rotor')) {
+    // the flattest long line up over it (the highest); else one of its own
     let best = null;
     for (const o of st) {
       if (!free(o)) continue;
       const sh = shapeOf(o.pts);
-      if (sh.w > sh.h * 2.5 && sh.dev < 0.15 && sh.cy > B.y0 + Hb * 0.4 && sh.w > L * 0.15 && (!best || sh.w > best.sh.w)) best = { o, sh };
+      if (sh.cy > B.y0 + Hb * 0.55 && sh.w > sh.h * 2 && sh.w > L * 0.25 && (!best || sh.cy > best.sh.cy)) best = { o, sh };
+    }
+    if (best) best.o.type = 'rotor';
+    else st.push({ pts: [[B.x0 + L * 0.08, B.y1 + Hb * 0.22], [B.x1 - L * 0.08, B.y1 + Hb * 0.22]], ink, type: 'rotor', made: true });
+  }
+  if (res.fly === 'wings' && !st.some((o) => o.type === 'wing')) {
+    // a flat wide line or a thin shape across its middle; else one of its own
+    let best = null;
+    for (const o of st) {
+      if (!free(o)) continue;
+      const sh = shapeOf(o.pts);
+      if (sh.w > sh.h * 1.5 && sh.w > L * 0.15 && sh.cy > B.y0 - Hb && sh.cy < B.y1 + Hb * 0.5 && (!best || sh.w > best.sh.w)) best = { o, sh };
+    }
+    if (best) best.o.type = 'wing';
+    else {
+      const cz = B.x0 + L * 0.55;
+      st.push({ pts: [[cz - L * 0.16, B.y0 + Hb * 0.45], [cz + L * 0.16, B.y0 + Hb * 0.45]], ink, type: 'wing', made: true });
+    }
+  }
+  if (res.fly === 'balloon' && !st.some((o) => o.type === 'envelope')) {
+    // a balloon of its own over it, on two ropes
+    const r = clamp(L * 0.42, 0.6, 3);
+    const cx = (B.x0 + B.x1) / 2;
+    const cy = B.y1 + r * 1.75;
+    st.push({ pts: ring(cx, cy, r, r * 1.12), ink, type: 'envelope', made: true });
+    for (const s of [-1, 1]) st.push({ pts: [[cx + s * r * 0.55, cy - r * 0.95], [cx + s * L * 0.3, B.y1]], ink: 1, type: 'line', made: true });
+  }
+  // ---- on the water: a sail on a sailboat, an engine at the back of a speedboat, a submarine's
+  // tower (found among its lines, or added)
+  if (base === 'boat' && HB) {
+    // a sail: a closed shape standing up over the hull (taller than it is wide), or what the lines
+    // over the hull go round, if they stand tall; a cabin is wider than it is high
+    let sail = null;
+    for (const o of st) {
+      if (o === hullO || o.fixed) continue;
+      const sh = shapeOf(o.pts);
+      if (sh.closed && sh.y0 >= HB.y1 - (HB.y1 - HB.y0) * 0.35 && sh.h >= sh.w * 0.7 && sh.size >= L * (cls === 'sailboat' ? 0.22 : 0.35) && (!sail || sh.area > sail.sh.area)) sail = { o, sh };
+    }
+    if (sail) sail.o.type = 'sail';
+    else {
+      const up = st.filter((o) => o !== hullO && !o.fixed && o.type !== 'body' && shapeOf(o.pts).y0 >= HB.y1 - (HB.y1 - HB.y0) * 0.2);
+      const pts = up.flatMap((o) => o.pts);
+      let made = false;
+      if (pts.length >= 3 && cls === 'sailboat') {
+        const hp = hullPts(pts);
+        const sh = hp.length >= 3 ? shapeOf(hp.concat([hp[0]])) : null;
+        if (sh && sh.h >= L * 0.3 && sh.h >= sh.w * 0.7) {
+          st.push({ pts: hp.concat([hp[0]]), ink: up[0].ink, type: 'sail', made: true });
+          made = true;
+        }
+      }
+      if (!made && cls === 'sailboat') {
+        // (a triangle on a mast, from the middle of its deck)
+        const mz = HB.x0 + L * 0.48;
+        const top = HB.y1 + L * 0.85;
+        st.push({ pts: [[mz, HB.y1 + 0.05], [mz, top]], ink: 1, type: 'line', made: true });
+        st.push({ pts: [[mz + 0.04, HB.y1 + L * 0.08], [mz + 0.04, top - 0.05], [mz + L * 0.3, HB.y1 + L * 0.08], [mz + 0.04, HB.y1 + L * 0.08]], ink, type: 'sail', made: true });
+      }
+    }
+    // (a ship's decks, a cabin drawn in lines, not closed: what those lines over the hull go round,
+    // made solid - the lines drawn on it)
+    if (cls !== 'sailboat' && !st.some((o) => o.type === 'body' && o !== hullO)) {
+      const up = st.filter((o) => o !== hullO && !o.fixed && (o.type === 'line' || o.type === 'body') && shapeOf(o.pts).y0 >= HB.y1 - (HB.y1 - HB.y0) * 0.25);
+      const hp = hullPts(up.flatMap((o) => o.pts));
+      const sh = hp.length >= 3 ? shapeOf(hp.concat([hp[0]])) : null;
+      if (sh && sh.w >= L * 0.25 && sh.h >= (HB.y1 - HB.y0) * 0.3 && up.length >= 2) st.push({ pts: hp.concat([hp[0]]), ink: up[0].ink, type: 'body', made: true });
+    }
+    if (cls === 'speedboat' && !st.some((o) => o.type === 'jet')) {
+      const h = (HB.y1 - HB.y0) * 0.55;
+      st.push({ pts: [[HB.x0 - L * 0.06, HB.y1], [HB.x0 + L * 0.02, HB.y1], [HB.x0 + L * 0.02, HB.y1 - h], [HB.x0 - L * 0.06, HB.y1 - h], [HB.x0 - L * 0.06, HB.y1 - h * 0.5], [HB.x0 - L * 0.06, HB.y1]], ink: 1, type: 'jet', made: true });
+    }
+    if (cls === 'submarine' && !st.some((o) => o.type === 'body' && o !== hullO)) {
+      const tz = HB.x0 + L * 0.55;
+      const th = (HB.y1 - HB.y0) * 0.5;
+      st.push({ pts: [[tz - L * 0.08, HB.y1 - 0.05], [tz + L * 0.06, HB.y1 - 0.05], [tz + L * 0.05, HB.y1 + th], [tz - L * 0.06, HB.y1 + th], [tz - L * 0.07, HB.y1 + th * 0.5], [tz - L * 0.08, HB.y1 - 0.05]], ink, type: 'body', made: true });
+    }
+  }
+  // ---- on wheels: the wheels as drawn - small closed (or roundish) shapes low down - or a pair of
+  // its own (a skateboard's small, close under its ends)
+  if (res.drive) {
+    let wheels = st.filter((o) => o.type === 'wheel');
+    if (wheels.length < 2) {
+      for (const o of st) {
+        if (o.type === 'wheel' || o.type === 'body' || o.type === 'turret' || o.fixed) continue;
+        const sh = shapeOf(o.pts);
+        if (sh.y0 < B.y0 + Hb * 0.3 && sh.size < L * 0.45 && sh.size > L * 0.05 && sh.w < sh.h * 2.2 && sh.h < sh.w * 2.2 && (sh.closed || sh.len > sh.size * 2.2)) o.type = 'wheel';
+      }
+      wheels = st.filter((o) => o.type === 'wheel');
+    }
+    if (wheels.length < 2) {
+      const r = base === 'skate' ? L * 0.06 : clamp(Hb * 0.3, L * 0.07, L * 0.16);
+      const two = group === 'moto' || group === 'bicycle';
+      const zs = base === 'skate' ? [B.x0 + L * 0.18, B.x1 - L * 0.18] : wheels.length ? [L * 0.5 < shapeOf(wheels[0].pts).mx - B.x0 ? B.x0 + L * 0.2 : B.x1 - L * 0.2] : two ? [B.x0 + r, B.x1 - r] : [B.x0 + L * 0.2, B.x1 - L * 0.2];
+      for (const z of zs) st.push({ pts: ring(z, B.y0 - (base === 'skate' ? r * 1.1 : -r * 0.25), r, r), ink: 1, type: 'wheel', made: true });
+    }
+  }
+  // ---- armed: a gun out of it - the longest straight line off its upper part; else a barrel of its
+  // own over its front (a tank's cannon, a machine gun on a turret)
+  if (res.gun && !st.some((o) => o.type === 'gun')) {
+    // (on anything but a tank, only one that sticks out of it: a line on its side is a door)
+    const outl = bodies.map((o) => outline(o.pts));
+    const out = (o) => o.pts.filter((p) => !outl.some((ol) => inPoly(p[0], p[1], ol))).length / o.pts.length >= 0.3;
+    let best = null;
+    for (const o of st) {
+      if (!free(o)) continue;
+      const sh = shapeOf(o.pts);
+      if (sh.w > sh.h * 2.5 && sh.dev < 0.15 && sh.cy > B.y0 + Hb * 0.4 && sh.w > L * 0.15 && (group === 'tank' || out(o)) && (!best || sh.w > best.sh.w)) best = { o, sh };
     }
     if (best) best.o.type = 'gun';
-    else st.push({ pts: [[B.x1 - L * 0.3, B.y1 - Hb * 0.12], [B.x1 + L * 0.28, B.y1 - Hb * 0.04]], ink, type: 'gun', made: true });
+    else if (group === 'tank') st.push({ pts: [[B.x1 - L * 0.3, B.y1 - Hb * 0.12], [B.x1 + L * 0.28, B.y1 - Hb * 0.04]], ink, type: 'gun', made: true });
+    else {
+      // (a little turret on its top, the barrel forward)
+      const tz = B.x0 + L * 0.55;
+      const tw = clamp(L * 0.09, 0.25, 0.6);
+      const ty = B.y1 - 0.04;
+      st.push({ pts: [[tz - tw, ty], [tz, ty], [tz + tw, ty], [tz + tw * 0.8, ty + tw * 0.7], [tz - tw * 0.8, ty + tw * 0.7], [tz - tw, ty]], ink, type: 'turret', made: true });
+      st.push({ pts: [[tz, ty + tw * 0.38], [tz + tw + L * 0.22, ty + tw * 0.38]], ink: 1, type: 'gun', made: true });
+    }
   }
+  // ---- gear on it (ROADMAP 11.8): a spring - a zigzag or a coil under it (it jumps); a parachute
+  // over it (it comes down slowly); armour - lines hatched across its body, or a shield drawn on
+  // it (it takes hits better). The one the player picked, or the one drawn; none drawn: one of its
+  // own, the one that suits what it does
+  if (A.gear) {
+    const want = A.gear === true ? null : A.gear === 'umbrella' ? 'parachute' : A.gear;
+    if (!res.gear && (!want || want === 'spring')) {
+      let best = null;
+      for (const o of st) {
+        if (!free(o) || o.type === 'rotor' || o.type === 'wing' || o.type === 'gun') continue;
+        const n = springy(o.pts);
+        if (n >= 3 && shapeOf(o.pts).cy < B.y0 + Hb * 0.5 && (!best || n > best.n)) best = { o, n };
+      }
+      if (best) {
+        best.o.type = 'spring';
+        res.gear = 'spring';
+      }
+    }
+    if (!res.gear && (!want || want === 'shield')) {
+      // (three lines or more across its body, straight, the same way: hatching)
+      const outl = bodies.map((o) => outline(o.pts));
+      const inBody = (o) => o.pts.filter((p) => outl.some((ol) => inPoly(p[0], p[1], ol))).length / o.pts.length >= 0.8;
+      const hatch = st.filter((o) => o.type === 'line' && !o.fixed && shapeOf(o.pts).dev < 0.12 && inBody(o));
+      const ang = (o) => {
+        const p = o.pts;
+        const a2 = Math.atan2(p[p.length - 1][1] - p[0][1], p[p.length - 1][0] - p[0][0]);
+        return ((a2 % Math.PI) + Math.PI) % Math.PI;
+      };
+      let most = [];
+      for (const h of hatch) {
+        const same = hatch.filter((o) => {
+          const d = Math.abs(ang(o) - ang(h));
+          return Math.min(d, Math.PI - d) < 0.35;
+        });
+        if (same.length > most.length) most = same;
+      }
+      if (most.length >= 3) {
+        for (const o of most) o.type = 'armor';
+        res.gear = 'shield';
+      }
+    }
+    if (!res.gear) {
+      const g = want || (res.fly ? 'parachute' : res.drive ? 'spring' : 'shield');
+      res.gear = g;
+      if (g === 'spring') {
+        // (a coil under its middle, down to the ground)
+        const cz = (B.x0 + B.x1) / 2;
+        const w = clamp(L * 0.08, 0.15, 0.5);
+        const ws = st.filter((o) => o.type === 'wheel').map((o) => shapeOf(o.pts));
+        const bot = ws.length ? Math.min(...ws.map((s) => s.y0)) : B.y0 - Hb * 0.45;
+        const top = B.y0 + Hb * 0.1;
+        const pts = [];
+        for (let i = 0; i <= 8; i++) pts.push([cz + (i % 2 ? w : -w) * (i === 0 || i === 8 ? 0 : 1), top + ((bot - top) * i) / 8]);
+        st.push({ pts, ink: 1, type: 'spring', made: true });
+      } else if (g === 'parachute') {
+        // (a dome over it on its lines)
+        const cz = (B.x0 + B.x1) / 2;
+        const r = clamp(L * 0.55, 0.8, 6);
+        const base0 = B.y1 + Hb * 0.9;
+        const pts = [];
+        for (let i = 0; i <= 12; i++) {
+          const t = Math.PI * (1 - i / 12);
+          pts.push([cz + Math.cos(t) * r, base0 + Math.sin(t) * r * 0.55]);
+        }
+        st.push({ pts, ink, type: 'chute', made: true });
+        for (const s of [-1, 1]) st.push({ pts: [[cz + s * r, base0], [cz + s * L * 0.3, B.y1]], ink: 1, type: 'line', made: true });
+      } else {
+        // (plates hatched across its sides)
+        const n = 4;
+        for (let i = 0; i < n; i++) {
+          const z = B.x0 + (L * (i + 0.6)) / (n + 0.2);
+          st.push({ pts: [[z - L * 0.05, B.y0 + Hb * 0.25], [z + L * 0.05, B.y0 + Hb * 0.75]], ink: 1, type: 'armor', made: true });
+        }
+      }
+    }
+  }
+  // ---- what it does not do, it does not have: a rotor, wings, a propeller, a gun, wheels are only
+  // lines on it then (a motorbike's exhaust, a fire engine's ladder)
+  for (const o of st) {
+    if (o.fixed && (o.type === 'envelope' || o.type === 'chute')) continue;
+    if (o.type === 'rotor' && res.fly !== 'rotor') o.type = 'line';
+    else if ((o.type === 'wing' || o.type === 'prop') && res.fly !== 'wings') o.type = 'line';
+    else if (o.type === 'gun' && !res.gun && base !== 'copter' && base !== 'plane') o.type = 'line';
+    else if (o.type === 'turret' && !res.gun && base !== 'copter' && base !== 'plane') o.type = 'body';
+    else if (o.type === 'wheel' && !res.drive && base !== 'plane') o.type = 'line';
+    else if (o.type === 'envelope' && res.fly !== 'balloon') o.type = 'line';
+  }
+  // (a copter's propeller is no plane's: a line)
+  if (base === 'copter') for (const o of st) if (o.type === 'prop') o.type = 'line';
+  return res;
 }
 
 // a drawing seen from above, as a plane is most often drawn: what is far out from its long axis
@@ -1645,27 +1986,86 @@ const family = (g) => (CAR_FAMILY.has(g) ? 'car' : g);
 const vehicleFamily = (v) => (v.spec.base === 'copter' ? 'copter' : v.spec.base === 'plane' ? 'plane' : v.spec.cannon ? 'tank' : 'car');
 // what it looks like to the network, when it is nothing for the game (a sad word for each)
 const OTHER_NAME = { house: 'בית', tree: 'עץ', face: 'פרצוף', flower: 'פרח', cat: 'חתול', star: 'כוכב', cloud: 'ענן', fish: 'דג' };
+// (ROADMAP 11.8) the network's groups by what they are for the player
+const WEAPON_SET = new Set(CATEGORIES.weapon);
+const VEHICLE_CATS = ['car', 'air', 'sea'];
+const AIR_SET = new Set(CATEGORIES.air);
+const AIR_OF = { copter: 'rotor', plane: 'wings', balloon: 'balloon' };
+const ARMED_SET = new Set([...CATEGORIES.weapon, ...CATEGORIES.gear]);
+// the gear a weapon in the hand can take on (a shield on a gun, a hammer on a spring...)
+const HAND_GEAR = new Set(['shield', 'umbrella', 'parachute', 'spring', 'key']);
+
+// a choice's key (the tag's chips, its menu, the player's pick): 'v:<group>' a vehicle
+// ('v:boat:<class>' which boat), 'g:<group>' gear, else a weapon's kind (or 'gun')
+export const keyOf = (grp, cls = null) => (grp === 'boat' && cls ? `v:boat:${cls}` : VEHICLE_GROUPS.has(grp) ? `v:${grp}` : GEAR_GROUPS.has(grp) || grp === 'ramp' ? `g:${grp}` : grp);
+// what a key is for: 'vehicle', 'gear' or 'weapon'
+export const keyKind = (k) => (!k ? null : k === 'vehicle' || k.startsWith('v:') ? 'vehicle' : k.startsWith('g:') ? 'gear' : 'weapon');
+// the player's picks: one of each kind, '|' between them (ui/freedraw.js)
+function picks(force) {
+  const out = { vehicle: null, gear: null, weapon: null };
+  for (const k of (force || '').split('|')) {
+    if (!k) continue;
+    const kk = keyKind(k);
+    if (kk === 'vehicle') {
+      const [, grp, cls] = k.split(':');
+      out.vehicle = { key: k, grp: grp || null, cls: cls || null };
+    } else if (kk === 'gear') out.gear = { key: k, grp: k.slice(2) };
+    else out.weapon = { key: k };
+  }
+  return out;
+}
+const onlyWeapon = (pk) => ({ vehicle: null, gear: null, weapon: pk.weapon });
+const onlyGear = (pk) => ({ vehicle: null, gear: pk.gear, weapon: null });
+
+// what else it could be: the network's guesses, best first (the chips by the drawing)
+function altsOf(net) {
+  const alts = [];
+  for (const [grp, q, cls] of net.groups) {
+    if (grp === 'other' || q < 0.04) continue;
+    alts.push({ key: keyOf(grp, cls), name: NAME_OF(cls) || GROUP_NAME[grp], p: q, cls });
+  }
+  return alts;
+}
+
+// gear: a shield is held (a weapon of its own kind); the rest, game/freegear.js
+function gearOf(S, grp, cls) {
+  if (grp === 'shield') return readWeapon(S, 'shield');
+  return readGear(S, grp, cls);
+}
 
 // what the drawing is: what the network sees in it (game/sketchnet.js) - the shape then says
 // which way it faces, its parts and its numbers. When the network is not that sure, what the
 // shape alone reads has a say; when it sees nothing it knows, the shape alone decides: a vehicle
 // if it can be one, else a thing for the hand.
 // force: what the player picked instead - 'vehicle', 'v:<kind>' (game/sketchnet.js's groups:
-// 'v:copter', 'v:plane', 'v:car'...), 'gun', or one of the weapons' kinds.
-// Returns the reading ({ cat: 'vehicle' | 'weapon', name, cost, alts: what else it could be,
-// choice: what it was taken for }) or { cat: null, why }; null with almost nothing drawn
-export function readFree(strokes, force = null) {
+// 'v:copter', 'v:plane', 'v:car'... 'v:boat:<class>'), 'g:<gear>', 'gun', or one of the weapons'
+// kinds; several (one of each), '|' between them.
+// cats (ROADMAP 11.8): what the player says they draw - a Set of 'weapon', 'car', 'air', 'sea',
+// 'gear' (none: anything). Only that is seen in it; more than one: a thing of them all together.
+// Returns the reading ({ cat: 'vehicle' | 'weapon' | 'gear', name, cost, alts: what else it could
+// be, choice: what it was taken for }) or { cat: null, why }; null with almost nothing drawn
+export function readFree(strokes, force = null, cats = null) {
   const S = strokes.filter((s) => s.p.length > 1 && pathLen(s.p) > 0.012);
   let ink = 0;
   for (const s of S) ink += pathLen(s.p);
   if (ink < 0.08) return null;
-  const net = look(S.map((s) => s.p));
-  // what else it could be: the network's guesses, best first (the chips by the drawing)
-  const alts = [];
-  for (const [grp, q, cls] of net.groups) {
-    if (grp === 'other' || q < 0.04) continue;
-    alts.push({ key: VEHICLE_GROUPS.has(grp) ? `v:${grp}` : grp, name: NAME_OF(cls) || GROUP_NAME[grp], p: q, cls });
-  }
+  const C = cats && cats.size ? cats : null;
+  const pk = picks(force);
+  // (a vehicle - of one kind or more, armed, with gear - as one; a weapon and gear, both; one
+  // kind: only what that is)
+  if (C && VEHICLE_CATS.some((c) => C.has(c))) return readRide(S, pk, C);
+  if (C && C.has('weapon') && C.has('gear')) return readArmed(S, pk);
+  return readOne(S, pk, C ? groupsOf(C) : null);
+}
+
+// one thing, of what is allowed (a Set of the network's groups; null: anything)
+function readOne(S, pk, allowed = null) {
+  const net = look(S.map((s) => s.p), allowed);
+  const can = (set) => !allowed || [...allowed].some((g) => set.has(g));
+  const canV = can(VEHICLE_GROUPS);
+  const canW = can(WEAPON_SET);
+  const force = pk.vehicle ? pk.vehicle.key : pk.gear ? pk.gear.key : pk.weapon ? pk.weapon.key : null;
+  const alts = altsOf(net);
   // the family it is surest of (a car's chances and a truck's together), and in it the kind
   const fq = new Map();
   for (const [grp, q] of net.groups) fq.set(family(grp), (fq.get(family(grp)) || 0) + q);
@@ -1681,21 +2081,21 @@ export function readFree(strokes, force = null) {
   // what the shape alone reads (each at most once)
   let shapeV;
   let shapeW;
-  const vehicleShape = () => (shapeV === undefined ? (shapeV = readVehicle(S)) : shapeV);
-  const handShape = () => (shapeW === undefined ? (shapeW = readWeapon(S)) : shapeW);
+  const vehicleShape = () => (shapeV === undefined ? (shapeV = canV ? readVehicle(S) : null) : shapeV);
+  const handShape = () => (shapeW === undefined ? (shapeW = canW ? readWeapon(S) : null) : shapeW);
   // what to make: the player's pick; else, when the network is not that sure, what the shape
   // reads if the network gives it a chance too; else what the network sees (if sure enough)
   let want = force;
   let named = null;
   let R = null;
-  if (!want && q0 < ASK_VEHICLE) {
+  if (!want && canV && q0 < ASK_VEHICLE) {
     const v = vehicleShape();
     if (v && v.cat === 'vehicle') {
       const vf = vehicleFamily(v);
       if (vf !== f0 && (fq.get(vf) || 0) + BACK_VEHICLE > q0) R = v;
     }
   }
-  if (!want && !R && f0 === 'gun' && q0 < ASK_BLADE) {
+  if (!want && !R && canW && f0 === 'gun' && q0 < ASK_BLADE) {
     const w = handShape();
     if (w && w.kind === 'sword' && !w.grip && !w.mag && (fq.get('sword') || 0) + BACK_BLADE > q0) {
       // (a knife, if that is the blade the network sees)
@@ -1704,7 +2104,7 @@ export function readFree(strokes, force = null) {
     }
   }
   if (!want && !R && f0 !== 'other' && q0 >= SURE) {
-    want = VEHICLE_GROUPS.has(g0) ? `v:${g0}` : g0;
+    want = keyOf(g0, c0);
     named = c0;
   }
   if (want && named === null) {
@@ -1713,45 +2113,316 @@ export function readFree(strokes, force = null) {
     if (a) named = a.cls;
   }
   // (sure it is something else altogether - a house, a cat: said so; the list still offers all)
-  if (!want && !R && f0 === 'other' && q0 >= 0.6 && OTHER_NAME[c0]) return { cat: null, why: `נראה כמו ${OTHER_NAME[c0]} — ציירו נשק או רכב`, alts };
-  if (want === 'vehicle' || (want && want.startsWith('v:'))) {
-    const grp = want === 'vehicle' ? null : want.slice(2);
-    const v = readVehicle(S, grp, grp ? (named && NAME_OF(named)) || GROUP_NAME[grp] : null);
+  if (!want && !R && f0 === 'other' && q0 >= 0.6 && OTHER_NAME[c0]) return { cat: null, why: `נראה כמו ${OTHER_NAME[c0]} — ציירו נשק, רכב או ציוד`, alts };
+  const kind = keyKind(want);
+  if (kind === 'vehicle') {
+    const pv = picks(want).vehicle;
+    const grp = pv.grp;
+    const cls = pv.cls || (named && GROUP_OF(named) === grp ? named : null);
+    const v = readVehicle(S, grp, grp ? (cls && NAME_OF(cls)) || GROUP_NAME[grp] : null, null, cls);
     if (v && v.cat === 'vehicle') R = v;
     else if (force) return { cat: null, why: v && v.why && v.why !== 'not' ? v.why : 'רכב צריך גוף, ומתחתיו גלגלים, רוטור מעליו, או כנפיים', alts };
+  } else if (kind === 'gear') {
+    R = gearOf(S, want.slice(2), named);
+    if (!R || !R.cat) return { cat: null, why: (R && R.why) || 'זה עוד לא נראה כמו כלום — עוד כמה קווים', alts };
   }
   if (!R) {
-    const wk = want && want !== 'vehicle' && !want.startsWith('v:') ? want : null;
+    const wk = kind === 'weapon' ? want : null;
     if (!want) {
       // (nothing the network knows: the shape alone - a vehicle if it can be one)
       const v = vehicleShape();
       if (v && v.cat === 'vehicle') R = v;
     }
-    if (!R) {
+    if (!R && canW) {
       // (a gun: how likely each gun the network knows, for what the shape leaves open)
       const odds = {};
       for (let i = 0; i < CLASSES.length; i++) if (GROUP_OF(CLASSES[i]) === 'gun') odds[CLASSES[i]] = net.p[i];
       R = wk || named ? readWeapon(S, wk, named, odds) : handShape();
     }
+    if (!R && !want && can(GEAR_GROUPS)) {
+      // (gear, the network not that sure which: what it sees most)
+      const g = net.groups.find(([grp]) => GEAR_GROUPS.has(grp));
+      if (g) R = gearOf(S, g[0], g[2]);
+    }
   }
-  if (!R) return { cat: null, why: f0 === 'other' && OTHER_NAME[c0] ? `נראה כמו ${OTHER_NAME[c0]} — ציירו נשק או רכב` : 'זה עוד לא נראה כמו כלום — עוד כמה קווים', alts };
+  if (!R || !R.cat) return { cat: null, why: f0 === 'other' && OTHER_NAME[c0] ? `נראה כמו ${OTHER_NAME[c0]} — ציירו נשק, רכב או ציוד` : 'זה עוד לא נראה כמו כלום — עוד כמה קווים', alts };
   if (R.cat === 'weapon') {
     R.name = R.def.name;
     R.cost = R.def.cost;
-    R.choice = GUNS.has(R.kind) ? 'gun' : R.kind;
+    R.choice = R.kind === 'shield' ? 'g:shield' : GUNS.has(R.kind) ? 'gun' : R.kind;
   } else if (R.cat === 'vehicle') {
-    if (want && want.startsWith('v:')) R.choice = want;
-    else if (R.group) R.choice = `v:${R.group}`;
+    if (kind === 'vehicle') R.choice = want;
+    else if (R.group) R.choice = keyOf(R.group, R.design.cls);
     else {
       // (the shape's own: the chip of its family - for a car, the kind the network likes best)
       const vf = vehicleFamily(R);
       const a = vf === 'car' ? alts.find((x) => x.key.startsWith('v:') && CAR_FAMILY.has(x.key.slice(2))) : null;
       R.choice = a ? a.key : `v:${vf}`;
     }
-  }
+  } else R.choice = `g:${R.kind}`;
   R.alts = alts;
-  R.net = { best: net.best, vehicle: net.vehicle, weapon: net.weapon };
+  R.net = { best: net.best, vehicle: net.vehicle, weapon: net.weapon, gear: net.gear };
   return R;
+}
+
+// (ROADMAP 11.8) how it is called: what it is, and what else it does - by its name's gender
+// (a car: מכונית, she; a plane: מטוס, he; a bicycle: אופניים, they)
+const ADJ = {
+  fly: ['מעופף', 'מעופפת', 'מעופפים'],
+  amphi: ['אמפיבי', 'אמפיבית', 'אמפיביים'],
+  sea: ['ימי', 'ימית', 'ימיים'],
+  armed: ['חמוש', 'חמושה', 'חמושים'],
+  armor: ['משוריין', 'משוריינת', 'משוריינים'],
+  spring: ['קופץ', 'קופצת', 'קופצים'],
+};
+function rideName(baseName, grp, A) {
+  const first = baseName.split(' ')[0];
+  const gi = /ים$/.test(first) ? 2 : /[תה]$/.test(first) ? 1 : 0;
+  const words = [baseName];
+  const isAir = AIR_SET.has(grp);
+  const isSea = grp === 'boat';
+  const isCar = CAR_FAMILY.has(grp) || grp === 'tank' || grp === 'skate';
+  if (A.fly && !isAir) words.push(ADJ.fly[gi]);
+  if (A.float && !isSea) words.push(A.drive ? ADJ.amphi[gi] : ADJ.sea[gi]);
+  else if (A.drive && isSea) words.push(ADJ.amphi[gi]);
+  else if (A.drive && !isCar) words.push('על גלגלים');
+  if (A.gun && grp !== 'tank') words.push(ADJ.armed[gi]);
+  if (A.gear === 'shield') words.push(ADJ.armor[gi]);
+  else if (A.gear === 'spring') words.push(ADJ.spring[gi]);
+  else if (A.gear === 'parachute') words.push('עם מצנח');
+  return words.join(' ');
+}
+
+// (ROADMAP 11.8) a vehicle of the kinds the player chose - on wheels, in the air, on the water, or
+// any of them together (it drives, flies and floats, each where it can) - armed if they chose a
+// weapon too, with its gear if they chose gear
+function readRide(S, pk, C) {
+  const P = S.map((s) => s.p);
+  const VC = VEHICLE_CATS.filter((c) => C.has(c));
+  const allowed = groupsOf(new Set(VC));
+  const net = look(P, allowed);
+  const alts = altsOf(net);
+  // what it is at heart: the player's pick (of the kinds chosen), else what the network sees most
+  let grp;
+  let cls;
+  const pv = pk.vehicle;
+  if (pv && pv.grp && allowed.has(pv.grp)) {
+    grp = pv.grp;
+    const seen = net.groups.find(([g]) => g === grp);
+    cls = pv.cls || (seen ? seen[2] : null);
+  } else [grp, , cls] = net.groups[0];
+  if (cls && GROUP_OF(cls) !== grp) cls = null;
+  let abil = null;
+  if (VC.length > 1 || C.has('weapon') || C.has('gear')) {
+    // (what flies it, when it is no flying thing itself: what is drawn on it - a rotor, wings, a
+    // balloon; none: it lifts straight up, a rotor of its own on its roof)
+    abil = { drive: C.has('car'), fly: C.has('air') ? AIR_OF[grp] || 'any' : null, float: C.has('sea'), gun: C.has('weapon'), gear: C.has('gear') ? (pk.gear ? pk.gear.grp : true) : null, flyNet: 'rotor' };
+    if (pk.weapon) abil.gunKind = pk.weapon.key;
+  }
+  const baseName = (cls && NAME_OF(cls)) || GROUP_NAME[grp];
+  const v = readVehicle(S, grp, baseName, abil, cls);
+  if (!v || v.cat !== 'vehicle') return { cat: null, why: v && v.why && v.why !== 'not' ? v.why : 'ציירו אותו מהצד, עם גוף: צורה סגורה גדולה', alts };
+  if (abil && v.design.abil) {
+    const name = rideName(baseName, grp, v.design.abil);
+    v.name = name;
+    v.design.name = name;
+    v.spec.label = name;
+  }
+  v.choice = keyOf(grp, cls);
+  v.alts = alts;
+  v.net = { best: net.best, vehicle: net.vehicle, weapon: net.weapon, gear: net.gear };
+  return v;
+}
+
+// the drawing's separate pieces: lines that touch (or nearly) are one
+function pieces(S) {
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  const boxes = S.map((s) => {
+    const b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+    for (const [x, y] of s.p) {
+      b.x0 = Math.min(b.x0, x);
+      b.x1 = Math.max(b.x1, x);
+      b.y0 = Math.min(b.y0, y);
+      b.y1 = Math.max(b.y1, y);
+    }
+    x0 = Math.min(x0, b.x0);
+    x1 = Math.max(x1, b.x1);
+    y0 = Math.min(y0, b.y0);
+    y1 = Math.max(y1, b.y1);
+    return b;
+  });
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.045;
+  const up = S.map((_, i) => i);
+  const root = (i) => (up[i] === i ? i : (up[i] = root(up[i])));
+  const near = (a, b) => {
+    for (const p of a) for (const q of b) if (Math.abs(p[0] - q[0]) < pad && Math.abs(p[1] - q[1]) < pad && Math.hypot(p[0] - q[0], p[1] - q[1]) < pad) return true;
+    return false;
+  };
+  for (let i = 0; i < S.length; i++) {
+    for (let j = i + 1; j < S.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      if (a.x0 > b.x1 + pad || b.x0 > a.x1 + pad || a.y0 > b.y1 + pad || b.y0 > a.y1 + pad) continue;
+      if (root(i) !== root(j) && near(S[i].p, S[j].p)) up[root(i)] = root(j);
+    }
+  }
+  const by = new Map();
+  S.forEach((s, i) => {
+    const r = root(i);
+    if (!by.has(r)) by.set(r, []);
+    by.get(r).push(s);
+  });
+  return [...by.values()];
+}
+
+// (ROADMAP 11.8) a weapon and gear in one drawing, which strokes are which: drawn one after the
+// other (a sword, then a shield; a spring, then a hammer on it), the strokes drawn first are one
+// of them and the rest the other; drawn apart on the page, each piece is one or the other. Each
+// way of parting them is looked at as two drawings, and taken if one part is surely a weapon and
+// the other surely gear (their shares of all that the network sees in them, multiplied) - surer
+// than the drawing as a whole is of being one of them. On held-out drawings, see ROADMAP 11.8
+const TWO_SURE = 0.5;
+// (the gear picked by name: the player says it is there - how sure of it is enough)
+const TWO_PICKED = 0.25;
+// (the gear, drawn first or after the weapon: at most this many strokes)
+const TWO_MOST = 8;
+// what the network sees in a part of the drawing (not mirrored), kept: as more is drawn, the
+// parts looked at already are not looked at again
+const seen = new Map();
+const strokeId = new WeakMap();
+let lastId = 0;
+function seenIn(S) {
+  const key = S.map((s) => {
+    let id = strokeId.get(s.p);
+    if (!id) strokeId.set(s.p, (id = ++lastId));
+    return id;
+  }).join(',');
+  let o = seen.get(key);
+  if (o) return o;
+  const raw = chances(picture(ready(S.map((s) => s.p))));
+  const by = {};
+  o = { w: 0, g: 0, weapon: null, gear: null, by };
+  for (let i = 0; i < raw.length; i++) {
+    const grp = GROUP_OF(CLASSES[i]);
+    if (WEAPON_SET.has(grp)) o.w += raw[i];
+    else if (GEAR_GROUPS.has(grp)) o.g += raw[i];
+    else continue;
+    by[grp] = (by[grp] || 0) + raw[i];
+  }
+  let bw = 0;
+  let bg = 0;
+  for (const grp in by) {
+    if (WEAPON_SET.has(grp) && by[grp] > bw) [bw, o.weapon] = [by[grp], grp];
+    else if (GEAR_GROUPS.has(grp) && by[grp] > bg) [bg, o.gear] = [by[grp], grp];
+  }
+  if (seen.size > 400) seen.clear();
+  seen.set(key, o);
+  return o;
+}
+// -> { weapon, gear (their groups), wS, gS (their strokes), apart } | null: one thing.
+// gear: the gear the player picked by name (the network's group), if they did
+function twoIn(S, gear = null) {
+  const n = S.length;
+  const whole = seenIn(S);
+  let top = gear ? Math.max(TWO_PICKED, whole.w, whole.by[gear] || 0) : Math.max(TWO_SURE, whole.w, whole.g);
+  let best = null;
+  const gearIn = (o) => (gear ? o.by[gear] || 0 : o.g);
+  const take = (wS, gS, a = seenIn(wS), b = seenIn(gS)) => {
+    const q = a.w * gearIn(b);
+    if (q > top) {
+      top = q;
+      best = { weapon: a.weapon, gear: gear || b.gear, wS, gS };
+    }
+  };
+  // (neither share is more than 1: a part not sure enough of itself is not looked past - most
+  // of the parts are looked at once, as they were drawn, and kept)
+  for (let k = 1; k < n; k++) {
+    const after = n - k <= TWO_MOST;
+    const first = k <= TWO_MOST;
+    if (!after && !first) continue;
+    const head = seenIn(S.slice(0, k));
+    if (after && head.w > top) take(S.slice(0, k), S.slice(k), head);
+    if (first && gearIn(head) > top) take(S.slice(k), S.slice(0, k), undefined, head);
+  }
+  const parts = pieces(S);
+  // (apart: a few pieces - many is hatching, dots, writing)
+  if (parts.length > 1 && parts.length <= TWO_MOST + 4) {
+    const isG = new Set();
+    for (const part of parts) {
+      const o = seenIn(part);
+      if (o.g > o.w) for (const s of part) isG.add(s);
+    }
+    if (isG.size && isG.size < n) take(S.filter((s) => !isG.has(s)), S.filter((s) => isG.has(s)));
+  }
+  if (best) {
+    // (apart: no piece of the drawing has some of each)
+    const isG = new Set(best.gS);
+    best.apart = parts.every((part) => part.every((s) => isG.has(s)) || !part.some((s) => isG.has(s)));
+  }
+  return best;
+}
+
+// a weapon with the knack of the gear drawn on it (or picked): a gun with a shield on it blocks, a
+// hammer on a spring knocks them twice as far and a gun's shots bounce off the walls; an umbrella,
+// a parachute or a key comes with it (gS: the gear's strokes)
+function withKnack(w, grp, gS) {
+  const d = w.def;
+  // (the knack goes with the weapon's def: a sword with a shield on it is still held as a sword)
+  w.knack = d.knack = grp;
+  if (grp === 'shield') {
+    d.block = 0.55;
+    w.name = `${d.name} עם מגן`;
+  } else if (grp === 'spring') {
+    if (d.kind === 'melee') d.knock = (d.knock || 4) * 2;
+    else if (d.kind === 'gun') d.bounce = 2;
+    else d.speed = (d.speed || 20) * 1.35;
+    w.name = `${d.name} עם קפיץ`;
+  } else {
+    w.extra = readGear(gS, grp, null, true);
+    w.name = `${d.name} + ${GEAR[grp].name}`;
+  }
+  // (what comes with it costs what it costs drawn apart; a knack, a little)
+  w.cost += w.extra ? w.extra.cost : 6;
+  return w;
+}
+
+// (ROADMAP 11.8) a weapon and gear. Drawn apart, both: the weapon in the hand, the gear as it
+// goes (a shield in the other hand, a parachute on the back, a ladder against the wall...).
+// Drawn on each other, the weapon with the gear's knack (withKnack). A weapon and no gear seen
+// with it: the weapon, as it is (its tag says the gear is not there yet)
+function readArmed(S, pk) {
+  const two = twoIn(S, pk.gear && GEAR_GROUPS.has(pk.gear.grp) ? pk.gear.grp : null);
+  if (two) {
+    const { wS, gS } = two;
+    const wp = pk.weapon || { key: keyOf(two.weapon) };
+    const gp = pk.gear || { key: keyOf(two.gear), grp: two.gear };
+    if (two.apart || !HAND_GEAR.has(gp.grp)) {
+      const w = readOne(wS, { vehicle: null, gear: null, weapon: wp }, WEAPON_SET);
+      if (!w || w.cat !== 'weapon') return w;
+      const g = readOne(gS, { vehicle: null, gear: gp, weapon: null }, GEAR_GROUPS);
+      if (g && g.cat) {
+        w.extra = g;
+        w.name = `${w.def.name} + ${g.cat === 'weapon' ? g.def.name : g.name}`;
+        w.cost += g.cost;
+      }
+      return w;
+    }
+    const w = readOne(S, { vehicle: null, gear: null, weapon: wp }, WEAPON_SET);
+    return w && w.cat === 'weapon' ? withKnack(w, gp.grp, gS) : w;
+  }
+  // (no two things in it: gear alone, if that is all the network sees in it; else the weapon -
+  // with the knack of the gear picked, if it can take it on)
+  const n = look(S.map((s) => s.p), ARMED_SET);
+  if (n.gear > n.weapon * 1.5 && !pk.weapon) return readOne(S, onlyGear(pk), GEAR_GROUPS);
+  const w = readOne(S, onlyWeapon(pk), WEAPON_SET);
+  if (!w || w.cat !== 'weapon') return w;
+  if (pk.gear && HAND_GEAR.has(pk.gear.grp)) return withKnack(w, pk.gear.grp, S);
+  // (said on its tag: what was chosen and is not there yet)
+  w.note = pk.gear && GEAR[pk.gear.grp] ? `עוד אין כאן ${GEAR[pk.gear.grp].name} — מציירים ליד הנשק` : 'עוד אין כאן ציוד — מציירים ליד הנשק או עליו';
+  return w;
 }
 
 export { KIND_NAME };

@@ -4,6 +4,7 @@ import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight } from '../world/layout.js';
 import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
 import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake } from './rides.js';
+import { hybridStep, updateBalloon } from './hybrid.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
 // The things you drive: the city's own cars (taken from the traffic or from the curb), and the
@@ -35,6 +36,8 @@ const VEH = {
   // (ROADMAP 4.8: a jet ski's and a boat's, a light plane's)
   boat: { width: 1.9, hp: 160, len: 2.6 },
   plane: { width: 9.6, hp: 170, len: 3.8 },
+  // (ROADMAP 11.8: a hot air balloon, drawn)
+  balloon: { width: 3, hp: 140, len: 1.5 },
 };
 
 const QUALITY = {
@@ -342,7 +345,8 @@ class Vehicle {
 
   hurt(amount) {
     if (this.dead) return;
-    this.hp -= amount;
+    // (armour drawn on it takes some of it: ROADMAP 11.8)
+    this.hp -= amount * (1 - (this.armor || 0));
     this.game.hud.hurtFlash();
     this.game.audio.play('clang', 0.5);
     if (this.hp <= 0) this.destroy();
@@ -391,17 +395,21 @@ class Vehicle {
     }
     this.pop = pop;
     const input = this.driver ? this.game.input : null;
-    if ((this.kind === 'car' || this.kind === 'bike') && !this.game.classic) {
-      this.drive(dt, input);
-      // (a cannon drawn on it, ROADMAP 11.6: its turret after where you look, a click fires)
-      if (input && this.turret && this.drawn) this.drawnGun(dt, input);
-    } else if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
+    // (ROADMAP 11.8: drawn to go more than one way - it drives, flies, floats as it can: game/hybrid.js)
+    if (this.hybrid) {
+      hybridStep(this, dt, input);
+      if (this.dead) return;
+    } else if ((this.kind === 'car' || this.kind === 'bike') && !this.game.classic) this.drive(dt, input);
+    else if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
     else if (this.kind === 'tank') this.updateTank(dt, input);
     else if (this.kind === 'boat') updateBoat(this, dt, input);
     else if (this.kind === 'plane') {
       updatePlane(this, dt, input);
       if (this.dead) return;
-    } else this.updateCopter(dt, input);
+    } else if (this.kind === 'balloon') updateBalloon(this, dt, input);
+    else this.updateCopter(dt, input);
+    // (a gun drawn on it, ROADMAP 11.6, 11.8: its turret after where you look, a click fires)
+    if (input && this.turret && this.drawn) this.drawnGun(dt, input);
     this.wheelSpin += (this.speed * dt) / 0.36;
     if (this.kind === 'car') return;
     this.group.position.copy(this.pos);
@@ -416,6 +424,11 @@ class Vehicle {
       if (this.kind === 'boat') {
         this.body.rotation.x = this.pitchV || 0;
         this.body.rotation.z = this.rollV || 0;
+      } else if (this.kind === 'balloon') {
+        // (its basket sways under it, leaning a little into where the wind takes it)
+        const side = (this.vx || 0) * Math.cos(this.yaw) - (this.vz || 0) * Math.sin(this.yaw);
+        this.body.rotation.z = Math.sin(this.time * 0.9) * 0.02 + clamp(side * 0.01, -0.08, 0.08);
+        this.body.rotation.x = Math.sin(this.time * 0.7 + 1) * 0.015 - clamp((this.speed || 0) * 0.01, -0.06, 0.06);
       } else if (this.kind === 'plane') {
         this.body.rotation.x = -(this.pitch || 0);
         this.body.rotation.z = -(this.roll || 0);
@@ -735,7 +748,8 @@ class Vehicle {
       const mv = input.readMove();
       throttle = mv.y;
       steer = -mv.x;
-      hand = input.keys.has('Space');
+      // (Space lifts a drawn one that flies, or jumps one on a spring: no handbrake - game/hybrid.js)
+      hand = input.keys.has('Space') && !this.spaceIsMine;
       if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
     }
     if (this.stall > 0) {
@@ -924,12 +938,36 @@ class Vehicle {
     }
   }
 
-  // (game/drawncar.js) the cannon drawn on a vehicle: as the tank's
+  // (game/drawncar.js) the gun drawn on a vehicle: a cannon as the tank's; a machine gun (a thin
+  // barrel, ROADMAP 11.8) rattles on while the button is held
   drawnGun(dt, input) {
     this.turretYaw = dampAngle(this.turretYaw, this.game.camRig.yaw - this.yaw, 4, dt);
     this.turret.rotation.y = this.turretYaw;
     this.reload -= dt;
-    if ((input.fire || input.firePressed) && this.reload <= 0) this.fireCannon();
+    if (this.gunType === 'mg') {
+      if (input.fire && this.reload <= 0) this.fireMG();
+    } else if ((input.fire || input.firePressed) && this.reload <= 0) this.fireCannon();
+  }
+
+  fireMG() {
+    const game = this.game;
+    this.reload = 0.1;
+    this.group.updateMatrixWorld(true);
+    const mw = this.muzzleLocal.clone();
+    this.turret.localToWorld(mw);
+    const dir = game.weapons.aimPoint.clone().sub(mw).normalize();
+    dir.x += (Math.random() - 0.5) * 0.035;
+    dir.y += (Math.random() - 0.5) * 0.035;
+    dir.z += (Math.random() - 0.5) * 0.035;
+    dir.normalize();
+    const sp = 88;
+    const c = this.mgColor || [1.0, 0.82, 0.3];
+    game.weapons.projectiles.push({ kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * sp, vy: dir.y * sp, vz: dir.z * sp, gravity: 2, damage: 13, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this });
+    game.fx.muzzle(mw.x, mw.y, mw.z, 0.9);
+    game.audio.play('paint', 0.45);
+    game.enemies.noise(this.pos, 32);
+    game.civilians.panic(this.pos, 40);
+    game.onCrime('shoot', this.pos.x, this.pos.z);
   }
 
   fireCannon() {
@@ -1005,9 +1043,9 @@ class Vehicle {
       this.vx *= 0.3;
       this.vz *= 0.3;
     }
-    // paper planes from the doors, at whatever you aim
-    this.reload -= dt;
-    if (input && input.fire && this.reload <= 0) {
+    // paper planes from the doors, at whatever you aim (a gun drawn on it fires instead: drawnGun)
+    if (!this.turret) this.reload -= dt;
+    if (input && input.fire && this.reload <= 0 && !this.turret) {
       this.reload = this.grade === 'perfect' ? 0.45 : this.grade === 'good' ? 0.6 : this.grade === 'wonky' ? 0.9 : 2;
       this.dropPlane();
     }

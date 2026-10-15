@@ -792,7 +792,7 @@ function beach(ctx) {
       const h = (x) => SAND_TOP - ((SAND_TOP + 0.8) * (x - SAND_X0)) / (WATER_X - SAND_X0) + 0.012;
       S.quad([xa, h(xa), z], [xb, h(xb), z], [xb, h(xb), z2], [xa, h(xa), z2], up);
     }
-    ctx.B.add(M.grass, S.geo(), null, nextId(), { color: srgb(0.8, 0.68, 0.5), chunk: 'beach' });
+    ctx.B.add(M.wetSand, S.geo(), null, nextId(), { color: srgb(0.8, 0.68, 0.5), chunk: 'beach' });
   }
   // ---- the lifeguard towers, at the end of every street and between
   const spots = [];
@@ -901,7 +901,7 @@ function surf(ctx, z0, z1) {
         const xb = WATER_X + off + wob(zz);
         S.quad([xa, 0, z], [xa + w, 0, z], [xb + w, 0, zz], [xb, 0, zz], up);
       }
-      B.add(M.grass, S.geo(), null, nextId(), { color: srgb(0.9, 0.94, 0.97), chunk: `surf${k}` });
+      B.add(M.foam, S.geo(), null, nextId(), { color: srgb(0.9, 0.94, 0.97), chunk: `surf${k}` });
     }
     const g = new THREE.Group();
     g.position.y = -0.78;

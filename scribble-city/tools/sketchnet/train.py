@@ -62,12 +62,22 @@ def loss_fn(p, x, y, key):
 
 steps_per_epoch = len(Xtr) // BATCH
 total = steps_per_epoch * EPOCHS
-sched = optax.warmup_cosine_decay_schedule(0.0, 2e-3, 500, total, 2e-5)
+# (the top rate: lower, to go on gently from weights already trained - train.py 2 w.npz tag 6e-4)
+PEAK = float(sys.argv[4]) if len(sys.argv) > 4 else 2e-3
+sched = optax.warmup_cosine_decay_schedule(0.0, PEAK, 500, total, 2e-5)
 opt = optax.adamw(sched, weight_decay=1e-4)
 params = init(jax.random.PRNGKey(0))
 if FROM:
     W0 = np.load(FROM)
-    params = {k: {n: jnp.asarray(W0[f'{k}_{n}']) for n in q} for k, q in params.items()}
+    def carry(k, n, cur):
+        old = W0[f'{k}_{n}']
+        if old.shape == cur.shape:
+            return jnp.asarray(old)
+        # (more classes than it was trained for: the old ones' weights kept, the new ones' fresh)
+        out = np.array(cur)
+        out[..., :old.shape[-1]] = old
+        return jnp.asarray(out)
+    params = {k: {n: carry(k, n, v) for n, v in q.items()} for k, q in params.items()}
     print('from', FROM, flush=True)
 state = opt.init(params)
 
