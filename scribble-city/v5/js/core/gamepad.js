@@ -397,8 +397,8 @@ export class Pad {
 
   // ------------------------------------------------------------------ drawing freehand, on the run
   // (ROADMAP 11.6, ui/freedraw.js) the left stick keeps running (pushed all the way: a sprint), the
-  // right stick moves the pencil over the page and RT puts it down; A makes it, X takes the last
-  // line back, Y: something else, LB/RB the inks, B (or up) puts the page away
+  // right stick moves the pencil in the air and RT puts it down; A makes it, X takes the last
+  // line back, Y: something else, LB/RB the inks, B (or up) puts the pen away
   freePad(dt) {
     const game = this.game;
     const F = game.freedraw;
@@ -417,8 +417,9 @@ export class Pad {
       inp.aim = false;
     }
     const c = (a) => a * Math.abs(a);
+    // (over the whole screen now, the pencil as quick as it was over the page)
     const r = F.cv.getBoundingClientRect();
-    const sp = Math.max(r.width, r.height) * 1.1;
+    const sp = Math.min(r.width, r.height) * 1.05;
     this.cursor.x = Math.min(r.right - 2, Math.max(r.left + 2, this.cursor.x + c(rx) * sp * dt));
     this.cursor.y = Math.min(r.bottom - 2, Math.max(r.top + 2, this.cursor.y + c(ry) * sp * dt));
     if (this.cursorEl) {
@@ -441,7 +442,7 @@ export class Pad {
     }
   }
 
-  // the pencil starts in the middle of the free drawing's page
+  // the pencil starts in the middle of the screen, to draw in the air
   startFree(rect) {
     this.cursor.x = rect.left + rect.width / 2;
     this.cursor.y = rect.top + rect.height / 2;

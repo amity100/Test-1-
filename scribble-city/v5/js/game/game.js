@@ -511,7 +511,7 @@ export class Game {
       this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
       setTimeout(() => {
         // (ROADMAP 11.6) the free drawing first: anything at all, on the run
-        if (this.freedraw) this.hud.toast(this.touch ? 'העיפרון ✏ — ציירו נשק או רכב, גם תוך כדי ריצה' : 'Q — ציירו נשק או רכב, גם תוך כדי ריצה', 'info', 4.2);
+        if (this.freedraw) this.hud.toast(this.touch ? 'העיפרון ✏ — ציירו באוויר נשק או רכב, גם תוך כדי ריצה' : 'Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'info', 4.2);
         else if (this.album.allOpen) this.hud.toast(this.touch ? `כל השרטוטים פתוחים: לוחצים על ${this.drawTap} ובוחרים מה לצייר` : `כל השרטוטים פתוחים: ${this.drawKey} — בוחרים מה לצייר`, 'info', 4);
         else if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
       }, 2600);
@@ -1218,8 +1218,8 @@ export class Game {
       return;
     }
     if (this.state !== 'play') return;
-    // (ROADMAP 11.6) Q: the page to draw on freehand, on the move (ui/freedraw.js) - again, and
-    // what is drawn becomes the thing; the album's drawing in the air is T
+    // (ROADMAP 11.6, 11.7) Q: the pen out, to draw freehand in the air on the move
+    // (ui/freedraw.js) - again, and what is drawn becomes the thing; the album's drawing is T
     if (this.freedraw) {
       if (input.wasPressed('KeyQ')) this.freedraw.toggle();
       if (input.wasPressed('KeyT')) this.freedraw.close();

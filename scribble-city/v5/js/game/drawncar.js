@@ -158,7 +158,7 @@ export function specOf(design) {
   }
   const L = x1 - x0;
   const H = y1 - y0;
-  if (L < 0.4) return { ok: false, why: 'הגוף קטן מדי' };
+  if (L < (design.force ? 0.15 : 0.4)) return { ok: false, why: 'הגוף קטן מדי' };
   const wheels = P.filter((s) => s.type === 'wheel').map((s) => {
     const sh = shapeOf(s.pts);
     return { z: sh.mx, y: sh.my, r: clamp((sh.w + sh.h) / 4, 0.15, 1.3) };
@@ -171,11 +171,13 @@ export function specOf(design) {
   const fins = P.filter((s) => s.type === 'fin');
   const chord = wings.reduce((a, w) => a + w.w, 0);
   let kind;
-  if (rotors.length) kind = 'copter';
+  // (what the network saw it as: game/freeform.js has made sure of its parts)
+  const force = design.force;
+  if (force === 'copter' || (!force && rotors.length)) kind = 'copter';
   // (wings and something to push it - or, with no wheels to drive on, a tail: a jet plane)
-  else if (chord >= L * 0.22 && (props.length || jets.length || (fins.length && wheels.length < 2))) kind = 'plane';
-  else if (wheels.length) kind = jets.length ? 'jetcar' : chord > L * 0.2 ? 'glider' : 'car';
-  else kind = 'still';
+  else if (force === 'plane' || (!force && chord >= L * 0.22 && (props.length || jets.length || (fins.length && wheels.length < 2)))) kind = 'plane';
+  else if (wheels.length) kind = jets.length ? 'jetcar' : chord > L * 0.2 && force !== 'car' ? 'glider' : 'car';
+  else kind = force === 'car' ? 'car' : 'still';
   // as wide as it is long - a plane's body as wide as it is high
   const W = kind === 'plane' ? clamp(H * 1.05, 0.8, 1.9) : clamp(0.55 + L * 0.24, 0.9, 2.3);
   // its weight (a car's about 1: game/vehicles.js HANDLING)
@@ -216,7 +218,7 @@ export function specOf(design) {
       out.stats.gun = clamp(out.cannon.r / 0.25, 0.3, 1);
     }
   } else if (base === 'copter') {
-    const R = clamp((Math.max(...rotors.map((r) => r.w)) / 2) * 1.4, 1.0, 4.5);
+    const R = clamp((rotors.length ? Math.max(...rotors.map((r) => r.w)) / 2 : L * 0.5) * 1.4, 1.0, 4.5);
     out.rotorR = R;
     out.q = { speed: clamp(0.65 + R * 0.12 - mass * 0.08, 0.5, 1.35), accel: clamp(0.8 + R * 0.1, 0.7, 1.3) };
     out.stats = { speed: out.q.speed / 1.35, grip: 0.5, steady: clamp(0.4 + R * 0.12, 0, 1), air: 1 };
@@ -224,6 +226,8 @@ export function specOf(design) {
     out.q = { speed: clamp(0.75 + jets.length * 0.18 + props.length * 0.05 - mass * 0.05, 0.6, 1.3), accel: clamp(1.15 + props.length * 0.1 + jets.length * 0.3, 1.0, 1.9) };
     out.stats = { speed: out.q.speed / 1.3, grip: 0.4, steady: clamp(chord / L, 0, 1), air: 1 };
   }
+  // (its name as the network called it: a truck, a bus, a tractor...)
+  if (design.name) out.label = design.name;
   out.hp = Math.round(clamp(90 + mass * 60 + (base === 'copter' ? 60 : 0) + (guns.length ? 80 : 0), 80, 400));
   out.cost = Math.round(clamp(24 + P.length * 1.5 + jets.length * 4 + guns.length * 10 + (base === 'copter' ? 14 : base === 'plane' ? 10 : 0), 24, 70));
   return out;
@@ -643,8 +647,10 @@ export function spawnDrawn(game, design, x, z, yaw, add = true) {
   v.group.add(v.body);
   v.model = 'drawn';
   v.drawn = {
-    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon })),
+    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined })),
     color: design.color.slice(),
+    force: design.force || null,
+    name: design.name || null,
   };
   v.spec = spec;
   v.seat = true;

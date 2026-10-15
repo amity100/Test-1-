@@ -5,21 +5,25 @@ import { makeFrame, findSpot, localBox } from '../game/materialize.js';
 import { angleDiff, clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 
-// (ROADMAP 11.6) Drawing freehand, on the move. Q (the pencil on a phone): a page of the notebook
-// comes up in the corner - on a phone, over the right half - and whatever is drawn on it is read
-// as it is drawn: a word on top says what it is becoming and what it can do (game/freeform.js).
-// The game goes on all the while: WASD (the stick) keep running, the camera turns after you,
-// Shift still sprints. Q again (✓, a right click, Enter) and the drawing becomes the thing - a
-// weapon hangs in the air beside you as it turns real, then flies into your hand; a vehicle
-// stands in the street ahead. Esc (✕, a click outside the page) puts the page away, the drawing
-// kept on it for later; Z (↶) takes the last line back. The inks: colour as you like (pencil is
-// no colour - the thing gets one of its own; neon glows, and a gun drawn in it is a laser).
-// A tap on the word on top: it is something else (the numbers stay the drawing's).
+// (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
+// pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
+// The game goes on all the while: WASD (the stick, under the left thumb) keep running, Shift still
+// sprints, and the camera turns after where you run (the mouse is drawing). As it is drawn it is
+// read (game/freeform.js, with game/sketchnet.js): a small tag by the drawing says what it is
+// becoming and what it can do, and offers what else it could be. Q again (✓, a right click,
+// Enter) and the drawing becomes the thing where it was drawn - a weapon hangs in the air beside
+// you as it turns real, then flies into your hand; a vehicle stands in the street ahead.
+// Esc (✕) puts the pen away, the drawing kept for later; Z (↶) takes the last line back. The
+// inks: colour as you like (the mouse wheel; pencil is no colour - the thing gets one of its own;
+// neon glows, and a gun drawn in it is a laser).
 
 const $ = (id) => document.getElementById(id);
 const UP = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+
+// what it can be made into instead (the tag's menu): the vehicles by kind, the weapons
+const VEH_CHOICES = [['v:car', 'מכונית'], ['v:truck', 'משאית'], ['v:bus', 'אוטובוס'], ['v:moto', 'אופנוע'], ['v:tank', 'טנק'], ['v:copter', 'מסוק'], ['v:plane', 'מטוס']];
 
 export class FreeDraw {
   constructor(game) {
@@ -33,6 +37,7 @@ export class FreeDraw {
     this.R = null;
     this.presenting = null;
     this.shutAt = -1e9;
+    this.U = 300;
     this.stats = { opened: 0, made: {}, failed: 0 };
     this.build();
     this.bind();
@@ -42,44 +47,52 @@ export class FreeDraw {
     return this.isOpen;
   }
 
+  // the drawing's own unit (px): half the screen's shorter side, as big as the page it once had
+  unit() {
+    return Math.max(150, Math.min(window.innerWidth, window.innerHeight) * 0.5);
+  }
+
   build() {
     const sw = INKS.map((c, i) => `<button class="fd-sw${c.neon ? ' neon' : ''}${c.pencil ? ' pencil' : ''}" data-i="${i}" style="--c:${c.css}" title="${c.name}" aria-label="${c.name}"></button>`).join('');
-    const chips = [['', 'אוטומטי'], ['vehicle', 'רכב'], ...WEAPON_ORDER.map((k) => [k, KINDS[k].name])].map(([k, n]) => `<button class="fd-chip" data-k="${k}">${n}</button>`).join('');
-    this.el.innerHTML = `<div class="fd-page">
-      <div class="fd-top">
-        <button class="fd-kind" id="fd-kind" title="מה זה יהיה (נגיעה: משהו אחר)"><b id="fd-name"></b><span id="fd-stats"></span></button>
-        <div class="fd-ink" aria-label="דיו"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
+    const chips = [['', 'אוטומטי'], ...VEH_CHOICES, ...WEAPON_ORDER.map((k) => [k, KINDS[k].name])].map(([k, n]) => `<button class="fd-chip" data-k="${k}">${n}</button>`).join('');
+    this.el.innerHTML = `<canvas id="fd-air"></canvas>
+      <div class="fd-zone" id="fd-zone-a"></div><div class="fd-zone" id="fd-zone-b"></div>
+      <div class="fd-hint" id="fd-hint"></div>
+      <div class="fd-tag hidden" id="fd-tag">
+        <button class="fd-kind" id="fd-kind" title="משהו אחר"><b id="fd-name"></b><span id="fd-stats"></span></button>
+        <div class="fd-alts" id="fd-alts"></div>
+        <div class="fd-menu hidden" id="fd-menu">${chips}</div>
       </div>
-      <div class="fd-sheet"><canvas id="fd-canvas"></canvas><div class="fd-hint" id="fd-hint"></div></div>
-      <div class="fd-bar">
+      <div class="fd-tools" id="fd-tools">
         <div class="fd-inks" id="fd-inks">${sw}</div>
-        <div class="fd-acts">
-          <button class="fd-btn" id="fd-undo" title="ביטול הקו האחרון (Z)">↶</button>
-          <button class="fd-btn" id="fd-clear" title="דף נקי (Delete)">נקה</button>
-          <button class="fd-btn touch-only" id="fd-album">שרטוטים</button>
-          <button class="fd-btn" id="fd-close" title="סגירה, הציור נשמר (Esc)">✕</button>
-          <button class="fd-btn primary" id="fd-make">✓ צרו!</button>
-        </div>
-      </div>
-      <div class="fd-menu hidden" id="fd-menu">${chips}</div>
-    </div>`;
-    this.page = this.el.querySelector('.fd-page');
-    this.cv = $('fd-canvas');
+        <button class="fd-btn fd-color" id="fd-color" aria-label="צבע"><i></i></button>
+        <div class="fd-ink" aria-label="דיו"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
+        <button class="fd-btn" id="fd-undo" title="ביטול הקו האחרון (Z)">↶</button>
+        <button class="fd-btn" id="fd-clear" title="ניקוי (Delete)">נקה</button>
+        <button class="fd-btn touch-only" id="fd-album">שרטוטים</button>
+        <button class="fd-btn" id="fd-close" title="סגירה, הציור נשמר (Esc)">✕</button>
+        <button class="fd-btn primary" id="fd-make">✓ צרו!</button>
+      </div>`;
+    this.cv = $('fd-air');
     this.g = this.cv.getContext('2d');
+    this.tagEl = $('fd-tag');
     this.nameEl = $('fd-name');
     this.statsEl = $('fd-stats');
+    this.altsEl = $('fd-alts');
     this.hintEl = $('fd-hint');
+    this.toolsEl = $('fd-tools');
     this.makeBtn = $('fd-make');
     this.menuEl = $('fd-menu');
     this.inkFill = $('fd-ink-fill');
     this.inkCost = $('fd-ink-cost');
+    this.colorBtn = $('fd-color');
     this.pickInk(0);
   }
 
   bind() {
-    const cv = this.cv;
     const game = this.game;
-    cv.addEventListener('pointerdown', (e) => {
+    // the pen: on the whole screen (a phone: all of it but the stick's corner, the thumb's)
+    const down = (e) => {
       if (!this.isOpen || this.cur) return;
       e.preventDefault();
       if (e.button === 2) {
@@ -87,15 +100,17 @@ export class FreeDraw {
         return;
       }
       try {
-        cv.setPointerCapture(e.pointerId);
+        e.currentTarget.setPointerCapture(e.pointerId);
       } catch (err) {
         // (synthetic pointers)
       }
       this.menu(false);
       this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId };
+      this.hintEl.classList.add('gone');
       game.audio.scratchStart();
-    });
-    cv.addEventListener('pointermove', (e) => {
+      this.render();
+    };
+    const move = (e) => {
       if (!this.cur || e.pointerId !== this.cur.pid) return;
       e.preventDefault();
       let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
@@ -104,23 +119,27 @@ export class FreeDraw {
       for (const ev of evs) moved += this.penTo(this.toPage(ev));
       if (moved) game.audio.scratch(moved * 300);
       this.render();
-    });
+    };
     const up = (e) => {
       if (!this.cur || e.pointerId !== this.cur.pid) return;
       this.penUp();
     };
-    cv.addEventListener('pointerup', up);
-    cv.addEventListener('pointercancel', up);
-    cv.addEventListener('contextmenu', (e) => e.preventDefault());
-    // (nothing on the page reaches the game under it; a click on the game beside it puts it away)
-    for (const ev of ['mousedown', 'mouseup', 'click', 'contextmenu', 'touchstart', 'wheel']) this.page.addEventListener(ev, (e) => e.stopPropagation());
-    this.el.addEventListener('mousedown', (e) => {
-      if (!this.isOpen || game.touch || e.target !== this.el) return;
+    for (const t of [this.cv, $('fd-zone-a'), $('fd-zone-b')]) {
+      t.addEventListener('pointerdown', down);
+      t.addEventListener('pointermove', move);
+      t.addEventListener('pointerup', up);
+      t.addEventListener('pointercancel', up);
+    }
+    // (the mouse wheel: the next ink)
+    this.cv.addEventListener('wheel', (e) => {
+      if (!this.isOpen) return;
       e.preventDefault();
-      this.close();
-    });
+      if (Math.abs(e.deltaY) > 2) this.cycleInk(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
+    // (nothing drawn here reaches the game under it)
+    for (const ev of ['mousedown', 'mouseup', 'click', 'contextmenu', 'touchstart', 'wheel']) this.el.addEventListener(ev, (e) => e.stopPropagation());
     this.el.addEventListener('contextmenu', (e) => e.preventDefault());
-    // the page's buttons: a finger works them as it touches them - with the thumb on the stick a
+    // the buttons: a finger works them as it touches them - with the thumb on the stick a
     // phone sees two fingers, and a tap of the other one makes no click; the mouse clicks (and
     // the click a finger's tap may still make after is not a second press, here or beside it)
     let pressed = -1e9;
@@ -138,6 +157,7 @@ export class FreeDraw {
       const b = e.target.closest('.fd-sw');
       if (b) this.pickInk(+b.dataset.i);
     });
+    press(this.colorBtn, () => this.cycleInk(1));
     press($('fd-undo'), () => this.undo());
     press($('fd-clear'), () => this.clear());
     press($('fd-close'), () => this.close());
@@ -147,13 +167,18 @@ export class FreeDraw {
       game.openDraw();
     });
     press($('fd-kind'), () => this.menu(this.menuEl.classList.contains('hidden')));
-    press(this.menuEl, (e) => {
+    press(this.altsEl, (e) => {
       const b = e.target.closest('.fd-chip');
       if (!b) return;
-      this.force = b.dataset.k || null;
-      this.menu(false);
-      this.read();
-      this.render();
+      if (b.dataset.k === '…') {
+        this.menu(this.menuEl.classList.contains('hidden'));
+        return;
+      }
+      this.choose(b.dataset.k || null);
+    });
+    press(this.menuEl, (e) => {
+      const b = e.target.closest('.fd-chip');
+      if (b) this.choose(b.dataset.k || null);
     });
     // its own keys while it is out (after the game's own listener: core/input.js); the game does
     // not see them (Esc is no pause here)
@@ -177,11 +202,15 @@ export class FreeDraw {
       }
     });
     window.addEventListener('resize', () => {
-      if (this.isOpen) this.layout();
+      if (this.isOpen) {
+        this.layout();
+        this.info();
+        this.render();
+      }
     });
   }
 
-  // ------------------------------------------------------------------ the page
+  // ------------------------------------------------------------------ the pen out, and away
   show() {
     const game = this.game;
     const p = game.player;
@@ -200,12 +229,8 @@ export class FreeDraw {
     this.layout();
     this.read();
     this.render();
-    if (game.pad) game.pad.startFree(this.cv.getBoundingClientRect());
-    game.audio.play('pageflip', 0.5);
-    if (!this.told) {
-      this.told = true;
-      game.hud.toast(game.touch ? 'ציירו נשק או רכב — מה שבא לכם. הג׳ויסטיק ממשיך לרוץ' : 'ציירו נשק או רכב — מה שבא לכם. WASD ממשיכים לרוץ', 'info', 3.4);
-    }
+    if (game.pad) game.pad.startFree({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight });
+    game.audio.play('pageflip', 0.4);
   }
 
   close() {
@@ -228,22 +253,22 @@ export class FreeDraw {
   }
 
   layout() {
-    const r = this.cv.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.cw = Math.max(1, r.width);
-    this.ch = Math.max(1, r.height);
+    this.cw = Math.max(1, window.innerWidth);
+    this.ch = Math.max(1, window.innerHeight);
     this.cv.width = Math.round(this.cw * dpr);
     this.cv.height = Math.round(this.ch * dpr);
     this.dpr = dpr;
+    this.U = this.unit();
     this.bake();
   }
 
+  // screen px -> the drawing's units
   toPage(e) {
-    const r = this.cv.getBoundingClientRect();
-    return [(e.clientX - r.left) / Math.max(1, r.height), (e.clientY - r.top) / Math.max(1, r.height)];
+    return [e.clientX / this.U, e.clientY / this.U];
   }
 
-  // the pen on to p (page units): how far it went
+  // the pen on to p: how far it went
   penTo(p) {
     const c = this.cur;
     const q = c.p[c.p.length - 1];
@@ -274,9 +299,8 @@ export class FreeDraw {
 
   // (the pad's pencil, core/gamepad.js: in screen pixels)
   padPen(x, y, down) {
-    const r = this.cv.getBoundingClientRect();
-    const inside = x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-    const p = [(x - r.left) / Math.max(1, r.height), (y - r.top) / Math.max(1, r.height)];
+    const inside = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight;
+    const p = [x / this.U, y / this.U];
     if (down && !this.cur && inside) {
       this.cur = { p: [p], c: this.ink, pid: -2 };
       this.game.audio.scratchStart();
@@ -306,20 +330,34 @@ export class FreeDraw {
   pickInk(i) {
     this.ink = i;
     this.el.querySelectorAll('.fd-sw').forEach((b) => b.classList.toggle('on', +b.dataset.i === i));
+    const ink = INKS[i];
+    this.colorBtn.style.setProperty('--c', ink.css);
+    this.colorBtn.classList.toggle('pencil', !!ink.pencil);
+    this.colorBtn.classList.toggle('neon', !!ink.neon);
   }
 
   menu(on) {
     this.menuEl.classList.toggle('hidden', !on);
     if (on) this.menuEl.querySelectorAll('.fd-chip').forEach((b) => b.classList.toggle('on', (b.dataset.k || null) === this.force));
+    if (this.isOpen) this.place();
+  }
+
+  // it is something else: what the player picked (null: what it looks like)
+  choose(k) {
+    this.force = k;
+    this.menu(false);
+    this.read();
+    this.render();
   }
 
   cycleInk(d) {
     this.pickInk((this.ink + d + INKS.length) % INKS.length);
   }
 
-  // (the pad's Y) it is something else: the next kind
+  // (the pad's Y) it is something else: the next of what it could be, then the rest
   cycleKind() {
-    const list = [null, 'vehicle', ...WEAPON_ORDER];
+    const alts = this.R && this.R.alts ? this.R.alts.map((a) => a.key) : [];
+    const list = [...new Set([null, ...alts, ...VEH_CHOICES.map((v) => v[0]), ...WEAPON_ORDER])];
     this.force = list[(list.indexOf(this.force) + 1) % list.length];
     this.read();
     this.render();
@@ -331,24 +369,30 @@ export class FreeDraw {
     this.info();
   }
 
-  // what the page says of it: what it is becoming, what it can do, the ink it takes
+  // what the tag says of it: what it is becoming, what it can do, the ink it takes, what else
+  // it could be
   info() {
     const game = this.game;
     const R = this.R;
     const ink = game.ink;
     const level = ink ? ink.level : 1e9;
     const cost = R && R.cat ? R.cost : 0;
-    if (!this.strokes.length) {
-      this.nameEl.textContent = 'ציירו נשק או רכב';
-      this.statsEl.textContent = 'מה שבא לכם — הצורה קובעת מה הוא עושה';
-    } else if (!R || !R.cat) {
-      this.nameEl.textContent = '…';
-      this.statsEl.textContent = R && R.why ? R.why : 'עוד קצת';
-    } else {
-      this.nameEl.textContent = (this.force ? '✎ ' : '') + R.name;
-      this.statsEl.textContent = `${statLine(R)} · ${cost} דיו`;
+    const has = this.strokes.length > 0;
+    this.tagEl.classList.toggle('hidden', !has);
+    this.hintEl.classList.toggle('gone', has || !!this.cur);
+    this.hintEl.textContent = game.touch ? 'ציירו באוויר — נשק או רכב · האגודל ממשיך לרוץ' : 'ציירו באוויר — נשק או רכב · WASD ממשיכים לרוץ · Q יוצרים · Esc סוגרים';
+    if (has) {
+      if (!R || !R.cat) {
+        this.nameEl.textContent = '…';
+        this.statsEl.textContent = R && R.why ? R.why : 'עוד קצת';
+      } else {
+        this.nameEl.textContent = (this.force ? '✎ ' : '') + R.name;
+        this.statsEl.textContent = `${statLine(R)} · ${cost} דיו`;
+      }
+      // what else it could be (the network's next guesses), and the rest of the list
+      const alts = R && R.alts ? R.alts.filter((a) => a.key !== (R.choice || null)).slice(0, 2) : [];
+      this.altsEl.innerHTML = alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + '<button class="fd-chip more" data-k="…">עוד…</button>';
     }
-    this.hintEl.textContent = this.strokes.length ? '' : game.touch ? 'ציירו כאן — הג׳ויסטיק ממשיך לרוץ' : 'ציירו כאן · WASD ממשיכים לרוץ · Q יוצרים · Esc סוגרים';
     const short = R && R.cat && cost > level;
     this.makeBtn.textContent = short ? 'אין מספיק דיו' : R && R.cat ? `✓ ${R.name}!` : '✓ צרו!';
     this.makeBtn.classList.toggle('off', !R || !R.cat || short);
@@ -359,44 +403,80 @@ export class FreeDraw {
       this.inkCost.style.right = `${clamp(((level - c) / ink.cap) * 100, 0, 100)}%`;
       this.inkCost.classList.toggle('over', !!short);
     }
+    if (has) this.place();
   }
 
-  // one line on a page (g: in page units)
+  // the tag by the drawing: over it, or under it when there is no room (never under the tools)
+  place() {
+    const b = this.bounds();
+    if (!b) return;
+    const tag = this.tagEl;
+    const w = tag.offsetWidth;
+    const h = tag.offsetHeight;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const tr = this.toolsEl.getBoundingClientRect();
+    const right = this.game.touch ? tr.left - 8 : W - 8;
+    let x = clamp(b.x0, 8, Math.max(8, right - w));
+    let y = b.y0 - h - 14;
+    if (y < 8) y = Math.min(b.y1 + 14, H - h - 8);
+    if (!this.game.touch) y = Math.min(y, tr.top - h - 8);
+    tag.style.transform = `translate(${Math.round(x)}px, ${Math.round(Math.max(8, y))}px)`;
+  }
+
+  // the drawing's box on the screen (px)
+  bounds() {
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const s of this.strokes) {
+      for (const [x, y] of s.p) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+    }
+    if (!(x1 >= x0)) return null;
+    const U = this.U;
+    return { x0: x0 * U, x1: x1 * U, y0: y0 * U, y1: y1 * U };
+  }
+
+  // one line in the air (g: in the drawing's units): a pale edge round it, so it shows over any
+  // street, then its ink
   line(g, s) {
-    const H = this.ch || 1;
+    const U = this.U;
     const ink = INKS[s.c] || INKS[0];
-    const w = (ink.pencil ? 2.6 : 3.4) / H;
+    const w = (ink.pencil ? 3.2 : 4) / U;
     g.beginPath();
     s.p.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
     if (s.p.length === 1) g.lineTo(s.p[0][0] + 0.001, s.p[0][1]);
-    if (ink.css === '#f4efe4') {
-      g.strokeStyle = '#8a8272';
-      g.lineWidth = w + 2.2 / H;
-      g.stroke();
-    }
+    g.strokeStyle = ink.css === '#f4efe4' ? 'rgba(40, 36, 48, 0.75)' : 'rgba(255, 252, 244, 0.82)';
+    g.lineWidth = w + 3.4 / U;
+    g.globalAlpha = 1;
+    g.stroke();
     g.strokeStyle = ink.css;
     g.lineWidth = w;
-    g.globalAlpha = ink.pencil ? 0.9 : 1;
     if (ink.neon) {
       g.shadowColor = ink.css;
-      g.shadowBlur = 10 * (this.dpr || 1);
+      g.shadowBlur = 12 * (this.dpr || 1);
     }
     g.stroke();
     g.shadowBlur = 0;
-    g.globalAlpha = 1;
   }
 
-  // the lines already drawn, on a page of their own: as the pen moves only its own line is drawn
-  // again (the neon's glow is slow to draw, and a phone draws the game at the same time)
+  // the lines already drawn, on a picture of their own: as the pen moves only its own line is
+  // drawn again (the neon's glow is slow to draw, and a phone draws the game at the same time)
   bake() {
     if (!this.baked) this.baked = document.createElement('canvas');
     const b = this.baked;
     b.width = this.cv.width;
     b.height = this.cv.height;
     const g = b.getContext('2d');
-    const H = this.ch || 1;
+    const U = this.U;
     const dpr = this.dpr || 1;
-    g.setTransform(dpr * H, 0, 0, dpr * H, 0, 0);
+    g.setTransform(dpr * U, 0, 0, dpr * U, 0, 0);
     g.lineCap = 'round';
     g.lineJoin = 'round';
     for (const s of this.strokes) this.line(g, s);
@@ -405,30 +485,23 @@ export class FreeDraw {
   render() {
     const g = this.g;
     const dpr = this.dpr || 1;
-    const H = this.ch || 1;
+    const U = this.U;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.cv.width, this.cv.height);
     if (!this.baked || this.baked.width !== this.cv.width || this.baked.height !== this.cv.height) this.bake();
     g.drawImage(this.baked, 0, 0);
-    g.setTransform(dpr * H, 0, 0, dpr * H, 0, 0);
+    g.setTransform(dpr * U, 0, 0, dpr * U, 0, 0);
     g.lineCap = 'round';
     g.lineJoin = 'round';
     if (this.cur) this.line(g, this.cur);
     // which way it points (its muzzle, its tip, its nose)
     const R = this.R;
     if (R && R.cat && !this.cur) {
-      let x0 = Infinity;
-      let x1 = -Infinity;
-      let y0 = Infinity;
-      let y1 = -Infinity;
-      for (const s of this.strokes) {
-        for (const [x, y] of s.p) {
-          x0 = Math.min(x0, x);
-          x1 = Math.max(x1, x);
-          y0 = Math.min(y0, y);
-          y1 = Math.max(y1, y);
-        }
-      }
+      const b = this.bounds();
+      const x0 = b.x0 / U;
+      const x1 = b.x1 / U;
+      const y0 = b.y0 / U;
+      const y1 = b.y1 / U;
       let dirX;
       if (R.cat === 'vehicle') dirX = R.mirror ? -1 : 1;
       else if (R.theta) dirX = 0;
@@ -437,24 +510,28 @@ export class FreeDraw {
         const y = R.cat === 'vehicle' ? y1 + 0.05 : (y0 + y1) / 2;
         const x = dirX > 0 ? x1 + 0.03 : x0 - 0.03;
         const l = 0.05;
-        g.strokeStyle = '#e2335f';
-        g.lineWidth = 3 / H;
-        g.beginPath();
-        if (R.cat === 'vehicle') {
-          const cx = (x0 + x1) / 2;
-          g.moveTo(cx - dirX * 0.06, y);
-          g.lineTo(cx + dirX * 0.06, y);
-          g.moveTo(cx + dirX * 0.06 - dirX * 0.025, y - 0.02);
-          g.lineTo(cx + dirX * 0.06, y);
-          g.lineTo(cx + dirX * 0.06 - dirX * 0.025, y + 0.02);
-        } else {
-          g.moveTo(x, y);
-          g.lineTo(x + dirX * l, y);
-          g.moveTo(x + dirX * l - dirX * 0.02, y - 0.018);
-          g.lineTo(x + dirX * l, y);
-          g.lineTo(x + dirX * l - dirX * 0.02, y + 0.018);
-        }
-        g.stroke();
+        const arrow = (style, w) => {
+          g.strokeStyle = style;
+          g.lineWidth = w / U;
+          g.beginPath();
+          if (R.cat === 'vehicle') {
+            const cx = (x0 + x1) / 2;
+            g.moveTo(cx - dirX * 0.06, y);
+            g.lineTo(cx + dirX * 0.06, y);
+            g.moveTo(cx + dirX * 0.06 - dirX * 0.025, y - 0.02);
+            g.lineTo(cx + dirX * 0.06, y);
+            g.lineTo(cx + dirX * 0.06 - dirX * 0.025, y + 0.02);
+          } else {
+            g.moveTo(x, y);
+            g.lineTo(x + dirX * l, y);
+            g.moveTo(x + dirX * l - dirX * 0.02, y - 0.018);
+            g.lineTo(x + dirX * l, y);
+            g.lineTo(x + dirX * l - dirX * 0.02, y + 0.018);
+          }
+          g.stroke();
+        };
+        arrow('rgba(255, 252, 244, 0.85)', 6);
+        arrow('#e2335f', 3);
       }
     }
   }
@@ -466,14 +543,14 @@ export class FreeDraw {
     const R = this.strokes.length ? readFree(this.strokes, this.force) : null;
     const shake = (why) => {
       this.stats.failed++;
-      this.page.classList.remove('shake');
-      void this.page.offsetWidth;
-      this.page.classList.add('shake');
+      this.tagEl.classList.remove('shake');
+      void this.tagEl.offsetWidth;
+      this.tagEl.classList.add('shake');
       if (why) game.hud.toast(why, 'bad', 2.4);
       game.audio.play('meh', 0.5);
     };
     if (!R || !R.cat) {
-      shake(!this.strokes.length ? 'הדף ריק — ציירו נשק או רכב' : R && R.why ? R.why : 'זה עוד לא נראה כמו כלום — עוד כמה קווים');
+      shake(!this.strokes.length ? 'עוד לא צויר כלום — ציירו נשק או רכב' : R && R.why ? R.why : 'זה עוד לא נראה כמו כלום — עוד כמה קווים');
       return;
     }
     const p = game.player;
@@ -502,30 +579,18 @@ export class FreeDraw {
       if (R.spec.cannon || R.spec.base === 'copter') game.goalFlags.heavyDrawn = true;
     }
     game.updateGoals();
-    this.flyAway(where);
+    this.flyAway();
     this.strokes = [];
     this.force = null;
     this.R = null;
+    this.bake();
     this.close();
   }
 
   // where the drawing is on the screen: its middle (px) and its size (px)
   drawnAt() {
-    const r = this.cv.getBoundingClientRect();
-    let x0 = Infinity;
-    let x1 = -Infinity;
-    let y0 = Infinity;
-    let y1 = -Infinity;
-    for (const s of this.strokes) {
-      for (const [x, y] of s.p) {
-        x0 = Math.min(x0, x);
-        x1 = Math.max(x1, x);
-        y0 = Math.min(y0, y);
-        y1 = Math.max(y1, y);
-      }
-    }
-    const H = r.height;
-    return { x: r.left + ((x0 + x1) / 2) * H, y: r.top + ((y0 + y1) / 2) * H, w: Math.max(10, (x1 - x0) * H), h: Math.max(10, (y1 - y0) * H), rect: r };
+    const b = this.bounds() || { x0: 0, x1: 10, y0: 0, y1: 10 };
+    return { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, w: Math.max(10, b.x1 - b.x0), h: Math.max(10, b.y1 - b.y0) };
   }
 
   // the screen's axes in the street: its right (level), into it (level), and the turn that shows a
@@ -600,25 +665,20 @@ export class FreeDraw {
     return true;
   }
 
-  // the drawing leaves the page (a copy of it, shrinking away)
-  flyAway(where) {
+  // the drawing in the air gives way to the thing (a copy of it, fading as it swells a little)
+  flyAway() {
     try {
       const c = document.createElement('canvas');
       c.width = this.cv.width;
       c.height = this.cv.height;
       c.getContext('2d').drawImage(this.cv, 0, 0);
-      const r = where.rect;
       c.className = 'fd-fly';
-      c.style.left = `${r.left}px`;
-      c.style.top = `${r.top}px`;
-      c.style.width = `${r.width}px`;
-      c.style.height = `${r.height}px`;
       document.body.appendChild(c);
       requestAnimationFrame(() => {
-        c.style.transform = `translate(${(window.innerWidth / 2 - where.x) * 0.35}px, ${(window.innerHeight / 2 - where.y) * 0.35}px) scale(0.55)`;
+        c.style.transform = 'scale(1.04)';
         c.style.opacity = '0';
       });
-      setTimeout(() => c.remove(), 600);
+      setTimeout(() => c.remove(), 700);
     } catch (err) {
       // (no copy: no matter)
     }
@@ -656,7 +716,7 @@ export class FreeDraw {
     const v = p.inVehicle;
     if (v && v.drawn) jetFlames(game, v, dt);
     if (!this.isOpen) return;
-    // not on foot any more (in a car, swimming, down...), or the game stopped: the page goes
+    // not on foot any more (in a car, swimming, down...), or the game stopped: the pen goes
     if (p.mode !== 'foot' || p.inVehicle || game.state !== 'play' || (game.dialog && game.dialog.open)) {
       this.close();
       return;

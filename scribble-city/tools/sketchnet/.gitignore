@@ -1,0 +1,6 @@
+raw/
+*.npz
+*.npy
+parity.json
+classes.json
+__pycache__/

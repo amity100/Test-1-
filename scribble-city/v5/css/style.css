@@ -1179,61 +1179,55 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch .opt-group .opt { margin: 4px 0; font-size: 13px; }
 }
 
-/* ================================================================ ROADMAP 11.6
-   Drawing freehand, on the move (ui/freedraw.js): a page of the notebook in the corner - on a
-   phone, over the right half - with the city going on around it. */
-#freedraw { position: fixed; inset: 0; z-index: 16; pointer-events: auto; }
-body.touch #freedraw { pointer-events: none; }
-.fd-page {
-  position: absolute;
-  left: max(14px, env(safe-area-inset-left));
-  bottom: max(14px, env(safe-area-inset-bottom));
-  width: min(44vw, 620px);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: repeating-linear-gradient(180deg, transparent 0 27px, var(--rule) 27px 28px), var(--paper);
-  border: 3px solid var(--ink);
-  border-radius: 10px 14px 9px 12px;
-  box-shadow: 4px 5px 0 var(--ink), 0 10px 30px rgba(10, 4, 30, 0.35);
-  pointer-events: auto;
-  transform: rotate(-0.6deg);
-  transform-origin: 0 100%;
-}
-.fd-page.shake { animation: fd-shake 0.4s; }
+/* ================================================================ ROADMAP 11.6, 11.7
+   Drawing freehand in the air, on the run (ui/freedraw.js): the lines straight on the screen,
+   over the street, and a small tag by them saying what they are becoming; the tools along the
+   bottom (a phone: down its right edge, the stick's corner left to the thumb). */
+#freedraw { position: fixed; inset: 0; z-index: 16; pointer-events: none; }
+#fd-air { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; touch-action: none; cursor: crosshair; }
+body.touch #fd-air { pointer-events: none; }
+.fd-zone { display: none; position: absolute; pointer-events: auto; touch-action: none; }
+body.touch .fd-zone { display: block; }
+#fd-zone-a { right: 0; top: 0; width: 58%; height: 100%; }
+#fd-zone-b { left: 0; top: 0; width: 42%; height: 30%; }
+.fd-hint { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); width: min(86vw, 640px); text-align: center; font-family: var(--font-hand); font-size: 26px; line-height: 1.25; color: #fffaf0; text-shadow: 0 0 6px rgba(20, 14, 40, 0.8), 0 2px 0 rgba(20, 14, 40, 0.6); pointer-events: none; transition: opacity 0.2s; }
+.fd-hint.gone { opacity: 0; }
+.fd-tag { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: min(380px, 70vw); pointer-events: auto; }
+.fd-tag.shake { animation: fd-shake 0.4s; }
 @keyframes fd-shake { 0%, 100% { translate: 0; } 20% { translate: -7px; } 40% { translate: 7px; } 60% { translate: -4px; } 80% { translate: 3px; } }
-.fd-top { display: flex; align-items: center; gap: 8px; }
-.fd-kind { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; text-align: right; padding: 3px 10px; border: 2.5px solid var(--ink); border-radius: 10px 12px 9px 11px; background: var(--paper-2); box-shadow: 2px 3px 0 var(--ink); cursor: pointer; color: var(--ink); font-family: var(--font-ui); }
+.fd-kind { display: flex; flex-direction: column; align-items: flex-start; text-align: right; max-width: 100%; padding: 3px 10px 4px; border: 2.5px solid var(--ink); border-radius: 10px 12px 9px 11px; background: rgba(255, 252, 244, 0.94); box-shadow: 2px 3px 0 var(--ink); cursor: pointer; color: var(--ink); font-family: var(--font-ui); }
 .fd-kind b { font-family: var(--font-hand); font-size: 26px; line-height: 1.05; }
 .fd-kind span { font-size: 13px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.fd-ink { position: relative; width: 120px; height: 12px; border: 2px solid var(--ink); border-radius: 7px; background: var(--paper-2); overflow: hidden; flex: none; }
+.fd-alts { display: flex; flex-wrap: wrap; gap: 5px; }
+.fd-chip { font: 600 14px var(--font-ui); padding: 3px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 252, 244, 0.94); cursor: pointer; color: var(--ink); }
+.fd-chip.more { opacity: 0.8; }
+.fd-chip.on { background: #ffe2a8; border-color: #ff4fa3; }
+.fd-menu { display: flex; flex-wrap: wrap; gap: 5px; max-width: min(380px, 70vw); padding: 7px; background: var(--paper-2); border: 2.5px solid var(--ink); border-radius: 10px; box-shadow: 3px 4px 0 var(--ink); }
+.fd-tools { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(255, 252, 244, 0.92); border: 2.5px solid var(--ink); border-radius: 12px 10px 13px 9px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; }
+.fd-inks { display: flex; gap: 4px; }
+.fd-sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); background: var(--c); cursor: pointer; padding: 0; transition: transform 0.1s; }
+.fd-sw.pencil, .fd-color.pencil i { background: repeating-linear-gradient(-45deg, #e8e4da 0 3px, #5b5e6a 3px 5px); }
+.fd-sw.neon, .fd-color.neon i { box-shadow: 0 0 8px var(--c); }
+.fd-sw.on { outline: 3px solid #ff4fa3; outline-offset: 1px; transform: scale(1.14); }
+.fd-color { display: none; }
+.fd-color i { display: block; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--ink); background: var(--c); }
+.fd-ink { position: relative; width: 90px; height: 12px; border: 2px solid var(--ink); border-radius: 7px; background: var(--paper-2); overflow: hidden; flex: none; }
 #fd-ink-fill { position: absolute; top: 0; bottom: 0; right: 0; width: 100%; background: #2a3a8c; }
 #fd-ink-cost { position: absolute; top: 0; bottom: 0; width: 0; background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.85) 0 4px, rgba(255, 255, 255, 0.3) 4px 8px); }
 #fd-ink-cost.over { background: repeating-linear-gradient(-45deg, rgba(226, 51, 95, 0.95) 0 4px, rgba(255, 210, 220, 0.9) 4px 8px); }
-.fd-sheet { position: relative; height: min(46vh, 400px); border: 2px dashed rgba(36, 36, 44, 0.35); border-radius: 8px; background: rgba(255, 253, 246, 0.55); }
-#fd-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
-.fd-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 86%; text-align: center; font-family: var(--font-hand); font-size: 22px; line-height: 1.25; color: rgba(36, 36, 44, 0.45); pointer-events: none; }
-.fd-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.fd-inks { display: flex; gap: 4px; flex-wrap: wrap; }
-.fd-sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); background: var(--c); cursor: pointer; padding: 0; transition: transform 0.1s; }
-.fd-sw.pencil { background: repeating-linear-gradient(-45deg, #e8e4da 0 3px, #5b5e6a 3px 5px); }
-.fd-sw.neon { box-shadow: 0 0 8px var(--c); }
-.fd-sw.on { outline: 3px solid #ff4fa3; outline-offset: 1px; transform: scale(1.14); }
-.fd-acts { display: flex; gap: 6px; margin-inline-start: auto; }
 .fd-btn { font-family: var(--font-hand); font-size: 19px; line-height: 1; padding: 5px 10px; color: var(--ink); background: var(--paper-2); border: 2.5px solid var(--ink); border-radius: 11px 8px 12px 7px; box-shadow: 2px 3px 0 var(--ink); cursor: pointer; white-space: nowrap; }
 .fd-btn:active { transform: translate(1px, 2px); box-shadow: 1px 1px 0 var(--ink); }
 .fd-btn.primary { background: linear-gradient(90deg, #ffd23f, #ff9a3c); font-size: 21px; }
 .fd-btn.primary.off { background: #e6e0d2; opacity: 0.8; }
-.fd-menu { position: absolute; left: 10px; right: 10px; top: 64px; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; background: var(--paper-2); border: 2.5px solid var(--ink); border-radius: 10px; box-shadow: 3px 4px 0 var(--ink); z-index: 2; }
-.fd-chip { font: 600 14px var(--font-ui); padding: 4px 10px; border: 2px solid var(--ink); border-radius: 12px; background: var(--paper); cursor: pointer; color: var(--ink); }
-.fd-chip.on { background: #ffe2a8; border-color: #ff4fa3; }
-.fd-fly { position: fixed; z-index: 17; pointer-events: none; transition: transform 0.45s cubic-bezier(0.5, 0, 0.75, 0), opacity 0.45s ease-in; transform-origin: 50% 50%; }
-body.fd-open #crosshair { opacity: 0.35; }
-/* (a phone: over the right half, the stick on the left still running; the game's own buttons
-   there out of the way) */
-body.touch .fd-page { left: auto; right: max(10px, env(safe-area-inset-right)); top: max(54px, calc(env(safe-area-inset-top) + 46px)); bottom: max(8px, env(safe-area-inset-bottom)); width: min(54vw, 560px); transform: none; padding: 6px 8px; gap: 4px; }
-body.touch .fd-sheet { height: auto; flex: 1; min-height: 0; }
+.fd-fly { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 17; pointer-events: none; transition: transform 0.5s ease-out, opacity 0.5s ease-in; transform-origin: 50% 50%; }
+body.fd-open #crosshair { opacity: 0; }
+/* (a phone: the tools down the right edge, one colour button for the colours; the stick's corner
+   stays the thumb's; the game's own buttons out of the way) */
+body.touch .fd-tools { left: auto; right: max(8px, env(safe-area-inset-right)); top: 50%; bottom: auto; transform: translateY(-50%); flex-direction: column; gap: 6px; padding: 6px; }
+body.touch .fd-inks { display: none; }
+body.touch .fd-color { display: block; padding: 4px 6px; }
+body.touch .fd-ink { width: 46px; }
+body.touch .fd-hint { font-size: 21px; top: 22%; left: 58%; width: 60vw; }
 body.touch.fd-open #btn-fire, body.touch.fd-open #btn-jump, body.touch.fd-open #btn-draw, body.touch.fd-open #btn-photo, body.touch.fd-open #btn-swap, body.touch.fd-open #btn-guard, body.touch.fd-open #btn-hands, body.touch.fd-open #btn-up, body.touch.fd-open #btn-down, body.touch.fd-open #btn-enter, body.touch.fd-open #draw-hint, body.touch.fd-open #look-zone { display: none !important; }
 body.touch.fd-open #toasts { left: 24%; }
 @media (max-height: 520px) {
@@ -1242,7 +1236,5 @@ body.touch.fd-open #toasts { left: 24%; }
   .fd-btn { font-size: 16px; padding: 4px 8px; }
   .fd-btn.primary { font-size: 17px; }
   .fd-sw { width: 19px; height: 19px; }
-  .fd-ink { width: 80px; }
-  .fd-menu { top: 46px; }
   .fd-chip { font-size: 12.5px; padding: 3px 8px; }
 }
