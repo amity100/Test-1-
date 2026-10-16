@@ -501,6 +501,8 @@ body:not(.touch) .touch-only { display: none; }
 /* the view from the car (ROADMAP 4.3): where the copter's "up" is, in a car or on a bike */
 #btn-view { right: max(200px, calc(env(safe-area-inset-right) + 180px)); bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); }
 #btn-down { right: max(200px, calc(env(safe-area-inset-right) + 180px)); bottom: max(96px, calc(env(safe-area-inset-bottom) + 86px)); }
+/* (ROADMAP 11.10) a drawn parachute: open it, while it is in the air */
+#btn-chute { right: max(262px, calc(env(safe-area-inset-right) + 242px)); bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); background: #ffdcae; }
 /* (not with ?classic) ▲ and ▼ a step higher, clear of the enter button (on foot ▼ crouches, often
    by a car); the fists' guard up beside the fire button (ROADMAP 5.4) */
 body.nc #btn-up { bottom: max(204px, calc(env(safe-area-inset-bottom) + 194px)); }
@@ -1168,6 +1170,7 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch #btn-enter { right: max(142px, calc(env(safe-area-inset-right) + 126px)); bottom: max(44px, env(safe-area-inset-bottom)); }
   body.touch #btn-up, body.touch #btn-view { right: max(150px, calc(env(safe-area-inset-right) + 134px)); bottom: max(112px, calc(env(safe-area-inset-bottom) + 104px)); }
   body.touch #btn-down { right: max(150px, calc(env(safe-area-inset-right) + 134px)); bottom: max(72px, calc(env(safe-area-inset-bottom) + 64px)); }
+  body.touch #btn-chute { right: max(200px, calc(env(safe-area-inset-right) + 184px)); bottom: max(124px, calc(env(safe-area-inset-bottom) + 116px)); }
   body.touch.nc #btn-up { bottom: max(152px, calc(env(safe-area-inset-bottom) + 144px)); }
   body.touch.nc #btn-down { bottom: max(112px, calc(env(safe-area-inset-bottom) + 104px)); }
   body.touch #btn-guard { right: max(86px, calc(env(safe-area-inset-right) + 72px)); bottom: max(146px, calc(env(safe-area-inset-bottom) + 138px)); }
@@ -1229,6 +1232,46 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-signs div { display: flex; align-items: center; gap: 7px; font: 600 13.5px var(--font-ui); white-space: nowrap; }
 .fd-signs svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .fd-signs svg .red { stroke: #e8336f; stroke-width: 2.3; }
+/* (ROADMAP 11.10) a ride of parts: each line's name on it (a tap: what else it could be), the card by
+   the drawing - its name, the model it will be, what it does, its numbers */
+.fd-parts { position: absolute; inset: 0; pointer-events: none; transition: opacity 0.15s; }
+.fd-parts.drawing { opacity: 0.4; }
+.fd-pchip { position: absolute; left: 0; top: 0; font: 700 12.5px var(--font-ui); line-height: 1; padding: 3px 7px 4px; border: 1.8px solid var(--ink); border-radius: 9px 7px 10px 8px; background: #f1ede3; color: var(--ink); white-space: nowrap; box-shadow: 1.5px 2px 0 rgba(36, 36, 44, 0.35); }
+.fd-pchip.mine::after { content: ' ✎'; font-weight: 400; }
+.r-body { background: #f1ede3; }
+.r-move { background: #cfe3ff; }
+.r-air { background: #d4f1ff; }
+.r-water { background: #c9f0e6; }
+.r-fire { background: #ffd0cf; }
+.r-gear { background: #ffe5b0; }
+.r-hand { background: #e8dcff; }
+.r-deco { background: #f6f6f2; border-style: dashed !important; }
+.fd-pmenu { position: absolute; left: 0; top: 0; z-index: 4; display: flex; flex-wrap: wrap; gap: 5px; max-width: min(320px, 80vw); padding: 7px 8px 8px; background: var(--paper-2); border: 2.5px solid var(--ink); border-radius: 11px 9px 12px 8px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; }
+.fd-pmenu b { flex-basis: 100%; font-family: var(--font-hand); font-size: 17px; line-height: 1.1; color: var(--ink); }
+.fd-pc { font: 600 13.5px var(--font-ui); padding: 3px 9px; border: 2px solid var(--ink); border-radius: 10px; cursor: pointer; color: var(--ink); }
+.fd-pc.on { box-shadow: inset 0 -3px 0 #ff4fa3; border-color: #ff4fa3; }
+.fd-pc.auto { background: #fff; font-weight: 500; }
+.fd-card { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 176px); width: 238px; display: flex; flex-direction: column; gap: 5px; padding: 7px 9px 8px; background: rgba(255, 252, 244, 0.93); border: 2.5px solid var(--ink); border-radius: 11px 9px 12px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; }
+.fd-card-top { display: flex; align-items: center; gap: 6px; }
+.fd-card-top b { flex: 1; font-family: var(--font-hand); font-size: 21px; line-height: 1.05; }
+.fd-face { flex: none; pointer-events: auto; font: 700 15px var(--font-ui); width: 30px; height: 26px; padding: 0; border: 2px solid var(--ink); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; }
+#fd-view { width: 100%; height: 122px; display: block; border-radius: 8px; background: radial-gradient(ellipse at 50% 38%, #fffdf6 0%, #efe8d8 72%, #e4dccb 100%); }
+#fd-view.none { display: none; }
+.fd-abil { display: flex; flex-wrap: wrap; gap: 4px; }
+.fd-ab { font: 700 12px var(--font-ui); padding: 2px 7px 3px; border: 1.6px solid var(--ink); border-radius: 8px; }
+.fd-bars { display: flex; flex-direction: column; gap: 3px; }
+.fd-bar { display: grid; grid-template-columns: 50px 1fr auto 13px; align-items: center; gap: 5px; font: 600 12px var(--font-ui); }
+.fd-bar i { height: 8px; border: 1.5px solid var(--ink); border-radius: 5px; background: #fff; overflow: hidden; }
+.fd-bar i b { display: block; height: 100%; background: linear-gradient(90deg, #4f9cf5, #2fc3a2); transition: width 0.35s; }
+.fd-bar.bad i b { background: #ef4a5f; }
+.fd-bar .v { font-weight: 500; font-size: 11.5px; white-space: nowrap; }
+.fd-bar em { font-style: normal; font-size: 11px; text-align: center; }
+.fd-bar em.up { color: #1b9e55; animation: fd-delta 2.6s forwards; }
+.fd-bar em.down { color: #e2335f; animation: fd-delta 2.6s forwards; }
+@keyframes fd-delta { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+.fd-warn { font: 600 12px var(--font-ui); color: #c8213f; line-height: 1.3; }
+.fd-warn.hidden { display: none; }
+.fd-meta { font: 500 11.5px var(--font-ui); opacity: 0.8; }
 /* (ROADMAP 11.8) what is drawn: anything, or one of five, or several together (a combination) */
 .fd-cats { position: absolute; z-index: 3; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); display: flex; align-items: center; gap: 5px; padding: 5px 8px; background: rgba(255, 252, 244, 0.92); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; white-space: nowrap; }
 .fd-cats-t { font-family: var(--font-hand); font-size: 18px; color: var(--ink); margin-left: 3px; }
@@ -1252,6 +1295,19 @@ body.touch .fd-signs { top: calc(max(6px, env(safe-area-inset-top)) + 96px); lef
 body.touch .fd-signs b { font-size: 15px; }
 body.touch .fd-signs div { font-size: 11.5px; gap: 5px; }
 body.touch .fd-signs svg { width: 17px; height: 17px; }
+body.touch .fd-card { top: calc(max(6px, env(safe-area-inset-top)) + 6px); left: max(8px, env(safe-area-inset-left)); width: 178px; gap: 2px; padding: 4px 6px 5px; }
+body.touch .fd-card-top b { font-size: 15px; }
+body.touch .fd-face { width: 26px; height: 22px; font-size: 13px; }
+body.touch #fd-view { height: 70px; }
+body.touch .fd-bars { gap: 1px; }
+body.touch .fd-bar { grid-template-columns: 38px 1fr auto 10px; font-size: 10px; gap: 3px; }
+body.touch .fd-bar i { height: 6px; }
+body.touch .fd-bar .v { font-size: 9.5px; }
+body.touch .fd-ab { font-size: 10.5px; padding: 1px 5px 2px; }
+body.touch .fd-warn { font-size: 10.5px; }
+body.touch .fd-meta { font-size: 10px; }
+body.touch .fd-pchip { font-size: 11px; padding: 2px 6px 3px; }
+body.touch .fd-pc { font-size: 12.5px; padding: 3px 8px; }
 @media (max-height: 520px) {
   .fd-kind b { font-size: 20px; }
   .fd-kind span { font-size: 11.5px; }

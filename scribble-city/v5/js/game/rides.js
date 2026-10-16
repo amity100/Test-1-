@@ -474,7 +474,8 @@ export function updatePlane(v, dt, input) {
   } else v.thr = Math.max(0, (v.thr || 0) - dt * 0.5);
   const thr = v.thr || 0;
   const top = 48 * q.speed;
-  const stall = 17;
+  // (how slow it can fly before it falls: by its wings for its weight, if drawn of parts)
+  const stall = v.stallV || 17;
   let s = v.speed || 0;
   v.pitch = v.pitch || 0;
   v.roll = v.roll || 0;
@@ -488,7 +489,7 @@ export function updatePlane(v, dt, input) {
     v.yaw += rollIn * 0.55 * Math.min(1, s / 8) * dt;
     v.pitch = damp(v.pitch, 0, 6, dt);
     v.roll = damp(v.roll, 0, 6, dt);
-    if (s > 21 && pitchIn > 0) {
+    if (s > (v.takeoffV || 21) && pitchIn > 0) {
       v.flying = true;
       v.vy = 1.5;
       game.audio.play('whoosh', 0.5);

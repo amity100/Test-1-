@@ -44,11 +44,14 @@ export function setupDrawn(v, spec) {
   }
   v.balloonP = spec.balloon || null;
   v.spring = spec.spring || null;
-  v.chute = spec.chute || null;
+  // (a parachute: one that is always open, as before; one made of parts opens when you say -
+  // ROADMAP 11.10)
+  v.chute = spec.chute && !spec.chute.deploy ? spec.chute : null;
+  v.paraP = spec.chute && spec.chute.deploy ? spec.chute : null;
   v.armor = spec.armor || 0;
   v.gunType = spec.gun ? spec.gun.type : null;
   const ways = Object.values(M).filter(Boolean).length;
-  v.hybrid = ways > 1 || !!v.spring || !!v.chute;
+  v.hybrid = ways > 1 || !!v.spring || !!v.chute || !!v.paraP;
   v.canLift = !!(M.copter || M.balloon || M.plane) && ways > 1;
   // (Space is its own then - no handbrake: game/vehicles.js drive)
   v.spaceIsMine = v.canLift || !!v.spring;
@@ -75,8 +78,9 @@ export function setMode(v, mode, init = false) {
   const was = v.mode;
   const fwd = was === 'plane' || was === 'drive' ? v.speed || 0 : (v.vx || 0) * Math.sin(v.yaw) + (v.vz || 0) * Math.cos(v.yaw);
   v.mode = mode;
-  v.kind = KIND[mode];
-  v.flies = mode === 'copter' || mode === 'plane' || mode === 'balloon';
+  // (under its parachute it stays what it was: game/vehicles.js draws it so)
+  v.kind = KIND[mode] || v.kind;
+  v.flies = mode === 'copter' || mode === 'plane' || mode === 'balloon' || mode === 'para';
   if (v.qModes && v.qModes[mode]) v.q = v.qModes[mode];
   if (v.body) {
     v.body.rotation.set(0, 0, 0);
@@ -130,7 +134,7 @@ function liftOff(v) {
   }
   if (M.plane) {
     const sp = v.speedAbs || 0;
-    const need = v.mode === 'boat' ? TAKEOFF_WATER : TAKEOFF;
+    const need = v.mode === 'boat' ? TAKEOFF_WATER : v.takeoffV || TAKEOFF;
     if (sp < need) {
       if (!v.toldSpeed) {
         v.toldSpeed = true;
@@ -160,6 +164,27 @@ export function hybridStep(v, dt, input) {
   const up = !!input && (input.wasPressed('Space') || (upNow && !v.upWas));
   v.upWas = upNow;
   const down = !!input && (input.keys.has('KeyC') || input.keys.has('ControlLeft') || input.keys.has('ShiftLeft') || input.flyDown);
+  // (ROADMAP 11.10) its parachute: open in the air when you say (by itself, a car falling off a
+  // roof); folded away again once down
+  if (v.paraP) {
+    if (v.paraOut) paraClose(v, dt);
+    if (v.mode === 'para') {
+      updatePara(v, dt, input);
+      return;
+    }
+    const air = airborne(v);
+    if (input) chuteButton(v, air);
+    if (air && input && !game.toldChute && v.driver) {
+      game.toldChute = true;
+      game.hud.toast(game.touch ? 'כפתור המצנח — הוא נפתח' : 'G — המצנח נפתח', 'info', 2.6);
+    }
+    const fall = v.mode === 'drive' && v.air && (v.vy || 0) < -9 && v.pos.y - Math.max(0, groundHeight(v.pos.x, v.pos.z)) > 4;
+    if (air && ((input && input.wasPressed('KeyG')) || fall)) {
+      openChute(v);
+      if (input) chuteButton(v, false);
+      return;
+    }
+  }
   switch (v.mode) {
     case 'drive': {
       if (up && !v.air) {
@@ -227,6 +252,170 @@ export function hybridStep(v, dt, input) {
     }
     default:
       break;
+  }
+}
+
+// ------------------------------------------------------------------ (ROADMAP 11.10) its parachute
+// Drawn on it (game/partsum.js): G in the air (its button on a phone, X on a pad) and it opens - a
+// plane's wings fold up along its sides as the canopy blooms over it - and it comes down slowly:
+// the bigger the canopy for its weight, the slower. The stick steers it a little, the wind takes
+// it a little. Down on the ground it rolls on, on its wheels (a plane without: it stands, ready to
+// go again); on the water it floats, if it can. The canopy folds away, the wings come down, and it
+// is packed again for next time.
+const smooth = (k) => k * k * (3 - 2 * k);
+
+function airborne(v) {
+  if (v.mode === 'drive') return !!v.air && v.pos.y - Math.max(0, groundHeight(v.pos.x, v.pos.z)) > 2;
+  if (v.mode === 'plane') return !!v.flying;
+  if (v.mode === 'copter' || v.mode === 'balloon') return (v.alt || 0) > 3;
+  return false;
+}
+
+// its button on a phone: there while it could open
+function chuteButton(v, on) {
+  if (v.chuteBtn === on) return;
+  v.chuteBtn = on;
+  const el = typeof document !== 'undefined' ? document.getElementById('btn-chute') : null;
+  if (el) el.classList.toggle('hidden', !on);
+}
+
+// a plane's wings: folded up (f 1) or out (0), each on its hinge at its root
+function foldWings(v, f) {
+  for (const w of v.wings || []) w.rotation.z = (w.userData.side || 1) * f * 1.25;
+}
+
+function openChute(v) {
+  const game = v.game;
+  // (the way it was going, carried on as it falls)
+  let vx = v.vx || 0;
+  let vz = v.vz || 0;
+  if (v.mode === 'plane') {
+    const sp = (v.speed || 0) * Math.cos(v.pitch || 0);
+    vx = Math.sin(v.yaw) * sp;
+    vz = Math.cos(v.yaw) * sp;
+  }
+  const vy = v.mode === 'plane' || v.mode === 'drive' ? v.vy || 0 : 0;
+  v.paraFrom = v.mode;
+  setMode(v, 'para');
+  v.vx = vx;
+  v.vz = vz;
+  v.vy = vy;
+  v.paraT = 0;
+  v.paraOut = 0;
+  v.thr = 0;
+  if (v.canopy) {
+    v.canopy.visible = true;
+    v.canopy.scale.setScalar(0.01);
+  }
+  if (v.pack) v.pack.visible = false;
+  game.audio.play('whoosh', 0.8);
+  game.camRig.addShake(0.25);
+}
+
+export function updatePara(v, dt, input) {
+  const game = v.game;
+  const P = v.paraP;
+  v.paraT += dt;
+  const t = v.paraT;
+  // the canopy blooms open (a little past, and back)
+  const k = Math.min(1, t / 0.7);
+  const open = 1 + 2.70158 * Math.pow(k - 1, 3) + 1.70158 * Math.pow(k - 1, 2);
+  if (v.canopy) {
+    v.canopy.scale.setScalar(Math.max(0.01, open));
+    v.canopy.rotation.z = Math.sin(t * 1.3) * 0.06;
+    v.canopy.rotation.x = Math.sin(t * 0.9 + 1) * 0.05;
+  }
+  foldWings(v, smooth(Math.min(1, t / 0.6)));
+  // the stick: a little this way or that; the wind up there
+  let ax = 0;
+  let az = 0;
+  if (input) {
+    const mv = input.readMove();
+    const cy = game.camRig.yaw;
+    const fx = Math.sin(cy);
+    const fz = Math.cos(cy);
+    ax = fx * mv.y - fz * mv.x;
+    az = fz * mv.y + fx * mv.x;
+  }
+  const wx = Math.cos(game.time * 0.013 + 1.1) * 1.2;
+  const wz = Math.sin(game.time * 0.017 + 0.4) * 1.2;
+  v.vx = damp(v.vx || 0, ax * 5.5 + wx, 0.7, dt);
+  v.vz = damp(v.vz || 0, az * 5.5 + wz, 0.7, dt);
+  // falling until it fills, then down at its own pace
+  if (open < 0.6) v.vy -= 9.8 * dt;
+  else v.vy = damp(v.vy, -P.sink, 2.2, dt);
+  v.pos.x += v.vx * dt;
+  v.pos.z += v.vz * dt;
+  v.pos.y += v.vy * dt;
+  const hs = Math.hypot(v.vx, v.vz);
+  if (hs > 1.5) v.yaw = dampAngle(v.yaw, Math.atan2(v.vx, v.vz), 0.8, dt);
+  v.speed = hs;
+  v.speedAbs = hs;
+  v.turn = 0;
+  // (swaying under it)
+  v.pitch = Math.sin(t * 1.1) * 0.05;
+  v.roll = Math.sin(t * 0.8 + 0.5) * 0.08;
+  if (v.kind !== 'plane' && v.body) {
+    v.body.rotation.x = -v.pitch;
+    v.body.rotation.z = -v.roll;
+  }
+  // walls: it slides down them
+  const col = game.world.collision;
+  _p.set(v.pos.x, v.pos.y + 0.3, v.pos.z);
+  const res = col.resolveCylinder(_p, Math.min(v.radius || 2, 2.5), v.heightM || 2, 0);
+  if (res.hitWall) {
+    v.pos.x = _p.x;
+    v.pos.z = _p.z;
+    v.vx *= 0.3;
+    v.vz *= 0.3;
+  }
+  const wet = isWater(v.pos.x, v.pos.z);
+  const floor = wet ? -0.8 : Math.max(0, groundHeight(v.pos.x, v.pos.z));
+  v.alt = v.pos.y - floor;
+  if (input) game.audio.engine(0.06, 'prop');
+  if (v.pos.y <= floor) landPara(v, wet, floor);
+}
+
+function landPara(v, wet, floor) {
+  const game = v.game;
+  const M = v.modes;
+  const hit = -(v.vy || 0);
+  v.pos.y = floor;
+  v.vy = 0;
+  game.audio.play('jump', 0.6);
+  game.camRig.addShake(0.2);
+  if (hit > 8) v.hurt((hit - 8) * 4);
+  v.paraOut = 0.001;
+  if (wet) {
+    game.fx.splash(v.pos.x, -0.75, v.pos.z, 24, 4, [0.88, 0.95, 1]);
+    if (M.boat) setMode(v, 'boat');
+    else {
+      v.destroy();
+      return;
+    }
+  } else if (M.drive) setMode(v, 'drive');
+  else if (M.plane) setMode(v, 'plane');
+  else if (M.copter) setMode(v, 'copter');
+  else if (M.balloon) setMode(v, 'balloon');
+  else setMode(v, v.paraFrom || 'drive');
+}
+
+// down: the canopy folds away over it, the wings come down - and it is packed again
+function paraClose(v, dt) {
+  v.paraOut += dt;
+  const k = Math.min(1, v.paraOut / 0.6);
+  if (v.canopy) {
+    v.canopy.scale.set(Math.max(0.01, 1 - k * 0.6), Math.max(0.01, 1 - k), Math.max(0.01, 1 - k * 0.6));
+    if (k >= 1) {
+      v.canopy.visible = false;
+      v.canopy.scale.setScalar(0.01);
+    }
+  }
+  foldWings(v, 1 - smooth(Math.min(1, v.paraOut / 0.9)));
+  if (v.paraOut >= 0.9) {
+    v.paraOut = 0;
+    foldWings(v, 0);
+    if (v.pack) v.pack.visible = true;
   }
 }
 

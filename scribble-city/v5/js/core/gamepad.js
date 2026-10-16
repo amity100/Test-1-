@@ -188,6 +188,8 @@ export class Pad {
       }
       key(B.DOWN, 'KeyR');
       key(B.R3, 'KeyV');
+      // (a drawn parachute: X opens it in the air - ROADMAP 11.10)
+      key(B.X, 'KeyG');
     } else {
       inp.pad = { x: lx, y: -ly, sprint: this.down[B.A] };
       inp.flyUp = false;

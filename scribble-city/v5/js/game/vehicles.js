@@ -13,6 +13,8 @@ import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 // them shows: a wonky drawing pulls to one side, a bad one barely runs.
 
 const _v = new THREE.Vector3();
+const _tb = new THREE.Vector3();
+const _tz = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _stripe = new THREE.Matrix4();
 // (ROADMAP 4.6) the car's own frame this frame (render/cars.js), for what is drawn on it
@@ -409,7 +411,8 @@ class Vehicle {
     } else if (this.kind === 'balloon') updateBalloon(this, dt, input);
     else this.updateCopter(dt, input);
     // (a gun drawn on it, ROADMAP 11.6, 11.8: its turret after where you look, a click fires)
-    if (input && this.turret && this.drawn) this.drawnGun(dt, input);
+    if (input && this.drawn && this.turrets) this.drawnGuns(dt, input);
+    else if (input && this.turret && this.drawn) this.drawnGun(dt, input);
     this.wheelSpin += (this.speed * dt) / 0.36;
     if (this.kind === 'car') return;
     this.group.position.copy(this.pos);
@@ -947,6 +950,59 @@ class Vehicle {
     if (this.gunType === 'mg') {
       if (input.fire && this.reload <= 0) this.fireMG();
     } else if ((input.fire || input.firePressed) && this.reload <= 0) this.fireCannon();
+  }
+
+  // (ROADMAP 11.10) every barrel drawn on it, each on its turret after where you look (one on
+  // its top all the way round; one out of its nose, its side, only a little), each firing as it
+  // was drawn (game/partsum.js gunOf): a machine gun on while the button is held, a cannon again
+  // as soon as it can
+  drawnGuns(dt, input) {
+    const want = this.game.camRig.yaw - this.yaw;
+    const fire = input.fire || input.firePressed;
+    for (const t of this.turrets) {
+      const target = t.yaw0 + clamp(angleDiff(t.yaw0, want), -t.arc, t.arc);
+      t.yaw = dampAngle(t.yaw, target, 4, dt);
+      t.node.rotation.y = t.yaw;
+      t.cool -= dt;
+      if (fire && t.cool <= 0) this.fireTurret(t);
+    }
+  }
+
+  fireTurret(t) {
+    const game = this.game;
+    const g = t.gun;
+    t.cool = g.reload;
+    this.group.updateMatrixWorld(true);
+    const mw = t.muzzle.clone();
+    t.node.localToWorld(mw);
+    // (at what you aim at - or, one that cannot turn so far, straight along its barrel)
+    const along = _tb.copy(t.pivot || _tz.set(0, t.muzzle.y, 0));
+    t.node.localToWorld(along);
+    along.subVectors(mw, along).normalize();
+    const dir = game.weapons.aimPoint.clone().sub(mw).normalize();
+    if (dir.dot(along) < Math.cos(Math.min(Math.PI, t.arc + 0.45))) dir.copy(along);
+    const sp = g.spread || 0.02;
+    dir.x += (Math.random() - 0.5) * sp;
+    dir.y += (Math.random() - 0.5) * sp;
+    dir.z += (Math.random() - 0.5) * sp;
+    dir.normalize();
+    if (g.type === 'mg') {
+      const c = this.mgColor || [1.0, 0.82, 0.3];
+      game.weapons.projectiles.push({ kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * g.speed, vy: dir.y * g.speed, vz: dir.z * g.speed, gravity: 2, damage: g.dmg, radius: 0, life: g.life || 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this });
+      game.fx.muzzle(mw.x, mw.y, mw.z, 0.6 + t.r * 4);
+      game.audio.play('paint', this.turrets.length > 1 ? 0.3 : 0.45);
+      game.enemies.noise(this.pos, 32);
+    } else {
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'whiteShell');
+      game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
+      game.fx.splash(mw.x, mw.y, mw.z, 6, 2.5, [1, 1, 0.98]);
+      game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
+      game.camRig.addShake(clamp(0.15 + t.r * 1.4, 0.15, 0.5));
+      game.enemies.noise(this.pos, 60, 'boom');
+      if (this.mode === 'drive' || this.kind === 'bike') this.speed -= t.r * 6;
+    }
+    game.civilians.panic(this.pos, 40);
+    game.onCrime('shoot', this.pos.x, this.pos.z);
   }
 
   fireMG() {

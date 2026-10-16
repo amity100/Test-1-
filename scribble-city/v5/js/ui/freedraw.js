@@ -8,6 +8,10 @@ import { waterSpot } from '../game/rides.js';
 import { angleDiff, clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { cleanStroke, joinStroke, morphPair } from '../game/inkclean.js';
+import { readParts, rideEvidence, PART } from '../game/parts.js';
+import { look } from '../game/sketchnet.js';
+import { rideDesign, rideSpec } from '../game/partsum.js';
+import { PartView } from './partview.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -44,6 +48,9 @@ function forceOf(R) {
 }
 // how long a line takes to turn into its steadied self (s)
 const MORPH_T = 0.24;
+// (ROADMAP 11.10) how long a changed number keeps its arrow (s)
+const DELTA_T = 2.6;
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // what it can be made into instead (the tag's menu), by what the player says they draw (ROADMAP
 // 11.8): the weapons, the vehicles by kind, on the water, in the air, the gear
@@ -72,6 +79,17 @@ export class FreeDraw {
     this.shutAt = -1e9;
     this.U = 300;
     this.stats = { opened: 0, made: {}, failed: 0 };
+    // (ROADMAP 11.10, the sample: a ride made of parts) what the player said a line is, which way it
+    // faces (null: as its parts say), the parts read, the ride they add up to, its preview
+    this.over = {};
+    this.face = null;
+    this.P = null;
+    this.PR = null;
+    this.bars0 = null;
+    this.deltas = {};
+    this.view = null;
+    this.chips = [];
+    this.pmenuAt = -1;
     this.build();
     this.bind();
   }
@@ -98,6 +116,16 @@ export class FreeDraw {
         <div><svg viewBox="0 0 24 24"><path d="M12 5 a1.6 1.6 0 1 0 0.01 0 M12 8 L12 14 M9 10.5 L15 10.5 M12 14 L10 19 M12 14 L14 19"/><ellipse class="red" cx="12" cy="12" rx="7.5" ry="9.5"/></svg>לולאה סביב אויבים — קשורים</div>
         <div><svg viewBox="0 0 24 24"><path class="red" d="M6 15 C3 9 10 4 14 7 C18 10 11 18 7 14 C4 10 13 4 17 9 C21 14 13 21 9 17 C6 13 15 7 19 12 C21 16 15 20 12 18"/></svg>קשקוש — ענן דיו</div>
         <div><svg viewBox="0 0 24 24"><path d="M14 4 L21 4 L21 21 M14 4 L14 21"/><path d="M5 17 a1.4 1.4 0 1 0 0.01 0 M5 19 L5 22"/><path class="red" d="M6 18 L15 5"/></svg>קו מכם לגג — חבל</div>
+      </div>
+      <div class="fd-parts" id="fd-parts"></div>
+      <div class="fd-pmenu hidden" id="fd-pmenu"></div>
+      <div class="fd-card hidden" id="fd-card">
+        <div class="fd-card-top"><b id="fd-cname"></b><button class="fd-face" id="fd-face" title="הכיוון שלו" aria-label="הכיוון שלו">⇄</button></div>
+        <canvas id="fd-view"></canvas>
+        <div class="fd-abil" id="fd-abil"></div>
+        <div class="fd-bars" id="fd-bars"></div>
+        <div class="fd-warn" id="fd-warn"></div>
+        <div class="fd-meta" id="fd-meta"></div>
       </div>
       <div class="fd-tag hidden" id="fd-tag">
         <button class="fd-kind" id="fd-kind" title="משהו אחר"><b id="fd-name"></b><span id="fd-stats"></span><em id="fd-note"></em></button>
@@ -130,6 +158,9 @@ export class FreeDraw {
     this.inkCost = $('fd-ink-cost');
     this.colorBtn = $('fd-color');
     this.catsEl = $('fd-cats');
+    this.partsEl = $('fd-parts');
+    this.pmenuEl = $('fd-pmenu');
+    this.cardEl = $('fd-card');
     this.pickInk(0);
     this.showCats();
   }
@@ -150,7 +181,10 @@ export class FreeDraw {
         // (synthetic pointers)
       }
       this.menu(false);
-      this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId };
+      // (on a part's name: a tap there is its menu - drawn on from it, it is a line as any)
+      const chip = this.chipAt(e.clientX, e.clientY);
+      this.partMenu(-1);
+      this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, t0: performance.now() };
       this.hintEl.classList.add('gone');
       game.audio.scratchStart();
       this.render();
@@ -216,6 +250,16 @@ export class FreeDraw {
       if (b) this.toggleCat(b.dataset.c || null);
     });
     press($('fd-kind'), () => this.menu(this.menuEl.classList.contains('hidden')));
+    // (ROADMAP 11.10) a part's menu: what else that line could be; which way it faces
+    press(this.pmenuEl, (e) => {
+      const b = e.target.closest('.fd-pc');
+      if (b) this.setPart(this.pmenuAt, b.dataset.t || null);
+    });
+    press($('fd-face'), () => {
+      this.face = !(this.P && this.P.flip);
+      this.read();
+      this.render();
+    });
     press(this.altsEl, (e) => {
       const b = e.target.closest('.fd-chip');
       if (!b) return;
@@ -258,8 +302,10 @@ export class FreeDraw {
     window.addEventListener('resize', () => {
       if (this.isOpen) {
         this.layout();
+        this.chipsDirty = true;
         this.info();
         this.render();
+        this.partMenu(-1);
       }
     });
   }
@@ -294,6 +340,7 @@ export class FreeDraw {
     this.shutAt = performance.now();
     if (this.cur) this.penUp(true);
     this.menu(false);
+    this.partMenu(-1);
     this.el.classList.add('hidden');
     document.body.classList.remove('fd-open');
     if (game.pad) game.pad.pen = false;
@@ -337,6 +384,17 @@ export class FreeDraw {
     this.cur = null;
     this.game.audio.scratchStop();
     if (drop || !c) return;
+    // (a tap on a part's name: its menu, no line)
+    if (c.chip >= 0 && performance.now() - c.t0 < 700) {
+      const U = this.U;
+      let far = 0;
+      for (const q of c.p) far = Math.max(far, Math.hypot(q[0] - c.p[0][0], q[1] - c.p[0][1]) * U);
+      if (far < 9) {
+        this.partMenu(c.chip);
+        this.render();
+        return;
+      }
+    }
     let len = 0;
     for (let i = 1; i < c.p.length; i++) len += Math.hypot(c.p[i][0] - c.p[i - 1][0], c.p[i][1] - c.p[i - 1][1]);
     // (a dot: a little round one)
@@ -403,6 +461,9 @@ export class FreeDraw {
   undo() {
     if (this.cur) return;
     this.strokes.pop();
+    delete this.over[this.strokes.length];
+    if (!this.strokes.length) this.face = null;
+    this.partMenu(-1);
     this.bake();
     this.read();
     this.render();
@@ -411,6 +472,9 @@ export class FreeDraw {
   clear() {
     this.strokes = [];
     this.force = null;
+    this.over = {};
+    this.face = null;
+    this.partMenu(-1);
     this.bake();
     this.read();
     this.render();
@@ -498,8 +562,207 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ reading it
   read() {
-    this.R = this.strokes.length ? this.readNow() : null;
+    this.R = null;
+    this.R0 = null;
+    this.readRide();
+    if (!this.PR) this.R = this.R0 || (this.strokes.length ? this.readNow() : null);
+    this.chipsDirty = true;
     this.info();
+  }
+
+  // ------------------------------------------------------------------ (ROADMAP 11.10) a ride of parts
+  // Each line a part (game/parts.js), its name on it as it is drawn; what the ride does, the parts
+  // added up (game/partsum.js) - on the card by the drawing, with the model it will be. A drawing
+  // that is no ride (held by a grip, no body to it - or no way to move, and the network sure it is
+  // a weapon or gear) is read as before.
+  readRide() {
+    this.P = null;
+    const was = this.PR;
+    this.PR = null;
+    if (!this.game.lab || !this.strokes.length) {
+      if (was) this.cardDirty = true;
+      return;
+    }
+    // (the player said it is a weapon, gear - and nothing that moves: as before)
+    if (this.cats.size && ![...this.cats].some((c) => c === 'car' || c === 'air' || c === 'sea')) {
+      if (was) this.cardDirty = true;
+      return;
+    }
+    // (what the network sees in it: only to tell a ride from a weapon or gear drawn - and that a
+    // body drawn alone is a boat's hull)
+    let net = null;
+    try {
+      net = look(this.strokes.map((s) => s.raw || s.p));
+    } catch (err) {
+      net = null;
+    }
+    const hint = net && net.best && net.best[0] === 'boat' ? 'sea' : null;
+    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k })), this.over, this.face, hint);
+    this.P = P;
+    const main = P && P.st.find((o) => o.i === P.body);
+    if (!P || P.frame !== 'ride' || !main || !main.sh.closed) return;
+    const design = rideDesign(P, this.strokes, INKS);
+    if (!design) return;
+    const spec = rideSpec(design);
+    const ok = spec.ok !== false && !!spec.base;
+    if (net && !Object.keys(this.over).length) {
+      // (plainly something else - a weapon, a shield: read as before - unless its parts are surely
+      // a ride's, and the network not that sure)
+      const other = net.weapon + net.gear;
+      const ev = rideEvidence(P);
+      if (other > 0.5 && net.vehicle < 0.3 && (ev < 2 || other > 0.8 || !ok)) return;
+    }
+    this.PR = { design, spec, sum: spec.sum, ok, why: spec.why };
+    this.cardDirty = true;
+  }
+
+  // what a line is: the player's say (null: as the game reads it)
+  setPart(i, t) {
+    if (i < 0) return;
+    if (t && t !== '') this.over[i] = t;
+    else delete this.over[i];
+    this.partMenu(-1);
+    this.game.audio.play('click', 0.4);
+    this.read();
+    this.render();
+  }
+
+  // the menu of a part's name (-1: none)
+  partMenu(i) {
+    this.pmenuAt = i;
+    const el = this.pmenuEl;
+    const part = i >= 0 && this.P ? this.P.parts.find((q) => q.i === i) : null;
+    if (!part) {
+      el.classList.add('hidden');
+      return;
+    }
+    const mine = this.over[i];
+    const opts = part.choices.map((t) => `<button class="fd-pc r-${PART[t].role}${t === part.type ? ' on' : ''}" data-t="${t}">${PART[t].name}</button>`).join('');
+    el.innerHTML = `<b>מה הקו הזה?</b>${opts}${mine ? `<button class="fd-pc auto" data-t="">אוטומטי (${PART[part.auto].name})</button>` : ''}`;
+    el.classList.remove('hidden');
+    const chip = this.chips.find((c) => c.i === i);
+    const r = chip ? chip.el.getBoundingClientRect() : { left: 20, bottom: 20, top: 20 };
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const x = clamp(r.left, 8, window.innerWidth - w - 8);
+    let y = r.bottom + 6;
+    if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 6);
+    el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  }
+
+  // which part's name is at (x, y) on the screen (-1: none)
+  chipAt(x, y) {
+    if (!this.PR) return -1;
+    for (const c of this.chips) {
+      const r = c.el.getBoundingClientRect();
+      if (x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4) return c.i;
+    }
+    return -1;
+  }
+
+  // each line's name, on it (big shapes: in their middle; the rest just over their top), clear of
+  // one another
+  showChips() {
+    this.chipsDirty = false;
+    const P = this.P;
+    const on = !!(this.PR && P);
+    this.partsEl.classList.toggle('hidden', !on);
+    if (!on) {
+      this.partsEl.innerHTML = '';
+      this.chips = [];
+      return;
+    }
+    const U = this.U;
+    const b = this.bounds();
+    const big = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) / U : 1;
+    this.partsEl.innerHTML = P.parts.map((q) => `<span class="fd-pchip r-${PART[q.type].role}${this.over[q.i] ? ' mine' : ''}" data-i="${q.i}">${PART[q.type].name}</span>`).join('');
+    const els = [...this.partsEl.children];
+    const placed = [];
+    this.chips = [];
+    const order = P.parts.map((q, k) => ({ q, el: els[k] }));
+    for (const { q, el } of order) {
+      const s = this.strokes[q.i];
+      if (!s) continue;
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let y0 = Infinity;
+      let y1 = -Infinity;
+      for (const [x, y] of s.p) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const inBig = q.sh.closed && Math.max(x1 - x0, y1 - y0) > big * 0.4;
+      let cx = ((x0 + x1) / 2) * U;
+      let top = inBig ? ((y0 + y1) / 2) * U - h / 2 : y0 * U - h - 5;
+      // (clear of the names already placed: up a little, then down)
+      for (let k = 0; k < 6; k++) {
+        const hit = placed.find((r) => Math.abs(r.cx - cx) < (r.w + w) / 2 + 3 && Math.abs(r.top - top) < h + 2);
+        if (!hit) break;
+        top = k < 3 ? hit.top - h - 3 : hit.top + h + 3;
+      }
+      cx = clamp(cx, w / 2 + 4, window.innerWidth - w / 2 - 4);
+      top = clamp(top, 4, window.innerHeight - h - 4);
+      placed.push({ cx, top, w });
+      el.style.transform = `translate(${Math.round(cx - w / 2)}px, ${Math.round(top)}px)`;
+      this.chips.push({ i: q.i, el });
+    }
+    if (this.pmenuAt >= 0) this.partMenu(this.pmenuAt);
+  }
+
+  // the card by the drawing: what it is called, the model it will be, what it does, its numbers
+  // (an arrow by each that the last line changed), what is wrong with it, how much ink
+  card() {
+    this.cardDirty = false;
+    const PR = this.PR;
+    this.cardEl.classList.toggle('hidden', !PR);
+    if (!PR) {
+      this.bars0 = null;
+      if (this.view) this.view.set(null);
+      return;
+    }
+    const sum = PR.sum;
+    $('fd-cname').textContent = sum ? sum.name : '…';
+    $('fd-abil').innerHTML = sum ? sum.abil.map(([r, t]) => `<span class="fd-ab r-${r}">${esc(t)}</span>`).join('') : '';
+    // (what changed since the last line: an arrow, up green, down red)
+    const now = performance.now() / 1000;
+    const bars = sum ? sum.bars : [];
+    if (this.bars0) {
+      for (const b of bars) {
+        const o = this.bars0.find((q) => q.k === b.k);
+        const d = o ? b.v - o.v : 1;
+        if (Math.abs(d) > 0.012) this.deltas[b.k] = { up: d > 0, t: now };
+      }
+    }
+    this.bars0 = bars;
+    $('fd-bars').innerHTML = bars
+      .map((b) => {
+        const dl = this.deltas[b.k];
+        const arrow = dl && now - dl.t < DELTA_T ? `<em class="${dl.up ? 'up' : 'down'}">${dl.up ? '▲' : '▼'}</em>` : '<em></em>';
+        return `<div class="fd-bar${b.bad ? ' bad' : ''}"><span class="n">${b.name}</span><i><b style="width:${Math.round(clamp(b.v, 0.03, 1) * 100)}%"></b></i><span class="v">${esc(b.txt)}</span>${arrow}</div>`;
+      })
+      .join('');
+    const warn = [];
+    if (!PR.ok && PR.why) warn.push(PR.why);
+    if (sum) warn.push(...sum.warn);
+    const wEl = $('fd-warn');
+    wEl.textContent = warn.join(' · ');
+    wEl.classList.toggle('hidden', !warn.length);
+    $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}` : '';
+    // the model it will be
+    if (!this.view) this.view = new PartView($('fd-view'));
+    this.view.set(PR.ok ? PR.design : null, PR.ok ? PR.spec : null);
+    $('fd-view').classList.toggle('none', !PR.ok || this.view.dead);
+  }
+
+  // as a made thing is read (ui/freedraw.js make): the ride, as R is
+  partsR() {
+    const PR = this.PR;
+    if (!PR.ok) return { cat: null, why: PR.why || 'עוד לא זז' };
+    return { cat: 'vehicle', kind: PR.spec.kind, name: PR.sum.name, design: PR.design, spec: PR.spec, cost: PR.spec.cost, mirror: !!(this.P && this.P.flip) };
   }
 
   readNow() {
@@ -521,18 +784,27 @@ export class FreeDraw {
   // it could be
   info() {
     const game = this.game;
-    const R = this.R;
+    const PR = this.PR;
+    const R = PR ? this.partsR() : this.R;
     const ink = game.ink;
     const level = ink ? ink.level : 1e9;
     const cost = R && R.cat ? R.cost : 0;
     const has = this.strokes.length > 0;
-    this.tagEl.classList.toggle('hidden', !has);
+    if (this.cardDirty || (!PR && !this.cardEl.classList.contains('hidden'))) this.card();
+    if (this.chipsDirty) this.showChips();
+    this.tagEl.classList.toggle('hidden', !has || !!PR);
     this.hintEl.classList.toggle('gone', has || !!this.cur);
     this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur);
-    this.hintEl.textContent = game.touch ? 'ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ' : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
+    this.hintEl.textContent = game.lab
+      ? game.touch
+        ? 'ציירו באוויר · כל קו מקבל שם, ונגיעה בשם מחליפה אותו · האגודל ממשיך לרוץ'
+        : 'ציירו באוויר · כל קו מקבל שם, ולחיצה על השם מחליפה אותו · WASD ממשיכים לרוץ · Q יוצרים'
+      : game.touch
+        ? 'ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ'
+        : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
     // (what was chosen and is not in the drawing yet: on a line of its own)
     this.noteEl.textContent = has && R && R.cat && R.note ? R.note : '';
-    if (has) {
+    if (has && !PR) {
       if (!R || !R.cat) {
         this.nameEl.textContent = '…';
         this.statsEl.textContent = R && R.why ? R.why : 'עוד קצת';
@@ -548,8 +820,9 @@ export class FreeDraw {
       this.altsEl.innerHTML = alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + '<button class="fd-chip more" data-k="…">עוד…</button>';
     }
     const short = R && R.cat && cost > level;
+    if (PR) this.nowhere = false;
     const nowhere = has && R && R.cat && this.nowhere;
-    this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : R && R.cat ? `✓ ${R.name}!` : '✓ צרו!';
+    this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : R && R.cat ? `✓ ${R.name}!` : PR ? 'עוד לא זז' : '✓ צרו!';
     this.makeBtn.classList.toggle('off', !R || !R.cat || short || nowhere);
     if (ink) {
       this.inkFill.style.width = `${clamp((level / ink.cap) * 100, 0, 100)}%`;
@@ -558,7 +831,7 @@ export class FreeDraw {
       this.inkCost.style.right = `${clamp(((level - c) / ink.cap) * 100, 0, 100)}%`;
       this.inkCost.classList.toggle('over', !!short);
     }
-    if (has) this.place();
+    if (has && !PR) this.place();
   }
 
   // the tag by the drawing: over it, or under it when there is no room (never under the tools,
@@ -661,8 +934,10 @@ export class FreeDraw {
       this.line(g, { p: a.map((q, i) => [q[0] + (b[i][0] - q[0]) * e, q[1] + (b[i][1] - q[1]) * e]), c: s.c });
     }
     if (this.cur) this.line(g, this.cur);
+    // (the parts' names: faint while a line is drawn)
+    this.partsEl.classList.toggle('drawing', !!this.cur);
     // which way it points (its muzzle, its tip, its nose)
-    const R = this.R;
+    const R = this.PR ? { cat: 'vehicle', mirror: !!(this.P && this.P.flip) } : this.R;
     if (R && R.cat && !this.cur) {
       const b = this.bounds();
       const x0 = b.x0 / U;
@@ -707,7 +982,7 @@ export class FreeDraw {
   make() {
     const game = this.game;
     if (this.cur) this.penUp();
-    const R = this.strokes.length ? this.readNow() : null;
+    const R = !this.strokes.length ? null : this.game.lab && this.PR ? this.partsR() : this.readNow();
     const shake = (why) => {
       this.stats.failed++;
       this.tagEl.classList.remove('shake');
@@ -762,8 +1037,14 @@ export class FreeDraw {
     this.strokes = [];
     this.force = null;
     this.R = null;
+    this.over = {};
+    this.face = null;
+    this.P = null;
+    this.PR = null;
+    this.cardDirty = true;
     this.bake();
     this.close();
+    this.info();
   }
 
   // where the drawing is on the screen: its middle (px) and its size (px)
@@ -958,7 +1239,7 @@ export class FreeDraw {
     const game = this.game;
     const s = v.spec;
     if (!s) return;
-    const key = `${s.kind}:${v.hybrid ? Object.keys(v.modes || {}).filter((k) => v.modes[k]).join('') : ''}:${v.turret ? v.gunType : ''}`;
+    const key = `${s.kind}:${v.hybrid ? Object.keys(v.modes || {}).filter((k) => v.modes[k]).join('') : ''}:${v.turret ? v.gunType : ''}:${v.turrets ? v.turrets.length : 0}:${v.paraP ? 'p' : ''}:${v.ram ? 'r' : ''}`;
     this.toldRides = this.toldRides || new Set();
     if (this.toldRides.has(key)) return;
     this.toldRides.add(key);
@@ -974,8 +1255,12 @@ export class FreeDraw {
     if (v.spring && !v.canLift) tips.push(s.kind === 'skate' ? (t ? '▲: קפיצה' : 'רווח: קפיצה') : t ? '▲: קפיצה על הקפיץ' : 'רווח: קפיצה על הקפיץ');
     if (v.chute) tips.push('המצנח: נוחת לאט מכל גובה');
     if (v.armor) tips.push('משוריין: פגיעות כואבות לו פחות');
-    if (v.turret) tips.push(v.gunType === 'mg' ? (t ? 'ירי: המקלע' : 'קליק (להחזיק): המקלע') : t ? 'ירי: התותח' : 'קליק: התותח');
+    // (ROADMAP 11.10: made of parts - each barrel fires; its parachute opens when you say)
+    if (v.turrets && v.turrets.length > 1) tips.push(t ? `ירי: כל ${v.turrets.length} הקנים` : `קליק (להחזיק): יורים מכל ${v.turrets.length} הקנים`);
+    else if (v.turret) tips.push(v.gunType === 'mg' ? (t ? 'ירי: המקלע' : 'קליק (להחזיק): המקלע') : t ? 'ירי: התותח' : 'קליק: התותח');
     else if (s.base === 'copter') tips.push(t ? 'ירי: מטוסי נייר' : 'קליק: מטוסי נייר');
+    if (v.paraP) tips.unshift(t ? 'באוויר, כפתור המצנח: הוא נפתח' : 'באוויר, G: המצנח נפתח');
+    if (v.ram) tips.push('הלהב מקדימה: ניגוח');
     if (s.jets.length && s.base === 'car') tips.push(t ? 'ג׳ויסטיק עד הסוף: טורבו' : 'Shift: טורבו מהסילון');
     else if (s.glide && !v.canLift) tips.push('הכנפיים: אחרי קפיצה מרמפה הוא גולש');
     if (tips.length) game.hud.toast(tips.slice(0, 3).join(' · '), 'info', 4);
@@ -1012,6 +1297,8 @@ export class FreeDraw {
     }
     if (done) this.bake();
     if (turning) this.render();
+    // (ROADMAP 11.10) the model by the drawing, turning
+    if (this.view && this.PR && this.PR.ok) this.view.frame(dt);
     // not on foot any more (in a car, swimming, down...), or the game stopped: the pen goes
     if (p.mode !== 'foot' || p.inVehicle || game.state !== 'play' || (game.dialog && game.dialog.open)) {
       this.close();
@@ -1034,7 +1321,7 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats] };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face };
   }
 
   load(o) {
@@ -1042,6 +1329,9 @@ export class FreeDraw {
     this.strokes = Array.isArray(o.s) ? o.s.filter((s) => Array.isArray(s.p) && s.p.length).map((s) => ({ p: s.p, c: Number.isInteger(s.c) && INKS[s.c] ? s.c : 0, raw: Array.isArray(s.r) && s.r.length ? s.r : undefined, k: typeof s.k === 'string' ? s.k : undefined })) : [];
     if (Number.isInteger(o.ink) && INKS[o.ink]) this.pickInk(o.ink);
     this.cats = new Set(Array.isArray(o.cats) ? o.cats.filter((c) => CATEGORY_ORDER.includes(c)) : []);
+    this.over = {};
+    if (o.over && typeof o.over === 'object') for (const [k, t] of Object.entries(o.over)) if (PART[t] && +k < this.strokes.length) this.over[+k] = t;
+    this.face = typeof o.face === 'boolean' ? o.face : null;
     this.showCats();
   }
 }

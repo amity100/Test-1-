@@ -270,6 +270,8 @@ export class Input {
     btn('btn-view', 'KeyV');
     btn('btn-up', 'Space', true);
     btn('btn-down', 'KeyC', true);
+    // (ROADMAP 11.10: a drawn parachute, opened in the air)
+    btn('btn-chute', 'KeyG');
     btn('btn-pause', 'Escape');
     btn('btn-phone', 'KeyP');
     // (not with ?classic: hands up, ROADMAP 6.3)

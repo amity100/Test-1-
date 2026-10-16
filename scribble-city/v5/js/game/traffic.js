@@ -1239,7 +1239,10 @@ export class Traffic {
         if (Math.abs(v.speed) > 6) {
           // (dented where they met: game/damage.js)
           if (!this.game.classic && this.game.damage) this.game.damage.crash(v, c, Math.abs(v.speed));
-          if (!c.wrecked && (v.kind === 'tank' || Math.abs(v.speed) > 14)) {
+          // (a blade drawn at its front, ROADMAP 11.10: it rams - the other car wrecked sooner, itself
+          // hurt less)
+          const ram = !!v.ram && (c.pos.x - v.pos.x) * Math.sin(v.yaw) + (c.pos.z - v.pos.z) * Math.cos(v.yaw) > 0;
+          if (!c.wrecked && (v.kind === 'tank' || Math.abs(v.speed) > (ram ? 14 / v.ram.k : 14))) {
             c.wrecked = true;
             this.game.fx.sprite('fx_crash', c.pos.x, 1.2, c.pos.z, { size: 2.4, life: 0.4 });
             this.game.audio.play('crash', 0.8);
@@ -1254,8 +1257,8 @@ export class Traffic {
           }
           // (people come to look: game/reactions.js)
           if (this.game.reactions) this.game.reactions.note('crash', c.pos.x, c.pos.z);
-          if (v.kind !== 'tank') v.hurt(Math.abs(v.speed) * 0.8);
-          v.speed *= v.kind === 'tank' ? 0.8 : 0.4;
+          if (v.kind !== 'tank') v.hurt(Math.abs(v.speed) * (ram ? 0.8 / v.ram.k : 0.8));
+          v.speed *= v.kind === 'tank' ? 0.8 : ram ? 0.7 : 0.4;
         }
       }
     }

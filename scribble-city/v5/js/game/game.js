@@ -1232,7 +1232,7 @@ export class Game {
     }
     if (input.wasPressed('KeyF')) this.takePhoto();
     // (a graffiti on the wall in front of you: ROADMAP 9.3)
-    if (this.graffiti && input.wasPressed('KeyG')) this.spray();
+    if (this.graffiti && input.wasPressed('KeyG') && !p.inVehicle) this.spray();
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
@@ -1737,6 +1737,8 @@ export class Game {
     $('btn-down').classList.add('hidden');
     $('btn-radio').classList.add('hidden');
     $('btn-view').classList.add('hidden');
+    $('btn-chute').classList.add('hidden');
+    v.chuteBtn = undefined;
     if (!force) this.audio.play('click');
   }
 

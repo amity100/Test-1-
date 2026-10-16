@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
 import { setupDrawn, startMode } from './hybrid.js';
+import { rideSpec } from './partsum.js';
+import { buildPolished } from './partbuild.js';
 
 // (ROADMAP 11.6) A vehicle drawn freehand from the side (ui/freedraw.js, read by
 // game/freeform.js), its shape what it does. Each line drawn is read as a part of it:
@@ -544,7 +546,7 @@ function wheelModel(M, r, w, rim) {
 
 // ------------------------------------------------------------------ (ROADMAP 11.8) boats, balloons
 // the outline's top and bottom at z (o: a closed outline of [z, y]); null: not over it
-function spanAt(o, z) {
+export function spanAt(o, z) {
   let lo = Infinity;
   let hi = -Infinity;
   for (let i = 0, j = o.length - 1; i < o.length; j = i++) {
@@ -564,7 +566,7 @@ function spanAt(o, z) {
 // at each station along it from the deck down to the keel and up again, round-bottomed, as wide
 // as the boat amidships, narrowing to an edge at the bow and a little at the stern (a transom).
 // Returns { geo, deck, half(z, y): how far its side is out from its middle there }
-function hullGeometry(o, W) {
+export function hullGeometry(o, W) {
   let z0 = Infinity;
   let z1 = -Infinity;
   for (const [z] of o) {
@@ -654,7 +656,7 @@ function hullGeometry(o, W) {
 // a hot air balloon's envelope from its outline (o: [z, y]): turned round its upright middle - as
 // wide at each height as it was drawn there - in gores of its colours. Returns { geos: [[geo,
 // colour]], axis (its z), r(y), y0, y1 }
-function envelopeGeometry(o, cols) {
+export function envelopeGeometry(o, cols) {
   let y0 = Infinity;
   let y1 = -Infinity;
   let za = Infinity;
@@ -706,7 +708,7 @@ function envelopeGeometry(o, cols) {
 }
 
 // a coil spring standing from y0 up to y1 at z, r round
-function helixGeometry(z, y0, y1, r, turns) {
+export function helixGeometry(z, y0, y1, r, turns) {
   const P = [];
   const n = Math.max(24, Math.round(turns * 16));
   for (let i = 0; i <= n; i++) {
@@ -717,7 +719,7 @@ function helixGeometry(z, y0, y1, r, turns) {
 }
 
 // a stroke's colour ([r, g, b], 0..1); one drawn in pencil takes the vehicle's own paint
-const colOf = (s, design) => (s.col && !s.pencil ? s.col : design.color);
+export const colOf = (s, design) => (s.col && !s.pencil ? s.col : design.color);
 
 // the vehicle's own frame (game/vehicles.js): x across (+x its left), y up, z forward, on the
 // ground at y = 0. Returns what game/vehicles.js needs of a model.
@@ -1099,19 +1101,22 @@ export function buildModel(design, spec) {
 // a drawn vehicle at (x, z), facing yaw: one of the city's kinds, with the drawing's model and
 // handling (null: it is no vehicle). design.strokes: [{ pts, type, col, pencil, neon }]
 export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
-  const spec = specOf(design);
+  // (ROADMAP 11.10: made of parts - what it does their sum, each made properly: game/partsum.js,
+  // game/partbuild.js)
+  const spec = design.polish ? rideSpec(design) : specOf(design);
   if (!spec.ok) return null;
   const V = game.vehicles;
   const v = V.create(spec.base === 'car' ? 'bike' : spec.base, 'good', 90);
   // (its own model instead of the kind's)
   v.group.remove(v.body);
   v.body.traverse((m) => m.geometry && m.geometry.dispose());
-  const m = buildModel(design, spec);
+  const m = design.polish ? buildPolished(design, spec) : buildModel(design, spec);
   Object.assign(v, m);
   v.group.add(v.body);
   v.model = 'drawn';
   v.drawn = {
-    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined })),
+    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined, part: s.part || undefined, r: s.r || undefined, len: s.len || undefined, coils: s.coils || undefined, base: s.base || undefined, muz: s.muz || undefined })),
+    polish: design.polish || undefined,
     color: design.color.slice(),
     force: design.force || null,
     name: design.name || null,
@@ -1128,6 +1133,13 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   v.leanK = 0.25;
   // (a cannon: it fires as the tank does, its turret after where you look - game/vehicles.js)
   v.muzzleLocal = m.muzzle;
+  // (ROADMAP 11.10: every barrel drawn on it fires, each as it was drawn - game/partsum.js gunOf)
+  if (m.turrets && m.turrets.length) {
+    v.turrets = m.turrets.map((t, i) => Object.assign(t, { gun: spec.guns[i] || { type: t.type, reload: 0.12, dmg: 12, speed: 88, spread: 0.035, life: 2.5, blast: 6 }, yaw: t.yaw0, cool: 0.2 + i * 0.07 }));
+  } else v.turrets = null;
+  v.ram = spec.ram || null;
+  v.stallV = spec.stallV || 0;
+  v.takeoffV = spec.takeoffV || 0;
   v.turretYaw = 0;
   v.reload = 0;
   v.q = Object.assign({}, v.q, { reload: 1 });
