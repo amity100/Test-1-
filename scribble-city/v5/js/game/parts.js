@@ -274,7 +274,7 @@ function circleFit(pts) {
 // the body: what the lines `use` close round - the thick of it (thin lines out of it - a barrel, a
 // rotor, a mast - are not body), its biggest piece. Its edge, how far each cell is from it, its
 // outline (the frame's units), its measures
-function region(G, use, r = 2) {
+function region(G, use, r = 2, along = false) {
   if (!use.length) return null;
   // (a line drawn round to near where it began: closed, as it was meant)
   const P = use.map((o) => (o.sh.closed && o.sh.endGap > 0 ? o.pts.concat([o.pts[0]]) : o.pts));
@@ -288,14 +288,17 @@ function region(G, use, r = 2) {
       break;
     }
   }
-  if (!best && use.length) {
-    // (a body drawn as an arch over its wheels, its bottom not drawn: closed along it)
-    const big = Math.max(...use.map((o) => o.sh.size));
-    const P2 = use.map((o) => ((!o.sh.closed && o.sh.size > big * 0.5 && o.sh.endGap < o.sh.size * 1.05 && o.sh.dev > 0.07) || o.sh.closed ? o.pts.concat([o.pts[0]]) : o.pts));
+  // (a body drawn as an arch over its wheels, its bottom not drawn: closed along it - when nothing
+  // else closes; or, said so (along: game/parts.js parseGround), when what does is a small part of
+  // it all - ROADMAP 11.11)
+  const big = Math.max(...use.map((o) => o.sh.size));
+  const arch = (o) => !o.sh.closed && o.sh.size > big * 0.5 && o.sh.endGap < o.sh.size * 1.05 && o.sh.dev > 0.07;
+  if (!best || (along && use.some(arch))) {
+    const P2 = use.map((o) => (arch(o) || o.sh.closed ? o.pts.concat([o.pts[0]]) : o.pts));
     const solid = G.solid(P2, r + 1);
     const core = G.open(solid, 2);
     const pcs = G.pieces(core);
-    if (pcs.length && pcs[0].n >= 14) best = { pcs, solid };
+    if (pcs.length && pcs[0].n >= 14 && (!best || pcs[0].n > best.pcs[0].n * 2)) best = { pcs, solid };
   }
   if (!best) return null;
   const piece = best.pcs[0];
@@ -369,7 +372,9 @@ function wheelCands(st, D, over) {
     let c = null;
     let q = 0;
     const f = sh.fit;
-    if (!sh.closed && f && (f.err < 0.16 ? f.cover > 2.5 : f.err < 0.25 && f.cover > 3.1) && f.r * 2 > D.w * 0.05 && f.r * 2 < D.w * 0.6 && !sh.scribble) {
+    // (its lowest point: an arc over the top of a circle - a dome, a roof, a parachute - is no wheel)
+    const low = f ? Math.min(...o.pts.map((q) => q[1])) : 0;
+    if (!sh.closed && f && (f.err < 0.16 ? f.cover > 2.5 : f.err < 0.25 && f.cover > 3.1) && f.r * 2 > D.w * 0.05 && f.r * 2 < D.w * 0.6 && !sh.scribble && low < f.cy - f.r * 0.2) {
       // (a U, a C, most of a circle: the wheel it goes round)
       c = { cx: f.cx, cy: f.cy, r: f.r };
       q = 0.6 + 0.3 * Math.min(1, f.cover / 5.5) - f.err;
@@ -429,52 +434,203 @@ function wheelSet(cands, D) {
   return best.slice(0, 8);
 }
 
-// a body drawn with its wheel arches in it and no wheels: its wheels there (the bumps up in its
-// bottom edge, each as wide as a wheel) - [{ x, y, r }], the frame's units
-function archesOf(ol, B, wheels) {
-  const N = 80;
-  const xs = [];
-  const lows = [];
-  for (let i = 0; i < N; i++) {
-    const x = B.x0 + B.w * (0.02 + (0.96 * i) / (N - 1));
-    const sp = spanAt(ol, x);
-    xs.push(x);
-    lows.push(sp ? sp[0] : null);
+// a body drawn with its wheels in its outline: its wheel arches - the bottom edge up over a wheel
+// and down again - and wheels drawn as bulges under it, the edge round down and back up (ROADMAP
+// 11.11). Each by its own rise and fall, not by the bottom edge's level overall: a raised bumper at
+// an end is no arch. Its bottom edge as the outline has it - or as its lines are drawn, when the
+// outline is closed across under an arch (body: the body's lines). [{ x, y, r }], the frame's units
+function archesOf(ol, B, wheels, body = []) {
+  const N = 96;
+  const across = (box) => {
+    const xs = [];
+    for (let i = 0; i < N; i++) xs.push(box.x0 + box.w * (0.01 + (0.98 * i) / (N - 1)));
+    return xs;
+  };
+  // (a long body: not a star, not a cloud)
+  let a = [];
+  if (ol && B.w >= B.h * 1.2) {
+    const xs = across(B);
+    a = bumpsOf(xs.map((x) => {
+      const sp = spanAt(ol, x);
+      return sp ? sp[0] : null;
+    }), xs, B, wheels);
   }
-  const ok = lows.filter((v) => v !== null).sort((a, b) => a - b);
-  if (ok.length < N * 0.6) return [];
-  const base = ok[Math.floor(ok.length * 0.2)];
-  const thr = base + B.h * 0.07;
-  const out = [];
-  // (a long body with a flat bottom between them: not a star, not a cloud)
-  if (B.w < B.h * 1.5 || ok.filter((v) => v <= thr).length < ok.length * 0.3) return out;
-  let a = -1;
-  for (let i = 0; i <= N; i++) {
-    const on = i < N && lows[i] !== null && lows[i] > thr;
-    if (on && a < 0) a = i;
-    if (!on && a >= 0) {
-      const b = i - 1;
-      const w = xs[b] - xs[a];
-      let peak = 0;
-      for (let j = a; j <= b; j++) peak = Math.max(peak, lows[j] - base);
-      if (a > 1 && b < N - 2 && w > B.w * 0.08 && w < B.w * 0.38 && peak > B.h * 0.1) {
-        const r = Math.max(w * 0.47, Math.min(peak, w * 0.6));
-        const x = (xs[a] + xs[b]) / 2;
-        if (!wheels.some((o) => Math.abs(o.cx - x) < r * 1.2)) out.push({ x, y: base + peak - r * 0.98, r });
-      }
-      a = -1;
+  if (a.length + wheels.length >= 2 || !body.length) return a;
+  // (as its lines are drawn: the lowest of them at each place along all of them - how high a bump
+  // is, for the body's height)
+  let x0 = B.x0;
+  let x1 = B.x1;
+  for (const pts of body) {
+    for (const [x] of pts) {
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
     }
   }
-  // (two wheels at least, with what is drawn: one bump is no car)
-  return out.length + wheels.length >= 2 && out.length <= 4 ? out : [];
+  const Bl = { x0, x1, y0: B.y0, y1: B.y1, w: x1 - x0, h: B.h };
+  if (!(Bl.w >= Bl.h * 1.2)) return a;
+  const xs = across(Bl);
+  const lows = new Array(N).fill(null);
+  for (const pts of body) {
+    for (let j = 1; j < pts.length; j++) {
+      const [xa, ya] = pts[j - 1];
+      const [xb, yb] = pts[j];
+      const i0 = Math.max(0, Math.ceil(((Math.min(xa, xb) - Bl.x0) / Bl.w - 0.01) * ((N - 1) / 0.98)));
+      const i1 = Math.min(N - 1, Math.floor(((Math.max(xa, xb) - Bl.x0) / Bl.w - 0.01) * ((N - 1) / 0.98)));
+      for (let i = i0; i <= i1; i++) {
+        const y = Math.abs(xb - xa) < 1e-9 ? Math.min(ya, yb) : ya + ((yb - ya) * (xs[i] - xa)) / (xb - xa);
+        if (lows[i] === null || y < lows[i]) lows[i] = y;
+      }
+    }
+  }
+  const b = bumpsOf(lows, xs, Bl, wheels);
+  return b.length + wheels.length >= 2 ? b : a;
+}
+
+// the wheels in a bottom edge (lows: its height at each of xs, null where there is none)
+function bumpsOf(lows, xs, B, wheels) {
+  const N = xs.length;
+  if (lows.filter((v) => v !== null).length < N * 0.6) return [];
+  // (steadied a little: a shaky line's jitter is no bump)
+  const L = lows.map((v, i) => {
+    if (v === null) return null;
+    let sum = 0;
+    let n = 0;
+    for (let j = Math.max(0, i - 1); j <= Math.min(N - 1, i + 1); j++) {
+      if (lows[j] === null) continue;
+      sum += lows[j];
+      n++;
+    }
+    return sum / n;
+  });
+  const maxW = Math.round(N * 0.36);
+  const step = xs[1] - xs[0];
+  const first = L.findIndex((v) => v !== null);
+  const last = N - 1 - L.slice().reverse().findIndex((v) => v !== null);
+  const cands = [];
+  // (up: an arch, the edge up over a wheel; down: a bulge, the edge round under one)
+  for (const up of [1, -1]) {
+    const v = (i) => (i < 0 || i >= N || L[i] === null ? null : L[i] * up);
+    for (let p = 1; p < N - 1; p++) {
+      const vp = v(p);
+      if (vp === null) continue;
+      // (the top of it: none higher near it)
+      let top = true;
+      for (let j = p - 2; j <= p + 2 && top; j++) if (j !== p && v(j) !== null && v(j) > vp + 1e-9) top = false;
+      if (!top) continue;
+      // (down again on both sides of it - each within a wheel's width or so)
+      let lo0 = Infinity;
+      let lo1 = Infinity;
+      for (let j = Math.max(0, p - maxW); j < p; j++) if (v(j) !== null) lo0 = Math.min(lo0, v(j));
+      for (let j = p + 1; j <= Math.min(N - 1, p + maxW); j++) if (v(j) !== null) lo1 = Math.min(lo1, v(j));
+      let foot = Math.max(lo0, lo1);
+      let prom = vp - foot;
+      // (an arch at an end - a bumper drawn high: well down on its inner side, and down a little
+      // toward its end)
+      let end = false;
+      if (up > 0 && prom < B.h * 0.06) {
+        const front = p < N / 2;
+        const inner = front ? lo1 : lo0;
+        const drop = vp - v(front ? first : last);
+        if (vp - inner > B.h * 0.1 && drop > Math.max(B.h * 0.04, (vp - inner) * 0.15)) {
+          foot = inner;
+          prom = vp - inner;
+          end = true;
+        }
+      }
+      if (!(prom > B.h * 0.035)) continue;
+      // (as wide as it is, at its foot)
+      let a = p;
+      let b = p;
+      while (a > 0 && v(a - 1) !== null && v(a - 1) > foot + prom * 0.2) a--;
+      while (b < N - 1 && v(b + 1) !== null && v(b + 1) > foot + prom * 0.2) b++;
+      const w = (b - a + 1) * step;
+      if (w < B.w * 0.06 || w > B.w * 0.38 || (!end && (a <= first || b >= last))) continue;
+      // (round, not a long gentle sag of its bottom; an arch no higher than most of the body)
+      if (prom < w * 0.08) continue;
+      if (up > 0 && vp > B.y0 + B.h * 0.7) continue;
+      const sure = prom > B.h * 0.06 && prom >= w * (up > 0 ? 0.15 : 0.2);
+      cands.push({ up, p, a, b, w, prom, sure, peak: vp * up, x: (xs[a] + xs[b]) / 2 });
+    }
+  }
+  // (the clearest first, none over another - and with one only, its pair: a car has two wheels
+  // side on, the other one's arch drawn shallower maybe, about as wide, a wheel or more apart)
+  cands.sort((q, r) => r.prom / r.w - q.prom / q.w);
+  const over = (c, t) => c.a <= t.b && c.b >= t.a;
+  const pick = (list) => {
+    const took = [];
+    for (const c of list) if (c.sure && !took.some((t) => over(c, t))) took.push(c);
+    if (took.length === 1 && !wheels.length) {
+      const t = took[0];
+      const pair = list.find((c) => !c.sure && !over(c, t) && Math.abs(c.x - t.x) > t.w * 1.6 && c.w > t.w * 0.4 && c.w < t.w * 2.5);
+      if (pair) took.push(pair);
+    }
+    return took;
+  };
+  // (arches, or bulges - the bottom between two bulges is no arch, nor between two arches a bulge:
+  // whichever makes its wheels, the clearer; neither alone, both)
+  const ups = pick(cands.filter((c) => c.up > 0));
+  const downs = pick(cands.filter((c) => c.up < 0));
+  const n = (t) => t.length + wheels.length;
+  const clear = (t) => t.reduce((sum, c) => sum + c.prom / c.w, 0);
+  let took;
+  if (n(ups) >= 2 && n(downs) >= 2) took = clear(ups) >= clear(downs) ? ups : downs;
+  else if (n(ups) >= 2) took = ups;
+  else if (n(downs) >= 2) took = downs;
+  else took = ups.concat(downs.filter((c) => !ups.some((t) => over(c, t))));
+  const out = [];
+  for (const c of took) {
+    let r;
+    let y;
+    if (c.up > 0) {
+      // (an arch: the wheel up in it, its top at the arch's)
+      r = Math.max(c.w * 0.47, Math.min(c.prom, c.w * 0.6));
+      y = c.peak - r * 0.98;
+    } else {
+      // (a bulge: the wheel it goes round, its bottom at the bulge's)
+      r = Math.max(c.w * 0.5, Math.min(c.prom, c.w * 0.7));
+      y = c.peak + r;
+    }
+    if (!wheels.some((o) => Math.abs(o.cx - c.x) < r * 1.2)) out.push({ x: c.x, y, r });
+  }
+  // (two wheels at least, with what is drawn: one bump is no car - and a wavy line, many, none)
+  return out.length + wheels.length >= 2 && took.length <= 4 ? out : [];
 }
 
 // ------------------------------------------------------------------ what was added to it
+// how far a line's end stands clear over the body's top - its muzzle out over a hood, past a front
+// (all the way); lights, a rack on a roof sit on it at both ends
+function clearOf(pts, R) {
+  const B = R.sh;
+  const at = ([x, y]) => {
+    const sp = R.loop ? spanAt(R.loop, x) : null;
+    if (!sp && (x < B.x0 || x > B.x1)) return Infinity;
+    return y - (sp ? sp[1] : B.y1);
+  };
+  const n = pts.length;
+  const k = Math.max(1, Math.round(n * 0.12));
+  let a = 0;
+  let b = 0;
+  for (let i = 0; i < k; i++) {
+    a += at(pts[i]) / k;
+    b += at(pts[n - 1 - i]) / k;
+  }
+  return Math.max(a, b);
+}
+
+// (what the network sees: a weapon, gear - no wheels in what hangs under it, a grip, a magazine)
+const HAND_CLS = new Set(['rifle', 'pistol', 'smg', 'shotgun', 'minigun', 'launcher', 'sword', 'knife', 'axe', 'hammer', 'baseball bat', 'boomerang', 'bomb', 'shield', 'umbrella', 'parachute', 'key', 'ladder', 'spring']);
+// (what the network sees it is - ROADMAP 11.11: lights, a sign, a ladder, a rack on its roof - a gun
+// there only when it is out over its hood, its front; a bike's handlebars, a tractor's exhaust
+// stack - no guns slanting up off it)
+const ROOF_KIN = new Set(['police car', 'ambulance', 'firetruck', 'bus', 'school bus', 'van']);
+const BIKE_KIN = new Set(['motorbike', 'bicycle', 'tractor']);
+
 // a line out of the body (gap: how near it comes; L, H: the body's length and height) that is
 // plainly one of the parts that make a thing do more: a barrel out of its front or back, a blade at
 // its nose, a spring under it, a rotor or a balloon over it... - strict unless the player said they
 // draw that kind of thing too (lenient: { air, sea, weapon })
-function addedPart(o, R, r, len) {
+// (wheelTop: how high its wheels come; kin: what the network sees it is)
+function addedPart(o, R, r, len, wheelTop = -Infinity, kin = null) {
   const sh = o.sh;
   const B = R.sh;
   const L = B.w;
@@ -486,15 +642,25 @@ function addedPart(o, R, r, len) {
   // a barrel: long, thin and straight, from it out past its front or back (or slanting up off
   // its top: a gun on a turret)
   const barrelish = sh.straight && sh.thin > 2.8 && sh.long > L * 0.12 && sh.long < L * 1.1;
+  const roofed = ROOF_KIN.has(kin) || BIKE_KIN.has(kin);
+  const boxy = sh.closed || sh.endGap < sh.long * 0.35;
   if (barrelish && gap < L * 0.07) {
-    const past = sh.x1 > B.x1 + L * 0.06 || sh.x0 < B.x0 - L * 0.06;
+    const past = sh.x1 > B.x1 + L * 0.1 || sh.x0 < B.x0 - L * 0.1;
     // (slanting up off its top: a gun on a turret - long; short ones spread like a fan over it
-    // are a siren's light)
-    const upOff = sh.y0 > B.y1 - H * 0.35 && sh.slant > 0.3 && sh.slant < 1.25 && sh.y1 > B.y1 + H * 0.2 && sh.long > L * 0.24 && !(len.fan && len.fan.has(o.i));
-    if ((past && sh.slant < 0.5) || upOff) return 'barrel';
+    // are a siren's light; one alone on a police car, a bus, its antenna - a gun only when thick;
+    // on a bike, its handlebars)
+    const upOff = (!roofed || (boxy && !BIKE_KIN.has(kin))) && sh.y0 > B.y1 - H * 0.35 && sh.slant > 0.3 && sh.slant < 1.25 && sh.y1 > B.y1 + H * 0.2 && sh.long > L * 0.24 && !(len.fan && len.fan.has(o.i));
+    // (along its bottom, down among its wheels: its chassis, a bumper, a pickup's bed, a tow bar -
+    // no gun)
+    const low = sh.cy < B.y0 + H * 0.28 || sh.cy < wheelTop;
+    if ((past && sh.slant < 0.5 && !low) || upOff) return 'barrel';
   }
-  // (one out of a turret on top, forward, level - inside its length or not: a tank's gun)
-  if ((sh.straight || ((sh.closed || sh.endGap < sh.long * 0.35) && sh.thin > 3.2)) && sh.thin > 3 && gap < L * 0.06 && r.fo > (r.far > L * 0.12 ? 0.38 : 0.55) && sh.long > L * 0.18 && sh.long < L * 1.1 && sh.slant < 0.6 && sh.cy > B.y0 + H * 0.45 && !(len.fan && len.fan.has(o.i))) return 'barrel';
+  // (one out of a turret on top, forward, level - inside its length or not: a tank's gun; not as
+  // long as it is, its roof's edge. Mostly out of it - or its end well out over its hood: drawn
+  // close over its roof, a small drawing's edge takes in the rest)
+  const clear = clearOf(o.pts, R);
+  const out = r.fo > (r.far > L * 0.12 ? 0.38 : 0.55) || clear > H * 0.4;
+  if ((!roofed || clear > H * 0.25) && (sh.long < L * 0.8 || kin === 'tank' || kin === 'cannon') && (sh.straight || (boxy && sh.thin > 3.2)) && sh.thin > 3 && gap < L * 0.06 && out && sh.long > L * 0.18 && sh.long < L * 1.1 && sh.slant < 0.6 && sh.cy > B.y0 + H * 0.45 && !(len.fan && len.fan.has(o.i))) return 'barrel';
   // a blade: pointed, out of its front (or back)
   if (sh.closed && sh.point && gap < L * 0.06 && (sh.tipX > B.x1 + L * 0.02 || sh.tipX < B.x0 - L * 0.02) && sh.size < L * 0.6 && Math.abs(sh.tipY - B.cy) < H * 0.8) return 'blade';
   // up over it
@@ -576,6 +742,9 @@ function parseGround(F) {
   // a bike: two big wheels, and between them a frame of lines - no box of a body
   const bigWheels = wheels.length === 2 && wheels.every((c) => c.r > D.w * 0.11);
   if (bigWheels && (!R || R.sh.area < Math.PI * wheels[0].r * wheels[1].r * 0.9)) return parseBike(F, wheels, labels, inWheel);
+  // (what closes a small part of it all - its body drawn as a line over it, its bottom not drawn:
+  // closed along its bottom - ROADMAP 11.11)
+  if (R && R.sh.area < D.w * D.h * 0.12) R = region(G, use, 2, true) || R;
   if (!R) return null;
   const B = R.sh;
   // (round ones well up inside the body are its portholes, its lights - not what it stands on)
@@ -589,6 +758,8 @@ function parseGround(F) {
     }
   }
   F.len.fan = fanOver(st, B);
+  // (how high its wheels come, most of the way to their tops)
+  const wheelTop = wheels.length ? wheels.reduce((a, c) => a + c.cy + c.r * 0.7, 0) / wheels.length : -Infinity;
   let main = null;
   let mainE = -1;
   for (const o of st) {
@@ -615,7 +786,7 @@ function parseGround(F) {
       labels[o.i] = 'deco';
       continue;
     }
-    labels[o.i] = addedPart(o, R, r, F.len) || 'deco';
+    labels[o.i] = addedPart(o, R, r, F.len, wheelTop, F.cls) || 'deco';
   }
   // (a closed one sitting on its top, as big as a cabin: its cabin)
   for (const o of st) {
@@ -623,7 +794,7 @@ function parseGround(F) {
     if (o.sh.cy > B.y0 + B.h * 0.55 && o.sh.w < B.w * 0.8) labels[o.i] = 'cabin';
   }
   // its wheel arches drawn in it, and fewer wheels than that: its wheels in them
-  const arches = wheels.length < 2 ? archesOf(R.loop, B, wheels) : [];
+  const arches = wheels.length < 2 && !HAND_CLS.has(F.cls) ? archesOf(R.loop, B, wheels, st.filter((o) => labels[o.i] === 'body').map((o) => o.pts)) : [];
   // (one wheel drawn, at one end, under a long body: the other is there too, at its other end -
   // only half drawn, or hidden)
   if (wheels.length === 1 && !arches.length && B.w > B.h * 1.5) {
@@ -1422,6 +1593,12 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
     if (!best || res.total > best.total) best = res;
   }
   if (!best) return null;
+  // (a parachute drawn over it: the network looks again, at what is under it - a dome over a plane is
+  // no car's roof - and it is read again by that; ctx.relook(the lines to look at): what it sees)
+  if (ctx && ctx.relook && Object.values(best.labels).includes('chute')) {
+    const net2 = ctx.relook(S.map((s) => s.i).filter((i) => best.labels[i] !== 'chute'));
+    if (net2) return readParts(strokes, over, face, hint, { ...ctx, net: net2, relook: null });
+  }
   // the player's own say over all (what it would be without it: for the menu's "automatic")
   const autoL = Object.assign({}, best.labels);
   for (const o of st) if (over[o.i] && PART[over[o.i]]) best.labels[o.i] = over[o.i];
@@ -1452,7 +1629,10 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
   const toPage = ([x, y]) => [x / k + x0, y1 - y / k];
   const implicit = (best.implicit || []).map((q) => ({ type: q.type, at: toPage(q.at) }));
   for (const a of best.frame === 'ride' ? best.arches || [] : []) implicit.push({ type: 'wheel', at: toPage([a.x, a.y + a.r]), guess: !!a.guess });
-  return { frame: best.frame, family: best.fam, parts, flip, body: main, R, st: ost, k, x0, x1, y0, y1, arches, top: best.top || null, prior, score: best.score, tried, implicit, like: F.dbgLike };
+  // (what the network sees in it, each kind with its chance: game/partsum.js names it by that)
+  const guess = ctx && ctx.net && ctx.net.groups ? ctx.net.groups : null;
+  const prob = ctx && ctx.net && ctx.net.p ? ctx.net.p : null;
+  return { frame: best.frame, family: best.fam, parts, flip, body: main, R, st: ost, k, x0, x1, y0, y1, arches, top: best.top || null, prior, score: best.score, tried, implicit, like: F.dbgLike, guess, prob };
 }
 
 // (a steadied line can be a few corners only: points along it, every so often - its shape the same)

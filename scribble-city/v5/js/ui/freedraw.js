@@ -678,7 +678,14 @@ export class FreeDraw {
     }
     // (each line as steadied, and as the hand drew it; what kind of thing it likely is: what the
     // network sees, what the player said they draw)
-    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.face, null, { net, cats: this.cats.size ? this.cats : null });
+    const relook = (keep) => {
+      try {
+        return look(keep.map((i) => this.strokes[i].raw || this.strokes[i].p));
+      } catch (err) {
+        return null;
+      }
+    };
+    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.face, null, { net, cats: this.cats.size ? this.cats : null, relook: net ? relook : null });
     this.P = P;
     if (!P || P.frame !== 'ride' || !P.R) return;
     const design = rideDesign(P, this.strokes, INKS);

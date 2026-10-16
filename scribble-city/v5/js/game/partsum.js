@@ -1,5 +1,6 @@
 import { clamp } from '../core/util.js';
 import { shapeOf, specOf, inPoly, outline } from './drawncar.js';
+import { CLASSES } from './sketchnet.js';
 
 // (ROADMAP 11.10, the sample) What a ride does is its parts added up - each part does one thing,
 // the same thing on anything it is put on, and how much of it by how big it was drawn:
@@ -163,7 +164,28 @@ export function rideDesign(P, strokes, inks) {
     }
     if (hi > lo) nose = Math.round(((hi - lo) / Math.max(1e-6, B.h)) * 100) / 100;
   }
-  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, nose };
+  const kin = kinOf(P);
+  // (a fire engine's ladder, its hose: it sprays water - unless drawn in an ink of its own)
+  if (kin.cls === 'firetruck') for (const s of out) if (s.part === 'barrel' && !s.el) s.el = 'water';
+  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, nose, ...kin };
+}
+
+// (ROADMAP 11.11) what the network sees in it (game/parts.js readParts' guess), of the kinds its
+// build can be: a motorbike, a bus, a tractor - its name by it (summary()); a submarine - it dives
+// (game/drawncar.js specOf: only when the network is sure, as it changes how it goes)
+const KIN_GROUPS = { ground: ['car', 'truck', 'bus', 'moto', 'bicycle', 'tractor', 'tank', 'skate'], boat: ['boat'] };
+// (a kind with something of its own to show - lights on its roof, a ladder: only when the network
+// is sure of it, a police car surer still - a plain car is so like one; else the plain one of its
+// group)
+const PLAIN = { 'police car': ['car', 0.7], ambulance: ['car', 0.55], firetruck: ['truck', 0.55] };
+function kinOf(P) {
+  const want = KIN_GROUPS[P.family];
+  if (!want || !P.guess) return {};
+  const g = P.guess.find(([grp]) => want.includes(grp));
+  if (!g || !(g[1] >= (P.family === 'boat' ? 0.5 : 0.2))) return {};
+  let cls = g[2];
+  if (PLAIN[cls] && !(P.prob && P.prob[CLASSES.indexOf(cls)] >= PLAIN[cls][1])) cls = PLAIN[cls][0];
+  return { group: g[0], cls };
 }
 
 // a plane drawn from above: the same plane from its side - its body as long as drawn and as thick as
@@ -355,7 +377,7 @@ export function rideSpec(design) {
   let cost = 14 + area * 1.2;
   for (const s of S) cost += INK[s.part] || 0;
   spec.cost = Math.round(clamp(cost, 18, 95));
-  const sum = summary({ ok: true, spec, mass, L, H, wheels, rAvg, R, liftR, liftW, warn, design, copter, plane, glide, boat, balloon });
+  const sum = summary({ ok: true, spec, mass, L, H, area, wheels, rAvg, R, liftR, liftW, warn, design, copter, plane, glide, boat, balloon });
   spec.label = sum.name;
   spec.sum = sum;
   spec.polish = true;
@@ -395,7 +417,19 @@ const NOUN = {
   car: ['מכונית', 'f'],
   moto: ['אופנוע', 'm'],
   mono: ['חד־אופן', 'm'],
+  bicycle: ['אופניים', 'p'],
+  police: ['ניידת', 'f'],
+  van: ['מסחרית', 'f'],
+  pickup: ['טנדר', 'm'],
+  ambulance: ['אמבולנס', 'm'],
+  bus: ['אוטובוס', 'm'],
   truck: ['משאית', 'f'],
+  firetruck: ['כבאית', 'f'],
+  tractor: ['טרקטור', 'm'],
+  skate: ['סקייטבורד', 'm'],
+  speedboat: ['סירת מנוע', 'f'],
+  canoe: ['קאנו', 'm'],
+  sub: ['צוללת', 'f'],
   monster: ['מכונית מפלצת', 'f'],
   copter: ['מסוק', 'm'],
   plane: ['מטוס', 'm'],
@@ -407,45 +441,77 @@ const NOUN = {
   still: ['פסל', 'm'],
 };
 const ADJ = {
-  fly: ['מעופף', 'מעופפת'],
-  glide: ['גולש', 'גולשת'],
-  float: ['אמפיבי', 'אמפיבית'],
-  armed: ['חמוש', 'חמושה'],
-  armor: ['משוריין', 'משוריינת'],
-  jump: ['קופץ', 'קופצת'],
+  fly: ['מעופף', 'מעופפת', 'מעופפים'],
+  glide: ['גולש', 'גולשת', 'גולשים'],
+  float: ['אמפיבי', 'אמפיבית', 'אמפיביים'],
+  armed: ['חמוש', 'חמושה', 'חמושים'],
+  armor: ['משוריין', 'משוריינת', 'משוריינים'],
+  jump: ['קופץ', 'קופצת', 'קופצים'],
 };
+// (the network's kind of it: its noun)
+const WATER_NOUN = new Set(['speedboat', 'canoe', 'sub', 'ship', 'sailboat']);
+const KIN_NOUN = { car: 'car', 'police car': 'police', 'pickup truck': 'pickup', van: 'van', ambulance: 'ambulance', truck: 'truck', firetruck: 'firetruck', bus: 'bus', 'school bus': 'bus', motorbike: 'moto', bicycle: 'bicycle', tractor: 'tractor', tank: 'tank', cannon: 'tank', skateboard: 'skate', speedboat: 'speedboat', canoe: 'canoe', submarine: 'sub', 'cruise ship': 'ship', sailboat: 'sailboat' };
 
 function summary(o) {
-  const { spec, mass, L, wheels, warn } = o;
+  const { spec, mass, L, H, wheels, warn } = o;
   const S = o.design.strokes;
   const has = (t) => S.some((s) => (s.part || legacy(s)) === t);
   const nBarrels = S.filter((s) => (s.part || legacy(s)) === 'barrel').length;
+  // (all it fires water: a water cannon, no weapon)
+  const waterOnly = nBarrels > 0 && S.every((s) => (s.part || legacy(s)) !== 'barrel' || s.el === 'water');
   // ---- its name: what it mostly is, and what else
   let noun = 'still';
   const base = spec ? spec.base : null;
+  const kin = KIN_NOUN[o.design.cls] || null;
   if (base === 'car') {
+    // (ROADMAP 11.11: what it is, by what the network sees in it - a motorbike, a bus, a tractor -
+    // and by its build, the wheels for its body: not by how big it was drawn. Measured on people's
+    // own drawings, 1,900 rides and boats: 68% named as they were drawn, 83% as near as can be)
     const n = wheels.length;
     const cannon = spec.guns && spec.guns.some((gn) => gn.type === 'cannon');
-    noun = n === 1 ? 'mono' : n === 2 && L < 3.2 ? 'moto' : cannon && n >= 4 ? 'tank' : (o.rAvg || 0) > 0.62 ? 'monster' : L > 6.8 ? 'truck' : 'car';
+    const r = o.rAvg || 0;
+    const rH = r / Math.max(1e-3, H);
+    const aW = n ? (o.area || 0) / (Math.PI * r * r * n) : Infinity;
+    const wr = n === 2 ? Math.max(wheels[0].r, wheels[1].r) / Math.max(1e-3, Math.min(wheels[0].r, wheels[1].r)) : 9;
+    // (two like wheels, big for its length, and little body between them: a bike's build)
+    const bikey = S.some((s) => s.type === 'body' && s.slim) || (n === 2 && wr < 1.6 && r / Math.max(1e-3, L) >= 0.13 && aW <= 3.6);
+    let k = kin;
+    if ((k === 'moto' || k === 'bicycle') && n > 2) k = null;
+    if (k === 'tank' && !nBarrels) k = null;
+    if (k === 'skate' && n < 2) k = null;
+    // (a boat's kind, for one on wheels: a car still)
+    if (k && WATER_NOUN.has(k)) k = null;
+    if (k === 'car' && rH >= 0.5) k = 'monster';
+    if (cannon && n >= 4) k = 'tank';
+    noun = k || (bikey ? 'moto' : n === 1 && aW < 1.5 ? 'mono' : rH >= 0.5 ? 'monster' : L > 6.8 ? 'truck' : 'car');
   } else if (base === 'copter') noun = 'copter';
   else if (base === 'plane') noun = 'plane';
   else if (base === 'balloon') noun = 'balloon';
-  else if (base === 'boat') noun = L > 10 ? 'ship' : has('sail') ? 'sailboat' : 'boat';
+  else if (base === 'boat') {
+    // (a sail drawn: a sailboat; else the network's kind of boat - a submarine, a canoe)
+    const k = kin === 'speedboat' || kin === 'canoe' || kin === 'sub' || kin === 'ship' ? kin : null;
+    noun = has('sail') ? (L > 10 ? 'ship' : 'sailboat') : k || (L > 10 ? 'ship' : 'boat');
+  }
   const [word, g] = NOUN[noun];
   const adj = [];
-  const say = (k) => adj.push(ADJ[k][g === 'f' ? 1 : 0]);
+  const say = (k) => adj.push(ADJ[k][g === 'f' ? 1 : g === 'p' ? 2 : 0]);
   if (spec) {
     const M = spec.modes;
     if (base !== 'copter' && base !== 'plane' && base !== 'balloon' && (M.copter || M.plane || M.balloon)) say('fly');
     else if (o.glide) say('glide');
     if (base !== 'boat' && M.boat) say('float');
-    if (nBarrels && noun !== 'tank') say('armed');
+    if (nBarrels && noun !== 'tank' && !waterOnly) say('armed');
     if (spec.armor) say('armor');
     if (spec.spring && adj.length < 2) say('jump');
   }
   let name = [word, ...adj.slice(0, 2)].join(' ');
+  // (nothing moves it yet, and the network sees a car, a bus, a tractor in it: that, with no wheels -
+  // a plain one: a body alone is no police car yet)
+  const bare = { police: 'car', ambulance: 'car', firetruck: 'truck' }[kin] || kin;
+  if (noun === 'still' && bare && NOUN[bare] && !WATER_NOUN.has(bare)) name = `${NOUN[bare][0]} בלי גלגלים`;
   if (has('chute') && spec && spec.chute) name += ' עם מצנח';
   else if (has('blade') && spec && spec.ram) name += ' עם איל';
+  else if (waterOnly) name += ' עם תותח מים';
   // ---- what it does (a chip each)
   const abil = [];
   if (spec) {
@@ -456,6 +522,7 @@ function summary(o) {
     if (o.glide) abil.push(['air', 'גלישה']);
     if (M.balloon) abil.push(['air', 'התרוממות']);
     if (M.boat) abil.push(['water', 'שיט']);
+    if (spec.boat && spec.boat.dive) abil.push(['water', 'צלילה']);
     if (nBarrels) abil.push(['fire', nBarrels > 1 ? `ירי ×${nBarrels}` : 'ירי']);
     // (a barrel drawn in colour: what it fires, a chip each)
     for (const e of [...new Set((spec.guns || []).map((gn) => gn.el).filter(Boolean))]) abil.push(['el-' + e, EL_NAME[e]]);
