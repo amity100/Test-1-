@@ -1060,9 +1060,11 @@ export function buildWeapon(R) {
     const metal = R.kind === 'laser' ? linC(0.9, 0.92, 0.96) : linC(0.36, 0.37, 0.42);
     const runs = R.barrelRuns.length ? R.barrelRuns : [[R.bt, R.bb]];
     let my = 0;
+    const ys = [];
     for (const [a, b] of runs) {
       const y = (gy(a) + gy(b)) / 2;
       my += y / runs.length;
+      ys.push(y);
       const rr = clamp(((b - a + 1) * cell * s) / 2, 0.006, R.kind === 'launcher' ? 0.11 : 0.045);
       Kt.cyl(M.metal, rr * 0.92, rr * 0.92, zFront - bLen, zFront, metal, { y, segs: 12 });
       Kt.cyl(M.metal, rr * 1.08, rr * 1.08, zFront - Math.min(0.03, bLen * 0.2), zFront, shade(base, 0.6), { y, segs: 12 });
@@ -1070,6 +1072,14 @@ export function buildWeapon(R) {
       if (R.kind === 'laser') Kt.cyl(M.glow, rr * 0.5, rr * 0.5, zFront, zFront + 0.006, linC(0.66, 1.0, 0.2), { y, segs: 10 });
     }
     out.muzzle = new THREE.Vector3(0, my, zFront + 0.02);
+    // (ROADMAP 11.11, parts 2) each barrel's own mouth: its barrels drawn each in a line of its
+    // own (game/handparts.js: where each one ends, on the page), or the runs of one outline
+    if (R.muzzlePts && R.muzzlePts.length > 1) {
+      out.muzzles = R.muzzlePts.map((p) => {
+        const [z, y] = toM(rot(p));
+        return new THREE.Vector3(0, y, Math.max(z, zFront - bLen) + 0.02);
+      });
+    } else if (R.parts && ys.length > 1) out.muzzles = ys.map((y) => new THREE.Vector3(0, y, zFront + 0.02));
   } else if (R.kind === 'sword' || R.kind === 'club') {
     // the hilt (or the handle): round, from its end to the guard (or to its head)
     const zBack = (G.ox + (R.front > 0 ? R.c0 : R.c1) * cell - hx) * s * R.front;

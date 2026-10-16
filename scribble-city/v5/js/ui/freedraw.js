@@ -11,6 +11,7 @@ import { cleanStroke, joinStroke, morphPair } from '../game/inkclean.js';
 import { readParts, rideEvidence, PART } from '../game/parts.js';
 import { look } from '../game/sketchnet.js';
 import { rideDesign, rideSpec } from '../game/partsum.js';
+import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
@@ -50,6 +51,8 @@ function forceOf(R) {
 const MORPH_T = 0.24;
 // (ROADMAP 11.10) how long a changed number keeps its arrow (s)
 const DELTA_T = 2.6;
+// (ROADMAP 11.11) the gear whose model the card shows
+const GEAR_VIEW = new Set(['parachute', 'umbrella', 'key', 'ladder', 'ramp', 'bridge', 'spring']);
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // what it can be made into instead (the tag's menu), by what the player says they draw (ROADMAP
@@ -85,6 +88,10 @@ export class FreeDraw {
     this.face = null;
     this.P = null;
     this.PR = null;
+    // (ROADMAP 11.11, parts 2: a weapon made of parts - its parts read, what they add up to; gear,
+    // a shield: the model it will be)
+    this.PW = null;
+    this.PG = null;
     this.bars0 = null;
     this.deltas = {};
     this.view = null;
@@ -124,8 +131,10 @@ export class FreeDraw {
         <canvas id="fd-view"></canvas>
         <div class="fd-abil" id="fd-abil"></div>
         <div class="fd-bars" id="fd-bars"></div>
+        <div class="fd-lines hidden" id="fd-lines"></div>
         <div class="fd-warn" id="fd-warn"></div>
         <div class="fd-meta" id="fd-meta"></div>
+        <div class="fd-alts fd-calts hidden" id="fd-calts"></div>
       </div>
       <div class="fd-tag hidden" id="fd-tag">
         <button class="fd-kind" id="fd-kind" title="משהו אחר"><b id="fd-name"></b><span id="fd-stats"></span><em id="fd-note"></em></button>
@@ -270,6 +279,11 @@ export class FreeDraw {
       this.choose(b.dataset.k || null);
     });
     press(this.menuEl, (e) => {
+      const b = e.target.closest('.fd-chip');
+      if (b) this.choose(b.dataset.k || null);
+    });
+    // (ROADMAP 11.11) a weapon of parts: what else it could be, on its card
+    press($('fd-calts'), (e) => {
       const b = e.target.closest('.fd-chip');
       if (b) this.choose(b.dataset.k || null);
     });
@@ -566,8 +580,74 @@ export class FreeDraw {
     this.R0 = null;
     this.readRide();
     if (!this.PR) this.R = this.R0 || (this.strokes.length ? this.readNow() : null);
+    this.readHand();
+    this.readGear();
     this.chipsDirty = true;
     this.info();
+  }
+
+  // ------------------------------------------------------------------ (ROADMAP 11.11, parts 2) a weapon of parts
+  // What it is, read as it always was (game/freeform.js); then each line, which part of it it is
+  // (game/handparts.js), its name on it - and what each part makes it do, on the card by the
+  // drawing with the model it will be (a red barrel fires fire, a sight zooms, wings make its shots
+  // fly after them...)
+  readHand() {
+    const was = this.PW;
+    this.PW = null;
+    const R = this.R;
+    if (!this.game.lab || this.PR || !R || R.cat !== 'weapon' || !R.grid || R.kind === 'shield') {
+      if (was) this.cardDirty = true;
+      return;
+    }
+    let P = null;
+    try {
+      P = readHandParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.cats, R);
+    } catch (err) {
+      console.warn('handparts', err);
+    }
+    if (!P) {
+      if (was) this.cardDirty = true;
+      return;
+    }
+    this.P = P;
+    this.PW = { P, R, spec: handSpec(P) };
+    this.cardDirty = true;
+  }
+
+  // (ROADMAP 11.11) gear, a shield: no parts to name - but its model by the drawing, as it will be
+  readGear() {
+    const was = this.PG;
+    this.PG = null;
+    const R = this.R;
+    const shield = R && R.cat === 'weapon' && R.kind === 'shield';
+    const gear = R && R.cat === 'gear' && GEAR_VIEW.has(R.kind);
+    if (!this.game.lab || this.PR || this.PW || !(shield || gear)) {
+      if (was) this.cardDirty = true;
+      return;
+    }
+    this.PG = { R };
+    this.cardDirty = true;
+  }
+
+  // gear's model, as it is made (ui/partview.js)
+  gearModel(R) {
+    if (R.cat === 'weapon') return buildWeapon(R).group;
+    if (R.kind === 'parachute') return canopyModel(R.grade, R.colors && R.colors.length ? R.colors : null);
+    const G = this.game.gadgets;
+    return G ? G.model(R.kind, R.grade, null, R.kind === 'umbrella' && R.colors && R.colors.length ? R.colors[0] : null).group : null;
+  }
+
+  // as a made thing is read (make): the weapon, its numbers what its parts made them
+  handR() {
+    const { P, R, spec } = this.PW;
+    return Object.assign({}, R, {
+      def: spec.def,
+      name: spec.sum.name,
+      cost: spec.def.cost + (R.extra ? R.extra.cost : 0),
+      muzzlePts: P.muzzles,
+      say: spec.sum.abil.map(([, t]) => t).join(' · '),
+      parts: true,
+    });
   }
 
   // ------------------------------------------------------------------ (ROADMAP 11.10) a ride of parts
@@ -652,7 +732,7 @@ export class FreeDraw {
 
   // which part's name is at (x, y) on the screen (-1: none)
   chipAt(x, y) {
-    if (!this.PR) return -1;
+    if (!this.PR && !this.PW) return -1;
     for (const c of this.chips) {
       const r = c.el.getBoundingClientRect();
       if (x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4) return c.i;
@@ -665,7 +745,7 @@ export class FreeDraw {
   showChips() {
     this.chipsDirty = false;
     const P = this.P;
-    const on = !!(this.PR && P);
+    const on = !!((this.PR || this.PW) && P);
     this.partsEl.classList.toggle('hidden', !on);
     if (!on) {
       this.partsEl.innerHTML = '';
@@ -737,13 +817,16 @@ export class FreeDraw {
   card() {
     this.cardDirty = false;
     const PR = this.PR;
-    this.cardEl.classList.toggle('hidden', !PR);
-    if (!PR) {
+    const PW = this.PW;
+    const PG = this.PG;
+    this.cardEl.classList.toggle('hidden', !PR && !PW && !PG);
+    if (!PR && !PW && !PG) {
       this.bars0 = null;
       if (this.view) this.view.set(null);
       return;
     }
-    const sum = PR.sum;
+    // (gear: its name, what it does, the model)
+    const sum = PR ? PR.sum : PW ? PW.spec.sum : { name: PG.R.name, abil: statLine(PG.R).split(' · ').map((t) => ['gear', t]), bars: [], lines: [], warn: [] };
     $('fd-cname').textContent = sum ? sum.name : '…';
     $('fd-abil').innerHTML = sum ? sum.abil.map(([r, t]) => `<span class="fd-ab r-${r}">${esc(t)}</span>`).join('') : '';
     // (what changed since the last line: an arrow, up green, down red)
@@ -764,17 +847,45 @@ export class FreeDraw {
         return `<div class="fd-bar${b.bad ? ' bad' : ''}"><span class="n">${b.name}</span><i><b style="width:${Math.round(clamp(b.v, 0.03, 1) * 100)}%"></b></i><span class="v">${esc(b.txt)}</span>${arrow}</div>`;
       })
       .join('');
+    // (ROADMAP 11.11) what each of its parts does (a ride's: what no number says - its nose, a
+    // barrel's ink, one that points down)
+    const lines = sum && sum.lines ? sum.lines : [];
+    const lEl = $('fd-lines');
+    lEl.innerHTML = lines.map(([r, t, x]) => `<div class="fd-ln"><span class="fd-ab r-${r}">${esc(t)}</span><span>${esc(x)}</span></div>`).join('');
+    lEl.classList.toggle('hidden', !lines.length);
     const warn = [];
-    if (!PR.ok && PR.why) warn.push(PR.why);
+    if (PR && !PR.ok && PR.why) warn.push(PR.why);
     if (sum) warn.push(...sum.warn);
     const wEl = $('fd-warn');
     wEl.textContent = warn.join(' · ');
     wEl.classList.toggle('hidden', !warn.length);
-    $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}` : '';
+    if (PR) $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}` : '';
+    else if (PG) {
+      $('fd-meta').textContent = `${PG.R.cost} דיו`;
+      // (gear that needs its place: why it would not go here)
+      const why = this.cannotMake(PG.R);
+      if (why) {
+        wEl.textContent = why;
+        wEl.classList.remove('hidden');
+      }
+    } else {
+      const len = PW.R.len || (KINDS[PW.R.kind] ? KINDS[PW.R.kind].len : 0.5);
+      $('fd-meta').textContent = `אורך ${len.toFixed(2)} מ׳ · ${this.handR().cost} דיו`;
+    }
+    // (which way it faces: a ride's to say; a weapon's, as its parts say)
+    $('fd-face').classList.toggle('hidden', !PR);
+    // (a weapon: what else it could be, the network's next guesses)
+    const cEl = $('fd-calts');
+    const AR = PW ? PW.R : PG ? PG.R : null;
+    const alts = AR && AR.alts ? AR.alts.filter((a) => a.key !== (AR.choice || null)).slice(0, 3) : [];
+    cEl.innerHTML = alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('');
+    cEl.classList.toggle('hidden', !alts.length);
     // the model it will be
     if (!this.view) this.view = new PartView($('fd-view'));
-    this.view.set(PR.ok ? PR.design : null, PR.ok ? PR.spec : null);
-    $('fd-view').classList.toggle('none', !PR.ok || this.view.dead);
+    if (PR) this.view.set(PR.ok ? PR.design : null, PR.ok ? PR.spec : null);
+    else if (PW) this.view.setModel(() => buildWeapon(this.handR()).group);
+    else this.view.setModel(() => this.gearModel(PG.R), PG.R.cat === 'weapon' || PG.R.kind === 'umbrella' || PG.R.kind === 'key');
+    $('fd-view').classList.toggle('none', (PR && !PR.ok) || this.view.dead);
   }
 
   // as a made thing is read (ui/freedraw.js make): the ride, as R is
@@ -804,14 +915,16 @@ export class FreeDraw {
   info() {
     const game = this.game;
     const PR = this.PR;
-    const R = PR ? this.partsR() : this.R;
+    const PW = this.PW;
+    const PG = this.PG;
+    const R = PR ? this.partsR() : PW ? this.handR() : this.R;
     const ink = game.ink;
     const level = ink ? ink.level : 1e9;
     const cost = R && R.cat ? R.cost : 0;
     const has = this.strokes.length > 0;
     if (this.cardDirty || (!PR && !this.cardEl.classList.contains('hidden'))) this.card();
     if (this.chipsDirty) this.showChips();
-    this.tagEl.classList.toggle('hidden', !has || !!PR);
+    this.tagEl.classList.toggle('hidden', !has || !!PR || !!PW || !!PG);
     this.hintEl.classList.toggle('gone', has || !!this.cur);
     this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur);
     this.hintEl.textContent = game.lab
@@ -823,7 +936,7 @@ export class FreeDraw {
         : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
     // (what was chosen and is not in the drawing yet: on a line of its own)
     this.noteEl.textContent = has && R && R.cat && R.note ? R.note : '';
-    if (has && !PR) {
+    if (has && !PR && !PW && !PG) {
       if (!R || !R.cat) {
         this.nameEl.textContent = '…';
         this.statsEl.textContent = R && R.why ? R.why : 'עוד קצת';
@@ -839,7 +952,8 @@ export class FreeDraw {
       this.altsEl.innerHTML = alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + '<button class="fd-chip more" data-k="…">עוד…</button>';
     }
     const short = R && R.cat && cost > level;
-    if (PR) this.nowhere = false;
+    if (PR || PW) this.nowhere = false;
+    else if (PG) this.nowhere = !!this.cannotMake(R);
     const nowhere = has && R && R.cat && this.nowhere;
     this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : R && R.cat ? `✓ ${R.name}!` : PR ? 'עוד לא זז' : '✓ צרו!';
     this.makeBtn.classList.toggle('off', !R || !R.cat || short || nowhere);
@@ -850,7 +964,7 @@ export class FreeDraw {
       this.inkCost.style.right = `${clamp(((level - c) / ink.cap) * 100, 0, 100)}%`;
       this.inkCost.classList.toggle('over', !!short);
     }
-    if (has && !PR) this.place();
+    if (has && !PR && !PW && !PG) this.place();
   }
 
   // the tag by the drawing: over it, or under it when there is no room (never under the tools,
@@ -1001,7 +1115,7 @@ export class FreeDraw {
   make() {
     const game = this.game;
     if (this.cur) this.penUp();
-    const R = !this.strokes.length ? null : this.game.lab && this.PR ? this.partsR() : this.readNow();
+    const R = !this.strokes.length ? null : this.game.lab && this.PR ? this.partsR() : this.game.lab && this.PW ? this.handR() : this.readNow();
     const shake = (why) => {
       this.stats.failed++;
       this.tagEl.classList.remove('shake');
@@ -1060,6 +1174,8 @@ export class FreeDraw {
     this.face = null;
     this.P = null;
     this.PR = null;
+    this.PW = null;
+    this.PG = null;
     this.cardDirty = true;
     this.bake();
     this.close();
@@ -1098,6 +1214,11 @@ export class FreeDraw {
     // (the HUD's picture of it, and the drawing again for a save: game/save.js)
     slot.strokes = this.strokes.map((s) => s.p);
     slot.free = { s: this.strokes.map((s) => ({ p: s.p, c: s.c })), force: R.decided || this.force, cats: [...this.cats] };
+    // (ROADMAP 11.11: made of parts - read so again when loaded, with what the player said of each)
+    if (R.parts) {
+      slot.free.parts = true;
+      if (Object.keys(this.over).length) slot.free.over = { ...this.over };
+    }
     // it hangs in the air where it was drawn, beside you, as it turns real; then into the hand
     const cam = game.camera;
     const D = 2.3;
@@ -1114,7 +1235,7 @@ export class FreeDraw {
     slot.present = { matrix: frame.matrix.clone(), k: 0 };
     const follow = new THREE.Vector3();
     this.presenting = { slot, base: frame.matrix.clone(), follow, from: game.player.pos.clone() };
-    const say = `${def.name}! ${statLine(R)}`;
+    const say = `${def.name}! ${R.say || statLine(R)}`;
     game.materialize.begin({ frame, root: m.group, held: slot, follow, onReal: () => game.hud.toast(say, 'good', 2.6) });
     game.hud.updateWeapon();
     return true;
@@ -1317,7 +1438,7 @@ export class FreeDraw {
     if (done) this.bake();
     if (turning) this.render();
     // (ROADMAP 11.10) the model by the drawing, turning
-    if (this.view && this.PR && this.PR.ok) this.view.frame(dt);
+    if (this.view && ((this.PR && this.PR.ok) || this.PW || this.PG)) this.view.frame(dt);
     // not on foot any more (in a car, swimming, down...), or the game stopped: the pen goes
     if (p.mode !== 'foot' || p.inVehicle || game.state !== 'play' || (game.dialog && game.dialog.open)) {
       this.close();

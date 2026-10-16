@@ -76,13 +76,42 @@ export class PartView {
       console.warn('partview', err);
       return;
     }
-    const root = m.body;
+    this.show(m.body);
+  }
+
+  // (ROADMAP 11.11, parts 2) a thing for the hand, as it will be made: its model (game/freeform.js
+  // buildWeapon) - a gun, a blade, a hammer, a bomb (null: nothing)
+  setModel(make, small = true) {
+    if (!this.init()) return;
+    this.drop();
+    let root = null;
+    try {
+      root = make ? make() : null;
+    } catch (err) {
+      console.warn('partview', err);
+      root = null;
+    }
+    if (!root) {
+      this.render(true);
+      return;
+    }
+    this.show(root, small);
+  }
+
+  // (small: a thing for the hand - its outline and its shadow as fine as it is)
+  show(root, small = false) {
+    this.small = small;
     root.updateMatrixWorld(true);
     // (its paint as it will be, under the lights here; an outline round each part)
     const add = [];
     root.traverse((o) => {
       if (!o.isMesh) return;
-      const pm = this.mats.get(o.material);
+      // (a paint of the game's own that is none of the kit's - a parachute's: an ordinary one)
+      let pm = this.mats.get(o.material);
+      if (!pm && o.material && !o.material.isMeshBasicMaterial && !o.material.isMeshStandardMaterial) {
+        pm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0, side: o.material.side });
+        this.mats.set(o.material, pm);
+      }
       if (pm) o.material = pm;
       if (o.material && o.material.isMeshBasicMaterial) return;
       const ol = new THREE.Mesh(o.geometry, this.outline);
@@ -100,9 +129,10 @@ export class PartView {
     this.pivot.add(root);
     this.root = root;
     this.size = size;
-    this.R = Math.max(0.5, size.length() / 2);
-    this.uW.value = clampN(this.R * 0.012, 0.012, 0.08);
-    this.shadow.scale.set(Math.max(size.x, 0.6) * 0.75, 1, Math.max(size.z, 0.6) * 0.62);
+    this.R = Math.max(small ? 0.1 : 0.5, size.length() / 2);
+    this.uW.value = small ? clampN(this.R * 0.014, 0.002, 0.012) : clampN(this.R * 0.012, 0.012, 0.08);
+    const m = small ? 0.12 : 0.6;
+    this.shadow.scale.set(Math.max(size.x, m) * 0.75, 1, Math.max(size.z, m) * 0.62);
     this.acc = 1;
   }
 
@@ -119,6 +149,9 @@ export class PartView {
   frame(dt) {
     if (!this.r || !this.root) return;
     this.yaw += dt * 0.55;
+    // (a thing for the hand: seen from its side, its front to the right - turning a little to
+    // and fro, not all the way round)
+    if (this.small) this.pivot.userData.sway = Math.sin(this.yaw * 1.4) * 0.7;
     this.acc += dt;
     if (this.acc < this.every) return;
     this.acc = 0;
@@ -142,7 +175,7 @@ export class PartView {
       r.clear();
       return;
     }
-    this.pivot.rotation.y = this.yaw;
+    this.pivot.rotation.y = this.small ? Math.PI / 2 + (this.pivot.userData.sway || 0) : this.yaw;
     // (far enough back for all of it as it turns - across, and up, seen from a little above)
     const el = 0.3;
     const tan = Math.tan(THREE.MathUtils.degToRad(this.cam.fov) / 2);

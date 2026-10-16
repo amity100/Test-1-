@@ -30,6 +30,16 @@ const MOVERS = new Set(['wheel', 'rotor', 'wing', 'prop', 'jet', 'sail', 'balloo
 // ink table (game/freeform.js INKS). Returns the design game/drawncar.js builds (polished) - or null.
 // Its body is what its lines close round (P.R: however many lines drew it), the lines that drew it
 // its edges; a plane drawn from above, the same plane from its side; a bike, its frame of tubes
+// (ROADMAP 11.11, parts 2) what a barrel drawn in each ink fires (as game/handparts.js ELEMENT has
+// it): red fire, orange a blast, yellow a shock, green glue, blue water, purple ink, pink bounces,
+// white correction fluid, neon light
+const INK_EL = [null, null, 'fire', 'blast', 'shock', 'glue', 'water', 'ink', 'bounce', 'tippex', 'light'];
+const EL_NAME = { fire: 'אש', blast: 'נפץ', shock: 'חשמל', glue: 'דבק', water: 'מים', ink: 'דיו', bounce: 'קופצני', tippex: 'טיפקס', light: 'אור' };
+// (what each barrel is called on the card: a flamethrower, a water cannon, a ray; a machine gun
+// or a cannon of its ink)
+const STREAM_NAME = { fire: 'להביור', water: 'תותח מים', light: 'לייזר' };
+const gunName = (gn) => (gn.el && STREAM_NAME[gn.el] ? STREAM_NAME[gn.el] : gn.down && gn.type === 'cannon' ? `פצצות${gn.el ? ` ${EL_NAME[gn.el]}` : ''}` : `${gn.type === 'cannon' ? 'תותח' : 'מקלע'}${gn.el ? ` ${EL_NAME[gn.el]}` : ''}`);
+
 function inkOf(inks, i) {
   const ink = inks[i] || inks[0];
   return { col: ink.c.slice(), pencil: !!ink.pencil, neon: !!ink.neon };
@@ -127,6 +137,8 @@ export function rideDesign(P, strokes, inks) {
       s.base = [base[0] * m, base[1] * m];
       s.muz = [muz[0] * m, muz[1] * m];
       s.len = o.sh.long * m;
+      // (drawn in colour: what it fires - ROADMAP 11.11)
+      if (INK_EL[o.ink]) s.el = INK_EL[o.ink];
     }
     if (o.type === 'blade' || o.type === 'wing' || o.type === 'rotor' || o.type === 'chute') s.len = o.sh.long * m;
     out.push(s);
@@ -137,7 +149,21 @@ export function rideDesign(P, strokes, inks) {
     for (let k = 0; k <= 24; k++) pts.push([(a.x + Math.cos((k / 24) * Math.PI * 2) * a.r) * m, (a.y + Math.sin((k / 24) * Math.PI * 2) * a.r) * m]);
     out.push({ type: 'wheel', part: 'wheel', pts, ...bodyInk, neon: false, implicit: true });
   }
-  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined };
+  // (ROADMAP 11.11) its nose: how much of its height its front end keeps - a wedge cuts through the
+  // air, a flat front pushes it (rideSpec)
+  let nose;
+  if (P.R.loop && P.family === 'ground') {
+    const fx = P.flip ? B.x0 : B.x1;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const [x, y] of P.R.loop) {
+      if (Math.abs(x - fx) > B.w * 0.12) continue;
+      lo = Math.min(lo, y);
+      hi = Math.max(hi, y);
+    }
+    if (hi > lo) nose = Math.round(((hi - lo) / Math.max(1e-6, B.h)) * 100) / 100;
+  }
+  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, nose };
 }
 
 // a plane drawn from above: the same plane from its side - its body as long as drawn and as thick as
@@ -287,7 +313,9 @@ export function rideSpec(design) {
     const n = wheels.length;
     const zs = wheels.map((w) => w.z);
     const base = n > 1 ? Math.max(...zs) - Math.min(...zs) : 0;
-    const top = clamp(16 + rAvg * 36 + jets.length * 5 - mass * 2.6 - (n === 1 ? 6 : 0), 9, 46);
+    // (ROADMAP 11.11: a pointed nose, a little faster; a flat front, a little slower)
+    const noseK = design.nose === undefined ? 1 : design.nose < 0.32 ? 1.12 : design.nose > 0.82 ? 0.92 : 1;
+    const top = clamp((16 + rAvg * 36 + jets.length * 5 - mass * 2.6 - (n === 1 ? 6 : 0)) * noseK, 9, 48);
     const power = clamp(19 + jets.length * 3 - mass * 4.2 + Math.min(n, 4) * 0.3, 5, 24);
     const grip = clamp(3 + Math.min(n, 6) * 1.0 + rAvg * 2.5 + (fins.length ? 0.6 : 0) + (base / L) * 1.5, 3, 11);
     spec.handling = { mass: clamp(mass, 0.4, 3.2), power, top, grip, slide: clamp(0.8 + grip * 0.03, 0.85, 1.2), steer: clamp(2.25 - base * 0.17, 0.8, 2.3), roll: clamp(H * 0.45, 0.2, 1.4), pitch: 0.5 };
@@ -344,12 +372,22 @@ export function gunOf(s) {
   const r = s.r || 0.05;
   const len = s.len || 1;
   const cannon = r >= 0.11;
+  const el = s.el || undefined;
+  // (out of its underside, pointing down: what it fires falls - bombs; game/vehicles.js fires
+  // along a barrel that cannot turn to where you aim)
+  const down = !!(s.base && s.muz && s.muz[1] - s.base[1] > len * 0.6) || undefined;
+  // (ROADMAP 11.11) drawn in blue, red, neon: a jet of water, a flamethrower, a ray - a stream of
+  // it while the button is held, however thick the barrel; the rest as drawn, of their ink
+  if (el === 'water' || el === 'fire' || el === 'light') {
+    const speed = el === 'light' ? 150 : el === 'fire' ? 34 : 46;
+    return { type: 'mg', el, down, r, len, reload: el === 'light' ? 0.12 : 0.06, dmg: Math.round(clamp((el === 'light' ? 18 : 6) + r * 90, 6, el === 'light' ? 40 : 22)), speed, spread: el === 'light' ? 0.004 : 0.05, life: el === 'fire' ? 0.75 : el === 'water' ? 1.4 : 1.6, range: Math.round(speed * (el === 'fire' ? 0.75 : el === 'water' ? 1.1 : 1.6)) };
+  }
   if (cannon) {
     const speed = clamp(42 + len * 5, 42, 70);
-    return { type: 'cannon', r, len, reload: clamp(0.8 + r * 5, 1.0, 2.6), dmg: Math.round(clamp(80 + r * 520, 100, 240)), blast: clamp(2.5 + r * 18, 3, 8.5), speed, spread: clamp(0.03 / (1 + len * 0.8), 0.004, 0.03), range: Math.round(speed * 3.2) };
+    return { type: 'cannon', el, down, r, len, reload: clamp(0.8 + r * 5, 1.0, 2.6), dmg: Math.round(clamp(80 + r * 520, 100, 240)), blast: clamp(2.5 + r * 18, 3, 8.5), speed, spread: clamp(0.03 / (1 + len * 0.8), 0.004, 0.03), range: Math.round(speed * 3.2) };
   }
   const speed = clamp(70 + len * 14, 70, 130);
-  return { type: 'mg', r, len, reload: clamp(0.05 + r * 1.2, 0.07, 0.16), dmg: Math.round(clamp(6 + r * 140, 8, 20)), speed, spread: clamp(0.06 / (1 + len * 0.9), 0.007, 0.06), life: 2.5, range: Math.round(speed * 2.5) };
+  return { type: 'mg', el, down, r, len, reload: clamp(0.05 + r * 1.2, 0.07, 0.16), dmg: Math.round(clamp(6 + r * 140, 8, 20)), speed, spread: clamp(0.06 / (1 + len * 0.9), 0.007, 0.06), life: 2.5, range: Math.round(speed * 2.5) };
 }
 
 // ------------------------------------------------------------------ the card: its name, what it does, its numbers
@@ -419,6 +457,8 @@ function summary(o) {
     if (M.balloon) abil.push(['air', 'התרוממות']);
     if (M.boat) abil.push(['water', 'שיט']);
     if (nBarrels) abil.push(['fire', nBarrels > 1 ? `ירי ×${nBarrels}` : 'ירי']);
+    // (a barrel drawn in colour: what it fires, a chip each)
+    for (const e of [...new Set((spec.guns || []).map((gn) => gn.el).filter(Boolean))]) abil.push(['el-' + e, EL_NAME[e]]);
     if (spec.ram) abil.push(['fire', 'ניגוח']);
     if (spec.spring) abil.push(['gear', 'קפיצה']);
     if (spec.chute) abil.push(['gear', 'מצנח']);
@@ -449,7 +489,7 @@ function summary(o) {
     if (spec.guns.length) {
       const dps = spec.guns.reduce((a, gn) => a + gn.dmg / gn.reload, 0);
       const range = Math.max(...spec.guns.map((gn) => gn.range));
-      bars.push({ k: 'fire', name: 'כוח אש', v: Math.min(1, dps / 320), txt: spec.guns.map((gn) => (gn.type === 'cannon' ? 'תותח' : 'מקלע')).join(' + ') });
+      bars.push({ k: 'fire', name: 'כוח אש', v: Math.min(1, dps / 320), txt: spec.guns.map(gunName).join(' + ') });
       bars.push({ k: 'range', name: 'טווח', v: Math.min(1, range / 330), txt: `${range} מ׳` });
     }
     if (spec.spring) {
@@ -461,7 +501,21 @@ function summary(o) {
     const lift = Math.max(o.liftR || 0, o.liftW ? o.liftW / 0.7 : 0);
     bars.push({ k: 'lift', name: 'עילוי', v: Math.min(1, lift / 2), txt: `×${lift.toFixed(1)}`, bad: lift < 1 });
   }
-  return { ok: o.ok, name, abil, bars, warn, mass, L, cost: spec ? spec.cost : 0 };
+  // ---- (ROADMAP 11.11) what its parts make it do that no number says: a line each
+  const lines = [];
+  if (spec) {
+    const D = o.design;
+    if (spec.modes.drive && D.nose !== undefined && D.nose < 0.32) lines.push(['move', 'חרטום מחודד', 'חותך את האוויר: מהיר יותר']);
+    else if (spec.modes.drive && D.nose !== undefined && D.nose > 0.82) lines.push(['move', 'חזית שטוחה', 'דוחפת את האוויר: איטי יותר']);
+    for (const gn of spec.guns || []) {
+      if (gn.el === 'fire') lines.push(['el-fire', 'קנה אדום', gn.type === 'mg' ? 'להביור: שורף את מה שמולו' : 'פגז שמצית']);
+      else if (gn.el === 'water') lines.push(['el-water', 'קנה כחול', 'סילון מים: הודף ומכבה שריפות']);
+      else if (gn.el === 'light') lines.push(['el-light', 'קנה ניאון', 'קרן אור שעוברת דרך קירות']);
+      else if (gn.el) lines.push(['el-' + gn.el, `${gn.type === 'cannon' ? 'תותח' : 'מקלע'} ${EL_NAME[gn.el]}`, { glue: 'מדביק למקום', shock: 'משתק את מי שסביב', ink: 'ענן דיו שמסתיר', tippex: 'מוחק את מה שפוגע בו', blast: 'מתפוצץ', bounce: 'קופץ מהקירות' }[gn.el]]);
+      if (gn.down) lines.push(['fire', 'קנה כלפי מטה', gn.type === 'cannon' ? 'מטיל פצצות' : 'יורה למטה']);
+    }
+  }
+  return { ok: o.ok, name, abil, bars, warn, mass, L, cost: spec ? spec.cost : 0, lines };
 }
 
 const rotorOrWings = (o) => o.design.strokes.some((s) => s.part === 'rotor' || s.part === 'wing');

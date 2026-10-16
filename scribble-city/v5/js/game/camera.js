@@ -23,11 +23,13 @@ export class CameraRig {
     this.right = new THREE.Vector3();
     this.minPitch = -1.05;
     this.maxPitch = 0.85;
+    // (zoomed in through a drawn sight: the look slower, as much as it zooms - ROADMAP 11.11)
+    this.lookK = 1;
   }
 
   applyLook(dx, dy) {
-    this.yaw -= dx * 0.0026;
-    this.pitch = clamp(this.pitch - dy * 0.0022, this.minPitch, this.maxPitch);
+    this.yaw -= dx * 0.0026 * this.lookK;
+    this.pitch = clamp(this.pitch - dy * 0.0022 * this.lookK, this.minPitch, this.maxPitch);
   }
 
   /**

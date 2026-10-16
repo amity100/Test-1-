@@ -2,6 +2,7 @@ import { WEAPON_DEFS } from './weapons.js';
 import { dress } from './wardrobe.js';
 import { buildWeaponModel } from './items.js';
 import { readFree, buildWeapon } from './freeform.js';
+import { readHandParts, handSpec } from './handparts.js';
 import { spawnDrawn } from './drawncar.js';
 import { BLUEPRINTS, BLUEPRINT_MORE } from './blueprints.js';
 import { openWall } from '../world/rooms.js';
@@ -255,8 +256,20 @@ export class SaveGame {
       if (it.free && Array.isArray(it.free.s)) {
         // (drawn freehand: read and made again from its drawing, game/freeform.js)
         if (g.classic) continue;
-        const R = readFree(it.free.s, it.free.force || null, new Set(Array.isArray(it.free.cats) ? it.free.cats : []));
+        const cats = new Set(Array.isArray(it.free.cats) ? it.free.cats : []);
+        const R = readFree(it.free.s, it.free.force || null, cats);
         if (!R || R.cat !== 'weapon') continue;
+        // (ROADMAP 11.11: made of parts - what each did, again)
+        if (it.free.parts && g.lab) {
+          const over = {};
+          if (it.free.over && typeof it.free.over === 'object') for (const [k, t] of Object.entries(it.free.over)) if (typeof t === 'string') over[+k] = t;
+          const P = R.grid ? readHandParts(it.free.s.map((o) => ({ p: o.p, c: o.c })), over, cats, R) : null;
+          if (P) {
+            R.def = handSpec(P).def;
+            R.muzzlePts = P.muzzles;
+            R.parts = true;
+          }
+        }
         W.add(R.def, 'good', buildWeapon(R), undefined);
         slot = W.current;
         slot.free = it.free;

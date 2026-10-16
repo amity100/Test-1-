@@ -988,10 +988,36 @@ class Vehicle {
     dir.normalize();
     if (g.type === 'mg') {
       const c = this.mgColor || [1.0, 0.82, 0.3];
-      game.weapons.projectiles.push({ kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * g.speed, vy: dir.y * g.speed, vz: dir.z * g.speed, gravity: 2, damage: g.dmg, radius: 0, life: g.life || 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this });
-      game.fx.muzzle(mw.x, mw.y, mw.z, 0.6 + t.r * 4);
-      game.audio.play('paint', this.turrets.length > 1 ? 0.3 : 0.45);
+      const pr = { kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * g.speed, vy: dir.y * g.speed, vz: dir.z * g.speed, gravity: 2, damage: g.dmg, radius: 0, life: g.life || 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this };
+      // (ROADMAP 11.11: drawn in colour - a flamethrower's flames rise a little, water arcs down,
+      // light flies straight on through a wall or two; game/weapons.js inkHit)
+      if (g.el) {
+        pr.el = g.el;
+        if (g.el === 'fire') pr.gravity = -1.5;
+        else if (g.el === 'water') pr.gravity = 9;
+        else if (g.el === 'light') {
+          pr.gravity = 0;
+          pr.pierce = 2;
+        } else if (g.el === 'bounce') pr.bounce = 3;
+      }
+      game.weapons.projectiles.push(pr);
+      game.fx.muzzle(mw.x, mw.y, mw.z, g.el === 'fire' || g.el === 'water' ? 0.3 : 0.6 + t.r * 4);
+      if (g.el === 'fire' || g.el === 'water') {
+        if (Math.random() < 0.3) game.audio.play(g.el === 'fire' ? 'whoosh' : 'pour', 0.25);
+      } else game.audio.play(g.el === 'light' ? 'laser' : 'paint', this.turrets.length > 1 ? 0.3 : 0.45);
       game.enemies.noise(this.pos, 32);
+    } else if (g.el && g.el !== 'tippex') {
+      // (ROADMAP 11.11) a cannon drawn in colour: its ink where it goes off (glue, a shock, ink...)
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'shell');
+      const pr = game.weapons.projectiles[game.weapons.projectiles.length - 1];
+      pr.el = g.el;
+      pr.big = true;
+      if (g.el === 'bounce') pr.bounce = 3;
+      game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
+      game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
+      game.camRig.addShake(clamp(0.15 + t.r * 1.4, 0.15, 0.5));
+      game.enemies.noise(this.pos, 60, 'boom');
+      if (this.mode === 'drive' || this.kind === 'bike') this.speed -= t.r * 6;
     } else {
       game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'whiteShell');
       game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);

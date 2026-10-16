@@ -50,6 +50,7 @@ export const PART = {
   spring: { name: 'קפיץ', role: 'gear' },
   armor: { name: 'שריון', role: 'gear' },
   window: { name: 'חלון', role: 'deco' },
+  silencer: { name: 'משתיק', role: 'fire' },
   tail: { name: 'זנב', role: 'air' },
   skid: { name: 'מגלש', role: 'deco' },
   deco: { name: 'קישוט', role: 'deco' },
@@ -57,7 +58,7 @@ export const PART = {
 
 // the parts that only a ride has, and only a thing for the hand
 const RIDE_ONLY = new Set(['wheel', 'rotor', 'wing', 'prop', 'jet', 'fin', 'tail', 'skid', 'sail', 'balloon', 'hull', 'cabin', 'window', 'mast', 'rope', 'frame']);
-const HAND_ONLY = new Set(['grip', 'mag', 'scope', 'stock', 'guard', 'head']);
+const HAND_ONLY = new Set(['grip', 'mag', 'scope', 'stock', 'guard', 'head', 'silencer']);
 // what a body is made of (the player's say: these go into it)
 const BODYISH = new Set(['body', 'cabin', 'hull', 'frame']);
 

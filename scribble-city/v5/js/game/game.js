@@ -1053,6 +1053,8 @@ export class Game {
       if (this.state === 'play') this.saves.update(dt);
     }
     // camera
+    // (the look as quick as ever - but through a drawn sight, aimed: below)
+    this.camRig.lookK = 1;
     if (this.state === 'title' && !this.freeCam) {
       // behind the title page: drifting slowly up the first boulevard, into the sunset
       const z = -20 + Math.sin(this.time * 0.025) * 70;
@@ -1091,7 +1093,14 @@ export class Game {
         const t = this._ragCam || (this._ragCam = new THREE.Vector3());
         this.camRig.update(dt, t.set(hip.x, Math.max(player.pos.y, hip.y - 0.75), hip.z), { height: 1.3, dist: 4.6, shoulder: 0 });
       }
-      else this.camRig.update(dt, player.pos, { aim: this.weapons.current.def.kind === 'gun' && input.aim, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
+      else {
+        // (ROADMAP 11.11, parts 2: a sight drawn on it - aimed, it zooms, and the look slows to match)
+        const wd = this.weapons.current.def;
+        const aim = wd.kind === 'gun' && input.aim;
+        const zoom = aim && wd.zoom ? wd.zoom : 1;
+        this.camRig.lookK = 1 / zoom;
+        this.camRig.update(dt, player.pos, { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
+      }
     }
     const tipsy = this.inkwell.tipsy;
     if (tipsy > 0.05 && this.state === 'play') {

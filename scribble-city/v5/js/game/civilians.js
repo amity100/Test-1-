@@ -300,6 +300,11 @@ class Civilian {
       this.reelT -= dt;
       speed *= 0.2;
     }
+    // (glued to the pavement: a shot of glue, a puddle of it - game/weapons.js)
+    if (this.glueT > 0) {
+      this.glueT -= dt;
+      speed = 0;
+    }
     fig.crawl = damp(fig.crawl, legless ? 1 : 0, 6, dt);
     if (!this.headless) fig.stagger = this.reelT > 0 ? 0.8 : limping ? 0.6 : 0;
     const dx = tx - this.pos.x;

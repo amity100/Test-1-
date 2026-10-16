@@ -347,8 +347,11 @@ export class Player {
     // (ROADMAP 9.2, not with ?classic: the drawn umbrella open over your head - down slowly, the
     // way the parachute holds you, only less)
     const brolly = !gliding && this.game.gadgets ? this.game.gadgets.fall(this) : null;
+    // (ROADMAP 11.11, parts 2: a parachute drawn on what you hold - down slowly too)
+    const chuteHeld = !gliding && brolly === null ? weapons.chuteFall(this) : null;
     if (gliding) this.vel.y = damp(this.vel.y, -chute.fly.sink, 2.5, dt);
     else if (brolly !== null) this.vel.y = damp(this.vel.y, -brolly, 6, dt);
+    else if (chuteHeld !== null) this.vel.y = damp(this.vel.y, -chuteHeld, 4, dt);
     else this.vel.y -= GRAVITY * dt;
     const p = this.pos;
     // (a fall lands on whatever it comes down onto, however fast: ROADMAP 5.1, not with ?classic)

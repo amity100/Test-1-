@@ -304,24 +304,7 @@ export class Signs {
       game.audio.play('glue', 0.5);
       game.hud.toast(sg.who.length > 1 ? `◯ ${sg.who.length} קשורים בחבל דיו` : '◯ קשור בחבל דיו', 'good', 1.6);
     } else if (sg.id === 'cloud') {
-      const spot = { x: sg.x, z: sg.z, r: CLOUD_R, kind: 'ink', until: t + CLOUD_T };
-      game.world.hideSpots.push(spot);
-      this.clouds.push(spot);
-      for (let i = 0; i < 20; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const d = Math.sqrt(Math.random()) * CLOUD_R * 0.85;
-        fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', sg.x + Math.cos(a) * d, 0.6 + Math.random() * 2.6, sg.z + Math.sin(a) * d, {
-          size: 2.6 + Math.random() * 1.6, grow: 0.25, life: CLOUD_T - 0.5 + Math.random(), vy: 0.04, alpha: 0.93, tint: INK, fadeIn: 0.15,
-        });
-      }
-      // (those who had you in their sights lose you)
-      for (const e of game.enemies.list) {
-        if (e.alive && this.blocks(e.pos.x, e.pos.z, p.pos.x, p.pos.z)) {
-          e.sees = false;
-          e.aimT = 0;
-        }
-      }
-      game.audio.play('poof', 0.7);
+      this.puff(sg.x, sg.z);
       game.hud.toast('☁ ענן דיו — בתוכו אף אחד לא רואה אתכם', 'good', 2);
     } else if (sg.id === 'rope') {
       const from = p.pos.clone();
@@ -333,6 +316,41 @@ export class Signs {
       game.audio.play('whoosh', 0.8);
     }
     return true;
+  }
+
+  // a cloud of ink at (x, z), r across, for T seconds: nobody sees through it, and inside it you
+  // are hidden (a scribble; a shot of purple ink, game/weapons.js - ROADMAP 11.11)
+  puff(x, z, r = CLOUD_R, T = CLOUD_T) {
+    const game = this.game;
+    const fx = game.fx;
+    const p = game.player;
+    // (not too many at once: the oldest goes first)
+    if (this.clouds.length >= 8) {
+      const old = this.clouds.shift();
+      const hs = game.world.hideSpots;
+      const k = hs.indexOf(old);
+      if (k >= 0) hs.splice(k, 1);
+    }
+    const spot = { x, z, r, kind: 'ink', until: game.time + T };
+    game.world.hideSpots.push(spot);
+    this.clouds.push(spot);
+    const n = Math.round(clamp(20 * (r / CLOUD_R) * (r / CLOUD_R), 6, 20));
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * r * 0.85;
+      fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', x + Math.cos(a) * d, 0.6 + Math.random() * (0.6 + r * 0.4), z + Math.sin(a) * d, {
+        size: (2.6 + Math.random() * 1.6) * Math.min(1, 0.4 + r / CLOUD_R), grow: 0.25, life: T - 0.5 + Math.random(), vy: 0.04, alpha: 0.93, tint: INK, fadeIn: 0.15,
+      });
+    }
+    // (those who had you in their sights lose you)
+    for (const e of game.enemies.list) {
+      if (e.alive && this.blocks(e.pos.x, e.pos.z, p.pos.x, p.pos.z)) {
+        e.sees = false;
+        e.aimT = 0;
+      }
+    }
+    game.audio.play('poof', 0.7);
+    return spot;
   }
 
   // (game/enemies.js, game/police.js) does a cloud stand between a and b (on the ground's plane)
