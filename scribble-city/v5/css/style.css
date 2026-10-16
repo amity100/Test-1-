@@ -1238,6 +1238,7 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-parts.drawing { opacity: 0.4; }
 .fd-pchip { position: absolute; left: 0; top: 0; font: 700 12.5px var(--font-ui); line-height: 1; padding: 3px 7px 4px; border: 1.8px solid var(--ink); border-radius: 9px 7px 10px 8px; background: #f1ede3; color: var(--ink); white-space: nowrap; box-shadow: 1.5px 2px 0 rgba(36, 36, 44, 0.35); }
 .fd-pchip.mine::after { content: ' ✎'; font-weight: 400; }
+.fd-pchip.implicit { border-style: dashed; opacity: 0.78; box-shadow: none; pointer-events: none; }
 .r-body { background: #f1ede3; }
 .r-move { background: #cfe3ff; }
 .r-air { background: #d4f1ff; }

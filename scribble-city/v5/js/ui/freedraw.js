@@ -596,11 +596,11 @@ export class FreeDraw {
     } catch (err) {
       net = null;
     }
-    const hint = net && net.best && net.best[0] === 'boat' ? 'sea' : null;
-    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k })), this.over, this.face, hint);
+    // (each line as steadied, and as the hand drew it; what kind of thing it likely is: what the
+    // network sees, what the player said they draw)
+    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.face, null, { net, cats: this.cats.size ? this.cats : null });
     this.P = P;
-    const main = P && P.st.find((o) => o.i === P.body);
-    if (!P || P.frame !== 'ride' || !main || !main.sh.closed) return;
+    if (!P || P.frame !== 'ride' || !P.R) return;
     const design = rideDesign(P, this.strokes, INKS);
     if (!design) return;
     const spec = rideSpec(design);
@@ -675,7 +675,9 @@ export class FreeDraw {
     const U = this.U;
     const b = this.bounds();
     const big = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) / U : 1;
-    this.partsEl.innerHTML = P.parts.map((q) => `<span class="fd-pchip r-${PART[q.type].role}${this.over[q.i] ? ' mine' : ''}" data-i="${q.i}">${PART[q.type].name}</span>`).join('');
+    // (and what no one line is: the wheels in its arches, a plane's wings in its outline - faint)
+    const imp = P.implicit || [];
+    this.partsEl.innerHTML = P.parts.map((q) => `<span class="fd-pchip r-${PART[q.type].role}${this.over[q.i] ? ' mine' : ''}" data-i="${q.i}">${PART[q.type].name}</span>`).join('') + imp.map((q) => `<span class="fd-pchip r-${PART[q.type].role} implicit">${PART[q.type].name}</span>`).join('');
     const els = [...this.partsEl.children];
     const placed = [];
     this.chips = [];
@@ -710,6 +712,23 @@ export class FreeDraw {
       el.style.transform = `translate(${Math.round(cx - w / 2)}px, ${Math.round(top)}px)`;
       this.chips.push({ i: q.i, el });
     }
+    imp.forEach((q, k) => {
+      const el = els[P.parts.length + k];
+      if (!el) return;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      let cx = q.at[0] * U;
+      let top = q.at[1] * U - h / 2;
+      for (let n = 0; n < 4; n++) {
+        const hit = placed.find((r) => Math.abs(r.cx - cx) < (r.w + w) / 2 + 3 && Math.abs(r.top - top) < h + 2);
+        if (!hit) break;
+        top = hit.top + h + 3;
+      }
+      cx = clamp(cx, w / 2 + 4, window.innerWidth - w / 2 - 4);
+      top = clamp(top, 4, window.innerHeight - h - 4);
+      placed.push({ cx, top, w });
+      el.style.transform = `translate(${Math.round(cx - w / 2)}px, ${Math.round(top)}px)`;
+    });
     if (this.pmenuAt >= 0) this.partMenu(this.pmenuAt);
   }
 

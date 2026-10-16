@@ -27,12 +27,19 @@ const MOVERS = new Set(['wheel', 'rotor', 'wing', 'prop', 'jet', 'sail', 'balloo
 
 // ------------------------------------------------------------------ the drawing, in metres
 // P: game/parts.js readParts (a ride's); strokes: the drawing's ({ p, c }, page units); inks: the
-// ink table (game/freeform.js INKS). Returns the design game/drawncar.js builds (polished) - or null
+// ink table (game/freeform.js INKS). Returns the design game/drawncar.js builds (polished) - or null.
+// Its body is what its lines close round (P.R: however many lines drew it), the lines that drew it
+// its edges; a plane drawn from above, the same plane from its side; a bike, its frame of tubes
+function inkOf(inks, i) {
+  const ink = inks[i] || inks[0];
+  return { col: ink.c.slice(), pencil: !!ink.pencil, neon: !!ink.neon };
+}
+
 export function rideDesign(P, strokes, inks) {
-  if (!P || P.frame !== 'ride' || P.body < 0) return null;
-  const main = P.st.find((o) => o.i === P.body);
-  if (!main) return null;
-  const B = main.sh;
+  if (!P || P.frame !== 'ride' || !P.R) return null;
+  if (P.top) return topDesign(P, inks);
+  const B = P.R.sh;
+  if (!(B.w > 0)) return null;
   const types = new Set(P.parts.map((p) => p.type));
   // its real size: as long as it was drawn big (a car drawn across a third of the screen is a
   // car's length), within what its kind can be
@@ -41,7 +48,8 @@ export function rideDesign(P, strokes, inks) {
   let hi = 12;
   if (types.has('rotor')) [lo, hi] = [3, 14];
   if (types.has('wing') && (types.has('prop') || types.has('jet'))) [lo, hi] = [4.5, 16];
-  if (!types.has('wheel') && (types.has('sail') || types.has('hull'))) [lo, hi] = [2.5, 20];
+  if (P.family === 'boat') [lo, hi] = [2.5, 20];
+  if (P.R.bike) [lo, hi] = [1.5, 2.6];
   let L = clamp(bodyPage * 3.4, lo, hi);
   // (a balloon: by its envelope - a balloon is ten metres tall or so)
   const env = P.st.find((o) => o.type === 'balloon');
@@ -65,24 +73,52 @@ export function rideDesign(P, strokes, inks) {
   const PAINTS = [[0.92, 0.2, 0.24], [0.22, 0.55, 0.95], [1.0, 0.78, 0.2], [0.3, 0.8, 0.45], [1.0, 0.55, 0.16], [0.55, 0.4, 0.95], [0.95, 0.93, 0.88]];
   const seed = Math.floor(Math.abs(B.w * 1000 + P.st.length * 37 + B.h * 777)) % PAINTS.length;
   const color = best >= 0 ? inks[best].c.slice() : PAINTS[seed].slice();
-  const ol = B.closed ? outline(main.pts) : null;
-  const floats = types.has('hull') || types.has('sail');
+  const main = P.st.find((o) => o.i === P.body);
+  const bodyInk = inkOf(inks, main ? main.ink : best >= 0 ? best : 0);
   const out = [];
+  const M = (pts) => pts.map(([x, y]) => [x * m, y * m]);
+  // the body: its outline
+  const boat = P.family === 'boat';
+  if (P.R.loop) out.push({ type: 'body', part: boat ? 'hull' : 'body', pts: M(P.R.loop.concat([P.R.loop[0]])), ...bodyInk, hull: boat || undefined, made: true });
+  else if (P.R.bike) {
+    // (a bike: a slim tank and seat over its frame, between its wheels)
+    const w = P.st.filter((o) => o.type === 'wheel').map((o) => o.sh);
+    const r = w.length ? w.reduce((a, q) => a + (q.w + q.h) / 4, 0) / w.length : B.h * 0.3;
+    const xa = B.x0 + B.w * 0.3;
+    const xb = B.x0 + B.w * 0.7;
+    const y = (w.length ? Math.max(...w.map((q) => q.cy)) : B.y0) + r * 0.85;
+    const pts = [];
+    for (let k = 0; k <= 16; k++) {
+      const t = (k / 16) * Math.PI * 2;
+      pts.push([(xa + xb) / 2 + Math.cos(t) * (xb - xa) / 2, y + Math.sin(t) * r * 0.32]);
+    }
+    out.push({ type: 'body', part: 'body', pts: M(pts), ...bodyInk, slim: true, made: true });
+  } else if (P.R.made) {
+    // (a balloon with no basket drawn: one, under its envelope)
+    const b = P.R.sh;
+    out.push({ type: 'body', part: 'body', pts: M([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1], [b.x0, b.y0]]), ...bodyInk, made: true });
+  }
+  const ol = P.R.loop || null;
   for (const o of P.st) {
-    const ink = inks[o.ink] || inks[0];
-    const s = { type: TYPE[o.type] || 'line', part: o.type, pts: o.pts.map(([x, y]) => [x * m, y * m]), col: ink.c.slice(), pencil: !!ink.pencil, neon: !!ink.neon };
-    if (o === main && floats) s.hull = true;
-    if (o.type === 'hull') s.hull = true;
+    const ink = inkOf(inks, o.ink);
+    let type = TYPE[o.type] || 'line';
+    // (the lines that drew the body: its edges, the body itself now)
+    const edge = P.R.loop && (o.type === 'body' || o.type === 'cabin' || o.type === 'hull');
+    if (edge || o.type === 'frame') type = 'line';
+    const s = { type, part: o.type, pts: M(o.pts), ...ink };
+    if (edge) s.edge = true;
     if (o.type === 'spring') s.coils = o.sh.coils;
-    // (half a wheel drawn, hanging from it: the whole wheel)
-    if (o.type === 'wheel' && !o.sh.closed && o.sh.cup) {
-      const c = o.sh.cup;
-      s.pts = [];
-      for (let k = 0; k <= 24; k++) s.pts.push([(c.cx + Math.cos((k / 24) * Math.PI * 2) * c.r) * m, (c.cy + Math.sin((k / 24) * Math.PI * 2) * c.r) * m]);
+    // (half a wheel drawn, hanging from it - a U, a C: the whole wheel it goes round)
+    if (o.type === 'wheel' && !o.sh.closed) {
+      const f = o.sh.fit && o.sh.fit.cover > 2.5 && o.sh.fit.err < 0.3 ? o.sh.fit : o.sh.cup;
+      if (f) {
+        s.pts = [];
+        for (let k = 0; k <= 24; k++) s.pts.push([(f.cx + Math.cos((k / 24) * Math.PI * 2) * f.r) * m, (f.cy + Math.sin((k / 24) * Math.PI * 2) * f.r) * m]);
+      }
     }
     if (o.type === 'barrel') {
       // (a line: a thin barrel; a long closed shape: as thick as it was drawn)
-      s.r = o.sh.closed ? clamp((o.sh.thick * m) / 2, 0.04, 0.32) : 0.045;
+      s.r = o.sh.closed || o.sh.endGap < o.sh.long * 0.35 ? clamp((o.sh.thick * m) / 2, 0.04, 0.32) : 0.045;
       // its two ends along it: the one out of the body is its muzzle
       const a = [o.sh.cx - (o.sh.ux * o.sh.long) / 2, o.sh.cy - (o.sh.uy * o.sh.long) / 2];
       const b = [o.sh.cx + (o.sh.ux * o.sh.long) / 2, o.sh.cy + (o.sh.uy * o.sh.long) / 2];
@@ -96,13 +132,54 @@ export function rideDesign(P, strokes, inks) {
     out.push(s);
   }
   // (wheels in its wheel arches, drawn without: game/parts.js archesOf)
-  const bodyInk = inks[main.ink] || inks[0];
   for (const a of P.arches || []) {
     const pts = [];
     for (let k = 0; k <= 24; k++) pts.push([(a.x + Math.cos((k / 24) * Math.PI * 2) * a.r) * m, (a.y + Math.sin((k / 24) * Math.PI * 2) * a.r) * m]);
-    out.push({ type: 'wheel', part: 'wheel', pts, col: bodyInk.c.slice(), pencil: !!bodyInk.pencil, neon: false, implicit: true });
+    out.push({ type: 'wheel', part: 'wheel', pts, ...bodyInk, neon: false, implicit: true });
   }
-  return { color, strokes: out, polish: true };
+  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined };
+}
+
+// a plane drawn from above: the same plane from its side - its body as long as drawn and as thick as
+// it was wide, its wings as long and as broad as drawn, its tail as tall as its tailplane was wide;
+// the engines, the propeller drawn on it, there
+function topDesign(P, inks) {
+  const T = P.top;
+  const L = clamp((T.len / P.k) * 3.4, 4.5, 16);
+  const k = L / T.len;
+  const h = clamp(T.fw * k * 1.1, 0.8, 1.8);
+  const main = P.st.find((o) => o.i === P.body) || P.st[0];
+  const bodyInk = inkOf(inks, main.ink);
+  const wingS = P.st.find((o) => o.type === 'wing');
+  const finS = P.st.find((o) => o.type === 'fin');
+  const wingInk = wingS ? inkOf(inks, wingS.ink) : bodyInk;
+  const finInk = finS ? inkOf(inks, finS.ink) : bodyInk;
+  // (its body from the side: a rounded nose, a tail that thins and rises)
+  const body = [];
+  const prof = (t) => (h / 2) * Math.pow(Math.sin(Math.PI * clamp(t * 0.92 + 0.04, 0, 1)), 0.45) * (t < 0.35 ? 0.55 + t * 1.3 : 1);
+  const mid = (t) => h / 2 + 0.2 + (t < 0.3 ? (0.3 - t) * 0.9 : 0);
+  for (let i = 0; i <= 24; i++) body.push([(i / 24) * L, mid(i / 24) + prof(i / 24)]);
+  for (let i = 24; i >= 0; i--) body.push([(i / 24) * L, mid(i / 24) - prof(i / 24)]);
+  const c = h / 2 + 0.2;
+  const wc = clamp(T.wingAt, 0.25, 0.75) * L;
+  const chord = clamp(T.chord * k, L * 0.14, L * 0.4);
+  const out = [{ type: 'body', part: 'body', pts: body, ...bodyInk, made: true }];
+  out.push({ type: 'wing', part: 'wing', pts: [[wc - chord / 2, c], [wc + chord / 2, c]], span: clamp(T.span * k, 3, 22), len: chord, ...wingInk, made: true });
+  const tail = clamp(T.tailSpan * k * 0.35, 0.6, 2.2);
+  out.push({ type: 'fin', part: 'fin', pts: [[0.25, c + h * 0.3], [0.45, c + h * 0.3 + tail], [1.3, c + h * 0.3], [0.25, c + h * 0.3]], ...finInk, made: true });
+  // (its engines on its wings: under them; its propeller at its nose)
+  const jets = P.st.filter((o) => o.type === 'jet');
+  jets.slice(0, 4).forEach((o, i) => {
+    const r = clamp(o.sh.size * k * 0.35, 0.25, 0.6);
+    const x = wc + chord * 0.1;
+    const y = c - r - 0.05;
+    const pts = [];
+    for (let q = 0; q <= 12; q++) pts.push([x + Math.cos((q / 12) * Math.PI * 2) * r * 1.6, y + Math.sin((q / 12) * Math.PI * 2) * r]);
+    out.push({ type: 'jet', part: 'jet', pts, ...inkOf(inks, o.ink), made: true, side: i % 2 ? -1 : 1 });
+  });
+  if (P.st.some((o) => o.type === 'prop')) out.push({ type: 'prop', part: 'prop', pts: [[L + 0.05, c - h * 0.7], [L + 0.05, c + h * 0.7]], ...bodyInk, made: true });
+  const color = bodyInk.pencil ? [0.95, 0.93, 0.88] : bodyInk.col.slice();
+  return { color, strokes: out, polish: true, above: true, plane: true };
 }
 
 // ------------------------------------------------------------------ what it can do: the parts added up
@@ -116,14 +193,21 @@ export function rideSpec(design) {
     const sh = shapeOf(s.pts);
     return { z: sh.mx, y: sh.my, r: clamp((sh.w + sh.h) / 4, 0.12, 1.3) };
   });
-  const rotorS = of('rotor');
-  const rotors = rotorS.map((s) => {
+  // (the lines of one rotor - an X, a star, its blades drawn one by one - are one rotor, as wide as
+  // all of them; two apart, two rotors)
+  const rotors = [];
+  for (const s of of('rotor')) {
     const sh = shapeOf(s.pts);
-    if (s.len) sh.w = Math.max(sh.w, s.len);
-    return sh;
-  });
-  // (lines crossed over one place - an X, a star - are one rotor)
-  const rotorN = rotors.reduce((n, r, i) => n + (rotors.slice(0, i).some((q) => Math.abs(q.cx - r.cx) < Math.max(q.w, r.w) * 0.35) ? 0 : 1), 0);
+    const w = Math.max(sh.w, s.len || 0);
+    const near = rotors.find((r) => sh.x1 > r.x0 - w * 0.15 && sh.x0 < r.x1 + w * 0.15 && Math.abs(sh.cy - r.cy) < Math.max(r.w, w) * 0.35);
+    if (near) {
+      near.x0 = Math.min(near.x0, sh.x0);
+      near.x1 = Math.max(near.x1, sh.x1);
+      near.w = Math.max(near.x1 - near.x0, w, near.w);
+      near.cx = (near.x0 + near.x1) / 2;
+    } else rotors.push({ x0: sh.x0, x1: sh.x1, w, cx: sh.cx, cy: sh.cy, h: sh.h, y0: sh.y0, y1: sh.y1 });
+  }
+  const rotorN = rotors.length;
   const wings = of('wing').map((s) => shapeOf(s.pts));
   const props = of('prop').map((s) => shapeOf(s.pts));
   const jets = of('jet').map((s) => shapeOf(s.pts));
@@ -158,7 +242,11 @@ export function rideSpec(design) {
   // (the wings: as long as drawn side on, front to back; across, as the plane is long)
   const span = (w) => clamp(Math.max(w.w * 2.6, L * 0.95), 2.2, 16);
   const wingA = wings.reduce((a, w) => a + w.w * span(w), 0);
-  const thrust = props.reduce((a, p) => a + clamp(p.h, 0.5, 3.2) * 1.3, 0) + jets.reduce((a, j) => a + clamp(j.size, 0.3, 1.6) * 3.2, 0);
+  let thrust = props.reduce((a, p) => a + clamp(p.h, 0.5, 3.2) * 1.3, 0) + jets.reduce((a, j) => a + clamp(j.size, 0.3, 1.6) * 3.2, 0);
+  // (a plane drawn as a plane - its body, its wings, its tail - with no engine drawn: one inside it,
+  // a small one; the one drawn is stronger)
+  const inner = !thrust && design.plane && wings.length > 0;
+  if (inner) thrust = 1.6;
   const W0 = clamp(0.55 + L * 0.24, 0.9, 2.3);
   let mass = area * W0 * 0.16;
   mass += wheels.reduce((a, w) => a + 0.025 + w.r * w.r * 0.25, 0);
@@ -169,7 +257,7 @@ export function rideSpec(design) {
   mass = clamp(mass, 0.15, 6);
   // ---- how it goes: what it can do of each way
   const drive = wheels.length > 0;
-  const liftR = R ? (R * R * 0.8 * (1 + (rotorN - 1) * 0.6)) / mass : 0;
+  const liftR = R ? (R * R * 1.15 * (1 + (rotorN - 1) * 0.6)) / mass : 0;
   const copter = rotors.length > 0 && liftR >= 1;
   const liftW = wings.length ? wingA / (mass * 3.5) : 0;
   const plane = wings.length > 0 && thrust > 0 && liftW >= 0.7;
@@ -184,6 +272,7 @@ export function rideSpec(design) {
   if (rotors.length && !copter) warn.push('הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל');
   if (wings.length && thrust > 0 && !plane) warn.push('הכנפיים קטנות מדי למשקל — לא ימריא');
   if (wings.length && !thrust && !drive) warn.push('כנפיים בלי מדחף או סילון — אין מה שיזיז אותו');
+  if (inner) warn.push('לא צויר מנוע: יש לו מנוע קטן בפנים. מדחף או סילון שמציירים — מהיר יותר');
   if (!force) {
     const sum = summary({ ok: false, mass, L, H, wheels, warn, design, liftR, liftW });
     return { ok: false, why: 'עוד לא זז — הוסיפו גלגלים, רוטור, כנפיים עם מדחף, מפרש או בלון', sum, mass };

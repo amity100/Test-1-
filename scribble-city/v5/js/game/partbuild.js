@@ -492,6 +492,8 @@ export function buildPolished(design, spec) {
   const bodies = S.filter((s) => s.type === 'body' && s.part !== 'cabin');
   const cabins = S.filter((s) => s.type === 'body' && s.part === 'cabin');
   const main = bodies.map((s) => ({ s, sh: shapeOf(s.pts) })).sort((a, b) => b.sh.area - a.sh.area)[0];
+  // (a bike's: a slim tank and seat over its frame)
+  const slim = !!(main && main.s.slim);
   let body = null;
   let hull = null;
   if (main) {
@@ -508,11 +510,11 @@ export function buildPolished(design, spec) {
       // (its style: a car's body - one that drives, even if it flies too - a plane's, a
       // helicopter's, a balloon's basket)
       const style = spec.base === 'plane' ? 'plane' : spec.base === 'copter' ? 'copter' : spec.base === 'balloon' ? 'basket' : 'car';
-      body = loftRide(o, W, style);
+      body = loftRide(o, slim ? Math.min(W, 0.42) : W, style);
       K.add(M.paint, body.paint, linC(...bc));
-      if (body.glass) K.add(M.glass, body.glass, linC(...GLASS));
+      if (body.glass && !slim) K.add(M.glass, body.glass, linC(...GLASS));
       // a car's lights, its grille, its bumpers, its doors and mirrors
-      if (style === 'car' && spec.L > 1.4) carDetails(K, M, body, bc);
+      if (style === 'car' && spec.L > 1.4 && !slim) carDetails(K, M, body, bc);
     }
   }
   // (another body drawn by it: a part of its own, a little narrower)
@@ -538,7 +540,15 @@ export function buildPolished(design, spec) {
   const ol = main ? outline(main.s.pts) : null;
   for (const s of S) {
     if (s.type !== 'line' && s.type !== 'armor') continue;
+    // (the lines that drew its body: the body is made of them already)
+    if (s.edge) continue;
     const c = s.col && !s.pencil ? s.col : INK;
+    if (s.part === 'frame') {
+      // (a bike's frame: a tube along each line, in its paint)
+      const P = thin(toM(s.pts), 0.06);
+      for (let i = 1; i < P.length; i++) tube(K, M.metal, [0, P[i - 1][1], P[i - 1][0]], [0, P[i][1], P[i][0]], 0.045, linC(...colOf(s, design)), 8);
+      continue;
+    }
     const on = ol ? s.pts.filter((q) => inPoly(q[0], q[1], ol)).length / s.pts.length : 0;
     if (s.part === 'window' && on > 0.6) {
       // (a window drawn on it: glass, set into its side)
@@ -690,13 +700,16 @@ export function buildPolished(design, spec) {
     if (s.type !== 'jet') continue;
     const sh = shapeOf(s.pts);
     const r = clamp(sh.size / 2, 0.16, 0.6);
-    const zb = Z(Math.max(sh.x1, spec.x0 + 0.2));
+    const zb = s.side ? Z(sh.x1) : Z(Math.max(sh.x1, spec.x0 + 0.2));
     const z0 = Z(sh.x0) - 0.15;
     const y = Y(sh.cy);
-    K.cyl(M.metal, r * 1.1, r * 0.92, z0, zb, linC(0.5, 0.51, 0.56), { y, segs: 18 });
-    K.cyl(M.metal, r * 1.18, r * 1.18, z0 - 0.04, z0 + 0.08, linC(0.25, 0.25, 0.28), { y, segs: 18 });
-    K.cyl(M.glow, r * 0.7, r * 0.7, z0 - 0.05, z0 - 0.02, s.neon ? linC(...s.col) : linC(1.0, 0.55, 0.2), { y, segs: 16 });
-    jetsAt.push([0, y, z0 - 0.15]);
+    // (one under a wing - a plane drawn from above: out along the wing, both sides)
+    for (const x of s.side ? [-1, 1].map((sx) => sx * clamp(W * 1.1, 1.2, 3.5)) : [0]) {
+      K.cyl(M.metal, r * 1.1, r * 0.92, z0, zb, linC(0.5, 0.51, 0.56), { x, y, segs: 18 });
+      K.cyl(M.metal, r * 1.18, r * 1.18, z0 - 0.04, z0 + 0.08, linC(0.25, 0.25, 0.28), { x, y, segs: 18 });
+      K.cyl(M.glow, r * 0.7, r * 0.7, z0 - 0.05, z0 - 0.02, s.neon ? linC(...s.col) : linC(1.0, 0.55, 0.2), { x, y, segs: 16 });
+      jetsAt.push([x, y, z0 - 0.15]);
+    }
   }
   // ---- a blade at the front (a ram): steel, its edge bevelled
   for (const s of S) {
@@ -717,14 +730,14 @@ export function buildPolished(design, spec) {
     const r = clamp((sh.w + sh.h) / 4, skate ? 0.025 : 0.15, 1.3);
     const ww = skate ? 0.045 : clamp(r * 0.62, 0.12, 0.46);
     const rim = s.col && !s.pencil ? shade(s.col, 1) : linC(0.82, 0.83, 0.87);
-    for (const sx of [-1, 1]) {
-      const g = wheel(M, r, ww, rim);
+    for (const sx of slim ? [0] : [-1, 1]) {
+      const g = wheel(M, r, slim ? Math.min(ww, 0.14) : ww, rim);
       g.position.set(sx * (skate ? W * 0.42 : W / 2 + ww / 2 + 0.02), Y(sh.my), Z(sh.mx));
       root.add(g);
       wheels.push(g);
     }
     // (its arch: the dark of the wheel well behind it, on the body's side)
-    if (body && !skate) {
+    if (body && !skate && !slim) {
       for (const sx of [-1, 1]) {
         const d = new THREE.CircleGeometry(r * 1.14, 26);
         d.rotateY(sx * Math.PI / 2);
