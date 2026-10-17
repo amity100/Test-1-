@@ -1234,6 +1234,26 @@ export class Traffic {
         c.pos.z -= (dz / d) * push * 0.3;
         // knocked off its lane: it stays where it was hit
         c.path = null;
+        // (ROADMAP 11.12) what is drawn on it where they met: a spring bumper at its front throws the
+        // car off (and it is not hurt); a blade at its back wrecks whoever rams it from behind
+        const ahead = (c.pos.x - v.pos.x) * Math.sin(v.yaw) + (c.pos.z - v.pos.z) * Math.cos(v.yaw);
+        if (v.bumper && ahead > 0 && Math.abs(v.speed) > 3) {
+          const k = Math.min(6, Math.abs(v.speed) * 0.35 * v.bumper.k);
+          c.pos.x -= (dx / d) * k;
+          c.pos.z -= (dz / d) * k;
+          c.yaw += (Math.random() - 0.5) * 1.2;
+          if (Math.abs(v.speed) > 9) c.wrecked = true;
+          v.speed *= -0.3;
+          this.game.audio.play('jump', 0.7);
+          this.game.camRig.addShake(0.2);
+          continue;
+        }
+        if (v.blades && v.blades.rear && ahead < 0 && !c.wrecked) {
+          c.wrecked = true;
+          this.game.fx.sparks(c.pos.x, 0.9, c.pos.z, 10, [0.9, 0.9, 0.95]);
+          this.game.audio.play('crash', 0.7);
+          if (this.game.onCrime) this.game.onCrime('vandal', c.pos.x, c.pos.z);
+        }
         // (a police car after you shoves you round instead: ROADMAP 6.1, game/chase.js)
         if (this.game.chase && this.game.chase.contact(v, c)) continue;
         if (Math.abs(v.speed) > 6) {
@@ -1242,7 +1262,7 @@ export class Traffic {
           // (a blade drawn at its front, ROADMAP 11.10: it rams - the other car wrecked sooner, itself
           // hurt less)
           const ram = !!v.ram && (c.pos.x - v.pos.x) * Math.sin(v.yaw) + (c.pos.z - v.pos.z) * Math.cos(v.yaw) > 0;
-          if (!c.wrecked && (v.kind === 'tank' || Math.abs(v.speed) > (ram ? 14 / v.ram.k : 14))) {
+          if (!c.wrecked && (v.kind === 'tank' || v.crush || Math.abs(v.speed) > (ram ? 14 / v.ram.k : 14))) {
             c.wrecked = true;
             this.game.fx.sprite('fx_crash', c.pos.x, 1.2, c.pos.z, { size: 2.4, life: 0.4 });
             this.game.audio.play('crash', 0.8);
@@ -1257,12 +1277,14 @@ export class Traffic {
           }
           // (people come to look: game/reactions.js)
           if (this.game.reactions) this.game.reactions.note('crash', c.pos.x, c.pos.z);
-          if (v.kind !== 'tank') v.hurt(Math.abs(v.speed) * (ram ? 0.8 / v.ram.k : 0.8));
-          v.speed *= v.kind === 'tank' ? 0.8 : ram ? 0.7 : 0.4;
+          // (a ram shielded with armour: hardly hurt at all - ROADMAP 11.12)
+          if (v.kind !== 'tank') v.hurt(Math.abs(v.speed) * (ram ? (v.ram.shield ? 0.25 : 0.8) / v.ram.k : v.crush ? 0.4 : 0.8));
+          v.speed *= v.kind === 'tank' || v.crush ? 0.8 : ram ? 0.7 : 0.4;
         }
       }
     }
-    if (v.kind === 'tank' && Math.abs(v.speed) > 1.5) {
+    // (and over the parked ones: a tank - and tracks, giant wheels, ROADMAP 11.12)
+    if ((v.kind === 'tank' || v.crush) && Math.abs(v.speed) > 1.5) {
       for (const c of this.parked) {
         if (c.taken || c.flat || c.poofT !== undefined) continue;
         if (this.boxDist(c, v.pos.x, v.pos.z) < 1.2) {

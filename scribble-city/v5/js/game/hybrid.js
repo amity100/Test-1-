@@ -47,6 +47,8 @@ export function setupDrawn(v, spec) {
   // (a parachute: one that is always open, as before; one made of parts opens when you say -
   // ROADMAP 11.10)
   v.chute = spec.chute && !spec.chute.deploy ? spec.chute : null;
+  // (ROADMAP 11.12: a balloon too small to lift it: it falls slowly, always)
+  if (spec.floaty && !v.chute) v.chute = { sink: spec.floaty.sink };
   v.paraP = spec.chute && spec.chute.deploy ? spec.chute : null;
   v.armor = spec.armor || 0;
   v.gunType = spec.gun ? spec.gun.type : null;
@@ -187,13 +189,24 @@ export function hybridStep(v, dt, input) {
   }
   switch (v.mode) {
     case 'drive': {
+      // (ROADMAP 11.12: on its back, its wheels in the air - Space puts it right, game/vehicles.js)
+      if (v.flipped && !v.roofDrive) {
+        v.drive(dt, input);
+        break;
+      }
       if (up && !v.air) {
         if (!(v.canLift && liftOff(v)) && v.spring && !v.canLift) {
-          // (its spring: up it goes - a skateboard's hop)
+          // (its spring: up it goes - a skateboard's hop; one at its back kicks it forward)
           v.vx = v.vx === undefined ? Math.sin(v.yaw) * (v.speed || 0) : v.vx;
+          v.vz = v.vz === undefined ? Math.cos(v.yaw) * (v.speed || 0) : v.vz;
           v.physT = game.time;
           v.air = true;
-          v.vy = v.spring.jump;
+          v.vy = v.spring.jump || 3;
+          if (v.spring.kick) {
+            v.vx += Math.sin(v.yaw) * v.spring.kick;
+            v.vz += Math.cos(v.yaw) * v.spring.kick;
+            game.camRig.addShake(0.2);
+          }
           game.audio.play('jump', v.spring.ollie ? 0.4 : 0.8);
           if (!v.spring.ollie) game.fx.sparks(v.pos.x, v.pos.y + 0.2, v.pos.z, 6, [0.8, 0.8, 0.85]);
         }

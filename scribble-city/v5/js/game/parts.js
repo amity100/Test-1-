@@ -59,6 +59,11 @@ export const PART = {
 // the parts that only a ride has, and only a thing for the hand
 const RIDE_ONLY = new Set(['wheel', 'rotor', 'wing', 'prop', 'jet', 'fin', 'tail', 'skid', 'sail', 'balloon', 'hull', 'cabin', 'window', 'mast', 'rope', 'frame']);
 const HAND_ONLY = new Set(['grip', 'mag', 'scope', 'stock', 'guard', 'head', 'silencer']);
+// (ROADMAP 11.12) what makes it a thing held in the hand whatever it is (a ride's sight, its hammer's
+// head, its silencer: a ride's still); what makes a thing for the hand a ride (its wings, a
+// propeller on it: a weapon's still)
+export const HELD = new Set(['grip', 'stock', 'guard']);
+export const RIDES_IT = new Set(['wheel', 'rotor', 'sail', 'balloon', 'hull', 'cabin']);
 // what a body is made of (the player's say: these go into it)
 const BODYISH = new Set(['body', 'cabin', 'hull', 'frame']);
 
@@ -701,6 +706,13 @@ function fanOver(st, B) {
   return out;
 }
 
+// (ROADMAP 11.12) what the player named something else that can still be its body - its outline, a
+// barrel, a wheel: when nothing else closes round, the body is that, and that is a part of it too
+function named(F, skip) {
+  const { st, D, over } = F;
+  return st.filter((o) => !skip.has(o.i) && over[o.i] && !BODYISH.has(over[o.i]) && o.sh.size > D.size * 0.5);
+}
+
 // ------------------------------------------------------------------ the kinds of thing, each its build
 // F: the drawing as read so far ({ st, D, G, over, len }); each returns { fam, frame, labels,
 // score (how well the drawing fits the build, 0..1), R (the body), main, front, arches }
@@ -738,7 +750,7 @@ function parseGround(F) {
     if (sh.x1 > bx1 + D.w * 0.06 || sh.x0 < bx0 - D.w * 0.06 || sh.y1 > by1 + D.h * 0.12 || (boxy && sh.cy > D.y0 + D.h * 0.5 && sh.long > D.w * 0.22)) gun.add(o.i);
   }
   const use = st.filter((o) => !wheelI.has(o.i) && !gun.has(o.i) && !inWheel(o) && (!over[o.i] || BODYISH.has(over[o.i])) && (o.sh.closed || o.sh.size > D.size * 0.1));
-  let R = region(G, use);
+  let R = region(G, use) || region(G, use.concat(named(F, wheelI)));
   // a bike: two big wheels, and between them a frame of lines - no box of a body
   const bigWheels = wheels.length === 2 && wheels.every((c) => c.r > D.w * 0.11);
   if (bigWheels && (!R || R.sh.area < Math.PI * wheels[0].r * wheels[1].r * 0.9)) return parseBike(F, wheels, labels, inWheel);
@@ -858,7 +870,7 @@ function parseCopter(F) {
   const blade = (o) => o.sh.slant < 0.75 && o.sh.long > D.w * 0.16 && (o.sh.straight || o.sh.thin > (o.sh.closed ? 2.2 : 2.8)) && o.sh.wiggle < 3;
   const rotorC = new Set(st.filter((o) => !over[o.i] && !wheelI.has(o.i) && o.sh.cy > D.y0 + D.h * 0.62 && blade(o)).map((o) => o.i));
   const use = st.filter((o) => !wheelI.has(o.i) && !rotorC.has(o.i) && (!over[o.i] || BODYISH.has(over[o.i])) && (o.sh.closed || o.sh.size > D.size * 0.1));
-  const R = region(G, use);
+  const R = region(G, use) || region(G, use.concat(named(F, wheelI)));
   if (!R) return null;
   const B = R.sh;
   let main = null;
@@ -1043,7 +1055,7 @@ function planeSide(F) {
   const wheelI = new Set(wheels.map((c) => c.o.i));
   for (const c of wheels) labels[c.o.i] = 'wheel';
   const use = st.filter((o) => !wheelI.has(o.i) && (!over[o.i] || BODYISH.has(over[o.i])) && (o.sh.closed || o.sh.size > D.size * 0.1));
-  const R = region(G, use);
+  const R = region(G, use) || region(G, use.concat(named(F, wheelI)));
   if (!R) return null;
   const B = R.sh;
   let main = null;
@@ -1562,10 +1574,12 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
   const cats = ctx && ctx.cats;
   const len = { air: !!(cats && cats.has('air')), sea: !!(cats && cats.has('sea')), weapon: !!(cats && cats.has('weapon')) };
   const F = { st, D, G, over, len, cls: ctx && ctx.net && ctx.net.best ? ctx.net.best[2] : null };
-  // (the player named a part only a thing for the hand has: it is one)
+  // (the player named a part only a thing for the hand has: it is one - a ride with a sight, a
+  // silencer on it, a ride still; a part only a ride has: it is one - ROADMAP 11.12)
   const picked = Object.values(over);
-  const handSaid = picked.some((t) => HAND_ONLY.has(t));
-  const rideSaid = picked.some((t) => RIDE_ONLY.has(t));
+  const was = ctx && ctx.frame;
+  const handSaid = picked.some((t) => HELD.has(t)) || (was !== 'ride' && picked.some((t) => HAND_ONLY.has(t)));
+  const rideSaid = picked.some((t) => RIDES_IT.has(t)) || (was !== 'hand' && picked.some((t) => RIDE_ONLY.has(t)));
   const order = FAMS.slice().sort((a, b) => prior[b] - prior[a]);
   let best = null;
   const tried = [];

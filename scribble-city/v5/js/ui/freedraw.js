@@ -8,9 +8,11 @@ import { waterSpot } from '../game/rides.js';
 import { angleDiff, clamp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { cleanStroke, joinStroke, morphPair } from '../game/inkclean.js';
-import { readParts, rideEvidence, PART } from '../game/parts.js';
+import { readParts, rideEvidence, PART, RIDES_IT } from '../game/parts.js';
+import { menuOf } from '../game/partrole.js';
 import { look } from '../game/sketchnet.js';
-import { rideDesign, rideSpec } from '../game/partsum.js';
+import { rideDesign, rideSpec, toPage } from '../game/partsum.js';
+import { engineer, ENG_LEVELS } from '../game/engineer.js';
 import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
 
@@ -51,9 +53,28 @@ function forceOf(R) {
 const MORPH_T = 0.24;
 // (ROADMAP 11.10) how long a changed number keeps its arrow (s)
 const DELTA_T = 2.6;
+// (ROADMAP 11.12) how long the drawing takes to turn into what the engineer made of it (s)
+const ENG_T = 0.9;
 // (ROADMAP 11.11) the gear whose model the card shows
 const GEAR_VIEW = new Set(['parachute', 'umbrella', 'key', 'ladder', 'ramp', 'bridge', 'spring']);
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// (ROADMAP 11.12) a line as n points along it, evenly
+function resample(P, n) {
+  if (P.length < 2) return new Array(n).fill(P[0] || [0, 0]);
+  const L = [0];
+  for (let i = 1; i < P.length; i++) L.push(L[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+  const T = L[L.length - 1] || 1;
+  const out = [];
+  let j = 0;
+  for (let k = 0; k < n; k++) {
+    const d = (k / (n - 1)) * T;
+    while (j < P.length - 2 && L[j + 1] < d) j++;
+    const u = (d - L[j]) / Math.max(1e-9, L[j + 1] - L[j]);
+    out.push([P[j][0] + (P[j + 1][0] - P[j][0]) * u, P[j][1] + (P[j + 1][1] - P[j][1]) * u]);
+  }
+  return out;
+}
 
 // what it can be made into instead (the tag's menu), by what the player says they draw (ROADMAP
 // 11.8): the weapons, the vehicles by kind, on the water, in the air, the gear
@@ -97,6 +118,11 @@ export class FreeDraw {
     this.view = null;
     this.chips = [];
     this.pmenuAt = -1;
+    // (ROADMAP 11.12) how much the engineer does to it (game/engineer.js): 'raw', 'tidy', 'eng'; the
+    // drawing turning into its work
+    this.engLevel = 'eng';
+    this.engMorph = null;
+    this.engSig = '';
     this.build();
     this.bind();
   }
@@ -129,9 +155,11 @@ export class FreeDraw {
       <div class="fd-card hidden" id="fd-card">
         <div class="fd-card-top"><b id="fd-cname"></b><button class="fd-face" id="fd-face" title="הכיוון שלו" aria-label="הכיוון שלו">⇄</button></div>
         <canvas id="fd-view"></canvas>
+        <div class="fd-eng hidden" id="fd-eng"></div>
         <div class="fd-abil" id="fd-abil"></div>
         <div class="fd-bars" id="fd-bars"></div>
         <div class="fd-lines hidden" id="fd-lines"></div>
+        <div class="fd-engn hidden" id="fd-engn"></div>
         <div class="fd-warn" id="fd-warn"></div>
         <div class="fd-meta" id="fd-meta"></div>
         <div class="fd-alts fd-calts hidden" id="fd-calts"></div>
@@ -263,6 +291,21 @@ export class FreeDraw {
     press(this.pmenuEl, (e) => {
       const b = e.target.closest('.fd-pc');
       if (b) this.setPart(this.pmenuAt, b.dataset.t || null);
+    });
+    // (ROADMAP 11.12) the pointer over a part in the menu: what it would do there
+    this.pmenuEl.addEventListener('pointerover', (e) => {
+      const b = e.target.closest('.fd-pc');
+      if (b && b.dataset.t && e.pointerType !== 'touch') this.pmenuShow(b.dataset.t);
+    });
+    this.pmenuEl.addEventListener('pointerleave', () => this.pmenuShow(this.pmenuType));
+    // (ROADMAP 11.12) how much the engineer does to it
+    press($('fd-eng'), (e) => {
+      const b = e.target.closest('.fd-eb');
+      if (!b || b.dataset.k === this.engLevel) return;
+      this.engLevel = b.dataset.k;
+      this.game.audio.play('click', 0.4);
+      this.read();
+      this.render();
     });
     press($('fd-face'), () => {
       this.face = !(this.P && this.P.flip);
@@ -685,22 +728,41 @@ export class FreeDraw {
         return null;
       }
     };
-    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.face, null, { net, cats: this.cats.size ? this.cats : null, relook: net ? relook : null });
+    // (ROADMAP 11.12: what it was a moment ago - a ride the player names a part of is a ride still,
+    // unless they named what is held; a weapon, a weapon - unless what they named makes it a ride)
+    const frame = was ? 'ride' : this.PW ? 'hand' : null;
+    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.face, null, { net, cats: this.cats.size ? this.cats : null, relook: net ? relook : null, frame });
     this.P = P;
     if (!P || P.frame !== 'ride' || !P.R) return;
-    const design = rideDesign(P, this.strokes, INKS);
-    if (!design) return;
+    const drawn = rideDesign(P, this.strokes, INKS);
+    if (!drawn) return;
+    // (ROADMAP 11.12) what the engineer makes of it: game/engineer.js - the card shows it, the drawing
+    // turns into it, and it is what is made
+    let E = { design: drawn, notes: [], changes: [] };
+    try {
+      E = engineer(drawn, this.engLevel);
+    } catch (err) {
+      console.warn('engineer', err);
+    }
+    const design = E.design;
     const spec = rideSpec(design);
     const ok = spec.ok !== false && !!spec.base;
-    if (net && !Object.keys(this.over).length) {
+    const picked = Object.values(this.over);
+    if (net && (!picked.length || (frame === 'hand' && !picked.some((t) => RIDES_IT.has(t))))) {
       // (plainly something else - a weapon, a shield: read as before - unless its parts are surely
       // a ride's, and the network not that sure)
       const other = net.weapon + net.gear;
       const ev = rideEvidence(P);
       if (other > 0.5 && net.vehicle < 0.3 && (ev < 2 || other > 0.8 || !ok)) return;
     }
-    this.PR = { design, spec, sum: spec.sum, ok, why: spec.why };
+    this.PR = { design, spec, sum: spec.sum, ok, why: spec.why, eng: E };
     this.cardDirty = true;
+    // (a change in what the engineer did: the drawing turns into it again)
+    const sig = E.changes.map((c) => c.to.reduce((a, p) => a + p[0] * 3.1 + p[1], 0).toFixed(2)).join(',');
+    if (sig !== this.engSig) {
+      this.engSig = sig;
+      this.engMorph = E.changes.length && design.page ? { t: 0 } : null;
+    }
   }
 
   // what a line is: the player's say (null: as the game reads it)
@@ -712,20 +774,37 @@ export class FreeDraw {
     this.game.audio.play('click', 0.4);
     this.read();
     this.render();
+    // (ROADMAP 11.12: the menu stays - another tried, the card says what each makes of it)
+    if (this.P && this.P.parts.some((q) => q.i === i)) this.partMenu(i);
   }
 
-  // the menu of a part's name (-1: none)
+  // the menu of a part's name (-1: none). (ROADMAP 11.12) Every part it could be, in groups - the
+  // likely ones first - each with what it would be there (a wheel along its bottom: a track); at its
+  // foot, what the part it is now does there (and, the pointer over another, what that would). A
+  // tap: it is that - the card says what it made of the whole, its numbers' arrows what changed
   partMenu(i) {
     this.pmenuAt = i;
     const el = this.pmenuEl;
-    const part = i >= 0 && this.P ? this.P.parts.find((q) => q.i === i) : null;
+    const P = this.P;
+    const part = i >= 0 && P ? P.parts.find((q) => q.i === i) : null;
     if (!part) {
       el.classList.add('hidden');
       return;
     }
     const mine = this.over[i];
-    const opts = part.choices.map((t) => `<button class="fd-pc r-${PART[t].role}${t === part.type ? ' on' : ''}" data-t="${t}">${PART[t].name}</button>`).join('');
-    el.innerHTML = `<b>מה הקו הזה?</b>${opts}${mine ? `<button class="fd-pc auto" data-t="">אוטומטי (${PART[part.auto].name})</button>` : ''}`;
+    const likely = (part.choices || []).filter((t) => t !== 'deco' && PART[t]).slice(0, 4);
+    const groups = menuOf(P, i, likely, (t) => RIDES_IT.has(t));
+    this.pmenuSay = new Map();
+    this.pmenuType = part.type;
+    const btn = (it) => {
+      this.pmenuSay.set(it.t, it);
+      const sub = it.name && it.name !== PART[it.t].name ? `<small>${esc(it.name)}</small>` : '';
+      return `<button class="fd-pc r-${PART[it.t].role}${it.t === part.type ? ' on' : ''}" data-t="${it.t}">${PART[it.t].name}${sub}</button>`;
+    };
+    const rows = groups.map((g) => `<div class="fd-pg${g.k === 'likely' ? ' likely' : ''}"><span>${g.name}</span>${g.items.map(btn).join('')}</div>`).join('');
+    const auto = mine ? `<button class="fd-pc auto" data-t="">אוטומטי (${PART[part.auto].name})</button>` : '';
+    el.innerHTML = `<div class="fd-pm-top"><b>מה הקו הזה?</b>${auto}</div><div class="fd-pm-say" id="fd-pm-say"></div>${rows}`;
+    this.pmenuShow(part.type);
     el.classList.remove('hidden');
     const chip = this.chips.find((c) => c.i === i);
     const r = chip ? chip.el.getBoundingClientRect() : { left: 20, bottom: 20, top: 20 };
@@ -735,6 +814,16 @@ export class FreeDraw {
     let y = r.bottom + 6;
     if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 6);
     el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  }
+
+  // the menu's foot: what part t does there (now: the one it is; else the one the pointer is over)
+  pmenuShow(t) {
+    const it = this.pmenuSay && this.pmenuSay.get(t);
+    const el = $('fd-pm-say');
+    if (!el || !it) return;
+    const now = t === this.pmenuType;
+    const name = it.name && it.name !== PART[t].name ? `${PART[t].name}: ${it.name}` : PART[t].name;
+    el.innerHTML = `<b>${now ? 'עכשיו' : 'אם יהיה'} ${esc(name)}</b> — ${esc(it.say || '')}`;
   }
 
   // which part's name is at (x, y) on the screen (-1: none)
@@ -860,13 +949,21 @@ export class FreeDraw {
     const lEl = $('fd-lines');
     lEl.innerHTML = lines.map(([r, t, x]) => `<div class="fd-ln"><span class="fd-ab r-${r}">${esc(t)}</span><span>${esc(x)}</span></div>`).join('');
     lEl.classList.toggle('hidden', !lines.length);
+    // (ROADMAP 11.12) the engineer: how much it does (as drawn, tidy, engineered) - and what it did
+    const eEl = $('fd-eng');
+    eEl.innerHTML = PR ? ENG_LEVELS.map(([k, n]) => `<button class="fd-eb${k === this.engLevel ? ' on' : ''}" data-k="${k}">${n}</button>`).join('') : '';
+    eEl.classList.toggle('hidden', !PR);
+    const notes = PR && PR.eng ? PR.eng.notes.slice(0, 3) : [];
+    const nEl = $('fd-engn');
+    nEl.innerHTML = notes.map((t) => `<div class="fd-ln"><span class="fd-ab r-eng">מהנדס</span><span>${esc(t)}</span></div>`).join('');
+    nEl.classList.toggle('hidden', !notes.length);
     const warn = [];
     if (PR && !PR.ok && PR.why) warn.push(PR.why);
     if (sum) warn.push(...sum.warn);
     const wEl = $('fd-warn');
     wEl.textContent = warn.join(' · ');
     wEl.classList.toggle('hidden', !warn.length);
-    if (PR) $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}` : '';
+    if (PR) $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}${PR.ok && PR.spec.com && PR.design.page ? ' · ◐ מרכז הכובד' : ''}` : '';
     else if (PG) {
       $('fd-meta').textContent = `${PG.R.cost} דיו`;
       // (gear that needs its place: why it would not go here)
@@ -893,6 +990,10 @@ export class FreeDraw {
     else if (PW) this.view.setModel(() => buildWeapon(this.handR()).group);
     else this.view.setModel(() => this.gearModel(PG.R), PG.R.cat === 'weapon' || PG.R.kind === 'umbrella' || PG.R.kind === 'key');
     $('fd-view').classList.toggle('none', (PR && !PR.ok) || this.view.dead);
+    // (a ride's, on a phone: more than the screen holds - it scrolls, a finger on it moving it, not
+    // drawing)
+    const C = this.cardEl;
+    C.classList.toggle('scroll', !!PR && this.game.touch && C.scrollHeight > C.clientHeight + 2);
   }
 
   // as a made thing is read (ui/freedraw.js make): the ride, as R is
@@ -1074,6 +1175,11 @@ export class FreeDraw {
       this.line(g, { p: a.map((q, i) => [q[0] + (b[i][0] - q[0]) * e, q[1] + (b[i][1] - q[1]) * e]), c: s.c });
     }
     if (this.cur) this.line(g, this.cur);
+    // (ROADMAP 11.12) the engineer's work - the drawing turning into it, then a faint line of it - and
+    // where its weight is, over what it stands on
+    const PR = this.PR;
+    if (PR && PR.eng && PR.eng.changes.length && PR.design.page && !this.cur) this.drawEng(g);
+    if (PR && PR.ok && PR.spec.com && PR.design.page && !this.cur) this.drawCom(g);
     // (the parts' names: faint while a line is drawn)
     this.partsEl.classList.toggle('drawing', !!this.cur);
     // which way it points (its muzzle, its tip, its nose)
@@ -1116,6 +1222,89 @@ export class FreeDraw {
         arrow('#e2335f', 3);
       }
     }
+  }
+
+  // (ROADMAP 11.12) what the engineer did, on the drawing: each line it moved, from where it was
+  // drawn to where it is now (ENG_T), then a faint dashed line of where it is
+  drawEng(g) {
+    const page = this.PR.design.page;
+    const U = this.U;
+    const k = this.engMorph ? Math.min(1, this.engMorph.t / ENG_T) : 1;
+    const e = k * k * (3 - 2 * k);
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.setLineDash([7 / U, 5 / U]);
+    g.lineWidth = 2.6 / U;
+    g.strokeStyle = `rgba(43, 125, 224, ${(0.9 - 0.55 * e).toFixed(3)})`;
+    for (const c of this.PR.eng.changes) {
+      let a = c.from;
+      let b = c.to;
+      if (a.length !== b.length) {
+        a = resample(a, 40);
+        b = resample(b, 40);
+      }
+      g.beginPath();
+      for (let i = 0; i < b.length; i++) {
+        const [x, y] = toPage(page, [a[i][0] + (b[i][0] - a[i][0]) * e, a[i][1] + (b[i][1] - a[i][1]) * e]);
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  // (ROADMAP 11.12) where its weight is - the old sign for it, a circle in quarters - a plumb line from
+  // it to the ground, and on the ground what it stands on, its first wheel to its last: green, its
+  // weight between them; red, not
+  drawCom(g) {
+    const { spec, design } = this.PR;
+    const page = design.page;
+    const U = this.U;
+    const [x, y] = toPage(page, spec.com);
+    const r = 7 / U;
+    const bad = (spec.balance !== undefined && (spec.balance < 0.14 || spec.balance > 0.86)) || !!spec.lean || !!spec.pitchy || !!(spec.handling && spec.handling.tipA);
+    const col = bad ? '#e2335f' : '#1b9e55';
+    g.save();
+    const W = spec.wheels || [];
+    if (W.length && !spec.upside) {
+      const gy = toPage(page, [0, Math.min(...W.map((w) => w.y - w.r))])[1];
+      const xs = W.map((w) => toPage(page, [w.z, 0])[0]);
+      g.lineWidth = 2 / U;
+      g.strokeStyle = col;
+      g.setLineDash([4 / U, 4 / U]);
+      g.beginPath();
+      g.moveTo(x, y + r);
+      g.lineTo(x, gy);
+      g.stroke();
+      g.setLineDash([]);
+      if (xs.length > 1) {
+        g.lineWidth = 4 / U;
+        g.globalAlpha = 0.75;
+        g.beginPath();
+        g.moveTo(Math.min(...xs), gy + 4 / U);
+        g.lineTo(Math.max(...xs), gy + 4 / U);
+        g.stroke();
+        g.globalAlpha = 1;
+      }
+    }
+    g.lineWidth = 2 / U;
+    g.fillStyle = '#fffdf6';
+    g.strokeStyle = col;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.fillStyle = col;
+    for (const a0 of [0, Math.PI]) {
+      g.beginPath();
+      g.moveTo(x, y);
+      g.arc(x, y, r, a0, a0 + Math.PI / 2);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
   }
 
   // ------------------------------------------------------------------ making it
@@ -1386,7 +1575,7 @@ export class FreeDraw {
     const game = this.game;
     const s = v.spec;
     if (!s) return;
-    const key = `${s.kind}:${v.hybrid ? Object.keys(v.modes || {}).filter((k) => v.modes[k]).join('') : ''}:${v.turret ? v.gunType : ''}:${v.turrets ? v.turrets.length : 0}:${v.paraP ? 'p' : ''}:${v.ram ? 'r' : ''}`;
+    const key = `${s.kind}:${v.hybrid ? Object.keys(v.modes || {}).filter((k) => v.modes[k]).join('') : ''}:${v.turret ? v.gunType : ''}:${v.turrets ? v.turrets.length : 0}:${v.paraP ? 'p' : ''}:${v.ram ? 'r' : ''}:${(s.tracks || []).length ? 't' : ''}${s.hover ? 'h' : ''}${v.bumper ? 'b' : ''}${v.blades ? 'x' : ''}${v.roofDrive ? 'u' : ''}${s.spring && s.spring.kick ? 'k' : ''}${(s.guns || []).some((gn) => gn.giant) ? 'g' : ''}`;
     this.toldRides = this.toldRides || new Set();
     if (this.toldRides.has(key)) return;
     this.toldRides.add(key);
@@ -1408,6 +1597,15 @@ export class FreeDraw {
     else if (s.base === 'copter') tips.push(t ? 'ירי: מטוסי נייר' : 'קליק: מטוסי נייר');
     if (v.paraP) tips.unshift(t ? 'באוויר, כפתור המצנח: הוא נפתח' : 'באוויר, G: המצנח נפתח');
     if (v.ram) tips.push('הלהב מקדימה: ניגוח');
+    // (ROADMAP 11.12: what its parts are where they are)
+    if ((s.tracks || []).length) tips.unshift('זחלים: מסתובב במקום ודורס מכוניות בדרך');
+    if (s.hover) tips.unshift('רחפת: עוברת מהכביש למים בלי לעצור — ומחליקה בפניות');
+    if (s.spring && s.spring.kick) tips.push(t ? '▲: זינוק קדימה' : 'רווח: זינוק קדימה');
+    if (v.bumper) tips.push('פגוש הקפיץ: מעיף את מי שנתקלים בו');
+    if (v.blades && v.blades.side) tips.push('להבי הצד: מי שעוברים לידו נחתך');
+    if ((s.guns || []).some((gn) => gn.giant)) tips.push('התותח הענק: כל ירייה הודפת אחורה');
+    if (v.roofDrive) tips.push('גלגלי הגג: אם מתהפכים — ממשיכים לנסוע');
+    else if (s.handling && s.handling.tipA) tips.push(t ? 'גבוה וצר — בפנייה חדה מתהפך. ▲: להפוך בחזרה' : 'גבוה וצר — בפנייה חדה מתהפך. רווח: להפוך בחזרה');
     if (s.jets.length && s.base === 'car') tips.push(t ? 'ג׳ויסטיק עד הסוף: טורבו' : 'Shift: טורבו מהסילון');
     else if (s.glide && !v.canLift) tips.push('הכנפיים: אחרי קפיצה מרמפה הוא גולש');
     if (tips.length) game.hud.toast(tips.slice(0, 3).join(' · '), 'info', 4);
@@ -1443,6 +1641,12 @@ export class FreeDraw {
       }
     }
     if (done) this.bake();
+    // (ROADMAP 11.12) the drawing turning into what the engineer made of it
+    if (this.engMorph) {
+      this.engMorph.t += dt;
+      if (this.engMorph.t >= ENG_T) this.engMorph = null;
+      turning = true;
+    }
     if (turning) this.render();
     // (ROADMAP 11.10) the model by the drawing, turning
     if (this.view && ((this.PR && this.PR.ok) || this.PW || this.PG)) this.view.frame(dt);
@@ -1468,7 +1672,7 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel !== 'eng' ? this.engLevel : undefined };
   }
 
   load(o) {
@@ -1479,6 +1683,7 @@ export class FreeDraw {
     this.over = {};
     if (o.over && typeof o.over === 'object') for (const [k, t] of Object.entries(o.over)) if (PART[t] && +k < this.strokes.length) this.over[+k] = t;
     this.face = typeof o.face === 'boolean' ? o.face : null;
+    this.engLevel = ENG_LEVELS.some(([k]) => k === o.eng) ? o.eng : 'eng';
     this.showCats();
   }
 }

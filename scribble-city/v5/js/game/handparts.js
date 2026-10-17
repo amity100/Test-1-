@@ -358,6 +358,7 @@ function labelAt(p) {
 }
 
 function choicesHand(q, R) {
+  // (the likely ones - and the part's menu has every other one too: game/partrole.js menuOf)
   const out = [q.type];
   const add = (...t) => {
     for (const x of t) if (!out.includes(x) && PART[x]) out.push(x);
@@ -561,6 +562,19 @@ export function handSpec(P) {
     def.chute = true;
     lines.push(['gear', 'מצנח', 'כשמחזיקים אותו, נופלים לאט']);
     abil.push(['gear', 'מצנח']);
+  }
+  // (ROADMAP 11.12: any part on it - a jet: its shots faster; a fin: truer; armour: a blow blocked)
+  if (by('jet').length && def.speed) {
+    def.speed *= 1.45;
+    lines.push(['fire', 'סילון', 'הקליעים מהירים יותר']);
+  }
+  if (by('fin').length && def.spread) {
+    def.spread *= 0.8;
+    lines.push(['fire', 'סנפיר', 'הקליעים יציבים — מדויק יותר']);
+  }
+  if (by('armor').length) {
+    def.parry = Math.max(def.parry || 0, 0.2);
+    lines.push(['gear', 'שריון', 'חוסם חלק מהמכה מלפנים']);
   }
   // ---- its name: what it is, and what its parts made it
   let name = def.name;

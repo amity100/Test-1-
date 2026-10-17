@@ -499,6 +499,8 @@ export function updatePlane(v, dt, input) {
     // the stick: it banks and pitches; banked, it turns; too slow, the nose drops
     v.roll = damp(v.roll, rollIn * 0.75, 2.2, dt);
     v.pitch = damp(v.pitch, pitchIn * 0.38, 1.6, dt);
+    // (ROADMAP 11.12: its weight behind where its wings hold it - it pitches up and down by itself)
+    if (v.pitchy) v.pitch += Math.sin((v.time || 0) * 2.4) * v.pitchy * 0.55 * dt;
     if (s < stall) {
       v.pitch = damp(v.pitch, -0.45, 1.4, dt);
       if (!v.stallSaid) {

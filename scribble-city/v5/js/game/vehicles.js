@@ -418,6 +418,8 @@ class Vehicle {
     this.group.position.copy(this.pos);
     this.group.rotation.set(0, this.yaw, 0);
     this.group.scale.setScalar(pop);
+    // (ROADMAP 11.12: a drawn one - how it stands, its propellers and fans going round)
+    if (this.stance) this.stand(dt);
     if (this.model) {
       // (ROADMAP 4.8) the pedals going round, the boat on the waves, the plane pitched and banked
       if (this.crank) {
@@ -449,7 +451,7 @@ class Vehicle {
       const fz = Math.cos(this.yaw);
       const fwdV = (this.vx || 0) * fx + (this.vz || 0) * fz;
       const sideV = (this.vx || 0) * fz - (this.vz || 0) * fx;
-      this.body.rotation.x = damp(this.body.rotation.x, clamp(fwdV * 0.018, -0.3, 0.3), 3, dt);
+      this.body.rotation.x = damp(this.body.rotation.x, clamp(fwdV * 0.018, -0.3, 0.3) + (this.alt > 1.2 ? this.lean0 || 0 : 0), 3, dt);
       this.body.rotation.z = damp(this.body.rotation.z, clamp(sideV * 0.02, -0.35, 0.35), 3, dt) + Math.sin(this.time * 4.1) * 0.03 * this.q.wobble;
     } else if (this.kind === 'bike') {
       for (const w of this.wheels) w.rotation.x = this.wheelSpin * (this.grade === 'fail' ? 0.6 : 1);
@@ -667,6 +669,14 @@ class Vehicle {
       const along = dx * f.x + dz * f.z;
       const side = Math.abs(dx * f.z - dz * f.x);
       if (Math.abs(along) < this.halfLen + 0.4 && side < this.halfWid + 0.4) {
+        // (ROADMAP 11.12: a spring bumper at its front - thrown far, and it is not hurt)
+        if (this.bumper && along > 0 && game.ragdolls && !e.isMonster && !(e.fig && e.fig.rag)) {
+          game.ragdolls.carHit(e, this, this.speed * this.bumper.k);
+          e.leaveCover && e.leaveCover();
+          game.audio.play('jump', 0.6);
+          this.speed *= 0.9;
+          continue;
+        }
         // (not with ?classic: thrown over the bonnet, ROADMAP 5.5; one already flying is left be;
         // the tank still crushes)
         if (game.ragdolls && !e.isMonster && this.kind !== 'tank') {
@@ -675,6 +685,12 @@ class Vehicle {
         } else game.enemies.damage(e, 'torso', 999, e.pos.clone().setY(e.pos.y + 1), f.clone(), 'run');
         game.fx.sprite('fx_crash', e.pos.x, e.pos.y + 1, e.pos.z, { size: 1.6, life: 0.35 });
         if (this.kind === 'car' || this.kind === 'bike') this.hurt(this.kind === 'bike' ? 6 : 4);
+      } else if (this.blades && this.blades.side && Math.abs(along) < this.halfLen && side < this.halfWid + 1.3 && (!e.bladeT || game.time - e.bladeT > 0.5)) {
+        // (ROADMAP 11.12: blades at its sides - whoever it passes close by is cut)
+        e.bladeT = game.time;
+        const sx = Math.sign(dx * f.z - dz * f.x) || 1;
+        game.enemies.damage(e, 'torso', this.blades.side, e.pos.clone().setY(e.pos.y + 1), new THREE.Vector3(f.z * sx, 0, -f.x * sx), 'melee');
+        game.fx.sparks(e.pos.x, e.pos.y + 0.9, e.pos.z, 6, [0.9, 0.9, 0.95]);
       }
     }
     // (not with ?classic: at speed, somebody right at the bumper has no time to jump clear)
@@ -739,7 +755,8 @@ class Vehicle {
     this.boosting = boost;
     const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1) * (1 + 0.4 * boost);
     const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1) * (1 + 1.2 * boost);
-    const brakeK = U ? 1 + 0.18 * U.brakes : 1;
+    // (ROADMAP 11.12: a jet pointing forward - it brakes hard)
+    const brakeK = (U ? 1 + 0.18 * U.brakes : 1) * (H.brake || 1);
     // (the driving skill: ROADMAP 5.6)
     const S = this.driver === this.game.player ? this.game.skills : null;
     const gripK = (U ? 1 + 0.08 * U.tires : 1) * (S ? S.gripMul : 1);
@@ -760,6 +777,16 @@ class Vehicle {
       throttle *= 0.1;
       if (Math.random() < dt * 4) this.game.fx.smoke(this.pos.x - Math.sin(this.yaw) * 2, this.pos.y + 0.6, this.pos.z - Math.cos(this.yaw) * 2, 0.8);
     }
+    // (ROADMAP 11.12) rolled onto its roof, nothing there to drive it on: it scrapes to a stop - Space
+    // (a spring on its roof: by itself) and it is put back on its wheels
+    const stuck = this.flipped && !this.roofDrive;
+    if (stuck) {
+      throttle = 0;
+      steer = 0;
+      hand = false;
+      this.stuckT = (this.stuckT || 0) + dt;
+      if (this.rollT === undefined && ((input && (input.wasPressed('Space') || input.flyUp)) || (this.righter && this.stuckT > 0.7))) this.rollOver(1);
+    }
     if (this.vx === undefined || this.physT === undefined || this.game.time - this.physT > 1) {
       // (from where it is: its speed along where it points)
       this.vx = Math.sin(this.yaw) * this.speed;
@@ -779,7 +806,9 @@ class Vehicle {
     const fz0 = Math.cos(this.yaw);
     let vL = this.vx * fx0 + this.vz * fz0;
     if (!this.air) {
-      const k = Math.min(1, Math.abs(vL) / 5) * (1 - 0.45 * Math.min(1, Math.abs(vL) / top)) * (hand ? 1.55 : 1);
+      let k = Math.min(1, Math.abs(vL) / 5) * (1 - 0.45 * Math.min(1, Math.abs(vL) / top)) * (hand ? 1.55 : 1);
+      // (ROADMAP 11.12: on tracks it turns on the spot)
+      if (H.pivot) k = Math.max(k, 0.75);
       const pull = input ? q.pull * 0.5 : 0;
       const want = (steer + pull) * H.steer * k * Math.sign(vL || 1);
       // (shoved round by a police car: for a moment the tyres let go - ROADMAP 6.1, game/chase.js)
@@ -806,6 +835,11 @@ class Vehicle {
       } else vL -= vL * (0.35 + 0.002 * Math.abs(vL)) * dt;
       // (an empty tank: the engine coughs, the car slows to a crawl)
       if (dry && vL > top) vL = Math.max(top, vL - 5 * dt);
+      // (on its roof: scraping along)
+      if (stuck) {
+        vL -= vL * 2.4 * dt;
+        if (Math.abs(vL) > 2 && Math.random() < dt * 20) this.game.fx.sparks(this.pos.x, this.pos.y + 0.1, this.pos.z, 3, [1.0, 0.8, 0.4]);
+      }
       // the handbrake: the back wheels locked
       if (hand) vL -= vL * 0.6 * dt;
       // the tyres' grip across: the slip dies away (hardly, with the handbrake on)
@@ -814,6 +848,22 @@ class Vehicle {
     }
     this.vx = fx * vL - fz * vS;
     this.vz = fz * vL + fx * vS;
+    // (ROADMAP 11.12) how hard the turn pulls it sideways (its way turning, for how fast it goes) -
+    // high for how wide it is (game/partsum.js rideSpec: tipA), up on two wheels, and over
+    if (H.tipA && !this.air && this.rollT === undefined && !stuck) {
+      const sp = Math.hypot(this.vx, this.vz);
+      const hv = Math.atan2(this.vx, this.vz);
+      const dh = this.hv === undefined ? 0 : angleDiff(this.hv, hv);
+      const aLat = sp > 4 ? Math.abs(dh / Math.max(dt, 1e-3)) * sp : 0;
+      this.aLat = damp(this.aLat || 0, aLat, 10, dt);
+      this.tipSide = dh > 0 ? 1 : dh < 0 ? -1 : this.tipSide || 1;
+      if (this.aLat > H.tipA) {
+        this.tipT = (this.tipT || 0) + dt;
+        if (this.tipT > 0.3) this.rollOver(this.tipSide);
+      } else this.tipT = Math.max(0, (this.tipT || 0) - dt * 2);
+      this.hv = hv;
+    } else this.hv = undefined;
+    this.accelL = damp(this.accelL || 0, (vL - v0) / Math.max(dt, 1e-3), 8, dt);
     this.pos.x += this.vx * dt;
     this.pos.z += this.vz * dt;
     // up and down: on the ground (and up the ramps), or flying
@@ -874,6 +924,89 @@ class Vehicle {
     // (a bicycle's, a scooter's: no engine; a bicycle's bell on H)
     if (input) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car');
     if (input && this.model === 'bicycle' && input.wasPressed('KeyH')) this.game.audio.play('bikebell', 0.7);
+  }
+
+  // (ROADMAP 11.12) over it goes, round its length (dir: which way): onto its roof - or, on its roof,
+  // back onto its wheels with a hop
+  rollOver(dir) {
+    const game = this.game;
+    this.rollT = 0;
+    this.rollDir = dir;
+    this.rollFrom = this.flipped ? Math.PI * (this.rollSign || 1) : 0;
+    this.flipped = !this.flipped;
+    if (this.flipped) this.rollSign = dir;
+    this.tipT = 0;
+    this.stuckT = 0;
+    this.aLat = 0;
+    game.audio.play('crash', 0.7);
+    game.camRig.addShake(0.35);
+    game.fx.sparks(this.pos.x, this.pos.y + 0.4, this.pos.z, 10, [1.0, 0.8, 0.4]);
+    if (!this.flipped) {
+      this.air = true;
+      this.vy = 4.5;
+      this.physT = game.time;
+      return;
+    }
+    // (the roll takes its speed, and dents it)
+    if (this.vx !== undefined) {
+      this.vx *= 0.55;
+      this.vz *= 0.55;
+    }
+    this.hurt(8);
+    if (this.driver === game.player && !this.roofDrive) game.hud.toast(this.righter ? 'התהפך — הקפיץ על הגג מחזיר אותו לגלגלים' : game.touch ? 'התהפך! ▲ — להפוך בחזרה' : 'התהפך! רווח — להפוך בחזרה', 'info', 2.6);
+    else if (this.driver === game.player) game.hud.toast('התהפך — וממשיך לנסוע על גלגלי הגג', 'info', 2.2);
+  }
+
+  // (ROADMAP 11.12) how a drawn one stands (its model's stance, game/partbuild.js): on its tail, its
+  // nose, by its balance (game/partsum.js rideSpec: tilt); its nose up as it speeds off, its weight
+  // over its back wheels (wheelie), down as it brakes, its weight over its front (dive); up on two
+  // wheels in a turn too hard for how high it is; rolling over, on its roof; bumping along on square
+  // wheels; over the ground on its fans
+  stand(dt) {
+    const S = this.stance;
+    const at = this.standAt || {};
+    const H = this.handling || {};
+    const ground = this.mode === 'drive' && !this.air;
+    // (rolling over: half way round in half a second)
+    let roll = this.flipped ? Math.PI * (this.rollSign || 1) : 0;
+    if (this.rollT !== undefined) {
+      this.rollT += dt;
+      const t = Math.min(1, this.rollT / 0.55);
+      const e = t * t * (3 - 2 * t);
+      const to = this.flipped ? Math.PI * this.rollDir : 0;
+      roll = this.rollFrom + (to - this.rollFrom) * e;
+      if (t >= 1) this.rollT = undefined;
+    } else if (ground && H.tipA && this.aLat > H.tipA * 0.78 && !this.flipped) {
+      // (up on two wheels)
+      roll = this.tipSide * clamp((this.aLat / H.tipA - 0.78) * 1.6, 0, 0.32);
+    }
+    this.standR = this.rollT !== undefined ? roll : damp(this.standR || 0, roll, 10, dt);
+    // its nose up (+) or down
+    let pitch = 0;
+    if (ground && !this.flipped) {
+      pitch = this.tilt0 || 0;
+      const a = this.accelL || 0;
+      if (H.wheelie && a > 2) pitch += H.wheelie * clamp(a / 12, 0, 1) * 0.3;
+      if (H.dive && a < -4) pitch -= (H.dive - 1) * clamp(-a / 18, 0, 1) * 0.12;
+    }
+    this.standP = damp(this.standP || 0, pitch, 6, dt);
+    const top = at.top || 1.5;
+    const r = this.standR;
+    const p = this.standP;
+    S.rotation.set(-p, 0, r);
+    // (round its length: lifted as high as it rolls; nose up round its back wheels, down round its
+    // front ones)
+    const zp = p > 0 ? at.zr || 0 : at.zf || 0;
+    const side = this.rollT === undefined && !this.flipped ? Math.abs(Math.sin(r)) * (this.halfWid || 1) * 0.85 : 0;
+    let y = (top * (1 - Math.cos(r))) / 2 + side + zp * Math.sin(-p);
+    const z = zp - zp * Math.cos(p);
+    if (ground && H.bump) y += H.bump * Math.abs(Math.sin(this.wheelSpin * 2)) * Math.min(1, this.speedAbs / 2);
+    if (this.hoverH && (this.mode === 'drive' || this.mode === 'boat')) y += this.hoverH + Math.sin(this.time * 2.7) * 0.03;
+    S.position.set(0, y, z);
+    if (this.driver) {
+      for (const pr of this.props || []) pr.rotation.z += dt * (10 + this.speedAbs * 1.5);
+      for (const f of this.fans || []) f.rotation.y += dt * 24;
+    }
   }
 
   // dark marks behind the back wheels while it slides (a long trail the city keeps a while)
@@ -1005,7 +1138,7 @@ class Vehicle {
       if (g.el === 'fire' || g.el === 'water') {
         if (Math.random() < 0.3) game.audio.play(g.el === 'fire' ? 'whoosh' : 'pour', 0.25);
       } else game.audio.play(g.el === 'light' ? 'laser' : 'paint', this.turrets.length > 1 ? 0.3 : 0.45);
-      game.enemies.noise(this.pos, 32);
+      if (!g.quiet) game.enemies.noise(this.pos, 32);
     } else if (g.el && g.el !== 'tippex') {
       // (ROADMAP 11.11) a cannon drawn in colour: its ink where it goes off (glue, a shock, ink...)
       game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'shell');
@@ -1016,19 +1149,48 @@ class Vehicle {
       game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
       game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
       game.camRig.addShake(clamp(0.15 + t.r * 1.4, 0.15, 0.5));
-      game.enemies.noise(this.pos, 60, 'boom');
+      if (!g.quiet) game.enemies.noise(this.pos, 60, 'boom');
       if (this.mode === 'drive' || this.kind === 'bike') this.speed -= t.r * 6;
+      if (g.recoil) this.recoilKick(dir, g.recoil);
     } else {
       game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'whiteShell');
       game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
       game.fx.splash(mw.x, mw.y, mw.z, 6, 2.5, [1, 1, 0.98]);
       game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
       game.camRig.addShake(clamp(0.15 + t.r * 1.4, 0.15, 0.5));
-      game.enemies.noise(this.pos, 60, 'boom');
+      if (!g.quiet) game.enemies.noise(this.pos, 60, 'boom');
       if (this.mode === 'drive' || this.kind === 'bike') this.speed -= t.r * 6;
+      if (g.recoil) this.recoilKick(dir, g.recoil);
     }
+    // (ROADMAP 11.12: a silencer on it - nobody hears it, nobody calls it in)
+    if (g.quiet) return;
     game.civilians.panic(this.pos, 40);
     game.onCrime('shoot', this.pos.x, this.pos.z);
+  }
+
+  // (ROADMAP 11.12) a giant cannon throws what fires it back along its barrel - a light one off the
+  // ground
+  recoilKick(dir, k) {
+    const kx = -dir.x * k;
+    const kz = -dir.z * k;
+    if (this.mode === 'drive' || (this.kind === 'bike' && !this.mode)) {
+      if (this.vx === undefined || this.physT === undefined || this.game.time - this.physT > 1) {
+        this.vx = Math.sin(this.yaw) * (this.speed || 0);
+        this.vz = Math.cos(this.yaw) * (this.speed || 0);
+      }
+      this.vx += kx;
+      this.vz += kz;
+      this.physT = this.game.time;
+      if ((this.handling ? this.handling.mass : 1) < 1.3 && !this.air) {
+        this.air = true;
+        this.vy = k * 0.28;
+      }
+    } else if (this.mode === 'plane' || this.kind === 'plane') this.speed = Math.max(0, (this.speed || 0) - k * 0.4);
+    else {
+      this.vx = (this.vx || 0) + kx * 0.6;
+      this.vz = (this.vz || 0) + kz * 0.6;
+    }
+    this.game.camRig.addShake(clamp(0.3 + k * 0.025, 0.3, 0.8));
   }
 
   fireMG() {
@@ -1102,6 +1264,11 @@ class Vehicle {
     const maxS = 24 * q.speed;
     this.vx = damp(this.vx || 0, ax * maxS, 1.6 * q.accel, dt);
     this.vz = damp(this.vz || 0, az * maxS, 1.6 * q.accel, dt);
+    // (ROADMAP 11.12: its weight not under its rotor - it leans that way and drifts, flown or not)
+    if (this.lean0 && this.alt > 1.2) {
+      this.vx += Math.sin(this.yaw) * this.lean0 * 10 * dt;
+      this.vz += Math.cos(this.yaw) * this.lean0 * 10 * dt;
+    }
     const maxAlt = this.grade === 'fail' ? 1.2 : 70;
     this.vy = damp(this.vy, up * 9, 3, dt);
     if (!this.driver) this.vy = damp(this.vy, (1.05 - this.alt) * 0.8, 1, dt);

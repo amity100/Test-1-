@@ -1,6 +1,7 @@
 import { clamp } from '../core/util.js';
 import { shapeOf, specOf, inPoly, outline } from './drawncar.js';
 import { CLASSES } from './sketchnet.js';
+import { placeOf, roleOf } from './partrole.js';
 
 // (ROADMAP 11.10, the sample) What a ride does is its parts added up - each part does one thing,
 // the same thing on anything it is put on, and how much of it by how big it was drawn:
@@ -20,9 +21,9 @@ import { CLASSES } from './sketchnet.js';
 // Its name is made of them too ("a flying armed car"), and the ink it takes.
 
 // a part's kind in game/drawncar.js (its model, its spec)
-const TYPE = { body: 'body', cabin: 'body', hull: 'body', wheel: 'wheel', barrel: 'gun', blade: 'blade', wing: 'wing', rotor: 'rotor', prop: 'prop', jet: 'jet', fin: 'fin', mast: 'line', tail: 'line', skid: 'line', sail: 'sail', balloon: 'envelope', chute: 'chute', spring: 'spring', armor: 'armor', window: 'line', deco: 'line' };
+const TYPE = { body: 'body', cabin: 'body', hull: 'body', wheel: 'wheel', barrel: 'gun', blade: 'blade', head: 'blade', wing: 'wing', rotor: 'rotor', prop: 'prop', jet: 'jet', fin: 'fin', mast: 'line', tail: 'line', skid: 'line', sail: 'sail', balloon: 'envelope', chute: 'chute', spring: 'spring', armor: 'armor', window: 'line', deco: 'line' };
 // how much ink each part takes
-const INK = { body: 0, cabin: 3, hull: 2, wheel: 1.5, barrel: 5, blade: 4, wing: 6, rotor: 10, prop: 3, jet: 5, fin: 1, tail: 1, skid: 1, mast: 0.5, sail: 4, balloon: 10, chute: 6, spring: 5, armor: 4, window: 0.5, deco: 0.5 };
+const INK = { body: 0, cabin: 3, hull: 2, wheel: 1.5, barrel: 5, blade: 4, head: 4, wing: 6, rotor: 10, prop: 3, jet: 5, fin: 1, tail: 1, skid: 1, mast: 0.5, sail: 4, balloon: 10, chute: 6, spring: 5, armor: 4, window: 0.5, deco: 0.5, scope: 2, mag: 2, silencer: 2 };
 // what moves it (one of them, at least, or it is a statue)
 const MOVERS = new Set(['wheel', 'rotor', 'wing', 'prop', 'jet', 'sail', 'balloon', 'hull']);
 
@@ -63,7 +64,7 @@ export function rideDesign(P, strokes, inks) {
   if (P.R.bike) [lo, hi] = [1.5, 2.6];
   let L = clamp(bodyPage * 3.4, lo, hi);
   // (a balloon: by its envelope - a balloon is ten metres tall or so)
-  const env = P.st.find((o) => o.type === 'balloon');
+  const env = P.family === 'balloon' ? P.st.find((o) => o.type === 'balloon') : null;
   if (env) L = clamp((env.sh.h / P.k) * 7, 6, 16) * (B.w / env.sh.h);
   const m = L / Math.max(1e-3, B.w);
   // its paint: the ink most of it is drawn in (pencil only: a paint of its own)
@@ -113,11 +114,13 @@ export function rideDesign(P, strokes, inks) {
   for (const o of P.st) {
     const ink = inkOf(inks, o.ink);
     let type = TYPE[o.type] || 'line';
-    // (the lines that drew the body: its edges, the body itself now)
-    const edge = P.R.loop && (o.type === 'body' || o.type === 'cabin' || o.type === 'hull');
+    // (the lines that drew the body: its edges, the body itself now - a body, a cabin, a hull the
+    // player named that is none of its outline: a part of its own, ROADMAP 11.12)
+    const edge = P.R.loop && (o.type === 'body' || o.type === 'cabin' || o.type === 'hull') && onLoop(o.pts, P.R.loop, B.size * 0.06) >= 0.5;
     if (edge || o.type === 'frame') type = 'line';
-    const s = { type, part: o.type, pts: M(o.pts), ...ink };
+    const s = { type, part: o.type, pts: M(o.pts), ...ink, src: o.i };
     if (edge) s.edge = true;
+    if (o.type === 'hull' && !edge) s.hull = true;
     if (o.type === 'spring') s.coils = o.sh.coils;
     // (half a wheel drawn, hanging from it - a U, a C: the whole wheel it goes round)
     if (o.type === 'wheel' && !o.sh.closed) {
@@ -134,7 +137,15 @@ export function rideDesign(P, strokes, inks) {
       const a = [o.sh.cx - (o.sh.ux * o.sh.long) / 2, o.sh.cy - (o.sh.uy * o.sh.long) / 2];
       const b = [o.sh.cx + (o.sh.ux * o.sh.long) / 2, o.sh.cy + (o.sh.uy * o.sh.long) / 2];
       const away = (q) => (ol && inPoly(q[0], q[1], ol) ? -1 : 0) + Math.hypot(q[0] - B.cx, q[1] - B.cy) / Math.max(1e-3, B.size);
-      const [base, muz] = away(a) > away(b) ? [b, a] : [a, b];
+      let [base, muz] = away(a) > away(b) ? [b, a] : [a, b];
+      // (ROADMAP 11.12: the body itself a barrel - drawn round it, as long as it is: a giant
+      // cannon, firing out of its nose)
+      if (ol && o.sh.long > B.w * 0.6 && onLoop(o.pts, ol, B.size * 0.06) >= 0.6 && onLoop(ol, o.pts, B.size * 0.06) >= 0.7) {
+        s.whole = true;
+        base = [B.x0 + B.w * 0.2, B.y0 + B.h * 0.55];
+        muz = [B.x1 + B.w * 0.08, B.y0 + B.h * 0.55];
+        s.r = clamp(B.h * m * 0.22, 0.14, 0.55);
+      }
       s.base = [base[0] * m, base[1] * m];
       s.muz = [muz[0] * m, muz[1] * m];
       s.len = o.sh.long * m;
@@ -167,7 +178,40 @@ export function rideDesign(P, strokes, inks) {
   const kin = kinOf(P);
   // (a fire engine's ladder, its hose: it sprays water - unless drawn in an ink of its own)
   if (kin.cls === 'firetruck') for (const s of out) if (s.part === 'barrel' && !s.el) s.el = 'water';
-  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, nose, ...kin };
+  // (and where on the page each metre of it is - ui/freedraw.js shows its balance there, and the
+  // engineer's changes: game/engineer.js)
+  const page = { m, k: P.k, x0: P.x0, y1: P.y1, flip: !!P.flip, W: (P.x1 - P.x0) * P.k };
+  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, nose, ...kin, page };
+}
+
+// how much of a line lies along an outline (within tol of it)
+function onLoop(pts, loop, tol) {
+  let n = 0;
+  for (const [x, y] of pts) {
+    let best = Infinity;
+    for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+      const [ax, ay] = loop[j];
+      const [bx, by] = loop[i];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 > 1e-12 ? clamp(((x - ax) * dx + (y - ay) * dy) / l2, 0, 1) : 0;
+      const d = Math.hypot(x - (ax + dx * t), y - (ay + dy * t));
+      if (d < best) best = d;
+    }
+    if (best <= tol) n++;
+  }
+  return n / Math.max(1, pts.length);
+}
+
+// where the page's point (x, y) is in a design's metres - and back (design.page)
+export function toDesign(page, [x, y]) {
+  const fx = page.flip ? page.W - (x - page.x0) * page.k : (x - page.x0) * page.k;
+  return [fx * page.m, (page.y1 - y) * page.k * page.m];
+}
+export function toPage(page, [x, y]) {
+  const fx = x / page.m;
+  return [(page.flip ? page.W - fx : fx) / page.k + page.x0, page.y1 - y / page.m / page.k];
 }
 
 // (ROADMAP 11.11) what the network sees in it (game/parts.js readParts' guess), of the kinds its
@@ -235,16 +279,74 @@ function topDesign(P, inks) {
 // parts', and sum: what the card by the drawing shows (ui/freedraw.js)
 export function rideSpec(design) {
   const S = design.strokes;
-  const of = (t) => S.filter((s) => (s.part || legacy(s)) === t);
+  const partOf = (s) => s.part || legacy(s);
+  // (the lines that drew its body are the body: no part of their own)
+  const of = (t) => S.filter((s) => !s.edge && partOf(s) === t);
   const bodies = S.filter((s) => s.type === 'body');
-  const wheels = of('wheel').map((s) => {
+  // ---- its size, and the middle of its body
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  let area = 0;
+  let bx = 0;
+  let by = 0;
+  for (const s of bodies) {
     const sh = shapeOf(s.pts);
-    return { z: sh.mx, y: sh.my, r: clamp((sh.w + sh.h) / 4, 0.12, 1.3) };
-  });
+    x0 = Math.min(x0, sh.x0);
+    x1 = Math.max(x1, sh.x1);
+    y0 = Math.min(y0, sh.y0);
+    y1 = Math.max(y1, sh.y1);
+    const a = sh.area || sh.w * sh.h * 0.7;
+    const c = centroid(s.pts) || [sh.mx, sh.my];
+    area += a;
+    bx += c[0] * a;
+    by += c[1] * a;
+  }
+  const L = x1 - x0;
+  const H = y1 - y0;
+  if (!bodies.length || !(L > 0)) return { ok: false, why: 'חסר גוף: צורה סגורה גדולה', sum: null };
+  bx /= Math.max(1e-9, area);
+  by /= Math.max(1e-9, area);
+  // ---- (ROADMAP 11.12) each part: what it is, where it is (game/partrole.js) - its wheels first,
+  // what the rest goes by (on wheels or not)
+  const box = { x0, x1, y0, y1 };
+  const role = new Map();
+  const see = (s, ctx) => {
+    const q = placeOf(s.pts, box);
+    const r = roleOf(partOf(s), q, ctx);
+    role.set(s, { v: r.v, name: r.name, say: r.say, q });
+  };
+  const vOf = (s) => (role.has(s) ? role.get(s).v : null);
+  const fam = bodies.some((s) => s.hull) ? 'boat' : design.plane ? 'plane' : 'ground';
+  const wheelS = of('wheel');
+  for (const s of wheelS) see(s, { fam });
+  const rollS = wheelS.filter((s) => vOf(s) === 'wheel' || vOf(s) === 'square' || vOf(s) === 'big');
+  const trackS = wheelS.filter((s) => vOf(s) === 'track');
+  const roofS = wheelS.filter((s) => vOf(s) === 'roof');
+  const ctx = { fam, wheels: rollS.length + trackS.length > 0, thrust: of('jet').length + of('prop').length > 0, wings: of('wing').length > 0, guns: of('barrel').length > 0, sail: of('sail').length > 0 };
+  for (const s of S) if (!s.edge && s.type !== 'body' && !role.has(s)) see(s, ctx);
+  // (a plane drawn from above: its wings, its engines on them, as made - game/partsum.js topDesign)
+  for (const s of S) if (s.made && role.has(s) && (s.part === 'wing' || s.part === 'jet')) role.get(s).v = s.part;
+  // (a stream - water, fire, light - is no giant cannon however it is drawn)
+  for (const s of S) if (s.el && STREAM_NAME[s.el] && role.has(s) && role.get(s).v === 'giant') Object.assign(role.get(s), { v: 'mg', name: STREAM_NAME[s.el], say: '' });
+  // ---- what moves it
+  const upside = !rollS.length && !trackS.length && roofS.length > 0;
+  const wheelsOf = (list) =>
+    list.map((s) => {
+      const sh = shapeOf(s.pts);
+      return { z: sh.mx, y: sh.my, r: clamp((sh.w + sh.h) / 4, 0.12, 1.3), v: vOf(s) };
+    });
+  // (on its roof only: it drives on its back - those are what it rolls on)
+  const wheels = wheelsOf(upside ? roofS : rollS);
+  const roofWheels = upside ? [] : wheelsOf(roofS);
+  const tracks = trackS.map((s) => shapeOf(s.pts));
   // (the lines of one rotor - an X, a star, its blades drawn one by one - are one rotor, as wide as
-  // all of them; two apart, two rotors)
+  // all of them; two apart, two rotors. A rotor, a propeller lying over it: they lift it)
+  const spinS = [...of('rotor'), ...of('prop')];
   const rotors = [];
-  for (const s of of('rotor')) {
+  for (const s of spinS) {
+    if (vOf(s) !== 'lift') continue;
     const sh = shapeOf(s.pts);
     const w = Math.max(sh.w, s.len || 0);
     const near = rotors.find((r) => sh.x1 > r.x0 - w * 0.15 && sh.x0 < r.x1 + w * 0.15 && Math.abs(sh.cy - r.cy) < Math.max(r.w, w) * 0.35);
@@ -256,120 +358,340 @@ export function rideSpec(design) {
     } else rotors.push({ x0: sh.x0, x1: sh.x1, w, cx: sh.cx, cy: sh.cy, h: sh.h, y0: sh.y0, y1: sh.y1 });
   }
   const rotorN = rotors.length;
-  const wings = of('wing').map((s) => shapeOf(s.pts));
-  const props = of('prop').map((s) => shapeOf(s.pts));
-  const jets = of('jet').map((s) => shapeOf(s.pts));
+  // (lying under it: a hovercraft's fans; standing up: a propeller - at its back, pushing)
+  const fans = spinS.filter((s) => vOf(s) === 'hover').map((s) => shapeOf(s.pts));
+  const props = spinS.filter((s) => vOf(s) === 'pusher' || vOf(s) === 'puller').map((s) => Object.assign(shapeOf(s.pts), { back: vOf(s) === 'pusher' }));
+  const jetS = of('jet');
+  const jets = jetS.filter((s) => vOf(s) === 'jet').map((s) => Object.assign(shapeOf(s.pts), { side: s.side }));
+  const vtols = jetS.filter((s) => vOf(s) === 'vtol').map((s) => shapeOf(s.pts));
+  const retros = jetS.filter((s) => vOf(s) === 'retro').map((s) => shapeOf(s.pts));
+  const wingS = of('wing');
+  const wings = wingS.filter((s) => vOf(s) === 'wing').map((s) => shapeOf(s.pts));
+  // (a wing standing up: a fin)
+  const fins = [...of('fin'), ...wingS.filter((s) => vOf(s) === 'fin')];
   const sails = of('sail');
+  const landSail = sails.some((s) => vOf(s) === 'land');
   const hulls = S.filter((s) => s.hull && s.type === 'body');
   const balloons = of('balloon');
   const barrels = of('barrel');
   const blades = of('blade');
+  const heads = of('head');
   const springs = of('spring');
   const chutes = of('chute').map((s) => shapeOf(s.pts));
   const armors = of('armor');
-  const fins = of('fin');
-  // ---- its size, its weight
-  let x0 = Infinity;
-  let x1 = -Infinity;
-  let y0 = Infinity;
-  let y1 = -Infinity;
-  let area = 0;
-  for (const s of bodies) {
-    const sh = shapeOf(s.pts);
-    x0 = Math.min(x0, sh.x0);
-    x1 = Math.max(x1, sh.x1);
-    y0 = Math.min(y0, sh.y0);
-    y1 = Math.max(y1, sh.y1);
-    area += sh.area || sh.w * sh.h * 0.7;
-  }
-  const L = x1 - x0;
-  const H = y1 - y0;
-  if (!bodies.length || !(L > 0)) return { ok: false, why: 'חסר גוף: צורה סגורה גדולה', sum: null };
-  const rAvg = wheels.length ? wheels.reduce((a, w) => a + w.r, 0) / wheels.length : 0;
+  const sled = of('skid').some((s) => vOf(s) === 'sled');
+  // ---- its weight, and where its weight is (each part's at its middle)
+  const W0 = clamp(0.55 + L * 0.24, 0.9, 2.3);
   const R = rotors.length ? clamp((Math.max(...rotors.map((r) => r.w)) / 2) * 1.15, 0.8, 5.5) : 0;
   // (the wings: as long as drawn side on, front to back; across, as the plane is long)
   const span = (w) => clamp(Math.max(w.w * 2.6, L * 0.95), 2.2, 16);
   const wingA = wings.reduce((a, w) => a + w.w * span(w), 0);
-  let thrust = props.reduce((a, p) => a + clamp(p.h, 0.5, 3.2) * 1.3, 0) + jets.reduce((a, j) => a + clamp(j.size, 0.3, 1.6) * 3.2, 0);
+  const ms = [[area * W0 * 0.16, bx, by]];
+  const put = (m, sh) => ms.push([m, sh.mx, sh.my]);
+  for (const s of wheelS) {
+    const sh = shapeOf(s.pts);
+    const r = clamp((sh.w + sh.h) / 4, 0.12, 1.3);
+    put(vOf(s) === 'track' ? 0.22 : 0.025 + r * r * 0.25, sh);
+  }
+  for (const s of barrels) put(0.03 + (s.len || 1) * (s.r || 0.05) ** 2 * 6, shapeOf(s.pts));
+  for (const r of rotors) ms.push([0.12 + R * 0.03, r.cx, r.cy]);
+  for (const w of wings) put(w.w * span(w) * 0.012, w);
+  for (const p of props) put(0.04, p);
+  for (const j of jets) put(0.1, j);
+  for (const j of vtols) put(0.1, j);
+  for (const j of retros) put(0.06, j);
+  for (const f of fans) put(0.1, f);
+  for (const s of fins) put(0.02, shapeOf(s.pts));
+  for (const s of sails) put(0.04, shapeOf(s.pts));
+  for (const c of chutes) put(0.06, c);
+  for (const s of springs) put(0.06, shapeOf(s.pts));
+  for (const s of armors) put(0.22, shapeOf(s.pts));
+  for (const s of blades) put(0.05, shapeOf(s.pts));
+  for (const s of heads) put(0.15, shapeOf(s.pts));
+  let mass = 0;
+  let cx = 0;
+  let cy = 0;
+  for (const [m, x, y] of ms) {
+    mass += m;
+    cx += m * x;
+    cy += m * y;
+  }
+  // (a balloon pulls up what it is tied to: its weight is no weight where it is)
+  const com = [cx / mass, cy / mass];
+  mass = clamp(mass + balloons.length * 0.15, 0.15, 6);
+  const rAvg = wheels.length ? wheels.reduce((a, w) => a + w.r, 0) / wheels.length : 0;
+  // (a propeller standing up, a jet out of its back: they push it)
+  const pd = (p) => Math.max(p.h, p.w * 0.8);
+  let thrust = props.reduce((a, p) => a + clamp(pd(p), 0.5, 3.2) * 1.3, 0) + jets.reduce((a, j) => a + clamp(j.size, 0.3, 1.6) * 3.2, 0);
   // (a plane drawn as a plane - its body, its wings, its tail - with no engine drawn: one inside it,
   // a small one; the one drawn is stronger)
   const inner = !thrust && design.plane && wings.length > 0;
   if (inner) thrust = 1.6;
-  const W0 = clamp(0.55 + L * 0.24, 0.9, 2.3);
-  let mass = area * W0 * 0.16;
-  mass += wheels.reduce((a, w) => a + 0.025 + w.r * w.r * 0.25, 0);
-  mass += barrels.reduce((a, s) => a + 0.03 + (s.len || 1) * (s.r || 0.05) ** 2 * 6, 0);
-  mass += rotorN * (0.12 + R * 0.03) + wings.reduce((a, w) => a + w.w * span(w) * 0.012, 0);
-  mass += props.length * 0.04 + jets.length * 0.1 + fins.length * 0.02 + sails.length * 0.04 + balloons.length * 0.15;
-  mass += chutes.length * 0.06 + springs.length * 0.06 + armors.length * 0.22 + blades.length * 0.05;
-  mass = clamp(mass, 0.15, 6);
   // ---- how it goes: what it can do of each way
-  const drive = wheels.length > 0;
+  const drive = wheels.length > 0 || tracks.length > 0 || fans.length > 0;
   const liftR = R ? (R * R * 1.15 * (1 + (rotorN - 1) * 0.6)) / mass : 0;
-  const copter = rotors.length > 0 && liftR >= 1;
+  // (jets under it pointing down: they lift it straight up)
+  const liftJ = vtols.length ? vtols.reduce((a, j) => a + clamp(j.size, 0.3, 1.6) * 1.9, 0) / mass : 0;
+  const copter = (rotors.length > 0 && liftR >= 1) || liftJ >= 1;
   const liftW = wings.length ? wingA / (mass * 3.5) : 0;
   const plane = wings.length > 0 && thrust > 0 && liftW >= 0.7;
   const glide = wings.length > 0 && !plane && drive;
-  const boat = hulls.length > 0 || sails.length > 0;
-  const balloon = balloons.length > 0;
+  // (a balloon big enough for what it carries lifts it; too small - smaller than what hangs from
+  // it, and too weak for its weight - it only slows its fall)
+  let balloon = balloons.length > 0;
+  let floaty = 0;
+  if (balloon) {
+    const E = shapeOf(balloons[0].pts);
+    const lift = ((Math.PI / 6) * E.w * E.w * E.h) / (mass * 45 + 25);
+    if (lift < 0.6 && (Math.PI / 4) * E.w * E.h < area * 1.2) {
+      balloon = false;
+      floaty = clamp(5.5 - lift * 5, 2.6, 5.5);
+    }
+  }
+  // (a hovercraft: on the water as on the road)
+  const boat = hulls.length > 0 || (sails.length > 0 && !landSail) || fans.length > 0;
   // (what it mostly is: wheels under a plane or a helicopter - small ones, under a long thin body -
   // are its landing gear: it is a plane that can roll along, not a car that flies)
   const gear = drive && (rAvg < H * 0.27 || L / Math.max(0.1, H) > 4.8);
   const force = plane && (gear || !drive) ? 'plane' : copter && (gear || !drive) ? 'copter' : drive ? 'car' : copter ? 'copter' : plane ? 'plane' : balloon ? 'balloon' : boat ? 'boat' : null;
   const warn = [];
-  if (rotors.length && !copter) warn.push('הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל');
+  if (rotors.length && liftR < 1 && !(liftJ >= 1)) warn.push('הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל');
+  if (vtols.length && liftJ < 1 && !(rotors.length && liftR >= 1)) warn.push('הסילונים שמתחת חלשים מדי למשקל — לא ימריא. עוד סילון, או פחות משקל');
   if (wings.length && thrust > 0 && !plane) warn.push('הכנפיים קטנות מדי למשקל — לא ימריא');
   if (wings.length && !thrust && !drive) warn.push('כנפיים בלי מדחף או סילון — אין מה שיזיז אותו');
   if (inner) warn.push('לא צויר מנוע: יש לו מנוע קטן בפנים. מדחף או סילון שמציירים — מהיר יותר');
+  if (floaty) warn.push('הבלון קטן מדי למשקל — לא מרים, רק מאט נפילה. בלון גדול יותר ימריא');
   if (!force) {
-    const sum = summary({ ok: false, mass, L, H, wheels, warn, design, liftR, liftW });
-    return { ok: false, why: 'עוד לא זז — הוסיפו גלגלים, רוטור, כנפיים עם מדחף, מפרש או בלון', sum, mass };
+    const sum = summary({ ok: false, mass, L, H, wheels, warn, design, liftR, liftJ, liftW, role, com });
+    return { ok: false, why: 'עוד לא זז — הוסיפו גלגלים, רוטור, כנפיים עם מדחף, מפרש או בלון', sum, mass, role, com };
   }
   const abil = { drive, fly: copter && force !== 'copter' ? 'rotor' : plane && force !== 'plane' ? 'wings' : balloon && force !== 'balloon' ? 'balloon' : undefined, float: boat && force !== 'boat', gun: barrels.length > 0 };
   // (the drawing as game/drawncar.js reads one - and then its numbers, the parts')
   const spec = specOf(Object.assign({}, design, { force, abil, name: undefined }));
   if (!spec.ok) return { ok: false, why: spec.why, sum: null };
   spec.mass = mass;
-  // ---- on wheels
+  // (what it is made of, each part as it is where it is: game/partbuild.js builds it so)
+  spec.role = role;
+  spec.wheels = wheels.map((w) => ({ z: w.z, y: w.y, r: w.r }));
+  spec.roofWheels = roofWheels.length ? roofWheels : undefined;
+  spec.tracks = tracks;
+  spec.upside = upside || undefined;
+  spec.rotors = rotors;
+  spec.props = props;
+  spec.jets = jets;
+  spec.vtols = vtols;
+  spec.retros = retros;
+  spec.fans = fans;
+  spec.com = com;
+  const bike = S.some((s) => s.type === 'body' && s.slim) || bikeBuild(wheels, L, area);
+  // ---- on wheels (on tracks, on its fans)
   if (spec.modes.drive) {
     const n = wheels.length;
     const zs = wheels.map((w) => w.z);
-    const base = n > 1 ? Math.max(...zs) - Math.min(...zs) : 0;
+    for (const t of tracks) zs.push(t.x0 + Math.min(t.h, t.w * 0.2), t.x1 - Math.min(t.h, t.w * 0.2));
+    const base = zs.length > 1 ? Math.max(...zs) - Math.min(...zs) : 0;
     // (ROADMAP 11.11: a pointed nose, a little faster; a flat front, a little slower)
     const noseK = design.nose === undefined ? 1 : design.nose < 0.32 ? 1.12 : design.nose > 0.82 ? 0.92 : 1;
-    const top = clamp((16 + rAvg * 36 + jets.length * 5 - mass * 2.6 - (n === 1 ? 6 : 0)) * noseK, 9, 48);
-    const power = clamp(19 + jets.length * 3 - mass * 4.2 + Math.min(n, 4) * 0.3, 5, 24);
-    const grip = clamp(3 + Math.min(n, 6) * 1.0 + rAvg * 2.5 + (fins.length ? 0.6 : 0) + (base / L) * 1.5, 3, 11);
-    spec.handling = { mass: clamp(mass, 0.4, 3.2), power, top, grip, slide: clamp(0.8 + grip * 0.03, 0.85, 1.2), steer: clamp(2.25 - base * 0.17, 0.8, 2.3), roll: clamp(H * 0.45, 0.2, 1.4), pitch: 0.5 };
+    let top = clamp((16 + rAvg * 36 + jets.length * 5 - mass * 2.6 - (n === 1 && !tracks.length ? 6 : 0)) * noseK, 9, 48);
+    let power = clamp(19 + jets.length * 3 - mass * 4.2 + Math.min(n, 4) * 0.3, 5, 24);
+    let grip = clamp(3 + Math.min(n, 6) * 1.0 + rAvg * 2.5 + (fins.length ? 0.6 : 0) + (base / L) * 1.5, 3, 11);
+    let steer = clamp(2.25 - base * 0.17, 0.8, 2.3);
+    let slide = clamp(0.8 + grip * 0.03, 0.85, 1.2);
+    const hx = {};
+    // (ROADMAP 11.12) tracks: slow, never sliding, turning on the spot - over whatever is in the way
+    if (tracks.length) {
+      top = clamp(13 - mass * 0.8, 9, 15) * noseK;
+      power = clamp(15 - mass * 2, 7, 15);
+      grip = 11;
+      slide = 1.2;
+      steer = 1.55;
+      hx.pivot = true;
+      spec.crush = true;
+    }
+    // (square wheels: it bumps along - slower, but they hold the road)
+    const sq = n ? wheels.filter((w) => w.v === 'square').length / n : 0;
+    if (sq) {
+      top *= 1 - 0.35 * sq;
+      grip = Math.min(11, grip + 1.5 * sq);
+      hx.bump = 0.08 * sq * clamp(rAvg / 0.35, 0.6, 2);
+    }
+    // (wheels as big as it is high: over the cars in its way)
+    if (wheels.some((w) => w.v === 'big')) spec.crush = true;
+    // (propellers pushing it along the road)
+    const push = props.reduce((a, p) => a + clamp(pd(p), 0.5, 3.2), 0);
+    if (push) {
+      top += push * 3;
+      power += push * 0.8;
+    }
+    // (a sail on wheels: a land yacht - quick on the straight, slow off the mark, silent)
+    if (landSail) {
+      const sa = sails.reduce((a, s) => a + (shapeOf(s.pts).area || 1), 0);
+      top += clamp(5 + (sa / Math.max(1, L * H)) * 8, 5, 14);
+      power *= 0.55;
+      steer *= 0.85;
+      hx.quiet = true;
+    }
+    // (a hovercraft: off the ground on its fans - it slides about)
+    if (fans.length) {
+      grip = clamp(grip * 0.35, 1.6, 3);
+      slide = 0.6;
+      top += 4;
+      spec.hover = { h: clamp(H * 0.12, 0.15, 0.35) };
+    }
+    // (skids on the road: it drifts)
+    if (sled) {
+      grip *= 0.7;
+      slide = 0.7;
+    }
+    // (a jet pointing forward: it brakes hard)
+    if (retros.length) hx.brake = 1 + 0.9 * retros.length;
+    // ---- (ROADMAP 11.12) its balance: where its weight is, over what it stands on
+    if (zs.length >= 2 || tracks.length) {
+      const floorY = upside ? Math.max(...wheels.map((w) => w.y + w.r)) : Math.min(...wheels.map((w) => w.y - w.r), ...tracks.map((t) => t.y0), y0);
+      const hC = Math.max(0.15, upside ? floorY - com[1] : com[1] - floorY);
+      const ssf = (W0 / 2 + 0.08) / hC;
+      spec.ssf = ssf;
+      // (side to side: high for how wide it is, it goes over in a hard turn - one that turns hard
+      // and fast the soonest; a bike leans instead. As people draw them, 19 in 20 cars, vans,
+      // buses stand wider than this: those never go over)
+      if (!bike && !fans.length && ssf < TIP_SSF) hx.tipA = steer * 0.55 * top * (ssf / TIP_SSF);
+      // (front to back: its weight between its wheels, or over one end)
+      const zr = Math.min(...zs);
+      const zf = Math.max(...zs);
+      if (zf - zr > 0.2 && !fans.length) {
+        const t = (com[0] - zr) / (zf - zr);
+        spec.balance = t;
+        if (t < -0.06) {
+          spec.tilt = clamp(-t * 0.6, 0.08, 0.3);
+          top *= 0.75;
+          warn.push('מרכז הכובד מאחורי הגלגלים — הוא נשען על הזנב ונגרר. גלגל אחורי רחוק יותר, או פחות משקל מאחור');
+        } else if (t > 1.06) {
+          spec.tilt = -clamp((t - 1) * 0.6, 0.08, 0.3);
+          top *= 0.75;
+          warn.push('מרכז הכובד לפני הגלגלים — האף נגרר על הכביש. גלגל קדמי רחוק יותר, או פחות משקל מקדימה');
+        } else if (t < 0.14) {
+          hx.wheelie = clamp((0.14 - t) / 0.2 + 0.35, 0.35, 1);
+          steer *= 0.8;
+          warn.push('מרכז הכובד מעל הגלגלים האחוריים — האף מתרומם בהאצה, וההיגוי קל');
+        } else if (t > 0.86) {
+          steer *= 0.85;
+          hx.dive = 1.8;
+          warn.push('מרכז הכובד מעל הגלגלים הקדמיים — פונה פחות טוב וצולל בבלימה');
+        }
+      }
+      if (hx.tipA) warn.push(roofWheels.length || upside ? 'גבוה וצר — עלול להתהפך בפנייה חדה, אבל גלגלי הגג ימשיכו לנסוע' : 'גבוה וצר — עלול להתהפך בפנייה חדה. רחב יותר, נמוך יותר, או גלגלים על הגג');
+      const ends = spec.balance === undefined ? 1 : spec.balance < -0.06 || spec.balance > 1.06 ? 0.4 : spec.balance < 0.14 || spec.balance > 0.86 ? 0.75 : 1;
+      spec.steady = bike ? 0.45 : clamp(Math.min(1, ssf / (TIP_SSF * 2)) * ends, 0.05, 1);
+    } else spec.steady = 0.2;
+    spec.handling = Object.assign({ mass: clamp(mass, 0.4, 3.2), power, top, grip, slide, steer, roll: clamp(H * 0.45, 0.2, 1.4), pitch: 0.5 }, hx);
     spec.glide = glide ? clamp(wingA / (mass * 6), 0.15, 0.75) : 0;
-    spec.steady = clamp((n >= 4 ? 0.8 : n === 3 ? 0.65 : n === 2 ? 0.45 : 0.2) + (base / L) * 0.25 - H * 0.05, 0, 1);
   }
   // ---- in the air
   if (spec.modes.copter) {
-    spec.rotorR = R;
-    spec.qCopter = { speed: clamp(0.5 + R * 0.1 + (liftR - 1) * 0.25, 0.45, 1.45), accel: clamp(0.65 + (liftR - 1) * 0.5 + R * 0.05, 0.6, 1.4) };
+    spec.rotorR = R || clamp(L * 0.45, 1, 3);
+    const lift = Math.max(liftR, liftJ);
+    spec.qCopter = { speed: clamp(0.5 + (R || 2) * 0.1 + (lift - 1) * 0.25 + (liftJ >= 1 ? 0.2 : 0), 0.45, 1.5), accel: clamp(0.65 + (lift - 1) * 0.5 + (R || 2) * 0.05, 0.6, 1.4) };
     if (spec.base === 'copter') spec.q = spec.qCopter;
+    // (its weight not under its rotor: it leans that way, and drifts)
+    let lx = 0;
+    let lw = 0;
+    if (rotors.length && liftR >= 1) {
+      for (const r of rotors) {
+        lx += r.cx * r.w * r.w;
+        lw += r.w * r.w;
+      }
+    } else {
+      for (const j of vtols) {
+        lx += j.mx * j.size;
+        lw += j.size;
+      }
+    }
+    const off = lw ? (com[0] - lx / lw) / L : 0;
+    if (Math.abs(off) > 0.08) {
+      spec.lean = clamp(off * 1.5, -0.3, 0.3);
+      const what = rotors.length && liftR >= 1 ? 'הרוטור' : 'הסילונים';
+      warn.push(off > 0 ? `${what} מאחורי מרכז הכובד — נוטה קדימה וזז לבד` : `${what} לפני מרכז הכובד — נוטה אחורה וזז לבד`);
+    }
   }
   if (spec.modes.plane) {
     spec.qPlane = { speed: clamp(0.75 + thrust * 0.08 - mass * 0.04, 0.6, 1.35), accel: clamp(1.0 + thrust * 0.12 - mass * 0.04, 0.9, 2.0) };
     // (the bigger the wings for its weight, the slower it flies without falling)
     spec.stallV = clamp(17 / Math.sqrt(Math.max(0.5, liftW / 0.9)), 11, 26);
+    // (its weight behind where its wings hold it: it pitches about; far ahead of them: it needs
+    // more speed)
+    if (wings.length) {
+      let np = 0;
+      let aw = 0;
+      for (const w of wings) {
+        const a = w.w * span(w);
+        np += (w.x1 - w.w * (fins.length ? 0.45 : 0.3)) * a;
+        aw += a;
+      }
+      const sm = (com[0] - np / aw) / L;
+      if (sm < -0.06) {
+        spec.pitchy = clamp(-sm * 5, 0.2, 1);
+        warn.push('מרכז הכובד מאחורי הכנפיים — המטוס מיטלטל באוויר. כנפיים יותר מאחור, או משקל מקדימה');
+      } else if (sm > 0.25) {
+        spec.stallV = clamp(spec.stallV * 1.15, 11, 30);
+        warn.push('הרבה משקל לפני הכנפיים — צריך יותר מהירות כדי להמריא');
+      }
+    }
     spec.takeoffV = spec.stallV + 4;
     if (spec.base === 'plane') spec.q = spec.qPlane;
   }
+  // (a hovercraft on the water: over it, not in it)
+  if (spec.boat && fans.length) spec.boat.draft = 0;
+  // ---- on the water: propellers push it along (an airboat)
+  if (spec.boat && props.length) {
+    const push = props.reduce((a, p) => a + clamp(pd(p), 0.5, 3.2), 0);
+    spec.boat.q.speed = clamp(spec.boat.q.speed + push * 0.25, 0.6, 1.45);
+    spec.boat.q.accel = Math.max(spec.boat.q.accel, 1.2);
+    spec.boat.motor = true;
+    spec.boat.paddle = false;
+    spec.boat.sail = false;
+    spec.boat.air = true;
+    if (spec.base === 'boat') spec.q = spec.boat.q;
+  }
   // ---- its gear
-  if (springs.length) {
-    const sh = shapeOf(springs[0].pts);
-    spec.spring = { jump: clamp(6 + (springs[0].coils || 4) * 0.45 + sh.h * 1.2 + (springs.length - 1), 6, 14) };
+  const springOf = (v) => springs.filter((s) => vOf(s) === v);
+  const jumps = springOf('jump');
+  if (jumps.length) {
+    const sh = shapeOf(jumps[0].pts);
+    spec.spring = { jump: clamp(6 + (jumps[0].coils || 4) * 0.45 + sh.h * 1.2 + (jumps.length - 1), 6, 14) };
   } else delete spec.spring;
+  // (at its back: a kick forward; at its front: a bumper that throws what it hits; on its roof: it
+  // rights itself)
+  const kicks = springOf('kick');
+  if (kicks.length) spec.spring = Object.assign(spec.spring || {}, { kick: clamp(10 + (kicks[0].coils || 4) * 0.8, 10, 18) });
+  const bumpers = springOf('bumper');
+  if (bumpers.length) spec.bumper = { k: clamp(1.4 + (bumpers[0].coils || 4) * 0.12, 1.4, 2.6) };
+  if (springOf('righter').length) spec.righter = true;
   if (chutes.length) {
     const c = chutes[0];
     spec.chute = { sink: clamp(3 + mass * 1.4 - (c.w / Math.max(0.5, L)) * 1.6, 2.2, 7), deploy: true, w: c.w };
   } else delete spec.chute;
+  if (floaty) spec.floaty = { sink: floaty };
   spec.armor = armors.length ? clamp(0.22 + armors.length * 0.07, 0.22, 0.55) : 0;
-  if (blades.length) spec.ram = { k: clamp(1.4 + Math.max(...blades.map((s) => s.len || 1)) * 0.5, 1.4, 3) };
+  // (at its front: what rams - a blade, a hammer's head (harder), armour (it is hurt less))
+  const rams = [...blades.filter((s) => vOf(s) === 'ram'), ...heads.filter((s) => vOf(s) === 'ram'), ...armors.filter((s) => vOf(s) === 'front')];
+  if (rams.length) {
+    const k = clamp(1.4 + Math.max(...rams.map((s) => s.len || shapeOf(s.pts).size)) * 0.5 + (heads.some((s) => vOf(s) === 'ram') ? 0.6 : 0), 1.4, 3.4);
+    spec.ram = { k, shield: armors.some((s) => vOf(s) === 'front') || undefined };
+  }
+  const sides = blades.filter((s) => vOf(s) === 'side');
+  const rears = blades.filter((s) => vOf(s) === 'rear');
+  if (sides.length || rears.length) spec.blades = { side: sides.length ? clamp(30 + sides.reduce((a, s) => a + (s.len || 1), 0) * 14, 30, 90) : 0, rear: rears.length > 0 };
   // ---- its barrels: each fires
-  spec.guns = barrels.map((s) => gunOf(s));
+  spec.guns = barrels.map((s) => gunOf(s, vOf(s), mass));
+  // (a sight on it: they all fire truer; a magazine: they load quicker; a silencer: nobody hears)
+  const scope = of('scope').length;
+  const mags = of('mag').length;
+  const quiet = of('silencer').length > 0;
+  for (const g of spec.guns) {
+    if (scope) g.spread *= 0.55;
+    if (mags) g.reload *= 0.7;
+    if (quiet) g.quiet = true;
+  }
   spec.gun = spec.guns.length ? { r: spec.guns[0].r, len: spec.guns[0].len, type: spec.guns[0].type } : undefined;
   delete spec.cannon;
   // ---- how much it takes, what it is called
@@ -377,11 +699,40 @@ export function rideSpec(design) {
   let cost = 14 + area * 1.2;
   for (const s of S) cost += INK[s.part] || 0;
   spec.cost = Math.round(clamp(cost, 18, 95));
-  const sum = summary({ ok: true, spec, mass, L, H, area, wheels, rAvg, R, liftR, liftW, warn, design, copter, plane, glide, boat, balloon });
+  const sum = summary({ ok: true, spec, mass, L, H, area, wheels, rAvg, R, liftR, liftJ, liftW, warn, design, copter, plane, glide, boat, balloon, role, com, tracks, fans });
   spec.label = sum.name;
   spec.sum = sum;
   spec.polish = true;
   return spec;
+}
+
+// (ROADMAP 11.12) how high its weight may be, for how wide it is (half its width over the height of
+// its weight), before its hardest turn rolls it over - game/vehicles.js drive: the sideways pull
+// (m/s²) that tips it, its hardest turn's at this, less below it
+const TIP_SSF = 0.3;
+
+// two like wheels, big for its length, and little body between them: a bike's build
+function bikeBuild(wheels, L, area) {
+  if (wheels.length !== 2) return false;
+  const [a, b] = wheels;
+  const r = (a.r + b.r) / 2;
+  const wr = Math.max(a.r, b.r) / Math.max(1e-3, Math.min(a.r, b.r));
+  return wr < 1.6 && r / Math.max(1e-3, L) >= 0.13 && area / (Math.PI * r * r * 2) <= 3.6;
+}
+
+// the middle of a closed outline (its area's)
+function centroid(pts) {
+  let a = 0;
+  let x = 0;
+  let y = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const c = pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1];
+    a += c;
+    x += (pts[j][0] + pts[i][0]) * c;
+    y += (pts[j][1] + pts[i][1]) * c;
+  }
+  if (Math.abs(a) < 1e-9) return null;
+  return [x / (3 * a), y / (3 * a)];
 }
 
 // (a design made before parts: its kinds as game/drawncar.js had them)
@@ -389,8 +740,9 @@ function legacy(s) {
   return s.type === 'gun' ? 'barrel' : s.type === 'envelope' ? 'balloon' : s.type;
 }
 
-// a barrel: what it fires, how hard, how far, how true
-export function gunOf(s) {
+// a barrel: what it fires, how hard, how far, how true (v: what it is where it is - game/
+// partrole.js; mass: what it is on, for how far a giant one throws it back)
+export function gunOf(s, v = null, mass = 1) {
   const r = s.r || 0.05;
   const len = s.len || 1;
   const cannon = r >= 0.11;
@@ -403,6 +755,13 @@ export function gunOf(s) {
   if (el === 'water' || el === 'fire' || el === 'light') {
     const speed = el === 'light' ? 150 : el === 'fire' ? 34 : 46;
     return { type: 'mg', el, down, r, len, reload: el === 'light' ? 0.12 : 0.06, dmg: Math.round(clamp((el === 'light' ? 18 : 6) + r * 90, 6, el === 'light' ? 40 : 22)), speed, spread: el === 'light' ? 0.004 : 0.05, life: el === 'fire' ? 0.75 : el === 'water' ? 1.4 : 1.6, range: Math.round(speed * (el === 'fire' ? 0.75 : el === 'water' ? 1.1 : 1.6)) };
+  }
+  // (ROADMAP 11.12) as long as what it is on (its body itself, drawn as a barrel): a giant cannon -
+  // a heavy shell, a big blast, slow to load, and it throws what fires it back
+  if (v === 'giant' || s.whole) {
+    const R = Math.max(r, 0.14);
+    const speed = clamp(36 + len * 2, 36, 52);
+    return { type: 'cannon', giant: true, el, down, r: R, len, reload: clamp(2.6 + R * 4, 3, 5), dmg: Math.round(clamp(220 + R * 500, 260, 480)), blast: clamp(7 + R * 10, 8, 13), speed, spread: 0.006, range: Math.round(speed * 3.4), recoil: clamp(6 + (R * len * 18) / Math.max(0.4, mass), 6, 24) };
   }
   if (cannon) {
     const speed = clamp(42 + len * 5, 42, 70);
@@ -438,6 +797,13 @@ const NOUN = {
   ship: ['ספינה', 'f'],
   balloon: ['כדור פורח', 'm'],
   tank: ['טנק', 'm'],
+  dozer: ['דחפור', 'm'],
+  crawler: ['רכב זחלים', 'm'],
+  hover: ['רחפת', 'f'],
+  landyacht: ['יאכטת יבשה', 'f'],
+  gun: ['תותח מתגלגל', 'm'],
+  jetcopter: ['רחפן סילון', 'm'],
+  airboat: ['סירת ביצות', 'f'],
   still: ['פסל', 'm'],
 };
 const ADJ = {
@@ -447,6 +813,7 @@ const ADJ = {
   armed: ['חמוש', 'חמושה', 'חמושים'],
   armor: ['משוריין', 'משוריינת', 'משוריינים'],
   jump: ['קופץ', 'קופצת', 'קופצים'],
+  upside: ['הפוך', 'הפוכה', 'הפוכים'],
 };
 // (the network's kind of it: its noun)
 const WATER_NOUN = new Set(['speedboat', 'canoe', 'sub', 'ship', 'sailboat']);
@@ -455,6 +822,11 @@ const KIN_NOUN = { car: 'car', 'police car': 'police', 'pickup truck': 'pickup',
 function summary(o) {
   const { spec, mass, L, H, wheels, warn } = o;
   const S = o.design.strokes;
+  // (ROADMAP 11.12: what each part is where it is - game/partrole.js)
+  const role = o.role || new Map();
+  const vs = (t, v) => S.some((s) => (s.part || legacy(s)) === t && role.has(s) && role.get(s).v === v);
+  const giant = spec && spec.guns && spec.guns.some((gn) => gn.giant);
+  const whole = S.some((s) => s.whole);
   const has = (t) => S.some((s) => (s.part || legacy(s)) === t);
   const nBarrels = S.filter((s) => (s.part || legacy(s)) === 'barrel').length;
   // (all it fires water: a water cannon, no weapon)
@@ -484,13 +856,20 @@ function summary(o) {
     if (k === 'car' && rH >= 0.5) k = 'monster';
     if (cannon && n >= 4) k = 'tank';
     noun = k || (bikey ? 'moto' : n === 1 && aW < 1.5 ? 'mono' : rH >= 0.5 ? 'monster' : L > 6.8 ? 'truck' : 'car');
-  } else if (base === 'copter') noun = 'copter';
+    // (ROADMAP 11.12: on tracks - a tank with a cannon, a bulldozer with a blade at its front; on
+    // its fans, a hovercraft; with a sail, a land yacht; its body a barrel, a cannon on wheels)
+    if (o.tracks && o.tracks.length) noun = cannon ? 'tank' : vs('blade', 'ram') ? 'dozer' : 'crawler';
+    else if (o.fans && o.fans.length) noun = 'hover';
+    else if (vs('sail', 'land')) noun = 'landyacht';
+    if (whole && noun !== 'tank') noun = 'gun';
+  } else if (base === 'copter') noun = spec.rotors && spec.rotors.length ? 'copter' : 'jetcopter';
   else if (base === 'plane') noun = 'plane';
   else if (base === 'balloon') noun = 'balloon';
   else if (base === 'boat') {
     // (a sail drawn: a sailboat; else the network's kind of boat - a submarine, a canoe)
     const k = kin === 'speedboat' || kin === 'canoe' || kin === 'sub' || kin === 'ship' ? kin : null;
     noun = has('sail') ? (L > 10 ? 'ship' : 'sailboat') : k || (L > 10 ? 'ship' : 'boat');
+    if (spec.boat && spec.boat.air) noun = 'airboat';
   }
   const [word, g] = NOUN[noun];
   const adj = [];
@@ -501,8 +880,9 @@ function summary(o) {
     else if (o.glide) say('glide');
     if (base !== 'boat' && M.boat) say('float');
     if (nBarrels && noun !== 'tank' && !waterOnly) say('armed');
+    if (spec.upside) say('upside');
     if (spec.armor) say('armor');
-    if (spec.spring && adj.length < 2) say('jump');
+    if (spec.spring && spec.spring.jump && adj.length < 2) say('jump');
   }
   let name = [word, ...adj.slice(0, 2)].join(' ');
   // (nothing moves it yet, and the network sees a car, a bus, a tractor in it: that, with no wheels -
@@ -510,7 +890,10 @@ function summary(o) {
   const bare = { police: 'car', ambulance: 'car', firetruck: 'truck' }[kin] || kin;
   if (noun === 'still' && bare && NOUN[bare] && !WATER_NOUN.has(bare)) name = `${NOUN[bare][0]} בלי גלגלים`;
   if (has('chute') && spec && spec.chute) name += ' עם מצנח';
-  else if (has('blade') && spec && spec.ram) name += ' עם איל';
+  else if (giant && !whole && noun !== 'tank') name += ' עם תותח ענק';
+  else if (has('blade') && spec && spec.ram && noun !== 'dozer') name += ' עם איל';
+  else if (spec && spec.bumper) name += ' עם פגוש קפיץ';
+  else if (spec && spec.blades && spec.blades.side) name += ' עם להבים';
   else if (waterOnly) name += ' עם תותח מים';
   // ---- what it does (a chip each)
   const abil = [];
@@ -527,9 +910,24 @@ function summary(o) {
     // (a barrel drawn in colour: what it fires, a chip each)
     for (const e of [...new Set((spec.guns || []).map((gn) => gn.el).filter(Boolean))]) abil.push(['el-' + e, EL_NAME[e]]);
     if (spec.ram) abil.push(['fire', 'ניגוח']);
-    if (spec.spring) abil.push(['gear', 'קפיצה']);
+    // (ROADMAP 11.12: what its parts make of it, where they are)
+    if (o.tracks && o.tracks.length) abil.push(['move', 'זחלים']);
+    if (spec.hover) abil.push(['water', 'מים ויבשה']);
+    if (spec.vtols && spec.vtols.length && M.copter) abil.push(['air', 'המראה אנכית']);
+    if (spec.upside) abil.push(['move', 'נוסע הפוך']);
+    else if (spec.roofWheels) abil.push(['move', 'נוסע גם הפוך']);
+    if (giant) abil.push(['fire', 'רתיעה']);
+    if (spec.blades && spec.blades.side) abil.push(['fire', 'להבי צד']);
+    if (spec.blades && spec.blades.rear) abil.push(['fire', 'להב אחורי']);
+    if (spec.bumper) abil.push(['gear', 'פגוש קפיץ']);
+    if (spec.spring && spec.spring.jump) abil.push(['gear', 'קפיצה']);
+    if (spec.spring && spec.spring.kick) abil.push(['gear', 'זינוק']);
+    if (spec.righter) abil.push(['gear', 'מתיישר']);
+    if (spec.handling && spec.handling.brake) abil.push(['move', 'בלם סילון']);
     if (spec.chute) abil.push(['gear', 'מצנח']);
+    if (spec.floaty) abil.push(['air', 'נפילה איטית']);
     if (spec.armor) abil.push(['gear', 'שריון']);
+    if ((spec.guns || []).some((gn) => gn.quiet) || (spec.handling && spec.handling.quiet)) abil.push(['gear', 'שקט']);
   }
   // ---- its numbers (each 0..1 for its bar, and as it is said)
   const bars = [];
@@ -540,6 +938,9 @@ function summary(o) {
       bars.push({ k: 'speed', name: 'מהירות', v: (spec.handling.top * 3.6) / 170, txt: `${Math.round(spec.handling.top * 3.6)} קמ״ש` });
       bars.push({ k: 'accel', name: 'תאוצה', v: spec.handling.power / 24, txt: '' });
       bars.push({ k: 'grip', name: 'אחיזה', v: spec.handling.grip / 11, txt: '' });
+      // (ROADMAP 11.12: how steady it stands - its weight over its wheels, low and wide or high
+      // and narrow)
+      if (spec.steady !== undefined) bars.push({ k: 'steady', name: 'יציבות', v: spec.steady, txt: spec.handling.tipA ? 'עלול להתהפך' : '', bad: !!spec.handling.tipA || spec.steady < 0.35 });
     } else if (M.boat && spec.boat) {
       const kmh = 20 * spec.boat.q.speed * 3.6;
       bars.push({ k: 'speed', name: 'מהירות', v: kmh / 100, txt: `${Math.round(kmh)} קמ״ש` });
@@ -550,7 +951,7 @@ function summary(o) {
     if (M.balloon && spec.balloon) air = Math.max(air, spec.balloon.drift * 3.6);
     if (air) bars.push({ k: 'air', name: 'בטיסה', v: air / 240, txt: `${Math.round(air)} קמ״ש` });
     if (rotorOrWings(o)) {
-      const lift = Math.max(o.liftR || 0, o.liftW ? o.liftW / 0.7 : 0);
+      const lift = Math.max(o.liftR || 0, o.liftJ || 0, o.liftW ? o.liftW / 0.7 : 0);
       bars.push({ k: 'lift', name: 'עילוי', v: Math.min(1, lift / 2), txt: `×${lift.toFixed(1)}`, bad: lift < 1 });
     }
     if (spec.guns.length) {
@@ -559,13 +960,13 @@ function summary(o) {
       bars.push({ k: 'fire', name: 'כוח אש', v: Math.min(1, dps / 320), txt: spec.guns.map(gunName).join(' + ') });
       bars.push({ k: 'range', name: 'טווח', v: Math.min(1, range / 330), txt: `${range} מ׳` });
     }
-    if (spec.spring) {
+    if (spec.spring && spec.spring.jump) {
       const h = (spec.spring.jump * spec.spring.jump) / 40;
       bars.push({ k: 'jump', name: 'קפיצה', v: Math.min(1, h / 5), txt: `${h.toFixed(1)} מ׳` });
     }
     bars.push({ k: 'hp', name: 'עמידות', v: spec.hp / 450, txt: `${spec.hp}` });
   } else if (rotorOrWings(o)) {
-    const lift = Math.max(o.liftR || 0, o.liftW ? o.liftW / 0.7 : 0);
+    const lift = Math.max(o.liftR || 0, o.liftJ || 0, o.liftW ? o.liftW / 0.7 : 0);
     bars.push({ k: 'lift', name: 'עילוי', v: Math.min(1, lift / 2), txt: `×${lift.toFixed(1)}`, bad: lift < 1 });
   }
   // ---- (ROADMAP 11.11) what its parts make it do that no number says: a line each
@@ -582,7 +983,22 @@ function summary(o) {
       if (gn.down) lines.push(['fire', 'קנה כלפי מטה', gn.type === 'cannon' ? 'מטיל פצצות' : 'יורה למטה']);
     }
   }
-  return { ok: o.ok, name, abil, bars, warn, mass, L, cost: spec ? spec.cost : 0, lines };
+  // (ROADMAP 11.12) each part that is something of its own where it is: what it does there (a
+  // track, a wheel on the roof, a propeller pushing from the back, a giant cannon...) - once each
+  const seen = new Set();
+  for (const s of S) {
+    const r = role.get(s);
+    if (!r || !NOTABLE.has(`${s.part || legacy(s)}:${r.v}`)) continue;
+    const key = `${r.v}:${r.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push([ROLE_TONE[s.part || legacy(s)] || 'gear', r.name, r.say.replace(/^[^:]+: /, '')]);
+  }
+  return { ok: o.ok, name, abil, bars, warn, mass, L, cost: spec ? spec.cost : 0, lines: lines.slice(0, 7), com: o.com };
 }
 
-const rotorOrWings = (o) => o.design.strokes.some((s) => s.part === 'rotor' || s.part === 'wing');
+const rotorOrWings = (o) => o.design.strokes.some((s) => s.part === 'rotor' || s.part === 'wing' || (s.part === 'jet' && o.role && o.role.has(s) && o.role.get(s).v === 'vtol'));
+// (the parts that are something of their own where they are - each a line on the card; the colour
+// of its chip)
+const NOTABLE = new Set(['wheel:track', 'wheel:roof', 'wheel:square', 'wheel:big', 'rotor:pusher', 'rotor:puller', 'rotor:hover', 'prop:pusher', 'prop:hover', 'prop:lift', 'jet:vtol', 'jet:retro', 'wing:fin', 'barrel:giant', 'barrel:rear', 'barrel:up', 'blade:side', 'blade:rear', 'head:ram', 'head:weight', 'spring:bumper', 'spring:kick', 'spring:righter', 'sail:land', 'armor:front', 'fin:spoiler', 'fin:keel', 'skid:sled', 'scope:scope', 'mag:mag', 'silencer:silencer']);
+const ROLE_TONE = { wheel: 'move', rotor: 'air', prop: 'air', jet: 'move', wing: 'air', barrel: 'fire', blade: 'fire', head: 'fire', spring: 'gear', sail: 'water', armor: 'gear', fin: 'air', skid: 'move', scope: 'fire', mag: 'fire', silencer: 'gear' };

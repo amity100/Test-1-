@@ -386,9 +386,18 @@ function glassPlan(st, style, lo, L) {
 }
 
 // ------------------------------------------------------------------ parts
-// a wheel: its tyre, the rim and five spokes, the hub (axle along x)
-function wheel(M, r, w, rim) {
+// a wheel: its tyre, the rim and five spokes, the hub (axle along x) - (ROADMAP 11.12) drawn square,
+// square: a block of a tyre, a square rim
+function wheel(M, r, w, rim, square = false) {
   const K = new Kit();
+  if (square) {
+    K.add(M.matte, new THREE.CylinderGeometry(r * 1.2, r * 1.2, w * 0.9, 4, 1).rotateY(Math.PI / 4).rotateZ(Math.PI / 2), linC(...RUBBER));
+    K.add(M.metal, new THREE.CylinderGeometry(r * 0.72, r * 0.72, w * 0.96, 4, 1).rotateY(Math.PI / 4).rotateZ(Math.PI / 2), rim);
+    K.add(M.metal, new THREE.CylinderGeometry(r * 0.15, r * 0.15, w, 12).rotateZ(Math.PI / 2), linC(0.8, 0.8, 0.84));
+    const g = K.build({ seed: 0.62 });
+    g.matrixAutoUpdate = true;
+    return g;
+  }
   K.add(M.matte, new THREE.TorusGeometry(r * 0.8, r * 0.2, 10, 30).rotateY(Math.PI / 2), linC(...RUBBER));
   K.add(M.matte, new THREE.CylinderGeometry(r * 0.97, r * 0.97, w * 0.86, 30, 1, true).rotateZ(Math.PI / 2), linC(0.08, 0.08, 0.09));
   K.add(M.metal, new THREE.CylinderGeometry(r * 0.6, r * 0.6, w * 0.7, 24).rotateZ(Math.PI / 2), rim);
@@ -402,6 +411,49 @@ function wheel(M, r, w, rim) {
   K.add(M.metal, new THREE.CylinderGeometry(r * 0.15, r * 0.15, w * 0.8, 12).rotateZ(Math.PI / 2), linC(0.8, 0.8, 0.84));
   const g = K.build({ seed: 0.61 });
   g.matrixAutoUpdate = true;
+  return g;
+}
+
+// (ROADMAP 11.12) a track: a rubber belt round a long loop - a half circle at each end, its bottom
+// run on the ground (yb) - across x from x - tw / 2 to x + tw / 2, `t` thick
+function trackBelt(z0, z1, yb, r, x, tw, t = 0.07) {
+  const za = z0 + r;
+  const zb = Math.max(za + 0.01, z1 - r);
+  const yc = yb + r;
+  // (round it the way it turns: its front end up, over the top, its back end down - at radius rr)
+  const loop = (rr) => {
+    const L = [];
+    for (let k = 0; k <= 10; k++) {
+      const a = -Math.PI / 2 + (k / 10) * Math.PI;
+      L.push([zb + Math.cos(a) * rr, yc + Math.sin(a) * rr]);
+    }
+    for (let k = 0; k <= 10; k++) {
+      const a = Math.PI / 2 + (k / 10) * Math.PI;
+      L.push([za + Math.cos(a) * rr, yc + Math.sin(a) * rr]);
+    }
+    return L;
+  };
+  const O = loop(r);
+  const I = loop(Math.max(0.02, r - t));
+  const xa = x - tw / 2;
+  const xb = x + tw / 2;
+  const pos = [];
+  const tri = (...v) => {
+    for (const [px, [pz, py]] of v) pos.push(px, py, pz);
+  };
+  const n = O.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    // (outside, facing out; inside, facing in; its two sides)
+    tri([xa, O[i]], [xb, O[i]], [xb, O[j]], [xa, O[i]], [xb, O[j]], [xa, O[j]]);
+    tri([xa, I[i]], [xb, I[j]], [xb, I[i]], [xa, I[i]], [xa, I[j]], [xb, I[j]]);
+    tri([xb, O[i]], [xb, I[i]], [xb, I[j]], [xb, O[i]], [xb, I[j]], [xb, O[j]]);
+    tri([xa, O[i]], [xa, I[j]], [xa, I[i]], [xa, O[i]], [xa, O[j]], [xa, I[j]]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
   return g;
 }
 
@@ -478,6 +530,11 @@ export function buildPolished(design, spec) {
   const S = design.strokes;
   let floor = spec.y0;
   if (spec.wheels.length) floor = Math.min(...spec.wheels.map((w) => w.y - w.r));
+  // (ROADMAP 11.12: on its tracks; a hovercraft, over its skirt)
+  for (const t of spec.tracks || []) floor = Math.min(floor, t.y0);
+  if (spec.hover && !spec.wheels.length && !(spec.tracks || []).length) floor = spec.y0 - 0.34;
+  // (what each part is where it is: game/partrole.js, game/partsum.js rideSpec)
+  const roleOf = (s) => (spec.role && spec.role.get(s) ? spec.role.get(s).v : null);
   for (const s of S) if (s.type === 'spring') floor = Math.min(floor, shapeOf(s.pts).y0);
   // (its skids under it: what it stands on)
   for (const s of S) if (s.part === 'skid') floor = Math.min(floor, shapeOf(s.pts).y0 - 0.05);
@@ -619,6 +676,14 @@ export function buildPolished(design, spec) {
   }
   // ---- fins: a plate where drawn, and tail planes either side of its foot
   for (const s of S) {
+    // (ROADMAP 11.12: a wing drawn standing up - a fin; on a car, its spoiler: a plate right across it)
+    if (s.type === 'wing' && roleOf(s) === 'fin') {
+      const sh = shapeOf(toM(s.pts));
+      const c = colOf(s, design);
+      const fo = sh.closed ? outline(toM(s.pts)) : toM(s.pts).concat(toM(s.pts).reverse().map(([z, y]) => [z - 0.08, y]));
+      if (fo.length >= 3) K.add(M.paint, plate(fo, drive ? W * 0.8 : 0.09, 0, 0.02), shade(c, 1.08));
+      continue;
+    }
     if (s.type !== 'fin') continue;
     const sh = shapeOf(s.pts);
     const c = colOf(s, design);
@@ -683,10 +748,28 @@ export function buildPolished(design, spec) {
       }
     }
   }
-  // ---- a spring under it: a steel coil between two pads
+  // ---- a spring under it: a steel coil between two pads - (ROADMAP 11.12) at its front a bumper on
+  // two coils, at its back two coils lying along it
   for (const s of S) {
     if (s.type !== 'spring') continue;
     const sh = shapeOf(s.pts);
+    const v = roleOf(s);
+    if (v === 'bumper' || v === 'kick') {
+      const front = v === 'bumper';
+      const r = clamp(Math.min(sh.w, sh.h) / 2, 0.1, 0.24);
+      const len = clamp(Math.max(sh.w, sh.h) * 0.8, 0.35, 1.1);
+      const turns = clamp(Math.round((s.coils || 6) / 2), 3, 8);
+      const y = clamp(Y(sh.cy), r + 0.15, Y(spec.y1) - r);
+      const z0 = front ? Z(spec.x1) - 0.12 : Z(spec.x0) + 0.12;
+      const zEnd = z0 + (front ? len : -len);
+      for (const x of [-W * 0.28, W * 0.28]) {
+        const g = helixGeometry(0, 0, len, r, turns).rotateX(front ? Math.PI / 2 : -Math.PI / 2);
+        K.add(M.metal, g.translate(x, y, z0), linC(...STEEL));
+      }
+      // (the pad it hits with)
+      K.box(M.matte, -W * 0.44, y - r * 1.6, Math.min(zEnd, zEnd + (front ? 0.1 : -0.1)), W * 0.44, y + r * 1.6, Math.max(zEnd, zEnd + (front ? 0.1 : -0.1)), linC(0.13, 0.13, 0.15));
+      continue;
+    }
     const r = clamp(Math.min(sh.w, sh.h) / 2, 0.14, 0.5);
     const turns = clamp(Math.round((s.coils || 6) / 2), 3, 9);
     for (const x of drive && W > 0.6 ? [-W * 0.24, W * 0.24] : [0]) {
@@ -694,12 +777,40 @@ export function buildPolished(design, spec) {
       K.cyl(M.matte, r * 1.15, r * 1.15, Y(sh.y0), Y(sh.y0) + 0.06, linC(0.12, 0.12, 0.14), { axis: 'y', x, z: Z(sh.mx), segs: 16 });
     }
   }
-  // ---- jets: a nozzle out of its back, the glow in it
+  // ---- jets: a nozzle out of its back, the glow in it - (ROADMAP 11.12) under it, a nozzle each side
+  // pointing down (it lifts it); at its front, one pointing forward (it brakes)
   const jetsAt = [];
+  const vtolAt = [];
   for (const s of S) {
     if (s.type !== 'jet') continue;
     const sh = shapeOf(s.pts);
     const r = clamp(sh.size / 2, 0.16, 0.6);
+    const v = roleOf(s);
+    if (v === 'vtol') {
+      const rr = clamp(r, 0.18, 0.45);
+      for (const sx of [-1, 1]) {
+        const x = sx * (W / 2 + rr * 0.9);
+        const z = Z(sh.mx);
+        const yb = Math.max(rr * 0.6, Y(sh.y0));
+        K.cyl(M.metal, rr * 1.05, rr * 0.85, yb, yb + rr * 2.2, linC(0.5, 0.51, 0.56), { axis: 'y', x, z, segs: 16 });
+        K.cyl(M.metal, rr * 1.12, rr * 1.12, yb - 0.04, yb + 0.08, linC(0.25, 0.25, 0.28), { axis: 'y', x, z, segs: 16 });
+        K.cyl(M.glow, rr * 0.7, rr * 0.7, yb - 0.05, yb - 0.02, s.neon ? linC(...s.col) : linC(1.0, 0.55, 0.2), { axis: 'y', x, z, segs: 14 });
+        // (a strut to its side)
+        K.box(M.metal, Math.min(x, sx * W * 0.4), yb + rr * 1.2, z - 0.08, Math.max(x, sx * W * 0.4), yb + rr * 1.4, z + 0.08, linC(0.4, 0.4, 0.45));
+        vtolAt.push([x, yb - 0.15, z]);
+      }
+      continue;
+    }
+    if (v === 'retro') {
+      const y = Y(sh.cy);
+      const za = Z(Math.min(sh.x0, spec.x1 - 0.2));
+      const zb = Z(sh.x1) + 0.15;
+      for (const x of W > 1.2 ? [-W * 0.3, W * 0.3] : [0]) {
+        K.cyl(M.metal, r * 0.92, r * 1.1, za, zb, linC(0.5, 0.51, 0.56), { x, y, segs: 18 });
+        K.cyl(M.glow, r * 0.7, r * 0.7, zb + 0.02, zb + 0.05, s.neon ? linC(...s.col) : linC(1.0, 0.55, 0.2), { x, y, segs: 16 });
+      }
+      continue;
+    }
     const zb = s.side ? Z(sh.x1) : Z(Math.max(sh.x1, spec.x0 + 0.2));
     const z0 = Z(sh.x0) - 0.15;
     const y = Y(sh.cy);
@@ -717,21 +828,52 @@ export function buildPolished(design, spec) {
     const bo = outline(toM(s.pts));
     if (bo.length < 3) continue;
     const t = clamp(W * 0.08, 0.06, 0.16);
-    for (const x of W > 1.2 ? [-W * 0.3, W * 0.3] : [0]) K.add(M.metal, plate(bo, t, x, t * 0.45), s.col && !s.pencil ? shade(s.col, 1) : linC(...STEEL));
+    // (ROADMAP 11.12: drawn along its side - a blade out of each side of it)
+    const side = roleOf(s) === 'side';
+    const xs = side ? [-W / 2 - 0.08, W / 2 + 0.08] : W > 1.2 ? [-W * 0.3, W * 0.3] : [0];
+    for (const x of xs) K.add(M.metal, plate(bo, side ? t * 0.5 : t, x, t * 0.25), s.col && !s.pencil ? shade(s.col, 1) : linC(...STEEL));
   }
   const root = K.build({ seed: 0.42 });
   root.matrixAutoUpdate = true;
-  // ---- wheels: a pair each, turning
+  // ---- wheels: a pair each, turning - (ROADMAP 11.12) a square one square; a track a belt round
+  // its wheels each side, as long as drawn
   const wheels = [];
   for (const s of S) {
     if (s.type !== 'wheel') continue;
     const sh = shapeOf(s.pts);
     const skate = spec.kind === 'skate';
+    const rim = s.col && !s.pencil ? shade(s.col, 1) : linC(0.82, 0.83, 0.87);
+    if (roleOf(s) === 'track') {
+      const r = clamp(sh.h / 2, 0.2, 0.62);
+      const tw = clamp(W * 0.24, 0.28, 0.56);
+      const z0 = Z(sh.x0);
+      const z1 = Z(sh.x1);
+      const yb = Y(sh.y0);
+      const TK = new Kit();
+      for (const sx of [-1, 1]) {
+        const x = sx * (W / 2 + tw / 2 + 0.03);
+        TK.add(M.matte, trackBelt(z0, z1, yb, r, x, tw), linC(...RUBBER));
+        // (its guard over it)
+        TK.box(M.paint, x - tw * 0.55, yb + r * 2 + 0.02, z0 - 0.04, x + tw * 0.55, yb + r * 2 + 0.07, z1 + 0.04, shade(base, 0.7));
+      }
+      root.add(TK.build({ seed: 0.63 }));
+      const n = clamp(Math.round((z1 - z0) / (r * 2.1)), 2, 7);
+      for (let k = 0; k < n; k++) {
+        const z = z0 + r + ((z1 - z0 - r * 2) * k) / Math.max(1, n - 1);
+        for (const sx of [-1, 1]) {
+          const g = wheel(M, r * 0.82, tw * 0.7, rim);
+          g.position.set(sx * (W / 2 + tw / 2 + 0.03), yb + r, z);
+          root.add(g);
+          wheels.push(g);
+        }
+      }
+      continue;
+    }
+    const square = roleOf(s) === 'square';
     const r = clamp((sh.w + sh.h) / 4, skate ? 0.025 : 0.15, 1.3);
     const ww = skate ? 0.045 : clamp(r * 0.62, 0.12, 0.46);
-    const rim = s.col && !s.pencil ? shade(s.col, 1) : linC(0.82, 0.83, 0.87);
     for (const sx of slim ? [0] : [-1, 1]) {
-      const g = wheel(M, r, slim ? Math.min(ww, 0.14) : ww, rim);
+      const g = wheel(M, r, slim ? Math.min(ww, 0.14) : ww, rim, square);
       g.position.set(sx * (skate ? W * 0.42 : W / 2 + ww / 2 + 0.02), Y(sh.my), Z(sh.mx));
       root.add(g);
       wheels.push(g);
@@ -766,7 +908,10 @@ export function buildPolished(design, spec) {
     const elev = clamp(Math.atan2(mz[1] - bs[1], Math.abs(dz)), -0.35, 1.2);
     const st = body ? body.at(bs[0]) : null;
     const roof = st ? st.yc + st.b : Y(spec.y1);
-    const onTop = bs[1] > roof - Math.max(0.25, r * 2);
+    // (ROADMAP 11.12: its body itself the barrel - no turret: it fires out of its nose, where it
+    // points)
+    const whole = !!s.whole;
+    const onTop = !whole && bs[1] > roof - Math.max(0.25, r * 2);
     const T = new Kit();
     const metal = s.col && !s.pencil ? shade(s.col, 0.85) : linC(...GUNMETAL);
     const dark = shade(GUNMETAL, 0.75);
@@ -785,7 +930,7 @@ export function buildPolished(design, spec) {
         T.box(M.matte, -0.09, y0 + 0.08, -0.25, 0.09, y0 + 0.3, 0.2, linC(...GUNMETAL));
         T.box(M.matte, 0.09, y0 + 0.06, -0.15, 0.24, y0 + 0.24, 0.08, linC(0.3, 0.36, 0.24));
       }
-    } else T.sphere(M.metal, Math.max(r * 1.7, 0.09), 0, 0, 0, dark, 1, 1, 1, 14);
+    } else if (!whole) T.sphere(M.metal, Math.max(r * 1.7, 0.09), 0, 0, 0, dark, 1, 1, 1, 14);
     // the barrel: along +z from the turret, then slanted up as drawn (round its foot)
     const bar = [];
     const z0 = cannon ? (onTop ? rb * 0.4 : 0) : onTop ? 0.2 : 0;
@@ -808,7 +953,7 @@ export function buildPolished(design, spec) {
     node.rotation.y = yaw0;
     root.add(node);
     const ml = L + 0.15;
-    turrets.push({ node, muzzle: new THREE.Vector3(0, ay + Math.sin(elev) * ml, Math.cos(elev) * ml), pivot: new THREE.Vector3(0, ay, 0), type: cannon ? 'cannon' : 'mg', r, yaw0, arc: onTop ? Math.PI : 0.4 });
+    turrets.push({ node, muzzle: new THREE.Vector3(0, ay + Math.sin(elev) * ml, Math.cos(elev) * ml), pivot: new THREE.Vector3(0, ay, 0), type: cannon ? 'cannon' : 'mg', r, yaw0, arc: whole ? 0.12 : onTop ? Math.PI : 0.4 });
   }
   // ---- the rotor on its mast; a tail rotor if it has a tail
   let rotor = null;
@@ -883,11 +1028,11 @@ export function buildPolished(design, spec) {
       wings.push(node);
     }
   }
-  // ---- the propeller on its nose
+  // ---- the propeller on its nose - (ROADMAP 11.12) or at its back, pushing, in a ring (an airboat's)
   let prop = null;
-  if (spec.props.length) {
-    const pr = spec.props[0];
-    const R = clamp(pr.h / 2, 0.35, 1.6);
+  const props = [];
+  for (const pr of spec.props || []) {
+    const R = clamp(Math.max(pr.h, pr.w * 0.8) / 2, 0.35, 1.6);
     const Pk = new Kit();
     for (let k = 0; k < 3; k++) {
       const g = bladeGeo(R, 0.2, 0.1, 0.04);
@@ -896,10 +1041,51 @@ export function buildPolished(design, spec) {
       Pk.add(M.matte, g, linC(0.1, 0.1, 0.12));
     }
     Pk.cyl(M.metal, 0.2, 0.02, 0, 0.36, shade(base, 1), { segs: 14 });
-    prop = Pk.build({ seed: 0.55 });
-    prop.matrixAutoUpdate = true;
-    prop.position.set(0, Y(pr.cy), Z(Math.max(pr.x1, spec.x1)) + 0.05);
-    root.add(prop);
+    if (pr.back) Pk.add(M.metal, new THREE.TorusGeometry(R * 1.08, 0.04, 6, 32).translate(0, 0, 0.05), linC(0.32, 0.33, 0.37));
+    const node = Pk.build({ seed: 0.55 + props.length * 0.02 });
+    node.matrixAutoUpdate = true;
+    // (as high as drawn - kept clear of the ground)
+    const y = Math.max(Y(pr.cy), R + 0.1);
+    if (pr.back) {
+      node.position.set(0, y, Z(Math.min(pr.x0, spec.x0)) - 0.1);
+      node.rotation.y = Math.PI;
+    } else node.position.set(0, y, Z(Math.max(pr.x1, spec.x1)) + 0.05);
+    root.add(node);
+    props.push(node);
+  }
+  prop = props[0] || null;
+  // ---- (ROADMAP 11.12) a hovercraft's fans under it, each in its duct; its skirt round its bottom
+  const fans = [];
+  for (const f of spec.fans || []) {
+    const R = clamp(f.w / 2, 0.35, Math.max(0.4, W * 0.42));
+    const Fk = new Kit();
+    Fk.add(M.metal, new THREE.TorusGeometry(R * 1.06, 0.06, 8, 30).rotateX(Math.PI / 2), linC(0.26, 0.26, 0.3));
+    for (let k = 0; k < 4; k++) {
+      const g = bladeGeo(R, 0.24, 0.12, 0.03);
+      g.rotateY((k / 4) * Math.PI * 2);
+      Fk.add(M.matte, g, linC(0.1, 0.1, 0.12));
+    }
+    Fk.cyl(M.metal, 0.12, 0.12, -0.05, 0.06, linC(0.5, 0.5, 0.55), { axis: 'y', segs: 12 });
+    const node = Fk.build({ seed: 0.66 + fans.length * 0.02 });
+    node.matrixAutoUpdate = true;
+    node.position.set(0, Math.max(0.12, Y(spec.y0) - 0.02), Z(clamp(f.mx, spec.x0 + R, spec.x1 - R)));
+    root.add(node);
+    fans.push(node);
+  }
+  if (spec.hover) {
+    const a = W / 2 + 0.14;
+    const b = spec.L / 2 + 0.12;
+    const P = [];
+    for (let k = 0; k < 40; k++) {
+      const t = (k / 40) * Math.PI * 2;
+      // (round at its ends, straight along its sides)
+      const c = Math.cos(t);
+      const sn = Math.sin(t);
+      P.push(new THREE.Vector3(Math.sign(sn) * Math.pow(Math.abs(sn), 0.6) * a, Math.max(0.17, Y(spec.y0) - 0.12), Math.sign(c) * Math.pow(Math.abs(c), 0.6) * b));
+    }
+    const SK = new Kit();
+    SK.add(M.matte, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P, true), 80, 0.17, 8, true), linC(0.1, 0.1, 0.12));
+    root.add(SK.build({ seed: 0.67 }));
   }
   // ---- a parachute: packed on its top; the canopy over it, closed until it opens
   let canopy = null;
@@ -969,9 +1155,32 @@ export function buildPolished(design, spec) {
     flame.scale.setScalar(0.01);
     root.add(flame);
   }
+  // ---- (ROADMAP 11.12) how it stands: a node of its own between it and the vehicle's (which leans
+  // it in the turns) - game/vehicles.js tips it onto its tail, its nose, its two wheels, rolls it
+  // over. On its roof's wheels only: built on its back
+  root.updateMatrixWorld(true);
+  if (spec.upside) {
+    const b0 = new THREE.Box3().setFromObject(root);
+    root.rotation.z = Math.PI;
+    root.position.y = b0.max.y;
+    root.updateMatrixWorld(true);
+  }
+  const bb = new THREE.Box3().setFromObject(root);
+  const stance = new THREE.Group();
+  stance.add(root);
+  const outer = new THREE.Group();
+  outer.add(stance);
+  const zs = spec.wheels.map((w) => Z(w.z));
+  for (const t of spec.tracks || []) zs.push(Z(t.x0), Z(t.x1));
+  const standAt = { zr: zs.length ? Math.min(...zs) : Z(spec.x0), zf: zs.length ? Math.max(...zs) : Z(spec.x1), top: Math.max(0.5, bb.max.y) };
   const t0 = turrets[0] || null;
   return {
-    body: root,
+    body: outer,
+    stance,
+    standAt,
+    props,
+    fans,
+    vtolAt,
     wheels,
     prop: prop || new THREE.Object3D(),
     rotor: rotor || new THREE.Object3D(),
