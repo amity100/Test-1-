@@ -2545,7 +2545,8 @@ function familyPrior(ctx, hint) {
 // parts: [{ i, type, auto, at: [x, y] (page units: where its name goes), choices }], flip (its
 // front to the left), body (the main body line's index), R (the body: its outline and measures,
 // the frame's units), the strokes in the frame's units (st: [{ pts, ink, type, sh }]), the frame's
-// scale (k), arches (wheels in its wheel arches), top (a plane drawn from above) }
+// scale (k), arches (wheels in its wheel arches), top (a plane drawn from above) }. (ROADMAP 11.15)
+// ctx.noImplicit: a Set of the parts the game would add that the player took away - not added
 export function readParts(strokes, over = {}, face = null, hint = null, ctx = null) {
   const S = strokes.map((s, i) => ({ i, p: s.p, c: s.c, k: s.k, r: s.r })).filter((s) => s.p && s.p.length > 1);
   if (!S.length) return null;
@@ -2696,7 +2697,10 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
     // (ROADMAP 11.14: a bike's - its frame of lines, no body drawn: built as a bike, game/partsum.js)
     R = { loop, sh, made: !!best.R.made, bike: !!best.R.bike };
   }
-  const arches = best.frame === 'ride' ? (best.arches || []).map((a) => ({ ...a, x: fx(a.x) })) : [];
+  // (ROADMAP 11.15: the parts the game adds that the player took away - none)
+  const noImp = ctx && ctx.noImplicit && ctx.noImplicit.size ? ctx.noImplicit : null;
+  if (noImp && best.implicit) best.implicit = best.implicit.filter((q) => !noImp.has(q.type));
+  const arches = best.frame === 'ride' && !(noImp && noImp.has('wheel')) ? (best.arches || []).map((a) => ({ ...a, x: fx(a.x) })) : [];
   const parts = ost.map((o) => {
     const auto = autoL[o.i] && autoL[o.i] !== over[o.i] ? autoL[o.i] : over[o.i] ? 'deco' : autoL[o.i] || 'deco';
     return { i: o.i, type: o.type, auto, choices: choicesFor(o.sh, best.frame, auto), at: labelAt(strokes[o.i].p), sh: o.sh };
@@ -2706,7 +2710,7 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
   // names go, page units)
   const toPage = ([x, y]) => [x / k + x0, y1 - y / k];
   const implicit = (best.implicit || []).map((q) => ({ type: q.type, at: toPage(q.at) }));
-  for (const a of best.frame === 'ride' ? best.arches || [] : []) implicit.push({ type: 'wheel', at: toPage([a.x, a.y + a.r]), guess: !!a.guess });
+  for (const a of best.frame === 'ride' && !(noImp && noImp.has('wheel')) ? best.arches || [] : []) implicit.push({ type: 'wheel', at: toPage([a.x, a.y + a.r]), guess: !!a.guess });
   // (what the network sees in it, each kind with its chance: game/partsum.js names it by that)
   const guess = ctx && ctx.net && ctx.net.groups ? ctx.net.groups : null;
   const prob = ctx && ctx.net && ctx.net.p ? ctx.net.p : null;

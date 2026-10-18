@@ -1239,6 +1239,12 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-pchip { position: absolute; left: 0; top: 0; font: 700 12.5px var(--font-ui); line-height: 1; padding: 3px 7px 4px; border: 1.8px solid var(--ink); border-radius: 9px 7px 10px 8px; background: #f1ede3; color: var(--ink); white-space: nowrap; box-shadow: 1.5px 2px 0 rgba(36, 36, 44, 0.35); }
 .fd-pchip.mine::after { content: ' ✎'; font-weight: 400; }
 .fd-pchip.implicit { border-style: dashed; opacity: 0.78; box-shadow: none; pointer-events: none; }
+/* (ROADMAP 11.15) a part's ▾ (its menu - a tap on its name is the next it could be); a part the game
+   added, its ✕ (taken away) */
+.fd-pchip .dd { font-style: normal; font-size: 10px; opacity: 0.55; margin-inline-end: 3px; }
+.fd-pchip .x { font-style: normal; font-size: 10px; margin-inline-start: 4px; color: #c8213f; }
+.fd-pchip.flip { animation: fd-flip 0.35s ease-out; }
+@keyframes fd-flip { 0% { transform-origin: 50% 50%; filter: brightness(1.35); } 100% { filter: none; } }
 .r-body { background: #f1ede3; }
 .r-move { background: #cfe3ff; }
 .r-air { background: #d4f1ff; }
@@ -1306,8 +1312,25 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-eng.hidden { display: none; }
 .fd-eb { flex: 1; font: 700 11.5px var(--font-ui); padding: 2px 4px 3px; border: 1.8px solid var(--ink); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; white-space: nowrap; }
 .fd-eb.on { background: #d9e8ff; border-color: #2b7de0; box-shadow: inset 0 -3px 0 #33b5ff; }
-.fd-engn { display: flex; flex-direction: column; gap: 2px; }
+.fd-engn { display: flex; flex-direction: column; gap: 3px; pointer-events: auto; }
 .fd-engn.hidden { display: none; }
+/* (ROADMAP 11.15) its look - as drawn, or polished; what the engineer offers, each a ✓ to take;
+   what the game added, each a ✕ to take away */
+.fd-look { display: flex; align-items: center; gap: 3px; pointer-events: auto; }
+.fd-look.hidden { display: none; }
+.fd-look > span { font: 700 11.5px var(--font-ui); margin-inline-end: 2px; }
+.fd-lk { flex: 1; font: 700 11.5px var(--font-ui); padding: 2px 4px 3px; border: 1.8px solid var(--ink); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.fd-lk.on { background: #ffe2a8; border-color: #ff4fa3; box-shadow: inset 0 -3px 0 #ff9a3c; }
+.fd-sgh { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 1px; }
+.fd-sgh b { font: 700 11.5px var(--font-ui); color: #1b6e3f; }
+.fd-sg { display: flex; align-items: baseline; gap: 5px; text-align: start; font: 500 11.5px var(--font-ui); line-height: 1.25; padding: 2px 6px 3px; border: 1.6px dashed #1b9e55; border-radius: 8px; background: #effaf2; color: var(--ink); cursor: pointer; }
+.fd-sg i { flex: none; font-style: normal; font-weight: 800; color: #1b9e55; }
+.fd-sg.on { border-style: solid; background: #d9f5e3; }
+.fd-sg.all { flex: none; font-weight: 700; padding: 1px 6px 2px; }
+.fd-sg.imp { border-color: #e8801e; background: #fff4e6; }
+.fd-sg.imp i { color: #c8213f; }
+.fd-sg.imp:not(.on) { opacity: 0.75; }
+.fd-sg.imp:not(.on) i { color: #1b9e55; }
 .fd-engn .fd-ln { color: #1d4f99; }
 .r-eng { background: #d9e8ff; }
 .fd-calts .fd-chip { font-size: 12px; padding: 2px 8px; }
@@ -1353,6 +1376,10 @@ body.touch .fd-ln .fd-ab { font-size: 9.5px; padding: 0 4px 1px; }
 body.touch .fd-calts .fd-chip { font-size: 10.5px; padding: 1px 6px; }
 body.touch .fd-eb { font-size: 9.5px; padding: 1px 2px 2px; border-width: 1.5px; }
 body.touch .fd-engn { gap: 1px; }
+body.touch .fd-lk { font-size: 9.5px; padding: 1px 2px 2px; border-width: 1.5px; }
+body.touch .fd-look > span { font-size: 9.5px; }
+body.touch .fd-sg { font-size: 9.5px; padding: 1px 4px 2px; gap: 3px; }
+body.touch .fd-sgh b { font-size: 9.5px; }
 body.touch .fd-pchip { font-size: 11px; padding: 2px 6px 3px; }
 body.touch .fd-pc { font-size: 12px; padding: 2px 7px; }
 body.touch .fd-pmenu { max-height: 62vh; padding: 5px 6px 6px; gap: 3px; }

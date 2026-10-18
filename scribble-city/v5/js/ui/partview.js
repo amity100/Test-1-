@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildPolished } from '../game/partbuild.js';
+import { buildRide } from '../game/partbuild.js';
 import { itemMats } from '../game/items.js';
 
 // (ROADMAP 11.10, the sample) What is being drawn, as it will be made: a small model by the
@@ -71,7 +71,7 @@ export class PartView {
     }
     let m;
     try {
-      m = buildPolished(design, spec);
+      m = buildRide(design, spec);
     } catch (err) {
       console.warn('partview', err);
       return;

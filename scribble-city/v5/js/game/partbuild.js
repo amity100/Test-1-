@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
-import { shapeOf, outline, spanAt, solid, tube, ribbon, thin, inPoly, shade, inkOn, colOf, helixGeometry, envelopeGeometry, hullGeometry } from './drawncar.js';
+import { shapeOf, outline, spanAt, solid, tube, ribbon, thin, inPoly, shade, inkOn, colOf, helixGeometry, envelopeGeometry, hullGeometry, hull as convexHull } from './drawncar.js';
+import { inflateShape, cornerness } from './inflate.js';
 
 // (ROADMAP 11.10, the sample) The drawing made into a finished thing, as if the city had always
 // had it: the drawing says which parts, where and how big - the game makes each part properly.
@@ -638,7 +639,7 @@ function plate(o, t, xc = 0, bev = 0.015) {
 // round its upright middle - as wide as drawn at each height, closed to a point at its nose - its
 // nose cone in a colour of its own; a flat foot. Returns { axis (its middle's z), y0, y1, r0 (its
 // foot's half width), rAt(y) }
-function rocketBody(K, M, o, c0) {
+function rocketBody(K, M, o, c0, plain = false) {
   let y0 = Infinity;
   let y1 = -Infinity;
   for (const [, y] of o) {
@@ -682,7 +683,8 @@ function rocketBody(K, M, o, c0) {
   const body = new THREE.LatheGeometry(pts.slice(0, ic + 1), 28).translate(0, 0, axis);
   K.add(M.paint, body.toNonIndexed(), linC(...c0));
   const cone = new THREE.LatheGeometry(pts.slice(ic), 28).translate(0, 0, axis);
-  const red = c0[0] > 0.6 && c0[1] < 0.45 ? [0.95, 0.95, 0.92] : [0.88, 0.16, 0.14];
+  // (ROADMAP 11.15: as drawn, in its own paint)
+  const red = plain ? c0 : c0[0] > 0.6 && c0[1] < 0.45 ? [0.95, 0.95, 0.92] : [0.88, 0.16, 0.14];
   K.add(M.paint, cone.toNonIndexed(), linC(...red));
   // (its foot closed)
   K.add(M.paint, new THREE.CircleGeometry(r[0], 28).rotateX(Math.PI / 2).translate(0, y0, axis).toNonIndexed(), shade(c0, 0.7));
@@ -796,8 +798,18 @@ function airship(K, M, eo, finO, c0, body) {
 // ------------------------------------------------------------------ a ride
 // design: { strokes: [{ type, pts ([z, y] metres), col, pencil, neon, part }], color }, spec: from
 // game/drawncar.js specOf. Returns what game/vehicles.js needs (as buildModel does), and turrets
-// (every barrel's), wings (each side's, on its hinge), canopy (the parachute, closed)
-export function buildPolished(design, spec) {
+// (every barrel's), wings (each side's, on its hinge), canopy (the parachute, closed).
+// (ROADMAP 11.15) opt.faithful: as it was drawn - each part made of its own line, its size and its
+// place as drawn: the body moulded from its outline (game/inflate.js), no windows, lights or tail
+// planes it was not drawn with, its rotor as long as drawn, its propeller where drawn, a jet drawn
+// as a flame a flame. Its side is the drawing; the game adds its depth, its paint and what turns
+export function buildRide(design, spec) {
+  return buildPolished(design, spec, { faithful: design.look === 'faithful' });
+}
+
+export function buildPolished(design, spec, opt = {}) {
+  // (a plane, a helicopter, a drone drawn from above: made as drawn from above - as it was)
+  const F = !!opt.faithful && !design.above;
   const M = itemMats();
   const base = design.color;
   // (ROADMAP 11.13: a plane drawn from above - as wide as drawn)
@@ -832,14 +844,15 @@ export function buildPolished(design, spec) {
   let hull = null;
   let rocket = null;
   if (main) {
-    let o = outline(toM(main.s.pts));
-    // (a cabin drawn on it: the skin goes up over it)
+    // (as drawn: its own line - one that crosses itself filled where it winds round, not its hull)
+    let o = F ? ringOf(toM(main.s.pts)) : outline(toM(main.s.pts));
+    // (a cabin drawn on it: the skin goes up over it - as drawn, a part of its own on it)
     const cabO = cabins.map((s) => outline(toM(s.pts))).filter((c) => c.length >= 3);
-    if (cabO.length) o = mergeTop(o, cabO);
+    if (cabO.length && !F) o = mergeTop(o, cabO);
     const bc = colOf(main.s, design);
     if (design.rocket) {
-      rocket = rocketBody(K, M, o, bc);
-    } else if (boat && main.s.hull !== false) {
+      rocket = rocketBody(K, M, o, bc, F);
+    } else if (boat && main.s.hull !== false && !F) {
       hull = hullGeometry(o, W);
       K.add(M.paint, hull.geo, linC(...bc));
       K.add(M.matte, hull.deck, shade(bc, 0.62));
@@ -867,18 +880,40 @@ export function buildPolished(design, spec) {
         const fy = Math.min(...cut.fin.map((q) => q[1]));
         const fw = Math.max(...fz) - Math.min(...fz);
         const span = clamp(fw * 1.6, 0.8, 3.2);
-        for (const sx of [-1, 1]) K.add(M.paint, wingGeo(sx * 0.05, sx * span, Math.max(...fz), fw * 0.9, fw * 0.45, fw * 0.25, 0.08, 0.04).translate(0, fy + 0.05, 0), shade(bc, 1.08));
+        if (!F) for (const sx of [-1, 1]) K.add(M.paint, wingGeo(sx * 0.05, sx * span, Math.max(...fz), fw * 0.9, fw * 0.45, fw * 0.25, 0.08, 0.04).translate(0, fy + 0.05, 0), shade(bc, 1.08));
       }
-      body = loftRide(o, slim ? Math.min(W, 0.42) : W, style, hwOf);
-      K.add(M.paint, body.paint, linC(...bc));
-      if (body.glass && !slim) K.add(M.glass, body.glass, linC(...GLASS));
-      // a car's lights, its grille, its bumpers, its doors and mirrors
-      if (style === 'car' && spec.L > 1.4 && !slim) carDetails(K, M, body, bc);
+      if (F && main.s.box && spec.base !== 'balloon' && !design.airship) {
+        // (ROADMAP 11.15: nothing drawn to sit in - a seat on its top, and the rest of it as drawn)
+        const sh = shapeOf(o);
+        const sz = clamp(sh.w * 0.3, 0.7, 1.1);
+        K.box(M.paint, -0.36, sh.y1 - 0.28, sh.cx - sz / 2, 0.36, sh.y1 - 0.06, sh.cx + sz / 2, linC(...bc));
+        K.box(M.paint, -0.36, sh.y1 - 0.06, sh.cx - sz / 2, 0.36, sh.y1 + 0.38, sh.cx - sz / 2 + 0.12, linC(...bc));
+        body = { half: () => 0.36, at: (z) => ({ z, yc: sh.y1 - 0.17, b: 0.11, hw: 0.36 }), z0: sh.cx - sz / 2, z1: sh.cx + sz / 2 };
+      } else if (F && slim && design.group === 'bicycle') {
+        // (ROADMAP 11.15: a bicycle drawn as its frame - no tank it was not drawn with: a saddle on it)
+        const sh = shapeOf(o);
+        const sz = clamp(sh.w * 0.35, 0.26, 0.4);
+        const sx = sh.cx - sh.w * 0.12;
+        K.sphere(M.paint, 1, 0, sh.y1 - 0.02, sx, shade(bc, 0.5), 0.09, 0.05, sz / 2, 14);
+        body = { half: () => 0.1, at: (z) => ({ z, yc: sh.cy, b: Math.max(0.05, sh.h / 2), hw: 0.1 }), z0: sh.x0, z1: sh.x1 };
+      } else if (F) body = mould(K, M, o, slim ? Math.min(W, 0.3) : W, bc);
+      else {
+        body = loftRide(o, slim ? Math.min(W, 0.42) : W, style, hwOf);
+        K.add(M.paint, body.paint, linC(...bc));
+        if (body.glass && !slim) K.add(M.glass, body.glass, linC(...GLASS));
+        // a car's lights, its grille, its bumpers, its doors and mirrors
+        if (style === 'car' && spec.L > 1.4 && !slim) carDetails(K, M, body, bc);
+      }
     }
   }
-  // (another body drawn by it: a part of its own, a little narrower)
-  for (const o of bodies) {
+  // (another body drawn by it: a part of its own, a little narrower - ROADMAP 11.15: a cabin drawn
+  // on it, as drawn: one of its own on it, narrower)
+  for (const o of F ? bodies.concat(cabins) : bodies) {
     if (!main || o === main.s) continue;
+    if (F) {
+      mould(K, M, ringOf(toM(o.pts)), W * (o.part === 'cabin' ? 0.86 : 0.9), colOf(o, design));
+      continue;
+    }
     const oo = outline(toM(o.pts));
     if (oo.length < 3) continue;
     const lb = loftBody(oo, W * 0.9, { n: 3, lean: 0.1, p: 3 });
@@ -986,6 +1021,14 @@ export function buildPolished(design, spec) {
           if (yTop > y + 0.05) tube(K, M.metal, [x, y, z], [sx * W * 0.24, yTop, z], 0.03, steel, 8);
         }
       }
+    } else if (s.part === 'tail' && body && F) {
+      // (ROADMAP 11.15: a helicopter's tail as drawn - a boom along its line, thinner out to its end)
+      const d = (q) => Math.abs(q[0] - (body.z0 + body.z1) / 2);
+      let P = thin(toM(s.pts), 0.08, 60);
+      if (d(P[0]) > d(P[P.length - 1])) P = P.slice().reverse();
+      const st = body.at(clamp(P[0][0], body.z0, body.z1));
+      const r0 = clamp(st.b * 0.3, 0.06, 0.3);
+      for (let i = 1; i < P.length; i++) tube(K, M.paint, [0, P[i - 1][1], P[i - 1][0]], [0, P[i][1], P[i][0]], r0 * (1 - 0.5 * (i / Math.max(1, P.length - 1))), linC(...colOf(main.s, design)), 10);
     } else if (s.part === 'tail' && body) {
       // (a helicopter's tail: a boom out of its back, tapering, in its paint - its fin at the end)
       const P = toM(s.pts);
@@ -1058,6 +1101,15 @@ export function buildPolished(design, spec) {
     }
     const fo = sh.closed ? outline(toM(s.pts)) : null;
     if (fo && fo.length >= 3) K.add(M.paint, plate(fo, 0.09, 0, 0.02), shade(c, 1.08));
+    // (ROADMAP 11.15: as drawn - an open line a thin plate along it, no tail planes it was not drawn with)
+    if (F) {
+      if (!(fo && fo.length >= 3)) {
+        const P = toM(s.pts);
+        const g = plate(P.concat(P.slice().reverse().map(([z, y]) => [z - 0.06, y - 0.03])), 0.07, 0, 0.015);
+        if (g) K.add(M.paint, g, shade(c, 1.08));
+      }
+      continue;
+    }
     if (S.some((q) => q.type === 'fin' && q.flat)) continue;
     const foot = Y(sh.y0) + 0.05;
     const span = clamp(sh.w * 1.6, 0.8, 3.2);
@@ -1109,8 +1161,8 @@ export function buildPolished(design, spec) {
         for (let i = 1; i < Pp.length; i++) tube(K, M.matte, Pp[i - 1], Pp[i], 0.02, dark, 5);
       }
       K.cyl(M.metal, 0.22, 0.22, env.y0 - 0.5, env.y0 - 0.15, linC(0.45, 0.45, 0.5), { axis: 'y', z: env.axis, segs: 10 });
-      // (the ropes down to its basket)
-      if (body) {
+      // (the ropes down to its basket - ROADMAP 11.15: the ones drawn, if they were)
+      if (body && !(F && S.some((q) => q.part === 'rope'))) {
         const top = body.at(env.axis);
         const ty = top.yc + top.b;
         const rr = Math.max(0.3, env.rAt(env.y0 + 0.05) * 0.8);
@@ -1125,6 +1177,25 @@ export function buildPolished(design, spec) {
     if (s.type !== 'spring') continue;
     const sh = shapeOf(s.pts);
     const v = roleOf(s);
+    // (ROADMAP 11.15) as drawn: one coil where it was drawn, as long and as wide - lying along it if
+    // it was drawn lying, standing if standing; a pad at the end it pushes with
+    if (F) {
+      const lying = sh.w > sh.h * 1.2;
+      const turns = clamp(Math.round((s.coils || 6) / 2), 3, 12);
+      const r = clamp((lying ? sh.h : sh.w) / 2, 0.1, 0.8);
+      const steel = s.col && !s.pencil ? linC(...s.col) : linC(...STEEL);
+      if (lying) {
+        const len = Math.max(0.2, sh.w);
+        K.add(M.metal, helixGeometry(0, 0, len, r, turns).rotateX(Math.PI / 2).translate(0, Y(sh.cy), Z(sh.x0)), steel);
+        const zp = v === 'kick' ? Z(sh.x0) : Z(sh.x1);
+        K.box(M.matte, -r * 1.3, Y(sh.cy) - r * 1.3, zp - 0.05, r * 1.3, Y(sh.cy) + r * 1.3, zp + 0.05, linC(0.13, 0.13, 0.15));
+      } else {
+        K.add(M.metal, helixGeometry(Z(sh.mx), Y(sh.y0) + 0.06, Y(sh.y1) - 0.02, r, turns), steel);
+        const yp = v === 'righter' ? Y(sh.y1) : Y(sh.y0);
+        K.cyl(M.matte, r * 1.15, r * 1.15, yp, yp + 0.06, linC(0.12, 0.12, 0.14), { axis: 'y', z: Z(sh.mx), segs: 16 });
+      }
+      continue;
+    }
     if (v === 'bumper' || v === 'kick') {
       const front = v === 'bumper';
       const r = clamp(Math.min(sh.w, sh.h) / 2, 0.1, 0.24);
@@ -1157,6 +1228,28 @@ export function buildPolished(design, spec) {
     const sh = shapeOf(s.pts);
     const r = clamp(sh.size / 2, 0.16, 0.6);
     const v = roleOf(s);
+    // (ROADMAP 11.15) as drawn: an engine drawn closed, that shape - its glow at the end it blows
+    // out of; one drawn open (a V, a flame out of its back), that flame, glowing
+    if (F && !rocket && !s.wing && s.lat === undefined && !s.side) {
+      const so = toM(s.pts);
+      const sm = shapeOf(so);
+      const [ex, ey] = v === 'vtol' ? [Z(sh.mx), Y(sh.y0)] : v === 'retro' ? [Z(sh.x1), Y(sh.cy)] : [Z(sh.x0), Y(sh.cy)];
+      if (sm.closed) {
+        const t = clamp(Math.min(sm.w, sm.h) * 0.85, 0.16, W * 0.8);
+        mould(K, M, ringOf(so), t, s.col && !s.pencil ? s.col.map((q) => q * 0.9) : [0.48, 0.49, 0.54], { res: 40, metal: true });
+        const rg = clamp((v === 'vtol' ? sm.w : sm.h) * 0.32, 0.08, 0.5);
+        const glowC = s.neon ? linC(...s.col) : linC(1.0, 0.55, 0.2);
+        if (v === 'vtol') K.cyl(M.glow, rg, rg, ey - 0.02, ey + 0.01, glowC, { axis: 'y', z: ex, segs: 16 });
+        else K.cyl(M.glow, rg, rg, ex - 0.02, ex + 0.01, glowC, { y: ey, segs: 16 });
+      } else {
+        // (a flame: what its line closes round, round across - glowing in its ink, or fire)
+        const fl = convexHull(so);
+        const t = clamp(Math.min(sm.w, sm.h) * 0.7, 0.12, W * 0.6);
+        mould(K, M, fl, t, s.col && !s.pencil && !s.neon ? s.col : [1.0, 0.56, 0.18], { res: 36, glow: true });
+      }
+      (v === 'vtol' ? vtolAt : jetsAt).push([0, v === 'vtol' ? ey - 0.15 : ey, v === 'vtol' ? ex : ex - 0.15]);
+      continue;
+    }
     if (v === 'vtol' && rocket) {
       // (a rocket's: its engine's bell under its foot, the flame in it)
       const rb = clamp(rocket.r0 * 0.7, 0.18, 0.7);
@@ -1213,8 +1306,9 @@ export function buildPolished(design, spec) {
       jetsAt.push([x, y, z0 - 0.15]);
     }
   }
-  // (ROADMAP 11.13: no engine drawn - the jet in it: its nozzle at its tail, glowing)
-  if (spec.inner === 'jet' && body) {
+  // (ROADMAP 11.13: no engine drawn - the jet in it: its nozzle at its tail, glowing - ROADMAP 11.15:
+  // as drawn, none: it is inside)
+  if (spec.inner === 'jet' && body && !F) {
     const st = body.at(body.z0 + (body.z1 - body.z0) * 0.08);
     const r = clamp(Math.min(st.hw, st.b) * 0.8, 0.12, 0.42);
     const z0 = body.z0 - 0.14;
@@ -1279,8 +1373,8 @@ export function buildPolished(design, spec) {
       root.add(g);
       wheels.push(g);
     }
-    // (its arch: the dark of the wheel well behind it, on the body's side)
-    if (body && !skate && !slim) {
+    // (its arch: the dark of the wheel well behind it, on the body's side - none drawn, none: ROADMAP 11.15)
+    if (body && !skate && !slim && !F) {
       for (const sx of [-1, 1]) {
         const d = new THREE.CircleGeometry(r * 1.14, 26);
         d.rotateY(sx * Math.PI / 2);
@@ -1316,6 +1410,23 @@ export function buildPolished(design, spec) {
     const T = new Kit();
     const metal = s.col && !s.pencil ? shade(s.col, 0.85) : linC(...GUNMETAL);
     const dark = shade(GUNMETAL, 0.75);
+    // (ROADMAP 11.15) as drawn: its barrel from where it was drawn, as thick and as long, on a ball
+    // it turns on at its foot - no turret it was not drawn with
+    if (F && !whole) {
+      T.sphere(M.metal, Math.max(r * 1.5, 0.07), 0, 0, 0, dark, 1, 1, 1, 14);
+      const bar2 = [T.cyl(M.metal, r, r * 0.92, 0, L, metal, { segs: 16 }), T.cyl(M.matte, r * 0.62, r * 0.62, L, L + 0.006, linC(0.02, 0.02, 0.03), { segs: 12 })];
+      for (const geo of bar2) geo.rotateX(-elev);
+      const node = T.build({ seed: 0.31 + turrets.length * 0.07 });
+      node.matrixAutoUpdate = true;
+      node.position.set(0, bs[1], bs[0]);
+      const yaw0 = dz < 0 ? Math.PI : 0;
+      node.rotation.y = yaw0;
+      root.add(node);
+      const ml = L + 0.15;
+      const top = bs[1] > roof - Math.max(0.25, r * 2);
+      turrets.push({ node, muzzle: new THREE.Vector3(0, Math.sin(elev) * ml, Math.cos(elev) * ml), pivot: new THREE.Vector3(0, 0, 0), type: cannon ? 'cannon' : 'mg', r, yaw0, arc: top ? Math.PI : 0.4 });
+      continue;
+    }
     const rb = cannon ? clamp(r * 2.6, 0.3, 0.9) : 0.16;
     // (its foot on the roof; its barrel as high as drawn - on a post, if drawn high over it)
     const mountY = onTop ? roof - 0.05 : bs[1];
@@ -1365,8 +1476,14 @@ export function buildPolished(design, spec) {
   // (ROADMAP 11.13: a drone's - each as big as drawn, in its guard, on an arm out of its body)
   const hub = body ? body.at((body.z0 + body.z1) / 2) : null;
   for (const [ri, ro] of spec.rotors.entries()) {
-    const R = ro.guard ? clamp((ro.w / 2) * 0.9, 0.25, 4) : ri === 0 ? spec.rotorR || 2 : clamp((ro.w / 2) * 1.15, 0.6, spec.rotorR || 2);
-    const y = Y(Math.max(ro.cy, spec.y1 + 0.25));
+    // (ROADMAP 11.15: as drawn - as long as its line)
+    const R = F ? Math.max(0.3, ro.w / 2) : ro.guard ? clamp((ro.w / 2) * 0.9, 0.25, 4) : ri === 0 ? spec.rotorR || 2 : clamp((ro.w / 2) * 1.15, 0.6, spec.rotorR || 2);
+    let y = Y(Math.max(ro.cy, spec.y1 + 0.25));
+    // (ROADMAP 11.15: as high as drawn - clear of its body there)
+    if (F) {
+      const atR = body && !ro.lat ? body.at(Z(ro.cx)) : null;
+      y = Math.max(Y(ro.cy), atR ? atR.yc + atR.b + 0.08 : Y(ro.cy));
+    }
     const blades = R > 2.6 ? 4 : 2;
     const Rk = new Kit();
     for (let k = 0; k < blades; k++) {
@@ -1431,7 +1548,7 @@ export function buildPolished(design, spec) {
     const at = body && !ro.lat ? body.at(Z(ro.cx)) : null;
     const topY = at ? at.yc + at.b : Y(spec.y1);
     mk.cyl(M.metal, 0.09, 0.11, topY - 0.08, y, linC(0.4, 0.4, 0.45), { axis: 'y', x: ro.lat || 0, z: Z(ro.cx), segs: 12 });
-    if (!ro.lat) mk.cyl(M.paint, 0.32, 0.38, topY - 0.06, topY + 0.14, shade(base, 0.8), { axis: 'y', z: Z(ro.cx), segs: 16 });
+    if (!ro.lat && !F) mk.cyl(M.paint, 0.32, 0.38, topY - 0.06, topY + 0.14, shade(base, 0.8), { axis: 'y', z: Z(ro.cx), segs: 16 });
     root.add(mk.build({ seed: 0.51 + ri * 0.01 }));
   }
   if (spec.tailRotor) {
@@ -1491,8 +1608,10 @@ export function buildPolished(design, spec) {
       const wk = new Kit();
       wk.add(M.paint, g, shade(c, 1.08));
       // (a darker stripe at its tip)
-      const tip = wingGeo(sx * (sp / 2 - rootX) * 0.9, sx * (sp / 2 - rootX), -chord * 0.29, chord * 0.53, chord * 0.48, chord * 0.03, clamp(chord * 0.07, 0.03, 0.17), clamp(chord * 0.065, 0.03, 0.16));
-      wk.add(M.paint, tip, shade(c, 0.45));
+      if (!F) {
+        const tip = wingGeo(sx * (sp / 2 - rootX) * 0.9, sx * (sp / 2 - rootX), -chord * 0.29, chord * 0.53, chord * 0.48, chord * 0.03, clamp(chord * 0.07, 0.03, 0.17), clamp(chord * 0.065, 0.03, 0.16));
+        wk.add(M.paint, tip, shade(c, 0.45));
+      }
       const node = wk.build({ seed: 0.44 + wings.length * 0.03 });
       node.matrixAutoUpdate = true;
       node.position.set(sx * rootX, sh.cy, sh.x0);
@@ -1505,7 +1624,9 @@ export function buildPolished(design, spec) {
   let prop = null;
   const props = [];
   for (const pr of spec.props || []) {
-    const R = clamp(Math.max(pr.h, pr.w * 0.8) / 2, 0.35, 1.6);
+    // (ROADMAP 11.15: an engine inside it, as drawn - none to see)
+    if (F && pr.made) continue;
+    const R = F ? clamp(Math.max(pr.h, pr.w * 0.8) / 2, 0.2, 3) : clamp(Math.max(pr.h, pr.w * 0.8) / 2, 0.35, 1.6);
     const Pk = new Kit();
     for (let k = 0; k < 3; k++) {
       const g = bladeGeo(R, 0.2, 0.1, 0.04);
@@ -1514,12 +1635,16 @@ export function buildPolished(design, spec) {
       Pk.add(M.matte, g, linC(0.1, 0.1, 0.12));
     }
     Pk.cyl(M.metal, 0.2, 0.02, 0, 0.36, shade(base, 1), { segs: 14 });
-    if (pr.back) Pk.add(M.metal, new THREE.TorusGeometry(R * 1.08, 0.04, 6, 32).translate(0, 0, 0.05), linC(0.32, 0.33, 0.37));
+    if (pr.back && !F) Pk.add(M.metal, new THREE.TorusGeometry(R * 1.08, 0.04, 6, 32).translate(0, 0, 0.05), linC(0.32, 0.33, 0.37));
     const node = Pk.build({ seed: 0.55 + props.length * 0.02 });
     node.matrixAutoUpdate = true;
     // (as high as drawn - kept clear of the ground)
     const y = Math.max(Y(pr.cy), R + 0.1);
-    if (pr.back) {
+    if (F) {
+      // (where it was drawn, turning about the way it pushes)
+      node.position.set(pr.lat || 0, Y(pr.cy), Z(pr.mx));
+      if (pr.back) node.rotation.y = Math.PI;
+    } else if (pr.back) {
       node.position.set(pr.lat || 0, y, Z(Math.min(pr.x0, spec.x0)) - 0.1);
       node.rotation.y = Math.PI;
     } else node.position.set(pr.lat || 0, y, pr.lat ? Z(pr.x1) + 0.05 : Z(Math.max(pr.x1, spec.x1)) + 0.05);
@@ -1545,7 +1670,7 @@ export function buildPolished(design, spec) {
     root.add(node);
     fans.push(node);
   }
-  if (spec.hover) {
+  if (spec.hover && !F) {
     const a = W / 2 + 0.14;
     const b = spec.L / 2 + 0.12;
     const P = [];
@@ -1577,7 +1702,7 @@ export function buildPolished(design, spec) {
     pack.matrixAutoUpdate = true;
     pack.position.set(0, py, pz);
     root.add(pack);
-    const rx = clamp(Math.max(sh.w / 2, spec.L * 0.55), 1.6, 7);
+    const rx = F ? clamp(sh.w / 2, 1.0, 7) : clamp(Math.max(sh.w / 2, spec.L * 0.55), 1.6, 7);
     const ry = rx * 0.55;
     const ck = new Kit();
     for (let k = 0; k < 12; k++) {
@@ -1692,7 +1817,31 @@ export function buildPolished(design, spec) {
     circleR: clamp(W / 2, 0.5, 1.1),
     span,
     sailAt,
+    // (where the drawing is in it: a design's z, y at the model's z - zc, y - floor)
+    frame: { zc, floor, upside: !!spec.upside },
   };
+}
+
+// (ROADMAP 11.15) a closed line as drawn, its points no closer than a couple of centimetres
+function ringOf(pts) {
+  const out = [];
+  for (const p of pts) {
+    const q = out[out.length - 1];
+    if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.02) out.push(p);
+  }
+  return out;
+}
+
+// (ROADMAP 11.15) a closed part moulded from its own outline (game/inflate.js) - W wide, its edges
+// squarer for one drawn with corners, rounder for one drawn round - in its paint (c: its colour as
+// drawn). opt: { res, metal, glow }. Returns the body's { half(z, y), at(z), z0, z1 } - or null
+function mould(K, M, o, W, c, opt = {}) {
+  if (!o || o.length < 3) return null;
+  const cn = cornerness(o);
+  const B = inflateShape(o, W, { n: 2.2 + 1.8 * cn, R: (W / 2) * (1 - 0.35 * cn), res: opt.res });
+  if (!B) return null;
+  K.add(opt.glow ? M.glow : opt.metal ? M.metal : M.paint, B.geo, linC(...c));
+  return B;
 }
 
 // the outline o with the cabins' tops over it: at each z where a cabin is, the higher top

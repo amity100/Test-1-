@@ -3,7 +3,7 @@ import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
 import { setupDrawn, startMode } from './hybrid.js';
 import { rideSpec } from './partsum.js';
-import { buildPolished } from './partbuild.js';
+import { buildRide } from './partbuild.js';
 
 // (ROADMAP 11.6) A vehicle drawn freehand from the side (ui/freedraw.js, read by
 // game/freeform.js), its shape what it does. Each line drawn is read as a part of it:
@@ -1111,13 +1111,15 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   // (its own model instead of the kind's)
   v.group.remove(v.body);
   v.body.traverse((m) => m.geometry && m.geometry.dispose());
-  const m = design.polish ? buildPolished(design, spec) : buildModel(design, spec);
+  // (ROADMAP 11.15: as it was drawn, or polished - as the player said)
+  const m = design.polish ? buildRide(design, spec) : buildModel(design, spec);
   Object.assign(v, m);
   v.group.add(v.body);
   v.model = 'drawn';
   v.drawn = {
-    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined, part: s.part || undefined, r: s.r || undefined, len: s.len || undefined, coils: s.coils || undefined, base: s.base || undefined, muz: s.muz || undefined, edge: s.edge || undefined, made: s.made || undefined, side: s.side || undefined, el: s.el || undefined, whole: s.whole || undefined, plan: s.plan ? s.plan.map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]) : undefined, mount: s.mount || undefined, lat: s.lat === undefined ? undefined : Math.round(s.lat * 100) / 100, wing: s.wing || undefined, flat: s.flat || undefined, guard: s.guard || undefined, ship: s.ship || undefined, implicit: s.implicit || undefined, push: s.push || undefined })),
+    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined, part: s.part || undefined, r: s.r || undefined, len: s.len || undefined, coils: s.coils || undefined, base: s.base || undefined, muz: s.muz || undefined, edge: s.edge || undefined, made: s.made || undefined, side: s.side || undefined, el: s.el || undefined, whole: s.whole || undefined, plan: s.plan ? s.plan.map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]) : undefined, mount: s.mount || undefined, lat: s.lat === undefined ? undefined : Math.round(s.lat * 100) / 100, wing: s.wing || undefined, flat: s.flat || undefined, guard: s.guard || undefined, ship: s.ship || undefined, implicit: s.implicit || undefined, push: s.push || undefined, box: s.box || undefined })),
     polish: design.polish || undefined,
+    look: design.look || undefined,
     plane: design.plane || undefined,
     above: design.above || undefined,
     copter: design.copter || undefined,

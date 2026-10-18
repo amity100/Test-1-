@@ -17,17 +17,23 @@ import { rideSpec } from './partsum.js';
 // is. And never something else: each part still does what it did (a step that would make one
 // something else is undone). Rule by rule, here and now, no guessing what was meant. Returns { design (a new one - the
 // one given untouched), notes (what it did, said on the card), changes ([{ src (the line, or the
-// body: -1), from, to }] - ui/freedraw.js turns the drawing into it, the page's lines into these) }
+// body: -1), from, to }] - ui/freedraw.js turns the drawing into it, the page's lines into these),
+// steps ([{ k, t, srcs }]: each note, the step that made it, the lines it is about) }.
+// (ROADMAP 11.15) opt: { only (a Set of its engineering steps, EN_STEPS: only these), noTidy (its lines
+// as drawn - none of the tidying) }: what it would do, offered on the card; what the player took, done
 export const ENG_LEVELS = [
   ['raw', 'כמו שצויר'],
   ['tidy', 'מסודר'],
   ['eng', 'מהונדס'],
 ];
+// (its steps: tidying - a hand's slips; engineering - what makes it work better, each one offered)
+export const TIDY_STEPS = ['smooth', 'wheels', 'level'];
+export const EN_STEPS = ['wheelsBody', 'spread', 'low', 'rotorCom', 'rotorGrow', 'tailRotor', 'jetsCom', 'jetsGrow', 'wingsCom', 'wingsGrow', 'barrelRoof', 'propCenter'];
 
 const ROLLS = new Set(['wheel', 'square', 'big']);
 
-export function engineer(design, level = 'eng') {
-  if (!design || level === 'raw' || (design.above && level !== 'eng')) return { design, notes: [], changes: [] };
+export function engineer(design, level = 'eng', opt = {}) {
+  if (!design || level === 'raw' || (design.above && level !== 'eng')) return { design, notes: [], changes: [], steps: [] };
   const D = Object.assign({}, design, { strokes: design.strokes.map((s) => copyStroke(s)) });
   const S = D.strokes;
   const drawn = new Map(S.map((s) => [s, copyStroke(s)]));
@@ -35,7 +41,7 @@ export function engineer(design, level = 'eng') {
   const role = spec.role || new Map();
   const vOf = (s) => (role.has(s) ? role.get(s).v : null);
   const bodies = S.filter((s) => s.type === 'body');
-  if (!bodies.length) return { design, notes: [], changes: [] };
+  if (!bodies.length) return { design, notes: [], changes: [], steps: [] };
   const main = bodies.reduce((a, s) => (!a || area(s.pts) > area(a.pts) ? s : a), null);
   const box = boxOf(bodies);
   const L = box.x1 - box.x0;
@@ -50,17 +56,24 @@ export function engineer(design, level = 'eng') {
   const notes = [];
   // (the rotors, the wings made bigger to fly)
   const grown = new Set();
-  // (each note, and the lines it is about)
+  // (each note, and the lines it is about; and the step that made it)
   const about = new Map();
+  const keyOf = new Map();
+  let cur = null;
   const say = (t, of) => {
     if (!notes.includes(t)) notes.push(t);
     about.set(t, new Set([...(about.get(t) || []), ...of]));
+    if (cur) keyOf.set(t, cur);
   };
+  // (ROADMAP 11.15: a step the player did not take - not done)
+  const allow = (k) => (TIDY_STEPS.includes(k) ? !opt.noTidy : !opt.only || opt.only.has(k));
   // Step by step, and each keeps what every part does: one that would make a part something else by
   // where it moves it (a propeller moved down under it - a hovercraft's fan; a wheel made bigger than
   // half its body - one that runs cars over) is undone, and the next goes on from before it
   const keeps = (sp) => S.every((s) => !vOf(s) || !sp.role || !sp.role.has(s) || sp.role.get(s).v === vOf(s));
-  const step = (fn) => {
+  const step = (fn, k) => {
+    if (k && !allow(k)) return;
+    cur = k || null;
     const was = { pts: S.map((s) => s.pts), at: S.map((s) => copyStroke(s)), wh: wheels.map((w) => [w.x, w.y, w.r]), notes: notes.slice(), about: new Map([...about].map(([t, of]) => [t, new Set(of)])), spec };
     fn();
     if (S.every((s, i) => s.pts === was.pts[i])) return;
@@ -87,7 +100,7 @@ export function engineer(design, level = 'eng') {
       for (const p of main.pts) if (p[1] < y0 + H * 0.12) p[1] = y0 + (p[1] - y0) * 0.3;
     }
     say('הקווים הוחלקו', [main]);
-  });
+  }, 'smooth');
   // its wheels round, on one line, alike
   step(() => {
     if (!wheels.length) return;
@@ -123,7 +136,7 @@ export function engineer(design, level = 'eng') {
     }
     for (const w of wheels) wheelAt(w);
     if (lined.length) say(lined.length > 1 ? `${lined.length} גלגלים יושרו על קו אחד` : 'גלגל יושר לקו של האחרים', lined);
-  });
+  }, 'wheels');
   // its barrels, wings, rotors level (a propeller upright) - as they nearly were
   for (const s of above ? [] : S) {
     step(() => {
@@ -151,7 +164,7 @@ export function engineer(design, level = 'eng') {
           say('המדחף הוזקף', [s]);
         }
       }
-    });
+    }, 'level');
   }
   if (level === 'eng') {
     // ---- its wheels on its body: not hanging under it, not lost in it (most of each out under it)
@@ -172,7 +185,7 @@ export function engineer(design, level = 'eng') {
       }
       if (up.length) say(up.length > 1 ? 'הגלגלים חוברו לגוף' : 'גלגל חובר לגוף', up);
       if (down.length) say(down.length > 1 ? 'הגלגלים הורדו מתוך הגוף — שיהיה מרווח מהכביש' : 'גלגל הורד מתוך הגוף — שיהיה מרווח מהכביש', down);
-    });
+    }, 'wheelsBody');
     // ---- spread to carry its weight: its weight between its wheels
     step(() => {
       if (!spec.ok || spec.balance === undefined || wheels.length < 2 || !spec.com) return;
@@ -202,7 +215,7 @@ export function engineer(design, level = 'eng') {
         wheelAt(w);
       }
       say(t < 0.5 ? 'הגלגלים האחוריים הוזזו אחורה — שהמשקל יהיה ביניהם' : 'הגלגלים הקדמיים הוזזו קדימה — שהמשקל יהיה ביניהם', end.map((w) => w.s));
-    });
+    }, 'spread');
     // ---- down low between its wheels, when it would roll over in a turn
     step(() => {
       if (!spec.ok || !spec.handling || !spec.handling.tipA || !wheels.length || !spec.ssf) return;
@@ -215,7 +228,7 @@ export function engineer(design, level = 'eng') {
       const low = S.filter((s) => !wheelSet.has(s) && vOf(s) !== 'track');
       for (const s of low) shift(s, 0, -d);
       say('הגוף הונמך בין הגלגלים — יציב יותר בפניות', low);
-    });
+    }, 'low');
     const top = (x) => {
       const sp = spanAt(main.pts, clamp(x, box.x0 + 1e-3, box.x1 - 1e-3));
       return sp ? sp[1] : box.y1;
@@ -254,7 +267,7 @@ export function engineer(design, level = 'eng') {
           say('הרוטור הוצב על תורן', g);
         }
       }
-    });
+    }, 'rotorCom');
     // (too small to lift it: as big as it must be, all its blades round its hub - up to as wide as
     // the whole of it is long, as a real helicopter's is: most draw a rotor short)
     step(() => {
@@ -279,11 +292,12 @@ export function engineer(design, level = 'eng') {
         }
       }
       say(f > 1.6 ? `הרוטור הוגדל פי ${f.toFixed(1)} — רוטור של מסוק אמיתי ארוך כמעט כמו המסוק כולו` : `הרוטור הוגדל ב־${Math.round((f - 1) * 100)}% — כדי שירים אותו`, rotors);
-    });
+    }, 'rotorGrow');
     // (ROADMAP 11.13: a helicopter of one rotor, nothing to hold it straight - it turns round itself:
     // a small rotor at the end of its tail, as a real one has, a fifth of its rotor's size)
     // (ROADMAP 11.14: any thing of one rotor so - a tank, a house with a rotor on its roof: its back)
-    if (!design.drone && !design.rocket && spec.spin && rotors.length) {
+    if (!design.drone && !design.rocket && spec.spin && rotors.length && allow('tailRotor')) {
+      cur = 'tailRotor';
       const tails = S.filter((s) => s.part === 'tail');
       const end = tails.length ? tails.flatMap((s) => s.pts).reduce((a, p) => (p[0] < a[0] ? p : a)) : [box.x0, mid(box.x0 + L * 0.05)];
       const wMax = Math.max(...rotorSets(rotors).map((g) => boxOf(g).x1 - boxOf(g).x0));
@@ -309,7 +323,7 @@ export function engineer(design, level = 'eng') {
       if (Math.abs(dx) <= L * 0.03) return;
       for (const s of vtols) shift(s, dx, 0);
       say('הסילונים הוזזו אל מתחת למרכז הכובד', vtols);
-    });
+    }, 'jetsCom');
     // (ROADMAP 11.13: too weak to lift it - a rocket's engine, a jump jet's: bigger, as much as it
     // must be - its thrust goes as its size, up to four times as big as drawn)
     for (let round = 0; round < 2; round++) {
@@ -326,7 +340,7 @@ export function engineer(design, level = 'eng') {
           grown.add(s);
         }
         say('הסילונים הוגדלו — כדי שירימו אותו', vtols);
-      });
+      }, 'jetsGrow');
       if (spec === before) break;
     }
     // ---- wings under its weight (its weight a little ahead of where they hold it) - as big as they
@@ -348,7 +362,7 @@ export function engineer(design, level = 'eng') {
       if (Math.abs(dx) <= L * 0.03 || !(spec.pitchy || want - np < -L * 0.2)) return;
       for (const s of wings) shift(s, dx, 0);
       say('הכנפיים הוזזו אל מרכז הכובד', wings);
-    });
+    }, 'wingsCom');
     // (too small to hold it up: as big as they must be - out longer, their shape as drawn (drawn edge
     // on: deeper) - up to a glider's)
     const wingsAll = S.filter((s) => s.part === 'wing' && vOf(s) === 'wing');
@@ -373,7 +387,7 @@ export function engineer(design, level = 'eng') {
           grown.add(s);
         }
         say(f > 1.5 || round ? 'הכנפיים הוארכו — כנף קטנה מדי לא מחזיקה מטוס באוויר' : 'הכנפיים הוגדלו — כדי שימריא', wingsAll);
-      });
+      }, 'wingsGrow');
       // (no bigger they can be)
       if (spec === before) break;
     }
@@ -386,7 +400,7 @@ export function engineer(design, level = 'eng') {
           shift(s, 0, Math.max(t + 0.12 - s.base[1], -0.9));
           say('הקנה הונח על הגג', [s]);
         }
-      });
+      }, 'barrelRoof');
     }
     // ---- a propeller in its nose's middle, a jet on its tail's
     for (const s of S) {
@@ -406,7 +420,7 @@ export function engineer(design, level = 'eng') {
           say(jet ? 'הסילון מורכז על הזנב' : front ? 'המדחף מורכז על החרטום' : 'המדחף מורכז על הזנב', [s]);
         }
         if (!jet && Math.abs(cx - x) > L * 0.1) shift(s, x - cx, 0);
-      });
+      }, 'propCenter');
     }
   }
   // ---- never far from the drawing: each line a little of its size at most (a rotor, a wing made
@@ -442,13 +456,17 @@ export function engineer(design, level = 'eng') {
       else if (/^\d+ גלגלים יושרו/.test(t)) notes[at] = of.size > 1 ? `${of.size} גלגלים יושרו על קו אחד` : 'גלגל יושר לקו של האחרים';
     }
     fin = rideSpec(D);
-    if (!keeps(fin)) return level === 'eng' ? engineer(design, 'tidy') : { design, notes: [], changes: [] };
+    if (!keeps(fin)) return level === 'eng' ? engineer(design, 'tidy', opt) : { design, notes: [], changes: [], steps: [] };
   }
   // (what it says is what it did: when the most it may move did not get it there - closer, not over)
   const warn = (fin.sum || {}).warn || [];
   for (let i = 0; i < notes.length; i++) {
     const c = CLOSER.find((c) => c[0] === notes[i]);
-    if (c && warn.some((w) => c[2].some((p) => w.startsWith(p)))) notes[i] = c[1];
+    if (c && warn.some((w) => c[2].some((p) => w.startsWith(p)))) {
+      keyOf.set(c[1], keyOf.get(notes[i]));
+      about.set(c[1], about.get(notes[i]));
+      notes[i] = c[1];
+    }
   }
   const changes = [];
   for (const s of S) {
@@ -458,7 +476,10 @@ export function engineer(design, level = 'eng') {
     if (far < 0.01 && a.length === s.pts.length) continue;
     changes.push({ src: s.made && s.type === 'body' ? -1 : s.src === undefined ? null : s.src, from: a, to: s.pts });
   }
-  return { design: D, notes, changes };
+  // (ROADMAP 11.15) each note, the step that made it, the lines it is about (a line the engineer
+  // added - a tail rotor - by itself: its new line)
+  const steps = notes.map((t) => ({ k: keyOf.get(t) || null, t, srcs: [...(about.get(t) || [])].map((s) => (s.made && s.type === 'body' ? -1 : s.src === undefined ? null : s.src)), added: [...(about.get(t) || [])].filter((s) => s.implicit && s.made && s.src === undefined).map((s) => s.pts) }));
+  return { design: D, notes, changes, steps };
 }
 
 // [the note, said instead when it did not get all the way, the warnings still on the card that say so]

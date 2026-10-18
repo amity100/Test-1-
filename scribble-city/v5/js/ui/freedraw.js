@@ -13,7 +13,7 @@ import { readParts, rideEvidence, PART, RIDES_IT } from '../game/parts.js';
 import { menuOf } from '../game/partrole.js';
 import { look } from '../game/sketchnet.js';
 import { rideDesign, rideSpec, toPage } from '../game/partsum.js';
-import { engineer, ENG_LEVELS } from '../game/engineer.js';
+import { engineer, ENG_LEVELS, EN_STEPS, TIDY_STEPS } from '../game/engineer.js';
 import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
 
@@ -56,6 +56,16 @@ const MORPH_T = 0.24;
 const DELTA_T = 2.6;
 // (ROADMAP 11.12) how long the drawing takes to turn into what the engineer made of it (s)
 const ENG_T = 0.9;
+// (ROADMAP 11.15) how long a press on a part's name opens its whole menu (s) - a tap is the next it
+// could be
+const LONG_PRESS = 0.45;
+// (ROADMAP 11.15) the two looks of what is made: as drawn, or each part the game's own
+const LOOKS = [
+  ['faithful', 'כמו שציירתי'],
+  ['polished', 'מלוטש'],
+];
+// (what the game adds when nothing drawn would do it - why, said by its toggle on the card)
+const IMP_WHY = { rotor: 'רוטור — כדי שיטוס', wing: 'כנף — כדי שיטוס', prop: 'מדחף — כדי שיזוז באוויר', jet: 'מנוע — כדי שימריא', wheel: 'גלגלים בקשתות שצוירו', fin: 'זנב — לייצוב' };
 // (ROADMAP 11.11) the gear whose model the card shows
 const GEAR_VIEW = new Set(['parachute', 'umbrella', 'key', 'ladder', 'ramp', 'bridge', 'spring']);
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -120,8 +130,13 @@ export class FreeDraw {
     this.chips = [];
     this.pmenuAt = -1;
     // (ROADMAP 11.12) how much the engineer does to it (game/engineer.js): 'raw', 'tidy', 'eng'; the
-    // drawing turning into its work
-    this.engLevel = 'eng';
+    // drawing turning into its work. (ROADMAP 11.15) the hand's slips put right ('tidy') - and what
+    // it would make better offered, each taken or not by the player (engOn: its steps taken); the
+    // look of it: as drawn, or polished; the parts the game would add, taken away (noImp)
+    this.engLevel = 'tidy';
+    this.engOn = new Set();
+    this.look = 'faithful';
+    this.noImp = new Set();
     this.engMorph = null;
     this.engSig = '';
     this.build();
@@ -156,6 +171,7 @@ export class FreeDraw {
       <div class="fd-card hidden" id="fd-card">
         <div class="fd-card-top"><b id="fd-cname"></b><button class="fd-face" id="fd-face" title="הכיוון שלו" aria-label="הכיוון שלו">⇄</button></div>
         <canvas id="fd-view"></canvas>
+        <div class="fd-look hidden" id="fd-look"></div>
         <div class="fd-eng hidden" id="fd-eng"></div>
         <div class="fd-abil" id="fd-abil"></div>
         <div class="fd-bars" id="fd-bars"></div>
@@ -219,10 +235,26 @@ export class FreeDraw {
         // (synthetic pointers)
       }
       this.menu(false);
-      // (on a part's name: a tap there is its menu - drawn on from it, it is a line as any)
+      // (on a part's name: a tap there is the next thing it could be, a long press - or its ▾ - its
+      // whole menu (ROADMAP 11.15); drawn on from it, it is a line as any. On a name the game added:
+      // taken away)
       const chip = this.chipAt(e.clientX, e.clientY);
+      const imp = chip < 0 ? this.impAt(e.clientX, e.clientY) : null;
       this.partMenu(-1);
-      this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, t0: performance.now() };
+      this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, imp, menuAt: chip >= 0 && this.chipArrow(chip, e.clientX), t0: performance.now() };
+      if (chip >= 0) {
+        clearTimeout(this.lpTimer);
+        const c = this.cur;
+        this.lpTimer = setTimeout(() => {
+          if (this.cur !== c) return;
+          let far = 0;
+          for (const q of c.p) far = Math.max(far, Math.hypot(q[0] - c.p[0][0], q[1] - c.p[0][1]) * this.U);
+          if (far >= 9) return;
+          c.opened = true;
+          this.partMenu(chip);
+          this.render();
+        }, LONG_PRESS * 1000);
+      }
       this.hintEl.classList.add('gone');
       game.audio.scratchStart();
       this.render();
@@ -304,6 +336,38 @@ export class FreeDraw {
       const b = e.target.closest('.fd-eb');
       if (!b || b.dataset.k === this.engLevel) return;
       this.engLevel = b.dataset.k;
+      this.game.audio.play('click', 0.4);
+      this.read();
+      this.render();
+    });
+    // (ROADMAP 11.15) its look: as drawn, or polished
+    press($('fd-look'), (e) => {
+      const b = e.target.closest('.fd-lk');
+      if (!b || b.dataset.l === this.look) return;
+      this.look = b.dataset.l;
+      this.game.audio.play('click', 0.4);
+      this.read();
+      this.render();
+    });
+    // (ROADMAP 11.15) what the engineer offers, taken or not - one, or all of them; a part the game
+    // added, taken away or back
+    press($('fd-engn'), (e) => {
+      const b = e.target.closest('.fd-sg');
+      if (!b) return;
+      if (b.dataset.imp) {
+        if (this.noImp.has(b.dataset.imp)) this.noImp.delete(b.dataset.imp);
+        else this.noImp.add(b.dataset.imp);
+      } else if (b.dataset.k === 'all') {
+        const offered = this.PR ? this.PR.sugg.map((q) => q.k) : [];
+        const all = offered.length && offered.every((k) => this.engOn.has(k));
+        for (const k of offered) {
+          if (all) this.engOn.delete(k);
+          else this.engOn.add(k);
+        }
+      } else if (b.dataset.k) {
+        if (this.engOn.has(b.dataset.k)) this.engOn.delete(b.dataset.k);
+        else this.engOn.add(b.dataset.k);
+      } else return;
       this.game.audio.play('click', 0.4);
       this.read();
       this.render();
@@ -442,13 +506,23 @@ export class FreeDraw {
     this.cur = null;
     this.game.audio.scratchStop();
     if (drop || !c) return;
-    // (a tap on a part's name: its menu, no line)
-    if (c.chip >= 0 && performance.now() - c.t0 < 700) {
+    // (a tap on a part's name: the next thing it could be - its menu, if pressed long or on its ▾;
+    // no line. ROADMAP 11.15)
+    clearTimeout(this.lpTimer);
+    if ((c.chip >= 0 || c.imp) && (c.opened || performance.now() - c.t0 < 900)) {
       const U = this.U;
       let far = 0;
       for (const q of c.p) far = Math.max(far, Math.hypot(q[0] - c.p[0][0], q[1] - c.p[0][1]) * U);
-      if (far < 9) {
-        this.partMenu(c.chip);
+      if (far < 9 || c.opened) {
+        if (c.imp) {
+          // (a part the game added: taken away - on the card, to have back)
+          this.noImp.add(c.imp);
+          this.game.audio.play('click', 0.4);
+          this.read();
+        } else if (c.opened) {
+          // (its menu is open already)
+        } else if (c.menuAt) this.partMenu(c.chip);
+        else this.cyclePart(c.chip);
         this.render();
         return;
       }
@@ -532,6 +606,9 @@ export class FreeDraw {
     this.force = null;
     this.over = {};
     this.face = null;
+    // (a new drawing: the engineer's offers, what the game adds - as they come again)
+    this.engOn.clear();
+    this.noImp.clear();
     this.partMenu(-1);
     this.bake();
     this.read();
@@ -732,18 +809,34 @@ export class FreeDraw {
     // (ROADMAP 11.12: what it was a moment ago - a ride the player names a part of is a ride still,
     // unless they named what is held; a weapon, a weapon - unless what they named makes it a ride)
     const frame = was ? 'ride' : this.PW ? 'hand' : null;
-    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.face, null, { net, cats: this.cats.size ? this.cats : null, relook: net ? relook : null, frame });
+    const P = readParts(this.strokes.map((s) => ({ p: s.p, c: s.c, k: s.k, r: s.raw })), this.over, this.face, null, { net, cats: this.cats.size ? this.cats : null, relook: net ? relook : null, frame, noImplicit: this.noImp });
     this.P = P;
     if (!P || P.frame !== 'ride' || !P.R) return;
-    const drawn = rideDesign(P, this.strokes, INKS);
+    // (ROADMAP 11.15: made as it was drawn - or polished, as the player says)
+    const drawn = rideDesign(P, this.strokes, INKS, this.look);
     if (!drawn) return;
     // (ROADMAP 11.12) what the engineer makes of it: game/engineer.js - the card shows it, the drawing
-    // turns into it, and it is what is made
-    let E = { design: drawn, notes: [], changes: [] };
+    // turns into it, and it is what is made. (ROADMAP 11.15) the hand's slips put right; what else it
+    // would do, offered - each step done only when the player takes it
+    let E = { design: drawn, notes: [], changes: [], steps: [] };
+    let all = E;
     try {
-      E = engineer(drawn, this.engLevel);
+      const noTidy = this.engLevel === 'raw';
+      all = engineer(drawn, 'eng', { noTidy });
+      const only = new Set([...this.engOn].filter((k) => EN_STEPS.includes(k)));
+      E = only.size ? engineer(drawn, 'eng', { only, noTidy }) : engineer(drawn, this.engLevel);
     } catch (err) {
       console.warn('engineer', err);
+    }
+    // (what it offers: each step, its notes and the lines it moves - as that step would)
+    const sugg = new Map();
+    for (const st of all.steps || []) {
+      if (!st.k || TIDY_STEPS.includes(st.k)) continue;
+      const g = sugg.get(st.k) || { k: st.k, notes: [], srcs: new Set(), added: [] };
+      g.notes.push(st.t);
+      for (const q of st.srcs) if (q !== null) g.srcs.add(q);
+      g.added.push(...(st.added || []));
+      sugg.set(st.k, g);
     }
     const design = E.design;
     const spec = rideSpec(design);
@@ -759,7 +852,7 @@ export class FreeDraw {
       const ev = rideEvidence(P);
       if (other > 0.5 && net.vehicle < 0.3 && (ev < 2 || other > 0.8 || !ok)) return;
     }
-    this.PR = { design, spec, sum: spec.sum, ok, why: spec.why, eng: E };
+    this.PR = { design, spec, sum: spec.sum, ok, why: spec.why, eng: E, all, sugg: [...sugg.values()] };
     this.cardDirty = true;
     // (a change in what the engineer did: the drawing turns into it again)
     const sig = E.changes.map((c) => c.to.reduce((a, p) => a + p[0] * 3.1 + p[1], 0).toFixed(2)).join(',');
@@ -770,7 +863,7 @@ export class FreeDraw {
   }
 
   // what a line is: the player's say (null: as the game reads it)
-  setPart(i, t) {
+  setPart(i, t, menu = true) {
     if (i < 0) return;
     if (t && t !== '') this.over[i] = t;
     else delete this.over[i];
@@ -779,7 +872,40 @@ export class FreeDraw {
     this.read();
     this.render();
     // (ROADMAP 11.12: the menu stays - another tried, the card says what each makes of it)
-    if (this.P && this.P.parts.some((q) => q.i === i)) this.partMenu(i);
+    if (menu && this.P && this.P.parts.some((q) => q.i === i)) this.partMenu(i);
+  }
+
+  // (ROADMAP 11.15) a tap on a part's name: the next thing it likely is (as the game read it first,
+  // then the likely ones, then only a line); round again to as the game reads it
+  cyclePart(i) {
+    const part = this.P ? this.P.parts.find((q) => q.i === i) : null;
+    if (!part) return;
+    const list = [...new Set([part.auto, ...(part.choices || []).filter((t) => PART[t] && t !== 'deco').slice(0, 4), 'deco'])].filter((t) => PART[t]);
+    const next = list[(list.indexOf(part.type) + 1) % list.length];
+    this.setPart(i, next === part.auto ? null : next, false);
+    const chip = this.chips.find((c) => c.i === i);
+    if (chip) {
+      chip.el.classList.remove('flip');
+      void chip.el.offsetWidth;
+      chip.el.classList.add('flip');
+    }
+  }
+
+  // (ROADMAP 11.15) on a part's ▾: its whole menu
+  chipArrow(i, x) {
+    const chip = this.chips.find((c) => c.i === i);
+    if (!chip) return false;
+    const r = chip.el.getBoundingClientRect();
+    return x <= r.left + 15;
+  }
+
+  // (ROADMAP 11.15) which part the game added has its name at (x, y) on the screen (its kind, or null)
+  impAt(x, y) {
+    for (const c of this.impChips || []) {
+      const r = c.el.getBoundingClientRect();
+      if (x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4) return c.type;
+    }
+    return null;
   }
 
   // the menu of a part's name (-1: none). (ROADMAP 11.12) Every part it could be, in groups - the
@@ -850,6 +976,7 @@ export class FreeDraw {
     if (!on) {
       this.partsEl.innerHTML = '';
       this.chips = [];
+      this.impChips = [];
       return;
     }
     const U = this.U;
@@ -857,7 +984,8 @@ export class FreeDraw {
     const big = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) / U : 1;
     // (and what no one line is: the wheels in its arches, a plane's wings in its outline - faint)
     const imp = P.implicit || [];
-    this.partsEl.innerHTML = P.parts.map((q) => `<span class="fd-pchip r-${PART[q.type].role}${this.over[q.i] ? ' mine' : ''}" data-i="${q.i}">${PART[q.type].name}</span>`).join('') + imp.map((q) => `<span class="fd-pchip r-${PART[q.type].role} implicit">${PART[q.type].name}</span>`).join('');
+    // (ROADMAP 11.15: each its ▾ - its menu; what the game added, its ✕ - taken away)
+    this.partsEl.innerHTML = P.parts.map((q) => `<span class="fd-pchip r-${PART[q.type].role}${this.over[q.i] ? ' mine' : ''}" data-i="${q.i}"><i class="dd">▾</i>${PART[q.type].name}</span>`).join('') + imp.map((q) => `<span class="fd-pchip r-${PART[q.type].role} implicit" title="המשחק הוסיף — נגיעה מורידה">${PART[q.type].name}<i class="x">✕</i></span>`).join('');
     const els = [...this.partsEl.children];
     const placed = [];
     this.chips = [];
@@ -892,9 +1020,11 @@ export class FreeDraw {
       el.style.transform = `translate(${Math.round(cx - w / 2)}px, ${Math.round(top)}px)`;
       this.chips.push({ i: q.i, el });
     }
+    this.impChips = [];
     imp.forEach((q, k) => {
       const el = els[P.parts.length + k];
       if (!el) return;
+      this.impChips.push({ type: q.type, el });
       const w = el.offsetWidth;
       const h = el.offsetHeight;
       let cx = q.at[0] * U;
@@ -953,14 +1083,38 @@ export class FreeDraw {
     const lEl = $('fd-lines');
     lEl.innerHTML = lines.map(([r, t, x]) => `<div class="fd-ln"><span class="fd-ab r-${r}">${esc(t)}</span><span>${esc(x)}</span></div>`).join('');
     lEl.classList.toggle('hidden', !lines.length);
-    // (ROADMAP 11.12) the engineer: how much it does (as drawn, tidy, engineered) - and what it did
+    // (ROADMAP 11.15) its look: as drawn, or each part the game's own
+    const lkEl = $('fd-look');
+    lkEl.innerHTML = PR ? `<span>מראה</span>${LOOKS.map(([k, n]) => `<button class="fd-lk${k === this.look ? ' on' : ''}" data-l="${k}">${n}</button>`).join('')}` : '';
+    lkEl.classList.toggle('hidden', !PR);
+    // (ROADMAP 11.12) the engineer: its lines as drawn, or the hand's slips put right - (ROADMAP 11.15)
+    // and what it would make better, offered: each a ✓ to take; the parts the game added, each a ✕
     const eEl = $('fd-eng');
-    eEl.innerHTML = PR ? ENG_LEVELS.map(([k, n]) => `<button class="fd-eb${k === this.engLevel ? ' on' : ''}" data-k="${k}">${n}</button>`).join('') : '';
+    eEl.innerHTML = PR ? ENG_LEVELS.filter(([k]) => k !== 'eng').map(([k, n]) => `<button class="fd-eb${k === this.engLevel ? ' on' : ''}" data-k="${k}">${n}</button>`).join('') : '';
     eEl.classList.toggle('hidden', !PR);
-    const notes = PR && PR.eng ? PR.eng.notes.slice(0, 3) : [];
     const nEl = $('fd-engn');
-    nEl.innerHTML = notes.map((t) => `<div class="fd-ln"><span class="fd-ab r-eng">מהנדס</span><span>${esc(t)}</span></div>`).join('');
-    nEl.classList.toggle('hidden', !notes.length);
+    const rows = [];
+    if (PR) {
+      const sg = PR.sugg || [];
+      if (sg.length) {
+        const allOn = sg.every((q) => this.engOn.has(q.k));
+        rows.push(`<div class="fd-sgh"><b>💡 המהנדס מציע</b>${sg.length > 1 ? `<button class="fd-sg all${allOn ? ' on' : ''}" data-k="all">${allOn ? 'לבטל הכל' : '✓ הכל'}</button>` : ''}</div>`);
+        for (const q of sg) {
+          const on = this.engOn.has(q.k);
+          rows.push(`<button class="fd-sg${on ? ' on' : ''}" data-k="${q.k}"><i>${on ? '✓' : '+'}</i><span>${esc(q.notes.join(' · '))}</span></button>`);
+        }
+      }
+      // (what the game adds - each with its ✕; taken away, a + to have it back)
+      const imp = [...new Set((this.P && this.P.implicit ? this.P.implicit : []).map((q) => q.type))];
+      const gone = [...this.noImp];
+      if (imp.length || gone.length) {
+        rows.push('<div class="fd-sgh"><b>המשחק הוסיף</b></div>');
+        for (const t of imp) rows.push(`<button class="fd-sg imp on" data-imp="${t}"><i>✕</i><span>${esc(IMP_WHY[t] || (PART[t] ? PART[t].name : t))}</span></button>`);
+        for (const t of gone) if (!imp.includes(t)) rows.push(`<button class="fd-sg imp" data-imp="${t}"><i>+</i><span>${esc(IMP_WHY[t] || (PART[t] ? PART[t].name : t))} (הוסר)</span></button>`);
+      }
+    }
+    nEl.innerHTML = rows.join('');
+    nEl.classList.toggle('hidden', !rows.length);
     const warn = [];
     if (PR && !PR.ok && PR.why) warn.push(PR.why);
     if (sum) warn.push(...sum.warn);
@@ -1041,8 +1195,8 @@ export class FreeDraw {
     this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur);
     this.hintEl.textContent = game.lab
       ? game.touch
-        ? 'ציירו באוויר · כל קו מקבל שם, ונגיעה בשם מחליפה אותו · האגודל ממשיך לרוץ'
-        : 'ציירו באוויר · כל קו מקבל שם, ולחיצה על השם מחליפה אותו · WASD ממשיכים לרוץ · Q יוצרים'
+        ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'
+        : 'ציירו באוויר · כל קו מקבל שם: לחיצה על השם — התפקיד הבא, ▾ — כל האפשרויות · נבנה בדיוק כמו שציירתם · Q יוצרים'
       : game.touch
         ? 'ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ'
         : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
@@ -1183,6 +1337,8 @@ export class FreeDraw {
     // where its weight is, over what it stands on
     const PR = this.PR;
     if (PR && PR.eng && PR.eng.changes.length && PR.design.page && !this.cur) this.drawEng(g);
+    // (ROADMAP 11.15) what the engineer offers, faint - and what the game added, dashed
+    if (PR && PR.design.page && !this.cur) this.drawOffers(g);
     if (PR && PR.ok && PR.spec.com && PR.design.page && !this.cur) this.drawCom(g);
     // (the parts' names: faint while a line is drawn)
     this.partsEl.classList.toggle('drawing', !!this.cur);
@@ -1256,6 +1412,39 @@ export class FreeDraw {
       }
       g.stroke();
     }
+    g.restore();
+  }
+
+  // (ROADMAP 11.15) on the drawing, before it is taken: where each line the engineer offers to move
+  // would be (faint, green, dotted), the lines it would add; and each part the game added (dashed,
+  // orange) - nothing it does that is not drawn on the drawing
+  drawOffers(g) {
+    const PR = this.PR;
+    const page = PR.design.page;
+    const U = this.U;
+    const path = (pts) => {
+      g.beginPath();
+      pts.forEach((p, i) => {
+        const [x, y] = toPage(page, p);
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      });
+      g.stroke();
+    };
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.lineWidth = 2.4 / U;
+    g.setLineDash([2.5 / U, 5 / U]);
+    g.strokeStyle = 'rgba(27, 158, 85, 0.75)';
+    for (const q of PR.sugg || []) {
+      if (this.engOn.has(q.k)) continue;
+      for (const c of PR.all.changes || []) if (q.srcs.has(c.src)) path(c.to);
+      for (const a of q.added) path(a);
+    }
+    g.setLineDash([6 / U, 4 / U]);
+    g.strokeStyle = 'rgba(232, 128, 30, 0.85)';
+    for (const s of PR.design.strokes) if (s.implicit && !s.edge) path(s.pts.length > 2 ? s.pts.concat([s.pts[0]]) : s.pts);
     g.restore();
   }
 
@@ -1680,7 +1869,7 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel !== 'eng' ? this.engLevel : undefined };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel, engOn: this.engOn.size ? [...this.engOn] : undefined, look: this.look, noImp: this.noImp.size ? [...this.noImp] : undefined };
   }
 
   load(o) {
@@ -1691,7 +1880,11 @@ export class FreeDraw {
     this.over = {};
     if (o.over && typeof o.over === 'object') for (const [k, t] of Object.entries(o.over)) if (PART[t] && +k < this.strokes.length) this.over[+k] = t;
     this.face = typeof o.face === 'boolean' ? o.face : null;
-    this.engLevel = ENG_LEVELS.some(([k]) => k === o.eng) ? o.eng : 'eng';
+    // (ROADMAP 11.15: one saved engineered - the hand's slips put right, and all it offered taken)
+    this.engLevel = o.eng === 'raw' ? 'raw' : 'tidy';
+    this.engOn = new Set(Array.isArray(o.engOn) ? o.engOn.filter((k) => EN_STEPS.includes(k)) : o.eng === 'eng' || o.eng === undefined ? EN_STEPS : []);
+    this.look = LOOKS.some(([k]) => k === o.look) ? o.look : o.look === undefined && o.eng !== undefined ? 'polished' : 'faithful';
+    this.noImp = new Set(Array.isArray(o.noImp) ? o.noImp.filter((t) => PART[t]) : []);
     this.showCats();
   }
 }

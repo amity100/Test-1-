@@ -1283,7 +1283,8 @@ class Vehicle {
       }
     }
     const maxAlt = this.grade === 'fail' ? 1.2 : 70;
-    this.vy = damp(this.vy, up * 9, 3, dt);
+    // (ROADMAP 11.15: what lifts it a little small for it - it rises slowly)
+    this.vy = damp(this.vy, up * 9 * (up > 0 ? q.climb || 1 : 1), 3, dt);
     if (!this.driver) this.vy = damp(this.vy, (1.05 - this.alt) * 0.8, 1, dt);
     this.alt = clamp(this.alt + this.vy * dt, 1.0, maxAlt);
     if (q.wobble) {

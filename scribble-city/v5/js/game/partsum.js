@@ -47,7 +47,15 @@ function inkOf(inks, i) {
   return { col: ink.c.slice(), pencil: !!ink.pencil, neon: !!ink.neon };
 }
 
-export function rideDesign(P, strokes, inks) {
+// (ROADMAP 11.15) look: 'faithful' - made as drawn (game/partbuild.js), what it does by how it was
+// drawn (rideSpec); 'polished' (or none) - each part the game's own
+export function rideDesign(P, strokes, inks, look = null) {
+  const d = rideDesign0(P, strokes, inks, look);
+  if (d && look) d.look = look;
+  return d;
+}
+
+function rideDesign0(P, strokes, inks, look) {
   if (!P || P.frame !== 'ride' || !P.R) return null;
   if (P.drone) return droneDesign(P, inks);
   if (P.heliTop) return heliTopDesign(P, inks);
@@ -146,7 +154,7 @@ export function rideDesign(P, strokes, inks) {
   } else if (P.R.made) {
     // (a balloon with no basket drawn: one, under its envelope)
     const b = P.R.sh;
-    out.push({ type: 'body', part: 'body', pts: M([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1], [b.x0, b.y0]]), ...bodyInk, made: true });
+    out.push({ type: 'body', part: 'body', pts: M([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1], [b.x0, b.y0]]), ...bodyInk, made: true, box: true });
   }
   const ol = P.R.loop || null;
   for (const o of P.st) {
@@ -193,8 +201,8 @@ export function rideDesign(P, strokes, inks) {
     }
     if (o.type === 'blade' || o.type === 'wing' || o.type === 'rotor' || o.type === 'chute') s.len = o.sh.long * m;
     // (ROADMAP 11.13) a plane's wing drawn hanging off its body: the wing as it is from above, as
-    // drawn - its sweep, its taper, its tip
-    if (o.type === 'wing' && P.family === 'plane') {
+    // drawn - its sweep, its taper, its tip (ROADMAP 11.15: as drawn, on anything)
+    if (o.type === 'wing' && (P.family === 'plane' || look === 'faithful')) {
       const wp = wingPlan(o, B, m);
       if (wp) Object.assign(s, wp);
     }
@@ -1023,15 +1031,20 @@ export function rideSpec(design) {
   const inner = !thrust && design.plane && wings.length > 0;
   if (inner) thrust = 1.6;
   // ---- how it goes: what it can do of each way
+  // (ROADMAP 11.15: as drawn - what lifts it a little small for it still lifts it, slowly: the game
+  // makes the drawing work in how it goes, not by changing its shape; the bigger it was drawn, the
+  // better it does it)
+  const assist = design.look === 'faithful';
+  const LMIN = assist ? 0.4 : 1;
   const drive = wheels.length > 0 || tracks.length > 0 || fans.length > 0;
   const liftR = R ? (R * R * 1.15 * (1 + (rotorN - 1) * 0.6)) / mass : 0;
   // (jets under it pointing down: they lift it straight up - a rocket's engine as big as its foot
   // is wide, or as a fifth of how tall it stands: ROADMAP 11.13)
   const jCap = design.rocket ? Math.max(1.6, L * 1.1, H * 0.22) : 1.6;
   const liftJ = vtols.length ? vtols.reduce((a, j) => a + clamp(j.size, 0.3, jCap) * 1.9, 0) / mass : 0;
-  const copter = (rotors.length > 0 && liftR >= 1) || liftJ >= 1;
+  const copter = (rotors.length > 0 && liftR >= LMIN) || liftJ >= LMIN;
   const liftW = wings.length ? wingA / (mass * 3.5) : 0;
-  const plane = wings.length > 0 && thrust > 0 && liftW >= 0.7;
+  const plane = wings.length > 0 && thrust > 0 && liftW >= (assist ? 0.12 : 0.7);
   const glide = wings.length > 0 && !plane && drive;
   // (a balloon big enough for what it carries lifts it; too small - smaller than what hangs from
   // it, and too weak for its weight - it only slows its fall)
@@ -1065,9 +1078,10 @@ export function rideSpec(design) {
   const gear = drive && !tracks.length && !!airy && ((rAvg < H * 0.27 && spread < 0.55 && (wings.length > 0 || boom || !rotors.length)) || rAvg < H * 0.18 || (L / Math.max(0.1, H) > 4.8 && rAvg < H * 0.5));
   const force = plane && (gear || !drive) ? 'plane' : copter && (gear || !drive) ? 'copter' : drive ? 'car' : copter ? 'copter' : plane ? 'plane' : balloon ? 'balloon' : boat ? 'boat' : null;
   const warn = [];
-  if (rotors.length && liftR < 1 && !(liftJ >= 1)) warn.push('הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל');
-  if (vtols.length && liftJ < 1 && !(rotors.length && liftR >= 1)) warn.push('הסילונים שמתחת חלשים מדי למשקל — לא ימריא. עוד סילון, או פחות משקל');
+  if (rotors.length && liftR < 1 && !(liftJ >= 1)) warn.push(liftR >= LMIN ? 'הרוטור קטן למשקל — מתרומם לאט. רוטור גדול יותר יטוס מהר יותר' : 'הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל');
+  if (vtols.length && liftJ < 1 && !(rotors.length && liftR >= 1)) warn.push(liftJ >= LMIN ? 'הסילונים שמתחת חלשים למשקל — ממריא לאט. עוד סילון ימריא מהר יותר' : 'הסילונים שמתחת חלשים מדי למשקל — לא ימריא. עוד סילון, או פחות משקל');
   if (wings.length && thrust > 0 && !plane) warn.push('הכנפיים קטנות מדי למשקל — לא ימריא');
+  else if (wings.length && thrust > 0 && liftW < 0.7) warn.push('הכנפיים קטנות למשקל — צריך הרבה מהירות כדי להמריא. כנפיים גדולות יותר ימריאו מהר יותר');
   if (wings.length && !thrust && !drive) warn.push('כנפיים בלי מדחף או סילון — אין מה שיזיז אותו');
   if (inner) warn.push('לא צויר מנוע: יש לו מנוע קטן בפנים. מדחף או סילון שמציירים — מהיר יותר');
   if (floaty) warn.push('הבלון קטן מדי למשקל — לא מרים, רק מאט נפילה. בלון גדול יותר ימריא');
@@ -1219,6 +1233,8 @@ export function rideSpec(design) {
     spec.rotorR = R || clamp(L * 0.45, 1, 3);
     const lift = Math.max(liftR, liftJ);
     spec.qCopter = { speed: clamp(0.5 + (R || 2) * 0.1 + (lift - 1) * 0.25 + (liftJ >= 1 ? 0.2 : 0), 0.45, 1.5), accel: clamp(0.65 + (lift - 1) * 0.5 + (R || 2) * 0.05, 0.6, 1.4) };
+    // (ROADMAP 11.15: a little small for it - it rises slowly)
+    if (lift < 1) spec.qCopter.climb = clamp(lift, 0.35, 1);
     if (spec.base === 'copter') spec.q = spec.qCopter;
     // (its weight not under its rotor: it leans that way, and drifts)
     let lx = 0;
@@ -1237,9 +1253,10 @@ export function rideSpec(design) {
     const off = lw ? (com[0] - lx / lw) / L : 0;
     // (ROADMAP 11.13: one rotor, nothing to hold it straight - it turns its body round the other
     // way: a tail rotor holds it, a second rotor turning against it, jets)
-    if (rotors.length === 1 && !rotors[0].coax && liftR >= 1 && !tailRS.length && !(liftJ >= 1)) {
-      spec.spin = 0.5;
-      warn.push('רוטור אחד בלי רוטור זנב — בטיסה הוא מסתובב סביב עצמו. רוטור קטן בזנב, או רוטור שני, יחזיקו אותו ישר');
+    if (rotors.length === 1 && !rotors[0].coax && liftR >= LMIN && !tailRS.length && !(liftJ >= 1)) {
+      // (ROADMAP 11.15: as drawn, the game holds it nearly straight - a tail rotor holds it all the way)
+      spec.spin = assist ? 0.18 : 0.5;
+      warn.push(assist ? 'רוטור אחד בלי רוטור זנב — מסתובב קצת סביב עצמו. רוטור קטן בזנב יחזיק אותו ישר' : 'רוטור אחד בלי רוטור זנב — בטיסה הוא מסתובב סביב עצמו. רוטור קטן בזנב, או רוטור שני, יחזיקו אותו ישר');
     }
     if (Math.abs(off) > 0.08) {
       spec.lean = clamp(off * 1.5, -0.3, 0.3);
