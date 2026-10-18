@@ -1116,7 +1116,7 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   v.group.add(v.body);
   v.model = 'drawn';
   v.drawn = {
-    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined, part: s.part || undefined, r: s.r || undefined, len: s.len || undefined, coils: s.coils || undefined, base: s.base || undefined, muz: s.muz || undefined, edge: s.edge || undefined, made: s.made || undefined, side: s.side || undefined, el: s.el || undefined, whole: s.whole || undefined, plan: s.plan ? s.plan.map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]) : undefined, mount: s.mount || undefined, lat: s.lat === undefined ? undefined : Math.round(s.lat * 100) / 100, wing: s.wing || undefined, flat: s.flat || undefined, guard: s.guard || undefined, ship: s.ship || undefined, implicit: s.implicit || undefined })),
+    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined, part: s.part || undefined, r: s.r || undefined, len: s.len || undefined, coils: s.coils || undefined, base: s.base || undefined, muz: s.muz || undefined, edge: s.edge || undefined, made: s.made || undefined, side: s.side || undefined, el: s.el || undefined, whole: s.whole || undefined, plan: s.plan ? s.plan.map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]) : undefined, mount: s.mount || undefined, lat: s.lat === undefined ? undefined : Math.round(s.lat * 100) / 100, wing: s.wing || undefined, flat: s.flat || undefined, guard: s.guard || undefined, ship: s.ship || undefined, implicit: s.implicit || undefined, push: s.push || undefined })),
     polish: design.polish || undefined,
     plane: design.plane || undefined,
     above: design.above || undefined,
@@ -1133,6 +1133,8 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
     // (ROADMAP 11.8: what the network called it, and what else it does)
     group: design.group || null,
     cls: design.cls || null,
+    thing: design.thing || undefined,
+    asBoat: design.asBoat || undefined,
     abil: design.abil || null,
   };
   v.spec = spec;

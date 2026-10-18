@@ -564,14 +564,17 @@ export function updatePlane(v, dt, input) {
       v.destroy();
       return;
     }
-    if (s > 6) {
+    // (ROADMAP 11.14: only what is ahead of it stops it - a post beside its wing, it rolls on past)
+    const push = Math.sin(v.yaw) * (p.x - v.pos.x) + Math.cos(v.yaw) * (p.z - v.pos.z);
+    const ahead = s >= 0 ? push < -1e-4 : push > 1e-4;
+    if (s > 6 && ahead) {
       v.hurt(s * 1.2);
       game.audio.play('crash', Math.min(1, s / 20));
       game.camRig.addShake(Math.min(0.5, s * 0.02));
     }
     v.pos.x = p.x;
     v.pos.z = p.z;
-    v.speed = 0;
+    if (ahead) v.speed = 0;
   }
   if (input) game.audio.engine(0.25 + thr * 0.75, 'prop');
 }

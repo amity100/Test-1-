@@ -1,6 +1,6 @@
 import { clamp } from '../core/util.js';
 import { shapeOf, specOf, inPoly, outline, spanAt } from './drawncar.js';
-import { CLASSES } from './sketchnet.js';
+import { CLASSES, VEHICLE_GROUPS } from './sketchnet.js';
 import { placeOf, roleOf } from './partrole.js';
 
 // (ROADMAP 11.10, the sample) What a ride does is its parts added up - each part does one thing,
@@ -69,7 +69,9 @@ export function rideDesign(P, strokes, inks) {
   if (P.rocket) L = clamp((B.h / P.k) * 3.4, 5, 14) * (B.w / Math.max(1e-6, B.h));
   // (a balloon: by its envelope - a balloon is ten metres tall or so)
   const env = P.family === 'balloon' ? P.st.find((o) => o.type === 'balloon') : null;
-  if (env && !P.ship) L = clamp((env.sh.h / P.k) * 7, 6, 16) * (B.w / env.sh.h);
+  // (ROADMAP 11.14: a car under it, on its wheels - by the car, as long as a car is drawn so)
+  const onWheels = P.parts.filter((p) => p.type === 'wheel').length >= 2;
+  if (env && !P.ship && !onWheels) L = clamp((env.sh.h / P.k) * 7, 6, 16) * (B.w / env.sh.h);
   // (ROADMAP 11.13: an airship - by its envelope's length, a big one; its gondola tall enough to
   // sit in)
   if (env && P.ship) {
@@ -101,7 +103,32 @@ export function rideDesign(P, strokes, inks) {
   const out = [];
   const M = (pts) => pts.map(([x, y]) => [x * m, y * m]);
   // the body: its outline
-  const boat = P.family === 'boat';
+  // (ROADMAP 11.14: an aircraft drawn on a boat's hull - flat along its deck, narrower at its keel, a
+  // boat the network sees in it: it floats too)
+  let boat = P.family === 'boat';
+  if (!boat && (P.family === 'copter' || P.family === 'plane') && main && main.sh.closed && P.guess) {
+    const qBoat = P.guess.filter(([g]) => g === 'boat').reduce((a, [, q]) => a + q, 0);
+    const wAt = (y) => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      const L0 = main.pts;
+      for (let a = 0, b = L0.length - 1; a < L0.length; b = a++) {
+        const [xa, ya] = L0[b];
+        const [xb, yb] = L0[a];
+        if ((ya <= y && yb >= y) || (yb <= y && ya >= y)) {
+          const x = xa + (xb - xa) * (Math.abs(yb - ya) < 1e-9 ? 0.5 : (y - ya) / (yb - ya));
+          lo = Math.min(lo, x);
+          hi = Math.max(hi, x);
+        }
+      }
+      return hi > lo ? hi - lo : 0;
+    };
+    const ms = main.sh;
+    const keelK = wAt(ms.y0 + ms.h * 0.15) / Math.max(1e-6, wAt(ms.y0 + ms.h * 0.85));
+    // (or plainly a hull, whatever the network sees: flat along its deck, right to its top, and far
+    // narrower at its keel)
+    if ((qBoat >= 0.4 && ms.w > ms.h * 2.2 && keelK < 0.93) || (qBoat >= 0.15 && ms.w > ms.h * 2.8 && keelK < 0.86 && wAt(ms.y0 + ms.h * 0.95) > ms.w * 0.75)) boat = true;
+  }
   if (P.R.loop) out.push({ type: 'body', part: boat ? 'hull' : 'body', pts: M(P.R.loop.concat([P.R.loop[0]])), ...bodyInk, hull: boat || undefined, made: true });
   else if (P.R.bike) {
     // (a bike: a slim tank and seat over its frame, between its wheels)
@@ -217,6 +244,10 @@ export function rideDesign(P, strokes, inks) {
       const c = B.w * 0.26;
       const y = B.y0 + B.h * 0.3;
       out.push({ type: 'wing', part: 'wing', pts: M([[B.cx - c / 2, y], [B.cx + c / 2, y]]), len: c * m, ...bodyInk, made: true, implicit: true });
+    } else if (q.type === 'prop') {
+      // (ROADMAP 11.14: a wing drawn on it, nothing to push it - a small propeller at its back, standing)
+      const r = clamp(B.h * 0.42, 0.2 / m, 0.9 / m);
+      out.push({ type: 'prop', part: 'prop', pts: M([[B.x0 - B.w * 0.02, B.cy - r], [B.x0 - B.w * 0.02, B.cy + r]]), ...bodyInk, made: true, implicit: true, push: true });
     } else if (q.type === 'jet') {
       // (a rocket's engine: its bell under its foot, pointing down)
       const w = B.w * 0.5;
@@ -245,12 +276,17 @@ export function rideDesign(P, strokes, inks) {
     if (hi > lo) nose = Math.round(((hi - lo) / Math.max(1e-6, B.h)) * 100) / 100;
   }
   const kin = kinOf(P);
+  // (ROADMAP 11.14: the network plainly sees something that is no ride in it - a house, a fish: what
+  // it is called, flying)
+  // (a ladder, a bridge - boxes and lines, as any body is: only when all but certain)
+  const g0 = P.guess && P.guess[0];
+  if (g0 && g0[1] >= (BOXY_THING.has(g0[2]) ? 0.85 : 0.6) && THING_NOUN[g0[2]] && !VEHICLE_GROUPS.has(g0[0]) && !((P.sure || 0) >= 0.75)) kin.thing = g0[2];
   // (a fire engine's ladder, its hose: it sprays water - unless drawn in an ink of its own)
   if (kin.cls === 'firetruck') for (const s of out) if (s.part === 'barrel' && !s.el) s.el = 'water';
   // (and where on the page each metre of it is - ui/freedraw.js shows its balance there, and the
   // engineer's changes: game/engineer.js)
   const page = { m, k: P.k, x0: P.x0, y1: P.y1, flip: !!P.flip, W: (P.x1 - P.x0) * P.k };
-  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, copter: P.family === 'copter' || undefined, airship: P.ship || undefined, rocket: P.rocket ? true : undefined, nose, ...kin, page };
+  return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, copter: P.family === 'copter' || undefined, airship: P.ship || undefined, rocket: P.rocket ? true : undefined, asBoat: P.family === 'boat' || undefined, nose, ...kin, page };
 }
 
 // (ROADMAP 11.13) a wing drawn from the side, as most draw one - hanging down off the body (or up
@@ -318,7 +354,14 @@ const PLAIN = { 'police car': ['car', 0.7], ambulance: ['car', 0.55], firetruck:
 function kinOf(P) {
   const want = KIN_GROUPS[P.family];
   if (!want || !P.guess) return {};
-  const g = P.guess.find(([grp]) => want.includes(grp));
+  // (ROADMAP 11.14: a bike's own is a frame of lines between its wheels - a body drawn closed over
+  // them is no bike's, whatever the network sees)
+  const framed = P.parts.some((q) => q.type === 'frame');
+  const fits = (grp) => want.includes(grp) && (framed || (grp !== 'bicycle' && grp !== 'moto'));
+  let g = P.guess.find(([grp]) => fits(grp));
+  // (ROADMAP 11.14: a car or something else of the road, the network all but undecided - a car)
+  const g2 = g && P.guess.find(([grp]) => fits(grp) && grp !== g[0]);
+  if (g && g2 && g2[0] === 'car' && g[1] - g2[1] < 0.08) g = g2;
   if (!g || !(g[1] >= (P.family === 'boat' ? 0.5 : 0.2))) return {};
   let cls = g[2];
   if (PLAIN[cls] && !(P.prob && P.prob[CLASSES.indexOf(cls)] >= PLAIN[cls][1])) cls = PLAIN[cls][0];
@@ -361,7 +404,10 @@ function topDesign(P, inks) {
   const UV = ([x, y]) => [(x - T.cx) * T.ux + (y - T.cy) * T.uy, -(x - T.cx) * T.uy + (y - T.cy) * T.ux];
   let u0 = Infinity;
   let u1 = -Infinity;
-  for (const o of P.st) {
+  // (ROADMAP 11.14: how long the plane is - a gun out past its nose, a spring past its tail no part of
+  // that: out past it, where drawn)
+  const own = P.st.filter((o) => o.type !== 'barrel' && o.type !== 'spring');
+  for (const o of own.length ? own : P.st) {
     for (const p of o.pts) {
       const u = UV(p)[0];
       u0 = Math.min(u0, u);
@@ -564,6 +610,50 @@ function topDesign(P, inks) {
     const lat = Math.abs(cv * k) > hMax * 1.5 ? cv * k : 0;
     const r = clamp((Math.max(o.sh.w, o.sh.h) * k) / 2, 0.45, 1.6);
     out.push({ type: 'prop', part: 'prop', pts: [[z + 0.05, c - r], [z + 0.05, c + r]], lat, ...bodyInk, made: true });
+  }
+  // ---- (ROADMAP 11.14) its guns: along it out of its nose (its tail) as far as drawn - on its
+  // middle, level
+  for (const o of P.st.filter((q) => q.type === 'barrel')) {
+    let a = Infinity;
+    let b = -Infinity;
+    let cv = 0;
+    for (const p of o.pts) {
+      const [u, v] = UV(p);
+      a = Math.min(a, Zof(u));
+      b = Math.max(b, Zof(u));
+      cv += v;
+    }
+    cv /= o.pts.length;
+    const back = (a + b) / 2 < L / 2;
+    const [zb, zm] = back ? [Math.min(b, L * 0.18), Math.min(a, -0.3)] : [Math.max(a, L * 0.82), Math.max(b, L + 0.3)];
+    const y = yc(back ? 0 : L);
+    const r = o.sh.closed || o.sh.endGap < o.sh.long * 0.35 ? clamp((o.sh.thick * k) / 2, 0.04, 0.3) : 0.045;
+    const lat = Math.abs(cv * k) > hMax * 1.2 ? cv * k : 0;
+    out.push({ type: 'gun', part: 'barrel', pts: [[zb, y], [zm, y]], base: [zb, y], muz: [zm, y], len: Math.abs(zm - zb), r, lat, ...inkOf(inks, o.ink), src: o.i });
+  }
+  // ---- its springs: past its tail (its nose), out of its end along it - one drawn on it, under it
+  // (game/partrole.js: at its back it kicks it on, at its front a bumper, under it it jumps)
+  for (const o of P.st.filter((q) => q.type === 'spring')) {
+    let a = Infinity;
+    let b = -Infinity;
+    for (const p of o.pts) {
+      const z = Zof(UV(p)[0]);
+      a = Math.min(a, z);
+      b = Math.max(b, z);
+    }
+    const n = clamp(o.sh.coils || 4, 3, 10);
+    const pts = [];
+    if (b < L * 0.1 || a > L * 0.9) {
+      const back = b < L * 0.1;
+      const z0 = back ? 0 : L;
+      const ln = clamp(Math.abs(back ? -a : b - L), 0.6, 2.2);
+      for (let q = 0; q <= n * 2; q++) pts.push([z0 + (back ? -1 : 1) * (q / (n * 2)) * ln, yc(z0) + (q % 2 ? 0.16 : -0.16)]);
+    } else {
+      const zm = (a + b) / 2;
+      const yb = yc(zm) - hwAt(zm) * 0.95;
+      for (let q = 0; q <= n * 2; q++) pts.push([zm + (q % 2 ? 0.18 : -0.18), yb - (q / (n * 2)) * 0.9]);
+    }
+    out.push({ type: 'spring', part: 'spring', pts, coils: n, ...inkOf(inks, o.ink), src: o.i });
   }
   const color = bodyInk.pencil ? [0.95, 0.93, 0.88] : bodyInk.col.slice();
   const hwPlan = [];
@@ -807,7 +897,9 @@ export function rideSpec(design) {
   // over it: they lift it)
   for (const s of S) if (s.implicit && s.part === 'rotor' && role.has(s)) Object.assign(role.get(s), { v: 'lift', name: 'רוטור כפול', say: 'שני רוטורים, אחד מעל השני, מסתובבים הפוך: מרים, ולא מסובב אותו סביב עצמו' });
   // (and the small one the engineer adds at a helicopter's tail - game/engineer.js: its tail rotor)
-  for (const s of S) if (s.implicit && s.part === 'prop' && role.has(s)) Object.assign(role.get(s), { v: 'tail', name: 'רוטור זנב', say: 'בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו' });
+  for (const s of S) if (s.implicit && s.part === 'prop' && !s.push && role.has(s)) Object.assign(role.get(s), { v: 'tail', name: 'רוטור זנב', say: 'בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו' });
+  // (ROADMAP 11.14: the one the game adds at the back of a winged thing with nothing to push it)
+  for (const s of S) if (s.implicit && s.push && role.has(s)) Object.assign(role.get(s), { v: 'pusher', name: 'מדחף דוחף', say: 'נוסף מאחור: דוחף אותו, והכנפיים מרימות' });
   // (a stream - water, fire, light - is no giant cannon however it is drawn)
   for (const s of S) if (s.el && STREAM_NAME[s.el] && role.has(s) && role.get(s).v === 'giant') Object.assign(role.get(s), { v: 'mg', name: STREAM_NAME[s.el], say: '' });
   // ---- what moves it
@@ -965,7 +1057,12 @@ export function rideSpec(design) {
   const spread = wz.length >= 2 ? (Math.max(...wz) - Math.min(...wz)) / Math.max(0.1, L) : 0;
   // (a helicopter's are under its cabin, its tail boom out behind; a car with a rotor has none)
   const boom = of('tail').length > 0;
-  const gear = drive && ((rAvg < H * 0.27 && spread < 0.55 && (wings.length > 0 || boom || !rotors.length)) || rAvg < H * 0.18 || L / Math.max(0.1, H) > 4.8);
+  // (ROADMAP 11.14: tracks are no landing gear - a tank that flies; nor are a car's wheels, read as a
+  // car, with only what the game added to fly it)
+  const airy = design.plane || design.copter || design.airship || (wingS.some((s) => !s.implicit) && !design.group);
+  // (ROADMAP 11.14: a long thin body over wheels as big as it is thick - a skateboard's deck - is on
+  // wheels, no landing gear)
+  const gear = drive && !tracks.length && !!airy && ((rAvg < H * 0.27 && spread < 0.55 && (wings.length > 0 || boom || !rotors.length)) || rAvg < H * 0.18 || (L / Math.max(0.1, H) > 4.8 && rAvg < H * 0.5));
   const force = plane && (gear || !drive) ? 'plane' : copter && (gear || !drive) ? 'copter' : drive ? 'car' : copter ? 'copter' : plane ? 'plane' : balloon ? 'balloon' : boat ? 'boat' : null;
   const warn = [];
   if (rotors.length && liftR < 1 && !(liftJ >= 1)) warn.push('הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל');
@@ -1191,6 +1288,13 @@ export function rideSpec(design) {
       warn.push('בלי סנפירים בזנב היא מתנדנדת ופונה לאט. סנפירים מאחור ייצבו אותה');
     }
   }
+  // (ROADMAP 11.14: a hot air balloon with a propeller on its basket - it goes where it is steered,
+  // faster)
+  if (spec.balloon && !design.airship && props.length) {
+    const push = props.reduce((a, p) => a + clamp(pd(p), 0.5, 3.2), 0);
+    spec.balloon.drift = clamp(spec.balloon.drift + 2 + push * 1.4, 3.5, 12);
+    spec.balloon.prop = true;
+  }
   // (a hovercraft on the water: over it, not in it)
   if (spec.boat && fans.length) spec.boat.draft = 0;
   // ---- on the water: propellers push it along (an airboat)
@@ -1347,6 +1451,7 @@ const NOUN = {
   canoe: ['קאנו', 'm'],
   sub: ['צוללת', 'f'],
   monster: ['מכונית מפלצת', 'f'],
+  jetcar: ['מכונית סילון', 'f'],
   copter: ['מסוק', 'm'],
   plane: ['מטוס', 'm'],
   boat: ['סירה', 'f'],
@@ -1380,6 +1485,36 @@ const ADJ = {
   armor: ['משוריין', 'משוריינת', 'משוריינים'],
   jump: ['קופץ', 'קופצת', 'קופצים'],
   upside: ['הפוך', 'הפוכה', 'הפוכים'],
+  sail: ['שט', 'שטה', 'שטים'],
+  drive: ['נוסע', 'נוסעת', 'נוסעים'],
+};
+// (ROADMAP 11.14) what the network sees in it that is no ride - its noun when it goes all the same
+const BOXY_THING = new Set(['ladder', 'bridge']);
+const THING_NOUN = {
+  house: ['בית', 'm'],
+  tree: ['עץ', 'm'],
+  flower: ['פרח', 'm'],
+  cat: ['חתול', 'm'],
+  star: ['כוכב', 'm'],
+  cloud: ['ענן', 'm'],
+  fish: ['דג', 'm'],
+  face: ['ראש', 'm'],
+  umbrella: ['מטרייה', 'f'],
+  key: ['מפתח', 'm'],
+  ladder: ['סולם', 'm'],
+  bridge: ['גשר', 'm'],
+  sword: ['חרב', 'f'],
+  knife: ['סכין', 'f'],
+  axe: ['גרזן', 'm'],
+  hammer: ['פטיש', 'm'],
+  'baseball bat': ['מחבט', 'm'],
+  boomerang: ['בומרנג', 'm'],
+  rifle: ['רובה', 'm'],
+  pistol: ['אקדח', 'm'],
+  bomb: ['פצצה', 'f'],
+  shield: ['מגן', 'm'],
+  spring: ['קפיץ', 'm'],
+  parachute: ['מצנח', 'm'],
 };
 // (the network's kind of it: its noun)
 const WATER_NOUN = new Set(['speedboat', 'canoe', 'sub', 'ship', 'sailboat']);
@@ -1415,6 +1550,8 @@ function planeNoun(S, role, spec, design) {
   return 'plane';
 }
 
+const M0 = (spec) => spec.modes || {};
+
 function summary(o) {
   const { spec, mass, L, H, wheels, warn } = o;
   const S = o.design.strokes;
@@ -1446,35 +1583,49 @@ function summary(o) {
     let k = kin;
     if ((k === 'moto' || k === 'bicycle') && n > 2) k = null;
     if (k === 'tank' && !nBarrels) k = null;
-    if (k === 'skate' && n < 2) k = null;
+    // (ROADMAP 11.14: a skateboard's deck is thin over its wheels - a tub on them is no skateboard)
+    if (k === 'skate' && (n < 2 || rH < 0.3)) k = null;
     // (a boat's kind, for one on wheels: a car still)
     if (k && WATER_NOUN.has(k)) k = null;
     if (k === 'car' && rH >= 0.5) k = 'monster';
     if (cannon && n >= 4) k = 'tank';
-    noun = k || (bikey ? 'moto' : n === 1 && aW < 1.5 ? 'mono' : rH >= 0.5 ? 'monster' : L > 6.8 ? 'truck' : 'car');
+    // (ROADMAP 11.14: a long thin deck over its two wheels, they as big as it is thick - a skateboard)
+    const decked = n === 2 && L / Math.max(1e-3, H) > 6 && rH >= 0.3;
+    noun = k || (bikey ? 'moto' : n === 1 && aW < 1.5 ? 'mono' : decked ? 'skate' : rH >= 0.5 ? 'monster' : L > 6.8 ? 'truck' : 'car');
     // (ROADMAP 11.12: on tracks - a tank with a cannon, a bulldozer with a blade at its front; on
     // its fans, a hovercraft; with a sail, a land yacht; its body a barrel, a cannon on wheels)
-    if (o.tracks && o.tracks.length) noun = cannon ? 'tank' : vs('blade', 'ram') ? 'dozer' : 'crawler';
+    // (ROADMAP 11.14: one the network sees a tank in, with a gun: a tank still)
+    if (o.tracks && o.tracks.length) noun = cannon || (k === 'tank' && nBarrels) ? 'tank' : vs('blade', 'ram') ? 'dozer' : 'crawler';
+    // (ROADMAP 11.14: a jet out of its back pushing it - a jet car)
+    else if ((spec.jets || []).length && (noun === 'car' || noun === 'skate' || noun === 'truck' || noun === 'mono')) noun = 'jetcar';
     else if (o.fans && o.fans.length) noun = 'hover';
     else if (vs('sail', 'land')) noun = 'landyacht';
     if (whole && noun !== 'tank') noun = 'gun';
   } else if (base === 'copter') noun = o.design.rocket ? 'rocket' : !(spec.rotors && spec.rotors.length) ? 'jetcopter' : o.design.drone || spec.rotors.length >= 3 ? 'drone' : spec.rotors.length === 2 ? 'tandem' : 'copter';
   else if (base === 'plane') noun = planeNoun(S, role, spec, o.design);
   else if (base === 'balloon') noun = o.design.airship ? 'airship' : 'balloon';
-  else if (base === 'boat') {
+  // (ROADMAP 11.14: drawn a boat, and it flies - a rotor, wings on it: the boat it is, flying)
+  const asBoat = !!o.design.asBoat && base !== 'boat' && base !== 'car';
+  if (base === 'boat' || asBoat) {
     // (a sail drawn: a sailboat; else the network's kind of boat - a submarine, a canoe)
     const k = kin === 'speedboat' || kin === 'canoe' || kin === 'sub' || kin === 'ship' ? kin : null;
     noun = has('sail') ? (L > 10 ? 'ship' : 'sailboat') : k || (L > 10 ? 'ship' : 'boat');
-    if (spec.boat && spec.boat.air) noun = 'airboat';
+    if (spec.boat && spec.boat.air && !asBoat) noun = 'airboat';
   }
-  const [word, g] = NOUN[noun];
+  // (ROADMAP 11.14: what the network plainly sees in it is no ride - a house, a fish, a cloud, a
+  // sword - and it goes: that, going - a flying house, a fish that sails, a sword on wheels)
+  const thing = spec && o.design.thing ? THING_NOUN[o.design.thing] : null;
+  const [word, g] = thing || NOUN[noun];
   const adj = [];
   const say = (k) => adj.push(ADJ[k][g === 'f' ? 1 : g === 'p' ? 2 : 0]);
   if (spec) {
     const M = spec.modes;
-    if (base !== 'copter' && base !== 'plane' && base !== 'balloon' && (M.copter || M.plane || M.balloon)) say('fly');
+    // (a balloon over it, all that lifts it: "with a balloon" says it - game/partsum.js below)
+    if ((thing || asBoat || (base !== 'copter' && base !== 'plane' && base !== 'balloon')) && (M.copter || M.plane || (M.balloon && thing))) say('fly');
     else if (o.glide) say('glide');
-    if (base !== 'boat' && M.boat) say('float');
+    else if (thing && M.boat && !M.drive) say('sail');
+    else if (thing && M.drive) say('drive');
+    if (base !== 'boat' && !asBoat && M.boat && !(thing && !M.drive && !M.copter && !M.plane && !M.balloon)) say('float');
     if (nBarrels && noun !== 'tank' && !waterOnly) say('armed');
     if (spec.upside) say('upside');
     if (spec.armor) say('armor');
@@ -1491,6 +1642,8 @@ function summary(o) {
   else if (spec && spec.bumper) name += ' עם פגוש קפיץ';
   else if (spec && spec.blades && spec.blades.side) name += ' עם להבים';
   else if (waterOnly) name += ' עם תותח מים';
+  else if (spec && M0(spec).balloon && base !== 'balloon') name += ' עם בלון';
+  else if (spec && spec.balloon && spec.balloon.prop) name += ' עם מדחף';
   // ---- what it does (a chip each)
   const abil = [];
   if (spec) {

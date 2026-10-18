@@ -282,7 +282,8 @@ export function engineer(design, level = 'eng') {
     });
     // (ROADMAP 11.13: a helicopter of one rotor, nothing to hold it straight - it turns round itself:
     // a small rotor at the end of its tail, as a real one has, a fifth of its rotor's size)
-    if (design.copter && !design.drone && !design.rocket && spec.spin && rotors.length) {
+    // (ROADMAP 11.14: any thing of one rotor so - a tank, a house with a rotor on its roof: its back)
+    if (!design.drone && !design.rocket && spec.spin && rotors.length) {
       const tails = S.filter((s) => s.part === 'tail');
       const end = tails.length ? tails.flatMap((s) => s.pts).reduce((a, p) => (p[0] < a[0] ? p : a)) : [box.x0, mid(box.x0 + L * 0.05)];
       const wMax = Math.max(...rotorSets(rotors).map((g) => boxOf(g).x1 - boxOf(g).x0));
@@ -296,7 +297,7 @@ export function engineer(design, level = 'eng') {
         drawn.delete(s);
       } else {
         spec = sp;
-        say('נוסף רוטור זנב — בלעדיו מסוק מסתובב סביב עצמו', [s]);
+        say(design.copter ? 'נוסף רוטור זנב — בלעדיו מסוק מסתובב סביב עצמו' : 'נוסף רוטור זנב — בלעדיו הוא מסתובב סביב עצמו באוויר', [s]);
       }
     }
     // ---- jets under it, under its weight

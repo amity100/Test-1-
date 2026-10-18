@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { INKS, KINDS, WEAPON_ORDER, readFree, buildWeapon, statLine, keyKind } from '../game/freeform.js';
 import { CATEGORY_ORDER, CATEGORY_NAME, CATEGORY_OF } from '../game/sketchnet.js';
 import { spawnDrawn, jetFlames } from '../game/drawncar.js';
+import { setMode } from '../game/hybrid.js';
 import { makeFrame, findSpot, localBox } from '../game/materialize.js';
 import { canopyModel } from '../game/parachute.js';
 import { waterSpot } from '../game/rides.js';
@@ -1449,6 +1450,10 @@ export class FreeDraw {
     v.group.position.set(0, 0, 0);
     v.group.rotation.set(0, 0, 0);
     v.group.updateMatrixWorld(true);
+    // (ROADMAP 11.14, the sample: one that floats and flies with no wheels - a flying boat, on its
+    // hull: it waits on the water, where it takes off from, not stranded on the sand)
+    const M = v.modes || {};
+    if (game.lab && v.kind !== 'boat' && M.boat && !M.drive && !M.copter && !M.balloon) setMode(v, 'boat', true);
     const box = localBox(v.group);
     const spot = findSpot(game, v, so, box);
     const boat = v.kind === 'boat';

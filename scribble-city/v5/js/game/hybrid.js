@@ -136,7 +136,8 @@ function liftOff(v) {
   }
   if (M.plane) {
     const sp = v.speedAbs || 0;
-    const need = v.mode === 'boat' ? TAKEOFF_WATER : v.takeoffV || TAKEOFF;
+    // (ROADMAP 11.14: off the water, at what its hull can go - a slow hull lifts off slower)
+    const need = v.mode === 'boat' ? Math.min(TAKEOFF_WATER, (v.jet ? 24 : 19) * ((v.q && v.q.speed) || 1) * 0.6) : v.takeoffV || TAKEOFF;
     if (sp < need) {
       if (!v.toldSpeed) {
         v.toldSpeed = true;
@@ -151,10 +152,62 @@ function liftOff(v) {
     v.thr = 1;
     v.pitch = 0.12;
     v.vy = 2;
+    // (ROADMAP 11.14: off the water, from its surface - its hull is under it, afloat)
+    v.pos.y = Math.max(v.pos.y, -0.5);
     v.game.audio.play('whoosh', 0.5);
     return true;
   }
   return false;
+}
+
+// (ROADMAP 11.14) its spring, on the ground: Space and it throws it up - into the air, where it
+// flies on as it flies (a rotor hovers it there, a balloon holds it, wings fly it: the spring is its
+// catapult - it leaves at its take-off speed); one at its back kicks it forward too. Nothing to fly
+// it: a hop (drive's own). true: thrown
+function springLaunch(v) {
+  const game = v.game;
+  const sp = v.spring;
+  if (!sp || !sp.jump) return false;
+  const M = v.modes;
+  const up = sp.jump * 1.35;
+  const kick = sp.kick || 0;
+  const fwd = (s) => {
+    v.vx = (v.vx || 0) + Math.sin(v.yaw) * s;
+    v.vz = (v.vz || 0) + Math.cos(v.yaw) * s;
+  };
+  if (v.mode === 'plane' || (v.mode !== 'copter' && v.mode !== 'balloon' && M.plane && !M.copter && !M.balloon)) {
+    const s = Math.max((v.speedAbs || Math.abs(v.speed || 0)) * 1.15, (v.takeoffV || TAKEOFF) + 2) + kick;
+    if (v.mode !== 'plane') setMode(v, 'plane');
+    v.speed = s;
+    v.flying = true;
+    v.thr = 1;
+    v.pitch = 0.18;
+    v.vy = 2;
+    v.pos.y = Math.max(v.pos.y + 0.3, -0.5);
+  } else if (M.copter) {
+    if (v.mode !== 'copter') setMode(v, 'copter');
+    if (kick) fwd(kick);
+  } else if (M.balloon) {
+    if (v.mode !== 'balloon') setMode(v, 'balloon');
+    v.heat = Math.max(v.heat || 0, 0.7);
+    if (kick) fwd(kick * 0.5);
+  } else return false;
+  v.springVy = up;
+  game.audio.play('jump', 0.9);
+  game.audio.play('whoosh', 0.5);
+  game.fx.sparks(v.pos.x, v.pos.y + 0.2, v.pos.z, 8, [0.8, 0.8, 0.85]);
+  game.camRig.addShake(0.25);
+  return true;
+}
+
+// (its spring's throw: up as fast as it threw it, slowing as anything thrown does - on top of how
+// it flies)
+function springRise(v, dt) {
+  if (!(v.springVy > 0)) return;
+  const d = v.springVy * dt;
+  v.pos.y += d;
+  if (v.mode === 'copter') v.alt = (v.alt || 1) + d;
+  v.springVy -= 9.8 * dt;
 }
 
 // each step of a drawn vehicle of more than one way (game/vehicles.js update)
@@ -195,7 +248,10 @@ export function hybridStep(v, dt, input) {
         break;
       }
       if (up && !v.air) {
-        if (!(v.canLift && liftOff(v)) && v.spring && !v.canLift) {
+        // (ROADMAP 11.14: a spring under one that flies: up it throws it, flying)
+        if (v.canLift && v.spring && v.spring.jump && springLaunch(v)) break;
+        // (too slow for its wings to lift it, a spring at its back: it kicks it on - to take-off speed)
+        if (!(v.canLift && liftOff(v)) && v.spring && (!v.canLift || v.spring.kick)) {
           // (its spring: up it goes - a skateboard's hop; one at its back kicks it forward)
           v.vx = v.vx === undefined ? Math.sin(v.yaw) * (v.speed || 0) : v.vx;
           v.vz = v.vz === undefined ? Math.cos(v.yaw) * (v.speed || 0) : v.vz;
@@ -213,6 +269,19 @@ export function hybridStep(v, dt, input) {
         if (v.mode !== 'drive') break;
       }
       v.drive(dt, input);
+      // (ROADMAP 11.14: wings, and an engine that pushes it - a jet, a propeller: on the ground it
+      // pushes too, up to the speed its wings lift it at, past what its wheels alone can do - a
+      // tank's tracks)
+      if (M.plane && input && !v.air && !v.flipped) {
+        const mv = input.readMove();
+        const vL = (v.vx || 0) * Math.sin(v.yaw) + (v.vz || 0) * Math.cos(v.yaw);
+        const need = (v.takeoffV || TAKEOFF) + 3;
+        if (mv.y > 0.1 && vL > 0 && vL < need) {
+          const a = 6.5 * ((v.qModes && v.qModes.plane.accel) || 1) * mv.y * (1 - vL / need);
+          v.vx += Math.sin(v.yaw) * a * dt;
+          v.vz += Math.cos(v.yaw) * a * dt;
+        }
+      }
       // (a parachute: falling, slowly)
       if (v.chute && v.air && v.vy < -v.chute.sink) v.vy = -v.chute.sink;
       // into the water: afloat
@@ -220,7 +289,9 @@ export function hybridStep(v, dt, input) {
       break;
     }
     case 'copter': {
+      if (up && v.spring && v.spring.jump && (v.alt || 0) <= 1.15 && !(v.springVy > 0)) springLaunch(v);
       v.updateCopter(dt, input);
+      springRise(v, dt);
       // down as low as it goes: it lands (on its wheels, on its hull)
       if (down && v.alt <= 1.06) {
         if (isWater(v.pos.x, v.pos.z)) {
@@ -230,8 +301,22 @@ export function hybridStep(v, dt, input) {
       break;
     }
     case 'plane': {
+      // (ROADMAP 11.14: standing, a balloon over it - a rotor: Space, and up it goes on that)
+      if (up && !v.flying && (M.balloon || M.copter) && Math.abs(v.speed || 0) < (v.takeoffV || TAKEOFF) * 0.5 && !(v.spring && v.spring.jump)) {
+        if (liftOff(v)) break;
+      }
+      if (up && v.spring && !v.flying && !v.splashed) {
+        if (v.spring.jump) springLaunch(v);
+        else if (v.spring.kick) {
+          // (a spring at its back only: a kick forward along the runway)
+          v.speed = Math.max(0, v.speed || 0) + v.spring.kick;
+          game.audio.play('jump', 0.7);
+          game.camRig.addShake(0.2);
+        }
+      }
       updatePlane(v, dt, input);
       if (v.dead) return;
+      springRise(v, dt);
       // landed: on its wheels it drives on; on the water, it floats (ROADMAP 11.13: a plane's
       // wheels are its landing gear - it taxis and takes off on them, a plane still)
       if (!v.flying) {
@@ -241,6 +326,7 @@ export function hybridStep(v, dt, input) {
       break;
     }
     case 'boat': {
+      if (up && v.canLift && v.spring && v.spring.jump && springLaunch(v)) break;
       if (up && v.canLift && liftOff(v)) break;
       // its bow on the sand, and wheels under it: up the beach it goes (going, or driven at it)
       if (M.drive && ((v.speed || 0) > 0.5 || (input && input.readMove().y > 0.2))) {
@@ -255,12 +341,16 @@ export function hybridStep(v, dt, input) {
       break;
     }
     case 'balloon': {
+      if (up && v.spring && v.spring.jump && (v.alt || 0) <= 0.3 && !(v.springVy > 0)) springLaunch(v);
       updateBalloon(v, dt, input);
-      // down on the ground (on the water) and let go of: it rolls on, it floats
+      springRise(v, dt);
+      // down on the ground (on the water) and let go of: it rolls on, it floats (ROADMAP 11.14: a
+      // plane under it - on its wheels, its skids, ready to take off as a plane again)
       if (v.alt <= 0.05 && (v.heat || 0) < 0.35) {
         if (isWater(v.pos.x, v.pos.z)) {
           if (M.boat) setMode(v, 'boat');
         } else if (M.drive) setMode(v, 'drive');
+        else if (M.plane) setMode(v, 'plane');
       }
       break;
     }
