@@ -941,6 +941,9 @@ export function buildPolished(design, spec, opt = {}) {
     if (s.type !== 'line' && s.type !== 'armor') continue;
     // (the lines that drew its body: the body is made of them already)
     if (s.edge) continue;
+    // (ROADMAP 11.15: a parachute's lines down to it - in its pack until it opens: its canopy has
+    // its own; a balloon's are its ropes, as drawn)
+    if (s.part === 'rope' && S.some((q) => q.type === 'chute') && !S.some((q) => q.type === 'envelope')) continue;
     const c = s.col && !s.pencil ? s.col : INK;
     if (s.part === 'frame') {
       // (a bike's frame: a tube along each line, in its paint; ROADMAP 11.13 - a plane's struts
