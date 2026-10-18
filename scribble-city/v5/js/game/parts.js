@@ -3260,6 +3260,37 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
       best.arches = [{ x: BB.x0 + BB.w * 0.2, y: BB.y0, r, given: true }, { x: BB.x1 - BB.w * 0.2, y: BB.y0, r, given: true }];
     }
   }
+  // (ROADMAP 11.16: a barrel drawn as its two sides - two lines side by side, alike, close for how
+  // long they are (or one drawn over again): one barrel, as thick as they are apart; the first
+  // carries it, the other is its name only)
+  const sides = st.filter((o) => best.labels[o.i] === 'barrel' && !over[o.i] && !o.sh.closed && (o.sh.straight || o.sh.thin > 5));
+  for (let a = 0; a < sides.length; a++) {
+    for (let b = a + 1; b < sides.length; b++) {
+      const A = sides[a];
+      const Bq = sides[b];
+      if (!st.includes(A) || !st.includes(Bq)) continue;
+      let dAng = Math.abs(Math.atan2(A.sh.uy, A.sh.ux) - Math.atan2(Bq.sh.uy, Bq.sh.ux)) % Math.PI;
+      dAng = Math.min(dAng, Math.PI - dAng);
+      const L = Math.min(A.sh.long, Bq.sh.long);
+      if (dAng > 0.2 || L < Math.max(A.sh.long, Bq.sh.long) * 0.6) continue;
+      const along = (p) => (p[0] - A.sh.cx) * A.sh.ux + (p[1] - A.sh.cy) * A.sh.uy;
+      const bs = Bq.pts.map(along);
+      if (Math.min(A.sh.long / 2, Math.max(...bs)) - Math.max(-A.sh.long / 2, Math.min(...bs)) < L * 0.6) continue;
+      const sep = toLine([Bq.sh.cx, Bq.sh.cy], A.pts);
+      if (sep > L * 0.35) continue;
+      // (round the two: one along, the other back)
+      const a1 = A.pts[A.pts.length - 1];
+      const near0 = Math.hypot(a1[0] - Bq.pts[0][0], a1[1] - Bq.pts[0][1]) < Math.hypot(a1[0] - Bq.pts[Bq.pts.length - 1][0], a1[1] - Bq.pts[Bq.pts.length - 1][1]);
+      const box = A.pts.concat(near0 ? Bq.pts : Bq.pts.slice().reverse());
+      box.push(box[0].slice());
+      const whole = { ...A, kind: 'poly', pts: dense(box), raw: null };
+      whole.sh = measure(whole.pts, 'poly', null);
+      st.splice(st.indexOf(A), 1, whole);
+      st.splice(st.indexOf(Bq), 1);
+      sides[a] = whole;
+      joined.pieces.push([A.i, [Bq]]);
+    }
+  }
   // which way it faces: the player's say, else its parts'
   const front = face === true ? -1 : face === false ? 1 : best.front || 1;
   const flip = front < 0;
@@ -3310,7 +3341,7 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
   const drone = best.drone ? { cx: fx(best.drone.cx), cy: best.drone.cy, body: best.drone.body, rotors: best.drone.rotors.map((r) => ({ ...r, cx: fx(r.cx) })) } : null;
   const H0 = best.heliTop;
   const heliTop = H0 ? { ...H0, hub: [fx(H0.hub[0]), H0.hub[1]], tailEnd: [fx(H0.tailEnd[0]), H0.tailEnd[1]], ux: flip ? -H0.ux : H0.ux } : null;
-  return { frame: best.frame, family: best.fam, parts, flip, body: main, R, st: ost, k, x0, x1, y0, y1, arches, top: best.top || null, drone, heliTop, rocket: best.rocket || null, ship: !!best.ship, prior, score: best.score, sure: best.sure || 0, tried, implicit, like: F.dbgLike, guess, prob, sea: len.sea };
+  return { frame: best.frame, family: best.fam, parts, flip, body: main, R, st: ost, k, x0, x1, y0, y1, arches, top: best.top || null, drone, heliTop, rocket: best.rocket || null, ship: !!best.ship, prior, score: best.score, sure: best.sure || 0, tried, implicit, like: F.dbgLike, guess, prob, sea: len.sea, ladder: lad.size ? [...lad] : null };
 }
 
 // (a steadied line can be a few corners only: points along it, every so often - its shape the same)

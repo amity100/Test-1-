@@ -372,6 +372,9 @@ function kinOf(P) {
   const framed = P.parts.some((q) => q.type === 'frame');
   const fits = (grp) => want.includes(grp) && (framed || (grp !== 'bicycle' && grp !== 'moto'));
   let g = P.guess.find(([grp]) => fits(grp));
+  // (ROADMAP 11.16: a ladder drawn on it - a fire engine, whatever else of the road the network sees
+  // in it)
+  if (P.ladder && P.family === 'ground' && !framed && (!g || g[0] === 'truck' || g[0] === 'bus' || g[0] === 'car')) return { group: 'truck', cls: 'firetruck' };
   // (ROADMAP 11.14: a car or something else of the road, the network all but undecided - a car)
   const g2 = g && P.guess.find(([grp]) => fits(grp) && grp !== g[0]);
   if (g && g2 && g2[0] === 'car' && g[1] - g2[1] < 0.08) g = g2;
@@ -899,7 +902,7 @@ export function rideSpec(design) {
   const rollS = wheelS.filter((s) => vOf(s) === 'wheel' || vOf(s) === 'square' || vOf(s) === 'big');
   const trackS = wheelS.filter((s) => vOf(s) === 'track');
   const roofS = wheelS.filter((s) => vOf(s) === 'roof');
-  const ctx = { fam, wheels: rollS.length + trackS.length > 0, thrust: of('jet').length + of('prop').length > 0, wings: of('wing').length > 0, guns: of('barrel').length > 0, sail: of('sail').length > 0, rocket: !!design.rocket };
+  const ctx = { fam, wheels: rollS.length + trackS.length > 0, thrust: of('jet').length + of('prop').length > 0, wings: of('wing').length > 0, guns: of('barrel').length > 0, sail: of('sail').length > 0, rocket: !!design.rocket, copter: !!design.copter };
   for (const s of S) if (!s.edge && s.type !== 'body' && !role.has(s)) see(s, ctx);
   // (a plane drawn from above: its wings, its engines on them, as made - game/partsum.js topDesign;
   // ROADMAP 11.13: a wing drawn hanging off its body, made the wing it is from above - wingPlan)

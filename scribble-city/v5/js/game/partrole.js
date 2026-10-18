@@ -66,6 +66,8 @@ export function placeOf(pts, B) {
   q.v = (sh.my - B.y0) / BH;
   q.front = q.u > 0.8 || sh.x0 > B.x1 - BW * 0.08;
   q.back = q.u < 0.2 || sh.x1 < B.x0 + BW * 0.08;
+  // (all of it out past its back)
+  q.past = sh.x1 < B.x0 + BW * 0.08;
   q.top = q.v > 0.72;
   q.under = q.v < 0.3;
   // (out of it, the end further from its middle is where it points)
@@ -105,7 +107,9 @@ export function roleOf(t, q, ctx = {}) {
     case 'rotor':
     case 'prop': {
       // (ROADMAP 11.13) at a helicopter's tail, small: its tail rotor - it holds it straight
-      if (fam === 'copter' && q.back && !q.top && (sh.w + sh.h) / 2 < (q.BH || 1) * 1.3) return V('tail', 'רוטור זנב', 'בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו');
+      // (ROADMAP 11.16: or a propeller out past its end, at the end of a tail boom drawn out of its
+      // top - as high as its top, still its tail rotor)
+      if ((fam === 'copter' || ctx.copter) && q.back && (!q.top || (t === 'prop' && q.past && q.v < 1.4)) && (sh.w + sh.h) / 2 < (q.BH || 1) * 1.3) return V('tail', 'רוטור זנב', 'בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו');
       if (q.upright) {
         if (q.back) return V('pusher', 'מדחף דוחף', fam === 'boat' ? 'עומד מאחור: דוחף — סירת ביצות מהירה' : fam === 'balloon' ? 'מאחור: דוחף את ספינת האוויר קדימה, והיא פונה לאן שמסתכלים' : ctx.wings ? 'עומד מאחור: דוחף את המטוס' : 'עומד מאחור: דוחף קדימה — עוד מהירות, גם במים');
         return V('puller', 'מדחף', ctx.wings ? 'עומד מלפנים: מושך את המטוס' : 'עומד: מושך קדימה — עוד מהירות');

@@ -1406,8 +1406,19 @@ export function buildPolished(design, spec, opt = {}) {
     const g = shapeOf(toM(s.pts));
     const r = clamp(s.r || (s.thick || g.h) * 0.5, 0.035, 0.32);
     const cannon = r >= 0.11;
-    const bs = s.base ? [Z(s.base[0]), Y(s.base[1])] : [g.x0, g.cy];
+    let bs = s.base ? [Z(s.base[0]), Y(s.base[1])] : [g.x0, g.cy];
     const mz = s.muz ? [Z(s.muz[0]), Y(s.muz[1])] : [g.x1, g.cy];
+    // (ROADMAP 11.16: out of a nose drawn to a point - the point too thin to hold it: its foot back
+    // in where the body is as thick as it is, its muzzle where it was drawn)
+    if (F && !s.whole && body && body.at) {
+      const fwd = Math.sign(mz[0] - bs[0]) || 1;
+      const L0 = Math.hypot(mz[0] - bs[0], mz[1] - bs[1]);
+      let st0 = body.at(bs[0]);
+      for (let k = 0; k < 16 && st0 && st0.hw < r * 1.5 && Math.abs(mz[0] - bs[0]) < L0 * 1.8; k++) {
+        bs = [bs[0] - fwd * Math.max(0.04, L0 * 0.05), bs[1]];
+        st0 = body.at(bs[0]);
+      }
+    }
     const dz = mz[0] - bs[0];
     const L = Math.max(0.3, Math.hypot(dz, mz[1] - bs[1]));
     const elev = clamp(Math.atan2(mz[1] - bs[1], Math.abs(dz)), -0.35, 1.2);
