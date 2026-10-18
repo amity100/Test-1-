@@ -316,6 +316,8 @@ export class Game {
     const tp = this.params.get('tp');
     if (tp) {
       const v = tp.split(',').map(Number);
+      // (v5, ROADMAP 11.17: out on the mainland, what is around you is built first)
+      if (world.mainland) world.mainland.fill({ x: v[0], z: v[1] });
       this.player.spawn(v[0], v[1], v[2] || 0);
       this.camRig.yaw = v[2] || 0;
     }
@@ -990,6 +992,18 @@ export class Game {
     }
     this.ambient.update(dt);
     if (this.world.update) this.world.update(dt, this.time);
+    // (v5, ROADMAP 11.17) the mainland built where you are going, let go of where you have been
+    if (this.world.mainland) {
+      const a = this.anchorPos();
+      const l = this._lastAnchor || (this._lastAnchor = { x: a.x, z: a.z });
+      const k = dt > 0 ? 1 / dt : 0;
+      const vel = this._anchorVel || (this._anchorVel = { x: 0, z: 0 });
+      vel.x = Math.max(-60, Math.min(60, (a.x - l.x) * k));
+      vel.z = Math.max(-60, Math.min(60, (a.z - l.z) * k));
+      l.x = a.x;
+      l.z = a.z;
+      this.world.mainland.update(dt, a, vel);
+    }
     const input = this.input;
     const player = this.player;
     const fr = this.figures;

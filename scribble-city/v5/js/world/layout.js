@@ -7,6 +7,8 @@
 // to 43, the dunes to 52, the sand down to the water at 108. Behind the hotels the city goes on:
 // Collins Ave, Washington Ave, Meridian Ave, and the numbered streets across them.
 
+import { MAINLAND_ON, mainlandHeight, mDistrictName, CAUSEWAYS } from './mainland/plan.js';
+
 export const CURB = 0.15;
 
 // north-south roads, west to east. x: centre, half: half the street, walk: sidewalk width
@@ -156,8 +158,16 @@ export function beachHeight(x, z) {
   return SAND_TOP - ((SAND_TOP + 0.8) * (x - SAND_X0)) / (WATER_X - SAND_X0);
 }
 
+// (v5, ROADMAP 11.17) on one of the causeways' decks (or the ground they come ashore on)?
+function onCauseway(z) {
+  for (let i = 0; i < CAUSEWAYS.length; i++) if (Math.abs(z - CAUSEWAYS[i].z) < CAUSEWAYS[i].half + 1.2) return true;
+  return false;
+}
+
 // Height of the walkable ground (sidewalks, blocks and the park are raised by a curb).
 export function groundHeight(x, z) {
+  // (v5, ROADMAP 11.17: the bay, the causeways over it and the mainland: world/mainland/plan.js)
+  if (MAINLAND_ON && x < WEST_EDGE - 2 && (x < WEST_EDGE - 30 || onCauseway(z))) return mainlandHeight(x, z);
   if (x > PROM_X1) {
     if (z > PIER.z0 && z < PIER.z1 && x > PIER.x0 && x < PIER.x1) return 0.35;
     if (x > WATER_X) return -0.8;
@@ -190,6 +200,7 @@ export function nearestRoadInfo(x, z) {
 }
 
 export function districtName(x, z) {
+  if (MAINLAND_ON && x < WEST_EDGE - 20) return mDistrictName(x, z);
   if (x > PIER.x0 - 1 && z > PIER.z0 - 2 && z < PIER.z1 + 2) return 'המזח';
   if (x > PARK_X1 && x < WATER_X + 40) return 'החוף';
   if (x > PROM_X1 && x <= PARK_X1) return 'פארק החוף';

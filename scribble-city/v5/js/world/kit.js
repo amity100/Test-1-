@@ -71,6 +71,15 @@ export class Batch {
 
   // opts.merge(mat): the shared pen mat draws with (materials.js mergedSurface), or null
   flush(parent, opts = {}) {
+    const it = this.flushSteps(parent, opts);
+    for (;;) {
+      const r = it.next();
+      if (r.done) return r.value;
+    }
+  }
+
+  // (v5, ROADMAP 11.17) the same, a draw at a time (a block of the mainland, in the background)
+  *flushSteps(parent, opts = {}) {
     const meshes = [];
     const draws = new Map();
     for (const [mat, byChunk] of this.groups) {
@@ -210,10 +219,12 @@ export class Batch {
         Object.assign(m.userData, opts);
         delete m.userData.merge;
         delete m.userData.whole;
+        delete m.userData.steps;
         // the pens drawn in it (more than one when they share)
         m.userData.pens = [...pens];
         parent.add(m);
         meshes.push(m);
+        if (opts.steps) yield;
       }
     }
     this.groups.clear();

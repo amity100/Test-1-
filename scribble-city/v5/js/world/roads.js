@@ -1,4 +1,5 @@
 import { AVES, STREETS, STREET_X0, WEST_EDGE } from './layout.js';
+import { MAINLAND_ON, M_AVES, M_STREETS, CAUSEWAYS } from './mainland/plan.js';
 
 // The roads as the traffic sees them: a crossing wherever an avenue meets a street, the lanes
 // painted on each road, where the cars stop for the lights. (The world draws its traffic lights
@@ -30,10 +31,62 @@ for (const n of NODES) {
     const m = nodeAt(n.i + di, n.j + dj);
     if (m) n.nb.push(m);
   }
+}
+
+// (v5, ROADMAP 11.17) the mainland's crossings after the island's (whose numbers stay as they
+// were): wherever an avenue and a street of it meet, each joined to the next one along both; and
+// the two causeways, from Meridian at 15th and at 5th over the bay to the bayfront boulevard
+export const MAIN0 = NODES.length;
+if (MAINLAND_ON) {
+  const at = new Map();
+  for (let j = 0; j < M_STREETS.length; j++) {
+    const st = M_STREETS[j];
+    for (let i = 0; i < M_AVES.length; i++) {
+      const ave = M_AVES[i];
+      if (st.z < ave.z0 - 0.5 || st.z > ave.z1 + 0.5 || ave.x < st.x0 - 0.5 || ave.x > st.x1 + 0.5) continue;
+      const n = { id: NODES.length, i: 100 + i, j: 100 + j, x: ave.x, z: st.z, ave, street: st, nb: [], signal: false, offset: 0, main: true };
+      NODES.push(n);
+      at.set(`${i},${j}`, n);
+    }
+  }
+  const link = (a, b) => {
+    if (!a || !b || a.nb.includes(b)) return;
+    a.nb.push(b);
+    b.nb.push(a);
+  };
+  // along each avenue (north to south) and each street (east to west), the next crossing on it
+  for (let i = 0; i < M_AVES.length; i++) {
+    let prev = null;
+    for (let j = 0; j < M_STREETS.length; j++) {
+      const n = at.get(`${i},${j}`);
+      if (!n) continue;
+      link(prev, n);
+      prev = n;
+    }
+  }
+  for (let j = 0; j < M_STREETS.length; j++) {
+    let prev = null;
+    for (let i = 0; i < M_AVES.length; i++) {
+      const n = at.get(`${i},${j}`);
+      if (!n) continue;
+      link(prev, n);
+      prev = n;
+    }
+  }
+  for (const c of CAUSEWAYS) {
+    const isl = NODES.find((n) => !n.main && n.i === 0 && Math.abs(n.z - c.z) < 1);
+    const main = NODES.find((n) => n.main && n.ave === M_AVES[0] && Math.abs(n.z - c.z) < 1);
+    link(isl, main);
+    if (isl) isl.causeway = c;
+    if (main) main.causeway = c;
+  }
+}
+
+for (const n of NODES) {
   // a crossing with three or four ways has lights; a corner does not need them
   n.signal = n.nb.length >= 3;
   // a green wave down the avenues
-  n.offset = (n.i * 5.3 + n.j * 3.1) % CYCLE;
+  n.offset = n.main ? ((n.i - 100) * 4.7 + (n.j - 100) * 2.9) % CYCLE : (n.i * 5.3 + n.j * 3.1) % CYCLE;
 }
 
 // The light for cars coming along an axis ('ns': along an avenue, 'ew': along a street):
@@ -48,6 +101,9 @@ export function lightAt(n, axis, time) {
 // lane offsets (to the right of the middle of the road) for a car going along (dx, dz) on the
 // avenue or street through n
 export function laneOffsets(n, dx, dz) {
+  // (v5, ROADMAP 11.17: the mainland's wide boulevards say their own)
+  const road = dz !== 0 ? n.ave : n.street;
+  if (road.lanes) return road.lanes;
   if (dz !== 0) {
     // Bayview Blvd: one lane south (the curb lane is for parking), two lanes north
     if (n.ave.blvd) return dz > 0 ? [2.0] : [2.1, 6.0];

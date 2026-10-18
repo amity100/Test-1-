@@ -139,11 +139,22 @@ export function buildGround(ctx) {
   plane(M.water, -2600, WEST_EDGE - 30, -3200, ZS + 40, -0.8);
   // the land: north of the city (up to the beach), and downtown across the bay
   plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, -3200, ZN - 40, -0.02);
-  plane(M.land, -2600, -650, -3200, ZS + 40, -0.02);
+  // (v5, ROADMAP 11.17: the mainland is a city of its own now, its ground world/mainland/ground.js;
+  // under it, and out to the horizon past its hills, the land goes on lower down)
+  if (ctx.mainland) plane(M.land, -4200, -650, -4200, 642, -0.5);
+  else plane(M.land, -2600, -650, -3200, ZS + 40, -0.02);
   // the beach at the south end (and round the corner to the ocean's)
   slab(ctx, M.sand, WEST_EDGE - 30, STREET_X1, ZS + 4, ZS + 40, -0.6, 0.12, 6);
   // the walls you cannot pass: the edges of the city
-  ctx.col.addBox(WEST_EDGE - 40, ZN - 80, WEST_EDGE - 2, ZS + 60, -2, 30, 'bound');
+  // (v5, ROADMAP 11.17: open where the causeways go over the bay, at 15th and 5th)
+  if (ctx.mainland) {
+    let z0 = ZN - 80;
+    for (const zc of [STREETS[0].z, STREETS[5].z]) {
+      ctx.col.addBox(WEST_EDGE - 40, z0, WEST_EDGE - 2, zc - 6.4, -2, 30, 'bound');
+      z0 = zc + 6.4;
+    }
+    ctx.col.addBox(WEST_EDGE - 40, z0, WEST_EDGE - 2, ZS + 60, -2, 30, 'bound');
+  } else ctx.col.addBox(WEST_EDGE - 40, ZN - 80, WEST_EDGE - 2, ZS + 60, -2, 30, 'bound');
   ctx.col.addBox(WEST_EDGE - 40, ZN - 80, WATER_X + 260, ZN - 1, -2, 30, 'bound');
   ctx.col.addBox(WEST_EDGE - 40, ZS + 38, WATER_X + 260, ZS + 80, -2, 30, 'bound');
 }
@@ -165,6 +176,6 @@ function zebra(ctx, x0, x1, z0, z1, acrossX) {
   ctx.B.add(ctx.M.crosswalk, g, null, nextId());
 }
 
-export { slab, strip, curb };
+export { slab, strip, curb, zebra };
 void BLVD;
 void WALK_X0;

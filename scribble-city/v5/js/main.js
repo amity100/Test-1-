@@ -4,6 +4,7 @@ import { Settings } from './core/settings.js';
 import { Pipeline } from './render/pipeline.js';
 import { buildAtlas } from './render/atlas.js';
 import { buildCity } from './world/city.js';
+import { Mainland } from './world/mainland/index.js';
 import { buildGarages } from './world/garages.js';
 import { buildStation } from './world/station.js';
 import { buildRoofs } from './world/roofs.js';
@@ -170,6 +171,18 @@ async function boot() {
   };
   const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
+  // (v5, ROADMAP 11.17) the mainland across the bay: built near you as you go (its far bodies
+  // from the bake, world/mainland/far.json, when it is there)
+  if (world.ctx.mainland) {
+    let farData = null;
+    try {
+      const res = await fetch(new URL('./world/mainland/far.json', import.meta.url));
+      if (res.ok) farData = await res.json();
+    } catch (e) {
+      farData = null;
+    }
+    world.mainland = new Mainland(world, { renderer, pipe, low, farData });
+  }
 
   setStatus('השמש שוקעת על העיר…');
   await frame();

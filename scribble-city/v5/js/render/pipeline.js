@@ -1362,6 +1362,50 @@ export class Pipeline {
     this._occHidden = [];
   }
 
+  // (v5, ROADMAP 11.17) A piece of the still city made after the start (a block of the mainland,
+  // built near you, world/mainland/stream.js): into everything the start's pieces were put into -
+  // the layer the mirror does not see, the walls' layer, the solid twins, the pieces left out
+  // behind the buildings. And out of all of them again when it is let go of.
+  addStatic(root) {
+    root.updateMatrixWorld(true);
+    root.traverse((o) => {
+      if (!o.isMesh || o.userData.dynamic) return;
+      if (this.mirrorLayered && notInMirror(o)) o.layers.set(MIRRORLESS);
+      const m = o.material;
+      if (!Array.isArray(m) && m.side === THREE.DoubleSide && !m.transparent && m.depthWrite && m.uniforms && m.uniforms.uKind && m.uniforms.uKind.value === 0) {
+        o.layers.enable(LAYERS.WALLS);
+        this.walls = (this.walls || 0) + 1;
+      }
+      if (this.solid) this.solid.consider(o);
+      if (this.occPieces) {
+        const b = new THREE.Box3().setFromObject(o);
+        if (!b.isEmpty()) {
+          this.occPieces.push({ o, b });
+          this._pieceBox.set(o, b);
+        }
+      }
+    });
+    if (this.solid) this.solid.key = NaN;
+    this.staticSoft = true;
+  }
+
+  removeStatic(root) {
+    const gone = new Set();
+    root.traverse((o) => {
+      if (o.isMesh) gone.add(o);
+    });
+    if (this.occPieces) {
+      this.occPieces = this.occPieces.filter((p) => !gone.has(p.o));
+      for (const o of gone) this._pieceBox.delete(o);
+    }
+    if (this.solid) {
+      for (const e of this.solid.list) if (gone.has(e.o)) e.o.material = e.full;
+      this.solid.list = this.solid.list.filter((e) => !gone.has(e.o));
+      this.solid.key = NaN;
+    }
+    this.staticSoft = true;
+  }
+
   // leave out (for this one pass) the pieces surely behind the buildings, as cam sees them
   occlude(cam) {
     const occ = this.occlusion;
@@ -1516,12 +1560,23 @@ export class Pipeline {
         if (this.fade) return;
         this.startFade('static', cur);
         this.useStatic(b);
-      } else if (this.staticLeft(b, center, ver) > left) this.useStatic(b);
-      else this.stBuild = null;
+      } else if (b.soft || this.staticLeft(b, center, ver) > left) {
+        b.soft = false;
+        this.useStatic(b);
+      } else this.stBuild = null;
       return;
     }
     // (the map fading out is not free to be drawn into)
     if (this.fade && this.fade.kind === 'static') return;
+    // (v5, ROADMAP 11.17: pieces came or went - a block of the mainland: the map drawn again calmly,
+    // an eighth a frame, the one in use kept till then)
+    if (this.staticSoft && cur.on) {
+      this.staticSoft = false;
+      const m = this.beginStatic(cur.sun, center, ver, STATIC_SLICES_CALM);
+      m.soft = true;
+      this.drawStatic(m, 1);
+      return;
+    }
     // (the steady pace: the next map begun sooner, in eight slices, and not four)
     if (this.steady && left < STATIC_SOON_STEADY) this.drawStatic(this.beginStatic(want, center, ver, STATIC_SLICES_CALM), 1);
     else if (left < STATIC_SOON) this.drawStatic(this.beginStatic(want, center, ver), 1);
@@ -2603,6 +2658,14 @@ export class Pipeline {
   // The sun's view of the whole city (for what is beyond the box around you), on two maps:
   // the first call draws one whole at once; later ones (something was rubbed out) have it drawn
   // again in the background, as the sun's going on does (updateFar)
+  // (v5, ROADMAP 11.17) the far map's box moved (out on the mainland: around you), drawn again in
+  // its slices the next frames (the one in use until then)
+  moveFarShadows(box) {
+    if (!this.farMaps) return;
+    this.farBox = box.clone();
+    this.farDirty = true;
+  }
+
   bakeFarShadows(root, box, size = 4096) {
     if (this.farMaps) {
       this.farDirty = true;

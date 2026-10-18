@@ -17,7 +17,8 @@ export class Signals {
     this.list = game.world.signals || [];
     let n = 0;
     for (const s of this.list) n += s.lamps.length;
-    this.cap = Math.max(1, n);
+    // (v5, ROADMAP 11.17: room for the mainland's lights too, which come and go with its streets)
+    this.cap = Math.max(1, n) + (game.world.mainland && game.world.mainland.on ? 720 : 0);
     const g = new THREE.CylinderGeometry(0.118, 0.118, 0.02, 14).rotateX(Math.PI / 2).toNonIndexed();
     g.setAttribute('aId', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count), 1));
     // (the instanced surface reads an owner and a clip per instance: none here)

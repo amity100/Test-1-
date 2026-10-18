@@ -223,6 +223,10 @@ export function buildSkyline(ctx, rand, mats) {
   };
   // (v5) downtown across the bay, to the west: a dense waterfront of glass and the tall towers
   // behind it (the old ones stepped back to a spire among them, the way Chicago builds)
+  // (v5, ROADMAP 11.17: with the mainland there, its own towers stand there, world/mainland/far.js;
+  // these are thrown for nothing, so the dice of the ones after them fall as they did)
+  const B0 = ctx.B;
+  if (ctx.mainland) ctx.B = new B0.constructor();
   for (let i = 0; i < 150; i++) {
     const x = -r.range(700, 1380);
     const z = r.range(-1150, 380);
@@ -234,6 +238,7 @@ export function buildSkyline(ctx, rand, mats) {
     one(x, z, w, w * r.range(0.75, 1.3), h);
     o.style = undefined;
   }
+  ctx.B = B0;
   // north, up the beach: the tall condominiums along the ocean, and the city behind them
   for (let i = 0; i < 70; i++) {
     const x = r.range(-300, 40);
@@ -243,7 +248,7 @@ export function buildSkyline(ctx, rand, mats) {
     // (by the ocean they are long slabs, their broad side to the sea)
     one(x, z, coast ? w * 0.6 : w, coast ? w * r.range(1.6, 2.3) : w * r.range(0.75, 1.3), coast ? r.range(70, 160) : r.range(60, 270));
   }
-  bridge(ctx, r);
+  if (!ctx.mainland) bridge(ctx, r);
 }
 
 // the long bridge over the bay: a deck on piers, two great towers and the cables between them,

@@ -35,7 +35,8 @@ GN.forEach((g, i) => (g.id = i));
   };
   const at = (i, j) => GN[j * AVES.length + i];
   // the streets go on west of Coral Ave, the boulevard north and south of the last streets
-  for (let j = 0; j < STREETS.length; j++) end(WEST_EDGE - 2, STREETS[j].z, at(0, j));
+  // (v5, ROADMAP 11.17: not where a causeway goes on over the bay to the mainland)
+  for (let j = 0; j < STREETS.length; j++) if (!at(0, j).nb.some((e) => e.to.x < WEST_EDGE - 20)) end(WEST_EDGE - 2, STREETS[j].z, at(0, j));
   const b = AVES.indexOf(BLVD);
   end(BLVD.x, NORTH_EDGE - 55, at(b, 0));
   end(BLVD.x, SOUTH_EDGE + 25, at(b, STREETS.length - 1));

@@ -74,6 +74,79 @@ export class WorldObjects {
     this.world = world;
   }
 
+  // ------------------------------------------------------------------ the mainland's blocks
+  // (v5, ROADMAP 11.17) A block built in the background (world/mainland/stream.js): its props
+  // take numbers of the city's own (one let go of by a block left behind, if there is one), but
+  // their boxes are the block's own (ctx.col is its BoxList) and their lights its owner's, until
+  // the block is shown (adoptLocal) - and when it is let go of, so are they (releaseLocal)
+  beginLocal(ctx, kind, x, z) {
+    if (ctx.B.obj > 0) return 0;
+    const free = (this.freeIds = this.freeIds || []);
+    if (!free.length && this.list.length >= MAX_IDS) return 0;
+    const id = free.length ? free.pop() : this.list.length;
+    const o = {
+      id, kind, x, z, y: 0,
+      ink: INK[kind] || 60, maxInk: INK[kind] || 60,
+      state: 'pending', gone: 0,
+      boxes: [], hides: [], lights: [],
+      x0: x, x1: x, z0: z, z1: z, y1: 1,
+      _b: ctx.col.boxes.length, _h: ctx.hideSpots.length, _l: ctx.lightOwner.lights.length,
+    };
+    this.list[id] = o;
+    ctx.B.obj = id;
+    (ctx.props = ctx.props || []).push(o);
+    return id;
+  }
+
+  endLocal(ctx, id, data = null) {
+    if (!id) return;
+    const o = this.list[id];
+    const col = ctx.col;
+    for (let i = o._b; i < col.boxes.length; i++) {
+      const b = col.boxes[i];
+      o.boxes.push(b);
+      o.x0 = Math.min(o.x0, b.x0);
+      o.x1 = Math.max(o.x1, b.x1);
+      o.z0 = Math.min(o.z0, b.z0);
+      o.z1 = Math.max(o.z1, b.z1);
+      o.y1 = Math.max(o.y1, b.y1);
+    }
+    for (let i = o._h; i < ctx.hideSpots.length; i++) o.hides.push(ctx.hideSpots[i]);
+    const L = ctx.lightOwner.lights;
+    for (let i = o._l; i < L.length; i++) o.lights.push(L[i]);
+    if (data) o.data = data;
+    ctx.B.obj = 0;
+  }
+
+  // the block is shown: its props are in the world (their boxes adopted by now: box.id is the
+  // city's number for each)
+  adoptLocal(props) {
+    for (const o of props) {
+      if (o.state !== 'pending') continue;
+      o.boxes = o.boxes.map((b) => b.id);
+      for (const id of o.boxes) this.byBox.set(id, o);
+      o.state = 'here';
+      o.gone = 0;
+      this.setMask(o);
+    }
+  }
+
+  // the block is let go of: so are its props and their numbers (the mask back to drawn, for the
+  // next block's prop that takes the number)
+  releaseLocal(props) {
+    const free = (this.freeIds = this.freeIds || []);
+    for (const o of props) {
+      for (const id of o.boxes) if (this.byBox.get(id) === o) this.byBox.delete(id);
+      o.state = 'freed';
+      o.gone = 0;
+      this.setMask(o);
+      const k = this.fading.indexOf(o);
+      if (k >= 0) this.fading.splice(k, 1);
+      free.push(o.id);
+    }
+    props.length = 0;
+  }
+
   // ------------------------------------------------------------------ queries
   ofBox(box) {
     return box ? this.byBox.get(box.id) || null : null;

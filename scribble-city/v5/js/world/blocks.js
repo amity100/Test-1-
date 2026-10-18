@@ -106,7 +106,7 @@ export function buildBlocks(ctx) {
 }
 
 // a building's look: colours, neon, awning, how tall
-function look(ctx, o = {}) {
+export function look(ctx, o = {}) {
   const r = ctx.rng;
   return {
     color: r.pick(WALLS),
@@ -313,7 +313,7 @@ function buildBlock(ctx, col, row, type) {
 }
 
 // the alley: asphalt, dumpsters, crates, a car parked out of the way
-function alleyGround(ctx, a) {
+export function alleyGround(ctx, a) {
   const M = ctx.M;
   const r = ctx.rng;
   const g = new THREE.PlaneGeometry(a.x1 - a.x0, a.z1 - a.z0).rotateX(-Math.PI / 2);
@@ -427,13 +427,15 @@ function westRow(ctx, row) {
   bayEdge(ctx, WEST_EDGE - 30, R.x0 - 0.2, R.z0 - 4.6, R.z1 + 4.6);
   // (and where the cross street ends at the bay)
   const s = STREETS[row + 1];
-  if (s) bayEdge(ctx, WEST_EDGE - 30, WEST_EDGE - 6.5, s.z - s.half - 0.4, s.z + s.half + 0.4);
-  if (row === 0) bayEdge(ctx, WEST_EDGE - 30, WEST_EDGE - 6.5, STREETS[0].z - STREETS[0].half - 0.4, STREETS[0].z + STREETS[0].half + 0.4);
+  // (v5, ROADMAP 11.17: not where a causeway goes on over the bay, at 15th and 5th)
+  const over = (st) => ctx.mainland && (st === STREETS[0] || st === STREETS[5]);
+  if (s && !over(s)) bayEdge(ctx, WEST_EDGE - 30, WEST_EDGE - 6.5, s.z - s.half - 0.4, s.z + s.half + 0.4);
+  if (row === 0 && !over(STREETS[0])) bayEdge(ctx, WEST_EDGE - 30, WEST_EDGE - 6.5, STREETS[0].z - STREETS[0].half - 0.4, STREETS[0].z + STREETS[0].half + 0.4);
 }
 
 // ------------------------------------------------------------------ downtown towers
 // a podium of shops along the avenue, and out of it a skyscraper of glass (world/skyline.js)
-function towers(ctx, R) {
+export function towers(ctx, R) {
   const r = ctx.rng;
   const len = R.z1 - R.z0;
   const parts = [[R.z0, R.z0 + len * 0.5], [R.z0 + len * 0.5, R.z1]];
@@ -469,7 +471,7 @@ function towers(ctx, R) {
 }
 
 // ------------------------------------------------------------------ a park of palms
-function park(ctx, R) {
+export function park(ctx, R) {
   const M = ctx.M;
   const r = ctx.rng;
   const cx = (R.x0 + R.x1) / 2;
@@ -502,7 +504,7 @@ function park(ctx, R) {
   ctx.hideSpots.push({ x: cx - 10, z: cz + 14, r: 2.4, kind: 'bush' });
 }
 
-function court(ctx, x0, x1, z0, z1) {
+export function court(ctx, x0, x1, z0, z1) {
   const M = ctx.M;
   const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2);
   g.translate((x0 + x1) / 2, CURB + 0.012, (z0 + z1) / 2);
@@ -554,7 +556,7 @@ export function bench(ctx, x, z, yaw, y0 = CURB) {
   ctx.objects.end(ctx, id);
 }
 
-function kiosk(ctx, x, z) {
+export function kiosk(ctx, x, z) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'stand', x, z);
   const f = new Facade(x - 1.5, z + 1.5, 1, 0, 0, 1);
@@ -568,7 +570,7 @@ function kiosk(ctx, x, z) {
 }
 
 // ------------------------------------------------------------------ a plaza with a fountain
-function plaza(ctx, R) {
+export function plaza(ctx, R) {
   const M = ctx.M;
   const r = ctx.rng;
   slab(ctx, M.plaza, R.x0, R.x1, R.z0, R.z1, CURB, CURB + 0.02, 8);
@@ -582,7 +584,7 @@ function plaza(ctx, R) {
   ctx.plazas.push({ ...R, cx, cz });
 }
 
-function fountain(ctx, x, z) {
+export function fountain(ctx, x, z) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'fountain', x, z);
   const stone = srgb(0.95, 0.88, 0.8);
@@ -640,7 +642,7 @@ export function cafeTable(ctx, x, z) {
 }
 
 // ------------------------------------------------------------------ the Star Motel
-function motel(ctx, R) {
+export function motel(ctx, R) {
   const M = ctx.M;
   // a parking lot on the avenue, the motel's two floors behind it in an L, a pool in the corner
   const lot = new THREE.PlaneGeometry(R.x1 - R.x0, R.z1 - R.z0).rotateX(-Math.PI / 2);
@@ -713,7 +715,7 @@ function boxOf(f, u0, v0, w0, u1, v1, w1) {
 }
 
 // ------------------------------------------------------------------ the market street
-function market(ctx, R) {
+export function market(ctx, R) {
   const M = ctx.M;
   const r = ctx.rng;
   slab(ctx, M.plaza, R.x0, R.x1, R.z0, R.z1, CURB, CURB + 0.02, 8);

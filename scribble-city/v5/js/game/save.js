@@ -224,6 +224,8 @@ export class SaveGame {
     }
     // you
     const P = s.player;
+    // (v5, ROADMAP 11.17: saved out on the mainland: what is around you is built first)
+    if (w.mainland) w.mainland.fill({ x: P.x, z: P.z });
     p.spawn(P.x, P.z, P.yaw);
     p.pos.y = Math.max(p.pos.y, P.y);
     if (s.hero && g.streetlife) {

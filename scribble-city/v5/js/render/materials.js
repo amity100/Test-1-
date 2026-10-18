@@ -219,9 +219,45 @@ export const shared = {
 // The city has hundreds of neon signs and lamps; the shaders take the ones nearest the camera.
 const staticLights = [];
 export function addLight(x, y, z, radius, color, intensity) {
-  staticLights.push({ x, y, z, r: radius, c: color.clone ? color.clone() : new THREE.Color(color[0], color[1], color[2]), i: intensity, on: true, d: 0 });
+  const l = { x, y, z, r: radius, c: color.clone ? color.clone() : new THREE.Color(color[0], color[1], color[2]), i: intensity, on: true, d: 0, owner: lightOwner };
   lastPick = { x: 1e9, z: 1e9 };
+  // (v5, ROADMAP 11.17) a light of a block being built in the background: off until it is shown,
+  // and in the place of one let go of, if there is one
+  if (lightOwner) {
+    l.on = false;
+    if (freeLights.length) {
+      const i = freeLights.pop();
+      staticLights[i] = l;
+      lightOwner.lights.push(i);
+      return i;
+    }
+    lightOwner.lights.push(staticLights.length);
+  }
+  staticLights.push(l);
   return staticLights.length - 1;
+}
+// (v5, ROADMAP 11.17) whose lights are being made now (a block of the mainland: { lights: [] }),
+// and the places of the ones let go of
+let lightOwner = null;
+const freeLights = [];
+export function setLightOwner(o) {
+  lightOwner = o;
+}
+export function showLights(o, on) {
+  for (const i of o.lights) if (staticLights[i] && staticLights[i].owner === o) staticLights[i].on = on;
+  lastPick = { x: 1e9, z: 1e9 };
+}
+export function releaseLights(o) {
+  for (const i of o.lights) {
+    const l = staticLights[i];
+    if (!l || l.owner !== o) continue;
+    l.on = false;
+    l.owner = null;
+    l.dead = true;
+    freeLights.push(i);
+  }
+  o.lights.length = 0;
+  lastPick = { x: 1e9, z: 1e9 };
 }
 export function setLightOn(i, on) {
   if (staticLights[i]) staticLights[i].on = on;

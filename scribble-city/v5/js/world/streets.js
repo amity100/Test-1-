@@ -70,7 +70,7 @@ export function streetLamp(ctx, x, z, ax, az, o = {}) {
 // ------------------------------------------------------------------ the crossings
 // a traffic light for the cars coming along (dx, dz) into n: a pole on the corner to their right,
 // an arm over their lanes with a head on it, and a second head low on the pole
-function signalPole(ctx, n, dx, dz, blades) {
+export function signalPole(ctx, n, dx, dz, blades) {
   const M = ctx.M;
   const alongZ = dz !== 0;
   const half = alongZ ? n.ave.half : n.street.half;
@@ -134,6 +134,8 @@ function nameBlades(ctx, n, x, y, z) {
   const M = ctx.M;
   const ave = A[`ave_${n.ave.sign}`];
   const st = A[`st_${n.street.sign}`];
+  // (v5, ROADMAP 11.17: a road the boards' picture has no name of)
+  if (!ave || !st) return;
   // the avenue's name runs along the avenue, the street's along the street
   const tx = Math.sign(n.x - x) || 1;
   const tz = Math.sign(n.z - z) || 1;
@@ -154,6 +156,8 @@ function nameBlades(ctx, n, x, y, z) {
 function crossings(ctx) {
   const M = ctx.M;
   for (const n of NODES) {
+    // (v5, ROADMAP 11.17: the mainland's crossings are built with its streets, world/mainland/tiles.js)
+    if (n.main) continue;
     if (n.signal) {
       let first = true;
       for (const m of n.nb) {

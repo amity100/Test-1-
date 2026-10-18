@@ -2,10 +2,12 @@
 // circle push-out for walkers/vehicles and a walkability grid for enemy navigation.
 
 const CELL = 8;
-const GX0 = -310;
-const GZ0 = -470;
-const GW = 48;
-const GH = 110;
+// (v5, ROADMAP 11.17: the grid covers the island, the bay and the mainland across it; the cells
+// out there stay empty until the blocks near you are built, world/mainland/stream.js)
+const GX0 = -2030;
+const GZ0 = -1380;
+const GW = 264;
+const GH = 268;
 
 export class Collision {
   constructor() {
@@ -43,6 +45,52 @@ export class Collision {
     if (b) b.alive = false;
   }
 
+  // (v5, ROADMAP 11.17) let go of boxes for good (a block of the mainland you left behind): out
+  // of their cells, their numbers kept for the boxes of the next block
+  release(ids) {
+    for (const id of ids) {
+      const b = this.boxes[id];
+      if (!b || b.freed) continue;
+      b.alive = false;
+      b.freed = true;
+      const cx0 = Math.max(0, Math.floor((b.x0 - GX0) / CELL));
+      const cx1 = Math.min(GW - 1, Math.floor((b.x1 - GX0) / CELL));
+      const cz0 = Math.max(0, Math.floor((b.z0 - GZ0) / CELL));
+      const cz1 = Math.min(GH - 1, Math.floor((b.z1 - GZ0) / CELL));
+      for (let cz = cz0; cz <= cz1; cz++) {
+        for (let cx = cx0; cx <= cx1; cx++) {
+          const list = this.cells[cz * GW + cx];
+          const k = list.indexOf(id);
+          if (k >= 0) {
+            list[k] = list[list.length - 1];
+            list.pop();
+          }
+        }
+      }
+      (this.free = this.free || []).push(id);
+    }
+  }
+
+  // a box made elsewhere (a block of the mainland, built in the background) taken in: a number
+  // let go of before if there is one, its cells
+  adopt(b) {
+    const id = this.free && this.free.length ? this.free.pop() : this.boxes.length;
+    b.id = id;
+    b.alive = true;
+    b.freed = false;
+    this.boxes[id] = b;
+    const cx0 = Math.max(0, Math.floor((b.x0 - GX0) / CELL));
+    const cx1 = Math.min(GW - 1, Math.floor((b.x1 - GX0) / CELL));
+    const cz0 = Math.max(0, Math.floor((b.z0 - GZ0) / CELL));
+    const cz1 = Math.min(GH - 1, Math.floor((b.z1 - GZ0) / CELL));
+    for (let cz = cz0; cz <= cz1; cz++) for (let cx = cx0; cx <= cx1; cx++) this.cells[cz * GW + cx].push(id);
+    if (this.marks.length < this.boxes.length) {
+      const m = new Uint32Array(Math.max(1024, this.boxes.length * 2));
+      m.set(this.marks);
+      this.marks = m;
+    }
+    return id;
+  }
   // Calls fn(box) once per box overlapping the xz rectangle.
   forEachIn(x0, z0, x1, z1, fn) {
     const st = ++this.stamp;
@@ -213,6 +261,46 @@ export class Collision {
     if (d < 1e-3) return true;
     const h = this.raycast(ax, ay, az, dx, dy, dz, d - 0.2);
     return !h;
+  }
+}
+
+// (v5, ROADMAP 11.17) the boxes of a block being built: kept aside (the same calls as Collision's)
+// until the block is shown, then taken into the city's own (Collision.adopt)
+export class BoxList {
+  constructor() {
+    this.boxes = [];
+  }
+
+  addBox(x0, z0, x1, z1, y0, y1, tag = 'wall', data = null) {
+    if (x1 < x0) [x0, x1] = [x1, x0];
+    if (z1 < z0) [z0, z1] = [z1, z0];
+    const id = this.boxes.length;
+    this.boxes.push({ x0, z0, x1, z1, y0, y1, tag, data, id, alive: true });
+    return id;
+  }
+
+  addCircle(x, z, r, y0, y1, tag = 'pole', data = null) {
+    return this.addBox(x - r, z - r, x + r, z + r, y0, y1, tag, data);
+  }
+
+  remove(id) {
+    const b = this.boxes[id];
+    if (b) b.alive = false;
+  }
+
+  // (nothing is solid while it is being built)
+  forEachIn() {}
+
+  pointInside() {
+    return null;
+  }
+
+  raycast() {
+    return null;
+  }
+
+  lineOfSight() {
+    return true;
   }
 }
 

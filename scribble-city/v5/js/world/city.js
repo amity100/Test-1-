@@ -15,6 +15,9 @@ import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
 import { BOUNDS } from './layout.js';
 import { BLUEPRINT_MORE } from '../game/blueprints.js';
+import { MAINLAND_ON } from './mainland/plan.js';
+import { buildCauseways, buildHills, farGround, buildShore } from './mainland/ground.js';
+import { buildMainlandTowers } from './mainland/far.js';
 
 // The whole city: Ocean Drive and the beach (v5), and the city behind them.
 export function buildCity(scene, o = {}) {
@@ -25,7 +28,10 @@ export function buildCity(scene, o = {}) {
   // (the service station's signs, ROADMAP 4.6, want a few more lines of it: not with ?classic)
   const neon = o.neonRows ? new NeonAtlas(4, o.neonRows) : new NeonAtlas();
   M.signNeon = makeSurface({ kind: 'neon', neonMask: true, vcolor: true, alphaTest: 0.5, emissive: new THREE.Color(2.0, 2.0, 2.0), line: 0.15, side: THREE.DoubleSide, noShadow: true });
+  // (v5, ROADMAP 11.17: the mainland across the bay, a city of its own; ?island=1: the island alone)
+  const mainland = o.mainland !== undefined ? o.mainland : MAINLAND_ON && !o.classicCity;
   const ctx = {
+    mainland,
     B: new Batch(),
     R: new Batch(),
     M,
@@ -101,6 +107,17 @@ export function buildCity(scene, o = {}) {
   buildOceanDrive(ctx);
   if (o.streets !== false) buildStreets(ctx);
   if (o.extra) o.extra(ctx);
+  // (v5, ROADMAP 11.17) the mainland's part of the start: its causeways, its hills and their
+  // letters, its towers, its shore (by dice of its own: nothing of the island moves)
+  if (mainland) {
+    const dice = ctx.rng;
+    ctx.rng = seeded(20261117);
+    buildCauseways(ctx);
+    buildHills(ctx);
+    buildShore(ctx);
+    ctx.mainTowers = buildMainlandTowers(ctx);
+    ctx.rng = dice;
+  }
   // the neon of every shop, in one texture
   M.signNeon.uniforms.uMap.value = neon.texture();
   M.signNeon.uniforms.uUseMap.value = 1;
@@ -149,7 +166,7 @@ export function buildCity(scene, o = {}) {
   const meshes = ctx.B.flush(group, { static: true, merge, whole: { max: 25000, ok: (pens) => !pens.some((p) => small.has(p) || far.has(p)) } });
   const rooms = ctx.R.flush(group, { static: true, indoor: true, merge });
   for (const m of rooms) m.renderOrder = 1;
-  const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN', 'beach', 'whole']);
+  const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN', 'beach', 'whole', 'hills', 'shore']);
   const cull = [];
   for (const m of rooms) cull.push({ m, r: 55 });
   for (const m of meshes) {
@@ -165,10 +182,33 @@ export function buildCity(scene, o = {}) {
   penGroups = sharedPens.size;
   const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, pens: penGroups, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length };
 
+  // (v5, ROADMAP 11.17) the mainland's picture of its ground from afar; the groups its blocks are
+  // shown in (made now, so the still city's pieces stay the ones the renderer was given at the
+  // start: what changes is inside them)
+  let buckets = null;
+  if (mainland) {
+    farGround(ctx);
+    buckets = [];
+    for (let i = 0; i < 8; i++) {
+      const g = new THREE.Group();
+      g.name = `mainland${i}`;
+      g.matrixAutoUpdate = false;
+      group.add(g);
+      buckets.push(g);
+    }
+  }
+
   const world = {
     group,
     sky,
     ctx,
+    buckets,
+    // (what a block of the mainland needs of the city's: the shared pens, which pens are small, the
+    // list of what is hidden by distance)
+    merge,
+    smallPens: small,
+    cullList: cull,
+    low: !!o.low,
     collision: ctx.col,
     nav: null,
     objects: ctx.objects,
@@ -227,6 +267,20 @@ export function buildCity(scene, o = {}) {
     },
   };
   world.objects.attach(world);
+  // (v5, ROADMAP 11.17) shops that come and go with the mainland's blocks: a number of their own
+  // each, never used again (the shops' life is kept by it, game/streetlife.js)
+  let shopId = 100000;
+  world.shopHooks = [];
+  world.addShop = (sh) => {
+    sh.id = shopId++;
+    world.shops.push(sh);
+    for (const f of world.shopHooks) f(sh, true);
+  };
+  world.removeShop = (sh) => {
+    const k = world.shops.indexOf(sh);
+    if (k >= 0) world.shops.splice(k, 1);
+    for (const f of world.shopHooks) f(sh, false);
+  };
   world.buildNav = () => {
     if (!world.nav) world.nav = new NavGrid(ctx.col, BOUNDS, 2);
     return world.nav;

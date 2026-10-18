@@ -177,7 +177,7 @@ function takeKind(ctx, env) {
 
 // ------------------------------------------------------------------ the plan of a row
 function mixFor(o) {
-  const m = { ...MIX[o.street] };
+  const m = { ...(o.mix || MIX[o.street]) };
   if (o.type === 'hotels' && o.street === 'collins') m.tall = 1.5;
   if (o.type === 'gang') {
     m.vacant = (m.vacant || 0.3) * 4;
@@ -207,7 +207,7 @@ const SAME_OK = new Set(['house']);
 function planRow(r, n, o) {
   const mix = mixFor(o);
   const kinds = Object.keys(mix).filter((k) => mix[k] > 0);
-  const cornerOnly = CORNER_ONLY[o.street] || [];
+  const cornerOnly = o.cornerOnly || CORNER_ONLY[o.street] || [];
   const pick = (ok) => {
     let sum = 0;
     for (const k of kinds) if (ok(k)) sum += mix[k];
@@ -584,6 +584,16 @@ function yardsFor(r, kind, o, L) {
  * returns the lots (north to south), each with its building's info
  */
 export function sobeRow(ctx, o) {
+  const it = sobeRowSteps(ctx, o);
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+  }
+}
+
+// (v5, ROADMAP 11.17) the same, a lot at a time: the mainland's blocks are built near you in the
+// background, a few milliseconds a frame (world/mainland/stream.js), so each lot is a step
+export function* sobeRowSteps(ctx, o) {
   const r = ctx.rng;
   const len = o.z1 - o.z0;
   const n = Math.max(2, Math.round(len / HALF));
@@ -641,6 +651,7 @@ export function sobeRow(ctx, o) {
     lot.f = f0;
     lot.L = L;
     lot.info = BUILD[lot.kind](ctx, { f, L: Lb, D: Dk, sides, corner, lot, env });
+    yield;
     lot.info.z0 = lot.za;
     lot.info.z1 = lot.zb;
     // where the building stands on its lot: how far back its front is, how far back it reaches
@@ -655,6 +666,7 @@ export function sobeRow(ctx, o) {
   partyWalls(ctx, lots, o);
   // (v5, ROADMAP 11.2ג) the forecourts, the gardens, the yards behind, their fences, the trees
   rowYards(ctx, lots, { ...o, alley: o.street !== 'west' });
+  yield;
   // (every lot of the city, for the map and the tests)
   ctx.lots = ctx.lots || [];
   for (const lot of lots) ctx.lots.push({ kind: lot.kind, style: lot.style, x: o.x, side: o.side, D: o.D, z0: lot.za, z1: lot.zb, street: o.street, top: lot.info.top, front: lot.front, back: lot.back, use: lot.use || null, gapN: lot.gapN, gapS: lot.gapS });
