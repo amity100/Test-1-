@@ -883,8 +883,8 @@ function addedPart(o, R, r, len, wheelTop = -Infinity, kin = null) {
   const gap = r.gap;
   const air = !!len.air;
   // (ROADMAP 11.16: the player said it flies - a zigzag lying out past its end about its middle's
-  // height is a flame out of it, a jet pushing it: no spring)
-  if (air && sh.coils >= 3 && sh.slant < 0.45 && sh.w > sh.h * 1.5 && Math.abs(sh.cy - B.cy) < H * 0.45 && gap < L * 0.08 && (sh.x1 < B.x0 + L * 0.08 || sh.x0 > B.x1 - L * 0.08)) return 'jet';
+  // height is a flame out of it, a jet pushing it: no spring. Out of a thin body, as tall as it is)
+  if (air && sh.coils >= 3 && sh.slant < 0.45 && sh.w > sh.h * 1.5 && Math.abs(sh.cy - B.cy) < Math.max(H * 0.45, sh.h * 0.6) && gap < L * 0.08 && (sh.x1 < B.x0 + L * 0.08 || sh.x0 > B.x1 - L * 0.08)) return 'jet';
   // coils: a spring (under it, or at an end)
   if (sh.coils >= 3 && sh.cy < B.cy + H * 0.2 && gap < H * 0.5) return 'spring';
   // (ROADMAP 11.13: the player said it flies - a level line over the middle of its roof, not out
@@ -1316,6 +1316,17 @@ function parseGround(F) {
     if (t === 'blade') face += side * 2;
     // (ROADMAP 11.14: a flame out of its end is its back - whichever way its gun points)
     if (t === 'jet') face -= side * 3;
+  }
+  // (ROADMAP 11.16) a zigzag lying out past its back, about its middle's height: a flame out of it,
+  // a jet pushing it - as a plane's is, though it was not said to fly. Its back: the end its front
+  // is not at (at its front, coils are its bumper; the player's own say aside)
+  const back = face < 0 ? 1 : -1;
+  for (const o of st) {
+    const sh = o.sh;
+    if (labels[o.i] !== 'spring' || over[o.i] || sh.slant > 0.45 || sh.w < sh.h * 1.5 || Math.abs(sh.cy - B.cy) > Math.max(B.h * 0.45, sh.h * 0.6)) continue;
+    if (!(back < 0 ? sh.x1 < B.x0 + B.w * 0.08 : sh.x0 > B.x1 - B.w * 0.08) || relate(G, R, o).gap > B.w * 0.08) continue;
+    labels[o.i] = 'jet';
+    face -= back * 3;
   }
   return { fam: 'ground', frame: 'ride', labels, score, R, main, front: face < 0 ? -1 : 1, arches, wheels };
 }

@@ -1582,6 +1582,8 @@ export function buildPolished(design, spec, opt = {}) {
       tr.add(M.matte, g, bc);
     }
     tr.cyl(M.metal, 0.07, 0.07, -0.06, 0.06, linC(0.5, 0.5, 0.55), { axis: 'x', segs: 10 });
+    // (ROADMAP 11.16: drawn as a ring - its ring round it, as big)
+    if (F && spec.tailRotor.ring) tr.add(M.matte, new THREE.TorusGeometry(r2, 0.05, 6, 28).rotateY(Math.PI / 2), bc);
     tailRotor = tr.build({ seed: 0.52 });
     tailRotor.matrixAutoUpdate = true;
     tailRotor.position.set(0.16, Y(spec.tailRotor.cy), Z(spec.tailRotor.cx));

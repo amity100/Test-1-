@@ -142,6 +142,9 @@ function rideDesign0(P, strokes, inks, look) {
     // (said so: a hull's shape is enough - flat along its deck, narrower at its keel)
     if (seaSaid && ms.w > ms.h * 2.2 && keelK < 0.93 && wAt(ms.y0 + ms.h * 0.95) > ms.w * 0.7) boat = true;
   }
+  // (ROADMAP 11.16: said so, on wheels - whatever the shape of its body, it floats: an amphibious
+  // truck's box as well as a hull; built as drawn all the same)
+  if (seaSaid && P.R.loop) boat = true;
   if (P.R.loop) out.push({ type: 'body', part: boat ? 'hull' : 'body', pts: M(P.R.loop.concat([P.R.loop[0]])), ...bodyInk, hull: boat || undefined, made: true });
   else if (P.R.bike) {
     // (a bike: a slim tank and seat over its frame, between its wheels)
@@ -364,6 +367,7 @@ const KIN_GROUPS = { ground: ['car', 'truck', 'bus', 'moto', 'bicycle', 'tractor
 // is sure of it, a police car surer still - a plain car is so like one; else the plain one of its
 // group)
 const PLAIN = { 'police car': ['car', 0.7], ambulance: ['car', 0.55], firetruck: ['truck', 0.55] };
+const ODD_FIRE = new Set(['wing', 'rotor', 'sail', 'balloon', 'prop', 'jet']);
 function kinOf(P) {
   const want = KIN_GROUPS[P.family];
   if (!want || !P.guess) return {};
@@ -381,6 +385,10 @@ function kinOf(P) {
   if (!g || !(g[1] >= (P.family === 'boat' ? 0.5 : 0.2))) return {};
   let cls = g[2];
   if (PLAIN[cls] && !(P.prob && P.prob[CLASSES.indexOf(cls)] >= PLAIN[cls][1])) cls = PLAIN[cls][0];
+  // (ROADMAP 11.16: no ladder drawn on it - and what no fire engine has, wings, a rotor, a sail: the
+  // fire engine the network sees is the long box of it, a truck; a row of windows along it, a bus)
+  if (cls === 'firetruck' && !P.ladder && P.parts.some((q) => ODD_FIRE.has(q.type))) cls = 'truck';
+  if ((cls === 'truck' || cls === 'firetruck') && !P.ladder && P.parts.filter((q) => q.type === 'window').length >= 4) return { group: 'bus', cls: 'bus' };
   return { group: g[0], cls };
 }
 
@@ -852,6 +860,19 @@ function droneDesign(P, inks) {
   return { color, strokes: out, polish: true, above: true, copter: true, drone: { n: Dr.rotors.length, round }, plan: { hw: plan } };
 }
 
+// (ROADMAP 11.16) drawn round its middle, however hurried - open, an egg, or round twice: no quarter
+// of the way round left out, and never through its middle (a figure eight's blades are no ring)
+function ringy(pts, sh) {
+  if (sh.w < sh.h * 0.5 || sh.h < sh.w * 0.5) return false;
+  const d = pts.map(([x, y]) => Math.hypot(x - sh.mx, y - sh.my));
+  const mean = d.reduce((a, b) => a + b, 0) / d.length;
+  if (Math.min(...d) < mean * 0.45) return false;
+  const a = pts.map(([x, y]) => Math.atan2(y - sh.my, x - sh.mx)).sort((p, q) => p - q);
+  let gap = a[0] + Math.PI * 2 - a[a.length - 1];
+  for (let i = 1; i < a.length; i++) gap = Math.max(gap, a[i] - a[i - 1]);
+  return gap < Math.PI / 2;
+}
+
 // ------------------------------------------------------------------ what it can do: the parts added up
 // design: rideDesign's (or a saved one). Returns game/drawncar.js specOf's spec, its numbers the
 // parts', and sum: what the card by the drawing shows (ui/freedraw.js)
@@ -981,7 +1002,8 @@ export function rideSpec(design) {
   const fans = spinS.filter((s) => vOf(s) === 'hover').map((s) => shapeOf(s.pts));
   const props = spinS.filter((s) => vOf(s) === 'pusher' || vOf(s) === 'puller').map((s) => Object.assign(shapeOf(s.pts), { back: vOf(s) === 'pusher', lat: s.lat }));
   // (ROADMAP 11.13: a helicopter's tail rotor - it holds it straight, it lifts nothing)
-  const tailRS = spinS.filter((s) => vOf(s) === 'tail').map((s) => shapeOf(s.pts));
+  const tailS = spinS.filter((s) => vOf(s) === 'tail');
+  const tailRS = tailS.map((s) => shapeOf(s.pts));
   const jetS = of('jet');
   const jets = jetS.filter((s) => vOf(s) === 'jet').map((s) => Object.assign(shapeOf(s.pts), { side: s.side }));
   const vtols = jetS.filter((s) => vOf(s) === 'vtol').map((s) => shapeOf(s.pts));
@@ -1121,7 +1143,7 @@ export function rideSpec(design) {
   spec.tracks = tracks;
   spec.upside = upside || undefined;
   spec.rotors = rotors;
-  spec.tailRotor = tailRS.length ? { cx: tailRS[0].cx, cy: tailRS[0].cy, r: clamp((tailRS[0].w + tailRS[0].h) / 4, 0.25, 1.2) } : null;
+  spec.tailRotor = tailRS.length ? { cx: tailRS[0].cx, cy: tailRS[0].cy, r: clamp((tailRS[0].w + tailRS[0].h) / 4, 0.25, 1.2), ring: ringy(tailS[0].pts, tailRS[0]) || undefined } : null;
   spec.props = props;
   // (ROADMAP 11.13: a plane drawn with no engine - the small one in it shows: a jet's nozzle at the
   // tail of one that looks a jet, a fighter, an airliner; a propeller on the nose of the rest)
