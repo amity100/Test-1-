@@ -1966,6 +1966,7 @@ export class Weapons {
       this.chuteOpen = true;
       g.audio.play('chute', 0.4);
     }
-    return 3;
+    // (ROADMAP 11.15: wings on it too - it glides, coming down slower: game/combos.js)
+    return def.glider ? 1.7 : 3;
   }
 }

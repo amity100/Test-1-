@@ -377,7 +377,10 @@ class Enemy {
     const d = Math.hypot(dx, dz);
     // (down low, ROADMAP 5.3: seen less far off, unless they are already fighting you)
     const low = p.crouched && !p.inVehicle ? 1 - (p.coverPop || 0) : 0;
-    if (d > this.cfg.sight * (1 + this.onEdge * 0.2) * (this.state === 'combat' ? 1 : 1 - 0.45 * low)) return false;
+    // (ROADMAP 11.15: in a ride that is hard to see - silent, in its ink - only from closer; less so
+    // once they are fighting it: game/combos.js)
+    const st = p.inVehicle && p.inVehicle.stealth ? (this.state === 'combat' ? Math.sqrt(p.inVehicle.stealth) : p.inVehicle.stealth) : 1;
+    if (d > this.cfg.sight * st * (1 + this.onEdge * 0.2) * (this.state === 'combat' ? 1 : 1 - 0.45 * low)) return false;
     if (p.hidden && d > 3.2 && !p.inVehicle) return false;
     // (a cloud of ink between: ROADMAP 11.9, game/signs.js)
     if (game.signs && game.signs.clouds.length && game.signs.blocks(this.pos.x, this.pos.z, tp.x, tp.z)) return false;

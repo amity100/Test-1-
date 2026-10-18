@@ -1161,6 +1161,14 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   v.blades = spec.blades || null;
   v.crush = !!spec.crush;
   v.righter = !!spec.righter;
+  // (ROADMAP 11.15: what its parts do together - game/combos.js: the police lose its trail sooner in
+  // the water and the air, it is seen only from closer, landing from a jump knocks down what is
+  // round it, it lands from any height unhurt)
+  v.escape = spec.escape || 0;
+  v.stealth = spec.stealth || 0;
+  v.stomp = spec.stomp || null;
+  v.safeFall = !!spec.safeFall;
+  v.combos = spec.combos && spec.combos.length ? spec.combos : null;
   v.roofDrive = !!(spec.roofWheels || spec.upside);
   v.tilt0 = spec.tilt || 0;
   v.lean0 = spec.lean || 0;

@@ -885,7 +885,10 @@ class Vehicle {
           this.game.audio.play('crash', Math.min(0.6, hit / 20));
           this.game.camRig.addShake(Math.min(0.5, hit * 0.035));
         }
-        if (hit > 10) this.hurt((hit - 10) * 2);
+        if (hit > 10 && !this.safeFall) this.hurt((hit - 10) * 2);
+        // (ROADMAP 11.15: heavy, on a spring - down from its jump it knocks over what is round it:
+        // game/combos.js)
+        if (this.stomp && hit > 6) this.stompAt(hit);
       }
     } else if (g < this.pos.y - 0.3) {
       // off the edge: flying, as fast upwards as it was climbing
@@ -925,6 +928,39 @@ class Vehicle {
     // (a bicycle's, a scooter's: no engine; a bicycle's bell on H)
     if (input) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car');
     if (input && this.model === 'bicycle' && input.wasPressed('KeyH')) this.game.audio.play('bikebell', 0.7);
+  }
+
+  // (ROADMAP 11.15) down from a jump, heavy: a shock round it - whoever is near thrown and hurt,
+  // the cars round it dented, the windows broken (the harder it lands, the more)
+  stompAt(hit) {
+    const game = this.game;
+    // (a spring's hop lands at 7 to 10 m/s: the whole of it within a few metres - those near thrown)
+    const k = clamp(hit / 10, 0.8, 1.5);
+    const r = this.stomp.r * k;
+    const x = this.pos.x;
+    const z = this.pos.z;
+    game.camRig.addShake(0.55);
+    game.audio.play('boom', 0.6);
+    game.fx.crumbs(x, this.pos.y + 0.2, z, 26, 6);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      game.fx.smoke(x + Math.cos(a) * r * 0.45, this.pos.y + 0.3, z + Math.sin(a) * r * 0.45, 1.6);
+    }
+    if (game.knock) game.knock.blast(x, this.pos.y, z, r);
+    game.enemies.explosion(x, this.pos.y + 0.5, z, r, this.stomp.dmg * k);
+    game.civilians.explosion(x, this.pos.y + 0.5, z, r * 0.7);
+    // (the cars round it: dented where it came down by them - none set alight)
+    const dmg = !game.classic && game.damage;
+    for (const c of [...game.traffic.list, ...game.traffic.parked]) {
+      if (c === this || c.taken || c.poofT !== undefined) continue;
+      const d = Math.hypot(c.pos.x - x, c.pos.z - z);
+      if (d > r * 0.6 + 1.5) continue;
+      const l = d || 1;
+      if (dmg) dmg.hit(c, c.pos.x + ((x - c.pos.x) / l) * Math.min(l, 2), 0.8, c.pos.z + ((z - c.pos.z) / l) * Math.min(l, 2), 20 + 30 * k * (1 - d / (r * 0.6 + 1.5)));
+      c.path = null;
+    }
+    game.enemies.noise(this.pos, 50, 'boom');
+    this.stomps = (this.stomps || 0) + 1;
   }
 
   // (ROADMAP 11.12) over it goes, round its length (dir: which way): onto its roof - or, on its roof,

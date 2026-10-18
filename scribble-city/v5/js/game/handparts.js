@@ -2,6 +2,7 @@ import { clamp } from '../core/util.js';
 import { readFree, INKS, KINDS } from './freeform.js';
 import { shapeOf } from './drawncar.js';
 import { PART } from './parts.js';
+import { handCombos } from './combos.js';
 
 // (ROADMAP 11.11, parts 2) A thing for the hand, made of its parts - and each part changes what it
 // does, as each part of a ride does (game/partsum.js):
@@ -94,8 +95,9 @@ export function readHandParts(strokes, over = {}, cats = null, R0 = null) {
     // where its points are: in the grip, the magazine, the stock (under it), over it (a sight),
     // the barrel's run (its front, in the body's band), a guard, the head end...
     const n = { grip: 0, mag: 0, stock: 0, up: 0, barrel: 0, guard: 0, blade: 0, head: 0, handle: 0, body: 0 };
-    // (all of it over the body's band: a sight)
-    const over = gun && sh.y1 <= R.bt + 0.5 && sh.y0 < R.bt - 1.5 && along(front > 0 ? sh.x1 : sh.x0) < 0.97;
+    // (all of it over the body's band: a sight - ROADMAP 11.15: named so, the player's own word for
+    // each line is still theirs below)
+    const onTop = gun && sh.y1 <= R.bt + 0.5 && sh.y0 < R.bt - 1.5 && along(front > 0 ? sh.x1 : sh.x0) < 0.97;
     for (const [c, r] of P) {
       const a = along(c);
       if (R.kind === 'sword') {
@@ -103,7 +105,7 @@ export function readHandParts(strokes, over = {}, cats = null, R0 = null) {
         else n[(R.guard ? (front > 0 ? c > R.guard.b : c < R.guard.a) : a > 0.3) ? 'blade' : 'handle']++;
       } else if (R.kind === 'club') n[a > 0.68 ? 'head' : 'handle']++;
       else if (!gun) n.body++;
-      else if (over) n.up++;
+      else if (onTop) n.up++;
       else if (seg(R.grip, c, r, true)) n.grip++;
       else if (seg(R.mag, c, r, true)) n.mag++;
       else if (seg(R.stock, c, r, true)) n.stock++;
@@ -395,6 +397,7 @@ export function handSpec(P) {
   const els = barrels.map((b) => b.el).filter(Boolean);
   let el = els.length ? els[0] : ELEMENT[bodyInk] || null;
   if (kind === 'laser') el = null;
+  let longB = false;
   if (gun) {
     if (nB === 2) {
       def.volley = 2;
@@ -409,6 +412,7 @@ export function handSpec(P) {
       lines.push(['fire', `${nB} קנים`, 'מסתובבים ויורים בלי הפסקה']);
     }
     const longest = barrels.reduce((a, b) => Math.max(a, b.len), R.bl || 0);
+    longB = longest > 0.45 && kind !== 'launcher';
     if (longest > 0.45 && kind !== 'launcher') {
       def.speed *= 1.15;
       def.spread *= 0.75;
@@ -576,6 +580,27 @@ export function handSpec(P) {
     def.parry = Math.max(def.parry || 0, 0.2);
     lines.push(['gear', 'שריון', 'חוסם חלק מהמכה מלפנים']);
   }
+  // ---- (ROADMAP 11.15) what its parts do together, more than each alone (game/combos.js)
+  const combo = handCombos(def, {
+    scope: gun && !!(by('scope').length || R.scope),
+    long: longB,
+    stock: gun && !!(by('stock').length || R.stock),
+    wing: by('wing').length > 0,
+    jet: gun && by('jet').length > 0,
+    spin: !!def.spin,
+    multi: gun && nB >= 2,
+    mag: gun && by('mag').length > 0 && !!def.mag,
+    bayonet: !!def.bayonet,
+    bounce: (def.bounce || 0) > 0,
+    quiet: !!def.quiet,
+    prop: !!def.wind,
+    chute: !!def.chute,
+    guard: (def.parry || 0) > 0,
+    edge: by('blade').length > 0,
+    saw: !!def.saw,
+    head: kind === 'club' && by('head').length > 0,
+    els: new Set([...(def.elements || []), def.element].filter(Boolean)),
+  });
   // ---- its name: what it is, and what its parts made it
   let name = def.name;
   const g = FEM.has(kind) ? 1 : 0;
@@ -613,7 +638,7 @@ export function handSpec(P) {
   else if (def.kind === 'melee') abil.unshift(['fire', def.arc >= Math.PI * 2 ? 'סיבוב' : def.slash ? 'חיתוך' : 'מכה']);
   else abil.unshift(['fire', 'זריקה']);
   def.cost = Math.round(clamp((KINDS[kind] ? KINDS[kind].cost : 14) + lines.length * 2, 10, 40));
-  const sum = { ok: true, name, abil, bars, lines, warn: [], L, cost: def.cost, kind };
+  const sum = { ok: true, name, abil, bars, lines, warn: [], L, cost: def.cost, kind, combos: combo.list, adv: abil.length, near: combo.near };
   return { def, sum };
 }
 

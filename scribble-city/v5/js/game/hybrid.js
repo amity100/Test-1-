@@ -488,7 +488,7 @@ function landPara(v, wet, floor) {
   v.vy = 0;
   game.audio.play('jump', 0.6);
   game.camRig.addShake(0.2);
-  if (hit > 8) v.hurt((hit - 8) * 4);
+  if (hit > 8 && !v.safeFall) v.hurt((hit - 8) * 4);
   v.paraOut = 0.001;
   if (wet) {
     game.fx.splash(v.pos.x, -0.75, v.pos.z, 24, 4, [0.88, 0.95, 1]);
@@ -594,7 +594,7 @@ export function updateBalloon(v, dt, input) {
   const floor = Math.max(wet ? -0.8 : Math.max(0, groundHeight(v.pos.x, v.pos.z)), res.floor);
   if (v.pos.y <= floor) {
     if (v.vy < -5) {
-      v.hurt((-v.vy - 5) * 6);
+      if (!v.safeFall) v.hurt((-v.vy - 5) * 6);
       game.audio.play('crash', 0.5);
     }
     v.pos.y = floor;

@@ -1333,6 +1333,15 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-sg.imp:not(.on) i { color: #1b9e55; }
 .fd-engn .fd-ln { color: #1d4f99; }
 .r-eng { background: #d9e8ff; }
+/* (ROADMAP 11.15) what its parts do together, in the row of what it can do: how many things it can do
+   in stars, each combo in gold (new: never made), and what one more part would make of it */
+.fd-cbh { display: inline-flex; align-items: center; }
+.fd-cbh b { color: #e0a100; font-size: 13px; letter-spacing: 0.5px; text-shadow: 0 1px 0 #7a5200; }
+.fd-cbc { display: inline-flex; align-items: center; gap: 4px; font: 800 11.5px var(--font-ui); line-height: 1.2; padding: 1px 7px 2px; border: 1.8px solid #c98a00; border-radius: 9px; background: linear-gradient(#fff3c4, #ffe08a); color: #6b4300; white-space: nowrap; }
+.fd-cbc i { font-style: normal; font-weight: 800; font-size: 10px; color: #fff; background: #e2335f; border-radius: 6px; padding: 0 4px 1px; }
+.fd-cbc.found i { background: #1b9e55; }
+.fd-cbc.near { font-weight: 600; border-style: dashed; border-color: #b9a46a; background: #fffaf0; color: #7a6a3c; white-space: normal; }
+.r-combo { background: linear-gradient(#fff3c4, #ffe08a); color: #6b4300; box-shadow: inset 0 0 0 1.5px #c98a00; }
 .fd-calts .fd-chip { font-size: 12px; padding: 2px 8px; }
 /* (ROADMAP 11.8) what is drawn: anything, or one of five, or several together (a combination) */
 .fd-cats { position: absolute; z-index: 3; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); display: flex; align-items: center; gap: 5px; padding: 5px 8px; background: rgba(255, 252, 244, 0.92); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; white-space: nowrap; }
@@ -1378,6 +1387,9 @@ body.touch .fd-eb { font-size: 9.5px; padding: 1px 2px 2px; border-width: 1.5px;
 body.touch .fd-engn { gap: 1px; }
 body.touch .fd-lk { font-size: 9.5px; padding: 1px 2px 2px; border-width: 1.5px; }
 body.touch .fd-look > span { font-size: 9.5px; }
+body.touch .fd-cbh b { font-size: 11px; }
+body.touch .fd-cbc { font-size: 9.5px; padding: 0 5px 1px; border-width: 1.5px; }
+body.touch .fd-cbc i { font-size: 8.5px; }
 body.touch .fd-sg { font-size: 9.5px; padding: 1px 4px 2px; gap: 3px; }
 body.touch .fd-sgh b { font-size: 9.5px; }
 body.touch .fd-pchip { font-size: 11px; padding: 2px 6px 3px; }

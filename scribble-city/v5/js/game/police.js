@@ -191,13 +191,17 @@ export class Police {
         break;
       }
     }
+    // (ROADMAP 11.15: a ride that is hard to see - silent, in its ink - is seen only from closer:
+    // game/combos.js)
+    const sv = p.inVehicle;
+    const far = 45 * (sv && sv.stealth ? sv.stealth : 1);
     if (!seen && !under) {
       const col = game.world.collision;
       for (const c of game.traffic.list) {
         if (!c.police || c.mode !== 'pursuit') continue;
         const d = Math.hypot(c.pos.x - pp.x, c.pos.z - pp.z);
         // (a police car sees in front of it, ROADMAP 6.4)
-        if (d < 45 && !(p.hidden && d > 4) && (!game.lose || game.lose.carSees(c, pp, d)) && !(game.signs && game.signs.clouds.length && game.signs.blocks(c.pos.x, c.pos.z, pp.x, pp.z)) && col.lineOfSight(c.pos.x, 1.4, c.pos.z, pp.x, pp.y + 1.2, pp.z)) {
+        if (d < far && !(p.hidden && d > 4) && (!game.lose || game.lose.carSees(c, pp, d)) && !(game.signs && game.signs.clouds.length && game.signs.blocks(c.pos.x, c.pos.z, pp.x, pp.z)) && col.lineOfSight(c.pos.x, 1.4, c.pos.z, pp.x, pp.y + 1.2, pp.z)) {
           seen = true;
           break;
         }
@@ -221,7 +225,10 @@ export class Police {
     }
     const searching = t - this.seenT > 3;
     // (in another car or other clothes they give up sooner: ROADMAP 6.4)
-    if (searching) this.searchT += dt * (p.hidden ? 2 : 1) * (game.lose ? game.lose.searchMul : 1);
+    // (ROADMAP 11.15: one that goes everywhere - in the water, in the air - they lose sooner:
+    // game/combos.js)
+    const lostK = sv && sv.escape && (sv.flies || sv.kind === 'boat' || sv.submerged) ? sv.escape : 1;
+    if (searching) this.searchT += dt * (p.hidden ? 2 : 1) * (game.lose ? game.lose.searchMul : 1) * lostK;
     else this.searchT = 0;
     if (searching !== this.searching) {
       this.searching = searching;

@@ -16,6 +16,8 @@ import { rideDesign, rideSpec, toPage } from '../game/partsum.js';
 import { engineer, ENG_LEVELS, EN_STEPS, TIDY_STEPS } from '../game/engineer.js';
 import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
+import { comboReward, comboName } from '../game/combos.js';
+import { fmt } from '../game/money.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -137,6 +139,9 @@ export class FreeDraw {
     this.engOn = new Set();
     this.look = 'faithful';
     this.noImp = new Set();
+    // (ROADMAP 11.15) the parts that work together that the player has made: each found once, a
+    // reward (game/combos.js)
+    this.found = new Set();
     this.engMorph = null;
     this.engSig = '';
     this.build();
@@ -609,6 +614,7 @@ export class FreeDraw {
     // (a new drawing: the engineer's offers, what the game adds - as they come again)
     this.engOn.clear();
     this.noImp.clear();
+    this.gaveWheels = false;
     this.partMenu(-1);
     this.bake();
     this.read();
@@ -1058,7 +1064,21 @@ export class FreeDraw {
     // (gear: its name, what it does, the model)
     const sum = PR ? PR.sum : PW ? PW.spec.sum : { name: PG.R.name, abil: statLine(PG.R).split(' · ').map((t) => ['gear', t]), bars: [], lines: [], warn: [] };
     $('fd-cname').textContent = sum ? sum.name : '…';
-    $('fd-abil').innerHTML = sum ? sum.abil.map(([r, t]) => `<span class="fd-ab r-${r}">${esc(t)}</span>`).join('') : '';
+    // (ROADMAP 11.15) what its parts do together (game/combos.js), in the same row as what it can do -
+    // the card no taller for it: how many things it can do, in stars; each combo in gold (new: never
+    // made yet), what each gives in the lines below; one part short of another, what to draw for it
+    const cbs = sum && sum.combos ? sum.combos : [];
+    const near = sum && sum.near ? sum.near : [];
+    const adv = sum && sum.adv ? sum.adv : 0;
+    const made = PR ? PR.ok : !!PW;
+    const chips = sum ? sum.abil.map(([r, t]) => `<span class="fd-ab r-${r}">${esc(t)}</span>`) : [];
+    if (made && (cbs.length || near.length || adv >= 3)) {
+      const stars = clamp(Math.ceil((adv + cbs.length * 2) / 3), 1, 5);
+      chips.unshift(`<span class="fd-cbh" title="${adv} יתרונות${cbs.length ? ` · ${cbs.length} שילובים` : ''}"><b>${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</b></span>`);
+      for (const c of cbs) chips.push(this.found.has(c.k) ? `<span class="fd-cbc found" data-k="${c.k}">🏆 ${esc(c.name)}<i>✓</i></span>` : `<span class="fd-cbc" data-k="${c.k}">🏆 ${esc(c.name)}<i>חדש!</i></span>`);
+      for (const c of near) chips.push(`<span class="fd-cbc near" data-k="${c.k}" title="${esc(c.say)}">💡 + ${esc(c.miss)} = ${esc(c.name)}</span>`);
+    }
+    $('fd-abil').innerHTML = chips.join('');
     // (what changed since the last line: an arrow, up green, down red)
     const now = performance.now() / 1000;
     const bars = sum ? sum.bars : [];
@@ -1079,7 +1099,8 @@ export class FreeDraw {
       .join('');
     // (ROADMAP 11.11) what each of its parts does (a ride's: what no number says - its nose, a
     // barrel's ink, one that points down)
-    const lines = sum && sum.lines ? sum.lines : [];
+    // (ROADMAP 11.15: what its parts do together first, in gold - each, what it gives)
+    const lines = [...(sum && sum.combos ? sum.combos.map((c) => ['combo', `🏆 ${c.name}`, c.say]) : []), ...(sum && sum.lines ? sum.lines : [])];
     const lEl = $('fd-lines');
     lEl.innerHTML = lines.map(([r, t, x]) => `<div class="fd-ln"><span class="fd-ab r-${r}">${esc(t)}</span><span>${esc(x)}</span></div>`).join('');
     lEl.classList.toggle('hidden', !lines.length);
@@ -1107,10 +1128,14 @@ export class FreeDraw {
       // (what the game adds - each with its ✕; taken away, a + to have it back)
       const imp = [...new Set((this.P && this.P.implicit ? this.P.implicit : []).map((q) => q.type))];
       const gone = [...this.noImp];
+      // (ROADMAP 11.15: wheels the game gave it - nothing drawn moved it - said so)
+      const given = this.P && this.P.implicit && this.P.implicit.some((q) => q.type === 'wheel' && q.given);
+      const why = (t) => (t === 'wheel' && (given || (!imp.includes('wheel') && this.gaveWheels)) ? 'גלגלים — כדי שייסע' : IMP_WHY[t] || (PART[t] ? PART[t].name : t));
+      if (given) this.gaveWheels = true;
       if (imp.length || gone.length) {
         rows.push('<div class="fd-sgh"><b>המשחק הוסיף</b></div>');
-        for (const t of imp) rows.push(`<button class="fd-sg imp on" data-imp="${t}"><i>✕</i><span>${esc(IMP_WHY[t] || (PART[t] ? PART[t].name : t))}</span></button>`);
-        for (const t of gone) if (!imp.includes(t)) rows.push(`<button class="fd-sg imp" data-imp="${t}"><i>+</i><span>${esc(IMP_WHY[t] || (PART[t] ? PART[t].name : t))} (הוסר)</span></button>`);
+        for (const t of imp) rows.push(`<button class="fd-sg imp on" data-imp="${t}"><i>✕</i><span>${esc(why(t))}</span></button>`);
+        for (const t of gone) if (!imp.includes(t)) rows.push(`<button class="fd-sg imp" data-imp="${t}"><i>+</i><span>${esc(why(t))} (הוסר)</span></button>`);
       }
     }
     nEl.innerHTML = rows.join('');
@@ -1121,7 +1146,9 @@ export class FreeDraw {
     const wEl = $('fd-warn');
     wEl.textContent = warn.join(' · ');
     wEl.classList.toggle('hidden', !warn.length);
-    if (PR) $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}${PR.ok && PR.spec.com && PR.design.page ? ' · ◐ מרכז הכובד' : ''}` : '';
+    // (ROADMAP 11.15: how many things it can do, and of them together - by the stars)
+    const advSay = made && (cbs.length || adv >= 3) ? ` · ${adv} יתרונות${cbs.length ? `, ${cbs.length === 1 ? 'שילוב אחד' : `${cbs.length} שילובים`}` : ''}` : '';
+    if (PR) $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}${advSay}${PR.ok && PR.spec.com && PR.design.page ? ' · ◐ מרכז הכובד' : ''}` : '';
     else if (PG) {
       $('fd-meta').textContent = `${PG.R.cost} דיו`;
       // (gear that needs its place: why it would not go here)
@@ -1132,7 +1159,7 @@ export class FreeDraw {
       }
     } else {
       const len = PW.R.len || (KINDS[PW.R.kind] ? KINDS[PW.R.kind].len : 0.5);
-      $('fd-meta').textContent = `אורך ${len.toFixed(2)} מ׳ · ${this.handR().cost} דיו`;
+      $('fd-meta').textContent = `אורך ${len.toFixed(2)} מ׳ · ${this.handR().cost} דיו${advSay}`;
     }
     // (which way it faces: a ride's to say; a weapon's, as its parts say)
     $('fd-face').classList.toggle('hidden', !PR);
@@ -1547,6 +1574,8 @@ export class FreeDraw {
     }
     if (!ok) return;
     if (ink) ink.spend(R.cost);
+    // (ROADMAP 11.15) parts that work together, made for the first time: found - a reward
+    this.foundNew(R.cat === 'vehicle' && R.spec ? R.spec.combos : R.def ? R.def.combos : null);
     this.stats.made[R.kind] = (this.stats.made[R.kind] || 0) + 1;
     if (game.skills) game.skills.add('draw', 1);
     game.goalFlags.drew = true;
@@ -1569,6 +1598,22 @@ export class FreeDraw {
     this.bake();
     this.close();
     this.info();
+  }
+
+  // (ROADMAP 11.15) each of what its parts do together (game/combos.js) made for the first time:
+  // money for it, and said
+  foundNew(list) {
+    const game = this.game;
+    const fresh = (list || []).filter((k) => !this.found.has(k));
+    if (!fresh.length) return;
+    let n = 0;
+    for (const k of fresh) {
+      this.found.add(k);
+      n += comboReward(k);
+    }
+    if (game.money) game.money.earn(n, 'שילוב חדש');
+    game.hud.toast(`🏆 שילוב חדש: ${fresh.map(comboName).join(', ')}! +${fmt(n)}`, 'good', 3.6);
+    game.audio.play('cheer', 0.5);
   }
 
   // where the drawing is on the screen: its middle (px) and its size (px)
@@ -1772,7 +1817,7 @@ export class FreeDraw {
     const game = this.game;
     const s = v.spec;
     if (!s) return;
-    const key = `${s.kind}:${v.hybrid ? Object.keys(v.modes || {}).filter((k) => v.modes[k]).join('') : ''}:${v.turret ? v.gunType : ''}:${v.turrets ? v.turrets.length : 0}:${v.paraP ? 'p' : ''}:${v.ram ? 'r' : ''}:${(s.tracks || []).length ? 't' : ''}${s.hover ? 'h' : ''}${v.bumper ? 'b' : ''}${v.blades ? 'x' : ''}${v.roofDrive ? 'u' : ''}${s.spring && s.spring.kick ? 'k' : ''}${(s.guns || []).some((gn) => gn.giant) ? 'g' : ''}`;
+    const key = `${s.kind}:${v.hybrid ? Object.keys(v.modes || {}).filter((k) => v.modes[k]).join('') : ''}:${v.turret ? v.gunType : ''}:${v.turrets ? v.turrets.length : 0}:${v.paraP ? 'p' : ''}:${v.ram ? 'r' : ''}:${(s.tracks || []).length ? 't' : ''}${s.hover ? 'h' : ''}${v.bumper ? 'b' : ''}${v.blades ? 'x' : ''}${v.roofDrive ? 'u' : ''}${s.spring && s.spring.kick ? 'k' : ''}${(s.guns || []).some((gn) => gn.giant) ? 'g' : ''}${v.combos ? v.combos.join('') : ''}`;
     this.toldRides = this.toldRides || new Set();
     if (this.toldRides.has(key)) return;
     this.toldRides.add(key);
@@ -1804,6 +1849,9 @@ export class FreeDraw {
     if (v.roofDrive) tips.push('גלגלי הגג: אם מתהפכים — ממשיכים לנסוע');
     else if (s.handling && s.handling.tipA) tips.push(t ? 'גבוה וצר — בפנייה חדה מתהפך. ▲: להפוך בחזרה' : 'גבוה וצר — בפנייה חדה מתהפך. רווח: להפוך בחזרה');
     if (s.jets.length && s.base === 'car') tips.push(t ? 'ג׳ויסטיק עד הסוף: טורבו' : 'Shift: טורבו מהסילון');
+    // (ROADMAP 11.15: what its parts do together - first of all)
+    if (v.stomp) tips.unshift(t ? 'נחיתה מועכת: ▲ לקפוץ — והנחיתה הודפת את מי שסביב' : 'נחיתה מועכת: רווח לקפוץ — והנחיתה הודפת את מי שסביב');
+    if (v.combos) tips.unshift('🏆 ' + v.combos.map(comboName).join(' · '));
     else if (s.glide && !v.canLift) tips.push('הכנפיים: אחרי קפיצה מרמפה הוא גולש');
     if (tips.length) game.hud.toast(tips.slice(0, 3).join(' · '), 'info', 4);
   }
@@ -1869,7 +1917,7 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel, engOn: this.engOn.size ? [...this.engOn] : undefined, look: this.look, noImp: this.noImp.size ? [...this.noImp] : undefined };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel, engOn: this.engOn.size ? [...this.engOn] : undefined, look: this.look, noImp: this.noImp.size ? [...this.noImp] : undefined, found: this.found.size ? [...this.found] : undefined };
   }
 
   load(o) {
@@ -1885,6 +1933,7 @@ export class FreeDraw {
     this.engOn = new Set(Array.isArray(o.engOn) ? o.engOn.filter((k) => EN_STEPS.includes(k)) : o.eng === 'eng' || o.eng === undefined ? EN_STEPS : []);
     this.look = LOOKS.some(([k]) => k === o.look) ? o.look : o.look === undefined && o.eng !== undefined ? 'polished' : 'faithful';
     this.noImp = new Set(Array.isArray(o.noImp) ? o.noImp.filter((t) => PART[t]) : []);
+    this.found = new Set(Array.isArray(o.found) ? o.found.filter((k) => typeof k === 'string') : []);
     this.showCats();
   }
 }

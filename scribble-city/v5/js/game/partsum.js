@@ -2,6 +2,7 @@ import { clamp } from '../core/util.js';
 import { shapeOf, specOf, inPoly, outline, spanAt } from './drawncar.js';
 import { CLASSES, VEHICLE_GROUPS } from './sketchnet.js';
 import { placeOf, roleOf } from './partrole.js';
+import { rideCombos } from './combos.js';
 
 // (ROADMAP 11.10, the sample) What a ride does is its parts added up - each part does one thing,
 // the same thing on anything it is put on, and how much of it by how big it was drawn:
@@ -114,8 +115,10 @@ function rideDesign0(P, strokes, inks, look) {
   // (ROADMAP 11.14: an aircraft drawn on a boat's hull - flat along its deck, narrower at its keel, a
   // boat the network sees in it: it floats too)
   let boat = P.family === 'boat';
-  if (!boat && (P.family === 'copter' || P.family === 'plane') && main && main.sh.closed && P.guess) {
-    const qBoat = P.guess.filter(([g]) => g === 'boat').reduce((a, [, q]) => a + q, 0);
+  // (ROADMAP 11.15: on wheels, and the player said it sails too - a hull on wheels: it floats)
+  const seaSaid = !!P.sea && P.family === 'ground';
+  if (!boat && (((P.family === 'copter' || P.family === 'plane') && P.guess) || seaSaid) && main && main.sh.closed) {
+    const qBoat = (P.guess || []).filter(([g]) => g === 'boat').reduce((a, [, q]) => a + q, 0);
     const wAt = (y) => {
       let lo = Infinity;
       let hi = -Infinity;
@@ -136,6 +139,8 @@ function rideDesign0(P, strokes, inks, look) {
     // (or plainly a hull, whatever the network sees: flat along its deck, right to its top, and far
     // narrower at its keel)
     if ((qBoat >= 0.4 && ms.w > ms.h * 2.2 && keelK < 0.93) || (qBoat >= 0.15 && ms.w > ms.h * 2.8 && keelK < 0.86 && wAt(ms.y0 + ms.h * 0.95) > ms.w * 0.75)) boat = true;
+    // (said so: a hull's shape is enough - flat along its deck, narrower at its keel)
+    if (seaSaid && ms.w > ms.h * 2.2 && keelK < 0.93 && wAt(ms.y0 + ms.h * 0.95) > ms.w * 0.7) boat = true;
   }
   if (P.R.loop) out.push({ type: 'body', part: boat ? 'hull' : 'body', pts: M(P.R.loop.concat([P.R.loop[0]])), ...bodyInk, hull: boat || undefined, made: true });
   else if (P.R.bike) {
@@ -1372,9 +1377,11 @@ export function rideSpec(design) {
   let cost = 14 + area * 1.2;
   for (const s of S) cost += INK[s.part] || 0;
   spec.cost = Math.round(clamp(cost, 18, 95));
+  // (ROADMAP 11.15: what its parts do together, more than each alone - game/combos.js)
+  const combo = rideCombos(spec);
   // (as long as it is all: an airship by its envelope, a drone across its rotors)
   const Lall = design.rocket ? H : spec.balloon && spec.balloon.len ? spec.balloon.len : design.drone && rotors.length ? Math.max(...rotors.map((r) => r.x1)) - Math.min(...rotors.map((r) => r.x0)) : L;
-  const sum = summary({ ok: true, spec, mass, L, Lall, H, area, wheels, rAvg, R, liftR, liftJ, liftW, warn, design, copter, plane, glide, boat, balloon, role, com, tracks, fans });
+  const sum = summary({ ok: true, spec, mass, L, Lall, H, area, wheels, rAvg, R, liftR, liftJ, liftW, warn, design, copter, plane, glide, boat, balloon, role, com, tracks, fans, combo });
   spec.label = sum.name;
   spec.sum = sum;
   spec.polish = true;
@@ -1760,7 +1767,9 @@ function summary(o) {
     seen.add(key);
     lines.push([ROLE_TONE[s.part || legacy(s)] || 'gear', r.name, r.say.replace(/^[^:]+: /, '')]);
   }
-  return { ok: o.ok, name, abil, bars, warn, mass, L: o.Lall || L, cost: spec ? spec.cost : 0, lines: lines.slice(0, 7), com: o.com };
+  // (ROADMAP 11.15: what its parts do together; how many things it can do; one thing short of more)
+  const C = o.combo || { list: [], adv: 0, near: [] };
+  return { ok: o.ok, name, abil, bars, warn, mass, L: o.Lall || L, cost: spec ? spec.cost : 0, lines: lines.slice(0, 7), com: o.com, combos: C.list, adv: C.adv, near: C.near };
 }
 
 const rotorOrWings = (o) => o.design.strokes.some((s) => s.part === 'rotor' || s.part === 'wing' || (s.part === 'jet' && o.role && o.role.has(s) && o.role.get(s).v === 'vtol'));
