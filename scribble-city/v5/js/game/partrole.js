@@ -97,7 +97,8 @@ export function roleOf(t, q, ctx = {}) {
       // (long and flat along its bottom - not an oval wheel: a track)
       if (sh.w > sh.h * 2.4 && q.long > (q.BW || 1) * 0.4 && q.v < 0.42) return V('track', 'זחל', 'זחל: איטי, לא מחליק, מסתובב במקום ועולה על מכוניות');
       if (q.top && q.u > -0.05 && q.u < 1.05 && (sh.w + sh.h) / 4 < (q.BW || 1) * 0.6) return V('roof', 'גלגל גג', ctx.wheels ? 'על הגג: כשהוא מתהפך — ממשיך לנסוע' : 'על הגג: נוסע הפוך, על הגב');
-      if (q.closed && !q.round && q.fill > 0.86 && Math.max(sh.w, sh.h) < Math.min(sh.w, sh.h) * 1.6) return V('square', 'גלגל מרובע', 'מרובע: מקפץ ואיטי יותר, אבל נאחז ומטפס');
+      // (ROADMAP 11.16: a wheel scribbled round and round fills its box twice over - round, not square)
+      if (q.closed && !q.round && q.fill > 0.86 && q.fill < 1.08 && sh.len < (sh.w + sh.h) * 2.5 && Math.max(sh.w, sh.h) < Math.min(sh.w, sh.h) * 1.6) return V('square', 'גלגל מרובע', 'מרובע: מקפץ ואיטי יותר, אבל נאחז ומטפס');
       if ((sh.w + sh.h) / 4 > (q.BH || 1) * 0.42) return V('big', 'גלגל ענק', 'ענק: עולה על מדרכות ומכוניות, אבל כבד');
       return V('wheel', 'גלגל', air ? 'גלגל נחיתה: נוסע על הקרקע' : 'נוסע — גדול יותר, מהיר יותר');
     }

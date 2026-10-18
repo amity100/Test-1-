@@ -121,8 +121,10 @@ export function wiggles(pts, eps = 0.07) {
 // a spring drawn: a zigzag (up and down it, or along it) or a coil of loops, not closed
 export function springy(pts) {
   const sh = shapeOf(pts);
-  if (sh.closed || sh.len < sh.size * 2.2) return 0;
+  if (sh.closed) return 0;
   const w = wiggles(pts);
+  // (ROADMAP 11.16: a zigzag of many turns drawn fast and flat is shorter for its size)
+  if (sh.len < sh.size * (Math.max(w.x, w.y) >= 4 && Math.min(w.x, w.y) <= 1 ? 1.6 : 2.2)) return 0;
   if ((w.x >= 3 && w.y <= 1) || (w.y >= 3 && w.x <= 1)) return Math.max(w.x, w.y);
   if (w.x + w.y >= 7) return Math.round((w.x + w.y) / 2);
   return 0;

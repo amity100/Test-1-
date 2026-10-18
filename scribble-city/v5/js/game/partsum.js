@@ -925,7 +925,17 @@ export function rideSpec(design) {
   // (on its roof only: it drives on its back - those are what it rolls on)
   const wheels = wheelsOf(upside ? roofS : rollS);
   const roofWheels = upside ? [] : wheelsOf(roofS);
-  const tracks = trackS.map((s) => shapeOf(s.pts));
+  // (ROADMAP 11.16: one track drawn in two strokes - its two halves over each other: one track)
+  const tracks = [];
+  for (const s of trackS) {
+    const sh = shapeOf(s.pts);
+    const t = tracks.find((q) => Math.min(q.x1, sh.x1) - Math.max(q.x0, sh.x0) > Math.min(q.w, sh.w) * 0.5 && Math.min(q.y1, sh.y1) - Math.max(q.y0, sh.y0) > -Math.max(q.h, sh.h) * 0.5);
+    if (!t) {
+      tracks.push(sh);
+      continue;
+    }
+    Object.assign(t, shapeOf([[Math.min(t.x0, sh.x0), Math.min(t.y0, sh.y0)], [Math.max(t.x1, sh.x1), Math.min(t.y0, sh.y0)], [Math.max(t.x1, sh.x1), Math.max(t.y1, sh.y1)], [Math.min(t.x0, sh.x0), Math.max(t.y1, sh.y1)], [Math.min(t.x0, sh.x0), Math.min(t.y0, sh.y0)]]));
+  }
   // (the lines of one rotor - an X, a star, its blades drawn one by one - are one rotor, as wide as
   // all of them; two apart, two rotors. A rotor, a propeller lying over it: they lift it)
   const spinS = [...of('rotor'), ...of('prop')];

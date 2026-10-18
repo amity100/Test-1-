@@ -1059,6 +1059,13 @@ export function buildPolished(design, spec, opt = {}) {
       // (ROADMAP 11.13: on an aircraft, a line drawn off it touching nothing of it - the wind, its
       // speed, a cloud: the drawing's, not the model's)
       if (flier && s.part === 'deco' && ol && gapTo(s.pts, ol) > Math.max(0.25, spec.H * 0.12)) continue;
+      // (ROADMAP 11.16: as drawn - a closed shape drawn off it, a thing of its own: a sidecar, a
+      // flag, an umbrella - is solid in its own outline, as thick as it is big; no frame of wire)
+      const so = F && on < 0.5 ? shapeOf(toM(s.pts)) : null;
+      if (so && so.closed && so.size > Math.max(0.25, spec.L * 0.08)) {
+        mould(K, M, ringOf(toM(s.pts)), clamp(Math.min(so.w, so.h) * 0.7, 0.08, W * 0.8), colOf(s, design));
+        continue;
+      }
       const P = thin(toM(s.pts), 0.06);
       for (let i = 1; i < P.length; i++) tube(K, M.matte, [0, P[i - 1][1], P[i - 1][0]], [0, P[i][1], P[i][0]], 0.05, shade(colOf(s, design), 0.5));
     }
@@ -1576,6 +1583,43 @@ export function buildPolished(design, spec, opt = {}) {
     if (s.type !== 'wing' || roleOf(s) === 'fin') continue;
     const sh = shapeOf(toM(s.pts));
     const c = colOf(s, design);
+    // (ROADMAP 11.16) as drawn - a wing standing up off the roof of what is no plane: the shape
+    // drawn, both sides, raised as a bird's are, its root along its roof. From its side it is the
+    // drawing; from in front, its wings (a plane's, hanging under it or up off it, is the wing it is
+    // from above, below)
+    const st0 = F && body && spec.base !== 'plane' && !design.plane ? body.at(sh.cx) : null;
+    const wo = st0 ? outline(toM(s.pts)) : null;
+    if (wo && wo.length >= 3 && sh.y0 > st0.yc + st0.b * 0.5) {
+      const up = true;
+      const yr = up ? Math.max(sh.y0, st0.yc + st0.b * 0.6) : Math.min(sh.y1, st0.yc - st0.b * 0.6);
+      const th = 1.08;
+      const ct = Math.cos(th);
+      const sn = Math.sin(th);
+      const rootX = Math.max(0.05, half(sh.cx, yr) * 0.7);
+      span = Math.max(span, (rootX + sh.h * ct) * 2);
+      for (const sx of [-1, 1]) {
+        const g = plate(wo, 0.07, 0, 0.015);
+        if (!g) continue;
+        const h = up ? [sx * ct, sn] : [-sx * ct, sn];
+        const n = up ? [sn, -sx * ct] : [sn, sx * ct];
+        const a = g.attributes.position;
+        for (let i = 0; i < a.count; i++) {
+          const x = a.getX(i);
+          const dy = a.getY(i) - yr;
+          a.setXYZ(i, dy * h[0] + x * n[0], dy * h[1] + x * n[1], a.getZ(i));
+        }
+        g.computeVertexNormals();
+        const wk = new Kit();
+        wk.add(M.paint, g, shade(c, 1.08));
+        const node = wk.build({ seed: 0.44 + wings.length * 0.03 });
+        node.matrixAutoUpdate = true;
+        node.position.set(sx * rootX, yr, 0);
+        node.userData.side = sx;
+        root.add(node);
+        wings.push(node);
+      }
+      continue;
+    }
     // (ROADMAP 11.13) its shape from above, as drawn: its root in the body - low on it, or high, as
     // it was drawn - its tips up a little
     if (s.plan) {
