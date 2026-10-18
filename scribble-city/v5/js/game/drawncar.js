@@ -308,10 +308,11 @@ export function specOf(design) {
     // the hotter its air, the higher it goes: how fast, by the size of its envelope for its weight
     const env = P.filter((s) => s.type === 'envelope').map((s) => shapeOf(s.pts));
     const E = env.length ? env[0] : { w: L * 2, h: L * 2.2 };
-    const vol = (Math.PI / 6) * E.w * E.w * E.h;
+    const ship = P.some((s) => s.type === 'envelope' && s.ship);
+    const vol = ship ? (Math.PI / 6) * E.w * E.h * E.h : (Math.PI / 6) * E.w * E.w * E.h;
     const lift = clamp(vol / (mass * 45 + 25), 0.5, 1.6);
     out.balloon = { lift, climb: clamp(1.8 + lift * 2.4, 2, 5.5), drift: clamp(3 + lift * 2.5, 3.5, 7) };
-    out.envR = E.w / 2;
+    out.envR = ship ? E.h / 2 : E.w / 2;
   }
   // its gun (any of them; armed, ROADMAP 11.8): a thick barrel a cannon, a thin one a machine gun -
   // or what the player picked
@@ -1115,10 +1116,16 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   v.group.add(v.body);
   v.model = 'drawn';
   v.drawn = {
-    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined, part: s.part || undefined, r: s.r || undefined, len: s.len || undefined, coils: s.coils || undefined, base: s.base || undefined, muz: s.muz || undefined, edge: s.edge || undefined, made: s.made || undefined, side: s.side || undefined, el: s.el || undefined, whole: s.whole || undefined })),
+    strokes: design.strokes.map((s) => ({ type: s.type, pts: s.pts.map((p) => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100]), col: s.col ? s.col.slice() : null, pencil: !!s.pencil, neon: !!s.neon, slim: !!s.slim, span: s.span || undefined, hull: s.hull || undefined, part: s.part || undefined, r: s.r || undefined, len: s.len || undefined, coils: s.coils || undefined, base: s.base || undefined, muz: s.muz || undefined, edge: s.edge || undefined, made: s.made || undefined, side: s.side || undefined, el: s.el || undefined, whole: s.whole || undefined, plan: s.plan ? s.plan.map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]) : undefined, mount: s.mount || undefined, lat: s.lat === undefined ? undefined : Math.round(s.lat * 100) / 100, wing: s.wing || undefined, flat: s.flat || undefined, guard: s.guard || undefined, ship: s.ship || undefined, implicit: s.implicit || undefined })),
     polish: design.polish || undefined,
     plane: design.plane || undefined,
     above: design.above || undefined,
+    copter: design.copter || undefined,
+    drone: design.drone || undefined,
+    airship: design.airship || undefined,
+    rocket: design.rocket || undefined,
+    dart: design.dart || undefined,
+    plan: design.plan || undefined,
     nose: design.nose === undefined ? undefined : design.nose,
     color: design.color.slice(),
     force: design.force || null,
@@ -1129,7 +1136,8 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
     abil: design.abil || null,
   };
   v.spec = spec;
-  v.seat = true;
+  // (ROADMAP 11.13: in a rocket the rider is shut in its capsule)
+  v.seat = !design.rocket;
   v.label = design.name || spec.label;
   v.maxHp = spec.hp;
   v.hp = spec.hp;
@@ -1152,6 +1160,7 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   v.roofDrive = !!(spec.roofWheels || spec.upside);
   v.tilt0 = spec.tilt || 0;
   v.lean0 = spec.lean || 0;
+  v.spin = spec.spin || 0;
   v.pitchy = spec.pitchy || 0;
   v.hoverH = spec.hover ? 0.06 : 0;
   v.flipped = false;
@@ -1170,7 +1179,7 @@ export function spawnDrawn(game, design, x, z, yaw, add = true, alt = 0) {
   const gunS = design.strokes.find((s) => s.type === 'gun');
   if (gunS && gunS.col && !gunS.pencil) v.mgColor = gunS.col.slice();
   // (a big boat, a balloon: the camera further back)
-  v.camOpt = spec.base === 'balloon' ? { dist: 19, height: 5.5, shoulder: 0, fovMul: 1 } : { dist: clamp(spec.L * 1.3 + 3.2, 5.5, spec.base === 'boat' ? 26 : 14), height: clamp(spec.H + 1.4, 2.3, 5), shoulder: 0, fovMul: 1 };
+  v.camOpt = spec.base === 'balloon' ? { dist: spec.balloon && spec.balloon.ship ? clamp((spec.balloon.len || 20) * 1.15, 19, 42) : 19, height: spec.balloon && spec.balloon.ship ? 7 : 5.5, shoulder: 0, fovMul: 1 } : { dist: clamp(spec.L * 1.3 + 3.2, 5.5, spec.base === 'boat' ? 26 : 14), height: clamp(spec.H + 1.4, 2.3, 5), shoulder: 0, fovMul: 1 };
   // (ROADMAP 11.8: how it goes each of its ways, its gear and its gun - game/hybrid.js - and the
   // way it starts where it stands)
   setupDrawn(v, spec);

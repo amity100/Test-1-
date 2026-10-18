@@ -445,7 +445,8 @@ class Vehicle {
     if (this.kind === 'copter') {
       // the rotor whirls (fast when someone flies it), the body leans into where it goes
       const spin = this.driver ? 26 : this.alt > 1.2 ? 14 : 2;
-      this.rotor.rotation.y += dt * spin;
+      if (this.rotorsAll && this.rotorsAll.length) for (const r of this.rotorsAll) r.rotation.y += dt * spin * (r.userData.dir || 1);
+      else this.rotor.rotation.y += dt * spin;
       this.tailRotor.rotation.x += dt * spin * 1.6;
       const fx = Math.sin(this.yaw);
       const fz = Math.cos(this.yaw);
@@ -1007,6 +1008,8 @@ class Vehicle {
       for (const pr of this.props || []) pr.rotation.z += dt * (10 + this.speedAbs * 1.5);
       for (const f of this.fans || []) f.rotation.y += dt * 24;
     }
+    // (ROADMAP 11.13: a car that flies too - its rotors whirl while it flies, idle on the road)
+    if (this.kind !== 'copter' && this.rotorsAll) for (const r of this.rotorsAll) r.rotation.y += dt * (this.mode === 'copter' ? 26 : this.driver ? 3 : 0) * (r.userData.dir || 1);
   }
 
   // dark marks behind the back wheels while it slides (a long trail the city keeps a while)
@@ -1268,6 +1271,16 @@ class Vehicle {
     if (this.lean0 && this.alt > 1.2) {
       this.vx += Math.sin(this.yaw) * this.lean0 * 10 * dt;
       this.vz += Math.cos(this.yaw) * this.lean0 * 10 * dt;
+    }
+    // (ROADMAP 11.13: one rotor and nothing to hold it straight - it turns round as it flies, and
+    // the view with it)
+    if (this.spin && this.alt > 1.2) {
+      this.yaw += this.spin * dt;
+      if (input) game.camRig.yaw += this.spin * dt;
+      if (input && !this.toldSpin) {
+        this.toldSpin = true;
+        game.hud.toast('אין רוטור זנב — הוא מסתובב סביב עצמו! ציירו רוטור קטן בזנב', 'info', 3);
+      }
     }
     const maxAlt = this.grade === 'fail' ? 1.2 : 70;
     this.vy = damp(this.vy, up * 9, 3, dt);

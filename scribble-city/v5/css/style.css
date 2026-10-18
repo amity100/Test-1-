@@ -1274,7 +1274,9 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-pc small { display: block; font-size: 10px; font-weight: 500; line-height: 1; margin-top: 1px; opacity: 0.85; }
 .fd-pm-say { flex-basis: 100%; min-height: 2.5em; padding: 4px 6px 5px; border-radius: 7px; background: rgba(255, 255, 255, 0.75); border: 1.5px dashed rgba(36, 36, 44, 0.35); font: 500 12px var(--font-ui); line-height: 1.3; color: var(--ink); }
 .fd-pmenu .fd-pm-say b { flex-basis: auto; font: 700 12px var(--font-ui); }
-.fd-card { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 176px); width: 238px; display: flex; flex-direction: column; gap: 5px; padding: 7px 9px 8px; background: rgba(255, 252, 244, 0.93); border: 2.5px solid var(--ink); border-radius: 11px 9px 12px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; }
+.fd-card { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 176px); width: 238px; display: flex; flex-direction: column; gap: 5px; padding: 7px 9px 8px; background: rgba(255, 252, 244, 0.93); border: 2.5px solid var(--ink); border-radius: 11px 9px 12px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; max-height: calc(100% - max(10px, env(safe-area-inset-top)) - 176px - max(10px, env(safe-area-inset-bottom))); overflow: hidden; }
+.fd-card > * { flex-shrink: 0; }
+.fd-card.scroll { overflow-y: auto; pointer-events: auto; overscroll-behavior: contain; }
 .fd-card-top { display: flex; align-items: center; gap: 6px; }
 .fd-card-top b { flex: 1; font-family: var(--font-hand); font-size: 21px; line-height: 1.05; }
 .fd-face { flex: none; pointer-events: auto; font: 700 15px var(--font-ui); width: 30px; height: 26px; padding: 0; border: 2px solid var(--ink); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; }

@@ -748,7 +748,10 @@ export class FreeDraw {
     const spec = rideSpec(design);
     const ok = spec.ok !== false && !!spec.base;
     const picked = Object.values(this.over);
-    if (net && (!picked.length || (frame === 'hand' && !picked.some((t) => RIDES_IT.has(t))))) {
+    // (ROADMAP 11.13: the player said it is a ride - an aircraft, a car, a boat, armed or not: one it
+    // is, whatever weapon or gear the network sees in it - a rocket is no ladder)
+    const rideSaid = this.cats.size > 0 && [...this.cats].some((c) => c === 'car' || c === 'air' || c === 'sea');
+    if (net && !rideSaid && (!picked.length || (frame === 'hand' && !picked.some((t) => RIDES_IT.has(t))))) {
       // (plainly something else - a weapon, a shield: read as before - unless its parts are surely
       // a ride's, and the network not that sure)
       const other = net.weapon + net.gear;
@@ -990,10 +993,10 @@ export class FreeDraw {
     else if (PW) this.view.setModel(() => buildWeapon(this.handR()).group);
     else this.view.setModel(() => this.gearModel(PG.R), PG.R.cat === 'weapon' || PG.R.kind === 'umbrella' || PG.R.kind === 'key');
     $('fd-view').classList.toggle('none', (PR && !PR.ok) || this.view.dead);
-    // (a ride's, on a phone: more than the screen holds - it scrolls, a finger on it moving it, not
-    // drawing)
+    // (a ride's, more than the screen holds - it scrolls: on a phone a finger on it moving it, not
+    // drawing; on a computer the wheel)
     const C = this.cardEl;
-    C.classList.toggle('scroll', !!PR && this.game.touch && C.scrollHeight > C.clientHeight + 2);
+    C.classList.toggle('scroll', !!PR && C.scrollHeight > C.clientHeight + 2);
   }
 
   // as a made thing is read (ui/freedraw.js make): the ride, as R is

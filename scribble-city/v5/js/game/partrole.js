@@ -85,7 +85,7 @@ export function placeOf(pts, B) {
 
 // ------------------------------------------------------------------ what it is, there
 // t: the part; q: placeOf's; ctx: { fam ('ground', 'copter', 'plane', 'boat', 'balloon'), wheels
-// (it has wheels under it), thrust (a propeller, a jet), wings, guns, sail }. Returns { v (which of
+// (it has wheels under it), thrust (a propeller, a jet), wings, guns, sail, rocket }. Returns { v (which of
 // its kinds - game/partsum.js goes by it), name, say (what it will do, there) }
 export function roleOf(t, q, ctx = {}) {
   const fam = ctx.fam || 'ground';
@@ -103,8 +103,10 @@ export function roleOf(t, q, ctx = {}) {
     }
     case 'rotor':
     case 'prop': {
+      // (ROADMAP 11.13) at a helicopter's tail, small: its tail rotor - it holds it straight
+      if (fam === 'copter' && q.back && !q.top && (sh.w + sh.h) / 2 < (q.BH || 1) * 1.3) return V('tail', 'רוטור זנב', 'בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו');
       if (q.upright) {
-        if (q.back) return V('pusher', 'מדחף דוחף', fam === 'boat' ? 'עומד מאחור: דוחף — סירת ביצות מהירה' : ctx.wings ? 'עומד מאחור: דוחף את המטוס' : 'עומד מאחור: דוחף קדימה — עוד מהירות, גם במים');
+        if (q.back) return V('pusher', 'מדחף דוחף', fam === 'boat' ? 'עומד מאחור: דוחף — סירת ביצות מהירה' : fam === 'balloon' ? 'מאחור: דוחף את ספינת האוויר קדימה, והיא פונה לאן שמסתכלים' : ctx.wings ? 'עומד מאחור: דוחף את המטוס' : 'עומד מאחור: דוחף קדימה — עוד מהירות, גם במים');
         return V('puller', 'מדחף', ctx.wings ? 'עומד מלפנים: מושך את המטוס' : 'עומד: מושך קדימה — עוד מהירות');
       }
       if (q.under) return V('hover', 'מאוורר ריחוף', 'שוכב מתחת: רחפת — מחליקה על היבשה ועל המים');
@@ -113,7 +115,9 @@ export function roleOf(t, q, ctx = {}) {
       return V('lift', t === 'prop' ? 'מדחף מרים' : 'רוטור', 'שוכב מעל: מרים — טס כמו מסוק, אם הוא גדול מספיק');
     }
     case 'jet': {
-      if (q.under && !q.back) return V('vtol', 'סילון אנכי', 'מתחת, כלפי מטה: ממריא ונוחת במקום');
+      // (an engine slung under a wing, lying along it: it pushes - pointing down under it: it lifts)
+      // (ROADMAP 11.13: a rocket's, under its foot - it stands up, its back is down: it lifts)
+      if (q.under && (ctx.rocket || (!q.back && !(ctx.wings && sh.w > sh.h * 1.15)))) return V('vtol', 'סילון אנכי', 'מתחת, כלפי מטה: ממריא ונוחת במקום');
       if (q.front && q.dx > -0.2) return V('retro', 'סילון הפוך', 'מלפנים: בלם חזק בבת אחת');
       return V('jet', 'סילון', fam === 'plane' || ctx.wings ? 'מאחור: דוחף את המטוס' : 'מאחור: טורבו (Shift)');
     }

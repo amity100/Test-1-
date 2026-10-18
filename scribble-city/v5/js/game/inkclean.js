@@ -318,6 +318,25 @@ function ring(cx, cy, a, b, ang, t0, dir, n = 48) {
  * 'mixed' | 'scribble', closed, c: { x, y, r } (a circle's) }
  */
 export function cleanStroke(P, o = {}) {
+  const C = cleanLine(P, o);
+  // (never a shape lost: a small closed one drawn with a shaking hand - an engine, a window - made
+  // into nothing much smaller than it was, is the hand's own line, smoothed)
+  if (C.kind === 'dot' || C.kind === 'scribble' || !P || P.length < 3 || o.rotated) return C;
+  const B = boxOf(P);
+  const b = boxOf(C.p);
+  if (Math.max(b.w, b.h) >= Math.max(B.w, B.h) * 0.45) return C;
+  const n = Math.max(12, Math.min(80, P.length));
+  let Q = resample(P, n);
+  Q = Q.map((q, i) => (i === 0 || i === n - 1 ? q : [(Q[i - 1][0] + q[0] * 2 + Q[i + 1][0]) / 4, (Q[i - 1][1] + q[1] * 2 + Q[i + 1][1]) / 4]));
+  const a = Q[0];
+  const z = Q[n - 1];
+  const px = o.unit || 1 / 360;
+  const closed = Math.hypot(z[0] - a[0], z[1] - a[1]) < Math.max(px * 14, Math.max(B.w, B.h) * 0.2);
+  if (closed) Q[n - 1] = [a[0], a[1]];
+  return { p: Q, kind: 'curve', closed };
+}
+
+function cleanLine(P, o = {}) {
   const px = o.unit || 1 / 360;
   if (!P || P.length < 2) return { p: P, kind: 'dot', closed: false };
   const L = pathLen(P);
@@ -335,7 +354,9 @@ export function cleanStroke(P, o = {}) {
   const a1 = Q[n - 1];
   const chord = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]);
   // ---- closed (nearly): a circle, an ellipse, or a shape of straight sides and curves
-  const closedish = chord < Math.max(px * 14, size * 0.2) && L > size * 2.2;
+  // (a long thin one - a fuselage, a blade - goes round in little more than twice its length: its
+  // two ends meeting say it is closed)
+  const closedish = chord < Math.max(px * 14, size * 0.2) && (L > size * 2.2 || (chord < Math.max(px * 6, size * 0.05) && L > size * 1.7));
   if (closedish) {
     const ring0 = Q.slice(0, n - 1);
     const C = fitCircle(ring0);
@@ -364,7 +385,9 @@ export function cleanStroke(P, o = {}) {
     }
   }
   // ---- straight sides and curves, between the corners
-  const eps = Math.max(px * 2.5, size * 0.03);
+  // (a thin closed one: its corners as close as it is thin - a fuselage keeps its nose and its tail)
+  const thick = closedish ? axes(Q).b : Infinity;
+  const eps = Math.max(px * 2.5, Math.min(size * 0.03, thick * 0.2));
   const ring1 = closedish ? [...Q.slice(0, n - 1), Q[0]] : Q;
   const idx = rdpIdx(ring1, eps);
   // the corners: where it turns sharply. Looked at close by and a little farther: a corner turns
@@ -391,7 +414,7 @@ export function cleanStroke(P, o = {}) {
       // no corner at the start: begin at the first real one
       const k0 = cIdx[1];
       const rot = [...ring1.slice(k0, ring1.length - 1), ...ring1.slice(0, k0), ring1[k0]];
-      return cleanStroke(rot, { ...o, rotated: true });
+      return cleanLine(rot, { ...o, rotated: true });
     }
   }
   // each run between corners: straight (how far it bulges from its chord) or a curve
@@ -400,7 +423,7 @@ export function cleanStroke(P, o = {}) {
     const i = cIdx[k];
     const j = cIdx[k + 1];
     const len = Math.hypot(ring1[j][0] - ring1[i][0], ring1[j][1] - ring1[i][1]);
-    const straight = j - i < 2 || bulge(ring1, i, j) < Math.max(px * 3, len * 0.06);
+    const straight = j - i < 2 || bulge(ring1, i, j) < Math.max(px * 3, Math.min(len * 0.06, thick * 0.25));
     runs.push({ i, j, straight, len });
   }
   const allStraight = runs.every((r) => r.straight);

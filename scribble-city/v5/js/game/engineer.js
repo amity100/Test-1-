@@ -48,6 +48,8 @@ export function engineer(design, level = 'eng') {
     return { s, x: sh.mx, y: sh.my, r: (sh.w + sh.h) / 4, sq: vOf(s) === 'square' };
   });
   const notes = [];
+  // (the rotors, the wings made bigger to fly)
+  const grown = new Set();
   // (each note, and the lines it is about)
   const about = new Map();
   const say = (t, of) => {
@@ -240,26 +242,63 @@ export function engineer(design, level = 'eng') {
         for (const s of rotors) shift(s, dx, 0);
         say('הרוטור הוזז מעל מרכז הכובד', rotors);
       }
-      for (const s of rotors) {
-        const [cx, cy] = centre(s.pts);
+      // (each rotor - its blades drawn one by one, together - up on its mast)
+      for (const g of rotorSets(rotors)) {
+        const b = boxOf(g);
+        const cx = (b.x0 + b.x1) / 2;
+        const cy = (b.y0 + b.y1) / 2;
         const t = top(cx);
         const dy = cy < t + 0.25 ? t + 0.35 - cy : cy > t + 1.4 ? t + 0.7 - cy : 0;
         if (Math.abs(dy) > 0.05) {
-          shift(s, 0, dy);
-          say('הרוטור הוצב על תורן', [s]);
+          for (const s of g) shift(s, 0, dy);
+          say('הרוטור הוצב על תורן', g);
         }
       }
     });
-    // (too small to lift it: bigger, a third at most)
+    // (too small to lift it: as big as it must be, all its blades round its hub - up to as wide as
+    // the whole of it is long, as a real helicopter's is: most draw a rotor short)
     step(() => {
-      if (!rotors.length || !spec.com) return;
-      const lift = specLift(spec);
+      if (above || !rotors.length || !spec.com) return;
+      // (the rotor's own lift - not the card's, the most of all it has: its wings' may be more)
+      const lift = liftOf(spec, 'R');
       if (lift === null || lift >= 1) return;
-      const f = Math.sqrt(1.12 / Math.max(0.05, lift));
-      if (f > 1.35) return;
-      for (const s of rotors) stretch(s, f, 1);
-      say(`הרוטור הוגדל ב־${Math.round((f - 1) * 100)}% — כדי שירים אותו`, rotors);
+      const sets = rotorSets(rotors);
+      const wMax = Math.max(...sets.map((g) => boxOf(g).x1 - boxOf(g).x0));
+      // (its lift goes as the square of its radius - and one drawn very short lifts as a small
+      // rotor does: game/partsum.js rideSpec)
+      const R0 = Math.max(wMax * 0.575, 0.8);
+      const f = Math.min((R0 * Math.sqrt(1.15 / Math.max(0.05, lift))) / Math.max(1e-6, wMax * 0.575), (Math.max(L, H) * 1.2) / Math.max(1e-6, wMax));
+      if (f < 1.03) return;
+      for (const g of sets) {
+        const rb = boxOf(g);
+        const hub = (rb.x0 + rb.x1) / 2;
+        for (const s of g) {
+          s.pts = s.pts.map(([x, y]) => [hub + (x - hub) * f, y]);
+          if (s.len) s.len *= f;
+          grown.add(s);
+        }
+      }
+      say(f > 1.6 ? `הרוטור הוגדל פי ${f.toFixed(1)} — רוטור של מסוק אמיתי ארוך כמעט כמו המסוק כולו` : `הרוטור הוגדל ב־${Math.round((f - 1) * 100)}% — כדי שירים אותו`, rotors);
     });
+    // (ROADMAP 11.13: a helicopter of one rotor, nothing to hold it straight - it turns round itself:
+    // a small rotor at the end of its tail, as a real one has, a fifth of its rotor's size)
+    if (design.copter && !design.drone && !design.rocket && spec.spin && rotors.length) {
+      const tails = S.filter((s) => s.part === 'tail');
+      const end = tails.length ? tails.flatMap((s) => s.pts).reduce((a, p) => (p[0] < a[0] ? p : a)) : [box.x0, mid(box.x0 + L * 0.05)];
+      const wMax = Math.max(...rotorSets(rotors).map((g) => boxOf(g).x1 - boxOf(g).x0));
+      const r = clamp(wMax * 0.09, 0.25, 0.7);
+      const s = { type: 'prop', part: 'prop', pts: circle(end[0] - r * 0.2, end[1] + r * 0.5, r), col: main.col ? main.col.slice() : null, pencil: !!main.pencil, neon: false, made: true, implicit: true };
+      S.push(s);
+      drawn.set(s, copyStroke(s));
+      const sp = rideSpec(D);
+      if (sp.spin || !keeps(sp)) {
+        S.pop();
+        drawn.delete(s);
+      } else {
+        spec = sp;
+        say('נוסף רוטור זנב — בלעדיו מסוק מסתובב סביב עצמו', [s]);
+      }
+    }
     // ---- jets under it, under its weight
     const vtols = S.filter((s) => s.part === 'jet' && vOf(s) === 'vtol');
     step(() => {
@@ -270,6 +309,25 @@ export function engineer(design, level = 'eng') {
       for (const s of vtols) shift(s, dx, 0);
       say('הסילונים הוזזו אל מתחת למרכז הכובד', vtols);
     });
+    // (ROADMAP 11.13: too weak to lift it - a rocket's engine, a jump jet's: bigger, as much as it
+    // must be - its thrust goes as its size, up to four times as big as drawn)
+    for (let round = 0; round < 2; round++) {
+      if (!vtols.length || !spec.sum || !spec.sum.warn.some((w) => w.startsWith('הסילונים שמתחת חלשים'))) break;
+      const before = spec;
+      step(() => {
+        const lift = liftOf(spec, 'J');
+        const f = clamp(1.15 / Math.max(0.2, lift === null ? 0.8 : Math.min(lift, 0.95)), 1.05, 2);
+        for (const s of vtols) {
+          const [cx] = centre(s.pts);
+          const t = Math.max(...s.pts.map((p) => p[1]));
+          // (from where it meets its body, out and down)
+          s.pts = s.pts.map(([x, y]) => [cx + (x - cx) * f, t + (y - t) * f]);
+          grown.add(s);
+        }
+        say('הסילונים הוגדלו — כדי שירימו אותו', vtols);
+      });
+      if (spec === before) break;
+    }
     // ---- wings under its weight (its weight a little ahead of where they hold it) - as big as they
     // must be to fly
     const wings = S.filter((s) => s.part === 'wing' && vOf(s) === 'wing' && (above || !s.span));
@@ -290,11 +348,34 @@ export function engineer(design, level = 'eng') {
       for (const s of wings) shift(s, dx, 0);
       say('הכנפיים הוזזו אל מרכז הכובד', wings);
     });
-    step(() => {
-      if (!wings.length || !spec.sum || !spec.sum.warn.some((w) => w.startsWith('הכנפיים קטנות'))) return;
-      for (const s of wings) stretch(s, 1.3, 1);
-      say('הכנפיים הוגדלו — כדי שימריא', wings);
-    });
+    // (too small to hold it up: as big as they must be - out longer, their shape as drawn (drawn edge
+    // on: deeper) - up to a glider's)
+    const wingsAll = S.filter((s) => s.part === 'wing' && vOf(s) === 'wing');
+    // (ROADMAP 11.13: again, while it is still too heavy for them - a glider's wings at most, twice
+    // as long as it is, near half as deep)
+    for (let round = 0; round < 3; round++) {
+      if (!wingsAll.length || !spec.sum || !spec.sum.warn.some((w) => w.startsWith('הכנפיים קטנות'))) break;
+      const before = spec;
+      step(() => {
+        const lift = liftOf(spec, 'W');
+        const f = clamp(1.12 / Math.max(0.1, lift === null ? 0.77 : lift), 1.05, 2.4);
+        for (const s of wingsAll) {
+          if (s.span) {
+            // (out longer - and, as long as a wing can be, deeper too)
+            const g = Math.max(1, Math.min(f, (L * (round ? 2 : 1.7)) / Math.max(1e-6, s.span)));
+            const sh = shapeOf(s.pts);
+            const c = Math.max(1, Math.min(f / g, (L * (round ? 0.45 : 0.4)) / Math.max(1e-6, sh.w)));
+            s.span *= g;
+            if (s.plan) s.plan = s.plan.map(([z, v]) => [sh.cx + (z - sh.cx) * c, v * g]);
+            s.pts = s.pts.map(([x, y]) => [sh.cx + (x - sh.cx) * c, y]);
+          } else stretch(s, Math.max(1, Math.min(f, (L * (round ? 0.55 : 0.45)) / Math.max(1e-6, shapeOf(s.pts).w))), 1);
+          grown.add(s);
+        }
+        say(f > 1.5 || round ? 'הכנפיים הוארכו — כנף קטנה מדי לא מחזיקה מטוס באוויר' : 'הכנפיים הוגדלו — כדי שימריא', wingsAll);
+      });
+      // (no bigger they can be)
+      if (spec === before) break;
+    }
     // ---- a barrel on its roof, not over it in the air
     for (const s of S) {
       if (s.part !== 'barrel' || s.whole || !s.base) continue;
@@ -327,11 +408,13 @@ export function engineer(design, level = 'eng') {
       });
     }
   }
-  // ---- never far from the drawing: each line a little of its size at most
-  const cap = Math.max(L, H) * 0.32;
+  // ---- never far from the drawing: each line a little of its size at most (a rotor, a wing made
+  // as big as it must be to fly: further)
+  const cap0 = Math.max(L, H) * 0.32;
   for (const s of S) {
     const a = drawn.get(s);
     if (a.pts.length !== s.pts.length) continue;
+    const cap = grown.has(s) ? cap0 * 2.2 : cap0;
     let far = 0;
     for (let i = 0; i < a.pts.length; i++) far = Math.max(far, Math.hypot(s.pts[i][0] - a.pts[i][0], s.pts[i][1] - a.pts[i][1]));
     if (far > cap) {
@@ -386,6 +469,32 @@ const CLOSER = [
   ['הגלגלים הקדמיים הוזזו קדימה — שהמשקל יהיה ביניהם', 'הגלגלים הקדמיים הוזזו קדימה — לא עד הסוף, כדי שיישאר דומה לציור', ['מרכז הכובד לפני הגלגלים', 'מרכז הכובד מעל הגלגלים הקדמיים']],
 ];
 
+// (the rotors of it: the lines of each one - its blades drawn one by one, an X - together, as
+// game/partsum.js rideSpec has them)
+function rotorSets(list) {
+  let sets = list.map((s) => ({ s: [s], b: boxOf([s]), lat: s.lat || 0 }));
+  const near = (p, q) => {
+    const wp = p.b.x1 - p.b.x0;
+    const wq = q.b.x1 - q.b.x0;
+    const w = Math.max(wp, wq);
+    return p.b.x1 > q.b.x0 - Math.min(wp, wq) * 0.3 && p.b.x0 < q.b.x1 + Math.min(wp, wq) * 0.3 && Math.abs((p.b.y0 + p.b.y1) / 2 - (q.b.y0 + q.b.y1) / 2) < w * 0.5 && Math.abs(p.lat - q.lat) < w * 0.5;
+  };
+  // (one into another while any two are near: an X, blades drawn one by one, all one)
+  for (let joined = true; joined; ) {
+    joined = false;
+    for (let i = 0; i < sets.length && !joined; i++) {
+      for (let j = i + 1; j < sets.length && !joined; j++) {
+        if (!near(sets[i], sets[j])) continue;
+        sets[i].s.push(...sets[j].s);
+        sets[i].b = boxOf(sets[i].s);
+        sets = sets.filter((q, k) => k !== j);
+        joined = true;
+      }
+    }
+  }
+  return sets.map((q) => q.s);
+}
+
 function copyStroke(s) {
   const c = Object.assign({}, s, { pts: s.pts.map((p) => p.slice()) });
   if (s.base) c.base = s.base.slice();
@@ -394,6 +503,13 @@ function copyStroke(s) {
 }
 
 // what the parts it has now give it to lift itself (a rotor's), or null
+// (ROADMAP 11.13) how much one kind of what lifts it does - k: 'R' its rotors, 'J' its jets under it,
+// 'W' its wings (1: just enough) - else, as the card shows the most of them
+function liftOf(spec, k) {
+  if (spec.lifts && Number.isFinite(spec.lifts[k])) return spec.lifts[k];
+  return specLift(spec);
+}
+
 function specLift(spec) {
   const bar = spec.sum && spec.sum.bars ? spec.sum.bars.find((b) => b.k === 'lift') : null;
   if (!bar) return null;

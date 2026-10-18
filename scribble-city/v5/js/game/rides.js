@@ -480,13 +480,16 @@ export function updatePlane(v, dt, input) {
   v.pitch = v.pitch || 0;
   v.roll = v.roll || 0;
   // thrust, drag, and climbing costs speed (diving gives it)
-  s += (thr * 6.5 * q.accel - s * s * 0.0028 - Math.sin(v.pitch) * G * (v.flying ? 1 : 0)) * dt;
+  s += (thr * 6.5 * q.accel - s * Math.abs(s) * 0.0028 - Math.sin(v.pitch) * G * (v.flying ? 1 : 0)) * dt;
   const ground = Math.max(0, groundHeight(v.pos.x, v.pos.z));
   if (!v.flying) {
-    // on the wheels: rolls, steers slowly, the brakes; off the ground past its speed, nose up
-    s -= s * (brake ? 0.9 : 0.08) * dt;
-    s = clamp(s, 0, top);
-    v.yaw += rollIn * 0.55 * Math.min(1, s / 8) * dt;
+    // on the wheels: rolls, steers slowly (ROADMAP 11.13: even standing - it turns on its wheels,
+    // its brakes on one side), the brakes - held on standing, it rolls back a little; off the
+    // ground past its speed, nose up
+    if (brake && s < 0.6) s = Math.max(-3, s - 2.5 * dt);
+    else s -= s * (brake ? 0.9 : 0.08) * dt;
+    s = clamp(s, -3, top);
+    v.yaw += rollIn * 0.55 * Math.max(0.45, Math.min(1, Math.abs(s) / 8)) * (s < -0.2 ? -1 : 1) * dt;
     v.pitch = damp(v.pitch, 0, 6, dt);
     v.roll = damp(v.roll, 0, 6, dt);
     if (s > (v.takeoffV || 21) && pitchIn > 0) {

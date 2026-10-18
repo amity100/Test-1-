@@ -151,11 +151,14 @@ const ST = {
   plane: { n: 2.2, p: 2.2, end: 0.1, lean: 0.02 },
   copter: { n: 2.3, p: 2.4, end: 0.22, lean: 0.04 },
   basket: { n: 6, p: 10, end: 0.92, lean: 0 },
+  // (ROADMAP 11.13: a drone's body - drawn square, a box with round edges; drawn round, a pod)
+  drone: { n: 3.4, p: 4, end: 0.8, lean: 0.06 },
+  pod: { n: 2.3, p: 2.4, end: 0.3, lean: 0.04 },
 };
 // (a side's ring, from its bottom: under the belt, the windows, a frame, the roof - 16 steps)
 const SEG = [7, 4, 2, 3];
 
-export function loftRide(o, W, style = 'car') {
+export function loftRide(o, W, style = 'car', hwOf = null) {
   const P = ST[style] || ST.car;
   let z0 = Infinity;
   let z1 = -Infinity;
@@ -186,7 +189,7 @@ export function loftRide(o, W, style = 'car') {
   const pos = [];
   const rows = [];
   for (const s of st) {
-    const hw = Math.max(0.015, (W / 2) * (P.end + (1 - P.end) * plan(s.u)));
+    const hw = Math.max(0.015, hwOf ? hwOf(s.z) : (W / 2) * (P.end + (1 - P.end) * plan(s.u)));
     const yc = (s.sp[0] + s.sp[1]) / 2;
     const b = Math.max(0.01, (s.sp[1] - s.sp[0]) / 2);
     const th = ringAngles(levels(G, style, yc, b, s.sp[1]), yc, b, P.n);
@@ -279,6 +282,77 @@ export function loftRide(o, W, style = 'car') {
     return R.hw * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(e), P.n)), 1 / P.n) * tumble(y, R.yc);
   };
   return { paint: geoOf(out.paint), glass: geoOf(out.glass), half, at, rows, z0, z1, plan: G };
+}
+
+// (how near a line comes to an outline: 0 inside it or on it)
+function gapTo(pts, ol) {
+  let best = Infinity;
+  for (const [x, y] of pts) {
+    if (inPoly(x, y, ol)) return 0;
+    for (let i = 0, j = ol.length - 1; i < ol.length; j = i++) {
+      const [ax, ay] = ol[j];
+      const [bx, by] = ol[i];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 > 1e-12 ? clamp(((x - ax) * dx + (y - ay) * dy) / l2, 0, 1) : 0;
+      best = Math.min(best, Math.hypot(x - (ax + dx * t), y - (ay + dy * t)));
+    }
+  }
+  return best;
+}
+
+// (how much of a line's length lies inside an outline: 0..1)
+function onBody(pts, ol) {
+  let inL = 0;
+  let all = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1];
+    const [bx, by] = pts[i];
+    const l = Math.hypot(bx - ax, by - ay);
+    const n = Math.max(1, Math.ceil(l / 0.1));
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n;
+      if (inPoly(ax + (bx - ax) * t, ay + (by - ay) * t, ol)) inL += l / n;
+    }
+    all += l;
+  }
+  return all > 1e-6 ? inL / all : pts.filter((q) => inPoly(q[0], q[1], ol)).length / Math.max(1, pts.length);
+}
+
+// (ROADMAP 11.13) a plane's fin drawn in its body's own line - up over its tail, as most draw one:
+// o, the outline ([z, y], its nose at +z). Returns { body: the outline with its top along the
+// body's own there, fin: the fin's outline over it } - or null, no fin in it
+function cutFin(o) {
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const [z] of o) {
+    z0 = Math.min(z0, z);
+    z1 = Math.max(z1, z);
+  }
+  const L = z1 - z0;
+  if (!(L > 0.5)) return null;
+  const N = 48;
+  const st = [];
+  for (let i = 0; i <= N; i++) {
+    const z = z0 + L * (0.004 + (i / N) * 0.992);
+    const sp = spanAt(o, z);
+    if (sp) st.push({ u: i / N, z, lo: sp[0], hi: sp[1] });
+  }
+  const mid = st.filter((q) => q.u > 0.3 && q.u < 0.75);
+  if (mid.length < 6) return null;
+  const med = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
+  const top = med(mid.map((q) => q.hi));
+  const h = med(mid.map((q) => q.hi - q.lo));
+  // (its tail end: what rises well over the top of its body there)
+  const fin = st.filter((q) => q.u < 0.42 && q.hi > top + h * 0.3);
+  if (fin.length < 3 || Math.max(...fin.map((q) => q.hi)) < top + h * 0.38) return null;
+  const za = fin[0].z;
+  const zb = fin[fin.length - 1].z;
+  const cap = (q) => (q.z >= za - L * 0.02 && q.z <= zb + L * 0.02 ? Math.max(q.lo + h * 0.25, Math.min(q.hi, top)) : q.hi);
+  const body = st.map((q) => [q.z, cap(q)]).concat(st.slice().reverse().map((q) => [q.z, q.lo]));
+  const finO = fin.map((q) => [q.z, q.hi]).concat(fin.slice().reverse().map((q) => [q.z, cap(q) - h * 0.12]));
+  return { body, fin: finO };
 }
 
 // (a side's ring: its angles, so that it passes through the beltline, the top of its windows and
@@ -507,6 +581,48 @@ function wingGeo(x0, x1, z0, c0, c1, sweep, t0, t1) {
   return g;
 }
 
+// (ROADMAP 11.13) a wing from its shape from above - plan: [[z, x]...] (x out from its root, >= 0) -
+// as thick at its root as `t`, thinner out to its tip; side: -1, the other wing (its mirror)
+function planWing(plan, t, side = 1) {
+  const pts = plan.map(([z, x]) => new THREE.Vector2(x, -z));
+  if (pts.length < 3) return null;
+  const shape = new THREE.Shape(pts);
+  const b = Math.min(0.03, t * 0.35);
+  const g = solid(new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.006, t - b * 2), bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 2, curveSegments: 4 }));
+  // (the shape's y: -z -> z; its depth: up)
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, -t / 2 + b, 0);
+  let xm = 0;
+  for (const [, x] of plan) xm = Math.max(xm, x);
+  const a = g.attributes.position;
+  for (let i = 0; i < a.count; i++) {
+    const x = a.getX(i);
+    a.setY(i, a.getY(i) * (1 - 0.6 * clamp(x / Math.max(1e-3, xm), 0, 1)));
+    if (side < 0) a.setX(i, -x);
+  }
+  if (side < 0) {
+    if (g.index) flipFaces(g);
+    else {
+      // (its mirror turned inside out: each triangle's corners the other way round)
+      for (const at of Object.values(g.attributes)) {
+        const n = at.itemSize;
+        const arr = at.array;
+        for (let t = 0; t + 2 < at.count; t += 3) {
+          for (let c = 0; c < n; c++) {
+            const i1 = (t + 1) * n + c;
+            const i2 = (t + 2) * n + c;
+            const tmp = arr[i1];
+            arr[i1] = arr[i2];
+            arr[i2] = tmp;
+          }
+        }
+      }
+    }
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 // a flat shape (an outline [z, y]) made a plate `t` thick across x, at x = xc, its edges rounded
 function plate(o, t, xc = 0, bev = 0.015) {
   if (o.length < 3) return null;
@@ -518,6 +634,165 @@ function plate(o, t, xc = 0, bev = 0.015) {
   return g;
 }
 
+// (ROADMAP 11.13) a rocket's body (o: its outline [z, y] standing up, the model's frame): turned
+// round its upright middle - as wide as drawn at each height, closed to a point at its nose - its
+// nose cone in a colour of its own; a flat foot. Returns { axis (its middle's z), y0, y1, r0 (its
+// foot's half width), rAt(y) }
+function rocketBody(K, M, o, c0) {
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const [, y] of o) {
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  const N = 36;
+  const rs = [];
+  let ax = 0;
+  let aw = 0;
+  for (let i = 0; i <= N; i++) {
+    const y = y0 + ((y1 - y0) * i) / N;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let a = 0, b = o.length - 1; a < o.length; b = a++) {
+      const [zA, yA] = o[b];
+      const [zB, yB] = o[a];
+      if ((yA <= y && yB >= y) || (yB <= y && yA >= y)) {
+        const t = Math.abs(yB - yA) < 1e-9 ? 0.5 : (y - yA) / (yB - yA);
+        const z = zA + (zB - zA) * t;
+        lo = Math.min(lo, z);
+        hi = Math.max(hi, z);
+      }
+    }
+    const r = hi > lo ? (hi - lo) / 2 : 0;
+    rs.push(r);
+    if (r > 0) {
+      ax += ((hi + lo) / 2) * r;
+      aw += r;
+    }
+  }
+  const axis = ax / Math.max(1e-6, aw);
+  const rMax = Math.max(...rs);
+  const r = rs.map((v, i) => (i === 0 || i === N ? v : (rs[i - 1] + v * 2 + rs[i + 1]) / 4));
+  r[N] = 0.001;
+  r[0] = Math.max(r[0], rMax * 0.6);
+  const pts = r.map((v, i) => new THREE.Vector2(Math.max(0.001, v), y0 + ((y1 - y0) * i) / N));
+  // (its nose cone: from where it starts to narrow to its tip)
+  let ic = N;
+  while (ic > N * 0.55 && r[ic - 1] < rMax * 0.82) ic--;
+  const body = new THREE.LatheGeometry(pts.slice(0, ic + 1), 28).translate(0, 0, axis);
+  K.add(M.paint, body.toNonIndexed(), linC(...c0));
+  const cone = new THREE.LatheGeometry(pts.slice(ic), 28).translate(0, 0, axis);
+  const red = c0[0] > 0.6 && c0[1] < 0.45 ? [0.95, 0.95, 0.92] : [0.88, 0.16, 0.14];
+  K.add(M.paint, cone.toNonIndexed(), linC(...red));
+  // (its foot closed)
+  K.add(M.paint, new THREE.CircleGeometry(r[0], 28).rotateX(Math.PI / 2).translate(0, y0, axis).toNonIndexed(), shade(c0, 0.7));
+  const rAt = (y) => {
+    const t = clamp((y - y0) / Math.max(1e-6, y1 - y0), 0, 1) * N;
+    const i = Math.min(N - 1, Math.floor(t));
+    return r[i] + (r[i + 1] - r[i]) * (t - i);
+  };
+  return { axis, y0, y1, r0: r[0], rAt };
+}
+
+// (ROADMAP 11.13) an airship's envelope (eo: its outline [z, y], the model's frame): turned round its
+// own length - as high as drawn all along it - dark above, light under it, its seams; its fins on
+// its tail as drawn, and the two the side view hides (four, a cross); its gondola hung under it
+function airship(K, M, eo, finO, c0, body) {
+  let za = Infinity;
+  let zb = -Infinity;
+  for (const [z] of eo) {
+    za = Math.min(za, z);
+    zb = Math.max(zb, z);
+  }
+  const N = 44;
+  const rs = [];
+  const ycs = [];
+  for (let i = 0; i <= N; i++) {
+    const z = za + ((zb - za) * i) / N;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let a = 0, b = eo.length - 1; a < eo.length; b = a++) {
+      const [zA, yA] = eo[b];
+      const [zB, yB] = eo[a];
+      if ((zA <= z && zB >= z) || (zB <= z && zA >= z)) {
+        const t = Math.abs(zB - zA) < 1e-9 ? 0.5 : (z - zA) / (zB - zA);
+        const y = yA + (yB - yA) * t;
+        lo = Math.min(lo, y);
+        hi = Math.max(hi, y);
+      }
+    }
+    rs.push(lo <= hi ? (hi - lo) / 2 : 0);
+    ycs.push(lo <= hi ? (hi + lo) / 2 : NaN);
+  }
+  // (its axis: level, at its middle's height; its ends closed round)
+  let ya = 0;
+  let wy = 0;
+  ycs.forEach((y, i) => {
+    if (!Number.isNaN(y)) {
+      ya += y * rs[i];
+      wy += rs[i];
+    }
+  });
+  ya /= Math.max(1e-6, wy);
+  const r = rs.map((v, i) => (i === 0 || i === N ? 0 : (rs[i - 1] + v * 2 + rs[i + 1]) / 4));
+  const rMax = Math.max(...r);
+  const pts = r.map((v, i) => new THREE.Vector2(Math.max(0.001, i === 0 || i === N ? 0.001 : Math.max(v, rMax * 0.05)), za + ((zb - za) * i) / N));
+  const light = linC(0.95, 0.94, 0.9);
+  const dark = linC(...c0);
+  const G = 12;
+  for (let k = 0; k < G; k++) {
+    const g = new THREE.LatheGeometry(pts, 4, (k / G) * Math.PI * 2, (Math.PI * 2) / G);
+    // (the lathe's length its z, its bottom down)
+    g.rotateX(Math.PI / 2);
+    g.translate(0, ya, 0);
+    const mid = ((k + 0.5) / G) * Math.PI * 2;
+    K.add(M.paint, g.index ? g.toNonIndexed() : g, Math.cos(mid) > 0.45 ? light : dark);
+  }
+  // (its seams, and a band round its nose)
+  const seam = linC(...c0.map((v) => v * 0.55));
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    for (let i = 1; i <= N; i++) {
+      const p0 = pts[i - 1];
+      const p1 = pts[i];
+      tube(K, M.matte, [Math.sin(a) * p0.x * 1.004, ya - Math.cos(a) * p0.x * 1.004, p0.y], [Math.sin(a) * p1.x * 1.004, ya - Math.cos(a) * p1.x * 1.004, p1.y], 0.03, seam, 4);
+    }
+  }
+  // ---- its fins: as drawn up (and down); the ones each side the same as the top one
+  const up = finO.filter((o) => o.reduce((s, q) => s + q[1], 0) / o.length > ya);
+  const dn = finO.filter((o) => o.reduce((s, q) => s + q[1], 0) / o.length <= ya);
+  const flip = (o) => o.map(([z, y]) => [z, 2 * ya - y]);
+  const ups = up.length ? up : dn.map(flip);
+  const dns = dn.length ? dn : up.map(flip);
+  const finC = linC(...c0.map((v) => v * 0.8));
+  const fin = (o, ang) => {
+    const g = plate(o.length > 2 ? o : o.concat([o[0]]), 0.14, 0, 0.04);
+    if (!g) return;
+    g.translate(0, -ya, 0);
+    g.rotateZ(ang);
+    g.translate(0, ya, 0);
+    K.add(M.paint, g, finC);
+  };
+  for (const o of ups) fin(o, 0);
+  for (const o of dns) fin(o, 0);
+  for (const o of ups.slice(0, 1)) {
+    fin(o, Math.PI / 2);
+    fin(o, -Math.PI / 2);
+  }
+  // ---- its gondola hung under it: struts up to it, either side
+  if (body) {
+    const zm = (body.z0 + body.z1) / 2;
+    const half = (body.z1 - body.z0) * 0.32;
+    for (const dz of [-half, half]) {
+      const st = body.at(zm + dz);
+      const top = st.yc + st.b * 0.85;
+      const i = clamp(Math.round(((zm + dz - za) / Math.max(1e-6, zb - za)) * N), 0, N);
+      const yEnv = ya - r[i] * 0.92;
+      if (yEnv > top + 0.05) for (const sx of [-1, 1]) tube(K, M.metal, [sx * st.hw * 0.6, top, zm + dz], [sx * Math.min(st.hw * 0.9, r[i] * 0.4), yEnv, zm + dz], 0.035, linC(0.3, 0.3, 0.34), 6);
+    }
+  }
+}
+
 // ------------------------------------------------------------------ a ride
 // design: { strokes: [{ type, pts ([z, y] metres), col, pencil, neon, part }], color }, spec: from
 // game/drawncar.js specOf. Returns what game/vehicles.js needs (as buildModel does), and turrets
@@ -525,7 +800,9 @@ function plate(o, t, xc = 0, bev = 0.015) {
 export function buildPolished(design, spec) {
   const M = itemMats();
   const base = design.color;
-  const W = spec.W;
+  // (ROADMAP 11.13: a plane drawn from above - as wide as drawn)
+  const planHW = design.plan && design.plan.hw ? design.plan.hw : null;
+  const W = planHW ? Math.max(0.3, ...planHW.map((q) => q[1] * 2)) : spec.W;
   const zc = (spec.x0 + spec.x1) / 2;
   const S = design.strokes;
   let floor = spec.y0;
@@ -553,21 +830,46 @@ export function buildPolished(design, spec) {
   const slim = !!(main && main.s.slim);
   let body = null;
   let hull = null;
+  let rocket = null;
   if (main) {
     let o = outline(toM(main.s.pts));
     // (a cabin drawn on it: the skin goes up over it)
     const cabO = cabins.map((s) => outline(toM(s.pts))).filter((c) => c.length >= 3);
     if (cabO.length) o = mergeTop(o, cabO);
     const bc = colOf(main.s, design);
-    if (boat && main.s.hull !== false) {
+    if (design.rocket) {
+      rocket = rocketBody(K, M, o, bc);
+    } else if (boat && main.s.hull !== false) {
       hull = hullGeometry(o, W);
       K.add(M.paint, hull.geo, linC(...bc));
       K.add(M.matte, hull.deck, shade(bc, 0.62));
     } else {
       // (its style: a car's body - one that drives, even if it flies too - a plane's, a
       // helicopter's, a balloon's basket)
-      const style = spec.base === 'plane' ? 'plane' : spec.base === 'copter' ? 'copter' : spec.base === 'balloon' ? 'basket' : 'car';
-      body = loftRide(o, slim ? Math.min(W, 0.42) : W, style);
+      const style = design.drone ? (design.drone.round ? 'pod' : 'drone') : design.airship ? 'copter' : spec.base === 'plane' ? 'plane' : spec.base === 'copter' ? 'copter' : spec.base === 'balloon' ? 'basket' : 'car';
+      const hwOf = planHW
+        ? (z) => {
+            const zz = z + zc;
+            let i = 0;
+            while (i + 2 < planHW.length && planHW[i + 1][0] < zz) i++;
+            const [za, a] = planHW[i];
+            const [zb, b] = planHW[i + 1];
+            return a + (b - a) * clamp((zz - za) / Math.max(1e-6, zb - za), 0, 1);
+          }
+        : null;
+      // (ROADMAP 11.13: a plane's fin drawn in its body's line - its body a tube, the fin a thin
+      // plate over its tail, tail planes either side of its foot)
+      const cut = style === 'plane' && !planHW && !S.some((q) => q.type === 'fin') ? cutFin(o) : null;
+      if (cut) {
+        o = cut.body;
+        K.add(M.paint, plate(cut.fin, 0.09, 0, 0.02), shade(bc, 1.08));
+        const fz = cut.fin.map((q) => q[0]);
+        const fy = Math.min(...cut.fin.map((q) => q[1]));
+        const fw = Math.max(...fz) - Math.min(...fz);
+        const span = clamp(fw * 1.6, 0.8, 3.2);
+        for (const sx of [-1, 1]) K.add(M.paint, wingGeo(sx * 0.05, sx * span, Math.max(...fz), fw * 0.9, fw * 0.45, fw * 0.25, 0.08, 0.04).translate(0, fy + 0.05, 0), shade(bc, 1.08));
+      }
+      body = loftRide(o, slim ? Math.min(W, 0.42) : W, style, hwOf);
       K.add(M.paint, body.paint, linC(...bc));
       if (body.glass && !slim) K.add(M.glass, body.glass, linC(...GLASS));
       // a car's lights, its grille, its bumpers, its doors and mirrors
@@ -595,18 +897,54 @@ export function buildPolished(design, spec) {
     }
   };
   const ol = main ? outline(main.s.pts) : null;
+  // (a cockpit's glass bubble: its pilot sits in it)
+  let canopyAt = null;
+  // (how far its wings reach: a biplane's struts stand out on them)
+  let wingSpan = 0;
+  for (const s of S) if (s.type === 'wing' && roleOf(s) !== 'fin') wingSpan = Math.max(wingSpan, s.span || clamp(Math.max(shapeOf(s.pts).w * 2.6, spec.L * 0.95), 2.2, 11));
   for (const s of S) {
     if (s.type !== 'line' && s.type !== 'armor') continue;
     // (the lines that drew its body: the body is made of them already)
     if (s.edge) continue;
     const c = s.col && !s.pencil ? s.col : INK;
     if (s.part === 'frame') {
-      // (a bike's frame: a tube along each line, in its paint)
+      // (a bike's frame: a tube along each line, in its paint; ROADMAP 11.13 - a plane's struts
+      // between its wings: out on them, both sides)
       const P = thin(toM(s.pts), 0.06);
-      for (let i = 1; i < P.length; i++) tube(K, M.metal, [0, P[i - 1][1], P[i - 1][0]], [0, P[i][1], P[i][0]], 0.045, linC(...colOf(s, design)), 8);
+      const xs = wingSpan && spec.base === 'plane' ? [-wingSpan * 0.28, wingSpan * 0.28] : [0];
+      for (const x of xs) for (let i = 1; i < P.length; i++) tube(K, M.metal, [x, P[i - 1][1], P[i - 1][0]], [x, P[i][1], P[i][0]], 0.045, linC(...colOf(s, design)), 8);
       continue;
     }
-    const on = ol ? s.pts.filter((q) => inPoly(q[0], q[1], ol)).length / s.pts.length : 0;
+    // (how much of it - its length, not its points: a line drawn with a few - is on the body)
+    const on = ol ? onBody(s.pts, ol) : 0;
+    // (ROADMAP 11.13: a cockpit's canopy drawn as a dome on its top - a glass bubble there)
+    if (s.part === 'window' && on <= 0.6 && body && main) {
+      const sh = shapeOf(toM(s.pts));
+      const st = body.at(sh.cx);
+      const top = st.yc + st.b;
+      if (sh.y1 > top - 0.05 && sh.w > 0.3) {
+        const h = clamp(sh.y1 - top + st.b * 0.35, 0.15, 1.2);
+        canopyAt = { z: sh.cx, top, h };
+        const g = new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+        g.scale(clamp(st.hw * 0.72, 0.18, 0.7), h, sh.w / 2);
+        g.translate(0, top - st.b * 0.35, sh.cx);
+        K.add(M.glass, g.toNonIndexed(), linC(...GLASS));
+        continue;
+      }
+    }
+    if (s.part === 'window' && rocket) {
+      // (a rocket's porthole: glass in a ring, both sides)
+      const sh = shapeOf(toM(s.pts));
+      const rr = clamp(Math.min(sh.w, sh.h) / 2, 0.12, 0.6);
+      const rx = rocket.rAt(sh.cy);
+      for (const sx of [-1, 1]) {
+        const g = new THREE.CylinderGeometry(rr, rr, 0.04, 20).rotateZ(Math.PI / 2).translate(sx * (rx - 0.005), sh.cy, rocket.axis + (sh.cx - rocket.axis) * 0.2);
+        K.add(M.glass, g.toNonIndexed(), linC(...GLASS));
+        const ring = new THREE.TorusGeometry(rr, 0.035, 6, 24).rotateY(Math.PI / 2).translate(sx * (rx + 0.01), sh.cy, rocket.axis + (sh.cx - rocket.axis) * 0.2);
+        K.add(M.metal, ring.toNonIndexed(), linC(0.6, 0.6, 0.64));
+      }
+      continue;
+    }
     if (s.part === 'window' && on > 0.6) {
       // (a window drawn on it: glass, set into its side)
       const wo = outline(toM(s.pts));
@@ -651,9 +989,11 @@ export function buildPolished(design, spec) {
     } else if (s.part === 'tail' && body) {
       // (a helicopter's tail: a boom out of its back, tapering, in its paint - its fin at the end)
       const P = toM(s.pts);
-      const ends = [P[0], P[P.length - 1]];
       const d = (q) => Math.abs(q[0] - (body.z0 + body.z1) / 2);
-      const [a, b] = d(ends[0]) < d(ends[1]) ? ends : [ends[1], ends[0]];
+      // (its two ends: nearest its body's middle, furthest out - a line drawn there and back again
+      // too, its first and last points one)
+      const a = P.reduce((m, q) => (d(q) < d(m) ? q : m), P[0]);
+      const b = P.reduce((m, q) => (d(q) > d(m) ? q : m), P[0]);
       const st = body.at(clamp(a[0], body.z0, body.z1));
       const r0 = clamp(st.b * 0.42, 0.1, 0.42);
       const r1 = Math.max(0.05, r0 * 0.42);
@@ -670,6 +1010,9 @@ export function buildPolished(design, spec) {
         tailTip = [r1 + 0.1, bx[1] + r1 * 0.5, bx[2] - 0.1];
       }
     } else {
+      // (ROADMAP 11.13: on an aircraft, a line drawn off it touching nothing of it - the wind, its
+      // speed, a cloud: the drawing's, not the model's)
+      if (flier && s.part === 'deco' && ol && gapTo(s.pts, ol) > Math.max(0.25, spec.H * 0.12)) continue;
       const P = thin(toM(s.pts), 0.06);
       for (let i = 1; i < P.length; i++) tube(K, M.matte, [0, P[i - 1][1], P[i - 1][0]], [0, P[i][1], P[i][0]], 0.05, shade(colOf(s, design), 0.5));
     }
@@ -684,11 +1027,38 @@ export function buildPolished(design, spec) {
       if (fo.length >= 3) K.add(M.paint, plate(fo, drive ? W * 0.8 : 0.09, 0, 0.02), shade(c, 1.08));
       continue;
     }
-    if (s.type !== 'fin') continue;
+    if (s.type !== 'fin' || design.airship) continue;
     const sh = shapeOf(s.pts);
     const c = colOf(s, design);
+    // (ROADMAP 11.13: a rocket's - as drawn either side of it, and the two the drawing hides: four
+    // round its foot)
+    if (rocket) {
+      const fo = outline(toM(s.pts).concat([toM(s.pts)[0]]));
+      for (const a of [0, Math.PI / 2]) {
+        const g = plate(fo.length >= 3 ? fo : toM(s.pts), 0.08, 0, 0.02);
+        if (!g) continue;
+        g.translate(0, 0, -rocket.axis);
+        g.rotateY(a);
+        g.translate(0, 0, rocket.axis);
+        K.add(M.paint, g, shade(c, 1.05));
+      }
+      continue;
+    }
+    // (ROADMAP 11.13: a tailplane drawn from above - its shape, either side, flat across its tail)
+    if (s.flat && s.plan) {
+      const zs = s.plan.map((q) => q[0]);
+      const st = body ? body.at(Z((Math.min(...zs) + Math.max(...zs)) / 2)) : null;
+      const y = st ? st.yc + st.b * 0.15 : Y(sh.cy);
+      const chord = Math.max(...zs) - Math.min(...zs);
+      for (const sx of [-1, 1]) {
+        const g = planWing(s.plan.map(([z, x]) => [Z(z), x]), clamp(chord * 0.1, 0.04, 0.16), sx);
+        if (g) K.add(M.paint, g.translate(0, y, 0), shade(c, 1.08));
+      }
+      continue;
+    }
     const fo = sh.closed ? outline(toM(s.pts)) : null;
     if (fo && fo.length >= 3) K.add(M.paint, plate(fo, 0.09, 0, 0.02), shade(c, 1.08));
+    if (S.some((q) => q.type === 'fin' && q.flat)) continue;
     const foot = Y(sh.y0) + 0.05;
     const span = clamp(sh.w * 1.6, 0.8, 3.2);
     for (const sx of [-1, 1]) K.add(M.paint, wingGeo(sx * 0.05, sx * span, Z(sh.x0), sh.w * 0.9, sh.w * 0.45, sh.w * 0.25, 0.08, 0.04).translate(0, foot, 0), shade(c, 1.08));
@@ -725,7 +1095,8 @@ export function buildPolished(design, spec) {
   // ---- a balloon: its envelope in gores, the burner under its mouth
   let env = null;
   const envS = S.find((s) => s.type === 'envelope');
-  if (envS) {
+  if (envS && envS.ship) airship(K, M, toM(envS.pts), S.filter((s) => s.type === 'fin').map((s) => toM(s.pts)), colOf(envS, design), body);
+  else if (envS) {
     const eo = outline(toM(envS.pts));
     const c0 = colOf(envS, design);
     if (eo.length >= 3) {
@@ -786,6 +1157,15 @@ export function buildPolished(design, spec) {
     const sh = shapeOf(s.pts);
     const r = clamp(sh.size / 2, 0.16, 0.6);
     const v = roleOf(s);
+    if (v === 'vtol' && rocket) {
+      // (a rocket's: its engine's bell under its foot, the flame in it)
+      const rb = clamp(rocket.r0 * 0.7, 0.18, 0.7);
+      const yb = rocket.y0;
+      K.cyl(M.metal, rb * 0.55, rb, yb - rb * 1.1, yb, linC(0.36, 0.36, 0.4), { axis: 'y', z: rocket.axis, segs: 18 });
+      K.cyl(M.glow, rb * 0.8, rb * 0.8, yb - rb * 1.14, yb - rb * 1.08, s.neon ? linC(...s.col) : linC(1.0, 0.6, 0.2), { axis: 'y', z: rocket.axis, segs: 16 });
+      vtolAt.push([0, yb - rb * 1.3, rocket.axis]);
+      continue;
+    }
     if (v === 'vtol') {
       const rr = clamp(r, 0.18, 0.45);
       for (const sx of [-1, 1]) {
@@ -811,16 +1191,37 @@ export function buildPolished(design, spec) {
       }
       continue;
     }
-    const zb = s.side ? Z(sh.x1) : Z(Math.max(sh.x1, spec.x0 + 0.2));
+    const onWing = s.lat !== undefined || s.wing;
+    const zb = s.side || onWing ? Z(sh.x1) : Z(Math.max(sh.x1, spec.x0 + 0.2));
     const z0 = Z(sh.x0) - 0.15;
-    const y = Y(sh.cy);
-    // (one under a wing - a plane drawn from above: out along the wing, both sides)
-    for (const x of s.side ? [-1, 1].map((sx) => sx * clamp(W * 1.1, 1.2, 3.5)) : [0]) {
+    let y = Y(sh.cy);
+    // (one under a wing - a plane drawn from above: out along the wing, both sides; ROADMAP 11.13:
+    // where it was drawn on it - from the side, under each wing a third of the way out)
+    let xs = s.side ? [-1, 1].map((sx) => sx * clamp(W * 1.1, 1.2, 3.5)) : [0];
+    if (s.lat !== undefined) xs = [s.lat];
+    else if (s.wing) {
+      const wi = S.find((q) => q.type === 'wing' && q.span);
+      const hs = wi ? wi.span / 2 : clamp(spec.L * 0.5, 1.5, 6);
+      xs = [-1, 1].map((sx) => sx * Math.max(W / 2 + r * 1.3, hs * 0.34));
+      const st = body ? body.at((z0 + zb) / 2) : null;
+      if (st) y = Math.max(r + 0.12, st.yc - st.b * 0.42 - r * 1.05);
+    }
+    for (const x of xs) {
       K.cyl(M.metal, r * 1.1, r * 0.92, z0, zb, linC(0.5, 0.51, 0.56), { x, y, segs: 18 });
       K.cyl(M.metal, r * 1.18, r * 1.18, z0 - 0.04, z0 + 0.08, linC(0.25, 0.25, 0.28), { x, y, segs: 18 });
       K.cyl(M.glow, r * 0.7, r * 0.7, z0 - 0.05, z0 - 0.02, s.neon ? linC(...s.col) : linC(1.0, 0.55, 0.2), { x, y, segs: 16 });
       jetsAt.push([x, y, z0 - 0.15]);
     }
+  }
+  // (ROADMAP 11.13: no engine drawn - the jet in it: its nozzle at its tail, glowing)
+  if (spec.inner === 'jet' && body) {
+    const st = body.at(body.z0 + (body.z1 - body.z0) * 0.08);
+    const r = clamp(Math.min(st.hw, st.b) * 0.8, 0.12, 0.42);
+    const z0 = body.z0 - 0.14;
+    K.cyl(M.metal, r * 0.92, r * 1.08, z0, body.z0 + 0.4, linC(0.42, 0.43, 0.47), { y: st.yc, segs: 18 });
+    K.cyl(M.metal, r * 1.02, r * 1.02, z0 - 0.03, z0 + 0.06, linC(0.22, 0.22, 0.25), { y: st.yc, segs: 18 });
+    K.cyl(M.glow, r * 0.72, r * 0.72, z0 - 0.04, z0 - 0.01, linC(1.0, 0.55, 0.2), { y: st.yc, segs: 16 });
+    jetsAt.push([0, st.yc, z0 - 0.15]);
   }
   // ---- a blade at the front (a ram): steel, its edge bevelled
   for (const s of S) {
@@ -955,60 +1356,132 @@ export function buildPolished(design, spec) {
     const ml = L + 0.15;
     turrets.push({ node, muzzle: new THREE.Vector3(0, ay + Math.sin(elev) * ml, Math.cos(elev) * ml), pivot: new THREE.Vector3(0, ay, 0), type: cannon ? 'cannon' : 'mg', r, yaw0, arc: whole ? 0.12 : onTop ? Math.PI : 0.4 });
   }
-  // ---- the rotor on its mast; a tail rotor if it has a tail
+  // ---- the rotors on their masts (ROADMAP 11.13: each one drawn - two, a tandem's; four, a
+  // drone's); its tail rotor where it was drawn on its tail, as big
   let rotor = null;
+  const rotorsAll = [];
   let tailRotor = new THREE.Object3D();
-  if (spec.rotors.length) {
-    const ro = spec.rotors[0];
-    const R = spec.rotorR || 2;
+  const bc = linC(0.12, 0.12, 0.14);
+  // (ROADMAP 11.13: a drone's - each as big as drawn, in its guard, on an arm out of its body)
+  const hub = body ? body.at((body.z0 + body.z1) / 2) : null;
+  for (const [ri, ro] of spec.rotors.entries()) {
+    const R = ro.guard ? clamp((ro.w / 2) * 0.9, 0.25, 4) : ri === 0 ? spec.rotorR || 2 : clamp((ro.w / 2) * 1.15, 0.6, spec.rotorR || 2);
     const y = Y(Math.max(ro.cy, spec.y1 + 0.25));
     const blades = R > 2.6 ? 4 : 2;
     const Rk = new Kit();
-    const bc = linC(0.12, 0.12, 0.14);
     for (let k = 0; k < blades; k++) {
-      const g = bladeGeo(R, 0.34, 0.2, 0.05);
+      const g = bladeGeo(R, 0.34 * Math.min(1, R / 2), 0.2 * Math.min(1, R / 2), 0.05);
       g.rotateY((k / blades) * Math.PI * 2);
       Rk.add(M.matte, g, bc);
     }
     Rk.cyl(M.metal, 0.2, 0.16, -0.08, 0.14, linC(0.5, 0.5, 0.55), { axis: 'y', segs: 14 });
     Rk.sphere(M.metal, 0.14, 0, 0.16, 0, linC(0.6, 0.6, 0.65), 1, 0.6, 1, 12);
-    rotor = Rk.build({ seed: 0.5 });
-    rotor.matrixAutoUpdate = true;
-    rotor.position.set(0, y, Z(ro.cx));
-    root.add(rotor);
-    const mk = new Kit();
-    const topY = body ? body.at(Z(ro.cx)).yc + body.at(Z(ro.cx)).b : Y(spec.y1);
-    mk.cyl(M.metal, 0.09, 0.11, topY - 0.08, y, linC(0.4, 0.4, 0.45), { axis: 'y', z: Z(ro.cx), segs: 12 });
-    mk.cyl(M.paint, 0.32, 0.38, topY - 0.06, topY + 0.14, shade(base, 0.8), { axis: 'y', z: Z(ro.cx), segs: 16 });
-    const mm = mk.build({ seed: 0.51 });
-    root.add(mm);
-    // (a helicopter's tail rotor: at the end of its tail, else at its back end)
-    if (body && spec.base === 'copter') {
-      const tz = body.z0 + 0.25;
-      const st = body.at(tz);
-      const tr = new Kit();
-      const r2 = clamp(R * 0.22, 0.35, 0.9);
-      for (let k = 0; k < 2; k++) {
-        const g = bladeGeo(r2, 0.14, 0.08, 0.03);
-        g.rotateX(Math.PI / 2);
-        g.rotateX((k / 2) * Math.PI * 2);
-        tr.add(M.matte, g, bc);
+    const node = Rk.build({ seed: 0.5 + ri * 0.01 });
+    node.matrixAutoUpdate = true;
+    node.position.set(ro.lat || 0, y, Z(ro.cx));
+    node.userData.dir = ri % 2 ? -1 : 1;
+    root.add(node);
+    rotorsAll.push(node);
+    if (!rotor) rotor = node;
+    // (ROADMAP 11.13: one the game added - a second over it on the same mast, turning the other way:
+    // nothing turns it round)
+    if (ro.coax) {
+      const Ck = new Kit();
+      for (let k = 0; k < blades; k++) {
+        const g = bladeGeo(R * 0.96, 0.34 * Math.min(1, R / 2), 0.2 * Math.min(1, R / 2), 0.05);
+        g.rotateY((k / blades + 0.25) * Math.PI * 2);
+        Ck.add(M.matte, g, bc);
       }
-      tr.cyl(M.metal, 0.07, 0.07, -0.06, 0.06, linC(0.5, 0.5, 0.55), { axis: 'x', segs: 10 });
-      tailRotor = tr.build({ seed: 0.52 });
-      tailRotor.matrixAutoUpdate = true;
-      if (tailTip) tailRotor.position.set(...tailTip);
-      else tailRotor.position.set(st.hw + 0.12, st.yc + st.b * 0.6, tz);
-      root.add(tailRotor);
+      Ck.cyl(M.metal, 0.13, 0.13, -0.42, 0.1, linC(0.5, 0.5, 0.55), { axis: 'y', segs: 12 });
+      Ck.sphere(M.metal, 0.12, 0, 0.12, 0, linC(0.6, 0.6, 0.65), 1, 0.6, 1, 12);
+      const top = Ck.build({ seed: 0.53 + ri * 0.01 });
+      top.matrixAutoUpdate = true;
+      top.position.set(ro.lat || 0, y + 0.42, Z(ro.cx));
+      top.userData.dir = -node.userData.dir;
+      root.add(top);
+      rotorsAll.push(top);
     }
+    const mk = new Kit();
+    if (ro.guard && hub) {
+      // (its arm out of the body's middle, its motor at the end of it under the blades, the
+      // guard drawn round them)
+      const Rg = Math.max(R + 0.06, ro.w / 2);
+      const armY = hub.yc + hub.b * 0.2;
+      const rA = clamp(Rg * 0.09, 0.045, 0.14);
+      const zA = (body.z0 + body.z1) / 2;
+      tube(mk, M.paint, [0, armY, zA], [ro.lat || 0, armY, Z(ro.cx)], rA, shade(base, 0.85), 10);
+      mk.cyl(M.metal, rA * 1.6, rA * 1.8, armY - rA * 1.4, y - 0.04, linC(0.22, 0.22, 0.25), { axis: 'y', x: ro.lat || 0, z: Z(ro.cx), segs: 14 });
+      const ring = new THREE.TorusGeometry(Rg, clamp(Rg * 0.035, 0.025, 0.08), 6, 40);
+      ring.rotateX(Math.PI / 2);
+      ring.translate(ro.lat || 0, y, Z(ro.cx));
+      mk.add(M.paint, ring.toNonIndexed(), shade(base, 0.7));
+      // (its light under the motor: red on its left at the front, green on its right, white behind)
+      const front = Z(ro.cx) > zA;
+      const lc = front ? ((ro.lat || 0) > 0 ? linC(1, 0.12, 0.1) : linC(0.15, 1, 0.3)) : linC(1, 1, 0.95);
+      mk.add(M.glow, new THREE.SphereGeometry(rA * 0.9, 10, 8).translate(ro.lat || 0, armY - rA * 1.5, Z(ro.cx)).toNonIndexed(), lc);
+      // (and its two struts from the arm to the guard)
+      for (const a of [Math.PI / 2, -Math.PI / 2]) {
+        const dx = Math.cos(Math.atan2(Z(ro.cx) - zA, ro.lat || 0) + a) * Rg;
+        const dz = Math.sin(Math.atan2(Z(ro.cx) - zA, ro.lat || 0) + a) * Rg;
+        tube(mk, M.metal, [ro.lat || 0, armY, Z(ro.cx)], [(ro.lat || 0) + dx, y, Z(ro.cx) + dz], rA * 0.45, linC(0.3, 0.3, 0.34), 6);
+      }
+      root.add(mk.build({ seed: 0.51 + ri * 0.01 }));
+      continue;
+    }
+    const at = body && !ro.lat ? body.at(Z(ro.cx)) : null;
+    const topY = at ? at.yc + at.b : Y(spec.y1);
+    mk.cyl(M.metal, 0.09, 0.11, topY - 0.08, y, linC(0.4, 0.4, 0.45), { axis: 'y', x: ro.lat || 0, z: Z(ro.cx), segs: 12 });
+    if (!ro.lat) mk.cyl(M.paint, 0.32, 0.38, topY - 0.06, topY + 0.14, shade(base, 0.8), { axis: 'y', z: Z(ro.cx), segs: 16 });
+    root.add(mk.build({ seed: 0.51 + ri * 0.01 }));
+  }
+  if (spec.tailRotor) {
+    const tr = new Kit();
+    const r2 = spec.tailRotor.r;
+    for (let k = 0; k < 2; k++) {
+      const g = bladeGeo(r2, 0.14, 0.08, 0.03);
+      g.rotateX(Math.PI / 2);
+      g.rotateX((k / 2) * Math.PI * 2);
+      tr.add(M.matte, g, bc);
+    }
+    tr.cyl(M.metal, 0.07, 0.07, -0.06, 0.06, linC(0.5, 0.5, 0.55), { axis: 'x', segs: 10 });
+    tailRotor = tr.build({ seed: 0.52 });
+    tailRotor.matrixAutoUpdate = true;
+    tailRotor.position.set(0.16, Y(spec.tailRotor.cy), Z(spec.tailRotor.cx));
+    root.add(tailRotor);
   }
   // ---- wings: each side on its hinge (they fold up when the parachute opens)
   const wings = [];
   let span = W;
   for (const s of S) {
-    if (s.type !== 'wing') continue;
+    if (s.type !== 'wing' || roleOf(s) === 'fin') continue;
     const sh = shapeOf(toM(s.pts));
     const c = colOf(s, design);
+    // (ROADMAP 11.13) its shape from above, as drawn: its root in the body - low on it, or high, as
+    // it was drawn - its tips up a little
+    if (s.plan) {
+      const P = s.plan.map(([z, x]) => [Z(z), x]);
+      const zs = P.map((q) => q[0]);
+      const zm = (Math.min(...zs) + Math.max(...zs)) / 2;
+      const st = body ? body.at(zm) : null;
+      const yr = st ? (s.mount === 'high' ? st.yc + st.b * 0.62 : st.yc - st.b * 0.42) : sh.cy;
+      const chord = Math.max(...zs) - Math.min(...zs);
+      const sp = s.span || W * 4;
+      span = Math.max(span, sp);
+      for (const sx of [-1, 1]) {
+        const g = planWing(P, clamp(chord * 0.11, 0.06, 0.3), sx);
+        if (!g) continue;
+        const wk = new Kit();
+        wk.add(M.paint, g, shade(c, 1.08));
+        const node = wk.build({ seed: 0.44 + wings.length * 0.03 });
+        node.matrixAutoUpdate = true;
+        node.position.set(0, yr, 0);
+        node.rotation.z = sx * 0.05;
+        node.userData.side = sx;
+        root.add(node);
+        wings.push(node);
+      }
+      continue;
+    }
     const chord = Math.max(0.4, sh.w);
     const sp = s.span ? clamp(s.span, 2.2, 16) : clamp(Math.max(chord * 2.6, spec.L * 0.95), 2.2, 11);
     span = Math.max(span, sp);
@@ -1047,9 +1520,9 @@ export function buildPolished(design, spec) {
     // (as high as drawn - kept clear of the ground)
     const y = Math.max(Y(pr.cy), R + 0.1);
     if (pr.back) {
-      node.position.set(0, y, Z(Math.min(pr.x0, spec.x0)) - 0.1);
+      node.position.set(pr.lat || 0, y, Z(Math.min(pr.x0, spec.x0)) - 0.1);
       node.rotation.y = Math.PI;
-    } else node.position.set(0, y, Z(Math.max(pr.x1, spec.x1)) + 0.05);
+    } else node.position.set(pr.lat || 0, y, pr.lat ? Z(pr.x1) + 0.05 : Z(Math.max(pr.x1, spec.x1)) + 0.05);
     root.add(node);
     props.push(node);
   }
@@ -1127,8 +1600,8 @@ export function buildPolished(design, spec) {
   }
   // ---- where the rider sits (as game/drawncar.js has it)
   const topY = Y(spec.y1);
-  const seatY = Math.max(Y(spec.y0) + 0.5, topY - 0.55);
-  const seatZ = clamp(-spec.L * 0.08, -1.2, 0);
+  let seatY = Math.max(Y(spec.y0) + 0.5, topY - 0.55);
+  let seatZ = clamp(-spec.L * 0.08, -1.2, 0);
   let pose = 'pilot';
   let deck = 0;
   let bar = [0, seatY + 0.95, seatZ + 0.55];
@@ -1138,11 +1611,23 @@ export function buildPolished(design, spec) {
     deck = topY;
     bar = [0, topY + 1.0, 0.05];
     grip = 0.5;
-  } else if (spec.base === 'balloon') {
+  } else if (spec.base === 'balloon' && !design.airship) {
     pose = 'stand';
     deck = Y(spec.y0) + 0.1;
     bar = [0, topY + 0.02, Z(spec.x1) - 0.18];
     grip = clamp(W * 0.3, 0.2, 0.4);
+  }
+  // (ROADMAP 11.13: a fighter's pilot - down in its cockpit, the head in the glass bubble)
+  if (canopyAt && spec.base === 'plane') {
+    seatY = canopyAt.top - 0.85;
+    seatZ = canopyAt.z - 0.15;
+    bar = [0, seatY + 0.95, seatZ + 0.55];
+  }
+  // (ROADMAP 11.13: an airship's pilot - sitting at the front of its gondola, behind its glass)
+  if (design.airship) {
+    seatY = Y(spec.y0) + 0.05;
+    seatZ = Z(spec.x1) - clamp(spec.L * 0.28, 0.6, 1.4);
+    bar = [0, seatY + 0.95, seatZ + 0.55];
   }
   let flame = null;
   if (env) {
@@ -1185,6 +1670,7 @@ export function buildPolished(design, spec) {
     prop: prop || new THREE.Object3D(),
     rotor: rotor || new THREE.Object3D(),
     tailRotor,
+    rotorsAll,
     turret: t0 ? t0.node : null,
     muzzle: t0 ? t0.muzzle : null,
     turrets,

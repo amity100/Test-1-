@@ -232,10 +232,11 @@ export function hybridStep(v, dt, input) {
     case 'plane': {
       updatePlane(v, dt, input);
       if (v.dead) return;
-      // landed: on its wheels it drives on; on the water, it floats
+      // landed: on its wheels it drives on; on the water, it floats (ROADMAP 11.13: a plane's
+      // wheels are its landing gear - it taxis and takes off on them, a plane still)
       if (!v.flying) {
         if (v.splashed && M.boat) setMode(v, 'boat');
-        else if (!v.splashed && M.drive) setMode(v, 'drive');
+        else if (!v.splashed && M.drive && v.spec.base !== 'plane') setMode(v, 'drive');
       }
       break;
     }
@@ -443,6 +444,9 @@ export function updateBalloon(v, dt, input) {
   let vent = 0;
   let ax = 0;
   let az = 0;
+  // (ROADMAP 11.13: an airship - its propellers push it where it points, it turns slowly toward
+  // where you look; up and down on its elevators, and it stays as high as it is)
+  let thr = 0;
   if (input) {
     const mv = input.readMove();
     const cy = game.camRig.yaw;
@@ -450,21 +454,38 @@ export function updateBalloon(v, dt, input) {
     const fz = Math.cos(cy);
     ax = fx * mv.y - fz * mv.x;
     az = fz * mv.y + fx * mv.x;
+    thr = mv.y;
     if (input.keys.has('Space') || input.flyUp) burn = 1;
     if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || input.keys.has('ShiftLeft') || input.flyDown) vent = 1;
-    v.yaw = dampAngle(v.yaw, cy, 0.6, dt);
+    if (B.ship) {
+      // (turned by its rudder: slowly - the slower it goes, the slower)
+      const want = Math.atan2(Math.sin(cy - v.yaw), Math.cos(cy - v.yaw)) - mv.x * 0.9;
+      const turn = (B.turn || 0.4) * (0.45 + 0.55 * clamp(Math.abs(v.shipS || 0) / Math.max(1, B.drift), 0, 1));
+      v.yaw += clamp(want, -turn * dt, turn * dt);
+    } else v.yaw = dampAngle(v.yaw, cy, 0.6, dt);
   }
-  v.heat = clamp((v.heat || 0) + (burn * 0.42 - vent * 0.55 - 0.035) * dt, 0, 1);
-  v.burning = burn;
-  // up or down as hot as it is (as fast as its envelope lifts its weight)
-  v.vy = damp(v.vy || 0, (v.heat - 0.45) * 2 * B.climb, 0.7, dt);
+  if (B.ship) {
+    v.heat = 0.45;
+    v.burning = 0;
+    v.vy = damp(v.vy || 0, (burn - vent) * B.climb, 0.9, dt);
+    // (its engines take it up to speed and down again slowly - a big, light thing)
+    v.shipS = damp(v.shipS || 0, (thr < 0 ? thr * 0.35 : thr) * B.drift, 0.55, dt);
+    ax = Math.sin(v.yaw) * v.shipS;
+    az = Math.cos(v.yaw) * v.shipS;
+  } else {
+    v.heat = clamp((v.heat || 0) + (burn * 0.42 - vent * 0.55 - 0.035) * dt, 0, 1);
+    v.burning = burn;
+    // up or down as hot as it is (as fast as its envelope lifts its weight)
+    v.vy = damp(v.vy || 0, (v.heat - 0.45) * 2 * B.climb, 0.7, dt);
+  }
   // the wind up there (turning slowly through the day), and the lean
   const t = game.time;
   const high = clamp(((v.alt || 0) - 2) / 10, 0, 1);
   const wx = Math.cos(t * 0.013 + 1.1) * 1.6 * high;
   const wz = Math.sin(t * 0.017 + 0.4) * 1.6 * high;
-  v.vx = damp(v.vx || 0, ax * B.drift + wx, 0.55, dt);
-  v.vz = damp(v.vz || 0, az * B.drift + wz, 0.55, dt);
+  const k = B.ship ? 1 : B.drift;
+  v.vx = damp(v.vx || 0, ax * k + wx * (B.ship ? 0.4 : 1), B.ship ? 1.2 : 0.55, dt);
+  v.vz = damp(v.vz || 0, az * k + wz * (B.ship ? 0.4 : 1), B.ship ? 1.2 : 0.55, dt);
   v.pos.x += v.vx * dt;
   v.pos.z += v.vz * dt;
   v.pos.y += v.vy * dt;
@@ -488,10 +509,11 @@ export function updateBalloon(v, dt, input) {
     }
     v.pos.y = floor;
     v.vy = Math.max(0, v.vy);
-    // (on the ground it stays where it came down)
+    // (on the ground it stays where it came down - an airship moored, till it is flown up)
     v.vx *= Math.exp(-4 * dt);
     v.vz *= Math.exp(-4 * dt);
-    if (v.heat < 0.45) v.heat = Math.max(0, v.heat - dt * 0.2);
+    if (B.ship) v.shipS = (v.shipS || 0) * Math.exp(-4 * dt);
+    if (v.heat < 0.45 && !B.ship) v.heat = Math.max(0, v.heat - dt * 0.2);
   }
   if (v.pos.y > 140) {
     v.pos.y = 140;
@@ -502,5 +524,8 @@ export function updateBalloon(v, dt, input) {
   v.speedAbs = Math.hypot(v.vx, v.vz);
   // the burner's flame, roaring while it heats
   if (v.flame) v.flame.scale.setScalar(burn ? 1 + Math.sin(t * 31) * 0.12 : 0.01);
-  if (input) game.audio.engine(burn ? 0.7 : 0.05, burn ? 'boat' : 'pedal');
+  if (input) {
+    if (B.ship) game.audio.engine(0.15 + Math.abs(thr) * 0.5, 'prop');
+    else game.audio.engine(burn ? 0.7 : 0.05, burn ? 'boat' : 'pedal');
+  }
 }
