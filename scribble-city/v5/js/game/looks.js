@@ -523,6 +523,54 @@ export function shopkeeperLook(kind) {
       L.bottom = { kind: 'pants', color: [0.16, 0.2, 0.32] };
       L.hat = { kind: 'cap', color: [0.16, 0.2, 0.32] };
       break;
+    // (v5, ROADMAP 11.17) the mainland's stores
+    case 'fashion':
+    case 'perfume':
+      L.top = { kind: chance(0.5) ? 'blazer' : 'cardigan', color: pick([[0.12, 0.12, 0.14], [0.95, 0.94, 0.9], [0.86, 0.72, 0.62]]), sleeves: 'long', inner: [0.96, 0.95, 0.92], shirt: [0.96, 0.95, 0.92] };
+      L.bottom = fem ? { kind: 'wide', color: [0.12, 0.12, 0.14] } : { kind: 'pants', color: [0.12, 0.12, 0.14] };
+      if (fem) L.acc.push('earrings');
+      break;
+    case 'jewelry':
+      L.top = { kind: fem ? 'blazer' : 'suit', color: [0.12, 0.12, 0.16], sleeves: 'long', shirt: [0.96, 0.95, 0.92], tie: fem ? null : [0.62, 0.5, 0.2] };
+      L.bottom = { kind: fem ? 'wide' : 'pants', color: [0.12, 0.12, 0.16] };
+      L.face.glasses = chance(0.4) ? 'round' : null;
+      break;
+    case 'shoes':
+    case 'sports':
+      L.top = { kind: kind === 'sports' ? 'track' : 'polo', color: pick([[0.84, 0.22, 0.24], [0.22, 0.36, 0.72], [0.12, 0.12, 0.14]]), sleeves: kind === 'sports' ? 'long' : 'short' };
+      L.bottom = { kind: 'pants', color: [0.12, 0.12, 0.14] };
+      L.shoes = [0.97, 0.97, 0.96];
+      if (kind === 'sports') L.hat = { kind: 'cap', color: pick(BRIGHT) };
+      break;
+    case 'electronics':
+      L.top = { kind: 'polo', color: [0.2, 0.42, 0.78], sleeves: 'short' };
+      L.bottom = { kind: 'pants', color: [0.2, 0.2, 0.24] };
+      L.acc.push('headphones');
+      break;
+    case 'toys':
+      L.top = { kind: 'sweater', color: pick([[0.98, 0.8, 0.3], [0.4, 0.62, 0.95], [0.95, 0.5, 0.6]]), sleeves: 'long' };
+      L.hat = { kind: 'beanie', color: pick(BRIGHT) };
+      apron([0.95, 0.4, 0.4]);
+      break;
+    case 'burger':
+    case 'noodles':
+      L.top = { kind: 'tee', color: kind === 'burger' ? [0.86, 0.22, 0.2] : [0.12, 0.12, 0.14], sleeves: 'short' };
+      L.hat = kind === 'burger' ? { kind: 'cap', color: [0.98, 0.8, 0.22] } : { kind: 'bandanaHead', color: [0.75, 0.15, 0.18] };
+      apron(kind === 'burger' ? [0.98, 0.96, 0.92] : [0.2, 0.2, 0.26]);
+      break;
+    case 'gourmet':
+      // the chef: whites buttoned to the neck, the tall toque, an apron to the knees
+      L.top = { kind: 'blazer', color: [0.98, 0.98, 0.96], sleeves: 'long', shirt: [0.98, 0.98, 0.96] };
+      L.bottom = { kind: 'pants', color: [0.14, 0.14, 0.16] };
+      L.hat = { kind: 'toque', color: WHITE };
+      apron([0.98, 0.97, 0.94]);
+      if (!fem) L.face.beard = chance(0.5) ? 'mustache' : null;
+      break;
+    case 'club':
+      L.top = { kind: chance(0.5) ? 'bomber' : 'tee', color: [0.12, 0.12, 0.16], sleeves: 'long', inner: [0.62, 0.3, 0.86] };
+      L.bottom = { kind: 'pants', color: [0.1, 0.1, 0.12] };
+      L.acc.push('chain');
+      break;
     case 'pharmacy':
     case 'optics':
       L.top = { kind: 'blazer', color: WHITE, sleeves: 'long', shirt: [0.6, 0.75, 0.9] };

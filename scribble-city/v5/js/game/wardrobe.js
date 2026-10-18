@@ -42,6 +42,44 @@ export const ACCS = [
   { name: 'צעיף', acc: 'scarf' },
   { name: 'בלי אביזרים', acc: null },
 ];
+// (v5, ROADMAP 11.17) the mainland's stores: a whole floor of clothes (a store of fashion), a wall
+// of shoes, the sports store's tracksuits, the jeweller's counter
+export const FASHION_TOPS = [
+  { name: 'טרנץ\' בז\'', top: { kind: 'trench', color: [0.8, 0.68, 0.5], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: 'מעיל פוך שחור', top: { kind: 'puffer', color: [0.12, 0.12, 0.14], sleeves: 'long' } },
+  { name: 'ג\'קט בומבר זית', top: { kind: 'bomber', color: [0.36, 0.4, 0.3], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: 'חולצה מכופתרת תכלת', top: { kind: 'overshirt', color: [0.72, 0.84, 0.96], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: 'פולו לבנה', top: { kind: 'polo', color: [0.97, 0.96, 0.93], sleeves: 'short' } },
+  { name: 'קרדיגן ורוד', top: { kind: 'cardigan', color: [0.95, 0.72, 0.78], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: 'סווטשירט אוברסייז', top: { kind: 'oversized', color: [0.62, 0.72, 0.88], sleeves: 'long' } },
+  { name: 'חליפה כחולה', top: { kind: 'suit', color: [0.18, 0.22, 0.34], sleeves: 'long', shirt: [0.95, 0.95, 0.94], tie: [0.62, 0.12, 0.14] } },
+  ...TOPS,
+];
+export const FASHION_BOTTOMS = [
+  { name: 'מכנסיים רחבים שמנת', bottom: { kind: 'wide', color: [0.92, 0.9, 0.84] } },
+  { name: 'מכנסי דגמ"ח זית', bottom: { kind: 'cargo', color: [0.36, 0.4, 0.3] } },
+  { name: 'מכנסי חליפה כחולים', bottom: { kind: 'pants', color: [0.18, 0.22, 0.34] } },
+  ...BOTTOMS,
+];
+export const SHOE_WALL = [
+  ...SHOES,
+  { name: 'סניקרס כחולות', shoes: [0.3, 0.45, 0.85] },
+  { name: 'נעלי ריצה צהובות', shoes: [0.98, 0.82, 0.25] },
+  { name: 'מוקסינים חומים', shoes: [0.55, 0.36, 0.22] },
+  { name: 'נעלי בד ורודות', shoes: [0.95, 0.6, 0.72] },
+];
+export const SPORT_TOPS = [
+  { name: 'חליפת ספורט אדומה', top: { kind: 'track', color: [0.84, 0.22, 0.24], sleeves: 'long' } },
+  { name: 'חליפת ספורט כחולה', top: { kind: 'track', color: [0.22, 0.36, 0.72], sleeves: 'long' } },
+  { name: 'גופיית ריצה', top: { kind: 'tank', color: [0.3, 0.7, 0.45], sleeves: 'none' } },
+  { name: 'קפוצ\'ון ספורט שחור', top: { kind: 'hoodie', color: [0.12, 0.12, 0.14], sleeves: 'long' } },
+];
+export const JEWELS = [
+  { name: 'שרשרת זהב', acc: 'chain' },
+  { name: 'צעיף משי', acc: 'scarf' },
+  { name: 'תיק צד מעור', acc: 'crossbody' },
+  { name: 'בלי אביזרים', acc: null },
+];
 // tattoos: a little drawing on the right forearm (game/doodle.js); the sketch the barber draws
 export const TATTOOS = [
   { name: 'עוגן', tattoo: 'anchor' },

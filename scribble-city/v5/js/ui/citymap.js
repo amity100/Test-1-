@@ -99,7 +99,21 @@ const KINDS = {
   friends: ['fun', 'דוכן "ציירו לעצמכם חבר"'],
   lobby: ['hotel', 'מלון'],
   motel: ['hotel', 'מוטל'],
+  // (v5, ROADMAP 11.17: the mainland's)
+  fashion: ['shop', 'חנות אופנה'],
+  shoes: ['shop', 'חנות נעליים'],
+  electronics: ['shop', 'אלקטרוניקה'],
+  jewelry: ['shop', 'תכשיטים'],
+  toys: ['shop', 'צעצועים'],
+  perfume: ['shop', 'בשמים'],
+  sports: ['shop', 'ספורט'],
+  burger: ['food', 'המבורגר'],
+  noodles: ['food', 'נודלס'],
+  gourmet: ['food', 'מסעדת שף'],
 };
+
+// (the mainland's stores drawn with the stickers of their kin)
+const GLYPH_OF = { fashion: 'boutique', shoes: 'boutique', electronics: 'phones', jewelry: 'boutique', toys: 'shop', perfume: 'flowers', sports: 'gym', burger: 'diner', noodles: 'sushi', gourmet: 'diner' };
 
 // the legend: each group's sticker, its name, and from how close it shows (pixels a metre)
 const CATS = [
@@ -461,7 +475,7 @@ export class CityMap {
       const d = s.door;
       // (ROADMAP 8.1: where the ATMs are)
       const atm = game.money && ATM_KINDS.has(s.kind) ? 'יש כאן כספומט PAPERTRUST' : undefined;
-      add({ cat: k[0], glyph: kind, x: d[0], z: d[2], name: s.name === 'tower' ? null : s.name, he: k[1], hours: kind === 'club' ? 'club' : kind === 'motel' ? 'lobby' : kind, shop: s, note: atm });
+      add({ cat: k[0], glyph: GLYPH_OF[kind] || kind, x: d[0], z: d[2], name: s.name === 'tower' ? null : s.name, he: k[1], hours: kind === 'club' ? 'club' : kind === 'motel' ? 'lobby' : kind, shop: s, note: atm });
     }
     // the blueprints' boards
     for (const b of w.billboards || []) {

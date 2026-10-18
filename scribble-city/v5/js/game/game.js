@@ -78,6 +78,7 @@ import { Wheel } from '../ui/wheel.js';
 import { Money, fmt } from './money.js';
 import { Ink } from './ink.js';
 import { Properties } from './properties.js';
+import { MallLife } from './mall.js';
 import { Knock } from './knock.js';
 import { Graffiti } from './graffiti.js';
 import { SketchPad } from '../ui/sketchpad.js';
@@ -189,6 +190,8 @@ export class Game {
     this.airdraw = new AirDraw(this);
     this.airsketch = new AirSketches(this);
     this.streetlife = new StreetLife(this);
+    // (v5, ROADMAP 11.17: the people of the mainland's malls)
+    this.mallLife = new MallLife(this);
     this.vignettes = new Vignettes(this);
     this.ambient = new Ambient(this);
     this.nightlife = new Nightlife(this);
@@ -1032,6 +1035,7 @@ export class Game {
       if (!this.classic) armorBar(this);
       this.farCrowd.update(dt);
       this.streetlife.update(dt);
+      this.mallLife.update(dt);
       this.routines.update(dt);
       this.workers.update(dt);
       this.crowds.update(dt);

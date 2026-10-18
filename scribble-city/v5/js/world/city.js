@@ -271,6 +271,9 @@ export function buildCity(scene, o = {}) {
   // each, never used again (the shops' life is kept by it, game/streetlife.js)
   let shopId = 100000;
   world.shopHooks = [];
+  // (the mainland's malls that are built, and the halls under a roof: game/mall.js, game/weather.js)
+  world.malls = [];
+  world.indoorAreas = [];
   world.addShop = (sh) => {
     sh.id = shopId++;
     world.shops.push(sh);

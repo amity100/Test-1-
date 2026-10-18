@@ -40,6 +40,10 @@ const SHOP_HOURS = {
   cafe: [6.5, 21], grocery: [7, 23], deli: [7, 20], bagel: [6, 19], flowers: [8, 20], books: [9, 21.5], hardware: [7.5, 19],
   laundry: [7, 22], shop: [9, 21], phones: [9, 21], optics: [9, 19], gym: [6, 23], music: [10, 22], barber: [9, 20],
   juice: [7.5, 20], surf: [8, 19.5], boutique: [10, 21], friends: [9, 22.5],
+  // (v5, ROADMAP 11.17) the mainland's: the malls' stores keep the malls' hours, the food court a
+  // little longer, the gourmet kitchen opens for the evening, the club for the night
+  fashion: [10, 22], shoes: [10, 22], electronics: [10, 22], jewelry: [10, 21], toys: [10, 21], perfume: [10, 22], sports: [9, 22],
+  burger: [10, 24], noodles: [11, 24], gourmet: [12, 24],
   // (the lines outside: the club's doors open at six, the cinema's last show is at midnight)
   club: [18, 28],
 };

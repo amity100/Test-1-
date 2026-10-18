@@ -255,6 +255,8 @@ export class Weather {
     const shops = game.world.shops;
     if (!shops) return false;
     const p = game.camera.position;
+    // (v5: a mall's hall under its glass roof)
+    for (const a of game.world.indoorAreas || []) if (p.x > a.x0 && p.x < a.x1 && p.z > a.z0 && p.z < a.z1 && p.y < a.y + a.top) return true;
     for (let i = 0; i < shops.length; i++) {
       const R = shops[i].room;
       if (!R || p.y < R.floor - 0.5 || p.y > R.floor + R.height + 0.3) continue;

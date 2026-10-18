@@ -327,7 +327,7 @@ export { DISTRICT_BY_ID };
 // ------------------------------------------------------------------ the towers
 // where a block of towers has them (downtown's tallest in the middle of it, by the bay; Brickton's
 // a little lower; the condos lower still): [{ x, z, w, d, h, style, podium }] standing on the block
-const TOWER_KINDS = { towers: 1, offices: 1, condos: 1, galleria: 1, dining: 1 };
+const TOWER_KINDS = { towers: 1, offices: 1, condos: 1, dining: 1 };
 export function towersOf(b) {
   if (!TOWER_KINDS[b.kind]) return [];
   const r = seeded(b.seed * 7 + 3);
@@ -341,8 +341,8 @@ export function towersOf(b) {
   const bay = 1 - Math.min(1, (SHORE_X - b.cx) / 420);
   const tall = (lo, hi) => lo + (hi - lo) * Math.min(1, Math.max(0, peak * 0.75 + bay * 0.35 + (r() - 0.5) * 0.35));
   const styles = ['cut', 'cut', 'rect', 'round', 'deco', 'slant'];
-  if (b.kind === 'galleria' || b.kind === 'dining') {
-    // one tower over the mall's (or the restaurants') low building, at its north end
+  if (b.kind === 'dining') {
+    // one tower over the restaurants' low building, at its north end
     out.push({ x: (R.x0 + R.x1) / 2, z: R.z0 + 20, w: 26, d: 24, h: tall(70, 150), style: 'cut', podium: false });
     return out;
   }

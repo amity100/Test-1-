@@ -8,6 +8,24 @@ import { park, plaza, alleyGround, court, bench, fountain } from '../blocks.js';
 import { palm } from '../palms.js';
 import { SHOP_NAMES } from '../blocks.js';
 import { M_AVES, M_STREETS, CURB, towersOf } from './plan.js';
+import { buildMall, buildStripMall } from './mall.js';
+
+// (the malls: what is in each - world/mainland/mall.js)
+const MALLS = {
+  galleria: {
+    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', wall: '#f4efe8', trim: '#2fa8a0', signCol: '#ff5ad1', font: 'Rubik',
+    stores: ['fashion', 'shoes', 'electronics', 'jewelry', 'perfume', 'toys', 'sports', 'fashion', 'books', 'optics', 'fashion', 'phones', 'boutique', 'shoes', 'music', 'fashion', 'jewelry', 'icecream', 'cafe'],
+    food: ['burger', 'tacos', 'noodles', 'pizza'],
+    street: ['cafe', 'pharmacy', 'juice', 'sushi', 'icecream', 'phones', 'barber', 'flowers', 'cafe', 'optics'],
+  },
+  starlight: {
+    name: 'STARLIGHT CENTER', heb: 'מרכז סטארלייט', open: true, wall: '#f6e3d0', trim: '#e0574f', signCol: '#ffe14f', font: 'Permanent Marker',
+    stores: ['fashion', 'sports', 'electronics', 'shoes', 'toys', 'perfume', 'fashion', 'jewelry', 'books', 'music', 'arcade', 'fashion', 'boutique', 'cafe'],
+    food: ['burger', 'noodles', 'sushi', 'icecream'],
+    street: ['diner', 'juice', 'barber', 'pharmacy', 'cafe', 'phones', 'flowers', 'gym'],
+  },
+  stripmall: { name: 'VALLEY PLAZA', heb: 'ואלי פלאזה', stores: ['grocery', 'pizza', 'laundry', 'pharmacy', 'barber', 'icecream', 'bagel', 'phones', 'cafe'] },
+};
 
 // (v5, ROADMAP 11.17) A block of the mainland, built near you: the same kits the island's blocks
 // are built with (world/sobe.js, world/kits.js), each district with a mix of its own, a lot at a
@@ -178,6 +196,13 @@ function* buildKind(bctx, b) {
       plaza(bctx, R);
       yield;
       return;
+    case 'galleria':
+    case 'starlight':
+      yield* buildMall(bctx, b, MALLS[b.kind]);
+      return;
+    case 'stripmall':
+      yield* buildStripMall(bctx, b, MALLS.stripmall);
+      return;
     case 'school':
       // the school's fields and its court behind a row of houses
       yield* rows(bctx, b, { east: false, D: 26 });
@@ -188,7 +213,6 @@ function* buildKind(bctx, b) {
     case 'towers':
     case 'offices':
     case 'condos':
-    case 'galleria':
     case 'dining': {
       // the shops along both avenues under the towers (the towers are always there, built at the
       // start: world/mainland/far.js); a plaza and its fountain where a block has only one
@@ -255,7 +279,7 @@ export function* buildMBlock(world, b) {
   const rooms = yield* bctx.R.flushSteps(group, { static: true, indoor: true, merge: world.merge, steps: true });
   for (const m of rooms) m.renderOrder = 1;
   const cull = [];
-  for (const m of rooms) cull.push({ m, r: 55 });
+  for (const m of rooms) cull.push({ m, r: bctx.mall ? 90 : 55 });
   for (const m of meshes) {
     const pen = m.userData.pens ? m.userData.pens[0] : m.material;
     if (world.smallPens.has(pen)) cull.push({ m, r: world.low ? 110 : 150 });
@@ -274,6 +298,11 @@ export function* buildMBlock(world, b) {
       for (const s of bctx.shops) world.addShop(s);
       for (const h of bctx.hideSpots) world.hideSpots.push(h);
       for (const c of cull) world.cullList.push(c);
+      // (a mall: its hall is indoors for the weather, and its people's - game/mall.js)
+      if (bctx.mall) {
+        world.malls.push(bctx.mall);
+        if (!bctx.mall.open && !bctx.mall.strip) world.indoorAreas.push(bctx.mall.hall);
+      }
       group.visible = true;
       world.mainland.show(group, `b${b.id}`);
       world.mainland.onBlock(live, true);
@@ -293,6 +322,12 @@ export function* buildMBlock(world, b) {
       for (const c of cull) {
         const k = world.cullList.indexOf(c);
         if (k >= 0) world.cullList.splice(k, 1);
+      }
+      if (bctx.mall) {
+        let k = world.malls.indexOf(bctx.mall);
+        if (k >= 0) world.malls.splice(k, 1);
+        k = world.indoorAreas.indexOf(bctx.mall.hall);
+        if (k >= 0) world.indoorAreas.splice(k, 1);
       }
       group.traverse((m) => {
         if (m.isMesh) m.geometry.dispose();

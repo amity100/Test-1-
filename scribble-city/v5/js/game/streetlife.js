@@ -4,7 +4,7 @@ import { HAIR_SKETCH } from './airsketch.js';
 import { BLUEPRINTS, BLUEPRINT_MORE, BLUEPRINT_TOOLS } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
-import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, wear, armorUp, outfitOf, putOn, ownTattoo } from './wardrobe.js';
+import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, FASHION_TOPS, FASHION_BOTTOMS, SHOE_WALL, SPORT_TOPS, JEWELS, wear, armorUp, outfitOf, putOn, ownTattoo } from './wardrobe.js';
 import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 import { BOSS } from './properties.js';
 import { TOOLS, BOTTLE } from './ink.js';
@@ -27,6 +27,9 @@ const ITEM = {
   icecream: 'icecream', hardware: 'bag', laundry: 'laundry', sushi: 'bag', falafel: 'bag', shop: 'bag', pharmacy: 'bag',
   phones: 'phone', optics: null, gym: null, music: null, barber: null, lobby: null,
   tacos: 'bag', diner: 'bag', juice: 'coffee', surf: null, boutique: 'bag', arcade: null, bar: null, cinema: 'coffee',
+  // (v5, ROADMAP 11.17: the mainland's stores - a bag in the store's own colour)
+  fashion: 'shopBag', shoes: 'shopBag', electronics: 'shopBag', jewelry: 'shopBag', toys: 'teddy', perfume: 'shopBag', sports: 'shopBag',
+  burger: 'burger', noodles: 'noodleBox', gourmet: null, club: null,
 };
 // what the shopkeeper holds while working
 const TOOL = {
@@ -34,6 +37,7 @@ const TOOL = {
   icecream: 'icecream', hardware: 'broom', laundry: 'laundry', sushi: null, falafel: null, shop: 'broom', pharmacy: null,
   phones: 'phone', optics: null, gym: 'dumbbell', music: 'guitar', barber: 'scissors', lobby: null,
   friends: 'magicPencil', tacos: 'tray', diner: 'tray', juice: 'tray', surf: null, boutique: null, arcade: null, bar: 'tray', cinema: null,
+  fashion: null, shoes: null, electronics: 'phone', jewelry: null, toys: null, perfume: null, sports: null, burger: 'tray', noodles: null, gourmet: null, club: null,
 };
 const CALLS = {
   pizza: ['Hot slice!', 'Fresh outta the oven!', 'Pizza! Pizza!'],
@@ -65,6 +69,17 @@ const CALLS = {
   arcade: ['New high score!', 'Insert coin!'],
   bar: ['Happy hour!', 'One more round?', 'Live music tonight!'],
   cinema: ['Tonight: THE ERASER!', 'Popcorn! Fresh popcorn!'],
+  fashion: ['New season, new you!', 'Thirty percent off!', 'Try it on, the fitting rooms are free!'],
+  shoes: ['Fresh kicks!', 'Second pair half price!', 'What size are you?'],
+  electronics: ['Latest models!', 'Free headphones with every phone!', 'Have you seen this screen?'],
+  jewelry: ['Something sparkly?', 'Solid gold, darling.', 'For someone special?'],
+  toys: ['Toys! Toys! Toys!', 'Look, it talks!', 'Every kid\'s dream!'],
+  perfume: ['A little spritz?', 'Smell like a garden!', 'Try the new one!'],
+  sports: ['Game day sale!', 'Just move!', 'New sneakers in!'],
+  burger: ['Order forty-two!', 'Fries with that?', 'Burgers! Hot off the grill!'],
+  noodles: ['Hot noodles!', 'Straight from the wok!', 'Extra spicy?'],
+  gourmet: ['Service!', 'Table four, please.', 'Bon appétit.'],
+  club: ['Make some noise!', 'Hands up!', 'One more song!'],
 };
 
 // the hero's own look (hair, glasses, muscles) survives a reload
@@ -176,6 +191,25 @@ export class StreetLife {
     if (this.notes.length) this.notes = this.notes.filter((n) => n.t < 2.6);
     const pp = game.player;
     if (pp.coffeeT > 0) pp.coffeeT -= dt;
+    // (v5: the perfume from the mall - heads turn as you pass)
+    if (pp.perfumeT > 0) {
+      pp.perfumeT -= dt;
+      this.sniffT = (this.sniffT || 2) - dt;
+      if (this.sniffT <= 0) {
+        this.sniffT = 5 + Math.random() * 5;
+        let best = null;
+        let bd = 5;
+        for (const c of game.civilians.list) {
+          if (!c.alive || c.panicT > 0 || c.headless) continue;
+          const d = Math.hypot(c.pos.x - pp.pos.x, c.pos.z - pp.pos.z);
+          if (d < bd && d > 0.8) {
+            bd = d;
+            best = c;
+          }
+        }
+        if (best) game.bubbles.say(best, pick(['Mmm, nice perfume!', 'Who smells like roses?', 'Wow, what is that scent?', 'Lovely!']));
+      }
+    }
   }
 
   // people from the street pop into the shops
@@ -631,9 +665,129 @@ function bookHint(game) {
   game.hud.toast(`השרטוט של ה${BLUEPRINTS[best.id].name}: ${where}, בערך ${Math.round(bd / 10) * 10} מטר ${dir}`, 'info', 5);
 }
 
+// ------------------------------------------------------------------ the mainland's stores
+// (v5, ROADMAP 11.17) the malls' stores, the food court's counters, the gourmet kitchen, the club:
+// each with its keeper and what is bought there (drawn in the air and handed over)
+const meal = (n, color, text) => (game) => {
+  heal(n, color, text)(game);
+  game.player.fig.carry = null;
+};
+SERVICES.fashion = { verb: 'להיכנס לחנות הבגדים', ask: 'לדבר עם המוכרת', who: 'המוכרת בחנות', greet: 'הקולקציה של העונה הגיעה! תמדדו, תא המדידה פנוי.', offers: [
+  ['כובע מצחייה', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'cap', color: pick([[0.09, 0.09, 0.11], [0.95, 0.3, 0.45], [0.2, 0.62, 0.66]]) }), 'כובע חדש!')],
+  ['כובע רחב שוליים', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'fedora', color: [0.94, 0.9, 0.82] }), 'אלגנטי!')],
+  ['בלי כובע', null, (game) => heroLook(game, (L) => (L.hat = null), 'בלי כובע')],
+] };
+SERVICES_NC.fashion = { ...SERVICES.fashion, ask: 'למדוד בגדים', offers: [
+  ['חולצות, מעילים וחליפות', 'menu', (game, a) => a.shelf('מה מודדים? (הכול מתאים, התא פנוי)', 'top', FASHION_TOPS, (it) => (it.top.kind === 'suit' || it.top.kind === 'blazer' || it.top.kind === 'trench' || it.top.kind === 'puffer' || it.top.kind === 'bomber' ? 'jacket' : 'shirt'))],
+  ['מכנסיים', 'menu', (game, a) => a.shelf('אילו מכנסיים?', 'bottom', FASHION_BOTTOMS, 'pants')],
+  ['כובעים', 'menu', (game, a) => a.shelf('משהו לראש?', 'hat', HATS, 'hat')],
+] };
+SERVICES.shoes = { verb: 'להיכנס לחנות הנעליים', ask: 'למדוד נעליים', who: 'המוכר בחנות הנעליים', greet: 'איזו מידה? יש לנו הכול, מסניקרס ועד נעלי ערב.', offers: [
+  ['סניקרס לבנות', 'shoe', (game) => { wear(game, 'shoes', SHOES[0]); game.hud.toast('נוחות!', 'good', 2); }],
+  ['נעלי עור שחורות', 'shoe', (game) => { wear(game, 'shoes', SHOES[2]); game.hud.toast('אלגנטי!', 'good', 2); }],
+] };
+SERVICES_NC.shoes = { ...SERVICES.shoes, offers: [['כל הקיר: לבחור זוג', 'menu', (game, a) => a.shelf('איזה זוג מודדים?', 'shoes', SHOE_WALL, 'shoe')]] };
+SERVICES.electronics = { verb: 'להיכנס לחנות האלקטרוניקה', ask: 'לדבר עם המוכר', who: 'המוכר באלקטרוניקה', greet: 'המסכים הכי חדשים, הטלפונים הכי מהירים. מה מחפשים?', offers: [
+  ['אוזניות אלחוטיות', 'headphones', (game) => { wear(game, 'acc', ACCS[2]); game.hud.toast('מוזיקה באוזניים!', 'good', 2.2); }],
+  ['אפליקציית מפות: איפה השרטוט הקרוב', 'phone', (game) => bookHint(game)],
+  ['טלפון חדש: "אזעקת שווא, שוטר" (כוכב משטרה אחד פחות)', 'phone', (game) => SERVICES.phones.offers[0][2](game)],
+] };
+SERVICES.jewelry = { verb: 'להיכנס לחנות התכשיטים', ask: 'לראות את התכשיטים', who: 'הצורפת', greet: 'זהב, כסף, ויהלום מצויר אחד שנוצץ באמת. במה אפשר לעזור?', offers: [
+  ['שרשרת זהב', 'chain', (game) => { wear(game, 'acc', JEWELS[0]); game.hud.toast('נוצץ!', 'good', 2); }],
+  ['משקפי שמש מעוצבים', 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), 'קול.')],
+  ['טבעת: מתנה לחברה שציירת', 'ring', (game) => {
+    const fr = game.streetlife.companion;
+    if (fr && fr.alive) {
+      game.bubbles.say(fr.c, pick(['For me? I love it!', 'It sparkles!', 'You\'re so sweet!']));
+      fr.hearts && fr.hearts(3);
+      game.hud.toast('היא שמחה מאוד!', 'good', 2.6);
+    } else game.hud.toast('טבעת בכיס. אולי לחברה שתציירו?', 'info', 2.6);
+  }],
+] };
+SERVICES_NC.jewelry = { ...SERVICES.jewelry, offers: [['שרשראות, צעיפים ותיקים', 'menu', (game, a) => a.shelf('משהו קטן ויפה?', 'acc', JEWELS, 'chain')], ...SERVICES.jewelry.offers.slice(1)] };
+SERVICES.toys = { verb: 'להיכנס לחנות הצעצועים', ask: 'לדבר עם המוכר', who: 'המוכר בחנות הצעצועים', greet: 'כל מה שחלמתם עליו כשהייתם בני שבע! וגם מה שתחלמו בשבעים.', offers: [
+  ['דובי רך', 'teddy', (game) => { game.player.fig.carry = 'teddy'; game.hud.toast('דובי! (יורד מהיד כשמחזיקים נשק)', 'good', 2.4); }],
+  ['בלון אדום', 'balloon', (game) => { game.player.fig.carryL = 'balloon'; game.hud.toast('בלון!', 'good', 2); }],
+  ['שרטוט: בומרנג סרגל', 'boomerang', (game) => giveBlueprint(game, 'boomerang')],
+] };
+SERVICES.perfume = { verb: 'להיכנס לחנות הבשמים', ask: 'לנסות בושם', who: 'המוכרת', greet: 'ריח של גן אחרי גשם? של ים? של עיפרון חדש?', offers: [
+  ['בושם פרחים (+10 חיים, וכולם מסתובבים)', 'perfume', (game) => {
+    heal(10, [0.95, 0.7, 0.85], 'ריח של פרחים... +10 חיים')(game);
+    game.player.perfumeT = 90;
+  }],
+  ['בושם ים (ריצה קלה ל-20 שניות)', 'perfume', (game) => {
+    game.player.coffeeT = Math.max(game.player.coffeeT || 0, 20);
+    game.player.perfumeT = 90;
+    game.hud.toast('רענן כמו בריזה מהים!', 'good', 2.4);
+  }],
+] };
+SERVICES.sports = { verb: 'להיכנס לחנות הספורט', ask: 'לדבר עם המוכר', who: 'המוכר בחנות הספורט', greet: 'מוכנים לזוז? חליפות, נעלי ריצה, ואופניים מצוירים.', offers: [
+  ['נעלי ריצה צהובות (ריצה מהירה ל-40 שניות)', 'shoe', (game) => {
+    wear(game, 'shoes', SHOE_WALL[SHOES.length + 1]);
+    game.player.coffeeT = Math.max(game.player.coffeeT || 0, 40);
+    game.hud.toast('קלים כמו נוצה!', 'good', 2.4);
+  }],
+  ['שרטוט: אופניים', 'bicycle', (game) => giveBlueprint(game, 'bicycle')],
+  ['כדורגל (לבעוט ברחוב)', 'ball', (game) => game.hud.toast('כדור ביד! אפשר לצייר אותו גם באוויר', 'good', 2.4)],
+] };
+SERVICES_NC.sports = { ...SERVICES.sports, offers: [...SERVICES.sports.offers, ['חליפות ספורט וגופיות', 'menu', (game, a) => a.shelf('איזו חליפה?', 'top', SPORT_TOPS, 'shirt')]] };
+SERVICES.burger = { verb: 'להזמין המבורגר', ask: 'להזמין המבורגר', who: 'הטבח בדוכן', greet: 'המבורגר על הגריל, צ\'יפס בשמן, שייק בבלנדר. מה בא לכם?', offers: [
+  ['המבורגר כפול (+45 חיים)', 'burger', meal(45, [0.7, 0.42, 0.25], 'המבורגר! +45 חיים')],
+  ['צ\'יפס (+15 חיים)', 'fries', meal(15, [0.98, 0.82, 0.3], 'צ\'יפס פריך! +15 חיים')],
+  ['שייק וניל (+20 חיים)', 'soda', meal(20, [0.98, 0.94, 0.82], 'שייק! +20 חיים')],
+] };
+SERVICES.noodles = { verb: 'להזמין נודלס', ask: 'להזמין נודלס', who: 'הטבחית בווק', greet: 'נודלס מהווק, חריף או עדין? שתי דקות וזה אצלכם.', offers: [
+  ['נודלס מוקפצים (+40 חיים)', 'noodles', meal(40, [0.95, 0.78, 0.4], 'נודלס! +40 חיים')],
+  ['באן מאודה (+20 חיים)', 'bagel', meal(20, [0.97, 0.95, 0.9], 'רך וחם. +20 חיים')],
+] };
+SERVICES.gourmet = { verb: 'להיכנס למסעדה', ask: 'להזמין מהשף', who: 'השף', greet: 'ערב טוב. הערב התפריט שלי: כל מנה מצוירת ביד, ברגע, רק בשבילכם.', offers: [
+  ['מנת פתיחה של השף (+30 חיים)', 'gourmet', meal(30, [0.92, 0.72, 0.42], 'מעדן. +30 חיים')],
+  ['פילה בקר ברוטב יין (+60 חיים)', 'steak', meal(60, [0.5, 0.3, 0.18], 'נמס בפה. +60 חיים')],
+  ['פסטה טרייה (+40 חיים)', 'pasta', meal(40, [0.95, 0.82, 0.4], 'כמו באיטליה. +40 חיים')],
+  ['קינוח: עוגת תותים (+25 חיים)', 'dessert', meal(25, [0.95, 0.6, 0.7], 'מתוק! +25 חיים')],
+] };
+SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הברמן', who: 'הברמן', greet: 'ברוכים הבאים! הדי ג\'יי בוער הלילה. משהו לשתות? (בלי אלכוהול, רק צבעים)', offers: [
+  ['מוקטייל ניאון (+15 חיים)', 'mocktail', (game) => heal(15, [0.4, 0.85, 0.9], 'מוקטייל! +15 חיים')(game)],
+  ['לימונדה קרה (+10 חיים)', 'lemonade', heal(10, [0.98, 0.9, 0.4], 'לימונדה. +10 חיים')],
+  ['לרקוד על הרחבה', null, (game) => {
+    const p = game.player;
+    p.fig.dance = 1;
+    game.inkwell.after(9, () => (p.fig.dance = 0));
+    game.hud.toast('רוקדים! כל הרחבה איתכם', 'good', 2.4);
+  }],
+] };
+
+// (v5, ROADMAP 11.17) what each kitchen draws for the people who order there: the dish in the air,
+// then into their hands (or onto their table)
+const DISH = {
+  pizza: ['slice', 'pizza'], cafe: ['cup'], icecream: ['cone'], sushi: ['sushi'], falafel: ['pita'], tacos: ['taco', 'empanada'], diner: ['burger', 'dessert', 'soda'],
+  juice: ['smoothie', 'lemonade'], deli: ['sandwich', 'hotdog'], bagel: ['bagel', 'donut'], burger: ['burger', 'fries', 'soda', 'hotdog'], noodles: ['noodles'],
+  gourmet: ['gourmet', 'steak', 'pasta', 'dessert'], bar: ['mocktail', 'lemonade'], club: ['mocktail', 'lemonade'], cinema: ['soda'],
+};
+const ORDERS = {
+  gourmet: ['The chef\'s special, please.', 'I\'ll have the filet.', 'The pasta, please!', 'Something sweet?', 'Surprise me, chef.'],
+  burger: ['A double, please!', 'Fries with that!', 'Two burgers!', 'Extra cheese!'],
+  noodles: ['Spicy noodles, please!', 'The usual!', 'Extra noodles!'],
+  pizza: ['One slice, please!', 'Pepperoni!'],
+  tacos: ['Three tacos!', 'Extra salsa!'],
+  sushi: ['The salmon roll!', 'Chef\'s choice!'],
+  diner: ['Burger and a shake!', 'Pie of the day!'],
+  default: ['One, please!', 'That one!', 'Mmm, that looks good!'],
+};
+const CHEF_SAYS = ['Voilà!', 'Bon appétit!', 'Service!', 'Here you go!', 'Fresh!', 'Enjoy!'];
+const pickDish = (kind) => {
+  const d = DISH[kind];
+  return d ? d[Math.floor(Math.random() * d.length)] : null;
+};
+// a store's colour for its bags (its neon's)
+function bagColor(css) {
+  const c = new THREE.Color(css || '#ff5ad1');
+  return [Math.min(1, c.r * 0.85 + 0.1), Math.min(1, c.g * 0.85 + 0.1), Math.min(1, c.b * 0.85 + 0.1)];
+}
+
 // ------------------------------------------------------------------ one open shop
 // how many people sit at the tables (or wait on the bench) when you come by
-const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2 };
+const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2, burger: 2, noodles: 2, gourmet: 5, club: 2 };
 // the new hairdos the barber draws
 const CUTS_M = ['short', 'buzz', 'pompadour', 'spiky', 'curly', 'short', 'pompadour', 'mohawk'];
 const CUTS_F = ['long', 'bun', 'ponytail', 'braids', 'curly', 'beehive', 'long', 'spacebuns'];
@@ -922,13 +1076,35 @@ class OpenShop {
     const c = v.c;
     c.faceYaw = this.paySpot.yaw;
     this.payer = v;
+    const s = this.shop;
+    // (v5, ROADMAP 11.17) at a food counter the cook draws what they ordered, there in the air
+    // between them, and hands it over; near you, so that you see it
+    if (!v.dishAsk && v.t > 0.4 && DISH[s.kind] && this.open && !this.drawing && !this.heroJob) {
+      const p = this.game.player.pos;
+      v.dishAsk = true;
+      if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 26) {
+        this.say(c, pick(ORDERS[s.kind] || ORDERS.default));
+        v.dishT = 0.9;
+      }
+    }
+    if (v.dishT !== undefined) {
+      if (!v.dishDrawn && v.t > 0.4 + v.dishT && this.open && this.keeper && this.keeper.alive) {
+        v.dishDrawn = true;
+        const k = this.keeper;
+        const at = _w.copy(k.pos).lerp(c.pos, 0.5).clone();
+        at.y = c.pos.y + 1.45;
+        this.game.airsketch.draw({ shape: pickDish(s.kind), at, size: 0.5, author: k, target: c.fig.j.handR.clone(), targetScale: 0.22, dur: 1.2, onPlop: () => (v.dishGot = true) });
+        v.t = Math.min(v.t, 0.5);
+      }
+      if (!v.dishGot && v.t < 6) return null;
+    }
     if (v.t > 1.8 && !v.paid) {
       v.paid = true;
-      const s = this.shop;
       const item = ITEM[s.kind];
       if (item) {
-        if (item === 'bag' || item === 'bouquet') c.fig.carryL = item;
+        if (item === 'bag' || item === 'bouquet' || item === 'shopBag') c.fig.carryL = item;
         else c.fig.carry = item;
+        if (item === 'shopBag') c.fig.shopBagColor = bagColor(s.signCol);
         c.fig.bagBread = s.kind === 'bagel' || s.kind === 'deli' || s.kind === 'grocery';
         c.carryUntil = this.game.time + 50;
       }
@@ -947,6 +1123,7 @@ class OpenShop {
     const c = v.c;
     const R = this.room;
     const s = this.shop;
+    this.clearDish(v);
     c.fig.reachR = null;
     c.fig.drinkT = -1;
     v.phase = 'out';
@@ -993,6 +1170,7 @@ class OpenShop {
   drop(v) {
     const i = this.visitors.indexOf(v);
     if (i >= 0) this.visitors.splice(i, 1);
+    this.clearDish(v);
     if (this.payer === v) this.payer = null;
     const c = v.c;
     if (c.owner === this) this.game.civilians.release(c);
@@ -1144,6 +1322,11 @@ class OpenShop {
     const fig = c.fig;
     if (s.kind === 'barber') return this.barberInside(c, dt);
     if (s.kind === 'cafe' && this.room.seats.length >= 2) return this.waiterInside(c, dt);
+    // (v5) a kitchen with tables: now and then a plate drawn for one of them, flown to the table
+    if (DISH[s.kind] && this.room.seats.length && s.kind !== 'cafe') {
+      const m = this.serveTables(c, dt);
+      if (m) return m;
+    }
     if (s.kind === 'music') {
       c.faceYaw = this.homeYaw;
       this.strum(c, dt);
@@ -1171,6 +1354,63 @@ class OpenShop {
     }
     const step = Math.sin(this.t * 0.13 + 1.7) > 0.55 ? Math.sin(this.t * 0.5) * 0.35 : 0;
     return { x: this.home.x - fz * step, z: this.home.z + fx * step, speed: 0.6 };
+  }
+
+  // (v5, ROADMAP 11.17) the cook draws a plate for somebody at a table: they ask, the plate is
+  // drawn in the air over the counter, it flies to their table and stays there (drawn) while they
+  // eat; the gourmet chef does it more often, and with a flourish
+  serveTables(c, dt) {
+    const s = this.shop;
+    const gourmet = s.kind === 'gourmet';
+    this.tableT = (this.tableT === undefined ? 3 + Math.random() * 4 : this.tableT) - dt;
+    const cur = this.tableJob;
+    if (cur) {
+      const v = cur.v;
+      c.faceYaw = Math.atan2(v.c.pos.x - c.pos.x, v.c.pos.z - c.pos.z);
+      c.fig.lookAt = cur.at;
+      if (cur.done || this.game.time > cur.until) this.tableJob = null;
+      return { x: this.home.x, z: this.home.z, speed: 0.6 };
+    }
+    if (this.tableT > 0 || this.drawing || this.heroJob || this.payer) return null;
+    this.tableT = (gourmet ? 6 : 11) + Math.random() * (gourmet ? 6 : 10);
+    const p = this.game.player.pos;
+    if (Math.hypot(this.home.x - p.x, this.home.z - p.z) > 30) return null;
+    const waiting = this.visitors.filter((v) => v.mode === 'seat' && v.phase === 'at' && !v.dish && v.c.alive);
+    if (!waiting.length) return null;
+    const v = pick(waiting);
+    const sp = v.spot;
+    // the table in front of the seat
+    const tx = sp.x + Math.sin(sp.yaw) * 0.42;
+    const tz = sp.z + Math.cos(sp.yaw) * 0.42;
+    const floor = this.room.floor;
+    this.say(v.c, pick(ORDERS[s.kind] || ORDERS.default));
+    const at = new THREE.Vector3(c.pos.x + Math.sin(this.homeYaw) * 0.7, floor + 1.75, c.pos.z + Math.cos(this.homeYaw) * 0.7);
+    const job = { v, at, done: false, until: this.game.time + 9 };
+    this.tableJob = job;
+    const shape = pickDish(s.kind);
+    this.game.inkwell.after(1.0, () => {
+      if (!this.alive || !this.open || this.tableJob !== job) return;
+      this.game.airsketch.draw({
+        shape, at, size: gourmet ? 0.62 : 0.5, author: c, target: new THREE.Vector3(tx, floor + 0.98, tz), targetScale: 0.62, dur: gourmet ? 2.0 : 1.3, hold: gourmet ? 0.6 : 0.35, width: gourmet ? 3.4 : 3.2,
+        onPlop: () => {
+          job.done = true;
+          if (!this.alive || !v.c.alive || v.phase !== 'at') return;
+          // (the plate stays on the table, drawn, while they eat)
+          v.dish = this.game.airsketch.draw({ shape, at: new THREE.Vector3(tx, floor + 0.98, tz), size: 0.31, keep: true, dur: 0.05 });
+          v.stay = Math.max(v.stay, v.t + 14 + Math.random() * 12);
+          if (Math.random() < 0.7) this.say(c, pick(CHEF_SAYS));
+          if (Math.random() < 0.5) this.game.inkwell.after(1.2, () => this.say(v.c, pick(['Mmm!', 'Delicious!', 'Wow, thank you!', 'Magnifique!'])));
+        },
+      });
+    });
+    return { x: this.home.x, z: this.home.z, speed: 0.6 };
+  }
+
+  clearDish(v) {
+    if (v.dish) {
+      this.game.airsketch.erase(v.dish);
+      v.dish = null;
+    }
   }
 
   // the cafe: from the counter to a table and back
@@ -1910,6 +2150,7 @@ class OpenShop {
     for (const c of this.extras) drop(c);
     drop(this.chairGuy);
     for (const v of this.visitors) {
+      this.clearDish(v);
       if (v.own) drop(v.c);
       else if (v.c.ctrl) {
         // a passer-by still inside: they find their own way out

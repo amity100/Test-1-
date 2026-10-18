@@ -53,6 +53,18 @@ export const PRICES = {
   cinema: [5],
   friends: [(g) => (g.streetlife.companion && g.streetlife.companion.alive ? 0 : 15)],
   lobby: [0, 0],
+  // (v5, ROADMAP 11.17: the mainland's stores; a shelf's things cost what SHELF_PRICES says)
+  fashion: [20, 25, 0],
+  shoes: [45, 55],
+  electronics: [40, 5, (g) => (g.police.level > 0 ? 60 * g.police.level : 0)],
+  jewelry: [180, 60, 250],
+  toys: [12, 3, 30],
+  perfume: [35, 35],
+  sports: [50, 140, 18],
+  burger: [9, 4, 5],
+  noodles: [10, 5],
+  gourmet: [28, 64, 36, 18],
+  club: [8, 4, 0],
 };
 // a shelf's things (the wardrobe, ROADMAP 5.7); taking something off is free
 export const SHELF_PRICES = { top: 30, bottom: 35, shoes: 45, hat: 20, acc: 25, tattoo: 45 };

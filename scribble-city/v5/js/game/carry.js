@@ -79,6 +79,17 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
     case 'pizzaBox':
       [x, y, z] = [side * 0.17, hipY + 0.12, 0.3];
       break;
+    // (v5, ROADMAP 11.17: what the mainland's stores and food counters hand you)
+    case 'burger':
+    case 'teddy':
+      [x, y, z] = [side * 0.13, ny - 0.12, 0.27];
+      break;
+    case 'noodleBox':
+    case 'soda':
+      [x, y, z] = [side * 0.16, hipY + 0.22, 0.25];
+      break;
+    case 'shopBag':
+      return false;
     case 'laundry':
       [x, y, z] = [side * 0.21, hipY + 0.05, 0.27];
       break;
@@ -195,6 +206,47 @@ function shapesFor(fig, item, side, S) {
     case 'bag':
       _a.copy(h).addScaledVector(UP, -0.14 * S);
       e(_a, 0.11, 0.15, 0.07, CARD);
+      break;
+    case 'shopBag': {
+      // a store's paper bag, in its colour, hanging from the rope handles
+      _a.copy(h).addScaledVector(UP, -0.2 * S);
+      const b = e(_a, 0.15, 0.17, 0.065, fig.shopBagColor || [0.95, 0.45, 0.6]);
+      fig.clip(b, _b.set(0, 1, 0), _a, 0.11 * S);
+      break;
+    }
+    case 'balloon': {
+      _a.copy(h).addScaledVector(UP, 0.95 * S + Math.sin(fig.carryT * 1.3) * 0.03 * S).addScaledVector(X, Math.sin(fig.carryT * 0.9) * 0.05 * S);
+      e(_a, 0.15, 0.19, 0.15, fig.balloonColor || [0.88, 0.2, 0.24]);
+      break;
+    }
+    case 'burger':
+      _a.copy(h).addScaledVector(UP, 0.08 * S);
+      e(_a, 0.07, 0.035, 0.07, [0.86, 0.62, 0.32]);
+      _a.copy(h).addScaledVector(UP, 0.035 * S);
+      e(_a, 0.072, 0.02, 0.072, [0.45, 0.26, 0.14]);
+      _a.copy(h).addScaledVector(UP, 0.005 * S);
+      e(_a, 0.066, 0.022, 0.066, [0.86, 0.62, 0.32]);
+      break;
+    case 'noodleBox': {
+      _a.copy(h).addScaledVector(UP, 0.07 * S);
+      const b = e(_a, 0.06, 0.08, 0.06, [0.97, 0.96, 0.93]);
+      fig.clip(b, _b.set(0, 1, 0), _a, 0.055 * S);
+      break;
+    }
+    case 'soda':
+      _a.copy(h).addScaledVector(UP, -0.01 * S);
+      _b.copy(h).addScaledVector(UP, 0.11 * S);
+      fig.capsule(part, bone, _a, _b, 0.038 * S, fig.sodaColor || [0.86, 0.22, 0.24]);
+      break;
+    case 'teddy':
+      _a.copy(h).addScaledVector(UP, 0.06 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.07, 0.085, 0.06, [0.62, 0.42, 0.26]);
+      _a.copy(h).addScaledVector(UP, 0.18 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.06, 0.055, 0.055, [0.62, 0.42, 0.26]);
+      for (const k of [-1, 1]) {
+        _a.copy(h).addScaledVector(UP, 0.23 * S).addScaledVector(X, k * 0.045 * S).addScaledVector(Z, 0.03 * S);
+        e(_a, 0.022, 0.022, 0.018, [0.62, 0.42, 0.26]);
+      }
       break;
     case 'trashbag':
       // a black bin bag, tied at the top (the garbage truck's crew: game/fleet.js)
@@ -391,6 +443,41 @@ function strokesFor(fig, item, side, w) {
         _b.copy(_a).addScaledVector(UP, 0.22 * S).addScaledVector(X, 0.04 * S);
         line(fig, _a, _b, [0.86, 0.66, 0.36], w * 3.6, sd + 52);
       }
+      break;
+    case 'shopBag': {
+      // the rope handles up to the hand, the store's mark on its side
+      _a.copy(h).addScaledVector(UP, -0.09 * S).addScaledVector(X, -0.07 * S);
+      _b.copy(h).addScaledVector(UP, -0.09 * S).addScaledVector(X, 0.07 * S);
+      line(fig, h, _a, ink, w, sd + 170);
+      line(fig, h, _b, ink, w, sd + 171);
+      _a.copy(h).addScaledVector(UP, -0.2 * S).addScaledVector(X, -0.05 * S).addScaledVector(Z, 0.068 * S);
+      _b.copy(_a).addScaledVector(X, 0.1 * S);
+      line(fig, _a, _b, fig.shopBagMark || [0.98, 0.98, 0.96], w * 2.6, sd + 172);
+      break;
+    }
+    case 'balloon':
+      _a.copy(h).addScaledVector(UP, 0.76 * S + Math.sin(fig.carryT * 1.3) * 0.03 * S).addScaledVector(X, Math.sin(fig.carryT * 0.9) * 0.05 * S);
+      _b.lerpVectors(h, _a, 0.5).addScaledVector(X, 0.03 * S);
+      line(fig, h, _b, ink, w * 0.7, sd + 180);
+      line(fig, _b, _a, ink, w * 0.7, sd + 181);
+      break;
+    case 'burger':
+      _a.copy(h).addScaledVector(UP, 0.05 * S).addScaledVector(X, -0.07 * S);
+      _b.copy(_a).addScaledVector(X, 0.14 * S);
+      line(fig, _a, _b, [0.35, 0.65, 0.3], w * 1.8, sd + 175);
+      break;
+    case 'noodleBox':
+      // two chopsticks out of the top
+      for (const k of [-1, 1]) {
+        _a.copy(h).addScaledVector(UP, 0.1 * S).addScaledVector(X, k * 0.012 * S);
+        _b.copy(_a).addScaledVector(UP, 0.14 * S).addScaledVector(X, 0.05 * S);
+        line(fig, _a, _b, WOOD, w * 1.1, sd + 176 + k);
+      }
+      break;
+    case 'soda':
+      _a.copy(h).addScaledVector(UP, 0.12 * S);
+      _b.copy(_a).addScaledVector(UP, 0.09 * S).addScaledVector(X, 0.02 * S);
+      line(fig, _a, _b, [0.3, 0.6, 0.9], w * 1.4, sd + 179);
       break;
     case 'pizzaBox': {
       if (side !== 1) break;
