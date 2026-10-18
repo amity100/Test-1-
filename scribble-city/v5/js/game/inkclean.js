@@ -94,6 +94,19 @@ function rdpIdx(P, eps) {
         m = k;
       }
     }
+    // (ROADMAP 11.16) nothing off its line - but gone on well past an end of it, out and back over
+    // it: half a rotor's blade, the T of a mast and its blade in one stroke - as far as it went
+    if (m < 0) {
+      let over = Math.max(eps, L * 0.15);
+      for (let k = i + 1; k < j; k++) {
+        const t = ((P[k][0] - ax) * dx + (P[k][1] - ay) * dy) / (L * L);
+        const o = t < 0 ? -t * L : t > 1 ? (t - 1) * L : 0;
+        if (o > over) {
+          over = o;
+          m = k;
+        }
+      }
+    }
     if (m >= 0) {
       keep[m] = 1;
       stack.push([i, m], [m, j]);
@@ -339,7 +352,7 @@ export function cleanStroke(P, o = {}) {
 function cleanLine(P, o = {}) {
   const px = o.unit || 1 / 360;
   if (!P || P.length < 2) return { p: P, kind: 'dot', closed: false };
-  const L = pathLen(P);
+  let L = pathLen(P);
   const B = boxOf(P);
   const size = Math.max(B.w, B.h);
   if (L < px * 6 || size < px * 4) return { p: P, kind: 'dot', closed: false };
@@ -347,9 +360,41 @@ function cleanLine(P, o = {}) {
   if (L > Math.hypot(B.w, B.h) * 5.5) return { p: P, kind: 'scribble', closed: false };
   // the hand's tremble out first: points evenly along it, each the average of it and its two
   // neighbours (the ends stay where they are)
-  const n = Math.max(12, Math.min(160, Math.round(L / (px * 3))));
+  let n = Math.max(12, Math.min(160, Math.round(L / (px * 3))));
   let Q = resample(P, n);
   Q = Q.map((q, i) => (i === 0 || i === n - 1 ? q : [(Q[i - 1][0] + q[0] * 2 + Q[i + 1][0]) / 4, (Q[i - 1][1] + q[1] * 2 + Q[i + 1][1]) / 4]));
+  // (ROADMAP 11.16: drawn round fast and on past where it began - back over its start: closed there,
+  // what ran on past it none of it; or ended on its own first stretch: closed there, the bit before
+  // that a lead-in)
+  if (Math.hypot(Q[n - 1][0] - Q[0][0], Q[n - 1][1] - Q[0][1]) >= Math.max(px * 14, size * 0.2)) {
+    const near = Math.max(px * 8, size * 0.06);
+    const pick = (i0, i1, q) => {
+      let k = -1;
+      let d = near;
+      for (let i = i0; i < i1; i++) {
+        const e = Math.hypot(Q[i][0] - q[0], Q[i][1] - q[1]);
+        if (e < d) {
+          d = e;
+          k = i;
+        }
+      }
+      return k;
+    };
+    const t = pick(Math.floor(n * 0.6), n - 1, Q[0]);
+    const h = t < 0 ? pick(1, Math.ceil(n * 0.4), Q[n - 1]) : -1;
+    const R = t > 0 ? Q.slice(0, t + 1) : h > 0 ? Q.slice(h) : null;
+    // (what is cut off: a little past it, a little before it - or round it again, within it, over its
+    // own line or inside it, a spiral; never a leg with a wheel at its end, off away from it)
+    const C = t > 0 ? Q.slice(t) : h > 0 ? Q.slice(0, h + 1) : null;
+    const RB = R ? boxOf(R) : null;
+    const pad = RB ? Math.max(RB.w, RB.h) * 0.15 : 0;
+    const within = C && RB ? C.filter(([x, y]) => x > RB.x0 - pad && x < RB.x0 + RB.w + pad && y > RB.y0 - pad && y < RB.y0 + RB.h + pad).length / C.length : 0;
+    if (R && pathLen(R) > size * 2.2 && (pathLen(R) > L * 0.75 || within > 0.8)) {
+      Q = R;
+      n = Q.length;
+      L = pathLen(Q);
+    }
+  }
   const a0 = Q[0];
   const a1 = Q[n - 1];
   const chord = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]);
@@ -406,7 +451,18 @@ function cleanLine(P, o = {}) {
     return t2 > 22 * DEG && t2 > 0.5 * turnAt(i, 5);
   };
   const cIdx = [idx[0]];
-  for (let k = 1; k < idx.length - 1; k++) if (sharp(idx[k])) cIdx.push(idx[k]);
+  for (let k = 1; k < idx.length - 1; k++) {
+    if (sharp(idx[k])) {
+      cIdx.push(idx[k]);
+      continue;
+    }
+    // (ROADMAP 11.16: a turn right back on itself - out and back over its line, the pen not lifted,
+    // a hairpin however tight: its tip, a few samples from the point farthest off the line)
+    let tip = -1;
+    const back = (j) => turnAt(j, 5) + turnAt(j, 2);
+    for (let j = Math.max(idx[k - 1] + 1, idx[k] - 6); j <= Math.min(idx[k + 1] - 1, idx[k] + 6); j++) if (turnAt(j, 5) > 130 * DEG && turnAt(j, 2) > 45 * DEG && (tip < 0 || back(j) > back(tip))) tip = j;
+    if (tip >= 0) cIdx.push(tip);
+  }
   cIdx.push(idx[idx.length - 1]);
   // (a closed one: its start is a corner only if it turns there too)
   if (closedish && cIdx.length > 2 && !o.rotated) {

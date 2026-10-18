@@ -1008,10 +1008,15 @@ export function buildPolished(design, spec, opt = {}) {
     else if (on >= 0.6) skinLine(s.pts, 0.05, s.neon ? linC(...c) : inkOn(c, base));
     else if (s.part === 'mast' && S.some((q) => q.type === 'sail')) continue;
     else if (s.part === 'skid') {
-      // (a helicopter's skids: a steel tube each side where it was drawn, on struts up to it)
-      const P = thin(toM(s.pts), 0.08);
-      const a = P[0];
-      const b = P[P.length - 1];
+      // (a helicopter's skids: a steel tube each side where it was drawn, on struts up to it - ROADMAP
+      // 11.16: drawn in one line with its struts, down, along and up: the skid its bottom)
+      const P0 = thin(toM(s.pts), 0.08);
+      const ys = P0.map((q) => q[1]);
+      const lo = Math.min(...ys);
+      const hi = Math.max(...ys);
+      const P = hi - lo > 0.2 ? P0.filter((q) => q[1] < lo + (hi - lo) * 0.3) : P0;
+      const a = P.reduce((m, q) => (q[0] < m[0] ? q : m), P[0]);
+      const b = P.reduce((m, q) => (q[0] > m[0] ? q : m), P[0]);
       const steel = linC(0.32, 0.33, 0.37);
       for (const sx of [-1, 1]) {
         const x = sx * W * 0.38;
@@ -1413,6 +1418,14 @@ export function buildPolished(design, spec, opt = {}) {
     if (F && !s.whole && body && body.at) {
       const fwd = Math.sign(mz[0] - bs[0]) || 1;
       const L0 = Math.hypot(mz[0] - bs[0], mz[1] - bs[1]);
+      // (ROADMAP 11.16: drawn a little off its nose, the hand not quite there - out of its nose, along
+      // the line it was drawn on)
+      const end = fwd > 0 ? body.z1 : body.z0;
+      const off = (bs[0] - end) * fwd;
+      if (Number.isFinite(end) && off > 0 && off < L0 * 1.5 && Math.abs(mz[0] - bs[0]) > 1e-3) {
+        const t = (end - fwd * 0.04 - bs[0]) / (mz[0] - bs[0]);
+        bs = [bs[0] + (mz[0] - bs[0]) * t, bs[1] + (mz[1] - bs[1]) * t];
+      }
       let st0 = body.at(bs[0]);
       for (let k = 0; k < 16 && st0 && st0.hw < r * 1.5 && Math.abs(mz[0] - bs[0]) < L0 * 1.8; k++) {
         bs = [bs[0] - fwd * Math.max(0.04, L0 * 0.05), bs[1]];

@@ -174,11 +174,40 @@ function rideDesign0(P, strokes, inks, look) {
     if (edge || o.type === 'frame') type = 'line';
     const s = { type, part: o.type, pts: M(o.pts), ...ink, src: o.i };
     if (edge) s.edge = true;
+    // (ROADMAP 11.16: the body's line going on out of it, the pen not lifted - a helicopter's tail boom
+    // drawn on from its cabin, an aerial: what goes on out of it, as drawn - out of a helicopter's
+    // end, level, its tail)
+    if (edge) {
+      // (each run from the last point on it - where it leaves it - to the next)
+      const runs = [];
+      let run = [];
+      let last = null;
+      for (const p of o.pts) {
+        if (onLoop([p], P.R.loop, B.size * 0.06)) {
+          if (run.length) runs.push(run.concat([p]));
+          run = [];
+          last = p;
+        } else {
+          if (!run.length && last) run.push(last);
+          run.push(p);
+        }
+      }
+      if (run.length) runs.push(run);
+      for (const r of runs) {
+        if (r.length < 2) continue;
+        const rs = shapeOf(r);
+        if (Math.max(rs.w, rs.h) < B.size * 0.15) continue;
+        const tail = P.family === 'copter' && rs.h < rs.w * 0.75 && (rs.cx < B.x0 || rs.cx > B.x1);
+        out.push({ type: 'line', part: tail ? 'tail' : 'line', pts: M(r), ...ink, src: o.i, run: true });
+      }
+    }
     if (o.type === 'hull' && !edge) s.hull = true;
     if (o.type === 'spring') s.coils = o.sh.coils;
     if (o.type === 'balloon' && P.ship) s.ship = true;
     // (half a wheel drawn, hanging from it - a U, a C: the whole wheel it goes round)
-    if (o.type === 'wheel' && !o.sh.closed) {
+    // (ROADMAP 11.16: not a track - a row of loops drawn along under it, its two halves: as drawn)
+    if (o.track) s.track = true;
+    if (o.type === 'wheel' && !o.sh.closed && !o.track) {
       const f = o.sh.fit && o.sh.fit.cover > 2.5 && o.sh.fit.err < 0.3 ? o.sh.fit : o.sh.cup;
       if (f) {
         s.pts = [];
@@ -208,6 +237,12 @@ function rideDesign0(P, strokes, inks, look) {
       if (INK_EL[o.ink]) s.el = INK_EL[o.ink];
     }
     if (o.type === 'blade' || o.type === 'wing' || o.type === 'rotor' || o.type === 'chute') s.len = o.sh.long * m;
+    // (ROADMAP 11.16: a rotor drawn as a T, its mast and its blade in one stroke - it turns where
+    // its blade is, as wide as that; its mast the game's)
+    if (o.type === 'rotor' && o.tee) {
+      s.pts = M(o.tee.blade);
+      s.len = o.tee.b.w * m;
+    }
     // (ROADMAP 11.13) a plane's wing drawn hanging off its body: the wing as it is from above, as
     // drawn - its sweep, its taper, its tip (ROADMAP 11.15: as drawn, on anything)
     if (o.type === 'wing' && (P.family === 'plane' || look === 'faithful')) {
@@ -292,17 +327,21 @@ function rideDesign0(P, strokes, inks, look) {
     if (hi > lo) nose = Math.round(((hi - lo) / Math.max(1e-6, B.h)) * 100) / 100;
   }
   const kin = kinOf(P);
-  // (ROADMAP 11.14: the network plainly sees something that is no ride in it - a house, a fish: what
-  // it is called, flying)
-  // (a ladder, a bridge - boxes and lines, as any body is: only when all but certain)
-  const g0 = P.guess && P.guess[0];
-  if (g0 && g0[1] >= (BOXY_THING.has(g0[2]) ? 0.85 : 0.6) && THING_NOUN[g0[2]] && !VEHICLE_GROUPS.has(g0[0]) && !((P.sure || 0) >= 0.75)) kin.thing = g0[2];
+  const thing = thingOf(P);
+  if (thing) kin.thing = thing;
   // (a fire engine's ladder, its hose: it sprays water - unless drawn in an ink of its own)
   if (kin.cls === 'firetruck') for (const s of out) if (s.part === 'barrel' && !s.el) s.el = 'water';
   // (and where on the page each metre of it is - ui/freedraw.js shows its balance there, and the
   // engineer's changes: game/engineer.js)
   const page = { m, k: P.k, x0: P.x0, y1: P.y1, flip: !!P.flip, W: (P.x1 - P.x0) * P.k };
   return { color, strokes: out, polish: true, plane: P.family === 'plane' || undefined, copter: P.family === 'copter' || undefined, airship: P.ship || undefined, rocket: P.rocket ? true : undefined, asBoat: P.family === 'boat' || undefined, nose, ...kin, page };
+}
+
+// (ROADMAP 11.14) the network plainly sees something that is no ride in it - a house, a fish: what it
+// is called, flying. A ladder, a bridge - boxes and lines, as any body is: only when all but certain
+function thingOf(P) {
+  const g0 = P.guess && P.guess[0];
+  return g0 && g0[1] >= (BOXY_THING.has(g0[2]) ? 0.85 : 0.6) && THING_NOUN[g0[2]] && !VEHICLE_GROUPS.has(g0[0]) && !((P.sure || 0) >= 0.75) ? g0[2] : null;
 }
 
 // (ROADMAP 11.13) a wing drawn from the side, as most draw one - hanging down off the body (or up
@@ -682,7 +721,9 @@ function topDesign(P, inks) {
   const color = bodyInk.pencil ? [0.95, 0.93, 0.88] : bodyInk.col.slice();
   const hwPlan = [];
   for (let i = 0; i <= 48; i++) hwPlan.push([(i / 48) * L, hwAt((i / 48) * L)]);
-  return { color, strokes: out, polish: true, above: true, plane: true, plan: { hw: hwPlan }, dart: T.dart };
+  // (ROADMAP 11.16: and from above too - a star its network plainly sees in it, flying: a flying star)
+  const thing = thingOf(P);
+  return { color, strokes: out, polish: true, above: true, plane: true, plan: { hw: hwPlan }, dart: T.dart, ...(thing ? { thing } : {}) };
 }
 
 // (ROADMAP 11.13) a helicopter drawn from above: its body as long and as wide as drawn, from the
@@ -913,6 +954,7 @@ export function rideSpec(design) {
   const role = new Map();
   const see = (s, ctx) => {
     const q = placeOf(s.pts, box);
+    if (s.track) q.track = true;
     const r = roleOf(partOf(s), q, ctx);
     role.set(s, { v: r.v, name: r.name, say: r.say, q });
   };
@@ -1416,7 +1458,7 @@ export function rideSpec(design) {
   const combo = rideCombos(spec);
   // (as long as it is all: an airship by its envelope, a drone across its rotors)
   const Lall = design.rocket ? H : spec.balloon && spec.balloon.len ? spec.balloon.len : design.drone && rotors.length ? Math.max(...rotors.map((r) => r.x1)) - Math.min(...rotors.map((r) => r.x0)) : L;
-  const sum = summary({ ok: true, spec, mass, L, Lall, H, area, wheels, rAvg, R, liftR, liftJ, liftW, warn, design, copter, plane, glide, boat, balloon, role, com, tracks, fans, combo });
+  const sum = summary({ ok: true, box, spec, mass, L, Lall, H, area, wheels, rAvg, R, liftR, liftJ, liftW, warn, design, copter, plane, glide, boat, balloon, role, com, tracks, fans, combo });
   spec.label = sum.name;
   spec.sum = sum;
   spec.polish = true;
@@ -1638,7 +1680,11 @@ function summary(o) {
     const aW = n ? (o.area || 0) / (Math.PI * r * r * n) : Infinity;
     const wr = n === 2 ? Math.max(wheels[0].r, wheels[1].r) / Math.max(1e-3, Math.min(wheels[0].r, wheels[1].r)) : 9;
     // (two like wheels, big for its length, and little body between them: a bike's build)
-    const bikey = S.some((s) => s.type === 'body' && s.slim) || (n === 2 && wr < 1.6 && r / Math.max(1e-3, L) >= 0.13 && aW <= 3.6);
+    // (ROADMAP 11.16: a body up on them, its bottom about their tops, and out past both of them - a
+    // monster truck's: a bike's frame is down between its wheels, or its wheels stick out at its ends.
+    // Of 25 people's bikes named so by their build, none so)
+    const perched = !!o.box && n === 2 && aW >= 0.4 && wheels.every((w) => o.box.y0 - w.y > w.r * 0.75 && Math.min(w.z - o.box.x0, o.box.x1 - w.z) > w.r * 0.7);
+    const bikey = S.some((s) => s.type === 'body' && s.slim) || (n === 2 && wr < 1.6 && r / Math.max(1e-3, L) >= 0.13 && aW <= 3.6 && !perched);
     let k = kin;
     if ((k === 'moto' || k === 'bicycle') && n > 2) k = null;
     if (k === 'tank' && !nBarrels) k = null;
