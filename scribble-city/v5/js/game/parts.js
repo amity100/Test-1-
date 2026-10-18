@@ -530,6 +530,35 @@ function netTurns(P) {
   return t / (Math.PI * 2);
 }
 
+// (ROADMAP 11.16) how far a point is from a line (closed: round back to its start)
+function toLine(p, P, closed = false) {
+  let m = Infinity;
+  const n = P.length;
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const a = P[i];
+    const b = P[(i + 1) % n];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / Math.max(1e-12, dx * dx + dy * dy)));
+    m = Math.min(m, Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy));
+  }
+  return m;
+}
+
+// (ROADMAP 11.16) a short line out from an outline - a leg, a strut: one end on it, the other well
+// out of it - is no more of what it stands out from, however near its edge most of it is drawn
+function sticksOut(o, R) {
+  const sh = o.sh;
+  const B = R.sh;
+  if (sh.closed || !R.loop || sh.size > B.h * 0.8) return false;
+  const p = o.pts[0];
+  const q = o.pts[o.pts.length - 1];
+  const a = toLine(p, R.loop, true);
+  const b = toLine(q, R.loop, true);
+  const far = a > b ? p : q;
+  return Math.max(a, b) > Math.max(B.h * 0.1, sh.long * 0.55) && Math.min(a, b) < B.h * 0.12 && !inPoly(far[0], far[1], R.loop);
+}
+
 // (ROADMAP 11.16) how much of a line is spent in small loops, each closed where it crosses itself
 // (a puff of smoke: most of it; a body outline with a curl in it, a wheel with a tail: little)
 function loopShare(P, size) {
@@ -584,7 +613,12 @@ function besideBody(o, st, D) {
     // wheel there hangs lower than what it carries)
     const over = Math.min(sh.y1, q.sh.y1) - Math.max(sh.y0, q.sh.y0);
     if ((Math.abs(sh.x0 - q.sh.x1) < d * 1.2 || Math.abs(sh.x1 - q.sh.x0) < d * 1.2) && over > sh.h * 0.6 && sh.my > q.sh.y0 + r * 0.35 && Math.abs(sh.y0 - q.sh.y0) < q.sh.h * 0.15 && sh.y1 > q.sh.y0 + q.sh.h * 0.6) return true;
-    const near = o.pts.filter(([x, y]) => q.pts.some(([u, v]) => Math.abs(u - x) + Math.abs(v - y) < d));
+    // (how near to its line - not to the points it is drawn in, far apart on a long straight side;
+    // set against it, not drawn across its edge - a wheel half up in its body is a wheel)
+    const inQ = q.sh.closed ? o.pts.filter(([x, y]) => inPoly(x, y, q.pts)).length / o.pts.length : 0;
+    if (inQ > 0.3 && inQ < 0.85) continue;
+    // (one inside it, against its end: as near as its points come)
+    const near = inQ < 0.3 ? o.pts.filter((p) => toLine(p, q.pts) < d * 1.1) : o.pts.filter(([x, y]) => q.pts.some(([u, v]) => Math.abs(u - x) + Math.abs(v - y) < d));
     if (near.length < o.pts.length * 0.07) continue;
     const L = near.filter(([x]) => x < sh.mx - r * 0.55);
     const Rt = near.filter(([x]) => x > sh.mx + r * 0.55);
@@ -1650,8 +1684,13 @@ function parseCopter(F) {
   let rotor = 0;
   let tail = null;
   const out = [];
+  // (ROADMAP 11.16: a line out past its end at about its top's height, little of it over it - its
+  // tail boom, not a rotor; a rotor is over it)
+  // (out from its end - one half of a rotor drawn out from its hub over its middle is a rotor still)
+  const overB = (sh) => Math.max(0, Math.min(sh.x1, B.x1) - Math.max(sh.x0, B.x0)) / Math.max(1e-6, sh.w);
+  const boom = (sh) => overB(sh) < 0.4 && sh.cy < B.y1 + B.h * 0.2 && (sh.cx < B.cx ? Math.abs(sh.x1 - B.x0) : Math.abs(sh.x0 - B.x1)) < B.w * 0.2;
   for (const o of st) {
-    if (rotorC.has(o.i) && o.sh.cy > B.y1 - B.h * 0.25) {
+    if (rotorC.has(o.i) && o.sh.cy > B.y1 - B.h * 0.25 && !boom(o.sh)) {
       labels[o.i] = 'rotor';
       rotor++;
     }
@@ -1663,7 +1702,7 @@ function parseCopter(F) {
     // (ROADMAP 11.16) one big line drawn round most of what the body is: the body, whatever thin bit of
     // it the thinning left out of what closes - a tank's hull drawn flat, coming to a point
     const bigOne = !over[o.i] && (o.sh.closed || o.sh.endGap < o.sh.size * 0.2) && o.sh.size > B.size * 0.6 && r.fo < 0.5;
-    if (r.fo <= 0.28 || bigOne) {
+    if ((r.fo <= 0.28 || bigOne) && !sticksOut(o, R)) {
       if (r.fe >= 0.5 || (r.fe >= r.fi && o.sh.size > B.size * 0.3) || bigOne) {
         labels[o.i] = 'body';
         if (r.fe * o.sh.len > mainE) {
@@ -1679,7 +1718,7 @@ function parseCopter(F) {
   for (const o of out) {
     const sh = o.sh;
     const flat = sh.slant < 0.62 && (sh.straight || sh.thin > 3.5) && sh.wiggle < 3;
-    if (flat && sh.cy > B.y1 - B.h * 0.15 && sh.long > B.w * 0.3 && Math.abs(sh.cx - B.cx) < B.w * 0.55) {
+    if (flat && sh.cy > B.y1 - B.h * 0.15 && sh.long > B.w * 0.3 && Math.abs(sh.cx - B.cx) < B.w * 0.55 && !boom(sh)) {
       labels[o.i] = 'rotor';
       rotor++;
     }
@@ -2082,6 +2121,25 @@ function planeSide(F) {
   // wing seen from a little over it slants back) - no wing
   const lowW = st.filter((o) => labels[o.i] === 'wing' && !(o.sh.slant < 0.22 && o.sh.y0 > B.y1 - B.h * 0.1));
   const fwd = face < 0 ? -1 : 1;
+  // (ROADMAP 11.16: a short straight line out of its nose, level, at its nose's height - its gun,
+  // however short for how long it is; one line or two side by side, a barrel drawn quickly)
+  for (const o of st) {
+    if (labels[o.i] !== 'deco' || over[o.i] || o === long) continue;
+    const sh = o.sh;
+    if (!(sh.straight || sh.thin > 4) || sh.slant > 0.35 || sh.long < B.w * 0.08 || sh.long > B.w * 0.9) continue;
+    const nose = fwd > 0 ? B.x1 : B.x0;
+    const back = fwd > 0 ? sh.x0 : sh.x1;
+    const tip = fwd > 0 ? sh.x1 : sh.x0;
+    if ((tip - nose) * fwd < B.w * 0.04 || Math.abs(back - nose) > B.w * 0.12) continue;
+    const sp = R.loop ? spanAt(R.loop.concat([R.loop[0]]), nose - fwd * B.w * 0.03) : null;
+    const lo = sp ? sp[0] : B.y0;
+    const hi = sp ? sp[1] : B.y1;
+    if (sh.cy < lo - B.h * 0.15 || sh.cy > hi + B.h * 0.15) continue;
+    // (from its very nose, as drawn - a thin nose is worn out of the body's cells)
+    const gap = R.loop ? Math.min(...o.pts.map((p) => toLine(p, R.loop, true))) : (o.rel || relate(G, R, o)).gap;
+    if (gap > B.w * 0.04) continue;
+    labels[o.i] = 'barrel';
+  }
   for (const o of st) {
     if (labels[o.i] !== 'wing' || over[o.i]) continue;
     const sh = o.sh;
@@ -2431,14 +2489,17 @@ function parseBalloon(F) {
   // the basket: small, compact, under it (ROADMAP 11.14: or what hangs from it in its place - a
   // car, a boat, a house: closed, under it, far bigger than the rest that could be)
   let basket = null;
+  const hung = [];
   for (const o of st) {
     if (o === env || (over[o.i] && !BODYISH.has(over[o.i]))) continue;
     const sh = o.sh;
     const aspect = Math.max(sh.w, sh.h) / Math.max(1e-6, Math.min(sh.w, sh.h));
-    if (sh.cy < E.y0 + E.h * 0.12 && sh.size < E.w * 0.75 && sh.size > E.w * 0.08 && aspect < 3 && (sh.closed || sh.cup || sh.endGap < sh.size * 0.9) && Math.abs(sh.cx - E.cx) < E.w * 0.5) {
-      if (!basket || sh.y0 < basket.sh.y0) basket = o;
-    }
+    if (sh.cy < E.y0 + E.h * 0.12 && sh.size < E.w * 0.75 && sh.size > E.w * 0.08 && aspect < 3 && (sh.closed || sh.cup || sh.endGap < sh.size * 0.9) && Math.abs(sh.cx - E.cx) < E.w * 0.5) hung.push(o);
   }
+  // (ROADMAP 11.16: the one hanging under its middle - a propeller at the basket's side, hanging as
+  // low, is no basket)
+  const mid = hung.filter((o) => Math.abs(o.sh.cx - E.cx) < E.w * 0.25);
+  for (const o of mid.length ? mid : hung) if (!basket || o.sh.y0 < basket.sh.y0) basket = o;
   // (ROADMAP 11.14) what hangs from it in its basket's place - a car, on its wheels: closed, long,
   // all of it under it, two wheels under it - it drives on the road too
   let wheelsUnder = [];
@@ -2969,6 +3030,82 @@ function joinPieces(st, D, over) {
   return { st: out, pieces };
 }
 
+// (ROADMAP 11.16) a ladder: two long lines side by side, alike in length and way, close for how long
+// they are, and short ones across from one to the other along them (its rungs - two at least, not
+// only its two ends: a box drawn in four lines is no ladder) - on a fire engine's roof, hung from a
+// helicopter: as drawn, no rotor, no gun, no body. Returns the strokes it is drawn in
+function ladders(st, D, over) {
+  const out = new Set();
+  const free = st.filter((o) => !over[o.i] && !o.sh.closed && o.kind !== 'dot' && o.kind !== 'scribble');
+  const rails = free.filter((o) => (o.sh.straight || o.sh.thin > 6) && o.sh.long > D.size * 0.2);
+  for (let a = 0; a < rails.length; a++) {
+    for (let b = a + 1; b < rails.length; b++) {
+      const A = rails[a].sh;
+      const B = rails[b].sh;
+      let dAng = Math.abs(Math.atan2(A.uy, A.ux) - Math.atan2(B.uy, B.ux)) % Math.PI;
+      dAng = Math.min(dAng, Math.PI - dAng);
+      if (dAng > 0.2 || Math.min(A.long, B.long) < Math.max(A.long, B.long) * 0.65) continue;
+      // (how far apart: B's middle from A's line; along A, how much of the shorter they share)
+      const sep = toLine([B.cx, B.cy], rails[a].pts);
+      const L = Math.min(A.long, B.long);
+      if (sep < D.size * 0.02 || sep > L * 0.3) continue;
+      const along = (p) => (p[0] - A.cx) * A.ux + (p[1] - A.cy) * A.uy;
+      const bs = rails[b].pts.map(along);
+      const lo = Math.max(-A.long / 2, Math.min(...bs));
+      const hi = Math.min(A.long / 2, Math.max(...bs));
+      if (hi - lo < L * 0.6) continue;
+      let rungs = 0;
+      let inner = 0;
+      const these = [];
+      for (const o of free) {
+        if (o === rails[a] || o === rails[b] || o.sh.long > sep * 2.2 || o.sh.long < sep * 0.4) continue;
+        const p = o.pts[0];
+        const q = o.pts[o.pts.length - 1];
+        const lim = sep * 0.4;
+        const pa = toLine(p, rails[a].pts);
+        const pb = toLine(p, rails[b].pts);
+        const qa = toLine(q, rails[a].pts);
+        const qb = toLine(q, rails[b].pts);
+        if (!((pa < lim && qb < lim) || (pb < lim && qa < lim))) continue;
+        const t = (along([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]) - lo) / Math.max(1e-6, hi - lo);
+        if (t < -0.1 || t > 1.1) continue;
+        rungs++;
+        if (t > 0.12 && t < 0.88) inner++;
+        these.push(o.i);
+      }
+      if (inner < 2 && !(rungs >= 3 && inner >= 1)) continue;
+      // (a band across a body - a bus's windows between two long lines, the frames between them - has
+      // more of the body over it along most of it: a ladder is on top)
+      const nx = A.uy > 0 || (A.uy === 0 && A.ux < 0) ? A.uy : -A.uy;
+      const ny = A.uy > 0 || (A.uy === 0 && A.ux < 0) ? -A.ux : A.ux;
+      const up = ny >= 0 ? [nx, ny] : [-nx, -ny];
+      const N = 10;
+      const binOf = (p) => Math.floor(((along(p) - lo) / Math.max(1e-6, hi - lo)) * N);
+      const railTop = new Array(N).fill(-Infinity);
+      for (const o of [rails[a], rails[b]]) {
+        for (const p of o.pts) {
+          const k = binOf(p);
+          if (k >= 0 && k < N) railTop[k] = Math.max(railTop[k], p[0] * up[0] + p[1] * up[1]);
+        }
+      }
+      const lid = new Array(N).fill(false);
+      const mine = new Set([rails[a].i, rails[b].i, ...these]);
+      for (const o of st) {
+        if (mine.has(o.i)) continue;
+        for (const p of o.pts) {
+          const k = binOf(p);
+          if (k >= 0 && k < N && railTop[k] > -Infinity && p[0] * up[0] + p[1] * up[1] > railTop[k] + sep * 0.3) lid[k] = true;
+        }
+      }
+      if (lid.filter(Boolean).length >= N * 0.6) continue;
+      out.add(rails[a].i);
+      out.add(rails[b].i);
+      for (const i of these) out.add(i);
+    }
+  }
+  return out;
+}
+
 export function readParts(strokes, over = {}, face = null, hint = null, ctx = null) {
   const S = strokes.map((s, i) => ({ i, p: s.p, c: s.c, k: s.k, r: s.r })).filter((s) => s.p && s.p.length > 1);
   if (!S.length) return null;
@@ -2995,11 +3132,15 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
   // as the one shape it is)
   const joined = joinPieces(st, D, over);
   st.splice(0, st.length, ...joined.st);
+  // (ROADMAP 11.16: a ladder drawn on it - its lines as drawn, read as no other part)
+  const lad = ladders(st, D, over);
+  const overP = lad.size ? Object.assign({}, over) : over;
+  for (const i of lad) overP[i] = 'deco';
   const G = new PGrid(st.map((o) => o.pts), 72);
   const prior = familyPrior(ctx, hint);
   const cats = ctx && ctx.cats;
   const len = { air: !!(cats && cats.has('air')), sea: !!(cats && cats.has('sea')), weapon: !!(cats && cats.has('weapon')) };
-  const F = { st, D, G, over, len, cls: ctx && ctx.net && ctx.net.best ? ctx.net.best[2] : null, clsP: ctx && ctx.net && ctx.net.best ? ctx.net.best[1] : 0 };
+  const F = { st, D, G, over: overP, len, cls: ctx && ctx.net && ctx.net.best ? ctx.net.best[2] : null, clsP: ctx && ctx.net && ctx.net.best ? ctx.net.best[1] : 0 };
   // (the player named a part only a thing for the hand has: it is one - a ride with a sight, a
   // silencer on it, a ride still; a part only a ride has: it is one - ROADMAP 11.12)
   const picked = Object.values(over);
@@ -3068,6 +3209,7 @@ export function readParts(strokes, over = {}, face = null, hint = null, ctx = nu
     if (net2) return readParts(strokes, over, face, hint, { ...ctx, net: net2, relook: null });
   }
   // the player's own say over all (what it would be without it: for the menu's "automatic")
+  for (const i of lad) best.labels[i] = 'deco';
   const autoL = Object.assign({}, best.labels);
   for (const o of st) if (over[o.i] && PART[over[o.i]]) best.labels[o.i] = over[o.i];
   // (ROADMAP 11.13) the player said it flies, and nothing drawn lifts it: what it is missing, where
