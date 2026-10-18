@@ -5,6 +5,7 @@ import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
 import { pin } from './mapglyphs.js';
 import { searchArea } from '../game/heli.js';
 import { drawSight } from '../game/lose.js';
+import { M_AVES, M_STREETS, M_BLOCKS, CAUSEWAYS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z } from '../world/mainland/plan.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -64,12 +65,16 @@ export class HUD {
   // the city from above, once: the bay, the roads, the parks, every building (from its walls)
   buildMap() {
     const pad = 60;
-    const x0 = BOUNDS.minX - pad;
+    // (v5, ROADMAP 11.17: with the mainland, the whole world, half a pixel a metre)
+    const ml = this.game.world.mainland && this.game.world.mainland.on;
+    const x0 = ml ? WEST_X - 60 : BOUNDS.minX - pad;
     const x1 = PIER.x1 + pad;
-    const z0 = BOUNDS.minZ - pad;
-    const z1 = BOUNDS.maxZ + pad;
-    const W = Math.ceil(x1 - x0);
-    const H = Math.ceil(z1 - z0);
+    const z0 = ml ? NORTH_Z - 80 : BOUNDS.minZ - pad;
+    const z1 = ml ? SEA_Z + 80 : BOUNDS.maxZ + pad;
+    const px = ml ? 0.5 : 1;
+    this.mapPx = px;
+    const W = Math.ceil((x1 - x0) * px);
+    const H = Math.ceil((z1 - z0) * px);
     const c = document.createElement('canvas');
     c.width = W;
     c.height = H;
@@ -77,16 +82,53 @@ export class HUD {
     const ox = -x0;
     const oz = -z0;
     this.mapOrigin = [ox, oz];
+    g.setTransform(px, 0, 0, px, 0, 0);
     const R = (ax, az, bx, bz, col) => {
       g.fillStyle = col;
       g.fillRect(ax + ox, az + oz, bx - ax, bz - az);
     };
+    if (ml) {
+      // the bay and the ocean round it all; the mainland's ground, its hills, its beach
+      R(x0, z0, x1, z1, '#34307a');
+      R(WEST_X - 60, NORTH_Z - 80, SHORE_X, BEACH_Z, '#d9b9c4');
+      R(WEST_X - 60, NORTH_Z - 80, SHORE_X, -1212, '#a9b98a');
+      R(WEST_X - 60, -1212, -1884, BEACH_Z, '#a9b98a');
+      R(WEST_X - 60, BEACH_Z, SHORE_X, SEA_Z, '#f0d9a8');
+      for (const b of M_BLOCKS) {
+        const r = b.rect;
+        const green = b.kind === 'park' || b.kind === 'domino';
+        R(r.x0, r.z0, r.x1, r.z1, green ? '#7fc485' : b.kind === 'plaza' ? '#f2c9a0' : '#e8cdd6');
+      }
+      R(M_AVES[0].x + M_AVES[0].half + M_AVES[0].walk, NORTH_Z, SHORE_X, BEACH_Z, '#8cc98a');
+      const road = '#4a4258';
+      for (const a of M_AVES) R(a.x - a.half, a.z0 - 6, a.x + a.half, a.z1 + 6, road);
+      for (const st of M_STREETS) R(st.x0 - 7, st.z - st.half, st.x1 + 3, st.z + st.half, road);
+      for (const cw of CAUSEWAYS) R(cw.x0, cw.z - cw.half, cw.x1 + 30, cw.z + cw.half, road);
+      // every building's body (the bake), the towers darker
+      const far = this.game.world.mainland.far && this.game.world.mainland.far.data;
+      g.strokeStyle = '#1b1430';
+      g.lineWidth = 1;
+      for (const id in far || {}) {
+        for (const [bx0, bz0, bx1, bz1, top] of far[id]) {
+          g.fillStyle = top > 30 ? '#8e7fd0' : '#f4e6ec';
+          g.fillRect(bx0 + ox, bz0 + oz, bx1 - bx0, bz1 - bz0);
+          g.strokeRect(bx0 + ox + 0.5, bz0 + oz + 0.5, Math.max(0, bx1 - bx0 - 1), Math.max(0, bz1 - bz0 - 1));
+        }
+      }
+      for (const t of this.game.world.ctx.mainTowers || []) {
+        g.fillStyle = '#6f5fbf';
+        g.fillRect(t.x - t.w / 2 + ox, t.z - t.d / 2 + oz, t.w, t.d);
+        g.strokeRect(t.x - t.w / 2 + ox, t.z - t.d / 2 + oz, t.w, t.d);
+      }
+    }
     // the land (pavers), the bay to the east and the sea to the south
-    R(x0, z0, x1, z1, '#d9b9c4');
+    if (ml) R(BOUNDS.minX - pad, BOUNDS.minZ - pad, x1, BOUNDS.maxZ + pad, '#d9b9c4');
+    else R(x0, z0, x1, z1, '#d9b9c4');
     R(WATER_X, z0, x1, z1, '#34307a');
     R(x0, SOUTH_EDGE + 36, x1, z1, '#34307a');
     // (v5) the bay to the west
-    R(x0, z0, WEST_EDGE - 30, SOUTH_EDGE + 36, '#34307a');
+    R(ml ? BOUNDS.minX - pad : x0, ml ? BOUNDS.minZ - pad : z0, WEST_EDGE - 30, SOUTH_EDGE + 36, '#34307a');
+    if (ml) for (const cw of CAUSEWAYS) R(cw.x0, cw.z - cw.half, WEST_EDGE, cw.z + cw.half, '#4a4258');
     R(WEST_EDGE - 40, SOUTH_EDGE + 4, WATER_X, SOUTH_EDGE + 36, '#f0d9a8');
     // the sidewalk on the park's side, the park, the dunes, the beach
     R(STREET_X1, NORTH_EDGE - 60, PROM_X1, SOUTH_EDGE + 4, '#efc9b4');
@@ -407,7 +449,8 @@ export class HUD {
     const k = this.mapK;
     const [ox, oz] = this.mapOrigin;
     // the city's map: the camera's forward points up
-    const key = `translate(${((W / 2) * k).toFixed(2)}px, ${((H / 2) * k).toFixed(2)}px) rotate(${(Math.PI + yaw).toFixed(4)}rad) scale(${(s * k).toFixed(4)}) translate(${(-(p.x + ox)).toFixed(2)}px, ${(-(p.z + oz)).toFixed(2)}px)`;
+    const px = this.mapPx || 1;
+    const key = `translate(${((W / 2) * k).toFixed(2)}px, ${((H / 2) * k).toFixed(2)}px) rotate(${(Math.PI + yaw).toFixed(4)}rad) scale(${((s * k) / px).toFixed(4)}) translate(${(-(p.x + ox) * px).toFixed(2)}px, ${(-(p.z + oz) * px).toFixed(2)}px)`;
     if (key !== this.mapKey) {
       this.mapKey = key;
       this.mapCanvas.style.transform = key;

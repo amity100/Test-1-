@@ -2,6 +2,7 @@ import { AVES, STREETS, BLOCK_TYPES, DISTRICT_NAMES, blockRect, westRect, distri
 // (v5) where the bay begins, west of the city
 const BAY_X = WEST_EDGE - 30;
 import { NODES } from '../world/roads.js';
+import { MAINLAND_ON, M_AVES, M_STREETS, M_BLOCKS, CAUSEWAYS, DISTRICTS, PLACES, placeBlock, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z } from '../world/mainland/plan.js';
 import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';
 import { sticker, pin } from './mapglyphs.js';
@@ -28,6 +29,12 @@ const TAU = Math.PI * 2;
 // what the map shows: from behind the west edge's houses to past the pier, from the far blocks in
 // the north to the open sea
 const MAP = { x0: WEST_EDGE - 60, x1: PIER.x1 + 60, z0: NORTH_EDGE - 80, z1: SOUTH_EDGE + 90 };
+// (v5, ROADMAP 11.17: and the mainland across the bay, from its hills to its beach)
+if (MAINLAND_ON) {
+  MAP.x0 = WEST_X - 60;
+  MAP.z0 = NORTH_Z - 70;
+  MAP.z1 = SEA_Z + 60;
+}
 // where the beach goes into the sea
 const SHORE_Z = SOUTH_EDGE + 36;
 // the closest the map comes (pixels a metre)
@@ -429,6 +436,13 @@ export class CityMap {
         });
       }
     }
+    // (v5, ROADMAP 11.17) the mainland's buildings, from the bake of its blocks, and its towers
+    const ml = w.mainland && w.mainland.on ? w.mainland : null;
+    if (ml) {
+      const far = (ml.far && ml.far.data) || {};
+      for (const id in far) for (const [x0, z0, x1, z1, top, hx] of far[id]) this.buildings.push({ x0, z0, x1, z1, top, fill: hx || '#f4e6ec' });
+      for (const t of w.ctx.mainTowers || []) this.buildings.push({ x0: t.x - t.w / 2, z0: t.z - t.d / 2, x1: t.x + t.w / 2, z1: t.z + t.d / 2, top: t.peak || t.h, tower: true, fill: COL.tower });
+    }
     // (the tall ones last: their shadows fall over the low ones)
     this.buildings.sort((a, b) => a.top - b.top);
     this.trees = [];
@@ -462,6 +476,15 @@ export class CityMap {
     for (const c of w.courts || []) add({ cat: 'place', glyph: 'court', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: 'מגרש הכדורסל', note: 'בפארק הדקלים' });
     for (const m of w.markets || []) add({ cat: 'place', glyph: 'market', x: (m.x0 + m.x1) / 2, z: (m.z0 + m.z1) / 2, name: 'השוק', note: 'דוכנים של פירות, פרחים, דגים ובגדים' });
     add({ cat: 'place', glyph: 'beach', x: 80, z: -100, name: 'החוף', note: 'חול, סוכות מצילים, שמשיות והאוקיינוס' });
+    if (ml) {
+      for (const pl of PLACES) {
+        const b = placeBlock(pl);
+        const x = pl.at ? pl.at[0] : b ? b.cx : 0;
+        const z = pl.at ? pl.at[1] : b ? b.cz : 0;
+        add({ cat: 'place', glyph: pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : 'fountain', x, z, name: pl.heb, note: pl.name });
+      }
+      add({ cat: 'place', glyph: 'beach', x: -1500, z: 600, name: 'חוף פליסייד', note: 'הטיילת, החול והאוקיינוס בדרום היבשה' });
+    }
     // the service station (ROADMAP 4.6; none with ?classic)
     const G = w.garages;
     if (G) {
@@ -597,7 +620,47 @@ export class CityMap {
     g.globalAlpha = 1;
   }
 
+  // (v5, ROADMAP 11.17) the mainland: its ground and blocks, its parks, the bayfront's lawn, the
+  // beach on its south coast, the hills round it
+  drawMainland(g, vis, px) {
+    if (!MAINLAND_ON || vis.x0 > SHORE_X) return;
+    g.fillStyle = COL.ground;
+    g.fillRect(WEST_X - 60, NORTH_Z - 70, SHORE_X - WEST_X + 60, BEACH_Z - NORTH_Z + 70);
+    g.fillStyle = '#c9d9a6';
+    g.fillRect(WEST_X - 60, NORTH_Z - 70, SHORE_X - WEST_X + 60, -1212 - NORTH_Z + 70);
+    g.fillRect(WEST_X - 60, -1212, -1884 - WEST_X + 60, BEACH_Z + 1212);
+    g.fillStyle = COL.sand;
+    g.fillRect(WEST_X - 60, BEACH_Z, SHORE_X - WEST_X + 60, SEA_Z - BEACH_Z);
+    g.fillStyle = COL.grass;
+    const bay = M_AVES[0];
+    g.fillRect(bay.x + bay.half + bay.walk, NORTH_Z, SHORE_X - (bay.x + bay.half + bay.walk), BEACH_Z - NORTH_Z);
+    g.fillRect(-1060, M_STREETS[12].z + 11, SHORE_X + 1060, BEACH_Z - M_STREETS[12].z - 11);
+    g.lineWidth = px;
+    for (const b of M_BLOCKS) {
+      const r = b.rect;
+      if (r.x1 < vis.x0 || r.x0 > vis.x1 || r.z1 < vis.z0 || r.z0 > vis.z1) continue;
+      if (b.kind === 'park' || b.kind === 'domino' || b.kind === 'school') {
+        g.fillStyle = COL.grass;
+        g.fillRect(r.x0, r.z0, r.x1 - r.x0, r.z1 - r.z0);
+        g.strokeStyle = COL.grassInk;
+        g.strokeRect(r.x0, r.z0, r.x1 - r.x0, r.z1 - r.z0);
+      } else if (b.kind === 'plaza') {
+        g.fillStyle = COL.plaza;
+        g.fillRect(r.x0, r.z0, r.x1 - r.x0, r.z1 - r.z0);
+      }
+    }
+    // the shore's line
+    g.strokeStyle = COL.waterLine;
+    g.lineWidth = 1.4 * px;
+    g.beginPath();
+    g.moveTo(SHORE_X, NORTH_Z - 70);
+    g.lineTo(SHORE_X, SEA_Z);
+    g.lineTo(WEST_X - 60, SEA_Z);
+    g.stroke();
+  }
+
   drawLand(g, vis, px) {
+    this.drawMainland(g, vis, px);
     // the far blocks in the north: the city goes on beyond the map
     g.lineWidth = px;
     for (const f of this.far) {
@@ -708,6 +771,12 @@ export class CityMap {
       else r.push([a.x - a.half, NORTH_EDGE, a.x + a.half, SOUTH_EDGE]);
     }
     for (const s of STREETS) r.push([WEST_EDGE - 6, s.z - s.half, STREET_X0, s.z + s.half]);
+    // (v5, ROADMAP 11.17) the mainland's, and the causeways over the bay
+    if (MAINLAND_ON) {
+      for (const a of M_AVES) r.push([a.x - a.half, a.z0 - 6, a.x + a.half, a.z1 + 6]);
+      for (const st of M_STREETS) r.push([st.x0 - 7, st.z - st.half, st.x1 + 3, st.z + st.half]);
+      for (const c of CAUSEWAYS) r.push([c.x0, c.z - c.half, WEST_EDGE - 4, c.z + c.half]);
+    }
     this._roads = r;
     return r;
   }
@@ -972,7 +1041,7 @@ export class CityMap {
     }
     // the long bridge over the bay, coming ashore in the north
     const bz = -430;
-    if (vis.z0 < bz + 10 && vis.z1 > bz - 10) {
+    if (!MAINLAND_ON && vis.z0 < bz + 10 && vis.z1 > bz - 10) {
       g.fillStyle = 'rgba(27, 20, 48, 0.14)';
       g.fillRect(WATER_X, bz - 5, vis.x1 - WATER_X + 20, 14);
       g.fillStyle = '#d4c9e9';
@@ -1287,6 +1356,20 @@ export class CityMap {
         fit.lines.forEach((line, i) => this.text(g, line, x, y + (i - (n - 1) / 2) * fit.size * 0.95, { font: `${fit.size}px ${hand}`, halo: 4.5, alpha: fade }));
       }
     }
+    // (v5, ROADMAP 11.17) the mainland's districts, big across them, and the causeways' names
+    if (MAINLAND_ON && k < 3.2) {
+      for (const d of DISTRICTS) {
+        const x = this.sx((d.x0 + d.x1) / 2);
+        const y = this.sy((Math.max(d.z0, NORTH_Z) + Math.min(d.z1, BEACH_Z)) / 2);
+        if (!on(x, y, 300)) continue;
+        this.text(g, d.name, x, y, { font: `${clamp(12 + k * 26, 16, 44)}px ${hand}`, halo: 5, alpha: 0.85 });
+      }
+      for (const c of CAUSEWAYS) {
+        const x = this.sx((c.x0 + c.x1) / 2);
+        const y = this.sy(c.z - 14);
+        if (on(x, y, 200)) this.text(g, c.name, x, y, { font: `${clamp(10 + k * 6, 13, 22)}px ${hand}`, halo: 4, alpha: 0.9 });
+      }
+    }
     // the houses west of Coral Ave, the promenade, the pier, the beach, the bridge
     const side = clamp(10 + k * 4, 14, 28);
     for (const row of k < 0.75 ? [] : k < 2.1 ? [1, 3] : [0, 1, 2, 3, 4]) {
@@ -1308,7 +1391,7 @@ export class CityMap {
       if (on(x, y, 150)) this.text(g, 'המזח', x, y, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.water });
       const bx = this.sx(Math.max(BAY_X - 70, (this.vis.x0 + BAY_X) / 2));
       const by = this.sy(-430 - 14);
-      if (on(bx, by, 150)) this.text(g, 'גשר המפרץ', bx, by, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.water });
+      if (!MAINLAND_ON && on(bx, by, 150)) this.text(g, 'גשר המפרץ', bx, by, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.water });
       const cx = this.sx(-110);
       const cy = this.sy(SOUTH_EDGE + 20);
       if (on(cx, cy, 150) && k > 1.2) this.text(g, 'החוף', cx + 70, cy, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.sand });

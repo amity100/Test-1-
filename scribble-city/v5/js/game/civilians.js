@@ -4,6 +4,7 @@ import { civilianLook } from './looks.js';
 import { holeRadius } from './enemies.js';
 import { AVES, STREETS, BLOCK_TYPES, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
 import { NODES, CYCLE } from '../world/roads.js';
+import { M_BLOCKS, mBlockRect, M_AVES } from '../world/mainland/plan.js';
 import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
 import { WORK_CLOTHES, NIGHT_CLOTHES } from './rhythm.js';
@@ -23,6 +24,13 @@ const _rd = new THREE.Vector3();
 // The walk round a block: the middle of the sidewalks around it (col -1: the houses west of Coral
 // Ave, walked up and down along the avenue). Corners: NW, NE, SE, SW.
 export function sidewalkLoop(col, row) {
+  // (v5, ROADMAP 11.17: a block of the mainland is col, row + 100: its sidewalks are as wide as
+  // the island's, the bayfront's a metre wider)
+  if (col >= 100) {
+    const R = mBlockRect(col - 100, row - 100);
+    const x1 = col === 100 ? R.x1 + 3 : R.x1 + 2.5;
+    return [[R.x0 - 2.5, R.z0 - 2.5], [x1, R.z0 - 2.5], [x1, R.z1 + 2.5], [R.x0 - 2.5, R.z1 + 2.5]];
+  }
   if (col < 0) {
     const R = westRect(row);
     const x = R.x1 + 2.5;
@@ -32,6 +40,52 @@ export function sidewalkLoop(col, row) {
   // (v5: on Ocean Drive the walk is between the terraces and the cafés' umbrellas)
   const x1 = col === 2 ? R.x1 + 5.4 : R.x1 + 2.5;
   return [[R.x0 - 2.5, R.z0 - 2.5], [x1, R.z0 - 2.5], [x1, R.z1 + 2.5], [R.x0 - 2.5, R.z1 + 2.5]];
+}
+
+// (v5, ROADMAP 11.17) the mainland's blocks by col, row (+ 100), and what kind of street each is
+// for who walks there (game/crowds.js lookFor)
+const M_AT = new Map(M_BLOCKS.map((b) => [`${b.col + 100},${b.row + 100}`, b]));
+export function mainBlock(col, row) {
+  return M_AT.get(`${col},${row}`) || null;
+}
+const M_TYPE = {
+  towers: 'towers', offices: 'towers', condos: 'hotels', galleria: 'towers', dining: 'hotels', arena: 'plaza', plaza: 'plaza', park: 'park', domino: 'park',
+  warehouses: 'gang', lofts: 'shops', walls: 'gang', clubs: 'shops', calle: 'market', bungalows: 'west', apartments: 'west', villas: 'west', mansions: 'west',
+  houses: 'west', school: 'west', boulevard: 'shops', theatres: 'shops', starlight: 'shops', velvet: 'hotels', stripmall: 'shops', boardwalk: 'shops', mixed: 'shops',
+};
+export function blockType(col, row) {
+  if (col >= 100) {
+    const b = mainBlock(col, row);
+    return b ? M_TYPE[b.kind] || 'shops' : 'shops';
+  }
+  return col < 0 ? 'west' : BLOCK_TYPES[row][col];
+}
+// the walks near p: [[col, row], ...] within d (the island's and the mainland's built near you)
+export function walksNear(p, d, built = null) {
+  const out = [];
+  const near = (L) => {
+    let best = Infinity;
+    for (let i = 0; i < L.length; i++) {
+      const a = L[i];
+      const b = L[(i + 1) % L.length];
+      const dx = b[0] - a[0];
+      const dz = b[1] - a[1];
+      const t = Math.max(0, Math.min(1, ((p.x - a[0]) * dx + (p.z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+      best = Math.min(best, Math.hypot(a[0] + dx * t - p.x, a[1] + dz * t - p.z));
+    }
+    return best;
+  };
+  if (p.x > -300) {
+    for (let col = -1; col < 3; col++) for (let row = 0; row < 5; row++) if (near(sidewalkLoop(col, row)) < d) out.push([col, row]);
+  }
+  if (p.x < -560) {
+    for (const b of M_BLOCKS) {
+      if (Math.abs(b.cx - p.x) > d + 80 || Math.abs(b.cz - p.z) > d + 80) continue;
+      if (built && !built.has(b.id)) continue;
+      if (near(sidewalkLoop(b.col + 100, b.row + 100)) < d) out.push([b.col + 100, b.row + 100]);
+    }
+  }
+  return out;
 }
 
 // (v5) the sidewalk on the park's side, the beach walk, the edge of the water: up and down
@@ -141,7 +195,29 @@ class Civilian {
       return;
     }
     const k = this.target;
-    if (Math.random() < 0.28) {
+    if (Math.random() < 0.28 && this.col >= 100) {
+      // (v5, ROADMAP 11.17: the mainland's blocks: their columns run west, and a block is there to
+      // cross to only when it is built)
+      const north = k < 2;
+      const west = k === 0 || k === 3;
+      const opts = [];
+      const live = this.game.world.mainland && this.game.world.mainland.blocks;
+      const ok = (c, r) => {
+        const b = mainBlock(c, r);
+        return b && (!live || live.has(b.id));
+      };
+      if (north && ok(this.col, this.row - 1)) opts.push([this.col, this.row - 1, west ? 3 : 2]);
+      if (!north && ok(this.col, this.row + 1)) opts.push([this.col, this.row + 1, west ? 0 : 1]);
+      if (west && ok(this.col + 1, this.row)) opts.push([this.col + 1, this.row, north ? 1 : 2]);
+      if (!west && ok(this.col - 1, this.row)) opts.push([this.col - 1, this.row, north ? 0 : 3]);
+      if (opts.length) {
+        const [c, r, corner] = opts[Math.floor(Math.random() * opts.length)];
+        this.setBlock(c, r, false);
+        this.target = corner;
+        this.crossing = true;
+        return;
+      }
+    } else if (Math.random() < 0.28 && this.col < 100) {
       // the corners: 0 NW, 1 NE, 2 SE, 3 SW; across the street (north/south) or the avenue
       const north = k < 2;
       const west = k === 0 || k === 3;
@@ -464,23 +540,10 @@ export class Civilians {
       const first = !this.filled;
       this.filled = true;
       let tries = first ? 60 : 8;
-      // the walks that pass near you
-      const near = [];
-      for (let col = -1; col < 3; col++) {
-        for (let row = 0; row < 5; row++) {
-          const L = sidewalkLoop(col, row);
-          let d = Infinity;
-          for (let i = 0; i < L.length; i++) {
-            const a = L[i];
-            const b = L[(i + 1) % L.length];
-            const dx = b[0] - a[0];
-            const dz = b[1] - a[1];
-            const t = Math.max(0, Math.min(1, ((p.x - a[0]) * dx + (p.z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
-            d = Math.min(d, Math.hypot(a[0] + dx * t - p.x, a[1] + dz * t - p.z));
-          }
-          if (d < 80) near.push([col, row]);
-        }
-      }
+      // the walks that pass near you (on the mainland: of the blocks built near you)
+      const ml = game.world.mainland;
+      const built = ml && ml.blocks ? new Set(ml.blocks.keys()) : null;
+      const near = walksNear(p, 80, built);
       let prom = 0;
       for (const c of this.list) if (c.prom && !c.scripted) prom++;
       const cam = game.camera;
@@ -505,7 +568,7 @@ export class Civilians {
           c = new Civilian(this, 'prom', z, look);
         } else if (near.length) {
           const [col, row] = near[Math.floor(Math.random() * near.length)];
-          if (!look && !game.classic) look = game.crowds.lookFor(col < 0 ? 'west' : BLOCK_TYPES[row][col]);
+          if (!look && !game.classic) look = game.crowds.lookFor(blockType(col, row));
           c = new Civilian(this, col, row, look);
         } else continue;
         if (jog) {
@@ -659,8 +722,12 @@ export class Civilians {
     if (x > 12) return ['prom', z];
     let best = [0, 0];
     let bd = Infinity;
-    for (let col = -1; col < 3; col++) {
-      for (let row = 0; row < 5; row++) {
+    // (v5, ROADMAP 11.17: the mainland's built blocks too)
+    const ml = this.game.world.mainland;
+    const cand = walksNear({ x, z }, 160, ml && ml.blocks ? new Set(ml.blocks.keys()) : null);
+    if (!cand.length) for (let col = -1; col < 3; col++) for (let row = 0; row < 5; row++) cand.push([col, row]);
+    for (const [col, row] of cand) {
+      {
         const L = sidewalkLoop(col, row);
         for (let i = 0; i < L.length; i++) {
           const a = L[i];

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { civilianLook } from './looks.js';
-import { sidewalkLoop } from './civilians.js';
+import { sidewalkLoop, walksNear, blockType } from './civilians.js';
 import { groundHeight, BLOCK_TYPES, NORTH_EDGE, SOUTH_EDGE, PIER } from '../world/layout.js';
 
 // The crowd further down the street (ROADMAP 3.6). Past about 45 m the walkers on the sidewalks
@@ -158,6 +158,14 @@ export class FarCrowd {
       if (z1 - z0 < 20) return null;
       loop = [[x, z0], [x, z1]];
       col = 'prom';
+    } else if (cam.x < -300) {
+      // (v5, ROADMAP 11.17: on the mainland, the walks of the blocks round you - built or not:
+      // from afar they are walked all the same)
+      const near = this._near && this._nearAt && Math.hypot(this._nearAt.x - cam.x, this._nearAt.z - cam.z) < 30 ? this._near : (this._near = walksNear(cam, FAR));
+      this._nearAt = { x: cam.x, z: cam.z };
+      if (!near.length) return null;
+      [col, row] = near[Math.floor(Math.random() * near.length)];
+      loop = sidewalkLoop(col, row);
     } else {
       col = -1 + Math.floor(Math.random() * 4);
       row = Math.floor(Math.random() * 5);
@@ -177,7 +185,7 @@ export class FarCrowd {
     if (prom && z > PIER.z0 - 4 && z < PIER.z1 + 4) return null;
     const R = this.game.rhythm;
     let look = null;
-    if (!this.game.classic && this.game.crowds) look = this.game.crowds.lookFor(prom ? 'prom' : col < 0 ? 'west' : BLOCK_TYPES[row][col]);
+    if (!this.game.classic && this.game.crowds) look = this.game.crowds.lookFor(prom ? 'prom' : blockType(col, row));
     if (!look) look = civilianLook();
     const w = { loop, col, row, prom, leg, u, dir: Math.random() < 0.5 ? 1 : -1, side: (Math.random() - 0.5) * 1.6, speed: (1.2 + Math.random() * 0.5) * (R && R.commute > 0 ? 1 + 0.3 * R.commute : 1), look, seed: Math.random() * 100, phase: Math.random() * 6, scale: look.build.height, x, z, y: 0, yaw: 0 };
     this.walk(w, 0);
