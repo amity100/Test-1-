@@ -44,6 +44,26 @@ export class Streamer {
     return true;
   }
 
+  // (v5, ROADMAP 11.18) cells that come and go with what they are in (the rooms of a block of the
+  // mainland: world/interiors.js)
+  add(cell) {
+    this.cells.push(cell);
+  }
+
+  remove(id) {
+    const i = this.cells.findIndex((c) => c.id === id);
+    if (i >= 0) this.cells.splice(i, 1);
+    if (this.job && this.job.cell.id === id) this.job = null;
+    if (this.pending.length) {
+      this.pending = this.pending.filter((p) => {
+        if (p.cell.id !== id) return true;
+        if (p.live.dispose) p.live.dispose();
+        return false;
+      });
+    }
+    if (this.live.has(id)) this.free(id);
+  }
+
   // a cell built and warmed: into the city (the one it takes the place of out, the same frame)
   show(p) {
     if (p.swap) {

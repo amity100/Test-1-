@@ -5,6 +5,7 @@ import { Pipeline } from './render/pipeline.js';
 import { buildAtlas } from './render/atlas.js';
 import { buildCity } from './world/city.js';
 import { Mainland } from './world/mainland/index.js';
+import { Interiors } from './world/interiors.js';
 import { buildGarages } from './world/garages.js';
 import { buildStation } from './world/station.js';
 import { buildRoofs } from './world/roofs.js';
@@ -183,6 +184,10 @@ async function boot() {
     }
     world.mainland = new Mainland(world, { renderer, pipe, low, farData });
   }
+  // (v5, ROADMAP 11.18) what is on the shops' shelves, built near you (the island's rooms now, each
+  // block's with it)
+  world.interiors = new Interiors(world, { pipe, low, warm: world.mainland ? (m) => world.mainland.warm(m) : null });
+  world.interiors.addAll(world.stockRecs);
 
   setStatus('השמש שוקעת על העיר…');
   await frame();

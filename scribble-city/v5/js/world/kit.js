@@ -31,7 +31,8 @@ export class Batch {
   }
 
   // add a geometry (already placed in world space, or with a matrix) with a part id
-  // o: { color: [r,g,b] linear | THREE.Color, obj: prop id, sway: number | (x,y,z)=>number, chunk: key }
+  // o: { color: [r,g,b] linear | THREE.Color, obj: prop id, sway: number | (x,y,z)=>number, chunk: key,
+  //   soup: the geometry brings its own aId and color for every corner (world/soup.js) }
   add(material, geo, matrix = null, id = nextId(), o = {}) {
     // (shared corners stay shared: a box is 24 corners, not 36; but a shape without normals of
     // its own gets flat ones, face by face, as it always did)
@@ -51,7 +52,7 @@ export class Batch {
     const byChunk = this.groups.get(material);
     if (!byChunk.has(key)) byChunk.set(key, []);
     const col = o.color ? (o.color.isColor ? [o.color.r, o.color.g, o.color.b] : o.color) : WHITE;
-    byChunk.get(key).push({ geo: g, id, color: col, obj: o.obj !== undefined ? o.obj : this.obj, sway: o.sway || 0, seq: this.seq++ });
+    byChunk.get(key).push({ geo: g, id, color: col, obj: o.obj !== undefined ? o.obj : this.obj, sway: o.sway || 0, seq: this.seq++, soup: !!o.soup });
     this.vcount += g.attributes.position.count;
     return id;
   }
@@ -186,11 +187,19 @@ export class Batch {
             for (let k = 0; k < c; k++) index[io + k] = o + k;
             io += c;
           }
-          ids.fill(it.id, o, o + c);
+          // (a soup of many parts in one geometry - world/soup.js - brings an id and a colour for
+          // every corner of its own)
+          const own = it.soup ? g.attributes.aId : null;
+          if (own) ids.set(own.array, o);
+          else ids.fill(it.id, o, o + c);
           // (a pen of its own colour, sharing a draw with coloured parts: white, as it was)
           if (vc) {
-            const col = src.vertexColors ? it.color : WHITE;
-            for (let i = 0; i < c; i++) vc.set(col, (o + i) * 3);
+            const oc = it.soup ? g.attributes.color : null;
+            if (oc && src.vertexColors) vc.set(oc.array, o * 3);
+            else {
+              const col = src.vertexColors ? it.color : WHITE;
+              for (let i = 0; i < c; i++) vc.set(col, (o + i) * 3);
+            }
           }
           if (objs) objs.fill(src.defines && src.defines.USE_OBJ !== undefined ? it.obj : 0, o, o + c);
           if (rows) rows.fill(penRow(src), o, o + c);

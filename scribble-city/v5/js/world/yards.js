@@ -114,6 +114,73 @@ function post(ctx, mat, x, y0, z, rad, h, color, id = nextId(), seg = 6) {
   ctx.B.add(mat, g, null, id, { color });
 }
 
+// ------------------------------------------------------------------ a clipped hedge
+// (v5, ROADMAP 11.18) A hedge the gardener keeps: the shape of a box, but its top edges rounded
+// off, its faces not quite flat (the leaves stand out here and there, a hollow there), lit as the
+// round thing it is so the pen draws its outline and not its facets. In the front's frame (u along
+// it, w out of it); the bottom on the ground, square.
+export function softBox(f, u0, y0, w0, u1, y1, w1, o = {}) {
+  const a = (u1 - u0) / 2;
+  const b = (y1 - y0) / 2;
+  const c = (w1 - w0) / 2;
+  const rr = Math.min(o.round || 0.2, a * 0.9, b * 0.9, c * 0.9);
+  const amp = o.amp !== undefined ? o.amp : 0.045;
+  const seed = o.seed || 0;
+  const g = new THREE.BoxGeometry(2 * a, 2 * b, 2 * c, Math.max(2, Math.round(a / 0.16)), Math.max(2, Math.round(b / 0.16)), Math.max(2, Math.round(c / 0.16)));
+  const P = g.attributes.position;
+  const N = g.attributes.normal;
+  const cu = (u0 + u1) / 2;
+  const cy = (y0 + y1) / 2;
+  const cw = (w0 + w1) / 2;
+  for (let i = 0; i < P.count; i++) {
+    let x = P.getX(i);
+    let y = P.getY(i);
+    let z = P.getZ(i);
+    // (onto the rounded box: the nearest point of the box inside it, pushed out by the round)
+    const qx = Math.max(-a + rr, Math.min(a - rr, x));
+    const qy = Math.max(-b, Math.min(b - rr, y));
+    const qz = Math.max(-c + rr, Math.min(c - rr, z));
+    let dx = x - qx;
+    let dy = y - qy;
+    let dz = z - qz;
+    const l = Math.hypot(dx, dy, dz);
+    let nx = N.getX(i);
+    let ny = N.getY(i);
+    let nz = N.getZ(i);
+    if (l > 1e-6) {
+      dx /= l;
+      dy /= l;
+      dz /= l;
+      x = qx + dx * rr;
+      y = qy + dy * rr;
+      z = qz + dz * rr;
+      nx = dx;
+      ny = dy;
+      nz = dz;
+    }
+    // (the leaves: out and in a little, never at the ground)
+    if (y > -b + 1e-4) {
+      const k = amp * Math.min(1, (y + b) / 0.25) * (Math.sin(x * 3.7 + seed) * Math.cos(z * 4.1 + seed * 0.7) + 0.6 * Math.sin(y * 5.3 + x * 1.7 + seed * 1.3) + 0.45 * Math.sin((x - z) * 9.1 + y * 7.7 + seed * 2.1));
+      x += nx * k;
+      y += ny * k;
+      z += nz * k;
+    }
+    const pw = f.p(cu + x, cy + y, cw + z);
+    P.setXYZ(i, pw[0], pw[1], pw[2]);
+    N.setXYZ(i, f.ux * nx + f.nx * nz, ny, f.uz * nx + f.nz * nz);
+  }
+  // (a front whose u, up and w turn the other way round: the faces' winding turned with it)
+  if (f.ux * f.nz - f.uz * f.nx < 0) {
+    const I = g.index;
+    for (let i = 0; i < I.count; i += 3) {
+      const t = I.getX(i + 1);
+      I.setX(i + 1, I.getX(i + 2));
+      I.setX(i + 2, t);
+    }
+  }
+  return g;
+}
+
 // ------------------------------------------------------------------ fences
 /**
  * A fence from (x0, z0) to (x1, z1): 'wall' (stucco on blocks, a cap, a pier every few metres),
@@ -189,7 +256,7 @@ export function fence(ctx, r, x0, z0, x1, z1, type, o = {}) {
     if (h >= 1.3) {
       // a tall one: the body of it, and over it the leaves in rounded clumps, none quite the size
       // of the next (the gardener has not been for a while)
-      fbox(ctx, f, M.leaf, 0, CURB, -t, len, CURB + h - 0.38, t, base);
+      ctx.B.add(M.leaf, softBox(f, 0, CURB, -t, len, CURB + h - 0.3, t, { round: 0.12, seed: r() * 100 }), null, nextId(), { color: base });
       for (let u = r.range(0.2, 0.5); u < len - 0.15; u += r.range(0.75, 1.05)) {
         const p = f.p(u, 0, r.range(-0.08, 0.08));
         clump(ctx, r, p[0], CURB + h - 0.36 + r.range(-0.08, 0.12), p[2], r.range(0.5, 0.66), 0.82, base.clone().multiplyScalar(r.range(0.9, 1.12)), M.leaf, false);
@@ -200,9 +267,8 @@ export function fence(ctx, r, x0, z0, x1, z1, type, o = {}) {
         const seg = Math.min(len - u, r.range(1.3, 2.6));
         const hh = h * r.range(0.86, 1.1);
         const tt = t * r.range(0.9, 1.12);
-        fbox(ctx, f, M.leaf, u - 0.04, CURB, -tt, u + seg + 0.04, CURB + hh, tt, base.clone().multiplyScalar(r.range(0.9, 1.08)));
-        // (its top not quite flat: a smaller box over the middle)
-        if (hh > 0.8) fbox(ctx, f, M.leaf, u + seg * 0.15, CURB + hh - 0.05, -tt * 0.8, u + seg * 0.85, CURB + hh + 0.12, tt * 0.8, base.clone().multiplyScalar(r.range(0.95, 1.12)));
+        // (each stretch clipped a little differently: its top rounded, its faces leafy)
+        ctx.B.add(M.leaf, softBox(f, u - 0.04, CURB, -tt, u + seg + 0.04, CURB + hh, tt, { round: Math.min(0.26, tt * 0.75), seed: r() * 100, amp: 0.05 }), null, nextId(), { color: base.clone().multiplyScalar(r.range(0.9, 1.08)) });
         u += seg;
       }
     }

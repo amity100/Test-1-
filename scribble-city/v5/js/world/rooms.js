@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { lin3 } from '../render/materials.js';
-import { nextId, seeded, quadGeo } from './kit.js';
+import { nextId, seeded, quadGeo, Batch } from './kit.js';
 import { GOODS } from './paint.js';
+import { FSoup } from './soup.js';
 
 // Rooms on the ground floors. Every shop has a real room behind its front: you walk in through
 // the open door, see the shop through the window, and the keeper works behind the counter while
@@ -103,11 +104,37 @@ Object.assign(DECOR, {
  */
 export function buildRoom(ctx, f, spec) {
   const R = new Room(ctx, f, spec);
+  // (v5, ROADMAP 11.18) a shop furnished to the small things: its shelves, its fixtures, where
+  // people stand and what they bump into are laid out now; the thousands of things on the shelves
+  // come when you come near (world/interiors.js streams them in, the way the big games stream their
+  // interiors) - unless nothing streams here, then now
+  const fn = FURNISH[spec.kind] || FURNISH.shop;
+  R.lazy = !!(fn.stock && ctx.stock);
   R.shell();
   R.furnish();
   R.collide();
+  if (R.lazy) {
+    const c = R.people.center;
+    ctx.stock.push({ f, spec: { ...spec, shop: null, outside: null }, kind: spec.kind, x: c.x, z: c.z, r: Math.max(R.ub - R.ua, R.da - R.db) / 2 });
+  }
   return R.people;
 }
+
+// the things on the shelves of a room laid out by buildRoom (rec: what ctx.stock was given), into a
+// batch of their own: the meshes, made a step at a time (a generator; world/interiors.js)
+export function* buildStock(rec, M, parent, opts = {}) {
+  const ctx = { M, R: new Batch(), col: null };
+  const R = new Room(ctx, rec.f, { ...rec.spec, mode: 'stock' });
+  R.furnish();
+  R.flushSoups();
+  yield;
+  const meshes = yield* ctx.R.flushSteps(parent, { static: true, indoor: true, merge: opts.merge, steps: true });
+  for (const m of meshes) m.renderOrder = 1;
+  return { meshes, verts: ctx.R.vcount };
+}
+
+// a soup that keeps nothing (a room laid out now, its things to come later)
+const NO_SOUP = { fbox() {}, fcyl() {}, fball() {}, box() {}, cyl() {}, ball() {}, quad() {}, full: false, n: 0 };
 
 class Room {
   constructor(ctx, f, spec) {
@@ -115,6 +142,11 @@ class Room {
     this.M = ctx.M;
     this.f = f;
     this.spec = spec;
+    // 'build' (the room and its furniture now) or 'stock' (only what goes into the soups: the
+    // things on the shelves, streamed in later)
+    this.mode = spec.mode || 'build';
+    this.lazy = false;
+    this.soups = null;
     this.kind = spec.kind;
     this.decor = DECOR[spec.kind] || DECOR.shop;
     this.ua = spec.u0 + T;
@@ -145,7 +177,30 @@ class Room {
   }
 
   add(mat, geo, color) {
+    // (streaming the things on the shelves in: the room and its furniture are already there)
+    if (this.mode === 'stock') return;
     this.ctx.R.add(mat, geo, null, nextId(), { color: color ? L3(color) : undefined });
+  }
+
+  // (v5, ROADMAP 11.18) the soup of many small parts for a pen of the rooms: 'box', 'gloss', 'cyl',
+  // 'lamp' (world/stock.js fills them). Laid out now and filled later: a soup that keeps nothing.
+  soup(kind) {
+    if (this.lazy) return NO_SOUP;
+    const all = this.soups || (this.soups = {});
+    let s = all[kind];
+    if (!s) s = all[kind] = new FSoup(this.f);
+    else if (s.full) s.flushTo(this.ctx.R, this.soupPen(kind));
+    return s;
+  }
+
+  soupPen(kind) {
+    const M = this.M;
+    return kind === 'gloss' ? M.inGloss : kind === 'cyl' ? M.inCyl : kind === 'lamp' ? M.inLamp : M.inBox;
+  }
+
+  flushSoups() {
+    if (!this.soups) return;
+    for (const [kind, s] of Object.entries(this.soups)) s.flushTo(this.ctx.R, this.soupPen(kind));
   }
 
   // a quad given by four points, wound so that its front faces n
@@ -351,9 +406,12 @@ class Room {
   furnish() {
     const fn = FURNISH[this.kind] || FURNISH.shop;
     fn(this);
-    // a lamp or two, always
+    // a lamp or two, always (unless the shop has its ceiling of light panels: world/stock.js)
     const n = this.ub - this.ua > 7 ? 3 : 2;
-    for (let i = 0; i < n; i++) this.lamp(this.ua + ((i + 0.5) / n) * (this.ub - this.ua), (this.da + this.db) / 2);
+    if (!this.noLamps) for (let i = 0; i < n; i++) this.lamp(this.ua + ((i + 0.5) / n) * (this.ub - this.ua), (this.da + this.db) / 2);
+    // (built now, not streamed in: what went into the soups goes to the rooms' batch)
+    if (this.mode === 'build' && !this.lazy) this.flushSoups();
+    if (this.mode === 'stock') return;
     // the way in, just past the door, and where the keeper stands
     const door = this.openings.find((o) => o.kind === 'door');
     if (door) {
@@ -364,11 +422,31 @@ class Room {
       const p = this.P(s.u, this.y0, s.d);
       const fx = s.face ? this.f.ux * s.face[0] + this.f.nx * s.face[1] : this.f.nx;
       const fz = s.face ? this.f.uz * s.face[0] + this.f.nz * s.face[1] : this.f.nz;
-      return { x: p[0], z: p[2], yaw: Math.atan2(fx, fz), lift: !!s.lift };
+      const w = { x: p[0], z: p[2], yaw: Math.atan2(fx, fz), lift: !!s.lift };
+      // (v5, ROADMAP 11.18: what is there to look at - the heights of the shelves, the point of the
+      // shelf a hand reaches to, a fridge's door, a mirror, a fitting room)
+      if (s.shelf) w.shelf = s.shelf;
+      if (s.reach) {
+        const q = this.P(s.reach.u, this.y0 + (s.reach.y || 0), s.reach.d);
+        w.reach = { x: q[0], y: q[1], z: q[2] };
+      }
+      if (s.fridge) w.fridge = true;
+      if (s.mirror) w.mirror = true;
+      if (s.fit) w.fit = true;
+      if (s.what) w.what = s.what;
+      return w;
     };
     const out = {
       door: this.spots.door,
       keeper: this.spots.keeper ? toWorld(this.spots.keeper) : null,
+      // (v5, ROADMAP 11.18: where a customer pays - across the checkout - and which way the line
+      // behind them runs; the places the staff work at; a second till)
+      pay: this.spots.pay ? toWorld(this.spots.pay) : null,
+      queueDir: this.spots.queueDir ? [this.f.ux * this.spots.queueDir[0] + this.f.nx * this.spots.queueDir[1], this.f.uz * this.spots.queueDir[0] + this.f.nz * this.spots.queueDir[1]] : null,
+      staff: (this.spots.staff || []).map(toWorld),
+      mirrors: (this.spots.mirrors || []).map(toWorld),
+      fitting: (this.spots.fitting || []).map(toWorld),
+      big: !!this.spots.big,
       browse: this.spots.browse.map(toWorld),
       seats: this.spots.seats.map(toWorld),
       chairs: this.spots.chairs.map(toWorld),

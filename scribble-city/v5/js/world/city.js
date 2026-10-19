@@ -10,6 +10,9 @@ import { buildFirstBoulevard } from './first.js';
 import { buildBlocks } from './blocks.js';
 import { buildOceanDrive, rollSurf } from './ocean.js';
 import { buildRoom } from './rooms.js';
+// (v5, ROADMAP 11.18: the shops laid out to the small things - their plans replace the old rooms')
+import './shops2.js';
+import './homes2.js';
 import { buildStreets, turnWheel } from './streets.js';
 import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
@@ -62,6 +65,8 @@ export function buildCity(scene, o = {}) {
     // every building from above, in its own colours, for the city's map (ui/citymap.js)
     footprints: [],
     room: null,
+    // (v5, ROADMAP 11.18: the things on the rooms' shelves, streamed in near you: world/interiors.js)
+    stock: [],
     lightCount: () => lightList().length,
   };
   if (o.rooms !== false) ctx.room = (f, spec) => buildRoom(ctx, f, spec);
@@ -236,6 +241,7 @@ export function buildCity(scene, o = {}) {
     parked: ctx.parked || [],
     busStops: ctx.busStops || [],
     queues: ctx.queues || [],
+    stockRecs: ctx.stock,
     helipad: ctx.helipad || null,
     // the buildings' bodies, for leaving out what is behind them (render/occlusion.js)
     occluders: ctx.occluders,

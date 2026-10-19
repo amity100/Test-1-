@@ -95,6 +95,14 @@ export class Routines {
       const seats = [-0.42, 0.42].map((u) => ({ x: b.x + fz * u + fx * 0.04, z: b.z - fx * u + fz * 0.04, yaw: b.yaw, who: null }));
       add.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false, park: live.block.kind === 'park' || live.block.kind === 'point' });
     }
+    // (v5, ROADMAP 11.18) the bus stops on its sidewalks: the bench's seats, two places by the sign
+    for (const st of bc.busStops || []) {
+      const fx = Math.sin(st.yaw);
+      const fz = Math.cos(st.yaw);
+      const at = (u, v) => ({ x: st.x + fz * u + fx * v, z: st.z - fx * u + fz * v, yaw: st.yaw, who: null });
+      const seats = (bc.seats || []).filter((s) => s.bus && Math.hypot(s.x - st.x, s.z - st.z) < 2.5).map((s) => ({ x: s.x, z: s.z, yaw: s.yaw, who: null }));
+      add.push({ kind: 'bus', stop: st, x: st.x, z: st.z, yaw: st.yaw, seats, stands: [at(2.0, 0.35), at(2.6, 0.1)], active: false });
+    }
     const groups = [];
     for (const s of bc.seats || []) {
       if (s.bus) continue;

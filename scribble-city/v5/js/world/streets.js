@@ -10,7 +10,8 @@ import { shopFronts } from './shopfronts.js';
 import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
 import { randomCarSpec } from '../render/cars.js';
-import { Batch } from './kit.js';
+import { Batch, Facade } from './kit.js';
+import { softBox } from './yards.js';
 
 // The furniture of the streets, in the first boulevard's own pens: palms and lamps down every
 // avenue, traffic lights at the crossings with the names of the streets, bus stops, phone booths
@@ -184,7 +185,7 @@ function crossings(ctx) {
 }
 
 // ------------------------------------------------------------------ street furniture
-function hydrant(ctx, x, z) {
+export function hydrant(ctx, x, z) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'hydrant', x, z);
   const red = srgb(0.86, 0.16, 0.18);
@@ -196,7 +197,7 @@ function hydrant(ctx, x, z) {
   ctx.objects.end(ctx, id);
 }
 
-function trashCan(ctx, x, z) {
+export function trashCan(ctx, x, z) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'trash', x, z);
   const col = ctx.rng.pick([srgb(0.18, 0.62, 0.6), srgb(0.3, 0.42, 0.7), srgb(0.95, 0.55, 0.3)]);
@@ -206,7 +207,7 @@ function trashCan(ctx, x, z) {
   ctx.objects.end(ctx, id);
 }
 
-function newsBox(ctx, x, z, yaw) {
+export function newsBox(ctx, x, z, yaw) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'news', x, z);
   const col = ctx.rng.pick([srgb(0.2, 0.36, 0.78), srgb(0.95, 0.75, 0.2), srgb(0.86, 0.2, 0.25)]);
@@ -216,7 +217,7 @@ function newsBox(ctx, x, z, yaw) {
   ctx.objects.end(ctx, id);
 }
 
-function mailbox(ctx, x, z, yaw) {
+export function mailbox(ctx, x, z, yaw) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'mailbox', x, z);
   const blue = srgb(0.16, 0.3, 0.68);
@@ -228,7 +229,7 @@ function mailbox(ctx, x, z, yaw) {
 }
 
 // a phone booth: a good place to hide while you draw
-function phoneBooth(ctx, x, z, yaw) {
+export function phoneBooth(ctx, x, z, yaw) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'booth', x, z);
   const frame = srgb(0.16, 0.62, 0.66);
@@ -263,26 +264,23 @@ function phoneBooth(ctx, x, z, yaw) {
 }
 
 // a hedge in a planter box (another place to hide)
-function hedge(ctx, x, z, alongZ) {
+export function hedge(ctx, x, z, alongZ) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'bush', x, z);
   const lx = alongZ ? 1.0 : 2.6;
   const lz = alongZ ? 2.6 : 1.0;
   put(ctx, M.prop, new THREE.BoxGeometry(lx, 0.5, lz), x, CURB + 0.25, z, 0, srgb(0.95, 0.85, 0.72));
   const r = ctx.rng;
-  for (let k = 0; k < 5; k++) {
-    const t = (k - 2) / 2.2;
-    const g = new THREE.IcosahedronGeometry(0.55 + r() * 0.15, 1);
-    g.scale(1, 0.8, 1);
-    put(ctx, M.leaf, g, x + (alongZ ? r.range(-0.15, 0.15) : t * 1.1), CURB + 0.85 + r() * 0.15, z + (alongZ ? t * 1.1 : r.range(-0.15, 0.15)), 0, r.pick([srgb(0.32, 0.62, 0.36), srgb(0.4, 0.7, 0.4), srgb(0.28, 0.55, 0.42)]));
-  }
+  // (v5, ROADMAP 11.18) the hedge in it clipped, its top edges rounded, its faces leafy
+  const f = alongZ ? new Facade(x, z - 1.2, 0, 1, -1, 0) : new Facade(x - 1.2, z, 1, 0, 0, 1);
+  ctx.B.add(M.leaf, softBox(f, 0.02, CURB + 0.48, -0.42, 2.38, CURB + 1.25 + r() * 0.12, 0.42, { round: 0.24, seed: r() * 100, amp: 0.05 }), null, nextId(), { color: r.pick([srgb(0.32, 0.62, 0.36), srgb(0.4, 0.7, 0.4), srgb(0.28, 0.55, 0.42)]) });
   ctx.col.addBox(x - lx / 2, z - lz / 2, x + lx / 2, z + lz / 2, 0, 1.3, 'prop');
   ctx.hideSpots.push({ x, z, r: 1.7, kind: 'bush' });
   ctx.objects.end(ctx, id);
 }
 
 // a bus stop: a roof, a glass back, a bench (people wait here), an ad at the end
-function busStop(ctx, x, z, yaw) {
+export function busStop(ctx, x, z, yaw) {
   const M = ctx.M;
   const id = ctx.objects.begin(ctx, 'busStop', x, z);
   const fx = Math.sin(yaw);
@@ -1128,7 +1126,7 @@ void westRect;
 void hex;
 
 // (v5: the beach street furnishes its own sidewalks with these, world/ocean.js)
-export { hydrant, trashCan, newsBox, put, free, faceQuad, billboard, friendStand };
+export { put, free, faceQuad, billboard, friendStand };
 
 // (v5, ROADMAP 11.17) a stand somewhere in an open place of rect R (a park, a square, a mall's
 // hall): the first place round its middle where the booth, its easel and room before it are free

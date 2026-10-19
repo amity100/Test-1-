@@ -299,6 +299,7 @@ export class Mainland {
     if (!this.on) return;
     this.stream.fill(p.x, p.z, ms);
     this.neon.flush(1e9);
+    if (this.world.interiors) this.world.interiors.fill(p.x, p.z, ms);
     const nav = this.world.nav;
     if (nav && nav.pump) nav.pump(1e9);
   }

@@ -29,7 +29,7 @@ export class FarCrowd {
 
   get most() {
     const R = this.game.rhythm;
-    return Math.round((this.game.touch ? 36 : 90) * (R ? R.people : 1));
+    return Math.round((this.game.touch ? 44 : 130) * (R ? R.people : 1));
   }
 
   // ------------------------------------------------------------------ every frame
@@ -164,7 +164,12 @@ export class FarCrowd {
       const near = this._near && this._nearAt && Math.hypot(this._nearAt.x - cam.x, this._nearAt.z - cam.z) < 30 ? this._near : (this._near = walksNear(cam, FAR));
       this._nearAt = { x: cam.x, z: cam.z };
       if (!near.length) return null;
-      [col, row] = near[Math.floor(Math.random() * near.length)];
+      // (v5, ROADMAP 11.18: most of them on the walks near you - the street you look down is full)
+      if (!near.sorted) {
+        near.sort((a, b) => a[2] - b[2]);
+        near.sorted = true;
+      }
+      [col, row] = near[Math.random() < 0.6 ? Math.floor(Math.random() * Math.min(6, near.length)) : Math.floor(Math.random() * near.length)];
       loop = sidewalkLoop(col, row);
     } else {
       col = -1 + Math.floor(Math.random() * 4);

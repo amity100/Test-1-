@@ -1837,6 +1837,8 @@ export function house(ctx, spec) {
       if (skip !== null && Math.abs(uc - skip) < 1.5) continue;
       const v0 = CURB + base + fl * FL + 0.85;
       flatWindow(ctx, sf, uc, v0, 1.15, 1.35, { jalousie: jal, ac: fl === 0 });
+      // (v5, ROADMAP 11.18: the head over it, standing out of the wall, as the sill does under it)
+      if (dressing !== 'awning') fbox(ctx, sf, M.frame, uc - 0.78, v0 + 1.43, 0, uc + 0.78, v0 + 1.55, 0.14, trim, tid);
       if (dressing === 'awning') windowAwning(ctx, sf, uc, v0 + 1.62, 1.5, awCol);
       else if (dressing === 'shutters') for (const sd of [-1, 1]) fbox(ctx, sf, M.frame, uc + sd * 0.86 - 0.22, v0 - 0.05, 0, uc + sd * 0.86 + 0.22, v0 + 1.42, 0.06, acc);
     }
@@ -1894,6 +1896,10 @@ export function house(ctx, spec) {
     addLight(lp[0], lp[1], lp[2], 6, srgb(1, 0.85, 0.6), 0.5);
     fbox(ctx, hf, M.lampGlass, uDoor + 0.85, CURB + base + 1.75, 0.04, uDoor + 1.05, CURB + base + 2.05, 0.2);
   }
+  // ---- (v5, ROADMAP 11.18) what a house that is lived in has on it: the gutters under its eaves
+  // and the pipes down from them, the pots either side of the steps, the meter on its side, the hose
+  // coiled under the tap, the mailbox at the end of the drive
+  houseThings(ctx, r, f, hf, parts, { pitch, base, FL, uDoor, u0, u1, depth, front, drive, trim, acc, DW, L });
   // ---- the condenser of its air conditioning beside it, a dish on the roof now and then
   {
     const sd = drive === 'a' ? 1 : -1;
@@ -1911,6 +1917,70 @@ export function house(ctx, spec) {
   }
   footprint(ctx, hf, u0, -depth, u1, 0, ridge, TILE, trim);
   return info;
+}
+
+function houseThings(ctx, r, f, hf, parts, o) {
+  const M = ctx.M;
+  const gut = r() < 0.6 ? WHITE : o.trim;
+  const gid = nextId();
+  for (const p of parts) {
+    const t = CURB + o.base + p.fl * o.FL;
+    const ve = t - 0.5 * o.pitch;
+    // the gutters, front and back, under the edge of the tiles
+    fbox(ctx, hf, M.frame, p.a - 0.5, ve - 0.14, p.wf + 0.4, p.b + 0.5, ve - 0.01, p.wf + 0.56, gut, gid);
+    fbox(ctx, hf, M.frame, p.a - 0.5, ve - 0.14, p.wb - 0.56, p.b + 0.5, ve - 0.01, p.wb - 0.4, gut, gid);
+    // the pipes down the front corners (a bend in to the wall under the gutter)
+    for (const u of [p.a + 0.14, p.b - 0.14]) {
+      fbox(ctx, hf, M.frame, u - 0.05, CURB, p.wf + 0.02, u + 0.05, ve - 0.32, p.wf + 0.12, gut, gid);
+      fbox(ctx, hf, M.frame, u - 0.05, ve - 0.36, p.wf + 0.02, u + 0.05, ve - 0.26, p.wf + 0.48, gut, gid);
+      fbox(ctx, hf, M.frame, u - 0.08, CURB, p.wf + 0.02, u + 0.08, CURB + 0.06, p.wf + 0.3, gut, gid);
+    }
+  }
+  // the pots either side of the steps, a plant in each
+  const pot = r.pick([srgb(0.72, 0.4, 0.28), srgb(0.86, 0.84, 0.8), srgb(0.24, 0.3, 0.36)]);
+  for (const sd of [-1, 1]) {
+    if (r() < 0.25) continue;
+    const u = o.uDoor + sd * 1.15;
+    const c = hf.p(u, 0, 0.55);
+    const g = new THREE.CylinderGeometry(0.2, 0.15, 0.42, 10);
+    g.translate(c[0], CURB + 0.21, c[2]);
+    ctx.B.add(M.prop, g, null, nextId(), { color: pot });
+    const leaf = new THREE.IcosahedronGeometry(0.3, 1);
+    leaf.scale(1, 1.25, 1);
+    leaf.translate(c[0], CURB + 0.72, c[2]);
+    ctx.B.add(M.leaf, leaf, null, nextId(), { color: r.pick([srgb(0.3, 0.58, 0.3), srgb(0.26, 0.5, 0.34), srgb(0.86, 0.3, 0.5)]) });
+    ctx.col.addCircle(c[0], c[2], 0.22, 0, 1.0, 'prop');
+  }
+  // the electric meter on the side by the drive, its pipe down into the ground
+  const sd = o.drive === 'b' ? 1 : -1;
+  const side = sideOf(hf, sd > 0 ? o.u1 : o.u0, sd);
+  const mw = Math.min(o.depth - 1, 2.2);
+  fbox(ctx, side, M.steel, mw - 0.18, CURB + 1.15, 0, mw + 0.18, CURB + 1.65, 0.16, srgb(0.78, 0.8, 0.82));
+  fbox(ctx, side, M.frame, mw - 0.08, CURB + 1.3, 0.16, mw + 0.08, CURB + 1.46, 0.2, srgb(0.86, 0.9, 0.95));
+  fbox(ctx, side, M.frame, mw - 0.03, CURB, 0.03, mw + 0.03, CURB + 1.15, 0.09, srgb(0.6, 0.62, 0.66));
+  // the tap and the hose coiled under it
+  if (r() < 0.7) {
+    const hw = Math.min(o.depth - 0.6, mw + 1.4);
+    fbox(ctx, side, M.frame, hw - 0.04, CURB + 0.5, 0, hw + 0.04, CURB + 0.6, 0.12, srgb(0.7, 0.6, 0.3));
+    const hc = side.p(hw, 0, 0.3);
+    const ring = new THREE.TorusGeometry(0.22, 0.035, 5, 12);
+    ring.rotateX(Math.PI / 2);
+    ring.scale(1, 2.2, 1);
+    ring.translate(hc[0], CURB + 0.08, hc[2]);
+    ctx.B.add(M.prop, ring, null, nextId(), { color: r.pick([srgb(0.2, 0.55, 0.3), srgb(0.9, 0.55, 0.15), srgb(0.2, 0.4, 0.75)]) });
+  }
+  // the mailbox at the end of the drive (or by the walk), on its post
+  const mbU = o.drive === 'a' ? 0.4 + o.DW + 0.35 : o.drive === 'b' ? o.L - 0.4 - o.DW - 0.35 : o.uDoor + 1.6;
+  const mp = f.p(mbU, 0, -0.45);
+  const post = new THREE.BoxGeometry(0.09, 1.0, 0.09);
+  post.translate(mp[0], CURB + 0.5, mp[2]);
+  ctx.B.add(M.prop, post, null, nextId(), { color: srgb(0.45, 0.32, 0.24) });
+  const yaw = Math.atan2(f.nx, f.nz);
+  const box = new THREE.BoxGeometry(0.24, 0.24, 0.48);
+  box.rotateY(yaw);
+  box.translate(mp[0], CURB + 1.12, mp[2]);
+  ctx.B.add(M.prop, box, null, nextId(), { color: r.pick([srgb(0.18, 0.18, 0.2), srgb(0.95, 0.95, 0.92), o.acc]) });
+  ctx.col.addCircle(mp[0], mp[2], 0.15, 0, 1.25, 'prop');
 }
 
 // ------------------------------------------------------------------ a tower of flats

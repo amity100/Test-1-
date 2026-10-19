@@ -14,6 +14,9 @@ import { friendStandIn } from '../streets.js';
 import { buildPier } from './pier.js';
 import { buildBeach, buildPoint, buildBayfront } from './shore.js';
 import { buildArena } from './arena.js';
+import '../shops2.js';
+import '../homes2.js';
+import { dressSidewalks } from './sidewalks.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
@@ -138,6 +141,8 @@ export function blockCtx(world, b) {
     plazas: [],
     fountains: [],
     seats: [],
+    // (the bus stops on its sidewalks: world/mainland/sidewalks.js, game/routines.js)
+    busStops: [],
     markets: [],
     lamps: [],
     billboards: [],
@@ -152,6 +157,8 @@ export function blockCtx(world, b) {
     lightOwner,
     lightCount: () => lightOwner.lights.length,
     props: [],
+    // (v5, ROADMAP 11.18: what is on its rooms' shelves, streamed in when you come near - world/interiors.js)
+    stock: [],
     block: b,
     // (the houses drawn on its plots: world/plot.js)
     homes: world.homes || null,
@@ -285,6 +292,9 @@ function* buildKind(bctx, b) {
   }
 }
 
+// (the blocks whose sidewalks are their own: the landmarks', the beach's, the arena's)
+const BARE = new Set(['pier', 'beach', 'point', 'bayfront', 'arena']);
+
 function lawn(bctx, x0, x1, z0, z1) {
   const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2);
   g.translate((x0 + x1) / 2, CURB + 0.01, (z0 + z1) / 2);
@@ -328,6 +338,16 @@ export function* buildMBlock(world, b) {
     }
   } finally {
     setLightOwner(null);
+  }
+  // (v5, ROADMAP 11.18) the things on its sidewalks
+  if (!BARE.has(b.kind)) {
+    setLightOwner(bctx.lightOwner);
+    try {
+      dressSidewalks(bctx, b);
+    } finally {
+      setLightOwner(null);
+    }
+    yield;
   }
   // the pens, merged a draw at a time
   const meshes = yield* bctx.B.flushSteps(group, { static: true, merge: world.merge, steps: true });
@@ -377,6 +397,7 @@ export function* buildMBlock(world, b) {
       }
       group.visible = true;
       world.mainland.show(group, `b${b.id}`);
+      if (world.interiors) world.interiors.addAll(bctx.stock);
       // (where people can walk in it: world/collision.js NavGrid, a row a frame)
       if (world.nav && world.nav.queueRefresh) world.nav.queueRefresh(b.rect.x0 - 2, b.rect.z0 - 2, b.rect.x1 + 2, b.rect.z1 + 2);
       world.mainland.onBlock(live, true);
@@ -384,6 +405,7 @@ export function* buildMBlock(world, b) {
     detach() {
       world.mainland.onBlock(live, false);
       world.mainland.hide(group);
+      if (world.interiors) world.interiors.removeAll(bctx.stock);
       const col = world.collision;
       col.release(bctx.col.boxes.map((x) => x.id));
       if (world.nav && world.nav.queueRefresh) world.nav.queueRefresh(b.rect.x0 - 2, b.rect.z0 - 2, b.rect.x1 + 2, b.rect.z1 + 2);

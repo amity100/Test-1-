@@ -76,13 +76,19 @@ export function walksNear(p, d, built = null) {
     return best;
   };
   if (p.x > -300) {
-    for (let col = -1; col < 3; col++) for (let row = 0; row < 5; row++) if (near(sidewalkLoop(col, row)) < d) out.push([col, row]);
+    for (let col = -1; col < 3; col++) {
+      for (let row = 0; row < 5; row++) {
+        const dd = near(sidewalkLoop(col, row));
+        if (dd < d) out.push([col, row, dd]);
+      }
+    }
   }
   if (p.x < -560) {
     for (const b of M_BLOCKS) {
       if (Math.abs(b.cx - p.x) > d + 80 || Math.abs(b.cz - p.z) > d + 80) continue;
       if (built && !built.has(b.id)) continue;
-      if (near(sidewalkLoop(b.col + 100, b.row + 100)) < d) out.push([b.col + 100, b.row + 100]);
+      const dd = near(sidewalkLoop(b.col + 100, b.row + 100));
+      if (dd < d) out.push([b.col + 100, b.row + 100, dd]);
     }
   }
   return out;
@@ -90,6 +96,12 @@ export function walksNear(p, d, built = null) {
 
 // (v5) the sidewalk on the park's side, the beach walk, the edge of the water: up and down
 const PROM_LINES = [15.2, 17.6, 32.2, 34.0, 15.2, 101.5, 103.5];
+
+// (v5, ROADMAP 11.18) how likely somebody walking past stops at a shop's window, by what it sells
+const WINDOW_KEEN = { fashion: 0.6, boutique: 0.6, surf: 0.5, shoes: 0.55, jewelry: 0.6, electronics: 0.5, phones: 0.5, toys: 0.45, perfume: 0.45, books: 0.4, optics: 0.35, sports: 0.45, flowers: 0.45, bakery: 0.45, icecream: 0.4, music: 0.4, gallery: 0.5 };
+const WINDOW_SAYS = ['Ooh, look at that!', 'I need those.', 'Too expensive...', 'That would look great on you.', 'Next payday.', 'Should we go in?', 'Cute!', 'Not my style.'];
+
+const _steer = { x: 0, z: 0, k: 1 };
 
 // beyond this far from the camera a walker steps every other frame (see Civilians.update)
 const FAR_STEP = 40;
@@ -355,12 +367,52 @@ class Civilian {
       const ex = this.exitTarget();
       tx = ex.x;
       tz = ex.z;
+    } else if (this.browse) {
+      // (v5, ROADMAP 11.18) at a shop's window: over to it, a look at what is in it, and on
+      fig.armsUp = 0;
+      fig.flail = 0;
+      const b = this.browse;
+      tx = b.x;
+      tz = b.z;
+      b.t -= dt;
+      if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 0.35 || b.at) {
+        b.at = true;
+        speed = 0;
+        this.yaw = dampAngle(this.yaw, b.yaw, 5, dt);
+        b.look = b.look || new THREE.Vector3();
+        const k = Math.sin(b.t * 0.7 + b.seed);
+        b.look.set(b.x + Math.sin(b.yaw) * 1.2 + Math.cos(b.yaw) * k * 0.8, this.pos.y + 1.2 + Math.sin(b.t * 0.5) * 0.25, b.z + Math.cos(b.yaw) * 1.2 - Math.sin(b.yaw) * k * 0.8);
+        fig.lookAt = b.look;
+        // (a friend with them: something to say about it)
+        if (b.say && b.t < b.say) {
+          b.say = 0;
+          if (this.buddy || this.buddyOf) this.game.bubbles.say(this, WINDOW_SAYS[Math.floor(Math.random() * WINDOW_SAYS.length)]);
+        }
+      }
+      if (b.t <= 0 || (!b.at && b.t < -6)) {
+        fig.lookAt = null;
+        this.browse = null;
+        this.idleT = 8 + Math.random() * 14;
+      }
     } else {
       fig.armsUp = 0;
       fig.flail = 0;
       const t = this.loop[this.target];
       tx = t[0];
       tz = t[1];
+      // (v5, ROADMAP 11.18) along the way: a shop's window to look in, a look at the phone, a
+      // look at the time
+      this.idleT = (this.idleT === undefined ? 3 + Math.random() * 10 : this.idleT) - dt;
+      if (this.idleT <= 0 && !this.crossing && !this.jog && this.stopT <= 0) {
+        this.idleT = 5 + Math.random() * 9;
+        if (!this.mgr.windowStop(this) && Math.random() < 0.25) {
+          this.stopT = 1.5 + Math.random() * 3;
+          if (!fig.carry && Math.random() < 0.6) {
+            fig.carry = 'phone';
+            this.carryUntil = this.game.time + this.stopT + 4 + Math.random() * 12;
+          }
+        }
+      }
       if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 0.8) {
         this.nextCorner();
         this.crossOK = false;
@@ -381,6 +433,17 @@ class Civilian {
       if (this.stopT > 0) {
         this.stopT -= dt;
         speed = 0;
+      }
+      // (v5, ROADMAP 11.18: round the others on the sidewalk, not through them)
+      // (where you can see it: past 36 m nobody can tell, and it costs a little for every walker)
+      const cam = this.game.camera.position;
+      const cdx = this.pos.x - cam.x;
+      const cdz = this.pos.z - cam.z;
+      if (speed > 0 && !this.crossing && cdx * cdx + cdz * cdz < 1296) {
+        const st = this.mgr.steer(this, tx, tz, _steer);
+        tx = st.x;
+        tz = st.z;
+        speed *= st.k;
       }
     }
     if (legless) speed = Math.min(speed, 0.8);
@@ -523,7 +586,7 @@ export class Civilians {
       this.t = 1;
       // a busy city: more people on the sidewalks around you (fewer late at night: game/rhythm.js)
       const R = game.rhythm;
-      const max = Math.round((game.touch ? 16 : 32) * (R ? R.people : 1));
+      const max = Math.round((game.touch ? 18 : 40) * (R ? R.people : 1));
       // despawn far ones (scripted people belong to their scene, unless it let them go)
       for (const c of this.list) if ((!c.scripted || !c.owner) && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 110) c.gone = true;
       this.list = this.list.filter((c) => {
@@ -553,7 +616,8 @@ export class Civilians {
       }
       const first = !this.filled;
       this.filled = true;
-      let tries = first ? 60 : 8;
+      // (v5, ROADMAP 11.18: a street fills up again quickly when you come into it)
+      let tries = first ? 60 : 14;
       // the walks that pass near you (on the mainland: of the blocks built near you)
       const ml = game.world.mainland;
       const built = ml && ml.blocks ? new Set(ml.blocks.keys()) : null;
@@ -593,7 +657,13 @@ export class Civilians {
           if (!look && !game.classic) look = game.crowds.lookFor('prom');
           c = new Civilian(this, 'prom', z, look);
         } else if (near.length) {
-          const [col, row] = near[Math.floor(Math.random() * near.length)];
+          // (v5, ROADMAP 11.18: most of them on the sidewalks you are on and the next ones, the way
+          // a busy street is busy where you are)
+          if (!near.sorted) {
+            near.sort((a, b) => a[2] - b[2]);
+            near.sorted = true;
+          }
+          const [col, row] = near[Math.random() < 0.65 ? Math.floor(Math.random() * Math.min(3, near.length)) : Math.floor(Math.random() * near.length)];
           if (!look && !game.classic) look = game.crowds.lookFor(blockType(col, row));
           c = new Civilian(this, col, row, look);
         } else continue;
@@ -640,6 +710,7 @@ export class Civilians {
     // frames, half on odd ones.
     const cam = game.camera.position;
     this.frameN = (this.frameN || 0) + 1;
+    this.buildGrid();
     for (let i = 0; i < this.list.length; i++) {
       const c = this.list[i];
       let step = dt + c.owed;
@@ -680,6 +751,118 @@ export class Civilians {
   }
 
   // a scripted person for a shop or a street scene; owner is told when it is gone
+  // (v5, ROADMAP 11.18) who is where, in cells of 2 m, for the walkers to keep out of each other's
+  // way (the player too: people step round you)
+  buildGrid() {
+    const G = this.grid || (this.grid = new Map());
+    for (const a of G.values()) a.length = 0;
+    const add = (o) => {
+      const k = Math.floor(o.pos.x / 2) * 4096 + Math.floor(o.pos.z / 2);
+      let a = G.get(k);
+      if (!a) G.set(k, (a = []));
+      a.push(o);
+    };
+    for (const c of this.list) if (!c.inside && c.dying < 0) add(c);
+    const p = this.game.player;
+    if (p && p.mode === 'foot') add(p);
+  }
+
+  // where a walker heading for (tx, tz) actually goes: a step to the side of the one coming the
+  // other way (to the right, as people do), slower behind one in the way; never through anybody
+  steer(c, tx, tz, out) {
+    out.x = tx;
+    out.z = tz;
+    out.k = 1;
+    const G = this.grid;
+    if (!G) return out;
+    let dx = tx - c.pos.x;
+    let dz = tz - c.pos.z;
+    const l = Math.hypot(dx, dz);
+    if (l < 1e-3) return out;
+    dx /= l;
+    dz /= l;
+    const rx = dz;
+    const rz = -dx;
+    let side = 0;
+    let slow = 1;
+    const cx = Math.floor(c.pos.x / 2);
+    const cz = Math.floor(c.pos.z / 2);
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        const a = G.get((cx + i) * 4096 + cz + j);
+        if (!a) continue;
+        for (const o of a) {
+          if (o === c || o === c.buddy || o === c.buddyOf) continue;
+          const ox = o.pos.x - c.pos.x;
+          const oz = o.pos.z - c.pos.z;
+          const d = Math.hypot(ox, oz);
+          if (d > 2.2 || d < 1e-4) continue;
+          // (too close: apart)
+          if (d < 0.62 && !c.noCollide) {
+            const push = (0.62 - d) * 0.5;
+            c.pos.x -= (ox / d) * push;
+            c.pos.z -= (oz / d) * push;
+          }
+          const ahead = (ox * dx + oz * dz) / d;
+          if (ahead < 0.35) continue;
+          const lat = ox * rx + oz * rz;
+          // (coming this way, or standing: round them; going the same way and slower: behind them)
+          const ov = o.vel ? o.vel.x * dx + o.vel.z * dz : 0;
+          const w = (2.2 - d) / 2.2;
+          if (ov > 0.6 && Math.abs(lat) < 0.5 && d < 1.3) slow = Math.min(slow, 0.55);
+          else side += (lat > 0.12 ? -1 : 1) * w;
+        }
+      }
+    }
+    if (side) {
+      const s = Math.max(-1, Math.min(1, side)) * 0.9;
+      out.x = c.pos.x + dx * 2 + rx * s;
+      out.z = c.pos.z + dz * 2 + rz * s;
+    }
+    out.k = slow;
+    return out;
+  }
+
+  // (v5, ROADMAP 11.18) a shop's window near somebody walking past it: now and then they stop and
+  // look in (more often at the clothes, the shoes, the phones; never at a closed one)
+  windowStop(c) {
+    const shops = this.game.world.shops;
+    if (!shops || !shops.length || c.prom) return false;
+    const R = this.game.rhythm;
+    let best = null;
+    let bd = 4.5;
+    for (const s of shops) {
+      if (!s.door || s.stand || s.home || s.nx === undefined) continue;
+      const dx = c.pos.x - s.door[0];
+      const dz = c.pos.z - s.door[2];
+      if (Math.abs(dx) > 6 || Math.abs(dz) > 6) continue;
+      // (in front of it, on the sidewalk)
+      const out = dx * s.nx + dz * s.nz;
+      if (out < 0.4 || out > 4.5) continue;
+      const d = Math.hypot(dx, dz);
+      if (d < bd) {
+        bd = d;
+        best = s;
+      }
+    }
+    if (!best || (R && !R.open(best.kind)) || best.shut) return false;
+    const keen = WINDOW_KEEN[best.kind] || 0.25;
+    if (Math.random() > keen) return false;
+    const rx = best.rx !== undefined ? best.rx : -best.nz;
+    const rz = best.rz !== undefined ? best.rz : best.nx;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const along = side * (1.5 + Math.random() * 1.2);
+    c.browse = {
+      x: best.door[0] + rx * along + best.nx * 0.85,
+      z: best.door[2] + rz * along + best.nz * 0.85,
+      yaw: Math.atan2(-best.nx, -best.nz),
+      t: 3 + Math.random() * 6,
+      seed: Math.random() * 6,
+      say: Math.random() < 0.5 ? 1.5 + Math.random() * 2 : 0,
+    };
+    return true;
+  }
+
   spawnScripted(x, z, look, owner, figOpts = null) {
     const [bx, bz] = this.nearestBlock(x, z);
     const c = new Civilian(this, bx, bz, look, figOpts);
@@ -784,7 +967,7 @@ export class Civilians {
   // way, if the street near you has room for one more
   fromFar(w) {
     const R = this.game.rhythm;
-    const max = Math.round((this.game.touch ? 16 : 32) * (R ? R.people : 1));
+    const max = Math.round((this.game.touch ? 18 : 40) * (R ? R.people : 1));
     let free = 0;
     for (const c of this.list) if (!c.scripted) free++;
     if (free >= max) return null;

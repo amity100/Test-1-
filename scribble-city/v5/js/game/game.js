@@ -1017,6 +1017,11 @@ export class Game {
       l.z = a.z;
       this.world.mainland.update(dt, a, vel);
     }
+    // (v5, ROADMAP 11.18: the insides of the shops near you)
+    if (this.world.interiors) {
+      const a = this.anchorPos();
+      this.world.interiors.update(a.x, a.z);
+    }
     const input = this.input;
     const player = this.player;
     const fr = this.figures;

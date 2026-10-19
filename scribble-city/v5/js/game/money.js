@@ -25,6 +25,7 @@ const RING = [0.95, 0.75, 0.2];
 // what the shops ask (their offers in order, game/streetlife.js); a function asks only when there
 // is something to pay for. 0: free.
 export const PRICES = {
+  hotdog: [3],
   pizza: [4],
   cafe: [3],
   grocery: [1],

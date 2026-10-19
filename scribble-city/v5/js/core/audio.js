@@ -428,6 +428,10 @@ export class Audio {
         this.tone('sine', 2093, 2093, 0.35, 0.08 * v, 0.06);
         this.tone('sine', 2637, 2637, 0.5, 0.06 * v, 0.1);
         break;
+      case 'beep':
+        // (v5, ROADMAP 11.18) the checkout's scanner
+        this.tone('square', 1900, 1900, 0.07, 0.035 * v);
+        break;
       case 'coins':
         // bills and coins into a pocket
         this.hiss(0.18, 0.16 * v, 2600, 0.9, 'bandpass');

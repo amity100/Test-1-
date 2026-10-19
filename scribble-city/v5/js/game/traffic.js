@@ -381,7 +381,7 @@ export class Traffic {
       }
       this.list = this.list.filter((c) => !c.gone);
       // (the rush hours: the most cars there are; at night few: game/rhythm.js)
-      const max = Math.round((game.touch ? 14 : 26) * (game.rhythm ? game.rhythm.cars : 1));
+      const max = Math.round((game.touch ? 16 : 32) * (game.rhythm ? game.rhythm.cars : 1));
       let n = 0;
       let buses = 0;
       for (const c of this.list) {

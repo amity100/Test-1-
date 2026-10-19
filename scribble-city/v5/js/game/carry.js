@@ -22,7 +22,7 @@ const STEAM = [0.55, 0.55, 0.6];
 const TRASH = [0.1, 0.1, 0.12];
 
 // held with both hands (the left hand follows the right one's item)
-const TWO_HANDED = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell']);
+const TWO_HANDED = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell', 'box']);
 
 export function heldIn(fig, side) {
   if (side === 1) return fig.carry;
@@ -81,6 +81,7 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
       break;
     // (v5, ROADMAP 11.17: what the mainland's stores and food counters hand you)
     case 'burger':
+    case 'hotdog':
     case 'teddy':
       [x, y, z] = [side * 0.13, ny - 0.12, 0.27];
       break;
@@ -90,6 +91,23 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
       break;
     case 'shopBag':
       return false;
+    // (v5, ROADMAP 11.18: shopping - the basket on the arm, a thing off the shelf held up to look at,
+    // a shirt on its hanger held up to the mirror, the stock box the staff carry, the card at the till)
+    case 'basket':
+      [x, y, z] = [side * 0.23, hipY + 0.02, 0.14];
+      break;
+    case 'item':
+      [x, y, z] = [side * 0.09, ny - 0.24, 0.3];
+      break;
+    case 'garment':
+      [x, y, z] = [side * 0.05, ny - 0.04 + (fig.holdUp || 0) * 0.12, 0.33];
+      break;
+    case 'box':
+      [x, y, z] = [side * 0.2, hipY + 0.2, 0.3];
+      break;
+    case 'card':
+      [x, y, z] = [side * 0.12, hipY + 0.4, 0.46];
+      break;
     case 'laundry':
       [x, y, z] = [side * 0.21, hipY + 0.05, 0.27];
       break;
@@ -227,6 +245,13 @@ function shapesFor(fig, item, side, S) {
       _a.copy(h).addScaledVector(UP, 0.005 * S);
       e(_a, 0.066, 0.022, 0.066, [0.86, 0.62, 0.32]);
       break;
+    // (v5, ROADMAP 11.18: from the cart at the curb - the bun, the sausage longer than it)
+    case 'hotdog':
+      _a.copy(h).addScaledVector(UP, 0.03 * S);
+      e(_a, 0.085, 0.03, 0.04, [0.9, 0.68, 0.38]);
+      _a.copy(h).addScaledVector(UP, 0.052 * S);
+      e(_a, 0.105, 0.018, 0.02, [0.72, 0.3, 0.22]);
+      break;
     case 'noodleBox': {
       _a.copy(h).addScaledVector(UP, 0.07 * S);
       const b = e(_a, 0.06, 0.08, 0.06, [0.97, 0.96, 0.93]);
@@ -247,6 +272,36 @@ function shapesFor(fig, item, side, S) {
         _a.copy(h).addScaledVector(UP, 0.23 * S).addScaledVector(X, k * 0.045 * S).addScaledVector(Z, 0.03 * S);
         e(_a, 0.022, 0.022, 0.018, [0.62, 0.42, 0.26]);
       }
+      break;
+    case 'basket': {
+      // a shop's basket in its colour, and what is in it so far
+      _a.copy(h).addScaledVector(UP, -0.17 * S);
+      const b = e(_a, 0.17, 0.1, 0.12, fig.basketColor || [0.86, 0.2, 0.22]);
+      fig.clip(b, _b.set(0, 1, 0), _a, 0.06 * S);
+      const items = fig.basketItems || [];
+      for (let i = 0; i < Math.min(items.length, 4); i++) {
+        _c.copy(_a).addScaledVector(UP, 0.07 * S).addScaledVector(X, (i - 1.5) * 0.07 * S).addScaledVector(Z, ((i % 2) - 0.5) * 0.04 * S);
+        e(_c, 0.034, 0.05, 0.03, items[i]);
+      }
+      break;
+    }
+    case 'item':
+      _a.copy(h).addScaledVector(UP, 0.05 * S).addScaledVector(Z, 0.015 * S);
+      e(_a, 0.045, 0.075, 0.03, fig.itemColor || [0.9, 0.3, 0.3]);
+      break;
+    case 'garment':
+      _a.copy(h).addScaledVector(UP, -0.19 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.19, 0.24, 0.022, fig.itemColor || [0.45, 0.6, 0.95]);
+      break;
+    case 'box': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, 0.07 * S);
+      e(_m, 0.23, 0.15, 0.17, CARD);
+      break;
+    }
+    case 'card':
+      _a.copy(h).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.045, 0.005, 0.03, fig.cardColor || [0.3, 0.45, 0.85]);
       break;
     case 'trashbag':
       // a black bin bag, tied at the top (the garbage truck's crew: game/fleet.js)
@@ -455,11 +510,44 @@ function strokesFor(fig, item, side, w) {
       line(fig, _a, _b, fig.shopBagMark || [0.98, 0.98, 0.96], w * 2.6, sd + 172);
       break;
     }
+    case 'basket': {
+      // its two handles up to the hand, the weave round its side
+      _a.copy(h).addScaledVector(UP, -0.1 * S).addScaledVector(X, -0.13 * S);
+      _b.copy(h).addScaledVector(UP, -0.1 * S).addScaledVector(X, 0.13 * S);
+      line(fig, h, _a, ink, w * 1.2, sd + 185);
+      line(fig, h, _b, ink, w * 1.2, sd + 186);
+      for (let i = 0; i < 2; i++) {
+        _a.copy(h).addScaledVector(UP, (-0.16 - i * 0.05) * S).addScaledVector(X, -0.15 * S).addScaledVector(Z, 0.11 * S);
+        _b.copy(_a).addScaledVector(X, 0.3 * S);
+        line(fig, _a, _b, ink, w * 0.7, sd + 187 + i);
+      }
+      break;
+    }
+    case 'garment':
+      // the hanger: its hook over the hand, its bar across the shoulders of the shirt
+      _a.copy(h).addScaledVector(UP, 0.04 * S);
+      line(fig, h, _a, [0.5, 0.5, 0.55], w * 0.9, sd + 190);
+      _a.copy(h).addScaledVector(UP, -0.03 * S).addScaledVector(X, -0.16 * S).addScaledVector(Z, 0.03 * S);
+      _b.copy(_a).addScaledVector(X, 0.32 * S);
+      line(fig, _a, _b, [0.5, 0.5, 0.55], w * 1.2, sd + 191);
+      break;
+    case 'box': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, -0.08 * S);
+      boxStrokes(fig, _m, X, Z, 0.24 * S, 0.18 * S, 0.3 * S, CARD, ink, w);
+      break;
+    }
     case 'balloon':
       _a.copy(h).addScaledVector(UP, 0.76 * S + Math.sin(fig.carryT * 1.3) * 0.03 * S).addScaledVector(X, Math.sin(fig.carryT * 0.9) * 0.05 * S);
       _b.lerpVectors(h, _a, 0.5).addScaledVector(X, 0.03 * S);
       line(fig, h, _b, ink, w * 0.7, sd + 180);
       line(fig, _b, _a, ink, w * 0.7, sd + 181);
+      break;
+    case 'hotdog':
+      // the mustard along it
+      _a.copy(h).addScaledVector(UP, 0.07 * S).addScaledVector(X, -0.08 * S);
+      _b.copy(_a).addScaledVector(X, 0.16 * S);
+      line(fig, _a, _b, [0.98, 0.82, 0.15], w * 1.6, sd + 177);
       break;
     case 'burger':
       _a.copy(h).addScaledVector(UP, 0.05 * S).addScaledVector(X, -0.07 * S);

@@ -30,6 +30,8 @@ const ITEM = {
   // (v5, ROADMAP 11.17: the mainland's stores - a bag in the store's own colour)
   fashion: 'shopBag', shoes: 'shopBag', electronics: 'shopBag', jewelry: 'shopBag', toys: 'teddy', perfume: 'shopBag', sports: 'shopBag',
   burger: 'burger', noodles: 'noodleBox', gourmet: null, club: null, theatre: null,
+  // (v5, ROADMAP 11.18: the carts at the curb)
+  hotdog: 'hotdog',
 };
 // what the shopkeeper holds while working
 const TOOL = {
@@ -41,6 +43,7 @@ const TOOL = {
   homeFamily: null, homeArtist: null, homeGrandma: null, homeLux: null,
 };
 const CALLS = {
+  hotdog: ['Hot dogs! Get your hot dogs!', 'Best dogs in town!', 'Mustard, ketchup, the works!'],
   pizza: ['Hot slice!', 'Fresh outta the oven!', 'Pizza! Pizza!'],
   cafe: ['Coffee\'s fresh!', 'Double espresso?', 'Table for one?'],
   grocery: ['Fresh peaches!', 'Apples, two for one!'],
@@ -86,6 +89,36 @@ const CALLS = {
   homeArtist: ['Hmm... more blue.', 'Inspiration!', 'Don\'t touch, it\'s wet!', 'Almost finished...'],
   homeGrandma: ['Who wants cookies?', 'Come in, sweetie!', 'In my day...', 'Domino, anyone?'],
   homeLux: ['Lovely evening.', 'The pool is warm today.', 'A little Chopin?'],
+};
+
+// (v5, ROADMAP 11.18) shopping: the shops whose customers take a basket (its colour), the colours
+// of what they pick up, and what they say at the shelves
+const BASKETS = {
+  grocery: [0.86, 0.2, 0.22], deli: [0.7, 0.3, 0.28], shop: [0.3, 0.45, 0.85], pharmacy: [0.32, 0.66, 0.46],
+  hardware: [0.86, 0.5, 0.22], toys: [0.98, 0.78, 0.2], sports: [0.24, 0.56, 0.36],
+};
+const ITEM_COLS = [[0.92, 0.26, 0.3], [0.98, 0.78, 0.2], [0.24, 0.6, 0.92], [0.96, 0.52, 0.2], [0.36, 0.72, 0.38], [0.62, 0.36, 0.82], [0.98, 0.98, 0.95], [0.95, 0.5, 0.66], [0.2, 0.7, 0.72]];
+const CLOTH_COLS = [[0.95, 0.45, 0.6], [0.45, 0.6, 0.95], [0.98, 0.9, 0.6], [0.6, 0.85, 0.7], [0.75, 0.5, 0.85], [0.98, 0.98, 0.95], [0.2, 0.22, 0.3], [0.86, 0.36, 0.3], [0.4, 0.7, 0.8]];
+const SODA_COLS = [[0.86, 0.14, 0.18], [0.2, 0.62, 0.3], [0.98, 0.74, 0.18], [0.3, 0.55, 0.9], [0.96, 0.5, 0.18]];
+const SHOP_SAYS = {
+  grocery: ['Where\'s the milk?', 'Two for one? Nice.', 'Hmm, no sugar...', 'We\'re out of eggs again?', 'This one\'s cheaper.'],
+  deli: ['Smells amazing.', 'Half a pound, please.', 'Is this fresh?'],
+  shop: ['Do they have batteries?', 'Hmm...', 'Where is it...'],
+  pharmacy: ['Something for a headache...', 'Sunscreen, sunscreen...', 'Vitamins!'],
+  fashion: ['Do you have this in blue?', 'Too small...', 'I love this color!', 'Is this on sale?', 'Does it come in a medium?'],
+  boutique: ['So pretty!', 'Is this silk?', 'I\'ll try it on.'],
+  surf: ['Nice shorts!', 'This is so summer.'],
+  shoes: ['Do you have a size nine?', 'So comfy!', 'Can I try the left one?'],
+  electronics: ['Is this the new model?', 'How much storage?', 'The screen is huge!', 'Does it come with a charger?'],
+  phones: ['Is this unlocked?', 'Nice camera!'],
+  toys: ['My nephew would love this!', 'Ooh, a robot!', 'Is it for ages five and up?'],
+  perfume: ['Mmm, lovely.', 'Too sweet...', 'That\'s the one!'],
+  books: ['Oh, I read this one!', 'Is there a second part?', 'Hmm, the cover is nice.'],
+  sports: ['Light as a feather!', 'Do these come in red?'],
+  hardware: ['Which screws do I need...', 'Ah, there it is.'],
+  optics: ['Do these suit me?', 'Too round?'],
+  jewelry: ['It sparkles!', 'Can I see that one?'],
+  default: ['Hmm...', 'Excuse me!', 'I\'ll take it!', 'Is this on sale?', 'Nice.'],
 };
 
 // the hero's own look (hair, glasses, muscles) survives a reload
@@ -221,6 +254,27 @@ export class StreetLife {
   // people from the street pop into the shops
   updateErrands(dt) {
     const game = this.game;
+    // (v5, ROADMAP 11.18: a cart at the curb has its own: somebody passing stops for a hot dog
+    // every few seconds while it is open)
+    for (const a of this.active.values()) {
+      if (!a.shop.cart || !a.open) continue;
+      a.cartT = (a.cartT === undefined ? 1 + Math.random() * 3 : a.cartT) - dt;
+      if (a.cartT > 0) continue;
+      a.cartT = 5 + Math.random() * 7;
+      if (a.customers >= 2) continue;
+      const s = a.shop;
+      let best = null;
+      let bd = 20;
+      for (const c of game.civilians.list) {
+        if (c.scripted || c.ctrl || !c.alive || c.panicT > 0 || c.headless || c.fig.carry || c.fig.carryL || c.jog || c.dog) continue;
+        const d = Math.hypot(c.pos.x - s.door[0], c.pos.z - s.door[2]);
+        if (d < bd && d > 1.5) {
+          bd = d;
+          best = c;
+        }
+      }
+      if (best) this.toCart(best, a);
+    }
     this.errandT -= dt;
     if (this.errandT > 0 || !this.active.size) return;
     this.errandT = 1.6 + Math.random() * 2.2;
@@ -251,6 +305,7 @@ export class StreetLife {
       a.admit(c);
       return;
     }
+    if (s.cart) return this.toCart(c, a);
     a.customers++;
     let phase = 'go';
     let t = 0;
@@ -314,6 +369,74 @@ export class StreetLife {
       const ox = s.door[0] + s.nx * 1.8;
       const oz = s.door[2] + s.nz * 1.8;
       if (Math.hypot(civ.pos.x - ox, civ.pos.z - oz) < 0.6 || t > 4) {
+        done();
+        return null;
+      }
+      return { x: ox, z: oz, speed: civ.speed };
+    };
+  }
+
+  // (v5, ROADMAP 11.18) up to a cart at the curb: in line if somebody is being served, the order
+  // said, the one behind the cart making it, paid, a word, and off with it
+  toCart(c, a) {
+    const game = this.game;
+    const s = a.shop;
+    a.customers++;
+    let phase = 'go';
+    let t = 0;
+    const done = () => {
+      a.customers = Math.max(0, a.customers - 1);
+      if (a.serving === c) a.serving = null;
+      c.ctrl = null;
+      c.faceYaw = null;
+      c.fig.lookAt = null;
+    };
+    c.ctrl = (civ, dt) => {
+      t += dt;
+      if (!a.alive || !a.open) {
+        done();
+        return null;
+      }
+      const sp = s.spots;
+      if (phase === 'go') {
+        // (the counter if it is free, else the place in line behind it)
+        const free = !a.serving || a.serving === civ || !a.serving.alive;
+        const to = free ? sp.counter : sp.queue;
+        if (t > 30) {
+          done();
+          return null;
+        }
+        if (Math.hypot(civ.pos.x - to.x, civ.pos.z - to.z) < 0.35) {
+          civ.faceYaw = Math.atan2(s.keeper[0] - civ.pos.x, s.keeper[2] - civ.pos.z);
+          if (free) {
+            a.serving = civ;
+            phase = 'order';
+            t = 0;
+            if (Math.random() < 0.6) game.bubbles.say(civ, pick(CART_ORDERS));
+          }
+          return null;
+        }
+        return { x: to.x, z: to.z, speed: civ.speed };
+      }
+      if (phase === 'order') {
+        civ.faceYaw = Math.atan2(s.keeper[0] - civ.pos.x, s.keeper[2] - civ.pos.z);
+        civ.fig.lookAt = a.keeper && a.keeper.alive ? a.keeper.fig.j.headC : null;
+        if (t > 4 + Math.random() * 0.02) {
+          phase = 'out';
+          t = 0;
+          civ.fig.lookAt = null;
+          civ.fig.carry = ITEM[s.kind] || 'burger';
+          civ.carryUntil = game.time + 40;
+          if (a.serving === civ) a.serving = null;
+          game.audio.play('till', 0.3);
+          if (Math.random() < 0.4) game.bubbles.say(civ, pick(['Thanks!', 'Smells great!', 'Keep the change.', 'See you tomorrow!']));
+        }
+        return null;
+      }
+      // out: off along the sidewalk with it
+      const ox = s.door[0] + s.nx * 1.4 + s.rx * 2.5;
+      const oz = s.door[2] + s.nz * 1.4 + s.rz * 2.5;
+      if (Math.hypot(civ.pos.x - ox, civ.pos.z - oz) < 0.6 || t > 5) {
         done();
         return null;
       }
@@ -434,6 +557,7 @@ const heal = (n, color, text) => (game) => {
 };
 
 const SERVICES = {
+  hotdog: { verb: 'לקנות נקניקייה', ask: 'לקנות נקניקייה', who: 'עגלת הנקניקיות', greet: 'חרדל? קטשופ? עם הכל?', offers: [['נקניקייה בלחמנייה (+25 חיים)', 'hotdog', heal(25, [0.82, 0.42, 0.3], 'יאמי! נקניקייה. +25 חיים')]] },
   pizza: { verb: 'להיכנס לפיצרייה', ask: 'להזמין פרוסה', who: 'השף ג\'ינו', greet: 'בואנה סרה! פרוסה חמה, ישר מהתנור?', offers: [['פרוסת פיצה (+35 חיים)', 'slice', heal(35, [0.95, 0.62, 0.25], 'יאמי! פיצה. +35 חיים')]] },
   cafe: { verb: 'להזמין קפה', ask: 'להזמין קפה', who: 'הבריסטה', greet: 'אספרסו כפול? יעיר אותך עד מחר בבוקר.', offers: [['אספרסו כפול (ריצה מהירה ל-30 שניות)', 'cup', (game) => {
     const p = game.player;
@@ -875,6 +999,7 @@ function bagColor(css) {
 
 // ------------------------------------------------------------------ one open shop
 // how many people sit at the tables (or wait on the bench) when you come by
+const CART_ORDERS = ['One with everything!', 'Two dogs, mustard only.', 'Just ketchup, please.', 'The usual!', 'Extra onions!', 'One hot dog and a soda.'];
 const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2, burger: 2, noodles: 2, gourmet: 5, club: 3, theatre: 14, homeFamily: 3, homeGrandma: 1, homeArtist: 1, homeLux: 2 };
 // the new hairdos the barber draws
 const CUTS_M = ['short', 'buzz', 'pompadour', 'spiky', 'curly', 'short', 'pompadour', 'mohawk'];
@@ -934,7 +1059,12 @@ class OpenShop {
         const end = way[way.length - 1];
         this.paySpot = { x: end.x, z: end.z, yaw: Math.atan2(kx - end.x, kz - end.z) };
       }
+      // (v5, ROADMAP 11.18: a shop laid out to the small things says where its checkout is, and
+      // which way the line runs; the line itself, in the order they came to it)
+      if (R.pay) this.paySpot = { x: R.pay.x, z: R.pay.z, yaw: R.pay.yaw };
+      this.queueDir = R.queueDir || null;
     }
+    this.queue = [];
     // a couple of people at the cafe tables out on the sidewalk
     if (s.spots.tables) {
       const n = this.game.touch ? 1 : s.spots.tables.length;
@@ -967,9 +1097,11 @@ class OpenShop {
     const nSeat = Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : SEATED[kind] || 0);
     for (let i = 0; i < nSeat; i++) this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
     const browse = shuffled(R.browse);
-    // (the club's floor is full: they are dancing)
-    const nb = Math.min(browse.length, kind === 'club' ? (touch ? 4 : 9) : touch ? 1 : 2);
+    // (the club's floor is full: they are dancing; a shop of the new kind is busy - v5, 11.18)
+    const nb = Math.min(browse.length, kind === 'club' ? (touch ? 4 : 9) : this.wantVisitors());
     for (let i = 0; i < nb; i++) this.addVisitor(null, { mode: browse[i].lift ? 'lift' : 'browse', spot: browse[i], already: true });
+    // (the one who fills the shelves, in the bigger shops)
+    if (R.pay && R.staff && R.staff.length && (!touch || R.big)) this.spawnStaff();
     // the DJ at the decks
     if (kind === 'club' && R.chairs.length && !this.dj) {
       const ch = R.chairs[0];
@@ -1038,6 +1170,23 @@ class OpenShop {
     }
     const v = { c, spot, mode, own, phase: o.already ? 'at' : 'in', t: 0, pts: null, reachT: 1 + Math.random() * 3 };
     v.stay = mode === 'seat' ? 25 + Math.random() * 40 : mode === 'lift' ? 6 + Math.random() * 8 : 7 + Math.random() * 9;
+    // (v5, ROADMAP 11.18) shopping: one, two or three places along the shelves, a basket on the arm
+    // where the shop has them, what they pick up looked at and kept or put back, then the line
+    if (mode === 'browse' && R.pay) {
+      v.shop = true;
+      v.stops = 1 + Math.floor(Math.random() * 3);
+      v.got = 0;
+      v.seed = Math.random() * 10;
+      v.st = 'look';
+      v.stT = o.already ? Math.random() * 2.5 : 1.2 + Math.random() * 2;
+      const bc = BASKETS[s.kind];
+      if (bc && !c.fig.carryL && Math.random() < 0.7) {
+        c.fig.carryL = 'basket';
+        c.fig.basketColor = bc;
+        c.fig.basketItems = [];
+        if (o.already) for (let i = Math.floor(Math.random() * 3); i > 0; i--) c.fig.basketItems.push(pick(ITEM_COLS));
+      }
+    }
     if (o.already) {
       v.t = Math.random() * v.stay * 0.6;
       if (mode === 'seat' || mode === 'chair') c.fig.sit = 1;
@@ -1103,6 +1252,18 @@ class OpenShop {
       }
       case 'pay':
         return this.paying(v);
+      // (v5, ROADMAP 11.18: on the way to the mirror or the fitting room; in the line)
+      case 'in2': {
+        const m = this.follow(v);
+        if (m) return m;
+        v.phase = 'at';
+        v.t = 0;
+        v.st = v.after;
+        v.stT = v.after === 'mirror' ? 2.5 + Math.random() * 2 : 6 + Math.random() * 4;
+        return null;
+      }
+      case 'queue':
+        return this.queueing(v, dt);
       default:
         return this.atSpot(v, dt);
     }
@@ -1110,7 +1271,8 @@ class OpenShop {
 
   atSpot(v, dt) {
     const c = v.c;
-    const sp = v.spot;
+    // (at the mirror, in the fitting room: that is where they face)
+    const sp = v.spot2 && (v.st === 'mirror' || v.st === 'fit') ? v.spot2 : v.spot;
     // (v5: at home, up to play with you - round you, dancing - then back to their place)
     if (v.playT > 0) {
       v.playT -= dt;
@@ -1187,6 +1349,8 @@ class OpenShop {
       }
       return null;
     }
+    // (v5, ROADMAP 11.18: shopping, in a shop laid out to the small things)
+    if (v.shop) return this.shopping(v, dt);
     // browsing: now and then a hand goes to the shelf
     const f = c.fig;
     v.reachT -= dt;
@@ -1213,10 +1377,299 @@ class OpenShop {
     return null;
   }
 
+  // ------------------------------------------------------------------ (v5, ROADMAP 11.18) shopping
+  // how many people this shop has in it now: a shop of the new kind is busy (more of them when it is
+  // big), the most when you are in it or at its window, fewer down the street; half on a phone
+  wantVisitors() {
+    const R = this.room;
+    if (!R || this.shop.home) return 0;
+    const touch = this.game.touch;
+    if (!R.pay) return touch ? 1 : 2;
+    const p = this.game.player.pos;
+    const d = Math.hypot(this.home.x - p.x, this.home.z - p.z);
+    const base = R.big ? 10 : 6;
+    // (each one a whole person: the most where you can see in, a few through the windows down the
+    // street)
+    const k = R.inside(p.x, p.z, 0.5) ? 1 : d < 14 ? 0.8 : d < 30 ? 0.45 : 0.25;
+    return Math.max(1, Math.min(R.browse.length, Math.round(base * k * (touch ? 0.5 : 1))));
+  }
+
+  // a customer at the shelves: the eyes along them, a hand out to one, the thing held up and looked
+  // at, kept (into the basket) or put back; a shirt held up to the mirror, or taken into the fitting
+  // room; then the next place along the shelves, or the line at the checkout
+  shopping(v, dt) {
+    const c = v.c;
+    const f = c.fig;
+    const sp = v.spot;
+    const R = this.room;
+    v.stT -= dt;
+    const sideX = Math.cos(sp.yaw);
+    const sideZ = -Math.sin(sp.yaw);
+    const shelfY = (k) => R.floor + (sp.shelf && sp.shelf.length ? sp.shelf[Math.min(sp.shelf.length - 1, k)] : 1.2);
+    switch (v.st) {
+      case 'look': {
+        const k = Math.sin(v.t * 0.8 + v.seed);
+        const fx = c.pos.x + Math.sin(sp.yaw) * 0.8;
+        const fz = c.pos.z + Math.cos(sp.yaw) * 0.8;
+        v.look = v.look || new THREE.Vector3();
+        v.look.set(fx + sideX * k * 0.75, R.floor + 1.05 + Math.sin(v.t * 0.55 + v.seed) * 0.45, fz + sideZ * k * 0.75);
+        f.lookAt = v.look;
+        if (v.stT <= 0) {
+          v.st = 'reach';
+          v.stT = 0.8;
+          v.row = Math.floor(Math.random() * (sp.shelf && sp.shelf.length ? sp.shelf.length : 3));
+          v.off = (Math.random() - 0.5) * 0.9;
+        }
+        return null;
+      }
+      case 'reach': {
+        if (!f.reachR) f.reachR = new THREE.Vector3();
+        const y = Math.min(c.pos.y + 1.95, Math.max(c.pos.y + 0.4, shelfY(v.row)));
+        f.reachR.set(c.pos.x + Math.sin(sp.yaw) * 0.62 + sideX * v.off, y, c.pos.z + Math.cos(sp.yaw) * 0.62 + sideZ * v.off);
+        f.lookAt = f.reachR;
+        if (v.stT <= 0) {
+          f.reachR = null;
+          const what = sp.what || (sp.fridge ? 'soda' : 'item');
+          if (what === 'garment') {
+            f.carry = 'garment';
+            f.itemColor = pick(CLOTH_COLS);
+          } else if (what === 'soda') {
+            f.carry = 'soda';
+            f.sodaColor = pick(SODA_COLS);
+          } else if (what === 'book') f.carry = 'book';
+          else if (what === 'look' || what === 'phone') f.carry = what === 'phone' ? 'phone' : null;
+          else {
+            f.carry = 'item';
+            f.itemColor = pick(ITEM_COLS);
+          }
+          v.st = 'hold';
+          v.stT = 1.6 + Math.random() * 2.6;
+          if (Math.random() < 0.2) this.say(c, pick(SHOP_SAYS[this.shop.kind] || SHOP_SAYS.default));
+        }
+        return null;
+      }
+      case 'hold': {
+        f.lookAt = f.carry ? f.j.handR : null;
+        if (v.stT > 0) return null;
+        // a shirt: held up against them in the mirror; maybe tried on
+        if (f.carry === 'garment' && !v.tried && R.mirrors && R.mirrors.length && Math.random() < 0.5) {
+          v.tried = true;
+          return this.goTo(v, R.mirrors[0], 'mirror');
+        }
+        if (f.carry === 'garment' && !v.fitted && R.fitting && R.fitting.length && Math.random() < 0.35) {
+          v.fitted = true;
+          return this.goTo(v, pick(R.fitting), 'fit');
+        }
+        return this.decide(v);
+      }
+      case 'mirror':
+        f.holdUp = 1;
+        f.lookAt = null;
+        if (v.stT <= 0) {
+          f.holdUp = 0;
+          return this.decide(v, 0.7);
+        }
+        return null;
+      case 'fit':
+        if (!v.hid) {
+          v.hid = true;
+          c.inside = true;
+          c.fig.setVisible(false);
+        }
+        if (v.stT <= 0) {
+          c.inside = false;
+          c.fig.setVisible(true);
+          v.hid = false;
+          return this.decide(v, 0.75);
+        }
+        return null;
+      case 'back': {
+        // putting it back where it was
+        if (!f.reachR) f.reachR = new THREE.Vector3();
+        f.reachR.set(c.pos.x + Math.sin(sp.yaw) * 0.62 + sideX * (v.off || 0), Math.max(c.pos.y + 0.45, shelfY(v.row || 0)), c.pos.z + Math.cos(sp.yaw) * 0.62 + sideZ * (v.off || 0));
+        if (v.stT <= 0) {
+          f.reachR = null;
+          f.carry = null;
+          return this.next(v);
+        }
+        return null;
+      }
+      default:
+        return this.next(v);
+    }
+  }
+
+  // keep it (into the basket, or carried to the checkout) or put it back; then on
+  decide(v, keep = 0.62) {
+    const f = v.c.fig;
+    f.lookAt = null;
+    const item = f.carry;
+    if (!item) return this.next(v);
+    if (Math.random() < keep) {
+      v.got++;
+      if (f.carryL === 'basket' && (item === 'item' || item === 'soda')) {
+        (f.basketItems = f.basketItems || []).push(item === 'soda' ? f.sodaColor || SODA_COLS[0] : f.itemColor || ITEM_COLS[0]);
+        f.carry = null;
+      }
+      return this.next(v);
+    }
+    // back on the shelf (if it came from there: the mirror's and the fitting room's go back too)
+    if (v.st === 'mirror' || v.st === 'fit') {
+      f.carry = null;
+      return this.next(v);
+    }
+    v.st = 'back';
+    v.stT = 0.7;
+    return null;
+  }
+
+  // the next place along the shelves, or the line at the checkout, or out
+  next(v) {
+    const c = v.c;
+    v.stops--;
+    c.fig.lookAt = null;
+    c.fig.holdUp = 0;
+    if (v.stops > 0 && this.open) {
+      const fsp = this.freeSpot();
+      if (fsp && fsp.mode === 'browse') {
+        v.spot = fsp.spot;
+        v.spot2 = null;
+        v.phase = 'in';
+        v.t = 0;
+        v.pts = this.room.path(c.pos.x, c.pos.z, fsp.spot.x, fsp.spot.z);
+        v.st = 'look';
+        v.stT = 1.2 + Math.random() * 2.5;
+        return null;
+      }
+    }
+    if (v.got > 0 && this.paySpot && this.open) return this.toQueue(v);
+    this.leave(v);
+    return null;
+  }
+
+  // across the shop to the mirror or the fitting room (st: what they do there)
+  goTo(v, spot, st) {
+    const c = v.c;
+    v.after = st;
+    v.spot2 = spot;
+    v.phase = 'in2';
+    v.t = 0;
+    v.pts = this.room.path(c.pos.x, c.pos.z, spot.x, spot.z);
+    return null;
+  }
+
+  toQueue(v) {
+    v.phase = 'queue';
+    v.t = 0;
+    v.qi = -1;
+    v.c.fig.lookAt = null;
+    if (!this.queue.includes(v)) this.queue.push(v);
+    return null;
+  }
+
+  // in the line: a step forward each time the one at the till is done; the first one up when it is
+  // free
+  queueing(v) {
+    const c = v.c;
+    const i = this.queue.indexOf(v);
+    if (i < 0 || !this.paySpot) {
+      this.leave(v);
+      return null;
+    }
+    const ps = this.paySpot;
+    if (i === 0 && (!this.payer || this.payer === v || !this.payer.c.alive || this.payer.phase === 'out')) {
+      this.queue.shift();
+      this.payer = v;
+      v.phase = 'pay-go';
+      v.t = 0;
+      v.pts = this.room.path(c.pos.x, c.pos.z, ps.x, ps.z);
+      return null;
+    }
+    const qd = this.queueDir || [-Math.sin(ps.yaw), -Math.cos(ps.yaw)];
+    const gap = 0.8;
+    const tx = ps.x + qd[0] * gap * (i + 1);
+    const tz = ps.z + qd[1] * gap * (i + 1);
+    if (v.qi !== i) {
+      v.qi = i;
+      v.pts = this.room.path(c.pos.x, c.pos.z, tx, tz);
+      v.t = 0;
+    }
+    const m = this.follow(v);
+    if (m) return m;
+    // waiting: facing the till, a look at the phone now and then
+    c.faceYaw = Math.atan2(ps.x - c.pos.x, ps.z - c.pos.z);
+    if (!c.fig.carry && Math.random() < 0.002) c.fig.carry = 'phone';
+    return null;
+  }
+
+  // the one who fills the shelves: from one place to the next with a box of stock, a while at each
+  spawnStaff() {
+    const R = this.room;
+    const s = this.shop;
+    const stops = (R.staff && R.staff.length ? R.staff : R.browse).concat(R.browse.slice(0, 4));
+    const first = stops[0];
+    const c = this.game.civilians.spawnScripted(first.x, first.z, shopkeeperLook(s.kind, Math.random() < 0.5), this);
+    c.noCollide = true;
+    c.exitRoom = R;
+    c.exitShop = s;
+    c.fig.carry = 'box';
+    let i = 0;
+    let t = 2 + Math.random() * 4;
+    let pts = null;
+    let row = 0;
+    c.ctrl = (civ, dt) => {
+      if (!this.alive) return null;
+      const sp = stops[i % stops.length];
+      if (pts && pts.length) {
+        const m = this.follow({ c: civ, pts, t: 0 });
+        if (m) return { ...m, speed: 1.0 };
+        pts = null;
+      }
+      t -= dt;
+      civ.faceYaw = sp.yaw;
+      const fig = civ.fig;
+      // a hand to the shelf, now high, now low; the box under the other arm
+      if (Math.sin(t * 2.1) > 0.2) {
+        fig.carry = null;
+        if (!fig.reachR) fig.reachR = new THREE.Vector3();
+        const y = R.floor + (sp.shelf && sp.shelf.length ? sp.shelf[row % sp.shelf.length] : 1.2);
+        fig.reachR.set(civ.pos.x + Math.sin(sp.yaw) * 0.6 + Math.cos(sp.yaw) * Math.sin(t) * 0.3, Math.min(civ.pos.y + 1.9, Math.max(civ.pos.y + 0.45, y)), civ.pos.z + Math.cos(sp.yaw) * 0.6 - Math.sin(sp.yaw) * Math.sin(t) * 0.3);
+      } else {
+        fig.reachR = null;
+        fig.carry = 'box';
+        row++;
+      }
+      if (t <= 0) {
+        fig.reachR = null;
+        fig.carry = 'box';
+        i++;
+        t = 5 + Math.random() * 6;
+        const nx = stops[i % stops.length];
+        pts = R.path(civ.pos.x, civ.pos.z, nx.x, nx.z);
+      }
+      return null;
+    };
+    this.extras.push(c);
+    this.staffer = c;
+  }
+
   paying(v) {
     const c = v.c;
     c.faceYaw = this.paySpot.yaw;
     this.payer = v;
+    // (v5, ROADMAP 11.18: what they chose onto the counter, the card to the reader, the bag)
+    if (v.shop) {
+      const f = c.fig;
+      if (v.t < 0.5 && (f.carry === 'item' || f.carry === 'garment' || f.carry === 'phone')) f.carry = null;
+      if (v.t > 1.0 && v.t < 1.75 && !v.paid) {
+        f.carry = 'card';
+        f.cardColor = f.cardColor || pick([[0.3, 0.45, 0.85], [0.85, 0.7, 0.3], [0.2, 0.2, 0.24], [0.85, 0.3, 0.35]]);
+      } else if (f.carry === 'card') f.carry = null;
+      if (v.t > 1.75 && f.carryL === 'basket') {
+        f.carryL = null;
+        f.basketItems = [];
+      }
+    }
     const s = this.shop;
     // (v5, ROADMAP 11.17) at a food counter the cook draws what they ordered, there in the air
     // between them, and hands it over; near you, so that you see it
@@ -1265,6 +1718,7 @@ class OpenShop {
     const R = this.room;
     const s = this.shop;
     this.clearDish(v);
+    this.unshop(v);
     c.fig.dance = 0;
     c.fig.reachR = null;
     c.fig.drinkT = -1;
@@ -1275,6 +1729,28 @@ class OpenShop {
     const out = 1.7 + (s.yard || 0);
     v.pts = [...R.path(c.pos.x, c.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2], bell: true, inRoom: false }, { x: s.door[0] + s.nx * out + s.rx * side, z: s.door[2] + s.nz * out + s.rz * side }];
     if (this.payer === v) this.payer = null;
+  }
+
+  // (v5, ROADMAP 11.18) out of the line, out of the fitting room, the basket left by the door
+  unshop(v) {
+    const c = v.c;
+    const qi = this.queue.indexOf(v);
+    if (qi >= 0) this.queue.splice(qi, 1);
+    if (!v.shop) return;
+    if (v.hid) {
+      c.inside = false;
+      c.fig.setVisible(true);
+      v.hid = false;
+    }
+    const f = c.fig;
+    f.holdUp = 0;
+    f.lookAt = null;
+    f.reachR = null;
+    if (f.carry === 'item' || f.carry === 'card' || f.carry === 'garment' || f.carry === 'box') f.carry = null;
+    if (f.carryL === 'basket') {
+      f.carryL = null;
+      f.basketItems = [];
+    }
   }
 
   // out on the sidewalk: an ordinary pedestrian again
@@ -1313,6 +1789,7 @@ class OpenShop {
     const i = this.visitors.indexOf(v);
     if (i >= 0) this.visitors.splice(i, 1);
     this.clearDish(v);
+    this.unshop(v);
     if (this.payer === v) this.payer = null;
     const c = v.c;
     if (c.owner === this) this.game.civilians.release(c);
@@ -1424,6 +1901,7 @@ class OpenShop {
     }
     fig.lookAt = null;
     if (s.kind === 'friends') return this.vendor(c, dt);
+    if (s.cart) return this.cartWork(c, dt);
     if (this.room) return this.workInside(c, dt);
     switch (s.kind) {
       case 'barber':
@@ -1481,6 +1959,16 @@ class OpenShop {
       fig.reachR = null;
       c.faceYaw = Math.atan2(pv.c.pos.x - c.pos.x, pv.c.pos.z - c.pos.z);
       fig.lookAt = pv.c.fig.j.headC;
+      // (v5, ROADMAP 11.18: the things passed over the scanner, a beep each)
+      if (this.room.pay && pv.t < 1.6) {
+        if (!fig.reachR) fig.reachR = new THREE.Vector3();
+        const k = Math.sin(this.t * 7);
+        const fy = c.faceYaw;
+        fig.reachR.set(c.pos.x + Math.sin(fy) * 0.5 + Math.cos(fy) * k * 0.25, c.pos.y + 1.0, c.pos.z + Math.cos(fy) * 0.5 - Math.sin(fy) * k * 0.25);
+        fig.lookAt = fig.reachR;
+        if (Math.random() < dt * 2.2) this.sound('beep', 0.6, 12);
+      }
+      if (pv.t > 1.7 && pv.t < 1.75 + dt) this.sound('till', 0.4, 12);
       return { x: this.home.x, z: this.home.z, speed: 0.8 };
     }
     // tidying the shelf behind, a look round the shop, a step along the counter
@@ -1786,6 +2274,28 @@ class OpenShop {
 
   // ------------------------------------------------------------------ DRAW YOURSELF A FRIEND
   // the girl at the stand: an eye on her customer, a smile for the promenade
+  // (v5, ROADMAP 11.18) behind the cart: the tongs into the well, the bun, the mustard, handed
+  // over; between customers a look up and down the street, a call to it now and then
+  cartWork(c, dt) {
+    const s = this.shop;
+    const fig = c.fig;
+    const cust = this.serving;
+    const cx = s.keeper[0] + s.nx * 0.75;
+    const cz = s.keeper[2] + s.nz * 0.75;
+    if (cust && cust.alive) {
+      c.faceYaw = Math.atan2(cust.pos.x - c.pos.x, cust.pos.z - c.pos.z);
+      const k = Math.sin(this.t * 3.1);
+      fig.reachR = fig.reachR || new THREE.Vector3();
+      fig.reachR.set(cx + s.rx * (k * 0.3 - 0.15), c.pos.y + 1.0 + Math.max(0, k) * 0.15, cz + s.rz * (k * 0.3 - 0.15));
+      fig.lookAt = k > 0.6 ? cust.fig.j.headC : fig.reachR;
+    } else {
+      fig.reachR = null;
+      fig.lookAt = null;
+      c.faceYaw = s.face + Math.sin(this.t * 0.35) * 0.9;
+    }
+    return { x: this.home.x, z: this.home.z, speed: 0.6 };
+  }
+
   vendor(c) {
     const fig = c.fig;
     const cust = this.fCust;
@@ -2487,14 +2997,26 @@ class OpenShop {
         }
       }
     }
-    // now and then somebody new at the door
-    if (this.room && this.open && !this.game.touch && !this.shop.home) {
-      this.newT = (this.newT === undefined ? 8 + Math.random() * 10 : this.newT) - dt;
+    // now and then somebody new at the door (v5, 11.18: a shop of the new kind is busy - as many as
+    // it holds when you are in it or at its window, fewer down the street)
+    if (this.room && this.open && !this.shop.home && (!this.game.touch || this.room.pay)) {
+      this.newT = (this.newT === undefined ? 4 + Math.random() * 6 : this.newT) - dt;
       if (this.newT <= 0) {
-        this.newT = 14 + Math.random() * 16;
-        if (this.visitors.length < 4) this.addVisitor(null);
+        const want = this.wantVisitors();
+        const n = this.visitors.length;
+        this.newT = n < want - 2 ? 1.2 + Math.random() * 1.6 : n < want ? 2.5 + Math.random() * 3.5 : 14 + Math.random() * 16;
+        if (n < Math.max(want, this.game.touch ? 0 : 4)) {
+          // (nobody pops up in sight: in at the door while you are near, already inside when not)
+          const p = this.game.player.pos;
+          const far = Math.hypot(this.home.x - p.x, this.home.z - p.z) > 22 && !this.room.inside(p.x, p.z, 0.5);
+          if (far) {
+            const f = this.freeSpot();
+            if (f) this.addVisitor(null, { ...f, already: true });
+          } else this.addVisitor(null);
+        }
       }
     }
+    if (this.staffer && this.staffer.owner !== this) this.staffer = null;
     if (this.lifts && this.lifts.length) this.liftLife(dt);
     if (this.shop.screen && this.open) this.film(dt);
     // (at home: the television on, the piano played)
