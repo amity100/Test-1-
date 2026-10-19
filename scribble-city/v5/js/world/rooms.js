@@ -306,12 +306,13 @@ class Room {
     const neg = (v) => [-v[0], -v[1], -v[2]];
     // the floor (boards, tiles, the checker of a diner), its pattern in world metres
     const fl = dec.floor;
-    const fcol = fl === 'checker' ? [0.98, 0.97, 0.95] : fl === 'mats' ? [0.8, 0.8, 0.85] : fl === 'tiles' ? [0.98, 0.96, 0.92] : fl === 'wood' ? [0.98, 0.9, 0.82] : fl === 'carpet' ? [0.95, 0.9, 0.95] : [0.94, 0.94, 0.92];
+    // (v5: a room may have a floor and a ceiling of its own colour - the club's are dark)
+    const fcol = dec.floorCol ? dec.floorCol : fl === 'checker' ? [0.98, 0.97, 0.95] : fl === 'mats' ? [0.8, 0.8, 0.85] : fl === 'tiles' ? [0.98, 0.96, 0.92] : fl === 'wood' ? [0.98, 0.9, 0.82] : fl === 'carpet' ? [0.95, 0.9, 0.95] : [0.94, 0.94, 0.92];
     const fp = [this.P(ua, y0 + 0.004, db), this.P(ub, y0 + 0.004, db), this.P(ub, y0 + 0.004, da), this.P(ua, y0 + 0.004, da)];
     const fuv = fp.map((p) => [p[0] / 2, -p[2] / 2]);
     this.add(this.M.floors[fl] || this.M.floors.concrete, this.f.facing(fp[0], fp[1], fp[2], fp[3], fuv, [0, 1, 0]), fcol);
     // the ceiling
-    this.quad(this.P(ua, y1, db), this.P(ub, y1, db), this.P(ub, y1, da), this.P(ua, y1, da), [0, -1, 0], [0.96, 0.93, 0.86]);
+    this.quad(this.P(ua, y1, db), this.P(ub, y1, db), this.P(ub, y1, da), this.P(ua, y1, da), [0, -1, 0], dec.ceiling || [0.96, 0.93, 0.86]);
     // walls: a lower band and the wall above it
     const band = y0 + 0.95;
     const wall = (a0, a1, nn) => {

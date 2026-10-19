@@ -240,6 +240,8 @@ export class Mainland {
       this.neon.release(live.neonKeys || []);
     }
     this.far.setNear(b, on);
+    // (the roofs the rain stops at are drawn again: render/rain.js)
+    this.world.roofVer = (this.world.roofVer || 0) + 1;
     for (const f of this.listeners) f(live, on);
   }
 

@@ -43,9 +43,10 @@ const SHOP_HOURS = {
   // (v5, ROADMAP 11.17) the mainland's: the malls' stores keep the malls' hours, the food court a
   // little longer, the gourmet kitchen opens for the evening, the club for the night
   fashion: [10, 22], shoes: [10, 22], electronics: [10, 22], jewelry: [10, 21], toys: [10, 21], perfume: [10, 22], sports: [9, 22],
-  burger: [10, 24], noodles: [11, 24], gourmet: [12, 24],
+  burger: [10, 24], noodles: [11, 24], gourmet: [12, 24], theatre: [11, 24.5],
   // (the lines outside: the club's doors open at six, the cinema's last show is at midnight)
-  club: [18, 28],
+  // (the clubs open in the afternoon: the day party first, then the night)
+  club: [15, 28],
 };
 
 // clothes for the morning's way to work and for the night out (looks.js kinds)

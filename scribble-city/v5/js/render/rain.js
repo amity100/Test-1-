@@ -316,7 +316,8 @@ export class RainRenderer {
     const root = pipe.staticRoot;
     if (!root) return;
     const cam = this.game.camera.position;
-    const ver = pipe.staticVersion ? pipe.staticVersion() : 0;
+    // (v5: and when a block of the mainland comes or goes, world/mainland/index.js)
+    const ver = (pipe.staticVersion ? pipe.staticVersion() : 0) + (this.game.world.roofVer || 0) * 1e6;
     const cur = this.roofCur;
     const off = cur ? Math.max(Math.abs(cam.x - cur.x), Math.abs(cam.z - cur.z)) : Infinity;
     let b = this.roofBuild;

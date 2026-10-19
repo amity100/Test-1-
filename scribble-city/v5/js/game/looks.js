@@ -566,6 +566,11 @@ export function shopkeeperLook(kind) {
       apron([0.98, 0.97, 0.94]);
       if (!fem) L.face.beard = chance(0.5) ? 'mustache' : null;
       break;
+    case 'theatre':
+      L.top = { kind: 'vest', color: [0.62, 0.08, 0.12], sleeves: 'long', under: [0.96, 0.95, 0.92] };
+      L.bottom = { kind: 'pants', color: [0.12, 0.12, 0.14] };
+      L.hat = { kind: 'cap', color: [0.62, 0.08, 0.12] };
+      break;
     case 'club':
       L.top = { kind: chance(0.5) ? 'bomber' : 'tee', color: [0.12, 0.12, 0.16], sleeves: 'long', inner: [0.62, 0.3, 0.86] };
       L.bottom = { kind: 'pants', color: [0.1, 0.1, 0.12] };

@@ -65,6 +65,7 @@ export const PRICES = {
   noodles: [10, 5],
   gourmet: [28, 64, 36, 18],
   club: [8, 4, 0],
+  theatre: [12, 5],
 };
 // a shelf's things (the wardrobe, ROADMAP 5.7); taking something off is free
 export const SHELF_PRICES = { top: 30, bottom: 35, shoes: 45, hat: 20, acc: 25, tattoo: 45 };

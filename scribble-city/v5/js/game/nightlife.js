@@ -11,11 +11,26 @@ const BOUNCER = ['Next.', 'You. Come on in.', 'Not tonight.', 'Easy, folks.', 'O
 export class Nightlife {
   constructor(game) {
     this.game = game;
-    this.spots = (game.world.queues || []).map((q) => ({ ...q, people: [], bouncer: null, t: 0, active: false }));
+    this.spots = (game.world.queues || []).map((q) => ({ ...q, src: q, people: [], bouncer: null, t: 0, active: false }));
+    this.ver = game.world.queuesVer || 0;
+  }
+
+  // (v5, ROADMAP 11.17) the mainland's clubs come and go with their blocks: their lines with them
+  sync() {
+    const w = this.game.world;
+    this.ver = w.queuesVer || 0;
+    const qs = w.queues || [];
+    for (const q of this.spots.slice()) {
+      if (qs.includes(q.src)) continue;
+      if (q.active) this.close(q);
+      this.spots.splice(this.spots.indexOf(q), 1);
+    }
+    for (const q of qs) if (!this.spots.some((s) => s.src === q)) this.spots.push({ ...q, src: q, people: [], bouncer: null, t: 0, active: false });
   }
 
   update(dt) {
     const game = this.game;
+    if ((game.world.queuesVer || 0) !== this.ver) this.sync();
     const p = game.anchorPos();
     const R = game.rhythm;
     for (const q of this.spots) {

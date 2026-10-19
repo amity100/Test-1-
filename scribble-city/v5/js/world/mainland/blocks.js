@@ -8,7 +8,8 @@ import { park, plaza, alleyGround, court, bench, fountain } from '../blocks.js';
 import { palm } from '../palms.js';
 import { SHOP_NAMES } from '../blocks.js';
 import { M_AVES, M_STREETS, CURB, towersOf } from './plan.js';
-import { buildMall, buildStripMall } from './mall.js';
+import { buildMall, buildStripMall, STORE_NAMES } from './mall.js';
+import { buildVenue } from './venues.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
@@ -25,6 +26,12 @@ const MALLS = {
     street: ['diner', 'juice', 'barber', 'pharmacy', 'cafe', 'phones', 'flowers', 'gym'],
   },
   stripmall: { name: 'VALLEY PLAZA', heb: 'ואלי פלאזה', stores: ['grocery', 'pizza', 'laundry', 'pharmacy', 'barber', 'icecream', 'bagel', 'phones', 'cafe'] },
+};
+// (the clubs and the theatre: world/mainland/venues.js)
+const VENUES = {
+  '2,3': { kind: 'club', name: 'NEON INK', signCol: '#ff3fa4', strip: '#3fe8ff', wall: '#26232c', mural: true, len: 30, depth: 24 },
+  '7,2': { kind: 'club', name: 'BLUE VELVET', signCol: '#4f9dff', strip: '#ff5ad1', wall: '#1e2440', font: 'Caveat', len: 28, depth: 22 },
+  '9,3': { kind: 'theatre', name: 'INKWOOD PALACE', show: 'DRAWN TOGETHER', signCol: '#ffe14f', wall: '#7a2a32', len: 34, depth: 26, h: 11 },
 };
 
 // (v5, ROADMAP 11.17) A block of the mainland, built near you: the same kits the island's blocks
@@ -84,10 +91,20 @@ function mixOf(b) {
   }
 }
 
-// a fair deck of shop kinds for a block (as the island's: every kind turns up)
+// a fair deck of shop kinds for a block (as the island's: every kind turns up; and the mainland's
+// own - the clothes and the shoes, the screens, the burgers and the noodles - along its avenues)
 const KIND_W = {
   cafe: 5, pizza: 4, grocery: 3, bagel: 3, icecream: 3, tacos: 2, sushi: 2, falafel: 2, shop: 3, hardware: 2, pharmacy: 2, laundry: 2,
-  phones: 2, optics: 2, gym: 2, books: 2, flowers: 2, barber: 4, deli: 2, music: 2, diner: 2, juice: 2, surf: 2, boutique: 2, arcade: 1,
+  phones: 2, optics: 2, gym: 2, books: 2, flowers: 2, barber: 4, deli: 2, music: 2, diner: 2, juice: 2, surf: 1, boutique: 2, arcade: 1,
+  fashion: 2, shoes: 1, electronics: 1, jewelry: 1, toys: 1, perfume: 1, sports: 1, burger: 2, noodles: 2,
+};
+// the restaurants' row in Brickton: Maison Plume, where the chef draws each plate, and its
+// neighbours
+const DINING_W = { gourmet: 3, sushi: 2, pizza: 2, noodles: 2, burger: 1, tacos: 1, cafe: 2, icecream: 1, diner: 1, juice: 1, deli: 1, bagel: 1 };
+const MORE_NAMES = {
+  gourmet: ['Maison Plume', 'Le Crayon', 'Atelier Nine', 'Graphite'],
+  noodles: STORE_NAMES.noodles,
+  burger: STORE_NAMES.burger,
 };
 
 // ------------------------------------------------------------------ the block's own ctx
@@ -140,7 +157,7 @@ export function blockCtx(world, b) {
   bctx.room = (f, spec) => buildRoom(bctx, f, spec);
   // the block's own deck of shop kinds and names (its dice: the same block is the same every time)
   const deck = [];
-  for (const [k, w] of Object.entries(KIND_W)) for (let i = 0; i < w; i++) deck.push(k);
+  for (const [k, w] of Object.entries(b.kind === 'dining' ? DINING_W : KIND_W)) for (let i = 0; i < w; i++) deck.push(k);
   let cards = [];
   bctx.kindDeck = () => {
     if (!cards.length) {
@@ -154,7 +171,7 @@ export function blockCtx(world, b) {
   };
   const use = new Map();
   bctx.nameFor = (kind) => {
-    const list = SHOP_NAMES[kind] || ['Shop'];
+    const list = MORE_NAMES[kind] || SHOP_NAMES[kind] || STORE_NAMES[kind] || ['Shop'];
     const n = (use.get(kind) || 0) + (b.seed % 7);
     use.set(kind, (use.get(kind) || 0) + 1);
     return list[n % list.length];
@@ -174,7 +191,9 @@ function* rows(bctx, b, o = {}) {
   const base = { z0: R.z0, z1: R.z1, D, street: mx.street, mix: mx.mix, type: o.type || 'shops', col: 100 + b.col, row: 100 + b.row, back: true };
   bctx.ctxRow = true;
   if (o.west !== false) yield* sobeRowSteps(bctx, { ...base, x: R.x0, side: -1, rowSide: 'west' });
-  if (o.east !== false) yield* sobeRowSteps(bctx, { ...base, x: R.x1, side: 1, rowSide: 'east' });
+  // (o.eastFrom: something of its own stands at the north end of the east side)
+  const ez0 = R.z0 + (o.eastFrom || 0);
+  if (o.east !== false && R.z1 - ez0 > 24) yield* sobeRowSteps(bctx, { ...base, z0: ez0, x: R.x1, side: 1, rowSide: 'east' });
   const a = { x0: R.x0 + D, x1: R.x1 - D, z0: R.z0, z1: R.z1, type: b.kind, col: 100 + b.col, row: 100 + b.row };
   if (a.x1 - a.x0 > 4 && o.alleyGround !== false) {
     bctx.alleys.push(a);
@@ -203,6 +222,15 @@ function* buildKind(bctx, b) {
     case 'stripmall':
       yield* buildStripMall(bctx, b, MALLS.stripmall);
       return;
+    case 'clubs':
+    case 'theatres': {
+      // the venue on the avenue's side at the north end, the district's rows round it
+      const v = VENUES[`${b.col},${b.row}`];
+      if (!v) break;
+      const taken = yield* buildVenue(bctx, b, v);
+      yield* rows(bctx, b, { eastFrom: taken });
+      return;
+    }
     case 'school':
       // the school's fields and its court behind a row of houses
       yield* rows(bctx, b, { east: false, D: 26 });
@@ -296,6 +324,11 @@ export function* buildMBlock(world, b) {
       world.objects.adoptLocal(bctx.props);
       showLights(bctx.lightOwner, true);
       for (const s of bctx.shops) world.addShop(s);
+      if (bctx.queues && bctx.queues.length) {
+        world.queues = world.queues || [];
+        for (const q of bctx.queues) world.queues.push(q);
+        world.queuesVer = (world.queuesVer || 0) + 1;
+      }
       for (const h of bctx.hideSpots) world.hideSpots.push(h);
       for (const c of cull) world.cullList.push(c);
       // (a mall: its hall is indoors for the weather, and its people's - game/mall.js)
@@ -315,6 +348,13 @@ export function* buildMBlock(world, b) {
       world.objects.releaseLocal(bctx.props);
       releaseLights(bctx.lightOwner);
       for (const s of bctx.shops) world.removeShop(s);
+      if (bctx.queues && bctx.queues.length && world.queues) {
+        for (const q of bctx.queues) {
+          const k = world.queues.indexOf(q);
+          if (k >= 0) world.queues.splice(k, 1);
+        }
+        world.queuesVer = (world.queuesVer || 0) + 1;
+      }
       for (const h of bctx.hideSpots) {
         const k = world.hideSpots.indexOf(h);
         if (k >= 0) world.hideSpots.splice(k, 1);

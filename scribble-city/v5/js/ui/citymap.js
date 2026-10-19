@@ -110,10 +110,11 @@ const KINDS = {
   burger: ['food', 'המבורגר'],
   noodles: ['food', 'נודלס'],
   gourmet: ['food', 'מסעדת שף'],
+  theatre: ['fun', 'תיאטרון'],
 };
 
 // (the mainland's stores drawn with the stickers of their kin)
-const GLYPH_OF = { fashion: 'boutique', shoes: 'boutique', electronics: 'phones', jewelry: 'boutique', toys: 'shop', perfume: 'flowers', sports: 'gym', burger: 'diner', noodles: 'sushi', gourmet: 'diner' };
+const GLYPH_OF = { theatre: 'cinema', fashion: 'boutique', shoes: 'boutique', electronics: 'phones', jewelry: 'boutique', toys: 'shop', perfume: 'flowers', sports: 'gym', burger: 'diner', noodles: 'sushi', gourmet: 'diner' };
 
 // the legend: each group's sticker, its name, and from how close it shows (pixels a metre)
 const CATS = [
@@ -495,7 +496,7 @@ export class CityMap {
         const b = placeBlock(pl);
         const x = pl.at ? pl.at[0] : b ? b.cx : 0;
         const z = pl.at ? pl.at[1] : b ? b.cz : 0;
-        add({ cat: 'place', glyph: pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : 'fountain', x, z, name: pl.heb, note: pl.name });
+        add({ cat: 'place', glyph: pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : 'fountain', x, z, name: pl.heb, note: pl.name });
       }
       add({ cat: 'place', glyph: 'beach', x: -1500, z: 600, name: 'חוף פליסייד', note: 'הטיילת, החול והאוקיינוס בדרום היבשה' });
     }

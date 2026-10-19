@@ -24,6 +24,9 @@ const smoothstep = (a, b, x) => {
 const SHOP_STYLE = {
   cafe: 'jazz', books: 'jazz', diner: 'jazz', icecream: 'lofi', juice: 'lofi', surf: 'lofi', boutique: 'synth', arcade: 'synth', gym: 'disco',
   music: 'rock', bar: 'rock', pizza: 'rock', tacos: 'rock',
+  // (v5, ROADMAP 11.17: the mainland's - the clubs play disco out into the street, the stores of the
+  // malls their own)
+  club: 'disco', fashion: 'synth', shoes: 'synth', sports: 'disco', electronics: 'synth', toys: 'lofi', burger: 'rock', noodles: 'lofi', gourmet: 'jazz', perfume: 'jazz', jewelry: 'jazz',
 };
 const CLUB = 'INK CLUB';
 // how loud each layer is at its fullest
@@ -254,7 +257,7 @@ export class Soundscape {
     for (const s of game.streetlife.active.values()) {
       const kind = s.shop.kind;
       if (SHOP_STYLE[kind] === undefined || !s.open || (R && !R.open(kind))) continue;
-      const club = s.shop.name === CLUB;
+      const club = s.shop.name === CLUB || kind === 'club';
       // (the club is heard from across the street; a shop from its door)
       const d = Math.hypot(s.shop.door[0] - cam.x, s.shop.door[2] - cam.z) * (club ? 0.5 : 1);
       if (d < bd && d < 17) {
@@ -263,7 +266,7 @@ export class Soundscape {
       }
     }
     const inRoom = best && best.room && best.room.inside(cam.x, cam.z, 0.2);
-    const club = best && best.shop.name === CLUB;
+    const club = best && (best.shop.name === CLUB || best.shop.kind === 'club');
     const vol = best ? (inRoom ? 0.32 : (club ? 0.34 : 0.22) * (1 - smoothstep(4, 17, bd))) : 0;
     this.shopOut.gain.setTargetAtTime(vol, now, 0.6);
     this.shopFilter.frequency.setTargetAtTime(inRoom ? 4000 : club ? 900 : 1300, now, 0.3);

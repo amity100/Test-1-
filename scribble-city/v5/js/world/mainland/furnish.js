@@ -41,7 +41,8 @@ Object.assign(DECOR, {
   burger: { wall: [0.98, 0.88, 0.62], band: [0.86, 0.26, 0.2], floor: 'checker', light: [1, 0.86, 0.6] },
   noodles: { wall: [0.94, 0.86, 0.72], band: [0.7, 0.16, 0.18], floor: 'wood', light: [1, 0.8, 0.55] },
   gourmet: { wall: [0.3, 0.22, 0.28], band: [0.16, 0.12, 0.14], floor: 'wood', light: [1, 0.82, 0.6] },
-  club: { wall: [0.08, 0.06, 0.12], band: [0.04, 0.03, 0.06], floor: 'carpet', light: [0.75, 0.45, 1.0] },
+  club: { wall: [0.08, 0.06, 0.12], band: [0.04, 0.03, 0.06], floor: 'concrete', floorCol: [0.2, 0.19, 0.24], ceiling: [0.05, 0.045, 0.07], light: [0.75, 0.45, 1.0] },
+  theatre: { wall: [0.42, 0.1, 0.14], band: [0.24, 0.06, 0.08], floor: 'carpet', floorCol: [0.55, 0.2, 0.26], ceiling: [0.2, 0.06, 0.09], light: [1, 0.82, 0.6] },
   homeFamily: { wall: [0.96, 0.9, 0.78], band: [0.6, 0.72, 0.62], floor: 'wood', light: [1, 0.86, 0.62] },
   homeArtist: { wall: [0.92, 0.9, 0.86], band: [0.5, 0.5, 0.56], floor: 'concrete', light: [1, 0.92, 0.8] },
   homeGrandma: { wall: [0.96, 0.86, 0.82], band: [0.62, 0.42, 0.36], floor: 'tiles', light: [1, 0.82, 0.58] },
@@ -418,8 +419,15 @@ Object.assign(FURNISH, {
     const f0 = db + 3.2;
     const f1 = Math.min(da - 3.5, f0 + 10);
     const cols = [[1, 0.3, 0.7], [0.3, 0.9, 1], [1, 0.85, 0.3], [0.6, 0.4, 1], [0.4, 1, 0.6]];
+    const dim = cols.map((c) => c.map((x) => x * 0.42));
     for (let u = mid - 4.5; u < mid + 4.5 - 0.1; u += 1.0) {
-      for (let d = f0; d < f1 - 0.1; d += 1.0) R.box(u + 0.04, y0 - 0.01, d + 0.04, u + 0.96, y0 + 0.012, d + 0.96, rng.pick(cols), GLOW);
+      for (let d = f0; d < f1 - 0.1; d += 1.0) R.box(u + 0.05, y0 - 0.01, d + 0.05, u + 0.95, y0 + 0.012, d + 0.95, rng.pick(dim), GLOW);
+    }
+    // the wall of light behind the stage: bands of colour, a black frame round it
+    R.box(mid - 5.5, y0 + 0.6, db + 0.02, mid + 5.5, y1 - 0.5, db + 0.08, C.black);
+    for (let k = 0; k < 9; k++) {
+      const v0 = y0 + 0.8 + k * ((y1 - y0 - 1.5) / 9);
+      R.box(mid - 5.3, v0, db + 0.09, mid + 5.3, v0 + (y1 - y0 - 1.5) / 9 - 0.08, db + 0.11, dim[k % dim.length].map((x) => x * 1.4), GLOW);
     }
     for (let i = 0; i < 12; i++) R.spots.browse.push({ u: mid - 3.8 + (i % 4) * 2.5, d: f0 + 1.2 + Math.floor(i / 4) * 2.8, face: [0, -1] });
     // the mirror ball and the light rig
@@ -450,6 +458,51 @@ Object.assign(FURNISH, {
       R.box(u + 0.9, y0, d + 0.7, u + 1.6, y0 + 0.5, d + 1.3, C.black, { solid: true });
       R.spots.seats.push({ u, d: d + 0.6, face: [1, 0] }, { u, d: d + 1.4, face: [1, 0] });
     }
+  },
+
+  // the theatre: the stage at the back, the screen over it between the red curtains, the rows of
+  // red seats with an aisle down the middle, the snack counter by the doors
+  theatre(R) {
+    const { ua, ub, db, da, y0, y1 } = R;
+    const mid = (ua + ub) / 2;
+    const w = ub - ua;
+    const red = [0.62, 0.08, 0.12];
+    const red2 = [0.7, 0.12, 0.16];
+    R.box(ua + 1, y0, db, ub - 1, y0 + 0.9, db + 3.0, C.darkWood, { solid: true });
+    R.box(ua + 1, y0 + 0.88, db + 2.95, ub - 1, y0 + 0.94, db + 3.1, C.gold);
+    R.box(mid - w * 0.3, y0 + 2.0, db + 0.05, mid + w * 0.3, y1 - 0.9, db + 0.1, [0.98, 0.97, 0.95], GLOW);
+    for (const sd of [-1, 1]) {
+      for (let k = 0; k < 7; k++) {
+        const u = mid + sd * (w * 0.31 + k * 0.3);
+        if (u < ua + 0.4 || u > ub - 0.4) continue;
+        R.box(u - 0.15, y0 + 0.9, db + 0.3 + (k % 2) * 0.12, u + 0.15, y1 - 0.4, db + 0.52 + (k % 2) * 0.12, k % 2 ? red2 : red);
+      }
+    }
+    R.box(ua + 1, y1 - 1.0, db + 0.2, ub - 1, y1 - 0.3, db + 0.7, red2);
+    // the rows: a cushion and a back the length of each half, an arm every third seat
+    let n = 0;
+    for (let d = db + 5.0; d < da - 3.6 && n < 11; d += 1.15, n++) {
+      for (const [a, b] of [[ua + 1.0, mid - 0.7], [mid + 0.7, ub - 1.0]]) {
+        R.box(a, y0 + 0.4, d - 0.26, b, y0 + 0.5, d + 0.22, red);
+        R.box(a, y0 + 0.5, d + 0.16, b, y0 + 1.05, d + 0.28, red2);
+        R.box(a, y0, d - 0.1, b, y0 + 0.4, d + 0.2, [0.16, 0.12, 0.14]);
+        let i = 0;
+        for (let u = a + 0.32; u < b - 0.2; u += 0.62, i++) {
+          if (i % 3 === 0) R.box(u - 0.33, y0 + 0.5, d - 0.22, u - 0.29, y0 + 0.72, d + 0.2, [0.3, 0.2, 0.18]);
+          R.spots.seats.push({ u, d, face: [0, -1] });
+        }
+      }
+    }
+    // the snack counter, the popcorn machine on it, the menu over it
+    const cu0 = ub - 4.2;
+    const cd = da - 1.2;
+    R.counter(cu0, ub - 0.6, cd, { front: [0.62, 0.08, 0.12], top: C.gold });
+    R.box(ub - 1.6, y0 + 1.05, cd - 0.55, ub - 0.9, y0 + 1.75, cd - 0.15, [1, 0.95, 0.75], GLOW);
+    R.box(ub - 1.62, y0 + 1.75, cd - 0.57, ub - 0.88, y0 + 1.8, cd - 0.13, C.red);
+    R.sign(ub - 2.4, y0 + 2.4, 2.4, 0.9, 'menu', cd - 1.0);
+    R.spots.keeper = { u: ub - 2.4, d: cd - 1.0, face: [0, 1] };
+    // the aisle's little lights along the floor
+    for (let d = db + 4.6; d < da - 3.6; d += 1.15) R.box(mid - 0.04, y0 + 0.01, d - 0.04, mid + 0.04, y0 + 0.05, d + 0.04, [1, 0.8, 0.5], GLOW);
   },
 
   // ------------------------------------------------------------------ homes

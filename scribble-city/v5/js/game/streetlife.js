@@ -29,7 +29,7 @@ const ITEM = {
   tacos: 'bag', diner: 'bag', juice: 'coffee', surf: null, boutique: 'bag', arcade: null, bar: null, cinema: 'coffee',
   // (v5, ROADMAP 11.17: the mainland's stores - a bag in the store's own colour)
   fashion: 'shopBag', shoes: 'shopBag', electronics: 'shopBag', jewelry: 'shopBag', toys: 'teddy', perfume: 'shopBag', sports: 'shopBag',
-  burger: 'burger', noodles: 'noodleBox', gourmet: null, club: null,
+  burger: 'burger', noodles: 'noodleBox', gourmet: null, club: null, theatre: null,
 };
 // what the shopkeeper holds while working
 const TOOL = {
@@ -37,7 +37,7 @@ const TOOL = {
   icecream: 'icecream', hardware: 'broom', laundry: 'laundry', sushi: null, falafel: null, shop: 'broom', pharmacy: null,
   phones: 'phone', optics: null, gym: 'dumbbell', music: 'guitar', barber: 'scissors', lobby: null,
   friends: 'magicPencil', tacos: 'tray', diner: 'tray', juice: 'tray', surf: null, boutique: null, arcade: null, bar: 'tray', cinema: null,
-  fashion: null, shoes: null, electronics: 'phone', jewelry: null, toys: null, perfume: null, sports: null, burger: 'tray', noodles: null, gourmet: null, club: null,
+  fashion: null, shoes: null, electronics: 'phone', jewelry: null, toys: null, perfume: null, sports: null, burger: 'tray', noodles: null, gourmet: null, club: null, theatre: null,
 };
 const CALLS = {
   pizza: ['Hot slice!', 'Fresh outta the oven!', 'Pizza! Pizza!'],
@@ -80,6 +80,7 @@ const CALLS = {
   noodles: ['Hot noodles!', 'Straight from the wok!', 'Extra spicy?'],
   gourmet: ['Service!', 'Table four, please.', 'Bon appétit.'],
   club: ['Make some noise!', 'Hands up!', 'One more song!'],
+  theatre: ['Popcorn! Fresh popcorn!', 'The show starts soon!', 'Tickets, tickets!'],
 };
 
 // the hero's own look (hair, glasses, muscles) survives a reload
@@ -746,6 +747,10 @@ SERVICES.gourmet = { verb: 'להיכנס למסעדה', ask: 'להזמין מה�
   ['פסטה טרייה (+40 חיים)', 'pasta', meal(40, [0.95, 0.82, 0.4], 'כמו באיטליה. +40 חיים')],
   ['קינוח: עוגת תותים (+25 חיים)', 'dessert', meal(25, [0.95, 0.6, 0.7], 'מתוק! +25 חיים')],
 ] };
+SERVICES.theatre = { verb: 'להיכנס לתיאטרון', ask: 'לקנות כרטיס', who: 'הקופאית', greet: 'ההצגה של הערב: סרט מצויר, כל פריים בעיפרון! כרטיס? פופקורן?', offers: [
+  ['כרטיס להצגה (לשבת ולצפות)', null, (game, a) => a.watchShow()],
+  ['פופקורן (+15 חיים)', 'cup', heal(15, [0.98, 0.9, 0.6], 'פופקורן! +15 חיים')],
+] };
 SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הברמן', who: 'הברמן', greet: 'ברוכים הבאים! הדי ג\'יי בוער הלילה. משהו לשתות? (בלי אלכוהול, רק צבעים)', offers: [
   ['מוקטייל ניאון (+15 חיים)', 'mocktail', (game) => heal(15, [0.4, 0.85, 0.9], 'מוקטייל! +15 חיים')(game)],
   ['לימונדה קרה (+10 חיים)', 'lemonade', heal(10, [0.98, 0.9, 0.4], 'לימונדה. +10 חיים')],
@@ -775,6 +780,16 @@ const ORDERS = {
   default: ['One, please!', 'That one!', 'Mmm, that looks good!'],
 };
 const CHEF_SAYS = ['Voilà!', 'Bon appétit!', 'Service!', 'Here you go!', 'Fresh!', 'Enjoy!'];
+// (the theatre's film: drawn on its screen a frame at a time, its words under it)
+const FILM = [
+  ['house', 'פעם, בעיר מצוירת אחת...'],
+  ['friend', '...גרה ילדה שציירה לעצמה חברים.'],
+  ['dog', 'יום אחד היא ציירה כלב קטן.'],
+  ['balloon', 'הכלב רצה לעוף, אז היא ציירה לו בלון.'],
+  ['umbrella', 'ירד גשם - והיא ציירה מטריה.'],
+  ['heart', 'והם היו חברים לתמיד.'],
+  ['flower', 'הסוף.'],
+];
 const pickDish = (kind) => {
   const d = DISH[kind];
   return d ? d[Math.floor(Math.random() * d.length)] : null;
@@ -787,7 +802,7 @@ function bagColor(css) {
 
 // ------------------------------------------------------------------ one open shop
 // how many people sit at the tables (or wait on the bench) when you come by
-const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2, burger: 2, noodles: 2, gourmet: 5, club: 2 };
+const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2, burger: 2, noodles: 2, gourmet: 5, club: 3, theatre: 14 };
 // the new hairdos the barber draws
 const CUTS_M = ['short', 'buzz', 'pompadour', 'spiky', 'curly', 'short', 'pompadour', 'mohawk'];
 const CUTS_F = ['long', 'bun', 'ponytail', 'braids', 'curly', 'beehive', 'long', 'spacebuns'];
@@ -879,8 +894,30 @@ class OpenShop {
     const nSeat = Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : SEATED[kind] || 0);
     for (let i = 0; i < nSeat; i++) this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
     const browse = shuffled(R.browse);
-    const nb = Math.min(browse.length, touch ? 1 : 2);
+    // (the club's floor is full: they are dancing)
+    const nb = Math.min(browse.length, kind === 'club' ? (touch ? 4 : 9) : touch ? 1 : 2);
     for (let i = 0; i < nb; i++) this.addVisitor(null, { mode: browse[i].lift ? 'lift' : 'browse', spot: browse[i], already: true });
+    // the DJ at the decks
+    if (kind === 'club' && R.chairs.length && !this.dj) {
+      const ch = R.chairs[0];
+      const L = civilianLook({ kind: 'street' });
+      L.acc = (L.acc || []).filter((x) => x !== 'headphones').concat(['headphones']);
+      const dj = this.game.civilians.spawnScripted(ch.x, ch.z, L, this);
+      dj.noCollide = true;
+      dj.yaw = ch.yaw;
+      let t = Math.random() * 10;
+      dj.ctrl = (civ, dt) => {
+        t += dt;
+        civ.pos.x = ch.x;
+        civ.pos.z = ch.z;
+        civ.faceYaw = ch.yaw;
+        civ.fig.dance = 1;
+        if (Math.sin(t * 0.7) > 0.6 && Math.random() < dt * 0.3) this.say(civ, pick(['Make some noise!', 'Hands up, NEON INK!', 'One more!', 'Are you ready?!']));
+        return null;
+      };
+      this.dj = dj;
+      this.extras.push(dj);
+    }
   }
 
   // a free place for somebody coming in
@@ -937,6 +974,7 @@ class OpenShop {
     if (mode === 'seat' && s.kind === 'cafe') c.fig.carry = 'coffee';
     if (mode === 'seat' && s.kind === 'books') c.fig.carry = 'book';
     if (mode === 'seat' && s.kind === 'lobby') c.fig.carry = 'newspaper';
+    if (mode === 'seat' && s.kind === 'theatre' && Math.random() < 0.5) c.fig.carry = 'soda';
     c.exitRoom = R;
     c.exitShop = s;
     c.ctrl = (civ, dt) => this.visit(v, dt);
@@ -1046,6 +1084,17 @@ class OpenShop {
       }
       return null;
     }
+    // (on the club's floor: they dance, a shout now and then)
+    if (this.shop.kind === 'club') {
+      c.fig.dance = 1;
+      if (v.stay < 25) v.stay = 25 + Math.random() * 40;
+      if (Math.random() < dt * 0.02) this.say(c, pick(['Woo!', 'I love this song!', 'Yeah!', 'Dance with me!', 'Best night ever!']));
+      if (v.t > v.stay) {
+        c.fig.dance = 0;
+        this.leave(v);
+      }
+      return null;
+    }
     // browsing: now and then a hand goes to the shelf
     const f = c.fig;
     v.reachT -= dt;
@@ -1124,6 +1173,7 @@ class OpenShop {
     const R = this.room;
     const s = this.shop;
     this.clearDish(v);
+    c.fig.dance = 0;
     c.fig.reachR = null;
     c.fig.drinkT = -1;
     v.phase = 'out';
@@ -2027,6 +2077,74 @@ class OpenShop {
       }
     }
     if (this.lifts && this.lifts.length) this.liftLife(dt);
+    if (this.shop.screen && this.open) this.film(dt);
+  }
+
+  // ------------------------------------------------------------------ the theatre's film
+  // while you are in the hall its film is drawn on the screen, a frame at a time (rubbed out for
+  // the next one); sitting in a seat with a ticket you read its words too
+  film(dt) {
+    const game = this.game;
+    const p = game.player.pos;
+    if (!this.room.inside(p.x, p.z, 0.3)) {
+      if (this.filmSk) game.airsketch.erase(this.filmSk);
+      this.filmSk = null;
+      this.filmI = 0;
+      this.filmT = 1;
+      return;
+    }
+    this.filmT = (this.filmT === undefined ? 1 : this.filmT) - dt;
+    if (this.filmT > 0) return;
+    if (this.filmSk) {
+      game.airsketch.erase(this.filmSk);
+      this.filmSk = null;
+      this.filmT = 0.7;
+      return;
+    }
+    const [shape, line] = FILM[(this.filmI || 0) % FILM.length];
+    this.filmI = (this.filmI || 0) + 1;
+    const scr = this.shop.screen;
+    this.filmSk = game.airsketch.draw({ shape, at: new THREE.Vector3(scr.x, scr.y, scr.z), size: scr.size * 1.7, wall: { rx: scr.rx, rz: scr.rz, nx: scr.nx, nz: scr.nz }, keep: true, dur: 2.2, width: 11 });
+    const seat = game.player.seat;
+    if (seat && seat.theatre === this) game.hud.toast(line, 'info', 3.6);
+    this.filmT = 4.8;
+  }
+
+  // a ticket: to a free seat in the middle of the rows, and the film from its start
+  watchShow() {
+    const game = this.game;
+    const R = this.room;
+    const used = new Set(this.visitors.map((v) => v.spot));
+    const free = R.seats.filter((x) => !used.has(x));
+    if (!free.length) {
+      game.hud.toast('כל המקומות תפוסים! אולי בהצגה הבאה', 'info', 2.6);
+      return;
+    }
+    const scr = this.shop.screen;
+    // (the seat with the best view: in the middle, not too close)
+    let best = free[0];
+    let bs = Infinity;
+    for (const x of free) {
+      const dx = x.x - scr.x;
+      const dz = x.z - scr.z;
+      const along = Math.abs(dx * scr.nx + dz * scr.nz);
+      const across = Math.abs(dx * scr.rx + dz * scr.rz);
+      const sc = across * 1.5 + Math.abs(along - 9);
+      if (sc < bs) {
+        bs = sc;
+        best = x;
+      }
+    }
+    const p = game.player;
+    p.seat = { x: best.x, z: best.z, yaw: best.yaw, lock: false, theatre: this };
+    // (the camera behind your head, a little up: the screen over the rows in front)
+    game.camRig.yaw = best.yaw;
+    game.camRig.pitch = 0.12;
+    this.filmI = 0;
+    this.filmT = 1.2;
+    if (this.filmSk) game.airsketch.erase(this.filmSk);
+    this.filmSk = null;
+    game.hud.toast('האורות כבים... ההצגה מתחילה! (צעד אחד - וקמים)', 'info', 3.2);
   }
 
   // ------------------------------------------------------------------ the lifts
@@ -2141,6 +2259,8 @@ class OpenShop {
 
   dispose() {
     this.alive = false;
+    if (this.filmSk) this.game.airsketch.erase(this.filmSk);
+    this.filmSk = null;
     const civs = this.game.civilians;
     const drop = (c) => {
       if (!c) return;

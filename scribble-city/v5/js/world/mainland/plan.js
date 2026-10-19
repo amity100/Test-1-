@@ -236,6 +236,7 @@ export const PLACES = [
   { id: 'velvet', kind: 'club', name: 'BLUE VELVET', heb: 'מועדון בלו ולווט', block: '7,2' },
   { id: 'plume', kind: 'gourmet', name: 'Maison Plume', heb: 'מזון פלום', block: '1,10' },
   { id: 'arena', kind: 'arena', name: 'Bayfront Arena', heb: 'ארנת המפרץ', block: '0,7' },
+  { id: 'palace', kind: 'theatre', name: 'Inkwood Palace', heb: 'תיאטרון אינקווד פאלאס', block: '9,3' },
   { id: 'sign', kind: 'landmark', name: 'INKWOOD', heb: 'השלט על הגבעה', at: [-1330, -1300] },
   { id: 'lighthouse', kind: 'landmark', name: 'Point Lighthouse', heb: 'המגדלור', at: [-760, 590] },
 ];
