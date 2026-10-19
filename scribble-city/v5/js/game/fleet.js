@@ -27,7 +27,8 @@ import { Patrol } from './patrol.js';
 //   (GTA IV) the patrol's stops        the patrol car pulls somebody over: the lights, the curb,
 //                                      the officer at the window with the pad (game/patrol.js)
 // The taxis (GTA IV) cruise the curb lane for a fare, and pull over for one - the signal, over to
-// the curb, the hazards - and back out after; the garbage truck works the mainland's bins too.
+// the curb, the hazards - and back out after; the garbage truck works the mainland's bins too,
+// its hazards going at each, its worker off the step and through a gap in the parked cars.
 // (?classic: none of it)
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];

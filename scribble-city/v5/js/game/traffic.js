@@ -20,7 +20,9 @@ import { Curbs } from './curbs.js';
 // turning at a crossing waits at its line while people are on the zebra it turns across; at a
 // green light the first in the line is not always quick off the mark (on the phone), and the one
 // behind lets it know; behind a van double-parked in a lane of its own, the horns. The mainland's
-// curbs, its lots' cars and its bus stops come and go with its blocks (game/curbs.js).
+// curbs, its lots' cars and its bus stops come and go with its blocks (game/curbs.js); and its
+// traffic is spent where you look: the cars far behind you, out of sight, give way to new ones
+// coming in ahead of you, and what is off to the side of the view is not drawn.
 
 const POLICE_WHITE = [0.95, 0.95, 0.97];
 // the city's buses: orange, with a blue band along the windows (drawn by the car batches)
@@ -528,8 +530,15 @@ export class Traffic {
     const by = c.passBy && c.s < c.passUntil ? c.passBy : null;
     // (a siren swung out to pass: not the ones pulled over for it - ROADMAP 8.4)
     const pass = c.emergency && c.passK > 0.5;
+    // (GTA IV: the mainland's traffic is thicker - what is plainly too far off on either axis to be
+    // within 13 m in front, a bus's length allowed for, is passed over before it is measured)
+    const cx = c.pos.x;
+    const cz = c.pos.z;
     for (let i = 0; i < os.length; i++) {
       const o = os[i];
+      const ox = o.pos.x - cx;
+      const oz = o.pos.z - cz;
+      if (ox > 23 || ox < -23 || oz > 23 || oz < -23) continue;
       if (o !== c && o !== by && !(pass && o.yieldK > 0.5)) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3, o);
     }
     const es = game.enemies.list;
@@ -543,6 +552,9 @@ export class Traffic {
     const hs = game.civilians.list;
     for (let i = 0; i < hs.length; i++) {
       const h = hs[i];
+      const hx = h.pos.x - cx;
+      const hz = h.pos.z - cz;
+      if (hx > 20 || hx < -20 || hz > 20 || hz < -20) continue;
       if (!h.inside && h.alive !== false) aheadTest(h.pos.x, h.pos.z, 0.3, 'other', 0);
     }
     if (!A.why) return null;
@@ -1466,6 +1478,9 @@ export class Traffic {
         const dx = c.pos.x - camPos.x;
         const dz = c.pos.z - camPos.z;
         if (dx * dx + dz * dz > 26 * 26 || dx * fwd.x + dz * fwd.z < -4) continue;
+        // (not on a car that was not drawn, off to the side of the view)
+        const d = Math.hypot(dx, dz);
+        if (d > 14 && dx * hx + dz * hz < cosA * d - c.halfLen - 6) continue;
         if (c.wipeOff === undefined) c.wipeOff = Math.random();
         drawWipers(fr, c.spec.kind, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, wiperSweep(t, rain, c.wipeOff), i * 7.1);
       }
@@ -1477,10 +1492,13 @@ export class Traffic {
     // is room)
     // (and only those in the width of the view, as above: a street's worth of them off to the
     // side of the screen are not drawn for nothing)
+    // (on a phone, out to 110 m: further off they are a few dots on its screen, and each costs
+    // the same to draw as one beside you)
     const parked = this.parked;
     const T = cars.tyres;
     const room = T && T.cap ? Math.floor((T.cap - T.n - 48) / 4) : 1e9;
-    const R = this.parkR;
+    const maxR = this.game.touch ? 110 : 190;
+    const R = Math.min(this.parkR, maxR);
     const R2 = R * R;
     let shown = 0;
     let wanted = 0;
@@ -1496,7 +1514,6 @@ export class Traffic {
       this.drawOne(cars, c);
       shown++;
     }
-    const maxR = this.game.touch ? 140 : 190;
     this.parkShown = shown;
     // (parkRFreeze: the tests', to measure what they cost)
     if (this.parkRFreeze) return;
