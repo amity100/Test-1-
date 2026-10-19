@@ -124,6 +124,8 @@ const CATS = [
   { id: 'car', name: 'מוסך, דלק וחניה', glyph: 'pump', fill: '#ffd0c8', k: 0 },
   { id: 'fun', name: 'בילוי ולילה', glyph: 'bar', fill: '#ff9ccc', k: 0 },
   { id: 'place', name: 'מקומות מיוחדים', glyph: 'wheel', fill: '#fff3c4', k: 0 },
+  // (v5, ROADMAP 11.17) the plots to draw a home on (game/friend.js)
+  { id: 'home', name: 'מגרשים לבית', glyph: 'deed', fill: '#ffe0ef', k: 0.9, nc: true },
   { id: 'hotel', name: 'מלונות', glyph: 'lobby', fill: '#aec6f6', k: 1.4 },
   { id: 'food', name: 'אוכל ושתייה', glyph: 'cafe', fill: '#ffc580', k: 1.75 },
   { id: 'shop', name: 'חנויות', glyph: 'shop', fill: '#a6e5e1', k: 1.75 },
@@ -499,6 +501,16 @@ export class CityMap {
         add({ cat: 'place', glyph: pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : 'fountain', x, z, name: pl.heb, note: pl.name });
       }
       add({ cat: 'place', glyph: 'beach', x: -1500, z: 600, name: 'חוף פליסייד', note: 'הטיילת, החול והאוקיינוס בדרום היבשה' });
+      // (v5, ROADMAP 11.17) DRAW YOURSELF A FRIEND on the mainland, the plots to draw a home on, and
+      // the home she drew (game/friend.js; their places from the bake, world/mainland/far.json)
+      for (const [x, z] of w.allStands || []) add({ cat: 'fun', glyph: 'friends', x, z, name: 'צייר לך חברה', note: 'עיפרון קסם: מציירים חברה, מדברים איתה, והיא באה איתכם' });
+      const F = game.friend;
+      for (const [key, x, z] of w.allPlots || []) {
+        if (w.homes && w.homes.has(key)) {
+          const h = w.homes.get(key);
+          add({ cat: 'place', glyph: 'friends', x, z, name: `הבית של ${h.heb || (F && F.data && F.data.heb) || 'החברה'}`, note: 'הבית שהיא ציירה לעצמה. נכנסים: סרט, ארוחה, ציור על הקיר' });
+        } else add({ cat: 'home', glyph: 'deed', x, z, name: 'מגרש לבית', note: 'מגרש ריק: החברה שציירתם יכולה לצייר עליו בית' });
+      }
     }
     // the service station (ROADMAP 4.6; none with ?classic)
     const G = w.garages;

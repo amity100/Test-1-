@@ -10,6 +10,7 @@ import { SHOP_NAMES } from '../blocks.js';
 import { M_AVES, M_STREETS, CURB, towersOf } from './plan.js';
 import { buildMall, buildStripMall, STORE_NAMES } from './mall.js';
 import { buildVenue } from './venues.js';
+import { friendStandIn } from '../streets.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
@@ -211,15 +212,20 @@ function* buildKind(bctx, b) {
     case 'park':
     case 'domino':
       park(bctx, R);
+      // (DRAW YOURSELF A FRIEND: a stand in the park - game/friend.js)
+      friendStandIn(bctx, R);
       yield;
       return;
     case 'plaza':
       plaza(bctx, R);
+      friendStandIn(bctx, R);
       yield;
       return;
     case 'galleria':
     case 'starlight':
       yield* buildMall(bctx, b, MALLS[b.kind]);
+      // (and one in the mall's hall, among the shoppers)
+      if (bctx.mall && bctx.mall.hall) friendStandIn(bctx, bctx.mall.hall, { from: 4, step: 2 });
       return;
     case 'stripmall':
       yield* buildStripMall(bctx, b, MALLS.stripmall);
@@ -342,6 +348,8 @@ export function* buildMBlock(world, b) {
       }
       group.visible = true;
       world.mainland.show(group, `b${b.id}`);
+      // (where people can walk in it: world/collision.js NavGrid, a row a frame)
+      if (world.nav && world.nav.queueRefresh) world.nav.queueRefresh(b.rect.x0 - 2, b.rect.z0 - 2, b.rect.x1 + 2, b.rect.z1 + 2);
       world.mainland.onBlock(live, true);
     },
     detach() {
@@ -349,6 +357,7 @@ export function* buildMBlock(world, b) {
       world.mainland.hide(group);
       const col = world.collision;
       col.release(bctx.col.boxes.map((x) => x.id));
+      if (world.nav && world.nav.queueRefresh) world.nav.queueRefresh(b.rect.x0 - 2, b.rect.z0 - 2, b.rect.x1 + 2, b.rect.z1 + 2);
       world.objects.releaseLocal(bctx.props);
       releaseLights(bctx.lightOwner);
       for (const s of bctx.shops) world.removeShop(s);

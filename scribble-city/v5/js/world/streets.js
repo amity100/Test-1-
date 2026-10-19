@@ -1128,4 +1128,43 @@ void westRect;
 void hex;
 
 // (v5: the beach street furnishes its own sidewalks with these, world/ocean.js)
-export { hydrant, trashCan, newsBox, put, free, faceQuad, billboard };
+export { hydrant, trashCan, newsBox, put, free, faceQuad, billboard, friendStand };
+
+// (v5, ROADMAP 11.17) a stand somewhere in an open place of rect R (a park, a square, a mall's
+// hall): the first place round its middle where the booth, its easel and room before it are free
+// of everything, facing in to the middle; null when there is none
+export function friendStandIn(ctx, R, o = {}) {
+  const cx = (R.x0 + R.x1) / 2;
+  const cz = (R.z0 + R.z1) / 2;
+  const BW = 3.4;
+  const fits = (x, z, nx, nz) => {
+    const rx = nz;
+    const rz = -nx;
+    const ox = x - (rx * BW) / 2;
+    const oz = z - (rz * BW) / 2;
+    for (let u = -1.2; u <= BW + 2.3; u += 0.55) {
+      for (let w = -1.8; w <= 1.8; w += 0.6) {
+        const px = ox + rx * u + nx * w;
+        const pz = oz + rz * u + nz * w;
+        if (px < R.x0 + 1 || px > R.x1 - 1 || pz < R.z0 + 1 || pz > R.z1 - 1) return false;
+        if (ctx.col.pointInside(px, 1.0, pz, 0.35)) return false;
+      }
+    }
+    return true;
+  };
+  const step = o.step || 3;
+  const reach = Math.max(R.x1 - R.x0, R.z1 - R.z0) / 2;
+  for (let r = o.from || 6; r < reach; r += step) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + r * 0.37;
+      const x = cx + Math.cos(a) * r;
+      const z = cz + Math.sin(a) * r;
+      // facing back toward the middle (the way to it along one of the four directions)
+      const dx = cx - x;
+      const dz = cz - z;
+      const [nx, nz] = Math.abs(dx) > Math.abs(dz) ? [Math.sign(dx), 0] : [0, Math.sign(dz)];
+      if (fits(x, z, nx, nz)) return friendStand(ctx, x, z, nx, nz);
+    }
+  }
+  return null;
+}

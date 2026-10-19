@@ -150,6 +150,7 @@ export class Mainland {
     this.far = new FarShells(world, o.farData || null, M.wallSolid);
     // (every plot to draw a home on, from the bake: [key, x, z] - the map, game/friend.js)
     world.allPlots = (o.farData && o.farData.plots) || [];
+    world.allStands = (o.farData && o.farData.stands) || [];
     const near = o.low ? 175 : 230;
     const cells = M_BLOCKS.map((b) => ({
       id: `b${b.id}`,
@@ -256,6 +257,9 @@ export class Mainland {
     if (!this.on) return;
     this.stream.update(pos.x, pos.z, vel ? vel.x : 0, vel ? vel.z : 0);
     this.neon.flush(8);
+    // (the blocks built or let go of: where people can walk, worked out again a little a frame)
+    const nav = this.world.nav;
+    if (nav && nav.pump) nav.pump(1.2);
     // the far shadows go with you on the mainland (the island's own box when you are back there)
     if (this.pipe && this.pipe.farMaps) {
       const onMain = pos.x < -330;
@@ -283,6 +287,8 @@ export class Mainland {
     if (!this.on) return;
     this.stream.fill(p.x, p.z, ms);
     this.neon.flush(1e9);
+    const nav = this.world.nav;
+    if (nav && nav.pump) nav.pump(1e9);
   }
 
   // (tools/mainland-bake.mjs) every block built once, not shown, and its buildings' bodies kept:
@@ -314,6 +320,8 @@ export class Mainland {
         list.push([+f.x0.toFixed(2), +f.z0.toFixed(2), +f.x1.toFixed(2), +f.z1.toFixed(2), +f.top.toFixed(2), c]);
       }
       out[b.id] = list;
+      // (the stands where a friend is drawn: for the map)
+      for (const s of live.bctx.shops) if (s.kind === 'friends') (out.stands = out.stands || []).push([+s.door[0].toFixed(1), +s.door[2].toFixed(1)]);
       // (the plots to draw a home on: where they are, for the map and for a friend looking for one)
       for (const p of live.bctx.plots || []) {
         const f = p.f;

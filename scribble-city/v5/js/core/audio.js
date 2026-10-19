@@ -520,6 +520,11 @@ export class Audio {
         this.tone('triangle', 660, 990, 0.12, 0.1 * v);
         this.tone('triangle', 880, 1320, 0.14, 0.08 * v, 0.1);
         break;
+      case 'radio':
+        // (v5) the police radio: a burst of static, the beep
+        this.hiss(0.18, 0.12 * v, 2200, 1.4);
+        this.tone('sine', 1250, 1250, 0.07, 0.08 * v, 0.2);
+        break;
       case 'knock':
         // (v5) three knocks on a wooden door
         for (let i = 0; i < 3; i++) {

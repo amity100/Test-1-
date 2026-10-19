@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { groundHeight } from '../world/layout.js';
+import { groundHeight, AVES, STREETS, WEST_EDGE } from '../world/layout.js';
+import { NODES } from '../world/roads.js';
 
 // The Scribble City Police: crimes that somebody sees (or phones in) earn stars; patrol
 // cars race to you with the siren on and drop off officers with pen-pistols, big school
@@ -40,6 +41,22 @@ const CREWS = [
 ];
 
 const _v = new THREE.Vector3();
+
+// (v5, ROADMAP 11.17) where something is, the way the radio says it: the corner of the nearest
+// avenue and street (the island's or the mainland's)
+function cornerName(x, z) {
+  let best = null;
+  let bd = Infinity;
+  for (const n of NODES) {
+    const d = Math.abs(n.x - x) + Math.abs(n.z - z);
+    if (d < bd) {
+      bd = d;
+      best = n;
+    }
+  }
+  return best ? `${best.ave.name} פינת ${best.street.name}` : 'במרכז העיר';
+}
+const dirName = (dx, dz) => (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'מזרחה' : 'מערבה') : dz > 0 ? 'דרומה' : 'צפונה');
 
 export class Police {
   constructor(game) {
@@ -133,6 +150,9 @@ export class Police {
     if (this.level > before) {
       const hud = this.game.hud;
       const msg = this.level === 1 ? 'המשטרה מחפשת אותך!' : this.level >= 4 ? 'יחידת מחק מיוחדת בדרך!' : 'עוד ניידות בדרך!';
+      if (before === 0) this.radio(`מוקד לכל הניידות: דיווח על חשוד, ${cornerName(x, z)}.`, true);
+      else if (this.level === 3) this.radio('מוקד: יחידה מיוחדת מצטרפת למרדף. זהירות.', true);
+      else if (this.level >= 4) this.radio('מוקד: כל הכוחות, החשוד מסוכן. מחסומים בכל הצירים.', true);
       hud.toast(msg, 'bad', 2.4);
       this.dispatchT = Math.min(this.dispatchT, 1);
       // the patrol car already around comes for you
@@ -233,6 +253,26 @@ export class Police {
     if (searching !== this.searching) {
       this.searching = searching;
       game.hud.setWanted(this.level, searching);
+      // (v5, ROADMAP 11.17) lost: the cars close the corners round where you were last seen; found
+      // again: everybody on the radio knows where
+      if (searching) {
+        this.radio(`איבדנו קשר עין ליד ${cornerName(this.lastSeen.x, this.lastSeen.z)}. סוגרים את האזור.`);
+        this.cordon();
+      } else {
+        this.radio(`ניידת ${10 + Math.floor(Math.random() * 40)}: יש קשר עין! ${cornerName(pp.x, pp.z)}.`);
+        for (const c of game.traffic.list) if (c.police) c.cordon = null;
+      }
+    }
+    if (searching) this.tips(dt, pp);
+    else if (p.inVehicle && this.level > 0) {
+      // (after you in a car: the way you are going, on the radio)
+      this.carT = (this.carT || 4) - dt;
+      if (this.carT <= 0) {
+        this.carT = 9 + Math.random() * 5;
+        const v = p.inVehicle;
+        const sg = Math.sign(v.speed || 1);
+        if (Math.abs(v.speed || 0) > 4) this.radio(`החשוד ברכב, נוסע ${dirName(Math.sin(v.yaw) * sg, Math.cos(v.yaw) * sg)}, ${cornerName(v.pos.x, v.pos.z)}.`);
+      }
     }
     if (this.searchT > SEARCH_TIME[this.level]) {
       this.clear();
@@ -273,6 +313,16 @@ export class Police {
     const pp = p.inVehicle ? p.inVehicle.pos : p.pos;
     const nav = game.world.nav;
     const col = game.world.collision;
+    // (v5, ROADMAP 11.17) up the roads to you, from round a corner (the island's or the mainland's)
+    {
+      const crews = CREWS[this.level];
+      const sp = game.traffic.roadSpot(pp, 65, 125, pp);
+      if (sp) {
+        const crew = crews[Math.floor(Math.random() * crews.length)];
+        const car = game.traffic.spawnPolice(sp.x, sp.z, sp.yaw, crew);
+        if (car) return car;
+      }
+    }
     for (let i = 0; i < 30; i++) {
       const a = Math.random() * Math.PI * 2;
       const r = 70 + Math.random() * 40;
@@ -308,6 +358,67 @@ export class Police {
     car.mode = 'parked';
   }
 
+  // (v5, ROADMAP 11.17) the police radio, in the subtitles (one line every few seconds at most)
+  radio(text, force = false) {
+    const game = this.game;
+    const t = game.time;
+    if (!force && t - (this.radioAt || -99) < 4) return;
+    this.radioAt = t;
+    if (game.audio) game.audio.play('radio', 0.6);
+    if (game.hud && game.hud.subtitles !== false && game.voices && game.voices.subtitle) game.voices.subtitle(`קשר משטרתי — ${text}`);
+  }
+
+  // where you were last seen, boxed in: each car on the case to a corner round it (and parked
+  // there across the road, its officers searching from there - game/traffic.js updatePolice)
+  cordon() {
+    const game = this.game;
+    const L = this.lastSeen;
+    const corners = NODES.filter((n) => {
+      const d = Math.hypot(n.x - L.x, n.z - L.z);
+      return d > 25 && d < 130;
+    }).sort((a, b) => Math.hypot(a.x - L.x, a.z - L.z) - Math.hypot(b.x - L.x, b.z - L.z));
+    let k = 0;
+    for (const c of game.traffic.list) {
+      if (!c.police || c.mode !== 'pursuit' || !c.crew || !c.crew.length) continue;
+      const n = corners[k++];
+      if (!n) break;
+      c.cordon = new THREE.Vector3(n.x, 0, n.z);
+    }
+  }
+
+  // somebody in the street saw where you went, and says so (not in a disguise: game/lose.js)
+  tips(dt, pp) {
+    const game = this.game;
+    this.tipT = (this.tipT === undefined ? 4 : this.tipT) - dt;
+    if (this.tipT > 0) return;
+    this.tipT = 6 + Math.random() * 4;
+    if (game.lose && game.lose.disguised) return;
+    if (game.player.hidden) return;
+    const col = game.world.collision;
+    let who = null;
+    for (const c of game.civilians.list) {
+      if (!c.alive || c.headless || c.inside || c.ctrl || c.scripted || c.panicT > 0) continue;
+      const d = Math.hypot(c.pos.x - pp.x, c.pos.z - pp.z);
+      if (d > 3 && d < 26 && col.lineOfSight(c.pos.x, c.pos.y + 1.6, c.pos.z, pp.x, pp.y + 1.2, pp.z)) {
+        who = c;
+        break;
+      }
+    }
+    if (!who || Math.random() < 0.4) return;
+    who.faceYaw = Math.atan2(pp.x - who.pos.x, pp.z - who.pos.z);
+    game.bubbles.say(who, pick(['Officer! Over there!', 'That way! That way!', 'I saw them, right there!', 'Police! Here!']), 'alarm');
+    const x = pp.x + (Math.random() - 0.5) * 8;
+    const z = pp.z + (Math.random() - 0.5) * 8;
+    game.inkwell.after(1.4, () => {
+      if (!this.hostile || !who.alive) return;
+      this.lastSeen.set(x, 0, z);
+      this.searchT = Math.max(0, this.searchT - 6);
+      for (const e of game.enemies.list) if (e.faction === 'police' && e.alive && !e.headless) e.squad.lastKnown.set(x, 0, z);
+      this.radio(`מוקד: עד ראייה מדווח על החשוד, ${cornerName(x, z)}.`);
+      this.cordon();
+    });
+  }
+
   clear() {
     const game = this.game;
     this.heat = 0;
@@ -316,6 +427,8 @@ export class Police {
     this.searching = false;
     game.hud.setWanted(0, false);
     game.hud.toast('המשטרה ויתרה — איבדו אותך', 'good', 2.6);
+    this.radio('מוקד: מבטלים את החיפוש. כל הניידות חוזרות לסיור.', true);
+    for (const c of game.traffic.list) if (c.police) c.cordon = null;
     for (const e of game.enemies.list) {
       if (e.faction !== 'police' || !e.alive) continue;
       e.setState('return');

@@ -1,5 +1,6 @@
 import { AVES, STREETS, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, BLVD, groundHeight } from '../world/layout.js';
 import { angleDiff, damp, dampAngle } from '../core/util.js';
+import { M_AVES, M_STREETS } from '../world/mainland/plan.js';
 
 // (ROADMAP 6.1, not with ?classic) Real chases. With you in a car and the police after you:
 //   - the car behind you calls on you to pull over first
@@ -284,8 +285,12 @@ export class Chase {
     const fx = Math.sin(v.yaw) * sg;
     const fz = Math.cos(v.yaw) * sg;
     let road = null;
-    if (Math.abs(fz) > 0.8) for (const a of AVES) if (Math.abs(v.pos.x - a.x) < a.half) road = { along: 'z', x: a.x, half: a.half };
-    if (Math.abs(fx) > 0.8) for (const s of STREETS) if (Math.abs(v.pos.z - s.z) < s.half) road = { along: 'x', z: s.z, half: s.half };
+    // (v5, ROADMAP 11.17: the island's avenues and streets, or the mainland's)
+    const isl = v.pos.x > WEST_EDGE - 20;
+    const aves = isl ? AVES.map((a) => ({ x: a.x, half: a.half, lo: NORTH_EDGE + 8, hi: SOUTH_EDGE - 8 })) : M_AVES.map((a) => ({ x: a.x, half: a.half, lo: a.z0 + 8, hi: a.z1 - 8 }));
+    const streets = isl ? STREETS.map((st) => ({ z: st.z, half: st.half, lo: WEST_EDGE + 8, hi: BLVD.x + BLVD.half })) : M_STREETS.map((st) => ({ z: st.z, half: st.half, lo: Math.min(st.x0, st.x1) + 8, hi: Math.max(st.x0, st.x1) - 8 }));
+    if (Math.abs(fz) > 0.8) for (const a of aves) if (Math.abs(v.pos.x - a.x) < a.half) road = { along: 'z', x: a.x, half: a.half, lo: a.lo, hi: a.hi };
+    if (Math.abs(fx) > 0.8) for (const st of streets) if (Math.abs(v.pos.z - st.z) < st.half) road = { along: 'x', z: st.z, half: st.half, lo: st.lo, hi: st.hi };
     if (!road) return null;
     const dir = road.along === 'z' ? Math.sign(fz) : Math.sign(fx);
     const cam = game.camera.position;
@@ -297,11 +302,11 @@ export class Chase {
         x = road.x;
         z = v.pos.z + dir * D;
         // (not in a crossing, nor off the map)
-        if (STREETS.some((s) => Math.abs(z - s.z) < s.half + 6) || z < NORTH_EDGE + 8 || z > SOUTH_EDGE - 8) continue;
+        if (streets.some((st) => Math.abs(z - st.z) < st.half + 6) || z < road.lo || z > road.hi) continue;
       } else {
         z = road.z;
         x = v.pos.x + dir * D;
-        if (AVES.some((a) => Math.abs(x - a.x) < a.half + 6) || x < WEST_EDGE + 8 || x > BLVD.x + BLVD.half) continue;
+        if (aves.some((a) => Math.abs(x - a.x) < a.half + 6) || x < road.lo || x > road.hi) continue;
       }
       if (groundHeight(x, z) > 0.05) continue;
       if (Math.hypot(cam.x - x, cam.z - z) < 100 && col.lineOfSight(cam.x, cam.y, cam.z, x, 1.2, z)) continue;

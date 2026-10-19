@@ -382,7 +382,9 @@ function rayBox(ox, oy, oz, dx, dy, dz, b, maxT) {
  * Walkability grid (2m cells) for enemy path finding, with BFS flow fields.
  */
 export class NavGrid {
-  constructor(collision, bounds, cell = 2) {
+  // (v5, ROADMAP 11.17: compute: the part worked out now - the island; the rest of the bounds, the
+  // mainland, is worked out a block at a time as its blocks come and go: queueRefresh / pump)
+  constructor(collision, bounds, cell = 2, compute = null) {
     this.cell = cell;
     this.x0 = bounds.minX;
     this.z0 = bounds.minZ;
@@ -390,9 +392,37 @@ export class NavGrid {
     this.h = Math.ceil((bounds.maxZ - bounds.minZ) / cell);
     this.blocked = new Uint8Array(this.w * this.h);
     this.collision = collision;
-    for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) this.computeCell(i, j);
+    if (compute) {
+      const i0 = Math.max(0, Math.floor((compute.minX - this.x0) / cell));
+      const i1 = Math.min(this.w - 1, Math.ceil((compute.maxX - this.x0) / cell));
+      const j0 = Math.max(0, Math.floor((compute.minZ - this.z0) / cell));
+      const j1 = Math.min(this.h - 1, Math.ceil((compute.maxZ - this.z0) / cell));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) this.computeCell(i, j);
+    } else for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) this.computeCell(i, j);
     this.dist = new Float32Array(this.w * this.h);
     this.queue = new Int32Array(this.w * this.h);
+    this.pending = [];
+  }
+
+  // an area to work out again in the frames to come (a block of the mainland built or let go of)
+  queueRefresh(x0, z0, x1, z1) {
+    const i0 = Math.max(0, Math.floor((x0 - this.x0) / this.cell));
+    const i1 = Math.min(this.w - 1, Math.floor((x1 - this.x0) / this.cell));
+    const j0 = Math.max(0, Math.floor((z0 - this.z0) / this.cell));
+    const j1 = Math.min(this.h - 1, Math.floor((z1 - this.z0) / this.cell));
+    if (i1 < i0 || j1 < j0) return;
+    this.pending.push({ i0, i1, j0, j1, j: j0 });
+  }
+
+  // a row at a time for up to ms milliseconds
+  pump(ms = 1) {
+    if (!this.pending.length) return;
+    const t0 = performance.now();
+    while (this.pending.length && performance.now() - t0 < ms) {
+      const r = this.pending[0];
+      for (let i = r.i0; i <= r.i1; i++) this.computeCell(i, r.j);
+      if (++r.j > r.j1) this.pending.shift();
+    }
   }
 
   computeCell(i, j) {

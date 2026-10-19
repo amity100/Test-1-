@@ -15,7 +15,7 @@ import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
 import { BOUNDS } from './layout.js';
 import { BLUEPRINT_MORE } from '../game/blueprints.js';
-import { MAINLAND_ON } from './mainland/plan.js';
+import { MAINLAND_ON, WEST_X, NORTH_Z, SEA_Z } from './mainland/plan.js';
 import { buildCauseways, buildHills, farGround, buildShore } from './mainland/ground.js';
 import { buildMainlandTowers } from './mainland/far.js';
 
@@ -294,7 +294,15 @@ export function buildCity(scene, o = {}) {
     for (const f of world.shopHooks) f(sh, false);
   };
   world.buildNav = () => {
-    if (!world.nav) world.nav = new NavGrid(ctx.col, BOUNDS, 2);
+    // (v5, ROADMAP 11.17: the mainland too - its cells worked out as its blocks are built)
+    if (!world.nav) {
+      world.nav = mainland
+        ? new NavGrid(ctx.col, { minX: WEST_X - 4, maxX: BOUNDS.maxX, minZ: Math.min(BOUNDS.minZ, NORTH_Z - 4), maxZ: Math.max(BOUNDS.maxZ, SEA_Z + 4) }, 2, BOUNDS)
+        : new NavGrid(ctx.col, BOUNDS, 2);
+      // (the blocks of the mainland built before it: worked out too)
+      const ml = world.mainland;
+      if (ml && ml.blocks) for (const live of ml.blocks.values()) world.nav.queueRefresh(live.block.rect.x0 - 2, live.block.rect.z0 - 2, live.block.rect.x1 + 2, live.block.rect.z1 + 2);
+    }
     return world.nav;
   };
   return world;

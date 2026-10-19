@@ -304,6 +304,38 @@ export class Traffic {
     return null;
   }
 
+  // (v5, ROADMAP 11.17) a place in a lane of the roads round p (the island's or the mainland's),
+  // between minD and maxD from it, out of sight of it, the way to p: { x, z, yaw } or null (the
+  // police cars sent to you come from there)
+  roadSpot(p, minD, maxD, sight = null) {
+    const col = this.game.world.collision;
+    const near = NODES.filter((n) => Math.hypot(n.x - p.x, n.z - p.z) < maxD + 60);
+    if (!near.length) return null;
+    for (let tries = 0; tries < 24; tries++) {
+      const A = near[Math.floor(Math.random() * near.length)];
+      const B = A.nb[Math.floor(Math.random() * A.nb.length)];
+      if (!B) continue;
+      // (driving toward p along the road: from the end farther from it)
+      const [S, E] = Math.hypot(A.x - p.x, A.z - p.z) > Math.hypot(B.x - p.x, B.z - p.z) ? [A, B] : [B, A];
+      const alongZ = E.z !== S.z;
+      const len = Math.abs(E.x - S.x) + Math.abs(E.z - S.z);
+      const t0 = stopDist(S, alongZ) + 3;
+      const t1 = len - stopDist(E, alongZ) - 6;
+      if (t1 - t0 < 4) continue;
+      const t = t0 + Math.random() * (t1 - t0);
+      const dx = Math.sign(E.x - S.x);
+      const dz = Math.sign(E.z - S.z);
+      const offs = laneOffsets(S, dx, dz);
+      const q = lanePoint(S, dx, dz, offs[0], t);
+      const d = Math.hypot(q[0] - p.x, q[1] - p.z);
+      if (d < minD || d > maxD) continue;
+      if (sight && col.lineOfSight(sight.x, sight.y + 1.6, sight.z, q[0], 1.4, q[1])) continue;
+      if (this.list.some((c) => Math.hypot(c.pos.x - q[0], c.pos.z - q[1]) < 9)) continue;
+      return { x: q[0], z: q[1], yaw: Math.atan2(dx, dz), node: E };
+    }
+    return null;
+  }
+
   // the first boulevard's own four cars, where they were
   seedFirst() {
     const blvd = NODES.filter((n) => n.ave.blvd);
@@ -982,7 +1014,8 @@ export class Traffic {
     if (c.mode === 'pursuit') {
       c.siren = true;
       c.path = null;
-      const T = P.target();
+      // (v5, ROADMAP 11.17: lost you - to its corner of the box round where you were last seen)
+      const T = P.searching && c.cordon ? c.cordon : P.target();
       const d = Math.hypot(T.x - c.pos.x, T.z - c.pos.z);
       c.chaseT -= dt;
       if (!c.chase || c.chaseT <= 0) {

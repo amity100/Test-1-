@@ -1112,6 +1112,7 @@ export class Friendship {
     this.saveHomes();
     this.data.homeKey = key;
     this.save();
+    if (game.citymap) game.citymap.built = false;
     this.buildPhase = 'wait';
     const bid = Number(String(key).split(':')[0]);
     this.waitBlock = bid;
