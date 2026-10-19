@@ -269,8 +269,8 @@ export function dressSidewalks(ctx, b) {
     }
     // the rest, a thing a place
     const menu = live
-      ? ['wheelie', 'wheelie', 'hydrant', 'mailbox', 'bench', 'bags', 'none', 'phonebox', 'sign']
-      : ['trash', 'pay', 'hydrant', 'bench', 'bike', 'pay', 'mailbox', 'booth', 'planter', 'trash', 'sign', 'bags', 'cabinet', 'sign'];
+      ? ['wheelie', 'wheelie', 'hydrant', 'mailbox', 'bench', 'bags', 'none', 'none', 'sign']
+      : ['trash', 'pay', 'hydrant', 'bench', 'bike', 'pay', 'mailbox', 'booth', 'planter', 'trash', 'sign', 'bags'];
     let hyd = false;
     for (const z of slots) {
       let what = r.pick(menu);
@@ -280,12 +280,7 @@ export function dressSidewalks(ctx, b) {
           trashCan(ctx, xc, z);
           drops.push([xc - side * 0.2, z, q.int(1, 3)]);
           break;
-        case 'cabinet':
-          signalCabinet(ctx, xc - side * 0.1, z, toWalk, { kind: q() < 0.5 ? 'power' : 'phone' });
-          break;
-        case 'phonebox':
-          signalCabinet(ctx, xc, z, toWalk, { kind: 'phone' });
-          break;
+
         case 'wheelie':
           wheelieBin(ctx, xc + side * 0.1, z, toWalk);
           if (r() < 0.5) wheelieBin(ctx, xc + side * 0.1, z + 0.8, toWalk);
@@ -320,6 +315,9 @@ export function dressSidewalks(ctx, b) {
           curbSign(ctx, xc - side * 0.45, z, true, r.pick(live ? ['clean', 'hour2', 'clean'] : ['tow', 'clean', 'hour2', 'noturn']), q() < 0.4 ? 'nopark' : null);
           break;
         default:
+          // (a place left empty where people live: now and then the squat green box of the
+          // phone lines - from the new dice, so the block's own things stay where they were)
+          if (q() < 0.35) signalCabinet(ctx, xc, z, toWalk, { kind: 'phone' });
           break;
       }
     }
@@ -333,6 +331,9 @@ export function dressSidewalks(ctx, b) {
         const x = L + off;
         if (x > x1 - 6) break;
         const what = r.pick(live ? ['wheelie', 'none', 'none', 'hydrant', 'bags'] : ['trash', 'none', 'hydrant', 'bike', 'none', 'mailbox']);
+        // (the places left empty in town: the grey box of the power or the green one of the phone
+        // lines now and then, from the new dice)
+        if (what === 'none' && !live && q() < 0.3) signalCabinet(ctx, x, zc - side * 0.05, toWalk, { kind: q() < 0.55 ? 'power' : 'phone' });
         if (what === 'trash') {
           trashCan(ctx, x, zc);
           drops.push([x, zc - side * 0.2, q.int(1, 3)]);
