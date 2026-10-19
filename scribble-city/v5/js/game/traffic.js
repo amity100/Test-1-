@@ -3,6 +3,7 @@ import { NODES, lightAt, laneOffsets, stopDist, lanePoint, exitsFrom } from '../
 import { randomCarSpec, drawWipers, wiperSweep, KINDS } from '../render/cars.js';
 import { civilianLook, copLook, swatLook } from './looks.js';
 import { damp, dampAngle, angleDiff } from '../core/util.js';
+import { Curbs } from './curbs.js';
 
 // The traffic of the city: sedans, taxis, vans and low sports cars in the right-hand lanes of
 // every avenue and street, turning at the crossings and waiting for the lights; the cars parked
@@ -11,6 +12,15 @@ import { damp, dampAngle, angleDiff } from '../core/util.js';
 //
 // A car in traffic rides its lane exactly (a path of points through the crossings ahead of it);
 // one that is wrecked, chasing you or taken off its path moves on its own.
+//
+// (GTA IV) And the street's manners: the buses run to the stops where people wait (one is sent
+// along the avenue to a stop near you now and then, and keeps straight on to it); a car pulling
+// over (a taxi for a fare, a van with a delivery, one stopped by the police) signals, eases over
+// to the curb - into the parking lane where there is a gap - and puts its hazards on; a car
+// turning at a crossing waits at its line while people are on the zebra it turns across; at a
+// green light the first in the line is not always quick off the mark (on the phone), and the one
+// behind lets it know; behind a van double-parked in a lane of its own, the horns. The mainland's
+// curbs, its lots' cars and its bus stops come and go with its blocks (game/curbs.js).
 
 const POLICE_WHITE = [0.95, 0.95, 0.97];
 // the city's buses: orange, with a blue band along the windows (drawn by the car batches)
@@ -25,6 +35,9 @@ const BIG = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', 'firetr
 
 const LOOK_AHEAD = 1.3;
 const DECEL = 3.6;
+// what the drivers stuck behind shout (GTA IV)
+const JAMMED = ['Come on!', 'Move!', 'Unbelievable...', 'Today, please!'];
+const PARKED_UP = ['Double-parked again?!', 'Move the van!', "You can't stop there!", 'Every single day...'];
 
 // A lane to follow: points with the distance along them, a speed cap at each, and the stop lines
 // (gates) of the crossings on the way.
@@ -89,9 +102,10 @@ const _b = [0, 0];
 const _p = [0, 0];
 
 // what is in front of a car (Traffic.ahead): its state, the test of one thing, the answer
-const _ahead = { c: null, fx: 0, fz: 0, best: Infinity, why: null, nose: 0 };
-const _aheadOut = { d: 0, why: null };
-function aheadTest(x, z, r, w, back) {
+const _ahead = { c: null, fx: 0, fz: 0, best: Infinity, why: null, nose: 0, o: null };
+const _aheadOut = { d: 0, why: null, o: null };
+// (o: the car it is, when it is one of the traffic's: who is holding everybody up)
+function aheadTest(x, z, r, w, back, o = null) {
   const A = _ahead;
   const c = A.c;
   const dx = x - c.pos.x;
@@ -102,6 +116,7 @@ function aheadTest(x, z, r, w, back) {
   if (side < 1.45 + r + (c.halfWid - 0.98)) {
     A.best = along;
     A.why = w;
+    A.o = o;
   }
 }
 const _drawOpts = { spin: 0, steer: 0, extra: null, siren: undefined, scale: 1, squash: 1 };
@@ -125,6 +140,14 @@ export class Traffic {
       speed: 0,
       wheel: 0,
     }));
+    // (GTA IV) the bus stops the buses stop at: the island's, and the mainland's as its blocks
+    // come and go (game/curbs.js); the cars parked along the mainland's curbs and in its lots
+    this.stops = (game.world.busStops || []).slice();
+    this.curbs = new Curbs(this);
+    // (the next bus sent along to a stop near you; how far off the parked cars are drawn)
+    this.busT = 5;
+    this.parkR = 190;
+    this.lineStats = { sent: 0, served: 0, yields: 0, slow: 0, taps: 0 };
   }
 
   get cars() {
@@ -137,7 +160,7 @@ export class Traffic {
   }
 
   removeCar(c) {
-    if ((c.rider || c.garbage || c.pickup) && this.game.fleet) this.game.fleet.forget(c);
+    if ((c.rider || c.garbage || c.pickup || c.delivery || c.pulled || c.tstop) && this.game.fleet) this.game.fleet.forget(c);
     if (c.driver && c.driver.fig) c.driver.fig.dispose();
     c.driver = null;
     if (c.crew) for (const m of c.crew) if (m.fig) m.fig.dispose();
@@ -219,6 +242,9 @@ export class Traffic {
       const R = c.respond;
       const far = (o) => Math.abs(o.to.x - R.x) + Math.abs(o.to.z - R.z);
       e = exitsFrom(B, dx, dz, true).reduce((a, b) => (far(b) < far(a) ? b : a));
+    } else if (c.lineStop && ex.some((o) => o.turn === 0) && this.stopAhead(c.lineStop, B, dx, dz)) {
+      // (GTA IV: a bus sent to a stop keeps straight on along the avenue to it)
+      e = ex.find((o) => o.turn === 0);
     } else if (ex.length > 1) {
       const w = ex.map((o) => (o.turn === 0 ? 0.55 : o.turn > 0 ? 0.3 : 0.3));
       let r = Math.random() * w.reduce((a, b) => a + b, 0);
@@ -233,7 +259,9 @@ export class Traffic {
     // (the turn signal, from 35 m before the crossing: game/fleet.js... ROADMAP 4.3)
     if (e.turn !== 0 && !this.game.classic) {
       const gs = path.gates.length ? path.gates[path.gates.length - 1].s : path.len;
-      (c.turns || (c.turns = [])).push({ s: gs, dir: e.turn > 0 ? -1 : 1 });
+      // (and the zebra it turns across: the far side of the crossing, on the road it turns into -
+      // it waits at its line while somebody is on it)
+      (c.turns || (c.turns = [])).push({ s: gs, dir: e.turn > 0 ? -1 : 1, node: B, ex: e.dx, ez: e.dz });
     }
     const offs = laneOffsets(B, e.dx, e.dz);
     let off2 = offs[0];
@@ -365,6 +393,8 @@ export class Traffic {
       this.t = 0.8;
       const cam = game.camera.position;
       const fwd = game.camera.getWorldDirection(this._fwd2 || (this._fwd2 = new THREE.Vector3()));
+      // (GTA IV: on the mainland the traffic is kept nearer you - see below)
+      const far = !game.classic && p.x < -330 ? 180 : 210;
       for (const c of this.list) {
         const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
         // empty police cars go when the chase is over and you are gone
@@ -374,14 +404,17 @@ export class Traffic {
         const vz = c.pos.z - cam.z;
         const seen = Math.hypot(vx, vz) < 120 && (vx * fwd.x + vz * fwd.z) > -6;
         const stuck = c.stuckT > 9 && !seen;
-        if (d > 210 || done || stuck || (c.wrecked && d > 120)) {
+        if (d > far || done || stuck || (c.wrecked && d > 120)) {
           this.removeCar(c);
           c.gone = true;
         }
       }
       this.list = this.list.filter((c) => !c.gone);
       // (the rush hours: the most cars there are; at night few: game/rhythm.js)
-      const max = Math.round((game.touch ? 16 : 32) * (game.rhythm ? game.rhythm.cars : 1));
+      // (GTA IV: the mainland's grid is wide and its blocks big - more cars on it, nearer you, or
+      // its avenues look empty)
+      const main = !game.classic && p.x < -330;
+      const max = Math.round((game.touch ? (main ? 20 : 16) : main ? 44 : 32) * (game.rhythm ? game.rhythm.cars : 1));
       let n = 0;
       let buses = 0;
       for (const c of this.list) {
@@ -408,10 +441,17 @@ export class Traffic {
       for (let k = 0; k < 3 && n < max; k++) {
         // now and then a city bus
         const spec = buses < 2 && Math.random() < 0.1 ? { kind: 'bus', color: BUS_COLORS[Math.floor(Math.random() * BUS_COLORS.length)] } : null;
-        if (this.spawnCar(p, first ? 30 : 60, 190, spec, { anywhere: first })) {
+        if (this.spawnCar(p, first ? 30 : main ? 40 : 60, main ? 140 : 190, spec, { anywhere: first })) {
           n++;
           if (spec) buses++;
         }
+      }
+      // (GTA IV) the curbs: somebody off in a parked car, somebody parking (game/curbs.js)
+      if (!first) this.curbs.tick(p);
+      // (GTA IV) and a bus along to a stop near you where people wait
+      if (!game.classic && !first) {
+        this.busT -= 0.8;
+        if (this.busT <= 0) this.busT = this.sendBus(p) ? (game.touch ? 40 : 26) + Math.random() * 20 : 6;
       }
     }
     // (the list as it was when the loop began, as for...of would)
@@ -422,7 +462,9 @@ export class Traffic {
       S.length = 0;
       for (let i = 0; i < cars.length; i++) if (cars[i].emergency && cars[i].siren && !cars[i].wrecked) S.push(cars[i]);
     }
-    for (let i = 0; i < cars.length; i++) this.updateCar(cars[i], dt);
+    for (let i = 0; i < cars.length; i++) if (!cars[i].gone) this.updateCar(cars[i], dt);
+    // (GTA IV: the ones walking up to their parked cars - game/curbs.js)
+    if (this.curbs.leaving.length) this.curbs.update(dt);
     if (!game.classic) this.crashes(dt);
     let gone = false;
     for (let i = 0; i < this.list.length; i++) if (this.list[i].poofT !== undefined && this.list[i].poofT > 0.45) gone = true;
@@ -446,6 +488,7 @@ export class Traffic {
     A.fz = Math.cos(c.yaw);
     A.best = Infinity;
     A.why = null;
+    A.o = null;
     // (distances from c's nose to the back of what is in front)
     A.nose = c.halfLen - 2.3;
     const pl = game.player;
@@ -462,7 +505,7 @@ export class Traffic {
     const pass = c.emergency && c.passK > 0.5;
     for (let i = 0; i < os.length; i++) {
       const o = os[i];
-      if (o !== c && o !== by && !(pass && o.yieldK > 0.5)) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3);
+      if (o !== c && o !== by && !(pass && o.yieldK > 0.5)) aheadTest(o.pos.x, o.pos.z, 0.8 + (o.halfWid - 0.98), 'car', o.halfLen - 2.3, o);
     }
     const es = game.enemies.list;
     for (let i = 0; i < es.length; i++) {
@@ -480,6 +523,7 @@ export class Traffic {
     if (!A.why) return null;
     _aheadOut.d = A.best;
     _aheadOut.why = A.why;
+    _aheadOut.o = A.o;
     return _aheadOut;
   }
 
@@ -544,6 +588,13 @@ export class Traffic {
     const path = c.path;
     if (path.len - c.s < 60) this.extend(c);
     let want = c.maxSpeed;
+    // (a signal of its own this frame: a bus pulling in to its stop or out of it, a car pulling
+    // over or out of its space - busStop, game/fleet.js, game/curbs.js)
+    c.sig2 = 0;
+    if (c.sigT > 0) {
+      c.sigT -= dt;
+      c.sig2 = c.sigDir;
+    }
     // curves ahead
     for (let i = 0; i < path.cum.length; i++) {
       const d = path.cum[i] - c.s;
@@ -569,11 +620,35 @@ export class Traffic {
           if (light === 'r' || canStop) want = Math.min(want, dist < 0.3 ? 0 : Math.sqrt(2 * DECEL * dist) * 0.9);
         }
       }
+      if (!this.game.classic && !c.emergency) {
+        // (GTA IV) the light just turned green: off the mark in a moment - or, one driver in eight
+        // (on the phone), not before the one behind has had to say so (Traffic.mind)
+        if (light === 'g' && c.lit && c.lit !== 'g' && dist < 7 && c.speed < 0.5) {
+          const slow = Math.random() < 0.12;
+          c.reactT = slow ? 2.4 + Math.random() * 2.2 : 0.25 + Math.random() * 0.7;
+          if (slow) this.lineStats.slow++;
+        }
+        c.lit = light;
+        // (GTA IV) turning at the crossing: not across the zebra while somebody is on it - it
+        // waits at its line
+        const T = c.turns && c.turns.length ? c.turns[0] : null;
+        if (T && T.node === g.node && dist < 26 && dist > -0.5 && this.zebraBusy(T)) {
+          want = Math.min(want, dist < 0.3 ? 0 : Math.sqrt(2 * DECEL * Math.max(0, dist)) * 0.9);
+          if (!c.yielding) this.lineStats.yields++;
+          c.yielding = true;
+        } else c.yielding = false;
+      }
+    }
+    if (c.reactT > 0) {
+      c.reactT -= dt;
+      want = 0;
     }
     // a bus pulls up at its stops
     if (c.bus) want = Math.min(want, this.busStop(c, dt));
+    // (GTA IV) a car after a space at the curb (game/curbs.js)
+    if (c.seekPark) want = Math.min(want, this.curbs.wantPark(c, dt));
     // a taxi pulling over, the garbage truck at a bin (game/fleet.js)
-    if (c.garbage || c.pickup || c.dropT !== undefined) want = Math.min(want, this.game.fleet.want(c, dt));
+    if (c.garbage || c.pickup || c.dropT !== undefined || c.drop || c.delivery || c.pulled || c.tstop || c.goT > 0) want = Math.min(want, this.game.fleet.want(c, dt));
     // whatever is in front (not for a driver looking elsewhere: game/events.js, the bump)
     const a = c.distracted ? null : this.ahead(c);
     if (c.brakeT > 0) {
@@ -603,6 +678,7 @@ export class Traffic {
       for (const t of c.turns) if (c.s > t.s - 35 && c.s < t.s + 10) c.signal = t.dir;
       if (c.turns.length && c.turns[0].s < c.s - 12) c.turns.shift();
     }
+    if (c.sig2) c.signal = c.sig2;
     path.trim(c.s);
     path.sample(c.s, _p);
     path.sample(c.s - LOOK_AHEAD, _a);
@@ -652,7 +728,12 @@ export class Traffic {
     }
     c.yieldK = THREE.MathUtils.damp(c.yieldK || 0, yieldTo ? 1 : 0, yieldTo ? 2.2 : 1.2, dt);
     const passK = c.emergency ? (c.passK = THREE.MathUtils.damp(c.passK || 0, passing ? 1 : 0, 3, dt)) : 0;
-    c.side = 1.5 * c.yieldK - 1.0 * passK;
+    // (GTA IV) over to the curb (a fare, a delivery, the police behind it): as far as
+    // Traffic.curbRoom found room for, and back out into the lane after - as it rolls (a car
+    // standing still does not slide sideways)
+    const roll = Math.min(1, 0.08 + c.speed / 3.5);
+    const pullK = c.pull || c.pullK > 0.001 ? (c.pullK = THREE.MathUtils.damp(c.pullK || 0, c.pull ? 1 : 0, (c.pull ? 1.5 : 1.8) * roll, dt)) : 0;
+    c.side = Math.max(1.5 * c.yieldK, pullK * (c.pullTo || 0)) - 1.0 * passK;
     if (c.yieldK > 0.05) want = Math.min(want, 9 * (1 - c.yieldK) + 0.5);
     // fleeing shots: faster, the lights be damned
     if (c.fleeT > 0) {
@@ -665,6 +746,15 @@ export class Traffic {
     const toGate = g ? g.s - front : 99;
     if (a && a.why === 'car' && c.speed < 0.6 && (light === 'g' || toGate > 30)) {
       c.jamT = (c.jamT || 0) + dt;
+      // (GTA IV) the one in front still sitting there at the green: a tap on the horn
+      if (a.o && a.o.reactT > 0.6 && c.jamT > 1.1 && !c.tapped && c.driver) {
+        c.tapped = true;
+        this.lineStats.taps++;
+        if (this.near(c, 45)) {
+          this.game.audio.play('honk', 0.3);
+          if (Math.random() < 0.35) this.game.bubbles.say(this.driverAnchor(c), pick(["It's green!", 'Hello? Green!', 'Wake up!']));
+        }
+      }
       if (c.jamT > 1.8 && !c.laneTried && g && toGate > 22) {
         c.laneTried = true;
         this.overtake(c, g);
@@ -673,12 +763,15 @@ export class Traffic {
         c.jamT = 2.5 + Math.random() * 2;
         if (this.near(c, 45)) {
           this.game.audio.play('honk', 0.45);
-          if (Math.random() < 0.3) this.game.bubbles.say(this.driverAnchor(c), pick(['Come on!', 'Move!', 'Unbelievable...', 'Today, please!']));
+          // (stuck behind a van double-parked, a car the police stopped, a taxi letting somebody out)
+          const parkedUp = a.o && (a.o.delivery || a.o.hazard || a.o.pulled || a.o.pickup || a.o.dropT !== undefined);
+          if (Math.random() < (parkedUp ? 0.55 : 0.3)) this.game.bubbles.say(this.driverAnchor(c), pick(parkedUp ? PARKED_UP : JAMMED));
         }
       }
     } else {
       c.jamT = 0;
       if (!a) c.laneTried = false;
+      if (c.speed > 2) c.tapped = false;
     }
     return want;
   }
@@ -854,10 +947,10 @@ export class Traffic {
     const L = this.list;
     for (let i = 0; i < L.length; i++) {
       const A = L[i];
-      if (A.poofT !== undefined || A.spec.kind === 'moto' || A.speed < 2.5 || A.crashed || A.police || A.tail) continue;
+      if (A.poofT !== undefined || A.gone || A.spec.kind === 'moto' || A.speed < 2.5 || A.crashed || A.police || A.tail) continue;
       for (let j = 0; j < L.length; j++) {
         const B = L[j];
-        if (B === A || B.poofT !== undefined || B.crashed || B.spec.kind === 'moto' || B.police || B.tail) continue;
+        if (B === A || B.poofT !== undefined || B.gone || B.crashed || B.spec.kind === 'moto' || B.police || B.tail) continue;
         const dx = B.pos.x - A.pos.x;
         const dz = B.pos.z - A.pos.z;
         const reach = A.halfLen + B.halfLen;
@@ -902,15 +995,36 @@ export class Traffic {
   busStop(c, dt) {
     if (c.dwell > 0) {
       c.dwell -= dt;
-      if (c.dwell <= 0) this.game.audio.play && this.near(c, 30) && this.game.audio.play('click', 0.3);
+      c.dwellT = (c.dwellT || 0) + dt;
+      // (GTA IV: its hazards on at the stop; the ones still on their way to its door waited for,
+      // a while - game/routines.js)
+      if (!this.game.classic) {
+        c.sig2 = 2;
+        if (c.dwell <= 0 && c.dwellT < 14 && this.boarding(c)) c.dwell = 0.3;
+      }
+      if (c.dwell <= 0) {
+        this.game.audio.play && this.near(c, 30) && this.game.audio.play('click', 0.3);
+        c.dwellT = 0;
+        // (and out into the traffic again, the left signal on)
+        c.leaveT = 2.6;
+        if (c.lineStop && c.lineStop === c.lastStop) {
+          c.lineStop = null;
+          this.lineStats.served++;
+        }
+      }
       return 0;
     }
-    const stops = this.game.world.busStops || [];
+    if (c.leaveT > 0) {
+      c.leaveT -= dt;
+      if (!this.game.classic) c.sig2 = 1;
+    }
+    const stops = this.stops;
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
     let best = null;
     let bd = 40;
-    for (const st of stops) {
+    for (let i = 0; i < stops.length; i++) {
+      const st = stops[i];
       if (st === c.lastStop) continue;
       const dx = st.x - c.pos.x;
       const dz = st.z - c.pos.z;
@@ -924,12 +1038,210 @@ export class Traffic {
     if (!best) return Infinity;
     // the front doors by the shelter
     const dist = bd - (c.halfLen - 1.5);
+    // (pulling in: the right signal)
+    if (dist < 32 && !this.game.classic) c.sig2 = -1;
     if (dist < 0.6 && c.speed < 0.6) {
       c.dwell = 4 + Math.random() * 3;
+      c.dwellT = 0;
       c.lastStop = best;
       return 0;
     }
     return Math.max(0, Math.sqrt(2 * DECEL * Math.max(0, dist)) * 0.85);
+  }
+
+  // (GTA IV) somebody still walking up to this bus's front door (game/routines.js: getting on)
+  boarding(c) {
+    const R = this.game.routines;
+    if (!R || !R.people || !R.people.size) return false;
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    const dx = c.pos.x + fx * (c.halfLen - 1.4) - fz * 1.5;
+    const dz = c.pos.z + fz * (c.halfLen - 1.4) + fx * 1.5;
+    for (const v of R.people) if (v.phase === 'board' && v.door && Math.abs(v.door.x - dx) + Math.abs(v.door.z - dz) < 3) return true;
+    return false;
+  }
+
+  // ------------------------------------------------------------------ the buses' rounds (GTA IV)
+  // is bus stop st on the road on from crossing B along (dx, dz), ahead of it?
+  stopAhead(st, B, dx, dz) {
+    const along = (st.x - B.x) * dx + (st.z - B.z) * dz;
+    const side = Math.abs((st.x - B.x) * dz - (st.z - B.z) * dx);
+    return along > 0 && along < 400 && side < 16;
+  }
+
+  // a bus along to one of the stops near p: the ones where people wait first (game/routines.js),
+  // none that a bus is already on its way to, not more buses round you than a city has
+  sendBus(p) {
+    const game = this.game;
+    let buses = 0;
+    for (const c of this.list) if (c.bus && Math.abs(c.pos.x - p.x) + Math.abs(c.pos.z - p.z) < 330) buses++;
+    if (buses >= (game.touch ? 2 : 3)) return false;
+    const R = game.routines;
+    let best = null;
+    let bs = -Infinity;
+    for (const st of this.stops) {
+      const d = Math.hypot(st.x - p.x, st.z - p.z);
+      if (d > 170) continue;
+      let due = false;
+      for (const c of this.list) if (c.bus && c.lineStop === st) due = true;
+      if (due) continue;
+      let waiting = 0;
+      if (R) {
+        for (const pl of R.places) {
+          if (pl.kind !== 'bus' || pl.stop !== st || !pl.active) continue;
+          for (const sp of pl.seats) if (sp.who) waiting++;
+          for (const sp of pl.stands) if (sp.who) waiting++;
+        }
+      }
+      const score = waiting * 30 - d + Math.random() * 25;
+      if (score > bs) {
+        bs = score;
+        best = st;
+      }
+    }
+    return !!(best && this.busTo(best));
+  }
+
+  // a bus in the curb lane of stop st's road, far enough back along it to come up to the stop
+  // from out of sight (o.near: close, in plain view - the tests'); it keeps straight on to it
+  busTo(st, o = {}) {
+    const c = this.approach(st.x, st.z, st.yaw, { kind: 'bus', color: BUS_COLORS[Math.floor(Math.random() * BUS_COLORS.length)] }, o);
+    if (!c) return null;
+    c.lineStop = st;
+    this.lineStats.sent++;
+    return c;
+  }
+
+  // a new car of the traffic (spec) in the curb lane of the road beside the place (x, z) whose
+  // front looks at the road along yaw (a bus stop, a shop), some way back along the road so that
+  // it comes up to it with the place on its right: out of sight of you, or (o.near) close by
+  approach(x, z, yaw, spec, o = {}) {
+    const tx = Math.sin(yaw);
+    const tz = Math.cos(yaw);
+    // (the way the traffic goes past it: with the place on its right)
+    const dx = Math.round(-tz);
+    const dz = Math.round(tx);
+    if (Math.abs(dx) + Math.abs(dz) !== 1) return null;
+    // the crossing of its road just behind the place, and the one after it
+    let A = null;
+    let aBest = Infinity;
+    for (const n of NODES) {
+      const side = Math.abs((x - n.x) * dz - (z - n.z) * dx);
+      if (side > 24) continue;
+      const along = (x - n.x) * dx + (z - n.z) * dz;
+      if (along > 8 && along < aBest) {
+        aBest = along;
+        A = n;
+      }
+    }
+    if (!A) return null;
+    const step = (n, sx, sz) => n.nb.find((m) => Math.sign(m.x - n.x) === sx && Math.sign(m.z - n.z) === sz) || null;
+    const B = step(A, dx, dz);
+    const P = step(A, -dx, -dz);
+    if (!B) return null;
+    const alongZ = dz !== 0;
+    const cam = this.game.camera;
+    const fwd = cam.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
+    for (const D of o.near ? [34, 46, 60] : [80, 100, 125, 150, 175]) {
+      // (D metres back from it: on A's road to it, or on the one before A)
+      let E0 = A;
+      let E1 = B;
+      let t = aBest - D;
+      if (t < stopDist(A, alongZ) + 3) {
+        if (!P) continue;
+        E0 = P;
+        E1 = A;
+        const len = Math.abs(A.x - P.x) + Math.abs(A.z - P.z);
+        t = len + t;
+        if (t > len - stopDist(A, alongZ) - 8 || t < stopDist(P, alongZ) + 3) continue;
+      }
+      const offs = laneOffsets(E0, dx, dz);
+      const q = lanePoint(E0, dx, dz, offs[offs.length - 1], t);
+      if (!o.near) {
+        const vx = q[0] - cam.position.x;
+        const vz = q[1] - cam.position.z;
+        const d = Math.hypot(vx, vz) || 1;
+        if (d < 110 && (vx * fwd.x + vz * fwd.z) / d > 0.15) continue;
+      }
+      let clear = true;
+      for (const c of this.list) if (Math.abs(c.pos.x - q[0]) + Math.abs(c.pos.z - q[1]) < 16) clear = false;
+      if (!clear) continue;
+      const c = this.newCar(spec, o.maxSpeed ? { maxSpeed: o.maxSpeed } : {});
+      // (straight on along the road to it: game/traffic.js extend)
+      c.lineStop = { x, z };
+      this.placeOnEdge(c, E0, E1, offs.length - 1, t);
+      c.lineStop = null;
+      this.list.push(c);
+      return c;
+    }
+    return null;
+  }
+
+  // (for the tests: a bus up to stop st now, in plain view)
+  debugBus(st) {
+    return this.busTo(st, { near: true });
+  }
+
+  // ------------------------------------------------------------------ the zebras (GTA IV)
+  // is somebody on the zebra across the road car-turn T turns into (or stepping onto it)?
+  zebraBusy(T) {
+    const n = T.node;
+    // (the road it turns into goes along (T.ex, T.ez) out of the crossing; its zebra is just past
+    // the crossing's own box, the width of the road across)
+    const alongX = T.ex !== 0;
+    const t0 = (alongX ? n.ave.half : n.street.half) + 0.1;
+    const half = (alongX ? n.street.half : n.ave.half) + 0.9;
+    const pl = this.game.player;
+    if (!pl.inVehicle && pl.mode !== 'dead' && onZebra(n, T.ex, T.ez, t0, half, pl.pos.x, pl.pos.z)) return true;
+    const hs = this.game.civilians.list;
+    for (let i = 0; i < hs.length; i++) {
+      const h = hs[i];
+      if (h.inside || h.alive === false) continue;
+      if (onZebra(n, T.ex, T.ez, t0, half, h.pos.x, h.pos.z)) return true;
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------------ pulling over (GTA IV)
+  // how far c may ease over to its right from its lane, where it will be ahead metres on: to a
+  // hand's width off the curb; on a street, into the parking lane where nobody is parked beside it
+  // (and not at all inside a crossing)
+  curbRoom(c, ahead = 0) {
+    const g = c.path && c.path.gates[0];
+    if (!g || g.off === undefined) return 0;
+    const A = g.from;
+    const px = c.pos.x + g.dx * ahead;
+    const pz = c.pos.z + g.dz * ahead;
+    // (on the road from A to the gate's crossing, in its lane? not turning through a crossing)
+    const along = (px - A.x) * g.dx + (pz - A.z) * g.dz;
+    const lat = (px - A.x) * -g.dz + (pz - A.z) * g.dx;
+    const len = Math.abs(g.node.x - A.x) + Math.abs(g.node.z - A.z);
+    const alongZ = g.dz !== 0;
+    if (along < stopDist(A, alongZ) + 1 || along > len - stopDist(g.node, alongZ) || Math.abs(lat - g.off - (c.side || 0)) > 1.2) return 0;
+    // (from the curb lane only: not across the lane beside it)
+    const offs = laneOffsets(A, g.dx, g.dz);
+    if (Math.abs(g.off - offs[offs.length - 1]) > 0.3) return 0;
+    const road = alongZ ? A.ave : A.street;
+    let room = road.half - g.off - c.halfWid - 0.3;
+    if (room < 0.15) return 0;
+    if (room > 1.0) {
+      // (the parked cars beside it and a little way ahead and behind)
+      const fx = g.dx;
+      const fz = g.dz;
+      const P = this.parked;
+      for (let i = 0; i < P.length; i++) {
+        const p = P[i];
+        if (p.taken || p.flat) continue;
+        const dx = p.pos.x - px;
+        const dz = p.pos.z - pz;
+        if (Math.abs(dx) + Math.abs(dz) > 14) continue;
+        const pa = dx * fx + dz * fz;
+        const ps = dx * -fz + dz * fx;
+        if (Math.abs(pa) > c.halfLen + p.halfLen + 1.2 || ps < 0.5) continue;
+        room = Math.min(room, ps - p.halfWid - c.halfWid - 0.35);
+      }
+    }
+    return Math.max(0, Math.min(room, 3));
   }
 
   near(c, r) {
@@ -997,9 +1309,11 @@ export class Traffic {
   // a patrol car doing its rounds near (but not right next to) you
   spawnPatrol() {
     const p = this.game.anchorPos();
-    const c = this.spawnCar(p, 50, 130, { kind: 'sedan', color: POLICE_WHITE, police: true }, { driver: false, maxSpeed: 10 });
+    // (GTA IV: cruising, slower than the traffic round it - a look at the street as it goes)
+    const c = this.spawnCar(p, 50, 130, { kind: 'sedan', color: POLICE_WHITE, police: true }, { driver: false, maxSpeed: 7.4 + Math.random() * 1.4 });
     if (!c) return null;
     c.mode = 'patrol';
+    c.patrol = true;
     c.crew = this.makeCrew(['cop', 'cop']);
     c.ink = 200;
     return c;
@@ -1096,7 +1410,7 @@ export class Traffic {
     const fwd = cam.getWorldDirection(this._fwd3 || (this._fwd3 = new THREE.Vector3()));
     this._blink = Math.floor(this.game.time * 5) % 2;
     const list = this.list;
-    for (let i = 0; i < list.length; i++) if (this.inSight(list[i], 260, camPos, fwd)) this.drawOne(cars, list[i]);
+    for (let i = 0; i < list.length; i++) if (!list[i].gone && this.inSight(list[i], 260, camPos, fwd)) this.drawOne(cars, list[i]);
     // in the rain the wipers of the cars near you go (the parked ones' stay down)
     const w = this.game.weather;
     const rain = w ? w.cur.rain : 0;
@@ -1113,12 +1427,36 @@ export class Traffic {
         drawWipers(fr, c.spec.kind, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, wiperSweep(t, rain, c.wipeOff), i * 7.1);
       }
     }
+    // (GTA IV) the parked cars - the mainland's curbs are full of them now: the ones within a
+    // radius of you, as many as the cars' batches have room for (the tyres' fill first, four a
+    // car), with room kept for the cars you drive and the motorbikes; more of them wanted than
+    // there was room for, and the radius is drawn in a little for next time (out again when there
+    // is room)
     const parked = this.parked;
+    const T = cars.tyres;
+    const room = T && T.cap ? Math.floor((T.cap - T.n - 48) / 4) : 1e9;
+    const R = this.parkR;
+    const R2 = R * R;
+    let shown = 0;
+    let wanted = 0;
     for (let i = 0; i < parked.length; i++) {
       const c = parked[i];
       if (c.taken || (c.poofT !== undefined && c.poofT > 0.45)) continue;
-      if (this.inSight(c, 190, camPos, fwd)) this.drawOne(cars, c);
+      const vx = c.pos.x - camPos.x;
+      const vz = c.pos.z - camPos.z;
+      const d2 = vx * vx + vz * vz;
+      if (d2 > R2 || (d2 > 196 && vx * fwd.x + vz * fwd.z < -12)) continue;
+      wanted++;
+      if (shown >= room) continue;
+      this.drawOne(cars, c);
+      shown++;
     }
+    const maxR = this.game.touch ? 140 : 190;
+    this.parkShown = shown;
+    // (parkRFreeze: the tests', to measure what they cost)
+    if (this.parkRFreeze) return;
+    if (wanted > room) this.parkR = Math.max(50, R * 0.9);
+    else if (wanted < room * 0.8 && R < maxR) this.parkR = Math.min(maxR, R * 1.04 + 1);
   }
 
   inSight(c, far, camPos, fwd) {
@@ -1145,7 +1483,7 @@ export class Traffic {
     o.spin = c.wheel || 0;
     o.steer = Math.max(-0.5, Math.min(0.5, c.steer || 0));
     o.extra = spec.police ? 'police' : spec.taxi ? 'taxi' : spec.extra || (spec.kind === 'van' ? null : spec.kind === 'bus' ? 'bus' : 'plain');
-    o.siren = spec.police || spec.siren ? (c.siren ? this._blink : -1) : undefined;
+    o.siren = spec.police || spec.siren ? (c.siren || c.lights ? this._blink : -1) : undefined;
     // (dents, the glass, a flat: game/damage.js; the turn signal, or the hazards)
     o.dmg = c.dmg || null;
     o.signal = c.hazard ? 2 : c.signal || 0;
@@ -1170,7 +1508,7 @@ export class Traffic {
       const list = li === 0 ? this.list : this.parked;
       for (let i = 0; i < list.length; i++) {
         const c = list[i];
-        if (c.poofT !== undefined || (li === 1 && c.taken)) continue;
+        if (c.poofT !== undefined || c.gone || (li === 1 && c.taken)) continue;
         // (nobody drives off with a bus)
         if (c.flat || c.bus) continue;
         const d = this.boxDist(c, pos.x, pos.z);
@@ -1204,7 +1542,7 @@ export class Traffic {
     const i = this.list.indexOf(c);
     if (i >= 0) this.list.splice(i, 1);
     this.unpark(c);
-    if ((c.rider || c.garbage || c.pickup) && this.game.fleet) this.game.fleet.forget(c);
+    if ((c.rider || c.garbage || c.pickup || c.delivery || c.pulled || c.tstop) && this.game.fleet) this.game.fleet.forget(c);
     const driver = c.driver;
     const crew = c.crew;
     c.driver = null;
@@ -1422,4 +1760,12 @@ export class Traffic {
 
 function pick(list) {
   return list[Math.floor(Math.random() * list.length)];
+}
+
+// (x, z) on the zebra across the road out of crossing n along (ex, ez): from t0 past its middle,
+// three metres of stripes, the road's half-width either side (and a step onto it from the curb)
+function onZebra(n, ex, ez, t0, half, x, z) {
+  const a = (x - n.x) * ex + (z - n.z) * ez - t0;
+  if (a < -0.6 || a > 3.6) return false;
+  return Math.abs((x - n.x) * ez - (z - n.z) * ex) < half;
 }
