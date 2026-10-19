@@ -1,5 +1,5 @@
 import { civilianLook, elderLook } from './looks.js';
-import { groundHeight, blockAt } from '../world/layout.js';
+import { groundHeight, blockAt, CURB } from '../world/layout.js';
 
 // Everyday life on the street (ROADMAP 3.1). The benches, the bus stops and the café tables on
 // the plaza are used:
@@ -9,6 +9,9 @@ import { groundHeight, blockAt } from '../world/layout.js';
 //   a bus stop people wait on its bench or by its sign, looking down the road; when the bus stops
 //              they get on, somebody gets off and walks away. In the rain the shelter fills up.
 //   the plaza  coffee at the tables round the fountain.
+//   (GTA IV pass) lunch  at midday the benches fill up with people eating - a burger, a hot dog,
+//              noodles from the box, a soda - bite by bite; and the ledges too: the rims of the
+//              round planters on the sidewalks and of the fountains, sat on facing the walk
 // Only the places near you are lived in (a handful of them, fewer on a phone); the people on them
 // come from the street (or were there already when you came by) and go back to it.
 //
@@ -19,6 +22,17 @@ const LET_GO = 80;
 const CHAT = ['Did you see that?', 'No way!', 'Ha! True.', 'And then what?', 'Exactly.', 'I know, right?', 'Same here.', 'Seriously?', 'Love this spot.', 'Look at the sky.'];
 const PHONE = ['Uh-huh.', "I'm on my way.", 'Yeah, yeah.', 'Call you back!', 'No, the other one.', 'Love you too.', "I'm at the stop."];
 const WAIT = ['Where is that bus?', 'Late again.', '...', 'Any minute now.'];
+// (GTA IV pass) what lunch is, on a bench; what is said over it
+const LUNCH = ['burger', 'hotdog', 'noodleBox', 'burger', 'noodleBox', 'soda', 'apple'];
+const LUNCH_SAY = ['Mmm.', 'So good.', 'Best hot dog in town.', 'I needed this.', 'Back to work in ten...'];
+const EATS = new Set(['coffee', 'apple', 'icecream', 'burger', 'hotdog', 'noodleBox', 'soda']);
+// how high a ledge's top is over a bench's seat (sat on a step up: the round planter's rim, the
+// fountain's basin)
+const BENCH_SEAT = 0.48;
+function lunchHour(game) {
+  const h = game.daynight ? game.daynight.hour : 12;
+  return h > 11.4 && h < 14.6;
+}
 
 function pick(a) {
   return a[Math.floor(Math.random() * a.length)];
@@ -64,6 +78,8 @@ export class Routines {
       const seats = t.list.map((s) => ({ x: s.x, z: s.z, yaw: s.yaw, who: null }));
       this.places.push({ kind: 'cafe', x: t.x, z: t.z, yaw: 0, seats, stands: [], active: false });
     }
+    // (GTA IV pass) the fountains' rims (the plaza's)
+    for (const f of w.fountains || []) this.addFountain(this.places, f.x, f.z);
     this.people = new Set();
     // (counted for the tests: who got on a bus, who got off)
     this.boarded = 0;
@@ -114,8 +130,40 @@ export class Routines {
       t.list.push(s);
     }
     for (const t of groups) add.push({ kind: 'cafe', x: t.x, z: t.z, yaw: 0, seats: t.list.map((s) => ({ x: s.x, z: s.z, yaw: s.yaw, who: null })), stands: [], active: false });
+    // (GTA IV pass) the ledges: the rims of the round planters on its sidewalks (sat on facing the
+    // walk, the side away from the road), of its fountains
+    const R = live.block.rect;
+    for (const o of bc.props || []) {
+      if (o.kind !== 'planter') continue;
+      const rad = Math.max(0.6, (o.x1 - o.x0) / 2);
+      // towards the lots: the nearest point of the block's edge
+      const nx = Math.max(R.x0, Math.min(R.x1, o.x));
+      const nz = Math.max(R.z0, Math.min(R.z1, o.z));
+      const a = Math.atan2(nx - o.x, nz - o.z);
+      const top = CURB + 0.59;
+      const seats = [-0.6, 0.6].map((da) => {
+        const s = { x: o.x + Math.sin(a + da) * (rad - 0.12), z: o.z + Math.cos(a + da) * (rad - 0.12), yaw: a + da, who: null };
+        s.baseY = Math.max(0, top - groundHeight(s.x, s.z) - BENCH_SEAT);
+        return s;
+      });
+      add.push({ kind: 'ledge', x: o.x, z: o.z, yaw: a, seats, stands: [], active: false });
+    }
+    for (const f of bc.fountains || []) this.addFountain(add, f.x, f.z);
     live.places = add;
     for (const pl of add) this.places.push(pl);
+  }
+
+  // a fountain's basin, sat on round its rim (four places, facing out)
+  addFountain(list, x, z) {
+    const top = CURB + 0.7;
+    const seats = [];
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + 0.4;
+      const s = { x: x + Math.sin(a) * 4.15, z: z + Math.cos(a) * 4.15, yaw: a, who: null };
+      s.baseY = Math.max(0, top - groundHeight(s.x, s.z) - BENCH_SEAT);
+      seats.push(s);
+    }
+    list.push({ kind: 'ledge', x, z, yaw: 0, seats, stands: [], active: false, fountain: true });
   }
 
   get budget() {
@@ -174,7 +222,8 @@ export class Routines {
 
   // a place you just came near: some of it is taken already
   fill(pl, R, rain) {
-    const busy = (R ? R.people : 1) * (this.game.daynight && this.game.daynight.hour > 21.5 ? 0.5 : 1);
+    // (at lunchtime the benches and the ledges are where people eat)
+    const busy = (R ? R.people : 1) * (this.game.daynight && this.game.daynight.hour > 21.5 ? 0.5 : 1) * (lunchHour(this.game) && pl.kind !== 'bus' ? 1.6 : 1);
     if (pl.kind === 'bus') {
       const n = Math.random() < busy * (rain > 0.2 ? 1 : 0.75) ? 1 + Math.floor(Math.random() * (rain > 0.2 ? 4 : 2.6)) : 0;
       const spots = [...pl.seats, ...pl.stands].sort(() => Math.random() - 0.5);
@@ -190,6 +239,11 @@ export class Routines {
       return;
     }
     const r = Math.random();
+    if (pl.kind === 'ledge') {
+      // (one or two on a planter's rim; round a fountain, a few apart)
+      for (const s of pl.seats) if (Math.random() < 0.32 * busy) this.sitNew(pl, s, null);
+      return;
+    }
     if (r < 0.2 * busy) {
       this.sitNew(pl, pl.seats[0], 'chat');
       this.sitNew(pl, pl.seats[1], 'chat');
@@ -213,8 +267,19 @@ export class Routines {
   sitNew(pl, spot, what) {
     if (!spot || spot.who || this.people.size >= this.most) return null;
     // (the park's benches are more often the grandparents': game/crowds.js)
-    const c = this.game.civilians.spawnScripted(spot.x, spot.z, pl.park && Math.random() < 0.45 ? elderLook(Math.random() < 0.5) : civilianLook(), this);
-    c.pos.set(spot.x, groundHeight(spot.x, spot.z), spot.z);
+    // (lunch downtown: the office people out of their towers)
+    const office = lunchHour(this.game) && Math.random() < 0.45;
+    const elder = pl.park && Math.random() < 0.45;
+    const look = elder ? elderLook(Math.random() < 0.5) : civilianLook(office ? { kind: 'office' } : {});
+    const c = this.game.civilians.spawnScripted(spot.x, spot.z, look, this);
+    // (a grandparent on a park bench: the pigeons' friend, now and then)
+    if (elder) {
+      c.role = 'elder';
+      c.fig.hunch = 0.15 + Math.random() * 0.25;
+      if (!what && pl.kind === 'bench' && Math.random() < 0.5) what = 'feed';
+    }
+    c.pos.set(spot.x, groundHeight(spot.x, spot.z) + (spot.baseY || 0), spot.z);
+    c.baseY = spot.baseY || 0;
     c.yaw = spot.yaw;
     c.noCollide = true;
     const v = this.take(pl, spot, c, what, true);
@@ -228,15 +293,19 @@ export class Routines {
     // (sitting or waiting still: far away their pose is redrawn less often, Civilians.update)
     c.still = true;
     const v = { pl, spot, c, sitting, phase: already ? 'at' : 'go', t: 0, own: already, talkT: 2 + Math.random() * 6, biteT: 2 + Math.random() * 4 };
-    if (!what) what = pick(['paper', 'book', 'coffee', 'phone', 'apple', 'icecream', 'idle', 'idle']);
+    const lunch = lunchHour(this.game);
+    if (!what) what = lunch && Math.random() < 0.65 ? 'lunch' : pick(['paper', 'book', 'coffee', 'phone', 'apple', 'icecream', 'idle', 'idle']);
     if (pl.kind === 'bus') what = Math.random() < 0.45 ? 'phone' : Math.random() < 0.3 ? 'paper' : 'wait';
-    if (pl.kind === 'cafe' && what !== 'chat') what = Math.random() < 0.7 ? 'coffee' : 'icecream';
+    if (pl.kind === 'cafe' && what !== 'chat') what = lunch && Math.random() < 0.5 ? 'lunch' : Math.random() < 0.7 ? 'coffee' : 'icecream';
+    if (what === 'feed') c.fig.carry = 'bag';
     v.what = what;
     v.stay = pl.kind === 'bus' ? 1e9 : what === 'chat' ? 50 + Math.random() * 80 : 35 + Math.random() * 110;
     const f = c.fig;
-    if (!c.fig.carry) {
-      f.carry = what === 'paper' ? 'newspaper' : what === 'book' ? 'book' : what === 'coffee' ? 'coffee' : what === 'phone' ? 'phone' : what === 'apple' ? 'apple' : what === 'icecream' ? 'icecream' : f.carry;
+    if (!c.fig.carry || what === 'lunch') {
+      f.carry = what === 'paper' ? 'newspaper' : what === 'book' ? 'book' : what === 'coffee' ? 'coffee' : what === 'phone' ? 'phone' : what === 'apple' ? 'apple' : what === 'icecream' ? 'icecream' : what === 'lunch' ? pick(LUNCH) : f.carry;
     }
+    // (eating: the bites come quicker)
+    if (what === 'lunch') v.biteT = 0.8 + Math.random() * 2;
     if (pl.kind === 'cafe' && what === 'chat' && !f.carry) f.carry = 'coffee';
     spot.who = v;
     c.ctrl = (civ, dt) => this.step(v, dt);
@@ -259,6 +328,8 @@ export class Routines {
         v.phase = 'at';
         v.t = 0;
         c.noCollide = true;
+        // (up onto the ledge)
+        c.baseY = s.baseY || 0;
       } else return { x: s.x, z: s.z, speed: c.speed };
     }
     if (v.phase === 'board') {
@@ -278,15 +349,26 @@ export class Routines {
       c.fig.sit = Math.min(1, c.fig.sit + dt * 3);
     }
     const f = c.fig;
-    // a sip, a bite
-    if (f.carry === 'coffee' || f.carry === 'apple' || f.carry === 'icecream') {
+    // a sip, a bite (lunch: one after the other, a chew between)
+    if (EATS.has(f.carry)) {
       v.biteT -= dt;
-      if (v.biteT < 0) {
+      if (v.biteT < 0 && !(c.talkUntil > this.game.time)) {
         f.drinkT = Math.min(1, -v.biteT / 1.1);
         if (v.biteT < -1.1) {
-          v.biteT = 3 + Math.random() * 6;
+          v.biteT = v.what === 'lunch' ? 1.4 + Math.random() * 2.6 : 3 + Math.random() * 6;
           f.drinkT = -1;
         }
+      }
+    }
+    // the pigeons fed: down they come in front of the bench, a handful of crumbs thrown now and
+    // then (and if something scared them off, back after a while)
+    if (v.what === 'feed' && v.sitting) {
+      v.feedT = (v.feedT === undefined ? 0.5 : v.feedT) - dt;
+      if (v.feedT <= 0) {
+        v.feedT = 2.5 + Math.random() * 2.5;
+        const A = this.game.ambient;
+        if (A && A.feedFlock && (!v.flock || (v.flock.up && v.flock.upT > 15))) v.flock = A.feedFlock(s.x + Math.sin(s.yaw) * 1.9, s.z + Math.cos(s.yaw) * 1.9);
+        if (v.flock && !v.flock.up) this.game.civilians.mime(c, 'toss', 0.8);
       }
     }
     // a word now and then (the friends answer each other)
@@ -306,6 +388,7 @@ export class Routines {
         }
         else if (v.what === 'phone') this.game.bubbles.say(c, pick(PHONE));
         else if (v.pl.kind === 'bus' && Math.random() < 0.4) this.game.bubbles.say(c, pick(WAIT));
+        else if (v.what === 'lunch' && Math.random() < 0.35) this.game.bubbles.say(c, pick(LUNCH_SAY));
       }
     }
     // waiting for the bus: a look down the road now and then

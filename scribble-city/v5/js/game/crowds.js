@@ -3,6 +3,7 @@ import { civilianLook, elderLook, kidLook, modest } from './looks.js';
 import { sidewalkLoop } from './civilians.js';
 import { BLOCK_TYPES } from '../world/layout.js';
 import { dampAngle } from '../core/util.js';
+import { StreetSocial } from './streetsocial.js';
 
 // Who you meet depends on where you are (ROADMAP 3.3):
 //   downtown        suits and blazers, a briefcase or a handbag, a coffee, on the phone
@@ -22,6 +23,10 @@ const chance = (p) => Math.random() < p;
 const BRIGHT = [[0.95, 0.4, 0.35], [0.98, 0.78, 0.25], [0.35, 0.65, 0.92], [0.45, 0.78, 0.5], [0.92, 0.55, 0.75], [0.98, 0.95, 0.9]];
 const YOUTH_LINES = ['Yo!', 'No way, bro.', 'Ha! Classic.', 'Check this out.', 'For real?', 'Who\'s got the ball?', 'Same time tomorrow.', 'Nah, nah, nah.'];
 const PHOTO_LINES = ['Smile!', 'One more!', 'Look at that view!', 'Got it!'];
+// (GTA IV pass) a picture of the friend, a selfie, a picture of the musician or of a shop's sign
+const POSE_LINES = [['Say cheese!', 'Cheese!'], ['Stand over there!', 'Like this?', 'Perfect!'], ['Smile!', 'Hurry up!'], ['One more!', 'My face hurts!']];
+const SELFIE_LINES = ['Selfie!', 'Hashtag vacation!', 'Wait, my hair...', 'Got it!'];
+const SIGN_LINES = ['Love this sign!', 'So retro!', 'For the album.', 'Look at that!'];
 const _fwd = new THREE.Vector3();
 
 function office() {
@@ -70,7 +75,10 @@ export class Crowds {
     this.hangouts = null;
     this.hangT = 0;
     // (counted for the tests)
-    this.stats = { photos: 0, families: 0, elders: 0, tourists: 0, office: 0, youths: 0, shoppers: 0 };
+    this.stats = { photos: 0, families: 0, elders: 0, tourists: 0, office: 0, youths: 0, shoppers: 0, poses: 0, selfies: 0 };
+    // (GTA IV pass) the groups standing and talking, people who know each other meeting, the calls,
+    // the street musician, home with the shopping: game/streetsocial.js (dressed as these are)
+    this.social = new StreetSocial(game, { office, tourist, elder, youth, shopper });
   }
 
   // a look for somebody new on the walk round a block of this type ('prom': the promenade), or
@@ -110,6 +118,14 @@ export class Crowds {
       c.photoT = 6 + Math.random() * 20;
       c.speed = Math.min(c.speed, 1.1 + Math.random() * 0.2);
       this.stats.tourists++;
+      // (GTA IV pass: most tourists are two - the other to stand in the pictures)
+      if (!c.dog && chance(0.45)) {
+        const b = this.game.civilians.addBuddy(c, { look: tourist(), couple: chance(0.45) });
+        if (b) {
+          const r = Math.random();
+          b.fig.carry = r < 0.3 ? 'icecream' : r < 0.5 ? 'soda' : r < 0.65 ? 'phone' : null;
+        }
+      }
     } else if (role === 'elder') {
       c.speed = 0.7 + Math.random() * 0.25;
       f.hunch = 0.15 + Math.random() * 0.35;
@@ -190,6 +206,7 @@ export class Crowds {
       this.hang(p);
     }
     for (const h of this.hangouts) if (h.who) this.chat(h, dt);
+    this.social.update(dt);
   }
 
   // the corners of the alleys' blocks where the young people hang out
@@ -222,25 +239,41 @@ export class Crowds {
     const f = c.fig;
     if (c.photo) {
       const ph = c.photo;
-      ph.t += dt;
       c.stopT = Math.max(c.stopT, 0.2);
       c.yaw = dampAngle(c.yaw, ph.yaw, 3, dt);
+      // (the friend in the picture first walks to the place and turns round: addBuddy's pose)
+      const B = ph.model;
+      if (B && !(B.pose && B.pose.at)) {
+        ph.wait += dt;
+        if (ph.wait > 6 || !B.alive || B.buddyOf !== c) this.endPhoto(c);
+        return;
+      }
+      ph.t += dt;
+      if (ph.look && (!f.lookAt || f.lookAt === ph.look)) f.lookAt = ph.look;
       if (ph.t > 0.7 && ph.t < 2.6) {
-        // both hands to the camera in front of the eyes
-        f.toWorld(0.06, 1.5, 0.2, ph.r);
-        f.toWorld(-0.06, 1.48, 0.2, ph.l);
-        f.reachR = ph.r;
-        f.reachL = ph.l;
+        if (ph.selfie) {
+          // the camera held out at arm's length, up and turned back: the head turned to it
+          f.toWorld(0.24, 1.7, 0.5, ph.r);
+          f.reachR = ph.r;
+          f.lookAt = ph.r;
+          ph.look = ph.r;
+        } else {
+          // both hands to the camera in front of the eyes
+          f.toWorld(0.06, 1.5, 0.2, ph.r);
+          f.toWorld(-0.06, 1.48, 0.2, ph.l);
+          f.reachR = ph.r;
+          f.reachL = ph.l;
+        }
         if (!ph.shot && ph.t > 1.7) {
           ph.shot = true;
           this.stats.photos++;
           const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
           if (d < 14) this.game.audio.play('shutter', 0.5 * (1 - d / 14));
-          if (d < 30 && Math.random() < 0.25) this.game.bubbles.say(c, pick(PHOTO_LINES));
+          if (d < 30 && Math.random() < 0.3 && !B) this.game.bubbles.say(c, pick(ph.selfie ? SELFIE_LINES : ph.sign ? SIGN_LINES : PHOTO_LINES));
         }
       } else {
-        f.reachR = null;
-        f.reachL = null;
+        if (f.reachR === ph.r) f.reachR = null;
+        if (f.reachL === ph.l) f.reachL = null;
       }
       if (ph.t > 3) this.endPhoto(c);
       return;
@@ -249,17 +282,75 @@ export class Crowds {
     if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 45 || c.crossing) return;
     c.photoT -= dt;
     if (c.photoT > 0) return;
-    c.photoT = 14 + Math.random() * 22;
-    // on the promenade the bay; anywhere else, across the street or along it
-    const yaw = c.prom ? Math.PI / 2 + (Math.random() - 0.5) * 1.2 : c.yaw + (Math.random() < 0.5 ? 1 : -1) * (0.6 + Math.random() * 1.2);
-    c.photo = { t: 0, yaw, shot: false, r: new THREE.Vector3(), l: new THREE.Vector3() };
-    c.stopT = 3.1;
+    c.photoT = 12 + Math.random() * 20;
+    this.startPhoto(c, p);
+  }
+
+  // (GTA IV pass) what a tourist takes a picture of: the musician playing nearby, the friend posing
+  // on the sidewalk, a selfie, the sign over a shop's door; on the promenade the bay; anywhere else
+  // across the street or along it
+  startPhoto(c, p) {
+    const ph = { t: 0, wait: 0, yaw: 0, shot: false, r: new THREE.Vector3(), l: new THREE.Vector3(), look: null, model: null, selfie: false, sign: false };
+    const S = this.social && this.social.busker;
+    const B = c.buddy && c.buddy.alive && c.buddy.buddyOf === c && !c.buddy.convo ? c.buddy : null;
+    const r = Math.random();
+    if (S && Math.hypot(S.x - c.pos.x, S.z - c.pos.z) < 16) {
+      ph.yaw = Math.atan2(S.x - c.pos.x, S.z - c.pos.z);
+      ph.look = S.c.fig.j.headC;
+    } else if (B && r < 0.55) {
+      // the friend: a few steps ahead along the walk, turned round, posing
+      ph.yaw = c.yaw;
+      ph.model = B;
+      B.pose = { x: c.pos.x + Math.sin(c.yaw) * 2.6, z: c.pos.z + Math.cos(c.yaw) * 2.6, at: false, kind: pick(['peace', 'wave', 'arms', 'hip']), hand: new THREE.Vector3(), hand2: new THREE.Vector3(), face: c };
+      this.stats.poses++;
+      if (this.game.voices && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 26) ph.talk = pick(POSE_LINES);
+    } else if (r < 0.75) {
+      ph.selfie = true;
+      ph.yaw = c.yaw;
+      this.stats.selfies++;
+    } else {
+      const sh = this.signNear(c);
+      if (sh) {
+        ph.sign = true;
+        ph.look = new THREE.Vector3(sh.door[0], (sh.door[1] || 0) + 3.1, sh.door[2]);
+        ph.yaw = Math.atan2(sh.door[0] - c.pos.x, sh.door[2] - c.pos.z);
+      } else ph.yaw = c.prom ? Math.PI / 2 + (Math.random() - 0.5) * 1.2 : c.yaw + (Math.random() < 0.5 ? 1 : -1) * (0.6 + Math.random() * 1.2);
+    }
+    c.photo = ph;
+    c.stopT = ph.model ? 9 : 3.1;
+    if (ph.talk) this.game.voices.talk([c, ph.model], ph.talk);
+  }
+
+  // a shop's sign near a tourist, on the side of the walk where the shops are
+  signNear(c) {
+    let best = null;
+    let bd = 13;
+    for (const s of this.game.world.shops || []) {
+      if (!s.door || s.home || s.stand || s.nx === undefined) continue;
+      const dx = s.door[0] - c.pos.x;
+      const dz = s.door[2] - c.pos.z;
+      if (Math.abs(dx) > bd || Math.abs(dz) > bd) continue;
+      const d = Math.hypot(dx, dz);
+      // (looking at its front, from the sidewalk)
+      if (d < bd && d > 3 && dx * s.nx + dz * s.nz < -1) {
+        bd = d;
+        best = s;
+      }
+    }
+    return best;
   }
 
   endPhoto(c) {
+    const ph = c.photo;
     c.photo = null;
-    c.fig.reachR = null;
-    c.fig.reachL = null;
+    const f = c.fig;
+    if (ph) {
+      if (f.reachR === ph.r) f.reachR = null;
+      if (f.reachL === ph.l) f.reachL = null;
+      if (f.lookAt === ph.look || f.lookAt === ph.r) f.lookAt = null;
+      if (ph.model) this.game.civilians.endPose(ph.model);
+    }
+    c.stopT = Math.min(c.stopT, 0.3);
   }
 
   // the young people on the corners near you (three at a corner), from noon to one at night

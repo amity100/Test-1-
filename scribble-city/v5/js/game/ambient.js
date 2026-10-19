@@ -186,6 +186,25 @@ export class Ambient {
     }
   }
 
+  // (GTA IV pass) a flock come down round somebody on a bench throwing them crumbs
+  // (game/routines.js, the grandparents in the park): round (x, z), pecking
+  feedFlock(x, z) {
+    for (const f of this.flocks) if (!f.up && Math.abs(f.x - x) < 4 && Math.abs(f.z - z) < 4) return f;
+    if (this.game.world.collision.pointInside(x, 0.5, z, 0.8)) return null;
+    const birds = [];
+    const n = 5 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.4 + Math.random() * 1.3;
+      const bx = x + Math.cos(a) * r;
+      const bz = z + Math.sin(a) * r;
+      birds.push({ x: bx, z: bz, y: groundHeight(bx, bz), yaw: Math.atan2(x - bx, z - bz) + (Math.random() - 0.5), peck: Math.random() * 5, hop: 0, vx: 0, vy: 0, vz: 0, flap: Math.random() * 6 });
+    }
+    const f = { x, z, birds, up: false, upT: 0, fed: true };
+    this.flocks.push(f);
+    return f;
+  }
+
   // a flock pecking on a sidewalk near you
   spawnFlock(p) {
     for (let tries = 0; tries < 6; tries++) {
