@@ -13,6 +13,7 @@ import { buildRoom } from './rooms.js';
 // (v5, ROADMAP 11.18: the shops laid out to the small things - their plans replace the old rooms')
 import './shops2.js';
 import './homes2.js';
+import './venues2.js';
 import { buildStreets, turnWheel } from './streets.js';
 import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';

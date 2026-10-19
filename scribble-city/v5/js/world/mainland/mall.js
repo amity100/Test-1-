@@ -314,15 +314,18 @@ export function* buildMall(bctx, b, o) {
     planter(hctx, cx, z, !o.open);
     palm(hctx, r, cx, z, 7 + r() * 1.5, { y0: CURB + 0.6 });
     for (const s of [-1, 1]) {
-      bench(hctx, cx + s * 2.5, z, s < 0 ? Math.PI / 2 : -Math.PI / 2);
-      mall.benches.push({ x: cx + s * 2.3, z, yaw: s < 0 ? -Math.PI / 2 : Math.PI / 2 });
+      // (the bench faces the palm: who sits on it faces the way it does, as on the street's)
+      const by = s < 0 ? Math.PI / 2 : -Math.PI / 2;
+      bench(hctx, cx + s * 2.5, z, by);
+      for (const dz of [-0.42, 0.42]) mall.benches.push({ x: cx + s * 2.46, z: z + dz, yaw: by });
     }
   }
   fountain(hctx, cx, zm - 17);
   mall.fountain = { x: cx, z: zm - 17, r: 4.4 };
-  kiosk(bctx, IN, hall, hallGeo, cx + 3.6, bz0 + 22, r);
-  kiosk(bctx, IN, hall, hallGeo, cx - 3.6, bz1 - 22, r);
   for (const end of [-1, 1]) directory(bctx, IN, hall, cx - 4.2, end < 0 ? bz0 + 5 : bz1 - 5, end, b);
+  // the kiosks, the benches round their planters, the bins, the screens, the banners, the signs to
+  // the food court, the stores' windows dressed (the hall of a real mall: dressHall below)
+  dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, { cx, zm, hx0, hx1, bz0, bz1, H, UY, fc: food.length ? [fcz0, fcz1] : null });
   // the lamps of the hall: big round ones hanging from the roof, and their light
   for (let z = bz0 + 8; z < bz1 - 4; z += 16) {
     if (Math.abs(z - zm) < 4) continue;
@@ -356,6 +359,8 @@ function* store(bctx, mall, side, hx0, hx1, za, zb, kind, nameOf, depth, food = 
   if (shop) {
     shop.mall = mall.name;
     shop.inMall = true;
+    // (its front, for the window dressing on the hall's side: dressFronts)
+    shop.mallFront = { f, L, food };
     (food ? mall.food : mall.stores).push(shop);
   }
   yield;
@@ -444,22 +449,325 @@ function planter(ctx, x, z, inside) {
   ctx.col.addCircle(x, z, 1.1, 0, 0.7, 'prop');
 }
 
-// a kiosk in the hall: a little counter on wheels with sunglasses and phone cases, a parasol
-function kiosk(bctx, IN, hall, hallGeo, x, z, r) {
-  hall(IN.box, x - 1.0, CURB, z - 0.6, x + 1.0, CURB + 0.95, z + 0.6, srgb(0.98, 0.6, 0.72));
-  hall(IN.gloss, x - 1.05, CURB + 0.95, z - 0.65, x + 1.05, CURB + 1.0, z + 0.65, srgb(0.95, 0.95, 0.97));
-  for (let i = 0; i < 6; i++) hall(IN.box, x - 0.85 + i * 0.3, CURB + 1.0, z - 0.2, x - 0.65 + i * 0.3, CURB + 1.06, z + 0.2, [srgb(0.2, 0.2, 0.25), srgb(0.95, 0.4, 0.5), srgb(0.3, 0.6, 0.9)][i % 3]);
-  hall(IN.box, x - 0.03, CURB + 1.0, z - 0.03, x + 0.03, CURB + 2.6, z + 0.03, srgb(0.9, 0.9, 0.92));
-  const um = new THREE.ConeGeometry(1.4, 0.5, 10, 1, true);
-  um.translate(x, CURB + 2.75, z);
-  hallGeo(IN.box, um, r() < 0.5 ? srgb(0.95, 0.45, 0.55) : srgb(0.3, 0.75, 0.8));
-  bctx.col.addBox(x - 1.0, z - 0.6, x + 1.0, z + 0.6, 0, 1.0, 'prop');
+// ------------------------------------------------------------------ the hall dressed
+// What a real mall's hall is full of, between its stores: kiosks selling sunglasses, phone cases,
+// sweets and watches, a seller in each (game/mall.js); benches back to back along low planters,
+// a bin at the ends; screens of advertising standing by the columns; banners hung from the roof;
+// the signs to the food court and the doors under the bridge; and the stores' windows dressed -
+// the offer lit on the glass, a lightbox standing out by the window, potted plants at the door.
+// (All of it in the hall's own batch, merged: a few hundred boxes for the whole hall.)
+const PROMO = ['SALE', 'NEW IN', '-30%', 'NEW SEASON', '2 FOR 1', 'LAST DAYS', '-50%', 'OPEN'];
+const KIOSKS = ['sunglasses', 'phones', 'sweets', 'watches'];
+const ADS = [
+  [srgb(0.98, 0.42, 0.58), srgb(1, 0.92, 0.86), srgb(0.24, 0.2, 0.36)],
+  [srgb(0.3, 0.72, 0.95), srgb(0.96, 0.98, 1), srgb(0.98, 0.7, 0.24)],
+  [srgb(0.98, 0.8, 0.3), srgb(1, 0.97, 0.88), srgb(0.86, 0.26, 0.24)],
+  [srgb(0.46, 0.84, 0.58), srgb(0.98, 1, 0.96), srgb(0.3, 0.26, 0.56)],
+  [srgb(0.62, 0.45, 0.92), srgb(1, 0.88, 0.96), srgb(0.16, 0.16, 0.2)],
+];
+const DARK = srgb(0.15, 0.15, 0.19);
+const WHITE = srgb(0.97, 0.97, 0.96);
+
+function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
+  const r = bctx.rng;
+  const { cx, zm, hx0, hx1, bz0, bz1, H, UY } = g;
+  const boxes = bctx.col.boxes || [];
+  const e = mall.escalator;
+  // (what must stay clear: the ways in, the escalator's foot, the fountain, the food court's tables)
+  const keep = [[hx0, bz0, hx1, bz0 + 7], [hx0, bz1 - 7, hx1, bz1], [e.x0 - 0.5, e.z0, e.x1 + 0.6, e.z1 + 3.4], [cx - 5, zm - 22.5, cx + 5, zm - 11.5]];
+  if (g.fc) keep.push([hx0, g.fc[0] - 1, hx0 + 7.4, g.fc[1] + 1]);
+  const taken = [];
+  const hit = (list, x0, z0, x1, z1) => list.some((k) => k[2] > x0 && k[0] < x1 && k[3] > z0 && k[1] < z1);
+  const free = (x0, z0, x1, z1) => {
+    if (x0 < hx0 + 1.8 || x1 > hx1 - 1.8 || hit(keep, x0, z0, x1, z1) || hit(taken, x0, z0, x1, z1)) return false;
+    for (const q of boxes) if (q.alive !== false && q.y0 < 2.4 && q.x1 > x0 && q.x0 < x1 && q.z1 > z0 && q.z0 < z1) return false;
+    return true;
+  };
+  mall.kiosks = [];
+  mall.screens = [];
+  mall.bins = [];
+  // (where the people stand to read the directories by the doors: directory below)
+  mall.directories = [-1, 1].map((end) => {
+    const z = end < 0 ? bz0 + 5 : bz1 - 5;
+    return { x: cx - 4.2, z: z - end * 1.0, yaw: Math.atan2(0, end), at: { x: cx - 4.2, z } };
+  });
+  // ---- the kiosks: four down the hall, either side of its middle
+  let kk = 0;
+  for (let z = bz0 + 14; z < bz1 - 14 && kk < 4; z += 2) {
+    const side = kk % 2 ? -1 : 1;
+    const x = cx + side * 3.2;
+    if (!free(x - 1.65, z - 2.2, x + 1.65, z + 2.2)) continue;
+    kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, KIOSKS[(kk + b.seed) % KIOSKS.length], r);
+    taken.push([x - 1.65, z - 2.2, x + 1.65, z + 2.2]);
+    kk++;
+    z += 14;
+  }
+  // ---- benches back to back along low planters, down the middle
+  let np = 0;
+  for (let z = bz0 + 9; z < bz1 - 9 && np < 5; z += 1.5) {
+    if (!free(cx - 2.3, z - 2.5, cx + 2.3, z + 2.5)) continue;
+    pod(bctx, IN, hall, hallGeo, hctx, mall, cx, z, r);
+    taken.push([cx - 2.3, z - 9, cx + 2.3, z + 9]);
+    np++;
+  }
+  // ---- the bins by the food court
+  if (g.fc) {
+    for (const z of [g.fc[0] - 0.6, g.fc[1] + 0.6]) {
+      if (z < bz0 + 8 || z > bz1 - 8) continue;
+      bin(bctx, IN, hall, hallGeo, mall, hx0 + 6.9, z, srgb(0.36, 0.38, 0.42));
+      bin(bctx, IN, hall, hallGeo, mall, hx0 + 7.5, z, srgb(0.3, 0.6, 0.4));
+    }
+  }
+  // ---- the screens of advertising, by every other column under the galleries
+  for (const s of [-1, 1]) {
+    const xg = (s < 0 ? hx0 : hx1) - s * 2.6;
+    let k = s > 0 ? 1 : 0;
+    for (let z = bz0 + 6; z < bz1 - 3; z += 12) {
+      if (k++ % 2) continue;
+      const tz = z + 0.8;
+      if (!free(xg - 0.55, tz - 0.3, xg + 0.55, tz + 0.3)) continue;
+      screenTotem(bctx, IN, hall, xg, tz, ADS[(k + b.seed) % ADS.length]);
+      mall.screens.push({ x: xg, z: tz });
+    }
+  }
+  // ---- the banners hung from the roof down the void between the galleries (a roof to hang from)
+  if (!o.open) {
+    const a = hex(o.trim || '#2fa8a0');
+    const c = hex(o.signCol || '#ff5ad1');
+    let k = 0;
+    for (let z = bz0 + 16; z < bz1 - 8; z += 16) {
+      for (const s of [-1, 1]) banner(IN, hall, cx + s * 3.0, z, H, k++ % 2 ? a : c, k % 3 ? WHITE : srgb(1, 0.85, 0.4));
+    }
+  }
+  // ---- the signs under the bridge: to the food court one way, to the doors and parking the other
+  {
+    const cool = srgb(0.96, 0.98, 1);
+    // (the escalator meets the bridge on its south face: that face's sign keeps to the west half)
+    const faces = [
+      { s: -1, x0: cx - 3.6, x1: cx + 3.6, words: g.fc ? ['FOOD COURT', 'RESTROOMS'] : ['RESTROOMS', 'EXIT'] },
+      { s: 1, x0: cx - 4.0, x1: e.x0 - 0.5, words: ['EXIT', 'PARKING'] },
+    ];
+    for (const fc of faces) {
+      const zf = zm + fc.s * 2.2;
+      const len = fc.x1 - fc.x0;
+      if (len < 2.4) continue;
+      hall(IN.box, fc.x0, UY - 1.05, Math.min(zf, zf + fc.s * 0.16), fc.x1, UY - 0.35, Math.max(zf, zf + fc.s * 0.16), DARK);
+      hall(IN.lamp, fc.x0 + 0.06, UY - 1.0, Math.min(zf + fc.s * 0.16, zf + fc.s * 0.165), fc.x1 - 0.06, UY - 0.96, Math.max(zf + fc.s * 0.16, zf + fc.s * 0.165), srgb(1, 0.82, 0.4));
+      // (the lettering reads left to right from the side it faces)
+      const f = fc.s > 0 ? new Facade(fc.x0, zf + 0.17, 1, 0, 0, 1) : new Facade(fc.x1, zf - 0.17, -1, 0, 0, -1);
+      const n = fc.words.length;
+      for (let i = 0; i < n; i++) {
+        const w = Math.min(2.6, len / n - 0.3);
+        neonSign(hctx, f, fc.words[i], (len * (i + 0.5)) / n, UY - 0.68, 0.0, w, cool, { font: 'Rubik', size: 80 });
+      }
+    }
+  }
+  // ---- the stores' windows dressed
+  for (const s of mall.stores) {
+    const fr = s.mallFront;
+    if (!fr || fr.food) continue;
+    dressFront(bctx, IN, hall, hallGeo, hctx, fr.f, fr.L, r, b);
+  }
 }
 
-// the directory by the entrance: a lit board with the mall's plan on it (its stores in colour)
+// a store's front on the hall: the offer on the wide pane, lit; a lightbox standing out at the far
+// end; potted plants either side of the door
+function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
+  const fb = (mat, u0, v0, w0, u1, v1, w1, col) => {
+    const [a, c] = f.box(u0, v0, w0, u1, v1, w1);
+    IN.B.box(mat, a[0], a[1], a[2], c[0], c[1], c[2], nextId(), { color: col });
+  };
+  // (the front's own measures: world/kits.js storefront, its glass from 0.55 in at either end)
+  const sg0 = 0.55;
+  const sg1 = L - 0.55;
+  const uDoor = Math.max(sg0 + 0.85, Math.min(sg1 - 0.85, sg0 + (sg1 - sg0) * 0.3));
+  const p0 = uDoor + 0.85;
+  const p1 = sg1 - 0.15;
+  if (p1 - p0 > 2.2 && r() < 0.7) {
+    const word = PROMO[Math.floor(r() * PROMO.length)];
+    neonSign(hctx, f, word, (p0 + p1) / 2, 2.6, 0.16, Math.min(2.2, p1 - p0 - 0.5), hex(NEONS[Math.floor(r() * NEONS.length)]), { font: 'Rubik', size: 90 });
+  }
+  if (r() < 0.65) {
+    // the lightbox: a slim lit panel on a foot, standing out of the front, both faces a poster
+    const u = L - 0.5;
+    const ad = ADS[Math.floor(r() * ADS.length)];
+    fb(IN.box, u - 0.09, CURB, 0.28, u + 0.09, CURB + 0.07, 1.12, srgb(0.7, 0.72, 0.76));
+    fb(IN.box, u - 0.05, CURB + 0.07, 0.32, u + 0.05, CURB + 1.98, 1.08, DARK);
+    for (const k of [-1, 1]) {
+      const a = (d0, d1) => (k > 0 ? [u + d0, u + d1] : [u - d1, u - d0]);
+      let [x0, x1] = a(0.05, 0.056);
+      fb(IN.lamp, x0, CURB + 0.16, 0.38, x1, CURB + 1.9, 1.02, ad[1]);
+      [x0, x1] = a(0.05, 0.062);
+      fb(IN.lamp, x0, CURB + 1.32, 0.38, x1, CURB + 1.9, 1.02, ad[0]);
+      fb(IN.box, x0, CURB + 0.62, 0.52, x1, CURB + 1.18, 0.88, ad[2]);
+      fb(IN.lamp, x0, CURB + 0.3, 0.46, x1, CURB + 0.42, 0.94, ad[0]);
+    }
+    const [p, q] = f.box(u - 0.1, 0, 0.28, u + 0.1, 0, 1.12);
+    bctx.col.addBox(p[0], p[2], q[0], q[2], 0, 2.0, 'prop');
+  }
+  if (r() < 0.5) {
+    // a pair of potted plants at the door
+    for (const k of [-1, 1]) {
+      const [x, , z] = f.p(uDoor + k * 1.08, 0, 0.42);
+      const pot = new THREE.CylinderGeometry(0.21, 0.16, 0.48, 10);
+      pot.translate(x, CURB + 0.24, z);
+      hallGeo(IN.cyl, pot, [srgb(0.95, 0.94, 0.92), srgb(0.2, 0.2, 0.24), srgb(0.86, 0.6, 0.42)][(b.seed + Math.round(x)) % 3]);
+      const leaf = new THREE.SphereGeometry(0.3, 8, 6);
+      leaf.scale(1, 1.25, 1);
+      leaf.translate(x, CURB + 0.86, z);
+      hallGeo(IN.box, leaf, srgb(0.3, 0.56, 0.32));
+      bctx.col.addCircle(x, z, 0.24, 0, 1.0, 'prop');
+    }
+  }
+}
+
+// a kiosk: a cart on the hall's floor - its cabinet with panels on the side the people come to, the
+// counter, a tower of goods down its middle, a glass case, a roof on four posts with its lit sign
+// band. Its seller stands on the side away from the hall's middle (mall.kiosks, game/mall.js).
+function kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, kind, r) {
+  const C0 = CURB;
+  const col = { sunglasses: srgb(0.98, 0.6, 0.72), phones: srgb(0.3, 0.7, 0.82), sweets: srgb(0.98, 0.78, 0.34), watches: srgb(0.24, 0.26, 0.32) }[kind];
+  const lite = col.clone().lerp(WHITE, 0.45);
+  const glass = srgb(0.8, 0.9, 0.95);
+  hall(IN.box, x - 0.58, C0, z - 1.18, x + 0.58, C0 + 0.12, z + 1.18, DARK);
+  hall(IN.box, x - 0.6, C0 + 0.12, z - 1.2, x + 0.6, C0 + 0.95, z + 1.2, col);
+  const xf = x - side * 0.6;
+  for (const dz of [-0.6, 0.6]) hall(IN.box, Math.min(xf, xf - side * 0.02), C0 + 0.24, z + dz - 0.5, Math.max(xf, xf - side * 0.02), C0 + 0.84, z + dz + 0.5, lite);
+  hall(IN.gloss, x - 0.66, C0 + 0.95, z - 1.26, x + 0.66, C0 + 1.0, z + 1.26, WHITE);
+  // the posts, the roof, the lit band under its edge, the sign band round it
+  for (const [a, c] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) hall(IN.box, x + a * 0.62 - 0.025, C0 + 1.0, z + c * 1.22 - 0.025, x + a * 0.62 + 0.025, C0 + 2.4, z + c * 1.22 + 0.025, DARK);
+  hall(IN.box, x - 0.78, C0 + 2.4, z - 1.38, x + 0.78, C0 + 2.48, z + 1.38, WHITE);
+  hall(IN.lamp, x - 0.7, C0 + 2.37, z - 1.3, x + 0.7, C0 + 2.4, z + 1.3, srgb(1, 0.95, 0.85));
+  hall(IN.box, x - 0.8, C0 + 2.48, z - 1.4, x + 0.8, C0 + 2.8, z + 1.4, col);
+  hall(IN.lamp, x - 0.81, C0 + 2.57, z - 1.0, x + 0.81, C0 + 2.71, z + 1.0, srgb(1, 1, 0.94));
+  // the goods
+  const xt = x - side * 0.08; // the tower's face to the people
+  const face = (y0, y1, z0, z1, c, deep = 0.02) => hall(IN.box, Math.min(xt, xt - side * deep), y0, z0, Math.max(xt, xt - side * deep), y1, z1, c);
+  if (kind !== 'sweets') hall(IN.box, x - 0.08, C0 + 1.0, z - 0.98, x + 0.08, C0 + 2.25, z + 0.98, kind === 'watches' ? srgb(0.2, 0.16, 0.18) : WHITE);
+  if (kind === 'sunglasses') {
+    // rows of sunglasses on the tower, a mirror at its end
+    for (let k = 0; k < 5; k++) {
+      for (let j = 0; j < 8; j++) {
+        const zz = z - 0.84 + j * 0.24;
+        const y = C0 + 1.18 + k * 0.2;
+        face(y, y + 0.05, zz - 0.08, zz + 0.08, [DARK, srgb(0.42, 0.26, 0.16), srgb(0.2, 0.32, 0.5), srgb(0.6, 0.2, 0.3)][(j + k) % 4]);
+      }
+    }
+    face(C0 + 1.1, C0 + 2.1, z + 0.99, z + 1.12, srgb(0.86, 0.9, 0.94), 0.04);
+  } else if (kind === 'phones') {
+    // phone cases hung in rows, bright; chargers in boxes on the counter
+    const P = [srgb(0.95, 0.3, 0.45), srgb(0.3, 0.6, 0.95), srgb(0.98, 0.85, 0.3), srgb(0.5, 0.85, 0.5), srgb(0.7, 0.45, 0.9), DARK, WHITE];
+    for (let k = 0; k < 5; k++) for (let j = 0; j < 11; j++) face(C0 + 1.12 + k * 0.21, C0 + 1.26 + k * 0.21, z - 0.9 + j * 0.165, z - 0.83 + j * 0.165, P[Math.floor(r() * P.length)]);
+    for (let j = 0; j < 5; j++) hall(IN.box, x - side * 0.42 - 0.08, C0 + 1.0, z - 0.8 + j * 0.38, x - side * 0.42 + 0.08, C0 + 1.12, z - 0.62 + j * 0.38, P[j]);
+  } else if (kind === 'sweets') {
+    // jars of sweets in two rows on the counter, a scoop, a striped awning
+    const S = [srgb(0.98, 0.4, 0.55), srgb(0.98, 0.8, 0.3), srgb(0.45, 0.8, 0.45), srgb(0.5, 0.6, 0.98), srgb(0.95, 0.55, 0.3), srgb(0.8, 0.5, 0.9)];
+    for (let k = 0; k < 2; k++) {
+      for (let j = 0; j < 5; j++) {
+        const jx = x + (k ? 0.22 : -0.22);
+        const jz = z - 0.9 + j * 0.45;
+        const jar = new THREE.CylinderGeometry(0.15, 0.15, 0.34, 10);
+        jar.translate(jx, C0 + 1.17, jz);
+        hallGeo(IN.gloss, jar, glass);
+        const fill = new THREE.CylinderGeometry(0.13, 0.13, 0.22, 8);
+        fill.translate(jx, C0 + 1.12, jz);
+        hallGeo(IN.box, fill, S[(j + k * 3) % S.length]);
+        const lid = new THREE.CylinderGeometry(0.155, 0.155, 0.04, 10);
+        lid.translate(jx, C0 + 1.36, jz);
+        hallGeo(IN.box, lid, WHITE);
+      }
+    }
+    for (let j = 0; j < 7; j++) hall(IN.box, x - 0.8, C0 + 2.34, z - 1.38 + j * 0.4, x + 0.8, C0 + 2.4, z - 1.18 + j * 0.4, j % 2 ? WHITE : srgb(0.95, 0.4, 0.5));
+  } else {
+    // watches: a glass case on the counter, rows of faces on dark velvet; the mirror on the tower
+    const xc = x - side * 0.36;
+    hall(IN.box, xc - 0.22, C0 + 1.0, z - 1.0, xc + 0.22, C0 + 1.04, z + 1.0, srgb(0.24, 0.12, 0.16));
+    for (let k = 0; k < 2; k++) for (let j = 0; j < 9; j++) hall(IN.gloss, xc - 0.12 + k * 0.2 - 0.035, C0 + 1.04, z - 0.88 + j * 0.22 - 0.035, xc - 0.12 + k * 0.2 + 0.035, C0 + 1.06, z - 0.88 + j * 0.22 + 0.035, (j + k) % 3 ? srgb(0.95, 0.8, 0.4) : srgb(0.85, 0.87, 0.9));
+    hall(IN.gloss, xc - 0.24, C0 + 1.3, z - 1.02, xc + 0.24, C0 + 1.32, z + 1.02, glass);
+    for (const dz of [-1.02, 1.02]) hall(IN.gloss, xc - 0.24, C0 + 1.0, z + dz - 0.01, xc + 0.24, C0 + 1.3, z + dz + 0.01, glass);
+    hall(IN.gloss, Math.min(xc - side * 0.24, xc - side * 0.25), C0 + 1.0, z - 1.02, Math.max(xc - side * 0.24, xc - side * 0.25), C0 + 1.3, z + 1.02, glass);
+    face(C0 + 1.4, C0 + 2.1, z - 0.4, z + 0.4, srgb(0.86, 0.9, 0.94), 0.03);
+  }
+  bctx.col.addBox(x - 0.66, z - 1.26, x + 0.66, z + 1.26, 0, 1.0, 'prop');
+  mall.kiosks.push({ x: x + side * 0.95, z, yaw: Math.atan2(-side, 0), kind, cust: { x: x - side * 1.0, z, yaw: Math.atan2(side, 0) }, mid: { x, y: C0 + 1.1, z } });
+}
+
+// benches back to back along a low planter of shrubs and flowers; a bin and a recycling bin at one
+// end, a bin at the other
+function pod(bctx, IN, hall, hallGeo, hctx, mall, x, z, r) {
+  hall(IN.box, x - 0.42, CURB, z - 1.35, x + 0.42, CURB + 0.5, z + 1.35, srgb(0.93, 0.9, 0.86));
+  hall(IN.box, x - 0.47, CURB + 0.5, z - 1.4, x + 0.47, CURB + 0.56, z + 1.4, srgb(0.8, 0.76, 0.72));
+  hall(IN.box, x - 0.36, CURB + 0.5, z - 1.29, x + 0.36, CURB + 0.575, z + 1.29, srgb(0.36, 0.26, 0.2));
+  for (let k = 0; k < 4; k++) {
+    const leaf = new THREE.SphereGeometry(0.33 + r() * 0.08, 8, 6);
+    leaf.scale(1, 0.8, 1);
+    leaf.translate(x + (r() - 0.5) * 0.12, CURB + 0.8, z - 0.96 + k * 0.64);
+    hallGeo(IN.box, leaf, [srgb(0.3, 0.58, 0.3), srgb(0.38, 0.64, 0.34), srgb(0.26, 0.5, 0.32)][k % 3]);
+  }
+  for (let k = 0; k < 7; k++) {
+    const fx = x + (r() - 0.5) * 0.5;
+    const fz = z - 1.1 + r() * 2.2;
+    hall(IN.box, fx - 0.04, CURB + 1.0 + r() * 0.06, fz - 0.04, fx + 0.04, CURB + 1.07 + r() * 0.06, fz + 0.04, [srgb(0.98, 0.5, 0.65), srgb(0.98, 0.9, 0.4), WHITE][k % 3]);
+  }
+  bctx.col.addBox(x - 0.47, z - 1.4, x + 0.47, z + 1.4, 0, 0.9, 'prop');
+  for (const s of [-1, 1]) {
+    // (each faces out, its back to the planter; two seats on each)
+    const by = s < 0 ? -Math.PI / 2 : Math.PI / 2;
+    bench(hctx, x + s * 0.95, z, by);
+    for (const dz of [-0.42, 0.42]) mall.benches.push({ x: x + s * 0.99, z: z + dz, yaw: by });
+  }
+  bin(bctx, IN, hall, hallGeo, mall, x - 0.28, z + 1.78, srgb(0.36, 0.38, 0.42));
+  bin(bctx, IN, hall, hallGeo, mall, x + 0.28, z + 1.78, srgb(0.3, 0.6, 0.4));
+  bin(bctx, IN, hall, hallGeo, mall, x, z - 1.78, srgb(0.36, 0.38, 0.42));
+}
+
+// a bin: its round body, its steel lid with the slot in it
+function bin(bctx, IN, hall, hallGeo, mall, x, z, col) {
+  const g = new THREE.CylinderGeometry(0.24, 0.21, 0.84, 12);
+  g.translate(x, CURB + 0.42, z);
+  hallGeo(IN.cyl, g, col);
+  const l = new THREE.CylinderGeometry(0.26, 0.26, 0.08, 12);
+  l.translate(x, CURB + 0.88, z);
+  hallGeo(IN.gloss, l, srgb(0.8, 0.82, 0.85));
+  hall(IN.box, x - 0.11, CURB + 0.92, z - 0.05, x + 0.11, CURB + 0.925, z + 0.05, DARK);
+  bctx.col.addCircle(x, z, 0.26, 0, 0.95, 'prop');
+  mall.bins.push({ x, z });
+}
+
+// a screen of advertising on its foot, lit on both faces (what it shows: a band of colour, the
+// thing for sale, a line under it)
+function screenTotem(bctx, IN, hall, x, z, ad) {
+  hall(IN.box, x - 0.5, CURB, z - 0.2, x + 0.5, CURB + 0.08, z + 0.2, srgb(0.7, 0.72, 0.76));
+  hall(IN.box, x - 0.44, CURB + 0.08, z - 0.09, x + 0.44, CURB + 2.25, z + 0.09, DARK);
+  hall(IN.box, x - 0.44, CURB + 2.25, z - 0.09, x + 0.44, CURB + 2.3, z + 0.09, srgb(0.85, 0.86, 0.9));
+  for (const s of [-1, 1]) {
+    const lay = (mat, x0, y0, x1, y1, d, col) => hall(mat, x0, CURB + y0, Math.min(z + s * 0.09, z + s * (0.09 + d)), x1, CURB + y1, Math.max(z + s * 0.09, z + s * (0.09 + d)), col);
+    lay(IN.lamp, x - 0.38, 0.28, x + 0.38, 2.12, 0.006, ad[1]);
+    lay(IN.lamp, x - 0.38, 1.5, x + 0.38, 2.12, 0.012, ad[0]);
+    lay(IN.box, x - 0.2, 0.72, x + 0.2, 1.36, 0.012, ad[2]);
+    lay(IN.lamp, x - 0.3, 0.4, x + 0.3, 0.54, 0.012, ad[0]);
+  }
+  bctx.col.addBox(x - 0.5, z - 0.2, x + 0.5, z + 0.2, 0, 2.3, 'prop');
+}
+
+// a banner hung from the roof on two wires: its rod, the cloth, a band across it, a white panel
+function banner(IN, hall, x, z, top, a, c) {
+  for (const s of [-0.6, 0.6]) hall(IN.box, x + s - 0.006, top - 0.45, z - 0.006, x + s + 0.006, top, z + 0.006, DARK);
+  hall(IN.box, x - 0.72, top - 0.5, z - 0.03, x + 0.72, top - 0.44, z + 0.03, DARK);
+  hall(IN.box, x - 0.65, top - 3.9, z - 0.014, x + 0.65, top - 0.5, z + 0.014, a);
+  hall(IN.box, x - 0.65, top - 3.3, z - 0.02, x + 0.65, top - 3.05, z + 0.02, c);
+  hall(IN.box, x - 0.38, top - 2.35, z - 0.02, x + 0.38, top - 1.4, z + 0.02, WHITE);
+  hall(IN.box, x - 0.2, top - 2.1, z - 0.024, x + 0.2, top - 1.65, z + 0.024, c);
+  hall(IN.box, x - 0.67, top - 4.0, z - 0.025, x + 0.67, top - 3.9, z + 0.025, DARK);
+}
+
+// the directory by the entrance: a lit board with the mall's plan on it (its stores in colour, a
+// red dot where you are), its header lit along the top; on its back, an advertisement
 function directory(bctx, IN, hall, x, z, end, b) {
   const s = -end;
   hall(IN.box, x - 0.9, CURB, z - 0.12, x + 0.9, CURB + 2.3, z + 0.12, srgb(0.2, 0.21, 0.26));
+  hall(IN.box, x - 0.95, CURB + 2.3, z - 0.15, x + 0.95, CURB + 2.6, z + 0.15, DARK);
+  hall(IN.lamp, x - 0.85, CURB + 2.38, Math.min(z + s * 0.15, z + s * 0.156), x + 0.85, CURB + 2.52, Math.max(z + s * 0.15, z + s * 0.156), srgb(1, 0.93, 0.8));
   hall(IN.lamp, x - 0.75, CURB + 0.6, z + s * 0.13 - 0.01, x + 0.75, CURB + 2.1, z + s * 0.13 + 0.01, srgb(0.95, 0.96, 0.98));
   // the plan: the hall down the middle, the stores either side of it
   for (let i = 0; i < 7; i++) {
@@ -468,7 +776,15 @@ function directory(bctx, IN, hall, x, z, end, b) {
       hall(IN.box, x + k * 0.42 - 0.2, CURB + 0.7 + i * 0.19, z + s * 0.15 - 0.01, x + k * 0.42 + 0.2, CURB + 0.85 + i * 0.19, z + s * 0.15 + 0.01, c);
     }
   }
-  bctx.col.addBox(x - 0.9, z - 0.15, x + 0.9, z + 0.15, 0, 2.3, 'prop');
+  hall(IN.lamp, x - 0.06, CURB + 0.66, z + s * 0.16 - 0.012, x + 0.06, CURB + 0.78, z + s * 0.16 + 0.012, srgb(1, 0.2, 0.2));
+  // the advertisement on its back
+  const ad = ADS[(b.seed + (end > 0 ? 1 : 0)) % ADS.length];
+  const lay = (mat, x0, y0, x1, y1, d, col) => hall(mat, x0, CURB + y0, Math.min(z - s * 0.12, z - s * (0.12 + d)), x1, CURB + y1, Math.max(z - s * 0.12, z - s * (0.12 + d)), col);
+  lay(IN.lamp, x - 0.75, 0.4, x + 0.75, 2.15, 0.006, ad[1]);
+  lay(IN.lamp, x - 0.75, 1.55, x + 0.75, 2.15, 0.012, ad[0]);
+  lay(IN.box, x - 0.32, 0.75, x + 0.32, 1.42, 0.012, ad[2]);
+  lay(IN.lamp, x - 0.55, 0.5, x + 0.55, 0.62, 0.012, ad[0]);
+  bctx.col.addBox(x - 0.95, z - 0.15, x + 0.95, z + 0.15, 0, 2.6, 'prop');
 }
 
 // ------------------------------------------------------------------ the strip mall

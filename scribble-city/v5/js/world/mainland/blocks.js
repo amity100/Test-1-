@@ -16,6 +16,7 @@ import { buildBeach, buildPoint, buildBayfront } from './shore.js';
 import { buildArena } from './arena.js';
 import '../shops2.js';
 import '../homes2.js';
+import '../venues2.js';
 import { dressSidewalks } from './sidewalks.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
