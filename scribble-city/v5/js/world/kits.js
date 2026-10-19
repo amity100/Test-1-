@@ -6,7 +6,7 @@ import { AD_IDS } from './ads.js';
 import { palm } from './palms.js';
 import { randomCarSpec } from '../render/cars.js';
 import { CURB } from './layout.js';
-import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, darker, lighter, DETAIL_LOW } from './facades.js';
+import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, DETAIL_LOW } from './facades.js';
 
 // (v5, ROADMAP 11.2) The building kits of the city behind Ocean Drive. Every lot gets its own
 // building, the way the real South Beach was built a lot at a time: a row of shops of one floor
@@ -198,7 +198,7 @@ export function storefront(ctx, f, u0, u1, o, info = null) {
       const dr = diceAt(f, 13 + Math.round(u0 * 10));
       if (dr() < 0.7) {
         const P = o.P || new Parts(ctx);
-        tag(P, f, (u0 + u1) / 2 + (dr() - 0.5) * 0.6, CURB + 1.2 + dr() * 0.8, 0.004, Math.min(2.6, u1 - u0 - 0.5));
+        tag(P, f, (u0 + u1) / 2 + (dr() - 0.5) * 0.6, CURB + 1.2 + dr() * 0.8, 0.02, Math.min(2.6, u1 - u0 - 0.5));
         if (!o.P) P.flush();
       }
     }
@@ -370,6 +370,19 @@ export function shopStrip(ctx, spec) {
   {
     const pf = shifted(f, 0.24);
     PP.box(M.wall, f, -0.06, G1 - 0.04, 0, L + 0.06, G1 + 0.08, 0.3, lighter(trim, 0.2), nextId(), FB.BACK);
+    // each shop's fascia, a moulding round the band its name is on; the pilasters' feet
+    const fc = lighter(trim, 0.3);
+    bays.forEach(([b0, b1]) => {
+      const fid = nextId();
+      const v0 = G1 + 0.16;
+      const v1 = top - 0.14;
+      PP.box(M.wall, f, b0 + 0.06, v0, 0, b1 - 0.06, v0 + 0.07, 0.06, fc, fid, FB.BACK);
+      PP.box(M.wall, f, b0 + 0.06, v1 - 0.07, 0, b1 - 0.06, v1, 0.06, fc, fid, FB.BACK);
+      PP.box(M.wall, f, b0 + 0.06, v0 + 0.07, 0, b0 + 0.13, v1 - 0.07, 0.06, fc, fid, FB.BACK | FB.TOP | FB.BOTTOM);
+      PP.box(M.wall, f, b1 - 0.13, v0 + 0.07, 0, b1 - 0.06, v1 - 0.07, 0.06, fc, fid, FB.BACK | FB.TOP | FB.BOTTOM);
+    });
+    const bid = nextId();
+    for (const [p0, p1] of piers) PP.box(M.wall, f, p0 - 0.07, CURB, 0.24, p1 + 0.07, CURB + 0.42, 0.29, darker(trim, 0.8), bid, FB.BACK);
     if (dia !== 'deco') {
       const n = Math.max(3, Math.round(L / 0.85));
       const bid = nextId();
@@ -387,7 +400,7 @@ export function shopStrip(ctx, spec) {
     // (a sign on a bracket: the shop's name again, out over the sidewalk, on the old streets most)
     bays.forEach(([b0], i) => {
       const s = spec.shops[i];
-      if (s.shutter || dr() > (dia === 'deco' ? 0.22 : 0.5)) return;
+      if (s.shutter || dr() > (dia === 'deco' ? 0.3 : 0.55)) return;
       bladeSign(PP, pf, b0 - P / 2, G1 + 0.62, s.name, hex(s.signCol), { font: s.font, w0: 0.02, len: 0.95, board: dr() < 0.5 ? COL.dark : lighter(wall, 0.4) });
     });
   }
@@ -428,12 +441,13 @@ function flatWindow(ctx, f, uc, v0, ww, wh, o = {}) {
   fbox(ctx, f, M.frame, uc - ww / 2 - 0.16, v0 - 0.16, 0, uc + ww / 2 + 0.16, v0 - 0.06, 0.2, o.sill || WHITE, id);
   const blind = o.blinds !== false && r() < 0.18;
   if (blind) fbox(ctx, f, M.frame, uc - ww / 2, v0 + wh * r.range(0.45, 0.8), 0.02, uc + ww / 2, v0 + wh, 0.03, srgb(0.95, 0.9, 0.8));
-  if (o.ac && r() < 0.14) airCon(ctx, f, uc, v0);
+  const ac = o.ac && r() < 0.14;
+  if (ac) airCon(ctx, f, uc, v0);
   // (v5, GTA IV) the wall round it standing out a hand's width, so that the glass is set back in
   // it (its sides in the shade, its head over it); behind the glass somebody's curtains, by the
   // building's own dice (world/facades.js)
   const P = o.P;
-  if (!P) return;
+  if (!P) return ac;
   if (o.wall) {
     const rid = nextId();
     const d = o.reveal || 0.15;
@@ -447,19 +461,20 @@ function flatWindow(ctx, f, uc, v0, ww, wh, o = {}) {
   const dr = o.r;
   if (dr && !blind && dr() < (o.life !== undefined ? o.life : 0.45)) {
     const k = dr();
-    const cw = 0.016;
+    const cw = 0.032;
     if (k < 0.6) {
       const col = CURTAIN_COLS[Math.floor(dr() * CURTAIN_COLS.length)];
       const a = ww * (0.18 + dr() * 0.18);
-      P.box(M.prop, f, uc - ww / 2, v0 + 0.02, cw - 0.005, uc - ww / 2 + a, v0 + wh - 0.02, cw, col, nextId(), FB.BACK);
-      if (dr() < 0.7) P.box(M.prop, f, uc + ww / 2 - a, v0 + 0.02, cw - 0.005, uc + ww / 2, v0 + wh - 0.02, cw, col, nextId(), FB.BACK);
+      P.box(M.prop, f, uc - ww / 2, v0 + 0.02, cw - 0.008, uc - ww / 2 + a, v0 + wh - 0.02, cw, col, nextId(), FB.BACK);
+      if (dr() < 0.7) P.box(M.prop, f, uc + ww / 2 - a, v0 + 0.02, cw - 0.008, uc + ww / 2, v0 + wh - 0.02, cw, col, nextId(), FB.BACK);
     } else {
       // a plant on the sill inside
       const pc = uc + (dr() - 0.5) * ww * 0.6;
-      P.box(M.prop, f, pc - 0.08, v0, cw - 0.005, pc + 0.08, v0 + 0.15, cw + 0.015, COL.pot, nextId(), FB.BACK);
-      P.box(M.leaf, f, pc - 0.15, v0 + 0.15, cw - 0.005, pc + 0.15, v0 + 0.42, cw + 0.025, COL.leaf, nextId(), FB.BACK);
+      P.box(M.prop, f, pc - 0.08, v0, cw - 0.008, pc + 0.08, v0 + 0.15, cw + 0.015, COL.pot, nextId(), FB.BACK);
+      P.box(M.leaf, f, pc - 0.15, v0 + 0.15, cw - 0.008, pc + 0.15, v0 + 0.42, cw + 0.025, COL.leaf, nextId(), FB.BACK);
     }
   }
+  return ac;
 }
 const CURTAIN_COLS = [srgb(0.96, 0.92, 0.82), srgb(0.98, 0.98, 0.96), srgb(0.92, 0.7, 0.72), srgb(0.72, 0.82, 0.92), srgb(0.75, 0.9, 0.8), srgb(0.98, 0.88, 0.6), srgb(0.62, 0.2, 0.24), srgb(0.9, 0.55, 0.3)];
 
@@ -520,7 +535,10 @@ export function apartments(ctx, spec) {
       for (let k = 0; k < n; k++) {
         const c = u0 + step * (k + 0.5);
         if (o.skip && Math.abs(c - o.skip) < portW / 2 + 0.7) continue;
-        flatWindow(ctx, sf, c, v0, sl ? 1.75 : 1.15, sl ? 1.3 : 1.45, { jalousie: o.jalousie, ac: true, P: PA, wall, brow: o.brows !== false && !sl, r: ad });
+        const ww0 = sl ? 1.75 : 1.15;
+        const hasAc = flatWindow(ctx, sf, c, v0, ww0, sl ? 1.3 : 1.45, { jalousie: o.jalousie, ac: true, P: PA, wall, brow: o.brows !== false && !sl, r: ad });
+        // (v5, GTA IV) an iron rail out in front of a window upstairs, the pots on its ledge
+        if (!hasAc && fl >= 1 && ad() < 0.18) balconette(PA, sf, c - ww0 / 2 - 0.22, c + ww0 / 2 + 0.22, v0 - 0.16, { r: ad, depth: 0.42 });
       }
     }
   };
@@ -948,8 +966,8 @@ export function modern(ctx, spec) {
       if (md() > 0.55) continue;
       const yb = y1 - (y1 - y0) * (0.15 + md() * 0.7);
       const bid = nextId();
-      PM.box(M.prop, f, a + 0.04, yb, w + 0.006, b - 0.04, y1, w + 0.014, blindCol, bid, FB.BACK);
-      if (!DETAIL_LOW) for (let v = yb + 0.25; v < y1 - 0.1; v += 0.35) PM.box(M.prop, f, a + 0.04, v, w + 0.014, b - 0.04, v + 0.012, w + 0.018, darker(blindCol, 0.8), bid, FB.BACK);
+      PM.box(M.prop, f, a + 0.04, yb, w + 0.02, b - 0.04, y1, w + 0.028, blindCol, bid, FB.BACK);
+      if (!DETAIL_LOW) for (let v = yb + 0.25; v < y1 - 0.1; v += 0.35) PM.box(M.prop, f, a + 0.04, v, w + 0.028, b - 0.04, v + 0.012, w + 0.034, darker(blindCol, 0.8), bid, FB.BACK);
     }
   };
   for (let fl = 1; fl < floors; fl++) {

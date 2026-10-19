@@ -212,7 +212,7 @@ export function decoBuilding(ctx, spec) {
       if (dr() > (old ? 0.45 : 0.25)) continue;
       const sl = 0.8 + dr() * 2.4;
       const sw = 0.1 + dr() * 0.18;
-      P.box(M.frame, f, u - sw / 2, h - 0.2 - sl, 0, u + sw / 2, h - 0.2, 0.005, darker(color, 0.86), nextId(), FB.BACK);
+      P.box(M.frame, f, u - sw / 2, h - 0.2 - sl, 0, u + sw / 2, h - 0.2, 0.014, darker(color, 0.86), nextId(), FB.BACK);
     }
   }
   // ---- (v5, GTA IV) the fire escape down the front of an old walk-up
@@ -273,7 +273,7 @@ export function decoBuilding(ctx, spec) {
   // behind the name, the pilasters' foot and their joints, the pipe down a corner, the meters
   if (ctx.block) {
     shopHardware(P, f, sg0, sg1, { r: dr, top: 3.55, door: uDoor, housingCol: dr() < 0.5 ? COL.steel : darker(trim, 0.7) });
-    if (old && dr() < 0.12) tag(P, f, (sg0 + sg1) / 2 + (dr() - 0.5) * 2, 3.7, 0.245, 1.2);
+    if (old && dr() < 0.12) tag(P, f, (sg0 + sg1) / 2 + (dr() - 0.5) * 2, 3.7, 0.26, 1.2);
     if (old) {
       const pc = darker(trim, 0.82);
       const jid = nextId();
@@ -284,7 +284,7 @@ export function decoBuilding(ctx, spec) {
     }
     // the pipe from the roof, down the corner away from the fire escape
     if (floors > 1 && (old || dr() < 0.5)) {
-      const pu = escape === 'a' || (!escape && dr() < 0.5) ? L - 0.35 : 0.35;
+      const pu = escape === 'a' || (!escape && dr() < 0.5) ? L - 0.12 : 0.12;
       downpipe(P, f, pu, h - 0.22, CURB, dia === 'havana' ? lighter(trim, 0.3) : dr() < 0.5 ? COL.zinc : darker(trim, 0.75), { w: 0.33 });
     }
     // the meters on the wall beside the window, at the end with room for them
@@ -519,6 +519,8 @@ export function windowRows(ctx, f, o) {
   let avoid = d.avoid || null;
   const clear = (uc, fl, ww) => !(avoid && uc > avoid[0] - 0.75 && uc < avoid[1] + 0.75) && !(fl === 1 && d.signSpan && uc + ww / 2 + 0.45 > d.signSpan[0] && uc - ww / 2 - 0.45 < d.signSpan[1]);
   if (dia === 'deco') {
+    const panels = r() < 0.6;
+    const panelCol = lighter(trim, 0.45);
     // the same windows where they always were, the city's dice thrown as they always were (an
     // air conditioner in this one, a box of flowers under that), set into the wall now
     for (let fl = 1; fl < floors; fl++) {
@@ -542,6 +544,12 @@ export function windowRows(ctx, f, o) {
         }
         holes.push([uc - ww / 2, y0, uc + ww / 2, y1]);
         deepWindow(P, f, uc - ww / 2, y0, uc + ww / 2, y1, { R, sash, stone, head: 'none', lights: o.hotel && k % 2 ? 'one' : 'deco', r, ac, life: 0.5 });
+        // (a panel in relief under it, its flutes, the Deco ones' ornament)
+        if (panels && fl >= 2 && !balc) {
+          const pid = nextId();
+          P.box(M.wall, f, uc - ww / 2 + 0.05, y0 - 0.85, 0, uc + ww / 2 - 0.05, y0 - 0.3, 0.04, panelCol, pid, FB.BACK);
+          for (const du of [-0.25, 0, 0.25]) P.box(M.wall, f, uc + du * ww - 0.035, y0 - 0.8, 0.04, uc + du * ww + 0.035, y0 - 0.35, 0.07, panelCol, pid, FB.BACK);
+        }
         if (balc) balcony(ctx, f, uc, y0, Math.min(step * 1.7, 3.2), trim, r);
         else if (flowers) flowerBox(ctx, f, uc, y0, ww, ctx.rng);
       }

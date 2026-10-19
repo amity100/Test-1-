@@ -405,16 +405,16 @@ export function oceanHotel(ctx, spec) {
     if (v1 - v0 > 1.4) fbox(ctx, sf, M.frame, u0, v0 + (v1 - v0) * 0.68 - 0.025, out, u1, v0 + (v1 - v0) * 0.68 + 0.025, out + 0.05, frameCol, fid);
     // (v5, GTA IV) the rooms behind: curtains drawn, a blind down, by the building's own dice
     if (hr() < 0.42) {
-      const cw = out + 0.018;
+      const cw = out + 0.034;
       const ww = u1 - u0;
       if (hr() < 0.62) {
         const col = CURTAIN[Math.floor(hr() * CURTAIN.length)];
         const a = Math.min(0.5, ww * (0.2 + hr() * 0.2));
-        P.box(M.prop, sf, u0, v0 + 0.03, cw - 0.005, u0 + a, v1 - 0.03, cw, col, nextId(), FB.BACK);
-        if (hr() < 0.7) P.box(M.prop, sf, u1 - a, v0 + 0.03, cw - 0.005, u1, v1 - 0.03, cw, col, nextId(), FB.BACK);
+        P.box(M.prop, sf, u0, v0 + 0.03, cw - 0.008, u0 + a, v1 - 0.03, cw, col, nextId(), FB.BACK);
+        if (hr() < 0.7) P.box(M.prop, sf, u1 - a, v0 + 0.03, cw - 0.008, u1, v1 - 0.03, cw, col, nextId(), FB.BACK);
       } else {
         const yb = v1 - (v1 - v0) * (0.25 + hr() * 0.4);
-        P.box(M.prop, sf, u0, yb, cw - 0.005, u1, v1, cw, hr() < 0.6 ? srgb(0.95, 0.92, 0.84) : srgb(0.86, 0.86, 0.84), nextId(), FB.BACK);
+        P.box(M.prop, sf, u0, yb, cw - 0.008, u1, v1, cw, hr() < 0.6 ? srgb(0.95, 0.92, 0.84) : srgb(0.86, 0.86, 0.84), nextId(), FB.BACK);
       }
     }
   };
@@ -434,7 +434,7 @@ export function oceanHotel(ctx, spec) {
       const aid = nextId();
       P.box(M.steel, sf, uc0 - 0.36, v0 - 0.72, -0.02, uc0 + 0.36, v0 - 0.26, 0.3, COL.acBody, aid, FB.BACK);
       P.box(M.frame, sf, uc0 - 0.3, v0 - 0.66, 0.3, uc0 + 0.3, v0 - 0.32, 0.315, COL.acGrille, aid, FB.BACK);
-      if (hr() < 0.5) P.box(M.frame, sf, uc0 - 0.05, v0 - 0.72 - (0.5 + hr()), -0.02, uc0 + 0.04, v0 - 0.72, 0.004, darker(wall, 0.84), nextId(), FB.BACK);
+      if (hr() < 0.5) P.box(M.frame, sf, uc0 - 0.05, v0 - 0.72 - (0.5 + hr()), -0.02, uc0 + 0.04, v0 - 0.72, 0.014, darker(wall, 0.84), nextId(), FB.BACK);
     }
   };
   // the windows of a bay [b0, b1] on one floor

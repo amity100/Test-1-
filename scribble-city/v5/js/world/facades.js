@@ -313,34 +313,34 @@ export function deepWindow(P, f, u0, v0, u1, v1, o) {
     const q = r();
     if (q < (o.life !== undefined ? o.life : 0.55)) {
       const k = r();
-      const cw = back + 0.016;
+      const cw = back + 0.032;
       if (k < 0.4) {
         // curtains, to the sides or across
         const col = CURTAINS[Math.floor(r() * CURTAINS.length)];
         const a = ww * (0.18 + r() * 0.2);
-        P.box(M.prop, f, u0 + t, v0 + 0.09, cw - 0.006, u0 + t + a, v1 - t, cw, col, nextId(), FB.BACK);
-        if (r() < 0.7) P.box(M.prop, f, u1 - t - a * (0.7 + r() * 0.5), v0 + 0.09, cw - 0.006, u1 - t, v1 - t, cw, col, nextId(), FB.BACK);
+        P.box(M.prop, f, u0 + t, v0 + 0.09, cw - 0.008, u0 + t + a, v1 - t, cw, col, nextId(), FB.BACK);
+        if (r() < 0.7) P.box(M.prop, f, u1 - t - a * (0.7 + r() * 0.5), v0 + 0.09, cw - 0.008, u1 - t, v1 - t, cw, col, nextId(), FB.BACK);
         // (a pelmet over them)
-        if (r() < 0.4) P.box(M.prop, f, u0 + t, v1 - t - 0.12, cw - 0.006, u1 - t, v1 - t, cw + 0.004, col.clone().multiplyScalar(0.85), nextId(), FB.BACK);
+        if (r() < 0.4) P.box(M.prop, f, u0 + t, v1 - t - 0.12, cw - 0.008, u1 - t, v1 - t, cw + 0.006, col.clone().multiplyScalar(0.85), nextId(), FB.BACK);
       } else if (k < 0.72) {
         // a blind, half down, its slats
         const yb = v1 - (v1 - v0) * (0.25 + r() * 0.45);
         const col = r() < 0.6 ? C(0.95, 0.92, 0.84) : r() < 0.5 ? C(0.86, 0.86, 0.84) : C(0.55, 0.42, 0.3);
         const bid = nextId();
-        P.box(M.prop, f, u0 + t, yb, cw - 0.006, u1 - t, v1 - t, cw, col, bid, FB.BACK);
-        if (!LOW) for (let v = yb + 0.2; v < v1 - t - 0.04; v += 0.3) P.box(M.prop, f, u0 + t, v, cw, u1 - t, v + 0.012, cw + 0.004, col.clone().multiplyScalar(0.8), bid, FB.BACK);
+        P.box(M.prop, f, u0 + t, yb, cw - 0.008, u1 - t, v1 - t, cw, col, bid, FB.BACK);
+        if (!LOW) for (let v = yb + 0.2; v < v1 - t - 0.04; v += 0.3) P.box(M.prop, f, u0 + t, v, cw, u1 - t, v + 0.012, cw + 0.008, col.clone().multiplyScalar(0.8), bid, FB.BACK);
       } else if (k < 0.86 && lights !== 'deco') {
         // the lower sash pushed up: the room's dark under it, a curtain stirring in it
         open = true;
         const yo = v0 + 0.09 + (vm - v0) * (0.45 + r() * 0.4);
-        P.box(M.prop, f, u0 + t, v0 + 0.09, back + 0.004, u1 - t, yo, back + 0.012, COL.room, nextId(), FB.BACK);
+        P.box(M.prop, f, u0 + t, v0 + 0.09, back + 0.02, u1 - t, yo, back + 0.028, COL.room, nextId(), FB.BACK);
         P.box(M.frame, f, u0 + t, yo - 0.05, back + 0.04, u1 - t, yo + 0.02, back + 0.1, sash, sid, FB.BACK);
-        if (r() < 0.5) P.box(M.prop, f, u0 + t + 0.05, v0 + 0.12, back + 0.014, u0 + t + ww * 0.3, yo - 0.05, back + 0.022, CURTAINS[Math.floor(r() * CURTAINS.length)], nextId(), FB.BACK);
+        if (r() < 0.5) P.box(M.prop, f, u0 + t + 0.05, v0 + 0.12, back + 0.03, u0 + t + ww * 0.3, yo - 0.05, back + 0.038, CURTAINS[Math.floor(r() * CURTAINS.length)], nextId(), FB.BACK);
       } else {
         // a plant on the sill inside, against the glass
         const pc = u0 + t + 0.15 + r() * Math.max(0.01, ww - 2 * t - 0.3);
-        P.box(M.prop, f, pc - 0.09, v0 + 0.09, cw - 0.006, pc + 0.09, v0 + 0.25, cw + 0.02, COL.pot, nextId(), FB.BACK);
-        P.box(M.leaf, f, pc - 0.16, v0 + 0.25, cw - 0.006, pc + 0.16, v0 + 0.52, cw + 0.03, r() < 0.5 ? COL.leaf : COL.leaf2, nextId(), FB.BACK);
+        P.box(M.prop, f, pc - 0.09, v0 + 0.09, cw - 0.008, pc + 0.09, v0 + 0.25, cw + 0.02, COL.pot, nextId(), FB.BACK);
+        P.box(M.leaf, f, pc - 0.16, v0 + 0.25, cw - 0.008, pc + 0.16, v0 + 0.52, cw + 0.03, r() < 0.5 ? COL.leaf : COL.leaf2, nextId(), FB.BACK);
       }
     }
   }
@@ -370,7 +370,7 @@ export function deepWindow(P, f, u0, v0, u1, v1, o) {
     P.box(M.frame, f, u0 + t, ay1 + 0.02, back + 0.03, u1 - t, ay1 + 0.08, back + 0.09, sash, sid, FB.BACK);
     for (const k of [-0.32, 0.32]) P.bar(M.frame, f.p(uc + k * aw, v0 - 0.42, 0.01), f.p(uc + k * aw, ay0 - 0.01, 0.3), 0.035, COL.ironRust, aid);
     // (what it drips has drawn a streak down the wall)
-    if (r && r() < 0.6) P.box(M.frame, f, uc - 0.05 + (r() - 0.5) * 0.2, v0 - 0.12 - (0.6 + r() * 1.3), 0.0, uc + 0.04 + (r() - 0.5) * 0.2, v0 - 0.12, 0.006, COL.grime, nextId(), FB.BACK);
+    if (r && r() < 0.6) P.box(M.frame, f, uc - 0.05 + (r() - 0.5) * 0.2, v0 - 0.12 - (0.6 + r() * 1.3), 0.0, uc + 0.04 + (r() - 0.5) * 0.2, v0 - 0.12, 0.014, COL.grime, nextId(), FB.BACK);
   }
   // the sill: stone, from the back of the hole out over the wall
   const sillId = nextId();
@@ -717,7 +717,7 @@ export function shopHardware(P, f, sg0, sg1, o) {
     const d = o.door !== undefined ? o.door : (sg0 + sg1) / 2;
     if (r() < 0.55) {
       const left = d - 0.95 > sg0 + 0.3;
-      P.sticker(f, r() < 0.5 ? 'open24' : 'ch_open', left ? d - 1.15 : d + 1.15, CURB + 1.55, 0.085, 0.5, 0.25);
+      P.sticker(f, r() < 0.5 ? 'open24' : 'ch_open', left ? d - 1.15 : d + 1.15, CURB + 1.55, 0.085, 0.6, 0.15);
     }
     const posters = P.ctx.posters;
     if (posters && posters.length && r() < 0.45) {
@@ -780,7 +780,7 @@ export function weather(P, f, o) {
   if (!r) return;
   const { u0, u1, v0, v1 } = o;
   const col = o.col;
-  const w = o.w || 0.004;
+  const w = o.w || 0.014;
   const span = u1 - u0;
   if (span < 1) return;
   // streaks from under the cornice
