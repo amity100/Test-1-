@@ -343,12 +343,16 @@ class Vehicle {
 
   dispose() {
     this.game.scene.remove(this.group);
+    // (ROADMAP 11.20: the parts drawn onto a city car are the scene's, not its group's)
+    if (this.fuse && this.fuse.root && this.fuse.root.parent) this.fuse.root.parent.remove(this.fuse.root);
   }
 
   hurt(amount) {
     if (this.dead) return;
     // (armour drawn on it takes some of it: ROADMAP 11.8)
     this.hp -= amount * (1 - (this.armor || 0));
+    // (ROADMAP 11.20: a hard knock can tear a part drawn on it off - game/fuse.js)
+    if (this.fuse && this.game.fuse) this.game.fuse.onHurt(this, amount);
     this.game.hud.hurtFlash();
     this.game.audio.play('clang', 0.5);
     if (this.hp <= 0) this.destroy();
@@ -411,7 +415,7 @@ class Vehicle {
     } else if (this.kind === 'balloon') updateBalloon(this, dt, input);
     else this.updateCopter(dt, input);
     // (a gun drawn on it, ROADMAP 11.6, 11.8: its turret after where you look, a click fires)
-    if (input && this.drawn && this.turrets) this.drawnGuns(dt, input);
+    if (input && (this.drawn || this.fuseGuns) && this.turrets) this.drawnGuns(dt, input);
     else if (input && this.turret && this.drawn) this.drawnGun(dt, input);
     this.wheelSpin += (this.speed * dt) / 0.36;
     if (this.kind === 'car') return;
@@ -474,12 +478,16 @@ class Vehicle {
     const U = this.up;
     cars.draw(this.carKind, this.dirt > 0.05 ? this.dustyColor() : this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: wob, roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      lift: wob + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0), roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      // (ROADMAP 11.20: wheels drawn onto it in place of its own - game/fuse.js)
+      noWheels: !!(this.fz && this.fz.hideWheels),
       // (yours: the side windows down, you and whoever rides with you seen through them)
       open: !this.game.classic && !rv,
       // (the garage's work: ROADMAP 4.6)
-      mods: U && !rv ? U : null, rim: U && U.tires ? RIM_UP[U.tires] : null, matrixOut: (this.design || this.dirt > 0.2 || this.shineT) && !rv ? _cm : null,
+      mods: U && !rv ? U : null, rim: U && U.tires ? RIM_UP[U.tires] : null, matrixOut: (this.design || this.dirt > 0.2 || this.shineT || this.fuse) && !rv ? _cm : null,
     });
+    // (ROADMAP 11.20) the parts drawn onto it, in its frame
+    if (this.fuse && !rv && this.game.fuse) this.game.fuse.place(this, _cm);
     if (!rv && (this.design || this.dirt > 0.2 || this.shineT)) this.drawOn(_cm);
     // in the rain the wipers go (once somebody is at the wheel)
     const w = this.game.weather;
@@ -620,7 +628,8 @@ class Vehicle {
     for (const o of offs) {
       const p = new THREE.Vector3(this.pos.x + f.x * o, this.pos.y + 0.2, this.pos.z + f.z * o);
       const before = p.clone();
-      const res = col.resolveCylinder(p, r, 1.5, 0.45);
+      // (ROADMAP 11.20: wheels with teeth, huge wheels - up onto what a car's would hit)
+      const res = col.resolveCylinder(p, r, 1.5, this.fz && this.fz.step ? this.fz.step : 0.45);
       if (res.hitWall) {
         hit = true;
         this.pos.x += p.x - before.x;
@@ -754,8 +763,10 @@ class Vehicle {
     // (its jets, Shift held: game/drawncar.js)
     const boost = this.jets && input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || (input.touch && (input.stickMag || 0) > 0.92) || (input.pad && input.pad.sprint)) ? 1 : 0;
     this.boosting = boost;
-    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1) * (1 + 0.4 * boost);
-    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1) * (1 + 1.2 * boost);
+    // (ROADMAP 11.20: a jet drawn onto it - as strong as it is long, game/fuse.js)
+    const jk = this.fz ? this.fz.jetK || 1 : 1;
+    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1) * (1 + 0.4 * boost * jk);
+    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1) * (1 + 1.2 * boost * jk);
     // (ROADMAP 11.12: a jet pointing forward - it brakes hard)
     const brakeK = (U ? 1 + 0.18 * U.brakes : 1) * (H.brake || 1);
     // (the driving skill: ROADMAP 5.6)
@@ -802,6 +813,8 @@ class Vehicle {
       this.climb = 0;
     }
     this.physT = this.game.time;
+    // (ROADMAP 11.20) parts drawn onto it: up on its spring, off on its rotor, its balloon
+    if (this.fz && this.game.fuse) this.game.fuse.preDrive(this, dt, input);
     // the steering: how quick it turns (less as it goes faster; more with the handbrake on)
     const fx0 = Math.sin(this.yaw);
     const fz0 = Math.cos(this.yaw);
@@ -868,10 +881,14 @@ class Vehicle {
     this.pos.x += this.vx * dt;
     this.pos.z += this.vz * dt;
     // up and down: on the ground (and up the ramps), or flying
-    const g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z));
+    let g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z));
+    // (ROADMAP 11.20: up steps on teeth, down onto a roof when it flies - game/fuse.js)
+    if (this.fz && this.game.fuse) g = this.game.fuse.floor(this, g);
     if (this.air) {
+      // (ROADMAP 11.20: the lift of a rotor, a balloon, a jet drawn onto it - and steering in the air)
+      const pull = this.fz && this.game.fuse ? this.game.fuse.air(this, dt, input) : 1;
       // (wings drawn on it, game/drawncar.js: it glides, coming down slower)
-      this.vy -= 20 * dt * (this.glide ? 1 - this.glide * (this.vy < 0 ? 1 : 0.4) : 1);
+      this.vy -= 20 * dt * pull * (this.glide ? 1 - this.glide * (this.vy < 0 ? 1 : 0.4) : 1);
       if (this.glide && this.vy < -6 * (1 - this.glide)) this.vy = damp(this.vy, -6 * (1 - this.glide), 3, dt);
       this.pos.y += this.vy * dt;
       this.bodyPitch = damp(this.bodyPitch, 0.12, 1.2, dt);
@@ -1404,7 +1421,7 @@ const BIG_STOCK = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', '
 // How each kind handles (ROADMAP 4.3; not with ?classic): how heavy (slow to start turning, slow
 // to stop turning), how strong, how fast, how much the tyres grip sideways (and with the
 // handbrake on: a drift), how quick the steering, how much the body rolls and pitches
-const HANDLING = {
+export const HANDLING = {
   sports: { mass: 1.0, power: 16, top: 33, grip: 9.5, slide: 1.12, steer: 1.6, roll: 0.45, pitch: 0.35 },
   sedan: { mass: 1.25, power: 14, top: 28, grip: 8, slide: 1.01, steer: 1.4, roll: 0.75, pitch: 0.5 },
   suv: { mass: 1.6, power: 13.5, top: 28, grip: 7, slide: 0.94, steer: 1.25, roll: 1.05, pitch: 0.6 },

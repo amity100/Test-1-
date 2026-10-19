@@ -252,7 +252,7 @@ export class Weapons {
     const v = player.inVehicle;
     const seated = !game.classic && player.mode === 'vehicle' && v && (v.kind === 'car' || v.kind === 'bike') && !v.dead && !game.dialog.open && !(game.garage && game.garage.state) && !(game.paintshop && game.paintshop.open);
     // (not from one with a cannon drawn on it: the click is the cannon's, ROADMAP 11.6)
-    const driveBy = seated && def.kind === 'gun' && !slot.present && !v.turret;
+    const driveBy = seated && def.kind === 'gun' && !slot.present && !v.turret && !v.fuseGuns && !(v.fz && v.fz.flame);
     const canAct = onFoot || driveBy;
     this.beam = null;
     // weapon switching (1..9, 0 for the tenth; in a car the wheel is the camera's)
@@ -607,7 +607,9 @@ export class Weapons {
       // (a toothed blade saws: more of it, ROADMAP 11.11)
       const saw = def.saw ? 1.6 : 1;
       const c = game.traffic.inArc(p.pos, f, reach + 1.2);
-      if (c) {
+      // (ROADMAP 11.20: a part drawn onto a car of yours rubs off it first)
+      if (game.fuse && game.fuse.rubPart(p.pos, f, reach + 1.2, tip)) any = true;
+      else if (c) {
         game.traffic.rub(c, def.damage * saw, tip);
         if (el === 'fire' && game.damage && Math.random() < 0.35) game.damage.ignite(c, 1 + Math.random() * 2);
         any = true;

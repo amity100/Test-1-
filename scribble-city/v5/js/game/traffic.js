@@ -1153,6 +1153,8 @@ export class Traffic {
     o.busy = !!c.fare;
     o.scale = scale;
     o.squash = squash;
+    // (ROADMAP 11.20: square wheels drawn onto it go round in place of its own - game/fuse.js)
+    o.noWheels = !!c.fuseNoWheels;
     cars.draw(spec.kind, c.wrecked ? WRECK : spec.color, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, o);
   }
 

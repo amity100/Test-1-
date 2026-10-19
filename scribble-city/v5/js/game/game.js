@@ -34,7 +34,7 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp, smoothstep } from '../core/util.js';
+import { clamp, smoothstep, damp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -87,6 +87,7 @@ import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Signs } from './signs.js';
+import { Fuse } from './fuse.js';
 import { drawLandmarks } from '../world/mainland/landmarks.js';
 import { Fairground } from './fairground.js';
 import { ArenaGame } from './arenagame.js';
@@ -300,6 +301,8 @@ export class Game {
     // quick signs
     this.lab = !this.classic && (this.params.has('lab') || (typeof window !== 'undefined' && !!window.SC_LAB));
     this.signs = this.lab ? new Signs(this) : null;
+    // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car
+    this.fuse = this.lab ? new Fuse(this) : null;
     this.freedraw = this.classic ? null : new FreeDraw(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
@@ -1082,6 +1085,7 @@ export class Game {
       if (this.gadgets) this.gadgets.update(dt);
       if (this.freedraw) this.freedraw.update(dt);
       if (this.signs) this.signs.update(dt);
+      if (this.fuse) this.fuse.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -1120,7 +1124,13 @@ export class Game {
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
         : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
-      this.camRig.update(dt, v.pos, opt);
+      // (ROADMAP 11.20: the pen out in a car - a step back and lower, the whole car in the middle
+      // with room round it, over it and under it to draw its parts on)
+      this.fzFrame = damp(this.fzFrame || 0, this.fuse && this.freedraw.isOpen ? 1 : 0, 5, dt);
+      if (this.fzFrame > 0.01) {
+        const k = this.fzFrame;
+        this.camRig.update(dt, v.pos, { ...opt, dist: opt.dist * (1 + 0.22 * k), height: opt.height * (1 - 0.42 * k) });
+      } else this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
@@ -1191,6 +1201,7 @@ export class Game {
       this.signals.draw(this.camera.position);
       this.vehicles.draw(this.cars);
       this.cars.end();
+      if (this.fuse) this.fuse.draw(fr, dt);
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
       // (the lighthouse's light going round at night: world/mainland/landmarks.js)
@@ -2048,7 +2059,8 @@ export class Game {
     this.hud.setPrompt(prompt);
     // (not with ?classic, on a phone: ▼ crouches on foot and dives in the water; ▲ comes up)
     if (this.touch && !this.classic) {
-      const fl = p.inVehicle && p.inVehicle.flies;
+      // (ROADMAP 11.20: a spring, a rotor, a balloon drawn onto the car - ▲ jumps, lifts it)
+      const fl = p.inVehicle && (p.inVehicle.flies || p.inVehicle.fuseUp);
       // (the fists' guard: on foot with the fists out, ROADMAP 5.4)
       const fists = p.mode === 'foot' && !!this.weapons.current.def.bare;
       const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}`;

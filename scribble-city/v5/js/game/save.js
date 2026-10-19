@@ -128,6 +128,8 @@ export class SaveGame {
         fuel: o.fuel === undefined ? null : o.fuel, dirt: o.dirt === undefined ? null : o.dirt, kept: !!o.kept,
         // (one drawn freehand: its drawing, to build it again - ROADMAP 11.6)
         drawn: o.drawn || null,
+        // (the parts drawn onto it: ROADMAP 11.20)
+        fz: g.fuse ? g.fuse.saveVeh(o) : undefined,
       })),
       world: { gone, spots: objs.spots.map((s) => ({ x: s.x, y: s.y, z: s.z, r: s.r })) },
       hour: g.daynight ? g.daynight.hour : 18.3,
@@ -327,6 +329,7 @@ export class SaveGame {
       v.kept = !!it.kept;
       v.hp = Math.min(v.maxHp, it.hp);
       v.alt = it.alt || 0;
+      if (it.fz && g.fuse) g.fuse.loadVeh(v, it.fz);
       if (it.mine) mine = v;
     }
     if (mine) g.enterVehicle(mine);

@@ -137,7 +137,9 @@ export class FreeDraw {
     // look of it: as drawn, or polished; the parts the game would add, taken away (noImp)
     this.engLevel = 'tidy';
     this.engOn = new Set();
-    this.look = 'faithful';
+    // (ROADMAP 11.20, the lab: polished first - your layout, built as the game's own parts; as drawn
+    // is a choice)
+    this.look = game.lab ? 'polished' : 'faithful';
     this.noImp = new Set();
     // (ROADMAP 11.15) the parts that work together that the player has made: each found once, a
     // reward (game/combos.js)
@@ -170,6 +172,18 @@ export class FreeDraw {
         <div><svg viewBox="0 0 24 24"><path d="M12 5 a1.6 1.6 0 1 0 0.01 0 M12 8 L12 14 M9 10.5 L15 10.5 M12 14 L10 19 M12 14 L14 19"/><ellipse class="red" cx="12" cy="12" rx="7.5" ry="9.5"/></svg>לולאה סביב אויבים — קשורים</div>
         <div><svg viewBox="0 0 24 24"><path class="red" d="M6 15 C3 9 10 4 14 7 C18 10 11 18 7 14 C4 10 13 4 17 9 C21 14 13 21 9 17 C6 13 15 7 19 12 C21 16 15 20 12 18"/></svg>קשקוש — ענן דיו</div>
         <div><svg viewBox="0 0 24 24"><path d="M14 4 L21 4 L21 21 M14 4 L14 21"/><path d="M5 17 a1.4 1.4 0 1 0 0.01 0 M5 19 L5 22"/><path class="red" d="M6 18 L15 5"/></svg>קו מכם לגג — חבל</div>
+      </div>
+      <div class="fd-fuse hidden" id="fd-fuse"><b>הרכבה — חלק בקו אחד, על משהו</b>
+        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/></svg>גלגל — עיגול, נמוך</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 13 L21 9 L21 13 Z"/></svg>כנף — צורה צרה לצד</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 6 L21 6 M12 6 L12 11"/><rect x="7" y="11" width="10" height="7" rx="2"/></svg>רוטור — קו ישר מעל</div>
+        <div><svg viewBox="0 0 24 24"><path d="M4 12 L8 8 L11 15 L14 7 L17 15 L21 10"/></svg>סילון — זיגזג מאחור</div>
+        <div><svg viewBox="0 0 24 24"><path d="M6 20 C2 18 7 15 12 16 C17 17 20 14 16 12 C12 10 7 12 6 10 C5 7 11 6 15 7 C19 8 19 4 15 3"/></svg>קפיץ — סליל לולאות מתחת</div>
+        <div><svg viewBox="0 0 24 24"><rect x="3" y="13" width="9" height="6" rx="1.5"/><path d="M10 14 L21 9"/></svg>קנה — קו שיוצא ממנו</div>
+        <div><svg viewBox="0 0 24 24"><path d="M4 18 C8 6 16 6 20 18"/></svg>להב — קשת</div>
+        <div><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="11" rx="2"/><path d="M6 15 L8 10 L10 15 L12 10 L14 15 L16 10 L18 15"/></svg>שריון — קווקוו עליו</div>
+        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M12 13 L12 21"/></svg>בלון — עיגול מעליו</div>
+        <div><svg viewBox="0 0 24 24"><path d="M7 4 L7 13 C7 20 17 20 17 13 L17 4"/></svg>מגנט — U</div>
       </div>
       <div class="fd-parts" id="fd-parts"></div>
       <div class="fd-pmenu hidden" id="fd-pmenu"></div>
@@ -210,6 +224,7 @@ export class FreeDraw {
     this.altsEl = $('fd-alts');
     this.hintEl = $('fd-hint');
     this.signsEl = $('fd-signs');
+    this.fuseEl = $('fd-fuse');
     this.toolsEl = $('fd-tools');
     this.makeBtn = $('fd-make');
     this.menuEl = $('fd-menu');
@@ -240,6 +255,7 @@ export class FreeDraw {
         // (synthetic pointers)
       }
       this.menu(false);
+      this.autoShut = 0;
       // (on a part's name: a tap there is the next thing it could be, a long press - or its ▾ - its
       // whole menu (ROADMAP 11.15); drawn on from it, it is a line as any. On a name the game added:
       // taken away)
@@ -442,11 +458,13 @@ export class FreeDraw {
     const game = this.game;
     const p = game.player;
     if (this.isOpen) return;
-    if (p.inVehicle) {
+    // (ROADMAP 11.20: in a car, the pen draws parts onto it - game/fuse.js)
+    const inCar = !!(game.fuse && p.inVehicle && p.mode === 'vehicle');
+    if (p.inVehicle && !inCar) {
       game.hud.toast('צריך לצאת מהרכב כדי לצייר', 'info');
       return;
     }
-    if (p.mode !== 'foot' || game.state !== 'play') return;
+    if ((p.mode !== 'foot' && !inCar) || game.state !== 'play') return;
     this.isOpen = true;
     this.stats.opened++;
     this.el.classList.remove('hidden');
@@ -567,6 +585,31 @@ export class FreeDraw {
       sg.run(m);
       return;
     }
+    // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car: on at once
+    const fz = this.game.fuse;
+    const fm = fz && fz.match(this.strokes.map((s) => s.raw || s.p), this.U);
+    if (fm) {
+      this.flyAway();
+      this.strokes = [];
+      this.force = null;
+      this.bake();
+      this.read();
+      this.render();
+      // (on a phone, in a car: the pen away by itself a moment after - the fly and jump buttons back
+      // under the thumb; another line before that keeps it out)
+      if (fz.run(fm, c.c) && this.game.touch && this.game.player.inVehicle) this.autoShut = performance.now() + 1500;
+      return;
+    }
+    // (in a car only parts go on: a line that is not one goes)
+    if (fz && this.game.player.inVehicle) {
+      this.flyAway();
+      this.strokes = [];
+      this.bake();
+      this.read();
+      this.render();
+      fz.say('לא נקרא כחלק — ציירו אותו על המכונית', 'bad');
+      return;
+    }
     const s = this.strokes[this.strokes.length - 1];
     const unit = 1 / this.U;
     const prev = this.strokes.slice(0, -1).map((o) => ({ p: o.p, kind: o.k || 'curve', closed: !!o.closed, c: o.circ }));
@@ -597,6 +640,8 @@ export class FreeDraw {
 
   undo() {
     if (this.cur) return;
+    // (ROADMAP 11.20: nothing on the page - the part just drawn onto a thing comes off, its ink back)
+    if (!this.strokes.length && this.game.fuse && this.game.fuse.undo()) return;
     this.strokes.pop();
     delete this.over[this.strokes.length];
     if (!this.strokes.length) this.face = null;
@@ -1219,8 +1264,14 @@ export class FreeDraw {
     if (this.chipsDirty) this.showChips();
     this.tagEl.classList.toggle('hidden', !has || !!PR || !!PW || !!PG);
     this.hintEl.classList.toggle('gone', has || !!this.cur);
-    this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur);
-    this.hintEl.textContent = game.lab
+    this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur || !!this.game.player.inVehicle);
+    // (ROADMAP 11.20) the parts you can draw onto things, how each is drawn
+    this.fuseEl.classList.toggle('hidden', !this.game.fuse || has || !!this.cur);
+    this.hintEl.textContent = game.fuse && game.player.inVehicle
+      ? game.touch
+        ? 'ציירו חלק על המכונית — גלגל, כנף, רוטור, סילון, קפיץ, קנה... · האגודל ממשיך לנהוג'
+        : 'ציירו חלק על המכונית (או על מכונית אחרת) — הוא מתחבר מיד · WASD ממשיכים לנהוג · Q סוגרים'
+      : game.lab
       ? game.touch
         ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'
         : 'ציירו באוויר · כל קו מקבל שם: לחיצה על השם — התפקיד הבא, ▾ — כל האפשרויות · נבנה בדיוק כמו שציירתם · Q יוצרים'
@@ -1873,6 +1924,13 @@ export class FreeDraw {
     const v = p.inVehicle;
     if (v && v.drawn) jetFlames(game, v, dt);
     if (!this.isOpen) return;
+    if (this.autoShut && performance.now() > this.autoShut) {
+      this.autoShut = 0;
+      if (!this.cur && !this.strokes.length) {
+        this.close();
+        return;
+      }
+    }
     // (ROADMAP 11.9) the lines turning: on with it, and onto the page when done
     let turning = false;
     let done = false;
@@ -1896,18 +1954,19 @@ export class FreeDraw {
     // (ROADMAP 11.10) the model by the drawing, turning
     if (this.view && ((this.PR && this.PR.ok) || this.PW || this.PG)) this.view.frame(dt);
     // not on foot any more (in a car, swimming, down...), or the game stopped: the pen goes
-    if (p.mode !== 'foot' || p.inVehicle || game.state !== 'play' || (game.dialog && game.dialog.open)) {
+    const inCar = !!(game.fuse && p.inVehicle && p.mode === 'vehicle');
+    if ((p.mode !== 'foot' && !inCar) || (p.inVehicle && !inCar) || game.state !== 'play' || (game.dialog && game.dialog.open)) {
       this.close();
       return;
     }
-    // the camera turns after where you run (the mouse is drawing)
+    // the camera turns after where you run (the mouse is drawing; in a car it follows the car)
     const vx = p.vel.x;
     const vz = p.vel.z;
-    if (Math.hypot(vx, vz) > 1.2) {
+    if (!inCar && Math.hypot(vx, vz) > 1.2) {
       const d = angleDiff(game.camRig.yaw, Math.atan2(vx, vz));
       if (Math.abs(d) < 2.3) game.camRig.yaw += d * (1 - Math.exp(-1.7 * dt));
     }
-    game.camRig.pitch += (-0.12 - game.camRig.pitch) * (1 - Math.exp(-2 * dt));
+    if (!inCar) game.camRig.pitch += (-0.12 - game.camRig.pitch) * (1 - Math.exp(-2 * dt));
     // (the ink bar moves while it fills back up; the drawing is not read again for it)
     if (game.ink && Math.floor(game.time * 4) !== this.inkTick) {
       this.inkTick = Math.floor(game.time * 4);
@@ -1917,7 +1976,7 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel, engOn: this.engOn.size ? [...this.engOn] : undefined, look: this.look, noImp: this.noImp.size ? [...this.noImp] : undefined, found: this.found.size ? [...this.found] : undefined };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel, engOn: this.engOn.size ? [...this.engOn] : undefined, look: this.look, lookV: this.game.lab ? 2 : undefined, noImp: this.noImp.size ? [...this.noImp] : undefined, found: this.found.size ? [...this.found] : undefined };
   }
 
   load(o) {
@@ -1931,7 +1990,9 @@ export class FreeDraw {
     // (ROADMAP 11.15: one saved engineered - the hand's slips put right, and all it offered taken)
     this.engLevel = o.eng === 'raw' ? 'raw' : 'tidy';
     this.engOn = new Set(Array.isArray(o.engOn) ? o.engOn.filter((k) => EN_STEPS.includes(k)) : o.eng === 'eng' || o.eng === undefined ? EN_STEPS : []);
-    this.look = LOOKS.some(([k]) => k === o.look) ? o.look : o.look === undefined && o.eng !== undefined ? 'polished' : 'faithful';
+    // (ROADMAP 11.20: polished by default now - a choice saved after it stays)
+    if (this.game.lab) this.look = o.lookV === 2 && LOOKS.some(([k]) => k === o.look) ? o.look : 'polished';
+    else this.look = LOOKS.some(([k]) => k === o.look) ? o.look : o.look === undefined && o.eng !== undefined ? 'polished' : 'faithful';
     this.noImp = new Set(Array.isArray(o.noImp) ? o.noImp.filter((t) => PART[t]) : []);
     this.found = new Set(Array.isArray(o.found) ? o.found.filter((k) => typeof k === 'string') : []);
     this.showCats();

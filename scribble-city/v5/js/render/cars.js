@@ -747,6 +747,8 @@ export function drawWipers(fr, kind, x, y, z, yaw, sweep, seed) {
   }
 }
 
+const NO_WHEELS = [];
+
 export class CarRenderer {
   constructor(scene) {
     const S = (o) => makeSurface(o);
@@ -935,7 +937,8 @@ export class CarRenderer {
       this.seats(K, _m);
     }
     // the wheels: they roll, the front ones steer
-    const wheels = P.b.wheels;
+    // (ROADMAP 11.20: none of its own - wheels drawn onto it go round in their place, game/fuse.js)
+    const wheels = o.noWheels ? NO_WHEELS : P.b.wheels;
     for (let wi = 0; wi < wheels.length; wi++) {
       const w = wheels[wi];
       _e.set(o.spin || 0, w.z > 0 ? o.steer || 0 : 0, 0, 'YXZ');
