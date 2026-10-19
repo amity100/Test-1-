@@ -152,15 +152,32 @@ export class Curbs {
         // (the south curb: the cars face east, with the traffic beside them; the north curb: west)
         const z = s.z + side * 4.75;
         const yaw = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+        // (and the curb kept clear where something comes out onto the street: the mouth of the
+        // block's alley - its middle few metres, where the alley is a wide yard - and a driveway,
+        // or a lot's way in, where a car stands nose to the street just inside it)
+        const keep = [];
+        if (bc) {
+          for (const a of bc.alleys || []) {
+            if (a.z0 > s.z + s.half + 14 || a.z1 < s.z - s.half - 14) continue;
+            const wide = a.x1 - a.x0 > 10;
+            const m = (a.x0 + a.x1) / 2;
+            keep.push(wide ? m - 4.3 : a.x0 - 0.8, wide ? m + 4.3 : a.x1 + 0.8);
+          }
+          for (const sp of bc.parked || []) {
+            if (Math.abs(Math.sin(sp.yaw)) > 0.5 || Math.abs(sp.z - z) > 15) continue;
+            keep.push(sp.x - 1.7, sp.x + 1.7);
+          }
+        }
         let x = xa + r() * 2;
         while (x < xb) {
           const spec = curbSpec(r, b.district);
           const hl = HALF_LEN[spec.kind] || 2.3;
           // (a gap where a car has just left, a driveway, a hydrant)
-          const take = r() < full;
+          let take = r() < full;
           const jx = (r() - 0.5) * 0.5;
           const jz = (r() - 0.5) * 0.22;
           const jy = (r() - 0.5) * 0.05;
+          for (let k = 0; take && k < keep.length; k += 2) if (x + 2 * hl + jx > keep[k] && x + jx < keep[k + 1]) take = false;
           if (take && x + hl < xb + 2.4) {
             const cx = x + hl + jx;
             const cz = z + jz;

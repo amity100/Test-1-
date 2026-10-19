@@ -297,8 +297,9 @@ export class Traffic {
     const fwd = cam.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
     const near = NODES.filter((n) => Math.hypot(n.x - p.x, n.z - p.z) < maxD + 80);
     if (!near.length) return null;
-    // (o.toward: heading for p - the fire engine, ROADMAP 8.4)
-    for (let tries = 0; tries < (o.toward ? 30 : 8); tries++) {
+    // (o.toward: heading for p - the fire engine, ROADMAP 8.4; o.ahead: on your side of the city,
+    // the way you look - GTA IV, the mainland: not far behind you, where nobody sees it)
+    for (let tries = 0; tries < (o.toward ? 30 : o.ahead ? 12 : 8); tries++) {
       const A = near[Math.floor(Math.random() * near.length)];
       const B = A.nb[Math.floor(Math.random() * A.nb.length)];
       if (o.toward && Math.hypot(B.x - p.x, B.z - p.z) >= Math.hypot(A.x - p.x, A.z - p.z)) continue;
@@ -321,6 +322,11 @@ export class Traffic {
         const vx = q[0] - cam.position.x;
         const vz = q[1] - cam.position.z;
         if ((vx * fwd.x + vz * fwd.z) / (Math.hypot(vx, vz) || 1) > 0.2) continue;
+      }
+      if (o.ahead && d > 60) {
+        const vx = q[0] - cam.position.x;
+        const vz = q[1] - cam.position.z;
+        if ((vx * fwd.x + vz * fwd.z) / (Math.hypot(vx, vz) || 1) < -0.3) continue;
       }
       if (this.list.some((c) => Math.hypot(c.pos.x - q[0], c.pos.z - q[1]) < (spec && (spec.kind === 'bus' || spec.curb || spec.emergency) ? 18 : 10))) continue;
       // (what drives about: the city's own mix; with the trucks, the motorbikes... game/fleet.js)
@@ -438,10 +444,29 @@ export class Traffic {
         this.list = this.list.filter((c) => !c.gone);
       }
       const first = game.state === 'title' || this.time < 3;
+      if (main && !first && n >= max - 1) {
+        // (GTA IV) the cars are spent where you look: two of those far behind you, out of sight
+        // (nothing they are in the middle of - a fare, a delivery, a stop), go, and the new ones
+        // come in ahead of you instead
+        let k = 0;
+        for (const c of this.list) {
+          if (k >= 2) break;
+          if (c.police || c.bus || c.emergency || c.delivery || c.garbage || c.fare || c.pickup || c.drop || c.pulled || c.seekPark || c.mode !== 'drive' || !c.driver || c.poofT !== undefined) continue;
+          const vx = c.pos.x - cam.x;
+          const vz = c.pos.z - cam.z;
+          const d = Math.hypot(vx, vz) || 1;
+          if (d < 75 || (vx * fwd.x + vz * fwd.z) / d > -0.35) continue;
+          this.removeCar(c);
+          c.gone = true;
+          n--;
+          k++;
+        }
+        if (k) this.list = this.list.filter((c) => !c.gone);
+      }
       for (let k = 0; k < 3 && n < max; k++) {
         // now and then a city bus
         const spec = buses < 2 && Math.random() < 0.1 ? { kind: 'bus', color: BUS_COLORS[Math.floor(Math.random() * BUS_COLORS.length)] } : null;
-        if (this.spawnCar(p, first ? 30 : main ? 40 : 60, main ? 140 : 190, spec, { anywhere: first })) {
+        if (this.spawnCar(p, first ? 30 : main ? 40 : 60, main ? 140 : 190, spec, { anywhere: first, ahead: main && !first })) {
           n++;
           if (spec) buses++;
         }
@@ -1409,8 +1434,26 @@ export class Traffic {
     const cam = this.game.camera;
     const fwd = cam.getWorldDirection(this._fwd3 || (this._fwd3 = new THREE.Vector3()));
     this._blink = Math.floor(this.game.time * 5) % 2;
+    // (GTA IV: what is in the width of the view, and a little - the camera's own angle, so the
+    // phone's too; cosA -1: everything in front, looking straight down)
+    const hl = Math.hypot(fwd.x, fwd.z) || 1;
+    const hx = fwd.x / hl;
+    const hz = fwd.z / hl;
+    let cosA = -1;
+    if (hl > 0.5 && cam.isPerspectiveCamera) {
+      const half = Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect) + 0.3;
+      if (half < Math.PI / 2) cosA = Math.cos(half);
+    }
     const list = this.list;
-    for (let i = 0; i < list.length; i++) if (!list[i].gone && this.inSight(list[i], 260, camPos, fwd)) this.drawOne(cars, list[i]);
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (c.gone || !this.inSight(c, 260, camPos, fwd)) continue;
+      const vx = c.pos.x - camPos.x;
+      const vz = c.pos.z - camPos.z;
+      const d = Math.hypot(vx, vz);
+      if (d > 14 && vx * hx + vz * hz < cosA * d - c.halfLen - 6) continue;
+      this.drawOne(cars, c);
+    }
     // in the rain the wipers of the cars near you go (the parked ones' stay down)
     const w = this.game.weather;
     const rain = w ? w.cur.rain : 0;
@@ -1432,6 +1475,8 @@ export class Traffic {
     // car), with room kept for the cars you drive and the motorbikes; more of them wanted than
     // there was room for, and the radius is drawn in a little for next time (out again when there
     // is room)
+    // (and only those in the width of the view, as above: a street's worth of them off to the
+    // side of the screen are not drawn for nothing)
     const parked = this.parked;
     const T = cars.tyres;
     const room = T && T.cap ? Math.floor((T.cap - T.n - 48) / 4) : 1e9;
@@ -1445,7 +1490,7 @@ export class Traffic {
       const vx = c.pos.x - camPos.x;
       const vz = c.pos.z - camPos.z;
       const d2 = vx * vx + vz * vz;
-      if (d2 > R2 || (d2 > 196 && vx * fwd.x + vz * fwd.z < -12)) continue;
+      if (d2 > R2 || (d2 > 196 && vx * hx + vz * hz < cosA * Math.sqrt(d2) - 6)) continue;
       wanted++;
       if (shown >= room) continue;
       this.drawOne(cars, c);

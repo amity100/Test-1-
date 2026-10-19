@@ -503,6 +503,9 @@ export class Fleet {
     // where the bag goes in: behind the hopper
     const hx = c.pos.x - fx * (c.halfLen + 0.95);
     const hz = c.pos.z - fz * (c.halfLen + 0.95);
+    // (GTA IV: the mainland's curbs are lined with parked cars - the way to the sidewalk is through
+    // the gap between two of them, as the delivery drivers go: game/deliveries.js wayIn)
+    const way = G.way;
     if (G.state === 'off') {
       // down off the step
       G.x = sx;
@@ -511,13 +514,17 @@ export class Fleet {
       if (G.t < -0.3) {
         G.state = 'go';
         G.t = 0;
+        G.way = this.deliveries.wayIn(c, [sx, sz], fx, fz, rx, rz) || [];
+        G.wi = 0;
       }
+    } else if (G.state === 'go' && way && G.wi < way.length && G.t > -10) {
+      if (walk(way[G.wi][0], way[G.wi][1], 2.2)) G.wi++;
     } else if (G.state === 'go') {
       // to the bin (stopping short of it)
       const dx = bin.x - G.x;
       const dz = bin.z - G.z;
       const l = Math.hypot(dx, dz) || 1;
-      if (walk(bin.x - (dx / l) * 0.55, bin.z - (dz / l) * 0.55, 2.2) || G.t < -8) {
+      if (walk(bin.x - (dx / l) * 0.55, bin.z - (dz / l) * 0.55, 2.2) || G.t < -14) {
         G.state = 'grab';
         G.t = 0;
         f.yaw = Math.atan2(dx, dz);
@@ -531,8 +538,11 @@ export class Fleet {
         G.state = 'back';
         G.t = 0;
       }
+    } else if (G.state === 'back' && way && G.wi > 0 && G.t > -10) {
+      // (back the way it came, through the same gap)
+      if (walk(way[G.wi - 1][0], way[G.wi - 1][1], 2.2)) G.wi--;
     } else if (G.state === 'back') {
-      if (walk(hx, hz, 2.2) || G.t < -8) {
+      if (walk(hx, hz, 2.2) || G.t < -14) {
         G.state = 'toss';
         G.t = 0;
         f.yaw = c.yaw;
@@ -601,6 +611,7 @@ export class Fleet {
     const G = c.garbage;
     G.state = 'drive';
     G.bin = null;
+    G.way = null;
     G.t = 3;
     if (G.man) {
       G.man.carryL = null;

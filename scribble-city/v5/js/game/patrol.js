@@ -38,7 +38,9 @@ export class Patrol {
     if ((c.tstopCool || 0) > game.time || (game.police && (game.police.hostile || game.police.level > 0))) return;
     if (!this.fleet.near(c, 140) || Math.random() > 0.3) return;
     const T = this.ahead(c);
-    if (T) this.start(c, T);
+    // (only one in the curb lane, with room to ease over a little a way on: nobody is stopped in
+    // the middle of an avenue)
+    if (T && this.traffic.curbRoom(T, 10) > 0.1) this.start(c, T);
   }
 
   // the car in front in its lane, a little way on, that may be pulled over
@@ -166,8 +168,11 @@ export class Patrol {
     const game = this.game;
     const civs = game.civilians;
     S.t += dt;
-    // (called off: the car gone or wrecked, you wanted, the officer hurt or frightened)
-    const gone = !T || T.gone || T.poofT !== undefined || T.wrecked || this.traffic.list.indexOf(T) < 0 || !T.pulled || T.pulled.by !== c;
+    // (called off: the car gone or wrecked, you wanted, the officer hurt or frightened - the car
+    // stopped matters only till it is let go: once the officer turns back to the patrol car it
+    // pulls out and is on its way, and nothing is called off for that)
+    const held = S.phase !== 'back' && S.phase !== 'leave';
+    const gone = held && (!T || T.gone || T.poofT !== undefined || T.wrecked || this.traffic.list.indexOf(T) < 0 || !T.pulled || T.pulled.by !== c);
     const hot = game.police && (game.police.hostile || game.police.level > 0);
     const cop = S.cop;
     const lost = cop && (!cop.alive || cop.panicT > 0 || civs.list.indexOf(cop) < 0 || cop.ctrl !== S.ctrl);
