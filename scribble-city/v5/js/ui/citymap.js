@@ -2,7 +2,18 @@ import { AVES, STREETS, BLOCK_TYPES, DISTRICT_NAMES, blockRect, westRect, distri
 // (v5) where the bay begins, west of the city
 const BAY_X = WEST_EDGE - 30;
 import { NODES } from '../world/roads.js';
-import { MAINLAND_ON, M_AVES, M_STREETS, M_BLOCKS, CAUSEWAYS, DISTRICTS, PLACES, placeBlock, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z } from '../world/mainland/plan.js';
+import { MAINLAND_ON, M_AVES, M_STREETS, M_BLOCKS, CAUSEWAYS, DISTRICTS, PLACES, placeBlock, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z, PIER_M, JETTY, MARINA } from '../world/mainland/plan.js';
+import { ARENA } from '../world/mainland/landmarks.js';
+
+// (v5, ROADMAP 11.17) what the mainland's places are, in a line each (the map's note under the name)
+const PLACE_NOTES = {
+  pier: 'Palisade Pier: גלגל ענק, רכבת הרים עם לולאה, קרוסלה, משחקייה, דוכני אוכל, דייגים בקצה',
+  lighthouse: 'Point Lighthouse: בקצה שובר הגלים. בלילה האור שלו מסתובב מעל הים',
+  pointpark: 'פארק הלשון: מדשאות, דקלים, מגרש משחקים, בית קפה והדרך אל המגדלור',
+  arena: 'Bayfront Arena: האצטדיון על המפרץ. הערב: WAVE נגד PENS',
+  marina: 'Marina Market: שוק על המים, רציפים וסירות. בטיילת המפרץ',
+  observatory: 'Inkwood Observatory: על הגבעות ליד השלט. כיפות נחושת, ובלילה הוא מואר מעל העיר',
+};
 import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';
 import { sticker, pin } from './mapglyphs.js';
@@ -498,7 +509,8 @@ export class CityMap {
         const b = placeBlock(pl);
         const x = pl.at ? pl.at[0] : b ? b.cx : 0;
         const z = pl.at ? pl.at[1] : b ? b.cz : 0;
-        add({ cat: 'place', glyph: pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : 'fountain', x, z, name: pl.heb, note: pl.name });
+        const glyph = pl.id === 'pier' ? 'wheel' : pl.id === 'lighthouse' ? 'lighthouse' : pl.id === 'observatory' ? 'dome' : pl.kind === 'arena' ? 'arena' : pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : 'fountain';
+        add({ cat: 'place', glyph, x, z, name: pl.heb, note: PLACE_NOTES[pl.id] || pl.name });
       }
       add({ cat: 'place', glyph: 'beach', x: -1500, z: 600, name: 'חוף פליסייד', note: 'הטיילת, החול והאוקיינוס בדרום היבשה' });
       // (v5, ROADMAP 11.17) DRAW YOURSELF A FRIEND on the mainland, the plots to draw a home on, and
@@ -647,7 +659,7 @@ export class CityMap {
     g.globalAlpha = 1;
   }
 
-  // (v5, ROADMAP 11.17) the mainland: its ground and blocks, its parks, the bayfront's lawn, the
+    // (v5, ROADMAP 11.17) the mainland: its ground and blocks, its parks, the bayfront's lawn, the
   // beach on its south coast, the hills round it
   drawMainland(g, vis, px) {
     if (!MAINLAND_ON || vis.x0 > SHORE_X) return;
@@ -683,6 +695,30 @@ export class CityMap {
     g.moveTo(SHORE_X, NORTH_Z - 70);
     g.lineTo(SHORE_X, SEA_Z);
     g.lineTo(WEST_X - 60, SEA_Z);
+    g.stroke();
+    // the pier out over the ocean, the jetty and its lighthouse, the marina's docks, the arena
+    g.lineWidth = px;
+    g.strokeStyle = COL.farInk;
+    g.fillStyle = '#c99a78';
+    for (const r of PIER_M.parts) {
+      g.fillRect(r.x0, r.z0, r.x1 - r.x0, r.z1 - r.z0);
+      g.strokeRect(r.x0, r.z0, r.x1 - r.x0, r.z1 - r.z0);
+    }
+    for (const r of MARINA.docks) g.fillRect(r.x0, r.z0, r.x1 - r.x0, r.z1 - r.z0);
+    g.fillStyle = '#b8b2aa';
+    g.fillRect(JETTY.x - JETTY.half - 2, JETTY.z0, JETTY.half * 2 + 4, JETTY.z1 - JETTY.z0);
+    g.beginPath();
+    g.arc(JETTY.light[0], JETTY.light[1], JETTY.r + 1.5, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(JETTY.light[0], JETTY.light[1], 3.2, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#eef2f8';
+    g.beginPath();
+    g.ellipse(ARENA.x, ARENA.z, ARENA.a, ARENA.b, 0, 0, Math.PI * 2);
+    g.fill();
     g.stroke();
   }
 

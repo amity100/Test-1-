@@ -87,6 +87,9 @@ import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Signs } from './signs.js';
+import { drawLandmarks } from '../world/mainland/landmarks.js';
+import { Fairground } from './fairground.js';
+import { ArenaGame } from './arenagame.js';
 
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
@@ -193,6 +196,10 @@ export class Game {
     this.streetlife = new StreetLife(this);
     // (v5, ROADMAP 11.17: the friend you drew - her name, her words, her home: game/friend.js)
     this.friend = this.classic ? null : new Friendship(this);
+    // (v5, ROADMAP 11.17: the rides on Palisade Pier - the big wheel, the coaster, the carousel)
+    this.fair = this.classic || !this.world.landmarks ? null : new Fairground(this);
+    // (v5, ROADMAP 11.17: game night at the Bayfront Arena - the players, the crowd, the score)
+    this.arenaGame = this.classic ? null : new ArenaGame(this);
     // (v5, ROADMAP 11.17: the people of the mainland's malls)
     this.mallLife = new MallLife(this);
     this.vignettes = new Vignettes(this);
@@ -997,7 +1004,7 @@ export class Game {
       }
     }
     this.ambient.update(dt);
-    if (this.world.update) this.world.update(dt, this.time);
+    if (this.world.update) this.world.update(dt, this.time, this.camera.position);
     // (v5, ROADMAP 11.17) the mainland built where you are going, let go of where you have been
     if (this.world.mainland) {
       const a = this.anchorPos();
@@ -1039,6 +1046,8 @@ export class Game {
       this.farCrowd.update(dt);
       this.streetlife.update(dt);
       if (this.friend) this.friend.update(dt);
+      if (this.fair) this.fair.update(dt);
+      if (this.arenaGame) this.arenaGame.update(dt);
       this.mallLife.update(dt);
       this.routines.update(dt);
       this.workers.update(dt);
@@ -1086,6 +1095,8 @@ export class Game {
       const v = this.freeCam;
       this.camera.position.set(v[0], v[1], v[2]);
       this.camera.rotation.set(v[4] || 0, v[3] || 0, 0, 'YXZ');
+    } else if (this.fair && this.fair.cam(dt)) {
+      // (from the coaster's front car: game/fairground.js)
     } else if (player.inVehicle && this.hoodCam && !this.classic && !player.inVehicle.drawn && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike')) {
       this.hoodView(player.inVehicle, dt);
     } else if (player.inVehicle) {
@@ -1121,7 +1132,9 @@ export class Game {
         const aim = wd.kind === 'gun' && input.aim;
         const zoom = aim && wd.zoom ? wd.zoom : 1;
         this.camRig.lookK = 1 / zoom;
-        this.camRig.update(dt, player.pos, { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
+        // (on the big wheel or the carousel: further back, the ride and the view round it)
+        const ro = (this.fair && this.fair.camOpts()) || (this.arenaGame && this.arenaGame.camOpts());
+        this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
       }
     }
     const tipsy = this.inkwell.tipsy;
@@ -1160,6 +1173,7 @@ export class Game {
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
       this.farCrowd.draw(this.camera.position);
+      if (this.arenaGame) this.arenaGame.draw();
       this.streetlife.draw(fr);
       this.workers.draw(fr);
       this.events.draw(fr);
@@ -1174,6 +1188,8 @@ export class Game {
       this.cars.end();
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
+      // (the lighthouse's light going round at night: world/mainland/landmarks.js)
+      if (this.world.landmarks) drawLandmarks(this.world.landmarks, fr, this.daynight ? this.daynight.night : 0);
       if (this.heli && this.heli.on) {
         this.heli.draw();
         // (its light on the ground, after dark)
@@ -1267,7 +1283,7 @@ export class Game {
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -1963,6 +1979,16 @@ export class Game {
       // somebody near you needs a hand (game/events.js)
       enter = true;
       prompt = touch ? this.events.prompt() : `E — ${this.events.prompt()}`;
+    } else if (p.mode === 'foot' && this.fair && this.fair.target()) {
+      // (a ride on the pier: game/fairground.js)
+      enter = true;
+      const rt = this.fair.target();
+      prompt = touch ? rt.label.replace('E — ', '') : rt.label;
+    } else if (p.mode === 'foot' && this.arenaGame && this.arenaGame.target()) {
+      // (a seat at the edge of the court: game/arenagame.js)
+      enter = true;
+      const at = this.arenaGame.target();
+      prompt = touch ? at.label.replace('E — ', '') : at.label;
     } else if (p.mode === 'foot' && this.friend && this.friend.target()) {
       // (the friend you drew, beside you: game/friend.js)
       enter = true;

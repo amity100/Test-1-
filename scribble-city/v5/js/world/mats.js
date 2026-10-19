@@ -42,6 +42,8 @@ export function cityMaterials() {
     wetSand: B({ kind: 'ground', vcolor: true, color: new THREE.Color(1, 1, 1), ang: 0.3, line: 0.4 }),
     foam: B({ kind: 'ground', vcolor: true, color: new THREE.Color(1, 1, 1), ang: 1.2, line: 0.4, density: 1.1 }),
     deck: B({ kind: 'ground', map: woodDeckTexture(), ang: 1.5708, line: 0.7 }),
+    // (v5, ROADMAP 11.17: Palisade Pier's planks, older and darker than the island's)
+    pierDeck: B({ kind: 'ground', map: woodDeckTexture(['#94705a', '#85634e', '#a07a60']), ang: 1.5708, line: 0.7 }),
     water: B({ kind: 'water', color: srgb(0.18, 0.2, 0.42), refl: true, wet: 1, line: 0 }),
     pool: B({ kind: 'water', color: srgb(0.2, 0.62, 0.78), refl: true, wet: 0.9, line: 0.3 }),
     // (v5, ROADMAP 11.2ג) a pool up on a roof: the street's mirror is not under it

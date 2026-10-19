@@ -520,6 +520,47 @@ export class Audio {
         this.tone('triangle', 660, 990, 0.12, 0.1 * v);
         this.tone('triangle', 880, 1320, 0.14, 0.08 * v, 0.1);
         break;
+      case 'scream':
+        // (v5) the coaster's riders over the top and down the drop: wheee, a few voices
+        for (let i = 0; i < 3; i++) {
+          const f = 620 + i * 170 + Math.random() * 60;
+          this.tone('triangle', f, f * 1.45, 0.55, 0.035 * v, i * 0.06);
+          this.tone('triangle', f * 1.45, f * 0.9, 0.7, 0.03 * v, 0.55 + i * 0.06);
+        }
+        this.hiss(1.1, 0.06 * v, 1400, 0.8, 'bandpass');
+        break;
+      case 'clank':
+        // (v5) the chain pulling the coaster up its lift hill
+        this.tone('square', 900, 700, 0.025, 0.03 * v);
+        this.hiss(0.03, 0.08 * v, 3200, 2, 'highpass');
+        break;
+      case 'buzzer':
+        // (v5) the arena's horn: the end of a quarter, a time-out
+        this.tone('square', 196, 194, 0.95, 0.05 * v);
+        this.tone('sawtooth', 294, 292, 0.95, 0.035 * v);
+        break;
+      case 'swish':
+        // (v5) the ball through the net
+        this.hiss(0.16, 0.16 * v, 5200, 0.9, 'highpass', 0, 2600);
+        break;
+      case 'bounce':
+        // (v5) the ball on the boards
+        this.tone('sine', 150, 82, 0.09, 0.22 * v);
+        this.hiss(0.04, 0.08 * v, 600, 1.2, 'lowpass');
+        break;
+      case 'roar':
+        // (v5) a whole arena on its feet: a long swell of voices
+        this.hiss(1.8, 0.22 * v, 900, 0.6, 'bandpass', 0, 1300);
+        this.hiss(1.4, 0.12 * v, 2400, 0.8, 'bandpass', 0.1, 1800);
+        for (let i = 0; i < 4; i++) {
+          const f = 330 + Math.random() * 260;
+          this.tone('triangle', f, f * 1.3, 0.5, 0.012 * v, 0.05 + i * 0.12);
+        }
+        break;
+      case 'squeak':
+        // (v5) sneakers on the court
+        this.tone('sine', 2300 + Math.random() * 500, 2900, 0.06, 0.03 * v);
+        break;
       case 'radio':
         // (v5) the police radio: a burst of static, the beep
         this.hiss(0.18, 0.12 * v, 2200, 1.4);

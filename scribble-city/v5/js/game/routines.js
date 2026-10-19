@@ -68,6 +68,46 @@ export class Routines {
     // (counted for the tests: who got on a bus, who got off)
     this.boarded = 0;
     this.alighted = 0;
+    // (v5, ROADMAP 11.17) the mainland's benches and the towels on its beach, as their blocks come
+    // and go (the pier's benches, the parks', the beach's)
+    const ml = w.mainland;
+    if (ml && ml.listen) {
+      ml.listen((live, on) => this.blockPlaces(live, on));
+      if (ml.blocks) for (const live of ml.blocks.values()) this.blockPlaces(live, true);
+    }
+  }
+
+  blockPlaces(live, on) {
+    if (!on) {
+      for (const pl of live.places || []) {
+        if (pl.active) this.letGo(pl);
+        const k = this.places.indexOf(pl);
+        if (k >= 0) this.places.splice(k, 1);
+      }
+      live.places = null;
+      return;
+    }
+    const bc = live.bctx;
+    const add = [];
+    for (const b of bc.benches || []) {
+      const fx = Math.sin(b.yaw);
+      const fz = Math.cos(b.yaw);
+      const seats = [-0.42, 0.42].map((u) => ({ x: b.x + fz * u + fx * 0.04, z: b.z - fx * u + fz * 0.04, yaw: b.yaw, who: null }));
+      add.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false, park: live.block.kind === 'park' || live.block.kind === 'point' });
+    }
+    const groups = [];
+    for (const s of bc.seats || []) {
+      if (s.bus) continue;
+      let t = groups.find((o) => Math.hypot(o.x - s.x, o.z - s.z) < 2.2);
+      if (!t) {
+        t = { x: s.x, z: s.z, list: [] };
+        groups.push(t);
+      }
+      t.list.push(s);
+    }
+    for (const t of groups) add.push({ kind: 'cafe', x: t.x, z: t.z, yaw: 0, seats: t.list.map((s) => ({ x: s.x, z: s.z, yaw: s.yaw, who: null })), stands: [], active: false });
+    live.places = add;
+    for (const pl of add) this.places.push(pl);
   }
 
   get budget() {

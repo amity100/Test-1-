@@ -215,6 +215,24 @@ body.air-drawing #ink { display: none !important; }
   filter: url(#wobble2);
   white-space: nowrap;
 }
+/* (v5) the game at the arena: its score under the little map while you are inside */
+#scorebug {
+  position: absolute;
+  top: calc(max(10px, env(safe-area-inset-top)) + 186px);
+  left: max(12px, env(safe-area-inset-left));
+  padding: 2px 14px;
+  font-family: var(--font-hand);
+  font-size: 21px;
+  white-space: nowrap;
+  background: var(--paper-2);
+  border: 2.5px solid var(--ink);
+  border-radius: 10px 8px 12px 9px;
+  pointer-events: none;
+}
+#scorebug .t0 { color: #d8384f; }
+#scorebug .t1 { color: #2457c8; }
+#scorebug span { font-size: 26px; }
+#scorebug i { font-style: normal; opacity: 0.75; margin-left: 8px; font-size: 17px; }
 /* the car radio: the station, what the DJ says, an ad (in the city's own English) */
 #radio {
   position: absolute;
@@ -529,6 +547,7 @@ body.nc #btn-down { bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)
   #goals { width: 200px; font-size: 13px; top: 54px; }
   #goals h4 { font-size: 18px; }
   #minimap-wrap { width: 118px; height: 118px; }
+  #scorebug { top: calc(max(10px, env(safe-area-inset-top)) + 136px); font-size: 17px; }
   #health, #vehicle-hp { min-width: 120px; padding: 4px 8px; }
   #district { font-size: 17px; padding: 4px 8px; }
   #clock { font-size: 17px; padding: 4px 8px; }
@@ -1145,6 +1164,9 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch #bigmsg { top: 18%; font-size: 34px; }
   body.touch #prompt { bottom: max(30px, calc(env(safe-area-inset-bottom) + 24px)); padding: 2px 10px; border-width: 2px; font-size: 15px; }
   body.touch #hidden-tag { bottom: max(64px, calc(env(safe-area-inset-bottom) + 58px)); padding: 2px 10px; border-width: 2px; font-size: 15px; }
+  body.touch #scorebug { top: calc(max(6px, env(safe-area-inset-top)) + 96px); left: max(10px, env(safe-area-inset-left)); font-size: 14px; padding: 0 8px; border-width: 2px; }
+  body.touch #scorebug span { font-size: 17px; }
+  body.touch #scorebug i { font-size: 12px; margin-left: 4px; }
   body.touch #radio { bottom: max(58px, calc(env(safe-area-inset-bottom) + 52px)); max-width: 40vw; padding: 2px 10px; border-width: 2px; font-size: 13px; }
   body.touch #subs { bottom: max(92px, calc(env(safe-area-inset-bottom) + 86px)); max-width: 40vw; }
   body.touch #subs > div { padding: 1px 8px; font-size: 13px; }

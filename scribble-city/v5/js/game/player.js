@@ -233,6 +233,8 @@ export class Player {
       } else {
         this.pos.x = st.x;
         this.pos.z = st.z;
+        // (a seat that moves up and down: a ride on the pier, game/fairground.js)
+        if (st.y !== undefined) this.pos.y = st.y;
         this.vel.set(0, 0, 0);
         this.yaw = dampAngle(this.yaw, st.yaw, 10, dt);
         fig.yaw = this.yaw;
@@ -468,6 +470,8 @@ export class Player {
 
   draw(camPos) {
     if (this.mode === 'vehicle' && !(this.inVehicle && this.inVehicle.seat)) return;
+    // (your own eyes in the coaster's front car: game/fairground.js)
+    if (this.rideHidden) return;
     this.fig.draw(camPos);
   }
 }

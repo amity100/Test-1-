@@ -752,7 +752,8 @@ export class PersonRenderer {
   // A walker far down the street, cheaply (game/farcrowd.js): the body, the head with its hair
   // or hat, the arms and legs swinging with the walk, the shoes; no face, nothing held. The same
   // pens and the same proportions as a whole person, so the one becomes the other unnoticed.
-  // w: { x, y, z, yaw, phase, speed, look, scale }
+  // w: { x, y, z, yaw, phase, speed, look, scale } (and, for a crowd in its seats - the arena's,
+  // game/arenagame.js - sit: 1 seated, 0 on their feet; cheer: 1 both arms up, pumping with pump)
   drawCheap(w) {
     const L = w.look;
     const p = this.p;
@@ -771,7 +772,9 @@ export class PersonRenderer {
     _aw = w;
     _aS[0] = S;
     const at = atW;
-    const hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A;
+    const sit = w.sit || 0;
+    const cheer = w.cheer || 0;
+    const hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A - 0.46 * sit;
     const lean = A * 0.12;
     at(J.hip, 0, hipY, 0);
     const ny = hipY + 0.5 * Math.cos(lean);
@@ -857,14 +860,25 @@ export class PersonRenderer {
     for (let ai = 0; ai < 2; ai++) {
       const side = ai === 0 ? 1 : -1;
       const off = ai === 0 ? 0 : Math.PI;
-      const a = -Math.sin(ph + off) * swing;
-      const sx = side * (sw + 0.02);
+      let a = -Math.sin(ph + off) * swing;
+      let b = a + 0.35 + A * 0.5;
+      if (sit > 0) {
+        // (the hands on the knees)
+        a += (0.42 - a) * sit;
+        b += (1.25 - b) * sit;
+      }
+      if (cheer > 0) {
+        // (up, pumping, a little out to the sides)
+        const up = Math.PI - 0.32 + Math.sin((w.pump || 0) + ai * 0.9) * 0.22;
+        a += (up - a) * cheer;
+        b += (up + 0.12 - b) * cheer;
+      }
+      const sx = side * (sw + 0.02 + cheer * 0.05);
       at(_a, sx, ny - 0.07, nz);
       const ey = ny - 0.07 - Math.cos(a) * armU;
       const ez = nz + Math.sin(a) * armU;
-      at(_b, sx, ey, ez);
-      const b = a + 0.35 + A * 0.5;
-      at(_c, sx + side * 0.02, ey - Math.cos(b) * armF, ez + Math.sin(b) * armF);
+      at(_b, sx + side * cheer * 0.06, ey, ez);
+      at(_c, sx + side * (0.02 + cheer * 0.1), ey - Math.cos(b) * armF, ez + Math.sin(b) * armF);
       (shortS || noS ? p.lowUpperSkin : p.lowUpper).push(along(_a, _b, 0.29, armK, F), shortS || noS ? skin : topC, own, armId, ind);
       (shortS || noS ? p.lowForeSkin : p.lowFore).push(along(_b, _c, 0.26, armK, F), shortS || noS ? skin : topC, own, armId, ind);
     }
@@ -878,8 +892,13 @@ export class PersonRenderer {
     for (let li = 0; li < 2; li++) {
       const off = li === 0 ? 0 : Math.PI;
       const sx = (li === 0 ? 1 : -1) * hw;
-      const th = Math.sin(ph + off) * (0.18 + 0.62 * A);
-      const kb = Math.max(0, Math.sin(ph + off - Math.PI * 0.5)) * (0.25 + 0.9 * A) + 0.05;
+      let th = Math.sin(ph + off) * (0.18 + 0.62 * A);
+      let kb = Math.max(0, Math.sin(ph + off - Math.PI * 0.5)) * (0.25 + 0.9 * A) + 0.05;
+      if (sit > 0) {
+        // (in a seat: the thighs out in front, the shins down to the floor)
+        th += (1.45 - th) * sit;
+        kb += (1.45 - kb) * sit;
+      }
       at(_a, sx, hipY, 0);
       const ky = hipY - Math.cos(th) * legL;
       const kz = Math.sin(th) * legL;

@@ -626,11 +626,11 @@ export function sandTexture() {
 }
 
 // the boards of the pier (4 m across the planks)
-export function woodDeckTexture() {
+export function woodDeckTexture(cols = ['#c99e7a', '#bd8f6c', '#d3aa86']) {
   const c = canvas(256, 256);
   const g = c.getContext('2d');
   for (let k = 0; k < 16; k++) {
-    g.fillStyle = k % 3 === 0 ? '#c99e7a' : k % 3 === 1 ? '#bd8f6c' : '#d3aa86';
+    g.fillStyle = cols[k % 3];
     g.fillRect(0, k * 16, 256, 16);
     g.fillStyle = 'rgba(80, 50, 40, 0.55)';
     g.fillRect(0, k * 16, 256, 2);

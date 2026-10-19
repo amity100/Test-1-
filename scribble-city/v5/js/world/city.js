@@ -18,6 +18,7 @@ import { BLUEPRINT_MORE } from '../game/blueprints.js';
 import { MAINLAND_ON, WEST_X, NORTH_Z, SEA_Z } from './mainland/plan.js';
 import { buildCauseways, buildHills, farGround, buildShore } from './mainland/ground.js';
 import { buildMainlandTowers } from './mainland/far.js';
+import { buildLandmarks, moveLandmarks } from './mainland/landmarks.js';
 
 // The whole city: Ocean Drive and the beach (v5), and the city behind them.
 export function buildCity(scene, o = {}) {
@@ -116,6 +117,8 @@ export function buildCity(scene, o = {}) {
     buildHills(ctx);
     buildShore(ctx);
     ctx.mainTowers = buildMainlandTowers(ctx);
+    // (the pier, its wheel and its coaster; the lighthouse; the arena: world/mainland/landmarks.js)
+    ctx.landmarks = buildLandmarks(ctx);
     ctx.rng = dice;
   }
   // the neon of every shop, in one texture
@@ -170,7 +173,7 @@ export function buildCity(scene, o = {}) {
   const cull = [];
   for (const m of rooms) cull.push({ m, r: 55 });
   for (const m of meshes) {
-    if (special.has(m.name.split('#')[0])) continue;
+    if (special.has(m.name.split('#')[0]) || m.name.startsWith('lm_')) continue;
     // (a shared draw's pens are all of one kind here)
     const pen = m.userData.pens ? m.userData.pens[0] : m.material;
     // (the little things are not worth a mirror image in the wet street)
@@ -255,8 +258,17 @@ export function buildCity(scene, o = {}) {
         c.m.visible = sph.center.distanceTo(cam) - sph.radius < c.r;
       }
     },
-    update(dt, t) {
+    // (the mainland's landmarks that move: world/mainland/landmarks.js)
+    landmarks: ctx.landmarks || null,
+    // things a block of the mainland sets going while it is shown (the carousel): fn(dt, t)
+    anims: [],
+    // the ways people stroll where there are no blocks to walk round (the pier, the beach, the
+    // promenades): [{ a: [x, z], b: [x, z] }] (game/civilians.js)
+    walks: [],
+    update(dt, t, cam) {
       if (ctx.wheel) turnWheel(ctx.wheel, dt);
+      if (ctx.landmarks) moveLandmarks(ctx.landmarks, dt, cam);
+      for (const f of this.anims) f(dt, t, cam);
       if (ctx.surf) rollSurf(ctx.surf, dt);
       // a neon letter that flickers (TACOS 24/7, as it always did)
       const s = ctx.signs[2];

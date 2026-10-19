@@ -36,8 +36,10 @@ export class CameraRig {
    * target: feet position of the followed object. opts: { dist, height, shoulder, aim }
    */
   update(dt, target, opts = {}) {
-    const dist = (opts.dist || this.dist) * (opts.aim ? 0.62 : 1);
-    const height = opts.height || this.height;
+    // (a test's view from further off: its script sets camRig.over = { dist, height })
+    const ov = this.over;
+    const dist = ov ? ov.dist : (opts.dist || this.dist) * (opts.aim ? 0.62 : 1);
+    const height = ov ? ov.height : opts.height || this.height;
     const shoulder = opts.shoulder !== undefined ? opts.shoulder : this.shoulder;
     const cp = Math.cos(this.pitch);
     this.fwd.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
@@ -45,7 +47,7 @@ export class CameraRig {
     this.pivot.set(target.x, target.y + height, target.z).addScaledVector(this.right, shoulder);
     // collide camera boom
     let want = dist;
-    const hit = this.collision.raycast(this.pivot.x, this.pivot.y, this.pivot.z, -this.fwd.x, -this.fwd.y, -this.fwd.z, dist + 0.3);
+    const hit = ov ? null : this.collision.raycast(this.pivot.x, this.pivot.y, this.pivot.z, -this.fwd.x, -this.fwd.y, -this.fwd.z, dist + 0.3);
     if (hit) want = Math.max(0.6, hit.t - 0.35);
     // never go under the ground
     this.curDist = want < this.curDist ? want : damp(this.curDist, want, 6, dt);

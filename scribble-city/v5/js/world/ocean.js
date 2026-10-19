@@ -608,11 +608,11 @@ const TOWER_COLS = [
   ['#7fe0b0', '#ff5a8a', '#ffffff'], ['#ff9a3c', '#3a6fd8', '#ffe8c0'], ['#c08af0', '#ffe14f', '#50c8b8'],
   ['#ff5a6a', '#ffffff', '#3fb0e0'], ['#50d0c0', '#ffb43f', '#ffffff'],
 ];
-function lifeguardTower(ctx, x, z, k) {
+export function lifeguardTower(ctx, x, z, k) {
   const M = ctx.M;
   const r = ctx.rng;
   const [c0, c1, c2] = TOWER_COLS[k % TOWER_COLS.length].map(hex);
-  const y = beachHeight(x, z);
+  const y = (ctx.sandY || beachHeight)(x, z);
   const H = 2.3;
   const id = ctx.objects.begin(ctx, 'tower', x, z);
   // the stilts and their cross braces
@@ -687,9 +687,9 @@ function lifeguardTower(ctx, x, z, k) {
 }
 
 // a beach umbrella stuck in the sand (stripes of two colours), its shadow on a towel or two
-function beachUmbrella(ctx, x, z, c0, c1, o = {}) {
+export function beachUmbrella(ctx, x, z, c0, c1, o = {}) {
   const M = ctx.M;
-  const y = beachHeight(x, z);
+  const y = (ctx.sandY || beachHeight)(x, z);
   const id = ctx.objects.begin(ctx, 'umbrella', x, z);
   const tilt = o.tilt || 0;
   const pole = new THREE.CylinderGeometry(0.03, 0.03, 2.3, 5);
@@ -715,9 +715,9 @@ function beachUmbrella(ctx, x, z, c0, c1, o = {}) {
 }
 
 // a lounger: a white frame, a cushion, its back up
-function lounger(ctx, x, z, col) {
+export function lounger(ctx, x, z, col) {
   const M = ctx.M;
-  const y = beachHeight(x, z);
+  const y = (ctx.sandY || beachHeight)(x, z);
   const id = nextId();
   ctx.B.box(M.prop, x - 0.95, y + 0.25, z - 0.32, x + 0.45, y + 0.33, z + 0.32, id, { color: WHITE });
   ctx.B.box(M.prop, x - 0.92, y + 0.33, z - 0.28, x + 0.4, y + 0.4, z + 0.28, nextId(), { color: col });
@@ -729,9 +729,9 @@ function lounger(ctx, x, z, col) {
 }
 
 // a towel on the sand (people sit on it, facing the sea)
-function towel(ctx, x, z, col, col2) {
+export function towel(ctx, x, z, col, col2) {
   const M = ctx.M;
-  const y = beachHeight(x, z);
+  const y = (ctx.sandY || beachHeight)(x, z);
   ctx.B.box(M.court, x - 0.5, y + 0.005, z - 0.95, x + 0.5, y + 0.03, z + 0.95, nextId(), { color: col });
   ctx.B.box(M.court, x - 0.5, y + 0.03, z - 0.95, x + 0.5, y + 0.035, z - 0.65, nextId(), { color: col2 });
   ctx.seats.push({ x: x - 0.2, z, yaw: Math.PI / 2, beach: true });

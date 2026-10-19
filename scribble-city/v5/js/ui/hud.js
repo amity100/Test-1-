@@ -5,7 +5,8 @@ import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
 import { pin } from './mapglyphs.js';
 import { searchArea } from '../game/heli.js';
 import { drawSight } from '../game/lose.js';
-import { M_AVES, M_STREETS, M_BLOCKS, CAUSEWAYS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z } from '../world/mainland/plan.js';
+import { M_AVES, M_STREETS, M_BLOCKS, CAUSEWAYS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z, PIER_M, JETTY, MARINA } from '../world/mainland/plan.js';
+import { ARENA } from '../world/mainland/landmarks.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -109,6 +110,7 @@ export class HUD {
       g.strokeStyle = '#1b1430';
       g.lineWidth = 1;
       for (const id in far || {}) {
+        if (id === 'plots' || id === 'stands') continue;
         for (const [bx0, bz0, bx1, bz1, top] of far[id]) {
           g.fillStyle = top > 30 ? '#8e7fd0' : '#f4e6ec';
           g.fillRect(bx0 + ox, bz0 + oz, bx1 - bx0, bz1 - bz0);
@@ -120,6 +122,19 @@ export class HUD {
         g.fillRect(t.x - t.w / 2 + ox, t.z - t.d / 2 + oz, t.w, t.d);
         g.strokeRect(t.x - t.w / 2 + ox, t.z - t.d / 2 + oz, t.w, t.d);
       }
+      // (the pier, the jetty and its lighthouse, the marina's docks, the arena)
+      for (const r of PIER_M.parts) R(r.x0, r.z0, r.x1, r.z1, '#c99a78');
+      for (const r of MARINA.docks) R(r.x0, r.z0, r.x1, r.z1, '#c99a78');
+      R(JETTY.x - JETTY.half - 2, JETTY.z0, JETTY.x + JETTY.half + 2, JETTY.z1, '#b8b2aa');
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.arc(JETTY.light[0] + ox, JETTY.light[1] + oz, 5, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#eef2f8';
+      g.beginPath();
+      g.ellipse(ARENA.x + ox, ARENA.z + oz, ARENA.a, ARENA.b, 0, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
     }
     // the land (pavers), the bay to the east and the sea to the south
     if (ml) R(BOUNDS.minX - pad, BOUNDS.minZ - pad, x1, BOUNDS.maxZ + pad, '#d9b9c4');

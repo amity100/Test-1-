@@ -6,6 +6,7 @@ import { Streamer } from './stream.js';
 import { buildMBlock } from './blocks.js';
 import { groundTiles, buildGroundTile } from './tiles.js';
 import { FarShells } from './far.js';
+import { LANDMARK_CELLS } from './landmarks.js';
 
 // (v5, ROADMAP 11.17) The mainland, alive: what is built near you (the streamer), what stands
 // for the rest from afar (the far bodies), and how the city's systems hear of a block coming and
@@ -160,6 +161,17 @@ export class Mainland {
       block: b,
       build: (c) => this.buildBlock(c.block),
     }));
+    // the pier's shops and rides, the beach, the Point, the bayfront (world/mainland/landmarks.js)
+    for (const b of LANDMARK_CELLS) {
+      cells.push({
+        id: b.id,
+        rect: { x0: b.rect.x0 - 8, x1: b.rect.x1 + 8, z0: b.rect.z0 - 8, z1: b.rect.z1 + 8 },
+        near,
+        far: near + 90,
+        block: b,
+        build: (c) => this.buildBlock(c.block),
+      });
+    }
     // the streets, a tile at a time (they are seen from further off than the blocks' insides)
     const gnear = o.low ? 220 : 280;
     for (const t of groundTiles()) cells.push({ id: t.id, rect: t.rect, near: gnear, far: gnear + 90, tile: t, build: (c) => buildGroundTile(this.world, c.tile) });
@@ -242,7 +254,7 @@ export class Mainland {
       this.blocks.delete(b.id);
       this.neon.release(live.neonKeys || []);
     }
-    this.far.setNear(b, on);
+    if (!b.landmark) this.far.setNear(b, on);
     // (the roofs the rain stops at are drawn again: render/rain.js)
     this.world.roofVer = (this.world.roofVer || 0) + 1;
     for (const f of this.listeners) f(live, on);
@@ -329,6 +341,21 @@ export class Mainland {
       }
       times.push({ id: b.id, kind: b.kind, ms: Math.round(performance.now() - t0), verts: live.verts });
       releaseAll(live);
+    }
+    // (the landmarks' own cells: no far bodies - the landmarks are always there - only their friend
+    // stands, for the map)
+    if (!ids) {
+      for (const b of LANDMARK_CELLS) {
+        const t0 = performance.now();
+        const it = this.buildBlock(b);
+        let r;
+        do r = it.next();
+        while (!r.done);
+        const live = r.value;
+        for (const s of live.bctx.shops) if (s.kind === 'friends') (out.stands = out.stands || []).push([+s.door[0].toFixed(1), +s.door[2].toFixed(1)]);
+        times.push({ id: b.id, kind: b.kind, ms: Math.round(performance.now() - t0), verts: live.verts });
+        releaseAll(live);
+      }
     }
     return { data: out, times };
   }

@@ -3,7 +3,7 @@ import { makeSurface, srgb, hex, canvasTexture, addLight } from '../../render/ma
 import { nextId, canvas } from '../kit.js';
 import { palm } from '../palms.js';
 import { prism, rectPts } from '../skyline.js';
-import { M_AVES, M_STREETS, CAUSEWAYS, deckY, M_BLOCKS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z, hillsHeight, CURB } from './plan.js';
+import { M_AVES, M_STREETS, CAUSEWAYS, deckY, M_BLOCKS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z, hillsHeight, CURB, PIER_M, JETTY, MARINA } from './plan.js';
 
 // (v5, ROADMAP 11.17) The mainland's ground as it is built at the start, all of it at once (it is
 // cheap): the picture of its roads and sidewalks seen from afar, the hills and their letters, the
@@ -310,6 +310,12 @@ export function buildShore(ctx) {
   const cap = srgb(0.88, 0.85, 0.8);
   const rail = srgb(0.92, 0.92, 0.95);
   const gaps = CAUSEWAYS.map((c) => [c.z - c.half - 1.4, c.z + c.half + 1.4]);
+  // (and the marina's: its dock along the wall is the way out onto the water; under it only a low
+  // wall keeps the swimmers off)
+  const mg = [MARINA.docks[0].z0, MARINA.docks[0].z1];
+  gaps.push(mg);
+  gaps.sort((a, b) => a[0] - b[0]);
+  ctx.col.addBox(SHORE_X - 0.1, mg[0], SHORE_X + 40, mg[1], -2, MARINA.deck - 0.3, 'bound');
   const runs = [];
   let z = NORTH_Z;
   for (const [a, b] of gaps) {
@@ -355,7 +361,16 @@ export function buildShore(ctx) {
   // the walls: the hills to the north and west (their foot), the ocean beyond the surf
   ctx.col.addBox(WEST_X - 200, NORTH_Z - 300, SHORE_X + 40, -1213, -2, 120, 'bound');
   ctx.col.addBox(WEST_X - 200, -1213, -1889, SEA_Z + 40, -2, 120, 'bound');
-  ctx.col.addBox(-1889, SEA_Z + 1, SHORE_X + 40, SEA_Z + 60, -2, 30, 'bound');
+  // (the ocean's wall stops short of the pier and the jetty: under them only a low one, below
+  // their decks, keeps the swimmers off - you walk out over it; world/mainland/landmarks.js)
+  const gaps2 = [[PIER_M.parts[2].x0 - 1, PIER_M.parts[3].x1 + 1, PIER_M.deck - 0.4], [JETTY.x - JETTY.r - 0.5, JETTY.x + JETTY.r + 0.5, JETTY.top - 0.4]].sort((a, b) => a[0] - b[0]);
+  let gx = -1889;
+  for (const [a, b, low] of gaps2) {
+    ctx.col.addBox(gx, SEA_Z + 1, a, SEA_Z + 60, -2, 30, 'bound');
+    ctx.col.addBox(a, SEA_Z + 1, b, SEA_Z + 60, -2, low, 'bound');
+    gx = b;
+  }
+  ctx.col.addBox(gx, SEA_Z + 1, SHORE_X + 40, SEA_Z + 60, -2, 30, 'bound');
 }
 
 export { hex };

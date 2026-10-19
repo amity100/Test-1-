@@ -34,7 +34,7 @@ const SYSTEMS = [
   ['nightlife', 'update'], ['vignettes', 'update'], ['vignettes', 'draw'], ['police', 'update'], ['ambient', 'update'], ['ambient', 'draw'],
   ['fx', 'update'], ['hud', 'update'], ['signals', 'draw'], ['cars', 'end'], ['figures', 'end'],
   ['weather', 'update'], ['shutters', 'update'], ['soundscape', 'update'],
-  ['routines', 'update'], ['workers', 'update'], ['workers', 'draw'], ['farCrowd', 'update'], ['farCrowd', 'draw'], ['animals', 'update'], ['animals', 'draw'], ['voices', 'update'], ['fleet', 'update'], ['fleet', 'draw'], ['damage', 'update'], ['damage', 'draw'], ['garage', 'update'], ['garage', 'draw'],
+  ['routines', 'update'], ['workers', 'update'], ['workers', 'draw'], ['farCrowd', 'update'], ['farCrowd', 'draw'], ['arenaGame', 'update'], ['arenaGame', 'draw'], ['animals', 'update'], ['animals', 'draw'], ['voices', 'update'], ['fleet', 'update'], ['fleet', 'draw'], ['damage', 'update'], ['damage', 'draw'], ['garage', 'update'], ['garage', 'draw'],
 ];
 // (pens: drawn in two passes, ROADMAP 11.4 - the pens over the whole picture after the surfaces)
 const PASSES = ['shadow', 'reflection', 'main', 'pens', 'ink', 'taa', 'rain', 'glow', 'final'];

@@ -2100,6 +2100,10 @@ class OpenShop {
     const m = R.marks || {};
     const F = R.facade;
     const used = new Set(this.visitors.filter((v) => v.mode === 'seat' || v.mode === 'chair').map((v) => v.spot));
+    // (not where you sit, nor where the one who lives here already is)
+    const ps = this.game.player.seat;
+    if (this.heroSeat && ps && Math.hypot(ps.x - this.heroSeat.x, ps.z - this.heroSeat.z) < 0.1) used.add(this.heroSeat);
+    if (this.resSpot && this.resSpot.seat) used.add(this.resSpot.seat);
     const nearSeat = (t, max) => {
       let best = null;
       let bd = max;
@@ -2212,7 +2216,10 @@ class OpenShop {
     const p = game.player;
     const R = this.room;
     const sp = this.spotOf('table');
-    if (sp) p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+    if (sp) {
+      p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+      this.heroSeat = sp.seat;
+    }
     const m = R.marks.table || { x: this.keeper.pos.x, y: CURB + 0.8, z: this.keeper.pos.z };
     // (the cook to the table too)
     this.resHold = { name: 'table', until: game.time + 14 };
@@ -2242,7 +2249,10 @@ class OpenShop {
     const game = this.game;
     const p = game.player;
     const sp = this.spotOf('sofa');
-    if (sp) p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+    if (sp) {
+      p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+      this.heroSeat = sp.seat;
+    }
     this.tv = { k: -1, t: 0 };
     game.hud.toast('על הספה. בטלוויזיה: סרט מצויר', 'info', 2.4);
     // (the family comes to watch too)

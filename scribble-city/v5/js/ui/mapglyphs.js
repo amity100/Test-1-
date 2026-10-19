@@ -401,6 +401,51 @@ export const GLYPHS = {
       g.fill();
     }
   },
+  // (v5, ROADMAP 11.17) the lighthouse at the Point, the arena on the bay
+  lighthouse(g) {
+    g.fillStyle = W;
+    shape(g, [-3.4, 7, -2.2, -3.6, 2.2, -3.6, 3.4, 7]);
+    g.fillStyle = '#e2335f';
+    shape(g, [-2.9, 3, -2.6, 0.6, 2.6, 0.6, 2.9, 3]);
+    g.fillStyle = '#ffd23f';
+    rrect(g, -2.2, -6.6, 4.4, 3, 0.8);
+    g.strokeStyle = '#ffd23f';
+    line(g, 3, -5.2, 7.4, -7);
+    line(g, -3, -5.2, -7.4, -7);
+    g.strokeStyle = '#1b1430';
+  },
+  dome(g) {
+    g.fillStyle = W;
+    g.fillRect(-7, 1, 14, 5);
+    g.strokeRect(-7, 1, 14, 5);
+    g.fillStyle = '#6fa596';
+    g.beginPath();
+    g.arc(0, 1, 4.6, Math.PI, TAU);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.arc(-5.6, 1, 1.6, Math.PI, TAU);
+    g.arc(5.6, 1, 1.6, Math.PI, TAU);
+    g.fill();
+    line(g, 0, -3.6, 0, -6.4);
+  },
+  arena(g) {
+    g.fillStyle = '#9fd0ff';
+    g.beginPath();
+    g.ellipse(0, 1, 7, 4.6, 0, 0, TAU);
+    g.fill();
+    g.stroke();
+    g.fillStyle = W;
+    g.beginPath();
+    g.ellipse(0, -0.6, 5.4, 2.6, 0, Math.PI, TAU);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.strokeStyle = '#ff4fa3';
+    line(g, -5.6, 2.4, 5.6, 2.4);
+    g.strokeStyle = '#1b1430';
+  },
   heli(g) {
     g.fillStyle = '#5a5470';
     circle(g, 0, 0, 6.4, true);

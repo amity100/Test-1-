@@ -238,7 +238,10 @@ export const PLACES = [
   { id: 'arena', kind: 'arena', name: 'Bayfront Arena', heb: 'ארנת המפרץ', block: '0,7' },
   { id: 'palace', kind: 'theatre', name: 'Inkwood Palace', heb: 'תיאטרון אינקווד פאלאס', block: '9,3' },
   { id: 'sign', kind: 'landmark', name: 'INKWOOD', heb: 'השלט על הגבעה', at: [-1330, -1300] },
-  { id: 'lighthouse', kind: 'landmark', name: 'Point Lighthouse', heb: 'המגדלור', at: [-760, 590] },
+  { id: 'observatory', kind: 'landmark', name: 'Inkwood Observatory', heb: 'מצפה הכוכבים', at: [-1160, -1300] },
+  { id: 'lighthouse', kind: 'landmark', name: 'Point Lighthouse', heb: 'המגדלור של הלשון', at: [-760, 690] },
+  { id: 'pier', kind: 'landmark', name: 'Palisade Pier', heb: 'המזח של פליסייד', at: [-1430, 700] },
+  { id: 'pointpark', kind: 'park', name: 'South Point Park', heb: 'פארק הלשון', at: [-810, 500] },
 ];
 export function placeBlock(p) {
   if (!p.block) return null;
@@ -293,6 +296,60 @@ export function mOnRoad(x, z) {
   return mRoadAt(x, z) !== null;
 }
 
+// ------------------------------------------------------------------ the landmarks on the water
+// Palisade Pier, off the end of Western Avenue into the ocean the way Santa Monica's goes out from
+// Colorado: a walk of planks high over the sand (a ramp up to it from the boardwalk), the
+// carousel's plaza by its start, the amusement park on its wide part out over the water (the big
+// wheel, the coaster), and its head at the end for the fishermen. world/mainland/landmarks.js
+export const PIER_M = {
+  x: -1420,
+  deck: 1.4,
+  // (the ramp: from the boardwalk's sidewalk up to the deck)
+  ramp: [551, 567],
+  // the walk (its shops along the east rail), the carousel's plaza, the amusement park, the head
+  parts: [
+    { x0: -1430, x1: -1402, z0: 551, z1: 806 },
+    { x0: -1454, x1: -1430, z0: 571, z1: 603 },
+    { x0: -1480, x1: -1430, z0: 628, z1: 728 },
+    { x0: -1446, x1: -1394, z0: 774, z1: 808 },
+  ],
+};
+// The Point's jetty: a path on a wall of rocks from the beach out to the lighthouse on its round
+// foot at the end
+export const JETTY = { x: -760, half: 2.2, z0: 556, z1: 684, top: 1.3, light: [-760, 690], r: 7.5, foot: 1.45 };
+
+// The Marina Market's docks, out into the bay from the sea wall where the Venetian comes ashore: a
+// dock along the wall, fingers out from it, the boats in the slips between them
+export const MARINA = (() => {
+  const z0 = -362;
+  const z1 = -296;
+  const fingers = [-350, -338, -326, -314];
+  const docks = [{ x0: SHORE_X, x1: SHORE_X + 5, z0: z0 + 1, z1: z1 - 1 }];
+  for (const zf of fingers) docks.push({ x0: SHORE_X + 5, x1: SHORE_X + 25, z0: zf - 1, z1: zf + 1 });
+  const slips = [];
+  for (let i = 0; i + 1 < fingers.length; i++) for (const dz of [3.8, 8.2]) slips.push([SHORE_X + 15, fingers[i] + dz]);
+  return { z0, z1, deck: CURB + 0.3, docks, slips };
+})();
+
+export function onPier(x, z) {
+  for (const r of PIER_M.parts) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return true;
+  return false;
+}
+// the height of the pier's deck or the jetty's path at (x, z) (null off them)
+export function pierHeight(x, z) {
+  if (z >= PIER_M.ramp[0] - 0.01 && onPier(x, z)) {
+    const [r0, r1] = PIER_M.ramp;
+    if (z < r1) return CURB + ((PIER_M.deck - CURB) * (z - r0)) / (r1 - r0);
+    return PIER_M.deck;
+  }
+  const J = JETTY;
+  if (z > J.z0 && z < J.z1 + 1 && Math.abs(x - J.x) < J.half) return CURB + ((J.top - CURB) * Math.min(1, (z - J.z0) / 14));
+  const d = Math.hypot(x - J.light[0], z - J.light[1]);
+  if (d < J.r) return J.foot;
+  if (x > SHORE_X - 0.5 && z > MARINA.z0 && z < MARINA.z1) for (const r of MARINA.docks) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return MARINA.deck;
+  return null;
+}
+
 // the walkable ground of the mainland and the bay (the island's is world/layout.js's own)
 export function mainlandHeight(x, z) {
   // the causeways over the bay
@@ -300,9 +357,13 @@ export function mainlandHeight(x, z) {
     const c = CAUSEWAYS[k];
     if (Math.abs(z - c.z) < c.half + 1.2 && x >= c.x0 - 2 && x <= c.x1 + 26) return deckY(c, x) + (Math.abs(z - c.z) < c.half ? 0 : CURB);
   }
+  // the pier and the jetty over the sea, the marina's docks over the bay
+  if (z > BEACH_Z - 1.5 || (x > SHORE_X - 0.5 && z > MARINA.z0 && z < MARINA.z1)) {
+    const ph = pierHeight(x, z);
+    if (ph !== null) return ph;
+  }
   // the bay
   if (x > SHORE_X) return -0.8;
-  // the south coast: the sand slopes down into the water
   if (z > BEACH_Z) {
     if (z > SEA_Z) return -0.8;
     return CURB - ((CURB + 0.8) * (z - BEACH_Z)) / (SEA_Z - BEACH_Z);

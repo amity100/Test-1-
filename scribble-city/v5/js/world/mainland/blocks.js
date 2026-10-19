@@ -11,6 +11,9 @@ import { M_AVES, M_STREETS, CURB, towersOf } from './plan.js';
 import { buildMall, buildStripMall, STORE_NAMES } from './mall.js';
 import { buildVenue } from './venues.js';
 import { friendStandIn } from '../streets.js';
+import { buildPier } from './pier.js';
+import { buildBeach, buildPoint, buildBayfront } from './shore.js';
+import { buildArena } from './arena.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
@@ -209,6 +212,22 @@ function* rows(bctx, b, o = {}) {
 function* buildKind(bctx, b) {
   const R = b.rect;
   switch (b.kind) {
+    // (the landmarks' own: world/mainland/landmarks.js LANDMARK_CELLS, and the arena's block)
+    case 'pier':
+      yield* buildPier(bctx, b);
+      return;
+    case 'beach':
+      yield* buildBeach(bctx, b);
+      return;
+    case 'point':
+      yield* buildPoint(bctx, b);
+      return;
+    case 'bayfront':
+      yield* buildBayfront(bctx, b);
+      return;
+    case 'arena':
+      yield* buildArena(bctx, b);
+      return;
     case 'park':
     case 'domino':
       park(bctx, R);
@@ -341,6 +360,16 @@ export function* buildMBlock(world, b) {
       }
       for (const h of bctx.hideSpots) world.hideSpots.push(h);
       for (const c of cull) world.cullList.push(c);
+      // (what turns while it is here - the carousel; the ways people stroll on it - the pier, the
+      // beach, the promenades: game/civilians.js)
+      if (bctx.anims) for (const f of bctx.anims) world.anims.push(f);
+      if (bctx.walks) for (const w of bctx.walks) world.walks.push(w);
+      if (bctx.carousel) world.carousel = bctx.carousel;
+      // (the arena: its floor is indoors, and the game on it - game/arenagame.js)
+      if (bctx.arena) {
+        world.arena = bctx.arena;
+        world.indoorAreas.push(bctx.arena.hall);
+      }
       // (a mall: its hall is indoors for the weather, and its people's - game/mall.js)
       if (bctx.mall) {
         world.malls.push(bctx.mall);
@@ -381,6 +410,24 @@ export function* buildMBlock(world, b) {
       for (const c of cull) {
         const k = world.cullList.indexOf(c);
         if (k >= 0) world.cullList.splice(k, 1);
+      }
+      if (bctx.anims) {
+        for (const f of bctx.anims) {
+          const k = world.anims.indexOf(f);
+          if (k >= 0) world.anims.splice(k, 1);
+        }
+      }
+      if (bctx.carousel && world.carousel === bctx.carousel) world.carousel = null;
+      if (bctx.arena) {
+        if (world.arena === bctx.arena) world.arena = null;
+        const k = world.indoorAreas.indexOf(bctx.arena.hall);
+        if (k >= 0) world.indoorAreas.splice(k, 1);
+      }
+      if (bctx.walks) {
+        for (const w of bctx.walks) {
+          const k = world.walks.indexOf(w);
+          if (k >= 0) world.walks.splice(k, 1);
+        }
       }
       if (bctx.mall) {
         let k = world.malls.indexOf(bctx.mall);

@@ -115,6 +115,7 @@ class Civilian {
     this.headlessT = 0;
     this.dir = Math.random() < 0.5 ? 1 : -1;
     if (bx === 'prom') this.setProm(bz);
+    else if (bx === 'line') this.setLine(bz);
     else this.setBlock(bx, bz, true);
     this.speed = 1.2 + Math.random() * 0.5;
     // (quicker in the rain: game/weather.js, Civilians.rainCheck)
@@ -184,6 +185,19 @@ class Civilian {
     const zb = Math.min(SOUTH_EDGE + 20, z + 60 + Math.random() * 80);
     this.loop = [[x, za], [x, zb]];
     this.pos.set(x + (Math.random() - 0.5) * 1.5, groundHeight(x, z), z);
+    this.target = this.dir > 0 ? 1 : 0;
+  }
+
+  // (v5, ROADMAP 11.17) up and down one of the mainland's strolls (the pier, the beach, the
+  // promenades: world.walks { a, b })
+  setLine(w) {
+    this.prom = true;
+    this.line = w;
+    this.loop = [w.a, w.b];
+    const t = Math.random();
+    const x = w.a[0] + (w.b[0] - w.a[0]) * t;
+    const z = w.a[1] + (w.b[1] - w.a[1]) * t;
+    this.pos.set(x + (Math.random() - 0.5) * 1.2, groundHeight(x, z), z + (Math.random() - 0.5) * 1.2);
     this.target = this.dir > 0 ? 1 : 0;
   }
 
@@ -546,6 +560,14 @@ export class Civilians {
       const near = walksNear(p, 80, built);
       let prom = 0;
       for (const c of this.list) if (c.prom && !c.scripted) prom++;
+      // (v5, ROADMAP 11.17: the strolls near you on the mainland's pier, beach and promenades)
+      const lines = [];
+      for (const w of game.world.walks || []) {
+        const dx = w.b[0] - w.a[0];
+        const dz = w.b[1] - w.a[1];
+        const t = Math.max(0, Math.min(1, ((p.x - w.a[0]) * dx + (p.z - w.a[1]) * dz) / (dx * dx + dz * dz || 1)));
+        if (Math.hypot(w.a[0] + dx * t - p.x, w.a[1] + dz * t - p.z) < 70) lines.push(w);
+      }
       const cam = game.camera;
       const fwd = cam.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
       while (free < max && tries-- > 0) {
@@ -560,7 +582,11 @@ export class Civilians {
           const kinds = R.commute > R.night ? WORK_CLOTHES : NIGHT_CLOTHES;
           look = civilianLook({ kind: kinds[Math.floor(Math.random() * kinds.length)] });
         }
-        if (p.x > -40 && (Math.random() < 0.3 || !near.length) && prom < max * 0.35) {
+        if (lines.length && (Math.random() < 0.55 || !near.length) && prom < max * 0.7) {
+          const w = lines[Math.floor(Math.random() * lines.length)];
+          if (!look && !game.classic) look = game.crowds.lookFor('prom');
+          c = new Civilian(this, 'line', w, look);
+        } else if (p.x > -40 && (Math.random() < 0.3 || !near.length) && prom < max * 0.35) {
           const z = Math.max(NORTH_EDGE + 10, Math.min(SOUTH_EDGE, p.z + (Math.random() - 0.5) * 160));
           if (z > PIER.z0 - 4 && z < PIER.z1 + 4) continue;
           // (who walks here: game/crowds.js; ?classic: anybody, as before)
