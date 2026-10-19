@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { srgb } from '../../render/materials.js';
-import { nextId } from '../kit.js';
+import { nextId, seeded } from '../kit.js';
 import { bench } from '../blocks.js';
 import { hydrant, trashCan, newsBox, mailbox, phoneBooth, busStop } from '../streets.js';
 import { payStation, bikeRack, planter } from '../streetscape.js';
 import { M_AVES, M_STREETS, CURB } from './plan.js';
+import { Paint, PAINT_Y, frame, curbWord, WHITE } from './roadkit.js';
+import { signPost, signalCabinet, CURB_RED } from './roadside.js';
 
 // (v5, ROADMAP 11.18) The things on the mainland's sidewalks, the way a real street has them: the
 // newspaper boxes at the corners, the hydrants, the bins, the bus stops with people waiting at them
@@ -13,6 +15,13 @@ import { M_AVES, M_STREETS, CURB } from './plan.js';
 // the bags beside them. Each between the lamps and the trees the street's tiles stand along the curb
 // (world/mainland/tiles.js: a lamp every 26 m from 14 m past the corner, a tree 13 m after it - the
 // places between are free), each the block's: built, shown and let go of with it.
+//
+// (v5, GTA IV streets) And what a real sidewalk has besides: the bus stop's stretch of the curb
+// painted red and BUS STOP on the asphalt in its box, the plate on its post; the plates on their
+// posts of no parking, the street cleaning, the tow-away (the street's own picture, world/mainland/
+// roadkit.js); the grey boxes of the power and the squat green ones of the phone lines; and what
+// people drop - the papers by the bins and the corners and in the gutter, a crushed cup now and
+// then, the leaves under the trees where people live.
 
 const LIVE = new Set(['houses', 'bungalows', 'apartments', 'villas', 'mansions', 'school']);
 
@@ -125,18 +134,82 @@ function foodCart(ctx, x, z, yaw) {
   });
 }
 
-// a sign on its pole at the curb (no parking, one way, the bus): a plate of colour
-function curbSign(ctx, x, z, yaw, kind) {
-  const M = ctx.M;
-  const id = ctx.objects.begin(ctx, 'sign', x, z);
-  put(ctx, M.pole, new THREE.CylinderGeometry(0.035, 0.04, 2.6, 6), x, CURB + 1.3, z, 0, srgb(0.6, 0.62, 0.66));
-  const fx = Math.sin(yaw);
-  const fz = Math.cos(yaw);
-  const col = kind === 'noparking' ? srgb(0.86, 0.2, 0.2) : kind === 'oneway' ? srgb(0.1, 0.1, 0.12) : srgb(0.95, 0.95, 0.92);
-  put(ctx, M.prop, new THREE.BoxGeometry(0.45, 0.6, 0.03), x + fx * 0.04, CURB + 2.25, z + fz * 0.04, yaw, srgb(0.97, 0.96, 0.92));
-  put(ctx, M.prop, new THREE.BoxGeometry(0.3, kind === 'oneway' ? 0.12 : 0.3, 0.035), x + fx * 0.06, CURB + 2.3, z + fz * 0.06, yaw, col);
-  ctx.col.addCircle(x, z, 0.1, 0, 2.6, 'pole');
-  ctx.objects.end(ctx, id);
+// a sign on its post at the curb, facing both ways along it (alongZ: an avenue's curb): the
+// plates of the street's own picture (world/mainland/roadkit.js) - the tow-away, the street
+// cleaning, two hours' parking, no turn on red - a short NO PARKING under some
+function curbSign(ctx, x, z, alongZ, key, under = null) {
+  signPost(ctx, x, z, alongZ, key, under ? { under } : {});
+}
+
+// The bus stop's stretch of the curb: the curb painted red over its length (a skin a few
+// millimetres over the tile's own stones, world/mainland/tiles.js), the box on the asphalt in the
+// lane by the curb with BUS STOP in it (read from the sidewalk, along the curb), the plate on its
+// post past the shelter's end. side: the avenue east (1) or west (-1) of the block; xc: its curb
+function busZone(ctx, P, side, xc, z) {
+  const za = z - 8;
+  const zb = z + 6;
+  const g = new THREE.BoxGeometry(0.192, 0.176, zb - za);
+  g.translate(xc - side * 0.09, 0.088, (za + zb) / 2);
+  ctx.B.add(ctx.M.wallSolid, g, null, nextId(), { color: CURB_RED });
+  // (frame(0, 0, 0, 1): u is -x, v is z)
+  const f = frame(0, 0, 0, 1);
+  const xi = xc + side * 0.14;
+  const xo = xc + side * 2.9;
+  P.stroke(f, [[-xi, za + 0.6], [-xo, za + 0.6], [-xo, zb - 0.6], [-xi, zb - 0.6]], 0.13, WHITE, PAINT_Y);
+  curbWord(P, xc, z - 1.4, side, 0, 'BUS STOP', WHITE, PAINT_Y, 0.75, 0.5, 1.5);
+  curbSign(ctx, xc - side * 0.45, z + 3.2, true, 'busstop');
+}
+
+// What people drop: papers round each spot ([x, z, how many]) - by a bin, a newspaper box, a
+// bench, a corner - kept on the sidewalk (x0..x1, z0..z1: its curbs), a crushed cup now and then;
+// the papers blown into the gutters; where people live, the leaves (o.live)
+const PAPER = [srgb(0.97, 0.96, 0.92), srgb(0.9, 0.9, 0.87), srgb(0.86, 0.83, 0.72), srgb(0.96, 0.86, 0.82), srgb(0.82, 0.88, 0.95)];
+const LEAF = [srgb(0.74, 0.5, 0.2), srgb(0.62, 0.42, 0.22), srgb(0.55, 0.6, 0.3), srgb(0.8, 0.62, 0.3)];
+function litter(ctx, P, q, drops, x0, x1, z0, z1, o = {}) {
+  const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+  const y = CURB + 0.012;
+  for (const [x, z, n] of drops) {
+    for (let k = 0; k < n; k++) {
+      const a = q() * Math.PI;
+      const px = cl(x + q.range(-0.9, 0.9), x0 + 0.3, x1 - 0.3);
+      const pz = cl(z + q.range(-0.9, 0.9), z0 + 0.3, z1 - 0.3);
+      const w = q.range(0.1, 0.17);
+      const h = q.range(0.14, 0.24);
+      P.box(frame(px, pz, Math.sin(a), Math.cos(a)), -w, -h, w, h, q.pick(PAPER), y + k * 0.0015);
+    }
+    if (q() < 0.3) {
+      const g = new THREE.CylinderGeometry(0.035, 0.045, 0.11, 7, 1, true).rotateZ(Math.PI / 2).rotateY(q() * Math.PI);
+      g.translate(cl(x + q.range(-0.7, 0.7), x0 + 0.3, x1 - 0.3), CURB + 0.045, cl(z + q.range(-0.7, 0.7), z0 + 0.3, z1 - 0.3));
+      ctx.B.add(ctx.M.propCyl, g, null, nextId(), { color: q.pick([srgb(0.95, 0.95, 0.93), srgb(0.86, 0.22, 0.22), srgb(0.95, 0.85, 0.4)]) });
+    }
+  }
+  // the gutters: along each curb, out on the asphalt
+  const sides = [
+    [true, z0, -1],
+    [true, z1, 1],
+    [false, x0, -1],
+    [false, x1, 1],
+  ];
+  for (const [alongX, c, s] of sides) {
+    const a = alongX ? x0 + 4 : z0 + 4;
+    const b = alongX ? x1 - 4 : z1 - 4;
+    for (let k = o.live ? 2 : q.int(2, 4); k > 0; k--) {
+      const t = q.range(a, b);
+      const d = q.range(0.08, 0.45);
+      const [px, pz] = alongX ? [t, c + s * d] : [c + s * d, t];
+      const an = q() * Math.PI;
+      P.box(frame(px, pz, Math.sin(an), Math.cos(an)), -0.11, -0.16, 0.11, 0.16, q.pick(PAPER), PAINT_Y + 0.004);
+    }
+    // (the leaves: in the gutter and on the walk under the trees)
+    if (o.live) {
+      for (let k = 14; k > 0; k--) {
+        const t = q.range(a, b);
+        const d = q() < 0.5 ? -q.range(0.05, 0.5) : q.range(0.4, 2.2);
+        const [px, pz] = alongX ? [t, c - s * d] : [c - s * d, t];
+        P.disc(px, pz, q.range(0.04, 0.07), q.pick(LEAF), d < 0 ? PAINT_Y + 0.005 : CURB + 0.01, 5);
+      }
+    }
+  }
 }
 
 /**
@@ -155,6 +228,10 @@ export function dressSidewalks(ctx, b) {
   const z1 = ss.z - ss.half;
   const live = LIVE.has(b.kind);
   ctx.busStops = ctx.busStops || [];
+  // (the dice of what was added for the GTA IV streets, apart from the block's own; the paint)
+  const q = seeded(b.seed * 7 + 3);
+  const P = new Paint();
+  const drops = [];
   // ---- the avenues' sides (east and west): the places between the lamps and the trees
   for (const side of [1, -1]) {
     const xc = side > 0 ? x1 - 0.8 : x0 + 0.8; // the line along the curb
@@ -175,19 +252,25 @@ export function dressSidewalks(ctx, b) {
     if (busAt !== null) {
       busStop(ctx, xc - side * 0.15, busAt, toRoad);
       ctx.busStops.push({ x: xc - side * 0.15, z: busAt, yaw: toRoad });
+      busZone(ctx, P, side, side > 0 ? x1 : x0, busAt);
+      drops.push([xc, busAt, 4]);
     }
     // the corners: the papers (in town), a bin, a hydrant
     for (const zc of corners) {
       if (!live && r() < 0.8) {
         const n = r.int(1, 3);
         for (let i = 0; i < n; i++) newsBox(ctx, xc + side * 0.1, zc + (zc < (z0 + z1) / 2 ? i : -i) * 0.62, toWalk);
+        drops.push([xc - side * 0.3, zc, q.int(2, 4)]);
       }
-      if (r() < 0.7) trashCan(ctx, xc - side * 0.05, zc + (zc < (z0 + z1) / 2 ? 2.2 : -2.2));
+      if (r() < 0.7) {
+        trashCan(ctx, xc - side * 0.05, zc + (zc < (z0 + z1) / 2 ? 2.2 : -2.2));
+        drops.push([xc - side * 0.2, zc + (zc < (z0 + z1) / 2 ? 2.2 : -2.2), live ? 1 : q.int(2, 4)]);
+      }
     }
     // the rest, a thing a place
     const menu = live
-      ? ['wheelie', 'wheelie', 'hydrant', 'mailbox', 'bench', 'bags', 'none', 'none', 'sign']
-      : ['trash', 'pay', 'hydrant', 'bench', 'bike', 'pay', 'mailbox', 'booth', 'planter', 'trash', 'sign', 'bags'];
+      ? ['wheelie', 'wheelie', 'hydrant', 'mailbox', 'bench', 'bags', 'none', 'phonebox', 'sign']
+      : ['trash', 'pay', 'hydrant', 'bench', 'bike', 'pay', 'mailbox', 'booth', 'planter', 'trash', 'sign', 'bags', 'cabinet', 'sign'];
     let hyd = false;
     for (const z of slots) {
       let what = r.pick(menu);
@@ -195,6 +278,13 @@ export function dressSidewalks(ctx, b) {
       switch (what) {
         case 'trash':
           trashCan(ctx, xc, z);
+          drops.push([xc - side * 0.2, z, q.int(1, 3)]);
+          break;
+        case 'cabinet':
+          signalCabinet(ctx, xc - side * 0.1, z, toWalk, { kind: q() < 0.5 ? 'power' : 'phone' });
+          break;
+        case 'phonebox':
+          signalCabinet(ctx, xc, z, toWalk, { kind: 'phone' });
           break;
         case 'wheelie':
           wheelieBin(ctx, xc + side * 0.1, z, toWalk);
@@ -212,6 +302,7 @@ export function dressSidewalks(ctx, b) {
           break;
         case 'bench':
           bench(ctx, xc + side * 0.2, z, toRoad);
+          drops.push([xc - side * 0.4, z, q.int(0, 2)]);
           break;
         case 'bike':
           bikeRack(ctx, r, xc, z, true, r.int(1, 3));
@@ -226,7 +317,7 @@ export function dressSidewalks(ctx, b) {
           planter(ctx, r, xc, z);
           break;
         case 'sign':
-          curbSign(ctx, xc - side * 0.45, z, toRoad, r.pick(['noparking', 'oneway', 'noparking']));
+          curbSign(ctx, xc - side * 0.45, z, true, r.pick(live ? ['clean', 'hour2', 'clean'] : ['tow', 'clean', 'hour2', 'noturn']), q() < 0.4 ? 'nopark' : null);
           break;
         default:
           break;
@@ -242,8 +333,10 @@ export function dressSidewalks(ctx, b) {
         const x = L + off;
         if (x > x1 - 6) break;
         const what = r.pick(live ? ['wheelie', 'none', 'none', 'hydrant', 'bags'] : ['trash', 'none', 'hydrant', 'bike', 'none', 'mailbox']);
-        if (what === 'trash') trashCan(ctx, x, zc);
-        else if (what === 'wheelie') wheelieBin(ctx, x, zc - side * 0.1, toWalk);
+        if (what === 'trash') {
+          trashCan(ctx, x, zc);
+          drops.push([x, zc - side * 0.2, q.int(1, 3)]);
+        } else if (what === 'wheelie') wheelieBin(ctx, x, zc - side * 0.1, toWalk);
         else if (what === 'hydrant') hydrant(ctx, x, zc + side * 0.3);
         else if (what === 'bike') bikeRack(ctx, r, x, zc, false, r.int(1, 2));
         else if (what === 'mailbox') mailbox(ctx, x, zc, toWalk);
@@ -251,4 +344,7 @@ export function dressSidewalks(ctx, b) {
       }
     }
   }
+  // what people drop, the paint, a colour a part
+  litter(ctx, P, q, drops, x0, x1, z0, z1, { live });
+  if (!P.empty) P.flush(ctx, ctx.M.court);
 }

@@ -200,7 +200,8 @@ function diamond(g, x, y, s, what) {
 /**
  * The streets' picture and its pen, made once: { mat, rects }. rects: `a<i>` / `s<j>` / `c<k>`:
  * the blades of the avenues, the streets, the causeways; ped (the box of the hand and the man),
- * stop, xing, school; the plates: clean, hour2, loading, speed25, speed35, noturn, tow, bike.
+ * stop, xing, school; the plates: clean, hour2, loading, speed25, speed35, noturn, tow, bike,
+ * busstop, push; the short ones: allway, nopark, bikelane.
  */
 export function roadKit() {
   if (KIT) return KIT;
@@ -249,6 +250,14 @@ export function roadKit() {
     plate(g, x, y, 96, 128, bg, fg, lines, o);
     rects[key === 'ped' ? 'push' : key] = cell(x, y, 96, 128);
   });
+  // (the little plate under a stop sign where every way stops, and the street's number plates)
+  y = 768;
+  plate(g, 0, y, 96, 48, '#c8202c', '#ffffff', ['ALL WAY'], { bigSize: 20 });
+  rects.allway = cell(0, y, 96, 48);
+  plate(g, 96, y, 96, 48, '#f7f4ec', '#141418', ['NO PARKING'], { bigSize: 15 });
+  rects.nopark = cell(96, y, 96, 48);
+  plate(g, 192, y, 96, 48, '#2a5fc0', '#f7f4ec', ['BIKE LANE'], { bigSize: 17 });
+  rects.bikelane = cell(192, y, 96, 48);
   const tex = canvasTexture(c);
   // (the island's little boards' pen, M.board, with this picture: world/city.js)
   const mat = makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1, objMask: true });
@@ -282,7 +291,6 @@ const at = (f, u, v) => [f.ox + f.rx * u + f.fx * v, f.oz + f.rz * u + f.fz * v]
 export const WHITE = srgb(0.95, 0.93, 0.88);
 export const YELLOW = srgb(0.96, 0.78, 0.24);
 
-const _c = [];
 // the shapes of the paint, gathered per colour; flushed as a part each (a mark's outline is its
 // edge with the asphalt round it)
 export class Paint {
@@ -311,6 +319,19 @@ export class Paint {
     const n = s.pos.length / 3;
     s.pos.push(...a, ...(up ? b : c), ...(up ? c : b));
     s.idx.push(n, n + 1, n + 2);
+  }
+
+  // a quad by world points a, b, c, d round it (turned to face up): four corners, two triangles
+  quad(s, a, b, c, d) {
+    const ux = b[0] - a[0];
+    const uz = b[2] - a[2];
+    const vx = c[0] - a[0];
+    const vz = c[2] - a[2];
+    const up = uz * vx - ux * vz > 0;
+    const n = s.pos.length / 3;
+    s.pos.push(...a, ...b, ...c, ...d);
+    if (up) s.idx.push(n, n + 1, n + 2, n, n + 2, n + 3);
+    else s.idx.push(n, n + 2, n + 1, n, n + 3, n + 2);
   }
 
   // a filled shape [[u, v], ...] in frame f at height y
@@ -349,16 +370,24 @@ export class Paint {
         const r = at(f, u, v);
         return [r[0], y, r[1]];
       });
-      this.tri(s, W[0], W[1], W[2]);
-      this.tri(s, W[0], W[2], W[3]);
+      this.quad(s, W[0], W[1], W[2], W[3]);
     }
+  }
+
+  // a rectangle in frame f (u0..u1 across, v0..v1 along)
+  box(f, u0, v0, u1, v1, color, y) {
+    const s = this.set(color);
+    const a = at(f, u0, v0);
+    const b = at(f, u1, v0);
+    const c = at(f, u1, v1);
+    const d = at(f, u0, v1);
+    this.quad(s, [a[0], y, a[1]], [b[0], y, b[1]], [c[0], y, c[1]], [d[0], y, d[1]]);
   }
 
   // a rectangle along the axes (world x0..x1, z0..z1)
   rect(x0, z0, x1, z1, color, y) {
     const s = this.set(color);
-    this.tri(s, [x0, y, z0], [x1, y, z0], [x1, y, z1]);
-    this.tri(s, [x0, y, z0], [x1, y, z1], [x0, y, z1]);
+    this.quad(s, [x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1]);
   }
 
   // a round thing flat on the ground (a manhole's cover, a spot)
@@ -395,7 +424,6 @@ export class Paint {
       ctx.B.add(mat, g, null, nextId(), { color: s.color });
     }
     this.sets.clear();
-    _c.length = 0;
   }
 }
 
@@ -475,8 +503,8 @@ export function paintBike(paint, f, v0, color, y, sharrow = false) {
   const S = 1.45;
   const ring = (cu, cv, r) => {
     const pts = [];
-    for (let k = 0; k <= 12; k++) {
-      const a = (k / 12) * Math.PI * 2;
+    for (let k = 0; k <= 9; k++) {
+      const a = (k / 9) * Math.PI * 2;
       pts.push([cu + Math.cos(a) * r, cv + Math.sin(a) * r * 1.5]);
     }
     paint.stroke(f, pts, w, color, y);
@@ -524,4 +552,18 @@ export function blot(paint, f, r, u, v, a, b, color, y, n = 9) {
   paint.poly(f, pts, color, y);
 }
 
-export const PAINT_Y = 0.016;
+// (the paint's height over the asphalt: up off it enough that the two never fight in the depth,
+// from as far off as the little things are drawn)
+export const PAINT_Y = 0.02;
+
+// the frame f moved across by u (the middle of a lane)
+export function shift(f, u) {
+  return frame(f.ox + f.rx * u, f.oz + f.rz * u, f.fx, f.fz);
+}
+
+// a word painted along the curb, read from the sidewalk (LOADING ZONE, BUS STOP): the letters stand
+// across the lane by the curb, out from it. (cx, cz): the middle of the word at the curb, (ox, oz):
+// out from the curb into the road, d: how far out its foot is
+export function curbWord(paint, cx, cz, ox, oz, word, color, y, d = 0.5, W = 0.62, H = 1.5) {
+  paintWord(paint, frame(cx + ox * d, cz + oz * d, ox, oz), word, 0, color, y, W, H, 0.12);
+}
