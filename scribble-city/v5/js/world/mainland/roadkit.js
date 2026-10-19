@@ -259,8 +259,9 @@ export function roadKit() {
   plate(g, 192, y, 96, 48, '#2a5fc0', '#f7f4ec', ['BIKE LANE'], { bigSize: 17 });
   rects.bikelane = cell(192, y, 96, 48);
   const tex = canvasTexture(c);
-  // (the island's little boards' pen, M.board, with this picture: world/city.js)
-  const mat = makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1, objMask: true });
+  // (the island's little boards' pen, M.board, with this picture: world/city.js; no shadow of
+  // its own - a plate a few millimetres thin on its post casts none worth a draw in the sun's map)
+  const mat = makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1, objMask: true, noShadow: true });
   KIT = { mat, rects, texture: tex };
   return KIT;
 }

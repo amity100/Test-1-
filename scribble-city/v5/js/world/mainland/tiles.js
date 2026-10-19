@@ -9,7 +9,7 @@ import { streetLamp, signalPole } from '../streets.js';
 import { shadeTree, grassStrip } from '../streetscape.js';
 import { NODES, MAIN0 } from '../roads.js';
 import { M_AVES, M_STREETS, M_BLOCKS, SHORE_X, BEACH_Z, CURB } from './plan.js';
-import { Paint, PAINT_Y, frame, curbWord } from './roadkit.js';
+import { Paint, PAINT_Y, frame, curbWord, roadKit } from './roadkit.js';
 import { sidewalk, pedHeads, nameBlades, stopPost, polePlate, signalCabinet, bollards, grate, utilityPole, poleEnds, span, guyWire, RAMP, CURB_RED, CURB_YELLOW } from './roadside.js';
 import { markRoad, markCrossing, nodeOf, blockAt, schoolBeside, BIKE_AVES, BIKE_STREETS } from './roadmarks.js';
 
@@ -150,6 +150,7 @@ function cornersOf(n) {
 // on the corners of the busy town
 function cornerThings(tctx, n) {
   const r = seeded(7717 + n.id * 31);
+  const lite = tctx.low;
   const cs = cornersOf(n).filter((c) => c.b && !BARE.has(c.b.kind));
   if (!cs.length) return;
   if (n.signal) {
@@ -159,7 +160,10 @@ function cornerThings(tctx, n) {
   }
   for (const c of cs) {
     if (!TOWN.has(c.b.kind)) continue;
-    bollards(tctx, [[c.x + c.qx * 0.45, c.z + c.qz * 0.45], [c.x + c.qx * 0.36, c.z + c.qz * 0.98], [c.x + c.qx * 0.98, c.z + c.qz * 0.36]]);
+    // (on a phone, the one at the point of the corner)
+    const pts = [[c.x + c.qx * 0.45, c.z + c.qz * 0.45]];
+    if (!lite) pts.push([c.x + c.qx * 0.36, c.z + c.qz * 0.98], [c.x + c.qx * 0.98, c.z + c.qz * 0.36]);
+    bollards(tctx, pts);
   }
 }
 
@@ -382,7 +386,8 @@ function* buildTile(tctx, t) {
         streetLamp(tctx, x, z, ax, 0, { light: (Math.round(z) & 1) === 0 });
         const lid = lastProp(tctx);
         const plate = k === 0 ? (bikeAve ? 'bike' : bq() < 0.5 ? 'speed35' : null) : bq.pick(['tow', null, 'noturn', null, null, 'clean']);
-        if (plate && !bare) polePlate(tctx, x, z, CURB + 2.7, true, plate, lid, 0.115);
+        // (on a phone, the first lamp's plate of a side only)
+        if (plate && !bare && (!lite || k === 0)) polePlate(tctx, x, z, CURB + 2.7, true, plate, lid, 0.115);
         if (r() < 0.6) {
           const tx = x - ax * 0.4;
           const tz = z + 13;
@@ -400,7 +405,7 @@ function* buildTile(tctx, t) {
         const lid = lastProp(tctx);
         const load = cp.loading.find((l) => l.lamp === x && l.side === az);
         const plate = load ? 'loading' : bikeSt && x === x0 + 16 ? 'bike' : bare ? null : bq.pick(['clean', 'hour2', null, null, 'tow']);
-        if (plate) polePlate(tctx, x, z, CURB + 2.7, false, plate, lid, 0.115);
+        if (plate && (!lite || load || x === x0 + 16)) polePlate(tctx, x, z, CURB + 2.7, false, plate, lid, 0.115);
       }
     }
     // the loading zones' words, along the curb in the lane of the parked cars
@@ -445,10 +450,10 @@ function* homeStreets(tctx, b, x0, x1, z0, z1, q) {
   grassStrip(tctx, x0 + g0, z0 + e, x0 + g1, z1 - e);
   grassStrip(tctx, x1 - g1, z0 + e, x1 - g0, z1 - e);
   // a street tree on each side (between the lamps and the things on the sidewalk:
-  // world/mainland/sidewalks.js)
+  // world/mainland/sidewalks.js; not on a phone)
   for (const [z, s, u] of [[z0 + 1.0, 1, 27], [z1 - 1.0, -1, 57]]) {
     const x = x0 + u + q.range(-0.6, 0.6);
-    if (x > x1 - 8) continue;
+    if (x > x1 - 8 || tctx.low) continue;
     shadeTree(tctx, q, x, z, { lite: true, away: [0, s], size: q.range(0.75, 0.95) });
   }
   yield;
@@ -470,6 +475,9 @@ function* homeStreets(tctx, b, x0, x1, z0, z1, q) {
 
 /** a tile's build (a generator); returns its live object { group, attach(), detach() } */
 export function* buildGroundTile(world, t) {
+  // (the signs' pen is one of the little things not drawn from far off, like the props it hangs
+  // on - the blocks' plates too, world/mainland/sidewalks.js)
+  world.smallPens.add(roadKit().mat);
   const tctx = tileCtx(world, t);
   const group = new THREE.Group();
   group.name = `ground ${t.id}`;

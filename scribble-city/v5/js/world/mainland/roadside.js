@@ -204,13 +204,16 @@ export function pedHeads(ctx, n, sig, o = {}) {
     put(ctx, M.prop, new THREE.BoxGeometry(0.36, 0.64, 0.2), hx, yc, hz, yaw, box);
     // (its bracket back to the pole)
     put(ctx, M.prop, new THREE.BoxGeometry(0.08, 0.5, 0.2), px + fx * 0.14, yc, pz + fz * 0.14, yaw, POLE);
-    // the hood over the upper lens
-    put(ctx, M.prop, new THREE.BoxGeometry(0.36, 0.025, 0.12), hx + fx * 0.16, yc + 0.31, hz + fz * 0.16, yaw, box);
+    // the hood over the upper lens (not on a phone)
+    if (!o.lite) put(ctx, M.prop, new THREE.BoxGeometry(0.36, 0.025, 0.12), hx + fx * 0.16, yc + 0.31, hz + fz * 0.16, yaw, box);
     signFace(ctx, hx + fx * 0.104, yc, hz + fz * 0.104, fx, fz, 0.32, 0.6, K.rects.ped);
     const lens = (dy) => new THREE.Matrix4().makeRotationY(yaw).scale(new THREE.Vector3(1.12, 1.12, 1)).setPosition(hx + fx * 0.12, yc + dy, hz + fz * 0.12);
     const hand = lens(0.15);
     const walk = lens(-0.15);
-    ctx.signals.push({ node: n.id, axis, lamps: [[hand, hand, walk]], x: px, z: pz, obj: sig.obj || 0, ped: true });
+    // (the head lit by the light of the pole's own cars rides on the pole's own entry - one less
+    // for game/signals.js to look at every frame; the other is an entry of its own)
+    if (axis === sig.axis) sig.lamps.push([hand, hand, walk]);
+    else ctx.signals.push({ node: n.id, axis, lamps: [[hand, hand, walk]], x: px, z: pz, obj: sig.obj || 0, ped: true });
     if (o.lite) continue;
     // the button: a yellow box, its plate over it (on the pole)
     const bx = px + fx * 0.13;
