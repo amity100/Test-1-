@@ -939,8 +939,12 @@ export class Civilians {
           if (!C.used.some((o) => o && o.alive && !o.gone && o.waitAt && o.waitAt.C === C)) this.curbs.delete(k);
         }
       }
+      // (GTA IV pass: the street's own people standing in a group, listening to the musician, on
+      // the phone, stopped to talk - game/streetsocial.js - are counted with the walkers: they are
+      // the street's people, not more of them)
+      const social = game.crowds && game.crowds.social;
       let free = 0;
-      for (const c of this.list) if (!c.scripted) free++;
+      for (const c of this.list) if (!c.scripted || (social && c.owner === social)) free++;
       if (free > max + 1) {
         // (fewer people are out at this hour than there were: some of those out of sight go home)
         const cp = game.camera.position;
@@ -1058,17 +1062,24 @@ export class Civilians {
     // there nobody can tell; it halves their share of the work). Half of them move on even
     // frames, half on odd ones.
     const cam = game.camera.position;
+    const social = game.crowds && game.crowds.social;
     this.frameN = (this.frameN || 0) + 1;
     this.buildGrid();
     for (let i = 0; i < this.list.length; i++) {
       const c = this.list[i];
       let step = dt + c.owed;
-      if (!c.ctrl && !c.scripted && c.dying < 0 && !(c.panicT > 0) && !c.headless && !c.inside) {
-        const dx = c.pos.x - cam.x;
-        const dz = c.pos.z - cam.z;
-        if (dx * dx + dz * dz > FAR_STEP * FAR_STEP && ((this.frameN + i) & 1)) {
-          c.owed = step;
-          continue;
+      // (the street's own people on the phone, stopping to talk, by the musician - game/streetsocial.js
+      // - are walkers too: far away, the same every-other-frame steps)
+      if ((!c.ctrl && !c.scripted && !c.headless && !c.inside) || (social && c.owner === social && !c.still)) {
+        if (c.dying >= 0 || c.panicT > 0) {
+          // (as near)
+        } else {
+          const dx = c.pos.x - cam.x;
+          const dz = c.pos.z - cam.z;
+          if (dx * dx + dz * dz > FAR_STEP * FAR_STEP && ((this.frameN + i) & 1)) {
+            c.owed = step;
+            continue;
+          }
         }
       } else if (c.still && c.dying < 0 && !(c.panicT > 0)) {
         // somebody sitting or waiting (game/routines.js): beyond a few metres their small moves
@@ -1328,8 +1339,9 @@ export class Civilians {
   fromFar(w) {
     const R = this.game.rhythm;
     const max = Math.round((this.game.touch ? 18 : 40) * (R ? R.people : 1));
+    const social = this.game.crowds && this.game.crowds.social;
     let free = 0;
-    for (const c of this.list) if (!c.scripted) free++;
+    for (const c of this.list) if (!c.scripted || (social && c.owner === social)) free++;
     if (free >= max) return null;
     const c = new Civilian(this, w.prom ? 'prom' : w.col, w.prom ? w.z : w.row, w.look);
     c.loop = w.loop;

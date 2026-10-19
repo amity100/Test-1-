@@ -441,6 +441,14 @@ export class StreetSocial {
         this.stats.partings++;
         return;
       }
+      // now and then somebody walking past knows them and joins in; now and then one of them
+      // has to go before the others
+      H.joinT = (H.joinT === undefined ? 4 + Math.random() * 6 : H.joinT) - dt;
+      if (H.joinT <= 0 && !H.ex) {
+        H.joinT = 5 + Math.random() * 8;
+        if (H.members.length < 4 && d < 45 && chance(0.5)) this.joinHuddle(H, d);
+        else if (H.members.length > 2 && H.t > 25 && chance(0.18)) this.leaveHuddle(H, d);
+      }
       H.talkT -= dt;
       if (!H.ex && H.talkT <= 0) {
         const cam = this.game.camera.position;
@@ -481,6 +489,66 @@ export class StreetSocial {
       }
       H.done = true;
     }
+  }
+
+  // a walker passing close by stops and joins them: a place in the ring on the side they came
+  // from, a hello
+  joinHuddle(H, d) {
+    const civs = this.game.civilians;
+    let best = null;
+    let bd = 4;
+    for (const c of civs.list) {
+      if (!civs.plain(c) || c.jog || c.convo || (c.joinedT || 0) > this.game.time) continue;
+      const dd = Math.hypot(c.pos.x - H.x, c.pos.z - H.z);
+      if (dd < bd && dd > 1.2) {
+        bd = dd;
+        best = c;
+      }
+    }
+    if (!best) return;
+    best.joinedT = this.game.time + 120;
+    const a = Math.atan2(best.pos.x - H.x, best.pos.z - H.z);
+    const sx = H.x + Math.sin(a) * 0.7;
+    const sz = H.z + Math.cos(a) * 0.7;
+    if (!this.roomAt(sx, sz, 0.22)) return;
+    // (the others shuffle round a little to make room: nobody in the newcomer's place)
+    for (const m of H.members) {
+      if (Math.hypot(m.hslot.x - sx, m.hslot.z - sz) < 0.55) return;
+    }
+    best.scripted = true;
+    best.owner = this;
+    best.huddle = H;
+    best.still = true;
+    best.hslot = { x: sx, z: sz };
+    best.sway = (Math.random() - 0.5) * 0.5;
+    best.sipT = 4 + Math.random() * 8;
+    best.ctrl = (me, dt) => this.memberStep(me, H, dt);
+    H.members.push(best);
+    H.life = Math.max(H.life, H.t + 25);
+    this.stats.joins = (this.stats.joins || 0) + 1;
+    if (d < 26) {
+      best.gestNext = 'wave';
+      const o = pick(H.members.filter((m) => m !== best));
+      if (o) H.ex = this.game.voices.talk([best, o], pick(LINES.GROUP_JOIN));
+    }
+  }
+
+  // one of them off before the others: a goodbye, a wave, away along the walk
+  leaveHuddle(H, d) {
+    const civs = this.game.civilians;
+    const m = pick(H.members);
+    if (!m || m.convo) return;
+    H.members = H.members.filter((o) => o !== m);
+    if (d < 26) {
+      const o = pick(H.members);
+      if (o) this.game.voices.talk([m, o], pick(LINES.GROUP_LEAVE));
+    }
+    civs.release(m);
+    m.scripted = false;
+    m.dir = chance(0.5) ? 1 : -1;
+    civs.rejoin(m);
+    m.idleT = 8;
+    this.stats.leaves = (this.stats.leaves || 0) + 1;
   }
 
   laugh(H) {
@@ -1282,7 +1350,7 @@ export class StreetSocial {
         const u = ((i * 0.618) % 1) * 0.7 - 0.35;
         const v = ((i * 0.371) % 1) * 0.18 - 0.09;
         _c.set(B.caseAt.x + r.x * u + f.x * v, gy + 0.13, B.caseAt.z + r.z * u + f.z * v);
-        bodies.blob(_c, r, UP, f, 0.03, 0.008, 0.03, i % 3 === 2 ? SILVER : COIN);
+        bodies.blob(_c, r, UP, f, 0.04, 0.01, 0.04, i % 3 === 2 ? SILVER : COIN);
       }
       // the pen along its rim
       const e = 0.5;

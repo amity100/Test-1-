@@ -174,6 +174,9 @@ const GROUP = {
   ],
 };
 const LAUGHS = ['Ha ha ha!', 'Hahaha!', 'Ha! Stop it!', 'Ha ha, no way!', 'Hah!'];
+// somebody joining a group on the street, somebody leaving it early
+const GROUP_JOIN = [['Hey guys!', 'There you are!'], ['Sorry I\'m late!', 'As always!'], ['What did I miss?', 'Everything.'], ['Hey hey!', 'Look who it is!']];
+const GROUP_LEAVE = [['I have to go, sorry!', 'Bye!'], ['That\'s my bus. Bye!', 'See you!'], ['Gotta run. Text me!', 'Will do!']];
 const GROUP_BYE = [["Okay, I'm off.", 'See you!', 'Bye!'], ['I gotta run.', 'Later!', 'Take care!'], ['Same time next week?', 'Deal.', 'Bye bye!'], ['Alright, back to work.', 'Ugh. Fine.', 'See you later!']];
 // acquaintances meeting on the sidewalk: who calls whom, the hello, a few lines, goodbye
 const NAMES = ['Sam', 'Maria', 'Dev', 'Lena', 'Marco', 'Aisha', 'Tom', 'Rosa', 'Jin', 'Carla', 'Omar', 'Nina', 'Luis', 'Priya', 'Ben', 'Sofia', 'Andre', 'Mia', 'Hector', 'Yuki', 'Dana', 'Leo'];
@@ -203,7 +206,7 @@ const LYRICS = ['♪ Ink on the city, ink on my heart ♪', '♪ Oh, Calle Ocho,
 const BUSK_SAY = ['Thank you, thank you!', 'This next one is an original!', 'Thanks for listening!', 'Any requests?', 'You are too kind!'];
 const TIP_SAY = ['Great song!', 'Love it!', 'Keep it up!', 'Beautiful!', 'Bravo!'];
 const LISTEN_SAY = ['So good.', 'I love this song.', 'Wow.', 'Nice voice!', 'Play another!'];
-export const LINES = { GROUP, LAUGHS, GROUP_BYE, NAMES, MEET, MEET_BYE, CALLS, LYRICS, BUSK_SAY, TIP_SAY, LISTEN_SAY };
+export const LINES = { GROUP, LAUGHS, GROUP_BYE, GROUP_JOIN, GROUP_LEAVE, NAMES, MEET, MEET_BYE, CALLS, LYRICS, BUSK_SAY, TIP_SAY, LISTEN_SAY };
 
 // (the names a browser gives its voices: whose is whose, roughly)
 const FEM_VOICE = /female|zira|samantha|victoria|karen|moira|tessa|fiona|susan|hazel|serena|allison|ava|kate|libby|sonia|jenny|aria|emma|amy|joanna|salli|kimberly/i;
