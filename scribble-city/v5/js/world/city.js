@@ -274,6 +274,15 @@ export function buildCity(scene, o = {}) {
   // (the mainland's malls that are built, and the halls under a roof: game/mall.js, game/weather.js)
   world.malls = [];
   world.indoorAreas = [];
+  world.plots = [];
+  // (the houses drawn on the plots, kept in the browser: world/plot.js, game/friend.js)
+  world.homes = new Map();
+  try {
+    const list = JSON.parse(localStorage.getItem('scribble-city-v5-homes') || '[]');
+    if (!/[?&]homes=0/.test(location.search)) for (const h of list) if (h && h.key) world.homes.set(h.key, h);
+  } catch (e) {
+    // (no storage: no houses kept)
+  }
   world.addShop = (sh) => {
     sh.id = shopId++;
     world.shops.push(sh);

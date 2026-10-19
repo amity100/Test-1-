@@ -520,6 +520,23 @@ export class Audio {
         this.tone('triangle', 660, 990, 0.12, 0.1 * v);
         this.tone('triangle', 880, 1320, 0.14, 0.08 * v, 0.1);
         break;
+      case 'knock':
+        // (v5) three knocks on a wooden door
+        for (let i = 0; i < 3; i++) {
+          this.tone('sine', 150, 70, 0.09, 0.32 * v, i * 0.17);
+          this.hiss(0.05, 0.22 * v, 700, 1.2, 'lowpass', i * 0.17);
+        }
+        break;
+      case 'piano': {
+        // (v5) a few notes of a piano, soft (a pentatonic run)
+        const scale = [262, 294, 330, 392, 440, 523, 587, 659];
+        for (let i = 0; i < 3; i++) {
+          const f = scale[Math.floor(Math.random() * scale.length)];
+          this.tone('triangle', f, f * 0.998, 0.7, 0.07 * v, i * 0.16);
+          this.tone('sine', f * 2, f * 1.996, 0.4, 0.025 * v, i * 0.16);
+        }
+        break;
+      }
       case 'strum':
         // a guitar chord, string by string
         [196, 247, 294, 392, 494].forEach((f, i) => this.tone('triangle', f, f * 0.995, 0.9, 0.05 * v, i * 0.025));

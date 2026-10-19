@@ -1408,3 +1408,49 @@ body.touch .fd-pmenu .fd-pm-say b { font-size: 11px; }
   .fd-chip { font-size: 12.5px; padding: 3px 8px; }
   .fd-cat { font-size: 12.5px; padding: 3px 7px; }
 }
+
+/* ---------- (v5, ROADMAP 11.17) talking with the friend you drew: ui/chat.js ---------- */
+#chat {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: min(420px, 92vw);
+  max-height: min(520px, 70vh);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 12px;
+  pointer-events: auto;
+  z-index: 21;
+  transform: rotate(0.4deg);
+}
+#chat .chat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+#chat .chat-name { font-family: var(--font-hand); font-size: 26px; color: #b3191e; }
+#chat .chat-love { color: #e2456f; font-size: 18px; letter-spacing: 1px; flex: 1; }
+#chat .chat-x { font: inherit; font-size: 16px; border: 2px solid var(--ink); border-radius: 8px; background: #fffdf6; cursor: pointer; padding: 2px 8px; }
+#chat .chat-log {
+  flex: 1;
+  min-height: 90px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px 8px;
+  background: repeating-linear-gradient(180deg, transparent 0 25px, rgba(110, 140, 210, 0.22) 25px 26px);
+}
+#chat .chat-line { max-width: 86%; padding: 6px 10px; border-radius: 12px 10px 14px 8px; font-size: 16px; line-height: 1.4; border: 2px solid var(--ink); white-space: pre-wrap; }
+#chat .chat-her { align-self: flex-start; background: #ffe3ec; }
+#chat .chat-me { align-self: flex-end; background: #e4f1ff; }
+#chat .chat-note { align-self: center; border: none; color: #6a6478; font-size: 13px; padding: 0; }
+#chat .chat-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+#chat .chat-chip { font: inherit; font-size: 14px; padding: 4px 10px; border: 2px solid var(--ink); border-radius: 14px 10px 12px 9px; background: #fff7c7; cursor: pointer; box-shadow: 2px 2px 0 rgba(36, 36, 44, 0.2); }
+#chat .chat-chip:hover { background: #fff0a0; }
+#chat .chat-form { display: flex; gap: 6px; }
+#chat .chat-in { flex: 1; font: inherit; font-size: 16px; padding: 6px 10px; border: 2px solid var(--ink); border-radius: 10px; background: #fffdf6; }
+#chat .chat-send { font: inherit; font-size: 15px; padding: 6px 12px; border: 2px solid var(--ink); border-radius: 10px; background: #c9f2d3; cursor: pointer; }
+#chat.busy .chat-send { opacity: 0.5; }
+body.touch #chat { width: min(380px, 58vw); max-height: 62vh; padding: 6px 8px 8px; bottom: max(8px, env(safe-area-inset-bottom)); }
+body.touch #chat .chat-name { font-size: 19px; }
+body.touch #chat .chat-line { font-size: 13px; padding: 4px 8px; }
+body.touch #chat .chat-chip { font-size: 12px; padding: 3px 8px; }
+body.touch #chat .chat-in { font-size: 16px; padding: 4px 8px; }
+body.chatting #goals { display: none; }

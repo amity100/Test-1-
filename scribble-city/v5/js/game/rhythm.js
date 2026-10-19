@@ -47,6 +47,8 @@ const SHOP_HOURS = {
   // (the lines outside: the club's doors open at six, the cinema's last show is at midnight)
   // (the clubs open in the afternoon: the day party first, then the night)
   club: [15, 28],
+  // (the houses where people live: somebody is always home)
+  homeFamily: null, homeArtist: null, homeGrandma: null, homeLux: null,
 };
 
 // clothes for the morning's way to work and for the night out (looks.js kinds)

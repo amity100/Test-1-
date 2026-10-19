@@ -379,6 +379,12 @@ class Room {
       floor: this.y0,
       height: this.y1 - this.y0,
       kind: this.kind,
+      // (v5: named places in the room - the television's screen, the stove, a wall for a picture)
+      marks: Object.fromEntries((this.spots.marks || []).map((m) => {
+        const p = this.P(m.u, this.y0 + (m.y || 0), m.d);
+        return [m.name, { x: p[0], y: p[1], z: p[2], ...toWorld(m) }];
+      })),
+      facade: { rx: this.f.ux, rz: this.f.uz, nx: this.f.nx, nz: this.f.nz },
       // the floor's corners: front left, front right, back right, back left
       corners: [[this.ua, this.da], [this.ub, this.da], [this.ub, this.db], [this.ua, this.db]].map(([u, d]) => {
         const p = this.P(u, this.y0, d);

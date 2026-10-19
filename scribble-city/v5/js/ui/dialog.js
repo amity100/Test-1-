@@ -14,8 +14,9 @@ export class Dialog {
     this.isOpen = false;
   }
 
+  // (v5: the talk with the friend you drew is a conversation too - ui/chat.js)
   get open() {
-    return this.isOpen;
+    return this.isOpen || !!(this.chat && this.chat.isOpen);
   }
 
   // choices: [{ label, fn }]; with none, a single "continue" closes it
@@ -75,6 +76,10 @@ export class Dialog {
 
   // number keys pick an answer
   update() {
+    if (!this.isOpen && this.chat && this.chat.isOpen) {
+      this.chat.update();
+      return;
+    }
     if (!this.isOpen) return;
     const input = this.game.input;
     for (let k = 1; k <= this.choices.length && k <= 9; k++) {

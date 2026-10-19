@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { shopkeeperLook, civilianLook, friendLook } from './looks.js';
+import { shopkeeperLook, civilianLook, friendLook, kidLook, elderLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
 import { BLUEPRINTS, BLUEPRINT_MORE, BLUEPRINT_TOOLS } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
-import { DISTRICT_NAMES, blockAt } from '../world/layout.js';
+import { DISTRICT_NAMES, blockAt, CURB } from '../world/layout.js';
 import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, FASHION_TOPS, FASHION_BOTTOMS, SHOE_WALL, SPORT_TOPS, JEWELS, wear, armorUp, outfitOf, putOn, ownTattoo } from './wardrobe.js';
 import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 import { BOSS } from './properties.js';
@@ -38,6 +38,7 @@ const TOOL = {
   phones: 'phone', optics: null, gym: 'dumbbell', music: 'guitar', barber: 'scissors', lobby: null,
   friends: 'magicPencil', tacos: 'tray', diner: 'tray', juice: 'tray', surf: null, boutique: null, arcade: null, bar: 'tray', cinema: null,
   fashion: null, shoes: null, electronics: 'phone', jewelry: null, toys: null, perfume: null, sports: null, burger: 'tray', noodles: null, gourmet: null, club: null, theatre: null,
+  homeFamily: null, homeArtist: null, homeGrandma: null, homeLux: null,
 };
 const CALLS = {
   pizza: ['Hot slice!', 'Fresh outta the oven!', 'Pizza! Pizza!'],
@@ -81,6 +82,10 @@ const CALLS = {
   gourmet: ['Service!', 'Table four, please.', 'Bon appétit.'],
   club: ['Make some noise!', 'Hands up!', 'One more song!'],
   theatre: ['Popcorn! Fresh popcorn!', 'The show starts soon!', 'Tickets, tickets!'],
+  homeFamily: ['Dinner\'s ready!', 'Kids, wash your hands!', 'Who left the TV on?', 'Smells good, right?'],
+  homeArtist: ['Hmm... more blue.', 'Inspiration!', 'Don\'t touch, it\'s wet!', 'Almost finished...'],
+  homeGrandma: ['Who wants cookies?', 'Come in, sweetie!', 'In my day...', 'Domino, anyone?'],
+  homeLux: ['Lovely evening.', 'The pool is warm today.', 'A little Chopin?'],
 };
 
 // the hero's own look (hair, glasses, muscles) survives a reload
@@ -349,28 +354,43 @@ export class StreetLife {
     if (p.mode !== 'foot' || game.inBar) return null;
     let best = null;
     let bd = 2.4;
+    let knock = false;
     for (const a of this.active.values()) {
       const s = a.shop;
       // a shop with a room: you walk in and talk to the keeper at his counter
       const dd = a.room ? 99 : Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
       const kp = a.keeper && a.keeper.alive && (a.open || !a.room) ? a.keeper.pos : a.home;
       const dk = Math.hypot(kp.x - p.pos.x, kp.z - p.pos.z);
-      if (a.room && !a.room.inside(p.pos.x, p.pos.z, 0.2)) continue;
+      if (a.room && !a.room.inside(p.pos.x, p.pos.z, 0.2)) {
+        // (v5: at a house's door, outside: you knock first)
+        if (s.home && a.open && (!a.knocked || game.time - a.knocked > 12)) {
+          const d = Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
+          if (d < 1.6 && d < bd) {
+            bd = d;
+            best = a;
+            knock = true;
+          }
+        }
+        continue;
+      }
       const d = Math.min(dd, dk + 0.4);
       if (d < bd) {
         bd = d;
         best = a;
+        knock = false;
       }
     }
     if (!best) return null;
     const info = svc(this.game, best.shop.kind);
-    return { shop: best, label: best.open ? `E — ${best.room ? info.ask || info.verb : info.verb}` : 'החנות סגורה — המוכר ברח' };
+    if (knock) return { shop: best, knock: true, label: `E — ${info.verb}` };
+    return { shop: best, label: best.open ? `E — ${best.room ? best.shop.ask || info.ask || info.verb : info.verb}` : 'החנות סגורה — המוכר ברח' };
   }
 
   interact() {
     const t = this.target();
     if (!t || !t.shop.open) return false;
-    t.shop.talk();
+    if (t.knock) t.shop.knock();
+    else t.shop.talk();
     return true;
   }
 
@@ -393,10 +413,12 @@ export class StreetLife {
     this.companion = null;
   }
 
-  // the friend you drew at a stand: she walks with you
-  newCompanion(x, z) {
+  // the friend you drew at a stand: she walks with you (look: hers again, when drawn again; quiet:
+  // she was already yours - at home, game/friend.js)
+  newCompanion(x, z, look = null, quiet = false) {
     if (this.companion) this.companion.dispose();
-    this.companion = new Companion(this, x, z);
+    this.companion = new Companion(this, x, z, look);
+    if (!quiet && this.game.friend) this.game.friend.adopt(this.companion);
     return this.companion;
   }
 }
@@ -762,6 +784,57 @@ SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הב�
   }],
 ] };
 
+// ------------------------------------------------------------------ (v5, ROADMAP 11.17) at home
+// the houses of the mainland where people live (world/home.js): you knock, they let you in, and
+// there is something to do with them - the family's dinner and its television, the painter's
+// wall, grandmother's cookies and her dominoes, the villa's piano (who: the household's own name)
+SERVICES.homeFamily = { verb: 'לדפוק בדלת', ask: 'לדבר עם המשפחה', who: 'המשפחה', greet: 'שלום שלום! בדיוק מתיישבים לאכול. מצטרפים?', offers: [
+  ['ארוחת ערב עם המשפחה (+40 חיים)', null, (game, a) => a.homeMeal(pick(['pasta', 'pizza', 'burger', 'noodles']), 40, [0.95, 0.82, 0.4], 'ארוחה ביתית. +40 חיים')],
+  ['לראות טלוויזיה על הספה', null, (game, a) => a.watchTV()],
+  ['לשחק עם הילדים', null, (game, a) => a.playKids()],
+] };
+SERVICES.homeArtist = { verb: 'לדפוק בדלת', ask: 'לדבר עם האמן', who: 'הסטודיו', greet: 'היי! סליחה על הבלגן, יש צבע בכל מקום. רוצים לצייר משהו ביחד?', offers: [
+  ['לצייר ביחד על הקיר (העט מתמלא דיו)', null, (game, a) => a.paintTogether()],
+  ['ציור במתנה: שרטוט חדש לאלבום', 'flower', (game) => giftBlueprint(game)],
+  ['לשים תקליט ולרקוד', null, (game, a) => a.homeDance()],
+] };
+SERVICES.homeGrandma = { verb: 'לדפוק בדלת', ask: 'לדבר עם סבתא', who: 'סבתא', greet: 'אוי, איזו שמחה, אורחים! שבו, שבו. אכלתם משהו היום?', offers: [
+  ['עוגיות של סבתא (+30 חיים)', 'donut', meal(30, [0.86, 0.66, 0.36], 'עוגיות חמות מהתנור. +30 חיים')],
+  ['משחק דומינו', null, (game, a) => a.dominoes()],
+  ['לשמוע סיפור מפעם', null, (game, a) => a.story()],
+] };
+SERVICES.homeLux = { verb: 'לצלצל בפעמון', ask: 'לדבר עם בעלי הבית', who: 'הווילה', greet: 'ערב טוב, ברוכים הבאים לווילה. הפסנתר מכוון, המיץ קר.', offers: [
+  ['לנגן בפסנתר', null, (game, a) => a.piano()],
+  ['מיץ טרי מהבר (+20 חיים)', 'smoothie', meal(20, [1, 0.7, 0.3], 'מיץ טרי. +20 חיים')],
+  ['להתארח בחדר האורחים (לישון עד הבוקר)', null, (game) => game.props && game.props.sleep()],
+] };
+const HOME_KINDS = new Set(['homeFamily', 'homeArtist', 'homeGrandma', 'homeLux']);
+// who else is at home (the visitors of a house: game/streetlife.js addVisitor)
+const HOME_GUESTS = {
+  homeFamily: () => (Math.random() < 0.65 ? kidLook() : civilianLook({ kind: 'casual' })),
+  homeGrandma: () => elderLook(Math.random() < 0.4),
+  homeArtist: () => civilianLook({ kind: pick(['street', 'knit', 'denim']) }),
+  homeLux: () => civilianLook({ kind: pick(['chic', 'smart']) }),
+};
+// grandmother's stories of the drawn city
+const STORIES = [
+  'כשהייתי צעירה, כל העיר הייתה דף ריק. ציירנו את הרחובות בעיפרון אחד, ומחקנו כשטעינו. והים? הוא נשפך פעם מבקבוק דיו, ומאז אף אחד לא הצליח לנגב אותו.',
+  'הטיילת הייתה פעם קו ישר אחד. ואז ילד אחד צייר דקל, ואחריו עוד אחד, ועוד אחד... עד שהגיע הבוקר, והיו שם מאה דקלים.',
+  'סבא צייר לי פרח כל בוקר, חמישים שנה. כל הפרחים על הקיר הזה, תסתכלו. אף אחד מהם לא נמחק.',
+  'פעם ירד פה גשם של צבעי מים. כל העיר נהייתה סגולה לשבוע שלם. הכי יפה שהיה.',
+  'השלט על הגבעה? שלושה חברים כתבו אותו בטוש, באמצע הלילה. בבוקר כולם כבר חשבו שהוא תמיד היה שם.',
+  'פעם המחקים השתלטו על השכונה. מחקו את המכולת, את הספסל, את המדרכה. ואז כל השכנים יצאו עם עפרונות, וציירו הכול מחדש, יפה יותר.',
+];
+// a blueprint the album does not have yet (the painter's present)
+function giftBlueprint(game) {
+  const ids = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id));
+  if (!ids.length) {
+    game.hud.toast('כבר יש לכם את כל השרטוטים!', 'good', 2.4);
+    return;
+  }
+  giveBlueprint(game, pick(ids));
+}
+
 // (v5, ROADMAP 11.17) what each kitchen draws for the people who order there: the dish in the air,
 // then into their hands (or onto their table)
 const DISH = {
@@ -802,7 +875,7 @@ function bagColor(css) {
 
 // ------------------------------------------------------------------ one open shop
 // how many people sit at the tables (or wait on the bench) when you come by
-const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2, burger: 2, noodles: 2, gourmet: 5, club: 3, theatre: 14 };
+const SEATED = { cafe: 3, sushi: 2, pizza: 1, icecream: 1, barber: 1, books: 1, lobby: 1, diner: 3, bar: 3, juice: 1, tacos: 1, cinema: 2, burger: 2, noodles: 2, gourmet: 5, club: 3, theatre: 14, homeFamily: 3, homeGrandma: 1, homeArtist: 1, homeLux: 2 };
 // the new hairdos the barber draws
 const CUTS_M = ['short', 'buzz', 'pompadour', 'spiky', 'curly', 'short', 'pompadour', 'mohawk'];
 const CUTS_F = ['long', 'bun', 'ponytail', 'braids', 'curly', 'beehive', 'long', 'spacebuns'];
@@ -836,7 +909,7 @@ class OpenShop {
     const k = R && R.keeper ? R.keeper : null;
     const kx = k ? k.x : s.keeper[0];
     const kz = k ? k.z : s.keeper[2];
-    this.keeper = civs.spawnScripted(kx, kz, shopkeeperLook(s.kind), this);
+    this.keeper = civs.spawnScripted(kx, kz, shopkeeperLook(s.kind, s.fem), this);
     this.homeYaw = k ? k.yaw : s.face;
     this.keeper.yaw = this.homeYaw;
     this.keeper.fig.carry = TOOL[s.kind] || null;
@@ -958,7 +1031,7 @@ class OpenShop {
     const own = !c;
     if (!c) {
       const at = o.already ? spot : { x: s.door[0] + s.nx * 1.4 + s.rx * (Math.random() - 0.5) * 3, z: s.door[2] + s.nz * 1.4 + s.rz * (Math.random() - 0.5) * 3 };
-      const look = civilianLook();
+      const look = HOME_GUESTS[s.kind] ? HOME_GUESTS[s.kind]() : civilianLook();
       c = this.game.civilians.spawnScripted(at.x, at.z, look, this);
       c.yaw = o.already ? spot.yaw : s.face + Math.PI;
       if (o.already) c.noCollide = true;
@@ -1038,6 +1111,25 @@ class OpenShop {
   atSpot(v, dt) {
     const c = v.c;
     const sp = v.spot;
+    // (v5: at home, up to play with you - round you, dancing - then back to their place)
+    if (v.playT > 0) {
+      v.playT -= dt;
+      c.fig.sit = Math.max(0, c.fig.sit - dt * 3);
+      c.noCollide = false;
+      if (v.playT <= 0) {
+        c.fig.dance = 0;
+        v.phase = 'in';
+        v.pts = this.room.path(c.pos.x, c.pos.z, sp.x, sp.z);
+        return null;
+      }
+      c.fig.dance = 1;
+      const p = this.game.player.pos;
+      v.ang = (v.ang === undefined ? Math.random() * 6.28 : v.ang) + dt * 1.1;
+      const tx = p.x + Math.cos(v.ang) * 1.5;
+      const tz = p.z + Math.sin(v.ang) * 1.5;
+      if (!this.room.inside(tx, tz, -0.4)) return null;
+      return { x: tx, z: tz, speed: 1.5 };
+    }
     c.faceYaw = sp.yaw;
     if (v.mode === 'seat' || v.mode === 'chair') {
       c.pos.x = sp.x;
@@ -1371,6 +1463,7 @@ class OpenShop {
     const s = this.shop;
     const fig = c.fig;
     if (s.kind === 'barber') return this.barberInside(c, dt);
+    if (s.home) return this.residentLife(c, dt);
     if (s.kind === 'cafe' && this.room.seats.length >= 2) return this.waiterInside(c, dt);
     // (v5) a kitchen with tables: now and then a plate drawn for one of them, flown to the table
     if (DISH[s.kind] && this.room.seats.length && s.kind !== 'cafe') {
@@ -1819,6 +1912,18 @@ class OpenShop {
       game.hud.toast('כבר יש לך חברה מצוירת — היא כאן לידך', 'info', 2.4);
       return;
     }
+    // (v5: the friend you had - drawn again, she remembers you; or a new one: game/friend.js)
+    const F = game.friend;
+    if (F && F.data && !this.askedAgain) {
+      this.askedAgain = true;
+      game.dialog.show('צייר לך חברה', `לצייר שוב את ${F.data.heb}? היא זוכרת אתכם${F.data.homeKey ? ', והבית שלה מחכה' : ''}.`, [
+        { label: `לצייר את ${F.data.heb}`, fn: () => ((F.redraw = true), this.heroFriend()) },
+        { label: 'חברה חדשה', fn: () => ((F.redraw = false), this.heroFriend()) },
+      ]);
+      return;
+    }
+    this.askedAgain = false;
+    const look = F && F.redraw && F.data && F.data.look ? F.data.look : null;
     // you turn to the promenade and draw her there, out in the open
     const s = this.shop;
     const at = new THREE.Vector3(p.pos.x + s.nx * 1.7, p.pos.y + 0.88, p.pos.z + s.nz * 1.7);
@@ -1846,7 +1951,7 @@ class OpenShop {
         if (p.seat && p.seat.stand) p.seat = null;
         this.drawing = false;
         this.talking = false;
-        const c = life.newCompanion(at.x, at.z).c;
+        const c = life.newCompanion(at.x, at.z, look).c;
         c.yaw = p.yaw + Math.PI;
         this.game.fx.confetti(at.x, at.y + 0.6, at.z, 30, 3);
         this.hearts(at.x, at.y + 1.0, at.z, 6);
@@ -1886,7 +1991,7 @@ class OpenShop {
       if (own) this.say(this.keeper, BOSS[Math.floor(Math.random() * BOSS.length)]);
     }
     choices.push({ label: 'רק מסתכל, תודה', fn: null });
-    game.dialog.show(info.who, own ? 'הבוס הגיע! הכול על חשבון הבית. מה תרצו?' : info.greet, choices);
+    game.dialog.show(this.shop.who || info.who, own ? 'הבוס הגיע! הכול על חשבון הבית. מה תרצו?' : info.greet, choices);
   }
 
   // (ROADMAP 5.7) a shelf: each thing on it drawn in the air for you, and put on
@@ -1974,6 +2079,310 @@ class OpenShop {
         fn(game, this);
       },
     });
+  }
+
+  // ------------------------------------------------------------------ (v5, ROADMAP 11.17) at home
+  // knocking on the door of a house: who lives there comes to it and asks you in
+  knock() {
+    const game = this.game;
+    const s = this.shop;
+    game.audio.play('knock', 0.8);
+    this.knocked = game.time;
+    this.resHold = { name: 'door', until: game.time + 7 };
+    this.resPts = null;
+    this.say(this.keeper, pick(['Come in, it\'s open!', 'Who is it? Oh, come in!', 'Welcome, come in!', 'Door\'s open, come on in!']));
+    game.hud.toast(`${s.who || 'בעלי הבית'}: נכנסים, הדלת פתוחה`, 'info', 2.4);
+  }
+
+  // where in the room someone stands, sits or works at a mark: { x, z, yaw, sit } (or null)
+  spotOf(name) {
+    const R = this.room;
+    const m = R.marks || {};
+    const F = R.facade;
+    const used = new Set(this.visitors.filter((v) => v.mode === 'seat' || v.mode === 'chair').map((v) => v.spot));
+    const nearSeat = (t, max) => {
+      let best = null;
+      let bd = max;
+      for (const st of R.seats) {
+        if (used.has(st)) continue;
+        const d = Math.hypot(st.x - t.x, st.z - t.z);
+        if (d < bd) {
+          bd = d;
+          best = st;
+        }
+      }
+      return best;
+    };
+    if (name === 'door') {
+      const d = R.door;
+      return d ? { x: d.x, z: d.z, yaw: Math.atan2(F.nx, F.nz), sit: false } : null;
+    }
+    if (name === 'table' || name === 'sofa') {
+      const t = name === 'table' ? m.table : m.sofaB || m.sofaA;
+      if (!t) return null;
+      const st = nearSeat(t, name === 'table' ? 1.6 : 1.2);
+      return st ? { x: st.x, z: st.z, yaw: st.yaw, sit: true, seat: st } : null;
+    }
+    if (name === 'wall') {
+      const t = m.wall;
+      return t ? { x: t.x + F.nx * 1.5, z: t.z + F.nz * 1.5, yaw: Math.atan2(-F.nx, -F.nz), sit: false } : null;
+    }
+    const t = m[name];
+    if (!t) return null;
+    return { x: t.x, z: t.z, yaw: t.yaw, sit: name === 'domino' || name === 'piano' };
+  }
+
+  // the one who lives here, through the day: at the stove, a while at the table, on the sofa before
+  // the television, a look at the pictures; the painter at the easel, grandmother at her dominoes,
+  // the villa's at its piano
+  residentLife(c, dt) {
+    const game = this.game;
+    const h = this.resHold;
+    if (h && game.time < h.until) return this.goSpot(c, h.name, dt);
+    this.resHold = null;
+    this.resT = (this.resT === undefined ? 2 + Math.random() * 5 : this.resT) - dt;
+    if (this.resT <= 0 || !this.resAt) {
+      const m = this.room.marks || {};
+      const pool = ['stove', 'stove', 'table', 'sofa', 'wall'];
+      if (m.easel) pool.push('easel', 'easel', 'easel');
+      if (m.domino) pool.push('domino', 'domino');
+      if (m.piano) pool.push('piano', 'piano');
+      const ok = pool.filter((k) => k !== this.resAt && this.spotOf(k));
+      this.resAt = ok.length ? pick(ok) : 'stove';
+      this.resT = 9 + Math.random() * 13;
+      this.resPts = null;
+    }
+    return this.goSpot(c, this.resAt, dt);
+  }
+
+  // walk to a spot of the room (round the furniture) and be there
+  goSpot(c, name, dt) {
+    const fig = c.fig;
+    if (this.resSpotName !== name || !this.resSpot) {
+      this.resSpotName = name;
+      this.resSpot = this.spotOf(name) || { x: this.home.x, z: this.home.z, yaw: this.homeYaw, sit: false };
+      this.resPts = null;
+    }
+    const t = this.resSpot;
+    const d = Math.hypot(c.pos.x - t.x, c.pos.z - t.z);
+    if (d > 0.3) {
+      fig.sit = Math.max(0, fig.sit - dt * 3);
+      fig.reachR = null;
+      if (!this.resPts) this.resPts = this.room.path(c.pos.x, c.pos.z, t.x, t.z);
+      while (this.resPts.length > 1 && Math.hypot(c.pos.x - this.resPts[0].x, c.pos.z - this.resPts[0].z) < 0.3) this.resPts.shift();
+      const q = this.resPts[0] || t;
+      // (stuck: a step straight there)
+      this.resStuck = (this.resStuck || 0) + dt;
+      if (this.resStuck > 14) {
+        c.pos.x = t.x;
+        c.pos.z = t.z;
+        this.resStuck = 0;
+      }
+      return { x: q.x, z: q.z, speed: 1.0 };
+    }
+    this.resStuck = 0;
+    c.faceYaw = t.yaw;
+    fig.sit = t.sit ? Math.min(1, fig.sit + dt * 3) : Math.max(0, fig.sit - dt * 3);
+    // what the hands do there: the spoon in the pot, the brush on the canvas, the keys
+    if (name === 'stove' || name === 'easel' || name === 'piano') {
+      if (!fig.reachR) fig.reachR = new THREE.Vector3();
+      const fx = Math.sin(t.yaw);
+      const fz = Math.cos(t.yaw);
+      const k = this.t;
+      const up = name === 'easel' ? 1.25 + Math.sin(k * 1.3) * 0.22 : name === 'piano' ? 0.82 : 1.02;
+      fig.reachR.set(c.pos.x + fx * 0.42 + Math.sin(k * 2.1) * 0.12, c.pos.y + up, c.pos.z + fz * 0.42 + Math.cos(k * 1.7) * 0.12);
+      if (name === 'piano') this.notesAt(c, dt, 0.8);
+    } else fig.reachR = null;
+    return { x: t.x, z: t.z, speed: 0.4 };
+  }
+
+  // music notes over someone playing (a few a second)
+  notesAt(c, dt, rate = 1.2) {
+    if (Math.floor(this.t * rate) === Math.floor((this.t - dt) * rate)) return;
+    const j = c.fig.j.handR;
+    this.life.notes.push({ x: j.x + (Math.random() - 0.5) * 0.4, y: j.y + 0.35, z: j.z + (Math.random() - 0.5) * 0.4, t: 0, s: Math.random() * 100 });
+    const p = this.game.player.pos;
+    const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
+    if (d < 12 && Math.random() < 0.6) this.game.audio.play(c === this.game.player || this.shop.kind === 'homeLux' ? 'piano' : 'strum', 0.7 * (1 - d / 12));
+  }
+
+  // dinner with them: you sit at the table, the one who cooked draws your plate onto it
+  homeMeal(dish, n, color, text) {
+    const game = this.game;
+    const p = game.player;
+    const R = this.room;
+    const sp = this.spotOf('table');
+    if (sp) p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+    const m = R.marks.table || { x: this.keeper.pos.x, y: CURB + 0.8, z: this.keeper.pos.z };
+    // (the cook to the table too)
+    this.resHold = { name: 'table', until: game.time + 14 };
+    this.drawing = true;
+    this.talking = true;
+    this.say(this.keeper, pick(['Dinner is served!', 'Eat, eat!', 'Help yourself!', 'Made it myself!']));
+    const at = new THREE.Vector3(m.x, (m.y || CURB + 0.78) + 0.55, m.z);
+    game.airsketch.draw({
+      shape: dish,
+      at,
+      size: 0.5,
+      author: this.keeper,
+      target: new THREE.Vector3(m.x, (m.y || CURB + 0.78) + 0.06, m.z),
+      targetScale: 0.55,
+      dur: 1.5,
+      onPlop: () => {
+        this.drawing = false;
+        meal(n, color, text)(game);
+        this.hearts(p.pos.x, p.pos.y + 1.8, p.pos.z, 3);
+        for (const v of this.visitors) if (v.mode === 'seat' && Math.random() < 0.6) this.say(v.c, pick(['Yum!', 'So good!', 'Can I have more?', 'Mmm!']));
+      },
+    });
+  }
+
+  // on the sofa before the television: a cartoon on it, a frame at a time (its words under it)
+  watchTV() {
+    const game = this.game;
+    const p = game.player;
+    const sp = this.spotOf('sofa');
+    if (sp) p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+    this.tv = { k: -1, t: 0 };
+    game.hud.toast('על הספה. בטלוויזיה: סרט מצויר', 'info', 2.4);
+    // (the family comes to watch too)
+    this.resHold = { name: 'sofa', until: game.time + 30 };
+  }
+
+  tvLife(dt) {
+    const game = this.game;
+    const p = game.player;
+    const tv = this.tv;
+    const R = this.room;
+    const m = R.marks.tv;
+    if (!m || !p.seat || !R.inside(p.pos.x, p.pos.z, 0.2)) {
+      if (tv.sk) game.airsketch.erase(tv.sk);
+      this.tv = null;
+      return;
+    }
+    tv.t -= dt;
+    if (tv.t > 0) return;
+    tv.t = 3.4;
+    tv.k = (tv.k + 1) % FILM.length;
+    if (tv.sk) game.airsketch.erase(tv.sk);
+    const F = R.facade;
+    const [shape, words] = FILM[tv.k];
+    tv.sk = game.airsketch.draw({ shape, at: new THREE.Vector3(m.x + F.nx * 0.03, m.y, m.z + F.nz * 0.03), size: 0.62, keep: true, dur: 1.4, width: 2.2, wall: { rx: F.rx, rz: F.rz, nx: F.nx, nz: F.nz } });
+    game.hud.toast(words, 'info', 3);
+  }
+
+  // the kids up off the rug and round you, dancing; laughter
+  playKids() {
+    const game = this.game;
+    let n = 0;
+    for (const v of this.visitors) {
+      if (v.phase !== 'at') continue;
+      v.playT = 9 + Math.random() * 3;
+      n++;
+      this.say(v.c, pick(['Yay!', 'Again! Again!', 'Catch me!', 'Wheee!']));
+    }
+    game.hud.toast(n ? 'משחקים ביחד! כולם צוחקים' : 'הילדים יצאו לשחק בחצר...', n ? 'good' : 'info', 2.4);
+    if (n) {
+      const p = game.player;
+      p.fig.dance = 1;
+      game.inkwell.after(8, () => (p.fig.dance = 0));
+      this.hearts(p.pos.x, p.pos.y + 1.9, p.pos.z, 4);
+    }
+  }
+
+  // the painter draws on the wall, and so do you, side by side; the pen full of ink after
+  paintTogether() {
+    const game = this.game;
+    const p = game.player;
+    const R = this.room;
+    const m = R.marks.wall;
+    if (!m) return;
+    const F = R.facade;
+    const wall = { rx: F.rx, rz: F.rz, nx: F.nx, nz: F.nz };
+    const shapes = shuffled(['flower', 'heart', 'dog', 'balloon', 'house', 'umbrella', 'plant']);
+    this.resHold = { name: 'wall', until: game.time + 9 };
+    this.drawing = true;
+    this.talking = true;
+    this.say(this.keeper, pick(['Let\'s make something!', 'You start, I follow.', 'More colour!']));
+    const a = new THREE.Vector3(m.x - F.rx * 0.7 + F.nx * 0.04, m.y, m.z - F.rz * 0.7 + F.nz * 0.04);
+    const b = new THREE.Vector3(m.x + F.rx * 0.7 + F.nx * 0.04, m.y, m.z + F.rz * 0.7 + F.nz * 0.04);
+    const s1 = game.airsketch.draw({ shape: shapes[0], at: a, size: 0.8, author: this.keeper, keep: true, dur: 2.4, width: 3.0, wall });
+    const me = { fig: p.fig, alive: true, panicT: 0, owner: null };
+    const s2 = game.airsketch.draw({ shape: shapes[1], at: b, size: 0.8, author: me, keep: true, dur: 2.6, width: 3.0, wall, pen: 'magicPencil' });
+    game.inkwell.after(3, () => {
+      this.drawing = false;
+      if (game.ink) game.ink.fill(game.ink.cap, 'מהסטודיו');
+      game.hud.toast('ציור משותף על הקיר! העט מלא דיו', 'good', 2.6);
+      this.hearts(p.pos.x, p.pos.y + 1.9, p.pos.z, 3);
+    });
+    game.inkwell.after(40, () => {
+      game.airsketch.erase(s1);
+      game.airsketch.erase(s2);
+    });
+  }
+
+  // a record on, and everyone dances
+  homeDance() {
+    const game = this.game;
+    const p = game.player;
+    p.fig.dance = 1;
+    this.keeper.fig.dance = 1;
+    for (const v of this.visitors) if (v.phase === 'at') v.playT = 10;
+    for (let i = 0; i < 8; i++) this.life.notes.push({ x: this.keeper.pos.x + (Math.random() - 0.5) * 2, y: this.keeper.pos.y + 1.4 + Math.random() * 0.6, z: this.keeper.pos.z + (Math.random() - 0.5) * 2, t: -i * 0.35, s: Math.random() * 100 });
+    for (let i = 0; i < 5; i++) setTimeout(() => game.audio.play('strum', 0.8), i * 420);
+    game.hud.toast('התקליט מסתובב, כולם רוקדים!', 'good', 2.4);
+    game.inkwell.after(10, () => {
+      p.fig.dance = 0;
+      if (this.keeper) this.keeper.fig.dance = 0;
+    });
+  }
+
+  // dominoes with grandmother: you at one side of her little table, she at the other
+  dominoes() {
+    const game = this.game;
+    const p = game.player;
+    const sp = this.spotOf('domino2');
+    if (!sp) {
+      game.hud.toast('השולחן תפוס. אולי אחר כך', 'info', 2);
+      return;
+    }
+    p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+    this.resHold = { name: 'domino', until: game.time + 13 };
+    this.say(this.keeper, pick(['I warn you, I never lose.', 'Double six! Your turn.', 'Let\'s see what you\'ve got.']));
+    game.hud.toast('משחקים דומינו עם סבתא...', 'info', 2.4);
+    game.inkwell.after(11, () => {
+      if (!p.seat) return;
+      if (Math.random() < 0.55) {
+        if (game.money) game.money.earn(15, 'ניצחון בדומינו');
+        game.hud.toast('ניצחתם את סבתא בדומינו! (+15 בכיס)', 'good', 2.8);
+        this.say(this.keeper, pick(['Beginner\'s luck!', 'Again tomorrow!', 'Ay, you\'re good!']));
+      } else {
+        game.hud.toast('סבתא ניצחה. היא תמיד מנצחת', 'info', 2.8);
+        this.say(this.keeper, pick(['Domino!', 'Hah! Another round?', 'Don\'t feel bad, sweetie.']));
+      }
+      this.hearts(p.pos.x, p.pos.y + 1.6, p.pos.z, 2);
+    });
+  }
+
+  // a story from the old days
+  story() {
+    const game = this.game;
+    const s = this.shop;
+    this.talking = true;
+    const k = (this.storyK = ((this.storyK === undefined ? Math.floor(Math.random() * STORIES.length) : this.storyK) + 1) % STORIES.length);
+    game.dialog.show(s.who || 'סבתא', STORIES[k], [{ label: 'עוד סיפור', fn: () => this.story() }, { label: 'תודה, סבתא', fn: null }]);
+  }
+
+  // the villa's piano: you play, the notes fly up, everyone listens
+  piano() {
+    const game = this.game;
+    const p = game.player;
+    const sp = this.spotOf('piano');
+    if (!sp) return;
+    p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
+    this.pianoT = 12;
+    this.resHold = { name: 'sofa', until: game.time + 14 };
+    game.hud.toast('מנגנים... כולם מקשיבים', 'good', 2.4);
   }
 
   // the hero in the barber's chair
@@ -2069,7 +2478,7 @@ class OpenShop {
       }
     }
     // now and then somebody new at the door
-    if (this.room && this.open && !this.game.touch) {
+    if (this.room && this.open && !this.game.touch && !this.shop.home) {
       this.newT = (this.newT === undefined ? 8 + Math.random() * 10 : this.newT) - dt;
       if (this.newT <= 0) {
         this.newT = 14 + Math.random() * 16;
@@ -2078,6 +2487,23 @@ class OpenShop {
     }
     if (this.lifts && this.lifts.length) this.liftLife(dt);
     if (this.shop.screen && this.open) this.film(dt);
+    // (at home: the television on, the piano played)
+    if (this.tv) this.tvLife(dt);
+    if (this.pianoT > 0) {
+      this.pianoT -= dt;
+      const p = this.game.player;
+      if (!p.seat) this.pianoT = 0;
+      else {
+        p.fig.reachR = p.fig.reachR || new THREE.Vector3();
+        p.fig.reachR.set(p.pos.x + Math.sin(p.yaw) * 0.45 + Math.sin(this.t * 6) * 0.15, p.pos.y + 0.85, p.pos.z + Math.cos(p.yaw) * 0.45 + Math.cos(this.t * 5) * 0.15);
+        this.notesAt(p, dt, 3);
+        if (this.pianoT <= 0) {
+          p.fig.reachR = null;
+          this.game.hud.toast('מחיאות כפיים!', 'good', 2);
+          this.hearts(p.pos.x, p.pos.y + 1.8, p.pos.z, 4);
+        }
+      }
+    }
   }
 
   // ------------------------------------------------------------------ the theatre's film
@@ -2299,10 +2725,10 @@ const RIDE_HIT = ['Ow! Careful!', 'Watch the road!', 'My hair!', 'Easy!'];
 const RIDE_OUT = ['Thanks for the ride!', 'Fun!', "Let's walk a bit."];
 
 class Companion {
-  constructor(life, x, z) {
+  constructor(life, x, z, look = null) {
     this.life = life;
     this.game = life.game;
-    this.c = this.game.civilians.spawnScripted(x, z, friendLook(), this);
+    this.c = this.game.civilians.spawnScripted(x, z, look || friendLook(), this);
     // she stays by you when it gets loud
     this.c.brave = true;
     this.c.speed = 1.6;
@@ -2322,6 +2748,11 @@ class Companion {
   }
 
   step(c, dt) {
+    // (v5: what she does of her own - leading the way, waiting, at home: game/friend.js)
+    if (this.over && !this.riding) {
+      const r = this.over(c, dt);
+      if (r !== undefined) return r;
+    }
     const game = this.game;
     const p = game.player;
     const anchor = p.inVehicle ? p.inVehicle.pos : p.pos;

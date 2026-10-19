@@ -8,6 +8,8 @@ import { seeded } from './kit.js';
 import { rooftopName } from './blocks.js';
 import { AD_IDS } from './ads.js';
 import { CURB } from './layout.js';
+import { plotLot } from './plot.js';
+import { homeHouse, household, HOME_STYLES } from './home.js';
 
 // (v5, ROADMAP 11.2) The avenues behind Ocean Drive, a lot at a time, the way South Beach was
 // built: a block's side is cut into lots of 25 and 50 feet, and a building takes one, two or
@@ -19,7 +21,7 @@ import { CURB } from './layout.js';
 // corner store). No two neighbours are the same building; the corners turn onto the cross streets.
 
 const HALF = 7.6; // half a lot: 25 feet
-const OPEN = new Set(['lot', 'vacant']);
+const OPEN = new Set(['lot', 'vacant', 'plot']);
 const LANDMARKS = new Set(['post', 'diner', 'museum']);
 
 // what each building takes (in half lots), whether it may stand on a corner, at most one a row
@@ -35,6 +37,10 @@ const KIT = {
   garage: { hw: [4, 5], corner: true, once: true },
   lot: { hw: [2, 3], corner: false, once: true },
   vacant: { hw: [1, 2], corner: false, once: true },
+  // (v5, ROADMAP 11.17: a plot to draw a home on, world/plot.js - only the mainland's rows have them)
+  plot: { hw: [2], corner: false, once: true },
+  // (v5, ROADMAP 11.17: a house to walk into, someone's home - world/home.js)
+  home: { hw: [2, 3], corner: false },
   apt: { hw: [2, 3], corner: true },
   aptU: { hw: [3, 4], corner: true },
   post: { hw: [4], corner: true, once: true },
@@ -433,6 +439,28 @@ const BUILD = {
     const { f, L, D } = a;
     a.lot.wall = null;
     return vacantLot(ctx, { f, L, D, sign: ctx.rng() < 0.6 ? 'forsale' : 'soon' });
+  },
+
+  plot(ctx, a) {
+    const { f, L, D } = a;
+    a.lot.wall = null;
+    return plotLot(ctx, { f, L, D });
+  },
+
+  // (v5, ROADMAP 11.17) somebody's home, its door open: the family, the painter, grandmother, the
+  // villa (who lives there by the district); its garden round it is a house's (world/yards.js)
+  home(ctx, a) {
+    const r = ctx.rng;
+    const { f, L, D, lot } = a;
+    const hh = household(r, ctx.block ? ctx.block.district : 'valley');
+    const front = r.range(3.6, 5.4);
+    const info = homeHouse(ctx, { f, L, D, style: hh.style, kind: hh.kind, front, name: hh.name, who: hh.who, ask: hh.ask, fem: hh.fem });
+    lot.wall = HOME_STYLES[hh.style].wall;
+    lot.front = front;
+    lot.back = front + info.D + 0.25;
+    lot.kind = 'house';
+    lot.use = 'garden';
+    return info;
   },
 
   // garden apartments

@@ -439,8 +439,15 @@ export function bartenderLook() {
 
 // ------------------------------------------------------------------ people at work on the street
 const WHITE = [0.97, 0.96, 0.93];
-export function shopkeeperLook(kind) {
-  const fem = chance(0.45);
+export function shopkeeperLook(kind, femIs = undefined) {
+  // (v5: who lives in a house - grandmother is grandmother)
+  if (kind === 'homeGrandma') {
+    const G = elderLook(true);
+    G.face.glasses = chance(0.6) ? 'round' : G.face.glasses;
+    G.apron = [0.96, 0.9, 0.84];
+    return G;
+  }
+  const fem = femIs === undefined ? chance(0.45) : femIs;
   const L = civilianLook({ fem, kind: 'casual', pen: pick(['fineliner', 'ballpoint', 'marker', 'comic', 'sepia']) });
   L.acc = L.acc.filter((a) => a === 'earrings');
   const apron = (c) => {
@@ -551,6 +558,24 @@ export function shopkeeperLook(kind) {
       L.top = { kind: 'sweater', color: pick([[0.98, 0.8, 0.3], [0.4, 0.62, 0.95], [0.95, 0.5, 0.6]]), sleeves: 'long' };
       L.hat = { kind: 'beanie', color: pick(BRIGHT) };
       apron([0.95, 0.4, 0.4]);
+      break;
+    // (v5, ROADMAP 11.17) at home: the one who cooks for the family, the painter in a spattered
+    // smock and a beret, the villa's in white linen
+    case 'homeFamily':
+      L.top = { kind: chance(0.5) ? 'sweater' : 'tee', color: pick(BRIGHT), sleeves: chance(0.5) ? 'long' : 'short' };
+      L.bottom = { kind: 'pants', color: pick([[0.24, 0.3, 0.46], [0.36, 0.3, 0.26], [0.2, 0.2, 0.24]]) };
+      apron(pick([[0.95, 0.94, 0.9], [0.95, 0.62, 0.62], [0.62, 0.78, 0.95]]));
+      break;
+    case 'homeArtist':
+      L.top = { kind: 'tee', color: [0.96, 0.95, 0.92], sleeves: 'long' };
+      L.bottom = { kind: 'pants', color: [0.3, 0.32, 0.42] };
+      L.hat = { kind: 'beret', color: pick([[0.85, 0.2, 0.35], [0.2, 0.2, 0.26], [0.3, 0.5, 0.85]]) };
+      apron([0.9, 0.82, 0.62]);
+      break;
+    case 'homeLux':
+      L.top = { kind: fem ? 'blazer' : 'suit', color: [0.95, 0.94, 0.9], sleeves: 'long', shirt: [0.98, 0.97, 0.94], tie: null };
+      L.bottom = { kind: fem ? 'wide' : 'pants', color: [0.95, 0.94, 0.9] };
+      if (fem) L.acc.push('earrings');
       break;
     case 'burger':
     case 'noodles':

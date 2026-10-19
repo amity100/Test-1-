@@ -31,6 +31,31 @@ export class Streamer {
     this.stats = { built: 0, freed: 0, ms: 0, last: '' };
     // what to warm up before a finished cell is shown (its meshes, one a frame)
     this.pending = [];
+    // cells to build again while the old one stays shown (a house drawn on a plot)
+    this.redo = [];
+  }
+
+  // a cell built again in the background: shown in place of the old one, in one frame, when it is
+  // all there (the old one stays until then)
+  rebuild(id) {
+    const c = this.cells.find((x) => x.id === id);
+    if (!c || !this.live.has(id) || this.redo.includes(c) || (this.job && this.job.cell === c)) return false;
+    this.redo.push(c);
+    return true;
+  }
+
+  // a cell built and warmed: into the city (the one it takes the place of out, the same frame)
+  show(p) {
+    if (p.swap) {
+      const old = this.live.get(p.cell.id);
+      if (old) {
+        this.live.delete(p.cell.id);
+        old.detach();
+      }
+    }
+    p.live.attach();
+    this.live.set(p.cell.id, p.live);
+    this.stats.built++;
   }
 
   distTo(c, x, z) {
@@ -75,10 +100,12 @@ export class Streamer {
         return;
       }
       this.pending.shift();
-      p.live.attach();
-      this.live.set(p.cell.id, p.live);
-      this.stats.built++;
+      this.show(p);
       return;
+    }
+    if (!this.job && this.redo.length) {
+      const c = this.redo.shift();
+      if (this.live.has(c.id)) this.job = { cell: c, it: c.build(c), ms: 0, swap: true };
     }
     if (!this.job) {
       const n = this.pick(x, z, vx, vz);
@@ -108,7 +135,7 @@ export class Streamer {
         live.cell = job.cell;
         const meshes = [];
         if (live.group) live.group.traverse((m) => m.isMesh && meshes.push(m));
-        this.pending.push({ cell: job.cell, live, meshes });
+        this.pending.push({ cell: job.cell, live, meshes, swap: !!job.swap });
         return;
       }
       if (performance.now() - t0 > slice) break;
@@ -131,9 +158,7 @@ export class Streamer {
       while (this.pending.length) {
         const p = this.pending.shift();
         for (const m of p.meshes) if (this.warm) this.warm(m);
-        p.live.attach();
-        this.live.set(p.cell.id, p.live);
-        this.stats.built++;
+        this.show(p);
       }
       if (!this.job) {
         const n = this.pick(x, z, 0, 0);
@@ -152,10 +177,11 @@ export class Streamer {
       if (r.done) {
         const live = r.value;
         live.cell = this.job.cell;
+        const swap = !!this.job.swap;
         this.job = null;
         const meshes = [];
         if (live.group) live.group.traverse((m) => m.isMesh && meshes.push(m));
-        this.pending.push({ cell: live.cell, live, meshes });
+        this.pending.push({ cell: live.cell, live, meshes, swap });
       }
       if (performance.now() - t0 > maxMs) break;
     }

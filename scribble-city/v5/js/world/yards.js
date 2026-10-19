@@ -31,7 +31,7 @@ const BINS = [srgb(0.2, 0.42, 0.3), srgb(0.2, 0.3, 0.56), srgb(0.28, 0.28, 0.3)]
 const DUMPSTERS = [srgb(0.24, 0.5, 0.4), srgb(0.3, 0.38, 0.62), srgb(0.62, 0.3, 0.3)];
 const WHITE = srgb(0.95, 0.95, 0.93);
 
-const OPEN = new Set(['lot', 'vacant']);
+const OPEN = new Set(['lot', 'vacant', 'plot']);
 // (the ones that keep their own yard in front: the garden flats)
 const OWN_FRONT = new Set(['apt', 'aptU']);
 

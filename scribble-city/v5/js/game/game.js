@@ -45,6 +45,7 @@ import { Radio } from './radio.js';
 import { CityMap } from '../ui/citymap.js';
 import { Phone } from '../ui/phone.js';
 import { GPS } from './gps.js';
+import { Friendship } from './friend.js';
 import { Settings } from '../core/settings.js';
 import { DepthTrial } from '../render/depthtrial.js';
 import { Pace } from './pace.js';
@@ -190,6 +191,8 @@ export class Game {
     this.airdraw = new AirDraw(this);
     this.airsketch = new AirSketches(this);
     this.streetlife = new StreetLife(this);
+    // (v5, ROADMAP 11.17: the friend you drew - her name, her words, her home: game/friend.js)
+    this.friend = this.classic ? null : new Friendship(this);
     // (v5, ROADMAP 11.17: the people of the mainland's malls)
     this.mallLife = new MallLife(this);
     this.vignettes = new Vignettes(this);
@@ -1035,6 +1038,7 @@ export class Game {
       if (!this.classic) armorBar(this);
       this.farCrowd.update(dt);
       this.streetlife.update(dt);
+      if (this.friend) this.friend.update(dt);
       this.mallLife.update(dt);
       this.routines.update(dt);
       this.workers.update(dt);
@@ -1263,7 +1267,7 @@ export class Game {
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -1959,6 +1963,11 @@ export class Game {
       // somebody near you needs a hand (game/events.js)
       enter = true;
       prompt = touch ? this.events.prompt() : `E — ${this.events.prompt()}`;
+    } else if (p.mode === 'foot' && this.friend && this.friend.target()) {
+      // (the friend you drew, beside you: game/friend.js)
+      enter = true;
+      const ft = this.friend.target();
+      prompt = touch ? ft.label.replace('E — ', '') : ft.label;
     } else if (p.mode === 'foot' && this.streetlife.target()) {
       const sh = this.streetlife.target();
       enter = sh.shop.open;

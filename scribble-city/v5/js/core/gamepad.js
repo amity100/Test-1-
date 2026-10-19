@@ -239,6 +239,7 @@ export class Pad {
   menuRoot() {
     const g = this.game;
     if (g.phone && g.phone.isOpen) return $('phone');
+    if (g.dialog && g.dialog.chat && g.dialog.chat.isOpen && !g.dialog.isOpen) return $('chat');
     if (g.dialog && g.dialog.open) return $('dialog');
     if (g.album && g.album.open) return $('album');
     for (const id of ['death', 'pause', 'title']) {

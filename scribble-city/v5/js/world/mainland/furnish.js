@@ -47,6 +47,7 @@ Object.assign(DECOR, {
   homeArtist: { wall: [0.92, 0.9, 0.86], band: [0.5, 0.5, 0.56], floor: 'concrete', light: [1, 0.92, 0.8] },
   homeGrandma: { wall: [0.96, 0.86, 0.82], band: [0.62, 0.42, 0.36], floor: 'tiles', light: [1, 0.82, 0.58] },
   homeLux: { wall: [0.98, 0.97, 0.94], band: [0.72, 0.66, 0.56], floor: 'tiles', light: [1, 0.95, 0.85] },
+  homeFriend: { wall: [0.99, 0.93, 0.9], band: [0.62, 0.78, 0.86], floor: 'wood', light: [1, 0.88, 0.7] },
 });
 
 // a hanging garment on a rail at u, d (a shirt or a dress, its colour)
@@ -524,6 +525,8 @@ Object.assign(FURNISH, {
       R.box(u - 0.45, y0 + 0.8, d - 0.03, u + 0.45, y0 + 1.6, d + 0.03, C.white);
       for (let k = 0; k < 5; k++) R.box(u - 0.4 + rng.float(0, 0.6), y0 + 0.85 + rng.float(0, 0.6), d + 0.031, u - 0.25 + rng.float(0, 0.6), y0 + 0.95 + rng.float(0, 0.6), d + 0.034, rng.pick(cols));
       R.solid.push([u - 0.5, d - 0.3, u + 0.5, d + 0.3, y0 + 1.7]);
+      // (where the painter stands to paint: game/streetlife.js)
+      if (i === 0) R.spots.marks.push({ name: 'easel', u, d: d + 0.75, face: [0, -1] });
     }
     for (let k = 0; k < 9; k++) R.box(ua + rng.float(0.5, ub - ua - 1), y0 + 0.006, db + rng.float(1, da - db - 1), ua + rng.float(0.5, ub - ua - 1) + 0.3, y0 + 0.008, db + rng.float(1, da - db - 1) + 0.3, rng.pick(cols));
   },
@@ -540,6 +543,7 @@ Object.assign(FURNISH, {
     R.chair(tu - 0.75, td, Math.PI / 2, C.darkWood);
     R.chair(tu + 0.75, td, -Math.PI / 2, C.darkWood);
     R.spots.seats.push({ u: tu - 0.75, d: td, face: [1, 0] }, { u: tu + 0.75, d: td, face: [-1, 0] });
+    R.spots.marks.push({ name: 'domino', u: tu - 0.75, d: td, face: [1, 0] }, { name: 'domino2', u: tu + 0.75, d: td, face: [-1, 0] });
   },
   // the mansion: marble, a grand piano, a long sofa before a wall of glass, art in gold frames
   homeLux(R) {
@@ -552,9 +556,39 @@ Object.assign(FURNISH, {
     R.box(pu - 0.75, y0 + 0.95, pd - 0.6, pu - 0.7, y0 + 1.5, pd + 0.6, C.black);
     R.box(pu + 0.75, y0 + 0.7, pd - 0.3, pu + 1.15, y0 + 0.75, pd + 0.3, C.black);
     R.spots.chairs.push({ u: pu + 1.1, d: pd, face: [-1, 0] });
+    R.spots.marks.push({ name: 'piano', u: pu + 1.1, d: pd, face: [-1, 0] });
     for (let u = ua + 1.5; u < ub - 1.0; u += 2.4) {
       R.box(u - 0.6, y0 + 1.3, db + 0.02, u + 0.6, y0 + 2.2, db + 0.06, C.gold);
       R.box(u - 0.52, y0 + 1.38, db + 0.06, u + 0.52, y0 + 2.12, db + 0.07, [0.3 + (u % 3) * 0.2, 0.45, 0.7]);
+    }
+  },
+  // the home a drawn friend drew for herself: her easel by the window and what she drew on it,
+  // her books, her plants, a string of little lights along the back wall, a cosy sofa
+  homeFriend(R) {
+    const { ua, ub, db, da, y0, rng } = R;
+    home(R, { sofa: [0.98, 0.7, 0.78], rug: [0.62, 0.8, 0.9], table: 2, kitchen: 'small' });
+    // the easel, a picture on it
+    const eu = ub - 1.0;
+    const ed = da - 1.3;
+    if (eu > R.lane[1] + 0.8) {
+      for (const s of [-0.28, 0.28]) R.box(eu + s - 0.02, y0, ed - 0.02, eu + s + 0.02, y0 + 1.75, ed + 0.02, C.wood);
+      R.box(eu - 0.45, y0 + 0.85, ed - 0.03, eu + 0.45, y0 + 1.6, ed + 0.03, C.white);
+      const cols = [C.pink, C.yellow, C.teal, C.purple, C.orange];
+      for (let k = 0; k < 6; k++) R.box(eu - 0.38 + rng.float(0, 0.6), y0 + 0.9 + rng.float(0, 0.55), ed - 0.034, eu - 0.24 + rng.float(0, 0.6), y0 + 0.98 + rng.float(0, 0.55), ed - 0.031, rng.pick(cols));
+      R.solid.push([eu - 0.5, ed - 0.3, eu + 0.5, ed + 0.3, y0 + 1.75]);
+      R.spots.marks.push({ name: 'easel', u: eu, d: ed - 0.75, face: [0, 1] });
+    }
+    // a shelf of books on the back wall
+    const su = (ua + ub) / 2 + 0.6;
+    R.box(su - 0.9, y0 + 1.3, db, su + 0.9, y0 + 1.34, db + 0.28, C.lightWood);
+    for (let u = su - 0.85, k = 0; u < su + 0.8; u += 0.09, k++) R.box(u, y0 + 1.34, db + 0.03, u + 0.07, y0 + 1.34 + 0.18 + (k % 3) * 0.04, db + 0.25, [C.red, C.blue, C.yellow, C.green, C.pink, C.teal][k % 6]);
+    // the little lights along the top of the back wall
+    for (let u = ua + 0.3, k = 0; u < ub - 0.2; u += 0.4, k++) R.box(u - 0.04, y0 + 2.62 - (k % 2) * 0.05, db + 0.02, u + 0.04, y0 + 2.7 - (k % 2) * 0.05, db + 0.08, [[1, 0.8, 0.5], [1, 0.6, 0.75], [0.6, 0.85, 1]][k % 3], GLOW);
+    // plants by the window
+    for (const u of [ua + 0.5, ub - 2.0]) {
+      if (u > R.lane[0] - 0.3 && u < R.lane[1] + 0.3) continue;
+      R.cyl(u, da - 0.5, 0.18, y0, 0.36, [0.85, 0.5, 0.36], 10);
+      R.cyl(u, da - 0.5, 0.3, y0 + 0.36, 0.6, [0.36, 0.66, 0.4], 10);
     }
   },
 });
@@ -595,6 +629,16 @@ function home(R, o) {
   R.box(lu - 0.8, y0 + 0.55, ld - 1.45, lu + 0.8, y0 + 1.45, ld - 1.38, C.black);
   R.box(lu - 0.74, y0 + 0.6, ld - 1.38, lu + 0.74, y0 + 1.4, ld - 1.37, [0.55, 0.8, 1.0], GLOW);
   R.spots.browse.push({ u: lu, d: ld - 0.6, face: [0, -1] });
+  // (the places a friend at home goes to: game/friend.js)
+  R.spots.marks = [
+    { name: 'tv', u: lu, d: ld - 1.36, y: 1.0, face: [0, 1] },
+    { name: 'sofaA', u: lu - 0.5, d: ld + 1.0, face: [0, -1] },
+    { name: 'sofaB', u: lu + 0.5, d: ld + 1.0, face: [0, -1] },
+    { name: 'stove', u: ua + 1.1, d: db + 1.05, face: [0, -1] },
+    { name: 'table', u: tu, d: td, y: 0.78 },
+    { name: 'wall', u: (ua + ub) / 2, d: db + 0.05, y: 1.75, face: [0, 1] },
+    { name: 'bed', u: ua + 1.3, d: da - 1.6, face: [0, 1] },
+  ];
   // a bed in the corner by the window, behind a low wall
   const bu = ua + 1.3;
   const bd = da - 1.4;

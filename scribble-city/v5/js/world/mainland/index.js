@@ -148,6 +148,8 @@ export class Mainland {
     speck.position.set(-450, -30, 0);
     world.group.add(speck);
     this.far = new FarShells(world, o.farData || null, M.wallSolid);
+    // (every plot to draw a home on, from the bake: [key, x, z] - the map, game/friend.js)
+    world.allPlots = (o.farData && o.farData.plots) || [];
     const near = o.low ? 175 : 230;
     const cells = M_BLOCKS.map((b) => ({
       id: `b${b.id}`,
@@ -269,6 +271,13 @@ export class Mainland {
     }
   }
 
+  // a block built again where it is (a house drawn on one of its plots: game/friend.js); the old
+  // one stays shown until the new one is all there
+  rebuild(blockId) {
+    if (!this.on) return false;
+    return this.stream.rebuild(`b${blockId}`);
+  }
+
   // everything near p built now (the start; a jump across the map)
   fill(p, ms) {
     if (!this.on) return;
@@ -305,6 +314,11 @@ export class Mainland {
         list.push([+f.x0.toFixed(2), +f.z0.toFixed(2), +f.x1.toFixed(2), +f.z1.toFixed(2), +f.top.toFixed(2), c]);
       }
       out[b.id] = list;
+      // (the plots to draw a home on: where they are, for the map and for a friend looking for one)
+      for (const p of live.bctx.plots || []) {
+        const f = p.f;
+        (out.plots = out.plots || []).push([p.key, +(f.ox + f.ux * p.L * 0.5 - f.nx * 1).toFixed(2), +(f.oz + f.uz * p.L * 0.5 - f.nz * 1).toFixed(2)]);
+      }
       times.push({ id: b.id, kind: b.kind, ms: Math.round(performance.now() - t0), verts: live.verts });
       releaseAll(live);
     }

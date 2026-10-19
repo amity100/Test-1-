@@ -42,16 +42,16 @@ const VENUES = {
 
 // how each district builds its rows: which avenue's ways (the street key the kits know) and mix
 const MIXES = {
-  paintwood: { street: 'washington', mix: { strip: 3, deco: 1.2, garage: 0.8, lot: 1.4, vacant: 1.1, modern: 1.8, narrow: 0.8, apt: 0.6 } },
+  paintwood: { street: 'washington', mix: { strip: 3, deco: 1.2, garage: 0.8, lot: 1.4, vacant: 1.1, modern: 1.8, narrow: 0.8, apt: 0.6, home: 0.5 } },
   downtown: { street: 'washington', mix: { modern: 3.5, strip: 2, deco: 1.5, garage: 1.2, hotel: 1, mimo: 1, lot: 0.4 } },
   towers: { street: 'washington', mix: { strip: 3, modern: 2, deco: 1 } },
   brickton: { street: 'collins', mix: { modern: 2.5, mimo: 2.2, condo: 1.4, hotel: 1.2, strip: 1, apt: 0.8 } },
   havana: { street: 'washington', mix: { strip: 4, med: 3, deco: 1.4, narrow: 1.2, apt: 0.8, house: 0.6, vacant: 0.3, lot: 0.5 } },
   boulevard: { street: 'washington', mix: { strip: 3, deco: 3, hotel: 1.2, modern: 1.2, mimo: 1.2, garage: 0.6, narrow: 1 } },
-  homes: { street: 'meridian', mix: { apt: 3, aptU: 2.2, house: 2.5, med: 1.6, mimo: 1, condo: 0.5 } },
-  houses: { street: 'west', mix: { house: 8, apt: 0.6, med: 1.2 } },
-  mansions: { street: 'west', mix: { house: 5, med: 3 } },
-  beach: { street: 'washington', mix: { strip: 3, deco: 2, mimo: 1.6, hotel: 1.2, house: 1.2, apt: 1 } },
+  homes: { street: 'meridian', mix: { apt: 3, aptU: 2.2, house: 2.5, med: 1.6, mimo: 1, condo: 0.5, plot: 0.6, home: 1.4 } },
+  houses: { street: 'west', mix: { house: 8, apt: 0.6, med: 1.2, plot: 1.4, home: 3 } },
+  mansions: { street: 'west', mix: { house: 5, med: 3, plot: 0.8, home: 2.2 } },
+  beach: { street: 'washington', mix: { strip: 3, deco: 2, mimo: 1.6, hotel: 1.2, house: 1.2, apt: 1, home: 0.8 } },
 };
 // which mix a block's rows take, by its kind (and district)
 function mixOf(b) {
@@ -77,7 +77,7 @@ function mixOf(b) {
     case 'bungalows':
     case 'apartments':
     case 'villas':
-      return b.district === 'havana' ? { street: 'meridian', mix: { house: 4, apt: 2, med: 2, aptU: 1 } } : MIXES.homes;
+      return b.district === 'havana' ? { street: 'meridian', mix: { house: 4, apt: 2, med: 2, aptU: 1, plot: 0.7, home: 1.8 } } : MIXES.homes;
     case 'houses':
     case 'school':
       return MIXES.houses;
@@ -149,6 +149,8 @@ export function blockCtx(world, b) {
     lightCount: () => lightOwner.lights.length,
     props: [],
     block: b,
+    // (the houses drawn on its plots: world/plot.js)
+    homes: world.homes || null,
   };
   bctx.objects = {
     begin: (cx, kind, x, z) => world.objects.beginLocal(cx, kind, x, z),
@@ -324,6 +326,8 @@ export function* buildMBlock(world, b) {
       world.objects.adoptLocal(bctx.props);
       showLights(bctx.lightOwner, true);
       for (const s of bctx.shops) world.addShop(s);
+      // (the plots to draw a home on: game/friend.js)
+      if (bctx.plots) for (const p of bctx.plots) world.plots.push(p);
       if (bctx.queues && bctx.queues.length) {
         world.queues = world.queues || [];
         for (const q of bctx.queues) world.queues.push(q);
@@ -348,6 +352,12 @@ export function* buildMBlock(world, b) {
       world.objects.releaseLocal(bctx.props);
       releaseLights(bctx.lightOwner);
       for (const s of bctx.shops) world.removeShop(s);
+      if (bctx.plots) {
+        for (const p of bctx.plots) {
+          const k = world.plots.indexOf(p);
+          if (k >= 0) world.plots.splice(k, 1);
+        }
+      }
       if (bctx.queues && bctx.queues.length && world.queues) {
         for (const q of bctx.queues) {
           const k = world.queues.indexOf(q);
