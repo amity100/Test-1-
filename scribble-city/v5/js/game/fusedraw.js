@@ -421,7 +421,7 @@ export function readSheet(caps, ctx, sheet, force = null) {
     if (face === 'wheel') {
       // (by a wheel, upright on its side: round - a wheel; long and low along it - floats)
       const along = z1 - z0 > 1.2 && z1 - z0 > (y1 - y0) * 2.2;
-      type = along ? 'float' : round || (S.closed && S.aspect < 1.8) ? 'wheel' : 'deco3';
+      type = coily && !S.closed ? 'spring' : along ? 'float' : round || (S.closed && S.aspect < 1.8) ? 'wheel' : 'deco3';
     }
     else if (face === 'side') {
       const out = Math.max(x0 * sd, x1 * sd) - D.hw;
@@ -429,6 +429,8 @@ export function readSheet(caps, ctx, sheet, force = null) {
       const low = sheet.c < Math.max(clear + 0.3, D.h * 0.36);
       if (starry) type = 'star';
       else if (along && low) type = 'float';
+      // (a coil out of its side, low: a spring under it, to jump on)
+      else if (!S.closed && coily && low) type = 'spring';
       else if (!S.closed && caps.length === 1 && (teethy || coily)) type = 'deco3';
       else type = 'wing';
     } else if (face === 'top') {

@@ -26,12 +26,12 @@ const KICK_Y = 2.85;
 // the other half of it, broken off on to the island; the island; the slipway up out of the water
 const FAR0 = 136;
 const FAR_Y = 1.35;
-const ISLE = { x0: 151, x1: 180, z0: 13, z1: 45 };
+const ISLE = { x0: 151, x1: 198, z0: 10, z1: 48 };
 const SLIP = { x0: 137, x1: 151, z0: 14, z1: 22 };
 // a try again starts here, on the sand
 const BACK = { x: 60, z: Z, yaw: Math.PI / 2 };
-// again, from the island
-const AGAIN = { x: 168, z: Z };
+// again, from the island (off to its side: not where a car lands)
+const AGAIN = { x: 172, z: 42 };
 const WAYS = { wings: 'כנפיים', rotor: 'רוטור', balloon: 'בלון', floats: 'מצופים', spring: 'קפיץ', plane: 'מטוס (כנפיים + סילון)', chute: 'מצנח', jump: 'קפיצה' };
 const ALL_WAYS = ['wings', 'rotor', 'balloon', 'floats', 'spring', 'plane'];
 const KEY = 'scribble-city-v5-bridge';
@@ -170,7 +170,7 @@ export class BrokenBridge {
     const fx = ISLE.x1 - 4;
     K.cyl(M.metal, 0.08, 0.08, FAR_Y, FAR_Y + 7, WHITE, { axis: 'y', x: fx, z: Z });
     for (let a = 0; a < 4; a++) for (let b = 0; b < 3; b++) K.box(M.matte, fx + 0.1 + a * 0.5, FAR_Y + 5.4 + b * 0.5, Z - 0.03, fx + 0.6 + a * 0.5, FAR_Y + 5.9 + b * 0.5, Z + 0.03, (a + b) % 2 ? WHITE : linC(0.1, 0.1, 0.12));
-    for (const [x, z, s] of [[158, 18, 1.1], [159.3, 18.4, 0.9], [172, 41, 1.2], [165, 40, 0.8]]) K.box(M.matte, x - s / 2, FAR_Y, z - s / 2, x + s / 2, FAR_Y + s, z + s / 2, WOOD_L);
+    for (const [x, z, s] of [[158, 16, 1.1], [159.3, 16.4, 0.9], [186, 44, 1.2], [179, 43, 0.8]]) K.box(M.matte, x - s / 2, FAR_Y, z - s / 2, x + s / 2, FAR_Y + s, z + s / 2, WOOD_L);
     // (the slipway up out of the water, buoys along it)
     for (let x = SLIP.x0 + 0.3; x < SLIP.x1; x += 0.62) {
       const y = this.floorAt(x, (SLIP.z0 + SLIP.z1) / 2);
@@ -211,7 +211,7 @@ export class BrokenBridge {
         g.hud.toast(left.length ? `מצאתם ${n} מתוך ${ALL_WAYS.length} דרכים — נסו גם: ${left.slice(0, 3).map((k) => WAYS[k]).join(', ')} (העיגול הצהוב — שוב)` : 'מצאתם את כל הדרכים!', 'good', 5);
       }
       const at = this.state === 'won' ? AGAIN : START;
-      const ok = p.mode === 'foot' || (v && !v.air && (v.kind === 'car' || v.kind === 'bike'));
+      const ok = p.mode === 'foot' || (v && !v.air && (v.kind === 'car' || v.kind === 'bike') && Math.abs(v.speed || 0) < 9);
       if (ok && Math.hypot(pos.x - at.x, pos.z - at.z) < 3.4 && g.state === 'play') this.start();
       return;
     }

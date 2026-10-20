@@ -1513,9 +1513,12 @@ export class Fuse {
         v.vx *= cap / sp;
         v.vz *= cap / sp;
       }
+      // (ROADMAP 11.23: a rotor holding still in the air stops like a helicopter - over where it
+      // is to come down)
       if (lifting && !mv.y) {
-        v.vx *= Math.exp(-0.5 * dt);
-        v.vz *= Math.exp(-0.5 * dt);
+        const k = fz.rotor >= 1 ? 1.6 : 0.5;
+        v.vx *= Math.exp(-k * dt);
+        v.vz *= Math.exp(-k * dt);
       }
     }
     v.fzLifting = lifting;
@@ -2210,6 +2213,9 @@ export class Fuse {
     // (floats too small for it: down slower)
     v.fzSink = (v.fzSink || 0) + dt * (fl ? 1 - 0.7 * clamp(fl.k, 0, 1) : 1);
     v.speed *= Math.exp(-2.2 * dt);
+    // (ROADMAP 11.23: the water stops it - it does not drive on along the bottom)
+    v.vx *= Math.exp(-3 * dt);
+    v.vz *= Math.exp(-3 * dt);
     const M = g.mission;
     if (M && M.holds(v)) return;
     if (v.fzSink > 1.8) {

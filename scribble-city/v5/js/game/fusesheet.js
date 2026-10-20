@@ -154,8 +154,15 @@ export class Sheets {
     const r = F.local(sx, sy);
     let p = null;
     let n = null;
-    const k = F.skinAt ? F.skinAt(sx, sy) : null;
-    if (k) {
+    // (down in the air over its roof - its ray over the roof before anything of it: over the roof,
+    // though the car is behind it on the screen)
+    const over = onPlane(r, 'x', 0);
+    const aloft = !!over && over[1] > roof + 0.18 && over[1] < roof + 3.5 && Math.abs(over[2]) < D.hl + 0.4;
+    const k = !aloft && F.skinAt ? F.skinAt(sx, sy) : null;
+    if (aloft) {
+      p = over;
+      n = [0, 1, 0];
+    } else if (k) {
       p = k.p;
       n = k.n;
     } else if (r.hit && r.face) {
@@ -701,11 +708,11 @@ export class Sheets {
       const name = DRAWN[p.type] || '';
       if (!np) {
         v.fuse.parts.splice(i, 1);
-        said.push(`${name} נמחק`);
+        said.push(`המחק הוריד את ה${name}`);
       } else {
         v.fuse.parts[i] = np;
         const st = statOf(np, (v.handling && v.handling.mass) || 1.25);
-        said.push(`${name} קטן${st ? ` — ${st}` : ''}`);
+        said.push(`נמחק חלק מה${name}${st ? ` — ${st}` : ''}`);
       }
       if (this.fz.last && this.fz.last.part === p) this.fz.last = null;
     }
@@ -717,6 +724,7 @@ export class Sheets {
     if (!changed) return false;
     this.fz.applyVeh(v);
     this.fz.buildVeh(v);
+    if (this.fz.tagEl) this.fz.tagEl.classList.remove('on');
     g.audio.play('rubber', 0.55);
     g.fx.crumbs(v.pos.x, (v.pos.y || 0) + 1, v.pos.z, 10, 1.6);
     this.fz.say(said.join(' · '), 'info');
