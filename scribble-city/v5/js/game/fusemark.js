@@ -399,7 +399,13 @@ export function readMark(P, F) {
     if (!dir.fromIt && !(person && dir.near)) return null;
     // (a hero's steep line up from himself is the quick sign's rope up to a roof - not a part)
     if (person && dir.d[1] > 0.55) return null;
-    if (Math.abs(dir.d[0]) > 0.66 && Math.abs(dir.d[0]) > Math.abs(dir.d[2]) && F.kind !== 'weapon') return R('wing', 'plank', [Math.sign(dir.d[0]) * D.hw, wingY(c, D, person), clampZ(cz, D)], dir.d, { span: len, chord: Math.max(0.35, len * 0.35) }, ['barrel']);
+    // (out of its side - its door, its flank - a wing, whichever way the line goes on the screen: from
+    // beside it, three quarters from behind, a line out of its side looks to go forward. ROADMAP 11.21)
+    const flank = !person && dir.face && dir.face[0] === 0 && dir.d[1] < 0.6;
+    if (F.kind !== 'weapon' && (flank || (Math.abs(dir.d[0]) > 0.66 && Math.abs(dir.d[0]) > Math.abs(dir.d[2])))) {
+      const sd = flank ? dir.face[1] : Math.sign(dir.d[0]);
+      return R('wing', 'plank', [sd * D.hw, wingY(c, D, person), clampZ(cz, D)], flank ? [sd, Math.max(0, dir.d[1]), 0] : dir.d, { span: len, chord: Math.max(0.35, len * 0.35) }, ['barrel']);
+    }
     if (F.kind === 'weapon') return R('barrel', 'extra', dir.at, dir.d, { len, r: 0.035 }, ['blade']);
     return R('barrel', barrelKind(dir, D), dir.at, dir.d, { len, r: 0.06 }, ['wing', 'rotor']);
   }
@@ -595,7 +601,7 @@ function axisDir(loc, D) {
   dz /= l;
   // its foot: where it meets the thing (pulled onto its skin)
   const at = [Math.max(-D.hw, Math.min(D.hw, inner.p[0])), Math.max(0, Math.min(D.h, inner.p[1])), Math.max(-D.hl, Math.min(D.hl, inner.p[2]))];
-  return { d: [dx, dy, dz], at, fromIt: near, near, atTop: at[1] > D.h * 0.8 };
+  return { d: [dx, dy, dz], at, fromIt: near, near, atTop: at[1] > D.h * 0.8, face: inner.hit ? inner.face || null : null };
 }
 
 // a gun on a car: on the roof it turns (a turret); out of its nose it fires ahead; out of its tail,
