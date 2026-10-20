@@ -1906,7 +1906,7 @@ export class FreeDraw {
     if (v.canLift) tips.push(M.plane && !M.copter && !M.balloon ? (t ? 'במהירות, ▲: להמריא' : 'במהירות, רווח: להמריא') : t ? '▲: להמריא · ▼ עד למטה: לנחות' : 'רווח: להמריא · C עד למטה: לנחות');
     else if (s.base === 'balloon') tips.push(t ? '▲: המבער, למעלה · ▼: למטה · הרוח לוקחת אותו' : 'רווח: המבער, למעלה · C: למטה · הרוח לוקחת אותו');
     else if (s.base === 'copter') tips.push(t ? 'כפתורי ▲▼: גובה' : 'רווח ו־C: למעלה ולמטה');
-    else if (s.base === 'plane') tips.push(t ? 'קדימה: מצערת · צריך כביש ארוך להמראה' : 'W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה');
+    else if (s.base === 'plane') tips.push(t ? `${game.settings.get('touchDrive') !== 'stick' ? 'גז' : 'קדימה'}: מצערת · צריך כביש ארוך להמראה` : 'W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה');
     if (M.drive && M.boat) tips.push('נוסעים ישר לתוך המים ושטים, ועולים לחוף');
     if (v.dive) tips.push(t ? '▼: לצלול, אף אחד לא רואה אתכם · ▲: לעלות' : 'C: לצלול, אף אחד לא רואה אתכם · רווח: לעלות');
     if (v.spring && !v.canLift) tips.push(s.kind === 'skate' ? (t ? '▲: קפיצה' : 'רווח: קפיצה') : t ? '▲: קפיצה על הקפיץ' : 'רווח: קפיצה על הקפיץ');
@@ -1927,7 +1927,8 @@ export class FreeDraw {
     if ((s.guns || []).some((gn) => gn.giant)) tips.push('התותח הענק: כל ירייה הודפת אחורה');
     if (v.roofDrive) tips.push('גלגלי הגג: אם מתהפכים — ממשיכים לנסוע');
     else if (s.handling && s.handling.tipA) tips.push(t ? 'גבוה וצר — בפנייה חדה מתהפך. ▲: להפוך בחזרה' : 'גבוה וצר — בפנייה חדה מתהפך. רווח: להפוך בחזרה');
-    if (s.jets.length && s.base === 'car') tips.push(t ? 'ג׳ויסטיק עד הסוף: טורבו' : 'Shift: טורבו מהסילון');
+    // (a phone: its turbo button over the gas - or the stick all the way, with the stick in the settings)
+    if (s.jets.length && s.base === 'car') tips.push(!t ? 'Shift: טורבו מהסילון' : game.settings.get('touchDrive') !== 'stick' ? 'טורבו מהסילון: הכפתור מעל הגז' : 'ג׳ויסטיק עד הסוף: טורבו');
     // (ROADMAP 11.15: what its parts do together - first of all)
     if (v.stomp) tips.unshift(t ? 'נחיתה מועכת: ▲ לקפוץ — והנחיתה הודפת את מי שסביב' : 'נחיתה מועכת: רווח לקפוץ — והנחיתה הודפת את מי שסביב');
     if (v.combos) tips.unshift('🏆 ' + v.combos.map(comboName).join(' · '));

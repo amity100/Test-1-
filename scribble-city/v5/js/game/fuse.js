@@ -2811,7 +2811,8 @@ function vehRule(p, v) {
     case 'jet':
       if (p.v === 'front') return { name: 'מבער להבות', rule: 'קליק — אש קדימה', nums: `טווח ${Math.round(fz.flame ? fz.flame.range : 8)} מ׳` };
       if (p.v === 'under') return { name: 'סילון מתחת', rule: 'זינוק אנכי', nums: '2.5 שניות דלק', use: `${SP} — למעלה` };
-      return { name: 'סילון', rule: `האצה: מהירות +${Math.round(40 * (fz.jetK || 1))}%, ובאוויר דוחף קדימה`, nums: `כוח ×${fmt(fz.jetK || 1)}`, use: t ? 'הג׳ויסטיק עד הסוף' : 'Shift' };
+      // (a phone: its turbo button - or the stick all the way, with the stick in the settings)
+      return { name: 'סילון', rule: `האצה: מהירות +${Math.round(40 * (fz.jetK || 1))}%, ובאוויר דוחף קדימה`, nums: `כוח ×${fmt(fz.jetK || 1)}`, use: !t ? 'Shift' : v.game.settings.get('touchDrive') !== 'stick' ? 'כפתור הטורבו' : 'הג׳ויסטיק עד הסוף' };
     case 'spring':
       if (p.v === 'bumper') return { name: 'פגוש קפיץ', rule: 'מי שנפגע מקדימה עף רחוק', nums: `${p.n.coils || 4} סלילים` };
       return { name: 'קפיץ', rule: `קפיצה לגובה ${fmt(((fz.jump || 9) ** 2) / 40)} מ׳`, nums: `${p.n.coils || 4} סלילים`, use: SP };

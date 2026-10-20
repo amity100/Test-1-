@@ -429,6 +429,8 @@ export class Game {
       $('opt-vol-radio').value = v.radio;
       $('opt-sens').value = v.sens;
       $('opt-invert').checked = v.invertY;
+      $('opt-drive').value = v.touchDrive;
+      $('opt-drive-row').classList.toggle('hidden', !this.touch || this.classic);
       $('opt-subs').checked = v.subtitles;
       $('opt-voices').checked = v.voices;
       $('opt-boil').checked = pick('boil');
@@ -480,6 +482,8 @@ export class Game {
       S.set('pens', e.target.value);
       apply();
     });
+    // (a phone at the wheel: the driving buttons or the stick - read as the car is driven, updatePrompts)
+    $('opt-drive').addEventListener('change', (e) => S.set('touchDrive', e.target.value));
     // F3 keeps its choice too
     this.perf.onToggle = (on) => {
       if (!this.perf.bench) S.set('perf', on);
@@ -1741,6 +1745,10 @@ export class Game {
     else if (!this.classic && !this.touch && !this.driveHint && (v.kind === 'car' || v.kind === 'bike')) {
       this.driveHint = true;
       this.hud.toast('V — מבט מהרכב · רווח — בלם יד', 'info', 3.2);
+    } else if (!this.classic && this.touch && !this.driveHint && this.settings.get('touchDrive') !== 'stick') {
+      // (a phone: the driving buttons, and where the stick is for whoever misses it)
+      this.driveHint = true;
+      this.hud.toast('נוהגים בכפתורים: החיצים משמאל, גז ובלם מימין · ג׳ויסטיק — בהגדרות', 'info', 4);
     }
   }
 
@@ -2059,17 +2067,37 @@ export class Game {
     this.hud.setPrompt(prompt);
     // (not with ?classic, on a phone: ▼ crouches on foot and dives in the water; ▲ comes up)
     if (this.touch && !this.classic) {
+      const v = p.inVehicle;
       // (ROADMAP 11.20: a spring, a rotor, a balloon drawn onto the car - ▲ jumps, lifts it)
-      const fl = p.inVehicle && (p.inVehicle.flies || p.inVehicle.fuseUp);
+      const fl = v && (v.flies || v.fuseUp);
+      // (at the wheel: the driving buttons instead of the stick, core/input.js - or the stick as it
+      // was, if that is what the settings say)
+      const btns = !!v && this.settings.get('touchDrive') !== 'stick';
+      // (with them the jump button is gone: ▲ does what it did - a spring's jump, a lift off the road,
+      // a car on its roof back onto its wheels; and ▲ ▼ take a submarine up and down)
+      const lift = btns && !!(v.spaceIsMine || (v.flipped && !v.roofDrive));
+      const dive = btns && !!v.dive;
       // (the fists' guard: on foot with the fists out, ROADMAP 5.4)
       const fists = p.mode === 'foot' && !!this.weapons.current.def.bare;
-      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}`;
+      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}|${lift}|${dive}`;
       if (key !== this.upDownKey) {
         this.upDownKey = key;
-        $('btn-down').classList.toggle('hidden', !(p.mode === 'foot' || p.mode === 'swim' || fl));
-        $('btn-up').classList.toggle('hidden', !(p.mode === 'swim' || fl));
+        $('btn-down').classList.toggle('hidden', !(p.mode === 'foot' || p.mode === 'swim' || fl || dive));
+        $('btn-up').classList.toggle('hidden', !(p.mode === 'swim' || fl || lift || dive));
         $('btn-guard').classList.toggle('hidden', !fists);
         if (!fists) this.input.aim = false;
+      }
+      // the pedals (and the stick away, css/style.css): the handbrake where there are wheels to lock,
+      // the turbo where there are jets
+      const wheels = btns && (v.kind === 'car' || v.kind === 'bike');
+      const jets = wheels && !!v.jets;
+      const pk = `${btns}|${wheels}|${jets}`;
+      if (pk !== this.pedalKey) {
+        this.pedalKey = pk;
+        this.input.driveButtons = btns;
+        document.body.classList.toggle('drive-btns', btns);
+        $('btn-handbrake').classList.toggle('hidden', !wheels);
+        $('btn-boost').classList.toggle('hidden', !jets);
       }
     }
     if (this.touch) {

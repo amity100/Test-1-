@@ -760,8 +760,8 @@ class Vehicle {
     // (the garage's upgrades, and the tank: game/garage.js, ROADMAP 4.6)
     const U = this.up;
     const dry = this.fuel === 0 ? 1 : 0;
-    // (its jets, Shift held: game/drawncar.js)
-    const boost = this.jets && input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || (input.touch && (input.stickMag || 0) > 0.92) || (input.pad && input.pad.sprint)) ? 1 : 0;
+    // (its jets, Shift held - on a phone its turbo button, or the stick pushed all the way: game/drawncar.js)
+    const boost = this.jets && input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || (input.touch && (input.driveButtons ? input.boost : (input.stickMag || 0) > 0.92)) || (input.pad && input.pad.sprint)) ? 1 : 0;
     this.boosting = boost;
     // (ROADMAP 11.20: a jet drawn onto it - as strong as it is long, game/fuse.js)
     const jk = this.fz ? this.fz.jetK || 1 : 1;
@@ -780,8 +780,9 @@ class Vehicle {
       const mv = input.readMove();
       throttle = mv.y;
       steer = -mv.x;
-      // (Space lifts a drawn one that flies, or jumps one on a spring: no handbrake - game/hybrid.js)
-      hand = input.keys.has('Space') && !this.spaceIsMine;
+      // (Space lifts a drawn one that flies, or jumps one on a spring: no handbrake - game/hybrid.js;
+      // a phone's handbrake button is a handbrake whatever Space does)
+      hand = (input.keys.has('Space') && !this.spaceIsMine) || !!input.handbrake;
       if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
     }
     if (this.stall > 0) {
@@ -1306,11 +1307,16 @@ class Vehicle {
     let up = 0;
     if (input) {
       const mv = input.readMove();
+      // (a phone's driving buttons: ◀ ▶ turn it as they turn a car - the view round, and its nose
+      // after it - not sideways as the stick does)
+      const turn = input.touch && input.driveButtons && mv !== input.pad ? mv.x : 0;
+      if (turn) game.camRig.yaw -= turn * 1.4 * dt;
       const cy = game.camRig.yaw;
       const fx = Math.sin(cy);
       const fz = Math.cos(cy);
-      ax = fx * mv.y - fz * mv.x;
-      az = fz * mv.y + fx * mv.x;
+      const sx = mv.x - turn;
+      ax = fx * mv.y - fz * sx;
+      az = fz * mv.y + fx * sx;
       if (input.keys.has('Space')) up += 1;
       if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || input.keys.has('ShiftLeft')) up -= 1;
       if (input.flyUp) up += 1;

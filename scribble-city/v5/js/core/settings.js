@@ -13,6 +13,9 @@ export const DEFAULTS = {
   radio: 1,
   sens: 1,
   invertY: false,
+  // (on a phone, at the wheel) the buttons of the big phone games: ◀ ▶ under the left thumb, the
+  // pedals under the right; or 'stick', the stick drives as it always did
+  touchDrive: 'buttons',
   // the radio's words on the screen, and what people say (near you, behind you, or aloud)
   subtitles: true,
   // what people say, aloud in the browser's own voice (game/voices.js)

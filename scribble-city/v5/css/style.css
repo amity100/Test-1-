@@ -1038,7 +1038,7 @@ body.touch #btn-pause { left: calc(50% - 26px); }
 #vf-shoot, #vf-back { pointer-events: auto; display: none; }
 body.touch #vf-shoot { display: block; right: max(30px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); background: #fff8ec; }
 body.touch #vf-back { display: block; left: max(20px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); }
-body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio, body.phone-cam #btn-view, body.phone-cam #btn-guard, body.phone-cam #btn-hands { display: none !important; }
+body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio, body.phone-cam #btn-view, body.phone-cam #btn-guard, body.phone-cam #btn-hands, body.phone-cam #btn-handbrake, body.phone-cam #btn-boost { display: none !important; }
 #phone-flash { position: fixed; inset: 0; z-index: 13; background: #fff; opacity: 0; pointer-events: none; }
 #phone-flash.on { animation: phoneFlash 0.35s ease-out; }
 @keyframes phoneFlash { from { opacity: 0.85; } to { opacity: 0; } }
@@ -1204,6 +1204,76 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch .sheet .btn { padding: 6px 14px; box-shadow: 3px 3px 0 var(--ink); font-size: 17px; }
   body.touch .opt-group h3 { font-size: 17px; }
   body.touch .opt-group .opt { margin: 4px 0; font-size: 13px; }
+}
+
+/* ---------- at the wheel on a phone: the buttons of the big phone games instead of the stick ----------
+   (core/input.js; game/game.js puts body.drive-btns on in a vehicle, unless the stick is chosen in the
+   settings.) ◀ ▶ bottom left, one strip the thumb slides along; the gas in the corner bottom right,
+   the brake beside it, the handbrake over the brake, the jets' turbo over the gas. The fire, the
+   pencil, the way out, the view, ▲ ▼ and the parachute step up and to the left, out of their way. */
+#steer-zone, .pedal { display: none; }
+body.drive-btns #steer-zone { display: flex; }
+body.drive-btns .pedal { display: flex; }
+body.drive-btns #stick-zone, body.drive-btns #btn-jump, body.drive-btns #draw-hint { display: none; }
+#steer-zone { position: absolute; left: max(10px, env(safe-area-inset-left)); bottom: max(10px, env(safe-area-inset-bottom)); gap: 16px; padding: 14px; direction: ltr; pointer-events: auto; }
+.steer { width: 104px; height: 92px; display: flex; align-items: center; justify-content: center; border: 3px solid var(--ink); border-radius: 20px 16px 22px 15px; background: rgba(248, 241, 228, 0.92); box-shadow: 3px 4px 0 var(--ink); }
+.steer .ico { width: 60%; height: 60%; fill: #ffd23f; stroke: var(--ink); stroke-width: 1.8; stroke-linejoin: round; }
+.steer.on { transform: scale(0.93); background: #ffd0e4; }
+.pedal { position: absolute; pointer-events: auto; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0; border: 3px solid var(--ink); border-radius: 18px 14px 20px 15px; background: rgba(248, 241, 228, 0.92); box-shadow: 3px 4px 0 var(--ink); color: var(--ink); font: 400 25px/1 var(--font-hand); }
+.pedal .ico { width: 36px; height: 36px; flex: none; fill: none; stroke: var(--ink); stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.pedal span { pointer-events: none; }
+.pedal.on { transform: scale(0.93); }
+/* (a thumb a little off still presses it: the gas reaches the screen's corner) */
+.pedal::after { content: ''; position: absolute; inset: -6px; }
+#btn-gas::after { right: -18px; bottom: -18px; }
+#btn-brake::after { bottom: -18px; }
+.pedal.pill { flex-direction: row; gap: 6px; font-size: 21px; border-radius: 14px 11px 15px 12px; }
+.pedal.pill .ico { width: 24px; height: 24px; }
+#btn-gas { right: max(24px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); width: 96px; height: 136px; background: #c8f5da; }
+#btn-gas.on { background: #8fe3b4; }
+#btn-brake { right: max(136px, calc(env(safe-area-inset-right) + 112px)); bottom: max(24px, env(safe-area-inset-bottom)); width: 96px; height: 104px; background: #ffd6e0; }
+#btn-brake.on { background: #ffa3bf; }
+#btn-handbrake { right: max(136px, calc(env(safe-area-inset-right) + 112px)); bottom: max(144px, calc(env(safe-area-inset-bottom) + 120px)); width: 96px; height: 52px; }
+#btn-handbrake.on { background: #ffd0e4; }
+#btn-boost { right: max(24px, env(safe-area-inset-right)); bottom: max(176px, calc(env(safe-area-inset-bottom) + 152px)); width: 96px; height: 52px; background: linear-gradient(135deg, #ffd23f, #ff9a3c); }
+#btn-boost.on { background: linear-gradient(135deg, #ff9a3c, #ff4fa3); }
+/* the rest over the pedals: the fire over the gas (and the weapon's swap over it), the pencil and
+   the way out over the brake, a column of the small ones beside */
+body.touch.drive-btns #btn-fire { right: max(29px, calc(env(safe-area-inset-right) + 5px)); bottom: max(244px, calc(env(safe-area-inset-bottom) + 220px)); }
+body.touch.drive-btns #btn-swap { right: max(41px, calc(env(safe-area-inset-right) + 17px)); bottom: max(346px, calc(env(safe-area-inset-bottom) + 322px)); }
+body.touch.drive-btns #btn-draw { right: max(149px, calc(env(safe-area-inset-right) + 125px)); bottom: max(220px, calc(env(safe-area-inset-bottom) + 196px)); }
+body.touch.drive-btns #btn-enter { right: max(153px, calc(env(safe-area-inset-right) + 129px)); bottom: max(310px, calc(env(safe-area-inset-bottom) + 286px)); }
+body.touch.drive-btns #btn-down { right: max(256px, calc(env(safe-area-inset-right) + 232px)); bottom: max(30px, calc(env(safe-area-inset-bottom) + 6px)); }
+body.touch.drive-btns #btn-up { right: max(256px, calc(env(safe-area-inset-right) + 232px)); bottom: max(92px, calc(env(safe-area-inset-bottom) + 68px)); }
+body.touch.drive-btns #btn-view { right: max(256px, calc(env(safe-area-inset-right) + 232px)); bottom: max(154px, calc(env(safe-area-inset-bottom) + 130px)); }
+body.touch.drive-btns #btn-chute { right: max(248px, calc(env(safe-area-inset-right) + 224px)); bottom: max(226px, calc(env(safe-area-inset-bottom) + 202px)); }
+/* (the radio's line and the words said: no wider than the room between the arrows and the buttons) */
+body.touch.drive-btns #radio, body.touch.drive-btns #subs { max-width: max(30vw, min(640px, calc(100vw - 644px))); }
+/* (a phone held sideways: all of it a quarter smaller, nearer the corners - as the other buttons) */
+@media (max-height: 520px) {
+  #steer-zone { left: max(6px, env(safe-area-inset-left)); bottom: max(6px, env(safe-area-inset-bottom)); gap: 12px; padding: 10px; }
+  .steer { width: 80px; height: 70px; border-width: 2.5px; box-shadow: 2px 3px 0 var(--ink); }
+  .pedal { border-width: 2.5px; box-shadow: 2px 3px 0 var(--ink); font-size: 20px; gap: 2px; }
+  .pedal .ico { width: 28px; height: 28px; }
+  .pedal.pill { font-size: 17px; gap: 4px; }
+  .pedal.pill .ico { width: 20px; height: 20px; }
+  #btn-gas { right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: 72px; height: 100px; }
+  #btn-gas::after { right: -14px; bottom: -14px; }
+  #btn-brake { right: max(98px, calc(env(safe-area-inset-right) + 84px)); bottom: max(14px, env(safe-area-inset-bottom)); width: 72px; height: 76px; }
+  #btn-brake::after { bottom: -14px; }
+  #btn-handbrake { right: max(98px, calc(env(safe-area-inset-right) + 84px)); bottom: max(102px, calc(env(safe-area-inset-bottom) + 88px)); width: 72px; height: 40px; }
+  #btn-boost { right: max(14px, env(safe-area-inset-right)); bottom: max(126px, calc(env(safe-area-inset-bottom) + 112px)); width: 72px; height: 40px; }
+  body.touch.drive-btns #btn-fire { right: max(18px, calc(env(safe-area-inset-right) + 4px)); bottom: max(178px, calc(env(safe-area-inset-bottom) + 164px)); }
+  /* (the swap stays under the weapon's card, by the map) */
+  body.touch.drive-btns #btn-swap { right: auto; bottom: auto; }
+  body.touch.drive-btns #btn-draw { right: max(108px, calc(env(safe-area-inset-right) + 94px)); bottom: max(160px, calc(env(safe-area-inset-bottom) + 146px)); }
+  body.touch.drive-btns #btn-enter { right: max(111px, calc(env(safe-area-inset-right) + 97px)); bottom: max(224px, calc(env(safe-area-inset-bottom) + 210px)); }
+  body.touch.drive-btns #btn-down { right: max(188px, calc(env(safe-area-inset-right) + 174px)); bottom: max(18px, calc(env(safe-area-inset-bottom) + 4px)); }
+  body.touch.drive-btns #btn-up { right: max(188px, calc(env(safe-area-inset-right) + 174px)); bottom: max(62px, calc(env(safe-area-inset-bottom) + 48px)); }
+  body.touch.drive-btns #btn-view { right: max(188px, calc(env(safe-area-inset-right) + 174px)); bottom: max(106px, calc(env(safe-area-inset-bottom) + 92px)); }
+  body.touch.drive-btns #btn-chute { right: max(182px, calc(env(safe-area-inset-right) + 168px)); bottom: max(162px, calc(env(safe-area-inset-bottom) + 148px)); }
+  /* (the radio's line and the words said: narrower, between the arrows and the buttons) */
+  body.touch.drive-btns #radio, body.touch.drive-btns #subs { max-width: 30vw; }
 }
 
 /* ================================================================ ROADMAP 11.6, 11.7
@@ -1417,7 +1487,7 @@ body.touch .fd-hint { font-size: 21px; top: 22%; left: 58%; width: 60vw; }
 body.touch .fd-cats { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); left: 56%; padding: 4px 6px; gap: 4px; }
 body.touch .fd-cats-t { display: none; }
 body.touch .fd-cat { font-size: 13px; padding: 4px 8px; }
-body.touch.fd-open #btn-fire, body.touch.fd-open #btn-jump, body.touch.fd-open #btn-draw, body.touch.fd-open #btn-photo, body.touch.fd-open #btn-swap, body.touch.fd-open #btn-guard, body.touch.fd-open #btn-hands, body.touch.fd-open #btn-up, body.touch.fd-open #btn-down, body.touch.fd-open #btn-enter, body.touch.fd-open #draw-hint, body.touch.fd-open #look-zone { display: none !important; }
+body.touch.fd-open #btn-fire, body.touch.fd-open #btn-jump, body.touch.fd-open #btn-draw, body.touch.fd-open #btn-photo, body.touch.fd-open #btn-swap, body.touch.fd-open #btn-guard, body.touch.fd-open #btn-hands, body.touch.fd-open #btn-up, body.touch.fd-open #btn-down, body.touch.fd-open #btn-enter, body.touch.fd-open #draw-hint, body.touch.fd-open #look-zone, body.touch.fd-open #btn-gas, body.touch.fd-open #btn-brake, body.touch.fd-open #btn-handbrake, body.touch.fd-open #btn-boost { display: none !important; }
 body.touch.fd-open #toasts { left: 24%; }
 body.touch .fd-signs { top: calc(max(6px, env(safe-area-inset-top)) + 96px); left: max(10px, env(safe-area-inset-left)); padding: 4px 7px 5px; gap: 2px; }
 body.touch .fd-signs b { font-size: 15px; }
