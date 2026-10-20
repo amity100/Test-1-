@@ -607,7 +607,7 @@ export class FreeDraw {
     // many as you like. The button back to driving shows the time running out)
     const shut = () => {
       if (!inCar) return;
-      this.autoShutLen = this.game.touch ? 3400 : 3800;
+      this.autoShutLen = this.game.touch ? 4200 : 4600;
       this.autoShut = performance.now() + this.autoShutLen;
     };
     const fm = fz && fz.match(this.strokes.map((s) => s.raw || s.p), this.U);

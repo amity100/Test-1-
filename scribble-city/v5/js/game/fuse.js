@@ -490,23 +490,41 @@ export class Fuse {
     const on = !!(g.freedraw && g.freedraw.isOpen) && g.state === 'play';
     const c = Math.cos(v.yaw);
     const sn = Math.sin(v.yaw);
+    const D = vehDims(v);
+    const lift = (v.fz && v.fz.lift) || 0;
+    // (its frame: x to its left, z to its nose)
+    const toW = (x, y, z, out) => out.set(v.pos.x + x * c + z * sn, (v.pos.y || 0) + lift + y, v.pos.z - x * sn + z * c);
+    // where the camera goes on one side of it, three quarters from behind and high (over the cafes'
+    // umbrellas, the awnings), pulled in before a wall - how much of the way there is clear (0-1)
+    const coll = g.world && g.world.collision;
+    const place = (sd, out) => {
+      toW(sd * (D.hw + 2.3), D.h + 2.3, -(D.hl + 1.3), out);
+      toW(0, D.h + 0.3, 0, _o);
+      _d.subVectors(out, _o);
+      const L = _d.length();
+      _d.multiplyScalar(1 / L);
+      const hit = coll && coll.raycast ? coll.raycast(_o.x, _o.y, _o.z, _d.x, _d.y, _d.z, L + 0.3) : null;
+      if (!hit) return 1;
+      const t = Math.max(1.4, hit.t - 0.35);
+      out.copy(_o).addScaledVector(_d, t);
+      return t / L;
+    };
     if (on && this.sk < 0.01) {
-      // (the side the camera was already on)
+      // (the side the camera was already on - the other, if a wall is in the way there)
       const dx = cam.position.x - v.pos.x;
       const dz = cam.position.z - v.pos.z;
       this.skSide = dx * c - dz * sn >= 0 ? 1 : -1;
+      const here = place(this.skSide, _p);
+      if (here < 0.75 && place(-this.skSide, _p) > here) this.skSide = -this.skSide;
     }
     this.sk = damp(this.sk, on ? 1 : 0, on ? 6 : 4, rdt);
     if (this.sk < 0.003) {
       this.sk = 0;
       return;
     }
-    const D = vehDims(v);
-    const lift = (v.fz && v.fz.lift) || 0;
-    // (its frame: x to its left, z to its nose)
-    const toW = (x, y, z, out) => out.set(v.pos.x + x * c + z * sn, (v.pos.y || 0) + lift + y, v.pos.z - x * sn + z * c);
-    // (three quarters from behind: its roof, its side and its tail all in view - all of it to draw on)
-    toW(this.skSide * (D.hw + 2.5), D.h + 1.2, -(D.hl + 1.5), _p);
+    // (three quarters from behind and above: its roof, its side and its tail all in view - all of it
+    // to draw on)
+    place(this.skSide, _p);
     toW(0, D.h * 0.42, D.hl * 0.12, _w);
     const e = this.sk * this.sk * (3 - 2 * this.sk);
     _m.lookAt(_p, _w, UPY);
