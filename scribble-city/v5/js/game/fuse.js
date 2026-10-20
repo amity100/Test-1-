@@ -121,9 +121,10 @@ export class Fuse {
     this.tagAt = null;
     this.combosSeen = new Set();
     // (ROADMAP 11.21) the time to draw: the pace things go at now (1: as ever); the camera by the
-    // car you drive (0-1) and its side of it
+    // car you drive (0-1), where it stands in the car's frame and its side of it
     this.tk = 1;
     this.sk = 0;
+    this.skSpot = [3.2, 3.7, -3.6];
     this.skSide = 1;
     this.slowOn = false;
     // (the part just put on: it grows into place)
@@ -367,7 +368,11 @@ export class Fuse {
     const mine = cands.find((c) => c.t.kind === 'veh' && c.t.ref === this.game.player.inVehicle);
     if (mine) {
       const Q = along(P, 24);
-      if (onItAll(mine.F, Q, Q.map(([x, y]) => mine.F.local(x, y)))) {
+      const loc = Q.map(([x, y]) => mine.F.local(x, y));
+      // (on its paint all along - or on it all along, a line low along its sill dipping off the paint)
+      let onBox = 0;
+      for (const o of loc) if (o.hit) onBox++;
+      if (onItAll(mine.F, Q, loc) || onBox >= Q.length * 0.9) {
         const m = readMark(P, mine.F);
         return m ? { t: mine.t, F: mine.F, m, P } : null;
       }
@@ -516,11 +521,11 @@ export class Fuse {
     const lift = (v.fz && v.fz.lift) || 0;
     // (its frame: x to its left, z to its nose)
     const toW = (x, y, z, out) => out.set(v.pos.x + x * c + z * sn, (v.pos.y || 0) + lift + y, v.pos.z - x * sn + z * c);
-    // where the camera goes on one side of it, three quarters from behind and high (over the cafes'
-    // umbrellas, the awnings), pulled in before a wall - how much of the way there is clear (0-1)
+    // where the camera goes - s: the spot in the car's frame - pulled in before a wall: how much of the
+    // way there is clear (0-1)
     const coll = g.world && g.world.collision;
-    const place = (sd, out) => {
-      toW(sd * (D.hw + 2.3), D.h + 2.3, -(D.hl + 1.3), out);
+    const place = (s, out) => {
+      toW(s[0], s[1], s[2], out);
       toW(0, D.h + 0.3, 0, _o);
       _d.subVectors(out, _o);
       const L = _d.length();
@@ -532,12 +537,24 @@ export class Fuse {
       return t / L;
     };
     if (on && this.sk < 0.01) {
-      // (the side the camera was already on - the other, if a wall is in the way there)
+      // (three quarters from behind and high - over the cafes' umbrellas, the awnings - on the side
+      // the camera was already on; else on the other side, straight behind, or right over it: the
+      // first clear of walls, or the clearest - never inside the building it was parked by)
       const dx = cam.position.x - v.pos.x;
       const dz = cam.position.z - v.pos.z;
-      this.skSide = dx * c - dz * sn >= 0 ? 1 : -1;
-      const here = place(this.skSide, _p);
-      if (here < 0.75 && place(-this.skSide, _p) > here) this.skSide = -this.skSide;
+      const sd = dx * c - dz * sn >= 0 ? 1 : -1;
+      const w = D.hw + 2.3;
+      const spots = [[sd * w, D.h + 2.3, -(D.hl + 1.3)], [-sd * w, D.h + 2.3, -(D.hl + 1.3)], [0, D.h + 2.6, -(D.hl + 2.4)], [0, D.h + 4.2, -0.4]];
+      let best = -1;
+      for (const s of spots) {
+        const k = place(s, _p);
+        if (k > best + 0.05) {
+          best = k;
+          this.skSpot = s;
+        }
+        if (k >= 0.75) break;
+      }
+      this.skSide = this.skSpot[0] ? Math.sign(this.skSpot[0]) : sd;
     }
     this.sk = damp(this.sk, on ? 1 : 0, on ? 6 : 4, rdt);
     if (this.sk < 0.003) {
@@ -546,7 +563,7 @@ export class Fuse {
     }
     // (three quarters from behind and above: its roof, its side and its tail all in view - all of it
     // to draw on)
-    place(this.skSide, _p);
+    place(this.skSpot, _p);
     toW(0, D.h * 0.42, D.hl * 0.12, _w);
     const e = this.sk * this.sk * (3 - 2 * this.sk);
     _m.lookAt(_p, _w, UPY);

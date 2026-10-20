@@ -592,6 +592,9 @@ function axisDir(loc, D) {
   const inner = da <= db ? a : b;
   const outer = da <= db ? b : a;
   const near = Math.min(da, db) < Math.max(0.6, D.h * 0.35);
+  // (and its other end out of it: a line with both its ends on the thing lies along it - a stripe
+  // down its side is ink, not a wing. ROADMAP 11.21)
+  const reach = Math.max(da, db) > 0.3;
   let dx = outer.p[0] - inner.p[0];
   let dy = outer.p[1] - inner.p[1];
   let dz = outer.p[2] - inner.p[2];
@@ -601,7 +604,7 @@ function axisDir(loc, D) {
   dz /= l;
   // its foot: where it meets the thing (pulled onto its skin)
   const at = [Math.max(-D.hw, Math.min(D.hw, inner.p[0])), Math.max(0, Math.min(D.h, inner.p[1])), Math.max(-D.hl, Math.min(D.hl, inner.p[2]))];
-  return { d: [dx, dy, dz], at, fromIt: near, near, atTop: at[1] > D.h * 0.8, face: inner.hit ? inner.face || null : null };
+  return { d: [dx, dy, dz], at, fromIt: near && reach, near, atTop: at[1] > D.h * 0.8, face: inner.hit ? inner.face || null : null };
 }
 
 // a gun on a car: on the roof it turns (a turret); out of its nose it fires ahead; out of its tail,
