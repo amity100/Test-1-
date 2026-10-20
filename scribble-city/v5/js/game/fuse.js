@@ -1184,7 +1184,7 @@ export class Fuse {
       const fz = v.fz || {};
       // (ROADMAP 11.22: drawn on it - made of its own lines, where they were drawn)
       if (p.shape) {
-        const { body, line } = drawnColours(ink(p), v, PARTS[p.type].col);
+        const { body, line } = drawnColours(ink(p), v, p.type);
         const ms = buildDrawn(p, { D, K, spots: vehWheelSpots(v, K, D), wheelR: fz.wheels ? fz.wheels.r : null, lift: fz.lift || 0 }, body);
         for (const o of ms) {
           o.m.userData.lineC = line;
@@ -2941,14 +2941,16 @@ function hatch(P, gap) {
 
 // (ROADMAP 11.22) a part drawn on your car: its body and its lines - in the ink it was drawn in, its
 // body a little lighter and its lines the ink itself (a light ink: lines dark on it); in pencil or a
-// dark ink, the car's own colour, its lines that ink (light ones on a dark car)
-function drawnColours(ink, v, dflt) {
+// dark ink, what it is made of - a wing of the car's own paint, a flame of fire, a balloon red - its
+// lines that ink (light ones on a dark body)
+const OWN_PAINT = new Set(['wing', 'blade', 'deco3']);
+function drawnColours(ink, v, type) {
   const lum = (c) => c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
   if (ink && !ink.pencil && lum(ink.c) > 0.3) {
     if (lum(ink.c) > 0.72) return { body: ink.c, line: EDGE_DARK };
     return { body: ink.c.map((x) => x + (1 - x) * 0.42), line: ink.c };
   }
-  const body = Array.isArray(v.color) ? v.color : dflt;
+  const body = OWN_PAINT.has(type) && Array.isArray(v.color) ? v.color : type === 'jet' ? [1, 0.62, 0.2] : PARTS[type].col;
   return { body, line: lum(body) < 0.32 ? EDGE_PAPER : ink && !ink.pencil ? ink.c : [0.16, 0.16, 0.22] };
 }
 
@@ -2967,12 +2969,12 @@ function capsBox(caps) {
   return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
 }
 
-// (does a drawing touch another on the screen - an end of a line of it within px of a line of the
-// other)
+// (does a drawing go on from another on the screen - an end of a line of it within px of the other
+// where it is off the car: its part, not the paint it came out of)
 function touching(A, B, px) {
   for (const a of A) {
     for (const q of [a.pts[0], a.pts[a.pts.length - 1]]) {
-      for (const b of B) for (const r of b.pts) if (Math.hypot(q.s[0] - r.s[0], q.s[1] - r.s[1]) <= px) return true;
+      for (const b of B) for (const r of b.pts) if (!r.k && Math.hypot(q.s[0] - r.s[0], q.s[1] - r.s[1]) <= px) return true;
     }
   }
   return false;

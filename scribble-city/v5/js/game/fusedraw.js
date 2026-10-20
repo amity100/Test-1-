@@ -138,6 +138,20 @@ function isDome(S) {
   return S.fill > 0.5 && S.fill < 0.85 && B.w > B.h * 1.3 && S.fit.err > 0.15;
 }
 
+// a line as it is on the car's side (the plane x = c): its shape there, in metres - round? where its
+// middle is (cy, cz) - or null
+function sideShape(cap, c) {
+  const P = [];
+  for (const q of cap.pts) {
+    const X = onPlane(q, 'x', c);
+    if (X) P.push([X[2] * 200, -X[1] * 200]);
+  }
+  if (P.length < 8) return null;
+  const S = shapeOf(P);
+  const B = boxOf(P);
+  return { round: S.closed && S.fit.err < 0.3 && S.fit.cover > 0.7 && S.aspect < 1.6, cz: B.cx / 200, cy: -B.cy / 200, r: Math.max(B.w, B.h) / 400 };
+}
+
 // a closed line made into a band round an open one (its thickness h): a blade, a plank
 function band(L, h) {
   if (L.length < 2) return null;
@@ -195,22 +209,11 @@ export function readDrawing(caps, ctx, force = null) {
   for (const c of caps) if (c.len > main.len) main = c;
   const S = shapeOf(main.P);
   const round = S.closed && S.fit.err < 0.26 && S.fit.cover > 0.7 && S.aspect < 1.7;
-  // (over a wheel of its own, round: a wheel of yours instead, though it is all on its paint)
-  let overWheel = false;
-  if (round && on.length) {
-    let cx = 0;
-    let cy = 0;
-    let cz = 0;
-    for (const q of on) {
-      cx += q.k.p[0];
-      cy += q.k.p[1];
-      cz += q.k.p[2];
-    }
-    cx /= on.length;
-    cy /= on.length;
-    cz /= on.length;
-    overWheel = cy < ctx.r0 * 2.4 && ctx.spots.some((s) => Math.abs(cz - s.z) < ctx.r0 * 1.7 && Math.sign(cx || 1) === Math.sign(s.x));
-  }
+  // (over a wheel of its own, round there - on its side, in metres, not as the camera sees it: a
+  // wheel of yours instead, though it is all on its paint)
+  const sd0 = Math.sign(main.pts[0].o[0]) || 1;
+  const SW = sideShape(main, sd0 * D.hw);
+  const overWheel = !!SW && SW.round && SW.cy < ctx.r0 * 2.2 && ctx.spots.some((s) => Math.abs(SW.cz - s.z) < ctx.r0 * 1.8 && Math.sign(s.x) === sd0);
   if (force === 'ink' || (!force && !asPart && onFrac >= 0.85 && !overWheel)) return { kind: 'ink' };
   // ---- where it meets the car, and which of its faces it comes out of
   const sc = (L) => {
@@ -307,11 +310,23 @@ export function readDrawing(caps, ctx, force = null) {
     else if (starry && face !== 'bottom') type = 'star';
     else if (zed && face === 'top') type = 'bolt';
     else if (face === 'side') {
-      // (on its side plane: how high it is - a wing is out of its waist, floats along its sill)
-      const ys = all.map((q) => onPlane(q, 'x', (Math.sign(A[0]) || 1) * D.hw)).filter(Boolean).map((X) => X[1]).sort((a, b) => a - b);
-      const yMid = ys.length ? ys[ys.length >> 1] : A[1];
-      if (round && A[1] < D.h * 0.6) type = 'wheel';
-      else if (yMid < Math.max(clear + 0.2, D.h * 0.28) && S.aspect >= 2.2) type = 'float';
+      // (as a wing would be - flat, at its waist: out from it, or along it? Along it and low, floats)
+      const sd = Math.sign(A[0]) || 1;
+      let out = 0;
+      let z0 = Infinity;
+      let z1 = -Infinity;
+      for (const q of all) {
+        const X = onPlane(q, 'y', clamp(A[1], 0.2, roof));
+        if (!X) continue;
+        out = Math.max(out, X[0] * sd - D.hw);
+        z0 = Math.min(z0, X[2]);
+        z1 = Math.max(z1, X[2]);
+      }
+      const along = z1 - z0 > 1.5 && z1 - z0 > out * 2.2;
+      const SS = SW && Math.sign(sd0) === sd ? SW : sideShape(main, sd * D.hw);
+      const low = SS ? SS.cy < Math.max(clear + 0.3, D.h * 0.36) : A[1] < D.h * 0.4;
+      if (SS && SS.round && SS.cy < D.h * 0.5) type = 'wheel';
+      else if (along && low) type = 'float';
       else if (!S.closed && caps.length === 1 && (teethy || coily)) type = 'deco3';
       else type = 'wing';
     } else if (face === 'top') {
@@ -433,6 +448,12 @@ function makePart(type, caps, ctx, o) {
       const ol = closed ? L : band(L, 0.09);
       if (ol) outlines.push(ol);
     }
+  } else if (type === 'chute' && !closedL.length) {
+    // (its canopy: the arch as drawn, a thin sheet across it)
+    let longest = lines[0];
+    for (const L of lines) if (L.length > longest.length) longest = L;
+    const ol = band(longest, 0.07);
+    if (ol) outlines = [ol];
   } else if (closedL.length) {
     let best = closedL[0];
     for (const L of closedL) if (areaOf(L) > areaOf(best)) best = L;
@@ -549,7 +570,7 @@ function makePart(type, caps, ctx, o) {
     shape.string = r3([clamp(A[0], -D.hw * 0.5, D.hw * 0.5), roof, A[2]]);
   } else if (type === 'chute') {
     n.span = clamp(bx.w, 1.4, 8);
-    shape.W = clamp(n.span * 0.75, 1, 5);
+    shape.W = clamp(n.span * 0.55, 0.8, 4);
     shape.string = r3([clamp(A[0], -D.hw * 0.5, D.hw * 0.5), roof, A[2]]);
     v = 'top';
   } else if (type === 'float') {
