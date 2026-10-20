@@ -514,8 +514,14 @@ export class FreeDraw {
     if (!this.isOpen) return;
     const game = this.game;
     if (this.cur) this.penUp(true);
-    // (ROADMAP 11.22: back to driving - the drawing on the car is made first)
+    // (ROADMAP 11.22: back to driving - the drawing on the car is made first; its tag goes with the
+    // pen, off the driving buttons)
     if (this.group.length) this.finishGroup();
+    const fz = game.fuse;
+    if (this.carOpen && fz && fz.tagEl) {
+      fz.tagEl.classList.remove('on');
+      fz.tagT = 0;
+    }
     this.isOpen = false;
     this.shutAt = performance.now();
     this.menu(false);
