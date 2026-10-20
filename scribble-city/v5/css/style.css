@@ -1359,6 +1359,14 @@ body.fz-slow::after { opacity: 1; }
    the last line) */
 body.fd-car .fd-cats, body.fd-car #fd-clear, body.fd-car #fd-album { display: none; }
 body.fd-car #fd-make { background: linear-gradient(to left, #ffd23f calc(var(--left, 1) * 100%), #efe6d2 0); }
+/* (the pen out in a car on a phone, at the driving buttons: all of the screen to draw on the car but
+   the arrows' corner - the thumb steers on; the pedals are away while the pen is out) */
+body.touch.fd-car.drive-btns #fd-zone-a { left: 0; right: 0; top: 0; bottom: 150px; width: auto; height: auto; }
+body.touch.fd-car.drive-btns #fd-zone-b { left: 280px; right: 0; top: auto; bottom: 0; width: auto; height: 150px; }
+@media (max-height: 520px) {
+  body.touch.fd-car.drive-btns #fd-zone-a { bottom: 108px; }
+  body.touch.fd-car.drive-btns #fd-zone-b { left: 214px; height: 108px; }
+}
 /* (ROADMAP 11.10) a ride of parts: each line's name on it (a tap: what else it could be), the card by
    the drawing - its name, the model it will be, what it does, its numbers */
 .fd-parts { position: absolute; inset: 0; pointer-events: none; transition: opacity 0.15s; }
