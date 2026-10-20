@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { readMark, asType, shapeOf } from './fusemark.js';
+import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
 import { boxOf, along, pathLen } from './signshape.js';
 import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, paintOf } from './fusemodel.js';
 import { isWater } from './rides.js';
@@ -83,6 +83,9 @@ const DECOR_MAX = 14;
 const SWAPS = new Set(['veh', 'hero', 'weapon']);
 const MAX_ON_HERO = 3;
 const HERO_T = 90;
+// (ROADMAP 11.21) the edge under ink on a car: paper white, or dark under a light ink
+const EDGE_PAPER = [1, 0.98, 0.93];
+const EDGE_DARK = [0.1, 0.09, 0.16];
 // (ROADMAP 11.21) star power: how long it lasts; how high floats keep a car on the water
 const STAR_T = 10;
 const WATER_RIDE = -0.96;
@@ -152,7 +155,10 @@ export class Fuse {
     };
     for (const v of g.vehicles.list) {
       if (v.dead || v.materializing || !near(v.pos.x, v.pos.z, 80)) continue;
-      add('veh', v, v.pos.x, v.pos.y + (v.fz && v.fz.lift ? v.fz.lift : 0), v.pos.z, v.yaw, vehDims(v), v === p.inVehicle ? 0.3 : 0.08, { wheelR: vehWheelR(v), skin: v.kind === 'car' ? (KINDS[v.carKind] ? v.carKind : 'sedan') : null });
+      // (the car you drive - more so with the pen out in it, the camera on it: what is drawn round it
+      // is for it, not for the cafe's people behind it. ROADMAP 11.21)
+      const own = v === p.inVehicle ? 0.3 + (this.sk > 0.5 ? 0.5 : 0) : 0.08;
+      add('veh', v, v.pos.x, v.pos.y + (v.fz && v.fz.lift ? v.fz.lift : 0), v.pos.z, v.yaw, vehDims(v), own, { wheelR: vehWheelR(v), skin: v.kind === 'car' ? (KINDS[v.carKind] ? v.carKind : 'sedan') : null });
     }
     if (p.mode === 'foot') {
       const s = p.fig.scale || 1;
@@ -356,11 +362,27 @@ export class Fuse {
     // (a line that starts on the gun in your hand is the gun's - whatever it crosses after)
     for (const c of cands) if (c.t.kind === 'weapon' && inBox(a, c.F.box, 6)) c.cost -= 2;
     cands.sort((p, q) => p.cost - q.cost);
-    for (const c of cands.slice(0, 3)) {
-      const m = readMark(P, c.F);
-      if (m) return { t: c.t, F: c.F, m, P };
+    // (all on the car you drive: it is the car's - a part of it, or ink on it - not anything's behind
+    // it. ROADMAP 11.21)
+    const mine = cands.find((c) => c.t.kind === 'veh' && c.t.ref === this.game.player.inVehicle);
+    if (mine) {
+      const Q = along(P, 24);
+      if (onItAll(mine.F, Q, Q.map(([x, y]) => mine.F.local(x, y)))) {
+        const m = readMark(P, mine.F);
+        return m ? { t: mine.t, F: mine.F, m, P } : null;
+      }
     }
-    return null;
+    // (a part that cannot go on the nearest thing is for the next one under the pen, not far behind
+    // it: a star over your car is your car's, not the man's at the table behind it)
+    let first = null;
+    for (const c of cands.slice(0, 5)) {
+      if (first && c.cost > cands[0].cost + 1.2) break;
+      const m = readMark(P, c.F);
+      if (!m) continue;
+      if (ALLOW[c.t.kind].has(m.type)) return { t: c.t, F: c.F, m, P };
+      if (!first) first = { t: c.t, F: c.F, m, P };
+    }
+    return first;
   }
 
   // ------------------------------------------------------------------ putting it on
@@ -620,12 +642,12 @@ export class Fuse {
     const r2 = (q) => q.map((x) => Math.round(x * 100) / 100);
     const pts = Q.map(([x, y], i) => r3(proj(x, y, sk[i])));
     const sizeM = Math.max(B.w, B.h) * F.perPx;
-    const d = { pts, c: inkI, w: clamp(2.4 + sizeM * 0.4, 2.6, 4), cost: clamp(Math.round(L * F.perPx * 0.8), 1, 5) };
+    const d = { pts, c: inkI, w: clamp(3 + sizeM * 0.5, 3.2, 5), cost: clamp(Math.round(L * F.perPx * 0.8), 1, 5) };
     const onK = on / Q.length;
     const S = shapeOf(P);
     if (S.closed && Math.min(B.w, B.h) > 16) {
       const fill = [];
-      for (const [a, b] of hatch(P, Math.max(8, Math.min(B.w, B.h) / 6))) {
+      for (const [a, b] of hatch(P, Math.max(7, Math.min(B.w, B.h) / 7))) {
         const k = clamp(Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 22), 1, 4);
         const line = [];
         for (let i = 0; i <= k; i++) {
@@ -712,25 +734,16 @@ export class Fuse {
     for (let k = 0; k < list.length; k++) {
       const d = list[k];
       const col = (INKS[d.c] || INKS[1]).c;
-      const pts = d.pts;
-      _v.set(pts[0][0], pts[0][1], pts[0][2]).applyMatrix4(M);
-      for (let i = 1; i < pts.length; i++) {
-        _w.set(pts[i][0], pts[i][1], pts[i][2]).applyMatrix4(M);
-        fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, col, d.w || 3, seed0 + k * 97 + i, 1, 0.012, 0);
-        _v.copy(_w);
-      }
+      const w = d.w || 3;
+      // (under each line a paper-white edge, as a sticker has - it shows on any paint, on the car's own
+      // hatching too; under a light ink, a dark one)
+      const edge = col[0] * 0.3 + col[1] * 0.59 + col[2] * 0.11 > 0.72 ? EDGE_DARK : EDGE_PAPER;
+      const sd = seed0 + k * 97;
+      inkRun(fr, d.pts, M, edge, w + 3.2, sd, 0.95);
       // (a closed one: the strokes that fill it, a little thinner)
-      if (d.fill) {
-        for (let j = 0; j < d.fill.length; j++) {
-          const f = d.fill[j];
-          _v.set(f[0][0], f[0][1], f[0][2]).applyMatrix4(M);
-          for (let i = 1; i < f.length; i++) {
-            _w.set(f[i][0], f[i][1], f[i][2]).applyMatrix4(M);
-            fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, col, (d.w || 3) * 0.66, seed0 + k * 97 + 300 + j * 7 + i, 0.92, 0.01, 0);
-            _v.copy(_w);
-          }
-        }
-      }
+      if (d.fill) for (let j = 0; j < d.fill.length; j++) inkRun(fr, d.fill[j], M, edge, w * 0.66 + 2.4, sd + 300 + j * 7, 0.9);
+      inkRun(fr, d.pts, M, col, w, sd, 1);
+      if (d.fill) for (let j = 0; j < d.fill.length; j++) inkRun(fr, d.fill[j], M, col, w * 0.66, sd + 300 + j * 7, 0.92);
     }
   }
 
@@ -2662,6 +2675,16 @@ export const COMBO_NAME = {
   turbo: 'רולר טורבו — בריצה מהירה פי 1.35',
   airship: 'ספינת אוויר — מרחפים כמעט בלי הגבלה',
 };
+
+// (ROADMAP 11.21) a line of ink on a car, point to point in its frame M
+function inkRun(fr, pts, M, c, w, seed, a) {
+  _v.set(pts[0][0], pts[0][1], pts[0][2]).applyMatrix4(M);
+  for (let i = 1; i < pts.length; i++) {
+    _w.set(pts[i][0], pts[i][1], pts[i][2]).applyMatrix4(M);
+    fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, c, w, seed + i, a, 0.012, 0);
+    _v.copy(_w);
+  }
+}
 
 // (ROADMAP 11.21) strokes across a closed line (screen px): lines at 45 degrees, gap apart, each one
 // inside it (even-odd: a star drawn in one go keeps its middle empty) - [[a, b], ...], 18 at most

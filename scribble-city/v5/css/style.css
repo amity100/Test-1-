@@ -1337,6 +1337,8 @@ body.fd-open #crosshair { opacity: 0; }
 /* (ROADMAP 11.20) the part just drawn onto something: what it is, what it does there, its numbers */
 .fz-tag { position: fixed; left: 0; top: 0; z-index: 60; max-width: 280px; display: flex; flex-direction: column; gap: 2px; padding: 7px 11px 8px; background: rgba(255, 252, 244, 0.95); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transform: translateY(6px) scale(0.96); transition: opacity 0.18s, transform 0.18s; direction: rtl; }
 .fz-tag.on { opacity: 1; transform: none; }
+/* (ROADMAP 11.21) the pen down: the marks card and the tag fade - the line under them shows */
+body.fd-pen .fd-fuse, body.fd-pen .fz-tag.on { opacity: 0.18; }
 .fz-tag b { display: flex; align-items: center; gap: 6px; font-family: var(--font-hand); font-size: 21px; line-height: 1.05; }
 .fz-tag b i { width: 12px; height: 12px; border-radius: 50%; border: 1.8px solid var(--ink); flex: none; }
 .fz-tag span { font: 600 13.5px var(--font-ui); line-height: 1.3; }
@@ -1358,6 +1360,8 @@ body.fz-slow::after { opacity: 1; }
 /* (the pen in a car: no kinds to pick, nothing to clear; the button back to driving runs down after
    the last line) */
 body.fd-car .fd-cats, body.fd-car #fd-clear, body.fd-car #fd-album { display: none; }
+/* (the "E: out" line under the car, while drawing on it: off the car - E still gets out) */
+body.fd-car #prompt { display: none; }
 body.fd-car #fd-make { background: linear-gradient(to left, #ffd23f calc(var(--left, 1) * 100%), #efe6d2 0); }
 /* (the pen out in a car on a phone, at the driving buttons: all of the screen to draw on the car but
    the arrows' corner - the thumb steers on; the pedals are away while the pen is out) */

@@ -269,6 +269,8 @@ export class FreeDraw {
       const imp = chip < 0 ? this.impAt(e.clientX, e.clientY) : null;
       this.partMenu(-1);
       this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, imp, menuAt: chip >= 0 && this.chipArrow(chip, e.clientX), t0: performance.now() };
+      // (the cards fade while the pen is down: the line under them shows. ROADMAP 11.21)
+      if (chip < 0 && !imp) document.body.classList.add('fd-pen');
       if (chip >= 0) {
         clearTimeout(this.lpTimer);
         const c = this.cur;
@@ -500,6 +502,7 @@ export class FreeDraw {
     this.el.classList.add('hidden');
     document.body.classList.remove('fd-open');
     document.body.classList.remove('fd-car');
+    document.body.classList.remove('fd-pen');
     this.carOpen = false;
     this.autoShut = 0;
     if (game.pad) game.pad.pen = false;
@@ -541,6 +544,7 @@ export class FreeDraw {
   penUp(drop = false) {
     const c = this.cur;
     this.cur = null;
+    document.body.classList.remove('fd-pen');
     this.game.audio.scratchStop();
     if (drop || !c) return;
     // (a tap on a part's name: the next thing it could be - its menu, if pressed long or on its ▾;
