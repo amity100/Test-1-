@@ -61,6 +61,10 @@ const ENG_T = 0.9;
 // (ROADMAP 11.15) how long a press on a part's name opens its whole menu (s) - a tap is the next it
 // could be
 const LONG_PRESS = 0.45;
+// (ROADMAP 11.22) in a car: how long the pen rests before what is drawn on it is made (ms) - a
+// finger is slower to the next line than a mouse
+const GROUP_MS = 700;
+const GROUP_TOUCH = 850;
 // (ROADMAP 11.15) the two looks of what is made: as drawn, or each part the game's own
 const LOOKS = [
   ['faithful', 'כמו שציירתי'],
@@ -146,6 +150,11 @@ export class FreeDraw {
     this.found = new Set();
     this.engMorph = null;
     this.engSig = '';
+    // (ROADMAP 11.22) in a car: the drawing being drawn on it - its lines as they were seen
+    // (game/fuse.js capture), till the pen rests (groupAt)
+    this.group = [];
+    this.groupAt = 0;
+    this.fuseHelp = false;
     this.build();
     this.bind();
   }
@@ -173,6 +182,7 @@ export class FreeDraw {
         <div><svg viewBox="0 0 24 24"><path class="red" d="M6 15 C3 9 10 4 14 7 C18 10 11 18 7 14 C4 10 13 4 17 9 C21 14 13 21 9 17 C6 13 15 7 19 12 C21 16 15 20 12 18"/></svg>קשקוש — ענן דיו</div>
         <div><svg viewBox="0 0 24 24"><path d="M14 4 L21 4 L21 21 M14 4 L14 21"/><path d="M5 17 a1.4 1.4 0 1 0 0.01 0 M5 19 L5 22"/><path class="red" d="M6 18 L15 5"/></svg>קו מכם לגג — חבל</div>
       </div>
+      <button class="fd-fuse-q hidden" id="fd-fuse-q" title="הסימנים" aria-label="הסימנים">?</button>
       <div class="fd-fuse hidden" id="fd-fuse"><b>הרכבה — חלק בקו אחד, על משהו</b>
         <div><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/></svg>גלגל — עיגול, נמוך</div>
         <div><svg viewBox="0 0 24 24"><path d="M3 13 L21 9 L21 13 Z"/></svg>כנף — צורה צרה לצד</div>
@@ -262,6 +272,9 @@ export class FreeDraw {
       }
       this.menu(false);
       this.autoShut = 0;
+      // (ROADMAP 11.22: in a car, a line begun away from the drawing being drawn - something new: that
+      // one is done first)
+      if (this.carOpen && this.group.length && this.farFromGroup(e.clientX, e.clientY)) this.finishGroup();
       // (on a part's name: a tap there is the next thing it could be, a long press - or its ▾ - its
       // whole menu (ROADMAP 11.15); drawn on from it, it is a line as any. On a name the game added:
       // taken away)
@@ -339,6 +352,10 @@ export class FreeDraw {
     press($('fd-undo'), () => this.undo());
     press($('fd-clear'), () => this.clear());
     press($('fd-close'), () => this.close());
+    press($('fd-fuse-q'), () => {
+      this.fuseHelp = !this.fuseHelp;
+      this.info();
+    });
     // (in a car: back to driving - ROADMAP 11.21)
     press($('fd-make'), () => (this.carOpen ? this.close() : this.make()));
     press($('fd-album'), () => {
@@ -481,6 +498,8 @@ export class FreeDraw {
     // (ROADMAP 11.21: in a car - the time to draw on it: no kinds to pick, a button back to driving)
     this.carOpen = inCar;
     this.autoShut = 0;
+    this.group = [];
+    this.groupAt = 0;
     document.body.classList.toggle('fd-car', inCar);
     if (!game.touch) game.input.releaseLock();
     game.input.fire = false;
@@ -494,9 +513,11 @@ export class FreeDraw {
   close() {
     if (!this.isOpen) return;
     const game = this.game;
+    if (this.cur) this.penUp(true);
+    // (ROADMAP 11.22: back to driving - the drawing on the car is made first)
+    if (this.group.length) this.finishGroup();
     this.isOpen = false;
     this.shutAt = performance.now();
-    if (this.cur) this.penUp(true);
     this.menu(false);
     this.partMenu(-1);
     this.el.classList.add('hidden');
@@ -606,14 +627,16 @@ export class FreeDraw {
     // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car: on at once
     const fz = this.game.fuse;
     const inCar = !!(fz && this.game.player.inVehicle);
-    // (in a car: the pen away by itself a few seconds after the last line - the city back up to
-    // speed, the driving buttons back under the thumbs; another line before that keeps it out, as
-    // many as you like. The button back to driving shows the time running out)
-    const shut = () => {
-      if (!inCar) return;
-      this.autoShutLen = this.game.touch ? 4200 : 4600;
-      this.autoShut = performance.now() + this.autoShutLen;
-    };
+    // (ROADMAP 11.22) in a car: a drawing on it, as many lines as it takes - wet on the screen while
+    // you draw, one drawing till the pen rests a moment; then what it is, made of those lines, there
+    if (inCar) {
+      this.group.push(fz.capture(raw, this.U, c.c));
+      this.groupAt = performance.now() + (this.game.touch ? GROUP_TOUCH : GROUP_MS);
+      this.keepOut();
+      this.bake();
+      this.render();
+      return;
+    }
     const fm = fz && fz.match(this.strokes.map((s) => s.raw || s.p), this.U);
     if (fm) {
       this.flyAway();
@@ -622,20 +645,7 @@ export class FreeDraw {
       this.bake();
       this.read();
       this.render();
-      if (fz.run(fm, c.c)) shut();
-      return;
-    }
-    // (ROADMAP 11.21: in a car, a line that is no part stays on what it was drawn on, as drawn - ink
-    // on it; one drawn off everything goes)
-    if (inCar) {
-      const stuck = fz.stick(this.strokes.map((s) => s.raw || s.p), this.U, c.c);
-      if (!stuck) this.flyAway();
-      this.strokes = [];
-      this.bake();
-      this.read();
-      this.render();
-      if (stuck) shut();
-      else fz.say('ציירו על המכונית, או חלק צמוד אליה', 'bad');
+      fz.run(fm, c.c);
       return;
     }
     const s = this.strokes[this.strokes.length - 1];
@@ -650,6 +660,59 @@ export class FreeDraw {
     this.bake();
     this.read();
     this.render();
+  }
+
+  // (ROADMAP 11.21: in a car, the pen away by itself a few seconds after the last line - the city back
+  // up to speed, the driving buttons back under the thumbs; another line before that keeps it out,
+  // as many as you like. The button back to driving shows the time running out)
+  keepOut() {
+    if (!this.carOpen) return;
+    this.autoShutLen = this.game.touch ? 4200 : 4600;
+    this.autoShut = performance.now() + this.autoShutLen;
+  }
+
+  // (ROADMAP 11.22) is a line begun at x, y (screen px) away from the drawing being drawn on the car
+  farFromGroup(x, y) {
+    const S = this.U;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const st of this.strokes) {
+      for (const [a, b] of st.p) {
+        x0 = Math.min(x0, a * S);
+        x1 = Math.max(x1, a * S);
+        y0 = Math.min(y0, b * S);
+        y1 = Math.max(y1, b * S);
+      }
+    }
+    const m = Math.max(48, Math.max(x1 - x0, y1 - y0) * 0.45);
+    return x < x0 - m || x > x1 + m || y < y0 - m || y > y1 + m;
+  }
+
+  // (ROADMAP 11.22) the drawing on the car done - the pen rested, a line began away from it, or back
+  // to driving: what it is, made of its lines where they were drawn (game/fuse.js addDrawing)
+  finishGroup() {
+    const fz = this.game.fuse;
+    const caps = this.group;
+    const raws = this.strokes.map((st) => st.raw || st.p);
+    const inkI = this.strokes.length ? this.strokes[this.strokes.length - 1].c : this.ink;
+    this.group = [];
+    this.groupAt = 0;
+    if (!fz || !raws.length) return;
+    this.flyAway();
+    this.strokes = [];
+    this.bake();
+    this.render();
+    let ok = false;
+    // (one line drawn by something else - a police car, a man in the street - and not by yours: for
+    // that one, as ever)
+    if (raws.length === 1 && !caps.some((c) => c && c.near)) {
+      const fm = fz.match(raws, this.U);
+      if (fm && fm.t.ref !== this.game.player.inVehicle) ok = fz.run(fm, inkI);
+    }
+    if (!ok) ok = fz.addDrawing(caps, inkI);
+    this.keepOut();
   }
 
   // (the pad's pencil, core/gamepad.js: in screen pixels)
@@ -668,6 +731,15 @@ export class FreeDraw {
 
   undo() {
     if (this.cur) return;
+    // (ROADMAP 11.22: the drawing being drawn on the car - its last line)
+    if (this.carOpen && this.group.length) {
+      this.group.pop();
+      this.strokes.pop();
+      if (!this.group.length) this.strokes = [];
+      this.bake();
+      this.render();
+      return;
+    }
     // (ROADMAP 11.20: nothing on the page - the part just drawn onto a thing comes off, its ink back)
     if (!this.strokes.length && this.game.fuse && this.game.fuse.undo()) return;
     this.strokes.pop();
@@ -1290,15 +1362,18 @@ export class FreeDraw {
     const has = this.strokes.length > 0;
     if (this.cardDirty || (!PR && !this.cardEl.classList.contains('hidden'))) this.card();
     if (this.chipsDirty) this.showChips();
-    this.tagEl.classList.toggle('hidden', !has || !!PR || !!PW || !!PG);
+    this.tagEl.classList.toggle('hidden', !has || !!PR || !!PW || !!PG || this.carOpen);
     this.hintEl.classList.toggle('gone', has || !!this.cur);
     this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur || !!this.game.player.inVehicle);
-    // (ROADMAP 11.20) the parts you can draw onto things, how each is drawn
-    this.fuseEl.classList.toggle('hidden', !this.game.fuse || has || !!this.cur);
+    // (ROADMAP 11.20) the parts you can draw onto things, how each is drawn - (ROADMAP 11.22) behind
+    // its "?", on foot; none in a car: what you draw on it is what it gets
+    const helpOk = !!this.game.fuse && !this.carOpen;
+    this.fuseEl.classList.toggle('hidden', !helpOk || !this.fuseHelp || has || !!this.cur);
+    this.el.querySelector('#fd-fuse-q').classList.toggle('hidden', !helpOk || has || !!this.cur);
     this.hintEl.textContent = game.fuse && game.player.inVehicle
       ? game.touch
-        ? 'ציירו על המכונית — נשאר עליה · קו שיוצא ממנה — חלק (גלגל, כנף, כוכב...)'
-        : 'ציירו על המכונית — כל קו נשאר עליה · קו שיוצא ממנה הופך לחלק · WASD ממשיכים לנהוג · Q חוזרים לנסוע'
+        ? 'ציירו על המכונית — מה שתציירו יהיה עליה'
+        : 'ציירו על המכונית — מה שתציירו יהיה עליה: כנפיים, גלגלים, להבה, בלון... · Q חוזרים לנסוע'
       : game.lab
       ? game.touch
         ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'
@@ -1957,6 +2032,7 @@ export class FreeDraw {
     const v = p.inVehicle;
     if (v && v.drawn) jetFlames(game, v, dt);
     if (!this.isOpen) return;
+    if (this.group.length && !this.cur && performance.now() > this.groupAt) this.finishGroup();
     if (this.autoShut && performance.now() > this.autoShut) {
       this.autoShut = 0;
       if (!this.cur && !this.strokes.length) {
