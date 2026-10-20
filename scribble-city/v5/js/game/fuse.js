@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
-import { readDrawing, buildDrawn } from './fusedraw.js';
+import { readDrawing, readSheet, buildDrawn } from './fusedraw.js';
+import { Sheets, CALM, POP_DELAY, floatK } from './fusesheet.js';
 import { boxOf, along, pathLen } from './signshape.js';
 import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, paintOf } from './fusemodel.js';
 import { isWater } from './rides.js';
@@ -141,6 +142,10 @@ export class Fuse {
     this.zaps = [];
     this.heroZap = { reach: 7, cool: 0 };
     this.heroChuteOpen = false;
+    // (ROADMAP 11.23) the sheet the pen draws on in your car, the sketchbook, the eraser
+    // (game/fusesheet.js); the part just made comes a moment after its ink boils (ms)
+    this.sheets = new Sheets(this);
+    this.popDelay = 0;
   }
 
   // ------------------------------------------------------------------ what is on screen, and where
@@ -165,7 +170,7 @@ export class Fuse {
       // (the car you drive - more so with the pen out in it, the camera on it: what is drawn round it
       // is for it, not for the cafe's people behind it. ROADMAP 11.21)
       const own = v === p.inVehicle ? 0.3 + (this.sk > 0.5 ? 0.5 : 0) : 0.08;
-      add('veh', v, v.pos.x, v.pos.y + (v.fz && v.fz.lift ? v.fz.lift : 0), v.pos.z, v.yaw, vehDims(v), own, { wheelR: vehWheelR(v), skin: v.kind === 'car' ? (KINDS[v.carKind] ? v.carKind : 'sedan') : null });
+      out.push({ ...this.vehTarget(v), prio: own });
     }
     if (p.mode === 'foot') {
       const s = p.fig.scale || 1;
@@ -192,6 +197,12 @@ export class Fuse {
       add('person', c, c.pos.x, c.pos.y, c.pos.z, c.yaw || 0, { hl: 0.22, hw: 0.3, h: 1.75 * (c.fig.scale || 1) }, 0);
     }
     return out;
+  }
+
+  // (ROADMAP 11.23) a car of yours as a thing to draw on: its frame, its size, its paint
+  vehTarget(v) {
+    const M = new THREE.Matrix4().compose(_p.set(v.pos.x, v.pos.y + (v.fz && v.fz.lift ? v.fz.lift : 0), v.pos.z), _q.setFromAxisAngle(UPY, v.yaw), _s.set(1, 1, 1));
+    return { kind: 'veh', ref: v, M, D: vehDims(v), prio: 0.3, wheelR: vehWheelR(v), skin: v.kind === 'car' ? (KINDS[v.carKind] ? v.carKind : 'sedan') : null };
   }
 
   // the gun in your hand as a box in its own frame (its hand frame: x across, y up, z forward)
@@ -479,7 +490,7 @@ export class Fuse {
       }
       if (L.tk === 'veh' && L.ref.fuse && !L.ref.fuse.parts.length && !list.length) this.buildVeh(L.ref);
     } else return false;
-    if (this.game.ink) this.game.ink.fill(L.part.cost, 'undo');
+    if (this.game.ink && L.part && L.part.cost) this.game.ink.fill(L.part.cost, 'undo');
     if (!quiet) this.say(L.kind === 'decor' ? 'הקו נמחק' : `${PARTS[L.part.type].name} הוסר`, 'info');
     if (this.tagEl && quiet !== 'keep') this.tagEl.classList.remove('on');
     return true;
@@ -492,7 +503,8 @@ export class Fuse {
     if (!L || !L.M || this.game.time - L.t > 8) return false;
     // (ROADMAP 11.22: a drawing on your car - the same lines, where they were drawn, read as that)
     if (L.caps) {
-      const r = readDrawing(L.caps, this.drawCtx(L.ref), type);
+      const sh = L.caps[0] && L.caps[0].sheet;
+      const r = sh ? readSheet(L.caps, this.drawCtx(L.ref), sh, type) : readDrawing(L.caps, this.drawCtx(L.ref), type);
       if (!r || r.kind !== 'part' || !this.undo('keep')) return false;
       r.alts = [L.part.type, ...(L.alts || [])].filter((a) => a && a !== type && a !== 'decor').slice(0, 3);
       return this.makeDrawn(L.M.t, L.caps, r, L.part.ink);
@@ -513,7 +525,8 @@ export class Fuse {
   // anything moves) - rdt the real step. The pace things go at now (1: as ever)
   timeK(rdt, on) {
     const was = this.tk;
-    this.tk = damp(this.tk, on ? SLOW : 1, on ? 9 : 5, rdt);
+    // (ROADMAP 11.23: standing still, it all but stops - on the move, slow)
+    this.tk = damp(this.tk, on ? (this.sheets.calm ? CALM : SLOW) : 1, on ? 9 : 5, rdt);
     if (!on && this.tk > 0.995) this.tk = 1;
     if (on && was > 0.95 && this.tk <= 0.95) this.game.audio.play('whoosh', 0.3);
     const slow = this.tk < 0.85;
@@ -579,7 +592,8 @@ export class Fuse {
     }
     // (three quarters from behind and above: its roof, its side and its tail all in view - all of it
     // to draw on)
-    place(this.skSpot, _p);
+    // (ROADMAP 11.23: turned round the car, up, nearer - by the player - the sheet seen)
+    place(this.sheets.spot(this.skSpot), _p);
     toW(0, D.h * 0.42, D.hl * 0.12, _w);
     const e = this.sk * this.sk * (3 - 2 * this.sk);
     _m.lookAt(_p, _w, UPY);
@@ -714,9 +728,10 @@ export class Fuse {
     if (t.kind === 'car') this.decorCars.add(t.ref);
     while (list.length > (t.kind === 'veh' ? DECOR_MAX : 8)) list.shift();
     if (t.kind === 'veh' && !t.ref.fuse.root) this.buildVeh(t.ref);
+    // (ROADMAP 11.23: on your car it costs no ink)
     let cost = 0;
-    for (const d of ds) cost += d.cost;
-    if (g.ink) g.ink.spend(cost);
+    if (t.kind !== 'veh') for (const d of ds) cost += d.cost;
+    if (g.ink && cost) g.ink.spend(cost);
     // (the biggest line: what the tag says of it)
     let main = items[0];
     for (const o of items) if (o.I.sizeM > main.I.sizeM) main = o;
@@ -830,6 +845,16 @@ export class Fuse {
     return { pts, P, len, box, near, view: F.view, t, F, I: this.inkLine(F, P, inkI), cam: { v: Array.from(V.elements), p: Array.from(cam.projectionMatrix.elements), W: window.innerWidth, H: window.innerHeight } };
   }
 
+  // (ROADMAP 11.23) a line drawn on the sheet (game/fusesheet.js end): kept as capture's are - and as
+  // its points on the sheet (w), each on the paint or not
+  sheetCap(L, raw, U, inkI = 1) {
+    const W = this.sheets.wet;
+    const o = this.sheets.own();
+    const P = raw.map(([x, y]) => [x * U, y * U]);
+    const t = o ? o.t : this.vehTarget(this.game.player.inVehicle);
+    return { sheet: W ? W.sheet : null, w: L.w, show: L.show, paint: L.paint, P, len: pathLen(P), box: boxOf(P), near: true, view: o ? o.F.view : [0, 0, 1], t, F: o ? o.F : null, I: o && P.length >= 2 ? this.inkLine(o.F, P, inkI) : null };
+  }
+
   // what game/fusedraw.js needs of a car of yours: its size, its kind, its wheels
   drawCtx(v) {
     const D = vehDims(v);
@@ -850,6 +875,9 @@ export class Fuse {
     const t = caps[caps.length - 1].t;
     const v = t.ref;
     if (v !== g.player.inVehicle || v.dead) return false;
+    // (ROADMAP 11.23: drawn on its sheet - read there)
+    const sc = caps.filter((c) => c.sheet);
+    if (sc.length) return this.addSheet(sc, inkI);
     // (drawn on from the lines of what was just made, a moment after it: more of the same drawing -
     // its other edge, the rest of its outline)
     const L = this.last;
@@ -861,24 +889,41 @@ export class Fuse {
     return this.inkCaps(t, caps, inkI, as && as.kind === 'part' ? [as.type, ...as.alts] : []);
   }
 
+  // (ROADMAP 11.23) a drawing on the sheet (game/fusesheet.js): a part, made of its lines where they
+  // are - or, all of it on the paint, ink on it. Drawn on again from the part just made, on the same
+  // sheet a moment later: more of the same drawing
+  addSheet(caps, inkI = 1) {
+    const g = this.game;
+    const v = g.player.inVehicle;
+    const sh = caps[0].sheet;
+    const L = this.last;
+    if (L && L.caps && L.caps[0] && L.caps[0].sheet && L.ref === v && L.caps[0].sheet.face === sh.face && L.caps[0].sheet.ax === sh.ax && Math.abs(L.caps[0].sheet.c - sh.c) < 0.05 && performance.now() - L.rt < MERGE_MS && near3(caps, L.caps, 0.3) && this.undo('keep')) caps = L.caps.concat(caps);
+    const t = this.vehTarget(v);
+    const ctx = this.drawCtx(v);
+    const r = readSheet(caps, ctx, caps[0].sheet);
+    if (r && r.kind === 'part') return this.makeDrawn(t, caps, r, inkI);
+    const as = readSheet(caps, ctx, caps[0].sheet, 'part');
+    const F = caps.find((c) => c.F);
+    if (!F) return false;
+    return this.inkCaps({ ...t, F: F.F }, caps.map((c) => ({ ...c, F: c.F || F.F })), inkI, as && as.kind === 'part' ? [as.type, ...as.alts] : []);
+  }
+
   // a drawing read as a part (r: game/fusedraw.js readDrawing) put on your car
   makeDrawn(t, caps, r, inkI) {
     const g = this.game;
     const v = t.ref;
     const info = PARTS[r.type];
-    const cost = Math.round(info.cost * clamp(0.8 + (r.sizeM || 1) * 0.12, 0.8, 1.5));
-    if (g.ink && g.ink.level < cost) {
-      g.hud.toast(`אין מספיק דיו ל${info.name} (צריך ${cost})`, 'bad', 2);
-      g.audio.play('meh', 0.5);
-      return false;
-    }
-    const part = { type: r.type, v: r.v, n: r.n, at: r.at, dir: r.dir, shape: r.shape, ink: inkI, t0: g.time, cost, id: Math.random().toString(36).slice(2, 8) };
+    // (ROADMAP 11.23: drawn on your car, it costs no ink)
+    const cost = 0;
+    const sheet = !!(caps[0] && caps[0].sheet);
+    const part = { type: r.type, v: r.v, n: r.n, at: r.at, dir: r.dir, shape: r.shape, face: r.face, ink: inkI, t0: g.time, cost, id: Math.random().toString(36).slice(2, 8) };
     if (r.type === 'star') part.until = g.time + STAR_T;
     this.justAdded = part;
+    this.popDelay = sheet ? POP_DELAY : 0;
     const res = this.onVehicle(v, part);
     this.justAdded = null;
+    this.popDelay = 0;
     if (!res) return false;
-    if (g.ink) g.ink.spend(cost);
     this.stats.made++;
     this.stats.byType[r.type] = (this.stats.byType[r.type] || 0) + 1;
     this.stats.onto.veh = (this.stats.onto.veh || 0) + 1;
@@ -892,6 +937,8 @@ export class Fuse {
     g.fx.sparks(v.pos.x + ax * c + az * sn, (v.pos.y || 0) + ay, v.pos.z - ax * sn + az * c, 10, ik && !ik.pencil ? ik.c : info.col);
     g.audio.play('magic', 0.45);
     g.audio.play('click', 0.4);
+    // (ROADMAP 11.23: the ink boils into it, its sound, the car takes its weight; kept)
+    if (sheet) this.sheets.onMade(part, v, caps);
     this.tag({ ...res, drawn: true }, t, cost, alts, inkI, inkable);
     return true;
   }
@@ -902,13 +949,6 @@ export class Fuse {
     const items = caps.filter((c) => c.I && (c.I.on > 0.3 || caps.length > 1));
     if (!items.length) {
       this.say('ציירו על המכונית, או משהו שיוצא ממנה', 'bad');
-      return false;
-    }
-    const g = this.game;
-    let cost = 0;
-    for (const c of items) cost += c.I.d.cost;
-    if (g.ink && g.ink.level < cost) {
-      g.hud.toast(`אין מספיק דיו (צריך ${cost})`, 'bad', 2);
       return false;
     }
     this.putInks(t, items[0].F, items.map((c) => ({ P: c.P, I: c.I })), alts.filter((a) => PARTS[a] && a !== 'deco3').slice(0, 3));
@@ -1129,7 +1169,17 @@ export class Fuse {
         fz.chute = { span: clamp(n.span || 3, 2.4, 8) };
         fz.airCtl = Math.max(fz.airCtl || 0, 0.45);
       } else if (p.type === 'float') {
-        fz.float = { len: clamp(n.len || 3.6, 2, 6) };
+        // (ROADMAP 11.23: long and thick enough for its weight, it holds it up - less, it sinks slower)
+        fz.float = { len: clamp(n.len || 3.6, 2, 6), k: p.shape ? floatK(n, H.mass) : 1.2 };
+      } else if (p.type === 'deco3') {
+        // (ROADMAP 11.23: anything drawn on it weighs what it is - flat and broad out of it, it glides
+        // a little)
+        const a = clamp(n.area || 0, 0, 4);
+        H.mass = (H.mass || 1) + a * 0.04;
+        if (p.shape && p.shape.ax === 'y' && a >= 0.4) {
+          v.glide = Math.max(v.glide || 0, clamp(0.18 + a * 0.08, 0.2, 0.5));
+          fz.airCtl = Math.max(fz.airCtl || 0, 0.3);
+        }
       }
     }
     // the combinations: two parts that make something of each other
@@ -1325,7 +1375,13 @@ export class Fuse {
       }
     }
     // (ROADMAP 11.21: the part just put on grows into its place)
-    if (this.justAdded) for (const o of R.models) if (o.p === this.justAdded) o.m.userData.popAt = performance.now();
+    if (this.justAdded) {
+      for (const o of R.models) {
+        if (o.p !== this.justAdded) continue;
+        o.m.userData.popAt = performance.now() + this.popDelay;
+        o.m.scale.setScalar(0.02);
+      }
+    }
     // (a car of the city's: its frame comes from the car batches each frame - place(); a drawn
     // one's group carries it)
     if (v.kind === 'car') {
@@ -1473,7 +1529,7 @@ export class Fuse {
     if (v.fzSink) return g - Math.min(1.9, v.fzSink * 1.1);
     const fz = v.fz;
     if (!fz) return g;
-    if (fz.float) {
+    if (fz.float && fz.float.k >= 1) {
       v.fzWet = isWater(v.pos.x, v.pos.z);
       if (v.fzWet) g = WATER_RIDE + Math.sin(this.game.time * 1.7) * 0.04;
     }
@@ -2036,6 +2092,7 @@ export class Fuse {
       }
     }
     if (pv) this.sea(pv, dt);
+    this.sheets.update(g.realDt || dt);
     if (pv && pv.fz) {
       const fz = pv.fz;
       if (fz.star) {
@@ -2137,18 +2194,24 @@ export class Fuse {
   // and out you get, swimming; floats keep it up (floor())
   sea(v, dt) {
     const g = this.game;
-    const wet = !v.air && !v.dead && (v.kind === 'car' || v.kind === 'bike') && !v.drawn && v.pos.x > WATER_X + 3 && isWater(v.pos.x, v.pos.z);
-    if (!wet || (v.fz && v.fz.float)) {
+    // (ROADMAP 11.23: not on a deck over it - game/mission.js)
+    const deck = g.mission ? g.mission.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false;
+    const wet = !v.air && !v.dead && (v.kind === 'car' || v.kind === 'bike') && !v.drawn && v.pos.x > WATER_X + 3 && isWater(v.pos.x, v.pos.z) && !deck;
+    const fl = v.fz && v.fz.float;
+    if (!wet || (fl && fl.k >= 1)) {
       v.fzSink = 0;
       return;
     }
     if (!v.fzSink) {
       g.fx.splash(v.pos.x, -0.78, v.pos.z, 26, 4, [0.88, 0.95, 1]);
       g.audio.play('splat', 0.8);
-      this.say('המכונית שוקעת! ציירו לה מצופים — צורה ארוכה נמוך לאורכה', 'bad');
+      this.say(fl ? 'המצופים קטנים מדי בשבילה — היא שוקעת לאט' : 'המכונית שוקעת! ציירו לה מצופים — צורה ארוכה נמוך לאורכה', 'bad');
     }
-    v.fzSink = (v.fzSink || 0) + dt;
+    // (floats too small for it: down slower)
+    v.fzSink = (v.fzSink || 0) + dt * (fl ? 1 - 0.7 * clamp(fl.k, 0, 1) : 1);
     v.speed *= Math.exp(-2.2 * dt);
+    const M = g.mission;
+    if (M && M.holds(v)) return;
     if (v.fzSink > 1.8) {
       g.exitVehicle(true);
       v.dead = true;
@@ -2529,7 +2592,7 @@ export class Fuse {
       for (const o of R.models) {
         const ud = o.m.userData;
         if (ud.popAt !== undefined) {
-          const k = (now - ud.popAt) / 380;
+          const k = Math.max(0, (now - ud.popAt) / 380);
           if (k >= 1) {
             o.m.scale.setScalar(1);
             delete ud.popAt;
@@ -2632,6 +2695,8 @@ export class Fuse {
         z0 = z;
       }
     }
+    // (ROADMAP 11.23) the sheet, the line on it, the ink boiling into a part, the hints
+    this.sheets.draw(fr);
     // the hero's
     if (this.hero.length) this.drawHero(fr);
     // the gun's: its wings, its rotor
@@ -2798,7 +2863,7 @@ export class Fuse {
     this.tagEl.classList.toggle('mini', t.kind === 'veh');
     if (t.kind === 'veh') {
       const say = [res.rule, res.use].filter(Boolean).join(' · ');
-      this.tagEl.innerHTML = `<b><i style="background:${dot}"></i>${esc(res.name || info.name)}<small>−${cost}</small></b>${say ? `<span>${esc(say)}</span>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<div class="fz-alt">${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? '<button data-a="ink" class="ink">✎ ציור</button>' : ''}<button data-a="undo" class="x">✕</button></div>`;
+      this.tagEl.innerHTML = `<b><i style="background:${dot}"></i>${esc(res.name || info.name)}${cost ? `<small>−${cost}</small>` : ''}</b>${say ? `<span>${esc(say)}</span>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<div class="fz-alt">${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? '<button data-a="ink" class="ink">✎ ציור</button>' : ''}<button data-a="undo" class="x">✕</button></div>`;
       this.tagEl.classList.add('on');
       this.tagT = combo.length ? 5 : 4;
       this.tagAt = t;
@@ -2993,6 +3058,17 @@ function touching(A, B, px) {
 // ------------------------------------------------------------------ sizes of things
 // (ROADMAP 11.21) what a line that is no part could be made into: the parts its shape is nearest to,
 // where it is on the thing (S: fusemark.js shapeOf; m: its middle on it, c [x, y, z])
+// (ROADMAP 11.23) does a drawing on the sheet come within d (m) of another's lines - by its ends
+function near3(A, B, d) {
+  const pts = [];
+  for (const c of B) if (c.w) for (const q of c.w) pts.push(q);
+  for (const c of A) {
+    if (!c.w || !c.w.length) continue;
+    for (const e of [c.w[0], c.w[c.w.length - 1]]) for (const q of pts) if (Math.hypot(e[0] - q[0], e[1] - q[1], e[2] - q[2]) < d) return true;
+  }
+  return false;
+}
+
 function guessParts(S, m, F) {
   const D = F.dims;
   const cy = m.c[1];

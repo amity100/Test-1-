@@ -88,6 +88,7 @@ import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Signs } from './signs.js';
 import { Fuse } from './fuse.js';
+import { BrokenBridge } from './mission.js';
 import { drawLandmarks } from '../world/mainland/landmarks.js';
 import { Fairground } from './fairground.js';
 import { ArenaGame } from './arenagame.js';
@@ -303,6 +304,8 @@ export class Game {
     this.signs = this.lab ? new Signs(this) : null;
     // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car
     this.fuse = this.lab ? new Fuse(this) : null;
+    // (ROADMAP 11.23) the lab's first mission: the broken bridge - drawing on your car to get over
+    this.mission = this.lab ? new BrokenBridge(this) : null;
     this.freedraw = this.classic ? null : new FreeDraw(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
@@ -1094,6 +1097,7 @@ export class Game {
       if (this.freedraw) this.freedraw.update(this.realDt);
       if (this.signs) this.signs.update(dt);
       if (this.fuse) this.fuse.update(dt);
+      if (this.mission) this.mission.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -1206,6 +1210,7 @@ export class Game {
       this.vehicles.draw(this.cars);
       this.cars.end();
       if (this.fuse) this.fuse.draw(fr, dt);
+      if (this.mission) this.mission.draw(fr);
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
       // (the lighthouse's light going round at night: world/mainland/landmarks.js)
@@ -2122,6 +2127,12 @@ export class Game {
 
   updateGoals() {
     const f = this.goalFlags;
+    // (ROADMAP 11.23: the lab's mission, while it is on)
+    const mg = this.mission && this.mission.goals();
+    if (mg) {
+      this.hud.setGoals(mg);
+      return;
+    }
     // (ROADMAP 11.6: with the free drawing, drawing anything comes first; the blueprints later)
     const all = this.freedraw ? [
       { text: this.touch ? 'לצייר נשק משלכם — מה שבא לכם (עיפרון), גם בריצה' : 'לצייר נשק משלכם — מה שבא לכם (Q), גם בריצה', done: f.drew },

@@ -22,7 +22,7 @@ import { clamp } from '../core/util.js';
 // the planes a drawing goes onto: through the car's frame, square to one of its axes (n), with two
 // ways along it (e1, e2) - n, e2, e1 a right-handed frame, the way game/inflate.js makes its shapes
 // (across x; its outline z, y)
-const AX = {
+export const AX = {
   x: { n: [1, 0, 0], e1: [0, 0, 1], e2: [0, 1, 0] },
   y: { n: [0, 1, 0], e1: [0, 0, 1], e2: [-1, 0, 0] },
   z: { n: [0, 0, 1], e1: [-1, 0, 0], e2: [0, 1, 0] },
@@ -72,7 +72,7 @@ function projector(cam) {
 }
 
 // where a point's ray meets the plane (axis ax, at c along it) - [x, y, z] or null
-function onPlane(q, ax, c) {
+export function onPlane(q, ax, c) {
   const n = AX[ax].n;
   const dn = dot(q.d, n);
   if (Math.abs(dn) < 0.03) return null;
@@ -82,8 +82,8 @@ function onPlane(q, ax, c) {
 }
 
 // the plane's own coordinates of a point in the car's frame, and back
-const toUV = (X, ax) => [dot(X, AX[ax].e1), dot(X, AX[ax].e2)];
-function toXYZ(uv, ax, c) {
+export const toUV = (X, ax) => [dot(X, AX[ax].e1), dot(X, AX[ax].e2)];
+export function toXYZ(uv, ax, c) {
   const { n, e1, e2 } = AX[ax];
   return [n[0] * c + e1[0] * uv[0] + e2[0] * uv[1], n[1] * c + e1[1] * uv[0] + e2[1] * uv[1], n[2] * c + e1[2] * uv[0] + e2[2] * uv[1]];
 }
@@ -362,6 +362,201 @@ export function readDrawing(caps, ctx, force = null) {
   return { kind: 'part', ...part, face, alts, name: DRAWN[type] };
 }
 
+// ------------------------------------------------------------------ on a sheet (ROADMAP 11.23)
+// a drawing on its sheet (game/fuse.js sheetAt): its lines are already where they were drawn, on the
+// sheet, in the car's frame (cap.w; cap.paint: each point on the car's paint itself) - only what it
+// is is read here: by the sheet it is on (where the pen touched the car) and what it looks like on it.
+// sheet: { face (side, top, back, front, wheel), ax, c, side, anchor }. Returns as readDrawing
+export function readSheet(caps, ctx, sheet, force = null) {
+  caps = caps.filter((c) => c && c.w && c.w.length >= 2);
+  if (!caps.length) return null;
+  const D = ctx.D;
+  const K = ctx.K;
+  const roof = K ? K.roofY : D.h;
+  const clear = K ? K.clear : 0.25;
+  let n = 0;
+  let onPaint = 0;
+  for (const c of caps) {
+    for (const p of c.paint) {
+      n++;
+      if (p) onPaint++;
+    }
+  }
+  if (force === 'ink' || (!force && sheet.face !== 'wheel' && onPaint >= n * 0.85)) return { kind: 'ink' };
+  const ax = sheet.ax;
+  const uvOf = (c) => c.w.map((X) => toUV(X, ax));
+  // (its look, on the sheet as a page: up is up)
+  const flat = (L) => L.map(([u, w]) => [u * 200, -w * 200]);
+  let main = caps[0];
+  for (const c of caps) if (c.w.length > main.w.length) main = c;
+  const S = shapeOf(flat(uvOf(main)));
+  const round = S.closed && S.fit.err < 0.26 && S.fit.cover > 0.7 && S.aspect < 1.7;
+  const teethy = S.teeth >= 3 || S.teethL >= 3;
+  const coily = S.coils >= 1.2;
+  const pages = caps.map((c) => ({ P: flat(uvOf(c)) }));
+  const pair = parallelPair(pages);
+  const crossed = crossing(pages);
+  const starry = S.closed && !round && (S.nx >= 4 || S.nc >= 8);
+  const zed = !S.closed && caps.length === 1 && S.nc === 2 && S.teeth <= 2 && S.straight < 0.8;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const c of caps) {
+    for (const X of c.w) {
+      x0 = Math.min(x0, X[0]);
+      x1 = Math.max(x1, X[0]);
+      y0 = Math.min(y0, X[1]);
+      y1 = Math.max(y1, X[1]);
+      z0 = Math.min(z0, X[2]);
+      z1 = Math.max(z1, X[2]);
+    }
+  }
+  const sd = sheet.side || 1;
+  const face = sheet.face;
+  let type = force;
+  if (!type) {
+    if (face === 'wheel') {
+      // (by a wheel, upright on its side: round - a wheel; long and low along it - floats)
+      const along = z1 - z0 > 1.2 && z1 - z0 > (y1 - y0) * 2.2;
+      type = along ? 'float' : round || (S.closed && S.aspect < 1.8) ? 'wheel' : 'deco3';
+    }
+    else if (face === 'side') {
+      const out = Math.max(x0 * sd, x1 * sd) - D.hw;
+      const along = z1 - z0 > 1.5 && z1 - z0 > out * 2.2;
+      const low = sheet.c < Math.max(clear + 0.3, D.h * 0.36);
+      if (starry) type = 'star';
+      else if (along && low) type = 'float';
+      else if (!S.closed && caps.length === 1 && (teethy || coily)) type = 'deco3';
+      else type = 'wing';
+    } else if (face === 'top') {
+      const flatish = z1 - z0 > (y1 - y0) * 2.2;
+      if (isDome(S)) type = 'chute';
+      else if (round) type = 'balloon';
+      else if (crossed) type = 'rotor';
+      else if (pair) type = 'barrel';
+      else if (starry) type = 'star';
+      else if (zed) type = 'bolt';
+      else if (!S.closed && caps.length <= 2 && S.straight > 0.85) type = flatish ? 'rotor' : 'barrel';
+      else if (S.closed && (z0 + z1) / 2 < -D.hl * 0.35 && y1 < roof + 0.9 && flatish) type = 'wing';
+      else type = 'deco3';
+    } else if (face === 'back') {
+      if (isU(S)) type = 'magnet';
+      else if (coily || (round && S.bumps >= 5)) type = 'smoke';
+      else if (pair) type = 'barrel';
+      else if (teethy || S.closed || caps.length > 1 || S.straight > 0.85) type = 'jet';
+      else type = 'deco3';
+    } else {
+      if (isU(S)) type = 'magnet';
+      else if (coily) type = 'spring';
+      else if (pair || (!S.closed && caps.length === 1 && S.straight > 0.9)) type = 'barrel';
+      else if (teethy || S.closed || S.nc >= 1) type = 'blade';
+      else type = 'deco3';
+    }
+  }
+  // (its plane: the sheet's - a rotor lies flat over the roof, as it was drawn from the side)
+  let plane = { ax, c: sheet.c };
+  let uvLines = caps.map(uvOf);
+  if (type === 'rotor' && ax !== 'y') {
+    const ym = (y0 + y1) / 2;
+    plane = { ax: 'y', c: Math.max(roof + 0.3, ym) };
+    uvLines = caps.map((c) => c.w.map((X) => [X[2], X[1] - ym]));
+  }
+  const closed = caps.map((c) => shapeOf(flat(uvOf(c))).closed);
+  const part = makePart(type, caps, ctx, { A: sheet.anchor.slice(), face: face === 'wheel' ? 'side' : face, S, round, floating: false, main, plane, uvLines, closed });
+  if (!part) return null;
+  const alts = (ALTS[face === 'wheel' ? 'side' : face] || ALTS.side).filter((a) => a !== type).slice(0, 3);
+  return { kind: 'part', ...part, face, alts, name: DRAWN[type] };
+}
+
+// ------------------------------------------------------------------ the eraser (ROADMAP 11.23)
+// a part drawn on your car (p: its type, at, face, shape), rubbed: hits - where the eraser went, on
+// its plane ([u, w]), r its reach there (m). What is left of its lines - of a closed one, the piece
+// that holds on to the car - made again as the same part, smaller: its numbers with it. null: next
+// to nothing left (it comes off)
+export function trimPart(p, ctx, hits, r) {
+  const sh = p.shape;
+  if (!sh || !sh.lines || !sh.lines.length || !hits.length) return p;
+  const ax = sh.ax;
+  const free = (q) => {
+    for (const h of hits) if (Math.abs(q[0] - h[0]) < r && Math.abs(q[1] - h[1]) < r && Math.hypot(q[0] - h[0], q[1] - h[1]) < r) return false;
+    return true;
+  };
+  const lenOf = (L) => {
+    let s = 0;
+    for (let i = 1; i < L.length; i++) s += Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1]);
+    return s;
+  };
+  const A = p.at || [0, 0, 0];
+  const Auv = toUV(A, ax);
+  // (a mirrored one - wings, floats - is rubbed on either side the same)
+  let before = 0;
+  let after = 0;
+  let cut = false;
+  const keep = [];
+  const closed = [];
+  for (const L of sh.lines) {
+    before += lenOf(L);
+    const runs = [];
+    let cur = [];
+    for (const q of L) {
+      if (free(q)) cur.push(q);
+      else {
+        if (cur.length) runs.push(cur);
+        cur = [];
+      }
+    }
+    if (cur.length) runs.push(cur);
+    const shut = L.length >= 4 && Math.hypot(L[0][0] - L[L.length - 1][0], L[0][1] - L[L.length - 1][1]) < Math.max(0.12, lenOf(L) * 0.08);
+    if (runs.length === 1 && runs[0].length === L.length) {
+      keep.push(L);
+      closed.push(shut);
+      after += lenOf(L);
+      continue;
+    }
+    cut = true;
+    if (shut) {
+      // (round the end: its last piece and its first are one)
+      if (runs.length > 1 && free(L[0]) && free(L[L.length - 1])) runs[0] = runs.pop().concat(runs[0]);
+      let best = null;
+      let bd = Infinity;
+      for (const R of runs) {
+        if (R.length < 3) continue;
+        for (const q of R) {
+          const d = Math.hypot(q[0] - Auv[0], q[1] - Auv[1]);
+          if (d < bd) {
+            bd = d;
+            best = R;
+          }
+        }
+      }
+      if (best) {
+        keep.push(best);
+        closed.push(true);
+        after += lenOf(best);
+      }
+    } else {
+      for (const R of runs) {
+        if (R.length < 2) continue;
+        keep.push(R);
+        closed.push(false);
+        after += lenOf(R);
+      }
+    }
+  }
+  if (!cut) return p;
+  if (!keep.length || after < before * 0.18) return null;
+  let main = keep[0];
+  for (const L of keep) if (L.length > main.length) main = L;
+  const S = shapeOf(main.map(([u, w]) => [u * 200, -w * 200]));
+  const round = S.closed && S.fit.err < 0.26 && S.fit.cover > 0.7 && S.aspect < 1.7;
+  const made = makePart(p.type, [], ctx, { A: A.slice(), face: p.face || 'side', S, round, floating: false, plane: { ax, c: sh.c }, uvLines: keep, closed });
+  if (!made) return null;
+  return { ...p, v: made.v, n: made.n, dir: made.dir || p.dir, shape: made.shape };
+}
+
 // ------------------------------------------------------------------ making it
 // the drawing as that part: its plane, its outline(s), its lines, its numbers - { type, v, n, at,
 // dir, shape }
@@ -402,7 +597,7 @@ function makePart(type, caps, ctx, o) {
   } else if (type === 'chute') {
     ax = 'z';
     c = A[2];
-  } else {
+  } else if (!o.plane) {
     // (a balloon, a star, anything else: square to the eye as it was drawn - from there exactly what
     // was drawn - through where it meets the car)
     const v = caps[caps.length - 1].view;
@@ -410,10 +605,22 @@ function makePart(type, caps, ctx, o) {
     ax = k[0] >= k[1] && k[0] >= k[2] ? 'x' : k[1] >= k[2] ? 'y' : 'z';
     c = A[ax === 'x' ? 0 : ax === 'y' ? 1 : 2];
   }
+  // (ROADMAP 11.23: drawn on a sheet - its plane is the sheet's, the lines on it already)
+  if (o.plane) {
+    ax = o.plane.ax;
+    c = o.plane.c;
+  }
   // ---- its lines on that plane (a point whose ray misses it: where it met the car, else left out)
   const lines = [];
   const closedL = [];
-  for (const cap of caps) {
+  if (o.uvLines) {
+    o.uvLines.forEach((L, i) => {
+      if (L.length < 2) return;
+      lines.push(L);
+      if (o.closed[i] && L.length >= 4) closedL.push(L);
+    });
+  }
+  for (const cap of o.uvLines ? [] : caps) {
     const L = [];
     for (const q of cap.pts) {
       const X = onPlane(q, ax, c) || (q.k ? q.k.p : null);
@@ -597,6 +804,11 @@ function makePart(type, caps, ctx, o) {
     v = 'deco';
   }
   if (!shape.W) shape.W = 0.1;
+  // (ROADMAP 11.23: what any shape does comes of its size - its area flat, its length)
+  const ol0 = outlines[0];
+  n.area = Math.round((ol0 ? areaOf(ol0) : longM * Math.max(0.05, shortM * 0.3)) * 100) / 100;
+  n.long = Math.round(longM * 100) / 100;
+  if (type === 'float') n.w = Math.round(shape.W * 100) / 100;
   // (how big it is, for its ink: game/fuse.js run)
   const sizeM = longM;
   return { type, v, n, at, dir, shape, sizeM };

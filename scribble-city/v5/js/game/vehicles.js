@@ -478,7 +478,7 @@ class Vehicle {
     const U = this.up;
     cars.draw(this.carKind, this.dirt > 0.05 ? this.dustyColor() : this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: wob + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0), roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      lift: wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0), roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
       // (ROADMAP 11.20: wheels drawn onto it in place of its own - game/fuse.js)
       noWheels: !!(this.fz && this.fz.hideWheels),
       // (yours: the side windows down, you and whoever rides with you seen through them)
@@ -785,6 +785,8 @@ class Vehicle {
       hand = (input.keys.has('Space') && !this.spaceIsMine) || !!input.handbrake;
       if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
     }
+    // (ROADMAP 11.23: going down in the sea, the engine drowns - game/fuse.js sea)
+    if (this.fzSink > 0.4) throttle *= 0.05;
     if (this.stall > 0) {
       this.stall -= dt;
       throttle *= 0.1;
@@ -885,6 +887,8 @@ class Vehicle {
     let g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z));
     // (ROADMAP 11.20: up steps on teeth, down onto a roof when it flies - game/fuse.js)
     if ((this.fz || this.fzSink) && this.game.fuse) g = this.game.fuse.floor(this, g);
+    // (ROADMAP 11.23: the lab's mission - its bridge, its island)
+    if (this.game.mission) g = Math.max(g, this.game.mission.floorAt(this.pos.x, this.pos.z, this.pos.y));
     if (this.air) {
       // (ROADMAP 11.20: the lift of a rotor, a balloon, a jet drawn onto it - and steering in the air)
       const pull = this.fz && this.game.fuse ? this.game.fuse.air(this, dt, input) : 1;

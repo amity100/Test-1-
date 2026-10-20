@@ -1335,6 +1335,25 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-fuse b, .fd-fuse em { grid-column: 1 / -1; }
 .fd-fuse em { font: 600 12px var(--font-ui); font-style: normal; color: #a33b5c; margin-top: 3px; white-space: normal; max-width: 330px; }
 /* (ROADMAP 11.20) the part just drawn onto something: what it is, what it does there, its numbers */
+/* (ROADMAP 11.23) drawing on your car: the eraser, no ink bar - the sketchbook, the live name by the pen */
+.fd-rub { display: none; }
+body.fd-car .fd-rub { display: inline-block; }
+.fd-rub.on { background: #ffc2cd; box-shadow: inset 1px 2px 0 rgba(0, 0, 0, 0.25); transform: translate(1px, 2px); }
+body.fd-car .fd-ink { display: none; }
+.fz-book { position: fixed; z-index: 61; top: calc(max(8px, env(safe-area-inset-top)) + 4px); left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 5px; padding: 4px 8px; background: rgba(255, 252, 244, 0.93); border: 2.5px solid var(--ink); border-radius: 11px 9px 12px 8px; box-shadow: 3px 4px 0 var(--ink); direction: rtl; max-width: calc(100vw - 24px); overflow-x: auto; }
+.fz-book.on { display: flex; }
+.fz-book > span { font-family: var(--font-hand); font-size: 15px; white-space: nowrap; color: var(--ink); padding-inline-end: 2px; }
+.fz-book button { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 2px 4px 1px; background: var(--paper-2); border: 2px solid var(--ink); border-radius: 8px 6px 9px 6px; cursor: pointer; flex: none; }
+.fz-book button:active { transform: translate(1px, 1px); }
+.fz-book button svg { width: 40px; height: 26px; display: block; }
+.fz-book button em { font: 600 10.5px var(--font-ui); font-style: normal; color: var(--ink); line-height: 1.1; }
+.fz-live { position: fixed; z-index: 62; left: 0; top: 0; display: flex; align-items: baseline; gap: 6px; padding: 3px 9px 4px; background: rgba(255, 252, 244, 0.94); border: 2px solid var(--ink); border-radius: 10px 8px 11px 7px; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transition: opacity 0.12s; direction: rtl; white-space: nowrap; }
+.fz-live.on { opacity: 1; }
+.fz-live b { font-family: var(--font-hand); font-size: 18px; line-height: 1; }
+.fz-live span { font: 700 13px var(--font-ui); color: #1d7a3a; }
+.fz-live span.bad { color: #c2410c; }
+body.touch .fz-book button svg { width: 34px; height: 22px; }
+body.touch .fz-book > span { display: none; }
 .fz-tag { position: fixed; left: 0; top: 0; z-index: 60; max-width: 280px; display: flex; flex-direction: column; gap: 2px; padding: 7px 11px 8px; background: rgba(255, 252, 244, 0.95); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transform: translateY(6px) scale(0.96); transition: opacity 0.18s, transform 0.18s; direction: rtl; }
 .fz-tag.on { opacity: 1; transform: none; }
 /* (ROADMAP 11.21) the pen down: the marks card and the tag fade - the line under them shows */

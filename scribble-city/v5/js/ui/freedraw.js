@@ -155,6 +155,10 @@ export class FreeDraw {
     this.group = [];
     this.groupAt = 0;
     this.fuseHelp = false;
+    // (ROADMAP 11.23) the fingers down (two turn the camera round the car), the eraser
+    this.fingers = new Map();
+    this.orbit = null;
+    this.erasing = false;
     this.build();
     this.bind();
   }
@@ -226,6 +230,7 @@ export class FreeDraw {
         <button class="fd-btn fd-color" id="fd-color" aria-label="צבע"><i></i></button>
         <div class="fd-ink" aria-label="דיו"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
         <button class="fd-btn" id="fd-undo" title="ביטול הקו האחרון (Z)">↶</button>
+        <button class="fd-btn fd-rub" id="fd-rub" title="מחק — משפשפים חלק והוא קטן (X)">מחק</button>
         <button class="fd-btn" id="fd-clear" title="ניקוי (Delete)">נקה</button>
         <button class="fd-btn touch-only" id="fd-album">שרטוטים</button>
         <button class="fd-btn" id="fd-close" title="סגירה, הציור נשמר (Esc)">✕</button>
@@ -259,7 +264,25 @@ export class FreeDraw {
     const game = this.game;
     // the pen: on the whole screen (a phone: all of it but the stick's corner, the thumb's)
     const down = (e) => {
-      if (!this.isOpen || this.cur) return;
+      if (!this.isOpen) return;
+      // (ROADMAP 11.23: in a car - two fingers, or the right button, turn the camera round it)
+      if (this.carOpen) {
+        if (e.pointerType === 'touch') this.fingers.set(e.pointerId, [e.clientX, e.clientY]);
+        if (this.fingers.size >= 2 || e.button === 2) {
+          e.preventDefault();
+          if (this.cur) this.penUp(true);
+          if (this.rubbing && game.fuse) game.fuse.sheets.rubEnd();
+          this.rubbing = false;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch (err) {
+            // (synthetic pointers)
+          }
+          this.orbit = e.button === 2 ? { pid: e.pointerId, mouse: [e.clientX, e.clientY] } : { mid: this.fingerMid(), dist: this.fingerDist() };
+          return;
+        }
+      }
+      if (this.cur || this.orbit) return;
       e.preventDefault();
       if (e.button === 2) {
         this.make();
@@ -282,6 +305,15 @@ export class FreeDraw {
       const imp = chip < 0 ? this.impAt(e.clientX, e.clientY) : null;
       this.partMenu(-1);
       this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, imp, menuAt: chip >= 0 && this.chipArrow(chip, e.clientX), t0: performance.now() };
+      // (ROADMAP 11.23: in a car - the eraser rubbing at its parts, or the pen on the sheet where it
+      // went down on it)
+      const fz = game.fuse;
+      if (this.carOpen && fz && chip < 0 && !imp) {
+        if (this.erasing) {
+          this.cur.rub = true;
+          fz.sheets.rubStart(e.clientX, e.clientY);
+        } else if (fz.sheets.begin(e.clientX, e.clientY, this.ink)) this.cur.sheet = true;
+      }
       // (the cards fade while the pen is down: the line under them shows. ROADMAP 11.21)
       if (chip < 0 && !imp) document.body.classList.add('fd-pen');
       if (chip >= 0) {
@@ -302,16 +334,47 @@ export class FreeDraw {
       this.render();
     };
     const move = (e) => {
+      if (e.pointerType === 'touch' && this.fingers.has(e.pointerId)) this.fingers.set(e.pointerId, [e.clientX, e.clientY]);
+      // (ROADMAP 11.23: turning the camera round the car)
+      const O = this.orbit;
+      if (O) {
+        e.preventDefault();
+        const S = game.fuse && game.fuse.sheets;
+        if (!S) return;
+        if (O.mouse && e.pointerId === O.pid) {
+          S.orbit(e.clientX - O.mouse[0], e.clientY - O.mouse[1]);
+          O.mouse = [e.clientX, e.clientY];
+        } else if (!O.mouse && this.fingers.size >= 2) {
+          const m = this.fingerMid();
+          const d = this.fingerDist();
+          S.orbit(m[0] - O.mid[0], m[1] - O.mid[1]);
+          if (d > 10 && O.dist > 10) S.zoom(O.dist / d);
+          O.mid = m;
+          O.dist = d;
+        }
+        return;
+      }
       if (!this.cur || e.pointerId !== this.cur.pid) return;
       e.preventDefault();
       let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
       if (!evs.length) evs = [e];
       let moved = 0;
-      for (const ev of evs) moved += this.penTo(this.toPage(ev));
+      const fz = game.fuse;
+      for (const ev of evs) {
+        moved += this.penTo(this.toPage(ev));
+        if (this.cur.sheet) fz.sheets.move(ev.clientX, ev.clientY);
+        else if (this.cur.rub) fz.sheets.rubAt(ev.clientX, ev.clientY);
+      }
       if (moved) game.audio.scratch(moved * 300);
       this.render();
     };
     const up = (e) => {
+      if (e.pointerType === 'touch') this.fingers.delete(e.pointerId);
+      const O = this.orbit;
+      if (O) {
+        if ((O.mouse && e.pointerId === O.pid) || (!O.mouse && this.fingers.size < 2)) this.orbit = null;
+        return;
+      }
       if (!this.cur || e.pointerId !== this.cur.pid) return;
       this.penUp();
     };
@@ -325,6 +388,11 @@ export class FreeDraw {
     this.cv.addEventListener('wheel', (e) => {
       if (!this.isOpen) return;
       e.preventDefault();
+      // (ROADMAP 11.23: in a car - nearer to it, or further)
+      if (this.carOpen && game.fuse) {
+        game.fuse.sheets.zoom(e.deltaY > 0 ? 1.08 : 0.93);
+        return;
+      }
       if (Math.abs(e.deltaY) > 2) this.cycleInk(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });
     // (nothing drawn here reaches the game under it)
@@ -350,6 +418,7 @@ export class FreeDraw {
     });
     press(this.colorBtn, () => this.cycleInk(1));
     press($('fd-undo'), () => this.undo());
+    press($('fd-rub'), () => this.setErasing(!this.erasing));
     press($('fd-clear'), () => this.clear());
     press($('fd-close'), () => this.close());
     press($('fd-fuse-q'), () => {
@@ -458,6 +527,9 @@ export class FreeDraw {
         mine();
         e.preventDefault();
         this.undo();
+      } else if (k === 'KeyX' && this.carOpen) {
+        mine();
+        this.setErasing(!this.erasing);
       } else if (k === 'Delete') {
         mine();
         this.clear();
@@ -501,6 +573,11 @@ export class FreeDraw {
     this.group = [];
     this.groupAt = 0;
     document.body.classList.toggle('fd-car', inCar);
+    // (ROADMAP 11.23: standing still or on the move - the sheet, the sketchbook)
+    this.fingers.clear();
+    this.orbit = null;
+    this.setErasing(false);
+    if (inCar) game.fuse.sheets.open(p.inVehicle);
     if (!game.touch) game.input.releaseLock();
     game.input.fire = false;
     this.layout();
@@ -522,6 +599,10 @@ export class FreeDraw {
       fz.tagEl.classList.remove('on');
       fz.tagT = 0;
     }
+    if (this.carOpen && fz) fz.sheets.close();
+    this.setErasing(false);
+    this.orbit = null;
+    this.fingers.clear();
     this.isOpen = false;
     this.shutAt = performance.now();
     this.menu(false);
@@ -573,6 +654,14 @@ export class FreeDraw {
     this.cur = null;
     document.body.classList.remove('fd-pen');
     this.game.audio.scratchStop();
+    // (ROADMAP 11.23: the eraser lifted - what it rubbed made smaller; a line on the sheet dropped)
+    const fz = this.game.fuse;
+    if (c && c.rub) {
+      if (fz) fz.sheets.rubEnd();
+      this.keepOut();
+      return;
+    }
+    if (drop && c && c.sheet && fz) fz.sheets.cancel();
     if (drop || !c) return;
     // (a tap on a part's name: the next thing it could be - its menu, if pressed long or on its ▾;
     // no line. ROADMAP 11.15)
@@ -617,9 +706,10 @@ export class FreeDraw {
   // it stays on the page, drawn again steadier (game/inkclean.js), turning into that
   steady(c) {
     const raw = c.p;
-    this.strokes.push({ p: raw, raw, c: c.c });
+    this.strokes.push({ p: raw, raw, c: c.c, sheet: !!c.sheet });
     const sg = this.game.signs;
-    const m = sg && sg.match(this.strokes.map((s) => s.raw || s.p), this.U);
+    // (ROADMAP 11.23: a line on the car's sheet is no quick sign)
+    const m = !c.sheet && sg && sg.match(this.strokes.filter((s) => !s.sheet).map((s) => s.raw || s.p), this.U);
     if (m) {
       this.flyAway();
       this.strokes = [];
@@ -636,7 +726,9 @@ export class FreeDraw {
     // (ROADMAP 11.22) in a car: a drawing on it, as many lines as it takes - wet on the screen while
     // you draw, one drawing till the pen rests a moment; then what it is, made of those lines, there
     if (inCar) {
-      this.group.push(fz.capture(raw, this.U, c.c));
+      const L = c.sheet ? fz.sheets.end() : null;
+      if (c.sheet && !L) this.strokes[this.strokes.length - 1].sheet = false;
+      this.group.push(L ? fz.sheetCap(L, raw, this.U, c.c) : fz.capture(raw, this.U, c.c));
       this.groupAt = performance.now() + (this.game.touch ? GROUP_TOUCH : GROUP_MS);
       this.keepOut();
       this.bake();
@@ -668,11 +760,58 @@ export class FreeDraw {
     this.render();
   }
 
+  // (ROADMAP 11.23) the eraser, in a car: rubbing at the parts on it
+  setErasing(on) {
+    this.erasing = !!on && this.carOpen;
+    const b = document.getElementById('fd-rub');
+    if (b) b.classList.toggle('on', this.erasing);
+    document.body.classList.toggle('fd-erasing', this.erasing);
+  }
+
+  fingerMid() {
+    let x = 0;
+    let y = 0;
+    let n = 0;
+    for (const [a, b] of this.fingers.values()) {
+      x += a;
+      y += b;
+      n++;
+      if (n === 2) break;
+    }
+    return n ? [x / n, y / n] : [0, 0];
+  }
+
+  fingerDist() {
+    const [a, b] = [...this.fingers.values()];
+    return a && b ? Math.hypot(a[0] - b[0], a[1] - b[1]) : 0;
+  }
+
+  // where the eraser is: a soft round mark where it rubs
+  rubMark(g) {
+    const c = this.cur;
+    const q = c.p[c.p.length - 1];
+    const U = this.U;
+    g.save();
+    g.strokeStyle = 'rgba(255, 140, 160, 0.9)';
+    g.fillStyle = 'rgba(255, 190, 200, 0.25)';
+    g.lineWidth = 2 / U;
+    g.beginPath();
+    g.arc(q[0], q[1], 24 / U, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.restore();
+  }
+
   // (ROADMAP 11.21: in a car, the pen away by itself a few seconds after the last line - the city back
   // up to speed, the driving buttons back under the thumbs; another line before that keeps it out,
   // as many as you like. The button back to driving shows the time running out)
   keepOut() {
     if (!this.carOpen) return;
+    // (ROADMAP 11.23: standing still, the pen stays out till you go)
+    if (this.game.fuse && this.game.fuse.sheets.calm) {
+      this.autoShut = 0;
+      return;
+    }
     this.autoShutLen = this.game.touch ? 4200 : 4600;
     this.autoShut = performance.now() + this.autoShutLen;
   }
@@ -718,6 +857,7 @@ export class FreeDraw {
       if (fm && fm.t.ref !== this.game.player.inVehicle) ok = fz.run(fm, inkI);
     }
     if (!ok) ok = fz.addDrawing(caps, inkI);
+    fz.sheets.done();
     this.keepOut();
   }
 
@@ -739,7 +879,8 @@ export class FreeDraw {
     if (this.cur) return;
     // (ROADMAP 11.22: the drawing being drawn on the car - its last line)
     if (this.carOpen && this.group.length) {
-      this.group.pop();
+      const cap = this.group.pop();
+      if (cap && cap.sheet && this.game.fuse) this.game.fuse.sheets.undoLine();
       this.strokes.pop();
       if (!this.group.length) this.strokes = [];
       this.bake();
@@ -1501,7 +1642,7 @@ export class FreeDraw {
     g.setTransform(dpr * U, 0, 0, dpr * U, 0, 0);
     g.lineCap = 'round';
     g.lineJoin = 'round';
-    for (const s of this.strokes) if (!s.morph) this.line(g, s);
+    for (const s of this.strokes) if (!s.morph && !s.sheet) this.line(g, s);
   }
 
   render() {
@@ -1523,7 +1664,9 @@ export class FreeDraw {
       const { a, b } = s.morph;
       this.line(g, { p: a.map((q, i) => [q[0] + (b[i][0] - q[0]) * e, q[1] + (b[i][1] - q[1]) * e]), c: s.c });
     }
-    if (this.cur) this.line(g, this.cur);
+    // (ROADMAP 11.23: a line on the car's sheet is drawn in the world, not here; the eraser shows)
+    if (this.cur && this.cur.rub) this.rubMark(g);
+    else if (this.cur && !this.cur.sheet) this.line(g, this.cur);
     // (ROADMAP 11.12) the engineer's work - the drawing turning into it, then a faint line of it - and
     // where its weight is, over what it stands on
     const PR = this.PR;
@@ -2046,8 +2189,16 @@ export class FreeDraw {
         return;
       }
     }
+    // (ROADMAP 11.23: on the move, the slow seconds run down - the pen goes when they are spent)
+    const S = this.carOpen && game.fuse ? game.fuse.sheets : null;
+    if (S && !S.calm && S.focus <= 0 && !this.cur) {
+      if (this.group.length) this.finishGroup();
+      this.close();
+      return;
+    }
     if (this.carOpen) {
-      const left = this.autoShut && !this.cur ? clamp((this.autoShut - performance.now()) / (this.autoShutLen || 3800), 0, 1) : 1;
+      let left = this.autoShut && !this.cur ? clamp((this.autoShut - performance.now()) / (this.autoShutLen || 3800), 0, 1) : 1;
+      if (S && !S.calm) left = Math.min(left, S.focus);
       if (Math.abs(left - (this.goLeft ?? -1)) > 0.004) {
         this.goLeft = left;
         this.makeBtn.style.setProperty('--left', left.toFixed(3));
