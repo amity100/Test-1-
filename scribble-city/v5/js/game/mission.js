@@ -34,6 +34,8 @@ const BACK = { x: 60, z: Z, yaw: Math.PI / 2 };
 const AGAIN = { x: 172, z: 42 };
 const WAYS = { wings: 'כנפיים', rotor: 'רוטור', balloon: 'בלון', floats: 'מצופים', spring: 'קפיץ', plane: 'מטוס (כנפיים + סילון)', chute: 'מצנח', jump: 'קפיצה' };
 const ALL_WAYS = ['wings', 'rotor', 'balloon', 'floats', 'spring', 'plane'];
+// (ROADMAP 11.24: with the part pen, the three parts it draws)
+const PEN_WAYS = ['wings', 'floats', 'rotor'];
 const KEY = 'scribble-city-v5-bridge';
 const RING_C = [1, 0.82, 0.16];
 
@@ -207,9 +209,10 @@ export class BrokenBridge {
       }
       if (this.state === 'won' && this.tellAt && g.time > this.tellAt) {
         this.tellAt = 0;
-        const left = ALL_WAYS.filter((k) => !this.solved.has(k));
-        const n = ALL_WAYS.length - left.length;
-        g.hud.toast(left.length ? `מצאתם ${n} מתוך ${ALL_WAYS.length} דרכים — נסו גם: ${left.slice(0, 3).map((k) => WAYS[k]).join(', ')} (העיגול הצהוב — שוב)` : 'מצאתם את כל הדרכים!', 'good', 5);
+        const all = this.pen() ? PEN_WAYS : ALL_WAYS;
+        const left = all.filter((k) => !this.solved.has(k));
+        const n = all.length - left.length;
+        g.hud.toast(left.length ? `מצאתם ${n} מתוך ${all.length} דרכים — נסו גם: ${left.slice(0, 3).map((k) => WAYS[k]).join(', ')} (העיגול הצהוב — שוב)` : 'מצאתם את כל הדרכים!', 'good', 5);
       }
       const at = this.state === 'won' ? AGAIN : START;
       const ok = p.mode === 'foot' || (v && !v.air && (v.kind === 'car' || v.kind === 'bike') && Math.abs(v.speed || 0) < 9);
@@ -253,7 +256,8 @@ export class BrokenBridge {
     if (near && !this.toldPen && !this.toldOnce && pos.x > 48) {
       this.toldPen = true;
       this.toldOnce = true;
-      g.hud.radio(g.touch ? 'הגשר שבור באמצע! ✎ — ציירו על המכונית משהו שיעביר אתכם' : 'הגשר שבור באמצע! Q — ציירו על המכונית משהו שיעביר אתכם');
+      const what = this.pen() ? 'ציירו כנפיים, מצופים או רוטור' : 'ציירו על המכונית משהו שיעביר אתכם';
+      g.hud.radio(g.touch ? `הגשר שבור באמצע! ✎ — ${what}` : `הגשר שבור באמצע! Q — ${what}`);
       this.radioT = g.time + 6;
     }
     if (this.radioT && g.time > this.radioT) {
@@ -342,7 +346,8 @@ export class BrokenBridge {
     this.state = 'on';
     this.used.clear();
     this.gpsIsle = false;
-    g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר', 'info', 4.5);
+    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — ולשוט מהחוף לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר — המספר ליד העט אומר כמה', 'info', 4.5);
+    else g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר', 'info', 4.5);
   }
 
   win(v) {
@@ -364,6 +369,12 @@ export class BrokenBridge {
     this.tellAt = g.time + 3;
     this.hint = null;
     g.updateGoals();
+  }
+
+  // (ROADMAP 11.24) the part pen in the car (game/partpen.js), or the pen as in 11.22
+  pen() {
+    const fz = this.game.fuse;
+    return !!(fz && fz.pen && fz.pen.active());
   }
 
   // gone far away: it waits at its ring

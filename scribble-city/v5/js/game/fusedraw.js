@@ -368,6 +368,35 @@ export function floatK(n, mass) {
   return (clamp(n.len || 3.6, 1, 6) * clamp(n.w || 0.45, 0.2, 0.8) * 0.85) / (mass || 1.25);
 }
 
+// (ROADMAP 11.24) wings: how much of a fall they glide away (v.glide) - the bigger, the more
+export function wingGlide(n) {
+  const area = clamp((n.span || 1) * (n.chord || 0.5), 0.2, 6);
+  return clamp(0.32 + area * 0.16, 0.35, 0.86);
+}
+
+// a rotor: how much of the car it lifts (1: all of it) - as wide as the car, about, it flies
+export function rotorLift(n, mass) {
+  const span = clamp(n.span || 2, 0.6, 9);
+  return clamp((span * span * 0.42) / (mass || 1), 0.15, 3);
+}
+
+// (ROADMAP 11.24, game/partpen.js) a part said and drawn: its lines already on its plane (uvLines, in
+// metres), where it goes on the car (A, face) - made as any drawn part is. Returns as readDrawing
+export function partOf(type, uvLines, ctx, A, face, plane) {
+  uvLines = uvLines.filter((L) => L.length >= 2);
+  if (!uvLines.length) return null;
+  const flat = (L) => L.map(([u, w]) => [u * 200, -w * 200]);
+  let main = uvLines[0];
+  for (const L of uvLines) if (L.length > main.length) main = L;
+  const S = shapeOf(flat(main));
+  const round = S.closed && S.fit.err < 0.26 && S.fit.cover > 0.7 && S.aspect < 1.7;
+  const closed = uvLines.map((L) => shapeOf(flat(L)).closed);
+  // (its outline, not closed: all of what was drawn - two lines, its top and its bottom, a float)
+  const fill = type === 'wing' || type === 'float';
+  const part = makePart(type, [], ctx, { A: A.slice(), face, S, round, floating: false, plane, uvLines, closed, fill });
+  return part ? { kind: 'part', ...part, face, alts: [], name: DRAWN[type] } : null;
+}
+
 // ------------------------------------------------------------------ making it
 // the drawing as that part: its plane, its outline(s), its lines, its numbers - { type, v, n, at,
 // dir, shape }
@@ -476,7 +505,7 @@ function makePart(type, caps, ctx, o) {
     let best = closedL[0];
     for (const L of closedL) if (areaOf(L) > areaOf(best)) best = L;
     outlines = [best];
-  } else if (shortM >= longM * 0.28 && allUV.length >= 8) {
+  } else if (shortM >= longM * (o.fill ? 0.08 : 0.28) && allUV.length >= 8) {
     outlines = [hull(allUV)];
   } else if (type === 'deco3' || type === 'star' || type === 'bolt') {
     rods = lines.slice(0, 6);

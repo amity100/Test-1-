@@ -434,6 +434,9 @@ export class Game {
       $('opt-invert').checked = v.invertY;
       $('opt-drive').value = v.touchDrive;
       $('opt-drive-row').classList.toggle('hidden', !this.touch || this.classic);
+      // (ROADMAP 11.24, the lab: drawing on your car - a part said, then drawn, or as in 11.22)
+      $('opt-carpen').value = v.carPen;
+      $('opt-carpen-row').classList.toggle('hidden', !this.lab);
       $('opt-subs').checked = v.subtitles;
       $('opt-voices').checked = v.voices;
       $('opt-boil').checked = pick('boil');
@@ -487,6 +490,7 @@ export class Game {
     });
     // (a phone at the wheel: the driving buttons or the stick - read as the car is driven, updatePrompts)
     $('opt-drive').addEventListener('change', (e) => S.set('touchDrive', e.target.value));
+    $('opt-carpen').addEventListener('change', (e) => S.set('carPen', e.target.value));
     // F3 keeps its choice too
     this.perf.onToggle = (on) => {
       if (!this.perf.bench) S.set('perf', on);

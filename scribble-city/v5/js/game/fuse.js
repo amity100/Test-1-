@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
-import { readDrawing, buildDrawn, floatK } from './fusedraw.js';
+import { readDrawing, buildDrawn, floatK, wingGlide, rotorLift } from './fusedraw.js';
+import { PartPen } from './partpen.js';
 import { boxOf, along, pathLen } from './signshape.js';
 import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, paintOf } from './fusemodel.js';
 import { isWater } from './rides.js';
@@ -143,6 +144,9 @@ export class Fuse {
     this.heroChuteOpen = false;
     // (the part just made: how long after it is put on it grows in, ms)
     this.popDelay = 0;
+    // (ROADMAP 11.24) in your car: a part said, then drawn - and the parts kept, a tap away
+    // (game/partpen.js)
+    this.pen = new PartPen(this);
   }
 
   // ------------------------------------------------------------------ what is on screen, and where
@@ -839,6 +843,15 @@ export class Fuse {
     return { pts, P, len, box, near, view: F.view, t, F, I: this.inkLine(F, P, inkI), cam: { v: Array.from(V.elements), p: Array.from(cam.projectionMatrix.elements), W: window.innerWidth, H: window.innerHeight } };
   }
 
+  // (ROADMAP 11.24) what a car of yours weighs, as its parts' physics take it (applyVeh)
+  vehMass(v) {
+    const B = v.fzBase;
+    const H0 = (B && B.handling) || (!B && v.handling) || HANDLING[v.kind === 'bike' ? v.model || 'bike' : v.carKind] || HANDLING.sedan;
+    let m = H0.mass || 1;
+    if (v.fuse && v.fuse.parts.some((p) => p.type === 'armor')) m *= 1.2;
+    return m;
+  }
+
   // what game/fusedraw.js needs of a car of yours: its size, its kind, its wheels
   drawCtx(v) {
     const D = vehDims(v);
@@ -1066,14 +1079,13 @@ export class Fuse {
           H.grip += 1.3;
           H.top *= 1.03;
         } else {
-          const area = clamp((n.span || 1) * (n.chord || 0.5), 0.2, 6);
-          v.glide = Math.max(v.glide, clamp(0.32 + area * 0.16, 0.35, 0.86));
+          v.glide = Math.max(v.glide, wingGlide(n));
           fz.airCtl = Math.max(fz.airCtl || 0, 0.5);
-          fz.wing = area;
+          fz.wing = clamp((n.span || 1) * (n.chord || 0.5), 0.2, 6);
         }
       } else if (p.type === 'rotor') {
         const span = clamp(n.span || 2, 0.6, 9);
-        fz.rotor = clamp((span * span * 0.42) / (H.mass || 1), 0.15, 3);
+        fz.rotor = rotorLift(n, H.mass);
         fz.rotorSpan = span;
         fz.airCtl = Math.max(fz.airCtl || 0, 1);
       } else if (p.type === 'jet') {
@@ -2043,6 +2055,7 @@ export class Fuse {
       }
     }
     if (pv) this.sea(pv, dt);
+    this.pen.update(g.realDt || dt);
     if (pv && pv.fz) {
       const fz = pv.fz;
       if (fz.star) {
@@ -2648,6 +2661,8 @@ export class Fuse {
         z0 = z;
       }
     }
+    // (ROADMAP 11.24) where the part being drawn goes, lit; a part's lines glowing in as it comes
+    this.pen.draw(fr);
     // the hero's
     if (this.hero.length) this.drawHero(fr);
     // the gun's: its wings, its rotor
@@ -3152,7 +3167,10 @@ function vehRule(p, v) {
     case 'chute':
       return { name: 'מצנח', rule: 'בנפילה הוא נפתח — יורדים לאט וגולשים', use: 'קופצים מגג, מרמפה או בקפיץ' };
     case 'float':
-      return { name: 'מצופים', rule: 'נוסעים לתוך הים — והיא צפה ושטה', nums: 'במים עד 14 מ׳/ש' };
+      // (ROADMAP 11.23: too small for its weight, it sinks - slower)
+      return fz.float && fz.float.k < 1
+        ? { name: 'מצופים קטנים', rule: 'קטנים מדי בשבילה — במים היא שוקעת לאט. צריך ארוכים ועבים יותר' }
+        : { name: 'מצופים', rule: 'נוסעים לתוך הים — והיא צפה ושטה', nums: 'במים עד 14 מ׳/ש' };
     case 'deco3':
       return { name: 'קישוט', rule: 'עליה כמו שציירתם' };
     default:

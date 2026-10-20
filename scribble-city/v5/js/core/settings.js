@@ -39,6 +39,9 @@ export const DEFAULTS = {
   // (ROADMAP 9.1, not with ?classic) every blueprint open to draw from the start; off, they are
   // found in the city (photographed, bought, won, given: ui/album.js)
   allOpen: true,
+  // (ROADMAP 11.24, the lab) drawing on your car: 'parts' - the part said, then drawn (game/partpen.js);
+  // 'old', as in 11.22 - what is drawn is read as what it looks like, where it is
+  carPen: 'parts',
 };
 
 export class Settings {

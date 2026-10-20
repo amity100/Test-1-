@@ -18,6 +18,7 @@ import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
+import { PEN_PARTS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -273,8 +274,9 @@ export class FreeDraw {
       this.menu(false);
       this.autoShut = 0;
       // (ROADMAP 11.22: in a car, a line begun away from the drawing being drawn - something new: that
-      // one is done first)
-      if (this.carOpen && this.group.length && this.farFromGroup(e.clientX, e.clientY)) this.finishGroup();
+      // one is done first. ROADMAP 11.24: not with the part pen - all of it is the part said, till the
+      // pen rests)
+      if (this.carOpen && this.group.length && !this.group[0].pen && this.farFromGroup(e.clientX, e.clientY)) this.finishGroup();
       // (on a part's name: a tap there is the next thing it could be, a long press - or its ▾ - its
       // whole menu (ROADMAP 11.15); drawn on from it, it is a line as any. On a name the game added:
       // taken away)
@@ -310,6 +312,8 @@ export class FreeDraw {
       for (const ev of evs) moved += this.penTo(this.toPage(ev));
       if (moved) game.audio.scratch(moved * 300);
       this.render();
+      // (ROADMAP 11.24: in a car, the part pen - what the drawing makes, by the pen)
+      if (moved && this.penOn()) this.feelPen();
     };
     const up = (e) => {
       if (!this.cur || e.pointerId !== this.cur.pid) return;
@@ -453,7 +457,10 @@ export class FreeDraw {
         this.close();
       } else if (k === 'Enter' || k === 'NumpadEnter') {
         mine();
-        this.make();
+        // (in a car: what is drawn on it, made now)
+        if (this.carOpen) {
+          if (this.group.length && !this.cur) this.finishGroup();
+        } else this.make();
       } else if (k === 'KeyZ' || k === 'Backspace') {
         mine();
         e.preventDefault();
@@ -461,6 +468,10 @@ export class FreeDraw {
       } else if (k === 'Delete') {
         mine();
         this.clear();
+      } else if (this.penOn() && /^(Digit|Numpad)[1-3]$/.test(k)) {
+        // (ROADMAP 11.24: in a car - the part to draw, 1-3)
+        mine();
+        this.game.fuse.pen.pick(PEN_PARTS[+k.slice(-1) - 1]);
       } else if (/^(Digit|Numpad)[0-5]$/.test(k)) {
         // (what is drawn: 1-5 each of the five, together; 0 anything - the weapons wait)
         mine();
@@ -501,6 +512,9 @@ export class FreeDraw {
     this.group = [];
     this.groupAt = 0;
     document.body.classList.toggle('fd-car', inCar);
+    // (ROADMAP 11.24: the parts to draw, and where each goes on it)
+    document.body.classList.toggle('fd-pp', this.penOn());
+    if (this.penOn()) game.fuse.pen.open();
     if (!game.touch) game.input.releaseLock();
     game.input.fire = false;
     this.layout();
@@ -522,6 +536,7 @@ export class FreeDraw {
       fz.tagEl.classList.remove('on');
       fz.tagT = 0;
     }
+    if (fz && fz.pen && fz.pen.isOpen) fz.pen.close();
     this.isOpen = false;
     this.shutAt = performance.now();
     this.menu(false);
@@ -529,6 +544,7 @@ export class FreeDraw {
     this.el.classList.add('hidden');
     document.body.classList.remove('fd-open');
     document.body.classList.remove('fd-car');
+    document.body.classList.remove('fd-pp');
     document.body.classList.remove('fd-pen');
     this.carOpen = false;
     this.autoShut = 0;
@@ -538,6 +554,8 @@ export class FreeDraw {
 
   toggle() {
     if (!this.isOpen) this.show();
+    // (in a car: back to driving - what is drawn on it made first)
+    else if (this.carOpen) this.close();
     else if (this.strokes.length) this.make();
     else this.close();
   }
@@ -618,6 +636,17 @@ export class FreeDraw {
   steady(c) {
     const raw = c.p;
     this.strokes.push({ p: raw, raw, c: c.c });
+    // (ROADMAP 11.24) in a car, the part pen: the line is part of what was said - wings, floats, a rotor -
+    // as it is on the screen; no quick signs here, nothing read. Done when the pen rests
+    if (this.penOn()) {
+      const U = this.U;
+      this.group.push({ pen: true, P: raw.map(([x, y]) => [x * U, y * U]), c: c.c });
+      this.groupAt = performance.now() + (this.game.touch ? PEN_REST_TOUCH : PEN_REST);
+      this.bake();
+      this.render();
+      this.feelPen(true);
+      return;
+    }
     const sg = this.game.signs;
     const m = sg && sg.match(this.strokes.map((s) => s.raw || s.p), this.U);
     if (m) {
@@ -677,6 +706,25 @@ export class FreeDraw {
     this.autoShut = performance.now() + this.autoShutLen;
   }
 
+  // (ROADMAP 11.24) in a car, the part pen (game/partpen.js) - or, as in 11.22, what is drawn read
+  penOn() {
+    const fz = this.game.fuse;
+    return !!(this.carOpen && fz && fz.pen && fz.pen.active());
+  }
+
+  // what the drawing on the car makes so far (the line being drawn too), by the pen
+  feelPen(now = false) {
+    const U = this.U;
+    const strokes = this.group.map((st) => st.P);
+    let tip = null;
+    if (this.cur && this.cur.p.length) {
+      strokes.push(this.cur.p.map(([x, y]) => [x * U, y * U]));
+      const q = this.cur.p[this.cur.p.length - 1];
+      tip = [q[0] * U, q[1] * U];
+    }
+    this.game.fuse.pen.feel(strokes, tip, now);
+  }
+
   // (ROADMAP 11.22) is a line begun at x, y (screen px) away from the drawing being drawn on the car
   farFromGroup(x, y) {
     const S = this.U;
@@ -705,6 +753,14 @@ export class FreeDraw {
     const inkI = this.strokes.length ? this.strokes[this.strokes.length - 1].c : this.ink;
     this.group = [];
     this.groupAt = 0;
+    // (ROADMAP 11.24: the part pen's - the part chosen, made of the lines as drawn; the ink flies there)
+    if (caps.length && caps[0].pen) {
+      this.strokes = [];
+      this.bake();
+      this.render();
+      if (fz && fz.pen) fz.pen.make(caps.map((st) => st.P), inkI);
+      return;
+    }
     if (!fz || !raws.length) return;
     this.flyAway();
     this.strokes = [];
@@ -744,6 +800,7 @@ export class FreeDraw {
       if (!this.group.length) this.strokes = [];
       this.bake();
       this.render();
+      if (this.penOn()) this.feelPen(true);
       return;
     }
     // (ROADMAP 11.20: nothing on the page - the part just drawn onto a thing comes off, its ink back)
@@ -1377,9 +1434,13 @@ export class FreeDraw {
     this.fuseEl.classList.toggle('hidden', !helpOk || !this.fuseHelp || has || !!this.cur);
     this.el.querySelector('#fd-fuse-q').classList.toggle('hidden', !helpOk || has || !!this.cur);
     this.hintEl.textContent = game.fuse && game.player.inVehicle
-      ? game.touch
-        ? 'ציירו על המכונית — מה שתציירו יהיה עליה'
-        : 'ציירו על המכונית — מה שתציירו יהיה עליה: כנפיים, גלגלים, להבה, בלון... · Q חוזרים לנסוע'
+      ? this.penOn()
+        ? game.touch
+          ? 'בחרו חלק למטה, וציירו אותו איפה שנוח · הגודל ליד המכונית קובע'
+          : 'בחרו חלק (1–3), וציירו אותו איפה שנוח · הגודל ליד המכונית קובע · Q חוזרים לנסוע'
+        : game.touch
+          ? 'ציירו על המכונית — מה שתציירו יהיה עליה'
+          : 'ציירו על המכונית — מה שתציירו יהיה עליה: כנפיים, גלגלים, להבה, בלון... · Q חוזרים לנסוע'
       : game.lab
       ? game.touch
         ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'
