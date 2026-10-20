@@ -883,7 +883,7 @@ class Vehicle {
     // up and down: on the ground (and up the ramps), or flying
     let g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z));
     // (ROADMAP 11.20: up steps on teeth, down onto a roof when it flies - game/fuse.js)
-    if (this.fz && this.game.fuse) g = this.game.fuse.floor(this, g);
+    if ((this.fz || this.fzSink) && this.game.fuse) g = this.game.fuse.floor(this, g);
     if (this.air) {
       // (ROADMAP 11.20: the lift of a rotor, a balloon, a jet drawn onto it - and steering in the air)
       const pull = this.fz && this.game.fuse ? this.game.fuse.air(this, dt, input) : 1;

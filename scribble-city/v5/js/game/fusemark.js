@@ -356,7 +356,7 @@ export function readMark(P, F) {
       return R('wheel', v, [0, 0, 0], null, { r, bumps: S.bumps }, ['balloon']);
     }
     // a long one low along it, by its wheels: floats (ROADMAP 11.21)
-    if (S.aspect >= 2.2 && cy < D.h * 0.32 && !person && F.kind !== 'weapon' && alongIt(S, F, D)) return R('float', 'pontoon', [0, 0, 0], null, { len: S.A.long * m }, ['wing', 'barrel']);
+    if (S.aspect >= 2.2 && cy < D.h * 0.32 && inside < 0.5 && S.B.cy > F.box.y0 + F.box.h * 0.55 && !person && F.kind !== 'weapon' && alongIt(S, F, D)) return R('float', 'pontoon', [0, 0, 0], null, { len: S.A.long * m }, ['wing', 'barrel']);
     // a long thin one: a wing out to the side; a cannon out of its front, back or top
     if (S.aspect >= 2.4) {
       const dir = axisDir(loc, D);
@@ -498,7 +498,7 @@ function roundish(S) {
 export function onItAll(F, Q, loc) {
   let on = 0;
   for (let i = 0; i < Q.length; i++) if (F.skinAt ? F.skinAt(Q[i][0], Q[i][1]) : loc[i].hit) on++;
-  return on >= Q.length * 0.92;
+  return on >= Q.length * 0.85;
 }
 
 // the same stroke as another part (the tag's "not that one?" - game/fuse.js swap): that part where

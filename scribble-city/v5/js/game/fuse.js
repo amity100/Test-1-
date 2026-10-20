@@ -7,7 +7,7 @@ import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
 import { gunOf } from './partsum.js';
 import { HANDLING } from './vehicles.js';
-import { groundHeight } from '../world/layout.js';
+import { groundHeight, WATER_X } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
 
 // (ROADMAP 11.20) Fusing: a part drawn onto a thing, in one stroke, on the run.
@@ -1252,12 +1252,14 @@ export class Fuse {
 
   // what it stands on: up kerbs and steps (teeth, huge wheels), onto roofs (when it flies)
   floor(v, g) {
+    // (ROADMAP 11.21) the sea: a car with no floats goes down in it (sea()); with floats it rides on
+    // it - its wheels under, its floats half in, bobbing
+    if (v.fzSink) return g - Math.min(1.9, v.fzSink * 1.1);
     const fz = v.fz;
     if (!fz) return g;
-    // (ROADMAP 11.21) floats: on the water it rides on it - its wheels under, its floats half in
     if (fz.float) {
       v.fzWet = isWater(v.pos.x, v.pos.z);
-      if (v.fzWet) g = Math.max(g, WATER_RIDE);
+      if (v.fzWet) g = WATER_RIDE + Math.sin(this.game.time * 1.7) * 0.04;
     }
     const G = this.game.gadgets;
     if (!G) return g;
@@ -1817,6 +1819,7 @@ export class Fuse {
         if (v === pv) this.say(`ה${PARTS[q.type].name} נגמר`, 'info');
       }
     }
+    if (pv) this.sea(pv, dt);
     if (pv && pv.fz) {
       const fz = pv.fz;
       if (fz.star) {
@@ -1904,6 +1907,7 @@ export class Fuse {
       return;
     }
     Z.cool = hero ? 1.1 : 0.8;
+    this.stats.zaps = (this.stats.zaps || 0) + 1;
     this.zaps.push({ a: [x, y, z], b: [best.x, best.y, best.z], t0: g.time });
     g.fx.sparks(best.x, best.y, best.z, 12, [0.6, 0.85, 1]);
     g.audio.play('laser', 0.5);
@@ -1911,6 +1915,29 @@ export class Fuse {
       _d.set(best.e.pos.x - x, 0, best.e.pos.z - z).normalize();
       g.enemies.damage(best.e, 'torso', 34, new THREE.Vector3(best.x, best.y, best.z), _d.clone(), 'melee');
     } else this.crash(best.c, 16);
+  }
+
+  // (ROADMAP 11.21) the sea: a car (or a motorbike) with no floats drawn on it goes down - slower, lower,
+  // and out you get, swimming; floats keep it up (floor())
+  sea(v, dt) {
+    const g = this.game;
+    const wet = !v.air && !v.dead && (v.kind === 'car' || v.kind === 'bike') && !v.drawn && v.pos.x > WATER_X + 3 && isWater(v.pos.x, v.pos.z);
+    if (!wet || (v.fz && v.fz.float)) {
+      v.fzSink = 0;
+      return;
+    }
+    if (!v.fzSink) {
+      g.fx.splash(v.pos.x, -0.78, v.pos.z, 26, 4, [0.88, 0.95, 1]);
+      g.audio.play('splat', 0.8);
+      this.say('המכונית שוקעת! ציירו לה מצופים — צורה ארוכה נמוך לאורכה', 'bad');
+    }
+    v.fzSink = (v.fzSink || 0) + dt;
+    v.speed *= Math.exp(-2.2 * dt);
+    if (v.fzSink > 1.8) {
+      g.exitVehicle(true);
+      v.dead = true;
+      v.removeAt = g.time + 4;
+    }
   }
 
   // (ROADMAP 11.21) the smoke pots: chased (the police after you) and going, it lays ink smoke behind
@@ -1924,6 +1951,12 @@ export class Fuse {
     }
     S.charge -= dt;
     S.next -= dt;
+    S.trail = (S.trail || 0) - dt;
+    if (S.trail <= 0) {
+      S.trail = 0.08;
+      const D = vehDims(v);
+      g.fx.smoke(v.pos.x - Math.sin(v.yaw) * (D.hl + 0.4), (v.pos.y || 0) + 0.5, v.pos.z - Math.cos(v.yaw) * (D.hl + 0.4), 0.9);
+    }
     if (S.next > 0) return;
     S.next = 0.45;
     this.puffBehind(v);
