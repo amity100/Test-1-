@@ -1423,7 +1423,7 @@ body.fd-car .fd-cats, body.fd-car #fd-clear, body.fd-car #fd-album { display: no
 body.fd-car #prompt { display: none; }
 /* (ROADMAP 11.22) while drawing on the car: nothing over it but the pen's own - the radio's name and
    the list of what to do wait till you drive on */
-body.fd-car #radio, body.fd-car #goals { display: none; }
+body.fd-car #radio, body.fd-car #goals, body.fd-car #subs { display: none; }
 body.fd-car #fd-make { background: linear-gradient(to left, #ffd23f calc(var(--left, 1) * 100%), #efe6d2 0); }
 /* (the pen out in a car on a phone, at the driving buttons: all of the screen to draw on the car but
    the arrows' corner - the thumb steers on; the pedals are away while the pen is out) */

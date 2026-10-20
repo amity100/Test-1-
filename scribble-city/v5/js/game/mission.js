@@ -320,6 +320,10 @@ export class BrokenBridge {
   fail() {
     const g = this.game;
     if (this.state !== 'on') return;
+    // (what is on it, to try again with - in the sea off the beach too, not only off the bridge's end)
+    const v = g.player.inVehicle;
+    const kept = v && g.fuse ? g.fuse.saveVeh(v) : null;
+    if (kept) this.saved = kept;
     this.state = 'down';
     this.downT = 2.4;
     this.tries++;

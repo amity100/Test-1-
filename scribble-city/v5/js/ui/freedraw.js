@@ -263,7 +263,10 @@ export class FreeDraw {
       if (!this.isOpen || this.cur) return;
       e.preventDefault();
       if (e.button === 2) {
-        this.make();
+        // (in a car: what is drawn on it, made now - ROADMAP 11.24)
+        if (this.carOpen) {
+          if (this.group.length) this.finishGroup();
+        } else this.make();
         return;
       }
       try {
@@ -1552,7 +1555,9 @@ export class FreeDraw {
   // the lines already drawn, on a picture of their own: as the pen moves only its own line is
   // drawn again (the neon's glow is slow to draw, and a phone draws the game at the same time)
   bake() {
-    if (!this.baked) this.baked = document.createElement('canvas');
+    // (ROADMAP 11.24: a new picture each time - one used over again could keep a line taken off it, in a
+    // browser that kept its old pixels through being cleared)
+    this.baked = document.createElement('canvas');
     const b = this.baked;
     b.width = this.cv.width;
     b.height = this.cv.height;
