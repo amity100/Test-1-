@@ -14,12 +14,21 @@
 //   armor    hatching back and forth on it
 //   balloon  a circle above it
 //   magnet   a U
+// (ROADMAP 11.21) And five more, each drawn out of it:
+//   star     a star - in one go, its lines crossing, or its outline
+//   bolt     a bolt of lightning: a Z, two sharp turns
+//   smoke    a spiral, round and round in one place
+//   chute    an arch over it, bulging up
+//   float    a long shape low along it
+// A part stands out of the thing. A line drawn all on it - a stripe, a flame, a smile,
+// a name, a star - is no part: it stays on it as ink, as drawn (game/fuse.js inkLine). But a U is a
+// magnet wherever it is, and a circle low on it a wheel.
 // This file only reads: strokes in screen px ([x, y], y down) and a frame of the thing they are
 // drawn on (game/fuse.js makes it). Nothing here knows the city.
 
-import { boxOf, pathLen, along, straightness, corners, crossings } from './signshape.js';
+import { boxOf, pathLen, along, straightness, corners, crossings, isHeart } from './signshape.js';
 
-export const PART_TYPES = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet'];
+export const PART_TYPES = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float'];
 
 const TAU = Math.PI * 2;
 
@@ -225,9 +234,10 @@ export function shapeOf(P0) {
   let back = Infinity;
   const [ex, ey] = P0[P0.length - 1];
   for (let i = 0; i < Q.length * 0.35; i++) back = Math.min(back, Math.hypot(Q[i][0] - ex, Q[i][1] - ey));
-  const closed = L > size * 1.8 && (gap < Math.max(10, size * 0.26) || (Math.abs(T.signed) > 5 && back < Math.max(10, size * 0.3)));
-  const A = axisOf(Q);
+  // (not a spiral: round and round, but ever wider - it never comes back to where it began)
   const fit = circleFit(Q);
+  const closed = L > size * 1.8 && (gap < Math.max(10, size * 0.26) || (Math.abs(T.signed) > 5 && back < Math.max(10, size * 0.3) && fit.err < 0.22));
+  const A = axisOf(Q);
   const nc = corners(Q, closed);
   const teeth = swings(Q, A);
   // (and back and forth along its length: hatching across its long way - strokes up and down a
@@ -307,10 +317,12 @@ export function readMark(P, F) {
 
   // -------- hatching on it (or scribbled over it): armour
   // (a patch of it, not a long tongue: a long zigzag out of it is a flame - a jet, below)
-  if (inside >= 0.5 && ((S.teeth >= 3 && S.aspect < 2.2) || S.teethL >= 3 || S.nx >= 5) && !S.closed && F.kind !== 'prop') {
+  if (inside >= 0.5 && ((S.teeth >= 3 && S.aspect < 2.2) || S.teethL >= 3 || S.nx >= 5) && !S.closed && Math.abs(S.T.signed) < 6 && F.kind !== 'prop') {
     const cover = Math.min(1, (S.B.w * S.B.h) / Math.max(1, F.box.w * F.box.h));
     return R('armor', 'plate', [0, D.h * 0.5, 0], null, { cover, teeth: S.teeth }, ['jet', 'spring']);
   }
+  // -------- drawn all on it: ink on it, not a part (ROADMAP 11.21)
+  if (!person && F.kind !== 'weapon' && F.kind !== 'prop' && onItAll(F, Q, loc) && !isU(S) && !(S.closed && roundish(S) && cy < D.h * 0.55 && !isHeart(S.P))) return null;
   // -------- a coil: a spring (at the nose of a car: a bumper)
   if (S.coils >= 1.5 && S.nx >= 1 && !S.closed) {
     const coils = Math.max(2, Math.round(S.coils));
@@ -319,9 +331,15 @@ export function readMark(P, F) {
     if (!person && front && cy > D.h * 0.15) return R('spring', 'bumper', [0, D.h * 0.32, D.hl], [0, 0, 1], { coils, len }, ['jet']);
     return R('spring', 'under', [0, 0, 0], [0, 1, 0], { coils, len }, ['jet', 'armor']);
   }
+  // -------- a spiral, round and round in one place (not a coil going along): smoke at its back
+  if (!S.closed && Math.abs(S.T.signed) > 8.5 && S.coils < 1.5 && S.nx <= 1 && F.kind !== 'weapon' && !person) {
+    return R('smoke', 'back', [0, D.h * 0.35, -D.hl], [0, 0, -1], { turns: Math.abs(S.T.signed) / TAU }, ['spring']);
+  }
   // -------- closed shapes
   if (S.closed) {
     const fit = S.fit;
+    // a star: star power (on what is yours)
+    if (isStar(S) && F.kind !== 'weapon') return R('star', 'top', [0, D.h, clampZ(cz, D)], [0, 1, 0], { size: S.size * m }, ['balloon']);
     const square = S.nc >= 3 && S.nc <= 5 && S.fill > 0.72 && S.aspect < 1.45;
     const round = fit.err < 0.24 && fit.cover > 0.72 && S.aspect < 1.9;
     if (round || square) {
@@ -337,6 +355,8 @@ export function readMark(P, F) {
       else if (v === 'round' && r <= base * 0.45 && !person) v = 'small';
       return R('wheel', v, [0, 0, 0], null, { r, bumps: S.bumps }, ['balloon']);
     }
+    // a long one low along it, by its wheels: floats (ROADMAP 11.21)
+    if (S.aspect >= 2.2 && cy < D.h * 0.32 && !person && F.kind !== 'weapon' && alongIt(S, F, D)) return R('float', 'pontoon', [0, 0, 0], null, { len: S.A.long * m }, ['wing', 'barrel']);
     // a long thin one: a wing out to the side; a cannon out of its front, back or top
     if (S.aspect >= 2.4) {
       const dir = axisDir(loc, D);
@@ -355,9 +375,12 @@ export function readMark(P, F) {
     return null;
   }
   // -------- open lines
-  // a U: a magnet (deep, its two arms straight, back the way it came)
   const turn = Math.abs(S.T.signed);
-  if (turn > 2.3 && turn < 4.3 && S.depth > S.gap * 0.7 && S.gap > S.size * 0.22 && S.armA > 0.86 && S.armB > 0.86 && S.nx === 0) {
+  // an arch over it, clear of it, bulging up: a parachute (ROADMAP 11.21) - an arc with its ends on
+  // it is a blade
+  if (above && inside < 0.15 && !first.hit && !last.hit && F.kind !== 'weapon' && S.nx === 0 && turn > 1.2 && turn < 4.6 && bulgesUp(S, F)) return R('chute', 'top', [0, D.h, 0], [0, 1, 0], { span: S.A.long * m }, ['balloon', 'blade']);
+  // a U: a magnet (deep, its two arms straight, back the way it came)
+  if (isU(S)) {
     const fr = cz >= 0 || person || F.kind === 'weapon';
     return R('magnet', fr ? 'front' : 'back', [0, D.h * 0.45, fr ? D.hl : -D.hl], [0, 0, fr ? 1 : -1], { size: S.size * m }, ['blade']);
   }
@@ -392,6 +415,8 @@ export function readMark(P, F) {
     if (cy < 0 && !back && !fromBack && Math.abs(S.A.uy) > 0.75) return R('jet', 'under', [0, 0.1, 0], [0, -1, 0], { len, teeth: S.teeth }, ['spring']);
     return R('jet', 'back', [0, D.h * 0.4, -D.hl], [0, 0, -1], { len, teeth: S.teeth }, ['spring', 'armor', 'barrel']);
   }
+  // a bolt of lightning: a Z - two sharp turns, there and back (ROADMAP 11.21)
+  if (isBolt(S) && F.kind !== 'weapon') return R('bolt', person ? 'aura' : 'coil', [0, D.h, 0], [0, 1, 0], { size: S.size * m }, ['jet', 'wing']);
   // an arc: a blade - at its nose a ram, at its sides knives (on the hero: on his arm)
   const onCircle = S.fit.err < 0.12 && S.fit.cover > 0.15 && S.fit.cover < 0.8 && S.depth > S.gap * 0.12;
   if (S.nx === 0 && (onCircle || (turn > 0.9 && turn < 3.8 && S.T.abs < turn * 1.6 + 0.6))) {
@@ -408,6 +433,72 @@ export function readMark(P, F) {
     if (front && !person) return R('blade', 'ram', [0, D.h * 0.3, D.hl], [0, 0, 1], { len: S.A.long * m, curve: 0 }, ['wing']);
   }
   return null;
+}
+
+// a U: deep, its two arms straight, back the way it came
+function isU(S) {
+  const turn = Math.abs(S.T.signed);
+  return !S.closed && turn > 2.3 && turn < 4.3 && S.depth > S.gap * 0.7 && S.gap > S.size * 0.22 && S.armA > 0.86 && S.armB > 0.86 && S.nx === 0;
+}
+
+// (ROADMAP 11.21) a star: in one go, its lines crossing in the middle - or its outline, five points in
+// and out (not round: a gear's teeth are a wheel's)
+function isStar(S) {
+  if (!S.closed || S.aspect > 1.8) return false;
+  return (S.nx >= 4 && S.nc >= 4) || (S.bumps >= 4 && S.bumps <= 7 && S.fill < 0.44 && S.fit.err > 0.22);
+}
+
+// a bolt of lightning: open, two sharp turns, its three runs straight, going on the way it went
+function isBolt(S) {
+  return !S.closed && S.nc === 2 && S.teeth <= 2 && S.nx === 0 && Math.abs(S.T.signed) < 1.6 && S.armA > 0.8 && S.armB > 0.8 && S.straight < 0.9;
+}
+
+// an arch bulging up on the screen (the thing's up): its middle well above the line across its ends
+function bulgesUp(S, F) {
+  const P = S.P;
+  const a = P[0];
+  const b = P[P.length - 1];
+  const mid = S.Q[Math.floor(S.Q.length / 2)];
+  const h = (mid[0] - (a[0] + b[0]) / 2) * F.up[0] + (mid[1] - (a[1] + b[1]) / 2) * F.up[1];
+  return h > Math.max(6, S.size * 0.18);
+}
+
+// a long one lying along the thing's length (its ends front and back of each other, on it)
+function alongIt(S, F, D) {
+  let i0 = 0;
+  let i1 = 0;
+  let lo = Infinity;
+  let hi = -Infinity;
+  S.Q.forEach(([x, y], i) => {
+    const s = (x - S.A.mx) * S.A.ux + (y - S.A.my) * S.A.uy;
+    if (s < lo) {
+      lo = s;
+      i0 = i;
+    }
+    if (s > hi) {
+      hi = s;
+      i1 = i;
+    }
+  });
+  const a = F.local(S.Q[i0][0], S.Q[i0][1]).p;
+  const b = F.local(S.Q[i1][0], S.Q[i1][1]).p;
+  return Math.abs(b[2] - a[2]) > Math.abs(b[0] - a[0]) * 1.2 && Math.abs(b[2] - a[2]) > D.hl * 0.5;
+}
+
+// a closed one that is round, or square: a wheel's, a balloon's
+function roundish(S) {
+  const square = S.nc >= 3 && S.nc <= 5 && S.fill > 0.72 && S.aspect < 1.45;
+  const round = S.fit.err < 0.24 && S.fit.cover > 0.72 && S.aspect < 1.9;
+  return round || square;
+}
+
+// (ROADMAP 11.21) a line all on the thing itself, but for a slip of the hand: on its paint where that
+// is known (a car of the city's kinds: F.skinAt), else on its box. Q: the line's points, loc: theirs
+// on it (F.local)
+export function onItAll(F, Q, loc) {
+  let on = 0;
+  for (let i = 0; i < Q.length; i++) if (F.skinAt ? F.skinAt(Q[i][0], Q[i][1]) : loc[i].hit) on++;
+  return on >= Q.length * 0.92;
 }
 
 // the same stroke as another part (the tag's "not that one?" - game/fuse.js swap): that part where
@@ -449,6 +540,16 @@ export function asType(type, m, F) {
       return R('ram', [0, D.h * 0.3, D.hl], [0, 0, 1], { len: Math.max(1, s), curve: 1.5 });
     case 'magnet':
       return R(fr ? 'front' : 'back', [0, D.h * 0.45, fr ? D.hl : -D.hl], [0, 0, fr ? 1 : -1], { size: Math.max(0.5, s) });
+    case 'star':
+      return gun ? null : R('top', [0, D.h, clampZ(cz, D)], [0, 1, 0], { size: Math.max(0.6, s) });
+    case 'bolt':
+      return gun ? null : R(person ? 'aura' : 'coil', [0, D.h, 0], [0, 1, 0], { size: 1 });
+    case 'smoke':
+      return gun || person ? null : R('back', [0, D.h * 0.35, -D.hl], [0, 0, -1], { turns: 2 });
+    case 'chute':
+      return gun ? null : R('top', [0, D.h, 0], [0, 1, 0], { span: Math.max(2.4, s) });
+    case 'float':
+      return gun || person ? null : R('pontoon', [0, 0, 0], null, { len: D.hl * 1.7 });
     default:
       return null;
   }

@@ -465,3 +465,121 @@ export function magnetModel(size) {
   K.box(M.metal, -0.06, -0.06, -R - t - 0.18, 0.06, 0.06, -R - t, STEEL);
   return wrap(K.build({ seed: 0.49 }), { S, reach: S * 0.46 });
 }
+
+// ------------------------------------------------------------------ (ROADMAP 11.21) more parts
+// a star on a short mast, standing up and turning (size: across it): star power while it lasts
+export function starModel(size, paint) {
+  const M = itemMats();
+  const K = new Kit();
+  K.cyl(M.round, 0.035, 0.03, 0, 0.32, DARK, { axis: 'y' });
+  K.cyl(M.round, 0.11, 0.1, 0, 0.06, STEEL, { axis: 'y' });
+  const base = K.build({ seed: 0.81 });
+  const R = Math.max(0.28, Math.min(0.75, size * 0.45));
+  const sh = new THREE.Shape();
+  for (let i = 0; i <= 10; i++) {
+    const a = Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 ? R * 0.44 : R;
+    if (i === 0) sh.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else sh.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const g = new THREE.ExtrudeGeometry(sh, { depth: R * 0.22, bevelEnabled: true, bevelThickness: R * 0.06, bevelSize: R * 0.05, bevelSegments: 1 });
+  g.translate(0, 0, -R * 0.11);
+  g.computeVertexNormals();
+  const S = new Kit();
+  S.add(M.glow, g, paint);
+  const star = new THREE.Group();
+  star.add(S.build({ seed: 0.83 }));
+  star.position.y = 0.32 + R;
+  const out = new THREE.Group();
+  out.add(base);
+  out.add(star);
+  return wrap(out, { spin: star, R, top: 0.32 + R * 2 });
+}
+
+// a coil of lightning on the roof: a dark foot, a post with brass rings, a ball that glows - its
+// sparks leave from the ball (userData.tip)
+export function boltModel(size, paint) {
+  const M = itemMats();
+  const K = new Kit();
+  const s = Math.max(0.8, Math.min(1.4, size));
+  K.cyl(M.round, 0.16 * s, 0.13 * s, 0, 0.1 * s, DARK, { axis: 'y' });
+  K.cyl(M.metal, 0.05 * s, 0.045 * s, 0.1 * s, 0.5 * s, STEEL, { axis: 'y' });
+  for (let i = 0; i < 3; i++) K.torus(M.metal, (0.12 - i * 0.02) * s, 0.022 * s, 0, (0.2 + i * 0.1) * s, 0, BRASS, Math.PI / 2);
+  K.sphere(M.glow, 0.1 * s, 0, 0.58 * s, 0, paint, 1, 1, 1, 12);
+  return wrap(K.build({ seed: 0.87 }), { tip: new THREE.Vector3(0, 0.58 * s, 0) });
+}
+
+// two smoke pots at its tail, pointing back along -z
+export function smokeModel(paint) {
+  const M = itemMats();
+  const K = new Kit();
+  for (const s of [-1, 1]) {
+    const x = s * 0.32;
+    K.cyl(M.metal, 0.11, 0.11, 0, -0.34, paint, { x });
+    K.cyl(M.metal, 0.12, 0.14, -0.34, -0.42, STEEL, { x });
+    K.torus(M.metal, 0.115, 0.018, x, 0, -0.12, CHROME);
+    K.cyl(M.matte, 0.1, 0.1, -0.41, -0.43, DARK, { x });
+  }
+  K.box(M.metal, -0.4, -0.13, -0.08, 0.4, -0.09, 0.04, STEEL);
+  return wrap(K.build({ seed: 0.89 }));
+}
+
+// a parachute packed on the roof - and its canopy over it, folded away until it opens
+// (userData.canopy: scale it up to open; its lines run to the pack)
+export function chuteModel(span, paint) {
+  const M = itemMats();
+  const K = new Kit();
+  K.box(M.matte, -0.3, 0, -0.22, 0.3, 0.16, 0.22, paint);
+  K.box(M.matte, -0.31, 0.06, -0.23, 0.31, 0.09, 0.23, DARK);
+  const pack = K.build({ seed: 0.91 });
+  const C = new Kit();
+  const R = Math.max(1.6, Math.min(4.5, span * 0.5));
+  const n = 10;
+  for (let i = 0; i < n; i++) {
+    const g = new THREE.SphereGeometry(R, 3, 6, (i / n) * Math.PI * 2, (Math.PI * 2) / n, 0, Math.PI * 0.42);
+    g.scale(1, 0.55, 1);
+    g.translate(0, R * 1.05, 0);
+    C.add(M.paint, g, i % 2 ? WHITE : paint);
+  }
+  // (its lines: from the rim down to the pack)
+  const rimY = R * 1.05 + Math.cos(Math.PI * 0.42) * R * 0.55;
+  const rimR = Math.sin(Math.PI * 0.42) * R;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const top = new THREE.Vector3(Math.cos(a) * rimR, rimY, Math.sin(a) * rimR);
+    const foot = new THREE.Vector3(Math.cos(a) * 0.2, 0.16, Math.sin(a) * 0.15);
+    const len = top.distanceTo(foot);
+    const g = new THREE.CylinderGeometry(0.012, 0.012, len, 4);
+    g.translate(0, len / 2, 0);
+    g.lookAt(top.clone().sub(foot));
+    g.rotateX(Math.PI / 2);
+    g.translate(foot.x, foot.y, foot.z);
+    C.add(M.matte, g, DARK);
+  }
+  const canopy = new THREE.Group();
+  canopy.add(C.build({ seed: 0.93 }));
+  canopy.scale.setScalar(0.001);
+  canopy.visible = false;
+  const out = new THREE.Group();
+  out.add(pack);
+  out.add(canopy);
+  return wrap(out, { canopy, R });
+}
+
+// floats along its two sides, low (len: how long; hw: half the width between them)
+export function floatModel(len, hw, paint) {
+  const M = itemMats();
+  const K = new Kit();
+  const L = Math.max(1.6, len);
+  const r = 0.24;
+  for (const s of [-1, 1]) {
+    const x = s * (hw + r * 0.6);
+    K.cyl(M.paint, r, r, -L / 2 + r, L / 2 - r, paint, { x, segs: 16 });
+    K.sphere(M.paint, r, x, 0, L / 2 - r, paint, 1, 1, 1.3, 12);
+    K.sphere(M.paint, r, x, 0, -L / 2 + r, paint, 1, 1, 1.1, 12);
+    for (const z of [-L * 0.25, L * 0.25]) K.cyl(M.matte, r * 1.02, r * 1.02, z - 0.06, z + 0.06, WHITE, { x, segs: 16 });
+    // (struts up to the body)
+    for (const z of [-L * 0.3, L * 0.3]) K.box(M.metal, x - s * 0.02 - 0.03, 0.1, z - 0.04, x - s * (r * 0.6 + 0.06) + 0.03, 0.42, z + 0.04, STEEL);
+  }
+  return wrap(K.build({ seed: 0.97 }), { L, r });
+}

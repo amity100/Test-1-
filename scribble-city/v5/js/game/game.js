@@ -34,7 +34,7 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp, smoothstep, damp } from '../core/util.js';
+import { clamp, smoothstep } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -986,6 +986,10 @@ export class Game {
       this.wheel.update();
       dt *= this.wheel.slow;
     }
+    // (ROADMAP 11.21, the lab: the pen out - the city slows right down, time to draw on what is
+    // moving; what you see go by as it really goes - the pen, its camera - keeps the real step)
+    this.realDt = dt;
+    if (this.fuse) dt *= this.fuse.timeK(dt, !!(this.freedraw && this.freedraw.isOpen) && this.state === 'play');
     this.time += dt;
     shared.uTime.value = this.time;
     // the gamepad first: it presses the same keys the keyboard does
@@ -1083,7 +1087,7 @@ export class Game {
       if (this.money) this.money.update(dt);
       if (this.ink) this.ink.update(dt);
       if (this.gadgets) this.gadgets.update(dt);
-      if (this.freedraw) this.freedraw.update(dt);
+      if (this.freedraw) this.freedraw.update(this.realDt);
       if (this.signs) this.signs.update(dt);
       if (this.fuse) this.fuse.update(dt);
       if (this.props) this.props.update(dt);
@@ -1124,13 +1128,7 @@ export class Game {
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
         : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
-      // (ROADMAP 11.20: the pen out in a car - a step back and lower, the whole car in the middle
-      // with room round it, over it and under it to draw its parts on)
-      this.fzFrame = damp(this.fzFrame || 0, this.fuse && this.freedraw.isOpen ? 1 : 0, 5, dt);
-      if (this.fzFrame > 0.01) {
-        const k = this.fzFrame;
-        this.camRig.update(dt, v.pos, { ...opt, dist: opt.dist * (1 + 0.22 * k), height: opt.height * (1 - 0.42 * k) });
-      } else this.camRig.update(dt, v.pos, opt);
+      this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
@@ -1152,6 +1150,8 @@ export class Game {
         this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
       }
     }
+    // (ROADMAP 11.21) the pen out in the car you drive: the camera close by it, held in its frame
+    if (this.fuse && player.inVehicle) this.fuse.sketchCam(player.inVehicle, this.realDt);
     const tipsy = this.inkwell.tipsy;
     if (tipsy > 0.05 && this.state === 'play') {
       // a few drinks in: the page sways

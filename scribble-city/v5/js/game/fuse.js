@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { readMark, asType } from './fusemark.js';
-import { boxOf, along } from './signshape.js';
-import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, paintOf } from './fusemodel.js';
-import { KINDS } from '../render/cars.js';
+import { readMark, asType, shapeOf } from './fusemark.js';
+import { boxOf, along, pathLen } from './signshape.js';
+import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, paintOf } from './fusemodel.js';
+import { isWater } from './rides.js';
+import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
 import { gunOf } from './partsum.js';
 import { HANDLING } from './vehicles.js';
@@ -24,6 +25,12 @@ import { clamp, damp } from '../core/util.js';
 //   armor   it holds        more of it covered, more it holds - and heavier
 //   balloon it floats       big enough for its weight: it goes up
 //   magnet  it pulls        metal to it - cars, guns, coins
+// (ROADMAP 11.21) and, each one line drawn out of it:
+//   star    star power      ten seconds: nothing hurts it, it smashes through, faster - then it is spent
+//   bolt    it zaps         a coil on the roof: who comes near - a gangster, a police car - gets a bolt
+//   smoke   it hides        a spiral at its back: chased, it lays ink smoke the police cannot see through
+//   chute   it floats down  an arch over it: falling, it opens
+//   float   it swims        a long shape low along it: on the water it floats and drives on
 // On what is yours (your car, you, your gun) it stays; on others (a police car, a gangster, a man in
 // the street) it does its thing for a few seconds and goes.
 
@@ -38,32 +45,47 @@ export const PARTS = {
   armor: { name: 'שריון', mark: 'קווקוו — עליו', cost: 10, col: [0.5, 0.52, 0.57] },
   balloon: { name: 'בלון', mark: 'עיגול — מעליו', cost: 10, col: [0.92, 0.2, 0.24] },
   magnet: { name: 'מגנט', mark: 'U', cost: 10, col: [0.86, 0.12, 0.14] },
+  star: { name: 'כוכב', mark: 'כוכב — מחוץ לה', cost: 24, col: [1, 0.82, 0.18] },
+  bolt: { name: 'ברק', mark: 'ברק (Z) — יוצא ממנה', cost: 14, col: [0.45, 0.78, 1] },
+  smoke: { name: 'עשן', mark: 'ספירלה — מאחור', cost: 10, col: [0.55, 0.56, 0.62] },
+  chute: { name: 'מצנח', mark: 'קשת ∩ — מעליה', cost: 10, col: [0.95, 0.38, 0.32] },
+  float: { name: 'מצופים', mark: 'צורה ארוכה — מתחת, לאורכה', cost: 12, col: [1, 0.55, 0.16] },
 };
-export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet'];
+export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float'];
 
 // what a part can be put on
 const ALLOW = {
-  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet']),
-  hero: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet']),
+  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float']),
+  hero: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'chute']),
   weapon: new Set(['barrel', 'blade', 'spring', 'magnet', 'jet', 'wing', 'armor', 'rotor']),
   car: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel', 'barrel', 'wing']),
   person: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel']),
 };
+const MINE = { star: 'כוכב — רק על מה ששלכם', bolt: 'ברק — רק על מה ששלכם', smoke: 'עשן — רק על הרכב שלכם', chute: 'מצנח — רק על מה ששלכם', float: 'מצופים — רק על הרכב שלכם' };
 const WHY_NOT = {
-  car: { blade: 'להב — רק על מה ששלכם', armor: 'שריון — רק על מה ששלכם' },
-  person: { wing: 'כנף על אדם — רק על הגיבור', barrel: 'קנה — רק על מה ששלכם', blade: 'להב — רק על מה ששלכם', armor: 'שריון — רק על מה ששלכם' },
+  car: { blade: 'להב — רק על מה ששלכם', armor: 'שריון — רק על מה ששלכם', ...MINE },
+  person: { wing: 'כנף על אדם — רק על הגיבור', barrel: 'קנה — רק על מה ששלכם', blade: 'להב — רק על מה ששלכם', armor: 'שריון — רק על מה ששלכם', ...MINE },
   weapon: { wheel: 'גלגל על נשק לא עושה כלום', balloon: 'בלון על נשק לא עושה כלום' },
+  hero: { smoke: 'עשן — רק על רכב', float: 'מצופים — רק על רכב' },
 };
 // (what goes on yours: how many of them)
 const MAX_ON_VEH = 5;
 // (how big a part drawn on it usually is, to its box on screen - the reading's guess at what a
 // stroke over two things is meant for)
 const SIZE_ON = { veh: 0.4, car: 0.4, hero: 0.3, person: 0.45, weapon: 0.9 };
+// (ROADMAP 11.21) the pen out: the city slows right down while you draw - how slow
+const SLOW = 0.12;
+// (ROADMAP 11.21) a line drawn on a car that is no part stays on it: how many on one car (the oldest
+// goes)
+const DECOR_MAX = 14;
 // (what a part drawn on can be swapped for another on: what is yours - what is on others is gone
 // to do its thing at once)
 const SWAPS = new Set(['veh', 'hero', 'weapon']);
 const MAX_ON_HERO = 3;
 const HERO_T = 90;
+// (ROADMAP 11.21) star power: how long it lasts; how high floats keep a car on the water
+const STAR_T = 10;
+const WATER_RIDE = -0.96;
 // (the ink each costs: the part's, a little more for a big one)
 const INK_EL = [null, null, 'fire', 'blast', 'shock', 'glue', 'water', 'ink', 'bounce', 'tippex', 'light'];
 
@@ -95,6 +117,20 @@ export class Fuse {
     this.tagT = 0;
     this.tagAt = null;
     this.combosSeen = new Set();
+    // (ROADMAP 11.21) the time to draw: the pace things go at now (1: as ever); the camera by the
+    // car you drive (0-1) and its side of it
+    this.tk = 1;
+    this.sk = 0;
+    this.skSide = 1;
+    this.slowOn = false;
+    // (the part just put on: it grows into place)
+    this.justAdded = null;
+    // (the city's cars with ink on them)
+    this.decorCars = new Set();
+    // (the coil's bolts, in flight a moment: { a, b, t0 })
+    this.zaps = [];
+    this.heroZap = { reach: 7, cool: 0 };
+    this.heroChuteOpen = false;
   }
 
   // ------------------------------------------------------------------ what is on screen, and where
@@ -116,7 +152,7 @@ export class Fuse {
     };
     for (const v of g.vehicles.list) {
       if (v.dead || v.materializing || !near(v.pos.x, v.pos.z, 80)) continue;
-      add('veh', v, v.pos.x, v.pos.y + (v.fz && v.fz.lift ? v.fz.lift : 0), v.pos.z, v.yaw, vehDims(v), v === p.inVehicle ? 0.3 : 0.08, { wheelR: vehWheelR(v) });
+      add('veh', v, v.pos.x, v.pos.y + (v.fz && v.fz.lift ? v.fz.lift : 0), v.pos.z, v.yaw, vehDims(v), v === p.inVehicle ? 0.3 : 0.08, { wheelR: vehWheelR(v), skin: v.kind === 'car' ? (KINDS[v.carKind] ? v.carKind : 'sedan') : null });
     }
     if (p.mode === 'foot') {
       const s = p.fig.scale || 1;
@@ -128,11 +164,11 @@ export class Fuse {
     }
     for (const c of g.traffic.list) {
       if (c.gone || c.taken || c.poofT !== undefined || c.spec.kind === 'moto' || !near(c.pos.x, c.pos.z, 75)) continue;
-      add('car', c, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, carDims(c), 0, { wheelR: carWheelR(c) });
+      add('car', c, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, carDims(c), 0, { wheelR: carWheelR(c), skin: KINDS[c.spec.kind] ? c.spec.kind : null });
     }
     for (const c of g.traffic.parked || []) {
       if (c.taken || c.gone || !near(c.pos.x, c.pos.z, 60)) continue;
-      add('car', c, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, carDims(c), -0.04, { wheelR: carWheelR(c) });
+      add('car', c, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, carDims(c), -0.04, { wheelR: carWheelR(c), skin: KINDS[c.spec.kind] ? c.spec.kind : null });
     }
     for (const e of g.enemies.list) {
       if (!e.alive || e.isMonster || !near(e.pos.x, e.pos.z, 50)) continue;
@@ -209,6 +245,9 @@ export class Fuse {
       // (the box: x within its width, y off the ground up to its top, z its length)
       let tn = -Infinity;
       let tf = Infinity;
+      // (the side of it the ray goes in by: [axis, -1 | 1])
+      let fa = -1;
+      let fs = 0;
       const lo = [-D.hw, 0, -D.hl];
       const hi = [D.hw, D.h, D.hl];
       const oa = [o.x, o.y, o.z];
@@ -221,20 +260,36 @@ export class Fuse {
         }
         let a = (lo[i] - oa[i]) / da[i];
         let b = (hi[i] - oa[i]) / da[i];
-        if (a > b) [a, b] = [b, a];
-        tn = Math.max(tn, a);
+        let sd = -1;
+        if (a > b) {
+          [a, b] = [b, a];
+          sd = 1;
+        }
+        if (a > tn) {
+          tn = a;
+          fa = i;
+          fs = sd;
+        }
         tf = Math.min(tf, b);
       }
       if (ok && tn <= tf && tf > 0) {
         const tt = Math.max(0, tn);
-        return { p: [o.x + d.x * tt, o.y + d.y * tt, o.z + d.z * tt], hit: true, t: tt };
+        return { p: [o.x + d.x * tt, o.y + d.y * tt, o.z + d.z * tt], hit: true, t: tt, t1: tf, face: fa >= 0 ? [fa, fs] : null, o: oa, d: da };
       }
       // (off it: where the ray passes the plane through its middle, square to the eye)
       const den = d.x * cfl.x + d.y * cfl.y + d.z * cfl.z;
       const tt = Math.abs(den) < 1e-6 ? dist : ((0 - o.x) * cfl.x + (D.h / 2 - o.y) * cfl.y + (0 - o.z) * cfl.z) / den;
-      return { p: [o.x + d.x * tt, o.y + d.y * tt, o.z + d.z * tt], hit: false };
+      return { p: [o.x + d.x * tt, o.y + d.y * tt, o.z + d.z * tt], hit: false, o: oa, d: da };
     };
-    return { kind: t.kind, D, dims: D, local, perPx, box, up: [(c1.x - c0.x) / ul, (c1.y - c0.y) / ul], dist, wheelR: t.wheelR };
+    // (ROADMAP 11.21) a car of the city's kinds: where the ray meets its paint - { p, n } or null
+    const skin = t.skin || null;
+    const skinAt = skin
+      ? (sx, sy) => {
+          const r = local(sx, sy);
+          return r.hit ? skinHit(skin, r.o, r.d, r.t, r.t1) : null;
+        }
+      : null;
+    return { kind: t.kind, D, dims: D, local, skinAt, perPx, box, up: [(c1.x - c0.x) / ul, (c1.y - c0.y) / ul], dist, wheelR: t.wheelR, view: [cfl.x, cfl.y, cfl.z] };
   }
 
   // ------------------------------------------------------------------ reading the stroke
@@ -260,7 +315,7 @@ export class Fuse {
       // over it)
       if (B.x1 < bx.x0 - w * 0.5 || B.x0 > bx.x1 + w * 0.5 || B.y1 < bx.y0 - h * 1.3 || B.y0 > bx.y1 + h * 0.7) continue;
       const k = S / Math.max(w, h);
-      if (k > 2.8 || k < 0.04) continue;
+      if (k > 2.8 || k < 0.02) continue;
       // (the gun in the hand: only what is drawn out of it - one end on it)
       if (t.kind === 'weapon' && !inBox(a, bx, Math.max(10, w * 0.25)) && !inBox(b, bx, Math.max(10, w * 0.25))) continue;
       // how far off it the stroke is, in the stroke's own size (a balloon over a far man's head is as
@@ -339,23 +394,39 @@ export class Fuse {
       return false;
     }
     const part = { type: m.type, v: m.v, n: m.n, at: m.at, dir: m.dir, ink: inkI, t0: game.time, cost, id: Math.random().toString(36).slice(2, 8) };
+    // (star power lasts its while, then it is spent)
+    if (m.type === 'star') part.until = game.time + STAR_T;
     let res = null;
+    this.justAdded = part;
     if (t.kind === 'veh') res = this.onVehicle(t.ref, part);
     else if (t.kind === 'hero') res = this.onHero(part);
     else if (t.kind === 'weapon') res = this.onWeapon(t.ref, part);
     else if (t.kind === 'car') res = this.onCar(t.ref, part);
     else if (t.kind === 'person') res = this.onPerson(t.ref, part);
+    this.justAdded = null;
     if (!res) return false;
+    // (ink where it went on)
+    if (t.kind === 'veh' && part.at) {
+      const v = t.ref;
+      const c = Math.cos(v.yaw);
+      const sn = Math.sin(v.yaw);
+      const [ax, ay, az] = part.at;
+      const ik = INKS[inkI];
+      game.fx.sparks(v.pos.x + ax * c + az * sn, (v.pos.y || 0) + ay, v.pos.z - ax * sn + az * c, 12, ik && !ik.pencil ? ik.c : PARTS[m.type].col);
+    }
     if (ink) ink.spend(cost);
     this.stats.made++;
     this.stats.byType[m.type] = (this.stats.byType[m.type] || 0) + 1;
     this.stats.onto[t.kind] = (this.stats.onto[t.kind] || 0) + 1;
     this.last = { kind: t.kind, ref: t.ref, part, t: game.time, M: { ...M, t, m } };
+    // (ROADMAP 11.21: on your car - or, just a drawing after all: the same line as ink on it, a tap
+    // away)
+    if (t.kind === 'veh' && M.F && M.P) this.last.ink = this.inkLine(M.F, M.P, inkI);
     game.audio.play('magic', 0.45);
     game.audio.play('click', 0.4);
     // (not what was meant? the other parts the same stroke could be, a tap away - on what is yours)
     const alts = SWAPS.has(t.kind) ? (m.alts || []).filter((a) => a !== m.type && ALLOW[t.kind].has(a)).slice(0, 3) : [];
-    this.tag(res, t, cost, alts);
+    this.tag(res, t, cost, alts, inkI, !!this.last.ink);
     return true;
   }
 
@@ -367,9 +438,14 @@ export class Fuse {
     if (L.kind === 'veh') this.removeVeh(L.ref, L.part);
     else if (L.kind === 'hero') this.removeHero(L.part);
     else if (L.kind === 'weapon') this.removeWeapon(L.ref, L.part);
-    else return false;
+    else if (L.kind === 'decor') {
+      const list = this.decorOf({ kind: L.tk, ref: L.ref });
+      const i = list.indexOf(L.d);
+      if (i >= 0) list.splice(i, 1);
+    } else return false;
     if (this.game.ink) this.game.ink.fill(L.part.cost, 'undo');
-    if (!quiet) this.say(`${PARTS[L.part.type].name} הוסר`, 'info');
+    if (!quiet) this.say(L.kind === 'decor' ? 'הקו נמחק' : `${PARTS[L.part.type].name} הוסר`, 'info');
+    if (this.tagEl && quiet !== 'keep') this.tagEl.classList.remove('on');
     return true;
   }
 
@@ -380,9 +456,264 @@ export class Fuse {
     if (!L || !L.M || this.game.time - L.t > 8) return false;
     const M = L.M;
     const m = asType(type, M.m, M.F);
-    if (!m || !this.undo(true)) return false;
-    m.alts = [M.m.type, ...(M.m.alts || []).filter((a) => a !== type)];
-    return this.run({ t: M.t, F: M.F, P: M.P, m }, L.part.ink);
+    if (!m || !this.undo('keep')) return false;
+    m.alts = [M.m.type, ...(M.m.alts || [])].filter((a) => a && a !== type);
+    // (its line as ink stays the one made when it was drawn: the camera has moved on since)
+    const ink = L.ink;
+    const ok = this.run({ t: M.t, F: M.F, P: M.P, m }, L.part.ink);
+    if (ok && ink && this.last) this.last.ink = ink;
+    return ok;
+  }
+
+  // ------------------------------------------------------------------ the time to draw (ROADMAP 11.21)
+  // the pen out, in play: the city slows right down while you draw (game/game.js update, before
+  // anything moves) - rdt the real step. The pace things go at now (1: as ever)
+  timeK(rdt, on) {
+    const was = this.tk;
+    this.tk = damp(this.tk, on ? SLOW : 1, on ? 9 : 5, rdt);
+    if (!on && this.tk > 0.995) this.tk = 1;
+    if (on && was > 0.95 && this.tk <= 0.95) this.game.audio.play('whoosh', 0.3);
+    const slow = this.tk < 0.85;
+    if (slow !== this.slowOn && typeof document !== 'undefined') {
+      this.slowOn = slow;
+      document.body.classList.toggle('fz-slow', slow);
+    }
+    return this.tk;
+  }
+
+  // the camera while you draw on the car you drive: close by it, from behind and a little to its
+  // side, held in the car's own frame - it stands still on the screen while the street goes by
+  // slowly - and back to behind it after. Over what game/game.js has just set, blended in
+  sketchCam(v, rdt) {
+    const g = this.game;
+    const cam = g.camera;
+    const on = !!(g.freedraw && g.freedraw.isOpen) && g.state === 'play';
+    const c = Math.cos(v.yaw);
+    const sn = Math.sin(v.yaw);
+    if (on && this.sk < 0.01) {
+      // (the side the camera was already on)
+      const dx = cam.position.x - v.pos.x;
+      const dz = cam.position.z - v.pos.z;
+      this.skSide = dx * c - dz * sn >= 0 ? 1 : -1;
+    }
+    this.sk = damp(this.sk, on ? 1 : 0, on ? 6 : 4, rdt);
+    if (this.sk < 0.003) {
+      this.sk = 0;
+      return;
+    }
+    const D = vehDims(v);
+    const lift = (v.fz && v.fz.lift) || 0;
+    // (its frame: x to its left, z to its nose)
+    const toW = (x, y, z, out) => out.set(v.pos.x + x * c + z * sn, (v.pos.y || 0) + lift + y, v.pos.z - x * sn + z * c);
+    // (three quarters from behind: its roof, its side and its tail all in view - all of it to draw on)
+    toW(this.skSide * (D.hw + 2.5), D.h + 1.2, -(D.hl + 1.5), _p);
+    toW(0, D.h * 0.42, D.hl * 0.12, _w);
+    const e = this.sk * this.sk * (3 - 2 * this.sk);
+    _m.lookAt(_p, _w, UPY);
+    _q.setFromRotationMatrix(_m);
+    cam.position.lerp(_p, e);
+    cam.quaternion.slerp(_q, e);
+    cam.updateMatrixWorld();
+  }
+
+  // ------------------------------------------------------------------ ink on a car (ROADMAP 11.21)
+  // a line drawn on a car that is no part stays on it, as it was drawn: ink on the car, going where it
+  // goes - until undo, the eraser or a part made of it. strokes: the page's (one), U: px a unit, inkI:
+  // its ink. true if it went on something
+  stick(strokes, U, inkI = 1) {
+    if (strokes.length !== 1) return false;
+    const g = this.game;
+    const P = strokes[0].map(([x, y]) => [x * U, y * U]);
+    if (P.length < 2) return false;
+    const B = boxOf(P);
+    // on what: what the pen went down on (the nearest), else the car you drive if it is by it
+    let best = null;
+    let bt = Infinity;
+    let own = null;
+    for (const t of this.targets()) {
+      if (t.kind !== 'veh' && t.kind !== 'car') continue;
+      const F = this.frameOf(t);
+      if (!F) continue;
+      if (t.ref === g.player.inVehicle) own = { t, F };
+      const r = F.local(P[0][0], P[0][1]);
+      if (r.hit && r.t < bt) {
+        bt = r.t;
+        best = { t, F, r };
+      }
+    }
+    if (!best) {
+      if (!own) return false;
+      const bx = own.F.box;
+      if (B.x1 < bx.x0 - bx.w * 0.6 || B.x0 > bx.x1 + bx.w * 0.6 || B.y1 < bx.y0 - bx.h * 1.2 || B.y0 > bx.y1 + bx.h * 0.8) return false;
+      best = { t: own.t, F: own.F, r: null };
+    }
+    const { t, F } = best;
+    const I = this.inkLine(F, P, inkI, best.r);
+    if (g.ink && g.ink.level < I.d.cost) {
+      g.hud.toast(`אין מספיק דיו (צריך ${I.d.cost})`, 'bad', 2);
+      return false;
+    }
+    this.putInk(t, F, P, I);
+    return true;
+  }
+
+  // a line on the screen made ink on a thing: each point where its ray meets the thing's paint (a car
+  // of the city's kinds: render/cars.js skinHit) or else its box's side; what is drawn off it goes
+  // on in the plane where it first met it. A closed one is filled in, the way a pen fills one: strokes
+  // across it. P: screen px, r0: its box where the pen went down (if known) - { d (the ink: pts,
+  // fill, c, w, cost), on (how much of it is on it, 0-1), sizeM, S (its shape) }
+  inkLine(F, P, inkI, r0 = null) {
+    const L = pathLen(P);
+    const B = boxOf(P);
+    const Q = along(P, clamp(Math.round(L / 8), 6, 48));
+    const at = (x, y) => (F.skinAt ? F.skinAt(x, y) : null);
+    const sk = Q.map(([x, y]) => at(x, y));
+    let n = F.view;
+    let q0 = [0, F.D.h / 2, 0];
+    const k0 = sk.find(Boolean);
+    if (k0) {
+      n = k0.n;
+      q0 = k0.p;
+    } else {
+      const r = r0 || F.local(P[0][0], P[0][1]);
+      if (r.hit && r.face) {
+        n = [0, 0, 0];
+        n[r.face[0]] = r.face[1];
+        q0 = r.p;
+      }
+    }
+    const LIFT = 0.025;
+    let on = 0;
+    const proj = (x, y, k) => {
+      if (k) {
+        on++;
+        return [k.p[0] + k.n[0] * LIFT, k.p[1] + k.n[1] * LIFT, k.p[2] + k.n[2] * LIFT];
+      }
+      const r = F.local(x, y);
+      if (!F.skinAt && r.hit) on++;
+      const den = r.d[0] * n[0] + r.d[1] * n[1] + r.d[2] * n[2];
+      if (Math.abs(den) > 0.1) {
+        const tt = ((q0[0] - r.o[0]) * n[0] + (q0[1] - r.o[1]) * n[1] + (q0[2] - r.o[2]) * n[2]) / den;
+        if (tt > 0) return [r.o[0] + r.d[0] * tt + n[0] * LIFT, r.o[1] + r.d[1] * tt + n[1] * LIFT, r.o[2] + r.d[2] * tt + n[2] * LIFT];
+      }
+      return r.p;
+    };
+    const r3 = (q) => q.map((x) => Math.round(x * 1000) / 1000);
+    const r2 = (q) => q.map((x) => Math.round(x * 100) / 100);
+    const pts = Q.map(([x, y], i) => r3(proj(x, y, sk[i])));
+    const sizeM = Math.max(B.w, B.h) * F.perPx;
+    const d = { pts, c: inkI, w: clamp(2.4 + sizeM * 0.4, 2.6, 4), cost: clamp(Math.round(L * F.perPx * 0.8), 1, 5) };
+    const onK = on / Q.length;
+    const S = shapeOf(P);
+    if (S.closed && Math.min(B.w, B.h) > 16) {
+      const fill = [];
+      for (const [a, b] of hatch(P, Math.max(8, Math.min(B.w, B.h) / 6))) {
+        const k = clamp(Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 22), 1, 4);
+        const line = [];
+        for (let i = 0; i <= k; i++) {
+          const x = a[0] + ((b[0] - a[0]) * i) / k;
+          const y = a[1] + ((b[1] - a[1]) * i) / k;
+          line.push(r2(proj(x, y, at(x, y))));
+        }
+        fill.push(line);
+      }
+      if (fill.length) {
+        d.fill = fill;
+        d.cost = Math.min(6, d.cost + 1);
+      }
+    }
+    return { d, on: onK, sizeM, S };
+  }
+
+  // the ink made of a line (inkLine) put on t: it goes where t goes, its tag offers the parts its
+  // shape could be made into
+  putInk(t, F, P, I) {
+    const g = this.game;
+    const { d } = I;
+    const list = this.decorOf(t, true);
+    list.push(d);
+    if (t.kind === 'car') this.decorCars.add(t.ref);
+    if (list.length > (t.kind === 'veh' ? DECOR_MAX : 8)) list.shift();
+    if (t.kind === 'veh' && !t.ref.fuse.root) this.buildVeh(t.ref);
+    if (g.ink) g.ink.spend(d.cost);
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    for (const q of d.pts) {
+      cx += q[0];
+      cy += q[1];
+      cz += q[2];
+    }
+    const k = d.pts.length || 1;
+    const m = { c: [cx / k, cy / k, cz / k], sizeM: I.sizeM, inside: I.on };
+    // (a little sparkle of its ink where it went on)
+    if (t.M) {
+      _v.set(m.c[0], m.c[1], m.c[2]).applyMatrix4(t.M);
+      const ik = INKS[d.c];
+      g.fx.sparks(_v.x, _v.y, _v.z, 7, ik && !ik.pencil ? ik.c : [0.3, 0.3, 0.36]);
+    }
+    const alts = guessParts(I.S, m, F).filter((a) => ALLOW[t.kind].has(a)).slice(0, 3);
+    this.last = { kind: 'decor', ref: t.ref, tk: t.kind, d, part: { type: 'decor', cost: d.cost, ink: d.c }, t: g.time, M: { t, F, P, m }, ink: I };
+    g.audio.play('click', 0.35);
+    this.tag({ part: { type: 'decor' }, name: d.fill ? 'מדבקה בדיו' : 'קו דיו', rule: t.kind === 'veh' ? 'נשאר עליה כמו שציירתם' : 'נשאר עליה, עד שתיעלם', use: 'אפשר להפוך אותו לחלק:' }, t, d.cost, alts, d.c);
+  }
+
+  // the part just put on, as the line it was drawn as instead (its tag's "just a drawing"): ink on
+  // it where it was drawn - its ink back, the line's spent
+  toInk() {
+    const L = this.last;
+    if (!L || !L.ink || this.game.time - L.t > 8) return false;
+    const { t, F, P } = L.M;
+    const I = L.ink;
+    if (!this.undo('keep')) return false;
+    const g = this.game;
+    if (g.ink && g.ink.level < I.d.cost) {
+      g.hud.toast(`אין מספיק דיו (צריך ${I.d.cost})`, 'bad', 2);
+      return false;
+    }
+    this.putInk(t, F, P, I);
+    return true;
+  }
+
+  // the ink on a thing: a car of yours (in its fuse), a car of the city's (on it); make: start one
+  decorOf(t, make = false) {
+    if (t.kind === 'veh') {
+      const v = t.ref;
+      if (make) v.fuse = v.fuse || { parts: [], root: null, models: [] };
+      if (!v.fuse) return [];
+      if (make && !v.fuse.decor) v.fuse.decor = [];
+      return v.fuse.decor || [];
+    }
+    const c = t.ref;
+    if (make && !c.fzDecor) c.fzDecor = [];
+    return c.fzDecor || [];
+  }
+
+  // its lines, in its frame M, this frame
+  drawDecor(fr, list, M, seed0) {
+    for (let k = 0; k < list.length; k++) {
+      const d = list[k];
+      const col = (INKS[d.c] || INKS[1]).c;
+      const pts = d.pts;
+      _v.set(pts[0][0], pts[0][1], pts[0][2]).applyMatrix4(M);
+      for (let i = 1; i < pts.length; i++) {
+        _w.set(pts[i][0], pts[i][1], pts[i][2]).applyMatrix4(M);
+        fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, col, d.w || 3, seed0 + k * 97 + i, 1, 0.012, 0);
+        _v.copy(_w);
+      }
+      // (a closed one: the strokes that fill it, a little thinner)
+      if (d.fill) {
+        for (let j = 0; j < d.fill.length; j++) {
+          const f = d.fill[j];
+          _v.set(f[0][0], f[0][1], f[0][2]).applyMatrix4(M);
+          for (let i = 1; i < f.length; i++) {
+            _w.set(f[i][0], f[i][1], f[i][2]).applyMatrix4(M);
+            fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, col, (d.w || 3) * 0.66, seed0 + k * 97 + 300 + j * 7 + i, 0.92, 0.01, 0);
+            _v.copy(_w);
+          }
+        }
+      }
+    }
   }
 
   // ------------------------------------------------------------------ on your car
@@ -396,6 +727,7 @@ export class Fuse {
     R.parts.push(part);
     this.applyVeh(v);
     this.buildVeh(v);
+    if (part.type === 'smoke') this.puffBehind(v);
     const st = vehRule(part, v);
     return { part, ...st, combos: this.newCombos(v.fz ? v.fz.combos : []) };
   }
@@ -418,7 +750,7 @@ export class Fuse {
     let best = null;
     let bd = Infinity;
     for (const v of g.vehicles.list) {
-      if (!v.fuse || !v.fuse.parts.length || v === g.player.inVehicle || v.dead) continue;
+      if (!v.fuse || !(v.fuse.parts.length || (v.fuse.decor && v.fuse.decor.length)) || v === g.player.inVehicle || v.dead) continue;
       const dx = v.pos.x - from.x;
       const dz = v.pos.z - from.z;
       const d = Math.hypot(dx, dz);
@@ -436,8 +768,28 @@ export class Fuse {
           best = { v, p, wx, wy: v.pos.y + ay, wz };
         }
       }
+      // (and the ink on it: where its line comes nearest)
+      for (const dc of v.fuse.decor || []) {
+        for (const q of dc.pts) {
+          const wx = v.pos.x + q[0] * c + q[2] * sn;
+          const wz = v.pos.z - q[0] * sn + q[2] * c;
+          const e = Math.hypot(wx - tip.x, (v.pos.y + q[1]) - tip.y, wz - tip.z);
+          if (e < bd) {
+            bd = e;
+            best = { v, dc, wx, wy: v.pos.y + q[1], wz };
+          }
+        }
+      }
     }
     if (!best || bd > 3.2) return false;
+    if (best.dc) {
+      const list = best.v.fuse.decor;
+      list.splice(list.indexOf(best.dc), 1);
+      g.fx.crumbs(best.wx, best.wy + 0.2, best.wz, 12, 2);
+      this.say('הקו נמחק', 'info');
+      if (this.last && this.last.d === best.dc) this.last = null;
+      return true;
+    }
     this.removeVeh(best.v, best.p, true);
     g.fx.crumbs(best.wx, best.wy + 0.3, best.wz, 18, 2.4);
     this.say(`${PARTS[best.p.type].name} נמחק`, 'info');
@@ -559,6 +911,22 @@ export class Fuse {
         fz.airCtl = Math.max(fz.airCtl || 0, 0.6);
       } else if (p.type === 'magnet') {
         fz.magnet = { front: p.v !== 'back', reach: clamp(10 + (n.size || 0.8) * 12, 10, 26) };
+      } else if (p.type === 'star') {
+        // (ROADMAP 11.21) star power: hardly a scratch, through whatever is in the way, faster
+        v.armor = Math.max(v.armor, 0.97);
+        v.crush = true;
+        H.top *= 1.25;
+        H.power *= 1.35;
+        fz.star = p;
+      } else if (p.type === 'bolt') {
+        fz.zap = { reach: clamp(9 + (n.size || 1) * 2, 9, 14), cool: 0.4 };
+      } else if (p.type === 'smoke') {
+        fz.smoke = { charge: 6, max: 6, next: 0 };
+      } else if (p.type === 'chute') {
+        fz.chute = { span: clamp(n.span || 3, 2.4, 8) };
+        fz.airCtl = Math.max(fz.airCtl || 0, 0.45);
+      } else if (p.type === 'float') {
+        fz.float = { len: clamp(n.len || 3.6, 2, 6) };
       }
     }
     // the combinations: two parts that make something of each other
@@ -603,7 +971,7 @@ export class Fuse {
       R.root = null;
     }
     R.models = [];
-    if (!R.parts.length) return;
+    if (!R.parts.length && !(R.decor && R.decor.length)) return;
     const root = new THREE.Group();
     const D = vehDims(v);
     const K = v.kind === 'car' ? KINDS[v.carKind] || KINDS.sedan : null;
@@ -715,8 +1083,35 @@ export class Fuse {
         if (!fr) m.rotation.y = Math.PI;
         root.add(m);
         R.models.push({ p, m, role: 'magnet' });
+      } else if (p.type === 'star') {
+        const m = starModel(clamp(p.n.size || 1, 0.7, 1.5), col);
+        m.position.set(0, (K ? K.roofY : D.h) - 0.02, K ? -0.1 : 0);
+        root.add(m);
+        R.models.push({ p, m, role: 'star' });
+      } else if (p.type === 'bolt') {
+        const m = boltModel(clamp(p.n.size || 1, 0.8, 1.4), col);
+        m.position.set(0, (K ? K.roofY : D.h) - 0.02, K ? -0.55 : -D.hl * 0.3);
+        root.add(m);
+        R.models.push({ p, m, role: 'bolt' });
+      } else if (p.type === 'smoke') {
+        const m = smokeModel(col);
+        m.position.set(0, K ? Math.max(0.42, K.clear + 0.22) : D.h * 0.3, -D.hl - 0.02);
+        root.add(m);
+        R.models.push({ p, m, role: 'smoke' });
+      } else if (p.type === 'chute') {
+        const m = chuteModel(p.n.span || 3, col);
+        m.position.set(0, (K ? K.roofY : D.h) - 0.02, K ? 0.1 : 0);
+        root.add(m);
+        R.models.push({ p, m, role: 'chute' });
+      } else if (p.type === 'float') {
+        const m = floatModel(clamp(D.hl * 2 * 0.86, 2, 6), D.hw, col);
+        m.position.set(0, 0.2, 0);
+        root.add(m);
+        R.models.push({ p, m, role: 'float' });
       }
     }
+    // (ROADMAP 11.21: the part just put on grows into its place)
+    if (this.justAdded) for (const o of R.models) if (o.p === this.justAdded) o.m.userData.popAt = performance.now();
     // (a car of the city's: its frame comes from the car batches each frame - place(); a drawn
     // one's group carries it)
     if (v.kind === 'car') {
@@ -817,6 +1212,17 @@ export class Fuse {
       pull = 0;
       lifting = true;
     }
+    // (ROADMAP 11.21) a parachute: falling fast, it opens - down slowly, gliding on
+    if (fz.chute && !lifting) {
+      if (!v.fzChute && v.vy < -4.5) {
+        v.fzChute = g.time;
+        g.audio.play('chute', 0.7);
+      }
+      if (v.fzChute) {
+        v.vy = damp(v.vy, -2.4, 3.5, dt);
+        pull = Math.min(pull, 0.08);
+      }
+    }
     // a jet out of its back pushes it on through the air (Shift)
     if (fz.thrust && boost) {
       v.vx += Math.sin(v.yaw) * fz.thrust * dt;
@@ -848,6 +1254,11 @@ export class Fuse {
   floor(v, g) {
     const fz = v.fz;
     if (!fz) return g;
+    // (ROADMAP 11.21) floats: on the water it rides on it - its wheels under, its floats half in
+    if (fz.float) {
+      v.fzWet = isWater(v.pos.x, v.pos.z);
+      if (v.fzWet) g = Math.max(g, WATER_RIDE);
+    }
     const G = this.game.gadgets;
     if (!G) return g;
     const flies = fz.rotor || fz.balloon || fz.vtol || fz.plane || v.glide;
@@ -885,7 +1296,7 @@ export class Fuse {
     // (one of each; three at most - the oldest goes)
     for (const h of this.hero.filter((h) => h.part.type === part.type)) this.removeHero(h.part, true);
     if (this.hero.length >= MAX_ON_HERO) this.removeHero(this.hero[0].part, true);
-    part.until = g.time + HERO_T;
+    part.until = g.time + (part.type === 'star' ? STAR_T : HERO_T);
     const col = paintOf(INKS[part.ink] || null, PARTS[part.type].col);
     const n = part.n;
     let model = null;
@@ -915,6 +1326,8 @@ export class Fuse {
     else if (part.type === 'armor') model = vestModel(n.cover || 0.4);
     else if (part.type === 'balloon') model = balloonModel(clamp(n.d || 0.9, 0.6, 2.4), col);
     else if (part.type === 'magnet') model = magnetModel(0.42);
+    else if (part.type === 'star') model = starModel(0.8, col);
+    else if (part.type === 'chute') model = chuteModel(4, col);
     if (model) g.scene.add(model);
     const h = { part, model };
     this.hero.push(h);
@@ -968,10 +1381,12 @@ export class Fuse {
   // (game/player.js) how fast you run on what you have on your feet
   heroSpeedK(sprint) {
     const w = this.heroHas('wheel');
-    if (!w) return 1;
+    // (star power: a third faster)
+    const star = this.heroHas('star') ? 1.3 : 1;
+    if (!w) return star;
     let k = w.v === 'square' ? 0.8 : w.v === 'big' ? 1.4 : w.v === 'small' ? 1.7 : 1.55;
     if (sprint && this.heroHas('jet') && this.heroCombos().includes('turbo')) k *= 1.35;
-    return k;
+    return k * star;
   }
 
   // (game/player.js) how high you jump
@@ -983,7 +1398,7 @@ export class Fuse {
   }
 
   heroSafe() {
-    return !!(this.heroHas('spring') || this.heroHas('wing') || this.heroHas('balloon') || this.heroHas('rotor'));
+    return !!(this.heroHas('spring') || this.heroHas('wing') || this.heroHas('balloon') || this.heroHas('rotor') || this.heroHas('chute') || this.heroHas('star'));
   }
 
   // (game/player.js, in the air) your wings, your rotor, your balloon, your jetpack: true when it
@@ -1017,6 +1432,14 @@ export class Fuse {
     if (rot && up && this.heroFuel.rotor > 0) {
       this.heroFuel.rotor -= dt * (combos.includes('airship') ? 0.3 : 1);
       p.vel.y = damp(p.vel.y, 4.5, 4, dt);
+      return true;
+    }
+    // (ROADMAP 11.21) a parachute on your back: falling, it opens
+    const chute = this.heroHas('chute');
+    if (chute && !bal && !down && (this.heroChuteOpen || p.vel.y < -5)) {
+      if (!this.heroChuteOpen) this.game.audio.play('chute', 0.6);
+      this.heroChuteOpen = true;
+      p.vel.y = damp(p.vel.y, -2.2, 4, dt);
       return true;
     }
     if (bal) {
@@ -1384,6 +1807,45 @@ export class Fuse {
     const pv = p.inVehicle;
     if (pv && pv.fz && pv.fz.magnet) this.carMagnet(pv, dt);
     if (pv && pv.fz && pv.fz.flame && g.input) this.flame(pv, dt);
+    // (ROADMAP 11.21) a star's power spent; the coil, the smoke pots, the floats
+    for (const v of g.vehicles.list) {
+      const R = v.fuse;
+      if (!R || !R.parts.length) continue;
+      const q = R.parts.find((o) => o.until && t > o.until);
+      if (q) {
+        this.removeVeh(v, q);
+        if (v === pv) this.say(`ה${PARTS[q.type].name} נגמר`, 'info');
+      }
+    }
+    if (pv && pv.fz) {
+      const fz = pv.fz;
+      if (fz.star) {
+        this.sparkT = (this.sparkT || 0) - dt;
+        if (this.sparkT <= 0) {
+          this.sparkT = 0.12;
+          const a = Math.random() * Math.PI * 2;
+          g.fx.sparks(pv.pos.x + Math.cos(a) * 1.4, (pv.pos.y || 0) + 0.4 + Math.random() * 1.2, pv.pos.z + Math.sin(a) * 1.4, 4, [1, 0.85, 0.25]);
+        }
+      }
+      if (fz.zap) this.zap(pv, fz.zap, dt, false);
+      if (fz.smoke) this.smokeOut(pv, fz.smoke, dt);
+      if (pv.fzChute && !pv.air) pv.fzChute = 0;
+      if (fz.float && pv.fzWet) {
+        if (Math.abs(pv.speed) > 14) pv.speed = Math.sign(pv.speed) * 14;
+        this.wakeT = (this.wakeT || 0) - dt;
+        if (Math.abs(pv.speed) > 2 && this.wakeT <= 0) {
+          this.wakeT = 0.1;
+          const D = vehDims(pv);
+          g.fx.splash(pv.pos.x - Math.sin(pv.yaw) * D.hl, -0.78, pv.pos.z - Math.cos(pv.yaw) * D.hl, 5, 2, [1, 1, 0.98]);
+        }
+      }
+    }
+    if (p.mode === 'foot' || p.mode === 'climb') {
+      // (star power on you: nothing hurts you while it lasts)
+      if (this.heroHas('star')) p.invuln = Math.max(p.invuln || 0, 0.3);
+      if (this.heroHas('bolt')) this.zap(p, this.heroZap, dt, true);
+    }
+    if (p.onGround) this.heroChuteOpen = false;
     // others
     for (let i = this.others.length - 1; i >= 0; i--) {
       const o = this.others[i];
@@ -1394,11 +1856,87 @@ export class Fuse {
         this.others.splice(i, 1);
       }
     }
-    // the tag fades
+    // the tag fades (in the time you see go by - not the slowed city's)
     if (this.tagEl && this.tagT > 0) {
-      this.tagT -= dt;
+      this.tagT -= g.realDt || dt;
       if (this.tagT <= 0) this.tagEl.classList.remove('on');
     }
+  }
+
+  // (ROADMAP 11.21) the coil's bolt: who comes at you gets it - a gangster or a policeman after you
+  // knocked flat, a police car after you stopped dead (no one else: it crackles). src: your car, or
+  // you (hero)
+  zap(src, Z, dt, hero) {
+    const g = this.game;
+    Z.cool -= dt;
+    if (Z.cool > 0) return;
+    const x = src.pos.x;
+    const z = src.pos.z;
+    const y = (src.pos.y || 0) + (hero ? 1.5 : vehDims(src).h + 0.6);
+    let best = null;
+    let bd = Z.reach;
+    for (const e of g.enemies.list) {
+      if (!e.alive || e.isMonster || !(e.hostile || (e.faction === 'police' && g.police && g.police.hostile))) continue;
+      const d = Math.hypot(e.pos.x - x, e.pos.z - z);
+      if (d < bd) {
+        bd = d;
+        best = { e, x: e.pos.x, y: e.pos.y + 1.1, z: e.pos.z };
+      }
+    }
+    if (!hero && g.police && g.police.hostile) {
+      for (const c of g.traffic.list) {
+        if (!c.police || c.gone || c.taken || c.crashed || c.wrecked || c.poofT !== undefined) continue;
+        const d = Math.hypot(c.pos.x - x, c.pos.z - z);
+        if (d < bd) {
+          bd = d;
+          best = { c, x: c.pos.x, y: (c.pos.y || 0) + 1, z: c.pos.z };
+        }
+      }
+    }
+    if (!best) {
+      // (nothing to zap: the ball crackles now and then)
+      Z.cool = 0.15;
+      Z.idle = (Z.idle || 0) - 0.15;
+      if (Z.idle <= 0) {
+        Z.idle = 1.6;
+        g.fx.sparks(x, y, z, 3, [0.6, 0.85, 1]);
+      }
+      return;
+    }
+    Z.cool = hero ? 1.1 : 0.8;
+    this.zaps.push({ a: [x, y, z], b: [best.x, best.y, best.z], t0: g.time });
+    g.fx.sparks(best.x, best.y, best.z, 12, [0.6, 0.85, 1]);
+    g.audio.play('laser', 0.5);
+    if (best.e) {
+      _d.set(best.e.pos.x - x, 0, best.e.pos.z - z).normalize();
+      g.enemies.damage(best.e, 'torso', 34, new THREE.Vector3(best.x, best.y, best.z), _d.clone(), 'melee');
+    } else this.crash(best.c, 16);
+  }
+
+  // (ROADMAP 11.21) the smoke pots: chased (the police after you) and going, it lays ink smoke behind
+  // it - six seconds of it, filling up again after
+  smokeOut(v, S, dt) {
+    const g = this.game;
+    const chased = !!(g.police && g.police.level > 0);
+    if (!chased || Math.abs(v.speed || 0) < 3 || S.charge <= 0) {
+      S.charge = Math.min(S.max, S.charge + dt * 0.5);
+      return;
+    }
+    S.charge -= dt;
+    S.next -= dt;
+    if (S.next > 0) return;
+    S.next = 0.45;
+    this.puffBehind(v);
+  }
+
+  // a cloud of ink smoke behind it (the police cannot see through it: game/signs.js)
+  puffBehind(v) {
+    const g = this.game;
+    const D = vehDims(v);
+    const bx = v.pos.x - Math.sin(v.yaw) * (D.hl + 1.4);
+    const bz = v.pos.z - Math.cos(v.yaw) * (D.hl + 1.4);
+    if (g.signs) g.signs.puff(bx, bz, 3.2, 7);
+    else g.fx.smoke(bx, (v.pos.y || 0) + 0.8, bz, 2.4);
   }
 
   // a car with something on it, a step: true when it is over
@@ -1730,13 +2268,24 @@ export class Fuse {
     this.fdt = dt || 1 / 60;
     // your car's (a drawn one's group carries them; a city car's frame came in place()): its wheels
     // going round, its rotor, its jet's flame, its spring
+    const now = performance.now();
     for (const v of g.vehicles.list) {
       const R = v.fuse;
       if (!R || !R.root) continue;
+      // (its frame as it is this frame, not the last: what is drawn from it keeps up at speed)
+      if (v.kind === 'car') R.root.updateMatrixWorld(true);
+      else if (v.group) v.group.updateMatrixWorld(true);
       const fz = v.fz || {};
       const r0 = (fz.wheels && fz.wheels.r) || 0.34;
       for (const o of R.models) {
         const ud = o.m.userData;
+        if (ud.popAt !== undefined) {
+          const k = (now - ud.popAt) / 380;
+          if (k >= 1) {
+            o.m.scale.setScalar(1);
+            delete ud.popAt;
+          } else o.m.scale.setScalar(Math.max(0.02, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2));
+        }
         if (o.role === 'wheel' && ud.spin) {
           ud.spin.rotation.x = (v.wheelSpin || 0) * (0.34 / r0);
           o.m.rotation.y = ud.front ? clamp((v.turn || 0) * 0.35, -0.45, 0.45) : 0;
@@ -1756,6 +2305,14 @@ export class Fuse {
           _v.copy(o.m.position).applyMatrix4(R.root.matrixWorld);
           _w.set(ud.base.x * 0.3, ud.base.y - 1.5 - (o.p.n.d || 1.6) * 0.3, ud.base.z).applyMatrix4(R.root.matrixWorld);
           fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, [0.2, 0.2, 0.24], 2.2, 7100, 1, 0.01, 0);
+        } else if (o.role === 'star' && ud.spin) {
+          ud.spin.rotation.y += this.fdt * 3.2;
+          ud.spin.visible = (o.p.until || Infinity) - t > 2.5 || Math.sin(t * 22) > -0.3;
+        } else if (o.role === 'chute' && ud.canopy) {
+          const open = !!v.fzChute;
+          const k = damp(ud.canopy.scale.x, open ? 1 : 0.001, open ? 7 : 5, this.fdt);
+          ud.canopy.scale.setScalar(k);
+          ud.canopy.visible = k > 0.02;
         } else if (o.role === 'magnet' && fz.magnet && v.fzStuck && v.fzStuck.length) {
           // (its pull, in ink: the lines of its field to what it holds)
           _v.copy(o.m.position).applyMatrix4(R.root.matrixWorld);
@@ -1763,6 +2320,43 @@ export class Fuse {
         }
       }
       if (v.kind !== 'car') R.root.updateMatrix();
+      if (R.decor && R.decor.length) this.drawDecor(fr, R.decor, R.root.matrixWorld, 8100);
+    }
+    // the ink on the city's cars (while they are about)
+    for (const c of this.decorCars) {
+      if (c.gone || c.taken || c.poofT !== undefined || !c.fzDecor || !c.fzDecor.length) {
+        this.decorCars.delete(c);
+        continue;
+      }
+      _e.set(0, c.yaw, 0, 'YXZ');
+      _q.setFromEuler(_e);
+      _m.compose(_p.set(c.pos.x, c.pos.y || 0, c.pos.z), _q, _s.set(1, 1, 1));
+      this.drawDecor(fr, c.fzDecor, _m, 8300);
+    }
+    // (ROADMAP 11.21) the coil's bolts: jagged, new kinks each frame
+    for (let i = this.zaps.length - 1; i >= 0; i--) {
+      const zp = this.zaps[i];
+      if (t - zp.t0 > 0.22 || t < zp.t0) {
+        this.zaps.splice(i, 1);
+        continue;
+      }
+      const [ax, ay, az] = zp.a;
+      const [bx, by, bz] = zp.b;
+      let x0 = ax;
+      let y0 = ay;
+      let z0 = az;
+      const n = 7;
+      for (let k = 1; k <= n; k++) {
+        const f = k / n;
+        const j = k < n ? 0.45 * Math.sin(f * Math.PI) : 0;
+        const x = ax + (bx - ax) * f + (Math.random() - 0.5) * j;
+        const y = ay + (by - ay) * f + (Math.random() - 0.5) * j;
+        const z = az + (bz - az) * f + (Math.random() - 0.5) * j;
+        fr.lineXYZ(x0, y0, z0, x, y, z, [0.78, 0.92, 1], 3.4, 7600 + k, 1, 0.02, 0);
+        x0 = x;
+        y0 = y;
+        z0 = z;
+      }
     }
     // the hero's
     if (this.hero.length) this.drawHero(fr);
@@ -1875,12 +2469,29 @@ export class Fuse {
       } else if (type === 'magnet') {
         m.position.copy(j.handL);
         m.rotation.set(-0.4, yaw, 0);
+      } else if (type === 'star') {
+        m.position.set(j.headC.x, j.headC.y + 0.22, j.headC.z);
+        m.scale.setScalar(0.5);
+        if (m.userData.spin) {
+          m.userData.spin.rotation.y += this.fdt * 3.5;
+          m.userData.spin.visible = h.part.until - t > 2.5 || Math.sin(t * 22) > -0.3;
+        }
+      } else if (type === 'chute') {
+        _v.lerpVectors(j.neck, j.hip, 0.25);
+        m.position.set(_v.x - Math.sin(yaw) * 0.2, _v.y - 0.1, _v.z - Math.cos(yaw) * 0.2);
+        m.scale.setScalar(0.62);
+        const cn = m.userData.canopy;
+        if (cn) {
+          const k = damp(cn.scale.x, this.heroChuteOpen ? 1 : 0.001, 6, this.fdt);
+          cn.scale.setScalar(k);
+          cn.visible = k > 0.02;
+        }
       }
     }
   }
 
   // ------------------------------------------------------------------ the little card that says what it does
-  tag(res, t, cost, alts = []) {
+  tag(res, t, cost, alts = [], inkI = 1, canInk = false) {
     if (typeof document === 'undefined') return;
     if (!this.tagEl) {
       const el = document.createElement('div');
@@ -1894,16 +2505,23 @@ export class Fuse {
         if (!b || !el.classList.contains('on')) return;
         e.preventDefault();
         e.stopPropagation();
-        this.swap(b.dataset.a);
+        if (b.dataset.a === 'undo') this.undo();
+        else if (b.dataset.a === 'ink') this.toInk();
+        else this.swap(b.dataset.a);
+        // (the pen stays out a while longer - another line may come)
+        const fd = this.game.freedraw;
+        if (fd && fd.autoShut) fd.autoShut = performance.now() + (fd.autoShutLen || 3800);
       };
       el.addEventListener('pointerdown', pick);
     }
-    const info = PARTS[res.part.type];
+    const ink = res.part.type === 'decor';
+    const info = PARTS[res.part.type] || { name: '' };
     const combo = (res.combos || []).map((k) => COMBO_NAME[k]).filter(Boolean);
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-    this.tagEl.innerHTML = `<b><i style="background:${PART_CSS[res.part.type]}"></i>${esc(res.name || info.name)}</b><span>${esc(res.rule || '')}</span>${res.nums ? `<em>${esc(res.nums)}</em>` : ''}${res.use ? `<u>${esc(res.use)}</u>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<small>−${cost} דיו</small>${alts.length ? `<div class="fz-alt">לא זה?${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}</div>` : ''}`;
+    const dot = ink ? (INKS[inkI] || INKS[1]).css : PART_CSS[res.part.type];
+    this.tagEl.innerHTML = `<b><i style="background:${dot}"></i>${esc(res.name || info.name)}</b><span>${esc(res.rule || '')}</span>${res.nums ? `<em>${esc(res.nums)}</em>` : ''}${res.use ? `<u>${esc(res.use)}</u>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<small>−${cost} דיו</small>${alts.length || ink || canInk ? `<div class="fz-alt">${ink ? '' : 'לא זה?'}${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? '<button data-a="ink" class="ink">✎ רק ציור</button>' : ''}${ink ? '<button data-a="undo" class="x">✕ למחוק</button>' : ''}</div>` : ''}`;
     this.tagEl.classList.add('on');
-    this.tagT = combo.length || alts.length ? 5 : 3.6;
+    this.tagT = combo.length || alts.length || ink || canInk ? 5 : 3.6;
     this.tagAt = t;
     this.placeTag();
     if (combo.length) this.game.audio.play('ding', 0.6);
@@ -1959,12 +2577,17 @@ export class Fuse {
   // ------------------------------------------------------------------ keeping them
   // (game/save.js) what is on a car of yours
   saveVeh(v) {
-    return v.fuse && v.fuse.parts.length ? v.fuse.parts.map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost })) : undefined;
+    const R = v.fuse;
+    if (!R || !(R.parts.length || (R.decor && R.decor.length))) return undefined;
+    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost }));
+    return R.decor && R.decor.length ? { parts, decor: R.decor } : parts;
   }
 
-  loadVeh(v, list) {
-    if (!Array.isArray(list) || !list.length) return;
-    v.fuse = { parts: list.map((p) => ({ ...p, t0: 0, id: Math.random().toString(36).slice(2, 8) })), root: null, models: [] };
+  loadVeh(v, saved) {
+    const list = Array.isArray(saved) ? saved : saved && Array.isArray(saved.parts) ? saved.parts : [];
+    const decor = saved && !Array.isArray(saved) && Array.isArray(saved.decor) ? saved.decor : [];
+    if (!list.length && !decor.length) return;
+    v.fuse = { parts: list.map((p) => ({ ...p, t0: 0, id: Math.random().toString(36).slice(2, 8) })), root: null, models: [], decor };
     this.applyVeh(v);
     this.buildVeh(v);
   }
@@ -1972,6 +2595,7 @@ export class Fuse {
 
 export const PART_CSS = {
   wheel: '#3c3c46', wing: '#e8e2d2', rotor: '#d23a32', jet: '#ff8a2a', spring: '#d6c84a', barrel: '#4c5448', blade: '#c8ccd6', armor: '#7c818c', balloon: '#e8333d', magnet: '#d21f26',
+  star: '#ffd02e', bolt: '#5ab8ff', smoke: '#8c8e9c', chute: '#f2604f', float: '#ff8c28',
 };
 
 export const COMBO_NAME = {
@@ -1988,7 +2612,71 @@ export const COMBO_NAME = {
   airship: 'ספינת אוויר — מרחפים כמעט בלי הגבלה',
 };
 
+// (ROADMAP 11.21) strokes across a closed line (screen px): lines at 45 degrees, gap apart, each one
+// inside it (even-odd: a star drawn in one go keeps its middle empty) - [[a, b], ...], 18 at most
+function hatch(P, gap) {
+  const c = Math.SQRT1_2;
+  const R = P.map(([x, y]) => [(x + y) * c, (y - x) * c]);
+  let v0 = Infinity;
+  let v1 = -Infinity;
+  for (const q of R) {
+    v0 = Math.min(v0, q[1]);
+    v1 = Math.max(v1, q[1]);
+  }
+  gap = Math.max(gap, (v1 - v0) / 18);
+  const out = [];
+  const n = R.length;
+  for (let v = v0 + gap / 2; v < v1 && out.length < 24; v += gap) {
+    const xs = [];
+    for (let i = 0; i < n; i++) {
+      const a = R[i];
+      const b = R[(i + 1) % n];
+      if (a[1] <= v !== b[1] <= v) xs.push(a[0] + ((v - a[1]) / (b[1] - a[1])) * (b[0] - a[0]));
+    }
+    xs.sort((p, q) => p - q);
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      if (xs[i + 1] - xs[i] < 4) continue;
+      out.push([[(xs[i] - v) * c, (xs[i] + v) * c], [(xs[i + 1] - v) * c, (xs[i + 1] + v) * c]]);
+    }
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ sizes of things
+// (ROADMAP 11.21) what a line that is no part could be made into: the parts its shape is nearest to,
+// where it is on the thing (S: fusemark.js shapeOf; m: its middle on it, c [x, y, z])
+function guessParts(S, m, F) {
+  const D = F.dims;
+  const cy = m.c[1];
+  const cz = m.c[2];
+  const above = cy > D.h * 0.95;
+  const low = cy < D.h * 0.35;
+  const back = cz < -D.hl * 0.5;
+  const front = cz > D.hl * 0.5;
+  const out = [];
+  const add = (...ts) => {
+    for (const t of ts) if (!out.includes(t)) out.push(t);
+  };
+  if (S.closed) {
+    if (S.nx >= 4 || S.nc >= 8) add('star');
+    if (above) add('balloon');
+    else if (low) add('wheel', 'float');
+    add('armor', 'balloon', 'star');
+  } else if (Math.abs(S.T.signed) > 8) add('smoke', 'spring');
+  else if (S.nc === 2 && S.teeth <= 2) add('bolt', 'jet');
+  else if (S.coils >= 1) add('spring', 'jet');
+  else if (S.teeth >= 2) add(back ? 'jet' : 'armor', 'jet', 'armor', 'spring');
+  else if (S.straight > 0.7) {
+    if (above) add('rotor');
+    add('barrel', 'wing', 'rotor');
+  } else {
+    if (front) add('blade');
+    if (above) add('balloon');
+    add('wing', 'blade', 'magnet', 'jet');
+  }
+  return out;
+}
+
 function vehDims(v) {
   if (v.kind === 'car') {
     const K = KINDS[v.carKind] || KINDS.sedan;
@@ -2090,6 +2778,16 @@ function vehRule(p, v) {
       return fz.balloon >= 1 ? { name: 'בלון', rule: 'המכונית מרחפת ושטה ברוח', nums: `קוטר ${fmt(fz.balloonD || 1.5)} מ׳ · עילוי ×${fmt(fz.balloon)}`, use: `${SP} — למעלה · ${DN} — למטה` } : { name: 'בלון קטן', rule: 'קטן מדי להרים אותה — רק מאט נפילה', nums: `קוטר ${fmt(fz.balloonD || 1)} מ׳ · מרים מ־${fmt(Math.cbrt((v.handling ? v.handling.mass : 1.25) / 0.32))} מ׳` };
     case 'magnet':
       return { name: p.v === 'back' ? 'מגנט מאחור' : 'מגנט', rule: p.v === 'back' ? 'מי שנוסע אחריך נדבק ונגרר' : 'מושך מכוניות מקדימה ומדביק אותן לחרטום', nums: `טווח ${Math.round(fz.magnet ? fz.magnet.reach : 12)} מ׳`, use: `${DN} — לשחרר` };
+    case 'star':
+      return { name: 'כוכב', rule: 'כוח כוכב: שום דבר לא פוגע בה, היא מועכת כל מה שבדרך ומהירה יותר', nums: `${STAR_T} שניות`, use: 'נוסעים על כולם' };
+    case 'bolt':
+      return { name: 'סליל ברקים', rule: 'מי שמתקרב חוטף ברק — אויבים נופלים, ניידות נעצרות', nums: `טווח ${Math.round(fz.zap ? fz.zap.reach : 10)} מ׳` };
+    case 'smoke':
+      return { name: 'מסך עשן', rule: 'כשהמשטרה רודפת — ענן דיו מאחור, והם לא רואים דרכו', nums: '6 שניות עשן, ונטען לבד' };
+    case 'chute':
+      return { name: 'מצנח', rule: 'בנפילה הוא נפתח — יורדים לאט וגולשים', use: 'קופצים מגג, מרמפה או בקפיץ' };
+    case 'float':
+      return { name: 'מצופים', rule: 'נוסעים לתוך הים — והיא צפה ושטה', nums: 'במים עד 14 מ׳/ש' };
     default:
       return { rule: '' };
   }
@@ -2118,6 +2816,12 @@ function heroRule(p, touch) {
       return (n.d || 0.9) >= 1.1 ? { name: 'בלון', rule: 'מרים אתכם — ובנפילה מרחפים', use: `${SP} — למעלה · ${touch ? '▼' : 'C'} — לשחרר` } : { name: 'בלון קטן', rule: 'נופלים לאט כמו נוצה' };
     case 'magnet':
       return { name: 'מגנט ביד', rule: 'כסף, תחמושת ונשקים שנפלו — נמשכים אליכם' };
+    case 'star':
+      return { name: 'כוכב', rule: 'שום דבר לא פוגע בכם, ורצים מהר יותר', nums: `${STAR_T} שניות` };
+    case 'bolt':
+      return { name: 'ברק', rule: 'אויב שמתקרב חוטף ברק ונופל', nums: 'טווח 7 מ׳' };
+    case 'chute':
+      return { name: 'מצנח', rule: 'בנפילה הוא נפתח — נוחתים רך', use: 'קופצים מגובה' };
     default:
       return { rule: '' };
   }

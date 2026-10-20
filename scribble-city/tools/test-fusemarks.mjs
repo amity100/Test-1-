@@ -124,6 +124,71 @@ const S = {
     out.push(pts[pts.length - 1]);
     return hand(out, w * 0.02);
   },
+  // (ROADMAP 11.21: drawn all on it - ink, no part) a star in one go, a heart, a wavy flame
+  star(cx, cy, r) {
+    const pts = [];
+    const a0 = -Math.PI / 2 + R(-0.2, 0.2);
+    for (let k = 0; k <= 5; k++) {
+      const a = a0 + (k * 4 * Math.PI) / 5;
+      const b = a0 + ((k + 1) * 4 * Math.PI) / 5;
+      for (let i = 0; i < (k < 5 ? 6 : 1); i++) {
+        const t = i / 6;
+        pts.push([cx + r * ((1 - t) * Math.cos(a) + t * Math.cos(b)), cy + r * ((1 - t) * Math.sin(a) + t * Math.sin(b))]);
+      }
+    }
+    return hand(pts, r * 0.04);
+  },
+  starOutline(cx, cy, r) {
+    const pts = [];
+    const a0 = -Math.PI / 2 + R(-0.2, 0.2);
+    for (let k = 0; k <= 10; k++) {
+      const a = a0 + (k * Math.PI) / 5;
+      const b = a0 + ((k + 1) * Math.PI) / 5;
+      const ra = k % 2 ? r * 0.42 : r;
+      const rb = k % 2 ? r : r * 0.42;
+      for (let i = 0; i < (k < 10 ? 4 : 1); i++) {
+        const t = i / 4;
+        pts.push([cx + (1 - t) * Math.cos(a) * ra + t * Math.cos(b) * rb, cy + (1 - t) * Math.sin(a) * ra + t * Math.sin(b) * rb]);
+      }
+    }
+    return hand(pts, r * 0.04);
+  },
+  // a bolt of lightning: down, back across, down again
+  bolt(x, y, s) {
+    const c = [[x, y], [x - 0.32 * s, y + 0.52 * s], [x + 0.12 * s, y + 0.46 * s], [x - 0.22 * s, y + s]].map(([a, b]) => [a + R(-0.03, 0.03) * s, b + R(-0.03, 0.03) * s]);
+    const pts = [];
+    for (let i = 0; i < 3; i++) for (let k = 0; k < 8; k++) pts.push([c[i][0] + ((c[i + 1][0] - c[i][0]) * k) / 8, c[i][1] + ((c[i + 1][1] - c[i][1]) * k) / 8]);
+    pts.push(c[3]);
+    return hand(pts, s * 0.012);
+  },
+  spiral(cx, cy, r, turns = 2.3) {
+    const pts = [];
+    const n = Math.round(turns * 24);
+    const a0 = rnd() * 6;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const a = a0 + t * turns * 2 * Math.PI;
+      pts.push([cx + Math.cos(a) * r * (0.15 + 0.85 * t), cy + Math.sin(a) * r * (0.15 + 0.85 * t) * R(0.95, 1.05)]);
+    }
+    return uneven(hand(pts, r * 0.05));
+  },
+  heart(cx, cy, r) {
+    const pts = [];
+    for (let i = 0; i <= 40; i++) {
+      const t = (i / 40) * 2 * Math.PI;
+      pts.push([cx + r * 0.06 * 16 * Math.sin(t) ** 3, cy - r * 0.06 * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))]);
+    }
+    return hand(pts, r * 0.04);
+  },
+  wave(x0, y0, x1, y1, waves = 3, amp = 8) {
+    const pts = [];
+    const n = waves * 10;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      pts.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t + Math.sin(t * waves * 2 * Math.PI) * amp]);
+    }
+    return hand(pts, amp * 0.08);
+  },
   V(x0, y0, xm, ym, x1, y1) {
     const pts = [];
     for (let k = 0; k <= 8; k++) pts.push([x0 + (xm - x0) * k / 8, y0 + (ym - y0) * k / 8]);
@@ -180,6 +245,22 @@ const CASES = {
   'armor:plate': () => S.hatch(B.x0 + w * 0.2, B.y0 + h * 0.3, w * 0.6, h * 0.5, Math.round(R(5, 8))),
   'armor:plate(tall)': () => S.hatch(B.x0 + w * 0.35, B.y0 + h * 0.2, w * 0.3, h * 0.6, Math.round(R(5, 8))),
   'magnet:back': () => S.U(cx - w * 0.15, B.y1 - h * 0.25, w * 0.3, h * 0.35),
+  // (ROADMAP 11.21) five more, drawn out of it
+  'star:top': () => S.star(cx + R(-20, 20), B.y0 - h * 0.35, w * 0.17),
+  'star:top(outline)': () => S.starOutline(cx + R(-20, 20), B.y0 - h * 0.35, w * 0.17),
+  'bolt:coil': () => S.bolt(cx + R(-10, 10), B.y0 - h * 0.55, h * 0.62),
+  'smoke:back': () => S.spiral(cx + R(-15, 15), B.y1 + h * 0.28, w * 0.16),
+  'chute:top': () => S.arc(cx - w * 0.38, B.y0 - h * 0.22, cx + w * 0.38, B.y0 - h * 0.22 + R(-6, 6), 0.32),
+  // (ROADMAP 11.21) all on it: ink, no part - but a U on it is still a magnet, a circle low on it a wheel
+  'magnet:on': () => S.U(cx - w * 0.12, B.y0 + h * 0.3, w * 0.24, h * 0.28),
+  'ink:smile': () => S.arc(B.x0 + w * 0.3, B.y0 + h * 0.74, B.x1 - w * 0.3, B.y0 + h * 0.74, -0.3),
+  'ink:stripe': () => S.line(cx + R(-12, 12), B.y0 + h * 0.12, cx + R(-12, 12), B.y0 + h * 0.6),
+  'ink:stripe(across)': () => S.line(B.x0 + w * 0.15, B.y0 + h * 0.4 + R(-8, 8), B.x1 - w * 0.15, B.y0 + h * 0.4 + R(-8, 8)),
+  'ink:flame': () => S.wave(B.x0 + w * 0.15, B.y0 + h * 0.8, B.x1 - w * 0.2, B.y0 + h * 0.72, 3, h * 0.05),
+  'ink:zigzag': () => S.zig(B.x0 + w * 0.2, B.y0 + h * 0.5, B.x1 - w * 0.2, B.y0 + h * 0.55, 4, h * 0.05),
+  'ink:star': () => S.star(cx + R(-15, 15), B.y0 + h * 0.4, w * 0.22),
+  'ink:heart': () => S.heart(cx + R(-15, 15), B.y0 + h * 0.4, w * 0.2),
+  'ink:spiral': () => S.coil(cx - w * 0.2, B.y0 + h * 0.4, cx + w * 0.2, B.y0 + h * 0.45, 3, w * 0.08),
 };
 const want = (k) => k.replace(/\(.*\)/, '');
 const tally = {};
@@ -196,7 +277,8 @@ for (const [k, mk] of Object.entries(CASES)) {
       console.log(k, key, JSON.stringify({ closed: s.closed, bumps: s.bumps, teeth: s.teeth, coils: s.coils, nx: s.nx, straight: +s.straight.toFixed(2), aspect: +s.aspect.toFixed(2), nc: s.nc, fit: { err: +s.fit.err.toFixed(2), cover: +s.fit.cover.toFixed(2) }, T: +s.T.signed.toFixed(2), Tabs: +s.T.abs.toFixed(2), depth: s.depth | 0, gap: s.gap | 0, armA: +s.armA.toFixed(2), armB: +s.armB.toFixed(2), fill: +s.fill.toFixed(2) }));
     }
   }
-  const ok = Object.entries(got).filter(([g]) => g.startsWith(want(k).split(':')[0]) && (want(k).endsWith(':side') ? true : g === want(k))).reduce((a, [, n]) => a + n, 0);
+  const W = k.startsWith('ink:') ? 'null' : k === 'magnet:on' ? 'magnet:back' : want(k);
+  const ok = Object.entries(got).filter(([g]) => g.startsWith(W.split(':')[0]) && (W.endsWith(':side') ? true : g === W)).reduce((a, [, n]) => a + n, 0);
   tally[k] = ok / N;
   console.log((ok / N * 100).toFixed(0).padStart(4) + '%  ' + k.padEnd(18) + JSON.stringify(got));
 }

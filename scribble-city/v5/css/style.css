@@ -1260,6 +1260,10 @@ body.fd-open #crosshair { opacity: 0; }
 .fd-fuse b { font-family: var(--font-hand); font-size: 18px; line-height: 1.1; margin-bottom: 2px; }
 .fd-fuse div { display: flex; align-items: center; gap: 7px; font: 600 13px var(--font-ui); white-space: nowrap; }
 .fd-fuse svg { flex: none; width: 20px; height: 20px; fill: none; stroke: #2a6cff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* (ROADMAP 11.21) fifteen parts: two columns; the rule of ink under them */
+.fd-fuse { grid-template-columns: auto auto; column-gap: 14px; }
+.fd-fuse b, .fd-fuse em { grid-column: 1 / -1; }
+.fd-fuse em { font: 600 12px var(--font-ui); font-style: normal; color: #a33b5c; margin-top: 3px; white-space: normal; max-width: 330px; }
 /* (ROADMAP 11.20) the part just drawn onto something: what it is, what it does there, its numbers */
 .fz-tag { position: fixed; left: 0; top: 0; z-index: 60; max-width: 280px; display: flex; flex-direction: column; gap: 2px; padding: 7px 11px 8px; background: rgba(255, 252, 244, 0.95); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transform: translateY(6px) scale(0.96); transition: opacity 0.18s, transform 0.18s; direction: rtl; }
 .fz-tag.on { opacity: 1; transform: none; }
@@ -1276,6 +1280,15 @@ body.fd-open #crosshair { opacity: 0; }
 .fz-tag .fz-alt button { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1.8px solid var(--ink); border-radius: 9px 7px 10px 6px; background: #fff; color: var(--ink); font: 700 12.5px var(--font-ui); cursor: pointer; touch-action: manipulation; }
 .fz-tag .fz-alt button i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink); }
 .fz-tag .fz-alt button:active { transform: translateY(1px); background: #fff6c8; }
+.fz-tag .fz-alt button.x { background: #fff3f1; }
+.fz-tag .fz-alt button.ink { background: #eef6ff; }
+/* (ROADMAP 11.21) the time to draw: the city slowed right down - a soft ink edge round the page */
+body::after { content: ''; position: fixed; inset: 0; z-index: 15; pointer-events: none; opacity: 0; transition: opacity 0.25s; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 56%, rgba(38, 30, 74, 0.3) 100%); }
+body.fz-slow::after { opacity: 1; }
+/* (the pen in a car: no kinds to pick, nothing to clear; the button back to driving runs down after
+   the last line) */
+body.fd-car .fd-cats, body.fd-car #fd-clear, body.fd-car #fd-album { display: none; }
+body.fd-car #fd-make { background: linear-gradient(to left, #ffd23f calc(var(--left, 1) * 100%), #efe6d2 0); }
 /* (ROADMAP 11.10) a ride of parts: each line's name on it (a tap: what else it could be), the card by
    the drawing - its name, the model it will be, what it does, its numbers */
 .fd-parts { position: absolute; inset: 0; pointer-events: none; transition: opacity 0.15s; }
@@ -1414,6 +1427,8 @@ body.touch .fd-fuse { top: calc(max(6px, env(safe-area-inset-top)) + 96px); righ
 body.touch .fd-fuse b { font-size: 14px; }
 body.touch .fd-fuse div { font-size: 10.5px; gap: 5px; }
 body.touch .fd-fuse svg { width: 15px; height: 15px; }
+body.touch .fd-fuse { column-gap: 9px; }
+body.touch .fd-fuse em { font-size: 10px; max-width: 250px; }
 body.touch .fz-tag { max-width: 220px; padding: 5px 8px 6px; }
 body.touch .fz-tag .fz-alt button { padding: 5px 10px; }
 body.touch .fz-tag b { font-size: 17px; }
