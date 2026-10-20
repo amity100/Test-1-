@@ -2822,6 +2822,16 @@ export class Fuse {
     const Hh = window.innerHeight;
     const w = el.offsetWidth || 220;
     const h = el.offsetHeight || 80;
+    // (ROADMAP 11.22: never over the pen's buttons - a column at the side on a phone, a row below
+    // on a computer)
+    let xMax = W - w - 8;
+    let yMax = Hh - h - 90;
+    const tools = this.game.freedraw && this.game.freedraw.isOpen ? document.getElementById('fd-tools') : null;
+    if (tools) {
+      const r = tools.getBoundingClientRect();
+      if (r.width && r.height < r.width * 0.6) yMax = Math.min(yMax, r.top - h - 8);
+      else if (r.width && r.left > W / 2) xMax = Math.min(xMax, r.left - w - 8);
+    }
     let x = W / 2 - w / 2;
     let y = Hh * 0.3;
     const ref = t.ref;
@@ -2836,12 +2846,12 @@ export class Fuse {
         const r = Math.max(D.hw || 0.4, D.hl || 0.4) * 1.1 + 0.3;
         const e = this.screen(pos.x + _cf.x * r, yc + _cf.y * r, pos.z + _cf.z * r);
         const half = Math.abs(e.x - q.x);
-        x = q.x + half + 10 + w <= W - 8 ? q.x + half + 10 : q.x - half - 10 - w;
+        x = q.x + half + 10 <= xMax ? q.x + half + 10 : q.x - half - 10 - w;
         y = q.y - h * 0.6;
       }
     }
-    el.style.left = `${clamp(x, 8, W - w - 8)}px`;
-    el.style.top = `${clamp(y, 56, Hh - h - 90)}px`;
+    el.style.left = `${clamp(x, 8, Math.max(8, xMax))}px`;
+    el.style.top = `${clamp(y, 56, Math.max(56, yMax))}px`;
   }
 
   say(text, kind = 'info') {
