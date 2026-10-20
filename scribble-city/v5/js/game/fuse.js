@@ -850,11 +850,10 @@ export class Fuse {
     const t = caps[caps.length - 1].t;
     const v = t.ref;
     if (v !== g.player.inVehicle || v.dead) return false;
-    // (drawn over the part just made, a moment after it: more of the same drawing - its other half,
-    // the lines in it)
+    // (drawn on from the lines of what was just made, a moment after it: more of the same drawing -
+    // its other edge, the rest of its outline)
     const L = this.last;
-    const box = capsBox(caps);
-    if (L && L.caps && L.ref === v && performance.now() - L.rt < MERGE_MS && within(box, L.box) && this.undo('keep')) caps = L.caps.concat(caps);
+    if (L && L.caps && L.ref === v && performance.now() - L.rt < MERGE_MS && touching(caps, L.caps, 16) && this.undo('keep')) caps = L.caps.concat(caps);
     const r = readDrawing(caps, this.drawCtx(v));
     if (r && r.kind === 'part') return this.makeDrawn(t, caps, r, inkI);
     // (on its paint: ink on it, as drawn - and what it could be made into instead)
@@ -2953,8 +2952,7 @@ function drawnColours(ink, v, dflt) {
   return { body, line: lum(body) < 0.32 ? EDGE_PAPER : ink && !ink.pencil ? ink.c : [0.16, 0.16, 0.22] };
 }
 
-// (ROADMAP 11.22) a drawing's box on the screen, all its lines; and is box a mostly within box b
-// (b grown a quarter of its size all round)
+// (ROADMAP 11.22) a drawing's box on the screen, all its lines
 function capsBox(caps) {
   let x0 = Infinity;
   let y0 = Infinity;
@@ -2969,12 +2967,15 @@ function capsBox(caps) {
   return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
 }
 
-function within(a, b) {
-  if (!a || !b) return false;
-  const m = Math.max(b.w, b.h) * 0.25 + 8;
-  const w = Math.max(0, Math.min(a.x1, b.x1 + m) - Math.max(a.x0, b.x0 - m));
-  const h = Math.max(0, Math.min(a.y1, b.y1 + m) - Math.max(a.y0, b.y0 - m));
-  return w * h >= Math.max(1, a.w) * Math.max(1, a.h) * 0.45;
+// (does a drawing touch another on the screen - an end of a line of it within px of a line of the
+// other)
+function touching(A, B, px) {
+  for (const a of A) {
+    for (const q of [a.pts[0], a.pts[a.pts.length - 1]]) {
+      for (const b of B) for (const r of b.pts) if (Math.hypot(q.s[0] - r.s[0], q.s[1] - r.s[1]) <= px) return true;
+    }
+  }
+  return false;
 }
 
 // ------------------------------------------------------------------ sizes of things
