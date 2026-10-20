@@ -54,6 +54,8 @@ export class BrokenBridge {
     }
     this.group = null;
     this.gpsOn = false;
+    // by the bridge with nothing on the car to get it over: the part to try ({ v, type }) - null
+    this.hint = null;
     this.build();
   }
 
@@ -196,9 +198,8 @@ export class BrokenBridge {
     const p = g.player;
     const v = p.inVehicle;
     const pos = v ? v.pos : p.pos;
-    const S = g.fuse && g.fuse.sheets;
     if (this.state === 'idle' || this.state === 'won') {
-      if (S && S.hint) S.hint = null;
+      this.hint = null;
       // (the way to it, once)
       if (this.state === 'idle' && !this.gpsOn && g.gps && g.time > 1) {
         this.gpsOn = true;
@@ -224,7 +225,7 @@ export class BrokenBridge {
     if (!v) {
       // (out of the car: swimming in the sea is the end of this try)
       if (p.mode === 'swim' && p.pos.x > 100) this.fail();
-      else if (S) S.hint = null;
+      else this.hint = null;
       return;
     }
     if (Math.hypot(pos.x - 120, pos.z - Z) > 460) {
@@ -246,9 +247,9 @@ export class BrokenBridge {
       this.gpsIsle = true;
       g.gps.set((ISLE.x0 + ISLE.x1) / 2, Z, 'האי');
     }
-    // (by the bridge with nothing on the car that would get it over: what to draw, dashed on it)
+    // (by the bridge with nothing on the car that would get it over: what to try)
     const near = pos.x > 36 && pos.x < EDGE + 2 && Math.abs(pos.z - Z) < 40;
-    if (S) S.hint = near && !canCross(v) ? { v, type: this.tries % 2 ? 'float' : 'wing' } : null;
+    this.hint = near && !canCross(v) ? { v, type: this.tries % 2 ? 'float' : 'wing' } : null;
     if (near && !this.toldPen && !this.toldOnce && pos.x > 48) {
       this.toldPen = true;
       this.toldOnce = true;
@@ -319,8 +320,7 @@ export class BrokenBridge {
     this.downT = 2.4;
     this.tries++;
     g.hud.big('נפלתם למים!', 1700);
-    const S = g.fuse && g.fuse.sheets;
-    if (S) S.hint = null;
+    this.hint = null;
   }
 
   retry() {
@@ -342,7 +342,7 @@ export class BrokenBridge {
     this.state = 'on';
     this.used.clear();
     this.gpsIsle = false;
-    g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר — המספר ליד העט אומר כמה', 'info', 4.5);
+    g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר', 'info', 4.5);
   }
 
   win(v) {
@@ -362,8 +362,7 @@ export class BrokenBridge {
     if (g.money) g.money.earn(how === 'jump' ? 200 : 400, 'הגשר השבור');
     if (g.gps) g.gps.clear();
     this.tellAt = g.time + 3;
-    const S = g.fuse && g.fuse.sheets;
-    if (S) S.hint = null;
+    this.hint = null;
     g.updateGoals();
   }
 
@@ -371,8 +370,7 @@ export class BrokenBridge {
   quit() {
     const g = this.game;
     this.state = 'idle';
-    const S = g.fuse && g.fuse.sheets;
-    if (S) S.hint = null;
+    this.hint = null;
     if (g.gps) g.gps.clear();
     g.updateGoals();
   }
