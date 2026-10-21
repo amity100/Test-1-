@@ -1532,9 +1532,9 @@ export class Fuse {
       pull = 0;
       lifting = lf >= 1;
       const H = v.handling || {};
-      let a = mv.y > 0 ? (H.power || 14) * 0.55 * mv.y : mv.y < 0 ? 7 * mv.y : -0.6;
+      // (S its air brakes: down onto a short island from full speed)
+      let a = mv.y > 0 ? (H.power || 14) * 0.55 * mv.y : mv.y < 0 ? 10 * mv.y : -0.6;
       if (up && lf >= 1) a -= 2;
-      if (down) a += 3;
       const cap = (H.top || 28) * (fz.thrust && boost ? 1.6 : 1.15);
       const nsp = clamp(sp + a * dt, 0, Math.max(cap, sp - 3 * dt));
       const hx = Math.sin(v.yaw);
