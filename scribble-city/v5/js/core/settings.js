@@ -43,6 +43,9 @@ export const DEFAULTS = {
   // do, protection), then drawn, and which of its things it is read (game/partpen.js, ROADMAP 11.25);
   // 'old', as in 11.22 - what is drawn is read as what it looks like, where it is
   carPen: 'parts',
+  // (ROADMAP 11.26, the lab) a test of the part pen's reading: nothing said while it is drawn, nothing
+  // asked, nothing put right - what it was read as goes on
+  penTest: false,
 };
 
 export class Settings {

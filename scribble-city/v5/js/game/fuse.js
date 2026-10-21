@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
-import { readDrawing, buildDrawn, floatK, wingGlide, rotorLift } from './fusedraw.js';
+import { readDrawing, buildDrawn, floatK, wingGlide, rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
 import { PartPen } from './partpen.js';
 import { boxOf, along, pathLen } from './signshape.js';
 import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, paintOf } from './fusemodel.js';
@@ -1144,7 +1144,8 @@ export class Fuse {
         fz.airCtl = Math.max(fz.airCtl || 0, 0.45);
       } else if (p.type === 'float') {
         // (ROADMAP 11.23: long and thick enough for its weight, it holds it up - less, it sinks slower)
-        fz.float = { len: clamp(n.len || 3.6, 2, 6), k: p.shape ? floatK(n, H.mass) : 1.2 };
+        // (ROADMAP 11.25: the part pen's propeller rides floats as long as the car - they hold it)
+        fz.float = { len: clamp(n.len || 3.6, 2, 6), k: p.shape && p.v !== 'prop' ? floatK(n, H.mass) : 1.2 };
       } else if (p.type === 'spike') {
         // (ROADMAP 11.25) spikes all round: who is beside it is cut, who rams it from behind is
         // wrecked, a police car shoving it is wrecked (game/chase.js contact)
@@ -1178,9 +1179,15 @@ export class Fuse {
       v.stomp = { r: 9, dmg: 70 };
       fz.combos.push('monster');
     }
+    // (ROADMAP 11.26) wings: fast enough for their size, it flies on them - not if it can never go
+    // that fast
+    if (has.wing && has.wing.v !== 'spoiler') {
+      fz.takeoff = takeoffOf(has.wing.n, H.mass);
+      fz.wingFly = fz.takeoff <= H.top * WING_TOP;
+    }
     v.handling = H;
-    v.spaceIsMine = B.spaceIsMine || !!(fz.jump || fz.rotor || fz.balloon || fz.vtol);
-    v.fuseUp = !!(fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || fz.vtol);
+    v.spaceIsMine = B.spaceIsMine || !!(fz.jump || fz.rotor || fz.balloon || fz.vtol || fz.wingFly);
+    v.fuseUp = !!(fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || fz.vtol || fz.wingFly);
     v.fz = R.parts.length ? fz : null;
     // (the touch buttons: ▲ to jump, to go up)
     if (v.driver === this.game.player) this.game.upDownKey = null;
@@ -1211,6 +1218,13 @@ export class Fuse {
           o.m.userData.lineC = line;
           root.add(o.m);
           R.models.push({ p, m: o.m, role: o.role, side: o.side });
+        }
+        // (ROADMAP 11.26: the part pen's propeller, as drawn - on the floats it makes a boat of)
+        if (p.type === 'float' && p.v === 'prop') {
+          const m = floatModel(clamp(D.hl * 2 * 0.86, 2, 6), D.hw, col);
+          m.position.set(0, 0.2, 0);
+          root.add(m);
+          R.models.push({ p, m, role: 'float' });
         }
         continue;
       }
@@ -1412,6 +1426,16 @@ export class Fuse {
       } else if (up && (fz.rotor >= 1 || fz.balloon >= 1 || (fz.vtol && fz.vtol.fuel > 0.3))) {
         v.air = true;
         v.vy = 2.5;
+      } else if (up && fz.wingFly && (v.speed || 0) >= fz.takeoff) {
+        // (ROADMAP 11.26) fast enough on its wings: ▲ (Space) and it lifts off
+        v.air = true;
+        v.vy = 3;
+        this.game.audio.play('whoosh', 0.5);
+      }
+      // (going fast enough to, the first time: how)
+      if (fz.wingFly && !fz.toldOff && (v.speed || 0) >= fz.takeoff && v.driver === this.game.player) {
+        fz.toldOff = true;
+        if (!v.air) this.say(this.game.touch ? 'מהירות המראה — ▲ להמריא' : 'מהירות המראה — רווח להמריא', 'good');
       }
     }
     if (fz.vtol && !v.air) fz.vtol.fuel = Math.min(fz.vtol.max, fz.vtol.fuel + dt * 0.8);
@@ -1460,8 +1484,9 @@ export class Fuse {
       lifting = true;
       v.fzThrust = 1;
     }
-    // wings and a jet: it flies - Shift held keeps it up
-    if (fz.plane && boost) {
+    // wings and a jet: it flies - Shift held keeps it up (ROADMAP 11.26: wings that lift it off fly
+    // by themselves)
+    if (fz.plane && boost && !fz.wingFly) {
       v.vy = damp(v.vy, 1.2 + mv.y * 2.5, 1.8, dt);
       pull = 0;
       lifting = true;
@@ -1482,9 +1507,40 @@ export class Fuse {
       v.vx += Math.sin(v.yaw) * fz.thrust * dt;
       v.vz += Math.cos(v.yaw) * fz.thrust * dt;
     }
+    // (ROADMAP 11.26) on its wings: as fast as it lifts off at, it holds its height - ▲ climbs, ▼
+    // dives; its engine pushes it on (W), S slows it; slower than that it sinks, gliding down. It goes
+    // where it points, banking round
+    let winged = false;
+    if (fz.wingFly && !lifting && !v.fzChute && input) {
+      const sp = Math.hypot(v.vx, v.vz);
+      const lf = Math.min(2, (sp / fz.takeoff) ** 2);
+      winged = true;
+      const want = v.pos.y > ceil ? -2 : up ? (lf >= 1 ? 4.5 : -1.5) : down ? -7 : lf >= 1 ? 0 : -7 * (1 - lf);
+      v.vy = damp(v.vy, want, 2.4, dt);
+      pull = 0;
+      lifting = lf >= 1;
+      const H = v.handling || {};
+      let a = mv.y > 0 ? (H.power || 14) * 0.55 * mv.y : mv.y < 0 ? 7 * mv.y : -0.6;
+      if (up && lf >= 1) a -= 2;
+      if (down) a += 3;
+      const cap = (H.top || 28) * (fz.thrust && boost ? 1.6 : 1.15);
+      const nsp = clamp(sp + a * dt, 0, Math.max(cap, sp - 3 * dt));
+      const hx = Math.sin(v.yaw);
+      const hz = Math.cos(v.yaw);
+      const kx = sp > 0.1 ? v.vx / sp : hx;
+      const kz = sp > 0.1 ? v.vz / sp : hz;
+      const t = 1 - Math.exp(-3 * dt);
+      const dx = kx + (hx - kx) * t;
+      const dz = kz + (hz - kz) * t;
+      const dl = Math.hypot(dx, dz) || 1;
+      v.vx = (dx / dl) * nsp;
+      v.vz = (dz / dl) * nsp;
+      v.yawRate = damp(v.yawRate, -mv.x * 1.3, 3, dt);
+    }
+    v.fzWinged = winged;
     // steering through the air: a rotor, a balloon, wings
     const ctl = fz.airCtl || 0;
-    if (ctl && input) {
+    if (ctl && input && !winged) {
       v.yawRate = damp(v.yawRate, -mv.x * 1.5 * ctl, 3, dt);
       const A = lifting ? (fz.rotor >= 1 ? 9 : fz.balloon >= 1 ? 3.5 : 4) : 2.5;
       v.vx += Math.sin(v.yaw) * mv.y * A * ctl * dt;
@@ -2505,6 +2561,7 @@ export class Fuse {
     F.cool -= dt;
     if (!(g.input.fire || g.input.firePressed) || F.cool > 0) return;
     F.cool = 0.06;
+    v.fzFlameT = g.time;
     const fx = Math.sin(v.yaw);
     const fz = Math.cos(v.yaw);
     const nose = (v.halfLen || 2.3) + 0.9;
@@ -2619,13 +2676,15 @@ export class Fuse {
           _v.copy(o.m.position).applyMatrix4(R.root.matrixWorld);
           for (const c of v.fzStuck) fr.lineXYZ(_v.x, _v.y + 0.3, _v.z, c.pos.x, (c.pos.y || 0) + 0.8, c.pos.z, [0.85, 0.15, 0.2], 2, 7200, 0.6, 0.04, 0);
         } else if (o.role === 'jet' && ud.dflame) {
-          // (ROADMAP 11.22, drawn ones: the flame as drawn, roaring out from its foot as it pushes)
-          const on = v.boosting || (v.fzThrust && v.air) ? 1 : 0;
-          v.fzThrust = 0;
+          // (ROADMAP 11.22, drawn ones: the flame as drawn, roaring out from its foot as it pushes - one
+          // out of its nose as it burns, ROADMAP 11.26)
+          const on = (o.p.v === 'front' ? v.fzFlameT && t - v.fzFlameT < 0.15 : v.boosting || (v.fzThrust && v.air)) ? 1 : 0;
+          if (o.p.v !== 'front') v.fzThrust = 0;
           ud.dflame.scale.setScalar(damp(ud.dflame.scale.x, on ? 1.14 + Math.sin(t * 40) * 0.1 : 1, 18, this.fdt));
         } else if (o.role === 'dspring' && ud.dcoil) {
           const k = v.fzSpringT && t - v.fzSpringT < 0.35 ? 1 - (t - v.fzSpringT) / 0.35 : 0;
-          ud.dcoil.scale.y = 1 + k * 0.9;
+          // (ROADMAP 11.26: one drawn longer than the car is high, squeezed in under it till it springs)
+          ud.dcoil.scale.y = ud.rest ? ud.rest + (1 - ud.rest) * k : 1 + k * 0.9;
         } else if (o.role === 'dballoon') {
           o.m.position.y = ud.base.y + Math.sin(t * 1.3) * 0.1;
           o.m.position.x = ud.base.x + Math.sin(t * 0.9) * 0.08;
@@ -3154,7 +3213,9 @@ function vehRule(p, v) {
     }
     case 'wing':
       if (p.v === 'spoiler') return { name: 'ספוילר', rule: 'אחיזה בפניות במהירות', nums: `אחיזה ${fmt(H.grip || 0)}` };
-      return { name: 'כנפיים', rule: `נופלת לאט פי ${fmt(1 / Math.max(0.1, 1 - v.glide))} וגולשת אחרי קפיצה`, nums: `מוטה ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} מ׳`, use: 'קופצים מרמפה, מגג או בקפיץ' };
+      // (ROADMAP 11.26: big enough for its weight, they lift it off - else they only slow its fall)
+      if (fz.wingFly) return { name: 'כנפיים', rule: `ממריאה ב־${Math.round(fz.takeoff * 3.6)} קמ״ש: ${SP} עולה, ${DN} יורדת`, nums: `מוטה ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} מ׳`, use: `נוסעים מהר ולוחצים ${SP}` };
+      return { name: 'כנפיים', rule: `קטנות מדי להמריא — רק גולשת אחרי קפיצה (פי ${fmt(1 / Math.max(0.1, 1 - v.glide))} לאט)`, nums: `מוטה ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} מ׳`, use: 'ציירו כנפיים גדולות יותר כדי לטוס' };
     case 'rotor':
       return fz.rotor >= 1
         ? { name: 'רוטור', rule: 'טסה מעל הפקקים והגגות', nums: `קוטר ${fmt(fz.rotorSpan || 2)} מ׳ · הרמה ×${fmt(fz.rotor)}`, use: `${SP} — למעלה · ${DN} — למטה` }

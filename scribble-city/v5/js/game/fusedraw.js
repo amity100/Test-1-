@@ -374,6 +374,15 @@ export function wingGlide(n) {
   return clamp(0.32 + area * 0.16, 0.35, 0.86);
 }
 
+// (ROADMAP 11.26) wings lift it off: how fast it must go for them to hold it up (m/s) - two of them,
+// span by chord each; the bigger for its weight, the slower
+export function takeoffOf(n, mass) {
+  const area = 2 * clamp(n.span || 1, 0.2, 4) * clamp(n.chord || 0.5, 0.2, 2);
+  return Math.sqrt(((mass || 1.25) * 610) / area);
+}
+// (it lifts off them only if it can go that fast: this much of its top speed at most)
+export const WING_TOP = 0.92;
+
 // a rotor: how much of the car it lifts (1: all of it) - as wide as the car, about, it flies
 export function rotorLift(n, mass) {
   const span = clamp(n.span || 2, 0.6, 9);
@@ -685,6 +694,7 @@ function middleOf(sh) {
 // ctx: { D, K, spots (its wheels), wheelR (their radius now), lift }, body: its colour (0-1)
 export function buildDrawn(p, ctx, body) {
   const sh = p.shape;
+  if (sh.look) return buildLook(p, body);
   const M = itemMats();
   const out = [];
   const col = linC(body[0], body[1], body[2]);
@@ -833,6 +843,92 @@ export function buildDrawn(p, ctx, body) {
     const top = toXYZ(sh.pivot, sh.ax, sh.c);
     const Kt = new Kit();
     rod(Kt, [sh.mast, [(sh.mast[0] + top[0]) / 2, (sh.mast[1] + top[1]) / 2, (sh.mast[2] + top[2]) / 2], top], 0.04);
+    const m = new THREE.Group();
+    m.add(Kt.build({ seed: 0.6 }));
+    out.push({ m, role: 'drawn', side: 1 });
+  }
+  return out;
+}
+
+// (ROADMAP 11.26) a thing of the part pen, as drawn (game/itemlook.js lookOf): each of its solids
+// moulded on its plane, its rods, its lines inked on both faces - round its pivot; a pair for one on
+// both sides. Turned, spun, folded, squeezed as its role says (game/fuse.js draw): [{ m, role, side }]
+export function buildLook(p, body) {
+  const sh = p.shape;
+  const M = itemMats();
+  const col = linC(body[0], body[1], body[2]);
+  const mat = sh.metal ? M.metal : M.paint;
+  const { n, e1, e2 } = AX[sh.ax];
+  const c = sh.c;
+  const pv = sh.pivot;
+  const at3 = (u, w, k) => [n[0] * k + e1[0] * u + e2[0] * w - pv[0], n[1] * k + e1[1] * u + e2[1] * w - pv[1], n[2] * k + e1[2] * u + e2[2] * w - pv[2]];
+  const out = [];
+  const makeOne = (mirror) => {
+    const Kt = new Kit();
+    let lines = [];
+    for (const s of sh.solids) {
+      const cn = cornerness(s.ol);
+      const B = inflateShape(s.ol, s.W, { n: 2.2 + 1.8 * cn, R: (s.W / 2) * (1 - 0.35 * cn), res: 44 });
+      if (!B) continue;
+      const m4 = new THREE.Matrix4().makeBasis(new THREE.Vector3(...n), new THREE.Vector3(...e2), new THREE.Vector3(...e1));
+      m4.setPosition(n[0] * c - pv[0], n[1] * c - pv[1], n[2] * c - pv[2]);
+      B.geo.applyMatrix4(m4);
+      Kt.add(mat, B.geo, col);
+      for (const L of s.ink) for (const sgn of [1, -1]) lines.push(L.map(([u, w]) => at3(u, w, c + sgn * ((B.half(u, w) || 0) + 0.012))));
+    }
+    for (const r of sh.rods) {
+      const L3 = r.L.map(([u, w]) => at3(u, w, c));
+      if (L3.length < 2) continue;
+      const curve = new THREE.CatmullRomCurve3(L3.map((q) => new THREE.Vector3(q[0], q[1], q[2])));
+      Kt.add(mat, new THREE.TubeGeometry(curve, Math.max(8, L3.length * 2), r.r, 6, false), col);
+    }
+    if (mirror) {
+      for (const list of Kt.parts.values()) for (const it of list) flipX(it.g);
+      lines = lines.map((L) => L.map((q) => [-q[0], q[1], q[2]]));
+    }
+    const inner = new THREE.Group();
+    inner.add(Kt.build({ seed: 0.47 }));
+    const m = new THREE.Group();
+    m.position.set(mirror ? -pv[0] : pv[0], pv[1], pv[2]);
+    m.add(inner);
+    const ud = m.userData;
+    ud.lineNode = inner;
+    ud.lines = lines;
+    let role = 'drawn';
+    if (sh.role === 'barrel') {
+      // (a gun on its turn: its muzzle at the end of it drawn to the nose)
+      const mz = sh.muzzle || [pv[0], pv[1], pv[2] + 1];
+      Object.assign(ud, { pivot: inner, muzzle: new THREE.Vector3(mz[0] - pv[0], mz[1] - pv[1], mz[2] - pv[2]), pivotPt: new THREE.Vector3(0, 0, 0), r: clamp(p.n.r || 0.08, 0.04, 0.24), yaw0: 0 });
+      role = 'barrel';
+    } else if (sh.role === 'rotor' || sh.role === 'star' || sh.role === 'prop') {
+      ud.spin = inner;
+      role = sh.role;
+    } else if (sh.role === 'jet') {
+      ud.dflame = inner;
+      role = 'jet';
+    } else if (sh.role === 'dspring') {
+      ud.dcoil = inner;
+      ud.rest = sh.rest || 1;
+      inner.scale.y = ud.rest;
+      role = 'dspring';
+    } else if (sh.role === 'dballoon') {
+      ud.base = m.position.clone();
+      ud.stringTo = sh.string ? new THREE.Vector3(...sh.string) : null;
+      role = 'dballoon';
+    } else if (sh.role === 'dchute') {
+      ud.canopy = inner;
+      role = 'dchute';
+    }
+    out.push({ m, role, side: mirror ? -1 : 1 });
+  };
+  makeOne(false);
+  if (sh.mirror) makeOne(true);
+  // (a rotor's mast: from the roof up to it)
+  if (sh.mast) {
+    const Kt = new Kit();
+    const a = sh.mast;
+    const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(a[0], a[1], a[2]), new THREE.Vector3((a[0] + pv[0]) / 2, (a[1] + pv[1]) / 2, (a[2] + pv[2]) / 2), new THREE.Vector3(pv[0], pv[1], pv[2])]);
+    Kt.add(M.metal, new THREE.TubeGeometry(curve, 6, 0.045, 6, false), col);
     const m = new THREE.Group();
     m.add(Kt.build({ seed: 0.6 }));
     out.push({ m, role: 'drawn', side: 1 });

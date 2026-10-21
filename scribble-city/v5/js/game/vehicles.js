@@ -894,9 +894,10 @@ class Vehicle {
       const pull = this.fz && this.game.fuse ? this.game.fuse.air(this, dt, input) : 1;
       // (wings drawn on it, game/drawncar.js: it glides, coming down slower)
       this.vy -= 20 * dt * pull * (this.glide ? 1 - this.glide * (this.vy < 0 ? 1 : 0.4) : 1);
-      if (this.glide && this.vy < -6 * (1 - this.glide)) this.vy = damp(this.vy, -6 * (1 - this.glide), 3, dt);
+      // (ROADMAP 11.26: flying on its wings, it dives as fast as it is put down - and its nose with it)
+      if (this.glide && !this.fzWinged && this.vy < -6 * (1 - this.glide)) this.vy = damp(this.vy, -6 * (1 - this.glide), 3, dt);
       this.pos.y += this.vy * dt;
-      this.bodyPitch = damp(this.bodyPitch, 0.12, 1.2, dt);
+      this.bodyPitch = damp(this.bodyPitch, this.fzWinged ? clamp(-this.vy * 0.035, -0.28, 0.28) : 0.12, 1.2, dt);
       if (this.pos.y <= g) {
         const hit = -this.vy;
         this.pos.y = g;

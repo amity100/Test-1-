@@ -6,10 +6,10 @@ import { clamp } from '../core/util.js';
 //
 // The bridge out to the island at the end of 9th Street is broken off over the sea, and the police
 // are after you: get across. No menu to pick from - whatever you draw on the car that gets it over
-// is the answer: wings big enough to glide the gap, a rotor, a balloon, floats down the beach and up
-// the slipway, a spring at the very edge, wings and a flame... Into the sea and you are back on the
-// bridge to try again, what you drew still on the car (and in the sketchbook). Across, it names how
-// you did it - and the ways you have not found yet.
+// is the answer: wings big enough to fly over it (ROADMAP 11.26) or to glide the gap, a rotor, a
+// balloon, floats down the beach and up the slipway, a spring at the very edge, wings and a flame...
+// Into the sea and you are back on the bridge to try again, what you drew still on the car (and in
+// the sketchbook). Across, it names how you did it - and the ways you have not found yet.
 
 // 9th Street, out to the sea (world/layout.js STREETS)
 const Z = 29;
@@ -351,8 +351,12 @@ export class BrokenBridge {
     this.state = 'on';
     this.used.clear();
     this.gpsIsle = false;
-    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי מדחף — ולשוט מהחוף לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר, וכדור פורח או רוטור עוברים מעל הכול', 'info', 4.5);
-    else g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר', 'info', 4.5);
+    // (ROADMAP 11.26: wings big enough lift it off - up, over, and down onto the island)
+    const up = g.touch ? '▲' : 'רווח';
+    const dn = g.touch ? '▼' : 'C';
+    const wings = `כנפיים גדולות: מהר, ${up} — ממריאה, ${dn} — נוחתת על האי`;
+    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי מדחף — ולשוט מהחוף לרציף שמימין' : `שוב! ${wings} · או כדור פורח, רוטור`, 'info', 4.5);
+    else g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : `שוב! ${wings}`, 'info', 4.5);
   }
 
   win(v) {

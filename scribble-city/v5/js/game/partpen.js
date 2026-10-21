@@ -1,5 +1,6 @@
 import { readItem, CATS, CAT_ORDER } from './partnet.js';
-import { wingGlide, rotorLift } from './fusedraw.js';
+import { rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
+import { lookOf } from './itemlook.js';
 import { gunOf } from './partsum.js';
 import { INKS } from './freeform.js';
 import { clamp } from '../core/util.js';
@@ -7,18 +8,32 @@ import { clamp } from '../core/util.js';
 // (ROADMAP 11.25) The part pen: a category said, a thing drawn - the game knows which of them.
 //
 // The pen out in the car, a row of three: a weapon, something it can do, protection. Over it, what
-// the chosen one has, each drawn the way it is drawn (to see, not to press). The line stays on the
-// screen under the finger, wherever it is drawn; as it is drawn the game says which of them it is
-// (game/partnet.js) - its name and its number by the pen ("cannon · damage 154"), it lights in the
-// legend, and its place on the car lights up. The pen at rest (or ✓), the ink flies to that place
-// and is the thing - the game's own, as big as it was drawn by the car on the screen. None of them:
+// the chosen one has, each drawn the way it is drawn. The line stays on the screen under the finger,
+// wherever it is drawn; as it is drawn the game says which of them it is (game/partnet.js) - its name
+// and its number by the pen ("cannon · damage 154"), it lights in the legend, and its place on the
+// car lights up. The pen at rest (or ✓), the ink flies to that place and is the thing. None of them:
 // it says so, and nothing goes on. Each category keeps the last one made: three buttons by the
 // steering (1-3 on a computer) put it on in a moment, and take it off again.
+//
+// (ROADMAP 11.26) The thing is the drawing: what it is read as says what it does, the lines say what
+// it looks like - each point of the ink flies to its own place on the car, and that is the thing
+// (game/itemlook.js), as big as it was drawn by the car on the screen. Read wrong: a tap on the right
+// one in the legend - the drawing still wet, or a few seconds after it went on - and it is that.
+// Not sure between two: it asks which, and waits. And a test of the reading, without any of that
+// help (the setting, or the legend's own button).
 
 export const PEN_CATS = CAT_ORDER;
 // how long the pen rests before the drawing goes (ms): another line before that is more of it
 export const PEN_REST = 1000;
 export const PEN_REST_TOUCH = 1150;
+// (ROADMAP 11.26) the two likeliest this near, the second at least this likely: it asks which
+export const ASK_GAP = 0.3;
+export const ASK_MIN = 0.2;
+// none of them, but the likeliest this likely and none of them not much more: it asks too
+const ASK_NONE = 0.3;
+// a tap on another thing in the legend this long after one went on: it is that one
+export const FIX_MS = 6000;
+const FIX_FLY_MS = 360;
 const CAT_NAME = { weapon: 'נשק', func: 'פונקציונלי', armor: 'מיגון' };
 const NONE_SAY = { weapon: 'לא זוהה נשק', func: 'לא זוהה משהו פונקציונלי', armor: 'לא זוהה מיגון' };
 const CAT_ICON = {
@@ -63,7 +78,7 @@ const pct = (k) => `${Math.round(Math.min(k, 3) * 100)}%`;
 
 // ------------------------------------------------------------------ what it is, by its size
 // the drawing's size by the car on the screen (F.perPx: a metre there, in px): { L (its long side,
-// m), S (its short side, m) }
+// m), S (its short side, m), w (across the screen), h (up it) }
 export function sizeOf(strokes, F) {
   let x0 = Infinity;
   let x1 = -Infinity;
@@ -80,7 +95,7 @@ export function sizeOf(strokes, F) {
   const k = F.perPx;
   const w = Math.max(1, x1 - x0) * k;
   const h = Math.max(1, y1 - y0) * k;
-  return { L: Math.max(w, h), S: Math.min(w, h) };
+  return { L: Math.max(w, h), S: Math.min(w, h), w, h };
 }
 
 // a thing's numbers (game/fuse.js applyVeh reads them) from how big it was drawn (sizeOf)
@@ -92,7 +107,9 @@ export function nOf(id, z) {
     case 'flamer': case 'jet': return { len: clamp(L / 1.2, 0.5, 3) };
     case 'bolt': return { size: clamp(L / 1.4, 0.8, 2.5) };
     case 'blades': case 'ram': case 'spikes': return { len: clamp(L / 1.6, 0.4, 3) };
-    case 'wing': return { span: clamp(L * 0.55, 0.7, 4), chord: clamp(S * 0.8, 0.35, 1.6) };
+    // (ROADMAP 11.26: a wing out of the side as wide as it was drawn across, its chord as it was up -
+    // game/itemlook.js lays it so)
+    case 'wing': return { span: clamp(z.w || L, 0.5, 4), chord: clamp((z.h || S) * 0.7, 0.3, 2) };
     case 'balloon': return { d: clamp(S * 1.05, 0.8, 6) };
     case 'rotor': return { span: clamp(L, 0.6, 9) };
     case 'prop': return { size: clamp(L, 0.4, 1.6) };
@@ -104,8 +121,27 @@ export function nOf(id, z) {
   }
 }
 
-// what it will do, by its numbers - as game/fuse.js applyVeh works it out: { text, ok }
-export function statOf(id, n, mass) {
+// (an old drawing kept with only its numbers and its little picture: about how long it was)
+function sizeBack(id, n) {
+  switch (id) {
+    case 'cannon': return (n.len || 1.2) / 0.7;
+    case 'mg': return (n.len || 1) / 0.6;
+    case 'flamer': case 'jet': return (n.len || 1) * 1.2;
+    case 'bolt': return (n.size || 1) * 1.4;
+    case 'blades': case 'ram': case 'spikes': return (n.len || 1) * 1.6;
+    case 'wing': return n.span || 1.6;
+    case 'balloon': return (n.d || 1.6) * 1.4;
+    case 'rotor': case 'chute': return n.span || 2.5;
+    case 'prop': case 'star': return n.size || 1;
+    case 'spring': return (n.len || 0.6) * 2;
+    case 'armor': return Math.sqrt((n.cover || 0.5) * 4) * 1.2;
+    default: return 1.2;
+  }
+}
+
+// what it will do, by its numbers - as game/fuse.js applyVeh works it out: { text, ok }. top: the
+// car's top speed
+export function statOf(id, n, mass, top = 28) {
   switch (id) {
     case 'cannon': case 'mg': {
       const gun = gunOf({ r: n.r, len: n.len });
@@ -114,7 +150,11 @@ export function statOf(id, n, mass) {
     case 'flamer': return { text: `טווח ${Math.round(clamp(6 + n.len * 4, 7, 18))} מ׳`, ok: true };
     case 'bolt': return { text: `טווח ${Math.round(clamp(9 + n.size * 2, 9, 14))} מ׳`, ok: true };
     case 'blades': return { text: `נזק ${Math.round(clamp(30 + n.len * 24, 30, 90))}`, ok: true };
-    case 'wing': return { text: `גלישה ×${fmt(1 / (1 - wingGlide(n)))}`, ok: true };
+    case 'wing': {
+      // (ROADMAP 11.26: wings lift it off - as fast as that, for how big they are)
+      const v0 = takeoffOf(n, mass);
+      return v0 <= top * WING_TOP ? { text: `ממריאה ב־${Math.round(v0 * 3.6)} קמ״ש`, ok: true } : { text: 'קטנות מדי להמריא · גדולות יותר', ok: false };
+    }
     case 'balloon': {
       const k = clamp((n.d ** 3 * 0.32) / mass, 0.1, 3);
       return k >= 1 ? { text: `הרמה ${pct(k)} ✓`, ok: true } : { text: `הרמה ${pct(k)} · גדול יותר`, ok: false };
@@ -159,18 +199,89 @@ export function mountOf(id, ctx) {
   return { at, to: pair ? [at, [-at[0], at[1], at[2]]] : [at] };
 }
 
-// the part itself (game/fuse.js), made of one of the things and its numbers
-export function partOfItem(id, n, ctx, inkI, time) {
+// ------------------------------------------------------------------ the drawing, kept
+// (ROADMAP 11.26) the drawing as drawn, in metres by the car on the screen (x to the right, y up the
+// screen), and which side of the car it was drawn on: { M, side } - what the thing is made of
+export function drawnOf(strokes, F) {
+  const k = F.perPx;
+  let sx = 0;
+  let n = 0;
+  for (const L of strokes) {
+    for (const [x] of L) {
+      sx += x;
+      n++;
+    }
+  }
+  const side = sx / Math.max(1, n) >= F.box.cx ? 1 : -1;
+  return { M: strokes.map((L) => L.map(([x, y]) => [x * k, -y * k])), side };
+}
+
+// (kept: about its middle, to the centimetre, 40 points a line at most)
+function compact(d, flip) {
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const L of d.M) {
+    for (const [x, y] of L) {
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    }
+  }
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const r = (x) => Math.round(x * 100) / 100;
+  const M = d.M.map((L) => {
+    const step = Math.max(1, Math.ceil(L.length / 40));
+    const out = [];
+    for (let i = 0; i < L.length; i += step) out.push([r(L[i][0] - cx), r(L[i][1] - cy)]);
+    const e = L[L.length - 1];
+    out.push([r(e[0] - cx), r(e[1] - cy)]);
+    return out;
+  });
+  return { M, side: d.side, flip: flip || 0 };
+}
+
+// (one kept before 11.26, with only its little picture: that, as big as its numbers say it was)
+function fromPic(it) {
+  if (!it.pic || !it.pic.length) return null;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const L of it.pic) {
+    for (const [x, y] of L) {
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    }
+  }
+  const k = sizeBack(it.item, it.n || {}) / Math.max(1, x1 - x0, y1 - y0);
+  return { M: it.pic.map((L) => L.map(([x, y]) => [(x - x0) * k, -(y - y0) * k])), side: 1 };
+}
+
+// the part itself (game/fuse.js), made of one of the things, its numbers and its drawing d ({ M, side,
+// flip }: its look - none, the game's own): { part, L (game/itemlook.js lookOf: where each point of it
+// went) }
+export function itemPart(id, n, ctx, inkI, time, d = null) {
   const it = ITEMS[id];
-  const M = mountOf(id, ctx);
-  const part = { type: it.type, v: it.v, n: { ...n }, at: M.at.slice(), ink: inkI, t0: time, cost: 0, item: id, id: Math.random().toString(36).slice(2, 8) };
+  const L = d && d.M && d.M.length ? lookOf(id, d.M, ctx, { side: d.side, flip: d.flip }) : null;
+  const part = { type: it.type, v: it.v, n: { ...n }, at: L ? L.at : mountOf(id, ctx).at.slice(), ink: inkI, t0: time, cost: 0, item: id, id: Math.random().toString(36).slice(2, 8) };
+  if (L) part.shape = L.shape;
   if (id === 'star') part.until = time + STAR_T;
   if (id === 'prop') {
     // (the floats it rides on: as long as the car - a propeller makes a boat of it)
     part.n.len = clamp(ctx.D.hl * 2 * 0.86, 2, 6);
     part.n.w = 0.6;
   }
-  return part;
+  return { part, L };
+}
+
+export function partOfItem(id, n, ctx, inkI, time, d = null) {
+  return itemPart(id, n, ctx, inkI, time, d).part;
 }
 
 export class PartPen {
@@ -183,16 +294,22 @@ export class PartPen {
     // the last of each category made: { weapon, func, armor, last } (the slots)
     this.book = this.loadBook();
     if (this.book.last && PEN_CATS.includes(this.book.last)) this.cat = this.book.last;
-    // the ink flying to its place: { v, from (px lines), to (the car's frame), c, t0, part } - and
-    // ink that was none of them, going: { from, c, t0 }
+    // the ink flying to its place: { v, from (px lines), to (the car's frame, a point for each), side,
+    // c, t0, part, ms } - and ink that was none of them, going: { from, c, t0 }
     this.flights = [];
-    // what the drawing is now, read as it is drawn: { item, p, none, ranked, n, text, ok } or null
+    // what the drawing is now, read as it is drawn: { item, p, none, ranked, ask, n, text, ok } or null
     this.live = null;
     this.liveAt = 0;
     this.liveTip = null;
     this.uiSig = '';
     this.legSig = '';
     this.slotSig = '';
+    this.askSig = '';
+    // (ROADMAP 11.26) the one just made, a tap in the legend from being another: { v, cat, item, read,
+    // part, d, z, inkI, P3, side, rt }
+    this.made = null;
+    // what was drawn and what it was: read right, put right by a tap (the legend, the two asked)
+    this.tally = { made: 0, asked: 0, tapped: 0, fixed: 0 };
     // (the things whose use was told this time)
     this.told = new Set();
     this.ui();
@@ -215,6 +332,25 @@ export class PartPen {
     return !g.settings || g.settings.get('carPen') !== 'old';
   }
 
+  // (ROADMAP 11.26) a test of the reading: nothing said while it is drawn, nothing asked, the legend
+  // to see, not to tap - what it was read as is what goes on
+  test() {
+    const g = this.game;
+    return !!(g.settings && g.settings.get('penTest'));
+  }
+
+  setTest(on) {
+    const g = this.game;
+    if (g.settings) g.settings.set('penTest', !!on);
+    this.live = null;
+    this.made = null;
+    this.legSig = '';
+    this.showLegend();
+    this.showLive();
+    g.audio.play('click', 0.4);
+    g.hud.toast(on ? 'מבחן זיהוי: מציירים, והמשחק מחליט לבד — בלי רמזים ובלי תיקון' : 'מבחן זיהוי כבוי — הרמזים והתיקון חזרו', 'info', 2.8);
+  }
+
   // ------------------------------------------------------------------ the pen out, and away
   // (game/freedraw.js show) the row out; the category the world asks for (the mission's hint), or as
   // before
@@ -224,6 +360,7 @@ export class PartPen {
     if (cat && PEN_CATS.includes(cat)) this.cat = cat;
     else if (H && H.cat && !this.book[H.cat]) this.cat = H.cat;
     this.live = null;
+    this.made = null;
     this.showRow();
     this.showLegend();
     this.showLive();
@@ -232,6 +369,7 @@ export class PartPen {
   close() {
     this.isOpen = false;
     this.live = null;
+    this.made = null;
     this.showRow();
     this.showLegend();
     this.showLive();
@@ -244,6 +382,7 @@ export class PartPen {
     this.cat = cat;
     this.book.last = cat;
     this.saveBook();
+    this.made = null;
     this.game.audio.play('click', 0.4);
     const fd = this.game.freedraw;
     if (fd && fd.group.length) {
@@ -256,7 +395,7 @@ export class PartPen {
   }
 
   // ------------------------------------------------------------------ the drawing, read
-  // the car you drive on the screen now: { v, t, F, ctx, mass } or null
+  // the car you drive on the screen now: { v, t, F, ctx, mass, top } or null
   own() {
     const g = this.game;
     const v = g.player.inVehicle;
@@ -264,18 +403,25 @@ export class PartPen {
     const t = this.fz.vehTarget(v);
     const F = this.fz.frameOf(t);
     if (!F) return null;
-    return { v, t, F, ctx: this.fz.drawCtx(v), mass: this.fz.vehMass(v) };
+    return { v, t, F, ctx: this.fz.drawCtx(v), mass: this.fz.vehMass(v), top: (v.handling && v.handling.top) || 28 };
   }
 
   // the drawing (lines of screen px) as one of the category's things: readItem's, and if it is one,
-  // its numbers and what they do - or null (nothing drawn)
+  // its numbers and what they do - or null (nothing drawn). ask: the two it could be, not sure which
   read(strokes, o, cat = this.cat) {
     const lines = strokes.filter((L) => L && L.length >= 2);
     if (!lines.length) return null;
     const r = readItem(lines, cat);
-    if (!r.item) return { ...r, cat };
-    const n = nOf(r.item, sizeOf(lines, o.F));
-    return { ...r, cat, n, ...statOf(r.item, n, o.mass) };
+    const z = sizeOf(lines, o.F);
+    const R = { ...r, cat, z, ask: null };
+    const [a, b] = r.ranked;
+    if (!this.test() && a && b) {
+      if (r.item && b[1] >= ASK_MIN && a[1] - b[1] < ASK_GAP) R.ask = [a[0], b[0]];
+      else if (!r.item && a[1] >= ASK_NONE && r.none - a[1] < ASK_GAP) R.ask = [a[0], b[0]];
+    }
+    if (!r.item) return R;
+    const n = nOf(r.item, z);
+    return { ...R, n, ...statOf(r.item, n, o.mass, o.top) };
   }
 
   // (game/freedraw.js, as it is drawn) the drawing so far: what it is, by the pen (tip: screen px,
@@ -290,6 +436,12 @@ export class PartPen {
     this.liveAt = t;
     const o = this.own();
     this.live = o && strokes.length ? this.read(strokes, o) : null;
+    // (not sure which of two: it waits for a tap on one - till then it is not done by itself)
+    const fd = this.game.freedraw;
+    if (fd && !fd.cur && fd.group.length) {
+      if (this.live && this.live.ask) fd.groupAt = Infinity;
+      else if (fd.groupAt === Infinity) fd.groupAt = t + (this.game.touch ? PEN_REST_TOUCH : PEN_REST);
+    }
     this.showLive(strokes);
     this.showLegend();
   }
@@ -301,49 +453,162 @@ export class PartPen {
   make(strokes, inkI = 1) {
     const g = this.game;
     const fz = this.fz;
+    const force = this.force || null;
+    this.force = null;
     this.live = null;
     this.showLive();
     this.showLegend();
     const o = this.own();
-    if (!o || !strokes.length) return false;
-    const R = this.read(strokes, o);
+    const lines = strokes.filter((L) => L && L.length >= 2);
+    if (!o || !lines.length) return false;
+    const R = this.read(lines, o);
     if (!R) return false;
-    if (!R.item) {
-      this.flights.push({ v: null, from: strokes.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
+    // (tapped in the legend, or one of the two asked: that - ✕ of the two asked: none of them)
+    const item = force === '-' ? null : force || R.item;
+    if (!item) {
+      this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('rubber', 0.5);
-      g.hud.toast(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, 'bad', 2.6);
+      if (force !== '-') g.hud.toast(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, 'bad', 2.6);
       return false;
     }
     const v = o.v;
-    const part = partOfItem(R.item, R.n, o.ctx, inkI, g.time);
-    fz.justAdded = part;
-    fz.popDelay = FLY_MS;
-    const res = fz.onVehicle(v, part);
-    fz.justAdded = null;
-    fz.popDelay = 0;
-    if (!res) return false;
+    const d = drawnOf(lines, o.F);
+    const n = item === R.item ? R.n : nOf(item, R.z);
+    const got = this.putOn(v, item, n, d, inkI, FLY_MS);
+    if (!got) return false;
+    const { part, L, res } = got;
     fz.stats.made++;
     fz.stats.byType[part.type] = (fz.stats.byType[part.type] || 0) + 1;
     fz.stats.onto.veh = (fz.stats.onto.veh || 0) + 1;
     fz.last = { kind: 'veh', ref: v, part, t: g.time, rt: performance.now(), alts: [], M: null };
-    this.fly(v, strokes, mountOf(R.item, o.ctx), inkI, part);
-    this.keep(R.cat, part, v, strokes);
+    const side = this.fly(v, lines, L, inkI, part);
+    this.keep(R.cat, part, compact(d, L ? L.flip : 0), lines);
+    this.tally.made++;
+    if (R.ask) this.tally.asked++;
+    if (force && force !== R.item) this.tally.tapped++;
+    this.made = { v, cat: R.cat, item, read: R.item, part, d, z: R.z, inkI, P3: L ? L.P3 : null, side, rt: performance.now() };
     g.audio.play('magic', 0.4);
-    // (what it does and how - once of each: no tag by the car to draw over by mistake)
-    if (!this.told.has(R.item)) {
-      this.told.add(R.item);
-      const say = [res.rule, res.use].filter(Boolean).join(' · ');
-      if (say) g.hud.toast(`${ITEMS[R.item].name}: ${say}`, 'info', 3.4);
-    }
+    if (this.test()) g.hud.toast(`זוהה: ${ITEMS[item].name}`, 'info', 2.2);
+    else this.tell(item, res);
+    this.legSig = '';
+    this.showLegend();
     return true;
   }
 
-  // the ink from the screen to its place on the car - shrinking into it; a pair (wings, blades,
-  // armour) to both sides, the second a little fainter
-  fly(v, strokes, M, inkI, part) {
-    const from = strokes.map((L) => L.map((q) => q.slice()));
+  // a thing made of drawing d on the car v - the one of its kind there before off: { part, L, res } or null
+  putOn(v, item, n, d, inkI, pop) {
+    const fz = this.fz;
+    const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d);
+    fz.justAdded = part;
+    fz.popDelay = pop;
+    const res = fz.onVehicle(v, part);
+    fz.justAdded = null;
+    fz.popDelay = 0;
+    return res ? { part, L, res } : null;
+  }
+
+  // (what it does and how - once of each: no tag by the car to draw over by mistake)
+  tell(item, res) {
+    if (this.told.has(item)) return;
+    this.told.add(item);
+    const say = [res.rule, res.use].filter(Boolean).join(' · ');
+    if (say) this.game.hud.toast(`${ITEMS[item].name}: ${say}`, 'info', 3.4);
+  }
+
+  // (ROADMAP 11.26) a thing in the legend tapped: the drawing still wet - it is that, made now; just
+  // made - it was that, and it is now; else, how it is drawn
+  tapItem(id) {
+    const g = this.game;
+    if (this.test() || !(CATS[this.cat].includes(id) || id === '-')) return;
+    const fd = g.freedraw;
+    if (fd && fd.group.length && !fd.cur) {
+      this.force = id;
+      g.audio.play('click', 0.4);
+      fd.finishGroup();
+      return;
+    }
+    if (id === '-' || this.fix(id)) return;
+    g.audio.play('click', 0.3);
+    g.hud.toast(`ציירו ${ITEMS[id].name} — כמו בציור הקטן`, 'info', 1.8);
+  }
+
+  // the one just made was another of the category's things: off with it, on with that one, made of the
+  // same drawing - its ink flying from the one to the other. true if it was
+  fix(id) {
+    const g = this.game;
+    const fz = this.fz;
+    const M = this.made;
+    if (!M || M.item === id || performance.now() - M.rt > FIX_MS) return false;
+    const v = M.v;
+    if (v !== g.player.inVehicle || v.dead) return false;
+    // (where its ink is now on the screen: each point of the one it was)
+    const from = M.P3 ? M.P3.map((L) => L.map((X) => {
+      const q = this.proj(v, X[0] * M.side, X[1], X[2]);
+      return q ? [q.x, q.y] : null;
+    })) : null;
+    if (v.fuse && v.fuse.parts.includes(M.part)) fz.removeVeh(v, M.part, true);
+    const got = this.putOn(v, id, nOf(id, M.z), M.d, M.inkI, FIX_FLY_MS);
+    if (!got) return false;
+    const { part, L } = got;
+    let side = M.side;
+    if (from && L && from.every((A) => A.every(Boolean))) {
+      side = this.sideFor(v, from, L);
+      this.flights.push({ v, from, to: L.P3, side, c: M.inkI, t0: performance.now(), part, ms: FIX_FLY_MS, a: 1 });
+      if (L.mirror) this.flights.push({ v, from, to: L.P3, side: -side, c: M.inkI, t0: performance.now(), part: null, ms: FIX_FLY_MS, a: 0.55 });
+    } else this.landed(v, part);
+    fz.last = { kind: 'veh', ref: v, part, t: g.time, rt: performance.now(), alts: [], M: null };
+    const was = M.item;
+    this.book[M.cat] = { ...this.book[M.cat], item: id, n: part.n, d: compact(M.d, L ? L.flip : 0) };
+    this.saveBook();
+    this.slotSig = '';
+    Object.assign(M, { item: id, part, P3: L ? L.P3 : null, side, rt: performance.now() });
+    this.tally.fixed++;
+    g.audio.play('magic', 0.35);
+    g.hud.toast(`${ITEMS[was].name} ← ${ITEMS[id].name}`, 'good', 1.8);
+    this.legSig = '';
+    this.showLegend();
+    return true;
+  }
+
+  // (a pair: the ink to the side of the car nearer where it was drawn) 1 or -1
+  sideFor(v, strokes, L) {
+    if (!L || !L.mirror) return 1;
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    let X = 0;
+    let Y = 0;
+    let Z = 0;
+    for (let i = 0; i < strokes.length; i++) {
+      for (let j = 0; j < strokes[i].length; j++) {
+        sx += strokes[i][j][0];
+        sy += strokes[i][j][1];
+        X += L.P3[i][j][0];
+        Y += L.P3[i][j][1];
+        Z += L.P3[i][j][2];
+        n++;
+      }
+    }
+    const a = this.proj(v, X / n, Y / n, Z / n);
+    const b = this.proj(v, -X / n, Y / n, Z / n);
+    return a && b && Math.hypot(b.x - sx / n, b.y - sy / n) < Math.hypot(a.x - sx / n, a.y - sy / n) ? -1 : 1;
+  }
+
+  // the ink from the screen to its place on the car: each point to where it is on the thing (ROADMAP
+  // 11.26) - a pair, to the side nearer the drawing, the other a little fainter. Returns that side
+  fly(v, strokes, L, inkI, part) {
+    const from = strokes.map((A) => A.map((q) => q.slice()));
     const t0 = performance.now();
-    M.to.forEach((to, i) => this.flights.push({ v, from, to, c: inkI, t0, part: i ? null : part, a: i ? 0.55 : 1 }));
+    if (!L) {
+      // (no drawing to go by: shrinking into its place)
+      const M = mountOf(part.item, this.fz.drawCtx(v));
+      M.to.forEach((to, i) => this.flights.push({ v, from, at: to, c: inkI, t0, part: i ? null : part, a: i ? 0.55 : 1 }));
+      return 1;
+    }
+    const side = this.sideFor(v, strokes, L);
+    this.flights.push({ v, from, to: L.P3, side, c: inkI, t0, part, a: 1 });
+    if (L.mirror) this.flights.push({ v, from, to: L.P3, side: -side, c: inkI, t0, part: null, a: 0.55 });
+    return side;
   }
 
   // a point in a car's frame (x to its left, z to its nose), on the screen - { x, y } or null
@@ -399,15 +664,11 @@ export class PartPen {
       this.slotSig = '';
       return true;
     }
-    const part = partOfItem(it.item, it.n, fz.drawCtx(v), it.ink, g.time);
-    fz.justAdded = part;
-    fz.popDelay = 120;
-    const res = fz.onVehicle(v, part);
-    fz.justAdded = null;
-    fz.popDelay = 0;
-    if (!res) return false;
-    this.landed(v, part);
-    fz.last = { kind: 'veh', ref: v, part, t: g.time, rt: performance.now(), alts: [], M: null };
+    // (as it was drawn - one kept before its drawing was: from its little picture)
+    const got = this.putOn(v, it.item, it.n, it.d || fromPic(it), it.ink, 120);
+    if (!got) return false;
+    this.landed(v, got.part);
+    fz.last = { kind: 'veh', ref: v, part: got.part, t: g.time, rt: performance.now(), alts: [], M: null };
     this.slotSig = '';
     return true;
   }
@@ -435,9 +696,10 @@ export class PartPen {
     }
   }
 
-  // the thing just made, kept as its category's - and its look as drawn, small (its slot's picture)
-  keep(cat, part, v, strokes) {
-    this.book[cat] = { item: part.item, n: part.n, ink: part.ink, pic: picOf(strokes) };
+  // the thing just made, kept as its category's - its drawing (d: compact's), and its look as drawn,
+  // small (its slot's picture)
+  keep(cat, part, d, strokes) {
+    this.book[cat] = { item: part.item, n: part.n, ink: part.ink, pic: picOf(strokes), d };
     this.book.last = cat;
     this.saveBook();
     this.slotSig = '';
@@ -467,6 +729,11 @@ export class PartPen {
         const k = clamp((fd.groupAt - now) / len, 0, 1);
         this.dryEl.style.transform = `scaleX(${k.toFixed(3)})`;
       } else if (this.dryEl) this.dryEl.style.transform = 'scaleX(1)';
+      // (the time to put right the one just made running out)
+      if (this.made && now - this.made.rt > FIX_MS) {
+        this.made = null;
+        this.showLegend();
+      }
       this.showRow();
     }
     this.showSlots();
@@ -491,57 +758,60 @@ export class PartPen {
     g.lineJoin = 'round';
     for (let i = this.flights.length - 1; i >= 0; i--) {
       const f = this.flights[i];
-      const k = clamp((now - f.t0) / FLY_MS, 0, 1);
+      const k = clamp((now - f.t0) / (f.ms || FLY_MS), 0, 1);
       if (k >= 1 || (f.v && f.v.dead)) {
         this.flights.splice(i, 1);
         if (f.v && !f.v.dead && f.part) this.landed(f.v, f.part);
         continue;
       }
       const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
-      // (the drawing's middle and size; where it goes on the screen, and how small it gets there)
-      let x0 = Infinity;
-      let x1 = -Infinity;
-      let y0 = Infinity;
-      let y1 = -Infinity;
-      for (const A of f.from) {
-        for (const q of A) {
-          x0 = Math.min(x0, q[0]);
-          x1 = Math.max(x1, q[0]);
-          y0 = Math.min(y0, q[1]);
-          y1 = Math.max(y1, q[1]);
-        }
-      }
-      const cx = (x0 + x1) / 2;
-      const cy = (y0 + y1) / 2;
-      let tx = cx;
-      let ty = cy;
-      let s = 1;
-      let a = 1;
-      if (f.v) {
-        const q = this.proj(f.v, f.to[0], f.to[1], f.to[2]);
-        if (q) {
-          tx = q.x;
-          ty = q.y;
-        }
-        s = 1 - 0.7 * e;
-        a = (k > 0.85 ? (1 - k) / 0.15 : 1) * (f.a ?? 1);
-      } else {
-        // (none of them: it crumbles where it was)
-        ty = cy + 40 * e;
-        s = 1 + 0.15 * e;
-        a = 1 - e;
-      }
       const ink = INKS[f.c] || INKS[1];
-      for (const A of f.from) {
+      // (the drawing's middle and size - where it goes on the screen, and how small, without points to
+      // go to; none of them: it crumbles where it was)
+      let pt = null;
+      if (!f.to) {
+        let x0 = Infinity;
+        let x1 = -Infinity;
+        let y0 = Infinity;
+        let y1 = -Infinity;
+        for (const A of f.from) {
+          for (const q of A) {
+            x0 = Math.min(x0, q[0]);
+            x1 = Math.max(x1, q[0]);
+            y0 = Math.min(y0, q[1]);
+            y1 = Math.max(y1, q[1]);
+          }
+        }
+        const cx = (x0 + x1) / 2;
+        const cy = (y0 + y1) / 2;
+        let tx = cx;
+        let ty = cy + 40 * e;
+        let s = 1 + 0.15 * e;
+        if (f.v) {
+          const q = this.proj(f.v, f.at[0], f.at[1], f.at[2]);
+          tx = q ? q.x : cx;
+          ty = q ? q.y : cy;
+          s = 1 - 0.7 * e;
+        }
+        pt = (q) => [cx + (tx - cx) * e + (q[0] - cx) * s, cy + (ty - cy) * e + (q[1] - cy) * s];
+      }
+      g.globalAlpha = f.v ? (k > 0.85 ? (1 - k) / 0.15 : 1) * (f.a ?? 1) : 1 - e;
+      for (let a = 0; a < f.from.length; a++) {
+        const A = f.from[a];
+        const B = f.to ? f.to[a] : null;
         g.beginPath();
         for (let j = 0; j < A.length; j++) {
-          const x = cx + (tx - cx) * e + (A[j][0] - cx) * s;
-          const y = cy + (ty - cy) * e + (A[j][1] - cy) * s;
+          let x;
+          let y;
+          if (B) {
+            const q = this.proj(f.v, B[j][0] * f.side, B[j][1], B[j][2]);
+            x = q ? A[j][0] + (q.x - A[j][0]) * e : A[j][0];
+            y = q ? A[j][1] + (q.y - A[j][1]) * e : A[j][1];
+          } else [x, y] = pt(A[j]);
           if (j) g.lineTo(x, y);
           else g.moveTo(x, y);
         }
         const w = 4 * (1 - 0.35 * e);
-        g.globalAlpha = a;
         g.strokeStyle = ink.css === '#f4efe4' ? 'rgba(40, 36, 48, 0.75)' : 'rgba(255, 252, 244, 0.85)';
         g.lineWidth = w + 3.4;
         g.stroke();
@@ -557,7 +827,7 @@ export class PartPen {
   // ------------------------------------------------------------------ drawn in the world
   // the place on the car of what the drawing is now, lit while the pen draws it
   draw(fr) {
-    if (!this.isOpen || !this.live || !this.live.item) return;
+    if (!this.isOpen || !this.live || !this.live.item || this.test()) return;
     const g = this.game;
     const v = g.player.inVehicle;
     if (!v || v.dead) return;
@@ -590,18 +860,44 @@ export class PartPen {
       } else if (b.dataset.c) this.pick(b.dataset.c);
     };
     row.addEventListener('pointerdown', act);
-    for (const ev of ['mousedown', 'click', 'touchstart', 'contextmenu']) row.addEventListener(ev, (e) => e.stopPropagation());
+    const stop = (el) => {
+      for (const ev of ['mousedown', 'click', 'touchstart', 'contextmenu']) el.addEventListener(ev, (e) => e.stopPropagation());
+    };
+    stop(row);
     document.body.appendChild(row);
-    // (what the category has, each as it is drawn: to see, not to press)
+    // (what the category has, each as it is drawn - ROADMAP 11.26: a tap on one, it is that one; and
+    // the test of the reading, on and off)
     const leg = document.createElement('div');
     leg.className = 'pp-legend';
     leg.id = 'pp-legend';
+    leg.addEventListener('pointerdown', (e) => {
+      const t = e.target.closest('[data-i], [data-test]');
+      if (!t) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (t.dataset.test) this.setTest(!this.test());
+      else this.tapItem(t.dataset.i);
+    });
+    stop(leg);
     document.body.appendChild(leg);
     const live = document.createElement('div');
     live.className = 'pp-live';
     live.id = 'pp-live';
     live.innerHTML = '<b></b><span></span><i></i>';
     document.body.appendChild(live);
+    // (ROADMAP 11.26) not sure which of two: the two, to tap
+    const ask = document.createElement('div');
+    ask.className = 'pp-ask';
+    ask.id = 'pp-ask';
+    ask.addEventListener('pointerdown', (e) => {
+      const b = e.target.closest('button[data-i]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.tapItem(b.dataset.i);
+    });
+    stop(ask);
+    document.body.appendChild(ask);
     const slots = document.createElement('div');
     slots.className = 'pp-slots';
     slots.id = 'pp-slots';
@@ -612,7 +908,7 @@ export class PartPen {
       e.stopPropagation();
       this.toggle(b.dataset.c);
     });
-    for (const ev of ['mousedown', 'click', 'touchstart', 'contextmenu']) slots.addEventListener(ev, (e) => e.stopPropagation());
+    stop(slots);
     document.body.appendChild(slots);
     const cv = document.createElement('canvas');
     cv.className = 'pp-fly';
@@ -621,6 +917,7 @@ export class PartPen {
     this.rowEl = row;
     this.legEl = leg;
     this.liveEl = live;
+    this.askEl = ask;
     this.liveName = live.querySelector('b');
     this.liveText = live.querySelector('span');
     this.dryEl = live.querySelector('i');
@@ -645,29 +942,44 @@ export class PartPen {
     }
   }
 
-  // the category's things over the row, the one the drawing is now lit
+  // the category's things over the row, the one the drawing is now lit (not in a test); just made,
+  // the one it went on as - and a word that a tap puts it right
   showLegend() {
     const el = this.legEl;
     if (!el) return;
-    const L = this.live;
-    const sig = `${this.isOpen}|${this.cat}|${L && L.item ? L.item : ''}`;
+    const test = this.test();
+    const L = test ? null : this.live;
+    const M = this.made && !test ? this.made : null;
+    const lit = L && L.item ? L.item : M ? M.item : '';
+    const sig = `${this.isOpen}|${this.cat}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}|${test}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     el.classList.toggle('on', this.isOpen);
+    el.classList.toggle('test', test);
     if (!this.isOpen) return;
-    el.innerHTML = CATS[this.cat].map((id) => `<div class="pp-it${L && L.item === id ? ' on' : ''}" data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b></div>`).join('');
+    const say = test ? 'מבחן זיהוי: מציירים — בלי רמזים' : M ? 'לא זה? נגעו בנכון' : 'נגיעה בציור = זה';
+    const items = CATS[this.cat].map((id) => {
+      const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : ''].filter(Boolean).join(' ');
+      return `<div class="${cls}" data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b></div>`;
+    }).join('');
+    el.innerHTML = `<div class="pp-say${M ? ' fix' : ''}">${say}</div><div class="pp-its">${items}<button class="pp-test${test ? ' on' : ''}" data-test="1" aria-label="מבחן זיהוי">מבחן<br>זיהוי</button></div>`;
   }
 
-  // its name and its number by the pen - or over the drawing, the pen up
+  // its name and its number by the pen - or over the drawing, the pen up. Not sure: the two it could be
   showLive(strokes) {
     const el = this.liveEl;
     if (!el) return;
     const L = this.live;
-    if (!L || !this.isOpen) {
+    if (!L || !this.isOpen || this.test()) {
       el.classList.remove('on');
+      this.showAsk();
       return;
     }
-    if (L.item) {
+    if (L.ask) {
+      this.liveName.textContent = '?';
+      this.liveText.textContent = L.item ? 'לא בטוח — מה זה?' : 'לא זוהה — אולי אחד מאלה?';
+      this.liveText.classList.add('bad');
+    } else if (L.item) {
       this.liveName.textContent = ITEMS[L.item].name;
       this.liveText.textContent = L.text;
       this.liveText.classList.toggle('bad', !L.ok);
@@ -676,9 +988,30 @@ export class PartPen {
       this.liveText.textContent = 'לא זוהה עדיין';
       this.liveText.classList.add('bad');
     }
-    el.classList.toggle('none', !L.item);
+    el.classList.toggle('none', !L.item || !!L.ask);
     el.classList.add('on');
     this.place(strokes);
+    this.showAsk();
+  }
+
+  // (ROADMAP 11.26) the two it could be, by its name: a tap, and it is that one
+  showAsk() {
+    const el = this.askEl;
+    if (!el) return;
+    const fd = this.game.freedraw;
+    const L = this.live;
+    const ask = L && L.ask && this.isOpen && !this.test() && fd && !fd.cur && fd.group.length ? L.ask : null;
+    const sig = ask ? ask.join() : '';
+    if (sig !== this.askSig) {
+      this.askSig = sig;
+      el.classList.toggle('on', !!ask);
+      if (ask) el.innerHTML = `${ask.map((id) => `<button data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b></button>`).join('')}<button class="pp-no" data-i="-" aria-label="אף אחד מהם">✕</button>`;
+    }
+    if (!ask || !this.liveEl) return;
+    const r = this.liveEl.getBoundingClientRect();
+    const w = el.offsetWidth || 200;
+    el.style.left = `${clamp(r.left + r.width / 2 - w / 2, 8, window.innerWidth - w - 8)}px`;
+    el.style.top = `${clamp(r.bottom + 6, 8, window.innerHeight - (el.offsetHeight || 60) - 8)}px`;
   }
 
   place(strokes) {
