@@ -19,8 +19,8 @@ import { clamp } from '../core/util.js';
 // it looks like - each point of the ink flies to its own place on the car, and that is the thing
 // (game/itemlook.js), as big as it was drawn by the car on the screen. Read wrong: a tap on the right
 // one in the legend - the drawing still wet, or a few seconds after it went on - and it is that.
-// Not sure between two: it asks which, and waits. And a test of the reading, without any of that
-// help (the setting, or the legend's own button).
+// Not sure between two when the pen rests: it asks which, by the drawing, and waits. And a test of
+// the reading, without any of that help (the setting, or the legend's own button).
 
 export const PEN_CATS = CAT_ORDER;
 // how long the pen rests before the drawing goes (ms): another line before that is more of it
@@ -305,6 +305,8 @@ export class PartPen {
     this.legSig = '';
     this.slotSig = '';
     this.askSig = '';
+    // (ROADMAP 11.26) the pen rested not sure which of two: the two by the drawing, it waits for a tap
+    this.asking = false;
     // (ROADMAP 11.26) the one just made, a tap in the legend from being another: { v, cat, item, read,
     // part, d, z, inkI, P3, side, rt }
     this.made = null;
@@ -383,6 +385,7 @@ export class PartPen {
     this.book.last = cat;
     this.saveBook();
     this.made = null;
+    this.asking = false;
     this.game.audio.play('click', 0.4);
     const fd = this.game.freedraw;
     if (fd && fd.group.length) {
@@ -429,6 +432,13 @@ export class PartPen {
   feel(strokes, tip, now = false) {
     const t = performance.now();
     this.liveTip = tip || null;
+    // (asking, and more drawn or a line taken back: not now - the pen rests again first)
+    if (this.asking && (tip || now)) {
+      this.asking = false;
+      const fd = this.game.freedraw;
+      if (!tip && fd && fd.group.length) fd.groupAt = t + (this.game.touch ? PEN_REST_TOUCH : PEN_REST);
+      this.showAsk();
+    }
     if (!now && t - this.liveAt < LIVE_MS) {
       this.place(strokes);
       return;
@@ -436,14 +446,20 @@ export class PartPen {
     this.liveAt = t;
     const o = this.own();
     this.live = o && strokes.length ? this.read(strokes, o) : null;
-    // (not sure which of two: it waits for a tap on one - till then it is not done by itself)
-    const fd = this.game.freedraw;
-    if (fd && !fd.cur && fd.group.length) {
-      if (this.live && this.live.ask) fd.groupAt = Infinity;
-      else if (fd.groupAt === Infinity) fd.groupAt = t + (this.game.touch ? PEN_REST_TOUCH : PEN_REST);
-    }
     this.showLive(strokes);
     this.showLegend();
+  }
+
+  // (game/freedraw.js, the pen rested) not sure which of two: the two by the drawing, and it waits for
+  // a tap on one (or more of it drawn) - true; else it is done now
+  holds() {
+    const fd = this.game.freedraw;
+    const L = this.live;
+    if (!L || !L.ask || !this.isOpen || this.test() || !fd || fd.cur || !fd.group.length) return false;
+    this.asking = true;
+    fd.groupAt = Infinity;
+    this.showAsk();
+    return true;
   }
 
   // ------------------------------------------------------------------ made
@@ -455,6 +471,7 @@ export class PartPen {
     const fz = this.fz;
     const force = this.force || null;
     this.force = null;
+    this.asking = false;
     this.live = null;
     this.showLive();
     this.showLegend();
@@ -726,7 +743,7 @@ export class PartPen {
       // (the drawing waiting to go: the bar under its name runs down)
       if (this.liveEl && this.live && fd && fd.group.length && !fd.cur) {
         const len = g.touch ? PEN_REST_TOUCH : PEN_REST;
-        const k = clamp((fd.groupAt - now) / len, 0, 1);
+        const k = this.asking ? 0 : clamp((fd.groupAt - now) / len, 0, 1);
         this.dryEl.style.transform = `scaleX(${k.toFixed(3)})`;
       } else if (this.dryEl) this.dryEl.style.transform = 'scaleX(1)';
       // (the time to put right the one just made running out)
@@ -994,13 +1011,13 @@ export class PartPen {
     this.showAsk();
   }
 
-  // (ROADMAP 11.26) the two it could be, by its name: a tap, and it is that one
+  // (ROADMAP 11.26) the two it could be, the pen rested: a tap, and it is that one
   showAsk() {
     const el = this.askEl;
     if (!el) return;
     const fd = this.game.freedraw;
     const L = this.live;
-    const ask = L && L.ask && this.isOpen && !this.test() && fd && !fd.cur && fd.group.length ? L.ask : null;
+    const ask = this.asking && L && L.ask && this.isOpen && !this.test() && fd && !fd.cur && fd.group.length ? L.ask : null;
     const sig = ask ? ask.join() : '';
     if (sig !== this.askSig) {
       this.askSig = sig;
@@ -1008,10 +1025,54 @@ export class PartPen {
       if (ask) el.innerHTML = `${ask.map((id) => `<button data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b></button>`).join('')}<button class="pp-no" data-i="-" aria-label="אף אחד מהם">✕</button>`;
     }
     if (!ask || !this.liveEl) return;
+    const [x, y] = this.askSpot(el.offsetWidth || 200, el.offsetHeight || 40, fd.group.map((s) => s.P));
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+  }
+
+  // where the two asked go (w x h px): by the drawing, never on it nor on its name - a line begun on
+  // them would be a tap - and off the pen's row and legend if it can be
+  askSpot(w, h, strokes) {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const L of strokes) {
+      for (const q of L) {
+        x0 = Math.min(x0, q[0]);
+        x1 = Math.max(x1, q[0]);
+        y0 = Math.min(y0, q[1]);
+        y1 = Math.max(y1, q[1]);
+      }
+    }
+    const pad = 18;
     const r = this.liveEl.getBoundingClientRect();
-    const w = el.offsetWidth || 200;
-    el.style.left = `${clamp(r.left + r.width / 2 - w / 2, 8, window.innerWidth - w - 8)}px`;
-    el.style.top = `${clamp(r.bottom + 6, 8, window.innerHeight - (el.offsetHeight || 60) - 8)}px`;
+    // [x0, y0, x1, y1, how bad on it]
+    const keep = [[x0 - pad, y0 - pad, x1 + pad, y1 + pad, 4], [r.left, r.top, r.right, r.bottom, 2]];
+    for (const e of [this.rowEl, this.legEl]) {
+      const q = e ? e.getBoundingClientRect() : null;
+      if (q && q.width && q.height) keep.push([q.left, q.top, q.right, q.bottom, 1]);
+    }
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    const top = Math.min(r.top, y0 - pad);
+    const spots = [[cx - w / 2, top - h - 8], [x1 + pad, cy - h / 2], [x0 - pad - w, cy - h / 2], [cx - w / 2, y1 + pad]];
+    let best = null;
+    let bad = Infinity;
+    for (const [sx, sy] of spots) {
+      const x = clamp(sx, 8, W - w - 8);
+      const y = clamp(sy, 8, H - h - 8);
+      let n = 0;
+      for (const [a, b, c, d, k] of keep) n += k * Math.max(0, Math.min(x + w, c) - Math.max(x, a)) * Math.max(0, Math.min(y + h, d) - Math.max(y, b));
+      if (n < bad) {
+        best = [x, y];
+        bad = n;
+      }
+      if (!n) break;
+    }
+    return best;
   }
 
   place(strokes) {

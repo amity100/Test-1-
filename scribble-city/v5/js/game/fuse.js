@@ -150,6 +150,8 @@ export class Fuse {
     // (ROADMAP 11.24) in your car: a part said, then drawn - and the parts kept, a tap away
     // (game/partpen.js)
     this.pen = new PartPen(this);
+    // (ROADMAP 11.26) the models of the part pen's things on cars, kept: part -> { key, ms }
+    this.looks = new WeakMap();
   }
 
   // ------------------------------------------------------------------ what is on screen, and where
@@ -1213,7 +1215,12 @@ export class Fuse {
       // (ROADMAP 11.22: drawn on it - made of its own lines, where they were drawn)
       if (p.shape) {
         const { body, line } = drawnColours(ink(p), v, p.type);
-        const ms = buildDrawn(p, { D, K, spots: vehWheelSpots(v, K, D), wheelR: fz.wheels ? fz.wheels.r : null, lift: fz.lift || 0 }, body);
+        // (ROADMAP 11.26: a thing of the part pen keeps its model while it is on - another put on, or
+        // one taken off, does not make all of them again)
+        const key = p.shape.look ? body.join() : null;
+        const kept = key && this.looks.get(p);
+        const ms = kept && kept.key === key ? kept.ms : buildDrawn(p, { D, K, spots: vehWheelSpots(v, K, D), wheelR: fz.wheels ? fz.wheels.r : null, lift: fz.lift || 0 }, body);
+        if (key) this.looks.set(p, { key, ms });
         for (const o of ms) {
           o.m.userData.lineC = line;
           root.add(o.m);
@@ -1415,6 +1422,7 @@ export class Fuse {
     const up = input.keys.has('Space') || input.flyUp;
     const press = input.wasPressed('Space') || (input.flyUp && !v.fzUpWas);
     v.fzUpWas = !!input.flyUp;
+    if (!v.air) v.fzWinged = false;
     if (!v.air && !v.flipped) {
       if (fz.jump && press) {
         v.air = true;
@@ -1515,7 +1523,11 @@ export class Fuse {
       const sp = Math.hypot(v.vx, v.vz);
       const lf = Math.min(2, (sp / fz.takeoff) ** 2);
       winged = true;
-      const want = v.pos.y > ceil ? -2 : up ? (lf >= 1 ? 4.5 : -1.5) : down ? -7 : lf >= 1 ? 0 : -7 * (1 - lf);
+      // (coming down near the ground it flattens out - it lands, not falls)
+      const M = g.mission;
+      const alt = Math.max(0, v.pos.y - Math.max(gy, M ? M.floorAt(v.pos.x, v.pos.z, v.pos.y) : -Infinity));
+      const sink = Math.max(-7, -1.6 - alt * 1.1);
+      const want = v.pos.y > ceil ? -2 : up ? (lf >= 1 ? 4.5 : -1.5) : down ? sink : lf >= 1 ? 0 : Math.max(sink, -7 * (1 - lf));
       v.vy = damp(v.vy, want, 2.4, dt);
       pull = 0;
       lifting = lf >= 1;

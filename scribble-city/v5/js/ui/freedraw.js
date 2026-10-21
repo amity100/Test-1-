@@ -2104,7 +2104,8 @@ export class FreeDraw {
     const v = p.inVehicle;
     if (v && v.drawn) jetFlames(game, v, dt);
     if (!this.isOpen) return;
-    if (this.group.length && !this.cur && performance.now() > this.groupAt) this.finishGroup();
+    // (ROADMAP 11.26: the part pen, not sure which of two - it asks, and the drawing waits)
+    if (this.group.length && !this.cur && performance.now() > this.groupAt && !(this.group[0].pen && this.game.fuse.pen.holds())) this.finishGroup();
     if (this.autoShut && performance.now() > this.autoShut) {
       this.autoShut = 0;
       if (!this.cur && !this.strokes.length) {
