@@ -214,6 +214,16 @@ export class Chase {
     const ox = c.pos.x - v.pos.x;
     const oz = c.pos.z - v.pos.z;
     if (ox * fx + oz * fz > (v.halfLen || 2) * 0.4) return true;
+    // (ROADMAP 11.25) spikes drawn all round it (game/fuse.js): the car shoving it is wrecked on them
+    if (v.spikes && !c.wrecked) {
+      c.wrecked = true;
+      c.speed *= 0.3;
+      game.fx.sparks(c.pos.x, 0.9, c.pos.z, 14, [0.9, 0.9, 0.95]);
+      game.audio.play('crash', 0.8);
+      game.camRig.addShake(0.2);
+      if (game.damage) game.damage.hit(c, (v.pos.x + c.pos.x) / 2, 0.7, (v.pos.z + c.pos.z) / 2, 10);
+      return true;
+    }
     c.pitT = game.time + PIT_GAP;
     // which way round: the nose towards the side it came in from, the back shoved away from it
     const side = Math.sign(ox * fz - oz * fx) || 1;

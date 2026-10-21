@@ -18,7 +18,7 @@ import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
-import { PEN_PARTS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
+import { PEN_CATS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -474,7 +474,7 @@ export class FreeDraw {
       } else if (this.penOn() && /^(Digit|Numpad)[1-3]$/.test(k)) {
         // (ROADMAP 11.24: in a car - the part to draw, 1-3)
         mine();
-        this.game.fuse.pen.pick(PEN_PARTS[+k.slice(-1) - 1]);
+        this.game.fuse.pen.pick(PEN_CATS[+k.slice(-1) - 1]);
       } else if (/^(Digit|Numpad)[0-5]$/.test(k)) {
         // (what is drawn: 1-5 each of the five, together; 0 anything - the weapons wait)
         mine();
@@ -1439,8 +1439,8 @@ export class FreeDraw {
     this.hintEl.textContent = game.fuse && game.player.inVehicle
       ? this.penOn()
         ? game.touch
-          ? 'בחרו חלק למטה, וציירו אותו איפה שנוח · הגודל ליד המכונית קובע'
-          : 'בחרו חלק (1–3), וציירו אותו איפה שנוח · הגודל ליד המכונית קובע · Q חוזרים לנסוע'
+          ? 'בחרו נשק, פונקציונלי או מיגון, וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע'
+          : 'בחרו נשק, פונקציונלי או מיגון (1–3), וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע · Q חוזרים לנסוע'
         : game.touch
           ? 'ציירו על המכונית — מה שתציירו יהיה עליה'
           : 'ציירו על המכונית — מה שתציירו יהיה עליה: כנפיים, גלגלים, להבה, בלון... · Q חוזרים לנסוע'

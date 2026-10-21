@@ -1365,9 +1365,19 @@ body.fd-car .fd-ink { display: none; }
 .pp-slot.on { background: #ffe58a; box-shadow: inset 0 -3px 0 #ff9a3c, 2px 3px 0 var(--ink); }
 .pp-slot:active { transform: translate(1px, 2px); box-shadow: 1px 1px 0 var(--ink); }
 .pp-slot kbd { position: absolute; top: -9px; left: -7px; font: 700 11px var(--font-ui); color: var(--ink); background: #fff; border: 1.5px solid var(--ink); border-radius: 4px; padding: 0 4px; }
+/* (ROADMAP 11.25) over the row, what the category has - each as it is drawn, to see (not buttons); the
+   one the drawing is now lit */
+.pp-legend { position: fixed; z-index: 18; left: 50%; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 126px); transform: translateX(-50%); display: none; gap: 3px; padding: 4px 6px; background: rgba(255, 252, 244, 0.88); border: 2px solid var(--ink); border-radius: 10px 8px 11px 7px; direction: rtl; pointer-events: none; }
+.pp-legend.on { display: flex; }
+.pp-it { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 54px; padding: 3px 3px 2px; border-radius: 8px 6px 9px 5px; opacity: 0.8; transition: background 0.12s, opacity 0.12s; }
+.pp-it svg { width: 30px; height: 30px; fill: none; stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pp-it b { font: 700 11.5px var(--font-ui); color: var(--ink); white-space: nowrap; }
+.pp-it.on { opacity: 1; background: #ffe58a; box-shadow: inset 0 -3px 0 #ff9a3c; }
+.pp-live.none b { color: #8a8494; }
 /* (a phone or a tablet at the wheel: the row at the bottom, the tools down the side; the kept parts over
    the steering arrows - or, with the stick, at the top) */
 body.touch .pp-row { bottom: max(8px, env(safe-area-inset-bottom)); }
+body.touch .pp-legend { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 60px); }
 body.touch.drive-btns .pp-slots { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 136px); }
 body.touch:not(.drive-btns) .pp-slots { bottom: auto; top: calc(max(8px, env(safe-area-inset-top)) + 54px); left: 50%; transform: translateX(-50%); }
 @media (max-height: 520px) {
@@ -1381,6 +1391,11 @@ body.touch:not(.drive-btns) .pp-slots { bottom: auto; top: calc(max(8px, env(saf
   .pp-slot > svg[viewBox="0 0 40 28"] { width: 44px; height: 31px; }
   .pp-slot > svg:not([viewBox="0 0 40 28"]) { width: 26px; height: 26px; }
   body.touch.drive-btns .pp-slots { bottom: calc(max(6px, env(safe-area-inset-bottom)) + 96px); }
+  .pp-legend { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 104px); padding: 3px 4px; }
+  body.touch .pp-legend { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 50px); }
+  .pp-it { min-width: 46px; }
+  .pp-it svg { width: 22px; height: 22px; }
+  .pp-it b { font-size: 10px; }
 }
 /* (ROADMAP 11.20) the part just drawn onto something: what it is, what it does there, its numbers */
 .fz-tag { position: fixed; left: 0; top: 0; z-index: 60; max-width: 280px; display: flex; flex-direction: column; gap: 2px; padding: 7px 11px 8px; background: rgba(255, 252, 244, 0.95); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transform: translateY(6px) scale(0.96); transition: opacity 0.18s, transform 0.18s; direction: rtl; }

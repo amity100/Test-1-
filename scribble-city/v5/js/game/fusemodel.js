@@ -567,6 +567,59 @@ export function chuteModel(span, paint) {
 }
 
 // floats along its two sides, low (len: how long; hw: half the width between them)
+// ------------------------------------------------------------------ propeller (ROADMAP 11.25)
+// a boat's propeller out of the car's back, along -z from the origin: a shaft, a hub, three broad
+// blades round it (r: how long a blade is)
+export function propModel(r, paint) {
+  const M = itemMats();
+  const K = new Kit();
+  K.cyl(M.metal, 0.05, 0.05, -0.3, 0, STEEL);
+  const base = K.build({ seed: 0.71 });
+  const B = new Kit();
+  B.cyl(M.metal, 0.1, 0.07, -0.38, -0.26, CHROME);
+  for (let k = 0; k < 3; k++) {
+    const bl = new THREE.BoxGeometry(Math.max(0.12, r * 0.42), r, 0.03);
+    bl.translate(0, r / 2 + 0.06, -0.32);
+    // (each blade a little twisted, as a propeller's are)
+    bl.rotateY(0.35);
+    bl.rotateZ((k * 2 * Math.PI) / 3);
+    B.add(M.paint, bl, paint);
+  }
+  const spin = new THREE.Group();
+  spin.add(B.build({ seed: 0.73 }));
+  const g = new THREE.Group();
+  g.add(base);
+  g.add(spin);
+  return wrap(g, { spin, r });
+}
+
+// ------------------------------------------------------------------ spikes (ROADMAP 11.25)
+// spikes all round a car (D: its size), a rail along each sill and across its back, cones out of
+// them (len: how long they were drawn)
+export function spikesModel(D, len, clear = 0.25) {
+  const M = itemMats();
+  const K = new Kit();
+  const L = Math.max(0.16, Math.min(0.42, 0.12 + len * 0.1));
+  const y = clear + 0.16;
+  const cone = (x, z, dx, dz) => {
+    const c = new THREE.ConeGeometry(0.075, L, 8);
+    // (pointing out along dx, dz)
+    if (dx) c.rotateZ(-Math.sign(dx) * Math.PI / 2);
+    else c.rotateX(Math.sign(dz) * Math.PI / 2);
+    c.translate(x + (dx * L) / 2, y, z + (dz * L) / 2);
+    K.add(M.metal, c, CHROME);
+  };
+  for (const s of [-1, 1]) {
+    K.box(M.metal, s * D.hw - 0.05, y - 0.06, -D.hl * 0.85, s * D.hw + 0.05, y + 0.06, D.hl * 0.8, DARK);
+    const n = Math.max(4, Math.round(D.hl * 2.4));
+    for (let i = 0; i < n; i++) cone(s * (D.hw + 0.05), -D.hl * 0.8 + (i / (n - 1)) * D.hl * 1.55, s, 0);
+  }
+  K.box(M.metal, -D.hw, y - 0.06, -D.hl - 0.05, D.hw, y + 0.06, -D.hl + 0.05, DARK);
+  const nb = Math.max(3, Math.round(D.hw * 3));
+  for (let i = 0; i < nb; i++) cone(-D.hw * 0.85 + (i / (nb - 1)) * D.hw * 1.7, -D.hl - 0.05, 0, -1);
+  return wrap(K.build({ seed: 0.99 }), { len: L });
+}
+
 export function floatModel(len, hw, paint) {
   const M = itemMats();
   const K = new Kit();

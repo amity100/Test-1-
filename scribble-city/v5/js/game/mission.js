@@ -34,8 +34,9 @@ const BACK = { x: 60, z: Z, yaw: Math.PI / 2 };
 const AGAIN = { x: 172, z: 42 };
 const WAYS = { wings: 'כנפיים', rotor: 'רוטור', balloon: 'בלון', floats: 'מצופים', spring: 'קפיץ', plane: 'מטוס (כנפיים + סילון)', chute: 'מצנח', jump: 'קפיצה' };
 const ALL_WAYS = ['wings', 'rotor', 'balloon', 'floats', 'spring', 'plane'];
-// (ROADMAP 11.24: with the part pen, the three parts it draws)
-const PEN_WAYS = ['wings', 'floats', 'rotor'];
+// (ROADMAP 11.25: with the part pen, what its "functional" category draws - floats are its propeller)
+const PEN_WAYS = ['wings', 'balloon', 'rotor', 'floats', 'spring', 'plane'];
+const PEN_WAY_NAME = { floats: 'מדחף (סירה)', plane: 'מטוס (כנפיים + סילון)', balloon: 'כדור פורח' };
 const KEY = 'scribble-city-v5-bridge';
 const RING_C = [1, 0.82, 0.16];
 
@@ -212,7 +213,7 @@ export class BrokenBridge {
         const all = this.pen() ? PEN_WAYS : ALL_WAYS;
         const left = all.filter((k) => !this.solved.has(k));
         const n = all.length - left.length;
-        g.hud.toast(left.length ? `מצאתם ${n} מתוך ${all.length} דרכים — נסו גם: ${left.slice(0, 3).map((k) => WAYS[k]).join(', ')} (העיגול הצהוב — שוב)` : 'מצאתם את כל הדרכים!', 'good', 5);
+        g.hud.toast(left.length ? `מצאתם ${n} מתוך ${all.length} דרכים — נסו גם: ${left.slice(0, 3).map((k) => this.wayName(k)).join(', ')} (העיגול הצהוב — שוב)` : 'מצאתם את כל הדרכים!', 'good', 5);
       }
       const at = this.state === 'won' ? AGAIN : START;
       const ok = p.mode === 'foot' || (v && !v.air && (v.kind === 'car' || v.kind === 'bike') && Math.abs(v.speed || 0) < 9);
@@ -252,11 +253,11 @@ export class BrokenBridge {
     }
     // (by the bridge with nothing on the car that would get it over: what to try)
     const near = pos.x > 36 && pos.x < EDGE + 2 && Math.abs(pos.z - Z) < 40;
-    this.hint = near && !canCross(v) ? { v, type: this.tries % 2 ? 'float' : 'wing' } : null;
+    this.hint = near && !canCross(v) ? { v, cat: 'func', type: this.tries % 2 ? 'float' : 'wing' } : null;
     if (near && !this.toldPen && !this.toldOnce && pos.x > 48) {
       this.toldPen = true;
       this.toldOnce = true;
-      const what = this.pen() ? 'ציירו כנפיים, מצופים או רוטור' : 'ציירו על המכונית משהו שיעביר אתכם';
+      const what = this.pen() ? 'פונקציונלי — ציירו כנפיים, כדור פורח, רוטור או מדחף' : 'ציירו על המכונית משהו שיעביר אתכם';
       g.hud.radio(g.touch ? `הגשר שבור באמצע! ✎ — ${what}` : `הגשר שבור באמצע! Q — ${what}`);
       this.radioT = g.time + 6;
     }
@@ -350,7 +351,7 @@ export class BrokenBridge {
     this.state = 'on';
     this.used.clear();
     this.gpsIsle = false;
-    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — ולשוט מהחוף לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר — המספר ליד העט אומר כמה', 'info', 4.5);
+    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי מדחף — ולשוט מהחוף לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר, וכדור פורח או רוטור עוברים מעל הכול', 'info', 4.5);
     else g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : 'שוב! כנפיים גדולות יותר גולשות רחוק יותר', 'info', 4.5);
   }
 
@@ -366,7 +367,7 @@ export class BrokenBridge {
     }
     g.hud.big('עברתם את הגשר!', 2400);
     g.audio.play('cheer', 0.7);
-    g.hud.toast(`הדרך שלכם: ${WAYS[how]}`, 'good', 4.5);
+    g.hud.toast(`הדרך שלכם: ${this.wayName(how)}`, 'good', 4.5);
     if (g.police) g.police.clear();
     if (g.money) g.money.earn(how === 'jump' ? 200 : 400, 'הגשר השבור');
     if (g.gps) g.gps.clear();
@@ -379,6 +380,11 @@ export class BrokenBridge {
   pen() {
     const fz = this.game.fuse;
     return !!(fz && fz.pen && fz.pen.active());
+  }
+
+  // a way over, by its name - as the part pen calls what it draws
+  wayName(k) {
+    return (this.pen() && PEN_WAY_NAME[k]) || WAYS[k];
   }
 
   // gone far away: it waits at its ring

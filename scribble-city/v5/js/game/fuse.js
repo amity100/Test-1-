@@ -3,7 +3,7 @@ import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
 import { readDrawing, buildDrawn, floatK, wingGlide, rotorLift } from './fusedraw.js';
 import { PartPen } from './partpen.js';
 import { boxOf, along, pathLen } from './signshape.js';
-import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, paintOf } from './fusemodel.js';
+import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, paintOf } from './fusemodel.js';
 import { isWater } from './rides.js';
 import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
@@ -33,6 +33,8 @@ import { clamp, damp } from '../core/util.js';
 //   smoke   it hides        a spiral at its back: chased, it lays ink smoke the police cannot see through
 //   chute   it floats down  an arch over it: falling, it opens
 //   float   it swims        a long shape low along it: on the water it floats and drives on
+// (ROADMAP 11.25) and from the part pen only:
+//   spike   it bristles     spikes all round: who rams it, who shoves it, is wrecked
 // On what is yours (your car, you, your gun) it stays; on others (a police car, a gangster, a man in
 // the street) it does its thing for a few seconds and goes.
 
@@ -52,14 +54,15 @@ export const PARTS = {
   smoke: { name: 'עשן', mark: 'ספירלה — מאחור', cost: 10, col: [0.55, 0.56, 0.62] },
   chute: { name: 'מצנח', mark: 'קשת ∩ — מעליה', cost: 10, col: [0.95, 0.38, 0.32] },
   float: { name: 'מצופים', mark: 'צורה ארוכה — מתחת, לאורכה', cost: 12, col: [1, 0.55, 0.16] },
+  spike: { name: 'קוצים', mark: '', cost: 10, col: [0.62, 0.64, 0.7] },
   // (ROADMAP 11.22) anything else drawn out of your car: on it as drawn
   deco3: { name: 'קישוט', mark: '', cost: 6, col: [0.94, 0.92, 0.86] },
 };
-export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float'];
+export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike'];
 
 // what a part can be put on
 const ALLOW = {
-  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'deco3']),
+  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3']),
   hero: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'chute']),
   weapon: new Set(['barrel', 'blade', 'spring', 'magnet', 'jet', 'wing', 'armor', 'rotor']),
   car: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel', 'barrel', 'wing']),
@@ -932,8 +935,9 @@ export class Fuse {
   // ------------------------------------------------------------------ on your car
   onVehicle(v, part) {
     const R = (v.fuse = v.fuse || { parts: [], root: null, models: [] });
-    // (one of each, but two guns and three things of your own; a wheel replaces the wheels)
-    const same = R.parts.filter((p) => p.type === part.type);
+    // (one of each, but two guns and three things of your own; a wheel replaces the wheels - the
+    // part pen's, ROADMAP 11.25: one of each of its things, a flamethrower and a jet both on)
+    const same = R.parts.filter((p) => p.type === part.type && (p.item || '') === (part.item || ''));
     const keep = part.type === 'barrel' ? 1 : part.type === 'deco3' ? 2 : 0;
     while (same.length > keep) this.removeVeh(v, same.shift(), true);
     if (R.parts.length >= MAX_ON_VEH) this.removeVeh(v, R.parts[0], true);
@@ -1036,6 +1040,7 @@ export class Fuse {
     v.spaceIsMine = B.spaceIsMine;
     v.turrets = B.turrets ? [...B.turrets] : null;
     v.fuseGuns = false;
+    v.spikes = null;
     const has = {};
     const r0 = vehWheelR(v);
     for (const p of R.parts) {
@@ -1140,6 +1145,12 @@ export class Fuse {
       } else if (p.type === 'float') {
         // (ROADMAP 11.23: long and thick enough for its weight, it holds it up - less, it sinks slower)
         fz.float = { len: clamp(n.len || 3.6, 2, 6), k: p.shape ? floatK(n, H.mass) : 1.2 };
+      } else if (p.type === 'spike') {
+        // (ROADMAP 11.25) spikes all round: who is beside it is cut, who rams it from behind is
+        // wrecked, a police car shoving it is wrecked (game/chase.js contact)
+        const side = Math.round(clamp(30 + (n.len || 1) * 20, 30, 80));
+        v.blades = { side: Math.max(side, (v.blades && v.blades.side) || 0), rear: true };
+        v.spikes = { dmg: side };
       }
     }
     // the combinations: two parts that make something of each other
@@ -1332,6 +1343,17 @@ export class Fuse {
         m.position.set(0, 0.2, 0);
         root.add(m);
         R.models.push({ p, m, role: 'float' });
+        if (p.v === 'prop') {
+          // (ROADMAP 11.25) a propeller out of its back, low: a boat of it
+          const pm = propModel(clamp((p.n.size || 1) * 0.4, 0.25, 0.6), col);
+          pm.position.set(0, K ? Math.max(0.3, K.clear + 0.05) : 0.3, -D.hl - 0.05);
+          root.add(pm);
+          R.models.push({ p, m: pm, role: 'prop' });
+        }
+      } else if (p.type === 'spike') {
+        const m = spikesModel(D, clamp(p.n.len || 1, 0.4, 3), K ? K.clear : 0.25);
+        root.add(m);
+        R.models.push({ p, m, role: 'spike' });
       }
     }
     // (ROADMAP 11.21: the part just put on grows into its place)
@@ -2568,6 +2590,7 @@ export class Fuse {
           ud.spin.rotation.x = (v.wheelSpin || 0) * (0.34 / r0);
           o.m.rotation.y = ud.front ? clamp((v.turn || 0) * 0.35, -0.45, 0.45) : 0;
         } else if (o.role === 'rotor' && ud.spin) ud.spin.rotation.y += this.fdt * (v.fzLifting || (v.air && fz.rotor) ? 26 : v.driver ? 6 : 1);
+        else if (o.role === 'prop' && ud.spin) ud.spin.rotation.z += this.fdt * (v.fzWet ? 4 + Math.abs(v.speed || 0) * 1.6 : v.driver ? 2 : 0.5);
         else if (o.role === 'jet' && ud.flame) {
           const on = v.boosting || (v.fzThrust && v.air) ? 1 : 0;
           v.fzThrust = 0;
@@ -2907,7 +2930,7 @@ export class Fuse {
   saveVeh(v) {
     const R = v.fuse;
     if (!R || !(R.parts.length || (R.decor && R.decor.length))) return undefined;
-    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}) }));
+    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}), ...(p.item ? { item: p.item } : {}) }));
     return R.decor && R.decor.length ? { parts, decor: R.decor } : parts;
   }
 
@@ -2923,7 +2946,7 @@ export class Fuse {
 
 export const PART_CSS = {
   wheel: '#3c3c46', wing: '#e8e2d2', rotor: '#d23a32', jet: '#ff8a2a', spring: '#d6c84a', barrel: '#4c5448', blade: '#c8ccd6', armor: '#7c818c', balloon: '#e8333d', magnet: '#d21f26',
-  star: '#ffd02e', bolt: '#5ab8ff', smoke: '#8c8e9c', chute: '#f2604f', float: '#ff8c28', deco3: '#efe9da',
+  star: '#ffd02e', bolt: '#5ab8ff', smoke: '#8c8e9c', chute: '#f2604f', float: '#ff8c28', spike: '#9ea3b2', deco3: '#efe9da',
 };
 
 export const COMBO_NAME = {
@@ -3167,10 +3190,13 @@ function vehRule(p, v) {
     case 'chute':
       return { name: 'מצנח', rule: 'בנפילה הוא נפתח — יורדים לאט וגולשים', use: 'קופצים מגג, מרמפה או בקפיץ' };
     case 'float':
+      if (p.v === 'prop') return { name: 'מדחף', rule: 'נוסעים לתוך הים — והיא שטה כמו סירה', nums: 'במים עד 14 מ׳/ש' };
       // (ROADMAP 11.23: too small for its weight, it sinks - slower)
       return fz.float && fz.float.k < 1
         ? { name: 'מצופים קטנים', rule: 'קטנים מדי בשבילה — במים היא שוקעת לאט. צריך ארוכים ועבים יותר' }
         : { name: 'מצופים', rule: 'נוסעים לתוך הים — והיא צפה ושטה', nums: 'במים עד 14 מ׳/ש' };
+    case 'spike':
+      return { name: 'קוצים', rule: 'ניידת שנצמדת אליכם נהרסת, ומי שנוגע בצד נחתך', nums: `נזק ${v.spikes ? v.spikes.dmg : 40}` };
     case 'deco3':
       return { name: 'קישוט', rule: 'עליה כמו שציירתם' };
     default:
