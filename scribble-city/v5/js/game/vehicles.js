@@ -1155,7 +1155,8 @@ class Vehicle {
     const want = this.game.camRig.yaw - this.yaw;
     const fire = input.fire || input.firePressed;
     for (const t of this.turrets) {
-      const target = t.yaw0 + clamp(angleDiff(t.yaw0, want), -t.arc, t.arc);
+      // (ROADMAP 11.27: one still taking shape as it was drawn, game/partpen.js fly)
+      const target = t.p && t.p.shaping > performance.now() ? t.yaw0 : t.yaw0 + clamp(angleDiff(t.yaw0, want), -t.arc, t.arc);
       t.yaw = dampAngle(t.yaw, target, 4, dt);
       t.node.rotation.y = t.yaw;
       t.cool -= dt;

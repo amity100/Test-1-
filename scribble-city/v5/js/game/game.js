@@ -1180,6 +1180,8 @@ export class Game {
     // the performance test route drives the camera (and the city's life follows it)
     if (this.perf.bench) this.perf.benchCamera(dt);
     this.camera.updateMatrixWorld();
+    // (the ink on its way onto the car, where the camera now sees it: game/partpen.js)
+    if (this.fuse) this.fuse.pen.late();
     // (the camera under the bay: the world down there, ROADMAP 5.2)
     if (this.swim) this.swim.frame(dt);
     this.bubbles.update(dt, this.camera);

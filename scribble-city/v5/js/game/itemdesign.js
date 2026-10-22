@@ -360,11 +360,13 @@ function atS(T, s) {
 // (the morph's second beat) each line of the drawing, already set over the thing on its plane, onto the
 // thing's own lines (targets: { P, closed }): onto the one most of it is near, evenly along the stretch
 // of it the line covers - a wobbly line drawn along an edge is that edge. Near none of them it was
-// none of the thing (smoke, a cannonball, a scribble): it goes - smoothed, faded. Returns { lines, fade }
+// none of the thing (smoke, a cannonball, a scribble): it goes - smoothed, faded. Returns { lines, fade,
+// on (the target each line went onto, -1 none) }
 function tidy(lines, targets, tol) {
   const TT = targets.map((t) => prep(t.P, t.closed));
   const out = [];
   const fade = [];
+  const on = [];
   for (const L of lines) {
     const near = L.map((q) => {
       let b = null;
@@ -387,6 +389,7 @@ function tidy(lines, targets, tol) {
     if (k < 0 || kn < L.length * 0.45) {
       out.push(smooth(L, 2));
       fade.push(true);
+      on.push(-1);
       continue;
     }
     const T = TT[k];
@@ -413,8 +416,9 @@ function tidy(lines, targets, tol) {
     }
     out.push(L.map((q, i) => atS(T, lerp(s0, s1, i / Math.max(1, L.length - 1)))));
     fade.push(false);
+    on.push(k);
   }
-  return { lines: out, fade };
+  return { lines: out, fade, on };
 }
 
 // a polygon's points down to those that carry its shape (eps off a straight line between them)
@@ -1378,6 +1382,8 @@ function balloonDesign(lines, ctx, o) {
   const k = D / W0;
   const yUnder = Math.min(B.y0, mouthY - 1e-3);
   const over = lines.map((L) => L.map(([x, y]) => [(x - ex) * k, y >= mouthY ? b0 + ((y - mouthY) / He0) * He : ((y - yUnder) / Math.max(1e-3, mouthY - yUnder)) * b0]));
+  // (its envelope's outline, target 0, inks only the morph: round all over, a line round its middle
+  // would cross its face from anywhere but straight in front - its edges are drawn as it is seen)
   const td = tidy(over.map((L) => thin(L, 48)), targets, D * 0.1);
   // (in the car's frame: x to its left - the screen's right is its -x - over its roof)
   const X = (x, y, z = 0) => [-x, base + y, z];
@@ -1395,9 +1401,9 @@ function balloonDesign(lines, ctx, o) {
   const roof = C.roof;
   const ropesTo = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sz]) => ({ a: r3([sx * bw * 0.44, base + 0.01, sz * bw * 0.44]), b: r3([sx * C.D.hw * 0.62, roof, sz * Math.min(C.D.hl * 0.3, 0.7)]) }));
   return {
-    shape: { design: 1, kind: 'balloon', ax: 'z', c: 0, pivot: r3([0, base, 0]), role: 'dballoon', mirror: false, fill: 'z', prims, ink: td.lines.filter((L, i) => !td.fade[i]).map((L) => thin(L, 40).map(([x, y]) => r2([x, base + y]))), pal, ropes: ropesTo, rof: r3([0, base + b0, 0]) },
+    shape: { design: 1, kind: 'balloon', ax: 'z', c: 0, pivot: r3([0, base, 0]), role: 'dballoon', mirror: false, fill: 'z', prims, ink: td.lines.filter((L, i) => !td.fade[i] && td.on[i] !== 0).map((L) => thin(L, 40).map(([x, y]) => r2([x, base + y]))), pal, ropes: ropesTo, rof: r3([0, base + b0, 0]) },
     at: r3([0, base, 0]),
-    focus: { at: r3([0, base + b0 + He * 0.4, 0]), k: -0.5 },
+    focus: { at: r3([0, base + b0 + He * 0.4, 0]), k: -0.15 },
     P3: pl.P3,
     T3: td.lines.map((L) => L.map(([x, y]) => r3(X(x, y)))),
     fade: td.fade,

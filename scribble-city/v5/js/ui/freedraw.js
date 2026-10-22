@@ -1429,7 +1429,10 @@ export class FreeDraw {
     if (this.cardDirty || (!PR && !this.cardEl.classList.contains('hidden'))) this.card();
     if (this.chipsDirty) this.showChips();
     this.tagEl.classList.toggle('hidden', !has || !!PR || !!PW || !!PG || this.carOpen);
-    this.hintEl.classList.toggle('gone', has || !!this.cur);
+    // (ROADMAP 11.27: nor over a thing taking shape on the car, nor while its name is up)
+    const pp = this.penOn() ? game.fuse.pen : null;
+    const shaping = !!(pp && (pp.flights.length || pp.focus || (pp.made && !pp.made.old)));
+    this.hintEl.classList.toggle('gone', has || !!this.cur || shaping);
     this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur || !!this.game.player.inVehicle);
     // (ROADMAP 11.20) the parts you can draw onto things, how each is drawn - (ROADMAP 11.22) behind
     // its "?", on foot; none in a car: what you draw on it is what it gets

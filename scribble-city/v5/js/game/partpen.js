@@ -483,9 +483,9 @@ export class PartPen {
     if (!o || !lines.length) return false;
     const R = this.read(lines, o);
     if (!R) return false;
-    // (ROADMAP 11.27: not sure of two - the likelier of them, the tip said what tells them apart; none
-    // of them the likeliest - none, the tip said what would make it one)
-    const item = R.item;
+    // (ROADMAP 11.27: not sure of two - the likelier of them, the tip said what tells them apart; so
+    // too when not sure it is one of them at all: what the tip showed is what goes on)
+    const item = R.item || (R.ask ? R.ask[0] : null);
     if (!item) {
       this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('rubber', 0.5);
@@ -576,7 +576,12 @@ export class PartPen {
     // (ROADMAP 11.27: designed - then onto the thing, its added parts dashed in, and it fills; the
     // camera leans in on it the while - game/fuse.js sketchCam)
     const tidy = L.T3 ? { tidy: L.T3, fade: L.fade, dash: L.dash } : {};
-    if (L.T3) this.focus = { v, at: L.focus ? L.focus.at : L.at, k: L.focus ? L.focus.k : 0.38, t0, ms: FLY_MS + TIDY_MS + FILL_MS + 600 };
+    if (L.T3) {
+      this.focus = { v, at: L.focus ? L.focus.at : L.at, k: L.focus ? L.focus.k : 0.38, fit: endsOf(L), t0, ms: FLY_MS + TIDY_MS + FILL_MS + 600 };
+      // (a gun on a turret stays as it was drawn till it has taken shape - the ink lands on it - then
+      // turns after the look: game/vehicles.js drawnGuns)
+      part.shaping = t0 + FLY_MS + TIDY_MS + FILL_MS;
+    }
     this.flights.push({ v, from, to: L.P3, side, c: inkI, t0, part, a: 1, ...tidy });
     if (L.mirror) this.flights.push({ v, from, to: L.P3, side: -side, c: inkI, t0, part: null, a: 0.55, ...tidy });
     return side;
@@ -680,8 +685,6 @@ export class PartPen {
   update(rdt) {
     const g = this.game;
     const now = performance.now();
-    // (the ink in flight, over everything)
-    if (this.flights.length || this.flyDrawn) this.drawFlights(now);
     // (the car taking a new part's weight: down a little on its springs, and back)
     const v = g.player.inVehicle;
     if (v && v.fzDipT) {
@@ -708,6 +711,12 @@ export class PartPen {
       this.showRow();
     }
     this.showSlots();
+  }
+
+  // (the ink in flight, over everything - once the camera has moved this frame, game/game.js: the
+  // camera leans in on a thing taking shape, and the ink stays on it)
+  late() {
+    if (this.flights.length || this.flyDrawn) this.drawFlights(performance.now());
   }
 
   drawFlights(now) {
@@ -794,9 +803,11 @@ export class PartPen {
             const q = this.proj(f.v, B[j][0] * f.side, B[j][1], B[j][2]);
             x = q ? A[j][0] + (q.x - A[j][0]) * e : A[j][0];
             y = q ? A[j][1] + (q.y - A[j][1]) * e : A[j][1];
-            // (straightening onto the thing: each point to its own place on its lines)
-            if (T && e2 > 0 && T[j]) {
-              const r = this.proj(f.v, T[j][0] * f.side, T[j][1], T[j][2]);
+            // (straightening onto the thing: each point to its own place on its lines - the line it goes
+            // onto has fewer points than were drawn, game/itemdesign.js tidy: the one as far along it)
+            const Tj = T && e2 > 0 ? T[T.length === A.length ? j : Math.round((j * (T.length - 1)) / Math.max(1, A.length - 1))] : null;
+            if (Tj) {
+              const r = this.proj(f.v, Tj[0] * f.side, Tj[1], Tj[2]);
               if (r) {
                 x += (r.x - x) * e2;
                 y += (r.y - y) * e2;
@@ -841,6 +852,9 @@ export class PartPen {
       g.globalAlpha = 1;
       this.flyDrawn = true;
     }
+    // (nothing in flight: the layer away as well - no last picture of the ink left on the screen)
+    const show = this.flyDrawn ? '' : 'hidden';
+    if (cv.style.visibility !== show) cv.style.visibility = show;
   }
 
   // ------------------------------------------------------------------ drawn in the world
@@ -1145,6 +1159,26 @@ function ring(cx, cy, cz, r, plane = 'y', n = 20) {
     const a = (i / n) * Math.PI * 2;
     if (plane === 'y') out.push([cx + Math.cos(a) * r, cy, cz + Math.sin(a) * r]);
     else out.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r, cz]);
+  }
+  return out;
+}
+
+// (ROADMAP 11.27) a designed thing's far ends, in the car's frame - its highest and lowest, foremost
+// and hindmost, and out to each side (both sides: a pair, or the ink on the side it flew to) - what
+// the camera keeps in the picture as it takes shape (game/fuse.js sketchCam)
+function endsOf(L) {
+  const pts = [...(L.T3 || []).flat(), ...(L.dash || []).flat()];
+  if (!pts.length) return null;
+  const all = pts.concat(pts.map(([x, y, z]) => [-x, y, z]));
+  const out = [];
+  for (let a = 0; a < 3; a++) {
+    let lo = all[0];
+    let hi = all[0];
+    for (const q of all) {
+      if (q[a] < lo[a]) lo = q;
+      if (q[a] > hi[a]) hi = q;
+    }
+    out.push(lo, hi);
   }
   return out;
 }

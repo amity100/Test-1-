@@ -114,6 +114,12 @@ const _f = new THREE.Vector3();
 const _o = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _cf = new THREE.Vector3();
+// (the pen camera's fit, ROADMAP 11.27: its eye, forward, right, up, a point)
+const _fe = new THREE.Vector3();
+const _ff = new THREE.Vector3();
+const _fr = new THREE.Vector3();
+const _fu = new THREE.Vector3();
+const _fq = new THREE.Vector3();
 const UPY = new THREE.Vector3(0, 1, 0);
 const fmt = (x, n = 1) => (Math.round(x * 10 ** n) / 10 ** n).toString();
 
@@ -614,6 +620,42 @@ export class Fuse {
         _w.lerp(_f, f * 0.75);
         _p.lerp(_f, f * (F.k ?? 0.38));
         _p.y = Math.max(_p.y, (v.pos.y || 0) + 1.2);
+        // (all of it in the picture as it takes shape - a balloon's top, a wing's tips, a barrel's
+        // muzzle: back off along the view till its far ends are in, short of a wall behind)
+        if (F.fit && F.fit.length && f > 0) {
+          const ty = Math.tan(((cam.fov || 50) * Math.PI) / 360) * 0.86;
+          const tx = ty * (cam.aspect || 1.6);
+          _d.subVectors(_p, _w);
+          let s = 1;
+          for (let it = 0; it < 14; it++) {
+            _fe.copy(_w).addScaledVector(_d, s);
+            _ff.subVectors(_w, _fe).normalize();
+            _fr.crossVectors(_ff, UPY).normalize();
+            _fu.crossVectors(_fr, _ff);
+            let ok = true;
+            for (const q of F.fit) {
+              toW(q[0], q[1], q[2], _fq).sub(_fe);
+              const z = _fq.dot(_ff);
+              if (z < 0.3 || Math.abs(_fq.dot(_fr)) > tx * z || Math.abs(_fq.dot(_fu)) > ty * z) {
+                ok = false;
+                break;
+              }
+            }
+            if (ok) break;
+            s *= 1.12;
+          }
+          if (s > 1) {
+            _p.copy(_w).addScaledVector(_d, 1 + (s - 1) * f);
+            if (coll && coll.raycast) {
+              toW(0, D.h + 0.3, 0, _fe);
+              _ff.subVectors(_p, _fe);
+              const L = _ff.length();
+              _ff.multiplyScalar(1 / L);
+              const hit = coll.raycast(_fe.x, _fe.y, _fe.z, _ff.x, _ff.y, _ff.z, L + 0.3);
+              if (hit) _p.copy(_fe).addScaledVector(_ff, Math.max(1.4, hit.t - 0.35));
+            }
+          }
+        }
       }
     }
     const e = this.sk * this.sk * (3 - 2 * this.sk);
@@ -1423,7 +1465,7 @@ export class Fuse {
       const ud = o.m.userData;
       // (a drawn one turns from the way it was drawn, about its foot)
       const yaw0 = ud.yaw0 !== undefined ? ud.yaw0 : o.p.v === 'rear' ? Math.PI : 0;
-      return { node: ud.pivot, muzzle: ud.muzzle.clone(), pivot: ud.pivotPt ? ud.pivotPt.clone() : new THREE.Vector3(0, ud.muzzle.y, 0), yaw0, arc: o.p.v === 'turret' ? Math.PI : 0.45, r: ud.r, gun: o.p.gun, yaw: yaw0, cool: 0 };
+      return { node: ud.pivot, muzzle: ud.muzzle.clone(), pivot: ud.pivotPt ? ud.pivotPt.clone() : new THREE.Vector3(0, ud.muzzle.y, 0), yaw0, arc: o.p.v === 'turret' ? Math.PI : 0.45, r: ud.r, gun: o.p.gun, p: o.p, yaw: yaw0, cool: 0 };
     });
     if (R.turrets.length) v.turrets = [...(v.fzBase.turrets || []), ...R.turrets];
     // (a gun that turns all the way: rate of fire up on a rotor - the gunship; true as a sniper's
