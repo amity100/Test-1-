@@ -110,6 +110,7 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3(1, 1, 1);
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _f = new THREE.Vector3();
 const _o = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _cf = new THREE.Vector3();
@@ -598,6 +599,23 @@ export class Fuse {
     // to draw on)
     place(this.skSpot, _p);
     toW(0, D.h * 0.42, D.hl * 0.12, _w);
+    // (ROADMAP 11.27: a thing taking shape on it - the camera leans in on it a moment, and back)
+    const F = this.pen.focus;
+    if (F) {
+      const k = (performance.now() - F.t0) / F.ms;
+      if (k >= 1 || F.v !== v) this.pen.focus = null;
+      else {
+        const ss = (a, b, x) => {
+          const t = clamp((x - a) / (b - a), 0, 1);
+          return t * t * (3 - 2 * t);
+        };
+        const f = ss(0, 0.25, k) * (1 - ss(0.72, 1, k));
+        toW(F.at[0], F.at[1], F.at[2], _f);
+        _w.lerp(_f, f * 0.75);
+        _p.lerp(_f, f * (F.k ?? 0.38));
+        _p.y = Math.max(_p.y, (v.pos.y || 0) + 1.2);
+      }
+    }
     const e = this.sk * this.sk * (3 - 2 * this.sk);
     _m.lookAt(_p, _w, UPY);
     _q.setFromRotationMatrix(_m);
@@ -1089,6 +1107,8 @@ export class Fuse {
           v.glide = Math.max(v.glide, wingGlide(n));
           fz.airCtl = Math.max(fz.airCtl || 0, 0.5);
           fz.wing = clamp((n.span || 1) * (n.chord || 0.5), 0.2, 6);
+          // (ROADMAP 11.27: drawn with feathers - they climb faster)
+          fz.climb = n.feather ? 1.35 : 1;
         }
       } else if (p.type === 'rotor') {
         const span = clamp(n.span || 2, 0.6, 9);
@@ -1111,7 +1131,8 @@ export class Fuse {
       } else if (p.type === 'barrel') {
         // (the gun itself: game/partsum.js's, as long and as thick as drawn, of its ink)
         const r = n.thick ? clamp(n.r, 0.11, 0.24) : clamp(n.r || 0.06, 0.04, 0.1);
-        p.gun = gunOf({ r, len: clamp(n.len || 1, 0.5, 3), el: INK_EL[p.ink] || undefined });
+        // (ROADMAP 11.27: drawn pointing up - a mortar; three barrels or more - a minigun)
+        p.gun = gunOf({ r, len: clamp(n.len || 1, 0.5, 3), el: INK_EL[p.ink] || undefined, barrels: n.barrels, mortar: n.mortar });
         v.fuseGuns = true;
       } else if (p.type === 'blade') {
         const len = clamp(n.len || 1, 0.4, 3);
@@ -1216,8 +1237,8 @@ export class Fuse {
       if (p.shape) {
         const { body, line } = drawnColours(ink(p), v, p.type);
         // (ROADMAP 11.26: a thing of the part pen keeps its model while it is on - another put on, or
-        // one taken off, does not make all of them again)
-        const key = p.shape.look ? body.join() : null;
+        // one taken off, does not make all of them again - ROADMAP 11.27: designed ones too)
+        const key = p.shape.look || p.shape.design ? body.join() : null;
         const kept = key && this.looks.get(p);
         const ms = kept && kept.key === key ? kept.ms : buildDrawn(p, { D, K, spots: vehWheelSpots(v, K, D), wheelR: fz.wheels ? fz.wheels.r : null, lift: fz.lift || 0 }, body);
         if (key) this.looks.set(p, { key, ms });
@@ -1381,8 +1402,14 @@ export class Fuse {
     if (this.justAdded) {
       for (const o of R.models) {
         if (o.p !== this.justAdded) continue;
-        o.m.userData.popAt = performance.now() + this.popDelay;
-        o.m.scale.setScalar(0.02);
+        const ud = o.m.userData;
+        ud.popAt = performance.now() + this.popDelay;
+        // (ROADMAP 11.27: a designed one is not there till its ink has straightened onto it - then it
+        // fills out of its plane)
+        if (ud.fill) {
+          o.m.visible = false;
+          o.m.scale.set(ud.fill === 'x' ? 0.02 : 1, ud.fill === 'y' ? 0.02 : 1, ud.fill === 'z' ? 0.02 : 1);
+        } else o.m.scale.setScalar(0.02);
       }
     }
     // (a car of the city's: its frame comes from the car batches each frame - place(); a drawn
@@ -1527,7 +1554,7 @@ export class Fuse {
       const M = g.mission;
       const alt = Math.max(0, v.pos.y - Math.max(gy, M ? M.floorAt(v.pos.x, v.pos.z, v.pos.y) : -Infinity));
       const sink = Math.max(-7, -1.6 - alt * 1.1);
-      const want = v.pos.y > ceil ? -2 : up ? (lf >= 1 ? 4.5 : -1.5) : down ? sink : lf >= 1 ? 0 : Math.max(sink, -7 * (1 - lf));
+      const want = v.pos.y > ceil ? -2 : up ? (lf >= 1 ? 4.5 * (fz.climb || 1) : -1.5) : down ? sink : lf >= 1 ? 0 : Math.max(sink, -7 * (1 - lf));
       v.vy = damp(v.vy, want, 2.4, dt);
       pull = 0;
       lifting = lf >= 1;
@@ -2624,7 +2651,11 @@ export class Fuse {
     const vx = dx / d + (Math.random() - 0.5) * sp;
     const vy = dy / d + (Math.random() - 0.5) * sp;
     const vz = dz / d + (Math.random() - 0.5) * sp;
-    if (gun.type === 'cannon') g.weapons.spawnShell(c.pos.x, y0, c.pos.z, vx, vy, vz, 'player', gun.dmg, gun.blast, gun.speed, 'shell');
+    // (ROADMAP 11.27: a cannon fires a glob of correction fluid - one drawn in colour, its ink)
+    if (gun.type === 'cannon') {
+      g.weapons.spawnShell(c.pos.x, y0, c.pos.z, vx, vy, vz, 'player', gun.dmg, gun.blast, gun.speed, gun.el && gun.el !== 'tippex' ? 'shell' : 'whiteShell');
+      if (gun.el && gun.el !== 'tippex') g.weapons.projectiles[g.weapons.projectiles.length - 1].el = gun.el;
+    }
     else g.weapons.projectiles.push({ kind: 'paintmg', owner: 'player', x: c.pos.x + (dx / d) * 1.2, y: y0, z: c.pos.z + (dz / d) * 1.2, vx: vx * gun.speed, vy: vy * gun.speed, vz: vz * gun.speed, gravity: 2, damage: gun.dmg, radius: 0, life: 2, t: 0, seed: Math.random() * 100, wobble: 0, color: [1.0, 0.82, 0.3], el: gun.el });
     g.fx.muzzle(c.pos.x + (dx / d) * 1.2, y0, c.pos.z + (dz / d) * 1.2, gun.type === 'cannon' ? 1.6 : 0.6);
     g.audio.play(gun.type === 'cannon' ? 'cannon' : 'paint', 0.3);
@@ -2652,8 +2683,17 @@ export class Fuse {
           const k = Math.max(0, (now - ud.popAt) / 380);
           if (k >= 1) {
             o.m.scale.setScalar(1);
+            o.m.visible = true;
             delete ud.popAt;
-          } else o.m.scale.setScalar(Math.max(0.02, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2));
+          } else {
+            const sc = Math.max(0.02, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2);
+            if (ud.fill) {
+              // (ROADMAP 11.27: designed - flat as the tidied ink, it fills out of its plane, a little
+              // past and back)
+              o.m.visible = now >= ud.popAt;
+              o.m.scale.set(ud.fill === 'x' ? sc : 1, ud.fill === 'y' ? sc : 1, ud.fill === 'z' ? sc : 1);
+            } else o.m.scale.setScalar(sc);
+          }
         }
         if (o.role === 'wheel' && ud.spin) {
           ud.spin.rotation.x = (v.wheelSpin || 0) * (0.34 / r0);
@@ -2705,12 +2745,31 @@ export class Fuse {
             _w.copy(ud.stringTo).applyMatrix4(R.root.matrixWorld);
             fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, [0.2, 0.2, 0.24], 2.2, 7100, 1, 0.01, 0);
           }
+          // (ROADMAP 11.27: a designed one's ropes, its basket's corners down to the roof's)
+          if (ud.ropes && o.m.visible) {
+            for (let j = 0; j < ud.ropes.length; j++) {
+              const rp = ud.ropes[j];
+              _v.copy(rp.a).multiply(o.m.scale).add(o.m.position).applyMatrix4(R.root.matrixWorld);
+              _w.copy(rp.b).applyMatrix4(R.root.matrixWorld);
+              fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, [0.3, 0.26, 0.2], 1.8, 7110 + j * 3, 1, 0.01, 0);
+            }
+          }
+        } else if (o.role === 'barrel' && ud.gatling) {
+          // (ROADMAP 11.27: a minigun's barrels spin up as it fires, and down)
+          const firing = v === g.player.inVehicle && !!g.input.fire;
+          ud.spinW = damp(ud.spinW || 0, firing ? 30 : 0, firing ? 6 : 1.5, this.fdt);
+          ud.gatling.rotation.z += ud.spinW * this.fdt;
+        } else if (o.role === 'dwing' && ud.flap) {
+          // (ROADMAP 11.27: feathers - they beat as it climbs)
+          const up = !!v.fzWinged && (v.vy || 0) > 0.8;
+          ud.flapA = damp(ud.flapA || 0, up ? 1 : 0, 4, this.fdt);
+          ud.flap.rotation.z = (ud.dih + Math.sin(t * 10) * 0.32 * ud.flapA) * (o.side < 0 ? -1 : 1);
         } else if (o.role === 'dchute' && ud.canopy) {
           // (folded on the roof; falling, it opens as drawn)
           ud.canopy.scale.setScalar(damp(ud.canopy.scale.x, v.fzChute ? 1 : 0.35, v.fzChute ? 7 : 3, this.fdt));
         }
         // (ROADMAP 11.22) a drawn one's own lines, inked on it where they were drawn
-        if (ud.lines && ud.lines.length && ud.lineNode.visible) {
+        if (ud.lines && ud.lines.length && ud.lineNode.visible && o.m.visible) {
           o.m.updateMatrixWorld(true);
           const M = ud.lineNode.matrixWorld;
           for (let j = 0; j < ud.lines.length; j++) inkRun(fr, ud.lines[j], M, ud.lineC || EDGE_DARK, 2.6, 8600 + j * 31, 1);

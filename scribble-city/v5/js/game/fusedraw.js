@@ -4,6 +4,7 @@ import { inflateShape, cornerness } from './inflate.js';
 import { shapeOf } from './fusemark.js';
 import { hull } from './drawncar.js';
 import { boxOf } from './signshape.js';
+import { buildDesign } from './designbuild.js';
 import { clamp } from '../core/util.js';
 
 // (ROADMAP 11.22) Drawn onto the car you drive the way you would draw on it: what you draw is the
@@ -694,6 +695,15 @@ function middleOf(sh) {
 // ctx: { D, K, spots (its wheels), wheelR (their radius now), lift }, body: its colour (0-1)
 export function buildDrawn(p, ctx, body) {
   const sh = p.shape;
+  // (ROADMAP 11.27: designed from its drawing - game/designbuild.js; 11.26: its own lines)
+  if (sh.design) {
+    try {
+      return buildDesign(p, body);
+    } catch (err) {
+      console.warn('design build', err);
+      return [];
+    }
+  }
   if (sh.look) return buildLook(p, body);
   const M = itemMats();
   const out = [];

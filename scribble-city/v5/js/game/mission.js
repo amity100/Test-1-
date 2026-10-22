@@ -257,7 +257,7 @@ export class BrokenBridge {
     if (near && !this.toldPen && !this.toldOnce && pos.x > 48) {
       this.toldPen = true;
       this.toldOnce = true;
-      const what = this.pen() ? 'פונקציונלי — ציירו כנפיים, כדור פורח, רוטור או מדחף' : 'ציירו על המכונית משהו שיעביר אתכם';
+      const what = this.pen() ? 'תנועה — ציירו כנפיים, כדור פורח, רוטור או מדחף' : 'ציירו על המכונית משהו שיעביר אתכם';
       g.hud.radio(g.touch ? `הגשר שבור באמצע! ✎ — ${what}` : `הגשר שבור באמצע! Q — ${what}`);
       this.radioT = g.time + 6;
     }

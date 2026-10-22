@@ -1,6 +1,7 @@
 import { readItem, CATS, CAT_ORDER } from './partnet.js';
 import { rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
 import { lookOf } from './itemlook.js';
+import { designOf, variantOf, DESIGNED } from './itemdesign.js';
 import { gunOf } from './partsum.js';
 import { INKS } from './freeform.js';
 import { clamp } from '../core/util.js';
@@ -17,25 +18,33 @@ import { clamp } from '../core/util.js';
 //
 // (ROADMAP 11.26) The thing is the drawing: what it is read as says what it does, the lines say what
 // it looks like - each point of the ink flies to its own place on the car, and that is the thing
-// (game/itemlook.js), as big as it was drawn by the car on the screen. Read wrong: a tap on the right
-// one in the legend - the drawing still wet, or a few seconds after it went on - and it is that.
-// Not sure between two when the pen rests: it asks which, by the drawing, and waits. And a test of
-// the reading, without any of that help (the setting, or the legend's own button).
+// (game/itemlook.js), as big as it was drawn by the car on the screen.
+//
+// (ROADMAP 11.27) The drawing decides: what it is drawn as is what goes on - nothing to tap to make
+// it another. Not sure between two when the pen rests: a tip by the drawing, the two as they are
+// drawn and what tells them apart ("wheel = cannon · stock = machine gun"), a little longer to draw
+// it in - then the likelier of them. Drawn wrong: ↶ or the eraser, and drawn again. And the thing is
+// designed (game/itemdesign.js): a machine gun, a cannon, wings, a balloon as such a thing is made,
+// its proportions, its parts, its colour, its hand as drawn - the ink flies to the car, straightens
+// onto it, and fills.
 
 export const PEN_CATS = CAT_ORDER;
 // how long the pen rests before the drawing goes (ms): another line before that is more of it
 export const PEN_REST = 1000;
 export const PEN_REST_TOUCH = 1150;
-// (ROADMAP 11.26) the two likeliest this near, the second at least this likely: it asks which
+// (ROADMAP 11.26) the two likeliest this near, the second at least this likely: not sure which
 export const ASK_GAP = 0.3;
 export const ASK_MIN = 0.2;
-// none of them, but the likeliest this likely and none of them not much more: it asks too
+// none of them, but the likeliest this likely and none of them not much more: not sure either
 const ASK_NONE = 0.3;
-// a tap on another thing in the legend this long after one went on: it is that one
-export const FIX_MS = 6000;
-const FIX_FLY_MS = 360;
-const CAT_NAME = { weapon: 'נשק', func: 'פונקציונלי', armor: 'מיגון' };
-const NONE_SAY = { weapon: 'לא זוהה נשק', func: 'לא זוהה משהו פונקציונלי', armor: 'לא זוהה מיגון' };
+// (ROADMAP 11.27) not sure: the tip out this much longer (ms) before the likelier goes on
+export const TIP_MS = 1500;
+// (ROADMAP 11.27) a moment after one went on, the legend says how to put it right
+const MADE_MS = 3200;
+const CAT_NAME = { weapon: 'נשק', func: 'תנועה', armor: 'הגנה' };
+const NONE_SAY = { weapon: 'לא זוהה נשק', func: 'לא זוהה אמצעי תנועה', armor: 'לא זוהה אמצעי הגנה' };
+// (ROADMAP 11.27) what tells each thing from the others as it is drawn - the tip's word for it
+const TELL = { cannon: 'גלגל = תותח', mg: 'קת = מקלע', flamer: 'להבה = להביור', bolt: 'זיגזג = ברק', blades: 'ידית = להבים', wing: 'נוצות = כנפיים', balloon: 'סל = כדור פורח', rotor: 'איקס = רוטור', prop: 'שלושה עלים = מדחף', jet: 'אש מאחור = סילון', spring: 'סליל = קפיץ', chute: 'חוטים = מצנח', armor: 'לוח = שריון', ram: 'חוד = איל ניגוח', star: 'חמישה קצוות = כוכב', smoke: 'ענן = עשן', spikes: 'שיניים = קוצים' };
 const CAT_ICON = {
   weapon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2 V8 M12 16 V22 M2 12 H8 M16 12 H22"/></svg>',
   func: '<svg viewBox="0 0 24 24"><path d="M12 13 L2 9 L3 12 L12 16 L21 12 L22 9 Z"/><circle cx="12" cy="6" r="2.5"/><path d="M12 8.5 V13"/></svg>',
@@ -68,6 +77,10 @@ const BOOK_KEY = 'scribble-city-v5-pen';
 // the ink flying from the screen to its place; how often the drawing is read while drawn (ms)
 const FLY_MS = 420;
 const LIVE_MS = 90;
+// (ROADMAP 11.27) a designed thing's moment: the ink lands (FLY_MS), straightens onto it, its missing
+// parts dashed in (TIDY_MS) - then it fills (FILL_MS: game/fuse.js draw, its pop), the ink going
+const TIDY_MS = 380;
+const FILL_MS = 420;
 // (strong enough to read on sand, on the sea, at night: a pale halo under a deep orange line - the
 // row's lit button's colour)
 const MOUNT_C = [1, 0.42, 0.04];
@@ -107,9 +120,9 @@ export function nOf(id, z) {
     case 'flamer': case 'jet': return { len: clamp(L / 1.2, 0.5, 3) };
     case 'bolt': return { size: clamp(L / 1.4, 0.8, 2.5) };
     case 'blades': case 'ram': case 'spikes': return { len: clamp(L / 1.6, 0.4, 3) };
-    // (ROADMAP 11.26: a wing out of the side as wide as it was drawn across, its chord as it was up -
-    // game/itemlook.js lays it so)
-    case 'wing': return { span: clamp(z.w || L, 0.5, 4), chord: clamp((z.h || S) * 0.7, 0.3, 2) };
+    // (ROADMAP 11.27: a wing out of the side as long as it was drawn, its chord its breadth - as
+    // game/itemdesign.js designs it)
+    case 'wing': return { span: clamp(L * 0.8, 0.7, 3), chord: clamp(S * 0.45, 0.32, 1.25) };
     case 'balloon': return { d: clamp(S * 1.05, 0.8, 6) };
     case 'rotor': return { span: clamp(L, 0.6, 9) };
     case 'prop': return { size: clamp(L, 0.4, 1.6) };
@@ -268,8 +281,11 @@ function fromPic(it) {
 // went) }
 export function itemPart(id, n, ctx, inkI, time, d = null) {
   const it = ITEMS[id];
-  const L = d && d.M && d.M.length ? lookOf(id, d.M, ctx, { side: d.side, flip: d.flip }) : null;
-  const part = { type: it.type, v: it.v, n: { ...n }, at: L ? L.at : mountOf(id, ctx).at.slice(), ink: inkI, t0: time, cost: 0, item: id, id: Math.random().toString(36).slice(2, 8) };
+  const has = d && d.M && d.M.length;
+  // (ROADMAP 11.27: the machine gun, the cannon, wings, the balloon - designed from the drawing; the
+  // rest its own lines, as drawn)
+  const L = has ? (DESIGNED.has(id) && designOf(id, d.M, ctx, { side: d.side, flip: d.flip, ink: INKS[inkI], n })) || lookOf(id, d.M, ctx, { side: d.side, flip: d.flip }) : null;
+  const part = { type: it.type, v: it.v, n: { ...n, ...((L && L.n) || {}) }, at: L ? L.at : mountOf(id, ctx).at.slice(), ink: inkI, t0: time, cost: 0, item: id, id: Math.random().toString(36).slice(2, 8) };
   if (L) part.shape = L.shape;
   if (id === 'star') part.until = time + STAR_T;
   if (id === 'prop') {
@@ -304,14 +320,15 @@ export class PartPen {
     this.uiSig = '';
     this.legSig = '';
     this.slotSig = '';
-    this.askSig = '';
-    // (ROADMAP 11.26) the pen rested not sure which of two: the two by the drawing, it waits for a tap
-    this.asking = false;
-    // (ROADMAP 11.26) the one just made, a tap in the legend from being another: { v, cat, item, read,
-    // part, d, z, inkI, P3, side, rt }
+    this.tipSig = '';
+    // (ROADMAP 11.27) the pen rested not sure which of two: the tip out by the drawing, a little longer
+    this.tipping = false;
+    // the one just made: { v, cat, item, read, part, d, z, inkI, P3, side, rt }
     this.made = null;
-    // what was drawn and what it was: read right, put right by a tap (the legend, the two asked)
-    this.tally = { made: 0, asked: 0, tapped: 0, fixed: 0 };
+    // (ROADMAP 11.27) a designed thing taking shape: what the camera leans in on - { v, at, t0, ms }
+    this.focus = null;
+    // what was drawn and what it was: made, and of those not sure of (the tip out)
+    this.tally = { made: 0, asked: 0 };
     // (the things whose use was told this time)
     this.told = new Set();
     this.ui();
@@ -334,25 +351,6 @@ export class PartPen {
     return !g.settings || g.settings.get('carPen') !== 'old';
   }
 
-  // (ROADMAP 11.26) a test of the reading: nothing said while it is drawn, nothing asked, the legend
-  // to see, not to tap - what it was read as is what goes on
-  test() {
-    const g = this.game;
-    return !!(g.settings && g.settings.get('penTest'));
-  }
-
-  setTest(on) {
-    const g = this.game;
-    if (g.settings) g.settings.set('penTest', !!on);
-    this.live = null;
-    this.made = null;
-    this.legSig = '';
-    this.showLegend();
-    this.showLive();
-    g.audio.play('click', 0.4);
-    g.hud.toast(on ? 'מבחן זיהוי: מציירים, והמשחק מחליט לבד — בלי רמזים ובלי תיקון' : 'מבחן זיהוי כבוי — הרמזים והתיקון חזרו', 'info', 2.8);
-  }
-
   // ------------------------------------------------------------------ the pen out, and away
   // (game/freedraw.js show) the row out; the category the world asks for (the mission's hint), or as
   // before
@@ -363,6 +361,7 @@ export class PartPen {
     else if (H && H.cat && !this.book[H.cat]) this.cat = H.cat;
     this.live = null;
     this.made = null;
+    this.tipping = false;
     this.showRow();
     this.showLegend();
     this.showLive();
@@ -372,6 +371,7 @@ export class PartPen {
     this.isOpen = false;
     this.live = null;
     this.made = null;
+    this.tipping = false;
     this.showRow();
     this.showLegend();
     this.showLive();
@@ -385,7 +385,7 @@ export class PartPen {
     this.book.last = cat;
     this.saveBook();
     this.made = null;
-    this.asking = false;
+    this.tipping = false;
     this.game.audio.play('click', 0.4);
     const fd = this.game.freedraw;
     if (fd && fd.group.length) {
@@ -411,6 +411,7 @@ export class PartPen {
 
   // the drawing (lines of screen px) as one of the category's things: readItem's, and if it is one,
   // its numbers and what they do - or null (nothing drawn). ask: the two it could be, not sure which
+  // (the likelier first)
   read(strokes, o, cat = this.cat) {
     const lines = strokes.filter((L) => L && L.length >= 2);
     if (!lines.length) return null;
@@ -418,13 +419,16 @@ export class PartPen {
     const z = sizeOf(lines, o.F);
     const R = { ...r, cat, z, ask: null };
     const [a, b] = r.ranked;
-    if (!this.test() && a && b) {
+    if (a && b) {
       if (r.item && b[1] >= ASK_MIN && a[1] - b[1] < ASK_GAP) R.ask = [a[0], b[0]];
       else if (!r.item && a[1] >= ASK_NONE && r.none - a[1] < ASK_GAP) R.ask = [a[0], b[0]];
     }
     if (!r.item) return R;
     const n = nOf(r.item, z);
-    return { ...R, n, ...statOf(r.item, n, o.mass, o.top) };
+    const st = statOf(r.item, n, o.mass, o.top);
+    // (ROADMAP 11.27: drawn pointing up, a mortar; three barrels, a minigun; feathers - said as drawn)
+    const vr = variantOf(r.item, lines);
+    return { ...R, n, ...st, vname: vr ? vr.name : null, text: vr ? `${vr.say} · ${st.text}` : st.text };
   }
 
   // (game/freedraw.js, as it is drawn) the drawing so far: what it is, by the pen (tip: screen px,
@@ -432,12 +436,12 @@ export class PartPen {
   feel(strokes, tip, now = false) {
     const t = performance.now();
     this.liveTip = tip || null;
-    // (asking, and more drawn or a line taken back: not now - the pen rests again first)
-    if (this.asking && (tip || now)) {
-      this.asking = false;
+    // (the tip out, and more drawn or a line taken back: read again - the pen rests again first)
+    if (this.tipping && (tip || now)) {
+      this.tipping = false;
       const fd = this.game.freedraw;
       if (!tip && fd && fd.group.length) fd.groupAt = t + (this.game.touch ? PEN_REST_TOUCH : PEN_REST);
-      this.showAsk();
+      this.showTip();
     }
     if (!now && t - this.liveAt < LIVE_MS) {
       this.place(strokes);
@@ -450,15 +454,15 @@ export class PartPen {
     this.showLegend();
   }
 
-  // (game/freedraw.js, the pen rested) not sure which of two: the two by the drawing, and it waits for
-  // a tap on one (or more of it drawn) - true; else it is done now
+  // (game/freedraw.js, the pen rested) not sure which of two: the tip by the drawing, and a little longer
+  // to draw in what tells them apart - true; else (or the tip out that long already) it is done now
   holds() {
     const fd = this.game.freedraw;
     const L = this.live;
-    if (!L || !L.ask || !this.isOpen || this.test() || !fd || fd.cur || !fd.group.length) return false;
-    this.asking = true;
-    fd.groupAt = Infinity;
-    this.showAsk();
+    if (this.tipping || !L || !L.ask || !this.isOpen || !fd || fd.cur || !fd.group.length) return false;
+    this.tipping = true;
+    fd.groupAt = performance.now() + TIP_MS;
+    this.showTip();
     return true;
   }
 
@@ -469,9 +473,8 @@ export class PartPen {
   make(strokes, inkI = 1) {
     const g = this.game;
     const fz = this.fz;
-    const force = this.force || null;
-    this.force = null;
-    this.asking = false;
+    this.tipping = false;
+    this.showTip();
     this.live = null;
     this.showLive();
     this.showLegend();
@@ -480,12 +483,13 @@ export class PartPen {
     if (!o || !lines.length) return false;
     const R = this.read(lines, o);
     if (!R) return false;
-    // (tapped in the legend, or one of the two asked: that - ✕ of the two asked: none of them)
-    const item = force === '-' ? null : force || R.item;
+    // (ROADMAP 11.27: not sure of two - the likelier of them, the tip said what tells them apart; none
+    // of them the likeliest - none, the tip said what would make it one)
+    const item = R.item;
     if (!item) {
       this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('rubber', 0.5);
-      if (force !== '-') g.hud.toast(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, 'bad', 2.6);
+      g.hud.toast(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, 'bad', 2.6);
       return false;
     }
     const v = o.v;
@@ -502,10 +506,10 @@ export class PartPen {
     this.keep(R.cat, part, compact(d, L ? L.flip : 0), lines);
     this.tally.made++;
     if (R.ask) this.tally.asked++;
-    if (force && force !== R.item) this.tally.tapped++;
-    this.made = { v, cat: R.cat, item, read: R.item, part, d, z: R.z, inkI, P3: L ? L.P3 : null, side, rt: performance.now() };
+    this.made = { v, cat: R.cat, item, read: R.item, part, d, z: R.z, inkI, P3: L ? L.P3 : null, side, rt: performance.now(), traits: (L && L.traits) || null };
     g.audio.play('magic', 0.4);
-    if (this.test()) g.hud.toast(`זוהה: ${ITEMS[item].name}`, 'info', 2.2);
+    // (ROADMAP 11.27: a designed one - what it does, said once it has taken shape, not over it)
+    if (L && L.T3) setTimeout(() => this.tell(item, res), FLY_MS + TIDY_MS + FILL_MS);
     else this.tell(item, res);
     this.legSig = '';
     this.showLegend();
@@ -517,7 +521,8 @@ export class PartPen {
     const fz = this.fz;
     const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d);
     fz.justAdded = part;
-    fz.popDelay = pop;
+    // (ROADMAP 11.27: designed, flown to - it fills once its ink has straightened onto it)
+    fz.popDelay = L && L.T3 && pop >= FLY_MS ? pop + TIDY_MS : pop;
     const res = fz.onVehicle(v, part);
     fz.justAdded = null;
     fz.popDelay = 0;
@@ -530,61 +535,6 @@ export class PartPen {
     this.told.add(item);
     const say = [res.rule, res.use].filter(Boolean).join(' · ');
     if (say) this.game.hud.toast(`${ITEMS[item].name}: ${say}`, 'info', 3.4);
-  }
-
-  // (ROADMAP 11.26) a thing in the legend tapped: the drawing still wet - it is that, made now; just
-  // made - it was that, and it is now; else, how it is drawn
-  tapItem(id) {
-    const g = this.game;
-    if (this.test() || !(CATS[this.cat].includes(id) || id === '-')) return;
-    const fd = g.freedraw;
-    if (fd && fd.group.length && !fd.cur) {
-      this.force = id;
-      g.audio.play('click', 0.4);
-      fd.finishGroup();
-      return;
-    }
-    if (id === '-' || this.fix(id)) return;
-    g.audio.play('click', 0.3);
-    g.hud.toast(`ציירו ${ITEMS[id].name} — כמו בציור הקטן`, 'info', 1.8);
-  }
-
-  // the one just made was another of the category's things: off with it, on with that one, made of the
-  // same drawing - its ink flying from the one to the other. true if it was
-  fix(id) {
-    const g = this.game;
-    const fz = this.fz;
-    const M = this.made;
-    if (!M || M.item === id || performance.now() - M.rt > FIX_MS) return false;
-    const v = M.v;
-    if (v !== g.player.inVehicle || v.dead) return false;
-    // (where its ink is now on the screen: each point of the one it was)
-    const from = M.P3 ? M.P3.map((L) => L.map((X) => {
-      const q = this.proj(v, X[0] * M.side, X[1], X[2]);
-      return q ? [q.x, q.y] : null;
-    })) : null;
-    if (v.fuse && v.fuse.parts.includes(M.part)) fz.removeVeh(v, M.part, true);
-    const got = this.putOn(v, id, nOf(id, M.z), M.d, M.inkI, FIX_FLY_MS);
-    if (!got) return false;
-    const { part, L } = got;
-    let side = M.side;
-    if (from && L && from.every((A) => A.every(Boolean))) {
-      side = this.sideFor(v, from, L);
-      this.flights.push({ v, from, to: L.P3, side, c: M.inkI, t0: performance.now(), part, ms: FIX_FLY_MS, a: 1 });
-      if (L.mirror) this.flights.push({ v, from, to: L.P3, side: -side, c: M.inkI, t0: performance.now(), part: null, ms: FIX_FLY_MS, a: 0.55 });
-    } else this.landed(v, part);
-    fz.last = { kind: 'veh', ref: v, part, t: g.time, rt: performance.now(), alts: [], M: null };
-    const was = M.item;
-    this.book[M.cat] = { ...this.book[M.cat], item: id, n: part.n, d: compact(M.d, L ? L.flip : 0) };
-    this.saveBook();
-    this.slotSig = '';
-    Object.assign(M, { item: id, part, P3: L ? L.P3 : null, side, rt: performance.now() });
-    this.tally.fixed++;
-    g.audio.play('magic', 0.35);
-    g.hud.toast(`${ITEMS[was].name} ← ${ITEMS[id].name}`, 'good', 1.8);
-    this.legSig = '';
-    this.showLegend();
-    return true;
   }
 
   // (a pair: the ink to the side of the car nearer where it was drawn) 1 or -1
@@ -623,8 +573,12 @@ export class PartPen {
       return 1;
     }
     const side = this.sideFor(v, strokes, L);
-    this.flights.push({ v, from, to: L.P3, side, c: inkI, t0, part, a: 1 });
-    if (L.mirror) this.flights.push({ v, from, to: L.P3, side: -side, c: inkI, t0, part: null, a: 0.55 });
+    // (ROADMAP 11.27: designed - then onto the thing, its added parts dashed in, and it fills; the
+    // camera leans in on it the while - game/fuse.js sketchCam)
+    const tidy = L.T3 ? { tidy: L.T3, fade: L.fade, dash: L.dash } : {};
+    if (L.T3) this.focus = { v, at: L.focus ? L.focus.at : L.at, k: L.focus ? L.focus.k : 0.38, t0, ms: FLY_MS + TIDY_MS + FILL_MS + 600 };
+    this.flights.push({ v, from, to: L.P3, side, c: inkI, t0, part, a: 1, ...tidy });
+    if (L.mirror) this.flights.push({ v, from, to: L.P3, side: -side, c: inkI, t0, part: null, a: 0.55, ...tidy });
     return side;
   }
 
@@ -742,13 +696,13 @@ export class PartPen {
     if (this.isOpen) {
       // (the drawing waiting to go: the bar under its name runs down)
       if (this.liveEl && this.live && fd && fd.group.length && !fd.cur) {
-        const len = g.touch ? PEN_REST_TOUCH : PEN_REST;
-        const k = this.asking ? 0 : clamp((fd.groupAt - now) / len, 0, 1);
+        const len = this.tipping ? TIP_MS : g.touch ? PEN_REST_TOUCH : PEN_REST;
+        const k = clamp((fd.groupAt - now) / len, 0, 1);
         this.dryEl.style.transform = `scaleX(${k.toFixed(3)})`;
       } else if (this.dryEl) this.dryEl.style.transform = 'scaleX(1)';
-      // (the time to put right the one just made running out)
-      if (this.made && now - this.made.rt > FIX_MS) {
-        this.made = null;
+      // (the word on putting right the one just made, a moment)
+      if (this.made && !this.made.old && now - this.made.rt > MADE_MS) {
+        this.made.old = true;
         this.showLegend();
       }
       this.showRow();
@@ -773,15 +727,27 @@ export class PartPen {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.lineCap = 'round';
     g.lineJoin = 'round';
+    const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
     for (let i = this.flights.length - 1; i >= 0; i--) {
       const f = this.flights[i];
-      const k = clamp((now - f.t0) / (f.ms || FLY_MS), 0, 1);
-      if (k >= 1 || (f.v && f.v.dead)) {
+      const T1 = f.ms || FLY_MS;
+      const el = now - f.t0;
+      // (ROADMAP 11.27, a designed thing: it lands, straightens onto the thing, and as the thing fills
+      // the ink goes)
+      const all = f.tidy ? T1 + TIDY_MS + FILL_MS : T1;
+      if (el >= all || (f.v && f.v.dead)) {
         this.flights.splice(i, 1);
-        if (f.v && !f.v.dead && f.part) this.landed(f.v, f.part);
+        if (!f.tidy && f.v && !f.v.dead && f.part) this.landed(f.v, f.part);
         continue;
       }
-      const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      if (f.tidy && !f.popped && el >= T1 + TIDY_MS) {
+        f.popped = true;
+        if (f.v && !f.v.dead && f.part) this.landed(f.v, f.part);
+      }
+      const k = clamp(el / T1, 0, 1);
+      const e = ease(k);
+      const e2 = f.tidy ? ease(clamp((el - T1) / TIDY_MS, 0, 1)) : 0;
+      const k3 = f.tidy ? clamp((el - T1 - TIDY_MS) / FILL_MS, 0, 1) : 0;
       const ink = INKS[f.c] || INKS[1];
       // (the drawing's middle and size - where it goes on the screen, and how small, without points to
       // go to; none of them: it crumbles where it was)
@@ -812,10 +778,14 @@ export class PartPen {
         }
         pt = (q) => [cx + (tx - cx) * e + (q[0] - cx) * s, cy + (ty - cy) * e + (q[1] - cy) * s];
       }
-      g.globalAlpha = f.v ? (k > 0.85 ? (1 - k) / 0.15 : 1) * (f.a ?? 1) : 1 - e;
+      const a0 = f.v ? (f.tidy ? 1 - k3 : k > 0.85 ? (1 - k) / 0.15 : 1) * (f.a ?? 1) : 1 - e;
+      const halo = ink.css === '#f4efe4' ? 'rgba(40, 36, 48, 0.75)' : 'rgba(255, 252, 244, 0.85)';
       for (let a = 0; a < f.from.length; a++) {
         const A = f.from[a];
         const B = f.to ? f.to[a] : null;
+        const T = f.tidy ? f.tidy[a] : null;
+        g.globalAlpha = a0 * (f.fade && f.fade[a] ? 1 - e2 : 1);
+        if (g.globalAlpha <= 0.01) continue;
         g.beginPath();
         for (let j = 0; j < A.length; j++) {
           let x;
@@ -824,17 +794,49 @@ export class PartPen {
             const q = this.proj(f.v, B[j][0] * f.side, B[j][1], B[j][2]);
             x = q ? A[j][0] + (q.x - A[j][0]) * e : A[j][0];
             y = q ? A[j][1] + (q.y - A[j][1]) * e : A[j][1];
+            // (straightening onto the thing: each point to its own place on its lines)
+            if (T && e2 > 0 && T[j]) {
+              const r = this.proj(f.v, T[j][0] * f.side, T[j][1], T[j][2]);
+              if (r) {
+                x += (r.x - x) * e2;
+                y += (r.y - y) * e2;
+              }
+            }
           } else [x, y] = pt(A[j]);
           if (j) g.lineTo(x, y);
           else g.moveTo(x, y);
         }
-        const w = 4 * (1 - 0.35 * e);
-        g.strokeStyle = ink.css === '#f4efe4' ? 'rgba(40, 36, 48, 0.75)' : 'rgba(255, 252, 244, 0.85)';
+        const w = 4 * (1 - 0.35 * e) * (1 - 0.25 * e2);
+        g.strokeStyle = halo;
         g.lineWidth = w + 3.4;
         g.stroke();
         g.strokeStyle = ink.css;
         g.lineWidth = w;
         g.stroke();
+      }
+      // (what it must have and was not drawn: dashed in as the ink straightens)
+      if (f.dash && e2 > 0) {
+        g.globalAlpha = e2 * (1 - k3) * (f.a ?? 1);
+        g.setLineDash([7, 6]);
+        g.lineDashOffset = -el / 40;
+        for (const P of f.dash) {
+          g.beginPath();
+          let on = false;
+          for (let j = 0; j < P.length; j++) {
+            const q = this.proj(f.v, P[j][0] * f.side, P[j][1], P[j][2]);
+            if (!q) continue;
+            if (on) g.lineTo(q.x, q.y);
+            else g.moveTo(q.x, q.y);
+            on = true;
+          }
+          g.strokeStyle = halo;
+          g.lineWidth = 4.6;
+          g.stroke();
+          g.strokeStyle = ink.css;
+          g.lineWidth = 2.2;
+          g.stroke();
+        }
+        g.setLineDash([]);
       }
       g.globalAlpha = 1;
       this.flyDrawn = true;
@@ -844,7 +846,7 @@ export class PartPen {
   // ------------------------------------------------------------------ drawn in the world
   // the place on the car of what the drawing is now, lit while the pen draws it
   draw(fr) {
-    if (!this.isOpen || !this.live || !this.live.item || this.test()) return;
+    if (!this.isOpen || !this.live || !this.live.item) return;
     const g = this.game;
     const v = g.player.inVehicle;
     if (!v || v.dead) return;
@@ -882,39 +884,21 @@ export class PartPen {
     };
     stop(row);
     document.body.appendChild(row);
-    // (what the category has, each as it is drawn - ROADMAP 11.26: a tap on one, it is that one; and
-    // the test of the reading, on and off)
+    // (what the category has, each as it is drawn - to see: ROADMAP 11.27, the drawing decides)
     const leg = document.createElement('div');
     leg.className = 'pp-legend';
     leg.id = 'pp-legend';
-    leg.addEventListener('pointerdown', (e) => {
-      const t = e.target.closest('[data-i], [data-test]');
-      if (!t) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (t.dataset.test) this.setTest(!this.test());
-      else this.tapItem(t.dataset.i);
-    });
-    stop(leg);
     document.body.appendChild(leg);
     const live = document.createElement('div');
     live.className = 'pp-live';
     live.id = 'pp-live';
     live.innerHTML = '<b></b><span></span><i></i>';
     document.body.appendChild(live);
-    // (ROADMAP 11.26) not sure which of two: the two, to tap
-    const ask = document.createElement('div');
-    ask.className = 'pp-ask';
-    ask.id = 'pp-ask';
-    ask.addEventListener('pointerdown', (e) => {
-      const b = e.target.closest('button[data-i]');
-      if (!b) return;
-      e.preventDefault();
-      e.stopPropagation();
-      this.tapItem(b.dataset.i);
-    });
-    stop(ask);
-    document.body.appendChild(ask);
+    // (ROADMAP 11.27) not sure which of two: the tip - to see, not to tap
+    const tipEl = document.createElement('div');
+    tipEl.className = 'pp-tip';
+    tipEl.id = 'pp-tip';
+    document.body.appendChild(tipEl);
     const slots = document.createElement('div');
     slots.className = 'pp-slots';
     slots.id = 'pp-slots';
@@ -934,7 +918,7 @@ export class PartPen {
     this.rowEl = row;
     this.legEl = leg;
     this.liveEl = live;
-    this.askEl = ask;
+    this.tipEl = tipEl;
     this.liveName = live.querySelector('b');
     this.liveText = live.querySelector('span');
     this.dryEl = live.querySelector('i');
@@ -959,45 +943,44 @@ export class PartPen {
     }
   }
 
-  // the category's things over the row, the one the drawing is now lit (not in a test); just made,
-  // the one it went on as - and a word that a tap puts it right
+  // the category's things over the row, the one the drawing is now lit; just made, the one it went on
+  // as - and a word on how to put it right (ROADMAP 11.27: drawn again, nothing to tap)
   showLegend() {
     const el = this.legEl;
     if (!el) return;
-    const test = this.test();
-    const L = test ? null : this.live;
-    const M = this.made && !test ? this.made : null;
+    const L = this.live;
+    const M = this.made && !this.made.old ? this.made : null;
     const lit = L && L.item ? L.item : M ? M.item : '';
-    const sig = `${this.isOpen}|${this.cat}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}|${test}`;
+    const sig = `${this.isOpen}|${this.cat}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     el.classList.toggle('on', this.isOpen);
-    el.classList.toggle('test', test);
     if (!this.isOpen) return;
-    const say = test ? 'מבחן זיהוי: מציירים — בלי רמזים' : M ? 'לא זה? נגעו בנכון' : 'נגיעה בציור = זה';
+    const say = L && L.ask ? 'עוד פרט אחד יכריע' : M ? 'לא יצא נכון? ↶ ומציירים שוב' : 'מה שמציירים — זה מה שיוצא';
     const items = CATS[this.cat].map((id) => {
       const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : ''].filter(Boolean).join(' ');
       return `<div class="${cls}" data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b></div>`;
     }).join('');
-    el.innerHTML = `<div class="pp-say${M ? ' fix' : ''}">${say}</div><div class="pp-its">${items}<button class="pp-test${test ? ' on' : ''}" data-test="1" aria-label="מבחן זיהוי">מבחן<br>זיהוי</button></div>`;
+    el.innerHTML = `<div class="pp-say${M ? ' fix' : ''}">${say}</div><div class="pp-its">${items}</div>`;
   }
 
-  // its name and its number by the pen - or over the drawing, the pen up. Not sure: the two it could be
+  // its name and its number by the pen - or over the drawing, the pen up. Not sure: the likelier, and
+  // that a little more of it decides
   showLive(strokes) {
     const el = this.liveEl;
     if (!el) return;
     const L = this.live;
-    if (!L || !this.isOpen || this.test()) {
+    if (!L || !this.isOpen) {
       el.classList.remove('on');
-      this.showAsk();
+      this.showTip();
       return;
     }
     if (L.ask) {
-      this.liveName.textContent = '?';
-      this.liveText.textContent = L.item ? 'לא בטוח — מה זה?' : 'לא זוהה — אולי אחד מאלה?';
+      this.liveName.textContent = `${ITEMS[L.ask[0]].name}?`;
+      this.liveText.textContent = 'עוד פרט אחד יכריע';
       this.liveText.classList.add('bad');
     } else if (L.item) {
-      this.liveName.textContent = ITEMS[L.item].name;
+      this.liveName.textContent = L.vname || ITEMS[L.item].name;
       this.liveText.textContent = L.text;
       this.liveText.classList.toggle('bad', !L.ok);
     } else {
@@ -1008,31 +991,32 @@ export class PartPen {
     el.classList.toggle('none', !L.item || !!L.ask);
     el.classList.add('on');
     this.place(strokes);
-    this.showAsk();
+    this.showTip();
   }
 
-  // (ROADMAP 11.26) the two it could be, the pen rested: a tap, and it is that one
-  showAsk() {
-    const el = this.askEl;
+  // (ROADMAP 11.27) not sure of two, the pen rested: the two as they are drawn and what tells them
+  // apart, by the drawing - to see, not to tap (a line begun on it draws)
+  showTip() {
+    const el = this.tipEl;
     if (!el) return;
     const fd = this.game.freedraw;
     const L = this.live;
-    const ask = this.asking && L && L.ask && this.isOpen && !this.test() && fd && !fd.cur && fd.group.length ? L.ask : null;
-    const sig = ask ? ask.join() : '';
-    if (sig !== this.askSig) {
-      this.askSig = sig;
-      el.classList.toggle('on', !!ask);
-      if (ask) el.innerHTML = `${ask.map((id) => `<button data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b></button>`).join('')}<button class="pp-no" data-i="-" aria-label="אף אחד מהם">✕</button>`;
+    const two = this.tipping && L && L.ask && this.isOpen && fd && !fd.cur && fd.group.length ? L.ask : null;
+    const sig = two ? two.join() : '';
+    if (sig !== this.tipSig) {
+      this.tipSig = sig;
+      el.classList.toggle('on', !!two);
+      if (two) el.innerHTML = `<div class="pp-tip-h">עוד פרט אחד יכריע</div><div class="pp-tip-two">${two.map((id) => `<span><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg>${TELL[id]}</span>`).join('<i>·</i>')}</div>`;
     }
-    if (!ask || !this.liveEl) return;
-    const [x, y] = this.askSpot(el.offsetWidth || 200, el.offsetHeight || 40, fd.group.map((s) => s.P));
+    if (!two || !this.liveEl) return;
+    const [x, y] = this.tipSpot(el.offsetWidth || 220, el.offsetHeight || 56, fd.group.map((s) => s.P));
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
   }
 
-  // where the two asked go (w x h px): by the drawing, never on it nor on its name - a line begun on
-  // them would be a tap - and off the pen's row and legend if it can be
-  askSpot(w, h, strokes) {
+  // where the tip goes (w x h px): by the drawing, never on it nor on its name - nothing of it hidden -
+  // and off the pen's row and legend if it can be
+  tipSpot(w, h, strokes) {
     const W = window.innerWidth;
     const H = window.innerHeight;
     let x0 = Infinity;

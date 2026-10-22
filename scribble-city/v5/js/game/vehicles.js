@@ -1208,6 +1208,7 @@ class Vehicle {
       pr.el = g.el;
       pr.big = true;
       if (g.el === 'bounce') pr.bounce = 3;
+      if (g.arc) this.lob(pr, mw);
       game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
       game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
       game.camRig.addShake(clamp(0.15 + t.r * 1.4, 0.15, 0.5));
@@ -1215,7 +1216,9 @@ class Vehicle {
       if (this.mode === 'drive' || this.kind === 'bike') this.speed -= t.r * 6;
       if (g.recoil) this.recoilKick(dir, g.recoil);
     } else {
+      // (the cannon's own: a glob of correction fluid - what it splashes is wiped off the page)
       game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'whiteShell');
+      if (g.arc) this.lob(game.weapons.projectiles[game.weapons.projectiles.length - 1], mw);
       game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
       game.fx.splash(mw.x, mw.y, mw.z, 6, 2.5, [1, 1, 0.98]);
       game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
@@ -1228,6 +1231,24 @@ class Vehicle {
     if (g.quiet) return;
     game.civilians.panic(this.pos, 40);
     game.onCrime('shoot', this.pos.x, this.pos.z);
+  }
+
+  // (ROADMAP 11.27) a mortar's shot: up high and down onto where you aim - as long in the air as it is
+  // far, over what is between
+  lob(pr, mw) {
+    const aim = this.game.weapons.aimPoint;
+    const dx = aim.x - mw.x;
+    const dz = aim.z - mw.z;
+    const h = Math.hypot(dx, dz) || 1;
+    const d = clamp(h, 8, 85);
+    const T = clamp(1 + d / 24, 1.3, 4);
+    const G = 14;
+    const dy = clamp(aim.y - mw.y, -20, 20);
+    pr.vx = (dx / h) * (d / T);
+    pr.vz = (dz / h) * (d / T);
+    pr.vy = (dy + 0.5 * G * T * T) / T;
+    pr.gravity = G;
+    pr.life = T + 1.5;
   }
 
   // (ROADMAP 11.12) a giant cannon throws what fires it back along its barrel - a light one off the

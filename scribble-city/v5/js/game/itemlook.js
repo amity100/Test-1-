@@ -21,7 +21,7 @@ const r2 = (q) => [Math.round(q[0] * 1000) / 1000, Math.round(q[1] * 1000) / 100
 const r3 = (q) => [Math.round(q[0] * 1000) / 1000, Math.round(q[1] * 1000) / 1000, Math.round(q[2] * 1000) / 1000];
 
 // the numbers of a car that say where things go on it (ctx: game/fuse.js drawCtx)
-function carNums(ctx) {
+export function carNums(ctx) {
   const D = ctx.D;
   const K = ctx.K;
   const roof = K ? K.roofY : D.h;
@@ -382,11 +382,10 @@ export function muzzleSide(lines, B = boxOfLines(lines)) {
   return right <= left * 1.08 ? 1 : -1;
 }
 
-// the drawing (M: lines in metres, x right, y up) as the thing it was read as (id), on a car (ctx:
-// game/fuse.js drawCtx). o: { flip, side } (else from the drawing). Returns { shape (for
-// game/fusedraw.js buildLook), at (where it holds on the car), P3 (each point of each line, where it
-// goes on the car - the ink flies there), mirror } - or null
-export function lookOf(id, M, ctx, o = {}) {
+// (ROADMAP 11.27) the drawing (M: lines in metres, x right, y up) laid where the thing it was read as
+// (id) goes on a car (ctx: game/fuse.js drawCtx), as big as it was drawn: { S (its LOOKS), lines, B,
+// C, flip, side, F (its frame), P3 (each point of each line on the car) } - or null
+export function placeOf(id, M, ctx, o = {}) {
   const S = LOOKS[id];
   if (!S) return null;
   const lines = M.filter((L) => L && L.length >= 2);
@@ -397,6 +396,17 @@ export function lookOf(id, M, ctx, o = {}) {
   const side = o.side || 1;
   const F = S.frame(B, C, { flip, side });
   const P3 = lines.map((L) => L.map(([x, y]) => F.P(x, y)));
+  return { S, lines, B, C, flip, side, F, P3 };
+}
+
+// the drawing (M: lines in metres, x right, y up) as the thing it was read as (id), on a car (ctx:
+// game/fuse.js drawCtx). o: { flip, side } (else from the drawing). Returns { shape (for
+// game/fusedraw.js buildLook), at (where it holds on the car), P3 (each point of each line, where it
+// goes on the car - the ink flies there), mirror } - or null
+export function lookOf(id, M, ctx, o = {}) {
+  const pl = placeOf(id, M, ctx, o);
+  if (!pl) return null;
+  const { S, B, flip, side, F, P3 } = pl;
   const uv = P3.map((L) => L.map((X) => r2(toUV(X, F.ax))));
   // each line on its plane: closed or open, its box (by its shape as px at 200 a metre, as
   // game/fusedraw.js partOf reads one)
