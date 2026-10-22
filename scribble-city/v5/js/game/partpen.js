@@ -331,6 +331,8 @@ export class PartPen {
     this.tally = { made: 0, asked: 0 };
     // (the things whose use was told this time)
     this.told = new Set();
+    // (ROADMAP 11.27) what a designed one does, to say once it has taken shape: { at, item, res }
+    this.later = null;
     this.ui();
     if (typeof window !== 'undefined') {
       // (on a computer, at the wheel: 1-3 the kept ones on or off - not the weapons)
@@ -509,7 +511,7 @@ export class PartPen {
     this.made = { v, cat: R.cat, item, read: R.item, part, d, z: R.z, inkI, P3: L ? L.P3 : null, side, rt: performance.now(), traits: (L && L.traits) || null };
     g.audio.play('magic', 0.4);
     // (ROADMAP 11.27: a designed one - what it does, said once it has taken shape, not over it)
-    if (L && L.T3) setTimeout(() => this.tell(item, res), FLY_MS + TIDY_MS + FILL_MS);
+    if (L && L.T3) this.later = { at: performance.now() + FLY_MS + TIDY_MS + FILL_MS, item, res };
     else this.tell(item, res);
     this.legSig = '';
     this.showLegend();
@@ -685,6 +687,12 @@ export class PartPen {
   update(rdt) {
     const g = this.game;
     const now = performance.now();
+    // (a designed one's word, once it has taken shape - on the game's clock, as the shape is)
+    if (this.later && now >= this.later.at) {
+      const q = this.later;
+      this.later = null;
+      this.tell(q.item, q.res);
+    }
     // (the car taking a new part's weight: down a little on its springs, and back)
     const v = g.player.inVehicle;
     if (v && v.fzDipT) {
