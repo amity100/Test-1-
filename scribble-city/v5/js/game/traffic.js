@@ -737,14 +737,18 @@ export class Traffic {
     const yaw = Math.atan2(_b[0] - _a[0], _b[1] - _a[1]);
     // (GTA IV) easing over to the side of its lane or back into it (to the curb, out of a space, out
     // of a siren's way): its nose turned the way it is going, not slid along sideways
+    // (steered over to the curb or out of a space, Traffic.mind: turned as steeply as it is
+    // steered - it is that turn that takes its nose round the car in front; out of a siren's way,
+    // as fast as it goes over)
     let tilt = 0;
     if (!this.game.classic) {
       const s1 = c.side || 0;
       const vs = (s1 - (c.side0 === undefined ? s1 : c.side0)) / Math.max(dt, 1e-3);
       c.side0 = s1;
-      const tw = vs > 0.03 || vs < -0.03 ? Math.max(-0.32, Math.min(0.32, -Math.atan2(vs, Math.max(c.speed, 1.2)))) : 0;
+      const steered = c.pullS > 0.01 && c.pullS >= s1 - 0.01;
+      const tw = steered ? -Math.atan(c.pullV || 0) : vs > 0.03 || vs < -0.03 ? -Math.atan2(vs, Math.max(c.speed, 1.2)) : 0;
       // (smoothed a little: no frame's jolt in it)
-      tilt = c.tilt = c.tilt || tw ? damp(c.tilt || 0, tw, 10, dt) : 0;
+      tilt = c.tilt = c.tilt || tw ? damp(c.tilt || 0, Math.max(-0.8, Math.min(0.8, tw)), 10, dt) : 0;
     }
     c.steer = damp(c.steer, angleDiff(c.yaw, yaw + tilt) * 6, 8, dt);
     c.yaw = yaw + tilt;
@@ -811,10 +815,11 @@ export class Traffic {
       const cur = c.pullS || 0;
       const v = c.pullV || 0;
       const wantV = Math.max(-steep, Math.min(steep, steep * 1.5 * (to - cur)));
-      const nv = v + Math.max(-steep * 0.8 * ds, Math.min(steep * 0.8 * ds, wantV - v));
+      const ramp = steep * (c.pullRamp || 0.8) * ds;
+      const nv = v + Math.max(-ramp, Math.min(ramp, wantV - v));
       c.pullV = nv;
       pullS = c.pullS = Math.max(0, cur + nv * ds);
-      if (!c.pull && pullS < 0.02 && Math.abs(nv) < 0.02) c.pullS = c.pullV = c.pullMax = pullS = 0;
+      if (!c.pull && pullS < 0.02 && Math.abs(nv) < 0.02) c.pullS = c.pullV = c.pullMax = c.pullRamp = pullS = 0;
     }
     c.side = Math.max(1.5 * c.yieldK, pullS) - 1.0 * passK;
     if (c.yieldK > 0.05) want = Math.min(want, 9 * (1 - c.yieldK) + 0.5);

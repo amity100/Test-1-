@@ -518,12 +518,13 @@ export class Curbs {
     const nc = T.newCar(c.spec, { speed: 0 });
     if (nc.driver) nc.driver.look = L.look;
     T.placeOnEdge(nc, E.A, E.B, E.lane, E.t);
-    // (as far over as it stood, and out of the space as it rolls - turned out sharply, the car in
-    // front of it a step away: Traffic.mind)
+    // (as far over as it stood, and out of the space as it rolls - turned out sharply, on full
+    // lock, the car in front of it a step away: its nose round that car's corner, Traffic.mind)
     nc.pull = false;
     nc.pullS = E.lat - E.off;
     nc.pullV = 0;
-    nc.pullMax = 0.75;
+    nc.pullMax = 1.0;
+    nc.pullRamp = 1.5;
     nc.side = nc.pullS;
     nc.pos.x += -Math.cos(nc.yaw) * nc.side;
     nc.pos.z += Math.sin(nc.yaw) * nc.side;
