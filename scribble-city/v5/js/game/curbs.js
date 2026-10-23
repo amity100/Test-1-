@@ -3,6 +3,7 @@ import { M_AVES, M_STREETS } from '../world/mainland/plan.js';
 import { CAR_COLORS, TAXI_YELLOW } from '../render/cars.js';
 import { NODES, laneOffsets, stopDist } from '../world/roads.js';
 import { civilianLook } from './looks.js';
+import { groundHeight } from '../world/layout.js';
 
 // (GTA IV) The mainland's curbs, as its blocks come and go (world/mainland/stream.js): the cars
 // parked along both curbs of every narrow street - the streets' asphalt has their lane painted
@@ -61,6 +62,13 @@ function curbSpec(r, district) {
 }
 
 const HALF_LEN = { sedan: 2.3, suv: 2.35, sports: 2.25, van: 2.5, classic: 2.65 };
+
+// the height a parked car stands at: the road's, or a lot's and a driveway's - the ground of a
+// block, a curb's height up (world/layout.js), not sunk in it to its hubs
+export function lotHeight(x, z) {
+  const y = groundHeight(x, z);
+  return y > 0.05 && y < 0.6 ? y : 0;
+}
 
 export class Curbs {
   constructor(traffic) {
@@ -128,6 +136,7 @@ export class Curbs {
         const lb = bc.col.boxes[sp.box];
         if (!lb || !lb.alive) continue;
         const c = this.car(sp.x, sp.z, sp.yaw, sp.spec, lb.id);
+        c.pos.y = lotHeight(sp.x, sp.z);
         // (a shot into its box dents it: game/damage.js carOfBox)
         lb.data = lb.data || { parked: true };
         lb.data.car = c;
@@ -602,7 +611,11 @@ export class Curbs {
     T.parked.push(pc);
     this.visitors.push(pc);
     if (game.world.nav && game.world.nav.queueRefresh) game.world.nav.queueRefresh(box.x0 - 1, box.z0 - 1, box.x1 + 1, box.z1 + 1);
-    // the driver out of the door and round the front onto the sidewalk
+    // the driver out of the door and onto the sidewalk round its front - or its back, the gap there
+    // being the wider - through the middle of the gap
+    const gf = Math.min(2.6, this.freeRun(c, 0, 1) - c.halfLen);
+    const gb = Math.min(2.6, this.freeRun(c, 0, -1) - c.halfLen);
+    const gu = gf >= gb ? c.halfLen + Math.max(0.5, gf) / 2 : -(c.halfLen + Math.max(0.5, gb) / 2);
     const look = c.driver ? c.driver.look : civilianLook();
     T.removeCar(c);
     c.gone = true;
@@ -614,7 +627,7 @@ export class Curbs {
     w.speed = 1.3;
     w.noCollide = true;
     w.yaw = c.yaw - Math.PI / 2;
-    const L = { legs: [P(c.halfLen + 0.9, -(c.halfWid + 0.5)), P(c.halfLen + 0.9, 2.2)], leg: 0, t: 0, phase: 'walk', go: { x: 0, z: 0, speed: 1.3 } };
+    const L = { legs: [P(gu, -(c.halfWid + 0.5)), P(gu, 2.2)], leg: 0, t: 0, phase: 'walk', go: { x: 0, z: 0, speed: 1.3 } };
     L.ctrl = (me, dt) => {
       L.t += dt;
       const r = this.walkTo(L, me);

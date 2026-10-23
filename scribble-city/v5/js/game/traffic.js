@@ -3,7 +3,7 @@ import { NODES, lightAt, laneOffsets, stopDist, lanePoint, exitsFrom } from '../
 import { randomCarSpec, drawWipers, wiperSweep, KINDS } from '../render/cars.js';
 import { civilianLook, copLook, swatLook } from './looks.js';
 import { damp, dampAngle, angleDiff } from '../core/util.js';
-import { Curbs } from './curbs.js';
+import { Curbs, lotHeight } from './curbs.js';
 
 // The traffic of the city: sedans, taxis, vans and low sports cars in the right-hand lanes of
 // every avenue and street, turning at the crossings and waiting for the lights; the cars parked
@@ -135,9 +135,10 @@ export class Traffic {
     // (counted for the tests: ROADMAP 4.4)
     this.stats = { overtakes: 0, bailed: 0, crashes: 0 };
     // the cars along the curbs (the city placed them; they stay where they are until taken)
+    // (one in a lot or on a driveway stands on its ground, a curb's height up: not sunk to its hubs)
     this.parked = (game.world.parked || []).map((sp) => ({
       ...sp,
-      pos: new THREE.Vector3(sp.x, 0, sp.z),
+      pos: new THREE.Vector3(sp.x, lotHeight(sp.x, sp.z), sp.z),
       halfLen: 2.3,
       halfWid: 0.98,
       ink: 110,
