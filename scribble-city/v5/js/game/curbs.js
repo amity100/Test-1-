@@ -318,8 +318,8 @@ export class Curbs {
     const mid = way * (hl + room / 2);
     const legs = [P(mid, 1.9), P(mid, -1.75), P(0.35, -(c.halfWid + 0.55))];
     // who it is: somebody already walking along this sidewalk near it (one of the street's own, who
-    // turns out to be its driver); nobody there, one coming along it from out of sight - nobody
-    // pops up in plain view beside it (game/civilians.js keeps to that too)
+    // turns out to be its driver); nobody there, one coming along it from out of sight, or from far
+    // enough off - nobody pops up in plain view near you (the rule game/civilians.js keeps)
     const civs = game.civilians;
     let w = null;
     let bu = 24;
@@ -343,7 +343,7 @@ export class Curbs {
       const vx = start[0] - cam.position.x;
       const vz = start[1] - cam.position.z;
       const vd = Math.hypot(vx, vz) || 1;
-      if (vd < 110 && (vx * fwd.x + vz * fwd.z) / vd > 0.2) return false;
+      if (vd < 50 && (vx * fwd.x + vz * fwd.z) / vd > 0.25) return false;
       look = civilianLook();
       w = civs.spawnScripted(start[0], start[1], look, this);
       w.speed = 1.35;
