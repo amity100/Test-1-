@@ -37,6 +37,9 @@ const BIG = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', 'firetr
 
 const LOOK_AHEAD = 1.3;
 const DECEL = 3.6;
+// (GTA IV) how steeply a car eases over to the curb or back out into its lane: metres over for a
+// metre on (Traffic.mind; one parking, or pulling out of a space, turns more sharply)
+const PULL_STEEP = 0.4;
 // what the drivers stuck behind shout (GTA IV)
 const JAMMED = ['Come on!', 'Move!', 'Unbelievable...', 'Today, please!'];
 const PARKED_UP = ['Double-parked again?!', 'Move the van!', "You can't stop there!", 'Every single day...'];
@@ -493,10 +496,13 @@ export class Traffic {
     // (GTA IV: the ones walking up to their parked cars - game/curbs.js)
     if (this.curbs.leaving.length) this.curbs.update(dt);
     if (!game.classic) this.crashes(dt);
+    // (rubbed out; or let go of this frame - a car that parked at the curb, game/curbs.js parkIt: a
+    // parked car of its own now, and out of the list before anything else bumps into it)
     let gone = false;
-    for (let i = 0; i < this.list.length; i++) if (this.list[i].poofT !== undefined && this.list[i].poofT > 0.45) gone = true;
+    for (let i = 0; i < this.list.length; i++) if (this.list[i].gone || (this.list[i].poofT !== undefined && this.list[i].poofT > 0.45)) gone = true;
     if (gone) {
       this.list = this.list.filter((c) => {
+        if (c.gone) return false;
         if (c.poofT === undefined || c.poofT <= 0.45) return true;
         this.removeCar(c);
         return false;
@@ -728,8 +734,17 @@ export class Traffic {
     path.sample(c.s + LOOK_AHEAD, _b);
     c.pos.set(_p[0], 0, _p[1]);
     const yaw = Math.atan2(_b[0] - _a[0], _b[1] - _a[1]);
-    c.steer = damp(c.steer, angleDiff(c.yaw, yaw) * 6, 8, dt);
-    c.yaw = yaw;
+    // (GTA IV) easing over to the side of its lane or back into it (to the curb, out of a space, out
+    // of a siren's way): its nose turned the way it is going, not slid along sideways
+    let tilt = 0;
+    if (!this.game.classic) {
+      const s1 = c.side || 0;
+      const vs = (s1 - (c.side0 === undefined ? s1 : c.side0)) / Math.max(dt, 1e-3);
+      c.side0 = s1;
+      if (vs > 0.03 || vs < -0.03) tilt = Math.max(-0.32, Math.min(0.32, -Math.atan2(vs, Math.max(c.speed, 1.2))));
+    }
+    c.steer = damp(c.steer, angleDiff(c.yaw, yaw + tilt) * 6, 8, dt);
+    c.yaw = yaw + tilt;
     // (pulled over to the right for a siren; a siren passing on the left)
     if (c.side) {
       c.pos.x += -Math.cos(yaw) * c.side;
@@ -771,12 +786,34 @@ export class Traffic {
     }
     c.yieldK = THREE.MathUtils.damp(c.yieldK || 0, yieldTo ? 1 : 0, yieldTo ? 2.2 : 1.2, dt);
     const passK = c.emergency ? (c.passK = THREE.MathUtils.damp(c.passK || 0, passing ? 1 : 0, 3, dt)) : 0;
-    // (GTA IV) over to the curb (a fare, a delivery, the police behind it): as far as
-    // Traffic.curbRoom found room for, and back out into the lane after - as it rolls (a car
-    // standing still does not slide sideways)
-    const roll = Math.min(1, 0.08 + c.speed / 3.5);
-    const pullK = c.pull || c.pullK > 0.001 ? (c.pullK = THREE.MathUtils.damp(c.pullK || 0, c.pull ? 1 : 0, (c.pull ? 1.5 : 1.8) * roll, dt)) : 0;
-    c.side = Math.max(1.5 * c.yieldK, pullK * (c.pullTo || 0)) - 1.0 * passK;
+    // (GTA IV) over to the curb (a fare, a delivery, the police behind it, a space to park in): as
+    // far as Traffic.curbRoom found room for, and back out into the lane after. Steered, as it
+    // rolls: so many metres over for every metre on (pullV), turned into and out of gently - a car
+    // standing still does not slide sideways, and its nose is turned the way it goes
+    // (Traffic.drive). Into the parking lane only where it is free beside it (roomBeside): round
+    // the end of the car parked behind the space, not through it.
+    let pullS = 0;
+    if (c.pull || c.pullS > 0.001) {
+      let to = c.pull ? c.pullTo || 0 : 0;
+      if (to > 0.9) {
+        c.roomT = (c.roomT || 0) - dt;
+        if (c.roomT <= 0) {
+          c.roomT = 0.1;
+          c.roomHere = this.roomBeside(c);
+        }
+        to = Math.min(to, c.roomHere);
+      }
+      const steep = c.pullMax || PULL_STEEP;
+      const ds = c.speed * dt;
+      const cur = c.pullS || 0;
+      const v = c.pullV || 0;
+      const wantV = Math.max(-steep, Math.min(steep, steep * 1.5 * (to - cur)));
+      const nv = v + Math.max(-steep * 0.8 * ds, Math.min(steep * 0.8 * ds, wantV - v));
+      c.pullV = nv;
+      pullS = c.pullS = Math.max(0, cur + nv * ds);
+      if (!c.pull && pullS < 0.02 && Math.abs(nv) < 0.02) c.pullS = c.pullV = c.pullMax = pullS = 0;
+    }
+    c.side = Math.max(1.5 * c.yieldK, pullS) - 1.0 * passK;
     if (c.yieldK > 0.05) want = Math.min(want, 9 * (1 - c.yieldK) + 0.5);
     // fleeing shots: faster, the lights be damned
     if (c.fleeT > 0) {
@@ -1287,6 +1324,39 @@ export class Traffic {
     return Math.max(0, Math.min(room, 3));
   }
 
+  // (GTA IV) how far over to its right c may be where it is now (from its lane's line): to a
+  // hand's width off the curb, or off the cars parked beside it. Its nose is turned in as it
+  // goes (pullV: metres over for a metre on), so what must clear a parked car is the part of it
+  // level with that car's end: the end of the car behind a space is driven round, not through.
+  roomBeside(c) {
+    const g = c.path && c.path.gates[0];
+    if (!g || g.off === undefined) return 0;
+    const road = g.dz !== 0 ? g.from.ave : g.from.street;
+    let room = road.half - g.off - c.halfWid - 0.3;
+    if (room <= 1.0) return Math.max(0, room);
+    const fx = g.dx;
+    const fz = g.dz;
+    const s0 = c.side || 0;
+    const slope = c.pullV || 0;
+    const P = this.parked;
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i];
+      if (p.taken || p.flat || p.poofT !== undefined) continue;
+      const dx = p.pos.x - c.pos.x;
+      const dz = p.pos.z - c.pos.z;
+      if (Math.abs(dx) + Math.abs(dz) > 14) continue;
+      const pa = dx * fx + dz * fz;
+      // (how far right of its lane's line: its own side shift taken off)
+      const ps = dx * -fz + dz * fx + s0;
+      if (ps < 1.0 || Math.abs(pa) > c.halfLen + p.halfLen + 0.4) continue;
+      // (the part of it level with that car's nearer end: its nose for one in front, else the
+      // other's front end)
+      const u = pa >= 0 ? c.halfLen : Math.max(-c.halfLen, Math.min(c.halfLen, pa + p.halfLen));
+      room = Math.min(room, ps - p.halfWid - c.halfWid - 0.25 - u * slope);
+    }
+    return Math.max(0, Math.min(room, 3));
+  }
+
   near(c, r) {
     const p = this.game.player.pos;
     return Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < r;
@@ -1352,8 +1422,9 @@ export class Traffic {
   // a patrol car doing its rounds near (but not right next to) you
   spawnPatrol() {
     const p = this.game.anchorPos();
-    // (GTA IV: cruising, slower than the traffic round it - a look at the street as it goes)
-    const c = this.spawnCar(p, 50, 130, { kind: 'sedan', color: POLICE_WHITE, police: true }, { driver: false, maxSpeed: 7.4 + Math.random() * 1.4 });
+    // (GTA IV: cruising, slower than the traffic round it - a look at the street as it goes; ?classic:
+    // as it always did)
+    const c = this.spawnCar(p, 50, 130, { kind: 'sedan', color: POLICE_WHITE, police: true }, { driver: false, maxSpeed: this.game.classic ? 10 : 7.4 + Math.random() * 1.4 });
     if (!c) return null;
     c.mode = 'patrol';
     c.patrol = true;

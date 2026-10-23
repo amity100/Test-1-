@@ -168,6 +168,14 @@ export class Curbs {
             keep.push(sp.x - 1.7, sp.x + 1.7);
           }
         }
+        // (and where a car already stands at this curb: one the traffic parked here while the block
+        // was away, or the one you left here - the block's own dice do not park on top of it)
+        for (const v of this.visitors) if (!v.taken && Math.abs(v.pos.z - z) < 1.6) keep.push(v.pos.x - v.halfLen - 0.5, v.pos.x + v.halfLen + 0.5);
+        for (const v of this.game.vehicles ? this.game.vehicles.list : []) {
+          if (v.dead || (v.flies && v.alt > 2) || Math.abs(v.pos.z - z) > 2.2) continue;
+          const r = (v.halfLen || 2.4) + 0.6;
+          keep.push(v.pos.x - r, v.pos.x + r);
+        }
         let x = xa + r() * 2;
         while (x < xb) {
           const spec = curbSpec(r, b.district);
@@ -271,31 +279,69 @@ export class Curbs {
       pick.push(c);
     }
     if (!pick.length) return false;
-    const c = pick[Math.floor(Math.random() * pick.length)];
-    const E = this.edgeOf(c);
-    if (!E) return false;
-    // (the lane beside it clear a way back and a little ahead)
-    for (const o of T.list) {
-      const a = (o.pos.x - E.A.x) * E.dx + (o.pos.z - E.A.z) * E.dz;
-      const l = (o.pos.x - E.A.x) * -E.dz + (o.pos.z - E.A.z) * E.dx;
-      if (Math.abs(l - E.off) < 2.2 && a > E.t - 26 && a < E.t + 10) return false;
+    // (one with room to get to its door: a gap behind it or in front of it a person fits through -
+    // a car parked a hand's width off its bumper is walked round, not through)
+    let c = null;
+    let E = null;
+    let way = 0;
+    let room = 0;
+    for (let tries = 0; tries < 4 && !c; tries++) {
+      const o = pick[Math.floor(Math.random() * pick.length)];
+      const e = this.edgeOf(o);
+      if (!e || !this.laneClear(e, 26, 10)) continue;
+      const back = this.gap(o, -1);
+      const front = this.gap(o, 1);
+      if (Math.max(back, front) < 1.1) continue;
+      c = o;
+      E = e;
+      way = back >= front ? -1 : 1;
+      room = Math.min(3, Math.max(back, front));
     }
+    if (!c) return false;
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
     const rx = -fz;
     const rz = fx;
     const hl = c.halfLen;
-    // the walk: along the sidewalk from behind, past its back, round to the driver's door (on the
-    // road's side)
+    // the walk: along the sidewalk to the gap (behind it, or in front of it), through the middle of
+    // the gap, round to the driver's door (on the road's side)
     const P = (u, v) => [c.pos.x + fx * u + rx * v, c.pos.z + fz * u + rz * v];
-    const legs = [P(-hl - 1.2, 1.9), P(-hl - 0.9, -1.75), P(0.35, -(c.halfWid + 0.55))];
-    const start = P(-hl - 7 - Math.random() * 4, 2.3);
-    const look = civilianLook();
-    const w = game.civilians.spawnScripted(start[0], start[1], look, this);
-    w.speed = 1.35;
+    const mid = way * (hl + room / 2);
+    const legs = [P(mid, 1.9), P(mid, -1.75), P(0.35, -(c.halfWid + 0.55))];
+    // who it is: somebody already walking along this sidewalk near it (one of the street's own, who
+    // turns out to be its driver); nobody there, one coming along it from out of sight - nobody
+    // pops up in plain view beside it (game/civilians.js keeps to that too)
+    const civs = game.civilians;
+    let w = null;
+    let bu = 24;
+    for (const h of civs.list) {
+      if (!civs.plain(h) || h.jog || h.convo || h.riding) continue;
+      const dx = h.pos.x - c.pos.x;
+      const dz = h.pos.z - c.pos.z;
+      const u = Math.abs(dx * fx + dz * fz);
+      const v = dx * rx + dz * rz;
+      if (v < 1.3 || v > 6 || u > bu) continue;
+      bu = u;
+      w = h;
+    }
+    let look;
+    if (w) {
+      look = w.fig.look;
+      w.scripted = true;
+      w.owner = this;
+    } else {
+      const start = P(way * (hl + 13 + Math.random() * 6), 2.3);
+      const vx = start[0] - cam.position.x;
+      const vz = start[1] - cam.position.z;
+      const vd = Math.hypot(vx, vz) || 1;
+      if (vd < 110 && (vx * fwd.x + vz * fwd.z) / vd > 0.2) return false;
+      look = civilianLook();
+      w = civs.spawnScripted(start[0], start[1], look, this);
+      w.speed = 1.35;
+      if (Math.random() < 0.5) w.fig.carry = Math.random() < 0.5 ? 'phone' : 'coffee';
+    }
     w.noCollide = true;
-    if (Math.random() < 0.5) w.fig.carry = Math.random() < 0.5 ? 'phone' : 'coffee';
-    const L = { c, E, w, legs, leg: 0, t: 0, phase: 'walk', look, go: { x: 0, z: 0, speed: 1.35 } };
+    const L = { c, E, w, legs, leg: 0, t: 0, phase: 'walk', look, go: { x: 0, z: 0, speed: Math.max(1.2, Math.min(1.6, w.speed || 1.35)) } };
     L.ctrl = (me) => this.walkTo(L, me);
     w.ctrl = L.ctrl;
     c.leaving = L;
@@ -322,7 +368,8 @@ export class Curbs {
     return L.go;
   }
 
-  // (every frame, Traffic.update: the ones walking up to their cars)
+  // (every frame, Traffic.update: the ones walking up to their cars, and the ones sitting in them
+  // waiting for the lane to clear)
   update(dt) {
     const civs = this.game.civilians;
     for (let i = this.leaving.length - 1; i >= 0; i--) {
@@ -330,26 +377,75 @@ export class Curbs {
       const c = L.c;
       const w = L.w;
       L.t += dt;
-      const lost = !w || !w.alive || w.panicT > 0 || civs.list.indexOf(w) < 0 || w.ctrl !== L.ctrl;
+      const sat = L.phase === 'sat';
+      const lost = !sat && (!w || !w.alive || w.panicT > 0 || civs.list.indexOf(w) < 0 || w.ctrl !== L.ctrl);
       if (c.taken || c.dropped || c.poofT !== undefined || c.wrecked || lost) {
-        // (called off: the car taken, the walker frightened or hurt)
-        if (w && !lost) {
+        // (called off: the car taken, the walker frightened or hurt - who is still on their feet is
+        // one of the street's own again, a frightened one running first: nobody is left standing
+        // by the door for good)
+        if (w && !sat && w.alive && civs.list.indexOf(w) >= 0 && (w.ctrl === L.ctrl || w.owner === this)) {
           civs.release(w);
           w.scripted = false;
           civs.rejoin(w);
         }
         c.leaving = null;
+        c.signal = 0;
         this.leaving.splice(i, 1);
         continue;
       }
       if (L.phase === 'in' && L.t > 0.6) {
-        // in, the door shut: the parked car joins the traffic where it stands
+        // in, the door shut: a moment in the seat, the left signal on - and out of the space when
+        // nothing is coming up the lane beside it (a look over the shoulder; after a while it
+        // noses out anyway, and whoever comes slows for it)
         civs.remove(w);
+        L.w = null;
+        L.phase = 'sat';
+        L.t = 0;
+        continue;
+      }
+      if (sat) {
+        if (L.t > 0.4) c.signal = 1;
+        if (L.t < 1.2 || (L.t < 12 && !this.laneClear(L.E, 24, 6))) continue;
         this.leaving.splice(i, 1);
         c.leaving = null;
+        c.signal = 0;
         this.pullOut(L);
       }
     }
+  }
+
+  // nothing in the lane beside a curb car's place (E: Curbs.edgeOf) from back metres behind it to
+  // front metres ahead: the traffic's cars, and yours
+  laneClear(E, back, front) {
+    const test = (x, z) => {
+      const a = (x - E.A.x) * E.dx + (z - E.A.z) * E.dz;
+      const l = (x - E.A.x) * -E.dz + (z - E.A.z) * E.dx;
+      return Math.abs(l - E.off) < 2.2 && a > E.t - back && a < E.t + front;
+    };
+    for (const o of this.traffic.list) if (!o.gone && test(o.pos.x, o.pos.z)) return false;
+    const V = this.game.vehicles;
+    if (V) for (const v of V.list) if (!v.dead && test(v.pos.x, v.pos.z)) return false;
+    return true;
+  }
+
+  // the free curb behind parked car c (dir -1) or in front of it (dir 1): bumper to bumper to the
+  // next car standing at this curb (9: nothing near)
+  gap(c, dir) {
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    let best = 9;
+    const P = this.traffic.parked;
+    for (let i = 0; i < P.length; i++) {
+      const o = P[i];
+      if (o === c || o.taken || o.poofT !== undefined) continue;
+      const dx = o.pos.x - c.pos.x;
+      const dz = o.pos.z - c.pos.z;
+      if (Math.abs(dx) + Math.abs(dz) > 14) continue;
+      const a = (dx * fx + dz * fz) * dir;
+      if (a <= 0 || Math.abs(dx * fz - dz * fx) > 1.6) continue;
+      best = Math.min(best, a - c.halfLen - o.halfLen);
+    }
+    return best;
   }
 
   // the parked car c into the traffic: a car of the traffic in its lane beside it, standing where
@@ -363,10 +459,13 @@ export class Curbs {
     const nc = T.newCar(c.spec, { speed: 0 });
     if (nc.driver) nc.driver.look = L.look;
     T.placeOnEdge(nc, E.A, E.B, E.lane, E.t);
-    nc.pullK = 1;
+    // (as far over as it stood, and out of the space as it rolls - turned out sharply, the car in
+    // front of it a step away: Traffic.mind)
     nc.pull = false;
-    nc.pullTo = E.lat - E.off;
-    nc.side = nc.pullTo;
+    nc.pullS = E.lat - E.off;
+    nc.pullV = 0;
+    nc.pullMax = 0.75;
+    nc.side = nc.pullS;
     nc.pos.x += -Math.cos(nc.yaw) * nc.side;
     nc.pos.z += Math.sin(nc.yaw) * nc.side;
     nc.sigT = 3;
@@ -412,14 +511,17 @@ export class Curbs {
       S.lookT -= dt;
       if (S.lookT <= 0) {
         S.lookT = 0.4;
+        // (a space it can drive into nose first: room at the curb there, and enough free curb
+        // behind it to turn in round the end of the car parked behind - Traffic.roomBeside)
         for (const ahead of [12, 16, 20]) {
           const room = this.traffic.curbRoom(c, ahead);
-          if (room > 2.4) {
+          if (room > 2.4 && this.freeRun(c, ahead, -1) > c.halfLen + 4.2) {
             S.phase = 'in';
             S.left = ahead;
             S.run = 0;
             c.pull = true;
             c.pullTo = room;
+            c.pullMax = 0.6;
             break;
           }
         }
@@ -430,17 +532,54 @@ export class Curbs {
     S.run += c.speed * dt;
     c.sig2 = -1;
     const dist = S.left - S.run;
+    const inK = (c.pullS || 0) / Math.max(0.5, c.pullTo || 0);
     if (S.t > 50) {
       // (no getting into it: on it goes)
       c.seekPark = null;
       c.pull = false;
       return Infinity;
     }
-    if (dist < 0.6 && c.speed < 0.25) {
-      if (c.pullK > 0.86) this.parkIt(c);
+    if (dist < 0.6) {
+      // there: in against the curb, and stopped - a parked car now. Not in yet: on a little,
+      // as far as the space goes; at its end in as far as it got, or (hardly in at all) it is
+      // given up and on it goes
+      const front = this.freeRun(c, 0, 1) - c.halfLen;
+      if (inK < 0.93 && front > 0.7 && dist > -4) return 1.0;
+      if (inK < 0.7) {
+        c.seekPark = null;
+        c.pull = false;
+        return Infinity;
+      }
+      if (c.speed < 0.25) this.parkIt(c);
       return 0;
     }
-    return dist < 0.5 ? 0 : Math.max(0.6, Math.sqrt(2 * 3.6 * Math.max(0, dist)) * 0.8);
+    return Math.max(1.0, Math.sqrt(2 * 3.6 * Math.max(0, dist)) * 0.8);
+  }
+
+  // the free curb from the place ahead metres on from c, along its road forward (dir 1) or back
+  // (dir -1), to the nearer end of the next car parked there (30: none near)
+  freeRun(c, ahead, dir) {
+    const g = c.path && c.path.gates[0];
+    if (!g) return 0;
+    const fx = g.dx;
+    const fz = g.dz;
+    const s0 = c.side || 0;
+    const px = c.pos.x + fx * ahead;
+    const pz = c.pos.z + fz * ahead;
+    let best = 30;
+    const P = this.traffic.parked;
+    for (let i = 0; i < P.length; i++) {
+      const o = P[i];
+      if (o.taken || o.flat || o.poofT !== undefined) continue;
+      const dx = o.pos.x - px;
+      const dz = o.pos.z - pz;
+      if (Math.abs(dx) + Math.abs(dz) > 34) continue;
+      const a = (dx * fx + dz * fz) * dir;
+      const l = dx * -fz + dz * fx + s0;
+      if (a <= 0 || l < 1.5 || l > 4.5) continue;
+      best = Math.min(best, a - o.halfLen);
+    }
+    return best;
   }
 
   // stopped in its space: a parked car now, where it stands; the driver out and off along the
@@ -500,6 +639,8 @@ export class Curbs {
     // (its box let go of for good: taken, it was only put out of use - Traffic.unpark)
     if (c.boxId !== undefined) this.game.world.collision.release([c.boxId]);
     c.box = undefined;
+    // (gone for good: whatever still holds it - a fire, game/damage.js - lets it go)
+    c.gone = true;
   }
 
   // a block let go of: its cars, its stops and its boxes with it
@@ -512,8 +653,14 @@ export class Curbs {
     const world = this.game.world;
     if (rec.cars.length) {
       const gone = new Set(rec.cars);
-      // (one somebody is walking up to goes with it: the walk is called off)
-      for (const c of rec.cars) c.dropped = true;
+      // (one somebody is walking up to goes with it: the walk is called off; and they are gone for
+      // good - their boxes' numbers are the next block's now, so nothing that still holds one of
+      // them, a fire burning on it, game/damage.js, may put a box out of use by its old number)
+      for (const c of rec.cars) {
+        c.dropped = true;
+        c.gone = true;
+        c.box = undefined;
+      }
       T.parked = T.parked.filter((c) => !gone.has(c));
       T.parkedVer = (T.parkedVer || 0) + 1;
     }
