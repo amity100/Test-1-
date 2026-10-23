@@ -124,8 +124,9 @@ const RIGHT_BUSY = new Set(['umbrella', 'cane', 'leash', 'shopBag', 'bag', 'bask
 export function rightFree(fig) {
   return !HANDS_FULL.has(fig.carry) && !RIGHT_BUSY.has(fig.carry);
 }
-const GREET_RE = /^(hi|hey|hello|bye|good ?bye|see you|see ya|later|morning|good morning|evening|good evening|night|yo\b|take care|ciao|welcome)/i;
-const LAUGH_RE = /^(ha|he he|haha|lol|hah)/i;
+// (whole words: "Have a nice day!", "Half off!", "Hands up!" are no laugh, "History..." no hello)
+const GREET_RE = /^(hi|hey|hello|bye|good ?bye|see you|see ya|later|morning|good morning|evening|good evening|night|yo|take care|ciao|welcome)\b/i;
+const LAUGH_RE = /^(ha|he)(\s?h?[ae])*h?\b/i;
 const POINT_RE = /(that way|over there|look at|right there|just there|this way|over here)/i;
 // where the hand is for a gesture (body space: x right, y up, z forward), side 1 the right, -1
 // the left; t seconds into it, ph the person's own phase (no two people move alike). false: that
@@ -658,7 +659,9 @@ class Civilian {
     // now, and the words get a new one; the hand stays with what it is doing)
     if (this._gR && fig.reachR === this._gR && this._gRw && !this._gR.equals(this._gRw)) this._gR = null;
     if (this._gL && fig.reachL === this._gL && this._gLw && !this._gL.equals(this._gLw)) this._gL = null;
-    let on = near && this.talkUntil > now && this.gest && !this.headless && !(this.panicT > 0) && this.downT <= 0 && !fig.rag && fig.speed < 2.6;
+    // (and never over hands held up - a gun pointed at them: "Don't shoot!" with the hands up, not a
+    // fist shaken at it, game/voices.js aimAt - nor over a dance)
+    let on = near && this.talkUntil > now && this.gest && !this.headless && !(this.panicT > 0) && this.downT <= 0 && !fig.rag && fig.speed < 2.6 && !(fig.armsUp > 0) && !(fig.surrender > 0) && !(fig.dance > 0.3);
     if (on) {
       this.gestT += dt;
       const t = this.gestT;
