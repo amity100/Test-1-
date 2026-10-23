@@ -5,16 +5,15 @@ import { ITEMS, CATS as ITEM_CATS, CAT_ORDER as ITEM_ORDER } from './itemcat.js'
 // (ROADMAP 11.25) What is drawn for the car, of one category's things. The player says the
 // category - a weapon, something it can do, protection - and draws; this tells which of that
 // category's things it is, or that it is none of them. A small network of game/sketchnet.js's make,
-// that learned from people's drawings (Quick, Draw!: cannons, rifles, lightning, swords and knives,
-// hot-air balloons, parachutes, ceiling fans, squares, triangles, stars, clouds, zigzags) and from
-// drawings made for what that lacks (flames, wings, rotors, propellers, springs, shields), and from
-// what is none of them (houses, trees, faces, cats, cars, scrawls...). Its weights are in
-// game/partnet_w.js.
+// that learned from people's drawings (Quick, Draw!) and from drawings made for what that lacks, and
+// from what is none of them (houses, trees, faces, flowers, scrawls...). Its weights are in
+// game/partnet_w.js, whose head says what it learned from.
 //
 // (ROADMAP 11.28) Thirty-five things now (game/itemcat.js), each drawn as one or more of the network's
-// classes - one drawing, a thing in each category it is in: a flame is the flamethrower among the
-// weapons and the turbo among what moves, a hook a harpoon and a grappling hook, a coil a jump and a
-// Tesla coil. A thing is as likely as all its classes together.
+// thirty-three classes - one drawing, a thing in each category it is in: a flame is the flamethrower
+// among the weapons and the turbo among what moves, a hook a harpoon and a grappling hook, a coil a jump
+// and a Tesla coil, a rotor the drone and the helicopter's. A thing is as likely as all its classes
+// together. (A car is one now: the drawn double.)
 
 export const CATS = ITEM_CATS;
 export const CAT_ORDER = ITEM_ORDER;
