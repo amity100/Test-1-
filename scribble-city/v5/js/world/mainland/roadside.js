@@ -433,7 +433,9 @@ export function utilityPole(ctx, x, z, ax, az, o = {}) {
   const M = ctx.M;
   const y0 = CURB;
   const H = POLE_H;
-  const id = ctx.objects.begin(ctx, 'lamp', x, z);
+  // (a 'pole': a car does not knock it over - it is part of a line of wires; inside the line's
+  // own prop, world/mainland/tiles.js homeStreets, it is that prop's)
+  const id = ctx.objects.begin(ctx, 'pole', x, z);
   put(ctx, M.pole, new THREE.CylinderGeometry(0.12, 0.16, H, 8), x, y0 + H / 2, z, 0, WOOD);
   // the crossarm: along the line of the wires (alongX: the street runs along x), its knobs
   const yA = y0 + H - 0.55;
@@ -498,7 +500,8 @@ export function span(ctx, a, b, o = {}) {
     }
     pairs.push([p, best, 0.022]);
   }
-  if (!o.lite) pairs.push([a.low, b.low, 0.035]);
+  // (o.cable false: the top wires only)
+  if (!o.lite && o.cable !== false) pairs.push([a.low, b.low, 0.035]);
   for (const [p, q, r] of pairs) wire(ctx, p, q, r);
 }
 
@@ -517,16 +520,16 @@ export function wire(ctx, p, q, r = 0.022, sagK = 0.028) {
   ctx.B.add(ctx.M.rail, g, null, nextId(), { color: WIRE });
 }
 
-// the guy wire that holds the last pole of a line: down to the ground beyond it (dx, dz), its
-// yellow guard over the last two metres
+// the guy wire that holds the last pole of a line: down to the ground beyond it (dx, dz), lead
+// metres out from the pole's foot, its yellow guard over the last two metres
 const _y = new THREE.Vector3(0, 1, 0);
 const _d = new THREE.Vector3();
 const _q = new THREE.Quaternion();
-export function guyWire(ctx, a, dx, dz) {
+export function guyWire(ctx, a, dx, dz, lead = 3.4) {
   const p = a.top[2];
   const top = [p[0], p[1] - 0.6, p[2]];
-  const gx = p[0] + dx * 3.4;
-  const gz = p[2] + dz * 3.4;
+  const gx = p[0] + dx * lead;
+  const gz = p[2] + dz * lead;
   wire(ctx, top, [gx, CURB + 0.05, gz], 0.016, 0.004);
   _d.set(top[0] - gx, top[1] - CURB, top[2] - gz).normalize();
   const g = new THREE.CylinderGeometry(0.045, 0.045, 2.0, 6, 1, true);

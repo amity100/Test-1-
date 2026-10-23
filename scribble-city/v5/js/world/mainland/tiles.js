@@ -154,15 +154,20 @@ function cornerThings(tctx, n) {
   const cs = cornersOf(n).filter((c) => c.b && !BARE.has(c.b.kind));
   if (!cs.length) return;
   if (n.signal) {
-    const c = cs[Math.floor(r() * cs.length)];
-    // (along the avenue's curb, past the newspapers and the bin of the corner)
-    signalCabinet(tctx, c.x + c.qx * 0.95, c.z + c.qz * 9.6, Math.atan2(c.qx, 0));
+    // (along the avenue's curb, past the newspapers and the bin of the corner, on a corner south of
+    // the crossing: a block's north end, where its sidewalk's things leave the stretch from 7 to 13 m
+    // clear - world/mainland/sidewalks.js. At its south end a block by one of the wide streets has
+    // one of its places there; no corner south of the crossing, no box)
+    const south = cs.filter((c) => c.qz > 0);
+    const c = south[Math.floor(r() * south.length)];
+    if (c) signalCabinet(tctx, c.x + c.qx * 0.95, c.z + c.qz * 9.6, Math.atan2(c.qx, 0));
   }
   for (const c of cs) {
     if (!TOWN.has(c.b.kind)) continue;
-    // (on a phone, the one at the point of the corner)
+    // (on a phone, the one at the point of the corner; the other two short of the ramps, which
+    // begin a metre from the corner: world/mainland/roadside.js RAMP)
     const pts = [[c.x + c.qx * 0.45, c.z + c.qz * 0.45]];
-    if (!lite) pts.push([c.x + c.qx * 0.36, c.z + c.qz * 0.98], [c.x + c.qx * 0.98, c.z + c.qz * 0.36]);
+    if (!lite) pts.push([c.x + c.qx * 0.34, c.z + c.qz * 0.85], [c.x + c.qx * 0.85, c.z + c.qz * 0.34]);
     bollards(tctx, pts);
   }
 }
@@ -309,8 +314,10 @@ function* buildTile(tctx, t) {
         median(tctx, za, zb, a.x, a.median, true);
       } else road(tctx, a.x - a.half, a.x + a.half, za, zb, true, a.half);
       markRoad(tctx, P, ownZ, a, true, a.x, s0.z + s0.half, s1.z - s1.half, nodeOf(a, s0), nodeOf(a, s1), 1 + a.i * 40 + s0.j, { lite, school: schoolBeside(true, a.i, s0.j) });
+      // (a stretch a step: the streamer gets its frame back between them - a boulevard's palms
+      // and a stretch's marks together were a step longer than a phone's frame)
+      yield;
     }
-    yield;
   }
   // the streets, between their avenues
   for (const s of M_STREETS) {
@@ -331,8 +338,8 @@ function* buildTile(tctx, t) {
         median(tctx, xa, xb, s.z, s.median, false);
       } else road(tctx, xa, xb, s.z - s.half, s.z + s.half, false, s.half);
       markRoad(tctx, P, ownX, s, false, s.z, xa0, ae ? xb0 : xb0 - 2, nodeOf(aw, s), ae ? nodeOf(ae, s) : null, 5000 + s.j * 40 + aw.i, { lite, school: ae ? schoolBeside(false, s.j, ae.i) : false });
+      yield;
     }
-    yield;
   }
   // the crossings: asphalt, zebras, the lights (and the boxes of the hand and the walking man on
   // their poles, the names on two of them), the corners' things
@@ -350,11 +357,14 @@ function* buildTile(tctx, t) {
       const k0 = tctx.signals.length;
       for (const m of n.nb) signalPole(tctx, n, Math.sign(n.x - m.x), Math.sign(n.z - m.z), false);
       const poles = tctx.signals.slice(k0);
+      // (the poles a step, their boxes and names the next, the corners' things the one after)
+      yield;
       for (const sig of poles) {
         pedHeads(tctx, n, sig, { lite });
         // (the names on the poles of two corners across from each other)
         if (Math.sign(sig.x - n.x) === Math.sign(sig.z - n.z)) nameBlades(tctx, n, sig.x, CURB + 4.15, sig.z, sig.obj);
       }
+      yield;
     } else stopCorner(tctx, n);
     markCrossing(tctx, P, n, { lite });
     cornerThings(tctx, n);
@@ -395,6 +405,8 @@ function* buildTile(tctx, t) {
           if (!live && !bare) grate(P, tx, tz);
         }
       }
+      // (a side of the block's lamps and trees a step)
+      yield;
     }
     for (const [z, az] of [[z0 + 0.7, -1], [z1 - 0.7, 1]]) {
       // (where people live the south side's lamps are on the poles of the wires)
@@ -411,6 +423,7 @@ function* buildTile(tctx, t) {
     // the loading zones' words, along the curb in the lane of the parked cars
     for (const l of cp.loading) curbWord(P, (l.x0 + l.x1) / 2, l.z, 0, l.side, 'LOADING ZONE', srgb(0.95, 0.8, 0.25), PAINT_Y, 0.55, 0.5, 1.3);
     if (live) yield* homeStreets(tctx, b, x0, x1, z0, z1, q);
+    yield;
     if (!bare) sidewalkWear(P, bq, x0, x1, z0, z1, Math.min(aw.walk, ae.walk), Math.min(sn.walk, ss.walk), lite);
     yield;
   }
@@ -457,20 +470,28 @@ function* homeStreets(tctx, b, x0, x1, z0, z1, q) {
     shadeTree(tctx, q, x, z, { lite: true, away: [0, s], size: q.range(0.75, 0.95) });
   }
   yield;
-  // the poles on the south side, their lamps out over the street
+  // the poles on the south side, their lamps out over the street. The line - its poles, its wires,
+  // its guy wires - is one thing of the street's: a wooden pole with the wires on it does not go
+  // over when a car hits it, it stops the car; and rubbed out, the line goes all together, nothing
+  // of it left hanging in the air (game/knock.js, world/objects.js)
   const zp = z1 - 0.7;
   const xs = [x0 + 16, x0 + 46, x1 - 5];
+  const line = tctx.objects.begin(tctx, 'pole', xs[1], zp);
   const poles = xs.map((x, k) => utilityPole(tctx, x, zp, 0, 1, { alongX: true, xfmr: k === 1 && q() < 0.6 }));
   const lite = tctx.low;
   for (let k = 0; k + 1 < poles.length; k++) span(tctx, poles[k], poles[k + 1], { lite });
-  // over the avenue to the east (col - 1) when people live there too; else the guy wire
+  // over the avenue to the east (col - 1) when people live there too - the top wires only: the
+  // phone cable would hang through the light's pole on the far corner (world/streets.js
+  // signalPole, 0.62 m in from the curb, as the wires are 0.7); else the guy wire, down to the
+  // corner's point past the two ramps (not on the ramp where the zebra lands, in the people's way)
   const east = blockAt(b.col - 1, b.row);
   if (east && LIVE.has(east.kind)) {
     const ex0 = M_AVES[b.col].x + M_AVES[b.col].half;
-    span(tctx, poles[poles.length - 1], poleEnds(ex0 + 16, zp, 0, 1, { alongX: true }), { lite });
-  } else guyWire(tctx, poles[poles.length - 1], 1, 0);
+    span(tctx, poles[poles.length - 1], poleEnds(ex0 + 16, zp, 0, 1, { alongX: true }), { lite, cable: false });
+  } else guyWire(tctx, poles[poles.length - 1], 1, 0, x1 - 0.45 - xs[2]);
   const west = blockAt(b.col + 1, b.row);
   if (!west || !LIVE.has(west.kind)) guyWire(tctx, poles[0], -1, 0);
+  tctx.objects.end(tctx, line);
 }
 
 /** a tile's build (a generator); returns its live object { group, attach(), detach() } */
