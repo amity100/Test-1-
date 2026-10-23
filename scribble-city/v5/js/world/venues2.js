@@ -1095,7 +1095,16 @@ function filmPoster(R, run, s, y, w, h, rng, o = {}) {
   run.box(S, s + w * 0.2, y + h * 0.22, 0.064, s + w * 0.36, y + h * 0.38, 0.068, [0.98, 0.94, 0.7], nextId(), FRONT);
   run.box(S, s - w * 0.42, y - h * 0.46, 0.064, s + w * 0.42, y - h * 0.34, 0.07, pk(rng, [[0.98, 0.84, 0.3], [0.98, 0.98, 0.95], [0.95, 0.4, 0.5]]), nextId(), FRONT);
   for (let k = 0; k < 2; k++) run.box(S, s - w * 0.36, y + h * (0.36 + k * 0.06), 0.064, s + w * (0.0 - k * 0.1), y + h * (0.39 + k * 0.06), 0.068, C.white, nextId(), FRONT);
+  // (the film's name over its title bar, lettered: the city's own films, a few of them going round
+  // its screens - the same handful of words for every poster, so they cost the city's neon little)
+  const title = FILMS[Math.floor(rng.r() * FILMS.length)];
+  // (dark letters on the bar's light colour, the way the marquee's are)
+  const ink = pk(rng, [[0.12, 0.1, 0.16], [0.46, 0.05, 0.1], [0.1, 0.14, 0.34]]);
+  if (o.titles !== false) wallNeon(R, run, title, s, y - h * 0.4, 0.075, w * 0.86, ink, { font: 'Rubik' });
 }
+
+// what is on at the city's cinemas and its theatre (parody titles)
+const FILMS = ['THE ERASER', 'INK STORM', 'PAPER HEARTS', 'SKETCHY', 'LINE OF FIRE', 'SMUDGE'];
 
 /**
  * The counter of the cinema: the back counter against the wall (the popcorn machine glowing, its

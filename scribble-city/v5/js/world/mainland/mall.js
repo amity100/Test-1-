@@ -566,7 +566,7 @@ function planter(ctx, x, z, inside) {
 // the offer lit on the glass, a lightbox standing out by the window, potted plants at the door.
 // (All of it in the hall's own batch, merged: a few hundred boxes for the whole hall.)
 const PROMO = ['SALE', 'NEW IN', '-30%', 'NEW SEASON', '2 FOR 1', 'LAST DAYS', '-50%', 'OPEN'];
-const BANNER_WORDS = ['SALE', 'SUMMER', '-50%', 'NEW IN', 'FASHION', 'BIG SALE', 'WELCOME', '-30%'];
+const BANNER_WORDS = ['SALE', 'SUMMER', '-50%', 'NEW IN', 'NEW SEASON', '2 FOR 1', 'OPEN', '-30%'];
 const KIOSKS = ['sunglasses', 'coffee', 'phones', 'balloons', 'sweets', 'watches'];
 const ADS = [
   [srgb(0.98, 0.42, 0.58), srgb(1, 0.92, 0.86), srgb(0.24, 0.2, 0.36)],
@@ -996,7 +996,8 @@ function banner(hctx, IN, hall, x, z, top, a, c, word) {
   for (const n of [-1, 1]) {
     // (each face reads left to right to whoever looks at it)
     const f = new Facade(x, z + n * 0.03, n, 0, 0, n);
-    neonSign(hctx, f, word, 0, top - 3.5, 0, 2.2, WHITE, { font: 'Rubik', size: 96 });
+    // (the same lettering as the windows' offers: one place in the city's neon for both)
+    neonSign(hctx, f, word, 0, top - 3.5, 0, 2.2, WHITE, { font: 'Rubik', size: 90 });
   }
 }
 

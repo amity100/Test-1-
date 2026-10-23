@@ -1055,11 +1055,24 @@ export class Dining {
     const f = c.fig;
     const m = this.m.station || this.m.pass;
     if (!m) return null;
-    const tx = m.x + w.i * 0.55;
-    const tz = m.z;
+    if (!w.idle) {
+      // (side by side along the station, each in a place of their own where a person can stand: the
+      // end of the way there - so a place in the furniture is never walked to again and again)
+      const off = (w.i - (this.waiters.length - 1) / 2) * 0.6;
+      const way = this.o.room.path(m.x, m.z, m.x - Math.cos(m.yaw) * off, m.z + Math.sin(m.yaw) * off);
+      w.idle = way[way.length - 1];
+    }
+    const tx = w.idle.x;
+    const tz = w.idle.z;
     if (Math.hypot(c.pos.x - tx, c.pos.z - tz) > 0.35) {
-      if (!w.pts) w.pts = this.o.room.path(c.pos.x, c.pos.z, tx, tz);
-      return null;
+      // (the way round the tables once; a step or two more is walked straight)
+      w.pathCool = (w.pathCool || 0) - dt;
+      if (!w.pts && w.pathCool <= 0) {
+        w.pathCool = 2;
+        w.pts = this.o.room.path(c.pos.x, c.pos.z, tx, tz);
+        return null;
+      }
+      return { x: tx, z: tz, speed: 1.0 };
     }
     c.faceYaw = m.yaw;
     f.carry = null;
