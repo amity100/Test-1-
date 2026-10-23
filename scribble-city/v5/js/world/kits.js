@@ -6,7 +6,7 @@ import { AD_IDS } from './ads.js';
 import { palm } from './palms.js';
 import { randomCarSpec } from '../render/cars.js';
 import { CURB } from './layout.js';
-import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, plateSpans, doorSill, SILL, DETAIL_LOW } from './facades.js';
+import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, plateSpans, doorSill, SILL, SLAT, DETAIL_LOW } from './facades.js';
 
 // (v5, ROADMAP 11.2) The building kits of the city behind Ocean Drive. Every lot gets its own
 // building, the way the real South Beach was built a lot at a time: a row of shops of one floor
@@ -726,8 +726,7 @@ export function apartments(ctx, spec) {
   // ---- (v5, GTA IV) the pipes down the corners from the roof; by the entrance its lamps, the bells
   {
     const pipe = ad() < 0.5 ? COL.white : darker(wall, 0.8);
-    const runs = U ? [[bf, 0.18], [bf, L - 0.18]] : [[bf, 0.18], [bf, L - 0.18]];
-    for (const [sf, u] of runs) downpipe(PA, sf, u, top + 0.6, CURB + base, pipe);
+    for (const u of [0.18, L - 0.18]) downpipe(PA, bf, u, top + 0.6, CURB + base, pipe);
     if (!walk) {
       const pf = shifted(wf, 0.46);
       for (const sd of [-1, 1]) wallLamp(PA, pf, uc + sd * 1.15, CURB + 2.55, { body: COL.iron });
@@ -965,6 +964,7 @@ export function modern(ctx, spec) {
   const PM = new Parts(ctx);
   const md = diceAt(f, 61);
   const blindCol = md.pick([srgb(0.92, 0.9, 0.84), srgb(0.82, 0.84, 0.86), srgb(0.62, 0.6, 0.56)]);
+  const slatCol = darker(blindCol, 0.8);
   const blinds = (u0, u1, y0, y1, w = -0.3) => {
     for (let a = u0; a < u1 - 0.3; a += 1.5) {
       const b = Math.min(u1, a + 1.5);
@@ -972,7 +972,7 @@ export function modern(ctx, spec) {
       const yb = y1 - (y1 - y0) * (0.15 + md() * 0.7);
       const bid = nextId();
       PM.box(M.prop, f, a + 0.04, yb, w + 0.02, b - 0.04, y1, w + 0.028, blindCol, bid, FB.BACK);
-      if (!DETAIL_LOW) for (let v = yb + 0.25; v < y1 - 0.1; v += 0.35) PM.box(M.prop, f, a + 0.04, v, w + 0.028, b - 0.04, v + 0.012, w + 0.034, darker(blindCol, 0.8), bid, FB.BACK);
+      if (!DETAIL_LOW) for (let v = yb + 0.25; v < y1 - 0.1; v += 0.35) PM.box(M.prop, f, a + 0.04, v, w + 0.028, b - 0.04, v + SLAT, w + 0.034, slatCol, bid, FB.BACK);
     }
   };
   for (let fl = 1; fl < floors; fl++) {
@@ -2086,7 +2086,8 @@ export function house(ctx, spec) {
     fbox(ctx, hf, M.frame, uDoor - 0.68, CURB + base, 0, uDoor + 0.68, CURB + base + 2.34, 0.04, trim);
     const pw = Math.min(2.0, (m1 - m0) / 2 - 0.2);
     const py = CURB + base + 2.75;
-    if (r() < 0.65) {
+    const porch = r() < 0.65;
+    if (porch) {
       fbox(ctx, hf, M.wall, uDoor - pw, py, 0, uDoor + pw, py + 0.22, 1.95, trim, tid);
       for (const sd of [-1, 1]) {
         fbox(ctx, hf, M.wall, uDoor + sd * (pw - 0.2) - 0.1, CURB + base, 1.65, uDoor + sd * (pw - 0.2) + 0.1, py, 1.85, trim, tid);
@@ -2103,14 +2104,16 @@ export function house(ctx, spec) {
     fbox(ctx, hf, M.prop, uDoor - 0.9, CURB, 0, uDoor + 0.9, CURB + base * 0.5, 1.1, srgb(0.86, 0.82, 0.76));
     info.doors.push(hf.p(uDoor, CURB, 1.2));
     info.uDoor = uDoor;
-    // (v5, GTA IV) the number by the door, the mat before it
+    // (v5, GTA IV) the number by the door, the mat before it (on the porch's floor where there is
+    // one, on the step where there is not)
     {
       const nid = nextId();
       const nu = uDoor - 1.0;
       PH.box(M.prop, hf, nu - 0.2, CURB + base + 1.55, 0, nu + 0.2, CURB + base + 1.77, 0.02, hd() < 0.5 ? COL.dark : COL.white, nid, FB.BACK);
       const digits = 3 + Math.floor(hd() * 2);
       for (let k = 0; k < digits; k++) PH.box(M.prop, hf, nu - (digits - 1) * 0.045 + k * 0.09 - 0.028, CURB + base + 1.59, 0.02, nu - (digits - 1) * 0.045 + k * 0.09 + 0.028, CURB + base + 1.73, 0.03, COL.brass, nid, FB.BACK);
-      PH.box(M.prop, hf, uDoor - 0.5, CURB + base * 0.5, 0.15, uDoor + 0.5, CURB + base * 0.5 + 0.02, 0.75, srgb(0.42, 0.32, 0.24), nextId(), FB.BOTTOM);
+      const my = CURB + (porch ? base : base * 0.5);
+      PH.box(M.prop, hf, uDoor - 0.5, my, 0.15, uDoor + 0.5, my + 0.02, 0.75, srgb(0.42, 0.32, 0.24), nextId(), FB.BOTTOM);
     }
     // a lamp by the door, a house number
     const lp = hf.p(uDoor + 0.95, CURB + base + 1.9, 0.25);
