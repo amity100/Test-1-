@@ -742,7 +742,9 @@ export class Traffic {
       const s1 = c.side || 0;
       const vs = (s1 - (c.side0 === undefined ? s1 : c.side0)) / Math.max(dt, 1e-3);
       c.side0 = s1;
-      if (vs > 0.03 || vs < -0.03) tilt = Math.max(-0.32, Math.min(0.32, -Math.atan2(vs, Math.max(c.speed, 1.2))));
+      const tw = vs > 0.03 || vs < -0.03 ? Math.max(-0.32, Math.min(0.32, -Math.atan2(vs, Math.max(c.speed, 1.2)))) : 0;
+      // (smoothed a little: no frame's jolt in it)
+      tilt = c.tilt = c.tilt || tw ? damp(c.tilt || 0, tw, 10, dt) : 0;
     }
     c.steer = damp(c.steer, angleDiff(c.yaw, yaw + tilt) * 6, 8, dt);
     c.yaw = yaw + tilt;
