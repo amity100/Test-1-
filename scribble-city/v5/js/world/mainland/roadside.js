@@ -521,7 +521,9 @@ export function wire(ctx, p, q, r = 0.022, sagK = 0.028) {
   _m.y -= sag * 2;
   const curve = new THREE.QuadraticBezierCurve3(_a.clone(), _m.clone(), _b.clone());
   const g = new THREE.TubeGeometry(curve, Math.max(4, Math.min(10, Math.round(L / 5))), r, 3, false);
-  ctx.B.add(ctx.M.rail, g, null, nextId(), { color: WIRE });
+  // (in the poles' pen, which carries the prop's number - the railings' does not: a wire of a line
+  // rubbed out goes with its poles)
+  ctx.B.add(ctx.M.pole, g, null, nextId(), { color: WIRE });
 }
 
 // the guy wire that holds the last pole of a line: down to the ground beyond it (dx, dz), lead
