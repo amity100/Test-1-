@@ -6,7 +6,7 @@ import { AD_IDS } from './ads.js';
 import { palm } from './palms.js';
 import { randomCarSpec } from '../render/cars.js';
 import { CURB } from './layout.js';
-import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, plateSpans, doorSill, SILL, SLAT, DETAIL_LOW } from './facades.js';
+import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, plateSpans, doorSill, SILL, SLAT, SLAT_FACE, DETAIL_LOW } from './facades.js';
 
 // (v5, ROADMAP 11.2) The building kits of the city behind Ocean Drive. Every lot gets its own
 // building, the way the real South Beach was built a lot at a time: a row of shops of one floor
@@ -972,7 +972,7 @@ export function modern(ctx, spec) {
       const yb = y1 - (y1 - y0) * (0.15 + md() * 0.7);
       const bid = nextId();
       PM.box(M.prop, f, a + 0.04, yb, w + 0.02, b - 0.04, y1, w + 0.028, blindCol, bid, FB.BACK);
-      if (!DETAIL_LOW) for (let v = yb + 0.25; v < y1 - 0.1; v += 0.35) PM.box(M.prop, f, a + 0.04, v, w + 0.028, b - 0.04, v + SLAT, w + 0.034, slatCol, bid, FB.BACK);
+      if (!DETAIL_LOW) for (let v = yb + 0.25; v < y1 - 0.1; v += 0.35) PM.box(M.prop, f, a + 0.04, v, w + 0.028, b - 0.04, v + SLAT, w + 0.034, slatCol, bid, SLAT_FACE);
     }
   };
   for (let fl = 1; fl < floors; fl++) {

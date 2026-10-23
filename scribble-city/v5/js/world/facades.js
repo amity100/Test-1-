@@ -38,10 +38,13 @@ export const DETAIL_LOW = LOW;
 // the faces of a box in a front's frame (the ones to leave out)
 export const FB = { FRONT: 1, BACK: 2, LEFT: 4, RIGHT: 8, TOP: 16, BOTTOM: 32 };
 
-// the slat of a blind, top to bottom: a pixel of the screen from twenty metres off, so that its line
-// is drawn whole (a hair of a centimetre came out as a row of dots, the blinds of the offices like
-// a sheet of perforated tin)
+// The slats of a blind: a band of the blind's own colour a shade darker every so often, its face
+// only. As a box a centimetre high each had its top and its underside, a fold the inker outlines;
+// from across the street those folds fall between the pixels, and every slat came out a row of
+// black dots (the offices' blinds like sheets of perforated tin). A face turned the way the blind
+// is has no fold to draw: up close it is a slat, far off the blind's tone. SLAT: its height
 export const SLAT = 0.03;
+export const SLAT_FACE = FB.BACK | FB.TOP | FB.BOTTOM | FB.LEFT | FB.RIGHT;
 
 // the frame's face as the world's (every street runs north-south or east-west)
 const axis = (x, z) => (Math.abs(x) > 0.5 ? (x > 0 ? F.PX : F.NX) : z > 0 ? F.PZ : F.NZ);
@@ -340,14 +343,14 @@ export function deepWindow(P, f, u0, v0, u1, v1, o) {
         // (a pelmet over them)
         if (r() < 0.4) P.box(M.prop, f, u0 + t, v1 - t - 0.12, cw - 0.008, u1 - t, v1 - t, cw + 0.006, col.clone().multiplyScalar(0.85), nextId(), FB.BACK);
       } else if (k < 0.72) {
-        // a blind, half down, its slats (SLAT thick)
+        // a blind, half down, its slats (their faces only: SLAT_FACE)
         const yb = v1 - (v1 - v0) * (0.25 + r() * 0.45);
         const col = r() < 0.6 ? C(0.95, 0.92, 0.84) : r() < 0.5 ? C(0.86, 0.86, 0.84) : C(0.55, 0.42, 0.3);
         const bid = nextId();
         P.box(M.prop, f, u0 + t, yb, cw - 0.008, u1 - t, v1 - t, cw, col, bid, FB.BACK);
         if (!LOW) {
           const sc = col.clone().multiplyScalar(0.8);
-          for (let v = yb + 0.2; v < v1 - t - 0.05; v += 0.3) P.box(M.prop, f, u0 + t, v, cw, u1 - t, v + SLAT, cw + 0.008, sc, bid, FB.BACK);
+          for (let v = yb + 0.2; v < v1 - t - 0.05; v += 0.3) P.box(M.prop, f, u0 + t, v, cw, u1 - t, v + SLAT, cw + 0.008, sc, bid, SLAT_FACE);
         }
       } else if (k < 0.86 && lights !== 'deco') {
         // the lower sash pushed up: the room's dark under it, a curtain stirring in it
