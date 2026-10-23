@@ -1110,7 +1110,11 @@ class OpenShop {
     if (this.lobby) return this.lobby.populate();
     if (kind === 'barber' && R.chairs.length) this.addVisitor(null, { mode: 'chair', spot: R.chairs[0], already: true });
     const seats = shuffled(R.seats);
-    const nSeat = this.barLife ? 0 : Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : SEATED[kind] || 0);
+    // (v5, GTA IV round: a place with a kitchen fills at lunch and at dinner - twice as many at its
+    // tables then, as many as it has)
+    const h = this.game.rhythm ? this.game.rhythm.hour : 13;
+    const meal = DISH[kind] && (SEATED[kind] || 0) < 6 && ((h > 11.8 && h < 14.5) || (h > 18.5 && h < 22));
+    const nSeat = this.barLife ? 0 : Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : (SEATED[kind] || 0) * (meal ? 2 : 1));
     for (let i = 0; i < nSeat; i++) {
       const v = this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
       // (v5, GTA IV round: here before you came - some halfway through what the kitchen brought)

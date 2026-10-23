@@ -566,6 +566,7 @@ function planter(ctx, x, z, inside) {
 // the offer lit on the glass, a lightbox standing out by the window, potted plants at the door.
 // (All of it in the hall's own batch, merged: a few hundred boxes for the whole hall.)
 const PROMO = ['SALE', 'NEW IN', '-30%', 'NEW SEASON', '2 FOR 1', 'LAST DAYS', '-50%', 'OPEN'];
+const BANNER_WORDS = ['SALE', 'SUMMER', '-50%', 'NEW IN', 'FASHION', 'BIG SALE', 'WELCOME', '-30%'];
 const KIOSKS = ['sunglasses', 'coffee', 'phones', 'balloons', 'sweets', 'watches'];
 const ADS = [
   [srgb(0.98, 0.42, 0.58), srgb(1, 0.92, 0.86), srgb(0.24, 0.2, 0.36)],
@@ -606,11 +607,12 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
   const placed = [];
   for (let z = bz0 + 15; z < bz1 - 15 && placed.length < 6; z += 1) {
     for (const side of placed.length % 2 ? [-1, 1] : [1, -1]) {
-      const x = cx + side * 3.2;
+      // (between the middle and the galleries' columns: half its width and a way past it either side)
+      const x = cx + side * 2.9;
       if (placed.some((q) => Math.abs(q.z - z) < (q.side === side ? 15 : 8))) continue;
-      if (!free(x - 1.65, z - 2.2, x + 1.65, z + 2.2)) continue;
+      if (!free(x - 1.15, z - 1.9, x + 1.15, z + 1.9)) continue;
       kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, KIOSKS[(placed.length + b.seed) % KIOSKS.length], r);
-      taken.push([x - 1.65, z - 2.2, x + 1.65, z + 2.2]);
+      taken.push([x - 1.15, z - 1.9, x + 1.15, z + 1.9]);
       placed.push({ z, side });
       break;
     }
@@ -652,7 +654,7 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
     const c = hex(o.signCol || '#ff5ad1');
     let k = 0;
     for (let z = bz0 + 16; z < bz1 - 8; z += 16) {
-      for (const s of [-1, 1]) banner(IN, hall, cx + s * 3.0, z, H, k++ % 2 ? a : c, k % 3 ? WHITE : srgb(1, 0.85, 0.4));
+      for (const s of [-1, 1]) banner(hctx, IN, hall, cx + s * 3.0, z, H, k++ % 2 ? a : c, k % 3 ? WHITE : srgb(1, 0.85, 0.4), BANNER_WORDS[(k + b.seed) % BANNER_WORDS.length]);
     }
   }
   // ---- the signs under the bridge: to the food court one way, to the doors and parking the other
@@ -955,14 +957,25 @@ function screenTotem(bctx, IN, hall, x, z, ad) {
 }
 
 // a banner hung from the roof on two wires: its rod, the cloth, a band across it, a white panel
-function banner(IN, hall, x, z, top, a, c) {
-  for (const s of [-0.6, 0.6]) hall(IN.box, x + s - 0.006, top - 0.45, z - 0.006, x + s + 0.006, top, z + 0.006, DARK);
-  hall(IN.box, x - 0.72, top - 0.5, z - 0.03, x + 0.72, top - 0.44, z + 0.03, DARK);
-  hall(IN.box, x - 0.65, top - 3.9, z - 0.014, x + 0.65, top - 0.5, z + 0.014, a);
-  hall(IN.box, x - 0.65, top - 3.3, z - 0.02, x + 0.65, top - 3.05, z + 0.02, c);
-  hall(IN.box, x - 0.38, top - 2.35, z - 0.02, x + 0.38, top - 1.4, z + 0.02, WHITE);
-  hall(IN.box, x - 0.2, top - 2.1, z - 0.024, x + 0.2, top - 1.65, z + 0.024, c);
-  hall(IN.box, x - 0.67, top - 4.0, z - 0.025, x + 0.67, top - 3.9, z + 0.025, DARK);
+// (v5, GTA IV round: the size of a real mall's - two metres and more across, five long - with the
+// offer on both its faces in big lit letters: the word, the season, the discount)
+function banner(hctx, IN, hall, x, z, top, a, c, word) {
+  const w = 1.15;
+  for (const s of [-w + 0.15, w - 0.15]) hall(IN.box, x + s - 0.006, top - 0.45, z - 0.006, x + s + 0.006, top, z + 0.006, DARK);
+  hall(IN.box, x - w - 0.08, top - 0.5, z - 0.03, x + w + 0.08, top - 0.44, z + 0.03, DARK);
+  hall(IN.box, x - w, top - 5.0, z - 0.014, x + w, top - 0.5, z + 0.014, a);
+  hall(IN.box, x - w, top - 1.25, z - 0.02, x + w, top - 0.95, z + 0.02, c);
+  hall(IN.box, x - w, top - 4.45, z - 0.02, x + w, top - 4.25, z + 0.02, c);
+  // the picture: a white disc of a sun (a square of it, in this hand), the thing on offer in it
+  hall(IN.box, x - 0.62, top - 2.75, z - 0.02, x + 0.62, top - 1.5, z + 0.02, WHITE);
+  hall(IN.box, x - 0.3, top - 2.45, z - 0.024, x + 0.3, top - 1.8, z + 0.024, c);
+  hall(IN.box, x - w - 0.03, top - 5.1, z - 0.025, x + w + 0.03, top - 5.0, z + 0.025, DARK);
+  if (!word) return;
+  for (const n of [-1, 1]) {
+    // (each face reads left to right to whoever looks at it)
+    const f = new Facade(x, z + n * 0.03, n, 0, 0, n);
+    neonSign(hctx, f, word, 0, top - 3.5, 0, 2.2, WHITE, { font: 'Rubik', size: 96 });
+  }
 }
 
 // the directory by the entrance: a lit board with the mall's plan on it (its stores in colour, a

@@ -270,8 +270,9 @@ export class MallLife {
   }
 
   get budget() {
-    // (the shoppers of the hall at once - the food court's tables on top of them on a computer)
-    return this.game.touch ? 7 : 18;
+    // (the shoppers of the hall at once - the food court's tables on top of them on a computer; a
+    // hall a hundred metres long takes a crowd to look busy)
+    return this.game.touch ? 7 : 22;
   }
 
   update(dt) {
