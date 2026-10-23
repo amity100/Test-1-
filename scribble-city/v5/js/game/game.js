@@ -87,6 +87,9 @@ import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Signs } from './signs.js';
+import { Fuse } from './fuse.js';
+import { Gear } from './gear.js';
+import { BrokenBridge } from './mission.js';
 import { drawLandmarks } from '../world/mainland/landmarks.js';
 import { Fairground } from './fairground.js';
 import { ArenaGame } from './arenagame.js';
@@ -300,6 +303,12 @@ export class Game {
     // quick signs
     this.lab = !this.classic && (this.params.has('lab') || (typeof window !== 'undefined' && !!window.SC_LAB));
     this.signs = this.lab ? new Signs(this) : null;
+    // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car
+    this.fuse = this.lab ? new Fuse(this) : null;
+    // (ROADMAP 11.28) what the things of the pen do: the turbo, the rewind, the missiles, the dome...
+    this.gear = this.fuse ? new Gear(this) : null;
+    // (ROADMAP 11.23) the lab's first mission: the broken bridge - drawing on your car to get over
+    this.mission = this.lab ? new BrokenBridge(this) : null;
     this.freedraw = this.classic ? null : new FreeDraw(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
@@ -426,6 +435,11 @@ export class Game {
       $('opt-vol-radio').value = v.radio;
       $('opt-sens').value = v.sens;
       $('opt-invert').checked = v.invertY;
+      $('opt-drive').value = v.touchDrive;
+      $('opt-drive-row').classList.toggle('hidden', !this.touch || this.classic);
+      // (ROADMAP 11.24, the lab: drawing on your car - a part said, then drawn, or as in 11.22)
+      $('opt-carpen').value = v.carPen;
+      $('opt-carpen-row').classList.toggle('hidden', !this.lab);
       $('opt-subs').checked = v.subtitles;
       $('opt-voices').checked = v.voices;
       $('opt-boil').checked = pick('boil');
@@ -477,6 +491,9 @@ export class Game {
       S.set('pens', e.target.value);
       apply();
     });
+    // (a phone at the wheel: the driving buttons or the stick - read as the car is driven, updatePrompts)
+    $('opt-drive').addEventListener('change', (e) => S.set('touchDrive', e.target.value));
+    $('opt-carpen').addEventListener('change', (e) => S.set('carPen', e.target.value));
     // F3 keeps its choice too
     this.perf.onToggle = (on) => {
       if (!this.perf.bench) S.set('perf', on);
@@ -983,6 +1000,12 @@ export class Game {
       this.wheel.update();
       dt *= this.wheel.slow;
     }
+    // (ROADMAP 11.21, the lab: the pen out - the city slows right down, time to draw on what is
+    // moving; what you see go by as it really goes - the pen, its camera - keeps the real step)
+    this.realDt = dt;
+    if (this.fuse) dt *= this.fuse.timeK(dt, !!(this.freedraw && this.freedraw.isOpen) && this.state === 'play');
+    // (ROADMAP 11.28: frozen while the rewind runs back, slow a moment after it - game/gear.js)
+    if (this.gear) dt *= this.gear.timeK(this.realDt);
     this.time += dt;
     shared.uTime.value = this.time;
     // the gamepad first: it presses the same keys the keyboard does
@@ -1080,8 +1103,11 @@ export class Game {
       if (this.money) this.money.update(dt);
       if (this.ink) this.ink.update(dt);
       if (this.gadgets) this.gadgets.update(dt);
-      if (this.freedraw) this.freedraw.update(dt);
+      if (this.freedraw) this.freedraw.update(this.realDt);
       if (this.signs) this.signs.update(dt);
+      if (this.fuse) this.fuse.update(dt);
+      if (this.gear) this.gear.update(dt);
+      if (this.mission) this.mission.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
       this.updateHidden();
@@ -1120,7 +1146,10 @@ export class Game {
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
         : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
-      this.camRig.update(dt, v.pos, opt);
+      // (ROADMAP 11.28: the turbo on - the picture wider, the camera back a little: game/gearmove.js)
+      const G = this.gear;
+      if (G && (G.fovK > 1.001 || G.camPull > 0.01)) this.camRig.update(dt, v.pos, { ...opt, fovMul: (opt.fovMul || 1) * G.fovK, dist: (opt.dist || 8.5) + G.camPull });
+      else this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
@@ -1142,6 +1171,8 @@ export class Game {
         this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
       }
     }
+    // (ROADMAP 11.21) the pen out in the car you drive: the camera close by it, held in its frame
+    if (this.fuse && player.inVehicle) this.fuse.sketchCam(player.inVehicle, this.realDt);
     const tipsy = this.inkwell.tipsy;
     if (tipsy > 0.05 && this.state === 'play') {
       // a few drinks in: the page sways
@@ -1158,6 +1189,8 @@ export class Game {
     // the performance test route drives the camera (and the city's life follows it)
     if (this.perf.bench) this.perf.benchCamera(dt);
     this.camera.updateMatrixWorld();
+    // (the ink on its way onto the car, where the camera now sees it: game/partpen.js)
+    if (this.fuse) this.fuse.pen.late();
     // (the camera under the bay: the world down there, ROADMAP 5.2)
     if (this.swim) this.swim.frame(dt);
     this.bubbles.update(dt, this.camera);
@@ -1191,6 +1224,8 @@ export class Game {
       this.signals.draw(this.camera.position);
       this.vehicles.draw(this.cars);
       this.cars.end();
+      if (this.fuse) this.fuse.draw(fr, dt);
+      if (this.mission) this.mission.draw(fr);
       this.drawStuckPencils(fr);
       this.ambient.draw(fr);
       // (the lighthouse's light going round at night: world/mainland/landmarks.js)
@@ -1730,6 +1765,10 @@ export class Game {
     else if (!this.classic && !this.touch && !this.driveHint && (v.kind === 'car' || v.kind === 'bike')) {
       this.driveHint = true;
       this.hud.toast('V — מבט מהרכב · רווח — בלם יד', 'info', 3.2);
+    } else if (!this.classic && this.touch && !this.driveHint && this.settings.get('touchDrive') !== 'stick') {
+      // (a phone: the driving buttons, and where the stick is for whoever misses it)
+      this.driveHint = true;
+      this.hud.toast('נוהגים בכפתורים: החיצים משמאל, גז ובלם מימין · ג׳ויסטיק — בהגדרות', 'info', 4);
     }
   }
 
@@ -2048,16 +2087,37 @@ export class Game {
     this.hud.setPrompt(prompt);
     // (not with ?classic, on a phone: ▼ crouches on foot and dives in the water; ▲ comes up)
     if (this.touch && !this.classic) {
-      const fl = p.inVehicle && p.inVehicle.flies;
+      const v = p.inVehicle;
+      // (ROADMAP 11.20: a spring, a rotor, a balloon drawn onto the car - ▲ jumps, lifts it)
+      const fl = v && (v.flies || v.fuseUp);
+      // (at the wheel: the driving buttons instead of the stick, core/input.js - or the stick as it
+      // was, if that is what the settings say)
+      const btns = !!v && this.settings.get('touchDrive') !== 'stick';
+      // (with them the jump button is gone: ▲ does what it did - a spring's jump, a lift off the road,
+      // a car on its roof back onto its wheels; and ▲ ▼ take a submarine up and down)
+      const lift = btns && !!(v.spaceIsMine || (v.flipped && !v.roofDrive));
+      const dive = btns && !!v.dive;
       // (the fists' guard: on foot with the fists out, ROADMAP 5.4)
       const fists = p.mode === 'foot' && !!this.weapons.current.def.bare;
-      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}`;
+      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}|${lift}|${dive}`;
       if (key !== this.upDownKey) {
         this.upDownKey = key;
-        $('btn-down').classList.toggle('hidden', !(p.mode === 'foot' || p.mode === 'swim' || fl));
-        $('btn-up').classList.toggle('hidden', !(p.mode === 'swim' || fl));
+        $('btn-down').classList.toggle('hidden', !(p.mode === 'foot' || p.mode === 'swim' || fl || dive));
+        $('btn-up').classList.toggle('hidden', !(p.mode === 'swim' || fl || lift || dive));
         $('btn-guard').classList.toggle('hidden', !fists);
         if (!fists) this.input.aim = false;
+      }
+      // the pedals (and the stick away, css/style.css): the handbrake where there are wheels to lock,
+      // the turbo where there are jets
+      const wheels = btns && (v.kind === 'car' || v.kind === 'bike');
+      const jets = wheels && !!v.jets;
+      const pk = `${btns}|${wheels}|${jets}`;
+      if (pk !== this.pedalKey) {
+        this.pedalKey = pk;
+        this.input.driveButtons = btns;
+        document.body.classList.toggle('drive-btns', btns);
+        $('btn-handbrake').classList.toggle('hidden', !wheels);
+        $('btn-boost').classList.toggle('hidden', !jets);
       }
     }
     if (this.touch) {
@@ -2082,6 +2142,12 @@ export class Game {
 
   updateGoals() {
     const f = this.goalFlags;
+    // (ROADMAP 11.23: the lab's mission, while it is on)
+    const mg = this.mission && this.mission.goals();
+    if (mg) {
+      this.hud.setGoals(mg);
+      return;
+    }
     // (ROADMAP 11.6: with the free drawing, drawing anything comes first; the blueprints later)
     const all = this.freedraw ? [
       { text: this.touch ? 'לצייר נשק משלכם — מה שבא לכם (עיפרון), גם בריצה' : 'לצייר נשק משלכם — מה שבא לכם (Q), גם בריצה', done: f.drew },

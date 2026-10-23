@@ -190,6 +190,8 @@ export class Pad {
       key(B.R3, 'KeyV');
       // (a drawn parachute: X opens it in the air - ROADMAP 11.10)
       key(B.X, 'KeyG');
+      // (ROADMAP 11.20: the pen in the car too - parts drawn onto it)
+      if (game.fuse) key(B.UP, 'KeyQ');
     } else {
       inp.pad = { x: lx, y: -ly, sprint: this.down[B.A] };
       inp.flyUp = false;
