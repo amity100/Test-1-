@@ -1,0 +1,66 @@
+[
+ {
+  "js": "(async () => { const m = await import('/v5/js/world/mainland/plan.js'); window.__plan = m; const g=window.__game; const D=g.daynight; if (D && D.setHour) D.setHour(13); const pick = (k, d) => m.M_BLOCKS.find(b => b.kind === k && (!d || b.district === d)); const hb = pick('calle'); const tb = pick('towers', 'downtown'); const vb = pick('houses'); const ab = pick('apartments') || pick('bungalows'); window.__B = { hb, tb, vb, ab }; g.world.mainland.fill({x:hb.cx, z:hb.cz}, 30000); g.player.spawn(hb.rect.x1 + 2.6, hb.cz + 10, Math.PI); g.camRig.yaw = Math.PI; g.camRig.pitch = 0.04; return { hb: [hb.col, hb.row, hb.kind], tb: tb && [tb.col, tb.row], vb: vb && [vb.col, vb.row], ab: ab && [ab.col, ab.row, ab.kind] }; })()",
+  "frames": 150,
+  "shot": "havana_street"
+ },
+ {
+  "js": "const g=window.__game; const hb=window.__B.hb; g.player.spawn(hb.rect.x1 + 3.2, hb.cz - 4, -Math.PI/2); g.camRig.yaw = -Math.PI/2 + 0.35; g.camRig.pitch = 0.12; null",
+  "frames": 40,
+  "shot": "havana_facade"
+ },
+ {
+  "js": "const g=window.__game; const hb=window.__B.hb; g.player.spawn(hb.rect.x1 + 7, hb.cz - 4, -Math.PI/2); g.camRig.yaw = -Math.PI/2 - 0.5; g.camRig.pitch = 0.25; null",
+  "frames": 40,
+  "shot": "havana_up"
+ },
+ {
+  "js": "(() => { const g=window.__game; const hb=window.__B.hb; const p = g.player.pos; const near = g.world.shops.filter(s => s.room && s.door && Math.hypot(s.door[0]-p.x, s.door[2]-p.z) < 120 && !/^home/.test(s.kind)).sort((a,b)=>Math.hypot(a.door[0]-p.x,a.door[2]-p.z)-Math.hypot(b.door[0]-p.x,b.door[2]-p.z)); window.__near = near.map(s => ({ kind: s.kind, name: s.name })); const s = near[0]; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.player.spawn(c.x + fx*1.2, c.z + fz*1.2, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz); g.camRig.pitch = 0.05; return near.slice(0,12).map(s=>s.kind+':'+s.name); })()",
+  "frames": 90,
+  "shot": "shop1"
+ },
+ {
+  "js": "(() => { const g=window.__game; const p = g.player.pos; const near = g.world.shops.filter(s => s.room && s.door && Math.hypot(s.door[0]-p.x, s.door[2]-p.z) < 160 && /grocery|pharmacy|cafe|hardware|shop|books/.test(s.kind)); const s = near[0] || g.world.shops.find(s=>s.room && s.kind==='cafe'); const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.player.spawn(c.x + fx*1.4, c.z + fz*1.4, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz) + 0.3; g.camRig.pitch = 0.05; return s.kind + ':' + s.name; })()",
+  "frames": 90,
+  "shot": "shop2"
+ },
+ {
+  "js": "const g=window.__game; const tb=window.__B.tb; g.world.mainland.fill({x:tb.cx, z:tb.cz}, 30000); g.player.spawn(tb.rect.x1 + 2.6, tb.cz + 20, Math.PI); g.camRig.yaw = Math.PI; g.camRig.pitch = 0.08; null",
+  "frames": 150,
+  "shot": "downtown_street"
+ },
+ {
+  "js": "const g=window.__game; const vb=window.__B.vb; g.world.mainland.fill({x:vb.cx, z:vb.cz}, 30000); g.player.spawn(vb.rect.x1 + 2.6, vb.cz + 10, Math.PI); g.camRig.yaw = Math.PI; g.camRig.pitch = 0.04; null",
+  "frames": 150,
+  "shot": "valley_street"
+ },
+ {
+  "js": "(() => { const g=window.__game; const p = g.player.pos; const near = g.world.shops.filter(s => s.room && s.door && /^home/.test(s.kind)).sort((a,b)=>Math.hypot(a.door[0]-p.x,a.door[2]-p.z)-Math.hypot(b.door[0]-p.x,b.door[2]-p.z)); const s = near[0]; if (!s) return 'no home'; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.player.spawn(c.x + fx*1.4, c.z + fz*1.4, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz) + 0.2; g.camRig.pitch = 0.05; return s.kind + ':' + s.name; })()",
+  "frames": 90,
+  "shot": "home1"
+ },
+ {
+  "js": "(async () => { const m = window.__plan; const g=window.__game; const pl = m.PLACES.find(q => q.id === 'galleria'); const b = m.placeBlock(pl); g.world.mainland.fill({x:b.cx, z:b.cz}, 30000); const mall = g.world.malls.find(x=>/galleria/i.test(x.name)); const s = mall.stores.find(s=>s.kind==='fashion') || mall.stores[0]; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.player.spawn(c.x + fx*1.6, c.z + fz*1.6, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz) + 0.25; g.camRig.pitch = 0.05; window.__mall = mall; return s.kind + ':' + s.name; })()",
+  "frames": 150,
+  "shot": "mall_fashion"
+ },
+ {
+  "js": "(() => { const g=window.__game; const mall = window.__mall; const s = mall.stores.find(s=>s.kind==='electronics') || mall.stores[2]; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.player.spawn(c.x + fx*1.6, c.z + fz*1.6, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz) - 0.25; g.camRig.pitch = 0.05; return s.kind + ':' + s.name; })()",
+  "frames": 90,
+  "shot": "mall_electronics"
+ },
+ {
+  "js": "(() => { const g=window.__game; const mall = window.__mall; const h = mall.hall; g.player.spawn((h.x0+h.x1)/2, h.z0 + 8, 0); g.camRig.yaw = 0; g.camRig.pitch = 0.1; return null; })()",
+  "frames": 90,
+  "shot": "mall_hall"
+ },
+ {
+  "js": "(() => { const m = window.__plan; const g=window.__game; const b = m.placeBlock(m.PLACES.find(q => q.id === 'plume')); g.world.mainland.fill({x:b.cx, z:b.cz}, 30000); const s=g.world.shops.find(x=>/plume/i.test(x.name)); if (!s) return 'no plume'; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.player.spawn(c.x + fx*2.5, c.z + fz*2.5, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz); g.camRig.pitch = 0.05; return s.name; })()",
+  "frames": 120,
+  "shot": "restaurant"
+ },
+ {
+  "js": "({ near: window.__near && window.__near.slice(0, 20), shops: window.__game.world.shops.length })",
+  "frames": 1
+ }
+]

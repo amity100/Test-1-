@@ -18,6 +18,7 @@ import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
+import { PEN_CATS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -61,6 +62,10 @@ const ENG_T = 0.9;
 // (ROADMAP 11.15) how long a press on a part's name opens its whole menu (s) - a tap is the next it
 // could be
 const LONG_PRESS = 0.45;
+// (ROADMAP 11.22) in a car: how long the pen rests before what is drawn on it is made (ms) - a
+// finger is slower to the next line than a mouse
+const GROUP_MS = 700;
+const GROUP_TOUCH = 850;
 // (ROADMAP 11.15) the two looks of what is made: as drawn, or each part the game's own
 const LOOKS = [
   ['faithful', 'כמו שציירתי'],
@@ -137,13 +142,20 @@ export class FreeDraw {
     // look of it: as drawn, or polished; the parts the game would add, taken away (noImp)
     this.engLevel = 'tidy';
     this.engOn = new Set();
-    this.look = 'faithful';
+    // (ROADMAP 11.20, the lab: polished first - your layout, built as the game's own parts; as drawn
+    // is a choice)
+    this.look = game.lab ? 'polished' : 'faithful';
     this.noImp = new Set();
     // (ROADMAP 11.15) the parts that work together that the player has made: each found once, a
     // reward (game/combos.js)
     this.found = new Set();
     this.engMorph = null;
     this.engSig = '';
+    // (ROADMAP 11.22) in a car: the drawing being drawn on it - its lines as they were seen
+    // (game/fuse.js capture), till the pen rests (groupAt)
+    this.group = [];
+    this.groupAt = 0;
+    this.fuseHelp = false;
     this.build();
     this.bind();
   }
@@ -170,6 +182,25 @@ export class FreeDraw {
         <div><svg viewBox="0 0 24 24"><path d="M12 5 a1.6 1.6 0 1 0 0.01 0 M12 8 L12 14 M9 10.5 L15 10.5 M12 14 L10 19 M12 14 L14 19"/><ellipse class="red" cx="12" cy="12" rx="7.5" ry="9.5"/></svg>לולאה סביב אויבים — קשורים</div>
         <div><svg viewBox="0 0 24 24"><path class="red" d="M6 15 C3 9 10 4 14 7 C18 10 11 18 7 14 C4 10 13 4 17 9 C21 14 13 21 9 17 C6 13 15 7 19 12 C21 16 15 20 12 18"/></svg>קשקוש — ענן דיו</div>
         <div><svg viewBox="0 0 24 24"><path d="M14 4 L21 4 L21 21 M14 4 L14 21"/><path d="M5 17 a1.4 1.4 0 1 0 0.01 0 M5 19 L5 22"/><path class="red" d="M6 18 L15 5"/></svg>קו מכם לגג — חבל</div>
+      </div>
+      <button class="fd-fuse-q hidden" id="fd-fuse-q" title="הסימנים" aria-label="הסימנים">?</button>
+      <div class="fd-fuse hidden" id="fd-fuse"><b>הרכבה — חלק בקו אחד, על משהו</b>
+        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/></svg>גלגל — עיגול, נמוך</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 13 L21 9 L21 13 Z"/></svg>כנף — צורה צרה לצד</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 6 L21 6 M12 6 L12 11"/><rect x="7" y="11" width="10" height="7" rx="2"/></svg>רוטור — קו ישר מעל</div>
+        <div><svg viewBox="0 0 24 24"><path d="M4 12 L8 8 L11 15 L14 7 L17 15 L21 10"/></svg>סילון — זיגזג מאחור</div>
+        <div><svg viewBox="0 0 24 24"><path d="M6 20 C2 18 7 15 12 16 C17 17 20 14 16 12 C12 10 7 12 6 10 C5 7 11 6 15 7 C19 8 19 4 15 3"/></svg>קפיץ — סליל לולאות מתחת</div>
+        <div><svg viewBox="0 0 24 24"><rect x="3" y="13" width="9" height="6" rx="1.5"/><path d="M10 14 L21 9"/></svg>קנה — קו שיוצא ממנו</div>
+        <div><svg viewBox="0 0 24 24"><path d="M4 18 C8 6 16 6 20 18"/></svg>להב — קשת</div>
+        <div><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="11" rx="2"/><path d="M6 15 L8 10 L10 15 L12 10 L14 15 L16 10 L18 15"/></svg>שריון — קווקוו עליו</div>
+        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M12 13 L12 21"/></svg>בלון — עיגול מעליו</div>
+        <div><svg viewBox="0 0 24 24"><path d="M7 4 L7 13 C7 20 17 20 17 13 L17 4"/></svg>מגנט — U</div>
+        <div><svg viewBox="0 0 24 24"><path d="M12 3 L14.6 9.2 L21 9.6 L16 13.8 L17.6 20.4 L12 16.8 L6.4 20.4 L8 13.8 L3 9.6 L9.4 9.2 Z"/></svg>כוכב — מעליה: בלתי פגיעה</div>
+        <div><svg viewBox="0 0 24 24"><path d="M15 2 L8 12 L15 11 L9 22"/></svg>ברק — Z יוצא ממנה</div>
+        <div><svg viewBox="0 0 24 24"><path d="M12 12 C12 10 14 10 14 12 C14 15 10 15 10 12 C10 8 16 8 16 12 C16 17 8 17 8 12 C8 6 19 6 19 12"/></svg>עשן — ספירלה מאחור</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 11 C3 2 21 2 21 11 M3 11 L10 17 M21 11 L14 17"/><rect x="9" y="17" width="6" height="4" rx="1"/></svg>מצנח — קשת ∩ מעליה</div>
+        <div><svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="7" rx="2"/><rect x="2" y="15" width="20" height="4" rx="2"/></svg>מצופים — ארוך מתחת</div>
+        <em>ציור בתוך המכונית — נשאר עליה כמו שציירתם · יוצא ממנה — חלק</em>
       </div>
       <div class="fd-parts" id="fd-parts"></div>
       <div class="fd-pmenu hidden" id="fd-pmenu"></div>
@@ -210,6 +241,7 @@ export class FreeDraw {
     this.altsEl = $('fd-alts');
     this.hintEl = $('fd-hint');
     this.signsEl = $('fd-signs');
+    this.fuseEl = $('fd-fuse');
     this.toolsEl = $('fd-tools');
     this.makeBtn = $('fd-make');
     this.menuEl = $('fd-menu');
@@ -231,7 +263,10 @@ export class FreeDraw {
       if (!this.isOpen || this.cur) return;
       e.preventDefault();
       if (e.button === 2) {
-        this.make();
+        // (in a car: what is drawn on it, made now - ROADMAP 11.24)
+        if (this.carOpen) {
+          if (this.group.length) this.finishGroup();
+        } else this.make();
         return;
       }
       try {
@@ -240,6 +275,11 @@ export class FreeDraw {
         // (synthetic pointers)
       }
       this.menu(false);
+      this.autoShut = 0;
+      // (ROADMAP 11.22: in a car, a line begun away from the drawing being drawn - something new: that
+      // one is done first. ROADMAP 11.24: not with the part pen - all of it is the part said, till the
+      // pen rests)
+      if (this.carOpen && this.group.length && !this.group[0].pen && this.farFromGroup(e.clientX, e.clientY)) this.finishGroup();
       // (on a part's name: a tap there is the next thing it could be, a long press - or its ▾ - its
       // whole menu (ROADMAP 11.15); drawn on from it, it is a line as any. On a name the game added:
       // taken away)
@@ -247,6 +287,8 @@ export class FreeDraw {
       const imp = chip < 0 ? this.impAt(e.clientX, e.clientY) : null;
       this.partMenu(-1);
       this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, imp, menuAt: chip >= 0 && this.chipArrow(chip, e.clientX), t0: performance.now() };
+      // (the cards fade while the pen is down: the line under them shows. ROADMAP 11.21)
+      if (chip < 0 && !imp) document.body.classList.add('fd-pen');
       if (chip >= 0) {
         clearTimeout(this.lpTimer);
         const c = this.cur;
@@ -273,6 +315,8 @@ export class FreeDraw {
       for (const ev of evs) moved += this.penTo(this.toPage(ev));
       if (moved) game.audio.scratch(moved * 300);
       this.render();
+      // (ROADMAP 11.24: in a car, the part pen - what the drawing makes, by the pen)
+      if (moved && this.penOn()) this.feelPen();
     };
     const up = (e) => {
       if (!this.cur || e.pointerId !== this.cur.pid) return;
@@ -315,7 +359,12 @@ export class FreeDraw {
     press($('fd-undo'), () => this.undo());
     press($('fd-clear'), () => this.clear());
     press($('fd-close'), () => this.close());
-    press($('fd-make'), () => this.make());
+    press($('fd-fuse-q'), () => {
+      this.fuseHelp = !this.fuseHelp;
+      this.info();
+    });
+    // (in a car: back to driving - ROADMAP 11.21)
+    press($('fd-make'), () => (this.carOpen ? this.close() : this.make()));
     press($('fd-album'), () => {
       this.close();
       game.openDraw();
@@ -411,7 +460,10 @@ export class FreeDraw {
         this.close();
       } else if (k === 'Enter' || k === 'NumpadEnter') {
         mine();
-        this.make();
+        // (in a car: what is drawn on it, made now)
+        if (this.carOpen) {
+          if (this.group.length && !this.cur) this.finishGroup();
+        } else this.make();
       } else if (k === 'KeyZ' || k === 'Backspace') {
         mine();
         e.preventDefault();
@@ -419,6 +471,10 @@ export class FreeDraw {
       } else if (k === 'Delete') {
         mine();
         this.clear();
+      } else if (this.penOn() && /^(Digit|Numpad)[1-3]$/.test(k)) {
+        // (ROADMAP 11.24: in a car - the part to draw, 1-3)
+        mine();
+        this.game.fuse.pen.pick(PEN_CATS[+k.slice(-1) - 1]);
       } else if (/^(Digit|Numpad)[0-5]$/.test(k)) {
         // (what is drawn: 1-5 each of the five, together; 0 anything - the weapons wait)
         mine();
@@ -442,15 +498,26 @@ export class FreeDraw {
     const game = this.game;
     const p = game.player;
     if (this.isOpen) return;
-    if (p.inVehicle) {
+    // (ROADMAP 11.20: in a car, the pen draws parts onto it - game/fuse.js)
+    const inCar = !!(game.fuse && p.inVehicle && p.mode === 'vehicle');
+    if (p.inVehicle && !inCar) {
       game.hud.toast('צריך לצאת מהרכב כדי לצייר', 'info');
       return;
     }
-    if (p.mode !== 'foot' || game.state !== 'play') return;
+    if ((p.mode !== 'foot' && !inCar) || game.state !== 'play') return;
     this.isOpen = true;
     this.stats.opened++;
     this.el.classList.remove('hidden');
     document.body.classList.add('fd-open');
+    // (ROADMAP 11.21: in a car - the time to draw on it: no kinds to pick, a button back to driving)
+    this.carOpen = inCar;
+    this.autoShut = 0;
+    this.group = [];
+    this.groupAt = 0;
+    document.body.classList.toggle('fd-car', inCar);
+    // (ROADMAP 11.24: the parts to draw, and where each goes on it)
+    document.body.classList.toggle('fd-pp', this.penOn());
+    if (this.penOn()) game.fuse.pen.open();
     if (!game.touch) game.input.releaseLock();
     game.input.fire = false;
     this.layout();
@@ -463,19 +530,35 @@ export class FreeDraw {
   close() {
     if (!this.isOpen) return;
     const game = this.game;
+    if (this.cur) this.penUp(true);
+    // (ROADMAP 11.22: back to driving - the drawing on the car is made first; its tag goes with the
+    // pen, off the driving buttons)
+    if (this.group.length) this.finishGroup();
+    const fz = game.fuse;
+    if (this.carOpen && fz && fz.tagEl) {
+      fz.tagEl.classList.remove('on');
+      fz.tagT = 0;
+    }
+    if (fz && fz.pen && fz.pen.isOpen) fz.pen.close();
     this.isOpen = false;
     this.shutAt = performance.now();
-    if (this.cur) this.penUp(true);
     this.menu(false);
     this.partMenu(-1);
     this.el.classList.add('hidden');
     document.body.classList.remove('fd-open');
+    document.body.classList.remove('fd-car');
+    document.body.classList.remove('fd-pp');
+    document.body.classList.remove('fd-pen');
+    this.carOpen = false;
+    this.autoShut = 0;
     if (game.pad) game.pad.pen = false;
     if (!game.touch && game.state === 'play') game.input.requestLock();
   }
 
   toggle() {
     if (!this.isOpen) this.show();
+    // (in a car: back to driving - what is drawn on it made first)
+    else if (this.carOpen) this.close();
     else if (this.strokes.length) this.make();
     else this.close();
   }
@@ -509,6 +592,7 @@ export class FreeDraw {
   penUp(drop = false) {
     const c = this.cur;
     this.cur = null;
+    document.body.classList.remove('fd-pen');
     this.game.audio.scratchStop();
     if (drop || !c) return;
     // (a tap on a part's name: the next thing it could be - its menu, if pressed long or on its ▾;
@@ -555,6 +639,17 @@ export class FreeDraw {
   steady(c) {
     const raw = c.p;
     this.strokes.push({ p: raw, raw, c: c.c });
+    // (ROADMAP 11.24) in a car, the part pen: the line is part of what was said - wings, floats, a rotor -
+    // as it is on the screen; no quick signs here, nothing read. Done when the pen rests
+    if (this.penOn()) {
+      const U = this.U;
+      this.group.push({ pen: true, P: raw.map(([x, y]) => [x * U, y * U]), c: c.c });
+      this.groupAt = performance.now() + (this.game.touch ? PEN_REST_TOUCH : PEN_REST);
+      this.bake();
+      this.render();
+      this.feelPen(true);
+      return;
+    }
     const sg = this.game.signs;
     const m = sg && sg.match(this.strokes.map((s) => s.raw || s.p), this.U);
     if (m) {
@@ -565,6 +660,30 @@ export class FreeDraw {
       this.read();
       this.render();
       sg.run(m);
+      return;
+    }
+    // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car: on at once
+    const fz = this.game.fuse;
+    const inCar = !!(fz && this.game.player.inVehicle);
+    // (ROADMAP 11.22) in a car: a drawing on it, as many lines as it takes - wet on the screen while
+    // you draw, one drawing till the pen rests a moment; then what it is, made of those lines, there
+    if (inCar) {
+      this.group.push(fz.capture(raw, this.U, c.c));
+      this.groupAt = performance.now() + (this.game.touch ? GROUP_TOUCH : GROUP_MS);
+      this.keepOut();
+      this.bake();
+      this.render();
+      return;
+    }
+    const fm = fz && fz.match(this.strokes.map((s) => s.raw || s.p), this.U);
+    if (fm) {
+      this.flyAway();
+      this.strokes = [];
+      this.force = null;
+      this.bake();
+      this.read();
+      this.render();
+      fz.run(fm, c.c);
       return;
     }
     const s = this.strokes[this.strokes.length - 1];
@@ -579,6 +698,86 @@ export class FreeDraw {
     this.bake();
     this.read();
     this.render();
+  }
+
+  // (ROADMAP 11.21: in a car, the pen away by itself a few seconds after the last line - the city back
+  // up to speed, the driving buttons back under the thumbs; another line before that keeps it out,
+  // as many as you like. The button back to driving shows the time running out)
+  keepOut() {
+    if (!this.carOpen) return;
+    this.autoShutLen = this.game.touch ? 4200 : 4600;
+    this.autoShut = performance.now() + this.autoShutLen;
+  }
+
+  // (ROADMAP 11.24) in a car, the part pen (game/partpen.js) - or, as in 11.22, what is drawn read
+  penOn() {
+    const fz = this.game.fuse;
+    return !!(this.carOpen && fz && fz.pen && fz.pen.active());
+  }
+
+  // what the drawing on the car makes so far (the line being drawn too), by the pen
+  feelPen(now = false) {
+    const U = this.U;
+    const strokes = this.group.map((st) => st.P);
+    let tip = null;
+    if (this.cur && this.cur.p.length) {
+      strokes.push(this.cur.p.map(([x, y]) => [x * U, y * U]));
+      const q = this.cur.p[this.cur.p.length - 1];
+      tip = [q[0] * U, q[1] * U];
+    }
+    this.game.fuse.pen.feel(strokes, tip, now);
+  }
+
+  // (ROADMAP 11.22) is a line begun at x, y (screen px) away from the drawing being drawn on the car
+  farFromGroup(x, y) {
+    const S = this.U;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const st of this.strokes) {
+      for (const [a, b] of st.p) {
+        x0 = Math.min(x0, a * S);
+        x1 = Math.max(x1, a * S);
+        y0 = Math.min(y0, b * S);
+        y1 = Math.max(y1, b * S);
+      }
+    }
+    const m = Math.max(48, Math.max(x1 - x0, y1 - y0) * 0.45);
+    return x < x0 - m || x > x1 + m || y < y0 - m || y > y1 + m;
+  }
+
+  // (ROADMAP 11.22) the drawing on the car done - the pen rested, a line began away from it, or back
+  // to driving: what it is, made of its lines where they were drawn (game/fuse.js addDrawing)
+  finishGroup() {
+    const fz = this.game.fuse;
+    const caps = this.group;
+    const raws = this.strokes.map((st) => st.raw || st.p);
+    const inkI = this.strokes.length ? this.strokes[this.strokes.length - 1].c : this.ink;
+    this.group = [];
+    this.groupAt = 0;
+    // (ROADMAP 11.24: the part pen's - the part chosen, made of the lines as drawn; the ink flies there)
+    if (caps.length && caps[0].pen) {
+      this.strokes = [];
+      this.bake();
+      this.render();
+      if (fz && fz.pen) fz.pen.make(caps.map((st) => st.P), inkI);
+      return;
+    }
+    if (!fz || !raws.length) return;
+    this.flyAway();
+    this.strokes = [];
+    this.bake();
+    this.render();
+    let ok = false;
+    // (one line drawn by something else - a police car, a man in the street - and not by yours: for
+    // that one, as ever)
+    if (raws.length === 1 && !caps.some((c) => c && c.near)) {
+      const fm = fz.match(raws, this.U);
+      if (fm && fm.t.ref !== this.game.player.inVehicle) ok = fz.run(fm, inkI);
+    }
+    if (!ok) ok = fz.addDrawing(caps, inkI);
+    this.keepOut();
   }
 
   // (the pad's pencil, core/gamepad.js: in screen pixels)
@@ -597,6 +796,18 @@ export class FreeDraw {
 
   undo() {
     if (this.cur) return;
+    // (ROADMAP 11.22: the drawing being drawn on the car - its last line)
+    if (this.carOpen && this.group.length) {
+      this.group.pop();
+      this.strokes.pop();
+      if (!this.group.length) this.strokes = [];
+      this.bake();
+      this.render();
+      if (this.penOn()) this.feelPen(true);
+      return;
+    }
+    // (ROADMAP 11.20: nothing on the page - the part just drawn onto a thing comes off, its ink back)
+    if (!this.strokes.length && this.game.fuse && this.game.fuse.undo()) return;
     this.strokes.pop();
     delete this.over[this.strokes.length];
     if (!this.strokes.length) this.face = null;
@@ -1217,10 +1428,26 @@ export class FreeDraw {
     const has = this.strokes.length > 0;
     if (this.cardDirty || (!PR && !this.cardEl.classList.contains('hidden'))) this.card();
     if (this.chipsDirty) this.showChips();
-    this.tagEl.classList.toggle('hidden', !has || !!PR || !!PW || !!PG);
-    this.hintEl.classList.toggle('gone', has || !!this.cur);
-    this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur);
-    this.hintEl.textContent = game.lab
+    this.tagEl.classList.toggle('hidden', !has || !!PR || !!PW || !!PG || this.carOpen);
+    // (ROADMAP 11.27: nor over a thing taking shape on the car, nor while its name is up)
+    const pp = this.penOn() ? game.fuse.pen : null;
+    const shaping = !!(pp && (pp.flights.length || pp.focus || (pp.made && !pp.made.old)));
+    this.hintEl.classList.toggle('gone', has || !!this.cur || shaping);
+    this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur || !!this.game.player.inVehicle);
+    // (ROADMAP 11.20) the parts you can draw onto things, how each is drawn - (ROADMAP 11.22) behind
+    // its "?", on foot; none in a car: what you draw on it is what it gets
+    const helpOk = !!this.game.fuse && !this.carOpen;
+    this.fuseEl.classList.toggle('hidden', !helpOk || !this.fuseHelp || has || !!this.cur);
+    this.el.querySelector('#fd-fuse-q').classList.toggle('hidden', !helpOk || has || !!this.cur);
+    this.hintEl.textContent = game.fuse && game.player.inVehicle
+      ? this.penOn()
+        ? game.touch
+          ? 'בחרו נשק, תנועה או הגנה, וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע'
+          : 'בחרו נשק, תנועה או הגנה (1–3), וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע · Q חוזרים לנסוע'
+        : game.touch
+          ? 'ציירו על המכונית — מה שתציירו יהיה עליה'
+          : 'ציירו על המכונית — מה שתציירו יהיה עליה: כנפיים, גלגלים, להבה, בלון... · Q חוזרים לנסוע'
+      : game.lab
       ? game.touch
         ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'
         : 'ציירו באוויר · כל קו מקבל שם: לחיצה על השם — התפקיד הבא, ▾ — כל האפשרויות · נבנה בדיוק כמו שציירתם · Q יוצרים'
@@ -1250,6 +1477,10 @@ export class FreeDraw {
     const nowhere = has && R && R.cat && this.nowhere;
     this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : R && R.cat ? `✓ ${R.name}!` : PR ? 'עוד לא זז' : '✓ צרו!';
     this.makeBtn.classList.toggle('off', !R || !R.cat || short || nowhere);
+    if (this.carOpen) {
+      this.makeBtn.textContent = '▶ לנסוע';
+      this.makeBtn.classList.remove('off');
+    }
     if (ink) {
       this.inkFill.style.width = `${clamp((level / ink.cap) * 100, 0, 100)}%`;
       const c = Math.min(cost, level);
@@ -1327,7 +1558,9 @@ export class FreeDraw {
   // the lines already drawn, on a picture of their own: as the pen moves only its own line is
   // drawn again (the neon's glow is slow to draw, and a phone draws the game at the same time)
   bake() {
-    if (!this.baked) this.baked = document.createElement('canvas');
+    // (ROADMAP 11.24: a new picture each time - one used over again could keep a line taken off it, in a
+    // browser that kept its old pixels through being cleared)
+    this.baked = document.createElement('canvas');
     const b = this.baked;
     b.width = this.cv.width;
     b.height = this.cv.height;
@@ -1827,7 +2060,7 @@ export class FreeDraw {
     if (v.canLift) tips.push(M.plane && !M.copter && !M.balloon ? (t ? 'במהירות, ▲: להמריא' : 'במהירות, רווח: להמריא') : t ? '▲: להמריא · ▼ עד למטה: לנחות' : 'רווח: להמריא · C עד למטה: לנחות');
     else if (s.base === 'balloon') tips.push(t ? '▲: המבער, למעלה · ▼: למטה · הרוח לוקחת אותו' : 'רווח: המבער, למעלה · C: למטה · הרוח לוקחת אותו');
     else if (s.base === 'copter') tips.push(t ? 'כפתורי ▲▼: גובה' : 'רווח ו־C: למעלה ולמטה');
-    else if (s.base === 'plane') tips.push(t ? 'קדימה: מצערת · צריך כביש ארוך להמראה' : 'W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה');
+    else if (s.base === 'plane') tips.push(t ? `${game.settings.get('touchDrive') !== 'stick' ? 'גז' : 'קדימה'}: מצערת · צריך כביש ארוך להמראה` : 'W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה');
     if (M.drive && M.boat) tips.push('נוסעים ישר לתוך המים ושטים, ועולים לחוף');
     if (v.dive) tips.push(t ? '▼: לצלול, אף אחד לא רואה אתכם · ▲: לעלות' : 'C: לצלול, אף אחד לא רואה אתכם · רווח: לעלות');
     if (v.spring && !v.canLift) tips.push(s.kind === 'skate' ? (t ? '▲: קפיצה' : 'רווח: קפיצה') : t ? '▲: קפיצה על הקפיץ' : 'רווח: קפיצה על הקפיץ');
@@ -1848,7 +2081,8 @@ export class FreeDraw {
     if ((s.guns || []).some((gn) => gn.giant)) tips.push('התותח הענק: כל ירייה הודפת אחורה');
     if (v.roofDrive) tips.push('גלגלי הגג: אם מתהפכים — ממשיכים לנסוע');
     else if (s.handling && s.handling.tipA) tips.push(t ? 'גבוה וצר — בפנייה חדה מתהפך. ▲: להפוך בחזרה' : 'גבוה וצר — בפנייה חדה מתהפך. רווח: להפוך בחזרה');
-    if (s.jets.length && s.base === 'car') tips.push(t ? 'ג׳ויסטיק עד הסוף: טורבו' : 'Shift: טורבו מהסילון');
+    // (a phone: its turbo button over the gas - or the stick all the way, with the stick in the settings)
+    if (s.jets.length && s.base === 'car') tips.push(!t ? 'Shift: טורבו מהסילון' : game.settings.get('touchDrive') !== 'stick' ? 'טורבו מהסילון: הכפתור מעל הגז' : 'ג׳ויסטיק עד הסוף: טורבו');
     // (ROADMAP 11.15: what its parts do together - first of all)
     if (v.stomp) tips.unshift(t ? 'נחיתה מועכת: ▲ לקפוץ — והנחיתה הודפת את מי שסביב' : 'נחיתה מועכת: רווח לקפוץ — והנחיתה הודפת את מי שסביב');
     if (v.combos) tips.unshift('🏆 ' + v.combos.map(comboName).join(' · '));
@@ -1873,6 +2107,23 @@ export class FreeDraw {
     const v = p.inVehicle;
     if (v && v.drawn) jetFlames(game, v, dt);
     if (!this.isOpen) return;
+    // (ROADMAP 11.26: the part pen, not sure which of two - it asks, and the drawing waits)
+    if (this.group.length && !this.cur && performance.now() > this.groupAt && !(this.group[0].pen && this.game.fuse.pen.holds())) this.finishGroup();
+    if (this.autoShut && performance.now() > this.autoShut) {
+      this.autoShut = 0;
+      if (!this.cur && !this.strokes.length) {
+        this.close();
+        return;
+      }
+    }
+    if (this.carOpen) {
+      const left = this.autoShut && !this.cur ? clamp((this.autoShut - performance.now()) / (this.autoShutLen || 3800), 0, 1) : 1;
+      if (Math.abs(left - (this.goLeft ?? -1)) > 0.004) {
+        this.goLeft = left;
+        this.makeBtn.style.setProperty('--left', left.toFixed(3));
+        this.makeBtn.classList.toggle('timing', left < 1);
+      }
+    }
     // (ROADMAP 11.9) the lines turning: on with it, and onto the page when done
     let turning = false;
     let done = false;
@@ -1896,18 +2147,19 @@ export class FreeDraw {
     // (ROADMAP 11.10) the model by the drawing, turning
     if (this.view && ((this.PR && this.PR.ok) || this.PW || this.PG)) this.view.frame(dt);
     // not on foot any more (in a car, swimming, down...), or the game stopped: the pen goes
-    if (p.mode !== 'foot' || p.inVehicle || game.state !== 'play' || (game.dialog && game.dialog.open)) {
+    const inCar = !!(game.fuse && p.inVehicle && p.mode === 'vehicle');
+    if ((p.mode !== 'foot' && !inCar) || (p.inVehicle && !inCar) || game.state !== 'play' || (game.dialog && game.dialog.open)) {
       this.close();
       return;
     }
-    // the camera turns after where you run (the mouse is drawing)
+    // the camera turns after where you run (the mouse is drawing; in a car it follows the car)
     const vx = p.vel.x;
     const vz = p.vel.z;
-    if (Math.hypot(vx, vz) > 1.2) {
+    if (!inCar && Math.hypot(vx, vz) > 1.2) {
       const d = angleDiff(game.camRig.yaw, Math.atan2(vx, vz));
       if (Math.abs(d) < 2.3) game.camRig.yaw += d * (1 - Math.exp(-1.7 * dt));
     }
-    game.camRig.pitch += (-0.12 - game.camRig.pitch) * (1 - Math.exp(-2 * dt));
+    if (!inCar) game.camRig.pitch += (-0.12 - game.camRig.pitch) * (1 - Math.exp(-2 * dt));
     // (the ink bar moves while it fills back up; the drawing is not read again for it)
     if (game.ink && Math.floor(game.time * 4) !== this.inkTick) {
       this.inkTick = Math.floor(game.time * 4);
@@ -1917,7 +2169,7 @@ export class FreeDraw {
 
   // ------------------------------------------------------------------ the save (game/save.js)
   save() {
-    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel, engOn: this.engOn.size ? [...this.engOn] : undefined, look: this.look, noImp: this.noImp.size ? [...this.noImp] : undefined, found: this.found.size ? [...this.found] : undefined };
+    return { s: this.strokes.map((s) => ({ p: s.p, c: s.c, r: s.raw || undefined, k: s.k || undefined })), ink: this.ink, cats: [...this.cats], over: Object.keys(this.over).length ? this.over : undefined, face: this.face === null ? undefined : this.face, eng: this.engLevel, engOn: this.engOn.size ? [...this.engOn] : undefined, look: this.look, lookV: this.game.lab ? 2 : undefined, noImp: this.noImp.size ? [...this.noImp] : undefined, found: this.found.size ? [...this.found] : undefined };
   }
 
   load(o) {
@@ -1931,7 +2183,9 @@ export class FreeDraw {
     // (ROADMAP 11.15: one saved engineered - the hand's slips put right, and all it offered taken)
     this.engLevel = o.eng === 'raw' ? 'raw' : 'tidy';
     this.engOn = new Set(Array.isArray(o.engOn) ? o.engOn.filter((k) => EN_STEPS.includes(k)) : o.eng === 'eng' || o.eng === undefined ? EN_STEPS : []);
-    this.look = LOOKS.some(([k]) => k === o.look) ? o.look : o.look === undefined && o.eng !== undefined ? 'polished' : 'faithful';
+    // (ROADMAP 11.20: polished by default now - a choice saved after it stays)
+    if (this.game.lab) this.look = o.lookV === 2 && LOOKS.some(([k]) => k === o.look) ? o.look : 'polished';
+    else this.look = LOOKS.some(([k]) => k === o.look) ? o.look : o.look === undefined && o.eng !== undefined ? 'polished' : 'faithful';
     this.noImp = new Set(Array.isArray(o.noImp) ? o.noImp.filter((t) => PART[t]) : []);
     this.found = new Set(Array.isArray(o.found) ? o.found.filter((k) => typeof k === 'string') : []);
     this.showCats();

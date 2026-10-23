@@ -114,6 +114,11 @@ export class Lose {
 
   // a police car's eyes (game/police.js)
   carSees(c, pp, d) {
+    // (ROADMAP 11.28: a submarine under the water - game/gearmove2.js)
+    const v = this.game.player.inVehicle;
+    if (v && v.unseen) return false;
+    // (with the drawn double out they know you only from close by - game/gearguard2.js)
+    if (d > NEAR && this.game.gear && this.game.gear.decoy()) return false;
     if (this.disguised && d > NEAR) return false;
     if (d < 8) return true;
     return Math.abs(angleDiff(c.yaw, Math.atan2(pp.x - c.pos.x, pp.z - c.pos.z))) < CAR_EYES;

@@ -135,6 +135,8 @@ export class Player {
   hurt(amount, fromX, fromZ, at = null, kind = null, src = null) {
     if (this.mode === 'dead' || this.invuln > 0) return;
     if (this.inVehicle) {
+      // (ROADMAP 11.28: the rear shield, the dome - game/gearguard2.js)
+      if (this.game.gear && this.game.gear.shields(this.inVehicle, fromX, fromZ)) return;
       this.inVehicle.hurt(amount);
       return;
     }
@@ -314,7 +316,10 @@ export class Player {
     const skills = this.game.skills;
     const sprint = mv.sprint && !aiming && (!skills || skills.canSprint);
     this.sprinting = sprint && wl > 0.3 && this.onGround && !this.crouched && !gliding;
-    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? 8.2 + (skills ? skills.sprintBonus : 0) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1);
+    // (ROADMAP 11.20: wheels drawn under your feet - game/fuse.js)
+    const fuse = this.game.fuse;
+    const skate = fuse && !this.crouched ? fuse.heroSpeedK(sprint) : 1;
+    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? 8.2 + (skills ? skills.sprintBonus : 0) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate;
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;
@@ -342,7 +347,8 @@ export class Player {
       }
     }
     if (input.wasPressed('Space') && this.onGround && !drawing && !stoodUp) {
-      this.vel.y = 8.4;
+      // (springs drawn under your feet: higher - game/fuse.js)
+      this.vel.y = 8.4 * (fuse ? fuse.jumpK() : 1);
       this.onGround = false;
       this.game.audio.play('jump');
     }
@@ -351,7 +357,11 @@ export class Player {
     const brolly = !gliding && this.game.gadgets ? this.game.gadgets.fall(this) : null;
     // (ROADMAP 11.11, parts 2: a parachute drawn on what you hold - down slowly too)
     const chuteHeld = !gliding && brolly === null ? weapons.chuteFall(this) : null;
-    if (gliding) this.vel.y = damp(this.vel.y, -chute.fly.sink, 2.5, dt);
+    // (ROADMAP 11.20: what is drawn on you in the air - wings, a rotor, a balloon, a jetpack)
+    const fuseAir = !gliding && fuse && !drawing ? fuse.heroAir(this, dt, input) : false;
+    if (fuseAir) {
+      // (game/fuse.js set how you fall)
+    } else if (gliding) this.vel.y = damp(this.vel.y, -chute.fly.sink, 2.5, dt);
     else if (brolly !== null) this.vel.y = damp(this.vel.y, -brolly, 6, dt);
     else if (chuteHeld !== null) this.vel.y = damp(this.vel.y, -chuteHeld, 4, dt);
     else this.vel.y -= GRAVITY * dt;
@@ -403,7 +413,7 @@ export class Player {
         // a hard landing hurts (a jump out of the helicopter without a parachute hurts a lot)
         const fall = -this.vel.y;
         if (gliding) chute.land();
-        else if (fall > 17 && !this.onGround) {
+        else if (fall > 17 && !this.onGround && !(fuse && fuse.heroSafe())) {
           this.hurt(Math.min(85, (fall - 17) * 3.2), p.x, p.z, null, 'fall');
           this.game.camRig.addShake(0.5);
           this.game.fx.crumbs(p.x, p.y + 0.2, p.z, 20, 3);
