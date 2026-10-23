@@ -260,6 +260,8 @@ class Civilian {
     this.gestT = 0;
     this._gR = null;
     this._gL = null;
+    this._gRw = null;
+    this._gLw = null;
     this.listenTo = null;
     this.listenUntil = 0;
     this.glanceAt = null;
@@ -651,6 +653,11 @@ class Civilian {
     // (taken from the curb by something else: the place there is free again)
     if (this.waitAt && (!this.crossing || this.crossOK || this.ctrl || this.panicT > 0)) this.mgr.leaveCurb(this);
     // ---- the hands
+    // (a hand another system took while it was ours: the shops and the others write their reach
+    // into whatever point the hand already follows - game/streetlife.js - so that point is theirs
+    // now, and the words get a new one; the hand stays with what it is doing)
+    if (this._gR && fig.reachR === this._gR && this._gRw && !this._gR.equals(this._gRw)) this._gR = null;
+    if (this._gL && fig.reachL === this._gL && this._gLw && !this._gL.equals(this._gLw)) this._gL = null;
     let on = near && this.talkUntil > now && this.gest && !this.headless && !(this.panicT > 0) && this.downT <= 0 && !fig.rag && fig.speed < 2.6;
     if (on) {
       this.gestT += dt;
@@ -669,6 +676,7 @@ class Civilian {
         if (gestureAt(this.gest, 1, t, ph, v)) {
           fig.toWorld(v.x, v.y - sitDrop, v.z, v);
           fig.reachR = v;
+          (this._gRw || (this._gRw = new THREE.Vector3())).copy(v);
           usedR = true;
         }
       }
@@ -680,6 +688,7 @@ class Civilian {
           if (k) v.x = -v.x;
           fig.toWorld(v.x, v.y - sitDrop, v.z, v);
           fig.reachL = v;
+          (this._gLw || (this._gLw = new THREE.Vector3())).copy(v);
           usedL = true;
         }
       }
