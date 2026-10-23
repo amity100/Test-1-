@@ -1721,18 +1721,23 @@ body.chatting #goals { display: none; }
 .gear-bar .gm span i { position: absolute; inset: 0 auto 0 0; background: #33b5ff; }
 .gear-bar .gm.full span i { background: #57d18a; }
 .gear-bar .gm kbd { font: 700 10.5px var(--font-ui); background: #fff; border: 1.5px solid var(--ink); border-radius: 4px; padding: 0 4px; }
-body.touch .gear-bar { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 60px); }
+/* (a phone: beside the kept things, not over them - right of them, over the steering's right edge) */
+body.touch .gear-bar { left: calc(max(14px, env(safe-area-inset-left)) + 184px); bottom: calc(max(6px, env(safe-area-inset-bottom)) + 170px); }
+body.touch .gear-bar .gm { padding: 1px 5px; font-size: 10px; }
+body.touch .gear-bar .gm b { min-width: 56px; }
+body.touch .gear-bar .gm span { width: 52px; height: 7px; }
 body.touch .gear-bar .gm kbd { display: none; }
 .gear-btn { position: absolute; }
 .gear-btn .cd { position: absolute; left: 8px; right: 8px; bottom: 5px; height: 3px; border-radius: 2px; background: rgba(51, 181, 255, 0.85); transform-origin: right; }
-#btn-rewind { right: max(24px, env(safe-area-inset-right)); bottom: max(236px, calc(env(safe-area-inset-bottom) + 212px)); width: 96px; height: 52px; background: linear-gradient(135deg, #e7e2ff, #b9a8ff); }
-#btn-gear { right: max(136px, calc(env(safe-area-inset-right) + 112px)); bottom: max(204px, calc(env(safe-area-inset-bottom) + 180px)); width: 96px; height: 52px; background: linear-gradient(135deg, #d9f6ff, #8fd8ff); }
+/* (in the column of the view button, above it and the parachute's: clear of the fire, the pencil, the way out) */
+#btn-rewind { right: max(256px, calc(env(safe-area-inset-right) + 232px)); bottom: max(296px, calc(env(safe-area-inset-bottom) + 272px)); width: 96px; height: 52px; background: linear-gradient(135deg, #e7e2ff, #b9a8ff); }
+#btn-gear { right: max(256px, calc(env(safe-area-inset-right) + 232px)); bottom: max(358px, calc(env(safe-area-inset-bottom) + 334px)); width: 96px; height: 52px; background: linear-gradient(135deg, #d9f6ff, #8fd8ff); }
 #btn-rewind.on, #btn-gear.on { transform: scale(0.93); }
 #btn-rewind.hidden, #btn-gear.hidden { display: none !important; }
 body.phone-cam #btn-rewind, body.phone-cam #btn-gear, body.touch.fd-open #btn-rewind, body.touch.fd-open #btn-gear { display: none !important; }
-@media (max-height: 480px) {
-  #btn-rewind { right: max(14px, env(safe-area-inset-right)); bottom: max(170px, calc(env(safe-area-inset-bottom) + 156px)); width: 72px; height: 40px; }
-  #btn-gear { right: max(98px, calc(env(safe-area-inset-right) + 84px)); bottom: max(146px, calc(env(safe-area-inset-bottom) + 132px)); width: 72px; height: 40px; }
+@media (max-height: 520px) {
+  #btn-rewind { right: max(188px, calc(env(safe-area-inset-right) + 174px)); bottom: max(222px, calc(env(safe-area-inset-bottom) + 208px)); width: 72px; height: 40px; }
+  #btn-gear { right: max(188px, calc(env(safe-area-inset-right) + 174px)); bottom: max(268px, calc(env(safe-area-inset-bottom) + 254px)); width: 72px; height: 40px; }
 }
 .gear-rw { position: fixed; inset: 0; z-index: 40; display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(40, 36, 48, 0.07) 0 2px, transparent 2px 5px); }
 .gear-rw.on { display: flex; }
