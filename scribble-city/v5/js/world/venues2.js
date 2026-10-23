@@ -1116,11 +1116,40 @@ function filmPoster(R, run, s, y, w, h, rng, o = {}) {
   const bgs = [[0.16, 0.18, 0.36], [0.95, 0.55, 0.3], [0.12, 0.3, 0.3], [0.85, 0.2, 0.26], [0.3, 0.2, 0.42], [0.96, 0.86, 0.5]];
   const bg = pk(rng, bgs);
   run.box(Sl, s - w / 2, y - h / 2, 0.06, s + w / 2, y + h / 2, 0.064, bg, nextId(), FRONT);
-  // (the figure: a body and a head against the sky; a moon or a sun; the title over them)
+  // (what is on it: the hero against the sky under a moon; two in love, a heart over them; a car
+  // racing out of the poster, the lines of its speed; the city at night, its windows lit)
   const fc = pk(rng, [[0.98, 0.9, 0.7], [0.12, 0.12, 0.16], [0.86, 0.3, 0.3], [0.4, 0.75, 0.9]]);
-  run.box(S, s - w * 0.14, y - h * 0.3, 0.064, s + w * 0.14, y + h * 0.12, 0.07, fc, nextId(), FRONT);
-  run.box(S, s - w * 0.08, y + h * 0.12, 0.064, s + w * 0.08, y + h * 0.26, 0.07, fc, nextId(), FRONT);
-  run.box(S, s + w * 0.2, y + h * 0.22, 0.064, s + w * 0.36, y + h * 0.38, 0.068, [0.98, 0.94, 0.7], nextId(), FRONT);
+  const kind = rng.r();
+  const P = (a0, b0, a1, b1, col, z = 0.07) => run.box(S, s + w * a0, y + h * b0, 0.064, s + w * a1, y + h * b1, z, col, nextId(), FRONT);
+  if (kind < 0.3) {
+    P(-0.14, -0.3, 0.14, 0.12, fc);
+    P(-0.08, 0.12, 0.08, 0.26, fc);
+    P(-0.22, -0.06, -0.14, 0.1, fc);
+    P(0.14, -0.06, 0.22, 0.1, fc);
+    P(0.2, 0.22, 0.36, 0.38, [0.98, 0.94, 0.7], 0.068);
+  } else if (kind < 0.55) {
+    for (const k of [-1, 1]) {
+      P(k * 0.22 - 0.09, -0.3, k * 0.22 + 0.09, 0.06, k < 0 ? fc : [0.2, 0.2, 0.26]);
+      P(k * 0.16 - 0.06, 0.06, k * 0.16 + 0.06, 0.18, [0.95, 0.78, 0.62]);
+    }
+    P(-0.07, 0.24, 0.07, 0.32, [0.95, 0.25, 0.35]);
+    P(-0.1, 0.27, -0.01, 0.34, [0.95, 0.25, 0.35]);
+    P(0.01, 0.27, 0.1, 0.34, [0.95, 0.25, 0.35]);
+  } else if (kind < 0.8) {
+    P(-0.34, -0.22, 0.26, -0.08, fc);
+    P(-0.2, -0.08, 0.12, 0.02, fc);
+    P(-0.2, -0.04, 0.1, 0.0, [0.7, 0.86, 0.95], 0.072);
+    for (const a of [-0.24, 0.14]) P(a - 0.05, -0.28, a + 0.05, -0.2, C.black, 0.072);
+    for (let k = 0; k < 3; k++) P(0.3, -0.18 + k * 0.06, 0.44, -0.165 + k * 0.06, C.white);
+  } else {
+    for (let k = 0; k < 6; k++) {
+      const a = -0.42 + k * 0.14;
+      const t = 0.0 + ((k * 37) % 5) * 0.06;
+      P(a, -0.32, a + 0.12, t, [0.1, 0.1, 0.16]);
+      for (let q = 0; q < 2; q++) P(a + 0.03, -0.24 + q * 0.1, a + 0.06, -0.2 + q * 0.1, [1, 0.86, 0.4], 0.072);
+    }
+    P(0.22, 0.24, 0.34, 0.36, [0.98, 0.94, 0.7], 0.068);
+  }
   run.box(S, s - w * 0.42, y - h * 0.46, 0.064, s + w * 0.42, y - h * 0.34, 0.07, pk(rng, [[0.98, 0.84, 0.3], [0.98, 0.98, 0.95], [0.95, 0.4, 0.5]]), nextId(), FRONT);
   for (let k = 0; k < 2; k++) run.box(S, s - w * 0.36, y + h * (0.36 + k * 0.06), 0.064, s + w * (0.0 - k * 0.1), y + h * (0.39 + k * 0.06), 0.068, C.white, nextId(), FRONT);
   // (the film's name over its title bar, lettered: the city's own films, a few of them going round
@@ -1681,7 +1710,7 @@ function theatre(R) {
   S.fbox(mid - 1.75, y0, pw - 0.2, mid - 1.55, y0 + 3.2, pw + 0.22, gold, nextId(), FF.BOTTOM);
   S.fbox(mid + 1.55, y0, pw - 0.2, mid + 1.75, y0 + 3.2, pw + 0.22, gold, nextId(), FF.BOTTOM);
   S.fbox(mid - 1.75, y0 + 3.05, pw - 0.2, mid + 1.75, y0 + 3.6, pw + 0.22, gold, nextId());
-  Sl.fbox(mid - 1.4, y0 + 3.1, pw + 0.22, mid + 1.4, y0 + 3.55, pw + 0.225, [0.16, 0.1, 0.14], nextId());
+  S.fbox(mid - 1.4, y0 + 3.1, pw + 0.22, mid + 1.4, y0 + 3.55, pw + 0.225, [0.12, 0.07, 0.1], nextId());
   // (its word lit in the dark panel, a row of little bulbs along the panel's top and its foot)
   words(R.soup('lamp'), new Run(R, mid, pw, [1, 0], [0, 1]), 'AUDITORIUM', 0, y0 + 3.2, 0.226, 0.26, [1, 0.86, 0.5]);
   const sL = R.soup('lamp');
