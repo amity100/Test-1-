@@ -597,9 +597,16 @@ export class Curbs {
         S.lookT = 0.4;
         // (a space it can drive into nose first: room at the curb there, and enough free curb
         // behind it to turn in round the end of the car parked behind - Traffic.roomBeside)
+        const g = c.path.gates[0];
         for (const ahead of [12, 16, 20]) {
           const room = this.traffic.curbRoom(c, ahead);
           if (room > 2.4 && this.freeRun(c, ahead, -1) > c.halfLen + 4.2) {
+            // (nobody else on their way into it)
+            const tx = c.pos.x + g.dx * ahead;
+            const tz = c.pos.z + g.dz * ahead;
+            if (this.traffic.list.some((o) => o !== c && o.seekPark && o.seekPark.phase === 'in' && Math.abs(o.seekPark.tx - tx) + Math.abs(o.seekPark.tz - tz) < 9)) continue;
+            S.tx = tx;
+            S.tz = tz;
             S.phase = 'in';
             S.left = ahead;
             S.run = 0;

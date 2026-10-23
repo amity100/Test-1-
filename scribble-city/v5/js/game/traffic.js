@@ -802,7 +802,7 @@ export class Traffic {
     let pullS = 0;
     if (c.pull || c.pullS > 0.001) {
       let to = c.pull ? c.pullTo || 0 : 0;
-      if (to > 0.9) {
+      if (c.pull) {
         c.roomT = (c.roomT || 0) - dt;
         if (c.roomT <= 0) {
           c.roomT = 0.1;
