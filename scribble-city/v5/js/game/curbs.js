@@ -4,6 +4,7 @@ import { CAR_COLORS, TAXI_YELLOW } from '../render/cars.js';
 import { NODES, laneOffsets, stopDist } from '../world/roads.js';
 import { civilianLook } from './looks.js';
 import { groundHeight } from '../world/layout.js';
+import { damp } from '../core/util.js';
 
 // (GTA IV) The mainland's curbs, as its blocks come and go (world/mainland/stream.js): the cars
 // parked along both curbs of every narrow street - the streets' asphalt has their lane painted
@@ -61,7 +62,8 @@ function curbSpec(r, district) {
   return { kind: 'sedan', color: r.pick(r() < 0.75 ? STREET_COLORS : CAR_COLORS) };
 }
 
-const HALF_LEN = { sedan: 2.3, suv: 2.35, sports: 2.25, van: 2.5, classic: 2.65 };
+// (half a car's length, as render/cars.js draws it: its box, and the gaps between them, true to it)
+const HALF_LEN = { sedan: 2.38, suv: 2.4, sports: 2.28, van: 2.5, classic: 2.7 };
 
 // the height a parked car stands at: the road's, or a lot's and a driveway's - the ground of a
 // block, a curb's height up (world/layout.js), not sunk in it to its hubs
@@ -294,6 +296,7 @@ export class Curbs {
     let E = null;
     let way = 0;
     let room = 0;
+    let backUp = 0;
     for (let tries = 0; tries < 4 && !c; tries++) {
       const o = pick[Math.floor(Math.random() * pick.length)];
       const e = this.edgeOf(o);
@@ -301,10 +304,14 @@ export class Curbs {
       const back = this.gap(o, -1);
       const front = this.gap(o, 1);
       if (Math.max(back, front) < 1.1) continue;
+      // (and room to drive out of it: the car in front far enough off to swing out round - or,
+      // backing up a little first, to be)
+      if (front + Math.max(0, back - 0.45) < 1.0) continue;
       c = o;
       E = e;
       way = back >= front ? -1 : 1;
       room = Math.min(3, Math.max(back, front));
+      backUp = Math.max(0, Math.min(back - 0.45, 1.4 - front));
     }
     if (!c) return false;
     const fx = Math.sin(c.yaw);
@@ -350,7 +357,7 @@ export class Curbs {
       if (Math.random() < 0.5) w.fig.carry = Math.random() < 0.5 ? 'phone' : 'coffee';
     }
     w.noCollide = true;
-    const L = { c, E, w, legs, leg: 0, t: 0, phase: 'walk', look, go: { x: 0, z: 0, speed: Math.max(1.2, Math.min(1.6, w.speed || 1.35)) } };
+    const L = { c, E, w, legs, leg: 0, t: 0, phase: 'walk', look, back: backUp, go: { x: 0, z: 0, speed: Math.max(1.2, Math.min(1.6, w.speed || 1.35)) } };
     L.ctrl = (me) => this.walkTo(L, me);
     w.ctrl = L.ctrl;
     c.leaving = L;
@@ -399,6 +406,7 @@ export class Curbs {
         }
         c.leaving = null;
         c.signal = 0;
+        c.steer = 0;
         this.leaving.splice(i, 1);
         continue;
       }
@@ -414,6 +422,20 @@ export class Curbs {
       }
       if (sat) {
         if (L.t > 0.4) c.signal = 1;
+        // (the car in front close: back a little first, the wheels straight - room to swing out)
+        if (L.back > 0.01 && L.t > 0.7) {
+          const step = Math.min(L.back, 0.7 * dt);
+          L.back -= step;
+          c.pos.x -= Math.sin(c.yaw) * step;
+          c.pos.z -= Math.cos(c.yaw) * step;
+          c.wheel = (c.wheel || 0) - step / 0.36;
+          L.E.t -= step;
+          // (stopped: a moment to turn the wheels out)
+          if (L.back <= 0.01) L.t = 0.7;
+          continue;
+        }
+        // (the left signal on, the wheels turned out)
+        if (L.t > 0.4) c.steer = damp(c.steer || 0, 0.5, 4, dt);
         if (L.t < 1.2 || (L.t < 12 && !this.laneClear(L.E, 24, 6))) continue;
         this.leaving.splice(i, 1);
         c.leaving = null;
@@ -530,6 +552,8 @@ export class Curbs {
     nc.pos.z += Math.sin(nc.yaw) * nc.side;
     nc.sigT = 3;
     nc.sigDir = 1;
+    nc.steer = c.steer || 0;
+    c.steer = 0;
     if (c.dmg) nc.dmg = c.dmg;
     T.list.push(nc);
     this.stats.left++;
