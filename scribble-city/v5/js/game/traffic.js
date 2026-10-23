@@ -1334,7 +1334,7 @@ export class Traffic {
         const pa = dx * fx + dz * fz;
         const ps = dx * -fz + dz * fx;
         if (Math.abs(pa) > c.halfLen + p.halfLen + 1.2 || ps < 0.5) continue;
-        room = Math.min(room, ps - p.halfWid - c.halfWid - 0.35);
+        room = Math.min(room, ps - sideOf(p, fx, fz) - c.halfWid - 0.35);
       }
     }
     return Math.max(0, Math.min(room, 3));
@@ -1380,7 +1380,7 @@ export class Traffic {
         if (-pa - p.halfLen - c.halfLen > 0.4) continue;
         u = Math.max(-c.halfLen, Math.min(c.halfLen, pa + p.halfLen));
       }
-      room = Math.min(room, ps - p.halfWid - c.halfWid - 0.25 - u * slope);
+      room = Math.min(room, ps - sideOf(p, fx, fz) - c.halfWid - 0.25 - u * slope);
     }
     return Math.max(0, Math.min(room, 3));
   }
@@ -1929,6 +1929,13 @@ export class Traffic {
 
 function pick(list) {
   return list[Math.floor(Math.random() * list.length)];
+}
+
+// (GTA IV) how far a parked car reaches out to either side of its middle, across a road going
+// along (fx, fz): its half-width - and, standing a little askew, its corners
+function sideOf(p, fx, fz) {
+  const s = Math.abs(Math.sin(p.yaw) * fz - Math.cos(p.yaw) * fx);
+  return p.halfWid * Math.sqrt(Math.max(0, 1 - s * s)) + p.halfLen * s;
 }
 
 // (x, z) on the zebra across the road out of crossing n along (ex, ez): from t0 past its middle,

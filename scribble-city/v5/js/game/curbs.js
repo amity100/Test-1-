@@ -637,11 +637,13 @@ export class Curbs {
       // as far as the space goes; at its end in as far as it got, or (hardly in at all) it is
       // given up and on it goes
       const front = this.freeRun(c, 0, 1) - c.halfLen;
-      if (inK < 0.93 && front > 0.7 && dist > -4) {
+      // (and straightened up: not left askew in its space)
+      if ((inK < 0.93 || Math.abs(c.pullV || 0) > 0.06) && front > 0.7 && dist > -4) {
         c.pullLeft = front - 0.6;
         return 1.0;
       }
-      if (inK < 0.7) {
+      // (in far enough that the traffic going by clears it: else it is given up)
+      if ((c.pullS || 0) < 2.05) {
         c.seekPark = null;
         c.pull = false;
         return Infinity;
@@ -684,6 +686,15 @@ export class Curbs {
   parkIt(c) {
     const T = this.traffic;
     const game = this.game;
+    // (square to the curb: what is left of its turn in, a degree or two, taken out)
+    const g = c.path && c.path.gates[0];
+    if (g) {
+      const lane = Math.atan2(g.dx, g.dz);
+      let d = c.yaw - lane;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      if (Math.abs(d) < 0.12) c.yaw = lane;
+    }
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
     const ax = Math.abs(fx) > 0.7;
