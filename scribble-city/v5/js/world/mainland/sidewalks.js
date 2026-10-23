@@ -167,7 +167,19 @@ const PAPER = [srgb(0.97, 0.96, 0.92), srgb(0.9, 0.9, 0.87), srgb(0.86, 0.83, 0.
 const LEAF = [srgb(0.74, 0.5, 0.2), srgb(0.62, 0.42, 0.22), srgb(0.55, 0.6, 0.3), srgb(0.8, 0.62, 0.3)];
 function litter(ctx, P, q, drops, x0, x1, z0, z1, o = {}) {
   const cl = (v, a, b) => Math.max(a, Math.min(b, v));
-  const y = CURB + 0.012;
+  // (where people live, the strip of grass along the curbs - world/mainland/tiles.js homeStreets,
+  // 0.35 to 1.6 m in from the curb, 4.1 m short of the corners, its top 2 cm over the walk: what
+  // lies on it lies on its top, not under it)
+  const G0 = 0.3;
+  const G1 = 1.65;
+  const E = 4.0;
+  const onGrass = (px, pz) => {
+    if (!o.live) return false;
+    const dx = Math.min(px - x0, x1 - px);
+    const dz = Math.min(pz - z0, z1 - pz);
+    return (dx > G0 && dx < G1 && dz > E) || (dz > G0 && dz < G1 && dx > E);
+  };
+  const ground = (px, pz) => (onGrass(px, pz) ? CURB + 0.028 : CURB + 0.012);
   for (const [x, z, n] of drops) {
     for (let k = 0; k < n; k++) {
       const a = q() * Math.PI;
@@ -175,7 +187,7 @@ function litter(ctx, P, q, drops, x0, x1, z0, z1, o = {}) {
       const pz = cl(z + q.range(-0.9, 0.9), z0 + 0.3, z1 - 0.3);
       const w = q.range(0.1, 0.17);
       const h = q.range(0.14, 0.24);
-      P.box(frame(px, pz, Math.sin(a), Math.cos(a)), -w, -h, w, h, q.pick(PAPER), y + k * 0.0015);
+      P.box(frame(px, pz, Math.sin(a), Math.cos(a)), -w, -h, w, h, q.pick(PAPER), ground(px, pz) + k * 0.0015);
     }
     if (q() < 0.3) {
       const g = new THREE.CylinderGeometry(0.035, 0.045, 0.11, 7, 1, true).rotateZ(Math.PI / 2).rotateY(q() * Math.PI);
@@ -206,7 +218,7 @@ function litter(ctx, P, q, drops, x0, x1, z0, z1, o = {}) {
         const t = q.range(a, b);
         const d = q() < 0.5 ? -q.range(0.05, 0.5) : q.range(0.4, 2.2);
         const [px, pz] = alongX ? [t, c - s * d] : [c - s * d, t];
-        P.disc(px, pz, q.range(0.04, 0.07), q.pick(LEAF), d < 0 ? PAINT_Y + 0.005 : CURB + 0.01, 5);
+        P.disc(px, pz, q.range(0.04, 0.07), q.pick(LEAF), d < 0 ? PAINT_Y + 0.005 : ground(px, pz) - 0.002, 5);
       }
     }
   }

@@ -227,7 +227,7 @@ const CRACK = srgb(0.44, 0.36, 0.4);
 const WORN = srgb(0.8, 0.7, 0.66);
 const LID = srgb(0.5, 0.48, 0.5);
 const LID_IN = srgb(0.38, 0.36, 0.4);
-function sidewalkWear(P, r, x0, x1, z0, z1, wx, wz, lite) {
+function sidewalkWear(P, r, x0, x1, z0, z1, wx, wz, lite, grass = false) {
   const y = CURB + 0.008;
   const sides = [
     // [along x?, the curb's coordinate, into the walk, from, to, the walk's width]
@@ -273,10 +273,11 @@ function sidewalkWear(P, r, x0, x1, z0, z1, wx, wz, lite) {
       }
       P.poly(flat, pts, WORN, y - 0.002);
     }
-    // the covers: the water's, the phone's (a frame, a lid, its bar)
+    // the covers: the water's, the phone's (a frame, a lid, its bar; where people live, past the
+    // strip of grass along the curb, homeStreets)
     for (let k = r.int(0, 2); k > 0; k--) {
       const t = r.range(a, b);
-      const d = r.range(0.5, 1.3);
+      const d = r.range(0.5, 1.3) + (grass ? 1.3 : 0);
       const [x, z] = at(t, d);
       const hw = alongX ? 0.32 : 0.48;
       const hd = alongX ? 0.48 : 0.32;
@@ -424,7 +425,7 @@ function* buildTile(tctx, t) {
     for (const l of cp.loading) curbWord(P, (l.x0 + l.x1) / 2, l.z, 0, l.side, 'LOADING ZONE', srgb(0.95, 0.8, 0.25), PAINT_Y, 0.55, 0.5, 1.3);
     if (live) yield* homeStreets(tctx, b, x0, x1, z0, z1, q);
     yield;
-    if (!bare) sidewalkWear(P, bq, x0, x1, z0, z1, Math.min(aw.walk, ae.walk), Math.min(sn.walk, ss.walk), lite);
+    if (!bare) sidewalkWear(P, bq, x0, x1, z0, z1, Math.min(aw.walk, ae.walk), Math.min(sn.walk, ss.walk), lite, live);
     yield;
   }
   // the bayfront: a walk along the water, its lawn and palms, benches looking out over the bay
