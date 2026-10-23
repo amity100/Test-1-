@@ -1081,6 +1081,8 @@ class OpenShop {
     if (this.barLife) {
       this.barTender = this.barLife.tender(R.keeper || { x: this.home.x, z: this.home.z, yaw: this.homeYaw });
       if (R.marks && R.marks.barman) this.barLife.spawnBarman(R.marks.barman);
+      // (the club's coat check, its attendant: whoever comes in hands their coat over first)
+      if (R.marks && R.marks.coats && !this.game.touch) this.barLife.spawnCoats(R.marks.coats);
     }
     this.lobby = own && (s.kind === 'cinema' || s.kind === 'theatre') && R.marks && R.marks.usher ? new LobbyLife(this) : null;
     if (R) this.populate();
@@ -1262,6 +1264,7 @@ class OpenShop {
     // until they are on their way out)
     if (v.dine && v.phase !== 'out') return this.dining.visit(v, dt);
     if (v.lobbyMan && (v.phase === 'in' || v.phase === 'lob' || v.phase === 'seat')) return this.lobby.visit(v, dt);
+    if (v.coat && this.barLife && v.phase === 'in') return this.barLife.coatCheck(v, dt);
     switch (v.phase) {
       case 'in':
       case 'pay-go':
@@ -3084,7 +3087,11 @@ class OpenShop {
           if (far) {
             const f = this.freeSpot();
             if (f) this.addVisitor(null, { ...f, already: true });
-          } else this.addVisitor(null);
+          } else {
+            const v = this.addVisitor(null);
+            // (v5, GTA IV round: in at the club's door - the coat check first)
+            if (v && this.barLife && this.barLife.coats) this.barLife.toCoats(v);
+          }
         }
       }
     }

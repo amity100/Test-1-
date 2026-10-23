@@ -1181,6 +1181,113 @@ export class BarLife {
     return c;
   }
 
+  // the club's coat check: an attendant behind its counter, the rail of coats behind her; whoever
+  // comes in hands a coat over the counter and gets a ticket for it, she turns and hangs it up
+  spawnCoats(at) {
+    const o = this.o;
+    const L = civilianLook({ kind: 'smart' });
+    L.top = { kind: 'blouse', color: [0.1, 0.09, 0.12], sleeves: 'long' };
+    const c = this.game.civilians.spawnScripted(at.x, at.z, modest(L), o);
+    c.noCollide = true;
+    c.exitRoom = o.room;
+    c.exitShop = o.shop;
+    c.yaw = at.yaw;
+    const w = { at, t: Math.random() * 10, hand: new THREE.Vector3(), handL: new THREE.Vector3(), guest: null, gT: 0 };
+    c.ctrl = (civ, dt) => (o.alive ? this.coatLife(w, civ, dt) : null);
+    o.extras.push(c);
+    this.coats = w;
+    w.c = c;
+    // (where the guest stands: across the counter from her, a pace into the room)
+    const fx = Math.sin(at.yaw);
+    const fz = Math.cos(at.yaw);
+    const way = o.room.path(at.x + fx * 1.6, at.z + fz * 1.6, at.x + fx * 1.4, at.z + fz * 1.4);
+    w.spot = way[way.length - 1];
+    return c;
+  }
+
+  coatLife(w, c, dt) {
+    const f = c.fig;
+    const at = w.at;
+    w.t += dt;
+    if (Math.hypot(c.pos.x - at.x, c.pos.z - at.z) > 0.3) {
+      f.reachR = null;
+      return { x: at.x, z: at.z, speed: 0.9 };
+    }
+    const g = w.guest;
+    if (g && g.c.alive && g.coatT > 0) {
+      // (the coat taken across the counter, the ticket given)
+      c.faceYaw = Math.atan2(g.c.pos.x - c.pos.x, g.c.pos.z - c.pos.z);
+      f.lookAt = g.c.fig.j.headC;
+      w.hand.set((c.pos.x + g.c.pos.x) / 2, c.pos.y + 1.12, (c.pos.z + g.c.pos.z) / 2);
+      f.reachR = g.coatT < 2.2 ? w.hand : null;
+      w.gT = 2.4;
+      return null;
+    }
+    f.lookAt = null;
+    if (w.gT > 0) {
+      // turned to the rail: the coat hung up
+      w.gT -= dt;
+      const fy = at.yaw + Math.PI;
+      c.faceYaw = fy;
+      w.hand.set(c.pos.x + Math.sin(fy) * 0.5, c.pos.y + 1.6, c.pos.z + Math.cos(fy) * 0.5);
+      f.reachR = w.gT < 1.8 ? w.hand : null;
+      return null;
+    }
+    // waiting: a look over the room, the coats straightened now and then
+    if (Math.sin(w.t * 0.23) > 0.6) {
+      const fy = at.yaw + Math.PI;
+      c.faceYaw = fy;
+      w.hand.set(c.pos.x + Math.sin(fy) * 0.5 + Math.cos(fy) * Math.sin(w.t * 1.7) * 0.3, c.pos.y + 1.55, c.pos.z + Math.cos(fy) * 0.5 - Math.sin(fy) * Math.sin(w.t * 1.7) * 0.3);
+      f.reachR = w.hand;
+    } else {
+      f.reachR = null;
+      c.faceYaw = at.yaw + Math.sin(w.t * 0.3) * 0.6;
+    }
+    return null;
+  }
+
+  // somebody new in at the club's door: to the coat check first (OpenShop.visit hands them here
+  // while v.coat), then on to where they were going
+  coatCheck(v, dt) {
+    const o = this.o;
+    const w = this.coats;
+    const c = v.c;
+    if (!w || !w.c.alive || w.c.owner !== o) {
+      v.coat = false;
+      return null;
+    }
+    const mv = o.follow(v);
+    if (mv) return mv;
+    if (v.coatT === undefined) {
+      if (w.guest && w.guest !== v && w.guest.coatT > 0 && o.visitors.includes(w.guest)) {
+        // (somebody at the counter already: a moment's wait behind them)
+        c.faceYaw = Math.atan2(w.c.pos.x - c.pos.x, w.c.pos.z - c.pos.z);
+        return null;
+      }
+      v.coatT = 3.2;
+      w.guest = v;
+      if (Math.random() < 0.5) o.say(c, pick(['Just the jacket, thanks.', 'Here you go.', 'Thanks!']));
+    }
+    c.faceYaw = Math.atan2(w.c.pos.x - c.pos.x, w.c.pos.z - c.pos.z);
+    v.coatT -= dt;
+    v.hand = v.hand || new THREE.Vector3();
+    v.hand.set((c.pos.x + w.c.pos.x) / 2, c.pos.y + 1.12, (c.pos.z + w.c.pos.z) / 2);
+    c.fig.reachR = v.coatT > 1.2 ? v.hand : null;
+    if (v.coatT < 1.0 && !v.ticket) {
+      v.ticket = true;
+      c.fig.carry = 'card';
+      c.fig.cardColor = [0.95, 0.85, 0.3];
+    }
+    if (v.coatT > 0) return null;
+    // the ticket in the pocket, on to the stool, the booth, the floor
+    v.coat = false;
+    if (c.fig.carry === 'card') c.fig.carry = null;
+    c.fig.reachR = null;
+    v.pts = o.room.path(c.pos.x, c.pos.z, v.spot.x, v.spot.z);
+    v.t = 0;
+    return null;
+  }
+
   // the people on the stools when you come by, a glass each (k: how many of the stools)
   populate(k) {
     for (const sp of this.seats) if (Math.random() < k) this.patron(sp, true);
@@ -1235,6 +1342,7 @@ export class BarLife {
     v.own = true;
     v.drink = true;
     v.stay = 40 + Math.random() * 70;
+    if (!already) this.toCoats(v);
     if (already) {
       c.noCollide = true;
       c.yaw = sp.yaw;
@@ -1256,8 +1364,19 @@ export class BarLife {
     v.own = true;
     v.stand = sp.what;
     v.stay = 30 + Math.random() * 60;
+    if (!already) this.toCoats(v);
     if (sp.what === 'high' || Math.random() < 0.3) this.glass(c);
     return v;
+  }
+
+  // (in at the door of the club: by the coat check first)
+  toCoats(v) {
+    const w = this.coats;
+    if (!w || !w.spot || !v.pts) return;
+    const R = this.o.room;
+    const s = this.o.shop;
+    v.coat = true;
+    v.pts = [{ x: s.door[0], z: s.door[2], bell: true }, { x: R.door.x, z: R.door.z, inRoom: true }, ...R.path(R.door.x, R.door.z, w.spot.x, w.spot.z)];
   }
 
   glass(c) {
