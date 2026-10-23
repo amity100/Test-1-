@@ -592,6 +592,8 @@ export class Curbs {
     c.sig2 = -1;
     const dist = S.left - S.run;
     const inK = (c.pullS || 0) / Math.max(0.5, c.pullTo || 0);
+    // (where it stops: Traffic.roomBeside)
+    c.pullLeft = Math.max(0, dist);
     if (S.t > 50) {
       // (no getting into it: on it goes)
       c.seekPark = null;
@@ -603,7 +605,10 @@ export class Curbs {
       // as far as the space goes; at its end in as far as it got, or (hardly in at all) it is
       // given up and on it goes
       const front = this.freeRun(c, 0, 1) - c.halfLen;
-      if (inK < 0.93 && front > 0.7 && dist > -4) return 1.0;
+      if (inK < 0.93 && front > 0.7 && dist > -4) {
+        c.pullLeft = front - 0.6;
+        return 1.0;
+      }
       if (inK < 0.7) {
         c.seekPark = null;
         c.pull = false;
@@ -612,7 +617,8 @@ export class Curbs {
       if (c.speed < 0.25) this.parkIt(c);
       return 0;
     }
-    return Math.max(1.0, Math.sqrt(2 * 3.6 * Math.max(0, dist)) * 0.8);
+    // (slowly, as anybody parks)
+    return Math.min(4.5, Math.max(1.0, Math.sqrt(2 * 3.6 * Math.max(0, dist)) * 0.8));
   }
 
   // the free curb from the place ahead metres on from c, along its road forward (dir 1) or back

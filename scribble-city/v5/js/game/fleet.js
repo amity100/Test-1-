@@ -207,6 +207,8 @@ export class Fleet {
     if (c.pickup) {
       // (GTA IV: the signal, over to the curb by the one waving, the hazards once there)
       const left = c.pickup.along0 - c.pickup.run;
+      // (where it stops: Traffic.roomBeside)
+      c.pullLeft = Math.max(0, left);
       if (left < 14 && !c.pull) {
         c.pull = true;
         c.pullTo = this.traffic.curbRoom(c, Math.max(0, left));
@@ -217,6 +219,7 @@ export class Fleet {
     }
     if (c.drop) {
       c.sig2 = -1;
+      c.pullLeft = Math.max(0, c.drop.left - c.drop.run);
       return this.stopFor(c, c.drop.left - c.drop.run);
     }
     if (c.dropT !== undefined) return 0;

@@ -1339,6 +1339,9 @@ export class Traffic {
   // hand's width off the curb, or off the cars parked beside it. Its nose is turned in as it
   // goes (pullV: metres over for a metre on), so what must clear a parked car is the part of it
   // level with that car's end: the end of the car behind a space is driven round, not through.
+  // And a parked car a little way in front of it, that it will come up beside before it stops
+  // (pullLeft: how far on it stops, its caller's), keeps it out: it does not dart into the
+  // hand's-width gaps between the parked cars, only into a space it stops in.
   roomBeside(c) {
     const g = c.path && c.path.gates[0];
     if (!g || g.off === undefined) return 0;
@@ -1349,20 +1352,29 @@ export class Traffic {
     const fz = g.dz;
     const s0 = c.side || 0;
     const slope = c.pullV || 0;
+    const look = Math.min(2 + c.speed * 1.1, c.pullLeft === undefined ? 1e9 : c.pullLeft + 0.3);
     const P = this.parked;
     for (let i = 0; i < P.length; i++) {
       const p = P[i];
       if (p.taken || p.flat || p.poofT !== undefined) continue;
       const dx = p.pos.x - c.pos.x;
       const dz = p.pos.z - c.pos.z;
-      if (Math.abs(dx) + Math.abs(dz) > 14) continue;
+      if (Math.abs(dx) + Math.abs(dz) > 20) continue;
       const pa = dx * fx + dz * fz;
       // (how far right of its lane's line: its own side shift taken off)
       const ps = dx * -fz + dz * fx + s0;
-      if (ps < 1.0 || Math.abs(pa) > c.halfLen + p.halfLen + 0.4) continue;
-      // (the part of it level with that car's nearer end: its nose for one in front, else the
-      // other's front end)
-      const u = pa >= 0 ? c.halfLen : Math.max(-c.halfLen, Math.min(c.halfLen, pa + p.halfLen));
+      if (ps < 1.0) continue;
+      let u;
+      if (pa >= 0) {
+        // (in front: from its nose to that car's back - beside it already, or soon; its nose is
+        // what must clear it)
+        if (pa - p.halfLen - c.halfLen > look) continue;
+        u = c.halfLen;
+      } else {
+        // (behind: clear of it, or the part of it level with that car's front end)
+        if (-pa - p.halfLen - c.halfLen > 0.4) continue;
+        u = Math.max(-c.halfLen, Math.min(c.halfLen, pa + p.halfLen));
+      }
       room = Math.min(room, ps - p.halfWid - c.halfWid - 0.25 - u * slope);
     }
     return Math.max(0, Math.min(room, 3));

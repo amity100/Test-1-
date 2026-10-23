@@ -126,6 +126,8 @@ export class Patrol {
       P.run += T.speed * dt;
       T.sig2 = -1;
       const dist = P.left - P.run;
+      // (where it stops: Traffic.roomBeside)
+      T.pullLeft = Math.max(0, dist);
       if (dist < 0.8 && T.speed < 0.3) {
         P.phase = 'stopped';
         T.hazard = true;

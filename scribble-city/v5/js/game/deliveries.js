@@ -113,6 +113,8 @@ export class Deliveries {
       return Infinity;
     }
     if (dist < 34) c.sig2 = -1;
+    // (where it stops: Traffic.roomBeside)
+    c.pullLeft = Math.max(0, dist);
     // (over towards the curb as it slows: in the parking lane where there is a gap by the shop)
     if (dist < 16 && !c.pull) {
       c.pull = true;
