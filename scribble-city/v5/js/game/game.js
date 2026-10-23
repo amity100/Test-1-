@@ -88,6 +88,7 @@ import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Signs } from './signs.js';
 import { Fuse } from './fuse.js';
+import { Gear } from './gear.js';
 import { BrokenBridge } from './mission.js';
 import { drawLandmarks } from '../world/mainland/landmarks.js';
 import { Fairground } from './fairground.js';
@@ -304,6 +305,8 @@ export class Game {
     this.signs = this.lab ? new Signs(this) : null;
     // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car
     this.fuse = this.lab ? new Fuse(this) : null;
+    // (ROADMAP 11.28) what the things of the pen do: the turbo, the rewind, the missiles, the dome...
+    this.gear = this.fuse ? new Gear(this) : null;
     // (ROADMAP 11.23) the lab's first mission: the broken bridge - drawing on your car to get over
     this.mission = this.lab ? new BrokenBridge(this) : null;
     this.freedraw = this.classic ? null : new FreeDraw(this);
@@ -1001,6 +1004,8 @@ export class Game {
     // moving; what you see go by as it really goes - the pen, its camera - keeps the real step)
     this.realDt = dt;
     if (this.fuse) dt *= this.fuse.timeK(dt, !!(this.freedraw && this.freedraw.isOpen) && this.state === 'play');
+    // (ROADMAP 11.28: frozen while the rewind runs back, slow a moment after it - game/gear.js)
+    if (this.gear) dt *= this.gear.timeK(this.realDt);
     this.time += dt;
     shared.uTime.value = this.time;
     // the gamepad first: it presses the same keys the keyboard does
@@ -1101,6 +1106,7 @@ export class Game {
       if (this.freedraw) this.freedraw.update(this.realDt);
       if (this.signs) this.signs.update(dt);
       if (this.fuse) this.fuse.update(dt);
+      if (this.gear) this.gear.update(dt);
       if (this.mission) this.mission.update(dt);
       if (this.props) this.props.update(dt);
       this.inkwell.update(dt);
@@ -1140,7 +1146,10 @@ export class Game {
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
         : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
-      this.camRig.update(dt, v.pos, opt);
+      // (ROADMAP 11.28: the turbo on - the picture wider, the camera back a little: game/gearmove.js)
+      const G = this.gear;
+      if (G && (G.fovK > 1.001 || G.camPull > 0.01)) this.camRig.update(dt, v.pos, { ...opt, fovMul: (opt.fovMul || 1) * G.fovK, dist: (opt.dist || 8.5) + G.camPull });
+      else this.camRig.update(dt, v.pos, opt);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });

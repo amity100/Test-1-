@@ -17,7 +17,9 @@ const AX = {
   z: { n: [0, 0, 1], e1: [-1, 0, 0], e2: [0, 1, 0] },
 };
 // (what each colour of it is made of)
-const MAT_OF = { metal: 'metal', dark: 'metal', iron: 'metal', paint: 'paint', body: 'paint', furn: 'paint', trim: 'paint', accent: 'paint', fabA: 'paint', fabB: 'paint', fA: 'matte', fB: 'matte', wood: 'matte', wicker: 'matte', rim: 'matte', rope: 'matte' };
+const MAT_OF = { metal: 'metal', dark: 'metal', iron: 'metal', paint: 'paint', body: 'paint', furn: 'paint', trim: 'paint', accent: 'paint', fabA: 'paint', fabB: 'paint', fA: 'matte', fB: 'matte', wood: 'matte', wicker: 'matte', rim: 'matte', rope: 'matte',
+  // (ROADMAP 11.28: the things of game/gearlook.js - a shape may say what any of its colours is made of)
+  chrome: 'metal', steel: 'metal', copper: 'metal', rubber: 'matte', canvas: 'matte', glass: 'glass', glow: 'glow', flame: 'glow', light: 'glow' };
 const _Y = new THREE.Vector3(0, 1, 0);
 
 // a geometry mirrored across x, its faces still facing out
@@ -94,7 +96,8 @@ function addPrim(Kt, q, o, mat, col, matOf, colOf) {
       break;
     }
     case 'slab': {
-      const B = inflateShape(q.ol, q.W, { n: q.edge || 3, R: (q.W / 2) * 0.9, res: 40 });
+      // (ROADMAP 11.28: a small one finer than it need be - its own grid, coarser: game/gearlook.js)
+      const B = inflateShape(q.ol, q.W, { n: q.edge || 3, R: (q.W / 2) * 0.9, res: q.res || 40 });
       if (!B) break;
       const { n, e1, e2 } = AX[q.ax];
       const m4 = new THREE.Matrix4().makeBasis(new THREE.Vector3(...n), new THREE.Vector3(...e2), new THREE.Vector3(...e1));
@@ -237,13 +240,16 @@ export function buildDesign(p, body) {
     const c = k === 'body' ? body : (sh.pal && sh.pal[k]) || body;
     return linC(c[0], c[1], c[2]);
   };
-  const matOf = (k) => M[MAT_OF[k] || 'paint'];
+  const matOf = (k) => M[(sh.mats && sh.mats[k]) || MAT_OF[k] || 'paint'];
   const spinO = sh.spinAt ? [0, sh.spinAt[1], pv[2]] : null;
   const { n, e1, e2 } = AX[sh.ax];
   // (the drawing's lines on both its faces, as far out as it is there)
   const inkLines = [];
-  for (const L of sh.ink || []) {
+  // (ROADMAP 11.28: the moving part each line lies on, if any - game/gearlook.js sheet)
+  const inkGs = [];
+  for (const [li, L] of (sh.ink || []).entries()) {
     for (const sgn of [1, -1]) {
+      inkGs.push(sh.inkG ? sh.inkG[li] : null);
       inkLines.push(
         L.map(([u, w]) => {
           const k = sh.c + sgn * (depthAt(sh, u, w, sgn) + 0.012);
@@ -254,11 +260,16 @@ export function buildDesign(p, body) {
   }
   const warp = bender(sh, pv);
   const out = [];
+  // (ROADMAP 11.28) its other moving parts, each round its own pivot (a rotor's blades, a saw, a flame
+  // that shows only as it is used: game/gear.js animate)
+  const GR = sh.groups || {};
   const makeOne = (mirror) => {
     const kits = { gun: new Kit(), base: new Kit(), spin: new Kit() };
+    for (const name of Object.keys(GR)) kits[name] = new Kit();
     for (const q of sh.prims) {
-      const g = q.g || 'gun';
-      addPrim(kits[g], q, g === 'spin' ? spinO : pv, matOf(q.k), colOf(q.k), matOf, colOf);
+      const g = kits[q.g] ? q.g || 'gun' : 'gun';
+      const o = g === 'spin' ? spinO : GR[g] ? GR[g].at : pv;
+      addPrim(kits[g], q, o, matOf(q.k), colOf(q.k), matOf, colOf);
     }
     if (mirror) for (const Kt of Object.values(kits)) for (const list of Kt.parts.values()) for (const it of list) flipX(it.g);
     const inner = new THREE.Group();
@@ -270,12 +281,32 @@ export function buildDesign(p, body) {
       spin.add(kits.spin.build({ seed: 0.71 }));
       inner.add(spin);
     }
+    const groups = {};
+    let seed = 0.31;
+    for (const [name, G] of Object.entries(GR)) {
+      if (!kits[name].parts.size) continue;
+      const node = new THREE.Group();
+      const sx = mirror ? -1 : 1;
+      node.position.set(sx * (G.at[0] - pv[0]), G.at[1] - pv[1], G.at[2] - pv[2]);
+      node.add(kits[name].build({ seed: (seed += 0.137) % 1 }));
+      inner.add(node);
+      groups[name] = { node, ax: G.ax || 'y', kind: G.kind || 'spin', at: G.at };
+    }
     const m = new THREE.Group();
     m.position.set(mirror ? -pv[0] : pv[0], pv[1], pv[2]);
     m.add(inner);
     const ud = m.userData;
+    ud.groups = groups;
     ud.lineNode = inner;
-    ud.lines = mirror ? inkLines.map((L) => L.map((q) => [-q[0], q[1], q[2]])) : inkLines;
+    const lines = mirror ? inkLines.map((L) => L.map((q) => [-q[0], q[1], q[2]])) : inkLines;
+    // (those on a moving part, in its own frame: they go round with it - game/fuse.js draw)
+    ud.lines = lines.filter((L, i) => {
+      const G = inkGs[i] && groups[inkGs[i]];
+      if (!G) return true;
+      const p0 = G.node.position;
+      (G.lines || (G.lines = [])).push(L.map((q) => [q[0] - p0.x, q[1] - p0.y, q[2] - p0.z]));
+      return false;
+    });
     ud.fill = sh.fill || null;
     let role = 'drawn';
     if (sh.role === 'barrel') {
@@ -290,6 +321,9 @@ export function buildDesign(p, body) {
     } else if (sh.role === 'dwing') {
       ud.flap = inner;
       role = 'dwing';
+    } else if (sh.role === 'gear') {
+      ud.inner = inner;
+      role = 'gear';
     }
     if (sh.dih) inner.rotation.z = mirror ? -sh.dih : sh.dih;
     ud.dih = sh.dih || 0;

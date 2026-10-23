@@ -57,12 +57,14 @@ export const PARTS = {
   spike: { name: 'קוצים', mark: '', cost: 10, col: [0.62, 0.64, 0.7] },
   // (ROADMAP 11.22) anything else drawn out of your car: on it as drawn
   deco3: { name: 'קישוט', mark: '', cost: 6, col: [0.94, 0.92, 0.86] },
+  // (ROADMAP 11.28) a thing of the pen with its own behaviour (game/gear.js)
+  gear: { name: 'מתקן', mark: '', cost: 10, col: [0.6, 0.62, 0.66] },
 };
 export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike'];
 
 // what a part can be put on
 const ALLOW = {
-  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3']),
+  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3', 'gear']),
   hero: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'chute']),
   weapon: new Set(['barrel', 'blade', 'spring', 'magnet', 'jet', 'wing', 'armor', 'rotor']),
   car: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel', 'barrel', 'wing']),
@@ -1218,6 +1220,8 @@ export class Fuse {
         v.blades = { side: Math.max(side, (v.blades && v.blades.side) || 0), rear: true };
         v.spikes = { dmg: side };
       }
+      // (ROADMAP 11.28) a thing of the pen: what it is beyond its part, at its level (game/gear.js)
+      if (p.item && this.game.gear) this.game.gear.apply(v, p, H, fz);
     }
     // the combinations: two parts that make something of each other
     if (has.spring && has.wing && has.spring.v !== 'bumper') {
@@ -1250,6 +1254,8 @@ export class Fuse {
       fz.takeoff = takeoffOf(has.wing.n, H.mass);
       fz.wingFly = fz.takeoff <= H.top * WING_TOP;
     }
+    // (ROADMAP 11.28: and what they make of each other)
+    if (this.game.gear) this.game.gear.finish(v, R.parts, H, fz);
     v.handling = H;
     v.spaceIsMine = B.spaceIsMine || !!(fz.jump || fz.rotor || fz.balloon || fz.vtol || fz.wingFly);
     v.fuseUp = !!(fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || fz.vtol || fz.wingFly);
@@ -1531,11 +1537,12 @@ export class Fuse {
     let pull = 1;
     // (no higher than this over the ground under it)
     const gy = groundHeight(v.pos.x, v.pos.z);
-    const ceil = gy + 80;
+    // (ROADMAP 11.28: a rotor of level 1 hovers low)
+    const ceil = gy + (fz.ceil || 80);
     let lifting = false;
     if (fz.rotor) {
       if (fz.rotor >= 1) {
-        const want = v.pos.y > ceil ? -2 : up ? 5 + Math.min(1.5, fz.rotor - 1) * 3 : down ? -5 : 0;
+        const want = v.pos.y > ceil ? -2 : up ? (5 + Math.min(1.5, fz.rotor - 1) * 3) * (fz.rotorK || 1) : down ? -5 : 0;
         v.vy = damp(v.vy, want, 2.6, dt);
         pull = 0;
         lifting = true;
@@ -1575,7 +1582,7 @@ export class Fuse {
         g.audio.play('chute', 0.7);
       }
       if (v.fzChute) {
-        v.vy = damp(v.vy, -2.4, 3.5, dt);
+        v.vy = damp(v.vy, fz.chuteVy || -2.4, 3.5, dt);
         pull = Math.min(pull, 0.08);
       }
     }
@@ -1623,10 +1630,10 @@ export class Fuse {
     const ctl = fz.airCtl || 0;
     if (ctl && input && !winged) {
       v.yawRate = damp(v.yawRate, -mv.x * 1.5 * ctl, 3, dt);
-      const A = lifting ? (fz.rotor >= 1 ? 9 : fz.balloon >= 1 ? 3.5 : 4) : 2.5;
+      const A = lifting ? (fz.rotor >= 1 ? 9 * (fz.rotorK || 1) : fz.balloon >= 1 ? 3.5 : 4) : 2.5;
       v.vx += Math.sin(v.yaw) * mv.y * A * ctl * dt;
       v.vz += Math.cos(v.yaw) * mv.y * A * ctl * dt;
-      const cap = fz.plane && boost ? 60 : fz.rotor >= 1 ? 26 : fz.balloon >= 1 ? 12 : 40;
+      const cap = fz.plane && boost ? 60 : fz.rotor >= 1 ? 26 * (fz.rotorK || 1) : fz.balloon >= 1 ? 12 : 40;
       const sp = Math.hypot(v.vx, v.vz);
       if (sp > cap) {
         v.vx *= cap / sp;
@@ -1653,13 +1660,17 @@ export class Fuse {
     if (!fz) return g;
     if (fz.float && fz.float.k >= 1) {
       v.fzWet = isWater(v.pos.x, v.pos.z);
-      if (v.fzWet) g = WATER_RIDE + Math.sin(this.game.time * 1.7) * 0.04;
+      // (ROADMAP 11.28: a submarine's dive, game/gearmove2.js)
+      if (v.fzWet) g = WATER_RIDE + Math.sin(this.game.time * 1.7) * 0.04 + (fz.float.dive || 0);
     }
+    // (ROADMAP 11.28: a bridge it laid)
+    if (this.game.gear) g = Math.max(g, this.game.gear.floorAt(v.pos.x, v.pos.z, v.pos.y || 0));
     const G = this.game.gadgets;
     if (!G) return g;
     const flies = fz.rotor || fz.balloon || fz.vtol || fz.plane || v.glide;
     const step = fz.step || 0;
-    if (!step && !(flies && v.air)) return g;
+    // (ROADMAP 11.28: up on a roof by a grappling hook, monster wheels, tracks - it stays there)
+    if (!step && !(flies && v.air) && !fz.roofs) return g;
     const y = v.pos.y + (v.air ? 0.3 : step);
     let f = G.floorAt(v.pos.x, v.pos.z, y);
     // (its nose over a step: up it goes)
@@ -2229,7 +2240,8 @@ export class Fuse {
       if (fz.smoke) this.smokeOut(pv, fz.smoke, dt);
       if (pv.fzChute && !pv.air) pv.fzChute = 0;
       if (fz.float && pv.fzWet) {
-        if (Math.abs(pv.speed) > 14) pv.speed = Math.sign(pv.speed) * 14;
+        const cap = fz.float.cap || 14;
+        if (Math.abs(pv.speed) > cap) pv.speed = Math.sign(pv.speed) * cap;
         this.wakeT = (this.wakeT || 0) - dt;
         if (Math.abs(pv.speed) > 2 && this.wakeT <= 0) {
           this.wakeT = 0.1;
@@ -2317,7 +2329,7 @@ export class Fuse {
   sea(v, dt) {
     const g = this.game;
     // (ROADMAP 11.23: not on a deck over it - game/mission.js)
-    const deck = g.mission ? g.mission.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false;
+    const deck = (g.mission ? g.mission.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false) || (g.gear ? g.gear.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false);
     const wet = !v.air && !v.dead && (v.kind === 'car' || v.kind === 'bike') && !v.drawn && v.pos.x > WATER_X + 3 && isWater(v.pos.x, v.pos.z) && !deck;
     const fl = v.fz && v.fz.float;
     if (!wet || (fl && fl.k >= 1)) {
@@ -2643,14 +2655,17 @@ export class Fuse {
     if (!(g.input.fire || g.input.firePressed) || F.cool > 0) return;
     F.cool = 0.06;
     v.fzFlameT = g.time;
-    const fx = Math.sin(v.yaw);
-    const fz = Math.cos(v.yaw);
     const nose = (v.halfLen || 2.3) + 0.9;
-    g.weapons.projectiles.push({
-      kind: 'paintmg', owner: 'player', x: v.pos.x + fx * nose, y: v.pos.y + 0.6, z: v.pos.z + fz * nose,
-      vx: fx * 34 + (Math.random() - 0.5) * 3, vy: 1 + Math.random(), vz: fz * 34 + (Math.random() - 0.5) * 3,
-      gravity: -1.5, damage: 9, radius: 0, life: F.range / 34, t: 0, seed: Math.random() * 100, wobble: 0, color: [1.0, 0.5, 0.15], el: 'fire', ignoreCar: v,
-    });
+    // (ROADMAP 11.28: the flamethrower's level 3 - three jets in a fan)
+    for (const a of F.wide ? [-0.22, 0, 0.22] : [0]) {
+      const fx = Math.sin(v.yaw + a);
+      const fz = Math.cos(v.yaw + a);
+      g.weapons.projectiles.push({
+        kind: 'paintmg', owner: 'player', x: v.pos.x + fx * nose, y: v.pos.y + 0.6, z: v.pos.z + fz * nose,
+        vx: fx * 34 + (Math.random() - 0.5) * 3, vy: 1 + Math.random(), vz: fz * 34 + (Math.random() - 0.5) * 3,
+        gravity: -1.5, damage: 9, radius: 0, life: F.range / 34, t: 0, seed: Math.random() * 100, wobble: 0, color: [1.0, 0.5, 0.15], el: 'fire', ignoreCar: v,
+      });
+    }
     if (Math.random() < 0.3) g.audio.play('whoosh', 0.25);
   }
 
@@ -2810,11 +2825,22 @@ export class Fuse {
           // (folded on the roof; falling, it opens as drawn)
           ud.canopy.scale.setScalar(damp(ud.canopy.scale.x, v.fzChute ? 1 : 0.35, v.fzChute ? 7 : 3, this.fdt));
         }
+        // (ROADMAP 11.28) a thing of the pen: its moving parts - its rotor's blades, its flame as it burns
+        if (g.gear && o.p.item && (o.role === 'gear' || (ud.groups && Object.keys(ud.groups).length))) g.gear.animate(v, o, this.fdt, fr);
         // (ROADMAP 11.22) a drawn one's own lines, inked on it where they were drawn
         if (ud.lines && ud.lines.length && ud.lineNode.visible && o.m.visible) {
           o.m.updateMatrixWorld(true);
           const M = ud.lineNode.matrixWorld;
           for (let j = 0; j < ud.lines.length; j++) inkRun(fr, ud.lines[j], M, ud.lineC || EDGE_DARK, 2.6, 8600 + j * 31, 1);
+        }
+        // (ROADMAP 11.28: and those on its moving parts, going round with them)
+        if (ud.groups && o.m.visible && ud.lineNode.visible) {
+          let k = 0;
+          for (const G of Object.values(ud.groups)) {
+            if (!G.lines || !G.node.visible) continue;
+            if (!k++) o.m.updateMatrixWorld(true);
+            for (let j = 0; j < G.lines.length; j++) inkRun(fr, G.lines[j], G.node.matrixWorld, ud.lineC || EDGE_DARK, 2.6, 8900 + k * 97 + j * 31, 1);
+          }
         }
       }
       if (v.kind !== 'car') R.root.updateMatrix();
@@ -2858,6 +2884,8 @@ export class Fuse {
     }
     // (ROADMAP 11.24) where the part being drawn goes, lit; a part's lines glowing in as it comes
     this.pen.draw(fr);
+    // (ROADMAP 11.28) what the things of the pen put out: ropes, arcs, rings, nets
+    if (g.gear) g.gear.draw(fr);
     // the hero's
     if (this.hero.length) this.drawHero(fr);
     // the gun's: its wings, its rotor

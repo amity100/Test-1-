@@ -32,11 +32,12 @@ const SLIP = { x0: 137, x1: 151, z0: 14, z1: 22 };
 const BACK = { x: 60, z: Z, yaw: Math.PI / 2 };
 // again, from the island (off to its side: not where a car lands)
 const AGAIN = { x: 172, z: 42 };
-const WAYS = { wings: 'כנפיים', rotor: 'רוטור', balloon: 'בלון', floats: 'מצופים', spring: 'קפיץ', plane: 'מטוס (כנפיים + סילון)', chute: 'מצנח', jump: 'קפיצה' };
+const WAYS = { wings: 'כנפיים', rotor: 'רוטור', balloon: 'בלון', floats: 'מצופים', spring: 'קפיץ', plane: 'מטוס (כנפיים + סילון)', chute: 'מצנח', jump: 'קפיצה', bridge: 'גשר מתקפל' };
 const ALL_WAYS = ['wings', 'rotor', 'balloon', 'floats', 'spring', 'plane'];
 // (ROADMAP 11.25: with the part pen, what its "functional" category draws - floats are its propeller)
-const PEN_WAYS = ['wings', 'balloon', 'rotor', 'floats', 'spring', 'plane'];
-const PEN_WAY_NAME = { floats: 'מדחף (סירה)', plane: 'מטוס (כנפיים + סילון)', balloon: 'כדור פורח' };
+const PEN_WAYS = ['wings', 'balloon', 'rotor', 'floats', 'spring', 'plane', 'bridge'];
+// (ROADMAP 11.28: by the names of the things of the pen - game/itemcat.js)
+const PEN_WAY_NAME = { floats: 'ערכת מים (סירה)', plane: 'מטוס (כנפיים + טורבו)', balloon: 'כדור פורח', rotor: 'מדחף מסוק', spring: 'קפיצה על־קולית', wings: 'כנפי מטוס', bridge: 'גשר מתקפל' };
 const KEY = 'scribble-city-v5-bridge';
 const RING_C = [1, 0.82, 0.16];
 
@@ -257,7 +258,7 @@ export class BrokenBridge {
     if (near && !this.toldPen && !this.toldOnce && pos.x > 48) {
       this.toldPen = true;
       this.toldOnce = true;
-      const what = this.pen() ? 'תנועה — ציירו כנפיים, כדור פורח, רוטור או מדחף' : 'ציירו על המכונית משהו שיעביר אתכם';
+      const what = this.pen() ? 'תנועה — ציירו כנפי מטוס, כדור פורח, מדחף מסוק, ערכת מים או גשר מתקפל' : 'ציירו על המכונית משהו שיעביר אתכם';
       g.hud.radio(g.touch ? `הגשר שבור באמצע! ✎ — ${what}` : `הגשר שבור באמצע! Q — ${what}`);
       this.radioT = g.time + 6;
     }
@@ -281,10 +282,12 @@ export class BrokenBridge {
       if ((v.glide || 0) >= 0.45) this.used.add('wings');
       if (v.fzSpringT && g.time - v.fzSpringT < 3) this.used.add('spring');
     } else if (fz.float && fz.float.k >= 1 && v.fzWet) this.used.add('floats');
+    // (ROADMAP 11.28: over it on the folding bridge - game/gearmove2.js)
+    if (v.fzBridgeT && g.time - v.fzBridgeT < 8) this.used.add('bridge');
   }
 
   how() {
-    for (const k of ['plane', 'rotor', 'balloon', 'floats', 'spring', 'chute', 'wings']) if (this.used.has(k)) return k;
+    for (const k of ['plane', 'rotor', 'balloon', 'floats', 'spring', 'chute', 'wings', 'bridge']) if (this.used.has(k)) return k;
     return 'jump';
   }
 
@@ -355,7 +358,7 @@ export class BrokenBridge {
     const up = g.touch ? '▲' : 'רווח';
     const dn = g.touch ? '▼' : 'C';
     const wings = `כנפיים גדולות: מהר, ${up} — ממריאה, ${dn} — נוחתת על האי`;
-    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי מדחף — ולשוט מהחוף לרציף שמימין' : `שוב! ${wings} · או כדור פורח, רוטור`, 'info', 4.5);
+    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי ערכת מים — ולשוט מהחוף לרציף שמימין' : `שוב! ${wings} · או כדור פורח, מדחף מסוק, גשר מתקפל`, 'info', 4.5);
     else g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : `שוב! ${wings}`, 'info', 4.5);
   }
 
@@ -374,6 +377,8 @@ export class BrokenBridge {
     g.hud.toast(`הדרך שלכם: ${this.wayName(how)}`, 'good', 4.5);
     if (g.police) g.police.clear();
     if (g.money) g.money.earn(how === 'jump' ? 200 : 400, 'הגשר השבור');
+    // (ROADMAP 11.28: a blueprint page for it - game/gearplay.js)
+    if (g.gear) g.gear.play.page('הגשר השבור');
     if (g.gps) g.gps.clear();
     this.tellAt = g.time + 3;
     this.hint = null;

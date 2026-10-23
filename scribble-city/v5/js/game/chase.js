@@ -49,6 +49,11 @@ export class Chase {
 
   // the player's car while it is worth chasing like a car (moving, on the ground)
   quarry() {
+    // (ROADMAP 11.28: the drawn double of your car, while they are after it - game/gearguard2.js)
+    if (this.game.police.decoyOn && this.game.gear) {
+      const dc = this.game.gear.decoy();
+      if (dc) return dc;
+    }
     const v = this.game.player.inVehicle;
     if (!v || v.flies || v.kind === 'boat' || v.kind === 'tank' || v.dead) return null;
     return Math.abs(v.speed || 0) > 4 ? v : null;
@@ -224,6 +229,14 @@ export class Chase {
       if (game.damage) game.damage.hit(c, (v.pos.x + c.pos.x) / 2, 0.7, (v.pos.z + c.pos.z) / 2, 10);
       return true;
     }
+    // (ROADMAP 11.28) heavy armour (game/gearguard2.js): it is not spun round - the police car glances off
+    if (v.fz && v.fz.pitProof) {
+      c.pitT = game.time + PIT_GAP;
+      c.speed *= 0.7;
+      game.audio.play('clang', 0.6);
+      game.camRig.addShake(0.15);
+      return true;
+    }
     c.pitT = game.time + PIT_GAP;
     // which way round: the nose towards the side it came in from, the back shoved away from it
     const side = Math.sign(ox * fz - oz * fx) || 1;
@@ -280,7 +293,7 @@ export class Chase {
     }
     if (this.blocks.some((b) => b.gone)) this.blocks = this.blocks.filter((b) => !b.gone);
     this.blockT -= dt;
-    if (this.blockT > 0 || P.level < 2 || this.blocks.length) return;
+    if (this.blockT > 0 || P.level < 2 || this.blocks.length || P.jammed(3)) return;
     const v = this.quarry();
     if (!v || Math.abs(v.speed) < 8) return;
     // (if there is nowhere to put it, the next try is soon)

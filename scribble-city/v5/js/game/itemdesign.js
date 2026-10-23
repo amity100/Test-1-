@@ -728,7 +728,11 @@ function mgDesign(lines, ctx, o) {
   const aB = Math.max(len * (1 - bf), a0 + 0.28);
   const hr = clamp(t.hb * len * 0.9, 0.14, 0.21);
   const wr = hr * 0.62;
-  const multi = t.barrels >= 3;
+  // (ROADMAP 11.28: its level says what it can be - a minigun from level 3, two barrels side by side from
+  // level 2; drawn with three barrels or more at level 3, a minigun; else, from level 2, a pair)
+  const lv = o.lv || 1;
+  const multi = t.barrels >= 3 && lv >= 3;
+  const twin = !multi && lv >= 2;
   const rb = multi ? clamp(0.014 + len * 0.006, 0.02, 0.03) : clamp(0.026 + t.hbar * len * 0.1, 0.026, 0.045);
   const ya = hr * 0.64;
   const postH = 0.2;
@@ -748,14 +752,16 @@ function mgDesign(lines, ctx, o) {
   S.rod([aP, -postH], [aP, -0.03], 0.03, 'dark', 'base', { r1: 0.026, dash: true, n: 10 });
   S.box(aP - 0.11, aP + 0.11, -postH - 0.012, -postH + 0.012, 0.11, 'dark', 'base', { dash: true });
   if (!multi) {
-    S.tube(aB, aM - 0.07, ya, rb, rb * 0.95, 'metal');
-    if (t.hbar > 0.045) {
-      // (a barrel drawn thick: its cooling jacket, ringed)
-      const j1 = aB + (aM - aB) * 0.56;
-      S.tube(aB - 0.01, j1, ya, rb * 1.85, rb * 1.85, 'dark');
-      for (let i = 1; i <= 3; i++) S.ring(aB + ((j1 - aB) * i) / 4, ya, rb * 1.85, rb * 0.22, 'metal', 'gun', { noSil: true });
+    for (const bx of twin ? [-rb * 1.6, rb * 1.6] : [0]) {
+      S.tube(aB, aM - 0.07, ya, rb, rb * 0.95, 'metal', 'gun', { x: bx, noSil: bx > 0 });
+      if (t.hbar > 0.045) {
+        // (a barrel drawn thick: its cooling jacket, ringed)
+        const j1 = aB + (aM - aB) * 0.56;
+        S.tube(aB - 0.01, j1, ya, rb * 1.85, rb * 1.85, 'dark', 'gun', { x: bx, noSil: bx > 0 });
+        for (let i = 1; i <= 3; i++) S.ring(aB + ((j1 - aB) * i) / 4, ya, rb * 1.85, rb * 0.22, 'metal', 'gun', { noSil: true, x: bx });
+      }
+      S.tube(aM - 0.075, aM, ya, rb * 1.3, rb * 1.55, 'dark', 'gun', { x: bx, noSil: bx > 0 });
     }
-    S.tube(aM - 0.075, aM, ya, rb * 1.3, rb * 1.55, 'dark');
     S.box(aM - 0.15, aM - 0.12, ya + rb * 0.8, ya + rb + 0.05, 0.006, 'dark');
   } else {
     // (three barrels or more: round their axis, turning together - a minigun)
@@ -812,7 +818,7 @@ function mgDesign(lines, ctx, o) {
   };
   // (the drawing over it: as long as it, its barrel's line on the barrel)
   const over = G.N.map((L) => L.map(([a, b]) => [a * len, b * len + (ya - t.mid * len)]));
-  return finishGun({ G, t, S, X, toUV, over, len, pal, ctx, o, C, pivot: [0, yP, zP], muzzle: X(aM, ya), spinAt: multi ? X(0, ya) : null, item: 'mg', n: { barrels: t.barrels }, bend: t.wob * 0.02, bendR: [-aP, len - aP] });
+  return finishGun({ G, t: { ...t, style: multi ? 'minigun' : twin ? 'twin' : 'single' }, S, X, toUV, over, len, pal, ctx, o, C, pivot: [0, yP, zP], muzzle: X(aM, ya), spinAt: multi ? X(0, ya) : null, item: 'mg', n: { barrels: multi ? t.barrels : twin ? 2 : 1, twin: twin ? 1 : 0 }, bend: t.wob * 0.02, bendR: [-aP, len - aP] });
 }
 
 // what a cannon drawn side on has: { elev, mortar, wheels, flare, rings, taper, mid, barH }
@@ -1100,7 +1106,11 @@ function wingDesign(lines, ctx, o) {
   const C = carNums(ctx);
   const W = wingFrame(lines, o.side || 1);
   const t = wingTraits(W, lines);
-  const span = clamp(W.Ls * (1 - W.stem * 0.6) * 0.8, 0.7, 3);
+  // (ROADMAP 11.28: an aeroplane's wings - huge, out past the car's length each side; feathers or not,
+  // drawn, it is an aeroplane's wing)
+  t.feather = false;
+  const lv = o.lv || 1;
+  const span = clamp(3.3 + W.Ls * 0.4, 3.6, 4.6);
   const aspect = clamp(t.aspect, 2.4, 5.2);
   const cbar = clamp(span / aspect, 0.32, 1.25);
   const taper = clamp(t.taper, t.feather ? 0.55 : 0.4, 0.95);
@@ -1140,7 +1150,8 @@ function wingDesign(lines, ctx, o) {
     if (!o2.noSil) sil.push(ol);
     if (o2.dash) dash.push(ol);
   };
-  const thick = clamp(Cr * 0.1, 0.04, 0.085);
+  const thick = clamp(Cr * 0.1, 0.06, 0.12);
+  const groups = {};
   if (t.feather) {
     // (feathers: the coverts over its front, the long feathers fanned out behind and out at the tip)
     const back = (s) => mid(s) - chord(s) * 0.08;
@@ -1196,6 +1207,47 @@ function wingDesign(lines, ctx, o) {
       fair.push([0.04 + Math.cos(a) * 0.1, mid(0) + Math.sin(a) * Cr * 0.46]);
     }
     slab(fair, thick + 0.03, 'body', { dash: true, edge: 2 });
+    // (ROADMAP 11.28) a flap inboard at its trailing edge; its strobe light at the tip; a strut under it
+    // to the sill
+    const flap = [];
+    for (let i = 0; i <= 8; i++) {
+      const s = lerp(0.12, 0.46, i / 8) * span;
+      flap.push([s, mid(s) - chord(s) / 2 + 0.004]);
+    }
+    for (let i = 8; i >= 0; i--) {
+      const s = lerp(0.12, 0.46, i / 8) * span;
+      flap.push([s, mid(s) - chord(s) * 0.24]);
+    }
+    slab(flap, thick * 0.7, 'trim', { up: 0.004, noSil: true });
+    const sT = span * 0.985;
+    groups.strobe = { at: X(sT, mid(sT), 0.02), ax: 'y', kind: 'blink' };
+    prims.push({ t: 'sph', c: r3(X(sT, mid(sT), 0.02)), r: 0.045, k: 'light', g: 'strobe' });
+    prims.push({ t: 'cyl', p0: r3(X(span * 0.32, mid(span * 0.32), -thick / 2)), p1: r3([C.D.hw - 0.02, C.sill + 0.06, zc]), r0: 0.025, r1: 0.025, k: 'trim', g: 'gun', n: 8 });
+    if (lv >= 3) {
+      // (level 3: a jet engine slung under it - its intake, its casing, its nozzle; its flame as it
+      // pushes)
+      const sE = span * 0.42;
+      const cE = mid(sE);
+      const yE = -0.16;
+      const zE0 = zc + cE + chord(sE) * 0.62;
+      const zE1 = zc + cE - chord(sE) * 0.55;
+      const xE = xr + sE;
+      prims.push({ t: 'cyl', p0: r3([xE, yc + yE, zE0]), p1: r3([xE, yc + yE, zE1]), r0: 0.17, r1: 0.13, k: 'engine', g: 'gun', n: 18 });
+      prims.push({ t: 'tor', c: r3([xE, yc + yE, zE0]), R: 0.165, r: 0.025, ax: 'z', k: 'chrome', g: 'gun' });
+      prims.push({ t: 'cyl', p0: r3([xE, yc + yE, zE1]), p1: r3([xE, yc + yE, zE1 - 0.1]), r0: 0.12, r1: 0.09, k: 'dark', g: 'gun', n: 16 });
+      prims.push({ t: 'box', p0: r3([xE - 0.02, yc + yE + 0.1, zE1 + 0.15]), p1: r3([xE + 0.02, yc - 0.02, zE0 - 0.2]), k: 'trim', g: 'gun' });
+      groups.flame = { at: [xE, yc + yE, zE1 - 0.1], ax: 'z', kind: 'flame' };
+      prims.push({ t: 'cyl', p0: r3([xE, yc + yE, zE1 - 0.1]), p1: r3([xE, yc + yE, zE1 - 1.1]), r0: 0.09, r1: 0.015, k: 'flame', g: 'flame', n: 12, noSil: true });
+    }
+    // the tail: the half of its stabiliser on this side, and half its fin (the other side's copy is
+    // the other half), over the back of the roof
+    const K = ctx.K;
+    const yT = (K ? K.roofY : C.D.h) + 0.02;
+    const zT = -C.D.hl + 0.15;
+    const hS = clamp(span * 0.32, 0.9, 1.3);
+    prims.push({ t: 'slab', ax: 'y', c: yT + 0.18, ol: [[zT + 0.32, 0], [zT + 0.12, -hS], [zT - 0.12, -hS], [zT - 0.22, 0]].map(r2), W: 0.05, k: 'body', g: 'gun', edge: 2.2 });
+    prims.push({ t: 'slab', ax: 'x', c: 0.0125, ol: [[zT + 0.45, yT - 0.02], [zT + 0.02, yT + 0.78], [zT - 0.24, yT + 0.78], [zT - 0.22, yT - 0.02]].map(r2), W: 0.025, k: 'accent', g: 'gun', edge: 2 });
+    prims.push({ t: 'box', p0: r3([0, yT - 0.03, zT - 0.22]), p1: r3([0.05, yT + 0.2, zT + 0.3]), k: 'trim', g: 'gun' });
   }
   const outl = outlineOf(sil, span / 80);
   const targets = outl.map((P) => ({ P, closed: true }));
@@ -1216,14 +1268,19 @@ function wingDesign(lines, ctx, o) {
     fB: hc ? mix(hc, [1, 1, 1], 0.3) : [0.86, 0.85, 0.82],
     trim: hc ? mix(hc, [0, 0, 0], 0.25) : [0.55, 0.56, 0.6],
     accent: hc || [0.86, 0.16, 0.2],
+    light: [1, 1, 0.96],
+    engine: [0.7, 0.72, 0.75],
+    chrome: [0.85, 0.86, 0.9],
+    dark: DARK,
+    flame: [1, 0.66, 0.24],
   };
   const pl = placeOf('wing', lines, ctx, { side: o.side });
   const T3 = td.lines.map((L) => L.map(([s, c]) => r3(X(s, c, 0.01))));
   return {
-    shape: { design: 1, kind: 'wing', ax: 'y', c: yc, pivot: r3([xr, yc, zc]), role: t.feather ? 'dwing' : 'drawn', mirror: true, fill: 'x', prims, ink: td.lines.filter((L, i) => !td.fade[i]).map((L) => thin(L, 40).map(([s, c]) => r2(toUV(s, c)))), pal, dih: Math.round(t.dih * 100) / 100, bend: Math.round(t.wob * 0.03 * 1000) / 1000, bendR: [0, Math.round(span * 1000) / 1000] },
+    shape: { design: 1, kind: 'wing', ax: 'y', c: yc, pivot: r3([xr, yc, zc]), role: t.feather ? 'dwing' : 'gear', mirror: true, fill: 'x', prims, ink: td.lines.filter((L, i) => !td.fade[i]).map((L) => thin(L, 40).map(([s, c]) => r2(toUV(s, c)))), pal, groups, mats: { light: 'glow', flame: 'glow', chrome: 'metal', engine: 'metal' }, lv, dih: Math.round(t.dih * 100) / 100, bend: Math.round(t.wob * 0.03 * 1000) / 1000, bendR: [0, Math.round(span * 1000) / 1000] },
     at: r3([xr, yc, zc]),
     // (what the camera leans in on as it takes shape - game/fuse.js sketchCam: how far, - away)
-    focus: { at: r3([0, yc, zc]), k: 0.22 },
+    focus: { at: r3([0, yc, zc]), k: -0.35 },
     P3: pl.P3,
     T3,
     fade: td.fade,
@@ -1231,7 +1288,7 @@ function wingDesign(lines, ctx, o) {
     mirror: true,
     flip: 1,
     side: o.side || 1,
-    n: { span: Math.round(span * 100) / 100, chord: Math.round(cbar * 100) / 100, feather: t.feather ? 1 : 0 },
+    n: { span: Math.round(span * 100) / 100, chord: Math.round(cbar * 100) / 100, feather: 0, lv },
     traits: { kind: 'wing', style: t.feather ? 'feather' : 'plane', bilateral: W.bilateral, stem: Math.round(W.stem * 100) / 100, aspect: Math.round(aspect * 10) / 10, taper: Math.round(taper * 100) / 100, sweep: Math.round(t.sweep * 100) / 100, round, feathers: t.feather ? t.feathers : 0, dih: t.dih },
   };
 }
@@ -1490,12 +1547,13 @@ export function variantOf(id, lines) {
       const t = mgTraits(gunFrame(L));
       return t.barrels >= 3 ? { name: 'מיניגאן', say: `${t.barrels} קנים · מהיר פי 2` } : null;
     }
-    if (id === 'wing') {
-      const W = wingFrame(L, 1);
-      return wingTraits(W, L).feather ? { name: 'כנפי נוצות', say: 'טיפוס מהיר' } : null;
-    }
+
   } catch (err) {
     // (nothing to say yet)
   }
   return null;
 }
+
+// (ROADMAP 11.28) the drawing's reading and the morph's tools, for the things designed in game/gearlook.js
+export { boxOf, lenOf, dense, smooth, thin, featOf, circleOf, profileOf, wobOf, spreadOf, runOf, turn, tidy, outlineOf, rect, circ, bar, median, mix, hueOf, lum, lerp, r2, r3 };
+export const PAL = { METAL, DARK, IRON, BRONZE, WOOD, TAN, OLIVE, WICKER, CREAM, RED, YELLOW, ROPE };

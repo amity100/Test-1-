@@ -484,6 +484,12 @@ export class Traffic {
   }
 
   updateCar(c, dt) {
+    // (ROADMAP 11.28: held by a thing of the pen - stopped by a bolt, under a net, spun on oil, on a
+    // harpoon: moved by it - game/gear.js)
+    if (c.gear && this.game.gear && this.game.gear.holdCar(c, dt)) {
+      c.wheel += (c.speed * dt) / 0.36;
+      return;
+    }
     if (c.tail && c.poofT === undefined && !c.wrecked) {
       // after another car, the way it went (game/events.js: the police after a getaway car)
       this.follow(c, dt);

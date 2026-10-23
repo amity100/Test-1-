@@ -135,6 +135,8 @@ export class Player {
   hurt(amount, fromX, fromZ, at = null, kind = null, src = null) {
     if (this.mode === 'dead' || this.invuln > 0) return;
     if (this.inVehicle) {
+      // (ROADMAP 11.28: the rear shield, the dome - game/gearguard2.js)
+      if (this.game.gear && this.game.gear.shields(this.inVehicle, fromX, fromZ)) return;
       this.inVehicle.hurt(amount);
       return;
     }

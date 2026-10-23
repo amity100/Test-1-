@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeSurface, srgb, flashLight } from '../render/materials.js';
 import { clamp } from '../core/util.js';
 import { fmt } from './money.js';
+import { ITEMS } from './itemcat.js';
 
 // (ROADMAP 4.6; not with ?classic) The service station on Flamingo Ave (world/garages.js):
 //  - the body shop: drive into its bay and stop - the door comes down and the mechanic asks what
@@ -259,6 +260,9 @@ export class Garage {
     if (v.kind === 'car') choices.unshift({ label: `צבע חדש וציור על הרכב${M ? ` · ${fmt(PAINT_PRICE)}` : ''}`, fn: () => this.paint(v) });
     // (ROADMAP 8.1) or sell it
     if (M) choices.splice(choices.length - 1, 0, { label: this.saleLabel(v), fn: () => this.sell(v) });
+    // (ROADMAP 11.28) the things of the pen, a level up (not in the lab, where all are at their top)
+    const P = game.gear && game.gear.play;
+    if (P && !P.all() && v.kind === 'car') choices.splice(1, 0, { label: `ציוד מצויר: רמות (${P.state.open.filter((id) => P.level(id) >= 3).length} מתוך ${P.state.open.length} ברמה 3)`, fn: () => this.gearLevels(v) });
     game.dialog.show('מוסך INK & IRON', M ? 'שלום! מה עושים לרכב היום?' : 'שלום! מה עושים לרכב היום? (בינתיים הכול בחינם)', choices);
   }
 
@@ -278,6 +282,46 @@ export class Garage {
       }
       this.menu(v);
     });
+  }
+
+  // (ROADMAP 11.28) a level up for the things of the pen that are open (game/gearplay.js): those on the car
+  // first, eight to a page. Bought, the ones on the car work at it at once - and look it when drawn again
+  gearLevels(v, page = 0) {
+    const game = this.game;
+    const P = game.gear.play;
+    const M = game.money;
+    const on = new Set(v.fuse ? v.fuse.parts.map((q) => q.item).filter(Boolean) : []);
+    const ids = P.state.open.filter((id) => P.level(id) < 3).sort((a, b) => (on.has(b) ? 1 : 0) - (on.has(a) ? 1 : 0));
+    if (!ids.length) {
+      game.dialog.show('מוסך INK & IRON', 'כל מה שפתוח כבר ברמה 3. דפי שרטוט חדשים פותחים עוד ציוד', [{ label: 'חזרה', fn: () => this.menu(v) }]);
+      return;
+    }
+    const per = 8;
+    const pages = Math.ceil(ids.length / per);
+    const choices = ids.slice(page * per, page * per + per).map((id) => {
+      const lv = P.level(id);
+      const pr = P.price(id);
+      const it = ITEMS[id];
+      return {
+        label: `${it.name} ${'●'.repeat(lv)}${'○'.repeat(3 - lv)} ← ${it.lv[lv]}${M && pr ? ` · ${fmt(pr)}` : ''}${on.has(id) ? ' ✓' : ''}`,
+        fn: () => {
+          if (M && pr && !M.can(pr)) return M.refuse('מוסך INK & IRON', pr, false, () => this.gearLevels(v, page));
+          if (P.buy(id)) {
+            const n = P.level(id);
+            if (v.fuse) for (const q of v.fuse.parts) if (q.item === id) q.lv = n;
+            if (v.fuse && game.fuse) game.fuse.applyVeh(v);
+            game.audio.play('drill', 0.6);
+            game.audio.play('clang', 0.4);
+            game.fx.sparks(v.pos.x, v.pos.y + 0.6, v.pos.z, 8, [1, 0.8, 0.3]);
+            game.hud.toast(`${it.name} ברמה ${n}: ${it.lv[n - 1]}${on.has(id) ? ' — ציירו אותו שוב כדי לראות אותו' : ''}`, 'good', 3);
+          }
+          this.gearLevels(v, page);
+        },
+      };
+    });
+    if (pages > 1) choices.push({ label: `עוד (${page + 1}/${pages})`, fn: () => this.gearLevels(v, (page + 1) % pages) });
+    choices.push({ label: 'חזרה', fn: () => this.menu(v) });
+    game.dialog.show('מוסך INK & IRON', 'איזה ציוד מעלים רמה?', choices);
   }
 
   applyPaint(v, res) {

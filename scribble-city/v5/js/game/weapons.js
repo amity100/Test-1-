@@ -1364,6 +1364,12 @@ export class Weapons {
       // a car hit: dented, its glass, a tyre... (game/damage.js); yours keep their own count
       const c = hit.car;
       if (hit.own) {
+        // (ROADMAP 11.28: what the rear shield, the dome stop - game/gearguard2.js)
+        if (game.gear && game.gear.shields(c, pr.x - ux * 5, pr.z - uz * 5)) {
+          fx.sparks(hit.x, hit.y, hit.z, 8, [0.6, 0.9, 1]);
+          game.audio.play('clang', 0.4);
+          return;
+        }
         // (yours: the one you sit in takes what was meant for you)
         c.hurt(pr.owner === 'player' ? pr.damage * 0.5 : pr.damage);
         game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.6, true);

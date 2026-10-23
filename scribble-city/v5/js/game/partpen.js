@@ -2,6 +2,8 @@ import { readItem, CATS, CAT_ORDER } from './partnet.js';
 import { rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
 import { lookOf } from './itemlook.js';
 import { designOf, variantOf, DESIGNED } from './itemdesign.js';
+import { gearDesign, GEAR_DESIGNED } from './geardesign.js';
+import { ITEMS as CAT_ITEMS, CAT_NAME as CAT_NAMES } from './itemcat.js';
 import { gunOf } from './partsum.js';
 import { INKS } from './freeform.js';
 import { clamp } from '../core/util.js';
@@ -41,10 +43,10 @@ const ASK_NONE = 0.3;
 export const TIP_MS = 1500;
 // (ROADMAP 11.27) a moment after one went on, the legend says how to put it right
 const MADE_MS = 3200;
-const CAT_NAME = { weapon: 'נשק', func: 'תנועה', armor: 'הגנה' };
+const CAT_NAME = CAT_NAMES;
 const NONE_SAY = { weapon: 'לא זוהה נשק', func: 'לא זוהה אמצעי תנועה', armor: 'לא זוהה אמצעי הגנה' };
 // (ROADMAP 11.27) what tells each thing from the others as it is drawn - the tip's word for it
-const TELL = { cannon: 'גלגל = תותח', mg: 'קת = מקלע', flamer: 'להבה = להביור', bolt: 'זיגזג = ברק', blades: 'ידית = להבים', wing: 'נוצות = כנפיים', balloon: 'סל = כדור פורח', rotor: 'איקס = רוטור', prop: 'שלושה עלים = מדחף', jet: 'אש מאחור = סילון', spring: 'סליל = קפיץ', chute: 'חוטים = מצנח', armor: 'לוח = שריון', ram: 'חוד = איל ניגוח', star: 'חמישה קצוות = כוכב', smoke: 'ענן = עשן', spikes: 'שיניים = קוצים' };
+const TELL = Object.fromEntries(Object.entries(CAT_ITEMS).map(([id, it]) => [id, it.tell]));
 const CAT_ICON = {
   weapon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2 V8 M12 16 V22 M2 12 H8 M16 12 H22"/></svg>',
   func: '<svg viewBox="0 0 24 24"><path d="M12 13 L2 9 L3 12 L12 16 L21 12 L22 9 Z"/><circle cx="12" cy="6" r="2.5"/><path d="M12 8.5 V13"/></svg>',
@@ -52,25 +54,8 @@ const CAT_ICON = {
 };
 // each thing: its name, the part it is (game/fuse.js), where it goes on the car, its sound, and how
 // it is drawn - the legend's picture
-export const ITEMS = {
-  cannon: { name: 'תותח', type: 'barrel', v: 'turret', at: 'roof', snd: 'clank', icon: '<rect x="4" y="5" width="15" height="6" rx="1" transform="rotate(-18 11 8)"/><circle cx="8" cy="16" r="4.5"/><circle cx="8" cy="16" r="1"/>' },
-  mg: { name: 'מקלע', type: 'barrel', v: 'front', at: 'hood', snd: 'clank', icon: '<path d="M2 8 H20 L22 7 V10 H20 V11 H11 L9 15 H6 L7 11 H4 L2 13 Z"/>' },
-  flamer: { name: 'להביור', type: 'jet', v: 'front', at: 'nose', snd: 'whoosh', icon: '<path d="M12 22 C6 22 5 17 7 13 C8 15 9 15 9.5 14 C9 10 11 6 13 2 C13 6 17 8 17.5 12 C18.5 11 18.5 9.5 18 8.5 C21 12 20 22 12 22 Z"/>' },
-  bolt: { name: 'ברק', type: 'bolt', at: 'roof', snd: 'zap', icon: '<path d="M14 2 L6 13 H11 L9 22 L18 10 H13 Z"/>' },
-  blades: { name: 'להבים', type: 'blade', v: 'side', at: 'sides', snd: 'clank', icon: '<path d="M12 2 L14.5 5 V15 H9.5 V5 Z M7 15 H17 M12 15 V21 M10.5 21 H13.5"/>' },
-  wing: { name: 'כנפיים', type: 'wing', at: 'sides', snd: 'flap', icon: '<path d="M2 13 L19 6 L22 7.5 L21 10 L4 16 Z"/>' },
-  balloon: { name: 'כדור פורח', type: 'balloon', at: 'above', snd: 'whoosh', icon: '<path d="M12 2 C17 2 20 5 20 9 C20 13 16 15 15 17 H9 C8 15 4 13 4 9 C4 5 7 2 12 2 Z"/><rect x="9" y="19" width="6" height="3.5"/><path d="M9 17 V19 M15 17 V19"/>' },
-  rotor: { name: 'רוטור', type: 'rotor', at: 'roof', snd: 'whoosh', icon: '<path d="M3 4 L21 20 M21 4 L3 20"/><circle cx="12" cy="12" r="2"/>' },
-  prop: { name: 'מדחף', type: 'float', v: 'prop', at: 'tail', snd: 'bounce', icon: '<circle cx="12" cy="12" r="2.2"/><path d="M12 10 C9 6 10 2 12 2 C14 2 15 6 12 10 Z M13.8 13 C18 12 21 15 20 17 C19 19 15 17 13.8 13 Z M10.2 13 C6 12 3 15 4 17 C5 19 9 17 10.2 13 Z"/>' },
-  jet: { name: 'סילון', type: 'jet', v: 'back', at: 'tail', snd: 'whoosh', icon: '<path d="M12 22 C6 22 5 17 7 13 C8 15 9 15 9.5 14 C9 10 11 6 13 2 C13 6 17 8 17.5 12 C18.5 11 18.5 9.5 18 8.5 C21 12 20 22 12 22 Z"/>' },
-  spring: { name: 'קפיץ', type: 'spring', at: 'under', snd: 'bounce', icon: '<path d="M5 21 H19 M12 21 C4 19 20 17 12 15 C4 13 20 11 12 9 C4 7 20 5 12 3"/>' },
-  chute: { name: 'מצנח', type: 'chute', at: 'roof', snd: 'flap', icon: '<path d="M2 11 C2 3 22 3 22 11 C19 9.5 15 9.5 12 11 C9 9.5 5 9.5 2 11 Z M2 11 L12 21 L22 11 M12 11 V21"/>' },
-  armor: { name: 'שריון', type: 'armor', at: 'body', snd: 'clank', icon: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 12 H20 M12 4 V20"/>' },
-  ram: { name: 'איל ניגוח', type: 'blade', v: 'ram', at: 'nose', snd: 'clank', icon: '<path d="M12 3 L21 20 H3 Z"/>' },
-  star: { name: 'כוכב', type: 'star', at: 'roof', snd: 'magic', icon: '<path d="M12 2 L14.6 8.6 L21.5 9 L16.2 13.4 L17.9 20.4 L12 16.6 L6.1 20.4 L7.8 13.4 L2.5 9 L9.4 8.6 Z"/>' },
-  smoke: { name: 'ענן עשן', type: 'smoke', at: 'tail', snd: 'whoosh', icon: '<path d="M6 19 H18 C21.5 19 22.5 14.5 19.5 13 C20.5 8.5 15.5 7 14 9.5 C13 5 6.5 5.5 7.5 10.5 C3 10.5 2 19 6 19 Z"/>' },
-  spikes: { name: 'קוצים', type: 'spike', at: 'sides', snd: 'clank', icon: '<path d="M2 17 L5 7 L8 17 L11 7 L14 17 L17 7 L20 17 L22 11"/>' },
-};
+// (ROADMAP 11.28: thirty-five of them now - game/itemcat.js)
+export const ITEMS = CAT_ITEMS;
 // (the star's power lasts; the city's car weighs this, about)
 const STAR_T = 10;
 const BOOK_KEY = 'scribble-city-v5-pen';
@@ -130,7 +115,8 @@ export function nOf(id, z) {
     case 'chute': return { span: clamp(L, 2.4, 8) };
     case 'armor': return { cover: clamp((L * S) / 4, 0.3, 1) };
     case 'star': return { size: clamp(L, 0.7, 1.5) };
-    default: return {};
+    // (ROADMAP 11.28: a turbo, a jump, a rewind - their level says what they are, not their size)
+    default: return { size: clamp(L, 0.4, 3) };
   }
 }
 
@@ -185,7 +171,7 @@ export function statOf(id, n, mass, top = 28) {
     case 'star': return { text: `${STAR_T} שניות בלי פגע`, ok: true };
     case 'smoke': return { text: '6 שניות עשן', ok: true };
     case 'spikes': return { text: 'ניידת שנצמדת — נהרסת', ok: true };
-    default: return { text: '', ok: true };
+    default: return { text: (ITEMS[id] && ITEMS[id].does) || '', ok: true };
   }
 }
 
@@ -206,9 +192,15 @@ export function mountOf(id, ctx) {
     case 'tail': at = [0, Math.max(0.45, clear + 0.3), -D.hl - 0.05]; break;
     case 'under': at = [0, 0.15, 0]; break;
     case 'body': at = [D.hw, mid, 0]; break;
+    // (ROADMAP 11.28: at the wheels, on the dashboard, on the boot, on a roof rack; nowhere - the decoy)
+    case 'wheels': at = [D.hw + 0.05, ctx.r0 || 0.34, ctx.spots && ctx.spots.length ? ctx.spots[0].z : D.hl * 0.6]; break;
+    case 'dash': at = [0, (K && K.hood ? K.hood.y : D.h * 0.55) + 0.2, (K && K.hood ? K.hood.z : D.hl * 0.6) - 0.7]; break;
+    case 'trunk': at = [0, Math.max(0.6, clear + 0.55), -D.hl + 0.25]; break;
+    case 'rack': at = [0, roof + 0.12, -0.3]; break;
+    case 'none': at = [D.hw + 1.5, 0.6, 0]; break;
     default: at = [D.hw + 0.1, mid, -0.1];
   }
-  const pair = ITEMS[id].at === 'sides' || ITEMS[id].at === 'body';
+  const pair = ITEMS[id].at === 'sides' || ITEMS[id].at === 'body' || ITEMS[id].at === 'wheels';
   return { at, to: pair ? [at, [-at[0], at[1], at[2]]] : [at] };
 }
 
@@ -279,13 +271,14 @@ function fromPic(it) {
 // the part itself (game/fuse.js), made of one of the things, its numbers and its drawing d ({ M, side,
 // flip }: its look - none, the game's own): { part, L (game/itemlook.js lookOf: where each point of it
 // went) }
-export function itemPart(id, n, ctx, inkI, time, d = null) {
+export function itemPart(id, n, ctx, inkI, time, d = null, lv = 1) {
   const it = ITEMS[id];
   const has = d && d.M && d.M.length;
   // (ROADMAP 11.27: the machine gun, the cannon, wings, the balloon - designed from the drawing; the
-  // rest its own lines, as drawn)
-  const L = has ? (DESIGNED.has(id) && designOf(id, d.M, ctx, { side: d.side, flip: d.flip, ink: INKS[inkI], n })) || lookOf(id, d.M, ctx, { side: d.side, flip: d.flip }) : null;
-  const part = { type: it.type, v: it.v, n: { ...n, ...((L && L.n) || {}) }, at: L ? L.at : mountOf(id, ctx).at.slice(), ink: inkI, t0: time, cost: 0, item: id, id: Math.random().toString(36).slice(2, 8) };
+  // rest its own lines, as drawn. ROADMAP 11.28: and every other thing - game/gearlook.js - at its level)
+  const o = { side: d && d.side, flip: d && d.flip, ink: INKS[inkI], n, lv };
+  const L = has ? (DESIGNED.has(id) && designOf(id, d.M, ctx, o)) || (GEAR_DESIGNED.has(id) && gearDesign(id, d.M, ctx, o)) || lookOf(id, d.M, ctx, { side: d.side, flip: d.flip }) : null;
+  const part = { type: it.type, v: it.v, n: { ...n, ...((L && L.n) || {}) }, at: L ? L.at : mountOf(id, ctx).at.slice(), ink: inkI, t0: time, cost: 0, item: id, lv, id: Math.random().toString(36).slice(2, 8) };
   if (L) part.shape = L.shape;
   if (id === 'star') part.until = time + STAR_T;
   if (id === 'prop') {
@@ -487,16 +480,26 @@ export class PartPen {
     if (!R) return false;
     // (ROADMAP 11.27: not sure of two - the likelier of them, the tip said what tells them apart; so
     // too when not sure it is one of them at all: what the tip showed is what goes on)
-    const item = R.item || (R.ask ? R.ask[0] : null);
+    // (the tests: what it is made as, whatever it was read as)
+    const item = this.force || R.item || (R.ask ? R.ask[0] : null);
+    this.force = null;
     if (!item) {
       this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('rubber', 0.5);
       g.hud.toast(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, 'bad', 2.6);
       return false;
     }
+    // (ROADMAP 11.28: not open yet - blueprint pages to find first, game/gearplay.js: the ink goes)
+    const play = g.gear && g.gear.play;
+    if (play && !play.isOpen(item)) {
+      this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
+      g.audio.play('fail', 0.5);
+      g.hud.toast(`${ITEMS[item].name} עוד נעול — ${play.lockSay(item)}`, 'bad', 2.8);
+      return false;
+    }
     const v = o.v;
     const d = drawnOf(lines, o.F);
-    const n = item === R.item ? R.n : nOf(item, R.z);
+    const n = item === R.item && R.n ? R.n : nOf(item, R.z);
     const got = this.putOn(v, item, n, d, inkI, FLY_MS);
     if (!got) return false;
     const { part, L, res } = got;
@@ -521,7 +524,15 @@ export class PartPen {
   // a thing made of drawing d on the car v - the one of its kind there before off: { part, L, res } or null
   putOn(v, item, n, d, inkI, pop) {
     const fz = this.fz;
-    const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d);
+    const G = this.game.gear;
+    // (ROADMAP 11.28: as many of a category on the car at once as the game has opened up - the oldest of
+    // them off: game/gearplay.js slots)
+    if (G && v.fuse) {
+      const cat = ITEMS[item].cat;
+      const mine = v.fuse.parts.filter((q) => q.item && q.item !== item && ITEMS[q.item] && ITEMS[q.item].cat === cat);
+      while (mine.length && mine.length >= G.play.slots(cat)) fz.removeVeh(v, mine.shift(), true);
+    }
+    const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d, G ? G.level(item) : 1);
     fz.justAdded = part;
     // (ROADMAP 11.27: designed, flown to - it fills once its ink has straightened onto it)
     fz.popDelay = L && L.T3 && pop >= FLY_MS ? pop + TIDY_MS : pop;
@@ -641,6 +652,12 @@ export class PartPen {
       g.audio.play('rubber', 0.45);
       this.slotSig = '';
       return true;
+    }
+    // (ROADMAP 11.28: kept in the lab, not open yet in this game - game/gearplay.js)
+    const play = g.gear && g.gear.play;
+    if (play && !play.isOpen(it.item)) {
+      g.hud.toast(`${ITEMS[it.item].name} עוד נעול — ${play.lockSay(it.item)}`, 'bad', 2.4);
+      return false;
     }
     // (as it was drawn - one kept before its drawing was: from its little picture)
     const got = this.putOn(v, it.item, it.n, it.d || fromPic(it), it.ink, 120);
@@ -973,15 +990,20 @@ export class PartPen {
     const L = this.live;
     const M = this.made && !this.made.old ? this.made : null;
     const lit = L && L.item ? L.item : M ? M.item : '';
-    const sig = `${this.isOpen}|${this.cat}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}`;
+    // (ROADMAP 11.28: what is open yet, and at what level - game/gearplay.js)
+    const play = this.game.gear && this.game.gear.play;
+    const sig = `${this.isOpen}|${this.cat}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}|${play ? `${play.state.open.length}:${JSON.stringify(play.state.lv)}` : ''}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     el.classList.toggle('on', this.isOpen);
     if (!this.isOpen) return;
     const say = L && L.ask ? 'עוד פרט אחד יכריע' : M ? 'לא יצא נכון? ↶ ומציירים שוב' : 'מה שמציירים — זה מה שיוצא';
     const items = CATS[this.cat].map((id) => {
-      const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : ''].filter(Boolean).join(' ');
-      return `<div class="${cls}" data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b></div>`;
+      const shut = play && !play.isOpen(id);
+      const lv = play && !shut && !play.all() ? play.level(id) : 0;
+      const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : '', shut ? 'lock' : ''].filter(Boolean).join(' ');
+      const tag = shut ? `<i class="pp-lock" title="${play.lockSay(id)}"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></i>` : lv > 1 ? `<i class="pp-lv">${'●'.repeat(lv)}</i>` : '';
+      return `<div class="${cls}" data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b>${tag}</div>`;
     }).join('');
     el.innerHTML = `<div class="pp-say${M ? ' fix' : ''}">${say}</div><div class="pp-its">${items}</div>`;
   }
@@ -1203,6 +1225,16 @@ function mountLines(id, ctx) {
     case 'nose': return [[[-D.hw * 0.9, y, z], [D.hw * 0.9, y, z]], [[-0.3, y, z + 0.1], [0, y, z + 0.45], [0.3, y, z + 0.1]]];
     case 'tail': return [ring(0, y, z, 0.3, 'z'), [[0, y, z], [0, y, z - 0.45]]];
     case 'under': return [ring(0, y, 0, 0.55)];
+    case 'dash': return [ring(0, y, z, 0.16, 'z')];
+    case 'trunk': return [[[-D.hw * 0.8, y, z], [D.hw * 0.8, y, z]], [[0, y, z], [0, y + 0.4, z]]];
+    case 'rack': return [[[-0.5, y, -0.5], [0.5, y, -0.5], [0.5, y, 0.5], [-0.5, y, 0.5], [-0.5, y, -0.5]]];
+    case 'none': return [ring(D.hw + 1.5, 0.05, 0, 0.9)];
+    case 'wheels': {
+      const out = [];
+      const r = (ctx.r0 || 0.34) * 1.05;
+      for (const s of ctx.spots || []) out.push(Array.from({ length: 21 }, (_, i) => [s.x + Math.sign(s.x) * 0.12, r + Math.sin((i / 20) * Math.PI * 2) * r, s.z + Math.cos((i / 20) * Math.PI * 2) * r]));
+      return out;
+    }
     case 'body': {
       const yy = y;
       return [[[D.hw + 0.04, yy, -D.hl * 0.8], [D.hw + 0.04, yy, D.hl * 0.8], [-D.hw - 0.04, yy, D.hl * 0.8], [-D.hw - 0.04, yy, -D.hl * 0.8], [D.hw + 0.04, yy, -D.hl * 0.8]]];
