@@ -420,6 +420,8 @@ export function oceanHotel(ctx, spec) {
   };
   // (v5, GTA IV) the wall round a window (or a group of them) standing out, so the glass is set
   // back in it; a sill of stone under it; now and then an air conditioner through the wall under it
+  // (not under the first floor's: there the shop's neon stands in the same plane, and the box
+  // went through its letters)
   const reveal = (sf, u0, u1, v0, v1, o = {}) => {
     const rid = nextId();
     const d = 0.17;
@@ -429,12 +431,13 @@ export function oceanHotel(ctx, spec) {
     P.box(M.wall, sf, u1 + 0.07, v0 - 0.07, -0.02, u1 + 0.07 + t, v1 + 0.07, d, rc, rid, FB.BACK | FB.BOTTOM);
     if (o.head !== false) P.box(M.wall, sf, u0 - 0.07 - t, v1 + 0.07, -0.02, u1 + 0.07 + t, v1 + 0.15, d, rc, rid, FB.BACK);
     P.box(M.frame, sf, u0 - 0.12 - t, v0 - 0.17, -0.02, u1 + 0.12 + t, v0 - 0.07, d + 0.06, style === 'med' ? srgb(0.95, 0.9, 0.82) : WHITE, nextId(), FB.BACK);
-    if (o.ac && style !== 'med' && hr() < 0.14) {
+    if (o.ac && style !== 'med' && v0 > CURB + GROUND + FH && hr() < 0.14) {
       const uc0 = (u0 + u1) / 2 + (hr() - 0.5) * (u1 - u0) * 0.5;
       const aid = nextId();
       P.box(M.steel, sf, uc0 - 0.36, v0 - 0.72, -0.02, uc0 + 0.36, v0 - 0.26, 0.3, COL.acBody, aid, FB.BACK);
       P.box(M.frame, sf, uc0 - 0.3, v0 - 0.66, 0.3, uc0 + 0.3, v0 - 0.32, 0.315, COL.acGrille, aid, FB.BACK);
-      if (hr() < 0.5) P.box(M.frame, sf, uc0 - 0.05, v0 - 0.72 - (0.5 + hr()), -0.02, uc0 + 0.04, v0 - 0.72, 0.014, darker(wall, 0.84), nextId(), FB.BACK);
+      // (its drip down the wall, stopping over the window under it, not across its glass)
+      if (hr() < 0.5) P.box(M.frame, sf, uc0 - 0.05, v0 - 0.72 - (0.4 + hr() * 0.45), -0.02, uc0 + 0.04, v0 - 0.72, 0.014, darker(wall, 0.84), nextId(), FB.BACK);
     }
   };
   // the windows of a bay [b0, b1] on one floor

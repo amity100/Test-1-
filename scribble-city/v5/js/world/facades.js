@@ -389,8 +389,10 @@ export function deepWindow(P, f, u0, v0, u1, v1, o) {
     P.box(M.frame, f, u0 + t, ay0, back + 0.01, u1 - t, ay1 + 0.02, back + 0.03, C(0.82, 0.8, 0.74), aid, FB.BACK);
     P.box(M.frame, f, u0 + t, ay1 + 0.02, back + 0.03, u1 - t, ay1 + 0.08, back + 0.09, sash, sid, FB.BACK);
     for (const k of [-0.32, 0.32]) P.bar(M.frame, f.p(uc + k * aw, v0 - 0.42, 0.01), f.p(uc + k * aw, ay0 - 0.01, 0.3), 0.035, COL.ironRust, aid);
-    // (what it drips has drawn a streak down the wall)
-    if (r && r() < 0.6) P.box(M.frame, f, uc - 0.05 + (r() - 0.5) * 0.2, v0 - 0.12 - (0.6 + r() * 1.3), 0.0, uc + 0.04 + (r() - 0.5) * 0.2, v0 - 0.12, 0.014, COL.grime, nextId(), FB.BACK);
+    // (what it drips has drawn a streak down the wall: no further than a metre, so that it stops on
+    // the wall over the head of the window under it - longer, it hung in the air across that one's
+    // hole, the wall set back behind it)
+    if (r && r() < 0.6) P.box(M.frame, f, uc - 0.05 + (r() - 0.5) * 0.2, v0 - 0.12 - (0.45 + r() * 0.55), 0.0, uc + 0.04 + (r() - 0.5) * 0.2, v0 - 0.12, 0.014, COL.grime, nextId(), FB.BACK);
   }
   // the sill: stone, from the back of the hole out over the wall
   const sillId = nextId();
