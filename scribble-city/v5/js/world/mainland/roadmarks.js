@@ -12,7 +12,8 @@ import { stormDrain, manhole } from './roadside.js';
 // asphalt; a round one where a pothole was filled), the black snakes of sealed cracks, the dark
 // drips where the cars wait. The bike routes have their bicycles painted on a green ground in the
 // lane by the curb; the bayfront boulevard its own bike lane; the streets round the school SLOW
-// SCHOOL XING; a corner with no light its STOP.
+// SCHOOL XING. (A corner with no light is one the road only turns at: the cars go round it without
+// stopping, world/roads.js lightAt - no STOP painted for them to drive over.)
 //
 // Everything is laid out for the whole stretch from the stretch's own dice (the same however the
 // tiles cut it: every throw is thrown whether its mark is this tile's or not, and a mark's own
@@ -33,9 +34,6 @@ for (let i = MAIN0; i < NODES.length; i++) {
 export const nodeOf = (a, s) => (a && s ? NODE_AT.get(`${a.i},${s.j}`) || null : null);
 const BLOCK_AT = new Map(M_BLOCKS.map((b) => [`${b.col},${b.row}`, b]));
 export const blockAt = (col, row) => BLOCK_AT.get(`${col},${row}`) || null;
-
-// a crossing where every way stops (no light: the corners of the grid)
-export const stopped = (n) => !!n && !n.signal;
 
 // the bike routes: the lane by the curb shared with the bicycles, painted (River Avenue, Fairfax;
 // NE 11th, Calle Ocho); the bayfront has a lane of their own
@@ -80,11 +78,6 @@ export function markRoad(ctx, P, own, road, alongZ, c, t0, t1, n0, n1, key, o = 
     if (to) {
       if (mine((u0 + half) / 2, L - 3.7)) P.box(f, u0, L - 3.95, half - 0.25, L - 3.5, WHITE, y);
       busy.push([L - 4, L, 0, half]);
-      if (stopped(to)) {
-        const fw = shift(f, (u0 + half) / 2);
-        if (mine((u0 + half) / 2, L - 8)) paintWord(P, fw, 'STOP', L - 8.6, WHITE, y, 0.5, 2.3, 0.14);
-        busy.push([L - 9, L - 6, 0, half]);
-      }
       // the arrows: the way(s) out of the crossing from each lane (no left turn where the way goes
       // on: game/traffic.js turns nobody across anybody)
       if (lanes.length >= 2 || bay) {

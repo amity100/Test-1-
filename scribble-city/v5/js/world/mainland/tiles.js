@@ -22,8 +22,8 @@ import { markRoad, markCrossing, nodeOf, blockAt, schoolBeside, BIKE_AVES, BIKE_
 // the lanes' arrows, the drains, the manholes, the patches and the sealed cracks, the bicycles of
 // the bike routes (world/mainland/roadmarks.js); at the corners the sidewalk let down to the
 // zebras, the boxes of the hand and the walking man, the green blades with the two names, the box
-// that runs the lights, the iron posts on the busy ones, a stop sign where there is no light
-// (world/mainland/roadside.js); along the curbs the red where nobody stops, the yellow where the
+// that runs the lights, the iron posts on the busy ones, the post with the names where there is
+// no light (world/mainland/roadside.js); along the curbs the red where nobody stops, the yellow where the
 // trucks load, the plates on the lamp posts; the trees in their grates in town, in their strip of
 // grass where people live, and there the wooden poles and their wires; the sidewalks' own wear.
 // What is painted is gathered a colour at a time and added as one part each (one more draw a
@@ -172,8 +172,10 @@ function cornerThings(tctx, n) {
   }
 }
 
-// a corner with no lights (the grid's corners): the zebras on each of its ways, a stop sign for
-// each way in, the names over the first
+// a corner with no lights (the grid's corners, where the road only turns: the cars go round it
+// without stopping - world/roads.js lightAt, game/traffic.js - so no stop sign they would drive
+// past): the zebras on each of its ways, and short of the first, on the corner to the right of
+// the cars coming in, the post with the two roads' names
 function stopCorner(tctx, n) {
   const a = n.ave;
   const s = n.street;
@@ -188,14 +190,15 @@ function stopCorner(tctx, n) {
       const x0 = ex < 0 ? a.x - a.half - 3.2 : a.x + a.half + 0.4;
       zebra(tctx, x0, x0 + 2.8, s.z - s.half, s.z + s.half, true);
     }
-    // (the cars coming in from m go -ex, -ez: the sign on the corner to their right, short of the zebra)
+    if (!first) continue;
+    first = false;
+    // (the cars coming in from m go -ex, -ez: the post on the corner to their right, short of the zebra)
     const dx = -ex;
     const dz = -ez;
     const along = dz !== 0;
     const back = (along ? s.half : a.half) + 3.6;
     const side = (along ? a.half : s.half) + 0.5;
-    stopPost(tctx, n, n.x - dx * back - dz * side, n.z - dz * back + dx * side, dx, dz, first);
-    first = false;
+    stopPost(tctx, n, n.x - dx * back - dz * side, n.z - dz * back + dx * side, dx, dz, true, { sign: false });
   }
 }
 

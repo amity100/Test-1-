@@ -7,8 +7,9 @@ import { roadKit, signFace } from './roadkit.js';
 // (v5, GTA IV streets) The things of the mainland's corners and curbs that the street's tiles
 // stand there (world/mainland/tiles.js): the sidewalk let down to the street where the zebras
 // land, its yellow pad of bumps for the ones who cannot see; the box of the hand and the walking
-// man on the light's pole, the button to push; the green blades with the two names; the stop sign
-// where there is no light, the grey box that runs the lights, the iron posts on the busy corners;
+// man on the light's pole, the button to push; the green blades with the two names (on a post of
+// their own where there is no light); the grey box that runs the lights, the iron posts on the
+// busy corners;
 // and where people live, the wooden poles of the wires along the curb, the lamp on their arm.
 //
 // (Every picture on them - a name, a hand, a plate - is a quad a few millimetres off its board:
@@ -255,8 +256,9 @@ export function nameBlades(ctx, n, x, y, z, obj = 0) {
 }
 
 // a post by the curb with a stop sign facing the cars coming along (dx, dz), the ALL WAY plate
-// under it, and the names over it (names)
-export function stopPost(ctx, n, x, z, dx, dz, names) {
+// under it, and the names over it (names); o.sign false: the post and its names only (a corner
+// the cars go round without stopping)
+export function stopPost(ctx, n, x, z, dx, dz, names, o = {}) {
   const M = ctx.M;
   const K = roadKit();
   const id = ctx.objects.begin(ctx, 'signPole', x, z);
@@ -265,10 +267,12 @@ export function stopPost(ctx, n, x, z, dx, dz, names) {
   const fx = -dx;
   const fz = -dz;
   const yaw = Math.atan2(fx, fz);
-  put(ctx, M.prop, new THREE.BoxGeometry(0.76, 0.76, 0.02), x + fx * 0.06, CURB + 2.3, z + fz * 0.06, yaw, srgb(0.7, 0.7, 0.72));
-  signFace(ctx, x + fx * 0.074, CURB + 2.3, z + fz * 0.074, fx, fz, 0.76, 0.76, K.rects.stop);
-  put(ctx, M.prop, new THREE.BoxGeometry(0.46, 0.23, 0.015), x + fx * 0.06, CURB + 1.75, z + fz * 0.06, yaw, srgb(0.7, 0.7, 0.72));
-  signFace(ctx, x + fx * 0.072, CURB + 1.75, z + fz * 0.072, fx, fz, 0.44, 0.22, K.rects.allway);
+  if (o.sign !== false) {
+    put(ctx, M.prop, new THREE.BoxGeometry(0.76, 0.76, 0.02), x + fx * 0.06, CURB + 2.3, z + fz * 0.06, yaw, srgb(0.7, 0.7, 0.72));
+    signFace(ctx, x + fx * 0.074, CURB + 2.3, z + fz * 0.074, fx, fz, 0.76, 0.76, K.rects.stop);
+    put(ctx, M.prop, new THREE.BoxGeometry(0.46, 0.23, 0.015), x + fx * 0.06, CURB + 1.75, z + fz * 0.06, yaw, srgb(0.7, 0.7, 0.72));
+    signFace(ctx, x + fx * 0.072, CURB + 1.75, z + fz * 0.072, fx, fz, 0.44, 0.22, K.rects.allway);
+  }
   ctx.col.addCircle(x, z, 0.1, 0, H, 'pole');
   ctx.objects.end(ctx, id);
   if (names) nameBlades(ctx, n, x, CURB + 4.0, z, id);
