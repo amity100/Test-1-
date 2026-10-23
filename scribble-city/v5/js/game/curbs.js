@@ -457,6 +457,56 @@ export class Curbs {
     return best;
   }
 
+  // (game/fleet.js: a taxi stopping for a fare, or to let one out) where on its road, near along
+  // metres on from c (between lo and hi), there is a gap of need metres between the cars parked
+  // at the curb on its right for a person to step through to its back door: the middle of the
+  // nearest such gap (along itself where nothing is parked near it)
+  gapAt(c, along, lo, hi, need) {
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    const iv = this._iv || (this._iv = []);
+    iv.length = 0;
+    const P = this.traffic.parked;
+    for (let i = 0; i < P.length; i++) {
+      const o = P[i];
+      if (o.taken || o.flat || o.poofT !== undefined) continue;
+      const dx = o.pos.x - c.pos.x;
+      const dz = o.pos.z - c.pos.z;
+      if (Math.abs(dx) + Math.abs(dz) > hi + 12) continue;
+      const a = dx * fx + dz * fz;
+      const l = dx * -fz + dz * fx;
+      if (l < 1.2 || l > 5.5 || a + o.halfLen < lo - need || a - o.halfLen > hi + need) continue;
+      iv.push(a - o.halfLen, a + o.halfLen);
+    }
+    if (!iv.length) return along;
+    // (the free stretches between them, ends and all: the point of each nearest along)
+    let best = along;
+    let bd = Infinity;
+    let from = -1e9;
+    const n = iv.length / 2;
+    for (let k = 0; k <= n; k++) {
+      // (the next car's start - in order along the curb)
+      let next = 1e9;
+      let ni = -1;
+      for (let j = 0; j < n; j++) if (iv[2 * j] >= from && iv[2 * j] < next && iv[2 * j + 1] > from) {
+        next = iv[2 * j];
+        ni = j;
+      }
+      const g0 = Math.max(from, lo - need / 2);
+      const g1 = Math.min(next, hi + need / 2);
+      if (g1 - g0 >= need) {
+        const at = Math.max(g0 + need / 2, Math.min(g1 - need / 2, along));
+        if (Math.abs(at - along) < bd) {
+          bd = Math.abs(at - along);
+          best = at;
+        }
+      }
+      if (ni < 0) break;
+      from = iv[2 * ni + 1];
+    }
+    return best;
+  }
+
   // the parked car c into the traffic: a car of the traffic in its lane beside it, standing where
   // c stood (eased over from the lane as far as c is), that signals and pulls out as it rolls
   pullOut(L) {

@@ -249,10 +249,19 @@ export class Fleet {
       P.t += dt;
       // pulled up: in they get, at the back door on the curb side
       if (c.speed < 0.3 && P.along0 - P.run < 1.5) {
-        P.stopped = true;
         const dx = c.pos.x - fx * 0.7 - fz * (c.halfWid + 0.45);
         const dz = c.pos.z - fz * 0.7 + fx * (c.halfWid + 0.45);
         P.door.set(dx, 0, dz);
+        if (!P.stopped) {
+          P.stopped = true;
+          // (the sidewalk just in from the curb, level with the door: where they cross from)
+          const g = c.path && c.path.gates[0];
+          if (g && g.off !== undefined) {
+            const road = g.dz !== 0 ? g.from.ave : g.from.street;
+            const v = road.half - g.off - (c.side || 0) + 0.7;
+            P.via = [c.pos.x - fx * 0.7 - fz * v, c.pos.z - fz * 0.7 + fx * v];
+          }
+        }
         if (Math.hypot(w.pos.x - dx, w.pos.z - dz) < 0.5) {
           c.fare = w.fig.look;
           c.fareT = 35 + Math.random() * 60;
@@ -308,7 +317,9 @@ export class Fleet {
           c.fare = null;
           return;
         }
-        const left = Math.max(9, (c.speed * c.speed) / (2 * 2.4));
+        // (its back door by a gap between the parked cars, for them to step out onto the sidewalk)
+        const left0 = Math.max(9, (c.speed * c.speed) / (2 * 2.4));
+        const left = this.traffic.curbs ? this.traffic.curbs.gapAt(c, left0, left0, left0 + 14, 1.4) + 0.7 : left0;
         c.drop = { left, run: 0 };
         c.pull = true;
         c.pullTo = this.traffic.curbRoom(c, left);
@@ -341,7 +352,10 @@ export class Fleet {
   hail(c, w, along) {
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
-    const P = { who: w, along0: along + 0.7, run: 0, t: 0, stopped: false, door: new THREE.Vector3(), arm: new THREE.Vector3() };
+    // (GTA IV: its back door by a gap between the cars parked at the curb, near where they stand -
+    // they step through it, not through a parked car: game/curbs.js gapAt)
+    const at = this.traffic.curbs ? this.traffic.curbs.gapAt(c, along, Math.max(8, along - 6), along + 18, 1.4) : along;
+    const P = { who: w, along0: at + 0.7, run: 0, t: 0, stopped: false, door: new THREE.Vector3(), arm: new THREE.Vector3(), via: null, go: { x: 0, z: 0, speed: 1.7 } };
     c.pickup = P;
     const roadYaw = Math.atan2(fz, -fx);
     w.ctrl = (me) => {
@@ -353,7 +367,12 @@ export class Fleet {
         return null;
       }
       if (me.fig.reachR === P.arm) me.fig.reachR = null;
-      return { x: P.door.x, z: P.door.z, speed: 1.7 };
+      // (along the sidewalk to the gap first, then across to the door)
+      const V = P.via;
+      if (V && !P.atVia && Math.hypot(me.pos.x - V[0], me.pos.z - V[1]) < 0.6) P.atVia = true;
+      P.go.x = V && !P.atVia ? V[0] : P.door.x;
+      P.go.z = V && !P.atVia ? V[1] : P.door.z;
+      return P.go;
     };
     this.stats.hails++;
     if (this.near(c, 40)) this.game.bubbles.say(w, pick(['Taxi!', 'Taxi! Over here!', 'Hey, taxi!']));
