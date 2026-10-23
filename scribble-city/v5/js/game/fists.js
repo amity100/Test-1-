@@ -201,7 +201,8 @@ export class Fists {
     // (a strike straight after a blow was blocked: the counter, harder; the fighting skill, ROADMAP
     // 5.6)
     const sk = game.skills;
-    const power = (game.time - this.blockT < 0.8 ? 1.6 : 1) * (sk ? sk.fightMul : 1);
+    // (ROADMAP 11.20: a blade drawn on your arm - game/fuse.js)
+    const power = (game.time - this.blockT < 0.8 ? 1.6 : 1) * (sk ? sk.fightMul : 1) * (game.fuse && game.fuse.heroHas('blade') ? 2.5 : 1);
     if (who) {
       const res = who.mgr === game.enemies ? game.enemies.strike(who, s, f, power) : game.civilians.struck(who, s, f, power);
       if (!res) return;

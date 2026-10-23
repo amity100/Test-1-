@@ -510,6 +510,8 @@ export class HUD {
       g.strokeRect(-5 / s, -4 / s, 10 / s, 8 / s);
       g.restore();
     }
+    // (ROADMAP 11.28: the blueprint pages near you - game/gearpages.js)
+    if (game.gear) game.gear.pages.mini(g, p, s);
     const barShop = this.barShop || (this.barShop = (game.world.shops || []).find((sh) => sh.kind === 'bar') || null);
     const bar = barShop ? { x: barShop.door[0], z: barShop.door[2] } : null;
     if (bar) {
