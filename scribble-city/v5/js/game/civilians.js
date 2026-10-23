@@ -844,7 +844,10 @@ export class Civilians {
     const ux = dx / l;
     const uz = dz / l;
     const way = Math.abs(ux) > Math.abs(uz) ? (ux > 0 ? 1 : 2) : uz > 0 ? 3 : 4;
-    const key = (Math.round(c.pos.x / 3) * 4099 + Math.round(c.pos.z / 3)) * 5 + way;
+    // (the corner known by where its crossing goes - the far corner, the same point of the walk
+    // for everybody crossing there - not by where each one happened to stop: two people arriving a
+    // step apart were two corners, each with its own places, and stood inside each other)
+    const key = (Math.round(tx * 2) * 8191 + Math.round(tz * 2)) * 5 + way;
     let C = this.curbs.get(key);
     if (!C) {
       C = { x: c.pos.x, z: c.pos.z, ux, uz, used: [] };
@@ -855,8 +858,8 @@ export class Civilians {
       const o = C.used[k];
       if (o && o !== c && o.alive && !o.gone && o.waitAt && o.waitAt.C === C) continue;
       const [lat, back] = CURB_SLOTS[k];
-      const x = C.x + ux * (1.9 - back) - uz * lat;
-      const z = C.z + uz * (1.9 - back) + ux * lat;
+      const x = C.x + C.ux * (1.9 - back) - C.uz * lat;
+      const z = C.z + C.uz * (1.9 - back) + C.ux * lat;
       // (room for a body there: a person is 0.33 m round)
       if (col.pointInside(x, 1.0, z, 0.36)) continue;
       C.used[k] = c;
@@ -1310,8 +1313,10 @@ export class Civilians {
     if (!c) return;
     const i = this.list.indexOf(c);
     if (i >= 0) this.list.splice(i, 1);
-    // (their place at the curb free again)
+    // (their place at the curb free again; and gone, for whoever still knows them - the friend
+    // posing for their picture, the others of their group looking at them, game/streetsocial.js)
     this.leaveCurb(c);
+    c.gone = true;
     c.dispose();
   }
 

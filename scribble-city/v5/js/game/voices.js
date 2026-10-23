@@ -567,10 +567,12 @@ export class Voices {
         this.stats.bumps++;
         continue;
       }
-      // the word after you, if you are still in earshot
+      // the word after you, if you are still in earshot (and only just after: not the next time you
+      // come by, minutes later)
       if (c.grumbleT && now > c.grumbleT) {
+        const fresh = now < c.grumbleT + 3;
         c.grumbleT = 0;
-        if (d < 12 && !c.convo) {
+        if (fresh && !c.convo) {
           c.gestNext = 'fist';
           this.sayToYou(c, pick(RAN_AFTER), 'plain');
         }
@@ -595,13 +597,16 @@ export class Voices {
         if (still && d < 1.7 && -(dx * cf.x + dz * cf.z) / d > 0.8 && (csp > 0.3 || c.blockT > 0)) {
           c.blockT = (c.blockT || 0) + dt;
           if (c.blockT > 0.5 && (c.excuseT || 0) < now) {
+            // (out of patience only with you still there since the last time: in their way again
+            // another day is a first "Excuse me" again)
+            const again = c.blockN > 0 && now < c.excuseT + 10;
             c.excuseT = now + 14;
             if (head) {
               c.glanceAt = head;
               c.glanceUntil = now + 2;
             }
-            this.sayToYou(c, pick(c.blockN ? EXCUSE_AGAIN : EXCUSE), 'plain');
-            c.blockN = (c.blockN || 0) + 1;
+            this.sayToYou(c, pick(again ? EXCUSE_AGAIN : EXCUSE), 'plain');
+            c.blockN = again ? c.blockN + 1 : 1;
             this.stats.excuse = (this.stats.excuse || 0) + 1;
           }
         } else if (c.blockT > 0) c.blockT = Math.max(0, c.blockT - dt);

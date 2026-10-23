@@ -105,7 +105,13 @@ export class Routines {
     }
     const bc = live.bctx;
     const add = [];
+    // (a mall's hall - its benches, its fountain - is the mall's own: game/mall.js sits its shoppers
+    // there; somebody of ours let go in it would walk for the street through its walls. The strip
+    // mall's "hall" is its parking lot, open to the street)
+    const H = bc.mall && !bc.mall.strip && bc.mall.hall;
+    const inHall = (x, z) => !!H && x > H.x0 && x < H.x1 && z > H.z0 && z < H.z1;
     for (const b of bc.benches || []) {
+      if (inHall(b.x, b.z)) continue;
       const fx = Math.sin(b.yaw);
       const fz = Math.cos(b.yaw);
       const seats = [-0.42, 0.42].map((u) => ({ x: b.x + fz * u + fx * 0.04, z: b.z - fx * u + fz * 0.04, yaw: b.yaw, who: null }));
@@ -148,7 +154,7 @@ export class Routines {
       });
       add.push({ kind: 'ledge', x: o.x, z: o.z, yaw: a, seats, stands: [], active: false });
     }
-    for (const f of bc.fountains || []) this.addFountain(add, f.x, f.z);
+    for (const f of bc.fountains || []) if (!inHall(f.x, f.z)) this.addFountain(add, f.x, f.z);
     live.places = add;
     for (const pl of add) this.places.push(pl);
   }

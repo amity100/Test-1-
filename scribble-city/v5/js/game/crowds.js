@@ -295,14 +295,15 @@ export class Crowds {
     const S = this.social && this.social.busker;
     const B = c.buddy && c.buddy.alive && c.buddy.buddyOf === c && !c.buddy.convo ? c.buddy : null;
     const r = Math.random();
+    const q = B && r < 0.55 ? this.poseSpot(c) : null;
     if (S && Math.hypot(S.x - c.pos.x, S.z - c.pos.z) < 16) {
       ph.yaw = Math.atan2(S.x - c.pos.x, S.z - c.pos.z);
       ph.look = S.c.fig.j.headC;
-    } else if (B && r < 0.55) {
-      // the friend: a few steps ahead along the walk, turned round, posing
-      ph.yaw = c.yaw;
+    } else if (q) {
+      // the friend: a few steps along the walk, turned round, posing
+      ph.yaw = q.yaw;
       ph.model = B;
-      B.pose = { x: c.pos.x + Math.sin(c.yaw) * 2.6, z: c.pos.z + Math.cos(c.yaw) * 2.6, at: false, kind: pick(['peace', 'wave', 'arms', 'hip']), hand: new THREE.Vector3(), hand2: new THREE.Vector3(), face: c };
+      B.pose = { x: q.x, z: q.z, at: false, kind: pick(['peace', 'wave', 'arms', 'hip']), hand: new THREE.Vector3(), hand2: new THREE.Vector3(), face: c };
       this.stats.poses++;
       if (this.game.voices && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 26) ph.talk = pick(POSE_LINES);
     } else if (r < 0.75) {
@@ -320,6 +321,30 @@ export class Crowds {
     c.photo = ph;
     c.stopT = ph.model ? 9 : 3.1;
     if (ph.talk) this.game.voices.talk([c, ph.model], ph.talk);
+  }
+
+  // where the friend stands for the picture: a few steps on along the walk (back along it near the
+  // corner - not out in the road beyond it), and only where somebody can stand - not in a bench, a
+  // planter, a pole (null: nowhere, a selfie then)
+  poseSpot(c) {
+    let ux = Math.sin(c.yaw);
+    let uz = Math.cos(c.yaw);
+    const T = c.loop && c.loop[c.target];
+    if (T) {
+      const dx = T[0] - c.pos.x;
+      const dz = T[1] - c.pos.z;
+      const l = Math.hypot(dx, dz);
+      if (l > 0.5) {
+        const k = l < 3.6 ? -1 : 1;
+        ux = (dx / l) * k;
+        uz = (dz / l) * k;
+      }
+    }
+    const x = c.pos.x + ux * 2.6;
+    const z = c.pos.z + uz * 2.6;
+    const hit = this.game.world.collision.pointInside(x, 1.0, z, 0.35);
+    if (hit && hit.alive !== false) return null;
+    return { x, z, yaw: Math.atan2(ux, uz) };
   }
 
   // a shop's sign near a tourist, on the side of the walk where the shops are
