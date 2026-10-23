@@ -320,9 +320,12 @@ export class Fleet {
           c.fare = null;
           return;
         }
-        // (its back door by a gap between the parked cars, for them to step out onto the sidewalk)
+        // (its back door by a gap between the parked cars, for them to step out onto the sidewalk -
+        // short of the crossing ahead)
         const left0 = Math.max(9, (c.speed * c.speed) / (2 * 2.4));
-        const left = this.traffic.curbs ? this.traffic.curbs.gapAt(c, left0, left0, left0 + 14, 1.4) + 0.7 : left0;
+        const g = c.path && c.path.gates[0];
+        const upTo = Math.min(left0 + 14, g ? g.s - c.s - c.halfLen - 4 : left0);
+        const left = this.traffic.curbs && upTo > left0 ? this.traffic.curbs.gapAt(c, left0, left0, upTo, 1.4) + 0.7 : left0;
         c.drop = { left, run: 0 };
         c.pull = true;
         c.pullTo = this.traffic.curbRoom(c, left);
@@ -357,7 +360,9 @@ export class Fleet {
     const fz = Math.cos(c.yaw);
     // (GTA IV: its back door by a gap between the cars parked at the curb, near where they stand -
     // they step through it, not through a parked car: game/curbs.js gapAt)
-    const at = this.traffic.curbs ? this.traffic.curbs.gapAt(c, along, Math.max(8, along - 6), along + 18, 1.4) : along;
+    const g = c.path && c.path.gates[0];
+    const upTo = Math.min(along + 18, g ? g.s - c.s - c.halfLen - 4 : along);
+    const at = this.traffic.curbs && upTo > along ? this.traffic.curbs.gapAt(c, along, Math.max(8, along - 6), upTo, 1.4) : along;
     const P = { who: w, along0: at + 0.7, run: 0, t: 0, stopped: false, door: new THREE.Vector3(), arm: new THREE.Vector3(), via: null, go: { x: 0, z: 0, speed: 1.7 } };
     c.pickup = P;
     const roadYaw = Math.atan2(fz, -fx);
