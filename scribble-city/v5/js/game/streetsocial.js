@@ -46,7 +46,7 @@ const SILVER = [0.82, 0.84, 0.88];
 const INK = [0.1, 0.09, 0.12];
 const BAG_COLORS = [[0.95, 0.45, 0.6], [0.98, 0.97, 0.94], [0.2, 0.22, 0.26], [0.62, 0.78, 0.92], [0.86, 0.66, 0.26], [0.4, 0.68, 0.5]];
 const FOOD = ['burger', 'hotdog', 'noodleBox', 'soda'];
-// what can be held up to film, or held while a hand drops a coin in the case
+// what can be held up to film the musician with
 const FILM_WITH = new Set(['phone', 'camera']);
 
 // (the finished ones out of a list, in place: every frame, and no new array for it)
@@ -663,8 +663,8 @@ export class StreetSocial {
     const voices = game.voices;
     M.t += dt;
     const lost = !a.alive || !b.alive || a.gone || b.gone || a.panicT > 0 || b.panicT > 0 || Math.hypot(a.pos.x - p.x, a.pos.z - p.z) > 90;
-    const ours = (c) => c.owner === this && c.meet === M;
-    if (lost || (M.phase !== 'spot' && (!ours(a) || !ours(b)))) {
+    const ours = a.owner === this && a.meet === M && b.owner === this && b.meet === M;
+    if (lost || (M.phase !== 'spot' && !ours)) {
       this.endMeet(M);
       return;
     }
