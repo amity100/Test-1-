@@ -166,7 +166,7 @@ const GROUP = {
     ["Let's get a coffee.", 'One more store first.', 'You said that three stores ago.', 'Ha ha!'],
   ],
   night: [
-    ['Where to now?', 'The rooftop bar?', 'The line is huge.', 'Then the club.', 'The line is bigger.'],
+    ['Where to now?', 'The rooftop terrace?', 'The line is huge.', 'Then the club.', 'The line is bigger.'],
     ["I'm starving.", 'Pizza?', 'Pizza.', 'Pizza!'],
     ['Who is driving?', 'Nobody. We walk.', 'In these shoes?', 'Ha ha!'],
     ['What a night!', 'And it is only ten.', 'Ten?!', 'Ha!'],
@@ -196,7 +196,7 @@ const CALLS = [
   ['Yeah?', "I'm on my way, five minutes.", 'Ten minutes, tops.', 'Order for me!', 'The usual. Bye!'],
   ["Hello, it's me.", 'About last night...', "No, you're right.", "I'm sorry, okay?", 'Dinner? Tonight?', 'Great. See you at eight.'],
   ['Talk to me.', 'How much?!', 'No way. Tell them no.', "I don't care, it's too much.", 'Call me when you know.'],
-  ['Hey you!', 'I got the job!', 'I know! I start Monday!', 'Drinks tonight, on me!', 'Bye bye bye!'],
+  ['Hey you!', 'I got the job!', 'I know! I start Monday!', 'Dinner tonight, on me!', 'Bye bye bye!'],
   ['Hello? Hello?', "You're breaking up.", 'Can you hear me now?', 'Hello?!', 'Ugh. Dead zone.'],
   ['Hi, yes, I have a reservation.', 'Under Lopez.', 'Eight thirty, for four.', 'Perfect, thank you!'],
   ['Listen, listen.', 'I told him twice.', 'Twice!', 'And he still sent it to the wrong address.', 'I know. I know.'],
@@ -711,7 +711,10 @@ export class Voices {
     if (!who || !who.pos || !text) return;
     this.stats.heard++;
     // (GTA IV pass: said with the hands too, and the others look at whoever says it - game/civilians.js)
-    if (who.mgr && who.fig) who.mgr.spoke(who, text, tone);
+    // (only the city's people: a gangster or an officer shouting has a manager of his own,
+    // game/enemies.js, with no hands-with-the-words in it)
+    const civs = this.game.civilians;
+    if (civs && who.mgr === civs && who.fig) civs.spoke(who, text, tone);
     const cam = this.game.camera.position;
     const d = Math.hypot(who.pos.x - cam.x, who.pos.z - cam.z);
     if (this.spoken) this.speak(who, text, tone, d);
