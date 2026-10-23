@@ -412,8 +412,9 @@ export class Paint {
     return this.sets.size === 0;
   }
 
-  // into the batch, a part a colour (mat: the street paint's pen)
-  flush(ctx, mat) {
+  // into the batch, a part a colour (mat: the street paint's pen; chunk: a draw of its own, by
+  // that name - else where its corners are, as anything else)
+  flush(ctx, mat, chunk = undefined) {
     for (const s of this.sets.values()) {
       if (!s.idx.length) continue;
       const g = new THREE.BufferGeometry();
@@ -422,7 +423,7 @@ export class Paint {
       for (let i = 1; i < nor.length; i += 3) nor[i] = 1;
       g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
       g.setIndex(s.idx);
-      ctx.B.add(mat, g, null, nextId(), { color: s.color });
+      ctx.B.add(mat, g, null, nextId(), { color: s.color, chunk });
     }
     this.sets.clear();
   }

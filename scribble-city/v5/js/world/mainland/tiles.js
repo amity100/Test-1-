@@ -451,7 +451,7 @@ function* buildTile(tctx, t) {
     yield;
   }
   // the paint, a colour a part
-  if (!P.empty) P.flush(tctx, M.court);
+  if (!P.empty) P.flush(tctx, M.court, 'paint');
 }
 
 // Where people live: the strip of grass along every curb (broken by the corners' ramps), the
@@ -525,6 +525,13 @@ export function* buildGroundTile(world, t) {
   for (const m of meshes) {
     const pen = m.userData.pens ? m.userData.pens[0] : m.material;
     if (world.smallPens.has(pen)) cull.push({ m, r: world.low ? 110 : 150 });
+    // (the paint, a draw of its own: flat on the street 2 cm up it throws no shadow worth the sun's
+    // map, and the wet street's mirror would show it just under itself, where the paint covers it -
+    // in neither, render/pipeline.js)
+    if (m.name === 'paint' || m.name.startsWith('paint#')) {
+      m.userData.noShadow = true;
+      m.userData.noReflect = true;
+    }
   }
   return {
     group,
