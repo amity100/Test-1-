@@ -414,6 +414,95 @@ export function sidePoint(kind, z, y, side = 1) {
   return [side * (x + 0.016 + 0.01 * cs), y + 0.016 * Math.max(0, sn), z];
 }
 
+// (ROADMAP 11.21) where a ray first meets a car's skin, in the car's own frame (x to its left, y up
+// from the ground, z to its nose): o, d [x, y, z] (d of length 1), from t0 to t1 along it -
+// { t, p, n (the skin's way out there) } or null. Its body below the belt and its glass house over
+// it, as built (the wheels' arches and the mirrors aside) - ink drawn on a car lies on its paint
+const _skins = new Map();
+function skinOf(K) {
+  let S = _skins.get(K);
+  if (!S) {
+    const G = K.glass;
+    S = {
+      hw: curve(K.halfW), belt: curve(K.belt),
+      roof: (t) => {
+        if (t <= G.tA || t >= G.tD) return 0;
+        if (t < G.tB) return Math.sin(((t - G.tA) / (G.tB - G.tA)) * Math.PI * 0.5);
+        if (t > G.tC) return Math.sin(((G.tD - t) / (G.tD - G.tC)) * Math.PI * 0.5);
+        return 1;
+      },
+    };
+    _skins.set(K, S);
+  }
+  return S;
+}
+// (how far in a point is: below 0 inside - its body's section, a rounded box from under it to its
+// belt, or its glass house's over that)
+function skinF(K, S, x, y, z) {
+  const t = (z + K.len / 2) / K.len;
+  if (t < 0 || t > 1) return 1;
+  const top = S.belt(t);
+  const a = S.hw(t);
+  let f = 1;
+  if (y >= K.clear && y <= top) {
+    const hb = (top - K.clear) / 2;
+    f = (Math.abs(x) / a) ** K.n + (Math.abs(y - K.clear - hb) / hb) ** K.n - 1;
+  }
+  const G = K.glass;
+  const yb = top - 0.04;
+  if (t > G.tA && t < G.tD && y >= yb) {
+    const yr = Math.max(yb + 0.02, yb + (G.R - yb) * S.roof(t));
+    const s = (y - yb) / (yr - yb);
+    if (s <= 1) f = Math.min(f, (Math.abs(x) / (a * (G.w0 + (G.w1 - G.w0) * s))) ** 3 + s * s * s - 1);
+  }
+  return f;
+}
+export function skinHit(kind, o, d, t0, t1) {
+  const K = KINDS[kind];
+  if (!K) return null;
+  const S = skinOf(K);
+  const at = (t) => skinF(K, S, o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t);
+  let prev = t0;
+  // (steps of 6 cm: nothing of a car is thinner; then halved down to a few millimetres)
+  for (let t = t0; t <= t1 + 1e-6; t += 0.06) {
+    if (at(t) > 0) {
+      prev = t;
+      continue;
+    }
+    let lo = prev;
+    let hi = t;
+    for (let i = 0; i < 9; i++) {
+      const mid = (lo + hi) / 2;
+      if (at(mid) <= 0) hi = mid;
+      else lo = mid;
+    }
+    const p = [o[0] + d[0] * hi, o[1] + d[1] * hi, o[2] + d[2] * hi];
+    // (its way out: which way it gets less inside, fastest)
+    const e = 0.012;
+    let nx = skinF(K, S, p[0] + e, p[1], p[2]) - skinF(K, S, p[0] - e, p[1], p[2]);
+    let ny = skinF(K, S, p[0], p[1] + e, p[2]) - skinF(K, S, p[0], p[1] - e, p[2]);
+    let nz = skinF(K, S, p[0], p[1], p[2] + e) - skinF(K, S, p[0], p[1], p[2] - e);
+    let l = Math.hypot(nx, ny, nz);
+    // (and never into the ray's own way: it is seen, so it faces the eye)
+    if (!(l > 1e-9)) {
+      nx = -d[0];
+      ny = -d[1];
+      nz = -d[2];
+      l = 1;
+    }
+    nx /= l;
+    ny /= l;
+    nz /= l;
+    if (nx * d[0] + ny * d[1] + nz * d[2] > 0) {
+      nx = -d[0];
+      ny = -d[1];
+      nz = -d[2];
+    }
+    return { t: hi, p, n: [nx, ny, nz] };
+  }
+  return null;
+}
+
 // the outline of a car from the side (for the paint shop's sheet): the body's top and bottom
 // along it, the windows' band and the roof, the wheels
 export function sideProfile(kind) {
@@ -747,6 +836,8 @@ export function drawWipers(fr, kind, x, y, z, yaw, sweep, seed) {
   }
 }
 
+const NO_WHEELS = [];
+
 export class CarRenderer {
   constructor(scene) {
     const S = (o) => makeSurface(o);
@@ -935,7 +1026,8 @@ export class CarRenderer {
       this.seats(K, _m);
     }
     // the wheels: they roll, the front ones steer
-    const wheels = P.b.wheels;
+    // (ROADMAP 11.20: none of its own - wheels drawn onto it go round in their place, game/fuse.js)
+    const wheels = o.noWheels ? NO_WHEELS : P.b.wheels;
     for (let wi = 0; wi < wheels.length; wi++) {
       const w = wheels[wi];
       _e.set(o.spin || 0, w.z > 0 ? o.steer || 0 : 0, 0, 'YXZ');

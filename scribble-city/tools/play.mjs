@@ -71,6 +71,6 @@ for (const st of steps) {
     logs.push('[step error] ' + e.message);
   }
 }
-console.log(logs.slice(0, 120).join('\n'));
+console.log(logs.slice(0, +process.env.MAXLINES || 120).join('\n'));
 await browser.close();
 server.close();

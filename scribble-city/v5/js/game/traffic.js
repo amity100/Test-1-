@@ -484,6 +484,12 @@ export class Traffic {
   }
 
   updateCar(c, dt) {
+    // (ROADMAP 11.28: held by a thing of the pen - stopped by a bolt, under a net, spun on oil, on a
+    // harpoon: moved by it - game/gear.js)
+    if (c.gear && this.game.gear && this.game.gear.holdCar(c, dt)) {
+      c.wheel += (c.speed * dt) / 0.36;
+      return;
+    }
     if (c.tail && c.poofT === undefined && !c.wrecked) {
       // after another car, the way it went (game/events.js: the police after a getaway car)
       this.follow(c, dt);
@@ -1153,6 +1159,8 @@ export class Traffic {
     o.busy = !!c.fare;
     o.scale = scale;
     o.squash = squash;
+    // (ROADMAP 11.20: square wheels drawn onto it go round in place of its own - game/fuse.js)
+    o.noWheels = !!c.fuseNoWheels;
     cars.draw(spec.kind, c.wrecked ? WRECK : spec.color, c.pos.x, c.pos.y || 0, c.pos.z, c.yaw, o);
   }
 

@@ -5,6 +5,7 @@
   "description": "Notebook-doodle open world web game (static, no build step).",
   "scripts": {
     "serve": "npx http-server -p 8080 -c-1 .",
-    "test:recognizer": "node tools/test-recognizer.mjs"
+    "test:recognizer": "node tools/test-recognizer.mjs",
+    "test:fusemarks": "node tools/test-fusemarks.mjs"
   }
 }

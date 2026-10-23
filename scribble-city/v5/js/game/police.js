@@ -163,6 +163,11 @@ export class Police {
 
   // where the police think you are
   target() {
+    // (ROADMAP 11.28: the drawn double of your car they are after - game/gearguard2.js)
+    if (this.decoyOn) {
+      const dc = this.game.gear && this.game.gear.decoy();
+      if (dc) return dc.pos;
+    }
     const p = this.game.player;
     return this.game.time - this.seenT < 2 ? (p.inVehicle ? p.inVehicle.pos : p.pos) : this.lastSeen;
   }
@@ -173,7 +178,24 @@ export class Police {
   }
 
   requestBackup() {
+    if (this.jammed(1)) return;
     this.dispatchT = Math.min(this.dispatchT, 2);
+  }
+
+  // (ROADMAP 11.28) the jammer on your car at this level or more: their radio all noise - no more cars
+  // sent; level 2 they give up the search sooner; level 3 they no longer tell each other where you are,
+  // nor set up roadblocks (game/gearguard2.js)
+  jammed(n) {
+    return !!this.game.gear && this.game.gear.jam >= n;
+  }
+
+  // (ROADMAP 11.28: a new paint in plain sight - game/gearguard2.js) n stars less
+  drop(n = 1) {
+    const lv = Math.max(0, this.level - n);
+    if (lv <= 0) return this.clear();
+    this.level = lv;
+    this.heat = Math.min(this.heat, LEVELS[lv - 1]);
+    this.game.hud.setWanted(this.level, this.searching);
   }
 
   // ------------------------------------------------------------------ every frame
@@ -205,8 +227,11 @@ export class Police {
     let seen = false;
     // (down under the waves in a drawn submarine: nobody sees you - ROADMAP 11.8)
     const under = !!(p.inVehicle && p.inVehicle.submerged);
+    // (ROADMAP 11.28: a drawn double of your car driving off - they go after it, and know you yourself only
+    // up close: game/gearguard2.js, game/lose.js)
+    const dc = game.gear ? game.gear.decoy() : null;
     for (const e of game.enemies.list) {
-      if (!under && e.faction === 'police' && e.alive && e.sees) {
+      if (!under && e.faction === 'police' && e.alive && e.sees && !(dc && Math.hypot(e.pos.x - pp.x, e.pos.z - pp.z) > 10)) {
         seen = true;
         break;
       }
@@ -228,16 +253,18 @@ export class Police {
       }
     }
     if (!seen && !under && this.airT !== undefined && t - this.airT < 0.2) seen = true;
-    if (seen) {
+    this.decoyOn = !!dc && !seen;
+    if (seen || this.decoyOn) {
+      const at = seen ? pp : dc.pos;
       this.seenT = t;
-      this.lastSeen.copy(pp);
-      // over the radio: every unit learns where you are
+      this.lastSeen.copy(at);
+      // over the radio: every unit learns where you are (not through the jammer's level 3)
       this.radioT = (this.radioT || 0) - dt;
-      if (this.radioT <= 0) {
+      if (this.radioT <= 0 && !this.jammed(3)) {
         this.radioT = 1;
         for (const e of game.enemies.list) {
           if (e.faction !== 'police' || !e.alive || e.headless) continue;
-          e.squad.lastKnown.copy(pp);
+          e.squad.lastKnown.copy(at);
           e.squad.knowT = t;
           if (e.state !== 'combat' && e.state !== 'flee' && e.joinT < 0) e.joinT = t + 0.6 + Math.random() * 1.2;
         }
@@ -248,7 +275,7 @@ export class Police {
     // (ROADMAP 11.15: one that goes everywhere - in the water, in the air - they lose sooner:
     // game/combos.js)
     const lostK = sv && sv.escape && (sv.flies || sv.kind === 'boat' || sv.submerged) ? sv.escape : 1;
-    if (searching) this.searchT += dt * (p.hidden ? 2 : 1) * (game.lose ? game.lose.searchMul : 1) * lostK;
+    if (searching) this.searchT += dt * (p.hidden ? 2 : 1) * (game.lose ? game.lose.searchMul : 1) * lostK * (this.jammed(2) ? 1.6 : 1);
     else this.searchT = 0;
     if (searching !== this.searching) {
       this.searching = searching;
@@ -275,6 +302,8 @@ export class Police {
       }
     }
     if (this.searchT > SEARCH_TIME[this.level]) {
+      // (ROADMAP 11.28: got away from two stars or more - a blueprint page, game/gearplay.js)
+      if (this.level >= 2 && game.gear) game.gear.play.page('ברחתם מהמשטרה');
       this.clear();
       return;
     }
@@ -287,7 +316,8 @@ export class Police {
       const away = game.chase && game.chase.quarry() ? 60 : Infinity;
       for (const e of game.enemies.list) if (e.faction === 'police' && e.alive && e.state !== 'flee' && Math.hypot(e.pos.x - pp.x, e.pos.z - pp.z) < away) active++;
       for (const c of game.traffic.list) if (c.police && c.crew) active += c.crew.length;
-      if (active < UNITS[this.level]) this.dispatch();
+      // (the jammer: only the car the first call brought - ROADMAP 11.28)
+      if (active < (this.jammed(1) ? Math.min(UNITS[this.level], 2) : UNITS[this.level])) this.dispatch();
     }
     // the siren of the nearest car on the way
     let near = Infinity;
@@ -310,7 +340,8 @@ export class Police {
   dispatch() {
     const game = this.game;
     const p = game.player;
-    const pp = p.inVehicle ? p.inVehicle.pos : p.pos;
+    // (to the drawn double while they are after it: ROADMAP 11.28)
+    const pp = this.decoyOn ? this.target() : p.inVehicle ? p.inVehicle.pos : p.pos;
     const nav = game.world.nav;
     const col = game.world.collision;
     // (v5, ROADMAP 11.17) up the roads to you, from round a corner (the island's or the mainland's)
@@ -363,6 +394,8 @@ export class Police {
     const game = this.game;
     const t = game.time;
     if (!force && t - (this.radioAt || -99) < 4) return;
+    // (ROADMAP 11.28: the jammer - all noise)
+    if (this.jammed(1)) text = '…ששש… קררר… [הקשר משובש] …ששש…';
     this.radioAt = t;
     if (game.audio) game.audio.play('radio', 0.6);
     if (game.hud && game.hud.subtitles !== false && game.voices && game.voices.subtitle) game.voices.subtitle(`קשר משטרתי — ${text}`);
@@ -421,6 +454,7 @@ export class Police {
 
   clear() {
     const game = this.game;
+    this.decoyOn = false;
     this.heat = 0;
     this.level = 0;
     this.searchT = 0;
