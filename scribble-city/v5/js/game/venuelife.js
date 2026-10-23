@@ -49,6 +49,7 @@ const COFFEE = ['Two espressos.', 'Coffee, anyone?', 'Here are your coffees.'];
 const CHECK = ['The check, please!', 'Could we have the bill?', 'Excuse me!'];
 const PAID = ['Thank you, have a lovely evening!', 'Merci! Come again soon.', 'Thank you very much.'];
 const BYE = ['Good night!', 'Thank you, see you soon!', 'Have a lovely evening!'];
+const TOAST = ['Cheers!', 'To us!', 'To your new job!', 'Happy birthday!', 'To many more!', 'Salud!'];
 // (a word between bites: one line each, in turn)
 const TALK = [
   ['How is yours?', 'Divine. Try some!'],
@@ -487,6 +488,19 @@ export class Dining {
         break;
       case 'eating':
         P.eatT -= dt;
+        // (once in the meal, a toast: the glasses up over the table's middle, a word)
+        if (M.length > 1 && !P.toasted && P.t > 6 && P.eatT > 4 && !this.game.classic && Math.random() < dt * 0.08) {
+          P.toasted = true;
+          P.toastT = 2.4;
+          if (this.near(18)) this.say(pick(M).c, pick(TOAST));
+        }
+        if (P.toastT > 0) {
+          P.toastT -= dt;
+          if (P.toastT <= 0) for (const v of M) if (v.c.fig.carry === 'soda' && v.toastGlass) {
+            v.c.fig.carry = null;
+            v.toastGlass = false;
+          }
+        }
         if (P.eatT <= 0) {
           P.state = 'done';
           P.t = 0;
@@ -659,6 +673,22 @@ export class Dining {
     const c = v.c;
     const f = c.fig;
     if (f.carry === 'book' || f.carry === 'coffee') f.carry = null;
+    const P = v.dine;
+    if (P && P.toastT > 0) {
+      // the glass raised to the others over the middle of the table
+      if (!f.carry) {
+        f.carry = 'soda';
+        f.sodaColor = pick([[0.85, 0.92, 0.96], [0.98, 0.84, 0.42], [0.95, 0.5, 0.45]]);
+        v.toastGlass = true;
+      }
+      const t = P.table;
+      v.hand.set(t.x + (c.pos.x - t.x) * 0.45, this.o.room.floor + 1.18 + Math.sin(P.toastT * 9) * 0.015, t.z + (c.pos.z - t.z) * 0.45);
+      f.reachR = v.hand;
+      f.reachL = null;
+      f.lookAt = v.hand;
+      return null;
+    }
+    f.lookAt = null;
     if (c.convo) {
       // (talking: the fork down, the hands at rest)
       f.reachR = null;
@@ -1752,8 +1782,46 @@ export class LobbyLife {
     return v;
   }
 
+  // the theatre: now and then the whole hall claps (the end of a scene), somebody calls out; while
+  // you are in it
+  applause(dt) {
+    if (!this.rows.length || this.game.classic) return;
+    this.clapT = (this.clapT === undefined ? 20 + Math.random() * 25 : this.clapT) - dt;
+    if (this.clapT > 0) return;
+    const o = this.o;
+    const p = this.game.player.pos;
+    if (this.clapT > -2.6 && o.room.inside(p.x, p.z, 0.5)) {
+      const k = -this.clapT;
+      for (const v of o.visitors) {
+        if (v.phase !== 'at' || !v.spot || v.spot.what !== 'row' || !v.c.alive) continue;
+        const f = v.c.fig;
+        v.clapV = v.clapV || new THREE.Vector3();
+        v.clapS = v.clapS === undefined ? Math.random() * 6 : v.clapS;
+        f.toWorld(0, 1.02, 0.3 + Math.abs(Math.sin(k * 11 + v.clapS)) * 0.07, v.clapV);
+        f.reachR = v.clapV;
+        f.reachL = v.clapV;
+      }
+      if (!this.clapSaid) {
+        this.clapSaid = true;
+        const seated = o.visitors.filter((v) => v.phase === 'at' && v.spot && v.spot.what === 'row');
+        for (let i = 0; i < 2 && seated.length; i++) o.say(pick(seated).c, pick(['Bravo!', 'Encore!', 'Wonderful!', 'Bravo! Bravo!']));
+        o.sound('cheer', 0.35, 30);
+      }
+      return;
+    }
+    // (over: the hands down, till the next)
+    for (const v of o.visitors) {
+      if (!v.clapV) continue;
+      if (v.c.fig.reachR === v.clapV) v.c.fig.reachR = null;
+      if (v.c.fig.reachL === v.clapV) v.c.fig.reachL = null;
+    }
+    this.clapSaid = false;
+    this.clapT = 35 + Math.random() * 40;
+  }
+
   update(dt) {
     const o = this.o;
+    this.applause(dt);
     if (!o.open) return;
     this.newT = (this.newT === undefined ? 3 + Math.random() * 4 : this.newT) - dt;
     if (this.newT > 0) return;

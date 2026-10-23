@@ -657,6 +657,28 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
       for (const s of [-1, 1]) banner(hctx, IN, hall, cx + s * 3.0, z, H, k++ % 2 ? a : c, k % 3 ? WHITE : srgb(1, 0.85, 0.4), BANNER_WORDS[(k + b.seed) % BANNER_WORDS.length]);
     }
   }
+  // ---- the open court's festoons: strings of bulbs from gallery to gallery, sagging over the
+  // people below, on short posts on the rails
+  if (o.open) {
+    const xa = hx0 + 2.6;
+    const xb = hx1 - 2.6;
+    const ys = UY + 1.75;
+    const warm = [srgb(1, 0.86, 0.5), srgb(1, 0.95, 0.8), srgb(1, 0.7, 0.45)];
+    for (let z = bz0 + 9; z < bz1 - 6; z += 7) {
+      if (Math.abs(z - zm) < 4) continue;
+      for (const x of [xa, xb]) hall(IN.box, x - 0.025, UY + 1.06, z - 0.025, x + 0.025, ys + 0.05, z + 0.025, DARK);
+      const n = 16;
+      const sag = (t) => ys - Math.sin(t * Math.PI) * 0.95;
+      for (let i = 0; i < n; i++) {
+        const xa0 = xa + ((xb - xa) * i) / n;
+        const xa1 = xa + ((xb - xa) * (i + 1)) / n;
+        const y0 = sag(i / n);
+        const y1 = sag((i + 1) / n);
+        hall(IN.box, xa0, Math.min(y0, y1) - 0.007, z - 0.007, xa1, Math.max(y0, y1) + 0.007, z + 0.007, DARK);
+        if (i > 0) hall(IN.lamp, xa0 - 0.05, y0 - 0.14, z - 0.05, xa0 + 0.05, y0 - 0.03, z + 0.05, warm[i % warm.length]);
+      }
+    }
+  }
   // ---- the signs under the bridge: to the food court one way, to the doors and parking the other
   {
     const cool = srgb(0.96, 0.98, 1);
