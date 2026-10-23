@@ -6,6 +6,7 @@ import { neonSign, fbox } from '../deco.js';
 import { palm } from '../palms.js';
 import { bench, fountain } from '../blocks.js';
 import { CURB } from './plan.js';
+import { letter } from '../letters.js';
 import './furnish.js';
 
 // (v5, ROADMAP 11.17) The malls. A hall down the middle of the block under a roof of glass (or open
@@ -568,6 +569,7 @@ function planter(ctx, x, z, inside) {
 const PROMO = ['SALE', 'NEW IN', '-30%', 'NEW SEASON', '2 FOR 1', 'LAST DAYS', '-50%', 'OPEN'];
 const BANNER_WORDS = ['SALE', 'SUMMER', '-50%', 'NEW IN', 'NEW SEASON', '2 FOR 1', 'OPEN', '-30%'];
 const KIOSKS = ['sunglasses', 'coffee', 'phones', 'balloons', 'sweets', 'watches'];
+const KIOSK_NAMES = { sunglasses: 'SUNGLASSES', coffee: 'COFFEE & CAKE', phones: 'PHONE CASES', balloons: 'BALLOONS', sweets: 'SWEETS', watches: 'WATCHES' };
 const ADS = [
   [srgb(0.98, 0.42, 0.58), srgb(1, 0.92, 0.86), srgb(0.24, 0.2, 0.36)],
   [srgb(0.3, 0.72, 0.95), srgb(0.96, 0.98, 1), srgb(0.98, 0.7, 0.24)],
@@ -698,7 +700,8 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
       const n = fc.words.length;
       for (let i = 0; i < n; i++) {
         const w = Math.min(2.6, len / n - 0.3);
-        neonSign(hctx, f, fc.words[i], (len * (i + 0.5)) / n, UY - 0.68, 0.0, w, cool, { font: 'Rubik', size: 80 });
+        const h = Math.min(0.26, (w * 7) / (fc.words[i].length * 6 - 1));
+        sign(IN, f, IN.lamp, fc.words[i], (len * (i + 0.5)) / n, UY - 0.68 - h / 2, 0.0, h, cool);
       }
     }
   }
@@ -725,7 +728,9 @@ function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
   const p1 = sg1 - 0.15;
   if (p1 - p0 > 2.2 && r() < 0.7) {
     const word = PROMO[Math.floor(r() * PROMO.length)];
-    neonSign(hctx, f, word, (p0 + p1) / 2, 2.6, 0.16, Math.min(2.2, p1 - p0 - 0.5), hex(NEONS[Math.floor(r() * NEONS.length)]), { font: 'Rubik', size: 90 });
+    const col = hex(NEONS[Math.floor(r() * NEONS.length)]);
+    const h = Math.min(0.32, (Math.min(2.2, p1 - p0 - 0.5) * 7) / (word.length * 6 - 1));
+    sign(IN, f, IN.lamp, word, (p0 + p1) / 2, 2.6 - h / 2, 0.16, h, col);
   }
   if (r() < 0.65) {
     // the lightbox: a slim lit panel on a foot, standing out of the front, both faces a poster
@@ -780,6 +785,8 @@ function kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, kind, r) {
   hall(IN.lamp, x - 0.7, C0 + 2.37, z - 1.3, x + 0.7, C0 + 2.4, z + 1.3, srgb(1, 0.95, 0.85));
   hall(IN.box, x - 0.8, C0 + 2.48, z - 1.4, x + 0.8, C0 + 2.8, z + 1.4, col);
   hall(IN.lamp, x - 0.81, C0 + 2.57, z - 1.0, x + 0.81, C0 + 2.71, z + 1.0, srgb(1, 1, 0.94));
+  // its name on the lit band, both long sides
+  for (const n of [-1, 1]) sign(IN, new Facade(x + n * 0.81, z, 0, -n, n, 0), IN.box, KIOSK_NAMES[kind], 0, C0 + 2.595, 0.006, 0.09, DARK);
   // the goods
   const xt = x - side * 0.08; // the tower's face to the people
   const face = (y0, y1, z0, z1, c, deep = 0.02) => hall(IN.box, Math.min(xt, xt - side * deep), y0, z0, Math.max(xt, xt - side * deep), y1, z1, c);
@@ -979,6 +986,15 @@ function screenTotem(bctx, IN, hall, x, z, ad) {
 }
 
 // a banner hung from the roof on two wires: its rod, the cloth, a band across it, a white panel
+// a word lettered in strokes on a face of the hall's things (world/letters.js; not the city's neon,
+// which the shops' names need): f the face's frame (it reads left to right to whoever faces it),
+// the word centred at u, its line at v, w out of the face, its capitals h high. One part for the
+// pens, a quad a stroke
+function sign(IN, f, mat, text, u, v, w, h, col) {
+  const id = nextId();
+  letter(text, h, (a0, b0, a1, b1) => IN.B.add(mat, f.quad(u + a0, v + b0, u + a1, v + b1, w), null, id, { color: col }));
+}
+
 // (v5, GTA IV round: the size of a real mall's - two metres and more across, five long - with the
 // offer on both its faces in big lit letters: the word, the season, the discount)
 function banner(hctx, IN, hall, x, z, top, a, c, word) {
@@ -993,11 +1009,10 @@ function banner(hctx, IN, hall, x, z, top, a, c, word) {
   hall(IN.box, x - 0.3, top - 2.45, z - 0.024, x + 0.3, top - 1.8, z + 0.024, c);
   hall(IN.box, x - w - 0.03, top - 5.1, z - 0.025, x + w + 0.03, top - 5.0, z + 0.025, DARK);
   if (!word) return;
+  const h = Math.min(0.42, (2.0 * 7) / (word.length * 6 - 1));
   for (const n of [-1, 1]) {
     // (each face reads left to right to whoever looks at it)
-    const f = new Facade(x, z + n * 0.03, n, 0, 0, n);
-    // (the same lettering as the windows' offers: one place in the city's neon for both)
-    neonSign(hctx, f, word, 0, top - 3.5, 0, 2.2, WHITE, { font: 'Rubik', size: 90 });
+    sign(IN, new Facade(x, z + n * 0.03, n, 0, 0, n), IN.box, word, 0, top - 3.5 - h / 2, 0, h, WHITE);
   }
 }
 

@@ -4,6 +4,7 @@ import { nextId, Facade } from './kit.js';
 import { FSoup, FF } from './soup.js';
 import { Run, L, SC, pk } from './stock.js';
 import { neonSign } from './deco.js';
+import { letter } from './letters.js';
 import { srgb } from '../render/materials.js';
 
 // (v5, GTA IV round) The places you sit down in, laid out to the last fork. A restaurant of the real
@@ -94,6 +95,9 @@ function mark(R, name, u, d, face, y = 0) {
 // the rooms' pens), never in the streamed pass - and only where the city has its neon to hand
 function wallNeon(R, run, text, s, y, t, len, col, o = {}) {
   if (R.mode === 'stock' || !R.ctx.neon || !R.ctx.R || !text) return;
+  // (a word already in the neon - the place's own name over its door - costs nothing more; a new one
+  // only while plenty is left for the names of the shops round about)
+  if (!neonRoom(R.ctx.neon, `${text}|${o.font || 'Rubik'}|${o.size || 90}|false`)) return;
   const f = R.f;
   // (the wall's face into the room, in the world; the way along it that reads left to right)
   const nx = run.ou * f.ux + run.od * f.nx;
@@ -101,6 +105,30 @@ function wallNeon(R, run, text, s, y, t, len, col, o = {}) {
   const [u, d] = run.ud(s, t);
   const p = f.p(u, 0, d);
   neonSign({ ...R.ctx, B: R.ctx.R }, new Facade(p[0], p[2], nz, -nx, nx, nz), text, 0, y, 0, len, srgb(col[0], col[1], col[2]), { font: o.font || 'Rubik', size: o.size || 90 });
+}
+
+// how much is left of the city's neon: the mainland's (a picture of 128 places, a place free or
+// one no block shown needs any more) or the island's (written once)
+function neonRoom(neon, key) {
+  if (neon.cache && neon.cache.has(key)) return true;
+  if (neon.free && neon.uses) {
+    let spare = neon.free.length;
+    if (spare < 32) for (const k of neon.cache.keys()) if (!(neon.uses.get(k) > 0)) spare++;
+    return spare >= 32;
+  }
+  return neon.cols * neon.rows - neon.n > 24;
+}
+
+// a word lettered on a wall in strokes (world/letters.js): on the wall of run at s, its strokes at t
+// out from it, its capitals h high up from y; reading left to right to whoever faces the wall (the
+// run's way along it, or the other way). One part for the pens: one id for the whole word
+function words(S, run, text, s, y, t, h, col, id = nextId()) {
+  const k = run.au * run.od - run.ad * run.ou >= 0 ? 1 : -1;
+  return letter(text, h, (a0, b0, a1, b1) => {
+    const s0 = s + k * a0;
+    const s1 = s + k * a1;
+    run.box(S, Math.min(s0, s1), y + b0, t, Math.max(s0, s1), y + b1, t + 0.006, col, id, FRONT);
+  });
 }
 
 // the name of the place, as its own front has it
@@ -1098,9 +1126,10 @@ function filmPoster(R, run, s, y, w, h, rng, o = {}) {
   // (the film's name over its title bar, lettered: the city's own films, a few of them going round
   // its screens - the same handful of words for every poster, so they cost the city's neon little)
   const title = FILMS[Math.floor(rng.r() * FILMS.length)];
-  // (dark letters on the bar's light colour, the way the marquee's are)
+  // (dark letters on the bar's light colour, the way the marquee's are; as big as the bar takes)
   const ink = pk(rng, [[0.12, 0.1, 0.16], [0.46, 0.05, 0.1], [0.1, 0.14, 0.34]]);
-  if (o.titles !== false) wallNeon(R, run, title, s, y - h * 0.4, 0.075, w * 0.86, ink, { font: 'Rubik' });
+  const th = Math.min(h * 0.075, (w * 0.8 * 7) / (title.length * 6 - 1));
+  words(S, run, title, s, y - h * 0.4 - th / 2, 0.07, th, ink);
 }
 
 // what is on at the city's cinemas and its theatre (parody titles)
@@ -1197,7 +1226,9 @@ function concession(R, run, len, o = {}) {
       run.box(sS, c - 0.16, y0 + 2.62, -0.54, c + 0.16, y0 + 2.66, -0.535, [0.72, 0.28, 0.2], nextId(), FRONT);
     }
     for (let k = 0; k < 3; k++) {
-      run.box(sS, s0 + 0.06, y0 + 2.26 + k * 0.07, -0.545, s0 + (s1 - s0) * 0.62, y0 + 2.29 + k * 0.07, -0.54, k ? C.white : gold, nextId(), FRONT);
+      // (the top line: what it is, lettered - the sizes under it and their prices)
+      if (k === 2) words(sS, run, ['POPCORN', 'SODAS', 'HOT DOGS'][kind], s0 + 0.06 + (s1 - s0) * 0.28, y0 + 2.395, -0.545, 0.07, gold);
+      else run.box(sS, s0 + 0.06, y0 + 2.26 + k * 0.07, -0.545, s0 + (s1 - s0) * 0.62, y0 + 2.29 + k * 0.07, -0.54, C.white, nextId(), FRONT);
       run.box(sS, s1 - 0.16, y0 + 2.26 + k * 0.07, -0.545, s1 - 0.06, y0 + 2.29 + k * 0.07, -0.54, gold, nextId(), FRONT);
     }
   }
@@ -1509,7 +1540,7 @@ function cinemaLobby(R, o = {}) {
     br.box(big(R, 'gloss'), 0.05, y0 + 1.1, -0.04, bl - 0.05, y0 + 2.3, -0.02, C.glass, nextId(), L.BOTTOM);
     br.box(S, -0.05, y0 + 2.3, -0.9, bl + 0.05, y0 + 2.75, 0.05, [0.4, 0.08, 0.12], nextId());
     br.box(Sl, 0.1, y0 + 2.4, 0.05, bl - 0.1, y0 + 2.65, 0.055, [1, 0.86, 0.5], nextId(), FRONT);
-    wallNeon(R, br, 'TICKETS', bl / 2, y0 + 2.525, 0.06, Math.min(1.7, bl - 0.4), [0.5, 0.06, 0.1]);
+    words(R.soup('box'), br, 'TICKETS', bl / 2, y0 + 2.44, 0.055, 0.17, [0.5, 0.06, 0.1]);
     for (const s of [bl * 0.3, bl * 0.7]) br.box(R.soup('box'), s - 0.05, y0 + 1.42, -0.02, s + 0.05, y0 + 1.52, -0.015, C.black, nextId(), FRONT);
     const sb = R.soup('box');
     br.box(sb, bl * 0.5 - 0.12, y0 + 1.1, -0.4, bl * 0.5 + 0.12, y0 + 1.22, -0.2, C.black, nextId(), L.BOTTOM);
@@ -1652,7 +1683,7 @@ function theatre(R) {
   S.fbox(mid - 1.75, y0 + 3.05, pw - 0.2, mid + 1.75, y0 + 3.6, pw + 0.22, gold, nextId());
   Sl.fbox(mid - 1.4, y0 + 3.1, pw + 0.22, mid + 1.4, y0 + 3.55, pw + 0.225, [0.16, 0.1, 0.14], nextId());
   // (its word lit in the dark panel, a row of little bulbs along the panel's top and its foot)
-  wallNeon(R, new Run(R, mid, pw + 0.23, [1, 0], [0, 1]), 'AUDITORIUM', 0, y0 + 3.33, 0, 2.3, [1, 0.86, 0.5]);
+  words(R.soup('lamp'), new Run(R, mid, pw, [1, 0], [0, 1]), 'AUDITORIUM', 0, y0 + 3.2, 0.226, 0.26, [1, 0.86, 0.5]);
   const sL = R.soup('lamp');
   for (let i = 0; i < 14; i++) for (const y of [y0 + 3.12, y0 + 3.5]) sL.fbox(mid - 1.33 + i * 0.2 - 0.025, y - 0.02, pw + 0.225, mid - 1.33 + i * 0.2 + 0.025, y + 0.02, pw + 0.235, i % 2 ? [1, 0.85, 0.4] : [1, 0.95, 0.75], nextId());
   ropes(R, [[mid - 1.5, pw + 0.5], [mid - 0.5, pw + 0.5]], {});
@@ -1684,7 +1715,7 @@ function theatre(R) {
     brun.box(Sg, 0.05, y0 + 1.1, 0.02, bl - 0.05, y0 + 2.3, 0.04, C.glass, nextId(), L.BOTTOM);
     brun.box(S, -0.05, y0 + 2.3, -0.9, bl + 0.05, y0 + 2.8, 0.1, [0.5, 0.1, 0.14], nextId());
     brun.box(Sl, 0.15, y0 + 2.38, 0.1, bl - 0.15, y0 + 2.72, 0.105, [1, 0.86, 0.5], nextId(), FRONT);
-    wallNeon(R, brun, 'BOX OFFICE', bl / 2, y0 + 2.55, 0.11, Math.min(2.4, bl - 0.6), [0.5, 0.06, 0.1]);
+    words(R.soup('box'), brun, 'BOX OFFICE', bl / 2, y0 + 2.45, 0.106, 0.2, [0.5, 0.06, 0.1]);
     for (let s = 0.6; s < bl - 0.3; s += 1.2) brun.box(R.soup('box'), s - 0.05, y0 + 1.42, 0.04, s + 0.05, y0 + 1.52, 0.045, C.black, nextId(), FRONT);
     brun.solid(0, -0.9, bl, 0.25, y0 + 2.3);
     const [tu, td] = brun.ud(bl * 0.5, -0.4);
@@ -1881,7 +1912,7 @@ function club(R) {
   if (vd1 - vd0 > 3) {
     const vr = new Run(R, ua, da, [0, -1], [1, 0]);
     wallNeon(R, vr, nameOf(R) || 'VIP', da - (vd0 + vd1) / 2, y0 + 3.7, 0.04, Math.min(8, (vd1 - vd0) * 0.8), [1, 0.32, 0.72], { font: 'Permanent Marker' });
-    wallNeon(R, vr, 'VIP', da - (vd0 + vd1) / 2, y0 + 2.5, 0.04, 1.6, [1, 0.85, 0.35]);
+    words(R.soup('lamp'), vr, 'VIP', da - (vd0 + vd1) / 2, y0 + 2.3, 0.02, 0.36, [1, 0.85, 0.35]);
   }
   // the rope along the step's edge, a way through by the floor
   const rp = [];
