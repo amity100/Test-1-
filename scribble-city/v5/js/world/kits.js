@@ -964,7 +964,7 @@ export function modern(ctx, spec) {
   const PM = new Parts(ctx);
   const md = diceAt(f, 61);
   const blindCol = md.pick([srgb(0.92, 0.9, 0.84), srgb(0.82, 0.84, 0.86), srgb(0.62, 0.6, 0.56)]);
-  const slatCol = darker(blindCol, 0.8);
+  const slatCol = darker(blindCol, 0.62);
   const blinds = (u0, u1, y0, y1, w = -0.3) => {
     for (let a = u0; a < u1 - 0.3; a += 1.5) {
       const b = Math.min(u1, a + 1.5);

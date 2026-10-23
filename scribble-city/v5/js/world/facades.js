@@ -42,7 +42,8 @@ export const FB = { FRONT: 1, BACK: 2, LEFT: 4, RIGHT: 8, TOP: 16, BOTTOM: 32 };
 // only. As a box a centimetre high each had its top and its underside, a fold the inker outlines;
 // from across the street those folds fall between the pixels, and every slat came out a row of
 // black dots (the offices' blinds like sheets of perforated tin). A face turned the way the blind
-// is has no fold to draw: up close it is a slat, far off the blind's tone. SLAT: its height
+// is has no fold to draw: up close it is a slat (a good shade darker than the blind, or the pens'
+// hatching would hide it), far off the blind's tone. SLAT: its height
 export const SLAT = 0.03;
 export const SLAT_FACE = FB.BACK | FB.TOP | FB.BOTTOM | FB.LEFT | FB.RIGHT;
 
@@ -349,7 +350,7 @@ export function deepWindow(P, f, u0, v0, u1, v1, o) {
         const bid = nextId();
         P.box(M.prop, f, u0 + t, yb, cw - 0.008, u1 - t, v1 - t, cw, col, bid, FB.BACK);
         if (!LOW) {
-          const sc = col.clone().multiplyScalar(0.8);
+          const sc = col.clone().multiplyScalar(0.62);
           for (let v = yb + 0.2; v < v1 - t - 0.05; v += 0.3) P.box(M.prop, f, u0 + t, v, cw, u1 - t, v + SLAT, cw + 0.008, sc, bid, SLAT_FACE);
         }
       } else if (k < 0.86 && lights !== 'deco') {
