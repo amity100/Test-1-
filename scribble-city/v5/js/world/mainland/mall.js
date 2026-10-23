@@ -305,9 +305,12 @@ export function* buildMall(bctx, b, o) {
     }
   }
   // ------------------------------------------------------------------ in the hall
-  // the food court's tables before its counters, a parasol over each in the open court
+  // the food court's tables before its counters, a parasol over each in the open court; what is on
+  // them (the napkins and the salt, a tray somebody has not cleared); the station where the trays
+  // go back at either end of it, by the bins
+  let nt = 0;
   for (let z = fcz0 + 2.2; z < fcz1 - 1 && food.length; z += 3.3) {
-    for (const x of [hx0 + 3.1, hx0 + 5.7]) foodTable(bctx, IN, hall, hallGeo, x, z, mall, !!o.open);
+    for (const x of [hx0 + 3.1, hx0 + 5.7]) foodTable(bctx, IN, hall, hallGeo, x, z, mall, !!o.open, nt++, r);
   }
   // planters with palms, benches round them; the fountain; the kiosks; the directory boards
   for (const z of [bz0 + 12, bz1 - 12, zm + 26, zm - 30]) {
@@ -407,8 +410,10 @@ function escalators(bctx, IN, hall, hallGeo, x0, zTop, UY) {
   return run;
 }
 
-// a table of the food court: four chairs round it (seats for game/mall.js), a parasol in the sun
-function foodTable(bctx, IN, hall, hallGeo, x, z, mall, sun) {
+// a table of the food court: four chairs round it (seats for game/mall.js: n, the table's number,
+// so a party sits at one table together), a parasol in the sun; in its middle the napkins in their
+// steel box, the salt and the pepper; on some a tray left by whoever ate there
+function foodTable(bctx, IN, hall, hallGeo, x, z, mall, sun, n = 0, r = Math.random) {
   const t = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 14);
   t.translate(x, CURB + 0.74, z);
   hallGeo(IN.gloss, t, srgb(0.97, 0.96, 0.93));
@@ -416,6 +421,7 @@ function foodTable(bctx, IN, hall, hallGeo, x, z, mall, sun) {
   leg.translate(x, CURB + 0.36, z);
   hallGeo(IN.cyl, leg, srgb(0.2, 0.18, 0.24));
   const cols = [srgb(0.95, 0.4, 0.45), srgb(0.3, 0.7, 0.8), srgb(0.98, 0.8, 0.3), srgb(0.6, 0.45, 0.85)];
+  const table = { x, z, n };
   for (let k = 0; k < 4; k++) {
     const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
     const sx = x + Math.cos(a) * 0.85;
@@ -426,7 +432,7 @@ function foodTable(bctx, IN, hall, hallGeo, x, z, mall, sun) {
     const bx = sx + Math.cos(a) * 0.19;
     const bz = sz + Math.sin(a) * 0.19;
     hall(IN.box, bx - 0.1, CURB + 0.47, bz - 0.1, bx + 0.1, CURB + 0.9, bz + 0.1, cols[k]);
-    mall.seats.push({ x: sx, z: sz, yaw: Math.atan2(x - sx, z - sz), table: { x, z } });
+    mall.seats.push({ x: sx, z: sz, yaw: Math.atan2(x - sx, z - sz), table, k });
   }
   if (sun) {
     hall(IN.box, x - 0.025, CURB + 0.75, z - 0.025, x + 0.025, CURB + 2.4, z + 0.025, srgb(0.9, 0.9, 0.92));
@@ -435,6 +441,105 @@ function foodTable(bctx, IN, hall, hallGeo, x, z, mall, sun) {
     hallGeo(IN.box, um, [srgb(0.98, 0.94, 0.86), srgb(0.95, 0.45, 0.5)][Math.floor(Math.abs(x * 3 + z)) % 2]);
   }
   bctx.col.addCircle(x, z, 0.55, 0, 0.8, 'prop');
+  // the napkins in their steel box, the salt and the pepper beside it
+  const y = CURB + 0.765;
+  // (beside the parasol's pole, in the open court)
+  hall(IN.gloss, x - 0.17, y, z - 0.035, x - 0.05, y + 0.1, z + 0.035, srgb(0.78, 0.8, 0.84));
+  hall(IN.box, x - 0.155, y + 0.1, z - 0.012, x - 0.065, y + 0.13, z + 0.012, WHITE);
+  for (const [dx, c] of [[0.08, WHITE], [0.12, DARK]]) {
+    const s = new THREE.CylinderGeometry(0.016, 0.018, 0.07, 6);
+    s.translate(x + dx, y + 0.035, z);
+    hallGeo(IN.gloss, s, c);
+  }
+  // a tray somebody left (on two tables in five): a burger's wrapper, the fries' carton, a cup
+  // with its lid and its straw, the napkins crumpled
+  if (r() < 0.4) {
+    const k = Math.floor(r() * 4);
+    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+    const tx = x + Math.cos(a) * 0.27;
+    const tz = z + Math.sin(a) * 0.27;
+    tray(IN, hall, hallGeo, tx, y, tz, r);
+  }
+}
+
+// a food court's tray on a table at (x, y, z) - square to the hall - and what is on it
+function tray(IN, hall, hallGeo, x, y, z, r) {
+  const col = [srgb(0.86, 0.26, 0.24), srgb(0.24, 0.58, 0.62), srgb(0.95, 0.6, 0.22), srgb(0.3, 0.32, 0.38)][Math.floor(r() * 4)];
+  hall(IN.box, x - 0.18, y, z - 0.135, x + 0.18, y + 0.018, z + 0.135, col);
+  hall(IN.box, x - 0.167, y + 0.018, z - 0.122, x + 0.167, y + 0.02, z + 0.122, col.clone().lerp(WHITE, 0.25));
+  // the paper on it, the burger (bun, patty, bun) or its crumpled wrapper
+  hall(IN.box, x - 0.16, y + 0.02, z - 0.12, x + 0.02, y + 0.022, z + 0.06, srgb(0.97, 0.94, 0.86));
+  if (r() < 0.55) {
+    const g = new THREE.CylinderGeometry(0.05, 0.055, 0.028, 10);
+    g.translate(x - 0.08, y + 0.036, z - 0.03);
+    hallGeo(IN.cyl, g, srgb(0.88, 0.62, 0.32));
+    const p = new THREE.CylinderGeometry(0.056, 0.056, 0.014, 10);
+    p.translate(x - 0.08, y + 0.057, z - 0.03);
+    hallGeo(IN.cyl, p, srgb(0.42, 0.24, 0.14));
+    const t = new THREE.SphereGeometry(0.052, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+    t.scale(1, 0.6, 1);
+    t.translate(x - 0.08, y + 0.064, z - 0.03);
+    hallGeo(IN.cyl, t, srgb(0.9, 0.64, 0.34));
+  } else {
+    const w = new THREE.SphereGeometry(0.045, 6, 4);
+    w.scale(1.2, 0.6, 1);
+    w.translate(x - 0.08, y + 0.045, z - 0.03);
+    hallGeo(IN.box, w, srgb(0.97, 0.9, 0.62));
+  }
+  // the fries in their red carton
+  hall(IN.box, x + 0.04, y + 0.02, z - 0.11, x + 0.11, y + 0.1, z - 0.06, srgb(0.86, 0.2, 0.2));
+  for (let i = 0; i < 4; i++) hall(IN.box, x + 0.048 + i * 0.015, y + 0.1, z - 0.095 + (i % 2) * 0.01, x + 0.058 + i * 0.015, y + 0.13 + (i % 3) * 0.01, z - 0.085 + (i % 2) * 0.01, srgb(0.98, 0.84, 0.36));
+  // the cup, its lid, its straw
+  const c = new THREE.CylinderGeometry(0.042, 0.032, 0.15, 10);
+  c.translate(x + 0.11, y + 0.095, z + 0.07);
+  hallGeo(IN.cyl, c, r() < 0.5 ? srgb(0.95, 0.95, 0.94) : srgb(0.86, 0.26, 0.24));
+  const l = new THREE.CylinderGeometry(0.044, 0.044, 0.012, 10);
+  l.translate(x + 0.11, y + 0.176, z + 0.07);
+  hallGeo(IN.gloss, l, srgb(0.9, 0.92, 0.95));
+  hall(IN.box, x + 0.104, y + 0.18, z + 0.064, x + 0.116, y + 0.26, z + 0.076, r() < 0.5 ? srgb(0.95, 0.3, 0.35) : srgb(0.3, 0.6, 0.9));
+  // the napkins, crumpled
+  const n = new THREE.SphereGeometry(0.03, 5, 4);
+  n.translate(x - 0.14, y + 0.04, z + 0.09);
+  hallGeo(IN.box, n, WHITE);
+}
+
+// the station where the trays go back: a counter of the hall's wood, the swing flaps of its bins
+// (THANK YOU over them), the trays stacked on its top, the napkins, the straws, the sauces in their
+// pumps (st: its front faces the food court's tables, along z; x0..x1 across the hall)
+function trayStation(bctx, IN, hall, hallGeo, x0, x1, z, face) {
+  const zf = z + face * 0.32;
+  const zb = z - face * 0.32;
+  const za = Math.min(zf, zb);
+  const zc = Math.max(zf, zb);
+  const wood = srgb(0.62, 0.44, 0.3);
+  hall(IN.box, x0, CURB, za, x1, CURB + 0.08, zc, DARK);
+  hall(IN.box, x0, CURB + 0.08, za, x1, CURB + 0.98, zc, wood);
+  hall(IN.gloss, x0 - 0.04, CURB + 0.98, za - 0.04, x1 + 0.04, CURB + 1.03, zc + 0.04, srgb(0.95, 0.94, 0.92));
+  const L = x1 - x0;
+  // the two flaps on its front, the band over them
+  for (const k of [0.27, 0.73]) {
+    const xm = x0 + L * k;
+    hall(IN.box, xm - 0.26, CURB + 0.42, Math.min(zf, zf + face * 0.01), xm + 0.26, CURB + 0.8, Math.max(zf, zf + face * 0.01), srgb(0.24, 0.25, 0.3));
+    hall(IN.gloss, xm - 0.22, CURB + 0.46, Math.min(zf, zf + face * 0.015), xm + 0.22, CURB + 0.76, Math.max(zf, zf + face * 0.015), srgb(0.62, 0.64, 0.7));
+  }
+  hall(IN.lamp, x0 + 0.1, CURB + 0.84, Math.min(zf, zf + face * 0.012), x1 - 0.1, CURB + 0.94, Math.max(zf, zf + face * 0.012), srgb(0.4, 0.8, 0.5));
+  // the trays stacked at one end of the top, the napkins and straws in the middle, the pumps
+  const cols = [srgb(0.86, 0.26, 0.24), srgb(0.24, 0.58, 0.62), srgb(0.95, 0.6, 0.22)];
+  for (let i = 0; i < 9; i++) hall(IN.box, x0 + 0.08, CURB + 1.03 + i * 0.022, z - 0.17, x0 + 0.5, CURB + 1.05 + i * 0.022, z + 0.17, cols[i % 3]);
+  hall(IN.gloss, x0 + L * 0.42, CURB + 1.03, z - 0.08, x0 + L * 0.42 + 0.16, CURB + 1.17, z + 0.08, srgb(0.78, 0.8, 0.84));
+  const sc = new THREE.CylinderGeometry(0.05, 0.05, 0.16, 8, 1, true);
+  sc.translate(x0 + L * 0.58, CURB + 1.11, z);
+  hallGeo(IN.gloss, sc, srgb(0.85, 0.92, 0.96));
+  for (let i = 0; i < 5; i++) hall(IN.box, x0 + L * 0.58 - 0.03 + i * 0.015, CURB + 1.1, z - 0.005, x0 + L * 0.58 - 0.024 + i * 0.015, CURB + 1.26, z + 0.005, [srgb(0.95, 0.3, 0.35), WHITE, srgb(0.3, 0.6, 0.9)][i % 3]);
+  for (const [k, c] of [[0, srgb(0.86, 0.14, 0.14)], [1, srgb(0.98, 0.8, 0.16)], [2, srgb(0.95, 0.95, 0.9)]]) {
+    const xp = x1 - 0.55 + k * 0.17;
+    const p = new THREE.CylinderGeometry(0.055, 0.055, 0.2, 8);
+    p.translate(xp, CURB + 1.13, z);
+    hallGeo(IN.cyl, p, c);
+    hall(IN.box, xp - 0.012, CURB + 1.23, z - 0.012, xp + 0.012, CURB + 1.31, z + 0.012, DARK);
+    hall(IN.box, xp - 0.012, CURB + 1.29, z - 0.012, xp + 0.012, CURB + 1.31, z + face * 0.08, DARK);
+  }
+  bctx.col.addBox(x0, za, x1, zc, 0, 1.05, 'prop');
 }
 
 // a round planter (with a palm in it: the caller's)
@@ -510,12 +615,15 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
     taken.push([cx - 2.3, z - 9, cx + 2.3, z + 9]);
     np++;
   }
-  // ---- the bins by the food court
+  // ---- the food court's ends: the station the trays go back to, facing the tables, the bins by it
   if (g.fc) {
-    for (const z of [g.fc[0] - 0.6, g.fc[1] + 0.6]) {
+    for (const [z, face] of [[g.fc[0] - 0.6, 1], [g.fc[1] + 0.6, -1]]) {
       if (z < bz0 + 8 || z > bz1 - 8) continue;
-      bin(bctx, IN, hall, hallGeo, mall, hx0 + 6.9, z, srgb(0.36, 0.38, 0.42));
-      bin(bctx, IN, hall, hallGeo, mall, hx0 + 7.5, z, srgb(0.3, 0.6, 0.4));
+      trayStation(bctx, IN, hall, hallGeo, hx0 + 5.5, hx0 + 7.1, z, face);
+      bin(bctx, IN, hall, hallGeo, mall, hx0 + 7.5, z, srgb(0.36, 0.38, 0.42));
+      bin(bctx, IN, hall, hallGeo, mall, hx0 + 8.08, z, srgb(0.3, 0.6, 0.4));
+      mall.trayStations = mall.trayStations || [];
+      mall.trayStations.push({ x: hx0 + 6.3, z: z + face * 0.75, yaw: Math.atan2(0, -face), at: { x: hx0 + 6.3, z } });
     }
   }
   // ---- the screens of advertising, by every other column under the galleries

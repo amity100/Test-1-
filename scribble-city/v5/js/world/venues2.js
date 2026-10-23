@@ -374,6 +374,41 @@ function bottle(Sg, Sc, run, s, t, y, h, r, col) {
   run.cyl(Sc, s, t, r * 0.32, y + h * 0.76, h * 0.24, col, nextId(), 4, true);
 }
 
+// the wines' glass: the dark green and the brown of the reds, the pale of the whites and the rosés
+const WINES = [[0.16, 0.26, 0.16], [0.24, 0.3, 0.14], [0.36, 0.08, 0.1], [0.42, 0.22, 0.1], [0.9, 0.86, 0.62], [0.86, 0.9, 0.78], [0.95, 0.66, 0.6], [0.12, 0.16, 0.12]];
+const LABELS = [[0.97, 0.95, 0.88], [0.95, 0.9, 0.75], [0.9, 0.85, 0.7], [0.15, 0.15, 0.17], [0.7, 0.16, 0.18]];
+
+// a wine glass standing at (u, d) on y: its foot, its stem, its bowl (a little wine in it: fill), or
+// upside down on its rim (down: the bowl under, the foot up)
+function wineGlass(Sg, Sc, u, d, y, fill = null, down = false) {
+  if (down) {
+    Sg.fcyl(u, d, 0.033, y, 0.075, C.glass, nextId(), 8, true, 0.022);
+    Sg.fcyl(u, d, 0.006, y + 0.075, 0.075, C.glass, nextId(), 4, false);
+    Sg.fcyl(u, d, 0.03, y + 0.15, 0.004, C.glass, nextId(), 8, true);
+    return;
+  }
+  Sg.fcyl(u, d, 0.03, y, 0.004, C.glass, nextId(), 8, true);
+  Sg.fcyl(u, d, 0.006, y + 0.004, 0.075, C.glass, nextId(), 4, false);
+  Sg.fcyl(u, d, 0.022, y + 0.079, 0.075, C.glass, nextId(), 8, false, 0.033);
+  if (fill) Sc.fcyl(u, d, 0.024, y + 0.082, 0.03, fill, nextId(), 8, true, 0.029);
+}
+
+// a decanter on the ledge (run frame): its wide low belly with the wine in it, the long neck, the
+// stopper beside it; or a bottle opened to breathe (open: false)
+function decanter(Sg, Sc, run, s, t, y, open, rng) {
+  if (open) {
+    run.cyl(Sg, s, t, 0.05, y, 0.012, C.glass, nextId(), 10, false, 0.085);
+    run.cyl(Sc, s, t, 0.082, y + 0.012, 0.05, C.wine, nextId(), 10, true, 0.07);
+    run.cyl(Sg, s, t, 0.085, y + 0.012, 0.07, C.glass, nextId(), 10, false, 0.05);
+    run.cyl(Sg, s, t, 0.05, y + 0.082, 0.05, C.glass, nextId(), 8, false, 0.022);
+    run.cyl(Sg, s, t, 0.022, y + 0.132, 0.12, C.glass, nextId(), 6, false, 0.026);
+    run.ball(Sg, s + 0.1, y + 0.02, t + 0.02, 0.02, C.glass, nextId(), 3, 5);
+    return;
+  }
+  bottle(Sg, Sc, run, s, t, y, 0.3, 0.036, pk(rng, [[0.16, 0.26, 0.16], [0.36, 0.08, 0.1]]));
+  run.cyl(Sc, s + 0.09, t + 0.02, 0.012, y, 0.04, C.oak, nextId(), 5, true);
+}
+
 /**
  * A bar along a wall (run: s along the wall, t out of it): the back bar - its cupboards, its marble,
  * the wall of bottles on glass shelves lit from behind, the mirror between them; the bartender's
@@ -563,23 +598,57 @@ function gourmet(R) {
     barZone = 0.47 + 1.42 + 0.75;
     floor.take(wallU, bd0 - 0.1, wallU - barSide * barZone, bd1 + 0.3);
   } else {
-    // (a narrow room: its tables go along this wall too) the wine rack high on the wall over them -
-    // shelves of bottles lying in their rack, a ledge under it, lit along the top
-    const run = barSide > 0 ? new Run(R, wallU - 0.3, bd1, [0, -1], [-1, 0]) : new Run(R, wallU + 0.3, bd1, [0, -1], [1, 0]);
+    // (a narrow room: its tables go along this wall too) the wall of wine over them, lit from
+    // behind the way a bar's back is: the walnut frame in bays between its pilasters, the glow
+    // behind the glass shelves, the bottles standing on them in their rows - the reds, the whites,
+    // the green of the old ones, a magnum now and then - the cornice over it with its light under
+    // the lip; the ledge along its foot where the sommelier keeps the evening's decanters, a bottle
+    // breathing, the glasses waiting upside down on their cloth
+    const run = barSide > 0 ? new Run(R, wallU - 0.32, bd1, [0, -1], [-1, 0]) : new Run(R, wallU + 0.32, bd1, [0, -1], [1, 0]);
     const len = Math.max(1.2, bd1 - bd0);
-    run.box(S, 0, y0 + 1.3, -0.3, len, y1 - 0.25, -0.28, C.walnut, nextId(), L.BACK);
-    run.box(S, -0.02, y0 + 1.3, -0.3, len + 0.02, y0 + 1.36, -0.02, C.walnut, nextId());
-    run.box(Sl, 0.05, y1 - 0.45, -0.28, len - 0.05, y1 - 0.41, -0.04, [1, 0.8, 0.5], nextId());
-    run.box(S, -0.02, y1 - 0.41, -0.3, len + 0.02, y1 - 0.35, 0, C.walnut, nextId());
-    for (const s of [0, len]) run.box(S, s - 0.03, y0 + 1.3, -0.3, s + 0.03, y1 - 0.35, -0.02, C.walnut, nextId());
-    for (let y = y0 + 1.56; y < y1 - 0.5; y += 0.2) {
-      run.box(S, 0, y - 0.02, -0.28, len, y, -0.04, C.walnut, nextId(), L.BACK);
-      for (let s = 0.06; s < len - 0.05; s += 0.09) run.cyl(sG, s, -0.14, 0.035, y, 0.07, pk(rng, BOTTLES), nextId(), 6, true);
+    const yB = y0 + 1.5;
+    const yT = Math.max(yB + 1.0, y1 - 0.42);
+    run.box(S, 0, yB, -0.32, len, yT, -0.3, C.walnut, nextId(), L.BACK);
+    run.box(Sl, 0.05, yB + 0.05, -0.3, len - 0.05, yT - 0.04, -0.295, [0.7, 0.44, 0.24], nextId(), L.BACK);
+    const bays = Math.max(1, Math.round(len / 1.05));
+    const bw = len / bays;
+    for (let k = 0; k <= bays; k++) {
+      const s = Math.min(len - 0.035, Math.max(0.035, k * bw));
+      run.box(S, s - 0.035, yB, -0.32, s + 0.035, yT, -0.02, C.walnut, nextId(), L.BACK);
     }
-    // (on the ledge: a decanter, a pair of glasses)
-    for (let s = 0.4; s < len - 0.3; s += 1.1) {
-      run.cyl(sG, s, -0.17, 0.05, y0 + 1.36, 0.16, C.glass, nextId(), 8, true, 0.02);
-      run.cyl(sG, s + 0.25, -0.17, 0.03, y0 + 1.36, 0.11, C.glass, nextId(), 6, true, 0.035);
+    run.box(S, -0.04, yT, -0.34, len + 0.04, yT + 0.12, 0.03, C.walnut, nextId(), L.BACK);
+    run.box(S, -0.06, yT + 0.12, -0.34, len + 0.06, yT + 0.16, 0.05, C.walnut.map((x) => x * 0.8), nextId(), L.BACK);
+    run.box(Sl, 0.06, yT - 0.025, -0.28, len - 0.06, yT, -0.05, [1, 0.88, 0.62], nextId(), L.TOP);
+    // the ledge: its top, the moulding under it, a brass rail along its edge
+    run.box(S, -0.03, yB - 0.07, -0.32, len + 0.03, yB, 0.03, C.walnut, nextId(), L.BACK);
+    run.box(S, -0.03, yB - 0.13, -0.32, len + 0.03, yB - 0.07, -0.04, C.walnut.map((x) => x * 0.75), nextId(), L.BACK);
+    run.box(Sg, -0.02, yB, 0.01, len + 0.02, yB + 0.045, 0.025, C.brass, nextId(), L.BOTTOM);
+    // the glass shelves, the bottles on them (and a row on the ledge's back, against the glow)
+    const shelves = [yB];
+    for (let y = yB + 0.36; y < yT - 0.3; y += 0.36) shelves.push(y);
+    for (const y of shelves) {
+      if (y > yB) run.box(Sg, 0.04, y - 0.012, -0.29, len - 0.04, y, -0.05, C.glass, nextId(), L.BACK);
+      let s = 0.08;
+      while (s < len - 0.08) {
+        // (not through a pilaster)
+        if (Math.abs(s - Math.round(s / bw) * bw) < 0.07) {
+          s += 0.07;
+          continue;
+        }
+        const big = rng.r() < 0.08;
+        const h = big ? 0.32 : 0.25 + rng.r() * 0.05;
+        const r = big ? 0.048 : 0.034 + rng.r() * 0.006;
+        bottle(sG, sC, run, s + r, -0.2 + (rng.r() - 0.5) * 0.03, y, h, r, pk(rng, WINES));
+        // (the label, a pale band round its middle)
+        if (rng.r() < 0.7) run.cyl(sC, s + r, -0.2, r * 1.04, y + h * 0.22, h * 0.2, pk(rng, LABELS), nextId(), 6, false);
+        s += r * 2 + 0.014 + rng.r() * 0.012;
+      }
+    }
+    // on the ledge's front: decanters breathing, a bottle open, the glasses upside down on a cloth
+    for (let s = 0.35; s < len - 0.3; s += 1.25) {
+      decanter(sG, sC, run, s, -0.06, yB, rng.r() < 0.7, rng);
+      run.box(sS, s + 0.18, yB, -0.12, s + 0.62, yB + 0.006, 0.02, C.white, nextId(), L.BOTTOM);
+      for (let q = 0; q < 3; q++) wineGlass(sG, sC, ...run.ud(s + 0.25 + q * 0.13, -0.05), yB + 0.006, null, true);
     }
   }
   // ---- the host's stand by the door, the coats, the way in kept clear

@@ -99,6 +99,132 @@ function dinerLook() {
 // a sit-down party's colours of drink
 const DRINKS = [[0.98, 0.6, 0.2], [0.95, 0.3, 0.45], [0.5, 0.8, 0.95], [0.96, 0.88, 0.5], [0.55, 0.85, 0.4], [0.7, 0.2, 0.3]];
 
+// ------------------------------------------------------------------ a meal at a table
+// The hands of somebody eating at a table, wherever it is - the restaurant's white cloth, the
+// diner's booth, the noodle bar's counter: a little saw with the knife at the plate's edge, the fork
+// up to the mouth, held there a moment, down to the plate again, a rest; the other hand at the
+// plate's edge. (v: hand and handL kept on it - no new vectors a frame; forkT the time into the
+// round, forkP how long a round takes them)
+const ease = (t) => t * t * (3 - 2 * t);
+
+export function forkToMouth(v, sp, floor, dt) {
+  const f = v.c.fig;
+  v.forkT += dt;
+  const T = v.forkP;
+  const k = (v.forkT % T) / T;
+  const sy = Math.sin(sp.yaw);
+  const cy = Math.cos(sp.yaw);
+  const px = sp.x + sy * 0.44;
+  const pz = sp.z + cy * 0.44;
+  // (the diner's right and left)
+  const rx = -cy;
+  const rz = sy;
+  const head = f.j.headC;
+  const mx = head.x + sy * 0.12;
+  const my = head.y - 0.07;
+  const mz = head.z + cy * 0.12;
+  const py = floor + 0.84;
+  let x;
+  let y;
+  let z;
+  if (k < 0.32) {
+    // cutting: a little saw at the plate
+    const s = Math.sin(v.forkT * 13) * 0.025;
+    x = px + rx * (0.05 + s) - sy * 0.03;
+    y = py;
+    z = pz + rz * (0.05 + s) - cy * 0.03;
+  } else if (k < 0.5) {
+    const t = ease((k - 0.32) / 0.18);
+    x = px + (mx - px) * t;
+    y = py + (my - py) * t;
+    z = pz + (mz - pz) * t;
+  } else if (k < 0.62) {
+    x = mx;
+    y = my;
+    z = mz;
+  } else if (k < 0.8) {
+    const t = ease((k - 0.62) / 0.18);
+    x = mx + (px - mx) * t;
+    y = my + (py - my) * t;
+    z = mz + (pz - mz) * t;
+  } else {
+    x = px + rx * 0.05;
+    y = py - 0.01;
+    z = pz + rz * 0.05;
+  }
+  v.hand.set(x + rx * 0.06, y, z + rz * 0.06);
+  f.reachR = v.hand;
+  v.handL.set(px - rx * 0.12, py - 0.01, pz - rz * 0.12);
+  f.reachL = v.handL;
+  f.lookAt = null;
+}
+
+// what is eaten with a fork (or chopsticks, or the hands) off a plate on the table; the rest of what
+// a kitchen draws for a table is drunk (game/streetlife.js serveTables: v.dishShape)
+const EATEN = new Set(['slice', 'pizza', 'sushi', 'pita', 'taco', 'empanada', 'burger', 'dessert', 'sandwich', 'hotdog', 'bagel', 'donut', 'fries', 'noodles', 'gourmet', 'steak', 'pasta']);
+// (a word across a table between bites, in the city's everyday places)
+const EAT_TALK = [
+  ['This is so good.', 'Told you!'],
+  ['How\'s yours?', 'Amazing. Want a bite?'],
+  ['We should come here every week.', 'Deal.'],
+  ['I was starving.', 'Me too!'],
+  ['Pass the napkins?', 'Here.'],
+  ['Did you hear what happened downtown?', 'No! Tell me.'],
+  ['Best in the city.', 'Don\'t tell my mom.'],
+  ['Too spicy?', 'Just right.'],
+];
+
+/**
+ * Somebody at a table with a plate before them (game/streetlife.js OpenShop: any shop whose kitchen
+ * sends plates out to its tables). They eat what was brought - or drink it, a glass to the lips now
+ * and then - and now and then say something to whoever sits nearest them at the table.
+ */
+export function eatPlate(o, v, dt) {
+  const c = v.c;
+  const f = c.fig;
+  if (!v.hand) {
+    v.hand = new THREE.Vector3();
+    v.handL = new THREE.Vector3();
+    v.forkT = Math.random() * 3;
+    v.forkP = 2.4 + Math.random() * 1.4;
+  }
+  v.ate = true;
+  if (c.convo) {
+    f.reachR = null;
+    f.reachL = null;
+  } else if (!v.dishShape || EATEN.has(v.dishShape)) forkToMouth(v, v.spot, o.room.floor, dt);
+  else {
+    // (a drink: up to the lips and down, a while between)
+    f.reachR = null;
+    f.reachL = null;
+    v.sip = (v.sip === undefined ? 1 + Math.random() * 3 : v.sip) - dt;
+    if (v.sip < 0) {
+      f.drinkT = Math.min(1, -v.sip / 1.2);
+      if (v.sip < -1.2) {
+        v.sip = 3 + Math.random() * 4;
+        f.drinkT = -1;
+      }
+    }
+  }
+  v.talkT = (v.talkT === undefined ? 4 + Math.random() * 8 : v.talkT) - dt;
+  if (v.talkT > 0 || o.game.classic) return;
+  v.talkT = 10 + Math.random() * 14;
+  const p = o.game.player.pos;
+  if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 16) return;
+  // (the nearest one sitting at the same table)
+  let best = null;
+  let bd = 1.7;
+  for (const w of o.visitors) {
+    if (w === v || w.mode !== 'seat' || w.phase !== 'at' || !w.c.alive) continue;
+    const d = Math.hypot(w.c.pos.x - c.pos.x, w.c.pos.z - c.pos.z);
+    if (d < bd) {
+      bd = d;
+      best = w;
+    }
+  }
+  if (best && !c.convo && !best.c.convo) o.game.voices.talk([c, best.c], pick(EAT_TALK));
+}
+
 // ------------------------------------------------------------------ the restaurant
 export class Dining {
   constructor(o) {
@@ -140,7 +266,7 @@ export class Dining {
     const m = this.m;
     const touch = this.game.touch;
     if (m.host) this.host = { c: this.staff(m.host, shopkeeperLook('jewelry', Math.random() < 0.6), (c, dt) => this.hostLife(c, dt)), t: 0, job: null, pts: null };
-    const nW = touch ? 1 : Math.min(3, Math.max(1, Math.round(this.tables.length / 4)));
+    const nW = touch ? 1 : Math.min(4, Math.max(1, Math.round(this.tables.length / 3.5)));
     for (let i = 0; i < nW; i++) {
       const at = m.station || m.pass || o.room.door;
       const w = { i, t: 0, job: null, pts: null, idleT: Math.random() * 3, hand: new THREE.Vector3(), handL: new THREE.Vector3() };
@@ -182,7 +308,10 @@ export class Dining {
   // already at their tables when you come by, each party somewhere in its evening
   populate() {
     const touch = this.game.touch;
-    const k = touch ? 0.4 : 0.75;
+    // (fuller at lunch and at dinner)
+    const h = this.game.rhythm ? this.game.rhythm.hour : 13;
+    const meal = (h > 11.8 && h < 14.5) || (h > 18.5 && h < 22.5);
+    const k = touch ? 0.4 : meal ? 0.88 : 0.7;
     for (const t of this.tables) {
       if (Math.random() > k) continue;
       const st = pick(['menus', 'cooking', 'cooking', 'eating', 'eating', 'eating', 'coffee']);
@@ -391,7 +520,7 @@ export class Dining {
         break;
     }
     // a word between them now and then, while they wait and while they eat
-    if ((P.state === 'menus' || P.state === 'cooking' || P.state === 'eating' || P.state === 'coffee') && M.length > 1 && !this.game.classic) {
+    if ((P.state === 'menus' || P.state === 'cooking' || P.state === 'eating' || P.state === 'coffee' || P.state === 'done' || P.state === 'check') && M.length > 1 && !this.game.classic) {
       P.talkT -= dt;
       if (P.talkT <= 0) {
         P.talkT = 9 + Math.random() * 12;
@@ -529,7 +658,6 @@ export class Dining {
   eat(v, dt) {
     const c = v.c;
     const f = c.fig;
-    const sp = v.spot;
     if (f.carry === 'book' || f.carry === 'coffee') f.carry = null;
     if (c.convo) {
       // (talking: the fork down, the hands at rest)
@@ -537,55 +665,7 @@ export class Dining {
       f.reachL = null;
       return null;
     }
-    v.forkT += dt;
-    const T = v.forkP;
-    const k = (v.forkT % T) / T;
-    const sy = Math.sin(sp.yaw);
-    const cy = Math.cos(sp.yaw);
-    const fl = this.o.room.floor;
-    const px = sp.x + sy * 0.44;
-    const pz = sp.z + cy * 0.44;
-    // (the diner's right and left)
-    const rx = -cy;
-    const rz = sy;
-    const head = f.j.headC;
-    const mx = head.x + sy * 0.12;
-    const my = head.y - 0.07;
-    const mz = head.z + cy * 0.12;
-    const ease = (t) => t * t * (3 - 2 * t);
-    let x;
-    let y;
-    let z;
-    if (k < 0.32) {
-      // cutting: a little saw at the plate
-      const s = Math.sin(v.forkT * 13) * 0.025;
-      x = px + rx * (0.05 + s) - sy * 0.03;
-      y = fl + 0.84;
-      z = pz + rz * (0.05 + s) - cy * 0.03;
-    } else if (k < 0.5) {
-      const t = ease((k - 0.32) / 0.18);
-      x = px + (mx - px) * t;
-      y = fl + 0.84 + (my - fl - 0.84) * t;
-      z = pz + (mz - pz) * t;
-    } else if (k < 0.62) {
-      x = mx;
-      y = my;
-      z = mz;
-    } else if (k < 0.8) {
-      const t = ease((k - 0.62) / 0.18);
-      x = mx + (px - mx) * t;
-      y = my + (fl + 0.84 - my) * t;
-      z = mz + (pz - mz) * t;
-    } else {
-      x = px + rx * 0.05;
-      y = fl + 0.83;
-      z = pz + rz * 0.05;
-    }
-    v.hand.set(x + rx * 0.06, y, z + rz * 0.06);
-    f.reachR = v.hand;
-    v.handL.set(px - rx * 0.12, fl + 0.83, pz - rz * 0.12);
-    f.reachL = v.handL;
-    f.lookAt = null;
+    forkToMouth(v, v.spot, this.o.room.floor, dt);
     return null;
   }
 

@@ -8,7 +8,7 @@ import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, FASHION_TOPS, FASHION_BOTTOM
 import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 import { BOSS } from './properties.js';
 import { TOOLS, BOTTLE } from './ink.js';
-import { Dining, BarLife, LobbyLife } from './venuelife.js';
+import { Dining, BarLife, LobbyLife, eatPlate } from './venuelife.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -1111,12 +1111,16 @@ class OpenShop {
     if (kind === 'barber' && R.chairs.length) this.addVisitor(null, { mode: 'chair', spot: R.chairs[0], already: true });
     const seats = shuffled(R.seats);
     const nSeat = this.barLife ? 0 : Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : SEATED[kind] || 0);
-    for (let i = 0; i < nSeat; i++) this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
+    for (let i = 0; i < nSeat; i++) {
+      const v = this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
+      // (v5, GTA IV round: here before you came - some halfway through what the kitchen brought)
+      if (v && DISH[kind] && kind !== 'cafe' && Math.random() < 0.6) this.plateFor(v);
+    }
     if (this.barLife) this.barLife.populateRoom();
     // (a bar's own standing places - the pool table, the darts, the tall tables - are the bar's)
     const browse = shuffled(this.barLife ? R.browse.filter((b) => !b.what) : R.browse);
     // (the club's floor is full: they are dancing; a shop of the new kind is busy - v5, 11.18)
-    const nb = Math.min(browse.length, kind === 'club' ? (touch ? 4 : 9) : this.wantVisitors());
+    const nb = Math.min(browse.length, kind === 'club' ? (touch ? 5 : 13) : this.wantVisitors());
     for (let i = 0; i < nb; i++) this.addVisitor(null, { mode: browse[i].lift ? 'lift' : 'browse', spot: browse[i], already: true });
     // (the one who fills the shelves, in the bigger shops)
     if (R.pay && R.staff && R.staff.length && (!touch || R.big)) this.spawnStaff();
@@ -1332,6 +1336,9 @@ class OpenShop {
       // (v5, GTA IV round: at a bar, a glass to the lips, a word with the next one)
       const bl = this.dining ? this.dining.bar : this.barLife;
       if (bl && (v.drink || c.fig.carry === 'soda')) bl.seated(v, dt);
+      // (v5, GTA IV round: a plate on the table before them - the diner's, the noodle bar's, the
+      // pizzeria's: they eat it, a word across the table between bites - game/venuelife.js)
+      else if (v.dish) eatPlate(this, v, dt);
       // the barber decides when the one in his chair is done
       if (v.mode === 'chair') return null;
       if (v.t > v.stay) {
@@ -1753,6 +1760,7 @@ class OpenShop {
     this.unshop(v);
     c.fig.dance = 0;
     c.fig.reachR = null;
+    c.fig.reachL = null;
     c.fig.drinkT = -1;
     v.phase = 'out';
     v.t = 0;
@@ -2069,6 +2077,7 @@ class OpenShop {
           if (!this.alive || !v.c.alive || v.phase !== 'at') return;
           // (the plate stays on the table, drawn, while they eat)
           v.dish = this.game.airsketch.draw({ shape, at: new THREE.Vector3(tx, floor + 0.98, tz), size: 0.31, keep: true, dur: 0.05 });
+          v.dishShape = shape;
           v.stay = Math.max(v.stay, v.t + 14 + Math.random() * 12);
           if (Math.random() < 0.7) this.say(c, pick(CHEF_SAYS));
           if (Math.random() < 0.5) this.game.inkwell.after(1.2, () => this.say(v.c, pick(['Mmm!', 'Delicious!', 'Wow, thank you!', 'Magnifique!'])));
@@ -2076,6 +2085,19 @@ class OpenShop {
       });
     });
     return { x: this.home.x, z: this.home.z, speed: 0.6 };
+  }
+
+  // (v5, GTA IV round) a plate already on the table before somebody who sat down before you came:
+  // drawn there, kept while they eat (only near you, where it is seen)
+  plateFor(v) {
+    const s = this.shop;
+    const p = this.game.player.pos;
+    if (v.dish || Math.hypot(this.home.x - p.x, this.home.z - p.z) > 30) return;
+    const sp = v.spot;
+    const shape = pickDish(s.kind);
+    v.dish = this.game.airsketch.draw({ shape, at: new THREE.Vector3(sp.x + Math.sin(sp.yaw) * 0.42, this.room.floor + 0.98, sp.z + Math.cos(sp.yaw) * 0.42), size: 0.31, keep: true, dur: 0.05 });
+    v.dishShape = shape;
+    v.stay = Math.max(v.stay, v.t + 14 + Math.random() * 12);
   }
 
   clearDish(v) {
