@@ -367,7 +367,13 @@ export class Routines {
       if (v.feedT <= 0) {
         v.feedT = 2.5 + Math.random() * 2.5;
         const A = this.game.ambient;
-        if (A && A.feedFlock && (!v.flock || (v.flock.up && v.flock.upT > 15))) v.flock = A.feedFlock(s.x + Math.sin(s.yaw) * 1.9, s.z + Math.cos(s.yaw) * 1.9);
+        const now = this.game.time;
+        // (flown off: game/ambient.js forgets a flock six seconds up - back down here a while later)
+        if (v.flock && v.flock.up && !v.backT) v.backT = now + 12 + Math.random() * 8;
+        if (A && A.feedFlock && (!v.flock || (v.backT && now > v.backT))) {
+          v.flock = A.feedFlock(s.x + Math.sin(s.yaw) * 1.9, s.z + Math.cos(s.yaw) * 1.9);
+          v.backT = 0;
+        }
         if (v.flock && !v.flock.up) this.game.civilians.mime(c, 'toss', 0.8);
       }
     }

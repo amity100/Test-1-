@@ -119,6 +119,11 @@ const GESTURE_D = 38;
 // things held in both hands (or in the way of the right one): no hands free to talk with
 const HANDS_FULL = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell', 'box', 'tray']);
 const RIGHT_BUSY = new Set(['umbrella', 'cane', 'leash', 'shopBag', 'bag', 'basket']);
+// (the right hand free for something - a gesture, a coin dropped in a case: nothing held in both
+// hands, nothing hanging from it)
+export function rightFree(fig) {
+  return !HANDS_FULL.has(fig.carry) && !RIGHT_BUSY.has(fig.carry);
+}
 const GREET_RE = /^(hi|hey|hello|bye|good ?bye|see you|see ya|later|morning|good morning|evening|good evening|night|yo\b|take care|ciao|welcome)/i;
 const LAUGH_RE = /^(ha|he he|haha|lol|hah)/i;
 const POINT_RE = /(that way|over there|look at|right there|just there|this way|over here)/i;
@@ -1294,6 +1299,8 @@ export class Civilians {
     if (!c) return;
     const i = this.list.indexOf(c);
     if (i >= 0) this.list.splice(i, 1);
+    // (their place at the curb free again)
+    this.leaveCurb(c);
     c.dispose();
   }
 
@@ -1353,7 +1360,8 @@ export class Civilians {
     c.fig.yaw = w.yaw;
     c.fig.phase = w.phase;
     c.speed = w.speed;
-    if (this.game.crowds && w.look.role) this.game.crowds.dress(c);
+    // (dressed for who they are; no friend popping up beside them out of thin air)
+    if (this.game.crowds && w.look.role) this.game.crowds.dress(c, false);
     this.list.push(c);
     return c;
   }
@@ -1757,6 +1765,9 @@ export class Civilians {
       const L = me.buddyOf;
       if (!L || !L.alive || L.gone || L.panicT > 0) {
         if (L && me.fig.reachL === L.fig.j.handR) me.fig.reachL = null;
+        // (in the middle of a pose for the camera: the hands down - not a peace sign held up all
+        // the way down the street)
+        this.endPose(me);
         me.ctrl = null;
         me.buddyOf = null;
         return null;
@@ -1792,7 +1803,8 @@ export class Civilians {
       const lsp = Math.hypot(L.vel.x, L.vel.z);
       // (hand in hand: her left in his right, walking)
       if (couple) {
-        const hold = d < 0.6 && lsp > 0.3 && !me.talkUntil && L.fig.parts.armR > 0.5;
+        // (the hands free for it: not round a coffee, not with the shopping bag)
+        const hold = d < 0.6 && lsp > 0.3 && !me.talkUntil && L.fig.parts.armR > 0.5 && !L.fig.carry && !me.fig.carryL;
         if (hold) me.fig.reachL = L.fig.j.handR;
         else if (me.fig.reachL === L.fig.j.handR) me.fig.reachL = null;
       }

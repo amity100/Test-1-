@@ -104,8 +104,9 @@ export class Crowds {
   }
 
   // what goes with who they are, once they are out (after Civilians.dressUp): the tourist's
-  // camera, the grandpa's cane, the child by the parent's hand, the shopping
-  dress(c) {
+  // camera, the grandpa's cane, the child by the parent's hand, the shopping. (company false: one
+  // of the far crowd come near - game/farcrowd.js - nobody new appearing beside them)
+  dress(c, company = true) {
     const role = c.fig.look.role;
     if (!role) return;
     c.role = role;
@@ -119,7 +120,7 @@ export class Crowds {
       c.speed = Math.min(c.speed, 1.1 + Math.random() * 0.2);
       this.stats.tourists++;
       // (GTA IV pass: most tourists are two - the other to stand in the pictures)
-      if (!c.dog && chance(0.45)) {
+      if (company && !c.dog && chance(0.45)) {
         const b = this.game.civilians.addBuddy(c, { look: tourist(), couple: chance(0.45) });
         if (b) {
           const r = Math.random();

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { civilianLook } from './looks.js';
-import { sidewalkLoop, walksNear, blockType } from './civilians.js';
+import { sidewalkLoop, walksNear, blockType, rightFree } from './civilians.js';
 import { groundHeight } from '../world/layout.js';
 import { NIGHT_CLOTHES } from './rhythm.js';
 import { LINES } from './voices.js';
@@ -46,6 +46,15 @@ const SILVER = [0.82, 0.84, 0.88];
 const INK = [0.1, 0.09, 0.12];
 const BAG_COLORS = [[0.95, 0.45, 0.6], [0.98, 0.97, 0.94], [0.2, 0.22, 0.26], [0.62, 0.78, 0.92], [0.86, 0.66, 0.26], [0.4, 0.68, 0.5]];
 const FOOD = ['burger', 'hotdog', 'noodleBox', 'soda'];
+// what can be held up to film, or held while a hand drops a coin in the case
+const FILM_WITH = new Set(['phone', 'camera']);
+
+// (the finished ones out of a list, in place: every frame, and no new array for it)
+function sweep(list, key) {
+  let n = 0;
+  for (let i = 0; i < list.length; i++) if (!list[i][key]) list[n++] = list[i];
+  list.length = n;
+}
 
 export class StreetSocial {
   // looks: the crowds' own (game/crowds.js): office, tourist, elder, youth, shopper
@@ -66,7 +75,6 @@ export class StreetSocial {
     this.homeT = 4;
     this._cand = [];
     // (counted for the tests)
-    this.why = {};
     this.stats = { huddles: 0, groupTalks: 0, mimes: 0, laughs: 0, partings: 0, meets: 0, hugs: 0, shakes: 0, bumps: 0, calls: 0, callLines: 0, busks: 0, listeners: 0, claps: 0, coins: 0, home: 0 };
   }
 
@@ -108,17 +116,20 @@ export class StreetSocial {
       this.homeScan(now);
     }
     for (let i = 0; i < this.huddles.length; i++) this.tendHuddle(this.huddles[i], dt, p, now);
-    if (this.huddles.some((x) => x.done)) this.huddles = this.huddles.filter((x) => !x.done);
+    sweep(this.huddles, 'done');
     for (let i = 0; i < this.meets.length; i++) this.tendMeet(this.meets[i], dt, p, now);
-    if (this.meets.some((x) => x.done)) this.meets = this.meets.filter((x) => !x.done);
+    sweep(this.meets, 'done');
     for (let i = 0; i < this.calls.length; i++) this.tendCall(this.calls[i], dt, p, now);
-    if (this.calls.some((x) => x.done)) this.calls = this.calls.filter((x) => !x.done);
+    sweep(this.calls, 'done');
     for (let i = 0; i < this.homes.length; i++) this.tendHome(this.homes[i], dt, now);
-    if (this.homes.some((x) => x.done)) this.homes = this.homes.filter((x) => !x.done);
+    sweep(this.homes, 'done');
     if (this.busker) this.tendBusker(this.busker, dt, p, now, rain);
     if (this.flying.length) {
-      for (const f of this.flying) f.t += dt;
-      this.flying = this.flying.filter((f) => f.t < f.dur);
+      for (const f of this.flying) {
+        f.t += dt;
+        if (f.t >= f.dur) f.done = true;
+      }
+      sweep(this.flying, 'done');
     }
   }
 
@@ -155,30 +166,13 @@ export class StreetSocial {
       const x = a[0] + ux * t + wx * 1.3;
       const z = a[1] + uz * t + wz * 1.3;
       const d = Math.hypot(x - p.x, z - p.z);
-      if (d < minD || d > maxD) {
-        this.no('dist');
-        continue;
-      }
-      if (unseen && !this.unseen(x, z)) {
-        this.no('seen');
-        continue;
-      }
-      if (this.crowded(x, z, 10)) {
-        this.no('crowded');
-        continue;
-      }
-      if (this.byDoor(x, z, 2.4)) {
-        this.no('door');
-        continue;
-      }
+      if (d < minD || d > maxD) continue;
+      if (unseen && !this.unseen(x, z)) continue;
+      if (this.crowded(x, z, 10)) continue;
+      if (this.byDoor(x, z, 2.4)) continue;
       return { x, z, ux, uz, wx, wz, type: blockType(bc, br), col: bc, row: br };
     }
     return null;
-  }
-
-  // (why a place was not taken: counted for the tests)
-  no(k) {
-    this.why[k] = (this.why[k] || 0) + 1;
   }
 
   // nobody can see (x, z) from the camera: behind it, or far
@@ -213,11 +207,7 @@ export class StreetSocial {
   // a spot standing free (nothing there: a bin, a bench, a planter, a stoop)
   roomAt(x, z, r = 0.28) {
     const hit = this.game.world.collision.pointInside(x, 1.0, z, r);
-    if (hit && hit.alive !== false) {
-      this.no('hit:' + hit.tag);
-      return false;
-    }
-    return true;
+    return !(hit && hit.alive !== false);
   }
 
   // ------------------------------------------------------------------ groups
@@ -318,10 +308,7 @@ export class StreetSocial {
       }
       if (slots) break;
     }
-    if (!slots) {
-      this.no('slot');
-      return null;
-    }
+    if (!slots) return null;
     const civs = game.civilians;
     const H = { kind, x: cx, z: cz, s, members: [], t: 0, life: 45 + Math.random() * 80, talkT: 1 + Math.random() * 3, ex: null, phase: 'talk', partT: 0, done: false };
     for (let i = 0; i < n; i++) {
@@ -675,7 +662,6 @@ export class StreetSocial {
     const lost = !a.alive || !b.alive || a.gone || b.gone || a.panicT > 0 || b.panicT > 0 || Math.hypot(a.pos.x - p.x, a.pos.z - p.z) > 90;
     const ours = (c) => c.owner === this && c.meet === M;
     if (lost || (M.phase !== 'spot' && (!ours(a) || !ours(b)))) {
-      this.no('meetEnd:' + M.phase + ':' + (!a.alive || !b.alive ? 'dead' : a.gone || b.gone ? 'gone' : a.panicT > 0 || b.panicT > 0 ? 'panic' : lost ? 'far' : 'taken'));
       this.endMeet(M);
       return;
     }
@@ -684,7 +670,6 @@ export class StreetSocial {
       const d = Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
       if (d < 1.9 || M.t > 5) {
         if (d > 3.2 || a.ctrl || b.ctrl || a.scripted || b.scripted) {
-          this.no(d > 3.2 ? 'meetMissed' : 'meetBusy');
           this.endMeet(M);
           return;
         }
@@ -827,11 +812,16 @@ export class StreetSocial {
       ends[0] = { x: bx, z: bz };
       ends[1] = { x: bx, z: bz };
     }
-    const K = { c, ends, end: 0, t: 0, lines: pick(LINES.CALLS), i: 0, lineT: 0.9, pause: 0, prev: c.fig.carry, done: false };
+    const K = { c, ends, end: 0, t: 0, lines: pick(LINES.CALLS), i: 0, lineT: 0.9, pause: 0, prev: c.fig.carry, toL: false, done: false };
     c.calledT = now + 90;
     c.scripted = true;
     c.owner = this;
     c.onCall = true;
+    // (the coffee, the bag into the other hand for the call: not gone into thin air)
+    if (K.prev && K.prev !== 'phone' && !c.fig.carryL) {
+      c.fig.carryL = K.prev;
+      K.toL = true;
+    }
     c.fig.carry = 'phone';
     c.ctrl = (me, dt) => this.callStep(me, K, dt);
     this.calls.push(K);
@@ -862,7 +852,6 @@ export class StreetSocial {
     if (K.done) return;
     const c = K.c;
     if (!c.alive || c.gone || c.panicT > 0 || c.owner !== this || !c.onCall) {
-      this.no(!c.alive ? 'callDead' : c.gone ? 'callGone' : c.panicT > 0 ? 'callPanic' : c.owner !== this ? 'callOwner' : 'callOff');
       this.endCall(K);
       return;
     }
@@ -891,9 +880,10 @@ export class StreetSocial {
     const c = K.c;
     const civs = this.game.civilians;
     if (c.owner === this && c.alive && !c.gone) {
-      // (the phone away again, unless it was out already)
+      // (the phone away again, unless it was out already; the coffee back in the right hand)
+      if (K.toL && c.fig.carryL === K.prev) c.fig.carryL = null;
       civs.release(c);
-      c.fig.carry = K.prev === 'phone' ? 'phone' : K.prev || null;
+      c.fig.carry = K.prev || null;
       c.scripted = false;
       civs.rejoin(c);
     }
@@ -951,10 +941,7 @@ export class StreetSocial {
     if (!this.roomAt(x, z, 0.35)) {
       x = s.x - s.wx * 0.1;
       z = s.z - s.wz * 0.1;
-      if (!this.roomAt(x, z, 0.35)) {
-        this.no('buskSpot');
-        return null;
-      }
+      if (!this.roomAt(x, z, 0.35)) return null;
     }
     const f = { x: Math.sin(yaw), z: Math.cos(yaw) };
     const r = { x: -f.z, z: f.x };
@@ -967,10 +954,7 @@ export class StreetSocial {
       const sz = z + Math.cos(a) * rr;
       if (this.roomAt(sx, sz)) ring.push({ x: sx, z: sz, who: null });
     }
-    if (ring.length < 3) {
-      this.no('ring');
-      return null;
-    }
+    if (ring.length < 3) return null;
     const civs = game.civilians;
     const look = civilianLook({ kind: pick(['street', 'denim', 'knit', 'smart']) });
     look.hat = chance(0.6) ? { kind: pick(['beanie', 'bucket', 'beret', 'cap']), color: pick([[0.12, 0.12, 0.14], [0.75, 0.18, 0.2], [0.36, 0.4, 0.3], [0.86, 0.66, 0.26]]) } : look.hat;
@@ -1061,7 +1045,8 @@ export class StreetSocial {
           if (a.owner !== this || !a.at) continue;
           civs.mime(a, 'clap', 1.4 + Math.random() * 0.8);
           this.stats.claps++;
-          if (!a.tipped && chance(0.4)) a.tipNow = 0.6 + Math.random() * 1.6;
+          // (a coin from a free hand: not with the shopping bag hanging from it)
+          if (!a.tipped && chance(0.4) && rightFree(a.fig)) a.tipNow = 0.6 + Math.random() * 1.6;
         }
         if (B.crowd.length && d < 30) game.audio.play('cheer', Math.min(0.5, 0.12 * B.crowd.length) * (1 - d / 30));
       }
@@ -1078,7 +1063,7 @@ export class StreetSocial {
       if (B.crowd.length < (this.touch ? 3 : 5) && B.phase === 'play') this.recruit(B, now);
     }
     for (const a of B.crowd) this.tendListener(B, a, dt, now, d);
-    if (B.crowd.some((a) => a.listenDone)) B.crowd = B.crowd.filter((a) => !a.listenDone);
+    sweep(B.crowd, 'listenDone');
   }
 
   // somebody walking past stops to listen (a place in the half ring)
@@ -1108,7 +1093,8 @@ export class StreetSocial {
     best.stayT = 14 + Math.random() * 26;
     best.bslot = slot;
     slot.who = best;
-    best.filmT = chance(0.2) ? 3 + Math.random() * 5 : 0;
+    // (one films it: with the phone, or the tourist's camera - not with a coffee or a bag held up)
+    best.filmT = chance(0.2) && (!best.fig.carry || FILM_WITH.has(best.fig.carry)) ? 3 + Math.random() * 5 : 0;
     best.ctrl = (me) => this.listenStep(me, B);
     B.crowd.push(best);
     this.stats.listeners++;
@@ -1279,7 +1265,15 @@ export class StreetSocial {
 
   goHome(c, s) {
     const out = 1.6 + (s.yard || 0);
-    const H = { c, s, pts: [{ x: s.door[0] + s.nx * out, z: s.door[2] + s.nz * out }, { x: s.door[0] + s.nx * 0.35, z: s.door[2] + s.nz * 0.35 }], t: 0, at: 0, done: false };
+    const pts = [{ x: s.door[0] + s.nx * out, z: s.door[2] + s.nz * out }, { x: s.door[0] + s.nx * 0.35, z: s.door[2] + s.nz * 0.35 }];
+    // (first along the walk to the point of it straight out from the door: in from there, through
+    // the gap in the yard's wall where the path is - not at a slant into the wall beside it)
+    const leg = this.legOf(c);
+    if (leg) {
+      const k = (s.door[0] - c.pos.x) * leg.ux + (s.door[2] - c.pos.z) * leg.uz;
+      if (Math.abs(k) > 0.6) pts.unshift({ x: c.pos.x + leg.ux * k, z: c.pos.z + leg.uz * k });
+    }
+    const H = { c, s, pts, t: 0, at: 0, done: false };
     c.scripted = true;
     c.owner = this;
     c.goingHome = true;
@@ -1295,8 +1289,8 @@ export class StreetSocial {
       }
       if (Math.hypot(q.x - me.pos.x, q.z - me.pos.z) < 0.35) {
         H.pts.shift();
-        // (off the sidewalk, in at the gate and up the path: through the yard's opening)
-        me.noCollide = true;
+        // (in at the gate and up the path, the last steps to the door: through the yard's opening)
+        if (H.pts.length <= 1) me.noCollide = true;
       }
       return { x: q.x, z: q.z, speed: me.speed };
     };
