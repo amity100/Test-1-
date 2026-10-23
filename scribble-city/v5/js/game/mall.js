@@ -21,23 +21,31 @@ const ASK = {
   phones: ['Got one for my phone?', 'How much is this case?', 'A charger, please.'],
   sweets: ['A bag of those, please.', 'Mmm, which ones are best?', 'Some of the sour ones!'],
   watches: ['Can I see that one?', 'Is it waterproof?', 'How much is this watch?'],
+  coffee: ['A latte, please.', 'One espresso, to go.', 'A cappuccino and a muffin.', 'Iced coffee, please!'],
+  balloons: ['The red one, please!', 'Can I have a balloon?', 'How much is the bear?'],
 };
 const SELL = {
   sunglasses: ['They look great on you!', 'Two for one today!', 'Try the mirror!'],
   phones: ['Ten dollars, a steal!', 'This one is very popular.', 'Fits every model!'],
   sweets: ['The sour ones, fresh today!', 'Here you go, a full scoop!', 'Try one first!'],
   watches: ['A classic, that one.', 'Water-proof to fifty metres.', 'Let me get it out for you.'],
+  coffee: ['Coming right up!', 'Name for the cup?', 'Here you go, careful, it\'s hot.'],
+  balloons: ['Here you go! Hold on tight!', 'The red one, good choice.', 'Don\'t let it fly away!'],
 };
 const CALL = {
   sunglasses: 'Sunglasses! Two for one!',
   phones: 'Phone cases! Chargers!',
   sweets: 'Sweets! Fresh sweets!',
   watches: 'Watches, best prices!',
+  coffee: 'Fresh coffee! Hot pastries!',
+  balloons: 'Balloons! Balloons for the kids!',
 };
 const BUY = ['I\'ll take it!', 'Perfect, thanks!', 'Maybe later.', 'Just looking, thanks.'];
 const MAP_SAY = ['Where is the food court?', 'Ah, there it is.', 'Second floor...', 'We are here.'];
 const GUARD_SAY = ['Evening.', 'Have a nice day.', 'No running, please.', 'All quiet.'];
-const KIOSK_COL = { sunglasses: [0.98, 0.6, 0.72], phones: [0.3, 0.7, 0.82], sweets: [0.98, 0.78, 0.34], watches: [0.24, 0.26, 0.32] };
+const KIOSK_COL = { sunglasses: [0.98, 0.6, 0.72], phones: [0.3, 0.7, 0.82], sweets: [0.98, 0.78, 0.34], watches: [0.24, 0.26, 0.32], coffee: [0.36, 0.24, 0.18], balloons: [0.56, 0.8, 0.96] };
+// (what a kiosk hands over: a cup of coffee, a balloon on its string; the rest go in a bag)
+const BALLOONS = [[0.95, 0.25, 0.3], [0.98, 0.82, 0.25], [0.3, 0.6, 0.95], [0.45, 0.85, 0.45], [0.95, 0.5, 0.8], [0.7, 0.45, 0.95]];
 // (lunch at the food court: what is on the tray, what is said over it, the tray back at the station)
 const MEAL = ['burger', 'noodleBox', 'hotdog', 'burger', 'soda', 'coffee', 'noodleBox'];
 const MEAL_TALK = [
@@ -317,6 +325,19 @@ export class MallLife {
       for (let i = 0; i < nUp; i++) {
         lone[i].plan.unshift({ kind: 'upstairs', pre: ['up', 'down', 'gallery', 'up'][i] });
         this.next(lone[i]);
+      }
+    }
+    // (and some on the benches already, a rest between the stores - a look at the phone, a word
+    // with the friend standing by)
+    if (m.benches.length) {
+      const sitters = st.people.filter((s) => !s.follower && !s.cur);
+      const nB = Math.min(sitters.length, this.game.touch ? 1 : 4);
+      for (let i = 0; i < nB; i++) {
+        const used = new Set(this.taken(st));
+        const free = m.benches.filter((b) => !used.has(b));
+        if (!free.length) break;
+        sitters[i].plan.unshift({ kind: 'bench', pre: pick(free) });
+        this.next(sitters[i]);
       }
     }
     this.hire(m, st);
@@ -676,6 +697,18 @@ export class MallLife {
         break;
       }
       case 'bench': {
+        if (a.pre) {
+          // (sitting there already when you come in)
+          a.seat = a.pre;
+          s.phase = 'at';
+          s.pts = null;
+          c.noCollide = true;
+          c.pos.x = a.seat.x;
+          c.pos.z = a.seat.z;
+          c.yaw = a.seat.yaw;
+          c.fig.sit = 1;
+          break;
+        }
         const used = new Set(this.taken(s.st));
         const free = m.benches.filter((b) => !used.has(b));
         if (!free.length) return this.next(s);
@@ -811,7 +844,16 @@ export class MallLife {
       if (k.vendor) this.game.inkwell.after(1.6, () => k.vendor && k.vendor.c.alive && this.say(k.vendor.c, pick(SELL[k.kind] || SELL.phones)));
     }
     s.hand = s.hand || new THREE.Vector3();
-    if (s.t > 2.8 && s.t < 6.5) {
+    const handed = k.kind === 'coffee' || k.kind === 'balloons';
+    if (handed && s.t > 3.2 && s.t < 4.6) {
+      // (a hand out across the counter for the cup, the balloon's string)
+      s.hand.set(k.mid.x + (c.pos.x - k.mid.x) * 0.35, k.mid.y + 0.15, k.mid.z + (c.pos.z - k.mid.z) * 0.35);
+      f.reachR = s.hand;
+      f.lookAt = s.hand;
+    } else if (handed) {
+      f.reachR = null;
+      f.lookAt = null;
+    } else if (s.t > 2.8 && s.t < 6.5) {
       // (taken from the seller's hand, held up: to the face for the glasses, before the eyes else)
       const up = k.kind === 'sunglasses' ? 1.62 : 1.25;
       const t = Math.min(1, (s.t - 2.8) / 0.8);
@@ -823,7 +865,19 @@ export class MallLife {
       f.reachR = null;
       f.lookAt = null;
     }
-    if (s.t > 6.5 && !a.done) {
+    if (handed && s.t > 4.6 && !a.done) {
+      // the cup, the balloon, in hand (paid at the counter: the coffee is never refused)
+      a.done = true;
+      if (k.kind === 'coffee') {
+        if (f.carry !== 'phone' || Math.random() < 0.5) f.carry = 'coffee';
+        if (Math.random() < 0.4) this.say(c, pick(['Thanks!', 'Mmm, smells great.', 'Perfect.']));
+      } else {
+        f.carry = 'balloon';
+        f.balloonColor = pick(BALLOONS);
+        if (Math.random() < 0.5) this.say(c, pick(['Yay!', 'Thank you!', 'Look, a balloon!']));
+      }
+    }
+    if (!handed && s.t > 6.5 && !a.done) {
       a.done = true;
       const yes = Math.random() < 0.55;
       this.say(c, yes ? pick(BUY.slice(0, 2)) : pick(BUY.slice(2)));
@@ -1020,8 +1074,14 @@ export class MallLife {
     c.pos.z = b.z;
     c.faceYaw = b.yaw;
     c.fig.sit = Math.min(1, c.fig.sit + 0.05);
-    a.stay = a.stay || 8 + Math.random() * 16;
+    a.stay = a.stay || (a.pre ? 10 + Math.random() * 30 : 8 + Math.random() * 16);
+    // (a rest: the phone out of the pocket, a look at it)
+    if (a.phone === undefined) {
+      a.phone = !c.fig.carry && Math.random() < 0.45;
+      if (a.phone) c.fig.carry = 'phone';
+    }
     if (s.t > a.stay) {
+      if (a.phone && c.fig.carry === 'phone') c.fig.carry = null;
       c.fig.sit = 0;
       c.noCollide = false;
       a.seat = null;
@@ -1071,19 +1131,40 @@ export class MallLife {
           s.t = 0;
         }
         return { x: a.gx, z: a.gz, speed: c.speed };
-      case 'stroll':
+      case 'stroll': {
         c.baseY = UY;
-        if (Math.hypot(c.pos.x - a.gx, c.pos.z - a.stroll) < 0.3) {
-          // a look in the upper floor's windows, then back
-          c.faceYaw = a.side < 0 ? -Math.PI / 2 : Math.PI / 2;
-          if (s.t > 4 + Math.random() * 4) {
+        // (half of them to the upper floor's windows, half to the gallery's rail, to lean on it and
+        // look down into the hall)
+        if (a.lean === undefined) {
+          a.lean = Math.random() < 0.5;
+          a.stay = (a.lean ? 6 : 4) + Math.random() * 5;
+        }
+        const h = s.m.hall;
+        const tx = a.lean ? (a.side < 0 ? h.x0 + 2.2 : h.x1 - 2.2) : a.gx;
+        if (Math.hypot(c.pos.x - tx, c.pos.z - a.stroll) < 0.3) {
+          const f = c.fig;
+          if (a.lean) {
+            // both hands on the brass rail, a look down at the people below
+            c.faceYaw = a.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+            const rx = a.side < 0 ? h.x0 + 2.58 : h.x1 - 2.58;
+            s.hand = s.hand || new THREE.Vector3();
+            s.handL = s.handL || new THREE.Vector3();
+            s.hand.set(rx, c.pos.y + 1.04, c.pos.z + f.right.z * 0.24);
+            s.handL.set(rx, c.pos.y + 1.04, c.pos.z - f.right.z * 0.24);
+            f.reachR = s.hand;
+            f.reachL = s.handL;
+          } else c.faceYaw = a.side < 0 ? -Math.PI / 2 : Math.PI / 2;
+          if (s.t > a.stay) {
+            f.reachR = null;
+            f.reachL = null;
             a.leg = 'back';
             s.t = 0;
           }
           return null;
         }
         s.t = 0;
-        return { x: a.gx, z: a.stroll, speed: c.speed * 0.8 };
+        return { x: tx, z: a.stroll, speed: c.speed * 0.8 };
+      }
       case 'back':
         c.baseY = UY;
         if (Math.hypot(c.pos.x - (e.x0 + 2.35), c.pos.z - (e.z0 - 0.3)) < 0.3) {
@@ -1240,7 +1321,10 @@ export class MallLife {
   // ------------------------------------------------------------------ the whole mall, each frame
   tick(m, st, dt) {
     const game = this.game;
-    for (const s of st.people.slice()) {
+    // (from the end: a shopper dropped is spliced out of the list as we go - no copy of it a frame)
+    for (let i = st.people.length - 1; i >= 0; i--) {
+      const s = st.people[i];
+      if (!s) continue;
       const c = s.c;
       if (!c.alive || c.headless) {
         this.drop(s, false);

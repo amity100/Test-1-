@@ -1,8 +1,10 @@
 import { FURNISH, DECOR } from './rooms.js';
 import './mainland/furnish.js';
-import { nextId } from './kit.js';
+import { nextId, Facade } from './kit.js';
 import { FSoup, FF } from './soup.js';
 import { Run, L, SC, pk } from './stock.js';
+import { neonSign } from './deco.js';
+import { srgb } from '../render/materials.js';
 
 // (v5, GTA IV round) The places you sit down in, laid out to the last fork. A restaurant of the real
 // world is not a room of tables: it is the host's stand by the door with the book of the evening's
@@ -35,7 +37,7 @@ const C = {
   plate: [0.99, 0.98, 0.96],
   charger: [0.84, 0.7, 0.42],
   silver: [0.8, 0.82, 0.86],
-  glass: [0.8, 0.9, 0.96],
+  glass: [0.72, 0.86, 0.92],
   wine: [0.5, 0.06, 0.14],
   white: [0.96, 0.95, 0.92],
   candle: [0.98, 0.95, 0.86],
@@ -85,6 +87,24 @@ function flushBig(R) {
 function mark(R, name, u, d, face, y = 0) {
   (R.spots.marks = R.spots.marks || []).push({ name, u, d, face, y });
 }
+
+// a word in neon (or lettering lit from behind) on a wall of the room, from the city's own neon
+// (world/deco.js neonSign): on the wall of run at s, t out from it, centred at height y, len long,
+// reading left to right to whoever faces the wall. Built with the room (in its own batch, with
+// the rooms' pens), never in the streamed pass - and only where the city has its neon to hand
+function wallNeon(R, run, text, s, y, t, len, col, o = {}) {
+  if (R.mode === 'stock' || !R.ctx.neon || !R.ctx.R || !text) return;
+  const f = R.f;
+  // (the wall's face into the room, in the world; the way along it that reads left to right)
+  const nx = run.ou * f.ux + run.od * f.nx;
+  const nz = run.ou * f.uz + run.od * f.nz;
+  const [u, d] = run.ud(s, t);
+  const p = f.p(u, 0, d);
+  neonSign({ ...R.ctx, B: R.ctx.R }, new Facade(p[0], p[2], nz, -nx, nx, nz), text, 0, y, 0, len, srgb(col[0], col[1], col[2]), { font: o.font || 'Rubik', size: o.size || 90 });
+}
+
+// the name of the place, as its own front has it
+const nameOf = (R) => (R.spec.shop && R.spec.shop.name) || null;
 
 // the door, which side of the room it is on, how wide and deep the room is
 function frameOf(R) {
@@ -316,20 +336,80 @@ function pendant(R, u, d, y, o = {}) {
   Sl.fcyl(u, d, (o.r || 0.17) - 0.02, y - 0.006, 0.008, o.light || [1, 0.84, 0.55], nextId(), 10, true);
 }
 
-// a picture in a gold frame on a wall (run along the wall, facing into the room)
+// a picture in a gold frame on a wall (run along the wall, facing into the room): its frame in two
+// mouldings, the canvas, and what is painted on it - a sea under an evening sky with its sun and a
+// sail, a still life of a jug, a bowl and its fruit on a table's edge, a hill town of little houses
+// under the sun, or a lady's portrait in the dark of an old master; the brass lamp over it
 function painting(R, run, s, y, w, h, rng, o = {}) {
   const S = R.soup('box');
-  run.box(S, s - w / 2 - 0.05, y - h / 2 - 0.05, -0.002, s + w / 2 + 0.05, y + h / 2 + 0.05, 0.04, o.frame || C.charger, nextId(), L.BACK);
-  const bg = pk(rng, [[0.36, 0.48, 0.6], [0.86, 0.76, 0.56], [0.3, 0.42, 0.3], [0.62, 0.3, 0.26], [0.92, 0.88, 0.8]]);
-  run.box(S, s - w / 2, y - h / 2, 0.04, s + w / 2, y + h / 2, 0.045, bg, nextId(), FRONT);
-  // (what is in it: a still life - a bowl, a jug, a fruit; or a sea and a sky)
-  if (rng.r() < 0.5) {
-    run.box(S, s - w / 2, y - h / 2, 0.045, s + w / 2, y - h * 0.15, 0.048, bg.map((x) => x * 0.7), nextId(), FRONT);
-    run.box(S, s - w * 0.25, y - h * 0.15, 0.045, s - w * 0.05, y + h * 0.15, 0.05, pk(rng, FOOD), nextId(), FRONT);
-    run.box(S, s + w * 0.02, y - h * 0.15, 0.045, s + w * 0.22, y + h * 0.02, 0.05, pk(rng, FOOD), nextId(), FRONT);
+  const frame = o.frame || C.charger;
+  run.box(S, s - w / 2 - 0.07, y - h / 2 - 0.07, -0.002, s + w / 2 + 0.07, y + h / 2 + 0.07, 0.035, frame.map((x) => x * 0.8), nextId(), L.BACK);
+  run.box(S, s - w / 2 - 0.035, y - h / 2 - 0.035, 0.02, s + w / 2 + 0.035, y + h / 2 + 0.035, 0.045, frame, nextId(), L.BACK);
+  // (the layers of paint, each a hair in front of the last)
+  let z = 0.045;
+  const lay = (a0, b0, a1, b1, col) => {
+    z += 0.002;
+    run.box(S, s + w * a0, y + h * b0, 0.045, s + w * a1, y + h * b1, z, col, nextId(), FRONT);
+  };
+  const kind = rng.r();
+  if (kind < 0.3) {
+    // the sea at evening: the sky's bands, the sun going down, the sea, its glints, a sail
+    lay(-0.5, -0.5, 0.5, 0.5, [0.98, 0.7, 0.42]);
+    lay(-0.5, 0.18, 0.5, 0.5, [0.5, 0.48, 0.72]);
+    lay(-0.5, 0.0, 0.5, 0.18, [0.96, 0.52, 0.42]);
+    lay(-0.1, -0.06, 0.12, 0.16, [1, 0.88, 0.45]);
+    lay(-0.5, -0.5, 0.5, -0.04, [0.16, 0.3, 0.5]);
+    for (let k = 0; k < 3; k++) lay(-0.12 + k * 0.05, -0.12 - k * 0.09, 0.14 - k * 0.05, -0.1 - k * 0.09, [1, 0.86, 0.5]);
+    lay(-0.34, -0.2, -0.3, 0.12, [0.2, 0.16, 0.14]);
+    lay(-0.42, -0.14, -0.31, 0.1, C.white);
+  } else if (kind < 0.6) {
+    // the still life: the wall behind, the table's cloth, the jug, the bowl, the fruit
+    lay(-0.5, -0.5, 0.5, 0.5, pk(rng, [[0.3, 0.26, 0.2], [0.36, 0.32, 0.26], [0.22, 0.26, 0.24]]));
+    lay(-0.5, -0.5, 0.5, -0.18, pk(rng, [[0.9, 0.86, 0.76], [0.7, 0.18, 0.2], [0.3, 0.42, 0.62]]));
+    lay(-0.32, -0.18, -0.08, 0.22, [0.86, 0.78, 0.6]);
+    lay(-0.29, 0.22, -0.11, 0.3, [0.86, 0.78, 0.6]);
+    lay(0.0, -0.18, 0.36, -0.06, [0.62, 0.42, 0.26]);
+    for (let k = 0; k < 3; k++) lay(0.04 + k * 0.1, -0.06, 0.12 + k * 0.1, 0.04 + (k % 2) * 0.03, pk(rng, [[0.88, 0.2, 0.2], [0.98, 0.72, 0.2], [0.52, 0.72, 0.28], [0.5, 0.2, 0.42]]));
+    lay(-0.06, -0.24, 0.06, -0.18, [0.88, 0.2, 0.2]);
+  } else if (kind < 0.8) {
+    // the hill town: the sky, the sun, the green hills, the white houses and their red roofs
+    lay(-0.5, -0.5, 0.5, 0.5, [0.6, 0.78, 0.92]);
+    lay(0.18, 0.18, 0.34, 0.34, [1, 0.9, 0.5]);
+    lay(-0.5, -0.5, 0.5, -0.02, [0.44, 0.62, 0.32]);
+    lay(-0.5, -0.5, 0.5, -0.24, [0.32, 0.5, 0.26]);
+    for (let k = 0; k < 4; k++) {
+      const a = -0.38 + k * 0.17;
+      const b = -0.18 + (k % 2) * 0.08;
+      lay(a, b, a + 0.12, b + 0.1, [0.97, 0.94, 0.86]);
+      lay(a - 0.01, b + 0.1, a + 0.13, b + 0.14, [0.78, 0.3, 0.2]);
+    }
   } else {
-    run.box(S, s - w / 2, y - h / 2, 0.045, s + w / 2, y - h * 0.1, 0.048, [0.24, 0.44, 0.62], nextId(), FRONT);
-    run.box(S, s + w * 0.15, y + h * 0.12, 0.045, s + w * 0.3, y + h * 0.27, 0.05, [0.98, 0.8, 0.4], nextId(), FRONT);
+    // the portrait: the dark ground, the shoulders in their dress, the face, the hair, the pearls
+    lay(-0.5, -0.5, 0.5, 0.5, [0.16, 0.14, 0.12]);
+    lay(-0.3, -0.5, 0.3, -0.1, pk(rng, [[0.3, 0.16, 0.2], [0.18, 0.26, 0.4], [0.22, 0.3, 0.22]]));
+    lay(-0.11, -0.12, 0.11, 0.22, [0.9, 0.74, 0.6]);
+    lay(-0.14, 0.12, 0.14, 0.32, pk(rng, [[0.24, 0.14, 0.08], [0.1, 0.08, 0.06], [0.62, 0.44, 0.2]]));
+    lay(-0.08, -0.14, 0.08, -0.12, [0.96, 0.94, 0.9]);
+  }
+  // the little brass lamp over it, lit
+  run.box(S, s - 0.012, y + h / 2 + 0.05, 0.0, s + 0.012, y + h / 2 + 0.09, 0.12, C.brass, nextId());
+  run.box(S, s - w * 0.3, y + h / 2 + 0.06, 0.1, s + w * 0.3, y + h / 2 + 0.1, 0.16, C.brass, nextId());
+  R.soup('lamp').fbox(...lampBox(run, s - w * 0.28, y + h / 2 + 0.055, 0.11, s + w * 0.28, y + h / 2 + 0.06, 0.15), [1, 0.86, 0.6], nextId());
+}
+
+// a mirror in its gilded frame on a wall: the glass, the light's streaks across it
+function mirror(R, run, s, y, w, h) {
+  const S = R.soup('box');
+  const Sg = R.soup('gloss');
+  run.box(S, s - w / 2 - 0.06, y - h / 2 - 0.06, 0, s + w / 2 + 0.06, y + h / 2 + 0.06, 0.035, C.charger, nextId(), L.BACK);
+  run.box(Sg, s - w / 2, y - h / 2, 0.035, s + w / 2, y + h / 2, 0.04, [0.7, 0.8, 0.86], nextId(), FRONT);
+  // (the streaks: thin bands of light slanting across the glass)
+  for (const [a, k] of [[-0.28, 0.08], [-0.14, 0.035], [0.22, 0.05]]) {
+    for (let i = 0; i < 6; i++) {
+      const v0 = -0.5 + i / 6;
+      const sa = s + w * (a + v0 * 0.35);
+      run.box(Sg, sa, y + h * v0, 0.04, sa + w * k, y + h * (v0 + 1 / 6), 0.043, [0.94, 0.97, 1], nextId(), FRONT);
+    }
   }
 }
 
@@ -397,9 +477,11 @@ function wineGlass(Sg, Sc, u, d, y, fill = null, down = false) {
 // stopper beside it; or a bottle opened to breathe (open: false)
 function decanter(Sg, Sc, run, s, t, y, open, rng) {
   if (open) {
+    // (the wine is the belly's lower half: the glass shows it - drawn as the belly's own colour, the
+    // glass going on up from its level)
     run.cyl(Sg, s, t, 0.05, y, 0.012, C.glass, nextId(), 10, false, 0.085);
-    run.cyl(Sc, s, t, 0.082, y + 0.012, 0.05, C.wine, nextId(), 10, true, 0.07);
-    run.cyl(Sg, s, t, 0.085, y + 0.012, 0.07, C.glass, nextId(), 10, false, 0.05);
+    run.cyl(Sc, s, t, 0.085, y + 0.012, 0.04, C.wine, nextId(), 10, true, 0.08);
+    run.cyl(Sg, s, t, 0.08, y + 0.052, 0.03, C.glass, nextId(), 10, false, 0.05);
     run.cyl(Sg, s, t, 0.05, y + 0.082, 0.05, C.glass, nextId(), 8, false, 0.022);
     run.cyl(Sg, s, t, 0.022, y + 0.132, 0.12, C.glass, nextId(), 6, false, 0.026);
     run.ball(Sg, s + 0.1, y + 0.02, t + 0.02, 0.02, C.glass, nextId(), 3, 5);
@@ -804,10 +886,8 @@ function gourmet(R) {
     if (!isBar) {
       for (let i = 0; i < banq.length; i++) {
         const s = sOf(banq[i]);
-        if (i % 2 === 0) {
-          run.box(sS, s - 0.5, y0 + 1.45, 0, s + 0.5, y0 + 2.45, 0.035, C.charger, nextId(), L.BACK);
-          run.box(sG, s - 0.44, y0 + 1.51, 0.035, s + 0.44, y0 + 2.39, 0.04, [0.78, 0.84, 0.9], nextId(), FRONT);
-        } else painting(R, run, s, y0 + 1.95, 0.8, 0.6, rng);
+        if (i % 2 === 0) mirror(R, run, s, y0 + 1.95, 0.88, 0.88);
+        else painting(R, run, s, y0 + 1.95, 0.8, 0.6, rng);
         if (i + 1 < banq.length) sconce(R, run, sOf((banq[i] + banq[i + 1]) / 2), y0 + 1.75);
       }
     }
@@ -1199,6 +1279,11 @@ function barRoom(R) {
     for (let k = 0; k < 6; k++) run.box(sS, s - 0.36 + rng.r() * 0.7, y0 + 2.6 + rng.r() * 0.3, -0.075, s - 0.34 + rng.r() * 0.7, y0 + 2.64 + rng.r() * 0.3, -0.07, k % 2 ? C.white : [0.9, 0.2, 0.25], nextId(), FRONT);
     run.box(sS, s - 0.46, y0 + 2.9, -0.075, s - 0.16, y0 + 2.96, -0.07, C.black, nextId(), FRONT);
   }
+  // the bar's name over the back bar, in neon, between the televisions
+  {
+    const len = Math.min(3.4, bl * 0.56 - 1.1, (y1 - y0 - 2.52) * 3.6);
+    if (len > 1.2) wallNeon(R, new Run(R, bu0, db, [1, 0], [0, 1]), nameOf(R) || 'BAR', bl / 2, (y0 + 2.48 + y1) / 2, 0.03, len, [1, 0.35, 0.75], { font: 'Permanent Marker' });
+  }
   // ---- the booths down the side away from the door: a table between two high-backed benches
   const side = fr.left ? 1 : -1; // (+1: along ub)
   const wallU = side > 0 ? ub : ua;
@@ -1415,6 +1500,7 @@ function cinemaLobby(R, o = {}) {
     br.box(big(R, 'gloss'), 0.05, y0 + 1.1, -0.04, bl - 0.05, y0 + 2.3, -0.02, C.glass, nextId(), L.BOTTOM);
     br.box(S, -0.05, y0 + 2.3, -0.9, bl + 0.05, y0 + 2.75, 0.05, [0.4, 0.08, 0.12], nextId());
     br.box(Sl, 0.1, y0 + 2.4, 0.05, bl - 0.1, y0 + 2.65, 0.055, [1, 0.86, 0.5], nextId(), FRONT);
+    wallNeon(R, br, 'TICKETS', bl / 2, y0 + 2.525, 0.06, Math.min(1.7, bl - 0.4), [0.5, 0.06, 0.1]);
     for (const s of [bl * 0.3, bl * 0.7]) br.box(R.soup('box'), s - 0.05, y0 + 1.42, -0.02, s + 0.05, y0 + 1.52, -0.015, C.black, nextId(), FRONT);
     const sb = R.soup('box');
     br.box(sb, bl * 0.5 - 0.12, y0 + 1.1, -0.4, bl * 0.5 + 0.12, y0 + 1.22, -0.2, C.black, nextId(), L.BOTTOM);
@@ -1555,9 +1641,11 @@ function theatre(R) {
   S.fbox(mid - 1.75, y0, pw - 0.2, mid - 1.55, y0 + 3.2, pw + 0.22, gold, nextId(), FF.BOTTOM);
   S.fbox(mid + 1.55, y0, pw - 0.2, mid + 1.75, y0 + 3.2, pw + 0.22, gold, nextId(), FF.BOTTOM);
   S.fbox(mid - 1.75, y0 + 3.05, pw - 0.2, mid + 1.75, y0 + 3.6, pw + 0.22, gold, nextId());
-  Sl.fbox(mid - 1.4, y0 + 3.15, pw + 0.22, mid + 1.4, y0 + 3.5, pw + 0.225, [0.16, 0.1, 0.14], nextId());
+  Sl.fbox(mid - 1.4, y0 + 3.1, pw + 0.22, mid + 1.4, y0 + 3.55, pw + 0.225, [0.16, 0.1, 0.14], nextId());
+  // (its word lit in the dark panel, a row of little bulbs along the panel's top and its foot)
+  wallNeon(R, new Run(R, mid, pw + 0.23, [1, 0], [0, 1]), 'AUDITORIUM', 0, y0 + 3.33, 0, 2.3, [1, 0.86, 0.5]);
   const sL = R.soup('lamp');
-  for (let i = 0; i < 9; i++) sL.fbox(mid - 1.25 + i * 0.28, y0 + 3.25, pw + 0.225, mid - 1.1 + i * 0.28, y0 + 3.4, pw + 0.23, i % 2 ? [1, 0.85, 0.4] : [1, 0.95, 0.75], nextId());
+  for (let i = 0; i < 14; i++) for (const y of [y0 + 3.12, y0 + 3.5]) sL.fbox(mid - 1.33 + i * 0.2 - 0.025, y - 0.02, pw + 0.225, mid - 1.33 + i * 0.2 + 0.025, y + 0.02, pw + 0.235, i % 2 ? [1, 0.85, 0.4] : [1, 0.95, 0.75], nextId());
   ropes(R, [[mid - 1.5, pw + 0.5], [mid - 0.5, pw + 0.5]], {});
   ropes(R, [[mid + 0.5, pw + 0.5], [mid + 1.5, pw + 0.5]], {});
   mark(R, 'usher', mid - 0.2, pw + 0.6, [0, 1]);
@@ -1587,6 +1675,7 @@ function theatre(R) {
     brun.box(Sg, 0.05, y0 + 1.1, 0.02, bl - 0.05, y0 + 2.3, 0.04, C.glass, nextId(), L.BOTTOM);
     brun.box(S, -0.05, y0 + 2.3, -0.9, bl + 0.05, y0 + 2.8, 0.1, [0.5, 0.1, 0.14], nextId());
     brun.box(Sl, 0.15, y0 + 2.38, 0.1, bl - 0.15, y0 + 2.72, 0.105, [1, 0.86, 0.5], nextId(), FRONT);
+    wallNeon(R, brun, 'BOX OFFICE', bl / 2, y0 + 2.55, 0.11, Math.min(2.4, bl - 0.6), [0.5, 0.06, 0.1]);
     for (let s = 0.6; s < bl - 0.3; s += 1.2) brun.box(R.soup('box'), s - 0.05, y0 + 1.42, 0.04, s + 0.05, y0 + 1.52, 0.045, C.black, nextId(), FRONT);
     brun.solid(0, -0.9, bl, 0.25, y0 + 2.3);
     const [tu, td] = brun.ud(bl * 0.5, -0.4);
@@ -1778,6 +1867,12 @@ function club(R) {
     for (const [su, sd, fu, fd] of [[ua + 0.45, d - 0.35, 1, 0], [ua + 0.45, d + 0.35, 1, 0], [ua + 1.2, d - 1.05, 0, 1], [ua + 1.2, d + 1.05, 0, -1]]) R.spots.seats.push({ u: su, d: sd, face: [fu, fd], what: `v${k}`, lift: false });
     sL.fbox(ua + 0.02, y0 + 1.6, d - 0.8, ua + 0.04, y0 + 1.65, d + 0.8, pk(rng, cols), nextId());
     k++;
+  }
+  // the club's name up the wall over the booths, in its own pink
+  if (vd1 - vd0 > 3) {
+    const vr = new Run(R, ua, da, [0, -1], [1, 0]);
+    wallNeon(R, vr, nameOf(R) || 'VIP', da - (vd0 + vd1) / 2, y0 + 3.7, 0.04, Math.min(8, (vd1 - vd0) * 0.8), [1, 0.32, 0.72], { font: 'Permanent Marker' });
+    wallNeon(R, vr, 'VIP', da - (vd0 + vd1) / 2, y0 + 2.5, 0.04, 1.6, [1, 0.85, 0.35]);
   }
   // the rope along the step's edge, a way through by the floor
   const rp = [];

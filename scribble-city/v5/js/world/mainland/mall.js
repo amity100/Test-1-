@@ -172,7 +172,11 @@ export function* buildMall(bctx, b, o) {
     for (const s of [-1, 1]) {
       const x0 = s < 0 ? hx0 : hx1 - 1.6;
       hall(IN.box, x0, CURB + 0.004, bz0, x0 + 1.6, CURB + 0.012, bz1, srgb(0.82, 0.78, 0.74));
+      // (the stone laid in bays between them: a border either side of the middle way)
+      hall(IN.box, cx + s * 2.1 - 0.07, CURB + 0.004, bz0 + 1.4, cx + s * 2.1 + 0.07, CURB + 0.013, bz1 - 1.4, srgb(0.86, 0.72, 0.6));
     }
+    // a band of warm stone across the hall under each of the roof's beams
+    for (let z = bz0 + 6; z < bz1 - 1; z += 6) hall(IN.box, hx0 + 1.6, CURB + 0.004, z - 0.12, hx1 - 1.6, CURB + 0.013, z + 0.12, srgb(0.86, 0.72, 0.6));
   }
   const UY = CURB + 5.2;
   const zm = (bz0 + bz1) / 2;
@@ -562,7 +566,7 @@ function planter(ctx, x, z, inside) {
 // the offer lit on the glass, a lightbox standing out by the window, potted plants at the door.
 // (All of it in the hall's own batch, merged: a few hundred boxes for the whole hall.)
 const PROMO = ['SALE', 'NEW IN', '-30%', 'NEW SEASON', '2 FOR 1', 'LAST DAYS', '-50%', 'OPEN'];
-const KIOSKS = ['sunglasses', 'phones', 'sweets', 'watches'];
+const KIOSKS = ['sunglasses', 'coffee', 'phones', 'balloons', 'sweets', 'watches'];
 const ADS = [
   [srgb(0.98, 0.42, 0.58), srgb(1, 0.92, 0.86), srgb(0.24, 0.2, 0.36)],
   [srgb(0.3, 0.72, 0.95), srgb(0.96, 0.98, 1), srgb(0.98, 0.7, 0.24)],
@@ -596,16 +600,20 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
     const z = end < 0 ? bz0 + 5 : bz1 - 5;
     return { x: cx - 4.2, z: z - end * 1.0, yaw: Math.atan2(0, end), at: { x: cx - 4.2, z } };
   });
-  // ---- the kiosks: four down the hall, either side of its middle
-  let kk = 0;
-  for (let z = bz0 + 14; z < bz1 - 14 && kk < 4; z += 2) {
-    const side = kk % 2 ? -1 : 1;
-    const x = cx + side * 3.2;
-    if (!free(x - 1.65, z - 2.2, x + 1.65, z + 2.2)) continue;
-    kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, KIOSKS[(kk + b.seed) % KIOSKS.length], r);
-    taken.push([x - 1.65, z - 2.2, x + 1.65, z + 2.2]);
-    kk++;
-    z += 14;
+  // ---- the kiosks: down the hall either side of its middle line, between the planters and the
+  // pods - one soon after each entrance, the rest along it, never two side by side, never two in a
+  // row on one side closer than a store's width or two (up to six: their sellers are game/mall.js's)
+  const placed = [];
+  for (let z = bz0 + 15; z < bz1 - 15 && placed.length < 6; z += 1) {
+    for (const side of placed.length % 2 ? [-1, 1] : [1, -1]) {
+      const x = cx + side * 3.2;
+      if (placed.some((q) => Math.abs(q.z - z) < (q.side === side ? 15 : 8))) continue;
+      if (!free(x - 1.65, z - 2.2, x + 1.65, z + 2.2)) continue;
+      kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, KIOSKS[(placed.length + b.seed) % KIOSKS.length], r);
+      taken.push([x - 1.65, z - 2.2, x + 1.65, z + 2.2]);
+      placed.push({ z, side });
+      break;
+    }
   }
   // ---- benches back to back along low planters, down the middle
   let np = 0;
@@ -734,7 +742,7 @@ function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
 // band. Its seller stands on the side away from the hall's middle (mall.kiosks, game/mall.js).
 function kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, kind, r) {
   const C0 = CURB;
-  const col = { sunglasses: srgb(0.98, 0.6, 0.72), phones: srgb(0.3, 0.7, 0.82), sweets: srgb(0.98, 0.78, 0.34), watches: srgb(0.24, 0.26, 0.32) }[kind];
+  const col = { sunglasses: srgb(0.98, 0.6, 0.72), phones: srgb(0.3, 0.7, 0.82), sweets: srgb(0.98, 0.78, 0.34), watches: srgb(0.24, 0.26, 0.32), coffee: srgb(0.36, 0.24, 0.18), balloons: srgb(0.56, 0.8, 0.96) }[kind];
   const lite = col.clone().lerp(WHITE, 0.45);
   const glass = srgb(0.8, 0.9, 0.95);
   hall(IN.box, x - 0.58, C0, z - 1.18, x + 0.58, C0 + 0.12, z + 1.18, DARK);
@@ -751,8 +759,96 @@ function kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, kind, r) {
   // the goods
   const xt = x - side * 0.08; // the tower's face to the people
   const face = (y0, y1, z0, z1, c, deep = 0.02) => hall(IN.box, Math.min(xt, xt - side * deep), y0, z0, Math.max(xt, xt - side * deep), y1, z1, c);
-  if (kind !== 'sweets') hall(IN.box, x - 0.08, C0 + 1.0, z - 0.98, x + 0.08, C0 + 2.25, z + 0.98, kind === 'watches' ? srgb(0.2, 0.16, 0.18) : WHITE);
-  if (kind === 'sunglasses') {
+  if (kind !== 'sweets' && kind !== 'coffee' && kind !== 'balloons') hall(IN.box, x - 0.08, C0 + 1.0, z - 0.98, x + 0.08, C0 + 2.25, z + 0.98, kind === 'watches' ? srgb(0.2, 0.16, 0.18) : WHITE);
+  if (kind === 'coffee') {
+    // the espresso machine on the seller's side (its steel body, the two heads, the cups warming on
+    // its top), the grinder, the towers of cups, the cakes under their glass dome on the people's
+    // side; the menu lit along the roof's band
+    const xm = x + side * 0.28;
+    hall(IN.gloss, xm - 0.22, C0 + 1.0, z - 0.42, xm + 0.22, C0 + 1.46, z + 0.42, srgb(0.78, 0.8, 0.84));
+    hall(IN.box, xm - 0.23, C0 + 1.46, z - 0.43, xm + 0.23, C0 + 1.5, z + 0.43, DARK);
+    for (const dz of [-0.2, 0.2]) {
+      hall(IN.box, Math.min(xm - side * 0.22, xm - side * 0.3), C0 + 1.22, z + dz - 0.05, Math.max(xm - side * 0.22, xm - side * 0.3), C0 + 1.3, z + dz + 0.05, DARK);
+      const cup = new THREE.CylinderGeometry(0.04, 0.03, 0.07, 8);
+      cup.translate(xm - side * 0.3, C0 + 1.035, z + dz);
+      hallGeo(IN.cyl, cup, WHITE);
+    }
+    for (let i = 0; i < 6; i++) {
+      const cup = new THREE.CylinderGeometry(0.035, 0.03, 0.06, 8);
+      cup.translate(xm - 0.1 + (i % 3) * 0.1, C0 + 1.53, z - 0.1 + Math.floor(i / 3) * 0.2);
+      hallGeo(IN.cyl, cup, WHITE);
+    }
+    const gr = new THREE.CylinderGeometry(0.1, 0.07, 0.3, 10);
+    gr.translate(xm, C0 + 1.15, z + 0.72);
+    hallGeo(IN.gloss, gr, DARK);
+    const hop = new THREE.CylinderGeometry(0.06, 0.1, 0.18, 10);
+    hop.translate(xm, C0 + 1.39, z + 0.72);
+    hallGeo(IN.gloss, hop, srgb(0.82, 0.88, 0.9));
+    for (const [dz, c] of [[-0.85, WHITE], [-0.72, srgb(0.95, 0.85, 0.65)], [0.95, WHITE]]) {
+      const t = new THREE.CylinderGeometry(0.05, 0.04, 0.42, 8);
+      t.translate(xm, C0 + 1.21, z + dz);
+      hallGeo(IN.cyl, t, c);
+    }
+    // the cakes under their dome, on the counter before the people
+    const xc = x - side * 0.34;
+    const plate = new THREE.CylinderGeometry(0.2, 0.2, 0.02, 14);
+    plate.translate(xc, C0 + 1.01, z - 0.45);
+    hallGeo(IN.gloss, plate, WHITE);
+    for (let i = 0; i < 4; i++) {
+      const cake = new THREE.CylinderGeometry(0.06, 0.06, 0.07, 10);
+      cake.translate(xc + ((i % 2) - 0.5) * 0.15, C0 + 1.055, z - 0.45 + (Math.floor(i / 2) - 0.5) * 0.15);
+      hallGeo(IN.cyl, cake, [srgb(0.55, 0.32, 0.2), srgb(0.98, 0.86, 0.7), srgb(0.95, 0.5, 0.6), srgb(0.98, 0.9, 0.5)][i]);
+    }
+    const dome = new THREE.SphereGeometry(0.22, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+    dome.translate(xc, C0 + 1.02, z - 0.45);
+    hallGeo(IN.gloss, dome, glass);
+    // the paper bags and the lids, the sugar
+    for (let i = 0; i < 3; i++) hall(IN.box, xc - 0.06, C0 + 1.0, z + 0.25 + i * 0.16, xc + 0.06, C0 + 1.16, z + 0.33 + i * 0.16, srgb(0.86, 0.72, 0.52));
+    // the menu on the roof's band, lit: the lines of it
+    for (const s2 of [-1, 1]) for (let i = 0; i < 3; i++) hall(IN.box, Math.min(x + s2 * 0.815, x + s2 * 0.83), C0 + 2.6 + i * 0.04, z - 0.8, Math.max(x + s2 * 0.815, x + s2 * 0.83), C0 + 2.62 + i * 0.04, z + (i === 1 ? 0.3 : 0.7), WHITE);
+  } else if (kind === 'balloons') {
+    // the balloons: a bunch tied to a pole up through the roof, bobbing over the hall; the toys in
+    // rows on the counter (bears, rabbits, a whale)
+    hall(IN.box, x - 0.03, C0 + 1.0, z - 0.03, x + 0.03, C0 + 3.2, z + 0.03, srgb(0.9, 0.9, 0.92));
+    const BAL = [srgb(0.95, 0.25, 0.3), srgb(0.98, 0.82, 0.25), srgb(0.3, 0.6, 0.95), srgb(0.45, 0.85, 0.45), srgb(0.95, 0.5, 0.8), srgb(0.7, 0.45, 0.95), srgb(0.98, 0.55, 0.25)];
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + r() * 0.4;
+      const rad = 0.18 + (i % 3) * 0.17;
+      const bx = x + Math.cos(a) * rad;
+      const bz = z + Math.sin(a) * rad;
+      const by = C0 + 3.35 + (i % 4) * 0.2 + r() * 0.12;
+      const ball = new THREE.SphereGeometry(0.17, 10, 8);
+      ball.scale(1, 1.2, 1);
+      ball.translate(bx, by, bz);
+      hallGeo(IN.gloss, ball, BAL[i % BAL.length]);
+      // (its string down to the pole's top)
+      const sx = (bx + x) / 2;
+      const sz = (bz + z) / 2;
+      const len = Math.hypot(bx - x, by - 0.2 - (C0 + 3.2), bz - z);
+      const str = new THREE.CylinderGeometry(0.006, 0.006, len, 3);
+      str.rotateX(Math.PI / 2);
+      str.lookAt(new THREE.Vector3(bx - x, by - 0.2 - (C0 + 3.2), bz - z));
+      str.translate(sx, (by - 0.2 + C0 + 3.2) / 2, sz);
+      hallGeo(IN.box, str, WHITE);
+    }
+    const TOY = [srgb(0.78, 0.56, 0.36), srgb(0.98, 0.9, 0.82), srgb(0.95, 0.66, 0.78), srgb(0.5, 0.7, 0.95)];
+    for (let i = 0; i < 8; i++) {
+      const tx = x - side * (0.18 + (i % 2) * 0.24);
+      const tz = z - 0.9 + Math.floor(i / 2) * 0.55;
+      const c = TOY[i % TOY.length];
+      const body = new THREE.SphereGeometry(0.1, 8, 6);
+      body.translate(tx, C0 + 1.09, tz);
+      hallGeo(IN.box, body, c);
+      const head = new THREE.SphereGeometry(0.075, 8, 6);
+      head.translate(tx, C0 + 1.24, tz);
+      hallGeo(IN.box, head, c);
+      for (const e of [-1, 1]) {
+        const ear = new THREE.SphereGeometry(0.03, 6, 4);
+        ear.translate(tx, C0 + 1.31, tz + e * 0.055);
+        hallGeo(IN.box, ear, c);
+      }
+    }
+  } else if (kind === 'sunglasses') {
     // rows of sunglasses on the tower, a mirror at its end
     for (let k = 0; k < 5; k++) {
       for (let j = 0; j < 8; j++) {
