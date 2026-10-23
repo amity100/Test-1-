@@ -615,7 +615,10 @@ export class StreetSocial {
     let nb = pick(LINES.NAMES);
     if (nb === na) nb = pick(LINES.NAMES);
     const young = a.role === 'youth' || b.role === 'youth';
-    const greet = young ? 'bump' : pick(['hug', 'hug', 'shake', 'shake', 'wave']);
+    let greet = young ? 'bump' : pick(['hug', 'hug', 'shake', 'shake', 'wave']);
+    // (a hand round a coffee shakes no hand; arms full of shopping hug nobody: a wave then)
+    if (greet === 'hug' && (a.fig.carry || a.fig.carryL || b.fig.carry || b.fig.carryL)) greet = 'shake';
+    if (greet !== 'wave' && greet !== 'hug' && (a.fig.carry || b.fig.carry)) greet = 'wave';
     const M = { a, b, phase: 'spot', t: 0, greet, ex: null, gt: 0, done: false, va: new THREE.Vector3(), vb: new THREE.Vector3(), mid: new THREE.Vector3() };
     a.meet = M;
     b.meet = M;

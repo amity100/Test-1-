@@ -557,8 +557,9 @@ class Civilian {
           const s = this.waitAt;
           if (!go) s.go = 0;
           const wd = Math.hypot(s.x - this.pos.x, s.z - this.pos.z);
-          if (wd > 0.25) {
-            // (up to the edge of the curb)
+          // (up to the edge of the curb - and where something low stands in the way of it, a
+          // couple of seconds of trying is enough: waiting where they are, not walking on the spot)
+          if (wd > 0.25 && (s.walkT = (s.walkT || 0) + dt) < 2.5) {
             tx = s.x;
             tz = s.z;
             speed = Math.min(speed, 0.6 + wd);
@@ -847,7 +848,8 @@ export class Civilians {
       const [lat, back] = CURB_SLOTS[k];
       const x = C.x + ux * (1.9 - back) - uz * lat;
       const z = C.z + uz * (1.9 - back) + ux * lat;
-      if (col.pointInside(x, 1.0, z, 0.22)) continue;
+      // (room for a body there: a person is 0.33 m round)
+      if (col.pointInside(x, 1.0, z, 0.36)) continue;
       C.used[k] = c;
       c.waitAt = { C, k, x, z, go: 0, react: 0.2 + Math.random() * 0.9 + (c.role === 'elder' ? 0.7 : 0), look: null, lookT: Math.random() * 2, ux, uz };
       return;
