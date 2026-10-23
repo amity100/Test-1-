@@ -3,7 +3,7 @@ import { srgb, hex, addLight } from '../render/materials.js';
 import { nextId } from './kit.js';
 import { fbox, fcol, neonSign, roofStuff, backFront, adQuad, FH, GROUND, FRAME, frontMatrix } from './deco.js';
 import { CURB } from './layout.js';
-import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, wallLamp, darker, lighter, DETAIL_LOW } from './facades.js';
+import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, wallLamp, darker, lighter, plateSpans, doorSill, SILL, DETAIL_LOW } from './facades.js';
 
 // (v5) The hotels of the beach street, the way the real ones stand along the ocean in Miami:
 // three or four floors of stucco in a pastel and its accent, a front that is symmetrical about a
@@ -898,7 +898,9 @@ function lobbyFront(ctx, f, o) {
   const fc = o.frameCol;
   // (gap: the half of the door's own bay; glass blocks stand either side of a hotel's)
   const gap = o.gap || 0.8;
-  fbox(ctx, f, M.frame, sg0, CURB, 0, sg1, 0.7, 0.18, fc);
+  // (the kick plate either side of the door, the doorway's sill: world/facades.js plateSpans)
+  for (const [a, b] of plateSpans(sg0, sg1, uDoor)) fbox(ctx, f, M.frame, a, CURB, 0, b, 0.7, 0.18, fc);
+  doorSill((...q) => fbox(ctx, f, M.frame, ...q, SILL), uDoor);
   for (let k = 0; k <= 4; k++) {
     const u = sg0 + ((sg1 - sg0) * k) / 4;
     if (Math.abs(u - uDoor) < gap - 0.05) continue;

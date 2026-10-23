@@ -6,7 +6,7 @@ import { AD_IDS } from './ads.js';
 import { palm } from './palms.js';
 import { randomCarSpec } from '../render/cars.js';
 import { CURB } from './layout.js';
-import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, DETAIL_LOW } from './facades.js';
+import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, plateSpans, doorSill, SILL, DETAIL_LOW } from './facades.js';
 
 // (v5, ROADMAP 11.2) The building kits of the city behind Ocean Drive. Every lot gets its own
 // building, the way the real South Beach was built a lot at a time: a row of shops of one floor
@@ -217,8 +217,10 @@ export function storefront(ctx, f, u0, u1, o, info = null) {
   // the wall either side of the glass, a hand's width deep
   fbox(ctx, f, M.wall, u0, CURB, -0.25, sg0, G1, 0, wall);
   fbox(ctx, f, M.wall, sg1, CURB, -0.25, u1, G1, 0, wall);
-  // the kick plate, the mullions, the bar over the glass
-  fbox(ctx, f, M.frame, sg0, CURB, 0, sg1, 0.7, 0.18, frame);
+  // the kick plate either side of the door (world/facades.js plateSpans), the doorway's sill, the
+  // mullions, the bar over the glass
+  for (const [a, b] of plateSpans(sg0, sg1, uDoor)) fbox(ctx, f, M.frame, a, CURB, 0, b, 0.7, 0.18, frame);
+  doorSill((...q) => fbox(ctx, f, M.frame, ...q, SILL), uDoor);
   const nm = Math.max(1, Math.round((sg1 - sg0) / 1.6));
   for (let k = 0; k <= nm; k++) {
     const u = sg0 + ((sg1 - sg0) * k) / nm;
@@ -266,8 +268,11 @@ export function storefront(ctx, f, u0, u1, o, info = null) {
     const P = o.P || new Parts(ctx);
     const dr = diceAt(f, 11 + Math.round(u0 * 10));
     const fid = nextId();
-    P.box(M.frame, f, sg0, CURB, 0.17, sg1, CURB + 0.1, 0.2, COL.dark, fid, FB.BACK);
-    P.box(M.frame, f, sg0, 0.64, 0.17, sg1, 0.7, 0.2, COL.steel, nextId(), FB.BACK);
+    const cid = nextId();
+    for (const [a, b] of plateSpans(sg0, sg1, uDoor)) {
+      P.box(M.frame, f, a, CURB, 0.17, b, CURB + 0.1, 0.2, COL.dark, fid, FB.BACK);
+      P.box(M.frame, f, a, 0.64, 0.17, b, 0.7, 0.2, COL.steel, cid, FB.BACK);
+    }
     for (const [a, b] of [[sg0, uDoor - 0.78], [uDoor + 0.78, sg1]]) if (b - a > 0.4) P.box(M.frame, f, a, 2.66, 0, b, 2.74, 0.12, frame, fid, FB.BACK);
     shopHardware(P, f, sg0, sg1, { r: dr, top: G1, door: uDoor, housing: aw !== 'box' && aw !== 'barrel', housingCol: dr() < 0.6 ? COL.steel : darker(frame, 1.6) });
     if (!o.P) P.flush();

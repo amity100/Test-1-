@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { srgb, hex, addLight, makeSurface } from '../render/materials.js';
 import { nextId, Facade, quadGeo } from './kit.js';
 import { CURB } from './layout.js';
-import { Parts, FB, COL, DOORS, SHUTTERS, sashFor, diceAt, dialectOf, skin, deepWindow, band, flatsDoor, fireStairs, shopHardware, bladeSign, downpipe, meters, tag, darker, lighter, DETAIL_LOW } from './facades.js';
+import { Parts, FB, COL, DOORS, SHUTTERS, sashFor, diceAt, dialectOf, skin, deepWindow, band, flatsDoor, fireStairs, shopHardware, bladeSign, downpipe, meters, tag, darker, lighter, plateSpans, doorSill, SILL, DETAIL_LOW } from './facades.js';
 
 // The Art Deco buildings of the boulevard: pastel walls, corner pilasters, a parapet with a line
 // of neon, a fin over the middle, framed windows with an eyebrow over each row, and at street
@@ -221,7 +221,9 @@ export function decoBuilding(ctx, spec) {
   // ---- the shop at street level: an open front, a door, a kick plate, the awning, the neon
   const door = sg0 + (sg1 - sg0) * 0.28; // (the first boulevard's doors are at 72 % from the north end)
   const uDoor = spec.doorU !== undefined ? spec.doorU : door;
-  fbox(ctx, f, M.frame, sg0, CURB, 0, sg1, 0.7, 0.18, FRAME);
+  // (the kick plate either side of the door, the doorway's sill: world/facades.js plateSpans)
+  for (const [a, b] of plateSpans(sg0, sg1, uDoor)) fbox(ctx, f, M.frame, a, CURB, 0, b, 0.7, 0.18, FRAME);
+  doorSill((...q) => fbox(ctx, f, M.frame, ...q, SILL), uDoor);
   for (let k = 0; k <= 4; k++) {
     const u = sg0 + ((sg1 - sg0) * k) / 4;
     if (Math.abs(u - uDoor) < 0.75) continue;
@@ -543,7 +545,9 @@ export function windowRows(ctx, f, o) {
           else if (q < 0.16 && fl <= 3) flowers = true;
         }
         holes.push([uc - ww / 2, y0, uc + ww / 2, y1]);
-        deepWindow(P, f, uc - ww / 2, y0, uc + ww / 2, y1, { R, sash, stone, head: 'none', lights: o.hotel && k % 2 ? 'one' : 'deco', r, ac, life: 0.5 });
+        // (where the gangs are, now and then one boarded up - the island's: ctx.wearGang)
+        const boarded = !!ctx.wearGang && !ac && !flowers && !balc && r() < 0.06;
+        deepWindow(P, f, uc - ww / 2, y0, uc + ww / 2, y1, { R, sash, stone, head: 'none', lights: o.hotel && k % 2 ? 'one' : 'deco', r, ac, life: 0.5, boarded });
         // (a panel in relief under it, its flutes, the Deco ones' ornament)
         if (panels && fl >= 2 && !balc) {
           const pid = nextId();

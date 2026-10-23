@@ -230,6 +230,8 @@ const SASH = {
 export const SHUTTERS = [C(0.2, 0.5, 0.42), C(0.22, 0.42, 0.62), C(0.52, 0.32, 0.2), C(0.15, 0.36, 0.3), C(0.85, 0.82, 0.74), C(0.62, 0.22, 0.24)];
 // curtains, blinds
 const CURTAINS = [C(0.96, 0.92, 0.82), C(0.98, 0.98, 0.96), C(0.92, 0.7, 0.72), C(0.72, 0.82, 0.92), C(0.75, 0.9, 0.8), C(0.98, 0.88, 0.6), C(0.62, 0.2, 0.24), C(0.22, 0.26, 0.42), C(0.9, 0.55, 0.3)];
+// a board over a window
+const BOARD = C(0.66, 0.5, 0.34);
 // what hangs out to dry
 const LAUNDRY = [C(0.95, 0.95, 0.92), C(0.9, 0.3, 0.32), C(0.3, 0.5, 0.85), C(0.98, 0.85, 0.35), C(0.4, 0.75, 0.5), C(0.95, 0.6, 0.75), C(0.25, 0.25, 0.3)];
 // the sash's paint for a building of a dialect
@@ -294,6 +296,16 @@ export function deepWindow(P, f, u0, v0, u1, v1, o) {
   const back = -R;
   const sash = o.sash || COL.white;
   const stone = o.stone || COL.stone;
+  // (where the gangs are, a window boarded up now and then, as world/deco.js lived() boarded them on
+  // the flat walls of before: the plywood nailed over the hole, two battens across it, its sill;
+  // nobody's light behind it)
+  if (o.boarded) {
+    const bid = nextId();
+    P.box(M.frame, f, u0 - 0.05, v0 - 0.02, -0.03, u1 + 0.05, v1 + 0.02, 0.022, BOARD, bid, FB.BACK);
+    for (const k of [0.22, 0.78]) P.box(M.frame, f, u0 - 0.02, v0 + (v1 - v0) * k - 0.05, 0.022, u1 + 0.02, v0 + (v1 - v0) * k + 0.05, 0.04, darker(BOARD, 0.8), bid, FB.BACK);
+    P.box(M.frame, f, u0 - 0.1, v0 - 0.1, back, u1 + 0.1, v0 - 0.02, 0.1, stone, nextId(), FB.BACK);
+    return;
+  }
   // the glass, at the back of the hole (each its own: some rooms are lit and some are not)
   P.pane(M.winGlass, f, u0, v0, u1, v1, back + 0.008, COL.white, o.glassId || nextId());
   // the sash: its stiles and rails, standing a little out of the glass
@@ -567,6 +579,9 @@ export function flatsDoor(P, f, u0, u1, vTop, o) {
   const cas = o.casing || COL.white;
   const uc = (u0 + u1) / 2;
   const dTop = Math.min(vTop - 0.5, CURB + 2.3);
+  // (the stair hall's dark behind the leaf and the fanlight: the room of the shop next door shows
+  // through no slit beside them; its back left out, where the shop's own wall stands)
+  P.box(M.frame, f, u0, CURB, back - 0.03, u1, vTop, back - 0.025, COL.room, nextId(), FB.BACK);
   // the fanlight over the door, its bars
   P.pane(M.winGlass, f, u0 + 0.06, dTop + 0.08, u1 - 0.06, vTop - 0.06, back + 0.01, COL.white, nextId());
   const fid = nextId();
@@ -687,6 +702,14 @@ export function fireStairs(P, f, a, b, floors, o = {}) {
 }
 
 // ------------------------------------------------------------------ the shops' fronts
+// The kick plate under a shop's glass used to run right across its door, a wall up to the knee that
+// every shopper walked in through. It stops in the jambs now (they stand at the door's middle -+
+// 0.7..0.78: the plate ends inside them, so that no two faces lie in one plane), and the doorway
+// has a sill of its own, worn metal flush with the sidewalk (doorSill: the kits' own fbox draws it).
+export const plateSpans = (sg0, sg1, uDoor) => [[sg0, uDoor - 0.74], [uDoor + 0.74, sg1]].filter(([a, b]) => b - a > 0.02);
+export const SILL = C(0.6, 0.58, 0.55);
+export const doorSill = (box, uDoor) => box(uDoor - 0.7, CURB, -0.25, uDoor + 0.7, CURB + 0.025, 0.1);
+
 /**
  * A shop front's hardware: the box of the roll-down shutter over the glass and its runners down
  * either side, the bar to push the door, a sticker or two on the glass (the hours, a poster).
