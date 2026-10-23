@@ -34,6 +34,18 @@ function lunchHour(game) {
   return h > 11.4 && h < 14.6;
 }
 
+// the prop (world/objects.js) of this kind standing at (x, z): what a bench, a planter, a fountain
+// of the places is, to know when it has been rubbed out
+function propAt(list, kind, x, z) {
+  for (const o of list || []) if (o && o.kind === kind && Math.abs(o.x - x) < 0.05 && Math.abs(o.z - z) < 0.05) return o;
+  return null;
+}
+// a place whose prop is being rubbed out or is gone
+function erased(pl) {
+  const o = pl.obj;
+  return !!o && (o.state === 'fading' || o.state === 'gone');
+}
+
 function pick(a) {
   return a[Math.floor(Math.random() * a.length)];
 }
@@ -46,13 +58,16 @@ export class Routines {
     this.sitT = 4;
     this.waitT = 3;
     const w = game.world;
+    // (the prop each place is - a bench, a fountain - world/objects.js: rubbed out, its people get up
+    // and go, and nobody is left sitting on the air where it was: tend)
+    const props = (w.objects && w.objects.list) || [];
     // a bench: two seats side by side, facing where the bench faces
     for (const b of w.benches || []) {
       const fx = Math.sin(b.yaw);
       const fz = Math.cos(b.yaw);
       const seats = [-0.42, 0.42].map((u) => ({ x: b.x + fz * u + fx * 0.04, z: b.z - fx * u + fz * 0.04, yaw: b.yaw, who: null }));
       const at = blockAt(b.x, b.z);
-      this.places.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false, park: !!at && at.type === 'park' });
+      this.places.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false, park: !!at && at.type === 'park', obj: propAt(props, 'bench', b.x, b.z) });
     }
     // a bus stop: its bench's three seats, and two places to stand by the sign, facing the road
     const stops = w.busStops || [];
@@ -79,7 +94,7 @@ export class Routines {
       this.places.push({ kind: 'cafe', x: t.x, z: t.z, yaw: 0, seats, stands: [], active: false });
     }
     // (GTA IV pass) the fountains' rims (the plaza's)
-    for (const f of w.fountains || []) this.addFountain(this.places, f.x, f.z);
+    for (const f of w.fountains || []) this.addFountain(this.places, f.x, f.z, propAt(props, 'fountain', f.x, f.z));
     this.people = new Set();
     // (counted for the tests: who got on a bus, who got off)
     this.boarded = 0;
@@ -115,7 +130,7 @@ export class Routines {
       const fx = Math.sin(b.yaw);
       const fz = Math.cos(b.yaw);
       const seats = [-0.42, 0.42].map((u) => ({ x: b.x + fz * u + fx * 0.04, z: b.z - fx * u + fz * 0.04, yaw: b.yaw, who: null }));
-      add.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false, park: live.block.kind === 'park' || live.block.kind === 'point' });
+      add.push({ kind: 'bench', x: b.x, z: b.z, yaw: b.yaw, seats, stands: [], active: false, park: live.block.kind === 'park' || live.block.kind === 'point', obj: propAt(bc.props, 'bench', b.x, b.z) });
     }
     // (v5, ROADMAP 11.18) the bus stops on its sidewalks: the bench's seats, two places by the sign
     for (const st of bc.busStops || []) {
@@ -152,15 +167,15 @@ export class Routines {
         s.baseY = Math.max(0, top - groundHeight(s.x, s.z) - BENCH_SEAT);
         return s;
       });
-      add.push({ kind: 'ledge', x: o.x, z: o.z, yaw: a, seats, stands: [], active: false });
+      add.push({ kind: 'ledge', x: o.x, z: o.z, yaw: a, seats, stands: [], active: false, obj: o });
     }
-    for (const f of bc.fountains || []) if (!inHall(f.x, f.z)) this.addFountain(add, f.x, f.z);
+    for (const f of bc.fountains || []) if (!inHall(f.x, f.z)) this.addFountain(add, f.x, f.z, propAt(bc.props, 'fountain', f.x, f.z));
     live.places = add;
     for (const pl of add) this.places.push(pl);
   }
 
   // a fountain's basin, sat on round its rim (four places, facing out)
-  addFountain(list, x, z) {
+  addFountain(list, x, z, obj = null) {
     const top = CURB + 0.7;
     const seats = [];
     for (let k = 0; k < 4; k++) {
@@ -169,7 +184,7 @@ export class Routines {
       s.baseY = Math.max(0, top - groundHeight(s.x, s.z) - BENCH_SEAT);
       seats.push(s);
     }
-    list.push({ kind: 'ledge', x, z, yaw: 0, seats, stands: [], active: false, fountain: true });
+    list.push({ kind: 'ledge', x, z, yaw: 0, seats, stands: [], active: false, fountain: true, obj });
   }
 
   get budget() {
@@ -228,6 +243,7 @@ export class Routines {
 
   // a place you just came near: some of it is taken already
   fill(pl, R, rain) {
+    if (erased(pl)) return;
     // (at lunchtime the benches and the ledges are where people eat)
     const busy = (R ? R.people : 1) * (this.game.daynight && this.game.daynight.hour > 21.5 ? 0.5 : 1) * (lunchHour(this.game) && pl.kind !== 'bus' ? 1.6 : 1);
     if (pl.kind === 'bus') {
@@ -432,22 +448,32 @@ export class Routines {
   // keep a place's people in order: the hurt or the frightened leave it, the rain sends the bench
   // sitters home
   tend(pl, dt, rain) {
-    for (const s of pl.seats.concat(pl.stands)) {
-      const v = s.who;
-      if (!v) continue;
-      const c = v.c;
-      if (!c.alive || c.panicT > 0 || c.headless || c.ctrl === null) {
-        s.who = null;
-        this.people.delete(v);
-        if (c.alive && c.ctrl) {
-          this.game.civilians.release(c);
-          c.scripted = false;
-          this.game.civilians.rejoin(c);
-        } else c.fig.sit = 0;
-        continue;
-      }
-      if (rain > 0.25 && pl.kind !== 'bus' && v.phase === 'at' && Math.random() < dt * 0.4) this.done(v, false);
+    // (the bench, the planter, the fountain rubbed out from under them: up, and away)
+    const gone = erased(pl);
+    for (let k = 0; k < 2; k++) {
+      const spots = k ? pl.stands : pl.seats;
+      for (let i = 0; i < spots.length; i++) this.tendSpot(spots[i], pl, dt, rain, gone);
     }
+  }
+
+  // one seat (or place to stand) of a place: who is on it still there, and staying (gone: its prop
+  // rubbed out)
+  tendSpot(s, pl, dt, rain, gone) {
+    const v = s.who;
+    if (!v) return;
+    const c = v.c;
+    if (!c.alive || c.panicT > 0 || c.headless || c.ctrl === null) {
+      s.who = null;
+      this.people.delete(v);
+      if (c.alive && c.ctrl) {
+        this.game.civilians.release(c);
+        c.scripted = false;
+        this.game.civilians.rejoin(c);
+      } else c.fig.sit = 0;
+      return;
+    }
+    if (gone) this.done(v, false);
+    else if (rain > 0.25 && pl.kind !== 'bus' && v.phase === 'at' && Math.random() < dt * 0.4) this.done(v, false);
   }
 
   // somebody walking past takes a free seat (or comes to wait for the bus)
@@ -455,7 +481,7 @@ export class Routines {
     const game = this.game;
     const free = [];
     for (const pl of this.places) {
-      if (!pl.active) continue;
+      if (!pl.active || erased(pl)) continue;
       if (rain > 0.15 && pl.kind !== 'bus') continue;
       const spots = pl.kind === 'bus' ? pl.seats.concat(pl.stands) : pl.seats;
       for (const s of spots) if (!s.who) free.push([pl, s]);
