@@ -148,6 +148,8 @@ export class Deliveries {
       // (its door on the road's side: its front looks back at the van)
       if (s.nx * fz - s.nz * fx < 0.7) continue;
       if (along + 2 * c.halfLen + 3 > room) continue;
+      // (not double-parked in a bus stop's place)
+      if (this.traffic.nearStop(s.door[0], s.door[2], 15)) continue;
       if (along < bd) {
         bd = along;
         best = s;

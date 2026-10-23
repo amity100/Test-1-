@@ -39,8 +39,11 @@ export class Patrol {
     if (!this.fleet.near(c, 140) || Math.random() > 0.3) return;
     const T = this.ahead(c);
     // (only one in the curb lane, with room to ease over a little a way on: nobody is stopped in
-    // the middle of an avenue)
-    if (T && this.traffic.curbRoom(T, 10) > 0.1) this.start(c, T);
+    // the middle of an avenue - nor at a bus stop, in the bus's place)
+    if (!T || this.traffic.curbRoom(T, 10) <= 0.1) return;
+    const on = Math.max(9, (T.speed * T.speed) / (2 * 2.4)) + 2;
+    if (this.traffic.nearStop(T.pos.x + Math.sin(T.yaw) * on, T.pos.z + Math.cos(T.yaw) * on, 18)) return;
+    this.start(c, T);
   }
 
   // the car in front in its lane, a little way on, that may be pulled over

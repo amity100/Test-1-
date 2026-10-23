@@ -1260,6 +1260,14 @@ export class Traffic {
     return null;
   }
 
+  // (GTA IV) a bus stop within r of (x, z)? (nobody pulls over in a bus's place: game/patrol.js,
+  // game/deliveries.js)
+  nearStop(x, z, r) {
+    const S = this.stops;
+    for (let i = 0; i < S.length; i++) if (Math.abs(S[i].x - x) + Math.abs(S[i].z - z) < r) return true;
+    return false;
+  }
+
   // (for the tests: a bus up to stop st now, in plain view)
   debugBus(st) {
     return this.busTo(st, { near: true });
