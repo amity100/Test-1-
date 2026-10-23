@@ -1527,10 +1527,17 @@ export function gunOf(s, v = null, mass = 1) {
   }
   if (cannon) {
     const speed = clamp(42 + len * 5, 42, 70);
-    return { type: 'cannon', el, down, r, len, reload: clamp(0.8 + r * 5, 1.0, 2.6), dmg: Math.round(clamp(80 + r * 520, 100, 240)), blast: clamp(2.5 + r * 18, 3, 8.5), speed, spread: clamp(0.03 / (1 + len * 0.8), 0.004, 0.03), range: Math.round(speed * 3.2) };
+    const g = { type: 'cannon', el, down, r, len, reload: clamp(0.8 + r * 5, 1.0, 2.6), dmg: Math.round(clamp(80 + r * 520, 100, 240)), blast: clamp(2.5 + r * 18, 3, 8.5), speed, spread: clamp(0.03 / (1 + len * 0.8), 0.004, 0.03), range: Math.round(speed * 3.2) };
+    // (ROADMAP 11.27) drawn pointing up: a mortar - its shot up high and down onto where you aim, over
+    // what is in the way; a bigger splash, slower to load
+    if (s.mortar) Object.assign(g, { arc: true, reload: g.reload * 1.25, blast: g.blast * 1.35, spread: 0.01, range: 85 });
+    return g;
   }
   const speed = clamp(70 + len * 14, 70, 130);
-  return { type: 'mg', el, down, r, len, reload: clamp(0.05 + r * 1.2, 0.07, 0.16), dmg: Math.round(clamp(6 + r * 140, 8, 20)), speed, spread: clamp(0.06 / (1 + len * 0.9), 0.007, 0.06), life: 2.5, range: Math.round(speed * 2.5) };
+  const g = { type: 'mg', el, down, r, len, reload: clamp(0.05 + r * 1.2, 0.07, 0.16), dmg: Math.round(clamp(6 + r * 140, 8, 20)), speed, spread: clamp(0.06 / (1 + len * 0.9), 0.007, 0.06), life: 2.5, range: Math.round(speed * 2.5) };
+  // (ROADMAP 11.27) three barrels or more: a minigun - twice as fast, a little wilder
+  if (s.barrels >= 3) Object.assign(g, { reload: g.reload * 0.5, spread: g.spread * 1.3, dmg: Math.round(g.dmg * 0.85), spin: true });
+  return g;
 }
 
 // ------------------------------------------------------------------ the card: its name, what it does, its numbers

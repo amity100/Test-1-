@@ -1,4 +1,5 @@
-// Keyboard + mouse (pointer lock, with a drag fallback) + touch (virtual stick, look pad, buttons).
+// Keyboard + mouse (pointer lock, with a drag fallback) + touch (virtual stick, look pad, buttons;
+// at the wheel, the steering and the pedals).
 
 export class Input {
   constructor(canvas, touch) {
@@ -18,6 +19,14 @@ export class Input {
     this.pad = null; // { x, y, sprint } from a gamepad
     this.flyUp = false;
     this.flyDown = false;
+    // (a phone at the wheel: its driving buttons instead of the stick, while game/game.js has them
+    // on - ◀ ▶ (-1, 0, 1), the gas and the brake (0 or 1), the handbrake, the jets' turbo)
+    this.driveButtons = false;
+    this.steer = 0;
+    this.gas = 0;
+    this.brake = 0;
+    this.handbrake = false;
+    this.boost = false;
     this.enabled = false;
     this.locked = false;
     this.lockFailed = false;
@@ -245,6 +254,72 @@ export class Input {
       this.fire = false;
     });
 
+    // at the wheel (when game/game.js turns them on): the buttons of the big phone games instead of
+    // the stick. ◀ ▶ are one strip under the left thumb - the side the finger is on steers, the gap
+    // between them is straight on, and the thumb slides from one to the other without lifting. Each
+    // finger is followed by its own touch (the other thumb is on the gas)
+    const steer = document.getElementById('steer-zone');
+    const steerL = document.getElementById('steer-l');
+    const steerR = document.getElementById('steer-r');
+    const steers = new Map();
+    let gap = [0, 0];
+    const side = (x) => (x <= gap[0] ? -1 : x >= gap[1] ? 1 : 0);
+    const steerNow = () => {
+      let l = 0;
+      let r = 0;
+      for (const s of steers.values()) {
+        if (s < 0) l = 1;
+        else if (s > 0) r = 1;
+      }
+      this.steer = r - l;
+      steerL.classList.toggle('on', l > 0);
+      steerR.classList.toggle('on', r > 0);
+    };
+    steer.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      // (where ◀ ends and ▶ begins: measured as a finger comes down, not at every move)
+      gap = [steerL.getBoundingClientRect().right, steerR.getBoundingClientRect().left];
+      for (const t of e.changedTouches) if (steer.contains(t.target)) steers.set(t.identifier, side(t.clientX));
+      steerNow();
+    }, { passive: false });
+    steer.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) if (steers.has(t.identifier)) steers.set(t.identifier, side(t.clientX));
+      steerNow();
+    }, { passive: false });
+    const endSteer = (e) => {
+      for (const t of e.changedTouches) steers.delete(t.identifier);
+      steerNow();
+    };
+    steer.addEventListener('touchend', endSteer);
+    steer.addEventListener('touchcancel', endSteer);
+    // the pedals, the handbrake and the turbo: down while a finger is on them (two on one: until the
+    // last lets go)
+    const pedal = (id, set) => {
+      const el = document.getElementById(id);
+      const on = new Set();
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        for (const t of e.changedTouches) if (el.contains(t.target)) on.add(t.identifier);
+        if (!on.size) return;
+        el.classList.add('on');
+        set(true);
+      }, { passive: false });
+      const up = (e) => {
+        for (const t of e.changedTouches) on.delete(t.identifier);
+        if (on.size) return;
+        el.classList.remove('on');
+        set(false);
+      };
+      el.addEventListener('touchend', up);
+      el.addEventListener('touchcancel', up);
+    };
+    pedal('btn-gas', (on) => (this.gas = on ? 1 : 0));
+    // (held standing still: back - game/vehicles.js drive)
+    pedal('btn-brake', (on) => (this.brake = on ? 1 : 0));
+    pedal('btn-handbrake', (on) => (this.handbrake = on));
+    pedal('btn-boost', (on) => (this.boost = on));
+
     const btn = (id, code, hold = false) => {
       const el = document.getElementById(id);
       el.addEventListener('touchstart', (e) => {
@@ -293,10 +368,13 @@ export class Input {
     }
   }
 
-  // Movement vector from keys or stick (a gamepad's, core/gamepad.js, while it is pushed).
+  // Movement vector from keys or stick (a gamepad's, core/gamepad.js, while it is pushed; at the
+  // wheel of a phone, its driving buttons).
   readMove() {
     const pad = this.pad;
     if (pad && (pad.x || pad.y || pad.sprint)) return pad;
+    // (◀ ▶ and the pedals are all or nothing: the gas stays full while it steers)
+    if (this.touch && this.driveButtons) return { x: this.steer, y: this.gas - this.brake, sprint: this.boost };
     if (this.touch) return { x: this.move.x, y: this.move.y, sprint: (this.stickMag || 0) > 0.92 };
     let x = 0;
     let y = 0;

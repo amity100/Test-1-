@@ -302,7 +302,8 @@ class Enemy {
   }
 
   get gunman() {
-    return !this.isMonster && !this.cfg.melee && !this.armless;
+    // (ROADMAP 11.20: a magnet drawn on him has pulled his gun out of his hand - game/fuse.js)
+    return !this.isMonster && !this.cfg.melee && !this.armless && !(this.disarmedT > this.game.time);
   }
 
   get doneDying() {
@@ -739,8 +740,8 @@ class Enemy {
     const cfg = this.cfg;
     const mv = { x: 0, z: 0, speed: 0 };
     if (this.headless) return this.headlessBrain(dt, mv);
-    if (this.armless && !cfg.melee) {
-      // lost the gun hand: runs from you
+    if ((this.armless || this.disarmedT > this.game.time) && !cfg.melee) {
+      // lost the gun hand (or the gun): runs from you
       if (this.state !== 'flee') this.startFlee();
     }
     switch (this.state) {

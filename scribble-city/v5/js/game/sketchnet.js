@@ -88,17 +88,20 @@ export function groupsOf(cats) {
 }
 
 // ------------------------------------------------------------------ the weights, unpacked once
-let L = null;
-function layers() {
+// (each network's: this one's, or another of the same make - game/partnet.js's, ROADMAP 11.25)
+const UNPACKED = new Map();
+function layers(net = NET) {
+  let L = UNPACKED.get(net);
   if (L) return L;
   L = {};
-  for (const [name, o] of Object.entries(NET.layers)) {
+  for (const [name, o] of Object.entries(net.layers)) {
     const bin = atob(o.q);
     const co = o.shape[o.shape.length - 1];
     const w = new Float32Array(bin.length);
     for (let i = 0; i < bin.length; i++) w[i] = ((bin.charCodeAt(i) << 24) >> 24) * o.s[i % co];
     L[name] = { w, b: Float32Array.from(o.b), shape: o.shape };
   }
+  UNPACKED.set(net, L);
   return L;
 }
 
@@ -225,9 +228,10 @@ function dense(inp, layer, relu) {
   return out;
 }
 
-// the chances of each class (CLASSES' order) for a picture (picture())
-export function chances(img) {
-  const Ls = layers();
+// the chances of each class (CLASSES' order) for a picture (picture()) - by this network, or by
+// another of the same make (net: its weights, as game/sketchnet_w.js's)
+export function chances(img, net = NET) {
+  const Ls = layers(net);
   let x = conv(img, G, G, 1, Ls.c1);
   x = pool(x, G, G, Ls.c1.b.length);
   x = conv(x, G / 2, G / 2, Ls.c1.b.length, Ls.c2);

@@ -1,0 +1,21 @@
+[
+  { "js": "(async () => { const m = await import('/v5/js/world/mainland/plan.js'); window.__plan = m; const g=window.__game; const D=g.daynight; if (D && D.setHour) D.setHour(13); const hb = m.M_BLOCKS.find(b => b.kind === 'calle'); window.__hb = hb; g.world.mainland.fill({x:hb.cx, z:hb.cz}, 30000); g.player.spawn(hb.rect.x1 + 2.6, hb.cz, Math.PI); window.__goShop = (re, dx, yawOff, side) => { const p = g.player.pos; const list = g.world.shops.filter(s => s.room && s.door && re.test(s.kind)).sort((a,b)=>Math.hypot(a.door[0]-p.x,a.door[2]-p.z)-Math.hypot(b.door[0]-p.x,b.door[2]-p.z)); const s = list[0]; if (!s) return 'none'; window.__shop = s; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.world.interiors.fill(c.x, c.z, 20000); const rx = -fz, rz = fx; g.player.spawn(c.x + fx*(dx||1.5) + rx*(side||0), c.z + fz*(dx||1.5) + rz*(side||0), Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz) + (yawOff||0); g.camRig.pitch = 0.12; return s.kind + ':' + s.name; }; window.__shopInfo = () => { const s = window.__shop; const a = s && g.streetlife.active.get(s.id); if (!a) return 'not active'; return { n: a.visitors.length, q: a.queue.length, payer: a.payer ? a.payer.phase : null, ph: a.visitors.map(v => v.phase + (v.st ? '/' + v.st : '') + (v.c.fig.carryL ? '+' + v.c.fig.carryL : '') + (v.c.fig.carry ? '+' + v.c.fig.carry : '')).join(' '), extras: a.extras.length, staff: !!a.staffer }; }; return { hb: [hb.col, hb.row], int: g.world.interiors.info() }; })()", "frames": 60 },
+  { "js": "(() => { const g = window.__game; const hb = window.__hb; g.player.spawn(hb.rect.x1 + 3.2, hb.rect.z0 + 30, Math.PI); g.camRig.yaw = Math.PI + 0.35; g.camRig.pitch = 0.1; return g.world.mainland.blocks ? g.world.mainland.blocks.size : 'nb'; })()", "frames": 200, "shot": "street_shops" },
+  { "js": "(() => { const g = window.__game; g.camRig.yaw = 0.3; return g.civilians.list.length; })()", "frames": 30, "shot": "street_shops2" },
+  { "js": "window.__goShop(/^grocery$/, 2.0, 0.3)", "frames": 30 },
+  { "js": "window.__shopInfo()", "frames": 300 },
+  { "js": "window.__shopInfo()", "frames": 2, "shot": "grocery_a" },
+  { "js": "window.__shopInfo()", "frames": 300 },
+  { "js": "(() => { const g = window.__game; g.camRig.yaw += 0.9; return window.__shopInfo(); })()", "frames": 2, "shot": "grocery_b" },
+  { "js": "window.__shopInfo()", "frames": 450 },
+  { "js": "(() => { const g = window.__game; g.camRig.yaw -= 1.6; return window.__shopInfo(); })()", "frames": 2, "shot": "grocery_c" },
+  { "js": "window.__goShop(/^(boutique|fashion|surf)$/, 1.8, 0.3)", "frames": 30 },
+  { "js": "window.__shopInfo()", "frames": 450 },
+  { "js": "window.__shopInfo()", "frames": 2, "shot": "clothes_a" },
+  { "js": "(() => { const g = window.__game; g.camRig.yaw -= 1.0; return window.__shopInfo(); })()", "frames": 300, "shot": "clothes_b" },
+  { "js": "window.__goShop(/^(pharmacy|deli|shop)$/, 1.8, -0.3)", "frames": 30 },
+  { "js": "window.__shopInfo()", "frames": 450 },
+  { "js": "window.__shopInfo()", "frames": 2, "shot": "pharmacy" },
+  { "js": "(() => { const m = window.__plan; const g = window.__game; const lb = m.M_BLOCKS.find(b => b.kind === 'houses' || b.kind === 'bungalows'); g.world.mainland.fill({x:lb.cx, z:lb.cz}, 30000); g.player.spawn(lb.rect.x1 + 3.2, lb.cz, Math.PI); g.camRig.yaw = Math.PI + 0.35; g.camRig.pitch = 0.1; return lb.kind + ' ' + lb.col + ',' + lb.row; })()", "frames": 200, "shot": "street_homes" },
+  { "js": "({ int: window.__game.world.interiors.info(), civ: window.__game.civilians.list.length, places: window.__game.routines.places.filter(p => p.kind === 'bus').length, busy: window.__game.routines.people.size })", "frames": 1 }
+]
