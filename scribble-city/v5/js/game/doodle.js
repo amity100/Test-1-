@@ -595,6 +595,7 @@ export class Doodle {
     s.fill = this.look.pen.fill;
     s.dress = this.dressing;
     s.gloss = false;
+    s.hairCut = false;
     this.shapes.push(s);
     return s;
   }
@@ -865,6 +866,8 @@ export class Doodle {
     if (L.hero) for (let i = hair0; i < this.shapes.length; i++) this.shapes[i].fill = FILL.MARKER;
     // (and the hero's skin is coloured in smooth, not hatched dark, so his face reads: eyes, brows, jaw)
     if (L.hero) for (let i = 0; i < hair0; i++) if (this.shapes[i].col === L.skin) this.shapes[i].fill = FILL.MARKER;
+    // (the hero in a body of his own, render/heroshapes.js, has his own hair: these are left out)
+    for (let i = hair0; i < this.shapes.length; i++) this.shapes[i].hairCut = !!L.heroModel;
     // hats
     if (hat) {
       const k = hat.kind;
@@ -1396,6 +1399,12 @@ export class Doodle {
     const ax = this.ax;
     const rgt = this.brgt;
     const fwd = this.bfwd;
+    // (the hero in a body of his own, render/heroshapes.js: his face, his jacket's zip and seams are
+    // in it - no pen strokes over it, but for what he carries)
+    if (L.heroModel) {
+      if (this.carry || this.carryL) carryStrokes(this, w);
+      return;
+    }
     if (this.parts.torso > 0.5) {
       const chestC = _p.lerpVectors(j.hip, j.neck, 0.7);
       const depth = (L.fem ? 0.13 : 0.12) * this.bulk * S;

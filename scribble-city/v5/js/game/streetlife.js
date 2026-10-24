@@ -161,13 +161,19 @@ export class StreetLife {
   applyHero(d) {
     const p = this.game.player;
     const L = p.fig.look;
-    // (the hero's first clothes were a white tee, grey trousers, white sneakers and a black cap, and
-    // for a day a near-black jacket and jeans: a save that still holds just those keeps the new
-    // first clothes instead)
+    // (the hero's first clothes were a white tee, grey trousers, white sneakers and a black cap, then
+    // for a while a dark jacket and jeans: a save that still holds just those gets the new first
+    // clothes instead)
     const was = (c, v) => Array.isArray(c) && c.length >= 3 && v.every((x, i) => Math.abs(c[i] - x) < 0.006);
     const o = d.outfit;
-    const first = o && o.top && o.bottom && ((o.top.kind === 'tee' && was(o.top.color, [0.97, 0.96, 0.93]) && was(o.bottom.color, [0.36, 0.36, 0.39])) || (o.top.kind === 'jacket' && was(o.top.color, [0.25, 0.16, 0.12]) && was(o.bottom.color, [0.16, 0.19, 0.27])));
-    if (first) d = { ...d, outfit: { ...o, top: null, bottom: null, shoes: was(o.shoes, [0.96, 0.96, 0.95]) || was(o.shoes, [0.2, 0.14, 0.11]) ? null : o.shoes } };
+    // (the hero's first clothes as they were, top, bottom and shoes)
+    const FIRST = [
+      [[0.97, 0.96, 0.93], [0.36, 0.36, 0.39], [0.96, 0.96, 0.95]],
+      [[0.25, 0.16, 0.12], [0.16, 0.19, 0.27], [0.2, 0.14, 0.11]],
+      [[0.4, 0.26, 0.18], [0.26, 0.31, 0.43], [0.32, 0.21, 0.14]],
+    ];
+    const first = o && o.top && o.bottom && FIRST.find(([t, b]) => was(o.top.color, t) && was(o.bottom.color, b));
+    if (first) d = { ...d, outfit: { ...o, top: null, bottom: null, shoes: was(o.shoes, first[2]) ? null : o.shoes, acc: (o.acc || []).filter((a) => a !== 'belt') } };
     if (d.hat && d.hat.kind === 'cap' && was(d.hat.color, [0.09, 0.09, 0.11])) d = { ...d, hat: null };
     if (d.hair) L.hair = { style: d.hair.style, color: d.hair.color };
     else if (d.bald) L.hair = { style: 'none', color: L.skin };

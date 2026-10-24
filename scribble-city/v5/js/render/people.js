@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, penPictures, LAYERS, sortDefines } from './materials.js';
 import { MAX_HOLES, MAX_OWNERS } from './glsl.js';
 import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
+import * as HERO from './heroshapes.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
 // (the first boulevard's own people: a shaped torso, tapering limbs, a head with a jaw and ears,
@@ -431,6 +432,11 @@ function framed(c, r, u, f, sx, sy, sz, out = _m) {
 }
 
 const SOLE = [0.95, 0.95, 0.93];
+const TEE = [0.93, 0.93, 0.91];
+const IRIS = [0.16, 0.11, 0.08];
+const SHADES = [0.05, 0.05, 0.07];
+const _mH = new THREE.Matrix4();
+const _hcH = new THREE.Vector3();
 const EYE_WHITE = [0.96, 0.95, 0.92];
 const PUPIL = [0.06, 0.05, 0.08];
 const MASK_EYE = [0.95, 0.92, 0.85];
@@ -528,6 +534,27 @@ export class PersonRenderer {
       thighWide: P(limb(0.1, 0.098, 0.45), M.plain),
       shinWide: P(limb(0.098, 0.122, 0.43), M.plain),
       collar: P(new THREE.TorusGeometry(0.075, 0.028, 6, 14).rotateX(Math.PI / 2), M.plain),
+      // (v5, ROADMAP 11.29) the hero's own body (render/heroshapes.js): one of him, so a few each
+      heroHead: P(HERO.heroHeadGeo(), M.skin, 4),
+      heroHair: P(HERO.heroHairGeo(), M.hair, 4),
+      heroFade: P(HERO.heroFadeGeo(), M.hair, 4),
+      heroNeck: P(HERO.heroNeckGeo(), M.skin, 4),
+      heroCollar: P(HERO.heroCollarGeo(), M.plain, 4),
+      heroTorso: P(HERO.heroTorsoGeo(), M.plain, 8),
+      heroHem: P(HERO.heroHemGeo(), M.plain, 4),
+      heroZip: P(HERO.heroZipGeo(), M.box, 4),
+      heroTee: P(HERO.heroTeeGeo(), M.tee, 4),
+      heroWelt: P(HERO.heroWeltGeo(), M.box, 4),
+      heroPelvis: P(HERO.heroPelvisGeo(), M.cargo, 4),
+      heroUpper: P(HERO.heroUpperGeo(), M.plain, 8),
+      heroFore: P(HERO.heroForeGeo(), M.plain, 8),
+      heroCuff: P(HERO.heroCuffGeo(), M.plain, 8),
+      heroHandR: P(HERO.heroHandGeo(false), M.skin, 4),
+      heroHandL: P(HERO.heroHandGeo(true), M.skin, 4),
+      heroThigh: P(HERO.heroThighGeo(), M.cargo, 8),
+      heroShin: P(HERO.heroShinGeo(), M.cargo, 8),
+      heroShoe: P(HERO.heroShoeGeo(), M.box, 8),
+      heroSole: P(HERO.heroSoleGeo(), M.box, 8),
       // the shapes of hair, hats and the things people hold (ellipsoids and capsules)
       sphere: P(new THREE.SphereGeometry(1, 14, 10), M.hair, 2048),
       sphereGloss: P(new THREE.SphereGeometry(1, 12, 8), M.gloss, 256),
@@ -944,6 +971,10 @@ export class PersonRenderer {
 
   // in full, in the picture
   drawFull(fig, camDist) {
+    if (fig.look.heroModel) {
+      this.drawHero(fig);
+      return;
+    }
     const L = fig.look;
     const j = fig.j;
     const P = fig.parts;
@@ -1198,6 +1229,172 @@ export class PersonRenderer {
     }
   }
 
+  // (v5, ROADMAP 11.29) The hero, in a body of his own (render/heroshapes.js), on the same rig as
+  // everyone: a carved head, his short hair, a bomber jacket over a white tee, jeans, sneakers, hands
+  // with fingers. What he wears keeps its colours (the jacket takes the top's, the jeans the
+  // bottom's, the sneakers the shoes'); a hat, glasses and what he holds come as for anybody.
+  drawHero(fig) {
+    const L = fig.look;
+    const j = fig.j;
+    const P = fig.parts;
+    const p = this.p;
+    const own = fig.owner + 1;
+    const ind = fig.indoor ? 1 : 0;
+    const S = fig.scale;
+    const k = S * 0.98;
+    const bulk = fig.bulk;
+    const seed = (fig.seed % 1) * 0.37 + 0.11;
+    _part[0] = seed;
+    const id = nextPart;
+    const ax = fig.ax;
+    const rgt = fig.brgt;
+    const fwd = fig.bfwd;
+    const top = L.top;
+    let topCol = top.armor && top.under ? top.under : top.color;
+    if (fig.paintT > 0) {
+      const t = Math.min(1, fig.paintT / 2.5) * 0.7;
+      topCol = topCol.map((v, i) => v + (fig.paintColor[i] - v) * t);
+    }
+    const jC = linC(topCol);
+    const ribC = heroDark(fig, jC);
+    const teeC = linC(top.inner || top.shirt || TEE);
+    const jeansC = linC(L.bottom.color);
+    const shoeC = linC(L.shoes);
+    const skin = linC(L.skin);
+    fig.headId = (seed * 7.77 + 0.31) % 1;
+    const bw = k * Math.max(0.92, bulk * 0.96);
+    // ---- the jacket, and the tee in its collar
+    if (P.torso > 0.5) {
+      const sy = Math.max(0.3, _b.subVectors(j.neck, j.hip).length()) / 0.5;
+      framed(j.hip, rgt, ax, fwd, bw, sy, bw, _mH);
+      p.heroTorso.push(_mH, jC, own, id(), ind);
+      p.heroHem.push(_mH, ribC, own, id(), ind);
+      p.heroZip.push(_mH, ZIP, own, id(), ind);
+      p.heroWelt.push(_mH, ribC, own, id(), ind);
+      p.heroTee.push(_mH, teeC, own, id(), ind);
+      _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
+      p.heroCollar.push(framed(_c, rgt, ax, fwd, k * 1.03, k, k * 1.03), ribC, own, id(), ind);
+      if (top.armor) {
+        // (the vest of notebook covers, over the jacket)
+        _c.copy(j.hip).addScaledVector(ax, 0.07 * S);
+        p.heroTorso.push(framed(_c, rgt, ax, fwd, bw * 1.09, sy * 0.8, bw * 1.15), linC(top.color), own, id(), ind);
+      }
+      // the neck, from under the back of the skull down into the collar
+      const hs = fig.headScale * S;
+      _c.copy(j.headC).addScaledVector(fig.hu, -0.055 * hs).addScaledVector(fig.hf, -0.018 * hs);
+      _d.copy(j.neck).addScaledVector(ax, -0.03 * S).addScaledVector(fwd, -0.008 * S);
+      // (its own drawing: the ink draws the jaw's line over it)
+      p.heroNeck.push(along(_c, _d, 0.17, k * Math.max(1, bulk * 0.92), rgt), skin, own, id(), ind);
+    }
+    if (P.pelvis > 0.5) p.heroPelvis.push(framed(j.hip, rgt, ax, fwd, bw, k, bw), jeansC, own, id(), ind);
+    // ---- arms in their sleeves, the cuffs, the hands
+    const arms = fig._armJ || (fig._armJ = [[j.shoulderR, j.elbowR, j.handR], [j.shoulderL, j.elbowL, j.handL]]);
+    const armK = k * Math.max(1, bulk * 0.85) * (fig.limbs || 1);
+    for (let ai = 0; ai < 2; ai++) {
+      if (P[ARM_PART[ai]] < 0.5) continue;
+      const sh = arms[ai][0];
+      const el = arms[ai][1];
+      const hd = arms[ai][2];
+      const armId = id();
+      p.heroUpper.push(along(sh, el, 0.31, armK, fwd), jC, own, armId, ind);
+      p.heroFore.push(along(el, hd, 0.29, armK, fwd), jC, own, armId, ind);
+      p.heroCuff.push(along(el, hd, 0.29, armK, fwd), ribC, own, id(), ind);
+      _c.subVectors(hd, el).normalize();
+      _d.copy(hd).addScaledVector(_c, 0.19 * S);
+      (ai === 0 ? p.heroHandR : p.heroHandL).push(along(hd, _d, 0.19, k, fwd), skin, own, id(), ind);
+    }
+    // ---- the legs in jeans, the sneakers
+    const legs = fig._legJ || (fig._legJ = [[j.hipR, j.kneeR, j.footR, j.toeR], [j.hipL, j.kneeL, j.footL, j.toeL]]);
+    const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
+    for (let li = 0; li < 2; li++) {
+      if (P[LEG_PART[li]] < 0.5) continue;
+      const hp = legs[li][0];
+      const kn = legs[li][1];
+      const ft = legs[li][2];
+      const to = legs[li][3];
+      const legId = id();
+      p.heroThigh.push(along(hp, kn, 0.47, legK, fwd), jeansC, own, legId, ind);
+      p.heroShin.push(along(kn, ft, 0.47, legK, fwd), jeansC, own, legId, ind);
+      _z.subVectors(to, ft);
+      _z.y = 0;
+      if (_z.lengthSq() < 1e-6) _z.copy(fwd);
+      _z.normalize();
+      _x.crossVectors(UP, _z).normalize();
+      _c.copy(ft).addScaledVector(_z, 0.05 * S);
+      _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
+      framed(_c, _x, UP, _z, k, k, k, _mH);
+      p.heroShoe.push(_mH, shoeC, own, id(), ind);
+      p.heroSole.push(_mH, linC(SOLE), own, id(), ind);
+    }
+    // ---- the head: the carved one, his hair, ears, eyes under their lids, brows, the line of the lips
+    if (P.head > 0.5) {
+      const hs = fig.headScale * S;
+      const hr = fig.hr;
+      const hu = fig.hu;
+      const hf = fig.hf;
+      // (set a little lower on the neck than the rig's head: a shorter neck, under a real jaw)
+      const hc = _hcH.copy(j.headC).addScaledVector(hu, -0.028 * hs);
+      p.heroHead.push(framed(hc, hr, hu, hf, hs, hs, hs), skin, own, fig.headId, ind);
+      if (L.hair && L.hair.style !== 'none') {
+        // (the top kept longer, the sides and the back faded close: the skin a little through them)
+        const hairC = linC(L.hair.color);
+        framed(hc, hr, hu, hf, hs, hs, hs, _mH);
+        p.heroHair.push(_mH, hairC, own, id(), ind);
+        p.heroFade.push(_mH, heroFadeC(fig, hairC, skin), own, fig.headId, ind);
+      }
+      if (!L.hat || L.hat.kind !== 'skimask') {
+        const P3 = (x, y, z) => _c.copy(hc).addScaledVector(hr, x * hs).addScaledVector(hu, y * hs).addScaledVector(hf, z * hs);
+        for (let sd = -1; sd <= 1; sd += 2) {
+          // (an ear lies close against the head, leaning back a little; one drawing with the head)
+          P3(sd * 0.071, 0.0, -0.014);
+          _d.copy(hu).addScaledVector(hf, -0.28).normalize();
+          _x.crossVectors(_d, hr).normalize();
+          p.ear.push(framed(_c, hr, _d, _x, hs * 0.5, hs * 1.08, hs * 0.72), skin, own, fig.headId, ind);
+        }
+        const shades = L.face && L.face.glasses === 'shades';
+        if (!L._brow || L._browOf !== L.hair) {
+          L._browOf = L.hair;
+          L._brow = L.hair && L.hair.style !== 'none' ? L.hair.color.map((v) => v * 0.8) : BROW_BALD;
+        }
+        const browC = linC(L._brow);
+        for (let sd = -1; sd <= 1; sd += 2) {
+          if (!shades) {
+            P3(sd * 0.031, 0.018, 0.074);
+            p.eyeWhite.push(framed(_c, hr, hu, hf, hs * 0.735, hs * 0.75, hs * 1.06), linC(EYE_WHITE), own, id(), ind);
+            P3(sd * 0.031, 0.0165, 0.0815);
+            p.eye.push(framed(_c, hr, hu, hf, hs * 0.38, hs * 0.4, hs * 0.25), linC(IRIS), own, id(), ind);
+            // the upper lid, over the top of the eye: a level, steady look
+            P3(sd * 0.031, 0.0238, 0.0772);
+            p.nose.push(framed(_c, hr, hu, hf, hs * 1.14, hs * 0.18, hs * 0.47), skin, own, fig.headId, ind);
+          }
+          // a brow along the ridge, its inner end a little lower
+          P3(sd * 0.033, 0.0355, 0.0875);
+          _d.copy(hr).multiplyScalar(sd).addScaledVector(hu, 0.13).normalize();
+          _x.copy(hu).addScaledVector(_d, -hu.dot(_d)).normalize();
+          p.sphere.push(framed(_c, _d, _x, hf, hs * 0.019, hs * 0.0042, hs * 0.0055), browC, own, id(), ind);
+        }
+        if (shades) {
+          P3(0, 0.019, 0.092);
+          p.boxP.push(framed(_c, hr, hu, hf, hs * 0.118, hs * 0.024, hs * 0.008), linC(SHADES), own, id(), ind);
+        }
+        P3(0, -0.0525, 0.1);
+        p.boxP.push(framed(_c, hr, hu, hf, hs * 0.036, hs * 0.0024, hs * 0.006), linC(LIPS_M), own, id(), ind);
+      }
+    }
+    // ---- a hat, what he holds (the rig's own shapes; his hair is his own, above)
+    const shapes = fig.shapes;
+    for (let i = fig.dressFrom || 0; i < shapes.length; i++) {
+      const s = shapes[i];
+      if (!s.dress || s.hairCut || P[s.part === 'pelvis' ? 'pelvis' : s.part] < 0.5) continue;
+      const col = linC(s.col);
+      if (s.type === 0) capsuleTo(p, _a.copy(s.c).sub(s.y), _b.copy(s.c).add(s.y), s.x.x, col, own, id(), ind, rgt, s.clip);
+      else {
+        _m.set(s.x.x, s.y.x, s.z.x, s.c.x, s.x.y, s.y.y, s.z.y, s.c.y, s.x.z, s.y.z, s.z.z, s.c.z, 0, 0, 0, 1);
+        (s.gloss ? p.sphereGloss : p.sphere).push(_m, col, own, id(), ind, s.clip);
+      }
+    }
+  }
+
   // (v5) A person in the simple shapes, on their own rig: their pose, what they wear and what they
   // hold, as drawFull draws them, without the little things of a face. In the picture too when far
   // away (aux false); for somebody drawn in full, only in the sun's view and the mirror (aux true:
@@ -1382,6 +1579,14 @@ const ZIP = lin3(0.62, 0.58, 0.5);
 const _hc = new THREE.Vector3();
 const _hr = new THREE.Vector3();
 const _hu = new THREE.Vector3();
+function heroFadeC(fig, hairC, skin) {
+  if (fig._hfOf !== hairC || fig._hfSk !== skin) {
+    fig._hfOf = hairC;
+    fig._hfSk = skin;
+    fig._hfC = [hairC[0] * 0.55 + skin[0] * 0.45, hairC[1] * 0.55 + skin[1] * 0.45, hairC[2] * 0.55 + skin[2] * 0.45];
+  }
+  return fig._hfC;
+}
 function heroDark(fig, topC) {
   if (fig._hjOf !== topC) {
     fig._hjOf = topC;
