@@ -1,0 +1,48 @@
+TREES (gta4/trees) - running notes of the third builder (resumed 2026-10-23)
+Worktree: /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-5  branch gta4/trees  base 6277529
+Earlier work: ad9c24f, 4832027 (builder 1), 7359ca1 (builder 2 snapshot, never browser-tested)
+Work dir: scratchpad/gta4/work_trees/r4 (builder 2's harness in r3: count.mjs/register.mjs node counts, make.py gallery+real scenes)
+
+STATE FOUND
+- foliage.js: Leaves (mass = lumpy geodesic body + alpha-cut leaf cards: scales/fins/droops), spray texture 4 cells, tube()
+- streetscape.js: shadeTree w/ trunk tube+roots, boughs w/ twigs, moss; clump() via Leaves; TEMP-PROF markers (to remove)
+- palms.js: folded/twisted fronds, young+old fronds, boot, coconut bunches (Leaves.puff), dead fronds; TEMP-PROF
+- city.js: M.spray in far set, M.spraySmall/M.sprayNear in small set
+- street rng preserved (count.mjs rngAfter identical to base)
+Node counts per tree (verts) base -> snapshot: oak 688->2342, maho 623->1976, grape 542->1393, poin 637->2141, lite 355->1172, palm 648->1162, royal 517->899, bush 93->228
+Builder-2 v3 shots: crowns too dark (body shade), underside nearly black, odd flat disk shapes.
+
+LOG
+- r4/c0 (snapshot 7359ca1) vs r4/b0 (base_main), same script r4/full.json:
+  city built 17445 ms vs 10622 (+6.4 s!) -> island trees took 6829 ms for 209 (mainland 98 trees 214 ms) => one-time spray texture paint ~6 s in sw browser. MUST FIX.
+  island verts 4.88M vs 4.11M (+19%); draws avenue 1153 vs 974, aerial 1325 vs 1082 (3 spray pens -> up to 3 extra draws per block/tile chunk). MUST REDUCE.
+  look: island_close crown nearly black underneath, top cards stick up like spikes, moss = blue shards; mainland tree_close ok-ish leafy fringe; palms: dead frond = dark slab, nuts hidden.
+  node build time not slower than base (oak 1974us vs 2157us).
+PLAN: masses = core + overlapping cluster caps (scalloped silhouette, ink lines where clusters meet), brighter dappled colour per cluster, small fins at fringe, few flush scales; one spray pen (small set); cheap texture; palms: visible nut bunches, proper dry fronds, tint variety.
+- abf3376: masses = core (M.canopy, far LOD) + cluster caps (M.leaf, small set -> culled >150m, id-offset so inker sees one part) + fin cards; ONE spray pen (small set). city.js lines: M.spray in small.
+  q1 run: sprayTexture 49 ms (was ~6 s: willReadFrequently canvases); city build 13.7 s vs base 10.6 (machine load varies; trees 602ms/209, palms 1261ms/594).
+  draws avenue 994 (base 974, builder-2 1153). island verts 5.00M (base 4.11M).
+  look: brighter, scalloped clouds, but lite clusters (icosphere1) look like rocks, fins nearly invisible, poinciana orange "pumpkins", underside a dark lid.
+- bda32e9: clusters cap(3,0.12) 52 verts for all; scales (cards lying on clusters, one-sided) + bigger fins; core underside normals up 0.3; flowers mostly cards; palms: frond pen with vcolor (M.fronds, far set) per-palm green / young lighter / old yellowing; dead fronds = CELL.DRY cards; atlas 3x2 (768x512) + DRY + MOSS cells; nuts brighter.
+  node counts: oak 2540, maho 2140, grape 1638, poin 2419, lite 1572, palm 1108, royal 899, bush 405.
+- 5bb3ad5: bigger fins, moss = CELL.MOSS cards (oak 50%), frond rows 12->9 (young 6, flat), bush caps coarser, phone: coarser caps.
+- a1911d7 / next: clusters spiral round underside, droops bigger; underside 'under' lighting (vertex colour lit-through), core normals up 0.45; poinciana flower clusters 42% flame + 1.5x cards.
+  q3/q4 measurements (in view triangles, by pen; base bq): mainland avenue all 1104k vs base 835k; aerial 1046k vs 787k; island 1264k vs 966k. draws avenue 1034 vs 973, aerial 1037 vs 967, island 361 vs 361.
+  city verts 4.48M vs 4.11M base (+9%). island trees build 400 ms/209 trees; palms ~1.1 s/594 (base ~?).
+  q3 avenue + aerial clearly better than base (leafy fringe, clusters). Undersides still dark (D ink pen at lum<0.3) -> under lighting.
+- q5: undersides olive-green, readable; poinciana flowers in bunches; far row (g_far) lovely. moss looked bluish -> darker (0.62-0.8) and further out.
+- (commit after q5): full trees fine=2 (cap(4,0.12) 89 verts), lite fine=1 (cap3), bushes cap2. node: oak 3717, maho 3099, grape 2353, poin 3656, lite 1641, palm 900, royal 707, bush 256 (base 688/623/542/637/355/648/517/93).
+  q6: city verts 4.58M (base 4.11M, +11%); in-view tris island 1338k (base 966k), avenue 1104k (835k), aerial 1047k (787k). draws same as base +~50.
+  Next: perf timing at 320x180 (r4/perf.json, p1 vs bp1).
+- 61ff7e7: fine caps cut at -0.1 (less than half ball; gaps show core). oak 3269, lite 1429.
+- next commit: TEMP-PROF removed; phone wood coarser (trunk -2 sides, boughs -1, twigs -1). Phone counts: oak 1586, lite 945, bush 230 (base 688/355/93).
+- perf: gl.finish timing at 320x180 ~2 s/frame in swiftshader (p1 timed out; reduced to 2 warm + 4 timed frames: p2 vs bp2).
+- perf p2 vs bp2 (320x180, ms/frame with gl.finish, 4 frames): avenue 34 vs 27, aerial 40 vs 29, island [33,1395,1422,2526] vs [10..14] (anomaly; retest p3/bp3 with 150 settle frames + render-only timing).
+  tally per oak: body 253 v, clusters 2042 v / 3413 t (cap4), cards 661 v; lite: body 188, clusters 709, cards 348.
+- d9ddf81: atlas 3x3 (768x768): + GRASS, WEEDS, FERN cells; grass strips get tufts (2 crossed cards, 1.7/m, 72% along edges, same part id as grass via id offset).
+- cfceec3: planters: 6-8 sword fern cards over rim (own dice).
+- perf p3 (fine2) vs bp3 base, 320x180 ms/frame (frame / render-only): avenue 42 (31-36) vs 24 (13-29); aerial 29 (14-16) vs 20 (11-13); island 16 (6-8) vs base anomaly (1.6 s frames in base too -> island anomaly is environmental, not trees).
+- then: full fine 2 -> 1, clusters 1.1: oak 2469 v / 3312 t (base 688/1153), lite 1429/1975 (355/505).
+- c2d3636: full trees fine 1 + clusters 1.1. 9767741: belly cards (lying under masses, face down, lit-through) + down-facing scales brightened.
+- c1 full run (9767741): city verts 4.47M (base 4.11M, +9%); island trees ok, under-crown now shows leaves. No pageerror.
+  ISSUE: c1_yard and c0_yard show a big BLACK OCTAGON lower-left (not in b0 base, not in pr1 probe without gallery steps). Investigating with probe2 (full steps + raycast + hide tree pens).

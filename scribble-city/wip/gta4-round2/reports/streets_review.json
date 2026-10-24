@@ -1,0 +1,109 @@
+{
+ "aspect": "Road and sidewalk detail (streets): adversarial review and fixes on gta4/streets (worktree /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-4)",
+ "issues": [
+  {
+   "issue": "Tile builds had longer steps between yields, which means hitches while the mainland streams in, worst on phones. Node, all 88 tiles: p99 step 13.0 ms on base vs 19.4 ms on the branch; steps over 16 ms went 32 -> 96, mostly crossings (p90 6 -> 12 ms) and blocks (p90 12 -> 17 ms). Fix: a yield per road stretch, per crossing phase (poles / ped heads and names / corner things) and per block side. Now p99 is 10.0 ms and 25 steps run over 16 ms, both better than base.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Signal cabinets at the south end of blocks next to the wide streets (half 9) stood on top of the block's own sidewalk things, about 40 overlaps: bins, benches, phone booths, mailboxes, planters, hot-dog carts, pay stations, hydrants, bike racks. Cause: there the block's last avenue slot falls at z1-9.5, the same place as the cabinet. Fix: cabinets go only on corners south of the crossing (the block's north end, where z0+7..13 m is always clear). The overlap checker now shows no new overlaps against base.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "The wooden utility poles were 'lamp' props, so a car could knock one over and its wires stayed hanging in the air. The wires had no prop id and were drawn in M.rail, which has no objMask, so erasing a pole left its wires too. Fix: each block's whole line (poles, wires, guy wires) is one 'pole' prop. A car is stopped by it like a wall, and erasing it removes everything. The wires now use M.pole, which carries the prop id. Checked in the browser: rub -> fading -> gone, and the poles and every wire vanish (after_line_before_erase / after_line_erased).",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "East-end guy wire anchors (26 in the city) sat on the curb ramp where the zebra lands: in the pedestrians' crossing path, with the yellow guard floating about 6 cm above the ramp. Fix: the anchor now goes to the corner point past both ramps (x1-0.45). Confirmed in shots.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Corner bollards at (0.98, 0.36) overlapped the ramps' edges, which start 1 m from the corner, and hung about 10 cm over them (712 collision boxes). Fix: moved to 0.85.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Over the avenue, the span's phone cable (about 5.5 m high, 0.7 m from the curb) ran straight through the far corner's signal pole (0.62 m in from the curb, 5.85 m tall). Fix: only the three top wires cross the avenue.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "The 5 grid corners without lights are L-bends where cars never stop (roads.js lightAt is always 'g'), yet they had STOP signs, ALL WAY plates and a painted STOP that the cars drove straight through. Fix: those are removed. The zebras, stop bar and arrows stay, and the street names stand on a post of their own.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "On residential blocks, papers and leaves dropped on the grass verge were drawn under the grass plane (2 cm above the walk), and the sidewalk's water and phone covers were hidden under it too. Fix: litter on the verge now lies on top of it, and the covers are placed past the verge.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "The tile's road paint (4-7k vertices per tile) was rendered into the sun's shadow map and the wet-street mirror. That is wasted work for flat marks 2 cm above the road. Fix: the paint is its own 'paint' draw with noShadow and noReflect. Valley spot: triangles 2.102M -> 2.004M, draw calls 1098 -> 1079.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Not fixed (known): on the curb ramps, feet float up to 9 cm, because plan.js mainlandHeight is a step at the curb. That file is not owned and the function is hot. Pedestrians cross the 1 m ramp in about a second.",
+   "severity": "low",
+   "fixed": false
+  },
+  {
+   "issue": "Not fixed: a block built before the first tile draws its sign plates without distance culling, in a separate merged pen. The fix needs a one-line hook in mainland/index.js; the impact is negligible.",
+   "severity": "low",
+   "fixed": false
+  },
+  {
+   "issue": "Not fixed (rare): erasing one residential line leaves the neighbouring line's cross-avenue span dangling at that end.",
+   "severity": "low",
+   "fixed": false
+  },
+  {
+   "issue": "Not fixed (cosmetic): dead exports warnPost, tarSnake, CURB_WHITE, plus unused texture cells (xing, school, speed25, bikelane). No console logs or debug leftovers.",
+   "severity": "info",
+   "fixed": false
+  }
+ ],
+ "commits": [
+  "ec1d4e0 v5 GTA IV streets review (in progress): shorter build steps, nothing on the ramps, the line of wires one thing",
+  "ece643d v5 GTA IV streets review (in progress): what lies on the grass verge lies on it, the covers past it",
+  "26d518a v5 GTA IV streets review (in progress): no stop sign the cars drive past",
+  "3330497 v5 GTA IV streets review (in progress): the wires in the poles' pen, so they go with their line",
+  "13b91fd v5 GTA IV streets review (in progress): the street paint a draw of its own, out of the sun's map and the mirror"
+ ],
+ "tests": [
+  "node --check on tiles.js, roadside.js, roadkit.js, roadmarks.js, sidewalks.js: pass",
+  "Node harness (/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/rv_streets/h: stubbed DOM, 'three' loader) builds all 88 tiles with no errors, desktop and low: 42.4k verts at 85-94 ms per tile (base 29.2k / 49 ms); low 37.3k / 66-72 ms",
+  "Node step timing (steps3.mjs): longest step between yields, p99 13.0 ms on base, 19.4 ms at the review's start, 10.0 ms after the fix; steps over 16 ms: 32 / 96 / 25",
+  "Node overlap checker (overlap.mjs) over the collision boxes of every tile plus every block's sidewalk dressing (165 blocks), checking prop overlaps, things on curb ramps and things in the crossing lines. At review start: 712 bollard boxes and 26 guy anchors on ramps, plus about 40 cabinet overlaps. After the fixes: nothing on ramps and no overlaps beyond the base's own; desktop and low give the same result",
+  "Node: ?island=1 imports of tiles.js / sidewalks.js work (NODES 24 = MAIN0)",
+  "Browser look1, after (the builder's 13 camera setups plus an erase test), look2: no [pageerror] or [error]. Shots show the guy wire landing at the corner point, the 3-wire avenue span, the line erased whole and the paint still drawn",
+  "Browser perf2 base vs branch (320x180; renderer.info for one frame, 300 updates timed, Signals.draw x300, 15 tiles built in page)",
+  "LAB SMOKE on final code (review_streets/lab2.log): [eval] lines identical to smoke/main.log, final {\"errors\":0}, no [pageerror] (also lab1 on earlier code)"
+ ],
+ "lab_smoke": "[eval] 1 x5; [\"car\",\"sedan\",170]; [\"harpoon\",\"tow\",3.1,14]; [\"net\",\"net\",1]; [\"tesla\",\"emp\"]; [\"oil\",2,\"spin\"]; [\"decoy\",true,true,16.99,2]; \"{\\\"errors\\\":0,\\\"errs\\\":[]}\". This is byte-identical to smoke/main.log (diff empty), with no [pageerror]. Run on final HEAD 13b91fd: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_streets/lab2.log",
+ "perf": "Browser, base_main vs final branch, one frame's renderer.info (all passes), 320x180:\n- Downtown corner, 14 tiles: draw calls 772 -> 842 (+9%), triangles 1.689M -> 1.849M (+9.5%), tile vertices 498k -> 733k, block vertices 3.327M -> 3.345M (+0.5%).\n- Valley, 18 tiles: draw calls 985 -> 1079 (+9.5%), triangles 1.907M -> 2.004M (+5%; it was +10% before the paint left the shadow map and mirror).\n- Signals.draw: about 0.01 -> 0.02-0.06 ms per call (lamps drawn 84 -> 168, list entries 234 -> 394). The most lamps near any camera is 192, well under the cap of 868.\n- Update time per frame over 300 updates is unchanged (7.5/6.4 and 4.9/5.0 ms; noise).\n- Tile build: node 49 -> 85-94 ms per tile, in page 70 -> 99-119 ms per tile. It is spread over more yields, so the worst steps are now shorter than base: node p99 10.0 vs 13.0 ms.\n- No per-frame code was added; everything is built once per tile or block.\n- Shared-machine noise: one in-page run had a single 125 ms step, very likely garbage collection or CPU contention; node runs did not show it.",
+ "verdict": "ready",
+ "notes": "I reviewed all of the aspect's commits (8cdea0c, ae895dd, 321d61b, 697c816) and the diff from 6277529. Only the owned files changed: tiles.js, sidewalks.js, and the new roadkit.js / roadside.js / roadmarks.js. ground.js is untouched, there are no outside edits, and no other gta4 branch touches these files. The trees branch keeps the shadeTree options these files use (lite, away).\n\nFive fixes are committed on gta4/streets (ec1d4e0, ece643d, 26d518a, 3330497, 13b91fd):\n- Shorter streaming steps.\n- Nothing stands on the curb ramps any more (guy-wire anchors, bollards).\n- Signal cabinets no longer sit on the blocks' sidewalk things.\n- Each block's power line (poles, wires, guy wires) is one prop: cars cannot knock it over, and erasing it removes all of it, wires included.\n- Only the top wires cross the avenue, so no cable runs through a signal pole.\n- No STOP signs at the 5 bends where cars never stop.\n- Litter sits on the grass verge, not under it.\n- The road paint is left out of the shadow map and the mirror.\n\nContent check: all text is English, names come from the plan's existing streets, and there are no brands.\n\nWhat I could not do:\n- Floating feet on ramps (up to 9 cm) needs plan.js, which is not owned.\n- Culling of plates in a block built before the first tile needs a one-line hook in mainland/index.js.\n- A dangling cross-avenue span after erasing a neighbouring line (rare).\n- One more draw per block with curb plates remains; the block's paint cannot be marked noShadow without touching blocks.js.\n\nRefreshed after shots are in /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/shots/streets/after_*.png (including after_line_before_erase / after_line_erased). The composed images send/streets_1..4.jpg are re-made with the builder's same labels.\n\nNotes: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/notes/review_streets.txt. Run logs and scripts: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_streets/.\n\nOne unrelated observation: my after_downtown shot shows a dark hexagonal object behind a shop window that is not in the builder's before shot. It is inside the shop, not street geometry; possibly a shopper's umbrella.",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_1.jpg",
+   "caption_he": "צומת ממבט על: לפני – אספלט חלק וריק; אחרי – קווי עצירה, חצים, סימוני אופניים על ירוק, תעלות ניקוז, מכסי ביוב, טלאים וסדקים מתוקנים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_2.jpg",
+   "caption_he": "פינת רחוב בגובה העיניים: שלטי שמות רחוב ירוקים, רמזורי הולכי רגל מוארים, רמפות עם משטח אזהרה צהוב, ועמודוני ברזל שמוקמו מחוץ לרמפות"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_3.jpg",
+   "caption_he": "שפת המדרכה מקרוב: אזור פריקה וטעינה צבוע בצהוב עם כיתוב על הכביש, שלט על עמוד הפנס, תעלת ניקוז, טלאי אספלט ולכלוך על המדרכה"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_4.jpg",
+   "caption_he": "צומת בשכונת מגורים: עמודי חשמל מעץ עם חוטים, כבל העיגון יורד לקצה הפינה ולא לרמפה, רצועות דשא, חצים וקווי עצירה"
+  }
+ ]
+}
