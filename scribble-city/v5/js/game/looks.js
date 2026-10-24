@@ -91,17 +91,21 @@ export function modest(L) {
 
 // ------------------------------------------------------------------ the hero
 export function heroLook() {
-  // the hero of the evening: white tee, grey cargo trousers, white sneakers, a black cap
+  // the hero: a worn dark-brown leather jacket open over a charcoal tee, dark jeans with a belt,
+  // dark boots; short dark hair, a day's stubble, heavy brows over a level look - a man the city
+  // takes seriously, not a doodle in a white tee and a cap (the cap, the tee and the rest are still
+  // in the shops: game/wardrobe.js)
   const L = baseLook({ pen: 'fineliner' });
-  L.pen.width = 3.0;
-  L.skin = [0.62, 0.43, 0.32];
+  L.pen.width = 3.2;
+  L.build = { height: 1.04, head: 0.95, bulk: 1.08, limbs: 1.06 };
+  L.skin = [0.7, 0.52, 0.41];
   L.hair = { style: 'short', color: [0.1, 0.08, 0.07] };
-  L.top = { kind: 'tee', color: [0.97, 0.96, 0.93], sleeves: 'short' };
-  L.bottom = { kind: 'baggy', color: [0.36, 0.36, 0.39] };
-  L.shoes = [0.96, 0.96, 0.95];
-  L.hat = { kind: 'cap', color: [0.09, 0.09, 0.11] };
-  L.face = { eyes: 'dot', brows: 'flat', mouth: 'line', beard: null, glasses: null };
-  L.acc = [];
+  L.top = { kind: 'jacket', color: [0.25, 0.16, 0.12], sleeves: 'long', inner: [0.2, 0.2, 0.23] };
+  L.bottom = { kind: 'pants', color: [0.16, 0.19, 0.27] };
+  L.shoes = [0.2, 0.14, 0.11];
+  L.hat = null;
+  L.face = { eyes: 'hero', brows: 'stern', mouth: 'line', beard: 'stubble', glasses: null };
+  L.acc = ['belt'];
   L.hero = true;
   return modest(L);
 }

@@ -798,10 +798,13 @@ export class Doodle {
     const st = hair.style;
     const hair0 = this.shapes.length;
     if (CAPPED.has(st)) {
-      const g = st === 'buzz' || st === 'cornrows' || st === 'spiky' ? 1.03 : st === 'curly' ? 1.14 : 1.08;
+      const g = st === 'buzz' || st === 'cornrows' || st === 'spiky' ? 1.03 : st === 'curly' ? 1.14 : L.hero && st === 'short' ? 1.045 : 1.08;
       _a.copy(hc).addScaledVector(hu, 0.012 * hs).addScaledVector(hf, -0.01 * hs);
       const cap = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * g, ry * g, rz * g, hcol);
-      this.clip(cap, _q.copy(hu).negate(), hc, -(st === 'long' || st === 'bob' ? 0.0 : 0.03) * hs);
+      // (the hero's short hair: a real hairline, high over the brow and down to the nape at the
+      // back - not a bowl that sits on the brows like a helmet)
+      if (L.hero && st === 'short') this.clip(cap, _q.copy(hu).negate().addScaledVector(hf, 0.5).normalize(), hc, -0.0145 * hs);
+      else this.clip(cap, _q.copy(hu).negate(), hc, -(st === 'long' || st === 'bob' ? 0.0 : 0.03) * hs);
     }
     if (st === 'long' || st === 'bob') {
       const len = st === 'long' ? 0.2 : 0.12;
@@ -859,6 +862,8 @@ export class Doodle {
     }
     // the hero is a blank paper doodle, but a haircut from the barber comes in colour
     if (L.hero) for (let i = hair0; i < this.shapes.length; i++) this.shapes[i].fill = FILL.MARKER;
+    // (and the hero's skin is coloured in smooth, not hatched dark, so his face reads: eyes, brows, jaw)
+    if (L.hero) for (let i = 0; i < hair0; i++) if (this.shapes[i].col === L.skin) this.shapes[i].fill = FILL.MARKER;
     // hats
     if (hat) {
       const k = hat.kind;
@@ -1229,6 +1234,17 @@ export class Doodle {
         P(ex - 0.1, ey, 0.93, _a);
         P(ex + 0.1, ey + 0.01, 0.93, _b);
         this.stroke(_a, _b, ink, w * 1.1, 1 + sd);
+      } else if (style === 'hero') {
+        // (the hero's eyes: a heavy upper lid, the iris under it, a crease beneath - a steady look)
+        P(ex - 0.13, ey + 0.035, 0.93, _a);
+        P(ex + 0.12, ey + 0.05, 0.93, _b);
+        this.stroke(_a, _b, ink, w * 1.35, 1 + sd);
+        P(ex - 0.012, ey - 0.008, 0.95, _a);
+        P(ex + 0.012, ey - 0.024, 0.95, _b);
+        this.stroke(_a, _b, ink, w * 2.1, 16 + sd);
+        P(ex - 0.09, ey - 0.075, 0.92, _a);
+        P(ex + 0.08, ey - 0.07, 0.92, _b);
+        this.stroke(_a, _b, ink, w * 0.6, 3 + sd * 7);
       } else if (style === 'oval' || style === 'lashes' || style === 'anime') {
         const big = style === 'anime' ? 1.5 : 1;
         for (let i = 0; i < 6; i++) {
@@ -1255,10 +1271,12 @@ export class Doodle {
       // brows
       const br = F.brows;
       if (br !== 'none' && !masked) {
-        const tilt = br === 'angry' ? -0.06 : br === 'up' ? 0.05 : 0;
-        P(ex - 0.11, ey + 0.17 + (sd > 0 ? -tilt : tilt), 0.9, _a);
-        P(ex + 0.11, ey + 0.17 + (sd > 0 ? tilt : -tilt), 0.9, _b);
-        this.stroke(_a, _b, L.hair.style === 'none' ? ink : ink, w * 1.1, 18 + sd);
+        // ('stern': heavy, low and level but for a slight frown at the middle - the hero's)
+        const tilt = br === 'angry' ? -0.06 : br === 'stern' ? -0.025 : br === 'up' ? 0.05 : 0;
+        const by = br === 'stern' ? 0.145 : 0.17;
+        P(ex - 0.12, ey + by + (sd > 0 ? -tilt : tilt), 0.9, _a);
+        P(ex + 0.12, ey + by + (sd > 0 ? tilt : -tilt), 0.9, _b);
+        this.stroke(_a, _b, L.hair.style === 'none' ? ink : ink, w * (br === 'stern' ? 1.9 : 1.1), 18 + sd);
       }
     }
     if (F.glasses === 'shades') {
@@ -1333,6 +1351,20 @@ export class Doodle {
         P(0.04, -0.75, 0.8, _b);
         this.stroke(_a, _b, L.hair.color, w * 2.6, 62);
       }
+    }
+    // (the hero's face drawn with more care: cheekbones, the line of the jaw, the chin's cleft)
+    if (L.hero) {
+      for (const sd of [-1, 1]) {
+        P(sd * 0.52, -0.04, 0.8, _a);
+        P(sd * 0.44, -0.22, 0.86, _b);
+        this.stroke(_a, _b, ink, w * 0.6, 80 + sd);
+        P(sd * 0.66, -0.28, 0.7, _a);
+        P(sd * 0.34, -0.68, 0.78, _b);
+        this.stroke(_a, _b, ink, w * 0.95, 83 + sd);
+      }
+      P(-0.1, -0.74, 0.8, _a);
+      P(0.1, -0.74, 0.8, _b);
+      this.stroke(_a, _b, ink, w * 0.7, 86);
     }
     // ears
     for (const sd of [-1, 1]) {

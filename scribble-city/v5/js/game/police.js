@@ -389,11 +389,12 @@ export class Police {
     car.mode = 'parked';
   }
 
-  // (v5, ROADMAP 11.17) the police radio, in the subtitles (one line every few seconds at most)
+  // (v5, ROADMAP 11.17) the police radio, in the subtitles (seldom: it is talk in the background)
   radio(text, force = false) {
     const game = this.game;
     const t = game.time;
-    if (!force && t - (this.radioAt || -99) < 4) return;
+    // (a line every 20 s at most; the dispatcher's own news - more units, the hunt called off - 6 s apart)
+    if (t - (this.radioAt || -99) < (force ? 6 : 20)) return;
     // (ROADMAP 11.28: the jammer - all noise)
     if (this.jammed(1)) text = '…ששש… קררר… [הקשר משובש] …ששש…';
     this.radioAt = t;

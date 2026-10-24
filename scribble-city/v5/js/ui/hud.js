@@ -240,13 +240,23 @@ export class HUD {
     this.promptEl.classList.toggle('hidden', !text);
   }
 
+  // (v5) a word on the screen: small, near the top, and seldom - the same words are not said again for
+  // half a minute, a passing note waits its turn (one every 6 s), and never more than two on the screen
   toast(text, kind = 'info', life = 2.6) {
+    const now = performance.now() / 1000;
+    const seen = this.toastSeen || (this.toastSeen = new Map());
+    if (now - (seen.get(text) ?? -1e9) < 30) return;
+    if (kind === 'info' && now - (this.toastInfoAt ?? -1e9) < 6) return;
+    seen.set(text, now);
+    if (seen.size > 60) for (const [k, t] of seen) if (now - t > 30) seen.delete(k);
+    if (kind === 'info') this.toastInfoAt = now;
+    life = Math.min(life, 2.4);
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
     el.textContent = text;
     el.style.setProperty('--life', `${life}s`);
     this.toastsEl.appendChild(el);
-    while (this.toastsEl.children.length > 3) this.toastsEl.firstChild.remove();
+    while (this.toastsEl.children.length > 2) this.toastsEl.firstChild.remove();
     setTimeout(() => el.remove(), (life + 0.6) * 1000);
   }
 

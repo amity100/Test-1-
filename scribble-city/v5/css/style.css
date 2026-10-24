@@ -242,12 +242,13 @@ body.air-drawing #ink { display: none !important; }
   max-width: min(680px, 60vw);
   padding: 5px 16px;
   font-family: var(--font-hand);
-  font-size: 22px;
+  font-size: 16px;
   line-height: 1.25;
   text-align: center;
   background: var(--paper-2);
-  border: 2.5px solid var(--ink);
+  border: 2px solid var(--ink);
   border-radius: 12px 9px 14px 8px;
+  opacity: 0.85;
 }
 #radio.ad { background: var(--sticky); }
 /* what people say near you (game/voices.js): above the radio's line */
@@ -264,36 +265,40 @@ body.air-drawing #ink { display: none !important; }
   pointer-events: none;
 }
 #subs > div {
-  padding: 2px 12px;
+  padding: 1px 10px;
   font-family: var(--font-hand);
-  font-size: 20px;
+  font-size: 16px;
+  opacity: 0.88;
   line-height: 1.2;
   text-align: center;
   background: var(--paper-2);
   border: 2px solid var(--ink);
   border-radius: 10px 8px 12px 7px;
 }
+/* (v5) the game's words: small, at the top under the bars, out of the way of the road ahead */
 #toasts {
   position: absolute;
-  top: 34%;
+  top: max(84px, calc(env(safe-area-inset-top) + 78px));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  pointer-events: none;
 }
 .toast {
   font-family: var(--font-hand);
-  font-size: 26px;
-  padding: 4px 18px;
+  font-size: 18px;
+  padding: 2px 12px;
+  opacity: 0.92;
   background: var(--paper-2);
   border: 2.5px solid var(--ink);
   border-radius: 12px 9px 14px 8px;
   animation: toastIn 0.25s ease-out, toastOut 0.5s ease-in forwards;
   animation-delay: 0s, var(--life, 2.6s);
   filter: url(#wobble2);
-  max-width: 80vw;
+  max-width: min(520px, 60vw);
   text-align: center;
 }
 .toast.good { background: #d9f5c8; }
@@ -567,7 +572,7 @@ body.nc #btn-down { bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)
 }
 body.touch #air-ref { width: min(300px, 34vw); }
 body.touch #air-head { left: 58%; }
-@media (max-height: 520px) { .toast { font-size: 20px; padding: 3px 12px; } }
+@media (max-height: 520px) { .toast { font-size: 15px; padding: 1px 10px; } }
 @media (max-width: 760px) {
   #goals { display: none; }
   #district { display: none; }
@@ -755,7 +760,7 @@ html, body { background: #1b1430; }
 
 #hidden-tag { background: var(--teal); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 5px 0 var(--ink); filter: none; }
 #prompt { background: var(--ink); color: #fff8ec; border: 3px solid #ffd23f; border-radius: 12px; box-shadow: 4px 5px 0 rgba(27, 20, 48, 0.6); filter: none; }
-.toast { background: var(--paper); border: 3px solid var(--ink); border-radius: 12px; box-shadow: 4px 5px 0 var(--ink); filter: none; }
+.toast { background: var(--paper); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 2px 3px 0 var(--ink); filter: none; }
 .toast.good { background: linear-gradient(90deg, #d8fbe8, #b6f0d6); }
 .toast.bad { background: linear-gradient(90deg, #ffd0e4, #ffb0cf); }
 .toast.info { background: linear-gradient(90deg, #fff1c2, #ffe2a8); }
@@ -1162,7 +1167,7 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch #wanted span, body.touch #wanted span.on { -webkit-text-stroke-width: 1.5px; }
   body.touch #toasts { top: calc(max(6px, env(safe-area-inset-top)) + 40px); gap: 4px; }
   body.touch.air-drawing #toasts { top: auto; }
-  body.touch .toast { max-width: 46vw; padding: 2px 10px; border-width: 2px; border-radius: 9px 7px 10px 6px; box-shadow: 2px 3px 0 var(--ink); font-size: 14px; }
+  body.touch .toast { max-width: 46vw; padding: 1px 8px; border-width: 2px; border-radius: 9px 7px 10px 6px; box-shadow: 2px 3px 0 var(--ink); font-size: 13px; }
   body.touch #bigmsg { top: 18%; font-size: 34px; }
   body.touch #prompt { bottom: max(30px, calc(env(safe-area-inset-bottom) + 24px)); padding: 2px 10px; border-width: 2px; font-size: 15px; }
   body.touch #hidden-tag { bottom: max(64px, calc(env(safe-area-inset-bottom) + 58px)); padding: 2px 10px; border-width: 2px; font-size: 15px; }

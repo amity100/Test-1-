@@ -161,6 +161,12 @@ export class StreetLife {
   applyHero(d) {
     const p = this.game.player;
     const L = p.fig.look;
+    // (the hero's first clothes were a white tee, grey trousers, white sneakers and a black cap: a
+    // save that still holds just those keeps the new first clothes instead - a jacket, jeans, boots)
+    const was = (c, v) => Array.isArray(c) && c.length >= 3 && v.every((x, i) => Math.abs(c[i] - x) < 0.006);
+    const o = d.outfit;
+    if (o && o.top && o.top.kind === 'tee' && was(o.top.color, [0.97, 0.96, 0.93]) && o.bottom && was(o.bottom.color, [0.36, 0.36, 0.39])) d = { ...d, outfit: { ...o, top: null, bottom: null, shoes: was(o.shoes, [0.96, 0.96, 0.95]) ? null : o.shoes } };
+    if (d.hat && d.hat.kind === 'cap' && was(d.hat.color, [0.09, 0.09, 0.11])) d = { ...d, hat: null };
     if (d.hair) L.hair = { style: d.hair.style, color: d.hair.color };
     else if (d.bald) L.hair = { style: 'none', color: L.skin };
     if (d.hat !== undefined) L.hat = d.hat;
