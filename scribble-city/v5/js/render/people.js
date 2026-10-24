@@ -980,7 +980,7 @@ export class PersonRenderer {
       const len = Math.max(0.2, _b.subVectors(j.neck, _a).length());
       const sy = len / 0.5;
       const pool = tee && top.kind !== 'tank' ? p.torsoTee : top.kind === 'shirt' || top.kind === 'blouse' || top.kind === 'dress' ? p.torsoFit : open || top.kind === 'hoodie' || top.kind === 'track' || top.kind === 'sweatshirt' ? p.torsoBoxy : p.torsoPlain;
-      const w = (L.fem ? 0.95 : 1.05) * br * k;
+      const w = (L.fem ? 0.95 : 1.05) * br * k * (L.hero ? 1.05 : 1);
       pool.push(framed(_a, rgt, ax, fwd, w, sy, w * (L.fem ? 1.05 : 1)), topC, own, id(), ind);
       // a jacket's open front over the shirt or the tee under it, a suit's tie
       if (open) {
@@ -994,6 +994,7 @@ export class PersonRenderer {
         // the collar standing round the neck
         _c.copy(j.neck).addScaledVector(ax, -0.01 * S);
         p.collar.push(framed(_c, rgt, ax, fwd, k * br, k, k * br * 0.95), topC, own, id(), ind);
+        if (L.hero && !far) heroJacket(p, fig, j, rgt, ax, fwd, S, br, topC, own, id, ind);
         // a coat goes on down to the knees, open in front
         if ((top.kind === 'trench' || top.kind === 'coat') && P.pelvis > 0.5 && fig.sit < 0.3) {
           _c.copy(j.hip).addScaledVector(ax, 0.06 * S);
@@ -1068,6 +1069,15 @@ export class PersonRenderer {
       _c.subVectors(hd, el).normalize();
       _d.copy(hd).addScaledVector(_c, 0.035 * S);
       p.hand.push(along(_d, _a.copy(_d).addScaledVector(_c, 0.05), 0.05, k, fwd), skin, own, id(), ind);
+      // (the hero's sleeves end in a cuff, a band a shade darker round the wrist)
+      if (L.hero && !far && !foreSkin) {
+        _a.copy(hd).addScaledVector(_c, -0.03 * S);
+        _x.crossVectors(_c, fwd);
+        if (_x.lengthSq() < 1e-6) _x.copy(rgt);
+        _x.normalize();
+        _z.crossVectors(_x, _c);
+        p.sphere.push(framed(_a, _x, _c, _z, 0.043 * armK, 0.02 * S, 0.043 * armK), heroDark(fig, topC), own, id(), ind);
+      }
     }
     // ---- legs
     const legs = fig._legJ || (fig._legJ = [[j.hipR, j.kneeR, j.footR, j.toeR], [j.hipL, j.kneeL, j.footL, j.toeL]]);
@@ -1102,6 +1112,13 @@ export class PersonRenderer {
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.035);
       p.shoe.push(framed(_c, _x, UP, _z, k, k, k), shoeC, own, id(), ind);
+      // (the hero's boots: a shaft up over the ankle, the jeans' hem over it)
+      if (L.hero && !far && !midi && !longSkirt && !shorts) {
+        _a.copy(ft).addScaledVector(UP, 0.01 * S);
+        _b.subVectors(kn, ft).normalize();
+        _b.multiplyScalar(0.15 * S).add(ft);
+        capsuleTo(p, _a, _b, 0.056 * legK, shoeC, own, id(), ind, rgt);
+      }
       if (!far) {
         _c.y -= 0.032 * S;
         p.sole.push(framed(_c, _x, UP, _z, k, k, k), linC(SOLE), own, id(), ind);
@@ -1118,7 +1135,7 @@ export class PersonRenderer {
       const headId = fig.headId !== undefined ? fig.headId : id();
       p.head.push(framed(hc, hr, hu, hf, 1.0 * hs * 0.98, 1.14 * hs * 1.0, 1.0 * hs * 1.06), skin, own, headId, ind);
       _c.copy(hc).addScaledVector(hu, -0.065 * hs).addScaledVector(hf, 0.03 * hs);
-      p.jaw.push(framed(_c, hr, hu, hf, hs * 1.05, hs, hs * 1.05), skin, own, headId, ind);
+      p.jaw.push(framed(_c, hr, hu, hf, hs * (L.hero ? 1.13 : 1.05), hs * (L.hero ? 1.04 : 1), hs * 1.05), skin, own, headId, ind);
       if (!far) {
         for (let sd = -1; sd <= 1; sd += 2) {
           _c.copy(hc).addScaledVector(hr, sd * 0.1 * hs).addScaledVector(hf, -0.005 * hs);
@@ -1143,12 +1160,12 @@ export class PersonRenderer {
             _c.copy(hc).addScaledVector(hr, sd * 0.038 * hs).addScaledVector(hu, 0.047 * hs).addScaledVector(hf, 0.096 * hs);
             _d.copy(hr).addScaledVector(hu, -sd * 0.12).normalize();
             _x.crossVectors(hf, _d).normalize();
-            p.brow.push(framed(_c, _d, _x, hf, hs * (L.fem ? 0.9 : 1.05), hs * (L.fem ? 0.8 : 1.15), hs), browC, own, id(), ind);
+            p.brow.push(framed(_c, _d, _x, hf, hs * (L.fem ? 0.9 : L.hero ? 1.15 : 1.05), hs * (L.fem ? 0.8 : L.hero ? 1.7 : 1.15), hs), browC, own, id(), ind);
           }
         }
         if (!masked) {
           _c.copy(hc).addScaledVector(hu, -0.012 * hs).addScaledVector(hf, 0.104 * hs);
-          p.nose.push(framed(_c, hr, hu, hf, hs, hs, hs), skin, own, headId, ind);
+          p.nose.push(framed(_c, hr, hu, hf, hs * (L.hero ? 1.1 : 1), hs * (L.hero ? 1.12 : 1), hs * (L.hero ? 1.15 : 1)), skin, own, headId, ind);
           _c.copy(hc).addScaledVector(hu, -0.056 * hs).addScaledVector(hf, 0.094 * hs);
           p.mouth.push(framed(_c, hr, hu, hf, hs, hs, hs), linC(L.fem ? LIPS_F : LIPS_M), own, id(), ind);
         }
@@ -1345,6 +1362,42 @@ export class PersonRenderer {
 const _q = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _mc = new THREE.Matrix4();
+// (v5, ROADMAP 11.29) the hero drawn with more care than the passers-by. His jacket: the lapels
+// laid back from the collar in a V, a strong shoulder line, the zip's metal down both front edges,
+// slanted pockets at the hips. (Drawn in the same pens as everyone, so he is of the same world.)
+const ZIP = lin3(0.62, 0.58, 0.5);
+const _hc = new THREE.Vector3();
+const _hr = new THREE.Vector3();
+const _hu = new THREE.Vector3();
+function heroDark(fig, topC) {
+  if (fig._hjOf !== topC) {
+    fig._hjOf = topC;
+    fig._hjDark = [topC[0] * 0.62, topC[1] * 0.62, topC[2] * 0.62];
+  }
+  return fig._hjDark;
+}
+function heroJacket(p, fig, j, rgt, ax, fwd, S, br, topC, own, id, ind) {
+  const dark = heroDark(fig, topC);
+  for (let sd = -1; sd <= 1; sd += 2) {
+    // a lapel: from the collar, out at the shoulder, down to the middle of the chest
+    _hc.lerpVectors(j.hip, j.neck, 0.79).addScaledVector(rgt, sd * 0.062 * br * S).addScaledVector(fwd, 0.127 * br * S);
+    _hu.copy(ax).addScaledVector(rgt, sd * 0.36).normalize();
+    _hr.crossVectors(_hu, fwd).normalize();
+    p.boxP.push(framed(_hc, _hr, _hu, fwd, 0.052 * S, 0.17 * S, 0.016 * S), topC, own, id(), ind);
+    // the zip down the front edge
+    _hc.lerpVectors(j.hip, j.neck, 0.43).addScaledVector(rgt, sd * 0.054 * S).addScaledVector(fwd, 0.123 * br * S);
+    p.boxP.push(framed(_hc, rgt, ax, fwd, 0.009 * S, 0.26 * S, 0.012 * S), ZIP, own, id(), ind);
+    // a slanted pocket at the hip
+    _hc.lerpVectors(j.hip, j.neck, 0.16).addScaledVector(rgt, sd * 0.105 * br * S).addScaledVector(fwd, 0.118 * br * S);
+    _hr.copy(rgt).addScaledVector(ax, sd * 0.7).normalize();
+    _hu.crossVectors(fwd, _hr).normalize();
+    p.boxP.push(framed(_hc, _hr, _hu, fwd, 0.085 * S, 0.014 * S, 0.022 * S), dark, own, id(), ind);
+    // the shoulder: the jacket's seam set square over the arm
+    _hc.copy(sd > 0 ? j.shoulderR : j.shoulderL).addScaledVector(ax, 0.012 * S);
+    p.sphere.push(framed(_hc, rgt, ax, fwd, 0.066 * br * S, 0.05 * S, 0.068 * br * S), topC, own, id(), ind);
+  }
+}
+
 function capsuleTo(p, a, b, r, col, own, part, ind, side, clip = null) {
   _q.subVectors(b, a);
   const L = _q.length();

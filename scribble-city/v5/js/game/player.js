@@ -11,7 +11,6 @@ const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3();
 const _y = new THREE.Vector3();
 const _z = new THREE.Vector3();
-const _hp = new THREE.Vector3();
 
 export class Player {
   constructor(game) {
@@ -155,11 +154,8 @@ export class Player {
     }
     if (amount < full * 0.5) at = null;
     this.hp -= amount;
-    if (at) {
-      // the hit rubs a little hole in your own drawing (it fills back in as you heal)
-      this.fig.closestSurfacePoint(at, _hp);
-      this.fig.erase(_hp, 0.045 + amount * 0.0035);
-    }
+    // (v5, ROADMAP 11.29: a hit no longer rubs a hole out of the hero's own drawing - it read as a
+    // hole through his body; the red at the screen's edges says he is hurt)
     this.lastHurt = this.game.time;
     this.game.hud.hurtFlash(amount, fromX, fromZ);
     this.game.audio.play('hurt');

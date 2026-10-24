@@ -99,10 +99,11 @@ export function heroLook() {
   L.pen.width = 3.2;
   L.build = { height: 1.04, head: 0.95, bulk: 1.08, limbs: 1.06 };
   L.skin = [0.7, 0.52, 0.41];
-  L.hair = { style: 'short', color: [0.1, 0.08, 0.07] };
-  L.top = { kind: 'jacket', color: [0.25, 0.16, 0.12], sleeves: 'long', inner: [0.2, 0.2, 0.23] };
-  L.bottom = { kind: 'pants', color: [0.16, 0.19, 0.27] };
-  L.shoes = [0.2, 0.14, 0.11];
+  L.hair = { style: 'buzz', color: [0.12, 0.09, 0.07] };
+  // (mid tones, not near-black: at night a black figure is all the pens' light strokes)
+  L.top = { kind: 'jacket', color: [0.4, 0.26, 0.18], sleeves: 'long', inner: [0.33, 0.34, 0.38] };
+  L.bottom = { kind: 'pants', color: [0.26, 0.31, 0.43] };
+  L.shoes = [0.32, 0.21, 0.14];
   L.hat = null;
   L.face = { eyes: 'hero', brows: 'stern', mouth: 'line', beard: 'stubble', glasses: null };
   L.acc = ['belt'];

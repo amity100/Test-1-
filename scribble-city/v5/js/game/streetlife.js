@@ -161,11 +161,13 @@ export class StreetLife {
   applyHero(d) {
     const p = this.game.player;
     const L = p.fig.look;
-    // (the hero's first clothes were a white tee, grey trousers, white sneakers and a black cap: a
-    // save that still holds just those keeps the new first clothes instead - a jacket, jeans, boots)
+    // (the hero's first clothes were a white tee, grey trousers, white sneakers and a black cap, and
+    // for a day a near-black jacket and jeans: a save that still holds just those keeps the new
+    // first clothes instead)
     const was = (c, v) => Array.isArray(c) && c.length >= 3 && v.every((x, i) => Math.abs(c[i] - x) < 0.006);
     const o = d.outfit;
-    if (o && o.top && o.top.kind === 'tee' && was(o.top.color, [0.97, 0.96, 0.93]) && o.bottom && was(o.bottom.color, [0.36, 0.36, 0.39])) d = { ...d, outfit: { ...o, top: null, bottom: null, shoes: was(o.shoes, [0.96, 0.96, 0.95]) ? null : o.shoes } };
+    const first = o && o.top && o.bottom && ((o.top.kind === 'tee' && was(o.top.color, [0.97, 0.96, 0.93]) && was(o.bottom.color, [0.36, 0.36, 0.39])) || (o.top.kind === 'jacket' && was(o.top.color, [0.25, 0.16, 0.12]) && was(o.bottom.color, [0.16, 0.19, 0.27])));
+    if (first) d = { ...d, outfit: { ...o, top: null, bottom: null, shoes: was(o.shoes, [0.96, 0.96, 0.95]) || was(o.shoes, [0.2, 0.14, 0.11]) ? null : o.shoes } };
     if (d.hat && d.hat.kind === 'cap' && was(d.hat.color, [0.09, 0.09, 0.11])) d = { ...d, hat: null };
     if (d.hair) L.hair = { style: d.hair.style, color: d.hair.color };
     else if (d.bald) L.hair = { style: 'none', color: L.skin };

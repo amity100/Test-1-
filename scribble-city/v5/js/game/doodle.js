@@ -799,11 +799,12 @@ export class Doodle {
     const hair0 = this.shapes.length;
     if (CAPPED.has(st)) {
       const g = st === 'buzz' || st === 'cornrows' || st === 'spiky' ? 1.03 : st === 'curly' ? 1.14 : L.hero && st === 'short' ? 1.045 : 1.08;
+      const hairline = L.hero && (st === 'short' || st === 'buzz');
       _a.copy(hc).addScaledVector(hu, 0.012 * hs).addScaledVector(hf, -0.01 * hs);
       const cap = this.ellipsoid('head', 'head', _a, hr, hu, hf, rx * g, ry * g, rz * g, hcol);
       // (the hero's short hair: a real hairline, high over the brow and down to the nape at the
       // back - not a bowl that sits on the brows like a helmet)
-      if (L.hero && st === 'short') this.clip(cap, _q.copy(hu).negate().addScaledVector(hf, 0.5).normalize(), hc, -0.0145 * hs);
+      if (hairline) this.clip(cap, _q.copy(hu).negate().addScaledVector(hf, 0.5).normalize(), hc, -0.0145 * hs);
       else this.clip(cap, _q.copy(hu).negate(), hc, -(st === 'long' || st === 'bob' ? 0.0 : 0.03) * hs);
     }
     if (st === 'long' || st === 'bob') {
