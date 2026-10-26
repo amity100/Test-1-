@@ -902,6 +902,8 @@ void main() {
     mGlow = exp(-5.0 * sb * sb) * bd.z;
   }
   bool inside = uIndoor > 0.5 || vX.z > 0.5;
+  // (ROADMAP 11.31) a mall's great hall under its glass roof (2): indoors, but in daylight
+  bool hall = uIndoor > 1.5 || vX.z > 1.5;
   vec3 Nw = normalize(vN);
   vec2 p = strokeCoords(Nw);
   // (uPxK, render/pipeline.js: the drawing's pixel in the screen's; 1 when it is drawn whole)
@@ -977,7 +979,14 @@ void main() {
   vec3 amb = ambientLight(N);
   vec3 pts = (probe & 4) != 0 ? vec3(0.0) : pointLights(vWP, N);
   vec3 key = uSunCol;
-  if (inside) {
+  if (hall) {
+    // the great hall: the daylight through the glass over it, white and even, the most on what
+    // faces up, a little cooler in the shade; its stone and gold their own colours
+    float up = N.y * 0.5 + 0.5;
+    amb = mix(vec3(0.6, 0.63, 0.7), vec3(0.9, 0.92, 0.96), up);
+    key = vec3(1.0, 0.98, 0.95) * 0.62;
+    light = clamp(0.42 + 0.48 * up, 0.0, 1.0);
+  } else if (inside) {
     // a room under its lamps at dusk: warm golden light from above, rosy in the corners, no sun;
     // the colours richer than outside, the way a lit shop window looks from the street
     float up = N.y * 0.5 + 0.5;
@@ -998,7 +1007,7 @@ void main() {
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
   vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv, uMipBias).rgb : vec3(1.0));
   // a room glows a little out into the evening
-  if (inside) em += alb * vec3(0.32, 0.2, 0.1);
+  if (inside) em += alb * (hall ? vec3(0.07) : vec3(0.32, 0.2, 0.1));
   if (uNeonMask > 0.5) em = uEmissive * tex.rgb;
   else if (uEmVColor > 0.5) em *= vCol;
 #ifdef USE_DENTS
@@ -1014,7 +1023,8 @@ void main() {
     vec3 R = reflect(-V, N);
     float fr = mix(0.08, 1.0, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0)) * uGloss;
     vec3 env = skyColor(R);
-    if (inside) env = mix(vec3(0.9, 0.62, 0.42), vec3(1.0, 0.9, 0.7), R.y * 0.5 + 0.5);
+    if (hall) env = mix(vec3(0.72, 0.75, 0.82), vec3(1.0, 1.0, 1.02), R.y * 0.5 + 0.5);
+    else if (inside) env = mix(vec3(0.9, 0.62, 0.42), vec3(1.0, 0.9, 0.7), R.y * 0.5 + 0.5);
     shade = mix(shade, env * 0.8, fr);
     lit = mix(lit, env, fr);
     if (!inside) em += uSunCol * pow(max(dot(R, uSunDir), 0.0), 220.0) * 5.0 * uGloss * sh;

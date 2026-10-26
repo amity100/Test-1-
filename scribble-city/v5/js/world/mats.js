@@ -86,6 +86,13 @@ export function cityMaterials() {
     inGloss: B({ kind: 'box', vcolor: true, indoor: true, gloss: 0.6, wash: 0.75 }),
     inLamp: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.92, 0.75), emissive: new THREE.Color(2.0, 2.0, 2.0), indoor: true, line: 0.4 }),
     goods: B({ kind: 'uv', map: goodsTexture(), cells: GOODS_CELLS, indoor: true, uvScale: 4, ang: 1.3, wash: 0.8, density: 0.75 }),
+    // (ROADMAP 11.31) a mall's great hall under its glass roof: the same, in daylight - white and
+    // even, its stone and gold their own colours (not a room's warm lamps); its marble floor
+    hallBox: B({ kind: 'box', vcolor: true, indoor: 'hall', wash: 0.7 }),
+    hallCyl: B({ kind: 'cyl', vcolor: true, indoor: 'hall', partR: 0.1, wash: 0.7 }),
+    hallGloss: B({ kind: 'box', vcolor: true, indoor: 'hall', gloss: 0.6, wash: 0.75 }),
+    hallLamp: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.97, 0.92), emissive: new THREE.Color(2.0, 2.0, 2.0), indoor: 'hall', line: 0.4 }),
+    hallFloor: B({ kind: 'ground', map: floorTexture('marble'), vcolor: true, indoor: 'hall', gloss: 0.45, ang: 0.4, wash: 0.75, line: 0.5 }),
   };
   M.floors = {};
   for (const k of ['checker', 'tiles', 'mats', 'wood', 'concrete', 'carpet']) M.floors[k] = B({ kind: 'ground', map: floorTexture(k), vcolor: true, indoor: true, ang: k === 'wood' ? 1.5708 : 0.4, wash: 0.72, line: 0.5 });

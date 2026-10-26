@@ -432,7 +432,8 @@ const nextObj = () => {
  * kind: wall | ground | street | cyl | box | uv | glass | leaf | neon | water | skin | paint
  * color (THREE.Color, linear) or map (sRGB canvas texture); emissive; ang (stroke direction)...
  * vcolor: a colour per vertex (multiplies color); objMask: props that can be rubbed out (aObj);
- * erasable: the eraser rubs holes in it; indoor: a room under its lamps; swayAttr: batched fronds
+ * erasable: the eraser rubs holes in it; indoor: a room under its lamps ('hall': a mall's great
+ * hall under its glass roof, in daylight); swayAttr: batched fronds
  */
 export function makeSurface(o = {}) {
   const kind = o.kind || 'wall';
@@ -464,7 +465,7 @@ export function makeSurface(o = {}) {
       uLit: { value: o.lit !== undefined ? o.lit : 0.4 },
       uWetK: { value: o.wet !== undefined ? o.wet : o.refl ? 0.8 : 0 },
       uSway: { value: o.sway || 0 },
-      uIndoor: { value: o.indoor ? 1 : 0 },
+      uIndoor: { value: o.indoor === 'hall' ? 2 : o.indoor ? 1 : 0 },
       uErasable: { value: o.erasable ? 1 : 0 },
       uEmVColor: { value: o.emVColor ? 1 : 0 },
       uCells: { value: o.cells || 0 },

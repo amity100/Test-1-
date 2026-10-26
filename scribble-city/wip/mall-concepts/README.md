@@ -11,5 +11,5 @@
   - `concepts.js`: הבנייה.
   - `harness.js`: דף הבדיקה מנקה את המגרש (הבלוקים ריקים, המגדלים מקופלים, בלי אנשים ורכבים), בונה סגנון ומכוון את המצלמות.
   - שום דבר מזה לא נכנס למשחק.
-- **הרצה:** בדף בדיקה, `await import('/wip/mall-concepts/harness.js')`. אחר כך `setup(game)`, `build(game, 'palace' | 'deco' | 'future')` ו־`view(game, 'street' | 'air' | 'inside' | 'night')`.
-- **מצב:** ממתין לבחירה.
+- **הרצה:** בדף בדיקה, `await import('/wip/mall-concepts/harness.js')`. אחר כך `setup(game)`, `build(game, 'palace' | 'deco' | 'future')` ו־`view(game, 'street' | 'air' | 'inside' | 'gallery' | 'night')`.
+- **מצב:** נבחר ב, בשני אגפים עם גשרים מעל השדרה. ב נצבע מחדש ב"דקו יוקרה": שנהב, שחור, זהב שמפניה וזכוכית כחולה כהה. בפנים: שיש לבן עם יהלומים שחורים בזהב, מעקות זהב וחזיתות חנויות שחורות, באור היום הלבן של האולם (`indoor: 'hall'`). הצבעים ממתינים לאישור.

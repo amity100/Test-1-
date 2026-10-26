@@ -145,11 +145,12 @@ function clearSite(g, cam) {
 }
 
 // (from the crossings at the two north corners, a little up; from over the low roofs south-east; in
-// the nave looking along it to the court)
+// the nave looking along it to the court; from the fourth floor's gallery across the court)
 const VIEWS = {
   street: { pos: [-788, 20, -121], look: [CX - 6, 17, CZ - 12], fov: 60, hour: 13 },
   air: { pos: [CX + 150, 120, CZ + 190], look: [CX - 4, 6, CZ - 6], fov: 50, hour: 13 },
   inside: { pos: [VOID.x0 + 1.5, G + 1.75, CZ], look: [CX, G + 11, CZ], fov: 74, hour: 13 },
+  gallery: { pos: [CX + 3, G + 17.9, CZ + 18.2], look: [CX - 4, G + 11, CZ - 14], fov: 76, hour: 13 },
   night: { pos: [-972, 20, -121], look: [CX + 6, 17, CZ - 12], fov: 60, hour: 21.6 },
 };
 

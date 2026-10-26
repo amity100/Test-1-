@@ -269,10 +269,10 @@ function straights(pts, min = 12) {
 let PENS = null;
 function pens(M) {
   if (PENS) return PENS;
-  const glass = (c) => makeSurface({ kind: 'glass', color: c, gloss: 0.85, lit: 0.3 });
+  const glass = (c, lit = 0.3) => makeSurface({ kind: 'glass', color: c, gloss: 0.85, lit });
   PENS = {
     gold: makeSurface({ kind: 'box', vcolor: true, gloss: 0.9, line: 0.55 }),
-    goldIn: makeSurface({ kind: 'box', vcolor: true, gloss: 0.9, indoor: true, wash: 0.7, line: 0.55 }),
+    goldIn: makeSurface({ kind: 'box', vcolor: true, gloss: 0.9, indoor: 'hall', wash: 0.7, line: 0.55 }),
     sky: glass(srgb(0.66, 0.84, 0.97)),
     mid: glass(srgb(0.42, 0.66, 0.9)),
     deep: glass(srgb(0.22, 0.4, 0.68)),
@@ -280,6 +280,9 @@ function pens(M) {
     teal: glass(srgb(0.16, 0.52, 0.6)),
     rose: glass(srgb(0.95, 0.72, 0.8)),
     dark: glass(srgb(0.12, 0.14, 0.22)),
+    // (none of their ribbons lit whole from inside: a floor's long band of glass glowing yellow)
+    navy: glass(srgb(0.1, 0.15, 0.28), 0),
+    clear: glass(srgb(0.74, 0.84, 0.93), 0),
   };
   return PENS;
 }
@@ -294,7 +297,12 @@ function inside(c, T) {
   const sg = area(vp) > 0 ? 1 : -1;
   const inner = T.inner || roundRect(SITE.x0 + 1.5, SITE.z0 + 1.5, SITE.x1 - 1.5, SITE.z1 - 1.5, 6);
   // the ground floor, its stone, and the rings set in it round the court
-  add(M.inGloss, plate(inner, [], G + 0.03), T.floor);
+  const fl = plate(inner, [], G + 0.03);
+  if (T.floorPen) {
+    const uv = fl.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 3.2, uv.getY(i) / 3.2);
+  }
+  add(T.floorPen || M.inGloss, fl, T.floor);
   for (const [d, w, col] of T.inlays || []) add(P.goldIn, plate(ellipse(CX, CZ, VOID.rx - d, VOID.rz - d), [ellipse(CX, CZ, VOID.rx - d - w, VOID.rz - d - w)], G + 0.045), col);
   for (let k = 1; k < NF; k++) {
     const y = LV[k];
@@ -684,136 +692,145 @@ const DECO = {
   build(c) {
     const { B, M, P } = c;
     const add = (mat, g, col) => g && B.add(mat, g, null, nextId(), col ? { color: col } : undefined);
-    const CREAM = hex('#fff1d8');
-    const PINK = hex('#f4a3bd');
-    const MINT = hex('#9ee0c6');
-    const TEAL = hex('#22b7b5');
-    const YEL = hex('#ffd36b');
-    const CHROME = hex('#d9e0e8');
-    const LAV = hex('#c3aef0');
-    const NPINK = srgb(1, 0.35, 0.72);
-    const NTEAL = srgb(0.25, 1, 0.92);
-    const NPURP = srgb(0.68, 0.45, 1);
-    ground(c, hex('#f3e2d0'));
+    // (the luxe palette: ivory stone, black lacquer, champagne gold, deep navy glass; at night gold
+    // and warm white light)
+    const IVORY = hex('#f2ece1');
+    const STONE = hex('#e2d9c8');
+    const BLACK = hex('#19181e');
+    const GOLD = hex('#d4af62');
+    const WHITE = hex('#ffffff');
+    const LGOLD = srgb(1, 0.78, 0.42);
+    const LWHITE = srgb(1, 0.93, 0.8);
+    ground(c, hex('#ece6dc'));
     const foot = roundRect(SITE.x0, SITE.z0, SITE.x1, SITE.z1, 11, 10);
     const sg = area(foot) > 0 ? 1 : -1;
-    // every floor: a band of colour, a ribbon of windows set in, an eyebrow over them, neon under it
+    // every floor: a band of stone (black granite at the street), a ribbon of dark glass set in, an
+    // eyebrow over it edged in gold, a line of gold light under it
     for (let k = 0; k < NF; k++) {
       const y = LV[k];
-      add(M.wallSolid, strip(foot, y - (k ? 0 : 0.2), y + 1.1), k % 2 ? PINK : CREAM);
-      add(P.aqua, strip(offset(foot, -0.45), y + 1.1, y + 4.15));
+      add(M.wallSolid, strip(foot, y - (k ? 0 : 0.2), y + 1.1), k ? IVORY : BLACK);
+      add(P.navy, strip(offset(foot, -0.45), y + 1.1, y + 4.15));
       add(M.glint, strip(offset(foot, -0.38), y + 1.3, y + 4.0));
-      add(M.wallSolid, strip(foot, y + 4.15, LV[k + 1]), CREAM);
+      add(M.wallSolid, strip(foot, y + 4.15, LV[k + 1]), IVORY);
       for (let i = 0; i < foot.length; i++) {
         const a = foot[i];
         const b = foot[(i + 1) % foot.length];
-        add(M.wallSolid, segGeo(a, b, y + 4.18, y + 4.42, 0, 1.15, sg), hex('#ffffff'));
-        add(M.neon, segGeo(a, b, y + 4.1, y + 4.18, 1.0, 1.12, sg), k % 2 ? NPINK : NTEAL);
+        add(M.wallSolid, segGeo(a, b, y + 4.18, y + 4.42, 0, 1.1, sg), WHITE);
+        add(P.gold, segGeo(a, b, y + 4.16, y + 4.44, 1.1, 1.2, sg), GOLD);
+        add(M.neon, segGeo(a, b, y + 4.1, y + 4.18, 0.9, 1.05, sg), LGOLD);
       }
     }
-    // the parapet: stepped, a band of pink, its top
-    add(M.wallSolid, strip(foot, ROOF, ROOF + 1.8), CREAM);
-    add(M.wallSolid, strip(offset(foot, 0.05), ROOF + 0.5, ROOF + 0.95), PINK);
-    for (let i = 0; i < foot.length; i++) add(M.neon, segGeo(foot[i], foot[(i + 1) % foot.length], ROOF + 1.8, ROOF + 1.92, -0.1, 0.1, sg), NPURP);
-    add(M.wallSolid, plate(foot, [voidPath(0)], ROOF - 0.6, ROOF), hex('#efe2cf'));
-    // the fins: three together, pink, up past the parapet, neon on their edges
+    // the parapet: stepped, a band of gold, its top lit
+    add(M.wallSolid, strip(foot, ROOF, ROOF + 1.8), IVORY);
+    add(P.gold, strip(offset(foot, 0.05), ROOF + 0.55, ROOF + 0.85), GOLD);
+    for (let i = 0; i < foot.length; i++) add(M.neon, segGeo(foot[i], foot[(i + 1) % foot.length], ROOF + 1.8, ROOF + 1.92, -0.1, 0.1, sg), LWHITE);
+    add(M.wallSolid, plate(foot, [voidPath(0)], ROOF - 0.6, ROOF), STONE);
+    c.R.add(M.hallBox, flip(plate(roundRect(SITE.x0 + 1.5, SITE.z0 + 1.5, SITE.x1 - 1.5, SITE.z1 - 1.5, 6), [voidPath(0)], ROOF - 0.63)), null, nextId(), { color: hex('#f7f4ee') });
+    // the fins: three together, ivory either side of a black one, up past the parapet, gold light
+    // on their edges
     for (const { a, b, L } of straights(foot, 30)) {
       for (let u = 12; u < L - 10; u += 22) for (const du of [-0.9, 0, 0.9]) {
         const p0 = [a[0] + ((b[0] - a[0]) * (u + du - 0.16)) / L, a[1] + ((b[1] - a[1]) * (u + du - 0.16)) / L];
         const p1 = [a[0] + ((b[0] - a[0]) * (u + du + 0.16)) / L, a[1] + ((b[1] - a[1]) * (u + du + 0.16)) / L];
-        add(M.wallSolid, segGeo(p0, p1, G, ROOF + 3.2, 0, 1.5, sg), du ? PINK : LAV);
-        add(M.neon, segGeo(p0, p1, G + 0.5, ROOF + 3.2, 1.5, 1.6, sg), du ? NPINK : NPURP);
+        add(M.wallSolid, segGeo(p0, p1, G, ROOF + 3.2, 0, 1.5, sg), du ? IVORY : BLACK);
+        add(M.neon, segGeo(p0, p1, G + 0.5, ROOF + 3.2, 1.5, 1.6, sg), du ? LWHITE : LGOLD);
       }
     }
-    // the tower over the doors: three steps up, stripes, neon on its edges, fins and a mast
+    // the tower over the doors: three steps up, black and gold stripes, gold light on its edges,
+    // fins and a mast
     const tiers = [[20, SITE.z0 - 3, SITE.z0 + 16, ROOF + 8], [13, SITE.z0 + 1, SITE.z0 + 13, ROOF + 18], [7.5, SITE.z0 + 3.5, SITE.z0 + 10.5, ROOF + 28]];
     let ybase = G;
-    const TIERC = [CREAM, MINT, PINK];
     for (const [hw, z0, z1, y1] of tiers) {
       const t = roundRect(CX - hw, z0, CX + hw, z1, 2.5, 4);
-      add(M.wallSolid, plate(t, [], ybase - 0.2, y1), TIERC[tiers.findIndex((q) => q[0] === hw)]);
+      add(M.wallSolid, plate(t, [], ybase - 0.2, y1), IVORY);
       for (const s of [-1, 1]) for (const dx of [hw * 0.28, hw * 0.62]) {
         const g = new THREE.BoxGeometry(1.1, y1 - ybase - 1.5, 0.3);
         g.translate(CX + s * dx, (ybase + y1) / 2, z0 - 0.12);
-        add(M.wallSolid, g, s * dx > hw * 0.5 || s * dx < -hw * 0.5 ? MINT : PINK);
+        if (dx > hw * 0.5) add(M.wallSolid, g, BLACK);
+        else add(P.gold, g, GOLD);
       }
       for (const s of [-1, 1]) {
         const g = new THREE.BoxGeometry(0.16, y1 - ybase, 0.16);
         g.translate(CX + s * (hw + 0.05), (ybase + y1) / 2, z0 - 0.05);
-        add(M.neon, g, NPINK);
+        add(M.neon, g, LGOLD);
       }
       const cap = new THREE.BoxGeometry(hw * 2 + 0.6, 0.6, z1 - z0 + 0.6);
       cap.translate(CX, y1 + 0.3, (z0 + z1) / 2);
-      add(M.wallSolid, cap, hex('#ffffff'));
+      add(M.wallSolid, cap, WHITE);
       const ln = new THREE.BoxGeometry(hw * 2 + 0.7, 0.14, 0.14);
       ln.translate(CX, y1 + 0.05, z0 - 0.35);
-      add(M.neon, ln, NTEAL);
+      add(M.neon, ln, LWHITE);
       ybase = y1;
     }
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const g = new THREE.BoxGeometry(dx ? 5.5 : 0.5, 13, dz ? 5.5 : 0.5);
       g.translate(CX + dx * 2.75, ybase + 6.5, SITE.z0 + 7 + dz * 2.75);
-      add(M.wallSolid, g, CREAM);
+      add(M.wallSolid, g, IVORY);
       const e = new THREE.BoxGeometry(dx ? 0.14 : 0.6, 12.6, dz ? 0.14 : 0.6);
       e.translate(CX + dx * 5.5, ybase + 6.5, SITE.z0 + 7 + dz * 5.5);
-      add(M.neon, e, NTEAL);
+      add(M.neon, e, LGOLD);
     }
     const mast = new THREE.CylinderGeometry(0.12, 0.35, 11, 8);
     mast.translate(CX, ybase + 18, SITE.z0 + 7);
-    add(M.frame, mast, CHROME);
+    add(P.gold, mast, GOLD);
     const ball = new THREE.SphereGeometry(0.9, 14, 10);
     ball.translate(CX, ybase + 13.4, SITE.z0 + 7);
-    add(M.neon, ball, NPINK);
-    // its name down its face, letter by letter, on a panel of deep teal
+    add(M.neon, ball, LWHITE);
+    // its name down its face, letter by letter, in gold light on black
     const pnl = new THREE.BoxGeometry(4.6, 26, 0.3);
     pnl.translate(CX, ROOF + 7.4 - 13.6, SITE.z0 - 3.2);
-    add(M.wallSolid, pnl, hex('#16707a'));
+    add(M.wallSolid, pnl, BLACK);
     const word = 'GALLERIA';
-    for (let i = 0; i < word.length; i++) letters(c, word[i], CX, SITE.z0 - 3.35, 0, -1, ROOF + 5.1 - i * 3.05, 2.6, NPINK, 0.3);
-    letters(c, 'DOWNTOWN', CX, SITE.z0 + 0.65, 0, -1, ROOF + 14.6, 1.6, NTEAL, 0.3);
-    // the doors: a sunburst over them, its rays in the colours, the chrome round it, a marquee
+    for (let i = 0; i < word.length; i++) letters(c, word[i], CX, SITE.z0 - 3.35, 0, -1, ROOF + 5.1 - i * 3.05, 2.6, LGOLD, 0.3);
+    letters(c, 'DOWNTOWN', CX, SITE.z0 + 0.65, 0, -1, ROOF + 14.6, 1.6, LWHITE, 0.3);
+    // the doors: a sunburst over them, its rays gold and black, gold round it, a marquee
     const fa = [CX - 20, SITE.z0 - 3];
     const fb = [CX + 20, SITE.z0 - 3];
-    const RAYS = [YEL, PINK, CREAM, MINT, YEL, LAV];
-    for (let i = 0; i < 18; i++) add(M.wallSolid, onWall(fa, fb, 1, 0.1, fanUV(20, G + 0.4, 2.2, 9.2, Math.PI - (Math.PI * i) / 18, Math.PI - (Math.PI * (i + 1)) / 18, 1)), RAYS[i % RAYS.length]);
-    add(M.frame, onWall(fa, fb, 1, 0.16, fanUV(20, G + 0.4, 9.2, 9.9, 0, Math.PI, 24)), CHROME);
-    add(M.neon, onWall(fa, fb, 1, 0.2, fanUV(20, G + 0.4, 9.9, 10.1, 0, Math.PI, 24)), NPINK);
+    for (let i = 0; i < 18; i++) {
+      const ray = onWall(fa, fb, 1, 0.1, fanUV(20, G + 0.4, 2.2, 9.2, Math.PI - (Math.PI * i) / 18, Math.PI - (Math.PI * (i + 1)) / 18, 1));
+      if (i % 2) add(M.wallSolid, ray, BLACK);
+      else add(P.gold, ray, GOLD);
+    }
+    add(P.gold, onWall(fa, fb, 1, 0.16, fanUV(20, G + 0.4, 9.2, 9.9, 0, Math.PI, 24)), GOLD);
+    add(M.neon, onWall(fa, fb, 1, 0.2, fanUV(20, G + 0.4, 9.9, 10.1, 0, Math.PI, 24)), LWHITE);
     add(P.dark, onWall(fa, fb, 1, 0.14, fanUV(20, G + 0.4, 0, 2.2, 0, Math.PI, 12)));
     add(P.dark, onWall(fa, fb, 1, 0.18, rectUV(14.5, G, 25.5, G + 3.4)));
     const mq = new THREE.BoxGeometry(16, 0.9, 4.5);
     mq.translate(CX, G + 3.9, SITE.z0 - 5.2);
-    add(M.wallSolid, mq, TEAL);
+    add(M.wallSolid, mq, BLACK);
     for (let x = -7.8; x <= 7.8; x += 0.6) {
       const bb = new THREE.SphereGeometry(0.11, 6, 4);
       bb.translate(CX + x, G + 3.9, SITE.z0 - 7.5);
-      add(M.bulb, bb, srgb(1, 0.92, 0.7));
+      add(M.bulb, bb, srgb(1, 0.86, 0.58));
     }
-    // the corner towers: round, banded, portholes, a neon crown
+    // the corner towers: round, ivory and dark glass in turn, a gold crown lit in rings
     for (const x of [SITE.x0 + 10, SITE.x1 - 10]) {
       const z = SITE.z0 + 10;
       for (let i = 0; i < 14; i++) {
-        const g = new THREE.CylinderGeometry(8, 8, 2.7, 32, 1, true);
+        const g = new THREE.CylinderGeometry(i % 2 ? 7.85 : 8, i % 2 ? 7.85 : 8, 2.7, 32, 1, true);
         g.translate(x, G + 1.35 + i * 2.7, z);
-        add(M.wallSolid, g, i % 2 ? MINT : CREAM);
+        if (i % 2) add(P.navy, g);
+        else add(M.wallSolid, g, IVORY);
       }
-      for (let i = 1; i < 13; i += 2) for (let j = 0; j < 10; j++) {
-        const t = (j / 10) * TAU;
-        const d = new THREE.CircleGeometry(0.55, 14);
-        d.lookAt(new THREE.Vector3(Math.cos(t), 0, Math.sin(t)));
-        d.translate(x + Math.cos(t) * 8.06, G + 1.35 + i * 2.7, z + Math.sin(t) * 8.06);
-        add(P.dark, d);
+      for (let i = 1; i < 14; i++) {
+        const g = new THREE.TorusGeometry(8.02, 0.07, 4, 48).rotateX(Math.PI / 2);
+        g.translate(x, G + i * 2.7, z);
+        add(P.gold, g, GOLD);
       }
       const top = G + 14 * 2.7;
       let yc = top;
-      for (const [r, h, col] of [[8.6, 0.7, hex('#ffffff')], [6, 2.4, PINK], [4, 2, CREAM], [2.2, 1.6, YEL]]) {
+      for (const [r, h, col] of [[8.6, 0.7, WHITE], [6, 2.4, IVORY], [4, 2, GOLD], [2.2, 1.6, IVORY]]) {
         const g = new THREE.CylinderGeometry(r, r, h, 32);
         g.translate(x, yc + h / 2, z);
-        add(M.wallSolid, g, col);
+        add(col === GOLD ? P.gold : M.wallSolid, g, col);
         yc += h;
       }
-      for (const [r, y] of [[8.7, top + 0.75], [6.1, top + 3.15]]) add(M.neon, tube(ellipse(x, z, r, r, 40).map(([px, pz]) => [px, y, pz]), 0.12, true, 80), NTEAL);
+      const sp = new THREE.ConeGeometry(0.9, 6, 12);
+      sp.translate(x, yc + 3, z);
+      add(P.gold, sp, GOLD);
+      for (const [r, y] of [[8.7, top + 0.75], [6.1, top + 3.15]]) add(M.neon, tube(ellipse(x, z, r, r, 40).map(([px, pz]) => [px, y, pz]), 0.12, true, 80), LGOLD);
     }
-    // the crown over the court: octagons stepping up, glass sides, neon on their edges
+    // the crown over the court: octagons stepping up, clear glass, gold and white light on their edges
     const oct = (r) => Array.from({ length: 8 }, (_, i) => {
       const t = Math.PI / 8 + (i * Math.PI) / 4;
       return [CX + Math.cos(t) * r * 1.18, CZ + Math.sin(t) * r];
@@ -822,53 +839,61 @@ const DECO = {
     let yb = ROOF;
     for (let j = 0; j < CR.length; j++) {
       const [r, h] = CR[j];
-      add(P.rose, strip(oct(r), yb, yb + h));
-      c.R.add(M.neonSoft, strip(oct(r - 0.25), yb, yb + h), null, nextId(), { color: srgb(0.4, 0.55, 0.78) });
+      add(P.clear, strip(oct(r), yb, yb + h));
+      c.R.add(M.neonSoft, strip(oct(r - 0.25), yb, yb + h), null, nextId(), { color: srgb(0.72, 0.82, 0.94) });
       const next = CR[j + 1];
-      add(M.wallSolid, plate(oct(r + 0.6), next ? [oct(next[0] - 0.1)] : [], yb + h, yb + h + 0.6), CREAM);
-      const ring = oct(r + 0.62);
-      for (let i = 0; i < 8; i++) add(M.neon, tube([[ring[i][0], yb + h + 0.62, ring[i][1]], [ring[(i + 1) % 8][0], yb + h + 0.62, ring[(i + 1) % 8][1]]], 0.12, false, 2), i % 2 ? NPINK : NTEAL);
+      add(M.wallSolid, plate(oct(r + 0.6), next ? [oct(next[0] - 0.1)] : [], yb + h, yb + h + 0.6), IVORY);
+      // (from the court below: white in the hall's light)
+      c.R.add(M.hallBox, flip(plate(oct(r + 0.6), next ? [oct(next[0] - 0.1)] : [], yb + h - 0.03)), null, nextId(), { color: hex('#f7f4ee') });
+      add(P.gold, strip(oct(r + 0.62), yb + h + 0.1, yb + h + 0.5), GOLD);
+      const ring = oct(r + 0.64);
+      for (let i = 0; i < 8; i++) add(M.neon, tube([[ring[i][0], yb + h + 0.62, ring[i][1]], [ring[(i + 1) % 8][0], yb + h + 0.62, ring[(i + 1) % 8][1]]], 0.12, false, 2), j % 2 ? LWHITE : LGOLD);
       yb += h + 0.6;
     }
     const fin = new THREE.ConeGeometry(2.2, 7, 8);
     fin.translate(CX, yb + 3.5, CZ);
-    add(P.gold, fin, YEL);
-    // the naves: pitched glass roofs, chrome ribs
-    naveRoofs(c, { glass: P.aqua, profile: [[-(VOID.hw + 0.8), 0], [0, 5.5], [VOID.hw + 0.8, 0]], ridge: 5.5, rib: CHROME, ribPen: M.frame, ribStep: 3 });
-    // the plaza: rings of colour round the doors, palms
+    add(P.gold, fin, GOLD);
+    // the naves: pitched roofs of clear glass, white ribs
+    naveRoofs(c, { glass: P.clear, skyIn: srgb(0.72, 0.82, 0.94), profile: [[-(VOID.hw + 0.8), 0], [0, 5.5], [VOID.hw + 0.8, 0]], ridge: 5.5, rib: WHITE, ribPen: M.frame, ribStep: 3 });
+    // the plaza: rings of stone, black granite and gold round the doors, palms
     for (let i = 0; i < 6; i++) {
       const g = new THREE.RingGeometry(10 + i * 3, 12.6 + i * 3, 40, 1, 0, Math.PI).rotateX(-Math.PI / 2);
       g.translate(CX, G + 0.03 + i * 0.001, SITE.z0 - 3);
-      B.add(M.court, g, null, nextId(), { color: [PINK, MINT, CREAM, LAV, YEL, MINT][i] });
+      B.add(M.court, g, null, nextId(), { color: [STONE, BLACK, IVORY, GOLD, STONE, BLACK][i] });
     }
     const pl = [];
     for (let x = SITE.x0 + 6; x < SITE.x1 - 4; x += 11) if (Math.abs(x - CX) > 30) pl.push([x, SITE.z0 - 12]);
     for (let z = SITE.z0 + 22; z < SITE.z1 - 6; z += 13) pl.push([SITE.x0 - 3, z], [SITE.x1 + 3, z]);
     palms(c, pl, 11, 14, srgb(0.74, 0.7, 0.62));
-    inside(c, {
-      floor: hex('#f0d6c0'),
-      inlays: [[-1.5, 0.7, PINK], [-3, 0.7, MINT], [-4.5, 0.7, YEL], [-7, 0.4, TEAL]],
-      slab: hex('#fff6ea'),
-      fascia: (k) => (k % 2 ? PINK : MINT),
-      edge: CHROME,
-      led: (k) => (k % 2 ? srgb(1, 0.42, 0.78) : srgb(0.3, 1, 0.9)),
-      rail: CHROME,
-      pier: hex('#2aa6a3'),
-      wallIn: hex('#ffe9d8'),
-      glow: [srgb(0.46, 0.38, 0.42), srgb(0.36, 0.46, 0.44), srgb(0.46, 0.42, 0.34)],
-      signs: [TEAL, PINK, LAV, YEL, hex('#ff8a7a'), MINT],
-      column: CREAM,
-      capital: CHROME,
+    // inside: the great hall in daylight - white marble, gold, black lacquered shop fronts
+    // (the block's pens are the city's by their prototype: a spread would lose them)
+    const H = { ...c, M: Object.assign(Object.create(M), { inBox: M.hallBox, inGloss: M.hallGloss, inCyl: M.hallCyl, inLamp: M.hallLamp }) };
+    inside(H, {
+      floorPen: M.hallFloor,
+      floor: hex('#ffffff'),
+      inlays: [[-1.5, 0.6, GOLD], [-2.7, 0.9, BLACK], [-4.2, 0.35, GOLD]],
+      slab: hex('#f7f4ee'),
+      fascia: hex('#f6f2ea'),
+      edge: GOLD,
+      led: srgb(1, 0.9, 0.72),
+      rail: GOLD,
+      pier: BLACK,
+      wallIn: hex('#f4f0e8'),
+      glow: [srgb(0.44, 0.41, 0.37), srgb(0.37, 0.38, 0.41), srgb(0.45, 0.4, 0.35), srgb(0.32, 0.32, 0.34)],
+      signs: [BLACK, hex('#0f4d3f'), BLACK, hex('#5a1f2e'), hex('#1d2a44'), hex('#2a2a30')],
+      column: hex('#f4f1ea'),
+      capital: GOLD,
     });
-    // the court: a round fountain stepped in pastel, and the chandelier of neon rings under the crown
-    const I = { ...c, B: c.R };
-    fountain(I, CX, CZ, [[8, 0.6], [5.5, 0.5], [3, 0.5]], { stonePen: M.inGloss, stone: PINK, rim: CHROME, rimPen: P.goldIn, jet: 3.5 });
-    for (const [r, y, col] of [[9, ROOF - 2.5, srgb(1, 0.4, 0.75)], [6.5, ROOF - 4, srgb(0.3, 1, 0.9)], [4, ROOF - 5.4, srgb(1, 0.85, 0.4)], [2, ROOF - 6.6, srgb(0.7, 0.5, 1)]]) {
-      c.R.add(M.inLamp, tube(ellipse(CX, CZ, r * 1.15, r, 40).map(([x, z]) => [x, y, z]), 0.16, true, 80), null, nextId(), { color: col });
+    // the court: a round fountain of white marble rimmed in gold, and a chandelier of rings of
+    // light under the crown
+    const I = { ...H, B: c.R };
+    fountain(I, CX, CZ, [[8, 0.6], [5.5, 0.5], [3, 0.5]], { stonePen: M.hallGloss, stone: hex('#f4f1ea'), rim: GOLD, rimPen: P.goldIn, jet: 3.5 });
+    for (const [r, y, col] of [[9, ROOF - 2.5, LWHITE], [6.5, ROOF - 4, LGOLD], [4, ROOF - 5.4, LWHITE], [2, ROOF - 6.6, LGOLD]]) {
+      c.R.add(M.hallLamp, tube(ellipse(CX, CZ, r * 1.15, r, 40).map(([x, z]) => [x, y, z]), 0.16, true, 80), null, nextId(), { color: col });
     }
     for (let i = 0; i < 8; i++) {
       const t = (i / 8) * TAU;
-      c.R.add(P.goldIn, tube([[CX + Math.cos(t) * 10.35, ROOF + 6, CZ + Math.sin(t) * 9], [CX + Math.cos(t) * 10.35, ROOF - 2.5, CZ + Math.sin(t) * 9]], 0.05, false, 2), null, nextId(), { color: CHROME });
+      c.R.add(P.goldIn, tube([[CX + Math.cos(t) * 10.35, ROOF + 6, CZ + Math.sin(t) * 9], [CX + Math.cos(t) * 10.35, ROOF - 2.5, CZ + Math.sin(t) * 9]], 0.05, false, 2), null, nextId(), { color: GOLD });
     }
   },
 };

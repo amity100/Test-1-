@@ -685,6 +685,55 @@ export function floorTexture(kind) {
       g.lineTo(256, k * 64);
       g.stroke();
     }
+  } else if (kind === 'marble') {
+    // (ROADMAP 11.31, a mall's great hall) white marble, four slabs, a few grey veins; at their
+    // corners a black diamond set in gold
+    g.fillStyle = '#f3f0ea';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 4; i++) {
+      g.fillStyle = i % 3 ? '#efebe4' : '#f6f4ef';
+      g.fillRect((i % 2) * 128, (i >> 1) * 128, 128, 128);
+    }
+    g.lineCap = 'round';
+    let s = 19;
+    const r = () => ((s = (s * 16807) % 2147483647) % 10000) / 10000;
+    for (let i = 0; i < 9; i++) {
+      g.strokeStyle = `rgba(120, 118, 124, ${0.12 + r() * 0.16})`;
+      g.lineWidth = 0.8 + r() * 1.2;
+      g.beginPath();
+      let x = r() * 256;
+      let y = r() * 256;
+      g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) {
+        x += (r() - 0.3) * 40;
+        y += (r() - 0.5) * 30;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    g.strokeStyle = 'rgba(150, 140, 130, 0.55)';
+    g.lineWidth = 1.5;
+    for (let k = 0; k <= 2; k++) {
+      g.beginPath();
+      g.moveTo(k * 128, 0);
+      g.lineTo(k * 128, 256);
+      g.moveTo(0, k * 128);
+      g.lineTo(256, k * 128);
+      g.stroke();
+    }
+    for (let y = 0; y <= 256; y += 128) for (let x = 0; x <= 256; x += 128) {
+      for (const [d, col] of [[17, '#c9a24e'], [13, '#17161c']]) {
+        g.fillStyle = col;
+        g.beginPath();
+        g.moveTo(x, y - d);
+        g.lineTo(x + d, y);
+        g.lineTo(x, y + d);
+        g.lineTo(x - d, y);
+        g.closePath();
+        g.fill();
+      }
+    }
+    return canvasTexture(c, { repeat: true });
   } else if (kind === 'wood') {
     for (let k = 0; k < 16; k++) {
       g.fillStyle = k % 3 === 0 ? '#b98a62' : k % 3 === 1 ? '#a87a55' : '#c39770';
