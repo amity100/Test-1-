@@ -624,7 +624,8 @@ export class FreeDraw {
       c.p = [];
       for (let i = 0; i <= 8; i++) c.p.push([x + Math.cos((i / 8) * Math.PI * 2) * 0.008, y + Math.sin((i / 8) * Math.PI * 2) * 0.008]);
     }
-    if (this.game.lab) {
+    // (in a car, the regular game's too: the lines go onto it - ROADMAP 11.30)
+    if (this.game.lab || this.carOpen) {
       this.steady(c);
       return;
     }
@@ -2146,9 +2147,10 @@ export class FreeDraw {
     if (turning) this.render();
     // (ROADMAP 11.10) the model by the drawing, turning
     if (this.view && ((this.PR && this.PR.ok) || this.PW || this.PG)) this.view.frame(dt);
-    // not on foot any more (in a car, swimming, down...), or the game stopped: the pen goes
+    // not on foot any more (in a car, swimming, down...), out of the car it was out for or into one
+    // (Q again: the pen of where you are), or the game stopped: the pen goes
     const inCar = !!(game.fuse && p.inVehicle && p.mode === 'vehicle');
-    if ((p.mode !== 'foot' && !inCar) || (p.inVehicle && !inCar) || game.state !== 'play' || (game.dialog && game.dialog.open)) {
+    if ((p.mode !== 'foot' && !inCar) || (p.inVehicle && !inCar) || this.carOpen !== inCar || game.state !== 'play' || (game.dialog && game.dialog.open)) {
       this.close();
       return;
     }

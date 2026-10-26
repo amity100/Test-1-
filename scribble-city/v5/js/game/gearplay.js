@@ -9,7 +9,8 @@ import { ITEMS, OPEN_ORDER, CATS, CAT_ORDER } from './itemcat.js';
 // twelve open, 3 at twenty-four). A use costs ink (game/ink.js); each has its time to be ready again.
 //
 // The lab (?lab=1): everything open at level 3 - or ?lv=1/2 - as it always was; with ?prog=1 the lab
-// plays it as a new game does (saved apart).
+// plays it as a new game does (saved apart). The regular game (ROADMAP 11.30): the same as the lab
+// while every blueprint is open (the pause menu's option, ROADMAP 9.1); with it off, as a new game.
 
 const KEY = 'scribble-city-v5-gear';
 // (a level's price at the garage: 2 and 3, by the stage it opens at)
@@ -26,8 +27,16 @@ export class GearPlay {
     this.state = this.load();
   }
 
-  // everything open, every level: the lab as it is
+  // everything open, every level: the lab as it is (and the regular game, every blueprint open)
   all() {
+    if (this.prog) return false;
+    if (this.lab) return true;
+    const A = this.game.album;
+    return !!(A && A.allOpen);
+  }
+
+  // (the lab's own: nothing kept)
+  labAll() {
     return this.lab && !this.prog;
   }
 
@@ -109,7 +118,7 @@ export class GearPlay {
   load() {
     const start = OPEN_ORDER.filter((id) => ITEMS[id].stage === 1);
     const out = { open: start.slice(), lv: {}, pages: 0, found: [] };
-    if (this.all()) return out;
+    if (this.labAll()) return out;
     try {
       const o = JSON.parse(localStorage.getItem(KEY + (this.lab ? '-lab' : '')) || 'null');
       if (o && Array.isArray(o.open)) {
@@ -125,7 +134,7 @@ export class GearPlay {
   }
 
   save() {
-    if (this.all()) return;
+    if (this.labAll()) return;
     try {
       localStorage.setItem(KEY + (this.lab ? '-lab' : ''), JSON.stringify(this.state));
     } catch (err) {

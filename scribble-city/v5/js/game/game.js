@@ -303,8 +303,9 @@ export class Game {
     // quick signs
     this.lab = !this.classic && (this.params.has('lab') || (typeof window !== 'undefined' && !!window.SC_LAB));
     this.signs = this.lab ? new Signs(this) : null;
-    // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car
-    this.fuse = this.lab ? new Fuse(this) : null;
+    // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car (since 11.30
+    // drawing on your car is in the regular game too, asked for; the rest of the lab stays there)
+    this.fuse = this.classic ? null : new Fuse(this);
     // (ROADMAP 11.28) what the things of the pen do: the turbo, the rewind, the missiles, the dome...
     this.gear = this.fuse ? new Gear(this) : null;
     // (ROADMAP 11.23) the lab's first mission: the broken bridge - drawing on your car to get over
@@ -437,9 +438,9 @@ export class Game {
       $('opt-invert').checked = v.invertY;
       $('opt-drive').value = v.touchDrive;
       $('opt-drive-row').classList.toggle('hidden', !this.touch || this.classic);
-      // (ROADMAP 11.24, the lab: drawing on your car - a part said, then drawn, or as in 11.22)
+      // (ROADMAP 11.24: drawing on your car - a part said, then drawn, or as in 11.22)
       $('opt-carpen').value = v.carPen;
-      $('opt-carpen-row').classList.toggle('hidden', !this.lab);
+      $('opt-carpen-row').classList.toggle('hidden', !this.fuse);
       $('opt-subs').checked = v.subtitles;
       $('opt-voices').checked = v.voices;
       $('opt-boil').checked = pick('boil');
@@ -1001,9 +1002,10 @@ export class Game {
       dt *= this.wheel.slow;
     }
     // (ROADMAP 11.21, the lab: the pen out - the city slows right down, time to draw on what is
-    // moving; what you see go by as it really goes - the pen, its camera - keeps the real step)
+    // moving; what you see go by as it really goes - the pen, its camera - keeps the real step. The
+    // regular game: only in a car - on foot the pen draws on the run, as it did)
     this.realDt = dt;
-    if (this.fuse) dt *= this.fuse.timeK(dt, !!(this.freedraw && this.freedraw.isOpen) && this.state === 'play');
+    if (this.fuse) dt *= this.fuse.timeK(dt, !!(this.freedraw && this.freedraw.isOpen && (this.lab || this.freedraw.carOpen)) && this.state === 'play');
     // (ROADMAP 11.28: frozen while the rewind runs back, slow a moment after it - game/gear.js)
     if (this.gear) dt *= this.gear.timeK(this.realDt);
     this.time += dt;
