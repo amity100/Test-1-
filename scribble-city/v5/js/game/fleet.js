@@ -3,6 +3,8 @@ import { Doodle } from './doodle.js';
 import { civilianLook } from './looks.js';
 import { randomCarSpec, TAXI_YELLOW } from '../render/cars.js';
 import { groundHeight } from '../world/layout.js';
+import { Deliveries } from './deliveries.js';
+import { Patrol } from './patrol.js';
 
 // The rest of the street's traffic (ROADMAP 4.1), besides the sedans, the taxis, the SUVs, the
 // vans, the sports cars, the buses and the police:
@@ -19,6 +21,14 @@ import { groundHeight } from '../world/layout.js';
 //   an ambulance, a fire engine        now and then, the siren going, the lights flashing,
 //                                      faster than the rest; at a red light they slow down and
 //                                      go through
+//   (GTA IV) the deliveries            a firm's van or box truck double-parked by a shop, its
+//                                      hazards going, the driver carrying the boxes in
+//                                      (game/deliveries.js)
+//   (GTA IV) the patrol's stops        the patrol car pulls somebody over: the lights, the curb,
+//                                      the officer at the window with the pad (game/patrol.js)
+// The taxis (GTA IV) cruise the curb lane for a fare, and pull over for one - the signal, over to
+// the curb, the hazards - and back out after; the garbage truck works the mainland's bins too,
+// its hazards going at each, its worker off the step and through a gap in the parked cars.
 // (?classic: none of it)
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -66,6 +76,8 @@ export class Fleet {
     this.taxiT = 0;
     // (counted for the tests)
     this.stats = { motos: 0, trucks: 0, classics: 0, limos: 0, garbage: 0, bins: 0, emergency: 0, hails: 0, pickups: 0, dropoffs: 0 };
+    this.deliveries = new Deliveries(this);
+    this.patrol = new Patrol(this);
   }
 
   get traffic() {
@@ -104,6 +116,8 @@ export class Fleet {
     } else if (k === 'truck' || k === 'garbage' || k === 'firetruck') c.maxSpeed = Math.min(c.maxSpeed, 8.5);
     else if (k === 'limo') c.maxSpeed = Math.min(c.maxSpeed, 9);
     if (c.spec.curb) c.curb = true;
+    // (GTA IV: a taxi with nobody in it keeps to the curb lane, looking for a fare)
+    if (c.spec.taxi && !c.police && Math.random() < 0.75) c.curb = true;
     if (c.spec.emergency) {
       c.emergency = true;
       c.siren = true;
@@ -137,12 +151,17 @@ export class Fleet {
         if (off || !c.driver) {
           if (c.pickup) this.letGo(c);
           c.dropT = undefined;
+          c.drop = null;
+          c.pull = false;
         } else this.taxi(c, dt, look, p);
       }
       if (c.garbage) {
         if (off) this.manOff(c);
         else this.garbage(c, dt);
       }
+      if (c.delivery) this.deliveries.tend(c, dt);
+      if (c.tstop) this.patrol.tend(c, dt);
+      else if (look && c.patrol) this.patrol.look(c);
       if (c.spec.kind === 'moto') this.rider(c, dt);
       if (c.emergency && c.siren && !c.wrecked) {
         const d = Math.hypot(c.pos.x - cam.x, c.pos.z - cam.z);
@@ -169,6 +188,8 @@ export class Fleet {
         this.stats.garbage++;
       }
     }
+    // (GTA IV) a firm's van on its round of the shops
+    this.deliveries.specials(p, h);
     this.sirenT -= 2;
     if (this.sirenT <= 0 && !(game.police && game.police.hostile)) {
       const c = tr.spawnCar(p, 90, 180, { ...(Math.random() < 0.6 ? AMBULANCE : FIRE) }, { anywhere: true });
@@ -180,8 +201,30 @@ export class Fleet {
   // how fast a car of the fleet's may go now (Traffic.drive)
   want(c, dt) {
     if (c.garbage) return this.garbageWant(c);
-    if (c.pickup) return this.stopFor(c, c.pickup.along0 - c.pickup.run);
+    if (c.delivery) return this.deliveries.want(c, dt);
+    if (c.tstop) return this.patrol.wantPolice(c, dt);
+    if (c.pulled) return this.patrol.wantPulled(c, dt);
+    if (c.pickup) {
+      // (GTA IV: the signal, over to the curb by the one waving, the hazards once there)
+      const left = c.pickup.along0 - c.pickup.run;
+      // (where it stops: Traffic.roomBeside)
+      c.pullLeft = Math.max(0, left);
+      if (left < 14 && !c.pull) {
+        c.pull = true;
+        c.pullTo = this.traffic.curbRoom(c, Math.max(0, left));
+      }
+      if (c.speed < 0.3 && left < 1.5) c.hazard = true;
+      else c.sig2 = -1;
+      return this.stopFor(c, left);
+    }
+    if (c.drop) {
+      c.sig2 = -1;
+      c.pullLeft = Math.max(0, c.drop.left - c.drop.run);
+      return this.stopFor(c, c.drop.left - c.drop.run);
+    }
     if (c.dropT !== undefined) return 0;
+    // (and back out into the lane after: the left signal)
+    if (c.goT > 0) c.sig2 = 1;
     return Infinity;
   }
 
@@ -209,17 +252,28 @@ export class Fleet {
       P.t += dt;
       // pulled up: in they get, at the back door on the curb side
       if (c.speed < 0.3 && P.along0 - P.run < 1.5) {
-        P.stopped = true;
         const dx = c.pos.x - fx * 0.7 - fz * (c.halfWid + 0.45);
         const dz = c.pos.z - fz * 0.7 + fx * (c.halfWid + 0.45);
         P.door.set(dx, 0, dz);
+        if (!P.stopped) {
+          P.stopped = true;
+          // (the sidewalk just in from the curb, level with the door: where they cross from)
+          const g = c.path && c.path.gates[0];
+          if (g && g.off !== undefined) {
+            const road = g.dz !== 0 ? g.from.ave : g.from.street;
+            const v = road.half - g.off - (c.side || 0) + 0.7;
+            P.via = [c.pos.x - fx * 0.7 - fz * v, c.pos.z - fz * 0.7 + fx * v];
+          }
+        }
         if (Math.hypot(w.pos.x - dx, w.pos.z - dz) < 0.5) {
           c.fare = w.fig.look;
           c.fareT = 35 + Math.random() * 60;
           civs.remove(w);
           this.near(c, 30) && game.audio.play('click', 0.5);
           c.pickup = null;
-          c.goT = 1.2;
+          c.goT = 1.6;
+          c.pull = false;
+          c.hazard = false;
           this.stats.pickups++;
         }
       }
@@ -232,6 +286,16 @@ export class Fleet {
     }
     if (c.fare) {
       c.fareT -= dt;
+      // (GTA IV: pulling over to let them out - the signal, over to the curb, stopped)
+      if (c.drop) {
+        c.drop.run += c.speed * dt;
+        if (c.speed < 0.3 && c.drop.left - c.drop.run < 1.2) {
+          c.drop = null;
+          c.dropT = 0.9;
+          c.hazard = true;
+        }
+        return;
+      }
       if (c.dropT !== undefined) {
         c.dropT -= dt;
         if (c.dropT <= 0 && c.speed < 0.3) {
@@ -243,7 +307,9 @@ export class Fleet {
           this.near(c, 30) && game.audio.play('click', 0.5);
           c.fare = null;
           c.dropT = undefined;
-          c.goT = 1.5;
+          c.goT = 1.6;
+          c.pull = false;
+          c.hazard = false;
           this.stats.dropoffs++;
         }
         return;
@@ -254,7 +320,15 @@ export class Fleet {
           c.fare = null;
           return;
         }
-        c.dropT = 1.2;
+        // (its back door by a gap between the parked cars, for them to step out onto the sidewalk -
+        // short of the crossing ahead)
+        const left0 = Math.max(9, (c.speed * c.speed) / (2 * 2.4));
+        const g = c.path && c.path.gates[0];
+        const upTo = Math.min(left0 + 14, g ? g.s - c.s - c.halfLen - 4 : left0);
+        const left = this.traffic.curbs && upTo > left0 ? this.traffic.curbs.gapAt(c, left0, left0, upTo, 1.4) + 0.7 : left0;
+        c.drop = { left, run: 0 };
+        c.pull = true;
+        c.pullTo = this.traffic.curbRoom(c, left);
       }
       return;
     }
@@ -276,7 +350,7 @@ export class Fleet {
     }
     if (!best) return;
     best.hailedT = game.time + 60;
-    if (Math.random() > 0.35) return;
+    if (Math.random() > 0.5) return;
     this.hail(c, best, bAlong);
   }
 
@@ -284,7 +358,12 @@ export class Fleet {
   hail(c, w, along) {
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
-    const P = { who: w, along0: along + 0.7, run: 0, t: 0, stopped: false, door: new THREE.Vector3(), arm: new THREE.Vector3() };
+    // (GTA IV: its back door by a gap between the cars parked at the curb, near where they stand -
+    // they step through it, not through a parked car: game/curbs.js gapAt)
+    const g = c.path && c.path.gates[0];
+    const upTo = Math.min(along + 18, g ? g.s - c.s - c.halfLen - 4 : along);
+    const at = this.traffic.curbs && upTo > along ? this.traffic.curbs.gapAt(c, along, Math.max(8, along - 6), upTo, 1.4) : along;
+    const P = { who: w, along0: at + 0.7, run: 0, t: 0, stopped: false, door: new THREE.Vector3(), arm: new THREE.Vector3(), via: null, go: { x: 0, z: 0, speed: 1.7 } };
     c.pickup = P;
     const roadYaw = Math.atan2(fz, -fx);
     w.ctrl = (me) => {
@@ -296,7 +375,12 @@ export class Fleet {
         return null;
       }
       if (me.fig.reachR === P.arm) me.fig.reachR = null;
-      return { x: P.door.x, z: P.door.z, speed: 1.7 };
+      // (along the sidewalk to the gap first, then across to the door)
+      const V = P.via;
+      if (V && !P.atVia && Math.hypot(me.pos.x - V[0], me.pos.z - V[1]) < 0.6) P.atVia = true;
+      P.go.x = V && !P.atVia ? V[0] : P.door.x;
+      P.go.z = V && !P.atVia ? V[1] : P.door.z;
+      return P.go;
     };
     this.stats.hails++;
     if (this.near(c, 40)) this.game.bubbles.say(w, pick(['Taxi!', 'Taxi! Over here!', 'Hey, taxi!']));
@@ -305,6 +389,8 @@ export class Fleet {
   letGo(c) {
     const P = c.pickup;
     c.pickup = null;
+    c.pull = false;
+    c.hazard = false;
     if (!P) return;
     const w = P.who;
     if (w.ctrl && !w.scripted) w.ctrl = null;
@@ -337,8 +423,10 @@ export class Fleet {
     const fz = Math.cos(c.yaw);
     let best = null;
     let bd = Infinity;
-    for (const o of this.bins()) {
-      if (G.done.has(o)) continue;
+    const bins = this.bins();
+    for (let i = 0; i < bins.length; i++) {
+      const o = bins[i];
+      if (o.state !== 'here' || G.done.has(o)) continue;
       const dx = o.x - c.pos.x;
       const dz = o.z - c.pos.z;
       const along = dx * fx + dz * fz;
@@ -366,14 +454,17 @@ export class Fleet {
     return this.stopFor(c, dist);
   }
 
-  // the sidewalk's bins near the truck (the city's, still there)
+  // the sidewalk's bins (the city's; the mainland's while their blocks are there: the list made
+  // again when a block comes or goes - world/mainland/index.js roofVer)
   bins() {
-    const objs = this.game.world.objects.list;
-    if (!this._bins) {
+    const W = this.game.world;
+    const ver = W.roofVer || 0;
+    if (!this._bins || this._binsVer !== ver) {
+      this._binsVer = ver;
       this._bins = [];
-      for (const o of objs) if (o && o.kind === 'trash') this._bins.push(o);
+      for (const o of W.objects.list) if (o && o.kind === 'trash') this._bins.push(o);
     }
-    return this._bins.filter((o) => o.state === 'here');
+    return this._bins;
   }
 
   // the worker: on the back step, or off for the bin
@@ -399,6 +490,8 @@ export class Fleet {
     const sz = c.pos.z - fz * (c.halfLen + 0.55) + rz * 0.75;
     const f = G.man;
     G.t -= dt;
+    // (GTA IV: its hazards going while it stands at a bin)
+    c.hazard = G.state !== 'drive';
     if (G.state === 'drive') {
       if (f) {
         f.pos.set(sx, 0.42, sz);
@@ -438,6 +531,9 @@ export class Fleet {
     // where the bag goes in: behind the hopper
     const hx = c.pos.x - fx * (c.halfLen + 0.95);
     const hz = c.pos.z - fz * (c.halfLen + 0.95);
+    // (GTA IV: the mainland's curbs are lined with parked cars - the way to the sidewalk is through
+    // the gap between two of them, as the delivery drivers go: game/deliveries.js wayIn)
+    const way = G.way;
     if (G.state === 'off') {
       // down off the step
       G.x = sx;
@@ -446,13 +542,17 @@ export class Fleet {
       if (G.t < -0.3) {
         G.state = 'go';
         G.t = 0;
+        G.way = this.deliveries.wayIn(c, [sx, sz], fx, fz, rx, rz) || [];
+        G.wi = 0;
       }
+    } else if (G.state === 'go' && way && G.wi < way.length && G.t > -10) {
+      if (walk(way[G.wi][0], way[G.wi][1], 2.2)) G.wi++;
     } else if (G.state === 'go') {
       // to the bin (stopping short of it)
       const dx = bin.x - G.x;
       const dz = bin.z - G.z;
       const l = Math.hypot(dx, dz) || 1;
-      if (walk(bin.x - (dx / l) * 0.55, bin.z - (dz / l) * 0.55, 2.2) || G.t < -8) {
+      if (walk(bin.x - (dx / l) * 0.55, bin.z - (dz / l) * 0.55, 2.2) || G.t < -14) {
         G.state = 'grab';
         G.t = 0;
         f.yaw = Math.atan2(dx, dz);
@@ -466,8 +566,11 @@ export class Fleet {
         G.state = 'back';
         G.t = 0;
       }
+    } else if (G.state === 'back' && way && G.wi > 0 && G.t > -10) {
+      // (back the way it came, through the same gap)
+      if (walk(way[G.wi - 1][0], way[G.wi - 1][1], 2.2)) G.wi--;
     } else if (G.state === 'back') {
-      if (walk(hx, hz, 2.2) || G.t < -8) {
+      if (walk(hx, hz, 2.2) || G.t < -14) {
         G.state = 'toss';
         G.t = 0;
         f.yaw = c.yaw;
@@ -528,12 +631,15 @@ export class Fleet {
       c.garbage.man = null;
     }
     if (c.pickup) this.letGo(c);
+    if (c.delivery) this.deliveries.forget(c);
+    if (c.tstop || c.pulled) this.patrol.forget(c);
   }
 
   binDone(c) {
     const G = c.garbage;
     G.state = 'drive';
     G.bin = null;
+    G.way = null;
     G.t = 3;
     if (G.man) {
       G.man.carryL = null;
