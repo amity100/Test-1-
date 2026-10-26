@@ -345,7 +345,9 @@ export class MallLife {
   }
 
   close(m, st) {
-    for (const s of st.people) this.drop(s, true);
+    // (from the end: drop() splices each one out of the list - going forward, every other one was
+    // skipped and stayed behind in the city, a dozen more every time a mall was left)
+    for (let i = st.people.length - 1; i >= 0; i--) this.drop(st.people[i], true);
     st.people = [];
     for (const w of st.staff) this.game.civilians.remove(w.c);
     st.staff = [];
