@@ -6,6 +6,7 @@ import { AD_IDS } from './ads.js';
 import { palm } from './palms.js';
 import { randomCarSpec } from '../render/cars.js';
 import { CURB } from './layout.js';
+import { Parts, FB, COL, DOORS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, meters, wallLamp, tag, balconette, darker, lighter, plateSpans, doorSill, SILL, SLAT, SLAT_FACE, DETAIL_LOW } from './facades.js';
 
 // (v5, ROADMAP 11.2) The building kits of the city behind Ocean Drive. Every lot gets its own
 // building, the way the real South Beach was built a lot at a time: a row of shops of one floor
@@ -192,6 +193,15 @@ export function storefront(ctx, f, u0, u1, o, info = null) {
     for (let v = CURB + 0.3; v < G1 - 0.3; v += 0.36) fbox(ctx, f, M.frame, u0 + 0.04, v, -0.02, u1 - 0.04, v + 0.04, 0.0, srgb(0.5, 0.5, 0.56));
     fbox(ctx, f, M.steel, u0 - 0.04, G1 - 0.25, -0.15, u1 + 0.04, G1, 0.2, g);
     fcol(ctx, f, u0, CURB, -0.25, u1, G1, 0.05);
+    // (v5, GTA IV) and somebody has sprayed his name on it
+    {
+      const dr = diceAt(f, 13 + Math.round(u0 * 10));
+      if (dr() < 0.7) {
+        const P = o.P || new Parts(ctx);
+        tag(P, f, (u0 + u1) / 2 + (dr() - 0.5) * 0.6, CURB + 1.2 + dr() * 0.8, 0.02, Math.min(2.6, u1 - u0 - 0.5));
+        if (!o.P) P.flush();
+      }
+    }
     // (the sign of what was here, unlit)
     if (o.name && o.sign !== 'none') {
       const len = Math.min(u1 - u0 - 0.8, o.signLen || 3.6);
@@ -207,8 +217,10 @@ export function storefront(ctx, f, u0, u1, o, info = null) {
   // the wall either side of the glass, a hand's width deep
   fbox(ctx, f, M.wall, u0, CURB, -0.25, sg0, G1, 0, wall);
   fbox(ctx, f, M.wall, sg1, CURB, -0.25, u1, G1, 0, wall);
-  // the kick plate, the mullions, the bar over the glass
-  fbox(ctx, f, M.frame, sg0, CURB, 0, sg1, 0.7, 0.18, frame);
+  // the kick plate either side of the door (world/facades.js plateSpans), the doorway's sill, the
+  // mullions, the bar over the glass
+  for (const [a, b] of plateSpans(sg0, sg1, uDoor)) fbox(ctx, f, M.frame, a, CURB, 0, b, 0.7, 0.18, frame);
+  doorSill((...q) => fbox(ctx, f, M.frame, ...q, SILL), uDoor);
   const nm = Math.max(1, Math.round((sg1 - sg0) / 1.6));
   for (let k = 0; k <= nm; k++) {
     const u = sg0 + ((sg1 - sg0) * k) / nm;
@@ -249,6 +261,22 @@ export function storefront(ctx, f, u0, u1, o, info = null) {
   if (aw === 'canvas') canvasAwning(ctx, f, sg0, sg1, o.awCol);
   else if (aw === 'box') boxAwning(ctx, f, sg0, sg1, o.awCol);
   else if (aw === 'barrel') barrelAwning(ctx, f, sg0, sg1, o.awCol);
+  // (v5, GTA IV) the hardware of a shop front: a dark foot and a line of chrome on the kick plate,
+  // a bar across the glass under its transom, the box of the roll-down shutter over it and the
+  // runners down its sides, the stickers on the glass, the mat at the door (world/facades.js)
+  {
+    const P = o.P || new Parts(ctx);
+    const dr = diceAt(f, 11 + Math.round(u0 * 10));
+    const fid = nextId();
+    const cid = nextId();
+    for (const [a, b] of plateSpans(sg0, sg1, uDoor)) {
+      P.box(M.frame, f, a, CURB, 0.17, b, CURB + 0.1, 0.2, COL.dark, fid, FB.BACK);
+      P.box(M.frame, f, a, 0.64, 0.17, b, 0.7, 0.2, COL.steel, cid, FB.BACK);
+    }
+    for (const [a, b] of [[sg0, uDoor - 0.78], [uDoor + 0.78, sg1]]) if (b - a > 0.4) P.box(M.frame, f, a, 2.66, 0, b, 2.74, 0.12, frame, fid, FB.BACK);
+    shopHardware(P, f, sg0, sg1, { r: dr, top: G1, door: uDoor, housing: aw !== 'box' && aw !== 'barrel', housingCol: dr() < 0.6 ? COL.steel : darker(frame, 1.6) });
+    if (!o.P) P.flush();
+  }
   // the name
   const signCol = hex(o.signCol);
   const uc = (sg0 + sg1) / 2;
@@ -333,10 +361,55 @@ export function shopStrip(ctx, spec) {
   }
   // ---- the shops
   const sv = (G1 + top) / 2;
+  // (v5, GTA IV: the small parts of the row, world/facades.js - its own dice)
+  const PP = new Parts(ctx);
+  const dia = dialectOf(ctx);
+  const dr = diceAt(f, 5);
   bays.forEach(([b0, b1], i) => {
     const s = spec.shops[i];
-    storefront(ctx, f, b0, b1, { ...s, color: wall, depth, signV: sv, signLen: Math.min(4.4, (top - G1 - 0.3) * 4) }, info);
+    storefront(ctx, f, b0, b1, { ...s, color: wall, depth, signV: sv, signLen: Math.min(4.4, (top - G1 - 0.3) * 4), P: PP }, info);
   });
+  // ---- (v5, GTA IV) the row up close: a moulding along the top of the shop fronts, the old ones'
+  // brackets under the coping, the pipe down an end pilaster, a meter on a pier, a sign hung out
+  // on its bracket over the sidewalk from a pier
+  {
+    const pf = shifted(f, 0.24);
+    PP.box(M.wall, f, -0.06, G1 - 0.04, 0, L + 0.06, G1 + 0.08, 0.3, lighter(trim, 0.2), nextId(), FB.BACK);
+    // each shop's fascia, a moulding round the band its name is on; the pilasters' feet
+    const fc = lighter(trim, 0.3);
+    bays.forEach(([b0, b1]) => {
+      const fid = nextId();
+      const v0 = G1 + 0.16;
+      const v1 = top - 0.14;
+      PP.box(M.wall, f, b0 + 0.06, v0, 0, b1 - 0.06, v0 + 0.07, 0.06, fc, fid, FB.BACK);
+      PP.box(M.wall, f, b0 + 0.06, v1 - 0.07, 0, b1 - 0.06, v1, 0.06, fc, fid, FB.BACK);
+      PP.box(M.wall, f, b0 + 0.06, v0 + 0.07, 0, b0 + 0.13, v1 - 0.07, 0.06, fc, fid, FB.BACK | FB.TOP | FB.BOTTOM);
+      PP.box(M.wall, f, b1 - 0.13, v0 + 0.07, 0, b1 - 0.06, v1 - 0.07, 0.06, fc, fid, FB.BACK | FB.TOP | FB.BOTTOM);
+    });
+    const bid = nextId();
+    for (const [p0, p1] of piers) PP.box(M.wall, f, p0 - 0.07, CURB, 0.24, p1 + 0.07, CURB + 0.42, 0.29, darker(trim, 0.8), bid, FB.BACK);
+    if (dia !== 'deco') {
+      const n = Math.max(3, Math.round(L / 0.85));
+      const bid = nextId();
+      for (let k = 0; k <= n; k++) {
+        const u = 0.1 + ((L - 0.2) * k) / n;
+        PP.box(M.wall, f, u - 0.07, top + 0.42, 0, u + 0.07, top + 0.75, 0.27, darker(trim, 0.9), bid, FB.BACK);
+      }
+    }
+    downpipe(PP, pf, dr() < 0.5 ? 0.27 : L - 0.27, top + 0.68, CURB, dr() < 0.5 ? COL.zinc : darker(wall, 0.8));
+    const inner = piers.slice(1, -1);
+    if (inner.length && dr() < 0.6) {
+      const [p0, p1] = inner[Math.floor(dr() * inner.length)];
+      meters(PP, pf, (p0 + p1) / 2 - 0.13, CURB + 0.8, 1, { gas: dr() < 0.4 });
+    }
+    // (a sign on a bracket: the shop's name again, out over the sidewalk, on the old streets most)
+    bays.forEach(([b0], i) => {
+      const s = spec.shops[i];
+      if (s.shutter || dr() > (dia === 'deco' ? 0.3 : 0.55)) return;
+      bladeSign(PP, pf, b0 - P / 2, G1 + 0.62, s.name, hex(s.signCol), { font: s.font, w0: 0.02, len: 0.95, board: dr() < 0.5 ? COL.dark : lighter(wall, 0.4) });
+    });
+  }
+  PP.flush();
   // ---- the roof, the sides, the back
   roofStuff(ctx, f, L, D, top, { floors: 1, color: wall, trim, hotel: false }, RF);
   for (const [k, uEdge, dir] of [['a', 0, -1], ['b', L, 1]]) {
@@ -371,9 +444,44 @@ function flatWindow(ctx, f, uc, v0, ww, wh, o = {}) {
     for (let v = v0 + 0.18; v < v0 + wh - 0.1; v += 0.2) fbox(ctx, f, M.frame, uc - ww / 2, v, 0.02, uc + ww / 2, v + 0.03, 0.07, fr, id);
   } else fbox(ctx, f, M.frame, uc - 0.03, v0, 0, uc + 0.03, v0 + wh, 0.06, fr, id);
   fbox(ctx, f, M.frame, uc - ww / 2 - 0.16, v0 - 0.16, 0, uc + ww / 2 + 0.16, v0 - 0.06, 0.2, o.sill || WHITE, id);
-  if (o.blinds !== false && r() < 0.18) fbox(ctx, f, M.frame, uc - ww / 2, v0 + wh * r.range(0.45, 0.8), 0.02, uc + ww / 2, v0 + wh, 0.03, srgb(0.95, 0.9, 0.8));
-  if (o.ac && r() < 0.14) airCon(ctx, f, uc, v0);
+  const blind = o.blinds !== false && r() < 0.18;
+  if (blind) fbox(ctx, f, M.frame, uc - ww / 2, v0 + wh * r.range(0.45, 0.8), 0.02, uc + ww / 2, v0 + wh, 0.03, srgb(0.95, 0.9, 0.8));
+  const ac = o.ac && r() < 0.14;
+  if (ac) airCon(ctx, f, uc, v0);
+  // (v5, GTA IV) the wall round it standing out a hand's width, so that the glass is set back in
+  // it (its sides in the shade, its head over it); behind the glass somebody's curtains, by the
+  // building's own dice (world/facades.js)
+  const P = o.P;
+  if (!P) return ac;
+  if (o.wall) {
+    const rid = nextId();
+    const d = o.reveal || 0.15;
+    const t = 0.11;
+    const top = o.brow ? 0.07 : 0.12;
+    const head = !o.noTop;
+    P.box(M.wall, f, uc - ww / 2 - 0.08 - t, v0 - 0.06, 0, uc - ww / 2 - 0.08, v0 + wh + 0.08, d, o.wall, rid, FB.BACK | FB.BOTTOM);
+    P.box(M.wall, f, uc + ww / 2 + 0.08, v0 - 0.06, 0, uc + ww / 2 + 0.08 + t, v0 + wh + 0.08, d, o.wall, rid, FB.BACK | FB.BOTTOM);
+    if (head) P.box(M.wall, f, uc - ww / 2 - 0.08 - t, v0 + wh + 0.08, 0, uc + ww / 2 + 0.08 + t, v0 + wh + 0.08 + top, d, o.wall, rid, FB.BACK);
+  }
+  const dr = o.r;
+  if (dr && !blind && dr() < (o.life !== undefined ? o.life : 0.45)) {
+    const k = dr();
+    const cw = 0.032;
+    if (k < 0.6) {
+      const col = CURTAIN_COLS[Math.floor(dr() * CURTAIN_COLS.length)];
+      const a = ww * (0.18 + dr() * 0.18);
+      P.box(M.prop, f, uc - ww / 2, v0 + 0.02, cw - 0.008, uc - ww / 2 + a, v0 + wh - 0.02, cw, col, nextId(), FB.BACK);
+      if (dr() < 0.7) P.box(M.prop, f, uc + ww / 2 - a, v0 + 0.02, cw - 0.008, uc + ww / 2, v0 + wh - 0.02, cw, col, nextId(), FB.BACK);
+    } else {
+      // a plant on the sill inside
+      const pc = uc + (dr() - 0.5) * ww * 0.6;
+      P.box(M.prop, f, pc - 0.08, v0, cw - 0.008, pc + 0.08, v0 + 0.15, cw + 0.015, COL.pot, nextId(), FB.BACK);
+      P.box(M.leaf, f, pc - 0.15, v0 + 0.15, cw - 0.008, pc + 0.15, v0 + 0.42, cw + 0.025, COL.leaf, nextId(), FB.BACK);
+    }
+  }
+  return ac;
 }
+const CURTAIN_COLS = [srgb(0.96, 0.92, 0.82), srgb(0.98, 0.98, 0.96), srgb(0.92, 0.7, 0.72), srgb(0.72, 0.82, 0.92), srgb(0.75, 0.9, 0.8), srgb(0.98, 0.88, 0.6), srgb(0.62, 0.2, 0.24), srgb(0.9, 0.55, 0.3)];
 
 // ------------------------------------------------------------------ garden apartments
 /**
@@ -411,6 +519,9 @@ export function apartments(ctx, spec) {
   const wf = U ? shifted(bf, -(BD - bd)) : bf; // the front with the entrance (the back wing's, in a U)
   // (the roof you walk on: in a U the back wing's, the courtyard open in front of it)
   const RF = roofOf(ctx, U ? { f: wf, L, D: bd, h, top, floors, doors: [], shop: null, kit: 'apts' } : info);
+  // (v5, GTA IV: the small parts, by the building's own dice - world/facades.js)
+  const PA = new Parts(ctx);
+  const ad = diceAt(f, 21);
   const uc = L / 2;
   const portW = 3.2;
   const yAt = (fl) => CURB + base + fl * FL;
@@ -429,7 +540,10 @@ export function apartments(ctx, spec) {
       for (let k = 0; k < n; k++) {
         const c = u0 + step * (k + 0.5);
         if (o.skip && Math.abs(c - o.skip) < portW / 2 + 0.7) continue;
-        flatWindow(ctx, sf, c, v0, sl ? 1.75 : 1.15, sl ? 1.3 : 1.45, { jalousie: o.jalousie, ac: true });
+        const ww0 = sl ? 1.75 : 1.15;
+        const hasAc = flatWindow(ctx, sf, c, v0, ww0, sl ? 1.3 : 1.45, { jalousie: o.jalousie, ac: true, P: PA, wall, brow: o.brows !== false && !sl, r: ad });
+        // (v5, GTA IV) an iron rail out in front of a window upstairs, the pots on its ledge
+        if (!hasAc && fl >= 1 && ad() < 0.18) balconette(PA, sf, c - ww0 / 2 - 0.22, c + ww0 / 2 + 0.22, v0 - 0.16, { r: ad, depth: 0.42 });
       }
     }
   };
@@ -511,7 +625,20 @@ export function apartments(ctx, spec) {
         const a = k * uw;
         fbox(ctx, bf, M.frame, a + 0.6, y0, 0, a + 1.5, y0 + 2.15, 0.06, dcol);
         fbox(ctx, bf, M.frame, a + 0.52, y0 + 2.15, 0, a + 1.58, y0 + 2.25, 0.09, WHITE);
-        flatWindow(ctx, bf, a + uw * 0.66, y0 + 0.95, 1.25, 1.25, { jalousie: true, ac: fl === 0 });
+        flatWindow(ctx, bf, a + uw * 0.66, y0 + 0.95, 1.25, 1.25, { jalousie: true, ac: fl === 0, P: PA, wall, r: ad });
+        // (v5, GTA IV) its number on the door, the knob, a lamp by it, the mat, a pot by the step
+        {
+          const nid = nextId();
+          for (let k2 = 0; k2 < 2; k2++) PA.box(M.prop, bf, a + 0.95 + k2 * 0.1 - 0.035, y0 + 1.55, 0.06, a + 0.95 + k2 * 0.1 + 0.035, y0 + 1.67, 0.07, COL.brass, nid, FB.BACK);
+          PA.box(M.prop, bf, a + 1.32, y0 + 0.98, 0.06, a + 1.38, y0 + 1.06, 0.12, COL.brass, nextId(), FB.BACK);
+          wallLamp(PA, bf, a + 1.8, y0 + 2.05, { body: COL.iron });
+          PA.box(M.prop, bf, a + 0.55, y0, 0.06, a + 1.55, y0 + 0.02, 0.62, srgb(0.36, 0.3, 0.26), nextId(), FB.BOTTOM);
+          if (ad() < 0.45) {
+            const pc = a + 0.32;
+            PA.box(M.prop, bf, pc - 0.14, y0, 0.12, pc + 0.14, y0 + 0.34, 0.4, ad() < 0.5 ? COL.pot : srgb(0.86, 0.84, 0.8), nextId(), FB.BOTTOM);
+            PA.box(M.leaf, bf, pc - 0.22, y0 + 0.34, 0.05, pc + 0.22, y0 + 0.8 + ad() * 0.3, 0.47, ad() < 0.6 ? COL.leaf : COL.bloom[Math.floor(ad() * COL.bloom.length)], nextId(), 0);
+          }
+        }
       }
     }
     // the name on the walkway's edge
@@ -596,6 +723,25 @@ export function apartments(ctx, spec) {
     winsOn(sf, 0.4, BD - 0.6);
   }
   if (spec.back !== false) backFront(ctx, bf, L, BD, h, wall, { floors: Math.max(2, floors) });
+  // ---- (v5, GTA IV) the pipes down the corners from the roof; by the entrance its lamps, the bells
+  {
+    const pipe = ad() < 0.5 ? COL.white : darker(wall, 0.8);
+    for (const u of [0.18, L - 0.18]) downpipe(PA, bf, u, top + 0.6, CURB + base, pipe);
+    if (!walk) {
+      const pf = shifted(wf, 0.46);
+      for (const sd of [-1, 1]) wallLamp(PA, pf, uc + sd * 1.15, CURB + 2.55, { body: COL.iron });
+      const bid = nextId();
+      PA.box(M.prop, pf, uc + 0.98, CURB + 1.2, 0, uc + 1.16, CURB + 1.7, 0.03, COL.steel, bid, FB.BACK);
+      for (let k = 0; k < 4; k++) PA.box(M.prop, pf, uc + 1.02, CURB + 1.25 + k * 0.08, 0.03, uc + 1.12, CURB + 1.29 + k * 0.08, 0.04, COL.cream, bid, FB.BACK);
+      // the number of the building on the portal over the canopy (where no name is)
+      if (!spec.name) {
+        const nid = nextId();
+        PA.box(M.prop, pf, uc - 0.25, CURB + 3.3, 0, uc + 0.25, CURB + 3.52, 0.02, COL.dark, nid, FB.BACK);
+        for (let k = 0; k < 3; k++) PA.box(M.prop, pf, uc - 0.15 + k * 0.11 - 0.035, CURB + 3.34, 0.02, uc - 0.15 + k * 0.11 + 0.035, CURB + 3.48, 0.03, COL.brass, nid, FB.BACK);
+      }
+    }
+  }
+  PA.flush();
   footprint(ctx, bf, 0, -BD, L, 0, top, wall, trim);
   return info;
 }
@@ -678,6 +824,9 @@ export function mimo(ctx, spec) {
   }
   // ---- the floors over the street
   const vAt = (fl) => G1 + (fl - 1) * FH;
+  // (v5, GTA IV: the small parts, by the building's own dice - world/facades.js)
+  const PX = new Parts(ctx);
+  const xd = diceAt(f, 71);
   if (v === 'catwalk') {
     // long balconies, a pipe rail, doors and louvred windows by turns
     for (let fl = 1; fl < floors; fl++) {
@@ -689,7 +838,25 @@ export function mimo(ctx, spec) {
       for (let u = 1.6, k = 0; u < L - 1.2; u += 3.2, k++) {
         if (k % 2) {
           fbox(ctx, f, M.frame, u - 0.48, y + 0.16, 0, u + 0.48, y + 2.35, 0.05, k % 4 === 1 ? acc2 : srgb(0.92, 0.9, 0.86));
-        } else flatWindow(ctx, f, u, y + 0.9, 1.5, 1.35, { jalousie: true, blinds: false });
+          // (v5, GTA IV) its number, its mat; a chair out by it, a plant, by the building's own dice
+          PX.box(M.prop, f, u - 0.07, y + 1.75, 0.05, u + 0.07, y + 1.87, 0.06, COL.brass, nextId(), FB.BACK);
+          PX.box(M.prop, f, u - 0.45, y + 0.16, 0.05, u + 0.45, y + 0.18, 0.6, srgb(0.36, 0.3, 0.26), nextId(), FB.BOTTOM);
+          const q = xd();
+          if (q < 0.4) {
+            const cu = u + 0.9;
+            const cc = xd() < 0.5 ? WHITE : acc;
+            const cid = nextId();
+            PX.box(M.prop, f, cu - 0.22, y + 0.58, 0.45, cu + 0.22, y + 0.62, 0.9, cc, cid, 0);
+            PX.box(M.prop, f, cu - 0.22, y + 0.62, 0.42, cu + 0.22, y + 1.05, 0.47, cc, cid, 0);
+            for (const du of [-0.19, 0.16]) PX.box(M.prop, f, cu + du, y + 0.16, 0.85, cu + du + 0.03, y + 0.58, 0.89, cc, cid, FB.BOTTOM);
+          } else if (q < 0.7) {
+            const pu = u - 0.85;
+            PX.box(M.prop, f, pu - 0.15, y + 0.16, 0.4, pu + 0.15, y + 0.5, 0.7, COL.pot, nextId(), FB.BOTTOM);
+            PX.box(M.leaf, f, pu - 0.25, y + 0.5, 0.3, pu + 0.25, y + 1.05 + xd() * 0.4, 0.8, xd() < 0.5 ? COL.leaf : COL.leaf2, nextId(), 0);
+          }
+          // (a towel over the rail)
+          if (xd() < 0.25) PX.box(M.prop, f, u - 0.3, y + 0.5, 1.43, u + 0.25, y + 1.02, 1.46, COL.bloom[Math.floor(xd() * COL.bloom.length)].clone().lerp(WHITE, 0.3), nextId(), FB.BACK);
+        } else flatWindow(ctx, f, u, y + 0.9, 1.5, 1.35, { jalousie: true, blinds: false, P: PX, r: xd });
       }
     }
   } else {
@@ -752,6 +919,7 @@ export function mimo(ctx, spec) {
     for (let fl = 1; fl < floors; fl++) for (let u = 1.6; u < D - 1.2; u += 2.8) flatWindow(ctx, sf, u, vAt(fl) + 0.85, 1.3, 1.4, { jalousie: true, blinds: false });
   }
   if (spec.back !== false) backFront(ctx, f, L, D, h, wall, { floors });
+  PX.flush();
   footprint(ctx, f, 0, -D, L, 0, roofY, wall, acc);
   return info;
 }
@@ -791,12 +959,29 @@ export function modern(ctx, spec) {
   // ---- the floors over it
   const vAt = (fl) => G1 + 1.0 + (fl - 1) * FH;
   const glass = (u0, u1, y0, y1, w = -0.3) => ctx.B.add(M.winGlass, f.quad(u0, y0, u1, y1, w), null, nextId());
+  // (v5, GTA IV) the offices and the flats behind the glass: the blinds at all heights, a bar across
+  // each pane, by the building's own dice (world/facades.js)
+  const PM = new Parts(ctx);
+  const md = diceAt(f, 61);
+  const blindCol = md.pick([srgb(0.92, 0.9, 0.84), srgb(0.82, 0.84, 0.86), srgb(0.62, 0.6, 0.56)]);
+  const slatCol = darker(blindCol, 0.62);
+  const blinds = (u0, u1, y0, y1, w = -0.3) => {
+    for (let a = u0; a < u1 - 0.3; a += 1.5) {
+      const b = Math.min(u1, a + 1.5);
+      if (md() > 0.55) continue;
+      const yb = y1 - (y1 - y0) * (0.15 + md() * 0.7);
+      const bid = nextId();
+      PM.box(M.prop, f, a + 0.04, yb, w + 0.02, b - 0.04, y1, w + 0.028, blindCol, bid, FB.BACK);
+      if (!DETAIL_LOW) for (let v = yb + 0.25; v < y1 - 0.1; v += 0.35) PM.box(M.prop, f, a + 0.04, v, w + 0.028, b - 0.04, v + SLAT, w + 0.034, slatCol, bid, SLAT_FACE);
+    }
+  };
   for (let fl = 1; fl < floors; fl++) {
     const y = vAt(fl) - 1.0 + (fl === 1 ? 1.0 : 0);
     const y0 = Math.max(y, G1 + 1.0);
     const y1 = G1 + fl * FH;
     if (v === 'bands') {
       glass(0.6, L - 0.6, y0 + 0.1, y1 - 0.45);
+      blinds(0.6, L - 0.6, y0 + 0.1, y1 - 0.45);
       for (let u = 0.6 + 1.5; u < L - 0.6; u += 1.5) fbox(ctx, f, M.frame, u - 0.03, y0 + 0.1, -0.3, u + 0.03, y1 - 0.45, -0.25, srgb(0.3, 0.32, 0.36));
       fbox(ctx, f, M.wall, -0.1, y1 - 0.45, -0.35, L + 0.1, y1 + 0.1, 0.45, frame, fid);
       if (fl % 2 === 1 && fl < floors - 1) {
@@ -806,12 +991,24 @@ export function modern(ctx, spec) {
       }
     } else if (v === 'fins') {
       glass(0.6, L - 0.6, y0, y1 - 0.2);
+      blinds(0.6, L - 0.6, y0, y1 - 0.2);
+      PM.box(M.frame, f, 0.6, y0 + (y1 - y0) * 0.72, -0.3, L - 0.6, y0 + (y1 - y0) * 0.72 + 0.05, -0.26, srgb(0.3, 0.32, 0.36), nextId(), FB.BACK);
       fbox(ctx, f, M.wall, 0, y1 - 0.2, -0.35, L, y1 + 0.1, 0.05, frame, fid);
     } else {
       // the grid: a white frame round every window
       const n = Math.max(2, Math.round((L - 1.2) / 3.2));
       const step = (L - 1.2) / n;
-      for (let k = 0; k < n; k++) glass(0.6 + step * k + 0.12, 0.6 + step * (k + 1) - 0.12, y0 + 0.15, y1 - 0.3);
+      for (let k = 0; k < n; k++) {
+        const a = 0.6 + step * k + 0.12;
+        const b = 0.6 + step * (k + 1) - 0.12;
+        glass(a, b, y0 + 0.15, y1 - 0.3);
+        blinds(a, b, y0 + 0.15, y1 - 0.3);
+        // (its bars: down the middle, across under the fanlight)
+        const gid = nextId();
+        const gc = srgb(0.3, 0.32, 0.36);
+        PM.box(M.frame, f, (a + b) / 2 - 0.025, y0 + 0.15, -0.3, (a + b) / 2 + 0.025, y1 - 0.3, -0.26, gc, gid, FB.BACK);
+        PM.box(M.frame, f, a, y1 - 0.85, -0.3, b, y1 - 0.8, -0.26, gc, gid, FB.BACK);
+      }
       fbox(ctx, f, M.wall, 0, y1 - 0.3, -0.35, L, y1 + 0.1, 0.32, frame, fid);
     }
   }
@@ -847,6 +1044,7 @@ export function modern(ctx, spec) {
     }
   }
   if (spec.back !== false) backFront(ctx, f, L, D, h, frame, { floors });
+  PM.flush();
   footprint(ctx, f, 0, -D, L, 0, info.top, frame, fin);
   return info;
 }
@@ -1825,6 +2023,10 @@ export function house(ctx, spec) {
   }
   // ---- the windows: white frames, striped awnings or shutters in the accent colour
   const dressing = r() < 0.45 ? 'awning' : r() < 0.6 ? 'shutters' : 'plain';
+  // (v5, GTA IV: the small parts, by the house's own dice - world/facades.js)
+  const PH = new Parts(ctx);
+  const hd = diceAt(f, 31);
+  const bars = !!ctx.block && ctx.block.district === 'havana' && hd() < 0.6;
   const awCol = r.pick([acc, srgb(0.2, 0.55, 0.5), srgb(0.85, 0.3, 0.3), srgb(0.25, 0.4, 0.7)]);
   const jal = r() < 0.4;
   const winRow = (sf, a, b, fl, skip = null) => {
@@ -1836,7 +2038,17 @@ export function house(ctx, spec) {
       const uc = a + step * (k + 0.5);
       if (skip !== null && Math.abs(uc - skip) < 1.5) continue;
       const v0 = CURB + base + fl * FL + 0.85;
-      flatWindow(ctx, sf, uc, v0, 1.15, 1.35, { jalousie: jal, ac: fl === 0 });
+      flatWindow(ctx, sf, uc, v0, 1.15, 1.35, { jalousie: jal, ac: fl === 0, P: PH, wall: dressing === 'shutters' ? null : wall, noTop: dressing !== 'awning', r: hd });
+      // (v5, GTA IV) iron bars over the windows by the street on the ground floor (Little Havana's)
+      if (bars && fl === 0) {
+        const gid = nextId();
+        const w0 = 0.2;
+        PH.box(M.frame, sf, uc - 0.66, v0 - 0.05, w0, uc + 0.66, v0 - 0.01, w0 + 0.03, COL.iron, gid, 0);
+        PH.box(M.frame, sf, uc - 0.66, v0 + 1.37, w0, uc + 0.66, v0 + 1.41, w0 + 0.03, COL.iron, gid, 0);
+        PH.box(M.frame, sf, uc - 0.66, v0 + 0.66, w0, uc + 0.66, v0 + 0.69, w0 + 0.03, COL.iron, gid, 0);
+        for (let u = uc - 0.6; u <= uc + 0.61; u += DETAIL_LOW ? 0.3 : 0.15) PH.box(M.frame, sf, u - 0.012, v0 - 0.05, w0, u + 0.012, v0 + 1.41, w0 + 0.025, COL.iron, gid, FB.TOP | FB.BOTTOM);
+        for (const u of [uc - 0.66, uc + 0.63]) PH.box(M.frame, sf, u, v0 - 0.05, 0, u + 0.03, v0 + 1.41, w0, COL.iron, gid, FB.BACK);
+      }
       // (v5, ROADMAP 11.18: the head over it, standing out of the wall, as the sill does under it)
       if (dressing !== 'awning') fbox(ctx, sf, M.frame, uc - 0.78, v0 + 1.43, 0, uc + 0.78, v0 + 1.55, 0.14, trim, tid);
       if (dressing === 'awning') windowAwning(ctx, sf, uc, v0 + 1.62, 1.5, awCol);
@@ -1874,7 +2086,8 @@ export function house(ctx, spec) {
     fbox(ctx, hf, M.frame, uDoor - 0.68, CURB + base, 0, uDoor + 0.68, CURB + base + 2.34, 0.04, trim);
     const pw = Math.min(2.0, (m1 - m0) / 2 - 0.2);
     const py = CURB + base + 2.75;
-    if (r() < 0.65) {
+    const porch = r() < 0.65;
+    if (porch) {
       fbox(ctx, hf, M.wall, uDoor - pw, py, 0, uDoor + pw, py + 0.22, 1.95, trim, tid);
       for (const sd of [-1, 1]) {
         fbox(ctx, hf, M.wall, uDoor + sd * (pw - 0.2) - 0.1, CURB + base, 1.65, uDoor + sd * (pw - 0.2) + 0.1, py, 1.85, trim, tid);
@@ -1891,6 +2104,17 @@ export function house(ctx, spec) {
     fbox(ctx, hf, M.prop, uDoor - 0.9, CURB, 0, uDoor + 0.9, CURB + base * 0.5, 1.1, srgb(0.86, 0.82, 0.76));
     info.doors.push(hf.p(uDoor, CURB, 1.2));
     info.uDoor = uDoor;
+    // (v5, GTA IV) the number by the door, the mat before it (on the porch's floor where there is
+    // one, on the step where there is not)
+    {
+      const nid = nextId();
+      const nu = uDoor - 1.0;
+      PH.box(M.prop, hf, nu - 0.2, CURB + base + 1.55, 0, nu + 0.2, CURB + base + 1.77, 0.02, hd() < 0.5 ? COL.dark : COL.white, nid, FB.BACK);
+      const digits = 3 + Math.floor(hd() * 2);
+      for (let k = 0; k < digits; k++) PH.box(M.prop, hf, nu - (digits - 1) * 0.045 + k * 0.09 - 0.028, CURB + base + 1.59, 0.02, nu - (digits - 1) * 0.045 + k * 0.09 + 0.028, CURB + base + 1.73, 0.03, COL.brass, nid, FB.BACK);
+      const my = CURB + (porch ? base : base * 0.5);
+      PH.box(M.prop, hf, uDoor - 0.5, my, 0.15, uDoor + 0.5, my + 0.02, 0.75, srgb(0.42, 0.32, 0.24), nextId(), FB.BOTTOM);
+    }
     // a lamp by the door, a house number
     const lp = hf.p(uDoor + 0.95, CURB + base + 1.9, 0.25);
     addLight(lp[0], lp[1], lp[2], 6, srgb(1, 0.85, 0.6), 0.5);
@@ -1915,6 +2139,7 @@ export function house(ctx, spec) {
     info.driveIn = Math.min(depth - 1, 6.5);
     if (r() < 0.8) parkCar(ctx, r, f, da + DW / 2, -(front + 2.7), -1);
   }
+  PH.flush();
   footprint(ctx, hf, u0, -depth, u1, 0, ridge, TILE, trim);
   return info;
 }
@@ -2017,6 +2242,9 @@ export function condo(ctx, spec) {
   const glassRail = spec.rail !== 'bars';
   const railCol = glassRail ? srgb(0.6, 0.79, 0.83) : WHITE;
   const checker = spec.variant === 'checker';
+  // (v5, GTA IV: the small parts, by the tower's own dice - world/facades.js)
+  const PC = new Parts(ctx);
+  const cd = diceAt(f, 41);
   // ---- the body: the flats behind their balconies, the lobby's back, the shaft up over the roof
   fbox(ctx, f, M.wall, b0, CURB + G, -D, b1, top, -BD, wall, wid);
   fcol(ctx, f, b0, CURB + G, -D, b1, top, -BD);
@@ -2075,6 +2303,9 @@ export function condo(ctx, spec) {
         if (q < 0.22) fbox(ctx, f, M.leaf, a + 0.3, y, -BD + 0.25, a + 0.75, y + r.range(0.5, 1.0), -BD + 0.7, life[0]);
         else if (q < 0.34) fbox(ctx, f, M.prop, (a + b) / 2 - 0.35, y + 0.45, -0.03, (a + b) / 2 + 0.35, y + 1.08, 0.02, r.pick(life.slice(1)));
         else if (q < 0.42) fbox(ctx, f, M.prop, b - 0.9, y, -BD + 0.4, b - 0.4, y + 0.85, -BD + 0.9, WHITE);
+        // (v5, GTA IV) and more of it, by the tower's own dice: a pot by the rail, a chair and its
+        // little table, the washing on a rack, the condenser of somebody's air conditioning
+        condoLife(PC, cd, f, a, b, y, BD);
       } else {
         // the wall out to the front, a window in it
         fbox(ctx, f, M.wall, a, y - 0.26, -BD, b, y + FHc - 0.26, 0, wall, wid);
@@ -2150,6 +2381,7 @@ export function condo(ctx, spec) {
     }
   }
   if (spec.back !== false) backFront(ctx, f, L, D, h, wall, { floors });
+  PC.flush();
   footprint(ctx, f, 0, -D, L, 0, ct, wall, acc);
   return info;
 }
@@ -2161,4 +2393,32 @@ function flatQuad(f, u0, w0, u1, w1, y) {
   const c = f.p((u0 + u1) / 2, 0, (w0 + w1) / 2);
   g.translate(c[0], y, c[2]);
   return g;
+}
+
+// (v5, GTA IV) the life on a tower's balcony (a..b along the front, its floor at y, BD deep)
+function condoLife(P, r, f, a, b, y, BD) {
+  const M = P.M;
+  const q = r();
+  if (q < 0.35) {
+    const pu = b - 0.45 - r() * 0.3;
+    P.box(M.prop, f, pu - 0.16, y, -0.55, pu + 0.16, y + 0.4, -0.25, r() < 0.5 ? COL.pot : srgb(0.86, 0.84, 0.8), nextId(), FB.BOTTOM);
+    P.box(M.leaf, f, pu - 0.28, y + 0.4, -0.65, pu + 0.28, y + 0.95 + r() * 0.5, -0.15, r() < 0.7 ? COL.leaf : COL.leaf2, nextId(), 0);
+  } else if (q < 0.55) {
+    const cu = (a + b) / 2 + 0.2;
+    const cc = r() < 0.5 ? srgb(0.95, 0.95, 0.92) : srgb(0.25, 0.3, 0.32);
+    const cid = nextId();
+    P.box(M.prop, f, cu - 0.22, y + 0.42, -1.25, cu + 0.22, y + 0.46, -0.85, cc, cid, 0);
+    P.box(M.prop, f, cu - 0.22, y + 0.46, -1.3, cu + 0.22, y + 0.92, -1.25, cc, cid, 0);
+    P.box(M.prop, f, cu + 0.45, y + 0.6, -1.15, cu + 0.95, y + 0.64, -0.75, cc, cid, 0);
+    P.box(M.prop, f, cu + 0.68, y, -0.97, cu + 0.72, y + 0.6, -0.93, cc, cid, FB.BOTTOM);
+  } else if (q < 0.68) {
+    const ru = a + 0.5;
+    const rack = srgb(0.85, 0.85, 0.86);
+    P.box(M.frame, f, ru, y + 0.9, -0.9, ru + 1.1, y + 0.93, -0.87, rack, nextId(), 0);
+    for (let u = ru + 0.05; u < ru + 1.0; u += 0.25 + r() * 0.1) P.box(M.prop, f, u, y + 0.45 + r() * 0.2, -0.9, u + 0.2, y + 0.9, -0.885, COL.bloom[Math.floor(r() * COL.bloom.length)].clone().lerp(COL.white, 0.45), nextId(), 0);
+  } else if (q < 0.78) {
+    const ku = b - 0.95;
+    P.box(M.steel, f, ku, y, -BD + 0.08, ku + 0.75, y + 0.6, -BD + 0.4, COL.acBody, nextId(), FB.BACK);
+    P.box(M.frame, f, ku + 0.1, y + 0.1, -BD + 0.4, ku + 0.65, y + 0.52, -BD + 0.415, COL.acGrille, nextId(), FB.BACK);
+  }
 }

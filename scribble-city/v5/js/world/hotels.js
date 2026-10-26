@@ -3,6 +3,7 @@ import { srgb, hex, addLight } from '../render/materials.js';
 import { nextId } from './kit.js';
 import { fbox, fcol, neonSign, roofStuff, backFront, adQuad, FH, GROUND, FRAME, frontMatrix } from './deco.js';
 import { CURB } from './layout.js';
+import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, wallLamp, darker, lighter, plateSpans, doorSill, SILL, DETAIL_LOW } from './facades.js';
 
 // (v5) The hotels of the beach street, the way the real ones stand along the ocean in Miami:
 // three or four floors of stucco in a pastel and its accent, a front that is symmetrical about a
@@ -20,6 +21,7 @@ const WHITE = srgb(0.98, 0.97, 0.95);
 const GLASS_BLOCK = srgb(0.72, 0.9, 0.92);
 const TILE_RED = srgb(0.78, 0.36, 0.26);
 const IRON = srgb(0.16, 0.14, 0.2);
+const CURTAIN = [srgb(0.96, 0.92, 0.82), srgb(0.98, 0.98, 0.96), srgb(0.92, 0.7, 0.72), srgb(0.72, 0.82, 0.92), srgb(0.75, 0.9, 0.8), srgb(0.98, 0.88, 0.6), srgb(0.62, 0.2, 0.24)];
 
 // a pastel for the walls, the accent for the eyebrows, the bands and the tower, a second accent,
 // the colour of the neon (the pairs you see on the real street)
@@ -329,6 +331,10 @@ export function oceanHotel(ctx, spec) {
     ctx.footprints.push({ x0: mn[0], z0: mn[2], x1: mx[0], z1: mx[2], top, color: wall, trim: acc, awning: spec.awning || acc, nx: f.nx, nz: f.nz });
   }
   const outline = bodyOutline(L, D, rA, rB);
+  // (v5, GTA IV: the front up close, by the building's own dice - world/facades.js)
+  const P = new Parts(ctx);
+  const hr = diceAt(f, 51);
+  const dia = dialectOf(ctx);
   const add = (mat, S, color, id = nextId()) => {
     if (!S.empty) ctx.B.add(mat, S.geo(), null, id, { color });
     return id;
@@ -397,6 +403,42 @@ export function oceanHotel(ctx, spec) {
       fbox(ctx, sf, M.frame, u - 0.03, v0, out, u + 0.03, v1, out + 0.05, frameCol, fid);
     }
     if (v1 - v0 > 1.4) fbox(ctx, sf, M.frame, u0, v0 + (v1 - v0) * 0.68 - 0.025, out, u1, v0 + (v1 - v0) * 0.68 + 0.025, out + 0.05, frameCol, fid);
+    // (v5, GTA IV) the rooms behind: curtains drawn, a blind down, by the building's own dice
+    if (hr() < 0.42) {
+      const cw = out + 0.034;
+      const ww = u1 - u0;
+      if (hr() < 0.62) {
+        const col = CURTAIN[Math.floor(hr() * CURTAIN.length)];
+        const a = Math.min(0.5, ww * (0.2 + hr() * 0.2));
+        P.box(M.prop, sf, u0, v0 + 0.03, cw - 0.008, u0 + a, v1 - 0.03, cw, col, nextId(), FB.BACK);
+        if (hr() < 0.7) P.box(M.prop, sf, u1 - a, v0 + 0.03, cw - 0.008, u1, v1 - 0.03, cw, col, nextId(), FB.BACK);
+      } else {
+        const yb = v1 - (v1 - v0) * (0.25 + hr() * 0.4);
+        P.box(M.prop, sf, u0, yb, cw - 0.008, u1, v1, cw, hr() < 0.6 ? srgb(0.95, 0.92, 0.84) : srgb(0.86, 0.86, 0.84), nextId(), FB.BACK);
+      }
+    }
+  };
+  // (v5, GTA IV) the wall round a window (or a group of them) standing out, so the glass is set
+  // back in it; a sill of stone under it; now and then an air conditioner through the wall under it
+  // (not under the first floor's: there the shop's neon stands in the same plane, and the box
+  // went through its letters)
+  const reveal = (sf, u0, u1, v0, v1, o = {}) => {
+    const rid = nextId();
+    const d = 0.17;
+    const t = 0.13;
+    const rc = style === 'med' ? wall : wall.clone().lerp(WHITE, 0.15);
+    P.box(M.wall, sf, u0 - 0.07 - t, v0 - 0.07, -0.02, u0 - 0.07, v1 + 0.07, d, rc, rid, FB.BACK | FB.BOTTOM);
+    P.box(M.wall, sf, u1 + 0.07, v0 - 0.07, -0.02, u1 + 0.07 + t, v1 + 0.07, d, rc, rid, FB.BACK | FB.BOTTOM);
+    if (o.head !== false) P.box(M.wall, sf, u0 - 0.07 - t, v1 + 0.07, -0.02, u1 + 0.07 + t, v1 + 0.15, d, rc, rid, FB.BACK);
+    P.box(M.frame, sf, u0 - 0.12 - t, v0 - 0.17, -0.02, u1 + 0.12 + t, v0 - 0.07, d + 0.06, style === 'med' ? srgb(0.95, 0.9, 0.82) : WHITE, nextId(), FB.BACK);
+    if (o.ac && style !== 'med' && v0 > CURB + GROUND + FH && hr() < 0.14) {
+      const uc0 = (u0 + u1) / 2 + (hr() - 0.5) * (u1 - u0) * 0.5;
+      const aid = nextId();
+      P.box(M.steel, sf, uc0 - 0.36, v0 - 0.72, -0.02, uc0 + 0.36, v0 - 0.26, 0.3, COL.acBody, aid, FB.BACK);
+      P.box(M.frame, sf, uc0 - 0.3, v0 - 0.66, 0.3, uc0 + 0.3, v0 - 0.32, 0.315, COL.acGrille, aid, FB.BACK);
+      // (its drip down the wall, stopping over the window under it, not across its glass)
+      if (hr() < 0.5) P.box(M.frame, sf, uc0 - 0.05, v0 - 0.72 - (0.4 + hr() * 0.45), -0.02, uc0 + 0.04, v0 - 0.72, 0.014, darker(wall, 0.84), nextId(), FB.BACK);
+    }
   };
   // the windows of a bay [b0, b1] on one floor
   const bayWindows = (sf, b0, b1, v0, v1, type) => {
@@ -410,6 +452,7 @@ export function oceanHotel(ctx, spec) {
       for (let k = 0; k < n; k++) {
         const c = b0 + step * (k + 0.5);
         win(sf, c - 0.6, c + 0.6, v0, v1, 2);
+        reveal(sf, c - 0.6, c + 0.6, v0, v1, { ac: true });
       }
     } else {
       const per = type === 'triple' ? 3 : 2;
@@ -422,10 +465,12 @@ export function oceanHotel(ctx, spec) {
           const a = c - gw / 2 + j * (0.95 + 0.12);
           win(sf, a, a + 0.95, v0, v1, 2);
         }
+        reveal(sf, c - gw / 2, c + gw / 2, v0, v1, { ac: true });
       }
     }
   };
   // arched windows (the Spanish ones): a tall window with a round top, a frame round it
+  const shutterCol = style === 'med' && hr() < 0.6 ? SHUTTERS[Math.floor(hr() * SHUTTERS.length)] : null;
   const archWin = (sf, uc0, v0, v1, w) => {
     const rr = w / 2;
     const vs = v1 - rr;
@@ -448,12 +493,32 @@ export function oceanHotel(ctx, spec) {
     fbox(ctx, sf, M.frame, uc0 - rr - 0.1, v0, -0.02, uc0 - rr, vs, 0.08, frameCol, fid);
     fbox(ctx, sf, M.frame, uc0 + rr, v0, -0.02, uc0 + rr + 0.1, vs, 0.08, frameCol, fid);
     fbox(ctx, sf, M.frame, uc0 - rr - 0.18, v0 - 0.12, -0.02, uc0 + rr + 0.18, v0, 0.22, srgb(0.95, 0.9, 0.82), fid);
+    // (v5, GTA IV) the wall's thickness round it, the shutters folded back either side of it
+    const jid = nextId();
+    for (const sd of [-1, 1]) P.box(M.wall, sf, sd < 0 ? uc0 - rr - 0.24 : uc0 + rr + 0.1, v0, -0.02, sd < 0 ? uc0 - rr - 0.1 : uc0 + rr + 0.24, vs, 0.16, wall, jid, FB.BACK | FB.BOTTOM);
+    if (shutterCol && hr() < 0.85) {
+      const shw = Math.min(rr + 0.05, 0.6);
+      for (const sd of [-1, 1]) {
+        const a = sd < 0 ? uc0 - rr - 0.27 - shw : uc0 + rr + 0.27;
+        const shid = nextId();
+        P.box(M.frame, sf, a, v0 + 0.02, -0.02, a + shw, vs + rr * 0.6, 0.03, shutterCol, shid, FB.BACK);
+        if (!DETAIL_LOW) for (let v = v0 + 0.3; v < vs + rr * 0.4; v += 0.45) P.box(M.frame, sf, a + 0.05, v, 0.03, a + shw - 0.05, v + 0.03, 0.045, darker(shutterCol, 0.8), shid, FB.BACK | FB.LEFT | FB.RIGHT);
+      }
+    }
     // and its iron balconette, now and then
     if (r() < 0.4) {
       const bid = nextId();
       fbox(ctx, sf, M.frame, uc0 - rr - 0.3, v0 - 0.08, 0, uc0 + rr + 0.3, v0, 0.55, IRON, bid);
       fbox(ctx, sf, M.frame, uc0 - rr - 0.3, v0 + 0.85, 0.5, uc0 + rr + 0.3, v0 + 0.9, 0.55, IRON, bid);
       for (let u = uc0 - rr - 0.3; u <= uc0 + rr + 0.31; u += 0.2) fbox(ctx, sf, M.frame, u - 0.015, v0, 0.51, u + 0.015, v0 + 0.85, 0.54, IRON, bid);
+      // (v5, GTA IV) the pots on it, somebody's geraniums
+      if (hr() < 0.7) {
+        for (const du of [-rr * 0.55, rr * 0.55]) {
+          if (hr() < 0.3) continue;
+          P.box(M.prop, sf, uc0 + du - 0.1, v0, 0.18, uc0 + du + 0.1, v0 + 0.2, 0.4, COL.pot, nextId(), FB.BOTTOM);
+          P.box(M.leaf, sf, uc0 + du - 0.17, v0 + 0.2, 0.12, uc0 + du + 0.17, v0 + 0.45 + hr() * 0.2, 0.46, hr() < 0.5 ? COL.leaf : COL.bloom[Math.floor(hr() * COL.bloom.length)], nextId(), 0);
+        }
+      }
     }
   };
   const rowV = (fl) => {
@@ -609,6 +674,9 @@ export function oceanHotel(ctx, spec) {
     } else {
       // the red tiles over the parapet, sloping out
       tileRoof(ctx, f, rA, L - rB, top + par - 0.1, 0.9);
+      // (v5, GTA IV) the ends of the beams under them
+      const bid = nextId();
+      for (let u = rA + 0.3; u < L - rB - 0.2; u += 0.62) P.box(M.frame, f, u - 0.07, top + par - 0.42, -0.02, u + 0.07, top + par - 0.2, 0.36, srgb(0.36, 0.22, 0.16), bid, FB.BACK);
     }
     // the parapet is solid up there (a fall stops at it)
     solid(...f.box(0, top, -0.35, L, top + par, 0.2));
@@ -729,6 +797,20 @@ export function oceanHotel(ctx, spec) {
     const lp = f.p(uc, 3.4, 2.2);
     addLight(lp[0], lp[1], lp[2], 11, neonCol, 1.3);
   }
+  // (v5, GTA IV) lanterns either side of the way in, the shop's hardware and its sign hung out on
+  // a bracket, the pipes down the corners from the roof
+  if (ctx.block) {
+    if (style === 'med' || hr() < 0.5) for (const u of [sg0 - 0.35, sg1 + 0.35]) wallLamp(P, f, u, 2.85, { body: style === 'med' ? COL.iron : COL.steelDark });
+    if (!spec.hotel) {
+      shopHardware(P, f, sg0, sg1, { r: hr, top: G1, door: uDoor, housingCol: style === 'med' ? srgb(0.4, 0.3, 0.24) : COL.steel });
+      if (sign && rA === 0 && (style === 'med' || dia !== 'deco') && hr() < 0.6) bladeSign(P, f, cA * 0.5, 4.95, sign, neonCol, { font: spec.font || 'Caveat', size: spec.signSize, w0: 0.06, board: style === 'med' ? srgb(0.36, 0.22, 0.16) : COL.dark });
+    }
+    if (style === 'med') {
+      const pc = srgb(0.62, 0.36, 0.24);
+      if (rA === 0) downpipe(P, f, 0.3, top + par - 0.2, CURB, pc);
+      if (rB === 0) downpipe(P, f, L - 0.3, top + par - 0.2, CURB, pc);
+    }
+  }
   // the room behind the glass
   const room = ctx.room ? ctx.room(f, {
     u0: ru0, u1: ru1, depth: roomDepth, y0: CURB, h: 3.35, kind: spec.kind || (spec.hotel ? 'lobby' : 'shop'),
@@ -776,6 +858,7 @@ export function oceanHotel(ctx, spec) {
   // ---- the roof's things, the back on the alley
   roofStuff(ctx, f, L, D, top, { color: wall, trim: acc, floors, hotel: true }, RF ? info : null);
   if (spec.back !== false) backFront(ctx, f, L, D, h, wall, { floors });
+  P.flush();
   info.towerTop = towerTop;
   info.pal = pal;
   info.uDoor = uDoor;
@@ -818,7 +901,9 @@ function lobbyFront(ctx, f, o) {
   const fc = o.frameCol;
   // (gap: the half of the door's own bay; glass blocks stand either side of a hotel's)
   const gap = o.gap || 0.8;
-  fbox(ctx, f, M.frame, sg0, CURB, 0, sg1, 0.7, 0.18, fc);
+  // (the kick plate either side of the door, the doorway's sill: world/facades.js plateSpans)
+  for (const [a, b] of plateSpans(sg0, sg1, uDoor)) fbox(ctx, f, M.frame, a, CURB, 0, b, 0.7, 0.18, fc);
+  doorSill((...q) => fbox(ctx, f, M.frame, ...q, SILL), uDoor);
   for (let k = 0; k <= 4; k++) {
     const u = sg0 + ((sg1 - sg0) * k) / 4;
     if (Math.abs(u - uDoor) < gap - 0.05) continue;
