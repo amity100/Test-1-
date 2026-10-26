@@ -84,6 +84,11 @@ function cleanerLook() {
   return modest(L);
 }
 
+// (the mega mall's floors: its top one, the food court's - ROADMAP 11.31: five of them now, three
+// before)
+const topLv = (m) => (m.top !== undefined ? m.top : m.levels.length - 1);
+const fcLv = (m) => (m.fcLv !== undefined ? m.fcLv : 2);
+
 // ------------------------------------------------------------------ the way round the hall
 // a walk grid over the hall (half a metre a cell), the furniture in it blocked; A* on it
 class HallNav {
@@ -278,10 +283,11 @@ export class MallLife {
     return this.game.touch ? 7 : 22;
   }
 
-  // (the mega mall: more of them, on three floors - ROADMAP 11.30)
+  // (the mega mall: more of them, on its floors - ROADMAP 11.30; a wing each of the two, both near
+  // at once, ROADMAP 11.31)
   budgetOf(m) {
     if (!m.mega) return this.budget;
-    return this.game.touch ? 9 : 30;
+    return this.game.touch ? 7 : 32;
   }
 
   update(dt) {
@@ -1399,7 +1405,7 @@ export class MallLife {
       if (m.mega) {
         if (st.people.length < want) {
           const ups = st.people.filter((q) => (q.lv || 0) > 0).length;
-          if (open && ups < want * 0.4 && Math.random() < 0.6) this.spawnUp(m, st, 1 + Math.floor(Math.random() * 2), false);
+          if (open && ups < want * 0.5 && Math.random() < 0.6) this.spawnUp(m, st, 1 + Math.floor(Math.random() * topLv(m)), false);
           else if (m.entrances.length) this.spawn(m, st, false);
         }
       } else if (st.people.length < want && m.entrances.length) this.spawn(m, st, false, { fromUp: !!m.escalator && open && Math.random() < 0.3 });
@@ -1407,7 +1413,7 @@ export class MallLife {
   }
 
   // ------------------------------------------------------------------ the mega mall (ROADMAP 11.30)
-  // its people on its three floors: the hall's below; the galleries' above - up its escalators,
+  // its people on its floors (five, ROADMAP 11.31): the hall's below; the galleries' above - up its escalators,
   // at the windows of the stores up there, in at their doors, at the rail looking down, on the
   // benches; lunch at the food court on the top floor - and down again and out
   openMega(m, st) {
@@ -1415,18 +1421,18 @@ export class MallLife {
     const touch = game.touch;
     const B = this.budgetOf(m);
     // (the top floor's own walk grid round the food court's tables)
-    if (m.fcz) st.nav2 = new HallNav(game.world.collision, { x0: m.hall.x0, z0: m.fcz[0], x1: m.hall.x1, z1: m.fcz[1] + 1 }, 0.5, CURB + m.levels[2]);
+    if (m.fcz) st.nav2 = new HallNav(game.world.collision, { x0: m.hall.x0, z0: m.fcz[0], x1: m.hall.x1, z1: m.fcz[1] + 1 }, 0.5, CURB + m.levels[fcLv(m)]);
     // (the lifts' gates: open where the cabin stands)
     for (const L of m.lifts || []) for (let k = 0; k < L.gates.length; k++) L.gates[k].alive = !(L.state === 'open' && k === L.at);
     const n0 = Math.round(B * 0.5);
     for (let i = 0; i < n0; i++) this.spawn(m, st, true);
     const nUp = Math.round(B * 0.3);
-    for (let i = 0; i < nUp; i++) this.spawnUp(m, st, 1 + (i % 2), true);
+    for (let i = 0; i < nUp; i++) this.spawnUp(m, st, 1 + (i % topLv(m)), true);
     if (m.seats.length) {
       const nEat = touch ? 2 : 8;
       for (let i = 0; i < nEat; i++) {
         const seat = this.freeSeat(st, m.seats[Math.floor(Math.random() * m.seats.length)], true);
-        if (seat) this.spawnUp(m, st, 2, true, { seat });
+        if (seat) this.spawnUp(m, st, fcLv(m), true, { seat });
       }
     }
     // (some on the hall's benches already)
@@ -1457,7 +1463,7 @@ export class MallLife {
     } else if (already) {
       const g = pick(m.galleries.filter((q) => q.lv === lv));
       x = g.x + (Math.random() - 0.5) * 0.6;
-      const z0 = lv === 2 && m.fcz ? Math.max(g.z0, m.fcz[1] + 1) : g.z0;
+      const z0 = lv === fcLv(m) && m.fcz ? Math.max(g.z0, m.fcz[1] + 1) : g.z0;
       z = z0 + Math.random() * (g.z1 - z0);
     } else {
       const f = pick(m.escalators.filter((q) => q.up && Math.abs(q.yt - CURB - y) < 0.1));
@@ -1513,12 +1519,12 @@ export class MallLife {
     const h = this.game.rhythm ? this.game.rhythm.hour : 14;
     const meal = (h > 11.5 && h < 14.5) || (h > 18 && h < 20.5);
     // (at lunch and at dinner: up to the food court on the top floor)
-    if (fresh && meal && m.seats.length && Math.random() < 0.35) P.push(this.upAct(m, 2, ['eat']));
+    if (fresh && meal && m.seats.length && Math.random() < 0.35) P.push(this.upAct(m, fcLv(m), ['eat']));
     for (let i = 0; i < n; i++) {
       const r = Math.random();
       if (r < 0.2 && m.spots.length) P.push({ kind: 'window' });
       else if (r < 0.38 && m.spots.length) P.push({ kind: 'shop' });
-      else if (r < 0.64) P.push(this.upAct(m, Math.random() < 0.55 ? 1 : 2));
+      else if (r < 0.64) P.push(this.upAct(m, 1 + Math.floor(Math.random() * topLv(m))));
       else if (r < 0.73 && m.kiosks && m.kiosks.length) P.push({ kind: 'kiosk' });
       else if (r < 0.83 && m.benches.length) P.push({ kind: 'bench' });
       else if (r < 0.89 && m.directories && m.directories.length) P.push({ kind: 'map' });
@@ -1536,7 +1542,7 @@ export class MallLife {
       const n = 1 + Math.floor(Math.random() * 3);
       for (let i = 0; i < n; i++) {
         const r = Math.random();
-        stops.push(r < 0.34 ? 'window' : r < 0.6 ? 'shop' : r < 0.78 ? 'rail' : r < 0.9 ? 'bench' : lv === 2 && m.seats.length ? 'eat' : 'rail');
+        stops.push(r < 0.34 ? 'window' : r < 0.6 ? 'shop' : r < 0.78 ? 'rail' : r < 0.9 ? 'bench' : lv === fcLv(m) && m.seats.length ? 'eat' : 'rail');
       }
     }
     return { kind: 'up', target: lv, stops };
@@ -1704,7 +1710,7 @@ export class MallLife {
     const c = s.c;
     const m = s.m;
     if (lv === 0) s.pts = s.st.nav.path(c.pos.x, c.pos.z, x, z);
-    else if (lv === 2 && s.st.nav2 && m.fcz && z < m.fcz[1] - 0.5 && c.pos.z < m.fcz[1] - 0.5) s.pts = s.st.nav2.path(c.pos.x, c.pos.z, x, z);
+    else if (lv === fcLv(m) && s.st.nav2 && m.fcz && z < m.fcz[1] - 0.5 && c.pos.z < m.fcz[1] - 0.5) s.pts = s.st.nav2.path(c.pos.x, c.pos.z, x, z);
     else s.pts = this.upWay(m, lv, c.pos, { x, z });
     s.t = 0;
   }
@@ -1714,12 +1720,12 @@ export class MallLife {
     const gW = h.x0 + 1.1;
     const gE = h.x1 - 1.1;
     const lineOf = (p) => (Math.abs(p.x - gW) < 1.9 ? gW : Math.abs(p.x - gE) < 1.9 ? gE : null);
-    const fc = lv === 2 && m.fcz ? m.fcz[1] : -Infinity;
+    const fc = lv === fcLv(m) && m.fcz ? m.fcz[1] : -Infinity;
     const la = lineOf(a);
     const lb = lineOf(b);
     if ((la !== null && la === lb) || (a.z < fc && b.z < fc)) return [{ x: b.x, z: b.z }];
     const zs = m.bridges.filter((br) => br.lv.includes(lv)).map((br) => (br.z0 + br.z1) / 2);
-    if (lv === 2 && m.fcz) zs.push(m.fcz[1] - 1.5);
+    if (lv === fcLv(m) && m.fcz) zs.push(m.fcz[1] - 1.5);
     let zb = zs[0];
     let bd = Infinity;
     for (const z of zs) {
@@ -1756,7 +1762,7 @@ export class MallLife {
         const gs = m.galleries.filter((g) => g.lv === lv);
         if (!gs.length) return false;
         const g = pick(gs);
-        const z0 = lv === 2 && m.fcz ? Math.max(g.z0, m.fcz[1] + 1) : g.z0;
+        const z0 = lv === fcLv(m) && m.fcz ? Math.max(g.z0, m.fcz[1] + 1) : g.z0;
         q.g = g;
         this.goLv(s, g.rx, z0 + Math.random() * (g.z1 - z0));
         return true;
@@ -1770,7 +1776,7 @@ export class MallLife {
         return true;
       }
       case 'eat': {
-        if (lv !== 2 || !m.seats.length) return false;
+        if (lv !== fcLv(m) || !m.seats.length) return false;
         const seat = a.seat || this.freeSeat(s.st, c.pos, false);
         if (!seat) return false;
         q.seat = seat;

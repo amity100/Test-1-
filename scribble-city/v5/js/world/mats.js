@@ -87,13 +87,25 @@ export function cityMaterials() {
     inLamp: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.92, 0.75), emissive: new THREE.Color(2.0, 2.0, 2.0), indoor: true, line: 0.4 }),
     goods: B({ kind: 'uv', map: goodsTexture(), cells: GOODS_CELLS, indoor: true, uvScale: 4, ang: 1.3, wash: 0.8, density: 0.75 }),
     // (ROADMAP 11.31) a mall's great hall under its glass roof: the same, in daylight - white and
-    // even, its stone and gold their own colours (not a room's warm lamps); its marble floor
-    hallBox: B({ kind: 'box', vcolor: true, indoor: 'hall', wash: 0.7 }),
-    hallCyl: B({ kind: 'cyl', vcolor: true, indoor: 'hall', partR: 0.1, wash: 0.7 }),
-    hallGloss: B({ kind: 'box', vcolor: true, indoor: 'hall', gloss: 0.6, wash: 0.75 }),
-    hallLamp: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.97, 0.92), emissive: new THREE.Color(2.0, 2.0, 2.0), indoor: 'hall', line: 0.4 }),
-    hallFloor: B({ kind: 'ground', map: floorTexture('marble'), vcolor: true, indoor: 'hall', gloss: 0.45, ang: 0.4, wash: 0.75, line: 0.5 }),
+    // even, its stone and gold their own colours (not a room's warm lamps); its marble floor. (Their
+    // obj given: the pens made after them keep the dice they always had)
+    hallBox: B({ obj: 0.137, kind: 'box', vcolor: true, indoor: 'hall', wash: 0.7 }),
+    hallCyl: B({ obj: 0.208, kind: 'cyl', vcolor: true, indoor: 'hall', partR: 0.1, wash: 0.7 }),
+    hallGloss: B({ obj: 0.279, kind: 'box', vcolor: true, indoor: 'hall', gloss: 0.6, wash: 0.75 }),
+    hallLamp: B({ obj: 0.350, kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.97, 0.92), emissive: new THREE.Color(2.0, 2.0, 2.0), indoor: 'hall', line: 0.4 }),
+    hallFloor: B({ obj: 0.421, kind: 'ground', map: floorTexture('marble'), vcolor: true, indoor: 'hall', gloss: 0.45, ang: 0.4, wash: 0.75, line: 0.5 }),
+    // (ROADMAP 11.31) the mall's art deco outside: its ribbons of dark glass (none of them lit whole
+    // from inside), the clear glass of its crown and its bridges' roofs, its trims of gold
+    mallGlass: B({ obj: 0.492, kind: 'glass', color: srgb(0.1, 0.15, 0.28), gloss: 0.85, lit: 0 }),
+    // (and the palms and the trees in its hall, in the hall's light: their own pens)
+    hallTrunk: B({ obj: 0.705, kind: 'cyl', map: trunkTex, partR: 0.3, ang: 0.15, objMask: true, indoor: 'hall' }),
+    hallNut: B({ obj: 0.776, kind: 'cyl', color: srgb(0.4, 0.28, 0.16), partR: 0.12, objMask: true, indoor: 'hall' }),
+    hallCanopy: B({ obj: 0.847, kind: 'leaf', vcolor: true, ang: 0.6, line: 0.6, objMask: true, indoor: 'hall' }),
+    mallGlassClear: B({ obj: 0.563, kind: 'glass', color: srgb(0.74, 0.84, 0.93), gloss: 0.85, lit: 0 }),
+    goldTrim: B({ obj: 0.634, kind: 'box', vcolor: true, gloss: 0.9, line: 0.55 }),
   };
+  // (the hall's fronds: the same picture as the street's)
+  M.hallFrond = B({ obj: 0.918, kind: 'leaf', map: M.frond.uniforms.uMap.value, alphaTest: 0.45, side: THREE.DoubleSide, uvScale: 5, sway: 0.06, ang: 0.15, line: 0.55, swayAttr: true, objMask: true, indoor: 'hall' });
   M.floors = {};
   for (const k of ['checker', 'tiles', 'mats', 'wood', 'concrete', 'carpet']) M.floors[k] = B({ kind: 'ground', map: floorTexture(k), vcolor: true, indoor: true, ang: k === 'wood' ? 1.5708 : 0.4, wash: 0.72, line: 0.5 });
   M.srgb = srgb;

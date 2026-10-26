@@ -13,8 +13,8 @@ const PLACE_NOTES = {
   arena: 'Bayfront Arena: האצטדיון על המפרץ. הערב: WAVE נגד PENS',
   marina: 'Marina Market: שוק על המים, רציפים וסירות. בטיילת המפרץ',
   observatory: 'Inkwood Observatory: על הגבעות ליד השלט. כיפות נחושת, ובלילה הוא מואר מעל העיר',
-  // (ROADMAP 11.30)
-  galleria: 'Downtown Galleria: שלוש קומות של חנויות, מדרגות נעות ומעליות, כיפת זכוכית ומזרקה, אוכל בקומה העליונה וגג עם מנחת. נכנסים מהצפון או מהדרום',
+  // (ROADMAP 11.30, 11.31)
+  galleria: 'Downtown Galleria: שני אגפים של חמש קומות משני צידי השדרה השנייה, גשרי זכוכית ושער עם מגדל מעל הכביש. מדרגות נעות ומעליות, כתרי זכוכית, מזרקה וחצר דקלים, אוכל ומסעדות בקומה העליונה וגג עם מנחת. נכנסים מהצפון או מהדרום',
 };
 import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';

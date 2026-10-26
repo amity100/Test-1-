@@ -46,7 +46,8 @@ const tileOf = (b) => `${Math.floor(b.col / TILE)},${Math.floor(b.row / TILE)}`;
 
 export class FarShells {
   /**
-   * data: { [blockId]: [[x0, z0, x1, z1, top, colorHex], ...] } (far.json); mat: the pen
+   * data: { [blockId]: [[x0, z0, x1, z1, top, colorHex, y0?], ...] } (far.json; y0: its foot, when it
+   * stands over the street - a bridge); mat: the pen
    */
   constructor(world, data, mat) {
     this.world = world;
@@ -101,7 +102,7 @@ export class FarShells {
         if (top < CURB + 1) continue;
         c.set(hx || '#e8d8d0');
         const id = nextId();
-        const y0 = CURB - 0.2;
+        const y0 = s[6] !== undefined ? s[6] : CURB - 0.2;
         const y1 = top;
         // four walls and the roof (a little darker: the parapet's shadow)
         face([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], c, id);

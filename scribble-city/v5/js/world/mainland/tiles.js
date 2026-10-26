@@ -8,7 +8,7 @@ import { bench } from '../blocks.js';
 import { streetLamp, signalPole } from '../streets.js';
 import { shadeTree, grassStrip } from '../streetscape.js';
 import { NODES, MAIN0 } from '../roads.js';
-import { M_AVES, M_STREETS, M_BLOCKS, SHORE_X, BEACH_Z, CURB } from './plan.js';
+import { M_AVES, M_STREETS, M_BLOCKS, SHORE_X, BEACH_Z, CURB, underSpan } from './plan.js';
 import { Paint, PAINT_Y, frame, curbWord, roadKit } from './roadkit.js';
 import { sidewalk, pedHeads, nameBlades, stopPost, polePlate, signalCabinet, bollards, grate, utilityPole, poleEnds, span, guyWire, RAMP, CURB_RED, CURB_YELLOW } from './roadside.js';
 import { markRoad, markCrossing, nodeOf, blockAt, schoolBeside, BIKE_AVES, BIKE_STREETS } from './roadmarks.js';
@@ -34,7 +34,7 @@ import { markRoad, markCrossing, nodeOf, blockAt, schoolBeside, BIKE_AVES, BIKE_
 const LIVE = new Set(['houses', 'bungalows', 'apartments', 'villas', 'mansions', 'school']);
 const BARE = new Set(['pier', 'beach', 'point', 'bayfront', 'arena']);
 // the blocks of the busy town: iron posts on their corners, the loading zones
-const TOWN = new Set(['towers', 'offices', 'condos', 'galleria', 'dining', 'warehouses', 'lofts', 'walls', 'clubs', 'calle', 'boulevard', 'theatres', 'starlight', 'velvet', 'mixed', 'stripmall', 'boardwalk', 'plaza']);
+const TOWN = new Set(['towers', 'offices', 'condos', 'galleria', 'galleriaW', 'dining', 'warehouses', 'lofts', 'walls', 'clubs', 'calle', 'boulevard', 'theatres', 'starlight', 'velvet', 'mixed', 'stripmall', 'boardwalk', 'plaza']);
 
 export const TILE = 180;
 const X0 = -1980;
@@ -397,16 +397,22 @@ function* buildTile(tctx, t) {
       let k = 0;
       const bikeAve = BIKE_AVES.has((ax < 0 ? aw : ae).i);
       for (let z = z0 + 14; z < z1 - 10; z += 26, k++) {
-        streetLamp(tctx, x, z, ax, 0, { light: (Math.round(z) & 1) === 0 });
-        const lid = lastProp(tctx);
+        // (none under the Galleria's bridges and its gate over Second Avenue: ROADMAP 11.31)
         const plate = k === 0 ? (bikeAve ? 'bike' : bq() < 0.5 ? 'speed35' : null) : bq.pick(['tow', null, 'noturn', null, null, 'clean']);
-        // (on a phone, the first lamp's plate of a side only)
-        if (plate && !bare && (!lite || k === 0)) polePlate(tctx, x, z, CURB + 2.7, true, plate, lid, 0.115);
+        if (!underSpan(x, z, 2)) {
+          streetLamp(tctx, x, z, ax, 0, { light: (Math.round(z) & 1) === 0 });
+          const lid = lastProp(tctx);
+          // (on a phone, the first lamp's plate of a side only)
+          if (plate && !bare && (!lite || k === 0)) polePlate(tctx, x, z, CURB + 2.7, true, plate, lid, 0.115);
+        }
         if (r() < 0.6) {
           const tx = x - ax * 0.4;
           const tz = z + 13;
-          shadeTree(tctx, r, tx, tz, { lite: true, size: r.range(0.8, 1.05) });
-          if (!live && !bare) grate(P, tx, tz);
+          const size = r.range(0.8, 1.05);
+          if (!underSpan(tx, tz, 4)) {
+            shadeTree(tctx, r, tx, tz, { lite: true, size });
+            if (!live && !bare) grate(P, tx, tz);
+          }
         }
       }
       // (a side of the block's lamps and trees a step)

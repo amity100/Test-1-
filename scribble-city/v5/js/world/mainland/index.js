@@ -332,7 +332,10 @@ export class Mainland {
       for (const f of live.bctx.footprints) {
         if (f.pool || f.lot || f.tower || f.top === undefined) continue;
         const c = f.color && f.color.isColor ? '#' + f.color.getHexString() : typeof f.color === 'string' ? f.color : '#e6d6cc';
-        list.push([+f.x0.toFixed(2), +f.z0.toFixed(2), +f.x1.toFixed(2), +f.z1.toFixed(2), +f.top.toFixed(2), c]);
+        const q = [+f.x0.toFixed(2), +f.z0.toFixed(2), +f.x1.toFixed(2), +f.z1.toFixed(2), +f.top.toFixed(2), c];
+        // (its foot, if it stands over the street: a bridge, the gate over the avenue)
+        if (f.y0 !== undefined) q.push(+f.y0.toFixed(2));
+        list.push(q);
       }
       out[b.id] = list;
       // (the stands where a friend is drawn: for the map)

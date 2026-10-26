@@ -22,22 +22,47 @@ import { dressSidewalks } from './sidewalks.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
-  // (v5, ROADMAP 11.30: the mega mall - three floors round a hall of glass, world/mainland/megamall.js;
-  // its stores floor by floor, west row and east row)
+  // (v5, ROADMAP 11.30, 11.31: the mega mall - two wings of five floors round their halls of glass,
+  // either side of Second Avenue, the bridges and the gate over it, world/mainland/megamall.js; their
+  // stores floor by floor, west row and east row. The east wing builds the bridges and the gate)
   galleria: {
-    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', wall: '#f4efe8', trim: '#2fa8a0', signCol: '#ff5ad1', font: 'Rubik',
-    mega: true,
+    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
+    mega: true, wing: 'east', floors: 5, other: 'WEST WING', spans: 24, bank: true, security: true, helipad: true, court: 'fountain',
     stores: {
       L0w: ['fashion', 'shoes', 'electronics', 'jewelry', 'perfume', 'fashion', 'optics', 'sports'],
       L0e: ['fashion', 'phones', 'toys', 'shoes', 'boutique', 'cafe'],
-      L1w: ['fashion', 'books', 'sports', 'fashion', 'shoes', 'boutique', 'perfume', 'fashion', 'jewelry', 'music'],
+      L1w: ['fashion', 'books', 'sports', 'shoes', 'boutique', 'perfume', 'jewelry', 'music'],
       L1e: ['electronics', 'toys', 'fashion', 'shoes', 'optics', 'phones'],
       L2w: ['arcade', 'music', 'fashion', 'books', 'sports', 'boutique', 'icecream', 'cafe'],
       L2e: ['fashion', 'perfume', 'electronics', 'shoes', 'toys', 'barber'],
+      L3w: ['fashion', 'jewelry', 'perfume', 'shoes', 'optics', 'boutique', 'fashion', 'books'],
+      L3e: ['sports', 'electronics', 'fashion', 'phones', 'toys', 'music', 'shoes', 'boutique'],
+      L4w: ['fashion', 'sports', 'cafe', 'books', 'boutique'],
+      L4e: ['perfume', 'electronics', 'icecream', 'shoes', 'barber'],
     },
     food: ['burger', 'tacos', 'noodles', 'pizza', 'sushi', 'juice'],
     street: ['cafe', 'pharmacy', 'juice', 'sushi', 'icecream', 'phones', 'barber', 'flowers', 'cafe', 'optics', 'bagel', 'books'],
-    anchor: { name: 'BLOOMWELL\'S', kind: 'fashion' },
+    anchor: { name: 'INKWELL & CO', kind: 'fashion', side: 1, floors: 2 },
+  },
+  galleriaW: {
+    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
+    mega: true, wing: 'west', floors: 5, other: 'EAST WING', bank: false, security: false, helipad: false, court: 'palms',
+    stores: {
+      L0w: ['jewelry', 'perfume', 'shoes', 'fashion'],
+      L0e: ['fashion', 'boutique', 'optics', 'phones', 'shoes', 'electronics', 'toys', 'cafe'],
+      L1w: ['shoes', 'boutique', 'perfume', 'fashion'],
+      L1e: ['fashion', 'sports', 'books', 'jewelry', 'music', 'fashion', 'shoes'],
+      L2w: ['electronics', 'toys', 'fashion', 'optics'],
+      L2e: ['boutique', 'fashion', 'perfume', 'arcade', 'shoes', 'phones', 'sports'],
+      L3w: ['fashion', 'books', 'shoes', 'jewelry', 'perfume', 'boutique', 'fashion', 'music'],
+      L3e: ['fashion', 'electronics', 'shoes', 'sports', 'optics', 'toys', 'fashion'],
+      L4w: ['cafe', 'fashion', 'books', 'icecream', 'boutique'],
+      L4e: ['fashion', 'perfume', 'jewelry', 'barber', 'shoes'],
+    },
+    food: ['sushi', 'noodles', 'pizza', 'cafe', 'tacos', 'icecream'],
+    foodSign: 'DINING',
+    street: ['cafe', 'flowers', 'books', 'juice', 'optics', 'bagel', 'pharmacy', 'icecream', 'phones', 'cafe', 'barber', 'sushi'],
+    anchor: { name: 'BLOOMWELL\'S', kind: 'fashion', side: -1, floors: 3 },
   },
   starlight: {
     name: 'STARLIGHT CENTER', heb: 'מרכז סטארלייט', open: true, wall: '#f6e3d0', trim: '#e0574f', signCol: '#ffe14f', font: 'Permanent Marker',
@@ -80,6 +105,7 @@ function mixOf(b) {
     case 'offices':
     case 'condos':
     case 'galleria':
+    case 'galleriaW':
     case 'dining':
       return MIXES.towers;
     case 'warehouses':
@@ -261,6 +287,7 @@ function* buildKind(bctx, b) {
       yield;
       return;
     case 'galleria':
+    case 'galleriaW':
     case 'starlight':
       if (MALLS[b.kind].mega) yield* buildMegaMall(bctx, b, MALLS[b.kind]);
       else yield* buildMall(bctx, b, MALLS[b.kind]);
