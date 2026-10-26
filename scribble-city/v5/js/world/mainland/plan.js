@@ -229,7 +229,8 @@ function rowOf(z) {
 // the places the city is known for: where they are (their block), what they are
 export const PLACES = [
   { id: 'marina', kind: 'mall', name: 'Marina Market', heb: 'מרינה מרקט', at: [-668, -330] },
-  { id: 'galleria', kind: 'mall', name: 'Downtown Galleria', heb: 'הגלריה של דאונטאון', block: '1,8' },
+  // (mega: the giant one, world/mainland/megamall.js - the map shows it big, at any zoom)
+  { id: 'galleria', kind: 'mall', mega: true, name: 'Downtown Galleria', heb: 'הגלריה של דאונטאון', block: '1,8' },
   { id: 'starlight', kind: 'mall', name: 'Starlight Center', heb: 'מרכז סטארלייט', block: '6,3' },
   { id: 'valleyplaza', kind: 'mall', name: 'Valley Plaza', heb: 'ואלי פלאזה', block: '9,9' },
   { id: 'neonink', kind: 'club', name: 'NEON INK', heb: 'מועדון ניאון אינק', block: '2,3' },

@@ -13,6 +13,8 @@ const PLACE_NOTES = {
   arena: 'Bayfront Arena: האצטדיון על המפרץ. הערב: WAVE נגד PENS',
   marina: 'Marina Market: שוק על המים, רציפים וסירות. בטיילת המפרץ',
   observatory: 'Inkwood Observatory: על הגבעות ליד השלט. כיפות נחושת, ובלילה הוא מואר מעל העיר',
+  // (ROADMAP 11.30)
+  galleria: 'Downtown Galleria: שלוש קומות של חנויות, מדרגות נעות ומעליות, כיפת זכוכית ומזרקה, אוכל בקומה העליונה וגג עם מנחת. נכנסים מהצפון או מהדרום',
 };
 import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';
@@ -509,8 +511,9 @@ export class CityMap {
         const b = placeBlock(pl);
         const x = pl.at ? pl.at[0] : b ? b.cx : 0;
         const z = pl.at ? pl.at[1] : b ? b.cz : 0;
-        const glyph = pl.id === 'pier' ? 'wheel' : pl.id === 'lighthouse' ? 'lighthouse' : pl.id === 'observatory' ? 'dome' : pl.kind === 'arena' ? 'arena' : pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : 'fountain';
-        add({ cat: 'place', glyph, x, z, name: pl.heb, note: PLACE_NOTES[pl.id] || pl.name });
+        const glyph = pl.mega ? 'mall' : pl.id === 'pier' ? 'wheel' : pl.id === 'lighthouse' ? 'lighthouse' : pl.id === 'observatory' ? 'dome' : pl.kind === 'arena' ? 'arena' : pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : 'fountain';
+        // (ROADMAP 11.30: the giant mall - big, at any zoom, its name with it)
+        add({ cat: 'place', glyph, x, z, name: pl.mega ? `קניון ${pl.heb}` : pl.heb, note: PLACE_NOTES[pl.id] || pl.name, big: !!pl.mega });
       }
       add({ cat: 'place', glyph: 'beach', x: -1500, z: 600, name: 'חוף פליסייד', note: 'הטיילת, החול והאוקיינוס בדרום היבשה' });
       // (v5, ROADMAP 11.17) DRAW YOURSELF A FRIEND on the mainland, the plots to draw a home on, and
@@ -545,9 +548,9 @@ export class CityMap {
     // where nobody sees you
     for (const h of w.hideSpots || []) add({ cat: 'hide', glyph: 'hide', x: h.x, z: h.z, name: 'מחבוא', note: `${HIDE_NOTE[h.kind] || ''}${HIDE_NOTE[h.kind] ? '. ' : ''}כאן לא רואים אתכם, ואפשר לצייר בשקט`, spot: h });
     for (const b of w.busStops || []) add({ cat: 'bus', glyph: 'bus', x: b.x, z: b.z, name: 'תחנת אוטובוס', note: districtName(b.x, b.z) });
-    // the most important first: they keep their place when the stickers crowd
+    // the most important first: they keep their place when the stickers crowd (the big ones before all)
     const rank = Object.fromEntries(ORDER.map((id, i) => [id, i]));
-    this.items.sort((a, b) => rank[a.cat] - rank[b.cat]);
+    this.items.sort((a, b) => (b.big ? 1 : 0) - (a.big ? 1 : 0) || rank[a.cat] - rank[b.cat]);
     this.gangs = (w.territories || []).filter((t) => t.name === 'gang');
     // the market's stalls
     this.stalls = (w.stands || []).filter((s) => s.kind !== 'icecream' && s.f);
@@ -1469,32 +1472,40 @@ export class CityMap {
     const placed = [];
     // (smaller stickers when the whole city is on the screen)
     const R = clamp(5.5 + k * 4.5, 7, this.game.touch ? 12 : 11);
-    const gap = R * 1.75;
     for (const it of this.items) {
       if (this.off.has(it.cat)) continue;
       const cat = CAT[it.cat];
       if (k < cat.k) continue;
+      const r = it.big ? R * 1.7 : R;
       const x = this.sx(it.x);
       const y = this.sy(it.z);
-      if (x < -R || y < -R || x > W + R || y > H + R) continue;
+      if (x < -r || y < -r || x > W + r || y > H + r) continue;
       let free = true;
       for (let i = 0; i < placed.length; i++) {
         const p = placed[i];
+        const gap = (p.r + r) * 0.875;
         if ((p.x - x) * (p.x - x) + (p.y - y) * (p.y - y) < gap * gap) {
           free = false;
           break;
         }
       }
       if (!free) continue;
-      placed.push({ x, y, it, r: R });
+      placed.push({ x, y, it, r });
     }
     this.placed = placed;
-    // the names of the shops and the boards, once there is room for them
+    // the names of the shops and the boards, once there is room for them (the big ones' always)
     const names = [];
+    const BIG = '800 15px Rubik, sans-serif';
+    for (const p of placed) {
+      if (!p.it.big) continue;
+      g.font = BIG;
+      const w = g.measureText(p.it.name).width;
+      names.push({ x0: p.x - w / 2 - 4, x1: p.x + w / 2 + 4, y0: p.y + p.r + 1, y1: p.y + p.r + 20 });
+    }
     if (k > 4.4) {
       for (const p of placed) {
         const it = p.it;
-        if (!it.name || it.cat === 'hide' || it.cat === 'bus') continue;
+        if (!it.name || it.big || it.cat === 'hide' || it.cat === 'bus') continue;
         const latin = /^[\x20-\x7e]+$/.test(it.name);
         const font = latin ? '700 16px Caveat, sans-serif' : '600 13px Rubik, sans-serif';
         g.font = font;
@@ -1516,7 +1527,7 @@ export class CityMap {
       const sel = this.sel === it || this.hover === it;
       const shut = it.hours && !this.isOpen(it);
       if (shut) g.globalAlpha = 0.55;
-      sticker(g, p.x, p.y, it.glyph, it.prop && it.prop.owned ? '#ffd23f' : cat.fill, R, { square: cat.square, dashed: cat.dashed, ring: sel });
+      sticker(g, p.x, p.y, it.glyph, it.prop && it.prop.owned ? '#ffd23f' : cat.fill, p.r, { square: cat.square, dashed: cat.dashed, ring: sel });
       g.globalAlpha = 1;
       // a board already photographed: a tick in its corner
       if (it.bp && this.game.album.items && this.game.album.items.has(it.bp.id)) {
@@ -1536,6 +1547,8 @@ export class CityMap {
         g.stroke();
       }
     }
+    // (over the stickers round it)
+    for (const p of placed) if (p.it.big) this.text(g, p.it.name, p.x, p.y + p.r + 11, { font: BIG, dir: 'rtl', halo: 4.5 });
   }
 
   isOpen(it) {

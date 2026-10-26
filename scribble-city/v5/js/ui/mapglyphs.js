@@ -499,6 +499,16 @@ export const GLYPHS = {
       g.stroke();
     }
   },
+  // (v5, ROADMAP 11.30: the giant mall - a shopping bag)
+  mall(g) {
+    g.fillStyle = '#ff7eb6';
+    shape(g, [-5.4, -2.6, 5.4, -2.6, 6.4, 6.6, -6.4, 6.6]);
+    g.beginPath();
+    g.arc(0, -2.6, 3, Math.PI, TAU);
+    g.stroke();
+    g.fillStyle = W;
+    circle(g, 0, 2.1, 1.9, true);
+  },
   beach(g) {
     line(g, 0, -4.6, 1.6, 7);
     g.fillStyle = '#ff7eb6';
