@@ -8,6 +8,7 @@ import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, FASHION_TOPS, FASHION_BOTTOM
 import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 import { BOSS } from './properties.js';
 import { TOOLS, BOTTLE } from './ink.js';
+import { Dining, BarLife, LobbyLife, eatPlate } from './venuelife.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -26,10 +27,10 @@ const ITEM = {
   pizza: 'pizzaBox', cafe: 'coffee', grocery: 'bag', deli: 'bag', bagel: 'bag', flowers: 'bouquet', books: 'book',
   icecream: 'icecream', hardware: 'bag', laundry: 'laundry', sushi: 'bag', falafel: 'bag', shop: 'bag', pharmacy: 'bag',
   phones: 'phone', optics: null, gym: null, music: null, barber: null, lobby: null,
-  tacos: 'bag', diner: 'bag', juice: 'coffee', surf: null, boutique: 'bag', arcade: null, bar: null, cinema: 'coffee',
+  tacos: 'bag', diner: 'bag', juice: 'coffee', surf: null, boutique: 'bag', arcade: null, bar: null, cinema: 'soda',
   // (v5, ROADMAP 11.17: the mainland's stores - a bag in the store's own colour)
   fashion: 'shopBag', shoes: 'shopBag', electronics: 'shopBag', jewelry: 'shopBag', toys: 'teddy', perfume: 'shopBag', sports: 'shopBag',
-  burger: 'burger', noodles: 'noodleBox', gourmet: null, club: null, theatre: null,
+  burger: 'burger', noodles: 'noodleBox', gourmet: null, club: null, theatre: 'soda',
   // (v5, ROADMAP 11.18: the carts at the curb)
   hotdog: 'hotdog',
 };
@@ -978,7 +979,7 @@ function giftBlueprint(game) {
 const DISH = {
   pizza: ['slice', 'pizza'], cafe: ['cup'], icecream: ['cone'], sushi: ['sushi'], falafel: ['pita'], tacos: ['taco', 'empanada'], diner: ['burger', 'dessert', 'soda'],
   juice: ['smoothie', 'lemonade'], deli: ['sandwich', 'hotdog'], bagel: ['bagel', 'donut'], burger: ['burger', 'fries', 'soda', 'hotdog'], noodles: ['noodles'],
-  gourmet: ['gourmet', 'steak', 'pasta', 'dessert'], bar: ['mocktail', 'lemonade'], club: ['mocktail', 'lemonade'], cinema: ['soda'],
+  gourmet: ['gourmet', 'steak', 'pasta', 'dessert'], bar: ['mocktail', 'lemonade'], club: ['mocktail', 'lemonade'], cinema: ['soda'], theatre: ['soda'],
 };
 const ORDERS = {
   gourmet: ['The chef\'s special, please.', 'I\'ll have the filet.', 'The pasta, please!', 'Something sweet?', 'Surprise me, chef.'],
@@ -1084,6 +1085,20 @@ class OpenShop {
       const n = this.game.touch ? 1 : s.spots.tables.length;
       for (let i = 0; i < n; i++) this.seat(s.spots.tables[i]);
     }
+    // (v5, GTA IV round) the places you sit down in run their evening their own way
+    // (game/venuelife.js): the restaurant's host, waiters and cooks and its parties at their tables;
+    // the bar's barmen and the people on its stools and at its tables; the cinema's and the
+    // theatre's lobby, the box office, the usher. (Not in ?classic.)
+    const own = R && !this.game.classic;
+    this.dining = own && R.marks && R.marks.host ? new Dining(this) : null;
+    this.barLife = own && !this.dining && (s.kind === 'bar' || s.kind === 'club') ? new BarLife(this, R.seats.filter((x) => x.what === 'bar')) : null;
+    if (this.barLife) {
+      this.barTender = this.barLife.tender(R.keeper || { x: this.home.x, z: this.home.z, yaw: this.homeYaw });
+      if (R.marks && R.marks.barman) this.barLife.spawnBarman(R.marks.barman);
+      // (the club's coat check, its attendant: whoever comes in hands their coat over first)
+      if (R.marks && R.marks.coats && !this.game.touch) this.barLife.spawnCoats(R.marks.coats);
+    }
+    this.lobby = own && (s.kind === 'cinema' || s.kind === 'theatre') && R.marks && R.marks.usher ? new LobbyLife(this) : null;
     if (R) this.populate();
     else if (s.spots.chair) this.newCustomer(true);
     // a tower's lifts: the doors slide open for whoever goes up, and now and then somebody comes
@@ -1106,13 +1121,26 @@ class OpenShop {
     const R = this.room;
     const kind = this.shop.kind;
     const touch = this.game.touch;
+    // (v5, GTA IV round: the places with an evening of their own - game/venuelife.js)
+    if (this.dining) return this.dining.populate();
+    if (this.lobby) return this.lobby.populate();
     if (kind === 'barber' && R.chairs.length) this.addVisitor(null, { mode: 'chair', spot: R.chairs[0], already: true });
     const seats = shuffled(R.seats);
-    const nSeat = Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : SEATED[kind] || 0);
-    for (let i = 0; i < nSeat; i++) this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
-    const browse = shuffled(R.browse);
+    // (v5, GTA IV round: a place with a kitchen fills at lunch and at dinner - twice as many at its
+    // tables then, as many as it has)
+    const h = this.game.rhythm ? this.game.rhythm.hour : 13;
+    const meal = DISH[kind] && (SEATED[kind] || 0) < 6 && ((h > 11.8 && h < 14.5) || (h > 18.5 && h < 22));
+    const nSeat = this.barLife ? 0 : Math.min(seats.length, touch ? Math.min(1, SEATED[kind] || 0) : (SEATED[kind] || 0) * (meal ? 2 : 1));
+    for (let i = 0; i < nSeat; i++) {
+      const v = this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
+      // (v5, GTA IV round: here before you came - some halfway through what the kitchen brought)
+      if (v && DISH[kind] && kind !== 'cafe' && Math.random() < 0.6) this.plateFor(v);
+    }
+    if (this.barLife) this.barLife.populateRoom();
+    // (a bar's own standing places - the pool table, the darts, the tall tables - are the bar's)
+    const browse = shuffled(this.barLife ? R.browse.filter((b) => !b.what) : R.browse);
     // (the club's floor is full: they are dancing; a shop of the new kind is busy - v5, 11.18)
-    const nb = Math.min(browse.length, kind === 'club' ? (touch ? 4 : 9) : this.wantVisitors());
+    const nb = Math.min(browse.length, kind === 'club' ? (touch ? 5 : 13) : this.wantVisitors());
     for (let i = 0; i < nb; i++) this.addVisitor(null, { mode: browse[i].lift ? 'lift' : 'browse', spot: browse[i], already: true });
     // (the one who fills the shelves, in the bigger shops)
     if (R.pay && R.staff && R.staff.length && (!touch || R.big)) this.spawnStaff();
@@ -1246,6 +1274,11 @@ class OpenShop {
     const c = v.c;
     v.t += dt;
     if (v.phase !== 'at') c.fig.sit = Math.max(0, c.fig.sit - dt * 3);
+    // (v5, GTA IV round: a party at the restaurant, a moviegoer in the lobby - game/venuelife.js -
+    // until they are on their way out)
+    if (v.dine && v.phase !== 'out') return this.dining.visit(v, dt);
+    if (v.lobbyMan && (v.phase === 'in' || v.phase === 'lob' || v.phase === 'seat')) return this.lobby.visit(v, dt);
+    if (v.coat && this.barLife && v.phase === 'in') return this.barLife.coatCheck(v, dt);
     switch (v.phase) {
       case 'in':
       case 'pay-go':
@@ -1321,11 +1354,22 @@ class OpenShop {
           }
         }
       }
+      // (v5, GTA IV round: at a bar, a glass to the lips, a word with the next one)
+      const bl = this.dining ? this.dining.bar : this.barLife;
+      if (bl && (v.drink || c.fig.carry === 'soda')) bl.seated(v, dt);
+      // (v5, GTA IV round: a plate on the table before them - the diner's, the noodle bar's, the
+      // pizzeria's: they eat it, a word across the table between bites - game/venuelife.js)
+      else if (v.dish) eatPlate(this, v, dt);
       // the barber decides when the one in his chair is done
       if (v.mode === 'chair') return null;
-      if (v.t > v.stay) this.leave(v);
+      if (v.t > v.stay) {
+        if (c.fig.carry === 'soda') c.fig.carry = null;
+        this.leave(v);
+      }
       return null;
     }
+    // (a bar's people standing: at the tall tables, the pool table, the darts, the jukebox)
+    if (this.barLife && v.stand) return this.barLife.standing(v, dt);
     if (v.mode === 'lift') {
       if (v.t > v.stay && !this.lifts) {
         // ding: the lift is here, up they go
@@ -1353,7 +1397,7 @@ class OpenShop {
       return null;
     }
     // (on the club's floor: they dance, a shout now and then)
-    if (this.shop.kind === 'club') {
+    if (this.shop.kind === 'club' && !v.spot.what) {
       c.fig.dance = 1;
       if (v.stay < 25) v.stay = 25 + Math.random() * 40;
       if (Math.random() < dt * 0.02) this.say(c, pick(['Woo!', 'I love this song!', 'Yeah!', 'Dance with me!', 'Best night ever!']));
@@ -1721,7 +1765,9 @@ class OpenShop {
     if (v.t > 2.6) {
       if (this.payer === v) this.payer = null;
       if (Math.random() < 0.3) this.say(c, pick(['Thanks!', 'See ya!', 'Mmm!', 'Bye!']));
-      this.leave(v);
+      // (a moviegoer with a soda: on to the usher, not out - game/venuelife.js)
+      if (v.lobbyMan && this.lobby) this.lobby.afterPay(v);
+      else this.leave(v);
     }
     return null;
   }
@@ -1735,6 +1781,7 @@ class OpenShop {
     this.unshop(v);
     c.fig.dance = 0;
     c.fig.reachR = null;
+    c.fig.reachL = null;
     c.fig.drinkT = -1;
     v.phase = 'out';
     v.t = 0;
@@ -1820,6 +1867,12 @@ class OpenShop {
   // a pedestrian popping in from the street
   admit(c) {
     if (!this.room) return false;
+    // (v5, GTA IV round: to the host's stand, or into the lobby's way - game/venuelife.js)
+    if (this.dining || this.lobby) {
+      const ok = this.dining ? this.dining.admit(c) : this.lobby.admit(c);
+      if (ok) this.customers++;
+      return ok;
+    }
     const v = this.addVisitor(c);
     if (!v) return false;
     this.customers++;
@@ -1957,6 +2010,9 @@ class OpenShop {
     if (s.kind === 'barber') return this.barberInside(c, dt);
     if (s.home) return this.residentLife(c, dt);
     if (s.kind === 'cafe' && this.room.seats.length >= 2) return this.waiterInside(c, dt);
+    // (v5, GTA IV round: the chef at the pass; the barman behind the bar - game/venuelife.js)
+    if (this.dining) return this.dining.chef(c, dt);
+    if (this.barLife) return this.barLife.barman(this.barTender, c, dt);
     // (v5) a kitchen with tables: now and then a plate drawn for one of them, flown to the table
     if (DISH[s.kind] && this.room.seats.length && s.kind !== 'cafe') {
       const m = this.serveTables(c, dt);
@@ -2042,6 +2098,7 @@ class OpenShop {
           if (!this.alive || !v.c.alive || v.phase !== 'at') return;
           // (the plate stays on the table, drawn, while they eat)
           v.dish = this.game.airsketch.draw({ shape, at: new THREE.Vector3(tx, floor + 0.98, tz), size: 0.31, keep: true, dur: 0.05 });
+          v.dishShape = shape;
           v.stay = Math.max(v.stay, v.t + 14 + Math.random() * 12);
           if (Math.random() < 0.7) this.say(c, pick(CHEF_SAYS));
           if (Math.random() < 0.5) this.game.inkwell.after(1.2, () => this.say(v.c, pick(['Mmm!', 'Delicious!', 'Wow, thank you!', 'Magnifique!'])));
@@ -2049,6 +2106,19 @@ class OpenShop {
       });
     });
     return { x: this.home.x, z: this.home.z, speed: 0.6 };
+  }
+
+  // (v5, GTA IV round) a plate already on the table before somebody who sat down before you came:
+  // drawn there, kept while they eat (only near you, where it is seen)
+  plateFor(v) {
+    const s = this.shop;
+    const p = this.game.player.pos;
+    if (v.dish || Math.hypot(this.home.x - p.x, this.home.z - p.z) > 30) return;
+    const sp = v.spot;
+    const shape = pickDish(s.kind);
+    v.dish = this.game.airsketch.draw({ shape, at: new THREE.Vector3(sp.x + Math.sin(sp.yaw) * 0.42, this.room.floor + 0.98, sp.z + Math.cos(sp.yaw) * 0.42), size: 0.31, keep: true, dur: 0.05 });
+    v.dishShape = shape;
+    v.stay = Math.max(v.stay, v.t + 14 + Math.random() * 12);
   }
 
   clearDish(v) {
@@ -3011,9 +3081,14 @@ class OpenShop {
         }
       }
     }
+    // (v5, GTA IV round: the restaurant's parties, the lobby's moviegoers, the bar's regulars come and
+    // go their own way - game/venuelife.js)
+    if (this.dining) this.dining.update(dt);
+    else if (this.lobby) this.lobby.update(dt);
+    else if (this.barLife) this.barLife.update(dt);
     // now and then somebody new at the door (v5, 11.18: a shop of the new kind is busy - as many as
     // it holds when you are in it or at its window, fewer down the street)
-    if (this.room && this.open && !this.shop.home && (!this.game.touch || this.room.pay)) {
+    if (this.room && this.open && !this.shop.home && !this.dining && !this.lobby && (!this.game.touch || this.room.pay)) {
       this.newT = (this.newT === undefined ? 4 + Math.random() * 6 : this.newT) - dt;
       if (this.newT <= 0) {
         const want = this.wantVisitors();
@@ -3026,7 +3101,11 @@ class OpenShop {
           if (far) {
             const f = this.freeSpot();
             if (f) this.addVisitor(null, { ...f, already: true });
-          } else this.addVisitor(null);
+          } else {
+            const v = this.addVisitor(null);
+            // (v5, GTA IV round: in at the club's door - the coat check first)
+            if (v && this.barLife && this.barLife.coats) this.barLife.toCoats(v);
+          }
         }
       }
     }
@@ -3231,6 +3310,7 @@ class OpenShop {
 
   dispose() {
     this.alive = false;
+    if (this.dining) this.dining.dispose();
     if (this.filmSk) this.game.airsketch.erase(this.filmSk);
     this.filmSk = null;
     const civs = this.game.civilians;

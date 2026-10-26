@@ -66,7 +66,7 @@ export class Nightlife {
       const [x, z] = this.spot(q, k);
       const c = this.person(q, x, z);
       c.qIndex = k;
-      c.ctrl = (me) => this.inLine(q, me);
+      c.ctrl = (me, dt) => this.inLine(q, me, dt);
       q.people.push(c);
     }
     if (q.kind === 'club') {
@@ -77,7 +77,17 @@ export class Nightlife {
       const b = this.game.civilians.spawnScripted(bx, bz, L, this);
       b.brave = true;
       b.ctrl = (me) => {
-        me.faceYaw = Math.atan2(q.ux, q.uz);
+        // (v5, GTA IV round: the one let in shows a card; he turns to it, takes a look, a nod)
+        const g = q.checking;
+        if (g && g.alive && g.idT > 0) {
+          me.faceYaw = Math.atan2(g.pos.x - me.pos.x, g.pos.z - me.pos.z);
+          me.fig.lookAt = g.fig.j.handR;
+          me.fig.reachR = g.idT < 1.4 ? g.fig.j.handR : null;
+        } else {
+          me.faceYaw = Math.atan2(q.ux, q.uz);
+          me.fig.lookAt = null;
+          me.fig.reachR = null;
+        }
         return Math.hypot(me.pos.x - bx, me.pos.z - bz) > 0.3 ? { x: bx, z: bz, speed: 1.2 } : null;
       };
       q.bouncer = b;
@@ -94,7 +104,18 @@ export class Nightlife {
   }
 
   // standing in line: on their spot, facing the door; now and then turned to a friend behind
-  inLine(q, me) {
+  inLine(q, me, dt = 0) {
+    if (me.going && me.idT > 0 && q.bouncer && q.bouncer.alive) {
+      // (at the rope: the card held out to the bouncer, a moment, then in)
+      const b = q.bouncer;
+      const tx = b.pos.x + q.ux * 0.75;
+      const tz = b.pos.z + q.uz * 0.75;
+      if (Math.hypot(tx - me.pos.x, tz - me.pos.z) > 0.25) return { x: tx, z: tz, speed: 1.1 };
+      me.faceYaw = Math.atan2(b.pos.x - me.pos.x, b.pos.z - me.pos.z);
+      me.idT -= dt;
+      if (me.idT <= 0 && me.fig.carry === 'card') me.fig.carry = null;
+      return null;
+    }
     if (me.going) {
       // the one let in: up to the door and inside
       const dx = q.door[0] - me.pos.x;
@@ -127,9 +148,12 @@ export class Nightlife {
       keep.push(c);
     }
     q.people = keep;
-    q.people.forEach((c, k) => {
-      if (!c.going) c.qIndex = k - q.people.filter((o, j) => j < k && o.going).length;
-    });
+    // (each one's place: those ahead of them on their way in no longer count)
+    let gone = 0;
+    for (let k = 0; k < keep.length; k++) {
+      if (keep[k].going) gone++;
+      else keep[k].qIndex = k - gone;
+    }
     // chatter
     if (Math.random() < dt * 0.25 && q.people.length) {
       const c = q.people[Math.floor(Math.random() * q.people.length)];
@@ -150,6 +174,13 @@ export class Nightlife {
       const first = q.people.find((c) => !c.going);
       if (first) {
         first.going = true;
+        // (at the club's rope: the card shown first - game/nightlife.js inLine)
+        if (q.bouncer && !game.classic) {
+          first.idT = 2.2;
+          first.fig.carry = 'card';
+          first.fig.cardColor = [[0.3, 0.45, 0.85], [0.85, 0.7, 0.3], [0.9, 0.9, 0.86]][Math.floor(Math.random() * 3)];
+          q.checking = first;
+        }
         if (q.bouncer) {
           const p = game.player.pos;
           if (Math.hypot(q.bouncer.pos.x - p.x, q.bouncer.pos.z - p.z) < 16) game.bubbles.say(q.bouncer, BOUNCER[Math.floor(Math.random() * BOUNCER.length)]);
@@ -164,7 +195,7 @@ export class Nightlife {
         const [x, z] = this.spot(q, k + 14);
         const c = this.person(q, x, z);
         c.qIndex = k;
-        c.ctrl = (me) => this.inLine(q, me);
+        c.ctrl = (me, d) => this.inLine(q, me, d);
         q.people.push(c);
       }
     }

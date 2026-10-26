@@ -1,4 +1,5 @@
-import { civilianLook, kidLook, elderLook } from './looks.js';
+import * as THREE from 'three';
+import { civilianLook, kidLook, elderLook, modest } from './looks.js';
 
 // (v5, ROADMAP 11.17) The people of the malls. When you come near one of the mainland's malls
 // (world/mainland/mall.js) its hall fills with shoppers: they come in at the doors, stroll down
@@ -14,6 +15,72 @@ const BAGS = [[0.95, 0.45, 0.62], [0.32, 0.72, 0.86], [0.98, 0.78, 0.3], [0.62, 
 const OOH = ['Ooh, look at that!', 'I love this one!', 'Too expensive...', 'Maybe next time.', 'That would look great on you!', 'On sale!', 'Hmm...'];
 const CHAT = ['Where to next?', 'Let\'s get something to eat.', 'I need new shoes.', 'This mall is huge!', 'Look, an escalator!', 'One more store?', 'I\'m starving!', 'Nice bag!'];
 const UP_SAY = ['Wheee, the escalator!', 'Up we go!', 'What\'s upstairs?'];
+// (the hall's own people - the kiosks' sellers, the guard, the cleaner - and what is said at a kiosk)
+const ASK = {
+  sunglasses: ['Can I try these on?', 'How much are these?', 'Do these suit me?'],
+  phones: ['Got one for my phone?', 'How much is this case?', 'A charger, please.'],
+  sweets: ['A bag of those, please.', 'Mmm, which ones are best?', 'Some of the sour ones!'],
+  watches: ['Can I see that one?', 'Is it waterproof?', 'How much is this watch?'],
+  coffee: ['A latte, please.', 'One espresso, to go.', 'A cappuccino and a muffin.', 'Iced coffee, please!'],
+  balloons: ['The red one, please!', 'Can I have a balloon?', 'How much is the bear?'],
+};
+const SELL = {
+  sunglasses: ['They look great on you!', 'Two for one today!', 'Try the mirror!'],
+  phones: ['Ten dollars, a steal!', 'This one is very popular.', 'Fits every model!'],
+  sweets: ['The sour ones, fresh today!', 'Here you go, a full scoop!', 'Try one first!'],
+  watches: ['A classic, that one.', 'Water-proof to fifty metres.', 'Let me get it out for you.'],
+  coffee: ['Coming right up!', 'Name for the cup?', 'Here you go, careful, it\'s hot.'],
+  balloons: ['Here you go! Hold on tight!', 'The red one, good choice.', 'Don\'t let it fly away!'],
+};
+const CALL = {
+  sunglasses: 'Sunglasses! Two for one!',
+  phones: 'Phone cases! Chargers!',
+  sweets: 'Sweets! Fresh sweets!',
+  watches: 'Watches, best prices!',
+  coffee: 'Fresh coffee! Hot pastries!',
+  balloons: 'Balloons! Balloons for the kids!',
+};
+const BUY = ['I\'ll take it!', 'Perfect, thanks!', 'Maybe later.', 'Just looking, thanks.'];
+const MAP_SAY = ['Where is the food court?', 'Ah, there it is.', 'Second floor...', 'We are here.'];
+const GUARD_SAY = ['Evening.', 'Have a nice day.', 'No running, please.', 'All quiet.'];
+const KIOSK_COL = { sunglasses: [0.98, 0.6, 0.72], phones: [0.3, 0.7, 0.82], sweets: [0.98, 0.78, 0.34], watches: [0.24, 0.26, 0.32], coffee: [0.36, 0.24, 0.18], balloons: [0.56, 0.8, 0.96] };
+// (what a kiosk hands over: a cup of coffee, a balloon on its string; the rest go in a bag)
+const BALLOONS = [[0.95, 0.25, 0.3], [0.98, 0.82, 0.25], [0.3, 0.6, 0.95], [0.45, 0.85, 0.45], [0.95, 0.5, 0.8], [0.7, 0.45, 0.95]];
+// (lunch at the food court: what is on the tray, what is said over it, the tray back at the station)
+const MEAL = ['burger', 'noodleBox', 'hotdog', 'burger', 'soda', 'coffee', 'noodleBox'];
+const MEAL_TALK = [
+  ['Want some of my fries?', 'Always!'],
+  ['These noodles are so good.', 'Can I try?'],
+  ['Where do we go after this?', 'The shoe store!', 'Again?'],
+  ['I needed this.', 'Shopping is hard work.'],
+  ['Did you see that jacket?', 'Too expensive.', 'Worth it!'],
+  ['Same place next week?', 'Deal.'],
+];
+const TRAY_SAY = ['Thank you!', 'There.', 'All done.'];
+
+function kioskLook(kind) {
+  const L = civilianLook({ kind: pick(['casual', 'street', 'smart']) });
+  L.top = { kind: 'polo', color: KIOSK_COL[kind] || [0.4, 0.5, 0.8], sleeves: L.fem ? 'long' : 'short' };
+  return modest(L);
+}
+
+function guardLook() {
+  const L = civilianLook({ kind: 'smart' });
+  L.top = { kind: 'polo', color: [0.16, 0.17, 0.2], sleeves: L.fem ? 'long' : 'short' };
+  L.bottom = L.fem ? { kind: 'wide', color: [0.13, 0.13, 0.16] } : { kind: 'pants', color: [0.13, 0.13, 0.16] };
+  L.hat = { kind: 'cap', color: [0.12, 0.12, 0.15] };
+  L.acc = L.fem ? ['earrings', 'belt'] : ['belt'];
+  return modest(L);
+}
+
+function cleanerLook() {
+  const L = civilianLook({ kind: 'casual' });
+  L.top = { kind: 'polo', color: [0.2, 0.5, 0.56], sleeves: 'long' };
+  L.bottom = { kind: 'pants', color: [0.3, 0.32, 0.36] };
+  L.hat = { kind: 'cap', color: [0.2, 0.5, 0.56] };
+  L.acc = L.fem ? ['earrings'] : [];
+  return modest(L);
+}
 
 // ------------------------------------------------------------------ the way round the hall
 // a walk grid over the hall (half a metre a cell), the furniture in it blocked; A* on it
@@ -203,7 +270,9 @@ export class MallLife {
   }
 
   get budget() {
-    return this.game.touch ? 7 : 16;
+    // (the shoppers of the hall at once - the food court's tables on top of them on a computer; a
+    // hall a hundred metres long takes a crowd to look busy)
+    return this.game.touch ? 7 : 22;
   }
 
   update(dt) {
@@ -237,25 +306,214 @@ export class MallLife {
     const game = this.game;
     const h = m.hall;
     const nav = new HallNav(game.world.collision, { x0: h.x0, z0: h.z0 - 4, x1: h.x1, z1: h.z1 + 4 });
-    const st = { nav, people: [], newT: 2, mall: m };
+    const st = { nav, people: [], staff: [], newT: 2, mall: m };
     this.active.set(m, st);
     const n = Math.round(this.budget * 0.75);
     for (let i = 0; i < n; i++) this.spawn(m, st, true);
+    // (lunch at the food court when you come in: people at its tables already, a tray each, in twos
+    // and on their own)
+    if (m.food.length && m.seats.length) {
+      const nEat = this.game.touch ? 2 : 6;
+      for (let i = 0; i < nEat; i++) {
+        const seat = this.freeSeat(st, m.seats[Math.floor(Math.random() * m.seats.length)], true);
+        if (seat) this.spawn(m, st, true, { seat });
+      }
+    }
+    // (some already on the escalator, some up on the gallery when you come in)
+    if (m.escalator) {
+      const lone = st.people.filter((s) => !s.follower);
+      const nUp = Math.min(lone.length, this.game.touch ? 1 : 4);
+      for (let i = 0; i < nUp; i++) {
+        lone[i].plan.unshift({ kind: 'upstairs', pre: ['up', 'down', 'gallery', 'up'][i] });
+        this.next(lone[i]);
+      }
+    }
+    // (and some on the benches already, a rest between the stores - a look at the phone, a word
+    // with the friend standing by)
+    if (m.benches.length) {
+      const sitters = st.people.filter((s) => !s.follower && !s.cur);
+      const nB = Math.min(sitters.length, this.game.touch ? 1 : 4);
+      for (let i = 0; i < nB; i++) {
+        const used = new Set(this.taken(st));
+        const free = m.benches.filter((b) => !used.has(b));
+        if (!free.length) break;
+        sitters[i].plan.unshift({ kind: 'bench', pre: pick(free) });
+        this.next(sitters[i]);
+      }
+    }
+    this.hire(m, st);
   }
 
   close(m, st) {
     for (const s of st.people) this.drop(s, true);
     st.people = [];
+    for (const w of st.staff) this.game.civilians.remove(w.c);
+    st.staff = [];
+    for (const k of m.kiosks || []) k.busy = null;
     this.active.delete(m);
   }
 
+  // ------------------------------------------------------------------ the hall's own people
+  // a seller in each kiosk (two on a phone), the guard on the beat, the cleaner with the broom
+  hire(m, st) {
+    const game = this.game;
+    const touch = game.touch;
+    const add = (x, z, look, fn) => {
+      const c = game.civilians.spawnScripted(x, z, look, this);
+      const w = { c, t: Math.random() * 10, hand: new THREE.Vector3(), handL: new THREE.Vector3(), pts: null, i: 0, pause: 0 };
+      c.ctrl = (civ, dt) => fn(w, dt);
+      st.staff.push(w);
+      return w;
+    };
+    for (const k of (m.kiosks || []).slice(0, touch ? 2 : 4)) {
+      const w = add(k.x, k.z, kioskLook(k.kind), (q, dt) => this.vendor(q, dt));
+      w.k = k;
+      w.c.noCollide = true;
+      w.c.yaw = k.yaw;
+      w.callT = 6 + Math.random() * 20;
+      k.vendor = w;
+    }
+    if (touch) return;
+    const h = m.hall;
+    const e = m.entrances[0];
+    if (e) {
+      const g = add(e.x + 2.5, e.zIn, guardLook(), (q, dt) => this.guard(q, dt));
+      g.st = st;
+      g.beat = [{ x: h.x0 + 5.6, z: h.z0 + 9 }, { x: h.x0 + 5.6, z: h.z1 - 9 }, { x: h.x1 - 5.6, z: h.z1 - 9 }, { x: h.x1 - 5.6, z: h.z0 + 9 }];
+      g.c.speed = 0.95;
+    }
+    if (m.bins && m.bins.length) {
+      const b0 = m.bins[0];
+      const cl = add(b0.x + 0.8, b0.z, cleanerLook(), (q, dt) => this.cleaner(q, dt));
+      cl.st = st;
+      cl.c.fig.carry = 'broom';
+      cl.c.speed = 0.7;
+      cl.i = Math.floor(Math.random() * m.bins.length);
+    }
+  }
+
+  // the seller: behind the counter, a hand at the goods (setting them straight), a look round the
+  // hall, a call to the people going by; to the one who stops, a word and the thing handed over
+  vendor(w, dt) {
+    const c = w.c;
+    const k = w.k;
+    const f = c.fig;
+    w.t += dt;
+    if (Math.hypot(c.pos.x - k.x, c.pos.z - k.z) > 0.3) return { x: k.x, z: k.z, speed: 0.9 };
+    const s = k.busy;
+    if (s && s.c.alive && s.cur && s.cur.k === k && s.phase === 'at') {
+      c.faceYaw = Math.atan2(s.c.pos.x - c.pos.x, s.c.pos.z - c.pos.z);
+      f.lookAt = s.c.fig.j.headC;
+      // (the thing held out across the counter)
+      if (s.t > 2.6 && s.t < 5.4) {
+        w.hand.set((c.pos.x + k.mid.x) / 2 + (s.c.pos.x - k.mid.x) * 0.15, k.mid.y + 0.25, (c.pos.z + k.mid.z) / 2 + (s.c.pos.z - k.mid.z) * 0.15);
+        f.reachR = w.hand;
+      } else f.reachR = null;
+      return null;
+    }
+    f.lookAt = null;
+    // setting the goods straight, now and then; otherwise a look up and down the hall
+    const busy = Math.sin(w.t * 0.37) > 0.2;
+    if (busy) {
+      w.hand.set(k.mid.x + Math.cos(w.t * 2.1) * 0.12, k.mid.y + 0.12 + Math.sin(w.t * 3.3) * 0.08, k.mid.z + Math.sin(w.t * 0.9) * 0.5);
+      f.reachR = w.hand;
+      c.faceYaw = Math.atan2(k.mid.x - c.pos.x, k.mid.z - c.pos.z);
+    } else {
+      f.reachR = null;
+      c.faceYaw = k.yaw + Math.sin(w.t * 0.25) * 0.9;
+    }
+    w.callT -= dt;
+    if (w.callT <= 0) {
+      w.callT = 18 + Math.random() * 25;
+      this.say(c, CALL[k.kind] || 'Best prices!');
+    }
+    return null;
+  }
+
+  // the guard: a slow round of the hall, a stop at each corner of it to look round, hands behind
+  // the back
+  guard(w, dt) {
+    const c = w.c;
+    const f = c.fig;
+    w.t += dt;
+    if (w.pause > 0) {
+      w.pause -= dt;
+      c.faceYaw += Math.sin(w.t * 0.8) * dt * 0.6;
+      w.hand.set(c.pos.x - f.forward.x * 0.22 + f.right.x * 0.08, c.pos.y + 0.95, c.pos.z - f.forward.z * 0.22 + f.right.z * 0.08);
+      w.handL.set(c.pos.x - f.forward.x * 0.22 - f.right.x * 0.08, c.pos.y + 0.95, c.pos.z - f.forward.z * 0.22 - f.right.z * 0.08);
+      f.reachR = w.hand;
+      f.reachL = w.handL;
+      return null;
+    }
+    f.reachR = null;
+    f.reachL = null;
+    const mv = this.walk(w);
+    if (mv) {
+      mv.speed = c.speed;
+      return mv;
+    }
+    // at the corner: a look round; then on to the next
+    if (w.pts) {
+      w.pts = null;
+      w.pause = 4 + Math.random() * 5;
+      const p = this.game.player.pos;
+      if (Math.hypot(p.x - c.pos.x, p.z - c.pos.z) < 6 && Math.random() < 0.5) this.say(c, pick(GUARD_SAY));
+      return null;
+    }
+    w.i = (w.i + 1) % w.beat.length;
+    const b = w.beat[w.i];
+    w.pts = w.st.nav.path(c.pos.x, c.pos.z, b.x, b.z);
+    w.t = 0;
+    return null;
+  }
+
+  // the cleaner: from bin to bin with the broom, a sweep round each, the bag changed now and then
+  cleaner(w, dt) {
+    const c = w.c;
+    const f = c.fig;
+    const bins = w.st.mall.bins;
+    w.t += dt;
+    if (w.pause > 0) {
+      w.pause -= dt;
+      // (the broom pushed to and fro at the bin's foot; the lid lifted at the end)
+      const b = bins[w.i];
+      c.faceYaw = Math.atan2(b.x - c.pos.x, b.z - c.pos.z) + Math.sin(w.t * 2.4) * 0.35;
+      f.reachL = w.pause < 1.2 && w.pause > 0.4 ? w.handL.set(b.x, c.pos.y + 0.95, b.z) : null;
+      return null;
+    }
+    f.reachL = null;
+    const mv = this.walk(w);
+    if (mv) {
+      mv.speed = c.speed;
+      return mv;
+    }
+    if (w.pts) {
+      w.pts = null;
+      w.pause = 4 + Math.random() * 4;
+      return null;
+    }
+    w.i = (w.i + 1 + Math.floor(Math.random() * 2)) % bins.length;
+    const b = bins[w.i];
+    w.pts = w.st.nav.path(c.pos.x, c.pos.z, b.x + 0.7, b.z + 0.4);
+    w.t = 0;
+    return null;
+  }
+
   // ------------------------------------------------------------------ a shopper
-  spawn(m, st, already) {
+  spawn(m, st, already, o = {}) {
     const game = this.game;
     const nav = st.nav;
     let x;
     let z;
-    if (already) {
+    if (o.seat) {
+      // (at a table of the food court, eating)
+      x = o.seat.x;
+      z = o.seat.z;
+    } else if (o.fromUp) {
+      // (down from the upper floor: at the head of the down flight)
+      x = m.escalator.x0 + 2.35;
+      z = m.escalator.z0 + 0.2;
+    } else if (already) {
       // somewhere in the hall already
       for (let t = 0; t < 20; t++) {
         x = m.hall.x0 + 1 + Math.random() * (m.hall.x1 - m.hall.x0 - 2);
@@ -278,18 +536,67 @@ export class MallLife {
     c.ctrl = (civ, dt) => this.step(s, dt);
     st.people.push(s);
     this.plan(s, !already);
-    // (a friend with them, sometimes: walking together)
-    if (Math.random() < 0.3 && st.people.length < this.budget) {
+    if (o.seat) {
+      s.plan.unshift({ kind: 'eat', pre: o.seat });
+      this.next(s);
+    } else if (o.fromUp) {
+      s.plan.unshift({ kind: 'upstairs', pre: 'down', k0: 0 });
+      this.next(s);
+    }
+    // (a friend with them, sometimes: walking together; at the table, across from them)
+    const mate = o.seat ? this.mateSeat(st, o.seat) : null;
+    if ((o.seat ? mate && Math.random() < 0.6 : Math.random() < 0.3) && st.people.length < this.budget + 6) {
       const look2 = civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim']) });
-      const c2 = game.civilians.spawnScripted(x + 0.8, z + 0.3, look2, this);
+      const c2 = game.civilians.spawnScripted(mate ? mate.x : x + 0.8, mate ? mate.z : z + 0.3, look2, this);
       c2.speed = c.speed;
       if (already && Math.random() < 0.5) this.giveBag(c2);
       const f = { c: c2, m, st, plan: [], cur: null, t: 0, pts: null, lead: s, follower: true };
       c2.ctrl = (civ, dt) => this.follow(f, dt);
       s.friend = f;
       st.people.push(f);
+      if (mate) {
+        f.fseat = mate;
+        f.sitting = true;
+        c2.noCollide = true;
+        c2.fig.sit = 1;
+        c2.yaw = mate.yaw;
+        c2.fig.carry = pick(MEAL);
+      }
     }
     return s;
+  }
+
+  // a seat of the food court nobody has: near (x, z) (near: a seat, whose own table first), at a
+  // table nobody sits at (empty) if there is one
+  freeSeat(st, near, empty = false) {
+    const m = st.mall;
+    const used = new Set(this.taken(st));
+    const busy = new Set();
+    for (const q of used) if (q.table) busy.add(q.table);
+    let best = null;
+    let bd = Infinity;
+    for (const q of m.seats) {
+      if (used.has(q) || (empty && busy.has(q.table))) continue;
+      const d = Math.hypot(q.x - near.x, q.z - near.z) + (busy.has(q.table) ? 4 : 0);
+      if (d < bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    return best;
+  }
+
+  // the seat across the table from seat q (or beside it), if it is free
+  mateSeat(st, q) {
+    if (!q || !q.table) return null;
+    const used = new Set(this.taken(st));
+    let alt = null;
+    for (const w of st.mall.seats) {
+      if (w.table !== q.table || w === q || used.has(w)) continue;
+      if (w.k === (q.k + 2) % 4) return w;
+      alt = alt || w;
+    }
+    return alt;
   }
 
   giveBag(c) {
@@ -302,20 +609,25 @@ export class MallLife {
     const m = s.m;
     const P = [];
     const n = 2 + Math.floor(Math.random() * 3);
+    // (at lunch and at dinner the food court fills: some come in for nothing else)
+    const h = this.game.rhythm ? this.game.rhythm.hour : 14;
+    const meal = (h > 11.5 && h < 14.5) || (h > 18 && h < 20.5);
+    if (fresh && meal && m.food.length && m.seats.length && Math.random() < 0.35) P.push({ kind: 'eat' });
     for (let i = 0; i < n; i++) {
       const r = Math.random();
-      if (r < 0.32 && m.spots.length) P.push({ kind: 'window' });
-      else if (r < 0.62 && m.spots.length) P.push({ kind: 'shop' });
-      else if (r < 0.74 && m.food.length && m.seats.length) P.push({ kind: 'eat' });
+      if (r < 0.28 && m.spots.length) P.push({ kind: 'window' });
+      else if (r < 0.54 && m.spots.length) P.push({ kind: 'shop' });
+      else if (r < 0.65 && m.food.length && m.seats.length) P.push({ kind: 'eat' });
+      else if (r < 0.74 && m.kiosks && m.kiosks.length) P.push({ kind: 'kiosk' });
       else if (r < 0.84 && m.benches.length) P.push({ kind: 'bench' });
-      else if (r < 0.92 && m.escalator) P.push({ kind: 'upstairs' });
+      else if (r < 0.93 && m.escalator) P.push({ kind: 'upstairs' });
+      else if (r < 0.96 && m.directories && m.directories.length) P.push({ kind: 'map' });
       else if (m.fountain) P.push({ kind: 'fountain' });
       else P.push({ kind: 'window' });
     }
     P.push({ kind: 'leave' });
     s.plan = P;
     s.cur = null;
-    void fresh;
   }
 
   say(c, text) {
@@ -350,6 +662,7 @@ export class MallLife {
   next(s) {
     const m = s.m;
     const c = s.c;
+    if (s.cur && s.cur.k && s.cur.k.busy === s) s.cur.k.busy = null;
     const a = s.plan.shift() || { kind: 'leave' };
     s.cur = a;
     s.t = 0;
@@ -365,11 +678,38 @@ export class MallLife {
         break;
       }
       case 'eat': {
+        if (a.pre) {
+          // (at the table already, the tray before them, half through the meal)
+          a.seat = a.pre;
+          a.step = 'eat';
+          a.stay = 15 + Math.random() * 35;
+          s.phase = 'at';
+          s.pts = null;
+          c.noCollide = true;
+          c.pos.x = a.seat.x;
+          c.pos.z = a.seat.z;
+          c.yaw = a.seat.yaw;
+          c.fig.sit = 1;
+          c.fig.carry = pick(MEAL);
+          break;
+        }
         a.shop = pick(m.food);
         this.go(s, a.shop.door[0] + a.shop.nx * 1.5, a.shop.door[2] + a.shop.nz * 1.5);
         break;
       }
       case 'bench': {
+        if (a.pre) {
+          // (sitting there already when you come in)
+          a.seat = a.pre;
+          s.phase = 'at';
+          s.pts = null;
+          c.noCollide = true;
+          c.pos.x = a.seat.x;
+          c.pos.z = a.seat.z;
+          c.yaw = a.seat.yaw;
+          c.fig.sit = 1;
+          break;
+        }
         const used = new Set(this.taken(s.st));
         const free = m.benches.filter((b) => !used.has(b));
         if (!free.length) return this.next(s);
@@ -388,7 +728,47 @@ export class MallLife {
         const e = m.escalator;
         // (the up flight is the west one)
         a.foot = { x: e.x0 + 0.85, z: e.z1 + 0.9 };
+        if (a.pre) {
+          // (already on it when you come by: part way up the flight, or up on a gallery)
+          s.phase = 'at';
+          s.pts = null;
+          c.noCollide = true;
+          if (a.pre === 'up') {
+            a.leg = 'up';
+            a.k = 0.15 + Math.random() * 0.6;
+          } else if (a.pre === 'down') {
+            // (on their way down from the upper floor's stores)
+            a.leg = 'down';
+            a.k = a.k0 !== undefined ? a.k0 : 0.1 + Math.random() * 0.6;
+            c.baseY = 5.2 * (1 - a.k);
+          } else {
+            const h = m.hall;
+            a.leg = 'stroll';
+            a.side = Math.random() < 0.5 ? -1 : 1;
+            a.gx = a.side < 0 ? h.x0 + 1.4 : h.x1 - 1.4;
+            a.gz = e.z0 - 1.2;
+            a.stroll = Math.max(h.z0 + 3, Math.min(h.z1 - 3, a.gz + (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 16)));
+            c.pos.x = a.gx;
+            c.pos.z = (a.gz + a.stroll) / 2;
+            c.baseY = 5.2;
+          }
+          break;
+        }
         this.go(s, a.foot.x, a.foot.z);
+        break;
+      }
+      case 'kiosk': {
+        // a kiosk with nobody at it (its seller there)
+        const free = m.kiosks.filter((k) => !k.busy && k.vendor);
+        if (!free.length) return this.next(s);
+        a.k = pick(free);
+        a.k.busy = s;
+        this.go(s, a.k.cust.x, a.k.cust.z + (Math.random() - 0.5) * 0.6);
+        break;
+      }
+      case 'map': {
+        a.d = pick(m.directories);
+        this.go(s, a.d.x + (Math.random() - 0.5) * 0.8, a.d.z);
         break;
       }
       default: {
@@ -405,7 +785,10 @@ export class MallLife {
 
   taken(st) {
     const out = [];
-    for (const o of st.people) if (o.cur && o.cur.seat) out.push(o.cur.seat);
+    for (const o of st.people) {
+      if (o.cur && o.cur.seat) out.push(o.cur.seat);
+      if (o.fseat) out.push(o.fseat);
+    }
     return out;
   }
 
@@ -440,9 +823,96 @@ export class MallLife {
         return null;
       case 'upstairs':
         return this.upstairs(s, a, dt);
+      case 'kiosk':
+        return this.atKiosk(s, a);
+      case 'map':
+        return this.atMap(s, a);
       default:
         return this.atDoor(s, a);
     }
+  }
+
+  // at a kiosk: a look, a question, a thing taken up to look at (the glasses up to the face), the
+  // seller's answer; bought or not, and on
+  atKiosk(s, a) {
+    const c = s.c;
+    const f = c.fig;
+    const k = a.k;
+    c.faceYaw = k.cust.yaw;
+    if (!a.asked && s.t > 0.8) {
+      a.asked = true;
+      this.say(c, pick(ASK[k.kind] || ASK.phones));
+      if (k.vendor) this.game.inkwell.after(1.6, () => k.vendor && k.vendor.c.alive && this.say(k.vendor.c, pick(SELL[k.kind] || SELL.phones)));
+    }
+    s.hand = s.hand || new THREE.Vector3();
+    const handed = k.kind === 'coffee' || k.kind === 'balloons';
+    if (handed && s.t > 3.2 && s.t < 4.6) {
+      // (a hand out across the counter for the cup, the balloon's string)
+      s.hand.set(k.mid.x + (c.pos.x - k.mid.x) * 0.35, k.mid.y + 0.15, k.mid.z + (c.pos.z - k.mid.z) * 0.35);
+      f.reachR = s.hand;
+      f.lookAt = s.hand;
+    } else if (handed) {
+      f.reachR = null;
+      f.lookAt = null;
+    } else if (s.t > 2.8 && s.t < 6.5) {
+      // (taken from the seller's hand, held up: to the face for the glasses, before the eyes else)
+      const up = k.kind === 'sunglasses' ? 1.62 : 1.25;
+      const t = Math.min(1, (s.t - 2.8) / 0.8);
+      const head = f.j.headC;
+      s.hand.set(k.mid.x + (head.x + f.forward.x * 0.25 - k.mid.x) * t, k.mid.y + (c.pos.y + up - k.mid.y) * t, k.mid.z + (head.z + f.forward.z * 0.25 - k.mid.z) * t);
+      f.reachR = s.hand;
+      f.lookAt = s.hand;
+    } else {
+      f.reachR = null;
+      f.lookAt = null;
+    }
+    if (handed && s.t > 4.6 && !a.done) {
+      // the cup, the balloon, in hand (paid at the counter: the coffee is never refused)
+      a.done = true;
+      if (k.kind === 'coffee') {
+        if (f.carry !== 'phone' || Math.random() < 0.5) f.carry = 'coffee';
+        if (Math.random() < 0.4) this.say(c, pick(['Thanks!', 'Mmm, smells great.', 'Perfect.']));
+      } else {
+        f.carry = 'balloon';
+        f.balloonColor = pick(BALLOONS);
+        if (Math.random() < 0.5) this.say(c, pick(['Yay!', 'Thank you!', 'Look, a balloon!']));
+      }
+    }
+    if (!handed && s.t > 6.5 && !a.done) {
+      a.done = true;
+      const yes = Math.random() < 0.55;
+      this.say(c, yes ? pick(BUY.slice(0, 2)) : pick(BUY.slice(2)));
+      if (yes && !c.fig.carryL) this.giveBag(c);
+    }
+    if (s.t > 8) {
+      if (k.busy === s) k.busy = null;
+      f.reachR = null;
+      f.lookAt = null;
+      this.next(s);
+    }
+    return null;
+  }
+
+  // at the directory: a look at the plan, a finger on it, where to go next
+  atMap(s, a) {
+    const c = s.c;
+    const f = c.fig;
+    const d = a.d;
+    c.faceYaw = d.yaw;
+    s.hand = s.hand || new THREE.Vector3();
+    if (s.t > 1 && s.t < 3.4) {
+      s.hand.set(d.at.x + (c.pos.x - d.at.x) * 0.1 + Math.sin(s.t * 2) * 0.12, c.pos.y + 1.45 + Math.sin(s.t * 3) * 0.1, d.at.z + (c.pos.z - d.at.z) * 0.12);
+      f.reachR = s.hand;
+    } else f.reachR = null;
+    if (!a.said && s.t > 1.5) {
+      a.said = true;
+      if (Math.random() < 0.5) this.say(c, pick(MAP_SAY));
+    }
+    if (s.t > 4.5) {
+      f.reachR = null;
+      this.next(s);
+    }
+    return null;
   }
 
   atWindow(s, a, dt) {
@@ -485,69 +955,116 @@ export class MallLife {
     return null;
   }
 
-  // lunch: a counter of the food court (its cook draws it for them), then a table to eat at
+  // lunch: a counter of the food court (its cook draws it for them), the tray carried to a table,
+  // the meal eaten there - a bite, a sip, a word with whoever is across the table - and the tray
+  // taken back to the station on the way out
   atFood(s, a, dt) {
     const c = s.c;
-    if (!a.ordered) {
-      a.ordered = true;
-      const open = this.game.streetlife.active.get(a.shop.id);
-      if (open && open.room && open.open && open.visitors.length < 4 && open.admit(c)) {
-        a.inside = true;
-        return null;
+    const f = c.fig;
+    if (!a.step) a.step = 'order';
+    if (a.step === 'order') {
+      if (!a.ordered) {
+        a.ordered = true;
+        const open = this.game.streetlife.active.get(a.shop.id);
+        if (open && open.room && open.open && open.visitors.length < 4 && open.admit(c)) {
+          a.inside = true;
+          return null;
+        }
       }
-    }
-    // (back from the counter: the store let go of them, game/streetlife.js)
-    if (a.inside) a.inside = false;
-    if (!a.seat) {
-      const used = new Set(this.taken(s.st));
-      const free = s.m.seats.filter((x) => !used.has(x));
-      if (!free.length) {
+      // (back from the counter: the store let go of them, game/streetlife.js - or it was full)
+      a.inside = false;
+      const seat = this.freeSeat(s.st, c.pos, false);
+      if (!seat) {
+        if (f.carry !== 'phone') f.carry = null;
         this.next(s);
         return null;
       }
-      // the free seat nearest the counter
-      let best = free[0];
-      for (const x of free) if (Math.hypot(x.x - c.pos.x, x.z - c.pos.z) < Math.hypot(best.x - c.pos.x, best.z - c.pos.z)) best = x;
-      a.seat = best;
-      if (!c.fig.carry || c.fig.carry === 'phone') c.fig.carry = pick(['burger', 'noodleBox', 'soda', 'pizzaBox', 'coffee']);
-      s.pts = s.st.nav.path(c.pos.x, c.pos.z, best.x, best.z);
+      a.seat = seat;
+      f.carry = 'tray';
+      s.pts = s.st.nav.path(c.pos.x, c.pos.z, seat.x, seat.z);
       s.t = 0;
-      a.walking = true;
+      a.step = 'toSeat';
     }
-    if (a.walking) {
+    if (a.step === 'toSeat') {
       const mv = this.walk(s);
       if (mv) return mv;
-      a.walking = false;
+      a.step = 'eat';
       s.t = 0;
       c.noCollide = true;
+      f.carry = pick(MEAL);
     }
-    // at the table: sit, eat (a hand to the mouth now and then), then up and on
-    c.pos.x = a.seat.x;
-    c.pos.z = a.seat.z;
-    c.faceYaw = a.seat.yaw;
-    c.fig.sit = Math.min(1, c.fig.sit + dt * 3);
-    a.bite = (a.bite === undefined ? 2 + Math.random() * 3 : a.bite) - dt;
-    if (a.bite < 0) {
-      c.fig.drinkT = Math.min(1, -a.bite / 1.1);
-      if (a.bite < -1.1) {
-        a.bite = 3 + Math.random() * 4;
-        c.fig.drinkT = -1;
+    if (a.step === 'eat') {
+      // at the table: sit, eat, then up and the tray back
+      c.pos.x = a.seat.x;
+      c.pos.z = a.seat.z;
+      c.faceYaw = a.seat.yaw;
+      f.sit = Math.min(1, f.sit + dt * 3);
+      this.bite(s, dt);
+      a.stay = a.stay || 25 + Math.random() * 25;
+      const fr = s.friend;
+      if (fr && fr.sitting && !this.game.classic) {
+        // (a word across the table now and then)
+        a.talkT = (a.talkT === undefined ? 3 + Math.random() * 6 : a.talkT) - dt;
+        if (a.talkT <= 0) {
+          a.talkT = 12 + Math.random() * 14;
+          const p = this.game.player.pos;
+          if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 18 && !c.convo && !fr.c.convo) this.game.voices.talk([c, fr.c], pick(MEAL_TALK));
+        }
+      } else if (s.t > 2 && !a.said && Math.random() < dt * 0.15) {
+        a.said = true;
+        this.say(c, pick(['Mmm, so good!', 'Best burger in town.', 'I needed this.', 'Want some?']));
       }
-    }
-    a.stay = a.stay || 18 + Math.random() * 20;
-    if (s.t > 2 && !a.said && Math.random() < dt * 0.15) {
-      a.said = true;
-      this.say(c, pick(['Mmm, so good!', 'Best burger in town.', 'I needed this.', 'Want some?']));
-    }
-    if (s.t > a.stay) {
-      c.fig.drinkT = -1;
-      c.fig.sit = 0;
+      if (s.t < a.stay) return null;
+      f.drinkT = -1;
+      f.sit = 0;
       c.noCollide = false;
-      if (c.fig.carry !== 'phone') c.fig.carry = null;
       a.seat = null;
+      const ts = s.m.trayStations;
+      if (!ts || !ts.length) {
+        if (f.carry !== 'phone') f.carry = null;
+        this.next(s);
+        return null;
+      }
+      let best = ts[0];
+      for (const q of ts) if (Math.hypot(q.x - c.pos.x, q.z - c.pos.z) < Math.hypot(best.x - c.pos.x, best.z - c.pos.z)) best = q;
+      a.station = best;
+      f.carry = 'tray';
+      s.pts = s.st.nav.path(c.pos.x, c.pos.z, best.x + (Math.random() - 0.5) * 0.8, best.z);
+      s.t = 0;
+      a.step = 'tray';
+    }
+    if (a.step === 'tray') {
+      const mv = this.walk(s);
+      if (mv) return mv;
+      // (the tray slid onto the station's top, what was on it into the flap)
+      const q = a.station;
+      c.faceYaw = q.yaw;
+      s.hand = s.hand || new THREE.Vector3();
+      if (s.t < 1.4) {
+        s.hand.set(q.at.x + (c.pos.x - q.at.x) * 0.3, c.pos.y + 1.05, q.at.z + (c.pos.z - q.at.z) * 0.3);
+        f.reachR = s.hand;
+        return null;
+      }
+      f.reachR = null;
+      if (f.carry === 'tray') f.carry = null;
+      if (Math.random() < 0.15) this.say(c, pick(TRAY_SAY));
       this.next(s);
     }
     return null;
+  }
+
+  // a bite of what they have, a sip: the hand up to the mouth and down, a while between (o: a
+  // shopper or their friend)
+  bite(o, dt) {
+    const f = o.c.fig;
+    o.bt = (o.bt === undefined ? 1 + Math.random() * 3 : o.bt) - dt;
+    if (o.bt < 0) {
+      f.drinkT = Math.min(1, -o.bt / 1.1);
+      if (o.bt < -1.1) {
+        o.bt = 2.5 + Math.random() * 4;
+        f.drinkT = -1;
+      }
+    }
   }
 
   atBench(s, a) {
@@ -558,8 +1075,14 @@ export class MallLife {
     c.pos.z = b.z;
     c.faceYaw = b.yaw;
     c.fig.sit = Math.min(1, c.fig.sit + 0.05);
-    a.stay = a.stay || 8 + Math.random() * 16;
+    a.stay = a.stay || (a.pre ? 10 + Math.random() * 30 : 8 + Math.random() * 16);
+    // (a rest: the phone out of the pocket, a look at it)
+    if (a.phone === undefined) {
+      a.phone = !c.fig.carry && Math.random() < 0.45;
+      if (a.phone) c.fig.carry = 'phone';
+    }
     if (s.t > a.stay) {
+      if (a.phone && c.fig.carry === 'phone') c.fig.carry = null;
       c.fig.sit = 0;
       c.noCollide = false;
       a.seat = null;
@@ -609,19 +1132,40 @@ export class MallLife {
           s.t = 0;
         }
         return { x: a.gx, z: a.gz, speed: c.speed };
-      case 'stroll':
+      case 'stroll': {
         c.baseY = UY;
-        if (Math.hypot(c.pos.x - a.gx, c.pos.z - a.stroll) < 0.3) {
-          // a look in the upper floor's windows, then back
-          c.faceYaw = a.side < 0 ? -Math.PI / 2 : Math.PI / 2;
-          if (s.t > 4 + Math.random() * 4) {
+        // (half of them to the upper floor's windows, half to the gallery's rail, to lean on it and
+        // look down into the hall)
+        if (a.lean === undefined) {
+          a.lean = Math.random() < 0.5;
+          a.stay = (a.lean ? 6 : 4) + Math.random() * 5;
+        }
+        const h = s.m.hall;
+        const tx = a.lean ? (a.side < 0 ? h.x0 + 2.2 : h.x1 - 2.2) : a.gx;
+        if (Math.hypot(c.pos.x - tx, c.pos.z - a.stroll) < 0.3) {
+          const f = c.fig;
+          if (a.lean) {
+            // both hands on the brass rail, a look down at the people below
+            c.faceYaw = a.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+            const rx = a.side < 0 ? h.x0 + 2.58 : h.x1 - 2.58;
+            s.hand = s.hand || new THREE.Vector3();
+            s.handL = s.handL || new THREE.Vector3();
+            s.hand.set(rx, c.pos.y + 1.04, c.pos.z + f.right.z * 0.24);
+            s.handL.set(rx, c.pos.y + 1.04, c.pos.z - f.right.z * 0.24);
+            f.reachR = s.hand;
+            f.reachL = s.handL;
+          } else c.faceYaw = a.side < 0 ? -Math.PI / 2 : Math.PI / 2;
+          if (s.t > a.stay) {
+            f.reachR = null;
+            f.reachL = null;
             a.leg = 'back';
             s.t = 0;
           }
           return null;
         }
         s.t = 0;
-        return { x: a.gx, z: a.stroll, speed: c.speed * 0.8 };
+        return { x: tx, z: a.stroll, speed: c.speed * 0.8 };
+      }
       case 'back':
         c.baseY = UY;
         if (Math.hypot(c.pos.x - (e.x0 + 2.35), c.pos.z - (e.z0 - 0.3)) < 0.3) {
@@ -666,6 +1210,43 @@ export class MallLife {
     }
     const lc = L.c;
     const a = L.cur;
+    // lunch together: a seat at the same table, across from them, a meal of their own
+    if (a && a.kind === 'eat' && a.seat && (a.step === 'eat' || a.step === 'toSeat')) {
+      if (!f.fseat) {
+        f.fseat = this.mateSeat(f.st, a.seat);
+        f.pts = null;
+      }
+      if (f.fseat) {
+        const q = f.fseat;
+        if (!f.sitting) {
+          if (!f.pts) {
+            f.pts = f.st.nav.path(c.pos.x, c.pos.z, q.x, q.z);
+            f.t = 0;
+          }
+          const mv = this.walk(f);
+          if (mv) return mv;
+          f.sitting = true;
+          c.noCollide = true;
+          c.fig.carry = pick(MEAL);
+        }
+        c.pos.x = q.x;
+        c.pos.z = q.z;
+        c.faceYaw = q.yaw;
+        c.fig.sit = Math.min(1, c.fig.sit + dt * 3);
+        this.bite(f, dt);
+        return null;
+      }
+    }
+    if (f.fseat) {
+      // (the meal over: up, and after them)
+      f.fseat = null;
+      f.sitting = false;
+      f.pts = null;
+      c.fig.sit = 0;
+      c.fig.drinkT = -1;
+      c.noCollide = false;
+      if (MEAL.includes(c.fig.carry)) c.fig.carry = null;
+    }
     // with them while they sit: standing by, chatting
     if (a && (a.kind === 'bench' || a.kind === 'eat') && lc.fig.sit > 0.5) {
       const tx = lc.pos.x + Math.cos(lc.yaw) * 0.9;
@@ -724,6 +1305,7 @@ export class MallLife {
     const game = this.game;
     const st = s.st;
     s.gone = true;
+    if (s.cur && s.cur.k && s.cur.k.busy === s) s.cur.k.busy = null;
     const i = st.people.indexOf(s);
     if (i >= 0) st.people.splice(i, 1);
     const c = s.c;
@@ -740,7 +1322,10 @@ export class MallLife {
   // ------------------------------------------------------------------ the whole mall, each frame
   tick(m, st, dt) {
     const game = this.game;
-    for (const s of st.people.slice()) {
+    // (from the end: a shopper dropped is spliced out of the list as we go - no copy of it a frame)
+    for (let i = st.people.length - 1; i >= 0; i--) {
+      const s = st.people[i];
+      if (!s) continue;
       const c = s.c;
       if (!c.alive || c.headless) {
         this.drop(s, false);
@@ -755,6 +1340,20 @@ export class MallLife {
       // a store let go of them (they are out of its door, or it closed): back to their plan
       if (!s.follower && c.owner === this && !c.ctrl && !c.inside) c.ctrl = (civ, d) => this.step(s, d);
     }
+    // (the hall's own people: rubbed out or frightened off, the city takes them)
+    for (let i = st.staff.length - 1; i >= 0; i--) {
+      const w = st.staff[i];
+      const c = w.c;
+      if (c.alive && !c.headless && !(c.panicT > 0) && c.owner === this) continue;
+      st.staff.splice(i, 1);
+      if (w.k && w.k.vendor === w) w.k.vendor = null;
+      if (c.owner === this) {
+        c.baseY = 0;
+        game.civilians.release(c);
+        c.scripted = false;
+        game.civilians.rejoin(c);
+      }
+    }
     // new people at the doors (fewer at night: the mall's hours are the stores')
     st.newT -= dt;
     if (st.newT <= 0) {
@@ -763,7 +1362,8 @@ export class MallLife {
       const h = R ? R.hour : 14;
       const open = h >= 9.5 && h < 22.5;
       const want = open ? this.budget : Math.round(this.budget * 0.2);
-      if (st.people.length < want && m.entrances.length) this.spawn(m, st, false);
+      // (most at the doors; some down the escalator from the upper floor's stores)
+      if (st.people.length < want && m.entrances.length) this.spawn(m, st, false, { fromUp: !!m.escalator && open && Math.random() < 0.3 });
     }
   }
 
