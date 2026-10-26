@@ -103,6 +103,110 @@ const LINGER = ['Can I help you?', 'Uh... hi?', 'Do I know you?', 'Personal spac
 const AIMED = ['Whoa, whoa! Easy!', "Don't shoot!", "I don't want any trouble!", 'Put that down!'];
 const AIM_GONE = ['Phew...', 'Crazy...', 'What was that about?'];
 const SLOW = ['Slow down!', 'Hey! Watch the road!', 'Are you crazy?!', 'This is a sidewalk!'];
+// (GTA IV pass) run into at a run: knocked aside, and they let you know about it - and a word after
+// you, if you are still near
+const RAN_INTO = ["Hey! Watch where you're running!", 'Whoa! Easy!', 'What is your problem?!', 'Do you mind?!', 'Unbelievable!', 'Ow! Hey!'];
+const RAN_AFTER = ['Jerk.', 'Some people...', 'Yeah, keep running!', 'Rude.', 'Unbelievable.', 'Not even a sorry.'];
+// coming at them running: a step aside
+const DODGE_RUN = ['Whoa!', 'Coming through, huh?', 'Careful!', 'Hey!'];
+// you standing in their way on the sidewalk
+const EXCUSE = ['Excuse me.', 'Pardon me.', 'Sorry, can I just...', 'Coming through.', 'Excuse me, please.'];
+const EXCUSE_AGAIN = ['Seriously?', 'Do you mind?', 'Okay... going round.', 'Move, please!'];
+// a look at you going by: for somebody odd (running, a pencil the size of an arm), a word too
+const GLANCE_ODD = ['Is that... a pencil?', 'Huh.', 'What are they doing?', 'Okay then.', 'Nice outfit.'];
+
+// (GTA IV pass) a group standing on the sidewalk, talking - each line by the next of them in turn,
+// by who they are (game/streetsocial.js); and the laugh after
+const GROUP = {
+  friends: [
+    ['So what happened next?', 'He just walked out!', 'No way!', 'I swear.', 'Classic.'],
+    ['Are we doing brunch Sunday?', "I'm in.", 'Same place?', 'Different place. That one was awful.', 'Ha! Fair.'],
+    ['Did you see the new mural?', 'On the corner? Love it.', 'My cousin painted half of it.', 'Shut up!', 'For real!'],
+    ["I can't believe it's already October.", 'Where did the year go?', 'Ask my bank account.', 'Ha ha!'],
+    ['Guess who I ran into yesterday.', 'Who?', 'Your ex.', 'Nooo.', 'With a dog. A tiny dog.', 'Stop it!'],
+    ['We need a vacation.', 'We live in a vacation.', 'A vacation from the vacation.', 'I like that.'],
+    ['Okay, honest opinion.', 'Uh-oh.', 'The haircut. Yes or no?', '...Yes?', "You hesitated!"],
+    ['My landlord raised the rent again.', 'Again?!', 'Third time this year.', "That's criminal.", 'Tell me about it.'],
+    ['Did you finish the show?', "Don't spoil it!", 'I would never.', 'You totally would.', 'Okay, I would.'],
+  ],
+  office: [
+    ['The meeting ran over again.', 'Two hours on one slide.', 'One slide!', 'I need another coffee.'],
+    ['Did you see the numbers?', 'Up three percent.', "That's good, right?", "Tell that to the boss.", 'Ha.'],
+    ['Lunch?', 'Tacos?', 'Tacos.', 'I have a call at one.', 'Then quick tacos.'],
+    ['Is it Friday yet?', "It's Tuesday.", "Don't say that.", 'Tuesday!', 'Stop.'],
+    ['Are you going to the conference?', 'If they pay for it.', 'They never pay for it.', 'Then no.'],
+    ["Who keeps stealing my yogurt?", 'Not me.', 'Suspicious.', 'I swear!', 'Ha ha!'],
+    ['The new guy started today.', 'How is he?', 'He replied-all to the whole company.', 'Oh no.', 'Oh yes.'],
+  ],
+  tourists: [
+    ['Which way is the beach?', 'The map says left.', 'The map said left an hour ago.', 'Trust the map!'],
+    ['Look at these buildings!', 'So colorful.', 'Take a picture!', 'I took forty.'],
+    ['I want to try the Cuban coffee.', "It's so strong, though.", "That's the point!", 'Okay, one.'],
+    ['My feet hurt.', 'We walked twelve miles.', 'On vacation!', "Ice cream break?", 'Ice cream break.'],
+    ['Did you put on sunscreen?', 'Twice.', 'Your nose says no.', 'Ugh.'],
+  ],
+  youth: [
+    ['Yo, you see that ride?', 'Clean.', 'Mine is cleaner.', 'You have a bike.', 'A clean bike.'],
+    ['What we doing tonight?', 'Same as always.', "That's boring.", 'Then you pick.', '...Same as always.'],
+    ['You hear about the party?', "Who's going?", 'Everybody.', 'Everybody everybody?', 'Everybody.'],
+    ['Ha! Did you see his face?', 'Priceless.', 'Do it again!', 'No way, he saw me.'],
+    ['Got any gum?', 'Nope.', 'You always have gum.', 'Not for you.', 'Ha!'],
+  ],
+  neighbours: [
+    ['Your roses look lovely this year.', 'Thank you! Lots of coffee grounds.', 'Coffee grounds?', 'Old trick.'],
+    ['Did you hear the noise last night?', 'The cats again.', 'Those cats!', 'Every night.'],
+    ['How is your grandson?', 'Off to college!', 'Already?', 'They grow so fast.'],
+    ['They are fixing the road again.', 'They fixed it last month.', 'And the month before.', 'Ha!'],
+    ['Is it going to rain?', 'The radio says no.', 'The radio always says no.', 'True.'],
+  ],
+  shoppers: [
+    ['What did you get?', 'Just a few things.', 'That is six bags.', 'A few things each.'],
+    ['Was it on sale?', 'Half off!', 'Then you saved money.', "That's what I said!"],
+    ['I need shoes.', 'You have shoes.', 'I need different shoes.', 'Fair.'],
+    ["Let's get a coffee.", 'One more store first.', 'You said that three stores ago.', 'Ha ha!'],
+  ],
+  night: [
+    ['Where to now?', 'The rooftop terrace?', 'The line is huge.', 'Then the club.', 'The line is bigger.'],
+    ["I'm starving.", 'Pizza?', 'Pizza.', 'Pizza!'],
+    ['Who is driving?', 'Nobody. We walk.', 'In these shoes?', 'Ha ha!'],
+    ['What a night!', 'And it is only ten.', 'Ten?!', 'Ha!'],
+    ['Did you get her number?', 'Maybe.', 'Maybe?!', 'Okay, yes.', 'Ha ha!'],
+  ],
+};
+const LAUGHS = ['Ha ha ha!', 'Hahaha!', 'Ha! Stop it!', 'Ha ha, no way!', 'Hah!'];
+// somebody joining a group on the street, somebody leaving it early
+const GROUP_JOIN = [['Hey guys!', 'There you are!'], ['Sorry I\'m late!', 'As always!'], ['What did I miss?', 'Everything.'], ['Hey hey!', 'Look who it is!']];
+const GROUP_LEAVE = [['I have to go, sorry!', 'Bye!'], ['That\'s my bus. Bye!', 'See you!'], ['Gotta run. Text me!', 'Will do!']];
+const GROUP_BYE = [["Okay, I'm off.", 'See you!', 'Bye!'], ['I gotta run.', 'Later!', 'Take care!'], ['Same time next week?', 'Deal.', 'Bye bye!'], ['Alright, back to work.', 'Ugh. Fine.', 'See you later!']];
+// acquaintances meeting on the sidewalk: who calls whom, the hello, a few lines, goodbye
+const NAMES = ['Sam', 'Maria', 'Dev', 'Lena', 'Marco', 'Aisha', 'Tom', 'Rosa', 'Jin', 'Carla', 'Omar', 'Nina', 'Luis', 'Priya', 'Ben', 'Sofia', 'Andre', 'Mia', 'Hector', 'Yuki', 'Dana', 'Leo'];
+const MEET = [
+  ['How have you been?', 'Good! Busy, you know.', 'Always busy!', 'How is the family?', 'Everybody is great.'],
+  ['I haven\'t seen you in ages!', 'Since the wedding!', 'That was a party.', 'Best party.'],
+  ['What are you doing around here?', 'Just some errands.', 'Me too!', 'Small world.'],
+  ['Did you move?', 'Two streets over.', 'We are neighbors now!', 'Come by for coffee!'],
+  ['You look great!', 'Thanks! New job.', 'Congratulations!', 'Thank you!'],
+  ['Are you still at the restaurant?', 'Head chef now.', 'No way!', 'Come by sometime.'],
+];
+const MEET_BYE = [['Good to see you!', 'You too! Call me!'], ['Say hi to your mom!', 'I will! Bye!'], ["Let's get lunch soon.", 'Definitely. Bye!'], ['Take care!', 'You too!']];
+// on the phone, pacing: one side of the call
+const CALLS = [
+  ['Hello?', "Hey! Yeah, I'm in town.", 'No, no, I can talk.', 'Wait, what? Seriously?', 'Okay... okay.', "I'll call you back. Bye!"],
+  ['Hi, Mom.', 'Yes, I ate.', 'Yes, I have a jacket.', "Mom, it's eighty degrees.", 'Love you too. Bye.'],
+  ['Yeah?', "I'm on my way, five minutes.", 'Ten minutes, tops.', 'Order for me!', 'The usual. Bye!'],
+  ["Hello, it's me.", 'About last night...', "No, you're right.", "I'm sorry, okay?", 'Dinner? Tonight?', 'Great. See you at eight.'],
+  ['Talk to me.', 'How much?!', 'No way. Tell them no.', "I don't care, it's too much.", 'Call me when you know.'],
+  ['Hey you!', 'I got the job!', 'I know! I start Monday!', 'Dinner tonight, on me!', 'Bye bye bye!'],
+  ['Hello? Hello?', "You're breaking up.", 'Can you hear me now?', 'Hello?!', 'Ugh. Dead zone.'],
+  ['Hi, yes, I have a reservation.', 'Under Lopez.', 'Eight thirty, for four.', 'Perfect, thank you!'],
+  ['Listen, listen.', 'I told him twice.', 'Twice!', 'And he still sent it to the wrong address.', 'I know. I know.'],
+];
+// the street musician: a song (made up on the spot), between songs, a coin in the case
+const LYRICS = ['♪ Ink on the city, ink on my heart ♪', '♪ Oh, Calle Ocho, take me home ♪', '♪ Paper sky, pencil moon ♪', '♪ Na na na, na na na ♪', '♪ Drawn to you, baby ♪', '♪ Summer on the boulevard ♪', '♪ La la la la ♪'];
+const BUSK_SAY = ['Thank you, thank you!', 'This next one is an original!', 'Thanks for listening!', 'Any requests?', 'You are too kind!'];
+const TIP_SAY = ['Great song!', 'Love it!', 'Keep it up!', 'Beautiful!', 'Bravo!'];
+const LISTEN_SAY = ['So good.', 'I love this song.', 'Wow.', 'Nice voice!', 'Play another!'];
+export const LINES = { GROUP, LAUGHS, GROUP_BYE, GROUP_JOIN, GROUP_LEAVE, NAMES, MEET, MEET_BYE, CALLS, LYRICS, BUSK_SAY, TIP_SAY, LISTEN_SAY };
 
 // (the names a browser gives its voices: whose is whose, roughly)
 const FEM_VOICE = /female|zira|samantha|victoria|karen|moira|tessa|fiona|susan|hazel|serena|allison|ava|kate|libby|sonia|jenny|aria|emma|amy|joanna|salli|kimberly/i;
@@ -286,6 +390,15 @@ export class Voices {
     return this.talk(people, pick(set));
   }
 
+  // (GTA IV pass) a group on the sidewalk talking, each line by the next of them (game/streetsocial.js)
+  group(people, kind = 'friends') {
+    if (this.game.classic) return null;
+    const sets = GROUP[kind] || GROUP.friends;
+    // (the hour and the weather have their say in a group of friends too)
+    const set = kind === 'friends' && Math.random() < 0.3 ? this.chatSet() : sets;
+    return this.talk(people, pick(set));
+  }
+
   chatSet() {
     const g = this.game;
     const rain = g.weather && g.weather.cur ? g.weather.cur.rain || 0 : 0;
@@ -413,23 +526,107 @@ export class Voices {
     const moving = pl.fig.speed > 1.2;
     const still = pl.fig.speed < 0.3;
     const fwd = game.camera.getWorldDirection(_f);
+    // (GTA IV pass) how you are going: at a run (the hero's own pace is a run: 5 m/s), at a sprint;
+    // something odd about you (a weapon out, a pencil the size of an arm)
+    const now = game.time;
+    const psp = Math.hypot(pl.vel.x, pl.vel.z);
+    const running = psp > 4.2;
+    const pvx = psp > 0.1 ? pl.vel.x / psp : 0;
+    const pvz = psp > 0.1 ? pl.vel.z / psp : 0;
+    const w = game.weapons;
+    const armed = !!(w && w.current && w.current.def && w.current.def.kind === 'gun');
+    const head = pl.fig && pl.fig.j ? pl.fig.j.headC : null;
     let close = null;
     let cd = 1.6;
     for (const c of civs.list) {
       if (!c.alive || c.dying >= 0 || c.panicT > 0 || c.inside || c.headless) continue;
       const dx = c.pos.x - p.x;
       const dz = c.pos.z - p.z;
+      if (dx > 7 || dx < -7 || dz > 7 || dz < -7) continue;
       const d = Math.hypot(dx, dz);
-      if (d > 2) continue;
-      // walked into
-      if (d < 0.75 && moving && (c.bumpT || 0) < game.time && !c.convo) {
-        c.bumpT = game.time + 6;
-        if (!c.scripted && !c.ctrl) c.dodgeV.set((dx / (d || 1)) * 2.2, 0, (dz / (d || 1)) * 2.2);
+      if (d > 7) continue;
+      const free = !c.scripted && !c.ctrl && !c.convo;
+      // walked into (at a run: knocked aside, a stumble, a glare, a word - and another after you)
+      if (d < 0.75 && moving && (c.bumpT || 0) < now && !c.convo) {
+        c.bumpT = now + 6;
+        const hard = running && free;
+        if (!c.scripted && !c.ctrl) c.dodgeV.set((dx / (d || 1)) * (hard ? 3.4 : 2.2), 0, (dz / (d || 1)) * (hard ? 3.4 : 2.2));
+        if (hard) {
+          c.reelT = 0.45;
+          c.fig.recoil = 0.8;
+          c.fig.recoilSide = (dx * pvz - dz * pvx > 0 ? 1 : -1);
+        }
         if (c.brave || c.fig.look.role === 'cop') continue;
-        this.sayToYou(c, pick(BUMP), 'plain');
+        if (head) {
+          c.glanceAt = head;
+          c.glanceUntil = now + (hard ? 3.5 : 2);
+        }
+        c.gestNext = hard ? 'fist' : 'open';
+        this.sayToYou(c, pick(hard ? RAN_INTO : BUMP), hard ? 'alarm' : 'plain');
+        if (hard && Math.random() < 0.6) c.grumbleT = now + 2.2 + Math.random();
         this.stats.bumps++;
         continue;
       }
+      // the word after you, if you are still in earshot (and only just after: not the next time you
+      // come by, minutes later)
+      if (c.grumbleT && now > c.grumbleT) {
+        const fresh = now < c.grumbleT + 3;
+        c.grumbleT = 0;
+        if (fresh && !c.convo) {
+          c.gestNext = 'fist';
+          this.sayToYou(c, pick(RAN_AFTER), 'plain');
+        }
+      }
+      if (free && !c.crossing) {
+        // you coming at them at a run: a quick step out of your way (and maybe a word)
+        if (running && d < 4.5 && d > 0.8 && (dx * pvx + dz * pvz) / d > 0.85 && (c.dodgedT || 0) < now) {
+          c.dodgedT = now + 4;
+          const s = dx * pvz - dz * pvx > 0 ? 1 : -1;
+          c.dodgeV.set(pvz * s * 2.6, 0, -pvx * s * 2.6);
+          if (head) {
+            c.glanceAt = head;
+            c.glanceUntil = now + 1.6;
+          }
+          if (Math.random() < 0.35 && d < 3.5) this.sayToYou(c, pick(DODGE_RUN), 'plain');
+          continue;
+        }
+        // in their way, standing still on the sidewalk: "Excuse me" - and round you (the walk
+        // steps round anyway: Civilians.steer); stay there and they lose patience
+        const cf = c.fig.forward;
+        const csp = Math.hypot(c.vel.x, c.vel.z);
+        if (still && d < 1.7 && -(dx * cf.x + dz * cf.z) / d > 0.8 && (csp > 0.3 || c.blockT > 0)) {
+          c.blockT = (c.blockT || 0) + dt;
+          if (c.blockT > 0.5 && (c.excuseT || 0) < now) {
+            // (out of patience only with you still there since the last time: in their way again
+            // another day is a first "Excuse me" again)
+            const again = c.blockN > 0 && now < c.excuseT + 10;
+            c.excuseT = now + 14;
+            if (head) {
+              c.glanceAt = head;
+              c.glanceUntil = now + 2;
+            }
+            this.sayToYou(c, pick(again ? EXCUSE_AGAIN : EXCUSE), 'plain');
+            c.blockN = again ? c.blockN + 1 : 1;
+            this.stats.excuse = (this.stats.excuse || 0) + 1;
+          }
+        } else if (c.blockT > 0) c.blockT = Math.max(0, c.blockT - dt);
+        // a look at you going by: somebody walking towards you, now and then (always, at somebody
+        // odd: a weapon out, running); the head turns, a word now and then
+        if (d < 5.5 && d > 1.2 && head && (c.glanceUntil || 0) < now && (c.glancedT || 0) < now) {
+          const ahead = -(dx * cf.x + dz * cf.z) / d;
+          if (ahead > 0.3) {
+            const odd = armed || running;
+            c.glancedT = now + 9 + Math.random() * 8;
+            if (odd || Math.random() < 0.4) {
+              c.glanceAt = head;
+              c.glanceUntil = now + 1.2 + Math.random() * 1.6;
+              this.stats.glances = (this.stats.glances || 0) + 1;
+              if (armed && d < 4 && Math.random() < 0.3) this.sayToYou(c, pick(GLANCE_ODD), 'plain');
+            }
+          }
+        }
+      }
+      if (d > 2) continue;
       // right by them, looking at them
       if (still && d < cd && (dx * fwd.x + dz * fwd.z) / (d || 1) > 0.6) {
         close = c;
@@ -518,6 +715,11 @@ export class Voices {
   heard(who, text, tone) {
     if (!who || !who.pos || !text) return;
     this.stats.heard++;
+    // (GTA IV pass: said with the hands too, and the others look at whoever says it - game/civilians.js)
+    // (only the city's people: a gangster or an officer shouting has a manager of his own,
+    // game/enemies.js, with no hands-with-the-words in it)
+    const civs = this.game.civilians;
+    if (civs && who.mgr === civs && who.fig) civs.spoke(who, text, tone);
     const cam = this.game.camera.position;
     const d = Math.hypot(who.pos.x - cam.x, who.pos.z - cam.z);
     if (this.spoken) this.speak(who, text, tone, d);

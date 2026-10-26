@@ -100,11 +100,114 @@ const PROM_LINES = [15.2, 17.6, 32.2, 34.0, 15.2, 101.5, 103.5];
 // (v5, ROADMAP 11.18) how likely somebody walking past stops at a shop's window, by what it sells
 const WINDOW_KEEN = { fashion: 0.6, boutique: 0.6, surf: 0.5, shoes: 0.55, jewelry: 0.6, electronics: 0.5, phones: 0.5, toys: 0.45, perfume: 0.45, books: 0.4, optics: 0.35, sports: 0.45, flowers: 0.45, bakery: 0.45, icecream: 0.4, music: 0.4, gallery: 0.5 };
 const WINDOW_SAYS = ['Ooh, look at that!', 'I need those.', 'Too expensive...', 'That would look great on you.', 'Next payday.', 'Should we go in?', 'Cute!', 'Not my style.'];
+// (GTA IV pass) lunch carried back to the desk; the paper bags of the city's stores
+const LUNCH = ['burger', 'hotdog', 'noodleBox', 'soda', 'noodleBox', 'burger'];
+const BAG_COLORS = [[0.95, 0.45, 0.6], [0.98, 0.97, 0.94], [0.2, 0.22, 0.26], [0.62, 0.78, 0.92], [0.86, 0.66, 0.26], [0.55, 0.38, 0.24], [0.4, 0.68, 0.5], [0.72, 0.2, 0.24]];
 
 const _steer = { x: 0, z: 0, k: 1 };
 
 // beyond this far from the camera a walker steps every other frame (see Civilians.update)
 const FAR_STEP = 40;
+
+// (GTA IV pass) What the hands do while a line is said. Everybody who says something (every
+// bubble of the city comes by Civilians.spoke) says it with their hands too - explaining with both,
+// beating out the words with one, palms open at a question, a shrug, a point, a wave hello or
+// goodbye, holding the belly laughing, clapping, a fist shaken after somebody who ran into them -
+// and the ones they are talking with turn their heads to whoever is speaking. Only near the camera
+// (past GESTURE_D nobody could tell): a few people at a time, a handful of sines each.
+const GESTURE_D = 38;
+// things held in both hands (or in the way of the right one): no hands free to talk with
+const HANDS_FULL = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell', 'box', 'tray']);
+const RIGHT_BUSY = new Set(['umbrella', 'cane', 'leash', 'shopBag', 'bag', 'basket']);
+// (the right hand free for something - a gesture, a coin dropped in a case: nothing held in both
+// hands, nothing hanging from it)
+export function rightFree(fig) {
+  return !HANDS_FULL.has(fig.carry) && !RIGHT_BUSY.has(fig.carry);
+}
+// (whole words: "Have a nice day!", "Half off!", "Hands up!" are no laugh, "History..." no hello)
+const GREET_RE = /^(hi|hey|hello|bye|good ?bye|see you|see ya|later|morning|good morning|evening|good evening|night|yo|take care|ciao|welcome)\b/i;
+const LAUGH_RE = /^(ha|he)(\s?h?[ae])*h?\b/i;
+const POINT_RE = /(that way|over there|look at|right there|just there|this way|over here)/i;
+// where the hand is for a gesture (body space: x right, y up, z forward), side 1 the right, -1
+// the left; t seconds into it, ph the person's own phase (no two people move alike). false: that
+// hand is not in it
+function gestureAt(kind, side, t, ph, out) {
+  switch (kind) {
+    case 'explain':
+      out.set(side * (0.17 + 0.05 * Math.sin(3.1 * t + ph + side)), 1.02 + 0.08 * Math.sin(2.3 * t + ph * 1.7 + (side > 0 ? 0 : 1.4)), 0.3 + 0.06 * Math.cos(3.1 * t + ph));
+      return true;
+    case 'beat': {
+      if (side < 0) return false;
+      const k = Math.max(0, Math.sin(6.2 * t + ph));
+      out.set(0.14, 1.06 + 0.11 * k * k, 0.34);
+      return true;
+    }
+    case 'open': {
+      const k = Math.min(1, t * 3);
+      out.set(side * (0.18 + 0.16 * k), 0.98 + 0.04 * Math.sin(2 * t + ph), 0.26);
+      return true;
+    }
+    case 'shrug': {
+      if (t > 1.1) return false;
+      const k = Math.sin(Math.min(1, t / 1.1) * Math.PI);
+      out.set(side * (0.2 + 0.14 * k), 0.95 + 0.15 * k, 0.2);
+      return true;
+    }
+    case 'point':
+      if (side < 0) return false;
+      out.set(0.3, 1.36, 0.5);
+      return true;
+    case 'wave':
+      if (side < 0) return false;
+      out.set(0.27 + 0.09 * Math.sin(9 * t + ph), 1.78, 0.1);
+      return true;
+    case 'laugh':
+      out.set(side * 0.11, 0.98 + 0.03 * Math.sin(14 * t + ph), 0.2);
+      return true;
+    case 'clap':
+      out.set(side * (0.015 + 0.06 * Math.abs(Math.sin(10 * t + ph))), 1.2, 0.32);
+      return true;
+    case 'fist':
+      if (side < 0) return false;
+      out.set(0.24, 1.6 + 0.05 * Math.sin(16 * t), 0.3);
+      return true;
+    case 'chin':
+      if (side < 0) return false;
+      out.set(0.05, 1.5, 0.15);
+      return true;
+    case 'toss': {
+      // (a handful of crumbs thrown out to the pigeons)
+      if (side < 0) return false;
+      const k = Math.min(1, t / 0.45);
+      out.set(0.18, 1.0 + 0.14 * k, 0.28 + 0.36 * k);
+      return true;
+    }
+    case 'rest':
+      // (both hands to the small of the back: a breather)
+      out.set(side * 0.2, 0.96, -0.1);
+      return true;
+    case 'hip':
+      // (a hand on the hip, the other one talking)
+      if (side < 0) out.set(-0.24, 0.98, -0.02);
+      else out.set(0.15 + 0.04 * Math.sin(3 * t + ph), 1.05 + 0.07 * Math.sin(2.6 * t + ph), 0.32);
+      return true;
+    default:
+      return false;
+  }
+}
+
+// a gesture for a line, from how it is said
+export function gestureFor(text, tone) {
+  if (tone === 'alarm') return /!$/.test(text) ? 'fist' : 'open';
+  if (LAUGH_RE.test(text)) return 'laugh';
+  if (GREET_RE.test(text)) return 'wave';
+  if (POINT_RE.test(text)) return 'point';
+  const r = Math.random();
+  if (/\?$/.test(text)) return r < 0.4 ? 'open' : r < 0.6 ? 'shrug' : r < 0.85 ? 'explain' : 'hip';
+  if (/!$/.test(text)) return r < 0.45 ? 'beat' : r < 0.8 ? 'explain' : 'point';
+  if (/^\.\.\.|^hmm|^well/i.test(text)) return 'chin';
+  return r < 0.45 ? 'explain' : r < 0.65 ? 'beat' : r < 0.8 ? 'open' : r < 0.9 ? 'hip' : 'chin';
+}
 /**
  * Pedestrians walking the sidewalks round their block (now and then crossing to the next one at
  * the zebra), or strolling on the promenade. They panic and run when shooting starts.
@@ -150,6 +253,22 @@ class Civilian {
     // it (fades later)
     this.lieT = 0;
     this.ragKill = false;
+    // (GTA IV pass) a line being said and the hands that go with it (gestureAt); the one they are
+    // listening to; a look at you going by (game/voices.js toYou); the place at the curb while the
+    // cars have the green (Civilians.curbSlot)
+    this.talkUntil = 0;
+    this.gest = null;
+    this.gestT = 0;
+    this._gR = null;
+    this._gL = null;
+    this._gRw = null;
+    this._gLw = null;
+    this.listenTo = null;
+    this.listenUntil = 0;
+    this.glanceAt = null;
+    this.glanceUntil = 0;
+    this._look = null;
+    this.waitAt = null;
   }
 
   // walk round block (col, row); fresh: start somewhere along it
@@ -405,7 +524,11 @@ class Civilian {
       this.idleT = (this.idleT === undefined ? 3 + Math.random() * 10 : this.idleT) - dt;
       if (this.idleT <= 0 && !this.crossing && !this.jog && this.stopT <= 0) {
         this.idleT = 5 + Math.random() * 9;
-        if (!this.mgr.windowStop(this) && Math.random() < 0.25) {
+        // (GTA IV pass: an old man stops for a breather now and then, a hand to his back)
+        if (this.role === 'elder' && Math.random() < 0.35) {
+          this.stopT = 2.5 + Math.random() * 2.5;
+          this.mgr.mime(this, 'rest', this.stopT);
+        } else if (!this.mgr.windowStop(this) && Math.random() < 0.25) {
           this.stopT = 1.5 + Math.random() * 3;
           if (!fig.carry && Math.random() < 0.6) {
             fig.carry = 'phone';
@@ -416,20 +539,52 @@ class Civilian {
       if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 0.8) {
         this.nextCorner();
         this.crossOK = false;
+        this.crossNode = undefined;
+        this.hurry = false;
         if (!this.crossing && Math.random() < (this.chatty ? 0.4 : 0.15)) this.stopT = 1 + Math.random() * (this.chatty ? 6 : 3);
       }
       if (this.crossing && !this.crossOK) {
-        // at the curb: across only when the cars of that road have the red light
+        // at the curb: across only when the cars of that road have the red light. (GTA IV pass)
+        // And waited for properly: a place of one's own at the edge of the curb beside the others
+        // waiting there (Civilians.curbSlot), facing across, a look up the road at the cars coming
+        // now and then; when the walk turns, a beat before stepping off - each their own - and over
+        // together
         const t2 = this.loop[this.target];
-        if (this.mayCross(t2[0], t2[1])) this.crossOK = true;
-        else {
-          speed = 0;
-          this.faceYaw = Math.atan2(t2[0] - this.pos.x, t2[1] - this.pos.z);
-          this.yaw = dampAngle(this.yaw, this.faceYaw, 4, dt);
+        const go = this.mayCross(t2[0], t2[1]);
+        const w = this.waitAt;
+        if (go && (!w || (w.go += dt) > w.react)) {
+          this.crossOK = true;
+          if (w) this.mgr.leaveCurb(this);
+        } else {
+          if (!w) this.mgr.curbSlot(this, t2[0], t2[1]);
+          const s = this.waitAt;
+          if (!go) s.go = 0;
+          const wd = Math.hypot(s.x - this.pos.x, s.z - this.pos.z);
+          // (up to the edge of the curb - and where something low stands in the way of it, a
+          // couple of seconds of trying is enough: waiting where they are, not walking on the spot)
+          if (wd > 0.25 && (s.walkT = (s.walkT || 0) + dt) < 2.5) {
+            tx = s.x;
+            tz = s.z;
+            speed = Math.min(speed, 0.6 + wd);
+          } else {
+            speed = 0;
+            this.faceYaw = Math.atan2(t2[0] - this.pos.x, t2[1] - this.pos.z);
+            this.yaw = dampAngle(this.yaw, this.faceYaw, 4, dt);
+          }
+          this.mgr.curbLook(this, s, dt);
         }
       }
-      // hurry across the road
-      if (this.crossing && this.crossOK) speed *= this.jog ? 1 : 1.35;
+      // hurry across the road (an old man at his own pace; everybody quicker once the walk is
+      // about to end - Civilian.lightLeft)
+      if (this.crossing && this.crossOK) {
+        this.hurryT = (this.hurryT || 0) - dt;
+        if (this.hurryT <= 0) {
+          this.hurryT = 0.5;
+          const t2 = this.loop[this.target];
+          this.hurry = this.lightLeft(t2[0], t2[1]) < 3;
+        }
+        speed *= this.jog ? 1 : this.role === 'elder' ? (this.hurry ? 1.25 : 1.05) : this.hurry ? 1.75 : 1.3;
+      }
       if (this.stopT > 0) {
         this.stopT -= dt;
         speed = 0;
@@ -481,8 +636,99 @@ class Civilian {
     if (sp > 0.2) this.yaw = dampAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), 8, dt);
     else if (this.faceYaw !== null && this.ctrl) this.yaw = dampAngle(this.yaw, this.faceYaw, 6, dt);
     fig.yaw = this.yaw;
-    fig.speed = sp;
+    // (a jogger at a red light runs on the spot: the stride goes on where the feet stay)
+    fig.speed = this.jog && this.waitAt && sp < 0.3 ? 2.6 : sp;
+    // (GTA IV pass) the hands with the words, the head to whoever is talking (near the camera)
+    if (this.talkUntil > 0 || this.listenTo || this.glanceUntil > 0 || this.waitAt || this._look) this.social(dt);
     fig.update(dt);
+  }
+
+  // the hands while a line is said (gestureAt), and where the head turns: to the one talking, to
+  // you going by (game/voices.js), up the road at the traffic while waiting at the curb
+  social(dt) {
+    const fig = this.fig;
+    const game = this.game;
+    const now = game.time;
+    const cam = game.camera.position;
+    const near = (this.pos.x - cam.x) ** 2 + (this.pos.z - cam.z) ** 2 < GESTURE_D * GESTURE_D;
+    // (taken from the curb by something else: the place there is free again)
+    if (this.waitAt && (!this.crossing || this.crossOK || this.ctrl || this.panicT > 0)) this.mgr.leaveCurb(this);
+    // ---- the hands
+    // (a hand another system took while it was ours: the shops and the others write their reach
+    // into whatever point the hand already follows - game/streetlife.js - so that point is theirs
+    // now, and the words get a new one; the hand stays with what it is doing)
+    if (this._gR && fig.reachR === this._gR && this._gRw && !this._gR.equals(this._gRw)) this._gR = null;
+    if (this._gL && fig.reachL === this._gL && this._gLw && !this._gL.equals(this._gLw)) this._gL = null;
+    // (and never over hands held up - a gun pointed at them: "Don't shoot!" with the hands up, not a
+    // fist shaken at it, game/voices.js aimAt - nor over a dance)
+    let on = near && this.talkUntil > now && this.gest && !this.headless && !(this.panicT > 0) && this.downT <= 0 && !fig.rag && fig.speed < 2.6 && !(fig.armsUp > 0) && !(fig.surrender > 0) && !(fig.dance > 0.3);
+    if (on) {
+      this.gestT += dt;
+      const t = this.gestT;
+      const ph = fig.seed * 1.7;
+      const sitDrop = fig.sit * 0.43;
+      const full = HANDS_FULL.has(fig.carry);
+      // the right hand: free, or holding something light (a coffee goes with the words); on the
+      // phone it stays at the ear and the left one talks
+      const rOk = !full && !RIGHT_BUSY.has(fig.carry) && !(this.onCall && fig.carry === 'phone') && fig.parts.armR > 0.5 && (!fig.reachR || fig.reachR === this._gR);
+      const lOk = !full && !fig.carryL && fig.parts.armL > 0.5 && (!fig.reachL || fig.reachL === this._gL);
+      let usedR = false;
+      let usedL = false;
+      if (rOk) {
+        const v = this._gR || (this._gR = new THREE.Vector3());
+        if (gestureAt(this.gest, 1, t, ph, v)) {
+          fig.toWorld(v.x, v.y - sitDrop, v.z, v);
+          fig.reachR = v;
+          (this._gRw || (this._gRw = new THREE.Vector3())).copy(v);
+          usedR = true;
+        }
+      }
+      if (lOk) {
+        const v = this._gL || (this._gL = new THREE.Vector3());
+        // (a one-handed gesture with the right hand busy: the left one makes it, mirrored)
+        const k = !rOk && gestureAt(this.gest, 1, t, ph, v) ? -1 : 0;
+        if (k || gestureAt(this.gest, -1, t, ph, v)) {
+          if (k) v.x = -v.x;
+          fig.toWorld(v.x, v.y - sitDrop, v.z, v);
+          fig.reachL = v;
+          (this._gLw || (this._gLw = new THREE.Vector3())).copy(v);
+          usedL = true;
+        }
+      }
+      if (!usedR && fig.reachR === this._gR && this._gR) fig.reachR = null;
+      if (!usedL && fig.reachL === this._gL && this._gL) fig.reachL = null;
+      on = usedR || usedL;
+    }
+    if (!on) {
+      if (this._gR && fig.reachR === this._gR) fig.reachR = null;
+      if (this._gL && fig.reachL === this._gL) fig.reachL = null;
+      if (this.talkUntil <= now) {
+        this.talkUntil = 0;
+        this.gest = null;
+      }
+    }
+    // ---- the head: the one talking to them, you (a glance), the traffic up the road
+    if (this.listenUntil <= now) this.listenTo = null;
+    if (this.glanceUntil <= now) {
+      this.glanceUntil = 0;
+      this.glanceAt = null;
+    }
+    let look = null;
+    if (near && !(this.panicT > 0)) {
+      const L = this.listenTo;
+      if (L && L.alive && !L.gone && L.fig.parts.head > 0.5 && Math.abs(L.pos.x - this.pos.x) + Math.abs(L.pos.z - this.pos.z) < 6) look = L.fig.j.headC;
+      else if (this.glanceAt) look = this.glanceAt;
+      else if (this.waitAt && this.waitAt.look) look = this.waitAt.look;
+    }
+    if (look) {
+      if (!fig.lookAt || fig.lookAt === this._look) {
+        fig.lookAt = look;
+        this._look = look;
+      }
+    } else if (this._look) {
+      if (fig.lookAt === this._look) fig.lookAt = null;
+      this._look = null;
+    }
   }
 
   // on the ground after a punch or a kick (game/fists.js), and back up; then off, away from you
@@ -516,24 +762,35 @@ class Civilian {
   // may they step off the curb towards (tx, tz)? Across an avenue when its cars wait at the red
   // light, across a street when its cars do (with time enough left to reach the other side)
   mayCross(tx, tz) {
-    const mx = (this.pos.x + tx) / 2;
-    const mz = (this.pos.z + tz) / 2;
-    let n = null;
-    let bd = 30;
-    for (const m of NODES) {
-      const d = Math.hypot(m.x - mx, m.z - mz);
-      if (d < bd) {
-        bd = d;
-        n = m;
+    return this.lightLeft(tx, tz) > 6;
+  }
+
+  // how long the way across to (tx, tz) is still the walkers' (s; -1: the cars have it now)
+  // (the crossing found once for each way over: every frame at the curb would look through every
+  // crossing of the city)
+  lightLeft(tx, tz) {
+    let n = this.crossNode;
+    if (n === undefined) {
+      const mx = (this.pos.x + tx) / 2;
+      const mz = (this.pos.z + tz) / 2;
+      n = null;
+      let bd = 30;
+      for (const m of NODES) {
+        if (Math.abs(m.x - mx) > bd || Math.abs(m.z - mz) > bd) continue;
+        const d = Math.hypot(m.x - mx, m.z - mz);
+        if (d < bd) {
+          bd = d;
+          n = m;
+        }
       }
+      this.crossNode = n;
     }
-    if (!n || !n.signal) return true;
+    if (!n || !n.signal) return 99;
     const time = this.game.traffic ? this.game.traffic.time : 0;
     const ph = (((time + n.offset) % CYCLE) + CYCLE) % CYCLE;
     const acrossAve = Math.abs(tx - this.pos.x) > Math.abs(tz - this.pos.z);
     // the avenue's cars: green 0..11, yellow ..13.5, red 13.5..26; the street's: green 14.5..23
-    const left = acrossAve ? (ph >= 13.5 ? CYCLE - ph : -1) : ph < 14.5 ? 14.5 - ph : ph >= 25.5 ? CYCLE - ph + 14.5 : -1;
-    return left > 6;
+    return acrossAve ? (ph >= 13.5 ? CYCLE - ph : -1) : ph < 14.5 ? 14.5 - ph : ph >= 25.5 ? CYCLE - ph + 14.5 : -1;
   }
 
   // the next step out of the shop they are in: round the furniture, out of the door, a step onto
@@ -566,16 +823,121 @@ class Civilian {
   }
 }
 
+// (GTA IV pass) the places at the edge of the curb where people wait for the walk, side by side
+// along it and a second row behind: [along the curb, back from it] (m)
+const CURB_SLOTS = [[0, 0], [0.8, 0], [-0.8, 0], [1.6, 0], [-1.6, 0], [0.4, 0.75], [-0.4, 0.75], [1.2, 0.75], [-1.2, 0.75], [0, 1.5]];
+
 export class Civilians {
   constructor(game) {
     this.game = game;
     this.list = [];
     this.t = 0;
+    // (GTA IV pass) the corners where somebody is waiting to cross: who stands where
+    this.curbs = new Map();
+  }
+
+  // ------------------------------------------------------------------ at the curb
+  // c at a corner, waiting to cross to (tx, tz): the next free place at the edge of the curb
+  // (1.9 m on from the corner of the walk, where the zebra starts), beside whoever is there
+  // already; one not on a pole, a bin, a box of papers
+  curbSlot(c, tx, tz) {
+    const dx = tx - c.pos.x;
+    const dz = tz - c.pos.z;
+    const l = Math.hypot(dx, dz) || 1;
+    const ux = dx / l;
+    const uz = dz / l;
+    const way = Math.abs(ux) > Math.abs(uz) ? (ux > 0 ? 1 : 2) : uz > 0 ? 3 : 4;
+    // (the corner known by where its crossing goes - the far corner, the same point of the walk
+    // for everybody crossing there - not by where each one happened to stop: two people arriving a
+    // step apart were two corners, each with its own places, and stood inside each other)
+    const key = (Math.round(tx * 2) * 8191 + Math.round(tz * 2)) * 5 + way;
+    let C = this.curbs.get(key);
+    if (!C) {
+      C = { x: c.pos.x, z: c.pos.z, ux, uz, used: [] };
+      this.curbs.set(key, C);
+    }
+    const col = this.game.world.collision;
+    for (let k = 0; k < CURB_SLOTS.length; k++) {
+      const o = C.used[k];
+      if (o && o !== c && o.alive && !o.gone && o.waitAt && o.waitAt.C === C) continue;
+      const [lat, back] = CURB_SLOTS[k];
+      const x = C.x + C.ux * (1.9 - back) - C.uz * lat;
+      const z = C.z + C.uz * (1.9 - back) + C.ux * lat;
+      // (room for a body there: a person is 0.33 m round)
+      if (col.pointInside(x, 1.0, z, 0.36)) continue;
+      C.used[k] = c;
+      c.waitAt = { C, k, x, z, go: 0, react: 0.2 + Math.random() * 0.9 + (c.role === 'elder' ? 0.7 : 0), look: null, lookT: Math.random() * 2, ux, uz };
+      return;
+    }
+    c.waitAt = { C: null, k: -1, x: c.pos.x, z: c.pos.z, go: 0, react: 0.3 + Math.random() * 0.8, look: null, lookT: Math.random() * 2, ux, uz };
+  }
+
+  leaveCurb(c) {
+    const w = c.waitAt;
+    if (!w) return;
+    if (w.C && w.C.used[w.k] === c) w.C.used[w.k] = null;
+    c.waitAt = null;
+  }
+
+  // waiting: a look up the road at the cars coming (from the left, on this side), now and then
+  // the other way; somebody with a phone looks at it instead
+  curbLook(c, w, dt) {
+    w.lookT -= dt;
+    if (w.lookT > 0) return;
+    w.lookT = 1.2 + Math.random() * 2.2;
+    if (c.fig.carry === 'phone' && Math.random() < 0.5) {
+      w.look = null;
+      return;
+    }
+    const v = w.look || (w.look = new THREE.Vector3());
+    const s = Math.random() < 0.7 ? 1 : -1;
+    v.set(c.pos.x + w.uz * 9 * s + w.ux * 3, c.pos.y + 1.4, c.pos.z - w.ux * 9 * s + w.uz * 3);
+  }
+
+  // ------------------------------------------------------------------ said, with the hands
+  // (game/voices.js heard: every line said in the city) c says text: the hands go with it for as
+  // long as it is said (Civilian.social), and whoever c is talking with looks at c
+  spoke(c, text, tone) {
+    if (!c || !c.fig || !c.alive || c.inside) return;
+    const life = Math.min(3.4, 1.3 + text.length * 0.045);
+    const now = this.game.time;
+    c.talkUntil = now + life;
+    let g = c.gestNext || gestureFor(text, tone);
+    // (on the phone: no wave hello into it, no pointing - the free hand talks)
+    if (c.onCall && (g === 'wave' || g === 'point')) g = 'hip';
+    c.gest = g;
+    c.gestNext = null;
+    c.gestT = 0;
+    const ex = c.convo;
+    const H = c.huddle;
+    const others = ex ? ex.who : H ? H.members : c.buddy ? [c.buddy] : c.buddyOf ? [c.buddyOf] : null;
+    if (others) {
+      for (const o of others) {
+        if (o === c || !o.alive) continue;
+        o.listenTo = c;
+        o.listenUntil = now + life + 0.8;
+      }
+    }
+  }
+
+  // a gesture with nothing said (far off: a group talking where no word can be heard)
+  mime(c, kind, life) {
+    if (!c.alive || c.inside) return;
+    c.talkUntil = this.game.time + life;
+    c.gest = kind;
+    c.gestT = 0;
   }
 
   reset() {
-    for (const c of this.list) c.dispose();
+    for (const c of this.list) {
+      c.dispose();
+      c.gone = true;
+    }
     this.list = [];
+    this.curbs.clear();
+    // (the groups, the calls, the musician: game/streetsocial.js)
+    const S = this.game.crowds && this.game.crowds.social;
+    if (S) S.reset();
   }
 
   update(dt) {
@@ -593,8 +955,18 @@ export class Civilians {
         if (c.gone) c.dispose();
         return !c.gone;
       });
+      // (the corners nobody waits at any more)
+      if (this.curbs.size > 24) {
+        for (const [k, C] of this.curbs) {
+          if (!C.used.some((o) => o && o.alive && !o.gone && o.waitAt && o.waitAt.C === C)) this.curbs.delete(k);
+        }
+      }
+      // (GTA IV pass: the street's own people standing in a group, listening to the musician, on
+      // the phone, stopped to talk - game/streetsocial.js - are counted with the walkers: they are
+      // the street's people, not more of them)
+      const social = game.crowds && game.crowds.social;
       let free = 0;
-      for (const c of this.list) if (!c.scripted) free++;
+      for (const c of this.list) if (!c.scripted || (social && c.owner === social)) free++;
       if (free > max + 1) {
         // (fewer people are out at this hour than there were: some of those out of sight go home)
         const cp = game.camera.position;
@@ -634,6 +1006,8 @@ export class Civilians {
       }
       const cam = game.camera;
       const fwd = cam.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
+      const hr = game.daynight ? game.daynight.hour : 12;
+      const evening = hr > 18 && hr < 23.5 ? 1 : hr >= 23.5 || hr < 1.5 ? 0.5 : 0;
       while (free < max && tries-- > 0) {
         // the promenade (when you are near the bay), or a block round you
         let c;
@@ -699,7 +1073,8 @@ export class Civilians {
           if (!game.classic && c.fig.look.role) {
             game.crowds.dress(c);
             if (c.buddy) free++;
-          } else if (!c.dog && !c.jog && Math.random() < 0.14 && free < max) {
+          } else if (!c.dog && !c.jog && Math.random() < 0.14 + 0.14 * evening && free < max) {
+            // (friends out together; in the evening more of them, and couples)
             if (this.addBuddy(c)) free++;
           }
         }
@@ -709,17 +1084,24 @@ export class Civilians {
     // there nobody can tell; it halves their share of the work). Half of them move on even
     // frames, half on odd ones.
     const cam = game.camera.position;
+    const social = game.crowds && game.crowds.social;
     this.frameN = (this.frameN || 0) + 1;
     this.buildGrid();
     for (let i = 0; i < this.list.length; i++) {
       const c = this.list[i];
       let step = dt + c.owed;
-      if (!c.ctrl && !c.scripted && c.dying < 0 && !(c.panicT > 0) && !c.headless && !c.inside) {
-        const dx = c.pos.x - cam.x;
-        const dz = c.pos.z - cam.z;
-        if (dx * dx + dz * dz > FAR_STEP * FAR_STEP && ((this.frameN + i) & 1)) {
-          c.owed = step;
-          continue;
+      // (the street's own people on the phone, stopping to talk, by the musician - game/streetsocial.js
+      // - are walkers too: far away, the same every-other-frame steps)
+      if ((!c.ctrl && !c.scripted && !c.headless && !c.inside) || (social && c.owner === social && !c.still)) {
+        if (c.dying >= 0 || c.panicT > 0) {
+          // (as near)
+        } else {
+          const dx = c.pos.x - cam.x;
+          const dz = c.pos.z - cam.z;
+          if (dx * dx + dz * dz > FAR_STEP * FAR_STEP && ((this.frameN + i) & 1)) {
+            c.owed = step;
+            continue;
+          }
         }
       } else if (c.still && c.dying < 0 && !(c.panicT > 0)) {
         // somebody sitting or waiting (game/routines.js): beyond a few metres their small moves
@@ -893,6 +1275,17 @@ export class Civilians {
       c.inside = false;
       c.fig.setVisible(true);
     }
+    // (GTA IV pass: the hands down, the head free, out of a group, off the curb's place)
+    c.talkUntil = 0;
+    c.gest = null;
+    c.listenTo = null;
+    c.glanceAt = null;
+    c.glanceUntil = 0;
+    c._look = null;
+    c.huddle = null;
+    c.onCall = false;
+    c.still = false;
+    this.leaveCurb(c);
   }
 
   // somebody let go where they stand (a bench, a shop's door, the bus): on along the side of the
@@ -923,6 +1316,10 @@ export class Civilians {
     if (!c) return;
     const i = this.list.indexOf(c);
     if (i >= 0) this.list.splice(i, 1);
+    // (their place at the curb free again; and gone, for whoever still knows them - the friend
+    // posing for their picture, the others of their group looking at them, game/streetsocial.js)
+    this.leaveCurb(c);
+    c.gone = true;
     c.dispose();
   }
 
@@ -958,7 +1355,7 @@ export class Civilians {
 
   // a walker nobody has a use for (the far crowd may take them over: game/farcrowd.js)
   plain(c) {
-    if (c.scripted || c.ctrl || c.owner || !c.alive || c.headless || c.panicT > 0 || c.inside || c.dog || c.buddy || c.buddyOf || c.crossing || c.photo || c.exitRoom) return false;
+    if (c.scripted || c.ctrl || c.owner || !c.alive || c.headless || c.panicT > 0 || c.inside || c.dog || c.buddy || c.buddyOf || c.crossing || c.photo || c.exitRoom || c.huddle || c.onCall || c.goingHome || c.meet || c.pose) return false;
     const P = c.fig.parts;
     return P.legL > 0.5 && P.legR > 0.5 && P.armL > 0.5 && P.armR > 0.5 && P.torso > 0.5;
   }
@@ -968,8 +1365,9 @@ export class Civilians {
   fromFar(w) {
     const R = this.game.rhythm;
     const max = Math.round((this.game.touch ? 18 : 40) * (R ? R.people : 1));
+    const social = this.game.crowds && this.game.crowds.social;
     let free = 0;
-    for (const c of this.list) if (!c.scripted) free++;
+    for (const c of this.list) if (!c.scripted || (social && c.owner === social)) free++;
     if (free >= max) return null;
     const c = new Civilian(this, w.prom ? 'prom' : w.col, w.prom ? w.z : w.row, w.look);
     c.loop = w.loop;
@@ -981,7 +1379,8 @@ export class Civilians {
     c.fig.yaw = w.yaw;
     c.fig.phase = w.phase;
     c.speed = w.speed;
-    if (this.game.crowds && w.look.role) this.game.crowds.dress(c);
+    // (dressed for who they are; no friend popping up beside them out of thin air)
+    if (this.game.crowds && w.look.role) this.game.crowds.dress(c, false);
     this.list.push(c);
     return c;
   }
@@ -1235,6 +1634,9 @@ export class Civilians {
       // (out cold: ROADMAP 5.4)
       if (c.ko && c.downT > 0) drawStars(this.game, c.fig.j.headC, this.game.time, Math.min(1, c.downT * 2, (CIV_KO - c.downT) * 2), i);
     }
+    // (the street musician's open case and its coins: game/streetsocial.js)
+    const S = this.game.crowds && this.game.crowds.social;
+    if (S) S.draw(this.game.figures);
   }
 
   // ------------------------------------------------------------------ in the rain
@@ -1332,6 +1734,11 @@ export class Civilians {
     const m = this.game.rhythm ? this.game.rhythm.commute : 0;
     if (c.jog) return;
     c.jog = false;
+    // (GTA IV pass) lunch in hand at midday, on the way back to the desk; the shopping on the way
+    // home in the afternoon and the evening, a bag in each hand now and then
+    const h = this.game.daynight ? this.game.daynight.hour : 12;
+    const lunch = h > 11.4 && h < 14.6 ? 1 : 0;
+    const shops = h > 10 && h < 21 ? 1 : 0.3;
     if (r < 0.08) {
       c.dog = newDog(c.pos.x + 1, c.pos.z);
       c.dog.y = c.pos.y;
@@ -1346,33 +1753,80 @@ export class Civilians {
       c.fig.carry = 'coffee';
     } else if (r < 0.42 + 0.25 * m) {
       c.fig.carry = 'bag';
+    } else if (r < 0.42 + 0.25 * m + 0.13 * lunch) {
+      c.fig.carry = LUNCH[Math.floor(Math.random() * LUNCH.length)];
+    } else if (r < 0.42 + 0.25 * m + 0.13 * lunch + 0.12 * shops) {
+      c.fig.carryL = 'shopBag';
+      c.fig.shopBagColor = BAG_COLORS[Math.floor(Math.random() * BAG_COLORS.length)];
+      if (Math.random() < 0.4) c.fig.carry = 'shopBag';
+      c.shopping = true;
+      c.speed = Math.min(c.speed, 1.15 + Math.random() * 0.2);
     }
   }
 
-  // a friend walking alongside c (and stopping with them to talk)
-  addBuddy(c) {
+  // a friend walking alongside c (and stopping with them to talk). o.look: who (anybody); o.couple:
+  // the two hand in hand, closer (in the evening most of the pairs out are couples)
+  addBuddy(c, o = {}) {
     if (c.prom || c.loop.length < 4) return null;
-    const b = new Civilian(this, c.col, c.row);
+    const b = new Civilian(this, c.col, c.row, o.look || null);
     b.pos.set(c.pos.x + 0.8, c.pos.y, c.pos.z);
     b.scripted = false;
     b.buddyOf = c;
     c.chatty = true;
     c.buddy = b;
+    const h = this.game.daynight ? this.game.daynight.hour : 12;
+    const couple = o.couple !== undefined ? o.couple : Math.random() < (h > 18.5 || h < 2 ? 0.55 : 0.2);
+    const gap = couple ? 0.58 : 0.85;
+    if (couple) b.couple = true;
     const lines = ['No way!', 'Ha ha ha!', 'Seriously?', 'I know, right?', 'Let\'s get pizza.', 'Did you see that?', 'Tell me more!'];
     let talkT = 2 + Math.random() * 4;
     b.ctrl = (me, dt) => {
       const L = me.buddyOf;
       if (!L || !L.alive || L.gone || L.panicT > 0) {
+        if (L && me.fig.reachL === L.fig.j.handR) me.fig.reachL = null;
+        // (in the middle of a pose for the camera: the hands down - not a peace sign held up all
+        // the way down the street)
+        this.endPose(me);
         me.ctrl = null;
         me.buddyOf = null;
         return null;
       }
+      // (GTA IV pass: in the picture - game/crowds.js startPhoto: over to the place, turned to the
+      // camera, a pose: a peace sign by the face, a wave, the arms out, a hand on the hip)
+      const P = me.pose;
+      if (P) {
+        if (me.fig.reachL === L.fig.j.handR) me.fig.reachL = null;
+        if (!P.at && Math.hypot(P.x - me.pos.x, P.z - me.pos.z) > 0.3) return { x: P.x, z: P.z, speed: 1.5 };
+        P.at = true;
+        me.faceYaw = Math.atan2(L.pos.x - me.pos.x, L.pos.z - me.pos.z);
+        const fg = me.fig;
+        const t = this.game.time;
+        if (P.kind === 'peace') fg.toWorld(0.2, 1.66, 0.12, P.hand);
+        else if (P.kind === 'wave') fg.toWorld(0.3 + Math.sin(t * 9) * 0.08, 1.8, 0.1, P.hand);
+        else if (P.kind === 'arms') {
+          fg.toWorld(0.62, 1.42, 0.08, P.hand);
+          fg.toWorld(-0.62, 1.42, 0.08, P.hand2);
+        } else {
+          fg.toWorld(0.25, 0.98, -0.02, P.hand);
+          fg.toWorld(-0.25, 0.98, -0.02, P.hand2);
+        }
+        if (!fg.reachR || fg.reachR === P.hand) fg.reachR = P.hand;
+        if ((P.kind === 'arms' || P.kind === 'hip') && (!fg.reachL || fg.reachL === P.hand2)) fg.reachL = P.hand2;
+        return null;
+      }
       const f = L.fig.forward;
       const side = L.fig.right;
-      const tx = L.pos.x + side.x * 0.85 - f.x * 0.1;
-      const tz = L.pos.z + side.z * 0.85 - f.z * 0.1;
+      const tx = L.pos.x + side.x * gap - f.x * 0.1;
+      const tz = L.pos.z + side.z * gap - f.z * 0.1;
       const d = Math.hypot(tx - me.pos.x, tz - me.pos.z);
       const lsp = Math.hypot(L.vel.x, L.vel.z);
+      // (hand in hand: her left in his right, walking)
+      if (couple) {
+        // (the hands free for it: not round a coffee, not with the shopping bag)
+        const hold = d < 0.6 && lsp > 0.3 && !me.talkUntil && L.fig.parts.armR > 0.5 && !L.fig.carry && !me.fig.carryL;
+        if (hold) me.fig.reachL = L.fig.j.handR;
+        else if (me.fig.reachL === L.fig.j.handR) me.fig.reachL = null;
+      }
       talkT -= dt;
       if (talkT < 0) {
         talkT = 3 + Math.random() * 5;
@@ -1394,6 +1848,15 @@ export class Civilians {
     };
     this.list.push(b);
     return b;
+  }
+
+  // the picture taken: the friend out of the pose, back alongside
+  endPose(b) {
+    const P = b && b.pose;
+    if (!P) return;
+    b.pose = null;
+    if (b.fig.reachR === P.hand) b.fig.reachR = null;
+    if (b.fig.reachL === P.hand2) b.fig.reachL = null;
   }
 
   walkDog(c, dt) {
