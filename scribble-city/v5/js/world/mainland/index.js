@@ -138,7 +138,9 @@ export class Mainland {
     if (!this.on) return;
     const M = world.ctx.M;
     // the mainland's own pens where they differ from the island's: its signs' neon
-    this.neon = new MainNeon(this.renderer);
+    // (v5, ROADMAP 11.30: a picture of 224 places on a computer - downtown round the mega mall
+    // wants more than 128 signs at once; 128 on a phone)
+    this.neon = new MainNeon(this.renderer, 4, o.low ? 32 : 56);
     const signNeon = makeSurface({ kind: 'neon', neonMask: true, vcolor: true, alphaTest: 0.5, emissive: new THREE.Color(2.0, 2.0, 2.0), line: 0.15, side: THREE.DoubleSide, noShadow: true });
     signNeon.uniforms.uMap.value = this.neon.tex;
     signNeon.uniforms.uUseMap.value = 1;

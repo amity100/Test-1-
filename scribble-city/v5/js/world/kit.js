@@ -403,6 +403,21 @@ export class Facade {
   }
 }
 
+// (v5, the mega mall) a front up on a floor of its own: everything built on it - the store's glass,
+// its sign, the room behind it, the walls you bump into - stands dy higher (world/mainland/megamall.js)
+export class LiftFacade extends Facade {
+  constructor(ox, oz, ux, uz, nx, nz, dy) {
+    super(ox, oz, ux, uz, nx, nz);
+    this.dy = dy;
+  }
+
+  p(u, v, w) {
+    const q = super.p(u, v, w);
+    q[1] += this.dy;
+    return q;
+  }
+}
+
 export function canvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w;

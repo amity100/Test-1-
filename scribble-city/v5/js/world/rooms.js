@@ -454,7 +454,8 @@ class Room {
         const p = this.P((this.ua + this.ub) / 2, this.y0, (this.da + this.db) / 2);
         return { x: p[0], z: p[2] };
       })(),
-      floor: this.y0,
+      // (a room up on a floor of the mega mall: its front lifted, world/kit.js LiftFacade)
+      floor: this.y0 + (this.f.dy || 0),
       height: this.y1 - this.y0,
       kind: this.kind,
       // (v5: named places in the room - the television's screen, the stove, a wall for a picture)
@@ -469,8 +470,10 @@ class Room {
         return { x: p[0], z: p[2] };
       }),
       path: (ax, az, bx, bz) => this.path(ax, az, bx, bz),
-      inside: (x, z, pad = 0) => {
+      // (y: where the feet are, when it matters - the mega mall's stores stand one over another)
+      inside: (x, z, pad = 0, y = null) => {
         const [u, d] = this.toUD(x, z);
+        if (y !== null && (y < this.y0 + (this.f.dy || 0) - 1.2 || y > this.y1 + (this.f.dy || 0) - 0.4)) return false;
         return u > this.ua - pad && u < this.ub + pad && d > this.db - pad && d < this.da + pad;
       },
     };
@@ -485,7 +488,7 @@ class Room {
     const add = (u0, d0, u1, d1, ya, yb, tag = 'wall') => {
       if (Math.abs(u1 - u0) < 1e-3 || Math.abs(d1 - d0) < 1e-3) return;
       const [mn, mx] = f.box(u0, ya, d0, u1, yb, d1);
-      col.addBox(mn[0], mn[2], mx[0], mx[2], ya, yb, tag);
+      col.addBox(mn[0], mn[2], mx[0], mx[2], mn[1], mx[1], tag);
     };
     // the room's own walls (the building round it does the rest)
     add(spec.u0, db - T, spec.u1, db, y0, y1);

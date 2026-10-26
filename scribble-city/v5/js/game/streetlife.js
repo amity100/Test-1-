@@ -205,13 +205,14 @@ export class StreetLife {
       for (const s of this.shops) {
         // (a shop that is closed at this hour stays dark: game/rhythm.js, game/shutters.js)
         if (R && !R.open(s.kind)) continue;
-        const d = Math.hypot(s.door[0] - p.x, s.door[2] - p.z);
+        // (the mega mall's floors one over another: the stores on your own floor first)
+        const d = Math.hypot(s.door[0] - p.x, s.door[2] - p.z) + Math.abs(s.door[1] - p.y) * 2.5;
         if (d < 62) near.push([d - (s.stand ? 25 : 0), s]);
       }
       near.sort((a, b) => a[0] - b[0]);
       const want = new Set(near.slice(0, this.budget).map((n) => n[1]));
       for (const [id, a] of this.active) {
-        const d = Math.hypot(a.shop.door[0] - p.x, a.shop.door[2] - p.z);
+        const d = Math.hypot(a.shop.door[0] - p.x, a.shop.door[2] - p.z) + Math.abs(a.shop.door[1] - p.y) * 2.5;
         // (closing: let go once the shutter is down and nobody sees them go; a stand packs up when
         // you are not looking)
         const shut = a.shop.shut || ((a.shop.stand || !a.shop.room) && R && !R.open(a.shop.kind) && d > 30);
@@ -499,7 +500,7 @@ export class StreetLife {
       const dd = a.room ? 99 : Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
       const kp = a.keeper && a.keeper.alive && (a.open || !a.room) ? a.keeper.pos : a.home;
       const dk = Math.hypot(kp.x - p.pos.x, kp.z - p.pos.z);
-      if (a.room && !a.room.inside(p.pos.x, p.pos.z, 0.2)) {
+      if (a.room && !a.room.inside(p.pos.x, p.pos.z, 0.2, p.pos.y)) {
         // (v5: at a house's door, outside: you knock first)
         if (s.home && a.open && (!a.knocked || game.time - a.knocked > 12)) {
           const d = Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
@@ -1036,6 +1037,9 @@ class OpenShop {
     this.shop = shop;
     // the room behind the door (interiors.js): the shopkeeper works in there and people come in
     this.room = shop.room && shop.room.door ? shop.room : null;
+    // (a store up on a floor of the mega mall: the people it brings stand on that floor -
+    // game/civilians.js spawnScripted)
+    this.lift = this.room && this.room.floor > 1.5 ? this.room.floor - 0.15 : 0;
     this.alive = true;
     this.customers = 0;
     this.doorT = 0;
@@ -1448,7 +1452,7 @@ class OpenShop {
     const base = R.big ? 10 : 6;
     // (each one a whole person: the most where you can see in, a few through the windows down the
     // street)
-    const k = R.inside(p.x, p.z, 0.5) ? 1 : d < 14 ? 0.8 : d < 30 ? 0.45 : 0.25;
+    const k = R.inside(p.x, p.z, 0.5, p.y) ? 1 : d < 14 ? 0.8 : d < 30 ? 0.45 : 0.25;
     return Math.max(1, Math.min(R.browse.length, Math.round(base * k * (touch ? 0.5 : 1))));
   }
 
@@ -1907,7 +1911,7 @@ class OpenShop {
       civ.faceYaw = yaw;
       civ.pos.x = x;
       civ.pos.z = z;
-      civ.baseY = 0.0;
+      civ.baseY = this.lift || 0;
       sip -= dt;
       if (sip < 0) {
         civ.fig.drinkT = Math.min(1, -sip / 1.2);
@@ -2859,7 +2863,7 @@ class OpenShop {
     const tv = this.tv;
     const R = this.room;
     const m = R.marks.tv;
-    if (!m || !p.seat || !R.inside(p.pos.x, p.pos.z, 0.2)) {
+    if (!m || !p.seat || !R.inside(p.pos.x, p.pos.z, 0.2, p.pos.y)) {
       if (tv.sk) game.airsketch.erase(tv.sk);
       this.tv = null;
       return;
@@ -3097,7 +3101,7 @@ class OpenShop {
         if (n < Math.max(want, this.game.touch ? 0 : 4)) {
           // (nobody pops up in sight: in at the door while you are near, already inside when not)
           const p = this.game.player.pos;
-          const far = Math.hypot(this.home.x - p.x, this.home.z - p.z) > 22 && !this.room.inside(p.x, p.z, 0.5);
+          const far = Math.hypot(this.home.x - p.x, this.home.z - p.z) > 22 && !this.room.inside(p.x, p.z, 0.5, p.y);
           if (far) {
             const f = this.freeSpot();
             if (f) this.addVisitor(null, { ...f, already: true });
@@ -3137,7 +3141,7 @@ class OpenShop {
   film(dt) {
     const game = this.game;
     const p = game.player.pos;
-    if (!this.room.inside(p.x, p.z, 0.3)) {
+    if (!this.room.inside(p.x, p.z, 0.3, p.y)) {
       if (this.filmSk) game.airsketch.erase(this.filmSk);
       this.filmSk = null;
       this.filmI = 0;

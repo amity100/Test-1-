@@ -351,7 +351,7 @@ export function* buildMall(bctx, b, o) {
 }
 
 // a store on the hall (side -1: the west row, its front facing east)
-function* store(bctx, mall, side, hx0, hx1, za, zb, kind, nameOf, depth, food = false) {
+export function* store(bctx, mall, side, hx0, hx1, za, zb, kind, nameOf, depth, food = false) {
   const r = bctx.rng;
   const L = zb - za;
   const f = side < 0 ? new Facade(hx0, zb, 0, -1, 1, 0) : new Facade(hx1, za, 0, 1, -1, 0);
@@ -418,7 +418,7 @@ function escalators(bctx, IN, hall, hallGeo, x0, zTop, UY) {
 // a table of the food court: four chairs round it (seats for game/mall.js: n, the table's number,
 // so a party sits at one table together), a parasol in the sun; in its middle the napkins in their
 // steel box, the salt and the pepper; on some a tray left by whoever ate there
-function foodTable(bctx, IN, hall, hallGeo, x, z, mall, sun, n = 0, r = Math.random) {
+export function foodTable(bctx, IN, hall, hallGeo, x, z, mall, sun, n = 0, r = Math.random) {
   const t = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 14);
   t.translate(x, CURB + 0.74, z);
   hallGeo(IN.gloss, t, srgb(0.97, 0.96, 0.93));
@@ -511,7 +511,7 @@ function tray(IN, hall, hallGeo, x, y, z, r) {
 // the station where the trays go back: a counter of the hall's wood, the swing flaps of its bins
 // (THANK YOU over them), the trays stacked on its top, the napkins, the straws, the sauces in their
 // pumps (st: its front faces the food court's tables, along z; x0..x1 across the hall)
-function trayStation(bctx, IN, hall, hallGeo, x0, x1, z, face) {
+export function trayStation(bctx, IN, hall, hallGeo, x0, x1, z, face) {
   const zf = z + face * 0.32;
   const zb = z - face * 0.32;
   const za = Math.min(zf, zb);
@@ -548,7 +548,7 @@ function trayStation(bctx, IN, hall, hallGeo, x0, x1, z, face) {
 }
 
 // a round planter (with a palm in it: the caller's)
-function planter(ctx, x, z, inside) {
+export function planter(ctx, x, z, inside) {
   const M = ctx.M;
   const g = new THREE.CylinderGeometry(1.1, 1.0, 0.7, 18);
   g.translate(x, CURB + 0.35, z);
@@ -715,7 +715,7 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
 
 // a store's front on the hall: the offer on the wide pane, lit; a lightbox standing out at the far
 // end; potted plants either side of the door
-function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
+export function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
   const fb = (mat, u0, v0, w0, u1, v1, w1, col) => {
     const [a, c] = f.box(u0, v0, w0, u1, v1, w1);
     IN.B.box(mat, a[0], a[1], a[2], c[0], c[1], c[2], nextId(), { color: col });
@@ -769,7 +769,7 @@ function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
 // a kiosk: a cart on the hall's floor - its cabinet with panels on the side the people come to, the
 // counter, a tower of goods down its middle, a glass case, a roof on four posts with its lit sign
 // band. Its seller stands on the side away from the hall's middle (mall.kiosks, game/mall.js).
-function kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, kind, r) {
+export function kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, kind, r) {
   const C0 = CURB;
   const col = { sunglasses: srgb(0.98, 0.6, 0.72), phones: srgb(0.3, 0.7, 0.82), sweets: srgb(0.98, 0.78, 0.34), watches: srgb(0.24, 0.26, 0.32), coffee: srgb(0.36, 0.24, 0.18), balloons: srgb(0.56, 0.8, 0.96) }[kind];
   const lite = col.clone().lerp(WHITE, 0.45);
@@ -929,7 +929,7 @@ function kiosk(bctx, IN, hall, hallGeo, mall, x, z, side, kind, r) {
 
 // benches back to back along a low planter of shrubs and flowers; a bin and a recycling bin at one
 // end, a bin at the other
-function pod(bctx, IN, hall, hallGeo, hctx, mall, x, z, r) {
+export function pod(bctx, IN, hall, hallGeo, hctx, mall, x, z, r) {
   hall(IN.box, x - 0.42, CURB, z - 1.35, x + 0.42, CURB + 0.5, z + 1.35, srgb(0.93, 0.9, 0.86));
   hall(IN.box, x - 0.47, CURB + 0.5, z - 1.4, x + 0.47, CURB + 0.56, z + 1.4, srgb(0.8, 0.76, 0.72));
   hall(IN.box, x - 0.36, CURB + 0.5, z - 1.29, x + 0.36, CURB + 0.575, z + 1.29, srgb(0.36, 0.26, 0.2));
@@ -957,7 +957,7 @@ function pod(bctx, IN, hall, hallGeo, hctx, mall, x, z, r) {
 }
 
 // a bin: its round body, its steel lid with the slot in it
-function bin(bctx, IN, hall, hallGeo, mall, x, z, col) {
+export function bin(bctx, IN, hall, hallGeo, mall, x, z, col) {
   const g = new THREE.CylinderGeometry(0.24, 0.21, 0.84, 12);
   g.translate(x, CURB + 0.42, z);
   hallGeo(IN.cyl, g, col);
@@ -971,7 +971,7 @@ function bin(bctx, IN, hall, hallGeo, mall, x, z, col) {
 
 // a screen of advertising on its foot, lit on both faces (what it shows: a band of colour, the
 // thing for sale, a line under it)
-function screenTotem(bctx, IN, hall, x, z, ad) {
+export function screenTotem(bctx, IN, hall, x, z, ad) {
   hall(IN.box, x - 0.5, CURB, z - 0.2, x + 0.5, CURB + 0.08, z + 0.2, srgb(0.7, 0.72, 0.76));
   hall(IN.box, x - 0.44, CURB + 0.08, z - 0.09, x + 0.44, CURB + 2.25, z + 0.09, DARK);
   hall(IN.box, x - 0.44, CURB + 2.25, z - 0.09, x + 0.44, CURB + 2.3, z + 0.09, srgb(0.85, 0.86, 0.9));
@@ -990,14 +990,14 @@ function screenTotem(bctx, IN, hall, x, z, ad) {
 // which the shops' names need): f the face's frame (it reads left to right to whoever faces it),
 // the word centred at u, its line at v, w out of the face, its capitals h high. One part for the
 // pens, a quad a stroke
-function sign(IN, f, mat, text, u, v, w, h, col) {
+export function sign(IN, f, mat, text, u, v, w, h, col) {
   const id = nextId();
   letter(text, h, (a0, b0, a1, b1) => IN.B.add(mat, f.quad(u + a0, v + b0, u + a1, v + b1, w), null, id, { color: col }));
 }
 
 // (v5, GTA IV round: the size of a real mall's - two metres and more across, five long - with the
 // offer on both its faces in big lit letters: the word, the season, the discount)
-function banner(hctx, IN, hall, x, z, top, a, c, word) {
+export function banner(hctx, IN, hall, x, z, top, a, c, word) {
   const w = 1.15;
   for (const s of [-w + 0.15, w - 0.15]) hall(IN.box, x + s - 0.006, top - 0.45, z - 0.006, x + s + 0.006, top, z + 0.006, DARK);
   hall(IN.box, x - w - 0.08, top - 0.5, z - 0.03, x + w + 0.08, top - 0.44, z + 0.03, DARK);
@@ -1018,7 +1018,7 @@ function banner(hctx, IN, hall, x, z, top, a, c, word) {
 
 // the directory by the entrance: a lit board with the mall's plan on it (its stores in colour, a
 // red dot where you are), its header lit along the top; on its back, an advertisement
-function directory(bctx, IN, hall, x, z, end, b) {
+export function directory(bctx, IN, hall, x, z, end, b) {
   const s = -end;
   hall(IN.box, x - 0.9, CURB, z - 0.12, x + 0.9, CURB + 2.3, z + 0.12, srgb(0.2, 0.21, 0.26));
   hall(IN.box, x - 0.95, CURB + 2.3, z - 0.15, x + 0.95, CURB + 2.6, z + 0.15, DARK);
@@ -1129,4 +1129,4 @@ export function* buildStripMall(bctx, b, o) {
   yield;
 }
 
-export { STORE_NAMES };
+export { STORE_NAMES, NEONS, FRONTS, FONTS, ADS, PROMO, KIOSKS, DARK, WHITE };

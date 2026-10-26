@@ -1251,6 +1251,11 @@ export class Civilians {
     c.pos.set(x, groundHeight(x, z), z);
     c.scripted = true;
     c.owner = owner;
+    // (a store up on a floor of the mega mall: its people stand on that floor - game/streetlife.js)
+    if (owner && owner.lift) {
+      c.baseY = owner.lift;
+      c.pos.y += owner.lift;
+    }
     c.speed = 1.25;
     this.list.push(c);
     return c;

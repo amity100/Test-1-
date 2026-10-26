@@ -39,7 +39,7 @@ export class Heli {
     const game = this.game;
     if (game.player.hidden || game.inBar) return true;
     const S = game.streetlife;
-    if (S && S.active) for (const a of S.active.values()) if (a.room && a.room.inside(pp.x, pp.z, 0)) return true;
+    if (S && S.active) for (const a of S.active.values()) if (a.room && a.room.inside(pp.x, pp.z, 0, pp.y)) return true;
     return !game.world.collision.lineOfSight(at.x, at.y - 1.5, at.z, pp.x, pp.y + 1.2, pp.z);
   }
 

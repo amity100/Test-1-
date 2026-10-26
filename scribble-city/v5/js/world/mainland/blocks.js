@@ -9,6 +9,7 @@ import { palm } from '../palms.js';
 import { SHOP_NAMES } from '../blocks.js';
 import { M_AVES, M_STREETS, CURB, towersOf } from './plan.js';
 import { buildMall, buildStripMall, STORE_NAMES } from './mall.js';
+import { buildMegaMall } from './megamall.js';
 import { buildVenue } from './venues.js';
 import { friendStandIn } from '../streets.js';
 import { buildPier } from './pier.js';
@@ -21,11 +22,22 @@ import { dressSidewalks } from './sidewalks.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
+  // (v5, ROADMAP 11.30: the mega mall - three floors round a hall of glass, world/mainland/megamall.js;
+  // its stores floor by floor, west row and east row)
   galleria: {
     name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', wall: '#f4efe8', trim: '#2fa8a0', signCol: '#ff5ad1', font: 'Rubik',
-    stores: ['fashion', 'shoes', 'electronics', 'jewelry', 'perfume', 'toys', 'sports', 'fashion', 'books', 'optics', 'fashion', 'phones', 'boutique', 'shoes', 'music', 'fashion', 'jewelry', 'icecream', 'cafe'],
-    food: ['burger', 'tacos', 'noodles', 'pizza'],
-    street: ['cafe', 'pharmacy', 'juice', 'sushi', 'icecream', 'phones', 'barber', 'flowers', 'cafe', 'optics'],
+    mega: true,
+    stores: {
+      L0w: ['fashion', 'shoes', 'electronics', 'jewelry', 'perfume', 'fashion', 'optics', 'sports'],
+      L0e: ['fashion', 'phones', 'toys', 'shoes', 'boutique', 'cafe'],
+      L1w: ['fashion', 'books', 'sports', 'fashion', 'shoes', 'boutique', 'perfume', 'fashion', 'jewelry', 'music'],
+      L1e: ['electronics', 'toys', 'fashion', 'shoes', 'optics', 'phones'],
+      L2w: ['arcade', 'music', 'fashion', 'books', 'sports', 'boutique', 'icecream', 'cafe'],
+      L2e: ['fashion', 'perfume', 'electronics', 'shoes', 'toys', 'barber'],
+    },
+    food: ['burger', 'tacos', 'noodles', 'pizza', 'sushi', 'juice'],
+    street: ['cafe', 'pharmacy', 'juice', 'sushi', 'icecream', 'phones', 'barber', 'flowers', 'cafe', 'optics', 'bagel', 'books'],
+    anchor: { name: 'BLOOMWELL\'S', kind: 'fashion' },
   },
   starlight: {
     name: 'STARLIGHT CENTER', heb: 'מרכז סטארלייט', open: true, wall: '#f6e3d0', trim: '#e0574f', signCol: '#ffe14f', font: 'Permanent Marker',
@@ -250,9 +262,10 @@ function* buildKind(bctx, b) {
       return;
     case 'galleria':
     case 'starlight':
-      yield* buildMall(bctx, b, MALLS[b.kind]);
-      // (and one in the mall's hall, among the shoppers)
-      if (bctx.mall && bctx.mall.hall) friendStandIn(bctx, bctx.mall.hall, { from: 4, step: 2 });
+      if (MALLS[b.kind].mega) yield* buildMegaMall(bctx, b, MALLS[b.kind]);
+      else yield* buildMall(bctx, b, MALLS[b.kind]);
+      // (and one in the mall's hall, among the shoppers - not in the mega mall's, full as it is)
+      if (bctx.mall && bctx.mall.hall && !bctx.mall.mega) friendStandIn(bctx, bctx.mall.hall, { from: 4, step: 2 });
       return;
     case 'stripmall':
       yield* buildStripMall(bctx, b, MALLS.stripmall);
@@ -394,7 +407,7 @@ export function* buildMBlock(world, b) {
       // (a mall: its hall is indoors for the weather, and its people's - game/mall.js)
       if (bctx.mall) {
         world.malls.push(bctx.mall);
-        if (!bctx.mall.open && !bctx.mall.strip) world.indoorAreas.push(bctx.mall.hall);
+        if (!bctx.mall.open && !bctx.mall.strip) for (const a of bctx.mall.indoor || [bctx.mall.hall]) world.indoorAreas.push(a);
       }
       group.visible = true;
       world.mainland.show(group, `b${b.id}`);
@@ -455,8 +468,10 @@ export function* buildMBlock(world, b) {
       if (bctx.mall) {
         let k = world.malls.indexOf(bctx.mall);
         if (k >= 0) world.malls.splice(k, 1);
-        k = world.indoorAreas.indexOf(bctx.mall.hall);
-        if (k >= 0) world.indoorAreas.splice(k, 1);
+        for (const a of bctx.mall.indoor || [bctx.mall.hall]) {
+          k = world.indoorAreas.indexOf(a);
+          if (k >= 0) world.indoorAreas.splice(k, 1);
+        }
       }
       group.traverse((m) => {
         if (m.isMesh) m.geometry.dispose();

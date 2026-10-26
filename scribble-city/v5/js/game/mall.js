@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { civilianLook, kidLook, elderLook, modest } from './looks.js';
+import { lightList } from '../render/materials.js';
+import { CURB } from '../world/mainland/plan.js';
 
 // (v5, ROADMAP 11.17) The people of the malls. When you come near one of the mainland's malls
 // (world/mainland/mall.js) its hall fills with shoppers: they come in at the doors, stroll down
@@ -85,7 +87,8 @@ function cleanerLook() {
 // ------------------------------------------------------------------ the way round the hall
 // a walk grid over the hall (half a metre a cell), the furniture in it blocked; A* on it
 class HallNav {
-  constructor(collision, rect, cell = 0.5) {
+  // (yb: the floor it is for - the mega mall's top floor has its own; ROADMAP 11.30)
+  constructor(collision, rect, cell = 0.5, yb = 0) {
     this.cell = cell;
     this.x0 = rect.x0;
     this.z0 = rect.z0;
@@ -95,7 +98,7 @@ class HallNav {
     this.blocked = new Uint8Array(n);
     const pad = 0.32;
     collision.forEachIn(rect.x0 - 1, rect.z0 - 1, rect.x1 + 1, rect.z1 + 1, (b) => {
-      if (!b.alive || b.y0 > 1.5 || b.y1 < 0.25) return false;
+      if (!b.alive || b.y0 > yb + 1.5 || b.y1 < yb + 0.25) return false;
       const i0 = Math.max(0, Math.floor((b.x0 - pad - this.x0) / cell));
       const i1 = Math.min(this.w - 1, Math.floor((b.x1 + pad - this.x0) / cell));
       const j0 = Math.max(0, Math.floor((b.z0 - pad - this.z0) / cell));
@@ -275,6 +278,12 @@ export class MallLife {
     return this.game.touch ? 7 : 22;
   }
 
+  // (the mega mall: more of them, on three floors - ROADMAP 11.30)
+  budgetOf(m) {
+    if (!m.mega) return this.budget;
+    return this.game.touch ? 9 : 30;
+  }
+
   update(dt) {
     const game = this.game;
     const malls = game.world.malls;
@@ -291,7 +300,10 @@ export class MallLife {
         if (!malls.includes(m) || this.dist(m, p.x, p.z) > (game.touch ? 70 : 100)) this.close(m, st);
       }
     }
-    for (const [m, st] of this.active) this.tick(m, st, dt);
+    for (const [m, st] of this.active) {
+      this.tick(m, st, dt);
+      if (m.mega) this.machines(m, st, dt);
+    }
   }
 
   dist(m, x, z) {
@@ -308,6 +320,10 @@ export class MallLife {
     const nav = new HallNav(game.world.collision, { x0: h.x0, z0: h.z0 - 4, x1: h.x1, z1: h.z1 + 4 });
     const st = { nav, people: [], staff: [], newT: 2, mall: m };
     this.active.set(m, st);
+    if (m.mega) {
+      this.openMega(m, st);
+      return;
+    }
     const n = Math.round(this.budget * 0.75);
     for (let i = 0; i < n; i++) this.spawn(m, st, true);
     // (lunch at the food court when you come in: people at its tables already, a tray each, in twos
@@ -609,6 +625,7 @@ export class MallLife {
   // what they do this visit: a few windows, a store or two, maybe lunch, the escalator, a bench
   plan(s, fresh) {
     const m = s.m;
+    if (m.mega) return this.planMega(s, fresh);
     const P = [];
     const n = 2 + Math.floor(Math.random() * 3);
     // (at lunch and at dinner the food court fills: some come in for nothing else)
@@ -670,8 +687,11 @@ export class MallLife {
     s.t = 0;
     s.phase = 'go';
     c.fig.sit = 0;
-    c.baseY = 0;
+    c.baseY = m.mega ? m.levels[s.lv || 0] : 0;
     switch (a.kind) {
+      case 'up':
+        this.upStart(s, a);
+        break;
       case 'window':
       case 'shop': {
         const sp = pick(m.spots);
@@ -790,6 +810,7 @@ export class MallLife {
     for (const o of st.people) {
       if (o.cur && o.cur.seat) out.push(o.cur.seat);
       if (o.fseat) out.push(o.fseat);
+      if (o.eatSeat) out.push(o.eatSeat);
     }
     return out;
   }
@@ -825,6 +846,8 @@ export class MallLife {
         return null;
       case 'upstairs':
         return this.upstairs(s, a, dt);
+      case 'up':
+        return this.upMega(s, a, dt);
       case 'kiosk':
         return this.atKiosk(s, a);
       case 'map':
@@ -1212,6 +1235,9 @@ export class MallLife {
     }
     const lc = L.c;
     const a = L.cur;
+    // (the mega mall: up its escalators a step behind them, beside them on its galleries, across
+    // the table from them at the food court)
+    if (L.m.mega && (lc.baseY > 0.05 || c.baseY > 0.05 || L.ride)) return this.followUp(f, L, dt);
     // lunch together: a seat at the same table, across from them, a meal of their own
     if (a && a.kind === 'eat' && a.seat && (a.step === 'eat' || a.step === 'toSeat')) {
       if (!f.fseat) {
@@ -1308,6 +1334,8 @@ export class MallLife {
     const st = s.st;
     s.gone = true;
     if (s.cur && s.cur.k && s.cur.k.busy === s) s.cur.k.busy = null;
+    const q = s.cur && s.cur.stop;
+    if (q && q.b && q.b.who === s) q.b.who = null;
     const i = st.people.indexOf(s);
     if (i >= 0) st.people.splice(i, 1);
     const c = s.c;
@@ -1335,8 +1363,10 @@ export class MallLife {
       }
       // a fright: they run for it (the city's own panic), and the mall lets them go
       if (c.panicT > 0) {
+        // (up on a floor of the mega mall: gone quietly, not dropped to the hall below)
+        const up = c.baseY > 1;
         c.baseY = 0;
-        this.drop(s, false);
+        this.drop(s, up);
         continue;
       }
       // a store let go of them (they are out of its door, or it closed): back to their plan
@@ -1363,9 +1393,720 @@ export class MallLife {
       const R = game.rhythm;
       const h = R ? R.hour : 14;
       const open = h >= 9.5 && h < 22.5;
-      const want = open ? this.budget : Math.round(this.budget * 0.2);
-      // (most at the doors; some down the escalator from the upper floor's stores)
-      if (st.people.length < want && m.entrances.length) this.spawn(m, st, false, { fromUp: !!m.escalator && open && Math.random() < 0.3 });
+      const want = open ? this.budgetOf(m) : Math.round(this.budgetOf(m) * 0.2);
+      // (most at the doors; some down the escalator from the upper floor's stores; in the mega mall
+      // the upper floors kept busy as well)
+      if (m.mega) {
+        if (st.people.length < want) {
+          const ups = st.people.filter((q) => (q.lv || 0) > 0).length;
+          if (open && ups < want * 0.4 && Math.random() < 0.6) this.spawnUp(m, st, 1 + Math.floor(Math.random() * 2), false);
+          else if (m.entrances.length) this.spawn(m, st, false);
+        }
+      } else if (st.people.length < want && m.entrances.length) this.spawn(m, st, false, { fromUp: !!m.escalator && open && Math.random() < 0.3 });
+    }
+  }
+
+  // ------------------------------------------------------------------ the mega mall (ROADMAP 11.30)
+  // its people on its three floors: the hall's below; the galleries' above - up its escalators,
+  // at the windows of the stores up there, in at their doors, at the rail looking down, on the
+  // benches; lunch at the food court on the top floor - and down again and out
+  openMega(m, st) {
+    const game = this.game;
+    const touch = game.touch;
+    const B = this.budgetOf(m);
+    // (the top floor's own walk grid round the food court's tables)
+    if (m.fcz) st.nav2 = new HallNav(game.world.collision, { x0: m.hall.x0, z0: m.fcz[0], x1: m.hall.x1, z1: m.fcz[1] + 1 }, 0.5, CURB + m.levels[2]);
+    // (the lifts' gates: open where the cabin stands)
+    for (const L of m.lifts || []) for (let k = 0; k < L.gates.length; k++) L.gates[k].alive = !(L.state === 'open' && k === L.at);
+    const n0 = Math.round(B * 0.5);
+    for (let i = 0; i < n0; i++) this.spawn(m, st, true);
+    const nUp = Math.round(B * 0.3);
+    for (let i = 0; i < nUp; i++) this.spawnUp(m, st, 1 + (i % 2), true);
+    if (m.seats.length) {
+      const nEat = touch ? 2 : 8;
+      for (let i = 0; i < nEat; i++) {
+        const seat = this.freeSeat(st, m.seats[Math.floor(Math.random() * m.seats.length)], true);
+        if (seat) this.spawnUp(m, st, 2, true, { seat });
+      }
+    }
+    // (some on the hall's benches already)
+    if (m.benches.length) {
+      const sitters = st.people.filter((q) => !q.follower && !q.cur && !(q.lv > 0));
+      const nB = Math.min(sitters.length, touch ? 1 : 4);
+      for (let i = 0; i < nB; i++) {
+        const used = new Set(this.taken(st));
+        const free = m.benches.filter((b) => !used.has(b));
+        if (!free.length) break;
+        sitters[i].plan.unshift({ kind: 'bench', pre: pick(free) });
+        this.next(sitters[i]);
+      }
+    }
+    this.hire(m, st);
+  }
+
+  // somebody up on floor lv (already there - along a gallery, at a table of the food court - or just
+  // up an escalator)
+  spawnUp(m, st, lv, already, o = {}) {
+    const game = this.game;
+    const y = m.levels[lv];
+    let x;
+    let z;
+    if (o.seat) {
+      x = o.seat.x;
+      z = o.seat.z;
+    } else if (already) {
+      const g = pick(m.galleries.filter((q) => q.lv === lv));
+      x = g.x + (Math.random() - 0.5) * 0.6;
+      const z0 = lv === 2 && m.fcz ? Math.max(g.z0, m.fcz[1] + 1) : g.z0;
+      z = z0 + Math.random() * (g.z1 - z0);
+    } else {
+      const f = pick(m.escalators.filter((q) => q.up && Math.abs(q.yt - CURB - y) < 0.1));
+      x = (f.x0 + f.x1) / 2;
+      z = f.zt + f.dir * 1.1;
+    }
+    const r = Math.random();
+    const look = r < 0.08 ? kidLook() : r < 0.15 ? elderLook(Math.random() < 0.5) : civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim', 'casual', 'sporty', 'trench']) });
+    const c = game.civilians.spawnScripted(x, z, look, this);
+    c.baseY = y;
+    c.pos.y += y;
+    c.noCollide = true;
+    c.speed = 1.0 + Math.random() * 0.3;
+    if (Math.random() < 0.55) this.giveBag(c);
+    if (!o.seat && Math.random() < 0.15) c.fig.carry = 'phone';
+    const s = { c, m, st, plan: [], cur: null, t: 0, pts: null, leaving: false, lv };
+    c.ctrl = (civ, dt) => this.step(s, dt);
+    st.people.push(s);
+    const act = this.upAct(m, lv, o.seat ? ['eat', ...(Math.random() < 0.4 ? ['window'] : [])] : null);
+    act.seat = o.seat || null;
+    s.plan = [act, ...(Math.random() < 0.5 ? [{ kind: 'window' }] : []), { kind: 'leave' }];
+    s.cur = null;
+    this.next(s);
+    // (in twos sometimes: at the table across from them, on the gallery at their side)
+    if (Math.random() < (o.seat ? 0.5 : 0.25) && st.people.length < this.budgetOf(m) + 6) {
+      const mate = o.seat ? this.mateSeat(st, o.seat) : null;
+      if (o.seat && !mate) return s;
+      const c2 = game.civilians.spawnScripted(mate ? mate.x : x + 0.8, mate ? mate.z : z + 0.3, civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim']) }), this);
+      c2.baseY = y;
+      c2.pos.y += y;
+      c2.noCollide = true;
+      c2.speed = c.speed;
+      if (Math.random() < 0.5) this.giveBag(c2);
+      const f = { c: c2, m, st, plan: [], cur: null, t: 0, pts: null, lead: s, follower: true, lv };
+      c2.ctrl = (civ, dt) => this.follow(f, dt);
+      s.friend = f;
+      st.people.push(f);
+      if (mate) {
+        f.fseat = mate;
+        c2.fig.sit = 1;
+        c2.yaw = mate.yaw;
+        c2.fig.carry = pick(MEAL);
+      }
+    }
+    return s;
+  }
+
+  // what they do this visit, in the mega mall
+  planMega(s, fresh) {
+    const m = s.m;
+    const P = [];
+    const n = 2 + Math.floor(Math.random() * 3);
+    const h = this.game.rhythm ? this.game.rhythm.hour : 14;
+    const meal = (h > 11.5 && h < 14.5) || (h > 18 && h < 20.5);
+    // (at lunch and at dinner: up to the food court on the top floor)
+    if (fresh && meal && m.seats.length && Math.random() < 0.35) P.push(this.upAct(m, 2, ['eat']));
+    for (let i = 0; i < n; i++) {
+      const r = Math.random();
+      if (r < 0.2 && m.spots.length) P.push({ kind: 'window' });
+      else if (r < 0.38 && m.spots.length) P.push({ kind: 'shop' });
+      else if (r < 0.64) P.push(this.upAct(m, Math.random() < 0.55 ? 1 : 2));
+      else if (r < 0.73 && m.kiosks && m.kiosks.length) P.push({ kind: 'kiosk' });
+      else if (r < 0.83 && m.benches.length) P.push({ kind: 'bench' });
+      else if (r < 0.89 && m.directories && m.directories.length) P.push({ kind: 'map' });
+      else P.push({ kind: 'fountain' });
+    }
+    P.push({ kind: 'leave' });
+    s.plan = P;
+    s.cur = null;
+  }
+
+  // a visit upstairs: up to floor lv, a few things there, and down again
+  upAct(m, lv, stops = null) {
+    if (!stops) {
+      stops = [];
+      const n = 1 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) {
+        const r = Math.random();
+        stops.push(r < 0.34 ? 'window' : r < 0.6 ? 'shop' : r < 0.78 ? 'rail' : r < 0.9 ? 'bench' : lv === 2 && m.seats.length ? 'eat' : 'rail');
+      }
+    }
+    return { kind: 'up', target: lv, stops };
+  }
+
+  upStart(s, a) {
+    s.phase = 'at';
+    s.pts = null;
+    a.step = null;
+    s.c.noCollide = (s.lv || 0) > 0;
+  }
+
+  // the visit upstairs, a leg at a time: to an escalator, up it, the stops, down again
+  upMega(s, a, dt) {
+    const m = s.m;
+    const c = s.c;
+    if (s.ride) {
+      if (this.rideStep(s, dt)) {
+        const f = s.ride.f;
+        const down = s.ride.down;
+        s.ride = null;
+        s.lv = (s.lv || 0) + (down ? -1 : 1);
+        c.baseY = m.levels[s.lv];
+        c.noCollide = s.lv > 0;
+        // (a pace off the end onto the floor)
+        const xc = (f.x0 + f.x1) / 2;
+        s.pts = [down ? { x: xc, z: f.zf - f.dir * 1.2 } : { x: xc, z: f.zt + f.dir * 1.2 }];
+        s.t = 0;
+        a.step = 'off';
+      }
+      return null;
+    }
+    if (s.pts && s.pts.length) {
+      const mv = this.walk(s);
+      if (mv) return mv;
+    }
+    if (a.step === 'toFlight') {
+      s.ride = { f: a.flight, k: 0, down: a.down };
+      c.noCollide = true;
+      if (!a.down && Math.random() < 0.12) this.say(c, pick(UP_SAY));
+      return null;
+    }
+    if (a.step === 'toLift') {
+      // at the lift's gate: waiting for it to come and open here
+      const L = a.lift;
+      c.faceYaw = Math.atan2(L.x - c.pos.x, L.z - c.pos.z);
+      if (L.state === 'open' && L.at === (s.lv || 0) && L.t < 3.4) {
+        a.step = 'inLift';
+        s.pts = [{ x: L.x + L.side * 0.25 + (Math.random() - 0.5) * 0.5, z: L.z + (Math.random() - 0.5) * 0.9 }];
+        s.t = 0;
+        c.noCollide = true;
+      }
+      return null;
+    }
+    if (a.step === 'inLift') {
+      // in its cabin, riding it to the floor they want; out at its gate
+      const L = a.lift;
+      c.baseY = L.y;
+      c.faceYaw = Math.atan2(-L.side, 0) + Math.sin(s.t * 0.3) * 0.8;
+      if (L.state === 'open' && L.at === a.toLv) {
+        s.lv = a.toLv;
+        c.baseY = m.levels[s.lv];
+        a.step = 'off';
+        s.pts = [{ x: L.x + L.side * (L.r + 1.3), z: L.z + (Math.random() - 0.5) * 1.0 }];
+        s.t = 0;
+        c.noCollide = s.lv > 0;
+      }
+      return null;
+    }
+    if (a.step === 'stop' && a.stop) {
+      if (!this.upStop(s, a, a.stop, dt)) return null;
+      a.stop = null;
+    }
+    const lv = s.lv || 0;
+    // (up and down by the escalators, or now and then by one of the glass lifts)
+    if (lv < a.target) {
+      if (!(Math.random() < 0.3 && this.toLift(s, a, false))) this.toFlight(s, a, false);
+      return null;
+    }
+    while (a.stops.length) {
+      a.stop = { kind: a.stops.shift(), t: 0 };
+      if (this.upStopGo(s, a, a.stop)) {
+        a.step = 'stop';
+        return null;
+      }
+      a.stop = null;
+    }
+    if (lv > 0) {
+      if (!(Math.random() < 0.3 && this.toLift(s, a, true))) this.toFlight(s, a, true);
+      return null;
+    }
+    c.noCollide = false;
+    this.next(s);
+    return null;
+  }
+
+  // to the nearest glass lift's gate on this floor (false: there is none)
+  toLift(s, a, down) {
+    const lifts = s.m.lifts || [];
+    if (!lifts.length) return false;
+    const c = s.c;
+    let best = null;
+    let bd = Infinity;
+    for (const L of lifts) {
+      const d = Math.hypot(L.x - c.pos.x, L.z - c.pos.z);
+      if (d < bd) {
+        bd = d;
+        best = L;
+      }
+    }
+    a.lift = best;
+    a.toLv = (s.lv || 0) + (down ? -1 : 1);
+    a.step = 'toLift';
+    this.goLv(s, best.x + best.side * (best.r + 1.1), best.z + (Math.random() - 0.5) * 1.4);
+    return true;
+  }
+
+  // on an escalator: carried along it, its steps under the feet
+  rideStep(s, dt) {
+    const R = s.ride;
+    const f = R.f;
+    const c = s.c;
+    R.k = Math.min(1, R.k + (dt * 0.6) / f.run);
+    const along = R.down ? 1 - R.k : R.k;
+    c.pos.x = (f.x0 + f.x1) / 2;
+    c.pos.z = f.zf + f.dir * f.run * along;
+    c.baseY = f.yf - CURB + f.rise * along;
+    c.faceYaw = (R.down ? -f.dir : f.dir) > 0 ? 0 : Math.PI;
+    return R.k >= 1;
+  }
+
+  // to the nearest flight going the way they want from the floor they are on
+  toFlight(s, a, down) {
+    const m = s.m;
+    const c = s.c;
+    const y = CURB + m.levels[s.lv || 0];
+    let best = null;
+    let bd = Infinity;
+    for (const f of m.escalators) {
+      if (f.up === down) continue;
+      if (Math.abs((down ? f.yt : f.yf) - y) > 0.1) continue;
+      const ez = down ? f.zt + f.dir * 0.8 : f.zf - f.dir * 0.8;
+      const d = Math.hypot((f.x0 + f.x1) / 2 - c.pos.x, ez - c.pos.z);
+      if (d < bd) {
+        bd = d;
+        best = f;
+      }
+    }
+    if (!best) {
+      c.noCollide = false;
+      this.next(s);
+      return null;
+    }
+    a.flight = best;
+    a.down = down;
+    a.step = 'toFlight';
+    this.goLv(s, (best.x0 + best.x1) / 2, down ? best.zt + best.dir * 0.8 : best.zf - best.dir * 0.8);
+    return null;
+  }
+
+  // a walk on the floor they are on: round the hall's furniture below, round the food court's tables
+  // on the top floor, along the galleries and over the bridges between
+  goLv(s, x, z) {
+    const lv = s.lv || 0;
+    const c = s.c;
+    const m = s.m;
+    if (lv === 0) s.pts = s.st.nav.path(c.pos.x, c.pos.z, x, z);
+    else if (lv === 2 && s.st.nav2 && m.fcz && z < m.fcz[1] - 0.5 && c.pos.z < m.fcz[1] - 0.5) s.pts = s.st.nav2.path(c.pos.x, c.pos.z, x, z);
+    else s.pts = this.upWay(m, lv, c.pos, { x, z });
+    s.t = 0;
+  }
+
+  upWay(m, lv, a, b) {
+    const h = m.hall;
+    const gW = h.x0 + 1.1;
+    const gE = h.x1 - 1.1;
+    const lineOf = (p) => (Math.abs(p.x - gW) < 1.9 ? gW : Math.abs(p.x - gE) < 1.9 ? gE : null);
+    const fc = lv === 2 && m.fcz ? m.fcz[1] : -Infinity;
+    const la = lineOf(a);
+    const lb = lineOf(b);
+    if ((la !== null && la === lb) || (a.z < fc && b.z < fc)) return [{ x: b.x, z: b.z }];
+    const zs = m.bridges.filter((br) => br.lv.includes(lv)).map((br) => (br.z0 + br.z1) / 2);
+    if (lv === 2 && m.fcz) zs.push(m.fcz[1] - 1.5);
+    let zb = zs[0];
+    let bd = Infinity;
+    for (const z of zs) {
+      const d = Math.abs(a.z - z) + Math.abs(b.z - z);
+      if (d < bd) {
+        bd = d;
+        zb = z;
+      }
+    }
+    // (not through a column where the bridge meets the gallery)
+    if (m.colZ) {
+      const k = (((zb - m.colZ.z0) % m.colZ.step) + m.colZ.step) % m.colZ.step;
+      if (k < 0.8) zb += 1.0;
+      else if (k > m.colZ.step - 0.8) zb -= 1.0;
+    }
+    return [{ x: la !== null ? la : a.x, z: zb }, { x: lb !== null ? lb : b.x, z: zb }, { x: b.x, z: b.z }];
+  }
+
+  // a stop upstairs: off to it (false: there is nowhere for it)
+  upStopGo(s, a, q) {
+    const m = s.m;
+    const lv = s.lv || 0;
+    const c = s.c;
+    switch (q.kind) {
+      case 'window':
+      case 'shop': {
+        const list = m.upSpots.filter((sp) => sp.lv === lv);
+        if (!list.length) return false;
+        q.spot = pick(list);
+        this.goLv(s, q.spot.x + (Math.random() - 0.5) * 0.8, q.spot.z + (Math.random() - 0.5) * 0.8);
+        return true;
+      }
+      case 'rail': {
+        const gs = m.galleries.filter((g) => g.lv === lv);
+        if (!gs.length) return false;
+        const g = pick(gs);
+        const z0 = lv === 2 && m.fcz ? Math.max(g.z0, m.fcz[1] + 1) : g.z0;
+        q.g = g;
+        this.goLv(s, g.rx, z0 + Math.random() * (g.z1 - z0));
+        return true;
+      }
+      case 'bench': {
+        const free = (m.upBenches || []).filter((b) => b.lv === lv && !b.who);
+        if (!free.length) return false;
+        q.b = pick(free);
+        q.b.who = s;
+        this.goLv(s, q.b.x + Math.sin(q.b.yaw) * 0.6, q.b.z + Math.cos(q.b.yaw) * 0.6);
+        return true;
+      }
+      case 'eat': {
+        if (lv !== 2 || !m.seats.length) return false;
+        const seat = a.seat || this.freeSeat(s.st, c.pos, false);
+        if (!seat) return false;
+        q.seat = seat;
+        s.eatSeat = seat;
+        if (a.seat) {
+          // (at the table already, half through the meal)
+          a.seat = null;
+          q.state = 'eat';
+          q.stay = 10 + Math.random() * 30;
+          s.eating = true;
+          c.pos.x = seat.x;
+          c.pos.z = seat.z;
+          c.yaw = seat.yaw;
+          c.fig.sit = 1;
+          c.fig.carry = pick(MEAL);
+          s.pts = null;
+          return true;
+        }
+        // (a tray from a counter, carried to the table)
+        c.fig.carry = 'tray';
+        q.state = 'toSeat';
+        this.goLv(s, seat.x, seat.z);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // at a stop upstairs: true once it is over
+  upStop(s, a, q, dt) {
+    const m = s.m;
+    const c = s.c;
+    const f = c.fig;
+    q.t += dt;
+    switch (q.kind) {
+      case 'window': {
+        c.faceYaw = Math.atan2(q.spot.window.x - c.pos.x, q.spot.window.z - c.pos.z);
+        q.stay = q.stay || 3 + Math.random() * 5;
+        if (!q.said && q.t > 1 && Math.random() < dt * 0.4) {
+          q.said = true;
+          this.say(c, pick(OOH));
+        }
+        return q.t > q.stay;
+      }
+      case 'shop': {
+        if (!q.inside) {
+          const open = this.game.streetlife.active.get(q.spot.shop.id);
+          if (!open || !open.room || !open.open || open.visitors.length >= 4 || !open.admit(c)) {
+            // (closed, or full: a look in the window instead)
+            q.kind = 'window';
+            q.t = 0;
+            return false;
+          }
+          q.inside = true;
+          return false;
+        }
+        // (out of its door again, a bag in hand)
+        if (!f.carryL && Math.random() < 0.5) this.giveBag(c);
+        c.baseY = m.levels[s.lv || 0];
+        c.noCollide = true;
+        return true;
+      }
+      case 'rail': {
+        const g = q.g;
+        q.stay = q.stay || 5 + Math.random() * 6;
+        c.faceYaw = g.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+        const rx = g.side < 0 ? m.void.x0 : m.void.x1;
+        s.hand = s.hand || new THREE.Vector3();
+        s.handL = s.handL || new THREE.Vector3();
+        s.hand.set(rx, c.pos.y + 1.04, c.pos.z - g.side * 0.24);
+        s.handL.set(rx, c.pos.y + 1.04, c.pos.z + g.side * 0.24);
+        f.reachR = s.hand;
+        f.reachL = s.handL;
+        if (!q.said && q.t > 2 && Math.random() < dt * 0.15) {
+          q.said = true;
+          this.say(c, pick(['What a view!', 'Look at the fountain!', 'This place is huge!', 'So many people...']));
+        }
+        if (q.t > q.stay) {
+          f.reachR = null;
+          f.reachL = null;
+          return true;
+        }
+        return false;
+      }
+      case 'bench': {
+        const b = q.b;
+        c.pos.x = b.x;
+        c.pos.z = b.z;
+        c.faceYaw = b.yaw;
+        f.sit = Math.min(1, f.sit + dt * 3);
+        q.stay = q.stay || 8 + Math.random() * 14;
+        if (q.phone === undefined) {
+          q.phone = !f.carry && Math.random() < 0.45;
+          if (q.phone) f.carry = 'phone';
+        }
+        if (q.t > q.stay) {
+          if (q.phone && f.carry === 'phone') f.carry = null;
+          f.sit = 0;
+          b.who = null;
+          return true;
+        }
+        return false;
+      }
+      case 'eat': {
+        if (q.state === 'toSeat') {
+          q.state = 'eat';
+          q.t = 0;
+          q.stay = 20 + Math.random() * 25;
+          s.eating = true;
+          f.carry = pick(MEAL);
+        }
+        if (q.state === 'eat') {
+          c.pos.x = q.seat.x;
+          c.pos.z = q.seat.z;
+          c.faceYaw = q.seat.yaw;
+          f.sit = Math.min(1, f.sit + dt * 3);
+          this.bite(s, dt);
+          const fr = s.friend;
+          if (fr && fr.fseat && !this.game.classic) {
+            q.talkT = (q.talkT === undefined ? 3 + Math.random() * 6 : q.talkT) - dt;
+            if (q.talkT <= 0) {
+              q.talkT = 12 + Math.random() * 14;
+              const p = this.game.player.pos;
+              if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 18 && Math.abs(c.pos.y - p.y) < 3 && !c.convo && !fr.c.convo) this.game.voices.talk([c, fr.c], pick(MEAL_TALK));
+            }
+          }
+          if (q.t < q.stay) return false;
+          f.sit = 0;
+          f.drinkT = -1;
+          s.eating = false;
+          s.eatSeat = null;
+          const ts = m.trayStations || [];
+          if (!ts.length) {
+            if (f.carry !== 'phone') f.carry = null;
+            return true;
+          }
+          let best = ts[0];
+          for (const t of ts) if (Math.hypot(t.x - c.pos.x, t.z - c.pos.z) < Math.hypot(best.x - c.pos.x, best.z - c.pos.z)) best = t;
+          q.station = best;
+          f.carry = 'tray';
+          q.state = 'tray';
+          q.t = 0;
+          this.goLv(s, best.x + (Math.random() - 0.5) * 0.8, best.z);
+          return false;
+        }
+        if (q.state === 'tray') {
+          const t = q.station;
+          c.faceYaw = t.yaw;
+          s.hand = s.hand || new THREE.Vector3();
+          if (q.t < 1.4) {
+            s.hand.set(t.at.x + (c.pos.x - t.at.x) * 0.3, c.pos.y + 1.05, t.at.z + (c.pos.z - t.at.z) * 0.3);
+            f.reachR = s.hand;
+            return false;
+          }
+          f.reachR = null;
+          if (f.carry === 'tray') f.carry = null;
+          if (Math.random() < 0.15) this.say(c, pick(TRAY_SAY));
+          return true;
+        }
+        return true;
+      }
+    }
+    return true;
+  }
+
+  // a friend up there with them: a step behind on the escalator, at their side on the gallery,
+  // across the table at the food court, outside the store while they are in it
+  followUp(f, L, dt) {
+    const c = f.c;
+    const lc = L.c;
+    c.noCollide = true;
+    const R = L.ride;
+    if (R) {
+      if (f.fseat) f.fseat = null;
+      const fl = R.f;
+      const k = Math.max(0, R.k - 0.08);
+      const along = R.down ? 1 - k : k;
+      c.pos.x = (fl.x0 + fl.x1) / 2;
+      c.pos.z = fl.zf + fl.dir * fl.run * along;
+      c.baseY = fl.yf - CURB + fl.rise * along;
+      c.faceYaw = (R.down ? -fl.dir : fl.dir) > 0 ? 0 : Math.PI;
+      c.fig.sit = 0;
+      return null;
+    }
+    c.baseY = lc.baseY;
+    if (L.eating && L.eatSeat) {
+      if (!f.fseat) f.fseat = this.mateSeat(f.st, L.eatSeat);
+      if (f.fseat) {
+        const q = f.fseat;
+        c.pos.x = q.x;
+        c.pos.z = q.z;
+        c.faceYaw = q.yaw;
+        c.fig.sit = Math.min(1, c.fig.sit + dt * 3);
+        if (!MEAL.includes(c.fig.carry)) c.fig.carry = pick(MEAL);
+        this.bite(f, dt);
+        return null;
+      }
+    } else if (f.fseat) {
+      f.fseat = null;
+      c.fig.sit = 0;
+      c.fig.drinkT = -1;
+      if (MEAL.includes(c.fig.carry)) c.fig.carry = null;
+    }
+    if (lc.inside || lc.exitRoom || lc.fig.sit > 0.5) {
+      // (waiting outside the store, standing by the bench)
+      if (lc.fig.sit > 0.5) c.faceYaw = Math.atan2(lc.pos.x - c.pos.x, lc.pos.z - c.pos.z);
+      return null;
+    }
+    const r = lc.fig.right;
+    const tx = lc.pos.x + r.x * 0.75;
+    const tz = lc.pos.z + r.z * 0.75;
+    const d = Math.hypot(c.pos.x - tx, c.pos.z - tz);
+    if (d < 0.4) {
+      c.faceYaw = lc.yaw;
+      if (Math.random() < dt * 0.02) this.say(c, pick(CHAT));
+      return null;
+    }
+    if (d > 5) {
+      c.pos.x = tx;
+      c.pos.z = tz;
+      return null;
+    }
+    return { x: tx, z: tz, speed: Math.max(lc.speed, 1.2) * (d > 2 ? 1.4 : 1.05) };
+  }
+
+  // ------------------------------------------------------------------ the mega mall's machines
+  machines(m, st, dt) {
+    this.liftsRun(m, dt);
+    this.carry(m, dt);
+    this.dance(m, dt);
+    // (the sky through the glass of the roof and the dome: by day, by night)
+    if (m.sky) {
+      const h = this.game.daynight ? this.game.daynight.hour : 13;
+      const night = h < 6.4 || h > 19.4;
+      m.sky.day.visible = !night;
+      m.sky.night.visible = night;
+    }
+  }
+
+  // the glass lifts: up and down their floors in turn, a while at each with the gate open; you in
+  // one are carried in it, kept inside its glass but at its door
+  liftsRun(m, dt) {
+    const p = this.game.player;
+    const pp = p.pos;
+    const onFoot = p.mode === 'foot' && !p.inVehicle;
+    for (const L of m.lifts || []) {
+      const dx = pp.x - L.x;
+      const dz = pp.z - L.z;
+      const dd = Math.hypot(dx, dz);
+      const inCab = onFoot && dd < L.r - 0.12 && Math.abs(pp.y - (CURB + L.y)) < 0.8;
+      L.t += dt;
+      if (L.state === 'open') {
+        if (L.t > (inCab ? 2.4 : 5.5)) {
+          L.state = 'close';
+          L.t = 0;
+          L.gates[L.at].alive = true;
+        }
+      } else if (L.state === 'close') {
+        if (L.t > 0.6) {
+          L.dir = L.dir || 1;
+          let to = L.at + L.dir;
+          if (to < 0 || to >= L.levels.length) {
+            L.dir = -L.dir;
+            to = L.at + L.dir;
+          }
+          L.to = to;
+          L.state = 'move';
+          L.t = 0;
+        }
+      } else {
+        const target = L.levels[L.to];
+        const d = target - L.y;
+        const sp = Math.min(1.7, Math.abs(d) * 1.4 + 0.12, 0.3 + L.t * 1.4);
+        L.y += Math.sign(d) * Math.min(Math.abs(d), sp * dt);
+        if (Math.abs(target - L.y) < 0.002) {
+          L.y = target;
+          L.at = L.to;
+          L.state = 'open';
+          L.t = 0;
+          L.gates[L.at].alive = false;
+        }
+      }
+      L.grp.position.y = CURB + L.y;
+      L.floor.y0 = CURB + L.y - 0.3;
+      L.floor.y1 = CURB + L.y;
+      if (inCab) {
+        pp.y = CURB + L.y;
+        if (p.vel.y < 0 || L.state === 'move') p.vel.y = 0;
+        p.onGround = true;
+        const out = dx * L.side > 0 && Math.abs(dz) < 0.85 && L.state === 'open';
+        const lim = L.r - 0.38;
+        if (dd > lim && !out) {
+          pp.x = L.x + (dx / dd) * lim;
+          pp.z = L.z + (dz / dd) * lim;
+        }
+      }
+    }
+  }
+
+  // the escalators carry whoever stands on them: you too
+  carry(m, dt) {
+    const p = this.game.player;
+    if (p.mode !== 'foot' || p.inVehicle) return;
+    const pp = p.pos;
+    for (const f of m.escalators || []) {
+      if (pp.x < f.x0 + 0.12 || pp.x > f.x1 - 0.12) continue;
+      const along = (pp.z - f.zf) * f.dir;
+      if (along < -0.1 || along > f.run + 0.1) continue;
+      const yl = f.yf + (f.rise * Math.max(0, Math.min(f.run, along))) / f.run;
+      if (Math.abs(pp.y - yl) > 0.75) continue;
+      pp.z += 0.6 * (f.up ? 1 : -1) * f.dir * dt;
+      break;
+    }
+  }
+
+  // the fountain's show: its rings of jets rising and falling in turn, the middle one shooting up on
+  // the beat; the lights in its water turning through the colours
+  dance(m, dt) {
+    const F = m.fountain;
+    if (!F || !F.jets) return;
+    F.t = (F.t || 0) + dt;
+    const t = F.t;
+    const ph = Math.floor(t / 9) % 4;
+    for (let i = 0; i < F.jets.length; i++) {
+      const J = F.jets[i];
+      let h;
+      if (ph === 0) h = 0.75 + 0.25 * Math.sin(t * 1.6 + i);
+      else if (ph === 1) h = 0.3 + 0.7 * Math.max(0, Math.sin(t * 2.4 - i * 1.3));
+      else if (ph === 2) h = (0.45 + 0.55 * Math.abs(Math.sin(t * 0.9 + i * 0.7))) * (i === 2 ? 1.5 : 1);
+      else h = 0.6 + 0.4 * Math.sin(t * 3.1 + i * 2.1);
+      J.grp.scale.y = Math.max(0.12, J.h * h);
+    }
+    const lights = lightList();
+    for (let k = 0; k < (F.show || []).length; k++) {
+      const l = lights[F.show[k]];
+      if (l && l.c && l.c.setHSL) l.c.setHSL((t * 0.04 + k * 0.25) % 1, 0.85, 0.55);
     }
   }
 

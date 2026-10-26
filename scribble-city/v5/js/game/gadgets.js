@@ -721,7 +721,7 @@ export class Gadgets {
   tillAt() {
     const p = this.game.player.pos;
     for (const e of this.forced) {
-      if (e.tillTaken || !e.room.inside(p.x, p.z, 0)) continue;
+      if (e.tillTaken || !e.room.inside(p.x, p.z, 0, p.y)) continue;
       const k = e.room.keeper;
       if (k && Math.hypot(k.x - p.x, k.z - p.z) < 2.4) return e;
     }

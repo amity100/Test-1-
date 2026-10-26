@@ -265,7 +265,7 @@ export class Soundscape {
         best = s;
       }
     }
-    const inRoom = best && best.room && best.room.inside(cam.x, cam.z, 0.2);
+    const inRoom = best && best.room && best.room.inside(cam.x, cam.z, 0.2, cam.y - 1.6);
     const club = best && (best.shop.name === CLUB || best.shop.kind === 'club');
     const vol = best ? (inRoom ? 0.32 : (club ? 0.34 : 0.22) * (1 - smoothstep(4, 17, bd))) : 0;
     this.shopOut.gain.setTargetAtTime(vol, now, 0.6);

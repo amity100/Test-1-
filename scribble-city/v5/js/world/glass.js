@@ -14,7 +14,7 @@ export function buildPanes(ctx) {
     let k = 0;
     for (let u = a; u < b - 0.5; u += 2.2) ctx.B.add(M.glintObj, f.quad(u, 0.9, Math.min(b, u + 1.6), 2.9, 0.07), null, p.ids[k++]);
     ctx.objects.end(ctx, id);
-    if (id) out.push({ id, f, u0: a, u1: b, y0: 0.7, y1: 3.4, x: c[0], z: c[2] });
+    if (id) out.push({ id, f, u0: a, u1: b, y0: 0.7 + (f.dy || 0), y1: 3.4 + (f.dy || 0), x: c[0], z: c[2] });
   }
   ctx.glass = out;
 }
