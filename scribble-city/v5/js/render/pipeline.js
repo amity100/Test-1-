@@ -504,6 +504,9 @@ const _pm = new THREE.Matrix4();
 const _sub = new THREE.Matrix4();
 const _frustum = new THREE.Frustum();
 const _frustum2 = new THREE.Frustum();
+const _fwd = new THREE.Vector3();
+// (ROADMAP 11.32) how far a mall's polished floor reflects: the hall, and what is near it
+const FLOOR_FAR = 150;
 const _box = new THREE.Box3();
 const _sph = new THREE.Sphere();
 // how far the water's ripples, the rain's rings and the five taps down the water reach from where a
@@ -2110,6 +2113,16 @@ export class Pipeline {
     } else {
       this._mirrorRect = null;
       this.mirrorShare = 1;
+      // (a mall's floor: nothing past FLOOR_FAR of the mirror's eye is drawn - the towers far beyond
+      // its glass roof are never in its stone)
+      if (floor) {
+        _pm.multiplyMatrices(rc.projectionMatrix, rc.matrixWorldInverse);
+        _frustum2.setFromProjectionMatrix(_pm);
+        rc.getWorldDirection(_fwd);
+        _v.copy(rc.position).addScaledVector(_fwd, FLOOR_FAR);
+        _frustum2.planes[4].setFromNormalAndCoplanarPoint(_fwd.negate(), _v);
+        this.hideOutside(this.scene, _frustum2, out);
+      }
     }
     this.r.setRenderTarget(rt);
     this.r.clear();
