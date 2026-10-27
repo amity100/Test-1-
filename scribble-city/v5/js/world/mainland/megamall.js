@@ -639,6 +639,19 @@ export function* buildMegaMall(bctx, b, o) {
       }
       hall(IN.box, a0, y + 4.2, l.z0, a1, y + 4.32, l.z1, CEIL);
       for (let x = a0 + 2; x < a1 - 1; x += 4) hall(IN.lamp, x - 0.5, y + 4.16, (l.z0 + l.z1) / 2 - 0.5, x + 0.5, y + 4.2, (l.z0 + l.z1) / 2 + 0.5, srgb(1, 0.97, 0.9));
+      // (its walls: a dado of cream stone with a line of brass over it, a picture rail, and on each
+      // a lit picture of something for sale)
+      for (const [z0, z1] of [[l.z0 + 0.2, l.z0 + 0.23], [l.z1 - 0.23, l.z1 - 0.2]]) {
+        hall(IN.box, a0, y, z0, a1, y + 1.1, z1, CREAM);
+        hall(IN.gloss, a0, y + 1.1, z0 - 0.01, a1, y + 1.16, z1 + 0.01, BRASS);
+        hall(IN.gloss, a0, y + 3.3, z0 - 0.01, a1, y + 3.35, z1 + 0.01, BRASS);
+        const ad = ADS[(Math.round(z0 * 7 + lv) % ADS.length + ADS.length) % ADS.length];
+        const xm2 = (a0 + a1) / 2;
+        const zf = z0 === l.z0 + 0.2 ? z1 : z0;
+        hall(IN.box, xm2 - 1.5, y + 1.35, Math.min(zf, zf + (z0 === l.z0 + 0.2 ? 0.05 : -0.05)), xm2 + 1.5, y + 3.05, Math.max(zf, zf + (z0 === l.z0 + 0.2 ? 0.05 : -0.05)), DARK);
+        hall(IN.lamp, xm2 - 1.35, y + 1.5, Math.min(zf, zf + (z0 === l.z0 + 0.2 ? 0.06 : -0.06)), xm2 + 1.35, y + 2.9, Math.max(zf, zf + (z0 === l.z0 + 0.2 ? 0.06 : -0.06)), ad[1]);
+        hall(IN.lamp, xm2 - 1.35, y + 2.5, Math.min(zf, zf + (z0 === l.z0 + 0.2 ? 0.065 : -0.065)), xm2 + 1.35, y + 2.9, Math.max(zf, zf + (z0 === l.z0 + 0.2 ? 0.065 : -0.065)), ad[0]);
+      }
       // (its mouth on the gallery: a frame of gold, the name over it)
       const f = bs < 0 ? new Facade(xi + 0.04, l.z1, 0, -1, 1, 0) : new Facade(xi - 0.04, l.z0, 0, 1, -1, 0);
       const W = l.z1 - l.z0;

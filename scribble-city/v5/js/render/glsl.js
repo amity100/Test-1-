@@ -986,6 +986,11 @@ void main() {
     amb = mix(vec3(0.6, 0.63, 0.7), vec3(0.9, 0.92, 0.96), up);
     key = vec3(1.0, 0.98, 0.95) * 0.62;
     light = clamp(0.42 + 0.48 * up, 0.0, 1.0);
+    // (at night the glass over it is dark: the hall under its own lamps, softer and a little warmer;
+    // uLitK, the share of the city's windows lit, is how dark it is)
+    float nk = smoothstep(0.4, 1.6, uLitK);
+    amb *= 1.0 - 0.42 * nk;
+    key = mix(key, vec3(1.0, 0.9, 0.78) * 0.5, nk);
   } else if (inside) {
     // a room under its lamps at dusk: warm golden light from above, rosy in the corners, no sun;
     // the colours richer than outside, the way a lit shop window looks from the street
