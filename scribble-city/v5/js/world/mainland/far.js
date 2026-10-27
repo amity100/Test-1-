@@ -32,9 +32,10 @@ export function buildMainlandTowers(ctx) {
         crownCol: r.pick(CROWNS),
         style: t.style,
         podium: t.podium,
+        solids: [],
       };
       const peak = skyscraper(ctx, t.x, t.z, t.w, t.d, t.h, o);
-      out.push({ ...t, peak, block: b.id });
+      out.push({ ...t, peak, block: b.id, solids: o.solids });
     }
   }
   return out;

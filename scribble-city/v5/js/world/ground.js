@@ -147,16 +147,20 @@ export function buildGround(ctx) {
   slab(ctx, M.sand, WEST_EDGE - 30, STREET_X1, ZS + 4, ZS + 40, -0.6, 0.12, 6);
   // the walls you cannot pass: the edges of the city
   // (v5, ROADMAP 11.17: open where the causeways go over the bay, at 15th and 5th)
+  // (v5: only as high as walking and driving need - what flies is held at the edge of the world,
+  // world/layout.js worldEdge, and no wall stands over the bay: you swim in it, game/swim.js)
+  const H = 4;
+  const X0 = ctx.mainland ? WEST_EDGE - 30.2 : WEST_EDGE - 40;
   if (ctx.mainland) {
     let z0 = ZN - 80;
     for (const zc of [STREETS[0].z, STREETS[5].z]) {
-      ctx.col.addBox(WEST_EDGE - 40, z0, WEST_EDGE - 2, zc - 6.4, -2, 30, 'bound');
+      ctx.col.addBox(X0, z0, WEST_EDGE - 2, zc - 6.4, -2, H, 'bound');
       z0 = zc + 6.4;
     }
-    ctx.col.addBox(WEST_EDGE - 40, z0, WEST_EDGE - 2, ZS + 60, -2, 30, 'bound');
-  } else ctx.col.addBox(WEST_EDGE - 40, ZN - 80, WEST_EDGE - 2, ZS + 60, -2, 30, 'bound');
-  ctx.col.addBox(WEST_EDGE - 40, ZN - 80, WATER_X + 260, ZN - 1, -2, 30, 'bound');
-  ctx.col.addBox(WEST_EDGE - 40, ZS + 38, WATER_X + 260, ZS + 80, -2, 30, 'bound');
+    ctx.col.addBox(X0, z0, WEST_EDGE - 2, ZS + 60, -2, H, 'bound');
+  } else ctx.col.addBox(X0, ZN - 80, WEST_EDGE - 2, ZS + 60, -2, H, 'bound');
+  ctx.col.addBox(X0, ZN - 80, WATER_X + 260, ZN - 1, -2, H, 'bound');
+  ctx.col.addBox(X0, ZS + 38, WATER_X + 260, ZS + 80, -2, H, 'bound');
 }
 
 // zebra stripes over a crossing; acrossX: the stripes run along x (a crossing of a street seen

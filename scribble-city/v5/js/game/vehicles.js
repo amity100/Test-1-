@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
-import { groundHeight } from '../world/layout.js';
+import { groundHeight, worldEdge } from '../world/layout.js';
 import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
 import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake } from './rides.js';
 import { hybridStep, updateBalloon } from './hybrid.js';
@@ -29,6 +29,8 @@ const SIDES = [1, -1];
 const SIDE_L = [1];
 const SIDE_R = [-1];
 const UP = new THREE.Vector3(0, 1, 0);
+// (how much tougher the vehicles are than they were at first: Vehicle.hurt)
+const TOUGH = 4;
 
 const VEH = {
   car: { width: 1.95, hp: 170, len: 2.26 },
@@ -349,6 +351,8 @@ class Vehicle {
 
   hurt(amount) {
     if (this.dead) return;
+    // (v5: four times as tough as it was - a knock, a crash, a shot takes a quarter of what it did)
+    amount /= TOUGH;
     // (armour drawn on it takes some of it: ROADMAP 11.8)
     this.hp -= amount * (1 - (this.armor || 0));
     // (ROADMAP 11.20: a hard knock can tear a part drawn on it off - game/fuse.js)
@@ -417,6 +421,8 @@ class Vehicle {
     // (a gun drawn on it, ROADMAP 11.6, 11.8: its turret after where you look, a click fires)
     if (input && (this.drawn || this.fuseGuns) && this.turrets) this.drawnGuns(dt, input);
     else if (input && this.turret && this.drawn) this.drawnGun(dt, input);
+    // (v5) the edge of the world, flying or sailing as well: it goes no further (world/layout.js)
+    this.keepIn();
     this.wheelSpin += (this.speed * dt) / 0.36;
     if (this.kind === 'car') return;
     this.group.position.copy(this.pos);
@@ -612,6 +618,30 @@ class Vehicle {
           fr.lineXYZ(_pa.x, _pa.y - s, _pa.z, _pa.x, _pa.y + s, _pa.z, SHINE, 2.2, 4610 + k, 1, 0, 0);
         }
       }
+    }
+  }
+
+  // (v5) held at the edge of the world, its way on out of it taken off it - no wall in the air
+  // there, nor over the bay and the ocean any more (world/ground.js, world/mainland/ground.js)
+  keepIn() {
+    const e = worldEdge(this.pos.x, this.pos.z);
+    if (!e) return;
+    const nx = e.x - this.pos.x;
+    const nz = e.z - this.pos.z;
+    const d = Math.hypot(nx, nz);
+    this.pos.x = e.x;
+    this.pos.z = e.z;
+    if (this.vx !== undefined && this.vz !== undefined) {
+      const out = -(this.vx * nx + this.vz * nz) / d;
+      if (out > 0) {
+        this.vx += (nx / d) * out;
+        this.vz += (nz / d) * out;
+      }
+    }
+    const g = this.game;
+    if (this.driver === g.player && !(this.edgeSaid > g.time)) {
+      this.edgeSaid = g.time + 8;
+      g.hud.toast('כאן נגמר העולם — חוזרים פנימה', 'info', 2.4);
     }
   }
 

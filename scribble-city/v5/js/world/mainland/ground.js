@@ -338,7 +338,9 @@ export function buildShore(ctx) {
         g.translate(SHORE_X + 0.25, CURB + 0.3 + 0.57, zz);
         ctx.B.add(M.rail, g, null, nextId(), { chunk, color: rail });
       }
-      ctx.col.addBox(SHORE_X - 0.1, a, SHORE_X + 40, b, -2, 30, 'bound');
+      // (v5: the wall itself, as high as its railing - over it into the bay, and out of the water
+      // up it: game/swim.js. No wall over the water, nor in the air over it)
+      ctx.col.addBox(SHORE_X - 0.1, a, SHORE_X + 0.6, b, -2, CURB + 1.5, 'bound');
     }
   }
   // the beach: from the boardwalk's edge down into the water, its wet sand darker
@@ -358,19 +360,16 @@ export function buildShore(ctx) {
     g.computeVertexNormals();
     ctx.B.add(M.sand, g, null, nextId(), { chunk });
   }
-  // the walls: the hills to the north and west (their foot), the ocean beyond the surf
-  ctx.col.addBox(WEST_X - 200, NORTH_Z - 300, SHORE_X + 40, -1213, -2, 120, 'bound');
-  ctx.col.addBox(WEST_X - 200, -1213, -1889, SEA_Z + 40, -2, 120, 'bound');
-  // (the ocean's wall stops short of the pier and the jetty: under them only a low one, below
-  // their decks, keeps the swimmers off - you walk out over it; world/mainland/landmarks.js)
-  const gaps2 = [[PIER_M.parts[2].x0 - 1, PIER_M.parts[3].x1 + 1, PIER_M.deck - 0.4], [JETTY.x - JETTY.r - 0.5, JETTY.x + JETTY.r + 0.5, JETTY.top - 0.4]].sort((a, b) => a[0] - b[0]);
-  let gx = -1889;
-  for (const [a, b, low] of gaps2) {
-    ctx.col.addBox(gx, SEA_Z + 1, a, SEA_Z + 60, -2, 30, 'bound');
+  // the walls: the hills to the north and west (their foot; over them, what flies is held at the
+  // edge of the world: world/layout.js worldEdge)
+  ctx.col.addBox(WEST_X - 200, NORTH_Z - 300, SHORE_X + 40, -1213, -2, 6, 'bound');
+  ctx.col.addBox(WEST_X - 200, -1213, -1889, SEA_Z + 40, -2, 6, 'bound');
+  // (v5: the ocean is open - you swim out from the beach as far as the current lets you, game/swim.js;
+  // under the pier and the jetty a low wall, below their decks, keeps the swimmers off - you walk
+  // out over it; world/mainland/landmarks.js)
+  for (const [a, b, low] of [[PIER_M.parts[2].x0 - 1, PIER_M.parts[3].x1 + 1, PIER_M.deck - 0.4], [JETTY.x - JETTY.r - 0.5, JETTY.x + JETTY.r + 0.5, JETTY.top - 0.4]]) {
     ctx.col.addBox(a, SEA_Z + 1, b, SEA_Z + 60, -2, low, 'bound');
-    gx = b;
   }
-  ctx.col.addBox(gx, SEA_Z + 1, SHORE_X + 40, SEA_Z + 60, -2, 30, 'bound');
 }
 
 export { hex };

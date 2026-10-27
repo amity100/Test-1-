@@ -105,15 +105,34 @@ export function skyscraper(ctx, x, z, w, d, h, o) {
   const glass = r.pick(o.mats);
   const y0 = o.y0 || 0;
   const style = o.style || r.pick(['cut', 'cut', 'rect', 'round', 'deco', 'deco', 'slant']);
+  // (v5: what it is solid as, o.solids - box by box as it is drawn, its setbacks, its round, its
+  // slanted roof; one box the size of its foot to its full height left walls in the air round its
+  // upper floors that the aircraft stuck on)
+  const solid = (sw, sd, ya, yb) => {
+    if (o.solids && sw > 0.2 && sd > 0.2 && yb > ya) o.solids.push([x - sw / 2, z - sd / 2, x + sw / 2, z + sd / 2, ya, yb]);
+  };
+  // (its foot with corners cut: two boxes across each other)
+  const cutSolid = (sw, sd, c, ya, yb) => {
+    if (c > 0) {
+      solid(sw, sd - 2 * c, ya, yb);
+      solid(sw - 2 * c, sd, ya, yb);
+    } else solid(sw, sd, ya, yb);
+  };
   // the podium
   if (o.podium !== false && h > 70) {
     const ph = r.range(10, 18);
     add(glass, prism(rectPts(x, z, w * 1.25, d * 1.25), y0 - 1, y0 + ph));
+    solid(w * 1.25, d * 1.25, y0 - 1, y0 + ph);
   }
   let top = y0 + h;
   if (style === 'round') {
     const g = prism(roundPts(x, z, w / 2, d / 2, 22), y0 - 1, top);
     add(glass, g);
+    // (its round: three boxes within it)
+    solid(w * 0.92, d * 0.4, y0 - 1, top);
+    solid(w * 0.4, d * 0.92, y0 - 1, top);
+    solid(w * 0.7, d * 0.7, y0 - 1, top);
+    solid(w * 0.42, d * 0.42, top, top + 6);
     // a ring of light near the top, a mast
     add(o.neon, prism(roundPts(x, z, w / 2 + 0.25, d / 2 + 0.25, 22), top - 6, top - 5.2, false), o.crownCol);
     add(o.steel, prism(roundPts(x, z, w * 0.3, d * 0.3, 10), top, top + 6), srgb(0.75, 0.74, 0.8));
@@ -127,6 +146,7 @@ export function skyscraper(ctx, x, z, w, d, h, o) {
     for (let s = 0; s < steps; s++) {
       const hh = s === 0 ? h * 0.55 : (h * 0.45) / (steps - 1);
       add(glass, prism(rectPts(x, z, ww, dd, ww * 0.08), yy, yy + hh));
+      cutSolid(ww, dd, ww * 0.08, yy, yy + hh);
       // a band of trim at each setback
       add(o.steel, prism(rectPts(x, z, ww + 0.6, dd + 0.6, ww * 0.08), yy + hh - 0.6, yy + hh), o.trimCol);
       yy += hh;
@@ -139,11 +159,15 @@ export function skyscraper(ctx, x, z, w, d, h, o) {
     const sp = new THREE.CylinderGeometry(0.25, Math.min(ww, dd) * 0.18, sh, 6);
     sp.translate(x, top + sh / 2, z);
     add(o.steel, sp, srgb(0.85, 0.82, 0.9));
+    solid(Math.min(ww, dd) * 0.2, Math.min(ww, dd) * 0.2, top, top + sh * 0.5);
     top += sh;
   } else if (style === 'slant') {
     // a slab with its roof cut on a slant
     const pts = rectPts(x, z, w, d);
     add(glass, prism(pts, y0 - 1, top - w * 0.4));
+    // (solid to the roof's low edge, then in slices under the slant, rising to the east)
+    solid(w, d, y0 - 1, top - w * 0.4);
+    if (o.solids) for (let i = 1; i < 4; i++) o.solids.push([x - w / 2 + (i * w) / 4, z - d / 2, x - w / 2 + ((i + 1) * w) / 4, z + d / 2, top - w * 0.4, top - w * 0.4 + w * 0.4 * (i / 4)]);
     const g = new THREE.BufferGeometry();
     const x0 = x - w / 2;
     const x1 = x + w / 2;
@@ -172,10 +196,13 @@ export function skyscraper(ctx, x, z, w, d, h, o) {
     const w2 = w * r.range(0.7, 0.85);
     const d2 = d * r.range(0.7, 0.85);
     add(glass, prism(rectPts(x, z, w2, d2, cut * 0.8), y0 + hb, top));
+    cutSolid(w, d, cut, y0 - 1, y0 + hb);
+    cutSolid(w2, d2, cut * 0.8, y0 + hb, top);
     const crown = r.pick(['ring', 'mast', 'pyramid', 'ring']);
     if (crown === 'ring') {
       add(o.neon, prism(rectPts(x, z, w2 + 0.3, d2 + 0.3, cut * 0.8), top - 3, top - 2.3, false), o.crownCol);
       add(o.steel, prism(rectPts(x, z, w2 * 0.5, d2 * 0.5), top, top + 4), srgb(0.6, 0.6, 0.68));
+      solid(w2 * 0.5, d2 * 0.5, top, top + 4);
       top += 4;
     } else if (crown === 'mast') {
       const sh = r.range(12, 28);
@@ -185,6 +212,7 @@ export function skyscraper(ctx, x, z, w, d, h, o) {
       top += sh;
     } else {
       const ph = Math.min(w2, d2) * 0.6;
+      solid(Math.min(w2, d2) * 0.6, Math.min(w2, d2) * 0.6, top, top + ph * 0.4);
       const py = new THREE.ConeGeometry(Math.min(w2, d2) * 0.62, ph, 4, 1);
       py.rotateY(Math.PI / 4);
       py.translate(x, top + ph / 2, z);

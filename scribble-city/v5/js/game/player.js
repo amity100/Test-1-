@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Doodle } from './doodle.js';
 import { heroLook } from './looks.js';
-import { groundHeight, WATER_X } from '../world/layout.js';
+import { groundHeight, WATER_X, worldEdge } from '../world/layout.js';
+import { isWater } from './rides.js';
 import { clamp, damp, dampAngle } from '../core/util.js';
 import { downStep } from './fists.js';
 import { dress } from './wardrobe.js';
@@ -367,6 +368,12 @@ export class Player {
     p.x += (this.vel.x + lx) * dt;
     p.z += (this.vel.z + lz) * dt;
     p.y += this.vel.y * dt;
+    // (v5: gliding down from up high too, no further than the edge of the world - world/layout.js)
+    const edge = worldEdge(p.x, p.z);
+    if (edge) {
+      p.x = edge.x;
+      p.z = edge.z;
+    }
     const col = this.game.world.collision.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25, prevY);
     let floor = col.floor;
     // (up on the roofs, what stands there: world/roofs.js)
@@ -393,9 +400,10 @@ export class Player {
     this.game.vehicles.pushOut(p, this.radius);
     let ground = groundHeight(p.x, p.z);
     if (floor > ground) ground = floor;
-    // (down into the bay: you swim, ROADMAP 5.2 - the water takes a fall, however high)
+    // (down into the bay: you swim, ROADMAP 5.2 - the water takes a fall, however high. v5: the
+    // mainland's bay and sea too, wherever it is water)
     const swim = this.game.swim;
-    if (swim && p.x > WATER_X && ground < -0.5 && floor < -0.5 && p.y <= ground + 0.02) {
+    if (swim && (p.x > WATER_X || isWater(p.x, p.z)) && ground < -0.5 && floor < -0.5 && p.y <= ground + 0.02) {
       if (gliding) chute.land();
       swim.enter();
       return;

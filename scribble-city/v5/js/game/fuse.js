@@ -9,7 +9,7 @@ import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
 import { gunOf } from './partsum.js';
 import { HANDLING } from './vehicles.js';
-import { groundHeight, WATER_X } from '../world/layout.js';
+import { groundHeight, WATER_X, WEST_EDGE } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
 
 // (ROADMAP 11.20) Fusing: a part drawn onto a thing, in one stroke, on the run.
@@ -2330,7 +2330,7 @@ export class Fuse {
     const g = this.game;
     // (ROADMAP 11.23: not on a deck over it - game/mission.js)
     const deck = (g.mission ? g.mission.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false) || (g.gear ? g.gear.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false);
-    const wet = !v.air && !v.dead && (v.kind === 'car' || v.kind === 'bike') && !v.drawn && v.pos.x > WATER_X + 3 && isWater(v.pos.x, v.pos.z) && !deck;
+    const wet = !v.air && !v.dead && (v.kind === 'car' || v.kind === 'bike') && !v.drawn && (v.pos.x > WATER_X + 3 || (v.pos.x < WEST_EDGE - 30 && groundHeight(v.pos.x, v.pos.z) < -0.79)) && isWater(v.pos.x, v.pos.z) && !deck;
     const fl = v.fz && v.fz.float;
     if (!wet || (fl && fl.k >= 1)) {
       v.fzSink = 0;

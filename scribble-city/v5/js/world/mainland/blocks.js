@@ -223,6 +223,8 @@ export function blockCtx(world, b) {
     block: b,
     // (the houses drawn on its plots: world/plot.js)
     homes: world.homes || null,
+    // (the city's towers as they were drawn, each with what it is solid as: world/mainland/far.js)
+    towers: (world.ctx && world.ctx.mainTowers) || null,
   };
   bctx.objects = {
     begin: (cx, kind, x, z) => world.objects.beginLocal(cx, kind, x, z),
@@ -347,7 +349,12 @@ function* buildKind(bctx, b) {
       const W = R.x1 - R.x0;
       plazaGround(bctx, R.x0 + 11, R.x1 - 11, R.z0, R.z1);
       if (ts.length < 2) fountain(bctx, R.x0 + W / 2, R.z1 - 22);
-      for (const t of ts) bctx.col.addBox(t.x - t.w / 2, t.z - t.d / 2, t.x + t.w / 2, t.z + t.d / 2, 0, t.h, 'wall');
+      // (each tower solid as it is drawn - its setbacks, its round, its slanted roof: world/skyline.js;
+      // one box its foot's size to its full height left walls in the air the aircraft stuck on)
+      const built = (bctx.towers || []).filter((q) => q.block === b.id && q.solids && q.solids.length);
+      if (built.length) {
+        for (const t of built) for (const q of t.solids) bctx.col.addBox(q[0], q[1], q[2], q[3], Math.max(0, q[4]), q[5], 'wall');
+      } else for (const t of ts) bctx.col.addBox(t.x - t.w / 2, t.z - t.d / 2, t.x + t.w / 2, t.z + t.d / 2, 0, t.h, 'wall');
       yield;
       return;
     }

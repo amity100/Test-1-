@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/util.js';
-import { WATER_X, PROM_X1, PIER, CURB, groundHeight } from '../world/layout.js';
+import { WATER_X, PIER, groundHeight, WEST_EDGE } from '../world/layout.js';
+import { SHORE_X, SEA_Z, ISLAND_X } from '../world/mainland/plan.js';
 import { srgb, makeSurface } from '../render/materials.js';
 import { Batch } from '../world/kit.js';
 import { isWater } from './rides.js';
@@ -16,8 +17,14 @@ import { isWater } from './rides.js';
 export const SURF = -0.8;
 const FLOOR = -7.5;
 const AIR = 25;
-// as far out as you can swim (the current takes you back)
+// as far out as you can swim (the current takes you back): off the island, and off the mainland's
+// beach out to sea
 const FAR_X = WATER_X + 240;
+const FAR_Z = SEA_Z + 320;
+// (v5) the sand you wade out onto: just over the water's line (a wall, a dock or the pier is higher:
+// E climbs out there)
+const WADE = SURF + 0.45;
+const far = (x, z) => x >= FAR_X || (x < WEST_EDGE && z > FAR_Z);
 
 const FISH = [[1.0, 0.55, 0.2], [1.0, 0.82, 0.25], [0.35, 0.6, 0.95], [0.95, 0.4, 0.55], [0.6, 0.85, 0.75]];
 const _c = new THREE.Vector3();
@@ -99,7 +106,7 @@ export class Swim {
     if (this.depth() > 0.5) return null;
     // (v5) the beach: up onto the sand
     const pierSide = p.z > PIER.z0 - 1 && p.z < PIER.z1 + 1;
-    if (!pierSide && p.x - WATER_X < 1.6) {
+    if (!pierSide && p.x > WEST_EDGE && p.x - WATER_X < 1.6) {
       const y = groundHeight(WATER_X - 1.4, p.z);
       return { x: WATER_X - 1.4, y, z: p.z, edge: { x: WATER_X - 0.3, y: y + 0.2, z: p.z }, fx: -1, fz: 0 };
     }
@@ -109,11 +116,28 @@ export class Swim {
       if (Math.abs(p.z - PIER.z1) < 1.5 && p.x < PIER.x1 - 0.5) return { x: p.x, y: 0.35, z: PIER.z1 - 1.0, edge: { x: p.x, y: 0.35, z: PIER.z1 }, fx: 0, fz: -1 };
       if (p.x > PIER.x1 - 0.2 && p.z > PIER.z0 && p.z < PIER.z1 && p.x < PIER.x1 + 1.5) return { x: PIER.x1 - 1.0, y: 0.35, z: p.z, edge: { x: PIER.x1, y: 0.35, z: p.z }, fx: -1, fz: 0 };
     }
+    // (v5) anywhere else - the mainland's sea walls, its docks, the causeways: a wall within reach,
+    // the land over it 1.4 m in from its edge
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const fx = Math.sin(a);
+      const fz = Math.cos(a);
+      for (const r of [0.8, 1.4]) {
+        const ex = p.x + fx * r;
+        const ez = p.z + fz * r;
+        if (isWater(ex, ez)) continue;
+        const y = groundHeight(ex + fx * 1.0, ez + fz * 1.0);
+        if (y < WADE || y > SURF + 3) break;
+        // (and room to stand there: not the island's shore, which is only to be seen)
+        if (this.game.world.collision.pointInside(ex + fx * 1.0, y + 0.9, ez + fz * 1.0, 0.3)) break;
+        return { x: ex + fx * 1.0, y, z: ez + fz * 1.0, edge: { x: ex, y: y + 0.2, z: ez }, fx, fz };
+      }
+    }
     return null;
   }
 
-  // out of the water on your feet, onto the sand of the beach
-  wadeOut() {
+  // out of the water on your feet, onto the sand of the beach (at x, z; or the island's, on its line)
+  wadeOut(x = WATER_X - 0.5, z = this.game.player.pos.z) {
     const g = this.game;
     const p = g.player;
     const vx = this.v.x;
@@ -121,7 +145,8 @@ export class Swim {
     this.leave();
     p.mode = 'foot';
     p.fig.crawl = 0;
-    p.pos.x = WATER_X - 0.5;
+    p.pos.x = x;
+    p.pos.z = z;
     p.pos.y = groundHeight(p.pos.x, p.pos.z);
     p.vel.set(vx * 0.5, 0, vz * 0.5);
     p.onGround = true;
@@ -237,7 +262,19 @@ export class Swim {
     const nx = p.pos.x + this.v.x * dt;
     const nz = p.pos.z + this.v.z * dt;
     // (only where the water is: the wall, the pier and the far current hold you back)
-    const ok = (x, z) => isWater(x, z) && isWater(x + 0.35, z) && isWater(x - 0.35, z) && isWater(x, z + 0.35) && isWater(x, z - 0.35) && x < FAR_X;
+    const ok = (x, z) => isWater(x, z) && isWater(x + 0.35, z) && isWater(x - 0.35, z) && isWater(x, z + 0.35) && isWater(x, z - 0.35) && !far(x, z);
+    // (v5: swimming in to a beach - the island's, the mainland's: where your feet touch the sand a
+    // step ahead you walk out of the water, even from under it)
+    const spd = Math.hypot(this.v.x, this.v.z);
+    if (spd > 0.3 && this.depth() < 1.5) {
+      const ax = p.pos.x + (this.v.x / spd) * 0.7;
+      const az = p.pos.z + (this.v.z / spd) * 0.7;
+      const land = isWater(ax, az) ? -9 : groundHeight(ax, az);
+      if (land > SURF + 0.01 && land < WADE) {
+        this.wadeOut(ax, az);
+        return;
+      }
+    }
     if (ok(nx, nz)) {
       p.pos.x = nx;
       p.pos.z = nz;
@@ -251,12 +288,12 @@ export class Swim {
       this.v.x *= -0.2;
       this.v.z *= -0.2;
     }
-    // (v5) swimming in to the beach: where your feet touch the sand you walk out of the water
-    if (p.pos.x < WATER_X + 0.7 && this.v.x < -0.3 && this.depth() < 0.4 && !(p.pos.z > PIER.z0 - 1 && p.pos.z < PIER.z1 + 1)) {
+    // (v5) swimming in to the island's beach: where your feet touch the sand you walk out of the water
+    if (p.pos.x > WEST_EDGE && p.pos.x < WATER_X + 0.7 && this.v.x < -0.3 && this.depth() < 1.5 && !(p.pos.z > PIER.z0 - 1 && p.pos.z < PIER.z1 + 1)) {
       this.wadeOut();
       return;
     }
-    if (p.pos.x > FAR_X - 6 && !this.saidFar) {
+    if (far(p.pos.x + Math.sign(this.v.x) * 6, p.pos.z + Math.sign(this.v.z) * 6) && !this.saidFar) {
       this.saidFar = true;
       g.hud.toast('הזרם חזק מדי כאן — חזרה לכיוון החוף', 'info', 2.4);
     }
@@ -342,6 +379,19 @@ export class Swim {
           weed.translate(x + (h - 0.2) * 10, FLOOR + hh / 2, z + (h - 0.2) * 6);
           B.add(M.leaf, weed, null, 0.5 + h, { color: srgb(0.35, 0.72, 0.4) });
         }
+      }
+    }
+    // (v5) under the mainland's water too: the bay between it and the island, and the sea off its
+    // beach - the surface over them seen from under it, their sandy floor
+    if (WEST_EDGE > SHORE_X) {
+      for (const [x0, x1, z0, z1] of [[SHORE_X, ISLAND_X, -1250, 560], [-1900, ISLAND_X, SEA_Z - 4, FAR_Z + 20]]) {
+        const s2 = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(Math.PI / 2), sm);
+        s2.position.set((x0 + x1) / 2, SURF - 0.02, (z0 + z1) / 2);
+        s2.userData.noShadow = true;
+        group.add(s2);
+        const f2 = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2);
+        f2.translate((x0 + x1) / 2, FLOOR, (z0 + z1) / 2);
+        B.add(M.sand, f2, null, 0.31);
       }
     }
     B.flush(group, { dynamic: true });

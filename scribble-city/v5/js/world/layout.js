@@ -7,7 +7,7 @@
 // to 43, the dunes to 52, the sand down to the water at 108. Behind the hotels the city goes on:
 // Collins Ave, Washington Ave, Meridian Ave, and the numbered streets across them.
 
-import { MAINLAND_ON, mainlandHeight, mDistrictName, CAUSEWAYS } from './mainland/plan.js';
+import { MAINLAND_ON, mainlandHeight, mDistrictName, CAUSEWAYS, WEST_X, NORTH_Z, SEA_Z } from './mainland/plan.js';
 
 export const CURB = 0.15;
 
@@ -49,6 +49,28 @@ export const SOUTH_EDGE = STREETS[5].z + STREETS[5].half + STREETS[5].walk; // 3
 export const WATER_X = 108;
 
 export const BOUNDS = { minX: WEST_EDGE + 1, maxX: WATER_X - 1, minZ: NORTH_EDGE + 1, maxZ: SOUTH_EDGE + 30 };
+
+// (v5) The edge of the world, for what flies and sails as well as what drives: the island and the
+// sea east of it to its walls (world/ground.js); with the mainland, it, the bay and the ocean off
+// its beach as far out as a swimmer may go (to the foot of its hills: world/mainland/ground.js).
+// null inside it; outside, the nearest place in it
+const EDGES = [[WEST_EDGE - 40, NORTH_EDGE - 80, WATER_X + 260, SOUTH_EDGE + 80]];
+if (MAINLAND_ON) EDGES.push([WEST_X + 71, NORTH_Z + 37, WEST_EDGE, SEA_Z + 300]);
+export function worldEdge(x, z) {
+  let best = null;
+  let bd = Infinity;
+  for (const [x0, z0, x1, z1] of EDGES) {
+    const cx = Math.min(x1, Math.max(x0, x));
+    const cz = Math.min(z1, Math.max(z0, z));
+    const d = (cx - x) * (cx - x) + (cz - z) * (cz - z);
+    if (d === 0) return null;
+    if (d < bd) {
+      bd = d;
+      best = { x: cx, z: cz };
+    }
+  }
+  return best;
+}
 
 // the pier out over the beach and into the ocean at the south end, with its wheel
 export const PIER = { z0: 236, z1: 250, x0: PARK_X1, x1: 232 };
