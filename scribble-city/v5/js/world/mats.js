@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeSurface, srgb, hex, canvasTexture } from '../render/materials.js';
 import { streetTexture, paverTexture, frondTexture, aveTexture, crossTexture, asphaltTexture, crosswalkTexture, tileTexture, glintTexture, floorTexture, goodsTexture, GOODS_CELLS, sandTexture, woodDeckTexture } from './paint.js';
 import { canvas } from './kit.js';
-import { hallMarble, hallMedallion, hallCoffer, hallFrieze, hallFlutes, decoStone } from './hallpaint.js';
+import { hallMarble, hallMedallion, hallCoffer, hallFrieze, decoStone } from './hallpaint.js';
 
 // The pens of the city, made once. Most of them take their colour from the parts (a colour per
 // vertex), so a hundred pink and mint and yellow buildings are one material, drawn per chunk.
@@ -109,16 +109,15 @@ export function cityMaterials() {
   };
   // (the hall's fronds: the same picture as the street's)
   M.hallFrond = B({ obj: 0.918, kind: 'leaf', map: M.frond.uniforms.uMap.value, alphaTest: 0.45, side: THREE.DoubleSide, uvScale: 5, sway: 0.06, ang: 0.15, line: 0.55, swayAttr: true, objMask: true, indoor: 'hall' });
-  // (ROADMAP 11.32) the great hall's finer things: the medallion in its court and its polished bands
-  // of granite and stone, the coffers of its ceilings with their lights, the frieze of gold along
-  // its galleries, the flutes of its columns (hallpaint.js)
+  // (ROADMAP 11.32) the great hall's finer things: the rings in its court and its polished bands of
+  // granite, its smooth ceilings with their lights let in, the smooth edges of its galleries
+  // (hallpaint.js)
   const POLISH = { kind: 'ground', vcolor: true, indoor: 'hall', refl: 2, gloss: 0.1, ang: 0.4, wash: 0.85, density: 0.55, line: 0.5 };
   M.hallMedal = B({ ...POLISH, obj: 0.061, map: hallMedallion() });
   M.hallPolish = B({ ...POLISH, obj: 0.103 });
   const cof = hallCoffer();
   M.hallCoffer = B({ obj: 0.172, kind: 'wall', map: cof.map, emMap: cof.em, emissive: new THREE.Color(2.2, 2.1, 1.9), vcolor: true, indoor: 'hall', wash: 0.82, density: 0.6, line: 0.4 });
   M.hallFrieze = B({ obj: 0.243, kind: 'wall', map: hallFrieze(), vcolor: true, indoor: 'hall', gloss: 0.15, wash: 0.82, density: 0.6, line: 0.5 });
-  M.hallFlute = B({ obj: 0.314, kind: 'cyl', map: hallFlutes(), vcolor: true, indoor: 'hall', partR: 0.28, wash: 0.78, density: 0.6, line: 0.6 });
   // (and its art deco outside's stone, laid on the world in squares of 3 m)
   M.decoStone = B({ obj: 0.385, kind: 'wall', map: decoStone(), worldMap: 3, vcolor: true, wash: 0.7, density: 0.8 });
   M.floors = {};

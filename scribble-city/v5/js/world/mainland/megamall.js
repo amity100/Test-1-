@@ -237,7 +237,6 @@ function* wing(bctx, b, o) {
     escalators: [], lifts: [], bridges: [], galleries: [], rails: [],
     void: { x0: vx0, x1: vx1 },
     court: { z0: zc0, z1: zc1 },
-    colZ: { z0: zN + 6, step: 12 },
     links: links.map((l) => ({ z0: l.z0, z1: l.z1, lv: l.lv.slice(), gate: !!l.gate, x: bs < 0 ? R.x0 : R.x1 })),
   });
   const solid = (x0, z0, x1, z1, y0, y1, colr, mat = M.wallSolid, B = bctx.B) => {
@@ -324,11 +323,11 @@ function* wing(bctx, b, o) {
     g.translate((x0 + x1) / 2, y + 0.006, (z0 + z1) / 2);
     const uv = g.attributes.uv;
     const p = g.attributes.position;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) / 6.4, -p.getZ(i) / 6.4);
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) / 4.8, -p.getZ(i) / 4.8);
     bctx.R.add(M.hallFloor, g, null, nextId(), { color: colr });
   };
-  // (ROADMAP 11.32) the ceilings under the galleries, the bridges and the food court: coffers of
-  // 1.6 m, a light in each (hallpaint.js hallCoffer), from the edge x0, z0
+  // (ROADMAP 11.32) the ceilings under the galleries, the bridges and the food court: smooth, a light
+  // let in every 1.6 m (hallpaint.js hallCoffer), from the edge x0, z0
   const coffers = (x0, z0, x1, z1, y) => {
     const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(Math.PI / 2);
     g.translate((x0 + x1) / 2, y - 0.33, (z0 + z1) / 2);
@@ -337,7 +336,7 @@ function* wing(bctx, b, o) {
     for (let i = 0; i < uv.count; i++) uv.setXY(i, (p.getX(i) - x0) / 1.6, (p.getZ(i) - z0) / 1.6);
     bctx.R.add(M.hallCoffer, g, null, nextId(), { color: srgb(1, 1, 1) });
   };
-  // the frieze of gold fans on the edge of the floor at y over the void (hallpaint.js hallFrieze),
+  // the smooth white edge of the floor at y over the void (hallpaint.js hallFrieze),
   // facing the void: along z at x (fx: +1 facing east, -1 west) or along x at z (fz)
   const frieze = (a, b, y, o) => {
     const len = b - a;
@@ -360,20 +359,16 @@ function* wing(bctx, b, o) {
   // the ground floor of the hall: cream stone, a band of warmer stone along the stores, a line
   // across now and then; round the court rings of black granite with one of brass between
   tiles(hx0, bz0, hx1, bz1, CURB);
-  // (ROADMAP 11.32: all of it polished, the hall in it; along the stores a band of warmer stone
-  // edged in black granite and brass, black lines across with brass either side; the court's
-  // medallion - a star of black and grey marble in rings of black and brass, hallpaint.js)
+  // (ROADMAP 11.32, as The Galleria's: all of it polished white marble in big slabs, the hall in it;
+  // a band of polished black granite along the stores' fronts, black lines across now and then; in
+  // the court rings of black and white, hallpaint.js)
   for (const s of [-1, 1]) {
-    const x0 = s < 0 ? hx0 : hx1 - 1.8;
-    hall(M.hallPolish, x0, CURB + 0.004, bz0 + 1, x0 + 1.8, CURB + 0.012, bz1 - 1, srgb(0.84, 0.77, 0.66));
-    const xe = s < 0 ? hx0 + 1.8 : hx1 - 1.8;
-    hall(M.hallPolish, xe - 0.08, CURB + 0.004, bz0 + 1, xe + 0.08, CURB + 0.014, bz1 - 1, GRANITE);
-    hall(M.hallPolish, xe - s * 0.14 - 0.025, CURB + 0.004, bz0 + 1, xe - s * 0.14 + 0.025, CURB + 0.014, bz1 - 1, BRASS);
+    const x0 = s < 0 ? hx0 : hx1 - 0.6;
+    hall(M.hallPolish, x0, CURB + 0.004, bz0 + 1, x0 + 0.6, CURB + 0.012, bz1 - 1, GRANITE);
   }
   for (let z = bz0 + 9; z < bz1 - 4; z += 9) {
     if (z > zc0 - 1 && z < zc1 + 1) continue;
-    hall(M.hallPolish, hx0 + 1.9, CURB + 0.004, z - 0.1, hx1 - 1.9, CURB + 0.013, z + 0.1, GRANITE);
-    for (const dz of [-0.16, 0.16]) hall(M.hallPolish, hx0 + 1.9, CURB + 0.004, z + dz - 0.022, hx1 - 1.9, CURB + 0.013, z + dz + 0.022, BRASS);
+    hall(M.hallPolish, hx0 + 0.6, CURB + 0.004, z - 0.15, hx1 - 0.6, CURB + 0.013, z + 0.15, GRANITE);
   }
   {
     const g = new THREE.CircleGeometry(1, 96).rotateX(-Math.PI / 2);
@@ -402,13 +397,13 @@ function* wing(bctx, b, o) {
       const g1 = s < 0 ? vx0 : hx1;
       tiles(g0, za, g1, zb, y);
       hall(M.hallPolish, s < 0 ? vx0 - 0.5 : vx1, y + 0.004, za, s < 0 ? vx0 : vx1 + 0.5, y + 0.012, zb, GRANITE);
-      hall(M.hallPolish, s < 0 ? vx0 - 0.58 : vx1 + 0.53, y + 0.004, za, s < 0 ? vx0 - 0.53 : vx1 + 0.58, y + 0.013, zb, BRASS);
-      // the slab's edge over the void: its frieze of gold fans, a line of light under it
+      // the slab's edge over the void: smooth and white, a line of champagne along it, a line of
+      // light under it
       const ex = s < 0 ? vx0 : vx1;
       hall(IN.box, ex - 0.06, y - 0.85, za, ex + 0.06, y + 0.02, zb, CEIL);
       frieze(za, zb, y, { fx: -s, x: ex });
       hall(IN.lamp, ex - 0.07, y - 0.9, za, ex + 0.07, y - 0.85, zb, srgb(1, 0.95, 0.86));
-      // the gallery's ceiling (the floor below's): coffers, a light in each
+      // the gallery's ceiling (the floor below's): smooth and white, its lights let into it
       coffers(g0, za, g1, zb, y);
       mall.galleries.push({ lv, side: s, x: s < 0 ? hx0 + 1.4 : hx1 - 1.4, rx: s < 0 ? vx0 - 0.45 : vx1 + 0.45, z0: za + 0.8, z1: zb - 0.8, y: y - CURB });
     }
@@ -431,29 +426,6 @@ function* wing(bctx, b, o) {
     hall(IN.box, hx0, LV[2] - 0.3, zN, hx1, LV[TL] - 0.32, zN + 0.16, STONE);
     col.addBox(hx0 - SD, bz0, hx1 + SD, zN + 0.16, LV[2] - 0.3, LV[TL] - 0.3, 'wall');
     for (let k = 2; k < TL; k++) hall(IN.lamp, hx0 + 0.5, LV[k] + 3.4, zN + 0.16, hx1 - 0.5, LV[k] + 3.48, zN + 0.2, srgb(1, 0.95, 0.86));
-  }
-  // the columns along the void, up to the roof
-  for (const s of [-1, 1]) {
-    const x = s < 0 ? vx0 - 0.42 : vx1 + 0.42;
-    for (let z = zN + 6; z < zS - 2; z += 12) {
-      if (z > zc0 + 1 && z < zc1 - 1) continue;
-      const g = new THREE.CylinderGeometry(0.28, 0.28, ROOF - CURB, 16);
-      g.translate(x, (ROOF + CURB) / 2, z);
-      hallGeo(M.hallFlute, g, STONE);
-      for (const lv of LV.keys()) {
-        const base = new THREE.CylinderGeometry(0.36, 0.38, 0.22, 16);
-        base.translate(x, LV[lv] + 0.11, z);
-        hallGeo(IN.gloss, base, GRANITE);
-        const band = new THREE.CylinderGeometry(0.385, 0.385, 0.04, 16);
-        band.translate(x, LV[lv] + 0.24, z);
-        hallGeo(IN.gloss, band, GOLD);
-        if (lv === 0) continue;
-        const cap = new THREE.CylinderGeometry(0.4, 0.29, 0.3, 16);
-        cap.translate(x, LV[lv] - 0.47, z);
-        hallGeo(IN.gloss, cap, GOLD);
-      }
-      col.addCircle(x, z, 0.3, 0, ROOF, 'pole');
-    }
   }
   yield;
 
@@ -1131,11 +1103,12 @@ function rail(c, axis, at, a, b, y) {
   if (b - a < 0.08) return;
   const P = (x0, y0, z0, x1, y1, z1) => (axis === 'z' ? [at + x0, y0, a + z0, at + x1, y1, a + z1] : [a + z0, y0, at + x0, a + z1, y1, at + x1]);
   const L = b - a;
+  // (ROADMAP 11.32, as The Galleria's: glass without posts, a handrail of steel on it, the glass held
+  // in a channel of steel along the floor's edge)
   hall(IN.gloss, ...P(-0.05, y + 1.02, 0, 0.05, y + 1.08, L), RAILC);
-  hall(IN.gloss, ...P(-0.03, y + 0.04, 0, 0.03, y + 0.1, L), STEEL);
+  hall(IN.gloss, ...P(-0.045, y, 0, 0.045, y + 0.12, L), STEEL);
   const step = Math.max(0.5, L / Math.max(1, Math.round(L / 1.6)));
-  for (let u = 0; u <= L + 0.01; u += step) hall(IN.gloss, ...P(-0.035, y, u - 0.035, 0.035, y + 1.02, u + 0.035), STEEL);
-  // (the glass between them: a glint across each pane, as the light catches it)
+  // (the glass: a glint across each pane, as the light catches it)
   for (let u = 0; u < L - 0.3; u += step) {
     const w = Math.min(step, L - u) - 0.2;
     const g = new THREE.PlaneGeometry(w, 0.8);
@@ -1573,7 +1546,7 @@ function terrace(bctx, c, mall, x0, z0, x1, z1, y, r) {
 // hall in pitched bays on steel trusses, the crown over the court; the machines, the vents, the
 // mast; the helicopters' pad
 function roof(bctx, c, mall, g) {
-  const { hall, hallGeo, IN, col, M } = c;
+  const { hall, IN, col, M } = c;
   const { R, hx0, hx1, vx0, vx1, bz0, bz1, zN, ROOF, TOP, zm, wallCol } = g;
   const B = bctx.B;
   const [sx, sz0, sz1] = g.sx;
