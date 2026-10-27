@@ -144,6 +144,18 @@ function flip(g) {
  * bctx.mall (game/mall.js reads it).
  */
 export function* buildMegaMall(bctx, b, o) {
+  // (ROADMAP 11.32) its outside in a stone of its own: ivory limestone in courses, hallpaint.js
+  // decoStone (the black and the white of it the same stone, its joints lost in the black)
+  const M0 = bctx.M;
+  bctx.M = Object.assign(Object.create(M0), { wallSolid: M0.decoStone });
+  try {
+    yield* wing(bctx, b, o);
+  } finally {
+    bctx.M = M0;
+  }
+}
+
+function* wing(bctx, b, o) {
   const M = bctx.M;
   const r = bctx.rng;
   const R = b.rect;
@@ -302,8 +314,34 @@ export function* buildMegaMall(bctx, b, o) {
     g.translate((x0 + x1) / 2, y + 0.006, (z0 + z1) / 2);
     const uv = g.attributes.uv;
     const p = g.attributes.position;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) / 3.2, -p.getZ(i) / 3.2);
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) / 6.4, -p.getZ(i) / 6.4);
     bctx.R.add(M.hallFloor, g, null, nextId(), { color: colr });
+  };
+  // (ROADMAP 11.32) the ceilings under the galleries, the bridges and the food court: coffers of
+  // 1.6 m, a light in each (hallpaint.js hallCoffer), from the edge x0, z0
+  const coffers = (x0, z0, x1, z1, y) => {
+    const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(Math.PI / 2);
+    g.translate((x0 + x1) / 2, y - 0.33, (z0 + z1) / 2);
+    const uv = g.attributes.uv;
+    const p = g.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (p.getX(i) - x0) / 1.6, (p.getZ(i) - z0) / 1.6);
+    bctx.R.add(M.hallCoffer, g, null, nextId(), { color: srgb(1, 1, 1) });
+  };
+  // the frieze of gold fans on the edge of the floor at y over the void (hallpaint.js hallFrieze),
+  // facing the void: along z at x (fx: +1 facing east, -1 west) or along x at z (fz)
+  const frieze = (a, b, y, o) => {
+    const len = b - a;
+    const g = new THREE.PlaneGeometry(len, 0.87);
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, (uv.getX(i) * len) / 2.4);
+    if (o.fx) {
+      g.rotateY((o.fx * Math.PI) / 2);
+      g.translate(o.x + o.fx * 0.07, y - 0.415, (a + b) / 2);
+    } else {
+      if (o.fz < 0) g.rotateY(Math.PI);
+      g.translate((a + b) / 2, y - 0.415, o.z + o.fz * 0.07);
+    }
+    bctx.R.add(M.hallFrieze, g, null, nextId(), { color: srgb(1, 1, 1) });
   };
   const slab = (x0, z0, x1, z1, y, colr = CEIL) => {
     hall(IN.box, x0, y - 0.32, z0, x1, y, z1, colr);
@@ -312,16 +350,29 @@ export function* buildMegaMall(bctx, b, o) {
   // the ground floor of the hall: cream stone, a band of warmer stone along the stores, a line
   // across now and then; round the court rings of black granite with one of brass between
   tiles(hx0, bz0, hx1, bz1, CURB);
+  // (ROADMAP 11.32: all of it polished, the hall in it; along the stores a band of warmer stone
+  // edged in black granite and brass, black lines across with brass either side; the court's
+  // medallion - a star of black and grey marble in rings of black and brass, hallpaint.js)
   for (const s of [-1, 1]) {
     const x0 = s < 0 ? hx0 : hx1 - 1.8;
-    hall(IN.box, x0, CURB + 0.004, bz0 + 1, x0 + 1.8, CURB + 0.012, bz1 - 1, srgb(0.86, 0.8, 0.7));
+    hall(M.hallPolish, x0, CURB + 0.004, bz0 + 1, x0 + 1.8, CURB + 0.012, bz1 - 1, srgb(0.84, 0.77, 0.66));
+    const xe = s < 0 ? hx0 + 1.8 : hx1 - 1.8;
+    hall(M.hallPolish, xe - 0.08, CURB + 0.004, bz0 + 1, xe + 0.08, CURB + 0.014, bz1 - 1, GRANITE);
+    hall(M.hallPolish, xe - s * 0.14 - 0.025, CURB + 0.004, bz0 + 1, xe - s * 0.14 + 0.025, CURB + 0.014, bz1 - 1, BRASS);
   }
-  for (let z = bz0 + 9; z < bz1 - 4; z += 9) if (z < zc0 - 1 || z > zc1 + 1) hall(IN.box, hx0 + 1.8, CURB + 0.004, z - 0.06, hx1 - 1.8, CURB + 0.013, z + 0.06, srgb(0.8, 0.74, 0.64));
-  for (const [r0, r1, colr] of [[6.0, 6.55, GRANITE], [6.75, 6.9, BRASS], [7.1, 7.65, GRANITE]]) {
-    const g = new THREE.RingGeometry(r0, r1, 72).rotateX(-Math.PI / 2);
-    g.scale(1, 1, 1.25);
-    g.translate(cx, CURB + 0.014, zm);
-    hallGeo(IN.gloss, g, colr);
+  for (let z = bz0 + 9; z < bz1 - 4; z += 9) {
+    if (z > zc0 - 1 && z < zc1 + 1) continue;
+    hall(M.hallPolish, hx0 + 1.9, CURB + 0.004, z - 0.1, hx1 - 1.9, CURB + 0.013, z + 0.1, GRANITE);
+    for (const dz of [-0.16, 0.16]) hall(M.hallPolish, hx0 + 1.9, CURB + 0.004, z + dz - 0.022, hx1 - 1.9, CURB + 0.013, z + dz + 0.022, BRASS);
+  }
+  {
+    const g = new THREE.CircleGeometry(1, 96).rotateX(-Math.PI / 2);
+    g.scale(9.2, 1, 11.5);
+    g.translate(cx, CURB + 0.01, zm);
+    const uv = g.attributes.uv;
+    const p = g.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (p.getX(i) - cx) / 18.4 + 0.5, 0.5 - (p.getZ(i) - zm) / 23);
+    bctx.R.add(M.hallMedal, g, null, nextId(), { color: srgb(1, 1, 1) });
   }
   for (const lv of UP) {
     const y = LV[lv];
@@ -340,13 +391,15 @@ export function* buildMegaMall(bctx, b, o) {
       const g0 = s < 0 ? hx0 : vx1;
       const g1 = s < 0 ? vx0 : hx1;
       tiles(g0, za, g1, zb, y);
-      hall(IN.box, s < 0 ? vx0 - 0.5 : vx1, y + 0.004, za, s < 0 ? vx0 : vx1 + 0.5, y + 0.012, zb, srgb(0.86, 0.8, 0.7));
-      // the slab's edge over the void: white, a line of light under it
+      hall(M.hallPolish, s < 0 ? vx0 - 0.5 : vx1, y + 0.004, za, s < 0 ? vx0 : vx1 + 0.5, y + 0.012, zb, GRANITE);
+      hall(M.hallPolish, s < 0 ? vx0 - 0.58 : vx1 + 0.53, y + 0.004, za, s < 0 ? vx0 - 0.53 : vx1 + 0.58, y + 0.013, zb, BRASS);
+      // the slab's edge over the void: its frieze of gold fans, a line of light under it
       const ex = s < 0 ? vx0 : vx1;
       hall(IN.box, ex - 0.06, y - 0.85, za, ex + 0.06, y + 0.02, zb, CEIL);
+      frieze(za, zb, y, { fx: -s, x: ex });
       hall(IN.lamp, ex - 0.07, y - 0.9, za, ex + 0.07, y - 0.85, zb, srgb(1, 0.95, 0.86));
-      // recessed lights in the gallery's ceiling (the floor below's)
-      for (let z = za + 1.5; z < zb - 1; z += 3) hall(IN.lamp, (g0 + g1) / 2 - 0.18, y - 0.335, z - 0.18, (g0 + g1) / 2 + 0.18, y - 0.32, z + 0.18, srgb(1, 0.97, 0.9));
+      // the gallery's ceiling (the floor below's): coffers, a light in each
+      coffers(g0, za, g1, zb, y);
       mall.galleries.push({ lv, side: s, x: s < 0 ? hx0 + 1.4 : hx1 - 1.4, rx: s < 0 ? vx0 - 0.45 : vx1 + 0.45, z0: za + 0.8, z1: zb - 0.8, y: y - CURB });
     }
     yield;
@@ -374,13 +427,20 @@ export function* buildMegaMall(bctx, b, o) {
     const x = s < 0 ? vx0 - 0.42 : vx1 + 0.42;
     for (let z = zN + 6; z < zS - 2; z += 12) {
       if (z > zc0 + 1 && z < zc1 - 1) continue;
-      const g = new THREE.CylinderGeometry(0.28, 0.28, ROOF - CURB, 14);
+      const g = new THREE.CylinderGeometry(0.28, 0.28, ROOF - CURB, 16);
       g.translate(x, (ROOF + CURB) / 2, z);
-      hallGeo(IN.cyl, g, STONE);
+      hallGeo(M.hallFlute, g, STONE);
       for (const lv of LV.keys()) {
-        const cap = new THREE.CylinderGeometry(0.36, 0.31, 0.12, 14);
-        cap.translate(x, LV[lv] + 0.06, z);
-        hallGeo(IN.cyl, cap, CREAM);
+        const base = new THREE.CylinderGeometry(0.36, 0.38, 0.22, 16);
+        base.translate(x, LV[lv] + 0.11, z);
+        hallGeo(IN.gloss, base, GRANITE);
+        const band = new THREE.CylinderGeometry(0.385, 0.385, 0.04, 16);
+        band.translate(x, LV[lv] + 0.24, z);
+        hallGeo(IN.gloss, band, GOLD);
+        if (lv === 0) continue;
+        const cap = new THREE.CylinderGeometry(0.4, 0.29, 0.3, 16);
+        cap.translate(x, LV[lv] - 0.47, z);
+        hallGeo(IN.gloss, cap, GOLD);
       }
       col.addCircle(x, z, 0.3, 0, ROOF, 'pole');
     }
@@ -404,8 +464,10 @@ export function* buildMegaMall(bctx, b, o) {
       const y = LV[lv];
       slab(vx0, br.z0, vx1, br.z1, y);
       tiles(vx0, br.z0, vx1, br.z1, y);
+      coffers(vx0, br.z0, vx1, br.z1, y);
       for (const z of [br.z0, br.z1]) {
         hall(IN.box, vx0, y - 0.85, z - 0.06, vx1, y + 0.02, z + 0.06, CEIL);
+        frieze(vx0, vx1, y, { fz: z === br.z0 ? -1 : 1, z });
         hall(IN.lamp, vx0, y - 0.9, z - 0.07, vx1, y - 0.85, z + 0.07, srgb(1, 0.95, 0.86));
       }
     }
@@ -413,7 +475,9 @@ export function* buildMegaMall(bctx, b, o) {
   // the top floor's food court: a floor over the whole north of the hall
   slab(vx0, zN, vx1, FC1, LV[TL]);
   tiles(vx0, zN, vx1, FC1, LV[TL]);
+  coffers(vx0, zN, vx1, FC1, LV[TL]);
   hall(IN.box, vx0, LV[TL] - 0.85, FC1 - 0.06, vx1, LV[TL] + 0.02, FC1 + 0.06, CEIL);
+  frieze(vx0, vx1, LV[TL], { fz: 1, z: FC1 });
   hall(IN.lamp, vx0, LV[TL] - 0.9, FC1 - 0.07, vx1, LV[TL] - 0.85, FC1 + 0.07, srgb(1, 0.95, 0.86));
   // the escalators: two pairs in each wing a floor - up from a floor to a bridge, and from that
   // bridge up to the next the other way, side by side, criss-crossing up through the hall

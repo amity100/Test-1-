@@ -650,6 +650,10 @@ export class Pipeline {
     this.reflCam = new THREE.PerspectiveCamera();
     this.reflCam.layers.enable(LAYERS.AUX);
     this.mirrorY = 0;
+    // (ROADMAP 11.32) in a mall's great hall, the mirror its polished floor's: floorAt(camera's
+    // position), the height of the floor under it or null (main.js); floorY, the one now
+    this.floorAt = null;
+    this.floorY = null;
     // fullscreen passes
     this.quadScene = new THREE.Scene();
     this.quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -1315,8 +1319,23 @@ export class Pipeline {
     });
   }
 
+  // (ROADMAP 11.32) the camera over a mall's polished floor, on a computer: the mirror is that floor's
+  // (its plane a hair over the stone, so the floor itself and what is set in it are not in it), not
+  // the street's and the water's - they are below it, and look up the sky meanwhile
+  // (render/glsl.js uMirrorY)
+  floorMirror() {
+    const fy = this.floorAt && this.reflections && !this.low ? this.floorAt(this.camera.position) : null;
+    if (fy !== this.floorY) {
+      this.floorY = fy;
+      this.reflDone = false;
+      this._mirrorRect = null;
+    }
+    this.mirrorY = fy === null ? 0 : fy;
+    shared.uMirrorY.value = this.mirrorY;
+  }
+
   // the mirror wanted this frame: wet streets, or water seen in the last second or so (no waters
-  // known: always, as it was)
+  // known: always, as it was); or a mall's polished floor under the camera
   mirrorWanted() {
     if (!this.waters.length || shared.uWet.value > 0 || this.mirrorAlways) return true;
     const gl = this.r.getContext();
@@ -1329,7 +1348,7 @@ export class Pipeline {
       }
       if (this.frameN - w.seen < 45) seen = true;
     }
-    return seen;
+    return seen || this.floorY !== null;
   }
 
   // (v5) the still city's pieces in pens that throw no pixel away, wherever nothing of them can be
@@ -1929,6 +1948,7 @@ export class Pipeline {
   // (11.5) the mirror as it was last drawn still covers all that the water in sight reads now (the
   // camera has moved since; the mirror's matrix has not, until it is drawn again)
   mirrorCovers() {
+    if (this.floorY !== null) return true;
     const m = this._mirrorRect;
     if (!m) return true;
     const reg = this._reg2;
@@ -2014,7 +2034,8 @@ export class Pipeline {
     tm.multiply(rc.matrixWorldInverse);
     // (11.5) the part of its picture the water in sight reads (false: all of it)
     const reg = this._reg;
-    const part = this.mirrorPartOn && this.waterRegion(tm, reg);
+    const floor = this.floorY !== null;
+    const part = this.mirrorPartOn && !floor && this.waterRegion(tm, reg);
     if (part && reg.empty) {
       // (no water in sight just now, seen a moment ago: nothing reads the mirror, nothing is drawn)
       this._drawn.empty = true;
@@ -2039,7 +2060,9 @@ export class Pipeline {
     // the still city's are on their own layer already, the rest are hidden for the moment
     const hidden = this._mirrorHide || (this._mirrorHide = []);
     hidden.length = 0;
-    this.hideFromMirror(this.scene, hidden);
+    // (a mall's floor: the hall itself is in it - its rooms, its people, its small things)
+    if (floor) rc.layers.enable(MIRRORLESS);
+    else this.hideFromMirror(this.scene, hidden);
     const keep = shared.uRefl.value;
     shared.uRefl.value = BLANK;
     shared.uMirror.value = 1;
@@ -2091,6 +2114,7 @@ export class Pipeline {
     this.r.setRenderTarget(rt);
     this.r.clear();
     this.r.render(this.scene, rc);
+    rc.layers.disable(MIRRORLESS);
     for (const o of out) o.visible = true;
     out.length = 0;
     this.unocclude();
@@ -2135,6 +2159,7 @@ export class Pipeline {
     }
     // (not at all while no water is in sight and the streets are dry: the water seen again
     // reflects the sky until the mirror is there, a frame or two later - mirrorWanted)
+    this.floorMirror();
     const want = this.mirrorWanted();
     shared.uReflOn.value = want ? 1 : 0;
     if (!want) this.reflDone = false;

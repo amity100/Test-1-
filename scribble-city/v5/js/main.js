@@ -214,6 +214,22 @@ async function boot() {
   // the streets are wet - render/pipeline.js setWaters; ?mirroralways: every frame, as it was)
   pipe.setWaters(world.group);
   if (params.has('mirroralways')) pipe.mirrorAlways = true;
+  // (ROADMAP 11.32) a mall's great hall: the mirror is its polished floor's, the floor the camera is
+  // over (a hair over its stone); ?nofloormirror: the hall's light in the floor instead, as a phone
+  if (!params.has('nofloormirror')) {
+    pipe.floorAt = (p) => {
+      for (const m of world.malls || []) {
+        const h = m.mega && m.hall;
+        if (!h || p.x < h.x0 || p.x > h.x1 || p.z < h.z0 || p.z > h.z1) continue;
+        const rel = p.y - h.y;
+        if (rel < 0.2 || rel > h.top) continue;
+        let k = 0;
+        for (let i = 1; i < m.levels.length; i++) if (m.levels[i] < rel - 0.3) k = i;
+        return h.y + m.levels[k] + 0.03;
+      }
+      return null;
+    };
+  }
   // (11.5: the mirror drawn only where the water in sight reads it; ?mirrorfull: all of it, as it was)
   if (params.has('mirrorfull')) pipe.mirrorPartOn = false;
   // (the walls' depth first: tried in play, render/depthtrial.js; ?walls / ?nowalls: fixed, no trying)

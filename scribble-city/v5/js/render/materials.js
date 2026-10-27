@@ -153,6 +153,8 @@ export const shared = {
   // (0: no mirror drawn this frame - no water in sight, the streets dry: the water reflects the
   // sky meanwhile, render/pipeline.js mirrorWanted)
   uReflOn: { value: 1 },
+  // (ROADMAP 11.32) the height of the mirror's plane: the street's, or a mall's polished floor
+  uMirrorY: { value: 0 },
   uReflMatrix: { value: new THREE.Matrix4() },
   // (the steady pace draws the mirror in the corner of its picture, at the drawing's size as it is
   // now: its share of the picture, and half a pixel of it, render/pipeline.js)
@@ -459,8 +461,9 @@ export function makeSurface(o = {}) {
       uObj: { value: o.obj !== undefined ? o.obj : nextObj() },
       uLine: { value: o.line !== undefined ? o.line : 1 },
       uAlphaTest: { value: o.alphaTest || 0 },
-      uUseRefl: { value: o.refl ? 1 : 0 },
+      uUseRefl: { value: o.refl === 2 ? 2 : o.refl ? 1 : 0 },
       uUvScale: { value: o.uvScale || 1 },
+      uWorldMap: { value: o.worldMap || 0 },
       uPartR: { value: o.partR || 0.12 },
       uLit: { value: o.lit !== undefined ? o.lit : 0.4 },
       uWetK: { value: o.wet !== undefined ? o.wet : o.refl ? 0.8 : 0 },

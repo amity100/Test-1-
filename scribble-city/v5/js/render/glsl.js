@@ -802,10 +802,14 @@ uniform sampler2D uEmMap;
 uniform float uUseEmMap;
 uniform sampler2D uRefl;
 uniform float uReflOn;
+uniform float uMirrorY;
 uniform vec2 uReflK;
 uniform vec2 uReflLo;
 uniform float uUseRefl;
 uniform float uUvScale;
+// (ROADMAP 11.32) > 0: the picture laid on the world in squares of this many metres (the pens' own
+// place on the surface), not by its uvs - a stone's courses on boxes of any size
+uniform float uWorldMap;
 uniform float uIndoor;   // a room under its lamps (no sun, warm light)
 uniform float uCells;    // a texture of stacked cells: v = cell * 64 + v in the cell (shelves of goods)
 uniform float uNeonMask; // the neon sign atlas: r is the tube, g its white-hot core
@@ -925,7 +929,7 @@ void main() {
 #ifdef USE_MAPSET
       tex = penPicture(vUv);
 #else
-      tex = texture(uMap, vUv, uMipBias);
+      tex = texture(uMap, uWorldMap > 0.0 ? p / uWorldMap : vUv, uMipBias);
 #endif
     }
     if (uNeonMask > 0.5) tex = vec4(mix(vCol, vec3(1.0), tex.g * 0.55), tex.r);
@@ -1048,7 +1052,34 @@ void main() {
   // In the rain its puddles spread and hold the city upside down, the more the wetter. The bay,
   // the sea and the pools are water: the mirror always
   bool street = kind < 8.5;
-  if (uUseRefl > 0.5 && street && uWet <= 0.0 && (probe & 32) == 0) {
+  if (uUseRefl > 1.5 && (probe & 32) == 0) {
+    // (ROADMAP 11.32) polished stone, a mall's great hall's floor: the hall upside down in it, a
+    // little soft, the more the lower you look across it, and the pens lighter over it. The mirror
+    // is this floor's only while the camera is over it (render/pipeline.js floorMirror: on a
+    // computer); otherwise the hall's light in it - the glass roof's white, the stores' darker band
+    // low across it
+    float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
+    vec3 r;
+    float k;
+    if (uReflOn > 0.5 && uMirror < 0.5 && abs(vWP.y - uMirrorY) < 0.15) {
+      vec2 ruv = vRefl.xy / vRefl.w;
+      r = vec3(0.0);
+      for (int i = 0; i < 4; i++) {
+        vec2 o = (vec2(float(i & 1), float(i >> 1)) - 0.5) * 0.002;
+        r += textureLod(uRefl, clamp(ruv + o, uReflLo, 1.0 - uReflLo) * uReflK, 0.0).rgb;
+      }
+      r *= 0.25;
+      k = 0.4 + 0.5 * fr;
+    } else {
+      vec3 R = reflect(-V, N);
+      float nk = smoothstep(0.4, 1.6, uLitK);
+      r = mix(vec3(0.55, 0.56, 0.62), vec3(1.0, 0.99, 0.96), smoothstep(0.05, 0.85, R.y)) * (1.0 - 0.45 * nk);
+      k = 0.12 + 0.5 * fr;
+    }
+    lit = mix(lit, r, k);
+    shade = mix(shade, r * 0.85, k);
+    dens *= 1.0 - 0.75 * k;
+  } else if (uUseRefl > 0.5 && street && uWet <= 0.0 && (probe & 32) == 0) {
     vec3 sky = skyColor(reflect(-V, N));
     float sk = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0) * 0.12;
     lit = mix(lit, sky, sk);
