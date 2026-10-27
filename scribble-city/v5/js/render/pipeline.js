@@ -505,6 +505,8 @@ const _sub = new THREE.Matrix4();
 const _frustum = new THREE.Frustum();
 const _frustum2 = new THREE.Frustum();
 const _fwd = new THREE.Vector3();
+const _ax = new THREE.Vector3();
+const _frustumBox = new THREE.Frustum();
 // (ROADMAP 11.32) how far a mall's polished floor reflects: the hall, and what is near it
 const FLOOR_FAR = 150;
 const _box = new THREE.Box3();
@@ -1327,7 +1329,11 @@ export class Pipeline {
   // the street's and the water's - they are below it, and look up the sky meanwhile
   // (render/glsl.js uMirrorY)
   floorMirror() {
-    const fy = this.floorAt && this.reflections && !this.low ? this.floorAt(this.camera.position) : null;
+    const f = this.floorAt && this.reflections && !this.low ? this.floorAt(this.camera.position) : null;
+    // (floorAt: the floor's height, or { y, box: [x0, z0, x1, z1, top] } - the mall's own block, all
+    // that its stone reflects)
+    const fy = f === null ? null : typeof f === 'number' ? f : f.y;
+    this.floorBox = f && f.box ? f.box : null;
     if (fy !== this.floorY) {
       this.floorY = fy;
       this.reflDone = false;
@@ -2122,6 +2128,18 @@ export class Pipeline {
         _v.copy(rc.position).addScaledVector(_fwd, FLOOR_FAR);
         _frustum2.planes[4].setFromNormalAndCoplanarPoint(_fwd.negate(), _v);
         this.hideOutside(this.scene, _frustum2, out);
+        // (nor anything outside the mall's own block: the city round it is not in its stone)
+        const b = this.floorBox;
+        if (b) {
+          const P = _frustumBox.planes;
+          P[0].set(_ax.set(1, 0, 0), -b[0]);
+          P[1].set(_ax.set(-1, 0, 0), b[2]);
+          P[2].set(_ax.set(0, 0, 1), -b[1]);
+          P[3].set(_ax.set(0, 0, -1), b[3]);
+          P[4].set(_ax.set(0, 1, 0), 1);
+          P[5].set(_ax.set(0, -1, 0), b[4]);
+          this.hideOutside(this.scene, _frustumBox, out);
+        }
       }
     }
     this.r.setRenderTarget(rt);

@@ -222,14 +222,15 @@ async function boot() {
         if (!m.mega) continue;
         // (its arcade over the avenue: one floor, the first)
         const a = m.arcade;
-        if (a && p.x > a.x0 && p.x < a.x1 && p.z > a.z0 && p.z < a.z1 && p.y > a.y + 0.2 && p.y < a.y + a.top) return a.y + 0.03;
+        if (a && p.x > a.x0 && p.x < a.x1 && p.z > a.z0 && p.z < a.z1 && p.y > a.y + 0.2 && p.y < a.y + a.top) return { y: a.y + 0.03, box: [a.x0 - 2, a.z0 - 2, a.x1 + 2, a.z1 + 2, a.y + a.top + 2] };
         const h = m.hall;
         if (!h || p.x < h.x0 || p.x > h.x1 || p.z < h.z0 || p.z > h.z1) continue;
         const rel = p.y - h.y;
         if (rel < 0.2 || rel > h.top) continue;
         let k = 0;
         for (let i = 1; i < m.levels.length; i++) if (m.levels[i] < rel - 0.3) k = i;
-        return h.y + m.levels[k] + 0.03;
+        const r = m.rect;
+        return { y: h.y + m.levels[k] + 0.03, box: [r.x0 - 2, r.z0 - 2, r.x1 + 2, r.z1 + 2, m.height || h.y + h.top + 20] };
       }
       return null;
     };

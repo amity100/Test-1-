@@ -8,24 +8,23 @@ import { bench } from '../blocks.js';
 import { CURB } from './plan.js';
 import { STORE_NAMES, NEONS, FONTS, ADS, PROMO, KIOSKS, DARK, WHITE, foodTable, trayStation, planter, dressFront, kiosk, pod, bin, screenTotem, sign, banner, directory } from './mall.js';
 
-// (v5, ROADMAP 11.30, 11.31) The Downtown Galleria, the city's great mall: two wings either side of
-// Second Avenue, five floors each round a hall of glass the length of the block - the galleries
-// along both sides of it on every floor, the bridges across, the escalators criss-crossing up
-// through it two pairs a floor, and in its middle the grand court under a crown of glass stepping
-// up: in the east wing the fountain whose jets dance (lit in colours at night), in the west wing a
-// court of royal palms; a chandelier of a hundred lights hung from the crown, the two glass lifts
-// riding up and down beside it. The department stores in the courts, the bank with its vault in
-// the east wing. The food court on the east wing's top floor, the restaurants on the west wing's,
-// their terraces over the boulevard. Between the wings, over the avenue the cars go on along,
-// bridges of glass and the gate - its floors of glass over the road, its tower up over the city
-// with the name down it. Outside, art deco: ivory stone, ribbons of dark glass, gold, fins up past
-// the roof, round towers on the corners; at night lines of gold light. Inside, a real mall's
-// colours in the daylight of its glass (the hall's own light, render/glsl.js 'hall'): warm white,
-// cream stone, glass and steel, black only round the court, gold in touches. Behind the stores the
-// mall's own corridors with the security room off them; the stairs up to the roof, where the
-// helicopters land. Every floor is walked on, every store has its room, its keeper, its people
-// (game/mall.js, game/streetlife.js); the escalators carry you and the lifts take you up
-// (game/mall.js MallRide).
+// (v5, ROADMAP 11.30 - 11.32) The Downtown Galleria, the city's great mall, after The Galleria in
+// Houston and the Galleria in Milan it took its vault from: three halls side by side on three
+// blocks, five floors each round a hall 44 m wide under a barrel vault of glass - the galleries
+// along both sides of it on every floor (no columns: they reach out over the void), the bridges
+// across, the escalators criss-crossing up through it two pairs a floor, royal palms rising past the
+// galleries; over the middle hall's court the dome on its crossing of arches, its chandelier a
+// cascade of lights. Between the halls, over Miami Avenue and Second Avenue, the arcades: a street of
+// the mall a floor up under a vault of glass, the length of the block, the avenue going on under it
+// covered. The department stores in the courts, the bank with its vault in the middle hall. The food
+// courts on the top floors, their terraces over the doors. Outside, ivory limestone with the stores'
+// windows lit along the street, art deco floors over them, round towers on the outer corners; at
+// night lines of gold light. Inside, a real mall's colours in the daylight of its glass (the hall's
+// own light, render/glsl.js 'hall'): polished white marble the hall is mirrored in (on a computer),
+// bands of black granite, white walls in marble, glass and steel, champagne in touches. The stairs up
+// to the roof, where the helicopters land. Every floor is walked on, every store has its room, its
+// keeper, its people (game/mall.js, game/streetlife.js); the escalators carry you and the lifts take
+// you up (game/mall.js MallRide).
 
 const FH = 5.4; // floor to floor
 const GW = 5; // the galleries' width
@@ -137,12 +136,13 @@ function flip(g) {
 }
 
 /**
- * A wing of the mega mall in block b (ROADMAP 11.31: two of them, either side of Second Avenue, the
- * bridges over it between them): o = { name, heb, wing: 'east' | 'west', floors, stores: { L0w,
- * L0e, L1w, ... } (kinds, in order, floor by floor, west row and east row), food: [kinds], foodSign,
- * street: [kinds], anchor: { name, kind, side, floors }, bank, security, helipad, court: 'fountain'
- * | 'palms', spans (this wing builds the bridges and the gate) }. Yields as it goes. Fills
- * bctx.mall (game/mall.js reads it).
+ * A hall of the mega mall in block b (ROADMAP 11.32: three of them side by side, the arcades over
+ * the avenues between them): o = { name, heb, wing: 'west' | 'center' | 'east', floors, stores: {
+ * L0w, L0e, L1w, ... } (kinds, in order, floor by floor, west row and east row), food: [kinds],
+ * foodSign, anchor: { name, kind, side, floors }, bank, security, helipad, court: 'fountain' |
+ * 'palms', inner: the sides with portals out into an arcade, outer: the side on the street, arcade:
+ * the side this hall builds the arcade on, dome: the grand dome over its court, portalSign }. Yields
+ * as it goes. Fills bctx.mall (game/mall.js reads it).
  */
 export function* buildMegaMall(bctx, b, o) {
   // (ROADMAP 11.32) its outside in a stone of its own: ivory limestone in courses, hallpaint.js
@@ -203,6 +203,8 @@ function* wing(bctx, b, o) {
   for (const side of inner) for (const [z0, z1] of [[zm - 30, zm - 18], [zm + 18, zm + 30]]) portals.push({ side, z0, z1, lv: 1 });
   const portalsAt = (lv, side) => portals.filter((l) => l.lv === lv && l.side === side);
   const IN = { B: bctx.R, box: M.hallBox, gloss: M.hallGloss, cyl: M.hallCyl, lamp: M.hallLamp };
+  // (the hall's own batch for things built on a Facade: fbox(rctx, ...))
+  const rctx = { ...bctx, B: bctx.R };
   const hall = (mat, x0, y0, z0, x1, y1, z1, col) => IN.B.box(mat, x0, y0, z0, x1, y1, z1, nextId(), col ? { color: col } : undefined);
   const hallGeo = (mat, g, col) => IN.B.add(mat, g, null, nextId(), { color: col });
   const col = bctx.col;
@@ -234,6 +236,8 @@ function* wing(bctx, b, o) {
     void: { x0: vx0, x1: vx1 },
     court: { z0: zc0, z1: zc1 },
     links: portals.map((l) => ({ z0: l.z0, z1: l.z1, lv: [l.lv], x: l.side < 0 ? R.x0 : R.x1 })),
+    // (how high it reaches: its vault's crown, its dome's lantern)
+    height: o.dome ? ROOF + DOME + 12 : YS + RV + 1,
   });
   const solid = (x0, z0, x1, z1, y0, y1, colr, mat = M.wallSolid, B = bctx.B) => {
     B.box(mat, x0, y0, z0, x1, y1, z1, nextId(), { color: colr });
@@ -526,9 +530,12 @@ function* wing(bctx, b, o) {
       awning: food ? 'box' : 'none', awCol: hex(NEONS[Math.floor(r() * NEONS.length)]), sign: o2.sign || (r() < 0.5 ? 'box' : undefined), signV: 4.3, signLen: Math.min(L - 1.2, o2.signLen || 5), doorAt: food ? 0.5 : 0.3 + r() * 0.4,
     }, info);
     // the pilaster between this front and the next, up to the floor above; the fascia over the
-    // front (the store's name stands out from it)
-    fbox(bctx, f, M.wall, -0.2, CURB, -0.25, 0.25, CURB + FH - 0.3, 0.14, srgb(0.95, 0.93, 0.9));
-    fbox(bctx, f, M.wall, 0, 3.55, -0.3, L, CURB + FH - 0.32, 0, srgb(0.97, 0.95, 0.92));
+    // front (the store's name stands out from it): polished white marble, a reveal of champagne
+    // under the fascia, a skirting of black granite along the front's foot (ROADMAP 11.32)
+    fbox(rctx, f, M.hallMarbleWall, -0.2, CURB, -0.25, 0.25, CURB + FH - 0.3, 0.14, WHITE);
+    fbox(rctx, f, M.hallMarbleWall, 0, 3.55, -0.3, L, CURB + FH - 0.32, 0, WHITE);
+    fbox(rctx, f, IN.gloss, 0.25, 3.5, -0.02, L - 0.2, 3.56, 0.02, GOLD);
+    fbox(rctx, f, IN.gloss, 0.25, CURB, -0.02, L - 0.2, CURB + 0.12, 0.03, GRANITE);
     // (a food counter is shallower: its kitchen's back to the core)
     if (food) fbox(bctx, f, M.wallSolid, 0.25, CURB, -SD, L - 0.25, 3.6, -7.25, wallCol);
     if (shop) {
@@ -548,7 +555,7 @@ function* wing(bctx, b, o) {
     const x = side < 0 ? hx0 : hx1;
     const y = LV[lv];
     const x0 = side < 0 ? x - 0.3 : x;
-    hall(IN.box, x0, y, za, x0 + 0.3, y + FH - 0.32, zb, srgb(0.96, 0.94, 0.9));
+    hall(M.hallMarbleWall, x0, y, za, x0 + 0.3, y + FH - 0.32, zb, WHITE);
     col.addBox(x0, za, x0 + 0.3, zb, y, y + FH - 0.32, 'wall');
   };
   const fill = (lv, side, z0, z1, deck, food = false) => {
@@ -636,7 +643,7 @@ function* wing(bctx, b, o) {
     const a1 = Math.max(xo, xi);
     tiles(a0, l.z0, a1, l.z1, y);
     for (const z of [l.z0, l.z1 - 0.2]) {
-      hall(IN.box, a0, y, z, a1, y + 4.25, z + 0.2, STONE);
+      hall(M.hallMarbleWall, a0, y, z, a1, y + 4.25, z + 0.2, WHITE);
       col.addBox(a0, z, a1, z + 0.2, y, y + 4.25, 'wall');
     }
     hall(IN.box, a0, y + 4.2, l.z0, a1, y + 4.32, l.z1, CEIL);

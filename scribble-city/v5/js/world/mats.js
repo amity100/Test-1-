@@ -118,6 +118,9 @@ export function cityMaterials() {
   const cof = hallCoffer();
   M.hallCoffer = B({ obj: 0.172, kind: 'wall', map: cof.map, emMap: cof.em, emissive: new THREE.Color(2.2, 2.1, 1.9), vcolor: true, indoor: 'hall', wash: 0.82, density: 0.6, line: 0.4 });
   M.hallFrieze = B({ obj: 0.243, kind: 'wall', map: hallFrieze(), vcolor: true, indoor: 'hall', gloss: 0.15, wash: 0.82, density: 0.6, line: 0.5 });
+  // (the walls between the stores and over them: the floor's white marble, laid on the world in
+  // squares of 4.8 m, polished)
+  M.hallMarbleWall = B({ obj: 0.314, kind: 'wall', map: M.hallFloor.uniforms.uMap.value, worldMap: 4.8, vcolor: true, indoor: 'hall', gloss: 0.3, wash: 0.85, density: 0.55, line: 0.5 });
   // (and its art deco outside's stone, laid on the world in squares of 3 m)
   M.decoStone = B({ obj: 0.385, kind: 'wall', map: decoStone(), worldMap: 3, vcolor: true, wash: 0.7, density: 0.8 });
   M.floors = {};
