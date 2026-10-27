@@ -289,64 +289,69 @@ export function hallCoffer() {
   return { map: canvasTexture(c, { repeat: true }), em: canvasTexture(e, { repeat: true }) };
 }
 
-// The frieze along the galleries' edges over the void (its picture 2.4 m long, the edge's whole
-// height): ivory between bands of gold and lines of black; two suns rising a length, fans of gold
-// and champagne rays over a stepped black plinth, chevrons of black between them
+// The galleries' edges over the void, the frieze of a classical entablature (its picture 2.4 m
+// long, the edge's whole height): a cornice and its cove, a fillet of gold, a row of dentils with
+// the shade between them, the fascia - a line of gold along it, gold rosettes on it - a bead of
+// gold, the soffit's edge
 export function hallFrieze() {
   const W = 704;
   const H = 256;
   const c = canvas(W, H);
   const g = c.getContext('2d');
-  g.fillStyle = '#f4efe6';
-  g.fillRect(0, 0, W, H);
+  const band = (y0, y1, c0, c1) => {
+    const gr = g.createLinearGradient(0, y0, 0, y1);
+    gr.addColorStop(0, c0);
+    gr.addColorStop(1, c1 || c0);
+    g.fillStyle = gr;
+    g.fillRect(0, y0, W, y1 - y0);
+  };
+  band(0, 14, '#fbf8f2', '#f1ebe0');
+  g.fillStyle = 'rgba(120, 104, 84, 0.45)';
+  g.fillRect(0, 13, W, 2);
+  band(15, 40, '#d9d0c1', '#f6f1e8');
   g.fillStyle = BRASS;
-  g.fillRect(0, 0, W, 12);
-  g.fillRect(0, H - 12, W, 12);
-  g.fillStyle = '#1b1a20';
-  g.fillRect(0, 18, W, 5);
-  g.fillRect(0, H - 23, W, 5);
-  for (const cx of [176, 528]) {
-    const y = H - 44;
-    // the plinth, in two steps
-    g.fillStyle = '#1b1a20';
-    g.fillRect(cx - 78, y, 156, 12);
-    g.fillRect(cx - 56, y - 10, 112, 10);
-    // the rays, from the plinth up round half a circle
-    const n = 11;
-    for (let i = 0; i < n; i++) {
-      const a0 = Math.PI + (i / n) * Math.PI;
-      const a1 = Math.PI + ((i + 1) / n) * Math.PI;
+  g.fillRect(0, 40, W, 7);
+  // the dentils: blocks with the shade between them, lit from below a little
+  band(47, 92, '#b9ad9a', '#cfc5b4');
+  for (let x = 4; x < W; x += 22) {
+    const gr = g.createLinearGradient(0, 47, 0, 92);
+    gr.addColorStop(0, '#f3eee5');
+    gr.addColorStop(1, '#fbf8f3');
+    g.fillStyle = gr;
+    g.fillRect(x, 47, 14, 45);
+    g.fillStyle = 'rgba(120, 104, 84, 0.35)';
+    g.fillRect(x + 14, 47, 2, 45);
+  }
+  g.fillStyle = 'rgba(120, 104, 84, 0.5)';
+  g.fillRect(0, 92, W, 3);
+  band(95, 202, '#f6f2ea', '#efe9de');
+  g.fillStyle = BRASS;
+  g.fillRect(0, 146, W, 3);
+  // (the rosettes, four to the picture)
+  for (let k = 0; k < 4; k++) {
+    const x = 88 + k * 176;
+    const y = 147;
+    g.beginPath();
+    g.arc(x, y, 19, 0, Math.PI * 2);
+    g.fillStyle = '#f6f2ea';
+    g.fill();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
       g.beginPath();
-      g.moveTo(cx, y - 10);
-      g.arc(cx, y - 10, 104, a0, a1);
-      g.closePath();
-      g.fillStyle = i % 2 ? '#e8d3a2' : '#cfa65a';
+      g.ellipse(x + Math.cos(a) * 10, y + Math.sin(a) * 10, 7, 4, a, 0, Math.PI * 2);
+      g.fillStyle = i % 2 ? '#d8b56a' : BRASS;
       g.fill();
     }
     g.beginPath();
-    g.arc(cx, y - 10, 104, Math.PI, Math.PI * 2);
-    g.strokeStyle = '#1b1a20';
-    g.lineWidth = 4;
-    g.stroke();
-    g.beginPath();
-    g.arc(cx, y - 10, 30, Math.PI, Math.PI * 2);
-    g.closePath();
-    g.fillStyle = '#1b1a20';
+    g.arc(x, y, 5, 0, Math.PI * 2);
+    g.fillStyle = '#8d6a2c';
     g.fill();
   }
-  // (the chevrons between the suns, and at the picture's ends - halves of the next one's)
-  for (const cx of [0, 352, 704]) {
-    g.strokeStyle = '#1b1a20';
-    g.lineWidth = 6;
-    for (let k = 0; k < 3; k++) {
-      const y = 70 + k * 40;
-      g.beginPath();
-      g.moveTo(cx - 20, y);
-      g.lineTo(cx, y + 18);
-      g.lineTo(cx + 20, y);
-      g.stroke();
-    }
-  }
+  g.fillStyle = BRASS;
+  g.fillRect(0, 202, W, 6);
+  g.fillStyle = 'rgba(255, 245, 220, 0.6)';
+  g.fillRect(0, 203, W, 1.5);
+  band(208, 256, '#f3eee5', '#e2dacb');
   return canvasTexture(c, { repeat: true });
 }
 

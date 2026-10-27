@@ -28,9 +28,9 @@ import { STORE_NAMES, NEONS, FONTS, ADS, PROMO, KIOSKS, DARK, WHITE, foodTable, 
 // (game/mall.js MallRide).
 
 const FH = 5.4; // floor to floor
-const GW = 3.2; // the galleries' width
+const GW = 4.4; // the galleries' width
 const SD = 11; // the hall's stores, deep
-const SO = 9; // the avenues' stores, deep
+const SO = 6; // the avenues' stores, deep
 const SC = 2; // the corridor behind them
 const VEST = 6; // the entrances' vestibules
 const SLOPE = Math.PI / 6;
@@ -54,6 +54,9 @@ const LWHITE = srgb(1, 0.93, 0.8);
 // (the sky through the glass of the roof and the crown, seen from under it: by day, by night)
 const SKY = srgb(0.3, 0.46, 0.7);
 const NIGHT_SKY = srgb(0.03, 0.04, 0.11);
+// (low down through the vault's glass, the sky paler: by day, by night)
+const SKY_LOW = srgb(0.64, 0.76, 0.9);
+const NIGHT_LOW = srgb(0.08, 0.09, 0.19);
 
 // (the hall's stores' fronts: a real mall's - white, cream, stone, and the deep colours of the
 // grand names: black, navy, emerald, wine, walnut)
@@ -183,10 +186,15 @@ function* wing(bctx, b, o) {
   const jS = [zc1 - 2.2, zc1 + 2.2];
   const FC1 = jN[0] - RUN;
   const sUp = [jS[1] + RUN, jS[1] + RUN + 4.4];
-  // (the crown over the court: octagons of glass stepping up - a part of the court's width each,
-  // their height)
-  const CROWN = [[1, 5.2], [0.66, 4.2], [0.38, 3.6]];
-  const DOME = CROWN.reduce((a, q) => a + q[1] + 0.5, 0);
+  // (ROADMAP 11.32) the vault over the void: springing from the top floor's galleries at YS, a half
+  // round RV; the crossing over the court, CQ either way of its middle, its walls up to YC, the
+  // drum, the dome from YD (vault)
+  const YS = ROOF + 0.6;
+  const RV = (vx1 - vx0) / 2;
+  const CQ = Math.min(12, (hx1 - hx0) / 2 - 1.6);
+  const YC = YS + RV + 0.8;
+  const YD = YC + 3.4;
+  const DOME = YD + CQ - 0.3 - ROOF;
   const wallCol = IVORY;
   // the links to the other wing, on its side: a passage a floor through the stores and the
   // building, out to a bridge over the avenue (the middle one the gate's, on every floor; the
@@ -209,9 +217,9 @@ function* wing(bctx, b, o) {
   // street's: the rooms' pens light themselves up at night, the sky must not)
   const skyD = new Batch();
   const skyN = new Batch();
-  const sky = (geo) => {
-    skyD.add(M.neonSoft, geo.clone(), null, nextId(), { color: SKY });
-    skyN.add(M.neonSoft, geo, null, nextId(), { color: NIGHT_SKY });
+  const sky = (geo, t = 1) => {
+    skyD.add(M.neonSoft, geo.clone(), null, nextId(), { color: SKY_LOW.clone().lerp(SKY, t) });
+    skyN.add(M.neonSoft, geo, null, nextId(), { color: NIGHT_LOW.clone().lerp(NIGHT_SKY, t) });
   };
   const c = { hall, hallGeo, IN, col, M, sky };
   const mall = (bctx.mall = {
@@ -241,8 +249,10 @@ function* wing(bctx, b, o) {
     const css = '#f2ece1';
     bctx.footprints.push({ x0: R.x0, z0: bz0, x1: hx0, z1: bz1, top: TOP, color: css });
     bctx.footprints.push({ x0: hx1, z0: bz0, x1: R.x1, z1: bz1, top: TOP, color: css });
-    bctx.footprints.push({ x0: hx0, z0: bz0, x1: hx1, z1: bz1, top: ROOF + 3.2, color: '#9cc0d8' });
-    bctx.footprints.push({ x0: hx0 + 2, z0: zc0 + 2, x1: hx1 - 2, z1: zc1 - 2, top: ROOF + DOME * 0.85, color: '#cfe3ef' });
+    bctx.footprints.push({ x0: hx0, z0: bz0, x1: hx1, z1: bz1, top: ROOF + 0.6, color: '#f2ece1' });
+    bctx.footprints.push({ x0: vx0 + 1.5, z0: zN, x1: vx1 - 1.5, z1: bz1, top: YS + RV * 0.8, color: '#9cc0d8' });
+    bctx.footprints.push({ x0: cx - CQ, z0: zm - CQ, x1: cx + CQ, z1: zm + CQ, top: YC, color: '#f2ece1' });
+    bctx.footprints.push({ x0: cx - CQ * 0.7, z0: zm - CQ * 0.7, x1: cx + CQ * 0.7, z1: zm + CQ * 0.7, top: ROOF + DOME * 0.92, color: '#cfe3ef' });
   }
 
   // ------------------------------------------------------------------ the body
@@ -881,7 +891,7 @@ function* wing(bctx, b, o) {
   yield;
 
   // ------------------------------------------------------------------ the roof
-  roof(bctx, c, mall, { R, hx0, hx1, vx0, vx1, bz0, bz1, zN, zS, zc0, zc1, ROOF, TOP, DOME, CROWN, cx, zm, wallCol, sx: [hx1, zS - 6, zS], helipad: !!o.helipad });
+  roof(bctx, c, mall, { R, hx0, hx1, vx0, vx1, bz0, bz1, zN, zS, zc0, zc1, ROOF, TOP, YS, RV, CQ, YC, YD, LV, cx, zm, wallCol, sx: [hx1, zS - 6, zS], helipad: !!o.helipad });
   yield;
 
   // ------------------------------------------------------------------ the grand court
@@ -1564,12 +1574,10 @@ function terrace(bctx, c, mall, x0, z0, x1, z1, y, r) {
 // mast; the helicopters' pad
 function roof(bctx, c, mall, g) {
   const { hall, hallGeo, IN, col, M } = c;
-  const { R, hx0, hx1, vx0, vx1, bz0, bz1, zN, zS, zc0, zc1, ROOF, TOP, DOME, cx, zm, wallCol } = g;
+  const { R, hx0, hx1, vx0, vx1, bz0, bz1, zN, ROOF, TOP, zm, wallCol } = g;
   const B = bctx.B;
   const [sx, sz0, sz1] = g.sx;
   const roofCol = srgb(0.72, 0.72, 0.7);
-  // (the sky seen through the glass from under it: buildMegaMall's, by day and by night)
-  const skyAdd = c.sky;
   const deck = (x0, z0, x1, z1) => {
     if (x1 - x0 < 0.1 || z1 - z0 < 0.1) return;
     B.box(M.wallSolid, x0, ROOF - 0.3, z0, x1, ROOF, z1, nextId(), { color: roofCol });
@@ -1590,136 +1598,18 @@ function roof(bctx, c, mall, g) {
     col.addBox(x0, z0, x1, z1, ROOF, TOP, 'wall');
   }
   for (const x of [hx0 - 0.3, hx1]) {
-    B.box(M.wallSolid, x, ROOF, zN, x + 0.3, ROOF + 0.9, bz1, nextId(), { color: wallCol });
-    col.addBox(x, zN, x + 0.3, bz1, ROOF, ROOF + 0.9, 'wall');
+    B.box(M.wallSolid, x, ROOF, zN, x + 0.3, ROOF + 1.4, bz1, nextId(), { color: wallCol });
+    col.addBox(x, zN, x + 0.3, bz1, ROOF, ROOF + 1.4, 'wall');
   }
-  // the hall's glass roof: bays of glass sloping up to a ridge down the middle, a steel truss every
-  // six metres (seen from the hall: lit sky between white steel); not over the court
-  const eave = ROOF + 0.6;
-  const ridge = ROOF + 3.6;
-  const W2 = (hx1 - hx0) / 2;
-  const pitch = Math.atan2(ridge - eave, W2);
-  const plen = Math.hypot(W2, ridge - eave);
-  const glassBay = (z0, z1) => {
-    for (const s of [-1, 1]) {
-      // outside: the glass, blue
-      const go = new THREE.BoxGeometry(plen, 0.06, z1 - z0);
-      go.rotateZ(s < 0 ? pitch : -pitch);
-      go.translate(cx + (s * W2) / 2, (eave + ridge) / 2 + 0.05, (z0 + z1) / 2);
-      B.add(M.winGlass, go, null, nextId());
-      // inside: the sky through it
-      const gi = new THREE.PlaneGeometry(plen, z1 - z0);
-      gi.rotateX(Math.PI / 2);
-      gi.rotateZ(s < 0 ? pitch : -pitch);
-      gi.translate(cx + (s * W2) / 2, (eave + ridge) / 2 - 0.02, (z0 + z1) / 2);
-      skyAdd(gi);
-      // (walked on, if you climb up onto it: a step at a time up the slope)
-      for (let k = 0; k < 4; k++) {
-        const xa = s < 0 ? hx0 + (k * W2) / 4 : hx1 - ((k + 1) * W2) / 4;
-        const xb = xa + W2 / 4;
-        const yt = eave + ((ridge - eave) * (k + 1)) / 4;
-        col.addBox(xa, z0, xb, z1, yt - 0.25, yt, 'wall');
-      }
-    }
-  };
-  const bays = [[zN, zc0], [zc1, bz1]];
-  // (the north bay's end over the terrace: a gable of glass)
-  {
-    const tri = (order) => {
-      const g2 = new THREE.BufferGeometry();
-      const p = [[hx0, eave, zN], [hx1, eave, zN], [cx, ridge, zN]];
-      g2.setAttribute('position', new THREE.Float32BufferAttribute(order.flatMap((i) => p[i]), 3));
-      g2.computeVertexNormals();
-      return g2;
-    };
-    B.add(M.winGlass, tri([0, 2, 1]), null, nextId());
-    skyAdd(tri([0, 1, 2]));
-  }
-  for (const [za, zb] of bays) {
-    glassBay(za, zb);
-    for (let z = za; z <= zb + 0.01; z += (zb - za) / Math.round((zb - za) / 6)) {
-      for (const s of [-1, 1]) {
-        const tr = new THREE.BoxGeometry(plen, 0.22, 0.2);
-        tr.rotateZ(s < 0 ? pitch : -pitch);
-        tr.translate(cx + (s * W2) / 2, (eave + ridge) / 2 - 0.08, z);
-        hallGeo(IN.box, tr, WHITE);
-        B.add(M.steel, tr, null, nextId(), { color: srgb(0.9, 0.9, 0.92) });
-      }
-      // (the truss's tie across, its hangers)
-      hall(IN.box, hx0, eave - 0.6, z - 0.06, hx1, eave - 0.48, z + 0.06, WHITE);
-      for (let k = 1; k < 6; k++) {
-        const x = hx0 + (k * (hx1 - hx0)) / 6;
-        const yt = eave + (ridge - eave) * (1 - Math.abs(x - cx) / W2);
-        hall(IN.box, x - 0.04, eave - 0.5, z - 0.04, x + 0.04, yt - 0.1, z + 0.04, WHITE);
-      }
-    }
-    hall(IN.box, cx - 0.12, ridge - 0.25, za, cx + 0.12, ridge - 0.05, zb, WHITE);
-    B.box(M.steel, cx - 0.15, ridge, za, cx + 0.15, ridge + 0.15, zb, nextId(), { color: srgb(0.9, 0.9, 0.92) });
-  }
-  // the court's ring under the dome, the hall's ceiling either side of the glass at the eaves
+  // over the top floor's galleries their ceiling, under the roof (to the south front: the vault's
+  // springing runs on it); the vault over the void and the dome over the court (vault)
   for (const s of [-1, 1]) {
     const x0 = s < 0 ? hx0 : vx1;
     const x1 = s < 0 ? vx0 : hx1;
-    hall(IN.box, x0, ROOF - 0.3, zN, x1, ROOF + 0.6, zS, CEIL);
+    hall(IN.box, x0, ROOF - 0.3, zN, x1, ROOF + 0.6, bz1, CEIL);
+    B.box(M.wallSolid, x0, ROOF + 0.5, zN, x1, ROOF + 0.62, bz1, nextId(), { color: roofCol });
   }
-  // the crown over the court: octagons of glass stepping up, their ledges of ivory, gold and light
-  // round their edges, a spire of gold over them - from under it the sky through its glass, the
-  // ledges white; the corners of the court's square round its foot roofed
-  {
-    const ax = (hx1 - hx0) / 2;
-    const az = (zc1 - zc0) / 2;
-    const y0 = ROOF + 0.6;
-    const K = Math.cos(Math.PI / 8);
-    const oct = (k) => Array.from({ length: 8 }, (_, i) => {
-      const t = Math.PI / 8 + (i * Math.PI) / 4;
-      return [cx + (Math.cos(t) * ax * k) / K, zm + (Math.sin(t) * az * k) / K];
-    });
-    for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
-      const tri = [[cx + sx * ax, zm + sz * az], [cx + sx * ax, zm + sz * az * Math.tan(Math.PI / 8)], [cx + sx * ax * Math.tan(Math.PI / 8), zm + sz * az]];
-      const pos = [];
-      const P = (q, y) => [q[0], y, q[1]];
-      faceTri(pos, P(tri[0], y0), P(tri[1], y0), P(tri[2], y0), [0, 1, 0]);
-      B.add(M.wallSolid, posGeo(pos), null, nextId(), { color: wallCol });
-      const pin = [];
-      faceTri(pin, P(tri[0], y0 - 0.02), P(tri[1], y0 - 0.02), P(tri[2], y0 - 0.02), [0, -1, 0]);
-      hallGeo(IN.box, posGeo(pin), CEIL);
-    }
-    let yb = y0;
-    const CR = g.CROWN;
-    for (let j = 0; j < CR.length; j++) {
-      const [k, h] = CR[j];
-      const ring = oct(k);
-      B.add(M.mallGlassClear, ringWall(ring, cx, zm, yb, yb + h, true), null, nextId());
-      skyAdd(ringWall(oct(k * 0.99), cx, zm, yb, yb + h, false));
-      for (const [px, pz] of ring) B.box(M.steel, px - 0.11, yb, pz - 0.11, px + 0.11, yb + h, pz + 0.11, nextId(), { color: srgb(0.94, 0.94, 0.95) });
-      const next = CR[j + 1] ? oct(CR[j + 1][0]) : null;
-      const ledge = oct(k * 1.03);
-      B.add(M.wallSolid, ringFlat(ledge, next, cx, zm, yb + h + 0.5, true), null, nextId(), { color: wallCol });
-      B.add(M.wallSolid, ringWall(ledge, cx, zm, yb + h, yb + h + 0.5, true), null, nextId(), { color: wallCol });
-      hallGeo(IN.box, ringFlat(ring, next ? oct(CR[j + 1][0] * 0.99) : null, cx, zm, yb + h, false), CEIL);
-      B.add(M.goldTrim, ringWall(oct(k * 1.034), cx, zm, yb + h + 0.14, yb + h + 0.36, true), null, nextId(), { color: GOLD });
-      B.add(M.neon, ringWall(oct(k * 1.036), cx, zm, yb + h + 0.48, yb + h + 0.56, true), null, nextId(), { color: j % 2 ? LWHITE : LGOLD });
-      // (the light round its foot inside)
-      if (j === 0) {
-        const glow = new THREE.TorusGeometry(1, 0.08, 5, 64).rotateX(Math.PI / 2);
-        glow.scale(ax - 0.4, 1, az - 0.4);
-        glow.translate(cx, yb + 0.15, zm);
-        hallGeo(IN.lamp, glow, srgb(1, 0.9, 0.7));
-      }
-      yb += h + 0.5;
-    }
-    const spire = new THREE.ConeGeometry(1.4, 7, 8);
-    spire.translate(cx, yb + 3.5, zm);
-    B.add(M.goldTrim, spire, null, nextId(), { color: GOLD });
-    const ball = new THREE.SphereGeometry(0.45, 12, 8);
-    ball.translate(cx, yb + 7.3, zm);
-    B.add(M.neon, ball, null, nextId(), { color: LWHITE });
-    for (const end of [-1, 1]) hall(IN.box, hx0, ROOF - 0.3, end < 0 ? zc0 - 0.3 : zc1, hx1, y0, end < 0 ? zc0 : zc1 + 0.3, CEIL);
-    // (solid from outside: you walk round it on the roof)
-    col.addBox(cx - ax * 0.75, zm - az * 0.75, cx + ax * 0.75, zm + az * 0.75, ROOF, yb, 'wall');
-    col.addBox(hx0, zc0, hx1, zc1, ROOF - 0.3, y0, 'wall');
-    mall.dome = { x: cx, z: zm, y: y0, ax, az, h: DOME };
-  }
+  vault(bctx, c, mall, g);
   // the machines on the roof: the air handlers with their fans, the ducts, the vents, the mast
   const box = (x0, y0, z0, x1, y1, z1, colr, mat = M.prop) => {
     B.box(mat, x0, y0, z0, x1, y1, z1, nextId(), { color: colr });
@@ -1787,6 +1677,272 @@ function roof(bctx, c, mall, g) {
     sign(IN, new Facade(x0 + 1.0, sz0 - 0.03, -1, 0, 0, -1), IN.lamp, 'ROOF EXIT', 0, ROOF + 2.55, 0, 0.12, srgb(0.3, 1, 0.5));
     addLight(x0 + 1.0, ROOF + 2.6, sz0 - 0.8, 8, srgb(1, 0.9, 0.7), 0.8);
   }
+}
+
+// ------------------------------------------------------------------ the vault and the dome
+// (ROADMAP 11.32, after The Galleria in Houston and the Galleria Vittorio Emanuele in Milan it took
+// its vault from) Over the void a barrel vault of glass, a half round springing from the top floor's
+// galleries: a white rib every three metres, a purlin along every pane's edge, the glass between -
+// from under it the sky through it, paler low down, by day and by night - its ends half moons of
+// glass on white mullions; two chandeliers hung from its top. Over the court the crossing: a square
+// of four arches, the vault's two open, two half moons of glass to the sides, their walls ivory, the
+// arches' undersides gold; on them the drum, its windows between white pilasters, and the dome of
+// glass on sixteen white ribs, rings of gold round it, its lantern with a spire and a lamp
+function vault(bctx, c, mall, g) {
+  const { hall, hallGeo, IN, col, M, sky } = c;
+  const { cx, zm, vx0, vx1, zN, bz1, YS, RV, CQ, YC, YD, LV, wallCol } = g;
+  const B = bctx.B;
+  const R = bctx.R;
+  const NA = 12;
+  const ang = (i) => (i / NA) * Math.PI;
+  const at = (a, r) => [cx + Math.cos(a) * r, YS + Math.sin(a) * r];
+  const ribCol = srgb(0.97, 0.97, 0.98);
+  const quad = (A, Bq, C, D, w) => {
+    const pos = [];
+    faceTri(pos, A, Bq, C, w);
+    faceTri(pos, A, C, D, w);
+    return posGeo(pos);
+  };
+  // a rib along a half round about the origin in its own plane (place: puts it where it goes) -
+  // boxes along it
+  const arc = (rad, a0, a1, n, w, d, colr, mat, Bt, place) => {
+    for (let i = 0; i < n; i++) {
+      const am = a0 + ((i + 0.5) / n) * (a1 - a0);
+      const len = 2 * rad * Math.sin(Math.abs(a1 - a0) / n / 2) + 0.05;
+      const g2 = new THREE.BoxGeometry(len, w, d);
+      g2.rotateZ(am + Math.PI / 2);
+      g2.translate(Math.cos(am) * rad, Math.sin(am) * rad, 0);
+      place(g2);
+      Bt.add(mat, g2, null, nextId(), { color: colr });
+    }
+  };
+  // ---- the vault, north of the crossing and south of it
+  for (const [za, zb, zg] of [[zN, zm - CQ, zN], [zm + CQ, bz1, bz1]]) {
+    const L = zb - za;
+    for (let i = 0; i < NA; i++) {
+      const a0 = ang(i);
+      const a1 = ang(i + 1);
+      const am = (a0 + a1) / 2;
+      const [x0, y0] = at(a0, RV);
+      const [x1, y1] = at(a1, RV);
+      sky(quad([x0, y0, za], [x1, y1, za], [x1, y1, zb], [x0, y0, zb], [-Math.cos(am), -Math.sin(am), 0]), Math.sin(am));
+      const [ox0, oy0] = at(a0, RV + 0.1);
+      const [ox1, oy1] = at(a1, RV + 0.1);
+      B.add(M.mallGlassClear, quad([ox0, oy0, za], [ox1, oy1, za], [ox1, oy1, zb], [ox0, oy0, zb], [Math.cos(am), Math.sin(am), 0]), null, nextId());
+    }
+    // its ribs, every three metres
+    const n = Math.max(1, Math.round(L / 3));
+    for (let k = 0; k <= n; k++) {
+      const z = za + (k * L) / n;
+      arc(RV - 0.1, 0, Math.PI, NA, 0.32, 0.18, ribCol, M.steel, B, (g2) => g2.translate(cx, YS, z));
+    }
+    // the purlins along it, the springing's beams heavier
+    for (let i = 0; i <= NA; i++) {
+      const [px, py] = at(ang(i), RV - 0.08);
+      const t = i === 0 || i === NA ? 0.2 : 0.06;
+      B.box(M.steel, px - t, py - t, za, px + t, py + t, zb, nextId(), { color: ribCol });
+    }
+    // its outer end: a half moon of glass, the sky through it, white mullions up it
+    const out = zg === za ? -1 : 1;
+    const pin = [];
+    const pout = [];
+    for (let i = 0; i < NA; i++) {
+      const [x0, y0] = at(ang(i), RV);
+      const [x1, y1] = at(ang(i + 1), RV);
+      faceTri(pin, [cx, YS, zg], [x0, y0, zg], [x1, y1, zg], [0, 0, -out]);
+      faceTri(pout, [cx, YS, zg + out * 0.1], [x0, y0, zg + out * 0.1], [x1, y1, zg + out * 0.1], [0, 0, out]);
+    }
+    sky(posGeo(pin), 0.55);
+    B.add(M.mallGlassClear, posGeo(pout), null, nextId());
+    for (let x = vx0 + 2.4; x < vx1 - 0.6; x += 2.4) {
+      const h = Math.sqrt(Math.max(0, RV * RV - (x - cx) * (x - cx)));
+      B.box(M.steel, x - 0.08, YS, zg - 0.08, x + 0.08, YS + h, zg + 0.08, nextId(), { color: ribCol });
+    }
+    B.box(M.steel, vx0, YS + RV * 0.45 - 0.08, zg - 0.08, vx1, YS + RV * 0.45 + 0.08, zg + 0.08, nextId(), { color: ribCol });
+    // (walked on from the roof: steps up its back)
+    for (let i = 0; i < NA; i++) {
+      const [x0, y0] = at(ang(i), RV + 0.1);
+      const [x1, y1] = at(ang(i + 1), RV + 0.1);
+      col.addBox(Math.min(x0, x1), za, Math.max(x0, x1), zb, Math.max(y0, y1) - 0.3, Math.max(y0, y1), 'wall');
+    }
+    // a chandelier from its top, in the middle of it: rings of gold, lights round them, a drop
+    const zc = (za + zb) / 2;
+    const yc = Math.max(LV[LV.length - 1] + 6.2, YS + 1.5);
+    for (const [rr, nn, dy] of [[2.4, 28, 0], [1.5, 18, -0.9], [0.7, 10, -1.7]]) {
+      const ring = new THREE.TorusGeometry(rr, 0.05, 5, 40).rotateX(Math.PI / 2);
+      ring.translate(cx, yc + dy, zc);
+      hallGeo(IN.gloss, ring, GOLD);
+      for (let k = 0; k < nn; k++) {
+        const a = (k / nn) * Math.PI * 2;
+        const ball = new THREE.SphereGeometry(0.11, 8, 6);
+        ball.translate(cx + Math.cos(a) * rr, yc + dy + 0.16, zc + Math.sin(a) * rr);
+        hallGeo(IN.lamp, ball, k % 2 ? srgb(1, 0.92, 0.7) : srgb(1, 0.98, 0.92));
+      }
+    }
+    const drop = new THREE.SphereGeometry(0.35, 12, 8);
+    drop.translate(cx, yc - 2.5, zc);
+    hallGeo(IN.lamp, drop, srgb(1, 0.95, 0.85));
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2;
+      const x = cx + Math.cos(a) * 1.2;
+      const z = zc + Math.sin(a) * 1.2;
+      hall(IN.box, x - 0.012, yc, z - 0.012, x + 0.012, YS + RV - 0.3, z + 0.012, srgb(0.6, 0.52, 0.36));
+    }
+    addLight(cx, yc - 1, zc, 18, srgb(1, 0.9, 0.7), 1.0);
+  }
+  // ---- the crossing: four walls on four arches, from the vault's springing to YC
+  const H = YC - YS;
+  const archShape = () => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-CQ, 0);
+    sh.lineTo(-RV, 0);
+    for (let i = 1; i <= 24; i++) {
+      const a = Math.PI - (i / 24) * Math.PI;
+      sh.lineTo(Math.cos(a) * RV, Math.sin(a) * RV);
+    }
+    sh.lineTo(CQ, 0);
+    sh.lineTo(CQ, H);
+    sh.lineTo(-CQ, H);
+    sh.lineTo(-CQ, 0);
+    return sh;
+  };
+  // (side 0 north, 1 east, 2 south, 3 west: from its own plane, x across, y up from the springing,
+  // facing +z, to its place - facing the court's middle - off: a step out)
+  const toSide = (g2, side, off) => {
+    g2.translate(0, YS, -off);
+    if (side === 0) g2.translate(cx, 0, zm - CQ);
+    else if (side === 2) g2.rotateY(Math.PI).translate(cx, 0, zm + CQ);
+    else if (side === 1) g2.rotateY(-Math.PI / 2).translate(cx + CQ, 0, zm);
+    else g2.rotateY(Math.PI / 2).translate(cx - CQ, 0, zm);
+    return g2;
+  };
+  for (let side = 0; side < 4; side++) {
+    // inside its face ivory (the hall's light); outside, a step out, the stone
+    hallGeo(IN.box, toSide(new THREE.ShapeGeometry(archShape()), side, 0), STONE);
+    B.add(M.wallSolid, toSide(flip(new THREE.ShapeGeometry(archShape())), side, 0.35), null, nextId(), { color: wallCol });
+    // the arch's underside: a band of gold the wall's thickness
+    arc(RV + 0.02, 0, Math.PI, 24, 0.06, 0.4, GOLD, IN.gloss, R, (g2) => toSide(g2, side, 0.17));
+    // its top: a cornice of ivory, a band of gold under it
+    B.add(M.wallSolid, toSide(new THREE.BoxGeometry(2 * CQ + 0.7, 0.5, 0.7).translate(0, H + 0.25, 0), side, 0.17), null, nextId(), { color: wallCol });
+    hallGeo(IN.gloss, toSide(new THREE.BoxGeometry(2 * CQ + 0.74, 0.14, 0.74).translate(0, H - 0.07, 0), side, 0.17), GOLD);
+    if (side % 2) {
+      // to the sides: a half moon of glass in the arch, the sky through it, its mullions fanned out
+      const pin = [];
+      for (let i = 0; i < 24; i++) {
+        const a0 = (i / 24) * Math.PI;
+        const a1 = ((i + 1) / 24) * Math.PI;
+        faceTri(pin, [0, 0, 0], [Math.cos(a0) * RV, Math.sin(a0) * RV, 0], [Math.cos(a1) * RV, Math.sin(a1) * RV, 0], [0, 0, 1]);
+      }
+      sky(toSide(posGeo(pin), side, 0.25), 0.7);
+      B.add(M.mallGlassClear, toSide(flip(posGeo(pin.slice())), side, 0.3), null, nextId());
+      for (let k = 1; k < 8; k++) {
+        const m2 = new THREE.BoxGeometry(RV, 0.12, 0.12).translate(RV / 2, 0, 0).rotateZ((k / 8) * Math.PI);
+        hallGeo(IN.box, toSide(m2, side, 0.2), WHITE);
+      }
+      const hub = new THREE.CylinderGeometry(1.4, 1.4, 0.16, 16, 1, false, -Math.PI / 2, Math.PI).rotateX(-Math.PI / 2);
+      hallGeo(IN.gloss, toSide(hub, side, 0.18), GOLD);
+    }
+  }
+  col.addBox(cx - CQ - 0.6, zm - CQ - 0.6, cx + CQ + 0.6, zm + CQ + 0.6, YS, YC + 0.5, 'wall');
+  // the corners over the arches, between the square and the drum's round (from under them ivory)
+  for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+    const pu = [];
+    const pd = [];
+    const corner = [cx + sx * CQ, YC, zm + sz * CQ];
+    for (let i = 0; i < 8; i++) {
+      const a0 = (i / 8) * (Math.PI / 2);
+      const a1 = ((i + 1) / 8) * (Math.PI / 2);
+      const p0 = [cx + sx * Math.cos(a0) * CQ, YC, zm + sz * Math.sin(a0) * CQ];
+      const p1 = [cx + sx * Math.cos(a1) * CQ, YC, zm + sz * Math.sin(a1) * CQ];
+      faceTri(pu, corner, p0, p1, [0, 1, 0]);
+      faceTri(pd, corner, p0, p1, [0, -1, 0]);
+    }
+    B.add(M.wallSolid, posGeo(pu), null, nextId(), { color: wallCol });
+    hallGeo(IN.box, posGeo(pd), STONE);
+  }
+  // ---- the drum: windows between white pilasters, round
+  const DR = CQ - 0.15;
+  {
+    const ring = new THREE.CylinderGeometry(DR, DR, YD - YC, 32, 1, true);
+    ring.translate(cx, (YC + YD) / 2, zm);
+    B.add(M.mallGlassClear, ring, null, nextId());
+    const inner = flip(new THREE.CylinderGeometry(DR - 0.1, DR - 0.1, YD - YC, 32, 1, true));
+    inner.translate(cx, (YC + YD) / 2, zm);
+    sky(inner, 0.4);
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const p = new THREE.BoxGeometry(0.55, YD - YC, 0.55);
+      p.rotateY(-a);
+      p.translate(cx + Math.cos(a) * DR, (YC + YD) / 2, zm + Math.sin(a) * DR);
+      B.add(M.wallSolid, p, null, nextId(), { color: wallCol });
+    }
+    // its cornice: ivory, a band of gold under it, a line of light round it; from under it gold
+    // (open: the drum is open to the dome over it; the ledge round its top a ring)
+    const cor = new THREE.CylinderGeometry(DR + 0.6, DR + 0.6, 0.6, 48, 1, true);
+    cor.translate(cx, YD + 0.3, zm);
+    B.add(M.wallSolid, cor, null, nextId(), { color: wallCol });
+    const ledge = new THREE.RingGeometry(DR - 0.2, DR + 0.6, 48).rotateX(-Math.PI / 2);
+    ledge.translate(cx, YD + 0.6, zm);
+    B.add(M.wallSolid, ledge, null, nextId(), { color: wallCol });
+    B.add(M.goldTrim, new THREE.CylinderGeometry(DR + 0.66, DR + 0.66, 0.16, 48, 1, true).translate(cx, YD + 0.05, zm), null, nextId(), { color: GOLD });
+    B.add(M.neon, new THREE.CylinderGeometry(DR + 0.68, DR + 0.68, 0.08, 48, 1, true).translate(cx, YD + 0.62, zm), null, nextId(), { color: LGOLD });
+    const under = new THREE.RingGeometry(DR - 0.6, DR, 48).rotateX(Math.PI / 2);
+    under.translate(cx, YD - 0.02, zm);
+    hallGeo(IN.gloss, under, GOLD);
+  }
+  // ---- the dome: glass on sixteen white ribs, rings of gold, the sky through it paler low down
+  const DRad = DR - 0.3;
+  const Y0 = YD + 0.6;
+  for (let b = 0; b < 4; b++) {
+    const t0 = (b / 4) * (Math.PI / 2);
+    const t1 = ((b + 1) / 4) * (Math.PI / 2);
+    const band = flip(new THREE.SphereGeometry(DRad, 32, 3, 0, Math.PI * 2, Math.PI / 2 - t1, t1 - t0));
+    band.translate(cx, Y0, zm);
+    sky(band, 0.35 + 0.65 * Math.sin((t0 + t1) / 2));
+  }
+  {
+    const glass = new THREE.SphereGeometry(DRad + 0.1, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+    glass.translate(cx, Y0, zm);
+    B.add(M.mallGlassClear, glass, null, nextId());
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      arc(DRad - 0.05, 0, Math.PI / 2 - 0.12, 10, 0.34, 0.2, ribCol, M.steel, B, (g2) => g2.rotateY(-a).translate(cx, Y0, zm));
+    }
+    for (const t of [Math.PI / 8, Math.PI / 4, (3 * Math.PI) / 8]) {
+      const ring = new THREE.TorusGeometry(DRad * Math.cos(t), 0.09, 5, 64).rotateX(Math.PI / 2);
+      ring.translate(cx, Y0 + DRad * Math.sin(t), zm);
+      B.add(M.goldTrim, ring, null, nextId(), { color: GOLD });
+    }
+    col.addCircle(cx, zm, DRad * 0.75, YD, Y0 + DRad * 0.7, 'wall');
+  }
+  // ---- the lantern on its top: a little drum of glass on white posts, a cap, a spire, a lamp
+  {
+    const yl = Y0 + DRad * Math.sin(Math.PI / 2 - 0.12);
+    const rl = DRad * Math.cos(Math.PI / 2 - 0.12) + 0.2;
+    const lg = new THREE.CylinderGeometry(rl, rl, 2.4, 16, 1, true);
+    lg.translate(cx, yl + 1.2, zm);
+    B.add(M.mallGlassClear, lg, null, nextId());
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const x = cx + Math.cos(a) * rl;
+      const z = zm + Math.sin(a) * rl;
+      B.box(M.steel, x - 0.1, yl, z - 0.1, x + 0.1, yl + 2.4, z + 0.1, nextId(), { color: ribCol });
+    }
+    const cap = new THREE.ConeGeometry(rl + 0.4, 1.4, 16);
+    cap.translate(cx, yl + 3.1, zm);
+    B.add(M.goldTrim, cap, null, nextId(), { color: GOLD });
+    const spire = new THREE.ConeGeometry(0.3, 4.5, 8);
+    spire.translate(cx, yl + 6, zm);
+    B.add(M.goldTrim, spire, null, nextId(), { color: GOLD });
+    const lamp = new THREE.SphereGeometry(0.42, 12, 8);
+    lamp.translate(cx, yl + 8.5, zm);
+    B.add(M.neon, lamp, null, nextId(), { color: LWHITE });
+    // (from under it: the lantern's ceiling, gold, where the chandelier hangs from)
+    const disc = new THREE.CircleGeometry(rl, 16).rotateX(Math.PI / 2);
+    disc.translate(cx, yl - 0.05, zm);
+    hallGeo(IN.gloss, disc, GOLD);
+  }
+  mall.dome = { x: cx, z: zm, y: Y0, r: DRad };
 }
 
 // ------------------------------------------------------------------ the grand court
@@ -1895,30 +2051,45 @@ function court(bctx, c, mall, hctx, g, r) {
       for (const ddz of [-0.42, 0.42]) mall.benches.push({ x: x + s * 2.36, z: z + ddz, yaw: by });
     }
   }
-  // the chandelier: a hundred lights on long wires from the dome, in two spirals winding down
-  // into a cone over the fountain - gold and white
+  // the chandelier: a cascade of lights on strands from three rings of gold - the longest in the
+  // middle, a cone of light pointing down into the court - hung on four cables and a rod from the
+  // dome's lantern, gold and white
   {
-    const yTop = ROOF + DOME - 1.0;
-    const yLow = LV[2] + 2.6;
-    const n = 130;
-    for (let k = 0; k < n; k++) {
-      const t = k / n;
-      const turn = (k % 2 ? Math.PI : 0) + t * Math.PI * 6;
-      const rad = 0.5 + t * 4.0;
-      const yk = yTop - 3.0 - t * (yTop - 3.0 - yLow) - (k % 3) * 0.35;
-      const x = cx + Math.cos(turn) * rad;
-      const z = zm + Math.sin(turn) * rad * 1.15;
-      const s = 0.12 + (k % 4) * 0.035;
-      const ball = new THREE.SphereGeometry(s, 8, 6);
-      ball.translate(x, yk, z);
-      hallGeo(IN.lamp, ball, k % 3 ? srgb(1, 0.9, 0.62) : srgb(1, 0.97, 0.9));
-      hall(IN.box, x - 0.006, yk + s, z - 0.006, x + 0.006, yTop, z + 0.006, srgb(0.5, 0.46, 0.4));
+    const d = mall.dome;
+    const yTop = d ? d.y + d.r * 0.99 - 0.1 : ROOF + DOME - 0.6;
+    const yRing = LV[LV.length - 1] + 5.2;
+    const rod = (x0, y0, z0, x1, y1, z1, rr, colr) => {
+      const len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+      const g2 = new THREE.CylinderGeometry(rr, rr, len, 5);
+      g2.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x1 - x0, y1 - y0, z1 - z0).normalize()));
+      g2.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      hallGeo(IN.gloss, g2, colr);
+    };
+    for (const [rr, ns, len] of [[4.4, 28, 5.5], [3.0, 20, 8.5], [1.6, 12, 11.5]]) {
+      const ring = new THREE.TorusGeometry(rr, 0.07, 6, 48).rotateX(Math.PI / 2);
+      ring.translate(cx, yRing, zm);
+      hallGeo(IN.gloss, ring, GOLD);
+      for (let k = 0; k < ns; k++) {
+        const a = (k / ns) * Math.PI * 2 + rr;
+        const x = cx + Math.cos(a) * rr;
+        const z = zm + Math.sin(a) * rr;
+        const l = len * (0.86 + (0.14 * ((k * 7) % 5)) / 4);
+        hall(IN.box, x - 0.008, yRing - l, z - 0.008, x + 0.008, yRing, z + 0.008, srgb(0.8, 0.7, 0.48));
+        for (let y = yRing - 0.55, i = 0; y > yRing - l; y -= 1.05, i++) {
+          const ball = new THREE.SphereGeometry(0.1 + (i % 3) * 0.02, 6, 4);
+          ball.translate(x, y, z);
+          hallGeo(IN.lamp, ball, (k + i) % 3 ? srgb(1, 0.9, 0.62) : srgb(1, 0.97, 0.9));
+        }
+      }
     }
-    // its crown: a gold ring at the top that holds the wires
-    const crown = new THREE.TorusGeometry(1.2, 0.08, 6, 32);
-    crown.rotateX(Math.PI / 2);
-    crown.translate(cx, yTop, zm);
-    hallGeo(IN.gloss, crown, srgb(0.86, 0.7, 0.36));
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      rod(cx + Math.cos(a) * 4.4, yRing, zm + Math.sin(a) * 4.4, cx, yTop, zm, 0.025, GOLD);
+    }
+    rod(cx, yRing - 1.2, zm, cx, yTop, zm, 0.06, GOLD);
+    const crown = new THREE.SphereGeometry(0.5, 12, 8);
+    crown.translate(cx, yRing - 1.2, zm);
+    hallGeo(IN.lamp, crown, srgb(1, 0.95, 0.82));
     addLight(cx, LV[2] + 3.5, zm, 22, srgb(1, 0.86, 0.6), 1.4);
     addLight(cx, LV[1] + 2.0, zm, 18, srgb(1, 0.88, 0.66), 1.0);
   }
@@ -2174,39 +2345,6 @@ function posGeo(pos) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.computeVertexNormals();
   return g;
-}
-function ringWall(pts, cx, cz, y0, y1, out) {
-  const pos = [];
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i];
-    const q = pts[(i + 1) % pts.length];
-    const mx = (p[0] + q[0]) / 2 - cx;
-    const mz = (p[1] + q[1]) / 2 - cz;
-    const w = out ? [mx, 0, mz] : [-mx, 0, -mz];
-    const A = [p[0], y0, p[1]];
-    const B = [q[0], y0, q[1]];
-    const C = [q[0], y1, q[1]];
-    const D = [p[0], y1, p[1]];
-    faceTri(pos, A, B, C, w);
-    faceTri(pos, A, C, D, w);
-  }
-  return posGeo(pos);
-}
-function ringFlat(outer, inner, cx, cz, y, up) {
-  const pos = [];
-  const w = [0, up ? 1 : -1, 0];
-  for (let i = 0; i < outer.length; i++) {
-    const j = (i + 1) % outer.length;
-    const A = [outer[i][0], y, outer[i][1]];
-    const B = [outer[j][0], y, outer[j][1]];
-    if (inner) {
-      const C = [inner[j][0], y, inner[j][1]];
-      const D = [inner[i][0], y, inner[i][1]];
-      faceTri(pos, A, B, C, w);
-      faceTri(pos, A, C, D, w);
-    } else faceTri(pos, A, B, [cx, y, cz], w);
-  }
-  return posGeo(pos);
 }
 
 // ------------------------------------------------------------------ over the avenue
