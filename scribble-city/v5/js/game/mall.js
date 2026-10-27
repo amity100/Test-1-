@@ -287,7 +287,9 @@ export class MallLife {
   // at once, ROADMAP 11.31)
   budgetOf(m) {
     if (!m.mega) return this.budget;
-    return this.game.touch ? 7 : 32;
+    // (ROADMAP 11.32: three halls side by side, each its own crowd - all three near at once in the
+    // middle one)
+    return this.game.touch ? 5 : 24;
   }
 
   update(dt) {

@@ -155,9 +155,11 @@ export function mBlockRect(col, row) {
 // the special blocks (by col,row): the malls, the parks, the clubs' street, the arena
 // (everything else is the district's own mix, world/mainland/blocks.js)
 const SPECIAL = {
-  // downtown: the arena on the bay, the Galleria (a mall of two wings of five floors, either side of
-  // Second Avenue - ROADMAP 11.31), the park with the stage
+  // downtown: the arena on the bay, the Galleria (a mall over three blocks, its halls of five floors
+  // under vaults of glass, the arcades over Miami Avenue and Second Avenue between them, the dome over
+  // the middle one's court - ROADMAP 11.31, 11.32), the park with the stage
   '0,7': 'arena',
+  '0,8': 'galleriaE',
   '1,8': 'galleria',
   '2,8': 'galleriaW',
   '2,9': 'plaza',
@@ -182,8 +184,9 @@ const SPECIAL = {
   '12,4': 'velvet',
 };
 
-// (the specials that came after the plan was first drawn: ROADMAP 11.31, the Galleria's west wing)
-const LATE = new Set(['2,8']);
+// (the specials that came after the plan was first drawn: ROADMAP 11.31, 11.32, the Galleria's west
+// and east halls)
+const LATE = new Set(['2,8', '0,8']);
 
 // what each district builds where nothing special stands (the kinds of world/mainland/blocks.js)
 const DISTRICT_MIX = {
@@ -220,15 +223,15 @@ export const M_BLOCKS = [];
     }
   }
 }
-// (ROADMAP 11.31) what stands over Second Avenue between the Galleria's two wings - its bridges of
-// glass and its gate with the pylons either side (world/mainland/megamall.js builds them, round the
-// block's middle): nothing tall stands under them on the sidewalks
+// (ROADMAP 11.32) what stands over the avenues either side of the Galleria's middle block - its
+// arcades, the length of the block (world/mainland/megamall.js): nothing tall stands under them on
+// the sidewalks
 export const M_SPANS = (() => {
   const b = M_BLOCKS.find((q) => q.kind === 'galleria');
   if (!b) return [];
-  const zm = (b.rect.z0 + b.rect.z1) / 2;
-  const x1 = b.rect.x0;
-  return [[zm - 7.6, zm + 7.6], [zm - 26.2, zm - 19.8], [zm + 19.8, zm + 26.2]].map(([z0, z1]) => ({ x0: x1 - 24, x1, z0, z1 }));
+  const z0 = b.rect.z0 + 1;
+  const z1 = b.rect.z1 - 1;
+  return [{ x0: b.rect.x0 - 24, x1: b.rect.x0, z0, z1 }, { x0: b.rect.x1, x1: b.rect.x1 + 24, z0, z1 }];
 })();
 export const underSpan = (x, z, m = 0) => M_SPANS.some((s) => x > s.x0 - m && x < s.x1 + m && z > s.z0 - m && z < s.z1 + m);
 
@@ -253,9 +256,9 @@ function rowOf(z) {
 // the places the city is known for: where they are (their block), what they are
 export const PLACES = [
   { id: 'marina', kind: 'mall', name: 'Marina Market', heb: 'מרינה מרקט', at: [-668, -330] },
-  // (mega: the giant one, world/mainland/megamall.js - the map shows it big, at any zoom; at the gate
-  // over Second Avenue between its two wings)
-  { id: 'galleria', kind: 'mall', mega: true, name: 'Downtown Galleria', heb: 'הגלריה של דאונטאון', block: '1,8', at: [-880, -37] },
+  // (mega: the giant one, world/mainland/megamall.js - the map shows it big, at any zoom; at its dome,
+  // in the middle of its three blocks)
+  { id: 'galleria', kind: 'mall', mega: true, name: 'Downtown Galleria', heb: 'הגלריה של דאונטאון', block: '1,8', at: [-835, -37] },
   { id: 'starlight', kind: 'mall', name: 'Starlight Center', heb: 'מרכז סטארלייט', block: '6,3' },
   { id: 'valleyplaza', kind: 'mall', name: 'Valley Plaza', heb: 'ואלי פלאזה', block: '9,9' },
   { id: 'neonink', kind: 'club', name: 'NEON INK', heb: 'מועדון ניאון אינק', block: '2,3' },

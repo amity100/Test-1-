@@ -22,12 +22,14 @@ import { dressSidewalks } from './sidewalks.js';
 
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
-  // (v5, ROADMAP 11.30, 11.31: the mega mall - two wings of five floors round their halls of glass,
-  // either side of Second Avenue, the bridges and the gate over it, world/mainland/megamall.js; their
-  // stores floor by floor, west row and east row. The east wing builds the bridges and the gate)
+  // (v5, ROADMAP 11.30 - 11.32: the mega mall - three halls of five floors under vaults of glass, on
+  // three blocks, the arcades over the avenues between them (each side hall builds the one on its
+  // side), the dome over the middle one's court, world/mainland/megamall.js; their stores floor by
+  // floor, west row and east row. inner: the sides with portals out into an arcade; outer: the side
+  // on the street)
   galleria: {
     name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
-    mega: true, wing: 'east', floors: 5, other: 'WEST WING', spans: 24, bank: true, security: true, helipad: true, court: 'fountain',
+    mega: true, wing: 'center', floors: 5, inner: [-1, 1], outer: 0, dome: true, portalSign: { '-1': 'WEST HALL', 1: 'EAST HALL' }, bank: true, security: true, helipad: true, court: 'fountain',
     stores: {
       L0w: ['fashion', 'shoes', 'electronics', 'jewelry', 'perfume', 'fashion', 'optics', 'sports'],
       L0e: ['fashion', 'phones', 'toys', 'shoes', 'boutique', 'cafe'],
@@ -46,7 +48,7 @@ const MALLS = {
   },
   galleriaW: {
     name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
-    mega: true, wing: 'west', floors: 5, other: 'EAST WING', bank: false, security: false, helipad: false, court: 'palms',
+    mega: true, wing: 'west', floors: 5, inner: [1], outer: -1, arcade: 1, portalSign: { 1: 'GRAND COURT' }, bank: false, security: false, helipad: false, court: 'palms',
     stores: {
       L0w: ['jewelry', 'perfume', 'shoes', 'fashion'],
       L0e: ['fashion', 'boutique', 'optics', 'phones', 'shoes', 'electronics', 'toys', 'cafe'],
@@ -63,6 +65,25 @@ const MALLS = {
     foodSign: 'DINING',
     street: ['cafe', 'flowers', 'books', 'juice', 'optics', 'bagel', 'pharmacy', 'icecream', 'phones', 'cafe', 'barber', 'sushi'],
     anchor: { name: 'BLOOMWELL\'S', kind: 'fashion', side: -1, floors: 3 },
+  },
+  galleriaE: {
+    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
+    mega: true, wing: 'east', floors: 5, inner: [-1], outer: 1, arcade: -1, portalSign: { '-1': 'GRAND COURT' }, bank: false, security: false, helipad: false, court: 'fountain',
+    stores: {
+      L0w: ['fashion', 'jewelry', 'perfume', 'shoes', 'optics', 'boutique', 'phones', 'cafe'],
+      L0e: ['shoes', 'fashion', 'perfume'],
+      L1w: ['books', 'fashion', 'sports', 'electronics', 'toys', 'shoes', 'music'],
+      L1e: ['jewelry', 'boutique', 'fashion'],
+      L2w: ['fashion', 'optics', 'arcade', 'perfume', 'shoes', 'sports', 'phones'],
+      L2e: ['fashion', 'books', 'electronics', 'toys', 'boutique', 'shoes', 'jewelry'],
+      L3w: ['boutique', 'fashion', 'shoes', 'perfume', 'music', 'books', 'sports'],
+      L3e: ['electronics', 'fashion', 'toys', 'optics', 'jewelry', 'shoes', 'fashion'],
+      L4w: ['icecream', 'fashion', 'barber', 'books', 'cafe'],
+      L4e: ['perfume', 'shoes', 'boutique', 'fashion', 'sports'],
+    },
+    food: ['burger', 'pizza', 'juice', 'noodles', 'tacos', 'icecream'],
+    foodSign: 'BAY CAFES',
+    anchor: { name: 'NORDSKETCH', kind: 'fashion', side: 1, floors: 2 },
   },
   starlight: {
     name: 'STARLIGHT CENTER', heb: 'מרכז סטארלייט', open: true, wall: '#f6e3d0', trim: '#e0574f', signCol: '#ffe14f', font: 'Permanent Marker',
@@ -106,6 +127,7 @@ function mixOf(b) {
     case 'condos':
     case 'galleria':
     case 'galleriaW':
+    case 'galleriaE':
     case 'dining':
       return MIXES.towers;
     case 'warehouses':
@@ -288,6 +310,7 @@ function* buildKind(bctx, b) {
       return;
     case 'galleria':
     case 'galleriaW':
+    case 'galleriaE':
     case 'starlight':
       if (MALLS[b.kind].mega) yield* buildMegaMall(bctx, b, MALLS[b.kind]);
       else yield* buildMall(bctx, b, MALLS[b.kind]);

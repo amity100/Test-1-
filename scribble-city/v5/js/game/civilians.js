@@ -49,7 +49,7 @@ export function mainBlock(col, row) {
   return M_AT.get(`${col},${row}`) || null;
 }
 const M_TYPE = {
-  towers: 'towers', offices: 'towers', condos: 'hotels', galleria: 'towers', galleriaW: 'towers', dining: 'hotels', arena: 'plaza', plaza: 'plaza', park: 'park', domino: 'park',
+  towers: 'towers', offices: 'towers', condos: 'hotels', galleria: 'towers', galleriaW: 'towers', galleriaE: 'towers', dining: 'hotels', arena: 'plaza', plaza: 'plaza', park: 'park', domino: 'park',
   warehouses: 'gang', lofts: 'shops', walls: 'gang', clubs: 'shops', calle: 'market', bungalows: 'west', apartments: 'west', villas: 'west', mansions: 'west',
   houses: 'west', school: 'west', boulevard: 'shops', theatres: 'shops', starlight: 'shops', velvet: 'hotels', stripmall: 'shops', boardwalk: 'shops', mixed: 'shops',
 };

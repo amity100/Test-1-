@@ -28,22 +28,20 @@ import { STORE_NAMES, NEONS, FONTS, ADS, PROMO, KIOSKS, DARK, WHITE, foodTable, 
 // (game/mall.js MallRide).
 
 const FH = 5.4; // floor to floor
-const GW = 4.4; // the galleries' width
-const SD = 11; // the hall's stores, deep
-const SO = 6; // the avenues' stores, deep
-const SC = 2; // the corridor behind them
+const GW = 5; // the galleries' width
+const SD = 11; // the hall's stores, deep (out to the building's side)
+const SKIN = 0.3; // the building's walls on its long sides
+const AVE_W = 24; // an avenue between two of its halls, with its sidewalks (the arcade's width)
 const VEST = 6; // the entrances' vestibules
 const SLOPE = Math.PI / 6;
 const RUN = FH / Math.tan(SLOPE);
 // (the hall: a real mall's colours - warm white, cream stone, glass and steel, black only round the
 // court, brass and gold in touches)
 const GLASS = srgb(0.8, 0.89, 0.95);
-const BRASS = srgb(0.86, 0.7, 0.4);
 const STEEL = srgb(0.66, 0.68, 0.74);
 const RAILC = srgb(0.84, 0.86, 0.9);
 const STONE = srgb(0.96, 0.94, 0.9);
 const CEIL = srgb(0.98, 0.96, 0.93);
-const CREAM = srgb(0.9, 0.86, 0.78);
 const GRANITE = srgb(0.09, 0.09, 0.11);
 // (outside: art deco - ivory stone, black, champagne gold; at night gold and warm white light)
 const IVORY = hex('#f2ece1');
@@ -165,8 +163,8 @@ function* wing(bctx, b, o) {
   const bz0 = R.z0 + 1;
   const bz1 = R.z1 - 1;
   const cx = (R.x0 + R.x1) / 2;
-  const hx0 = R.x0 + SO + SC + SD;
-  const hx1 = R.x1 - SO - SC - SD;
+  const hx0 = R.x0 + SD;
+  const hx1 = R.x1 - SD;
   const vx0 = hx0 + GW;
   const vx1 = hx1 - GW;
   // its floors (five: the top one's north the food court, its terrace over the doors)
@@ -191,21 +189,19 @@ function* wing(bctx, b, o) {
   // drum, the dome from YD (vault)
   const YS = ROOF + 0.6;
   const RV = (vx1 - vx0) / 2;
-  const CQ = Math.min(12, (hx1 - hx0) / 2 - 1.6);
+  // (the grand dome's crossing the hall's whole width, o.dome)
+  const CQ = o.dome ? (hx1 - hx0) / 2 - 1.6 : Math.min(12, (hx1 - hx0) / 2 - 1.6);
   const YC = YS + RV + 0.8;
   const YD = YC + 3.4;
-  const DOME = YD + CQ - 0.3 - ROOF;
+  const DOME = o.dome ? YD + CQ - 0.3 - ROOF : YS + RV - ROOF;
   const wallCol = IVORY;
-  // the links to the other wing, on its side: a passage a floor through the stores and the
-  // building, out to a bridge over the avenue (the middle one the gate's, on every floor; the
-  // bridges of glass either side of it on every other floor)
-  const bs = o.wing === 'west' ? 1 : -1;
-  const links = [
-    { z0: zm - 4, z1: zm + 4, lv: UP, gate: true },
-    { z0: zm - 26, z1: zm - 20, lv: UP.filter((k) => k % 2 === 1) },
-    { z0: zm + 20, z1: zm + 26, lv: UP.filter((k) => k % 2 === 1) },
-  ];
-  const linksAt = (lv) => links.filter((l) => l.lv.includes(lv));
+  // (ROADMAP 11.32) the sides that open onto an arcade over the avenue (o.inner): on the first floor
+  // two portals through the stores' row and the building's wall, out into it; o.outer, the side on
+  // the street (-1, 1, or 0: none)
+  const inner = o.inner || [];
+  const portals = [];
+  for (const side of inner) for (const [z0, z1] of [[zm - 30, zm - 18], [zm + 18, zm + 30]]) portals.push({ side, z0, z1, lv: 1 });
+  const portalsAt = (lv, side) => portals.filter((l) => l.lv === lv && l.side === side);
   const IN = { B: bctx.R, box: M.hallBox, gloss: M.hallGloss, cyl: M.hallCyl, lamp: M.hallLamp };
   const hall = (mat, x0, y0, z0, x1, y1, z1, col) => IN.B.box(mat, x0, y0, z0, x1, y1, z1, nextId(), col ? { color: col } : undefined);
   const hallGeo = (mat, g, col) => IN.B.add(mat, g, null, nextId(), { color: col });
@@ -237,78 +233,40 @@ function* wing(bctx, b, o) {
     escalators: [], lifts: [], bridges: [], galleries: [], rails: [],
     void: { x0: vx0, x1: vx1 },
     court: { z0: zc0, z1: zc1 },
-    links: links.map((l) => ({ z0: l.z0, z1: l.z1, lv: l.lv.slice(), gate: !!l.gate, x: bs < 0 ? R.x0 : R.x1 })),
+    links: portals.map((l) => ({ z0: l.z0, z1: l.z1, lv: [l.lv], x: l.side < 0 ? R.x0 : R.x1 })),
   });
   const solid = (x0, z0, x1, z1, y0, y1, colr, mat = M.wallSolid, B = bctx.B) => {
     B.box(mat, x0, y0, z0, x1, y1, z1, nextId(), { color: colr });
     col.addBox(x0, z0, x1, z1, y0, y1, 'wall');
   };
-  // (what is seen of it from afar: its two long bodies, the hall's glass between, the crown)
+  // (what is seen of it from afar: its two long bodies, the hall's glass vault between, the dome)
   if (bctx.footprints) {
     const css = '#f2ece1';
     bctx.footprints.push({ x0: R.x0, z0: bz0, x1: hx0, z1: bz1, top: TOP, color: css });
     bctx.footprints.push({ x0: hx1, z0: bz0, x1: R.x1, z1: bz1, top: TOP, color: css });
     bctx.footprints.push({ x0: hx0, z0: bz0, x1: hx1, z1: bz1, top: ROOF + 0.6, color: '#f2ece1' });
     bctx.footprints.push({ x0: vx0 + 1.5, z0: zN, x1: vx1 - 1.5, z1: bz1, top: YS + RV * 0.8, color: '#9cc0d8' });
-    bctx.footprints.push({ x0: cx - CQ, z0: zm - CQ, x1: cx + CQ, z1: zm + CQ, top: YC, color: '#f2ece1' });
-    bctx.footprints.push({ x0: cx - CQ * 0.7, z0: zm - CQ * 0.7, x1: cx + CQ * 0.7, z1: zm + CQ * 0.7, top: ROOF + DOME * 0.92, color: '#cfe3ef' });
+    if (o.dome) {
+      bctx.footprints.push({ x0: cx - CQ, z0: zm - CQ, x1: cx + CQ, z1: zm + CQ, top: YC, color: '#f2ece1' });
+      bctx.footprints.push({ x0: cx - CQ * 0.7, z0: zm - CQ * 0.7, x1: cx + CQ * 0.7, z1: zm + CQ * 0.7, top: ROOF + DOME * 0.92, color: '#cfe3ef' });
+    }
   }
 
   // ------------------------------------------------------------------ the body
-  // over the avenues' stores and the corridors behind them, up to the roof: the building's mass (on
-  // the links' side: holes through it, a passage a floor)
-  const holes = [];
-  for (const l of links) for (const lv of l.lv) holes.push({ z0: l.z0, z1: l.z1, y0: LV[lv] - 0.36, y1: LV[lv] + 4.25 });
+  // (ROADMAP 11.32) the stores' rows reach the building's long sides: its walls there, a skin of
+  // stone from the street to the parapet (the stores' rooms end inside it) - holes in it where the
+  // portals go out into an arcade
   for (const s of [-1, 1]) {
-    const xa = s < 0 ? R.x0 + SO : hx1 + SD;
-    const xb = s < 0 ? hx0 - SD : R.x1 - SO;
-    // (the corridor's ceiling and the mass over it)
-    holed(bctx.B, M.wallSolid, xa, xb, bz0, bz1, CURB + 3.7, TOP, wallCol, s === bs ? holes : []);
-    // its two walls, the corridor's own colour on their faces (the rooms' backs on the other side)
-    for (const x of [xa, xb]) {
-      const w0 = x === xa ? xa : xb - 0.2;
-      hall(IN.box, w0, CURB, bz0 + 1.2, w0 + 0.2, CURB + 3.7, bz1 - 1.2, srgb(0.86, 0.86, 0.82));
-      col.addBox(w0, bz0 + 1.2, w0 + 0.2, bz1 - 1.2, 0, CURB + 3.7, 'wall');
-    }
-    // the corridor's lights, its pipes along the ceiling, a fire extinguisher now and then, the
-    // grey stripe along its walls at the height of a trolley
-    const xm = (xa + xb) / 2;
-    for (let z = bz0 + 4; z < bz1 - 3; z += 6) {
-      hall(IN.lamp, xm - 0.15, CURB + 3.55, z - 0.6, xm + 0.15, CURB + 3.62, z + 0.6, srgb(0.9, 0.96, 1));
-      if (((z - bz0) / 6) % 3 < 1) hall(IN.box, xa + 0.2, CURB + 0.9, z + 1.5, xa + 0.38, CURB + 1.4, z + 1.7, srgb(0.86, 0.14, 0.14));
-    }
-    for (const dx of [0.35, 0.6]) {
-      const g = new THREE.CylinderGeometry(0.07, 0.07, bz1 - bz0 - 2.4, 8);
-      g.rotateX(Math.PI / 2);
-      g.translate(xb - dx, CURB + 3.35, (bz0 + bz1) / 2);
-      hallGeo(IN.cyl, g, dx < 0.5 ? srgb(0.75, 0.3, 0.25) : srgb(0.6, 0.62, 0.66));
-    }
-    for (const x of [xa + 0.2, xb - 0.2]) hall(IN.box, Math.min(x, x + 0.01), CURB + 0.9, bz0 + 1.2, Math.max(x, x + 0.01), CURB + 1.1, bz1 - 1.2, srgb(0.62, 0.64, 0.62));
-    // the corridor's floor, painted concrete
-    const g = new THREE.PlaneGeometry(xb - xa, bz1 - bz0 - 2.4).rotateX(-Math.PI / 2);
-    g.translate(xm, CURB + 0.008, (bz0 + bz1) / 2);
-    hallGeo(IN.box, g, srgb(0.7, 0.72, 0.7));
-    mall[s < 0 ? 'corridorW' : 'corridorE'] = { x: xm, z0: bz0 + 1.2, z1: bz1 - 1.2 };
+    const x0 = s < 0 ? R.x0 : R.x1 - SKIN;
+    const hs = portalsAt(1, s).map((l) => ({ z0: l.z0, z1: l.z1, y0: LV[l.lv] - 0.02, y1: LV[l.lv] + 4.25 }));
+    holed(bctx.B, M.wallSolid, x0, x0 + SKIN, bz0, bz1, CURB - 0.2, TOP, wallCol, hs, col);
   }
-  // the ends of the building, either side of the entrances: the avenues' stores' corners, the
-  // corridors' doors to the street (STAFF ONLY), the corner rooms (the vestibules': below)
+  // the ends of the building, either side of the entrances: the corner rooms' outer walls (the
+  // vestibules': below)
   for (const end of [-1, 1]) {
     const z0 = end < 0 ? bz0 : bz1 - 1.2;
     const z1 = end < 0 ? bz0 + 1.2 : bz1;
     for (const s of [-1, 1]) {
-      const xo = s < 0 ? R.x0 : R.x1;
-      const xc0 = s < 0 ? R.x0 + SO : hx1 + SD;
-      const xc1 = s < 0 ? hx0 - SD : R.x1 - SO;
-      solid(Math.min(xo, xo - s * SO), z0, Math.max(xo, xo - s * SO), z1, CURB - 0.2, 3.55, wallCol);
-      // the corridor's door: a steel frame, the door itself pushed open, the sign over it
-      solid(xc0, z0, xc1, z1, CURB + 2.6, TOP, wallCol);
-      const zf = end < 0 ? bz0 : bz1;
-      bctx.B.box(M.frame, xc0, CURB, zf - 0.08, xc0 + 0.12, CURB + 2.6, zf + 0.08, nextId(), { color: srgb(0.3, 0.3, 0.34) });
-      bctx.B.box(M.frame, xc1 - 0.12, CURB, zf - 0.08, xc1, CURB + 2.6, zf + 0.08, nextId(), { color: srgb(0.3, 0.3, 0.34) });
-      bctx.B.box(M.frame, xc0, CURB + 2.5, zf - 0.08, xc1, CURB + 2.62, zf + 0.08, nextId(), { color: srgb(0.3, 0.3, 0.34) });
-      const sf = end < 0 ? new Facade(xc1, zf - 0.1, -1, 0, 0, -1) : new Facade(xc0, zf + 0.1, 1, 0, 0, 1);
-      sign(IN, sf, M.frame, 'STAFF ONLY', SC / 2, CURB + 2.85, 0.02, 0.12, srgb(0.9, 0.2, 0.2));
-      // the corner room's outer wall (in the north up to the floors over the doors)
       const xr0 = s < 0 ? hx0 - SD : hx1 + 0.25;
       solid(xr0, z0, xr0 + SD - 0.25, z1, CURB - 0.2, end < 0 ? LV[2] - 0.3 : TOP, wallCol);
     }
@@ -382,8 +340,8 @@ function* wing(bctx, b, o) {
   for (const lv of UP) {
     const y = LV[lv];
     for (const s of [-1, 1]) {
-      const xs = s < 0 ? hx0 - SD - 0.25 : vx1;
-      const xe = s < 0 ? vx0 : hx1 + SD + 0.25;
+      const xs = s < 0 ? R.x0 + SKIN : vx1;
+      const xe = s < 0 ? vx0 : R.x1 - SKIN;
       const za = zN;
       const zb = zS;
       // (the east side's last bay is the stairs' shaft: only the gallery's slab passes it)
@@ -604,9 +562,9 @@ function* wing(bctx, b, o) {
     }
     blank(lv, side, z, z1);
   };
-  // (a row of stores on a floor, round the passages to the other wing on its side)
+  // (a row of stores on a floor, round the portals out to an arcade on its side)
   const fillRow = (lv, side, z0, z1, deck, food = false) => {
-    const cuts = side === bs ? linksAt(lv).filter((l) => l.z1 > z0 && l.z0 < z1).sort((p, q) => p.z0 - q.z0) : [];
+    const cuts = portalsAt(lv, side).filter((l) => l.z1 > z0 && l.z0 < z1).sort((p, q) => p.z0 - q.z0);
     let a = z0;
     for (const l of cuts) {
       if (l.z0 - a > 5.5) fill(lv, side, a, l.z0, deck, food);
@@ -666,105 +624,84 @@ function* wing(bctx, b, o) {
   cornerFronts(bctx, c, mall, { hx0, hx1, bz0, bz1, zN, zS, LV, TOP, ROOF, security: o.security !== false });
   yield;
 
-  // ------------------------------------------------------------------ the passages
-  // to the other wing, on its side: through the stores' row and the building to the avenue's face,
-  // a floor of stone, white walls, lights; its name over its mouth on the gallery
-  for (const l of links) {
-    for (const lv of l.lv) {
-      const y = LV[lv];
-      const xo = bs < 0 ? R.x0 : R.x1;
-      const xi = bs < 0 ? hx0 : hx1;
-      const xm = bs < 0 ? hx0 - SD : hx1 + SD;
-      const a0 = Math.min(xo, xi);
-      const a1 = Math.max(xo, xi);
-      slab(Math.min(xo, xm), l.z0, Math.max(xo, xm), l.z1, y);
-      tiles(a0, l.z0, a1, l.z1, y);
-      for (const z of [l.z0, l.z1 - 0.2]) {
-        hall(IN.box, a0, y, z, a1, y + 4.25, z + 0.2, STONE);
-        col.addBox(a0, z, a1, z + 0.2, y, y + 4.25, 'wall');
-      }
-      hall(IN.box, a0, y + 4.2, l.z0, a1, y + 4.32, l.z1, CEIL);
-      for (let x = a0 + 2; x < a1 - 1; x += 4) hall(IN.lamp, x - 0.5, y + 4.16, (l.z0 + l.z1) / 2 - 0.5, x + 0.5, y + 4.2, (l.z0 + l.z1) / 2 + 0.5, srgb(1, 0.97, 0.9));
-      // (its walls: a dado of cream stone with a line of brass over it, a picture rail, and on each
-      // a lit picture of something for sale)
-      for (const [z0, z1] of [[l.z0 + 0.2, l.z0 + 0.23], [l.z1 - 0.23, l.z1 - 0.2]]) {
-        hall(IN.box, a0, y, z0, a1, y + 1.1, z1, CREAM);
-        hall(IN.gloss, a0, y + 1.1, z0 - 0.01, a1, y + 1.16, z1 + 0.01, BRASS);
-        hall(IN.gloss, a0, y + 3.3, z0 - 0.01, a1, y + 3.35, z1 + 0.01, BRASS);
-        const ad = ADS[(Math.round(z0 * 7 + lv) % ADS.length + ADS.length) % ADS.length];
-        const xm2 = (a0 + a1) / 2;
-        const zf = z0 === l.z0 + 0.2 ? z1 : z0;
-        hall(IN.box, xm2 - 1.5, y + 1.35, Math.min(zf, zf + (z0 === l.z0 + 0.2 ? 0.05 : -0.05)), xm2 + 1.5, y + 3.05, Math.max(zf, zf + (z0 === l.z0 + 0.2 ? 0.05 : -0.05)), DARK);
-        hall(IN.lamp, xm2 - 1.35, y + 1.5, Math.min(zf, zf + (z0 === l.z0 + 0.2 ? 0.06 : -0.06)), xm2 + 1.35, y + 2.9, Math.max(zf, zf + (z0 === l.z0 + 0.2 ? 0.06 : -0.06)), ad[1]);
-        hall(IN.lamp, xm2 - 1.35, y + 2.5, Math.min(zf, zf + (z0 === l.z0 + 0.2 ? 0.065 : -0.065)), xm2 + 1.35, y + 2.9, Math.max(zf, zf + (z0 === l.z0 + 0.2 ? 0.065 : -0.065)), ad[0]);
-      }
-      // (its mouth on the gallery: a frame of gold, the name over it)
-      const f = bs < 0 ? new Facade(xi + 0.04, l.z1, 0, -1, 1, 0) : new Facade(xi - 0.04, l.z0, 0, 1, -1, 0);
-      const W = l.z1 - l.z0;
-      fbox(bctx, f, M.frame, -0.1, y + 4.25, -0.05, W + 0.1, y + 4.95, 0.1, srgb(0.1, 0.1, 0.13));
-      sign(IN, f, IN.lamp, o.other || 'WEST WING', W / 2, y + 4.42, 0.12, 0.34, srgb(1, 0.86, 0.55));
-      for (const u of [0, W]) fbox(bctx, f, M.frame, u - 0.08, y, -0.05, u + 0.08, y + 4.25, 0.08, BRASS);
-      mall.indoor.push({ x0: a0, x1: a1, z0: l.z0, z1: l.z1, y, top: 4.2 });
+  // ------------------------------------------------------------------ the portals
+  // (ROADMAP 11.32) out to an arcade on its side: through the stores' row and the building's wall, a
+  // floor of marble, white walls with lit pictures in frames, lights; its name over its mouth on the
+  // gallery
+  for (const l of portals) {
+    const y = LV[l.lv];
+    const xo = l.side < 0 ? R.x0 : R.x1;
+    const xi = l.side < 0 ? hx0 : hx1;
+    const a0 = Math.min(xo, xi);
+    const a1 = Math.max(xo, xi);
+    tiles(a0, l.z0, a1, l.z1, y);
+    for (const z of [l.z0, l.z1 - 0.2]) {
+      hall(IN.box, a0, y, z, a1, y + 4.25, z + 0.2, STONE);
+      col.addBox(a0, z, a1, z + 0.2, y, y + 4.25, 'wall');
     }
-    yield;
+    hall(IN.box, a0, y + 4.2, l.z0, a1, y + 4.32, l.z1, CEIL);
+    for (let x = a0 + 2; x < a1 - 1; x += 3) hall(IN.lamp, x - 0.4, y + 4.16, (l.z0 + l.z1) / 2 - 2.5, x + 0.4, y + 4.2, (l.z0 + l.z1) / 2 + 2.5, srgb(1, 0.97, 0.9));
+    // (its walls: a dado of black granite, a line of champagne over it, and on each a lit picture of
+    // something for sale)
+    for (const [z0, z1] of [[l.z0 + 0.2, l.z0 + 0.23], [l.z1 - 0.23, l.z1 - 0.2]]) {
+      hall(IN.gloss, a0, y, z0, a1, y + 0.9, z1, GRANITE);
+      hall(IN.gloss, a0, y + 0.9, z0 - 0.01, a1, y + 0.95, z1 + 0.01, GOLD);
+      const ad = ADS[(Math.round(z0 * 7 + l.lv) % ADS.length + ADS.length) % ADS.length];
+      const xm2 = (a0 + a1) / 2;
+      const zf = z0 === l.z0 + 0.2 ? z1 : z0;
+      const dz = (k) => [Math.min(zf, zf + (z0 === l.z0 + 0.2 ? k : -k)), Math.max(zf, zf + (z0 === l.z0 + 0.2 ? k : -k))];
+      hall(IN.box, xm2 - 2.5, y + 1.3, dz(0.05)[0], xm2 + 2.5, y + 3.3, dz(0.05)[1], DARK);
+      hall(IN.lamp, xm2 - 2.35, y + 1.45, dz(0.06)[0], xm2 + 2.35, y + 3.15, dz(0.06)[1], ad[1]);
+      hall(IN.lamp, xm2 - 2.35, y + 2.6, dz(0.065)[0], xm2 + 2.35, y + 3.15, dz(0.065)[1], ad[0]);
+    }
+    // (its mouth on the gallery: a frame of champagne, the name of the arcade over it)
+    const f = l.side < 0 ? new Facade(xi + 0.04, l.z1, 0, -1, 1, 0) : new Facade(xi - 0.04, l.z0, 0, 1, -1, 0);
+    const W = l.z1 - l.z0;
+    fbox(bctx, f, M.frame, -0.1, y + 4.25, -0.05, W + 0.1, y + 4.95, 0.1, srgb(0.1, 0.1, 0.13));
+    sign(IN, f, IN.lamp, (o.portalSign || {})[l.side] || 'ARCADE', W / 2, y + 4.42, 0.12, 0.34, srgb(1, 0.86, 0.55));
+    for (const u of [0, W]) fbox(bctx, f, M.frame, u - 0.08, y, -0.05, u + 0.08, y + 4.25, 0.08, GOLD);
+    mall.indoor.push({ x0: a0, x1: a1, z0: l.z0, z1: l.z1, y, top: 4.2 });
   }
+  yield;
 
-  // ------------------------------------------------------------------ the avenues' stores
-  const AWN = [BLACK, hex('#0f4d3f'), hex('#1d2a44'), hex('#5a1f2e'), hex('#3a3530')];
-  const street = (o.street || []).slice();
+  // ------------------------------------------------------------------ the long sides
+  // (ROADMAP 11.32) on the street: the stores' windows along the ground floor under a cornice of
+  // black and gold, the art deco floors over them, the name in the middle; on an arcade's side -
+  // in the covered avenue and in the arcade over it - the windows along both floors, the art deco
+  // floors over the arcade's
   for (const side of [-1, 1]) {
     const x = side < 0 ? R.x0 : R.x1;
-    let z = bz0 + 1.2;
-    const zEnd = bz1 - 1.2;
-    while (z < zEnd - 7) {
-      let L = 12 + Math.floor(r() * 4);
-      if (z + L > zEnd - 7) L = zEnd - z;
-      const kind = street.length ? street.shift() : r.pick(['cafe', 'phones', 'optics', 'juice']);
-      const f = side < 0 ? new Facade(x, z, 0, 1, -1, 0) : new Facade(x, z + L, 0, -1, 1, 0);
-      const info = { doors: [], shops: [], f, L, top: TOP };
-      const nm = nameOf(kind);
-      const shop = storefront(bctx, f, 0.3, L - 0.3, {
-        kind, name: nm, color: wallCol, depth: SO - 0.3, signCol: NEONS[Math.floor(r() * NEONS.length)], font: fontOf(nm),
-        awning: r() < 0.6 ? 'canvas' : 'box', awCol: AWN[Math.floor(r() * AWN.length)], sign: 'box', signV: 4.3, doorAt: 0.5,
-      }, info);
-      // (black granite between the shops)
-      fbox(bctx, f, M.wall, -0.3, CURB, -0.3, 0.3, 4.9, 0.2, BLACK);
-      if (shop) {
-        shop.mall = o.name;
-        mall.street.push(shop);
-      }
-      z += L;
-      yield;
-    }
-    // the mall's long front over them: its mass (holes where the bridges leave), and its art deco
-    yield;
     const f = side < 0 ? new Facade(x, bz0, 0, 1, -1, 0) : new Facade(x, bz1, 0, -1, 1, 0);
     const L = bz1 - bz0;
-    const xa = side < 0 ? x : x - SO;
-    holed(bctx.B, M.wall, xa, xa + SO, bz0, bz1, 3.55, TOP, wallCol, side === bs ? holes : []);
-    // (a cornice of black over the shops, a line of gold along it)
-    fbox(bctx, f, M.wallSolid, 0, 4.9, 0, L, 5.3, 0.3, BLACK);
-    fbox(bctx, f, M.goldTrim, 0, 5.3, 0, L, 5.38, 0.34, GOLD);
+    const arc = inner.includes(side);
     const uR = (za, zb) => {
       const a = f.toU(x, za);
       const q = f.toU(x, zb);
       return [Math.min(a, q), Math.max(a, q)];
     };
-    const skip = [];
-    if (side === bs) for (const l of links) for (const lv of l.lv) skip.push([...uR(l.z0 - (l.gate ? 3.8 : 0.3), l.z1 + (l.gate ? 3.8 : 0.3)), lv]);
+    vitrines(bctx, f, L, CURB, r, []);
+    if (arc) vitrines(bctx, f, L, LV[1], r, portalsAt(1, side).map((l) => uR(l.z0 - 0.4, l.z1 + 0.4)));
+    else {
+      fbox(bctx, f, M.wallSolid, 0, 4.9, 0, L, 5.3, 0.3, BLACK);
+      fbox(bctx, f, M.goldTrim, 0, 5.3, 0, L, 5.38, 0.34, GOLD);
+    }
+    yield;
     // (the outer front: the name in the middle, on black, over two floors)
-    const named = side !== bs;
+    const named = side === o.outer;
+    const skip = [];
     if (named) for (const lv of [2, 3]) if (lv < NF) skip.push([L / 2 - 17, L / 2 + 17, lv]);
-    decoFront(bctx, f, L, { LV, ROOF, TOP, skip, fins: side === bs ? links.map((l) => uR(l.z0 - (l.gate ? 4 : 1), l.z1 + (l.gate ? 4 : 1))) : [] });
+    decoFront(bctx, f, L, { LV, ROOF, TOP, from: arc ? 2 : 1, skip, fins: arc ? false : [] });
     if (named) {
       fbox(bctx, f, M.wallSolid, L / 2 - 17, LV[2] - 0.3, 0, L / 2 + 17, LV[Math.min(TL, 3)] + 4.6, 0.3, BLACK);
       fbox(bctx, f, M.goldTrim, L / 2 - 17.2, LV[2] - 0.42, 0.25, L / 2 + 17.2, LV[2] - 0.3, 0.4, GOLD);
       fbox(bctx, f, M.goldTrim, L / 2 - 17.2, LV[Math.min(TL, 3)] + 4.6, 0.25, L / 2 + 17.2, LV[Math.min(TL, 3)] + 4.72, 0.4, GOLD);
       bigName(bctx, f, o.name, L / 2, (LV[2] + LV[Math.min(TL, 3)] + 4.3) / 2, 0.36, 30, LGOLD, { font: o.font || 'Rubik', size: 90 });
     }
-    for (let u = 10; u < L; u += 24) {
-      const p = f.p(u, 5.2, 1.2);
-      addLight(p[0], p[1], p[2], 16, srgb(1, 0.85, 0.65), 0.9);
+    if (!arc) {
+      for (let u = 10; u < L; u += 24) {
+        const p = f.p(u, 5.2, 1.2);
+        addLight(p[0], p[1], p[2], 16, srgb(1, 0.85, 0.65), 0.9);
+      }
     }
   }
   yield;
@@ -801,9 +738,6 @@ function* wing(bctx, b, o) {
       // (the floors between, over the doors: ivory, their ribbons of dark glass, gold eyebrows)
       const nf = new Facade(hx1 + SD, zf, -1, 0, 0, -1);
       decoFront(bctx, nf, W + 2 * SD, { LV, ROOF, TOP, from: 2, to: TL, fins: false, parapet: false });
-      // (and the ends of the long bodies either side, up to the roof)
-      decoFront(bctx, new Facade(hx0 - SD, zf, -1, 0, 0, -1), hx0 - SD - R.x0, { LV, ROOF, TOP, fins: false });
-      decoFront(bctx, new Facade(R.x1, zf, -1, 0, 0, -1), R.x1 - hx1 - SD, { LV, ROOF, TOP, fins: false });
     } else {
       // the name over the glass, at the top
       fbox(bctx, f, M.frame, 1.2, ROOF - 0.4, 0, W - 1.2, TOP + 2.4, 0.4, BLACK);
@@ -854,16 +788,16 @@ function* wing(bctx, b, o) {
   yield;
 
   // ------------------------------------------------------------------ the corners' towers
-  // round, on the corners away from the avenue between the wings: ivory and dark glass a floor,
-  // gold rings, a stepped crown lit in rings
-  if (o.drums !== false) {
-    const xo = bs < 0 ? R.x1 : R.x0;
-    for (const zo of [bz0, bz1]) drum(bctx, xo + bs * 4, zo + (zo === bz0 ? 4 : -4), 6, LV, ROOF, TOP);
+  // round, on the corners on the street (the mall's outer ends): ivory and dark glass a floor, gold
+  // rings, a stepped crown lit in rings
+  if (o.outer) {
+    const xo = o.outer < 0 ? R.x0 : R.x1;
+    for (const zo of [bz0, bz1]) drum(bctx, xo - o.outer * 4, zo + (zo === bz0 ? 4 : -4), 6, LV, ROOF, TOP);
   }
   yield;
 
   // ------------------------------------------------------------------ the roof
-  roof(bctx, c, mall, { R, hx0, hx1, vx0, vx1, bz0, bz1, zN, zS, zc0, zc1, ROOF, TOP, YS, RV, CQ, YC, YD, LV, cx, zm, wallCol, sx: [hx1, zS - 6, zS], helipad: !!o.helipad });
+  roof(bctx, c, mall, { R, hx0, hx1, vx0, vx1, bz0, bz1, zN, zS, zc0, zc1, ROOF, TOP, YS, RV, CQ, YC, YD, LV, cx, zm, wallCol, sx: [hx1, zS - 6, zS], helipad: !!o.helipad, dome: !!o.dome });
   yield;
 
   // ------------------------------------------------------------------ the grand court
@@ -886,7 +820,7 @@ function* wing(bctx, b, o) {
     const sink = { seats, benches: [], bins: [] };
     let nt = 0;
     for (let z = zN + 2.8; z < FC1 - 4.0; z += 3.6) {
-      for (let x = hx0 + 2.8; x < hx1 - 2.5; x += 3.6) foodTable(fc, IN, fh, fg, x, z, sink, false, nt++, r);
+      for (let x = cx - 12.6; x < cx + 13; x += 3.6) foodTable(fc, IN, fh, fg, x, z, sink, false, nt++, r);
     }
     for (const s of seats) s.y = y - CURB;
     mall.seats = seats;
@@ -956,6 +890,22 @@ function* wing(bctx, b, o) {
     if (h) palm(hctx, r, x, z, h + r() * 1.5, { y0: CURB + 0.6, royal: srgb(0.82, 0.8, 0.76) });
     else tree(hctx, x, z, CURB + 0.6, 4.2 + r() * 1.2, r);
   }
+  // (ROADMAP 11.32) the hall's breadth: down either side of the void a row of royal palms in their
+  // planters, rising past the galleries, a bench on the side of each towards the middle (not under a
+  // bridge)
+  for (const s of [-1, 1]) {
+    const x = cx + s * (RV - 3.5);
+    for (let z = zN + 9; z < zS - 5; z += 11) {
+      if (bridges.some((br) => z + 4 > br.z0 && z - 4 < br.z1)) continue;
+      if (!clear(x - 1.3, z - 1.3, x + 1.3, z + 1.3)) continue;
+      planter(hctx, x, z, true);
+      palm(hctx, r, x, z, 11 + r() * 3, { y0: CURB + 0.6, royal: srgb(0.82, 0.8, 0.76) });
+      const bx = x - s * 1.9;
+      const by = s > 0 ? Math.PI / 2 : -Math.PI / 2;
+      bench(hctx, bx, z, by);
+      for (const ddz of [-0.42, 0.42]) mall.benches.push({ x: bx + s * 0.04, z: z + ddz, yaw: by });
+    }
+  }
   for (const s of [-1, 1]) {
     const xg = s < 0 ? vx0 - 0.42 : vx1 + 0.42;
     let k = s > 0 ? 1 : 0;
@@ -1005,7 +955,7 @@ function* wing(bctx, b, o) {
       }
       col.addBox(x - 0.22, z - 0.9, x + 0.22, z + 0.9, y, y + 0.6, 'prop');
       // (somebody to sit on it, beside it: a bench facing the stores)
-      if (linksAt(g.lv).some((l) => g.side === bs && z + 1.6 > l.z0 - 1 && z + 1.6 < l.z1 + 1)) continue;
+      if (portalsAt(g.lv, g.side).some((l) => z + 1.6 > l.z0 - 1 && z + 1.6 < l.z1 + 1)) continue;
       mall.upBenches.push({ x: x + g.side * 0.6, z: z + 1.6, yaw: g.side < 0 ? -Math.PI / 2 : Math.PI / 2, y: g.y, lv: g.lv });
     }
   }
@@ -1021,12 +971,11 @@ function* wing(bctx, b, o) {
   yield;
 
   // ------------------------------------------------------------------ over the avenue
-  // the bridges of glass to the other wing, the gate over the middle with its tower: built by one of
-  // the two (the other's passages come out to meet them)
-  if (o.spans) {
-    const x1 = R.x0;
-    const x0 = x1 - o.spans;
-    yield* spans(bctx, c, mall, { x0, x1, zm, LV, ROOF, TOP, links, name: o.name, font: o.font, tiles, slab });
+  // (ROADMAP 11.32) the arcade over the avenue on its side, between its hall and the next one's:
+  // built by one of the two (the other's portals come out into it)
+  if (o.arcade) {
+    const xa = o.arcade < 0 ? R.x0 - AVE_W : R.x1;
+    yield* arcade(bctx, c, mall, { xa, xb: xa + AVE_W, bz0, bz1, LV, ROOF, TOP, YS, tiles, r, hctx, name: o.name, font: o.font, wallCol });
     yield;
   }
   {
@@ -1652,20 +1601,14 @@ function roof(bctx, c, mall, g) {
   }
 }
 
-// ------------------------------------------------------------------ the vault and the dome
-// (ROADMAP 11.32, after The Galleria in Houston and the Galleria Vittorio Emanuele in Milan it took
-// its vault from) Over the void a barrel vault of glass, a half round springing from the top floor's
-// galleries: a white rib every three metres, a purlin along every pane's edge, the glass between -
-// from under it the sky through it, paler low down, by day and by night - its ends half moons of
-// glass on white mullions; two chandeliers hung from its top. Over the court the crossing: a square
-// of four arches, the vault's two open, two half moons of glass to the sides, their walls ivory, the
-// arches' undersides gold; on them the drum, its windows between white pilasters, and the dome of
-// glass on sixteen white ribs, rings of gold round it, its lantern with a spire and a lamp
-function vault(bctx, c, mall, g) {
+// a barrel vault of glass along z from za to zb (g: its middle cx, its springing YS, its radius RV,
+// the void under it x0 to x1): a white rib every three metres, a purlin along every pane's edge -
+// from under it the sky through it, paler low down - half moons of glass at ends (the z of each);
+// a chandelier of rings of gold hung at each of chand (z) at height yc
+function barrel(bctx, c, g, za, zb, ends, chand) {
   const { hall, hallGeo, IN, col, M, sky } = c;
-  const { cx, zm, vx0, vx1, zN, bz1, YS, RV, CQ, YC, YD, LV, wallCol } = g;
+  const { cx, YS, RV, x0: vx0, x1: vx1, yc } = g;
   const B = bctx.B;
-  const R = bctx.R;
   const NA = 12;
   const ang = (i) => (i / NA) * Math.PI;
   const at = (a, r) => [cx + Math.cos(a) * r, YS + Math.sin(a) * r];
@@ -1676,46 +1619,32 @@ function vault(bctx, c, mall, g) {
     faceTri(pos, A, C, D, w);
     return posGeo(pos);
   };
-  // a rib along a half round about the origin in its own plane (place: puts it where it goes) -
-  // boxes along it
-  const arc = (rad, a0, a1, n, w, d, colr, mat, Bt, place) => {
-    for (let i = 0; i < n; i++) {
-      const am = a0 + ((i + 0.5) / n) * (a1 - a0);
-      const len = 2 * rad * Math.sin(Math.abs(a1 - a0) / n / 2) + 0.05;
-      const g2 = new THREE.BoxGeometry(len, w, d);
-      g2.rotateZ(am + Math.PI / 2);
-      g2.translate(Math.cos(am) * rad, Math.sin(am) * rad, 0);
-      place(g2);
-      Bt.add(mat, g2, null, nextId(), { color: colr });
-    }
-  };
-  // ---- the vault, north of the crossing and south of it
-  for (const [za, zb, zg] of [[zN, zm - CQ, zN], [zm + CQ, bz1, bz1]]) {
-    const L = zb - za;
-    for (let i = 0; i < NA; i++) {
-      const a0 = ang(i);
-      const a1 = ang(i + 1);
-      const am = (a0 + a1) / 2;
-      const [x0, y0] = at(a0, RV);
-      const [x1, y1] = at(a1, RV);
-      sky(quad([x0, y0, za], [x1, y1, za], [x1, y1, zb], [x0, y0, zb], [-Math.cos(am), -Math.sin(am), 0]), Math.sin(am));
-      const [ox0, oy0] = at(a0, RV + 0.1);
-      const [ox1, oy1] = at(a1, RV + 0.1);
-      B.add(M.mallGlassClear, quad([ox0, oy0, za], [ox1, oy1, za], [ox1, oy1, zb], [ox0, oy0, zb], [Math.cos(am), Math.sin(am), 0]), null, nextId());
-    }
-    // its ribs, every three metres
-    const n = Math.max(1, Math.round(L / 3));
-    for (let k = 0; k <= n; k++) {
-      const z = za + (k * L) / n;
-      arc(RV - 0.1, 0, Math.PI, NA, 0.32, 0.18, ribCol, M.steel, B, (g2) => g2.translate(cx, YS, z));
-    }
-    // the purlins along it, the springing's beams heavier
-    for (let i = 0; i <= NA; i++) {
-      const [px, py] = at(ang(i), RV - 0.08);
-      const t = i === 0 || i === NA ? 0.2 : 0.06;
-      B.box(M.steel, px - t, py - t, za, px + t, py + t, zb, nextId(), { color: ribCol });
-    }
-    // its outer end: a half moon of glass, the sky through it, white mullions up it
+  const L = zb - za;
+  for (let i = 0; i < NA; i++) {
+    const a0 = ang(i);
+    const a1 = ang(i + 1);
+    const am = (a0 + a1) / 2;
+    const [x0, y0] = at(a0, RV);
+    const [x1, y1] = at(a1, RV);
+    sky(quad([x0, y0, za], [x1, y1, za], [x1, y1, zb], [x0, y0, zb], [-Math.cos(am), -Math.sin(am), 0]), Math.sin(am));
+    const [ox0, oy0] = at(a0, RV + 0.1);
+    const [ox1, oy1] = at(a1, RV + 0.1);
+    B.add(M.mallGlassClear, quad([ox0, oy0, za], [ox1, oy1, za], [ox1, oy1, zb], [ox0, oy0, zb], [Math.cos(am), Math.sin(am), 0]), null, nextId());
+  }
+  // its ribs, every three metres
+  const n = Math.max(1, Math.round(L / 3));
+  for (let k = 0; k <= n; k++) {
+    const z = za + (k * L) / n;
+    archRib(B, M.steel, RV - 0.1, 0, Math.PI, NA, 0.32, 0.18, ribCol, (g2) => g2.translate(cx, YS, z));
+  }
+  // the purlins along it, the springing's beams heavier
+  for (let i = 0; i <= NA; i++) {
+    const [px, py] = at(ang(i), RV - 0.08);
+    const t = i === 0 || i === NA ? 0.2 : 0.06;
+    B.box(M.steel, px - t, py - t, za, px + t, py + t, zb, nextId(), { color: ribCol });
+  }
+  // its ends: a half moon of glass, the sky through it, white mullions up it
+  for (const zg of ends) {
     const out = zg === za ? -1 : 1;
     const pin = [];
     const pout = [];
@@ -1732,15 +1661,15 @@ function vault(bctx, c, mall, g) {
       B.box(M.steel, x - 0.08, YS, zg - 0.08, x + 0.08, YS + h, zg + 0.08, nextId(), { color: ribCol });
     }
     B.box(M.steel, vx0, YS + RV * 0.45 - 0.08, zg - 0.08, vx1, YS + RV * 0.45 + 0.08, zg + 0.08, nextId(), { color: ribCol });
-    // (walked on from the roof: steps up its back)
-    for (let i = 0; i < NA; i++) {
-      const [x0, y0] = at(ang(i), RV + 0.1);
-      const [x1, y1] = at(ang(i + 1), RV + 0.1);
-      col.addBox(Math.min(x0, x1), za, Math.max(x0, x1), zb, Math.max(y0, y1) - 0.3, Math.max(y0, y1), 'wall');
-    }
-    // a chandelier from its top, in the middle of it: rings of gold, lights round them, a drop
-    const zc = (za + zb) / 2;
-    const yc = Math.max(LV[LV.length - 1] + 6.2, YS + 1.5);
+  }
+  // (walked on from the roof: steps up its back)
+  for (let i = 0; i < NA; i++) {
+    const [x0, y0] = at(ang(i), RV + 0.1);
+    const [x1, y1] = at(ang(i + 1), RV + 0.1);
+    col.addBox(Math.min(x0, x1), za, Math.max(x0, x1), zb, Math.max(y0, y1) - 0.3, Math.max(y0, y1), 'wall');
+  }
+  // the chandeliers: rings of gold, lights round them, a drop of light under them, hung from its top
+  for (const zc of chand) {
     for (const [rr, nn, dy] of [[2.4, 28, 0], [1.5, 18, -0.9], [0.7, 10, -1.7]]) {
       const ring = new THREE.TorusGeometry(rr, 0.05, 5, 40).rotateX(Math.PI / 2);
       ring.translate(cx, yc + dy, zc);
@@ -1763,6 +1692,48 @@ function vault(bctx, c, mall, g) {
     }
     addLight(cx, yc - 1, zc, 18, srgb(1, 0.9, 0.7), 1.0);
   }
+}
+
+// a rib along a half round about the origin in its own plane, boxes along it (place: puts it where
+// it goes)
+function archRib(Bt, mat, rad, a0, a1, n, w, d, colr, place) {
+  for (let i = 0; i < n; i++) {
+    const am = a0 + ((i + 0.5) / n) * (a1 - a0);
+    const len = 2 * rad * Math.sin(Math.abs(a1 - a0) / n / 2) + 0.05;
+    const g2 = new THREE.BoxGeometry(len, w, d);
+    g2.rotateZ(am + Math.PI / 2);
+    g2.translate(Math.cos(am) * rad, Math.sin(am) * rad, 0);
+    place(g2);
+    Bt.add(mat, g2, null, nextId(), { color: colr });
+  }
+}
+
+// ------------------------------------------------------------------ the vault and the dome
+// (ROADMAP 11.32, after The Galleria in Houston and the Galleria Vittorio Emanuele in Milan it took
+// its vault from) Over the void a barrel vault of glass, a half round springing from the top floor's
+// galleries: a white rib every three metres, a purlin along every pane's edge, the glass between -
+// from under it the sky through it, paler low down, by day and by night - its ends half moons of
+// glass on white mullions; two chandeliers hung from its top. Over the court the crossing: a square
+// of four arches, the vault's two open, two half moons of glass to the sides, their walls ivory, the
+// arches' undersides gold; on them the drum, its windows between white pilasters, and the dome of
+// glass on sixteen white ribs, rings of gold round it, its lantern with a spire and a lamp
+function vault(bctx, c, mall, g) {
+  const { hall, hallGeo, IN, col, M, sky } = c;
+  const { cx, zm, vx0, vx1, zN, bz1, YS, RV, CQ, YC, YD, LV, wallCol } = g;
+  const B = bctx.B;
+  const R = bctx.R;
+  const ribCol = srgb(0.97, 0.97, 0.98);
+  const arc = (rad, a0, a1, n, w, d, colr, mat, Bt, place) => archRib(Bt, mat, rad, a0, a1, n, w, d, colr, place);
+  // ---- the vault: north of the crossing and south of it (with no dome, the whole length - its
+  // chandeliers either side of the court)
+  const yc = Math.max(LV[LV.length - 1] + 6.2, YS + 1.5);
+  const bg = { cx, YS, RV, x0: vx0, x1: vx1, yc };
+  if (!g.dome) {
+    barrel(bctx, c, bg, zN, bz1, [zN, bz1], [(zN + zm - 16) / 2, (zm + 16 + bz1) / 2]);
+    return;
+  }
+  barrel(bctx, c, bg, zN, zm - CQ, [zN], [(zN + zm - CQ) / 2]);
+  barrel(bctx, c, bg, zm + CQ, bz1, [bz1], [(zm + CQ + bz1) / 2]);
   // ---- the crossing: four walls on four arches, from the vault's springing to YC
   const H = YC - YS;
   const archShape = () => {
@@ -2038,7 +2009,11 @@ function court(bctx, c, mall, hctx, g, r) {
       g2.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
       hallGeo(IN.gloss, g2, colr);
     };
-    for (const [rr, ns, len] of [[4.4, 28, 5.5], [3.0, 20, 8.5], [1.6, 12, 11.5]]) {
+    // (under the grand dome, bigger: its rings wider, more strands)
+    const kd = d ? Math.max(1, d.r / 12) : 1;
+    for (const [rr0, ns0, len] of [[4.4, 28, 5.5], [3.0, 20, 8.5], [1.6, 12, 11.5]]) {
+      const rr = rr0 * kd;
+      const ns = Math.round(ns0 * kd);
       const ring = new THREE.TorusGeometry(rr, 0.07, 6, 48).rotateX(Math.PI / 2);
       ring.translate(cx, yRing, zm);
       hallGeo(IN.gloss, ring, GOLD);
@@ -2057,7 +2032,7 @@ function court(bctx, c, mall, hctx, g, r) {
     }
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-      rod(cx + Math.cos(a) * 4.4, yRing, zm + Math.sin(a) * 4.4, cx, yTop, zm, 0.025, GOLD);
+      rod(cx + Math.cos(a) * 4.4 * kd, yRing, zm + Math.sin(a) * 4.4 * kd, cx, yTop, zm, 0.025, GOLD);
     }
     rod(cx, yRing - 1.2, zm, cx, yTop, zm, 0.06, GOLD);
     const crown = new THREE.SphereGeometry(0.5, 12, 8);
@@ -2166,10 +2141,142 @@ function lift(bctx, c, x, z, side, LV, ROOF) {
   return { x, z, r: rad, side, levels: LV.map((y) => y - CURB), grp, floor: col.boxes[floorId], gates: gates.map((id) => col.boxes[id]), y: 0, at: 0, to: 0, t: 0, state: 'open' };
 }
 
+// ------------------------------------------------------------------ the arcade over the avenue
+// (ROADMAP 11.32, after the Galleria Vittorio Emanuele's arms) Between two of the mall's halls, over
+// the avenue: a street of the mall a floor up, the length of the block, under a barrel vault of
+// glass from the one hall's roof to the other's - its floor polished marble edged in black granite;
+// the halls' long sides its walls (their windows, their floors over it: each builds its own); its
+// ends glass from its floor up to the vault; down its middle royal palms with benches round them,
+// café tables between, lamp posts along both sides, chandeliers hung from the vault. Under it the
+// avenue goes on, covered: its ceiling white over the road, lines of light along it, the mall's
+// name over the road at each end
+function* arcade(bctx, c, mall, g) {
+  const { hall, hallGeo, IN, col, M } = c;
+  const { xa, xb, bz0, bz1, LV, YS, tiles, r, hctx, name, font } = g;
+  const B = bctx.B;
+  const W = xb - xa;
+  const cx = (xa + xb) / 2;
+  const RV = W / 2;
+  const y = LV[1];
+  const L = bz1 - bz0;
+  // the floor over the road: its slab, white under it; the marble on it, black granite along its
+  // sides and in lines across
+  B.box(M.wall, xa, y - 0.62, bz0, xb, y - 0.02, bz1, nextId(), { color: srgb(0.97, 0.96, 0.94) });
+  col.addBox(xa, bz0, xb, bz1, y - 0.62, y, 'wall');
+  tiles(xa, bz0, xb, bz1, y);
+  for (const x of [xa, xb - 0.6]) hall(M.hallPolish, x, y + 0.004, bz0, x + 0.6, y + 0.012, bz1, GRANITE);
+  for (let z = bz0 + 6; z < bz1 - 3; z += 12) hall(M.hallPolish, xa + 0.6, y + 0.004, z - 0.15, xb - 0.6, y + 0.013, z + 0.15, GRANITE);
+  // the covered avenue under it: lines of light along its ceiling, over the sidewalks and either
+  // side of the road's middle; its lamps
+  for (const x of [xa + 2.5, cx - 3.5, cx + 3.5, xb - 2.5]) B.box(M.neon, x - 0.12, y - 0.66, bz0 + 1.5, x + 0.12, y - 0.62, bz1 - 1.5, nextId(), { color: LWHITE });
+  for (const k of [0.2, 0.5, 0.8]) addLight(cx, y - 1.4, bz0 + L * k, 22, srgb(1, 0.92, 0.8), 1.0);
+  yield;
+  // its ends: the name over the road on black edged in gold; over it glass from the arcade's floor up
+  // to the vault, bronze mullions, transoms, the panes
+  const mull = srgb(0.18, 0.17, 0.16);
+  for (const end of [-1, 1]) {
+    const z = end < 0 ? bz0 : bz1;
+    const f = end < 0 ? new Facade(xb, z, -1, 0, 0, -1) : new Facade(xa, z, 1, 0, 0, 1);
+    fbox(bctx, f, M.wallSolid, 0, y - 1.15, 0, W, y + 0.1, 0.4, BLACK);
+    fbox(bctx, f, M.goldTrim, 0, y - 1.2, 0.35, W, y - 1.1, 0.45, GOLD);
+    bigName(bctx, f, name, W / 2, y - 0.55, 0.42, W - 4, LGOLD, { font: font || 'Rubik', size: 90 });
+    for (let u = 0; u <= W + 0.01; u += W / 8) fbox(bctx, f, M.frame, u - 0.08, y + 0.1, -0.1, u + 0.08, YS, 0.12, mull);
+    for (let v = y + 3.2; v < YS - 0.5; v += 3.4) fbox(bctx, f, M.frame, 0, v, -0.1, W, v + 0.12, 0.12, mull);
+    for (let k = 0; k < 8; k++) {
+      for (let v = y + 0.3; v < YS - 0.6; v += 3.4) B.add(M.glint, f.quad((k * W) / 8 + 0.4, v + 0.2, ((k + 1) * W) / 8 - 0.4, Math.min(YS - 0.3, v + 2.8), 0.02), null, nextId());
+    }
+    col.addBox(xa, Math.min(z, z - end * 0.15), xb, Math.max(z, z - end * 0.15), y, YS, 'wall');
+  }
+  yield;
+  // the vault, its chandeliers
+  barrel(bctx, c, { cx, YS, RV, x0: xa, x1: xb, yc: YS - 3.5 }, bz0, bz1, [bz0, bz1], [bz0 + L * 0.25, bz0 + L * 0.75]);
+  yield;
+  // down its middle: royal palms in planters, a bench either side of each; café tables in twos
+  // between; lamp posts along both sides
+  const dy = y - CURB;
+  const lc = liftCtx(hctx, dy);
+  const fc = liftCtx(bctx, dy, bctx.R);
+  const fh = (mat, x0, y0, z0, x1, y1, z1, colr) => hall(mat, x0, y0 + dy, z0, x1, y1 + dy, z1, colr);
+  const fg = (mat, g2, colr) => {
+    g2.translate(0, dy, 0);
+    hallGeo(mat, g2, colr);
+  };
+  const sink = { seats: [], benches: [], bins: [] };
+  let nt = 0;
+  for (let z = bz0 + 10, k = 0; z < bz1 - 8; z += 12, k++) {
+    planter(lc, cx, z, true);
+    palm(lc, r, cx, z, 9 + r() * 3, { y0: CURB + 0.6, royal: srgb(0.82, 0.8, 0.76) });
+    for (const t of [-1, 1]) bench(lc, cx + t * 1.9, z, t < 0 ? Math.PI / 2 : -Math.PI / 2);
+    if (k % 2 === 0 && z + 6 < bz1 - 6) for (const t of [-1, 1]) foodTable(fc, IN, fh, fg, cx + t * 1.6, z + 6, sink, false, 200 + nt++, r);
+  }
+  for (const x of [xa + 2.2, xb - 2.2]) {
+    for (let z = bz0 + 4; z < bz1 - 2; z += 12) {
+      hall(IN.gloss, x - 0.07, y, z - 0.07, x + 0.07, y + 4.1, z + 0.07, srgb(0.12, 0.12, 0.14));
+      hall(IN.gloss, x - 0.16, y, z - 0.16, x + 0.16, y + 0.5, z + 0.16, srgb(0.12, 0.12, 0.14));
+      for (const t of [-1, 1]) {
+        const ball = new THREE.SphereGeometry(0.24, 10, 8);
+        ball.translate(x, y + 4.3, z + t * 0.36);
+        hallGeo(IN.lamp, ball, srgb(1, 0.96, 0.88));
+      }
+      hall(IN.gloss, x - 0.05, y + 4.05, z - 0.4, x + 0.05, y + 4.12, z + 0.4, GOLD);
+      col.addCircle(x, z, 0.16, y, y + 4.1, 'pole');
+    }
+  }
+  // (indoors for the weather: the arcade and the avenue under it; its floor for the mirror)
+  mall.indoor.push({ x0: xa, x1: xb, z0: bz0, z1: bz1, y: 0, top: YS + RV });
+  mall.arcade = { x0: xa, x1: xb, z0: bz0, z1: bz1, y, top: YS + RV - y };
+  if (bctx.footprints) {
+    bctx.footprints.push({ x0: xa, z0: bz0, x1: xb, z1: bz1, y0: y - 0.62, top: YS, color: '#bcd3e0' });
+    bctx.footprints.push({ x0: xa + 2, z0: bz0, x1: xb - 2, z1: bz1, y0: YS, top: YS + RV * 0.8, color: '#9cc0d8' });
+  }
+}
+
+// ------------------------------------------------------------------ the stores' windows
+// along a floor of the mall's long side (f: its Facade, u from 0 to L; y: the floor; skip: [u0, u1]
+// left bare): each in a frame of black standing out from the wall, lit from inside - a backdrop, the
+// plinths, the things on show on them - the glass over them, a line of gold over each
+const VIT = [
+  [srgb(1, 0.95, 0.86), srgb(0.96, 0.95, 0.93), srgb(0.1, 0.1, 0.12)],
+  [srgb(0.98, 0.92, 0.86), srgb(0.94, 0.9, 0.84), srgb(0.48, 0.14, 0.2)],
+  [srgb(0.9, 0.94, 0.98), srgb(0.96, 0.96, 0.97), srgb(0.12, 0.17, 0.32)],
+  [srgb(0.94, 0.96, 0.9), srgb(0.92, 0.88, 0.8), srgb(0.14, 0.34, 0.26)],
+  [srgb(1, 0.9, 0.7), srgb(0.12, 0.12, 0.14), srgb(0.95, 0.85, 0.6)],
+  [srgb(0.97, 0.97, 0.98), srgb(0.2, 0.2, 0.22), srgb(0.8, 0.62, 0.3)],
+];
+function vitrines(bctx, f, L, y, r, skip) {
+  const M = bctx.M;
+  const B = bctx.B;
+  const MOD = 6.4;
+  const n = Math.floor((L - 2) / MOD);
+  const pad = (L - n * MOD) / 2;
+  const H = 3.4;
+  for (let k = 0; k < n; k++) {
+    const u0 = pad + k * MOD + 0.6;
+    const u1 = u0 + MOD - 1.2;
+    if (skip.some(([a, q]) => u1 > a && u0 < q)) continue;
+    const pal = VIT[Math.floor(r() * VIT.length)];
+    fbox(bctx, f, M.frame, u0 - 0.15, y + 0.3, 0, u1 + 0.15, y + 0.45, 0.55, BLACK);
+    fbox(bctx, f, M.frame, u0 - 0.15, y + H, 0, u1 + 0.15, y + H + 0.18, 0.55, BLACK);
+    fbox(bctx, f, M.frame, u0 - 0.15, y + 0.3, 0, u0, y + H + 0.18, 0.55, BLACK);
+    fbox(bctx, f, M.frame, u1, y + 0.3, 0, u1 + 0.15, y + H + 0.18, 0.55, BLACK);
+    B.add(M.neonSoft, f.quad(u0, y + 0.45, u1, y + H, 0.03), null, nextId(), { color: pal[0].clone().multiplyScalar(0.5) });
+    for (let i = 0; i < 3; i++) {
+      const um = u0 + ((i + 0.5) * (u1 - u0)) / 3;
+      const ph = 0.2 + r() * 0.45;
+      fbox(bctx, f, M.prop, um - 0.38, y + 0.45, 0.08, um + 0.38, y + 0.45 + ph, 0.42, pal[1]);
+      const th = 0.4 + r() * 1.1;
+      const tw = 0.18 + r() * 0.2;
+      fbox(bctx, f, M.prop, um - tw, y + 0.45 + ph, 0.14, um + tw, y + 0.45 + ph + th, 0.36, pal[2]);
+    }
+    B.add(M.glint, f.quad(u0, y + 0.45, u1, y + H, 0.52), null, nextId());
+    fbox(bctx, f, M.goldTrim, u0 - 0.15, y + H + 0.18, 0.05, u1 + 0.15, y + H + 0.24, 0.6, GOLD);
+  }
+}
+
 // ------------------------------------------------------------------ the building's mass, with holes
 // a box from x0 to x1, z0 to z1, y0 to y1 with holes through it across x (the passages to the other
 // wing: [{ z0, z1, y0, y1 }]) - as the boxes round them
-function holed(B, mat, x0, x1, z0, z1, y0, y1, colr, hs) {
+function holed(B, mat, x0, x1, z0, z1, y0, y1, colr, hs, col = null) {
   const zs = [z0, z1];
   for (const h of hs) for (const z of [h.z0, h.z1]) if (z > z0 && z < z1) zs.push(z);
   zs.sort((a, b) => a - b);
@@ -2181,10 +2288,16 @@ function holed(B, mat, x0, x1, z0, z1, y0, y1, colr, hs) {
     const ys = hs.filter((h) => zc > h.z0 && zc < h.z1).map((h) => [h.y0, h.y1]).sort((p, q) => p[0] - q[0]);
     let y = y0;
     for (const [a, q] of ys) {
-      if (a > y + 0.01) B.box(mat, x0, y, za, x1, Math.min(a, y1), zb, nextId(), { color: colr });
+      if (a > y + 0.01) {
+        B.box(mat, x0, y, za, x1, Math.min(a, y1), zb, nextId(), { color: colr });
+        if (col) col.addBox(x0, za, x1, zb, y, Math.min(a, y1), 'wall');
+      }
       y = Math.max(y, q);
     }
-    if (y1 > y + 0.01) B.box(mat, x0, y, za, x1, y1, zb, nextId(), { color: colr });
+    if (y1 > y + 0.01) {
+      B.box(mat, x0, y, za, x1, y1, zb, nextId(), { color: colr });
+      if (col) col.addBox(x0, za, x1, zb, y, y1, 'wall');
+    }
   }
 }
 
@@ -2318,204 +2431,4 @@ function posGeo(pos) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.computeVertexNormals();
   return g;
-}
-
-// ------------------------------------------------------------------ over the avenue
-// between the two wings, over the avenue the cars go on along: the bridges of glass (a floor high, a
-// pane between posts on each side, the sky through their roofs) on every other floor either side of
-// the middle; in the middle the gate - its floors of glass in a frame of ivory over the road, the
-// pylons either side of it on the wings' fronts, under it a soffit of white and gold with its lamps,
-// and over it the tower: steps of ivory striped in black and gold up past sixty metres, the name
-// down it in gold light on black, north and south, a sunburst at its foot, a mast and its lamp
-function* spans(bctx, c, mall, g) {
-  const { hall, IN, col, M, sky } = c;
-  const { x0, x1, zm, LV, ROOF, TOP, links, tiles } = g;
-  const B = bctx.B;
-  const xm = (x0 + x1) / 2;
-  const W = x1 - x0;
-  const fp = (q) => bctx.footprints && bctx.footprints.push(q);
-  const white = srgb(0.94, 0.94, 0.95);
-  // the bridges of glass
-  for (const l of links) {
-    if (l.gate) continue;
-    for (const lv of l.lv) {
-      const y = LV[lv];
-      const { z0, z1 } = l;
-      // the deck: its body (ivory, a line of gold, the lights under it), its stone inside
-      B.box(M.wallSolid, x0, y - 0.6, z0 - 0.15, x1, y - 0.02, z1 + 0.15, nextId(), { color: IVORY });
-      col.addBox(x0, z0, x1, z1, y - 0.6, y, 'wall');
-      tiles(x0, z0, x1, z1, y);
-      for (const z of [z0 - 0.15, z1 + 0.15]) B.box(M.goldTrim, x0, y - 0.34, z - 0.05, x1, y - 0.22, z + 0.05, nextId(), { color: GOLD });
-      for (const z of [z0 + 0.7, z1 - 0.7]) B.box(M.neon, x0 + 0.5, y - 0.66, z - 0.06, x1 - 0.5, y - 0.6, z + 0.06, nextId(), { color: LWHITE });
-      // its sides: posts of white steel, the glass between (its glint), a rail of steel inside
-      for (const z of [z0, z1]) {
-        for (let k = 0; k <= 10; k++) {
-          const x = x0 + (k * W) / 10;
-          B.box(M.steel, x - 0.07, y, z - 0.07, x + 0.07, y + 3.7, z + 0.07, nextId(), { color: white });
-          if (k < 10) {
-            const pane = new THREE.PlaneGeometry(W / 10 - 0.3, 3.2);
-            pane.translate(x + W / 20, y + 1.85, z);
-            B.add(M.glint, pane, null, nextId());
-          }
-        }
-        B.box(M.steel, x0, y + 3.62, z - 0.09, x1, y + 3.78, z + 0.09, nextId(), { color: white });
-        const zi = z === z0 ? z + 0.15 : z - 0.15;
-        hall(IN.gloss, x0, y + 1.0, zi - 0.03, x1, y + 1.06, zi + 0.03, RAILC);
-        col.addBox(x0, z - 0.1, x1, z + 0.1, y, y + 3.7, 'wall');
-      }
-      // its roof: glass on ribs, the sky through it; a line of gold light along its eaves
-      B.box(M.mallGlassClear, x0, y + 3.78, z0 - 0.1, x1, y + 3.9, z1 + 0.1, nextId());
-      const sk = new THREE.PlaneGeometry(W, z1 - z0).rotateX(Math.PI / 2);
-      sk.translate(xm, y + 3.62, (z0 + z1) / 2);
-      sky(sk);
-      for (let k = 1; k < 10; k++) {
-        const x = x0 + (k * W) / 10;
-        hall(IN.box, x - 0.05, y + 3.5, z0, x + 0.05, y + 3.62, z1, white);
-      }
-      for (const z of [z0 - 0.1, z1 + 0.1]) B.box(M.neon, x0, y + 3.9, z - 0.04, x1, y + 3.96, z + 0.04, nextId(), { color: LGOLD });
-      col.addBox(x0, z0, x1, z1, y + 3.7, y + 3.9, 'wall');
-      mall.indoor.push({ x0, x1, z0, z1, y, top: 3.7 });
-      fp({ x0, z0: z0 - 0.15, x1, z1: z1 + 0.15, y0: y - 0.6, top: y + 3.9, color: '#bcd4e4' });
-      yield;
-    }
-  }
-
-  // the gate
-  const gl = links.find((l) => l.gate);
-  if (!gl) return;
-  const gz0 = gl.z0;
-  const gz1 = gl.z1;
-  const F = 0.6;
-  const soff = LV[1] - 0.7;
-  // (the soffit over the road: white, lines of gold across it, its lamps between)
-  B.box(M.wallSolid, x0, soff, gz0 - F, x1, LV[1] - 0.02, gz1 + F, nextId(), { color: IVORY });
-  col.addBox(x0, gz0 - F, x1, gz1 + F, soff, LV[1], 'wall');
-  for (let x = x0 + 3; x < x1 - 1; x += 3) B.box(M.goldTrim, x - 0.05, soff - 0.06, gz0 - F + 0.3, x + 0.05, soff, gz1 + F - 0.3, nextId(), { color: GOLD });
-  for (let x = x0 + 1.5; x < x1; x += 3) for (let z = gz0 + 0.5; z < gz1; z += 3) B.box(M.bulb, x - 0.22, soff - 0.04, z - 0.22, x + 0.22, soff, z + 0.22, nextId(), { color: srgb(1, 0.92, 0.75) });
-  addLight(xm, soff - 1.2, zm, 18, srgb(1, 0.88, 0.66), 1.2);
-  // its floors: the stone, the ceiling and its lamps; outside the spandrels of ivory over the glass,
-  // gold eyebrows, lines of gold light; the glass north and south in bronze mullions
-  for (const lv of gl.lv) {
-    const y = LV[lv];
-    const yc = y + 4.25;
-    const yn = lv + 1 < LV.length ? LV[lv + 1] - 0.36 : TOP;
-    if (lv > 1) B.box(M.wallSolid, x0, y - 0.36, gz0 - F, x1, y, gz1 + F, nextId(), { color: IVORY });
-    col.addBox(x0, gz0, x1, gz1, y - 0.36, y, 'wall');
-    tiles(x0, gz0, x1, gz1, y);
-    hall(IN.box, x0, yc, gz0, x1, yc + 0.12, gz1, CEIL);
-    for (let x = x0 + 2; x < x1 - 1; x += 4) hall(IN.lamp, x - 0.5, yc - 0.04, zm - 0.5, x + 0.5, yc, zm + 0.5, srgb(1, 0.97, 0.9));
-    B.box(M.wallSolid, x0, yc, gz0 - F, x1, yn, gz1 + F, nextId(), { color: IVORY });
-    col.addBox(x0, gz0, x1, gz1, yc, yn, 'wall');
-    for (const [z, s] of [[gz0 - F, -1], [gz1 + F, 1]]) {
-      B.box(M.goldTrim, x0, yc - 0.05, Math.min(z, z + s * 0.9), x1, yc + 0.22, Math.max(z, z + s * 0.9), nextId(), { color: GOLD });
-      B.box(M.neon, x0 + 0.2, yc - 0.12, Math.min(z + s * 0.35, z + s * 0.8), x1 - 0.2, yc - 0.05, Math.max(z + s * 0.35, z + s * 0.8), nextId(), { color: LGOLD });
-      const zg = s < 0 ? gz0 : gz1;
-      for (let k = 0; k <= 8; k++) {
-        const x = x0 + (k * W) / 8;
-        B.box(M.frame, x - 0.07, y, zg - 0.08, x + 0.07, yc, zg + 0.08, nextId(), { color: srgb(0.18, 0.17, 0.16) });
-        if (k < 8) {
-          const pane = new THREE.PlaneGeometry(W / 8 - 0.3, yc - y - 0.5);
-          pane.translate(x + W / 16, (y + yc) / 2, zg);
-          B.add(M.glint, pane, null, nextId());
-        }
-      }
-      B.box(M.frame, x0, y + 2.6, zg - 0.06, x1, y + 2.7, zg + 0.06, nextId(), { color: srgb(0.18, 0.17, 0.16) });
-      hall(IN.gloss, x0, y + 1.0, zg - s * 0.18, x1, y + 1.06, zg - s * 0.12, RAILC);
-      col.addBox(x0, zg - 0.1, x1, zg + 0.1, y, yc, 'wall');
-    }
-    mall.indoor.push({ x0, x1, z0: gz0, z1: gz1, y, top: 4.25 });
-    yield;
-  }
-  fp({ x0, z0: gz0 - F, x1, z1: gz1 + F, y0: soff, top: TOP, color: '#f2ece1' });
-  // the parapet's band of gold, its top lit
-  for (const s of [-1, 1]) {
-    const z = s < 0 ? gz0 - F : gz1 + F;
-    B.box(M.goldTrim, x0, ROOF + 0.45, Math.min(z, z + s * 0.08), x1, ROOF + 0.75, Math.max(z, z + s * 0.08), nextId(), { color: GOLD });
-    B.box(M.neon, x0, TOP - 0.05, Math.min(z, z + s * 0.1), x1, TOP + 0.05, Math.max(z, z + s * 0.1), nextId(), { color: LWHITE });
-  }
-  // the pylons either side of it, on the wings' fronts over their shops: ivory, black and gold up
-  // them, gold light on their corners, their caps stepped
-  for (const [xa, xb, xe] of [[x0, x0 + 1.3, x0 + 1.3], [x1 - 1.3, x1, x1 - 1.3]]) {
-    for (const [za, zb] of [[gz0 - F - 3, gz0 - F], [gz1 + F, gz1 + F + 3]]) {
-      const y0 = LV[1] - 0.3;
-      B.box(M.wallSolid, xa, y0, za, xb, TOP + 6, zb, nextId(), { color: IVORY });
-      col.addBox(xa, za, xb, zb, y0, TOP + 6, 'wall');
-      const zc = (za + zb) / 2;
-      B.box(M.wallSolid, Math.min(xe, xe + (xa === x0 ? 0.12 : -0.12)), y0 + 1, zc - 0.5, Math.max(xe, xe + (xa === x0 ? 0.12 : -0.12)), TOP + 5, zc + 0.5, nextId(), { color: BLACK });
-      B.box(M.goldTrim, Math.min(xe, xe + (xa === x0 ? 0.16 : -0.16)), y0 + 1, zc - 0.12, Math.max(xe, xe + (xa === x0 ? 0.16 : -0.16)), TOP + 5, zc + 0.12, nextId(), { color: GOLD });
-      for (const z of [za, zb]) B.box(M.neon, xe - 0.08, y0 + 0.4, z - 0.08, xe + 0.08, TOP + 6, z + 0.08, nextId(), { color: LGOLD });
-      B.box(M.wallSolid, xa - 0.2, TOP + 6, za - 0.2, xb + 0.2, TOP + 6.5, zb + 0.2, nextId(), { color: WHITE });
-      B.box(M.goldTrim, xa + 0.15, TOP + 6.5, za + 0.4, xb - 0.15, TOP + 8.2, zb - 0.4, nextId(), { color: GOLD });
-      const sf = new THREE.CircleGeometry(0.2, 8).rotateX(Math.PI / 2);
-      sf.translate((xa + xb) / 2, y0 - 0.01, zc);
-      B.add(M.bulb, sf, null, nextId(), { color: srgb(1, 0.9, 0.7) });
-      fp({ x0: xa, z0: za, x1: xb, z1: zb, y0, top: TOP + 8, color: '#f2ece1' });
-    }
-  }
-  yield;
-  // the tower over the gate: three steps up, stripes of black and gold on their faces north and
-  // south, white caps lit along their edges, gold light up their corners
-  const tiers = [[9, 6, 10], [6.5, 4.5, 10], [4.2, 3, 10]];
-  let yb = TOP;
-  for (const [hx, hz, h] of tiers) {
-    B.box(M.wallSolid, xm - hx, yb, zm - hz, xm + hx, yb + h, zm + hz, nextId(), { color: IVORY });
-    for (const s of [-1, 1]) {
-      const z = zm + s * hz;
-      for (const sx of [-1, 1]) {
-        for (const dx of [hx * 0.32, hx * 0.66]) {
-          const outer = dx > hx * 0.5;
-          B.box(outer ? M.wallSolid : M.goldTrim, xm + sx * dx - 0.5, yb + 0.6, Math.min(z, z + s * 0.25), xm + sx * dx + 0.5, yb + h - 0.8, Math.max(z, z + s * 0.25), nextId(), { color: outer ? BLACK : GOLD });
-        }
-      }
-    }
-    B.box(M.wallSolid, xm - hx - 0.3, yb + h, zm - hz - 0.3, xm + hx + 0.3, yb + h + 0.6, zm + hz + 0.3, nextId(), { color: WHITE });
-    for (const s of [-1, 1]) B.box(M.neon, xm - hx - 0.35, yb + h + 0.02, zm + s * (hz + 0.3) - 0.06, xm + hx + 0.35, yb + h + 0.12, zm + s * (hz + 0.3) + 0.06, nextId(), { color: LWHITE });
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.box(M.neon, xm + sx * hx - 0.09, yb, zm + sz * hz - 0.09, xm + sx * hx + 0.09, yb + h, zm + sz * hz + 0.09, nextId(), { color: LGOLD });
-    fp({ x0: xm - hx, z0: zm - hz, x1: xm + hx, z1: zm + hz, y0: yb, top: yb + h + 0.6, color: '#f2ece1' });
-    yb += h + 0.6;
-  }
-  // its top: fins in a cross, gold light on their edges, the mast, its lamp
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    B.box(M.wallSolid, xm + Math.min(0, dx * 3.2) - (dx ? 0 : 0.25), yb, zm + Math.min(0, dz * 3.2) - (dz ? 0 : 0.25), xm + Math.max(0, dx * 3.2) + (dx ? 0 : 0.25), yb + 9, zm + Math.max(0, dz * 3.2) + (dz ? 0 : 0.25), nextId(), { color: IVORY });
-    B.box(M.neon, xm + dx * 3.2 - 0.08, yb, zm + dz * 3.2 - 0.08, xm + dx * 3.2 + 0.08, yb + 8.8, zm + dz * 3.2 + 0.08, nextId(), { color: LGOLD });
-  }
-  const mast = new THREE.CylinderGeometry(0.12, 0.35, 12, 8);
-  mast.translate(xm, yb + 15, zm);
-  B.add(M.goldTrim, mast, null, nextId(), { color: GOLD });
-  const orb = new THREE.SphereGeometry(0.9, 14, 10);
-  orb.translate(xm, yb + 9.8, zm);
-  B.add(M.neon, orb, null, nextId(), { color: LWHITE });
-  const tip = new THREE.SphereGeometry(0.22, 8, 6);
-  tip.translate(xm, yb + 21.1, zm);
-  B.add(M.neon, tip, null, nextId(), { color: srgb(1, 0.2, 0.2) });
-  // the name down its faces, north and south, in gold light on a panel of black; at its foot the
-  // sunburst - rays of gold and black, a ring of gold round them, white light round that
-  const word = (g.name || 'GALLERIA').split(' ').pop();
-  for (const s of [-1, 1]) {
-    const z = zm + s * (tiers[0][1] + 0.35);
-    const n = word.length;
-    const step = 2.75;
-    const vTop = TOP + 7.8 + n * step;
-    B.box(M.wallSolid, xm - 2.2, TOP + 7.2, Math.min(z, z - s * 0.4), xm + 2.2, vTop + 0.6, Math.max(z, z - s * 0.4), nextId(), { color: BLACK });
-    for (const sx of [-1, 1]) B.box(M.goldTrim, xm + sx * 2.2 - 0.07, TOP + 7.2, Math.min(z, z + s * 0.06), xm + sx * 2.2 + 0.07, vTop + 0.6, Math.max(z, z + s * 0.06), nextId(), { color: GOLD });
-    const f = s < 0 ? new Facade(xm, z + s * 0.02, -1, 0, 0, -1) : new Facade(xm, z + s * 0.02, 1, 0, 0, 1);
-    for (let i = 0; i < n; i++) sign({ B }, f, M.neon, word[i], 0, vTop - (i + 1) * step + 0.2, 0.2, 2.3, LGOLD);
-    const zs = zm + s * (tiers[0][1] + 0.12);
-    for (let i = 0; i < 16; i++) {
-      const a0 = (i / 16) * Math.PI;
-      const ray = new THREE.RingGeometry(1.6, 6.4, 1, 1, a0, Math.PI / 16);
-      if (s < 0) ray.rotateY(Math.PI);
-      ray.translate(xm, TOP + 0.6, zs);
-      B.add(i % 2 ? M.wallSolid : M.goldTrim, ray, null, nextId(), { color: i % 2 ? BLACK : GOLD });
-    }
-    for (const [r0, r1, mat, colr] of [[6.4, 6.9, M.goldTrim, GOLD], [6.9, 7.05, M.neon, LWHITE], [0, 1.6, M.wallSolid, WHITE]]) {
-      const ring = new THREE.RingGeometry(r0, r1, 24, 1, 0, Math.PI);
-      if (s < 0) ring.rotateY(Math.PI);
-      ring.translate(xm, TOP + 0.6, zs + s * 0.02);
-      B.add(mat, ring, null, nextId(), { color: colr });
-    }
-  }
-  addLight(xm, TOP + 3, zm - tiers[0][1] - 4, 20, srgb(1, 0.85, 0.6), 1.0);
-  addLight(xm, TOP + 3, zm + tiers[0][1] + 4, 20, srgb(1, 0.85, 0.6), 1.0);
-  mall.gate = { x0, x1, z0: gz0, z1: gz1, tower: { x: xm, z: zm, top: yb + 21 } };
 }

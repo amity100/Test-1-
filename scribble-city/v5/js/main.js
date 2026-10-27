@@ -219,7 +219,11 @@ async function boot() {
   if (!params.has('nofloormirror')) {
     pipe.floorAt = (p) => {
       for (const m of world.malls || []) {
-        const h = m.mega && m.hall;
+        if (!m.mega) continue;
+        // (its arcade over the avenue: one floor, the first)
+        const a = m.arcade;
+        if (a && p.x > a.x0 && p.x < a.x1 && p.z > a.z0 && p.z < a.z1 && p.y > a.y + 0.2 && p.y < a.y + a.top) return a.y + 0.03;
+        const h = m.hall;
         if (!h || p.x < h.x0 || p.x > h.x1 || p.z < h.z0 || p.z > h.z1) continue;
         const rel = p.y - h.y;
         if (rel < 0.2 || rel > h.top) continue;
