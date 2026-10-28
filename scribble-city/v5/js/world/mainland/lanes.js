@@ -94,6 +94,8 @@ function* lanes(bctx, b, o) {
       { x0: xw1, z0: zI1 + 1, x1: xe0, z1: zP0 },
       { x0: xw0 + 1, z0: zP0, x1: xe1 - 1, z1: zF - 1 },
     ],
+    // (where the crews of teenagers who draw each other's style stand: game/mall.js crews)
+    crewSpots: [{ x: cx - 5, z: zP0 + 6 }, { x: cx - 12, z: Z0 + 4.5 }],
     // (the guard's beat: round the island and the piazza)
     beat: [{ x: xw0 + 4, z: Z0 + 5 }, { x: xw0 + 4, z: zF - 6 }, { x: xe1 - 4, z: zF - 6 }, { x: xe1 - 4, z: Z0 + 5 }],
     height: TOP - CURB,
@@ -437,7 +439,9 @@ function* lanes(bctx, b, o) {
       }
       for (const dx of [-0.35, 0.35]) hall(IN.box, x + dx - 0.025, CURB, z - 0.06, x + dx + 0.025, CURB + 1.9, z - 0.02, srgb(0.55, 0.38, 0.24));
       hall(IN.box, x - 0.4, CURB + 0.86, z - 0.08, x + 0.4, CURB + 0.92, z + 0.06, srgb(0.55, 0.38, 0.24));
-      mall.easels.push({ x, z, face: side, seat: { x, z: z - side * 1.1 }, sit: { x, z: z + side * 0.9 } });
+      // (the painter's stool before it, facing it; the sitter's place beside it, facing the painter)
+      const seat = { x, z: z - side * 1.1, yaw: side < 0 ? Math.PI : 0 };
+      mall.easels.push({ x, z, face: side, seat, sit: { x: x + 1.5, z: z - side * 0.6, yaw: Math.atan2(-1.5, -side * 0.5) } });
     }
     const f = new Facade(xw1, zA0 + 0.16, 1, 0, 0, 1);
     neonSign(bctx, f, 'ARTISTS\' ALLEY', (xe0 - xw1) / 2, CURB + 4.6, 0.1, 9, hex('#ff5ad1'), { font: 'Permanent Marker', size: 80 });

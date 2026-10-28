@@ -190,7 +190,10 @@ export class StreetLife {
 
   // ------------------------------------------------------------------ activation
   get budget() {
-    return this.game.touch ? 3 : 6;
+    // (v5, ROADMAP 11.35: in a mall the stores are all round you - more of them open whole; the
+    // rest have their people drawn cheaply, game/shopcrowd.js)
+    const inMall = this.game.mallLife && this.game.mallLife.inside;
+    return this.game.touch ? (inMall ? 4 : 3) : inMall ? 10 : 6;
   }
 
   update(dt) {
@@ -1003,6 +1006,17 @@ const FILM = [
   ['heart', 'והם היו חברים לתמיד.'],
   ['flower', 'הסוף.'],
 ];
+// (v5, ROADMAP 11.35) what the stores of things draw at the counter for whoever buys there: the
+// thing itself, in the air between them, then into the bag - every store of the drawn city draws
+// what it sells
+const PRODUCT = {
+  fashion: ['shirt', 'dress', 'jacket', 'pants'], boutique: ['dress', 'jacket', 'hat'], shoes: ['shoe'], jewelry: ['ring', 'chain', 'watch'],
+  perfume: ['perfume'], optics: ['glasses', 'sunglasses'], toys: ['teddy', 'ball', 'balloon'], books: ['book'], music: ['note', 'headphones'],
+  phones: ['phone', 'headphones'], electronics: ['laptop', 'tv', 'headphones', 'phone'], sports: ['ball', 'racket', 'dumbbell'],
+  flowers: ['bouquet', 'flower', 'plant'], home: ['candle', 'plant'], pharmacy: ['bandage'],
+};
+const PRODUCT_ASK = ['Could you draw me one in blue?', 'That one, please!', 'A little bigger?', 'Draw it for me!', 'Like the one in the window!', 'Is it still wet?'];
+const KEEPER_DRAWS = ['One fresh drawing, coming up!', 'Watch this...', 'Drawn just for you!', 'Here - careful, the ink is wet!', 'A classic!'];
 const pickDish = (kind) => {
   const d = DISH[kind];
   return d ? d[Math.floor(Math.random() * d.length)] : null;
@@ -1753,6 +1767,27 @@ class OpenShop {
         v.t = Math.min(v.t, 0.5);
       }
       if (!v.dishGot && v.t < 6) return null;
+    }
+    // (v5, ROADMAP 11.35) and at the other stores' counters the keeper draws what they bought
+    if (!v.prodAsk && v.t > 0.3 && !DISH[s.kind] && PRODUCT[s.kind] && this.open && !this.drawing && !this.heroJob) {
+      v.prodAsk = true;
+      const p = this.game.player.pos;
+      if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 26 && this.keeper && this.keeper.alive) {
+        if (Math.random() < 0.6) this.say(c, pick(PRODUCT_ASK));
+        v.prodT = 0.7;
+      }
+    }
+    if (v.prodT !== undefined) {
+      if (!v.prodDrawn && v.t > 0.3 + v.prodT && this.open && this.keeper && this.keeper.alive) {
+        v.prodDrawn = true;
+        const k = this.keeper;
+        const at = _w.copy(k.pos).lerp(c.pos, 0.5).clone();
+        at.y = c.pos.y + 1.4;
+        if (Math.random() < 0.5) this.say(k, pick(KEEPER_DRAWS));
+        this.game.airsketch.draw({ shape: pick(PRODUCT[s.kind]), at, size: 0.45, author: k, target: c.fig.j.handL.clone(), targetScale: 0.2, dur: 1.3, onPlop: () => (v.prodGot = true) });
+        v.t = Math.min(v.t, 0.4);
+      }
+      if (!v.prodGot && v.t < 6) return null;
     }
     if (v.t > 1.8 && !v.paid) {
       v.paid = true;

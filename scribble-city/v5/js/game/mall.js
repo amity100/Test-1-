@@ -70,6 +70,46 @@ const MEAL_TALK = [
   ['Same place next week?', 'Deal.'],
 ];
 const TRAY_SAY = ['Thank you!', 'There.', 'All done.'];
+// (v5, ROADMAP 11.35) the teenagers who draw each other's style: two or three of them in the street's
+// fashion; one draws a new jacket (a cap, the shades, sneakers...) at a friend, it flies onto them
+// and their look is that now; they cheer, or not, and the next one draws
+const STYLES = ['jacket', 'shirt', 'hat', 'sunglasses', 'headphones', 'shoe', 'pants'];
+const STYLE_COLS = [[0.95, 0.3, 0.45], [0.2, 0.55, 0.95], [0.98, 0.78, 0.2], [0.3, 0.8, 0.5], [0.62, 0.4, 0.9], [0.98, 0.5, 0.25], [0.12, 0.12, 0.14], [0.96, 0.95, 0.92], [0.55, 0.85, 0.95]];
+const CREW_SAY = {
+  start: ['Hold still - I got an idea!', 'Okay, my turn to style you.', 'Trust me on this one.', 'You need a glow-up.', 'Watch this!', 'Stand still, I\'m drawing!'],
+  love: ['Woah! I love it!', 'Okay that\'s FIRE.', 'Yesss!', 'I look so good!', 'Iconic.', 'Don\'t touch it, it\'s perfect.'],
+  meh: ['Hmm... not my vibe.', 'Bold choice.', 'Is this a joke?', 'My mom would hate it.', 'Draw it again!'],
+  friends: ['So fresh!', 'Okay, okay!', 'Post it!', 'Fit check!', 'Now do me!', 'That color though!'],
+};
+// a drawn thing put on: what it changes in the look
+function styleOn(L, shape, col) {
+  switch (shape) {
+    case 'jacket':
+      L.top = { kind: pick(['denim', 'puffer', 'overshirt', 'blazer']), color: col, sleeves: 'long', inner: pick([[0.96, 0.95, 0.92], [0.12, 0.12, 0.14]]) };
+      break;
+    case 'shirt':
+      L.top = { kind: pick(['hoodie', 'sweatshirt', 'oversized']), color: col, sleeves: 'long' };
+      break;
+    case 'hat':
+      L.hat = { kind: pick(['cap', 'bucket', 'beanie', 'capBack']), color: col };
+      break;
+    case 'sunglasses':
+      L.face.glasses = L.face.glasses === 'shades' ? 'round' : 'shades';
+      break;
+    case 'headphones':
+      L.acc = L.acc.includes('headphones') ? L.acc.filter((a) => a !== 'headphones') : [...L.acc, 'headphones'];
+      break;
+    case 'shoe':
+      L.shoes = col;
+      break;
+    default:
+      L.bottom = { kind: pick(['cargo', 'baggy', 'wide']), color: col };
+  }
+  modest(L);
+}
+// (and the painters of the artists' alley: a portrait of whoever sits for them, on the easel)
+const PAINTER_SAY = ['Don\'t move... perfect.', 'Chin up a little.', 'Almost done!', 'Done! What do you think?'];
+const SITTER_SAY = ['I love it!', 'Is that really me?', 'Can I keep it?', 'You made me look great!', 'Wow, thank you!'];
 
 function kioskLook(kind) {
   const L = civilianLook({ kind: pick(['casual', 'street', 'smart']) });
@@ -286,6 +326,8 @@ export class MallLife {
     this.game = game;
     this.active = new Map(); // mall -> { nav, people: [] }
     this.scanT = 0;
+    // (are you in one of them: game/streetlife.js opens more of its stores then)
+    this.inside = false;
   }
 
   get budget() {
@@ -318,6 +360,8 @@ export class MallLife {
       for (const [m, st] of this.active) {
         if (!malls.includes(m) || this.dist(m, p.x, p.z) > (game.touch ? 70 : 100)) this.close(m, st);
       }
+      this.inside = false;
+      for (const m of this.active.keys()) if (this.dist(m, p.x, p.z) < 1 && p.y < (m.height || 30)) this.inside = true;
     }
     for (const [m, st] of this.active) {
       this.tick(m, st, dt);
@@ -380,13 +424,186 @@ export class MallLife {
     this.hire(m, st);
   }
 
+  // ------------------------------------------------------------------ (v5, ROADMAP 11.35) the style crews
+  // two crews in the mall's open places (one on a phone): world/mainland/lanes.js gives its own
+  // spots (mall.crewSpots); in a hall, on the ground floor either side of its court
+  crews(m, st) {
+    const game = this.game;
+    st.crews = st.crews || [];
+    const h = m.hall;
+    const cx = (h.x0 + h.x1) / 2;
+    const zm = m.zm || (h.z0 + h.z1) / 2;
+    const spots = m.crewSpots || [{ x: cx - 7, z: zm + 15 }, { x: cx + 7, z: zm - 15 }];
+    const n = game.touch ? 1 : 2;
+    for (const sp0 of spots.slice(0, n)) {
+      // (where there is room for them: the spot, or a little way from it)
+      let sp = null;
+      for (const [dx, dz] of [[0, 0], [1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5], [2.5, 2.5], [-2.5, -2.5]]) {
+        if (st.nav.free(sp0.x + dx, sp0.z + dz) && st.nav.free(sp0.x + dx + 1, sp0.z + dz) && st.nav.free(sp0.x + dx - 1, sp0.z + dz)) {
+          sp = { x: sp0.x + dx, z: sp0.z + dz };
+          break;
+        }
+      }
+      if (!sp) continue;
+      const k = 2 + (Math.random() < 0.55 ? 1 : 0);
+      const g = { m, members: [], x: sp.x, z: sp.z, t: 2 + Math.random() * 5, turn: Math.floor(Math.random() * 3), job: null };
+      for (let i = 0; i < k; i++) {
+        const a = (i / k) * Math.PI * 2 + Math.random() * 0.5;
+        const px = sp.x + Math.sin(a) * 0.9;
+        const pz = sp.z + Math.cos(a) * 0.9;
+        const L = civilianLook({ kind: pick(['street', 'sporty', 'denim', 'street']) });
+        // (younger: a little shorter, the street's own things on)
+        L.build.height *= 0.94;
+        if (Math.random() < 0.5) L.hat = { kind: pick(['cap', 'capBack', 'bucket']), color: pick(STYLE_COLS) };
+        const c = game.civilians.spawnScripted(px, pz, modest(L), this);
+        c.baseY = m.mega ? m.levels[0] : 0;
+        const w = { c, g, i };
+        c.ctrl = () => this.crewStep(w);
+        g.members.push(w);
+      }
+      st.crews.push(g);
+    }
+  }
+
+  // a member of a crew: stands with the others, turned to the middle - to the one drawing, or the
+  // one drawn on
+  crewStep(w) {
+    const g = w.g;
+    const c = w.c;
+    const j = g.job;
+    let tx = g.x;
+    let tz = g.z;
+    if (j && j.artist === w) {
+      tx = j.model.c.pos.x;
+      tz = j.model.c.pos.z;
+    } else if (j && j.model === w) {
+      tx = j.artist.c.pos.x;
+      tz = j.artist.c.pos.z;
+    } else if (j) {
+      tx = j.model.c.pos.x;
+      tz = j.model.c.pos.z;
+    }
+    c.faceYaw = Math.atan2(tx - c.pos.x, tz - c.pos.z);
+    return null;
+  }
+
+  crewTick(g, dt) {
+    const game = this.game;
+    const live = g.members.filter((w) => w.c.alive && !w.c.headless && w.c.owner === this && w.c.panicT <= 0);
+    if (live.length < 2) return;
+    g.t -= dt;
+    const j = g.job;
+    if (!j) {
+      if (g.t > 0) return;
+      // the next one draws on another
+      const artist = live[g.turn % live.length];
+      const model = live[(g.turn + 1) % live.length];
+      g.turn++;
+      g.job = { artist, model, t: 0, shape: pick(STYLES), col: pick(STYLE_COLS), drawn: false, plopped: false };
+      this.say(artist.c, pick(CREW_SAY.start));
+      return;
+    }
+    j.t += dt;
+    if (!j.drawn && j.t > 1.0) {
+      j.drawn = true;
+      const a = j.artist.c;
+      const mc = j.model.c;
+      const at = new THREE.Vector3((a.pos.x + mc.pos.x) / 2, (a.pos.y || 0) + 1.5, (a.pos.z + mc.pos.z) / 2);
+      const part = j.shape === 'hat' || j.shape === 'sunglasses' || j.shape === 'headphones' ? mc.fig.j.headC : j.shape === 'shoe' ? mc.fig.j.footL : j.shape === 'pants' ? mc.fig.j.hip : mc.fig.j.neck;
+      game.airsketch.draw({ shape: j.shape, at, size: 0.85, author: a, target: part.clone(), targetScale: 0.25, dur: 2.2, hold: 0.8, onPlop: () => {
+        j.plopped = true;
+        styleOn(mc.fig.look, j.shape, j.col);
+        game.fx.sparkle ? game.fx.sparkle(mc.pos.x, (mc.pos.y || 0) + 1.2, mc.pos.z) : null;
+      } });
+    }
+    if (j.plopped && !j.said) {
+      j.said = true;
+      j.saidT = j.t;
+      const love = Math.random() < 0.75;
+      this.say(j.model.c, pick(love ? CREW_SAY.love : CREW_SAY.meh));
+      const other = live.find((w) => w !== j.model && w !== j.artist);
+      if (other) j.other = other;
+      j.cheer = love;
+    }
+    if (j.said && j.other && !j.otherSaid && j.t > j.saidT + 1.2) {
+      j.otherSaid = true;
+      this.say(j.other.c, pick(CREW_SAY.friends));
+    }
+    if ((j.said && j.t > j.saidT + 3.5) || j.t > 12) {
+      g.job = null;
+      g.t = 7 + Math.random() * 9;
+    }
+  }
+
+  // a painter at an easel of the artists' alley: when somebody sits for them, their portrait drawn on
+  // the board, a word, and it rubbed out for the next; when nobody does, a sketch of their own now
+  // and then
+  painter(w, dt) {
+    const game = this.game;
+    const e = w.e;
+    const c = w.c;
+    c.pos.x = e.seat.x;
+    c.pos.z = e.seat.z;
+    c.faceYaw = e.seat.yaw;
+    c.fig.sit = 1;
+    w.t += dt;
+    const board = () => new THREE.Vector3(e.x, (c.pos.y || 0) + 1.33, e.z - e.face * 0.05);
+    if (w.sk && w.sk.phase === 'gone') w.sk = null;
+    if (e.model && e.seated && !e.done) {
+      if (!w.sk && !w.portrait) {
+        w.portrait = true;
+        w.t = 0;
+        w.sk = game.airsketch.draw({ shape: 'friend', at: board(), size: 0.62, author: c, dur: 6, keep: true, wall: { rx: -e.face, rz: 0, nx: 0, nz: -e.face } });
+        if (Math.random() < 0.6) this.say(c, pick(PAINTER_SAY.slice(0, 3)));
+      }
+      if (w.portrait && w.t > 9) {
+        this.say(c, PAINTER_SAY[3]);
+        e.done = true;
+        w.portrait = false;
+        w.wipeT = 3;
+      }
+      return null;
+    }
+    if (w.wipeT !== undefined) {
+      w.wipeT -= dt;
+      if (w.wipeT <= 0) {
+        if (w.sk) game.airsketch.erase(w.sk);
+        w.sk = null;
+        w.wipeT = undefined;
+        w.t = 0;
+      }
+      return null;
+    }
+    // (nobody sitting: a sketch of their own now and then, rubbed out after a while)
+    if (!e.model && !w.sk && w.t > 12 + Math.random() * 10) {
+      w.t = 0;
+      w.sk = game.airsketch.draw({ shape: pick(['flower', 'dog', 'house', 'heart', 'umbrella']), at: board(), size: 0.55, author: c, dur: 4, keep: true, wall: { rx: -e.face, rz: 0, nx: 0, nz: -e.face } });
+    } else if (!e.model && w.sk && w.t > 10) {
+      game.airsketch.erase(w.sk);
+      w.sk = null;
+      w.t = 0;
+    }
+    return null;
+  }
+
   close(m, st) {
     // (from the end: drop() splices each one out of the list - going forward, every other one was
     // skipped and stayed behind in the city, a dozen more every time a mall was left)
     for (let i = st.people.length - 1; i >= 0; i--) this.drop(st.people[i], true);
     st.people = [];
-    for (const w of st.staff) this.game.civilians.remove(w.c);
+    for (const w of st.staff) {
+      if (w.sk) this.game.airsketch.erase(w.sk);
+      this.game.civilians.remove(w.c);
+    }
     st.staff = [];
+    for (const g of st.crews || []) for (const w of g.members) this.game.civilians.remove(w.c);
+    st.crews = [];
+    for (const e of m.easels || []) {
+      e.painter = null;
+      e.model = null;
+      e.seated = false;
+      e.done = false;
+    }
     for (const k of m.kiosks || []) k.busy = null;
     this.active.delete(m);
   }
@@ -403,6 +620,20 @@ export class MallLife {
       st.staff.push(w);
       return w;
     };
+    // (the painters at the artists' alley's easels: world/mainland/lanes.js)
+    for (const e of (m.easels || []).slice(0, touch ? 2 : 4)) {
+      const L = civilianLook({ kind: pick(['knit', 'denim', 'casual']) });
+      L.top = { kind: 'overshirt', color: pick([[0.92, 0.9, 0.84], [0.5, 0.52, 0.4], [0.78, 0.6, 0.4]]), sleeves: 'long', inner: [0.96, 0.95, 0.92] };
+      if (Math.random() < 0.5) L.hat = { kind: 'beanie', color: pick([[0.86, 0.3, 0.3], [0.2, 0.2, 0.24], [0.3, 0.5, 0.8]]) };
+      const w = add(e.seat.x, e.seat.z, modest(L), (q, dt) => this.painter(q, dt));
+      w.e = e;
+      w.c.noCollide = true;
+      w.c.yaw = e.seat.yaw;
+      w.c.fig.sit = 1;
+      w.t = Math.random() * 6;
+      e.painter = w;
+    }
+    this.crews(m, st);
     for (const k of (m.kiosks || []).slice(0, touch ? 2 : 4)) {
       const w = add(k.x, k.z, kioskLook(k.kind), (q, dt) => this.vendor(q, dt));
       w.k = k;
@@ -665,6 +896,8 @@ export class MallLife {
       else if (m.fountain) P.push({ kind: 'fountain' });
       else P.push({ kind: 'window' });
     }
+    // (in the lanes: a portrait at one of the artists' easels, now and then)
+    if (m.easels && Math.random() < 0.25) P.splice(Math.floor(Math.random() * P.length), 0, { kind: 'portrait' });
     P.push({ kind: 'leave' });
     s.plan = P;
     s.cur = null;
@@ -814,6 +1047,15 @@ export class MallLife {
         this.go(s, a.d.x + (Math.random() - 0.5) * 0.8, a.d.z);
         break;
       }
+      case 'portrait': {
+        // (an easel with its painter at it, and nobody sitting for them)
+        const free = (m.easels || []).filter((e) => e.painter && !e.model);
+        if (!free.length) return this.next(s);
+        a.e = pick(free);
+        a.e.model = s;
+        this.go(s, a.e.sit.x, a.e.sit.z);
+        break;
+      }
       default: {
         // out of the nearest door
         let best = m.entrances[0];
@@ -873,9 +1115,41 @@ export class MallLife {
         return this.atKiosk(s, a);
       case 'map':
         return this.atMap(s, a);
+      case 'portrait':
+        return this.atPortrait(s, a);
       default:
         return this.atDoor(s, a);
     }
+  }
+
+  // sitting for a painter of the artists' alley: still, facing them, until the portrait is done
+  atPortrait(s, a) {
+    const c = s.c;
+    const e = a.e;
+    c.noCollide = true;
+    c.pos.x = e.sit.x;
+    c.pos.z = e.sit.z;
+    c.faceYaw = e.sit.yaw;
+    c.fig.sit = Math.min(1, c.fig.sit + 0.05);
+    e.seated = c.fig.sit > 0.9;
+    if (!e.done && s.t < 40) return null;
+    // (up, a look at it, a word, and on)
+    if (e.done && !a.said) {
+      a.said = true;
+      this.say(c, pick(SITTER_SAY));
+    }
+    if (s.t < 42 && e.done && !a.up) {
+      a.up = true;
+      a.upT = s.t + 1.5;
+    }
+    if (a.upT && s.t < a.upT) return null;
+    c.fig.sit = 0;
+    c.noCollide = false;
+    e.model = null;
+    e.seated = false;
+    e.done = false;
+    this.next(s);
+    return null;
   }
 
   // at a kiosk: a look, a question, a thing taken up to look at (the glasses up to the face), the
@@ -1357,6 +1631,13 @@ export class MallLife {
     if (s.cur && s.cur.k && s.cur.k.busy === s) s.cur.k.busy = null;
     const q = s.cur && s.cur.stop;
     if (q && q.b && q.b.who === s) q.b.who = null;
+    for (const e of s.m.easels || []) {
+      if (e.model === s) {
+        e.model = null;
+        e.seated = false;
+        e.done = false;
+      }
+    }
     const i = st.people.indexOf(s);
     if (i >= 0) st.people.splice(i, 1);
     const c = s.c;
@@ -1373,6 +1654,7 @@ export class MallLife {
   // ------------------------------------------------------------------ the whole mall, each frame
   tick(m, st, dt) {
     const game = this.game;
+    if (st.crews) for (const g of st.crews) this.crewTick(g, dt);
     // (from the end: a shopper dropped is spliced out of the list as we go - no copy of it a frame)
     for (let i = st.people.length - 1; i >= 0; i--) {
       const s = st.people[i];

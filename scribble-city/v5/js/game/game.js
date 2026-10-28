@@ -57,6 +57,7 @@ import { Crowds } from './crowds.js';
 import { Events } from './events.js';
 import { Reactions } from './reactions.js';
 import { FarCrowd } from './farcrowd.js';
+import { ShopCrowd } from './shopcrowd.js';
 import { Animals } from './animals.js';
 import { Voices } from './voices.js';
 import { Fleet } from './fleet.js';
@@ -243,6 +244,8 @@ export class Game {
     this.reactions = new Reactions(this);
     // the crowd further down the street, drawn cheaply (game/farcrowd.js)
     this.farCrowd = new FarCrowd(this);
+    // (v5, ROADMAP 11.35) the people in the mall's other stores, drawn cheaply (game/shopcrowd.js)
+    this.shopCrowd = new ShopCrowd(this);
     // cats in the alleys, little birds on the park's lawns (game/animals.js)
     this.animals = new Animals(this);
     // what people say, and answer; aloud too, if asked for (game/voices.js)
@@ -1075,6 +1078,7 @@ export class Game {
       if (!this.classic) armorBar(this);
       this.farCrowd.update(dt);
       this.streetlife.update(dt);
+      this.shopCrowd.update(dt);
       if (this.friend) this.friend.update(dt);
       if (this.fair) this.fair.update(dt);
       if (this.arenaGame) this.arenaGame.update(dt);
@@ -1213,6 +1217,7 @@ export class Game {
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
       this.farCrowd.draw(this.camera.position);
+      this.shopCrowd.draw(this.camera.position);
       if (this.arenaGame) this.arenaGame.draw();
       this.streetlife.draw(fr);
       this.workers.draw(fr);
