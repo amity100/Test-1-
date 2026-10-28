@@ -622,7 +622,7 @@ export function storeFloor(kind) {
     }
   };
   if (kind === 'oak' || kind === 'walnut') {
-    const base = kind === 'oak' ? [204, 170, 126] : [108, 77, 56];
+    const base = kind === 'oak' ? [200, 172, 138] : [108, 79, 60];
     const n = 11;
     const w = N / n;
     for (let i = 0; i < n; i++) {

@@ -28,7 +28,8 @@ import { STORE_NAMES, NEONS, FONTS, ADS, PROMO, KIOSKS, DARK, WHITE, foodTable, 
 
 const FH = 5.4; // floor to floor
 const GW = 5; // the galleries' width
-const SD = 11; // the hall's stores, deep (out to the building's side)
+const SD = 11; // the hall's stores, deep (out to the building's side; their rooms end in front of its
+// stone - ROADMAP 11.42: inside a store you see its own back wall, not the stone of the outside)
 const SKIN = 0.3; // the building's walls on its long sides
 const AVE_W = 24; // an avenue between two of its halls, with its sidewalks (the arcade's width)
 const VEST = 6; // the entrances' vestibules
@@ -526,7 +527,7 @@ function* wing(bctx, b, o) {
     const colr = hex(HALL_FRONTS[Math.floor(r() * HALL_FRONTS.length)]);
     const info = { doors: [], shops: [], f, L, top: 3.55 };
     const shop = storefront(bctx, f, 0.25, L - 0.25, {
-      kind, name, color: o2.color || colr, depth: food ? 7 : SD, signCol: o2.signCol || NEONS[Math.floor(r() * NEONS.length)], font: o2.font || fontOf(name),
+      kind, name, color: o2.color || colr, depth: food ? 7 : SD - SKIN - 0.02, signCol: o2.signCol || NEONS[Math.floor(r() * NEONS.length)], font: o2.font || fontOf(name),
       awning: food ? 'box' : 'none', awCol: hex(NEONS[Math.floor(r() * NEONS.length)]), sign: o2.sign || (r() < 0.5 ? 'box' : undefined), signV: 4.3, signLen: Math.min(L - 1.2, o2.signLen || 5), doorAt: food ? 0.5 : 0.3 + r() * 0.4,
     }, info);
     // the pilaster between this front and the next, up to the floor above; the fascia over the
