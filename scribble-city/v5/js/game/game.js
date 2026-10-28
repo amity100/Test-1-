@@ -130,7 +130,7 @@ export class Game {
     this.state = 'title'; // title | play | paused | dead
     this.focus = new THREE.Vector3();
     this.stuck = [];
-    this.goalFlags = { photo: false, hidden: false, drew: false, bpWeapon: false, kills: 0, car: false, drove: false, heavy: false, heavyDrawn: false };
+    this.goalFlags = { photo: false, hidden: false, drew: false, bpWeapon: false, perfect: false, kills: 0, car: false, drove: false, heavy: false, heavyDrawn: false };
     this.lastLookInput = 0;
   }
 
@@ -1641,7 +1641,7 @@ export class Game {
       if (plan) {
         // it hangs in the air where it was drawn, turns real, then flies into the hand
         slot.present = { matrix: plan.frame.matrix.clone(), k: 0 };
-        this.materialize.begin({ frame: plan.frame, root: model.group, held: slot, onReal });
+        this.materialize.begin({ frame: plan.frame, root: model.group, held: slot, follow: plan.follow, onReal });
       } else slot.popAt = this.time;
       this.hud.updateWeapon();
     } else {
@@ -2164,16 +2164,16 @@ export class Game {
       this.hud.setGoals(mg);
       return;
     }
-    // (ROADMAP 11.6: with the free drawing, drawing anything comes first; the blueprints later)
+    // (ROADMAP 11.6: with the free drawing, drawing comes first; ROADMAP 11.40: from the catalog by
+    // the pen - and one drawn just as it is there)
     const all = this.freedraw ? [
-      { text: this.touch ? 'לצייר נשק משלכם — מה שבא לכם (עיפרון), גם בריצה' : 'לצייר נשק משלכם — מה שבא לכם (Q), גם בריצה', done: f.drew },
-      // (v5, ROADMAP 11.36: the library's weapons, from the start again)
-      { text: this.touch ? 'לצייר נשק מהשרטוטים: אקדח צבע, בזוקת מחקים... (עיפרון ← 📒 שרטוטים)' : 'לצייר נשק מהשרטוטים: אקדח צבע, בזוקת מחקים... (T)', done: f.bpWeapon },
+      { text: this.touch ? 'לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (עיפרון), גם בריצה' : 'לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (Q), גם בריצה', done: f.drew },
+      { text: 'לצייר נשק "מושלם" — בדיוק כמו במקרא, עם כל החלקים', done: f.perfect },
       { text: 'להתחבא ליד תא טלפון, פח אשפה או שיח', done: f.hidden },
       { text: 'לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', done: f.bar },
       { text: `למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
-      { text: this.touch ? 'לצייר רכב (שני גלגלים מתחתיו) ולנהוג בו' : 'לצייר רכב (שני גלגלים מתחתיו) ולנהוג בו (E)', done: f.drove },
-      { text: 'לצייר טנק (עם תותח) או מסוק (עם רוטור)', done: f.heavyDrawn },
+      { text: this.touch ? 'לצייר רכב מהמקרא (לשונית רכבים) ולנהוג בו' : 'לצייר רכב מהמקרא (לשונית רכבים, 2) ולנהוג בו (E)', done: f.drove },
+      { text: 'לצייר טנק או מסוק מהמקרא', done: f.heavyDrawn },
       { text: this.touch ? 'לצלם שרטוט על שלט ולצייר אותו באוויר' : 'לצלם שרטוט על שלט (F) ולצייר אותו באוויר (T)', done: f.photo },
     ] : [
       { text: this.touch ? 'לצלם את השרטוט של אקדח הצבע בטיילת, ממול (מצלמה)' : 'לצלם את השרטוט של אקדח הצבע בטיילת, ממול (F)', done: f.photo },

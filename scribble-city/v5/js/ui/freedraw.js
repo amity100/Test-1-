@@ -3,7 +3,7 @@ import { INKS, KINDS, WEAPON_ORDER, readFree, buildWeapon, statLine, keyKind } f
 import { CATEGORY_ORDER, CATEGORY_NAME, CATEGORY_OF } from '../game/sketchnet.js';
 import { spawnDrawn, jetFlames } from '../game/drawncar.js';
 import { setMode } from '../game/hybrid.js';
-import { makeFrame, findSpot, localBox } from '../game/materialize.js';
+import { makeFrame, findSpot, localBox, planDrawing } from '../game/materialize.js';
 import { canopyModel } from '../game/parachute.js';
 import { waterSpot } from '../game/rides.js';
 import { angleDiff, clamp } from '../core/util.js';
@@ -19,6 +19,8 @@ import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
 import { DrawMemory } from '../game/drawmemory.js';
+import { matchCatalog, gradeOf, MATCH_MIN, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
+import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
@@ -105,6 +107,30 @@ const CHOICES = {
   gear: [['g:shield', 'מגן'], ['g:parachute', 'מצנח'], ['g:umbrella', 'מטרייה'], ['g:ladder', 'סולם'], ['g:ramp', 'רמפה'], ['g:bridge', 'גשר'], ['g:key', 'מפתח'], ['g:spring', 'קפיץ']],
 };
 
+// (ROADMAP 11.40) a catalog thing in the legend, as its blueprint is drawn (its lines, nothing filled)
+const bpSvgs = new Map();
+function bpSvg(bp) {
+  let svg = bpSvgs.get(bp.id);
+  if (!svg) {
+    const b = blueprintBounds(bp);
+    const pad = Math.max(b.w, b.h) * 0.06;
+    const d = bp.strokes.map((st) => `M${st.pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L')}`).join('');
+    svg = `<svg viewBox="${(b.x0 - pad).toFixed(1)} ${(b.y0 - pad).toFixed(1)} ${(b.w + pad * 2).toFixed(1)} ${(b.h + pad * 2).toFixed(1)}" preserveAspectRatio="xMidYMid meet"><path d="${d}"/></svg>`;
+    bpSvgs.set(bp.id, svg);
+  }
+  return svg;
+}
+
+// the ink a catalog thing takes: more for a vehicle, more for a harder one
+function costOfBp(bp) {
+  const d = bp.difficulty || 1;
+  return bp.kind === 'vehicle' ? 14 + d * 6 : bp.kind === 'weapon' ? 8 + d * 5 : 6 + d * 3;
+}
+
+// how it came out, in a word
+const GRADE_WORD = { perfect: 'מושלם', good: 'טוב', wonky: 'עקום' };
+const moreLines = (n) => (n === 1 ? 'עוד קו אחד' : `עוד ${n} קווים`);
+
 export class FreeDraw {
   constructor(game) {
     this.game = game;
@@ -116,6 +142,10 @@ export class FreeDraw {
     this.force = null;
     // (ROADMAP 11.8) what the player says they draw: none - anything; one; or several together
     this.cats = new Set();
+    // (v5, ROADMAP 11.40) on foot: the catalog's category the legend shows, and what is drawn is read as
+    // one of its things (game/catmatch.js)
+    this.shelf = 'weapon';
+    this.legSig = '';
     // (ROADMAP 11.37) what the pen remembers of the way you draw: game/drawmemory.js
     this.memory = new DrawMemory();
     this.catCursor = 0;
@@ -177,6 +207,7 @@ export class FreeDraw {
     const cats = [['', 'כל דבר'], ...CATEGORY_ORDER.map((c) => [c, CATEGORY_NAME[c]])].map(([c, n], i) => `<button class="fd-cat" data-c="${c}"${i ? ` title="${i}"` : ' title="0"'}>${n}</button>`).join('');
     this.el.innerHTML = `<canvas id="fd-air"></canvas>
       <div class="fd-cats" id="fd-cats"><span class="fd-cats-t">מה מציירים?</span>${cats}</div>
+      <div class="fd-leg" id="fd-leg"></div>
       <div class="fd-zone" id="fd-zone-a"></div><div class="fd-zone" id="fd-zone-b"></div>
       <div class="fd-hint" id="fd-hint"></div>
       <div class="fd-signs hidden" id="fd-signs"><b>סימנים מהירים</b>
@@ -252,6 +283,7 @@ export class FreeDraw {
     this.inkCost = $('fd-ink-cost');
     this.colorBtn = $('fd-color');
     this.catsEl = $('fd-cats');
+    this.legEl = $('fd-leg');
     this.partsEl = $('fd-parts');
     this.pmenuEl = $('fd-pmenu');
     this.cardEl = $('fd-card');
@@ -376,6 +408,28 @@ export class FreeDraw {
       const b = e.target.closest('.fd-cat');
       if (b) this.toggleCat(b.dataset.c || null);
     });
+    // (ROADMAP 11.40) the catalog: a category; a thing in it - that is what is drawn (again: any).
+    // A tap, not a swipe along it: on a phone it scrolls under the finger
+    let tapAt = null;
+    this.legEl.addEventListener('pointerdown', (e) => {
+      tapAt = { x: e.clientX, y: e.clientY, t: performance.now() };
+    });
+    this.legEl.addEventListener('pointercancel', () => (tapAt = null));
+    const tap = (el, fn) =>
+      el.addEventListener('pointerup', (e) => {
+        const ok = tapAt && Math.hypot(e.clientX - tapAt.x, e.clientY - tapAt.y) < 12 && performance.now() - tapAt.t < 700;
+        tapAt = null;
+        if (ok) fn(e);
+      });
+    tap(this.legEl, (e) => {
+      const t = e.target.closest('[data-s]');
+      if (t) {
+        this.setShelf(t.dataset.s);
+        return;
+      }
+      const it = e.target.closest('[data-i]');
+      if (it && !it.classList.contains('lock')) this.choose(this.force === it.dataset.i ? null : it.dataset.i);
+    });
     press($('fd-kind'), () => this.menu(this.menuEl.classList.contains('hidden')));
     // (ROADMAP 11.10) a part's menu: what else that line could be; which way it faces
     press(this.pmenuEl, (e) => {
@@ -478,6 +532,10 @@ export class FreeDraw {
         // (ROADMAP 11.24: in a car - the part to draw, 1-3)
         mine();
         this.game.fuse.pen.pick(PEN_CATS[+k.slice(-1) - 1]);
+      } else if (this.catalogOn() && /^(Digit|Numpad)[1-3]$/.test(k)) {
+        // (ROADMAP 11.40: on foot, the catalog's categories - weapons, vehicles, gear)
+        mine();
+        this.setShelf(SHELVES[+k.slice(-1) - 1]);
       } else if (/^(Digit|Numpad)[0-5]$/.test(k)) {
         // (what is drawn: 1-5 each of the five, together; 0 anything - the weapons wait)
         mine();
@@ -553,6 +611,7 @@ export class FreeDraw {
     document.body.classList.remove('fd-pp');
     document.body.classList.remove('fd-pen');
     this.carOpen = false;
+    this.showLegend();
     this.autoShut = 0;
     if (game.pad) game.pad.pen = false;
     if (!game.touch && game.state === 'play') game.input.requestLock();
@@ -847,6 +906,7 @@ export class FreeDraw {
 
   // the choices there are: those of what is drawn (all of them, when anything)
   choices() {
+    if (this.catalogOn()) return shelfIds(this.shelf).filter((id) => this.bpOpen(id)).map((id) => [id, BLUEPRINTS[id].name]);
     const cs = this.cats.size ? CATEGORY_ORDER.filter((c) => this.cats.has(c)) : CATEGORY_ORDER;
     return cs.flatMap((c) => CHOICES[c]);
   }
@@ -887,6 +947,12 @@ export class FreeDraw {
 
   // (the pad's d-pad: left and right along them, down turns one on or off)
   padCat(d) {
+    // (ROADMAP 11.40: on foot, the catalog's categories)
+    if (this.catalogOn()) {
+      const n = SHELVES.length;
+      if (d) this.setShelf(SHELVES[(SHELVES.indexOf(this.shelf) + d + n) % n]);
+      return;
+    }
     this.padCats = true;
     if (d) this.catCursor = (this.catCursor + d + CATEGORY_ORDER.length + 1) % (CATEGORY_ORDER.length + 1);
     else this.toggleCat(this.catCursor ? CATEGORY_ORDER[this.catCursor - 1] : null);
@@ -896,7 +962,7 @@ export class FreeDraw {
   // it is something else: what the player picked (null: what it looks like)
   choose(k) {
     // (several kinds of thing together: a pick of each - the vehicle, its gear, its weapon)
-    if (k && this.cats.size > 1) this.force = [...picksOf(this.force).filter((x) => keyKind(x) !== keyKind(k)), k].join('|');
+    if (k && this.cats.size > 1 && !this.catalogOn()) this.force = [...picksOf(this.force).filter((x) => keyKind(x) !== keyKind(k)), k].join('|');
     else this.force = k;
     this.menu(false);
     this.read();
@@ -1403,7 +1469,127 @@ export class FreeDraw {
     return { cat: 'vehicle', kind: PR.spec.kind, name: PR.sum.name, design: PR.design, spec: PR.spec, cost: PR.spec.cost, mirror: !!(this.P && this.P.flip) };
   }
 
+  // ------------------------------------------------------------------ the catalog (ROADMAP 11.40)
+  // On foot (not in a car, not in the lab) what is drawn is one of the catalog's things - the
+  // blueprints, shown in the legend as they are drawn: a weapon, a vehicle, gear. The drawing is
+  // read against the legend's category (game/catmatch.js); the likeliest lights; a thing of more parts
+  // needs more lines; how alike it is decides how well it comes out.
+  catalogOn() {
+    return !this.game.lab && !this.carOpen && !this.game.classic;
+  }
+
+  // (found, or all open: the album's own say - ui/album.js)
+  bpOpen(id) {
+    const a = this.game.album;
+    return !a || a.allOpen || a.has(id);
+  }
+
+  setShelf(shelf) {
+    if (!SHELVES.includes(shelf) || shelf === this.shelf) return;
+    this.shelf = shelf;
+    if (this.force && BLUEPRINTS[this.force] && shelfOf(BLUEPRINTS[this.force]) !== shelf) this.force = null;
+    this.memKey = null;
+    this.game.audio.play('click', 0.35);
+    this.read();
+    this.render();
+  }
+
+  readCatalog() {
+    const shelf = this.shelf;
+    const ids = shelfIds(shelf).filter((id) => this.bpOpen(id));
+    // (picked in the legend or by a chip; or drawn like one picked before - ROADMAP 11.37)
+    const mem = this.force ? null : this.remembered();
+    const ok = (k) => k && BLUEPRINTS[k] && shelfOf(BLUEPRINTS[k]) === shelf && this.bpOpen(k);
+    const pick = ok(this.force) ? this.force : ok(mem) ? mem : null;
+    const all = matchCatalog(this.strokes, ids);
+    if (!all) return null;
+    const m = pick ? matchCatalog(this.strokes, [pick]) : all;
+    const b = m.best;
+    const bp = BLUEPRINTS[b.id];
+    const alts = all.list.filter((x) => x.id !== b.id && x.score >= MATCH_MIN - 0.08).slice(0, 2).map((x) => ({ key: x.id, name: BLUEPRINTS[x.id].name }));
+    if (b.score < MATCH_MIN && !pick) return { cat: null, why: 'לא דומה עדיין לשום דבר במאגר — ציירו אחד מהציורים שבמקרא', alts, lit: null };
+    return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like: b.score >= MATCH_MIN, grade: gradeOf(b.score), need: b.need, parts: b.n, have: all.have, cost: costOfBp(bp), alts, remembered: !this.force && !!mem && pick === mem };
+  }
+
+  // the legend: the categories, and the category's things as they are drawn; the one the drawing is lit
+  showLegend() {
+    const el = this.legEl;
+    if (!el) return;
+    const on = this.isOpen && this.catalogOn();
+    // (on a phone: along the bottom up to the tools down the right edge, clear of them)
+    if (on && this.game.touch) {
+      const right = Math.round(window.innerWidth - this.toolsEl.getBoundingClientRect().left + 8);
+      if (right !== this.legRight) {
+        this.legRight = right;
+        el.style.right = `${right}px`;
+      }
+    }
+    const R = on ? this.R : null;
+    const lit = R && R.lit ? R.lit : '';
+    const ids = on ? shelfIds(this.shelf) : [];
+    const sig = `${on}|${this.shelf}|${lit}|${this.force || ''}|${ids.map((id) => (this.bpOpen(id) ? 1 : 0)).join('')}`;
+    if (sig === this.legSig) return;
+    this.legSig = sig;
+    document.body.classList.toggle('fd-catalog', on);
+    if (!on) {
+      el.innerHTML = '';
+      return;
+    }
+    const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('');
+    const items = ids.map((id) => {
+      const bp = BLUEPRINTS[id];
+      const lock = !this.bpOpen(id);
+      const cls = ['fd-it', lit === id ? 'on' : '', this.force === id ? 'pick' : '', lock ? 'lock' : ''].filter(Boolean).join(' ');
+      return `<div class="${cls}" data-i="${id}">${bpSvg(bp)}<b>${bp.name}</b><i>${bp.strokes.length} חלקים</i></div>`;
+    }).join('');
+    el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">מה שמציירים מכאן — זה מה שיוצא</span></div><div class="fd-its">${items}</div>`;
+  }
+
+  // made from the catalog: the album's own way of making a drawn blueprint real (game/game.js
+  // onDrawingDone) - it hangs in the air where it was drawn as it turns real, a weapon then into
+  // the hand; a vehicle turns real beside you - the grade by how alike the drawing is
+  makeCatalog(R) {
+    const game = this.game;
+    const bp = R.bp;
+    const res = { grade: R.grade, score: Math.round(R.score * 100) };
+    const where = this.drawnAt();
+    const cam = game.camera;
+    const D = 2.3;
+    const dir = _v.set((where.x / window.innerWidth) * 2 - 1, -(where.y / window.innerHeight) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
+    const C = cam.position.clone().addScaledVector(dir, D);
+    const perPx = (2 * D * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / window.innerHeight;
+    const plan = planDrawing(game, bp, res, { C, W: (where.w * perPx) / 0.66, H: (where.h * perPx) / 0.66 });
+    plan.landed = true;
+    // (drawn on the run: it goes along with you as it turns real)
+    plan.follow = new THREE.Vector3();
+    if (this.force) this.memory.learn(this.memory.signature(this.strokes), this.force);
+    else if (R.remembered) this.memory.stats.used++;
+    if (game.ink) game.ink.spend(R.cost);
+    this.stats.made[R.kind] = (this.stats.made[R.kind] || 0) + 1;
+    if (game.skills) game.skills.add('draw', 1);
+    game.goalFlags.drew = true;
+    if (bp.kind === 'weapon' && R.grade === 'perfect') game.goalFlags.perfect = true;
+    if (bp.kind === 'vehicle') {
+      game.goalFlags.car = true;
+      if (bp.id === 'tank' || bp.id === 'copter') game.goalFlags.heavyDrawn = true;
+    }
+    game.updateGoals();
+    const strokes = this.strokes.map((s) => s.p);
+    this.flyAway();
+    this.strokes = [];
+    this.force = null;
+    this.R = null;
+    this.cardDirty = true;
+    this.bake();
+    this.close();
+    this.info();
+    game.onDrawingDone(bp, res, strokes, plan);
+    const slot = bp.kind === 'weapon' && game.weapons ? game.weapons.current : null;
+    if (slot && slot.present) this.presenting = { slot, base: slot.present.matrix.clone(), follow: plan.follow, from: game.player.pos.clone() };
+  }
+
   readNow() {
+    if (this.catalogOn()) return this.readCatalog();
     // (ROADMAP 11.37) a drawing like one you named before: read as what you named it then (unless
     // it cannot be that at all)
     const mem = this.force ? null : this.remembered();
@@ -1482,6 +1668,10 @@ export class FreeDraw {
       ? game.touch
         ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'
         : 'ציירו באוויר · כל קו מקבל שם: לחיצה על השם — התפקיד הבא, ▾ — כל האפשרויות · נבנה בדיוק כמו שציירתם · Q יוצרים'
+      : this.catalogOn()
+      ? game.touch
+        ? 'ציירו באוויר אחד מהציורים שבמקרא · נגיעה בציור — רק אותו · האגודל ממשיך לרוץ'
+        : 'ציירו באוויר אחד מהציורים שבמקרא · 1–3: נשק, רכבים, ציוד · WASD ממשיכים לרוץ · Q יוצרים'
       : game.touch
         ? 'ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ'
         : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
@@ -1495,7 +1685,9 @@ export class FreeDraw {
         this.nameEl.textContent = (this.force ? '✎ ' : R.remembered ? '★ ' : '') + R.name;
         // (gear that needs its place: why it would not go here, before the ink is spent)
         const why = this.cannotMake(R);
-        this.statsEl.textContent = why ? `⚠ ${why}` : `${statLine(R)} · ${cost} דיו`;
+        // (ROADMAP 11.40: from the catalog - the lines still to draw, or how it would come out)
+        const say = R.cat !== 'bp' ? statLine(R) : R.have < R.need ? `${moreLines(R.need - R.have)} · ${R.parts} חלקים` : !R.like ? 'עוד לא דומה — ציירו כמו במקרא' : GRADE_WORD[R.grade];
+        this.statsEl.textContent = why ? `⚠ ${why}` : `${say} · ${cost} דיו`;
         this.nowhere = !!why;
       }
       // what else it could be (the network's next guesses), and the rest of the list
@@ -1510,8 +1702,11 @@ export class FreeDraw {
     if (PR || PW) this.nowhere = false;
     else if (PG) this.nowhere = !!this.cannotMake(R);
     const nowhere = has && R && R.cat && this.nowhere;
-    this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : R && R.cat ? `✓ ${R.name}!` : PR ? 'עוד לא זז' : '✓ צרו!';
-    this.makeBtn.classList.toggle('off', !R || !R.cat || short || nowhere);
+    const notYet = !!(R && R.cat === 'bp' && (R.have < R.need || !R.like));
+    // (from the catalog, on a phone: short - the tag by the drawing names it - so the tools keep their width)
+    const terse = !!(R && R.cat === 'bp' && game.touch);
+    this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : notYet ? (terse ? 'עוד לא…' : `עוד לא ${R.name}`) : R && R.cat ? (terse ? '✓ צרו!' : `✓ ${R.name}!`) : PR ? 'עוד לא זז' : '✓ צרו!';
+    this.makeBtn.classList.toggle('off', !R || !R.cat || short || nowhere || notYet);
     if (this.carOpen) {
       this.makeBtn.textContent = '▶ לנסוע';
       this.makeBtn.classList.remove('off');
@@ -1524,6 +1719,7 @@ export class FreeDraw {
       this.inkCost.classList.toggle('over', !!short);
     }
     if (has && !PR && !PW && !PG) this.place();
+    this.showLegend();
   }
 
   // the tag by the drawing: over it, or under it when there is no room (never under the tools,
@@ -1537,7 +1733,8 @@ export class FreeDraw {
     const W = window.innerWidth;
     const H = window.innerHeight;
     const tr = this.toolsEl.getBoundingClientRect();
-    const cr = this.catsEl.getBoundingClientRect();
+    // (the catalog: along the bottom on a phone - at the side elsewhere, out of the tag's way)
+    const cr = (this.catalogOn() && this.game.touch ? this.legEl : this.catsEl).getBoundingClientRect();
     const top = cr.height && cr.top < H / 2 ? cr.bottom + 6 : 8;
     const bottom = cr.height && cr.top >= H / 2 ? cr.top - 8 : H - 8;
     const right = this.game.touch ? tr.left - 8 : W - 8;
@@ -1814,6 +2011,14 @@ export class FreeDraw {
     }
     const p = game.player;
     if (p.inVehicle || p.mode !== 'foot') return;
+    // (ROADMAP 11.40) from the catalog: enough of its lines, and like it - said before the ink
+    if (R.cat === 'bp') {
+      const not = R.have < R.need ? `${moreLines(R.need - R.have)} — ל${R.name} יש ${R.parts} חלקים` : !R.like ? `זה עוד לא מספיק דומה ל${R.name} — ציירו אותו כמו במקרא` : null;
+      if (not) {
+        shake(not);
+        return;
+      }
+    }
     const ink = game.ink;
     if (ink && ink.level < R.cost) {
       shake(`אין מספיק דיו (צריך ${R.cost}) — הדיו חוזר לאט, או בקבוק מחנות כלי כתיבה`);
@@ -1829,6 +2034,10 @@ export class FreeDraw {
     const why = this.cannotMake(R);
     if (why) {
       shake(why);
+      return;
+    }
+    if (R.cat === 'bp') {
+      this.makeCatalog(R);
       return;
     }
     const where = this.drawnAt();
@@ -1986,6 +2195,7 @@ export class FreeDraw {
   // (ROADMAP 11.8) why what is drawn cannot be made here (a ladder needs a wall, a ramp the road...)
   cannotMake(R) {
     const G = this.game.gadgets;
+    if (R.cat === 'bp') return G && R.bp.kind === 'tool' ? G.cannot(R.bp.id) : null;
     const g = R.cat === 'gear' ? R : R.extra && R.extra.cat === 'gear' ? R.extra : null;
     if (!G || !g || !g.place) return null;
     return G.cannot(g.kind, g.params);
