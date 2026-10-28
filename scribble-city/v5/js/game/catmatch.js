@@ -187,17 +187,16 @@ function covered(d, t) {
 }
 
 // a thing's parts (its blueprint's lines), and how many lines a drawing of it needs at least
-// (ROADMAP 11.43: nine in ten of them - all of it is drawn, not a hint of it)
+// (ROADMAP 11.44: six in ten of them - a little part left out, or drawn bigger or smaller, is fine)
 export function partsOf(bp) {
   const n = bp.strokes.length;
-  return { n, need: Math.max(1, Math.ceil(n * 0.9)) };
+  return { n, need: Math.max(1, Math.ceil(n * 0.6)) };
 }
 
-// (ROADMAP 11.43) drawn all of it: its lines there (nine in ten), its parts where they are (a third
-// of them may be off a little: a hand is not a ruler), the drawing over most of it, and not as much
-// again elsewhere
+// (ROADMAP 11.43, 11.44) drawn enough of it: its lines there (six in ten), the drawing over a good
+// part of it, and not as much again elsewhere - its parts in their proportions or not
 export function drawnWhole(m, have) {
-  return have >= m.need && m.hit >= m.n - Math.max(1, Math.floor(m.n * 0.34)) && m.cov >= 0.7 && m.prec >= 0.5;
+  return have >= m.need && m.cov >= 0.4 && m.prec >= 0.35;
 }
 
 // (ROADMAP 11.43) a guess is said only with something to guess from: half its lines, a part in
