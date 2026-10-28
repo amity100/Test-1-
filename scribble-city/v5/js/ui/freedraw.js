@@ -228,7 +228,7 @@ export class FreeDraw {
         <div class="fd-ink" aria-label="דיו"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
         <button class="fd-btn" id="fd-undo" title="ביטול הקו האחרון (Z)">↶</button>
         <button class="fd-btn" id="fd-clear" title="ניקוי (Delete)">נקה</button>
-        <button class="fd-btn touch-only" id="fd-album">שרטוטים</button>
+        <button class="fd-btn fd-album" id="fd-album" title="ספריית השרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים... (T)">📒 שרטוטים</button>
         <button class="fd-btn" id="fd-close" title="סגירה, הציור נשמר (Esc)">✕</button>
         <button class="fd-btn primary" id="fd-make">✓ צרו!</button>
       </div>`;

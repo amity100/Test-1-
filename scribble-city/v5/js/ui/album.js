@@ -30,9 +30,10 @@ const FOUND_IN = {
 };
 
 // the library's shelves
+// (v5, ROADMAP 11.36: the weapons first - the paint gun, the pencil rifle, the eraser bazooka...)
 const SHELVES = [
-  ['כלי רכב', (bp) => bp.kind === 'vehicle'],
   ['נשק', (bp) => bp.kind === 'weapon'],
+  ['כלי רכב', (bp) => bp.kind === 'vehicle'],
   ['ציוד ועזרה ראשונה', (bp) => bp.kind === 'gear' || bp.kind === 'heal'],
   // (ROADMAP 9.2, not with ?classic)
   ['כלים לבעיות בדרך', (bp) => bp.kind === 'tool'],

@@ -130,7 +130,7 @@ export class Game {
     this.state = 'title'; // title | play | paused | dead
     this.focus = new THREE.Vector3();
     this.stuck = [];
-    this.goalFlags = { photo: false, hidden: false, drew: false, kills: 0, car: false, drove: false, heavy: false, heavyDrawn: false };
+    this.goalFlags = { photo: false, hidden: false, drew: false, bpWeapon: false, kills: 0, car: false, drove: false, heavy: false, heavyDrawn: false };
     this.lastLookInput = 0;
   }
 
@@ -552,7 +552,12 @@ export class Game {
       this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
       setTimeout(() => {
         // (ROADMAP 11.6) the free drawing first: anything at all, on the run
-        if (this.freedraw) this.hud.toast(this.touch ? 'העיפרון ✏ — ציירו באוויר נשק או רכב, גם תוך כדי ריצה' : 'Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'info', 4.2);
+        if (this.freedraw) {
+          this.hud.toast(this.touch ? 'העיפרון ✏ — ציירו באוויר נשק או רכב, גם תוך כדי ריצה' : 'Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'info', 4.2);
+          // (v5, ROADMAP 11.36) and the library of the drawn city's own weapons, as at the start of
+          // the game it always was: picked, then drawn in the air
+          setTimeout(() => this.hud.toast(this.touch ? 'ובעיפרון ← 📒 שרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים' : 'T — ספריית השרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים', 'info', 5), 4600);
+        }
         else if (this.album.allOpen) this.hud.toast(this.touch ? `כל השרטוטים פתוחים: לוחצים על ${this.drawTap} ובוחרים מה לצייר` : `כל השרטוטים פתוחים: ${this.drawKey} — בוחרים מה לצייר`, 'info', 4);
         else if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
       }, 2600);
@@ -1648,6 +1653,7 @@ export class Game {
       if (bp.id === 'car') this.goalFlags.car = true;
     }
     this.goalFlags.drew = true;
+    if (bp.kind === 'weapon') this.goalFlags.bpWeapon = true;
     if (bp.id === 'tank' || bp.id === 'copter') this.goalFlags.heavyDrawn = true;
     this.updateGoals();
     if (!plan) this.fx.crumbs(p.pos.x, p.pos.y + 1, p.pos.z, 16, 3);
@@ -2158,6 +2164,8 @@ export class Game {
     // (ROADMAP 11.6: with the free drawing, drawing anything comes first; the blueprints later)
     const all = this.freedraw ? [
       { text: this.touch ? 'לצייר נשק משלכם — מה שבא לכם (עיפרון), גם בריצה' : 'לצייר נשק משלכם — מה שבא לכם (Q), גם בריצה', done: f.drew },
+      // (v5, ROADMAP 11.36: the library's weapons, from the start again)
+      { text: this.touch ? 'לצייר נשק מהשרטוטים: אקדח צבע, בזוקת מחקים... (עיפרון ← 📒 שרטוטים)' : 'לצייר נשק מהשרטוטים: אקדח צבע, בזוקת מחקים... (T)', done: f.bpWeapon },
       { text: 'להתחבא ליד תא טלפון, פח אשפה או שיח', done: f.hidden },
       { text: 'לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', done: f.bar },
       { text: `למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
