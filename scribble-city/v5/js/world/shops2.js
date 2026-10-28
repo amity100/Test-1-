@@ -1,7 +1,7 @@
 import { FURNISH, DECOR } from './rooms.js';
 import './mainland/furnish.js';
 import { nextId } from './kit.js';
-import { Run, L, SC, CLOTH, BRIGHT, PASTEL, shelving, gondola, fridges, produce, checkout, rail, foldTable, shoeWall, pegboard, vitrine, ceiling, poster, mannequin, entrance, goods, pk } from './stock.js';
+import { Run, L, SC, CLOTH, BRIGHT, PASTEL, CLOTH_REAL, CLOTH_LUX, SHOES_REAL, SPINES_REAL, GLASS_REAL, GEMS, SCREENS_REAL, OAK, shelving, gondola, fridges, produce, checkout, rail, foldTable, shoeWall, pegboard, vitrine, ceiling, poster, mannequin, entrance, goods, pk } from './stock.js';
 
 // (v5, ROADMAP 11.18) The shops, laid out the way real ones are. Each kind has its plan: what
 // stands along its back wall and its side walls, what runs down its middle, where the checkout is
@@ -141,8 +141,10 @@ function clothes(R, o = {}) {
   const fr = frame(R);
   const rng = R.rng;
   R.noLamps = true;
-  ceiling(R, { round: true, light: [1, 0.95, 0.86] });
-  const cols = o.cols || CLOTH;
+  ceiling(R, { round: true, light: R.store ? [1, 0.97, 0.92] : [1, 0.95, 0.86] });
+  // (ROADMAP 11.42: a store in a mall - the colours real clothes come in, its fittings black)
+  const cols = R.store ? o.storeCols || CLOTH_REAL : o.cols || CLOTH;
+  const fit = R.store ? SC.black : SC.gold;
   // the back wall: the fitting rooms in one corner, a rail of clothes along the rest, the folded
   // ones on a shelf over it
   const fitW = Math.min(2.4, fr.W * 0.35);
@@ -156,8 +158,8 @@ function clothes(R, o = {}) {
     // the walls of the cubicle, its curtain on a rail (a gap at the bottom), a mirror inside
     S.fbox(u0, R.y0, R.db, u0 + 0.05, R.y0 + 2.3, R.db + 1.4, SC.white, nextId());
     S.fbox(u0 + cw - 0.05, R.y0, R.db, u0 + cw, R.y0 + 2.3, R.db + 1.4, SC.white, nextId());
-    S.fbox(u0 + 0.05, R.y0 + 0.18, R.db + 1.33, u0 + cw - 0.05, R.y0 + 2.12, R.db + 1.38, o.curtain || [0.5, 0.2, 0.3], nextId());
-    S.fbox(u0 + 0.03, R.y0 + 2.14, R.db + 1.32, u0 + cw - 0.03, R.y0 + 2.18, R.db + 1.4, SC.gold, nextId());
+    S.fbox(u0 + 0.05, R.y0 + 0.18, R.db + 1.33, u0 + cw - 0.05, R.y0 + 2.12, R.db + 1.38, R.store ? o.storeCurtain || [0.74, 0.7, 0.62] : o.curtain || [0.5, 0.2, 0.3], nextId());
+    S.fbox(u0 + 0.03, R.y0 + 2.14, R.db + 1.32, u0 + cw - 0.03, R.y0 + 2.18, R.db + 1.4, fit, nextId());
     R.soup('gloss').fbox(u0 + 0.25, R.y0 + 0.4, R.db + 0.02, u0 + cw - 0.25, R.y0 + 2.0, R.db + 0.04, [0.8, 0.86, 0.94], nextId());
     R.spots.fitting.push({ u: u0 + cw / 2, d: R.db + 0.7, face: [0, -1] });
   }
@@ -186,7 +188,7 @@ function clothes(R, o = {}) {
     // the mirror on the other wall, a place to hold something up in front of it
     const mr = new Run(R, R.ub - 0.05, w.sd0 + 0.6, [0, 1], [-1, 0]);
     mr.box(R.soup('gloss'), 0.2, R.y0 + 0.15, -0.04, 1.3, R.y0 + 2.1, 0, [0.8, 0.86, 0.94], nextId(), L.BACK);
-    mr.box(S, 0.15, R.y0 + 0.1, -0.06, 1.35, R.y0 + 2.15, -0.03, SC.dwood, nextId(), L.BACK);
+    mr.box(S, 0.15, R.y0 + 0.1, -0.06, 1.35, R.y0 + 2.15, -0.03, R.store ? SC.black : SC.dwood, nextId(), L.BACK);
     const [mu2, md2] = mr.ud(0.75, 1.1);
     R.spots.mirrors = [{ u: mu2, d: md2, face: [1, 0] }];
     if (w.sideLen > 3.2) rail(R, new Run(R, R.ub - 0.6, w.sd0 + 1.7, [0, 1], [-1, 0]), w.sideLen - 1.7, { cols, high: 1.62 });
@@ -211,9 +213,9 @@ function clothes(R, o = {}) {
     if (u > R.lane[0] - 0.5 && u < R.lane[1] + 0.5) continue;
     mannequin(R, u, R.da - 0.7, 0, pk(rng, cols), pk(rng, cols));
   }
-  const t = till(R, { len: 1.9, front: o.counter || [0.2, 0.2, 0.24], top: SC.white, bagCol: o.bag || [0.95, 0.45, 0.6], sweets: false });
+  const t = till(R, R.store ? { len: 1.9, front: o.storeCounter || [0.12, 0.12, 0.13], top: o.storeTop || OAK, bagCol: o.storeBag || [0.66, 0.52, 0.36], sweets: false } : { len: 1.9, front: o.counter || [0.2, 0.2, 0.24], top: SC.white, bagCol: o.bag || [0.95, 0.45, 0.6], sweets: false });
   void t;
-  poster(R, new Run(R, R.ua + 0.02, R.db, [0, 1], [1, 0]), 1.5, R.y0 + 2.45, 1.0, 0.9, { frame: SC.white });
+  poster(R, new Run(R, R.ua + 0.02, R.db, [0, 1], [1, 0]), 1.5, R.y0 + 2.45, 1.0, 0.9, { frame: R.store ? SC.black : SC.white });
   entrance(R, {});
   staffSpots(R, 2);
   R.spots.big = fr.W * fr.D > 70;
@@ -237,8 +239,8 @@ function shoes(R) {
   if (fr.W > 4) {
     const bl = Math.min(2.4, fr.W - 2.8);
     const run = new Run(R, um - bl / 2, dm, [1, 0], [0, 1]);
-    run.box(S, 0, R.y0, -0.25, bl, R.y0 + 0.4, 0.25, [0.42, 0.3, 0.26], nextId(), L.BOTTOM);
-    run.box(S, 0.03, R.y0 + 0.4, -0.22, bl - 0.03, R.y0 + 0.46, 0.22, [0.85, 0.42, 0.36], nextId(), L.BOTTOM);
+    run.box(S, 0, R.y0, -0.25, bl, R.y0 + 0.4, 0.25, R.store ? [0.33, 0.24, 0.18] : [0.42, 0.3, 0.26], nextId(), L.BOTTOM);
+    run.box(S, 0.03, R.y0 + 0.4, -0.22, bl - 0.03, R.y0 + 0.46, 0.22, R.store ? [0.26, 0.24, 0.24] : [0.85, 0.42, 0.36], nextId(), L.BOTTOM);
     run.solid(0, -0.25, bl, 0.25, R.y0 + 0.46);
     R.spots.seats.push({ u: um - bl / 4, d: dm + 0.35, face: [0, 1] }, { u: um + bl / 4, d: dm - 0.35, face: [0, -1] });
     for (const s of [-0.2, bl + 0.05]) run.box(R.soup('gloss'), s, R.y0, -0.03, s + 0.15, R.y0 + 0.55, 0.03, [0.8, 0.86, 0.94], nextId(), L.BOTTOM);
@@ -247,7 +249,7 @@ function shoes(R) {
     const tr = new Run(R, um - tl / 2, R.da - FRONT_KEEP - 0.7, [1, 0], [0, 1]);
     tr.box(S, 0, R.y0, -0.7, tl, R.y0 + 0.62, 0, SC.white, nextId(), L.BOTTOM);
     for (let s = 0.15; s < tl - 0.2; s += 0.35) {
-      const col = pk(R.rng, CLOTH);
+      const col = pk(R.rng, R.store ? SHOES_REAL : CLOTH);
       const ry = R.y0 + 0.62 + (Math.floor(s / 0.35) % 2) * 0.12;
       tr.box(S, s - 0.1, R.y0 + 0.62, -0.5, s + 0.1, ry, -0.2, SC.white, nextId(), L.BOTTOM);
       for (const k of [-0.05, 0.05]) {
@@ -274,7 +276,7 @@ function screens(R, o = {}) {
   const back = new Run(R, R.ua + 0.2, R.db + 0.45, [1, 0], [0, 1]);
   const bl = fr.W - 0.4;
   back.box(S, 0, R.y0 + 0.85, -0.45, bl, R.y0 + 2.8, -0.4, SC.black, nextId(), L.BACK);
-  const pics = [[0.5, 0.85, 1.0], [1.0, 0.6, 0.8], [0.6, 1.0, 0.7], [1.0, 0.9, 0.5], [0.8, 0.7, 1.0]];
+  const pics = R.store ? SCREENS_REAL : [[0.5, 0.85, 1.0], [1.0, 0.6, 0.8], [0.6, 1.0, 0.7], [1.0, 0.9, 0.5], [0.8, 0.7, 1.0]];
   let k = 0;
   for (let s = 0.12; s < bl - 1.0; s += 1.22) {
     for (const y of [R.y0 + 0.95, R.y0 + 1.88]) {
@@ -298,7 +300,7 @@ function screens(R, o = {}) {
   if (tl > 0.9) {
     for (const dd of fr.D > 8 ? [-1.1, 1.1] : [0]) {
       const run = new Run(R, (R.ua + R.ub) / 2 - tl / 2, dm + dd + 0.4, [1, 0], [0, 1]);
-      run.box(S, 0, R.y0, -0.8, tl, R.y0 + 0.86, 0, o.table || SC.white, nextId(), L.BOTTOM);
+      run.box(S, 0, R.y0, -0.8, tl, R.y0 + 0.86, 0, R.store ? OAK : o.table || SC.white, nextId(), L.BOTTOM);
       for (let s = 0.12; s < tl - 0.15; s += 0.3) {
         for (const t of [-0.22, -0.58]) {
           run.box(S, s, R.y0 + 0.86, t - 0.1, s + 0.16, R.y0 + 0.87, t + 0.1, SC.black, nextId(), L.BOTTOM);
@@ -318,7 +320,7 @@ function screens(R, o = {}) {
       run.spot(tl * 0.75, 0.5, { shelf: [0.9], reach: run.at(tl * 0.75, R.y0 + 0.9, -0.25), what: 'phone' });
     }
   }
-  till(R, { len: 1.9, front: [0.2, 0.24, 0.34], top: SC.white, bagCol: [0.2, 0.24, 0.34], sweets: false });
+  till(R, { len: 1.9, front: R.store ? [0.94, 0.94, 0.93] : [0.2, 0.24, 0.34], top: R.store ? OAK : SC.white, bagCol: R.store ? [0.94, 0.94, 0.93] : [0.2, 0.24, 0.34], sweets: false });
   poster(R, new Run(R, R.ua + 0.02, R.db, [0, 1], [1, 0]), Math.max(1, w.sd1 - R.db - 1), R.y0 + 2.5, 1.2, 0.6, { frame: SC.black });
   entrance(R, {});
   staffSpots(R, 1);
@@ -345,7 +347,7 @@ function books(R) {
   for (let s = 0.08; s < tl - 0.28; s += 0.32) {
     for (const t2 of [-0.12, -0.45]) {
       const n = 2 + Math.floor(R.rng.r() * 4);
-      for (let k = 0; k < n; k++) tr.box(S, s, R.y0 + 0.75 + k * 0.035, t2 - 0.24, s + 0.24, R.y0 + 0.782 + k * 0.035, t2, pk(R.rng, BRIGHT), nextId(), L.BOTTOM);
+      for (let k = 0; k < n; k++) tr.box(S, s, R.y0 + 0.75 + k * 0.035, t2 - 0.24, s + 0.24, R.y0 + 0.782 + k * 0.035, t2, pk(R.rng, R.store ? SPINES_REAL : BRIGHT), nextId(), L.BOTTOM);
     }
   }
   tr.solid(0, -0.8, tl, 0, R.y0 + 0.8);
@@ -360,12 +362,14 @@ function toys(R) {
   R.noLamps = true;
   ceiling(R, { light: [1, 0.98, 0.9] });
   const w = walls(R, 0.5);
-  shelving(R, w.back, w.backLen, { cat: 'toys', h: 2.2, shelves: 4, unit: SC.white, header: [0.4, 0.62, 0.95] });
+  // (ROADMAP 11.42: a store's headers in quieter colours - the toys bring their own)
+  const hd = R.store ? [[0.3, 0.45, 0.65], [0.85, 0.68, 0.3], [0.7, 0.3, 0.32]] : [[0.4, 0.62, 0.95], [0.98, 0.78, 0.2], [0.92, 0.3, 0.4]];
+  shelving(R, w.back, w.backLen, { cat: 'toys', h: 2.2, shelves: 4, unit: SC.white, header: hd[0] });
   if (w.sideLen > 1.2) {
-    shelving(R, w.left, w.sideLen, { cat: 'toys', h: 2.2, shelves: 4, unit: SC.white, header: [0.98, 0.78, 0.2] });
-    shelving(R, w.right, w.sideLen, { cat: 'toys', h: 2.2, shelves: 4, unit: SC.white, header: [0.92, 0.3, 0.4] });
+    shelving(R, w.left, w.sideLen, { cat: 'toys', h: 2.2, shelves: 4, unit: SC.white, header: hd[1] });
+    shelving(R, w.right, w.sideLen, { cat: 'toys', h: 2.2, shelves: 4, unit: SC.white, header: hd[2] });
   }
-  const t = till(R, { len: 1.8, front: [0.98, 0.78, 0.2], top: SC.white, bagCol: [0.4, 0.62, 0.95] });
+  const t = till(R, { len: 1.8, front: R.store ? SC.white : [0.98, 0.78, 0.2], top: R.store ? OAK : SC.white, bagCol: hd[0] });
   aisles(R, R.db + 0.5, t ? t.d0 - 0.4 : R.da - 2.6, { cat: 'toys', h: 1.4, shelves: 3, unit: SC.white, depth: 0.45, aisle: 1.3 });
   // balloons and kites from the ceiling
   const S = R.soup('box');
@@ -391,18 +395,18 @@ function toys(R) {
 function perfume(R) {
   const fr = frame(R);
   R.noLamps = true;
-  ceiling(R, { round: true, light: [1, 0.94, 0.94] });
+  ceiling(R, { round: true, light: R.store ? [1, 0.97, 0.94] : [1, 0.94, 0.94] });
   const w = walls(R, 0.42, { front: 0.5 });
-  shelving(R, w.back, w.backLen, { cat: 'perfume', h: 2.2, shelves: 6, unit: SC.white, deck: 0.3, header: [0.86, 0.72, 0.82], strip: SC.gold });
+  shelving(R, w.back, w.backLen, { cat: 'perfume', h: 2.2, shelves: 6, unit: SC.white, deck: 0.3, header: R.store ? [0.1, 0.1, 0.11] : [0.86, 0.72, 0.82], strip: SC.gold });
   if (w.sideLen > 1.2) {
     shelving(R, w.left, w.sideLen, { cat: 'perfume', h: 2.2, shelves: 6, unit: SC.white, deck: 0.3, strip: SC.gold });
     shelving(R, w.right, w.sideLen, { cat: 'perfume', h: 2.2, shelves: 6, unit: SC.white, deck: 0.3, strip: SC.gold });
   }
   // the counter of testers in the middle, lit from under
   const tl = Math.min(2.0, fr.W - 3);
-  if (tl > 0.8) vitrine(R, new Run(R, (R.ua + R.ub) / 2 - tl / 2, (R.db + R.da - FRONT_KEEP) / 2 + 0.4, [1, 0], [0, 1]), tl, 0.8, { base: SC.white, velvet: [1, 0.92, 0.96], cols: [[0.95, 0.75, 0.85], [0.85, 0.9, 1.0], [1, 0.9, 0.6], SC.gold] });
-  till(R, { len: 1.6, front: SC.white, top: [0.86, 0.72, 0.82], bagCol: [0.98, 0.85, 0.9], sweets: false });
-  poster(R, new Run(R, R.ub - 0.02, R.db, [0, 1], [-1, 0]), 1.6, R.y0 + 2.45, 0.9, 0.9, { frame: SC.gold, cols: [PASTEL[0], [0.95, 0.75, 0.85], SC.gold] });
+  if (tl > 0.8) vitrine(R, new Run(R, (R.ua + R.ub) / 2 - tl / 2, (R.db + R.da - FRONT_KEEP) / 2 + 0.4, [1, 0], [0, 1]), tl, 0.8, R.store ? { base: SC.black, velvet: [0.08, 0.08, 0.09], cols: GLASS_REAL } : { base: SC.white, velvet: [1, 0.92, 0.96], cols: [[0.95, 0.75, 0.85], [0.85, 0.9, 1.0], [1, 0.9, 0.6], SC.gold] });
+  till(R, { len: 1.6, front: R.store ? SC.black : SC.white, top: R.store ? [0.94, 0.94, 0.93] : [0.86, 0.72, 0.82], bagCol: R.store ? [0.94, 0.94, 0.93] : [0.98, 0.85, 0.9], sweets: false });
+  poster(R, new Run(R, R.ub - 0.02, R.db, [0, 1], [-1, 0]), 1.6, R.y0 + 2.45, 0.9, 0.9, { frame: SC.gold, cols: R.store ? [[0.9, 0.88, 0.86], [0.78, 0.66, 0.42], [0.1, 0.1, 0.11]] : [PASTEL[0], [0.95, 0.75, 0.85], SC.gold] });
   entrance(R, {});
   staffSpots(R, 1);
 }
@@ -411,7 +415,9 @@ function jewels(R) {
   const fr = frame(R);
   R.noLamps = true;
   ceiling(R, { round: true, light: [1, 0.94, 0.82] });
-  const cols = [SC.gold, SC.white, [0.6, 0.85, 1.0], [1, 0.4, 0.5], [0.75, 0.95, 0.8]];
+  const cols = R.store ? GEMS : [SC.gold, SC.white, [0.6, 0.85, 1.0], [1, 0.4, 0.5], [0.75, 0.95, 0.8]];
+  // (ROADMAP 11.42: a store's velvet: navy)
+  const velvet = R.store ? [0.1, 0.12, 0.2] : [0.36, 0.08, 0.2];
   // glass cases round three sides, one down the middle
   const bl = fr.W - 0.8;
   vitrine(R, new Run(R, R.ua + 0.4, R.db + 1.2, [1, 0], [0, 1]), bl, 0.6, { cols });
@@ -423,7 +429,7 @@ function jewels(R) {
   // the busts with necklaces on the back wall, behind the keeper
   const S = R.soup('box');
   for (let u = R.ua + 0.8; u < R.ub - 0.6; u += 1.1) {
-    S.fbox(u - 0.2, R.y0 + 1.5, R.db + 0.05, u + 0.2, R.y0 + 2.1, R.db + 0.3, [0.36, 0.08, 0.2], nextId());
+    S.fbox(u - 0.2, R.y0 + 1.5, R.db + 0.05, u + 0.2, R.y0 + 2.1, R.db + 0.3, velvet, nextId());
     R.soup('lamp').fbox(u - 0.14, R.y0 + 1.62, R.db + 0.31, u + 0.14, R.y0 + 1.66, R.db + 0.33, SC.gold, nextId());
   }
   R.spots.keeper = { u: (R.ua + R.ub) / 2, d: R.db + 0.3, face: [0, 1] };
@@ -432,10 +438,10 @@ function jewels(R) {
   // two chairs at the case for those who try something on
   for (const k of [-0.8, 0.8]) {
     const u = (R.ua + R.ub) / 2 + k;
-    S.fbox(u - 0.22, R.y0 + 0.62, R.db + 2.0, u + 0.22, R.y0 + 0.68, R.db + 2.4, [0.36, 0.08, 0.2], nextId());
+    S.fbox(u - 0.22, R.y0 + 0.62, R.db + 2.0, u + 0.22, R.y0 + 0.68, R.db + 2.4, velvet, nextId());
     S.fcyl(u, R.db + 2.2, 0.03, R.y0, 0.62, SC.gold, nextId(), 5, false);
   }
-  entrance(R, { mat: [0.36, 0.08, 0.2] });
+  entrance(R, { mat: velvet });
 }
 
 function optics(R) {
@@ -885,7 +891,7 @@ const PLANS = {
   hardware,
   books,
   fashion: (R) => clothes(R, {}),
-  boutique: (R) => clothes(R, { cols: [[0.95, 0.45, 0.6], [0.98, 0.9, 0.94], [0.98, 0.9, 0.6], [0.75, 0.5, 0.85], [0.98, 0.98, 0.95], [0.86, 0.36, 0.42]], curtain: [0.82, 0.5, 0.68], counter: [0.98, 0.9, 0.94], bag: [0.98, 0.7, 0.8] }),
+  boutique: (R) => clothes(R, { cols: [[0.95, 0.45, 0.6], [0.98, 0.9, 0.94], [0.98, 0.9, 0.6], [0.75, 0.5, 0.85], [0.98, 0.98, 0.95], [0.86, 0.36, 0.42]], curtain: [0.82, 0.5, 0.68], counter: [0.98, 0.9, 0.94], bag: [0.98, 0.7, 0.8], storeCols: CLOTH_LUX, storeCurtain: [0.3, 0.22, 0.22], storeCounter: [0.86, 0.82, 0.74], storeTop: [0.94, 0.93, 0.9], storeBag: [0.1, 0.1, 0.11] }),
   surf: (R) => clothes(R, { cols: [[0.98, 0.6, 0.25], [0.3, 0.7, 0.85], [0.98, 0.85, 0.35], [0.95, 0.4, 0.55], [0.55, 0.85, 0.5], [0.98, 0.98, 0.95]], curtain: [0.26, 0.56, 0.78] }),
   shoes,
   electronics: (R) => screens(R, {}),

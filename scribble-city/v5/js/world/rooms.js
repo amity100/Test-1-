@@ -97,12 +97,50 @@ Object.assign(DECOR, {
   cinema: { wall: [0.62, 0.2, 0.26], band: [0.36, 0.12, 0.16], floor: 'carpet', light: [1, 0.8, 0.6] },
 });
 
+// (v5, ROADMAP 11.42) The stores in a mall, done the way real ones are: their walls white or a quiet
+// colour of their own, a skirting at their foot (skirt: its height - not a band of colour round the
+// room), floors of real stuff (world/hallpaint.js storeFloor, the hall's marble); under their own
+// white light (render/glsl.js uIndoor 3). By kind; the rest as a shop's
+const WARM_WHITE = [0.94, 0.93, 0.9];
+const CHAR = [0.17, 0.17, 0.19];
+export const STORE_DECOR = {
+  fashion: { wall: WARM_WHITE, band: CHAR, skirt: 0.1, floor: 'oak', ceiling: [0.95, 0.95, 0.94], light: [1, 0.97, 0.92] },
+  boutique: { wall: [0.87, 0.83, 0.77], band: [0.94, 0.92, 0.88], skirt: 0.12, floor: 'marble', ceiling: [0.95, 0.94, 0.92], light: [1, 0.95, 0.88] },
+  surf: { wall: [0.9, 0.9, 0.87], band: [0.42, 0.34, 0.26], skirt: 0.1, floor: 'oak', light: [1, 0.97, 0.92] },
+  shoes: { wall: [0.92, 0.9, 0.86], band: [0.24, 0.2, 0.18], skirt: 0.1, floor: 'walnut', ceiling: [0.95, 0.95, 0.94], light: [1, 0.96, 0.9] },
+  electronics: { wall: [0.95, 0.95, 0.94], band: [0.8, 0.8, 0.8], skirt: 0.08, floor: 'porcelain', ceiling: [0.97, 0.97, 0.97], light: [0.98, 0.99, 1] },
+  phones: { wall: [0.95, 0.95, 0.94], band: [0.8, 0.8, 0.8], skirt: 0.08, floor: 'porcelain', ceiling: [0.97, 0.97, 0.97], light: [0.98, 0.99, 1] },
+  jewelry: { wall: [0.15, 0.18, 0.26], band: [0.58, 0.47, 0.28], skirt: 0.12, floor: 'marble', ceiling: [0.93, 0.92, 0.9], light: [1, 0.95, 0.86] },
+  perfume: { wall: [0.96, 0.95, 0.94], band: CHAR, skirt: 0.12, floor: 'porcelain', ceiling: [0.97, 0.97, 0.96], light: [1, 0.97, 0.94] },
+  optics: { wall: [0.95, 0.94, 0.91], band: [0.62, 0.5, 0.36], skirt: 0.1, floor: 'oak', light: [1, 0.97, 0.92] },
+  books: { wall: [0.89, 0.86, 0.8], band: [0.32, 0.23, 0.17], skirt: 0.14, floor: 'walnut', ceiling: [0.93, 0.91, 0.87], light: [1, 0.94, 0.84] },
+  toys: { wall: [0.95, 0.95, 0.93], band: [0.36, 0.5, 0.66], skirt: 0.12, floor: 'terrazzo', light: [1, 0.98, 0.94] },
+  music: { wall: [0.22, 0.22, 0.24], band: [0.1, 0.1, 0.11], skirt: 0.12, floor: 'walnut', ceiling: [0.16, 0.16, 0.17], light: [1, 0.9, 0.78] },
+  sports: { wall: [0.86, 0.86, 0.85], band: CHAR, skirt: 0.12, floor: 'polished', ceiling: [0.2, 0.2, 0.22], light: [0.98, 0.99, 1] },
+  arcade: { wall: [0.13, 0.13, 0.16], band: [0.08, 0.08, 0.09], skirt: 0.12, floor: 'rug', ceiling: [0.09, 0.09, 0.1], light: [0.9, 0.85, 1] },
+  barber: { wall: [0.93, 0.93, 0.91], band: CHAR, skirt: 0.12, floor: 'checker', light: [1, 0.97, 0.92] },
+  flowers: { wall: [0.93, 0.93, 0.9], band: [0.46, 0.54, 0.44], skirt: 0.12, floor: 'polished', light: [1, 0.97, 0.92] },
+  cafe: { wall: [0.9, 0.87, 0.82], band: [0.3, 0.22, 0.17], skirt: 0.12, floor: 'oak', ceiling: [0.93, 0.92, 0.89], light: [1, 0.93, 0.82] },
+  icecream: { wall: [0.97, 0.95, 0.92], band: [0.62, 0.76, 0.72], skirt: 0.12, floor: 'terrazzo', light: [1, 0.97, 0.94] },
+  juice: { wall: [0.95, 0.95, 0.92], band: [0.5, 0.6, 0.42], skirt: 0.12, floor: 'terrazzo', light: [1, 0.98, 0.94] },
+  pizza: { wall: [0.93, 0.9, 0.85], band: [0.48, 0.2, 0.17], skirt: 0.12, floor: 'terrazzo', light: [1, 0.94, 0.84] },
+  sushi: { wall: [0.9, 0.86, 0.8], band: [0.24, 0.19, 0.15], skirt: 0.12, floor: 'walnut', light: [1, 0.95, 0.86] },
+  burger: { wall: [0.92, 0.9, 0.86], band: CHAR, skirt: 0.12, floor: 'polished', light: [1, 0.96, 0.9] },
+  tacos: { wall: [0.92, 0.86, 0.78], band: [0.56, 0.32, 0.23], skirt: 0.12, floor: 'terrazzo', light: [1, 0.94, 0.84] },
+  noodles: { wall: [0.88, 0.84, 0.78], band: [0.26, 0.18, 0.16], skirt: 0.12, floor: 'walnut', light: [1, 0.94, 0.84] },
+  shop: { wall: WARM_WHITE, band: CHAR, skirt: 0.1, floor: 'porcelain', light: [1, 0.97, 0.92] },
+};
+// (the floors of real stuff: their own colours - not tinted)
+const REAL_FLOORS = new Set(['oak', 'walnut', 'porcelain', 'polished', 'terrazzo', 'rug', 'marble']);
+
 /**
  * One room behind facade f.
  * spec: { u0, u1, depth, y0, h, kind, openings: [{ kind: 'door'|'window', u0, u1, y0, y1 }], shop, outside }
  * Returns what the people of the street need to know about it (spots, the way round the furniture).
  */
 export function buildRoom(ctx, f, spec) {
+  // (ROADMAP 11.42: a shop in a mall is a store - its own light, its own decor)
+  if (ctx.mall && spec.shop && !spec.store && ctx.M.store) spec = { ...spec, store: true };
   const R = new Room(ctx, f, spec);
   // (v5, ROADMAP 11.18) a shop furnished to the small things: its shelves, its fixtures, where
   // people stand and what they bump into are laid out now; the thousands of things on the shelves
@@ -139,7 +177,9 @@ const NO_SOUP = { fbox() {}, fcyl() {}, fball() {}, box() {}, cyl() {}, ball() {
 class Room {
   constructor(ctx, f, spec) {
     this.ctx = ctx;
-    this.M = ctx.M;
+    // (ROADMAP 11.42: a store in a mall reads its pens through the stores' own set - world/mats.js)
+    this.store = !!(spec.store && ctx.M.store);
+    this.M = this.store ? ctx.M.store : ctx.M;
     this.f = f;
     this.spec = spec;
     // 'build' (the room and its furniture now) or 'stock' (only what goes into the soups: the
@@ -148,7 +188,7 @@ class Room {
     this.lazy = false;
     this.soups = null;
     this.kind = spec.kind;
-    this.decor = DECOR[spec.kind] || DECOR.shop;
+    this.decor = (this.store && (STORE_DECOR[spec.kind] || STORE_DECOR.shop)) || DECOR[spec.kind] || DECOR.shop;
     this.ua = spec.u0 + T;
     this.ub = spec.u1 - T;
     this.da = -T;
@@ -362,14 +402,14 @@ class Room {
     // the floor (boards, tiles, the checker of a diner), its pattern in world metres
     const fl = dec.floor;
     // (v5: a room may have a floor and a ceiling of its own colour - the club's are dark)
-    const fcol = dec.floorCol ? dec.floorCol : fl === 'checker' ? [0.98, 0.97, 0.95] : fl === 'mats' ? [0.8, 0.8, 0.85] : fl === 'tiles' ? [0.98, 0.96, 0.92] : fl === 'wood' ? [0.98, 0.9, 0.82] : fl === 'carpet' ? [0.95, 0.9, 0.95] : [0.94, 0.94, 0.92];
+    const fcol = dec.floorCol ? dec.floorCol : REAL_FLOORS.has(fl) ? [1, 1, 1] : fl === 'checker' ? [0.98, 0.97, 0.95] : fl === 'mats' ? [0.8, 0.8, 0.85] : fl === 'tiles' ? [0.98, 0.96, 0.92] : fl === 'wood' ? [0.98, 0.9, 0.82] : fl === 'carpet' ? [0.95, 0.9, 0.95] : [0.94, 0.94, 0.92];
     const fp = [this.P(ua, y0 + 0.004, db), this.P(ub, y0 + 0.004, db), this.P(ub, y0 + 0.004, da), this.P(ua, y0 + 0.004, da)];
     const fuv = fp.map((p) => [p[0] / 2, -p[2] / 2]);
     this.add(this.M.floors[fl] || this.M.floors.concrete, this.f.facing(fp[0], fp[1], fp[2], fp[3], fuv, [0, 1, 0]), fcol);
     // the ceiling
     this.quad(this.P(ua, y1, db), this.P(ub, y1, db), this.P(ub, y1, da), this.P(ua, y1, da), [0, -1, 0], dec.ceiling || [0.96, 0.93, 0.86]);
-    // walls: a lower band and the wall above it
-    const band = y0 + 0.95;
+    // walls: a lower band and the wall above it (a store's: a skirting)
+    const band = y0 + (dec.skirt || 0.95);
     const wall = (a0, a1, nn) => {
       this.quad([a0[0], y0, a0[2]], [a1[0], y0, a1[2]], [a1[0], band, a1[2]], [a0[0], band, a0[2]], nn, dec.band);
       this.quad([a0[0], band, a0[2]], [a1[0], band, a1[2]], [a1[0], y1, a1[2]], [a0[0], y1, a0[2]], nn, dec.wall);

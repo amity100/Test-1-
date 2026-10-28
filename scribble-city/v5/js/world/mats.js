@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeSurface, srgb, hex, canvasTexture } from '../render/materials.js';
 import { streetTexture, paverTexture, frondTexture, aveTexture, crossTexture, asphaltTexture, crosswalkTexture, tileTexture, glintTexture, floorTexture, goodsTexture, GOODS_CELLS, sandTexture, woodDeckTexture } from './paint.js';
 import { canvas } from './kit.js';
-import { hallMarble, hallMedallion, hallCoffer, hallFrieze, decoStone, drawnSky, laneArt } from './hallpaint.js';
+import { hallMarble, hallMedallion, hallCoffer, hallFrieze, decoStone, drawnSky, laneArt, storeFloor } from './hallpaint.js';
 
 // The pens of the city, made once. Most of them take their colour from the parts (a colour per
 // vertex), so a hundred pink and mint and yellow buildings are one material, drawn per chunk.
@@ -135,6 +135,22 @@ export function cityMaterials() {
   M.laneArt = B({ kind: 'wall', map: laneArt(), color: srgb(1, 1, 1), side: THREE.DoubleSide, line: 0.35, wash: 0.75 });
   M.floors = {};
   for (const k of ['checker', 'tiles', 'mats', 'wood', 'concrete', 'carpet']) M.floors[k] = B({ kind: 'ground', map: floorTexture(k), vcolor: true, indoor: true, ang: k === 'wood' ? 1.5708 : 0.4, wash: 0.72, line: 0.5 });
+  // (v5, ROADMAP 11.42) the stores in a mall: the rooms' pens again, under the stores' own white light
+  // (render/glsl.js uIndoor 3), and floors of real stuff (hallpaint.js storeFloor; the hall's own
+  // marble) - a set of pens of their own a store's room reads through (world/rooms.js); the rest, the
+  // rooms' own
+  const ST = Object.create(M);
+  ST.inWall = B({ kind: 'wall', vcolor: true, indoor: 'store', erasable: true, wash: 0.74 });
+  ST.inBox = B({ kind: 'box', vcolor: true, indoor: 'store', wash: 0.74 });
+  ST.inCyl = B({ kind: 'cyl', vcolor: true, indoor: 'store', partR: 0.1, wash: 0.74 });
+  ST.inGloss = B({ kind: 'box', vcolor: true, indoor: 'store', gloss: 0.6, wash: 0.78 });
+  ST.inLamp = B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.97, 0.92), emissive: new THREE.Color(2.0, 2.0, 2.0), indoor: 'store', line: 0.4 });
+  ST.goods = B({ kind: 'uv', map: M.goods.uniforms.uMap.value, cells: GOODS_CELLS, indoor: 'store', uvScale: 4, ang: 1.3, wash: 0.8, density: 0.75 });
+  ST.floors = {};
+  for (const k of Object.keys(M.floors)) ST.floors[k] = B({ kind: 'ground', map: M.floors[k].uniforms.uMap.value, vcolor: true, indoor: 'store', ang: k === 'wood' ? 1.5708 : 0.4, wash: 0.76, line: 0.5 });
+  for (const k of ['oak', 'walnut', 'porcelain', 'polished', 'terrazzo', 'rug']) ST.floors[k] = B({ kind: 'ground', map: storeFloor(k), vcolor: true, indoor: 'store', ang: k === 'oak' || k === 'walnut' ? 1.5708 : 0.4, wash: 0.82, density: 0.6, line: 0.45 });
+  ST.floors.marble = B({ kind: 'ground', map: M.hallFloor.uniforms.uMap.value, vcolor: true, indoor: 'store', gloss: 0.1, ang: 0.4, wash: 0.85, density: 0.55, line: 0.5 });
+  M.store = ST;
   M.srgb = srgb;
   M.hex = hex;
   return M;

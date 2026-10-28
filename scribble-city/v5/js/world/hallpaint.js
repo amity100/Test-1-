@@ -600,3 +600,182 @@ export function laneArt() {
   }
   return canvasTexture(c);
 }
+
+// (v5, ROADMAP 11.42) The floors of the stores in a mall, laid the way real ones are: each picture 2 m
+// square (world/rooms.js lays the floors by the world's metres), 256 pixels a metre, joining up with
+// itself on every side. oak, walnut: planks of 18 cm, each its own shade and its run of grain, their
+// ends staggered; porcelain: big tiles of 50 cm, a hair of grout; polished: concrete, its soft clouds
+// and a seam; terrazzo: chips of stone in it; carpet: a grey tweed
+export function storeFloor(kind) {
+  const N = 512;
+  const c = canvas(N, N);
+  const g = c.getContext('2d');
+  const r = dice(kind.length * 31 + kind.charCodeAt(0));
+  const rgb = (a, k = 1, al = 1) => `rgba(${(a[0] * k) | 0}, ${(a[1] * k) | 0}, ${(a[2] * k) | 0}, ${al})`;
+  // (drawn again across each edge it crosses, so the picture joins up with itself)
+  const wrap = (fn) => {
+    for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) {
+      g.save();
+      g.translate(ox, oy);
+      fn();
+      g.restore();
+    }
+  };
+  if (kind === 'oak' || kind === 'walnut') {
+    const base = kind === 'oak' ? [204, 170, 126] : [108, 77, 56];
+    const n = 11;
+    const w = N / n;
+    for (let i = 0; i < n; i++) {
+      // (the planks of a row: the same length - a third or a half of the picture - their ends where
+      // the row's own offset puts them)
+      const len = r() < 0.5 ? N / 2 : N / 3;
+      const off = r() * len;
+      for (let y = -len + off; y < N; y += len) {
+        const t = 0.88 + r() * 0.2;
+        const x0 = i * w;
+        wrap(() => {
+          g.fillStyle = rgb(base, t);
+          g.fillRect(x0, y, w, len);
+        });
+        // the grain: long fine lines down it, a little wavy, darker and lighter
+        for (let k = 0; k < 9; k++) {
+          const gx = x0 + 3 + r() * (w - 6);
+          const dark = r() < 0.7;
+          const a = 0.06 + r() * 0.1;
+          const amp = 0.6 + r() * 1.6;
+          const ph = r() * 6;
+          const lw = 0.6 + r() * 0.9;
+          wrap(() => {
+            g.strokeStyle = dark ? rgb(base, 0.62, a) : rgb([255, 245, 230], 1, a * 0.7);
+            g.lineWidth = lw;
+            g.beginPath();
+            for (let s = 0; s <= 12; s++) {
+              const yy = y + (len * s) / 12;
+              const xx = gx + Math.sin(ph + s * 0.7) * amp;
+              if (s) g.lineTo(xx, yy);
+              else g.moveTo(xx, yy);
+            }
+            g.stroke();
+          });
+        }
+        // now and then a knot
+        if (r() < 0.25) {
+          const kx = x0 + w * (0.3 + r() * 0.4);
+          const ky = y + len * (0.2 + r() * 0.6);
+          wrap(() => {
+            g.fillStyle = rgb(base, 0.55, 0.45);
+            g.beginPath();
+            g.ellipse(kx, ky, 2.2, 4.5, 0, 0, Math.PI * 2);
+            g.fill();
+          });
+        }
+        // its end
+        wrap(() => {
+          g.fillStyle = rgb(base, 0.45, 0.55);
+          g.fillRect(x0, y, w, 1.2);
+        });
+      }
+      // the joint along it
+      wrap(() => {
+        g.fillStyle = rgb(base, 0.42, 0.6);
+        g.fillRect(i * w, 0, 1.2, N);
+      });
+    }
+  } else if (kind === 'porcelain') {
+    const S = N / 4;
+    for (let j = 0; j < 4; j++) {
+      for (let i = 0; i < 4; i++) {
+        const t = r() * 6 - 3;
+        g.fillStyle = `rgb(${(219 + t) | 0}, ${(215 + t) | 0}, ${(208 + t) | 0})`;
+        g.fillRect(i * S, j * S, S, S);
+        // its soft clouds, the faint grain of the stone it copies
+        for (let k = 0; k < 7; k++) {
+          const x = i * S + r() * S;
+          const y = j * S + r() * S;
+          const rad = 10 + r() * 40;
+          const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+          const v = r() < 0.5 ? '255, 252, 246' : '170, 164, 156';
+          gr.addColorStop(0, `rgba(${v}, ${0.08 + r() * 0.08})`);
+          gr.addColorStop(1, `rgba(${v}, 0)`);
+          g.fillStyle = gr;
+          g.fillRect(i * S, j * S, S, S);
+        }
+      }
+    }
+    g.fillStyle = 'rgba(150, 144, 136, 0.55)';
+    for (let k = 0; k < 4; k++) {
+      g.fillRect(k * S, 0, 1.6, N);
+      g.fillRect(0, k * S, N, 1.6);
+    }
+  } else if (kind === 'polished') {
+    g.fillStyle = 'rgb(186, 182, 175)';
+    g.fillRect(0, 0, N, N);
+    for (let k = 0; k < 40; k++) {
+      const x = r() * N;
+      const y = r() * N;
+      const rad = 30 + r() * 120;
+      const v = r() < 0.5 ? '228, 225, 218' : '128, 124, 118';
+      const al = 0.05 + r() * 0.06;
+      wrap(() => {
+        const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+        gr.addColorStop(0, `rgba(${v}, ${al})`);
+        gr.addColorStop(1, `rgba(${v}, 0)`);
+        g.fillStyle = gr;
+        g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      });
+    }
+    for (let k = 0; k < 1800; k++) {
+      const v = r() < 0.5 ? 236 : 96;
+      g.fillStyle = `rgba(${v}, ${v - 2}, ${v - 5}, ${0.08 + r() * 0.14})`;
+      g.fillRect(r() * N, r() * N, 1 + r() * 1.5, 1 + r() * 1.5);
+    }
+    // a hairline crack, and the saw cut every 2 m
+    g.strokeStyle = 'rgba(90, 86, 80, 0.35)';
+    g.lineWidth = 0.8;
+    g.beginPath();
+    let x = r() * N;
+    let y = 0;
+    g.moveTo(x, y);
+    while (y < N * 0.6) {
+      x += (r() - 0.5) * 18;
+      y += 6 + r() * 14;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+    g.fillStyle = 'rgba(96, 92, 86, 0.5)';
+    g.fillRect(0, 0, 1.4, N);
+    g.fillRect(0, 0, N, 1.4);
+  } else if (kind === 'terrazzo') {
+    g.fillStyle = 'rgb(216, 210, 200)';
+    g.fillRect(0, 0, N, N);
+    const chips = [[118, 116, 112], [62, 60, 60], [246, 244, 238], [168, 112, 84], [128, 138, 120], [196, 186, 170]];
+    for (let k = 0; k < 2600; k++) {
+      const col = chips[Math.floor(r() * chips.length)];
+      const x = r() * N;
+      const y = r() * N;
+      const s = r() < 0.85 ? 1 + r() * 2.5 : 3 + r() * 4;
+      const a = r() * Math.PI;
+      const al = 0.75 + r() * 0.25;
+      const sy = s * (0.5 + r() * 0.5);
+      const chip = () => {
+        g.fillStyle = rgb(col, 1, al);
+        g.beginPath();
+        g.ellipse(x, y, s, sy, a, 0, Math.PI * 2);
+        g.fill();
+      };
+      // (only one by an edge is drawn across it too)
+      if (x < 8 || y < 8 || x > N - 8 || y > N - 8) wrap(chip);
+      else chip();
+    }
+  } else {
+    // carpet: a grey tweed
+    g.fillStyle = 'rgb(66, 66, 72)';
+    g.fillRect(0, 0, N, N);
+    for (let k = 0; k < 9000; k++) {
+      const v = r() < 0.5 ? 104 : 40;
+      g.fillStyle = `rgba(${v}, ${v}, ${v + 6}, ${0.15 + r() * 0.25})`;
+      g.fillRect(r() * N, r() * N, 1, 1 + r() * 2);
+    }
+  }
+  return canvasTexture(c, { repeat: true });
+}

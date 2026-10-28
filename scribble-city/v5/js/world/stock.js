@@ -121,6 +121,19 @@ const LABEL = [[0.98, 0.98, 0.95], [0.98, 0.9, 0.35], [0.95, 0.3, 0.3], [0.2, 0.
 const SPINES = [[0.64, 0.2, 0.22], [0.18, 0.36, 0.54], [0.24, 0.48, 0.3], [0.85, 0.69, 0.29], [0.42, 0.25, 0.48], [0.91, 0.88, 0.82], [0.71, 0.4, 0.11], [0.1, 0.1, 0.12], [0.86, 0.36, 0.42], [0.36, 0.62, 0.7]];
 const FRUIT = [[0.88, 0.2, 0.18], [0.98, 0.7, 0.18], [0.6, 0.82, 0.3], [0.98, 0.86, 0.25], [0.98, 0.48, 0.16], [0.5, 0.2, 0.42], [0.36, 0.62, 0.22], [0.9, 0.34, 0.4]];
 export const CLOTH = [[0.95, 0.45, 0.6], [0.45, 0.6, 0.95], [0.98, 0.9, 0.6], [0.6, 0.85, 0.7], [0.75, 0.5, 0.85], [0.98, 0.98, 0.95], [0.2, 0.22, 0.3], [0.86, 0.36, 0.3], [0.4, 0.7, 0.8], [0.3, 0.32, 0.5], [0.62, 0.5, 0.38], [0.92, 0.74, 0.62], [0.16, 0.4, 0.3]];
+// (v5, ROADMAP 11.42) a store in a mall: the colours real things come in - clothes in a season's
+// quiet colours (navy, black, camel, cream, olive, wine, denim, grey, sand), shoes in leather and
+// suede, books' spines as a bookshop's, scent bottles' glass, stones and metals as they are, screens
+// showing pictures
+export const CLOTH_REAL = [[0.17, 0.22, 0.33], [0.1, 0.1, 0.11], [0.72, 0.55, 0.36], [0.92, 0.88, 0.8], [0.42, 0.42, 0.28], [0.43, 0.17, 0.2], [0.29, 0.39, 0.52], [0.6, 0.6, 0.62], [0.95, 0.94, 0.92], [0.82, 0.64, 0.62], [0.18, 0.3, 0.24], [0.24, 0.24, 0.26], [0.82, 0.74, 0.6], [0.6, 0.3, 0.2]];
+export const CLOTH_LUX = [[0.95, 0.93, 0.88], [0.1, 0.1, 0.11], [0.72, 0.55, 0.36], [0.88, 0.74, 0.7], [0.86, 0.8, 0.66], [0.17, 0.22, 0.33], [0.12, 0.32, 0.26], [0.43, 0.17, 0.2]];
+export const SHOES_REAL = [[0.1, 0.1, 0.11], [0.4, 0.26, 0.16], [0.66, 0.48, 0.3], [0.94, 0.93, 0.91], [0.17, 0.22, 0.33], [0.55, 0.55, 0.57], [0.43, 0.17, 0.2], [0.8, 0.72, 0.6]];
+export const SPINES_REAL = [[0.5, 0.18, 0.18], [0.16, 0.26, 0.4], [0.2, 0.36, 0.26], [0.76, 0.62, 0.3], [0.3, 0.2, 0.32], [0.88, 0.85, 0.78], [0.6, 0.36, 0.14], [0.1, 0.1, 0.12], [0.7, 0.42, 0.4], [0.3, 0.46, 0.5], [0.92, 0.9, 0.86], [0.42, 0.44, 0.48]];
+export const GLASS_REAL = [[0.86, 0.9, 0.92], [0.78, 0.55, 0.25], [0.86, 0.62, 0.6], [0.38, 0.38, 0.42], [0.84, 0.7, 0.4], [0.7, 0.78, 0.82], [0.55, 0.2, 0.25]];
+export const GEMS = [SC.gold, [0.85, 0.86, 0.88], [0.92, 0.95, 1.0], [0.6, 0.1, 0.15], [0.12, 0.2, 0.5], [0.1, 0.42, 0.28], [0.94, 0.92, 0.86]];
+export const SCREENS_REAL = [[0.15, 0.35, 0.72], [0.1, 0.5, 0.55], [0.9, 0.5, 0.25], [0.2, 0.45, 0.3], [0.4, 0.25, 0.6], [0.8, 0.84, 0.9], [0.95, 0.75, 0.45]];
+export const OAK = [0.76, 0.62, 0.45];
+const ART = [[0.86, 0.82, 0.76], [0.3, 0.32, 0.36], [0.72, 0.55, 0.4], [0.17, 0.22, 0.33], [0.9, 0.88, 0.84], [0.6, 0.36, 0.3]];
 
 // ------------------------------------------------------------------ the products
 // what a shelf of each kind holds: shapes, sizes (w along the shelf, h up, d into it), how many of
@@ -189,6 +202,14 @@ const P = {
   general: null,
 };
 P.general = [...P.grocery.slice(0, 3), ...P.tools.slice(0, 1), ...P.pharmacy.slice(0, 1)];
+// (ROADMAP 11.42) a store's shelves: the same things, in the colours real ones come in
+const PS = {
+  perfume: [
+    { s: 'flacon', w: [0.06, 0.09], h: [0.1, 0.16], d: 0.06, n: [2, 5], cols: GLASS_REAL },
+    { s: 'box', w: [0.08, 0.1], h: [0.12, 0.16], d: 0.06, n: [2, 4], cols: [[0.1, 0.1, 0.11], [0.95, 0.94, 0.92], [0.78, 0.66, 0.42], [0.62, 0.5, 0.46]], label: true },
+  ],
+  books: [{ s: 'book', w: [0.025, 0.055], h: [0.17, 0.27], d: 0.16, n: [6, 14], cols: SPINES_REAL }],
+};
 
 const rr = (rng, a) => a[0] + (a[1] - a[0]) * rng.r();
 const pk = (rng, a) => a[Math.floor(rng.r() * a.length)];
@@ -201,7 +222,7 @@ const rint = (rng, a) => Math.floor(a[0] + (a[1] - a[0] + 1) * rng.r());
  */
 export function goods(R, run, s0, s1, y, hMax, dMax, cat, o = {}) {
   const rng = R.rng;
-  const list = P[cat] || P.general;
+  const list = (R.store && PS[cat]) || P[cat] || P.general;
   const Sb = R.soup('box');
   const Sc = R.soup('cyl');
   const Sg = R.soup('gloss');
@@ -525,20 +546,22 @@ export function rail(R, run, len, o = {}) {
   const y0 = R.y0;
   const yb = y0 + (o.high || 1.62);
   const tc = o.tc !== undefined ? o.tc : -0.3;
+  // (a store's: matte black - ROADMAP 11.42)
+  const metal = o.metal || (R.store ? SC.black : SC.steel);
   if (o.free) {
     for (const s of [0.02, len - 0.02]) {
-      run.box(S, s - 0.02, y0, tc - 0.02, s + 0.02, yb, tc + 0.02, SC.steel, nextId());
-      run.box(S, s - 0.04, y0, tc - 0.25, s + 0.04, y0 + 0.03, tc + 0.25, SC.steel, nextId(), L.BOTTOM);
+      run.box(S, s - 0.02, y0, tc - 0.02, s + 0.02, yb, tc + 0.02, metal, nextId());
+      run.box(S, s - 0.04, y0, tc - 0.25, s + 0.04, y0 + 0.03, tc + 0.25, metal, nextId(), L.BOTTOM);
     }
   } else {
     // (on the wall: brackets)
-    for (const s of [0.05, len - 0.05]) run.box(S, s - 0.015, yb - 0.04, tc - 0.3, s + 0.015, yb + 0.02, tc, SC.steel, nextId());
+    for (const s of [0.05, len - 0.05]) run.box(S, s - 0.015, yb - 0.04, tc - 0.3, s + 0.015, yb + 0.02, tc, metal, nextId());
   }
-  run.box(S, 0, yb - 0.02, tc - 0.012, len, yb + 0.012, tc + 0.012, SC.steel, nextId());
+  run.box(S, 0, yb - 0.02, tc - 0.012, len, yb + 0.012, tc + 0.012, metal, nextId());
   let s = 0.08;
   const rng = R.rng;
   while (s < len - 0.08) {
-    const col = pk(rng, o.cols || CLOTH);
+    const col = pk(rng, o.cols || (R.store ? CLOTH_REAL : CLOTH));
     const long = rng.r() < (o.longs || 0.25);
     const n = rint(rng, [3, 7]);
     for (let k = 0; k < n && s < len - 0.08; k++) {
@@ -563,14 +586,14 @@ export function foldTable(R, run, len, depth, o = {}) {
   const S = R.soup('box');
   const y0 = R.y0;
   const top = y0 + (o.h || 0.82);
-  run.box(S, 0, y0, -depth, len, top - 0.04, 0, o.base || SC.lwood, nextId(), L.BOTTOM);
-  run.box(S, -0.02, top - 0.04, -depth - 0.02, len + 0.02, top, 0.02, o.top || SC.white, nextId(), L.BOTTOM);
+  run.box(S, 0, y0, -depth, len, top - 0.04, 0, o.base || (R.store ? SC.black : SC.lwood), nextId(), L.BOTTOM);
+  run.box(S, -0.02, top - 0.04, -depth - 0.02, len + 0.02, top, 0.02, o.top || (R.store ? OAK : SC.white), nextId(), L.BOTTOM);
   const rng = R.rng;
   const cols = Math.max(1, Math.floor((len - 0.1) / 0.36));
   const rows = Math.max(1, Math.floor((depth - 0.1) / 0.4));
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      const col = pk(rng, o.cols || CLOTH);
+      const col = pk(rng, o.cols || (R.store ? CLOTH_REAL : CLOTH));
       const n = rint(rng, [2, 6]);
       const sa = 0.07 + i * ((len - 0.14) / cols);
       const ta = -depth + 0.07 + j * ((depth - 0.14) / rows);
@@ -592,15 +615,16 @@ export function shoeWall(R, run, len, o = {}) {
   const S = R.soup('box');
   const y0 = R.y0;
   const h = o.h || 2.3;
-  run.box(S, 0, y0, -0.36, len, y0 + h, -0.32, o.panel || SC.white, nextId(), L.BACK);
-  run.box(S, 0, y0, -0.36, len, y0 + 0.3, 0, o.panel || SC.white, nextId(), L.BOTTOM);
+  const panel = o.panel || (R.store ? [0.92, 0.91, 0.88] : SC.white);
+  run.box(S, 0, y0, -0.36, len, y0 + h, -0.32, panel, nextId(), L.BACK);
+  run.box(S, 0, y0, -0.36, len, y0 + 0.3, 0, panel, nextId(), L.BOTTOM);
   const rng = R.rng;
   const ys = [];
   for (let y = y0 + 0.45; y < y0 + h - 0.2; y += 0.34) {
     ys.push(y);
-    run.box(S, 0, y - 0.02, -0.32, len, y, -0.02, SC.lwood, nextId(), L.BACK);
+    run.box(S, 0, y - 0.02, -0.32, len, y, -0.02, R.store ? OAK : SC.lwood, nextId(), L.BACK);
     for (let s = 0.12; s < len - 0.12; s += 0.3) {
-      const col = pk(rng, o.cols || CLOTH);
+      const col = pk(rng, o.cols || (R.store ? SHOES_REAL : CLOTH));
       const sole = rng.r() < 0.5 ? SC.white : SC.black;
       for (const k of [-0.055, 0.055]) {
         run.box(S, s + k - 0.045, y, -0.3, s + k + 0.045, y + 0.035, -0.04, sole, nextId(), L.BOTTOM);
@@ -654,14 +678,14 @@ export function vitrine(R, run, len, depth, o = {}) {
   const Sg = R.soup('gloss');
   const y0 = R.y0;
   run.box(S, 0, y0, -depth, len, y0 + 0.86, 0, o.base || SC.black, nextId(), L.BOTTOM);
-  run.box(Sl, 0.03, y0 + 0.86, -depth + 0.03, len - 0.03, y0 + 0.88, -0.03, o.velvet || [0.4, 0.1, 0.22], nextId(), L.BOTTOM);
+  run.box(Sl, 0.03, y0 + 0.86, -depth + 0.03, len - 0.03, y0 + 0.88, -0.03, o.velvet || (R.store ? [0.1, 0.12, 0.2] : [0.4, 0.1, 0.22]), nextId(), L.BOTTOM);
   // the glass: four thin edges and the top
   run.box(Sg, 0, y0 + 0.88, -depth, len, y0 + 1.12, -depth + 0.012, SC.glass, nextId(), L.BOTTOM);
   run.box(Sg, 0, y0 + 0.88, -0.012, len, y0 + 1.12, 0, SC.glass, nextId(), L.BOTTOM);
   run.box(Sg, 0, y0 + 1.11, -depth, len, y0 + 1.12, 0, SC.glass, nextId(), L.BOTTOM);
   const rng = R.rng;
   for (let s = 0.1; s < len - 0.08; s += 0.16) {
-    for (let t = -depth + 0.12; t < -0.08; t += 0.18) run.box(Sl, s, y0 + 0.88, t, s + 0.07, y0 + 0.905, t + 0.05, pk(rng, o.cols || [SC.gold, SC.white, [0.6, 0.85, 1.0], [1, 0.4, 0.5]]), nextId(), L.BOTTOM);
+    for (let t = -depth + 0.12; t < -0.08; t += 0.18) run.box(Sl, s, y0 + 0.88, t, s + 0.07, y0 + 0.905, t + 0.05, pk(rng, o.cols || (R.store ? GEMS : [SC.gold, SC.white, [0.6, 0.85, 1.0], [1, 0.4, 0.5]])), nextId(), L.BOTTOM);
   }
   run.solid(0, -depth, len, 0, y0 + 1.12);
   run.spot(len / 2, 0.55, { shelf: [0.95], reach: run.at(len / 2, 0.95, -depth / 2) });
@@ -680,11 +704,37 @@ export function ceiling(R, o = {}) {
   const D = da - db;
   const nu = Math.max(1, Math.round(W / 2.6));
   const nd = Math.max(1, Math.round(D / 2.6));
+  // (ROADMAP 11.42) a store's: spots on black tracks down its length, and lights let into the
+  // ceiling between them - as real ones are lit. (Boxes, and of the lamps only the face that shows:
+  // a store's whole ceiling is a few hundred points - its streamed things are what a phone counts)
+  if (o.round && R.store) {
+    const light = o.light || [1, 0.97, 0.92];
+    const LAMP = L.TOP | L.BACK | L.FRONT | L.START | L.END;
+    const nt = Math.min(2, nu);
+    for (let i = 0; i < nt; i++) {
+      const s = ((i + 0.5) * W) / nt;
+      run.box(S, s - 0.022, y1 - 0.035, 0.45, s + 0.022, y1, D - 0.45, SC.black, nextId(), L.TOP);
+      let k = 0;
+      for (let t = 0.9; t < D - 0.7; t += 1.6) {
+        const sd = k++ % 2 ? 0.06 : -0.06;
+        run.box(S, s + sd - 0.045, y1 - 0.24, t - 0.045, s + sd + 0.045, y1 - 0.035, t + 0.045, SC.black, nextId(), L.TOP);
+        run.box(Sl, s + sd - 0.034, y1 - 0.245, t - 0.034, s + sd + 0.034, y1 - 0.24, t + 0.034, light, nextId(), LAMP);
+      }
+    }
+    // (the lights let in between the tracks)
+    const sm = W / 2;
+    for (let t = 1.7; t < D - 1; t += 3.2) {
+      run.box(S, sm - 0.11, y1 - 0.012, t - 0.11, sm + 0.11, y1, t + 0.11, SC.white, nextId(), L.TOP);
+      run.box(Sl, sm - 0.08, y1 - 0.016, t - 0.08, sm + 0.08, y1 - 0.012, t + 0.08, light, nextId(), LAMP);
+    }
+  }
   for (let i = 0; i < nu; i++) {
     for (let j = 0; j < nd; j++) {
       const s = ((i + 0.5) * W) / nu;
       const t = ((j + 0.5) * D) / nd;
-      if (o.round) {
+      if (o.round && R.store) {
+        // (the tracks above)
+      } else if (o.round) {
         const [u, d] = run.ud(s, t);
         S.fcyl(u, d, 0.32, y1 - 0.06, 0.06, SC.white, nextId(), 10, false);
         Sl.fcyl(u, d, 0.27, y1 - 0.075, 0.016, o.light || [1, 0.96, 0.86], nextId(), 10, true);
@@ -718,7 +768,7 @@ export function poster(R, run, s, y, w, h, o = {}) {
   const S = R.soup('box');
   run.box(S, s - w / 2 - 0.03, y - h / 2 - 0.03, -0.03, s + w / 2 + 0.03, y + h / 2 + 0.03, 0, o.frame || SC.black, nextId(), L.BACK);
   const rng = R.rng;
-  const cols = o.cols || [pk(rng, BRIGHT), pk(rng, PASTEL), pk(rng, BRIGHT)];
+  const cols = o.cols || (R.store ? [pk(rng, ART), pk(rng, ART), pk(rng, ART)] : [pk(rng, BRIGHT), pk(rng, PASTEL), pk(rng, BRIGHT)]);
   run.box(S, s - w / 2, y - h / 2, 0, s + w / 2, y + h / 2, 0.005, cols[0], nextId(), FRONTONLY);
   run.box(S, s - w * 0.35, y - h * 0.3, 0.005, s + w * 0.1, y + h * 0.35, 0.01, cols[1], nextId(), FRONTONLY);
   run.box(S, s - w * 0.4, y - h * 0.44, 0.005, s + w * 0.4, y - h * 0.36, 0.01, cols[2], nextId(), FRONTONLY);
