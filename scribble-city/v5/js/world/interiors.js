@@ -12,6 +12,8 @@ import { buildStock } from './rooms.js';
 
 const NEAR = 40;
 const FAR = 65;
+// (ROADMAP 11.45) how long the things streamed into a shop take to be drawn in (ms)
+const REVEAL_MS = 600;
 
 let seq = 0;
 
@@ -33,6 +35,8 @@ export class Interiors {
     this.stream = new Streamer([], { budget: o.low ? 2 : 2.5, rush: o.low ? 5 : 7, warm: this.warmFn });
     this.byRec = new Map();
     this.verts = 0;
+    // (ROADMAP 11.45) the shops being drawn in: { id, t0, group }
+    this.reveals = [];
   }
 
   // the rooms of a part of the city (the island's, at the start; a block's, when it is shown)
@@ -46,6 +50,8 @@ export class Interiors {
         rect: { x0: rec.x - r, x1: rec.x + r, z0: rec.z - r, z1: rec.z + r },
         near: this.low ? NEAR - 8 : NEAR,
         far: FAR,
+        // (its floor: a store up in a mall is further off by the floors between)
+        y: rec.y,
         rec,
         build: (c) => this.build(c),
       };
@@ -68,7 +74,20 @@ export class Interiors {
     const group = new THREE.Group();
     group.name = `stock ${c.rec.kind}`;
     group.visible = false;
-    const res = yield* buildStock(c.rec, world.ctx.M, group, { merge: world.merge });
+    // (ROADMAP 11.45: its own id, so that it is drawn in - never there all at once)
+    const objs = world.objects || null;
+    const obj = objs && world.mergeObj ? objs.takeStockId() : 0;
+    // (not seen until it is drawn in: hidden from the start, before it ever reaches the screen)
+    if (obj) objs.maskAt(obj, 1);
+    let res;
+    let done = false;
+    try {
+      res = yield* buildStock(c.rec, world.ctx.M, group, { merge: obj ? world.mergeObj : world.merge, obj });
+      done = true;
+    } finally {
+      // (let go of before it was all there: its id back)
+      if (!done && obj) objs.giveStockId(obj);
+    }
     let h = 0;
     for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
     const bucket = this.buckets[h % this.buckets.length];
@@ -80,6 +99,11 @@ export class Interiors {
         bucket.add(group);
         group.updateMatrixWorld(true);
         if (self.pipe) self.pipe.addStatic(group);
+        if (obj) {
+          self.reveals.push({ id: obj, t0: performance.now(), group });
+          // (its pixels may go now: in its own pen, not the still city's twin, render/solid.js)
+          self.hold(group, true);
+        }
         group.visible = true;
         self.verts += res.verts;
       },
@@ -93,27 +117,48 @@ export class Interiors {
         group.traverse((m) => {
           if (m.isMesh) m.geometry.dispose();
         });
+        if (obj && !live.freed) {
+          live.freed = true;
+          self.reveals = self.reveals.filter((r) => r.id !== obj);
+          objs.giveStockId(obj);
+        }
       },
     };
     return live;
   }
 
-  update(x, z, vx = 0, vz = 0) {
-    this.stream.update(x, z, vx, vz);
+  update(x, z, vx = 0, vz = 0, y = null) {
+    this.stream.update(x, z, vx, vz, y);
+    // (ROADMAP 11.45) what came into a shop is drawn in, a stroke at a time, not there at once
+    if (this.reveals.length) {
+      const now = performance.now();
+      const objs = this.world.objects;
+      this.reveals = this.reveals.filter((r) => {
+        const k = (now - r.t0) / REVEAL_MS;
+        objs.maskAt(r.id, 1 - Math.min(1, k));
+        if (k < 1) return true;
+        this.hold(r.group, false);
+        return false;
+      });
+    }
     // (where the shops crowd together - a mall - the ring they are filled in narrows, so the
     // corners on the shelves stay within what the graphics card is given: about a million on a
     // computer, less than half that on a phone)
     const most = this.low ? 450000 : 1200000;
     const st = this.stream;
-    // (ROADMAP 11.43: and narrower still when the frames are slow - game.js applyDetail)
-    const top = this.scaleMax || 1;
-    if (this.verts > most || st.scale > top) st.scale = Math.max(0.55, st.scale * 0.985);
-    else if (this.verts < most * 0.8) st.scale = Math.min(top, st.scale * 1.01);
+    if (this.verts > most) st.scale = Math.max(0.55, st.scale * 0.985);
+    else if (this.verts < most * 0.8) st.scale = Math.min(1, st.scale * 1.01);
+  }
+
+  // a shop's goods in their own pens while they are drawn in (render/solid.js)
+  hold(group, on) {
+    const solid = this.pipe && this.pipe.solid;
+    if (solid) group.traverse((m) => m.isMesh && solid.hold(m, on));
   }
 
   // everything near p now (the start; a jump across the map; the tests)
-  fill(x, z, ms = 20000) {
-    this.stream.fill(x, z, ms);
+  fill(x, z, ms = 20000, y = null) {
+    this.stream.fill(x, z, ms, y);
   }
 
   info() {

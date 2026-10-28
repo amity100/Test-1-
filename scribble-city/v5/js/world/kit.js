@@ -201,7 +201,9 @@ export class Batch {
               for (let i = 0; i < c; i++) vc.set(col, (o + i) * 3);
             }
           }
-          if (objs) objs.fill(src.defines && src.defines.USE_OBJ !== undefined ? it.obj : 0, o, o + c);
+          // (ROADMAP 11.45: or every part, opts.objAll - the things streamed into a shop, drawn in as
+          // one by their id, world/interiors.js)
+          if (objs) objs.fill((src.defines && src.defines.USE_OBJ !== undefined) || opts.objAll ? it.obj : 0, o, o + c);
           if (rows) rows.fill(penRow(src), o, o + c);
           if (sway) {
             if (typeof it.sway === 'function') {
@@ -229,6 +231,7 @@ export class Batch {
         delete m.userData.merge;
         delete m.userData.whole;
         delete m.userData.steps;
+        delete m.userData.objAll;
         // the pens drawn in it (more than one when they share)
         m.userData.pens = [...pens];
         parent.add(m);

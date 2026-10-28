@@ -44,6 +44,8 @@ const REACH = 1.3;
 export class Solid {
   constructor() {
     this.list = [];
+    // (each piece's entry in the list, by the piece)
+    this.of = new WeakMap();
     this.twins = new Map();
     this.key = NaN;
     // (the test route: every piece in its own pen, to time it against the twins)
@@ -94,7 +96,18 @@ export class Solid {
     }
     const box = new THREE.Box3().setFromObject(o);
     if (box.isEmpty()) return;
-    this.list.push({ o, full: m, solid: t, erase, obj: d.USE_OBJ !== undefined, box });
+    const c = { o, full: m, solid: t, erase, obj: d.USE_OBJ !== undefined, box, hold: false };
+    this.list.push(c);
+    this.of.set(o, c);
+  }
+
+  // (ROADMAP 11.45) a piece in its own pen for now, whatever else: the goods being drawn into a
+  // shop, their pixels coming a few at a time (world/interiors.js); and back in its twin after
+  hold(o, on) {
+    const c = this.of.get(o);
+    if (!c || c.hold === on) return;
+    c.hold = on;
+    this.key = NaN;
   }
 
   // every frame: each piece in its twin, or in its own pen where something of it may be thrown
@@ -112,7 +125,7 @@ export class Solid {
     if (key === this.key) return;
     this.key = key;
     for (const c of this.list) {
-      let full = this.forceFull || (c.obj && fading);
+      let full = this.forceFull || c.hold || (c.obj && fading);
       if (!full && c.erase && n) {
         const b = c.box;
         for (let i = 0; i < n; i++) {

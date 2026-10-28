@@ -173,7 +173,7 @@ function clothes(R, o = {}) {
     back.box(S, 0, R.y0 + 2.1, -0.6, ru1 - ru0, R.y0 + 2.13, -0.25, SC.white, nextId(), L.BACK);
     for (let s = 0.1; s < ru1 - ru0 - 0.35; s += 0.42) {
       const col = pk(rng, cols);
-      for (let k = 0; k < 4; k++) back.box(S, s, R.y0 + 2.13 + k * 0.05, -0.56, s + 0.32, R.y0 + 2.175 + k * 0.05, -0.28, col, nextId(), L.BOTTOM);
+      for (let k = 0; k < 4; k++) back.box(R.soup('box', true), s, R.y0 + 2.13 + k * 0.05, -0.56, s + 0.32, R.y0 + 2.175 + k * 0.05, -0.28, col, nextId(), L.BOTTOM);
     }
     const k = Math.max(1, Math.floor((ru1 - ru0) / 1.4));
     for (let i = 0; i < k; i++) back.spot(((ru1 - ru0) * (i + 0.5)) / k, 0.65, { shelf: [1.2, 1.5], reach: back.at(((ru1 - ru0) * (i + 0.5)) / k, R.y0 + 1.3, -0.3), what: 'garment' });
@@ -301,19 +301,22 @@ function screens(R, o = {}) {
     for (const dd of fr.D > 8 ? [-1.1, 1.1] : [0]) {
       const run = new Run(R, (R.ua + R.ub) / 2 - tl / 2, dm + dd + 0.4, [1, 0], [0, 1]);
       run.box(S, 0, R.y0, -0.8, tl, R.y0 + 0.86, 0, R.store ? OAK : o.table || SC.white, nextId(), L.BOTTOM);
+      // (the goods on it: streamed in, ROADMAP 11.45)
+      const G = R.soup('box', true);
+      const Gl = R.soup('lamp', true);
       for (let s = 0.12; s < tl - 0.15; s += 0.3) {
         for (const t of [-0.22, -0.58]) {
-          run.box(S, s, R.y0 + 0.86, t - 0.1, s + 0.16, R.y0 + 0.87, t + 0.1, SC.black, nextId(), L.BOTTOM);
-          run.box(Sl, s + 0.01, R.y0 + 0.87, t - 0.09, s + 0.15, R.y0 + 0.875, t + 0.09, pk(R.rng, pics), nextId(), L.BOTTOM);
+          run.box(G, s, R.y0 + 0.86, t - 0.1, s + 0.16, R.y0 + 0.87, t + 0.1, SC.black, nextId(), L.BOTTOM);
+          run.box(Gl, s + 0.01, R.y0 + 0.87, t - 0.09, s + 0.15, R.y0 + 0.875, t + 0.09, pk(R.rng, pics), nextId(), L.BOTTOM);
           // the little stand with its price
-          run.box(S, s + 0.03, R.y0 + 0.86, t + 0.11, s + 0.13, R.y0 + 0.93, t + 0.12, SC.white, nextId(), L.BOTTOM);
+          run.box(G, s + 0.03, R.y0 + 0.86, t + 0.11, s + 0.13, R.y0 + 0.93, t + 0.12, SC.white, nextId(), L.BOTTOM);
         }
       }
       // a laptop open at each end
       for (const s of [0.05, tl - 0.45]) {
-        run.box(S, s, R.y0 + 0.86, -0.55, s + 0.4, R.y0 + 0.88, -0.27, SC.steel, nextId(), L.BOTTOM);
-        run.box(S, s, R.y0 + 0.88, -0.57, s + 0.4, R.y0 + 1.15, -0.55, SC.steel, nextId());
-        run.box(Sl, s + 0.02, R.y0 + 0.9, -0.55, s + 0.38, R.y0 + 1.13, -0.545, pk(R.rng, pics), nextId(), L.BACK);
+        run.box(G, s, R.y0 + 0.86, -0.55, s + 0.4, R.y0 + 0.88, -0.27, SC.steel, nextId(), L.BOTTOM);
+        run.box(G, s, R.y0 + 0.88, -0.57, s + 0.4, R.y0 + 1.15, -0.55, SC.steel, nextId());
+        run.box(Gl, s + 0.02, R.y0 + 0.9, -0.55, s + 0.38, R.y0 + 1.13, -0.545, pk(R.rng, pics), nextId(), L.BACK);
       }
       run.solid(0, -0.8, tl, 0, R.y0 + 0.9);
       run.spot(tl * 0.3, 0.5, { shelf: [0.9], reach: run.at(tl * 0.3, R.y0 + 0.9, -0.25), what: 'phone' });
@@ -347,7 +350,7 @@ function books(R) {
   for (let s = 0.08; s < tl - 0.28; s += 0.32) {
     for (const t2 of [-0.12, -0.45]) {
       const n = 2 + Math.floor(R.rng.r() * 4);
-      for (let k = 0; k < n; k++) tr.box(S, s, R.y0 + 0.75 + k * 0.035, t2 - 0.24, s + 0.24, R.y0 + 0.782 + k * 0.035, t2, pk(R.rng, R.store ? SPINES_REAL : BRIGHT), nextId(), L.BOTTOM);
+      for (let k = 0; k < n; k++) tr.box(R.soup('box', true), s, R.y0 + 0.75 + k * 0.035, t2 - 0.24, s + 0.24, R.y0 + 0.782 + k * 0.035, t2, pk(R.rng, R.store ? SPINES_REAL : BRIGHT), nextId(), L.BOTTOM);
     }
   }
   tr.solid(0, -0.8, tl, 0, R.y0 + 0.8);
@@ -604,8 +607,8 @@ function counterShop(R, o) {
   }
   // the boxes for the pizzas, folded and stacked, where the line ends
   if (o.boxes && s < bl - 0.6) {
-    for (let k = 0; k < 9; k++) back.box(S, s + 0.05, R.y0 + 0.93 + k * 0.045, -0.6, s + 0.5, R.y0 + 0.97 + k * 0.045, -0.15, k % 3 ? SC.white : SC.cream, nextId(), L.BOTTOM);
-    back.box(S, s + 0.2, R.y0 + 0.93 + 9 * 0.045 - 0.004, -0.45, s + 0.35, R.y0 + 0.93 + 9 * 0.045, -0.3, o.front || SC.red, nextId(), L.BOTTOM);
+    for (let k = 0; k < 9; k++) back.box(R.soup('box', true), s + 0.05, R.y0 + 0.93 + k * 0.045, -0.6, s + 0.5, R.y0 + 0.97 + k * 0.045, -0.15, k % 3 ? SC.white : SC.cream, nextId(), L.BOTTOM);
+    back.box(R.soup('box', true), s + 0.2, R.y0 + 0.93 + 9 * 0.045 - 0.004, -0.45, s + 0.35, R.y0 + 0.93 + 9 * 0.045, -0.3, o.front || SC.red, nextId(), L.BOTTOM);
     s += 0.6;
   }
   kitchenWall(R, back, bl, tall, o);
@@ -636,10 +639,11 @@ function counterShop(R, o) {
       for (const t of [-0.15, -0.35]) {
         if (o.pizza) {
           // a pie by the slice: the crust, the cheese, the pepperoni
-          crun.cyl(Sc, x + 0.07, t, 0.088, R.y0 + 1.04, 0.022, [0.88, 0.66, 0.38], nextId(), 10, true);
-          crun.cyl(Sc, x + 0.07, t, 0.074, R.y0 + 1.062, 0.006, pk(R.rng, [[0.98, 0.84, 0.42], [0.95, 0.62, 0.3], [0.98, 0.9, 0.6]]), nextId(), 10, true);
-          for (let k = 0; k < 3; k++) crun.cyl(Sc, x + 0.07 + Math.cos(k * 2.1) * 0.04, t + Math.sin(k * 2.1) * 0.04, 0.016, R.y0 + 1.066, 0.004, [0.72, 0.16, 0.14], nextId(), 6, true);
-        } else crun.box(S, x, R.y0 + 1.06, t - 0.07, x + 0.14, R.y0 + 1.06 + 0.05 + R.rng.r() * 0.05, t + 0.07, pk(R.rng, o.food || [[0.85, 0.64, 0.36], [0.98, 0.7, 0.4], [0.9, 0.45, 0.4], [0.98, 0.9, 0.6]]), nextId(), L.BOTTOM);
+          const G = R.soup('cyl', true);
+          crun.cyl(G, x + 0.07, t, 0.088, R.y0 + 1.04, 0.022, [0.88, 0.66, 0.38], nextId(), 10, true);
+          crun.cyl(G, x + 0.07, t, 0.074, R.y0 + 1.062, 0.006, pk(R.rng, [[0.98, 0.84, 0.42], [0.95, 0.62, 0.3], [0.98, 0.9, 0.6]]), nextId(), 10, true);
+          for (let k = 0; k < 3; k++) crun.cyl(G, x + 0.07 + Math.cos(k * 2.1) * 0.04, t + Math.sin(k * 2.1) * 0.04, 0.016, R.y0 + 1.066, 0.004, [0.72, 0.16, 0.14], nextId(), 6, true);
+        } else crun.box(R.soup('box', true), x, R.y0 + 1.06, t - 0.07, x + 0.14, R.y0 + 1.06 + 0.05 + R.rng.r() * 0.05, t + 0.07, pk(R.rng, o.food || [[0.85, 0.64, 0.36], [0.98, 0.7, 0.4], [0.9, 0.45, 0.4], [0.98, 0.9, 0.6]]), nextId(), L.BOTTOM);
       }
     }
   }
@@ -677,8 +681,8 @@ function counterShop(R, o) {
         if (u > R.lane[0] - 0.9 && u < R.lane[1] + 0.9 && d > R.da - 2.2) continue;
         R.table(u, d, { round: !!o.roundTables, r: 0.36, color: o.tableCol || SC.white, chairs: [[1, 0], [-1, 0]], chairColor: o.chairCol });
         // what is on it: cups, a napkin holder
-        R.soup('cyl') && R.soup('cyl').fcyl(u + 0.12, d - 0.05, 0.04, R.y0 + 0.74, 0.1, SC.white, nextId(), 6, true);
-        R.soup('box').fbox(u - 0.06, R.y0 + 0.74, d + 0.05, u + 0.02, R.y0 + 0.86, d + 0.12, SC.steel, nextId());
+        R.soup('cyl', true).fcyl(u + 0.12, d - 0.05, 0.04, R.y0 + 0.74, 0.1, SC.white, nextId(), 6, true);
+        R.soup('box', true).fbox(u - 0.06, R.y0 + 0.74, d + 0.05, u + 0.02, R.y0 + 0.86, d + 0.12, SC.steel, nextId());
       }
       k++;
     }
@@ -719,21 +723,21 @@ function kitchenWall(R, back, bl, tall, o) {
       const r = R.rng.r();
       if (r < 0.35) {
         // a stack of cups
-        for (let k = 0; k < 3; k++) back.cyl(Sc, x + 0.06 + k * 0.13, -0.56, 0.05, ys, 0.12 + (k % 2) * 0.05, o.cup || SC.white, nextId(), 6, true, 0.04);
+        for (let k = 0; k < 3; k++) back.cyl(R.soup('cyl', true), x + 0.06 + k * 0.13, -0.56, 0.05, ys, 0.12 + (k % 2) * 0.05, o.cup || SC.white, nextId(), 6, true, 0.04);
         x += 0.42;
       } else if (r < 0.65) {
         // the tubs, the jars of what goes in
         const c = pk(R.rng, [[0.86, 0.26, 0.2], [0.98, 0.84, 0.3], [0.4, 0.66, 0.3], [0.95, 0.95, 0.9], [0.55, 0.32, 0.2]]);
-        back.box(S, x, ys, -0.66, x + 0.22, ys + 0.16, -0.46, SC.steel, nextId(), L.BOTTOM);
-        back.box(S, x + 0.02, ys + 0.16, -0.64, x + 0.2, ys + 0.17, -0.48, c, nextId(), L.BOTTOM);
+        back.box(R.soup('box', true), x, ys, -0.66, x + 0.22, ys + 0.16, -0.46, SC.steel, nextId(), L.BOTTOM);
+        back.box(R.soup('box', true), x + 0.02, ys + 0.16, -0.64, x + 0.2, ys + 0.17, -0.48, c, nextId(), L.BOTTOM);
         x += 0.28;
       } else if (r < 0.85) {
         // bottles of the sauce
-        for (let k = 0; k < 3; k++) back.cyl(Sc, x + 0.05 + k * 0.09, -0.56, 0.032, ys, 0.2, pk(R.rng, [[0.86, 0.16, 0.14], [0.98, 0.82, 0.2], [0.3, 0.5, 0.2], [0.95, 0.95, 0.9]]), nextId(), 6, true, 0.02);
+        for (let k = 0; k < 3; k++) back.cyl(R.soup('cyl', true), x + 0.05 + k * 0.09, -0.56, 0.032, ys, 0.2, pk(R.rng, [[0.86, 0.16, 0.14], [0.98, 0.82, 0.2], [0.3, 0.5, 0.2], [0.95, 0.95, 0.9]]), nextId(), 6, true, 0.02);
         x += 0.32;
       } else {
         // a pot, upside down
-        back.cyl(Sc, x + 0.15, -0.56, 0.13, ys, 0.16, SC.steel, nextId(), 8, true);
+        back.cyl(R.soup('cyl', true), x + 0.15, -0.56, 0.13, ys, 0.16, SC.steel, nextId(), 8, true);
         x += 0.34;
       }
     }
@@ -746,8 +750,8 @@ function kitchenWall(R, back, bl, tall, o) {
     back.box(S, r0, yh - 0.02, -0.66, r1, yh, -0.64, SC.steel, nextId());
     for (let x = r0 + 0.12; x < r1 - 0.1; x += 0.22) {
       const len = 0.22 + R.rng.r() * 0.16;
-      back.box(S, x - 0.008, yh - len, -0.656, x + 0.008, yh, -0.644, SC.steel, nextId());
-      if (R.rng.r() < 0.6) back.cyl(Sc, x, -0.65, 0.04, yh - len - 0.04, 0.04, SC.steel, nextId(), 6, false);
+      back.box(R.soup('box', true), x - 0.008, yh - len, -0.656, x + 0.008, yh, -0.644, SC.steel, nextId());
+      if (R.rng.r() < 0.6) back.cyl(R.soup('cyl', true), x, -0.65, 0.04, yh - len - 0.04, 0.04, SC.steel, nextId(), 6, false);
     }
   }
   // the orders, clipped along the hood's edge

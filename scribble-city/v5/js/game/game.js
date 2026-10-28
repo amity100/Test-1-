@@ -100,8 +100,9 @@ const HELI_LIGHT = [1.0, 0.95, 0.8];
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
 // (ROADMAP 11.43: the steps of what is least seen, given up when the frames are slow before any of
-// the picture's sharpness - applyDetail)
-const DETAIL_MAX = 3;
+// the picture's sharpness - applyDetail; 11.45: only what is not seen to go - nothing is taken out
+// of the picture)
+const DETAIL_MAX = 2;
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -819,19 +820,14 @@ export class Game {
 
   // ------------------------------------------------------------------ main loop
   // (ROADMAP 11.43) when the frames are slow, what is least seen is given up first, a step at a time
-  // (0: all of it .. DETAIL_MAX): the shadows and the shine drawn every other frame, the
-  // reflections at a smaller share, people in the simple shapes nearer, and the shops' shelves
-  // filled in a narrower ring - so the picture itself stays sharp
+  // (0: all of it .. DETAIL_MAX), before the picture's sharpness: the reflections, then the
+  // shadows, drawn every other frame. (11.45: nothing that can be seen to go - not the people's
+  // detail, not the shops' shelves, not the reflections' sharpness)
   applyDetail(k) {
     const pipe = this.pipe;
     this.detail = k;
-    pipe.detailRefl = [1, 0.75, 0.6, 0.5][k];
     pipe.detailReflEvery = k >= 1 ? 2 : 1;
     pipe.detailShadowEvery = k >= 2 ? 2 : 1;
-    const lod = [1, 0.8, 0.65, 0.55][k];
-    this.figures.bodies.lodFar = (pipe.low ? 32 : 55) * lod;
-    this.figures.bodies.detailFar = (pipe.low ? 28 : 60) * lod;
-    if (this.world.interiors) this.world.interiors.scaleMax = [1, 0.85, 0.7, 0.6][k];
   }
 
   renderFrame() {
@@ -1089,7 +1085,7 @@ export class Game {
     // (v5, ROADMAP 11.18: the insides of the shops near you)
     if (this.world.interiors) {
       const a = this.anchorPos();
-      this.world.interiors.update(a.x, a.z);
+      this.world.interiors.update(a.x, a.z, 0, 0, a.y);
     }
     const input = this.input;
     const player = this.player;

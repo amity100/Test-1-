@@ -21,6 +21,7 @@ const LIFT_LIGHT = [1, 0.9, 0.62];
 const INK = [0.16, 0.15, 0.2];
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _seen = new THREE.Vector3();
 
 // what a customer comes out with
 const ITEM = {
@@ -186,6 +187,17 @@ export class StreetLife {
       p.maxHp = d.maxHp;
       p.hp = Math.min(p.hp, p.maxHp);
     }
+  }
+
+  // (ROADMAP 11.45) whether a place is in the picture now - in the camera's view, near enough to
+  // tell somebody there: nobody comes out of nowhere where they can be seen
+  inView(x, y, z) {
+    const cam = this.game.camera;
+    const dx = x - cam.position.x;
+    const dz = z - cam.position.z;
+    if (dx * dx + dz * dz > 95 * 95) return false;
+    _seen.set(x, y + 1, z).project(cam);
+    return _seen.z < 1 && Math.abs(_seen.x) < 1.15 && Math.abs(_seen.y) < 1.15;
   }
 
   // ------------------------------------------------------------------ activation
@@ -1067,7 +1079,10 @@ class OpenShop {
     const k = R && R.keeper ? R.keeper : null;
     const kx = k ? k.x : s.keeper[0];
     const kz = k ? k.z : s.keeper[2];
-    this.keeper = civs.spawnScripted(kx, kz, shopkeeperLook(s.kind, s.fem), this);
+    // (ROADMAP 11.45: the people it had before it was opened whole - game/shopcrowd.js - are its
+    // people now, the keeper too: nobody comes or goes)
+    this.crowd = this.game.shopCrowd ? this.game.shopCrowd.take(s) : null;
+    this.keeper = civs.spawnScripted(kx, kz, this.crowd ? this.crowd.keeperLook : shopkeeperLook(s.kind, s.fem), this);
     this.homeYaw = k ? k.yaw : s.face;
     this.keeper.yaw = this.homeYaw;
     this.keeper.fig.carry = TOOL[s.kind] || null;
@@ -1101,7 +1116,7 @@ class OpenShop {
     // a couple of people at the cafe tables out on the sidewalk
     if (s.spots.tables) {
       const n = this.game.touch ? 1 : s.spots.tables.length;
-      for (let i = 0; i < n; i++) this.seat(s.spots.tables[i]);
+      for (let i = 0; i < n; i++) this.seat(s.spots.tables[i], this.crowd ? this.crowd.tables.find((w) => w.table === i) : null);
     }
     // (v5, GTA IV round) the places you sit down in run their evening their own way
     // (game/venuelife.js): the restaurant's host, waiters and cooks and its parties at their tables;
@@ -1142,6 +1157,17 @@ class OpenShop {
     // (v5, GTA IV round: the places with an evening of their own - game/venuelife.js)
     if (this.dining) return this.dining.populate();
     if (this.lobby) return this.lobby.populate();
+    // (ROADMAP 11.45) the ones who were here already, where they are (game/shopcrowd.js)
+    if (this.crowd && !this.barLife) {
+      for (const w of this.crowd.people) {
+        const seat = !!(w.sit && w.at && R.seats.includes(w.at));
+        const spot = seat ? w.at : R.browse.includes(w.to) ? w.to : R.browse.includes(w.at) ? w.at : null;
+        this.addVisitor(null, { mode: seat ? 'seat' : spot && spot.lift ? 'lift' : spot ? 'browse' : null, spot, already: true, look: w.look, from: { x: w.x, z: w.z, yaw: w.yaw } });
+      }
+      this.crowd = null;
+      return;
+    }
+    this.crowd = null;
     if (kind === 'barber' && R.chairs.length) this.addVisitor(null, { mode: 'chair', spot: R.chairs[0], already: true });
     const seats = shuffled(R.seats);
     // (v5, GTA IV round: a place with a kitchen fills at lunch and at dinner - twice as many at its
@@ -1222,10 +1248,12 @@ class OpenShop {
     }
     const own = !c;
     if (!c) {
-      const at = o.already ? spot : { x: s.door[0] + s.nx * 1.4 + s.rx * (Math.random() - 0.5) * 3, z: s.door[2] + s.nz * 1.4 + s.rz * (Math.random() - 0.5) * 3 };
-      const look = HOME_GUESTS[s.kind] ? HOME_GUESTS[s.kind]() : civilianLook();
+      // (o.from: where somebody already in it stands - ROADMAP 11.45, game/shopcrowd.js; o.look:
+      // who they are)
+      const at = o.from || (o.already ? spot : { x: s.door[0] + s.nx * 1.4 + s.rx * (Math.random() - 0.5) * 3, z: s.door[2] + s.nz * 1.4 + s.rz * (Math.random() - 0.5) * 3 });
+      const look = o.look || (HOME_GUESTS[s.kind] ? HOME_GUESTS[s.kind]() : civilianLook());
       c = this.game.civilians.spawnScripted(at.x, at.z, look, this);
-      c.yaw = o.already ? spot.yaw : s.face + Math.PI;
+      c.yaw = o.from ? o.from.yaw : o.already ? spot.yaw : s.face + Math.PI;
       if (o.already) c.noCollide = true;
     }
     const v = { c, spot, mode, own, phase: o.already ? 'at' : 'in', t: 0, pts: null, reachT: 1 + Math.random() * 3 };
@@ -1249,7 +1277,11 @@ class OpenShop {
     }
     if (o.already) {
       v.t = Math.random() * v.stay * 0.6;
-      if (mode === 'seat' || mode === 'chair') c.fig.sit = 1;
+      // (on the way to it when the shop was opened: on the way still)
+      if (o.from && Math.hypot(o.from.x - spot.x, o.from.z - spot.z) > 0.15) {
+        v.phase = 'in';
+        v.pts = R.path(o.from.x, o.from.z, spot.x, spot.z);
+      } else if (mode === 'seat' || mode === 'chair') c.fig.sit = 1;
     } else {
       v.pts = [{ x: s.door[0], z: s.door[2], bell: true }, { x: R.door.x, z: R.door.z, inRoom: true }, ...R.path(R.door.x, R.door.z, spot.x, spot.z)];
     }
@@ -1930,13 +1962,16 @@ class OpenShop {
     if (d < range) this.game.audio.play(name, vol * (1 - d / range));
   }
 
-  seat(tb) {
+  // (w: who sat there before the shop was opened whole - ROADMAP 11.45, game/shopcrowd.js)
+  seat(tb, w = null) {
     const s = this.shop;
-    const side = Math.random() < 0.5 ? 1 : -1;
+    const side = w ? w.side : Math.random() < 0.5 ? 1 : -1;
     const x = tb.x + s.rx * side * 0.72;
     const z = tb.z + s.rz * side * 0.72;
-    const c = this.game.civilians.spawnScripted(x, z, civilianLook(), this);
+    const c = this.game.civilians.spawnScripted(x, z, w ? w.look : civilianLook(), this);
+    c.atTable = { table: s.spots.tables.indexOf(tb), side };
     c.noCollide = true;
+    if (w) c.fig.sit = 1;
     c.fig.carry = 'coffee';
     const yaw = Math.atan2(-s.rx * side, -s.rz * side);
     c.yaw = yaw;
@@ -3134,11 +3169,14 @@ class OpenShop {
         const n = this.visitors.length;
         this.newT = n < want - 2 ? 1.2 + Math.random() * 1.6 : n < want ? 2.5 + Math.random() * 3.5 : 14 + Math.random() * 16;
         if (n < Math.max(want, this.game.touch ? 0 : 4)) {
-          // (nobody pops up in sight: in at the door while you are near, already inside when not)
+          // (nobody pops up in sight: in at the door while you are near, already inside when not -
+          // either only where it is not in the picture, ROADMAP 11.45: a moment later otherwise)
           const p = this.game.player.pos;
+          const s = this.shop;
           const far = Math.hypot(this.home.x - p.x, this.home.z - p.z) > 22 && !this.room.inside(p.x, p.z, 0.5, p.y);
-          if (far) {
-            const f = this.freeSpot();
+          const f = far ? this.freeSpot() : null;
+          if (far ? f && this.life.inView(f.spot.x, this.lift, f.spot.z) : this.life.inView(s.door[0] + s.nx * 1.4, this.lift, s.door[2] + s.nz * 1.4)) this.newT = 1.5 + Math.random() * 2;
+          else if (far) {
             if (f) this.addVisitor(null, { ...f, already: true });
           } else {
             const v = this.addVisitor(null);
@@ -3349,6 +3387,16 @@ class OpenShop {
 
   dispose() {
     this.alive = false;
+    // (ROADMAP 11.45) its people go on as they were, drawn the cheap way, where they are now
+    // (game/shopcrowd.js): nobody vanishes when a shop is let go of
+    const crowd = this.game.shopCrowd;
+    if (crowd && !this.dining && !this.barLife && !this.lobby) {
+      const R = this.room;
+      const inside = R ? this.visitors.filter((v) => v.own && v.c.alive !== false && v.phase !== 'out' && R.inside(v.c.pos.x, v.c.pos.z, 0.2, v.c.pos.y)) : [];
+      const list = inside.map((v) => ({ look: v.c.fig.look, x: v.c.pos.x, z: v.c.pos.z, yaw: v.c.yaw, sit: v.phase === 'at' && (v.mode === 'seat' || v.mode === 'chair') ? 1 : 0, spot: v.spot }));
+      for (const c of this.extras) if (c.atTable && c.owner === this && c.alive !== false) list.push({ look: c.fig.look, table: c.atTable.table, side: c.atTable.side });
+      crowd.giveBack(this.shop, list, this.keeper && this.keeper.alive !== false ? this.keeper.fig.look : null);
+    }
     if (this.dining) this.dining.dispose();
     if (this.filmSk) this.game.airsketch.erase(this.filmSk);
     this.filmSk = null;

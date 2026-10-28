@@ -263,9 +263,9 @@ function dinnerTable(R, t, o = {}) {
 // spoon to the right, the bread plate up on the left, the wine glass and the water tumbler up on the
 // right (a little wine in some)
 function place(R, u, d, fu, fd, rng) {
-  const S = R.soup('box');
-  const Sc = R.soup('cyl');
-  const Sg = R.soup('gloss');
+  const S = R.soup('box', true);
+  const Sc = R.soup('cyl', true);
+  const Sg = R.soup('gloss', true);
   const y = R.y0 + 0.766;
   // (the diner's right: forward turned a quarter to the right)
   const ru = -fd;
@@ -305,10 +305,10 @@ function place(R, u, d, fu, fd, rng) {
 // where the places are: for two facing each other, along the line the places are not on and at its
 // ends; for four, in the middle and in the corners
 function centrepiece(R, t, y, seats, rng, o) {
-  const S = R.soup('box');
-  const Sc = R.soup('cyl');
-  const Sg = R.soup('gloss');
-  const Sl = R.soup('lamp');
+  const S = R.soup('box', true);
+  const Sc = R.soup('cyl', true);
+  const Sg = R.soup('gloss', true);
+  const Sl = R.soup('lamp', true);
   const { u, d } = t;
   const onU = seats.every((s) => !s.cd);
   const onD = seats.every((s) => !s.cu);
@@ -369,7 +369,7 @@ function pendant(R, u, d, y, o = {}) {
 // sail, a still life of a jug, a bowl and its fruit on a table's edge, a hill town of little houses
 // under the sun, or a lady's portrait in the dark of an old master; the brass lamp over it
 function painting(R, run, s, y, w, h, rng, o = {}) {
-  const S = R.soup('box');
+  const S = R.soup('box', true);
   const frame = o.frame || C.charger;
   run.box(S, s - w / 2 - 0.07, y - h / 2 - 0.07, -0.002, s + w / 2 + 0.07, y + h / 2 + 0.07, 0.035, frame.map((x) => x * 0.8), nextId(), L.BACK);
   run.box(S, s - w / 2 - 0.035, y - h / 2 - 0.035, 0.02, s + w / 2 + 0.035, y + h / 2 + 0.035, 0.045, frame, nextId(), L.BACK);
@@ -422,13 +422,13 @@ function painting(R, run, s, y, w, h, rng, o = {}) {
   // the little brass lamp over it, lit
   run.box(S, s - 0.012, y + h / 2 + 0.05, 0.0, s + 0.012, y + h / 2 + 0.09, 0.12, C.brass, nextId());
   run.box(S, s - w * 0.3, y + h / 2 + 0.06, 0.1, s + w * 0.3, y + h / 2 + 0.1, 0.16, C.brass, nextId());
-  R.soup('lamp').fbox(...lampBox(run, s - w * 0.28, y + h / 2 + 0.055, 0.11, s + w * 0.28, y + h / 2 + 0.06, 0.15), [1, 0.86, 0.6], nextId());
+  R.soup('lamp', true).fbox(...lampBox(run, s - w * 0.28, y + h / 2 + 0.055, 0.11, s + w * 0.28, y + h / 2 + 0.06, 0.15), [1, 0.86, 0.6], nextId());
 }
 
 // a mirror in its gilded frame on a wall: the glass, the light's streaks across it
 function mirror(R, run, s, y, w, h) {
-  const S = R.soup('box');
-  const Sg = R.soup('gloss');
+  const S = R.soup('box', true);
+  const Sg = R.soup('gloss', true);
   run.box(S, s - w / 2 - 0.06, y - h / 2 - 0.06, 0, s + w / 2 + 0.06, y + h / 2 + 0.06, 0.035, C.charger, nextId(), L.BACK);
   run.box(Sg, s - w / 2, y - h / 2, 0.035, s + w / 2, y + h / 2, 0.04, [0.7, 0.8, 0.86], nextId(), FRONT);
   // (the streaks: thin bands of light slanting across the glass)
@@ -444,7 +444,7 @@ function mirror(R, run, s, y, w, h) {
 // the wall's dress: the wood panelling round the lower wall (frames over the band), the rail on top
 // of it, the moulding along the ceiling, a sconce now and then (run: a wall, facing into the room)
 function panelling(R, run, len, o = {}) {
-  const S = R.soup('box');
+  const S = R.soup('box', true);
   const wood = o.wood || C.walnut;
   const dark = wood.map((x) => x * 0.72);
   const y0 = R.y0;
@@ -466,12 +466,12 @@ function panelling(R, run, len, o = {}) {
 }
 
 function sconce(R, run, s, y, o = {}) {
-  const S = R.soup('box');
-  const Sl = R.soup('lamp');
+  const S = R.soup('box', true);
+  const Sl = R.soup('lamp', true);
   run.box(S, s - 0.06, y - 0.1, 0, s + 0.06, y + 0.08, 0.03, o.col || C.brass, nextId(), L.BACK);
   run.box(S, s - 0.012, y - 0.02, 0.03, s + 0.012, y + 0.01, 0.12, o.col || C.brass, nextId());
   const [u, d] = run.ud(s, 0.13);
-  R.soup('cyl').fcyl(u, d, 0.07, y, 0.13, o.shade || [0.98, 0.9, 0.75], nextId(), 8, true, 0.05);
+  R.soup('cyl', true).fcyl(u, d, 0.07, y, 0.13, o.shade || [0.98, 0.9, 0.75], nextId(), 8, true, 0.05);
   Sl.fcyl(u, d, 0.05, y - 0.004, 0.006, o.light || [1, 0.84, 0.55], nextId(), 8, true);
 }
 
@@ -529,9 +529,9 @@ function bar(R, run, len, o = {}) {
   const S = big(R);
   const Sg = big(R, 'gloss');
   const Sl = big(R, 'lamp');
-  const sS = R.soup('box');
-  const sG = R.soup('gloss');
-  const sC = R.soup('cyl');
+  const sS = R.soup('box', true);
+  const sG = R.soup('gloss', true);
+  const sC = R.soup('cyl', true);
   const y0 = R.y0;
   const rng = R.rng;
   const wood = o.wood || C.walnut;
@@ -572,7 +572,7 @@ function bar(R, run, len, o = {}) {
   for (let s = 0.2; s < len * 0.4; s += 0.09) sG.fcyl(...run.ud(s, -0.25), 0.03, y0 + 0.96, 0.1, C.glass, nextId(), 6, true, 0.024);
   run.box(sS, len * 0.55, y0 + 0.96, -0.4, len * 0.55 + 0.32, y0 + 1.1, -0.15, C.black, nextId(), L.BOTTOM);
   run.box(sS, len * 0.55 + 0.04, y0 + 1.1, -0.36, len * 0.55 + 0.28, y0 + 1.32, -0.33, C.black, nextId());
-  R.soup('lamp').fbox(...lampBox(run, len * 0.55 + 0.06, y0 + 1.12, -0.33, len * 0.55 + 0.26, y0 + 1.3, -0.325), [0.55, 0.85, 1], nextId());
+  R.soup('lamp', true).fbox(...lampBox(run, len * 0.55 + 0.06, y0 + 1.12, -0.33, len * 0.55 + 0.26, y0 + 1.3, -0.325), [0.55, 0.85, 1], nextId());
   // ---- the counter: its panelled front, its top, the rail; where the bartender works behind it
   const c0 = 0.8;
   const c1 = 1.42;
@@ -646,10 +646,10 @@ function gourmet(R) {
   const S = big(R);
   const Sg = big(R, 'gloss');
   const Sl = big(R, 'lamp');
-  const sS = R.soup('box');
-  const sC = R.soup('cyl');
-  const sG = R.soup('gloss');
-  const sL = R.soup('lamp');
+  const sS = R.soup('box', true);
+  const sC = R.soup('cyl', true);
+  const sG = R.soup('gloss', true);
+  const sL = R.soup('lamp', true);
   R.noLamps = true;
   R.spots.marks = R.spots.marks || [];
   R.spots.staff = R.spots.staff || [];
@@ -818,7 +818,7 @@ function gourmet(R) {
   for (let k = 0; k < 6; k++) stRun.box(sS, 0.97 + k * 0.035, y0 + 0.98, -0.4, 0.985 + k * 0.035, y0 + 0.99, -0.22, C.silver, nextId(), L.BOTTOM);
   stRun.cyl(sG, 1.12, -0.1, 0.06, y0 + 0.94, 0.22, C.glass, nextId(), 8, true, 0.045);
   stRun.box(sS, 0.5, y0 + 0.94, -0.12, 0.62, y0 + 1.22, -0.08, C.black, nextId());
-  R.soup('lamp').fbox(...lampBox(stRun, 0.51, y0 + 1.0, -0.08, 0.61, y0 + 1.2, -0.075), [0.55, 0.85, 1], nextId());
+  R.soup('lamp', true).fbox(...lampBox(stRun, 0.51, y0 + 1.0, -0.08, 0.61, y0 + 1.2, -0.075), [0.55, 0.85, 1], nextId());
   stRun.solid(0, -0.5, stl, 0.02, y0 + 0.94);
   const [stu, std] = stRun.ud(stl * 0.5, 0.45);
   mark(R, 'station', stu, std, [-stRun.ou, -stRun.od]);
@@ -970,9 +970,9 @@ function kitchenLine(R, back, bl) {
   const S = big(R);
   const Sg = big(R, 'gloss');
   const Sl = big(R, 'lamp');
-  const sS = R.soup('box');
-  const sC = R.soup('cyl');
-  const sL = R.soup('lamp');
+  const sS = R.soup('box', true);
+  const sC = R.soup('cyl', true);
+  const sL = R.soup('lamp', true);
   const rng = R.rng;
   const y0 = R.y0;
   const y1 = R.y1;
@@ -1080,7 +1080,7 @@ function kitchenLine(R, back, bl) {
 // brass posts with a velvet rope sagging between each two (pts: [u, d] in the room)
 function ropes(R, pts, o = {}) {
   const Sc = big(R, 'cyl');
-  const S = R.soup('box');
+  const S = R.soup('box', true);
   const y0 = R.y0;
   const post = o.post || C.brass;
   const rope = o.rope || [0.66, 0.08, 0.14];
@@ -1110,8 +1110,8 @@ function ropes(R, pts, o = {}) {
 // a film's poster in a frame lit from inside (run: a wall, s along it): the night sky or the day's,
 // a figure, the title's bar, the stars' names in small lines
 function filmPoster(R, run, s, y, w, h, rng, o = {}) {
-  const S = R.soup('box');
-  const Sl = R.soup('lamp');
+  const S = R.soup('box', true);
+  const Sl = R.soup('lamp', true);
   run.box(big(R), s - w / 2 - 0.07, y - h / 2 - 0.07, -0.002, s + w / 2 + 0.07, y + h / 2 + 0.07, 0.06, o.frame || C.brass, nextId(), L.BACK);
   const bgs = [[0.16, 0.18, 0.36], [0.95, 0.55, 0.3], [0.12, 0.3, 0.3], [0.85, 0.2, 0.26], [0.3, 0.2, 0.42], [0.96, 0.86, 0.5]];
   const bg = pk(rng, bgs);
@@ -1174,10 +1174,10 @@ function concession(R, run, len, o = {}) {
   const S = big(R);
   const Sg = big(R, 'gloss');
   const Sl = big(R, 'lamp');
-  const sS = R.soup('box');
-  const sC = R.soup('cyl');
-  const sG = R.soup('gloss');
-  const sL = R.soup('lamp');
+  const sS = R.soup('box', true);
+  const sC = R.soup('cyl', true);
+  const sG = R.soup('gloss', true);
+  const sL = R.soup('lamp', true);
   const rng = R.rng;
   const y0 = R.y0;
   const red = o.red || [0.72, 0.1, 0.14];
@@ -1323,10 +1323,10 @@ function barRoom(R) {
   const Sc = big(R, 'cyl');
   const Sg = big(R, 'gloss');
   const Sl = big(R, 'lamp');
-  const sS = R.soup('box');
-  const sC = R.soup('cyl');
-  const sG = R.soup('gloss');
-  const sL = R.soup('lamp');
+  const sS = R.soup('box', true);
+  const sC = R.soup('cyl', true);
+  const sG = R.soup('gloss', true);
+  const sL = R.soup('lamp', true);
   R.noLamps = true;
   R.spots.marks = R.spots.marks || [];
   const floor = new Floor(R);
@@ -1569,9 +1569,9 @@ function cinemaLobby(R, o = {}) {
     br.box(big(R, 'gloss'), 0.05, y0 + 1.1, -0.04, bl - 0.05, y0 + 2.3, -0.02, C.glass, nextId(), L.BOTTOM);
     br.box(S, -0.05, y0 + 2.3, -0.9, bl + 0.05, y0 + 2.75, 0.05, [0.4, 0.08, 0.12], nextId());
     br.box(Sl, 0.1, y0 + 2.4, 0.05, bl - 0.1, y0 + 2.65, 0.055, [1, 0.86, 0.5], nextId(), FRONT);
-    words(R.soup('box'), br, 'TICKETS', bl / 2, y0 + 2.44, 0.055, 0.17, [0.5, 0.06, 0.1]);
-    for (const s of [bl * 0.3, bl * 0.7]) br.box(R.soup('box'), s - 0.05, y0 + 1.42, -0.02, s + 0.05, y0 + 1.52, -0.015, C.black, nextId(), FRONT);
-    const sb = R.soup('box');
+    words(R.soup('box', true), br, 'TICKETS', bl / 2, y0 + 2.44, 0.055, 0.17, [0.5, 0.06, 0.1]);
+    for (const s of [bl * 0.3, bl * 0.7]) br.box(R.soup('box', true), s - 0.05, y0 + 1.42, -0.02, s + 0.05, y0 + 1.52, -0.015, C.black, nextId(), FRONT);
+    const sb = R.soup('box', true);
     br.box(sb, bl * 0.5 - 0.12, y0 + 1.1, -0.4, bl * 0.5 + 0.12, y0 + 1.22, -0.2, C.black, nextId(), L.BOTTOM);
     br.box(sb, bl * 0.5 - 0.1, y0 + 1.22, -0.36, bl * 0.5 + 0.1, y0 + 1.4, -0.32, C.black, nextId());
     br.solid(0, -0.12, bl, 0.12, y0 + 2.3);
@@ -1594,7 +1594,7 @@ function cinemaLobby(R, o = {}) {
   const sx = um + (fr.left ? 2.6 : -2.6);
   const sd = (lane0 + da) / 2 + 0.2;
   if (Math.abs(sx - pu) > 1.6 && sx > ua + 1 && sx < ub - 1) {
-    const sS = R.soup('box');
+    const sS = R.soup('box', true);
     S.fbox(sx - 0.45, y0, sd - 0.15, sx + 0.45, y0 + 0.06, sd + 0.15, C.black, nextId(), FF.BOTTOM);
     sS.fbox(sx - 0.3, y0 + 0.06, sd - 0.02, sx + 0.3, y0 + 1.25, sd + 0.02, [0.2, 0.3, 0.6], nextId());
     sS.fbox(sx - 0.12, y0 + 1.25, sd - 0.02, sx + 0.12, y0 + 1.55, sd + 0.02, [0.95, 0.8, 0.62], nextId());
@@ -1712,8 +1712,8 @@ function theatre(R) {
   S.fbox(mid - 1.75, y0 + 3.05, pw - 0.2, mid + 1.75, y0 + 3.6, pw + 0.22, gold, nextId());
   S.fbox(mid - 1.4, y0 + 3.1, pw + 0.22, mid + 1.4, y0 + 3.55, pw + 0.225, [0.12, 0.07, 0.1], nextId());
   // (its word lit in the dark panel, a row of little bulbs along the panel's top and its foot)
-  words(R.soup('lamp'), new Run(R, mid, pw, [1, 0], [0, 1]), 'AUDITORIUM', 0, y0 + 3.2, 0.226, 0.26, [1, 0.86, 0.5]);
-  const sL = R.soup('lamp');
+  words(R.soup('lamp', true), new Run(R, mid, pw, [1, 0], [0, 1]), 'AUDITORIUM', 0, y0 + 3.2, 0.226, 0.26, [1, 0.86, 0.5]);
+  const sL = R.soup('lamp', true);
   for (let i = 0; i < 14; i++) for (const y of [y0 + 3.12, y0 + 3.5]) sL.fbox(mid - 1.33 + i * 0.2 - 0.025, y - 0.02, pw + 0.225, mid - 1.33 + i * 0.2 + 0.025, y + 0.02, pw + 0.235, i % 2 ? [1, 0.85, 0.4] : [1, 0.95, 0.75], nextId());
   ropes(R, [[mid - 1.5, pw + 0.5], [mid - 0.5, pw + 0.5]], {});
   ropes(R, [[mid + 0.5, pw + 0.5], [mid + 1.5, pw + 0.5]], {});
@@ -1744,8 +1744,8 @@ function theatre(R) {
     brun.box(Sg, 0.05, y0 + 1.1, 0.02, bl - 0.05, y0 + 2.3, 0.04, C.glass, nextId(), L.BOTTOM);
     brun.box(S, -0.05, y0 + 2.3, -0.9, bl + 0.05, y0 + 2.8, 0.1, [0.5, 0.1, 0.14], nextId());
     brun.box(Sl, 0.15, y0 + 2.38, 0.1, bl - 0.15, y0 + 2.72, 0.105, [1, 0.86, 0.5], nextId(), FRONT);
-    words(R.soup('box'), brun, 'BOX OFFICE', bl / 2, y0 + 2.45, 0.106, 0.2, [0.5, 0.06, 0.1]);
-    for (let s = 0.6; s < bl - 0.3; s += 1.2) brun.box(R.soup('box'), s - 0.05, y0 + 1.42, 0.04, s + 0.05, y0 + 1.52, 0.045, C.black, nextId(), FRONT);
+    words(R.soup('box', true), brun, 'BOX OFFICE', bl / 2, y0 + 2.45, 0.106, 0.2, [0.5, 0.06, 0.1]);
+    for (let s = 0.6; s < bl - 0.3; s += 1.2) brun.box(R.soup('box', true), s - 0.05, y0 + 1.42, 0.04, s + 0.05, y0 + 1.52, 0.045, C.black, nextId(), FRONT);
     brun.solid(0, -0.9, bl, 0.25, y0 + 2.3);
     const [tu, td] = brun.ud(bl * 0.5, -0.4);
     mark(R, 'tickets', tu, td, [0, 1]);
@@ -1790,10 +1790,10 @@ function club(R) {
   const Sc = big(R, 'cyl');
   const Sg = big(R, 'gloss');
   const Sl = big(R, 'lamp');
-  const sS = R.soup('box');
-  const sC = R.soup('cyl');
-  const sG = R.soup('gloss');
-  const sL = R.soup('lamp');
+  const sS = R.soup('box', true);
+  const sC = R.soup('cyl', true);
+  const sG = R.soup('gloss', true);
+  const sL = R.soup('lamp', true);
   R.noLamps = true;
   R.spots.marks = R.spots.marks || [];
   const w = fr.W;
@@ -1941,7 +1941,7 @@ function club(R) {
   if (vd1 - vd0 > 3) {
     const vr = new Run(R, ua, da, [0, -1], [1, 0]);
     wallNeon(R, vr, nameOf(R) || 'VIP', da - (vd0 + vd1) / 2, y0 + 3.7, 0.04, Math.min(8, (vd1 - vd0) * 0.8), [1, 0.32, 0.72], { font: 'Permanent Marker' });
-    words(R.soup('lamp'), vr, 'VIP', da - (vd0 + vd1) / 2, y0 + 2.3, 0.02, 0.36, [1, 0.85, 0.35]);
+    words(R.soup('lamp', true), vr, 'VIP', da - (vd0 + vd1) / 2, y0 + 2.3, 0.02, 0.36, [1, 0.85, 0.35]);
   }
   // the rope along the step's edge, a way through by the floor
   const rp = [];

@@ -14,6 +14,8 @@ const INK = {
   cafe: 50, stand: 60, pole: 40, chair: 30, aframe: 25, billboard: 160, fountain: 260, hoop: 60,
 };
 const MAX_IDS = 256 * 64;
+// (ROADMAP 11.45) the last ids are the shops' streamed things', one a shop: drawn in by it
+const STOCK_IDS = 1024;
 const MAX_SPOTS = 128; // remembered rubbed-out spots
 const SHADER_SPOTS = MAX_SHADER_SPOTS; // the ones nearest the camera go to the shaders
 
@@ -30,12 +32,33 @@ export class WorldObjects {
     // bumped whenever a prop appears in or leaves the sun's view
     this.castVersion = 0;
     this.world = null;
+    // (ROADMAP 11.45) the shops' streamed things' ids not in use
+    this.stockFree = [];
+    for (let i = MAX_IDS - STOCK_IDS; i < MAX_IDS; i++) this.stockFree.push(i);
+  }
+
+  // (ROADMAP 11.45) an id for what is streamed into a shop (0: none left), and back
+  takeStockId() {
+    return this.stockFree.pop() || 0;
+  }
+
+  giveStockId(id) {
+    if (!id) return;
+    this.maskAt(id, 0);
+    this.stockFree.push(id);
+  }
+
+  // how far gone the things of an id are (0: there, 1: not drawn) - not the sun's business: the
+  // shops' things cast no shadow of the still city
+  maskAt(id, gone) {
+    shared.uObjMask.value.image.data[id * 4] = Math.round(Math.min(1, Math.max(0, gone)) * 255);
+    this.maskDirty = true;
   }
 
   // ------------------------------------------------------------------ while building the city
   begin(ctx, kind, x, z) {
     // a prop built inside another prop belongs to the outer one
-    if (ctx.B.obj > 0 || this.list.length >= MAX_IDS) return 0;
+    if (ctx.B.obj > 0 || this.list.length >= MAX_IDS - STOCK_IDS) return 0;
     const id = this.list.length;
     const o = {
       id, kind, x, z, y: 0,

@@ -170,6 +170,15 @@ export function buildCity(scene, o = {}) {
     if (!sharedPens.has(key)) sharedPens.set(key, mergedSurface(mat, { obj }));
     return sharedPens.get(key);
   };
+  // (ROADMAP 11.45) the same pens, each with the props' ids (aObj): what is streamed into a shop
+  // is drawn in through it, all of it as one (world/interiors.js)
+  const mergeObj = o.merge === false ? null : (mat) => {
+    const u = mat.uniforms;
+    if (!u || !u.uUseMap || u.uUseMap.value || u.uUseEmMap.value || u.uAlphaTest.value || u.uSway.value || u.uCells.value || u.uNeonMask.value) return null;
+    const key = ['objAll', mat.side, u.uIndoor.value, u.uUseRefl.value, u.uUvScale.value, mat.userData.depth === null].join('|');
+    if (!sharedPens.has(key)) sharedPens.set(key, mergedSurface(mat, { obj: true }));
+    return sharedPens.get(key);
+  };
   // (v5: the pens with little of them in the whole city, one draw each, kit.js; not the ones
   // hidden by distance, nor the rooms)
   const meshes = ctx.B.flush(group, { static: true, merge, whole: { max: 25000, ok: (pens) => !pens.some((p) => small.has(p) || far.has(p)) } });
@@ -215,6 +224,7 @@ export function buildCity(scene, o = {}) {
     // (what a block of the mainland needs of the city's: the shared pens, which pens are small, the
     // list of what is hidden by distance)
     merge,
+    mergeObj,
     smallPens: small,
     cullList: cull,
     low: !!o.low,

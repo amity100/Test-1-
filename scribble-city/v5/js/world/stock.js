@@ -223,9 +223,9 @@ const rint = (rng, a) => Math.floor(a[0] + (a[1] - a[0] + 1) * rng.r());
 export function goods(R, run, s0, s1, y, hMax, dMax, cat, o = {}) {
   const rng = R.rng;
   const list = (R.store && PS[cat]) || P[cat] || P.general;
-  const Sb = R.soup('box');
-  const Sc = R.soup('cyl');
-  const Sg = R.soup('gloss');
+  const Sb = R.soup('box', true);
+  const Sc = R.soup('cyl', true);
+  const Sg = R.soup('gloss', true);
   let s = s0 + 0.015;
   const t1 = -0.015 - (o.inset || 0);
   let groups = 0;
@@ -458,6 +458,7 @@ export function fridges(R, run, len, o = {}) {
  */
 export function produce(R, run, len, o = {}) {
   const S = R.soup('box');
+  const G = R.soup('box', true);
   const y0 = R.y0;
   const depth = o.depth || 1.0;
   const tiers = 3;
@@ -477,10 +478,10 @@ export function produce(R, run, len, o = {}) {
       const nu = Math.max(1, Math.floor((sb - sa) / (r * 2.1)));
       const nv = Math.max(1, Math.floor((tw - 0.06) / (r * 2.1)));
       for (let i = 0; i < nu; i++) {
-        for (let j = 0; j < nv; j++) run.ball(S, sa + r + i * (r * 2.1), top - 0.02 + r * 0.8 + ((i + j) % 2) * r * 0.3, ta + 0.03 + r + j * (r * 2.1), r, col, nextId(), 2, 5);
+        for (let j = 0; j < nv; j++) run.ball(G, sa + r + i * (r * 2.1), top - 0.02 + r * 0.8 + ((i + j) % 2) * r * 0.3, ta + 0.03 + r + j * (r * 2.1), r, col, nextId(), 2, 5);
       }
       // the price card on its stick
-      run.box(S, sa + 0.05, top + 0.12, ta + tw - 0.05, sa + 0.17, top + 0.2, ta + tw - 0.045, SC.white, nextId(), FRONTONLY);
+      run.box(G, sa + 0.05, top + 0.12, ta + tw - 0.05, sa + 0.17, top + 0.2, ta + tw - 0.045, SC.white, nextId(), FRONTONLY);
     }
   }
   run.solid(0, -depth, len, 0, y0 + 0.95);
@@ -543,6 +544,7 @@ export function checkout(R, run, len, o = {}) {
  */
 export function rail(R, run, len, o = {}) {
   const S = R.soup('box');
+  const G = R.soup('box', true);
   const y0 = R.y0;
   const yb = y0 + (o.high || 1.62);
   const tc = o.tc !== undefined ? o.tc : -0.3;
@@ -569,8 +571,8 @@ export function rail(R, run, len, o = {}) {
       const w = 0.22 + rng.r() * 0.04;
       const bot = long ? y0 + 0.45 + rng.r() * 0.15 : yb - 0.78 - rng.r() * 0.12;
       // the hanger's hook, the garment
-      run.box(S, s, yb - 0.08, tc - 0.006, s + 0.006, yb + 0.03, tc + 0.006, SC.dgrey, nextId());
-      run.box(S, s - th / 2, bot, tc - w, s + th / 2, yb - 0.07, tc + w, col, nextId(), L.BOTTOM);
+      run.box(G, s, yb - 0.08, tc - 0.006, s + 0.006, yb + 0.03, tc + 0.006, SC.dgrey, nextId());
+      run.box(G, s - th / 2, bot, tc - w, s + th / 2, yb - 0.07, tc + w, col, nextId(), L.BOTTOM);
       s += th + 0.012 + rng.r() * 0.02;
     }
     s += 0.02;
@@ -584,6 +586,7 @@ export function rail(R, run, len, o = {}) {
  */
 export function foldTable(R, run, len, depth, o = {}) {
   const S = R.soup('box');
+  const G = R.soup('box', true);
   const y0 = R.y0;
   const top = y0 + (o.h || 0.82);
   run.box(S, 0, y0, -depth, len, top - 0.04, 0, o.base || (R.store ? SC.black : SC.lwood), nextId(), L.BOTTOM);
@@ -599,7 +602,7 @@ export function foldTable(R, run, len, depth, o = {}) {
       const ta = -depth + 0.07 + j * ((depth - 0.14) / rows);
       for (let k = 0; k < n; k++) {
         const j2 = (rng.r() - 0.5) * 0.02;
-        run.box(S, sa + j2, top + k * 0.045, ta + j2, sa + 0.3 + j2, top + k * 0.045 + 0.042, ta + 0.32 + j2, col, nextId(), L.BOTTOM);
+        run.box(G, sa + j2, top + k * 0.045, ta + j2, sa + 0.3 + j2, top + k * 0.045 + 0.042, ta + 0.32 + j2, col, nextId(), L.BOTTOM);
       }
     }
   }
@@ -613,6 +616,7 @@ export function foldTable(R, run, len, depth, o = {}) {
  */
 export function shoeWall(R, run, len, o = {}) {
   const S = R.soup('box');
+  const G = R.soup('box', true);
   const y0 = R.y0;
   const h = o.h || 2.3;
   const panel = o.panel || (R.store ? [0.92, 0.91, 0.88] : SC.white);
@@ -627,9 +631,9 @@ export function shoeWall(R, run, len, o = {}) {
       const col = pk(rng, o.cols || (R.store ? SHOES_REAL : CLOTH));
       const sole = rng.r() < 0.5 ? SC.white : SC.black;
       for (const k of [-0.055, 0.055]) {
-        run.box(S, s + k - 0.045, y, -0.3, s + k + 0.045, y + 0.035, -0.04, sole, nextId(), L.BOTTOM);
-        run.box(S, s + k - 0.042, y + 0.035, -0.28, s + k + 0.042, y + 0.11, -0.12, col, nextId(), L.BOTTOM);
-        run.box(S, s + k - 0.04, y + 0.035, -0.12, s + k + 0.04, y + 0.075, -0.05, col, nextId(), L.BOTTOM);
+        run.box(G, s + k - 0.045, y, -0.3, s + k + 0.045, y + 0.035, -0.04, sole, nextId(), L.BOTTOM);
+        run.box(G, s + k - 0.042, y + 0.035, -0.28, s + k + 0.042, y + 0.11, -0.12, col, nextId(), L.BOTTOM);
+        run.box(G, s + k - 0.04, y + 0.035, -0.12, s + k + 0.04, y + 0.075, -0.05, col, nextId(), L.BOTTOM);
       }
     }
   }
@@ -643,6 +647,7 @@ export function shoeWall(R, run, len, o = {}) {
  */
 export function pegboard(R, run, len, o = {}) {
   const S = R.soup('box');
+  const G = R.soup('box', true);
   const y0 = R.y0;
   const h = o.h || 2.0;
   run.box(S, 0, y0, -0.14, len, y0 + h, -0.1, o.board || [0.86, 0.82, 0.74], nextId(), L.BACK);
@@ -656,8 +661,8 @@ export function pegboard(R, run, len, o = {}) {
       const n = rint(rng, [2, 4]);
       const w = 0.1 + rng.r() * 0.05;
       for (let k = 0; k < n && s < len - 0.12; k++) {
-        run.box(S, s + 0.04, y + 0.02, -0.1, s + 0.05, y + 0.03, 0.02, SC.steel, nextId());
-        for (let q = 0; q < 3; q++) run.box(S, s, y - 0.16, -0.06 + q * 0.025, s + w, y + 0.02, -0.045 + q * 0.025, col, nextId(), L.BACK);
+        run.box(G, s + 0.04, y + 0.02, -0.1, s + 0.05, y + 0.03, 0.02, SC.steel, nextId());
+        for (let q = 0; q < 3; q++) run.box(G, s, y - 0.16, -0.06 + q * 0.025, s + w, y + 0.02, -0.045 + q * 0.025, col, nextId(), L.BACK);
         s += w + 0.03;
       }
       s += 0.05;
@@ -676,6 +681,7 @@ export function vitrine(R, run, len, depth, o = {}) {
   const S = R.soup('box');
   const Sl = R.soup('lamp');
   const Sg = R.soup('gloss');
+  const Gl = R.soup('lamp', true);
   const y0 = R.y0;
   run.box(S, 0, y0, -depth, len, y0 + 0.86, 0, o.base || SC.black, nextId(), L.BOTTOM);
   run.box(Sl, 0.03, y0 + 0.86, -depth + 0.03, len - 0.03, y0 + 0.88, -0.03, o.velvet || (R.store ? [0.1, 0.12, 0.2] : [0.4, 0.1, 0.22]), nextId(), L.BOTTOM);
@@ -685,7 +691,7 @@ export function vitrine(R, run, len, depth, o = {}) {
   run.box(Sg, 0, y0 + 1.11, -depth, len, y0 + 1.12, 0, SC.glass, nextId(), L.BOTTOM);
   const rng = R.rng;
   for (let s = 0.1; s < len - 0.08; s += 0.16) {
-    for (let t = -depth + 0.12; t < -0.08; t += 0.18) run.box(Sl, s, y0 + 0.88, t, s + 0.07, y0 + 0.905, t + 0.05, pk(rng, o.cols || (R.store ? GEMS : [SC.gold, SC.white, [0.6, 0.85, 1.0], [1, 0.4, 0.5]])), nextId(), L.BOTTOM);
+    for (let t = -depth + 0.12; t < -0.08; t += 0.18) run.box(Gl, s, y0 + 0.88, t, s + 0.07, y0 + 0.905, t + 0.05, pk(rng, o.cols || (R.store ? GEMS : [SC.gold, SC.white, [0.6, 0.85, 1.0], [1, 0.4, 0.5]])), nextId(), L.BOTTOM);
   }
   run.solid(0, -depth, len, 0, y0 + 1.12);
   run.spot(len / 2, 0.55, { shelf: [0.95], reach: run.at(len / 2, 0.95, -depth / 2) });

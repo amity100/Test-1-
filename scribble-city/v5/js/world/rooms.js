@@ -153,7 +153,7 @@ export function buildRoom(ctx, f, spec) {
   R.collide();
   if (R.lazy) {
     const c = R.people.center;
-    ctx.stock.push({ f, spec: { ...spec, shop: null, outside: null }, kind: spec.kind, x: c.x, z: c.z, r: Math.max(R.ub - R.ua, R.da - R.db) / 2 });
+    ctx.stock.push({ f, spec: { ...spec, shop: null, outside: null }, kind: spec.kind, x: c.x, z: c.z, y: spec.y0 + (f.dy || 0), r: Math.max(R.ub - R.ua, R.da - R.db) / 2 });
   }
   return R.people;
 }
@@ -162,16 +162,19 @@ export function buildRoom(ctx, f, spec) {
 // batch of their own: the meshes, made a step at a time (a generator; world/interiors.js)
 export function* buildStock(rec, M, parent, opts = {}) {
   const ctx = { M, R: new Batch(), col: null };
+  // (ROADMAP 11.45: every part with the shop's id - drawn in by it, world/interiors.js)
+  ctx.R.obj = opts.obj || 0;
   const R = new Room(ctx, rec.f, { ...rec.spec, mode: 'stock' });
   R.furnish();
   R.flushSoups();
   yield;
-  const meshes = yield* ctx.R.flushSteps(parent, { static: true, indoor: true, merge: opts.merge, steps: true });
+  const meshes = yield* ctx.R.flushSteps(parent, { static: true, indoor: true, merge: opts.merge, steps: true, objAll: !!opts.obj });
   for (const m of meshes) m.renderOrder = 1;
   return { meshes, verts: ctx.R.vcount };
 }
 
-// a soup that keeps nothing (a room laid out now, its things to come later)
+// a soup that keeps nothing (what is left for another time: the goods of a room whose goods are
+// streamed in, or the fixtures of a room whose fixtures went up with it)
 const NO_SOUP = { fbox() {}, fcyl() {}, fball() {}, box() {}, cyl() {}, ball() {}, quad() {}, full: false, n: 0 };
 
 class Room {
@@ -182,8 +185,8 @@ class Room {
     this.M = this.store ? ctx.M.store : ctx.M;
     this.f = f;
     this.spec = spec;
-    // 'build' (the room and its furniture now) or 'stock' (only what goes into the soups: the
-    // things on the shelves, streamed in later)
+    // 'build' (the room and its furniture now) or 'stock' (only its goods, streamed in later: the
+    // things on the shelves, the clothes on the rails)
     this.mode = spec.mode || 'build';
     this.lazy = false;
     this.soups = null;
@@ -223,9 +226,12 @@ class Room {
   }
 
   // (v5, ROADMAP 11.18) the soup of many small parts for a pen of the rooms: 'box', 'gloss', 'cyl',
-  // 'lamp' (world/stock.js fills them). Laid out now and filled later: a soup that keeps nothing.
-  soup(kind) {
-    if (this.lazy) return NO_SOUP;
+  // 'lamp' (world/stock.js fills them). goods: what stands, hangs and lies on the fixtures (the cans,
+  // the shirts, the shoes). (ROADMAP 11.45: where the goods are streamed in, the fixtures - the
+  // shelving, the rails, the counters, the lights - go up with the room, and a shop is never seen
+  // to come; only its goods come, with the stream, drawn in: world/interiors.js)
+  soup(kind, goods = false) {
+    if (goods ? this.lazy : this.mode === 'stock') return NO_SOUP;
     const all = this.soups || (this.soups = {});
     let s = all[kind];
     if (!s) s = all[kind] = new FSoup(this.f);
@@ -456,7 +462,7 @@ class Room {
     const n = this.ub - this.ua > 7 ? 3 : 2;
     if (!this.noLamps) for (let i = 0; i < n; i++) this.lamp(this.ua + ((i + 0.5) / n) * (this.ub - this.ua), (this.da + this.db) / 2);
     // (built now, not streamed in: what went into the soups goes to the rooms' batch)
-    if (this.mode === 'build' && !this.lazy) this.flushSoups();
+    if (this.mode === 'build') this.flushSoups();
     if (this.mode === 'stock') return;
     // the way in, just past the door, and where the keeper stands
     const door = this.openings.find((o) => o.kind === 'door');

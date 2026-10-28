@@ -30,6 +30,8 @@ export class Streamer {
     this.rush = o.rush || 9;
     this.warm = o.warm || null;
     this.scale = 1;
+    // (the height you are at, for the cells that have one: null, none)
+    this.y = null;
     this.job = null;
     this.live = new Map();
     this.stats = { built: 0, freed: 0, ms: 0, last: '' };
@@ -57,7 +59,11 @@ export class Streamer {
   remove(id) {
     const i = this.cells.findIndex((c) => c.id === id);
     if (i >= 0) this.cells.splice(i, 1);
-    if (this.job && this.job.cell.id === id) this.job = null;
+    if (this.job && this.job.cell.id === id) {
+      // (left half built: what it holds is let go of, world/interiors.js)
+      this.job.it.return();
+      this.job = null;
+    }
     if (this.pending.length) {
       this.pending = this.pending.filter((p) => {
         if (p.cell.id !== id) return true;
@@ -86,7 +92,10 @@ export class Streamer {
     const R = c.rect;
     const dx = x < R.x0 ? R.x0 - x : x > R.x1 ? x - R.x1 : 0;
     const dz = z < R.z0 ? R.z0 - z : z > R.z1 ? z - R.z1 : 0;
-    return Math.hypot(dx, dz);
+    // (ROADMAP 11.45: a cell on another floor - a store up in a mall, over you or under you - is
+    // further off by the floors between: hidden by them)
+    const dy = c.y !== undefined && this.y !== null ? Math.max(0, Math.abs(this.y - c.y) - 1.5) * 2 : 0;
+    return Math.hypot(dx, dz) + dy;
   }
 
   // the cell to build next: the nearest one wanted and not there (ahead of you counts nearer)
@@ -106,7 +115,8 @@ export class Streamer {
     return best ? { c: best, d: bd } : null;
   }
 
-  update(x, z, vx = 0, vz = 0) {
+  update(x, z, vx = 0, vz = 0, y = null) {
+    this.y = y;
     const t0 = performance.now();
     const lastAt = this.lastAt;
     this.lastAt = t0;
@@ -182,7 +192,8 @@ export class Streamer {
   }
 
   // build everything wanted right now, all at once (the start, and a jump across the map)
-  fill(x, z, maxMs = 20000) {
+  fill(x, z, maxMs = 20000, y = null) {
+    this.y = y;
     const t0 = performance.now();
     for (;;) {
       while (this.pending.length) {

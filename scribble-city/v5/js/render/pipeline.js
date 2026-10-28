@@ -2147,9 +2147,8 @@ export class Pipeline {
     // mirror whose size moved with the drawing's, a pixel or two a frame, would shimmer)
     const rt = this.reflRT;
     let k = 1;
-    // (ROADMAP 11.43: and with the free pace too, when the frames are slow - game.js applyDetail)
-    if (this.steady || (this.detailRefl || 1) < 1) {
-      const want = (this.steady ? Math.min(1, this.dyn) * (this.reflShare || 1) : 1) * (this.detailRefl || 1);
+    if (this.steady) {
+      const want = Math.min(1, this.dyn) * (this.reflShare || 1);
       k = this.reflK || 1;
       if (Math.abs(want - k) > 0.09) k = Math.min(1, Math.max(0.25, Math.round(want * 8) / 8));
     }
