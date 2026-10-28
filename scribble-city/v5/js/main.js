@@ -90,11 +90,13 @@ async function boot() {
   pipe.scale = Math.min(1, want / pr);
   // (the test route is drawn at this, whatever the resolution has come down to: game/perf.js)
   pipe.defaultScale = pipe.scale;
-  // (never coarser than this: a drawing made at too few pixels turns to mush in the distance)
-  pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.55, 1.25 / pr) : 0.7);
-  // (the steady pace, when it is chosen, may come down further on a computer: a weak graphics
-  // card that cannot keep the beat otherwise; game/pace.js)
-  pipe.minScaleSteady = low ? pipe.minScale : Math.min(pipe.scale, 0.5);
+  // (never coarser than this: a drawing made at too few pixels turns to mush in the distance. v5,
+  // ROADMAP 11.43: higher than it was - the game looks as it should all the time; what is least
+  // seen is given up first, game.js applyDetail)
+  pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.6, 1.4 / pr) : 0.85);
+  // (the steady pace, when it is chosen, may come down a little further on a computer: a weak
+  // graphics card that cannot keep the beat otherwise; game/pace.js)
+  pipe.minScaleSteady = low ? pipe.minScale : Math.min(pipe.scale, 0.8);
   // which graphics card draws (where the browser tells): none, in software (SwiftShader, llvmpipe,
   // the basic render driver), and every frame takes seconds
   const gl0 = renderer.getContext();

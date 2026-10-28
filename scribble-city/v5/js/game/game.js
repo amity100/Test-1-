@@ -99,6 +99,9 @@ import { ArenaGame } from './arenagame.js';
 const HELI_LIGHT = [1.0, 0.95, 0.8];
 // (your headlights' colour on the road at night: ROADMAP 4.3)
 const HEADLIGHT = [1.0, 0.92, 0.74];
+// (ROADMAP 11.43: the steps of what is least seen, given up when the frames are slow before any of
+// the picture's sharpness - applyDetail)
+const DETAIL_MAX = 3;
 
 // things a photo of a billboard can be taken past (only buildings hide a board)
 const PHOTO_SEE_THROUGH = new Set(['board', 'pole', 'fence', 'rail', 'tree', 'prop', 'car', 'cover']);
@@ -144,6 +147,7 @@ export class Game {
     // small screen a person 40 m away is some 20 pixels tall)
     this.figures.bodies.lodFar = this.pipe.low ? 32 : 55;
     this.figures.bodies.detailFar = this.pipe.low ? 28 : 60;
+    this.detail = 0;
     this.bubbles = new Bubbles(this.pipe.overlay);
     this.fx = new Effects(this);
     this.cars = new CarRenderer(scene);
@@ -814,6 +818,22 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ main loop
+  // (ROADMAP 11.43) when the frames are slow, what is least seen is given up first, a step at a time
+  // (0: all of it .. DETAIL_MAX): the shadows and the shine drawn every other frame, the
+  // reflections at a smaller share, people in the simple shapes nearer, and the shops' shelves
+  // filled in a narrower ring - so the picture itself stays sharp
+  applyDetail(k) {
+    const pipe = this.pipe;
+    this.detail = k;
+    pipe.detailRefl = [1, 0.75, 0.6, 0.5][k];
+    pipe.detailReflEvery = k >= 1 ? 2 : 1;
+    pipe.detailShadowEvery = k >= 2 ? 2 : 1;
+    const lod = [1, 0.8, 0.65, 0.55][k];
+    this.figures.bodies.lodFar = (pipe.low ? 32 : 55) * lod;
+    this.figures.bodies.detailFar = (pipe.low ? 28 : 60) * lod;
+    if (this.world.interiors) this.world.interiors.scaleMax = [1, 0.85, 0.7, 0.6][k];
+  }
+
   renderFrame() {
     // the sun's box follows a point ahead of the camera
     const c = this.camera.position;
@@ -875,7 +895,7 @@ export class Game {
     // sharp as it was. That step is not tried again for a while (a minute, longer each time it
     // does not help), unless the frames get much slower than they were
     let tried = null;
-    const hold = { scale: { v: 0, at: -1e9, for: 0, ms: 0 }, taa: { v: 0, at: -1e9, for: 0, ms: 0 } };
+    const hold = { scale: { v: 0, at: -1e9, for: 0, ms: 0 }, taa: { v: 0, at: -1e9, for: 0, ms: 0 }, detail: { v: -1, at: -1e9, for: 0, ms: 0 } };
     const held = (h, v, now, ms) => v <= h.v + 0.001 && now - h.at < h.for && ms < h.ms * 1.3;
     const pace = this.pace;
     const tick = (ts) => {
@@ -948,6 +968,8 @@ export class Game {
             if (tried.kind === 'taa') {
               pipe.taaFrac = tried.from;
               ceilingT = Infinity;
+            } else if (tried.kind === 'detail') {
+              this.applyDetail(tried.from);
             } else {
               pipe.scale = tried.from;
               ceiling = Infinity;
@@ -968,7 +990,15 @@ export class Game {
           const now = this.time;
           const cap = now - ceilingAt < 40 ? Math.min(pipe.maxScale, ceiling - 0.05) : pipe.maxScale;
           const capT = now - ceilingTAt < 40 ? Math.min(pipe.taaMax, ceilingT - 0.05) : pipe.taaMax;
-          if (slow >= 2 && pipe.taa && pipe.taaFrac > pipe.taaMin + 0.001 && !held(hold.taa, pipe.taaFrac, now, ms)) {
+          // (v5, ROADMAP 11.43: what is least seen goes first - applyDetail - and only then the
+          // sharpness: the drawing's share, its resolution, never under their floors, main.js)
+          if (slow >= 2 && this.detail < DETAIL_MAX && !held(hold.detail, this.detail, now, ms)) {
+            tried = { kind: 'detail', from: this.detail, ms };
+            this.applyDetail(this.detail + 1);
+            slow = 0;
+            fast = 0;
+            settle = 2;
+          } else if (slow >= 2 && pipe.taa && pipe.taaFrac > pipe.taaMin + 0.001 && !held(hold.taa, pipe.taaFrac, now, ms)) {
             tried = { kind: 'taa', from: pipe.taaFrac, ms };
             ceilingT = pipe.taaFrac;
             ceilingTAt = now;
@@ -992,6 +1022,11 @@ export class Game {
             pipe.taaFrac = Math.min(capT, pipe.taaFrac + 0.05);
             fast = 0;
             settle = 1;
+          } else if (fast >= 4 && this.detail > 0) {
+            // (the sharpness back first; then, with time to spare, what was given up)
+            this.applyDetail(this.detail - 1);
+            fast = 0;
+            settle = 2;
           }
         }
         acc = 0;

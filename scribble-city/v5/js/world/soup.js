@@ -199,8 +199,11 @@ export class FSoup extends Soup {
   }
 
   fcyl(u, d, r, y0, h, col, id = nextId(), seg = 8, top = true, r1 = r) {
-    const p = this.f.p(u, 0, d);
-    return this.cyl(p[0], y0, p[2], r, h, col, id, seg, top, r1);
+    // (v5, ROADMAP 11.43: the height through the frame too, like a box's - a store up on a floor of
+    // the mega mall is lifted with its front, world/kit.js LiftFacade; its bottles, jars and cans
+    // were left at the street's height, standing in the air of the store under it)
+    const p = this.f.p(u, y0, d);
+    return this.cyl(p[0], p[1], p[2], r, h, col, id, seg, top, r1);
   }
 
   fball(u, y, d, r, col, id = nextId(), lat = 4, lon = 6, sy = 1) {

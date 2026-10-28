@@ -105,8 +105,10 @@ export class Interiors {
     // computer, less than half that on a phone)
     const most = this.low ? 450000 : 1200000;
     const st = this.stream;
-    if (this.verts > most) st.scale = Math.max(0.55, st.scale * 0.985);
-    else if (this.verts < most * 0.8) st.scale = Math.min(1, st.scale * 1.01);
+    // (ROADMAP 11.43: and narrower still when the frames are slow - game.js applyDetail)
+    const top = this.scaleMax || 1;
+    if (this.verts > most || st.scale > top) st.scale = Math.max(0.55, st.scale * 0.985);
+    else if (this.verts < most * 0.8) st.scale = Math.min(top, st.scale * 1.01);
   }
 
   // everything near p now (the start; a jump across the map; the tests)

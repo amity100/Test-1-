@@ -719,15 +719,16 @@ export class Pipeline {
       tCur: { value: null }, tDepth: { value: null }, tVel: { value: null }, tHist: { value: null }, tHistMeta: { value: null },
       uIn: { value: new THREE.Vector2() }, uOut: { value: new THREE.Vector2() }, uJit: { value: new THREE.Vector2() },
       uInvVP: { value: new THREE.Matrix4() }, uPrevVP: { value: new THREE.Matrix4() }, uNear: { value: 0.1 }, uFar: { value: 3000 },
-      uFresh: { value: 1 }, uMaxW: { value: 8 }, uMinK: { value: 0.15 }, uMoveLo: { value: 0.1 }, uMoveHi: { value: 1.0 }, uMaxWMove: { value: 4 },
+      uFresh: { value: 1 }, uMaxW: { value: 8 }, uMinK: { value: 0.15 }, uMoveLo: { value: 0.1 }, uMoveHi: { value: 1.0 }, uMaxWMove: { value: 3 },
     });
     // the smart drawing (render): fewer pixels drawn each frame, a fraction of a pixel aside each
     // time, put together at the picture's size with the frames before (game.js turns it on;
     // taaFrac: the drawing's side against the picture's, which the pace moves between taaMin and
     // taaMax)
     this.taa = false;
-    this.taaFrac = 0.67;
-    this.taaMin = 0.5;
+    this.taaFrac = 0.8;
+    // (v5, ROADMAP 11.43: never under three quarters - below it the picture smeared as you moved)
+    this.taaMin = 0.75;
     this.taaMax = 1;
     this.taaN = 0;
     this.taaReset = true;
@@ -2146,8 +2147,9 @@ export class Pipeline {
     // mirror whose size moved with the drawing's, a pixel or two a frame, would shimmer)
     const rt = this.reflRT;
     let k = 1;
-    if (this.steady) {
-      const want = Math.min(1, this.dyn) * (this.reflShare || 1);
+    // (ROADMAP 11.43: and with the free pace too, when the frames are slow - game.js applyDetail)
+    if (this.steady || (this.detailRefl || 1) < 1) {
+      const want = (this.steady ? Math.min(1, this.dyn) * (this.reflShare || 1) : 1) * (this.detailRefl || 1);
       k = this.reflK || 1;
       if (Math.abs(want - k) > 0.09) k = Math.min(1, Math.max(0.25, Math.round(want * 8) / 8));
     }
@@ -2255,13 +2257,14 @@ export class Pipeline {
     // (on a phone the sun's view was drawn every other frame, before the still city got a map of
     // its own: now only what moves is drawn, each frame)
     this.frameN = (this.frameN || 0) + 1;
-    const every = this.low ? 2 : 1;
+    // (ROADMAP 11.43: or every other frame when the frames are slow - game.js applyDetail)
+    const every = Math.max(this.low ? 2 : 1, this.detailShadowEvery || 1);
     const phase = this.frameN % every;
     // the mirror under the street: every reflEvery-th frame (main.js: every frame, a phone every
     // other one). In between the street reads the last one through the matrix it was drawn with;
     // but a reflection depends on where you stand, so what is near in it slides a little until
     // the next. A jump of the camera (a cut, a teleport) draws it at once.
-    const re = this.reflEvery || 1;
+    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1);
     this.trackCamera();
     // (v5: the test route's moments without the people and the cars, or without the sun's view of
     // what moves, game/perf.js: what they cost on this device)
