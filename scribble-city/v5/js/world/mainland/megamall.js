@@ -38,8 +38,6 @@ const RUN = FH / Math.tan(SLOPE);
 // (the hall: a real mall's colours - warm white, cream stone, glass and steel, black only round the
 // court, brass and gold in touches)
 const GLASS = srgb(0.8, 0.89, 0.95);
-const STEEL = srgb(0.66, 0.68, 0.74);
-const RAILC = srgb(0.84, 0.86, 0.9);
 const STONE = srgb(0.96, 0.94, 0.9);
 const CEIL = srgb(0.98, 0.96, 0.93);
 const GRANITE = srgb(0.09, 0.09, 0.11);
@@ -49,6 +47,9 @@ const BLACK = hex('#1b1a20');
 const GOLD = hex('#d4af62');
 const LGOLD = srgb(1, 0.78, 0.42);
 const LWHITE = srgb(1, 0.93, 0.8);
+// (ROADMAP 11.46) the hall's lines of light: a warm gold
+const LIGHT_GOLD = srgb(1, 0.8, 0.5);
+const LIGHT_SOFT = srgb(0.7, 0.55, 0.34);
 // (the sky through the glass of the roof and the crown, seen from under it: by day, by night)
 const SKY = srgb(0.3, 0.46, 0.7);
 const NIGHT_SKY = srgb(0.03, 0.04, 0.11);
@@ -220,7 +221,13 @@ function* wing(bctx, b, o) {
     skyD.add(M.neonSoft, geo.clone(), null, nextId(), { color: SKY_LOW.clone().lerp(SKY, t) });
     skyN.add(M.neonSoft, geo, null, nextId(), { color: NIGHT_LOW.clone().lerp(NIGHT_SKY, t) });
   };
-  const c = { hall, hallGeo, IN, col, M, sky };
+  // (ROADMAP 11.46) a pane of stained glass: the day lighting it from behind, at night the hall's
+  // own lamps (a pane a part: the inker draws its lead round it)
+  const stain = (geo, day, night) => {
+    skyD.add(M.stainGlass, geo.clone(), null, nextId(), { color: day });
+    skyN.add(M.stainGlass, geo, null, nextId(), { color: night });
+  };
+  const c = { hall, hallGeo, IN, col, M, sky, stain };
   const mall = (bctx.mall = {
     name: o.name, heb: o.heb, open: false, mega: true, wing: o.wing || 'east',
     hall: { x0: hx0, x1: hx1, z0: bz0, z1: bz1, y: CURB, top: ROOF - CURB + 0.6 },
@@ -365,7 +372,10 @@ function* wing(bctx, b, o) {
       const ex = s < 0 ? vx0 : vx1;
       hall(IN.box, ex - 0.06, y - 0.85, za, ex + 0.06, y + 0.02, zb, CEIL);
       frieze(za, zb, y, { fx: -s, x: ex });
-      hall(IN.lamp, ex - 0.07, y - 0.9, za, ex + 0.07, y - 0.85, zb, srgb(1, 0.95, 0.86));
+      hall(IN.lamp, ex - 0.07, y - 0.92, za, ex + 0.07, y - 0.85, zb, srgb(1, 0.92, 0.76));
+      // (ROADMAP 11.46) a line of gold light along its face too, under the rail: every floor drawn
+      // across the hall in light
+      hall(IN.lamp, s < 0 ? ex + 0.06 : ex - 0.1, y - 0.2, za, s < 0 ? ex + 0.1 : ex - 0.06, y - 0.14, zb, LIGHT_GOLD);
       // the gallery's ceiling (the floor below's): smooth and white, its lights let into it
       coffers(g0, za, g1, zb, y);
       mall.galleries.push({ lv, side: s, x: s < 0 ? hx0 + 1.4 : hx1 - 1.4, rx: s < 0 ? vx0 - 0.45 : vx1 + 0.45, z0: za + 0.8, z1: zb - 0.8, y: y - CURB });
@@ -535,7 +545,10 @@ function* wing(bctx, b, o) {
     // under the fascia, a skirting of black granite along the front's foot (ROADMAP 11.32)
     fbox(rctx, f, M.hallMarbleWall, -0.2, CURB, -0.25, 0.25, CURB + FH - 0.3, 0.14, WHITE);
     fbox(rctx, f, M.hallMarbleWall, 0, 3.55, -0.3, L, CURB + FH - 0.32, 0, WHITE);
-    fbox(rctx, f, IN.gloss, 0.25, 3.5, -0.02, L - 0.2, 3.56, 0.02, GOLD);
+    // (ROADMAP 11.46: the reveal alight - a line of warm gold over every front - and a strip of the
+    // same light up every pilaster, the hall's rhythm in light, floor over floor)
+    fbox(rctx, f, IN.lamp, 0.25, 3.5, -0.02, L - 0.2, 3.56, 0.02, LIGHT_GOLD);
+    fbox(rctx, f, IN.lamp, 0.0, CURB + 0.4, 0.14, 0.05, CURB + FH - 0.7, 0.155, LIGHT_SOFT);
     fbox(rctx, f, IN.gloss, 0.25, CURB, -0.02, L - 0.2, CURB + 0.12, 0.03, GRANITE);
     // (a food counter is shallower: its kitchen's back to the core)
     if (food) fbox(bctx, f, M.wallSolid, 0.25, CURB, -SD, L - 0.25, 3.6, -7.25, wallCol);
@@ -1060,10 +1073,12 @@ function rail(c, axis, at, a, b, y) {
   if (b - a < 0.08) return;
   const P = (x0, y0, z0, x1, y1, z1) => (axis === 'z' ? [at + x0, y0, a + z0, at + x1, y1, a + z1] : [a + z0, y0, at + x0, a + z1, y1, at + x1]);
   const L = b - a;
-  // (ROADMAP 11.32, as The Galleria's: glass without posts, a handrail of steel on it, the glass held
-  // in a channel of steel along the floor's edge)
-  hall(IN.gloss, ...P(-0.05, y + 1.02, 0, 0.05, y + 1.08, L), RAILC);
-  hall(IN.gloss, ...P(-0.045, y, 0, 0.045, y + 0.12, L), STEEL);
+  // (ROADMAP 11.32, as The Galleria's: glass without posts, the glass held in a channel along the
+  // floor's edge - 11.46: the handrail polished brass, the channel too, a line of light under the rail
+  // along the glass)
+  hall(IN.gloss, ...P(-0.05, y + 1.02, 0, 0.05, y + 1.08, L), GOLD);
+  hall(IN.lamp, ...P(-0.012, y + 0.995, 0, 0.012, y + 1.02, L), LIGHT_GOLD);
+  hall(IN.gloss, ...P(-0.045, y, 0, 0.045, y + 0.12, L), GOLD);
   const step = Math.max(0.5, L / Math.max(1, Math.round(L / 1.6)));
   // (the glass: a glint across each pane, as the light catches it)
   for (let u = 0; u < L - 0.3; u += step) {
@@ -1614,7 +1629,7 @@ function roof(bctx, c, mall, g) {
 // from under it the sky through it, paler low down - half moons of glass at ends (the z of each);
 // a chandelier of rings of gold hung at each of chand (z) at height yc
 function barrel(bctx, c, g, za, zb, ends, chand) {
-  const { hall, hallGeo, IN, col, M, sky } = c;
+  const { hall, hallGeo, IN, col, M, sky, stain } = c;
   const { cx, YS, RV, x0: vx0, x1: vx1, yc } = g;
   const B = bctx.B;
   const NA = 12;
@@ -1651,18 +1666,32 @@ function barrel(bctx, c, g, za, zb, ends, chand) {
     const t = i === 0 || i === NA ? 0.2 : 0.06;
     B.box(M.steel, px - t, py - t, za, px + t, py + t, zb, nextId(), { color: ribCol });
   }
-  // its ends: a half moon of glass, the sky through it, white mullions up it
+  // its ends: a half moon of glass, white mullions up it - (ROADMAP 11.46) the glass stained, a sun
+  // rising as in the court's half moons: gold at its foot's middle, its rays out through amber, coral
+  // and rose to the evening's violet and blue at the rim
   for (const zg of ends) {
     const out = zg === za ? -1 : 1;
-    const pin = [];
     const pout = [];
+    const RB = [0, 0.22, 0.42, 0.62, 0.81, 1];
+    for (let i = 0; i < NA * 2; i++) {
+      const a0 = (i / (NA * 2)) * Math.PI;
+      const a1 = ((i + 1) / (NA * 2)) * Math.PI;
+      for (let j = 0; j < RB.length - 1; j++) {
+        const p = (a, k) => [...at(a, RB[k] * RV), zg];
+        const pane = [];
+        if (j === 0) faceTri(pane, [cx, YS, zg], p(a0, 1), p(a1, 1), [0, 0, -out]);
+        else {
+          faceTri(pane, p(a0, j), p(a0, j + 1), p(a1, j + 1), [0, 0, -out]);
+          faceTri(pane, p(a0, j), p(a1, j + 1), p(a1, j), [0, 0, -out]);
+        }
+        stain(posGeo(pane), ...glassOf(sunsetAt(Math.max(0, Math.min(1, 1 - (j + 0.5) / 5 + (i % 2 ? 0.1 : 0)))), i * 7 + j + Math.round(zg)));
+      }
+    }
     for (let i = 0; i < NA; i++) {
       const [x0, y0] = at(ang(i), RV);
       const [x1, y1] = at(ang(i + 1), RV);
-      faceTri(pin, [cx, YS, zg], [x0, y0, zg], [x1, y1, zg], [0, 0, -out]);
       faceTri(pout, [cx, YS, zg + out * 0.1], [x0, y0, zg + out * 0.1], [x1, y1, zg + out * 0.1], [0, 0, out]);
     }
-    sky(posGeo(pin), 0.55);
     B.add(M.mallGlassClear, posGeo(pout), null, nextId());
     for (let x = vx0 + 2.4; x < vx1 - 0.6; x += 2.4) {
       const h = Math.sqrt(Math.max(0, RV * RV - (x - cx) * (x - cx)));
@@ -1670,6 +1699,8 @@ function barrel(bctx, c, g, za, zb, ends, chand) {
     }
     B.box(M.steel, vx0, YS + RV * 0.45 - 0.08, zg - 0.08, vx1, YS + RV * 0.45 + 0.08, zg + 0.08, nextId(), { color: ribCol });
   }
+  // (ROADMAP 11.46) a line of gold light along its springing, each side, the length of it
+  for (const x of [vx0, vx1]) hall(IN.lamp, x - 0.05, YS + 0.02, za, x + 0.05, YS + 0.09, zb, LIGHT_GOLD);
   // (walked on from the roof: steps up its back)
   for (let i = 0; i < NA; i++) {
     const [x0, y0] = at(ang(i), RV + 0.1);
@@ -1726,7 +1757,7 @@ function archRib(Bt, mat, rad, a0, a1, n, w, d, colr, place) {
 // arches' undersides gold; on them the drum, its windows between white pilasters, and the dome of
 // glass on sixteen white ribs, rings of gold round it, its lantern with a spire and a lamp
 function vault(bctx, c, mall, g) {
-  const { hall, hallGeo, IN, col, M, sky } = c;
+  const { hall, hallGeo, IN, col, M, stain } = c;
   const { cx, zm, vx0, vx1, zN, bz1, YS, RV, CQ, YC, YD, LV, wallCol } = g;
   const B = bctx.B;
   const R = bctx.R;
@@ -1785,7 +1816,23 @@ function vault(bctx, c, mall, g) {
         const a1 = ((i + 1) / 24) * Math.PI;
         faceTri(pin, [0, 0, 0], [Math.cos(a0) * RV, Math.sin(a0) * RV, 0], [Math.cos(a1) * RV, Math.sin(a1) * RV, 0], [0, 0, 1]);
       }
-      sky(toSide(posGeo(pin), side, 0.25), 0.7);
+      // (ROADMAP 11.46: its glass stained - a sun rising, gold at its hub, its rays out through amber,
+      // coral and rose to the evening's violet and blue at the rim, ray and ray about a shade warmer)
+      const RB = [0, 0.2, 0.4, 0.6, 0.8, 1];
+      const q = (rr, a) => [Math.cos(a) * rr, Math.sin(a) * rr, 0];
+      for (let i = 0; i < 24; i++) {
+        const a0 = (i / 24) * Math.PI;
+        const a1 = ((i + 1) / 24) * Math.PI;
+        for (let j = 0; j < RB.length - 1; j++) {
+          const pane = [];
+          if (j === 0) faceTri(pane, [0, 0, 0], q(RB[1] * RV, a0), q(RB[1] * RV, a1), [0, 0, 1]);
+          else {
+            faceTri(pane, q(RB[j] * RV, a0), q(RB[j + 1] * RV, a0), q(RB[j + 1] * RV, a1), [0, 0, 1]);
+            faceTri(pane, q(RB[j] * RV, a0), q(RB[j + 1] * RV, a1), q(RB[j] * RV, a1), [0, 0, 1]);
+          }
+          stain(toSide(posGeo(pane), side, 0.25), ...glassOf(sunsetAt(Math.max(0, Math.min(1, 1 - (j + 0.5) / 5 + (i % 2 ? 0.1 : 0)))), i * 5 + j + side * 131));
+        }
+      }
       B.add(M.mallGlassClear, toSide(flip(posGeo(pin.slice())), side, 0.3), null, nextId());
       for (let k = 1; k < 8; k++) {
         const m2 = new THREE.BoxGeometry(RV, 0.12, 0.12).translate(RV / 2, 0, 0).rotateZ((k / 8) * Math.PI);
@@ -1818,9 +1865,24 @@ function vault(bctx, c, mall, g) {
     const ring = new THREE.CylinderGeometry(DR, DR, YD - YC, 32, 1, true);
     ring.translate(cx, (YC + YD) / 2, zm);
     B.add(M.mallGlassClear, ring, null, nextId());
-    const inner = flip(new THREE.CylinderGeometry(DR - 0.1, DR - 0.1, YD - YC, 32, 1, true));
-    inner.translate(cx, (YC + YD) / 2, zm);
-    sky(inner, 0.4);
+    // (ROADMAP 11.46: its windows' glass stained, a sunset in each - the evening's blue at the sill
+    // up to the gold at the top, the window's two halves a shade apart)
+    const pd = (a, yy) => [cx + Math.cos(a) * (DR - 0.1), yy, zm + Math.sin(a) * (DR - 0.1)];
+    for (let k = 0; k < 16; k++) {
+      for (let h = 0; h < 2; h++) {
+        const a0 = ((k + h / 2) / 16) * Math.PI * 2;
+        const a1 = ((k + (h + 1) / 2) / 16) * Math.PI * 2;
+        for (let j = 0; j < 5; j++) {
+          const y0 = YC + ((YD - YC) * j) / 5;
+          const y1 = YC + ((YD - YC) * (j + 1)) / 5;
+          const g2 = new THREE.BufferGeometry();
+          // (turned in, to the drum's middle)
+          g2.setAttribute('position', new THREE.Float32BufferAttribute([...pd(a0, y0), ...pd(a1, y1), ...pd(a0, y1), ...pd(a0, y0), ...pd(a1, y0), ...pd(a1, y1)], 3));
+          g2.computeVertexNormals();
+          stain(g2, ...glassOf(sunsetAt(Math.min(1, 0.12 + j * 0.2 + (h ? 0.07 : 0))), k * 10 + h * 5 + j));
+        }
+      }
+    }
     for (let k = 0; k < 16; k++) {
       const a = (k / 16) * Math.PI * 2;
       const p = new THREE.BoxGeometry(0.55, YD - YC, 0.55);
@@ -1842,16 +1904,13 @@ function vault(bctx, c, mall, g) {
     under.translate(cx, YD - 0.02, zm);
     hallGeo(IN.gloss, under, GOLD);
   }
-  // ---- the dome: glass on sixteen white ribs, rings of gold, the sky through it paler low down
+  // ---- the dome: glass on sixteen white ribs, rings of gold - (ROADMAP 11.46) the glass stained,
+  // a sunset in it: gold round the top where the sun is, through amber, coral, rose and violet to
+  // the deep blue and the sea's green low down, sixteen petals of a warmer glass out from the top
+  // between the ribs, a jewel here and there, the glass of every pane a shade its own
   const DRad = DR - 0.3;
   const Y0 = YD + 0.6;
-  for (let b = 0; b < 4; b++) {
-    const t0 = (b / 4) * (Math.PI / 2);
-    const t1 = ((b + 1) / 4) * (Math.PI / 2);
-    const band = flip(new THREE.SphereGeometry(DRad, 32, 3, 0, Math.PI * 2, Math.PI / 2 - t1, t1 - t0));
-    band.translate(cx, Y0, zm);
-    sky(band, 0.35 + 0.65 * Math.sin((t0 + t1) / 2));
-  }
+  stainedDome(stain, cx, Y0, zm, DRad);
   {
     const glass = new THREE.SphereGeometry(DRad + 0.1, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2);
     glass.translate(cx, Y0, zm);
@@ -1897,6 +1956,77 @@ function vault(bctx, c, mall, g) {
   mall.dome = { x: cx, z: zm, y: Y0, r: DRad };
 }
 
+// ------------------------------------------------------------------ (ROADMAP 11.46) the stained glass
+// the sunset's colours from the top of the dome (u = 1, where the sun is) down to its foot (u = 0)
+const SUNSET = [
+  [0.0, [0.1, 0.56, 0.6]],
+  [0.12, [0.16, 0.3, 0.74]],
+  [0.3, [0.42, 0.26, 0.78]],
+  [0.46, [0.82, 0.26, 0.6]],
+  [0.6, [0.96, 0.4, 0.4]],
+  [0.74, [1.0, 0.56, 0.24]],
+  [0.88, [1.0, 0.74, 0.26]],
+  [1.0, [1.0, 0.9, 0.56]],
+];
+const JEWELS = [[0.1, 0.7, 0.5], [0.16, 0.66, 0.86], [0.98, 0.84, 0.3], [0.9, 0.2, 0.36]];
+export function sunsetAt(u) {
+  for (let i = 1; i < SUNSET.length; i++) {
+    const [u1, c1] = SUNSET[i];
+    if (u <= u1) {
+      const [u0, c0] = SUNSET[i - 1];
+      const k = (u - u0) / (u1 - u0);
+      return [0, 1, 2].map((j) => c0[j] + (c1[j] - c0[j]) * k);
+    }
+  }
+  return SUNSET[SUNSET.length - 1][1];
+}
+
+// the dome's glass, a pane at a time, seen from under it (stain(geo, day, night)): rings of panes
+// up to the lantern's opening, more of them round the wide foot than near the top
+function stainedDome(stain, cx, y0, zm, rad) {
+  let seed = 4127;
+  const r = () => ((seed = (seed * 16807) % 2147483647) % 100000) / 100000;
+  const TOP = Math.PI / 2 - 0.12;
+  const RINGS = 12;
+  const at = (a, t) => [cx + Math.cos(t) * Math.cos(a) * rad, y0 + Math.sin(t) * rad, zm + Math.cos(t) * Math.sin(a) * rad];
+  for (let i = 0; i < RINGS; i++) {
+    const t0 = (i / RINGS) * TOP;
+    const t1 = ((i + 1) / RINGS) * TOP;
+    const ct = Math.cos((t0 + t1) / 2);
+    const n = ct > 0.6 ? 64 : ct > 0.3 ? 32 : 16;
+    const u = (i + 0.5) / RINGS;
+    for (let k = 0; k < n; k++) {
+      const a0 = (k / n) * Math.PI * 2;
+      const a1 = ((k + 1) / n) * Math.PI * 2;
+      const am = (a0 + a1) / 2;
+      // the petals: sixteen, out from the top between the ribs, widest half way down
+      const petal = Math.abs(Math.sin(am * 8)) > 0.3 + 0.75 * Math.abs(u - 0.58);
+      let col = sunsetAt(Math.min(1, u + (petal ? 0.17 : 0)));
+      // (the foot: a border of gold and deep blue, pane and pane about)
+      if (i === 0) col = k % 2 ? [0.98, 0.76, 0.3] : [0.14, 0.24, 0.66];
+      else if (r() < 0.05) col = JEWELS[Math.floor(r() * JEWELS.length)];
+      const [day, night] = glassOf(col, Math.floor(r() * 1e6));
+      const p00 = at(a0, t0);
+      const p10 = at(a1, t0);
+      const p11 = at(a1, t1);
+      const p01 = at(a0, t1);
+      const g = new THREE.BufferGeometry();
+      // (two triangles turned to the dome's middle: seen from under it)
+      g.setAttribute('position', new THREE.Float32BufferAttribute([...p00, ...p11, ...p01, ...p00, ...p10, ...p11], 3));
+      g.computeVertexNormals();
+      stain(g, day, night);
+    }
+  }
+}
+
+// a pane's glass by day (the day behind it) and by night (the hall's lamps on it) - the glass of
+// every pane a shade its own (seed)
+function glassOf(col, seed) {
+  const v = 0.86 + (((seed * 7919) % 1000) / 1000) * 0.22;
+  // (deep enough that its own light - the pen's, render: x1.6 - does not wash it out to white)
+  return [srgb(...col.map((x) => Math.min(1, x * v * 0.6))), srgb(...col.map((x, j) => x * v * 0.42 + [0.01, 0.01, 0.03][j]))];
+}
+
 // ------------------------------------------------------------------ the grand court
 // the fountain (its jets in three rings dance: game/mall.js), the royal palms in their planters with
 // benches round them - four, or in the palm court eight of them in a ring, taller - the chandelier
@@ -1917,6 +2047,17 @@ function court(bctx, c, mall, hctx, g, r) {
   const top = new THREE.RingGeometry(R0 - 0.45, R0, 48).rotateX(-Math.PI / 2);
   top.translate(cx, y + 0.55, zm);
   hallGeo(IN.box, top, srgb(0.86, 0.8, 0.72));
+  // (ROADMAP 11.46) a line of gold light round the rim's lip, and in the floor round the court a
+  // ring of little lights let into the stone
+  const lip = new THREE.TorusGeometry(R0 + 0.02, 0.04, 5, 96).rotateX(Math.PI / 2);
+  lip.translate(cx, y + 0.5, zm);
+  hallGeo(IN.lamp, lip, LIGHT_GOLD);
+  for (let k = 0; k < 40; k++) {
+    const a = (k / 40) * Math.PI * 2;
+    const dot = new THREE.CircleGeometry(0.11, 10).rotateX(-Math.PI / 2);
+    dot.translate(cx + Math.cos(a) * 9.75, y + 0.016, zm + Math.sin(a) * 12.15);
+    hallGeo(IN.lamp, dot, srgb(1, 0.9, 0.72));
+  }
   const water = new THREE.CircleGeometry(R0 - 0.45, 48).rotateX(-Math.PI / 2);
   water.translate(cx, y + 0.38, zm);
   bctx.R.add(M.pool, water, null, nextId());
@@ -1990,6 +2131,10 @@ function court(bctx, c, mall, hctx, g, r) {
     const soil = new THREE.CylinderGeometry(1.42, 1.42, 0.04, 24);
     soil.translate(x, y + 0.68, z);
     hallGeo(IN.box, soil, srgb(0.36, 0.26, 0.2));
+    // (ROADMAP 11.46: a ring of gold light under the planter's lip)
+    const glowR = new THREE.TorusGeometry(1.53, 0.035, 5, 48).rotateX(Math.PI / 2);
+    glowR.translate(x, y + 0.6, z);
+    hallGeo(IN.lamp, glowR, LIGHT_GOLD);
     col.addCircle(x, z, 1.55, 0, y + 0.7, 'prop');
     palm(hctx, r, x, z, (g.kind === 'palms' ? 17 : 15) + r() * 3, { y0: y + 0.7, royal: srgb(0.86, 0.84, 0.8), lean: 0.25 });
     // (a ring of flowers round its foot)
@@ -2048,6 +2193,38 @@ function court(bctx, c, mall, hctx, g, r) {
     hallGeo(IN.lamp, crown, srgb(1, 0.95, 0.82));
     addLight(cx, LV[2] + 3.5, zm, 22, srgb(1, 0.86, 0.6), 1.4);
     addLight(cx, LV[1] + 2.0, zm, 18, srgb(1, 0.88, 0.66), 1.0);
+  }
+  // (ROADMAP 11.46) the crystal rain: round the chandelier, a ring of strands of light hung from a
+  // ring of gold under the vault - hundreds of crystals on them, warm white and champagne, their
+  // ends falling in long and short swags all the way round, the whole court a chandelier
+  if (mall.dome) {
+    const half = (g.vx1 - g.vx0) / 2;
+    const RC = Math.min(half - 4.5, 12.5);
+    const yR = LV[4] + 3.2;
+    const ringC = new THREE.TorusGeometry(RC, 0.09, 6, 96).rotateX(Math.PI / 2);
+    ringC.translate(cx, yR, zm);
+    hallGeo(IN.gloss, ringC, GOLD);
+    const NS = 88;
+    for (let k = 0; k < NS; k++) {
+      const a = (k / NS) * Math.PI * 2;
+      const x = cx + Math.cos(a) * RC;
+      const z = zm + Math.sin(a) * RC;
+      // (the swags: long where the court's four ways open, short between)
+      const len = 9 + 6 * (0.5 + 0.5 * Math.cos(a * 4)) + ((k * 7) % 3) * 0.35;
+      hall(IN.box, x - 0.006, yR - len, z - 0.006, x + 0.006, yR, z + 0.006, srgb(0.86, 0.76, 0.52));
+      for (let yb = yR - 0.45, i = 0; yb > yR - len; yb -= 0.66, i++) {
+        const big = i % 3 === 0;
+        const cr = new THREE.OctahedronGeometry(big ? 0.12 : 0.075, 0);
+        cr.scale(1, 1.6, 1);
+        cr.translate(x, yb, z);
+        hallGeo(IN.lamp, cr, big ? srgb(1, 0.92, 0.76) : (k + i) % 2 ? srgb(0.62, 0.58, 0.5) : srgb(0.66, 0.54, 0.36));
+      }
+      // (a drop of crystal at its end)
+      const drop = new THREE.OctahedronGeometry(0.17, 0);
+      drop.scale(1, 1.9, 1);
+      drop.translate(x, yR - len - 0.3, z);
+      hallGeo(IN.lamp, drop, srgb(1, 0.92, 0.76));
+    }
   }
   // the court's floor-level lights for the galleries round it, bright at night
   for (let lv = 1; lv < LV.length; lv++) for (const dz of [-8, 8]) addLight(cx, LV[lv] + 2.6, zm + dz, 16, srgb(1, 0.9, 0.72), 0.8);

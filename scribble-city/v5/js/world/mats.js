@@ -61,6 +61,9 @@ export function cityMaterials() {
     neon: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.9, 1), emissive: new THREE.Color(2.6, 2.6, 2.6), line: 0.4 }),
     bridgeLight: B({ kind: 'neon', color: srgb(1, 0.85, 0.7), emissive: srgb(1, 0.78, 0.5).multiplyScalar(4), line: 0 }),
     neonSoft: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.95, 0.9), emissive: new THREE.Color(1.6, 1.6, 1.6), line: 0.5 }),
+    // (ROADMAP 11.46) the mall's stained glass, the day through it: its colours deep, the paper hardly
+    // through them, the lead round every pane
+    stainGlass: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 1, 1), emissive: new THREE.Color(1.5, 1.5, 1.5), line: 0.6, wash: 0.2 }),
     bulb: B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.95, 0.85), emissive: new THREE.Color(2.2, 2.2, 2.2), line: 0.5, objMask: true }),
     glint: B({ kind: 'neon', map: glintTex, alphaTest: 0.5, color: srgb(0.9, 0.95, 1), emissive: new THREE.Color(0.35, 0.4, 0.5), line: 0, noShadow: true, side: THREE.DoubleSide }),
     // (ROADMAP 8.3, not with ?classic: the same, a pane a prop that can break, world/glass.js)
@@ -113,7 +116,8 @@ export function cityMaterials() {
   // granite, its smooth ceilings with their lights let in, the smooth edges of its galleries
   // (hallpaint.js)
   const POLISH = { kind: 'ground', vcolor: true, indoor: 'hall', refl: 2, gloss: 0.1, ang: 0.4, wash: 0.85, density: 0.55, line: 0.5 };
-  M.hallMedal = B({ ...POLISH, obj: 0.061, map: hallMedallion() });
+  // (ROADMAP 11.46: its rose of coloured stone washed less - the colours are the point of it)
+  M.hallMedal = B({ ...POLISH, obj: 0.061, map: hallMedallion(), wash: 0.45 });
   M.hallPolish = B({ ...POLISH, obj: 0.103 });
   const cof = hallCoffer();
   M.hallCoffer = B({ obj: 0.172, kind: 'wall', map: cof.map, emMap: cof.em, emissive: new THREE.Color(2.2, 2.1, 1.9), vcolor: true, indoor: 'hall', wash: 0.82, density: 0.6, line: 0.4 });

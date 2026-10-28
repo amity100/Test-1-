@@ -124,7 +124,8 @@ export function hallMarble() {
 }
 
 // The court's floor (the picture's circle its whole width): rings of polished black granite in the
-// white marble - a wide one round the rim and a thin one inside it, a third round the fountain
+// white marble - a wide one round the rim and a thin one inside it, a third round the fountain;
+// between them a star of noble stone (ROADMAP 11.46)
 export function hallMedallion() {
   const N = 1024;
   const C = N / 2;
@@ -146,6 +147,64 @@ export function hallMedallion() {
   ring(0.93, 1.0);
   ring(0.885, 0.9);
   ring(0.57, 0.6);
+  // (ROADMAP 11.46) between the rings a star of noble stone laid into the marble, as the great old
+  // galleries have them: sixteen points - the long ones Siena's gold, the short ones black - on a
+  // ring of Levanto's deep red, every piece set in a line of brass; outside, past the granite, a
+  // band of the Alps' dark green with squares of gold; the chandelier's light on it, warm
+  const BRASS = 'rgb(198, 162, 96)';
+  const ell = (rr, a) => [C + Math.cos(a) * rr * R, C + Math.sin(a) * rr * R];
+  g.lineJoin = 'round';
+  const shape = (pts, fill, lw = 3) => {
+    g.beginPath();
+    g.moveTo(...pts[0]);
+    for (let i = 1; i < pts.length; i++) g.lineTo(...pts[i]);
+    g.closePath();
+    g.fillStyle = fill;
+    g.fill();
+    g.strokeStyle = BRASS;
+    g.lineWidth = lw;
+    g.stroke();
+  };
+  const band = (r0, r1, fill) => {
+    g.beginPath();
+    g.arc(C, C, r1 * R, 0, Math.PI * 2);
+    g.arc(C, C, r0 * R, 0, Math.PI * 2, true);
+    g.fillStyle = fill;
+    g.fill();
+    g.strokeStyle = BRASS;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(C, C, r1 * R, 0, Math.PI * 2);
+    g.stroke();
+    g.beginPath();
+    g.arc(C, C, r0 * R, 0, Math.PI * 2);
+    g.stroke();
+  };
+  band(0.6, 0.645, 'rgb(118, 30, 38)');
+  const P = 16;
+  for (let k = 0; k < P * 2; k++) {
+    const a = (k / (P * 2)) * Math.PI * 2;
+    const long = k % 2 === 0;
+    const w = long ? Math.PI / P : Math.PI / (P * 2);
+    const tip = long ? 0.878 : 0.79;
+    // (each point in two halves, the light side and the dark, as a star inlaid in stone is)
+    const lightC = long ? 'rgb(222, 178, 96)' : 'rgb(58, 58, 64)';
+    const darkC = long ? 'rgb(176, 132, 64)' : 'rgb(26, 26, 30)';
+    shape([ell(0.645, a - w), ell(tip, a), ell(0.645, a)], lightC, 2.5);
+    shape([ell(0.645, a), ell(tip, a), ell(0.645, a + w)], darkC, 2.5);
+  }
+  band(0.9, 0.93, 'rgb(22, 70, 56)');
+  for (let k = 0; k < 72; k++) {
+    const a = (k / 72) * Math.PI * 2;
+    const d = 0.012;
+    shape([ell(0.915, a - d * 1.4), ell(0.915 - d, a), ell(0.915, a + d * 1.4), ell(0.915 + d, a)], 'rgb(218, 176, 96)', 1.5);
+  }
+  // the chandelier's light on it: warm, soft
+  const glow = g.createRadialGradient(C, C, R * 0.5, C, C, R * 0.95);
+  glow.addColorStop(0, 'rgba(255, 226, 170, 0.16)');
+  glow.addColorStop(1, 'rgba(255, 226, 170, 0)');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, N, N);
   return canvasTexture(c);
 }
 
