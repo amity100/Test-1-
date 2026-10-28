@@ -34,7 +34,7 @@ import { markRoad, markCrossing, nodeOf, blockAt, schoolBeside, BIKE_AVES, BIKE_
 const LIVE = new Set(['houses', 'bungalows', 'apartments', 'villas', 'mansions', 'school']);
 const BARE = new Set(['pier', 'beach', 'point', 'bayfront', 'arena']);
 // the blocks of the busy town: iron posts on their corners, the loading zones
-const TOWN = new Set(['towers', 'offices', 'condos', 'galleria', 'galleriaW', 'galleriaE', 'dining', 'warehouses', 'lofts', 'walls', 'clubs', 'calle', 'boulevard', 'theatres', 'starlight', 'velvet', 'mixed', 'stripmall', 'boardwalk', 'plaza']);
+const TOWN = new Set(['towers', 'offices', 'condos', 'galleria', 'galleriaW', 'galleriaE', 'lanes', 'dining', 'warehouses', 'lofts', 'walls', 'clubs', 'calle', 'boulevard', 'theatres', 'starlight', 'velvet', 'mixed', 'stripmall', 'boardwalk', 'plaza']);
 
 export const TILE = 180;
 const X0 = -1980;

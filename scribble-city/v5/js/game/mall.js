@@ -13,6 +13,17 @@ import { CURB } from '../world/mainland/plan.js';
 // they go too.
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+// (one of the ways of a mall of lanes, a bigger one the likelier: world/mainland/lanes.js)
+function pickArea(list) {
+  let sum = 0;
+  for (const w of list) sum += (w.x1 - w.x0) * (w.z1 - w.z0);
+  let t = Math.random() * sum;
+  for (const w of list) {
+    t -= (w.x1 - w.x0) * (w.z1 - w.z0);
+    if (t <= 0) return w;
+  }
+  return list[list.length - 1];
+}
 const BAGS = [[0.95, 0.45, 0.62], [0.32, 0.72, 0.86], [0.98, 0.78, 0.3], [0.62, 0.48, 0.86], [0.4, 0.8, 0.5], [0.98, 0.55, 0.35], [0.95, 0.95, 0.92], [0.18, 0.18, 0.22]];
 const OOH = ['Ooh, look at that!', 'I love this one!', 'Too expensive...', 'Maybe next time.', 'That would look great on you!', 'On sale!', 'Hmm...'];
 const CHAT = ['Where to next?', 'Let\'s get something to eat.', 'I need new shoes.', 'This mall is huge!', 'Look, an escalator!', 'One more store?', 'I\'m starving!', 'Nice bag!'];
@@ -311,6 +322,7 @@ export class MallLife {
     for (const [m, st] of this.active) {
       this.tick(m, st, dt);
       if (m.mega) this.machines(m, st, dt);
+      else if (m.sky) this.skyOf(m);
     }
   }
 
@@ -405,7 +417,7 @@ export class MallLife {
     if (e) {
       const g = add(e.x + 2.5, e.zIn, guardLook(), (q, dt) => this.guard(q, dt));
       g.st = st;
-      g.beat = [{ x: h.x0 + 5.6, z: h.z0 + 9 }, { x: h.x0 + 5.6, z: h.z1 - 9 }, { x: h.x1 - 5.6, z: h.z1 - 9 }, { x: h.x1 - 5.6, z: h.z0 + 9 }];
+      g.beat = m.beat || [{ x: h.x0 + 5.6, z: h.z0 + 9 }, { x: h.x0 + 5.6, z: h.z1 - 9 }, { x: h.x1 - 5.6, z: h.z1 - 9 }, { x: h.x1 - 5.6, z: h.z0 + 9 }];
       g.c.speed = 0.95;
     }
     if (m.bins && m.bins.length) {
@@ -540,10 +552,11 @@ export class MallLife {
       x = m.escalator.x0 + 2.35;
       z = m.escalator.z0 + 0.2;
     } else if (already) {
-      // somewhere in the hall already
+      // somewhere in the hall already (in the lanes, on one of the ways - not in a room: m.walk)
       for (let t = 0; t < 20; t++) {
-        x = m.hall.x0 + 1 + Math.random() * (m.hall.x1 - m.hall.x0 - 2);
-        z = m.hall.z0 + 2 + Math.random() * (m.hall.z1 - m.hall.z0 - 4);
+        const w = m.walk ? pickArea(m.walk) : { x0: m.hall.x0 + 1, x1: m.hall.x1 - 1, z0: m.hall.z0 + 2, z1: m.hall.z1 - 2 };
+        x = w.x0 + Math.random() * (w.x1 - w.x0);
+        z = w.z0 + Math.random() * (w.z1 - w.z0);
         if (nav.free(x, z)) break;
       }
     } else {
@@ -2010,12 +2023,15 @@ export class MallLife {
     this.carry(m, dt);
     this.dance(m, dt);
     // (the sky through the glass of the roof and the dome: by day, by night)
-    if (m.sky) {
-      const h = this.game.daynight ? this.game.daynight.hour : 13;
-      const night = h < 6.4 || h > 19.4;
-      m.sky.day.visible = !night;
-      m.sky.night.visible = night;
-    }
+    if (m.sky) this.skyOf(m);
+  }
+
+  // (the sky over a mall by day, by night: through its glass, or painted over its lanes)
+  skyOf(m) {
+    const h = this.game.daynight ? this.game.daynight.hour : 13;
+    const night = h < 6.4 || h > 19.4;
+    m.sky.day.visible = !night;
+    m.sky.night.visible = night;
   }
 
   // the glass lifts: up and down their floors in turn, a while at each with the gate open; you in

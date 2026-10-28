@@ -162,6 +162,9 @@ const SPECIAL = {
   '0,8': 'galleriaE',
   '1,8': 'galleria',
   '2,8': 'galleriaW',
+  // (and across Flagler Street from its middle hall, under a canopy of glass, its lanes: Via
+  // Inkwell - ROADMAP 11.34, world/mainland/lanes.js)
+  '1,9': 'lanes',
   '2,9': 'plaza',
   // Paintwood: the walls with the murals round their yard; the clubs on 29th Street
   '1,2': 'walls',
@@ -185,8 +188,8 @@ const SPECIAL = {
 };
 
 // (the specials that came after the plan was first drawn: ROADMAP 11.31, 11.32, the Galleria's west
-// and east halls)
-const LATE = new Set(['2,8', '0,8']);
+// and east halls; 11.34, its lanes)
+const LATE = new Set(['2,8', '0,8', '1,9']);
 
 // what each district builds where nothing special stands (the kinds of world/mainland/blocks.js)
 const DISTRICT_MIX = {
@@ -259,6 +262,7 @@ export const PLACES = [
   // (mega: the giant one, world/mainland/megamall.js - the map shows it big, at any zoom; at its dome,
   // in the middle of its three blocks)
   { id: 'galleria', kind: 'mall', mega: true, name: 'Downtown Galleria', heb: 'הגלריה של דאונטאון', block: '1,8', at: [-835, -37] },
+  { id: 'lanes', kind: 'mall', name: 'Via Inkwell', heb: 'ויה אינקוול — הסמטאות של הגלריה', block: '1,9', at: [-835, 97] },
   { id: 'starlight', kind: 'mall', name: 'Starlight Center', heb: 'מרכז סטארלייט', block: '6,3' },
   { id: 'valleyplaza', kind: 'mall', name: 'Valley Plaza', heb: 'ואלי פלאזה', block: '9,9' },
   { id: 'neonink', kind: 'club', name: 'NEON INK', heb: 'מועדון ניאון אינק', block: '2,3' },

@@ -10,6 +10,7 @@ import { SHOP_NAMES } from '../blocks.js';
 import { M_AVES, M_STREETS, CURB, towersOf } from './plan.js';
 import { buildMall, buildStripMall, STORE_NAMES } from './mall.js';
 import { buildMegaMall } from './megamall.js';
+import { buildLanes } from './lanes.js';
 import { buildVenue } from './venues.js';
 import { friendStandIn } from '../streets.js';
 import { buildPier } from './pier.js';
@@ -85,6 +86,16 @@ const MALLS = {
     foodSign: 'BAY CAFES',
     anchor: { name: 'NORDSKETCH', kind: 'fashion', side: 1, floors: 2 },
   },
+  // (v5, ROADMAP 11.34: the Galleria's lanes across Flagler Street, Via Inkwell - its houses' shops
+  // in the order they are built: the west wall's from the food hall north, the east wall's from the
+  // doors south, the island's; the food hall's counters, east to west - world/mainland/lanes.js)
+  lanes: {
+    name: 'VIA INKWELL', heb: 'ויה אינקוול', sign: 'VIA INKWELL', font: 'Rubik',
+    stores: ['books', 'flowers', 'jewelry', 'perfume', 'boutique', 'shoes', 'optics', 'toys', 'music', 'fashion',
+      'icecream', 'cafe', 'fashion', 'books', 'shoes', 'boutique', 'phones', 'sports', 'jewelry', 'flowers',
+      'toys', 'perfume', 'boutique', 'fashion', 'music', 'shoes', 'books', 'optics', 'fashion', 'jewelry'],
+    food: ['pizza', 'sushi', 'burger', 'tacos', 'noodles', 'icecream'],
+  },
   starlight: {
     name: 'STARLIGHT CENTER', heb: 'מרכז סטארלייט', open: true, wall: '#f6e3d0', trim: '#e0574f', signCol: '#ffe14f', font: 'Permanent Marker',
     stores: ['fashion', 'sports', 'electronics', 'shoes', 'toys', 'perfume', 'fashion', 'jewelry', 'books', 'music', 'arcade', 'fashion', 'boutique', 'cafe'],
@@ -128,6 +139,7 @@ function mixOf(b) {
     case 'galleria':
     case 'galleriaW':
     case 'galleriaE':
+    case 'lanes':
     case 'dining':
       return MIXES.towers;
     case 'warehouses':
@@ -319,6 +331,9 @@ function* buildKind(bctx, b) {
       // (and one in the mall's hall, among the shoppers - not in the mega mall's, full as it is)
       if (bctx.mall && bctx.mall.hall && !bctx.mall.mega) friendStandIn(bctx, bctx.mall.hall, { from: 4, step: 2 });
       return;
+    case 'lanes':
+      yield* buildLanes(bctx, b, MALLS.lanes);
+      return;
     case 'stripmall':
       yield* buildStripMall(bctx, b, MALLS.stripmall);
       return;
@@ -461,6 +476,8 @@ export function* buildMBlock(world, b) {
         world.arena = bctx.arena;
         world.indoorAreas.push(bctx.arena.hall);
       }
+      // (v5, ROADMAP 11.34: the walls that hide what is behind them - render/occlusion.js)
+      if (bctx.occBoxes && world.occluders) for (const q of bctx.occBoxes) world.occluders.push(q);
       // (a mall: its hall is indoors for the weather, and its people's - game/mall.js)
       if (bctx.mall) {
         world.malls.push(bctx.mall);
@@ -476,6 +493,12 @@ export function* buildMBlock(world, b) {
     detach() {
       world.mainland.onBlock(live, false);
       world.mainland.hide(group);
+      if (bctx.occBoxes && world.occluders) {
+        for (const q of bctx.occBoxes) {
+          const k = world.occluders.indexOf(q);
+          if (k >= 0) world.occluders.splice(k, 1);
+        }
+      }
       if (world.interiors) world.interiors.removeAll(bctx.stock);
       const col = world.collision;
       col.release(bctx.col.boxes.map((x) => x.id));

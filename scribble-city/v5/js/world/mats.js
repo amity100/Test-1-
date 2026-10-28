@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeSurface, srgb, hex, canvasTexture } from '../render/materials.js';
 import { streetTexture, paverTexture, frondTexture, aveTexture, crossTexture, asphaltTexture, crosswalkTexture, tileTexture, glintTexture, floorTexture, goodsTexture, GOODS_CELLS, sandTexture, woodDeckTexture } from './paint.js';
 import { canvas } from './kit.js';
-import { hallMarble, hallMedallion, hallCoffer, hallFrieze, decoStone } from './hallpaint.js';
+import { hallMarble, hallMedallion, hallCoffer, hallFrieze, decoStone, drawnSky, laneArt } from './hallpaint.js';
 
 // The pens of the city, made once. Most of them take their colour from the parts (a colour per
 // vertex), so a hundred pink and mint and yellow buildings are one material, drawn per chunk.
@@ -123,6 +123,16 @@ export function cityMaterials() {
   M.hallMarbleWall = B({ obj: 0.314, kind: 'wall', map: M.hallFloor.uniforms.uMap.value, worldMap: 4.8, vcolor: true, indoor: 'hall', gloss: 0.3, wash: 0.85, density: 0.55, line: 0.5 });
   // (and its art deco outside's stone, laid on the world in squares of 3 m)
   M.decoStone = B({ obj: 0.385, kind: 'wall', map: decoStone(), worldMap: 3, vcolor: true, wash: 0.7, density: 0.8 });
+  // (ROADMAP 11.34) the sky painted over Via Inkwell's lanes (hallpaint.js drawnSky), by day and by
+  // night: lit by itself, and no shadow from it or from the roof over it - the sun comes down into
+  // the lanes as into a street (world/mainland/lanes.js)
+  for (const [k, night] of [['laneSky', false], ['laneSkyNight', true]]) {
+    const t = drawnSky(night);
+    M[k] = B({ kind: 'neon', map: t, emMap: t, color: srgb(1, 1, 1), emissive: new THREE.Color(1.0, 1.0, 1.0), line: 0.15, noShadow: true, side: THREE.DoubleSide });
+  }
+  M.roofLight = B({ kind: 'wall', vcolor: true, noShadow: true });
+  // (its artists' alley: the murals on its walls, the sketches on the easels and the lines)
+  M.laneArt = B({ kind: 'wall', map: laneArt(), color: srgb(1, 1, 1), side: THREE.DoubleSide, line: 0.35, wash: 0.75 });
   M.floors = {};
   for (const k of ['checker', 'tiles', 'mats', 'wood', 'concrete', 'carpet']) M.floors[k] = B({ kind: 'ground', map: floorTexture(k), vcolor: true, indoor: true, ang: k === 'wood' ? 1.5708 : 0.4, wash: 0.72, line: 0.5 });
   M.srgb = srgb;
