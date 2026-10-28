@@ -142,7 +142,8 @@ export class Game {
     this.figures = new FigureRenderer(scene);
     // (v5: from how far a person is drawn in the simple shapes, render/people.js: on a phone's
     // small screen a person 40 m away is some 20 pixels tall)
-    this.figures.bodies.lodFar = this.pipe.low ? 40 : 55;
+    this.figures.bodies.lodFar = this.pipe.low ? 32 : 55;
+    this.figures.bodies.detailFar = this.pipe.low ? 28 : 60;
     this.bubbles = new Bubbles(this.pipe.overlay);
     this.fx = new Effects(this);
     this.cars = new CarRenderer(scene);
@@ -1265,7 +1266,9 @@ export class Game {
     }
     this.focus.copy(player.inVehicle ? player.inVehicle.pos : player.pos);
     if (this.state !== 'title') this.hud.update(dt);
-    this.updatePrompts();
+    // (a phone: what the buttons say, worked out every other frame)
+    this._promptN = (this._promptN || 0) + 1;
+    if (!this.pipe.low || this._promptN % 2 === 0) this.updatePrompts();
     this.audio.tick();
     if (this.soundscape) this.soundscape.update(dt);
     if (this.radio) this.radio.update(dt);

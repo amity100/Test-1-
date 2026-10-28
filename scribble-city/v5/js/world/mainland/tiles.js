@@ -526,11 +526,13 @@ export function* buildGroundTile(world, t) {
   } finally {
     setLightOwner(null);
   }
-  const meshes = yield* tctx.B.flushSteps(group, { static: true, merge: world.merge, steps: true });
+  // (a phone: each pen of the tile in one draw - see world/mainland/blocks.js)
+  const whole = world.low ? { max: 60000, ok: (pens) => !pens.some((p) => world.smallPens.has(p)) } : null;
+  const meshes = yield* tctx.B.flushSteps(group, { static: true, merge: world.merge, steps: true, whole });
   const cull = [];
   for (const m of meshes) {
     const pen = m.userData.pens ? m.userData.pens[0] : m.material;
-    if (world.smallPens.has(pen)) cull.push({ m, r: world.low ? 110 : 150 });
+    if (world.smallPens.has(pen)) cull.push({ m, r: world.low ? 85 : 150 });
     // (the paint, a draw of its own: flat on the street 2 cm up it throws no shadow worth the sun's
     // map, and the wet street's mirror would show it just under itself, where the paint covers it -
     // in neither, render/pipeline.js)

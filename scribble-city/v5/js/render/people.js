@@ -595,6 +595,9 @@ export class PersonRenderer {
     // (farther than this a person is drawn in the simple shapes in the picture too: game.js sets
     // it for a phone and a computer)
     this.lodFar = 40;
+    // (the pen strokes over a whole person - a chain, a hood's strings, a logo: game/doodle.js
+    // drawDetails - within this far)
+    this.detailFar = 60;
     // (the little things of a face, the soles and the pockets are inside the shadow of what they
     // are on: the sun's view leaves them out; and in the wet street's mirror, at half the pixels
     // and smeared, they are not there either)

@@ -228,7 +228,9 @@ export class HUD {
       this.mapScale += (want - this.mapScale) * (1 - Math.exp(-dt * 1.6));
       if (Math.abs(want - this.mapScale) < 0.002) this.mapScale = want;
     }
-    this.drawMinimap();
+    // (a phone: the minimap drawn every other frame)
+    this.mapN = (this.mapN || 0) + 1;
+    if (!(this.game.pipe && this.game.pipe.low) || this.mapN % 2 === 0) this.drawMinimap();
   }
 
   setPrompt(text) {

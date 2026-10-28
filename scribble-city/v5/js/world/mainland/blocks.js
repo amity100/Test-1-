@@ -436,14 +436,19 @@ export function* buildMBlock(world, b) {
     yield;
   }
   // the pens, merged a draw at a time
-  const meshes = yield* bctx.B.flushSteps(group, { static: true, merge: world.merge, steps: true });
+  // (a phone: each pen of the block in one draw, not one in each 96 m of it - a phone feels every
+  // draw more than a little more drawn off the screen; the small things and the rooms stay as they
+  // are, to go with the distance)
+  const whole = world.low ? { max: 60000, ok: (pens) => !pens.some((p) => world.smallPens.has(p)) } : null;
+  const meshes = yield* bctx.B.flushSteps(group, { static: true, merge: world.merge, steps: true, whole });
   const rooms = yield* bctx.R.flushSteps(group, { static: true, indoor: true, merge: world.merge, steps: true });
   for (const m of rooms) m.renderOrder = 1;
   const cull = [];
-  for (const m of rooms) cull.push({ m, r: bctx.mall ? 90 : 55 });
+  // (a phone: the rooms in sight nearer - a mall's stores past 65 m are their windows' light)
+  for (const m of rooms) cull.push({ m, r: bctx.mall ? (world.low ? 65 : 90) : world.low ? 45 : 55 });
   for (const m of meshes) {
     const pen = m.userData.pens ? m.userData.pens[0] : m.material;
-    if (world.smallPens.has(pen)) cull.push({ m, r: world.low ? 110 : 150 });
+    if (world.smallPens.has(pen)) cull.push({ m, r: world.low ? 85 : 150 });
   }
   const live = {
     group,

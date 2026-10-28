@@ -154,7 +154,8 @@ export class Mainland {
     // (every plot to draw a home on, from the bake: [key, x, z] - the map, game/friend.js)
     world.allPlots = (o.farData && o.farData.plots) || [];
     world.allStands = (o.farData && o.farData.stands) || [];
-    const near = o.low ? 175 : 230;
+    // (a phone: the blocks in full within 150 m; past that their far bodies, world/mainland/far.js)
+    const near = o.low ? 150 : 230;
     const cells = M_BLOCKS.map((b) => ({
       id: `b${b.id}`,
       rect: { x0: b.rect.x0 - 12, x1: b.rect.x1 + 12, z0: b.rect.z0 - 12, z1: b.rect.z1 + 12 },
@@ -175,10 +176,10 @@ export class Mainland {
       });
     }
     // the streets, a tile at a time (they are seen from further off than the blocks' insides)
-    const gnear = o.low ? 220 : 280;
+    const gnear = o.low ? 190 : 280;
     for (const t of groundTiles()) cells.push({ id: t.id, rect: t.rect, near: gnear, far: gnear + 90, tile: t, build: (c) => buildGroundTile(this.world, c.tile) });
     this.pipe = o.pipe || null;
-    this.stream = new Streamer(cells, { budget: o.low ? 4 : 3, rush: o.low ? 10 : 8, warm: (m) => this.warm(m) });
+    this.stream = new Streamer(cells, { budget: o.low ? 2.5 : 3, rush: o.low ? 6 : 8, adaptive: !!o.low, warm: (m) => this.warm(m) });
     this.blocks = new Map();
     // (the graphics card's copy of a mesh made before it is shown: drawn once, alone, into a
     // speck of a picture nobody sees)

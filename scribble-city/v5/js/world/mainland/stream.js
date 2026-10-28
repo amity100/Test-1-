@@ -23,6 +23,10 @@ export class Streamer {
   constructor(cells, o = {}) {
     this.cells = cells;
     this.budget = o.budget || 3;
+    // (a phone: after a slow frame, less building in the next one - unless what is missing is right
+    // by you)
+    this.adaptive = !!o.adaptive;
+    this.lastAt = 0;
     this.rush = o.rush || 9;
     this.warm = o.warm || null;
     this.scale = 1;
@@ -104,6 +108,8 @@ export class Streamer {
 
   update(x, z, vx = 0, vz = 0) {
     const t0 = performance.now();
+    const lastAt = this.lastAt;
+    this.lastAt = t0;
     // let go of what is far behind (one a frame)
     for (const [id, l] of this.live) {
       const c = l.cell;
@@ -134,7 +140,11 @@ export class Streamer {
     }
     // the slice of time: more when the cell is close to you and not there
     const near = this.distTo(this.job.cell, x, z);
-    const slice = near < 70 ? this.rush * 1.6 : near < 140 ? this.rush : this.budget;
+    let slice = near < 70 ? this.rush * 1.6 : near < 140 ? this.rush : this.budget;
+    if (this.adaptive) {
+      const gap = lastAt ? t0 - lastAt : 0;
+      if (gap > 45 && near > 40) slice = Math.min(slice, near < 140 ? this.rush * 0.5 : this.budget * 0.5);
+    }
     const job = this.job;
     for (;;) {
       let r;

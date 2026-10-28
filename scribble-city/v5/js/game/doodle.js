@@ -1519,6 +1519,6 @@ export class Doodle {
     this.ensureShapes();
     const camDist = camPos.distanceTo(this.pos);
     this.fr.bodies.draw(this, camDist);
-    if (camDist < 60) this.drawDetails();
+    if (camDist < this.fr.bodies.detailFar) this.drawDetails();
   }
 }

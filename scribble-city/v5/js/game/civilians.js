@@ -108,6 +108,9 @@ const _steer = { x: 0, z: 0, k: 1 };
 
 // beyond this far from the camera a walker steps every other frame (see Civilians.update)
 const FAR_STEP = 40;
+// (on a phone: every other frame from this near, every third from FAR_THIRD_LOW)
+const FAR_STEP_LOW = 25;
+const FAR_THIRD_LOW = 55;
 
 // (GTA IV pass) What the hands do while a line is said. Everybody who says something (every
 // bubble of the city comes by Civilians.spoke) says it with their hands too - explaining with both,
@@ -1086,6 +1089,11 @@ export class Civilians {
     const cam = game.camera.position;
     const social = game.crowds && game.crowds.social;
     this.frameN = (this.frameN || 0) + 1;
+    // (a phone: every other frame from 25 m, and every third from 55 m - a walker that does not
+    // step this frame is not posed or shaped again either: game/doodle.js shapesDirty)
+    const low = !!(game.pipe && game.pipe.low);
+    const far2 = (low ? FAR_STEP_LOW : FAR_STEP) ** 2;
+    const far3 = low ? FAR_THIRD_LOW ** 2 : Infinity;
     this.buildGrid();
     for (let i = 0; i < this.list.length; i++) {
       const c = this.list[i];
@@ -1098,7 +1106,9 @@ export class Civilians {
         } else {
           const dx = c.pos.x - cam.x;
           const dz = c.pos.z - cam.z;
-          if (dx * dx + dz * dz > FAR_STEP * FAR_STEP && ((this.frameN + i) & 1)) {
+          const d2 = dx * dx + dz * dz;
+          const rest = d2 > far3 ? (this.frameN + i) % 3 !== 0 : d2 > far2 && ((this.frameN + i) & 1) === 1;
+          if (rest) {
             c.owed = step;
             continue;
           }

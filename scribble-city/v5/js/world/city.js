@@ -177,7 +177,7 @@ export function buildCity(scene, o = {}) {
   for (const m of rooms) m.renderOrder = 1;
   const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN', 'beach', 'whole', 'hills', 'shore']);
   const cull = [];
-  for (const m of rooms) cull.push({ m, r: 55 });
+  for (const m of rooms) cull.push({ m, r: o.low ? 45 : 55 });
   for (const m of meshes) {
     if (special.has(m.name.split('#')[0]) || m.name.startsWith('lm_')) continue;
     // (a shared draw's pens are all of one kind here)
@@ -185,8 +185,8 @@ export function buildCity(scene, o = {}) {
     // (the little things are not worth a mirror image in the wet street)
     if (small.has(pen) && pen !== M.lampGlass) m.userData.noReflect = true;
     if (o.low && (pen === M.frame || pen === M.awning || pen === M.steel)) m.userData.noReflect = true;
-    if (small.has(pen)) cull.push({ m, r: o.low ? 110 : 150 });
-    else if (far.has(pen)) cull.push({ m, r: o.low ? 200 : 260 });
+    if (small.has(pen)) cull.push({ m, r: o.low ? 85 : 150 });
+    else if (far.has(pen)) cull.push({ m, r: o.low ? 170 : 260 });
   }
   penGroups = sharedPens.size;
   const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, pens: penGroups, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length };

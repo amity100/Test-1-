@@ -505,10 +505,20 @@ const _sub = new THREE.Matrix4();
 const _frustum = new THREE.Frustum();
 const _frustum2 = new THREE.Frustum();
 const _fwd = new THREE.Vector3();
+// (touchesStatic)
+const _tbox = new THREE.Box3();
+const _tc = new THREE.Vector3();
 const _ax = new THREE.Vector3();
 const _frustumBox = new THREE.Frustum();
 // (ROADMAP 11.32) how far a mall's polished floor reflects: the hall, and what is near it
 const FLOOR_FAR = 150;
+// (a phone: the mirror under the street and the bay holds nothing past this of its eye - the far
+// city's reflection is a smear in the ripples anyway, and drawing it again costs a phone as much as
+// the drawing itself)
+const MIRROR_FAR_LOW = 220;
+// (a phone: water in sight that the mirror's picture would be read in less of than this - a
+// fountain, a pool across the square - shows the sky, and the city is not drawn again for it)
+const SMALL_WATER_LOW = 0.06;
 const _box = new THREE.Box3();
 const _sph = new THREE.Sphere();
 // how far the water's ripples, the rain's rings and the five taps down the water reach from where a
@@ -590,6 +600,13 @@ function movingParts(root) {
     if (dyn) out.push(c);
   }
   return out;
+}
+
+// the far side of a frustum moved in to dist along cam's view (render the mirror's eye)
+function farPlane(fr, cam, dist) {
+  cam.getWorldDirection(_fwd);
+  _v.copy(cam.position).addScaledVector(_fwd, dist);
+  fr.planes[4].setFromNormalAndCoplanarPoint(_fwd.negate(), _v);
 }
 
 // the sun's frame (x across it, level; y up its face; z along it towards the sun)
@@ -1414,7 +1431,35 @@ export class Pipeline {
       }
     });
     if (this.solid) this.solid.key = NaN;
-    this.staticSoft = true;
+    if (this.touchesStatic(root)) this.staticSoft = true;
+  }
+
+  // (v5) whether a piece that came or went is in the still city's map in use, as the sun sees it:
+  // the mainland's blocks come and go all the time, mostly far beyond it, and drawing the map again
+  // for each of those was a big part of a phone's frames on the mainland
+  touchesStatic(root) {
+    const m = this.stCur;
+    if (!m || !m.on || !this.shadowS) return true;
+    const box = _tbox.setFromObject(root);
+    if (box.isEmpty()) return false;
+    const texel = (this.sunCam.right - this.sunCam.left) / this.shadowS;
+    const hx = (this.shadowS / 2 + this.stMx) * texel + 4;
+    const hy = (this.shadowS / 2 + this.stMy) * texel + 4;
+    sunFrame(m.sun, _fx, _fy, _fz);
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      _tc.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      const px = _tc.dot(_fx);
+      const py = _tc.dot(_fy);
+      if (px < x0) x0 = px;
+      if (px > x1) x1 = px;
+      if (py < y0) y0 = py;
+      if (py > y1) y1 = py;
+    }
+    return x1 > m.sx - hx && x0 < m.sx + hx && y1 > m.sy - hy && y0 < m.sy + hy;
   }
 
   removeStatic(root) {
@@ -1431,7 +1476,7 @@ export class Pipeline {
       this.solid.list = this.solid.list.filter((e) => !gone.has(e.o));
       this.solid.key = NaN;
     }
-    this.staticSoft = true;
+    if (this.touchesStatic(root)) this.staticSoft = true;
   }
 
   // leave out (for this one pass) the pieces surely behind the buildings, as cam sees them
@@ -2045,6 +2090,17 @@ export class Pipeline {
     const reg = this._reg;
     const floor = this.floorY !== null;
     const part = this.mirrorPartOn && !floor && this.waterRegion(tm, reg);
+    this.reflSmall = false;
+    if (part && !reg.empty && this.low) {
+      const a = Math.max(0, Math.min(1, reg.x1) - Math.max(0, reg.x0)) * Math.max(0, Math.min(1, reg.y1) - Math.max(0, reg.y0));
+      if (a < SMALL_WATER_LOW) {
+        this.reflSmall = true;
+        shared.uReflOn.value = 0;
+        this._mirrorRect = null;
+        this.mirrorShare = 0;
+        return;
+      }
+    }
     if (part && reg.empty) {
       // (no water in sight just now, seen a moment ago: nothing reads the mirror, nothing is drawn)
       this._drawn.empty = true;
@@ -2069,8 +2125,11 @@ export class Pipeline {
     // the still city's are on their own layer already, the rest are hidden for the moment
     const hidden = this._mirrorHide || (this._mirrorHide = []);
     hidden.length = 0;
-    // (a mall's floor: the hall itself is in it - its rooms, its people, its small things)
-    if (floor) rc.layers.enable(MIRRORLESS);
+    // (a mall's floor: the hall itself is in it - its rooms, its people, its small things; on a
+    // phone only the hall: its stone, its rails, its glass and its signs)
+    if (floor) {
+      if (!this.low) rc.layers.enable(MIRRORLESS);
+    }
     else this.hideFromMirror(this.scene, hidden);
     const keep = shared.uRefl.value;
     shared.uRefl.value = BLANK;
@@ -2115,6 +2174,7 @@ export class Pipeline {
       _sub.set(2 / (x1 - x0), 0, 0, -(x1 + x0) / (x1 - x0), 0, 2 / (y1 - y0), 0, -(y1 + y0) / (y1 - y0), 0, 0, 1, 0, 0, 0, 0, 1);
       _pm.multiplyMatrices(_sub, rc.projectionMatrix).multiply(rc.matrixWorldInverse);
       _frustum2.setFromProjectionMatrix(_pm);
+      if (this.low) farPlane(_frustum2, rc, MIRROR_FAR_LOW);
       this.hideOutside(this.scene, _frustum2, out);
     } else {
       this._mirrorRect = null;
@@ -2140,6 +2200,12 @@ export class Pipeline {
           P[5].set(_ax.set(0, -1, 0), b[4]);
           this.hideOutside(this.scene, _frustumBox, out);
         }
+      } else if (this.low) {
+        // (the streets wet: all of the mirror is read, but on a phone not what is far off)
+        _pm.multiplyMatrices(rc.projectionMatrix, rc.matrixWorldInverse);
+        _frustum2.setFromProjectionMatrix(_pm);
+        farPlane(_frustum2, rc, MIRROR_FAR_LOW);
+        this.hideOutside(this.scene, _frustum2, out);
       }
     }
     this.r.setRenderTarget(rt);
@@ -2157,7 +2223,6 @@ export class Pipeline {
   }
 
   render(center) {
-    const r = this.r;
     const T = this.timer;
     // (the pens once a pixel could not be drawn on this graphics card: in one pass from now on)
     if (this.pensBroken && this.deferred) this.setPens(false);
@@ -2165,6 +2230,25 @@ export class Pipeline {
     if (this.pensMode === 'auto' && !this.pensKnown && !this._otherAsked && performance.now() > this.otherAt) this.prepareOtherPens();
     this.ensure();
     if (this.solid) this.solid.update();
+    // (v5, ROADMAP 11.39) the matrices of the whole scene worked out once a frame, here: three.js
+    // would walk all its two thousand pieces again in every pass that draws it (the sun's view, its
+    // slices, the mirror, the drawing), and a phone feels each walk
+    this.scene.updateMatrixWorld();
+    const autoScene = this.scene.matrixWorldAutoUpdate;
+    const root0 = this.staticRoot;
+    const autoRoot = root0 ? root0.matrixWorldAutoUpdate : true;
+    this.scene.matrixWorldAutoUpdate = false;
+    if (root0) root0.matrixWorldAutoUpdate = false;
+    try {
+      this.renderFrameInner(center, T);
+    } finally {
+      this.scene.matrixWorldAutoUpdate = autoScene;
+      if (root0) root0.matrixWorldAutoUpdate = autoRoot;
+    }
+  }
+
+  renderFrameInner(center, T) {
+    const r = this.r;
     r.autoClear = true;
     const taa = this.taa;
     if (taa) this.taaBegin();
@@ -2192,7 +2276,7 @@ export class Pipeline {
     // reflects the sky until the mirror is there, a frame or two later - mirrorWanted)
     this.floorMirror();
     const want = this.mirrorWanted();
-    shared.uReflOn.value = want ? 1 : 0;
+    shared.uReflOn.value = want && !this.reflSmall ? 1 : 0;
     if (!want) this.reflDone = false;
     else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale() || !this.mirrorCovers()) {
       if (T) T.begin('reflection');

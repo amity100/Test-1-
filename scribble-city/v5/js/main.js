@@ -13,6 +13,7 @@ import { buildPanes } from './world/glass.js';
 import { Game } from './game/game.js';
 import { isTouchDevice } from './core/util.js';
 import { initProvoke } from './render/provoke.js';
+import { cacheUniformArrays } from './render/glcache.js';
 import { readMemo } from './render/depthtrial.js';
 import { BUILD } from './game/telemetry.js';
 import { browserName } from './game/perf.js';
@@ -102,6 +103,9 @@ async function boot() {
   // out of the drawing and the mirror (render/provoke.js; ?provokelast: as it was). And again if the
   // graphics context is lost and comes back
   initProvoke(gl0, params.has('provokelast'));
+  // (v5, ROADMAP 11.39) the shared arrays sent to a shader only when they changed (render/glcache.js;
+  // ?nouniformcache: as it was)
+  if (!params.has('nouniformcache')) cacheUniformArrays(gl0);
   renderer.domElement.addEventListener('webglcontextrestored', () => initProvoke(renderer.getContext(), params.has('provokelast')));
   const dbg = gl0.getExtension('WEBGL_debug_renderer_info');
   pipe.gpuName = String((dbg && gl0.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) || gl0.getParameter(gl0.RENDERER) || '');
