@@ -36,8 +36,9 @@ const CREWS = [
   [['cop', 'copEraser'], ['cop', 'cop']],
   [['cop', 'copEraser'], ['cop', 'cop']],
   [['swat', 'cop'], ['swat', 'copEraser']],
-  [['swat', 'swat'], ['swat', 'copEraser']],
-  [['swat', 'swat'], ['swat', 'copEraser']],
+  // (ROADMAP 11.43: from four stars a marksman too - game/enemies.js)
+  [['swat', 'swat'], ['swat', 'marksman']],
+  [['swat', 'marksman'], ['marksman', 'swat']],
 ];
 
 const _v = new THREE.Vector3();

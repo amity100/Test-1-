@@ -13,6 +13,8 @@ const RISE = 0.8;
 
 // armor: how much of an eraser hit actually rubs out (bigger guys take more rubbing)
 // mag / reload: shots before they have to duck and reload
+// (ROADMAP 11.43) how long the police marksman's red line is on you before the shot (s)
+const MARK_AIM = 1.3;
 // personas: how likely each personality is for this kind of fighter
 const TYPES = {
   thug: { look: 'street', walk: 2.0, run: 5.0, range: 34, dmg: 7, interval: 1.15, burst: 2, mag: 8, reload: 2.0, sight: 40, scale: 1, armor: 1, personas: { standard: 3, coward: 2, hothead: 2, lookout: 1 } },
@@ -20,9 +22,15 @@ const TYPES = {
   mob: { look: 'mob', walk: 1.9, run: 4.6, range: 40, dmg: 11, interval: 1.4, burst: 1, mag: 6, reload: 2.4, sight: 44, scale: 1, armor: 1.2, personas: { veteran: 3, standard: 1, lookout: 1 } },
   brute: { look: 'biker', walk: 1.8, run: 4.6, range: 2.4, dmg: 22, interval: 1.1, melee: true, sight: 34, scale: 1.06, armor: 1.6, personas: { hothead: 3, standard: 1 } },
   // Scribble City Police: pen-pistols, the big school eraser, and paint M4s for the riot unit
-  cop: { look: 'cop', walk: 2.0, run: 5.2, range: 30, dmg: 8, interval: 0.5, burst: 3, pause: 1.6, mag: 12, reload: 1.8, sight: 42, scale: 1, armor: 1.1, personas: { standard: 3, veteran: 2, hothead: 1 }, faction: 'police', gun: 'pen' },
+  // (ROADMAP 11.43: the police are no pushovers - their pens hit harder and reach further, and they
+  // aim better than anybody: Enemy.shoot)
+  cop: { look: 'cop', walk: 2.0, run: 5.2, range: 36, dmg: 12, interval: 0.5, burst: 3, pause: 1.6, mag: 12, reload: 1.8, sight: 46, scale: 1, armor: 1.1, personas: { standard: 3, veteran: 2, hothead: 1 }, faction: 'police', gun: 'pen' },
   copEraser: { look: 'cop', walk: 2.0, run: 5.0, range: 2.5, dmg: 18, interval: 1.0, melee: true, sight: 38, scale: 1.03, armor: 1.3, personas: { hothead: 2, standard: 1 }, faction: 'police', club: 'eraser' },
-  swat: { look: 'swat', walk: 2.0, run: 5.2, range: 38, dmg: 6, interval: 0.11, burst: 5, pause: 1.3, mag: 30, reload: 2.4, sight: 46, scale: 1.02, armor: 1.5, personas: { veteran: 3, standard: 1 }, faction: 'police', gun: 'm4' },
+  swat: { look: 'swat', walk: 2.0, run: 5.2, range: 46, dmg: 9, interval: 0.11, burst: 5, pause: 1.3, mag: 30, reload: 2.4, sight: 52, scale: 1.02, armor: 1.5, personas: { veteran: 3, standard: 1 }, faction: 'police', gun: 'm4' },
+  // (ROADMAP 11.43) the police marksman, from four stars: a marker rifle from far off, a red line on
+  // you a moment before every shot - and seldom a miss. Nothing that blows up: the police keep the
+  // city whole
+  marksman: { look: 'swat', walk: 1.9, run: 5.0, range: 75, dmg: 34, interval: 2.4, burst: 1, mag: 5, reload: 2.6, sight: 85, scale: 1.02, armor: 1.4, personas: { veteran: 1 }, faction: 'police', gun: 'marker', marksman: true },
   // (ROADMAP 6.5, game/gangs.js) the Erasers: a school eraser for a club (a blow can rub the weapon
   // out of your hands), a rubber machine gun whose shots rub the city out
   eraser: { look: 'eraser', walk: 2.1, run: 5.2, range: 2.5, dmg: 16, interval: 1.0, melee: true, sight: 36, scale: 1.02, armor: 1.2, personas: { hothead: 2, standard: 1 }, club: 'eraser', erases: true },
@@ -1503,6 +1511,8 @@ class Enemy {
     if (this.mag <= 0) return;
     if (dist > cfg.range * (mode === 'suppress' ? 1.3 : 1.15)) return;
     if (mode === 'aimed' && this.aimT < this.persona.react) return;
+    // (the marksman's red line is on you a moment first)
+    if (cfg.marksman && this.aimT < MARK_AIM && !force) return;
     if (!force && !this.mgr.takeToken(this)) return;
     const hand = this.fig.j.handR;
     const p = game.player;
@@ -1515,10 +1525,19 @@ class Enemy {
       return;
     }
     // inaccuracy: distance, your speed, how long they have been aiming, their skill, the situation
+    // (ROADMAP 11.43: the police are trained - they settle on you sooner, miss by half as much (the
+    // marksman by a fifth), and aim where you will be when the shot gets there)
+    const police = this.faction === 'police';
     const pv = p.inVehicle ? p.inVehicle.speedAbs || 0 : Math.hypot(p.vel.x, p.vel.z);
-    const settle = 1 + 1.3 * Math.max(0, 1 - this.aimT / 1.6);
+    const settle = 1 + 1.3 * Math.max(0, 1 - this.aimT / (police ? 0.8 : 1.6));
     const modeMul = mode === 'moving' ? 1.8 : mode === 'suppress' ? 2.6 : mode === 'blind' ? 6 : 1;
-    const miss = (0.022 + dist * 0.0035 + pv * 0.012 + (this.legless ? 0.05 : 0)) * this.persona.aim * settle * modeMul;
+    const miss = (0.022 + dist * 0.0035 + pv * 0.012 + (this.legless ? 0.05 : 0)) * this.persona.aim * settle * modeMul * (police ? (cfg.marksman ? 0.2 : 0.5) : 1);
+    const speed = cfg.gun === 'marker' ? 140 : cfg.gun === 'm4' ? (police ? 78 : 50) : police ? 70 : 42;
+    if (police && mode !== 'blind') {
+      const fly = dist / speed;
+      tgt.x += (p.inVehicle ? p.inVehicle.vx || 0 : p.vel.x) * fly;
+      tgt.z += (p.inVehicle ? p.inVehicle.vz || 0 : p.vel.z) * fly;
+    }
     const dxx = tgt.x - hand.x;
     const dyy = tgt.y - hand.y + (mode === 'blind' ? 1.5 : 0);
     const dzz = tgt.z - hand.z;
@@ -1528,10 +1547,11 @@ class Enemy {
     const dirz = dzz / l + (Math.random() - 0.5) * miss * 2;
     const dl = Math.hypot(dirx, diry, dirz);
     // (the Erasers' rubber: ROADMAP 6.5)
-    const shotKind = cfg.rubber ? 'rubber' : cfg.gun === 'pen' ? 'ink' : cfg.gun === 'm4' ? 'paintball' : 'enemy';
-    game.weapons.spawnEnemyShot(hand.x, hand.y, hand.z, dirx / dl, diry / dl, dirz / dl, cfg.dmg, cfg.gun === 'm4' ? 50 : 42, this.inCover && this.cover ? this.cover.box : null, shotKind, this);
+    const shotKind = cfg.rubber ? 'rubber' : cfg.gun === 'pen' ? 'ink' : cfg.gun === 'm4' ? 'paintball' : cfg.gun === 'marker' ? 'marker' : 'enemy';
+    game.weapons.spawnEnemyShot(hand.x, hand.y, hand.z, dirx / dl, diry / dl, dirz / dl, cfg.dmg, speed, this.inCover && this.cover ? this.cover.box : null, shotKind, this);
     this.shots = (this.shots || 0) + 1;
-    game.fx.muzzle(hand.x, hand.y, hand.z, 0.6);
+    game.fx.muzzle(hand.x, hand.y, hand.z, cfg.marksman ? 1.1 : 0.6);
+    if (cfg.marksman) this.aimT = MARK_AIM * 0.35;
     game.audio.play('enemyShot', clamp(1 - dist / 60, 0.15, 0.7));
     this.mag--;
     if (this.burstLeft <= 0) this.burstLeft = cfg.burst || 1;
@@ -1632,6 +1652,22 @@ class Enemy {
       fr.lineXYZ(h.x - d.x * 0.06, h.y - d.y * 0.06 + 0.03, h.z - d.z * 0.06, h.x + d.x * 0.26, h.y + d.y * 0.26 + 0.03, h.z + d.z * 0.26, [0.8, 0.86, 0.94], 6.5, this.id, 1, 0.006, 0);
       fr.lineXYZ(h.x - d.x * 0.04, h.y - d.y * 0.04 + 0.03, h.z - d.z * 0.04, h.x + d.x * 0.22, h.y + d.y * 0.22 + 0.03, h.z + d.z * 0.22, PEN_BLUE, 2.2, this.id + 1, 1, 0.006, 0);
       fr.lineXYZ(h.x, h.y, h.z, h.x, h.y - 0.1, h.z, [0.16, 0.18, 0.24], 5, this.id + 2, 1, 0.01, 0);
+      return;
+    }
+    if (this.cfg.gun === 'marker') {
+      // (ROADMAP 11.43) the marksman's rifle: long, dark, its scope, a red marker's tip - and while
+      // you are in its sight, its red line on you, brighter as the shot comes
+      const d = this.fig.aim ? this.fig.aimDir : _v.copy(j.handR).sub(j.elbowR).normalize();
+      fr.lineXYZ(h.x - d.x * 0.35, h.y - d.y * 0.35, h.z - d.z * 0.35, h.x + d.x * 0.7, h.y + d.y * 0.7, h.z + d.z * 0.7, [0.2, 0.21, 0.25], 6, this.id, 1, 0.004, 0);
+      fr.lineXYZ(h.x + d.x * 0.02, h.y + d.y * 0.02 + 0.07, h.z + d.z * 0.02, h.x + d.x * 0.24, h.y + d.y * 0.24 + 0.07, h.z + d.z * 0.24, [0.2, 0.21, 0.25], 4.5, this.id + 1, 1, 0.004, 0);
+      fr.lineXYZ(h.x + d.x * 0.7, h.y + d.y * 0.7, h.z + d.z * 0.7, h.x + d.x * 0.8, h.y + d.y * 0.8, h.z + d.z * 0.8, [0.86, 0.12, 0.14], 5, this.id + 2, 1, 0.004, 0);
+      const p = this.game.player;
+      if (this.sees && this.fig.aim && this.reloadT <= 0 && p.mode !== 'dead') {
+        const T = p.inVehicle ? p.inVehicle.pos : p.pos;
+        const k = Math.min(1, this.aimT / MARK_AIM);
+        const blink = k > 0.75 ? 0.6 + 0.4 * Math.sin(this.game.time * 40) : 1;
+        fr.lineXYZ(h.x + d.x * 0.8, h.y + d.y * 0.8, h.z + d.z * 0.8, T.x, T.y + (p.inVehicle ? 1.0 : 1.25), T.z, [1.4, 0.1, 0.12], 1.2 + k * 1.6, this.id + 3, (0.25 + 0.6 * k) * blink, 0.002, 0);
+      }
       return;
     }
     if (this.cfg.gun === 'm4') {
@@ -1831,7 +1867,8 @@ export class Enemies {
       if (o.state === 'combat') fighting++;
       if (o !== e && o.tokenT > t) held++;
     }
-    const max = fighting >= 6 ? 3 : 2;
+    // (ROADMAP 11.43: the police fire together - one more of them at a time)
+    const max = (fighting >= 6 ? 3 : 2) + (e.faction === 'police' ? 1 : 0);
     if (held >= max) return false;
     e.tokenT = t + 2.4;
     e.tokenCoolT = t + 2.4 + 1.2; // then let somebody else have a go

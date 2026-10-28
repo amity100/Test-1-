@@ -1926,6 +1926,11 @@ export class Game {
     if (hit && hit.nx !== undefined && Math.abs(hit.ny || 0) < 0.7) fx.splatAt(x, y, z, hit.nx, hit.ny, hit.nz, radius * 0.9, W);
     fx.splash(x, y + 0.3, z, 46, radius * 1.3, [1, 1, 0.98]);
     fx.crumbs(x, y + 0.5, z, 24, radius);
+    // (ROADMAP 11.43: it goes off big - a white light, white rings racing out over the ground)
+    fx.flash(x, y + 0.5, z, radius * 1.4);
+    fx.ring(x, gy + 0.13, z, radius * 0.2, radius * 1.6, 0.7, W, 9);
+    fx.ring(x, gy + 0.15, z, radius * 0.1, radius * 1.05, 0.9, [0.16, 0.16, 0.2], 4);
+    fx.burst(x, y + 0.5, z, 14, radius * 5, W, 1);
     this.audio.play('splat', 1);
     this.audio.play('boom', 0.45);
     const p = this.player;

@@ -24,6 +24,8 @@ export class Effects {
     this.decalCursor = 0;
     this.particles = [];
     this.marks = []; // persistent markers (eyes over hiding spots, "!" over enemies)
+    // (ROADMAP 11.43) rings drawn round a blast, growing out from it
+    this.rings = [];
   }
 
   sprite(rect, x, y, z, o = {}) {
@@ -93,14 +95,14 @@ export class Effects {
   }
 
   // splat on whichever surface a projectile hit (normal from the ray cast)
-  splatAt(x, y, z, nx, ny, nz, size, tint) {
+  splatAt(x, y, z, nx, ny, nz, size, tint, rect = null) {
     const n = new THREE.Vector3(nx, ny, nz);
     if (n.lengthSq() < 0.5) n.set(0, 1, 0);
     let axis;
     if (Math.abs(n.y) > 0.7) axis = new THREE.Vector3(1, 0, 0);
     else axis = new THREE.Vector3(-n.z, 0, n.x).normalize();
     const up = new THREE.Vector3().crossVectors(n, axis).normalize();
-    this.decal(Math.random() < 0.5 ? 'splat0' : 'splat1', x + n.x * 0.03, y + n.y * 0.03, z + n.z * 0.03, size, tint, 0.92, [axis.x, axis.y, axis.z], [up.x, up.y, up.z]);
+    this.decal(rect || (Math.random() < 0.5 ? 'splat0' : 'splat1'), x + n.x * 0.03, y + n.y * 0.03, z + n.z * 0.03, size, tint, 0.92, [axis.x, axis.y, axis.z], [up.x, up.y, up.z]);
   }
 
   // eraser crumbs & debris (line particles)
@@ -151,6 +153,55 @@ export class Effects {
         color, seed: Math.random() * 50, spin: 0, streak: true, wide: 4,
       });
     }
+  }
+
+  // (ROADMAP 11.43) drops, bits or flakes thrown one way - out of a muzzle, off what was hit - in a
+  // cone round (dx, dy, dz). color: one, or a list to pick from. o: { cone (its half-width),
+  // len, wide, life, grav: false (straight on: a mist), bits (tumbling bits, not streaks),
+  // flutter (paper) }
+  spray(x, y, z, dx, dy, dz, n, speed, color, o = {}) {
+    const cone = o.cone === undefined ? 0.3 : o.cone;
+    const cols = Array.isArray(color[0]) ? color : null;
+    for (let i = 0; i < n; i++) {
+      if (this.particles.length > 420) this.particles.shift();
+      const sp = speed * (0.5 + Math.random() * 0.7);
+      const vx = dx + (Math.random() - 0.5) * cone * 2;
+      const vy = dy + (Math.random() - 0.5) * cone * 2;
+      const vz = dz + (Math.random() - 0.5) * cone * 2;
+      const l = Math.hypot(vx, vy, vz) || 1;
+      this.particles.push({
+        x, y, z, vx: (vx / l) * sp, vy: (vy / l) * sp, vz: (vz / l) * sp,
+        life: (o.life || 0.45) * (0.7 + Math.random() * 0.6), t: 0, len: (o.len || 0.12) * (0.6 + Math.random() * 0.8),
+        color: cols ? cols[Math.floor(Math.random() * cols.length)] : color, seed: Math.random() * 50, spin: Math.random() * 10,
+        streak: !o.bits && !o.flutter, wide: o.wide || 3, noGrav: o.grav === false, drag: o.grav === false ? 4 : 0, flutter: !!o.flutter,
+      });
+    }
+  }
+
+  // (ROADMAP 11.43) lines shooting out of a blast every way, the way a comic draws one
+  burst(x, y, z, n, speed, color, len = 0.9) {
+    for (let i = 0; i < n; i++) {
+      if (this.particles.length > 420) this.particles.shift();
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+      const b = (Math.random() - 0.3) * 0.9;
+      const sp = speed * (0.7 + Math.random() * 0.5);
+      this.particles.push({
+        x, y, z, vx: Math.cos(a) * Math.cos(b) * sp, vy: Math.sin(b) * sp, vz: Math.sin(a) * Math.cos(b) * sp,
+        life: 0.4 + Math.random() * 0.15, t: 0, len: len * (0.7 + Math.random() * 0.6), color, seed: Math.random() * 50, spin: 0,
+        streak: true, wide: 5, noGrav: true, drag: 2.5,
+      });
+    }
+  }
+
+  // (ROADMAP 11.43) a ring on the ground round a blast, from r0 out to r1 as it fades (life: s)
+  ring(x, y, z, r0, r1, life, color, width = 4) {
+    if (this.rings.length > 8) this.rings.shift();
+    this.rings.push({ x, y, z, r0, r1, life, t: 0, color, width, seed: Math.random() * 50 });
+  }
+
+  // (ROADMAP 11.43) the moment it goes off: a light brighter than the page
+  flash(x, y, z, size, tint = [1.7, 1.7, 1.6]) {
+    this.sprite('fx_impact', x, y, z, { size, grow: 0.5, life: 0.14, tint });
   }
 
   sparks(x, y, z, n = 6, color = [0.1, 0.1, 0.14]) {
@@ -236,7 +287,13 @@ export class Effects {
         p.vx *= Math.exp(-2.5 * dt);
         p.vz *= Math.exp(-2.5 * dt);
         p.x += Math.sin(p.t * 6 + p.seed) * 0.8 * dt;
-      } else p.vy -= 14 * dt;
+      } else if (!p.noGrav) p.vy -= 14 * dt;
+      if (p.drag) {
+        const k = Math.exp(-p.drag * dt);
+        p.vx *= k;
+        p.vy *= k;
+        p.vz *= k;
+      }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
@@ -260,6 +317,25 @@ export class Effects {
     }
     this._ps = parts;
     this.particles = ps;
+    // (ROADMAP 11.43) the rings round a blast: drawn in pieces round, growing out fast and then
+    // slower, thinner and paler as they go
+    const rings = this.rings;
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const R = rings[i];
+      R.t += dt;
+      if (R.t >= R.life) {
+        rings.splice(i, 1);
+        continue;
+      }
+      const k = R.t / R.life;
+      const r = R.r0 + (R.r1 - R.r0) * (1 - (1 - k) * (1 - k));
+      const N = 24;
+      for (let j = 0; j < N; j++) {
+        const a0 = (j / N) * Math.PI * 2;
+        const a1 = ((j + 1.15) / N) * Math.PI * 2;
+        figures.lineXYZ(R.x + Math.cos(a0) * r, R.y, R.z + Math.sin(a0) * r, R.x + Math.cos(a1) * r, R.y, R.z + Math.sin(a1) * r, R.color, R.width * (1 - k * 0.6), R.seed + j, 1 - k, 0.04, 0);
+      }
+    }
   }
 }
 

@@ -72,6 +72,12 @@ const FLAME_HOT = [2.2, 1.3, 0.35];
 const BOLT = [2.4, 2.2, 0.7];
 const SCORCH = [0.08, 0.07, 0.08];
 const WIND = [0.9, 0.94, 1.0];
+// (ROADMAP 11.43) what flies off a shot: shavings, an eraser's crumbs, graphite; the police
+// marksman's red marker
+const WOOD = [0.9, 0.62, 0.3];
+const PINK = [0.93, 0.5, 0.56];
+const GRAPHITE = [0.22, 0.22, 0.26];
+const MARKER_RED = [0.86, 0.12, 0.14];
 // (what the people it hits take it as: correction fluid and little erasers rub out like a
 // pencil's eraser, the paint machine gun's paint is paint)
 const hurtOf = (kind) => (kind === 'tippex' || kind === 'rubber' ? 'pencil' : kind === 'paintmg' ? 'paint' : kind);
@@ -85,12 +91,13 @@ const _om = new THREE.Matrix4();
 const _UP = new THREE.Vector3(0, 1, 0);
 const _hp = new THREE.Vector3();
 const _hd = new THREE.Vector3();
+const _md = new THREE.Vector3();
 
 /**
  * The hero's arsenal (pencil + weapons he drew), firing logic, projectiles of everyone.
  */
 // (what does not break glass: paint, ink, glue, rubber... ROADMAP 8.3)
-const SOFT_SHOTS = new Set(['ink', 'paintball', 'paint', 'crayon', 'glue', 'tippex', 'rubber', 'paintmg']);
+const SOFT_SHOTS = new Set(['ink', 'paintball', 'paint', 'crayon', 'glue', 'tippex', 'rubber', 'paintmg', 'marker']);
 
 export class Weapons {
   constructor(game) {
@@ -428,6 +435,7 @@ export class Weapons {
         this.launch(slot, muzzle.x, muzzle.y, muzzle.z, dir.x * spe, dir.y * spe + (sad ? 1 : 0), dir.z * spe, extra);
       }
       game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.quiet ? 0.35 : def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
+      this.muzzleFx(def, muzzle, _md.copy(this.aimPoint).sub(muzzle).normalize());
     }
     slot.ammo--;
     if (game.arsenal) game.arsenal.fired(slot);
@@ -446,6 +454,90 @@ export class Weapons {
     }
     if (slot.ammo <= 0) this.drop(slot, `ה${def.name} נגמר — אפשר לצייר אותו שוב`);
     game.hud.updateWeapon();
+  }
+
+  // (ROADMAP 11.43) what comes out of the muzzle with the shot, each gun its own: white out of the
+  // correction-fluid gun, paint out of the paint guns, bits of crayon out of the shotgun, shavings
+  // out of the pencil rifle and the sharpener, pink crumbs out of the eraser gun, paper out of the
+  // plane launcher, smoke out of both ends of the bazooka (m: the muzzle, d: the way it fires)
+  muzzleFx(def, m, d) {
+    const fx = this.game.fx;
+    switch (def.projectile) {
+      case 'tippex':
+        fx.spray(m.x, m.y, m.z, d.x, d.y, d.z, 4, 9, WHITE_OUT, { cone: 0.16, wide: 5, len: 0.16, life: 0.25 });
+        break;
+      case 'paint':
+      case 'paintmg':
+        fx.spray(m.x, m.y, m.z, d.x, d.y, d.z, 3, 8, PAINT_COLORS, { cone: 0.2, wide: 4, len: 0.12, life: 0.25 });
+        break;
+      case 'crayon':
+        fx.spray(m.x, m.y, m.z, d.x, d.y, d.z, 10, 11, CRAYONS, { cone: 0.32, wide: 3.4, len: 0.1, life: 0.3 });
+        fx.smoke(m.x + d.x * 0.4, m.y + d.y * 0.4, m.z + d.z * 0.4, 0.7);
+        break;
+      case 'pencil':
+        fx.spray(m.x, m.y, m.z, d.x, d.y + 0.3, d.z, 3, 3.5, WOOD, { cone: 0.6, bits: true, len: 0.05, life: 0.6 });
+        fx.spray(m.x, m.y, m.z, d.x, d.y, d.z, 2, 18, GRAPHITE, { cone: 0.03, wide: 2, len: 0.5, life: 0.08, grav: false });
+        break;
+      case 'shaving':
+        // (the curls of wood fly out of its side)
+        fx.spray(m.x, m.y, m.z, -d.z + d.x * 0.3, 0.6, d.x + d.z * 0.3, 1, 3, WOOD, { cone: 0.5, bits: true, len: 0.05, life: 0.7 });
+        break;
+      case 'rubber':
+        fx.spray(m.x, m.y, m.z, d.x, d.y + 0.2, d.z, 2, 4, PINK, { cone: 0.5, bits: true, len: 0.04, life: 0.5 });
+        break;
+      case 'staple':
+        fx.sparks(m.x, m.y, m.z, 1, STEEL);
+        break;
+      case 'glue':
+        fx.spray(m.x, m.y, m.z, d.x, d.y, d.z, 2, 5, GLUE, { cone: 0.15, wide: 4, len: 0.1, life: 0.3 });
+        break;
+      case 'plane':
+        fx.spray(m.x, m.y, m.z, d.x, d.y + 0.3, d.z, 3, 3, [1, 0.98, 0.92], { cone: 0.5, flutter: true, len: 0.05, life: 1.2 });
+        break;
+      case 'eraser':
+        // (the blast out of the back low and small: it is where the camera is)
+        for (let i = 0; i < 2; i++) fx.smoke(m.x + d.x * (0.6 + i * 0.5), m.y + d.y * 0.6, m.z + d.z * (0.6 + i * 0.5), 0.9);
+        for (let i = 0; i < 2; i++) fx.smoke(m.x - d.x * (0.8 + i * 0.5), m.y - 0.35, m.z - d.z * (0.8 + i * 0.5), 0.6 + i * 0.2);
+        fx.spray(m.x, m.y, m.z, -d.x, -d.y + 0.2, -d.z, 8, 7, [[0.55, 0.55, 0.6], [0.85, 0.8, 0.75]], { cone: 0.4, bits: true, len: 0.06, life: 0.7 });
+        break;
+    }
+  }
+
+  // (ROADMAP 11.43) a shot that lands on somebody: what it is made of thrown back off them - the
+  // white of correction fluid, paint, graphite and shavings, an eraser's crumbs, the police's ink
+  hitFx(kind, hit, ux, uy, uz, color) {
+    const fx = this.game.fx;
+    const x = hit.x;
+    const y = hit.y;
+    const z = hit.z;
+    if (kind === 'tippex') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 8, 4.5, WHITE_OUT, { cone: 0.7, wide: 5, len: 0.12 });
+    else if (kind === 'paint' || kind === 'paintmg' || kind === 'crayon' || kind === 'paintball') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 6, 4, color || PAINT_COLORS, { cone: 0.7, wide: 4, len: 0.1 });
+    else if (kind === 'ink') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 5, 3.5, PEN_BLUE, { cone: 0.6, wide: 3.5, len: 0.09 });
+    else if (kind === 'marker') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 7, 4.5, MARKER_RED, { cone: 0.6, wide: 4, len: 0.12 });
+    else if (kind === 'pencil' || kind === 'shaving') {
+      fx.spray(x, y, z, -ux, -uy + 0.4, -uz, 4, 3, GRAPHITE, { cone: 0.8, bits: true, len: 0.04, life: 0.6 });
+      fx.spray(x, y, z, -ux, -uy + 0.4, -uz, 3, 3, WOOD, { cone: 0.8, bits: true, len: 0.05, life: 0.7 });
+    } else if (kind === 'rubber') fx.spray(x, y, z, -ux, -uy + 0.4, -uz, 6, 3.5, PINK, { cone: 0.8, bits: true, len: 0.04, life: 0.6 });
+    else if (kind === 'glue') fx.spray(x, y, z, -ux, -uy + 0.2, -uz, 4, 2.5, GLUE, { cone: 0.6, wide: 3, len: 0.14 });
+  }
+
+  // (ROADMAP 11.43) the heavy ones go off big: a light brighter than the page, a ring of ink racing
+  // out over the ground and a white one after it, lines shooting out every way, paper flying - and
+  // what an eraser rocket rubs out stays rubbed out: a crater of blank paper in the city
+  bigBlast(pr, x, y, z, r, ink = BLACK_INK) {
+    const game = this.game;
+    const fx = game.fx;
+    const gy = groundHeight(x, z) + 0.15;
+    fx.flash(x, y + 0.5, z, r * 1.6);
+    fx.ring(x, gy, z, r * 0.2, r * 1.7, 0.7, ink, 10);
+    fx.ring(x, gy + 0.03, z, r * 0.1, r * 1.15, 0.9, WHITE_OUT, 12);
+    fx.burst(x, y + 0.6, z, 18, r * 3.2, ink, 1.4);
+    fx.spray(x, y + 0.4, z, 0, 1, 0, 22, r * 1.6, [[1, 0.98, 0.92], [0.95, 0.94, 0.9]], { cone: 1.4, flutter: true, len: 0.07, life: 2.2 });
+    if (pr.kind === 'eraser') {
+      game.world.objects.addSpot(x, y, z, r * 0.85);
+      fx.splash(x, y + 0.4, z, 30, r * 1.2, WHITE_OUT);
+    }
+    game.camRig.addShake(0.6);
   }
 
   // thrown things: an ink bottle lobbed onto the spot you aim at, the scissors sent spinning
@@ -834,7 +926,7 @@ export class Weapons {
   // kind: 'enemy' (scribble bullet), 'ink' (police pen-pistol), 'paintball' (paint M4)
   // (from: who fired it, ROADMAP 6.3 - the police would rather take you alive)
   spawnEnemyShot(x, y, z, dx, dy, dz, damage, speed = 40, ignore = null, kind = 'enemy', from = null) {
-    const color = kind === 'paintball' ? PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)] : kind === 'ink' ? PEN_BLUE : null;
+    const color = kind === 'paintball' ? PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)] : kind === 'ink' ? PEN_BLUE : kind === 'marker' ? MARKER_RED : null;
     this.projectiles.push({ kind, owner: 'enemy', x, y, z, vx: dx * speed, vy: dy * speed, vz: dz * speed, gravity: 0.5, damage, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, ignore, color, from });
   }
 
@@ -1092,12 +1184,14 @@ export class Weapons {
       game.fx.decal(Math.random() < 0.5 ? 'splat0' : 'splat1', x + Math.cos(a) * r, gy + 0.01 * i, z + Math.sin(a) * r, (pr.radius || 5) * (1.2 - i * 0.25), [0.12, 0.16, 0.42], 0.95, [1, 0, 0], [0, 0, -1]);
     }
     game.fx.crumbs(x, y + 0.5, z, 30, 6, true);
+    this.bigBlast(pr, x, y, z, pr.radius || 5, [0.12, 0.16, 0.42]);
   }
 
   // a paper plane bursts into a cloud of confetti and rubs out what is near
   planeBurst(pr, x, y, z) {
     const game = this.game;
     game.fx.confetti(x, y, z, 46, 6);
+    game.fx.ring(x, groundHeight(x, z) + 0.15, z, 0.3, (pr.radius || 3) * 1.3, 0.45, [0.62, 0.66, 0.78], 4);
     game.enemies.explosion(x, y, z, pr.radius || 3, pr.damage);
     game.civilians.explosion(x, y, z, pr.radius || 3);
     game.eraseBlast(x, y, z, (pr.radius || 3) * 0.8, pr.damage * 0.6);
@@ -1270,8 +1364,10 @@ export class Weapons {
       fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * 0.6, pr.y - uy * 0.6 + 0.05, pr.z - uz * 0.6, GLUE, 2, pr.seed + 1, 0.7, 0.08, 0);
     } else if (pr.kind === 'tippex') {
       // a blob of correction fluid, a thin white string behind it
-      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, WHITE_OUT, 10, pr.seed, 1, 0.08, 0);
-      fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.75, pr.y - uy * 0.75, pr.z - uz * 0.75, WHITE_OUT, 2, pr.seed + 1, 0.7, 0.05, 0);
+      // (ROADMAP 11.43: bigger, with an ink line along it - seen flying against a white wall too)
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.14, pr.y - uy * 0.14, pr.z - uz * 0.14, BLACK_INK, 17, pr.seed + 2, 0.9, 0.08, 0);
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.14, pr.y - uy * 0.14, pr.z - uz * 0.14, WHITE_OUT, 13, pr.seed, 1, 0.08, 0);
+      fr.lineXYZ(pr.x - ux * 0.14, pr.y - uy * 0.14, pr.z - uz * 0.14, pr.x - ux * 0.9, pr.y - uy * 0.9, pr.z - uz * 0.9, WHITE_OUT, 3, pr.seed + 1, 0.8, 0.05, 0);
     } else if (pr.kind === 'rubber') {
       // a little two-tone eraser, tumbling
       const a = pr.t * 22 + pr.seed;
@@ -1298,6 +1394,10 @@ export class Weapons {
       // a blot of ballpoint ink
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, PEN_BLUE, 8, pr.seed, 1, 0.05, 0);
       fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.9, pr.y - uy * 0.9, pr.z - uz * 0.9, PEN_BLUE, 1.4, pr.seed + 1, 0.55, 0.04, 0);
+    } else if (pr.kind === 'marker') {
+      // (ROADMAP 11.43) the police marksman's round: a stroke of red marker, long and fast
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.16, pr.y - uy * 0.16, pr.z - uz * 0.16, MARKER_RED, 8, pr.seed, 1, 0.02, 0);
+      fr.lineXYZ(pr.x - ux * 0.16, pr.y - uy * 0.16, pr.z - uz * 0.16, pr.x - ux * 2.6, pr.y - uy * 2.6, pr.z - uz * 2.6, MARKER_RED, 2.2, pr.seed + 1, 0.6, 0.02, 0);
     } else if (pr.kind === 'paintball') {
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.07, pr.y - uy * 0.07, pr.z - uz * 0.07, pr.color, 7, pr.seed, 1, 0.08, 0);
       fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * 0.5, pr.y - uy * 0.5, pr.z - uz * 0.5, pr.color, 1.2, pr.seed + 1, 0.5, 0.04, 0);
@@ -1326,6 +1426,7 @@ export class Weapons {
     }
     if (pr.radius > 0) {
       game.explosion(hit.x, hit.y, hit.z, pr.radius, pr.damage, pr.owner);
+      this.bigBlast(pr, hit.x, hit.y, hit.z, pr.radius);
       // (ROADMAP 11.11) a rocket drawn in colour: what its ink does, all round where it went off
       if (pr.el) this.inkRound(pr.el, hit.x, hit.y, hit.z, pr.radius, pr.damage);
       return;
@@ -1339,6 +1440,7 @@ export class Weapons {
       if (kind === 'paint' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') hit.civ.fig.paint(pr.color);
       if (kind === 'glue') hit.civ.glueT = pr.stick;
       fx.impact(hit.x, hit.y, hit.z, 0.6);
+      this.hitFx(kind, hit, ux, uy, uz, pr.color);
       return;
     }
     if (hit.type === 'enemy') {
@@ -1358,6 +1460,7 @@ export class Weapons {
         game.audio.play('snip', 0.8);
       }
       fx.impact(hit.x, hit.y, hit.z, kind === 'staple' || kind === 'shaving' ? 0.4 : 0.7);
+      this.hitFx(kind, hit, ux, uy, uz, pr.color);
       return;
     }
     if (hit.type === 'car') {
@@ -1387,6 +1490,7 @@ export class Weapons {
       const hp0 = p.hp;
       p.hurt(pr.damage, pr.x - ux * 5, pr.z - uz * 5, new THREE.Vector3(hit.x, hit.y, hit.z), null, pr.from);
       fx.impact(hit.x, hit.y, hit.z, 0.6);
+      this.hitFx(kind, hit, ux, uy, uz, pr.color);
       if (pr.color && !p.inVehicle && hp0 - p.hp > pr.damage * 0.5) game.hud.splat(pr.color);
       return;
     }
@@ -1394,26 +1498,36 @@ export class Weapons {
     if (hit.box && hit.box.tag === 'car' && game.damage && !game.classic) game.damage.shot(hit.box, hit, pr.damage);
     // (a shop window: a hard shot breaks it, ROADMAP 8.3, game/knock.js)
     if (game.knock && hit.box && hit.box.tag === 'roomwall' && !SOFT_SHOTS.has(kind)) game.knock.glassHit(hit.x, hit.y, hit.z);
-    if (kind === 'ink' || kind === 'paintball') {
-      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, kind === 'ink' ? 0.45 : 0.5 + Math.random() * 0.3, pr.color);
+    // (ROADMAP 11.43: what it is made of flies back off the wall, the floor, the car)
+    const nx = hit.nx || 0;
+    const ny = hit.ny === undefined ? 1 : hit.ny;
+    const nz = hit.nz || 0;
+    if (kind === 'ink' || kind === 'paintball' || kind === 'marker') {
+      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, kind === 'ink' ? 0.45 : kind === 'marker' ? 0.55 : 0.5 + Math.random() * 0.3, pr.color);
+      fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 4, 3, pr.color || PEN_BLUE, { cone: 0.8, wide: 3.5, len: 0.08 });
       return;
     }
     if (kind === 'tippex') {
-      // a splash of correction fluid: what it covers is gone from the page
-      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.5 + Math.random() * 0.3, WHITE_TINT);
-      game.eraseWorld(hit.x, hit.y, hit.z, 0.42, pr.damage * 1.5, hit.box, hit);
+      // a splash of correction fluid: what it covers is gone from the page (ROADMAP 11.43: a big
+      // white splash you see from afar, and the hole it rubs bigger)
+      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.8 + Math.random() * 0.4, WHITE_TINT, 'blot');
+      fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 7, 4, WHITE_OUT, { cone: 0.8, wide: 5, len: 0.11 });
+      game.eraseWorld(hit.x, hit.y, hit.z, 0.6, pr.damage * 1.5, hit.box, hit);
       game.audio.play('splat', 0.3);
     } else if (kind === 'rubber') {
       // (a gang war's rubber leaves the city as it is: ROADMAP 6.5)
       if (!pr.soft) game.eraseWorld(hit.x, hit.y, hit.z, 0.36, pr.damage * 1.3, hit.box, hit);
       fx.impact(hit.x, hit.y, hit.z, 0.35);
+      fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 4, 3, PINK, { cone: 0.8, bits: true, len: 0.04, life: 0.6 });
     } else if (kind === 'paintmg') {
       // drenched in paint, a thing runs off the page
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.55 + Math.random() * 0.4, pr.color);
+      fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 4, 3.5, pr.color, { cone: 0.8, wide: 4, len: 0.1 });
       game.eraseWorld(hit.x, hit.y, hit.z, 0.2, pr.damage * 1.1, hit.box, hit);
       game.audio.play('splat', 0.25);
     } else if (kind === 'paint' || kind === 'crayon') {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, (kind === 'crayon' ? 0.35 : 0.7) + Math.random() * 0.4, pr.color);
+      fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, kind === 'crayon' ? 3 : 5, 3.5, pr.color, { cone: 0.8, wide: 4, len: 0.1 });
       if (kind === 'crayon') game.eraseWorld(hit.x, hit.y, hit.z, 0.12, pr.damage * 0.3, hit.box, hit);
       game.audio.play('splat', 0.4);
     } else if (kind === 'glue') {
@@ -1424,6 +1538,7 @@ export class Weapons {
       game.eraseWorld(hit.x, hit.y, hit.z, kind === 'shaving' ? 0.16 : 0.28, pr.damage * 0.6, hit.box, hit);
       if (kind === 'pencil' || Math.random() < 0.15) game.stuckPencil(hit.x, hit.y, hit.z, ux, uy, uz);
       fx.impact(hit.x, hit.y, hit.z, kind === 'shaving' ? 0.3 : 0.5);
+      fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, kind === 'shaving' ? 2 : 5, 3, GRAPHITE, { cone: 0.9, bits: true, len: 0.04, life: 0.6 });
     } else if (kind === 'staple') {
       fx.sparks(hit.x, hit.y, hit.z, 2, STEEL);
     } else {

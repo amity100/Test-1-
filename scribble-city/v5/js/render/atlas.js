@@ -576,7 +576,7 @@ function fxMark(sk, ch, color, size = 170) {
   sk.stroke([[70, 222], [128, 230], [190, 220]], { width: 5, color, passes: 1 });
 }
 
-function splat(sk, variant) {
+function splat(sk, variant, ink = null) {
   const cx = 128;
   const cy = 128;
   const pts = [];
@@ -599,7 +599,10 @@ function splat(sk, variant) {
     ctx.fill();
   }
   ctx.restore();
-  sk.stroke([...pts, pts[0]], { width: 2.4, color: '#9a9aa4', passes: 1 });
+  // (ROADMAP 11.43: a blot of correction fluid has an ink line round it - white on the white of a
+  // wall, a window, is seen by it)
+  if (ink) sk.stroke([...pts, pts[0]], { width: 6, color: ink, passes: 2 });
+  else sk.stroke([...pts, pts[0]], { width: 2.4, color: '#9a9aa4', passes: 1 });
 }
 
 function smoke(sk) {
@@ -684,6 +687,7 @@ export function buildAtlas() {
   });
   cell('splat0', (sk) => splat(sk, 0));
   cell('splat1', (sk) => splat(sk, 1));
+  cell('blot', (sk) => splat(sk, 0, INK2D));
   cell('smoke0', smoke, 901);
   cell('smoke1', smoke, 902);
   cell('muzzle', muzzle);

@@ -1423,7 +1423,7 @@ export class Traffic {
 
   // ------------------------------------------------------------------ police cars
   makeCrew(types) {
-    return types.map((type) => ({ type, look: type === 'swat' ? swatLook() : copLook(), fig: null }));
+    return types.map((type) => ({ type, look: type === 'swat' || type === 'marksman' ? swatLook() : copLook(), fig: null }));
   }
 
   policeCar(x, z, yaw, crewTypes, mode) {

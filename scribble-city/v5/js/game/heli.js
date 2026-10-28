@@ -86,8 +86,12 @@ export class Heli {
     if (this.fireT <= 0) {
       this.fireT = 1.5 + Math.random() * 0.8;
       const y0 = at.y - 1.2;
-      _a.set(pp.x - at.x + (Math.random() - 0.5) * 1.6, pp.y + (p.inVehicle ? 1.0 : 1.2) - y0, pp.z - at.z + (Math.random() - 0.5) * 1.6).normalize();
-      game.weapons.spawnEnemyShot(at.x, y0, at.z, _a.x, _a.y, _a.z, 9, 70, null, 'ink');
+      // (ROADMAP 11.43: a police marksman - a marker rifle, where you will be when it gets there)
+      const fly = Math.hypot(pp.x - at.x, pp.y - y0, pp.z - at.z) / 140;
+      const vx = p.inVehicle ? p.inVehicle.vx || 0 : p.vel.x;
+      const vz = p.inVehicle ? p.inVehicle.vz || 0 : p.vel.z;
+      _a.set(pp.x + vx * fly - at.x + (Math.random() - 0.5) * 0.9, pp.y + (p.inVehicle ? 1.0 : 1.2) - y0, pp.z + vz * fly - at.z + (Math.random() - 0.5) * 0.9).normalize();
+      game.weapons.spawnEnemyShot(at.x, y0, at.z, _a.x, _a.y, _a.z, 16, 140, null, 'marker');
       game.audio.play('enemyShot', 0.5);
       this.stats.shots++;
     }
