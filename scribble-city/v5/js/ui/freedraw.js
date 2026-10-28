@@ -18,6 +18,7 @@ import { readHandParts, handSpec } from '../game/handparts.js';
 import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
+import { DrawMemory } from '../game/drawmemory.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
@@ -115,6 +116,8 @@ export class FreeDraw {
     this.force = null;
     // (ROADMAP 11.8) what the player says they draw: none - anything; one; or several together
     this.cats = new Set();
+    // (ROADMAP 11.37) what the pen remembers of the way you draw: game/drawmemory.js
+    this.memory = new DrawMemory();
     this.catCursor = 0;
     this.R = null;
     this.presenting = null;
@@ -1401,9 +1404,36 @@ export class FreeDraw {
   }
 
   readNow() {
-    if (!this.game.lab) return readFree(this.strokes, this.force, this.cats);
+    // (ROADMAP 11.37) a drawing like one you named before: read as what you named it then (unless
+    // it cannot be that at all)
+    const mem = this.force ? null : this.remembered();
+    if (mem) {
+      const Rm = this.readNowAs(mem);
+      if (Rm && Rm.cat) {
+        Rm.remembered = true;
+        return Rm;
+      }
+    }
+    return this.readNowAs(this.force);
+  }
+
+  // the drawing like one kept in the memory: what was picked for it then (cached till it changes)
+  remembered() {
+    const last = this.strokes.length ? this.strokes[this.strokes.length - 1].p : null;
+    const key = `${this.strokes.length}:${last ? last.length : 0}:${last && last.length ? last[last.length - 1].join(',') : ''}`;
+    if (this.memKey === key) return this.memPick;
+    this.memKey = key;
+    this.memPick = null;
+    if (!this.memory.list.length || !this.strokes.length) return null;
+    const m = this.memory.match(this.memory.signature(this.strokes));
+    if (m) this.memPick = m.key;
+    return this.memPick;
+  }
+
+  readNowAs(pick) {
+    if (!this.game.lab) return readFree(this.strokes, pick, this.cats);
     // (ROADMAP 11.9) what it is: read off the lines as they were drawn, as it always was...
-    const R0 = readFree(this.strokes.map((s) => ({ p: s.raw || s.p, c: s.c })), this.force, this.cats);
+    const R0 = readFree(this.strokes.map((s) => ({ p: s.raw || s.p, c: s.c })), pick, this.cats);
     const force = forceOf(R0);
     if (!force) return R0;
     // ...and built from the steadied lines: the same thing (else as it was)
@@ -1462,7 +1492,7 @@ export class FreeDraw {
         this.nameEl.textContent = '…';
         this.statsEl.textContent = R && R.why ? R.why : 'עוד קצת';
       } else {
-        this.nameEl.textContent = (this.force ? '✎ ' : '') + R.name;
+        this.nameEl.textContent = (this.force ? '✎ ' : R.remembered ? '★ ' : '') + R.name;
         // (gear that needs its place: why it would not go here, before the ink is spent)
         const why = this.cannotMake(R);
         this.statsEl.textContent = why ? `⚠ ${why}` : `${statLine(R)} · ${cost} דיו`;
@@ -1470,7 +1500,11 @@ export class FreeDraw {
       }
       // what else it could be (the network's next guesses), and the rest of the list
       const alts = R && R.alts ? R.alts.filter((a) => a.key !== (R.choice || null)).slice(0, 2) : [];
-      this.altsEl.innerHTML = alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + '<button class="fd-chip more" data-k="…">עוד…</button>';
+      // (ROADMAP 11.37: not sure of it - said, so that the other guesses are seen; remembered from
+      // before - said too)
+      const unsure = R && R.cat && !this.force && !R.remembered && R.net && R.net.best && R.net.best[1] < 0.55;
+      const lead = R && R.remembered ? '<span class="fd-unsure">★ כמו שציירתם קודם · לא זה?</span>' : unsure ? '<span class="fd-unsure">לא בטוח — אולי:</span>' : '';
+      this.altsEl.innerHTML = lead + alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + '<button class="fd-chip more" data-k="…">עוד…</button>';
     }
     const short = R && R.cat && cost > level;
     if (PR || PW) this.nowhere = false;
@@ -1807,6 +1841,9 @@ export class FreeDraw {
       if (ok && R.extra) this.makeExtra(R.extra, where);
     }
     if (!ok) return;
+    // (ROADMAP 11.37: picked by you - kept with the way it is drawn, for the next time)
+    if (this.force && !this.carOpen) this.memory.learn(this.memory.signature(this.strokes), this.force);
+    else if (R.remembered) this.memory.stats.used++;
     if (ink) ink.spend(R.cost);
     // (ROADMAP 11.15) parts that work together, made for the first time: found - a reward
     this.foundNew(R.cat === 'vehicle' && R.spec ? R.spec.combos : R.def ? R.def.combos : null);

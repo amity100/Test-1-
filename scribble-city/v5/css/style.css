@@ -1324,6 +1324,8 @@ body.touch .fd-zone { display: block; }
 .fd-btn.primary { background: linear-gradient(90deg, #ffd23f, #ff9a3c); font-size: 21px; }
 /* (v5, ROADMAP 11.36) the library of the drawn weapons, from the pen too */
 .fd-btn.fd-album { background: #dcefff; }
+/* (v5, ROADMAP 11.37) not sure what it is / drawn like before: said before the other guesses */
+.fd-unsure { font-family: var(--font-hand); font-size: 16px; color: #7a3a2e; margin-inline-end: 6px; align-self: center; }
 .fd-btn.primary.off { background: #e6e0d2; opacity: 0.8; }
 .fd-fly { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 17; pointer-events: none; transition: transform 0.5s ease-out, opacity 0.5s ease-in; transform-origin: 50% 50%; }
 body.fd-open #crosshair { opacity: 0; }
