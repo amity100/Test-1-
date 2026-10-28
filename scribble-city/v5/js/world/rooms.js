@@ -408,11 +408,17 @@ class Room {
     this.add(this.M.floors[fl] || this.M.floors.concrete, this.f.facing(fp[0], fp[1], fp[2], fp[3], fuv, [0, 1, 0]), fcol);
     // the ceiling
     this.quad(this.P(ua, y1, db), this.P(ub, y1, db), this.P(ub, y1, da), this.P(ua, y1, da), [0, -1, 0], dec.ceiling || [0.96, 0.93, 0.86]);
-    // walls: a lower band and the wall above it (a store's: a skirting)
+    // walls: a lower band and the wall above it (a store's: a skirting). (ROADMAP 11.42: up on a
+    // floor of the mega mall, lifted with its front - world/kit.js LiftFacade; they were left at the
+    // street's height, and a store upstairs had no walls of its own)
+    const ly = f.dy || 0;
     const band = y0 + (dec.skirt || 0.95);
+    const w0 = y0 + ly;
+    const wb = band + ly;
+    const w1 = y1 + ly;
     const wall = (a0, a1, nn) => {
-      this.quad([a0[0], y0, a0[2]], [a1[0], y0, a1[2]], [a1[0], band, a1[2]], [a0[0], band, a0[2]], nn, dec.band);
-      this.quad([a0[0], band, a0[2]], [a1[0], band, a1[2]], [a1[0], y1, a1[2]], [a0[0], y1, a0[2]], nn, dec.wall);
+      this.quad([a0[0], w0, a0[2]], [a1[0], w0, a1[2]], [a1[0], wb, a1[2]], [a0[0], wb, a0[2]], nn, dec.band);
+      this.quad([a0[0], wb, a0[2]], [a1[0], wb, a1[2]], [a1[0], w1, a1[2]], [a0[0], w1, a0[2]], nn, dec.wall);
     };
     wall(this.P(ua, y0, db), this.P(ub, y0, db), n); // back wall faces the front
     wall(this.P(ua, y0, da), this.P(ua, y0, db), r); // left wall faces right
