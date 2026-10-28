@@ -44,6 +44,18 @@ const VEH = {
   balloon: { width: 3, hp: 140, len: 1.5 },
 };
 
+// (v5, ROADMAP 11.41) the catalog's cars, drawn from nothing: each one of the city's car shapes
+// (render/cars.js), its colour, its trim, how much tougher it is - and what it can do: a turbo,
+// crushing what it drives over, armour, a ram (its handling: HANDLING)
+export const CAR_BP = {
+  hyper: { kind: 'hyper', color: [0.08, 0.86, 0.8], extra: 'hyper', hp: 0.9, jets: 1 },
+  muscle: { kind: 'muscle', color: [0.95, 0.46, 0.08], extra: 'muscle', hp: 1.2, jets: 1 },
+  monster: { kind: 'monster', color: [0.42, 0.82, 0.18], extra: 'monster', hp: 2.0, crush: true, armor: 0.3 },
+  armored: { kind: 'armored', color: [0.17, 0.18, 0.2], extra: 'armored', hp: 2.6, armor: 0.6, ram: { k: 2, shield: true } },
+  limo: { kind: 'limo', color: [0.04, 0.04, 0.05], extra: 'limo', hp: 1.3 },
+  firetruck: { kind: 'firetruck', color: [0.82, 0.08, 0.06], extra: 'fire', hp: 2.2, ram: { k: 1.5 } },
+};
+
 const QUALITY = {
   perfect: { speed: 1.15, accel: 1.2, pull: 0, stall: 0, wobble: 0, hp: 1.3, reload: 0.8 },
   good: { speed: 1, accel: 1, pull: 0, stall: 0, wobble: 0, hp: 1, reload: 1 },
@@ -281,13 +293,17 @@ class Vehicle {
     // as a boat - with a model of their own)
     this.model = RIDES[kind] ? kind : null;
     if (this.model) kind = RIDES[kind];
+    // (ROADMAP 11.41: the catalog's cars - a car of one of the city's shapes)
+    this.carBp = !stock && CAR_BP[kind] ? kind : null;
+    if (this.carBp) kind = 'car';
+    const cb = this.carBp ? CAR_BP[this.carBp] : null;
     this.kind = kind;
     this.grade = grade;
     this.score = score;
     this.q = QUALITY[grade];
-    this.bp = BLUEPRINTS[this.model || kind];
+    this.bp = BLUEPRINTS[this.model || this.carBp || kind];
     this.cfg = VEH[kind];
-    this.maxHp = Math.round(this.cfg.hp * this.q.hp);
+    this.maxHp = Math.round(this.cfg.hp * this.q.hp * (cb ? cb.hp : 1));
     this.hp = this.maxHp;
     this.pos = new THREE.Vector3();
     this.yaw = 0;
@@ -309,16 +325,28 @@ class Vehicle {
     this.group = new THREE.Group();
     if (kind === 'car') {
       // a car: drawn by the city's car batches every frame (see draw)
-      this.carKind = stock ? stock.kind || 'sedan' : 'sports';
-      this.color = stock ? stock.color : [0.98, 0.42, 0.36];
-      this.extra = stock ? (stock.police ? 'police' : stock.taxi ? 'taxi' : null) : null;
+      this.carKind = stock ? stock.kind || 'sedan' : cb ? cb.kind : 'sports';
+      this.color = stock ? stock.color : cb ? cb.color.slice() : [0.98, 0.42, 0.36];
+      this.extra = stock ? (stock.police ? 'police' : stock.taxi ? 'taxi' : null) : cb ? cb.extra : null;
       this.halfLen = 2.3;
       this.halfWid = 0.98;
       this.heightM = this.carKind === 'van' ? 2.15 : 1.45;
       this.seat = true;
-      this.label = stock ? (stock.police ? 'ניידת' : stock.taxi ? 'מונית' : 'מכונית') : BLUEPRINTS.car.name;
-      if (!stock) this.racing = true;
+      this.label = stock ? (stock.police ? 'ניידת' : stock.taxi ? 'מונית' : 'מכונית') : this.bp.name;
+      if (!stock && !cb) this.racing = true;
       this.reveal = stock ? 1 : 0;
+      if (cb) {
+        // (as big as it is - the monster truck's tyres out beside it; and what it can do)
+        const K = KINDS[cb.kind];
+        this.halfLen = K.len / 2;
+        this.halfWid = K.W / 2 + (K.wx ? K.wx + 0.2 : 0);
+        this.heightM = K.glass.R;
+        this.radius = clamp(this.halfWid, 1.6, 2.6);
+        if (cb.jets) this.jets = cb.jets;
+        if (cb.crush) this.crush = true;
+        if (cb.armor) this.armor = cb.armor;
+        if (cb.ram) this.ram = { ...cb.ram };
+      }
     } else if (this.model) {
       const m = MODELS[this.model](grade);
       Object.assign(this, m);
@@ -478,7 +506,7 @@ class Vehicle {
   draw(cars) {
     if (this.kind !== 'car' || this.dead) return;
     const wob = this.grade === 'fail' || this.grade === 'wonky' ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3) : 0;
-    const siren = this.extra === 'police' && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
+    const siren = (this.extra === 'police' || this.extra === 'armored' || this.extra === 'fire') && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
     // (just drawn: still turning from the drawing into the car)
     const rv = this.mat ? this.mat.carRV : null;
     const U = this.up;
@@ -1499,6 +1527,11 @@ export const HANDLING = {
   // (ROADMAP 4.8: pedalled, kicked)
   bicycle: { mass: 0.45, power: 4.2, top: 9.5, grip: 10, slide: 1.6, steer: 2.1, roll: 0, pitch: 0.2 },
   scooter: { mass: 0.35, power: 3.0, top: 6.5, grip: 9, slide: 1.4, steer: 2.3, roll: 0, pitch: 0.15 },
+  // (ROADMAP 11.41: the catalog's cars)
+  hyper: { mass: 0.95, power: 22, top: 46, grip: 11, slide: 1.18, steer: 1.7, roll: 0.3, pitch: 0.3 },
+  muscle: { mass: 1.3, power: 20, top: 40, grip: 7.5, slide: 1.28, steer: 1.45, roll: 0.7, pitch: 0.85 },
+  monster: { mass: 2.4, power: 16, top: 31, grip: 7, slide: 1.0, steer: 1.2, roll: 1.3, pitch: 1.0 },
+  armored: { mass: 3.2, power: 13, top: 28, grip: 6.5, slide: 0.86, steer: 0.95, roll: 0.9, pitch: 0.5 },
 };
 
 // the stunt ramps in the alleys (with their wooden planks, drawn by the car batches)

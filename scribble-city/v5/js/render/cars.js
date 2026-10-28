@@ -124,7 +124,44 @@ const KINDS = {
     glass: { tA: 0.725, tB: 0.74, tC: 0.9, tD: 0.965, R: 2.95, w0: 0.99, w1: 0.96, pillars: [0.82] },
     tail: { y: -1.4, w: 0.85, low: 0.95 }, head: { y: -0.2, w: 0.46, h: 0.14 },
   },
+  // (v5, ROADMAP 11.41) the catalog's own cars, drawn from nothing (game/blueprints.js) - none of
+  // them in the traffic. A hypercar: as low as a knee, wide over its wheels, the cockpit a bubble
+  // forward of the engine
+  hyper: {
+    len: 4.7, W: 2.06, r: 0.36, wheels: [0.18, 0.8], clear: 0.13, n: 3.9,
+    halfW: [[0, 0.84], [0.05, 1.0], [0.18, 1.04], [0.34, 0.97], [0.55, 0.93], [0.8, 1.0], [0.93, 0.94], [1, 0.64]],
+    belt: [[0, 0.8], [0.04, 0.86], [0.2, 0.88], [0.36, 0.84], [0.6, 0.72], [0.8, 0.6], [0.94, 0.48], [1, 0.36]],
+    glass: { tA: 0.24, tB: 0.42, tC: 0.56, tD: 0.74, R: 1.13, w0: 0.84, w1: 0.6, pillars: [] },
+    tail: { y: -0.16, w: 0.96 }, head: { y: -0.06, w: 0.44, h: 0.045 },
+  },
+  // a muscle car: a long hood (a scoop on it), a fastback sloping all the way to a ducktail
+  muscle: {
+    len: 4.9, W: 2.0, r: 0.37, wheels: [0.18, 0.8], clear: 0.19, n: 3.5,
+    halfW: [[0, 0.86], [0.04, 0.97], [0.18, 1.0], [0.4, 0.96], [0.62, 0.95], [0.82, 0.97], [0.95, 0.93], [1, 0.84]],
+    belt: [[0, 0.96], [0.03, 1.0], [0.2, 0.98], [0.4, 0.95], [0.66, 0.93], [0.86, 0.91], [0.97, 0.86], [1, 0.74]],
+    glass: { tA: 0.1, tB: 0.42, tC: 0.53, tD: 0.66, R: 1.36, w0: 0.9, w1: 0.68, pillars: [0.48] },
+    tail: { y: -0.14, w: 0.92 }, head: { y: -0.12, w: 0.3, h: 0.12 },
+  },
+  // a monster truck: a pickup's body high over tyres as tall as a man, wide ones, standing out
+  // from it (tw: the tyres' width, wx: out from the body)
+  monster: {
+    len: 5.3, W: 2.0, r: 0.95, wheels: [0.19, 0.8], clear: 1.12, n: 4.6, tw: 2.5, wx: 0.56,
+    halfW: [[0, 0.96], [0.03, 1.0], [0.97, 1.0], [1, 0.92]],
+    belt: [[0, 1.86], [0.02, 1.95], [0.45, 1.95], [0.47, 2.0], [0.74, 2.02], [0.78, 1.96], [0.96, 1.86], [1, 1.66]],
+    glass: { tA: 0.47, tB: 0.5, tC: 0.66, tD: 0.75, R: 2.72, w0: 0.97, w1: 0.9, pillars: [0.6] },
+    tail: { y: -0.14, w: 0.86 }, head: { y: -0.12, w: 0.44, h: 0.13 },
+  },
+  // an armoured SWAT truck: a steel box on big wheels, a steel nose sloping down, slits of windows
+  armored: {
+    len: 5.8, W: 2.32, r: 0.52, wheels: [0.19, 0.8], clear: 0.5, n: 8,
+    halfW: [[0, 1.1], [0.02, 1.14], [0.9, 1.14], [0.97, 1.08], [1, 0.98]],
+    belt: [[0, 1.72], [0.02, 1.8], [0.6, 1.8], [0.64, 1.82], [0.78, 1.6], [0.9, 1.46], [0.98, 1.3], [1, 1.12]],
+    glass: { tA: 0.03, tB: 0.05, tC: 0.66, tD: 0.73, R: 2.62, w0: 0.99, w1: 0.96, pillars: [0.14, 0.26, 0.38, 0.5], frame: 0.09 },
+    tail: { y: -0.5, w: 0.7, low: 1.0 }, head: { y: -0.1, w: 0.34, h: 0.1 },
+  },
 };
+// (only ever drawn by the player: a few of each)
+const DRAWN_ONLY = new Set(['hyper', 'muscle', 'monster', 'armored']);
 
 // the colours of the city's cars (sRGB), and which kinds they come in
 export const CAR_COLORS = [
@@ -354,7 +391,7 @@ function build(kind) {
     for (const sd of [-1, 1]) trimParts.push(box(0.16, 0.1, 0.2, sd * (hw(tm) + 0.08), belt(tm) + 0.12, tm * L - off - 0.05));
   }
   const plates = [box(0.52, 0.12, 0.02, 0, tailY - 0.2, -off - 0.01), box(0.52, 0.12, 0.02, 0, hb * 0.38, off + 0.01)];
-  const wheels = K.wheels.flatMap((t) => [-1, 1].map((sd) => ({ z: t * L - off, x: sd * (hw(t) - 0.16), r: K.r, sd })));
+  const wheels = K.wheels.flatMap((t) => [-1, 1].map((sd) => ({ z: t * L - off, x: sd * (hw(t) - 0.16 + (K.wx || 0)), r: K.r, sd, tw: K.tw || 1 })));
   K.roofY = K.glass.R;
   // where the turn signals blink: the front and back corners (ROADMAP 4.3)
   K.sig = { fx: hw(0.97) - 0.14, fy: hb + K.head.y, fz: off - 0.05, rx: hw(0.03) - 0.14, ry: tailY, rz: -off + 0.05 };
@@ -755,6 +792,9 @@ const CHROME = [0.9, 0.91, 0.95];
 const FIRE_BAND = [0.97, 0.95, 0.88];
 const GARBAGE_DARK = [0.05, 0.05, 0.06];
 const GARBAGE_STRIPE = [0.98, 0.84, 0.2];
+// (ROADMAP 11.41: the hypercar's neon under it, the armoured truck's plates)
+const NEON_UNDER = [0.35, 2.6, 2.9];
+const ARMOR_PLATE = [0.15, 0.16, 0.18];
 const _m = new THREE.Matrix4();
 const _w = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -874,7 +914,7 @@ export class CarRenderer {
     const shellParts = [['body', mats.paint, 0, 1], ['tail', mats.tail, 0.5, 0], ['head', mats.head, 0.6, 0], ['trim', mats.dark, 0.55, 0], ['plate', mats.plate, 0.65, 0]];
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);
-      const n = kind === 'bus' ? 12 : cap;
+      const n = kind === 'bus' ? 12 : DRAWN_ONLY.has(kind) ? 8 : cap;
       const shell = merge(shellParts.map(([k]) => b[k]));
       const cnt = shell.attributes.position.count;
       const ids = new Float32Array(cnt);
@@ -1034,10 +1074,10 @@ export class CarRenderer {
       _q.setFromEuler(_e);
       // (a flat one sits squashed on its rim)
       const wr = w === flat ? w.r * 0.74 : w.r;
-      _w.compose(_p.set(w.x, wr, w.z), _q, _s.set(1, wr, w.r));
+      _w.compose(_p.set(w.x, wr, w.z), _q, _s.set(w.tw, wr, w.r));
       _w.premultiply(_m);
       this.tyres.push(_w, WHITE, part + 0.7, rv);
-      _w.compose(_p.set(w.x + w.sd * 0.165, wr, w.z), _q, _s.set(1, w.r, w.r));
+      _w.compose(_p.set(w.x + w.sd * (0.15 * w.tw + 0.015), wr, w.z), _q, _s.set(1, w.r, w.r));
       _w.premultiply(_m);
       this.rims.push(_w, o.rim || WHITE, part + 0.8, rv);
     }
@@ -1111,6 +1151,64 @@ export class CarRenderer {
       for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.01), 0.62, 0.1, 0.03, 0.07, K.len * 0.78, FIRE_BAND, rv);
     } else if (o.extra === 'limo') {
       for (let sd = -1; sd <= 1; sd += 2) this.box(this.trimBox, _m, sd * (K.W / 2 - 0.03), 0.6, 0, 0.03, 0.05, K.len * 0.86, CHROME, rv);
+    } else if (o.extra) this.drawnTrim(o.extra, kind, K, P, o, rv);
+  }
+
+  // (v5, ROADMAP 11.41) the catalog's cars: what each has on it
+  drawnTrim(extra, kind, K, P, o, rv) {
+    const L = K.len;
+    if (extra === 'hyper') {
+      // the wing on two struts over the tail, its end plates; the intakes behind the doors; the
+      // diffuser's fins and four pipes; a bar of neon under it
+      const zw = -L / 2 + 0.32;
+      for (let sd = -1; sd <= 1; sd += 2) {
+        this.box(this.trimBox, _m, sd * 0.5, 1.0, zw, 0.06, 0.32, 0.16, GARBAGE_DARK, rv);
+        this.box(this.trimBox, _m, sd * K.W * 0.47, 1.22, zw, 0.04, 0.16, 0.42, GARBAGE_DARK, rv);
+        this.box(this.trimBox, _m, sd * 0.96, 0.56, -0.25, 0.05, 0.2, 0.7, GARBAGE_DARK, rv);
+      }
+      this.box(this.trimBox, _m, 0, 1.17, zw, K.W * 0.94, 0.05, 0.4, GARBAGE_DARK, rv);
+      for (let k = -1; k <= 1; k++) this.box(this.trimBox, _m, k * 0.45, K.clear + 0.1, -L / 2 + 0.06, 0.04, 0.18, 0.3, GARBAGE_DARK, rv);
+      for (const x of [-0.62, -0.46, 0.46, 0.62]) this.box(this.trimBox, _m, x, K.clear + 0.22, -L / 2 - 0.02, 0.11, 0.11, 0.08, CHROME, rv);
+      this.box(this.lightBox, _m, 0, 0.07, 0, K.W * 0.78, 0.03, L * 0.66, NEON_UNDER, rv);
+    } else if (extra === 'muscle') {
+      // a scoop on the hood, its mouth chrome; a ducktail on the deck; pipes along the sills;
+      // chrome bumpers; a white stripe down each side
+      this.box(this.trimBox, _m, 0, K.hood.y + 0.07, K.hood.z, 0.56, 0.14, 0.9, GARBAGE_DARK, rv);
+      this.box(this.trimBox, _m, 0, K.hood.y + 0.1, K.hood.z + 0.46, 0.5, 0.1, 0.03, CHROME, rv);
+      this.box(this.trimBox, _m, 0, 1.03, -L / 2 + 0.12, K.W * 0.84, 0.06, 0.24, GARBAGE_DARK, rv);
+      this.box(this.trimBox, _m, 0, K.clear + 0.2, L / 2 + 0.03, K.W * 0.9, 0.12, 0.1, CHROME, rv);
+      this.box(this.trimBox, _m, 0, K.clear + 0.2, -L / 2 - 0.03, K.W * 0.9, 0.12, 0.1, CHROME, rv);
+      for (let sd = -1; sd <= 1; sd += 2) {
+        this.box(this.trimBox, _m, sd * (K.W / 2 + 0.02), K.clear + 0.08, 0.1, 0.09, 0.09, L * 0.42, CHROME, rv);
+        this.box(this.trimBox, _m, sd * (K.W / 2 - 0.02), 0.7, 0.05, 0.03, 0.08, L * 0.8, FIRE_BAND, rv);
+      }
+    } else if (extra === 'monster') {
+      // a roll bar over the bed, two stacks behind the cab, a bar of lamps on its roof, the
+      // shock absorbers down to each wheel
+      const bedY = 1.95;
+      const zb = -L / 2 + 1.05;
+      for (let sd = -1; sd <= 1; sd += 2) {
+        this.box(this.trimBox, _m, sd * 0.86, bedY + 0.32, zb, 0.09, 0.64, 0.09, CHROME, rv);
+        this.box(this.trimBox, _m, sd * 0.62, bedY + 0.52, K.cab.zr - 0.12, 0.13, 1.05, 0.13, CHROME, rv);
+      }
+      this.box(this.trimBox, _m, 0, bedY + 0.64, zb, 1.8, 0.09, 0.09, CHROME, rv);
+      for (const x of [-0.6, -0.2, 0.2, 0.6]) this.box(this.lightBox, _m, x, K.roofY + 0.09, K.cab.zf - 0.4, 0.3, 0.14, 0.12, WHITE_ON, rv);
+      for (const w of P.b.wheels) this.box(this.trimBox, _m, w.sd * 1.06, w.r + 0.3, w.z, 0.08, 0.62, 0.12, STEEL_BAR, rv);
+    } else if (extra === 'armored') {
+      // a turret on the roof and its gun, a ram before its nose, steel plates along the sides,
+      // the red and the blue on the cab blinking as it goes
+      const blink = o.siren !== undefined ? o.siren : -1;
+      const ty = K.roofY;
+      this.box(this.trimBox, _m, 0, ty + 0.2, -0.3, 0.95, 0.38, 1.0, GARBAGE_DARK, rv);
+      this.box(this.trimBox, _m, 0, ty + 0.24, 0.6, 0.12, 0.12, 1.1, GARBAGE_DARK, rv);
+      this.box(this.trimBox, _m, 0, K.clear + 0.35, L / 2 + 0.16, K.W * 0.96, 0.12, 0.12, STEEL_BAR, rv);
+      this.box(this.trimBox, _m, 0, K.clear + 0.75, L / 2 + 0.12, K.W * 0.9, 0.12, 0.12, STEEL_BAR, rv);
+      for (let sd = -1; sd <= 1; sd += 2) {
+        this.box(this.trimBox, _m, sd * 0.6, K.clear + 0.55, L / 2 + 0.14, 0.12, 0.6, 0.1, STEEL_BAR, rv);
+        this.box(this.trimBox, _m, sd * (K.W / 2 + 0.01), 1.15, -0.4, 0.04, 0.7, L * 0.62, ARMOR_PLATE, rv);
+        const on = blink > 0 ? sd < 0 : blink === 0 ? sd > 0 : false;
+        this.box(this.lightBox, _m, sd * 0.3, ty + 0.06, L * 0.22, 0.5, 0.12, 0.2, sd < 0 ? (on ? RED_ON : RED_OFF) : on ? BLUE_ON : BLUE_OFF, rv);
+      }
     }
   }
 

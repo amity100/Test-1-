@@ -1,4 +1,4 @@
-import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, BLUEPRINT_TOOLS, drawBlueprint } from '../game/blueprints.js';
+import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, BLUEPRINT_CARS, BLUEPRINT_TOOLS, drawBlueprint } from '../game/blueprints.js';
 import { GRADE } from '../game/weapons.js';
 import { AVES, STREETS, nearestRoadInfo, districtName } from '../world/layout.js';
 
@@ -151,7 +151,7 @@ export class Album {
 
   // (the new ones, ROADMAP 4.8: not with ?classic)
   get order() {
-    return this.game.classic ? BLUEPRINT_ORDER : this._order || (this._order = [...BLUEPRINT_ORDER, ...BLUEPRINT_MORE, ...BLUEPRINT_TOOLS]);
+    return this.game.classic ? BLUEPRINT_ORDER : this._order || (this._order = [...BLUEPRINT_ORDER, ...BLUEPRINT_MORE, ...BLUEPRINT_CARS, ...BLUEPRINT_TOOLS]);
   }
 
   get size() {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shopkeeperLook, civilianLook, friendLook, kidLook, elderLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
-import { BLUEPRINTS, BLUEPRINT_MORE, BLUEPRINT_TOOLS } from './blueprints.js';
+import { BLUEPRINTS, BLUEPRINT_MORE, BLUEPRINT_CARS, BLUEPRINT_TOOLS } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
 import { DISTRICT_NAMES, blockAt, CURB } from '../world/layout.js';
 import { TOPS, BOTTOMS, SHOES, HATS, ACCS, TATTOOS, FASHION_TOPS, FASHION_BOTTOMS, SHOE_WALL, SPORT_TOPS, JEWELS, wear, armorUp, outfitOf, putOn, ownTattoo } from './wardrobe.js';
@@ -748,7 +748,7 @@ function toolShelf(game, a) {
 }
 
 SERVICES.arcade = { verb: 'להיכנס לארקייד', ask: 'לשחק במכונה', who: 'המכונה', greet: 'INSERT COIN — מכה אחת במכונה וקורה משהו...', offers: [['לשחק (אולי זוכים בשרטוט)', 'note', (game) => {
-  const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun' && (!game.classic || (!BLUEPRINT_MORE.includes(id) && !BLUEPRINT_TOOLS.includes(id))));
+  const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun' && (!game.classic || (!BLUEPRINT_MORE.includes(id) && !BLUEPRINT_TOOLS.includes(id) && !BLUEPRINT_CARS.includes(id))));
   if (left.length && Math.random() < 0.5) giveBlueprint(game, left[Math.floor(Math.random() * left.length)]);
   else {
     heal(10, [0.4, 0.8, 0.95], 'כמעט! לפחות קיבלת סוכרייה. +10 חיים')(game);

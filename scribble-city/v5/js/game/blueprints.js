@@ -826,9 +826,203 @@ Object.assign(BLUEPRINTS, {
   },
 });
 
+// (v5, ROADMAP 11.41) the catalog's cars, drawn from nothing - as many lines as there is to each
+// (game/vehicles.js CAR_BP: each a car of one of the city's shapes, render/cars.js)
+const HYPER = [[3, 44], [3, 33], [16, 30], [36, 28], [46, 20], [62, 19], [75, 27], [90, 33], [97, 38], [97, 44]];
+const MUSCLE = [[3, 44], [3, 32], [12, 30], [42, 19], [60, 19], [70, 28], [96, 30], [97, 38], [97, 44]];
+const MONSTER = [[8, 40], [8, 28], [40, 28], [44, 15], [66, 15], [72, 27], [94, 29], [94, 40]];
+const ARMORED = [[4, 46], [4, 18], [64, 18], [78, 26], [96, 30], [96, 46]];
+const LIMO = [[2, 40], [2, 31], [12, 29], [22, 22], [80, 22], [87, 29], [98, 31], [98, 40]];
+const FIRETRUCK = [[3, 46], [3, 27], [68, 27], [70, 16], [88, 16], [96, 29], [96, 46]];
+const RUNGS = [];
+for (let x = 8; x <= 64; x += 8) RUNGS.push(...(((x - 8) / 8) % 2 ? [[x, 23], [x, 20]] : [[x, 20], [x, 23]]));
+Object.assign(BLUEPRINTS, {
+  hyper: {
+    id: 'hyper',
+    name: 'היפר־קאר נאון',
+    the: 'ההיפר־קאר',
+    g: 'm',
+    nameEn: 'NEON HYPERCAR',
+    kind: 'vehicle',
+    difficulty: 4,
+    desc: 'נמוכה כמו ברך, כנף מאחור ונאון מתחת. הכי מהירה בעיר, עם טורבו.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close(HYPER) },
+      { label: 'חופה', en: 'canopy', pts: [[40, 27], [49, 21], [62, 21], [72, 28]] },
+      { label: 'כנף', en: 'wing', pts: close([[2, 20], [22, 20], [22, 24], [2, 24]]) },
+      { label: 'עמוד כנף', en: 'wing strut', pts: [[12, 24], [13, 31]] },
+      { label: 'פתח אוויר', en: 'intake', pts: [[28, 38], [37, 33], [40, 39]] },
+      { label: 'פנס', en: 'headlight', pts: [[85, 33], [94, 37]] },
+      { label: 'נאון', en: 'neon', pts: [[30, 50], [70, 50]] },
+      { label: 'גלגל', en: 'wheel', pts: circle(22, 45, 7) },
+      { label: 'גלגל', en: 'wheel', pts: circle(78, 45, 7) },
+    ],
+    fills: [
+      { poly: HYPER, color: '#3fd6c8' },
+      { poly: [[40, 27], [49, 21], [62, 21], [72, 28]], color: '#26323f' },
+      { poly: [[2, 20], [22, 20], [22, 24], [2, 24]], color: '#2a2a30' },
+      { poly: circle(22, 45, 7), color: '#3a3a42' },
+      { poly: circle(78, 45, 7), color: '#3a3a42' },
+    ],
+    wheels: [[22, 45, 7], [78, 45, 7]],
+    scale: 4.7,
+  },
+  muscle: {
+    id: 'muscle',
+    name: 'מכונית שרירים',
+    the: 'מכונית השרירים',
+    g: 'f',
+    nameEn: 'MUSCLE CAR',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: 'מנוע ענק מתחת למכסה, עם פתח אוויר. מחליקה יפה בפניות, עם טורבו.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close(MUSCLE) },
+      { label: 'קו חלונות', en: 'window line', pts: [[24, 27], [70, 28]] },
+      { label: 'עמוד', en: 'pillar', pts: [[55, 19], [55, 28]] },
+      { label: 'פתח אוויר', en: 'hood scoop', pts: [[76, 29], [78, 24], [87, 24], [89, 30]] },
+      { label: 'ספוילר', en: 'spoiler', pts: [[3, 32], [2, 26], [11, 26], [12, 30]] },
+      { label: 'פס', en: 'stripe', pts: [[6, 37], [94, 37]] },
+      { label: 'מפלט', en: 'side pipe', pts: [[30, 48], [66, 48]] },
+      { label: 'גלגל', en: 'wheel', pts: circle(22, 45, 8) },
+      { label: 'גלגל', en: 'wheel', pts: circle(79, 45, 8) },
+    ],
+    fills: [
+      { poly: MUSCLE, color: '#f08a2c' },
+      { poly: [[24, 27], [42, 20], [60, 20], [70, 28]], color: '#c3d6ea' },
+      { poly: [[76, 29], [78, 24], [87, 24], [89, 30]], color: '#2a2a30' },
+      { poly: circle(22, 45, 8), color: '#3a3a42' },
+      { poly: circle(79, 45, 8), color: '#3a3a42' },
+    ],
+    wheels: [[22, 45, 8], [79, 45, 8]],
+    scale: 4.9,
+  },
+  monster: {
+    id: 'monster',
+    name: 'משאית מפלצת',
+    the: 'משאית המפלצת',
+    g: 'f',
+    nameEn: 'MONSTER TRUCK',
+    kind: 'vehicle',
+    difficulty: 4,
+    desc: 'גלגלים בגובה של אדם: עולה על מכוניות ומועכת אותן, וכמעט לא נשרטת.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close(MONSTER) },
+      { label: 'חלון', en: 'window', pts: [[47, 27], [49, 18], [63, 18], [68, 27]] },
+      { label: 'קשת גלגול', en: 'roll bar', pts: [[14, 28], [16, 20], [32, 20], [34, 28]] },
+      { label: 'פנסים', en: 'light bar', pts: [[46, 11], [64, 11]] },
+      { label: 'ארובה', en: 'exhaust stack', pts: [[39, 28], [39, 8]] },
+      { label: 'גלגל ענק', en: 'giant wheel', pts: circle(25, 56, 15, 20) },
+      { label: 'גלגל ענק', en: 'giant wheel', pts: circle(77, 56, 15, 20) },
+      { label: 'בולם', en: 'shock', pts: [[22, 40], [28, 43], [22, 45], [28, 48]] },
+      { label: 'בולם', en: 'shock', pts: [[74, 40], [80, 43], [74, 45], [80, 48]] },
+    ],
+    fills: [
+      { poly: MONSTER, color: '#74c63a' },
+      { poly: [[47, 27], [49, 18], [63, 18], [68, 27]], color: '#c3d6ea' },
+      { poly: circle(25, 56, 15, 20), color: '#2e2e34' },
+      { poly: circle(77, 56, 15, 20), color: '#2e2e34' },
+    ],
+    wheels: [[25, 56, 15], [77, 56, 15]],
+    scale: 5.3,
+  },
+  armored: {
+    id: 'armored',
+    name: 'משוריין SWAT',
+    the: 'המשוריין',
+    g: 'm',
+    nameEn: 'SWAT ARMOR',
+    kind: 'vehicle',
+    difficulty: 5,
+    desc: 'פלדה מכל הצדדים, צריח על הגג ואיל ברזל מקדימה. דוחף מכוניות הצידה, ויריות כמעט לא עוברות.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close(ARMORED) },
+      { label: 'חלון חרך', en: 'slit window', pts: [[66, 23], [76, 28]] },
+      { label: 'דלת', en: 'door', pts: close([[40, 21], [62, 21], [62, 42], [40, 42]]) },
+      { label: 'חלון חרך', en: 'slit window', pts: [[44, 25], [58, 25]] },
+      { label: 'צריח', en: 'turret', pts: [[18, 18], [21, 10], [37, 10], [40, 18]] },
+      { label: 'קנה', en: 'gun', pts: [[37, 13], [58, 13]] },
+      { label: 'איל ברזל', en: 'ram', pts: [[96, 32], [100, 34], [100, 46], [96, 46]] },
+      { label: 'שריון', en: 'armor plate', pts: [[8, 36], [36, 36]] },
+      { label: 'גלגל', en: 'wheel', pts: circle(22, 48, 9) },
+      { label: 'גלגל', en: 'wheel', pts: circle(80, 48, 9) },
+    ],
+    fills: [
+      { poly: ARMORED, color: '#4a4e56' },
+      { poly: [[18, 18], [21, 10], [37, 10], [40, 18]], color: '#2c2f35' },
+      { poly: circle(22, 48, 9), color: '#2a2a30' },
+      { poly: circle(80, 48, 9), color: '#2a2a30' },
+    ],
+    wheels: [[22, 48, 9], [80, 48, 9]],
+    scale: 5.8,
+  },
+  limo: {
+    id: 'limo',
+    name: 'לימוזינה',
+    the: 'הלימוזינה',
+    g: 'f',
+    nameEn: 'STRETCH LIMO',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: 'ארוכה כמו שלוש מכוניות, שחורה ומבריקה. רכה בנסיעה, וחזקה ממכונית רגילה.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close(LIMO) },
+      { label: 'קו חלונות', en: 'window line', pts: [[20, 29], [87, 29]] },
+      { label: 'עמוד', en: 'pillar', pts: [[38, 22], [38, 29]] },
+      { label: 'עמוד', en: 'pillar', pts: [[54, 22], [54, 29]] },
+      { label: 'עמוד', en: 'pillar', pts: [[70, 22], [70, 29]] },
+      { label: 'פס כרום', en: 'chrome line', pts: [[6, 34], [94, 34]] },
+      { label: 'גלגל', en: 'wheel', pts: circle(15, 41, 6) },
+      { label: 'גלגל', en: 'wheel', pts: circle(86, 41, 6) },
+    ],
+    fills: [
+      { poly: LIMO, color: '#2a2a30' },
+      { poly: [[20, 29], [24, 23], [79, 23], [86, 29]], color: '#5c6878' },
+      { poly: circle(15, 41, 6), color: '#55555e' },
+      { poly: circle(86, 41, 6), color: '#55555e' },
+    ],
+    wheels: [[15, 41, 6], [86, 41, 6]],
+    scale: 7.1,
+  },
+  firetruck: {
+    id: 'firetruck',
+    name: 'כבאית',
+    the: 'הכבאית',
+    g: 'f',
+    nameEn: 'FIRE ENGINE',
+    kind: 'vehicle',
+    difficulty: 5,
+    desc: 'ארוכה וכבדה, עם סולם על הגב וסירנה. דוחפת מכוניות מהדרך.',
+    strokes: [
+      { label: 'גוף', en: 'body', pts: close(FIRETRUCK) },
+      { label: 'חלון', en: 'window', pts: [[73, 27], [75, 19], [86, 19], [91, 27]] },
+      { label: 'מעקה סולם', en: 'ladder rail', pts: [[5, 20], [66, 20]] },
+      { label: 'מעקה סולם', en: 'ladder rail', pts: [[5, 23], [66, 23]] },
+      { label: 'שלבים', en: 'rungs', pts: RUNGS },
+      { label: 'גלגלת צינור', en: 'hose reel', pts: circle(44, 38, 5, 12) },
+      { label: 'סירנה', en: 'light bar', pts: [[73, 13], [86, 13]] },
+      { label: 'פס לבן', en: 'white band', pts: [[3, 31], [96, 31]] },
+      { label: 'גלגל', en: 'wheel', pts: circle(16, 48, 7) },
+      { label: 'גלגל', en: 'wheel', pts: circle(32, 48, 7) },
+      { label: 'גלגל', en: 'wheel', pts: circle(83, 48, 7) },
+    ],
+    fills: [
+      { poly: FIRETRUCK, color: '#d8463b' },
+      { poly: [[73, 27], [75, 19], [86, 19], [91, 27]], color: '#c3d6ea' },
+      { poly: circle(16, 48, 7), color: '#3a3a42' },
+      { poly: circle(32, 48, 7), color: '#3a3a42' },
+      { poly: circle(83, 48, 7), color: '#3a3a42' },
+    ],
+    wheels: [[16, 48, 7], [32, 48, 7], [83, 48, 7]],
+    scale: 8.6,
+  },
+});
+
 export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shield', 'stapler', 'bandage', 'shotgun', 'katana', 'glue', 'inkbomb', 'boomerang', 'planes', 'bike', 'laser', 'copter', 'minigun', 'tippex', 'erasermg', 'paintmg', 'parachute'];
 // (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
 export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
+// (ROADMAP 11.41: the catalog's cars - in the album, not with ?classic; no boards of their own)
+export const BLUEPRINT_CARS = ['muscle', 'limo', 'hyper', 'monster', 'armored', 'firetruck'];
 // (ROADMAP 9.2: in the album, not with ?classic; to be had in the shops, no boards of their own)
 export const BLUEPRINT_TOOLS = ['ladder', 'ramp', 'bridge', 'umbrella', 'key'];
 
