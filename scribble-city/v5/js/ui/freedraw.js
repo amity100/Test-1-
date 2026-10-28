@@ -19,7 +19,7 @@ import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
 import { DrawMemory } from '../game/drawmemory.js';
-import { matchCatalog, gradeOf, MATCH_MIN, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
+import { matchCatalog, gradeOf, drawnWhole, tooEarly, MATCH_MIN, PICK_SLACK, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
 import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
 
@@ -1503,12 +1503,28 @@ export class FreeDraw {
     const pick = ok(this.force) ? this.force : ok(mem) ? mem : null;
     const all = matchCatalog(this.strokes, ids);
     if (!all) return null;
-    const m = pick ? matchCatalog(this.strokes, [pick]) : all;
-    const b = m.best;
+    const top = all.best;
+    const b = (pick && all.list.find((x) => x.id === pick)) || top;
     const bp = BLUEPRINTS[b.id];
-    const alts = all.list.filter((x) => x.id !== b.id && x.score >= MATCH_MIN - 0.08).slice(0, 2).map((x) => ({ key: x.id, name: BLUEPRINTS[x.id].name }));
-    if (b.score < MATCH_MIN && !pick) return { cat: null, why: 'לא דומה עדיין לשום דבר במאגר — ציירו אחד מהציורים שבמקרא', alts, lit: null };
-    return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like: b.score >= MATCH_MIN, grade: gradeOf(b.score), need: b.need, parts: b.n, have: all.have, cost: costOfBp(bp), alts, remembered: !this.force && !!mem && pick === mem };
+    // (ROADMAP 11.43: no guessing from a line or two - the likeliest named only with half of it there)
+    const early = tooEarly(top, all.have);
+    const alts = early ? [] : all.list.filter((x) => x.id !== b.id && x.score >= Math.max(MATCH_MIN, top.score - 0.08)).slice(0, 2).map((x) => ({ key: x.id, name: BLUEPRINTS[x.id].name }));
+    if (!pick && early) return { cat: null, why: all.have < 2 || top.score >= MATCH_MIN ? 'ממשיכים לצייר — ננחש כשחצי מהציור יהיה שם' : 'לא דומה עדיין לשום דבר במאגר — ציירו אחד מהציורים שבמקרא', alts, lit: null };
+    // (picked, but what is drawn is another thing: said, and not made)
+    const other = pick && top.id !== b.id && top.score > b.score + PICK_SLACK && !tooEarly(top, all.have) ? BLUEPRINTS[top.id].name : null;
+    const like = b.score >= MATCH_MIN;
+    const whole = drawnWhole(b, all.have);
+    return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like, whole, other, ready: like && whole && !other, grade: gradeOf(b.score), need: b.need, parts: b.n, have: all.have, missing: Math.max(0, b.n - b.hit), cost: costOfBp(bp), alts, remembered: !this.force && !!mem && pick === mem };
+  }
+
+  // (ROADMAP 11.43) why a drawing from the catalog is not made yet (null: it is) - long, said when
+  // it is tried; short, on the tag
+  notYetSay(R, long) {
+    if (R.other) return long ? `זה נראה כמו ${R.other}, לא ${R.name} — ציירו את מה שבחרתם, או בחרו אחר` : `נראה כמו ${R.other}`;
+    if (R.have < R.need) return long ? `${moreLines(R.need - R.have)} — ל${R.name} יש ${R.parts} חלקים` : `${moreLines(R.need - R.have)} · ${R.parts} חלקים`;
+    if (!R.whole) return long ? `חלקים של ${R.name} חסרים או לא במקום — ציירו את כולו, כמו במקרא` : 'חלקים חסרים או לא במקום';
+    if (!R.like) return long ? `זה עוד לא מספיק דומה ל${R.name} — ציירו אותו כמו במקרא` : 'עוד לא דומה — ציירו כמו במקרא';
+    return null;
   }
 
   // the legend: the categories, and the category's things as they are drawn; the one the drawing is lit
@@ -1686,7 +1702,7 @@ export class FreeDraw {
         // (gear that needs its place: why it would not go here, before the ink is spent)
         const why = this.cannotMake(R);
         // (ROADMAP 11.40: from the catalog - the lines still to draw, or how it would come out)
-        const say = R.cat !== 'bp' ? statLine(R) : R.have < R.need ? `${moreLines(R.need - R.have)} · ${R.parts} חלקים` : !R.like ? 'עוד לא דומה — ציירו כמו במקרא' : GRADE_WORD[R.grade];
+        const say = R.cat !== 'bp' ? statLine(R) : this.notYetSay(R, false) || GRADE_WORD[R.grade];
         this.statsEl.textContent = why ? `⚠ ${why}` : `${say} · ${cost} דיו`;
         this.nowhere = !!why;
       }
@@ -1702,7 +1718,7 @@ export class FreeDraw {
     if (PR || PW) this.nowhere = false;
     else if (PG) this.nowhere = !!this.cannotMake(R);
     const nowhere = has && R && R.cat && this.nowhere;
-    const notYet = !!(R && R.cat === 'bp' && (R.have < R.need || !R.like));
+    const notYet = !!(R && R.cat === 'bp' && !R.ready);
     // (from the catalog, on a phone: short - the tag by the drawing names it - so the tools keep their width)
     const terse = !!(R && R.cat === 'bp' && game.touch);
     this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : notYet ? (terse ? 'עוד לא…' : `עוד לא ${R.name}`) : R && R.cat ? (terse ? '✓ צרו!' : `✓ ${R.name}!`) : PR ? 'עוד לא זז' : '✓ צרו!';
@@ -2013,7 +2029,7 @@ export class FreeDraw {
     if (p.inVehicle || p.mode !== 'foot') return;
     // (ROADMAP 11.40) from the catalog: enough of its lines, and like it - said before the ink
     if (R.cat === 'bp') {
-      const not = R.have < R.need ? `${moreLines(R.need - R.have)} — ל${R.name} יש ${R.parts} חלקים` : !R.like ? `זה עוד לא מספיק דומה ל${R.name} — ציירו אותו כמו במקרא` : null;
+      const not = this.notYetSay(R, true);
       if (not) {
         shake(not);
         return;
