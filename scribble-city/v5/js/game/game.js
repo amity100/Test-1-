@@ -1049,7 +1049,7 @@ export class Game {
     const playing = this.state === 'play' || this.state === 'dead';
     if (this.state === 'paused') dt = 0;
     // (a game inside the game on its sheet: the city stands still behind it)
-    if (this.minigames && this.minigames.isOpen) dt = 0;
+    if (this.minigames && this.minigames.covering) dt = 0;
     // (the weapon wheel open: the city slows right down, ROADMAP 6.6)
     if (this.wheel) {
       this.wheel.update();
@@ -1228,7 +1228,10 @@ export class Game {
         this.camRig.lookK = 1 / zoom;
         // (on the big wheel or the carousel: further back, the ride and the view round it)
         const ro = (this.fair && this.fair.camOpts()) || (this.arenaGame && this.arenaGame.camOpts());
-        this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
+        // (a game played in the world: the camera held behind you, its screen in front - ui/minigame.js)
+        const hold = this.minigames && this.minigames.camHold;
+        if (hold) this.camRig.holdAt(dt, hold.pos, hold.look);
+        else this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
       }
     }
     // (ROADMAP 11.21) the pen out in the car you drive: the camera close by it, held in its frame

@@ -1091,17 +1091,29 @@ body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.ph
 #minigame .mg-stage { position: relative; width: 100%; height: min(72vh, 56vw); display: flex; align-items: center; justify-content: center; }
 #minigame canvas { display: block; border: 2px solid var(--ink); border-radius: 8px; background: #fbf8f0; touch-action: none; }
 #minigame .mg-help { font-size: 15px; opacity: 0.8; margin-top: 4px; text-align: center; }
-#minigame .mg-pad { position: absolute; bottom: 6px; display: none; gap: 6px; }
+#minigame .mg-pad { position: fixed; bottom: 10px; display: none; gap: 6px; z-index: 2; }
 #minigame.touch[data-pad="pad"] .mg-pad { display: grid; }
-#minigame .mg-left { left: 6px; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); }
+#minigame .mg-left { left: 10px; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); }
 #minigame .mg-left [data-k="up"] { grid-column: 2; grid-row: 1; }
 #minigame .mg-left [data-k="left"] { grid-column: 1; grid-row: 2; }
 #minigame .mg-left [data-k="down"] { grid-column: 2; grid-row: 2; }
 #minigame .mg-left [data-k="right"] { grid-column: 3; grid-row: 2; }
-#minigame .mg-right { right: 6px; grid-template-columns: repeat(2, 64px); align-items: end; }
+#minigame .mg-right { right: 10px; grid-template-columns: repeat(2, 64px); align-items: end; }
 #minigame .mg-pad button { border: 2px solid var(--ink); border-radius: 50%; background: rgba(255, 253, 246, 0.55); font-family: var(--font-hand); font-size: 22px; color: var(--ink); touch-action: none; user-select: none; }
 #minigame .mg-right button { width: 64px; height: 64px; }
 #minigame .mg-pad button.on { background: rgba(255, 210, 63, 0.85); }
+/* (ROADMAP 12.6) a game in the world: no sheet, the city round it; a bar at the top with its name
+   and the way out, the pad on a phone, and over the city a layer for the pointer on the screen */
+#minigame .mg-bar, #minigame .mg-touch { display: none; }
+#minigame.world { background: none; pointer-events: none; padding: 0; }
+#minigame.world .mg-sheet { display: none; }
+#minigame.world .mg-bar { display: flex; align-items: baseline; gap: 12px; position: fixed; top: 8px; left: 50%; transform: translateX(-50%) rotate(-0.4deg); padding: 4px 14px; background: rgba(251, 248, 240, 0.92); border: 2px solid var(--ink); border-radius: 10px; pointer-events: auto; max-width: 96vw; }
+#minigame.world .mg-bar .mg-title { font-size: 24px; }
+#minigame.world .mg-bar .mg-status { font-size: 19px; }
+#minigame.world .mg-touch { display: block; position: fixed; inset: 0; pointer-events: auto; touch-action: none; }
+#minigame.world[data-point="on"] .mg-touch { cursor: crosshair; }
+body.mg-world #touch { visibility: hidden; }
+#minigame.world .mg-pad button { pointer-events: auto; }
 @media (max-height: 500px) {
   #minigame { padding: 2px; }
   #minigame .mg-sheet { width: 100vw; max-height: 100vh; padding: 4px 8px 4px; transform: none; border-radius: 0; }

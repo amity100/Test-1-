@@ -537,3 +537,158 @@ export function paintMural(i, W = 1024, H = 400) {
   g.fillText(tag, 1000, H / k - 16);
   return canvasTexture(c);
 }
+
+// ------------------------------------------------------------------ (ROADMAP 12.5ה) framed works
+// The paintings in the fair's white pavilion: a field of colour in soft bands, a grid in primary
+// colours, circles over circles, drips, a portrait in blocks, hills under a sun, pop dots - each
+// with dice of its own, into a cell of one canvas (all of them one picture: one draw)
+const ART = [
+  (g, W, H, r, P) => {
+    // colour fields: two or three soft bands
+    g.fillStyle = P[4];
+    g.fillRect(0, 0, W, H);
+    const n = 2 + Math.floor(r() * 2);
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = P[i % 4];
+      g.globalAlpha = 0.9;
+      const y = H * 0.08 + (i * H * 0.86) / n;
+      g.fillRect(W * 0.08, y, W * 0.84, (H * 0.86) / n - H * 0.05);
+    }
+    g.globalAlpha = 1;
+  },
+  (g, W, H, r) => {
+    // the grid in primary colours
+    g.fillStyle = '#f4f1e8';
+    g.fillRect(0, 0, W, H);
+    const xs = [0, W * (0.2 + r() * 0.2), W * (0.6 + r() * 0.2), W];
+    const ys = [0, H * (0.25 + r() * 0.2), H * (0.6 + r() * 0.2), H];
+    const cols = ['#e8333d', '#2f6fe4', '#ffd23f', '#f4f1e8', '#f4f1e8'];
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        g.fillStyle = cols[Math.floor(r() * cols.length)];
+        g.fillRect(xs[i], ys[j], xs[i + 1] - xs[i], ys[j + 1] - ys[j]);
+      }
+    }
+    g.strokeStyle = INK;
+    g.lineWidth = W * 0.025;
+    g.beginPath();
+    for (const x of xs.slice(1, 3)) {
+      g.moveTo(x, 0);
+      g.lineTo(x, H);
+    }
+    for (const y of ys.slice(1, 3)) {
+      g.moveTo(0, y);
+      g.lineTo(W, y);
+    }
+    g.stroke();
+  },
+  (g, W, H, r, P) => {
+    // circles over circles
+    g.fillStyle = '#fbf3e4';
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 9; i++) {
+      g.beginPath();
+      g.arc(r() * W, r() * H, (0.08 + r() * 0.22) * W, 0, Math.PI * 2);
+      g.globalAlpha = 0.75;
+      g.fillStyle = P[i % 5];
+      g.fill();
+      g.globalAlpha = 1;
+      g.lineWidth = 3;
+      g.strokeStyle = INK;
+      g.stroke();
+    }
+  },
+  (g, W, H, r, P) => {
+    // drips and splashes
+    g.fillStyle = '#efe9dc';
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 26; i++) {
+      g.strokeStyle = i % 4 ? P[i % 5] : INK;
+      g.lineWidth = 2 + r() * 7;
+      g.beginPath();
+      let x = r() * W;
+      let y = r() * H;
+      g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) {
+        x += (r() - 0.5) * W * 0.4;
+        y += (r() - 0.5) * H * 0.4;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  },
+  (g, W, H, r, P) => {
+    // a portrait in blocks of colour
+    g.fillStyle = P[3];
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = P[1];
+    g.fillRect(0, H * 0.62, W, H * 0.38);
+    g.beginPath();
+    g.ellipse(W / 2, H * 0.44, W * 0.2, H * 0.27, 0, 0, Math.PI * 2);
+    ink(g, 4, '#e8b48c');
+    g.beginPath();
+    g.ellipse(W / 2, H * 0.22, W * 0.24, H * 0.13, 0, Math.PI, 0);
+    ink(g, 4, P[4]);
+    for (const s of [-1, 1]) {
+      g.beginPath();
+      g.arc(W / 2 + s * W * 0.08, H * 0.42, W * 0.025, 0, Math.PI * 2);
+      ink(g, 2, INK);
+    }
+    g.beginPath();
+    g.arc(W / 2, H * 0.52, W * 0.06, 0.2, Math.PI - 0.2);
+    ink(g, 3);
+  },
+  (g, W, H, r, P) => {
+    // hills under a sun
+    const sky = g.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, P[3]);
+    sky.addColorStop(1, P[1]);
+    g.fillStyle = sky;
+    g.fillRect(0, 0, W, H);
+    g.beginPath();
+    g.arc(W * (0.3 + r() * 0.4), H * 0.35, H * 0.14, 0, Math.PI * 2);
+    ink(g, 3, P[2]);
+    for (let k = 0; k < 3; k++) {
+      g.beginPath();
+      g.moveTo(0, H);
+      for (let x = 0; x <= W; x += W / 12) g.lineTo(x, H * (0.55 + k * 0.12) + Math.sin(x * 0.02 + k * 2 + r()) * H * 0.06);
+      g.lineTo(W, H);
+      g.closePath();
+      ink(g, 3, ['#2e8b57', '#3cb371', '#1f6b4a'][k]);
+    }
+  },
+  (g, W, H, r, P) => {
+    // pop: dots and a star
+    g.fillStyle = P[0];
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    for (let y = 6; y < H; y += 14) for (let x = (y / 14) % 2 ? 7 : 0; x < W; x += 14) {
+      g.beginPath();
+      g.arc(x, y, 3.5, 0, Math.PI * 2);
+      g.fill();
+    }
+    star(g, W / 2, H / 2, Math.min(W, H) * 0.32, P[2]);
+  },
+];
+
+// n works, each W x H, in one canvas of cells side by side (cols across): the texture and each
+// one's uv box [u0, v0, u1, v1]
+export function paintArtAtlas(n, W = 256, H = 192, cols = 4) {
+  const rows = Math.ceil(n / cols);
+  const c = canvas(W * cols, H * rows);
+  const g = c.getContext('2d');
+  const boxes = [];
+  for (let i = 0; i < n; i++) {
+    const cx = (i % cols) * W;
+    const cy = Math.floor(i / cols) * H;
+    g.save();
+    g.translate(cx, cy);
+    g.beginPath();
+    g.rect(0, 0, W, H);
+    g.clip();
+    ART[i % ART.length](g, W, H, dice(4441 + i * 131), PAL[(i * 3 + 1) % PAL.length]);
+    g.restore();
+    boxes.push([cx / (W * cols), 1 - (cy + H) / (H * rows), (cx + W) / (W * cols), 1 - cy / (H * rows)]);
+  }
+  return { tex: canvasTexture(c), boxes };
+}

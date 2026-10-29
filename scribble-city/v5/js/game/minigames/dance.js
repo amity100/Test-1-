@@ -104,6 +104,8 @@ export class DanceGame {
     this.api = api;
     this.o = { ...this.o, ...o };
     this.touch = !!api.game.touch;
+    // (ROADMAP 12.6: on a screen in the world - the floor's own dancer is you, not one drawn)
+    this.inWorld = !!api.world;
     this.scene = 'menu';
     this.track = Math.max(0, TRACKS.findIndex((t) => t.style === this.o.style));
     this.diff = 1;
@@ -122,7 +124,7 @@ export class DanceGame {
 
   layout() {
     // (a phone: the lanes wide, for thumbs; the dancer smaller beside them)
-    const L = this.touch ? { x0: 330, w: 150, dancer: 165, feet: 548, size: 100 } : { x0: 560, w: 88, dancer: 380, feet: 500, size: 150 };
+    const L = this.inWorld ? { x0: 330, w: 110, dancer: 0, feet: 0, size: 0 } : this.touch ? { x0: 330, w: 150, dancer: 165, feet: 548, size: 100 } : { x0: 560, w: 88, dancer: 380, feet: 500, size: 150 };
     this.lx = (l) => L.x0 + L.w * (l + 0.5);
     this.lw = L.w;
     this.L = L;
@@ -180,6 +182,7 @@ export class DanceGame {
   }
 
   stop() {
+    if (this.inWorld) this.api.game.player.fig.armsUp = 0;
     if (this.band) this.band.stop();
     if (this.out) {
       const c = this.ctx;
@@ -408,9 +411,10 @@ export class DanceGame {
     for (let x = 40; x < W; x += 60) line(g, x, 34, x + 30, 46, { w: 2, color: '#0a0818', seed: x });
     box(g, W / 2 - 170, 52, 340, 62, { fill: '#0a0818', color: '#000', r: 6, seed: 9 });
     text(g, this.o.venue || 'INK FEST', W / 2, 84, { font: MARKER, size: 34, color: LANE_COL[Math.floor(beat) % 4] || PENS.pink, outline: '#0a0818' });
-    // the crowd: heads and hands, jumping on the beat (higher with the hype)
+    // the crowd: heads and hands, jumping on the beat (higher with the hype) - not on a screen in
+    // the world, where the crowd is the one round you
     const jump = (0.3 + hype) * 14 * pulse + (this.fever > 0 ? 8 : 0);
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < (this.inWorld ? 0 : 26); i++) {
       const x = i * 40 + (i % 2) * 14 - 10;
       const y = H - 16 - (i % 3) * 7 - jump * (0.6 + ((i * 7) % 5) / 8);
       g.fillStyle = '#07050f';
@@ -539,7 +543,12 @@ export class DanceGame {
     let pose = { la: 0.4 + bob * 3, ra: -0.4 - bob * 3, ll: 0.15, rl: -0.15, hop: bob };
     if (this.poseT > 0 && this.pose >= 0) pose = poses[this.pose];
     else if (this.poseT > 0 && this.pose < 0) pose = { la: 0.9, ra: 1.4, ll: 0.6, rl: 0.1, lean: 0.35 };
-    figure(g, this.L.dancer, this.L.feet, this.L.size, pose, { shirt: this.fever > 0 ? PENS.yellow : PENS.pink, legs: '#2b2f55', hair: '#2a1a12' });
+    if (this.inWorld) {
+      // (the dancer is you, on the floor: your arms up on the strong moves and in the fever)
+      const f = this.api.game.player.fig;
+      f.dance = 1;
+      f.armsUp = (this.poseT > 0 && this.pose === 2) || this.fever > 0 ? 1 : 0;
+    } else figure(g, this.L.dancer, this.L.feet, this.L.size, pose, { shirt: this.fever > 0 ? PENS.yellow : PENS.pink, legs: '#2b2f55', hair: '#2a1a12' });
     // the score, the row, the hype
     text(g, `ניקוד ${this.score.toLocaleString('en-US')}`, 170, 150, { size: 28, color: PENS.white, outline: '#0a0818', ow: 6 });
     if (this.combo >= 5) text(g, `רצף ${this.combo}`, 170, 186, { size: 24, color: PENS.yellow, outline: '#0a0818', ow: 6 });

@@ -72,6 +72,34 @@ export class CameraRig {
     }
   }
 
+  // (ROADMAP 12.6) held at a place, looking at a point - a game in the world: behind your shoulder,
+  // its screen in front - eased there from wherever it was (its yaw and pitch kept, so the camera
+  // goes back behind you from there when the game is over)
+  holdAt(dt, pos, look) {
+    const cam = this.camera;
+    const dx = look[0] - pos[0];
+    const dy = look[1] - pos[1];
+    const dz = look[2] - pos[2];
+    const yaw = Math.atan2(dx, dz);
+    const pitch = Math.atan2(dy, Math.hypot(dx, dz));
+    this.holdT = (this.holdT || 0) + dt;
+    const k = this.holdT > 1.2 ? 1 : 1 - Math.exp(-dt * 6);
+    let d = yaw - this.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    this.yaw += d * k;
+    this.pitch += (pitch - this.pitch) * k;
+    cam.position.x += (pos[0] - cam.position.x) * k;
+    cam.position.y += (pos[1] - cam.position.y) * k;
+    cam.position.z += (pos[2] - cam.position.z) * k;
+    cam.rotation.set(this.pitch, this.yaw + Math.PI, 0, 'YXZ');
+    this.curDist = this.dist;
+    if (Math.abs(cam.fov - this.baseFov) > 0.05) {
+      cam.fov = damp(cam.fov, this.baseFov, 10, dt);
+      cam.updateProjectionMatrix();
+    }
+  }
+
   addShake(a) {
     this.shake = Math.min(1.2, this.shake + a);
   }

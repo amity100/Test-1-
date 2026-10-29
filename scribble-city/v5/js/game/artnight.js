@@ -9,6 +9,8 @@ import { mBlockRect, CURB } from '../world/mainland/plan.js';
 import { YARD_W } from '../world/mainland/blocks.js';
 import { paintMural, MURAL_COUNT } from '../world/murals.js';
 import { DrawOff, DOODLES, SUBJECTS } from './minigames/drawoff.js';
+import { worldAt } from '../ui/minigame.js';
+import { fairPlan, buildFair, paintFloor, paintProjection, paintLive } from './artfair.js';
 
 // (v5, ROADMAP 12.5) Paintwood's Walls, and Art Night in them. In the yard between the backs of the
 // rows of the walls' block (world/mainland/blocks.js), ten walls stand with a mural each - built
@@ -96,16 +98,6 @@ export class ArtNight {
         K.box(M.glow, xa, GY + 5.78 + b0, z + out * 0.26, xb, GY + 5.78 + b1, z + out * 0.32, BULB[0]);
       });
     }
-    // benches down the middle, back to back, facing the walls
-    for (const z of [Z0 + 20, Z0 + 37, Z0 + 54, Z0 + 71]) {
-      for (const s of [-1, 1]) {
-        const x = CX + s * 1.6;
-        K.box(M.paint, x - 0.3, GY + 0.42, z - 1, x + 0.3, GY + 0.5, z + 1, linC(0.55, 0.34, 0.2));
-        K.box(M.paint, x + s * 0.27 - 0.04, GY + 0.5, z - 1, x + s * 0.27 + 0.04, GY + 0.95, z + 1, linC(0.55, 0.34, 0.2));
-        for (const dz of [-0.85, 0.85]) K.box(M.metal, x - 0.25, GY, z + dz - 0.04, x + 0.25, GY + 0.42, z + dz + 0.04, DARK);
-      }
-      this.cols.push(col.addBox(CX - 2, z - 1, CX + 2, z + 1, -1, 0.95, 'prop'));
-    }
     // the lights strung across the yard, from wall top to wall top (the wires: drawn, draw())
     this.wires = [];
     for (let k = 0; k < 6; k++) {
@@ -185,7 +177,7 @@ export class ArtNight {
       this.lamps.push([x, GY + S.h + 4.4, S.z0 + 0.2]);
     }
     // three easels on the stage for the contest's artists
-    for (const dx of [-4.5, 0, 4.5]) easel(K, M, CX + dx, GY + S.h, S.z1 - 2.2, 0, -1, false);
+    for (const dx of [-5.6, -4.1, 5.4]) easel(K, M, CX + dx, GY + S.h, S.z1 - 2.2, 0, -1, false);
     // the café and the prints, either side of the stage
     this.stalls = [];
     const stall = (x0, x1, name, kind, colr) => {
@@ -206,18 +198,20 @@ export class ArtNight {
     };
     stall(X0 + 2.2, S.x0 - 1.2, 'CAFE CUBANO', 'cafe', linC(0.95, 0.5, 0.25));
     stall(S.x1 + 1.2, X1 - 2.2, 'PRINTS', 'prints', linC(0.3, 0.4, 0.85));
-    this.extraCols.push(col.addBox(S.x0, S.z0, S.x1, S.z1, -1, S.h, 'wall'));
-    // the painters' easels down the middle, facing the path
+    this.extraCols.push(col.addBox(S.x0, S.z0, S.x1, S.z1, -1, GY + S.h, 'wall'));
+    // the fair: the pavilions, the sculptures, the installations, the bar (game/artfair.js)
+    const Y = { X0, X1, Z0, Z1, CX, GY, touch: g.touch };
+    this.fair = buildFair(K, M, Y, col);
+    this.extraCols.push(...this.fair.cols);
+    // the painters' easels at the plaza's east side, facing across it
     this.easels = [];
-    const spots = [[-6, Z0 + 12], [6, Z0 + 28], [-6, Z0 + 45], [6, Z0 + 62]];
-    for (let i = 0; i < spots.length; i++) {
-      const [dx, z] = spots[i];
-      const face = dx < 0 ? 1 : -1;
-      easel(K, M, CX + dx, GY, z, face, 0, true);
-      this.extraCols.push(col.addBox(CX + dx - 0.5, z - 0.6, CX + dx + 0.5, z + 0.6, -1, 2, 'prop'));
-      this.easels.push({ x: CX + dx, z, face, i, t: Math.random() * 60, k: 0, painted: -1 });
-    }
+    this.fair.plan.easels.forEach(([x, z], i) => {
+      easel(K, M, x, GY, z, -1, 0, true);
+      this.extraCols.push(col.addBox(x - 0.5, z - 0.6, x + 0.5, z + 0.6, -1, 2, 'prop'));
+      this.easels.push({ x, z, face: -1, i, t: Math.random() * 60, k: 0, painted: -1 });
+    });
     const group = K.build({ seed: 0.71 });
+    for (const m of this.fair.meshes) group.add(m);
     // the paintings on the easels, painted as you watch (a canvas each, its texture redrawn)
     for (const e of this.easels) {
       e.c = canvas(256, 192);
@@ -260,6 +254,9 @@ export class ArtNight {
     }
     if (this.screenTex) this.screenTex.dispose();
     if (this.screenMat) this.screenMat.dispose();
+    const F = this.fair;
+    if (F) for (const x of [F.photoTex, F.photoMat, F.artTex, F.artMat, F.proj.tex, F.proj.mat, F.live.tex, F.live.mat]) x.dispose();
+    this.fair = null;
     this.screenTex = null;
     this.screenMat = null;
     this.easels = [];
@@ -270,46 +267,118 @@ export class ArtNight {
     this.stopMusic();
   }
 
-  // the people: at the walls looking, before the stage, strolling up and down the yard; the painters
-  // at their easels, the MC and the three artists on the stage
+  // the people, where a fair's people are: at the walls, before the works in the White Cube and the
+  // neon in the black box, round the balloon dog, posing on the carpet and the photographers before
+  // them, at the bar and the high tables, sitting in the lounge, on the floor of light, before the
+  // stage, strolling the yard's two lanes; and the fair's own - the painters, the bartenders, the
+  // DJ, the gallerist, the guards at the arch, the MC and the artists on the stage
   makeCrowd() {
     const g = this.game;
-    const n = g.touch ? 34 : 80;
+    const P = this.fair.plan;
+    const N = g.touch ? 0.42 : 1;
     const list = [];
+    const R = Math.random;
     const person = (x, z, yaw, o = {}) => {
       const look = civilianLook();
-      list.push({ x, z, y: o.y || GY, y0: o.y || GY, look, scale: look.build.height, yaw, speed: 0, phase: Math.random() * 6, seed: Math.random() * 100, cheer: 0, sit: 0, hop: Math.random(), ...o });
+      list.push({ x, z, y: o.y || GY, y0: o.y || GY, look, scale: look.build.height, yaw, speed: 0, phase: R() * 6, seed: R() * 100, cheer: 0, sit: 0, hop: R(), ...o });
     };
-    for (let i = 0; i < n; i++) {
-      const k = i / n;
-      if (k < 0.5) {
-        // at a wall, a few steps back from it, looking
-        const w = WALLS[Math.floor(Math.random() * WALLS.length)];
-        const z = w.z0 + 1 + Math.random() * (WALL_L - 2);
-        const x = w.x - w.side * (2.2 + Math.random() * 2.5);
-        person(x, z, w.side < 0 ? -Math.PI / 2 + (Math.random() - 0.5) * 0.5 : Math.PI / 2 + (Math.random() - 0.5) * 0.5, { at: 'wall' });
-      } else if (k < 0.78) {
-        // before the stage
-        const x = CX + (Math.random() - 0.5) * 16;
-        const z = ST.z0 - 3 - Math.random() * 12;
-        if (list.some((w) => Math.hypot(w.x - x, w.z - z) < 0.7)) continue;
-        person(x, z, Math.atan2(CX - x, ST.z1 - z), { at: 'stage', feel: 0.5 + Math.random() * 0.5 });
-      } else {
-        // strolling up and down
-        const x = CX + (Math.random() < 0.5 ? -1 : 1) * (2.5 + Math.random() * 2);
-        const z = Z0 + 6 + Math.random() * (ST.z0 - Z0 - 14);
-        const dir = Math.random() < 0.5 ? 1 : -1;
-        person(x, z, dir > 0 ? 0 : Math.PI, { at: 'walk', dir, v: 0.9 + Math.random() * 0.5, pause: 0 });
+    const facing = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
+    const n = (k) => Math.max(1, Math.round(k * N));
+    // at the walls (not where the easels and the scaffold are)
+    for (let i = 0; i < n(26); i++) {
+      const w = WALLS[Math.floor(R() * WALLS.length)];
+      const z = w.z0 + 1 + R() * (WALL_L - 2);
+      if (P.keepOff.some((k) => k.side === w.side && z > k.z0 && z < k.z1)) continue;
+      const x = w.x - w.side * (2.2 + R() * 2.5);
+      person(x, z, w.side < 0 ? -Math.PI / 2 + (R() - 0.5) * 0.5 : Math.PI / 2 + (R() - 0.5) * 0.5, { at: 'look' });
+    }
+    // in the White Cube, before the works
+    const works = this.fair.works;
+    for (let i = 0; i < n(16); i++) {
+      const wk = works[Math.floor(R() * works.length)];
+      const d = 1.3 + R() * 0.9;
+      const x = wk.x + wk.nx * d + wk.nz * (R() - 0.5) * 1.6;
+      const z = wk.z + wk.nz * d - wk.nx * (R() - 0.5) * 1.6;
+      if (list.some((q) => Math.hypot(q.x - x, q.z - z) < 0.6)) continue;
+      person(x, z, facing(x, z, wk.x, wk.z), { at: 'look' });
+    }
+    // in the black box, before the neon
+    const B = P.pavB;
+    for (let i = 0; i < n(8); i++) {
+      const north = i % 2 === 0;
+      const x = CX + (R() - 0.5) * 9;
+      const z = north ? B.z0 + 1.6 + R() * 1.2 : B.z1 - 1.6 - R() * 1.2;
+      person(x, z, north ? Math.PI : 0, { at: 'look' });
+    }
+    // round the sculptures, some taking pictures of them
+    for (const [sx, sz, r, k] of [[P.dog.x, P.dog.z, 3.4, 9], [P.ink.x, P.ink.z, 2.6, 3], [P.nib.x, P.nib.z, 2.2, 3]]) {
+      for (let i = 0; i < n(k); i++) {
+        const a = R() * Math.PI * 2;
+        const x = sx + Math.cos(a) * r;
+        const z = sz + Math.sin(a) * r;
+        if (x > P.easels[0][0] - 1.2 || list.some((q) => Math.hypot(q.x - x, q.z - z) < 0.6)) continue;
+        person(x, z, facing(x, z, sx, sz), { at: R() < 0.35 ? 'photo' : 'look' });
       }
     }
-    // (the painter beside the painting's face, looking at it: you see it over a shoulder)
+    // the carpet: two posing at the wall of logos, the photographers before them
+    for (const dz of [-0.6, 0.6]) person(P.photoWall.x + 0.9, (P.photoWall.z0 + P.photoWall.z1) / 2 + dz, Math.PI / 2, { at: 'pose' });
+    this.photographers = [];
+    for (const [x, z] of P.photographers) {
+      person(x, z, -Math.PI / 2, { at: 'photo' });
+      this.photographers.push([x, z]);
+    }
+    // the bar: its bartenders, people at it
+    const BR = P.bar;
+    for (const z of [BR.z0 + 1.2, BR.z1 - 1.4]) person(BR.x - 0.95, z, Math.PI / 2, { at: 'staff' });
+    for (let i = 0; i < n(5); i++) person(BR.x + 0.95 + R() * 0.3, BR.z0 + 0.5 + i * 1.0, -Math.PI / 2, { at: 'look' });
+    // the high tables, two or three at each
+    for (const [tx, tz] of P.tables) {
+      const k = 2 + Math.floor(R() * 2);
+      for (let i = 0; i < k; i++) {
+        if (N < 1 && i > 1) break;
+        const a = (i / k) * Math.PI * 2 + R();
+        const x = tx + Math.cos(a) * 0.75;
+        const z = tz + Math.sin(a) * 0.75;
+        person(x, z, facing(x, z, tx, tz), { at: 'chat' });
+      }
+    }
+    // the lounge, sitting
+    for (const { x, z } of P.lounge) {
+      for (const [dx, dz] of [[-0.8, -1.2], [0.2, -1.2], [1.2, -0.3], [1.2, 0.6]]) {
+        if (N < 1 && dx > 1) continue;
+        person(x + dx, z + dz, facing(x + dx, z + dz, x - 0.1, z), { at: 'sit', sit: 1 });
+      }
+    }
+    // on the floor of light
+    const F = P.floor;
+    for (let i = 0; i < n(5); i++) person(F.x0 + 0.8 + R() * (F.x1 - F.x0 - 1.6), F.z0 + 0.8 + R() * (F.z1 - F.z0 - 1.6), R() * Math.PI * 2, { at: 'floor' });
+    // before the stage
+    for (let i = 0; i < n(18); i++) {
+      const x = CX + (R() - 0.5) * 12;
+      const z = ST.z0 - 2.5 - R() * 6;
+      if (list.some((q) => Math.hypot(q.x - x, q.z - z) < 0.7)) continue;
+      person(x, z, facing(x, z, CX, ST.z1), { at: 'stage', feel: 0.5 + R() * 0.5 });
+    }
+    // strolling the lanes beside the pavilions
+    for (let i = 0; i < n(14); i++) {
+      const west = R() < 0.5;
+      const z = Z0 + 4 + R() * 58;
+      const dir = R() < 0.5 ? 1 : -1;
+      person(west ? CX - 8.4 : CX + 7.6, z, dir > 0 ? 0 : Math.PI, { at: 'walk', dir, v: 0.9 + R() * 0.5, pause: 0, zMin: Z0 + 3, zMax: Z0 + 63 });
+    }
+    // the fair's own
     for (const e of this.easels) {
       const px = e.x + e.face * 0.9;
       const pz = e.z + 0.95;
       person(px, pz, Math.atan2(e.x - px, e.z - pz), { at: 'painter', easel: e });
     }
+    person(P.dj.x - 0.9, P.dj.z, Math.PI / 2, { at: 'dj' });
+    person(CX + 4.3, P.pavA.z0 + 2.1, Math.PI, { at: 'staff' });
+    person((P.info.x0 + P.info.x1) / 2, P.info.z1 - 0.4, Math.PI, { at: 'staff' });
+    for (const x of [CX - 3.2, CX + 3.2]) person(x, Z0 + 2.4, Math.PI, { at: 'staff' });
+    person(P.scaffold.x - 1.3, (P.scaffold.z0 + P.scaffold.z1) / 2, Math.PI / 2, { y: GY + 2.46, y0: GY + 2.46, at: 'sprayer' });
     person(CX + 2.2, ST.z0 + 1.2, Math.PI, { y: GY + ST.h, at: 'mc' });
-    for (const dx of [-4.5, 0, 4.5]) person(CX + dx + 0.8, ST.z1 - 2.6, Math.PI - 0.5, { y: GY + ST.h, at: 'artist' });
+    for (const dx of [-5.6, -4.1, 5.4]) person(CX + dx + 0.5, ST.z1 - 2.9, Math.PI - 0.4, { y: GY + ST.h, at: 'artist' });
     this.crowd = list;
   }
 
@@ -506,8 +575,9 @@ export class ArtNight {
         }
         w.z += w.dir * w.v * dt;
         w.speed = 3.2 * w.v;
-        if (w.z > ST.z0 - 6 || w.z < Z0 + 4) {
+        if (w.z > (w.zMax || ST.z0 - 6) || w.z < (w.zMin || Z0 + 4)) {
           w.dir = -w.dir;
+          w.z = Math.max(w.zMin || Z0 + 4, Math.min(w.zMax || ST.z0 - 6, w.z));
           w.yaw = w.dir > 0 ? 0 : Math.PI;
         } else if (Math.random() < dt * 0.04) {
           // (stops for a look at the wall on its side)
@@ -521,9 +591,63 @@ export class ArtNight {
         w.cheer = this.contest ? 0.7 + 0.3 * bob : 0.25;
       } else if (w.at === 'artist') {
         w.cheer = this.cheer > 0.3 ? 1 : 0;
-      } else if (w.at === 'painter') {
+      } else if (w.at === 'painter' || w.at === 'sprayer') {
         w.cheer = 0.35 + 0.25 * Math.sin(this.t * 3 + w.seed);
+      } else if (w.at === 'photo') {
+        // (a phone or a camera up now and then)
+        w.cheer = Math.sin(this.t * 0.7 + w.seed) > 0.4 ? 0.7 : 0;
+      } else if (w.at === 'pose' || w.at === 'floor' || w.at === 'dj') {
+        w.y = w.y0 + (w.at === 'pose' ? 0 : bob * 0.06);
+        w.cheer = w.at === 'pose' ? 0.25 : Math.floor(this.beat + w.hop * 4) % 4 === 0 ? 0.9 : 0.2;
+      } else if (w.at === 'chat') {
+        w.cheer = Math.sin(this.t * 1.3 + w.seed * 3) > 0.85 ? 0.45 : 0;
       }
+    }
+    // the fair's moving parts (only near: the projection a few times a second, the floor of light,
+    // the mural painted from the scaffold, the photographers' flashes)
+    const F = this.fair;
+    const near = d < 75;
+    if (F && near) {
+      this.projT = (this.projT || 0) - dt;
+      if (this.projT <= 0) {
+        this.projT = g.touch ? 0.2 : 0.1;
+        paintProjection(F.proj, this.t);
+      }
+      this.floorT = ((this.floorT || 0) + 1) % (g.touch ? 2 : 1);
+      if (this.floorT === 0) {
+        const feet = [[p.pos.x, p.pos.z]];
+        for (const w of this.crowd) if (w.at === 'floor') feet.push([w.x, w.z]);
+        paintFloor(F.floor, this.t, feet);
+      }
+      const L = F.live;
+      if (L.hold > 0) {
+        L.hold -= dt;
+        if (L.hold <= 0) L.k = 0.02;
+      } else {
+        L.k = Math.min(1, L.k + dt / 360);
+        if (L.k >= 1) L.hold = 40;
+      }
+      const step = Math.floor(L.k * 90);
+      if (step !== L.step) {
+        L.step = step;
+        paintLive(L, L.k);
+      }
+      // (the spray off the painter's can, at the wall)
+      this.sprayT = (this.sprayT || 0) - dt;
+      if (this.sprayT <= 0 && g.fx && L.hold <= 0) {
+        this.sprayT = 0.5;
+        const SF = F.plan.scaffold;
+        const z = SF.z0 + 2 + ((this.t * 0.37) % 1) * (SF.z1 - SF.z0 - 4);
+        g.fx.burst(SF.x - 0.3, GY + 3.4 + Math.sin(this.t) * 0.6, z, 6, 1.6, [1, 0.35, 0.65], 0.25, 0.35);
+      }
+      this.flashT = (this.flashT || 0) - dt;
+      if (this.flashT <= 0 && this.photographers && this.photographers.length) {
+        this.flashT = this.flashBurst > 0 ? 0.12 + Math.random() * 0.15 : 0.6 + Math.random() * 1.6;
+        const [x, z] = this.photographers[Math.floor(Math.random() * this.photographers.length)];
+        this.flash = { x, z, t: 0.09 };
+      }
+      if (this.flash) this.flash.t -= dt;
+      if (this.flashBurst > 0) this.flashBurst -= dt;
     }
     // the paintings come along (only redrawn when it shows: a few times a second, and near)
     for (const e of this.easels) {
@@ -583,9 +707,24 @@ export class ArtNight {
     const night = g.daynight ? g.daynight.night : 1;
     if (night > 0.15 && this.on && dc < 140) {
       for (const [x, y, z] of this.lamps) flashLight(x + (x < CX ? 2.5 : -2.5), GY + ST.h + 1.2, z + 1.2, 9, _warm, 1.1 * night);
-      flashLight(CX, GY + WALL_H, Z0 + 30, 22, _bulb, 0.9 * night);
       flashLight(CX, GY + WALL_H, Z0 + 62, 22, _bulb, 0.9 * night);
+      // (the White Cube's track lights on its works, a warm pool over the bar)
+      const F = this.fair;
+      if (F) {
+        flashLight(CX, GY + 3.2, (F.plan.pavA.z0 + F.plan.pavA.z1) / 2, 10, _white, 1.1 * night);
+        flashLight(F.plan.bar.x + 1.5, GY + 3.4, (F.plan.bar.z0 + F.plan.bar.z1) / 2, 9, _warm, 1.0 * night);
+        // (the sculptures lit from below, the dog in its pink)
+        flashLight(F.plan.dog.x - 1.5, GY + 1.2, F.plan.dog.z - 2.8, 11, _pink, 1.8 * night);
+      }
     }
+    const F = this.fair;
+    if (!F || dc > 110) return;
+    // the photographers' flashes
+    if (this.flash && this.flash.t > 0) flashLight(this.flash.x - 0.4, GY + 1.8, this.flash.z, 7, _white, 4);
+    // the projector's beam, faint, to the corners of its picture
+    const pr = F.proj;
+    const c = PROJ_C[Math.floor(this.t / 2) % PROJ_C.length];
+    for (let i = 0; i < 4; i++) fr.lineXYZ(pr.from[0], pr.from[1], pr.from[2], pr.to[i][0], pr.to[i][1], pr.z, c, 2, 7900 + i, 0.07 * night + 0.02, 0.001, 0);
   }
 
   // ------------------------------------------------------------------ what you can do there
@@ -594,6 +733,11 @@ export class ArtNight {
     const p = this.game.player.pos;
     for (const s of this.stalls) if (Math.hypot(p.x - s.x, p.z - s.z) < 2.6) return { kind: s.kind, s, label: s.kind === 'cafe' ? 'E — CAFE CUBANO: קפה ומאפה' : 'E — PRINTS: הדפסים וציורים' };
     if (p.x > ST.x0 && p.x < ST.x1 && p.z > ST.z0 - 6 && p.z < ST.z0 + 0.5) return { kind: 'contest', label: 'E — קרב ציור על הבמה ($5)' };
+    const P = this.fair.plan;
+    if (p.x > P.bar.x + 0.3 && p.x < P.bar.x + 2.2 && p.z > P.bar.z0 && p.z < P.bar.z1) return { kind: 'bar', label: 'E — CHAMPAGNE: בר הבועות' };
+    if (p.x > P.photoWall.x + 0.2 && p.x < P.carpet.x1 && p.z > P.photoWall.z0 && p.z < P.photoWall.z1) return { kind: 'pose', label: 'E — להצטלם מול קיר הלוגואים' };
+    if (p.x > P.floor.x0 && p.x < P.floor.x1 && p.z > P.floor.z0 && p.z < P.floor.z1) return { kind: 'floor', label: 'E — לרקוד על רצפת האור' };
+    if (Math.hypot(p.x - (P.infinity.x - P.infinity.s / 2 - 0.8), p.z - P.infinity.z) < 1.4) return { kind: 'infinity', label: 'E — להיכנס לחדר האינסוף' };
     for (const e of this.easels) if (Math.hypot(p.x - e.x, p.z - e.z) < 2.2) return { kind: 'easel', e, label: `E — הצייר/ת ליד הכן: ${e.subject.he}` };
     return null;
   }
@@ -609,6 +753,10 @@ export class ArtNight {
         return true;
       }
       this.contest = true;
+      // (ROADMAP 12.6) on the stage, at the big screen: you draw on it with the pen in your hand,
+      // the yard behind you watching, the camera over your shoulder
+      const S = ST;
+      const world = worldAt({ at: [CX, GY + S.h + 2.2, S.z1 - 0.36], n: [0, -1], w: 6.4, stand: 1.3, side: 3.5, y0: GY + S.h, back: 4.6, up: 2.9, camSide: -1.2, pen: true, exit: [CX + 1.5, S.z0 - 2.2, Math.PI] });
       g.minigames.play(new DrawOff({ venue: 'PAINTWOOD DRAW-OFF', fee: 5 }), (r) => {
         this.contest = false;
         if (r && r.gallery && r.gallery.length) {
@@ -621,7 +769,46 @@ export class ArtNight {
           g.hud.big('CHAMPION!', 2400);
           g.hud.toast('ניצחתם בקרב הציור! כל החצר מוחאת כפיים, והציורים שלכם על המסך', 'good', 3.5);
         } else if (r && r.place) g.hud.toast(`מקום ${r.place} בקרב הציור. הציורים שלכם על המסך מעל הבמה`, 'good', 3);
-      });
+      }, { world });
+      return true;
+    }
+    if (tg.kind === 'bar') {
+      const menu = [['קוקטייל בועות ורוד (+15 חיים)', 8, 15, [1, 0.6, 0.75]], ['מים מוגזים עם לימון (+5 חיים)', 2, 5, [0.85, 0.95, 0.8]]];
+      g.dialog.show('CHAMPAGNE', 'Bubbles for the artists! What can I pour you?', menu.map(([label, price, hp, colr]) => ({
+        label: `${label} · $${price}`,
+        fn: () => {
+          if (!g.money || g.money.pay(price, label)) {
+            const pl = g.player;
+            pl.hp = Math.min(pl.maxHp, pl.hp + hp);
+            pl.fig.belly = Math.min(1, pl.fig.belly + 0.15);
+            pl.fig.bellyColor = colr;
+            g.audio.play('coins', 0.5);
+            g.hud.toast(`${label.split(' (')[0]}! +${hp} חיים`, 'good', 2);
+          } else g.money.refuse('CHAMPAGNE', price);
+        },
+      })));
+      return true;
+    }
+    if (tg.kind === 'pose') {
+      // (the photographers turn to you: a burst of flashes)
+      this.flashBurst = 2.2;
+      this.flashT = 0;
+      g.player.fig.armsUp = 1;
+      g.inkwell.after(2.2, () => (g.player.fig.armsUp = 0));
+      g.audio.play('click', 0.6);
+      g.hud.toast('הצלמים לא מפסיקים! מחר אתם בעמוד האמנות של העיתון', 'good', 3);
+      return true;
+    }
+    if (tg.kind === 'floor') {
+      g.player.fig.dance = 1;
+      g.inkwell.after(9, () => (g.player.fig.dance = 0));
+      g.hud.toast('הרצפה נדלקת מתחת לכל צעד שלכם', 'good', 2.4);
+      return true;
+    }
+    if (tg.kind === 'infinity') {
+      const I = this.fair.plan.infinity;
+      g.player.spawn(I.x, I.z, Math.PI / 2);
+      g.hud.toast('אלפי נקודות אור, בלי סוף לכל כיוון. שקט פה.', 'info', 3);
       return true;
     }
     if (tg.kind === 'easel') {
@@ -738,3 +925,6 @@ function drawStrokes(g, strokes, x, y, w, h, color, lw) {
 const _v = new THREE.Vector3();
 const _warm = new THREE.Color(1, 0.85, 0.6);
 const _bulb = new THREE.Color(1, 0.8, 0.55);
+const _white = new THREE.Color(1, 0.97, 0.92);
+const _pink = new THREE.Color(1, 0.62, 0.85);
+const PROJ_C = [[1, 0.4, 0.75], [0.4, 0.9, 1], [1, 0.9, 0.4], [0.6, 1, 0.6]];

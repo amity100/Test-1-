@@ -268,6 +268,8 @@ export class DrawOff {
     this.help = 'ציירו עם העכבר על הדף · Enter: סיימתי · K / Shift: מחיקת הקו האחרון · Esc ליציאה';
     this.helpTouch = 'ציירו באצבע על הדף · "סיימתי" כשגמרתם';
     this.pad = 'tap';
+    // (drawn with the pointer: in the world, the screen's face takes the mouse and the finger)
+    this.pointer = true;
   }
 
   start(api, o = {}) {

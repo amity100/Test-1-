@@ -6,6 +6,7 @@ import { groundHeight } from '../world/layout.js';
 import { letter } from '../world/letters.js';
 import { flashLight } from '../render/materials.js';
 import { DanceGame } from './minigames/dance.js';
+import { worldAt } from '../ui/minigame.js';
 
 // (v5, ROADMAP 12.4) INK FEST: the festival on the water. On its nights (game/calendar.js) a stage
 // stands on a floating deck off the island's beach, south of the pier: its trusses and roof, a wall
@@ -480,13 +481,17 @@ export class Festival {
       if (!g.minigames) return false;
       g.player.fig.dance = 1;
       const style = this.song ? this.song.style : 'disco';
+      // (ROADMAP 12.6: the arrows on a screen let down from the front truss, you in the front row
+      // dancing, the camera behind you)
+      const z = Math.max(STAGE.z0 + 5, Math.min(STAGE.z1 - 5, g.player.pos.z));
+      const world = worldAt({ at: [STAGE.x0 + 0.3, 5.7, z], n: [-1, 0], w: 9.6, stand: 5.1, side: 1.2, y0: groundHeight(98.2, z), back: 5.2, up: 2.9, exit: [97.4, z + 1.2, Math.PI / 2] });
       g.minigames.play(new DanceGame({ venue: 'INK FEST', style, tips: true }), (r) => {
         g.player.fig.dance = 0;
         if (r && (r.grade === 'S' || r.grade === 'A')) {
           this.cheer = 1;
           g.hud.toast('הקהל סביבכם השתגע! מחיאות כפיים מכל הכיוונים', 'good', 3);
         } else if (r && r.grade) g.hud.toast('רקדתם עם כל החוף', 'good', 2.4);
-      });
+      }, { world });
       return true;
     }
     const menu = tg.kind === 'bar'

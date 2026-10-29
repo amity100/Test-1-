@@ -10,6 +10,7 @@ import { BOSS } from './properties.js';
 import { TOOLS, BOTTLE } from './ink.js';
 import { Dining, BarLife, LobbyLife, eatPlate } from './venuelife.js';
 import { DanceGame } from './minigames/dance.js';
+import { worldAt } from '../ui/minigame.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -941,13 +942,35 @@ SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הב�
       game.minigames.play(new DanceGame({ venue: venue.toUpperCase(), style: 'disco', tips: true }), (r) => {
         p.fig.dance = 0;
         if (r && r.grade) game.hud.toast(r.grade === 'S' || r.grade === 'A' ? 'הרחבה כולה הסתכלה עליכם!' : 'רקדתם! הרחבה מחאה כפיים', 'good', 2.4);
-      });
+      }, { world: clubScreen(game, a) });
       return;
     }
     game.inkwell.after(9, () => (p.fig.dance = 0));
     game.hud.toast('רוקדים! כל הרחבה איתכם', 'good', 2.4);
   }],
 ] };
+
+// (ROADMAP 12.6) the club's floor in the world: the arrows on a screen over the back wall, you on
+// the floor before it, the camera behind you (a room unknown: a screen a few steps ahead)
+function clubScreen(game, a) {
+  const p = game.player;
+  const R = a && a.shop && a.shop.room;
+  const y0 = p.pos.y;
+  if (R && R.corners && R.facade) {
+    const [FL, , BR, BL] = R.corners;
+    const F = R.facade;
+    const W = Math.hypot(BR.x - BL.x, BR.z - BL.z);
+    const D = Math.hypot(BL.x - FL.x, BL.z - FL.z);
+    const w = Math.max(3, Math.min(W - 1.2, 5.6));
+    const h = (w * 3) / 5;
+    const cx = (BR.x + BL.x) / 2 + F.nx * 0.12;
+    const cz = (BR.z + BL.z) / 2 + F.nz * 0.12;
+    return worldAt({ at: [cx, y0 + 0.5 + h / 2, cz], n: [F.nx, F.nz], w, stand: Math.min(D * 0.42, 4), y0, back: Math.min(D * 0.4, 3), up: 2.1 });
+  }
+  const fx = Math.sin(p.yaw);
+  const fz = Math.cos(p.yaw);
+  return worldAt({ at: [p.pos.x + fx * 6, y0 + 2.6, p.pos.z + fz * 6], n: [-fx, -fz], w: 5, stand: 6, y0, back: 3, up: 2.1 });
+}
 
 // ------------------------------------------------------------------ (v5, ROADMAP 11.17) at home
 // the houses of the mainland where people live (world/home.js): you knock, they let you in, and
