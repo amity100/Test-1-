@@ -69,6 +69,21 @@ export class Solid {
     this.update();
   }
 
+  // (ROADMAP 11.47) the twin a pen would wear here, made now if it was not (its shader made ready
+  // before the piece is shown: world/mainland/index.js warm); null for a pen that wears none
+  twinFor(m) {
+    if (!m || !m.isShaderMaterial || !m.uniforms || !m.uniforms.uKind || m.transparent || !m.depthWrite) return null;
+    if (!m.fragmentShader.includes('#ifndef SOLID')) return null;
+    const d = m.defines || {};
+    if (d.SOLID !== undefined || d.USE_PULL !== undefined || d.USE_INSTANCING !== undefined || d.USE_CABIN !== undefined) return null;
+    let t = this.twins.get(m);
+    if (!t) {
+      t = twin(m);
+      this.twins.set(m, t);
+    }
+    return t;
+  }
+
   // a piece of the still city: in the list if its pens never cut out a shape
   consider(o) {
     if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material)) return;

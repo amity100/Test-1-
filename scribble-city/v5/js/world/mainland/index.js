@@ -117,14 +117,34 @@ export class MainNeon {
       g.strokeStyle = 'rgb(0, 255, 0)';
       g.strokeText(p.text, cx, cy);
       g.restore();
-      this.slotTex.needsUpdate = true;
       try {
-        this.r.copyTextureToTexture(this.slotTex, this.tex, null, new THREE.Vector2(p.x0, p.y0));
+        this.write(p.x0, p.y0);
       } catch (e) {
         console.warn('[neon] copy failed', e);
       }
       n++;
     }
+  }
+
+  // (ROADMAP 11.47) the slot straight into its place in the picture on the graphics card. three.js's
+  // copyTextureToTexture first asks the card five questions about how it unpacks pictures, and each
+  // answer makes the processor wait for the card to finish everything it was given: a stall at
+  // every sign a block brings (on a phone the whole frame, and more)
+  write(x0, y0) {
+    const r = this.r;
+    const gl = r.getContext();
+    if (!this.onCard) {
+      r.initTexture(this.tex);
+      this.onCard = true;
+    }
+    const t = r.properties.get(this.tex).__webglTexture;
+    if (!t) return;
+    r.state.activeTexture(gl.TEXTURE0);
+    r.state.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x0, y0, gl.RG, gl.UNSIGNED_BYTE, this.slot);
   }
 }
 
@@ -189,24 +209,57 @@ export class Mainland {
     this.farAt = null;
   }
 
+  // (ROADMAP 11.47) First the shaders it will be drawn with - its pen's, and the twin of it the
+  // still city wears (render/solid.js) - asked of the graphics card and not waited for: where the
+  // card makes shaders alongside the game (KHR_parallel_shader_compile) the frame never stands still
+  // for one (on a phone a second or more each, the picture frozen); the mesh waits instead, a few
+  // frames at most (false: not yet). Then drawn once, alone, into a speck of a picture nobody sees
+  // (its buffers up to the card). true once it is ready
   warm(m) {
     const r = this.renderer;
-    if (!r) return;
+    if (!r) return true;
     const parent = m.parent;
     const vis = m.visible;
+    const mat0 = m.material;
     this.warmScene.add(m);
     m.visible = true;
     const was = r.getRenderTarget();
+    let ready = true;
     try {
       r.setRenderTarget(this.warmRT);
-      r.render(this.warmScene, this.warmCam);
+      const ud = m.userData;
+      if (!ud.warmProgs) {
+        const progs = [];
+        for (const mat of [mat0, this.pipe && this.pipe.solid ? this.pipe.solid.twinFor(mat0) : null]) {
+          if (!mat || Array.isArray(mat)) continue;
+          m.material = mat;
+          for (const x of r.compile(this.warmScene, this.warmCam)) {
+            const prog = r.properties.get(x).currentProgram;
+            if (prog) progs.push(prog);
+          }
+        }
+        m.material = mat0;
+        ud.warmProgs = progs;
+        ud.warmT0 = performance.now();
+      }
+      // (never more than a few seconds: then the frame makes what is left, as before)
+      ready = ud.warmProgs.every((p) => p.isReady()) || performance.now() - ud.warmT0 > 4000;
+      if (ready) {
+        r.render(this.warmScene, this.warmCam);
+        delete ud.warmProgs;
+        delete ud.warmT0;
+      }
     } catch (e) {
       console.warn('[stream] warm failed', e);
+      ready = true;
+    } finally {
+      m.material = mat0;
     }
     r.setRenderTarget(was);
     this.warmScene.remove(m);
     m.visible = vis;
     if (parent) parent.add(m);
+    return ready;
   }
 
   // a cell's group into the city (one of the groups the renderer was given at the start), and its

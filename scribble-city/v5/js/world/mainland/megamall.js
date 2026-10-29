@@ -50,6 +50,10 @@ const LWHITE = srgb(1, 0.93, 0.8);
 // (ROADMAP 11.46) the hall's lines of light: a warm gold
 const LIGHT_GOLD = srgb(1, 0.8, 0.5);
 const LIGHT_SOFT = srgb(0.7, 0.55, 0.34);
+// (ROADMAP 11.48) the stores' own lights: cool and modern, a few warm; and their portals, smoked
+// metal
+const PORTAL = srgb(0.075, 0.07, 0.08);
+const ACCENTS = [srgb(0.55, 0.86, 1), srgb(0.78, 0.66, 1), srgb(1, 0.6, 0.78), srgb(0.55, 1, 0.82), srgb(0.42, 0.95, 0.95), srgb(1, 0.86, 0.66)];
 // (the sky through the glass of the roof and the crown, seen from under it: by day, by night)
 const SKY = srgb(0.3, 0.46, 0.7);
 const NIGHT_SKY = srgb(0.03, 0.04, 0.11);
@@ -547,8 +551,30 @@ function* wing(bctx, b, o) {
     fbox(rctx, f, M.hallMarbleWall, 0, 3.55, -0.3, L, CURB + FH - 0.32, 0, WHITE);
     // (ROADMAP 11.46: the reveal alight - a line of warm gold over every front - and a strip of the
     // same light up every pilaster, the hall's rhythm in light, floor over floor)
-    fbox(rctx, f, IN.lamp, 0.25, 3.5, -0.02, L - 0.2, 3.56, 0.02, LIGHT_GOLD);
+    // (ROADMAP 11.48: the gold line the cap of the store's portal, below, out over it)
+    fbox(rctx, f, IN.lamp, 0.25, 3.5, -0.02, L - 0.2, 3.56, 0.21, LIGHT_GOLD);
     fbox(rctx, f, IN.lamp, 0.0, CURB + 0.4, 0.14, 0.05, CURB + FH - 0.7, 0.155, LIGHT_SOFT);
+    // (ROADMAP 11.48) each store framed the modern way: a portal of smoked metal round its opening
+    // with a line of light let into it, the store's own - ice, lavender, rose, mint, aqua, a warm
+    // white; a threshold of black granite in the floor along its front, the same light in it; and
+    // that light along the tops of its walls inside, seen from the hall. By day the dark frames and
+    // their lines on the white stone; at night the hall's lamps low (render/glsl.js) and the stores
+    // glowing out of it, as the street's shops do
+    const acc = ACCENTS[Math.abs(Math.round(za * 7.3 + lv * 3 + side * 5)) % ACCENTS.length];
+    const accSoft = acc.clone().multiplyScalar(0.55);
+    for (const [a, c] of [[0.25, 0.45], [L - 0.45, L - 0.25]]) {
+      fbox(rctx, f, IN.gloss, a, CURB, 0, c, 3.36, 0.2, PORTAL);
+      fbox(rctx, f, IN.lamp, (a + c) / 2 - 0.025, CURB + 0.1, 0.2, (a + c) / 2 + 0.025, 3.42, 0.21, acc);
+    }
+    fbox(rctx, f, IN.gloss, 0.25, 3.36, -0.02, L - 0.25, 3.5, 0.2, PORTAL);
+    fbox(rctx, f, IN.lamp, 0.325, 3.395, 0.2, L - 0.325, 3.445, 0.21, acc);
+    fbox(rctx, f, IN.gloss, 0.25, CURB, 0.22, L - 0.25, CURB + 0.01, 0.5, GRANITE);
+    fbox(rctx, f, IN.lamp, 0.45, CURB + 0.01, 0.33, L - 0.45, CURB + 0.016, 0.39, acc);
+    if (!food) {
+      const dep = SD - SKIN - 0.02;
+      fbox(rctx, f, IN.lamp, 0.45, 3.12, -dep + 0.04, L - 0.45, 3.17, -dep + 0.09, accSoft);
+      for (const u of [0.3, L - 0.35]) fbox(rctx, f, IN.lamp, u, 3.12, -dep + 0.1, u + 0.05, 3.17, -0.5, accSoft);
+    }
     fbox(rctx, f, IN.gloss, 0.25, CURB, -0.02, L - 0.2, CURB + 0.12, 0.03, GRANITE);
     // (a food counter is shallower: its kitchen's back to the core)
     if (food) fbox(bctx, f, M.wallSolid, 0.25, CURB, -SD, L - 0.25, 3.6, -7.25, wallCol);

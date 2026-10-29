@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, pens } from './render/materials.js';
+import { shared, pens, mergeMoving } from './render/materials.js';
 import { Settings } from './core/settings.js';
 import { Pipeline } from './render/pipeline.js';
 import { buildAtlas } from './render/atlas.js';
@@ -263,7 +263,14 @@ async function boot() {
   // for now, while the game's people and cars are made; theirs after, and all of them waited for
   // (11.5: render/pipeline.js precompile - made as the frames draw with them)
   setStatus('מכינים את העטים…');
+  // (ROADMAP 11.47) and every pen the city may yet draw with - the mainland's blocks, the malls, the
+  // shops' goods - as the blocks will wear them (shared, and the still city's twin of each), made
+  // now with the rest: a shader first made in play stops the picture while it is made, on a phone
+  // a second or more each time (?nocatalog: as it was)
+  const catalog = params.has('nocatalog') ? null : penCatalog(world, pipe);
+  if (catalog) scene.add(catalog);
   const progs = pipe.precompile();
+  if (catalog) scene.remove(catalog);
 
   const resize = () => {
     const w = window.innerWidth;
@@ -287,6 +294,7 @@ async function boot() {
   await game.init();
   for (const p of pipe.precompile()) progs.push(p);
   await shadersReady(renderer, [...new Set(progs)]);
+  if (catalog) warmCatalog(game, catalog);
   setStatus('');
   const startBtn = document.getElementById('start-btn');
   startBtn.disabled = false;
@@ -298,6 +306,85 @@ async function boot() {
   // (the pens' shaders for the other way of drawing, made ready in the background a little after the
   // game begins - for trying the two in play: render/pipeline.js prepareOtherPens)
   pipe.otherAt = performance.now() + 1500;
+}
+
+// (ROADMAP 11.47) a stand-in for every pen of the city, as the blocks will wear it: the pen itself,
+// the shared pen it is merged into (world/city.js merge, mergeObj) and their twins without the
+// scissors (render/solid.js) - hidden, for render/pipeline.js precompile to make their shaders
+function penCatalog(world, pipe) {
+  const M = world.ctx && world.ctx.M;
+  if (!M) return null;
+  const pens = new Set();
+  const look = (o) => {
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if (v && v.isShaderMaterial) pens.add(v);
+    }
+  };
+  look(M);
+  if (M.store) look(M.store);
+  if (world.mainM) look(world.mainM);
+  const all = new Set();
+  for (const m of pens) {
+    if (!m.uniforms || !m.uniforms.uKind) continue;
+    // (and the pen of what moves - a mall's fountain, its lifts: render/materials.js mergeMoving)
+    for (const v of [m, world.merge && world.merge(m), world.mergeObj && world.mergeObj(m), mergeMoving(m)]) {
+      if (!v) continue;
+      all.add(v);
+      const t = pipe.solid ? pipe.solid.twinFor(v) : null;
+      if (t) all.add(t);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  const n = 3;
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0.01, 0, 0, 0, 0.01, 0], 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2), 2));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  for (const [name, w] of [['aId', 1], ['aObj', 1], ['aMat', 1], ['aSway', 1]]) geo.setAttribute(name, new THREE.Float32BufferAttribute(new Float32Array(n * w), w));
+  const g = new THREE.Group();
+  g.name = 'pen catalog';
+  for (const m of all) {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.frustumCulled = false;
+    mesh.position.y = -500;
+    g.add(mesh);
+  }
+  return g;
+}
+
+// (ROADMAP 11.47) the catalog drawn once in the frame's own passes - a speck of each pen just in
+// front of the camera, behind the loading page: some graphics cards finish a shader only when it is
+// first drawn with, and for each kind of picture it is drawn into
+function warmCatalog(game, catalog) {
+  const cam = game.camera;
+  cam.updateMatrixWorld();
+  const fwd = cam.getWorldDirection(new THREE.Vector3());
+  const right = new THREE.Vector3().crossVectors(fwd, cam.up).normalize();
+  const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+  catalog.children.forEach((m, i) => {
+    m.position.copy(cam.position).addScaledVector(fwd, 2.5).addScaledVector(right, ((i % 24) - 12) * 0.03).addScaledVector(up, (Math.floor(i / 24) - 4) * 0.03);
+  });
+  game.scene.add(catalog);
+  // (and what is drawn over the ink only now and then - the rain, its splashes: shown for these two
+  // frames, a drop or two of each)
+  const after = [];
+  for (const m of game.pipe.afterInk.children) {
+    after.push([m, m.visible, m.geometry && m.geometry.instanceCount]);
+    m.visible = true;
+    if (m.geometry && m.geometry.instanceCount === 0) m.geometry.instanceCount = 1;
+  }
+  try {
+    game.renderFrame();
+    game.renderFrame();
+  } catch (e) {
+    console.warn('pen catalog warm failed', e);
+  }
+  for (const [m, v, n] of after) {
+    m.visible = v;
+    if (n !== undefined && m.geometry) m.geometry.instanceCount = n;
+  }
+  game.scene.remove(catalog);
 }
 
 // (11.5) the shaders asked for (render/pipeline.js precompile) all made, where the graphics card

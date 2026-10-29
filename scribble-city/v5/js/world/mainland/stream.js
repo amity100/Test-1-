@@ -132,7 +132,8 @@ export class Streamer {
     if (this.pending.length) {
       const p = this.pending[0];
       if (p.meshes.length && this.warm) {
-        this.warm(p.meshes.pop());
+        // (ROADMAP 11.47: its shaders not made yet - waited for, the frames going on)
+        if (this.warm(p.meshes[p.meshes.length - 1]) !== false) p.meshes.pop();
         return;
       }
       this.pending.shift();

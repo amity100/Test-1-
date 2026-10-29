@@ -992,11 +992,13 @@ void main() {
     amb = mix(vec3(0.6, 0.63, 0.7), vec3(0.9, 0.92, 0.96), up);
     key = vec3(1.0, 0.98, 0.95) * 0.62;
     light = clamp(0.42 + 0.48 * up, 0.0, 1.0);
-    // (at night the glass over it is dark: the hall under its own lamps, softer and a little warmer;
-    // uLitK, the share of the city's windows lit, is how dark it is)
+    // (at night the glass over it is dark: the hall under its own lamps, an evening light, low and
+    // warm - the stores' white light, their names and their lines of colour glowing out of it, as
+    // the street's shops do at night (ROADMAP 11.48). uLitK, the share of the city's windows lit, is
+    // how dark it is)
     float nk = smoothstep(0.4, 1.6, uLitK);
-    amb *= 1.0 - 0.42 * nk;
-    key = mix(key, vec3(1.0, 0.9, 0.78) * 0.5, nk);
+    amb *= 1.0 - 0.62 * nk;
+    key = mix(key, vec3(1.0, 0.84, 0.66) * 0.36, nk);
   } else if (store) {
     // a store in a mall, lit the way a real one is: white light from its ceiling, bright and even,
     // the most on what faces up; its colours its own - not a room's dusk seen from the street, and
@@ -1043,7 +1045,7 @@ void main() {
     vec3 R = reflect(-V, N);
     float fr = mix(0.08, 1.0, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0)) * uGloss;
     vec3 env = skyColor(R);
-    if (hall) env = mix(vec3(0.72, 0.75, 0.82), vec3(1.0, 1.0, 1.02), R.y * 0.5 + 0.5);
+    if (hall) env = mix(vec3(0.72, 0.75, 0.82), vec3(1.0, 1.0, 1.02), R.y * 0.5 + 0.5) * (1.0 - 0.55 * smoothstep(0.4, 1.6, uLitK));
     else if (store) env = mix(vec3(0.62, 0.62, 0.64), vec3(1.0, 0.99, 0.96), R.y * 0.5 + 0.5);
     else if (inside) env = mix(vec3(0.9, 0.62, 0.42), vec3(1.0, 0.9, 0.7), R.y * 0.5 + 0.5);
     shade = mix(shade, env * 0.8, fr);
@@ -1085,7 +1087,7 @@ void main() {
     } else {
       vec3 R = reflect(-V, N);
       float nk = smoothstep(0.4, 1.6, uLitK);
-      r = mix(vec3(0.55, 0.56, 0.62), vec3(1.0, 0.99, 0.96), smoothstep(0.05, 0.85, R.y)) * (1.0 - 0.45 * nk);
+      r = mix(vec3(0.55, 0.56, 0.62), vec3(1.0, 0.99, 0.96), smoothstep(0.05, 0.85, R.y)) * (1.0 - 0.6 * nk);
       k = 0.12 + 0.5 * fr;
     }
     lit = mix(lit, r, k);

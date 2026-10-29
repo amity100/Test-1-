@@ -9,6 +9,7 @@ import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
 import { damp, dampAngle, clamp } from '../core/util.js';
 import { WORK_CLOTHES, NIGHT_CLOTHES } from './rhythm.js';
 import { downStep, drawStars, CIV_KO } from './fists.js';
+import { shared } from '../render/materials.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
 // what somebody punched in the street says (ROADMAP 5.4)
@@ -20,6 +21,10 @@ const RISE = 0.85;
 const UMBRELLAS = [[0.82, 0.22, 0.24], [0.2, 0.3, 0.6], [0.95, 0.75, 0.2], [0.15, 0.15, 0.18], [0.3, 0.6, 0.45], [0.55, 0.3, 0.6], [0.92, 0.45, 0.6]];
 const _ro = new THREE.Vector3();
 const _rd = new THREE.Vector3();
+// (ROADMAP 11.47: who is in the picture - draw)
+const _pv = new THREE.Matrix4();
+const _fr = new THREE.Frustum();
+const _sp = new THREE.Sphere();
 
 // The walk round a block: the middle of the sidewalks around it (col -1: the houses west of Coral
 // Ave, walked up and down along the avenue). Corners: NW, NE, SE, SW.
@@ -1631,7 +1636,25 @@ export class Civilians {
 
   draw(camPos) {
     const bodies = this.game.figures.bodies;
-    const fwd = this.game.camera.getWorldDirection(this._cf || (this._cf = new THREE.Vector3()));
+    const cam = this.game.camera;
+    // (ROADMAP 11.47) drawn only if they are in the picture, or their shadow is: the camera's own
+    // view, each of them a ball round them stretched along their shadow - the lower the sun, the
+    // longer it falls. Before, everybody in more than half the circle round the camera was worked
+    // out, in a picture that shows less than a third of it
+    cam.updateMatrixWorld();
+    _pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    _fr.setFromProjectionMatrix(_pv);
+    const sun = shared.uSunDir.value;
+    const flat = Math.hypot(sun.x, sun.z) || 1;
+    const shadow = sun.y > 0.08 ? Math.min(14, (1.9 * flat) / sun.y) : 14;
+    const ox = (-sun.x / flat) * shadow * 0.5;
+    const oz = (-sun.z / flat) * shadow * 0.5;
+    _sp.radius = 1.4 + shadow * 0.5;
+    // (and whoever is seen in the mirror: the water's, a mall's polished floor - someone up on a
+    // gallery over the picture's top edge, there in the floor)
+    const pipe = this.game.pipe;
+    const mirror = pipe && pipe.reflections && shared.uReflOn.value > 0.5;
+    const my = mirror ? (pipe.floorY !== null && pipe.floorY !== undefined ? pipe.floorY : pipe.mirrorY) : 0;
     const list = this.list;
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
@@ -1639,9 +1662,12 @@ export class Civilians {
       const dx = c.pos.x - camPos.x;
       const dz = c.pos.z - camPos.z;
       const d = Math.hypot(dx, dz);
-      // (nobody behind the camera is drawn, beyond a step or two: their shadows fall away from
-      // the low sun anyway)
-      const seen = d < 130 && (d < 8 || (dx * fwd.x + dz * fwd.z) / d > -0.35);
+      _sp.center.set(c.pos.x + ox, c.pos.y + 0.9, c.pos.z + oz);
+      let seen = d < 130 && (d < 6 || _fr.intersectsSphere(_sp));
+      if (!seen && mirror && d < 130) {
+        _sp.center.set(c.pos.x, 2 * my - c.pos.y - 0.9, c.pos.z);
+        seen = _fr.intersectsSphere(_sp);
+      }
       c.fig.setVisible(seen);
       if (!seen) continue;
       c.fig.draw(camPos);
