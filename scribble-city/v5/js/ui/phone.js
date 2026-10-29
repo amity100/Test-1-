@@ -141,6 +141,7 @@ export class Phone {
     if (name === 'skills') this.fillSkills();
     if (name === 'bank') this.fillBank();
     if (name === 'props') this.fillProps();
+    if (name === 'events') this.fillEvents();
   }
 
   status() {
@@ -170,6 +171,7 @@ export class Phone {
     else if (id === 'skills') this.page('skills');
     else if (id === 'bank') this.page('bank');
     else if (id === 'props') this.page('props');
+    else if (id === 'events') this.page('events');
     else if (id === 'graffiti') {
       // (ROADMAP 9.3: over the wall in front of you)
       this.close(true);
@@ -339,6 +341,43 @@ export class Phone {
   }
 
   // ------------------------------------------------------------------ the properties (ROADMAP 8.2)
+  // (ROADMAP 12.3) what is on in the city: tonight, and when next; the GPS to it
+  fillEvents() {
+    const g = this.game;
+    const C = g.calendar;
+    const box = $('phone-event-list');
+    box.innerHTML = '';
+    if (!C) return;
+    for (const ev of C.events()) {
+      const st = C.status(ev);
+      const d = document.createElement('div');
+      d.className = `prop${st.on ? ' owned' : ''}`;
+      const top = document.createElement('div');
+      top.className = 'prop-top';
+      const b = document.createElement('b');
+      b.textContent = `${ev.he} · ${ev.name}`;
+      const s = document.createElement('span');
+      s.textContent = st.text;
+      top.append(b, s);
+      const what = document.createElement('div');
+      what.className = 'prop-what';
+      what.textContent = `${ev.what} · ${ev.where}`;
+      const row = document.createElement('div');
+      row.className = 'prop-btns';
+      const go = document.createElement('button');
+      go.className = 'btn mini';
+      go.textContent = 'ניווט לשם';
+      go.addEventListener('click', () => {
+        C.go(ev);
+        g.audio.play('click', 0.5);
+        this.close();
+      });
+      row.append(go);
+      d.append(top, what, row);
+      box.appendChild(d);
+    }
+  }
+
   fillProps() {
     const g = this.game;
     const PR = g.props;

@@ -179,7 +179,8 @@ export class Effects {
   }
 
   // (ROADMAP 11.43) lines shooting out of a blast every way, the way a comic draws one
-  burst(x, y, z, n, speed, color, len = 0.9) {
+  // (life: how long the lines last - a firework's longer, game/festival.js)
+  burst(x, y, z, n, speed, color, len = 0.9, life = 0.4) {
     for (let i = 0; i < n; i++) {
       if (this.particles.length > 420) this.particles.shift();
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
@@ -187,7 +188,7 @@ export class Effects {
       const sp = speed * (0.7 + Math.random() * 0.5);
       this.particles.push({
         x, y, z, vx: Math.cos(a) * Math.cos(b) * sp, vy: Math.sin(b) * sp, vz: Math.sin(a) * Math.cos(b) * sp,
-        life: 0.4 + Math.random() * 0.15, t: 0, len: len * (0.7 + Math.random() * 0.6), color, seed: Math.random() * 50, spin: 0,
+        life: life + Math.random() * 0.15, t: 0, len: len * (0.7 + Math.random() * 0.6), color, seed: Math.random() * 50, spin: 0,
         streak: true, wide: 5, noGrav: true, drag: 2.5,
       });
     }

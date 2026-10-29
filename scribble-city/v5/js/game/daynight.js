@@ -166,12 +166,16 @@ export class DayNight {
     // minutes for a whole day (0: the clock stands still)
     this.dayMin = 48;
     this.hour = 17.6;
+    // (v5, ROADMAP 12.3) the days gone by since the game began (day 0 a Thursday: the weekend's
+    // festival on the first night out)
+    this.day = 0;
     let saved = null;
     try {
       saved = JSON.parse(localStorage.getItem(STORE) || 'null');
     } catch (e) {
       saved = null;
     }
+    if (saved && typeof saved.day === 'number') this.day = saved.day;
     if (saved && typeof saved.dayMin === 'number') {
       this.dayMin = saved.dayMin;
       if (saved.dayMin === 0 && typeof saved.hour === 'number') this.hour = saved.hour;
@@ -183,6 +187,7 @@ export class DayNight {
     }
     if (params.has('hour')) this.hour = parseFloat(params.get('hour')) || 0;
     if (params.has('daymin')) this.dayMin = parseFloat(params.get('daymin')) || 0;
+    if (params.has('day')) this.day = parseInt(params.get('day'), 10) || 0;
     this.sun = new THREE.Vector3();
     this.moon = new THREE.Vector3();
     this.key = KEYS[0];
@@ -207,7 +212,7 @@ export class DayNight {
 
   save() {
     try {
-      localStorage.setItem(STORE, JSON.stringify({ dayMin: this.dayMin, hour: this.hour }));
+      localStorage.setItem(STORE, JSON.stringify({ dayMin: this.dayMin, hour: this.hour, day: this.day }));
     } catch (e) {
       // (no storage: the settings last as long as the page)
     }
@@ -219,6 +224,11 @@ export class DayNight {
     return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   }
 
+  // (ROADMAP 12.3) the day of the week: 0 Sunday .. 6 Saturday
+  get weekday() {
+    return (this.day + 4) % 7;
+  }
+
   // how dark it is (0 day .. 1 night): for the life of the city
   get night() {
     return Math.min(1, this.stars || 0);
@@ -227,7 +237,11 @@ export class DayNight {
   update(dt) {
     if (this.dayMin > 0 && dt > 0) {
       this.hour += (dt / (this.dayMin * 60)) * 24;
-      if (this.hour >= 24) this.hour -= 24;
+      if (this.hour >= 24) {
+        this.hour -= 24;
+        this.day++;
+        this.save();
+      }
     }
     const h = this.hour;
     let i = 0;
