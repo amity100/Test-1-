@@ -87,6 +87,7 @@ import { SketchPad } from '../ui/sketchpad.js';
 import { MiniGames } from '../ui/minigame.js';
 import { Calendar } from './calendar.js';
 import { Festival } from './festival.js';
+import { ArtNight } from './artnight.js';
 import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
@@ -331,6 +332,8 @@ export class Game {
     // (ROADMAP 12.3, 12.4) the city's week of events, and the festival on the water
     this.calendar = this.classic ? null : new Calendar(this);
     this.festival = this.classic ? null : new Festival(this);
+    // (ROADMAP 12.5) Paintwood's Walls, and Art Night in them
+    this.artnight = this.classic ? null : new ArtNight(this);
     if (this.calendar) this.phone.addApp({ id: 'events', name: 'אירועים', glyph: 'music', fill: '#ffb3d9' });
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
@@ -1150,6 +1153,7 @@ export class Game {
       this.events.update(dt);
       if (this.calendar) this.calendar.update(dt);
       if (this.festival) this.festival.update(dt);
+      if (this.artnight) this.artnight.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);
       this.voices.update(dt);
@@ -1269,6 +1273,7 @@ export class Game {
       this.farCrowd.draw(this.camera.position);
       this.shopCrowd.draw(this.camera.position);
       if (this.festival) this.festival.draw(fr);
+      if (this.artnight) this.artnight.draw(fr);
       if (this.arenaGame) this.arenaGame.draw();
       this.streetlife.draw(fr);
       this.workers.draw(fr);
@@ -1385,7 +1390,7 @@ export class Game {
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -2096,6 +2101,11 @@ export class Game {
       enter = true;
       const ft = this.festival.target();
       prompt = touch ? ft.label.replace('E — ', '') : ft.label;
+    } else if (p.mode === 'foot' && this.artnight && this.artnight.target()) {
+      // (Art Night in Paintwood's Walls: the Draw-Off, the easels, the stalls - game/artnight.js)
+      enter = true;
+      const at = this.artnight.target();
+      prompt = touch ? at.label.replace('E — ', '') : at.label;
     } else if (p.mode === 'foot' && this.fair && this.fair.target()) {
       // (a ride on the pier: game/fairground.js)
       enter = true;

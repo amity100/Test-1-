@@ -337,6 +337,17 @@ function* buildKind(bctx, b) {
     case 'stripmall':
       yield* buildStripMall(bctx, b, MALLS.stripmall);
       return;
+    case 'walls': {
+      // (ROADMAP 12.5) Paintwood's Walls: the rows on both avenues, less deep, and between their
+      // backs a paved yard 30 m across, open to the streets at both ends - for the walls with the
+      // murals and, on Art Night, the stage and the crowd (game/artnight.js stands them)
+      yield* rows(bctx, b, { alley: YARD_W, alleyGround: false });
+      const D = (R.x1 - R.x0 - YARD_W) / 2;
+      yardGround(bctx, R.x0 + D, R.x1 - D, R.z0, R.z1);
+      bctx.alleys.push({ x0: R.x0 + D, x1: R.x1 - D, z0: R.z0, z1: R.z1, type: 'walls', col: 100 + b.col, row: 100 + b.row });
+      yield;
+      return;
+    }
     case 'clubs':
     case 'theatres': {
       // the venue on the avenue's side at the north end, the district's rows round it
@@ -385,6 +396,17 @@ function lawn(bctx, x0, x1, z0, z1) {
   const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2);
   g.translate((x0 + x1) / 2, CURB + 0.01, (z0 + z1) / 2);
   bctx.B.add(bctx.M.grass, g, null, nextId(), { color: srgb(0.52, 0.8, 0.46) });
+}
+
+// the Walls' yard (ROADMAP 12.5): its pavers, nothing on them (what stands there: game/artnight.js)
+export const YARD_W = 30;
+function yardGround(bctx, x0, x1, z0, z1) {
+  const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2);
+  g.translate((x0 + x1) / 2, CURB + 0.012, (z0 + z1) / 2);
+  const uv = g.attributes.uv;
+  const p = g.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) / 8, -p.getZ(i) / 8);
+  bctx.B.add(bctx.M.plaza, g, null, nextId());
 }
 
 function plazaGround(bctx, x0, x1, z0, z1) {

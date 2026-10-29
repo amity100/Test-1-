@@ -1020,6 +1020,8 @@ html, body { background: #1b1430; }
 .prop-top b { font-weight: 400; flex: 1; }
 .prop-top span { direction: ltr; color: #1d7a3c; font-size: 19px; }
 .prop.owned .prop-top span { color: #b07a00; }
+.prop.ev .prop-top { flex-direction: column; align-items: flex-start; gap: 0; }
+.prop.ev .prop-top span { direction: rtl; font-size: 17px; }
 .prop-what { margin: 2px 0 5px; font: 500 12px/1.25 var(--font-ui); color: var(--ink-soft); }
 .prop-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .prop-btns .btn[disabled] { opacity: 0.5; cursor: default; }

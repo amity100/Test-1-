@@ -903,8 +903,8 @@ function* wing(bctx, b, o) {
 
   // ------------------------------------------------------------------ the hall dressed
   // the ground floor's wings: kiosks, benches round planters with palms and trees, screens of
-  // advertising by the columns, the directories by the doors; banners hung down the void; planters
-  // of trailing green along the galleries' rails; the stores' windows dressed
+  // advertising by the columns, the directories by the doors; banners hung down the void; benches
+  // along the galleries' rails; the stores' windows dressed
   mall.kiosks = [];
   mall.screens = [];
   mall.bins = [];
@@ -976,10 +976,10 @@ function* wing(bctx, b, o) {
       for (const s of [-1, 1]) banner(hctx, IN, hall, cx + s * 4.6, z, ROOF + 0.3, k++ % 2 ? srgb(0.06, 0.06, 0.08) : srgb(0.05, 0.26, 0.21), k % 3 ? WHITE : srgb(1, 0.85, 0.45), words[(k + b.seed) % words.length]);
     }
   }
-  // planters of trailing green along the rails, on the upper floors
+  // benches along the rails on the upper floors, facing the stores (no planters of trailing green
+  // on the rails any more: green boxes hung on the white of the slabs, amateurish - ROADMAP 11.49)
   for (const g of mall.galleries) {
     const x = g.side < 0 ? vx0 - 0.3 : vx1 + 0.3;
-    const y = g.y + CURB;
     for (let z = g.z0 + 2.5; z < g.z1 - 2; z += 7.5) {
       if (z > zc0 - 1 && z < zc1 + 1) continue;
       if (g.lv === TL && z < FC1 + 1) continue;
@@ -987,21 +987,6 @@ function* wing(bctx, b, o) {
       if (Math.abs(((z - zN - 6) % 12 + 12) % 12) < 1.6 || Math.abs(((z - zN - 6) % 12 + 12) % 12) > 10.4) continue;
       if (bridges.some((br) => br.lv.includes(g.lv) && z + 2.6 > br.z0 - 0.5 && z - 1 < br.z1 + 0.5)) continue;
       if (lifts.some((l) => l.side === g.side && Math.abs(l.z - z) < 2.6)) continue;
-      hall(IN.box, x - 0.22, y, z - 0.9, x + 0.22, y + 0.55, z + 0.9, srgb(0.9, 0.86, 0.78));
-      for (let i = 0; i < 4; i++) {
-        const leaf = new THREE.SphereGeometry(0.3, 7, 5);
-        leaf.scale(1, 0.8, 1);
-        leaf.translate(x + (r() - 0.5) * 0.15, y + 0.65, z - 0.7 + i * 0.47);
-        hallGeo(IN.box, leaf, [srgb(0.3, 0.58, 0.3), srgb(0.38, 0.64, 0.34), srgb(0.26, 0.5, 0.32)][i % 3]);
-      }
-      // (and what trails over the edge, down the white of the slab)
-      for (let i = 0; i < 3; i++) {
-        const t = new THREE.BoxGeometry(0.12, 0.9 + r() * 0.7, 0.3);
-        t.translate(x + g.side * -0.35, y - 0.3, z - 0.5 + i * 0.5);
-        hallGeo(IN.box, t, srgb(0.3, 0.55, 0.3));
-      }
-      col.addBox(x - 0.22, z - 0.9, x + 0.22, z + 0.9, y, y + 0.6, 'prop');
-      // (somebody to sit on it, beside it: a bench facing the stores)
       if (portalsAt(g.lv, g.side).some((l) => z + 1.6 > l.z0 - 1 && z + 1.6 < l.z1 + 1)) continue;
       mall.upBenches.push({ x: x + g.side * 0.6, z: z + 1.6, yaw: g.side < 0 ? -Math.PI / 2 : Math.PI / 2, y: g.y, lv: g.lv });
     }

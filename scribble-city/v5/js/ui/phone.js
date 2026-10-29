@@ -351,11 +351,14 @@ export class Phone {
     for (const ev of C.events()) {
       const st = C.status(ev);
       const d = document.createElement('div');
-      d.className = `prop${st.on ? ' owned' : ''}`;
+      d.className = `prop ev${st.on ? ' owned' : ''}`;
       const top = document.createElement('div');
       top.className = 'prop-top';
+      // (its name in both: the English one kept whole, left to right, in the Hebrew line)
       const b = document.createElement('b');
-      b.textContent = `${ev.he} · ${ev.name}`;
+      const en = document.createElement('bdi');
+      en.textContent = ev.name;
+      b.append(`${ev.he} · `, en);
       const s = document.createElement('span');
       s.textContent = st.text;
       top.append(b, s);
