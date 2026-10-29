@@ -16,6 +16,7 @@ import { friendStandIn } from '../streets.js';
 import { buildPier } from './pier.js';
 import { buildBeach, buildPoint, buildBayfront } from './shore.js';
 import { buildArena } from './arena.js';
+import { HALL_ROW_D, ARCADE } from './halls.js';
 import '../shops2.js';
 import '../homes2.js';
 import '../venues2.js';
@@ -345,6 +346,16 @@ function* buildKind(bctx, b) {
       const D = (R.x1 - R.x0 - YARD_W) / 2;
       yardGround(bctx, R.x0 + D, R.x1 - D, R.z0, R.z1);
       bctx.alleys.push({ x0: R.x0 + D, x1: R.x1 - D, z0: R.z0, z1: R.z1, type: 'walls', col: 100 + b.col, row: 100 + b.row });
+      yield;
+      return;
+    }
+    case 'arcade': {
+      // (ROADMAP 12.7) the district's row on the west avenue; the east part the hall's - its ground
+      // here (the hall itself near you: game/arcade.js), its shape for the far view
+      yield* rows(bctx, b, { east: false, D: HALL_ROW_D, alleyGround: false });
+      yardGround(bctx, R.x0 + HALL_ROW_D, R.x1, R.z0, R.z1);
+      const H = ARCADE;
+      bctx.footprints.push({ x0: H.xw, z0: H.z0, x1: H.xe, z1: H.z1, top: H.h + 1.2, color: '#2a1840' });
       yield;
       return;
     }

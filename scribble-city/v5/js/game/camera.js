@@ -75,7 +75,7 @@ export class CameraRig {
   // (ROADMAP 12.6) held at a place, looking at a point - a game in the world: behind your shoulder,
   // its screen in front - eased there from wherever it was (its yaw and pitch kept, so the camera
   // goes back behind you from there when the game is over)
-  holdAt(dt, pos, look) {
+  holdAt(dt, pos, look, fov) {
     const cam = this.camera;
     const dx = look[0] - pos[0];
     const dy = look[1] - pos[1];
@@ -94,8 +94,10 @@ export class CameraRig {
     cam.position.z += (pos[2] - cam.position.z) * k;
     cam.rotation.set(this.pitch, this.yaw + Math.PI, 0, 'YXZ');
     this.curDist = this.dist;
-    if (Math.abs(cam.fov - this.baseFov) > 0.05) {
-      cam.fov = damp(cam.fov, this.baseFov, 10, dt);
+    // (a small screen near - an arcade cabinet's: the view narrower, the screen bigger in it)
+    const want = fov || this.baseFov;
+    if (Math.abs(cam.fov - want) > 0.05) {
+      cam.fov = damp(cam.fov, want, 6, dt);
       cam.updateProjectionMatrix();
     }
   }

@@ -19,7 +19,7 @@ import { fairPlan, buildFair, paintFloor, paintProjection, paintLive } from './a
 // drawings) and its screen, painters at their easels painting as you watch (a painting a few
 // minutes, then the next), a café and a stall of prints, the lights strung over it all, jazz,
 // people at the walls and in front of the stage. What you buy (a print, a painting off the easel)
-// is kept for your home (ROADMAP 12.13).
+// is kept for your home (ROADMAP 12.14).
 
 const BR = mBlockRect(1, 2);
 const X0 = (BR.x0 + BR.x1) / 2 - YARD_W / 2;
@@ -864,7 +864,7 @@ export class ArtNight {
     return true;
   }
 
-  // what you bought, kept for your home (ROADMAP 12.13)
+  // what you bought, kept for your home (ROADMAP 12.14)
   collect(item) {
     try {
       const list = JSON.parse(localStorage.getItem(COLLECTION) || '[]') || [];

@@ -174,6 +174,9 @@ const SPECIAL = {
   '2,11': 'park',
   // Little Havana: Domino Park and the theatre on Calle Ocho
   '5,9': 'domino',
+  // Inkwood: the arcade on the boulevard (ROADMAP 12.7: its hall on the block's east part,
+  // game/arcade.js)
+  '7,1': 'arcade',
   // Inkwood: the Starlight Center (a mall round an open court) and the theatres on the boulevard
   '6,3': 'starlight',
   '7,2': 'theatres',
@@ -270,6 +273,8 @@ export const PLACES = [
   { id: 'plume', kind: 'gourmet', name: 'Maison Plume', heb: 'מזון פלום', block: '1,10' },
   { id: 'arena', kind: 'arena', name: 'Bayfront Arena', heb: 'ארנת המפרץ', block: '0,7' },
   { id: 'palace', kind: 'theatre', name: 'Inkwood Palace', heb: 'תיאטרון אינקווד פאלאס', block: '9,3' },
+  // (ROADMAP 12.7: the hall on the block's east part, its doors on the avenue - world/mainland/halls.js)
+  { id: 'arcade', kind: 'arcade', name: 'INK ARCADE', heb: 'ארקייד INK ARCADE', at: [-1346, -991] },
   { id: 'sign', kind: 'landmark', name: 'INKWOOD', heb: 'השלט על הגבעה', at: [-1330, -1300] },
   { id: 'observatory', kind: 'landmark', name: 'Inkwood Observatory', heb: 'מצפה הכוכבים', at: [-1160, -1300] },
   { id: 'lighthouse', kind: 'landmark', name: 'Point Lighthouse', heb: 'המגדלור של הלשון', at: [-760, 690] },

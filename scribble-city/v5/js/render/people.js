@@ -776,7 +776,7 @@ export class PersonRenderer {
 
   // a pen line of the old notebook, as a thin rod (a cane, an umbrella's pole, a gold chain)
   rod(a, b, r, col, fig) {
-    capsuleTo(this.p, a, b, Math.max(0.003, r), linC(col), fig.owner + 1, (fig.seed * 0.13 + 0.5) % 1, fig.indoor ? 1 : 0, fig.brgt);
+    capsuleTo(this.p, a, b, Math.max(0.003, r), linC(col), fig.owner + 1, (fig.seed * 0.13 + 0.5) % 1, fig.indoor === 'club' ? 3 : fig.indoor ? 1 : 0, fig.brgt);
   }
 
   end() {
@@ -826,7 +826,8 @@ export class PersonRenderer {
     const sw = (fem ? 0.15 : 0.17) * Math.max(0.9, bulk * 0.96);
     const hw = (fem ? 0.095 : 0.085) * bulk;
     const own = 0;
-    const ind = 0;
+    // (a crowd indoors: 1 a room under its lamps, 3 a dark hall under its neon - the arcade)
+    const ind = w.indoor || 0;
     const seed = (w.seed % 1) * 0.37 + 0.11;
     const bodyId = seed;
     const armId = (seed + 0.31) % 1;
@@ -983,7 +984,7 @@ export class PersonRenderer {
     const P = fig.parts;
     const p = this.p;
     const own = fig.owner + 1;
-    const ind = fig.indoor ? 1 : 0;
+    const ind = fig.indoor === 'club' ? 3 : fig.indoor ? 1 : 0;
     const S = fig.scale;
     const k = S * 0.98;
     const bulk = fig.bulk;
@@ -1242,7 +1243,7 @@ export class PersonRenderer {
     const P = fig.parts;
     const p = this.p;
     const own = fig.owner + 1;
-    const ind = fig.indoor ? 1 : 0;
+    const ind = fig.indoor === 'club' ? 3 : fig.indoor ? 1 : 0;
     const S = fig.scale;
     const k = S * 0.98;
     const bulk = fig.bulk;
@@ -1408,7 +1409,7 @@ export class PersonRenderer {
     const P = fig.parts;
     const p = this.p;
     const own = fig.owner + 1;
-    const ind = fig.indoor ? 1 : 0;
+    const ind = fig.indoor === 'club' ? 3 : fig.indoor ? 1 : 0;
     const S = fig.scale;
     const k = S * 0.98;
     const bulk = fig.bulk;

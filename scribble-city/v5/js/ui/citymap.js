@@ -15,6 +15,8 @@ const PLACE_NOTES = {
   observatory: 'Inkwood Observatory: על הגבעות ליד השלט. כיפות נחושת, ובלילה הוא מואר מעל העיר',
   // (ROADMAP 11.30, 11.31)
   galleria: 'Downtown Galleria: קניון על שלושה בלוקים, שלושה אולמות של חמש קומות מתחת לקמרונות זכוכית, וכיפה ענקית מעל החצר האמצעית. מעל שדרות מיאמי והשדרה השנייה יש ארקדות זכוכית, והמכוניות נוסעות מתחתן. מדרגות נעות ומעליות, מזרקות וחצר דקלים, אוכל ומסעדות בקומה העליונה וגג עם מנחת. נכנסים מהצפון או מהדרום',
+  // (ROADMAP 12.7)
+  arcade: 'INK ARCADE: אולם משחקים ענק בשדרת אינקווד. ארבעים מכונות שמשחקים בהן על המסך שלהן, מכוניות מירוץ, מכונת ריקוד, הוקי אוויר, מכונות מנוף, פינבול, כרטיסים ודלפק פרסים, ופיצה',
   lanes: 'Via Inkwell: הסמטאות של הגלריה, מעבר לרחוב פלגלר מהאולם האמצעי, מתחת לחופת זכוכית. שני רחובות של חנויות בבתים צבעוניים, סמטת אמנים, ובסופם כיכר עם מזרקה ואולם אוכל, תחת שמיים מצוירים',
 };
 import { BLUEPRINTS } from '../game/blueprints.js';
@@ -512,7 +514,7 @@ export class CityMap {
         const b = placeBlock(pl);
         const x = pl.at ? pl.at[0] : b ? b.cx : 0;
         const z = pl.at ? pl.at[1] : b ? b.cz : 0;
-        const glyph = pl.mega ? 'mall' : pl.id === 'pier' ? 'wheel' : pl.id === 'lighthouse' ? 'lighthouse' : pl.id === 'observatory' ? 'dome' : pl.kind === 'arena' ? 'arena' : pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : 'fountain';
+        const glyph = pl.mega ? 'mall' : pl.id === 'pier' ? 'wheel' : pl.id === 'lighthouse' ? 'lighthouse' : pl.id === 'observatory' ? 'dome' : pl.kind === 'arena' ? 'arena' : pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : pl.kind === 'arcade' ? 'arcade' : 'fountain';
         // (ROADMAP 11.30: the giant mall - big, at any zoom, its name with it)
         add({ cat: 'place', glyph, x, z, name: pl.mega ? `קניון ${pl.heb}` : pl.heb, note: PLACE_NOTES[pl.id] || pl.name, big: !!pl.mega });
       }

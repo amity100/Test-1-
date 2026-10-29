@@ -11,7 +11,8 @@
 //          'enter' (pressed this frame), at: Map of those to when (performance.now(): a rhythm
 //          game judges the moment, not the frame), taps: [[x, y, when]] (this frame, in its measure),
 //          drag: { x, y, x0, y0, down } | null (a finger or the mouse held on the canvas),
-//          codes: Map of the keyboard's own codes pressed this frame to when, down: Set of those held
+//          hover: { x, y } | null (in the world: the mouse over the screen, nothing held),
+//          codes: Map of the keyboard's own codes pressed this frame to when, keys: Set of those held
 //          (a game with keys of its own: the dance floor's D F J K) }
 //   api: { finish(res), game, audio, money, rng, toast(text), status(text) }
 // finish(res): the sheet closes and whoever opened it hears res ({ score, won, cash, ... }).
@@ -39,7 +40,11 @@ export const MG_H = 600;
 // `n`, its width - its height follows the game's shape), you standing `stand` metres before it
 // (`side` to its right), on the floor at `y0`; the camera `back` behind you and `up` over the floor,
 // looking at the screen. hands: where they rest (else before your chest); pen: the drawing hand
-// follows the line; exit: where you are let go
+// follows the line; exit: where you are let go. (ROADMAP 12.7) fov: the camera's, narrower for a
+// small screen near (an arcade cabinet's); flat: the game lies face up, its far end the picture's
+// top, n the way to its near end, where you stand; hidden: no screen of its
+// own (the claw machine's game is the machine itself); along: a flat one's picture runs away from
+// you (its right the far end - the air hockey table, long that way); sit: seated at it (the racer)
 export function worldAt(o) {
   const [nx, nz] = o.n;
   const rx = nz;
@@ -54,17 +59,19 @@ export function worldAt(o) {
   const fx = -nx;
   const fz = -nz;
   return {
-    screen: { at: o.at, n: o.n, w, h, glow: o.glow },
+    screen: { at: o.at, n: o.n, w, h, glow: o.glow, flat: !!o.flat, along: !!o.along, hidden: !!o.hidden },
     stand: [sx, sz, Math.atan2(fx, fz), y0],
     cam: {
       pos: [sx - fx * back + rx * (o.camSide !== undefined ? o.camSide : 0.45), y0 + (o.up || 2.2), sz - fz * back + rz * (o.camSide !== undefined ? o.camSide : 0.45)],
-      look: [o.at[0], o.at[1] - (o.lookDown || 0), o.at[2]],
+      look: [o.at[0] - nx * (o.lookIn || 0), o.at[1] - (o.lookDown || 0), o.at[2] - nz * (o.lookIn || 0)],
+      fov: o.fov,
     },
     hands: o.hands || [
       [sx + fx * 0.32 - rx * 0.17, y0 + 1.12, sz + fz * 0.32 - rz * 0.17],
       [sx + fx * 0.32 + rx * 0.17, y0 + 1.12, sz + fz * 0.32 + rz * 0.17],
     ],
     pen: !!o.pen,
+    sit: !!o.sit,
     exit: o.exit,
   };
 }
@@ -165,7 +172,13 @@ export class MiniGames {
       this.drag = { x, y, x0: x, y0: y, down: true, t0: performance.now() };
     });
     tl.addEventListener('pointermove', (e) => {
-      if (!this.worldMode || !this.drag) return;
+      if (!this.worldMode) return;
+      // (the mouse over the screen, no button down: where it is - the air hockey's mallet follows it)
+      if (!this.drag) {
+        const [x, y] = this.atWorld(e);
+        this.hover = { x, y };
+        return;
+      }
       e.preventDefault();
       const [x, y] = this.atWorld(e);
       this.drag.x = x;
@@ -245,6 +258,7 @@ export class MiniGames {
     this.down.clear();
     this.taps.length = 0;
     this.drag = null;
+    this.hover = null;
     this.isOpen = true;
     this.el.classList.remove('hidden');
     if (!game.touch) game.input.releaseLock();
@@ -306,16 +320,30 @@ export class MiniGames {
     this.scale = cw / MG_W;
     const S = w.screen;
     const [nx, nz] = S.n;
-    this.tex = canvasTexture(this.cv, { mips: false });
-    this.mat = makeSurface({ kind: 'uv', map: this.tex, uvScale: 2, ang: 0.4, wash: 1, line: 0.2, emissive: new THREE.Color(S.glow || 1, S.glow || 1, S.glow || 1), emMap: this.tex });
-    const geo = new THREE.PlaneGeometry(S.w, S.h);
-    geo.rotateY(Math.atan2(nx, nz));
-    geo.translate(S.at[0] + nx * 0.015, S.at[1], S.at[2] + nz * 0.015);
-    this.mesh = new THREE.Mesh(geo, this.mat);
-    this.mesh.frustumCulled = false;
-    game.scene.add(this.mesh);
-    // the screen's frame for the pointer: its middle, its face, its right and up
-    this.plane = { c: new THREE.Vector3(S.at[0], S.at[1], S.at[2]), n: new THREE.Vector3(nx, 0, nz), r: new THREE.Vector3(nz, 0, -nx), w: S.w, h: S.h };
+    if (!S.hidden) {
+      this.tex = canvasTexture(this.cv, { mips: false });
+      this.mat = makeSurface({ kind: 'uv', map: this.tex, uvScale: 2, ang: 0.4, wash: 1, line: 0.2, emissive: new THREE.Color(S.glow || 1, S.glow || 1, S.glow || 1), emMap: this.tex });
+      const geo = new THREE.PlaneGeometry(S.w, S.h);
+      if (S.flat) {
+        // (face up, its top away from you - or, along, its right)
+        geo.rotateX(-Math.PI / 2);
+        geo.rotateY(S.along ? Math.atan2(nz, -nx) : Math.atan2(nx, nz));
+        geo.translate(S.at[0], S.at[1] + 0.012, S.at[2]);
+      } else {
+        geo.rotateY(Math.atan2(nx, nz));
+        geo.translate(S.at[0] + nx * 0.015, S.at[1], S.at[2] + nz * 0.015);
+      }
+      this.mesh = new THREE.Mesh(geo, this.mat);
+      this.mesh.frustumCulled = false;
+      game.scene.add(this.mesh);
+    }
+    // the screen's frame for the pointer: its middle, its face, its right and up (a flat one's up
+    // the way away from you)
+    this.plane = S.flat
+      ? S.along
+        ? { c: new THREE.Vector3(S.at[0], S.at[1], S.at[2]), n: new THREE.Vector3(0, 1, 0), r: new THREE.Vector3(-nx, 0, -nz), up: new THREE.Vector3(-nz, 0, nx), w: S.w, h: S.h }
+        : { c: new THREE.Vector3(S.at[0], S.at[1], S.at[2]), n: new THREE.Vector3(0, 1, 0), r: new THREE.Vector3(nz, 0, -nx), up: new THREE.Vector3(-nx, 0, -nz), w: S.w, h: S.h }
+      : { c: new THREE.Vector3(S.at[0], S.at[1], S.at[2]), n: new THREE.Vector3(nx, 0, nz), r: new THREE.Vector3(nz, 0, -nx), up: new THREE.Vector3(0, 1, 0), w: S.w, h: S.h };
     // you at it: in your place, facing it, your hands on its controls
     // (held there as on a seat, standing - game/player.js: on a stage too, whatever is under it)
     const p = game.player;
@@ -325,7 +353,7 @@ export class MiniGames {
       p.pos.z = z;
       if (y !== undefined) p.pos.y = y;
       p.yaw = yaw;
-      p.seat = { x, z, yaw, y, lock: true, stand: true, mg: true };
+      p.seat = { x, z, yaw, y, lock: true, stand: !w.sit, mg: true };
     }
     const f = p.fig;
     if (w.hands) {
@@ -377,10 +405,12 @@ export class MiniGames {
     if (f.reachL) f.reachL.set(L[0] + P.r.x * dx * k - P.n.x * dy * k, L[1], L[2] + P.r.z * dx * k - P.n.z * dy * k);
     if (!f.reachR) return;
     const d = inp.drag;
-    if (this.world.pen && d) {
-      const u = d.x / MG_W - 0.5;
-      const v = 0.5 - d.y / MG_H;
-      f.reachR.set(P.c.x + P.r.x * u * P.w + P.n.x * 0.05, P.c.y + v * P.h, P.c.z + P.r.z * u * P.w + P.n.z * 0.05);
+    // (the game's own word for where the hand is - the mallet on the air hockey table - or the pen's)
+    const at = this.mod && this.mod.handAt ? this.mod.handAt() : this.world.pen && d ? [d.x, d.y] : null;
+    if (at) {
+      const u = at[0] / MG_W - 0.5;
+      const v = 0.5 - at[1] / MG_H;
+      f.reachR.set(P.c.x + P.r.x * u * P.w + P.up.x * v * P.h + P.n.x * 0.05, P.c.y + P.up.y * v * P.h + P.n.y * 0.05, P.c.z + P.r.z * u * P.w + P.up.z * v * P.h + P.n.z * 0.05);
     } else f.reachR.set(R[0], R[1] - (inp.a || inp.b ? 0.025 : 0), R[2]);
   }
 
@@ -398,7 +428,7 @@ export class MiniGames {
     const t = _q.copy(P.c).sub(cam.position).dot(P.n) / den;
     const hit = _q.copy(cam.position).addScaledVector(d, t).sub(P.c);
     const u = hit.dot(P.r) / P.w + 0.5;
-    const w = 0.5 - hit.y / P.h;
+    const w = 0.5 - hit.dot(P.up) / P.h;
     return [u * MG_W, w * MG_H];
   }
 
@@ -442,9 +472,10 @@ export class MiniGames {
       hit: this.hit,
       at: this.hitAt,
       codes: this.codes,
-      down: this.down,
+      keys: this.down,
       taps: this.taps,
       drag: this.drag,
+      hover: this.hover,
     };
     const mod = this.mod;
     try {

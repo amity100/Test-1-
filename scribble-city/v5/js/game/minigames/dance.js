@@ -213,7 +213,7 @@ export class DanceGame {
     for (let l = 0; l < 4; l++) {
       const h = this.holding[l];
       if (!h) continue;
-      const down = LANE_CODES[l].some((c) => inp.down.has(c)) || (this.touch && inp.drag && inp.drag.down);
+      const down = LANE_CODES[l].some((c) => inp.keys.has(c)) || (this.touch && inp.drag && inp.drag.down);
       if (now >= this.t0 + h.t + h.hold) {
         this.holding[l] = null;
         h.done = true;

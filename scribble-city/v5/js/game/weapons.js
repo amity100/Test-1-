@@ -859,10 +859,14 @@ export class Weapons {
     const p = this.game.player;
     const drawing = p.mode === 'draw';
     if (this.off) this.offModel(p, drawing);
+    // (at a game in the world - a cabinet, a table, the claw - nothing in the hands; a game drawn
+    // with the pen keeps it: game/minigames)
+    const mg = this.game.minigames;
+    const playing = !!(mg && mg.isOpen && mg.worldMode && !(mg.world && mg.world.pen));
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (!s.model || !s.model.group) continue;
-      s.model.group.visible = drawing ? i === 0 : i === this.index && (p.mode === 'foot' || this.shootOut) && !this.game.inBar && !s.out;
+      s.model.group.visible = drawing ? i === 0 : i === this.index && (p.mode === 'foot' || this.shootOut) && !this.game.inBar && !s.out && !playing;
     }
     const fig = p.fig;
     const j = fig.j;

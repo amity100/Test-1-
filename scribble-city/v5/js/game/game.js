@@ -88,6 +88,7 @@ import { MiniGames } from '../ui/minigame.js';
 import { Calendar } from './calendar.js';
 import { Festival } from './festival.js';
 import { ArtNight } from './artnight.js';
+import { Arcade } from './arcade.js';
 import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
@@ -334,6 +335,8 @@ export class Game {
     this.festival = this.classic ? null : new Festival(this);
     // (ROADMAP 12.5) Paintwood's Walls, and Art Night in them
     this.artnight = this.classic ? null : new ArtNight(this);
+    // (ROADMAP 12.7) INK ARCADE on Inkwood Boulevard
+    this.arcade = this.classic ? null : new Arcade(this);
     if (this.calendar) this.phone.addApp({ id: 'events', name: 'אירועים', glyph: 'music', fill: '#ffb3d9' });
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
@@ -1154,6 +1157,7 @@ export class Game {
       if (this.calendar) this.calendar.update(dt);
       if (this.festival) this.festival.update(dt);
       if (this.artnight) this.artnight.update(dt);
+      if (this.arcade) this.arcade.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);
       this.voices.update(dt);
@@ -1230,7 +1234,7 @@ export class Game {
         const ro = (this.fair && this.fair.camOpts()) || (this.arenaGame && this.arenaGame.camOpts());
         // (a game played in the world: the camera held behind you, its screen in front - ui/minigame.js)
         const hold = this.minigames && this.minigames.camHold;
-        if (hold) this.camRig.holdAt(dt, hold.pos, hold.look);
+        if (hold) this.camRig.holdAt(dt, hold.pos, hold.look, hold.fov);
         else this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
       }
     }
@@ -1277,6 +1281,7 @@ export class Game {
       this.shopCrowd.draw(this.camera.position);
       if (this.festival) this.festival.draw(fr);
       if (this.artnight) this.artnight.draw(fr);
+      if (this.arcade) this.arcade.draw(fr);
       if (this.arenaGame) this.arenaGame.draw();
       this.streetlife.draw(fr);
       this.workers.draw(fr);
@@ -1393,7 +1398,7 @@ export class Game {
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -2108,6 +2113,11 @@ export class Game {
       // (Art Night in Paintwood's Walls: the Draw-Off, the easels, the stalls - game/artnight.js)
       enter = true;
       const at = this.artnight.target();
+      prompt = touch ? at.label.replace('E — ', '') : at.label;
+    } else if (p.mode === 'foot' && this.arcade && this.arcade.target()) {
+      // (INK ARCADE: the cabinets, the racers, the tables, the claws, the counters - game/arcade.js)
+      enter = true;
+      const at = this.arcade.target();
       prompt = touch ? at.label.replace('E — ', '') : at.label;
     } else if (p.mode === 'foot' && this.fair && this.fair.target()) {
       // (a ride on the pier: game/fairground.js)

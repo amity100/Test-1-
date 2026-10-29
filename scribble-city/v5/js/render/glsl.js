@@ -810,7 +810,7 @@ uniform float uUvScale;
 // (ROADMAP 11.32) > 0: the picture laid on the world in squares of this many metres (the pens' own
 // place on the surface), not by its uvs - a stone's courses on boxes of any size
 uniform float uWorldMap;
-uniform float uIndoor;   // a room under its lamps (no sun, warm light); 2 a mall's hall, 3 a store in it
+uniform float uIndoor;   // a room under its lamps (no sun, warm light); 2 a mall's hall, 3 a store in it, 4 a dark hall under its neon
 uniform float uCells;    // a texture of stacked cells: v = cell * 64 + v in the cell (shelves of goods)
 uniform float uNeonMask; // the neon sign atlas: r is the tube, g its white-hot core
 uniform float uMatOn;    // a drawing turning into a thing: the sweep that brings its colours
@@ -907,9 +907,12 @@ void main() {
   }
   bool inside = uIndoor > 0.5 || vX.z > 0.5;
   // (ROADMAP 11.31) a mall's great hall under its glass roof (2): indoors, but in daylight
-  bool hall = (uIndoor > 1.5 && uIndoor < 2.5) || vX.z > 1.5;
+  bool hall = (uIndoor > 1.5 && uIndoor < 2.5) || (vX.z > 1.5 && vX.z < 2.5);
   // (ROADMAP 11.42) a store in a mall (3): indoors, under its own white lights
-  bool store = uIndoor > 2.5;
+  bool store = uIndoor > 2.5 && uIndoor < 3.5;
+  // (ROADMAP 12.7) a dark hall under its own lights (4): the arcade, the casino's floor, a club -
+  // a little violet light from above, the neon, the screens and the lamps' pools doing the rest
+  bool club = uIndoor > 3.5 || vX.z > 2.5;
   vec3 Nw = normalize(vN);
   vec2 p = strokeCoords(Nw);
   // (uPxK, render/pipeline.js: the drawing's pixel in the screen's; 1 when it is drawn whole)
@@ -1001,6 +1004,11 @@ void main() {
     key = mix(key, vec3(1.0, 0.84, 0.66) * 0.22, nk);
     // (its lamps' own pools of light kept, softer: they do not flood it)
     pts *= 1.0 - 0.45 * nk;
+  } else if (club) {
+    float up = N.y * 0.5 + 0.5;
+    amb = mix(vec3(0.13, 0.08, 0.2), vec3(0.3, 0.22, 0.42), up);
+    key = vec3(0.75, 0.6, 1.0) * 0.22;
+    light = clamp(0.2 + 0.5 * up, 0.0, 1.0);
   } else if (store) {
     // a store in a mall, lit the way a real one is: white light from its ceiling, bright and even,
     // the most on what faces up; its colours its own - not a room's dusk seen from the street, and
@@ -1031,7 +1039,7 @@ void main() {
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
   vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv, uMipBias).rgb : vec3(1.0));
   // a room glows a little out into the evening
-  if (inside) em += alb * (hall || store ? vec3(0.07) : vec3(0.32, 0.2, 0.1));
+  if (inside) em += alb * (hall || store ? vec3(0.07) : club ? vec3(0.03, 0.02, 0.05) : vec3(0.32, 0.2, 0.1));
   if (uNeonMask > 0.5) em = uEmissive * tex.rgb;
   else if (uEmVColor > 0.5) em *= vCol;
 #ifdef USE_DENTS
@@ -1049,6 +1057,7 @@ void main() {
     vec3 env = skyColor(R);
     if (hall) env = mix(vec3(0.72, 0.75, 0.82), vec3(1.0, 1.0, 1.02), R.y * 0.5 + 0.5) * (1.0 - 0.7 * smoothstep(0.4, 1.6, uLitK));
     else if (store) env = mix(vec3(0.62, 0.62, 0.64), vec3(1.0, 0.99, 0.96), R.y * 0.5 + 0.5);
+    else if (club) env = mix(vec3(0.12, 0.08, 0.22), vec3(0.55, 0.35, 0.8), R.y * 0.5 + 0.5);
     else if (inside) env = mix(vec3(0.9, 0.62, 0.42), vec3(1.0, 0.9, 0.7), R.y * 0.5 + 0.5);
     shade = mix(shade, env * 0.8, fr);
     lit = mix(lit, env, fr);
