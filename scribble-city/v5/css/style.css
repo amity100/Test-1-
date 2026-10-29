@@ -1077,6 +1077,37 @@ body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.ph
 #paintshop .ps-gap, #sketchpad .ps-gap { flex: 1; }
 /* (ROADMAP 9.3: the sheet for a graffiti or a tattoo, ui/sketchpad.js) */
 #sketchpad canvas { max-height: 62vh; object-fit: contain; }
+
+/* (v5, ROADMAP 12.1) a game inside the game: a sheet over the city (ui/minigame.js) */
+#minigame { position: fixed; inset: 0; z-index: 32; display: flex; align-items: center; justify-content: center; background: rgba(27, 20, 48, 0.55); pointer-events: auto; padding: 8px; }
+#minigame.hidden { display: none; }
+#minigame .mg-sheet { width: min(1080px, 98vw); max-height: 98vh; display: flex; flex-direction: column; padding: 8px 12px 10px; transform: rotate(-0.3deg); }
+#minigame .mg-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+#minigame .mg-title { font-family: var(--font-hand); font-size: 28px; color: #b3191e; white-space: nowrap; }
+#minigame .mg-status { font-family: var(--font-hand); font-size: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#minigame .mg-gap { flex: 1; }
+#minigame .mg-stage { position: relative; width: 100%; height: min(72vh, 56vw); display: flex; align-items: center; justify-content: center; }
+#minigame canvas { display: block; border: 2px solid var(--ink); border-radius: 8px; background: #fbf8f0; touch-action: none; }
+#minigame .mg-help { font-size: 15px; opacity: 0.8; margin-top: 4px; text-align: center; }
+#minigame .mg-pad { position: absolute; bottom: 6px; display: none; gap: 6px; }
+#minigame.touch[data-pad="pad"] .mg-pad { display: grid; }
+#minigame .mg-left { left: 6px; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); }
+#minigame .mg-left [data-k="up"] { grid-column: 2; grid-row: 1; }
+#minigame .mg-left [data-k="left"] { grid-column: 1; grid-row: 2; }
+#minigame .mg-left [data-k="down"] { grid-column: 2; grid-row: 2; }
+#minigame .mg-left [data-k="right"] { grid-column: 3; grid-row: 2; }
+#minigame .mg-right { right: 6px; grid-template-columns: repeat(2, 64px); align-items: end; }
+#minigame .mg-pad button { border: 2px solid var(--ink); border-radius: 50%; background: rgba(255, 253, 246, 0.55); font-family: var(--font-hand); font-size: 22px; color: var(--ink); touch-action: none; user-select: none; }
+#minigame .mg-right button { width: 64px; height: 64px; }
+#minigame .mg-pad button.on { background: rgba(255, 210, 63, 0.85); }
+@media (max-height: 500px) {
+  #minigame { padding: 2px; }
+  #minigame .mg-sheet { width: 100vw; max-height: 100vh; padding: 4px 8px 4px; transform: none; border-radius: 0; }
+  #minigame .mg-title { font-size: 22px; }
+  #minigame .mg-status { font-size: 18px; }
+  #minigame .mg-stage { height: calc(100vh - 62px); }
+  #minigame .mg-help { display: none; }
+}
 #fuel { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
 #fuel.hidden { display: none; }
 #fuel .ico { font-size: 13px; line-height: 1; }

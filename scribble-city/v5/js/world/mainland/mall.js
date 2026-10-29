@@ -564,7 +564,7 @@ export function planter(ctx, x, z, inside) {
 // sweets and watches, a seller in each (game/mall.js); benches back to back along low planters,
 // a bin at the ends; screens of advertising standing by the columns; banners hung from the roof;
 // the signs to the food court and the doors under the bridge; and the stores' windows dressed -
-// the offer lit on the glass, a lightbox standing out by the window, potted plants at the door.
+// the offer lit on the glass, a lightbox standing out by the window.
 // (All of it in the hall's own batch, merged: a few hundred boxes for the whole hall.)
 const PROMO = ['SALE', 'NEW IN', '-30%', 'NEW SEASON', '2 FOR 1', 'LAST DAYS', '-50%', 'OPEN'];
 const BANNER_WORDS = ['SALE', 'SUMMER', '-50%', 'NEW IN', 'NEW SEASON', '2 FOR 1', 'OPEN', '-30%'];
@@ -714,7 +714,7 @@ function dressHall(bctx, IN, hall, hallGeo, hctx, mall, o, b, g) {
 }
 
 // a store's front on the hall: the offer on the wide pane, lit; a lightbox standing out at the far
-// end; potted plants either side of the door
+// end
 export function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
   const fb = (mat, u0, v0, w0, u1, v1, w1, col) => {
     const [a, c] = f.box(u0, v0, w0, u1, v1, w1);
@@ -750,20 +750,8 @@ export function dressFront(bctx, IN, hall, hallGeo, hctx, f, L, r, b) {
     const [p, q] = f.box(u - 0.1, 0, 0.28, u + 0.1, 0, 1.12);
     bctx.col.addBox(p[0], p[2], q[0], q[2], 0, 2.0, 'prop');
   }
-  if (r() < 0.5) {
-    // a pair of potted plants at the door
-    for (const k of [-1, 1]) {
-      const [x, , z] = f.p(uDoor + k * 1.08, 0, 0.42);
-      const pot = new THREE.CylinderGeometry(0.21, 0.16, 0.48, 10);
-      pot.translate(x, CURB + 0.24, z);
-      hallGeo(IN.cyl, pot, [srgb(0.95, 0.94, 0.92), srgb(0.2, 0.2, 0.24), srgb(0.86, 0.6, 0.42)][(b.seed + Math.round(x)) % 3]);
-      const leaf = new THREE.SphereGeometry(0.3, 8, 6);
-      leaf.scale(1, 1.25, 1);
-      leaf.translate(x, CURB + 0.86, z);
-      hallGeo(IN.box, leaf, srgb(0.3, 0.56, 0.32));
-      bctx.col.addCircle(x, z, 0.24, 0, 1.0, 'prop');
-    }
-  }
+  // (no potted plants at the doors any more: they looked amateurish, and the upper floors' stood on
+  // the ground floor's, in rows - ROADMAP 11.48)
 }
 
 // a kiosk: a cart on the hall's floor - its cabinet with panels on the side the people come to, the

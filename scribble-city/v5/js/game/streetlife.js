@@ -9,6 +9,7 @@ import { PRICES, SHELF_PRICES, CASH_ONLY, fmt } from './money.js';
 import { BOSS } from './properties.js';
 import { TOOLS, BOTTLE } from './ink.js';
 import { Dining, BarLife, LobbyLife, eatPlate } from './venuelife.js';
+import { DanceGame } from './minigames/dance.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -931,9 +932,18 @@ SERVICES.theatre = { verb: 'להיכנס לתיאטרון', ask: 'לקנות כ�
 SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הברמן', who: 'הברמן', greet: 'ברוכים הבאים! הדי ג\'יי בוער הלילה. משהו לשתות? (בלי אלכוהול, רק צבעים)', offers: [
   ['מוקטייל ניאון (+15 חיים)', 'mocktail', (game) => heal(15, [0.4, 0.85, 0.9], 'מוקטייל! +15 חיים')(game)],
   ['לימונדה קרה (+10 חיים)', 'lemonade', heal(10, [0.98, 0.9, 0.4], 'לימונדה. +10 חיים')],
-  ['לרקוד על הרחבה', null, (game) => {
+  ['לרקוד על הרחבה', null, (game, a) => {
     const p = game.player;
     p.fig.dance = 1;
+    // (ROADMAP 12.2) the floor is a game: Ink Beat, to the club's own music
+    if (game.minigames) {
+      const venue = (a && a.shop && a.shop.name) || 'NEON INK';
+      game.minigames.play(new DanceGame({ venue: venue.toUpperCase(), style: 'disco', tips: true }), (r) => {
+        p.fig.dance = 0;
+        if (r && r.grade) game.hud.toast(r.grade === 'S' || r.grade === 'A' ? 'הרחבה כולה הסתכלה עליכם!' : 'רקדתם! הרחבה מחאה כפיים', 'good', 2.4);
+      });
+      return;
+    }
     game.inkwell.after(9, () => (p.fig.dance = 0));
     game.hud.toast('רוקדים! כל הרחבה איתכם', 'good', 2.4);
   }],

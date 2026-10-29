@@ -84,6 +84,7 @@ import { MallLife } from './mall.js';
 import { Knock } from './knock.js';
 import { Graffiti } from './graffiti.js';
 import { SketchPad } from '../ui/sketchpad.js';
+import { MiniGames } from '../ui/minigame.js';
 import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
@@ -298,6 +299,8 @@ export class Game {
     this.knock = this.classic ? null : new Knock(this);
     // (drawing on the world: graffiti on the walls, a tattoo of your own - ROADMAP 9.3)
     this.sketchpad = this.classic ? null : new SketchPad(this);
+    // (ROADMAP 12.1) the games inside the game: a sheet of their own over the city
+    this.minigames = this.classic ? null : new MiniGames(this);
     this.graffiti = this.classic ? null : new Graffiti(this);
     if (this.graffiti) this.phone.addApp({ id: 'graffiti', name: 'גרפיטי', glyph: 'spray', fill: '#ffd0a6' });
     // (fire that spreads, and the fire engine that comes: ROADMAP 8.4)
@@ -397,7 +400,7 @@ export class Game {
         this.input.releaseLock();
         return;
       }
-      if (!locked && this.state === 'play' && performance.now() - (this.input.releasedAt || -1e9) > 600 && !this.airdraw.open && !(this.freedraw && (this.freedraw.open || performance.now() - this.freedraw.shutAt < 1500)) && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && performance.now() - (this.input.releasedAt || -1e9) > 600 && !this.airdraw.open && !(this.freedraw && (this.freedraw.open || performance.now() - this.freedraw.shutAt < 1500)) && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !(this.minigames && this.minigames.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -910,7 +913,7 @@ export class Game {
           perf.frameStart();
           this.update(step);
           perf.afterUpdate();
-          const drawn = !this.citymap.covering;
+          const drawn = !this.citymap.covering && !(this.minigames && this.minigames.covering);
           if (drawn) this.renderFrame();
           // (a frame the numbers' own timing made slower, and the two after it, not counted: perf.js)
           pace.sent(t0, performance.now(), drawn && !perf.probeLeft);
@@ -943,7 +946,7 @@ export class Game {
       perf.afterUpdate();
       // (under the open map the city is not drawn: the map covers all of it; nor for a moment of
       // the test route, to time the game alone)
-      if (!this.citymap.covering && !(perf.bench && perf.bench.noDraw)) this.renderFrame();
+      if (!this.citymap.covering && !(this.minigames && this.minigames.covering) && !(perf.bench && perf.bench.noDraw)) this.renderFrame();
       perf.frameEnd(raw);
       // (the test route is measured at the drawing's full quality: the resolution waits; and
       // while the depth first is being tried)
@@ -1036,6 +1039,8 @@ export class Game {
   update(dt) {
     const playing = this.state === 'play' || this.state === 'dead';
     if (this.state === 'paused') dt = 0;
+    // (a game inside the game on its sheet: the city stands still behind it)
+    if (this.minigames && this.minigames.isOpen) dt = 0;
     // (the weapon wheel open: the city slows right down, ROADMAP 6.6)
     if (this.wheel) {
       this.wheel.update();
@@ -1351,6 +1356,8 @@ export class Game {
       this.dialog.update();
       return;
     }
+    // (the keys are the game's on its sheet: ui/minigame.js)
+    if (this.minigames && this.minigames.isOpen) return;
     if (input.wasPressed('Escape')) {
       if (this.album.open) this.album.hide();
       else if (!this.airdraw.open && this.state === 'play') this.pause();
