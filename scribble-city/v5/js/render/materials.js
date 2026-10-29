@@ -182,6 +182,7 @@ export const shared = {
   uSunDisc: { value: new THREE.Vector3(0.3, 0.085, -1).normalize() },
   uSunDiscK: { value: 1 },
   uLitK: { value: 1 },
+  uEve: { value: new THREE.Vector4(0.62, 0.36, 0, 0.55) }, // TEMP tuning
   uSkyPen: { value: SKY_PENS.map((c) => new THREE.Vector3(c[0], c[1], c[2])) },
   uCloudC: { value: [new THREE.Vector3(0.66, 0.44, 0.74), new THREE.Vector3(1.0, 0.72, 0.4)] },
   uSunCore: { value: new THREE.Vector3(1.0, 0.97, 0.82) },

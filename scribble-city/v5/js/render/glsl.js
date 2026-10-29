@@ -65,6 +65,7 @@ uniform sampler2D uHoles;
 uniform vec3 uWind;
 uniform vec3 uSunDisc;
 uniform float uLitK;
+uniform vec4 uEve; // TEMP tuning
 uniform float uOvercast;
 uniform float uRain;
 uniform float uWet;
@@ -997,8 +998,9 @@ void main() {
     // the street's shops do at night (ROADMAP 11.48). uLitK, the share of the city's windows lit, is
     // how dark it is)
     float nk = smoothstep(0.4, 1.6, uLitK);
-    amb *= 1.0 - 0.62 * nk;
-    key = mix(key, vec3(1.0, 0.84, 0.66) * 0.36, nk);
+    amb *= 1.0 - uEve.x * nk;
+    key = mix(key, vec3(1.0, 0.84, 0.66) * uEve.y, nk);
+    pts *= 1.0 - uEve.z * nk;
   } else if (store) {
     // a store in a mall, lit the way a real one is: white light from its ceiling, bright and even,
     // the most on what faces up; its colours its own - not a room's dusk seen from the street, and
@@ -1045,7 +1047,7 @@ void main() {
     vec3 R = reflect(-V, N);
     float fr = mix(0.08, 1.0, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0)) * uGloss;
     vec3 env = skyColor(R);
-    if (hall) env = mix(vec3(0.72, 0.75, 0.82), vec3(1.0, 1.0, 1.02), R.y * 0.5 + 0.5) * (1.0 - 0.55 * smoothstep(0.4, 1.6, uLitK));
+    if (hall) env = mix(vec3(0.72, 0.75, 0.82), vec3(1.0, 1.0, 1.02), R.y * 0.5 + 0.5) * (1.0 - uEve.w * smoothstep(0.4, 1.6, uLitK));
     else if (store) env = mix(vec3(0.62, 0.62, 0.64), vec3(1.0, 0.99, 0.96), R.y * 0.5 + 0.5);
     else if (inside) env = mix(vec3(0.9, 0.62, 0.42), vec3(1.0, 0.9, 0.7), R.y * 0.5 + 0.5);
     shade = mix(shade, env * 0.8, fr);
