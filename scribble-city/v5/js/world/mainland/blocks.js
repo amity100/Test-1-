@@ -16,7 +16,7 @@ import { friendStandIn } from '../streets.js';
 import { buildPier } from './pier.js';
 import { buildBeach, buildPoint, buildBayfront } from './shore.js';
 import { buildArena } from './arena.js';
-import { HALL_ROW_D, ARCADE } from './halls.js';
+import { HALL_ROW_D, ARCADE, CASINO } from './halls.js';
 import '../shops2.js';
 import '../homes2.js';
 import '../venues2.js';
@@ -356,6 +356,20 @@ function* buildKind(bctx, b) {
       yardGround(bctx, R.x0 + HALL_ROW_D, R.x1, R.z0, R.z1);
       const H = ARCADE;
       bctx.footprints.push({ x0: H.xw, z0: H.z0, x1: H.xe, z1: H.z1, top: H.h + 1.2, color: '#2a1840' });
+      yield;
+      return;
+    }
+    case 'casino': {
+      // (ROADMAP 12.8) PALACE OF INK: the block all paved, palms along its streets; the hall, its
+      // tower and its fountains are game/casino.js's, built near you - here their shapes for the far view
+      yardGround(bctx, R.x0, R.x1, R.z0, R.z1);
+      for (let x = R.x0 + 5; x < R.x1 - 3; x += 9) {
+        for (const z of [R.z0 + 3, R.z1 - 3]) palm(bctx, bctx.rng, x, z, 10 + bctx.rng() * 3, { y0: CURB });
+      }
+      const C = CASINO;
+      bctx.footprints.push({ x0: C.xw, z0: C.z0, x1: C.xe, z1: C.z1, top: C.h + 1.4, color: '#efe2c4' });
+      const T = C.tower;
+      bctx.footprints.push({ x0: C.xw + T.u0, z0: C.z0 + T.v0, x1: C.xw + T.u1, z1: C.z0 + T.v1, top: T.h, color: '#e9dcc0', tower: true });
       yield;
       return;
     }

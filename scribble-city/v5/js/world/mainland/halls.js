@@ -16,3 +16,7 @@ function hall(col, row, w, d, h, back = 8) {
 
 // INK ARCADE: 32 x 52 m, 7.5 m high, its doors on the east avenue
 export const ARCADE = hall(7, 1, 32, 52, 7.5);
+
+// PALACE OF INK: the casino on the bay, the whole block its own - 36 x 78 m, 9.5 m high, its doors on
+// Bayfront Boulevard behind a forecourt of fountains; its hotel's tower over its west part
+export const CASINO = { ...hall(0, 6, 36, 78, 9.5, 20), tower: { u0: 0, u1: 16, v0: 20, v1: 58, h: 66 } };

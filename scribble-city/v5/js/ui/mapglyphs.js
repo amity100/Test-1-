@@ -332,6 +332,19 @@ export const GLYPHS = {
     g.fillStyle = '#ffd25a';
     circle(g, 3.6, 4.2, 1.1, true);
   },
+  // (ROADMAP 12.8) a chip, a spade on it
+  casino(g) {
+    g.fillStyle = '#d8263a';
+    circle(g, 0, 0, 6.2, true);
+    g.setLineDash([1.6, 1.6]);
+    g.strokeStyle = W;
+    circle(g, 0, 0, 5);
+    g.setLineDash([]);
+    g.strokeStyle = '#1b1430';
+    g.fillStyle = '#1b1430';
+    shape(g, [0, -3.2, 2.6, 0.4, 0, 1.6, -2.6, 0.4]);
+    line(g, 0, 1.2, 0, 3.4);
+  },
   friends(g) {
     g.fillStyle = W;
     circle(g, -1, -0.6, 5.8, true);

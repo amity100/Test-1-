@@ -7,18 +7,20 @@ import { letter } from '../world/letters.js';
 // 'club': a little violet from above, the neon and the screens doing the rest), and the pieces every
 // such place has - its name in neon tubes, pictures made of squares of light, bulbs that chase.
 
-let CM = null;
-export function clubMats() {
-  if (CM) return CM;
-  CM = {
-    paint: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.55, ang: 0.1, indoor: 'club' }),
-    matte: makeSurface({ kind: 'box', vcolor: true, indoor: 'club' }),
-    round: makeSurface({ kind: 'cyl', vcolor: true, partR: 0.05, indoor: 'club' }),
-    metal: makeSurface({ kind: 'box', vcolor: true, gloss: 0.75, indoor: 'club' }),
-    glass: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.95, ang: 0.5, indoor: 'club' }),
+// (the pens of a hall: 'club' the arcade's and the clubs', 'casino' the casino's floor, gold)
+const CMS = {};
+export function clubMats(indoor = 'club') {
+  if (CMS[indoor]) return CMS[indoor];
+  const CM = {
+    paint: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.55, ang: 0.1, indoor }),
+    matte: makeSurface({ kind: 'box', vcolor: true, indoor }),
+    round: makeSurface({ kind: 'cyl', vcolor: true, partR: 0.05, indoor }),
+    metal: makeSurface({ kind: 'box', vcolor: true, gloss: 0.75, indoor }),
+    glass: makeSurface({ kind: 'paint', vcolor: true, gloss: 0.95, ang: 0.5, indoor }),
     glow: makeSurface({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.95, 0.9), emissive: new THREE.Color(2.2, 2.2, 2.2), line: 0.4 }),
   };
   for (const m of Object.values(CM)) m.userData.depth = m.userData.depth || null;
+  CMS[indoor] = CM;
   return CM;
 }
 
