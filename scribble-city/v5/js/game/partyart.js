@@ -393,3 +393,54 @@ export function paintBackdrop(text, cols, w = 512, h = 320) {
   }
   return c;
 }
+
+/**
+ * The lit edge of the balconies, one long strip round the hall (the same s as paintLED): colour
+ * running round it, the name passing, the whole of it flashing on the beat in the drop, a chase
+ * racing faster and faster in the build.
+ */
+export function paintBand(g, W, H, s) {
+  const b = s.beat;
+  const ph = fr(b);
+  const pulse = Math.pow(1 - ph, 2);
+  const hue = s.hue || 0.9;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = '#05030a';
+  g.fillRect(0, 0, W, H);
+  const seg = W / 48;
+  if (s.part === 'build') {
+    // the chase: a run of light round the hall, faster as it rises
+    const v = 0.4 + s.prog * 6;
+    for (let i = 0; i < 48; i++) {
+      const on = fr(i / 48 - s.t * v * 0.1) < 0.18 + s.prog * 0.3;
+      g.fillStyle = on ? hsl(hue + s.prog * 0.5, 1, 0.6) : '#0b0814';
+      g.fillRect(i * seg + 1, 1, seg - 2, H - 2);
+    }
+    if (s.prog > 0.94) {
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, W, H);
+    }
+    return;
+  }
+  if (s.part === 'break') {
+    for (let i = 0; i < 48; i++) {
+      g.fillStyle = hsl(hue + i * 0.01 + s.t * 0.02, 0.8, 0.12 + 0.1 * Math.sin(i * 0.4 - s.t * 1.5));
+      g.fillRect(i * seg + 1, 1, seg - 2, H - 2);
+    }
+    return;
+  }
+  const drop = s.part === 'drop';
+  for (let i = 0; i < 48; i++) {
+    const wave = 0.5 + 0.5 * Math.sin(i * 0.5 - b * Math.PI * 0.5);
+    const l = drop ? 0.18 + 0.45 * pulse * (0.6 + 0.4 * wave) : 0.12 + 0.3 * wave;
+    g.fillStyle = hsl(hue + (drop ? Math.floor(b) * 0.17 : 0) + i * 0.012, 1, l);
+    g.fillRect(i * seg + 1, 1, seg - 2, H - 2);
+  }
+  // (the name going round)
+  g.font = `700 ${Math.round(H * 0.82)}px ${MARKER}`;
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  const x = W - fr(s.t * 0.03) * (W + 400);
+  g.fillStyle = drop && ph < 0.15 ? '#ffffff' : '#fff2fa';
+  for (let k = 0; k < 3; k++) g.fillText(s.name, x + k * (W / 3), H * 0.54);
+}

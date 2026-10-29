@@ -50,9 +50,9 @@ export function* buildVenue(bctx, b, o) {
   // the room
   const shopRef = { kind: o.kind === 'theatre' ? 'theatre' : 'club', name: o.name };
   const room = bctx.room(f, {
-    u0: 0.5, u1: LEN - 0.5, depth: DEP - 0.8, y0: CURB, h: o.kind === 'theatre' ? 7.5 : 6.5, kind: shopRef.kind,
+    u0: 0.5, u1: LEN - 0.5, depth: DEP - 0.8, y0: CURB, h: o.kind === 'theatre' ? 7.5 : o.roomH || 6.5, kind: shopRef.kind,
     // (ROADMAP 12.9: BLUE VELVET is a jazz club - its own furniture and colours, world/venues2.js)
-    jazz: !!o.jazz, decor: o.jazz ? 'jazz' : undefined,
+    jazz: !!o.jazz, decor: o.jazz ? 'jazz' : undefined, mega: !!o.mega,
     openings: [{ kind: 'door', u0: uDoor - 1.0, u1: uDoor + 1.0, y0: CURB, y1: 2.95 }],
     outside: wall,
     shop: shopRef,
@@ -76,7 +76,13 @@ export function* buildVenue(bctx, b, o) {
     const db = -(DEP - 0.8);
     // (the jazz club's: warm over the band and the tables, blue over the floor)
     const pal = o.jazz ? [[-3, 4, srgb(1, 0.72, 0.42)], [3, 4, srgb(1, 0.72, 0.42)], [0, 6, srgb(0.35, 0.5, 1)], [0, 13, srgb(1, 0.78, 0.5)]] : [[-3, 5, srgb(1, 0.3, 0.7)], [3, 5, srgb(0.3, 0.9, 1)], [0, 9, srgb(0.6, 0.4, 1)], [0, 1.5, srgb(1, 0.85, 0.4)]];
-    for (const [du, dd, c] of pal) {
+    // (the great hall's: over the stage, the floor, the balconies, the lobby under the front one)
+    const big = o.mega ? [[-6, 3, 7, srgb(1, 0.3, 0.7), 14], [6, 3, 7, srgb(0.3, 0.9, 1), 14], [0, 15, 8, srgb(0.6, 0.4, 1), 16], [-21, 20, 7.5, srgb(1, 0.4, 0.75), 10], [21, 20, 7.5, srgb(0.35, 0.85, 1), 10], [-21, 18, 3, srgb(0.75, 0.45, 1), 9], [21, 18, 3, srgb(0.75, 0.45, 1), 9], [0, 34, 3.5, srgb(1, 0.8, 0.5), 10]] : null;
+    if (big) for (const [du, dd, y, c, r] of big) {
+      const p = f.p(LEN / 2 + du, CURB + y, db + dd);
+      addLight(p[0], p[1], p[2], r, c, 1.5);
+    }
+    else for (const [du, dd, c] of pal) {
       const p = f.p(LEN / 2 + du, CURB + 4.6, db + dd);
       addLight(p[0], p[1], p[2], 9, c, 1.5);
     }

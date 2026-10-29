@@ -7,6 +7,7 @@ import { neonSign } from './deco.js';
 import { letter } from './letters.js';
 import { srgb } from '../render/materials.js';
 import { jazzPlan } from './jazzplan.js';
+import { megaPlan } from './megaplan.js';
 
 // (v5, GTA IV round) The places you sit down in, laid out to the last fork. A restaurant of the real
 // world is not a room of tables: it is the host's stand by the door with the book of the evening's
@@ -1784,8 +1785,10 @@ function theatre(R) {
  * round the floor; the coat check by the door.
  */
 function club(R) {
-  // (ROADMAP 12.9: BLUE VELVET is a jazz club - its bandstand, its tables, its velvet)
+  // (ROADMAP 12.9: BLUE VELVET is a jazz club - its bandstand, its tables, its velvet; NEON INK one
+  // of the world's great clubs - its hall, its balconies)
   if (R.spec.jazz) return jazzClub(R);
+  if (R.spec.mega) return megaClub(R);
   const fr = frameOf(R);
   const { ua, ub, da, db, y0, y1 } = R;
   const rng = R.rng;
@@ -1978,6 +1981,202 @@ function club(R) {
     wr.box(Sl, 0.2, y0 + 0.05, 0.01, len - 0.2, y0 + 0.08, 0.04, [0.6, 0.3, 1], nextId(), L.BACK);
     wr.box(Sl, 0.2, y1 - 0.12, 0.01, len - 0.2, y1 - 0.09, 0.04, [1, 0.3, 0.7], nextId(), L.BACK);
     for (let s = 2; s < len - 1; s += 3.5) wr.box(Sl, s, y0 + 1.2, 0.01, s + 0.06, y1 - 0.6, 0.04, pk(rng, cols), nextId(), L.BACK);
+  }
+  flushBig(R);
+}
+
+// ------------------------------------------------------------------ the great club
+/**
+ * NEON INK (v5, ROADMAP 12.9b): a hall thirteen metres high. Across its back the stage - the DJ's
+ * booth on it, the frame of the great wall of LED behind and its two pillars, the line arrays hung
+ * either side, the subs in its face, the barrier before it; the floor of LED; balconies on three
+ * sides at five metres, their glass and their lit edges, the columns under them, the stairs up to
+ * them either side of the doors; the bars under the side balconies, the bar upstairs, the VIP
+ * sofas looking down; the coat check by the door. (The show - the pictures on the LED, the ring
+ * chandelier, the kinetic ceiling, the lasers and the crowd: game/partyclub.js.)
+ */
+function megaClub(R) {
+  const fr = frameOf(R);
+  const { ua, ub, da, db, y0, y1 } = R;
+  const rng = R.rng;
+  const S = big(R);
+  const Sc = big(R, 'cyl');
+  const Sg = big(R, 'gloss');
+  const Sl = big(R, 'lamp');
+  const sS = R.soup('box', true);
+  const sG = R.soup('gloss', true);
+  R.noLamps = true;
+  R.spots.marks = R.spots.marks || [];
+  const P = megaPlan(R);
+  const { mid, by } = P;
+  const BLACK = [0.05, 0.05, 0.06];
+  const DARK = [0.1, 0.09, 0.12];
+  const cols = [[1, 0.3, 0.7], [0.3, 0.9, 1], [1, 0.85, 0.3], [0.6, 0.4, 1], [0.4, 1, 0.6]];
+  // (a box of collision with its own bottom: what stands up on the balconies, the balconies' floors)
+  const colBox = (u0, ya, d0, u1, yb, d1, tag) => {
+    if (R.mode === 'stock' || !R.ctx.col) return;
+    const [mn, mx] = R.f.box(u0, ya, d0, u1, yb, d1);
+    R.ctx.col.addBox(mn[0], mn[2], mx[0], mx[2], mn[1], mx[1], tag);
+  };
+  // (a railing you see through: posts, two rails of steel, the brass on top - along u or along d)
+  const railing = (alongU, c, a0, a1, y) => {
+    const box = (lo, ya, hi, yb, w, col, soup) => (alongU ? soup.fbox(lo, ya, c - w, hi, yb, c + w, col, nextId()) : soup.fbox(c - w, ya, lo, c + w, yb, hi, col, nextId()));
+    for (let s = a0; s <= a1 + 1e-6; s += 1.5) box(Math.min(s, a1) - 0.03, y, Math.min(s, a1) + 0.03, y + 1.1, 0.03, C.dsteel, S);
+    for (const h of [0.38, 0.74]) box(a0, y + h, a1, y + h + 0.025, 0.012, C.steel, S);
+    box(a0, y + 1.08, a1, y + 1.14, 0.04, C.brass, Sg);
+  };
+  // ---- the stage: its deck, its face of subs and the light along its lip, its steps at the side
+  const st = P.stage;
+  const top = y0 + st.h;
+  S.fbox(st.u0, y0, st.d0, st.u1, top, st.d1, BLACK, nextId(), FF.BOTTOM);
+  for (let u = st.u0 + 0.4; u < st.u1 - 1.2; u += 1.3) {
+    S.fbox(u, y0 + 0.1, st.d1, u + 1.15, top - 0.15, st.d1 + 0.02, [0.12, 0.12, 0.14], nextId());
+    for (const y of [y0 + 0.45, y0 + 1.0]) Sc.fcyl(u + 0.575, st.d1 + 0.03, 0.22, y - 0.01, 0.02, [0.2, 0.2, 0.23], nextId(), 12, true);
+  }
+  Sl.fbox(st.u0, top - 0.06, st.d1, st.u1, top - 0.02, st.d1 + 0.025, [0.3, 0.9, 1], nextId());
+  R.solid.push([st.u0, st.d0, st.u1, st.d1, top]);
+  // the DJ's booth: its body, the decks and the mixer on it
+  const bo = P.booth;
+  const btop = top + bo.h;
+  S.fbox(bo.u0, top, bo.d0, bo.u1, btop, bo.d1, [0.08, 0.08, 0.1], nextId());
+  Sg.fbox(bo.u0 - 0.05, btop, bo.d0 - 0.05, bo.u1 + 0.05, btop + 0.05, bo.d1 + 0.05, BLACK, nextId());
+  for (const s of [-1, 0, 1]) {
+    if (s) {
+      Sc.fcyl(mid + s * 1.0, (bo.d0 + bo.d1) / 2, 0.22, btop + 0.05, 0.05, [0.2, 0.2, 0.22], nextId(), 14, true);
+      Sc.fcyl(mid + s * 1.0, (bo.d0 + bo.d1) / 2, 0.17, btop + 0.1, 0.006, C.black, nextId(), 14, true);
+    } else S.fbox(mid - 0.35, btop + 0.05, bo.d0 + 0.2, mid + 0.35, btop + 0.13, bo.d1 - 0.2, [0.16, 0.16, 0.2], nextId());
+  }
+  for (const s of [-2.2, 2.2]) Sl.fbox(mid + s - 0.3, btop + 0.05, bo.d0 + 0.25, mid + s + 0.3, btop + 0.07, bo.d1 - 0.25, [0.5, 0.85, 1], nextId());
+  // the frame of the wall of LED, its pillars' frames (the pictures on them: game/partyclub.js)
+  const le = P.led;
+  S.fbox(le.u0 - 0.3, top, db + 0.02, le.u1 + 0.3, le.y1 + 0.35, db + 0.12, BLACK, nextId());
+  for (const pl of P.pillars) S.fbox(pl.u0 - 0.15, y0, db + 0.02, pl.u1 + 0.15, le.y1 + 0.35, db + 0.12, BLACK, nextId());
+  // the line arrays, hung either side over the stage's front corners
+  for (const s of [-1, 1]) {
+    const u = mid + s * 11.8;
+    for (let k = 0; k < 8; k++) {
+      const yt = y1 - 0.6 - k * 0.42;
+      const dd = k * k * 0.012;
+      S.fbox(u - 0.62, yt - 0.4, st.d1 - 0.9 + dd, u + 0.62, yt, st.d1 - 0.15 + dd, BLACK, nextId());
+      S.fbox(u - 0.55, yt - 0.36, st.d1 - 0.15 + dd, u + 0.55, yt - 0.04, st.d1 - 0.14 + dd, [0.13, 0.13, 0.15], nextId());
+    }
+    for (const du of [-0.5, 0.5]) S.fbox(u + du - 0.01, y1 - 0.6, st.d1 - 0.53, u + du + 0.01, y1, st.d1 - 0.51, C.dsteel, nextId());
+  }
+  // the barrier before the stage
+  const ba = P.barrier;
+  for (let u = ba.u0; u < ba.u1 - 0.1; u += 1.2) {
+    S.fbox(u, y0, ba.d - 0.04, u + 1.18, y0 + 1.1, ba.d + 0.04, [0.6, 0.62, 0.66], nextId());
+    S.fbox(u, y0, ba.d - 0.3, u + 0.06, y0 + 0.08, ba.d + 0.5, [0.5, 0.52, 0.56], nextId());
+  }
+  R.solid.push([ba.u0, ba.d - 0.1, ba.u1, ba.d + 0.1, y0 + 1.1]);
+  // ---- the floor under the LED's squares
+  const fl = P.floor;
+  S.fbox(fl.u0 - 0.1, y0 - 0.005, fl.d0 - 0.1, fl.u1 + 0.1, y0 + 0.012, fl.d1 + 0.1, [0.06, 0.06, 0.08], nextId(), FF.BOTTOM);
+  for (let i = 0; i < 16; i++) R.spots.browse.push({ u: fl.u0 + 2 + (i % 4) * 5, d: fl.d0 + 2.5 + Math.floor(i / 4) * 3.6, face: [0, -1] });
+  // ---- the balconies: their floors, the lit edge under the glass, the glass and its rail
+  for (const b of P.bal) {
+    S.fbox(b.u0, by - 0.4, b.d0, b.u1, by, b.d1, DARK, nextId());
+    colBox(b.u0, by - 0.4, b.d0, b.u1, by, b.d1, 'roof');
+    if (b.edge === 'd0') {
+      // (along the front: the glass on its edge but where the stairs come up)
+      const gaps = P.stairs.map((s) => [s.u0, s.u1]);
+      const runs = [[b.u0, gaps[0][1]], [gaps[0][1], gaps[1][0]], [gaps[1][0], b.u1]];
+      S.fbox(b.u0, by - 0.95, b.d0 - 0.06, b.u1, by - 0.4, b.d0 + 0.3, DARK, nextId());
+      for (const [a, c] of runs.slice(1, 2)) {
+        railing(true, b.d0 + 0.02, a, c, by);
+        colBox(a, by, b.d0 - 0.08, c, by + 2.2, b.d0 + 0.05, 'wall');
+      }
+    } else {
+      const u = b.edge === 'u1' ? b.u1 : b.u0;
+      const sg = b.edge === 'u1' ? 1 : -1;
+      S.fbox(u - (sg > 0 ? 0.3 : -0.06), by - 0.95, b.d0, u + (sg > 0 ? 0.06 : -0.3), by - 0.4, b.d1 - P.B, DARK, nextId());
+      // (the railing along the side, from the stage's end to the front balcony; across its end)
+      railing(false, u - sg * 0.02, b.d0, b.d1 - P.B, by);
+      colBox(u - 0.08, by, b.d0, u + 0.08, by + 2.2, b.d1 - P.B, 'wall');
+      railing(true, b.d0 + 0.02, b.u0, b.u1, by);
+      colBox(b.u0, by, b.d0 - 0.08, b.u1, by + 2.2, b.d0 + 0.08, 'wall');
+    }
+  }
+  // the columns under the balconies' edges, rings of light round them
+  for (const [u, d] of P.cols) {
+    Sc.fcyl(u, d, 0.35, y0, by - 0.4 - y0, [0.12, 0.11, 0.15], nextId(), 14, false);
+    for (const y of [y0 + 1.2, y0 + 3.2]) Sl.fcyl(u, d, 0.36, y, 0.07, pk(rng, cols), nextId(), 14, false);
+    R.solid.push([u - 0.35, d - 0.35, u + 0.35, d + 0.35, by - 0.4]);
+  }
+  // ---- the stairs up to the balconies: their steps of black stone, the light along each nose,
+  // the glass up their open side
+  for (const sr of P.stairs) {
+    for (let k = 0; k < P.steps; k++) {
+      const d0 = sr.d0 + k * P.run;
+      const yt = y0 + (k + 1) * P.rise;
+      S.fbox(sr.u0, y0, d0, sr.u1, yt, d0 + P.run, [0.09, 0.09, 0.11], nextId(), FF.BOTTOM);
+      Sl.fbox(sr.u0 + 0.05, yt - 0.03, d0 - 0.005, sr.u1 - 0.05, yt - 0.01, d0 + 0.01, [0.3, 0.9, 1], nextId());
+      R.solid.push([sr.u0, d0, sr.u1, d0 + P.run, yt]);
+      // (the handrail up the open side, on its posts)
+      const gu = sr.u0 < mid ? sr.u1 - 0.05 : sr.u0 + 0.05;
+      Sg.fbox(gu - 0.03, yt + 0.9, d0, gu + 0.03, yt + 0.95, d0 + P.run, C.brass, nextId());
+      if (k % 3 === 0) S.fbox(gu - 0.025, yt, d0 + 0.12, gu + 0.025, yt + 0.92, d0 + 0.17, C.dsteel, nextId());
+    }
+  }
+  // ---- the bars under the side balconies, their bottles lit in the club's colours
+  let keeperSet = false;
+  for (const b of P.bars) {
+    const u = b.side < 0 ? ua + 0.47 : ub - 0.47;
+    const run = new Run(R, u, b.d1, [0, -1], [-b.side, 0]);
+    const len = b.d1 - b.d0;
+    const bb = bar(R, run, len, { wood: [0.1, 0.08, 0.12], top: [0.16, 0.14, 0.18], counterTop: [0.12, 0.12, 0.16], light: [0.75, 0.4, 1], stoolTop: [0.85, 0.2, 0.55], shade: [0.3, 0.9, 1], pendants: false, high: 2.9 });
+    const [a0, d0] = run.ud(0, 1.44);
+    const [a1, d1] = run.ud(bb.cl, 1.47);
+    Sl.fbox(Math.min(a0, a1), y0 + 1.0, Math.min(d0, d1), Math.max(a0, a1), y0 + 1.03, Math.max(d0, d1), [0.3, 0.9, 1], nextId());
+    if (!keeperSet) {
+      R.spots.keeper = bb.keeper;
+      mark(R, 'barman', ...run.ud(len * 0.25, 0.42), bb.keeper.face);
+      keeperSet = true;
+    }
+  }
+  // ---- the bar upstairs, against the front wall: its back of bottles, its counter
+  {
+    const ub2 = P.upbar;
+    S.fbox(ub2.u0, by, da - 0.45, ub2.u1, by + 2.6, da - 0.02, [0.1, 0.08, 0.12], nextId());
+    Sl.fbox(ub2.u0 + 0.1, by + 1.05, da - 0.46, ub2.u1 - 0.1, by + 2.45, da - 0.44, [0.75, 0.4, 1], nextId());
+    for (let u = ub2.u0 + 0.3; u < ub2.u1 - 0.2; u += 0.22) for (const y of [by + 1.1, by + 1.6, by + 2.05]) sG.fcyl(u, da - 0.55, 0.04, y, 0.26 + rng.r() * 0.08, pk(rng, BOTTLES), nextId(), 6, true, 0.015);
+    S.fbox(ub2.u0, by, ub2.d0, ub2.u1, by + 1.1, ub2.d0 + 0.6, [0.12, 0.1, 0.14], nextId());
+    Sl.fbox(ub2.u0, by + 1.0, ub2.d0 - 0.005, ub2.u1, by + 1.04, ub2.d0 + 0.005, [1, 0.3, 0.7], nextId());
+    Sg.fbox(ub2.u0 - 0.05, by + 1.1, ub2.d0 - 0.05, ub2.u1 + 0.05, by + 1.15, ub2.d0 + 0.65, [0.2, 0.2, 0.24], nextId());
+    colBox(ub2.u0, by, ub2.d0, ub2.u1, by + 1.15, ub2.d0 + 0.6, 'furniture');
+    colBox(ub2.u0, by, da - 0.45, ub2.u1, by + 2.6, da, 'furniture');
+  }
+  // ---- the VIP sofas on the side balconies, their low tables, the ice and the bottles
+  for (const v of P.vip) {
+    const sg = v.side < 0 ? 1 : -1;
+    const bu = v.side < 0 ? ua + 0.1 : ub - 0.1;
+    S.fbox(bu, by, v.d - 1.3, bu + sg * 1.0, by + 0.42, v.d + 1.3, [0.42, 0.08, 0.3], nextId());
+    S.fbox(bu, by + 0.42, v.d - 1.3, bu + sg * 0.25, by + 1.05, v.d + 1.3, [0.5, 0.1, 0.36], nextId());
+    for (const s of [-1, 1]) S.fbox(bu, by + 0.42, v.d + s * 1.3 - (s > 0 ? 0.2 : 0), bu + sg * 1.0, by + 0.7, v.d + s * 1.3 + (s < 0 ? 0.2 : 0), [0.5, 0.1, 0.36], nextId());
+    const tu = bu + sg * 1.75;
+    S.fbox(tu - 0.35, by, v.d - 0.6, tu + 0.35, by + 0.42, v.d + 0.6, BLACK, nextId());
+    Sg.fbox(tu - 0.38, by + 0.42, v.d - 0.63, tu + 0.38, by + 0.45, v.d + 0.63, [0.2, 0.2, 0.24], nextId());
+    sG.fcyl(tu, v.d, 0.13, by + 0.45, 0.22, C.steel, nextId(), 10, true, 0.15);
+    for (let q = 0; q < 2; q++) sG.fcyl(tu - 0.03 + q * 0.07, v.d - 0.02 + q * 0.05, 0.035, by + 0.5, 0.32, pk(rng, [[0.2, 0.42, 0.22], [0.86, 0.66, 0.3], [0.1, 0.1, 0.12]]), nextId(), 6, true, 0.012);
+    for (let q = 0; q < 4; q++) sG.fcyl(tu + (q % 2 ? 0.22 : -0.22), v.d - 0.4 + (q >> 1) * 0.8, 0.03, by + 0.45, 0.12, C.glass, nextId(), 8, true, 0.036);
+    colBox(Math.min(bu, bu + sg * 1.0), by, v.d - 1.5, Math.max(bu, bu + sg * 1.0), by + 0.45, v.d + 1.5, 'furniture');
+    colBox(tu - 0.38, by, v.d - 0.63, tu + 0.38, by + 0.45, v.d + 0.63, 'furniture');
+  }
+  // ---- the coat check by the door, under the front balcony
+  const door = fr.door;
+  const cu = door ? door.u1 + 1.6 : ua + 6;
+  if (cu > ua + 1.2 && cu < ub - 1.2) {
+    S.fbox(cu - 0.9, y0, da - 2.0, cu + 0.9, y0 + 1.05, da - 1.7, [0.16, 0.12, 0.18], nextId(), FF.BOTTOM);
+    Sg.fbox(cu - 0.95, y0 + 1.05, da - 2.05, cu + 0.95, y0 + 1.1, da - 1.65, C.brass, nextId());
+    S.fbox(cu - 0.9, y0 + 1.9, da - 0.5, cu + 0.9, y0 + 1.93, da - 0.45, C.steel, nextId());
+    for (let u = cu - 0.8; u < cu + 0.8; u += 0.09) sS.fbox(u - 0.03, y0 + 0.95 + rng.r() * 0.25, da - 0.65, u + 0.03, y0 + 1.88, da - 0.3, pk(rng, [[0.1, 0.1, 0.12], [0.3, 0.2, 0.16], [0.5, 0.12, 0.2], [0.2, 0.24, 0.36], [0.7, 0.6, 0.5]]), nextId());
+    R.solid.push([cu - 0.95, da - 2.05, cu + 0.95, da - 1.65, y0 + 1.1]);
+    mark(R, 'coats', cu, da - 1.15, [0, -1]);
+  }
+  // ---- the walls: light up them in the club's colours, over the balconies and either side of the stage
+  for (const [wr, len] of [[new Run(R, ua, da, [0, -1], [1, 0]), fr.D], [new Run(R, ub, db, [0, 1], [-1, 0]), fr.D]]) {
+    wr.box(Sl, 0.2, y1 - 0.14, 0.01, len - 0.2, y1 - 0.1, 0.04, [1, 0.3, 0.7], nextId(), L.BACK);
+    for (let s = 2; s < len - 1; s += 3.2) wr.box(Sl, s, by + 0.4, 0.01, s + 0.07, y1 - 0.5, 0.04, pk(rng, cols), nextId(), L.BACK);
   }
   flushBig(R);
 }

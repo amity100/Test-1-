@@ -107,7 +107,8 @@ const MALLS = {
 };
 // (the clubs and the theatre: world/mainland/venues.js)
 export const VENUES = {
-  '2,3': { kind: 'club', name: 'NEON INK', signCol: '#ff3fa4', strip: '#3fe8ff', wall: '#26232c', mural: true, len: 30, depth: 24 },
+  // (ROADMAP 12.9b: NEON INK is one of the world's great clubs - a hall of its own, balconies round it)
+  '2,3': { kind: 'club', name: 'NEON INK', signCol: '#ff3fa4', strip: '#3fe8ff', wall: '#26232c', mural: true, len: 50, depth: 38, h: 16, roomH: 13, mega: true },
   '7,2': { kind: 'club', name: 'BLUE VELVET', signCol: '#4f9dff', strip: '#ff5ad1', wall: '#1e2440', font: 'Caveat', len: 28, depth: 22, jazz: true },
   '9,3': { kind: 'theatre', name: 'INKWOOD PALACE', show: 'DRAWN TOGETHER', signCol: '#ffe14f', wall: '#7a2a32', len: 34, depth: 26, h: 11 },
 };
@@ -283,7 +284,7 @@ function* rows(bctx, b, o = {}) {
   // (o.eastFrom: something of its own stands at the north end of the east side)
   const ez0 = R.z0 + (o.eastFrom || 0);
   if (o.east !== false && R.z1 - ez0 > 24) yield* sobeRowSteps(bctx, { ...base, z0: ez0, x: R.x1, side: 1, rowSide: 'east' });
-  const a = { x0: R.x0 + D, x1: R.x1 - D, z0: R.z0, z1: R.z1, type: b.kind, col: 100 + b.col, row: 100 + b.row };
+  const a = { x0: R.x0 + D, x1: R.x1 - D, z0: R.z0 + (o.alleyFrom || 0), z1: R.z1, type: b.kind, col: 100 + b.col, row: 100 + b.row };
   if (a.x1 - a.x0 > 4 && o.alleyGround !== false) {
     bctx.alleys.push(a);
     alleyGround(bctx, a);
@@ -379,7 +380,8 @@ function* buildKind(bctx, b) {
       const v = VENUES[`${b.col},${b.row}`];
       if (!v) break;
       const taken = yield* buildVenue(bctx, b, v);
-      yield* rows(bctx, b, { eastFrom: taken });
+      // (a great hall reaches back over where the alley would run: the alley's ground from its end)
+      yield* rows(bctx, b, { eastFrom: taken, alleyFrom: v.mega ? taken : 0 });
       return;
     }
     case 'school':

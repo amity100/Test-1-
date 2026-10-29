@@ -24,7 +24,7 @@ export function venueFrame(key) {
   const LEN = v.len || 30;
   const DEP = v.depth || 24;
   const zb = R.z0 + (v.z0 || 2) + LEN;
-  const F = { block: b, v, name: v.name, LEN, DEP, ua: 0.5 + T, ub: LEN - 0.5 - T, da: -T, db: -(DEP - 0.8), y0: CURB, y1: CURB + 6.5 };
+  const F = { block: b, v, name: v.name, LEN, DEP, ua: 0.5 + T, ub: LEN - 0.5 - T, da: -T, db: -(DEP - 0.8), y0: CURB, y1: CURB + (v.roomH || 6.5) };
   F.mid = (F.ua + F.ub) / 2;
   F.f0 = F.db + 3.2;
   F.f1 = Math.min(F.da - 3.5, F.f0 + 10);
@@ -197,4 +197,109 @@ export function drawPeople(game, list, far) {
     if (d > far || (d > 3 && (dx * fwd.x + dz * fwd.z) / d < -0.25)) continue;
     bodies.drawCheap(w);
   }
+}
+
+// a quad standing in the world: from (ax, az) to (bx, bz), from ya up to yb; its picture's x from
+// uA at a to uB at b; wound to face (nx, nz)
+export function wallQuad(ax, az, bx, bz, ya, yb, uA, uB, nx, nz) {
+  const pts = [[ax, ya, az], [bx, ya, bz], [bx, yb, bz], [ax, yb, az]];
+  const uv = [[uA, 0], [uB, 0], [uB, 1], [uA, 1]];
+  // (which way round: the face's normal from its first corner's two edges)
+  const ex = bx - ax;
+  const ez = bz - az;
+  const cx = -ez;
+  const cz = ex;
+  const order = cx * nx + cz * nz > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+  const pos = new Float32Array(18);
+  const nor = new Float32Array(18);
+  const uvs = new Float32Array(12);
+  order.forEach((k, i) => {
+    pos.set(pts[k], i * 3);
+    nor.set([nx, 0, nz], i * 3);
+    uvs.set(uv[k], i * 2);
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  g.computeBoundingSphere();
+  return g;
+}
+
+/**
+ * n boxes in one mesh whose places, sizes and colours are set every frame (the kinetic ceiling's
+ * bars and their wires): set(i, x, y, z, sx, sy, sz, r, g, b), then done().
+ */
+export class Boxes {
+  constructor(n, mat) {
+    const t = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+    this.tp = t.attributes.position.array;
+    this.V = this.tp.length / 3;
+    const V = this.V;
+    this.n = n;
+    this.pos = new Float32Array(n * V * 3);
+    this.col = new Float32Array(n * V * 3);
+    const nor = new Float32Array(n * V * 3);
+    const uv = new Float32Array(n * V * 2);
+    const ids = new Float32Array(n * V);
+    for (let i = 0; i < n; i++) {
+      nor.set(t.attributes.normal.array, i * V * 3);
+      uv.set(t.attributes.uv.array, i * V * 2);
+      ids.fill(((i * 0.1371) % 1) * 0.8 + 0.1, i * V, (i + 1) * V);
+    }
+    t.dispose();
+    const geo = new THREE.BufferGeometry();
+    this.pa = new THREE.BufferAttribute(this.pos, 3);
+    this.ca = new THREE.BufferAttribute(this.col, 3);
+    this.pa.setUsage(THREE.DynamicDrawUsage);
+    this.ca.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('position', this.pa);
+    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setAttribute('color', this.ca);
+    geo.setAttribute('aId', new THREE.BufferAttribute(ids, 1));
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.userData.dynamic = true;
+  }
+
+  set(i, x, y, z, sx, sy, sz, r, g, b) {
+    const V = this.V;
+    const tp = this.tp;
+    const p = this.pos;
+    const c = this.col;
+    let o = i * V * 3;
+    for (let k = 0; k < V; k++, o += 3) {
+      p[o] = x + tp[k * 3] * sx;
+      p[o + 1] = y + tp[k * 3 + 1] * sy;
+      p[o + 2] = z + tp[k * 3 + 2] * sz;
+      c[o] = r;
+      c[o + 1] = g;
+      c[o + 2] = b;
+    }
+  }
+
+  done() {
+    this.pa.needsUpdate = true;
+    this.ca.needsUpdate = true;
+  }
+}
+
+// a ring of light (the chandelier's): a torus with its colours its own, turned and tilted as a mesh
+export function ringMesh(r, tube, mat) {
+  const t = new THREE.TorusGeometry(r, tube, 6, 72).toNonIndexed();
+  t.rotateX(Math.PI / 2);
+  const n = t.attributes.position.count;
+  const col = new Float32Array(n * 3).fill(1);
+  const ca = new THREE.BufferAttribute(col, 3);
+  ca.setUsage(THREE.DynamicDrawUsage);
+  t.setAttribute('color', ca);
+  t.setAttribute('aId', new THREE.BufferAttribute(new Float32Array(n).fill(0.5), 1));
+  const m = new THREE.Mesh(t, mat);
+  m.frustumCulled = false;
+  m.userData.dynamic = true;
+  m.userData.colors = col;
+  m.userData.ca = ca;
+  return m;
 }
