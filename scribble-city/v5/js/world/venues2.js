@@ -6,6 +6,7 @@ import { Run, L, SC, pk } from './stock.js';
 import { neonSign } from './deco.js';
 import { letter } from './letters.js';
 import { srgb } from '../render/materials.js';
+import { jazzPlan } from './jazzplan.js';
 
 // (v5, GTA IV round) The places you sit down in, laid out to the last fork. A restaurant of the real
 // world is not a room of tables: it is the host's stand by the door with the book of the evening's
@@ -1783,6 +1784,8 @@ function theatre(R) {
  * round the floor; the coat check by the door.
  */
 function club(R) {
+  // (ROADMAP 12.9: BLUE VELVET is a jazz club - its bandstand, its tables, its velvet)
+  if (R.spec.jazz) return jazzClub(R);
   const fr = frameOf(R);
   const { ua, ub, da, db, y0, y1 } = R;
   const rng = R.rng;
@@ -1975,6 +1978,144 @@ function club(R) {
     wr.box(Sl, 0.2, y0 + 0.05, 0.01, len - 0.2, y0 + 0.08, 0.04, [0.6, 0.3, 1], nextId(), L.BACK);
     wr.box(Sl, 0.2, y1 - 0.12, 0.01, len - 0.2, y1 - 0.09, 0.04, [1, 0.3, 0.7], nextId(), L.BACK);
     for (let s = 2; s < len - 1; s += 3.5) wr.box(Sl, s, y0 + 1.2, 0.01, s + 0.06, y1 - 0.6, 0.04, pk(rng, cols), nextId(), L.BACK);
+  }
+  flushBig(R);
+}
+
+// ------------------------------------------------------------------ the jazz club
+/**
+ * BLUE VELVET (v5, ROADMAP 12.9): the bandstand of wood at the back before a curtain of blue velvet
+ * in deep folds, the spots over it; a dance floor of parquet before the band; round tables in their
+ * white cloths, a candle on each, three chairs round it; the bar of dark wood down one side, its
+ * bottles lit warm; booths of velvet along the other; the sconces on the walls, lamps hung low over
+ * the tables; the coat check by the door. (The band and the people at the tables: game/partyjazz.js.)
+ */
+function jazzClub(R) {
+  const fr = frameOf(R);
+  const { ua, ub, da, db, y0, y1 } = R;
+  const rng = R.rng;
+  const S = big(R);
+  const Sc = big(R, 'cyl');
+  const Sg = big(R, 'gloss');
+  const Sl = big(R, 'lamp');
+  const sG = R.soup('gloss', true);
+  const sS = R.soup('box', true);
+  R.noLamps = true;
+  R.spots.marks = R.spots.marks || [];
+  const J = jazzPlan(R);
+  const mid = J.mid;
+  const WOOD = [0.3, 0.16, 0.08];
+  const DARK = [0.16, 0.08, 0.05];
+  const BLUE = [0.1, 0.14, 0.44];
+  const BLUE2 = [0.15, 0.21, 0.58];
+  // ---- the bandstand, its brass edge and its step; the curtain behind it
+  const st = J.stage;
+  S.fbox(st.u0, y0, st.d0, st.u1, y0 + st.h, st.d1, WOOD, nextId(), FF.BOTTOM);
+  Sg.fbox(st.u0, y0 + st.h - 0.05, st.d1, st.u1, y0 + st.h, st.d1 + 0.03, C.brass, nextId());
+  S.fbox(mid - 1.4, y0, st.d1, mid + 1.4, y0 + st.h / 2, st.d1 + 0.35, WOOD, nextId(), FF.BOTTOM);
+  for (let u = st.u0 + 0.3; u < st.u1 - 0.2; u += 0.5) Sl.fbox(u, y0 + 0.12, st.d1 + 0.031, u + 0.12, y0 + 0.2, st.d1 + 0.035, [1, 0.78, 0.45], nextId());
+  R.solid.push([st.u0, st.d0, st.u1, st.d1, y0 + st.h]);
+  let k = 0;
+  for (let u = mid - 5.6; u < mid + 5.6; u += 0.28, k++) S.fbox(u, y0 + st.h, db + 0.02, u + 0.29, y1 - 0.25, db + (k % 2 ? 0.16 : 0.08), k % 2 ? BLUE2 : BLUE, nextId());
+  S.fbox(mid - 5.8, y1 - 0.95, db, mid + 5.8, y1 - 0.25, db + 0.26, BLUE, nextId());
+  Sg.fbox(mid - 5.8, y1 - 1.02, db + 0.2, mid + 5.8, y1 - 0.95, db + 0.27, C.brass, nextId());
+  // the spots over the bandstand, on their bar
+  S.fbox(mid - 4.5, y1 - 0.42, st.d1 + 0.8, mid + 4.5, y1 - 0.36, st.d1 + 0.9, C.black, nextId());
+  for (let u = mid - 3.6; u <= mid + 3.6; u += 1.8) {
+    Sc.fcyl(u, st.d1 + 0.85, 0.13, y1 - 0.72, 0.3, C.black, nextId(), 8, true);
+    Sl.fcyl(u, st.d1 + 0.85, 0.1, y1 - 0.73, 0.01, [1, 0.82, 0.55], nextId(), 8, true);
+  }
+  // ---- the dance floor: squares of parquet, two woods
+  const fl = J.floor;
+  for (let u = fl.u0, i = 0; u < fl.u1 - 0.01; u += 0.5, i++) {
+    for (let d = fl.d0, j = 0; d < fl.d1 - 0.01; d += 0.5, j++) S.fbox(u, y0 - 0.005, d, u + 0.5, y0 + 0.012, d + 0.5, (i + j) % 2 ? C.oak : [0.48, 0.3, 0.17], nextId(), FF.BOTTOM);
+  }
+  Sg.fbox(fl.u0 - 0.05, y0, fl.d0 - 0.05, fl.u1 + 0.05, y0 + 0.016, fl.d0, C.brass, nextId());
+  // (the couples dancing away from the bandstand's edge: the band seen over them)
+  for (let i = 0; i < 6; i++) R.spots.browse.push({ u: fl.u0 + 0.9 + (i % 3) * 2.6, d: fl.d0 + 2.4 + Math.floor(i / 3) * 1.7, face: [0, -1] });
+  // ---- the round tables in their white cloths, a candle on each, three chairs round it
+  J.tables.forEach((t, ti) => {
+    Sc.fcyl(t.u, t.d, 0.05, y0, 0.7, DARK, nextId(), 6, false);
+    Sc.fcyl(t.u, t.d, 0.25, y0, 0.03, DARK, nextId(), 10, true);
+    Sc.fcyl(t.u, t.d, 0.47, y0 + 0.36, 0.38, [0.86, 0.8, 0.7], nextId(), 14, false);
+    Sc.fcyl(t.u, t.d, 0.47, y0 + 0.73, 0.02, [0.9, 0.85, 0.75], nextId(), 14, true);
+    Sl.fcyl(t.u, t.d, 0.035, y0 + 0.75, 0.07, C.flame, nextId(), 6, true);
+    sG.fcyl(t.u, t.d, 0.055, y0 + 0.75, 0.09, C.glass, nextId(), 8, false, 0.06);
+    for (let q = 0; q < 2; q++) sG.fcyl(t.u + (q ? 0.18 : -0.2), t.d + (q ? -0.12 : 0.1), 0.03, y0 + 0.75, 0.13, C.glass, nextId(), 8, true, 0.035);
+    t.chairs.forEach((c, ci) => {
+      Sc.fcyl(c.u, c.d, 0.2, y0 + 0.44, 0.05, BLUE2, nextId(), 10, true);
+      for (const [a, b] of [[-0.14, -0.14], [0.14, -0.14], [-0.14, 0.14], [0.14, 0.14]]) Sc.fcyl(c.u + a, c.d + b, 0.015, y0, 0.44, C.brass, nextId(), 4, false);
+      // (its back, away from the table)
+      const bu = c.u - c.face[0] * 0.2;
+      const bd = c.d - c.face[1] * 0.2;
+      S.fbox(bu - 0.17 * Math.abs(c.face[1]) - 0.02, y0 + 0.49, bd - 0.17 * Math.abs(c.face[0]) - 0.02, bu + 0.17 * Math.abs(c.face[1]) + 0.02, y0 + 0.92, bd + 0.17 * Math.abs(c.face[0]) + 0.02, BLUE, nextId());
+      if (ci === 0) R.spots.seats.push({ u: c.u, d: c.d, face: c.face, what: `t${ti}` });
+    });
+    R.solid.push([t.u - 0.47, t.d - 0.47, t.u + 0.47, t.d + 0.47, y0 + 0.75]);
+  });
+  // the lamps hung low over the tables nearest the floor
+  for (const t of J.tables.slice(0, 4)) {
+    S.fbox(t.u - 0.006, y0 + 2.2, t.d - 0.006, t.u + 0.006, y1, t.d + 0.006, C.black, nextId());
+    Sc.fcyl(t.u, t.d, 0.2, y0 + 2.0, 0.22, [0.7, 0.5, 0.2], nextId(), 10, false);
+    Sl.fcyl(t.u, t.d, 0.16, y0 + 1.99, 0.01, [1, 0.8, 0.5], nextId(), 10, true);
+  }
+  // ---- the bar of dark wood down the side, its bottles lit warm
+  let keeperSet = false;
+  const f0 = db + 3.2;
+  if (fr.W > 14) {
+    const run = new Run(R, ub - 0.47, da - 2.6, [0, -1], [-1, 0]);
+    const len = da - 2.6 - f0;
+    const b = bar(R, run, len, { wood: [0.22, 0.11, 0.06], top: [0.42, 0.3, 0.14], counterTop: [0.3, 0.18, 0.08], light: [0.62, 0.42, 0.24], stoolTop: [0.12, 0.2, 0.6], shade: [1, 0.78, 0.4], pendants: true, high: 2.9 });
+    const [a0, d0] = run.ud(0, 1.44);
+    const [a1, d1] = run.ud(b.cl, 1.47);
+    Sl.fbox(Math.min(a0, a1), y0 + 1.0, Math.min(d0, d1), Math.max(a0, a1), y0 + 1.03, Math.max(d0, d1), [0.8, 0.55, 0.3], nextId());
+    R.spots.keeper = b.keeper;
+    mark(R, 'barman', ...run.ud(len * 0.25, 0.42), b.keeper.face);
+    keeperSet = true;
+  }
+  if (!keeperSet) R.spots.keeper = { u: mid, d: J.floor.d1 + 0.6, face: [0, -1] };
+  // ---- the booths of blue velvet along the other wall
+  k = 0;
+  for (const d of J.booths) {
+    S.fbox(ua + 0.1, y0, d - 1.0, ua + 0.65, y0 + 0.42, d + 1.0, BLUE, nextId(), FF.BOTTOM);
+    S.fbox(ua + 0.1, y0 + 0.42, d - 1.0, ua + 0.3, y0 + 1.15, d + 1.0, BLUE2, nextId());
+    for (const s of [-1, 1]) {
+      S.fbox(ua + 0.1, y0, d + s * 1.0 - (s > 0 ? 0.45 : 0), ua + 1.7, y0 + 0.42, d + s * 1.0 + (s < 0 ? 0.45 : 0), BLUE, nextId(), FF.BOTTOM);
+      S.fbox(ua + 0.1, y0 + 0.42, d + s * 1.0 + (s > 0 ? -0.15 : 0), ua + 1.7, y0 + 0.95, d + s * 1.0 + (s < 0 ? 0.15 : 0), BLUE2, nextId());
+    }
+    S.fbox(ua + 0.95, y0, d - 0.35, ua + 1.55, y0 + 0.7, d + 0.35, DARK, nextId(), FF.BOTTOM);
+    Sg.fbox(ua + 0.92, y0 + 0.7, d - 0.38, ua + 1.58, y0 + 0.73, d + 0.38, [0.3, 0.16, 0.08], nextId());
+    Sl.fcyl(ua + 1.25, d, 0.035, y0 + 0.73, 0.07, C.flame, nextId(), 6, true);
+    R.solid.push([ua + 0.1, d - 1.45, ua + 1.7, d + 1.45, y0 + 0.73]);
+    for (const [su, sd, fu, fd] of [[ua + 0.45, d - 0.35, 1, 0], [ua + 0.45, d + 0.35, 1, 0], [ua + 1.2, d - 1.05, 0, 1], [ua + 1.2, d + 1.05, 0, -1]]) R.spots.seats.push({ u: su, d: sd, face: [fu, fd], what: `b${k}`, lift: false });
+    Sl.fbox(ua + 0.02, y0 + 1.75, d - 0.12, ua + 0.05, y0 + 1.95, d + 0.12, [1, 0.78, 0.5], nextId());
+    k++;
+  }
+  // its name in blue light up the wall over the booths
+  if (J.booths.length > 1) {
+    const vr = new Run(R, ua, da, [0, -1], [1, 0]);
+    const dm = (J.booths[0] + J.booths[J.booths.length - 1]) / 2;
+    wallNeon(R, vr, nameOf(R) || 'BLUE VELVET', da - dm, y0 + 3.6, 0.04, Math.min(8, (J.booths[J.booths.length - 1] - J.booths[0]) * 0.75), [0.35, 0.55, 1], { font: 'Caveat' });
+  }
+  // ---- the coat check by the door: a counter, the rail of coats behind it
+  const door = fr.door;
+  const cs = door && door.u0 - ua > 3.2 ? -1 : 1;
+  const cu = cs < 0 ? (door ? door.u0 - 1.6 : ua + 2) : (door ? door.u1 + 1.6 : ub - 2);
+  if (cu > ua + 1.2 && cu < ub - 1.2) {
+    S.fbox(cu - 0.9, y0, da - 2.0, cu + 0.9, y0 + 1.05, da - 1.7, DARK, nextId(), FF.BOTTOM);
+    Sg.fbox(cu - 0.95, y0 + 1.05, da - 2.05, cu + 0.95, y0 + 1.1, da - 1.65, C.brass, nextId());
+    S.fbox(cu - 0.9, y0 + 1.9, da - 0.5, cu + 0.9, y0 + 1.93, da - 0.45, C.steel, nextId());
+    for (let u = cu - 0.8; u < cu + 0.8; u += 0.09) sS.fbox(u - 0.03, y0 + 0.95 + rng.r() * 0.25, da - 0.65, u + 0.03, y0 + 1.88, da - 0.3, pk(rng, [[0.1, 0.1, 0.12], [0.3, 0.2, 0.16], [0.5, 0.12, 0.2], [0.2, 0.24, 0.36], [0.7, 0.6, 0.5]]), nextId());
+    R.solid.push([cu - 0.95, da - 2.05, cu + 0.95, da - 1.65, y0 + 1.1]);
+    mark(R, 'coats', cu, da - 1.15, [0, -1]);
+  }
+  // the walls: a rail of wood at the height of a chair's back, sconces between the frames
+  for (const [wr, len] of [[new Run(R, ua, da, [0, -1], [1, 0]), fr.D], [new Run(R, ub, db, [0, 1], [-1, 0]), fr.D]]) {
+    wr.box(S, 0.2, y0 + 0.95, 0.01, len - 0.2, y0 + 1.0, 0.05, WOOD, nextId(), L.BACK);
+    for (let s = 1.8; s < len - 1; s += 3.2) {
+      wr.box(Sg, s - 0.05, y0 + 2.25, 0.01, s + 0.05, y0 + 2.4, 0.08, C.brass, nextId(), L.BACK);
+      wr.box(Sl, s - 0.1, y0 + 2.4, 0.04, s + 0.1, y0 + 2.62, 0.16, [1, 0.8, 0.5], nextId(), L.BACK);
+    }
   }
   flushBig(R);
 }

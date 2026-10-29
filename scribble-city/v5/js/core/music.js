@@ -61,6 +61,16 @@ export const STYLES = {
     lead: 'arp', leadWave: 'triangle', leadCut: 3000, leadVol: 0.03,
     progs: [[[0, 'min7'], [5, 'min7'], [0, 'min7'], [7, 'min7']], [[0, 'min7'], [8, 'maj7'], [10, 'dom7'], [0, 'min7']]],
   },
+  // (v5, ROADMAP 12.9) the club's big room: four on the floor, the clap on two and four, the hats
+  // between, a bass pumping off the beat, stabs of chords, an arpeggio high over it all
+  house: {
+    bpm: [124, 128], swing: 0, keys: [45, 46, 48, 50],
+    kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.o.x.o.x.o.x.o.',
+    bass: '.xX..xX..xX..xX.', bassWave: 'sawtooth', bassCut: 650,
+    chordWave: 'sawtooth', chordCut: 2600, chordHits: [0, 3, 6, 10, 12], chordLen: 0.22,
+    lead: 'arp', leadWave: 'square', leadCut: 3400, leadVol: 0.028,
+    progs: [[[0, 'min7'], [8, 'maj7'], [3, 'maj7'], [10, 'dom7']], [[0, 'min'], [10, 'maj'], [8, 'maj'], [7, 'maj']], [[0, 'min7'], [5, 'min7'], [3, 'maj7'], [10, 'maj']]],
+  },
 };
 
 // one song: from a style and a number (the same number, the same song)
@@ -143,18 +153,30 @@ export class Band {
     const root = s.key + deg;
     const shape = SHAPES[S.chordShape || q] || SHAPES[q];
     const minor = q === 'min' || q === 'min7';
+    // (v5, ROADMAP 12.9) a song with a form of its own (the club's, game/parties.js) goes in parts:
+    // 'break' - the chords alone, no drums, no bass; 'roll4', 'roll2', 'roll1' - the build, a snare
+    // rolling faster and faster; 'gap' - a breath of nothing before the drop
+    const part = s.form ? s.form(bar, k) : null;
+    if (part === 'gap') return;
+    const roll = part && part.startsWith('roll') ? +part.slice(4) : 0;
     // the drums
     const kc = S.kick[k];
-    if (kc !== '.') this.kick(t);
+    if (kc !== '.' && !part) this.kick(t);
     const sc = S.snare[k];
-    if (sc === 'x') this.snare(t, 0.16);
+    if (roll) {
+      if (k % roll === 0) this.snare(t, 0.05 + 0.08 / roll);
+    } else if (part) {
+      // (the break: no beat)
+    } else if (sc === 'x') this.snare(t, 0.16);
     else if (sc === 's') this.brush(t);
     const hc = S.hat[k];
-    if (hc === 'x') this.hat(t, 0.035, 0.05);
+    if (part === 'break') {
+      // (no hats either)
+    } else if (hc === 'x') this.hat(t, 0.035, 0.05);
     else if (hc === 'o') this.hat(t, 0.16, 0.05);
     if (S.crackle && (i * 7) % 5 === 0) this.crackle(t);
     // the bass
-    const bc = S.bass[k];
+    const bc = part ? '.' : S.bass[k];
     if (bc === 'w') {
       // walking: up through the chord, a step to the next one
       const walk = [0, shape[1], shape[2], shape[1] + 2];

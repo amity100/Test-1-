@@ -106,9 +106,9 @@ const MALLS = {
   stripmall: { name: 'VALLEY PLAZA', heb: 'ואלי פלאזה', stores: ['grocery', 'pizza', 'laundry', 'pharmacy', 'barber', 'icecream', 'bagel', 'phones', 'cafe'] },
 };
 // (the clubs and the theatre: world/mainland/venues.js)
-const VENUES = {
+export const VENUES = {
   '2,3': { kind: 'club', name: 'NEON INK', signCol: '#ff3fa4', strip: '#3fe8ff', wall: '#26232c', mural: true, len: 30, depth: 24 },
-  '7,2': { kind: 'club', name: 'BLUE VELVET', signCol: '#4f9dff', strip: '#ff5ad1', wall: '#1e2440', font: 'Caveat', len: 28, depth: 22 },
+  '7,2': { kind: 'club', name: 'BLUE VELVET', signCol: '#4f9dff', strip: '#ff5ad1', wall: '#1e2440', font: 'Caveat', len: 28, depth: 22, jazz: true },
   '9,3': { kind: 'theatre', name: 'INKWOOD PALACE', show: 'DRAWN TOGETHER', signCol: '#ffe14f', wall: '#7a2a32', len: 34, depth: 26, h: 11 },
 };
 

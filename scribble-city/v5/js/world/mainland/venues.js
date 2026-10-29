@@ -51,6 +51,8 @@ export function* buildVenue(bctx, b, o) {
   const shopRef = { kind: o.kind === 'theatre' ? 'theatre' : 'club', name: o.name };
   const room = bctx.room(f, {
     u0: 0.5, u1: LEN - 0.5, depth: DEP - 0.8, y0: CURB, h: o.kind === 'theatre' ? 7.5 : 6.5, kind: shopRef.kind,
+    // (ROADMAP 12.9: BLUE VELVET is a jazz club - its own furniture and colours, world/venues2.js)
+    jazz: !!o.jazz, decor: o.jazz ? 'jazz' : undefined,
     openings: [{ kind: 'door', u0: uDoor - 1.0, u1: uDoor + 1.0, y0: CURB, y1: 2.95 }],
     outside: wall,
     shop: shopRef,
@@ -72,7 +74,9 @@ export function* buildVenue(bctx, b, o) {
     clubFront(bctx, f, LEN, uDoor, H, o, signCol);
     // the club's lights over its dance floor: pink, cyan, violet (world/mainland/furnish.js's floor)
     const db = -(DEP - 0.8);
-    for (const [du, dd, c] of [[-3, 5, srgb(1, 0.3, 0.7)], [3, 5, srgb(0.3, 0.9, 1)], [0, 9, srgb(0.6, 0.4, 1)], [0, 1.5, srgb(1, 0.85, 0.4)]]) {
+    // (the jazz club's: warm over the band and the tables, blue over the floor)
+    const pal = o.jazz ? [[-3, 4, srgb(1, 0.72, 0.42)], [3, 4, srgb(1, 0.72, 0.42)], [0, 6, srgb(0.35, 0.5, 1)], [0, 13, srgb(1, 0.78, 0.5)]] : [[-3, 5, srgb(1, 0.3, 0.7)], [3, 5, srgb(0.3, 0.9, 1)], [0, 9, srgb(0.6, 0.4, 1)], [0, 1.5, srgb(1, 0.85, 0.4)]];
+    for (const [du, dd, c] of pal) {
       const p = f.p(LEN / 2 + du, CURB + 4.6, db + dd);
       addLight(p[0], p[1], p[2], 9, c, 1.5);
     }
@@ -84,7 +88,7 @@ export function* buildVenue(bctx, b, o) {
   const shop = {
     kind: shopRef.kind, name: o.name, id: bctx.shops.length, f, nx: f.nx, nz: f.nz, rx: f.ux, rz: f.uz, face: Math.atan2(f.nx, f.nz),
     door, inside: f.p(uDoor, CURB, -1.4), keeper: room && room.keeper ? [room.keeper.x, CURB, room.keeper.z] : f.p(uDoor, CURB, -1.4),
-    win: f.p(uDoor + 4, CURB, 0.9), signCol: o.signCol || '#ff3fa4', building: { f, L: LEN, D: DEP, h: H, top: H }, room, spots: {}, venue: true,
+    win: f.p(uDoor + 4, CURB, 0.9), signCol: o.signCol || '#ff3fa4', building: { f, L: LEN, D: DEP, h: H, top: H }, room, spots: {}, venue: true, jazz: !!o.jazz,
   };
   // (the theatre's screen: where its drawn film is drawn, game/streetlife.js)
   if (o.kind === 'theatre') {

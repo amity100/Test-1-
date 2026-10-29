@@ -157,7 +157,7 @@ export class Casino {
     K.cyl(M.matte, 1.0, 1.0, FY + HT + 7.4, FY + HT + 9.2, STONE, { axis: 'y', x: dx, z: dz, segs: 12 });
     K.sphere(M.glow, 0.9, dx, FY + HT + 9.6, dz, WARM, 1, 1, 1, 12);
     K.cyl(M.metal, 0.08, 0.02, FY + HT + 10.3, FY + HT + 12.5, GOLD, { axis: 'y', x: dx, z: dz, segs: 6 });
-    // the hotel's tower: its face of windows (a picture, lit at night), its crown, its name in red
+    // the hotel's tower: its face of windows (a picture, lit at night), its cornice, its name in red
     const tw = H.tower;
     const tx0 = X(tw.u0);
     const tx1 = X(tw.u1);
@@ -165,8 +165,7 @@ export class Casino {
     const tz1 = Z(tw.v1);
     K.box(M.matte, tx0, FY + HT + 0.3, tz0, tx1, FY + tw.h, tz1, STONE2);
     K.box(M.metal, tx0 - 0.4, FY + tw.h, tz0 - 0.4, tx1 + 0.4, FY + tw.h + 0.5, tz1 + 0.4, GOLD);
-    K.box(M.matte, tx0 + 2, FY + tw.h + 0.5, tz0 + 6, tx1 - 2, FY + tw.h + 4.5, tz1 - 6, STONE);
-    K.cyl(M.metal, 0.3, 0.05, FY + tw.h + 4.5, FY + tw.h + 14, GOLD, { axis: 'y', x: (tx0 + tx1) / 2, z: (tz0 + tz1) / 2, segs: 8 });
+    // (on its roof: SKY POOL, the party over the bay - game/partyroof.js)
     neonWord(K, M.glow, 'PALACE', 3.2, tx1, FY + tw.h - 5.5, (tz0 + tz1) / 2, 1, 0, linC(1, 0.15, 0.25), 0.02, 0.2);
     // the forecourt: two long pools, their stone rims, the water; the walk between them
     this.pools = [];
@@ -671,8 +670,9 @@ export class Casino {
   }
 
   // ------------------------------------------------------------------ every frame
-  inHall(x, z) {
-    return x > XW && x < XE && z > Z0 && z < Z1;
+  // (in the hall - not over it, on the tower's roof: game/partyroof.js)
+  inHall(x, z, y = 0) {
+    return x > XW && x < XE && z > Z0 && z < Z1 && y < FY + HT;
   }
 
   update(dt) {
@@ -716,7 +716,7 @@ export class Casino {
     }
     if (this.inside && d > NEAR_IN + 50) this.teardownInside();
     if (!this.inside) return;
-    const inside = this.inHall(p.pos.x, p.pos.z);
+    const inside = this.inHall(p.pos.x, p.pos.z, p.pos.y);
     const f = p.fig;
     if (inside && f.indoor !== 'casino') f.indoor = 'casino';
     else if (!inside && f.indoor === 'casino') f.indoor = null;
@@ -727,7 +727,7 @@ export class Casino {
     }
     if (!inside && d > 70) this.welcomed = false;
     const cam = g.camera.position;
-    const near = this.inHall(cam.x, cam.z) || Math.hypot(cam.x - XE, cam.z - CZ) < 40;
+    const near = this.inHall(cam.x, cam.z, cam.y) || (Math.hypot(cam.x - XE, cam.z - CZ) < 40 && cam.y < FY + HT + 6);
     if (near) {
       this.idleT = (this.idleT || 0) + dt;
       if (this.idleT >= (g.touch ? 0.3 : 0.15)) {
@@ -802,7 +802,7 @@ export class Casino {
     if (!this.shell) return;
     const g = this.game;
     const cam = g.camera.position;
-    const inCam = this.inHall(cam.x, cam.z);
+    const inCam = this.inHall(cam.x, cam.z, cam.y);
     const dc = Math.hypot(cam.x - XE, cam.z - CZ);
     const night = g.daynight ? g.daynight.night : 1;
     // the fountains: jets of water in the pools, swaying, rising and falling with the show
@@ -838,7 +838,7 @@ export class Casino {
       if (night > 0.15 && dc < 120) this.outsideLights(night, inCam);
       return;
     }
-    if (inCam || dc < 34) {
+    if (inCam || (dc < 34 && cam.y < FY + HT)) {
       const bodies = g.figures.bodies;
       const fwd = g.camera.getWorldDirection(_v);
       const far = g.touch ? 30 : 48;
@@ -894,7 +894,7 @@ export class Casino {
   target() {
     if (!this.inside || (this.game.minigames && this.game.minigames.isOpen)) return null;
     const p = this.game.player.pos;
-    if (!this.inHall(p.x, p.z)) return null;
+    if (!this.inHall(p.x, p.z, p.y)) return null;
     const near = (s, r) => Math.hypot(p.x - s[0], p.z - s[2]) < r;
     for (const s of this.slots) if (near(s.stand, 0.5)) return { kind: 'slot', s, label: 'E — לשבת ליד מכונת המזל INK FORTUNE' };
     for (const t of this.tables) {

@@ -42,6 +42,8 @@ Object.assign(DECOR, {
   noodles: { wall: [0.94, 0.86, 0.72], band: [0.7, 0.16, 0.18], floor: 'wood', light: [1, 0.8, 0.55] },
   gourmet: { wall: [0.3, 0.22, 0.28], band: [0.16, 0.12, 0.14], floor: 'wood', light: [1, 0.82, 0.6] },
   club: { wall: [0.08, 0.06, 0.12], band: [0.04, 0.03, 0.06], floor: 'concrete', floorCol: [0.2, 0.19, 0.24], ceiling: [0.05, 0.045, 0.07], light: [0.75, 0.45, 1.0] },
+  // (ROADMAP 12.9: BLUE VELVET, the jazz club - navy walls, a carpet of deep blue, warm light)
+  jazz: { wall: [0.07, 0.08, 0.2], band: [0.24, 0.12, 0.06], floor: 'carpet', floorCol: [0.13, 0.1, 0.28], ceiling: [0.04, 0.04, 0.09], light: [1, 0.76, 0.52] },
   theatre: { wall: [0.42, 0.1, 0.14], band: [0.24, 0.06, 0.08], floor: 'carpet', floorCol: [0.55, 0.2, 0.26], ceiling: [0.2, 0.06, 0.09], light: [1, 0.82, 0.6] },
   homeFamily: { wall: [0.96, 0.9, 0.78], band: [0.6, 0.72, 0.62], floor: 'wood', light: [1, 0.86, 0.62] },
   homeArtist: { wall: [0.92, 0.9, 0.86], band: [0.5, 0.5, 0.56], floor: 'concrete', light: [1, 0.92, 0.8] },

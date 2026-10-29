@@ -88,6 +88,8 @@ const CALLS = {
   noodles: ['Hot noodles!', 'Straight from the wok!', 'Extra spicy?'],
   gourmet: ['Service!', 'Table four, please.', 'Bon appétit.'],
   club: ['Make some noise!', 'Hands up!', 'One more song!'],
+  // (ROADMAP 12.9: BLUE VELVET, the jazz club)
+  jazz: ['Live jazz tonight!', 'A table for two?', 'The band is on fire tonight.'],
   theatre: ['Popcorn! Fresh popcorn!', 'The show starts soon!', 'Tickets, tickets!'],
   homeFamily: ['Dinner\'s ready!', 'Kids, wash your hands!', 'Who left the TV on?', 'Smells good, right?'],
   homeArtist: ['Hmm... more blue.', 'Inspiration!', 'Don\'t touch, it\'s wet!', 'Almost finished...'],
@@ -500,7 +502,7 @@ export class StreetLife {
         best = a;
       }
     }
-    if (best && !game.dialog.open) game.bubbles.say(best.keeper, pick(CALLS[best.shop.kind] || ['Hello!']));
+    if (best && !game.dialog.open) game.bubbles.say(best.keeper, pick(CALLS[best.shop.jazz ? 'jazz' : best.shop.kind] || ['Hello!']));
   }
 
   // ------------------------------------------------------------------ walking up to a shop
@@ -537,7 +539,7 @@ export class StreetLife {
       }
     }
     if (!best) return null;
-    const info = svc(this.game, best.shop.kind);
+    const info = svc(this.game, best.shop.kind, best.shop);
     if (knock) return { shop: best, knock: true, label: `E — ${info.verb}` };
     return { shop: best, label: best.open ? `E — ${best.room ? best.shop.ask || info.ask || info.verb : info.verb}` : 'החנות סגורה — המוכר ברח' };
   }
@@ -674,7 +676,8 @@ const SERVICES = {
 const PRAISE = ['מתאים לך!', 'נראה מעולה!', 'וואו, איזה סטייל!', 'כמו מהמגזין!'];
 const TATTOO_SKETCH = { anchor: 'tattooAnchor', heart: 'tattooHeart', star: 'tattooStar', pencil: 'tattooPencil' };
 const SERVICES_NC = {};
-const svc = (game, kind) => (!game.classic && SERVICES_NC[kind]) || SERVICES[kind];
+// (ROADMAP 12.9: BLUE VELVET is a club that is a jazz club - its own service)
+const svc = (game, kind, shop) => (shop && shop.jazz && SERVICES.jazz) || (!game.classic && SERVICES_NC[kind]) || SERVICES[kind];
 
 SERVICES.tacos = { verb: 'להזמין טאקו', ask: 'להזמין טאקו', who: 'הטאקרו', greet: 'טאקו פתוח עשרים וארבע שעות! חריף או חריף מאוד?', offers: [['שלושה טאקו (+35 חיים)', 'pita', heal(35, [0.95, 0.7, 0.3], 'טאקו! +35 חיים')]] };
 SERVICES.diner = { verb: 'להיכנס לדיינר', ask: 'להזמין המבורגר', who: 'המלצרית', greet: 'שב איפה שבא לך, מותק. המבורגר ומילקשייק?', offers: [['המבורגר (+45 חיים)', 'sandwich', heal(45, [0.7, 0.42, 0.25], 'המבורגר! +45 חיים')], ['מילקשייק תות (+20 חיים)', 'cup', heal(20, [0.98, 0.66, 0.74])]] };
@@ -733,7 +736,7 @@ SERVICES_NC.books = { ...SERVICES.books, greet: 'דיו, עופרת, מחקים 
 // makes every drawing better
 function inkShelf(game, a) {
   const I = game.ink;
-  const info = svc(game, a.shop.kind);
+  const info = svc(game, a.shop.kind, a.shop);
   const choices = [];
   const full = I.level >= I.cap - 0.5;
   choices.push({ label: full ? 'בקבוק דיו (העט מלא)' : `בקבוק דיו: העט מלא שוב · ${fmt(BOTTLE)}`, fn: full ? () => inkShelf(game, a) : () => a.buy(BOTTLE, 'בקבוק דיו', () => I.refill(), () => inkShelf(game, a)) });
@@ -750,7 +753,7 @@ SERVICES_NC.hardware = { ...SERVICES.hardware, offers: [...SERVICES.hardware.off
 // (ROADMAP 9.2) the blueprints of the things that solve problems on the way
 const TOOL_PRICES = { ladder: 30, ramp: 40, bridge: 55, key: 70 };
 function toolShelf(game, a) {
-  const info = svc(game, a.shop.kind);
+  const info = svc(game, a.shop.kind, a.shop);
   const choices = [];
   for (const [id, price] of Object.entries(TOOL_PRICES)) {
     const bp = BLUEPRINTS[id];
@@ -948,6 +951,12 @@ SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הב�
     game.inkwell.after(9, () => (p.fig.dance = 0));
     game.hud.toast('רוקדים! כל הרחבה איתכם', 'good', 2.4);
   }],
+] };
+
+SERVICES.jazz = { verb: 'להיכנס לבר הג׳אז', ask: 'לדבר עם הברמן', who: 'הברמן', greet: 'ערב טוב וברוכים הבאים ל־BLUE VELVET. הלהקה מנגנת עד הבוקר. קוקטייל? (בלי אלכוהול, רק טעם)', offers: [
+  ['קוקטייל בלו ולווט (+15 חיים)', 'mocktail', heal(15, [0.3, 0.45, 0.95], 'כחול כמו קטיפה. +15 חיים')],
+  ['ספריצר תפוזים עם נענע (+10 חיים)', 'lemonade', heal(10, [1, 0.62, 0.2], 'מרענן. +10 חיים')],
+  ['לרקוד סווינג על הרחבה', null, (game, a) => SERVICES.club.offers[2][2](game, a)],
 ] };
 
 // (ROADMAP 12.6) the club's floor in the world: the arrows on a screen over the back wall, you on
@@ -1483,7 +1492,7 @@ class OpenShop {
     if (this.shop.kind === 'club' && !v.spot.what) {
       c.fig.dance = 1;
       if (v.stay < 25) v.stay = 25 + Math.random() * 40;
-      if (Math.random() < dt * 0.02) this.say(c, pick(['Woo!', 'I love this song!', 'Yeah!', 'Dance with me!', 'Best night ever!']));
+      if (Math.random() < dt * 0.02) this.say(c, pick(this.shop.jazz ? ['What a voice!', 'I love this song.', 'Shall we dance?', 'Beautiful.'] : ['Woo!', 'I love this song!', 'Yeah!', 'Dance with me!', 'Best night ever!']));
       if (v.t > v.stay) {
         c.fig.dance = 0;
         this.leave(v);
@@ -2666,7 +2675,7 @@ class OpenShop {
   // ------------------------------------------------------------------ serving the hero
   talk() {
     const game = this.game;
-    const info = svc(game, this.shop.kind);
+    const info = svc(game, this.shop.kind, this.shop);
     if (game.time < this.cool || this.heroJob) {
       game.dialog.show(info.who, 'רגע, רגע — עוד לא סיימתי עם ההזמנה הקודמת. תחזור עוד מעט?', null);
       return;
@@ -2698,7 +2707,7 @@ class OpenShop {
   // (ROADMAP 5.7) a shelf: each thing on it drawn in the air for you, and put on
   shelf(text, part, items, sketch) {
     const game = this.game;
-    const info = svc(game, this.shop.kind);
+    const info = svc(game, this.shop.kind, this.shop);
     const choices = items.map((it) => {
       const off = it[part] === null || it[part] === undefined;
       // (ROADMAP 8.1: taking something off is free)
@@ -2723,7 +2732,7 @@ class OpenShop {
     if (!M || n <= 0) return go();
     const cashOnly = CASH_ONLY.has(this.shop.kind);
     if (!M.pay(n, what.replace(/\s*\(.*?\)/g, '').trim(), cashOnly)) {
-      M.refuse(svc(game, this.shop.kind).who, n, cashOnly, back);
+      M.refuse(svc(game, this.shop.kind, this.shop).who, n, cashOnly, back);
       return;
     }
     go();

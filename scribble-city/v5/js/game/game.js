@@ -90,6 +90,7 @@ import { Festival } from './festival.js';
 import { ArtNight } from './artnight.js';
 import { Arcade } from './arcade.js';
 import { Casino } from './casino.js';
+import { Parties } from './parties.js';
 import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
@@ -340,6 +341,8 @@ export class Game {
     this.arcade = this.classic ? null : new Arcade(this);
     // (ROADMAP 12.8) PALACE OF INK, the casino on the bay
     this.casino = this.classic ? null : new Casino(this);
+    // (ROADMAP 12.9) the parties: NEON INK's big night
+    this.parties = this.classic ? null : new Parties(this);
     if (this.calendar) this.phone.addApp({ id: 'events', name: 'אירועים', glyph: 'music', fill: '#ffb3d9' });
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
@@ -1162,6 +1165,7 @@ export class Game {
       if (this.artnight) this.artnight.update(dt);
       if (this.arcade) this.arcade.update(dt);
       if (this.casino) this.casino.update(dt);
+      if (this.parties) this.parties.update(dt);
       this.reactions.update(dt);
       this.animals.update(dt);
       this.voices.update(dt);
@@ -1287,6 +1291,7 @@ export class Game {
       if (this.artnight) this.artnight.draw(fr);
       if (this.arcade) this.arcade.draw(fr);
       if (this.casino) this.casino.draw(fr);
+      if (this.parties) this.parties.draw(fr);
       if (this.arenaGame) this.arenaGame.draw();
       this.streetlife.draw(fr);
       this.workers.draw(fr);
@@ -1403,7 +1408,7 @@ export class Game {
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -2129,6 +2134,11 @@ export class Game {
       enter = true;
       const ct = this.casino.target();
       prompt = touch ? ct.label.replace('E — ', '') : ct.label;
+    } else if (p.mode === 'foot' && this.parties && this.parties.target()) {
+      // (the parties: the dance floor, the DJ, the bottles - game/parties.js)
+      enter = true;
+      const pt = this.parties.target();
+      prompt = touch ? pt.label.replace('E — ', '') : pt.label;
     } else if (p.mode === 'foot' && this.fair && this.fair.target()) {
       // (a ride on the pier: game/fairground.js)
       enter = true;

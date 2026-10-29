@@ -191,7 +191,7 @@ class Room {
     this.lazy = false;
     this.soups = null;
     this.kind = spec.kind;
-    this.decor = (this.store && (STORE_DECOR[spec.kind] || STORE_DECOR.shop)) || DECOR[spec.kind] || DECOR.shop;
+    this.decor = (this.store && (STORE_DECOR[spec.kind] || STORE_DECOR.shop)) || DECOR[spec.decor || spec.kind] || DECOR.shop;
     this.ua = spec.u0 + T;
     this.ub = spec.u1 - T;
     this.da = -T;

@@ -257,6 +257,8 @@ export class Soundscape {
     for (const s of game.streetlife.active.values()) {
       const kind = s.shop.kind;
       if (SHOP_STYLE[kind] === undefined || !s.open || (R && !R.open(kind))) continue;
+      // (a club whose party is on plays its own: game/parties.js)
+      if (game.parties && game.parties.owns(s.shop)) continue;
       const club = s.shop.name === CLUB || kind === 'club';
       // (the club is heard from across the street; a shop from its door)
       const d = Math.hypot(s.shop.door[0] - cam.x, s.shop.door[2] - cam.z) * (club ? 0.5 : 1);
@@ -275,7 +277,7 @@ export class Soundscape {
     if (best && best !== this.shop) {
       // (each shop its own song, the same one every time you come by)
       this.shop = best;
-      this.band.play(makeSong(club ? 'disco' : SHOP_STYLE[best.shop.kind], 500 + best.shop.id), now + 0.05);
+      this.band.play(makeSong(best.shop.jazz ? 'jazz' : club ? 'disco' : SHOP_STYLE[best.shop.kind], 500 + best.shop.id), now + 0.05);
     }
     if (!best && this.shop && this.shopOut.gain.value < 0.002) {
       // (it went on a moment as it faded, then stopped)
