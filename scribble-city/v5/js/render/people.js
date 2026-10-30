@@ -1585,6 +1585,7 @@ export class PersonRenderer {
     // (their drawings turned over once a frame, however many of them are about)
     if (F.frame !== this.frameNo) {
       F.frame = this.frameNo;
+      F.art.want();
       F.art.step();
       F.art.frame(performance.now() / 1000, F.tex);
       const U = F.mat.uniforms;

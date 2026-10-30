@@ -48,7 +48,7 @@ function helperOf() {
       helper.onerror = () => {
         helper = null;
         // (whatever was left undrawn is drawn between the frames instead)
-        for (const a of arts) a.todo = a.sent || [];
+        for (const a of arts) if (a.sent) a.todo = a.sent;
       };
     }
   } catch (e) {
@@ -87,22 +87,32 @@ export class HeroArt {
     this.todo = Object.entries(this.sets).flatMap(([name, S]) => Array.from({ length: S.n - first }, (_, i) => [name, i + first]));
     this.todo.unshift(['face', 'blink']);
     this.wait = 0;
-    // (the helper: the rest drawn off the game's thread, sent back as pictures)
+    // (the helper: the rest drawn off the game's thread, sent back as pictures - the city's people's
+    // only once they are first about: want)
     this.id = arts.length;
     arts.push(this);
     this.worker = helperOf();
-    if (this.worker) {
-      for (const [name, i] of this.todo) {
-        const S = this.sets[name];
-        this.worker.postMessage({ art: this.id, folk, name, i, w: Math.round(S.w), h: Math.round(S.h), seed: this.seedOf(name, i === 'blink' ? 0 : i), blink: i === 'blink' });
-      }
-      this.sent = this.todo;
-      this.todo = [];
-    }
     this.tick = -1;
     this.cur = { face: 0, hair: 0, jacket: 0, pants: 0, boots: 0 };
     this.nextBlink = 3;
     this.blinking = 0;
+    this.asked = false;
+    if (folk === null) this.want();
+  }
+
+  // (their drawings asked for the first time they are drawn: render/people.js drawFolk)
+  want() {
+    if (this.asked) return;
+    this.asked = true;
+    this.worker = helperOf();
+    if (this.worker) {
+      for (const [name, i] of this.todo) {
+        const S = this.sets[name];
+        this.worker.postMessage({ art: this.id, folk: this.folk, name, i, w: Math.round(S.w), h: Math.round(S.h), seed: this.seedOf(name, i === 'blink' ? 0 : i), blink: i === 'blink' });
+      }
+      this.sent = this.todo;
+      this.todo = [];
+    }
   }
 
   seedOf(name, i) {
@@ -143,7 +153,7 @@ export class HeroArt {
 
   // (no helper: a drawing now and then between the frames, until all of it is drawn)
   step() {
-    if (!this.todo.length || --this.wait > 0) return;
+    if (!this.asked || !this.todo.length || --this.wait > 0) return;
     this.wait = 45;
     const [name, i] = this.todo.shift();
     const S = this.sets[name];
