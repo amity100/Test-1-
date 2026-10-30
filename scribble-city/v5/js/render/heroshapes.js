@@ -264,14 +264,19 @@ const smax = (a, b, k) => -smin(-a, -b, k);
 
 // (x right, y up, z ahead; the middle of the head at 0)
 export function headSdf(x, y, z) {
-  // (the eyes half way down the head; brow, nose and chin a hand's third of the face each)
-  let f = sdEll(x, y, z, 0, 0.024, -0.012, 0.075, 0.094, 0.101); // the skull
-  f = smin(f, sdEll(x, y, z, 0, -0.04, 0.026, 0.064, 0.064, 0.072), 0.03); // the face
-  f = smin(f, sdEll(x, y, z, 0, -0.058, -0.006, 0.073, 0.047, 0.066), 0.03); // the jaw, square at its angles
-  f = smin(f, sdEll(x, y, z, 0, 0.038, 0.07, 0.058, 0.014, 0.022), 0.015); // the brow
   const ax = Math.abs(x);
-  f = smin(f, sdEll(ax, y, z, 0.048, 0.003, 0.05, 0.028, 0.018, 0.03), 0.015); // cheekbones
-  f = smin(f, sdEll(x, y, z, 0, -0.092, 0.064, 0.033, 0.018, 0.022), 0.012); // the chin
+  // (the eyes half way down the head; brow, nose and chin a hand's third of the face each)
+  let f = sdEll(x, y, z, 0, 0.026, -0.012, 0.076, 0.094, 0.101); // the skull, full at the temples
+  f = smin(f, sdEll(x, y, z, 0, -0.034, 0.028, 0.061, 0.06, 0.07), 0.03); // the face, narrower below
+  // (ROADMAP 13.5) the jaw as a man's: its body under the ears narrower than the cheekbones, its
+  // angles under the ears, the jawline from them down to a square chin a little forward - not a
+  // round jowl as wide as the cheeks
+  f = smin(f, sdEll(x, y, z, 0, -0.062, -0.006, 0.053, 0.042, 0.06), 0.03);
+  f = smin(f, sdEll(ax, y, z, 0.043, -0.075, -0.006, 0.012, 0.014, 0.016), 0.03);
+  f = smin(f, sdCap(ax, y, z, 0.043, -0.079, -0.004, 0.02, -0.099, 0.06, 0.0105), 0.026);
+  f = smin(f, sdEll(x, y, z, 0, 0.038, 0.07, 0.058, 0.014, 0.022), 0.015); // the brow
+  f = smin(f, sdEll(ax, y, z, 0.05, 0.006, 0.048, 0.026, 0.016, 0.029), 0.015); // cheekbones, high
+  f = smin(f, sdEll(x, y, z, 0, -0.094, 0.067, 0.03, 0.017, 0.019), 0.026); // the chin, square
   // the nose: its bridge, its tip, its wings
   let n = sdCap(x, y, z, 0, 0.028, 0.087, 0, -0.02, 0.111, 0.0085);
   n = smin(n, sdBall(x, y, z, 0, -0.023, 0.107, 0.0145), 0.006);
@@ -350,7 +355,7 @@ export function heroHeadGeo() {
 function hairline(phi) {
   // (by the angle round the head, 0 ahead: the forehead, the temples a little receded, the
   // sideburns down in front of the ears, over the ears, down to the nape)
-  const K = [[0, 0.62], [0.55, 0.56], [1.1, 1.0], [1.33, 1.5], [1.5, 1.45], [1.72, 1.12], [2.2, 1.5], [Math.PI, 1.92]];
+  const K = [[0, 0.62], [0.55, 0.56], [1.1, 0.93], [1.33, 1.38], [1.5, 1.36], [1.72, 1.1], [2.2, 1.5], [Math.PI, 1.92]];
   const a = Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi)));
   let i = 0;
   while (i < K.length - 2 && K[i + 1][0] < a) i++;
@@ -492,25 +497,25 @@ export function heroLocksGeo() {
   };
   for (let i = 0; i < 11; i++) lock(-0.85 + (i / 10) * 1.7 + (R() - 0.5) * 0.12, 0.5 + R() * 0.18, 'fringe');
   for (let i = 0; i < 30; i++) lock(R() * Math.PI * 2, 0.06 + R() * 0.55, 'top');
-  for (const sd of [-1, 1]) for (let i = 0; i < 8; i++) lock(sd * (1.0 + R() * 1.1), 0.85 + R() * 0.45, 'side');
+  for (const sd of [-1, 1]) for (let i = 0; i < 8; i++) lock(sd * (1.0 + R() * 1.1), 0.8 + R() * 0.38, 'side');
   for (let i = 0; i < 10; i++) lock(Math.PI + (R() - 0.5) * 1.3, 1.2 + R() * 0.45, 'back');
   const g = make(pos, uv, idx);
   g.computeVertexNormals();
   return g;
 }
 // (v5, ROADMAP 13.1) the neck: from inside the back of the head, under the skull, down into the collar
-// - as wide as a man's, wider below (the muscles from behind the ears to the collarbones), the
-// nape thicker than the throat. Drawn in the face's picture (render/heroink.js: its skin, the
+// - as wide as a man's (narrower than his jaw's angles: ROADMAP 13.5), wider below (the muscles
+// from behind the ears to the collarbones), the nape thicker than the throat. Drawn in the face's picture (render/heroink.js: its skin, the
 // stubble to the beard's line, the shadow under the jaw), as the head is: front on, its back from
 // the picture's edges
 export const NECK_ROWS = [
-  [0.02, 0.034, 0.03, 0.034],
-  [0.01, 0.054, 0.05, 0.056],
-  [0.0, 0.058, 0.053, 0.06],
-  [-0.05, 0.06, 0.054, 0.062],
-  [-0.1, 0.064, 0.056, 0.065],
-  [-0.14, 0.071, 0.058, 0.069],
-  [-0.17, 0.08, 0.06, 0.074],
+  [0.02, 0.03, 0.028, 0.034],
+  [0.01, 0.046, 0.044, 0.052],
+  [0.0, 0.048, 0.046, 0.055],
+  [-0.05, 0.049, 0.047, 0.057],
+  [-0.1, 0.053, 0.049, 0.06],
+  [-0.14, 0.064, 0.054, 0.066],
+  [-0.17, 0.078, 0.058, 0.072],
   [-0.185, 0.064, 0.05, 0.06],
   [-0.192, 0.02, 0.02, 0.02],
 ];
@@ -519,6 +524,52 @@ export const NECK_Y = -0.025;
 export function heroNeckGeo() {
   const g = loft(NECK_ROWS, 24);
   faceMap(g, NECK_Y);
+  return g;
+}
+
+// (ROADMAP 13.5) an ear: a shell against the side of the head - its rim (the helix) curled round from
+// over the cheek, up and back and down to the lobe, the bowl inside it, the whole standing out a
+// little more behind than in front (the side it is on: sd, +1 out along +x). y up, z back
+export function heroEarGeo(sd = 1) {
+  const NR = 8;
+  const NT = 24;
+  const Ry = 0.031;
+  const Rz = 0.0175;
+  const pos = [];
+  const uv = [];
+  const idx = [];
+  for (let i = 0; i <= NR; i++) {
+    const r = i / NR;
+    for (let j = 0; j <= NT; j++) {
+      const th = (j / NT) * Math.PI * 2;
+      const c = Math.cos(th);
+      const sn = Math.sin(th);
+      // (the outline: fuller below for the lobe, narrower there)
+      const y = Ry * r * c * (c < 0 ? 1 + 0.1 * -c : 1);
+      const z = Rz * r * sn * (c < -0.4 ? 0.82 : 1);
+      // (out from the head: more behind; the rim curled at the edge but at the front, where it runs
+      // into the cheek; the bowl in the middle; a thin edge)
+      const flare = 0.003 + 0.0075 * Math.max(0, sn) * (c > -0.4 ? 1 : 0.55);
+      const rim = 0.0042 * Math.exp(-(((r - 0.86) / 0.11) ** 2)) * (sn > -0.55 ? 1 : 0.25);
+      const bowl = -0.0028 * Math.max(0, 1 - (r / 0.72) ** 2);
+      const edge = r > 0.96 ? (1 - r) / 0.04 : 1;
+      const x = (flare * Math.min(1, r * 1.5) + rim + bowl) * edge;
+      pos.push(sd * x, y, z);
+      uv.push(j / NT, r);
+    }
+  }
+  for (let i = 0; i < NR; i++) {
+    for (let j = 0; j < NT; j++) {
+      const a = i * (NT + 1) + j;
+      const b = a + 1;
+      const c = a + NT + 1;
+      const d = c + 1;
+      if (sd > 0) idx.push(a, c, b, b, c, d);
+      else idx.push(a, b, c, b, d, c);
+    }
+  }
+  const g = make(pos, uv, idx);
+  g.computeVertexNormals();
   return g;
 }
 

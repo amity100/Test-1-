@@ -559,6 +559,8 @@ export class PersonRenderer {
       heroHair: P(HERO.heroHairGeo(), M.heroHair, 4),
       heroLocks: P(HERO.heroLocksGeo(), M.heroHair, 4),
       heroNeck: P(HERO.heroNeckGeo(), M.heroFace, 4),
+      heroEarR: P(HERO.heroEarGeo(1), M.skin, 2),
+      heroEarL: P(HERO.heroEarGeo(-1), M.skin, 2),
       heroCollar: P(HERO.heroCollarGeo(), M.heroJacket, 4),
       heroTorso: P(HERO.heroTorsoGeo(), M.heroJacket, 8),
       heroZip: P(HERO.heroZipGeo(), M.heroJacket, 4),
@@ -619,7 +621,7 @@ export class PersonRenderer {
     // (the little things of a face, the soles and the pockets are inside the shadow of what they
     // are on: the sun's view leaves them out; and in the wet street's mirror, at half the pixels
     // and smeared, they are not there either)
-    for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'sole', 'pocket']) this.p[k].flags = NO_MIRROR | NO_SUN;
+    for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'heroEarR', 'heroEarL', 'sole', 'pocket']) this.p[k].flags = NO_MIRROR | NO_SUN;
     // (v5, ROADMAP 13.1) the hero's lines, over his body (render/herolines.js)
     this.heroLines = new HeroLines(touch);
     this.buildShapes(scene);
@@ -1430,11 +1432,12 @@ export class PersonRenderer {
       if (hat !== 'skimask') {
         const P3 = (x, y, z) => _c.copy(hc).addScaledVector(hr, x * hs).addScaledVector(hu, y * hs).addScaledVector(hf, z * hs);
         for (let sd = -1; sd <= 1; sd += 2) {
-          // (an ear lies close against the head, leaning back a little; one drawing with the head)
-          P3(sd * 0.071, 0.0, -0.014);
-          _d.copy(hu).addScaledVector(hf, -0.28).normalize();
+          // (an ear lies close against the head, leaning back a little; one drawing with the head -
+          // ROADMAP 13.5: its rim, its bowl, its lobe, render/heroshapes.js heroEarGeo)
+          P3(sd * 0.0735, -0.003, -0.016);
+          _d.copy(hu).addScaledVector(hf, -0.22).normalize();
           _x.crossVectors(_d, hr).normalize();
-          p.ear.push(framed(_c, hr, _d, _x, hs * 0.5, hs * 1.08, hs * 0.72), skin, own, fig.headId, ind);
+          (sd > 0 ? p.heroEarR : p.heroEarL).push(framed(_c, hr, _d, _x, hs, hs, hs), skin, own, fig.headId, ind);
         }
         if (L.face && L.face.glasses === 'shades') {
           P3(0, 0.019, 0.092);

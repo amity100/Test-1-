@@ -184,7 +184,12 @@ export function faceTone(x, y) {
     t += 0.6 * smooth(-0.2, -0.235, y);
   }
   t += 0.35 * smooth(0.066, 0.09, y); // the hair's shadow on the forehead
-  t += 0.3 * blob(ax, y, 0.058, -0.075, 0.014, 0.02); // the jaw's corners
+  t += 0.3 * blob(ax, y, 0.047, -0.079, 0.012, 0.016); // the jaw's corners
+  // (ROADMAP 13.5) under the jawline, from its angles down to the chin: the neck in its shade
+  if (ax < 0.052) {
+    const yj = -0.108 + (Math.max(0.02, ax) - 0.02) * 1.0;
+    t += 0.8 * smooth(yj + 0.003, yj - 0.016, y) * (1 - smooth(-0.14, -0.16, y));
+  }
   return Math.min(1, t);
 }
 // where the stubble grows: the jaw, the chin, over the lip, the sideburns, down the neck; its upper
