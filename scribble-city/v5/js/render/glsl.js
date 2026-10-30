@@ -370,7 +370,7 @@ vec3 drawPensUnrolled(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float li
   float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
   if (dk > 0.0) {
     vec2 D = penLayer(p, dpx, dpy, ang - 1.22 * spread, 3.8, wpx * 1.1, 51.0, 1.2);
-    col = mix(col, vec3(0.022, 0.016, 0.04), D.x * step(fract(D.y * 7.13), dk * 0.92));
+    col = mix(col, vec3(0.022, 0.016, 0.04), D.x * step(fract(D.y * 7.13), dk * 0.92 * min(1.0, dens * 1.8)));
   }
   // E: where the low sun catches an edge, quick strokes of a light, warm pen; and in the full
   // sun a few strokes of almost white, as if the paper showed through
@@ -378,7 +378,7 @@ vec3 drawPensUnrolled(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float li
   if (hiAll > 0.02) {
     vec2 E = penLayer(p, dpx, dpy, ang + 0.2, 4.4, wpx, 67.0, 0.9);
     vec3 pe = fract(E.y * 3.1) < 0.5 ? mix(lit, uSunCol, 0.45) * 1.25 : mix(uPaper * 1.2, lit, 0.25);
-    col = mix(col, pe, E.x * step(fract(E.y * 7.13), hiAll));
+    col = mix(col, pe, E.x * step(fract(E.y * 7.13), hiAll * min(1.0, dens * 1.8)));
   }
   return col;
 }
@@ -464,12 +464,14 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
     } else if (i == 3) {
       // D: dark ink pressed into the deepest places
       pc = vec3(0.022, 0.016, 0.04);
-      k = L.x * step(fract(L.y * 7.13), dk * 0.92);
+      // (a drawing of its own under the pens - the hero's face, render/heroink.js - takes only a little
+      // of the dark ink: its density low; every other surface, 0.56 and up, all of it)
+      k = L.x * step(fract(L.y * 7.13), dk * 0.92 * min(1.0, dens * 1.8));
     } else {
       // E: where the low sun catches an edge, quick strokes of a light, warm pen; and in the full
       // sun a few strokes of almost white, as if the paper showed through
       pc = fract(L.y * 3.1) < 0.5 ? mix(lit, uSunCol, 0.45) * 1.25 : mix(uPaper * 1.2, lit, 0.25);
-      k = L.x * step(fract(L.y * 7.13), hiAll);
+      k = L.x * step(fract(L.y * 7.13), hiAll * min(1.0, dens * 1.8));
     }
     col = mix(col, pc, k);
   }

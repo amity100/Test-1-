@@ -17,6 +17,10 @@ export class FigureRenderer {
     scene.add(this.batch.mesh);
     this.bodies = new PersonRenderer(scene);
     this.camPos = new THREE.Vector3();
+    // (the hero's own lights know where you look at him from, and his lines go with the figures':
+    // render/people.js drawHero)
+    this.bodies.camPos = this.camPos;
+    this.bodies.lines = this;
   }
 
   begin(camera) {

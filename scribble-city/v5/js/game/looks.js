@@ -91,21 +91,22 @@ export function modest(L) {
 
 // ------------------------------------------------------------------ the hero
 export function heroLook() {
-  // the hero: an olive bomber jacket zipped up to the white tee at its collar, indigo jeans, dark
-  // sneakers on white soles, short dark hair. He is drawn in a body of his own (heroModel:
-  // render/heroshapes.js), not in the passers-by's round shapes; what he wears keeps its colours
-  // there, and the shops still sell all the rest (game/wardrobe.js)
+  // (v5, ROADMAP 13.1) the hero as his character sheet has him: thirty-seven, lean, his dark hair
+  // short and tousled, stubble, a scar through his left brow; a worn black-brown leather jacket open
+  // over a charcoal henley and a steel chain, black cargo trousers on a belt, dark leather boots, a
+  // watch on his left wrist. He is drawn in a body and pictures of his own (heroModel: render/
+  // heroshapes.js, render/heroart.js): these colours are his drawing's own (another colour bought
+  // in a shop tints it); the shops still sell all the rest (game/wardrobe.js)
   const L = baseLook({ pen: 'fineliner' });
   L.pen.width = 3.2;
-  L.build = { height: 1.03, head: 1.02, bulk: 1.06, limbs: 1.04 };
-  L.skin = [0.76, 0.6, 0.48];
-  L.hair = { style: 'buzz', color: [0.17, 0.12, 0.09] };
-  // (mid tones, not near-black: at night a black figure is all the pens' light strokes)
-  L.top = { kind: 'jacket', color: [0.36, 0.38, 0.26], sleeves: 'long', inner: [0.93, 0.93, 0.91] };
-  L.bottom = { kind: 'pants', color: [0.2, 0.27, 0.42] };
-  L.shoes = [0.24, 0.24, 0.27];
+  L.build = { height: 1.03, head: 1.02, bulk: 1.0, limbs: 1.04 };
+  L.skin = [0.74, 0.54, 0.42];
+  L.hair = { style: 'messy', color: [0.17, 0.11, 0.08] };
+  L.top = { kind: 'jacket', color: [0.2, 0.15, 0.13], sleeves: 'long', inner: [0.2, 0.2, 0.23] };
+  L.bottom = { kind: 'cargo', color: [0.14, 0.14, 0.16] };
+  L.shoes = [0.12, 0.1, 0.09];
   L.hat = null;
-  L.face = { eyes: 'hero', brows: 'stern', mouth: 'line', beard: null, glasses: null };
+  L.face = { eyes: 'hero', brows: 'stern', mouth: 'line', beard: 'stubble', glasses: null };
   L.acc = [];
   L.hero = true;
   L.heroModel = true;
