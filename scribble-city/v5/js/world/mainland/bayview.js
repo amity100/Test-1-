@@ -7,7 +7,7 @@ import { palm } from '../palms.js';
 import { bench } from '../blocks.js';
 import { CURB } from './plan.js';
 import { KIOSKS, planter, kiosk, bin, directory, sign } from './mall.js';
-import { FH, flight, vitrines, holed, decoFront, bigName, liftCtx, flip } from './megamall.js';
+import { FH, flight, vitrines, holed, occWall, decoFront, bigName, liftCtx, flip } from './megamall.js';
 
 const RATTAN = srgb(0.74, 0.54, 0.32);
 const RATTAN_D = srgb(0.58, 0.4, 0.22);
@@ -256,10 +256,6 @@ function* atrium(bctx, b, o) {
   const hctx = { ...bctx, B: bctx.R, M: Object.assign(Object.create(M), { trunk: M.bayTrunk, frond: M.hallFrond, nut: M.hallNut, canopy: M.hallCanopy }) };
   // (a phone: the green and the lights a little sparer)
   const LOW = !!bctx.low;
-  // (the sky through the dome: two of it, by day and by night - game/mall.js shows the one the hour
-  // wants)
-  const skyD = new Batch();
-  const skyN = new Batch();
   const c = { hall, hallGeo, IN, col, M };
   // (ROADMAP 11.32: the portals out to the arcades over the avenues, on the first floor)
   const inner = o.inner || [];
@@ -303,6 +299,8 @@ function* atrium(bctx, b, o) {
     const x0 = s < 0 ? R.x0 : R.x1 - SKIN;
     const hs = portalsAt(1, s).map((l) => ({ z0: l.z0, z1: l.z1, y0: LV[l.lv] - 0.02, y1: LV[l.lv] + 4.25 }));
     holed(bctx.B, M.wallSolid, x0, x0 + SKIN, bz0, bz1, CURB - 0.2, TOP, wallCol, hs, col);
+    // (ROADMAP 13.4: and what is behind them is not drawn - megamall.js occWall)
+    occWall(bctx, x0, x0 + SKIN, bz0, bz1, CURB, TOP, hs);
   }
   // the ends either side of the entrances: the corners' rooms (the back of the house), up to the roof
   for (const end of [-1, 1]) {
@@ -311,6 +309,7 @@ function* atrium(bctx, b, o) {
     for (const s of [-1, 1]) {
       const xa = s < 0 ? R.x0 + SKIN : hx1;
       solid(xa, z0, xa + SD - SKIN, z1, CURB - 0.2, ROOF, wallCol);
+      occWall(bctx, xa, xa + SD - SKIN, z0, z1, CURB, ROOF);
     }
     // (and their faces on the hall, warm white, a line of gold light up each corner)
     for (const s of [-1, 1]) {
@@ -775,6 +774,8 @@ function* atrium(bctx, b, o) {
     fbox(bctx, f, M.neon, -0.6, LV[1] + 0.2, 0.3, W + 0.6, LV[1] + 0.3, 0.42, LGOLD);
     const nf = end < 0 ? new Facade(R.x1, zf, -1, 0, 0, -1) : new Facade(R.x0, zf, 1, 0, 0, 1);
     decoFront(bctx, nf, R.x1 - R.x0, { LV, ROOF, TOP, from: 2, to: NF, fins: false, parapet: true });
+    // (ROADMAP 13.4: over the glass of the doors the end hides what is behind it)
+    occWall(bctx, R.x0, R.x1, end < 0 ? zf : zf - 0.3, end < 0 ? zf + 0.3 : zf, LV[1] - 0.2, TOP);
     // (the corners beside the glass, a floor and a half: the stone)
     for (const [ua, ub] of [[-SD + SKIN, -0.6], [W + 0.6, W + SD - SKIN]]) fbox(bctx, f, M.wallSolid, ua, CURB - 0.2, -0.3, ub, LV[2] - 0.3, 0.0, wallCol);
     // the canopy over the doors: black edged in gold, its lights; palms in planters either side
@@ -796,8 +797,8 @@ function* atrium(bctx, b, o) {
 
   // ------------------------------------------------------------------ the roof and the dome
   // the roof over the floors, the oval open in it; over the atrium the dome of glass - its ribs of
-  // brass, from inside the sunset through it (the sky of world/bayart.js, by day and by night), from
-  // outside its glass
+  // brass, from inside the sky itself through it (ROADMAP 13.3: the city's towers against the
+  // sunset, the morning, the night), from outside its glass
   {
     const roofCol = srgb(0.72, 0.72, 0.7);
     bctx.B.add(M.wallSolid, flatGeo(R.x0, bz0, R.x1, bz1, ROOF, true, OV, 4), null, nextId(), { color: roofCol });
@@ -813,14 +814,7 @@ function* atrium(bctx, b, o) {
       const [nx, nz] = ovN((i / NE) * TAU);
       return [x - nx * 0.01, z - nz * 0.01];
     }), ROOF - 0.99, ROOF - 0.93, -1, 2.4), LGOLD);
-    dome(bctx, { cx, z: ZV, ax: AX, az: AZ, y0: ROOF, H: 13.5 }, skyD, skyN, M);
-    const day = new THREE.Group();
-    const night = new THREE.Group();
-    bctx.parent.add(day, night);
-    skyD.flush(day, { dynamic: true });
-    skyN.flush(night, { dynamic: true });
-    night.visible = false;
-    mall.sky = { day, night };
+    dome(bctx, { cx, z: ZV, ax: AX, az: AZ, y0: ROOF, H: 13.5 }, M);
   }
   yield;
 
@@ -1404,8 +1398,9 @@ function dineTable(c, x, z, y, sink, r, parasol, n) {
 
 // ------------------------------------------------------------------ the dome
 // over the oval, from its foot at y0 up H: glass in panes between ribs of brass - from inside, the
-// sky through it (by day, by night); from outside, glass. Its rings and its ribs drawn in brass
-function dome(bctx, g, skyD, skyN, M) {
+// sky itself through it, and the towers round the mall against it (ROADMAP 13.3), a glint of the
+// light across a pane here and there; from outside, glass. Its rings and its ribs drawn in brass
+function dome(bctx, g, M) {
   const { cx, z: zc, ax, az, y0, H } = g;
   const NA = 96;
   const NV = 14;
@@ -1416,7 +1411,7 @@ function dome(bctx, g, skyD, skyN, M) {
     const y = y0 + 0.9 + Math.sin((e * Math.PI) / 2) * H + (t < 0.03 ? -0.9 * (1 - t / 0.03) : 0);
     return [cx + (ax + grow) * s * Math.sin(a), y, zc + (az + grow) * s * Math.cos(a)];
   };
-  const inside = (grow, inward) => {
+  const shell = (grow, inward) => {
     const pos = [];
     const uv = [];
     const idx = [];
@@ -1443,45 +1438,54 @@ function dome(bctx, g, skyD, skyN, M) {
     geo.computeVertexNormals();
     return geo;
   };
-  // (which way round: the normals of the inner face must point in)
-  const gIn = inside(0, true);
+  // (the glass from inside: the light caught on it, a pane here and there)
   {
-    const n = gIn.attributes.normal;
-    const p = gIn.attributes.position;
-    const k = Math.floor(p.count / 2);
-    const dx = cx - p.getX(k);
-    const dz = zc - p.getZ(k);
-    if (n.getX(k) * dx + n.getZ(k) * dz < 0) {
-      const ix = gIn.index.array;
-      for (let i = 0; i < ix.length; i += 3) {
-        const t = ix[i + 1];
-        ix[i + 1] = ix[i + 2];
-        ix[i + 2] = t;
+    const pos = [];
+    const uv = [];
+    const idx = [];
+    for (let j = 1; j < NV - 1; j++) {
+      for (let i = 0; i < NA; i += 2) {
+        if ((Math.abs(Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1) > 0.2) continue;
+        const a0 = (i / NA) * Math.PI * 2;
+        const a1 = ((i + 2) / NA) * Math.PI * 2;
+        const o = pos.length / 3;
+        for (const [a, t, u, v] of [[a0, j / NV, 0, 0], [a1, j / NV, 1, 0], [a1, (j + 1) / NV, 1, 1], [a0, (j + 1) / NV, 0, 1]]) {
+          pos.push(...P(a, t, -0.08));
+          uv.push(u, v);
+        }
+        idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
       }
-      gIn.computeVertexNormals();
     }
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    gg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    gg.setIndex(idx);
+    gg.computeVertexNormals();
+    bctx.R.add(M.bayGlint, gg, null, nextId());
   }
-  skyD.add(M.baySky, gIn.clone(), null, nextId());
-  skyN.add(M.baySkyNight, gIn, null, nextId());
   // the glass seen from outside
-  const gOut = inside(0.25, false);
+  const gOut = shell(0.25, false);
   bctx.B.add(M.mallGlassClear, gOut, null, nextId());
   // the ribs: up from the foot to the top, a ring at every few panes, the ring at its foot
   const B = bctx.R;
-  const NR = 24;
+  // (as fine as the pictures': a rib every pane round it, every other one heavier; a ring every
+  // pane up it)
+  const NR = 48;
   for (let i = 0; i < NR; i++) {
     const a = (i / NR) * Math.PI * 2;
+    const w = i % 2 ? 0.1 : 0.17;
     for (let j = 0; j < NV; j++) {
       const p0 = P(a, j / NV, 0.06);
       const p1 = P(a, (j + 1) / NV, 0.06);
-      B.add(M.bayGold, barGeo(p0, p1, 0.18, 0.18), null, nextId(), { color: hex('#e6c48a') });
+      B.add(M.bayGold, barGeo(p0, p1, w, w), null, nextId(), { color: hex('#e6c48a') });
     }
   }
-  for (const t of [0.04, 0.28, 0.5, 0.7, 0.86]) {
+  for (const t of [0.04, 0.16, 0.28, 0.4, 0.5, 0.6, 0.7, 0.78, 0.86, 0.93]) {
+    const w = t < 0.1 ? 0.3 : t === 0.5 || t === 0.28 || t === 0.7 ? 0.14 : 0.09;
     for (let i = 0; i < NA; i += 2) {
       const p0 = P((i / NA) * Math.PI * 2, t, 0.05);
       const p1 = P(((i + 2) / NA) * Math.PI * 2, t, 0.05);
-      B.add(M.bayGold, barGeo(p0, p1, t < 0.1 ? 0.3 : 0.14, t < 0.1 ? 0.3 : 0.14), null, nextId(), { color: hex('#e6c48a') });
+      B.add(M.bayGold, barGeo(p0, p1, w, w), null, nextId(), { color: hex('#e6c48a') });
     }
   }
   // (its crown: a ring of gold at the top, a lantern of light)

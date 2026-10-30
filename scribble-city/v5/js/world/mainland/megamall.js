@@ -62,12 +62,6 @@ const NIGHT_SKY = srgb(0.03, 0.04, 0.11);
 // (low down through the vault's glass, the sky paler: by day, by night)
 const SKY_LOW = srgb(0.64, 0.76, 0.9);
 const NIGHT_LOW = srgb(0.08, 0.09, 0.19);
-// (ROADMAP 13.2: BAYVIEW's halls - the sunset through their glass, gold low down into rose and violet
-// over them; at night violet low down, the night over it)
-const BAY_LOW = srgb(1, 0.72, 0.42);
-const BAY_SKY = srgb(0.62, 0.36, 0.7);
-const BAY_NLOW = srgb(0.32, 0.13, 0.3);
-const BAY_NSKY = srgb(0.06, 0.05, 0.16);
 
 // (the hall's stores' fronts: a real mall's - white, cream, stone, and the deep colours of the
 // grand names: black, navy, emerald, wine, walnut)
@@ -233,10 +227,14 @@ function* wing(bctx, b, o) {
   // street's: the rooms' pens light themselves up at night, the sky must not)
   const skyD = new Batch();
   const skyN = new Batch();
-  const sky = (geo, t = 1) => {
-    skyD.add(M.neonSoft, geo.clone(), null, nextId(), { color: BAY ? BAY_LOW.clone().lerp(BAY_SKY, t) : SKY_LOW.clone().lerp(SKY, t) });
-    skyN.add(M.neonSoft, geo, null, nextId(), { color: BAY ? BAY_NLOW.clone().lerp(BAY_NSKY, t) : NIGHT_LOW.clone().lerp(NIGHT_SKY, t) });
-  };
+  // (ROADMAP 13.3: not in BAYVIEW's halls - the sky itself is seen through their glass, as through
+  // its dome)
+  const sky = BAY
+    ? () => {}
+    : (geo, t = 1) => {
+        skyD.add(M.neonSoft, geo.clone(), null, nextId(), { color: SKY_LOW.clone().lerp(SKY, t) });
+        skyN.add(M.neonSoft, geo, null, nextId(), { color: NIGHT_LOW.clone().lerp(NIGHT_SKY, t) });
+      };
   // (ROADMAP 11.46) a pane of stained glass: the day lighting it from behind, at night the hall's
   // own lamps (a pane a part: the inker draws its lead round it)
   const stain = (geo, day, night) => {
@@ -288,6 +286,7 @@ function* wing(bctx, b, o) {
     const x0 = s < 0 ? R.x0 : R.x1 - SKIN;
     const hs = portalsAt(1, s).map((l) => ({ z0: l.z0, z1: l.z1, y0: LV[l.lv] - 0.02, y1: LV[l.lv] + 4.25 }));
     holed(bctx.B, M.wallSolid, x0, x0 + SKIN, bz0, bz1, CURB - 0.2, TOP, wallCol, hs, col);
+    occWall(bctx, x0, x0 + SKIN, bz0, bz1, CURB, TOP, hs);
   }
   // the ends of the building, either side of the entrances: the corner rooms' outer walls (the
   // vestibules': below)
@@ -297,6 +296,7 @@ function* wing(bctx, b, o) {
     for (const s of [-1, 1]) {
       const xr0 = s < 0 ? hx0 - SD : hx1 + 0.25;
       solid(xr0, z0, xr0 + SD - 0.25, z1, CURB - 0.2, end < 0 ? LV[2] - 0.3 : TOP, wallCol);
+      occWall(bctx, xr0, xr0 + SD - 0.25, z0, z1, CURB, end < 0 ? LV[2] - 0.3 : TOP);
     }
   }
   yield;
@@ -830,6 +830,9 @@ function* wing(bctx, b, o) {
       // (the floors between, over the doors: ivory, their ribbons of dark glass, gold eyebrows)
       const nf = new Facade(hx1 + SD, zf, -1, 0, 0, -1);
       decoFront(bctx, nf, W + 2 * SD, { LV, ROOF, TOP, from: 2, to: TL, fins: false, parapet: false });
+      // (ROADMAP 13.4: the floors over the doors hide what is behind them - up to the food court's
+      // terrace, open to the sky)
+      occWall(bctx, hx0 - SD, hx1 + SD, zf, zf + 0.3, LV[1] - 0.2, LV[TL] - 0.3);
     } else {
       // the name over the glass, at the top
       fbox(bctx, f, M.frame, 1.2, ROOF - 0.4, 0, W - 1.2, TOP + 2.4, 0.4, BLACK);
@@ -2585,6 +2588,33 @@ export function holed(B, mat, x0, x1, z0, z1, y0, y1, colr, hs, col = null) {
       B.box(mat, x0, y, za, x1, y1, zb, nextId(), { color: colr });
       if (col) col.addBox(x0, za, x1, zb, y, y1, 'wall');
     }
+  }
+}
+
+// (ROADMAP 13.4) a wall of the mall as the boxes that hide what is behind it (render/occlusion.js,
+// world/mainland/blocks.js attach): in pieces of 10 m - the occlusion counts no box with a corner
+// behind the camera, and each at the depth of its farthest corner - and not where it is open (hs, as
+// holed's: { z0, z1 } along a wall along z, { x0, x1 } along one along x; y0, y1)
+export function occWall(bctx, x0, x1, z0, z1, y0, y1, hs = []) {
+  if (!bctx.occBoxes) bctx.occBoxes = [];
+  const alongZ = z1 - z0 > x1 - x0;
+  const a = alongZ ? z0 : x0;
+  const L = alongZ ? z1 - z0 : x1 - x0;
+  const n = Math.ceil(L / 10);
+  for (let k = 0; k < n; k++) {
+    const a0 = a + (L * k) / n;
+    const a1 = a + (L * (k + 1)) / n;
+    const put = (ya, yb) => {
+      if (yb - ya > 1) bctx.occBoxes.push(alongZ ? { x0, x1, z0: a0, z1: a1, y0: ya, y1: yb } : { x0: a0, x1: a1, z0, z1, y0: ya, y1: yb });
+    };
+    // (an opening across this piece: only what is under it and over it)
+    const ys = hs.filter((h) => (alongZ ? h.z1 > a0 && h.z0 < a1 : h.x1 > a0 && h.x0 < a1)).map((h) => [h.y0, h.y1]).sort((p, q) => p[0] - q[0]);
+    let y = y0;
+    for (const [ha, hb] of ys) {
+      if (ha > y) put(y, Math.min(ha, y1));
+      y = Math.max(y, hb);
+    }
+    if (y1 > y) put(y, y1);
   }
 }
 

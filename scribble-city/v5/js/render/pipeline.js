@@ -2268,7 +2268,20 @@ export class Pipeline {
     // (v5: the test route's moments without the people and the cars, or without the sun's view of
     // what moves, game/perf.js: what they cost on this device)
     const life = this.hideLife ? this.hideMoving() : null;
-    if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone)) {
+    // (ROADMAP 13.4: deep in a mall's hall - game/mall.js deepInside - the sun reaches nothing that
+    // is seen: what moves casts no shadow there, the map of it is left empty until you come out; the
+    // still city's stays as it was)
+    const indoors = !!this.sunIndoors;
+    if (indoors !== this._sunIndoors) {
+      this._sunIndoors = indoors;
+      if (indoors && this.shadowDone) {
+        const was = r.getRenderTarget();
+        r.setRenderTarget(this.shadowRT);
+        r.clear();
+        r.setRenderTarget(was);
+      }
+    }
+    if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone) && !(indoors && this.shadowDone)) {
       if (T) T.begin('shadow');
       this.renderShadows(center);
       if (T) T.end();

@@ -274,11 +274,19 @@ export class MallCrowd {
     const fwd = this._f || (this._f = cam.clone());
     g.camera.getWorldDirection(fwd);
     const far = g.touch ? 45 : 70;
+    // (ROADMAP 13.4: from outside its hall - the great hall's crowd from a hall beside it, from the
+    // arcade - most of it is behind the walls: whoever the walls hid at the last frame
+    // (render/occlusion.js), with a metre to spare all round, is not drawn)
+    const h = this.m.hall;
+    const outside = cam.x < h.x0 - 2 || cam.x > h.x1 + 2 || cam.z < h.z0 - 2 || cam.z > h.z1 + 2;
+    const pipe = g.pipe;
+    const occ = outside && pipe && pipe.occlusionOn ? pipe.occlusion : null;
     for (const w of this.list) {
       const dx = w.x - cam.x;
       const dz = w.z - cam.z;
       const d = Math.hypot(dx, dz);
       if (d > far || (d > 3 && (dx * fwd.x + dz * fwd.z) / d < -0.3)) continue;
+      if (occ && occ.hidden(w.x - 1, w.y - 0.5, w.z - 1, w.x + 1, w.y + 2.8, w.z + 1)) continue;
       bodies.drawCheap(w);
     }
   }

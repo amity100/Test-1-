@@ -859,6 +859,8 @@ export class Game {
     pickLights(c);
     if (this.world.cull) this.world.cull(c);
     this.world.sky.position.copy(c);
+    // (ROADMAP 13.4: deep in the mall's great hall the sun's view of what moves is not drawn)
+    this.pipe.sunIndoors = this.mallLife ? this.mallLife.deepInside(c) : false;
     // (under the water you see a few metres: ROADMAP 5.2)
     const fog = shared.uFogDensity.value;
     if (this.swim && this.swim.wasUnder) shared.uFogDensity.value = 0.075;

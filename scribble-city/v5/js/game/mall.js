@@ -331,6 +331,18 @@ export class MallLife {
     this.inside = false;
   }
 
+  // (ROADMAP 13.4) deep in BAYVIEW's great hall - under its roof, away from its doors (all but a
+  // glimpse of the street through their glass, far off): the sun reaches nothing seen from there
+  // (render/pipeline.js sunIndoors)
+  deepInside(p) {
+    for (const m of this.active.keys()) {
+      if (!m.bay) continue;
+      const h = m.hall;
+      if (p.x > h.x0 + 1 && p.x < h.x1 - 1 && p.z > h.z0 + 18 && p.z < h.z1 - 18 && p.y < CURB + (m.height || 30)) return true;
+    }
+    return false;
+  }
+
   get budget() {
     // (the shoppers of the hall at once - the food court's tables on top of them on a computer; a
     // hall a hundred metres long takes a crowd to look busy)

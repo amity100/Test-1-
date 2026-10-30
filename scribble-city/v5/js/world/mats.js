@@ -3,7 +3,7 @@ import { makeSurface, srgb, hex, canvasTexture } from '../render/materials.js';
 import { streetTexture, paverTexture, frondTexture, aveTexture, crossTexture, asphaltTexture, crosswalkTexture, tileTexture, glintTexture, floorTexture, goodsTexture, GOODS_CELLS, sandTexture, woodDeckTexture } from './paint.js';
 import { canvas } from './kit.js';
 import { hallMarble, hallMedallion, hallCoffer, hallFrieze, decoStone, drawnSky, laneArt, storeFloor } from './hallpaint.js';
-import { bayFloor, baySigns, bayArt, baySky, bayWater, bayTrunk } from './bayart.js';
+import { bayFloor, baySigns, bayArt, bayWater, bayTrunk } from './bayart.js';
 
 // The pens of the city, made once. Most of them take their colour from the parts (a colour per
 // vertex), so a hundred pink and mint and yellow buildings are one material, drawn per chunk.
@@ -138,8 +138,8 @@ export function cityMaterials() {
   M.roofLight = B({ kind: 'wall', vcolor: true, noShadow: true });
   // (v5, ROADMAP 13.2) BAYVIEW MALL's own pens (world/mainland/bayview.js, world/bayart.js): its floor
   // of marble on the diagonal, polished, the hall in it; its stores' boards and its pictures (the
-  // banners, the screens, the crown over the waterfall) lit by themselves; the sunset through its
-  // dome, by day and by night; the water of the waterfall sliding down it; its brass, its hanging
+  // banners, the screens, the crown over the waterfall) lit by themselves; the light caught on its
+  // dome's glass; the water of the waterfall sliding down it; its brass, its hanging
   // green, its bulbs
   M.bayFloor = B({ kind: 'ground', map: bayFloor(), worldMap: 6.4, vcolor: true, indoor: 'hall', refl: 2, gloss: 0.14, ang: 0.4, wash: 0.72, density: 0.5, line: 0.5 });
   // (the galleries' floors over the atrium: the same marble, cream and sand, quieter than the hall's
@@ -152,10 +152,8 @@ export function cityMaterials() {
   M.bayArt = B({ kind: 'neon', map: M.bayArtSet.tex, emMap: M.bayArtSet.tex, color: srgb(1, 1, 1), emissive: new THREE.Color(1.25, 1.25, 1.25), line: 0.2, noShadow: true });
   M.bayBanner = B({ kind: 'wall', map: M.bayArtSet.tex, emMap: M.bayArtSet.tex, color: srgb(1, 1, 1), emissive: new THREE.Color(0.55, 0.55, 0.55), indoor: 'hall', side: THREE.DoubleSide, wash: 0.85, density: 0.45, line: 0.45 });
   M.bayLogo = B({ kind: 'neon', map: M.bayArtSet.tex, emMap: M.bayArtSet.tex, alphaTest: 0.2, color: srgb(1, 1, 1), emissive: new THREE.Color(2.2, 2.1, 1.9), line: 0.1, noShadow: true });
-  for (const [k, night] of [['baySky', false], ['baySkyNight', true]]) {
-    const t = baySky(night);
-    M[k] = B({ kind: 'neon', map: t, emMap: t, color: srgb(1, 1, 1), emissive: new THREE.Color(1.0, 1.0, 1.0), line: 0.12, noShadow: true, side: THREE.DoubleSide });
-  }
+  // (the light caught on the dome's glass, warm: the sky itself is seen through it - ROADMAP 13.3)
+  M.bayGlint = B({ kind: 'neon', map: M.glint.uniforms.uMap.value, alphaTest: 0.5, color: srgb(1, 0.93, 0.82), emissive: new THREE.Color(0.6, 0.5, 0.4), line: 0, noShadow: true, side: THREE.DoubleSide });
   const water = bayWater();
   M.bayWater = B({ kind: 'neon', map: water, emMap: water, color: srgb(1, 1, 1), emissive: new THREE.Color(1.15, 1.25, 1.4), line: 0.15, noShadow: true, scroll: [0, 0.42] });
   M.bayGold = B({ kind: 'box', vcolor: true, indoor: 'hall', gloss: 0.85, wash: 0.7, density: 0.6, line: 0.5 });
