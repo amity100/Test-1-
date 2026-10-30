@@ -102,18 +102,26 @@ export class HeroArt {
     if (folk === null) this.want();
   }
 
-  // (their drawings asked for the first time they are drawn: render/people.js drawFolk)
+  // (their drawings asked for the first time they are drawn: render/people.js drawFolk) - the first
+  // of each first, the rest once those have come: whoever is about has their look soon, the boil after
   want() {
     if (this.asked) return;
     this.asked = true;
     this.worker = helperOf();
     if (this.worker) {
-      for (const [name, i] of this.todo) {
-        const S = this.sets[name];
-        this.worker.postMessage({ art: this.id, folk: this.folk, name, i, w: Math.round(S.w), h: Math.round(S.h), seed: this.seedOf(name, i === 'blink' ? 0 : i), blink: i === 'blink' });
-      }
+      const first = this.todo.filter(([, i]) => i === 0);
+      this.later = first.length ? this.todo.filter(([, i]) => i !== 0) : [];
+      this.firstLeft = first.length;
+      this.post(first.length ? first : this.todo);
       this.sent = this.todo;
       this.todo = [];
+    }
+  }
+
+  post(list) {
+    for (const [name, i] of list) {
+      const S = this.sets[name];
+      this.worker.postMessage({ art: this.id, folk: this.folk, name, i, w: Math.round(S.w), h: Math.round(S.h), seed: this.seedOf(name, i === 'blink' ? 0 : i), blink: i === 'blink' });
     }
   }
 
@@ -146,6 +154,10 @@ export class HeroArt {
     const t = canvasTexture(c, { mips: true });
     if (d.i === 'blink') this.blinkTex = t;
     else this.put(S, t);
+    if (d.i === 0 && this.firstLeft > 0 && --this.firstLeft === 0 && this.later.length && this.worker) {
+      this.post(this.later);
+      this.later = [];
+    }
   }
 
   // the first drawing of each: the pens' own pictures (render/people.js)
