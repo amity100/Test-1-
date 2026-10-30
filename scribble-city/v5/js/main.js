@@ -54,6 +54,10 @@ async function loadFonts() {
         document.fonts.load('600 40px "Rubik"', 'ABC'),
         document.fonts.load('400 40px "Rubik"', 'ABC'),
         document.fonts.load('700 40px "Caveat"', 'ABC'),
+        // (ROADMAP 13.2: BAYVIEW MALL's boards, the couture houses' letters)
+        document.fonts.load('600 40px "Cinzel"', 'ABC'),
+        document.fonts.load('700 40px "Cinzel"', 'ABC'),
+        document.fonts.load('500 40px "Rubik"', 'ABC'),
       ]),
       wait(4000),
     ]);

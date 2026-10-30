@@ -475,6 +475,7 @@ export function makeSurface(o = {}) {
       uEmVColor: { value: o.emVColor ? 1 : 0 },
       uCells: { value: o.cells || 0 },
       uNeonMask: { value: o.neonMask ? 1 : 0 },
+      uScroll: { value: new THREE.Vector2(o.scroll ? o.scroll[0] : 0, o.scroll ? o.scroll[1] : 0) },
     },
     defines,
     vertexColors: !!o.vcolor,

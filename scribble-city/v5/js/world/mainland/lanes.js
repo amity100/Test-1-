@@ -160,7 +160,7 @@ function* lanes(bctx, b, o) {
     fbox(bctx, f, M.goldTrim, -0.8, CURB + 7.2, 0, 2 * DW + 0.8, CURB + 7.45, 0.35, hex('#d4af62'));
     fbox(bctx, f, M.wallSolid, -1.4, CURB + 7.45, 0, 2 * DW + 1.4, CURB + 11.4, 0.4, DARK);
     neonSign(bctx, f, o.sign || 'VIA INKWELL', DW, CURB + 9.9, 0.45, 2 * DW + 1.6, hex('#f2d58c'), { font: o.font || 'Rubik', size: 90 });
-    neonSign(bctx, f, 'AT DOWNTOWN GALLERIA', DW, CURB + 8.2, 0.45, 2 * DW - 1.2, hex('#ffffff'), { font: 'Rubik', size: 60 });
+    neonSign(bctx, f, 'AT BAYVIEW MALL', DW, CURB + 8.2, 0.45, 2 * DW - 1.2, hex('#ffffff'), { font: 'Rubik', size: 60 });
     const lp = f.p(DW, CURB + 6, 3);
     addLight(lp[0], lp[1], lp[2], 16, srgb(1, 0.88, 0.7), 1.2);
     mall.entrances.push({ x: cx, z: R.z0 - 2.5, zIn: Z0 + 3, out: -1 });

@@ -1294,6 +1294,7 @@ export class Game {
       if (this.parties) this.parties.draw(fr);
       if (this.arenaGame) this.arenaGame.draw();
       this.streetlife.draw(fr);
+      this.mallLife.draw(fr);
       this.workers.draw(fr);
       this.events.draw(fr);
       this.vignettes.draw(fr);

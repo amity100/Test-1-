@@ -10,6 +10,7 @@ import { SHOP_NAMES } from '../blocks.js';
 import { M_AVES, M_STREETS, CURB, towersOf } from './plan.js';
 import { buildMall, buildStripMall, STORE_NAMES } from './mall.js';
 import { buildMegaMall } from './megamall.js';
+import { buildBayview } from './bayview.js';
 import { buildLanes } from './lanes.js';
 import { buildVenue } from './venues.js';
 import { friendStandIn } from '../streets.js';
@@ -29,8 +30,10 @@ const MALLS = {
   // side), the dome over the middle one's court, world/mainland/megamall.js; their stores floor by
   // floor, west row and east row. inner: the sides with portals out into an arcade; outer: the side
   // on the street)
+  // (v5, ROADMAP 13.2: the middle one BAYVIEW MALL's great hall - its oval atrium under the dome,
+  // the waterfall, world/mainland/bayview.js; its stores are its own)
   galleria: {
-    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
+    name: 'BAYVIEW MALL', heb: 'ביי־ויו מול', font: 'Rubik', bay: true,
     mega: true, wing: 'center', floors: 5, inner: [-1, 1], outer: 0, dome: true, portalSign: { '-1': 'WEST HALL', 1: 'EAST HALL' }, bank: true, security: true, helipad: true, court: 'fountain',
     stores: {
       L0w: ['fashion', 'shoes', 'electronics', 'jewelry', 'perfume', 'fashion', 'optics', 'sports'],
@@ -49,7 +52,7 @@ const MALLS = {
     anchor: { name: 'INKWELL & CO', kind: 'fashion', side: 1, floors: 2 },
   },
   galleriaW: {
-    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
+    name: 'BAYVIEW MALL', heb: 'ביי־ויו מול', font: 'Rubik', bayStyle: true,
     mega: true, wing: 'west', floors: 5, inner: [1], outer: -1, arcade: 1, portalSign: { 1: 'GRAND COURT' }, bank: false, security: false, helipad: false, court: 'palms',
     stores: {
       L0w: ['jewelry', 'perfume', 'shoes', 'fashion'],
@@ -69,7 +72,7 @@ const MALLS = {
     anchor: { name: 'BLOOMWELL\'S', kind: 'fashion', side: -1, floors: 3 },
   },
   galleriaE: {
-    name: 'DOWNTOWN GALLERIA', heb: 'הגלריה של דאונטאון', font: 'Rubik',
+    name: 'BAYVIEW MALL', heb: 'ביי־ויו מול', font: 'Rubik', bayStyle: true,
     mega: true, wing: 'east', floors: 5, inner: [-1], outer: 1, arcade: -1, portalSign: { '-1': 'GRAND COURT' }, bank: false, security: false, helipad: false, court: 'fountain',
     stores: {
       L0w: ['fashion', 'jewelry', 'perfume', 'shoes', 'optics', 'boutique', 'phones', 'cafe'],
@@ -235,6 +238,8 @@ export function blockCtx(world, b) {
     // (v5, ROADMAP 11.18: what is on its rooms' shelves, streamed in when you come near - world/interiors.js)
     stock: [],
     block: b,
+    // (a phone: the city a little lighter where it can be - world/mainland/bayview.js)
+    low: !!world.low,
     // (the houses drawn on its plots: world/plot.js)
     homes: world.homes || null,
     // (the city's towers as they were drawn, each with what it is solid as: world/mainland/far.js)
@@ -328,7 +333,9 @@ function* buildKind(bctx, b) {
     case 'galleriaW':
     case 'galleriaE':
     case 'starlight':
-      if (MALLS[b.kind].mega) yield* buildMegaMall(bctx, b, MALLS[b.kind]);
+      // (ROADMAP 13.2: BAYVIEW MALL's great hall in the middle - world/mainland/bayview.js)
+      if (MALLS[b.kind].bay) yield* buildBayview(bctx, b, MALLS[b.kind]);
+      else if (MALLS[b.kind].mega) yield* buildMegaMall(bctx, b, MALLS[b.kind]);
       else yield* buildMall(bctx, b, MALLS[b.kind]);
       // (and one in the mall's hall, among the shoppers - not in the mega mall's, full as it is)
       if (bctx.mall && bctx.mall.hall && !bctx.mall.mega) friendStandIn(bctx, bctx.mall.hall, { from: 4, step: 2 });

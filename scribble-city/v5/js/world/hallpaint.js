@@ -7,7 +7,7 @@ import { canvasTexture } from '../render/materials.js';
 // The pens still draw over them all, lighter on the polished stone (render/glsl.js uUseRefl 2).
 
 // a dice of its own for each picture: the same picture every time
-function dice(seed) {
+export function dice(seed) {
   let s = seed;
   return () => ((s = (s * 16807) % 2147483647) % 100000) / 100000;
 }
@@ -16,7 +16,7 @@ const rgba = (c, a) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
 
 // cloudy marble in a rectangle: its ground, soft patches a shade lighter and darker, veins along
 // its grain that wander and now and then branch, a few fine hairs
-function marble(g, r, x0, y0, w, h, o) {
+export function marble(g, r, x0, y0, w, h, o) {
   const grain = o.grain !== undefined ? o.grain : r() * Math.PI;
   g.save();
   g.beginPath();

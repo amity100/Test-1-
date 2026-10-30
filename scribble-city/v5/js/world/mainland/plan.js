@@ -266,8 +266,8 @@ export const PLACES = [
   { id: 'marina', kind: 'mall', name: 'Marina Market', heb: 'מרינה מרקט', at: [-668, -330] },
   // (mega: the giant one, world/mainland/megamall.js - the map shows it big, at any zoom; at its dome,
   // in the middle of its three blocks)
-  { id: 'galleria', kind: 'mall', mega: true, name: 'Downtown Galleria', heb: 'הגלריה של דאונטאון', block: '1,8', at: [-835, -37] },
-  { id: 'lanes', kind: 'mall', name: 'Via Inkwell', heb: 'ויה אינקוול — הסמטאות של הגלריה', block: '1,9', at: [-835, 97] },
+  { id: 'galleria', kind: 'mall', mega: true, name: 'Bayview Mall', heb: 'ביי־ויו מול', block: '1,8', at: [-835, -37] },
+  { id: 'lanes', kind: 'mall', name: 'Via Inkwell', heb: 'ויה אינקוול — הסמטאות של ביי־ויו מול', block: '1,9', at: [-835, 97] },
   { id: 'starlight', kind: 'mall', name: 'Starlight Center', heb: 'מרכז סטארלייט', block: '6,3' },
   { id: 'valleyplaza', kind: 'mall', name: 'Valley Plaza', heb: 'ואלי פלאזה', block: '9,9' },
   { id: 'neonink', kind: 'club', name: 'NEON INK', heb: 'מועדון ניאון אינק', block: '2,3' },

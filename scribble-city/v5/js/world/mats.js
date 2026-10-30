@@ -3,6 +3,7 @@ import { makeSurface, srgb, hex, canvasTexture } from '../render/materials.js';
 import { streetTexture, paverTexture, frondTexture, aveTexture, crossTexture, asphaltTexture, crosswalkTexture, tileTexture, glintTexture, floorTexture, goodsTexture, GOODS_CELLS, sandTexture, woodDeckTexture } from './paint.js';
 import { canvas } from './kit.js';
 import { hallMarble, hallMedallion, hallCoffer, hallFrieze, decoStone, drawnSky, laneArt, storeFloor } from './hallpaint.js';
+import { bayFloor, baySigns, bayArt, baySky, bayWater, bayTrunk } from './bayart.js';
 
 // The pens of the city, made once. Most of them take their colour from the parts (a colour per
 // vertex), so a hundred pink and mint and yellow buildings are one material, drawn per chunk.
@@ -93,9 +94,9 @@ export function cityMaterials() {
     // (ROADMAP 11.31) a mall's great hall under its glass roof: the same, in daylight - white and
     // even, its stone and gold their own colours (not a room's warm lamps); its marble floor. (Their
     // obj given: the pens made after them keep the dice they always had)
-    hallBox: B({ obj: 0.137, kind: 'box', vcolor: true, indoor: 'hall', wash: 0.75, density: 0.72 }),
-    hallCyl: B({ obj: 0.208, kind: 'cyl', vcolor: true, indoor: 'hall', partR: 0.1, wash: 0.75, density: 0.72 }),
-    hallGloss: B({ obj: 0.279, kind: 'box', vcolor: true, indoor: 'hall', gloss: 0.6, wash: 0.78, density: 0.72 }),
+    hallBox: B({ obj: 0.137, kind: 'box', vcolor: true, indoor: 'hall', wash: 0.68, density: 0.72 }),
+    hallCyl: B({ obj: 0.208, kind: 'cyl', vcolor: true, indoor: 'hall', partR: 0.1, wash: 0.68, density: 0.72 }),
+    hallGloss: B({ obj: 0.279, kind: 'box', vcolor: true, indoor: 'hall', gloss: 0.6, wash: 0.7, density: 0.72 }),
     hallLamp: B({ obj: 0.350, kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.97, 0.92), emissive: new THREE.Color(2.0, 2.0, 2.0), indoor: 'hall', line: 0.4 }),
     // (ROADMAP 11.32: polished - the hall upside down in it, render/glsl.js uUseRefl 2 - its pens
     // lighter)
@@ -124,7 +125,7 @@ export function cityMaterials() {
   M.hallFrieze = B({ obj: 0.243, kind: 'wall', map: hallFrieze(), vcolor: true, indoor: 'hall', gloss: 0.15, wash: 0.82, density: 0.6, line: 0.5 });
   // (the walls between the stores and over them: the floor's white marble, laid on the world in
   // squares of 4.8 m, polished)
-  M.hallMarbleWall = B({ obj: 0.314, kind: 'wall', map: M.hallFloor.uniforms.uMap.value, worldMap: 4.8, vcolor: true, indoor: 'hall', gloss: 0.3, wash: 0.85, density: 0.55, line: 0.5 });
+  M.hallMarbleWall = B({ obj: 0.314, kind: 'wall', map: M.hallFloor.uniforms.uMap.value, worldMap: 4.8, vcolor: true, indoor: 'hall', gloss: 0.3, wash: 0.76, density: 0.55, line: 0.5 });
   // (and its art deco outside's stone, laid on the world in squares of 3 m)
   M.decoStone = B({ obj: 0.385, kind: 'wall', map: decoStone(), worldMap: 3, vcolor: true, wash: 0.7, density: 0.8 });
   // (ROADMAP 11.34) the sky painted over Via Inkwell's lanes (hallpaint.js drawnSky), by day and by
@@ -135,6 +136,31 @@ export function cityMaterials() {
     M[k] = B({ kind: 'neon', map: t, emMap: t, color: srgb(1, 1, 1), emissive: new THREE.Color(1.0, 1.0, 1.0), line: 0.15, noShadow: true, side: THREE.DoubleSide });
   }
   M.roofLight = B({ kind: 'wall', vcolor: true, noShadow: true });
+  // (v5, ROADMAP 13.2) BAYVIEW MALL's own pens (world/mainland/bayview.js, world/bayart.js): its floor
+  // of marble on the diagonal, polished, the hall in it; its stores' boards and its pictures (the
+  // banners, the screens, the crown over the waterfall) lit by themselves; the sunset through its
+  // dome, by day and by night; the water of the waterfall sliding down it; its brass, its hanging
+  // green, its bulbs
+  M.bayFloor = B({ kind: 'ground', map: bayFloor(), worldMap: 6.4, vcolor: true, indoor: 'hall', refl: 2, gloss: 0.14, ang: 0.4, wash: 0.72, density: 0.5, line: 0.5 });
+  // (the galleries' floors over the atrium: the same marble, cream and sand, quieter than the hall's
+  // black; glossy, but not the hall's mirror - its dome would lie on them in pools of sunset)
+  M.bayFloorUp = B({ kind: 'ground', map: bayFloor(true), worldMap: 6.4, vcolor: true, indoor: 'hall', gloss: 0.22, ang: 0.4, wash: 0.72, density: 0.55, line: 0.5 });
+  M.bayTrunk = B({ kind: 'cyl', map: bayTrunk(), partR: 0.3, ang: 0.15, objMask: true, indoor: 'hall', wash: 0.8 });
+  M.baySignSet = baySigns();
+  M.baySign = B({ kind: 'neon', map: M.baySignSet.tex, emMap: M.baySignSet.tex, color: srgb(1, 1, 1), emissive: new THREE.Color(1.35, 1.35, 1.35), line: 0.2, noShadow: true });
+  M.bayArtSet = bayArt();
+  M.bayArt = B({ kind: 'neon', map: M.bayArtSet.tex, emMap: M.bayArtSet.tex, color: srgb(1, 1, 1), emissive: new THREE.Color(1.25, 1.25, 1.25), line: 0.2, noShadow: true });
+  M.bayBanner = B({ kind: 'wall', map: M.bayArtSet.tex, emMap: M.bayArtSet.tex, color: srgb(1, 1, 1), emissive: new THREE.Color(0.55, 0.55, 0.55), indoor: 'hall', side: THREE.DoubleSide, wash: 0.85, density: 0.45, line: 0.45 });
+  M.bayLogo = B({ kind: 'neon', map: M.bayArtSet.tex, emMap: M.bayArtSet.tex, alphaTest: 0.2, color: srgb(1, 1, 1), emissive: new THREE.Color(2.2, 2.1, 1.9), line: 0.1, noShadow: true });
+  for (const [k, night] of [['baySky', false], ['baySkyNight', true]]) {
+    const t = baySky(night);
+    M[k] = B({ kind: 'neon', map: t, emMap: t, color: srgb(1, 1, 1), emissive: new THREE.Color(1.0, 1.0, 1.0), line: 0.12, noShadow: true, side: THREE.DoubleSide });
+  }
+  const water = bayWater();
+  M.bayWater = B({ kind: 'neon', map: water, emMap: water, color: srgb(1, 1, 1), emissive: new THREE.Color(1.15, 1.25, 1.4), line: 0.15, noShadow: true, scroll: [0, 0.42] });
+  M.bayGold = B({ kind: 'box', vcolor: true, indoor: 'hall', gloss: 0.85, wash: 0.7, density: 0.6, line: 0.5 });
+  M.bayVine = B({ kind: 'leaf', vcolor: true, indoor: 'hall', ang: 0.7, line: 0.55, side: THREE.DoubleSide, noShadow: true });
+  M.bayBulb = B({ kind: 'neon', vcolor: true, emVColor: true, color: srgb(1, 0.9, 0.7), emissive: new THREE.Color(3.2, 3.2, 3.2), line: 0, noShadow: true });
   // (its artists' alley: the murals on its walls, the sketches on the easels and the lines)
   M.laneArt = B({ kind: 'wall', map: laneArt(), color: srgb(1, 1, 1), side: THREE.DoubleSide, line: 0.35, wash: 0.75 });
   M.floors = {};

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { civilianLook, kidLook, elderLook, modest } from './looks.js';
 import { lightList } from '../render/materials.js';
 import { CURB } from '../world/mainland/plan.js';
+import { MallCrowd } from './mallcrowd.js';
 
 // (v5, ROADMAP 11.17) The people of the malls. When you come near one of the mainland's malls
 // (world/mainland/mall.js) its hall fills with shoppers: they come in at the doors, stroll down
@@ -365,6 +366,7 @@ export class MallLife {
     }
     for (const [m, st] of this.active) {
       this.tick(m, st, dt);
+      if (st.crowd) st.crowd.tick(dt);
       if (m.mega) this.machines(m, st, dt);
       else if (m.sky) this.skyOf(m);
     }
@@ -605,6 +607,7 @@ export class MallLife {
       e.done = false;
     }
     for (const k of m.kiosks || []) k.busy = null;
+    st.crowd = null;
     this.active.delete(m);
   }
 
@@ -995,8 +998,17 @@ export class MallLife {
       }
       case 'fountain': {
         const f = m.fountain;
-        const ang = Math.random() * Math.PI * 2;
+        // (BAYVIEW's pool has the waterfall at its back: round the half before it)
+        const ang = m.bay ? Math.PI * (1.12 + Math.random() * 0.76) : Math.random() * Math.PI * 2;
         a.at = { x: f.x + Math.cos(ang) * (f.r + 0.8), z: f.z + Math.sin(ang) * (f.r + 0.8) };
+        this.go(s, a.at.x, a.at.z);
+        break;
+      }
+      case 'car': {
+        const q = pick(m.cars);
+        a.car = q;
+        const ang = Math.random() * Math.PI * 2;
+        a.at = { x: q.x + Math.cos(ang) * (q.r + 1.5), z: q.z + Math.sin(ang) * (q.r + 1.5) };
         this.go(s, a.at.x, a.at.z);
         break;
       }
@@ -1099,6 +1111,24 @@ export class MallLife {
         return this.atFood(s, a, dt);
       case 'bench':
         return this.atBench(s, a);
+      case 'car': {
+        // (a look at it turning on its stand; a picture of it on the phone)
+        c.faceYaw = Math.atan2(a.car.x - c.pos.x, a.car.z - c.pos.z);
+        if (!a.snap && s.t > 1.2 && Math.random() < 0.5) {
+          a.snap = true;
+          a.had = c.fig.carry;
+          c.fig.carry = 'phone';
+        }
+        if (s.t > 0.8 && !a.said && Math.random() < 0.006) {
+          a.said = true;
+          this.say(c, pick(['Wow, look at that car!', 'I want one!', 'Is that real gold?', 'Take my picture with it!', 'How much is it?!']));
+        }
+        if (s.t > (a.stay || (a.stay = 5 + Math.random() * 7))) {
+          if (a.snap) c.fig.carry = a.had || null;
+          this.next(s);
+        }
+        return null;
+      }
       case 'fountain':
         c.faceYaw = Math.atan2(s.m.fountain.x - c.pos.x, s.m.fountain.z - c.pos.z);
         if (s.t > 0.5 && !a.said && Math.random() < 0.004) {
@@ -1719,6 +1749,8 @@ export class MallLife {
     const B = this.budgetOf(m);
     // (the top floor's own walk grid round the food court's tables)
     if (m.fcz) st.nav2 = new HallNav(game.world.collision, { x0: m.hall.x0, z0: m.fcz[0], x1: m.hall.x1, z1: m.fcz[1] + 1 }, 0.5, CURB + m.levels[fcLv(m)]);
+    // (ROADMAP 13.2: BAYVIEW's crowd, over and above them - game/mallcrowd.js)
+    if (m.crowdSpots) st.crowd = new MallCrowd(game, m, st.nav);
     // (the lifts' gates: open where the cabin stands)
     for (const L of m.lifts || []) for (let k = 0; k < L.gates.length; k++) L.gates[k].alive = !(L.state === 'open' && k === L.at);
     const n0 = Math.round(B * 0.5);
@@ -1825,6 +1857,8 @@ export class MallLife {
       else if (r < 0.73 && m.kiosks && m.kiosks.length) P.push({ kind: 'kiosk' });
       else if (r < 0.83 && m.benches.length) P.push({ kind: 'bench' });
       else if (r < 0.89 && m.directories && m.directories.length) P.push({ kind: 'map' });
+      // (ROADMAP 13.2: BAYVIEW MALL's cars on their stands - a look, a picture)
+      else if (r < 0.95 && m.cars && m.cars.length) P.push({ kind: 'car' });
       else P.push({ kind: 'fountain' });
     }
     P.push({ kind: 'leave' });
@@ -2013,6 +2047,19 @@ export class MallLife {
   }
 
   upWay(m, lv, a, b) {
+    // (ROADMAP 13.2: round BAYVIEW's oval - along the line in front of the stores on its side, to
+    // the other side round by the nearer end)
+    if (m.oval) {
+      const h = m.hall;
+      const lx = (p) => (p.x < m.oval.cx ? h.x0 + 1.4 : h.x1 - 1.4);
+      const la = lx(a);
+      const lb = lx(b);
+      if (la === lb) return [{ x: la, z: a.z }, { x: la, z: b.z }, { x: b.x, z: b.z }];
+      const zs = m.bridges.filter((br) => br.lv.includes(lv)).map((br) => (br.z0 + br.z1) / 2);
+      let zb = zs[0];
+      for (const z of zs) if (Math.abs(a.z - z) + Math.abs(b.z - z) < Math.abs(a.z - zb) + Math.abs(b.z - zb)) zb = z;
+      return [{ x: la, z: a.z }, { x: la, z: zb }, { x: lb, z: zb }, { x: lb, z: b.z }, { x: b.x, z: b.z }];
+    }
     const h = m.hall;
     const gW = h.x0 + 1.1;
     const gE = h.x1 - 1.1;
@@ -2061,7 +2108,8 @@ export class MallLife {
         const g = pick(gs);
         const z0 = lv === fcLv(m) && m.fcz ? Math.max(g.z0, m.fcz[1] + 1) : g.z0;
         q.g = g;
-        this.goLv(s, g.rx, z0 + Math.random() * (g.z1 - z0));
+        const z = z0 + Math.random() * (g.z1 - z0);
+        this.goLv(s, m.railX ? m.railX(g.side, z) + g.side * 0.32 : g.rx, z);
         return true;
       }
       case 'bench': {
@@ -2140,7 +2188,7 @@ export class MallLife {
         const g = q.g;
         q.stay = q.stay || 5 + Math.random() * 6;
         c.faceYaw = g.side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        const rx = g.side < 0 ? m.void.x0 : m.void.x1;
+        const rx = m.railX ? m.railX(g.side, c.pos.z) : g.side < 0 ? m.void.x0 : m.void.x1;
         s.hand = s.hand || new THREE.Vector3();
         s.handL = s.handL || new THREE.Vector3();
         s.hand.set(rx, c.pos.y + 1.04, c.pos.z - g.side * 0.24);
@@ -2304,6 +2352,24 @@ export class MallLife {
     this.liftsRun(m, dt);
     this.carry(m, dt);
     this.dance(m, dt);
+    // (ROADMAP 13.2: BAYVIEW's cars turning on their stands; its screens turning over to the next face)
+    for (const q of m.cars || []) q.yaw += q.spin * dt;
+    if (m.screens && m.screens.length && m.screens[0].mesh) {
+      const ads = this.game.world.mainM && this.game.world.mainM.bayArtSet ? this.game.world.mainM.bayArtSet.ads : null;
+      for (const sc of m.screens) {
+        sc.t -= dt;
+        if (sc.t > 0 || !ads) continue;
+        sc.t = 7 + Math.random() * 5;
+        sc.k = (sc.k + 1) % ads.length;
+        const r = ads[sc.k];
+        const uv = sc.mesh.geometry.attributes.uv;
+        // (the quad's corners in the order picQuad made them, world/mainland/bayview.js)
+        const u0 = Math.min(uv.getX(0), uv.getX(1), uv.getX(2), uv.getX(3));
+        const v0 = Math.min(uv.getY(0), uv.getY(1), uv.getY(2), uv.getY(3));
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) <= u0 + 1e-6 ? r[0] : r[2], uv.getY(i) <= v0 + 1e-6 ? r[1] : r[3]);
+        uv.needsUpdate = true;
+      }
+    }
     // (the sky through the glass of the roof and the dome: by day, by night)
     if (m.sky) this.skyOf(m);
   }
@@ -2413,6 +2479,21 @@ export class MallLife {
     for (let k = 0; k < (F.show || []).length; k++) {
       const l = lights[F.show[k]];
       if (l && l.c && l.c.setHSL) l.c.setHSL((t * 0.04 + k * 0.25) % 1, 0.85, 0.55);
+    }
+  }
+
+  // (ROADMAP 13.2) what the malls near draw every frame: BAYVIEW's cars on their stands
+  draw() {
+    const cars = this.game.cars;
+    if (!cars) return;
+    const cam = this.game.camera.position;
+    for (const st of this.active.values()) if (st.crowd) st.crowd.draw();
+    for (const m of this.active.keys()) {
+      if (!m.cars) continue;
+      for (const q of m.cars) {
+        if (Math.hypot(q.x - cam.x, q.z - cam.z) > 140) continue;
+        cars.draw('sports', q.color, q.x, q.y, q.z, q.yaw, {});
+      }
     }
   }
 

@@ -813,6 +813,8 @@ uniform float uUvScale;
 // place on the surface), not by its uvs - a stone's courses on boxes of any size
 uniform float uWorldMap;
 uniform float uIndoor;   // a room under its lamps (no sun, warm light); 2 a mall's hall, 3 a store in it, 4 a dark hall under its neon, 5 a casino's floor under its gold
+// (ROADMAP 13.2) a picture sliding over its surface, so many of its widths a second (the mall's waterfall)
+uniform vec2 uScroll;
 uniform float uCells;    // a texture of stacked cells: v = cell * 64 + v in the cell (shelves of goods)
 uniform float uNeonMask; // the neon sign atlas: r is the tube, g its white-hot core
 uniform float uMatOn;    // a drawing turning into a thing: the sweep that brings its colours
@@ -938,7 +940,7 @@ void main() {
 #ifdef USE_MAPSET
       tex = penPicture(vUv);
 #else
-      tex = texture(uMap, uWorldMap > 0.0 ? p / uWorldMap : vUv, uMipBias);
+      tex = texture(uMap, uWorldMap > 0.0 ? p / uWorldMap : vUv + uScroll * uTime, uMipBias);
 #endif
     }
     if (uNeonMask > 0.5) tex = vec4(mix(vCol, vec3(1.0), tex.g * 0.55), tex.r);
@@ -993,21 +995,22 @@ void main() {
   vec3 pts = (probe & 4) != 0 ? vec3(0.0) : pointLights(vWP, N);
   vec3 key = uSunCol;
   if (hall) {
-    // the great hall: the daylight through the glass over it, white and even, the most on what
-    // faces up, a little cooler in the shade; its stone and gold their own colours
+    // (ROADMAP 13.2) BAYVIEW MALL's halls: the golden hour through the tinted glass of its dome -
+    // gold from above, a warm rose in the shade, its colours rich; its stone, its brass and its neon
+    // their own
     float up = N.y * 0.5 + 0.5;
-    amb = mix(vec3(0.6, 0.63, 0.7), vec3(0.9, 0.92, 0.96), up);
-    key = vec3(1.0, 0.98, 0.95) * 0.62;
-    light = clamp(0.42 + 0.48 * up, 0.0, 1.0);
-    // (at night the glass over it is dark: the hall under its own lamps, an evening light, low and
-    // warm - the stores' white light, their names and their lines of colour glowing out of it, as
-    // the street's shops do at night (ROADMAP 11.48). uLitK, the share of the city's windows lit, is
+    alb = saturateC(alb, 1.28);
+    amb = mix(vec3(0.54, 0.37, 0.33), vec3(1.0, 0.8, 0.56), up);
+    key = vec3(1.0, 0.78, 0.52) * 0.56;
+    light = clamp(0.4 + 0.5 * up, 0.0, 1.0);
+    // (at night the dome is violet over it: the hall under its own lamps, warm, lower - the stores,
+    // their names and the neon glowing out of it. uLitK, the share of the city's windows lit, is
     // how dark it is)
     float nk = smoothstep(0.4, 1.6, uLitK);
-    amb *= 1.0 - 0.86 * nk;
-    key = mix(key, vec3(1.0, 0.84, 0.66) * 0.22, nk);
-    // (its lamps' own pools of light kept, softer: they do not flood it)
-    pts *= 1.0 - 0.45 * nk;
+    amb *= 1.0 - 0.52 * nk;
+    key = mix(key, vec3(1.0, 0.72, 0.46) * 0.34, nk);
+    // (its lamps' own pools of light kept)
+    pts *= 1.0 - 0.15 * nk;
   } else if (casino) {
     float up = N.y * 0.5 + 0.5;
     amb = mix(vec3(0.26, 0.12, 0.08), vec3(0.62, 0.44, 0.26), up);
@@ -1046,7 +1049,7 @@ void main() {
   if (uOvercast > 0.0) hi *= 1.0 - uOvercast;
   // pictures (shop windows, signs, murals) and glass keep their own light
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
-  vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv, uMipBias).rgb : vec3(1.0));
+  vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv + uScroll * uTime, uMipBias).rgb : vec3(1.0));
   // a room glows a little out into the evening
   if (inside) em += alb * (hall || store ? vec3(0.07) : casino ? vec3(0.06, 0.04, 0.02) : club ? vec3(0.03, 0.02, 0.05) : vec3(0.32, 0.2, 0.1));
   if (uNeonMask > 0.5) em = uEmissive * tex.rgb;
@@ -1064,7 +1067,7 @@ void main() {
     vec3 R = reflect(-V, N);
     float fr = mix(0.08, 1.0, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0)) * uGloss;
     vec3 env = skyColor(R);
-    if (hall) env = mix(vec3(0.72, 0.75, 0.82), vec3(1.0, 1.0, 1.02), R.y * 0.5 + 0.5) * (1.0 - 0.7 * smoothstep(0.4, 1.6, uLitK));
+    if (hall) env = mix(vec3(0.62, 0.42, 0.38), vec3(1.0, 0.86, 0.62), R.y * 0.5 + 0.5) * (1.0 - 0.6 * smoothstep(0.4, 1.6, uLitK));
     else if (store) env = mix(vec3(0.62, 0.62, 0.64), vec3(1.0, 0.99, 0.96), R.y * 0.5 + 0.5);
     else if (casino) env = mix(vec3(0.3, 0.14, 0.06), vec3(1.0, 0.8, 0.5), R.y * 0.5 + 0.5);
     else if (club) env = mix(vec3(0.12, 0.08, 0.22), vec3(0.55, 0.35, 0.8), R.y * 0.5 + 0.5);
@@ -1091,7 +1094,7 @@ void main() {
     // (ROADMAP 11.32) polished stone, a mall's great hall's floor: the hall upside down in it, a
     // little soft, the more the lower you look across it, and the pens lighter over it. The mirror
     // is this floor's only while the camera is over it (render/pipeline.js floorMirror: on a
-    // computer); otherwise the hall's light in it - the glass roof's white, the stores' darker band
+    // computer); otherwise the hall's light in it - the golden glass over it, the stores' darker band
     // low across it
     float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
     vec3 r;
@@ -1108,7 +1111,7 @@ void main() {
     } else {
       vec3 R = reflect(-V, N);
       float nk = smoothstep(0.4, 1.6, uLitK);
-      r = mix(vec3(0.55, 0.56, 0.62), vec3(1.0, 0.99, 0.96), smoothstep(0.05, 0.85, R.y)) * (1.0 - 0.6 * nk);
+      r = mix(vec3(0.52, 0.37, 0.36), vec3(1.0, 0.86, 0.62), smoothstep(0.05, 0.85, R.y)) * (1.0 - 0.6 * nk);
       k = 0.12 + 0.5 * fr;
     }
     lit = mix(lit, r, k);

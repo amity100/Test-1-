@@ -7,6 +7,8 @@ import { palm } from '../palms.js';
 import { bench } from '../blocks.js';
 import { CURB } from './plan.js';
 import { STORE_NAMES, NEONS, FONTS, ADS, PROMO, KIOSKS, DARK, WHITE, foodTable, trayStation, planter, dressFront, kiosk, pod, bin, screenTotem, sign, banner, directory } from './mall.js';
+import { hangingGreen, palmLights, luxuryBanner, nameBoard, BAY_KIND, BAY_LEAVES } from './bayview.js';
+import { BAY_SIGNS } from '../bayart.js';
 
 // (v5, ROADMAP 11.30 - 11.32) The Downtown Galleria, the city's great mall, after The Galleria in
 // Houston and the Galleria in Milan it took its vault from: three halls side by side on three
@@ -26,7 +28,7 @@ import { STORE_NAMES, NEONS, FONTS, ADS, PROMO, KIOSKS, DARK, WHITE, foodTable, 
 // keeper, its people (game/mall.js, game/streetlife.js); the escalators carry you and the lifts take
 // you up (game/mall.js MallRide).
 
-const FH = 5.4; // floor to floor
+export const FH = 5.4; // floor to floor
 const GW = 5; // the galleries' width
 const SD = 11; // the hall's stores, deep (out to the building's side; their rooms end in front of its
 // stone - ROADMAP 11.42: inside a store you see its own back wall, not the stone of the outside)
@@ -60,6 +62,12 @@ const NIGHT_SKY = srgb(0.03, 0.04, 0.11);
 // (low down through the vault's glass, the sky paler: by day, by night)
 const SKY_LOW = srgb(0.64, 0.76, 0.9);
 const NIGHT_LOW = srgb(0.08, 0.09, 0.19);
+// (ROADMAP 13.2: BAYVIEW's halls - the sunset through their glass, gold low down into rose and violet
+// over them; at night violet low down, the night over it)
+const BAY_LOW = srgb(1, 0.72, 0.42);
+const BAY_SKY = srgb(0.62, 0.36, 0.7);
+const BAY_NLOW = srgb(0.32, 0.13, 0.3);
+const BAY_NSKY = srgb(0.06, 0.05, 0.16);
 
 // (the hall's stores' fronts: a real mall's - white, cream, stone, and the deep colours of the
 // grand names: black, navy, emerald, wine, walnut)
@@ -86,7 +94,7 @@ const EXTRA = {
 
 // a great name in neon - from the city's picture of them if it has room for it, else lettered in
 // lit strokes (world/letters.js): the mall's names are never missing
-function bigName(bctx, f, text, uc, vc, w, len, col, o = {}) {
+export function bigName(bctx, f, text, uc, vc, w, len, col, o = {}) {
   const r = bctx.neon && bctx.neon.add(text, { font: o.font || 'Caveat', size: o.size || 75 });
   if (r) {
     neonSign(bctx, f, text, uc, vc, w, len, col, o);
@@ -97,14 +105,14 @@ function bigName(bctx, f, text, uc, vc, w, len, col, o = {}) {
 }
 
 // (one name, one hand: a store's name is lettered alike wherever it is - fewer signs to keep)
-function fontOf(name) {
+export function fontOf(name) {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return FONTS[h % FONTS.length];
 }
 
 // a ctx whose things stand dy higher (a floor of the mall): its batch, its walls
-function liftCtx(ctx, dy, B = ctx.B) {
+export function liftCtx(ctx, dy, B = ctx.B) {
   if (!dy && B === ctx.B) return ctx;
   const LB = {
     add: (mat, geo, matrix = null, id = nextId(), o = {}) => {
@@ -126,7 +134,7 @@ function liftCtx(ctx, dy, B = ctx.B) {
 }
 
 // faces turned inside out (a dome seen from under it)
-function flip(g) {
+export function flip(g) {
   const ix = g.index;
   if (ix) {
     const a = ix.array;
@@ -215,15 +223,19 @@ function* wing(bctx, b, o) {
   const hallGeo = (mat, g, col) => IN.B.add(mat, g, null, nextId(), { color: col });
   const col = bctx.col;
   // (the hall's own things - its palms and trees in the hall's light)
-  const hctx = { ...bctx, B: bctx.R, M: Object.assign(Object.create(M), { trunk: M.hallTrunk, frond: M.hallFrond, nut: M.hallNut, canopy: M.hallCanopy }) };
+  // (ROADMAP 13.2: o.bay - a hall of BAYVIEW MALL either side of its great one, in its style: its
+  // marble on the diagonal, its palms wound with lights, its green hanging from the galleries, its
+  // banners, its stores' boards, the sunset through its glass - world/mainland/bayview.js)
+  const BAY = !!o.bayStyle;
+  const hctx = { ...bctx, B: bctx.R, M: Object.assign(Object.create(M), { trunk: BAY ? M.bayTrunk : M.hallTrunk, frond: M.hallFrond, nut: M.hallNut, canopy: M.hallCanopy }) };
   // (the sky seen through the glass from under it - the hall's roof, the crown, the bridges': two
   // of it, by day and by night - game/mall.js shows the one the hour wants; in a pen of the
   // street's: the rooms' pens light themselves up at night, the sky must not)
   const skyD = new Batch();
   const skyN = new Batch();
   const sky = (geo, t = 1) => {
-    skyD.add(M.neonSoft, geo.clone(), null, nextId(), { color: SKY_LOW.clone().lerp(SKY, t) });
-    skyN.add(M.neonSoft, geo, null, nextId(), { color: NIGHT_LOW.clone().lerp(NIGHT_SKY, t) });
+    skyD.add(M.neonSoft, geo.clone(), null, nextId(), { color: BAY ? BAY_LOW.clone().lerp(BAY_SKY, t) : SKY_LOW.clone().lerp(SKY, t) });
+    skyN.add(M.neonSoft, geo, null, nextId(), { color: BAY ? BAY_NLOW.clone().lerp(BAY_NSKY, t) : NIGHT_LOW.clone().lerp(NIGHT_SKY, t) });
   };
   // (ROADMAP 11.46) a pane of stained glass: the day lighting it from behind, at night the hall's
   // own lamps (a pane a part: the inker draws its lead round it)
@@ -298,7 +310,7 @@ function* wing(bctx, b, o) {
     const uv = g.attributes.uv;
     const p = g.attributes.position;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) / 4.8, -p.getZ(i) / 4.8);
-    bctx.R.add(M.hallFloor, g, null, nextId(), { color: colr });
+    bctx.R.add(BAY ? (y > CURB + 1 ? M.bayFloorUp : M.bayFloor) : M.hallFloor, g, null, nextId(), { color: BAY ? srgb(1, 1, 1) : colr });
   };
   // (ROADMAP 11.32) the ceilings under the galleries, the bridges and the food court: smooth, a light
   // let in every 1.6 m (hallpaint.js hallCoffer), from the edge x0, z0
@@ -337,14 +349,16 @@ function* wing(bctx, b, o) {
   // a band of polished black granite along the stores' fronts, black lines across now and then; in
   // the court rings of black and white, hallpaint.js)
   for (const s of [-1, 1]) {
+    if (BAY) break;
     const x0 = s < 0 ? hx0 : hx1 - 0.6;
     hall(M.hallPolish, x0, CURB + 0.004, bz0 + 1, x0 + 0.6, CURB + 0.012, bz1 - 1, GRANITE);
   }
   for (let z = bz0 + 9; z < bz1 - 4; z += 9) {
+    if (BAY) break;
     if (z > zc0 - 1 && z < zc1 + 1) continue;
     hall(M.hallPolish, hx0 + 0.6, CURB + 0.004, z - 0.15, hx1 - 0.6, CURB + 0.013, z + 0.15, GRANITE);
   }
-  {
+  if (!BAY) {
     const g = new THREE.CircleGeometry(1, 96).rotateX(-Math.PI / 2);
     g.scale(9.2, 1, 11.5);
     g.translate(cx, CURB + 0.01, zm);
@@ -521,6 +535,24 @@ function* wing(bctx, b, o) {
   railX(zN, hx0, hx1, LV[1], []);
   for (const lv of UP) railX(zS, hx0, hx1, LV[lv], []);
   yield;
+  // (ROADMAP 13.2: BAYVIEW's green hanging over the galleries' edges, strung with little lights -
+  // not where a bridge or a lift's gate meets them; world/mainland/bayview.js hangingGreen)
+  if (BAY) {
+    for (const lv of UP) {
+      for (const s of [-1, 1]) {
+        const ex = s < 0 ? vx0 : vx1;
+        const pts = [];
+        for (let z = zN + 0.6; z < zS - 0.6; z += 0.9) {
+          if (bridges.some((br) => br.lv.includes(lv) && z > br.z0 - 0.7 && z < br.z1 + 0.7)) continue;
+          if (lifts.some((l) => l.side === s && Math.abs(l.z - z) < 1.3)) continue;
+          if (lv === TL && z < FC1 + 0.6) continue;
+          pts.push({ x: ex - s * 0.08, z, vx: -s, vz: 0, y: LV[lv] });
+        }
+        hangingGreen({ hallGeo, IN, M }, pts, !!bctx.low, r);
+      }
+      yield;
+    }
+  }
 
   // ------------------------------------------------------------------ the stores
   const names = new Map();
@@ -530,6 +562,17 @@ function* wing(bctx, b, o) {
     names.set(kind, n + 1);
     return list[(n + (b.seed % 3)) % list.length];
   };
+  // (ROADMAP 13.2: in BAYVIEW's style the store's name on its board - world/bayart.js BAY_SIGNS - one
+  // of the names of its kind there, not the great hall's own houses)
+  const HERO = new Set(['SOLARA', 'TIDAL', 'VELORA', 'MONARCH', 'AZURE', 'PALM & PLATE']);
+  const bayUse = new Map();
+  const bayNameOf = (kind) => {
+    const list = BAY_SIGNS.map((q) => q.name).filter((n) => BAY_KIND[n] === kind && !HERO.has(n));
+    if (!list.length) return null;
+    const k = bayUse.get(kind) || 0;
+    bayUse.set(kind, k + 1);
+    return list[(k + b.seed) % list.length];
+  };
   const decks = o.stores || {};
   const deckOf = (lv, side) => decks[`L${lv}${side < 0 ? 'w' : 'e'}`] || (decks[`L${lv}${side < 0 ? 'w' : 'e'}`] = []);
   // a store on the hall at floor lv (side -1: the west row, its front facing east), from za to zb
@@ -537,13 +580,15 @@ function* wing(bctx, b, o) {
     const L = zb - za;
     const dy = LV[lv] - CURB;
     const f = side < 0 ? new LiftFacade(hx0, zb, 0, -1, 1, 0, dy) : new LiftFacade(hx1, za, 0, 1, -1, 0, dy);
-    const name = o2.name || nameOf(kind);
+    const board = BAY && !food && !o2.name ? bayNameOf(kind) : null;
+    const name = o2.name || (board ? board.charAt(0) + board.slice(1).toLowerCase() : nameOf(kind));
     const colr = hex(HALL_FRONTS[Math.floor(r() * HALL_FRONTS.length)]);
     const info = { doors: [], shops: [], f, L, top: 3.55 };
     const shop = storefront(bctx, f, 0.25, L - 0.25, {
       kind, name, color: o2.color || colr, depth: food ? 7 : SD - SKIN - 0.02, signCol: o2.signCol || NEONS[Math.floor(r() * NEONS.length)], font: o2.font || fontOf(name),
-      awning: food ? 'box' : 'none', awCol: hex(NEONS[Math.floor(r() * NEONS.length)]), sign: o2.sign || (r() < 0.5 ? 'box' : undefined), signV: 4.3, signLen: Math.min(L - 1.2, o2.signLen || 5), doorAt: food ? 0.5 : 0.3 + r() * 0.4,
+      awning: food ? 'box' : 'none', awCol: hex(NEONS[Math.floor(r() * NEONS.length)]), sign: board ? 'none' : o2.sign || (r() < 0.5 ? 'box' : undefined), signV: 4.3, signLen: Math.min(L - 1.2, o2.signLen || 5), doorAt: food ? 0.5 : 0.3 + r() * 0.4,
     }, info);
+    if (board) nameBoard({ IN, M }, f, L, board);
     // the pilaster between this front and the next, up to the floor above; the fascia over the
     // front (the store's name stands out from it): polished white marble, a reveal of champagne
     // under the fascia, a skirting of black granite along the front's foot (ROADMAP 11.32)
@@ -848,7 +893,7 @@ function* wing(bctx, b, o) {
   yield;
 
   // ------------------------------------------------------------------ the grand court
-  court(bctx, c, mall, hctx, { cx, zm, vx0, vx1, hx0, hx1, zc0, zc1, ROOF, DOME, LV, kind: o.court || 'fountain' }, r);
+  court(bctx, c, mall, hctx, { cx, zm, vx0, vx1, hx0, hx1, zc0, zc1, ROOF, DOME, LV, kind: o.court || 'fountain', bay: BAY }, r);
   yield;
   // the lifts: glass cabins riding up and down their rails (moved by game/mall.js)
   for (const l of lifts) mall.lifts.push(lift(bctx, c, l.x, l.z, l.side, LV, ROOF));
@@ -934,7 +979,10 @@ function* wing(bctx, b, o) {
   for (const [x, z, h] of [[cx + 2.0, zN + 15, 6.5], [cx - 2.0, sUp[1] + 6.5, 13], [cx + 5.4, sUp[1] + 12.5, 0], [cx - 5.4, zN + 25, 0], [cx + 5.4, zS - 11, 0]]) {
     if (!clear(x - 1.3, z - 1.3, x + 1.3, z + 1.3)) continue;
     planter(hctx, x, z, true);
-    if (h) palm(hctx, r, x, z, h + r() * 1.5, { y0: CURB + 0.6, royal: srgb(0.82, 0.8, 0.76) });
+    if (h) {
+      const p = palm(hctx, r, x, z, h + r() * 1.5, { y0: CURB + 0.6, royal: BAY ? undefined : srgb(0.82, 0.8, 0.76), lean: BAY ? 0.25 : undefined });
+      if (BAY) palmLights({ hallGeo, M }, { x, z, y0: CURB + 0.6, top: p.top }, !!bctx.low);
+    }
     else tree(hctx, x, z, CURB + 0.6, 4.2 + r() * 1.2, r);
   }
   // (ROADMAP 11.32) the hall's breadth: down either side of the void a row of royal palms in their
@@ -946,7 +994,8 @@ function* wing(bctx, b, o) {
       if (bridges.some((br) => z + 4 > br.z0 && z - 4 < br.z1)) continue;
       if (!clear(x - 1.3, z - 1.3, x + 1.3, z + 1.3)) continue;
       planter(hctx, x, z, true);
-      palm(hctx, r, x, z, 11 + r() * 3, { y0: CURB + 0.6, royal: srgb(0.82, 0.8, 0.76) });
+      const p = palm(hctx, r, x, z, 11 + r() * 3, { y0: CURB + 0.6, royal: BAY ? undefined : srgb(0.82, 0.8, 0.76), lean: BAY ? 0.25 : undefined });
+      if (BAY) palmLights({ hallGeo, M }, { x, z, y0: CURB + 0.6, top: p.top }, !!bctx.low);
       const bx = x - s * 1.9;
       const by = s > 0 ? Math.PI / 2 : -Math.PI / 2;
       bench(hctx, bx, z, by);
@@ -973,7 +1022,10 @@ function* wing(bctx, b, o) {
     const words = ['SALE', 'SUMMER', '-50%', 'NEW IN', 'NEW SEASON', '2 FOR 1', 'OPEN', '-30%'];
     let k = 0;
     for (const z of [FC1 + 4.5, sUp[1] + 4, zS - 6]) {
-      for (const s of [-1, 1]) banner(hctx, IN, hall, cx + s * 4.6, z, ROOF + 0.3, k++ % 2 ? srgb(0.06, 0.06, 0.08) : srgb(0.05, 0.26, 0.21), k % 3 ? WHITE : srgb(1, 0.85, 0.45), words[(k + b.seed) % words.length]);
+      for (const s of [-1, 1]) {
+        if (BAY) luxuryBanner({ hall, IN, M }, cx + s * 4.6, z, ROOF + 0.3, 9, 0, 1);
+        else banner(hctx, IN, hall, cx + s * 4.6, z, ROOF + 0.3, k++ % 2 ? srgb(0.06, 0.06, 0.08) : srgb(0.05, 0.26, 0.21), k % 3 ? WHITE : srgb(1, 0.85, 0.45), words[(k + b.seed) % words.length]);
+      }
     }
   }
   // benches along the rails on the upper floors, facing the stores (no planters of trailing green
@@ -1024,6 +1076,36 @@ function* wing(bctx, b, o) {
   // ------------------------------------------------------------------ where the people go
   for (const s of mall.stores) mall.spots.push({ x: s.door[0] + s.nx * 0.4, z: s.door[2] + s.nz * 0.4, yaw: s.face + Math.PI, shop: s, window: { x: s.win[0], z: s.win[2] } });
   for (const s of mall.upStores) mall.upSpots.push({ x: s.door[0] + s.nx * 0.5, z: s.door[2] + s.nz * 0.5, y: LV[s.level] - CURB, lv: s.level, yaw: s.face + Math.PI, shop: s, window: { x: s.win[0], z: s.win[2] } });
+  // (ROADMAP 13.2: BAYVIEW's crowd in this hall too - game/mallcrowd.js: the ground floor's sights it
+  // walks between - before the stores either side, down the middle, round the court - up on the
+  // galleries along them and back, and at their rails looking down; half the great hall's)
+  if (BAY) {
+    mall.crowdScale = 0.5;
+    mall.crowdSpots = [];
+    for (const s of mall.stores) if (r() < 0.55) mall.crowdSpots.push({ x: s.door[0] + s.nx * 1.8, z: s.door[2] + s.nz * 1.8 });
+    for (let z = zN + 5; z < zS - 3; z += 7) {
+      if (z > zc0 - 1 && z < zc1 + 1) continue;
+      for (const dx of [-2.4, 2.4]) mall.crowdSpots.push({ x: cx + dx, z });
+    }
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + 0.3;
+      mall.crowdSpots.push({ x: cx + Math.cos(a) * 7.6, z: zm + Math.sin(a) * 7.6 });
+    }
+    mall.crowdLoops = [];
+    mall.railSpots = [];
+    for (const g of mall.galleries) {
+      const z0 = g.lv === TL ? Math.max(g.z0, FC1 + 1) : g.z0;
+      if (g.z1 - z0 < 6) continue;
+      const xm = (g.x + g.rx) / 2;
+      mall.crowdLoops.push({ lv: g.lv, pts: [[xm, z0], [xm, g.z1]] });
+      for (let z = z0 + 2; z < g.z1 - 2; z += 2.8) {
+        if (bridges.some((br) => br.lv.includes(g.lv) && z > br.z0 - 1 && z < br.z1 + 1)) continue;
+        if (lifts.some((l) => l.side === g.side && Math.abs(l.z - z) < 2)) continue;
+        if (r() < 0.6) continue;
+        mall.railSpots.push({ lv: g.lv, x: g.rx, z, yaw: g.side < 0 ? Math.PI / 2 : -Math.PI / 2 });
+      }
+    }
+  }
   mall.zm = zm;
   mall.bins = mall.bins.filter((q) => q.y === undefined);
   yield;
@@ -1033,7 +1115,7 @@ function* wing(bctx, b, o) {
 // one flight: its lane x0..x1, from its foot (zf, yf) to its top (zt, yt) - the steel body under it,
 // the steps (solid underfoot, a box a step), the glass sides with the black handrails along them,
 // the comb plates at both ends. What game/mall.js needs to carry you on it comes back.
-function flight(c, x0, x1, zf, yf, zt, yt, n = 18) {
+export function flight(c, x0, x1, zf, yf, zt, yt, n = 18) {
   const { hall, hallGeo, IN, col } = c;
   const dir = Math.sign(zt - zf);
   const run = Math.abs(zt - zf);
@@ -1079,7 +1161,7 @@ function flight(c, x0, x1, zf, yf, zt, yt, n = 18) {
 
 // a glass rail along z (axis 'z', at x) or along x (axis 'x', at z) from a to b on a floor at y:
 // the pane, the steel rail over it, a post every two metres; solid to whoever walks into it
-function rail(c, axis, at, a, b, y) {
+export function rail(c, axis, at, a, b, y) {
   const { hall, IN, col } = c;
   if (b - a < 0.08) return;
   const P = (x0, y0, z0, x1, y1, z1) => (axis === 'z' ? [at + x0, y0, a + z0, at + x1, y1, a + z1] : [a + z0, y0, at + x0, a + z1, y1, at + x1]);
@@ -2138,7 +2220,8 @@ function court(bctx, c, mall, hctx, g, r) {
     const z = zm + dz;
     const pg = new THREE.CylinderGeometry(1.55, 1.45, 0.7, 24);
     pg.translate(x, y + 0.35, z);
-    hallGeo(IN.cyl, pg, srgb(0.95, 0.9, 0.82));
+    // (ROADMAP 13.2: in BAYVIEW's style its planters are dark stone, as the great hall's)
+    hallGeo(g.bay ? IN.gloss : IN.cyl, pg, g.bay ? srgb(0.12, 0.11, 0.13) : srgb(0.95, 0.9, 0.82));
     const soil = new THREE.CylinderGeometry(1.42, 1.42, 0.04, 24);
     soil.translate(x, y + 0.68, z);
     hallGeo(IN.box, soil, srgb(0.36, 0.26, 0.2));
@@ -2147,10 +2230,18 @@ function court(bctx, c, mall, hctx, g, r) {
     glowR.translate(x, y + 0.6, z);
     hallGeo(IN.lamp, glowR, LIGHT_GOLD);
     col.addCircle(x, z, 1.55, 0, y + 0.7, 'prop');
-    palm(hctx, r, x, z, (g.kind === 'palms' ? 17 : 15) + r() * 3, { y0: y + 0.7, royal: srgb(0.86, 0.84, 0.8), lean: 0.25 });
-    // (a ring of flowers round its foot)
+    const pq = palm(hctx, r, x, z, (g.kind === 'palms' ? 17 : 15) + r() * 3, { y0: y + 0.7, royal: g.bay ? undefined : srgb(0.86, 0.84, 0.8), lean: 0.25 });
+    if (g.bay) palmLights({ hallGeo, M }, { x, z, y0: y + 0.7, top: pq.top }, !!bctx.low);
+    // (a ring of flowers round its foot - in BAYVIEW's, leaves and blossom, as round the great hall's
+    // palms)
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2;
+      if (g.bay) {
+        const gl = new THREE.SphereGeometry(0.3 + r() * 0.14, 7, 5);
+        gl.translate(x + Math.cos(a) * 0.98, y + 0.8, z + Math.sin(a) * 0.98);
+        hallGeo(M.hallCanopy, gl, k % 3 ? BAY_LEAVES[k % BAY_LEAVES.length] : [srgb(0.95, 0.35, 0.55), srgb(1, 0.6, 0.3), srgb(0.95, 0.85, 0.4)][(k / 3) % 3]);
+        continue;
+      }
       hall(IN.box, x + Math.cos(a) * 1.15 - 0.07, y + 0.7, z + Math.sin(a) * 1.15 - 0.07, x + Math.cos(a) * 1.15 + 0.07, y + 0.86, z + Math.sin(a) * 1.15 + 0.07, [srgb(0.98, 0.5, 0.65), srgb(0.98, 0.9, 0.4), WHITE, srgb(0.7, 0.5, 0.95)][k % 4]);
     }
     for (const s of [-1, 1]) {
@@ -2439,7 +2530,7 @@ const VIT = [
   [srgb(1, 0.9, 0.7), srgb(0.12, 0.12, 0.14), srgb(0.95, 0.85, 0.6)],
   [srgb(0.97, 0.97, 0.98), srgb(0.2, 0.2, 0.22), srgb(0.8, 0.62, 0.3)],
 ];
-function vitrines(bctx, f, L, y, r, skip) {
+export function vitrines(bctx, f, L, y, r, skip) {
   const M = bctx.M;
   const B = bctx.B;
   const MOD = 6.4;
@@ -2472,7 +2563,7 @@ function vitrines(bctx, f, L, y, r, skip) {
 // ------------------------------------------------------------------ the building's mass, with holes
 // a box from x0 to x1, z0 to z1, y0 to y1 with holes through it across x (the passages to the other
 // wing: [{ z0, z1, y0, y1 }]) - as the boxes round them
-function holed(B, mat, x0, x1, z0, z1, y0, y1, colr, hs, col = null) {
+export function holed(B, mat, x0, x1, z0, z1, y0, y1, colr, hs, col = null) {
   const zs = [z0, z1];
   for (const h of hs) for (const z of [h.z0, h.z1]) if (z > z0 && z < z1) zs.push(z);
   zs.sort((a, b) => a - b);
@@ -2504,7 +2595,7 @@ function holed(B, mat, x0, x1, z0, z1, y0, y1, colr, hs, col = null) {
 // up past the roof in threes, white and gold light on their edges; a band of gold along the
 // parapet, its top lit. o.skip: [u0, u1, floor] left bare (a bridge leaves there, a name hangs
 // there); o.fins: [u0, u1] with no fins (false: none at all)
-function decoFront(bctx, f, L, o) {
+export function decoFront(bctx, f, L, o) {
   const M = bctx.M;
   const { LV, ROOF, TOP } = o;
   const from = o.from || 1;
@@ -2548,7 +2639,7 @@ function decoFront(bctx, f, L, o) {
 // a round tower on a corner (its middle x, z, its radius): from over the ground floor's shops up
 // past the roof - ivory, a ribbon of dark glass a floor, gold rings between; under it a soffit with
 // its lamps; on it a stepped crown, rings of gold light, a spire
-function drum(bctx, x, z, rad, LV, ROOF, TOP) {
+export function drum(bctx, x, z, rad, LV, ROOF, TOP) {
   const M = bctx.M;
   const B = bctx.B;
   const y0 = LV[1] - 0.3;
@@ -2594,7 +2685,7 @@ function drum(bctx, x, z, rad, LV, ROOF, TOP) {
 }
 
 // a shade tree in a planter in the hall (a ficus, trimmed round): its trunk, its crown in clumps
-function tree(ctx, x, z, y0, h, r) {
+export function tree(ctx, x, z, y0, h, r) {
   const M = ctx.M;
   const t = new THREE.CylinderGeometry(0.11, 0.18, h * 0.6, 8);
   t.translate(x, y0 + h * 0.3, z);
@@ -2611,7 +2702,7 @@ function tree(ctx, x, z, y0, h, r) {
 
 // (shapes for the crown: walls round a ring of points, a flat ring between two of them - each
 // triangle turned to face the way it is wanted)
-function faceTri(pos, a, b, c, w) {
+export function faceTri(pos, a, b, c, w) {
   const ux = b[0] - a[0];
   const uy = b[1] - a[1];
   const uz = b[2] - a[2];
@@ -2622,7 +2713,7 @@ function faceTri(pos, a, b, c, w) {
   if (n >= 0) pos.push(...a, ...b, ...c);
   else pos.push(...a, ...c, ...b);
 }
-function posGeo(pos) {
+export function posGeo(pos) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.computeVertexNormals();
