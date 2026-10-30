@@ -98,8 +98,6 @@ function heroKit() {
   };
 }
 function frontZ(x, y) {
-  // (a real head's face: its front as it was measured - render/folkshapes.js surfaceOf)
-  if (KIT.front) return KIT.front(x, y);
   const headSdf = KIT.sdf;
   let lo = -0.02;
   let hi = 0.16;
@@ -113,23 +111,6 @@ function frontZ(x, y) {
 }
 function headNormal(x, y, z, out) {
   const e = 0.0015;
-  if (KIT.front) {
-    const f = KIT.front;
-    const zx0 = f(x - e, y);
-    const zx1 = f(x + e, y);
-    const zy0 = f(x, y - e);
-    const zy1 = f(x, y + e);
-    if (zx0 !== null && zx1 !== null && zy0 !== null && zy1 !== null) {
-      out[0] = -(zx1 - zx0) / (2 * e);
-      out[1] = -(zy1 - zy0) / (2 * e);
-      out[2] = 1;
-      const L = Math.hypot(out[0], out[1], out[2]);
-      out[0] /= L;
-      out[1] /= L;
-      out[2] /= L;
-      return out;
-    }
-  }
   const headSdf = KIT.sdf;
   out[0] = headSdf(x + e, y, z) - headSdf(x - e, y, z);
   out[1] = headSdf(x, y + e, z) - headSdf(x, y - e, z);
@@ -142,6 +123,8 @@ function headNormal(x, y, z, out) {
 }
 // a point of the face (head frame, from the front), lifted off the skin
 function facePt(x, y, lift = 0.0015) {
+  // (a real head's: found on its face where its drawing has the point - render/folkshapes.js)
+  if (KIT.facePt) return KIT.facePt(x, y, lift);
   const z = frontZ(x, y);
   if (z === null) return null;
   const n = headNormal(x, y, z, [0, 0, 0]);

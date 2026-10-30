@@ -687,7 +687,7 @@ export class PersonRenderer {
       beardInk: spec.beardCol ? dark(spec.beardCol).map((v) => v * 0.8) : null,
       rows: Ln.rows, skirt: Ln.skirt,
       // (their real head's face, and how they look: render/folkshapes.js surfaceOf, folkspec.js expr)
-      front: Ln.front, mono: !!spec.eyes.mono,
+      facePt: Ln.facePt, mono: !!spec.eyes.mono,
       smile: { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[spec.expr] || 0, half: spec.expr === 'half', gape: spec.gape || 0,
       top: inkOf(spec.top), bottom: inkOf(spec.bottom),
       hair: dark(spec.hair.dark).map((v) => v * 0.6), hairHi: hexRGB(spec.hair.light[0]),

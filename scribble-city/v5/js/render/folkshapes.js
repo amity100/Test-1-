@@ -28,9 +28,101 @@ function base() {
     const q = unb64(HEAD.pos, Int16Array);
     const pos = new Float32Array(q.length);
     for (let i = 0; i < q.length; i++) pos[i] = q[i] * HEAD.q;
-    BASE = { pos, idx: unb64(HEAD.idx, Uint16Array) };
+    const idx = unb64(HEAD.idx, Uint16Array);
+    // (the drawing laid on the base head from the front: every head moved from it keeps these
+    // places, so its face's drawing moves with its features, as a skin does)
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+    faceMap(g);
+    BASE = { pos, idx, uv: g.attributes.uv.array, front: frontIds(pos, idx) };
   }
   return BASE;
+}
+// the base face's front: at each millimetre of it, the triangle nearest ahead - so that a point of
+// the face's drawing is found on any head moved from it (facePtOf)
+const FG = { x0: -0.1, y0: -0.13, n: 200, m: 300, d: 0.001 };
+function frontIds(P, I) {
+  const fz = new Float32Array(FG.n * FG.m).fill(-1);
+  const tri = new Int32Array(FG.n * FG.m).fill(-1);
+  for (let k = 0; k < I.length; k += 3) {
+    const a = I[k] * 3;
+    const b = I[k + 1] * 3;
+    const c = I[k + 2] * 3;
+    const xs = [P[a], P[b], P[c]];
+    const ys = [P[a + 1], P[b + 1], P[c + 1]];
+    const zs = [P[a + 2], P[b + 2], P[c + 2]];
+    const den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2]);
+    if (Math.abs(den) < 1e-12) continue;
+    const i0 = Math.max(0, Math.floor((Math.min(...xs) - FG.x0) / FG.d));
+    const i1 = Math.min(FG.n - 1, Math.ceil((Math.max(...xs) - FG.x0) / FG.d));
+    const j0 = Math.max(0, Math.floor((Math.min(...ys) - FG.y0) / FG.d));
+    const j1 = Math.min(FG.m - 1, Math.ceil((Math.max(...ys) - FG.y0) / FG.d));
+    for (let j = j0; j <= j1; j++) {
+      const py = FG.y0 + (j + 0.5) * FG.d;
+      for (let i = i0; i <= i1; i++) {
+        const px = FG.x0 + (i + 0.5) * FG.d;
+        const w0 = ((ys[1] - ys[2]) * (px - xs[2]) + (xs[2] - xs[1]) * (py - ys[2])) / den;
+        const w1 = ((ys[2] - ys[0]) * (px - xs[2]) + (xs[0] - xs[2]) * (py - ys[2])) / den;
+        const w2 = 1 - w0 - w1;
+        if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
+        const z = w0 * zs[0] + w1 * zs[1] + w2 * zs[2];
+        const o = j * FG.n + i;
+        if (z > fz[o]) {
+          fz[o] = z;
+          tri[o] = k;
+        }
+      }
+    }
+  }
+  return tri;
+}
+// a point of the face's drawing (x, y on the base face, from the front) on a head moved from it,
+// lifted off its skin: { p, n } - or null off the face
+function facePtOf(pos, nor, eyes) {
+  const B = base();
+  return (x, y, lift = 0.0015) => {
+    const i = Math.floor((x - FG.x0) / FG.d);
+    const j = Math.floor((y - FG.y0) / FG.d);
+    if (i < 0 || j < 0 || i >= FG.n || j >= FG.m) return null;
+    const k = B.front[j * FG.n + i];
+    if (k < 0) return null;
+    const P = B.pos;
+    const v = [B.idx[k], B.idx[k + 1], B.idx[k + 2]];
+    const xs = v.map((q) => P[q * 3]);
+    const ys = v.map((q) => P[q * 3 + 1]);
+    const den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2]);
+    const w0 = ((ys[1] - ys[2]) * (x - xs[2]) + (xs[2] - xs[1]) * (y - ys[2])) / den;
+    const w1 = ((ys[2] - ys[0]) * (x - xs[2]) + (xs[0] - xs[2]) * (y - ys[2])) / den;
+    const w = [w0, w1, 1 - w0 - w1];
+    const p = [0, 0, 0];
+    const n = [0, 0, 0];
+    for (let t = 0; t < 3; t++) {
+      for (let c = 0; c < 3; c++) {
+        p[c] += pos[v[t] * 3 + c] * w[t];
+        n[c] += nor[v[t] * 3 + c] * w[t];
+      }
+    }
+    const L = Math.hypot(n[0], n[1], n[2]) || 1;
+    for (let c = 0; c < 3; c++) n[c] /= L;
+    // (in the eye's opening the eye itself is ahead of the socket: on its ball, as far into it as
+    // the point is into the base head's)
+    const E = eyes[x > 0 ? 0 : 1];
+    const ex = x - Math.sign(x) * EYE.x;
+    const ey = y - EYE.y;
+    const ez = EYE.r * EYE.r - ex * ex - ey * ey;
+    if (ez > 0 && E[2] + Math.sqrt(ez) > p[2]) {
+      const zz = Math.sqrt(ez);
+      p[0] = E[0] + ex;
+      p[1] = E[1] + ey;
+      p[2] = E[2] + zz;
+      n[0] = ex / EYE.r;
+      n[1] = ey / EYE.r;
+      n[2] = zz / EYE.r;
+    }
+    for (let c = 0; c < 3; c++) p[c] += n[c] * lift;
+    return { p, n };
+  };
 }
 // their head's points: the base's, moved by each target by its weight (spec.morph: { name: weight };
 // a name without its side - cheek-, eye-, ear- - is both of them)
@@ -52,28 +144,40 @@ export function headOf(spec) {
       }
     }
   }
-  return { pos, idx: B.idx };
+  // (the eyes go with their sockets: each moved as the head round it was)
+  const eyes = [1, -1].map((sd) => {
+    const c = [sd * EYE.x, EYE.y, EYE.z];
+    const m = [0, 0, 0];
+    let n = 0;
+    for (let i = 0; i < B.pos.length; i += 3) {
+      if (Math.hypot(B.pos[i] - c[0], B.pos[i + 1] - c[1], B.pos[i + 2] - c[2]) > 0.022) continue;
+      for (let k = 0; k < 3; k++) m[k] += pos[i + k] - B.pos[i + k];
+      n++;
+    }
+    return c.map((v, k) => v + (n ? m[k] / n : 0));
+  });
+  return { pos, idx: B.idx, eyes };
 }
 function headGeo(H) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(H.pos, 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array((H.pos.length / 3) * 2), 2));
+  g.setAttribute('uv', new THREE.BufferAttribute(base().uv.slice(), 2));
   g.setIndex(new THREE.BufferAttribute(H.idx, 1));
   g.computeVertexNormals();
-  faceMap(g);
   return g;
 }
 // the eyes: two balls in their sockets, the drawing's eyes on their fronts
 const EYE = { x: 0.032, y: 0.0185, z: 0.072, r: 0.0155 };
-function eyesGeo() {
-  const one = (sd) => {
+function eyesGeo(eyes) {
+  const one = (sd, c) => {
     const g = new THREE.SphereGeometry(EYE.r, 22, 16);
+    // (the drawing's eye laid on it where the base head has it, then the ball into its socket)
     g.translate(sd * EYE.x, EYE.y, EYE.z);
+    faceMap(g);
+    g.translate(c[0] - sd * EYE.x, c[1] - EYE.y, c[2] - EYE.z);
     return g;
   };
-  const g = merge([one(1), one(-1)]);
-  faceMap(g);
-  return g;
+  return merge([one(1, eyes[0]), one(-1, eyes[1])]);
 }
 
 // The head's surface as the hair and the lines want it: how far out from its middle in each
@@ -193,14 +297,15 @@ for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4 - i; j++) SAMPLES.push([i / 
 // ------------------------------------------------------------------ glasses
 // thin metal frames: a rim round each eye, the bridge over the nose, the temples back over the
 // skull to the tops of the ears (round: round rims; else a soft rectangle)
-function glassesGeo(Sf, G, earTops) {
+function glassesGeo(Sf, G, earTops, eyes) {
   const r = 0.0011;
   const parts = [];
   const tube = (pts, closed, n) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(q[0], q[1], q[2])), closed), n, r, 5, closed);
   const frontAt = (x, y) => Sf.front(x, y) ?? 0.09;
   for (const sd of [1, -1]) {
-    const cx = sd * EYE.x;
-    const cy = 0.0175;
+    const E = eyes[sd > 0 ? 0 : 1];
+    const cx = E[0];
+    const cy = E[1] - 0.001;
     const z0 = Math.max(frontAt(cx, cy), frontAt(cx, 0.035)) + 0.012;
     const rim = [];
     for (let i = 0; i < 16; i++) {
@@ -212,7 +317,7 @@ function glassesGeo(Sf, G, earTops) {
     }
     parts.push(tube(rim, true, 32));
     // the temple: from the rim's outer edge back along the side of the skull to the ear
-    const tx = sd * 0.0535;
+    const tx = cx + sd * 0.0215;
     const top = earTops[sd > 0 ? 0 : 1];
     const pts = [[tx, 0.022, z0 - 0.004]];
     for (const t of [0.3, 0.6, 0.85]) {
@@ -579,7 +684,7 @@ export function folkBody(k) {
   const style = spec.hair.style;
   const parts = {
     head: headGeo(H),
-    eyes: eyesGeo(),
+    eyes: eyesGeo(H.eyes),
     hair: hairCapGeo(kit, headR),
   };
   const lockList = locksOf(style, R);
@@ -592,7 +697,8 @@ export function folkBody(k) {
     const q = at(i);
     return [q[0] + (e ? -0.002 : 0.002), q[1] - 0.004, q[2]];
   });
-  if (spec.glasses) parts.glasses = glassesGeo(Sf, spec.glasses, HEAD.earTop.map(at));
+  if (spec.glasses) parts.glasses = glassesGeo(Sf, spec.glasses, HEAD.earTop.map(at), H.eyes);
+  const facePt = facePtOf(H.pos, parts.head.attributes.normal.array, H.eyes);
   // their body: a belly, a chest, their limbs thicker or slighter
   const B = { belly: 0, chest: 0, thick: 0, ...(spec.body || {}) };
   const trunk = (rows) => rows.map(([y, w, df, db, z = 0, n = 2]) => {
@@ -646,7 +752,7 @@ export function folkBody(k) {
       locks,
       rows: { torso: T, pelvis: PEL, upper: UP, fore: FO, thigh: TH, shin, neck: NECK },
       skirt: dress ? skirtRows(0.6) : null,
-      front: Sf.front,
+      facePt,
     },
     lobes,
   };
