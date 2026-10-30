@@ -65,9 +65,11 @@ export class HeroArt {
     this.painters = folk === null ? PAINTERS : FOLK_PAINTERS;
     const q = folk === null ? (touch ? 0.5 : 1) : touch ? 0.36 : 0.5;
     const n = folk === null ? [touch ? 4 : 6, touch ? 3 : 4, touch ? 2 : 3, touch ? 2 : 3, 2] : [touch ? 3 : 4, 2, 2, 2, 1];
+    const qf = folk === null ? q : touch ? 0.5 : 1;
     this.sets = {
       // (the face's picture as tall as FACE has it, the head and the neck: render/heroink.js)
-      face: { w: 640 * q, h: Math.round((640 * q * FACE.H) / FACE.W), n: n[0], list: [] },
+      // (the city's people's faces as fine as his - ROADMAP 13.6: drawn with care, they are the person)
+      face: { w: 640 * qf, h: Math.round((640 * qf * FACE.H) / FACE.W), n: n[0], list: [] },
       hair: { w: 512 * q, h: 512 * q, n: n[1], list: [] },
       jacket: { w: 1024 * q, h: 1024 * q, n: n[2], list: [] },
       pants: { w: 1024 * q, h: 1024 * q, n: n[3], list: [] },

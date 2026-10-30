@@ -238,7 +238,7 @@ function head() {
     line(K.feature, [[sd * 0.019, 0.0181], [sd * 0.027, 0.0226], [sd * 0.036, 0.0236], [sd * 0.0451, 0.0197]], { w: 2.7, a: 0.92 });
     line(K.feature, [[sd * 0.0195, 0.0178], [sd * 0.031, 0.0153], [sd * 0.045, 0.0192]], { w: 1.3, a: 0.6, near: true });
     line(K.feature, [[sd * 0.0325, 0.0207], [sd * 0.0329, 0.0168]], { w: 3.6, a: 0.95, col: [0.09, 0.055, 0.03] });
-    line(K.feature, [[sd * 0.021, 0.0262], [sd * 0.033, 0.0288], [sd * 0.0445, 0.0258]], { w: 1.4, a: 0.55, near: true, col: SEPIA_D });
+    if (!KIT.mono) line(K.feature, [[sd * 0.021, 0.0262], [sd * 0.033, 0.0288], [sd * 0.0445, 0.0258]], { w: 1.4, a: 0.55, near: true, col: SEPIA_D });
     // the brow: its mass, then its hairs
     const bz = (t) => {
       const a = (1 - t) * (1 - t);
@@ -267,7 +267,15 @@ function head() {
   }
   line(K.feature, [[-0.009, -0.031], [0, -0.0322], [0.009, -0.031]], { w: 2, a: 0.65 });
   // the mouth: the line between the lips, its corners a little down; the shade under the lower lip
-  line(K.feature, [[-0.0245, -0.0538], [-0.012, -0.0519], [0, -0.0522], [0.012, -0.0519], [0.0245, -0.0538]], { w: 2.6, a: 0.92 });
+  // (a smile lifts its corners - one of them, a half-smile; a laugh: the lips apart)
+  const sm = KIT.smile || 0;
+  const half = KIT.half ? 0.12 : 1;
+  const cw = 0.0245 * (1 + 0.1 * sm);
+  const my = (x) => -0.0522 - 0.0016 * (1 - sm) * (Math.abs(x) / cw) ** 3 + sm * (x > 0 ? 1 : half) * 0.0062 * (x / cw) ** 2;
+  if (KIT.gape) {
+    line(K.feature, [-1, -0.5, 0, 0.5, 1].map((u) => [u * cw, my(u * cw) + 0.0016 * KIT.gape * (1 - u * u)]), { w: 1.8, a: 0.8 });
+    line(K.feature, [-0.8, -0.4, 0, 0.4, 0.8].map((u) => [u * cw, my(u * cw) - 0.0085 * KIT.gape * (1 - u * u) ** 0.8]), { w: 1.6, a: 0.7 });
+  } else line(K.feature, [-1, -0.5, 0, 0.5, 1].map((u) => [u * cw, my(u * cw)]), { w: 2.6, a: 0.92 });
   line(K.feature, [[-0.011, -0.0635], [0, -0.0645], [0.011, -0.0635]], { w: 1.8, a: 0.5, col: SEPIA_D });
   // the forehead's lines, the furrow between the brows
   if (!fem) for (const y of [0.054, 0.063]) line(K.feature, [[-0.026, y], [0, y + 0.0012], [0.026, y]], { w: 1.2, a: 0.35, near: true, col: SEPIA_D });
@@ -317,6 +325,25 @@ function head() {
   for (const L of LOCKS) {
     P.add(K.hair, L.mid, L.n, { w: 2.0, a: 0.9, col: HAIR });
     P.add(K.hair, L.edge, L.n, { w: 1.3, a: 0.75, col: HAIR });
+  }
+  // (ROADMAP 13.6: one of the city's people's own face - every stroke moved into its shape, as their
+  // head was: render/folkshapes.js warpOf)
+  const w = KIT.warp;
+  if (w) {
+    for (const list of P.by) {
+      for (const st of list) {
+        const n0 = st.n;
+        const m0 = st.mid;
+        st.n = KIT.warpN(w, m0, n0);
+        st.mid = w(m0[0], m0[1], m0[2]);
+        for (let i = 0; i < st.np; i++) {
+          const q = w(st.pts[i * 3], st.pts[i * 3 + 1], st.pts[i * 3 + 2]);
+          st.pts[i * 3] = q[0];
+          st.pts[i * 3 + 1] = q[1];
+          st.pts[i * 3 + 2] = q[2];
+        }
+      }
+    }
   }
   return P;
 }

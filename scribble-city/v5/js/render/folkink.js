@@ -13,14 +13,17 @@ const specOf = (o) => (typeof o.spec === 'number' ? FOLK[o.spec] : o.spec);
 // ------------------------------------------------------------------ the face's shape in tone
 // where the face is in shadow whatever the light - as the hero's (heroink.js faceTone), the jaw a
 // woman's or a man's
-export function folkTone(x, y, fem) {
+export function folkTone(x, y, fem, sh = null) {
   const ax = Math.abs(x);
+  // (ROADMAP 13.6: the face's own shape - full cheeks lit, hollow ones deeper; a heavy jaw's corners)
+  const full = sh ? sh.cheeks || 0 : 0;
+  const jaw = sh ? sh.jaw || 1 : 1;
   let t = 0;
   t += (fem ? 0.42 : 0.55) * blob(ax, y, 0.032, 0.024, 0.021, 0.011); // the sockets
   t += (fem ? 0.22 : 0.4) * blob(ax, y, 0.031, 0.031, 0.02, 0.0055); // under the brow
   t += 0.38 * blob(ax, y, 0.0115, 0.002, 0.0045, 0.022); // the sides of the nose
   t += 0.45 * blob(x, y, 0, -0.032, 0.013, 0.0045); // under the nose
-  t += (fem ? 0.26 : 0.4) * blob(ax, y, 0.05, -0.034, 0.013, 0.026); // the hollows of the cheeks
+  t += (fem ? 0.26 : 0.4) * Math.max(0.15, 1 - 0.75 * full) * blob(ax, y, 0.05, -0.034, 0.013, 0.026); // the hollows of the cheeks
   t += 0.4 * blob(ax, y, 0.066, 0.032, 0.012, 0.03); // the temples
   t += 0.42 * blob(x, y, 0, -0.066, 0.016, 0.0055); // under the lower lip
   t += 0.55 * smooth(0.05, 0.076, ax) * (1 - smooth(-0.11, -0.13, y)); // round the sides
@@ -40,7 +43,9 @@ export function folkTone(x, y, fem) {
     t += 0.6 * smooth(-0.2, -0.235, y);
   }
   t += 0.32 * smooth(0.066, 0.09, y); // the hair's shadow on the forehead
-  if (!fem) t += 0.3 * blob(ax, y, 0.047, -0.079, 0.012, 0.016); // the jaw's corners
+  if (!fem) t += (0.3 + 0.5 * Math.max(0, jaw - 1)) * blob(ax, y, 0.047, -0.079, 0.012, 0.016); // the jaw's corners
+  // (a round full face: its sides turning away soft and wide)
+  if (full > 0) t += 0.2 * full * smooth(0.055, 0.075, ax) * (1 - smooth(-0.1, -0.12, y));
   return Math.min(1, t);
 }
 
@@ -50,6 +55,12 @@ export function folkTone(x, y, fem) {
 export function folkBeard(x, y, kind) {
   if (!kind) return 0;
   const ax = Math.abs(x);
+  // (a moustache alone: thick over the upper lip, down a little past its corners)
+  if (kind === 'mustache') {
+    const top = -0.029 - 0.004 * smooth(0.008, 0.026, ax);
+    const bot = -0.0465 - 0.007 * smooth(0.018, 0.03, ax);
+    return Math.max(0, Math.min(1, smooth(top + 0.002, top - 0.003, y) * smooth(bot - 0.002, bot + 0.002, y) * (1 - smooth(0.029, 0.034, ax))));
+  }
   const lift = kind === 'shadow' ? 0 : kind === 'short' ? 0.012 : 0.006;
   const edge = (ax > 0.066 ? 0.026 : ax > 0.052 ? -0.022 + ((ax - 0.052) / 0.014) * 0.048 : ax > 0.03 ? -0.04 + ((ax - 0.03) / 0.022) * 0.018 : -0.041) + lift * smooth(0.02, 0.05, ax);
   let s = smooth(edge + 0.003, edge - 0.006, y);
@@ -81,6 +92,10 @@ export function paintFolkFace(c, o = {}) {
   const h = new Hand(g, o.seed || 1, s);
   const R = h.R;
   const age = P.lines || 0;
+  // (ROADMAP 13.6) how they look: a smile lifts the mouth's corners and the cheeks, narrows the eyes
+  const ex = P.expr || 'neutral';
+  const smile = { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[ex] || 0;
+  const gape = ex === 'laugh' ? 1 : ex === 'smile' ? 0.3 : 0;
   // (as many strokes in a smaller picture, each smaller: the same drawing)
   const N = (n) => n;
   // ---- the skin; its pencil grain
@@ -110,7 +125,7 @@ export function paintFolkFace(c, o = {}) {
     g.fillRect(0, ya, W, yb - ya);
   }
   // ---- the shadows: the warm dark first, then the cool across it, deepest where it is deepest
-  const tone = (px, py) => folkTone(xm(px), ym(py), fem);
+  const tone = (px, py) => folkTone(xm(px), ym(py), fem, P.shape);
   const neckK = (py) => smooth(-0.112, -0.132, ym(py));
   const soft = fem ? 0.8 : 1;
   h.hatch(0, 0, W, H, N(7600), (px, py) => tone(px, py) * 1.15 * soft * (1 - neckK(py)), 1.0, 28, 1.8, S.sh1, 0.55);
@@ -148,12 +163,12 @@ export function paintFolkFace(c, o = {}) {
     const kind = P.beard;
     const B = P.beardCol || ['#22160f', '#2c1e16', '#1a120c'];
     const st = (px, py) => folkBeard(xm(px), ym(py), kind);
-    const growth = (px, py) => Math.PI / 2 + xm(px) * 9 * (ym(py) > -0.07 ? 1 : 0.4);
-    const dens = kind === 'shadow' ? 0.55 : kind === 'short' ? 1.0 : 0.9;
+    const growth = kind === 'mustache' ? (px) => Math.PI / 2 + Math.sign(xm(px)) * (0.25 + Math.abs(xm(px)) * 14) : (px, py) => Math.PI / 2 + xm(px) * 9 * (ym(py) > -0.07 ? 1 : 0.4);
+    const dens = kind === 'shadow' ? 0.55 : kind === 'short' || kind === 'mustache' ? 1.0 : 0.9;
     // (a beard's mass first: its shade under the hairs)
     if (kind !== 'shadow') h.hatch(0, 0, W, H, N(5200), (px, py) => st(px, py) * 0.95, 1.3, 16, 2.0, B, 0.42, 0.6);
     h.hatch(0, 0, W, H, N(2200), (px, py) => st(px, py) * 0.85 * dens, 1.25, 20, 1.6, ['#6a5a6a', '#5a4a58', '#7a6a70'], 0.26);
-    h.ticks(0, 0, W, H, N(kind === 'shadow' ? 16000 : 34000), (px, py) => st(px, py) * 0.62 * dens, growth, kind === 'shadow' ? 3.6 : 5.6, kind === 'shadow' ? 1.1 : 1.4, B, kind === 'shadow' ? 0.6 : 0.82, 0.7);
+    h.ticks(0, 0, W, H, N(kind === 'shadow' ? 16000 : 34000), (px, py) => st(px, py) * 0.62 * dens, growth, kind === 'shadow' ? 3.6 : kind === 'mustache' ? 7.5 : 5.6, kind === 'shadow' ? 1.1 : kind === 'mustache' ? 1.7 : 1.4, B, kind === 'shadow' ? 0.6 : 0.82, 0.7);
     if (kind !== 'shadow') h.ticks(0, 0, W, H, N(9000), (px, py) => st(px, py) * 0.5, growth, 2.4, 1.5, B.slice(-2), 0.7, 1.5);
   }
   // ---- the eyes
@@ -163,7 +178,7 @@ export function paintFolkFace(c, o = {}) {
     const cx = X(sd * 0.032);
     const cy = Y(0.0185);
     const ew = 0.0262 * K * (fem ? 1.03 : 1);
-    const eh = 0.0064 * K * (E.open || 1) * (fem ? 1.1 : 1);
+    const eh = 0.0064 * K * (E.open || 1) * (fem ? 1.1 : 1) * (1 - 0.16 * smile);
     const lid = E.lid ?? 0.5;
     // (the inner corner by the nose, a touch lower; the outer a touch higher - lifted on a woman's eye)
     const ix = cx + sd * ew * 0.5;
@@ -172,7 +187,7 @@ export function paintFolkFace(c, o = {}) {
     const oy = cy - (fem ? 0.32 : 0.18) * eh;
     const upK = 0.78 + 0.22 * (1 - lid);
     const up = (t) => [ix + (ox - ix) * t, iy + (oy - iy) * t - Math.sin(Math.PI * Math.pow(t, fem ? 0.8 : 0.85)) * eh * upK];
-    const lo = (t) => [ix + (ox - ix) * t, iy + (oy - iy) * t + Math.sin(Math.PI * Math.pow(t, 1.1)) * eh * 0.58];
+    const lo = (t) => [ix + (ox - ix) * t, iy + (oy - iy) * t + Math.sin(Math.PI * Math.pow(t, 1.1)) * eh * (0.58 - 0.24 * smile)];
     const NE = 14;
     const upper = [];
     const lower = [];
@@ -202,7 +217,7 @@ export function paintFolkFace(c, o = {}) {
         const [x, y] = shut[i];
         h.line(x, y, x - sd * 3 * s, y + (6 + 4 * (E.lashes || 0)) * s, 1.3, '#1c120e', 0.8, 0.3);
       }
-      h.lines(crease.map(([x, y]) => [x, y + eh * 0.5]), 1.5, '#5a3a30', 0.6, 2, 0.8);
+      if (!E.mono) h.lines(crease.map(([x, y]) => [x, y + eh * 0.5]), 1.5, '#5a3a30', 0.6, 2, 0.8);
       continue;
     }
     // the white of it, not white: warm, shaded under the lid
@@ -265,7 +280,16 @@ export function paintFolkFace(c, o = {}) {
       const L = 6 + lash * 7 * (0.5 + i / NE);
       h.line(x, y, x + out * (5 + lash * 3) * s, y - L * s, 1.3 + lash * 0.5, '#140a08', 0.85, 0.4);
     }
-    h.lines(crease, 1.7, '#5a3830', 0.6, 2, 1);
+    // (the crease over the lid - or, with no crease, the fold of the lid at the inner corner)
+    if (!E.mono) h.lines(crease, 1.7, '#5a3830', 0.6, 2, 1);
+    else h.path([[ix - sd * 2 * s, iy - eh * 0.2], [ix - sd * ew * 0.12, iy - eh * 0.75], [ix - sd * ew * 0.3, iy - eh * 1.0]], 1.4, '#6a4436', 0.45, 0.6);
+    // the pink of its inner corner, the wet line along the lower lid
+    g.globalAlpha = 0.75;
+    g.fillStyle = '#d08a80';
+    g.beginPath();
+    g.ellipse(ix - sd * 2.2 * s * 4, iy + eh * 0.05, 3.2 * s * 4 * 0.35, eh * 0.32, 0, 0, Math.PI * 2);
+    g.fill();
+    h.path(lower.slice(3, NE - 2).map(([x, y]) => [x, y - eh * 0.12]), 1.1, '#f4e2d6', 0.35, 0.5);
     h.path(lower.slice(2), 1.3 + liner * 0.6, liner > 0.3 ? '#2a1a16' : '#6a4436', 0.6, 0.6);
     if (lash > 0.5) for (let i = 6; i < NE; i += 2) {
       const [x, y] = lower[i];
@@ -273,11 +297,11 @@ export function paintFolkFace(c, o = {}) {
     }
     // the bag under it, the crow's feet at its corner (with the years)
     h.path(lower.slice(3, NE - 1).map(([x, y]) => [x, y + eh * 0.85]), 1.2, S.sh1[0], 0.2 + 0.35 * age, 1);
-    for (let k = 0; k < Math.round(1 + 3 * age); k++) {
+    for (let k = 0; k < Math.round(1 + 3 * age + 2 * smile); k++) {
       const a = -0.5 + k * 0.4;
       const x0 = ox - sd * 6 * s;
       const y0 = oy + (k - 1) * 4 * s;
-      h.line(x0, y0, x0 - sd * Math.cos(a) * 16 * s, y0 + Math.sin(a) * 10 * s, 1.1, S.sh1[0], 0.18 + 0.35 * age, 0.3);
+      h.line(x0, y0, x0 - sd * Math.cos(a) * 16 * s, y0 + Math.sin(a) * 10 * s, 1.1, S.sh1[0], 0.18 + 0.35 * age + 0.22 * smile, 0.3);
     }
   }
   // ---- the brows, drawn hair by hair - arched on a woman's face, low and straight on a man's
@@ -338,52 +362,145 @@ export function paintFolkFace(c, o = {}) {
   }
   h.hatch(X(0.012 * nw), Y(-0.02), X(-0.012 * nw), Y(-0.034), 160, () => 0.6, 0.2, 12, 1.4, S.sh1, 0.45);
   h.hatch(X(0.004), Y(0.022), X(-0.004), Y(-0.019), 80, () => 0.8, Math.PI / 2, 18, 1.5, S.light, 0.5, 0.2);
-  // ---- the mouth: its width, its lips' fullness and colour (lipstick: deeper, glossy)
+  // ---- the mouth: its width, its lips' fullness and colour (lipstick: deeper, glossy) - and how
+  // they look: a smile lifts its corners (one of them, a half-smile), a laugh opens it on the teeth
   {
     const M = P.mouth;
-    const mw = 0.0245 * (M.w || 1) * (fem ? 0.92 : 1);
-    const full = M.full || 1;
+    const mw = 0.0245 * (M.w || 1) * (fem ? 0.92 : 1) * (1 + 0.1 * smile);
+    const full = (M.full || 1) * (1 - 0.18 * smile);
     const cy = Y(-0.0522);
+    const NM = 12;
+    const at = (i, k = 1) => mw * k * (i / (NM / 2) - 1);
+    const lift = (x) => {
+      const u = Math.min(1, Math.abs(x) / mw);
+      const side = ex === 'half' ? (x > 0 ? 1 : 0.12) : 1;
+      return smile * side * 0.0062 * u * u;
+    };
+    const midY = (x) => {
+      const u = Math.min(1, Math.abs(x) / mw);
+      return -0.0522 - 0.0016 * u ** 3 * (1 - smile) + (fem ? 0.0006 * u * u : 0) + lift(x);
+    };
+    const opn = (x) => {
+      const u = Math.min(1, Math.abs(x) / mw);
+      return Math.max(0, 1 - u * u) ** 0.8;
+    };
     const up = [];
-    for (let i = 0; i <= 12; i++) {
-      const x = mw * (i / 6 - 1);
-      const bow = Math.abs(x) < 0.008 ? 0.0012 * Math.cos((x / 0.008) * Math.PI) * (fem ? 1.6 : 1) : 0;
-      up.push([X(x), Y(-0.0522 + (0.0064 * full - 0.0045 * (Math.abs(x) / mw) ** 2 * full) + bow * 0.5 - 0.0008)]);
-    }
-    const mid = [];
-    for (let i = 0; i <= 12; i++) {
-      const x = mw * (i / 6 - 1);
-      mid.push([X(x), Y(-0.0522 - 0.0016 * (Math.abs(x) / mw) ** 3 + (fem ? 0.0006 * (Math.abs(x) / mw) ** 2 : 0))]);
-    }
+    const upB = [];
+    const loT = [];
     const low = [];
-    for (let i = 0; i <= 12; i++) {
-      const x = mw * 0.86 * (i / 6 - 1);
-      low.push([X(x), Y(-0.0525 - 0.0072 * full * (1 - (x / (mw * 0.86)) ** 2))]);
+    for (let i = 0; i <= NM; i++) {
+      const x = at(i);
+      const u = Math.abs(x) / mw;
+      const bow = Math.abs(x) < 0.008 ? 0.0012 * Math.cos((x / 0.008) * Math.PI) * (fem ? 1.6 : 1) : 0;
+      up.push([X(x), Y(midY(x) + 0.0016 * u ** 3 * (1 - smile) + (0.0064 * full - 0.0045 * u * u * full) + bow * 0.5 - 0.0008 + gape * 0.0016 * opn(x))]);
+      upB.push([X(x), Y(midY(x) + gape * 0.0016 * opn(x))]);
+      loT.push([X(x), Y(midY(x) - gape * 0.0085 * opn(x))]);
+    }
+    for (let i = 0; i <= NM; i++) {
+      const x = at(i, 0.86);
+      low.push([X(x), Y(-0.0525 - 0.0072 * full * (1 - (x / (mw * 0.86)) ** 2) - gape * 0.0085 * opn(x) + lift(x) * 0.7)]);
+    }
+    const poly = (top, bot) => {
+      g.beginPath();
+      g.moveTo(top[0][0], top[0][1]);
+      for (const [x, y] of top) g.lineTo(x, y);
+      for (let i = bot.length - 1; i >= 0; i--) g.lineTo(bot[i][0], bot[i][1]);
+      g.closePath();
+    };
+    if (gape > 0) {
+      // the mouth open: its dark, the upper teeth, a glimpse of the lower ones
+      g.globalAlpha = 1;
+      g.fillStyle = '#3a1612';
+      poly(upB, loT);
+      g.fill();
+      g.save();
+      poly(upB, loT);
+      g.clip();
+      const tw = mw * 0.78;
+      const ty = (x) => midY(x) + gape * 0.0016 * opn(x);
+      g.fillStyle = '#f0e8dc';
+      g.beginPath();
+      for (let i = 0; i <= 10; i++) {
+        const x = -tw + (i / 10) * 2 * tw;
+        const y = ty(x);
+        if (i === 0) g.moveTo(X(x), Y(y));
+        else g.lineTo(X(x), Y(y));
+      }
+      for (let i = 10; i >= 0; i--) {
+        const x = -tw + (i / 10) * 2 * tw;
+        g.lineTo(X(x), Y(ty(x) - 0.0034 * gape * (0.6 + 0.4 * opn(x))));
+      }
+      g.fill();
+      for (let i = -3; i <= 3; i++) h.line(X(i * 0.0042), Y(ty(i * 0.0042)), X(i * 0.0042), Y(ty(i * 0.0042) - 0.003 * gape), 1, '#b8a898', 0.35, 0.1);
+      if (gape > 0.6) {
+        g.fillStyle = '#e2d8c8';
+        g.beginPath();
+        for (let i = 0; i <= 8; i++) {
+          const x = -tw * 0.7 + (i / 8) * 1.4 * tw;
+          const y = midY(x) - gape * 0.0085 * opn(x);
+          if (i === 0) g.moveTo(X(x), Y(y));
+          else g.lineTo(X(x), Y(y));
+        }
+        for (let i = 8; i >= 0; i--) {
+          const x = -tw * 0.7 + (i / 8) * 1.4 * tw;
+          g.lineTo(X(x), Y(midY(x) - gape * 0.0085 * opn(x) + 0.0016));
+        }
+        g.fill();
+      }
+      g.restore();
     }
     const [l1, l2] = M.lip;
     g.globalAlpha = M.lipstick ? 0.95 : 0.82;
     g.fillStyle = l1;
-    g.beginPath();
-    g.moveTo(up[0][0], up[0][1]);
-    for (const [x, y] of up) g.lineTo(x, y);
-    for (let i = 12; i >= 0; i--) g.lineTo(mid[i][0], mid[i][1]);
+    poly(up, upB);
     g.fill();
     g.fillStyle = l2;
-    g.beginPath();
-    g.moveTo(mid[0][0], mid[0][1]);
-    for (const [x, y] of mid) g.lineTo(x, y);
-    for (let i = 12; i >= 0; i--) g.lineTo(low[i][0], low[i][1] + (i === 0 || i === 12 ? -0.0004 * K : 0));
+    poly(loT, low);
     g.fill();
-    h.hatch(up[0][0], up[0][1] - 0.006 * K, up[12][0], cy, 120, () => 0.7, 0.4, 10, 1.3, M.lipstick ? ['#6a1018', '#7a1820'] : [S.sh1[0], S.sh1[1]], 0.45);
-    h.hatch(X(0.012), cy + 0.002 * K, X(-0.012), cy + 0.0058 * K * full, 60, () => 0.7, 0.05, 14, 1.6, M.lipstick ? ['#f08088', '#ff98a0'] : S.light, M.lipstick ? 0.55 : 0.4);
-    h.lines(mid, 2.4, M.lipstick ? '#3a0a10' : '#341a16', 0.88, 2, 0.8);
+    h.hatch(up[0][0], up[0][1] - 0.006 * K, up[NM][0], cy, 120, () => 0.7, 0.4, 10, 1.3, M.lipstick ? ['#6a1018', '#7a1820'] : [S.sh1[0], S.sh1[1]], 0.45);
+    h.hatch(X(0.012), cy + 0.002 * K + gape * 0.0085 * K, X(-0.012), cy + 0.0058 * K * full + gape * 0.0085 * K, 60, () => 0.7, 0.05, 14, 1.6, M.lipstick ? ['#f08088', '#ff98a0'] : S.light, M.lipstick ? 0.55 : 0.4);
+    // (the lips' fine lines, up and down them)
+    for (let i = 0; i < 26; i++) {
+      const x = (R() - 0.5) * 1.6 * mw;
+      const lo2 = R() < 0.5;
+      const y0 = lo2 ? midY(x) - gape * 0.0085 * opn(x) - 0.001 : midY(x) + 0.001;
+      h.line(X(x), Y(y0), X(x + (R() - 0.5) * 0.001), Y(y0 + (lo2 ? -1 : 1) * 0.0032 * full), 0.9, M.lipstick ? '#6a1018' : S.sh1[1], 0.25, 0.2);
+    }
+    if (gape > 0) {
+      h.lines(upB, 1.6, '#341a16', 0.7, 2, 0.8);
+      h.lines(loT, 1.4, '#341a16', 0.55, 2, 0.8);
+    } else h.lines(upB, 2.4, M.lipstick ? '#3a0a10' : '#341a16', 0.88, 2, 0.8);
     h.path(up, M.lipstick ? 1.6 : 1.2, M.lipstick ? '#7a1018' : S.sh1[0], 0.55, 0.6);
     if (M.lipstick) h.path(low, 1.2, '#7a1018', 0.45, 0.6);
+    // (the corners of a smile pressed into the cheeks)
+    if (smile > 0.2) {
+      for (const sd of [1, -1]) {
+        if (ex === 'half' && sd < 0) continue;
+        const x = sd * mw * 1.02;
+        h.path([[X(x), Y(midY(x) + 0.002)], [X(x + sd * 0.0035), Y(midY(x) - 0.0008)], [X(x + sd * 0.002), Y(midY(x) - 0.004)]], 1.4, S.sh1[0], 0.35 + 0.3 * smile, 0.6);
+      }
+    }
   }
   // the shade under the lower lip, the cleft of the chin, the folds from the nose to the mouth
   h.hatch(X(0.017), Y(-0.061), X(-0.017), Y(-0.07), 140, () => 0.7, 0.15, 14, 1.5, S.sh2, 0.45);
   if (!fem) h.path([[X(0.0005), Y(-0.083)], [X(-0.0005), Y(-0.092)]], 1.4, S.sh1[0], 0.35, 0.8);
-  for (const sd of [1, -1]) h.lines([[X(sd * 0.0188), Y(-0.0215)], [X(sd * 0.0262), Y(-0.036)], [X(sd * 0.0292), Y(-0.05)], [X(sd * 0.0298), Y(-0.06)]], 1.7, S.sh1[0], 0.2 + 0.4 * age, 2, 1.1);
+  for (const sd of [1, -1]) {
+    const sm = ex === 'half' && sd < 0 ? 0.15 : smile;
+    h.lines([[X(sd * 0.0188), Y(-0.0215)], [X(sd * (0.0262 + 0.004 * sm)), Y(-0.034)], [X(sd * (0.0292 + 0.007 * sm)), Y(-0.048)], [X(sd * (0.0298 + 0.006 * sm)), Y(-0.06)]], 1.7 + 0.5 * sm, S.sh1[0], 0.2 + 0.4 * age + 0.35 * sm, 2, 1.1);
+    // (the cheek lifted over it, lit)
+    if (sm > 0.2) h.hatch(X(sd * 0.05), Y(-0.008), X(sd * 0.026), Y(-0.034), 90, () => 0.6 * sm, 1.0, 16, 1.6, S.light, 0.35);
+  }
+  // (a double chin: the fold under the chin, its shade)
+  const dbl = (P.shape && P.shape.dbl) || 0;
+  if (dbl > 0) {
+    const pts = [];
+    for (let i = 0; i <= 10; i++) {
+      const x = -0.034 + (i / 10) * 0.068;
+      pts.push([X(x), Y(-0.118 - 0.006 * (1 - (x / 0.034) ** 2))]);
+    }
+    h.lines(pts, 1.8, S.sh2[0], 0.45 * dbl, 2, 1);
+    h.hatch(X(0.03), Y(-0.12), X(-0.03), Y(-0.134), 160, () => 0.6 * dbl, 0.1, 18, 1.6, S.sh1, 0.4);
+  }
   for (const sd of [1, -1]) h.path([[X(sd * 0.0035), Y(-0.034)], [X(sd * 0.0052), Y(-0.0448)]], 1.1, S.sh1[0], 0.3, 0.6);
   g.globalAlpha = 1;
   return c;
@@ -425,6 +542,15 @@ export function paintFolkHair(c, o = {}) {
     coil(HR.dark, 2600, 7, 0.85);
     coil(HR.mid, 1500, 6, 0.7);
     coil(HR.light, 500, 5, 0.55);
+    g.globalAlpha = 1;
+    return c;
+  }
+  if (HR.style === 'buzz') {
+    // cut close: short fine hairs all over, down and back, grey through them
+    const way = () => Math.PI / 2 + (R() - 0.5) * 0.7;
+    h.ticks(0, 0, W, H, 30000 * k, () => 0.85, way, 4.2, 1.1, HR.dark, 0.7, 0.6);
+    h.ticks(0, 0, W, H, 22000 * k, () => 0.8, way, 3.6, 1.0, HR.mid, 0.65, 0.6);
+    h.ticks(0, 0, W, H, 12000 * k, () => 0.7, way, 3.2, 1.0, HR.light, 0.6, 0.6);
     g.globalAlpha = 1;
     return c;
   }

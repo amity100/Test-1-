@@ -126,7 +126,7 @@ export function folkLook(k) {
   L.pen.width = 3.0;
   L.build = { ...F.build };
   L.skin = SKINS[F.skin].rgb.slice();
-  L.hair = { style: { side: 'short', curls: 'short', back: 'slick', bun: 'bun', long: 'long' }[F.hair.style] || 'short', color: hexRGB(F.hair.base) };
+  L.hair = { style: { side: 'short', curls: 'short', back: 'slick', bun: 'bun', long: 'long', buzz: 'buzz' }[F.hair.style] || 'short', color: hexRGB(F.hair.base) };
   L.top = { kind: F.top.kind, color: hexRGB(F.top.base), sleeves: 'long', inner: hexRGB(F.inner.base) };
   L.bottom = { kind: F.bottom.kind === 'dress' ? 'midi' : F.bottom.kind === 'wide' ? 'wide' : 'pants', color: hexRGB(F.bottom.base) };
   L.shoes = hexRGB(F.shoes.base);

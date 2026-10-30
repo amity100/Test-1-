@@ -62,6 +62,153 @@ export function headSdfOf(spec) {
   };
 }
 
+// ------------------------------------------------------------------ the shape of their face
+// (ROADMAP 13.6) Each of them a face of their own, not the hero's: the head carved as above, then
+// moved into their shape - wider or narrower, longer or shorter below the eyes, the forehead higher,
+// the jaw broad and square or narrow to a pointed chin, the cheeks full or hollow, a double chin,
+// the brow, the lips and the chin forward or back, the nose longer, wider, further out or hooked,
+// the eyes further apart. Everything on the head goes with it - the face's drawing is laid on the
+// carved head first (so its eyes, nose and mouth move with the shape), the hair, the ears, glasses,
+// the lines (render/herolines.js). x right, y up, z ahead, the head's middle at 0.
+const gau = (d, w) => Math.exp(-(d * d) / (w * w));
+const sstep = (a, b, v) => {
+  const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+export function warpOf(spec) {
+  const F = { width: 1, long: 1, forehead: 1, crown: 1, cheekbones: 0, cheeks: 0, jaw: 1, chin: 0, chinW: 1, dbl: 0, brow: 0, noseLen: 1, noseW: 1, noseOut: 1, hook: 0, lips: 0, gap: 1, ...(spec.shape || {}) };
+  return (x, y, z) => {
+    const ax = Math.abs(x);
+    const sx = x < 0 ? -1 : 1;
+    const front = sstep(0.0, 0.05, z);
+    // the nose, about its root between the eyes
+    const wn = gau(x, 0.022) * gau(y + 0.004, 0.03) * sstep(0.068, 0.092, z);
+    let X = x * (1 + (F.noseW - 1) * wn);
+    let Y = y + (y - 0.026) * (F.noseLen - 1) * wn;
+    let Z = z + (z - 0.084) * (F.noseOut - 1) * wn + F.hook * 0.0045 * wn * gau(y - 0.006, 0.012);
+    // the eyes apart or together, their sockets and the drawing in them with them
+    X += x * (F.gap - 1) * gau(ax - 0.032, 0.022) * gau(y - 0.018, 0.016) * front;
+    // the brow, the lips and the chin forward or back
+    Z += F.brow * 0.006 * gau(y - 0.036, 0.011) * gau(x, 0.05) * front;
+    Z += F.lips * 0.004 * gau(x, 0.024) * gau(y + 0.052, 0.012) * front;
+    Z += F.chin * 0.01 * gau(x, 0.03 * F.chinW) * gau(y + 0.095, 0.017) * front;
+    // the cheeks full (out) or hollow (in)
+    const wc = gau(ax - 0.048, 0.022) * gau(y + 0.038, 0.026) * sstep(-0.02, 0.03, z);
+    X += sx * F.cheeks * 0.007 * wc;
+    Z += F.cheeks * 0.004 * wc;
+    // a double chin: soft under the jaw
+    const wd = gau(x, 0.042) * gau(y + 0.118, 0.017) * sstep(-0.03, 0.03, z);
+    Y -= F.dbl * 0.006 * wd;
+    Z += F.dbl * 0.012 * wd;
+    // how wide at each height: the cheekbones, the jaw, the chin
+    X *= F.width * (1 + F.cheekbones * gau(y - 0.004, 0.022) + (F.jaw - 1) * sstep(-0.035, -0.09, y) * (1 - 0.5 * sstep(-0.09, -0.125, y)));
+    X *= 1 + (F.chinW - 1) * gau(y + 0.1, 0.02) * gau(x, 0.04) * front;
+    // longer or shorter below the eyes, the forehead higher, the crown
+    if (Y < 0.02) Y = 0.02 + (Y - 0.02) * F.long;
+    else if (Y > 0.04) Y = 0.04 + (Y - 0.04) * F.forehead + Math.max(0, Y - 0.07) * (F.crown - 1);
+    return [X, Y, Z];
+  };
+}
+// a normal at p, through the warp: two lines along the surface, moved, crossed
+const _t1 = [0, 0, 0];
+const _t2 = [0, 0, 0];
+export function warpNormal(w, p, n) {
+  const ax = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  _t1[0] = n[1] * ax[2] - n[2] * ax[1];
+  _t1[1] = n[2] * ax[0] - n[0] * ax[2];
+  _t1[2] = n[0] * ax[1] - n[1] * ax[0];
+  _t2[0] = n[1] * _t1[2] - n[2] * _t1[1];
+  _t2[1] = n[2] * _t1[0] - n[0] * _t1[2];
+  _t2[2] = n[0] * _t1[1] - n[1] * _t1[0];
+  const e = 0.002;
+  const d = (t) => {
+    const a = w(p[0] + t[0] * e, p[1] + t[1] * e, p[2] + t[2] * e);
+    const b = w(p[0] - t[0] * e, p[1] - t[1] * e, p[2] - t[2] * e);
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  };
+  const a = d(_t1);
+  const b = d(_t2);
+  let nx = a[1] * b[2] - a[2] * b[1];
+  let ny = a[2] * b[0] - a[0] * b[2];
+  let nz = a[0] * b[1] - a[1] * b[0];
+  const L = Math.hypot(nx, ny, nz) || 1;
+  const sg = nx * n[0] + ny * n[1] + nz * n[2] < 0 ? -1 / L : 1 / L;
+  return [nx * sg, ny * sg, nz * sg];
+}
+// a geometry moved through the warp, its normals with it
+function warpGeo(g, w) {
+  const p = g.attributes.position;
+  const nr = g.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    const q = [p.getX(i), p.getY(i), p.getZ(i)];
+    const m = w(q[0], q[1], q[2]);
+    if (nr) {
+      const n = warpNormal(w, q, [nr.getX(i), nr.getY(i), nr.getZ(i)]);
+      nr.setXYZ(i, n[0], n[1], n[2]);
+    }
+    p.setXYZ(i, m[0], m[1], m[2]);
+  }
+  p.needsUpdate = true;
+  if (nr) nr.needsUpdate = true;
+  g.computeBoundingSphere();
+  return g;
+}
+// the face's front at (x, y): its z on the carved head
+function frontOf(sdf, x, y) {
+  let lo = -0.02;
+  let hi = 0.16;
+  for (let i = 0; i < 26; i++) {
+    const m = (lo + hi) / 2;
+    if (sdf(x, y, m) < 0) lo = m;
+    else hi = m;
+  }
+  return (lo + hi) / 2;
+}
+
+// ------------------------------------------------------------------ glasses
+// thin metal frames: a rim round each eye, the bridge over the nose, the temples back to the ears -
+// made on the carved head, then moved with the face (round: round rims; else a soft rectangle)
+function glassesGeo(sdf, G, earX) {
+  const r = 0.0011;
+  const parts = [];
+  const tube = (pts, closed, n) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(q[0], q[1], q[2])), closed), n, r, 5, closed);
+  for (const sd of [1, -1]) {
+    const cx = sd * 0.032;
+    const cy = 0.0175;
+    const z0 = frontOf(sdf, cx, cy) + 0.014;
+    const rim = [];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      const k = G.shape === 'round' ? 1 : 1 / Math.max(Math.abs(c), Math.abs(sn)) ** 0.35;
+      rim.push([cx + c * 0.0205 * k, cy + sn * 0.0165 * k, z0 - 0.003 * Math.abs(c) * (sd * c > 0 ? 1 : 0)]);
+    }
+    parts.push(tube(rim, true, 32));
+    // the temple: from the rim's outer edge back over the side of the head, to the ear
+    const tx = sd * 0.0535;
+    const pts = [[tx, 0.022, z0 - 0.004]];
+    for (const t of [0.25, 0.55, 0.85]) {
+      const z = z0 - 0.004 - t * (z0 + 0.012);
+      const y = 0.022 - t * 0.012;
+      let lo = 0.03;
+      let hi = 0.12;
+      for (let i = 0; i < 24; i++) {
+        const m = (lo + hi) / 2;
+        if (sdf(m, y, z) < 0) lo = m;
+        else hi = m;
+      }
+      pts.push([sd * (lo + 0.0045), y, z]);
+    }
+    pts.push([sd * (earX + 0.003), 0.008, -0.02]);
+    parts.push(tube(pts, false, 12));
+  }
+  // the bridge, arched over the nose
+  const zb = frontOf(sdf, 0, 0.022) + 0.004;
+  parts.push(tube([[0.0118, 0.021, zb - 0.002], [0.006, 0.0245, zb], [0, 0.0255, zb + 0.0005], [-0.006, 0.0245, zb], [-0.0118, 0.021, zb - 0.002]], false, 10));
+  return merge(parts);
+}
+
 // how far from the middle, in the direction (dx, dy, dz), the surface of `sdf` is
 export function radiusOf(sdf) {
   return (dx, dy, dz) => {
@@ -139,6 +286,12 @@ const STYLES = {
     edge: lineOf([[0, 0.58], [0.6, 0.6], [1.1, 1.06], [1.4, 1.5], [1.75, 1.48], [2.3, 1.62], [Math.PI, 1.8]]),
     thick: (th) => 0.0035 + 0.006 * Math.max(0, Math.cos(th)),
     clumps: 0.004,
+  },
+  // cut close all over, grey, the hairline gone back at the temples
+  buzz: {
+    edge: lineOf([[0, 0.66], [0.32, 0.56], [0.62, 0.8], [1.1, 1.06], [1.33, 1.38], [1.5, 1.38], [1.72, 1.16], [2.2, 1.5], [Math.PI, 1.86]]),
+    thick: (th) => 0.0024 + 0.0016 * Math.max(0, Math.cos(th)),
+    clumps: 0,
   },
   // long and loose, parted a little off the middle, down over the ears (the rest of it: longHair)
   long: {
@@ -299,15 +452,17 @@ function longHairGeo(kit, headR, len) {
     const t = j / NV;
     for (let i = 0; i <= NA; i++) {
       const phi = a0 + (i / NA) * (a1 - a0);
-      // (from just under the cap's edge at the ears' height down to its ends)
-      const th = 1.45;
+      // (from just under the cap's edge at the ears' height down to its ends - a bob's from higher,
+      // flowing on from the hair over the head)
+      const th = len < 0.18 ? 1.22 : 1.45;
       const dx = Math.sin(th) * Math.sin(phi);
       const dz = Math.sin(th) * Math.cos(phi);
       const r0 = headR(dx, Math.cos(th), dz) + kit.thick(Math.min(th, kit.edge(phi) - 0.02), phi) + 0.002;
-      const flare = 1 + 0.42 * t * t + 0.05 * Math.sin(t * 9 + phi * 5) * t;
+      // (a bob, short: close to the head, its ends turned under; long hair out over the shoulders)
+      const flare = len < 0.18 ? 1 + 0.1 * t - 0.12 * t ** 4 + 0.02 * Math.sin(t * 9 + phi * 5) * t : 1 + 0.42 * t * t + 0.05 * Math.sin(t * 9 + phi * 5) * t;
       const back = Math.max(0, -Math.cos(phi));
       const y = Math.cos(th) * r0 - t * len * (1 - 0.08 * back);
-      pos.push(Math.sin(phi) * r0 * flare * (1 + 0.15 * t), y, Math.cos(phi) * r0 * flare - 0.012 * t * back);
+      pos.push(Math.sin(phi) * r0 * flare * (1 + (len < 0.18 ? 0.04 : 0.15) * t), y, Math.cos(phi) * r0 * flare - 0.012 * t * back);
       uv.push(i / NA, 0.15 + 0.8 * t);
     }
   }
@@ -420,15 +575,38 @@ export function folkBody(k) {
   const R = rngOf(4242 + k * 101);
   const locks = [];
   const style = spec.hair.style;
+  const warp = warpOf(spec);
   const parts = {
     head: headGeo(headR),
     hair: hairCapGeo(kit, headR),
   };
   const lockList = locksOf(style, R);
   if (lockList.length) parts.locks = locksGeo(kit, headR, lockList, locks);
-  if (style === 'long') parts.fall = longHairGeo(kit, headR, 0.27);
+  if (style === 'long') parts.fall = longHairGeo(kit, headR, spec.hair.len || 0.27);
   if (style === 'bun') parts.bun = bunGeo(headR);
-  const T = fem ? FEM_TORSO : TORSO;
+  // (where the ears go on the side of the head, as the hero's on his)
+  let lo = 0;
+  let hi = 0.2;
+  for (let i = 0; i < 30; i++) {
+    const m = (lo + hi) / 2;
+    if (sdf(m, -0.003, -0.016) < 0) lo = m;
+    else hi = m;
+  }
+  const earX = lo + 0.0012;
+  if (spec.glasses) parts.glasses = glassesGeo(sdf, spec.glasses, earX);
+  // the head and all on it into their face's shape (the lines: render/herolines.js, the same warp)
+  for (const n of ['head', 'hair', 'locks', 'fall', 'bun', 'glasses']) if (parts[n]) warpGeo(parts[n], warp);
+  const ears = [1, -1].map((sd) => warp(sd * earX, -0.003, -0.016));
+  const lobes = [1, -1].map((sd) => warp(sd * (earX + 0.006), -0.036, -0.012));
+  // their body: a belly, a chest, their limbs thicker or slighter
+  const B = { belly: 0, chest: 0, thick: 0, ...(spec.body || {}) };
+  const trunk = (rows) => rows.map(([y, w, df, db, z = 0, n = 2]) => {
+    const b = B.belly * Math.exp(-(((y - 0.12) / 0.12) ** 2));
+    const c = B.chest * Math.exp(-(((y - 0.32) / 0.08) ** 2));
+    return [y, w * (1 + 0.14 * b + 0.05 * c), df * (1 + 0.55 * b + 0.12 * c), db * (1 + 0.06 * b), z, n];
+  });
+  const limb = (rows) => (B.thick ? slim(rows, 1 + B.thick) : rows);
+  const T = trunk(fem ? FEM_TORSO : TORSO);
   const NECK = fem ? FEM_NECK : MAN_NECK;
   const neck = loft(NECK, 24);
   faceMap(neck, -0.025);
@@ -450,12 +628,16 @@ export function folkBody(k) {
     const flap = (sd) => region(patch(T, 0.29, 0.335, () => sd * (fem ? 0.05 : 0.052), () => sd * (fem ? 0.108 : 0.122), 0.0058, 4, 3), JK.flap);
     parts.welt = merge([flap(1), flap(-1)]);
   }
-  parts.pelvis = region(loft(fem ? FEM_PELVIS : PELVIS_ROWS, 24, false, true), PT.pelvis);
-  parts.upper = region(loft(fem ? FEM_UPPER : UPPER_ROWS, 18, false, true), JK.upper);
-  parts.fore = region(loft(fem ? FEM_FORE : FORE_ROWS, 18, false, true), JK.fore);
+  const PEL = trunk(fem ? FEM_PELVIS : PELVIS_ROWS);
+  const UP = limb(fem ? FEM_UPPER : UPPER_ROWS);
+  const FO = limb(fem ? FEM_FORE : FORE_ROWS);
+  const TH = limb(fem ? FEM_THIGH : THIGH_ROWS);
+  parts.pelvis = region(loft(PEL, 24, false, true), PT.pelvis);
+  parts.upper = region(loft(UP, 18, false, true), JK.upper);
+  parts.fore = region(loft(FO, 18, false, true), JK.fore);
   const dress = spec.bottom.kind === 'dress';
-  const shin = spec.bottom.kind === 'wide' ? wideShin(fem ? FEM_SHIN : SHIN_ROWS) : fem ? FEM_SHIN : SHIN_ROWS;
-  parts.thigh = region(loft(fem ? FEM_THIGH : THIGH_ROWS, 20, false, true), PT.thigh);
+  const shin = limb(spec.bottom.kind === 'wide' ? wideShin(fem ? FEM_SHIN : SHIN_ROWS) : fem ? FEM_SHIN : SHIN_ROWS);
+  parts.thigh = region(loft(TH, 20, false, true), PT.thigh);
   parts.shin = region(loft(shin, 20, false, true), PT.shin);
   if (dress) parts.skirt = skirtGeo(0.6);
   return {
@@ -467,9 +649,12 @@ export function folkBody(k) {
       hairEdge: kit.edge,
       hairThick: kit.thick,
       locks,
-      rows: { torso: T, pelvis: fem ? FEM_PELVIS : PELVIS_ROWS, upper: fem ? FEM_UPPER : UPPER_ROWS, fore: fem ? FEM_FORE : FORE_ROWS, thigh: fem ? FEM_THIGH : THIGH_ROWS, shin, neck: NECK },
+      rows: { torso: T, pelvis: PEL, upper: UP, fore: FO, thigh: TH, shin, neck: NECK },
       skirt: dress ? skirtRows(0.6) : null,
+      warp,
     },
+    ears,
+    lobes,
   };
 }
 

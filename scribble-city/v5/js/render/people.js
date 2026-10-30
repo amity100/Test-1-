@@ -6,7 +6,7 @@ import * as HERO from './heroshapes.js';
 import { HeroArt } from './heroart.js';
 import { HeroLines } from './herolines.js';
 import { FOLK, SKINS, hexRGB } from './folkspec.js';
-import { folkBody } from './folkshapes.js';
+import { folkBody, warpNormal } from './folkshapes.js';
 import { folkTone, folkBeard } from './folkink.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
@@ -667,7 +667,9 @@ export class PersonRenderer {
     const TWO = new Set(['upper', 'fore', 'thigh', 'shin', 'shoe']);
     const sh = {};
     for (const [name, geo] of Object.entries(G)) {
-      sh[name] = this.p[`folk${k}_${name}`] = P(geo, mats[PEN[name] || 'top'], TWO.has(name) ? 12 : 6);
+      // (glasses: thin metal, in the city's gloss pen)
+      const pen = name === 'glasses' ? this.mats.gloss : mats[PEN[name] || 'top'];
+      sh[name] = this.p[`folk${k}_${name}`] = P(geo, pen, TWO.has(name) ? 12 : 6);
     }
     // their lines (render/herolines.js): their head and hair, their body's rows, in their colours
     const Ln = body.lines;
@@ -680,25 +682,27 @@ export class PersonRenderer {
     };
     const kit = {
       sdf: Ln.sdf, headR: Ln.headR, hairEdge: Ln.hairEdge, hairThick: Ln.hairThick, locks: Ln.locks, fem: !!spec.fem,
-      tone: (x, y) => folkTone(x, y, spec.fem),
+      tone: (x, y) => folkTone(x, y, spec.fem, spec.shape),
       beard: (x, y) => folkBeard(x, y, spec.beard),
       beardInk: spec.beardCol ? dark(spec.beardCol).map((v) => v * 0.8) : null,
       rows: Ln.rows, skirt: Ln.skirt,
+      // (their face's own shape, and how they look: render/folkshapes.js warpOf, folkspec.js expr)
+      warp: Ln.warp, warpN: warpNormal, mono: !!spec.eyes.mono,
+      smile: { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[spec.expr] || 0, half: spec.expr === 'half', gape: spec.expr === 'laugh' ? 1 : spec.expr === 'smile' ? 0.3 : 0,
       top: inkOf(spec.top), bottom: inkOf(spec.bottom),
       hair: dark(spec.hair.dark).map((v) => v * 0.6), hairHi: hexRGB(spec.hair.light[0]),
     };
-    // (where the ear goes: on the side of their head, as far out as the hero's is on his)
-    let lo = 0;
-    let hi = 0.2;
-    for (let i = 0; i < 30; i++) {
-      const m = (lo + hi) / 2;
-      if (Ln.sdf(m, -0.003, -0.016) < 0) lo = m;
-      else hi = m;
-    }
+    const B = { thick: 0, ...(spec.body || {}) };
     return {
       k, spec, art, mats, sh, tex: {}, mat: null, frame: -1,
       lines: new HeroLines(touch, kit, 0.5),
-      earX: lo + 0.0012,
+      // (where the ears and their lobes are on the head, in its shape: render/folkshapes.js)
+      ears: body.ears,
+      lobes: body.lobes,
+      // (a thick neck or a slender one; a heavy body's girth)
+      neck: (spec.shape && spec.shape.neck) || 1,
+      girth: 1 + Math.max(0, B.thick) * 0.6,
+      glasses: spec.glasses ? linC(spec.glasses.col) : null,
       // (the hands in the face's warmth: a flat colour reads paler than its drawing)
       skin: linC(SKINS[spec.skin].rgb.map((v, i) => v * [0.92, 0.84, 0.8][i])),
       // (a fair face's drawing a little deeper in the hall's bright light)
@@ -710,7 +714,7 @@ export class PersonRenderer {
       watch: spec.acc.watch ? linC(hexRGB(spec.acc.watch)) : null,
       earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
       // (long hair over the ears)
-      ears: spec.hair.style !== 'long',
+      earsOn: spec.hair.style !== 'long',
     };
   }
 
@@ -1594,7 +1598,7 @@ export class PersonRenderer {
     const white = PAPER_W;
     const skin = F.skin;
     fig.headId = (seed * 7.77 + 0.31) % 1;
-    const bw = k * Math.max(0.92, bulk * 0.96) * (fem ? 1.02 : 1.05);
+    const bw = k * Math.max(0.92, bulk * 0.96) * (fem ? 1.02 : 1.05) * F.girth;
     const HL = F.lines;
     const dress = !!q.skirt;
     // ---- the jacket worn open, what is under it, its collar; the neck
@@ -1613,7 +1617,7 @@ export class PersonRenderer {
       _c.copy(j.headC).addScaledVector(fig.hu, -0.083 * hs).addScaledVector(fig.hf, -0.018 * hs);
       _d.copy(j.neck).addScaledVector(ax, -0.03 * S).addScaledVector(fwd, -0.008 * S);
       _nL.copy(rgt).negate();
-      q.neck.push(along(_c, _d, 0.17, k * 1.16 * Math.max(1, bulk * 0.92), _nL), F.face, own, fig.headId, ind);
+      q.neck.push(along(_c, _d, 0.17, k * 1.16 * Math.max(1, bulk * 0.92) * F.neck, _nL), F.face, own, fig.headId, ind);
       HL.set('neck', 'neck', _m);
     }
     // ---- the seat, and a dress's skirt from the waist over the thighs
@@ -1691,17 +1695,19 @@ export class PersonRenderer {
       if (q.locks) q.locks.push(_mH, white, own, id(), ind);
       if (q.fall) q.fall.push(_mH, white, own, id(), ind);
       if (q.bun) q.bun.push(_mH, white, own, id(), ind);
-      if (F.ears) {
-        const P3 = (x, y, z) => _c.copy(hc).addScaledVector(hr, x * hs).addScaledVector(hu, y * hs).addScaledVector(hf, z * hs);
+      if (q.glasses) q.glasses.push(_mH, F.glasses, own, id(), ind);
+      if (F.earsOn) {
+        const P3 = (v) => _c.copy(hc).addScaledVector(hr, v[0] * hs).addScaledVector(hu, v[1] * hs).addScaledVector(hf, v[2] * hs);
         const es = hs * (fem ? 0.9 : 1);
         for (let sd = -1; sd <= 1; sd += 2) {
-          P3(sd * F.earX, -0.003, -0.016);
+          const e = sd > 0 ? 0 : 1;
+          P3(F.ears[e]);
           _d.copy(hu).addScaledVector(hf, -0.22).normalize();
           _x.crossVectors(_d, hr).normalize();
           (sd > 0 ? p.heroEarR : p.heroEarL).push(framed(_c, hr, _d, _x, es, es, es), skin, own, fig.headId, ind);
           if (F.earring) {
             // (a drop at the lobe)
-            P3(sd * (F.earX + 0.006), -0.036, -0.012);
+            P3(F.lobes[e]);
             p.sphere.push(framed(_c, hr, hu, hf, 0.0055 * hs, 0.008 * hs, 0.0055 * hs), F.earring, own, id(), ind);
           }
         }
