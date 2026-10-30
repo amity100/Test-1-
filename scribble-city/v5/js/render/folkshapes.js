@@ -201,6 +201,9 @@ function locksGeo(kit, headR, list, out) {
     const tPh = V(Math.cos(phi), 0, -Math.sin(phi));
     const p0 = n.clone().multiplyScalar(kit.capR(n.x, n.y, n.z));
     const d = tTh.clone().multiplyScalar(q.down).addScaledVector(tPh, q.side).normalize();
+    // (combed back: towards the nape, along the head - up over the crown from the forehead, back
+    // along the sides)
+    if (q.back) d.set(0, -0.15, -1).addScaledVector(n, -(-0.15 * n.y - n.z)).normalize();
     const L = q.L;
     const p1 = p0.clone().addScaledVector(d, L * 0.5);
     const p2 = p0.clone().addScaledVector(d, L);
@@ -249,7 +252,7 @@ function locksGeo(kit, headR, list, out) {
 // the locks of each style
 function locksOf(style, R) {
   const L = [];
-  const add = (phi, th, down, side, len, w, rise, fall = 0) => L.push({ phi, th, down, side, L: len, w, rise, fall });
+  const add = (phi, th, down, side, len, w, rise, fall = 0, back = false) => L.push({ phi, th, down, side, L: len, w, rise, fall, back });
   if (style === 'side') {
     // combed over from a parting on the left: across the top to the right, the front lifted a little
     for (let i = 0; i < 26; i++) {
@@ -261,14 +264,14 @@ function locksOf(style, R) {
     // combed straight back from the forehead, over the crown, down to the nape
     for (let i = 0; i < 30; i++) {
       const phi = (R() - 0.5) * 2.2;
-      add(phi, 0.3 + R() * 0.25, 1.0, (R() - 0.5) * 0.25, 0.06 + 0.04 * R(), 0.014 + 0.004 * R(), 0.003);
+      add(phi, 0.3 + R() * 0.14, 0, 0, 0.07 + 0.04 * R(), 0.014 + 0.004 * R(), 0.003, 0, true);
     }
     for (let i = 0; i < 10; i++) add(Math.PI + (R() - 0.5) * 1.4, 0.9 + R() * 0.5, 1, (R() - 0.5) * 0.3, 0.035, 0.012, 0.002, 0.2);
   } else if (style === 'bun') {
     // sleek: a few long strands drawn back from the face to the bun
     for (let i = 0; i < 16; i++) {
       const phi = (R() - 0.5) * 2.6;
-      add(phi, 0.35 + R() * 0.2, 1.0, (R() - 0.5) * 0.1, 0.07 + 0.03 * R(), 0.012, 0.0015);
+      add(phi, 0.3 + R() * 0.16, 0, 0, 0.08 + 0.03 * R(), 0.012, 0.0015, 0, true);
     }
   } else if (style === 'long') {
     // the top: from the parting down either side; the front: two locks framing the face
@@ -431,10 +434,18 @@ export function folkBody(k) {
   faceMap(neck, -0.025);
   parts.neck = neck;
   parts.torso = region(loft(T, 32, false, true), JK.torso);
-  // (the jacket worn open: its front edges proud of the body, widening into the lapels)
-  const edge = (sd) => region(patch(T, -0.086, 0.455, () => sd * (fem ? 0.039 : 0.043), (y) => sd * ((fem ? 0.052 : 0.058) + Math.max(0, y - 0.33) * 0.42), 0.0062, 2, 18), JK.edge, true);
-  parts.zip = merge([edge(1), edge(-1)]);
-  parts.tee = region(patch(T, -0.086, 0.43, () => (fem ? -0.042 : -0.047), () => (fem ? 0.042 : 0.047), 0.0032, 4, 18), PT.front, true);
+  // (the jacket worn open: its front edges proud of the body, widening into the lapels - a blazer's
+  // open in a V from its button at the waist up to the collarbones, its lapels laid back either side)
+  if (spec.top.kind === 'blazer') {
+    const half = (y) => 0.026 + Math.max(0, y - 0.1) * 0.17 + Math.max(0, 0.1 - y) * 0.12;
+    const edge = (sd) => region(patch(T, -0.086, 0.455, (y) => sd * (half(y) - 0.004), (y) => sd * (half(y) + 0.014 + Math.max(0, y - 0.2) * 0.2), 0.0062, 2, 18), JK.edge, true);
+    parts.zip = merge([edge(1), edge(-1)]);
+    parts.tee = region(patch(T, -0.086, 0.43, (y) => -half(y), (y) => half(y), 0.0032, 4, 18), PT.front, true);
+  } else {
+    const edge = (sd) => region(patch(T, -0.086, 0.455, () => sd * (fem ? 0.039 : 0.043), (y) => sd * ((fem ? 0.052 : 0.058) + Math.max(0, y - 0.33) * 0.42), 0.0062, 2, 18), JK.edge, true);
+    parts.zip = merge([edge(1), edge(-1)]);
+    parts.tee = region(patch(T, -0.086, 0.43, () => (fem ? -0.042 : -0.047), () => (fem ? 0.042 : 0.047), 0.0032, 4, 18), PT.front, true);
+  }
   if (spec.top.kind === 'denim') {
     const flap = (sd) => region(patch(T, 0.29, 0.335, () => sd * (fem ? 0.05 : 0.052), () => sd * (fem ? 0.108 : 0.122), 0.0058, 4, 3), JK.flap);
     parts.welt = merge([flap(1), flap(-1)]);

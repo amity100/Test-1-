@@ -699,7 +699,13 @@ export class PersonRenderer {
       k, spec, art, mats, sh, tex: {}, mat: null, frame: -1,
       lines: new HeroLines(touch, kit, 0.5),
       earX: lo + 0.0012,
-      skin: linC(SKINS[spec.skin].rgb),
+      // (the hands in the face's warmth: a flat colour reads paler than its drawing)
+      skin: linC(SKINS[spec.skin].rgb.map((v, i) => v * [0.92, 0.84, 0.8][i])),
+      // (a fair face's drawing a little deeper in the hall's bright light)
+      face: { fair: [0.9, 0.86, 0.84], light: [0.94, 0.91, 0.89] }[spec.skin] || PAPER_W,
+      // (the collar of a jacket worn open: a blazer's lies low under its lapels, a bomber's is a ribbed
+      // band, a denim jacket's a shirt's)
+      collar: { blazer: 0.5, bomber: 0.38, denim: 0.62 }[spec.top.kind] || 0.6,
       sole: linC(spec.shoes.sole),
       watch: spec.acc.watch ? linC(hexRGB(spec.acc.watch)) : null,
       earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
@@ -1600,13 +1606,13 @@ export class PersonRenderer {
       q.tee.push(_mH, white, own, id(), ind);
       if (q.welt) q.welt.push(_mH, white, own, id(), ind);
       _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
-      const ck = fem ? 0.9 : 1;
-      q.collar.push(framed(_c, rgt, ax, fwd, k * 1.02 * ck, k * ck, k * 1.02 * ck), white, own, id(), ind);
+      const ck = fem ? 0.92 : 1;
+      q.collar.push(framed(_c, rgt, ax, fwd, k * 1.04 * ck, k * F.collar, k * 1.04 * ck), white, own, id(), ind);
       const hs = fig.headScale * S;
       _c.copy(j.headC).addScaledVector(fig.hu, -0.083 * hs).addScaledVector(fig.hf, -0.018 * hs);
       _d.copy(j.neck).addScaledVector(ax, -0.03 * S).addScaledVector(fwd, -0.008 * S);
       _nL.copy(rgt).negate();
-      q.neck.push(along(_c, _d, 0.17, k * 1.16 * Math.max(1, bulk * 0.92), _nL), white, own, fig.headId, ind);
+      q.neck.push(along(_c, _d, 0.17, k * 1.16 * Math.max(1, bulk * 0.92), _nL), F.face, own, fig.headId, ind);
       HL.set('neck', 'neck', _m);
     }
     // ---- the seat, and a dress's skirt from the waist over the thighs
@@ -1677,7 +1683,7 @@ export class PersonRenderer {
       const hu = fig.hu;
       const hf = fig.hf;
       const hc = _hcH.copy(j.headC).addScaledVector(hu, -0.058 * hs);
-      q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), white, own, fig.headId, ind);
+      q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
       HL.set('head', 'head', _m);
       framed(hc, hr, hu, hf, hs, hs, hs, _mH);
       q.hair.push(_mH, white, own, id(), ind);
