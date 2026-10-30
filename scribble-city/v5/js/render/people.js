@@ -524,14 +524,14 @@ const MOODS = {
 const REST = { neutral: 0, soft: 0.3, half: 0.4, smile: 0.62, laugh: 0.8 };
 // (ROADMAP 13.8) the mouth of each sound: [the jaw, the lips wide (-: rounded)]
 const M_REST = [0.02, 0];
-const M_A = [0.55, 0.12];
-const M_E = [0.3, 0.45];
-const M_I = [0.2, 0.6];
+const M_A = [0.55, 0.05];
+const M_E = [0.3, 0.28];
+const M_I = [0.2, 0.36];
 const M_O = [0.42, -0.55];
 const M_U = [0.18, -0.75];
 const M_SHUT = [0, -0.05];
-const M_F = [0.06, 0.12];
-const M_C = [0.16, 0.15];
+const M_F = [0.06, 0.06];
+const M_C = [0.16, 0.08];
 function mouthOf(c) {
   // (lower case)
   if (c >= 65 && c <= 90) c += 32;
@@ -601,6 +601,8 @@ function faceOf(fig, F, t, cam) {
       const b = mouthOf(say.text.charCodeAt(i + 1) | 0);
       _want[0] = Math.max(_want[0], ja + (b[0] - ja) * f);
       _want[7] = wa + (b[1] - wa) * f;
+      // (a smile at rest gives way to the words; joy keeps it)
+      if (mood !== 'joy') _want[1] = Math.min(_want[1], 0.15);
       const end = p / Math.max(1, n);
       const q = say.text.indexOf('?') >= 0;
       const x = say.text.indexOf('!') >= 0;

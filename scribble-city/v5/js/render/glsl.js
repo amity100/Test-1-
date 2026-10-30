@@ -1013,7 +1013,7 @@ void main() {
       // lips, dark beyond them
       if (vMouth > 0.02) {
         vec3 inside = mix(vec3(0.15, 0.03, 0.028), vec3(0.025, 0.006, 0.006), smoothstep(0.3, 0.75, vMouth));
-        inside = mix(inside, vec3(0.84, 0.8, 0.72), smoothstep(0.07, 0.12, vMouth) * (1.0 - smoothstep(0.2, 0.27, vMouth)));
+        inside = mix(inside, vec3(0.84, 0.8, 0.72), smoothstep(0.07, 0.11, vMouth) * (1.0 - smoothstep(0.15, 0.21, vMouth)));
         tex.rgb = mix(tex.rgb, inside, smoothstep(0.02, 0.09, vMouth));
       }
 #endif
