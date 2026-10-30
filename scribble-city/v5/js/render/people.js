@@ -3,10 +3,10 @@ import { makeSurface, srgb, shared, canvasTexture, lin3, mergedSurface, penRow, 
 import { MAX_HOLES, MAX_OWNERS } from './glsl.js';
 import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 import * as HERO from './heroshapes.js';
-import { HeroArt } from './heroart.js';
+import { HeroArt, FolkAtlas } from './heroart.js';
 import { HeroLines } from './herolines.js';
-import { FOLK, SKINS, hexRGB } from './folkspec.js';
-import { folkBody } from './folkshapes.js';
+import { FOLK, FOLK_ON, SKINS, hexRGB } from './folkspec.js';
+import { folkBody, eyeGeo, faceEx, exprMoves, EXPR, EYE } from './folkshapes.js';
 import { folkTone, folkBeard } from './folkink.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
@@ -277,6 +277,14 @@ function partWas(out, i, m, owner, shape) {
   }
 }
 
+// (ROADMAP 13.7) one of the city's people being drawn: their tile in the pictures' atlases (render/
+// heroart.js FolkAtlas, 1 up) and their face's moves this frame (render/folkshapes.js EXPR) - set by
+// drawFolk before their parts are put down
+const _fTile = [0];
+const _fEw = new Float32Array(8);
+// (a move's weight, -1..1, in a byte: 0 exactly 128)
+const byteOf = (a) => Math.round(Math.max(-1, Math.min(1, a)) * 127) + 128;
+
 class DrawClass {
   // index: the shared layout of triangles of the shapes drawn by their corners (or none); aux: the
   // sun's view's and the mirror's own (no smart drawing's motion)
@@ -294,6 +302,12 @@ class DrawClass {
     g.setAttribute('iX', this.iX);
     g.setAttribute('iClip', this.iClip);
     g.setAttribute('iS', this.iS);
+    // (ROADMAP 13.7: a face's moves - the city's people's pen; two to a number, render/glsl.js)
+    this.iE = null;
+    if (mat.defines && mat.defines.USE_EXPR !== undefined) {
+      this.iE = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      g.setAttribute('iE', this.iE);
+    }
     this.mesh = new THREE.InstancedMesh(g, mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
@@ -351,7 +365,17 @@ class DrawClass {
     S[i * 4] = sh.row;
     S[i * 4 + 1] = sh.count;
     S[i * 4 + 2] = sh.pen;
-    S[i * 4 + 3] = sh.flags;
+    // (the city's people's: whose pictures, and a face's moves - ROADMAP 13.7)
+    let fl = sh.flags;
+    if (sh.atlas) {
+      fl += 8 * _fTile[0];
+      if (sh.expr && this.iE) {
+        fl += 4;
+        const E = this.iE.array;
+        for (let q = 0; q < 4; q++) E[i * 4 + q] = byteOf(_fEw[q * 2]) + 256 * byteOf(_fEw[q * 2 + 1]);
+      }
+    }
+    S[i * 4 + 3] = fl;
     return i;
   }
 
@@ -360,7 +384,7 @@ class DrawClass {
     // (nothing of this class on the screen: no draw call at all)
     this.mesh.visible = this.n > 0;
     const n = Math.max(1, this.n);
-    for (const at of [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS]) {
+    for (const at of this.iE ? [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS, this.iE] : [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS]) {
       at.clearUpdateRanges();
       at.addUpdateRange(0, n * at.itemSize);
       at.needsUpdate = true;
@@ -373,7 +397,7 @@ class DrawClass {
   }
 }
 
-// one kind of part: its row in the shapes' texture, its pen, its class
+// one kind of part: where it starts in the shapes' texture, its pen, its class
 class Shape {
   constructor(geo, pen, cap) {
     // (its corners and their triangles, kept for drawing it by its corners)
@@ -386,6 +410,10 @@ class Shape {
     this.cap = cap;
     this.row = 0;
     this.flags = 0;
+    // (ROADMAP 13.7: one of the city's people's - drawn with their tile of the atlases; a face that
+    // moves)
+    this.atlas = false;
+    this.expr = false;
     this.cls = null;
     // (v5) 'full', 'low' or 'shared' (SHARED); a low shape's draws for the sun's view and the mirror
     this.lod = 'full';
@@ -473,6 +501,182 @@ function linC(c) {
   }
   Object.defineProperty(c, '_lin', { value: v, writable: true });
   return v;
+}
+
+// ------------------------------------------------------------------ a face (ROADMAP 13.7)
+// How one of the city's people's face is this moment: its moves (render/folkshapes.js EXPR - the jaw,
+// a smile, the mouth's corners down, the brows up, the brows down, each eye shut, the mouth wide)
+// into _fEw, eased from what it was towards what they feel - their own look at rest (their spec's
+// expr), fear running from danger (fig.mood 'scared'), pain, anger in a fight, joy dancing - with
+// the words they say (fig.talk: the jaw and the lips at a speaker's pace), and blinking now and
+// then. Their eyes look about: at you when you are near and in front of them, else here and there.
+// Returns where (gaze: the iris's [x, y] on the ball for the lines, and its [yaw, pitch]).
+const MOODS = {
+  //        jaw   smile down  up    frown shutR shutL wide
+  scared: [0.42, 0, 0.35, 1, 0, 0, 0, 0.25],
+  hurt: [0.3, 0, 0.6, 0.2, 0.9, 0.55, 0.55, 0.15],
+  angry: [0.12, 0, 0.75, 0, 1, 0.12, 0.12, 0.2],
+  joy: [0.38, 1, 0, 0.35, 0, 0.15, 0.15, 0],
+  sad: [0, 0, 1, 0.55, 0, 0.1, 0.1, 0],
+  surprised: [0.5, 0, 0, 1, 0, 0, 0, 0],
+  dead: [0.22, 0, 0.3, 0, 0, 1, 1, 0],
+};
+const REST = { neutral: 0, soft: 0.3, half: 0.4, smile: 0.62, laugh: 0.8 };
+// (ROADMAP 13.8) the mouth of each sound: [the jaw, the lips wide (-: rounded)]
+const M_REST = [0.02, 0];
+const M_A = [0.55, 0.12];
+const M_E = [0.3, 0.45];
+const M_I = [0.2, 0.6];
+const M_O = [0.42, -0.55];
+const M_U = [0.18, -0.75];
+const M_SHUT = [0, -0.05];
+const M_F = [0.06, 0.12];
+const M_C = [0.16, 0.15];
+function mouthOf(c) {
+  // (lower case)
+  if (c >= 65 && c <= 90) c += 32;
+  if (c === 97) return M_A;
+  if (c === 101) return M_E;
+  if (c === 105 || c === 121) return M_I;
+  if (c === 111) return M_O;
+  if (c === 117 || c === 119) return M_U;
+  if (c === 109 || c === 98 || c === 112) return M_SHUT;
+  if (c === 102 || c === 118) return M_F;
+  if (c >= 97 && c <= 122) return M_C;
+  return M_REST;
+}
+const _want = new Float32Array(8);
+const _gaze = [0, 0, 0, 0];
+const _eyeR = new THREE.Matrix4();
+const _eyeT = new THREE.Matrix4();
+const _eyeM = new THREE.Matrix4();
+const _eyeE = new THREE.Euler();
+function faceOf(fig, F, t, cam) {
+  let st = fig._face;
+  if (!st) {
+    st = fig._face = { w: new Float32Array(8), last: t, blinkAt: t + 0.5 + Math.random() * 3, blinkT: -1, yaw: 0, pitch: 0, toYaw: 0, toPitch: 0, glanceAt: t + Math.random() * 2, talkPh: Math.random() * 9 };
+  }
+  const dt = Math.min(0.1, Math.max(0, t - st.last));
+  st.last = t;
+  // what they feel
+  _want.fill(0);
+  const rest = REST[F.spec.expr] || 0;
+  _want[1] = rest;
+  // (what they feel: what is happening to them, else what they are saying - game/voices.js say)
+  let mood = fig.mood || (fig.feel && fig.feel.until > t ? fig.feel.mood : null);
+  if (fig.dead > 0) mood = 'dead';
+  else if (!mood) {
+    if (fig.flail > 0 || fig.armsUp > 0.3 || fig.surrender > 0) mood = 'scared';
+    else if (fig.recoil > 0.2 || fig.stagger > 0) mood = 'hurt';
+    else if (fig.punch >= 0 || fig.kick >= 0 || fig.guard > 0.3) mood = 'angry';
+    else if (fig.dance > 0.3) mood = 'joy';
+  }
+  if (mood && MOODS[mood]) {
+    const M = MOODS[mood];
+    for (let e = 0; e < 8; e++) _want[e] = Math.max(e === 1 ? 0 : _want[e], M[e]);
+    if (mood !== 'joy') _want[1] = 0;
+  }
+  // (ROADMAP 13.8) the words said: each sound's mouth, read off the line at the voice's pace - the jaw
+  // dropped for an a, the lips wide for an e or an i, rounded for an o or a u, shut for an m, a b or a
+  // p - and the brows with what is said (a question, a shout)
+  const say = fig.say;
+  let saying = false;
+  if (say && !say.done && mood !== 'dead') {
+    // (no voice after all: the words on their own)
+    if (say.wait && t - say.atT > 1.2) {
+      say.wait = false;
+      say.at = 0;
+      say.atT = t;
+    }
+    const n = say.text.length;
+    const p = say.wait ? -1 : say.at + (t - say.atT) * say.cps;
+    if (p > n + 1) say.done = true;
+    else if (p >= 0) {
+      saying = true;
+      const i = Math.floor(p);
+      const f = p - i;
+      const a = mouthOf(say.text.charCodeAt(i) | 0);
+      const ja = a[0];
+      const wa = a[1];
+      const b = mouthOf(say.text.charCodeAt(i + 1) | 0);
+      _want[0] = Math.max(_want[0], ja + (b[0] - ja) * f);
+      _want[7] = wa + (b[1] - wa) * f;
+      const end = p / Math.max(1, n);
+      const q = say.text.indexOf('?') >= 0;
+      const x = say.text.indexOf('!') >= 0;
+      if (q) _want[3] = Math.max(_want[3], 0.25 + 0.4 * end);
+      if (x) _want[3] = Math.max(_want[3], 0.55);
+      if (say.tone === 'alarm') _want[3] = Math.max(_want[3], 0.8);
+    }
+  }
+  if (!say || say.done) fig.say = null;
+  // the words, when only that they are said is known: the jaw and the lips going at a speaker's pace,
+  // in syllables and the gaps between words
+  if (fig.talk && !saying && mood !== 'dead') {
+    st.talkPh += dt;
+    const p = st.talkPh;
+    const syl = Math.max(0, Math.sin(p * 13.5) * 0.6 + Math.sin(p * 7.3 + 1.1) * 0.4);
+    const gap = Math.sin(p * 2.1) > -0.55 ? 1 : 0.15;
+    _want[0] = Math.max(_want[0], 0.08 + 0.32 * syl * gap);
+    _want[7] = Math.max(_want[7], 0.25 * Math.max(0, Math.sin(p * 5.1 + 0.4)) * gap);
+  }
+  // eased towards it: the jaw quick, the rest a little slower
+  const w = st.w;
+  for (let e = 0; e < 8; e++) w[e] += (_want[e] - w[e]) * Math.min(1, dt * (e === 0 || e === 7 ? 18 : 7));
+  // a blink now and then (now and then two)
+  if (st.blinkT < 0 && t > st.blinkAt && mood !== 'dead') {
+    st.blinkT = 0;
+    st.blinkAt = t + (Math.random() < 0.15 ? 0.32 : 2 + Math.random() * 4.5);
+  }
+  for (let e = 0; e < 8; e++) _fEw[e] = w[e];
+  if (st.blinkT >= 0) {
+    st.blinkT += dt;
+    const b = st.blinkT < 0.07 ? st.blinkT / 0.07 : Math.max(0, 1 - (st.blinkT - 0.07) / 0.1);
+    if (st.blinkT > 0.17) st.blinkT = -1;
+    _fEw[5] = Math.max(_fEw[5], b);
+    _fEw[6] = Math.max(_fEw[6], b);
+  }
+  // where they look: at whoever they are listening to (fig.lookAt: their head turns there too), at
+  // you near and in front of them; else a glance here and there, now and then
+  let lookYou = false;
+  const at = fig.lookAt || cam;
+  if (at && mood !== 'dead') {
+    const hc = fig.j.headC;
+    const dx = at.x - hc.x;
+    const dy = at.y - hc.y;
+    const dz = at.z - hc.z;
+    const d = Math.hypot(dx, dy, dz);
+    if ((d < 7 || at !== cam) && d > 0.05) {
+      // (in the head's own frame: across, up, ahead)
+      const ax = (dx * fig.hr.x + dy * fig.hr.y + dz * fig.hr.z) / d;
+      const ay = (dx * fig.hu.x + dy * fig.hu.y + dz * fig.hu.z) / d;
+      const az = (dx * fig.hf.x + dy * fig.hf.y + dz * fig.hf.z) / d;
+      if (az > 0.35) {
+        st.toYaw = Math.max(-0.45, Math.min(0.45, Math.atan2(ax, az)));
+        st.toPitch = Math.max(-0.3, Math.min(0.3, Math.atan2(ay, az)));
+        lookYou = true;
+      }
+    }
+  }
+  if (!lookYou && t > st.glanceAt) {
+    st.glanceAt = t + 0.8 + Math.random() * 2.6;
+    const r = Math.random();
+    st.toYaw = r < 0.45 ? 0 : (Math.random() - 0.5) * 0.7;
+    st.toPitch = r < 0.45 ? 0 : (Math.random() - 0.6) * 0.3;
+  }
+  if (mood === 'dead') st.toYaw = st.toPitch = 0;
+  // (the eyes jump to where they look - quick, as eyes do)
+  const k = Math.min(1, dt * 22);
+  st.yaw += (st.toYaw - st.yaw) * k;
+  st.pitch += (st.toPitch - st.pitch) * k;
+  // (the lines are in the head's mirrored frame: towards its right is down its x)
+  _gaze[0] = -Math.sin(st.yaw) * EYE.r;
+  // (the tests: a face held as asked)
+  if (fig.__ew) for (let e = 0; e < 8; e++) _fEw[e] = fig.__ew[e];
+  _gaze[1] = Math.sin(st.pitch) * EYE.r;
+  _gaze[2] = st.yaw;
+  _gaze[3] = st.pitch;
+  return _gaze;
 }
 
 export class PersonRenderer {
@@ -616,8 +820,33 @@ export class PersonRenderer {
       lowCoatSkirt: P(skirtGeo(0.18, 0.27, 0.62, 0, 8), M.plain),
     };
     // (v5, ROADMAP 13.6) the city's people drawn as the hero is (render/folkspec.js FOLK): each their own
-    // pens (their pictures, render/heroart.js), body (render/folkshapes.js) and lines - drawFolk
-    this.folk = FOLK.map((spec, k) => this.folkKind(spec, k, touch, S, P));
+    // body (render/folkshapes.js), pictures and lines - drawFolk. (ROADMAP 13.7) All of them in one
+    // atlas of pictures (render/heroart.js FolkAtlas) and five pens of it, so that however many of
+    // them are about, their parts are drawn in a handful of draws; phones fewer of them
+    this.touch = touch;
+    this.folkLines = 0;
+    const nK = Math.min(FOLK.length, touch ? 16 : 32);
+    FOLK_ON.n = nK;
+    const A = (this.atlas = new FolkAtlas(touch, nK));
+    const FP = (o, name) => {
+      const m = S({ ...o, map: A.tex[name] });
+      m.userData.folk = true;
+      m.vertexColors = false;
+      return m;
+    };
+    this.folkPens = {
+      face: FP({ kind: 'skin', partR: 0.06, wash: 1, density: 0, ang: 1.0 }, 'face'),
+      hair: FP({ kind: 'cyl', partR: 0.1, wash: 0.95, density: 0.5 }, 'hair'),
+      top: FP({ kind: 'paint', partR: 0.09, gloss: 0.08, wash: 0.95, density: 0.55 }, 'jacket'),
+      bottom: FP({ kind: 'cyl', partR: 0.09, wash: 0.95, density: 0.55 }, 'pants'),
+      shoes: FP({ kind: 'paint', partR: 0.05, gloss: 0.14, wash: 0.95, density: 0.55 }, 'boots'),
+    };
+    // (their eyes: the same on every head, each turning in its socket to look - drawFolk)
+    for (const [name, sd] of [['folkEyeR', 1], ['folkEyeL', -1]]) {
+      this.p[name] = P(eyeGeo(sd), this.folkPens.face, 6 * nK);
+      this.p[name].atlas = true;
+    }
+    this.folk = Array.from({ length: nK }, (_, k) => this.folkKind(FOLK[k], k, touch, P));
     for (const [k, sh] of Object.entries(this.p)) sh.lod = SHARED.has(k) ? 'shared' : k.startsWith('low') ? 'low' : 'full';
     // (farther than this a person is drawn in the simple shapes in the picture too: game.js sets
     // it for a phone and a computer)
@@ -640,36 +869,26 @@ export class PersonRenderer {
     this.dirty = false;
   }
 
-  // (v5, ROADMAP 13.6) one of the city's people drawn as the hero is: their pictures (the helper draws
-  // them; a plain colour till they come), their five pens, their body's shapes (a few of each: one of
-  // them about the city at a time - game/mall.js), their lines, where their ears are on their head
-  folkKind(spec, k, touch, S, P) {
-    const art = new HeroArt(touch, k);
-    const FP = (o) => {
-      const m = S(o);
-      m.userData.folk = k;
-      m.vertexColors = false;
-      return m;
-    };
-    const mats = {
-      face: FP({ kind: 'skin', partR: 0.06, map: art.first('face'), wash: 1, density: 0, ang: 1.0 }),
-      hair: FP({ kind: 'cyl', partR: 0.1, map: art.first('hair'), wash: 0.95, density: 0.5 }),
-      top: FP({ kind: 'paint', partR: 0.09, gloss: spec.top.fabric === 'nylon' ? 0.2 : 0.06, map: art.first('jacket'), wash: 0.95, density: 0.55 }),
-      bottom: FP({ kind: 'cyl', partR: 0.09, map: art.first('pants'), wash: 0.95, density: 0.55 }),
-      shoes: FP({ kind: 'paint', partR: 0.05, gloss: 0.14, map: art.first('boots'), wash: 0.95, density: 0.55 }),
-    };
+  // (v5, ROADMAP 13.6) one of the city's people drawn as the hero is: their body's shapes (in the
+  // city's people's pens: their pictures are their tile of the atlases - ROADMAP 13.7), their lines,
+  // where their ears and eyes are on their head
+  folkKind(spec, k, touch, P) {
+    const pens = this.folkPens;
     const body = folkBody(k);
     const G = body.parts;
     // (the jacket's collar and the shoes: the hero's shapes, in their own pictures)
     G.collar = HERO.heroCollarGeo();
     G.shoe = HERO.heroShoeGeo();
-    const PEN = { head: 'face', eyes: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
+    const PEN = { head: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
     const TWO = new Set(['upper', 'fore', 'thigh', 'shin', 'shoe']);
     const sh = {};
     for (const [name, geo] of Object.entries(G)) {
       // (glasses: thin metal, in the city's gloss pen)
-      const pen = name === 'glasses' ? this.mats.gloss : mats[PEN[name] || 'top'];
-      sh[name] = this.p[`folk${k}_${name}`] = P(geo, pen, TWO.has(name) ? 12 : 6);
+      const pen = name === 'glasses' ? this.mats.gloss : pens[PEN[name] || 'top'];
+      const s = (sh[name] = this.p[`folk${k}_${name}`] = P(geo, pen, TWO.has(name) ? 12 : 6));
+      s.atlas = name !== 'glasses';
+      // (the face: it moves - render/folkshapes.js EXPR)
+      s.expr = name === 'head';
     }
     // their lines (render/herolines.js): their head and hair, their body's rows, in their colours
     const Ln = body.lines;
@@ -687,15 +906,17 @@ export class PersonRenderer {
       beardInk: spec.beardCol ? dark(spec.beardCol).map((v) => v * 0.8) : null,
       rows: Ln.rows, skirt: Ln.skirt,
       // (their real head's face, and how they look: render/folkshapes.js surfaceOf, folkspec.js expr)
-      facePt: Ln.facePt, mono: !!spec.eyes.mono,
+      facePt: Ln.facePt, faceEx, mono: !!spec.eyes.mono,
       smile: { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[spec.expr] || 0, half: spec.expr === 'half', gape: spec.gape || 0,
       top: inkOf(spec.top), bottom: inkOf(spec.bottom),
       hair: dark(spec.hair.dark).map((v) => v * 0.6), hairHi: hexRGB(spec.hair.light[0]),
     };
     const B = { thick: 0, ...(spec.body || {}) };
     return {
-      k, spec, art, mats, sh, tex: {}, mat: null, frame: -1,
+      k, spec, sh,
       lines: new HeroLines(touch, kit, 0.5),
+      // (where their eyes are in their head: they turn there to look - drawFolk)
+      eyes: body.eyes,
       // (their ears' lobes on their head: render/folkshapes.js)
       lobes: body.lobes,
       // (a thick neck or a slender one; a heavy body's girth)
@@ -729,8 +950,15 @@ export class PersonRenderer {
     // (v5, ROADMAP 13.1) the hero's pens, their five pictures in a draw of their own: drawHero turns
     // them over (HERO_PICS: their order)
     const hero = (this.heroMat = mergedSurface(M.heroJacket, { vcolor: false, pictures: penPictures(HERO_PICS.map((k) => M[k])), pull: true }));
-    // (ROADMAP 13.6: and each of the city's people drawn as he is, theirs - in a draw of their own)
-    for (const F of this.folk) F.mat = mergedSurface(F.mats.top, { vcolor: false, pictures: penPictures(['face', 'hair', 'top', 'bottom', 'shoes'].map((n) => F.mats[n])), pull: true });
+    // (ROADMAP 13.6: and the city's people drawn as he is, theirs - ROADMAP 13.7: all of them in one,
+    // their pictures atlases, their faces moving)
+    const FPn = this.folkPens;
+    const folkMat = (this.folkMat = mergedSurface(FPn.top, { vcolor: false, pictures: penPictures(['face', 'hair', 'top', 'bottom', 'shoes'].map((n) => FPn[n])), pull: true }));
+    folkMat.defines.USE_ATLAS = '';
+    folkMat.defines.USE_EXPR = '';
+    folkMat.uniforms.uAtlas = { value: Array.from({ length: 5 }, () => new THREE.Vector4(this.atlas.cols, this.atlas.rows, 0, 0)) };
+    folkMat.uniforms.uExprBase = { value: 0 };
+    folkMat.uniforms.uExprN = { value: 0 };
     // (v5) the shapes drawn by their corners (OWN_LAYOUT): their row of the texture holds their
     // corners, and they share a draw with the shapes of the same layout of triangles
     const layouts = [];
@@ -746,7 +974,7 @@ export class PersonRenderer {
     };
     // (by side, and by kind: 'full' shapes are drawn in the picture alone, 'low' ones everywhere
     // and again, for those drawn in full, in the sun's view and the mirror alone)
-    const sideOf = (sh) => `${sh.penMat.userData.folk !== undefined ? `folk${sh.penMat.userData.folk}` : sh.penMat === M.coat ? 'back' : sh.penMat.userData.heroPen ? 'hero' : 'front'}-${sh.lod}`;
+    const sideOf = (sh) => `${sh.penMat.userData.folk ? 'folk' : sh.penMat === M.coat ? 'back' : sh.penMat.userData.heroPen ? 'hero' : 'front'}-${sh.lod}`;
     const classOf = (sh) => CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
     const byCorners = (sh) => {
       sh.layout = layoutOf(sh.igeo);
@@ -756,7 +984,8 @@ export class PersonRenderer {
     const names = new Map(Object.entries(this.p).map(([k, v]) => [v, k]));
     for (const sh of shapes) {
       sh.layout = null;
-      if (sh.igeo && !IN_CLASS.has(names.get(sh)) && classOf(sh) - sh.igeo.attributes.position.count >= OWN_LAYOUT) byCorners(sh);
+      // (a face that moves is always drawn by its corners: its moves are its points' - USE_EXPR)
+      if (sh.igeo && ((!IN_CLASS.has(names.get(sh)) && classOf(sh) - sh.igeo.attributes.position.count >= OWN_LAYOUT) || sh.expr)) byCorners(sh);
     }
     // (a class left with the shapes of one layout only: drawn by their corners, for nothing)
     const rest = new Map();
@@ -774,23 +1003,36 @@ export class PersonRenderer {
     for (const sh of shapes) sh.igeo = null;
     let wide = 0;
     for (const sh of shapes) wide = Math.max(wide, sh.count);
-    // the texture: two texels a point, a row a shape - a shape longer than the widest row the
-    // graphics card is sure to have goes on in the next rows (ROADMAP 13.6: real heads)
+    // the texture: two texels a point, the shapes one after another, row after row (ROADMAP 13.7: a
+    // shape where it starts - a real head is longer than any row the graphics card is sure to have)
     const W = Math.min(wide * 2, 4096);
-    let rows = 0;
+    let at = 0;
     for (const sh of shapes) {
-      sh.row = rows;
-      rows += Math.ceil((sh.count * 2) / W);
+      sh.row = at;
+      at += sh.count * 2;
       sh.pen = penRow(sh.penMat);
     }
+    // (then the faces' moves: a texel a point, each move after the last - render/folkshapes.js)
+    const X = exprMoves();
+    const exprBase = at;
+    at += X.n * EXPR.length;
+    folkMat.uniforms.uExprBase.value = exprBase;
+    folkMat.uniforms.uExprN.value = X.n;
+    const rows = Math.ceil(at / W);
     const data = new Float32Array(W * rows * 4);
+    for (let t = 0; t < X.n * EXPR.length; t++) {
+      const o = (exprBase + t) * 4;
+      data[o] = X.d[t * 3];
+      data[o + 1] = X.d[t * 3 + 1];
+      data[o + 2] = X.d[t * 3 + 2];
+    }
     for (const sh of shapes) {
       const g = sh.geo;
       const pos = g.attributes.position.array;
       const nor = g.attributes.normal.array;
       const uv = g.attributes.uv ? g.attributes.uv.array : null;
       for (let v = 0; v < sh.count; v++) {
-        const o = (sh.row * W + v * 2) * 4;
+        const o = (sh.row + v * 2) * 4;
         data[o] = pos[v * 3];
         data[o + 1] = pos[v * 3 + 1];
         data[o + 2] = pos[v * 3 + 2];
@@ -821,7 +1063,7 @@ export class PersonRenderer {
     }
     for (const { side, size, index, list } of groups.values()) {
       const cap = list.reduce((a, sh) => a + sh.cap, 0);
-      const mat = side.startsWith('folk') ? this.folk[parseInt(side.slice(4), 10)].mat : side.startsWith('back') ? back : side.startsWith('hero') ? hero : front;
+      const mat = side.startsWith('folk') ? folkMat : side.startsWith('back') ? back : side.startsWith('hero') ? hero : front;
       const cls = new DrawClass(scene, size, mat, cap, index);
       if (side.endsWith('-full')) {
         // (the picture alone: not on the mirror's layer, and left out of the sun's view)
@@ -883,7 +1125,17 @@ export class PersonRenderer {
     this.dirty = true;
   }
 
-  begin() {}
+  begin() {
+    // (ROADMAP 13.7: the city's people's pictures that came this frame - their smaller copies; and the
+    // strokes their lines may have this frame, all of them together)
+    if (this.atlas.renderer) this.atlas.update();
+    this.folkLines = this.touch ? 1600 : 4200;
+  }
+
+  // (the graphics card's: the city's people's pictures are written straight into their atlases)
+  setRenderer(r) {
+    this.atlas.renderer = r;
+  }
 
   // a plain ellipsoid at c in the frame (r, u, f) (the birds of the city, little things in the air)
   blob(c, r, u, f, sx, sy, sz, col) {
@@ -1588,15 +1840,13 @@ export class PersonRenderer {
     const ax = fig.ax;
     const rgt = fig.brgt;
     const fwd = fig.bfwd;
-    // (their drawings turned over once a frame, however many of them are about)
-    if (F.frame !== this.frameNo) {
-      F.frame = this.frameNo;
-      F.art.want();
-      F.art.step();
-      F.art.frame(performance.now() / 1000, F.tex);
-      const U = F.mat.uniforms;
-      for (let i = 0; i < 5; i++) U[`uMapS${i}`].value = F.tex[HERO_SET[i]];
-    }
+    // (ROADMAP 13.7: their pictures - their tile of the atlases, drawn the first time they are about -
+    // and how their face is this frame)
+    this.atlas.want(L.folk, camDist);
+    _fTile[0] = L.folk + 1;
+    // (on the game's clock: a face slows with the game, and stops when it stops)
+    const now = shared.uTime.value;
+    const gaze = faceOf(fig, F, now, this.camPos);
     const white = PAPER_W;
     const skin = F.skin;
     fig.headId = (seed * 7.77 + 0.31) % 1;
@@ -1691,14 +1941,22 @@ export class PersonRenderer {
       const hf = fig.hf;
       const hc = _hcH.copy(j.headC).addScaledVector(hu, -0.058 * hs);
       q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
-      HL.set('head', 'head', _m);
+      HL.set('head', 'head', _m, _fEw, gaze);
       framed(hc, hr, hu, hf, hs, hs, hs, _mH);
       q.hair.push(_mH, white, own, id(), ind);
       if (q.locks) q.locks.push(_mH, white, own, id(), ind);
       if (q.fall) q.fall.push(_mH, white, own, id(), ind);
       if (q.bun) q.bun.push(_mH, white, own, id(), ind);
       if (q.glasses) q.glasses.push(_mH, F.glasses, own, id(), ind);
-      q.eyes.push(_mH, F.face, own, fig.headId, ind);
+      // (their eyes in their sockets, each turned to where they look. The head's frame is drawn
+      // mirrored - DrawClass.push - and the eyes' with it: each in the mirror's place)
+      _eyeR.makeRotationFromEuler(_eyeE.set(-gaze[3], gaze[2], 0, 'YXZ'));
+      for (let e = 0; e < 2; e++) {
+        const c = F.eyes[e];
+        _eyeT.makeTranslation(-c[0], c[1], c[2]).multiply(_eyeR);
+        _eyeM.multiplyMatrices(_mH, _eyeT);
+        (e ? p.folkEyeL : p.folkEyeR).push(_eyeM, F.face, own, fig.headId, ind);
+      }
       // (their ears are their head's; earrings at the lobes)
       if (F.earsOn && F.earring) {
         for (const v of F.lobes) {
@@ -1739,7 +1997,12 @@ export class PersonRenderer {
       ctx.t = performance.now() / 1000;
       // (farther than this, their pictures alone)
       ctx.dist = camDist < 9 ? Math.hypot(cam.x - j.headC.x, cam.y - j.headC.y, cam.z - j.headC.z) : 99;
-      HL.draw(this.lines, ctx);
+      // (ROADMAP 13.7: however many of them are near, the frame's lines are shared out - the nearer,
+      // the more of them; the hero's always his)
+      ctx.budget = Math.min(Math.round(HL.budget * Math.min(1, (3.4 / Math.max(1, ctx.dist)) ** 0.7)), this.folkLines);
+      ctx.used = 0;
+      if (ctx.budget > 40) HL.draw(this.lines, ctx);
+      this.folkLines -= ctx.used;
     }
   }
 

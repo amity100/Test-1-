@@ -36,6 +36,22 @@ function base() {
     g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
     faceMap(g);
     BASE = { pos, idx, uv: g.attributes.uv.array, front: frontIds(pos, idx) };
+    // (ROADMAP 13.7) the inside of the mouth: the lips' inner sides and what lies behind them - how
+    // far behind the face ahead of it each point is (0 the face itself .. 1 the back of the mouth).
+    // Its drawing is the mouth's own (render/glsl.js USE_ATLAS: vMouth), seen when the jaw drops
+    const n = pos.length / 3;
+    const mouth = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = pos[i * 3];
+      const y = pos[i * 3 + 1];
+      if (Math.abs(x) > 0.03 || y < -0.064 || y > -0.04) continue;
+      const T = frontTri(x, y);
+      if (!T) continue;
+      let fz = 0;
+      for (let t = 0; t < 3; t++) fz += pos[T.v[t] * 3 + 2] * T.w[t];
+      mouth[i] = Math.min(1, Math.max(0, (fz - pos[i * 3 + 2] - 0.0008) / 0.0045));
+    }
+    BASE.mouth = mouth;
   }
   return BASE;
 }
@@ -77,24 +93,32 @@ function frontIds(P, I) {
   }
   return tri;
 }
+// the base face's triangle straight ahead of (x, y) and where in it the point is: { v: its three
+// points, w: their weights } - or null off the face
+function frontTri(x, y) {
+  const B = BASE;
+  const i = Math.floor((x - FG.x0) / FG.d);
+  const j = Math.floor((y - FG.y0) / FG.d);
+  if (i < 0 || j < 0 || i >= FG.n || j >= FG.m) return null;
+  const k = B.front[j * FG.n + i];
+  if (k < 0) return null;
+  const P = B.pos;
+  const v = [B.idx[k], B.idx[k + 1], B.idx[k + 2]];
+  const xs = v.map((q) => P[q * 3]);
+  const ys = v.map((q) => P[q * 3 + 1]);
+  const den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2]);
+  const w0 = ((ys[1] - ys[2]) * (x - xs[2]) + (xs[2] - xs[1]) * (y - ys[2])) / den;
+  const w1 = ((ys[2] - ys[0]) * (x - xs[2]) + (xs[0] - xs[2]) * (y - ys[2])) / den;
+  return { v, w: [w0, w1, 1 - w0 - w1] };
+}
 // a point of the face's drawing (x, y on the base face, from the front) on a head moved from it,
 // lifted off its skin: { p, n } - or null off the face
 function facePtOf(pos, nor, eyes) {
-  const B = base();
+  base();
   return (x, y, lift = 0.0015) => {
-    const i = Math.floor((x - FG.x0) / FG.d);
-    const j = Math.floor((y - FG.y0) / FG.d);
-    if (i < 0 || j < 0 || i >= FG.n || j >= FG.m) return null;
-    const k = B.front[j * FG.n + i];
-    if (k < 0) return null;
-    const P = B.pos;
-    const v = [B.idx[k], B.idx[k + 1], B.idx[k + 2]];
-    const xs = v.map((q) => P[q * 3]);
-    const ys = v.map((q) => P[q * 3 + 1]);
-    const den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2]);
-    const w0 = ((ys[1] - ys[2]) * (x - xs[2]) + (xs[2] - xs[1]) * (y - ys[2])) / den;
-    const w1 = ((ys[2] - ys[0]) * (x - xs[2]) + (xs[0] - xs[2]) * (y - ys[2])) / den;
-    const w = [w0, w1, 1 - w0 - w1];
+    const T = frontTri(x, y);
+    if (!T) return null;
+    const { v, w } = T;
     const p = [0, 0, 0];
     const n = [0, 0, 0];
     for (let t = 0; t < 3; t++) {
@@ -123,6 +147,21 @@ function facePtOf(pos, nor, eyes) {
     for (let c = 0; c < 3; c++) p[c] += n[c] * lift;
     return { p, n };
   };
+}
+// (ROADMAP 13.7) how a point of the face's drawing goes with each of the face's moves (EXPR), as the
+// base face round it does: 8 moves of 3 numbers (render/herolines.js: the strokes of a face move with
+// it) - the same on every head
+export function faceEx(x, y) {
+  base();
+  const T = frontTri(x, y);
+  if (!T) return null;
+  const X = exprMoves();
+  const out = new Float32Array(EXPR.length * 3);
+  for (let t = 0; t < 3; t++) {
+    const v = T.v[t];
+    for (let e = 0; e < EXPR.length; e++) for (let c = 0; c < 3; c++) out[e * 3 + c] += X.d[(e * X.n + v) * 3 + c] * T.w[t];
+  }
+  return out;
 }
 // their head's points: the base's, moved by each target by its weight (spec.morph: { name: weight };
 // a name without its side - cheek-, eye-, ear- - is both of them)
@@ -164,20 +203,139 @@ function headGeo(H) {
   g.setAttribute('uv', new THREE.BufferAttribute(base().uv.slice(), 2));
   g.setIndex(new THREE.BufferAttribute(H.idx, 1));
   g.computeVertexNormals();
+  // (the inside of the mouth told by its normals' length: render/glsl.js USE_ATLAS, vMouth)
+  const M = base().mouth;
+  const nr = g.attributes.normal.array;
+  for (let i = 0; i < M.length; i++) {
+    if (!M[i]) continue;
+    for (let c = 0; c < 3; c++) nr[i * 3 + c] *= 1 + M[i];
+  }
   return g;
 }
 // the eyes: two balls in their sockets, the drawing's eyes on their fronts
-const EYE = { x: 0.032, y: 0.0185, z: 0.072, r: 0.0155 };
-function eyesGeo(eyes) {
-  const one = (sd, c) => {
-    const g = new THREE.SphereGeometry(EYE.r, 22, 16);
-    // (the drawing's eye laid on it where the base head has it, then the ball into its socket)
-    g.translate(sd * EYE.x, EYE.y, EYE.z);
-    faceMap(g);
-    g.translate(c[0] - sd * EYE.x, c[1] - EYE.y, c[2] - EYE.z);
-    return g;
+export const EYE = { x: 0.032, y: 0.0185, z: 0.072, r: 0.0155 };
+// (ROADMAP 13.7) an eye, round its middle (it turns to look): the same on every head - its drawing
+// laid on it where the base head has it (render/people.js drawFolk puts it in its socket)
+export function eyeGeo(sd) {
+  const g = new THREE.SphereGeometry(EYE.r, 22, 16);
+  g.translate(sd * EYE.x, EYE.y, EYE.z);
+  faceMap(g);
+  g.translate(-sd * EYE.x, -EYE.y, -EYE.z);
+  return g;
+}
+
+// ------------------------------------------------------------------ the face's moves
+// (ROADMAP 13.7) What a face can do, for every head moved from the base (they share its points): the
+// jaw open, a smile, the mouth's corners down, the brows up, the brows drawn down, each eye shut, the
+// mouth wide - each a move of every point, made as far as the moment wants it (render/glsl.js
+// USE_EXPR; render/people.js faceOf). n points, 3 numbers each, one move after another.
+export const EXPR = ['jaw', 'smile', 'down', 'browsUp', 'browsDown', 'blinkR', 'blinkL', 'wide'];
+const sstep = (a, b, v) => {
+  const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+let MOVES = null;
+export function exprMoves() {
+  if (MOVES) return MOVES;
+  const B = base();
+  const P = B.pos;
+  const n = P.length / 3;
+  const out = new Float32Array(EXPR.length * n * 3);
+  const add = (e, name, k) => {
+    for (const nm of MORPHS[name] ? [name] : [`l-${name}`, `r-${name}`]) {
+      const M = MORPHS[nm];
+      if (!M) continue;
+      const ix = unb64(M.i, Uint16Array);
+      const d = unb64(M.d, Int8Array);
+      for (let j = 0; j < ix.length; j++) for (let c = 0; c < 3; c++) out[(e * n + ix[j]) * 3 + c] += d[j * 3 + c] * M.s * k;
+    }
   };
-  return merge([one(1, eyes[0]), one(-1, eyes[1])]);
+  // the jaw: turned down about the hinge in front of the ears; the chin, the lower lip and the jaw's
+  // line with it, the cheeks a little, the upper lip and all above not at all
+  const hy = -0.006;
+  const hz = -0.004;
+  const A = 0.26;
+  // (where the lips meet each side of the line they part along, which is which is told by which
+  // way they face: the lower lip's top and its inside face up, the upper lip's face down - so the
+  // mouth opens between them, and its inside is seen)
+  const N = new Float32Array(n * 3);
+  const I = B.idx;
+  for (let k = 0; k < I.length; k += 3) {
+    const a = I[k] * 3;
+    const b = I[k + 1] * 3;
+    const c = I[k + 2] * 3;
+    const ux = P[b] - P[a];
+    const uy = P[b + 1] - P[a + 1];
+    const uz = P[b + 2] - P[a + 2];
+    const vx = P[c] - P[a];
+    const vy = P[c + 1] - P[a + 1];
+    const vz = P[c + 2] - P[a + 2];
+    const nx = uy * vz - uz * vy;
+    const ny = uz * vx - ux * vz;
+    const nz = ux * vy - uy * vx;
+    for (const o of [a, b, c]) {
+      N[o] += nx;
+      N[o + 1] += ny;
+      N[o + 2] += nz;
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const x = P[i * 3];
+    const y = P[i * 3 + 1];
+    const z = P[i * 3 + 2];
+    const ax = Math.abs(x);
+    // (the line the jaw parts along: the mouth, then up its corners and back to the hinge)
+    const edge = ax < 0.024 ? -0.0512 : -0.0512 + (ax - 0.024) * 0.62;
+    let w = sstep(edge + 0.0018, edge - 0.0024, y);
+    if (ax < 0.026 && Math.abs(y - edge) < 0.0034) {
+      const L = Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]) || 1;
+      const lips = sstep(0.026, 0.02, ax);
+      w = w + (sstep(-0.3, 0.3, N[i * 3 + 1] / L) - w) * lips;
+    }
+    w *= sstep(hz - 0.03, hz + 0.01, z);
+    // (the throat stretched, not carried away)
+    w *= 1 - 0.65 * sstep(-0.1, -0.135, y);
+    if (w <= 0) continue;
+    // (the chin down and back: what is ahead of the hinge goes down)
+    const a = A * w;
+    const dy = y - hy;
+    const dz = z - hz;
+    const ny = hy + dy * Math.cos(a) - dz * Math.sin(a);
+    const nz = hz + dy * Math.sin(a) + dz * Math.cos(a);
+    out[i * 3 + 1] = ny - y;
+    out[i * 3 + 2] = nz - z;
+  }
+  add(1, 'mouth-angles-up', 1.5);
+  add(1, 'mouth-scale-horiz-incr', 0.25);
+  add(1, 'cheek-volume-incr', 0.25);
+  add(2, 'mouth-angles-down', 1.5);
+  add(3, 'eyebrows-trans-up', 1.4);
+  add(3, 'eyebrows-angle-up', 0.4);
+  add(4, 'eyebrows-trans-down', 1.0);
+  add(4, 'eyebrows-angle-down', 1.2);
+  add(7, 'mouth-scale-horiz-incr', 1.0);
+  // each eye shut: the upper lid down over the eye to the lower one, close over the ball
+  for (const [e, sd] of [[5, 1], [6, -1]]) {
+    const cx = sd * EYE.x;
+    for (let i = 0; i < n; i++) {
+      const x = P[i * 3];
+      const y = P[i * 3 + 1];
+      const z = P[i * 3 + 2];
+      const dx = x - cx;
+      if (Math.abs(dx) > 0.019 || y < EYE.y - 0.001 || y > 0.034 || z < EYE.z + 0.002) continue;
+      // (the lid's edge all the way, the skin above it less, the brow not at all)
+      const w = (1 - sstep(0.0235, 0.031, y)) * (1 - sstep(0.0135, 0.019, Math.abs(dx)));
+      if (w <= 0) continue;
+      const lower = EYE.y - 0.0046 + 0.0012 * (dx / 0.012) ** 2;
+      const ty = y + (lower + 0.0006 - y) * w * (y < 0.0245 ? 1 : 0.55);
+      const r2 = (EYE.r + 0.0011) ** 2 - dx * dx - (ty - EYE.y) ** 2;
+      const tz = r2 > 0 ? Math.max(z - 0.003 * w, EYE.z + Math.sqrt(r2)) : z;
+      out[(e * n + i) * 3 + 1] = ty - y;
+      out[(e * n + i) * 3 + 2] = tz - z;
+    }
+  }
+  MOVES = { n, d: out };
+  return MOVES;
 }
 
 // The head's surface as the hair and the lines want it: how far out from its middle in each
@@ -188,35 +346,41 @@ function surfaceOf(H) {
   const I = H.idx;
   // (the front: the nearest of it at each millimetre of the face)
   const F = { x0: -0.1, y0: -0.13, n: 200, m: 300, d: 0.001 };
-  const fz = new Float32Array(F.n * F.m).fill(-1);
   // (the skull: the furthest of it in each direction, 2.8 degrees a cell)
   const NT = 64;
   const NP = 128;
   const rr = new Float32Array(NT * NP);
   // (the ears: out at the sides, from the temples down to the lobes, behind the cheeks)
   const ear = (x, y, z) => Math.abs(x) > 0.066 && y > -0.055 && y < 0.05 && z > -0.055 && z < 0.012;
+  // (a few hundred thousand of these a head: Math.hypot is slow)
+  const KT = NT / Math.PI;
+  const KP = NP / (Math.PI * 2);
   const splat = (x, y, z) => {
-    const r = Math.hypot(x, y, z);
+    const r = Math.sqrt(x * x + y * y + z * z);
     if (r < 1e-6) return;
-    const t = Math.min(NT - 1, Math.floor((Math.acos(Math.max(-1, Math.min(1, y / r))) / Math.PI) * NT));
-    const ph = Math.min(NP - 1, Math.floor(((Math.atan2(x, z) + Math.PI) / (Math.PI * 2)) * NP));
+    const cy = y / r;
+    const t = Math.min(NT - 1, Math.floor(Math.acos(cy > 1 ? 1 : cy < -1 ? -1 : cy) * KT));
+    const ph = Math.min(NP - 1, Math.floor((Math.atan2(x, z) + Math.PI) * KP));
     const c = t * NP + ph;
     if (r > rr[c]) rr[c] = r;
   };
-  for (let k = 0; k < I.length; k += 3) {
-    const a = I[k] * 3;
-    const b = I[k + 1] * 3;
-    const c = I[k + 2] * 3;
-    // the front, by the triangle's box of cells
-    const xs = [P[a], P[b], P[c]];
-    const ys = [P[a + 1], P[b + 1], P[c + 1]];
-    const zs = [P[a + 2], P[b + 2], P[c + 2]];
-    const i0 = Math.max(0, Math.floor((Math.min(...xs) - F.x0) / F.d));
-    const i1 = Math.min(F.n - 1, Math.ceil((Math.max(...xs) - F.x0) / F.d));
-    const j0 = Math.max(0, Math.floor((Math.min(...ys) - F.y0) / F.d));
-    const j1 = Math.min(F.m - 1, Math.ceil((Math.max(...ys) - F.y0) / F.d));
-    const den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2]);
-    if (Math.abs(den) > 1e-12) {
+  // (the front only when something wants it - glasses: drawn the first time it is asked for)
+  let fz = null;
+  const frontMap = () => {
+    fz = new Float32Array(F.n * F.m).fill(-1);
+    for (let k = 0; k < I.length; k += 3) {
+      const a = I[k] * 3;
+      const b = I[k + 1] * 3;
+      const c = I[k + 2] * 3;
+      const xs = [P[a], P[b], P[c]];
+      const ys = [P[a + 1], P[b + 1], P[c + 1]];
+      const zs = [P[a + 2], P[b + 2], P[c + 2]];
+      const i0 = Math.max(0, Math.floor((Math.min(...xs) - F.x0) / F.d));
+      const i1 = Math.min(F.n - 1, Math.ceil((Math.max(...xs) - F.x0) / F.d));
+      const j0 = Math.max(0, Math.floor((Math.min(...ys) - F.y0) / F.d));
+      const j1 = Math.min(F.m - 1, Math.ceil((Math.max(...ys) - F.y0) / F.d));
+      const den = (ys[1] - ys[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (ys[0] - ys[2]);
+      if (Math.abs(den) <= 1e-12) continue;
       for (let j = j0; j <= j1; j++) {
         const py = F.y0 + (j + 0.5) * F.d;
         for (let i = i0; i <= i1; i++) {
@@ -231,9 +395,16 @@ function surfaceOf(H) {
         }
       }
     }
-    // the skull, by points over the triangle (not the ears)
-    if (ear(xs[0], ys[0], zs[0]) || ear(xs[1], ys[1], zs[1]) || ear(xs[2], ys[2], zs[2])) continue;
-    for (const [u, v] of SAMPLES) splat(xs[0] + (xs[1] - xs[0]) * u + (xs[2] - xs[0]) * v, ys[0] + (ys[1] - ys[0]) * u + (ys[2] - ys[0]) * v, zs[0] + (zs[1] - zs[0]) * u + (zs[2] - zs[0]) * v);
+  };
+  // the skull, by its points and the middles of its triangles and their edges (not the ears)
+  const off = new Uint8Array(P.length / 3);
+  for (let v = 0; v < off.length; v++) off[v] = ear(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]) ? 1 : 0;
+  for (let k = 0; k < I.length; k += 3) {
+    const a = I[k];
+    const b = I[k + 1];
+    const c = I[k + 2];
+    if (off[a] || off[b] || off[c]) continue;
+    for (const [u, v] of SAMPLES) splat(P[a * 3] + (P[b * 3] - P[a * 3]) * u + (P[c * 3] - P[a * 3]) * v, P[a * 3 + 1] + (P[b * 3 + 1] - P[a * 3 + 1]) * u + (P[c * 3 + 1] - P[a * 3 + 1]) * v, P[a * 3 + 2] + (P[b * 3 + 2] - P[a * 3 + 2]) * u + (P[c * 3 + 2] - P[a * 3 + 2]) * v);
   }
   // (cells no point fell in: from their neighbours)
   for (let pass = 0; pass < 12; pass++) {
@@ -272,6 +443,7 @@ function surfaceOf(H) {
     return (at(t0, p0) * (1 - fp) + at(t0, p0 + 1) * fp) * (1 - ft) + (at(t1, p0) * (1 - fp) + at(t1, p0 + 1) * fp) * ft;
   };
   const front = (x, y) => {
+    if (!fz) frontMap();
     const i = (x - F.x0) / F.d - 0.5;
     const j = (y - F.y0) / F.d - 0.5;
     const i0 = Math.floor(i);
@@ -292,7 +464,7 @@ function surfaceOf(H) {
 }
 // (points over a triangle, as (u, v) along its sides)
 const SAMPLES = [];
-for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4 - i; j++) SAMPLES.push([i / 4, j / 4]);
+for (let i = 0; i <= 3; i++) for (let j = 0; j <= 3 - i; j++) SAMPLES.push([i / 3, j / 3]);
 
 // ------------------------------------------------------------------ glasses
 // thin metal frames: a rim round each eye, the bridge over the nose, the temples back over the
@@ -684,7 +856,6 @@ export function folkBody(k) {
   const style = spec.hair.style;
   const parts = {
     head: headGeo(H),
-    eyes: eyesGeo(H.eyes),
     hair: hairCapGeo(kit, headR),
   };
   const lockList = locksOf(style, R);
@@ -755,6 +926,8 @@ export function folkBody(k) {
       facePt,
     },
     lobes,
+    // (where their eyes are in their head: render/people.js drawFolk)
+    eyes: H.eyes,
   };
 }
 

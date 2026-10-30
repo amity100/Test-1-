@@ -143,7 +143,9 @@ class Part {
     const flat = new Float32Array(pts.length * 3);
     pts.forEach((p, i) => flat.set(p, i * 3));
     const mid = pts[Math.floor(pts.length / 2)];
-    this.by[ORDER.indexOf(kind)].push({ kind, pts: flat, np: pts.length, n, mid, thr: o.thr ?? 1, w: o.w ?? 1.6, a: o.a ?? 0.8, col: o.col || INK, near: !!o.near, far: !!o.far });
+    // (ROADMAP 13.7: ex - how each of its points goes with the face's moves; eye - the iris of the
+    // right eye (1) or the left (-1): it looks where the eye does, and is shut in with it)
+    this.by[ORDER.indexOf(kind)].push({ kind, pts: flat, np: pts.length, n, mid, thr: o.thr ?? 1, w: o.w ?? 1.6, a: o.a ?? 0.8, col: o.col || INK, near: !!o.near, far: !!o.far, ex: o.ex || null, eye: o.eye || 0 });
   }
 }
 
@@ -229,17 +231,27 @@ function head() {
   const { tone: faceTone, beard: stubble, headR, hairThick, hairEdge, locks: LOCKS, fem } = KIT;
   const HAIR = KIT.hair;
   const F = (x, y, lift) => facePt(x, y, lift);
+  // (ROADMAP 13.7: a real head's face moves - its strokes with it, each point as the face there)
+  const EX = KIT.faceEx;
   const line = (kind, xy, o) => {
     const pts = xy.map(([x, y]) => F(x, y, o.lift ?? 0.0015));
     if (pts.some((q) => !q)) return;
     const mid = pts[Math.floor(pts.length / 2)];
-    P.add(kind, pts.map((q) => q.p), mid.n, o);
+    let ex = null;
+    if (EX) {
+      ex = new Float32Array(xy.length * 24);
+      xy.forEach(([x, y], i) => {
+        const d = EX(x, y);
+        if (d) ex.set(d, i * 24);
+      });
+    }
+    P.add(kind, pts.map((q) => q.p), mid.n, ex ? { ...o, ex } : o);
   };
   for (const sd of [1, -1]) {
     // the eye: the upper lid heavy, the lower light, the iris, the crease over it
     line(K.feature, [[sd * 0.019, 0.0181], [sd * 0.027, 0.0226], [sd * 0.036, 0.0236], [sd * 0.0451, 0.0197]], { w: 2.7, a: 0.92 });
     line(K.feature, [[sd * 0.0195, 0.0178], [sd * 0.031, 0.0153], [sd * 0.045, 0.0192]], { w: 1.3, a: 0.6, near: true });
-    line(K.feature, [[sd * 0.0325, 0.0207], [sd * 0.0329, 0.0168]], { w: 3.6, a: 0.95, col: [0.09, 0.055, 0.03] });
+    line(K.feature, [[sd * 0.0325, 0.0207], [sd * 0.0329, 0.0168]], { w: 3.6, a: 0.95, col: [0.09, 0.055, 0.03], eye: sd });
     if (!KIT.mono) line(K.feature, [[sd * 0.021, 0.0262], [sd * 0.033, 0.0288], [sd * 0.0445, 0.0258]], { w: 1.4, a: 0.55, near: true, col: SEPIA_D });
     // the brow: its mass, then its hairs
     const bz = (t) => {
@@ -277,6 +289,11 @@ function head() {
   if (KIT.gape) {
     line(K.feature, [-1, -0.5, 0, 0.5, 1].map((u) => [u * cw, my(u * cw) + 0.0016 * KIT.gape * (1 - u * u)]), { w: 1.8, a: 0.8 });
     line(K.feature, [-0.8, -0.4, 0, 0.4, 0.8].map((u) => [u * cw, my(u * cw) - 0.0085 * KIT.gape * (1 - u * u) ** 0.8]), { w: 1.6, a: 0.7 });
+  } else if (EX) {
+    // (ROADMAP 13.7: a face that moves - the line between the lips drawn on each of them, as one
+    // while the mouth is shut, apart when it opens)
+    line(K.feature, [-1, -0.5, 0, 0.5, 1].map((u) => [u * cw, my(u * cw) + 0.0009]), { w: 1.9, a: 0.9 });
+    line(K.feature, [-0.92, -0.5, 0, 0.5, 0.92].map((u) => [u * cw, my(u * cw) - 0.0013]), { w: 1.7, a: 0.8 });
   } else line(K.feature, [-1, -0.5, 0, 0.5, 1].map((u) => [u * cw, my(u * cw)]), { w: 2.6, a: 0.92 });
   line(K.feature, [[-0.011, -0.0635], [0, -0.0645], [0.011, -0.0635]], { w: 1.8, a: 0.5, col: SEPIA_D });
   // the forehead's lines, the furrow between the brows
@@ -372,11 +389,15 @@ export class HeroLines {
     this._p = [0, 0, 0];
   }
 
-  // the matrix a part was drawn with this frame (render/people.js drawHero: after it is pushed)
-  set(slot, part, m) {
+  // the matrix a part was drawn with this frame (render/people.js drawHero: after it is pushed); a
+  // face's moves this frame (ROADMAP 13.7: ex, as far as each is made - render/folkshapes.js EXPR)
+  // and where its eyes look (gaze: [x, y], how far the iris goes on the ball)
+  set(slot, part, m, ex = null, gaze = null) {
     let s = this.slots[slot];
-    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false };
+    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null };
     s.e.set(m.elements);
+    s.ex = ex;
+    s.gaze = gaze;
     s.on = true;
   }
 
@@ -398,7 +419,9 @@ export class HeroLines {
     const wk = Math.max(0.65, Math.min(1.25, 3.2 / Math.max(1, ctx.dist)));
     const rims = ctx.dark > 0.4 ? RIM_NIGHT : RIM_DAY;
     const rimA = 0.35 + 0.55 * ctx.dark;
-    let left = this.budget;
+    // (ROADMAP 13.7: the city's people's - as many strokes as their share of the frame's)
+    const budget = ctx.budget !== undefined ? ctx.budget : this.budget;
+    let left = budget;
     const P = this._p;
     for (let oi = 0; oi < ORDER.length && left > 0; oi++) {
       const kind = ORDER[oi];
@@ -457,6 +480,9 @@ export class HeroLines {
             if (f < 0.05 || lit < 0.55) continue;
             col = this.hairHi;
           }
+          // (ROADMAP 13.7: an eye shut - its iris with it)
+          const ew = st.ex ? s.ex : null;
+          if (st.eye && s.ex && s.ex[st.eye > 0 ? 5 : 6] > 0.45) continue;
           // its points, each jittered by the boil, into lines
           const pts = st.pts;
           const seed = (i * 13 + tick * 7 + oi * 101) % 997;
@@ -464,9 +490,25 @@ export class HeroLines {
           let ay = 0;
           let az = 0;
           for (let k = 0; k < st.np; k++) {
-            const x = pts[k * 3];
-            const y = pts[k * 3 + 1];
-            const z = pts[k * 3 + 2];
+            let x = pts[k * 3];
+            let y = pts[k * 3 + 1];
+            let z = pts[k * 3 + 2];
+            if (ew) {
+              // (the face's moves, as far as each is made)
+              const d = st.ex;
+              const o = k * 24;
+              for (let q = 0; q < 8; q++) {
+                const w = ew[q];
+                if (w === 0) continue;
+                x += w * d[o + q * 3];
+                y += w * d[o + q * 3 + 1];
+                z += w * d[o + q * 3 + 2];
+              }
+            }
+            if (st.eye && s.gaze) {
+              x += s.gaze[0];
+              y += s.gaze[1];
+            }
             const h = i * 3.17 + k * 1.31 + tick * 0.618;
             const j = st.kind === K.feature ? 0.0006 : 0.0022;
             P[0] = e[0] * x + e[4] * y + e[8] * z + e[12] + (hash(h) - 0.5) * j;
@@ -487,5 +529,6 @@ export class HeroLines {
       }
     }
     for (const s of slots) s.on = false;
+    ctx.used = budget - left;
   }
 }

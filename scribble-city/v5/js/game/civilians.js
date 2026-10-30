@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Doodle } from './doodle.js';
-import { civilianLook } from './looks.js';
+import { civilianLook, cityLook } from './looks.js';
 import { holeRadius } from './enemies.js';
 import { AVES, STREETS, BLOCK_TYPES, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
 import { NODES, CYCLE } from '../world/roads.js';
@@ -224,7 +224,7 @@ class Civilian {
   constructor(mgr, bx, bz, look = null, figOpts = null) {
     this.mgr = mgr;
     this.game = mgr.game;
-    this.fig = new Doodle(mgr.game.figures, look || civilianLook(), { seed: Math.random() * 100, scale: look ? 1 : 0.93 + Math.random() * 0.1, ...(figOpts || {}) });
+    this.fig = new Doodle(mgr.game.figures, look || cityLook(), { seed: Math.random() * 100, scale: look ? 1 : 0.93 + Math.random() * 0.1, ...(figOpts || {}) });
     // scripted people (shopkeepers, the little scenes on the street) are driven by ctrl(civ, dt),
     // which returns where to walk ({ x, z, speed }) or null to stand; they still panic and bleed ink
     this.ctrl = null;
@@ -648,6 +648,10 @@ class Civilian {
     fig.speed = this.jog && this.waitAt && sp < 0.3 ? 2.6 : sp;
     // (GTA IV pass) the hands with the words, the head to whoever is talking (near the camera)
     if (this.talkUntil > 0 || this.listenTo || this.glanceUntil > 0 || this.waitAt || this._look) this.social(dt);
+    // (ROADMAP 13.7) their face: afraid running from danger, in pain on the ground, the words they say
+    // - render/people.js faceOf
+    fig.mood = this.panicT > 0 ? 'scared' : this.downT > 0 ? 'hurt' : null;
+    fig.talk = this.talkUntil > this.game.time;
     fig.update(dt);
   }
 
@@ -1026,7 +1030,7 @@ export class Civilians {
         const dress = R ? Math.max(R.commute, R.night) * 0.6 : 0;
         if (!look && dress > 0 && Math.random() < dress) {
           const kinds = R.commute > R.night ? WORK_CLOTHES : NIGHT_CLOTHES;
-          look = civilianLook({ kind: kinds[Math.floor(Math.random() * kinds.length)] });
+          look = cityLook({ kind: kinds[Math.floor(Math.random() * kinds.length)] });
         }
         if (lines.length && (Math.random() < 0.55 || !near.length) && prom < max * 0.7) {
           const w = lines[Math.floor(Math.random() * lines.length)];

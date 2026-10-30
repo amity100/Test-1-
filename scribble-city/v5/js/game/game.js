@@ -60,6 +60,7 @@ import { FarCrowd } from './farcrowd.js';
 import { ShopCrowd } from './shopcrowd.js';
 import { Animals } from './animals.js';
 import { Voices } from './voices.js';
+import { Talkers } from './talkers.js';
 import { Fleet } from './fleet.js';
 import { Damage } from './damage.js';
 import { Garage } from './garage.js';
@@ -154,6 +155,8 @@ export class Game {
     // (v5: from how far a person is drawn in the simple shapes, render/people.js: on a phone's
     // small screen a person 40 m away is some 20 pixels tall)
     this.figures.bodies.lodFar = this.pipe.low ? 32 : 55;
+    // (ROADMAP 13.7: the city's people's pictures written straight into their atlases)
+    this.figures.bodies.setRenderer(this.renderer);
     this.figures.bodies.detailFar = this.pipe.low ? 28 : 60;
     this.detail = 0;
     this.bubbles = new Bubbles(this.pipe.overlay);
@@ -263,6 +266,8 @@ export class Game {
     this.animals = new Animals(this);
     // what people say, and answer; aloud too, if asked for (game/voices.js)
     this.voices = new Voices(this);
+    // (ROADMAP 13.8: a few of the city's people talking, aloud, near where you come in)
+    this.talkers = new Talkers(this);
     // the rest of the street's traffic: trucks, motorbikes, the garbage truck, taxis waved down,
     // an ambulance, a fire engine (game/fleet.js)
     this.fleet = new Fleet(this);
@@ -1171,6 +1176,7 @@ export class Game {
       this.reactions.update(dt);
       this.animals.update(dt);
       this.voices.update(dt);
+      this.talkers.update(dt);
       this.pickups.update(dt);
       if (this.knock) this.knock.update(dt);
       if (this.fire) this.fire.update(dt);

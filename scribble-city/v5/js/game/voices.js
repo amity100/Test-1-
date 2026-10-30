@@ -355,7 +355,12 @@ export class Voices {
 
   // a line in a bubble, long enough to read (how long it stays)
   say(who, text, tone = 'plain') {
+    // (ROADMAP 13.8: '[joy] ...' - how they feel saying it, on their face while they do: render/
+    // people.js faceOf)
+    const m = /^\[(\w+)\]\s*/.exec(text);
+    if (m) text = text.slice(m[0].length);
     const life = Math.min(3.4, 1.3 + text.length * 0.045);
+    if (m && who.fig) who.fig.feel = { mood: m[1], until: this.game.time + Math.max(life, text.length / 13) + 0.8 };
     this.game.bubbles.say(who, text, tone, life);
     this.stats.lines++;
     return life;
@@ -720,9 +725,14 @@ export class Voices {
     // game/enemies.js, with no hands-with-the-words in it)
     const civs = this.game.civilians;
     if (civs && who.mgr === civs && who.fig) civs.spoke(who, text, tone);
+    // (ROADMAP 13.8) the mouth says the words: render/people.js faceOf reads them off, sound by sound,
+    // at a speaker's pace - in step with the voice, when there is one (speak)
+    if (who.fig) who.fig.say = { text, tone, at: 0, atT: this.game.time, cps: 14, wait: false, done: false };
     const cam = this.game.camera.position;
     const d = Math.hypot(who.pos.x - cam.x, who.pos.z - cam.z);
-    if (this.spoken) this.speak(who, text, tone, d);
+    // (ROADMAP 13.8: some of them always aloud - game/talkers.js)
+    const spoken = this.spoken || !!who.voiced;
+    if (spoken) this.speak(who, text, tone, d);
     // a subtitle: whatever is spoken near you; without the voice, what is said to you by
     // somebody you can't see
     const hud = this.game.hud;
@@ -732,7 +742,7 @@ export class Voices {
       const f = this.game.camera.getWorldDirection(_f);
       behind = ((who.pos.x - cam.x) * f.x + (who.pos.z - cam.z) * f.z) / (d || 1) < 0.35;
     }
-    if (!(this.spoken && d < 18) && !behind) return;
+    if (!(spoken && d < 18) && !behind) return;
     this.subtitle(text);
   }
 
@@ -810,6 +820,8 @@ export class Voices {
     const u = new SpeechSynthesisUtterance(words);
     u.lang = 'en-US';
     const fig = who.fig;
+    // (the mouth waits for the voice to start, then keeps to its words)
+    const say = fig && fig.say && fig.say.text === text ? fig.say : null;
     const look = fig ? fig.look : null;
     const seed = fig ? fig.seed || 0 : 0;
     const v = this.voiceFor(look, seed);
@@ -823,6 +835,25 @@ export class Voices {
     u.pitch = Math.max(0.1, Math.min(2, pitch));
     u.rate = (0.95 + ((seed * 3.17) % 1) * 0.2) * (tone === 'alarm' ? 1.15 : 1) * (elder ? 0.85 : 1);
     u.volume = Math.max(0.05, Math.min(1, fx * fx * (1 - d / 18) * 1.1));
+    if (say) {
+      say.text = words;
+      say.cps = 14 * u.rate;
+      say.wait = true;
+      u.onstart = () => {
+        say.wait = false;
+        say.at = 0;
+        say.atT = this.game.time;
+      };
+      u.onboundary = (e) => {
+        if (e.name && e.name !== 'word') return;
+        say.at = e.charIndex;
+        say.atT = this.game.time;
+        say.wait = false;
+      };
+      u.onend = () => {
+        say.done = true;
+      };
+    }
     this.lastTone = tone;
     try {
       S.speak(u);

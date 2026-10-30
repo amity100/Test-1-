@@ -205,3 +205,165 @@ export function hexRGB(h) {
   const n = parseInt(h.slice(1), 16);
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
+
+// ------------------------------------------------------------------ everybody else (ROADMAP 13.7)
+// The rest of the city's people, made from the same things by a rule: each their own face (a real
+// head moved their own way: render/folkshapes.js headOf), colouring, hair and clothes - the same
+// people on every computer and in the drawing helper (render/heroworker.js).
+const hex = (c) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, '0')).join('');
+// (a colour darker or lighter by k; towards white by t)
+const shade = (h, k) => hex(hexRGB(h).map((v) => v * k));
+const pale = (h, t) => hex(hexRGB(h).map((v) => v + (1 - v) * t));
+const cloth = (base) => ({ base, dark: [shade(base, 0.62), shade(base, 0.7), shade(base, 0.55)], mid: [shade(base, 1.07), shade(base, 0.95)], light: [pale(base, 0.32), pale(base, 0.4), pale(base, 0.26)] });
+const HAIRS = {
+  black: '#120c0a', espresso: '#2a1a12', brown: '#5a3a24', chestnut: '#7a4a2a', auburn: '#8a3a1c', copper: '#a4542a',
+  honey: '#b4844a', blonde: '#cca868', ash: '#8a7a62', grey: '#8a8682', silver: '#b8b6b2', white: '#dcdad6',
+};
+const hairOf = (name, style, o = {}) => {
+  const b = HAIRS[name];
+  const grey = name === 'grey' || name === 'silver' || name === 'white' ? 1 : 0;
+  return { style, base: b, dark: [shade(b, 0.45), shade(b, 0.55), shade(b, 0.4)], mid: [shade(b, 1.15), shade(b, 1.25), shade(b, 1.08)], light: [pale(b, 0.35), pale(b, 0.42), pale(b, 0.28)], grey, ...o };
+};
+const browsOf = (hairName, thick, arch) => {
+  const b = HAIRS[hairName === 'white' || hairName === 'silver' ? 'grey' : hairName === 'blonde' || hairName === 'honey' ? 'ash' : hairName];
+  return { col: [shade(b, 0.8), shade(b, 1.0), shade(b, 0.65)], thick, arch };
+};
+// what they wear, by how they dress: top (a jacket worn open), inner, bottom, shoes
+const TOPS = {
+  smart: [['blazer', 'wool', ['#3a3e4a', '#5a4a3a', '#2e3a32', '#6a5a4a', '#4a3a3e', '#7a6a58']], ['blazer', 'linen', ['#e6dcc8', '#c8b898', '#a8b4c0', '#d8c8b0']]],
+  chic: [['blazer', 'crepe', ['#c4925c', '#1e1e24', '#e8e0d0', '#9aa88a', '#c86a5a', '#7a8aa8', '#d8b8a8']]],
+  street: [['bomber', 'nylon', ['#4a5232', '#1e2228', '#6a2a30', '#2a3a5a', '#8a7a5a', '#3a4a4a', '#b8a888']]],
+  denim: [['denim', 'denim', ['#8eaccc', '#5a7aa0', '#3e5878', '#a8bcd0']]],
+};
+const INNERS = {
+  shirt: ['#f2ecdc', '#a8c8e6', '#ffffff', '#d8e0e8', '#e8d8d0', '#c8d8c0'],
+  tee: ['#f2f0ea', '#1a1a1e', '#8a8a90', '#c8b8a0', '#a83a3a', '#3a5a8a', '#e8c860'],
+  blouse: ['#16141a', '#f4eee4', '#c8a8b8', '#6a2a3a', '#2a4a5a'],
+  dress: ['#c4583a', '#2a4a6a', '#5a6a3a', '#8a2a4a', '#e8b860'],
+};
+const BOTTOMS = {
+  trousers: ['#4a4a50', '#2a2a30', '#5a4a3a', '#3a3e4a', '#6a6a70'],
+  chinos: ['#cbb48e', '#8a7a5a', '#3a4a3a', '#5a5048', '#e0d8c4'],
+  jeans: ['#1a1a1e', '#2a3a5a', '#4a6a8a', '#5a7898'],
+  wide: ['#e4dcc8', '#141418', '#8a6a4a', '#5a5a62', '#c8b8a0'],
+};
+const SHOES = {
+  loafer: ['#6a3c22', '#2a1a12', '#8a5e3a'],
+  oxford: ['#1a1412', '#4a2a1a'],
+  sneaker: ['#f2f2ee', '#1a1a1e', '#e8e4dc', '#c8c8cc'],
+  bootie: ['#141214', '#6a4a32', '#8a7a6a'],
+};
+const MEN = ['Marco', 'Theo', 'Jonah', 'Ravi', 'Omar', 'Felix', 'Kenji', 'Luca', 'Andre', 'Samuel', 'Viktor', 'Diego', 'Hugo', 'Malik', 'Ezra', 'Tomas'];
+const WOMEN = ['Nora', 'Priya', 'Sofia', 'Amara', 'Ines', 'Hana', 'Clara', 'Zoe', 'Leila', 'Mira', 'Esther', 'Rosa', 'Yuki', 'Talia', 'Greta', 'Noor'];
+const HEADS = ['head-round', 'head-oval', 'head-rectangular', 'head-square', 'head-triangular', 'head-invertedtriangular', 'head-diamond'];
+// the features a face is moved by: each [incr, decr] (one of a pair at a time), or a lone one
+const FEATURES = [
+  ['nose-scale-horiz-incr', 'nose-scale-horiz-decr'], ['nose-scale-vert-incr', 'nose-scale-vert-decr'], ['nose-scale-depth-incr', 'nose-scale-depth-decr'],
+  ['nose-hump-incr', 'nose-hump-decr'], ['nose-point-up', 'nose-point-down'], ['nose-point-width-incr', 'nose-point-width-decr'], ['nose-nostrils-width-incr', 'nose-nostrils-width-decr'],
+  ['nose-curve-convex', 'nose-curve-concave'], ['nose-volume-incr', 'nose-volume-decr'], ['nose-greek-incr', 'nose-greek-decr'],
+  ['mouth-scale-horiz-incr', 'mouth-scale-horiz-decr'], ['mouth-upperlip-volume-incr', 'mouth-upperlip-volume-decr'], ['mouth-lowerlip-volume-incr', 'mouth-lowerlip-volume-decr'],
+  ['mouth-cupidsbow-incr', 'mouth-cupidsbow-decr'], ['mouth-philtrum-volume-incr', 'mouth-philtrum-volume-decr'],
+  ['chin-prominent-incr', 'chin-prominent-decr'], ['chin-width-incr', 'chin-width-decr'], ['chin-height-incr', 'chin-height-decr'], ['chin-bones-incr', 'chin-bones-decr'],
+  ['chin-cleft-incr'], ['chin-prognathism-incr', 'chin-prognathism-decr'],
+  ['eye-scale-incr', 'eye-scale-decr'], ['eye-corner1-up', 'eye-corner1-down'], ['eye-eyefold-down', 'eye-eyefold-up'], ['eye-bag-incr', 'eye-bag-decr'],
+  ['eyebrows-trans-up', 'eyebrows-trans-down'], ['eyebrows-angle-up', 'eyebrows-angle-down'], ['eyebrows-trans-forward', 'eyebrows-trans-backward'],
+  ['forehead-scale-vert-incr', 'forehead-scale-vert-decr'], ['forehead-trans-forward', 'forehead-trans-backward'],
+  ['ear-scale-incr', 'ear-scale-decr'], ['ear-lobe-incr', 'ear-lobe-decr'], ['cheek-inner-incr', 'cheek-inner-decr'],
+  ['head-scale-vert-incr', 'head-scale-vert-decr'], ['head-scale-horiz-incr', 'head-scale-horiz-decr'], ['head-back-scale-depth-incr', 'head-back-scale-depth-decr'],
+];
+function rngOf(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function made(i) {
+  const R = rngOf(7919 * (i + 11));
+  const pick = (a) => a[Math.floor(R() * a.length)];
+  const range = (a, b) => a + (b - a) * R();
+  const fem = i % 2 === 1;
+  const age = Math.round(19 + 54 * R() ** 1.7);
+  const old = age > 52;
+  const skin = pick(['fair', 'light', 'light', 'golden', 'olive', 'olive', 'tan', 'deep', 'deep']);
+  const heavy = R() < 0.25;
+  const bulk = heavy ? range(1.08, 1.26) : range(0.84, 1.02);
+  // the face: a head's shape, then a handful of its features, each its own way
+  const morph = { [pick(HEADS)]: +range(0.3, 0.85).toFixed(2), 'cheek-bones-decr': +range(0.2, 0.45).toFixed(2) };
+  const used = new Set();
+  for (let n = Math.round(range(7, 12)); n > 0; n--) {
+    const f = Math.floor(R() * FEATURES.length);
+    if (used.has(f)) continue;
+    used.add(f);
+    const pair = FEATURES[f];
+    morph[pair.length > 1 && R() < 0.5 ? pair[1] : pair[0]] = +range(0.2, 0.8).toFixed(2);
+  }
+  if (old) morph['head-age-incr'] = +range(0.4, 1.0).toFixed(2);
+  else if (age < 28) morph['head-age-decr'] = +range(0.1, 0.35).toFixed(2);
+  if (heavy) Object.assign(morph, { 'head-fat-incr': +range(0.4, 0.9).toFixed(2), 'cheek-volume-incr': +range(0.3, 0.7).toFixed(2), 'neck-double-incr': +range(0.2, 0.8).toFixed(2) });
+  else if (R() < 0.4) Object.assign(morph, { 'head-fat-decr': +range(0.2, 0.5).toFixed(2), 'cheek-volume-decr': +range(0.1, 0.5).toFixed(2) });
+  if (fem) Object.assign(morph, { 'chin-width-decr': Math.max(morph['chin-width-decr'] || 0, 0.3), 'nose-scale-horiz-decr': Math.max(morph['nose-scale-horiz-decr'] || 0, 0.15) });
+  if (skin === 'golden' && R() < 0.6) Object.assign(morph, { 'eye-eyefold-down': 0.55, 'eye-epicanthus-in': 0.5 });
+  if (morph['mouth-scale-horiz-incr'] && morph['mouth-scale-horiz-decr']) delete morph['mouth-scale-horiz-decr'];
+  // the hair
+  const hairName = old && R() < 0.75 ? pick(['grey', 'silver', 'white', 'ash', 'grey']) : skin === 'deep' || skin === 'tan' || skin === 'golden' ? pick(['black', 'black', 'espresso', 'brown']) : pick(['black', 'espresso', 'brown', 'chestnut', 'auburn', 'copper', 'honey', 'blonde', 'ash']);
+  const style = fem ? pick(['long', 'long', 'bun', 'long', 'curls']) : pick(skin === 'deep' ? ['curls', 'curls', 'buzz', 'side'] : ['side', 'side', 'back', 'buzz', 'curls']);
+  const hair = hairOf(hairName, style, style === 'long' ? { len: +range(0.12, 0.3).toFixed(2), wave: R() < 0.4 ? 1 : 0 } : {});
+  // what they wear
+  const how = pick(fem ? ['chic', 'chic', 'smart', 'street', 'denim'] : ['smart', 'smart', 'street', 'street', 'denim']);
+  const [kind, fabric, cols] = pick(TOPS[how]);
+  const top = { kind, fabric, ...cloth(pick(cols)), buttons: '#2a2420' };
+  if (kind === 'bomber') Object.assign(top, { rib: shade(top.base, 0.6), lining: pick(['#e0702a', '#c8a050', '#2a2a2a']) });
+  if (kind === 'denim') Object.assign(top, { stitch: '#d8964a', buttons: '#a8743a' });
+  if (kind === 'blazer' && !fem && R() < 0.4) top.square = pick(['#9a2a34', '#e07a3a', '#f2ecdc']);
+  const innerKind = fem ? pick(how === 'denim' ? ['dress', 'tee', 'blouse'] : ['blouse', 'tee', 'shirt']) : how === 'smart' ? pick(['shirt', 'shirt', 'tee']) : pick(['tee', 'tee', 'shirt']);
+  const ib = pick(INNERS[innerKind]);
+  const inner = { kind: innerKind, base: ib, dark: [shade(ib, 0.82), shade(ib, 0.76), shade(ib, 0.88)], light: [pale(ib, 0.3), pale(ib, 0.4)] };
+  if (innerKind === 'shirt') Object.assign(inner, { collar: true, open: 2 });
+  if (innerKind === 'dress') inner.flower = ['#f4e6c8', '#f8d880', '#fff4dc'];
+  const bk = innerKind === 'dress' ? 'dress' : how === 'street' || how === 'denim' ? pick(['jeans', 'jeans', 'chinos']) : fem ? pick(['wide', 'wide', 'trousers']) : pick(['trousers', 'chinos']);
+  const bottom = bk === 'dress' ? { kind: 'dress', ...cloth(ib), flower: inner.flower } : { kind: bk, ...cloth(pick(BOTTOMS[bk])) };
+  if (bk === 'trousers') bottom.crease = true;
+  if (bk === 'jeans') bottom.stitch = '#6a6a70';
+  if (bk === 'chinos') bottom.cuff = true;
+  const sk = how === 'street' || how === 'denim' ? 'sneaker' : fem ? pick(['bootie', 'bootie', 'loafer']) : pick(['loafer', 'oxford']);
+  const sb = pick(SHOES[sk]);
+  const shoes = { kind: sk, base: sb, dark: [shade(sb, 0.6), shade(sb, 0.7), shade(sb, 0.5)], light: [pale(sb, 0.3), pale(sb, 0.4), pale(sb, 0.22)], sole: sk === 'sneaker' ? [0.95, 0.94, 0.9] : [0.12, 0.09, 0.07] };
+  if (sk === 'sneaker') Object.assign(shoes, { accent: top.base, lace: '#f8f8f4' });
+  const beard = fem ? null : pick([null, null, null, 'short', 'trim', 'mustache', 'shadow']);
+  const lipstick = fem && R() < 0.3;
+  const expr = pick(['neutral', 'neutral', 'soft', 'soft', 'half', 'smile']);
+  return {
+    key: `p${i}`, name: (fem ? WOMEN : MEN)[(i >> 1) % 16], age, fem, how,
+    build: { height: +range(fem ? 0.92 : 0.96, fem ? 1.02 : 1.08).toFixed(2), head: +range(0.95, 1.04).toFixed(2), bulk: +bulk.toFixed(2), limbs: +range(0.95, 1.05).toFixed(2) },
+    body: heavy ? { belly: +range(0.5, 1.0).toFixed(2), chest: +range(0.1, 0.3).toFixed(2), thick: +range(0.06, 0.16).toFixed(2) } : { belly: +range(-0.3, 0.2).toFixed(2), chest: +range(0, 0.2).toFixed(2), thick: +range(-0.06, 0.04).toFixed(2) },
+    morph,
+    shape: { cheeks: heavy ? range(0.6, 1.0) : range(-0.6, 0.6), jaw: range(fem ? 0.84 : 0.94, fem ? 0.98 : 1.14), dbl: heavy ? range(0.4, 1.0) : 0, neck: heavy ? range(1.1, 1.22) : range(0.92, 1.02) },
+    expr,
+    head: { jaw: fem ? 0 : range(0.95, 1.1), chin: range(0.85, 1.0), nose: range(0.8, 1.25), lips: range(0.8, 1.2), brow: fem ? range(0.5, 0.7) : range(0.95, 1.1) },
+    skin,
+    eyes: {
+      iris: skin === 'fair' || skin === 'light' ? pick(['brown', 'hazel', 'green', 'grey', 'brown']) : pick(['brown', 'dark', 'dark']),
+      open: range(0.82, 1.1), lid: range(0.2, 0.75), lashes: fem ? range(0.5, 1.0) : range(0.1, 0.35), liner: fem ? range(0.1, 0.8) : 0,
+      ...(fem ? { shadow: pick(['#a07a6a', '#8a6a5a', '#b48a7a']) } : {}), ...(morph['eye-eyefold-down'] ? { mono: true } : {}),
+    },
+    brows: browsOf(hairName, fem ? range(0.7, 0.9) : range(1.0, 1.4), fem ? range(0.3, 0.75) : range(0.1, 0.35)),
+    mouth: { w: range(0.94, 1.06), full: range(0.8, 1.2), lip: lipstick ? [pick(['#a8262e', '#b8485a', '#9a3a3a']), '#c8505a'] : [shade(SKINS[skin].warm[0], 0.85), SKINS[skin].warm[1]], lipstick: lipstick || null },
+    beard, ...(beard ? { beardCol: [shade(hair.base, 0.8), hair.base, shade(hair.base, 0.6), shade(hair.base, 0.45)] } : {}),
+    lines: old ? range(0.6, 1.0) : age > 35 ? range(0.15, 0.4) : 0, freckles: (skin === 'fair' || skin === 'light') && R() < 0.25 ? range(0.5, 1) : 0, blush: fem ? range(0.25, 0.55) : range(0, 0.3),
+    hair,
+    ...(R() < 0.2 ? { glasses: { col: pick([[0.78, 0.62, 0.3], [0.08, 0.07, 0.07], [0.35, 0.22, 0.14]]), shape: 'round' } } : {}),
+    top, inner, bottom,
+    belt: bk === 'dress' || bk === 'wide' ? null : { col: '#2a1e16', buckle: '#c8b080' },
+    shoes,
+    acc: { ...(R() < 0.4 ? { watch: pick(['#c8a860', '#b0b0b8']) } : {}), ...(fem && R() < 0.6 ? { earrings: pick(['#e0c070', '#e8e4dc']) } : {}) },
+  };
+}
+for (let i = FOLK.length; i < 32; i++) FOLK.push(made(i));
+
+// (how many of them the city's renderer made: phones fewer - render/people.js; game/looks.js picks
+// from those)
+export const FOLK_ON = { n: FOLK.length };

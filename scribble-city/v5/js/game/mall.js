@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { civilianLook, kidLook, elderLook, modest, folkLook } from './looks.js';
-import { FOLK } from '../render/folkspec.js';
+import { civilianLook, cityLook, kidLook, elderLook, modest, folkLook } from './looks.js';
+import { FOLK_ON } from '../render/folkspec.js';
 import { lightList } from '../render/materials.js';
 import { CURB } from '../world/mainland/plan.js';
 import { MallCrowd } from './mallcrowd.js';
@@ -19,7 +19,8 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 // one of each at a time
 function folkFree(game) {
   const out = [];
-  for (let k = 0; k < FOLK.length; k++) if (!game.civilians.list.some((c) => c.fig && c.fig.look && c.fig.look.folk === k)) out.push(k);
+  // (ROADMAP 13.7: the first six of them, met in the hall - everybody else is about anyway)
+  for (let k = 0; k < Math.min(6, FOLK_ON.n); k++) if (!game.civilians.list.some((c) => c.fig && c.fig.look && c.fig.look.folk === k)) out.push(k);
   return out;
 }
 // (one of the ways of a mall of lanes, a bigger one the likelier: world/mainland/lanes.js)
@@ -824,7 +825,7 @@ export class MallLife {
     let folk = o.folk;
     if (folk === undefined && m.crowdSpots && Math.random() < 0.12) folk = pick(folkFree(game));
     if (folk !== undefined) r = 1;
-    const look = folk !== undefined ? folkLook(folk) : r < 0.1 ? kidLook() : r < 0.18 ? elderLook(Math.random() < 0.5) : civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim', 'casual', 'sporty', 'trench']) });
+    const look = folk !== undefined ? folkLook(folk) : r < 0.1 ? kidLook() : r < 0.18 ? elderLook(Math.random() < 0.5) : cityLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim', 'casual', 'sporty', 'trench']) });
     const c = game.civilians.spawnScripted(x, z, look, this);
     c.speed = 1.05 + Math.random() * 0.35;
     if (r < 0.1) c.speed = 1.45;
@@ -844,7 +845,7 @@ export class MallLife {
     // (a friend with them, sometimes: walking together; at the table, across from them)
     const mate = o.seat ? this.mateSeat(st, o.seat) : null;
     if ((o.seat ? mate && Math.random() < 0.6 : Math.random() < 0.3) && st.people.length < this.budget + 6) {
-      const look2 = civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim']) });
+      const look2 = cityLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim']) });
       const c2 = game.civilians.spawnScripted(mate ? mate.x : x + 0.8, mate ? mate.z : z + 0.3, look2, this);
       c2.speed = c.speed;
       if (already && Math.random() < 0.5) this.giveBag(c2);
@@ -1827,7 +1828,7 @@ export class MallLife {
       z = f.zt + f.dir * 1.1;
     }
     const r = Math.random();
-    const look = r < 0.08 ? kidLook() : r < 0.15 ? elderLook(Math.random() < 0.5) : civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim', 'casual', 'sporty', 'trench']) });
+    const look = r < 0.08 ? kidLook() : r < 0.15 ? elderLook(Math.random() < 0.5) : cityLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim', 'casual', 'sporty', 'trench']) });
     const c = game.civilians.spawnScripted(x, z, look, this);
     c.baseY = y;
     c.pos.y += y;
@@ -1847,7 +1848,7 @@ export class MallLife {
     if (Math.random() < (o.seat ? 0.5 : 0.25) && st.people.length < this.budgetOf(m) + 6) {
       const mate = o.seat ? this.mateSeat(st, o.seat) : null;
       if (o.seat && !mate) return s;
-      const c2 = game.civilians.spawnScripted(mate ? mate.x : x + 0.8, mate ? mate.z : z + 0.3, civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim']) }), this);
+      const c2 = game.civilians.spawnScripted(mate ? mate.x : x + 0.8, mate ? mate.z : z + 0.3, cityLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim']) }), this);
       c2.baseY = y;
       c2.pos.y += y;
       c2.noCollide = true;

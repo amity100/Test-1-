@@ -516,6 +516,10 @@ out vec3 vCol;
 out float vGone;
 flat out vec4 vX;
 flat out vec4 vClip;
+#ifdef USE_ATLAS
+flat out float vTile;
+out float vMouth;
+#endif
 uniform mat4 uReflMatrix;
 uniform float uSway;
 uniform float uMatOn;   // a drawing turning into a thing (game/materialize.js)
@@ -567,6 +571,15 @@ out vec3 vVel;
 uniform highp sampler2D uShapes;
 in vec4 iS;
 #endif
+#ifdef USE_EXPR
+// (ROADMAP 13.7) a face's expression: how far each of its moves is made (the jaw open, a smile, the
+// mouth's corners down, the brows up, the brows down, each eye shut, the mouth wide) - two to a
+// number, each in a byte (render/people.js DrawClass.push: the attributes a draw may have are few) -
+// the moves themselves in the shapes' texture from uExprBase, uExprN points each
+in vec4 iE;
+uniform float uExprBase;
+uniform float uExprN;
+#endif
 void main() {
 #ifdef USE_PULL
   // (past the shape's own points, or left out of this pass: nothing)
@@ -574,16 +587,43 @@ void main() {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
-  // (a shape longer than a row goes on in the next: ROADMAP 13.6, the city's people's real heads)
+  // (the shapes one after another in the texture, row after row: iS.x where this one starts)
   int sw = textureSize(uShapes, 0).x;
-  int st = gl_VertexID * 2;
-  ivec2 sc = ivec2(st % sw, int(iS.x) + st / sw);
+  int st = int(iS.x) + gl_VertexID * 2;
+  ivec2 sc = ivec2(st % sw, st / sw);
   vec4 s0 = texelFetch(uShapes, sc, 0);
   vec4 s1 = texelFetch(uShapes, sc + ivec2(1, 0), 0);
   vec3 sPos = s0.xyz;
   vec3 sNor = s1.xyz;
   vec2 sUv = vec2(s0.w, s1.w);
   float sId = 0.0;
+#ifdef USE_ATLAS
+  // (the inside of the mouth: its points' normals longer by how deep in it they are -
+  // render/folkshapes.js base)
+  vMouth = max(0.0, length(sNor) - 1.0);
+  sNor = normalize(sNor);
+#endif
+#ifdef USE_EXPR
+  // (a face: its expression's moves, each as far as it is made)
+  if (mod(floor(iS.w / 4.0), 2.0) > 0.5) {
+    int eb = int(uExprBase);
+    int en = int(uExprN);
+    for (int e = 0; e < 4; e++) {
+      float f = iE[e];
+      float hi = floor(f / 256.0);
+      float w0 = (f - hi * 256.0 - 128.0) / 127.0;
+      float w1 = (hi - 128.0) / 127.0;
+      if (abs(w0) > 0.004) {
+        int t = eb + 2 * e * en + gl_VertexID;
+        sPos += w0 * texelFetch(uShapes, ivec2(t % sw, t / sw), 0).xyz;
+      }
+      if (abs(w1) > 0.004) {
+        int t = eb + (2 * e + 1) * en + gl_VertexID;
+        sPos += w1 * texelFetch(uShapes, ivec2(t % sw, t / sw), 0).xyz;
+      }
+    }
+  }
+#endif
 #else
   vec3 sPos = position;
   vec3 sNor = normal;
@@ -659,6 +699,10 @@ void main() {
   vClip = iClip;
   vId += iX.y;
 #endif
+#ifdef USE_ATLAS
+  // (which of the city's people: their pictures' place in the atlases - ROADMAP 13.7)
+  vTile = floor(iS.w / 8.0);
+#endif
   vGone = 0.0;
 #ifdef USE_OBJ
   vGone = objGone(aObj);
@@ -702,6 +746,10 @@ in float vBurnt;
 #endif
 flat in vec4 vX;
 flat in vec4 vClip;
+#ifdef USE_ATLAS
+flat in float vTile;
+in float vMouth;
+#endif
 #ifdef USE_PREV
 in vec3 vVel;
 #endif
@@ -774,10 +822,27 @@ uniform sampler2D uMapS1;
 uniform sampler2D uMapS2;
 uniform sampler2D uMapS3;
 uniform sampler2D uMapS4;
+#ifdef USE_ATLAS
+// (ROADMAP 13.7) the city's people's pictures, each kind of picture an atlas of all of them: tiles
+// across and down, from its top left (as its canvas has them: render/heroart.js FolkAtlas); a
+// person's tile is their number (vTile, 1 up; 0: none)
+uniform vec4 uAtlas[5];
+#endif
 vec4 penPicture(vec2 uv) {
   vec2 gx = dFdx(uv) * uPxK;
   vec2 gy = dFdy(uv) * uPxK;
   int l = int(uLayer + 0.5);
+#ifdef USE_ATLAS
+  if (vTile > 0.5) {
+    vec4 a = uAtlas[l];
+    float k = vTile - 1.0;
+    vec2 tile = vec2(mod(k, a.x), floor(k / a.x));
+    vec2 c = clamp(uv, vec2(0.004), vec2(0.996));
+    uv = (tile + vec2(c.x, 1.0 - c.y)) / a.xy;
+    gx = vec2(gx.x, -gx.y) / a.xy;
+    gy = vec2(gy.x, -gy.y) / a.xy;
+  }
+#endif
   if (l == 0) return textureGrad(uMapS0, uv, gx, gy);
   if (l == 1) return textureGrad(uMapS1, uv, gx, gy);
   if (l == 2) return textureGrad(uMapS2, uv, gx, gy);
@@ -943,6 +1008,15 @@ void main() {
     } else {
 #ifdef USE_MAPSET
       tex = penPicture(vUv);
+#ifdef USE_ATLAS
+      // (ROADMAP 13.7) the inside of the mouth, seen when the jaw drops: the teeth just behind the
+      // lips, dark beyond them
+      if (vMouth > 0.02) {
+        vec3 inside = mix(vec3(0.2, 0.045, 0.04), vec3(0.035, 0.01, 0.01), smoothstep(0.5, 0.9, vMouth));
+        inside = mix(inside, vec3(0.86, 0.82, 0.74), smoothstep(0.1, 0.18, vMouth) * (1.0 - smoothstep(0.38, 0.48, vMouth)));
+        tex.rgb = mix(tex.rgb, inside, smoothstep(0.02, 0.09, vMouth));
+      }
+#endif
 #else
       tex = texture(uMap, uWorldMap > 0.0 ? p / uWorldMap : vUv + uScroll * uTime, uMipBias);
 #endif
@@ -1371,8 +1445,8 @@ void main() {
     return;
   }
   int sw = textureSize(uShapes, 0).x;
-  int st = gl_VertexID * 2;
-  vec3 sPos = texelFetch(uShapes, ivec2(st % sw, int(iS.x) + st / sw), 0).xyz;
+  int st = int(iS.x) + gl_VertexID * 2;
+  vec3 sPos = texelFetch(uShapes, ivec2(st % sw, st / sw), 0).xyz;
   vUv = vec2(0.0);
 #else
   vec3 sPos = position;

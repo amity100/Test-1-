@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook, elderLook, kidLook, modest } from './looks.js';
+import { civilianLook, cityLook, elderLook, kidLook, modest } from './looks.js';
 import { sidewalkLoop } from './civilians.js';
 import { BLOCK_TYPES } from '../world/layout.js';
 import { dampAngle } from '../core/util.js';
@@ -30,7 +30,7 @@ const SIGN_LINES = ['Love this sign!', 'So retro!', 'For the album.', 'Look at t
 const _fwd = new THREE.Vector3();
 
 function office() {
-  const L = civilianLook({ kind: 'office' });
+  const L = cityLook({ kind: 'office' });
   L.role = 'office';
   return L;
 }
@@ -51,7 +51,7 @@ function elder() {
 }
 
 function parent() {
-  const L = civilianLook({ kind: pick(['street', 'denim', 'smart', 'knit']) });
+  const L = cityLook({ kind: pick(['street', 'denim', 'smart', 'knit']) });
   L.role = 'parent';
   return L;
 }
@@ -64,7 +64,7 @@ function youth() {
 }
 
 function shopper() {
-  const L = civilianLook();
+  const L = cityLook();
   L.role = 'shopper';
   return L;
 }

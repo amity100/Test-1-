@@ -2,7 +2,7 @@
 // (as if a different kid had doodled each one in the margin: pen colour, line, fill, proportions).
 // (how each character was drawn: kept for the code that reads it; the people are all drawn with
 // the same pens now)
-import { FOLK, SKINS, hexRGB } from '../render/folkspec.js';
+import { FOLK, FOLK_ON, SKINS, hexRGB } from '../render/folkspec.js';
 
 const FILL = { PENCIL: 0, MARKER: 1, HATCH: 2, SCRIBBLE: 3, FLAT: 4, PAPER: 5 };
 const OUTLINE = { SOLID: 0, BROKEN: 1, DOUBLE: 2, SKETCHY: 3 };
@@ -120,6 +120,27 @@ export function heroLook() {
 // game (the rig's build, their simple shapes far off, in the sun's view and the mirror); their body,
 // pictures and lines are their own (folk: render/people.js drawFolk). Dressed as they are already -
 // not through modest()
+// (ROADMAP 13.7) one of the city's people drawn as the hero is, for whoever walks the city: a person
+// of the kind asked (how they dress; a woman or a man) among those the renderer made (FOLK_ON), now
+// and then one of the older wardrobe instead
+const FOLK_HOW = { street: ['street', 'denim'], denim: ['denim', 'street'], smart: ['smart', 'chic'], office: ['smart', 'chic'], chic: ['chic', 'smart'], summer: ['denim', 'street'], knit: ['smart', 'denim'], casual: ['street', 'denim'], trench: ['chic', 'smart'] };
+export function folkPick(o = {}) {
+  const how = o.kind ? FOLK_HOW[o.kind] : null;
+  const ok = [];
+  for (let k = 0; k < FOLK_ON.n; k++) {
+    const F = FOLK[k];
+    if (o.fem !== undefined && !!F.fem !== !!o.fem) continue;
+    if (how && F.how && !how.includes(F.how)) continue;
+    ok.push(k);
+  }
+  return ok.length ? pick(ok) : -1;
+}
+export function cityLook(o = {}, share = 0.85) {
+  if (o.kind && !FOLK_HOW[o.kind]) return civilianLook(o);
+  const k = chance(share) ? folkPick(o) : -1;
+  return k >= 0 ? folkLook(k) : civilianLook(o);
+}
+
 export function folkLook(k) {
   const F = FOLK[k];
   const L = baseLook({ pen: 'fineliner', fem: F.fem });

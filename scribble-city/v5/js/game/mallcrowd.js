@@ -1,4 +1,4 @@
-import { civilianLook, kidLook, elderLook } from './looks.js';
+import { cityLook, kidLook, elderLook } from './looks.js';
 import { CURB } from '../world/mainland/plan.js';
 
 // (v5, ROADMAP 13.2) BAYVIEW MALL's crowd. Over and above the shoppers who go into its stores, ride
@@ -16,7 +16,7 @@ function lookOf() {
   const r = Math.random();
   if (r < 0.07) return kidLook();
   if (r < 0.14) return elderLook(Math.random() < 0.5);
-  return civilianLook({ kind: pick(KINDS) });
+  return cityLook({ kind: pick(KINDS) });
 }
 
 export class MallCrowd {
