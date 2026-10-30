@@ -2,6 +2,8 @@
 // (as if a different kid had doodled each one in the margin: pen colour, line, fill, proportions).
 // (how each character was drawn: kept for the code that reads it; the people are all drawn with
 // the same pens now)
+import { FOLK, SKINS, hexRGB } from '../render/folkspec.js';
+
 const FILL = { PENCIL: 0, MARKER: 1, HATCH: 2, SCRIBBLE: 3, FLAT: 4, PAPER: 5 };
 const OUTLINE = { SOLID: 0, BROKEN: 1, DOUBLE: 2, SKETCHY: 3 };
 export { FILL, OUTLINE };
@@ -111,6 +113,28 @@ export function heroLook() {
   L.hero = true;
   L.heroModel = true;
   return modest(L);
+}
+
+// ------------------------------------------------------------------ the city's people drawn as he is
+// (v5, ROADMAP 13.6) one of render/folkspec.js FOLK, by their number: their colours for the rest of the
+// game (the rig's build, their simple shapes far off, in the sun's view and the mirror); their body,
+// pictures and lines are their own (folk: render/people.js drawFolk). Dressed as they are already -
+// not through modest()
+export function folkLook(k) {
+  const F = FOLK[k];
+  const L = baseLook({ pen: 'fineliner', fem: F.fem });
+  L.pen.width = 3.0;
+  L.build = { ...F.build };
+  L.skin = SKINS[F.skin].rgb.slice();
+  L.hair = { style: { side: 'short', curls: 'short', back: 'slick', bun: 'bun', long: 'long' }[F.hair.style] || 'short', color: hexRGB(F.hair.base) };
+  L.top = { kind: F.top.kind, color: hexRGB(F.top.base), sleeves: 'long', inner: hexRGB(F.inner.base) };
+  L.bottom = { kind: F.bottom.kind === 'dress' ? 'midi' : F.bottom.kind === 'wide' ? 'wide' : 'pants', color: hexRGB(F.bottom.base) };
+  L.shoes = hexRGB(F.shoes.base);
+  L.hat = null;
+  L.face = { eyes: 'dot', brows: 'flat', mouth: 'line', beard: F.beard ? 'stubble' : null, glasses: null };
+  L.acc = [];
+  L.folk = k;
+  return L;
 }
 
 // ------------------------------------------------------------------ gangs (NY street crime, GTA flavour)

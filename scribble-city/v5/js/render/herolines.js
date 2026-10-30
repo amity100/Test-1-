@@ -87,7 +87,18 @@ function surf(rows, y, t, lift, out, nrm) {
 
 // ------------------------------------------------------------------ points on the head
 // the head's surface straight ahead of (x, y) (its front), and its normal
+// (v5, ROADMAP 13.6) whose head, hair, face and body the strokes are made for: the hero's, or one of
+// the city's people drawn as he is (render/folkshapes.js folkBody's lines) - set while they are made
+let KIT = null;
+function heroKit() {
+  return {
+    sdf: headSdf, headR, hairEdge, hairThick, locks: LOCKS, tone: faceTone, beard: stubble, fem: false,
+    rows: { torso: TORSO, pelvis: PELVIS_ROWS, upper: UPPER_ROWS, fore: FORE_ROWS, thigh: THIGH_ROWS, shin: SHIN_ROWS, neck: NECK_ROWS },
+    top: { ink: LEATHER, dark: LEATHER_D, hi: LEATHER_HI }, bottom: { ink: CLOTH, dark: CLOTH_D, hi: CLOTH_HI }, hair: HAIR, hairHi: HAIR_HI,
+  };
+}
 function frontZ(x, y) {
+  const headSdf = KIT.sdf;
   let lo = -0.02;
   let hi = 0.16;
   if (headSdf(x, y, lo) > 0) return null;
@@ -99,6 +110,7 @@ function frontZ(x, y) {
   return (lo + hi) / 2;
 }
 function headNormal(x, y, z, out) {
+  const headSdf = KIT.sdf;
   const e = 0.0015;
   out[0] = headSdf(x + e, y, z) - headSdf(x - e, y, z);
   out[1] = headSdf(x, y + e, z) - headSdf(x, y - e, z);
@@ -212,6 +224,8 @@ function lofted(name, rows, o) {
 function head() {
   const P = new Part('head');
   const R = rng(97);
+  const { tone: faceTone, beard: stubble, headR, hairThick, hairEdge, locks: LOCKS, fem } = KIT;
+  const HAIR = KIT.hair;
   const F = (x, y, lift) => facePt(x, y, lift);
   const line = (kind, xy, o) => {
     const pts = xy.map(([x, y]) => F(x, y, o.lift ?? 0.0015));
@@ -230,7 +244,8 @@ function head() {
       const a = (1 - t) * (1 - t);
       const b = 2 * t * (1 - t);
       const c = t * t;
-      return [a * sd * 0.012 + b * sd * 0.035 + c * sd * 0.058, a * 0.0318 + b * 0.0418 + c * 0.0338];
+      const up = fem ? 0.0018 : 0;
+      return [a * sd * 0.012 + b * sd * 0.035 + c * sd * 0.058, a * (0.0318 + up) + b * (0.0418 + up * 1.6) + c * (0.0338 + up)];
     };
     line(K.feature, [bz(0), bz(0.35), bz(0.7), bz(1)], { w: 3.4, a: 0.9 });
     for (let k = 0; k < 9; k++) {
@@ -255,8 +270,8 @@ function head() {
   line(K.feature, [[-0.0245, -0.0538], [-0.012, -0.0519], [0, -0.0522], [0.012, -0.0519], [0.0245, -0.0538]], { w: 2.6, a: 0.92 });
   line(K.feature, [[-0.011, -0.0635], [0, -0.0645], [0.011, -0.0635]], { w: 1.8, a: 0.5, col: SEPIA_D });
   // the forehead's lines, the furrow between the brows
-  for (const y of [0.054, 0.063]) line(K.feature, [[-0.026, y], [0, y + 0.0012], [0.026, y]], { w: 1.2, a: 0.35, near: true, col: SEPIA_D });
-  for (const sd of [1, -1]) line(K.feature, [[sd * 0.005, 0.04], [sd * 0.0048, 0.032]], { w: 1.2, a: 0.45, near: true, col: SEPIA_D });
+  if (!fem) for (const y of [0.054, 0.063]) line(K.feature, [[-0.026, y], [0, y + 0.0012], [0.026, y]], { w: 1.2, a: 0.35, near: true, col: SEPIA_D });
+  if (!fem) for (const sd of [1, -1]) line(K.feature, [[sd * 0.005, 0.04], [sd * 0.0048, 0.032]], { w: 1.2, a: 0.45, near: true, col: SEPIA_D });
   // the shadows of the face hatched: where faceTone has them, slanted strokes
   for (let i = 0; i < 90; i++) {
     const x = (R() - 0.5) * 0.15;
@@ -271,7 +286,7 @@ function head() {
     const x = (R() - 0.5) * 0.15;
     const y = -0.11 + R() * 0.08;
     if (stubble(x, y) < 0.6 || P.by[ORDER.indexOf(K.feature)].length > 400) continue;
-    line(K.feature, [[x, y], [x + x * 0.04, y - 0.0028]], { w: 1.2, a: 0.7, near: true, col: [0.08, 0.05, 0.04] });
+    line(K.feature, [[x, y], [x + x * 0.04, y - 0.0028]], { w: 1.2, a: 0.7, near: true, col: KIT.beardInk || [0.08, 0.05, 0.04] });
   }
   // the hair's lines: strands from the crown out and down, over the cap of it
   const n = [0, 0, 0];
@@ -308,18 +323,25 @@ function head() {
 
 // the neck: hatched down its sides, the shadow under the jaw
 function neck() {
-  const P = lofted('neck', NECK_ROWS, { seed: 61, ya: -0.17, yb: -0.02, hatch: 0, cross: 36, crossThr: 0.35, around: 12, bands: 2, rim: 8, ink: SEPIA, dark: SEPIA, down: true, lift: 0.0022 });
+  const P = lofted('neck', KIT.rows.neck, { seed: 61, ya: -0.17, yb: -0.02, hatch: 0, cross: 36, crossThr: 0.35, around: 12, bands: 2, rim: 8, ink: SEPIA, dark: SEPIA, down: true, lift: 0.0022 });
   void NECK_Y;
   return P;
 }
 
 // ------------------------------------------------------------------ the whole of him
 export class HeroLines {
-  constructor(touch = false) {
+  // kit: whose they are (null: the hero's - see heroKit); fewer: the city's people's, a share of his
+  constructor(touch = false, kit = null, fewer = 1) {
     this.touch = touch;
-    const jacket = { ink: LEATHER, dark: LEATHER_D };
-    const cloth = { ink: CLOTH, dark: CLOTH_D };
-    const S = touch ? 0.55 : 1;
+    KIT = kit || heroKit();
+    const { TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS } = { TORSO: KIT.rows.torso, PELVIS_ROWS: KIT.rows.pelvis, UPPER_ROWS: KIT.rows.upper, FORE_ROWS: KIT.rows.fore, THIGH_ROWS: KIT.rows.thigh, SHIN_ROWS: KIT.rows.shin };
+    const jacket = { ink: KIT.top.ink, dark: KIT.top.dark };
+    const cloth = { ink: KIT.bottom.ink, dark: KIT.bottom.dark };
+    const LEATHER_HI = KIT.top.hi;
+    const CLOTH_HI = KIT.bottom.hi;
+    this.hair = KIT.hair;
+    this.hairHi = KIT.hairHi;
+    const S = (touch ? 0.55 : 1) * fewer;
     const c = (n) => Math.round(n * S);
     this.parts = {
       head: head(),
@@ -331,9 +353,12 @@ export class HeroLines {
       thigh: lofted('thigh', THIGH_ROWS, { seed: 23, shine: c(55), hi: CLOTH_HI, ya: -0.5, yb: 0.05, hatch: c(70), cross: c(24), around: 14, bands: 4, rim: c(18), ...cloth, down: true, folds: [[-0.12, -0.02, 2.2, 4.1, 4], [-0.48, -0.42, 2.6, 3.7, 4]] }),
       shin: lofted('shin', SHIN_ROWS, { seed: 29, shine: c(50), hi: CLOTH_HI, ya: -0.44, yb: 0.03, hatch: c(60), cross: c(20), around: 14, bands: 4, rim: c(16), ...cloth, down: true, folds: [[-0.02, 0.03, -0.9, 0.9, 3], [-0.44, -0.37, 0.0, 6.28, 6]] }),
     };
+    // (a dress: its skirt's strokes - over the thighs' place, render/folkshapes.js skirtGeo)
+    if (KIT.skirt) this.parts.skirt = lofted('skirt', KIT.skirt, { seed: 31, shine: c(40), hi: CLOTH_HI, ya: -0.5, yb: 0.06, hatch: c(70), cross: c(24), around: 18, bands: 4, rim: c(16), ...cloth, down: true, folds: [[-0.5, -0.3, 0, 6.28, 6]] });
+    KIT = null;
     // (which part each of his drawn parts is, and the matrix it was drawn with this frame)
     this.slots = {};
-    this.budget = touch ? 650 : 1500;
+    this.budget = Math.round((touch ? 650 : 1500) * fewer);
     this._p = [0, 0, 0];
   }
 
@@ -417,10 +442,10 @@ export class HeroLines {
             if (f < 0.12) continue;
           } else if (kind === K.hair) {
             if (f < -0.08) continue;
-            if (!col) col = HAIR;
+            if (!col) col = this.hair;
           } else if (kind === K.hairhi) {
             if (f < 0.05 || lit < 0.55) continue;
-            col = HAIR_HI;
+            col = this.hairHi;
           }
           // its points, each jittered by the boil, into lines
           const pts = st.pts;

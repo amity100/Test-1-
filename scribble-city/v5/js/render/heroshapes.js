@@ -983,3 +983,6 @@ export function heroChainPts() {
   }
   return pts;
 }
+
+// (v5, ROADMAP 13.6) the building blocks, for the city's people drawn as he is (render/folkshapes.js)
+export { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, capsule, alongZ, sdEll, sdBall, sdCap, smin, smax };

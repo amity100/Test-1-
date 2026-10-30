@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { civilianLook, kidLook, elderLook, modest } from './looks.js';
+import { civilianLook, kidLook, elderLook, modest, folkLook } from './looks.js';
+import { FOLK } from '../render/folkspec.js';
 import { lightList } from '../render/materials.js';
 import { CURB } from '../world/mainland/plan.js';
 import { MallCrowd } from './mallcrowd.js';
@@ -14,6 +15,13 @@ import { MallCrowd } from './mallcrowd.js';
 // they go too.
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+// (v5, ROADMAP 13.6) the city's people drawn as the hero is (render/folkspec.js) not about the city now:
+// one of each at a time
+function folkFree(game) {
+  const out = [];
+  for (let k = 0; k < FOLK.length; k++) if (!game.civilians.list.some((c) => c.fig && c.fig.look && c.fig.look.folk === k)) out.push(k);
+  return out;
+}
 // (one of the ways of a mall of lanes, a bigger one the likelier: world/mainland/lanes.js)
 function pickArea(list) {
   let sum = 0;
@@ -810,8 +818,13 @@ export class MallLife {
       x = e.x + (Math.random() - 0.5) * 6;
       z = e.z + e.out * 1.5;
     }
-    const r = Math.random();
-    const look = r < 0.1 ? kidLook() : r < 0.18 ? elderLook(Math.random() < 0.5) : civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim', 'casual', 'sporty', 'trench']) });
+    let r = Math.random();
+    // (ROADMAP 13.6: one of the city's people drawn as the hero is, now and then - while they are not
+    // about already)
+    let folk = o.folk;
+    if (folk === undefined && m.crowdSpots && Math.random() < 0.12) folk = pick(folkFree(game));
+    if (folk !== undefined) r = 1;
+    const look = folk !== undefined ? folkLook(folk) : r < 0.1 ? kidLook() : r < 0.18 ? elderLook(Math.random() < 0.5) : civilianLook({ kind: pick(['chic', 'street', 'smart', 'summer', 'knit', 'denim', 'casual', 'sporty', 'trench']) });
     const c = game.civilians.spawnScripted(x, z, look, this);
     c.speed = 1.05 + Math.random() * 0.35;
     if (r < 0.1) c.speed = 1.45;
@@ -1765,6 +1778,8 @@ export class MallLife {
     if (m.crowdSpots) st.crowd = new MallCrowd(game, m, st.nav);
     // (the lifts' gates: open where the cabin stands)
     for (const L of m.lifts || []) for (let k = 0; k < L.gates.length; k++) L.gates[k].alive = !(L.state === 'open' && k === L.at);
+    // (ROADMAP 13.6: the city's people drawn as the hero is, each of them about the atrium already)
+    if (m.crowdSpots) for (const k of folkFree(game)) this.spawn(m, st, true, { folk: k });
     const n0 = Math.round(B * 0.5);
     for (let i = 0; i < n0; i++) this.spawn(m, st, true);
     const nUp = Math.round(B * 0.3);

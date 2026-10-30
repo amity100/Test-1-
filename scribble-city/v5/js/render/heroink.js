@@ -1014,3 +1014,5 @@ export function paintBoots(c, o = {}) {
 // strokes are drawn there faster, and with far less memory)
 // every picture by its name (render/heroworker.js draws them by name)
 export const PAINTERS = { face: paintFace, hair: paintHair, jacket: paintJacket, pants: paintPants, boots: paintBoots };
+// (v5, ROADMAP 13.6) the hand and its ways, for the city's people drawn as he is (render/folkink.js)
+export { Hand, rng, smooth, blob, regionOf, fold };

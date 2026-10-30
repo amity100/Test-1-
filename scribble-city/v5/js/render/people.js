@@ -5,6 +5,9 @@ import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 import * as HERO from './heroshapes.js';
 import { HeroArt } from './heroart.js';
 import { HeroLines } from './herolines.js';
+import { FOLK, SKINS, hexRGB } from './folkspec.js';
+import { folkBody } from './folkshapes.js';
+import { folkTone, folkBeard } from './folkink.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
 // (the first boulevard's own people: a shaped torso, tapering limbs, a head with a jaw and ears,
@@ -554,13 +557,14 @@ export class PersonRenderer {
       shinWide: P(limb(0.098, 0.122, 0.43), M.plain),
       collar: P(new THREE.TorusGeometry(0.075, 0.028, 6, 14).rotateX(Math.PI / 2), M.plain),
       // (v5, ROADMAP 11.29) the hero's own body (render/heroshapes.js): one of him, so a few each
-      // (ROADMAP 13.1: drawn in his own pens, the pictures of render/heroart.js)
+      // (ROADMAP 13.1: drawn in his own pens, the pictures of render/heroart.js; ROADMAP 13.6: his hands,
+      // ears and soles the city's people's drawn as he is too - drawFolk)
       heroHead: P(HERO.heroHeadGeo(), M.heroFace, 4),
       heroHair: P(HERO.heroHairGeo(), M.heroHair, 4),
       heroLocks: P(HERO.heroLocksGeo(), M.heroHair, 4),
       heroNeck: P(HERO.heroNeckGeo(), M.heroFace, 4),
-      heroEarR: P(HERO.heroEarGeo(1), M.skin, 2),
-      heroEarL: P(HERO.heroEarGeo(-1), M.skin, 2),
+      heroEarR: P(HERO.heroEarGeo(1), M.skin, 16),
+      heroEarL: P(HERO.heroEarGeo(-1), M.skin, 16),
       heroCollar: P(HERO.heroCollarGeo(), M.heroJacket, 4),
       heroTorso: P(HERO.heroTorsoGeo(), M.heroJacket, 8),
       heroZip: P(HERO.heroZipGeo(), M.heroJacket, 4),
@@ -569,12 +573,12 @@ export class PersonRenderer {
       heroPelvis: P(HERO.heroPelvisGeo(), M.heroPants, 4),
       heroUpper: P(HERO.heroUpperGeo(), M.heroJacket, 8),
       heroFore: P(HERO.heroForeGeo(), M.heroJacket, 8),
-      heroHandR: P(HERO.heroHandGeo(false), M.skin, 4),
-      heroHandL: P(HERO.heroHandGeo(true), M.skin, 4),
+      heroHandR: P(HERO.heroHandGeo(false), M.skin, 16),
+      heroHandL: P(HERO.heroHandGeo(true), M.skin, 16),
       heroThigh: P(HERO.heroThighGeo(), M.heroPants, 8),
       heroShin: P(HERO.heroShinGeo(), M.heroPants, 8),
       heroShoe: P(HERO.heroShoeGeo(), M.heroBoots, 8),
-      heroSole: P(HERO.heroSoleGeo(), M.box, 8),
+      heroSole: P(HERO.heroSoleGeo(), M.box, 32),
       // the shapes of hair, hats and the things people hold (ellipsoids and capsules)
       sphere: P(new THREE.SphereGeometry(1, 14, 10), M.hair, 2048),
       sphereGloss: P(new THREE.SphereGeometry(1, 12, 8), M.gloss, 256),
@@ -611,6 +615,9 @@ export class PersonRenderer {
       lowSleeve: P(lowSleeveGeo(0.08, 0.07, 0.15), M.tee),
       lowCoatSkirt: P(skirtGeo(0.18, 0.27, 0.62, 0, 8), M.plain),
     };
+    // (v5, ROADMAP 13.6) the city's people drawn as the hero is (render/folkspec.js FOLK): each their own
+    // pens (their pictures, render/heroart.js), body (render/folkshapes.js) and lines - drawFolk
+    this.folk = FOLK.map((spec, k) => this.folkKind(spec, k, touch, S, P));
     for (const [k, sh] of Object.entries(this.p)) sh.lod = SHARED.has(k) ? 'shared' : k.startsWith('low') ? 'low' : 'full';
     // (farther than this a person is drawn in the simple shapes in the picture too: game.js sets
     // it for a phone and a computer)
@@ -624,11 +631,81 @@ export class PersonRenderer {
     for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'heroEarR', 'heroEarL', 'sole', 'pocket']) this.p[k].flags = NO_MIRROR | NO_SUN;
     // (v5, ROADMAP 13.1) the hero's lines, over his body (render/herolines.js)
     this.heroLines = new HeroLines(touch);
+    // (their drawings turned over once a frame, however many of one of them there are: end counts)
+    this.frameNo = 0;
     this.buildShapes(scene);
     // eraser holes and fading per person
     this.owners = new Array(MAX_OWNERS).fill(false);
     this.holeTex = shared.uHoles.value;
     this.dirty = false;
+  }
+
+  // (v5, ROADMAP 13.6) one of the city's people drawn as the hero is: their pictures (the helper draws
+  // them; a plain colour till they come), their five pens, their body's shapes (a few of each: one of
+  // them about the city at a time - game/mall.js), their lines, where their ears are on their head
+  folkKind(spec, k, touch, S, P) {
+    const art = new HeroArt(touch, k);
+    const FP = (o) => {
+      const m = S(o);
+      m.userData.folk = k;
+      m.vertexColors = false;
+      return m;
+    };
+    const mats = {
+      face: FP({ kind: 'skin', partR: 0.06, map: art.first('face'), wash: 1, density: 0, ang: 1.0 }),
+      hair: FP({ kind: 'cyl', partR: 0.1, map: art.first('hair'), wash: 0.95, density: 0.5 }),
+      top: FP({ kind: 'paint', partR: 0.09, gloss: spec.top.fabric === 'nylon' ? 0.2 : 0.06, map: art.first('jacket'), wash: 0.95, density: 0.55 }),
+      bottom: FP({ kind: 'cyl', partR: 0.09, map: art.first('pants'), wash: 0.95, density: 0.55 }),
+      shoes: FP({ kind: 'paint', partR: 0.05, gloss: 0.14, map: art.first('boots'), wash: 0.95, density: 0.55 }),
+    };
+    const body = folkBody(k);
+    const G = body.parts;
+    // (the jacket's collar and the shoes: the hero's shapes, in their own pictures)
+    G.collar = HERO.heroCollarGeo();
+    G.shoe = HERO.heroShoeGeo();
+    const PEN = { head: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
+    const TWO = new Set(['upper', 'fore', 'thigh', 'shin', 'shoe']);
+    const sh = {};
+    for (const [name, geo] of Object.entries(G)) {
+      sh[name] = this.p[`folk${k}_${name}`] = P(geo, mats[PEN[name] || 'top'], TWO.has(name) ? 12 : 6);
+    }
+    // their lines (render/herolines.js): their head and hair, their body's rows, in their colours
+    const Ln = body.lines;
+    const dark = (list) => list.map(hexRGB).reduce((a, c) => (c[0] + c[1] + c[2] < a[0] + a[1] + a[2] ? c : a));
+    const inkOf = (o) => {
+      const d = dark(o.dark);
+      const hi = (o.light || o.mid).map(hexRGB);
+      while (hi.length < 3) hi.push(hi[hi.length - 1]);
+      return { ink: d.map((v) => v * 0.45), dark: d.map((v) => v * 0.22), hi: hi.slice(0, 3) };
+    };
+    const kit = {
+      sdf: Ln.sdf, headR: Ln.headR, hairEdge: Ln.hairEdge, hairThick: Ln.hairThick, locks: Ln.locks, fem: !!spec.fem,
+      tone: (x, y) => folkTone(x, y, spec.fem),
+      beard: (x, y) => folkBeard(x, y, spec.beard),
+      beardInk: spec.beardCol ? dark(spec.beardCol).map((v) => v * 0.8) : null,
+      rows: Ln.rows, skirt: Ln.skirt,
+      top: inkOf(spec.top), bottom: inkOf(spec.bottom),
+      hair: dark(spec.hair.dark).map((v) => v * 0.6), hairHi: hexRGB(spec.hair.light[0]),
+    };
+    // (where the ear goes: on the side of their head, as far out as the hero's is on his)
+    let lo = 0;
+    let hi = 0.2;
+    for (let i = 0; i < 30; i++) {
+      const m = (lo + hi) / 2;
+      if (Ln.sdf(m, -0.003, -0.016) < 0) lo = m;
+      else hi = m;
+    }
+    return {
+      k, spec, art, mats, sh, tex: {}, mat: null, frame: -1,
+      lines: new HeroLines(touch, kit, 0.5),
+      earX: lo + 0.0012,
+      skin: linC(SKINS[spec.skin].rgb),
+      sole: linC(spec.shoes.sole),
+      watch: spec.acc.watch ? linC(hexRGB(spec.acc.watch)) : null,
+      earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
+      // (long hair over the ears)
+      ears: spec.hair.style !== 'long',
+    };
   }
 
   // every shape into the texture, every shape into its class (a draw each)
@@ -643,6 +720,8 @@ export class PersonRenderer {
     // (v5, ROADMAP 13.1) the hero's pens, their five pictures in a draw of their own: drawHero turns
     // them over (HERO_PICS: their order)
     const hero = (this.heroMat = mergedSurface(M.heroJacket, { vcolor: false, pictures: penPictures(HERO_PICS.map((k) => M[k])), pull: true }));
+    // (ROADMAP 13.6: and each of the city's people drawn as he is, theirs - in a draw of their own)
+    for (const F of this.folk) F.mat = mergedSurface(F.mats.top, { vcolor: false, pictures: penPictures(['face', 'hair', 'top', 'bottom', 'shoes'].map((n) => F.mats[n])), pull: true });
     // (v5) the shapes drawn by their corners (OWN_LAYOUT): their row of the texture holds their
     // corners, and they share a draw with the shapes of the same layout of triangles
     const layouts = [];
@@ -658,7 +737,7 @@ export class PersonRenderer {
     };
     // (by side, and by kind: 'full' shapes are drawn in the picture alone, 'low' ones everywhere
     // and again, for those drawn in full, in the sun's view and the mirror alone)
-    const sideOf = (sh) => `${sh.penMat === M.coat ? 'back' : sh.penMat.userData.heroPen ? 'hero' : 'front'}-${sh.lod}`;
+    const sideOf = (sh) => `${sh.penMat.userData.folk !== undefined ? `folk${sh.penMat.userData.folk}` : sh.penMat === M.coat ? 'back' : sh.penMat.userData.heroPen ? 'hero' : 'front'}-${sh.lod}`;
     const classOf = (sh) => CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
     const byCorners = (sh) => {
       sh.layout = layoutOf(sh.igeo);
@@ -730,7 +809,7 @@ export class PersonRenderer {
     }
     for (const { side, size, index, list } of groups.values()) {
       const cap = list.reduce((a, sh) => a + sh.cap, 0);
-      const mat = side.startsWith('back') ? back : side.startsWith('hero') ? hero : front;
+      const mat = side.startsWith('folk') ? this.folk[parseInt(side.slice(4), 10)].mat : side.startsWith('back') ? back : side.startsWith('hero') ? hero : front;
       const cls = new DrawClass(scene, size, mat, cap, index);
       if (side.endsWith('-full')) {
         // (the picture alone: not on the mirror's layer, and left out of the sun's view)
@@ -806,6 +885,7 @@ export class PersonRenderer {
 
   end() {
     for (const c of this.classes) c.end();
+    this.frameNo++;
     // (the next frame's parts counted from the first again)
     _seq.fill(0);
     if (this.dirty) {
@@ -1003,6 +1083,10 @@ export class PersonRenderer {
   drawFull(fig, camDist) {
     if (fig.look.heroModel) {
       this.drawHero(fig);
+      return;
+    }
+    if (fig.look.folk !== undefined) {
+      this.drawFolk(fig, camDist);
       return;
     }
     const L = fig.look;
@@ -1470,6 +1554,188 @@ export class PersonRenderer {
     }
   }
 
+  // (v5, ROADMAP 13.6) One of the city's people drawn as the hero is (render/folkspec.js): their own
+  // body (render/folkshapes.js), their pictures turned over as his are, their lines - on the rig any
+  // of the city's people walk, sit and turn on, in any pose of theirs
+  drawFolk(fig, camDist) {
+    const L = fig.look;
+    const F = this.folk[L.folk];
+    const fem = !!F.spec.fem;
+    const q = F.sh;
+    const j = fig.j;
+    const P = fig.parts;
+    const p = this.p;
+    const own = fig.owner + 1;
+    const ind = fig.indoor === 'casino' ? 4 : fig.indoor === 'club' ? 3 : fig.indoor ? 1 : 0;
+    const S = fig.scale;
+    const k = S * 0.98;
+    const bulk = fig.bulk;
+    const seed = (fig.seed % 1) * 0.37 + 0.11;
+    _part[0] = seed;
+    const id = nextPart;
+    const ax = fig.ax;
+    const rgt = fig.brgt;
+    const fwd = fig.bfwd;
+    // (their drawings turned over once a frame, however many of them are about)
+    if (F.frame !== this.frameNo) {
+      F.frame = this.frameNo;
+      F.art.step();
+      F.art.frame(performance.now() / 1000, F.tex);
+      const U = F.mat.uniforms;
+      for (let i = 0; i < 5; i++) U[`uMapS${i}`].value = F.tex[HERO_SET[i]];
+    }
+    const white = PAPER_W;
+    const skin = F.skin;
+    fig.headId = (seed * 7.77 + 0.31) % 1;
+    const bw = k * Math.max(0.92, bulk * 0.96) * (fem ? 1.02 : 1.05);
+    const HL = F.lines;
+    const dress = !!q.skirt;
+    // ---- the jacket worn open, what is under it, its collar; the neck
+    if (P.torso > 0.5) {
+      const sy = Math.max(0.3, _b.subVectors(j.neck, j.hip).length()) / 0.5;
+      framed(j.hip, rgt, ax, fwd, bw, sy, bw, _mH);
+      q.torso.push(_mH, white, own, id(), ind);
+      HL.set('torso', 'torso', _mH);
+      q.zip.push(_mH, white, own, id(), ind);
+      q.tee.push(_mH, white, own, id(), ind);
+      if (q.welt) q.welt.push(_mH, white, own, id(), ind);
+      _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
+      const ck = fem ? 0.9 : 1;
+      q.collar.push(framed(_c, rgt, ax, fwd, k * 1.02 * ck, k * ck, k * 1.02 * ck), white, own, id(), ind);
+      const hs = fig.headScale * S;
+      _c.copy(j.headC).addScaledVector(fig.hu, -0.083 * hs).addScaledVector(fig.hf, -0.018 * hs);
+      _d.copy(j.neck).addScaledVector(ax, -0.03 * S).addScaledVector(fwd, -0.008 * S);
+      _nL.copy(rgt).negate();
+      q.neck.push(along(_c, _d, 0.17, k * 1.16 * Math.max(1, bulk * 0.92), _nL), white, own, fig.headId, ind);
+      HL.set('neck', 'neck', _m);
+    }
+    // ---- the seat, and a dress's skirt from the waist over the thighs
+    if (P.pelvis > 0.5) {
+      framed(j.hip, rgt, ax, fwd, bw, k, bw, _mH);
+      q.pelvis.push(_mH, white, own, id(), ind);
+      HL.set('pelvis', 'pelvis', _mH);
+      if (dress) {
+        q.skirt.push(_mH, white, own, id(), ind);
+        HL.set('skirt', 'skirt', _mH);
+      }
+    }
+    // ---- the arms in their sleeves, the hands; a watch on the left wrist
+    const arms = fig._armJ || (fig._armJ = [[j.shoulderR, j.elbowR, j.handR], [j.shoulderL, j.elbowL, j.handL]]);
+    const armK = k * Math.max(1, bulk * 0.85) * (fig.limbs || 1);
+    for (let ai = 0; ai < 2; ai++) {
+      if (P[ARM_PART[ai]] < 0.5) continue;
+      const sh = arms[ai][0];
+      const el = arms[ai][1];
+      const hd = arms[ai][2];
+      const armId = id();
+      q.upper.push(along(sh, el, 0.31, armK * 1.08, fwd), white, own, armId, ind);
+      HL.set(ai ? 'upperL' : 'upperR', 'upper', _m);
+      q.fore.push(along(el, hd, 0.29, armK * 1.06, fwd), white, own, armId, ind);
+      HL.set(ai ? 'foreL' : 'foreR', 'fore', _m);
+      _c.subVectors(hd, el).normalize();
+      _d.copy(hd).addScaledVector(_c, (fem ? 0.17 : 0.19) * S);
+      (ai === 0 ? p.heroHandR : p.heroHandL).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), fwd), skin, own, id(), ind);
+      if (ai === 1 && F.watch) {
+        _a.copy(hd).addScaledVector(_c, -0.025 * S);
+        _x.copy(rgt).multiplyScalar(-1).addScaledVector(_c, rgt.dot(_c)).normalize();
+        _z.crossVectors(_c, _x).normalize();
+        p.sphere.push(framed(_a, _x, _c, _z, 0.036 * S, 0.011 * S, 0.033 * S), F.watch, own, id(), ind);
+        _a.addScaledVector(_x, 0.029 * S);
+        p.boxP.push(framed(_a, _c, _x, _z, 0.024 * S, 0.008 * S, 0.024 * S), linC(DIAL), own, id(), ind);
+      }
+    }
+    // ---- the legs, the shoes (a dress: the legs bare under it)
+    const legs = fig._legJ || (fig._legJ = [[j.hipR, j.kneeR, j.footR, j.toeR], [j.hipL, j.kneeL, j.footL, j.toeL]]);
+    const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
+    const fk = k * (fem ? 0.9 : 1);
+    for (let li = 0; li < 2; li++) {
+      if (P[LEG_PART[li]] < 0.5) continue;
+      const hp = legs[li][0];
+      const kn = legs[li][1];
+      const ft = legs[li][2];
+      const to = legs[li][3];
+      const legId = id();
+      q.thigh.push(along(hp, kn, 0.47, legK, fwd), white, own, legId, ind);
+      if (!dress) HL.set(li ? 'thighL' : 'thighR', 'thigh', _m);
+      q.shin.push(along(kn, ft, 0.47, legK, fwd), white, own, legId, ind);
+      if (!dress) HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
+      _z.subVectors(to, ft);
+      _z.y = 0;
+      if (_z.lengthSq() < 1e-6) _z.copy(fwd);
+      _z.normalize();
+      _x.crossVectors(UP, _z).normalize();
+      _c.copy(ft).addScaledVector(_z, 0.05 * S);
+      _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
+      framed(_c, _x, UP, _z, fk, fk, fk, _mH);
+      q.shoe.push(_mH, white, own, id(), ind);
+      p.heroSole.push(_mH, F.sole, own, id(), ind);
+    }
+    // ---- the head: its face drawn on it, the hair (its cap, its locks, a fall of it, a bun), the ears
+    if (P.head > 0.5) {
+      const hs = fig.headScale * S;
+      const hr = fig.hr;
+      const hu = fig.hu;
+      const hf = fig.hf;
+      const hc = _hcH.copy(j.headC).addScaledVector(hu, -0.058 * hs);
+      q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), white, own, fig.headId, ind);
+      HL.set('head', 'head', _m);
+      framed(hc, hr, hu, hf, hs, hs, hs, _mH);
+      q.hair.push(_mH, white, own, id(), ind);
+      if (q.locks) q.locks.push(_mH, white, own, id(), ind);
+      if (q.fall) q.fall.push(_mH, white, own, id(), ind);
+      if (q.bun) q.bun.push(_mH, white, own, id(), ind);
+      if (F.ears) {
+        const P3 = (x, y, z) => _c.copy(hc).addScaledVector(hr, x * hs).addScaledVector(hu, y * hs).addScaledVector(hf, z * hs);
+        const es = hs * (fem ? 0.9 : 1);
+        for (let sd = -1; sd <= 1; sd += 2) {
+          P3(sd * F.earX, -0.003, -0.016);
+          _d.copy(hu).addScaledVector(hf, -0.22).normalize();
+          _x.crossVectors(_d, hr).normalize();
+          (sd > 0 ? p.heroEarR : p.heroEarL).push(framed(_c, hr, _d, _x, es, es, es), skin, own, fig.headId, ind);
+          if (F.earring) {
+            // (a drop at the lobe)
+            P3(sd * (F.earX + 0.006), -0.036, -0.012);
+            p.sphere.push(framed(_c, hr, hu, hf, 0.0055 * hs, 0.008 * hs, 0.0055 * hs), F.earring, own, id(), ind);
+          }
+        }
+      }
+    }
+    // ---- what they hold (the rig's own shapes; their hair is their own, above)
+    const shapes = fig.shapes;
+    for (let i = fig.dressFrom || 0; i < shapes.length; i++) {
+      const s = shapes[i];
+      if (!s.dress || s.hairCut || P[s.part === 'pelvis' ? 'pelvis' : s.part] < 0.5) continue;
+      const col = linC(s.col);
+      if (s.type === 0) capsuleTo(p, _a.copy(s.c).sub(s.y), _b.copy(s.c).add(s.y), s.x.x, col, own, id(), ind, rgt, s.clip);
+      else {
+        _m.set(s.x.x, s.y.x, s.z.x, s.c.x, s.x.y, s.y.y, s.z.y, s.c.y, s.x.z, s.y.z, s.z.z, s.c.z, 0, 0, 0, 1);
+        (s.gloss ? p.sphereGloss : p.sphere).push(_m, col, own, id(), ind, s.clip);
+      }
+    }
+    // ---- their lines over all of it (render/herolines.js), near enough to be seen
+    const cam = this.camPos;
+    if (this.lines && cam) {
+      const sun = shared.uSunCol.value;
+      const dark = fig.indoor ? 1 : Math.max(0, Math.min(1, 1 - (sun.r + sun.g + sun.b) / 1.4));
+      _hx.set(cam.x - fig.pos.x, 0, cam.z - fig.pos.z);
+      if (_hx.lengthSq() < 1e-4) _hx.set(0, 0, 1);
+      _hx.normalize();
+      _hz.set(_hx.z, 0, -_hx.x);
+      const sd = shared.uSunDir.value;
+      _fL.set(_hx.x + _hz.x * 0.75, 0.65, _hx.z + _hz.z * 0.75).normalize().multiplyScalar(dark).addScaledVector(sd, 1 - dark).normalize();
+      _fR.set(-_hx.x * 0.25 - _hz.x, 0.15, -_hx.z * 0.25 - _hz.z).normalize();
+      const ctx = _fCtx;
+      ctx.cam = cam;
+      ctx.L = _fL;
+      ctx.Lr = _fR;
+      ctx.dark = dark;
+      ctx.t = performance.now() / 1000;
+      // (farther than this, their pictures alone)
+      ctx.dist = camDist < 9 ? Math.hypot(cam.x - j.headC.x, cam.y - j.headC.y, cam.z - j.headC.z) : 99;
+      HL.draw(this.lines, ctx);
+    }
+  }
+
   // (v5) A person in the simple shapes, on their own rig: their pose, what they wear and what they
   // hold, as drawFull draws them, without the little things of a face. In the picture too when far
   // away (aux false); for somebody drawn in full, only in the sun's view and the mirror (aux true:
@@ -1670,6 +1936,10 @@ const _hL = new THREE.Vector3();
 const _hR = new THREE.Vector3();
 const _nL = new THREE.Vector3();
 const _hCtx = { cam: null, L: null, Lr: null, dark: 0, t: 0, dist: 0 };
+// (ROADMAP 13.6: the city's people's drawn as he is - drawFolk)
+const _fCtx = { cam: null, L: null, Lr: null, dark: 0, t: 0, dist: 0 };
+const _fL = new THREE.Vector3();
+const _fR = new THREE.Vector3();
 const _rimC = new THREE.Color(0.32, 0.82, 1.0);
 const _chain = HERO.heroChainPts();
 const _hc = new THREE.Vector3();

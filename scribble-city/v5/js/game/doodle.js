@@ -867,7 +867,8 @@ export class Doodle {
     // (and the hero's skin is coloured in smooth, not hatched dark, so his face reads: eyes, brows, jaw)
     if (L.hero) for (let i = 0; i < hair0; i++) if (this.shapes[i].col === L.skin) this.shapes[i].fill = FILL.MARKER;
     // (the hero in a body of his own, render/heroshapes.js, has his own hair: these are left out)
-    for (let i = hair0; i < this.shapes.length; i++) this.shapes[i].hairCut = !!L.heroModel;
+    // (ROADMAP 13.6: and so have the city's people drawn as he is - render/people.js drawFolk)
+    for (let i = hair0; i < this.shapes.length; i++) this.shapes[i].hairCut = !!L.heroModel || L.folk !== undefined;
     // hats
     if (hat) {
       const k = hat.kind;
@@ -1401,7 +1402,7 @@ export class Doodle {
     const fwd = this.bfwd;
     // (the hero in a body of his own, render/heroshapes.js: his face, his jacket's zip and seams are
     // in it - no pen strokes over it, but for what he carries)
-    if (L.heroModel) {
+    if (L.heroModel || L.folk !== undefined) {
       if (this.carry || this.carryL) carryStrokes(this, w);
       return;
     }
