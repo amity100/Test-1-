@@ -1012,8 +1012,8 @@ void main() {
       // (ROADMAP 13.7) the inside of the mouth, seen when the jaw drops: the teeth just behind the
       // lips, dark beyond them
       if (vMouth > 0.02) {
-        vec3 inside = mix(vec3(0.2, 0.045, 0.04), vec3(0.035, 0.01, 0.01), smoothstep(0.5, 0.9, vMouth));
-        inside = mix(inside, vec3(0.86, 0.82, 0.74), smoothstep(0.1, 0.18, vMouth) * (1.0 - smoothstep(0.38, 0.48, vMouth)));
+        vec3 inside = mix(vec3(0.15, 0.03, 0.028), vec3(0.025, 0.006, 0.006), smoothstep(0.3, 0.75, vMouth));
+        inside = mix(inside, vec3(0.84, 0.8, 0.72), smoothstep(0.07, 0.12, vMouth) * (1.0 - smoothstep(0.2, 0.27, vMouth)));
         tex.rgb = mix(tex.rgb, inside, smoothstep(0.02, 0.09, vMouth));
       }
 #endif

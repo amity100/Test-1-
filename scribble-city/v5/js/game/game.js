@@ -61,6 +61,7 @@ import { ShopCrowd } from './shopcrowd.js';
 import { Animals } from './animals.js';
 import { Voices } from './voices.js';
 import { Talkers } from './talkers.js';
+import { Minds } from './minds.js';
 import { Fleet } from './fleet.js';
 import { Damage } from './damage.js';
 import { Garage } from './garage.js';
@@ -268,6 +269,8 @@ export class Game {
     this.voices = new Voices(this);
     // (ROADMAP 13.8: a few of the city's people talking, aloud, near where you come in)
     this.talkers = new Talkers(this);
+    // (ROADMAP 13.9: what the city's people think of you, remember and pass on)
+    this.minds = new Minds(this);
     // the rest of the street's traffic: trucks, motorbikes, the garbage truck, taxis waved down,
     // an ambulance, a fire engine (game/fleet.js)
     this.fleet = new Fleet(this);
@@ -1177,6 +1180,7 @@ export class Game {
       this.animals.update(dt);
       this.voices.update(dt);
       this.talkers.update(dt);
+      this.minds.update(dt);
       this.pickups.update(dt);
       if (this.knock) this.knock.update(dt);
       if (this.fire) this.fire.update(dt);
@@ -1658,7 +1662,11 @@ export class Game {
     // (what the drawing became is said once it is all there, not over the show)
     const said = [];
     const say = (...a) => (plan ? said.push(a) : this.hud.toast(...a));
-    const onReal = () => said.forEach((a) => this.hud.toast(...a));
+    const onReal = () => {
+      said.forEach((a) => this.hud.toast(...a));
+      // (ROADMAP 13.9: the people round it saw your drawing come alive)
+      if (this.minds && plan && plan.frame) this.minds.happened('drawn', plan.frame.matrix.elements[12], plan.frame.matrix.elements[14], true);
+    };
     say(msg, grade === 'fail' ? 'bad' : grade === 'wonky' ? 'info' : 'good', 3.2);
     // a thing that flies to the hero once it is real (the plaster, the parachute)
     const toHero = (where, then) => {

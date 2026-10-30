@@ -644,7 +644,9 @@ export class Voices {
         close.lingeredT = game.time + 25;
         this.stats.lingers++;
         // (somebody walking stops, turns to you, says it, and goes on)
-        if (!this.talk([close], [pick(LINGER)], { stand: true, face: pl, delay: 0.1, direct: true })) this.sayToYou(close, pick(LINGER));
+        // (ROADMAP 13.9: what they say is theirs - their temper, what they think of you)
+        const ln = (game.minds && game.minds.lingerLine(close)) || pick(LINGER);
+        if (!this.talk([close], [ln], { stand: true, face: pl, delay: 0.1, direct: true })) this.sayToYou(close, ln);
       }
     } else {
       this.linger = close;
