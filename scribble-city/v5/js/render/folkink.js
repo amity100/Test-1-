@@ -95,7 +95,8 @@ export function paintFolkFace(c, o = {}) {
   // (ROADMAP 13.6) how they look: a smile lifts the mouth's corners and the cheeks, narrows the eyes
   const ex = P.expr || 'neutral';
   const smile = { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[ex] || 0;
-  const gape = ex === 'laugh' ? 1 : ex === 'smile' ? 0.3 : 0;
+  // (the lips apart on the teeth: only for a head whose lips part - spec.gape)
+  const gape = P.gape || 0;
   // (as many strokes in a smaller picture, each smaller: the same drawing)
   const N = (n) => n;
   // ---- the skin; its pencil grain
@@ -175,9 +176,10 @@ export function paintFolkFace(c, o = {}) {
   const E = P.eyes;
   const iris = IRIS[E.iris] || IRIS.brown;
   for (const sd of [1, -1]) {
-    const cx = X(sd * 0.032);
+    // (the real head's eye: its lids open from 21 to 45 mm out, about 18.5 mm up - render/folkheads.js)
+    const cx = X(sd * 0.0331);
     const cy = Y(0.0185);
-    const ew = 0.0262 * K * (fem ? 1.03 : 1);
+    const ew = 0.0242 * K * (fem ? 1.03 : 1);
     const eh = 0.0064 * K * (E.open || 1) * (fem ? 1.1 : 1) * (1 - 0.16 * smile);
     const lid = E.lid ?? 0.5;
     // (the inner corner by the nose, a touch lower; the outer a touch higher - lifted on a woman's eye)

@@ -56,10 +56,10 @@ export const IRIS = {
  * look's), the face (head: its shape - jaw, chin, nose, lips, brow; skin; eyes, brows, nose,
  * mouth; beard; lines of age; freckles, makeup), the hair (style, its colours, grey), what they wear:
  * top (over the rest: a jacket worn open), inner (seen in its opening), bottom, shoes, a few things
- * besides (acc). And what makes each of them their own beyond their colours: the shape of their
- * face (shape: render/folkshapes.js warpOf - its width and length, the jaw, the cheeks, the chin,
- * the nose, the brow, how far apart the eyes are, the neck), their body (body: a belly, a chest, how
- * thick their limbs), how they look (expr: 'neutral', 'soft', 'half', 'smile', 'laugh'), glasses.
+ * besides (acc). And what makes each of them their own beyond their colours: their face (morph: a real
+ * head moved by MakeHuman's targets - render/folkshapes.js headOf; shape: how its drawing is shaded -
+ * full or hollow cheeks, the jaw, a double chin - and the neck), their body (body: a belly, a chest,
+ * how thick their limbs), how they look (expr: 'neutral', 'soft', 'half', 'smile'), glasses.
  */
 export const FOLK = [
   {
@@ -68,7 +68,9 @@ export const FOLK = [
     key: 'bruno', name: 'Bruno', age: 58, fem: false,
     build: { height: 0.95, head: 1.05, bulk: 1.24, limbs: 1.08 },
     body: { belly: 1.0, chest: 0.25, thick: 0.16 },
-    shape: { width: 1.1, long: 0.93, forehead: 1.04, crown: 0.96, jaw: 1.16, cheeks: 1.0, cheekbones: -0.02, chin: -0.3, chinW: 1.25, dbl: 1.0, brow: 0.3, noseLen: 1.06, noseW: 1.32, noseOut: 1.1, lips: 0.2, gap: 0.97, neck: 1.22 },
+    // (a real head, moved by MakeHuman's targets: render/folkshapes.js headOf)
+    morph: { 'head-round': 0.7, 'head-fat-incr': 0.9, 'head-age-incr': 0.6, 'head-scale-horiz-incr': 0.35, 'neck-double-incr': 0.9, 'chin-width-incr': 0.5, 'chin-prominent-decr': 0.3, 'chin-bones-incr': 0.3, 'cheek-volume-incr': 0.7, 'cheek-bones-decr': 0.5, 'nose-scale-horiz-incr': 0.55, 'nose-volume-incr': 0.6, 'nose-point-width-incr': 0.6, 'nose-nostrils-width-incr': 0.5, 'mouth-scale-horiz-incr': 0.3, 'mouth-angles-up': 0.6, 'eye-bag-incr': 0.6, 'eye-scale-decr': 0.2, 'ear-scale-incr': 0.3, 'ear-lobe-incr': 0.4, 'eyebrows-trans-down': 0.3 },
+    shape: { cheeks: 1.0, jaw: 1.16, dbl: 1.0, neck: 1.22 },
     expr: 'smile',
     head: { jaw: 1.1, chin: 1.0, nose: 1.3, lips: 0.95, brow: 1.0 },
     skin: 'light', eyes: { iris: 'brown', open: 0.84, lid: 0.72, lashes: 0.1, liner: 0 },
@@ -90,7 +92,8 @@ export const FOLK = [
     key: 'dre', name: 'Dre', age: 26, fem: false,
     build: { height: 1.06, head: 0.98, bulk: 0.9, limbs: 0.96 },
     body: { belly: -0.3, chest: 0.1, thick: -0.04 },
-    shape: { width: 0.93, long: 1.1, forehead: 1.02, crown: 1.04, jaw: 0.98, cheeks: -0.4, cheekbones: 0.07, chin: 0.5, chinW: 0.95, dbl: 0, brow: 0.3, noseLen: 1.02, noseW: 1.26, noseOut: 0.95, lips: 0.8, gap: 1.03, neck: 0.96 },
+    morph: { 'head-oval': 0.7, 'head-scale-vert-incr': 0.4, 'head-scale-horiz-decr': 0.2, 'chin-prominent-incr': 0.4, 'chin-height-incr': 0.3, 'chin-bones-incr': 0.2, 'nose-scale-horiz-incr': 0.7, 'nose-nostrils-width-incr': 0.8, 'nose-flaring-incr': 0.5, 'nose-point-width-incr': 0.4, 'nose-scale-depth-decr': 0.2, 'mouth-upperlip-volume-incr': 0.7, 'mouth-lowerlip-volume-incr': 0.8, 'mouth-scale-horiz-incr': 0.3, 'mouth-angles-up': 0.25, 'eyebrows-trans-forward': 0.3, 'cheek-bones-decr': 0.2 },
+    shape: { cheeks: -0.3, jaw: 0.98, dbl: 0, neck: 0.96 },
     expr: 'half',
     head: { jaw: 0.95, chin: 1.0, nose: 1.12, lips: 1.25, brow: 0.95 },
     skin: 'deep', eyes: { iris: 'dark', open: 1.05, lid: 0.35, lashes: 0.35, liner: 0 },
@@ -111,7 +114,8 @@ export const FOLK = [
     key: 'sal', name: 'Salvatore', age: 63, fem: false,
     build: { height: 1.03, head: 1.0, bulk: 0.92, limbs: 0.98 },
     body: { belly: -0.15, chest: 0, thick: -0.06 },
-    shape: { width: 0.92, long: 1.12, forehead: 1.1, crown: 1.0, jaw: 0.94, cheeks: -1.0, cheekbones: 0.05, chin: 0.4, chinW: 0.88, dbl: 0, brow: 0.9, noseLen: 1.18, noseW: 1.04, noseOut: 1.22, hook: 1.0, lips: -0.4, gap: 0.98, neck: 0.92 },
+    morph: { 'head-rectangular': 0.5, 'head-scale-vert-incr': 0.5, 'head-scale-horiz-decr': 0.3, 'head-age-incr': 1.0, 'head-fat-decr': 0.6, 'cheek-volume-decr': 0.8, 'cheek-inner-decr': 0.5, 'cheek-bones-decr': 0.3, 'nose-hump-incr': 0.9, 'nose-scale-vert-incr': 0.6, 'nose-scale-depth-incr': 0.5, 'nose-point-down': 0.5, 'nose-curve-convex': 0.6, 'mouth-upperlip-volume-decr': 0.6, 'mouth-lowerlip-volume-decr': 0.4, 'mouth-angles-down': 0.25, 'eyebrows-trans-forward': 0.6, 'eye-bag-incr': 0.8, 'chin-prominent-incr': 0.3, 'chin-cleft-incr': 0.5, 'ear-scale-incr': 0.4, 'ear-lobe-incr': 0.6 },
+    shape: { cheeks: -0.8, jaw: 0.94, dbl: 0, neck: 0.92 },
     expr: 'neutral',
     head: { jaw: 1.02, chin: 0.95, nose: 1.15, lips: 0.8, brow: 1.1 },
     skin: 'tan', eyes: { iris: 'grey', open: 0.9, lid: 0.78, lashes: 0.15, liner: 0 },
@@ -133,7 +137,8 @@ export const FOLK = [
     key: 'mei', name: 'Mei', age: 29, fem: true,
     build: { height: 0.95, head: 0.97, bulk: 0.86, limbs: 0.97 },
     body: { belly: -0.2, chest: 0, thick: -0.02 },
-    shape: { width: 1.05, long: 0.95, forehead: 1.0, crown: 1.0, jaw: 0.97, cheeks: 0.35, cheekbones: 0.07, chin: -0.1, chinW: 1.0, dbl: 0, brow: -0.7, noseLen: 0.9, noseW: 1.1, noseOut: 0.8, lips: 0.2, gap: 1.05, neck: 0.96 },
+    morph: { 'head-round': 0.5, 'head-scale-horiz-incr': 0.25, 'head-scale-vert-decr': 0.2, 'nose-scale-depth-decr': 0.6, 'nose-scale-vert-decr': 0.3, 'nose-volume-decr': 0.3, 'nose-nostrils-width-incr': 0.3, 'nose-curve-concave': 0.4, 'eye-eyefold-down': 0.6, 'eye-epicanthus-in': 0.6, 'eye-scale-decr': 0.1, 'eyebrows-trans-backward': 0.4, 'chin-prominent-decr': 0.3, 'chin-width-decr': 0.2, 'mouth-angles-up': 0.35, 'cheek-volume-incr': 0.3, 'cheek-bones-decr': 0.3 },
+    shape: { cheeks: 0.3, jaw: 0.97, dbl: 0, neck: 0.96 },
     expr: 'soft',
     head: { jaw: 0.0, chin: 0.95, nose: 0.95, lips: 1.0, brow: 0.5 },
     skin: 'golden', eyes: { iris: 'dark', open: 0.8, lid: 0.2, lashes: 0.55, liner: 0.45, mono: true, shadow: '#a07a6a' },
@@ -155,7 +160,8 @@ export const FOLK = [
     key: 'valeria', name: 'Valeria', age: 33, fem: true,
     build: { height: 1.0, head: 0.96, bulk: 0.86, limbs: 0.98 },
     body: { belly: -0.3, chest: 0.1, thick: -0.04 },
-    shape: { width: 1.0, long: 1.02, forehead: 1.06, crown: 1.02, jaw: 0.84, cheeks: -0.3, cheekbones: 0.09, chin: 0.25, chinW: 0.78, dbl: 0, brow: -0.4, noseLen: 0.95, noseW: 0.86, noseOut: 1.0, lips: 0.7, gap: 1.02, neck: 0.94 },
+    morph: { 'head-invertedtriangular': 0.8, 'head-fat-decr': 0.3, 'chin-width-decr': 0.7, 'chin-prominent-incr': 0.2, 'chin-bones-decr': 0.5, 'cheek-bones-decr': 0.3, 'nose-scale-horiz-decr': 0.5, 'nose-point-width-decr': 0.5, 'nose-scale-vert-decr': 0.2, 'nose-volume-decr': 0.4, 'mouth-upperlip-volume-incr': 0.6, 'mouth-lowerlip-volume-incr': 0.7, 'mouth-cupidsbow-incr': 0.6, 'eye-scale-incr': 0.3, 'eyebrows-trans-up': 0.2 },
+    shape: { cheeks: -0.2, jaw: 0.84, dbl: 0, neck: 0.94 },
     expr: 'neutral',
     head: { jaw: 0.0, chin: 0.9, nose: 0.85, lips: 1.15, brow: 0.7 },
     skin: 'light', eyes: { iris: 'brown', open: 1.12, lid: 0.3, lashes: 1.0, liner: 0.8, shadow: '#8a6a5a' },
@@ -176,8 +182,9 @@ export const FOLK = [
     key: 'lena', name: 'Lena', age: 24, fem: true,
     build: { height: 0.94, head: 0.98, bulk: 0.96, limbs: 1.0 },
     body: { belly: 0, chest: 0.15, thick: 0.04 },
-    shape: { width: 1.05, long: 0.92, forehead: 0.98, crown: 1.0, jaw: 0.97, cheeks: 0.9, cheekbones: -0.02, chin: -0.3, chinW: 1.06, dbl: 0, brow: -0.6, noseLen: 0.88, noseW: 0.95, noseOut: 0.86, lips: 0.4, gap: 1.0, neck: 0.98 },
-    expr: 'laugh',
+    morph: { 'head-round': 0.8, 'head-scale-vert-decr': 0.2, 'head-fat-incr': 0.3, 'cheek-volume-incr': 0.6, 'cheek-bones-decr': 0.3, 'nose-point-up': 0.6, 'nose-scale-vert-decr': 0.4, 'nose-scale-horiz-decr': 0.2, 'nose-curve-concave': 0.6, 'chin-prominent-decr': 0.3, 'chin-width-incr': 0.2, 'mouth-angles-up': 0.8, 'mouth-scale-horiz-incr': 0.25, 'mouth-lowerlip-volume-incr': 0.3, 'eye-scale-incr': 0.25 },
+    shape: { cheeks: 0.9, jaw: 0.97, dbl: 0, neck: 0.98 },
+    expr: 'smile',
     head: { jaw: 0.0, chin: 0.85, nose: 0.8, lips: 1.05, brow: 0.6 },
     skin: 'fair', eyes: { iris: 'green', open: 1.1, lid: 0.25, lashes: 0.8, liner: 0.15, shadow: '#b48a7a' },
     brows: { col: ['#7a3a20', '#8a4628', '#6a321a'], thick: 0.72, arch: 0.55 },

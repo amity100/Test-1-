@@ -6,7 +6,7 @@ import * as HERO from './heroshapes.js';
 import { HeroArt } from './heroart.js';
 import { HeroLines } from './herolines.js';
 import { FOLK, SKINS, hexRGB } from './folkspec.js';
-import { folkBody, warpNormal } from './folkshapes.js';
+import { folkBody } from './folkshapes.js';
 import { folkTone, folkBeard } from './folkink.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
@@ -663,7 +663,7 @@ export class PersonRenderer {
     // (the jacket's collar and the shoes: the hero's shapes, in their own pictures)
     G.collar = HERO.heroCollarGeo();
     G.shoe = HERO.heroShoeGeo();
-    const PEN = { head: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
+    const PEN = { head: 'face', eyes: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
     const TWO = new Set(['upper', 'fore', 'thigh', 'shin', 'shoe']);
     const sh = {};
     for (const [name, geo] of Object.entries(G)) {
@@ -686,9 +686,9 @@ export class PersonRenderer {
       beard: (x, y) => folkBeard(x, y, spec.beard),
       beardInk: spec.beardCol ? dark(spec.beardCol).map((v) => v * 0.8) : null,
       rows: Ln.rows, skirt: Ln.skirt,
-      // (their face's own shape, and how they look: render/folkshapes.js warpOf, folkspec.js expr)
-      warp: Ln.warp, warpN: warpNormal, mono: !!spec.eyes.mono,
-      smile: { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[spec.expr] || 0, half: spec.expr === 'half', gape: spec.expr === 'laugh' ? 1 : spec.expr === 'smile' ? 0.3 : 0,
+      // (their real head's face, and how they look: render/folkshapes.js surfaceOf, folkspec.js expr)
+      front: Ln.front, mono: !!spec.eyes.mono,
+      smile: { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[spec.expr] || 0, half: spec.expr === 'half', gape: spec.gape || 0,
       top: inkOf(spec.top), bottom: inkOf(spec.bottom),
       hair: dark(spec.hair.dark).map((v) => v * 0.6), hairHi: hexRGB(spec.hair.light[0]),
     };
@@ -696,8 +696,7 @@ export class PersonRenderer {
     return {
       k, spec, art, mats, sh, tex: {}, mat: null, frame: -1,
       lines: new HeroLines(touch, kit, 0.5),
-      // (where the ears and their lobes are on the head, in its shape: render/folkshapes.js)
-      ears: body.ears,
+      // (their ears' lobes on their head: render/folkshapes.js)
       lobes: body.lobes,
       // (a thick neck or a slender one; a heavy body's girth)
       neck: (spec.shape && spec.shape.neck) || 1,
@@ -713,7 +712,7 @@ export class PersonRenderer {
       sole: linC(spec.shoes.sole),
       watch: spec.acc.watch ? linC(hexRGB(spec.acc.watch)) : null,
       earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
-      // (long hair over the ears)
+      // (long hair over the ears: no earrings seen)
       earsOn: spec.hair.style !== 'long',
     };
   }
@@ -774,14 +773,17 @@ export class PersonRenderer {
     }
     for (const sh of shapes) sh.igeo = null;
     let wide = 0;
-    shapes.forEach((sh, i) => {
-      sh.row = i;
+    for (const sh of shapes) wide = Math.max(wide, sh.count);
+    // the texture: two texels a point, a row a shape - a shape longer than the widest row the
+    // graphics card is sure to have goes on in the next rows (ROADMAP 13.6: real heads)
+    const W = Math.min(wide * 2, 4096);
+    let rows = 0;
+    for (const sh of shapes) {
+      sh.row = rows;
+      rows += Math.ceil((sh.count * 2) / W);
       sh.pen = penRow(sh.penMat);
-      wide = Math.max(wide, sh.count);
-    });
-    // the texture: a row a shape, two texels a point
-    const W = wide * 2;
-    const data = new Float32Array(W * shapes.length * 4);
+    }
+    const data = new Float32Array(W * rows * 4);
     for (const sh of shapes) {
       const g = sh.geo;
       const pos = g.attributes.position.array;
@@ -800,7 +802,7 @@ export class PersonRenderer {
       }
       sh.geo = null;
     }
-    const tex = new THREE.DataTexture(data, W, shapes.length, THREE.RGBAFormat, THREE.FloatType);
+    const tex = new THREE.DataTexture(data, W, rows, THREE.RGBAFormat, THREE.FloatType);
     tex.magFilter = THREE.NearestFilter;
     tex.minFilter = THREE.NearestFilter;
     tex.generateMipmaps = false;
@@ -1696,20 +1698,12 @@ export class PersonRenderer {
       if (q.fall) q.fall.push(_mH, white, own, id(), ind);
       if (q.bun) q.bun.push(_mH, white, own, id(), ind);
       if (q.glasses) q.glasses.push(_mH, F.glasses, own, id(), ind);
-      if (F.earsOn) {
-        const P3 = (v) => _c.copy(hc).addScaledVector(hr, v[0] * hs).addScaledVector(hu, v[1] * hs).addScaledVector(hf, v[2] * hs);
-        const es = hs * (fem ? 0.9 : 1);
-        for (let sd = -1; sd <= 1; sd += 2) {
-          const e = sd > 0 ? 0 : 1;
-          P3(F.ears[e]);
-          _d.copy(hu).addScaledVector(hf, -0.22).normalize();
-          _x.crossVectors(_d, hr).normalize();
-          (sd > 0 ? p.heroEarR : p.heroEarL).push(framed(_c, hr, _d, _x, es, es, es), skin, own, fig.headId, ind);
-          if (F.earring) {
-            // (a drop at the lobe)
-            P3(F.lobes[e]);
-            p.sphere.push(framed(_c, hr, hu, hf, 0.0055 * hs, 0.008 * hs, 0.0055 * hs), F.earring, own, id(), ind);
-          }
+      q.eyes.push(_mH, F.face, own, fig.headId, ind);
+      // (their ears are their head's; earrings at the lobes)
+      if (F.earsOn && F.earring) {
+        for (const v of F.lobes) {
+          _c.copy(hc).addScaledVector(hr, v[0] * hs).addScaledVector(hu, v[1] * hs).addScaledVector(hf, v[2] * hs);
+          p.sphere.push(framed(_c, hr, hu, hf, 0.0055 * hs, 0.008 * hs, 0.0055 * hs), F.earring, own, id(), ind);
         }
       }
     }

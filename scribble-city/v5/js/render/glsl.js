@@ -574,8 +574,12 @@ void main() {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
-  vec4 s0 = texelFetch(uShapes, ivec2(gl_VertexID * 2, int(iS.x)), 0);
-  vec4 s1 = texelFetch(uShapes, ivec2(gl_VertexID * 2 + 1, int(iS.x)), 0);
+  // (a shape longer than a row goes on in the next: ROADMAP 13.6, the city's people's real heads)
+  int sw = textureSize(uShapes, 0).x;
+  int st = gl_VertexID * 2;
+  ivec2 sc = ivec2(st % sw, int(iS.x) + st / sw);
+  vec4 s0 = texelFetch(uShapes, sc, 0);
+  vec4 s1 = texelFetch(uShapes, sc + ivec2(1, 0), 0);
   vec3 sPos = s0.xyz;
   vec3 sNor = s1.xyz;
   vec2 sUv = vec2(s0.w, s1.w);
@@ -1366,7 +1370,9 @@ void main() {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
-  vec3 sPos = texelFetch(uShapes, ivec2(gl_VertexID * 2, int(iS.x)), 0).xyz;
+  int sw = textureSize(uShapes, 0).x;
+  int st = gl_VertexID * 2;
+  vec3 sPos = texelFetch(uShapes, ivec2(st % sw, int(iS.x) + st / sw), 0).xyz;
   vUv = vec2(0.0);
 #else
   vec3 sPos = position;

@@ -98,6 +98,8 @@ function heroKit() {
   };
 }
 function frontZ(x, y) {
+  // (a real head's face: its front as it was measured - render/folkshapes.js surfaceOf)
+  if (KIT.front) return KIT.front(x, y);
   const headSdf = KIT.sdf;
   let lo = -0.02;
   let hi = 0.16;
@@ -110,8 +112,25 @@ function frontZ(x, y) {
   return (lo + hi) / 2;
 }
 function headNormal(x, y, z, out) {
-  const headSdf = KIT.sdf;
   const e = 0.0015;
+  if (KIT.front) {
+    const f = KIT.front;
+    const zx0 = f(x - e, y);
+    const zx1 = f(x + e, y);
+    const zy0 = f(x, y - e);
+    const zy1 = f(x, y + e);
+    if (zx0 !== null && zx1 !== null && zy0 !== null && zy1 !== null) {
+      out[0] = -(zx1 - zx0) / (2 * e);
+      out[1] = -(zy1 - zy0) / (2 * e);
+      out[2] = 1;
+      const L = Math.hypot(out[0], out[1], out[2]);
+      out[0] /= L;
+      out[1] /= L;
+      out[2] /= L;
+      return out;
+    }
+  }
+  const headSdf = KIT.sdf;
   out[0] = headSdf(x + e, y, z) - headSdf(x - e, y, z);
   out[1] = headSdf(x, y + e, z) - headSdf(x, y - e, z);
   out[2] = headSdf(x, y, z + e) - headSdf(x, y, z - e);
@@ -325,25 +344,6 @@ function head() {
   for (const L of LOCKS) {
     P.add(K.hair, L.mid, L.n, { w: 2.0, a: 0.9, col: HAIR });
     P.add(K.hair, L.edge, L.n, { w: 1.3, a: 0.75, col: HAIR });
-  }
-  // (ROADMAP 13.6: one of the city's people's own face - every stroke moved into its shape, as their
-  // head was: render/folkshapes.js warpOf)
-  const w = KIT.warp;
-  if (w) {
-    for (const list of P.by) {
-      for (const st of list) {
-        const n0 = st.n;
-        const m0 = st.mid;
-        st.n = KIT.warpN(w, m0, n0);
-        st.mid = w(m0[0], m0[1], m0[2]);
-        for (let i = 0; i < st.np; i++) {
-          const q = w(st.pts[i * 3], st.pts[i * 3 + 1], st.pts[i * 3 + 2]);
-          st.pts[i * 3] = q[0];
-          st.pts[i * 3 + 1] = q[1];
-          st.pts[i * 3 + 2] = q[2];
-        }
-      }
-    }
   }
   return P;
 }
