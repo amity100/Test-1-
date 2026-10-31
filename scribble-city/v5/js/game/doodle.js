@@ -189,6 +189,16 @@ export class Doodle {
     this.carryT = 0; // clock for the held things (steam, strumming, sweeping)
     this.leashTo = null; // where a dog's leash ends
     this.lookAt = null; // world point the head turns toward
+    // (ROADMAP 13.10) where the head is turned now, and how fast it is turning: it eases to where it
+    // looks as a person's does (game/doodle.js update), never snaps; with nothing to look at, the
+    // eyes and the head wander a little, as anybody's do
+    this.lookYaw = 0;
+    this.lookPitch = 0;
+    this.lookYawV = 0;
+    this.lookPitchV = 0;
+    this.idleLookT = Math.random() * 3;
+    this.idleYaw = 0;
+    this.idlePitch = 0;
     this.visible = true;
     this.parts = { head: 1, torso: 1, armL: 1, armR: 1, legL: 1, legR: 1, pelvis: 1 };
     this.split = -1; // seconds since the waist was erased: the body falls apart
@@ -250,6 +260,7 @@ export class Doodle {
     }
     const f = this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.right.set(-f.z, 0, f.x);
+    this.turnHead(dt);
     const sp = this.speed;
     const stride = sp > 5.5 ? 2.3 : 1.5;
     this.phase += (sp * dt * Math.PI * 2) / stride + this.dance * dt * 7;
@@ -540,6 +551,47 @@ export class Doodle {
     this.shapesDirty = true;
   }
 
+  // (ROADMAP 13.10) the head to where they look: a spring with a top speed - a glance quick, a long
+  // turn slower, eased in and out; never round past the shoulder; with nothing to look at, now and
+  // then a small look about, mostly ahead
+  turnHead(dt) {
+    let wy = 0;
+    let wp = 0;
+    const h = this.j.headC;
+    if (this.lookAt && this.dead < 0.2) {
+      const dx = this.lookAt.x - h.x;
+      const dz = this.lookAt.z - h.z;
+      const dy = this.lookAt.y - h.y;
+      let a = Math.atan2(dx, dz) - this.yaw;
+      a = Math.atan2(Math.sin(a), Math.cos(a));
+      if (Math.abs(a) < 2.2) {
+        wy = clamp(a, -1.25, 1.25);
+        wp = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.42);
+      }
+    } else if (this.dead < 0.2) {
+      this.idleLookT -= dt;
+      if (this.idleLookT <= 0) {
+        // (mostly ahead; now and then a look aside, down at the ground, up)
+        const r = Math.random();
+        this.idleLookT = 1.2 + Math.random() * 3.5;
+        this.idleYaw = r < 0.55 ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.9;
+        this.idlePitch = r < 0.55 ? 0 : (Math.random() - 0.6) * 0.25;
+      }
+      wy = this.idleYaw * (this.speed > 3 ? 0.3 : 1);
+      wp = this.idlePitch;
+    }
+    // (a critically damped spring: about a third of a second to get there, never faster than a turn
+    // of the head can be)
+    const w = 10;
+    const k = Math.min(dt, 0.05);
+    this.lookYawV += (w * w * (wy - this.lookYaw) - 2 * w * this.lookYawV) * k;
+    this.lookPitchV += (w * w * (wp - this.lookPitch) - 2 * w * this.lookPitchV) * k;
+    this.lookYawV = clamp(this.lookYawV, -5, 5);
+    this.lookPitchV = clamp(this.lookPitchV, -3, 3);
+    this.lookYaw += this.lookYawV * k;
+    this.lookPitch += this.lookPitchV * k;
+  }
+
   // let go of a ragdoll: the next moments of the pose start from where the joints are now
   unrag(dur) {
     const from = this.unragJ || (this.unragJ = {});
@@ -653,13 +705,11 @@ export class Doodle {
     if (hu.lengthSq() < 1e-6) hu.copy(ax);
     hu.normalize();
     const hf = this.hf.copy(fwd);
-    if (this.lookAt && this.dead < 0.2) {
-      _a.subVectors(this.lookAt, j.headC);
-      _a.y = 0;
-      if (_a.lengthSq() > 0.01) {
-        _a.normalize();
-        if (_a.dot(fwd) > -0.2) hf.lerp(_a, 0.7);
-      }
+    // (ROADMAP 13.10) turned as far as the head has turned by now (turnHead), up or down with it
+    if (Math.abs(this.lookYaw) > 1e-4 || Math.abs(this.lookPitch) > 1e-4) {
+      _a.crossVectors(ax, fwd);
+      hf.multiplyScalar(Math.cos(this.lookYaw)).addScaledVector(_a, Math.sin(this.lookYaw));
+      hu.addScaledVector(hf, -Math.sin(this.lookPitch)).normalize();
     }
     hf.addScaledVector(hu, -hf.dot(hu)).normalize();
     const hr = this.hr.crossVectors(hf, hu).normalize().negate();

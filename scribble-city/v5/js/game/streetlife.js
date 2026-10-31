@@ -1958,6 +1958,17 @@ class OpenShop {
     this.game.civilians.remove(v.c);
   }
 
+  // (ROADMAP 13.10) somebody who would rather not stay after what happened in here: out of the door
+  // at a walk, whatever they were doing (game/brain.js leave)
+  sendOut(c) {
+    const v = this.visitors.find((q) => q.c === c);
+    if (!v || v.phase === 'out' || v.dine || v.lobbyMan || !this.room) return false;
+    c.fig.sit = 0;
+    c.noCollide = false;
+    this.leave(v);
+    return true;
+  }
+
   // a visitor scared off (or rubbed out): let them go (they find their own way out of the door)
   drop(v) {
     const i = this.visitors.indexOf(v);

@@ -126,6 +126,42 @@ export class Reactions {
     this.game.civilians.rejoin(c);
   }
 
+  // (ROADMAP 13.10, game/brain.js) somebody who chose to stay and watch it - their phone up, if they
+  // are the kind to film it: a place on the ring round it, as far off as it is dangerous
+  enlist(c, ev, film) {
+    if (!this.free(c)) return false;
+    const kind = ev.kind === 'assault' ? 'fight' : ev.kind === 'shot' || ev.kind === 'fire' ? 'blast' : ev.kind === 'glass' ? 'crash' : ev.kind;
+    const inc = this.note(LOOK_LINES[kind] ? kind : 'crash', ev.x, ev.z);
+    if (!inc || inc.watchers.length >= this.most + 2) return false;
+    this.borrow(c);
+    const far = ev.kind === 'blast' || ev.kind === 'fire' ? 13 : ev.kind === 'shot' ? 18 : ev.kind === 'assault' ? 5.5 : 6.5;
+    const a = Math.atan2(c.pos.x - inc.x, c.pos.z - inc.z) + (Math.random() - 0.5) * 0.7;
+    const r = far + Math.random() * 3;
+    let sx = inc.x + Math.sin(a) * r;
+    let sz = inc.z + Math.cos(a) * r;
+    if (!blockAt(sx, sz) && blockAt(c.pos.x, c.pos.z)) {
+      sx = (sx + c.pos.x) / 2;
+      sz = (sz + c.pos.z) / 2;
+    }
+    // (no nearer than they were if it is dangerous)
+    if (ev.danger > 0.5 && Math.hypot(c.pos.x - inc.x, c.pos.z - inc.z) < r) {
+      sx = c.pos.x;
+      sz = c.pos.z;
+    }
+    c.goal = { x: sx, z: sz, speed: c.speed * 1.1 };
+    c.watchT = 0;
+    c.sayT = 2 + Math.random() * 6;
+    c.filming = film ? (c.fig.carry === 'phone' ? 'had' : c.fig.carry ? null : 'took') : null;
+    if (c.filming === 'took') c.fig.carry = 'phone';
+    if (c.filming) {
+      c.film = new THREE.Vector3();
+      this.stats.filming++;
+    }
+    inc.watchers.push(c);
+    this.stats.onlookers++;
+    return true;
+  }
+
   // ------------------------------------------------------------------ onlookers
   recruit(inc, dt) {
     inc.recruitT -= dt;
@@ -133,8 +169,11 @@ export class Reactions {
     inc.recruitT = 0.8 + Math.random();
     let best = null;
     let bd = 28;
+    const M = this.game.minds;
     for (const c of this.game.civilians.list) {
       if (!this.free(c)) continue;
+      // (ROADMAP 13.10: the curious come over to look; the others go about their day)
+      if (M && M.of(c).curious < 0.45) continue;
       const d = Math.hypot(c.pos.x - inc.x, c.pos.z - inc.z);
       if (d < bd && d > 3) {
         bd = d;
@@ -175,7 +214,7 @@ export class Reactions {
       c.faceYaw = Math.atan2(inc.x - c.pos.x, inc.z - c.pos.z);
       c.watchT += dt;
       // the phone out, held up to film it (half of them)
-      if (c.filming === undefined) {
+      if (c.filming === undefined && !c.ai) {
         c.filming = Math.random() < 0.5 ? (c.fig.carry === 'phone' ? 'had' : c.fig.carry ? null : 'took') : null;
         if (c.filming === 'took') c.fig.carry = 'phone';
         if (c.filming) {
@@ -213,6 +252,8 @@ export class Reactions {
       let bd = 30;
       for (const c of game.civilians.list) {
         if (c === v || !this.free(c)) continue;
+        // (ROADMAP 13.10: somebody kind stops to help - not just whoever is nearest)
+        if (game.minds && game.minds.of(c).warm < 0.5) continue;
         const d = Math.hypot(c.pos.x - v.pos.x, c.pos.z - v.pos.z);
         if (d < bd) {
           bd = d;

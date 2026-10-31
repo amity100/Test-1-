@@ -179,7 +179,7 @@ export class Fire {
             D.ignite(c, 1 + Math.random() * 2);
           }
         }
-        game.civilians.panic(_v.set(f.x, 0, f.z), 9);
+        game.civilians.panic(_v.set(f.x, 0, f.z), 9, 'fire');
       }
     }
     if (near) flashLight(near.x, near.y + near.h * 0.6, near.z, 9, FIRE_LIGHT, 1.3 + 0.45 * Math.sin(game.time * 13) + 0.25 * Math.sin(game.time * 29));

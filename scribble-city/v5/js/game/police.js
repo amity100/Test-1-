@@ -83,6 +83,7 @@ export class Police {
     this.level = 0;
     this.searchT = 0;
     this.reports = [];
+    if (this.game.brain) this.game.brain.reports = [];
     this.game.hud.setWanted(0, false);
   }
 
@@ -97,11 +98,23 @@ export class Police {
     const w = this.witnesses(x, z);
     if (c.always || w.cop) {
       this.addHeat(c.heat, x, z, true);
+    } else if (c.civ && w.civ && this.game.brain && !this.game.classic) {
+      // (ROADMAP 13.10) one of the people who saw it phones it in - when they are safe enough to,
+      // a few seconds on; stop them first, and nobody does (game/brain.js report, phoned)
+      this.game.brain.report(c.heat * 0.8, x, z);
     } else if (c.civ && w.civ) {
       // somebody pulls out a phone; erase them first and the call never happens
       this.reports.push({ t: t + 2.5 + Math.random() * 2, heat: c.heat * 0.8, x, z, by: w.civ });
       if (Math.random() < 0.6) this.game.bubbles.say(w.civ, pick(['I\'m calling the cops!', 'Police!!', 'Somebody call 911!']), 'alarm');
     }
+  }
+
+  // (ROADMAP 13.10) a witness of yours got through on the phone (game/brain.js)
+  phoned(heat, x, z) {
+    const t = this.game.time;
+    this.addHeat(heat, x, z, false);
+    if (this.level > 0 && t - this.seenT > 2) this.lastSeen.set(x, 0, z);
+    this.game.hud.toast('מישהו התקשר למשטרה…', 'info', 2);
   }
 
   witnesses(x, z) {

@@ -522,28 +522,70 @@ const MOODS = {
   dead: [0.22, 0, 0.3, 0, 0, 1, 1, 0],
 };
 const REST = { neutral: 0, soft: 0.3, half: 0.4, smile: 0.62, laugh: 0.8 };
-// (ROADMAP 13.8) the mouth of each sound: [the jaw, the lips wide (-: rounded)]
-const M_REST = [0.02, 0];
-const M_A = [0.55, 0.05];
-const M_E = [0.3, 0.28];
-const M_I = [0.2, 0.36];
-const M_O = [0.42, -0.55];
-const M_U = [0.18, -0.75];
-const M_SHUT = [0, -0.05];
-const M_F = [0.06, 0.06];
-const M_C = [0.16, 0.08];
-function mouthOf(c) {
-  // (lower case)
-  if (c >= 65 && c <= 90) c += 32;
-  if (c === 97) return M_A;
-  if (c === 101) return M_E;
-  if (c === 105 || c === 121) return M_I;
-  if (c === 111) return M_O;
-  if (c === 117 || c === 119) return M_U;
-  if (c === 109 || c === 98 || c === 112) return M_SHUT;
-  if (c === 102 || c === 118) return M_F;
-  if (c >= 97 && c <= 122) return M_C;
-  return M_REST;
+// (ROADMAP 13.11) a line's mouth, worked out once, as people's mouths go and not a shape a letter: the
+// jaw by syllables - open at each vowel, half-closing between them, shut for an m, a b, a p, at rest at
+// a comma or a stop - the lips on their own track, rounded for an o, a u, a w from a sound or two
+// before it (lips get ready early), spread for an e, an i; both eased from one sound into the next.
+// Returns [jaw, lips] for each letter.
+const V_JAW = { a: 0.5, e: 0.32, i: 0.22, o: 0.4, u: 0.2, y: 0.22 };
+const V_LIP = { a: 0.04, e: 0.24, i: 0.32, o: -0.5, u: -0.72, y: 0.28 };
+function mouthTrack(text, loud) {
+  const n = text.length;
+  const t = text.toLowerCase();
+  const jaw = new Float32Array(n + 2);
+  const lip = new Float32Array(n + 2);
+  const shut = new Uint8Array(n + 2);
+  let word = 0;
+  for (let i = 0; i < n; i++) {
+    const ch = t[i];
+    const v = V_JAW[ch];
+    if (v !== undefined) {
+      // (the first vowel of a word said a little stronger; each syllable a little its own)
+      const k = (word === 0 ? 1.12 : 1) * (0.9 + 0.2 * ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1) * (loud ? 1.35 : 1);
+      jaw[i] = v * k;
+      lip[i] = V_LIP[ch];
+      word++;
+    } else if (ch === 'm' || ch === 'b' || ch === 'p') {
+      shut[i] = 1;
+    } else if (ch === 'f' || ch === 'v') jaw[i] = 0.05;
+    else if (ch === 'w' || ch === 'q') {
+      jaw[i] = 0.1;
+      lip[i] = -0.65;
+    } else if (ch === 'h' || ch === 'r' || ch === 'l') jaw[i] = 0.18;
+    else if (ch >= 'a' && ch <= 'z') jaw[i] = 0.1;
+    else if (ch === ' ' || ch === '-' || ch === "'") {
+      jaw[i] = 0.08;
+      word = 0;
+    } else {
+      // (a comma, a stop: the mouth at rest a moment)
+      jaw[i] = 0;
+      word = 0;
+    }
+  }
+  // the jaw eased across its neighbours (it goes from syllable to syllable, not letter to letter)
+  const J = new Float32Array(n + 2);
+  for (let i = 0; i < n; i++) J[i] = jaw[Math.max(0, i - 1)] * 0.22 + jaw[i] * 0.56 + jaw[Math.min(n - 1, i + 1)] * 0.22;
+  // the lips: rounding reaches back two sounds and on one; spreading, one each way
+  const L = Float32Array.from(lip);
+  for (let i = 0; i < n; i++) {
+    const v = lip[i];
+    if (v < -0.3) {
+      if (i > 1) L[i - 2] = Math.min(L[i - 2], v * 0.45);
+      if (i > 0) L[i - 1] = Math.min(L[i - 1], v * 0.8);
+      L[i + 1] = Math.min(L[i + 1], v * 0.7);
+    } else if (v > 0.15) {
+      if (i > 0 && L[i - 1] > -0.1) L[i - 1] = Math.max(L[i - 1], v * 0.5);
+      if (L[i + 1] > -0.1) L[i + 1] = Math.max(L[i + 1], v * 0.5);
+    }
+  }
+  // (shut means shut: the lips together for an m, a b, a p, whatever is round them)
+  for (let i = 0; i < n; i++) if (shut[i]) J[i] = 0;
+  const out = new Float32Array((n + 2) * 2);
+  for (let i = 0; i < n + 2; i++) {
+    out[i * 2] = J[i];
+    out[i * 2 + 1] = L[i];
+  }
+  return out;
 }
 const _want = new Float32Array(8);
 const _gaze = [0, 0, 0, 0];
@@ -593,14 +635,18 @@ function faceOf(fig, F, t, cam) {
     if (p > n + 1) say.done = true;
     else if (p >= 0) {
       saying = true;
-      const i = Math.floor(p);
-      const f = p - i;
-      const a = mouthOf(say.text.charCodeAt(i) | 0);
-      const ja = a[0];
-      const wa = a[1];
-      const b = mouthOf(say.text.charCodeAt(i + 1) | 0);
-      _want[0] = Math.max(_want[0], ja + (b[0] - ja) * f);
-      _want[7] = wa + (b[1] - wa) * f;
+      const tr = say.track || (say.track = mouthTrack(say.text, say.tone === 'alarm' || say.text.indexOf('!') >= 0));
+      const i = Math.min(n + 1, Math.floor(p));
+      const j = Math.min(n + 1, i + 1);
+      const f0 = p - Math.floor(p);
+      // (eased from one sound into the next)
+      const f = f0 * f0 * (3 - 2 * f0);
+      const ja = tr[i * 2];
+      const wa = tr[i * 2 + 1];
+      _want[0] = Math.max(_want[0], ja + (tr[j * 2] - ja) * f);
+      _want[7] = wa + (tr[j * 2 + 1] - wa) * f;
+      // (the brows with what is stressed: a little up on the strong syllables)
+      if (ja > 0.42) _want[3] = Math.max(_want[3], (ja - 0.42) * 0.9);
       // (a smile at rest gives way to the words; joy keeps it)
       if (mood !== 'joy') _want[1] = Math.min(_want[1], 0.15);
       const end = p / Math.max(1, n);
@@ -638,17 +684,19 @@ function faceOf(fig, F, t, cam) {
     _fEw[5] = Math.max(_fEw[5], b);
     _fEw[6] = Math.max(_fEw[6], b);
   }
-  // where they look: at whoever they are listening to (fig.lookAt: their head turns there too), at
-  // you near and in front of them; else a glance here and there, now and then
+  // where they look: where their head is turned to (fig.lookAt - whoever they listen to, what they
+  // do, you when they notice you: the eyes get there first, the head after - game/doodle.js); else
+  // a glance here and there, now and then, mostly ahead. (ROADMAP 13.10: never a stare at you for
+  // its own sake)
   let lookYou = false;
-  const at = fig.lookAt || cam;
+  const at = fig.lookAt;
   if (at && mood !== 'dead') {
     const hc = fig.j.headC;
     const dx = at.x - hc.x;
     const dy = at.y - hc.y;
     const dz = at.z - hc.z;
     const d = Math.hypot(dx, dy, dz);
-    if ((d < 7 || at !== cam) && d > 0.05) {
+    if (d > 0.05) {
       // (in the head's own frame: across, up, ahead)
       const ax = (dx * fig.hr.x + dy * fig.hr.y + dz * fig.hr.z) / d;
       const ay = (dx * fig.hu.x + dy * fig.hu.y + dz * fig.hu.z) / d;
@@ -661,10 +709,10 @@ function faceOf(fig, F, t, cam) {
     }
   }
   if (!lookYou && t > st.glanceAt) {
-    st.glanceAt = t + 0.8 + Math.random() * 2.6;
+    st.glanceAt = t + 0.6 + Math.random() * 2.2;
     const r = Math.random();
-    st.toYaw = r < 0.45 ? 0 : (Math.random() - 0.5) * 0.7;
-    st.toPitch = r < 0.45 ? 0 : (Math.random() - 0.6) * 0.3;
+    st.toYaw = r < 0.55 ? (Math.random() - 0.5) * 0.08 : (Math.random() - 0.5) * 0.55;
+    st.toPitch = r < 0.55 ? 0 : (Math.random() - 0.6) * 0.25;
   }
   if (mood === 'dead') st.toYaw = st.toPitch = 0;
   // (the eyes jump to where they look - quick, as eyes do)

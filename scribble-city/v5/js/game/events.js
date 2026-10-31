@@ -464,7 +464,7 @@ function* robberyScene(sc, def) {
   yield* sc.walkPath(r, [...R.path(r.pos.x, r.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2] }], 3.6);
   r.noCollide = false;
   if (k.alive && k.owner === a) sc.say(k, pick(['Stop! Thief!', 'Somebody stop him!', 'Help! Police!']), 'alarm');
-  game.civilians.panic(new THREE.Vector3(s.door[0], 0, s.door[2]), 12);
+  game.civilians.panic(new THREE.Vector3(s.door[0], 0, s.door[2]), 12, 'assault', { by: 'thief' });
   // away along the sidewalk, away from you
   const p = game.player.pos;
   const away = (p.x - s.door[0]) * s.rx + (p.z - s.door[2]) * s.rz > 0 ? -1 : 1;

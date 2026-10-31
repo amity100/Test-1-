@@ -1288,7 +1288,7 @@ class Vehicle {
     }
     // (ROADMAP 11.12: a silencer on it - nobody hears it, nobody calls it in)
     if (g.quiet) return;
-    game.civilians.panic(this.pos, 40);
+    game.civilians.panic(this.pos, 40, 'shot', { by: 'player', armed: true });
     game.onCrime('shoot', this.pos.x, this.pos.z);
   }
 
@@ -1352,7 +1352,7 @@ class Vehicle {
     game.fx.muzzle(mw.x, mw.y, mw.z, 0.9);
     game.audio.play('paint', 0.45);
     game.enemies.noise(this.pos, 32);
-    game.civilians.panic(this.pos, 40);
+    game.civilians.panic(this.pos, 40, 'shot', { by: 'player', armed: true });
     game.onCrime('shoot', this.pos.x, this.pos.z);
   }
 

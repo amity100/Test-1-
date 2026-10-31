@@ -36,11 +36,29 @@ const LINGER_WARM = ['[joy] Hey there! Lovely day, right?', '[joy] Hi! Can I hel
 const LINGER_COLD = ['[angry] What are you looking at?', '[angry] Do I owe you money?', '[angry] Take a picture, it lasts longer.', '[angry] Personal space, buddy.'];
 const LINGER_TIMID = ['[scared] Uh... hi?', '[scared] Sorry, am I in your way?', '[surprised] Oh! You startled me.'];
 const LINGER_CURIOUS = ['[surprised] Is that a real pencil? It is huge!', 'Do I know you from somewhere?', '[surprised] Wait... are you the one who draws stuff?', 'Can I help you?'];
-// what they tell each other: about you, and about the street
-const TELL = {
-  bad: [['[scared] Did you hear? Somebody got hurt by the bay.', '[sad] This city, I swear.'], ['[angry] Some lunatic stole a car right in front of me!', '[surprised] In broad daylight?'], ['[scared] There was shooting, two blocks from here.', '[scared] I am going home early.']],
+// what they tell each other: about you, and about the street - what it was, as it was (a fist fight is
+// not told as a blast), and whether it was right here a moment ago or somewhere else a while back
+const TOLD = {
+  carjack: 'theft', steal: 'theft', quietSteal: 'theft', hurtCiv: 'fight', koCiv: 'fight', fight: 'fight', hurt: 'fight', koCop: 'fight', hurtCop: 'fight',
+  killCiv: 'kill', killCop: 'kill', shoot: 'shots', copcar: 'theft', blast: 'blast', crash: 'crash', drawn: 'wow',
+};
+const TELL_HERE = {
+  fight: [['[surprised] Did you see that? He just hit that guy!', '[scared] Come on, let us get out of here.'], ['[angry] Unbelievable. In broad daylight.', '[sad] I hope that poor guy is okay.'], ['[surprised] Whoa, whoa. Did he just punch him?', '[scared] Do not look. Just keep walking.']],
+  shots: [['[scared] Those were gunshots. Right here!', '[scared] Keep walking. Do not look back.'], ['[scared] Was that a gun?!', '[scared] I am not staying to find out.']],
+  kill: [['[scared] Is he... is that man dead?', '[scared] Oh my god. Somebody call the police!'], ['[scared] I just saw somebody get killed.', '[sad] I am shaking. I am actually shaking.']],
+  theft: [['[angry] He just took that car! Just like that!', '[surprised] Did anybody get the plate?'], ['[surprised] Was that his car? I do not think that was his car.', '[angry] Somebody call the cops.']],
+  blast: [['[scared] What was that?! Something blew up!', '[scared] Just keep moving!'], ['[scared] My ears are still ringing.', '[scared] Mine too. What was it?']],
+  crash: [['[surprised] Did you see that crash?', '[sad] I hope everybody is okay.'], ['[angry] People drive like maniacs here.', '[sad] Every single week.']],
+  wow: [['[surprised] Did you see that? The drawing - it came alive!', '[joy] I have to tell everybody!'], ['[surprised] He drew it... and it was real!', '[joy] Best day ever!']],
+};
+const TELL_THERE = {
+  fight: [['[surprised] Did you hear? There was a fight a few blocks from here.', '[sad] This city, I swear.'], ['[sad] Somebody got beaten up earlier. Out of nowhere.', '[scared] I will take the long way home.']],
+  shots: [['[scared] There was shooting, a few blocks from here.', '[scared] I am going home early.'], ['[scared] Did you hear the shots before?', '[sad] I thought it was fireworks.']],
+  kill: [['[sad] Somebody was killed today, not far from here.', '[scared] In this neighborhood? I do not believe it.']],
+  theft: [['[angry] Some lunatic stole a car right in front of people!', '[surprised] In broad daylight?'], ['[angry] Another car stolen around here.', '[sad] I am selling mine.']],
+  blast: [['[surprised] Something blew up earlier, did you hear it?', '[scared] What is going on lately?']],
+  crash: [['[surprised] There was a bad crash on the boulevard.', '[sad] Again? Somebody will get killed.']],
   wow: [['[surprised] I saw a guy draw a car - and then drive it away!', '[joy] Come on. Really?'], ['[joy] There is an artist whose drawings come alive!', '[surprised] I want to see that!'], ['[surprised] A drawing! It just stood up and walked!', '[joy] No way!']],
-  street: [['[surprised] Did you see that crash on the boulevard?', '[sad] Again? Somebody will get killed.'], ['[surprised] Something blew up near the pier!', '[scared] What is going on lately?'], ['[sad] Some guy was hurt right there.', '[sad] I hope he is okay.']],
 };
 
 export class Minds {
@@ -166,10 +184,11 @@ export class Minds {
       else if (this.dread > 1.2 && d < 9 && (armed || m.bold < 0.5)) feel = 'scared';
       if (feel && d < 10 && !(c.panicT > 0)) {
         c.fig.feel = { mood: feel, until: now + 1 };
-        // (and they look at you)
-        if (head && (c.glanceUntil || 0) < now && !c.convo) {
+        // (and a look at you now and then - not a stare: ROADMAP 13.10)
+        if (head && now > (m.glanceT || 0) && !c.convo) {
+          m.glanceT = now + 3 + Math.random() * 5;
           c.glanceAt = head;
-          c.glanceUntil = now + 0.8;
+          c.glanceUntil = now + 0.8 + Math.random() * 0.8;
         }
       }
       // a word to you, now and then: one person at a time, one line every few seconds in all
@@ -215,10 +234,14 @@ export class Minds {
       for (const b of civs) {
         if (b === a || !b.alive || b.convo || b.scripted || b.panicT > 0 || b.inside || !b.fig) continue;
         if (Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) > 2.6) continue;
-        // (what a knows: what they saw, else the latest news)
+        // (what a knows: what they saw, else the latest news - told as it was, here or elsewhere)
         const n = ma.saw && now - ma.sawT < 300 ? ma.saw : news[news.length - 1];
         const what = n.what || 'street';
-        const set = pick(TELL[what]);
+        const told = TOLD[n.kind] || (what === 'wow' ? 'wow' : 'fight');
+        const N = news.find((q) => q.kind === n.kind) || news[news.length - 1];
+        const here = N && Math.hypot(N.x - a.pos.x, N.z - a.pos.z) < 45 && now - N.t < 90;
+        const sets = (here ? TELL_HERE : TELL_THERE)[told] || TELL_THERE.fight;
+        const set = pick(sets);
         if (!game.voices.talk([a, b], set.slice())) return;
         // (and now b knows it - and what to think of you, if it was you)
         const mb = this.of(b);

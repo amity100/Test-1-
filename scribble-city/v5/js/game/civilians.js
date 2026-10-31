@@ -465,15 +465,83 @@ class Civilian {
       if (ex) {
         tx = ex.x;
         tz = ex.z;
+      } else if (game.brain && !game.classic) {
+        // (ROADMAP 13.10) running as people run: away along the sidewalk, round the corner, through
+        // the open - never into a wall; slower the further off - game/brain.js
+        const g = game.brain.fleeGoal(this, dt);
+        tx = g.x;
+        tz = g.z;
+        speed = g.speed;
       } else {
         const fx = this.pos.x - this.fearX;
         const fz = this.pos.z - this.fearZ;
         const l = Math.hypot(fx, fz) || 1;
         tx = this.pos.x + (fx / l) * 5;
         tz = this.pos.z + (fz / l) * 5;
+        speed = 5.8;
+        fig.armsUp = 1;
       }
-      speed = ex ? 4.4 : 5.8;
-      fig.armsUp = 1;
+      if (ex) speed = 4.4;
+    } else if (this.coverT > 0) {
+      // (ROADMAP 13.10) behind something - a parked car, a wall, a corner - out of the line of fire:
+      // there bent low, then down, turned to it, until it goes quiet (game/brain.js)
+      this.coverT -= dt;
+      const cv = this.coverAt;
+      const d = cv ? Math.hypot(cv.x - this.pos.x, cv.z - this.pos.z) : 0;
+      this.crouchW = cv && d > 0.45 ? 0.3 : 1;
+      if (cv && d > 0.45) {
+        tx = cv.x;
+        tz = cv.z;
+        speed = d > 1.6 ? 4.6 : 2.2;
+      } else {
+        tx = this.pos.x;
+        tz = this.pos.z;
+        speed = 0;
+        this.yaw = dampAngle(this.yaw, Math.atan2(this.fearX - this.pos.x, this.fearZ - this.pos.z), 5, dt);
+      }
+    } else if (this.cowerT > 0) {
+      // (ROADMAP 13.10) down where they are, the back to it, until it is over
+      this.cowerT -= dt;
+      tx = this.pos.x;
+      tz = this.pos.z;
+      speed = 0;
+      this.crouchW = 1;
+      this.yaw = dampAngle(this.yaw, Math.atan2(this.pos.x - this.fearX, this.pos.z - this.fearZ), 6, dt);
+    } else if (this.avoidT > 0 && !this.ctrl) {
+      // (ROADMAP 13.10) off from it at a brisk walk, glancing back
+      this.avoidT -= dt;
+      fig.armsUp = 0;
+      const g = game.brain.fleeGoal(this, dt, true);
+      tx = g.x;
+      tz = g.z;
+      speed = g.speed;
+    } else if ((this.callT > 0 || this.confrontT > 0) && !this.ctrl) {
+      // (ROADMAP 13.10) on the phone to the police, where they are; or up to whoever did it, to say
+      // so - not too near
+      tx = this.pos.x;
+      tz = this.pos.z;
+      speed = 0;
+      if (this.callT > 0) {
+        // (on the phone, still near it: a slow walk away from it as they talk)
+        this.callT -= dt;
+        const fx = this.pos.x - this.fearX;
+        const fz = this.pos.z - this.fearZ;
+        const fd = Math.hypot(fx, fz);
+        if (fd < 14 && fd > 0.1) {
+          tx = this.pos.x + (fx / fd) * 2;
+          tz = this.pos.z + (fz / fd) * 2;
+          speed = 0.9;
+        }
+      } else {
+        this.confrontT -= dt;
+        const p = game.player.pos;
+        const d = Math.hypot(p.x - this.pos.x, p.z - this.pos.z) || 1;
+        if (d > 3.6) {
+          tx = p.x - ((p.x - this.pos.x) / d) * 3.2;
+          tz = p.z - ((p.z - this.pos.z) / d) * 3.2;
+          speed = 1.5;
+        } else this.yaw = dampAngle(this.yaw, Math.atan2(p.x - this.pos.x, p.z - this.pos.z), 6, dt);
+      }
     } else if (this.ctrl) {
       fig.flail = 0;
       const m = this.ctrl(this, dt);
@@ -650,7 +718,15 @@ class Civilian {
     if (this.talkUntil > 0 || this.listenTo || this.glanceUntil > 0 || this.waitAt || this._look) this.social(dt);
     // (ROADMAP 13.7) their face: afraid running from danger, in pain on the ground, the words they say
     // - render/people.js faceOf
-    fig.mood = this.panicT > 0 ? 'scared' : this.downT > 0 ? 'hurt' : null;
+    // (down and up again as a body goes, not at once)
+    if (this.crouchW !== undefined) {
+      fig.crouch += (this.crouchW - fig.crouch) * Math.min(1, dt * 7);
+      if (this.crouchW === 0 && fig.crouch < 0.02) {
+        fig.crouch = 0;
+        this.crouchW = undefined;
+      }
+    }
+    fig.mood = this.panicT > 0 || this.cowerT > 0 || this.coverT > 0 ? 'scared' : this.downT > 0 ? 'hurt' : null;
     fig.talk = this.talkUntil > this.game.time;
     fig.update(dt);
   }
@@ -731,7 +807,7 @@ class Civilian {
       if (L && L.alive && !L.gone && L.fig.parts.head > 0.5 && Math.abs(L.pos.x - this.pos.x) + Math.abs(L.pos.z - this.pos.z) < 6) look = L.fig.j.headC;
       else if (this.glanceAt) look = this.glanceAt;
       else if (this.waitAt && this.waitAt.look) look = this.waitAt.look;
-    }
+    } else if (near && this.glanceAt) look = this.glanceAt; // (ROADMAP 13.10: a look back, running)
     if (look) {
       if (!fig.lookAt || fig.lookAt === this._look) {
         fig.lookAt = look;
@@ -1458,8 +1534,7 @@ export class Civilians {
     const res = fig.erase(point, holeRadius(kind, amount));
     game.fx.crumbs(point.x, point.y, point.z, 8, 2.5);
     game.audio.play('erase', 0.5);
-    this.panic(c.pos, 30);
-    c.panicT = c.brave ? 0 : 8;
+    if (!this.panic(c.pos, 30, 'hurt', { victim: c, by: 'player', src: game.player.pos, armed: true })) c.panicT = c.brave ? 0 : 8;
     if (game.onCivilianHurt) game.onCivilianHurt(c);
     if (!res) return;
     const part = res.part;
@@ -1492,8 +1567,7 @@ export class Civilians {
     fig.recoilSide = s.limb === 'L' ? 1 : s.limb === 'R' ? -1 : 0;
     c.daze += s.dmg * power;
     c.reelT = 0.7;
-    this.panic(c.pos, 30);
-    c.panicT = c.brave ? 0 : 8;
+    if (!this.panic(c.pos, 30, 'assault', { victim: c, by: 'player', src: game.player.pos })) c.panicT = c.brave ? 0 : 8;
     c.fearX = game.player.pos.x;
     c.fearZ = game.player.pos.z;
     if (game.onCivilianHurt) game.onCivilianHurt(c);
@@ -1573,8 +1647,7 @@ export class Civilians {
       game.fx.sprite('fx_crash', c.pos.x, c.pos.y + 1, c.pos.z, { size: 1.4, life: 0.3 });
       game.audio.play('crash', 0.5);
       if (v.kind === 'car' || v.kind === 'bike') v.hurt(3);
-      this.panic(c.pos, 30);
-      c.panicT = 8;
+      if (!this.panic(c.pos, 30, 'crash', { victim: c, by: 'player', src: v.pos })) c.panicT = 8;
       c.fearX = v.pos.x;
       c.fearZ = v.pos.z;
       if (sp > 15) {
@@ -1600,10 +1673,19 @@ export class Civilians {
     if (this.game.onCivilianKilled) this.game.onCivilianKilled(c);
   }
 
-  panic(pos, radius) {
+  // kind: what it was (game/brain.js EVENTS); o: { by, victim, src (who did it), armed }. Returns
+  // true when the city's people take it in each their own way (ROADMAP 13.10), false the old way
+  panic(pos, radius, kind = null, o = {}) {
     // (the cats and the birds round there are off too; the drivers react: ROADMAP 4.4)
     if (!this.game.classic && this.game.animals) this.game.animals.scare(pos, radius);
     if (!this.game.classic && this.game.traffic) this.game.traffic.scare(pos, radius);
+    // (ROADMAP 13.10) not everybody near running at once, as ants do: each who sees or hears it, in
+    // their own time and way - game/brain.js
+    const B = this.game.brain;
+    if (B && !this.game.classic) {
+      B.event(kind || (radius >= 55 ? 'blast' : radius >= 25 ? 'shot' : radius >= 10 ? 'glass' : 'crash'), pos.x, pos.z, o);
+      return true;
+    }
     for (const c of this.list) {
       if (c.inside) continue;
       // (the friend you drew stays by your side)
@@ -1615,6 +1697,7 @@ export class Civilians {
         c.fearZ = pos.z;
       }
     }
+    return false;
   }
 
   dodge(pos, f, halfLen, halfWid, speed) {

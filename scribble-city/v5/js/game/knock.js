@@ -795,7 +795,7 @@ export class Knock {
     if (d < 70) game.audio.play('glass', Math.max(0.25, 1 - d / 70));
     this.stats.panes++;
     // (whoever is near jumps; a broken window is vandalism)
-    game.civilians.panic(new THREE.Vector3(p.x, 0, p.z), 10);
+    game.civilians.panic(new THREE.Vector3(p.x, 0, p.z), 10, 'glass', { by: 'player' });
     if (game.onCrime) game.onCrime('vandal', p.x, p.z);
     return true;
   }

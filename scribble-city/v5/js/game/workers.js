@@ -793,7 +793,7 @@ export class Workers {
     game.audio.play('clang', 0.5);
     game.fx.crumbs(s.x, gy + 0.6, s.z, 12, 3);
     game.camRig.addShake(0.25);
-    game.civilians.panic(new THREE.Vector3(s.x, 0, s.z), 9);
+    game.civilians.panic(new THREE.Vector3(s.x, 0, s.z), 9, 'crash', { by: 'player' });
     // (the car feels it, a little)
     v.speed *= 0.86;
     if (v.vx !== undefined) {

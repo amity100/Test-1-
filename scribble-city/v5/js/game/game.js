@@ -62,6 +62,7 @@ import { Animals } from './animals.js';
 import { Voices } from './voices.js';
 import { Talkers } from './talkers.js';
 import { Minds } from './minds.js';
+import { Brain } from './brain.js';
 import { Fleet } from './fleet.js';
 import { Damage } from './damage.js';
 import { Garage } from './garage.js';
@@ -271,6 +272,8 @@ export class Game {
     this.talkers = new Talkers(this);
     // (ROADMAP 13.9: what the city's people think of you, remember and pass on)
     this.minds = new Minds(this);
+    // (ROADMAP 13.10: how they take what happens round them, each their own way)
+    this.brain = new Brain(this);
     // the rest of the street's traffic: trucks, motorbikes, the garbage truck, taxis waved down,
     // an ambulance, a fire engine (game/fleet.js)
     this.fleet = new Fleet(this);
@@ -1181,6 +1184,7 @@ export class Game {
       this.voices.update(dt);
       this.talkers.update(dt);
       this.minds.update(dt);
+      this.brain.update(dt);
       this.pickups.update(dt);
       if (this.knock) this.knock.update(dt);
       if (this.fire) this.fire.update(dt);
@@ -1959,7 +1963,7 @@ export class Game {
       if (p.mode === 'foot') p.thrown();
     }
     this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
-    this.civilians.panic(new THREE.Vector3(x, y, z), 60);
+    this.civilians.panic(new THREE.Vector3(x, y, z), 60, 'blast', { by: owner === 'player' ? 'player' : null });
     this.reactions.note('blast', x, z);
   }
 
@@ -1995,7 +1999,7 @@ export class Game {
     this.traffic.whiteOut(x, y, z, radius + 1.5, damage * 1.3);
     if (d < radius * 0.6 && !p.inVehicle) p.hurt((owner === 'player' ? 0.15 : 0.8) * damage * 0.3 * (1 - d / radius), x, z);
     this.enemies.noise(new THREE.Vector3(x, y, z), 60, 'boom');
-    this.civilians.panic(new THREE.Vector3(x, y, z), 60);
+    this.civilians.panic(new THREE.Vector3(x, y, z), 60, 'blast', { by: owner === 'player' ? 'player' : null });
     this.reactions.note('blast', x, z);
     if (this.onCrime) this.onCrime('vandal', x, z);
   }

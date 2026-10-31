@@ -68,7 +68,7 @@ export function blast(G, x, y, z, r, dmg, o = {}) {
   }
   g.enemies.noise({ x, z }, 60, 'boom');
   if (!o.quiet) {
-    g.civilians.panic({ x, z }, 30);
+    g.civilians.panic({ x, z }, 30, 'blast', { by: 'player' });
     g.onCrime('shoot', x, z);
   }
 }

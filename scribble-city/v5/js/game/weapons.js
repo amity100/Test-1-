@@ -449,7 +449,7 @@ export class Weapons {
     if (def.quiet) game.enemies.noise(at, 5);
     else {
       game.enemies.noise(at, 32);
-      game.civilians.panic(at, 40);
+      game.civilians.panic(at, 40, 'shot', { by: 'player', armed: true });
       game.onCrime('shoot', at.x, at.z);
     }
     if (slot.ammo <= 0) this.drop(slot, `ה${def.name} נגמר — אפשר לצייר אותו שוב`);
@@ -635,7 +635,7 @@ export class Weapons {
         game.fx.sparks(b.x, b.y, b.z, 2, [0.95, 1, 0.3]);
       }
       game.enemies.noise(player.pos, 20);
-      game.civilians.panic(player.pos, 25);
+      game.civilians.panic(player.pos, 25, 'shot', { by: 'player', armed: true });
       game.onCrime('shoot', player.pos.x, player.pos.z);
       game.audio.play('laser', 0.6);
     }
@@ -1203,7 +1203,7 @@ export class Weapons {
     game.audio.play('boom', 0.35);
     game.camRig.addShake(0.12);
     game.enemies.noise(new THREE.Vector3(x, y, z), 40, 'boom');
-    game.civilians.panic(new THREE.Vector3(x, y, z), 40);
+    game.civilians.panic(new THREE.Vector3(x, y, z), 40, 'blast', { by: 'player' });
   }
 
   drawBeam(fr, beam) {
@@ -1770,7 +1770,7 @@ export class Weapons {
     game.camRig.addShake(clamp(0.35 - d / 60, 0.03, 0.3));
     if (d < r && !p.inVehicle) p.hurt(0.25 * dmg * 0.35 * (1 - d / r), x, z);
     game.enemies.noise(new THREE.Vector3(x, y, z), 40, 'boom');
-    game.civilians.panic(new THREE.Vector3(x, y, z), 40);
+    game.civilians.panic(new THREE.Vector3(x, y, z), 40, 'blast', { by: 'player' });
   }
 
   // (yellow) the jolt jumps on to the nearest one near, a bolt between them
@@ -1832,8 +1832,7 @@ export class Weapons {
     if (this.burning.length >= 12) return;
     this.burning.push({ who, civ, t: 0, life: 3.6, dps: clamp(dmg * 0.45, 6, 28), tick: 0 });
     if (civ) {
-      who.panicT = 10;
-      this.game.civilians.panic(who.pos, 12);
+      if (!this.game.civilians.panic(who.pos, 12, 'fire', { victim: who, by: 'player' })) who.panicT = 10;
     } else if (who.state !== 'flee' && Math.random() < 0.5 && who.startFlee) who.startFlee();
     this.game.audio.play('whoosh', 0.35);
   }
