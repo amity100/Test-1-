@@ -18,6 +18,9 @@ import { PIER, PROM_X1, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
 // (?classic: none of it)
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+// (ROADMAP 13.12) somebody something that happened has taken: turned to it, down, walking off from it,
+// on the phone to the police, telling whoever did it (game/brain.js)
+const taken = (c) => c.noticeT > 0 || c.cowerT > 0 || c.coverT > 0 || c.avoidT > 0 || c.callT > 0 || c.confrontT > 0;
 
 // two friends: a line, the answer (now and then a third)
 const CHAT = [
@@ -286,6 +289,8 @@ export class Voices {
   // free to talk (and to stop and stand, if asked)
   free(c, stand) {
     if (!c || !c.alive || c.gone || c.dying >= 0 || c.panicT > 0 || c.inside || c.convo || c.headless) return false;
+    // (ROADMAP 13.12: nor while something that happened has them - game/brain.js)
+    if (taken(c)) return false;
     if (stand && (c.ctrl || c.scripted || c.owner || c.buddy || c.buddyOf || c.dog || c.crossing || c.photo || c.exitRoom)) return false;
     return true;
   }
@@ -305,9 +310,10 @@ export class Voices {
 
   step(ex, dt) {
     if (ex.done) return;
-    // broken off: somebody fell, ran, was taken by something else
+    // broken off: somebody fell, ran, was taken by something else (ROADMAP 13.12: turned to something
+    // that happened, down, on the phone to the police - game/brain.js)
     for (const c of ex.who) {
-      if (!c.alive || c.gone || c.dying >= 0 || c.panicT > 0 || c.headless) return this.end(ex);
+      if (!c.alive || c.gone || c.dying >= 0 || c.panicT > 0 || c.headless || taken(c)) return this.end(ex);
     }
     for (const [c, f] of ex.held) if (c.ctrl !== f) return this.end(ex);
     // the arm out showing the way, for a while
@@ -350,7 +356,37 @@ export class Voices {
     this.direct = ex.direct;
     const life = this.say(who, text, ex.tone);
     this.direct = false;
+    this.listen(who, ex.who, text);
     ex.t = life + 0.3 + Math.random() * 0.4;
+  }
+
+  // (ROADMAP 13.11) the others while one of them talks: a nod now and then, a smile or a laugh at
+  // what is funny, the brows up at a surprise - listening, not just waiting for their turn
+  listen(who, others, text) {
+    const g = this.game;
+    const m = /^\[(\w+)\]/.exec(text);
+    const mood = m ? m[1] : null;
+    const len = Math.min(3.4, 1.3 + text.length * 0.045);
+    for (const o of others) {
+      if (o === who || !o.alive || !o.fig || o.panicT > 0) continue;
+      const r = Math.random();
+      // (ROADMAP 13.12: by the time it comes, not if something else has taken them - a fright, a
+      // shot: no smile, no nod while they run or turn to it)
+      const calm = () => o.alive && o.fig && !(o.panicT > 0) && !(o.ai && o.ai.state && o.ai.state !== 'glance');
+      if (mood === 'joy' && r < 0.6) {
+        g.inkwell.after(len * (0.55 + Math.random() * 0.35), () => {
+          if (calm() && !(o.fig.say && !o.fig.say.done)) o.fig.feel = { mood: 'joy', until: g.time + 0.9 + Math.random() * 0.8 };
+        });
+      } else if ((mood === 'surprised' || mood === 'scared') && r < 0.45) {
+        g.inkwell.after(0.35 + Math.random() * 0.5, () => {
+          if (calm() && !(o.fig.say && !o.fig.say.done)) o.fig.feel = { mood: 'surprised', until: g.time + 0.9 };
+        });
+      } else if (r < 0.5) {
+        g.inkwell.after(0.5 + Math.random() * len * 0.7, () => {
+          if (calm()) o.fig.nodT = 0.7 + Math.random() * 0.3;
+        });
+      }
+    }
   }
 
   // a line in a bubble, long enough to read (how long it stays)
@@ -700,6 +736,11 @@ export class Voices {
     if (best.convo && best.convo.arms) return;
     if (best.convo) this.end(best.convo);
     const c = best;
+    // (ROADMAP 13.12: a gun on them comes before whatever had them - game/brain.js)
+    if (taken(c) && game.brain && c.ai) {
+      game.brain.end(c, c.ai);
+      c.ai.state = null;
+    }
     const ex = this.talk([c], [pick(AIMED)], { stand: this.free(c, true), face: game.player, arms: true, tone: 'alarm', delay: 0.05, stay: () => game.time - (c.aimedAt || 0) < 1.2, after: pick(AIM_GONE), direct: true });
     if (ex) {
       this.stats.aimed++;

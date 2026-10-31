@@ -1009,13 +1009,32 @@ void main() {
 #ifdef USE_MAPSET
       tex = penPicture(vUv);
 #ifdef USE_ATLAS
-      // (ROADMAP 13.7) the inside of the mouth, seen when the jaw drops: the teeth just behind the
-      // lips, dark beyond them
+      // (ROADMAP 13.7, 13.11) the inside of the mouth, seen when the jaw drops, as a mouth is: dark,
+      // darker the deeper; the upper teeth one band just behind the upper lip - not round the corners,
+      // not under the lower lip; the lower ones lower, dimmer, mostly hidden by the lip; the tongue
+      // down at the back. Upper or lower told by where the point is on the base face (its uv: render/
+      // heroink.js FACE), each side of the line the lips part along (render/folkshapes.js exprMoves)
       if (vMouth > 0.02) {
-        vec3 inside = mix(vec3(0.15, 0.03, 0.028), vec3(0.025, 0.006, 0.006), smoothstep(0.3, 0.75, vMouth));
-        inside = mix(inside, vec3(0.84, 0.8, 0.72), smoothstep(0.07, 0.11, vMouth) * (1.0 - smoothstep(0.15, 0.21, vMouth)));
-        tex.rgb = mix(tex.rgb, inside, smoothstep(0.02, 0.09, vMouth));
+        float bx = abs((0.5 - vUv.x) * 0.19);
+        float by = (vUv.y - 0.5) * 0.37 - 0.06;
+        float seam = bx < 0.024 ? -0.0512 : -0.0512 + (bx - 0.024) * 0.62;
+        float up = smoothstep(seam - 0.0005, seam + 0.0005, by);
+        float mid = 1.0 - smoothstep(0.013, 0.02, bx);
+        float d = vMouth;
+        // (the lips' wet insides, then dark at once - a mouth is dark a few millimetres in)
+        vec3 inside = mix(vec3(0.42, 0.15, 0.15), vec3(0.16, 0.04, 0.04), smoothstep(0.04, 0.14, d));
+        inside = mix(inside, vec3(0.025, 0.007, 0.007), smoothstep(0.3, 0.75, d));
+        float tg = smoothstep(0.28, 0.42, d) * (1.0 - smoothstep(0.85, 1.0, d)) * (1.0 - up) * (1.0 - smoothstep(0.011, 0.019, bx));
+        inside = mix(inside, vec3(0.36, 0.11, 0.11), tg * 0.75);
+        float tU = smoothstep(0.05, 0.09, d) * (1.0 - smoothstep(0.24, 0.32, d)) * up * mid;
+        float tL = smoothstep(0.12, 0.16, d) * (1.0 - smoothstep(0.2, 0.25, d)) * (1.0 - up) * mid * 0.25;
+        inside = mix(inside, vec3(0.86, 0.83, 0.74), max(tU, tL));
+        tex.rgb = mix(tex.rgb, inside, smoothstep(0.015, 0.05, d));
       }
+#ifdef FOLK_HEAD
+      // (a face drawn near: its inside, seen only through the open mouth - dark, as a throat is)
+      if (!gl_FrontFacing) tex.rgb = vec3(0.02, 0.006, 0.006);
+#endif
 #endif
 #else
       tex = texture(uMap, uWorldMap > 0.0 ? p / uWorldMap : vUv + uScroll * uTime, uMipBias);

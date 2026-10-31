@@ -40,10 +40,13 @@ export class Reactions {
   }
 
   // something happened at (x, z) worth stopping for ('crash', 'hurt', 'blast', 'fight'); the
-  // shooting kind keep people off for a few seconds (danger)
-  note(kind, x, z) {
+  // shooting kind keep people off for a few seconds (danger). (ROADMAP 13.12) A crash in the street
+  // is also something the people round it hear and see, each in their own way (game/brain.js) -
+  // raise: false when it is the brain's own onlookers asking
+  note(kind, x, z, raise = true) {
     const game = this.game;
     if (game.classic) return null;
+    if (raise && kind === 'crash' && game.brain) game.brain.event('crash', x, z);
     const danger = kind === 'hurt' || kind === 'blast';
     // (one incident a place: a new note there keeps it going, and a dangerous one scatters its
     // onlookers)
@@ -131,8 +134,10 @@ export class Reactions {
   enlist(c, ev, film) {
     if (!this.free(c)) return false;
     const kind = ev.kind === 'assault' ? 'fight' : ev.kind === 'shot' || ev.kind === 'fire' ? 'blast' : ev.kind === 'glass' ? 'crash' : ev.kind;
-    const inc = this.note(LOOK_LINES[kind] ? kind : 'crash', ev.x, ev.z);
+    const inc = this.note(LOOK_LINES[kind] ? kind : 'crash', ev.x, ev.z, false);
     if (!inc || inc.watchers.length >= this.most + 2) return false;
+    // (whoever it was done to: what there is to look at - Reactions.watch)
+    if (ev.victim && !inc.victim) inc.victim = ev.victim;
     this.borrow(c);
     const far = ev.kind === 'blast' || ev.kind === 'fire' ? 13 : ev.kind === 'shot' ? 18 : ev.kind === 'assault' ? 5.5 : 6.5;
     const a = Math.atan2(c.pos.x - inc.x, c.pos.z - inc.z) + (Math.random() - 0.5) * 0.7;
@@ -170,10 +175,14 @@ export class Reactions {
     let best = null;
     let bd = 28;
     const M = this.game.minds;
+    const B = this.game.brain;
     for (const c of this.game.civilians.list) {
       if (!this.free(c)) continue;
       // (ROADMAP 13.10: the curious come over to look; the others go about their day)
       if (M && M.of(c).curious < 0.45) continue;
+      // (ROADMAP 13.12: not one in the middle of a reaction of their own, nor one who just ran from
+      // it - game/brain.js busy)
+      if (B && B.busy(c)) continue;
       const d = Math.hypot(c.pos.x - inc.x, c.pos.z - inc.z);
       if (d < bd && d > 3) {
         bd = d;
@@ -181,6 +190,8 @@ export class Reactions {
       }
     }
     if (!best) return;
+    // (and only if they can see it from there - the crowd round it, the wreck: not through a wall)
+    if (B && !B.clear(best.pos.x, best.pos.z, inc.x, inc.z, bd)) return;
     this.borrow(best);
     // a place on a loose ring round it, on the side they came from
     const a = Math.atan2(best.pos.x - inc.x, best.pos.z - inc.z) + (Math.random() - 0.5) * 0.8;
@@ -202,6 +213,23 @@ export class Reactions {
   watch(inc, dt) {
     const game = this.game;
     const p = game.player.pos;
+    // (ROADMAP 13.12) what there is to see there. A fight, somebody hurt: whoever it was done to, still
+    // there (on the ground, getting up), or whoever did it - you - still by it; the heads on them. Once
+    // there is nothing left to see, a few seconds and the phones go down and everybody goes on their
+    // way - nobody stands filming an empty sidewalk. (A wreck, a fire: something to look at as long
+    // as they are there)
+    let see = null;
+    if (inc.kind === 'fight' || inc.kind === 'hurt') {
+      const v = inc.victim;
+      if (v && v.alive && !v.gone && v.fig && Math.hypot(v.pos.x - inc.x, v.pos.z - inc.z) < 8) see = v.fig.j.headC;
+      else if (Math.hypot(p.x - inc.x, p.z - inc.z) < 10 && game.player.fig) see = game.player.fig.j.headC;
+      inc.emptyT = see ? 0 : (inc.emptyT || 0) + dt;
+      if (inc.emptyT > 4) {
+        this.disperse(inc);
+        inc.t = inc.life + 1;
+        return;
+      }
+    }
     for (const c of inc.watchers) {
       if (c.owner !== this) continue;
       // (frightened off: back to the street, running)
@@ -212,6 +240,11 @@ export class Reactions {
       if (c.goal && Math.hypot(c.pos.x - c.goal.x, c.pos.z - c.goal.z) < 0.5) c.goal = null;
       if (c.goal) continue;
       c.faceYaw = Math.atan2(inc.x - c.pos.x, inc.z - c.pos.z);
+      if (see) c.fig.lookAt = c.watchLook = see;
+      else if (c.watchLook) {
+        if (c.fig.lookAt === c.watchLook) c.fig.lookAt = null;
+        c.watchLook = null;
+      }
       c.watchT += dt;
       // the phone out, held up to film it (half of them)
       if (c.filming === undefined && !c.ai) {
@@ -229,7 +262,9 @@ export class Reactions {
       c.sayT -= dt;
       if (c.sayT <= 0) {
         c.sayT = 7 + Math.random() * 9;
-        if (Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 22 && game.bubbles) game.bubbles.say(c, pick(LOOK_LINES[inc.kind] || LOOK_LINES.crash));
+        // (a word about it - while there is still something going on to say it about)
+        const live = see || (inc.kind !== 'fight' && inc.kind !== 'hurt');
+        if (live && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) < 22 && game.bubbles) game.bubbles.say(c, pick(LOOK_LINES[inc.kind] || LOOK_LINES.crash));
       }
     }
   }
@@ -254,6 +289,8 @@ export class Reactions {
         if (c === v || !this.free(c)) continue;
         // (ROADMAP 13.10: somebody kind stops to help - not just whoever is nearest)
         if (game.minds && game.minds.of(c).warm < 0.5) continue;
+        // (ROADMAP 13.12: and not in the middle of running from something themselves)
+        if (game.brain && game.brain.busy(c)) continue;
         const d = Math.hypot(c.pos.x - v.pos.x, c.pos.z - v.pos.z);
         if (d < bd) {
           bd = d;
@@ -270,7 +307,9 @@ export class Reactions {
       const h = { v, c: best, t: 0, said: false };
       this.helps.push(h);
       this.stats.aid++;
-      this.note('hurt', v.pos.x, v.pos.z).calm = game.time + 2;
+      const inc = this.note('hurt', v.pos.x, v.pos.z);
+      inc.calm = game.time + 2;
+      inc.victim = v;
       return;
     }
   }
@@ -353,7 +392,11 @@ export class Reactions {
     this.stats.fights++;
     // a crowd for it (no danger: they come at once)
     const inc = this.note('fight', mx, mz);
-    if (inc) inc.calm = this.game.time + 1.5;
+    if (inc) {
+      inc.calm = this.game.time + 1.5;
+      // (the two of them: what there is to see - Reactions.watch)
+      inc.victim = b;
+    }
     return f;
   }
 

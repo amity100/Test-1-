@@ -43,6 +43,10 @@ const RECOVER = ['That was close...', 'My heart...', 'Unbelievable.', 'Is it ove
 
 // (what the one with them does too)
 const JOIN = new Set(['flee', 'avoid', 'cover', 'cower', 'leave']);
+// (ROADMAP 13.12) how far a reaction goes. Something that goes on and gets worse - more shots, more
+// blows - is taken in again, and changes what they do only if it takes them further than what they
+// are doing already: the one who only looked at the first shot runs at the third
+const RANK = { glance: 0, notice: 1, watch: 1, film: 1, recover: 2, call: 2, confront: 2, avoid: 3, leave: 3, cover: 4, cower: 4, flee: 5 };
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -65,7 +69,8 @@ export class Brain {
 
   // the civilian's own state of mind for what happens round them
   ai(c) {
-    return c.ai || (c.ai = { seen: new Set(), state: null, until: 0, stim: null, ev: null, phase: 0, goal: null, planT: 0, pdx: 0, pdz: 0, lookBackT: 0, arms: false, calmT: 0 });
+    // (seen: each event taken in, and how far it had gone then - game/brain.js event)
+    return c.ai || (c.ai = { seen: new Map(), state: null, until: 0, stim: null, ev: null, phase: 0, goal: null, planT: 0, pdx: 0, pdz: 0, lookBackT: 0, arms: false, calmT: 0 });
   }
 
   // ------------------------------------------------------------------ an event
@@ -87,6 +92,9 @@ export class Brain {
       this.events.push(ev);
       this.stats.events++;
     }
+    // (ROADMAP 13.12) the people of the stores round it - the ones drawn the cheap way, game/shopcrowd.js
+    // - hear a shot, a blast, too
+    if (E.danger >= 0.8 && game.shopCrowd && game.shopCrowd.alarm) game.shopCrowd.alarm(x, z, E.hear * 0.7);
     const civs = game.civilians;
     if (!civs) return ev;
     const cam = game.camera.position;
@@ -96,7 +104,10 @@ export class Brain {
       // (far from you, the city's people are left as they are)
       if (Math.abs(c.pos.x - cam.x) > 140 || Math.abs(c.pos.z - cam.z) > 140) continue;
       const a = this.ai(c);
-      if (a.seen.has(ev.id)) continue;
+      // (taken in already: again only once it has got worse - two more shots, two more blows - and
+      // while they are not yet as afraid as it can make them)
+      const n0 = a.seen.get(ev.id);
+      if (n0 !== undefined && (ev.n < n0 + 2 || a.stim || (RANK[a.state] || 0) >= 4)) continue;
       const dx = x - c.pos.x;
       const dz = z - c.pos.z;
       const d = Math.hypot(dx, dz);
@@ -112,13 +123,13 @@ export class Brain {
         }
       }
       if (!victim && !heard && !seen) continue;
-      a.seen.add(ev.id);
-      if (a.seen.size > 24) a.seen.delete(a.seen.values().next().value);
+      a.seen.set(ev.id, ev.n);
+      if (a.seen.size > 24) a.seen.delete(a.seen.keys().next().value);
       // (a moment before it sinks in: the louder, the sooner; busy with a phone, a word, later)
       const busy = (c.fig && c.fig.carry === 'phone' ? 0.45 : 0) + (c.convo ? 0.25 : 0);
       const loud = kind === 'shot' || kind === 'blast';
       const delay = victim ? 0.05 : loud ? 0.15 + Math.random() * 0.35 + d * 0.004 + busy : 0.4 + Math.random() * 0.9 + d * 0.01 + busy;
-      a.stim = { ev, at: now + delay, d, seen, heard, victim };
+      a.stim = { ev, at: now + delay, d, seen, heard, victim, again: n0 !== undefined };
       this.stats.perceived++;
     }
     return ev;
@@ -207,33 +218,64 @@ export class Brain {
     a.ev = ev;
     // ---- what they do
     const crime = E.crime && ev.by;
-    // (in a shop, a café, a mall store: there is the door, and little room for anything else)
-    const inRoom = !!(c.exitRoom && c.ctrl);
+    // (in a shop, a café, a mall store: there is the door, and little room for anything else - and
+    // it happened either in here, or out in the street: seen through the window, heard through the
+    // wall)
+    const room = c.exitRoom && c.ctrl ? c.exitRoom : null;
+    const out = !!(room && room.inside && !room.inside(ev.x, ev.z, 0.3));
+    // (up on a floor of the mega mall: nowhere to run that their feet can take them)
+    const up = (c.baseY || 0) > 1;
     let act = 'glance';
-    if (s.follow) {
-      // (with somebody - a partner, a friend: they go where the other goes, do what the other does)
-      act = s.act;
-      a.with = s.follow;
-    } else if (s.victim) act = m.bold > 0.8 && m.temper > 0.6 && !ev.armed ? 'confront' : 'flee';
+    if (s.follow) act = s.act;
+    else if (s.victim) act = m.bold > 0.8 && m.temper > 0.6 && !ev.armed ? 'confront' : 'flee';
     else if (fear > 0.62) {
       // shots: down where they are (the timid, very near), or behind the nearest car or wall until it
-      // goes quiet - or run
+      // goes quiet - or run. (Somebody a scene holds in its place - at a table, in a group - is not
+      // taken off behind a car by it: they run, or get down)
       if (ev.kind === 'shot' && s.d < 14 && m.bold < 0.3 && Math.random() < 0.55) act = 'cower';
-      else if (ev.kind === 'shot' && !inRoom && s.d < 45 && Math.random() < 0.62 - m.bold * 0.3 && this.cover(c, a, ev)) act = 'cover';
+      else if (ev.kind === 'shot' && !room && (!c.ctrl || c.buddyOf) && s.d < 32 && Math.random() < 0.72 - m.bold * 0.3 && this.cover(c, a, ev)) act = 'cover';
       else act = 'flee';
     } else if (fear > 0.4) act = 'avoid';
     else if (crime && m.bold > 0.82 && m.temper > 0.65 && ev.kind === 'assault' && !ev.armed && s.d < 12) act = 'confront';
     else if (crime && m.warm > 0.6 && s.d > 5 && Math.random() < 0.2) act = 'call';
     else if (curiosity > 0.3 && s.d < 40) act = m.bold > 0.45 && Math.random() < 0.55 ? 'film' : 'watch';
-    if (inRoom && !s.follow) {
-      // (rather not stay after that: out of the door at a walk; the rest, a look and on with it)
-      if (act === 'avoid' || act === 'call') act = 'leave';
-      else if (act === 'confront' || act === 'watch' || act === 'film') act = 'glance';
+    // (ROADMAP 13.12) what they would do, before what they are in the middle of has its say - the one
+    // with them goes by this
+    const want = act;
+    // (hit while something holds them - at a table, in a shop: not a word back from there, but away)
+    if (s.victim && act === 'confront' && c.ctrl) act = 'flee';
+    if (room) {
+      // in a shop: what happens out in the street is kept out - down behind the shelves, the counter,
+      // and stay in (nobody runs out of the door into it); what happens in here, out of the door, at a
+      // walk or running. Whoever would have stood and watched stops what they are doing and turns to
+      // it a while, then goes on with it
+      if (out && act === 'flee') act = 'cower';
+      else if (act === 'avoid') act = out ? 'notice' : 'leave';
+      else if (act === 'confront' || act === 'watch' || act === 'film' || act === 'glance') act = 'notice';
+    } else if (up) {
+      if (act === 'flee' || act === 'cover') act = 'cower';
+      else if (act === 'avoid' || act === 'confront') act = 'notice';
+    } else if (c.ctrl) {
+      // (held by what they are doing - at a table, in a group, shopping in the mall: they stop and
+      // turn to it; walking with a friend, they keep with the friend. Running, or getting down,
+      // still takes them out of it)
+      if (act === 'avoid') act = c.buddyOf ? 'glance' : 'notice';
+      else if (act === 'confront') act = 'notice';
     }
+    // (more of the same - or something else while they are in the middle of a reaction, the people
+    // running past the one behind the car: only what takes them further than what they are doing
+    // already. The one with them, and the one it is done to, go by it whatever)
+    if (!s.follow && !s.victim && (s.again || (a.state && a.state !== 'glance')) && (RANK[act] || 0) <= (RANK[a.state] || 0)) return;
+    // (with somebody - a partner, a friend: they go where the other goes, do what the other does)
+    a.with = s.follow || null;
+    a.want = want;
     this.start(c, a, act, ev, m, threat);
+    // (frightened off: not straight back to it for a look - game/reactions.js, Brain.busy)
+    if ((RANK[a.state] || 0) >= 3) a.fled = now;
     // the one they are with does the same, a moment after
     const mate = c.buddy || c.buddyOf;
-    if (!s.follow && mate && JOIN.has(act) && mate.alive && !mate.gone && !mate.headless) this.join(mate, c, act, ev);
+    const jact = act === 'notice' || act === 'glance' ? want : act;
+    if (!s.follow && mate && JOIN.has(jact) && mate.alive && !mate.gone && !mate.headless) this.join(mate, c, jact, ev);
     // a word, now and then (one at a time round there)
     if (!s.follow && now > this.sayT && Math.random() < (loud ? 0.4 : 0.25) * (0.5 + m.chatty)) {
       this.sayT = now + 1.4;
@@ -261,6 +303,8 @@ export class Brain {
         a.until = now + T;
         // (most run as people run; a few with their arms up) - after a moment frozen, taking it in
         a.arms = m.bold < 0.25 && Math.random() < 0.5;
+        // (each their own pace: not a crowd running as one)
+        a.pace = 0.82 + Math.random() * 0.3;
         a.fleeT = 0;
         a.startle = ev.victim === c ? 0.15 : 0.25 + Math.random() * 0.45;
         a.lookBackT = 1.5 + Math.random() * 2;
@@ -269,6 +313,7 @@ export class Brain {
       case 'cower':
         c.cowerT = 3 + Math.random() * 4;
         a.until = now + c.cowerT;
+        a.t0 = now;
         break;
       case 'avoid':
         c.avoidT = 5 + Math.random() * 5;
@@ -316,8 +361,26 @@ export class Brain {
         // (the shop, the café: out of the door, not running - game/streetlife.js)
         if (c.owner && c.owner.sendOut && c.owner.sendOut(c)) a.until = now + 25;
         else {
-          a.state = 'glance';
-          a.until = now + 2;
+          // (nowhere they can be sent out of: they stop, and take it in)
+          a.state = null;
+          this.start(c, a, 'notice', ev, m, threat);
+          return;
+        }
+        break;
+      case 'notice':
+        // (ROADMAP 13.12) stopped by it: what they were doing waits while they turn to it and take it
+        // in - then on with it (game/civilians.js). The hand that was at a shelf, a cup at the lips,
+        // comes down
+        // (a look round at it, for what would have been a glance in the open: they are standing, and
+        // it may be behind them)
+        c.noticeT = a.want === 'glance' ? 1.3 + Math.random() * 1.2 : 2.5 + Math.random() * 2.5;
+        a.until = now + c.noticeT;
+        if (ev && ev.x !== undefined) this.look(c, ev.x, 1.2, ev.z, c.noticeT);
+        if (c.fig) {
+          c.fig.reachR = null;
+          c.fig.holdUp = 0;
+          c.fig.drinkT = -1;
+          c.fig.feel = { mood: threat > 0.3 ? 'scared' : 'surprised', until: now + c.noticeT * 0.8 };
         }
         break;
       case 'confront':
@@ -348,6 +411,7 @@ export class Brain {
     c.avoidT = 0;
     c.callT = 0;
     c.confrontT = 0;
+    c.noticeT = 0;
   }
 
   // the head (and with it the eyes) to a point for a while - eased, render/people.js and game/doodle.js
@@ -358,6 +422,9 @@ export class Brain {
     v.set(x, (c.pos.y || 0) + y, z);
     c.glanceAt = v;
     c.glanceUntil = this.game.time + secs;
+    // (ROADMAP 13.12) and away from whatever their scene had them looking at - the shelf, the menu,
+    // the friend talking: a shot, a blow, is looked at (Civilian.social)
+    c.glanceHard = c.glanceUntil;
   }
 
   // ------------------------------------------------------------------ doing it
@@ -376,6 +443,8 @@ export class Brain {
           c.stopT = 1.5 + Math.random() * 2;
           this.look(c, c.fearX, 1.2, c.fearZ, 1.5);
           this.stats.recover++;
+          // (and then on with their day - away from it, not back past it: Brain.resume)
+          this.resume(c);
           // (far enough: the phone out, to call it in - as many do, once they are safe)
           const m = game.minds ? game.minds.of(c) : null;
           a.callAfter = !!(m && this.pending(c.pos.x, c.pos.z, 120) && m.warm > 0.3 && Math.random() < 0.55);
@@ -392,6 +461,17 @@ export class Brain {
           a.callAfter = false;
         }
         break;
+      case 'avoid':
+        // (walked off from it far enough; or taken into something else on the way - then it is that)
+        if (!(c.avoidT > 0) || c.ctrl) {
+          if (c.ctrl) c.avoidT = 0;
+          a.state = null;
+          this.resume(c);
+        }
+        break;
+      case 'notice':
+        if (!(c.noticeT > 0)) a.state = null;
+        break;
       case 'cover': {
         const ev = a.ev;
         const p = game.player.pos;
@@ -404,7 +484,7 @@ export class Brain {
           this.look(c, c.fearX, 1.4, c.fearZ, 0.6 + Math.random() * 0.5);
         }
         // it has gone quiet a while; whoever it is comes their way; too long down there: up and away
-        const quiet = !ev || now - (ev.last || ev.t) > 3.5;
+        const quiet = this.quiet(c);
         const near = ev && ev.by === 'player' && dp < 6;
         if ((quiet && now - a.t0 > 2.5) || near || now - a.t0 > 30 || (!at && now - a.t0 > 7)) {
           const m = game.minds ? game.minds.of(c) : { bold: 0.5 };
@@ -415,18 +495,34 @@ export class Brain {
             c.stopT = 2;
             a.callAfter = !!(this.pending(c.pos.x, c.pos.z, 120) && (m.warm || 0) > 0.35 && Math.random() < 0.6);
             this.stats.recover++;
+            this.resume(c);
           } else this.start(c, a, 'flee', ev || { x: c.fearX, z: c.fearZ }, m, 0.55);
         }
         break;
       }
       case 'leave':
-        if (now > a.until || !c.ctrl || c.owner === null) a.state = null;
+        if (now > a.until || !c.ctrl || c.owner === null) {
+          a.state = null;
+          // (out of the door: on along the sidewalk, away from it)
+          this.resume(c);
+        }
         break;
       case 'cower':
         if (!(c.cowerT > 0)) {
-          // (up, and away from it)
+          // down until it goes quiet (not much longer than half a minute); then up, and away from it.
+          // In a shop, up a floor of the mall: up, and on with what they were doing - or, in a shop,
+          // out of the door now it is over
+          const ev = a.ev;
+          if (!this.quiet(c) && now - (a.t0 || now) < 25) {
+            c.cowerT = 1.2 + Math.random() * 1.5;
+            break;
+          }
+          const stay = (c.exitRoom && c.ctrl) || (c.baseY || 0) > 1;
+          this.end(c, a);
           a.state = null;
-          this.start(c, a, 'flee', a.ev || { x: c.fearX, z: c.fearZ }, game.minds ? game.minds.of(c) : { bold: 0.3 }, 0.5);
+          const m = game.minds ? game.minds.of(c) : { bold: 0.3 };
+          if (!stay) this.start(c, a, 'flee', ev || { x: c.fearX, z: c.fearZ }, m, 0.5);
+          else if (c.exitRoom && Math.random() < 0.5) this.start(c, a, 'leave', ev || { x: c.fearX, z: c.fearZ }, m, 0.3);
         }
         break;
       case 'call':
@@ -460,7 +556,7 @@ export class Brain {
         }
         break;
       case 'confront':
-        if (c.confrontT > 0) {
+        if (c.confrontT > 0 && !c.ctrl) {
           const p = game.player.pos;
           const d = Math.hypot(p.x - c.pos.x, p.z - c.pos.z);
           f.feel = { mood: 'angry', until: now + 1 };
@@ -509,8 +605,10 @@ export class Brain {
       const gx = w.pos.x + fx * 0.6 + fz * side * 0.7;
       const gz = w.pos.z + fz * 0.6 - fx * side * 0.7;
       const gap = Math.hypot(gx - c.pos.x, gz - c.pos.z);
-      if (walk) c.avoidT = Math.max(c.avoidT, w.avoidT);
-      else c.panicT = Math.max(c.panicT, w.panicT);
+      // (and stopping when they stop, a beat after - not running on alone once the other has
+      // stopped)
+      if (walk) c.avoidT = w.avoidT + 0.2;
+      else c.panicT = w.panicT + 0.2;
       if (c.fig) c.fig.armsUp = 0;
       return { x: gx, z: gz, speed: Math.min(walk ? 3 : 6.4, Math.max(wl, walk ? 1.4 : 3) + gap * 0.9) };
     }
@@ -525,7 +623,7 @@ export class Brain {
     // how fast: a sprint at first, slower the further off and the longer at it; walking off, a brisk
     // walk
     const far = clamp((dFear - 25) / 30, 0, 1);
-    let speed = walk ? 2.2 + (1 - far) * 0.6 : (a.fleeT < 4 ? 5.6 : 4.4) * (1 - far * 0.55);
+    let speed = (walk ? 2.2 + (1 - far) * 0.6 : (a.fleeT < 4 ? 5.6 : 4.4) * (1 - far * 0.55)) * (a.pace || 1);
     if (c.role === 'elder') speed *= 0.65;
     // a look back over the shoulder now and then
     a.lookBackT -= dt;
@@ -601,10 +699,113 @@ export class Brain {
   // b does what lead does, a moment after (and keeps with them)
   join(b, lead, act, ev) {
     const a = this.ai(b);
-    if (a.state === act || b.inside) return;
-    a.seen.add(ev.id);
+    if (b.inside) return;
+    if (a.state === act) {
+      // (ROADMAP 13.12) the other one took it in first and is at it already, on their own: from now
+      // on the two of them go together - not each their own way down the street
+      if (!a.with && !(lead.ai && lead.ai.with === b)) a.with = lead;
+      return;
+    }
+    a.seen.set(ev.id, ev.n || 1);
     a.stim = { ev, at: this.game.time + 0.15 + Math.random() * 0.3, d: Math.hypot(b.pos.x - ev.x, b.pos.z - ev.z), seen: true, heard: true, victim: false, follow: lead, act };
     this.stats.joined++;
+  }
+
+  // (ROADMAP 13.12) gone quiet round c: no shot, no blast - nothing dangerous - heard there in the last
+  // few seconds (the same shooting, or the one who does it on the move, a new place every few shots)
+  quiet(c) {
+    const now = this.game.time;
+    for (const e of this.events) {
+      if (e.danger < 0.5 || now - (e.last || e.t) > 3.5) continue;
+      if (Math.hypot(e.x - c.pos.x, e.z - c.pos.z) < e.E.hear) return false;
+    }
+    return true;
+  }
+
+  // ------------------------------------------------------------------ (ROADMAP 13.12) after it
+  // Over the fright: on with their day from where they are now. On the sidewalk they are on - the
+  // nearest one, if they ran across the road or round the corner onto another - and the way along it
+  // that takes them further from where it happened, not back past it. Off the sidewalk (out in the
+  // road, across a square) with something in the way of the corner they make for: back onto the
+  // sidewalk first, the short way (game/civilians.js via)
+  resume(c) {
+    if (c.ctrl || c.scripted || !c.loop || !c.mgr || c.fearX === undefined || !c.alive) return;
+    const px = c.pos.x;
+    const pz = c.pos.z;
+    const fx = c.fearX;
+    const fz = c.fearZ;
+    if (!c.prom && c.loop.length > 2 && c.mgr.nearestBlock) {
+      const nb = c.mgr.nearestBlock(px, pz);
+      if (nb[0] !== 'prom' && (nb[0] !== c.col || nb[1] !== c.row)) c.setBlock(nb[0], nb[1], false);
+    }
+    const L = c.loop;
+    const n = L.length;
+    // (the nearest stretch of it, and the nearest point on that)
+    let leg = 0;
+    let bd = Infinity;
+    let qx = px;
+    let qz = pz;
+    for (let i = 0; i < (n === 2 ? 1 : n); i++) {
+      const A = L[i];
+      const B = L[(i + 1) % n];
+      const dx = B[0] - A[0];
+      const dz = B[1] - A[1];
+      const t = clamp(((px - A[0]) * dx + (pz - A[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+      const x = A[0] + dx * t;
+      const z = A[1] + dz * t;
+      const d = Math.hypot(x - px, z - pz);
+      if (d < bd) {
+        bd = d;
+        leg = i;
+        qx = x;
+        qz = z;
+      }
+    }
+    // (an end of it: how much it leads away from where it happened - less if the way there passes
+    // close by it)
+    const ux = px - fx;
+    const uz = pz - fz;
+    const ul = Math.hypot(ux, uz) || 1;
+    const away = (k) => {
+      const dx = L[k][0] - qx;
+      const dz = L[k][1] - qz;
+      const l = Math.hypot(dx, dz) || 1;
+      const t = clamp(((fx - qx) * dx + (fz - qz) * dz) / (l * l), 0, 1);
+      return (dx * ux + dz * uz) / (l * ul) - (Math.hypot(qx + dx * t - fx, qz + dz * t - fz) < 10 ? 1 : 0);
+    };
+    if (n === 2) c.target = away(1) >= away(0) ? 1 : 0;
+    else if (away((leg + 1) % n) >= away(leg)) {
+      c.dir = 1;
+      c.target = (leg + 1) % n;
+    } else {
+      c.dir = -1;
+      c.target = leg;
+    }
+    c.crossing = false;
+    c.crossOK = false;
+    c.crossNode = undefined;
+    // (not back to the shop window they were looking in when it happened)
+    if (c.browse) {
+      if (c.fig && c.fig.lookAt === c.browse.look) c.fig.lookAt = null;
+      c.browse = null;
+    }
+    c.via = null;
+    if (bd > 2) {
+      const T = L[c.target];
+      const d = Math.hypot(T[0] - px, T[1] - pz);
+      const col = this.game.world && this.game.world.collision;
+      if (col && d > 1 && col.raycast(px, 1.0, pz, (T[0] - px) / d, 0, (T[1] - pz) / d, d)) c.via = { x: qx, z: qz, until: this.game.time + 20 };
+    }
+  }
+
+  // (ROADMAP 13.12) for whoever would take somebody for something of their own - the onlookers, the
+  // first aid (game/reactions.js), a word in passing (Civilians.plain): not while they are in the
+  // middle of a reaction, nor straight back to where they ran from
+  busy(c) {
+    const a = c.ai;
+    if (!a) return false;
+    if (a.state && a.state !== 'glance') return true;
+    return this.game.time - (a.fled !== undefined ? a.fled : -99) < 45;
   }
 
   // ------------------------------------------------------------------ cover
@@ -720,7 +921,8 @@ export class Brain {
         const a = c.ai;
         if (!a || !c.alive || c.inside || c.headless || c.ctrl || c.panicT > 0 || c.downT > 0 || c.brave) continue;
         if (a.state && a.state !== 'glance' && a.state !== 'avoid' && a.state !== 'recover') continue;
-        if (!a.ev || Math.abs(a.ev.x - r.x) + Math.abs(a.ev.z - r.z) > 40) continue;
+        // (somebody who saw it done - not one who only saw people running from there)
+        if (!a.ev || !a.ev.E || !a.ev.E.crime || Math.abs(a.ev.x - r.x) + Math.abs(a.ev.z - r.z) > 40) continue;
         const d = Math.hypot(c.pos.x - r.x, c.pos.z - r.z);
         if (d > 5 && d < bd) {
           bd = d;
@@ -756,7 +958,7 @@ export class Brain {
         if (d > 14) continue;
         const a = this.ai(c);
         if (a.seen.has(ev.id) || a.stim) continue;
-        a.seen.add(ev.id);
+        a.seen.set(ev.id, 1);
         a.stim = { ev, at: now + 0.3 + Math.random() * 0.8, d: Math.hypot(c.pos.x - ev.x, c.pos.z - ev.z), seen: true, heard: false, victim: false };
         if (++n >= 4) break;
       }

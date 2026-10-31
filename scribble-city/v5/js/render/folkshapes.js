@@ -879,9 +879,24 @@ export function folkBody(k) {
   });
   const limb = (rows) => (B.thick ? slim(rows, 1 + B.thick) : rows);
   const T = trunk(fem ? FEM_TORSO : TORSO);
-  const NECK = fem ? FEM_NECK : MAN_NECK;
+  // (ROADMAP 13.11) a row more just under the jaw's line, where the throat begins: above it the neck is
+  // inside the head, and when the jaw drops it is what is seen through the mouth - dark, as a throat
+  // is (its normals' length, as the mouth's: render/glsl.js USE_ATLAS, vMouth). The head ends below it.
+  const N0 = fem ? FEM_NECK : MAN_NECK;
+  const NECK = [];
+  for (let r = 0; r < N0.length; r++) {
+    NECK.push(N0[r]);
+    const nx = N0[r + 1];
+    if (nx && N0[r][0] > -0.045 && nx[0] < -0.045) {
+      const t = (N0[r][0] + 0.045) / (N0[r][0] - nx[0]);
+      NECK.push(N0[r].map((v, k) => (k === 0 ? -0.045 : v + (nx[k] - v) * t)));
+    }
+  }
   const neck = loft(NECK, 24);
   faceMap(neck, -0.025);
+  const nn = neck.attributes.normal.array;
+  const np = neck.attributes.position.array;
+  for (let i = 0; i < np.length / 3; i++) if (np[i * 3 + 1] > -0.0452) for (let c = 0; c < 3; c++) nn[i * 3 + c] *= 2;
   parts.neck = neck;
   parts.torso = region(loft(T, 32, false, true), JK.torso);
   // (the jacket worn open: its front edges proud of the body, widening into the lapels - a blazer's

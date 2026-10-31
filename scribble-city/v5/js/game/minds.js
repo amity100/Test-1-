@@ -82,9 +82,9 @@ export class Minds {
     };
     if (game.reactions) {
       const note = game.reactions.note.bind(game.reactions);
-      game.reactions.note = (kind, x, z) => {
+      game.reactions.note = (kind, x, z, ...rest) => {
         this.happened(kind, x, z, false);
-        return note(kind, x, z);
+        return note(kind, x, z, ...rest);
       };
     }
   }
@@ -133,10 +133,15 @@ export class Minds {
     }
     const civs = game.civilians;
     if (!civs) return;
+    const B = game.brain;
     for (const c of civs.list) {
       if (!c.alive || c.inside || c.gone) continue;
       const d = Math.hypot(c.pos.x - x, c.pos.z - z);
       if (d > 32) continue;
+      // (ROADMAP 13.12) what you did, they know only if they saw it: not from inside a shop when it was
+      // out in the street, not through a wall
+      if (you && c.exitRoom && c.ctrl && c.exitRoom.inside && !c.exitRoom.inside(x, z, 0.3)) continue;
+      if (you && d > 8 && B && !B.clear(c.pos.x, c.pos.z, x, z, d)) continue;
       const m = this.of(c);
       m.saw = { kind, what, you };
       m.sawT = now;

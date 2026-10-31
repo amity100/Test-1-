@@ -500,12 +500,14 @@ class Civilian {
         this.yaw = dampAngle(this.yaw, Math.atan2(this.fearX - this.pos.x, this.fearZ - this.pos.z), 5, dt);
       }
     } else if (this.cowerT > 0) {
-      // (ROADMAP 13.10) down where they are, the back to it, until it is over
+      // (ROADMAP 13.10) down where they are, the back to it, until it is over (off the chair first,
+      // if they were sitting: game/brain.js)
       this.cowerT -= dt;
       tx = this.pos.x;
       tz = this.pos.z;
       speed = 0;
       this.crouchW = 1;
+      if (fig.sit > 0) fig.sit = Math.max(0, fig.sit - dt * 3);
       this.yaw = dampAngle(this.yaw, Math.atan2(this.pos.x - this.fearX, this.pos.z - this.fearZ), 6, dt);
     } else if (this.avoidT > 0 && !this.ctrl) {
       // (ROADMAP 13.10) off from it at a brisk walk, glancing back
@@ -515,19 +517,21 @@ class Civilian {
       tx = g.x;
       tz = g.z;
       speed = g.speed;
-    } else if ((this.callT > 0 || this.confrontT > 0) && !this.ctrl) {
+    } else if (this.callT > 0 || (this.confrontT > 0 && !this.ctrl)) {
       // (ROADMAP 13.10) on the phone to the police, where they are; or up to whoever did it, to say
-      // so - not too near
+      // so - not too near. (ROADMAP 13.12: a call made at the counter, at a table, in the line waits
+      // for nothing - what they were doing waits for it)
       tx = this.pos.x;
       tz = this.pos.z;
       speed = 0;
       if (this.callT > 0) {
-        // (on the phone, still near it: a slow walk away from it as they talk)
+        // (on the phone, still near it: a slow walk away from it as they talk - unless where they are
+        // holds them: the table, the counter)
         this.callT -= dt;
         const fx = this.pos.x - this.fearX;
         const fz = this.pos.z - this.fearZ;
         const fd = Math.hypot(fx, fz);
-        if (fd < 14 && fd > 0.1) {
+        if (fd < 14 && fd > 0.1 && !this.ctrl) {
           tx = this.pos.x + (fx / fd) * 2;
           tz = this.pos.z + (fz / fd) * 2;
           speed = 0.9;
@@ -542,9 +546,27 @@ class Civilian {
           speed = 1.5;
         } else this.yaw = dampAngle(this.yaw, Math.atan2(p.x - this.pos.x, p.z - this.pos.z), 6, dt);
       }
+    } else if (this.noticeT > 0) {
+      // (ROADMAP 13.12) stopped by what happened: whatever they were doing - the shelf, the queue, the
+      // table, the walk - waits while they turn to it (the body too, unless they are sitting) and
+      // take it in (game/brain.js notice)
+      this.noticeT -= dt;
+      tx = this.pos.x;
+      tz = this.pos.z;
+      speed = 0;
+      if (fig.sit < 0.3 && this.fearX !== undefined) this.yaw = dampAngle(this.yaw, Math.atan2(this.fearX - this.pos.x, this.fearZ - this.pos.z), 4, dt);
     } else if (this.ctrl) {
       fig.flail = 0;
+      const fn = this.ctrl;
+      const lead = this.buddyOf;
       const m = this.ctrl(this, dt);
+      // (ROADMAP 13.12) a child at a parent's side, a friend at a friend's (game/crowds.js addChild,
+      // Civilians.addBuddy), let go because the other one ran: not for good - they find each other
+      // again once it is over (Civilians.regroup)
+      if (lead && !this.ctrl && !this.buddyOf && lead.alive && !lead.gone && lead.buddy === this && lead.panicT > 0) {
+        this.buddyOf = lead;
+        this.regroup = fn;
+      }
       if (this.inside) return;
       if (m) {
         tx = m.x;
@@ -592,9 +614,21 @@ class Civilian {
     } else {
       fig.armsUp = 0;
       fig.flail = 0;
+      // (ROADMAP 13.12) out with a friend and parted by a fright: back at their side once it is over
+      if (this.regroup) this.mgr.regroup(this);
       const t = this.loop[this.target];
       tx = t[0];
       tz = t[1];
+      // (ROADMAP 13.12) off their sidewalk after a fright, something in the way of the corner: back
+      // onto the sidewalk first, the short way (game/brain.js resume)
+      const via = this.via;
+      if (via) {
+        if (Math.hypot(via.x - this.pos.x, via.z - this.pos.z) < 0.8 || this.game.time > via.until) this.via = null;
+        else {
+          tx = via.x;
+          tz = via.z;
+        }
+      }
       // (v5, ROADMAP 11.18) along the way: a shop's window to look in, a look at the phone, a
       // look at the time
       this.idleT = (this.idleT === undefined ? 3 + Math.random() * 10 : this.idleT) - dt;
@@ -612,7 +646,7 @@ class Civilian {
           }
         }
       }
-      if (Math.hypot(tx - this.pos.x, tz - this.pos.z) < 0.8) {
+      if (!this.via && Math.hypot(tx - this.pos.x, tz - this.pos.z) < 0.8) {
         this.nextCorner();
         this.crossOK = false;
         this.crossNode = undefined;
@@ -710,7 +744,8 @@ class Civilian {
     fig.air = this.hopY > 0.04;
     const sp = Math.hypot(this.vel.x, this.vel.z);
     if (sp > 0.2) this.yaw = dampAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), 8, dt);
-    else if (this.faceYaw !== null && this.ctrl) this.yaw = dampAngle(this.yaw, this.faceYaw, 6, dt);
+    // (the way their scene has them face - not while they are turned to what happened, or down)
+    else if (this.faceYaw !== null && this.ctrl && !(this.noticeT > 0 || this.cowerT > 0 || this.coverT > 0)) this.yaw = dampAngle(this.yaw, this.faceYaw, 6, dt);
     fig.yaw = this.yaw;
     // (a jogger at a red light runs on the spot: the stride goes on where the feet stay)
     fig.speed = this.jog && this.waitAt && sp < 0.3 ? 2.6 : sp;
@@ -802,14 +837,18 @@ class Civilian {
       this.glanceAt = null;
     }
     let look = null;
+    // (ROADMAP 13.12: what they took in - a shot, a blow - comes before the one talking, and before
+    // whatever their scene has them looking at: game/brain.js look)
+    const hard = !!this.glanceAt && this.glanceHard > now;
     if (near && !(this.panicT > 0)) {
       const L = this.listenTo;
-      if (L && L.alive && !L.gone && L.fig.parts.head > 0.5 && Math.abs(L.pos.x - this.pos.x) + Math.abs(L.pos.z - this.pos.z) < 6) look = L.fig.j.headC;
+      if (hard) look = this.glanceAt;
+      else if (L && L.alive && !L.gone && L.fig.parts.head > 0.5 && Math.abs(L.pos.x - this.pos.x) + Math.abs(L.pos.z - this.pos.z) < 6) look = L.fig.j.headC;
       else if (this.glanceAt) look = this.glanceAt;
       else if (this.waitAt && this.waitAt.look) look = this.waitAt.look;
     } else if (near && this.glanceAt) look = this.glanceAt; // (ROADMAP 13.10: a look back, running)
     if (look) {
-      if (!fig.lookAt || fig.lookAt === this._look) {
+      if (!fig.lookAt || fig.lookAt === this._look || (hard && look === this.glanceAt)) {
         fig.lookAt = look;
         this._look = look;
       }
@@ -1456,6 +1495,8 @@ export class Civilians {
   // a walker nobody has a use for (the far crowd may take them over: game/farcrowd.js)
   plain(c) {
     if (c.scripted || c.ctrl || c.owner || !c.alive || c.headless || c.panicT > 0 || c.inside || c.dog || c.buddy || c.buddyOf || c.crossing || c.photo || c.exitRoom || c.huddle || c.onCall || c.goingHome || c.meet || c.pose) return false;
+    // (ROADMAP 13.12: nor somebody in the middle of a reaction, or just over a fright - game/brain.js)
+    if (this.game.brain && this.game.brain.busy(c)) return false;
     const P = c.fig.parts;
     return P.legL > 0.5 && P.legR > 0.5 && P.armL > 0.5 && P.armR > 0.5 && P.torso > 0.5;
   }
@@ -1908,7 +1949,7 @@ export class Civilians {
     if (couple) b.couple = true;
     const lines = ['No way!', 'Ha ha ha!', 'Seriously?', 'I know, right?', 'Let\'s get pizza.', 'Did you see that?', 'Tell me more!'];
     let talkT = 2 + Math.random() * 4;
-    b.ctrl = (me, dt) => {
+    const follow = (me, dt) => {
       const L = me.buddyOf;
       if (!L || !L.alive || L.gone || L.panicT > 0) {
         if (L && me.fig.reachL === L.fig.j.handR) me.fig.reachL = null;
@@ -1916,7 +1957,10 @@ export class Civilians {
         // the way down the street)
         this.endPose(me);
         me.ctrl = null;
-        me.buddyOf = null;
+        // (ROADMAP 13.12) the other one ran from something: apart only until it is over - then they
+        // find each other again (Civilians.regroup); gone for good, on their own
+        if (L && L.alive && !L.gone) me.regroup = follow;
+        else me.buddyOf = null;
         return null;
       }
       // (GTA IV pass: in the picture - game/crowds.js startPhoto: over to the place, turned to the
@@ -1974,8 +2018,25 @@ export class Civilians {
       }
       return { x: tx, z: tz, speed: Math.min(4, lsp + d * 1.2) };
     };
+    b.ctrl = follow;
     this.list.push(b);
     return b;
+  }
+
+  // (ROADMAP 13.12) c, parted from the friend they were out with when the friend ran: once neither
+  // is running, hiding or down any more, back to the friend's side (and on together); the friend
+  // gone, on alone
+  regroup(c) {
+    const L = c.buddyOf;
+    if (!L || !L.alive || L.gone || L.buddy !== c) {
+      c.regroup = null;
+      c.buddyOf = null;
+      return;
+    }
+    if (L.panicT > 0 || L.coverT > 0 || L.cowerT > 0 || L.downT > 0 || c.ctrl) return;
+    c.ctrl = c.regroup;
+    c.regroup = null;
+    c.via = null;
   }
 
   // the picture taken: the friend out of the pose, back alongside

@@ -645,6 +645,7 @@ function faceOf(fig, F, t, cam) {
       const wa = tr[i * 2 + 1];
       _want[0] = Math.max(_want[0], ja + (tr[j * 2] - ja) * f);
       _want[7] = wa + (tr[j * 2 + 1] - wa) * f;
+      fig.speakNod = ja + (tr[j * 2] - ja) * f;
       // (the brows with what is stressed: a little up on the strong syllables)
       if (ja > 0.42) _want[3] = Math.max(_want[3], (ja - 0.42) * 0.9);
       // (a smile at rest gives way to the words; joy keeps it)
@@ -658,6 +659,7 @@ function faceOf(fig, F, t, cam) {
     }
   }
   if (!say || say.done) fig.say = null;
+  if (!saying) fig.speakNod = 0;
   // the words, when only that they are said is known: the jaw and the lips going at a speaker's pace,
   // in syllables and the gaps between words
   if (fig.talk && !saying && mood !== 'dead') {
@@ -1111,9 +1113,17 @@ export class PersonRenderer {
       if (!groups.has(key)) groups.set(key, { side, size, index: L ? L.index : null, list: [] });
       groups.get(key).list.push(sh);
     }
+    // (ROADMAP 13.11) the faces drawn near: their insides too, dark - all that is seen of them is the
+    // throat, through the open mouth, whatever a head's own shape does to it (render/glsl.js FOLK_HEAD)
+    const headMat = folkMat.clone();
+    headMat.uniforms = folkMat.uniforms;
+    headMat.userData = folkMat.userData;
+    headMat.defines = { ...folkMat.defines, FOLK_HEAD: '' };
+    headMat.side = THREE.DoubleSide;
     for (const { side, size, index, list } of groups.values()) {
       const cap = list.reduce((a, sh) => a + sh.cap, 0);
-      const mat = side.startsWith('folk') ? folkMat : side.startsWith('back') ? back : side.startsWith('hero') ? hero : front;
+      const heads = side === 'folk-full' && list.every((sh) => sh.expr);
+      const mat = heads ? headMat : side.startsWith('folk') ? folkMat : side.startsWith('back') ? back : side.startsWith('hero') ? hero : front;
       const cls = new DrawClass(scene, size, mat, cap, index);
       if (side.endsWith('-full')) {
         // (the picture alone: not on the mirror's layer, and left out of the sun's view)

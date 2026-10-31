@@ -196,6 +196,8 @@ export class Doodle {
     this.lookPitch = 0;
     this.lookYawV = 0;
     this.lookPitchV = 0;
+    this.nodT = 0;
+    this.speakNod = 0;
     this.idleLookT = Math.random() * 3;
     this.idleYaw = 0;
     this.idlePitch = 0;
@@ -564,9 +566,12 @@ export class Doodle {
       const dy = this.lookAt.y - h.y;
       let a = Math.atan2(dx, dz) - this.yaw;
       a = Math.atan2(Math.sin(a), Math.cos(a));
-      if (Math.abs(a) < 2.2) {
-        wy = clamp(a, -1.25, 1.25);
-        wp = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.42);
+      // (ROADMAP 13.12) behind the shoulder the head gives it up gradually, not all at once: a point
+      // moving about back there no longer swings it from the side to straight ahead and back
+      const k = clamp((2.45 - Math.abs(a)) / 0.55, 0, 1);
+      if (k > 0) {
+        wy = clamp(a, -1.25, 1.25) * k;
+        wp = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.42) * k;
       }
     } else if (this.dead < 0.2) {
       this.idleLookT -= dt;
@@ -580,6 +585,13 @@ export class Doodle {
       wy = this.idleYaw * (this.speed > 3 ? 0.3 : 1);
       wp = this.idlePitch;
     }
+    // (ROADMAP 13.11) a nod, listening; and the head with the words, a small dip on the strong
+    // syllables (render/people.js faceOf)
+    if (this.nodT > 0) {
+      this.nodT -= dt;
+      wp += Math.sin(this.nodT * 12.5) * 0.17 * Math.min(1, this.nodT * 2.5);
+    }
+    if (this.speakNod > 0.36) wp -= (this.speakNod - 0.36) * 0.35;
     // (a critically damped spring: about a third of a second to get there, never faster than a turn
     // of the head can be)
     const w = 10;

@@ -101,7 +101,12 @@ export class Police {
     } else if (c.civ && w.civ && this.game.brain && !this.game.classic) {
       // (ROADMAP 13.10) one of the people who saw it phones it in - when they are safe enough to,
       // a few seconds on; stop them first, and nobody does (game/brain.js report, phoned)
-      this.game.brain.report(c.heat * 0.8, x, z);
+      const B = this.game.brain;
+      // (ROADMAP 13.12) a crime that came with nothing to hear or see of its own - a driver pulled out
+      // of the car, a car broken into: it is something that happened there, for the people round it to
+      // take in - and so to have seen, and phone in
+      if (!B.events.some((e) => e.E.crime && t - e.last < 3 && Math.abs(e.x - x) + Math.abs(e.z - z) < 12)) B.event(kind === 'steal' || kind === 'burglary' ? 'glass' : 'assault', x, z, { by: 'player' });
+      B.report(c.heat * 0.8, x, z);
     } else if (c.civ && w.civ) {
       // somebody pulls out a phone; erase them first and the call never happens
       this.reports.push({ t: t + 2.5 + Math.random() * 2, heat: c.heat * 0.8, x, z, by: w.civ });

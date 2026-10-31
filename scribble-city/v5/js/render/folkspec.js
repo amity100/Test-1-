@@ -69,8 +69,8 @@ export const FOLK = [
     build: { height: 0.95, head: 1.05, bulk: 1.24, limbs: 1.08 },
     body: { belly: 1.0, chest: 0.25, thick: 0.16 },
     // (a real head, moved by MakeHuman's targets: render/folkshapes.js headOf)
-    morph: { 'head-round': 0.7, 'head-fat-incr': 0.9, 'head-age-incr': 0.6, 'head-scale-horiz-incr': 0.35, 'neck-double-incr': 0.9, 'chin-width-incr': 0.5, 'chin-prominent-decr': 0.3, 'chin-bones-incr': 0.3, 'cheek-volume-incr': 0.7, 'cheek-bones-decr': 0.5, 'nose-scale-horiz-incr': 0.55, 'nose-volume-incr': 0.6, 'nose-point-width-incr': 0.6, 'nose-nostrils-width-incr': 0.5, 'mouth-scale-horiz-incr': 0.3, 'mouth-angles-up': 0.6, 'eye-bag-incr': 0.6, 'eye-scale-decr': 0.2, 'ear-scale-incr': 0.3, 'ear-lobe-incr': 0.4, 'eyebrows-trans-down': 0.3 },
-    shape: { cheeks: 1.0, jaw: 1.16, dbl: 1.0, neck: 1.22 },
+    morph: { 'head-round': 0.6, 'head-fat-incr': 0.7, 'head-age-incr': 0.6, 'head-scale-horiz-incr': 0.15, 'neck-double-incr': 0.55, 'chin-width-incr': 0.35, 'chin-prominent-decr': 0.2, 'chin-bones-incr': 0.3, 'cheek-volume-incr': 0.5, 'cheek-bones-decr': 0.5, 'nose-scale-horiz-incr': 0.55, 'nose-volume-incr': 0.6, 'nose-point-width-incr': 0.6, 'nose-nostrils-width-incr': 0.5, 'mouth-scale-horiz-incr': 0.3, 'mouth-angles-up': 0.6, 'eye-bag-incr': 0.6, 'eye-scale-decr': 0.2, 'ear-scale-incr': 0.3, 'ear-lobe-incr': 0.4, 'eyebrows-trans-down': 0.3 },
+    shape: { cheeks: 0.85, jaw: 1.08, dbl: 0.7, neck: 1.12 },
     expr: 'smile',
     head: { jaw: 1.1, chin: 1.0, nose: 1.3, lips: 0.95, brow: 1.0 },
     skin: 'light', eyes: { iris: 'brown', open: 0.84, lid: 0.72, lashes: 0.1, liner: 0 },
@@ -92,7 +92,7 @@ export const FOLK = [
     key: 'dre', name: 'Dre', age: 26, fem: false,
     build: { height: 1.06, head: 0.98, bulk: 0.9, limbs: 0.96 },
     body: { belly: -0.3, chest: 0.1, thick: -0.04 },
-    morph: { 'head-oval': 0.7, 'head-scale-vert-incr': 0.4, 'head-scale-horiz-decr': 0.2, 'chin-prominent-incr': 0.4, 'chin-height-incr': 0.3, 'chin-bones-incr': 0.2, 'nose-scale-horiz-incr': 0.7, 'nose-nostrils-width-incr': 0.8, 'nose-flaring-incr': 0.5, 'nose-point-width-incr': 0.4, 'nose-scale-depth-decr': 0.2, 'mouth-upperlip-volume-incr': 0.7, 'mouth-lowerlip-volume-incr': 0.8, 'mouth-scale-horiz-incr': 0.3, 'mouth-angles-up': 0.25, 'eyebrows-trans-forward': 0.3, 'cheek-bones-decr': 0.2 },
+    morph: { 'head-oval': 0.6, 'head-scale-vert-incr': 0.2, 'head-scale-horiz-decr': 0.1, 'chin-prominent-incr': 0.4, 'chin-height-incr': 0.3, 'chin-bones-incr': 0.2, 'nose-scale-horiz-incr': 0.7, 'nose-nostrils-width-incr': 0.8, 'nose-flaring-incr': 0.5, 'nose-point-width-incr': 0.4, 'nose-scale-depth-decr': 0.2, 'mouth-upperlip-volume-incr': 0.7, 'mouth-lowerlip-volume-incr': 0.8, 'mouth-scale-horiz-incr': 0.3, 'mouth-angles-up': 0.25, 'eyebrows-trans-forward': 0.3, 'cheek-bones-decr': 0.2 },
     shape: { cheeks: -0.3, jaw: 0.98, dbl: 0, neck: 0.96 },
     expr: 'half',
     head: { jaw: 0.95, chin: 1.0, nose: 1.12, lips: 1.25, brow: 0.95 },
@@ -114,7 +114,7 @@ export const FOLK = [
     key: 'sal', name: 'Salvatore', age: 63, fem: false,
     build: { height: 1.03, head: 1.0, bulk: 0.92, limbs: 0.98 },
     body: { belly: -0.15, chest: 0, thick: -0.06 },
-    morph: { 'head-rectangular': 0.5, 'head-scale-vert-incr': 0.5, 'head-scale-horiz-decr': 0.3, 'head-age-incr': 1.0, 'head-fat-decr': 0.6, 'cheek-volume-decr': 0.8, 'cheek-inner-decr': 0.5, 'cheek-bones-decr': 0.3, 'nose-hump-incr': 0.9, 'nose-scale-vert-incr': 0.6, 'nose-scale-depth-incr': 0.5, 'nose-point-down': 0.5, 'nose-curve-convex': 0.6, 'mouth-upperlip-volume-decr': 0.6, 'mouth-lowerlip-volume-decr': 0.4, 'mouth-angles-down': 0.25, 'eyebrows-trans-forward': 0.6, 'eye-bag-incr': 0.8, 'chin-prominent-incr': 0.3, 'chin-cleft-incr': 0.5, 'ear-scale-incr': 0.4, 'ear-lobe-incr': 0.6 },
+    morph: { 'head-rectangular': 0.4, 'head-scale-vert-incr': 0.22, 'head-scale-horiz-decr': 0.12, 'head-age-incr': 1.0, 'head-fat-decr': 0.6, 'cheek-volume-decr': 0.8, 'cheek-inner-decr': 0.5, 'cheek-bones-decr': 0.3, 'nose-hump-incr': 0.9, 'nose-scale-vert-incr': 0.6, 'nose-scale-depth-incr': 0.5, 'nose-point-down': 0.5, 'nose-curve-convex': 0.6, 'mouth-upperlip-volume-decr': 0.6, 'mouth-lowerlip-volume-decr': 0.4, 'mouth-angles-down': 0.25, 'eyebrows-trans-forward': 0.6, 'eye-bag-incr': 0.8, 'chin-prominent-incr': 0.3, 'chin-cleft-incr': 0.5, 'ear-scale-incr': 0.4, 'ear-lobe-incr': 0.6 },
     shape: { cheeks: -0.8, jaw: 0.94, dbl: 0, neck: 0.92 },
     expr: 'neutral',
     head: { jaw: 1.02, chin: 0.95, nose: 1.15, lips: 0.8, brow: 1.1 },
@@ -269,8 +269,21 @@ const FEATURES = [
   ['eyebrows-trans-up', 'eyebrows-trans-down'], ['eyebrows-angle-up', 'eyebrows-angle-down'], ['eyebrows-trans-forward', 'eyebrows-trans-backward'],
   ['forehead-scale-vert-incr', 'forehead-scale-vert-decr'], ['forehead-trans-forward', 'forehead-trans-backward'],
   ['ear-scale-incr', 'ear-scale-decr'], ['ear-lobe-incr', 'ear-lobe-decr'], ['cheek-inner-incr', 'cheek-inner-decr'],
-  ['head-scale-vert-incr', 'head-scale-vert-decr'], ['head-scale-horiz-incr', 'head-scale-horiz-decr'], ['head-back-scale-depth-incr', 'head-back-scale-depth-decr'],
+  ['head-back-scale-depth-incr', 'head-back-scale-depth-decr'],
 ];
+// (ROADMAP 13.11) as far as a real face goes each way: a face differs from the next by a little here and
+// a little there - not a stretched head, a nose half again as long, a chin out past the lips, eyes
+// shrunk to beads. (The head's height and width are its build's, not stretched: build.head)
+const CAP = {
+  'nose-hump-incr': 0.5, 'nose-scale-vert-incr': 0.4, 'nose-volume-incr': 0.4, 'nose-scale-horiz-incr': 0.5, 'nose-scale-depth-incr': 0.45, 'nose-point-down': 0.45,
+  'chin-prognathism-incr': 0.3, 'chin-prognathism-decr': 0.3, 'chin-height-incr': 0.35, 'chin-height-decr': 0.4, 'chin-prominent-incr': 0.45,
+  'forehead-scale-vert-incr': 0.3, 'forehead-scale-vert-decr': 0.4, 'forehead-trans-forward': 0.4,
+  'eye-scale-decr': 0.15, 'eye-bag-incr': 0.45, 'eye-corner1-up': 0.45, 'eye-corner1-down': 0.45,
+  'ear-scale-incr': 0.35, 'mouth-scale-horiz-incr': 0.4, 'mouth-scale-horiz-decr': 0.35,
+  'eyebrows-trans-up': 0.35, 'eyebrows-trans-down': 0.35, 'head-back-scale-depth-incr': 0.4, 'head-back-scale-depth-decr': 0.35,
+};
+// (the skull's own shapes, the odd ones only a little)
+const HEAD_MAX = { 'head-round': 0.6, 'head-oval': 0.65, 'head-rectangular': 0.45, 'head-square': 0.5, 'head-triangular': 0.35, 'head-invertedtriangular': 0.4, 'head-diamond': 0.3 };
 function rngOf(seed) {
   let a = seed >>> 0;
   return () => {
@@ -292,15 +305,19 @@ function made(i) {
   const heavy = R() < 0.25;
   const bulk = heavy ? range(1.08, 1.26) : range(0.84, 1.02);
   // the face: a head's shape, then a handful of its features, each its own way
-  const morph = { [pick(HEADS)]: +range(0.3, 0.85).toFixed(2), 'cheek-bones-decr': +range(0.2, 0.45).toFixed(2) };
+  const hs = pick(HEADS);
+  const morph = { [hs]: +(HEAD_MAX[hs] * range(0.5, 1)).toFixed(2), 'cheek-bones-decr': +range(0.2, 0.45).toFixed(2) };
   const used = new Set();
   for (let n = Math.round(range(7, 12)); n > 0; n--) {
     const f = Math.floor(R() * FEATURES.length);
     if (used.has(f)) continue;
     used.add(f);
     const pair = FEATURES[f];
-    morph[pair.length > 1 && R() < 0.5 ? pair[1] : pair[0]] = +range(0.2, 0.8).toFixed(2);
+    const name = pair.length > 1 && R() < 0.5 ? pair[1] : pair[0];
+    morph[name] = +Math.min(CAP[name] || 0.6, range(0.15, 0.65)).toFixed(2);
   }
+  // (eyes a touch larger than life read as eyes in a drawing - never beads)
+  if (!morph['eye-scale-decr']) morph['eye-scale-incr'] = Math.max(morph['eye-scale-incr'] || 0, +range(0.12, 0.3).toFixed(2));
   if (old) morph['head-age-incr'] = +range(0.4, 1.0).toFixed(2);
   else if (age < 28) morph['head-age-decr'] = +range(0.1, 0.35).toFixed(2);
   if (heavy) Object.assign(morph, { 'head-fat-incr': +range(0.4, 0.9).toFixed(2), 'cheek-volume-incr': +range(0.3, 0.7).toFixed(2), 'neck-double-incr': +range(0.2, 0.8).toFixed(2) });

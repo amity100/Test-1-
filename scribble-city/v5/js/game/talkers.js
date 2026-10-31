@@ -107,6 +107,12 @@ export class Talkers {
       this.group = null;
       return;
     }
+    // (ROADMAP 13.12: one of them turned to something that happened, down, on the phone to the police:
+    // the talk waits - game/brain.js)
+    if (this.group.some((c) => c.noticeT > 0 || c.cowerT > 0 || c.callT > 0)) {
+      this.t = Math.max(this.t, 1.2);
+      return;
+    }
     // (the last line still being said: the voice, or the mouth when there is none)
     const speaking = !!(this.cur && !this.cur.done && this.cur === this.curFig.say) && g.time < this.lineEnd;
     const p = g.player.pos;
@@ -147,6 +153,7 @@ export class Talkers {
     for (const c of this.group) c.fig.lookAt = c === who ? null : who.fig.j.headC;
     if (toYou) g.voices.sayToYou(who, text);
     else g.voices.say(who, text);
+    if (g.voices.listen) g.voices.listen(who, this.group, text);
     this.cur = who.fig.say || null;
     this.curFig = who.fig;
     // (however it goes, not longer than this)

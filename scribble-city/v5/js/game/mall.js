@@ -1731,6 +1731,22 @@ export class MallLife {
       // a store let go of them (they are out of its door, or it closed): back to their plan
       if (!s.follower && c.owner === this && !c.ctrl && !c.inside) c.ctrl = (civ, d) => this.step(s, d);
     }
+    // (ROADMAP 13.12) whoever the mall let go of in a fright - out of one of its stores, or off its own
+    // plan - and anybody else left in its hall with only the city's sidewalks to go back to: out
+    // through its doors, round its benches and kiosks, not off into its walls (game/civilians.js
+    // exitTarget). A few at a time: each way out is worked out on the hall's grid
+    st.outT = (st.outT || 0) - dt;
+    if (st.outT <= 0 && !m.mega && !m.strip && m.entrances.length) {
+      st.outT = 0.3;
+      const h = m.hall;
+      let n = 0;
+      for (const c of game.civilians.list) {
+        if (c.ctrl || c.scripted || c.exitRoom || c.brave || c.riding || c.inside || !c.alive || (c.baseY || 0) > 1) continue;
+        if (c.pos.x < h.x0 + 0.5 || c.pos.x > h.x1 - 0.5 || c.pos.z < h.z0 + 1 || c.pos.z > h.z1 - 1) continue;
+        this.wayOut(c, st, m);
+        if (++n >= 4) break;
+      }
+    }
     // (the hall's own people: rubbed out or frightened off, the city takes them)
     for (let i = st.staff.length - 1; i >= 0; i--) {
       const w = st.staff[i];
@@ -1763,6 +1779,32 @@ export class MallLife {
         }
       } else if (st.people.length < want && m.entrances.length) this.spawn(m, st, false, { fromUp: !!m.escalator && open && Math.random() < 0.3 });
     }
+  }
+
+  // (ROADMAP 13.12) c, loose in the hall: the way out - the nearest doors, or, running from something,
+  // the nearest that are not where it is nor past it - as a shop's way out is (game/civilians.js
+  // exitTarget: round the furniture to the doors, through them, a few steps on)
+  wayOut(c, st, m) {
+    const fresh = c.panicT > 0 && c.fearX !== undefined;
+    let best = null;
+    let bs = Infinity;
+    for (const e of m.entrances) {
+      const d = Math.hypot(e.x - c.pos.x, e.zIn - c.pos.z);
+      const s = d + (fresh && Math.hypot(e.x - c.fearX, e.zIn - c.fearZ) < d ? 60 : 0);
+      if (s < bs) {
+        bs = s;
+        best = e;
+      }
+    }
+    if (!best) return;
+    const h = m.hall;
+    c.exitRoom = {
+      door: { x: best.x, z: best.zIn },
+      inside: (x, z) => x > h.x0 - 0.5 && x < h.x1 + 0.5 && z > h.z0 - 0.5 && z < h.z1 + 0.5,
+      path: (ax, az, bx, bz) => st.nav.path(ax, az, bx, bz),
+    };
+    c.exitShop = { door: [best.x, 0, best.z], nx: 0, nz: best.out || 0, yard: 1 };
+    c.exitPts = null;
   }
 
   // ------------------------------------------------------------------ the mega mall (ROADMAP 11.30)

@@ -197,6 +197,31 @@ export class ShopCrowd {
     this.t = 0;
   }
 
+  // (ROADMAP 13.12) a shot, a blast near (game/brain.js event): the people of the stores round it hear
+  // it too. Whoever is up and about goes to the back of the store, away from its windows and its door,
+  // quickly, and stays there a while; whoever sits stays put
+  alarm(x, z, r) {
+    const now = this.game.time;
+    const open = this.game.streetlife ? this.game.streetlife.active : null;
+    for (const g of this.shown) {
+      const s = g.s;
+      const R = s.room;
+      if (!R || (open && open.has(s.id)) || Math.abs(s.door[0] - x) > r || Math.abs(s.door[2] - z) > r) continue;
+      const seats = R.seats || [];
+      const far = (sp) => Math.hypot(sp.x - s.door[0], sp.z - s.door[2]);
+      const back = g.spots.filter((sp) => !seats.includes(sp)).sort((a, b) => far(b) - far(a));
+      for (const w of g.people) {
+        if (w.keeper || w.sit || w.table !== undefined || (w.scared || 0) > now) continue;
+        w.scared = now + 20 + Math.random() * 15;
+        const sp = back.find((q) => !g.people.some((o) => o !== w && (o.at === q || o.to === q)));
+        if (!sp || far(sp) < far(w) + 0.5) continue;
+        w.to = sp;
+        w.at = null;
+        w.hurry = 1.9;
+      }
+    }
+  }
+
   // a customer: stands a while at a shelf (a step this way and that, a look along it), then goes over
   // to another place in the store
   step(w, g, dt) {
@@ -210,15 +235,19 @@ export class ShopCrowd {
         w.to = null;
         w.speed = 0;
         w.yaw = w.at.yaw || w.yaw;
-        w.t = 5 + Math.random() * 14;
+        // (at the back after a fright: there until it has been quiet a while)
+        const now = this.game.time;
+        w.t = (w.scared || 0) > now ? w.scared - now : 5 + Math.random() * 14;
+        w.hurry = 0;
         return;
       }
-      const v = Math.min(d, 1.0 * dt);
+      const k = w.hurry || 1;
+      const v = Math.min(d, 1.0 * k * dt);
       w.x += (dx / d) * v;
       w.z += (dz / d) * v;
       w.yaw = Math.atan2(dx, dz);
-      w.speed = 1.0;
-      w.phase += (dt * Math.PI * 2) / 1.5;
+      w.speed = 1.0 * k;
+      w.phase += (dt * Math.PI * 2 * k) / 1.5;
       return;
     }
     // (shifting the weight, the head turning along the shelf)
