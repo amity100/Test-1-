@@ -787,7 +787,9 @@ class Civilian {
     if (this._gL && fig.reachL === this._gL && this._gLw && !this._gL.equals(this._gLw)) this._gL = null;
     // (and never over hands held up - a gun pointed at them: "Don't shoot!" with the hands up, not a
     // fist shaken at it, game/voices.js aimAt - nor over a dance)
-    let on = near && this.talkUntil > now && this.gest && !this.headless && !(this.panicT > 0) && this.downT <= 0 && !fig.rag && fig.speed < 2.6 && !(fig.armsUp > 0) && !(fig.surrender > 0) && !(fig.dance > 0.3);
+    // (characters round: a body that talks with real people's recorded hands - game/mocap.js - needs no
+    // made-up gestures over them)
+    let on = near && this.talkUntil > now && this.gest && !(fig.gait && fig.gait.talkClip) && !this.headless && !(this.panicT > 0) && this.downT <= 0 && !fig.rag && fig.speed < 2.6 && !(fig.armsUp > 0) && !(fig.surrender > 0) && !(fig.dance > 0.3);
     if (on) {
       this.gestT += dt;
       const t = this.gestT;
