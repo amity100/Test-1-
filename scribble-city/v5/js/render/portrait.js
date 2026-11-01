@@ -587,11 +587,15 @@ function wrinkles() {
 }
 
 // ------------------------------------------------------------------ one person's portrait
+let SHARED_POS = null;
+
 export class Portrait {
   // spec: render/folkspec.js FOLK's (or its number); paint(spec, cb): the picture of the face, flat,
   // drawn off the game's thread (render/people.js gives it)
-  constructor(spec, k, layer = null) {
+  // (defer: built a little at a time - step() - so that no frame of the game stops for it)
+  constructor(spec, k, layer = null, defer = false) {
     this.k = k;
+    this.built = false;
     this.spec = typeof spec === 'number' ? FOLK[spec] : spec;
     this.ready = false;
     this.mesh = null;
@@ -607,12 +611,40 @@ export class Portrait {
     this.blinkAt = 1 + Math.random() * 3;
     this.blinkT = -1;
     this.noiseT = Math.random() * 10;
-    this.build();
+    if (!defer) this.build();
   }
 
+  // (all at once)
   build() {
+    const g = this.buildSteps();
+    while (!g.next().done);
+    this.built = true;
+  }
+
+  // (a little more of it: until ms have gone; true once it is all made - and its picture, if it
+  // came first, then put on)
+  step(ms = 3) {
+    if (this.built) return true;
+    if (!this._gen) this._gen = this.buildSteps();
+    const t0 = performance.now();
+    let r;
+    do r = this._gen.next();
+    while (!r.done && performance.now() - t0 < ms);
+    if (!r.done) return false;
+    this.built = true;
+    this._gen = null;
+    if (this._pic) {
+      const b = this._pic;
+      this._pic = null;
+      this.setPicture(b);
+    }
+    return true;
+  }
+
+  *buildSteps() {
     const t0 = performance.now();
     const M = moves();
+    yield;
     const B = baseHead();
     const H = headOf(this.spec);
     const n = M.n;
@@ -680,6 +712,7 @@ export class Portrait {
     const hn = hg.attributes.normal.array;
     const NK = neckOf(H, hn, this.spec);
     hg.dispose();
+    yield;
     const ng = NK.geo;
     const neck0 = pos.length / 3;
     {
@@ -728,6 +761,7 @@ export class Portrait {
     geo.computeBoundingSphere();
     // (the neck reaches down to the collar, and bends)
     geo.boundingSphere.radius += 0.3;
+    yield;
     // the moves of every point (the head's from the base; the jaw's turn for the teeth below and the
     // tongue; nothing for the eyes, which turn by themselves) and of its normal
     const W = 2048;
@@ -773,6 +807,7 @@ export class Portrait {
         dn[o + 1] = tn[i * 3 + 1] - nb[i * 3 + 1];
         dn[o + 2] = tn[i * 3 + 2] - nb[i * 3 + 2];
       }
+      yield;
     }
     tmp.dispose();
     // (the ring under the jaw keeps its evened normals whatever the face does: it does not move)
@@ -787,13 +822,23 @@ export class Portrait {
     };
     this.geo = geo;
     this.N = N;
-    this.auPos = dt(dp);
+    // (the points' moves are the base head's, the same for every kind of face - one texture for all
+    // of them; the normals' are each face's own)
+    if (SHARED_POS && SHARED_POS.N === N) this.auPos = SHARED_POS.tex;
+    else {
+      this.auPos = dt(dp);
+      SHARED_POS = { N, tex: this.auPos };
+    }
     this.auNor = dt(dn);
     console.log(`[portrait] ${this.spec.key}: ${N} points, ${idx.length / 3} triangles, ${NA} moves, ${(performance.now() - t0).toFixed(0)} ms`);
   }
 
   // the picture of the face (flat) has come: the portrait can be drawn
   setPicture(bmp) {
+    if (!this.built) {
+      this._pic = bmp;
+      return false;
+    }
     const tex = new THREE.Texture(bmp);
     // (turned already, render/people.js: a picture of this kind is never turned on the way up)
     tex.flipY = false;
@@ -820,7 +865,12 @@ export class Portrait {
       uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
       uNeckD: { value: this.neckD },
       uNeckToHead: { value: this.neckToHead },
+      uFade: { value: 1 },
     });
+    // (coming in over the city's way of drawing the same head: in front of it where it is drawn)
+    m.polygonOffset = true;
+    m.polygonOffsetFactor = -1;
+    m.polygonOffsetUnits = -4;
     m.needsUpdate = true;
     const mesh = new THREE.Mesh(this.geo, m);
     mesh.matrixAutoUpdate = false;
@@ -832,6 +882,8 @@ export class Portrait {
     this.mat = m;
     this.tex = tex;
     this.ready = true;
+    if (this.onReady) this.onReady(this);
+    return true;
   }
 
   // ---------------------------------------------------------------- how the face is this moment
@@ -924,6 +976,7 @@ export class Portrait {
   // placed on the head (m: the head's frame in the world, as render/people.js draws its head)
   place(m) {
     if (!this.mesh) return;
+    if (this.mat) this.mat.uniforms.uFade.value = this.fade === undefined ? 1 : this.fade;
     this.mesh.matrix.copy(m);
     this.mesh.matrixWorld.copy(m);
     this.mesh.matrixWorldNeedsUpdate = true;

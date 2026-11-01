@@ -827,6 +827,10 @@ uniform float uAge;
 // directions shown in colour)
 uniform vec4 uPLayers;
 float gWr = 0.0;
+// (characters round) how near the face is: 1 near enough for every stroke, 0 a face a few dozen
+// pixels high; and how far it has come in (uFade - a screen-door dissolve over the city's face)
+float gDet = 1.0;
+uniform float uFade;
 #endif
 in float vId;
 in vec4 vRefl;
@@ -1085,6 +1089,13 @@ void main() {
   vec2 dpx = dFdx(p) * uPxK;
   vec2 dpy = dFdy(p) * uPxK;
 #ifdef PORTRAIT
+  // (characters round) coming in (and going) over the city's way of drawing the face, a few pixels at
+  // a time - never a pop
+  if (uFade < 0.999 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > uFade) discard;
+  // how big the face is on the screen (in the drawing's pixels): a face a few dozen pixels high drawn
+  // clean - its colours, its features, its light - its strokes and lines coming in only as it comes
+  // near enough to show them (smaller, they would be a grey fuzz on it, moving)
+  gDet = smoothstep(80.0, 170.0, 0.24 / max(length(fwidth(vLP)), 1e-5));
   {
     // (ROADMAP 14.1) the strokes laid over the face as it is seen from the front, a millimetre a
     // millimetre of it; round its sides and the back of the head as a drawing goes round the turn
@@ -1183,7 +1194,7 @@ void main() {
   } else if (vPart < 0.5) {
     // the lines the face makes as it moves (and with the years a little of them at rest)
     vec4 wm = texture(uWrinkle, vUv);
-    gWr = clamp(dot(wm, max(uWrinkleW, vec4(uAge * 0.18))), 0.0, 1.0) * uPLayers.z;
+    gWr = clamp(dot(wm, max(uWrinkleW, vec4(uAge * 0.18))), 0.0, 1.0) * uPLayers.z * gDet;
     tex.rgb = mix(tex.rgb, tex.rgb * vec3(0.36, 0.28, 0.26), gWr * 0.9);
     // the inside of the mouth: the lips' wet insides, then dark a few millimetres in
     if (vMouthP > 0.02) {
@@ -1319,7 +1330,7 @@ void main() {
     float ao = vPart < 0.5 ? pl.b : 1.0;
     // (the neck: in the jaw's shade just under it, open lower down)
     ao = mix(ao, mix(0.6, 0.94, smoothstep(-0.11, -0.17, vLP.y)), vNeckP);
-    light *= mix(0.62, 1.0, ao);
+    light *= mix(mix(0.84, 0.62, gDet), 1.0, ao);
     light = clamp(light + pl.a * 0.1 * (1.0 - gWr), 0.0, 1.0);
     light = mix(1.0, light, uPLayers.x);
     float tone = clamp(max((1.0 - light) * 0.92, (1.0 - ao) * 1.15) + gWr * 0.4, 0.0, 1.0);
@@ -1331,7 +1342,7 @@ void main() {
     hk *= mix(vec3(1.0), vec3(0.6, 0.52, 0.52), h2.x * step(fract(h2.y * 7.13), smoothstep(0.46, 0.9, tone) * 0.95));
     vec2 h3 = penLayer(p, dpx, dpy, fa - 0.4, 3.0, 1.0, 157.0, 1.0);
     hk *= mix(vec3(1.0), vec3(0.42, 0.33, 0.32), h3.x * step(fract(h3.y * 7.13), smoothstep(0.64, 1.0, tone) * 0.7));
-    hk = mix(vec3(1.0), hk, max(uPLayers.y, uPLayers.w));
+    hk = mix(vec3(1.0), hk, max(uPLayers.y * gDet, uPLayers.w));
     if (uPLayers.w > 0.5) {
       vec3 fc = clamp(abs(fract(a2 / 6.2832 + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
       lit = mix(lit, fc, 0.5);

@@ -285,9 +285,18 @@ const _fEw = new Float32Array(8);
 // portrait is - for now one of them (FOLK 2, Sal: sixty-three, no glasses over his eyes, the years
 // in his face), the prototype - and how near
 const PORTRAIT_KINDS = new Set([2]);
+// (characters round) every kind of the city's people drawn as a portrait near the camera - each its
+// own face (?portrait=sal: Sal's alone, as before)
+const portraitKind = (k) => (PORTRAIT_MODE === 'sal' ? PORTRAIT_KINDS.has(k) : k >= 0 && k < FOLK.length);
 // (?portrait=off: none; ?portrait=hide: made, never shown - for the tests)
 const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('portrait') : null;
-const PORTRAIT_NEAR = 6.5;
+// (characters round) near enough for a face to show its drawing - a face 80 pixels high on the screen
+// and more (PORTRAIT_NEAR; out below 68 - no flicker at the edge). Smaller, its strokes and its eyes
+// are a dark fuzz on it: the same face then in the city's way of drawing, its ink lines clear at any
+// size. Coming in and going out over a quarter of a second, never a pop
+const PORTRAIT_NEAR = 80;
+const PORTRAIT_FAR = 68;
+const PORTRAIT_FADE = 0.25;
 // (in the street too, not only the face lab's - game/facelab.js)
 const PORTRAIT_STREET = true;
 const _mP = new THREE.Matrix4();
@@ -306,7 +315,7 @@ function unmirror(m) {
 // thread by the same helper as everybody's pictures (render/heroworker.js)
 let portraitHelper = null;
 const portraitWait = new Map();
-function paintPortrait(k, cb) {
+function paintPortrait(k, cb, w = 1024) {
   if (!portraitHelper) {
     portraitHelper = new Worker(new URL('./heroworker.js', import.meta.url), { type: 'module' });
     portraitHelper.onmessage = (e) => {
@@ -319,7 +328,7 @@ function paintPortrait(k, cb) {
     };
   }
   portraitWait.set(k, cb);
-  portraitHelper.postMessage({ art: 'portrait', folk: k, name: 'face', i: 0, w: 1024, h: Math.round((1024 * 0.37) / 0.19), seed: 7, blink: false, flat: true });
+  portraitHelper.postMessage({ art: 'portrait', folk: k, name: 'face', i: 0, w, h: Math.round((w * 0.37) / 0.19), seed: 7, blink: false, flat: true });
 }
 // (a move's weight, -1..1, in a byte: 0 exactly 128)
 const byteOf = (a) => Math.round(Math.max(-1, Math.min(1, a)) * 127) + 128;
@@ -509,7 +518,6 @@ const IRIS = [0.16, 0.11, 0.08];
 const SHADES = [0.05, 0.05, 0.07];
 const _mH = new THREE.Matrix4();
 const _mNk = new THREE.Matrix4();
-const _shU = new THREE.Vector3();
 const _hcH = new THREE.Vector3();
 const EYE_WHITE = [0.96, 0.95, 0.92];
 const PUPIL = [0.06, 0.05, 0.08];
@@ -1257,13 +1265,27 @@ export class PersonRenderer {
     // (ROADMAP 14.1) the portraits hidden until somebody is drawn with one again: each kind's to
     // whoever of them was nearest the camera last frame (the face lab's, always)
     if (this.portraits) {
+      // (the fades on the game's clock)
+      const now = shared.uTime.value;
+      const fdt = Math.min(0.1, Math.max(0, now - (this._fadeAt === undefined ? now : this._fadeAt)));
+      this._fadeAt = now;
       for (const P of this.portraits.values()) {
         if (P.mesh) P.mesh.visible = false;
-        if (P.next !== P.owner) P.fresh = true;
+        if (P.next !== P.owner) {
+          P.fresh = true;
+          // (somebody new: theirs comes in from nothing - the face lab's at once)
+          P.fade = P.next && P.next.__portrait ? 1 : 0;
+          P.fadeTo = 1;
+        }
         P.owner = P.next;
         P.next = null;
         P.nextD = Infinity;
+        if (P.fade === undefined) P.fade = 0;
+        if (P.fadeTo === undefined) P.fadeTo = 1;
+        const step = fdt / PORTRAIT_FADE;
+        P.fade = P.fadeTo > P.fade ? Math.min(P.fadeTo, P.fade + step) : Math.max(P.fadeTo, P.fade - step);
       }
+      this.stepPortraits();
     }
   }
 
@@ -1271,35 +1293,53 @@ export class PersonRenderer {
   // the nearest - the face lab's whatever its distance (game/facelab.js, fig.__portrait)
   portraitFor(fig, k, camDist) {
     // (on a phone, the face lab's alone: in the street the city's way, for the frames' sake)
-    if (PORTRAIT_MODE === 'off' || !PORTRAIT_KINDS.has(k) || fig.dead > 0 || fig.parts.head < 0.5 || (this.touch && !fig.__portrait) || fig.__noPortrait) return null;
-    if (!fig.__portrait && !(PORTRAIT_STREET && camDist < PORTRAIT_NEAR)) return null;
-    const P = this.portraits && this.portraits.get(k) ? this.portraits.get(k) : this.makePortrait(k);
-    const d = fig.__portrait ? -1 : camDist;
+    if (PORTRAIT_MODE === 'off' || !portraitKind(k) || fig.dead > 0 || fig.parts.head < 0.5 || (this.touch && !fig.__portrait) || fig.__noPortrait) return null;
+    const P0 = this.portraits && this.portraits.get(k);
+    const mine = !!P0 && P0.owner === fig;
+    // (the face's height on the screen, in its pixels)
+    const cam = this.cam;
+    const sh = this.atlas.renderer ? this.atlas.renderer.domElement.height : 720;
+    const px = cam && cam.isPerspectiveCamera ? (0.12 * sh) / (Math.max(0.3, camDist) * Math.tan((cam.fov * Math.PI) / 360)) : 166 / Math.max(0.3, camDist);
+    const inRange = !!fig.__portrait || (PORTRAIT_STREET && px > (mine ? PORTRAIT_FAR : PORTRAIT_NEAR));
+    // (going out: still theirs while it fades, unless somebody else of the kind comes near)
+    if (!inRange && !(mine && P0.fade > 0.01)) return null;
+    const P = P0 || this.makePortrait(k);
+    const d = fig.__portrait ? -1 : inRange ? camDist : 1e5 + camDist;
     if (d < P.nextD) {
       P.nextD = d;
       P.next = fig;
     }
-    return P.ready && P.owner === fig ? P : null;
+    if (!(P.ready && P.owner === fig)) return null;
+    P.fadeTo = inRange ? 1 : 0;
+    return P;
   }
 
   // a kind's portrait: its head and its muscles' moves made now, its picture painted off the game's
   // thread (render/heroworker.js), drawn once it has come
   makePortrait(k) {
     if (!this.portraits) this.portraits = new Map();
-    const P = new Portrait(k, k, LAYERS.MIRRORLESS);
+    // (characters round: made a little at a time, a few milliseconds a frame - stepPortraits - so no
+    // frame of the game stops for a face; drawn once it and its picture are both there)
+    const P = new Portrait(k, k, LAYERS.MIRRORLESS, true);
     P.next = null;
     P.nextD = Infinity;
+    P.onReady = (q) => this.scene.add(q.mesh);
     this.portraits.set(k, P);
-    paintPortrait(k, (bmp) => {
-      if (PORTRAIT_MODE === 'hide') return;
-      // (the picture's rows top first, as a canvas has them - a picture of this kind goes onto the
-      // graphics card as it is, never turned - and the face's v from the chin up: turned over first)
-      createImageBitmap(bmp, { imageOrientation: 'flipY' }).then((up) => {
-        bmp.close();
-        P.setPicture(up);
-        this.scene.add(P.mesh);
-      });
-    });
+    (this.portraitQueue || (this.portraitQueue = [])).push(P);
+    paintPortrait(
+      k,
+      (bmp) => {
+        if (PORTRAIT_MODE === 'hide') return;
+        // (the picture's rows top first, as a canvas has them - a picture of this kind goes onto the
+        // graphics card as it is, never turned - and the face's v from the chin up: turned over first)
+        createImageBitmap(bmp, { imageOrientation: 'flipY' }).then((up) => {
+          bmp.close();
+          P.setPicture(up);
+        });
+      },
+      // (the street's faces at half the close look's picture: a face a few metres off needs no more)
+      k === 2 ? 1024 : 512,
+    );
     return P;
   }
 
@@ -1308,7 +1348,17 @@ export class PersonRenderer {
   // first comes near in play
   warmPortraits() {
     if (PORTRAIT_MODE === 'off' || !PORTRAIT_STREET || this.touch) return;
-    for (const k of PORTRAIT_KINDS) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
+    // (Sal's first - he comes over at the start - then every kind of the city's people, a little a frame)
+    const ks = [2];
+    for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k)) ks.push(k);
+    for (const k of ks) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
+  }
+
+  // (characters round) the faces being made: a few milliseconds of it a frame
+  stepPortraits() {
+    const Q = this.portraitQueue;
+    if (!Q || !Q.length) return;
+    if (Q[0].step(this.touch ? 2 : 4)) Q.shift();
   }
 
   // (the graphics card's: the city's people's pictures are written straight into their atlases)
@@ -1713,15 +1763,13 @@ export class PersonRenderer {
       }
       // a sneaker: a rounded sole and a toe, pointing where the foot points
       _z.subVectors(to, ft);
-      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
-      // lands (game/doodle.js gaitFeet)
+      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.035);
-      p.shoe.push(framed(_c, _x, _shU, _z, k, k, k), shoeC, own, id(), ind);
+      p.shoe.push(framed(_c, _x, UP, _z, k, k, k), shoeC, own, id(), ind);
       // (the hero's boots: a shaft up over the ankle, the jeans' hem over it)
       if (L.hero && !far && !midi && !longSkirt && !shorts) {
         _a.copy(ft).addScaledVector(UP, 0.01 * S);
@@ -1731,7 +1779,7 @@ export class PersonRenderer {
       }
       if (!far) {
         _c.y -= 0.032 * S;
-        p.sole.push(framed(_c, _x, _shU, _z, k, k, k), linC(SOLE), own, id(), ind);
+        p.sole.push(framed(_c, _x, UP, _z, k, k, k), linC(SOLE), own, id(), ind);
       }
     }
     // ---- the head (the first boulevard's: a skull, a jaw, ears, two eyes)
@@ -1939,15 +1987,13 @@ export class PersonRenderer {
       p.heroShin.push(along(kn, ft, 0.47, legK, fwd), jeansC, own, legId, ind);
       HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
       _z.subVectors(to, ft);
-      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
-      // lands (game/doodle.js gaitFeet)
+      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
-      framed(_c, _x, _shU, _z, k, k, k, _mH);
+      framed(_c, _x, UP, _z, k, k, k, _mH);
       p.heroShoe.push(_mH, white, own, id(), ind);
       p.heroSole.push(_mH, linC(HERO_SOLE), own, id(), ind);
     }
@@ -2068,10 +2114,8 @@ export class PersonRenderer {
         _mNk.copy(_mH);
         portN.neckD.fromArray(fig.neckD);
         fig.__neckP = portN;
-      } else {
-        q.neck.push(_mH, F.face, own, fig.headId, ind, fig.neckD);
-        fig.__neckP = null;
-      }
+      } else fig.__neckP = null;
+      if (!(portN && portN.neckN) || portN.fade < 0.999) q.neck.push(_mH, F.face, own, fig.headId, ind, fig.neckD);
       HL.set('neck', 'neck', _mH, null, null, false, fig.neckD);
     }
     // ---- the seat, and a dress's skirt from the waist over the thighs
@@ -2125,15 +2169,13 @@ export class PersonRenderer {
       q.shin.push(along(kn, ft, 0.47, legK, fwd), white, own, legId, ind);
       if (!dress) HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
       _z.subVectors(to, ft);
-      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
-      // lands (game/doodle.js gaitFeet)
+      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
-      framed(_c, _x, _shU, _z, fk, fk, fk, _mH);
+      framed(_c, _x, UP, _z, fk, fk, fk, _mH);
       q.shoe.push(_mH, white, own, id(), ind);
       p.heroSole.push(_mH, F.sole, own, id(), ind);
     }
@@ -2167,10 +2209,12 @@ export class PersonRenderer {
           else port.neckToHead.makeScale(0, 0, 0);
         }
         fig.__neckP = null;
-        HL.set('head', 'head', _mP, _fEw, gaze, true);
-      } else {
+        HL.set('head', 'head', _mP, _fEw, gaze, port.fade > 0.5);
+      }
+      // (the city's way of drawing the face - under the portrait while it comes in or goes)
+      if (!port || port.fade < 0.999) {
         q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
-        HL.set('head', 'head', _m, _fEw, gaze);
+        if (!port) HL.set('head', 'head', _m, _fEw, gaze);
       }
       framed(hc, hr, hu, hf, hs, hs, hs, _mH);
       q.hair.push(_mH, white, own, id(), ind);
@@ -2181,7 +2225,7 @@ export class PersonRenderer {
       // (their eyes in their sockets, each turned to where they look. The head's frame is drawn
       // mirrored - DrawClass.push - and the eyes' with it: each in the mirror's place)
       _eyeR.makeRotationFromEuler(_eyeE.set(-gaze[3], gaze[2], 0, 'YXZ'));
-      for (let e = 0; e < (port ? 0 : 2); e++) {
+      for (let e = 0; e < (port && port.fade >= 0.999 ? 0 : 2); e++) {
         const c = F.eyes[e];
         _eyeT.makeTranslation(-c[0], c[1], c[2]).multiply(_eyeR);
         _eyeM.multiplyMatrices(_mH, _eyeT);
@@ -2377,15 +2421,13 @@ export class PersonRenderer {
         (shorts ? p.lowShinSkin : wide ? p.lowShinWide : cargo ? p.lowShinCargo : p.lowShin).put(aux, along(kn, ft, 0.43, legK, fwd), shorts ? skin : longSkirt ? skirtC : botC, own, shorts ? id() : legId, ind);
       }
       _z.subVectors(to, ft);
-      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
-      // lands (game/doodle.js gaitFeet)
+      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.035);
-      p.lowShoe.put(aux, framed(_c, _x, _shU, _z, k, k, k), shoeC, own, id(), ind);
+      p.lowShoe.put(aux, framed(_c, _x, UP, _z, k, k, k), shoeC, own, id(), ind);
     }
     // ---- the head (no face: smaller than a pixel from where this is drawn)
     if (P.head > 0.5) {

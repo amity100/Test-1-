@@ -25,6 +25,8 @@ export class FigureRenderer {
 
   begin(camera) {
     this.batch.clear();
+    // (characters round: how big a face is on the screen decides how it is drawn - render/people.js)
+    this.bodies.cam = camera;
     this.bodies.begin();
     this.camPos.copy(camera.position);
   }

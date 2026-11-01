@@ -334,6 +334,25 @@ export class FaceLab {
     });
   }
 
+  // (characters round: the face of another kind of the city's people in his place - k, render/folkspec.js
+  // FOLK's number; for the tests' pictures of all of them)
+  show(k) {
+    const g = this.game;
+    if (!this.c || !this.at) return Promise.resolve(false);
+    return import('./looks.js').then((m) => {
+      g.civilians.remove(this.c);
+      const c = g.civilians.spawnScripted(this.at.x, this.at.z, m.folkLook(k), null);
+      c.noCollide = true;
+      c.ctrl = () => null;
+      c.yaw = 0;
+      c.faceYaw = 0;
+      c.brave = true;
+      this.c = c;
+      this.kind = k;
+      return true;
+    });
+  }
+
   // ---------------------------------------------------------------- the panel
   panel() {
     if (typeof document === 'undefined' || this.el) return;
