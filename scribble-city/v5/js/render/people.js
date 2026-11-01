@@ -1304,6 +1304,14 @@ export class PersonRenderer {
     // (going out: still theirs while it fades, unless somebody else of the kind comes near)
     if (!inRange && !(mine && P0.fade > 0.01)) return null;
     const P = P0 || this.makePortrait(k);
+    // (somebody near whose face is still being made: theirs next)
+    if (!P.built && this.portraitQueue && this.portraitQueue[0] !== P) {
+      const i = this.portraitQueue.indexOf(P);
+      if (i > 0) {
+        this.portraitQueue.splice(i, 1);
+        this.portraitQueue.unshift(P);
+      }
+    }
     const d = fig.__portrait ? -1 : inRange ? camDist : 1e5 + camDist;
     if (d < P.nextD) {
       P.nextD = d;
