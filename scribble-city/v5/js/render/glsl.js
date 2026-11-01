@@ -1,3 +1,4 @@
+import { NECK_GLSL } from './neckbend.js';
 // The scribble-art look. Every surface is drawn with coloured pens: thin strokes stuck to
 // the world, wandering a little, tapering at their ends, each in its own colour - a pen
 // for where the sun hits, a cooler one for the shade, a neighbouring hue now and then,
@@ -570,6 +571,9 @@ out vec3 vVel;
 // left out of (1: the mirror, 2: the sun's view)
 uniform highp sampler2D uShapes;
 in vec4 iS;
+// (a neck - iS.w's 8: twisted and bent with the head it carries, its move in iClip - render/
+// neckbend.js)
+${NECK_GLSL}
 #endif
 #ifdef PORTRAIT
 // (ROADMAP 14.1) a portrait's face (render/portrait.js): thirty moves of its muscles, each as far as
@@ -667,6 +671,10 @@ void main() {
     }
   }
 #endif
+  // (a neck: as the head it carries is turned - render/neckbend.js; its move is in iClip, so it is
+  // no plane cutting it)
+  bool neckPart = mod(floor(iS.w / 8.0), 2.0) > 0.5;
+  if (neckPart) neckBend(sPos, sNor, iClip);
 #else
   vec3 sPos = position;
   vec3 sNor = normal;
@@ -746,10 +754,13 @@ void main() {
   vX = iX;
   vClip = iClip;
   vId += iX.y;
+#ifdef USE_PULL
+  if (neckPart) vClip = vec4(0.0);
+#endif
 #endif
 #ifdef USE_ATLAS
   // (which of the city's people: their pictures' place in the atlases - ROADMAP 13.7)
-  vTile = floor(iS.w / 8.0);
+  vTile = floor(iS.w / 16.0);
 #endif
   vGone = 0.0;
 #ifdef USE_OBJ

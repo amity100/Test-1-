@@ -21,7 +21,7 @@ const EYE_Y = 7.2841;
 const EYE_Z = 1.2454;
 const toOurs = (x, y, z) => [S * x, S * (y - EYE_Y) + 0.0185, S * (z - EYE_Z) + 0.072];
 // (the head and its neck's top: everything above this, in the base mesh's decimetres)
-const CUT = 6.2;
+const CUT = 6.0;
 
 // ------------------------------------------------------------------ the base mesh
 const V = [];

@@ -3,6 +3,7 @@ import { FACE, JK, PT } from './heroink.js';
 import { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, section, TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS } from './heroshapes.js';
 import { FOLK } from './folkspec.js';
 import { HEAD, MORPHS } from './folkheads.js';
+import { NECK_J, HEAD_DROP } from './neckbend.js';
 
 // (v5, ROADMAP 13.6) The bodies of the city's people drawn as the hero is (render/heroshapes.js has
 // his): their heads real ones (below), their hair as they wear it (combed to the side,
@@ -217,6 +218,225 @@ function headGeo(H) {
   }
   return g;
 }
+// ------------------------------------------------------------------ the neck: the head's own edge
+// (characters round) The neck carries on from the head's own edge: the ring where the MakeHuman head
+// was cut from its body (tools/folkheads.mjs: under the jaw, round the throat and the nape - 46
+// points) IS the neck's top, point for point - their places, their normals, their picture - so head
+// and neck are one skin with no seam and no gap, whatever the head does: render/neckbend.js twists
+// and bends the neck below J under a head carried rigidly above it, and the ring is above J. Below
+// the ring the neck eases over 3.5 cm into their own neck (a man's or a woman's, as thick as theirs,
+// the nape thickening as a nape does), down into the jacket's collar. Made in the neck's frame
+// (render/neckbend.js: J at its origin, head units).
+// the ring: its points in order round the neck (by the angle about the neck's middle, from behind on
+// the right round the front to behind on the left), each with that angle
+let RING = null;
+const RING_CZ = NECK_J.folk.z;
+function ringOf() {
+  if (RING) return RING;
+  const B = base();
+  const I = B.idx;
+  const E = new Map();
+  for (let k = 0; k < I.length; k += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = I[k + e];
+      const b = I[k + ((e + 1) % 3)];
+      const key = a < b ? a * 65536 + b : b * 65536 + a;
+      E.set(key, (E.get(key) || 0) + 1);
+    }
+  }
+  const v = [];
+  for (const [key, c] of E) if (c === 1) v.push(Math.floor(key / 65536), key % 65536);
+  const ids = [...new Set(v)];
+  const P = B.pos;
+  const phi = (i) => {
+    const a = Math.atan2(P[i * 3], P[i * 3 + 2] - RING_CZ);
+    // (the middle of the nape: from behind on the right, -pi)
+    return a > Math.PI - 1e-9 ? -Math.PI : a;
+  };
+  ids.sort((a, b) => phi(a) - phi(b));
+  RING = { ids, phi: ids.map(phi) };
+  return RING;
+}
+// their own neck below the ring (the rows of render/heroshapes.js NECK_ROWS, a woman's slighter: y
+// as the old neck had it, 0 at the head's -0.025), as thick as theirs (lat: their neck's width in
+// head units; near the head the ring's own, their full girth by the collar)
+const sstepN = (a, b, v) => {
+  const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+function neckSection(rows, lat, y, phi, out) {
+  const yo = y + 0.025;
+  let k = 0;
+  while (k < rows.length - 2 && rows[k + 1][0] > yo) k++;
+  const a = rows[k];
+  const b = rows[k + 1];
+  const t = Math.max(0, Math.min(1, (a[0] - yo) / (a[0] - b[0] || 1)));
+  const g = 1 + (lat - 1) * sstepN(-0.118, -0.19, y);
+  const w = (a[1] + (b[1] - a[1]) * t) * g;
+  const c = Math.cos(phi);
+  const sn = Math.sin(phi);
+  const d = (c >= 0 ? a[2] + (b[2] - a[2]) * t : a[3] + (b[3] - a[3]) * t) * g;
+  const r = 1 / Math.sqrt((sn / w) ** 2 + (c / d) ** 2);
+  // (its middle a little forward as it goes down, as the old neck leaned)
+  out[0] = r * sn;
+  out[1] = RING_CZ + 0.06 * (-0.118 - y) + r * c;
+  return out;
+}
+// how far below the ring each row of the neck is (the first, 0, the ring itself)
+const NECK_D = [0, 0.0025, 0.007, 0.013, 0.021, 0.03, 0.04, 0.052, 0.065, 0.078, 0.088, 0.095, 0.1];
+const NECK_EASE = 0.035;
+/**
+ * Their neck (render/neckbend.js's frame: J at the origin, head units) from their head's points and
+ * normals (H, hn): { geo, surf } - surf(rows, y, t, lift, out, nrm), a point on it at the neck's y and
+ * the angle t round it (0 ahead, as render/herolines.js's surf), for its lines.
+ */
+function neckOf(H, hn, spec) {
+  const fem = !!spec.fem;
+  const rows = fem ? FEM_NECK : MAN_NECK;
+  const lat = (0.98 * 1.16 * Math.max(1, 0.92 * ((spec.build && spec.build.bulk) || 1)) * ((spec.shape && spec.shape.neck) || 1)) / ((spec.build && spec.build.head) || 1);
+  const R = ringOf();
+  const B = base();
+  const K = R.ids.length;
+  const P = H.pos;
+  let ringMin = 1;
+  for (const i of R.ids) ringMin = Math.min(ringMin, P[i * 3 + 1]);
+  const jy = NECK_J.folk.y + HEAD_DROP;
+  const jz = NECK_J.folk.z;
+  const sec = [0, 0];
+  // a point of it, depth d below the ring at the angle phi (between the ring's points, as the ring
+  // goes there), in the head's frame
+  const ringAt = (phi, out) => {
+    let k = 0;
+    while (k < K - 1 && R.phi[k + 1] < phi) k++;
+    const k1 = (k + 1) % K;
+    const p0 = R.phi[k];
+    const p1 = k1 ? R.phi[k1] : R.phi[0] + Math.PI * 2;
+    const t = Math.max(0, Math.min(1, (phi - p0) / (p1 - p0 || 1)));
+    for (let c = 0; c < 3; c++) out[c] = P[R.ids[k] * 3 + c] + (P[R.ids[k1] * 3 + c] - P[R.ids[k] * 3 + c]) * t;
+    return out;
+  };
+  const at = (d, phi, rp, out) => {
+    const b = sstepN(0, NECK_EASE, d);
+    const y = ringMin - d + (rp[1] - ringMin) * (1 - b);
+    neckSection(rows, lat, y, phi, sec);
+    out[0] = rp[0] + (sec[0] - rp[0]) * b;
+    out[1] = y;
+    out[2] = rp[2] + (sec[1] - rp[2]) * b;
+    return out;
+  };
+  const pos = [];
+  const uv = [];
+  const idx = [];
+  const W = FACE.W;
+  const fm = (x, y, z, back) => {
+    let u = 0.5 - x / W;
+    const k = Math.max(0, Math.min(1, (0.02 - z) / 0.04));
+    u += (back - u) * k * k * (3 - 2 * k);
+    return [u, 0.5 + (y - FACE.YC) / FACE.H];
+  };
+  const q = [0, 0, 0];
+  const rp = [0, 0, 0];
+  // (the nape's middle twice - its first column's picture from the right's edge, its last's from the
+  // left's - so that no triangle spreads the whole picture across the back of the neck)
+  for (let r = 0; r < NECK_D.length; r++) {
+    const d = NECK_D[r];
+    const b = sstepN(0, NECK_EASE, d);
+    for (let c = 0; c <= K; c++) {
+      const i = R.ids[c % K];
+      const phi = c === K ? Math.PI : R.phi[c];
+      for (let m = 0; m < 3; m++) rp[m] = P[i * 3 + m];
+      if (r === 0) for (let m = 0; m < 3; m++) q[m] = rp[m];
+      else at(d, phi, rp, q);
+      pos.push(q[0], q[1] - jy, q[2] - jz);
+      const back = c === 0 ? 0.985 : c === K ? 0.015 : q[0] >= 0 ? 0.015 : 0.985;
+      const f = fm(q[0], q[1], q[2], back);
+      let u0 = B.uv[i * 2];
+      if (c === 0 && u0 < 0.5 && P[i * 3 + 2] < 0) u0 = 0.985;
+      const v0 = B.uv[i * 2 + 1];
+      uv.push(u0 + (f[0] - u0) * b, v0 + (f[1] - v0) * b);
+    }
+  }
+  const RW = K + 1;
+  for (let r = 0; r < NECK_D.length - 1; r++) {
+    for (let c = 0; c < K; c++) {
+      const a = r * RW + c;
+      idx.push(a, a + RW, a + 1, a + 1, a + RW, a + RW + 1);
+    }
+  }
+  // (closed at the bottom, deep in the collar)
+  const last = (NECK_D.length - 1) * RW;
+  const pole = pos.length / 3;
+  let my = 0;
+  let mz = 0;
+  for (let c = 0; c < K; c++) {
+    my += pos[(last + c) * 3 + 1];
+    mz += pos[(last + c) * 3 + 2];
+  }
+  pos.push(0, my / K, mz / K);
+  uv.push(0.5, uv[last * 2 + 1]);
+  for (let c = 0; c < K; c++) idx.push(pole, last + c + 1, last + c);
+  const seams = [];
+  for (let r = 0; r < NECK_D.length; r++) seams.push([r * RW, r * RW + K]);
+  const g = finish(make(pos, uv, idx), (x, y, z, out) => ((out[0] = 0), (out[1] = y), (out[2] = z > 0.2 ? 0 : RING_CZ - jz), out), seams);
+  // the ring's normals: the head's and the neck's together, both sides of it the same - one skin
+  const nn = g.attributes.normal.array;
+  for (let c = 0; c < K; c++) {
+    const i = R.ids[c];
+    let x = hn[i * 3] + nn[c * 3];
+    let y = hn[i * 3 + 1] + nn[c * 3 + 1];
+    let z = hn[i * 3 + 2] + nn[c * 3 + 2];
+    const l = Math.hypot(x, y, z) || 1;
+    x /= l;
+    y /= l;
+    z /= l;
+    nn[c * 3] = hn[i * 3] = x;
+    nn[c * 3 + 1] = hn[i * 3 + 1] = y;
+    nn[c * 3 + 2] = hn[i * 3 + 2] = z;
+  }
+  for (let m = 0; m < 3; m++) nn[K * 3 + m] = nn[m];
+  // (its lines: a point at the neck's y and the angle t round it, lifted off it, and its normal)
+  const e = 1e-4;
+  const qa = [0, 0, 0];
+  const qb = [0, 0, 0];
+  const ra = [0, 0, 0];
+  const surf = (rowsIgnored, y, t, lift, out, nrm) => {
+    const phi = Math.atan2(Math.sin(t), Math.cos(t));
+    const d = Math.max(0, ringMin - (y + jy));
+    at(d, phi, ringAt(phi, rp), q);
+    at(d + e, phi, ringAt(phi, ra), qa);
+    at(d, phi + e, ringAt(phi + e > Math.PI ? phi + e - Math.PI * 2 : phi + e, ra), qb);
+    // (down the neck x round it: outwards)
+    const ux = qa[0] - q[0];
+    const uy = qa[1] - q[1];
+    const uz = qa[2] - q[2];
+    const vx = qb[0] - q[0];
+    const vy = qb[1] - q[1];
+    const vz = qb[2] - q[2];
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nx /= l;
+    ny /= l;
+    nz /= l;
+    if (nx * q[0] + nz * (q[2] - RING_CZ) < 0) {
+      nx = -nx;
+      ny = -ny;
+      nz = -nz;
+    }
+    out[0] = q[0] + nx * lift;
+    out[1] = q[1] - jy + ny * lift;
+    out[2] = q[2] - jz + nz * lift;
+    if (nrm) {
+      nrm[0] = nx;
+      nrm[1] = ny;
+      nrm[2] = nz;
+    }
+    return out;
+  };
+  return { geo: g, surf };
+}
+
 // the eyes: two balls in their sockets, the drawing's eyes on their fronts
 export const EYE = { x: 0.032, y: 0.0185, z: 0.072, r: 0.0155 };
 // (ROADMAP 13.7) an eye, round its middle (it turns to look): the same on every head - its drawing
@@ -298,8 +518,10 @@ export function exprMoves() {
       w = w + (sstep(-0.3, 0.3, N[i * 3 + 1] / L) - w) * lips;
     }
     w *= sstep(hz - 0.03, hz + 0.01, z);
-    // (the throat stretched, not carried away)
-    w *= 1 - 0.65 * sstep(-0.1, -0.135, y);
+    // (the throat stretched, not carried away: under the jaw only the chin's underside goes with it -
+    // the skin behind it, back to where the head meets the neck (render/folkshapes.js folkBody: the
+    // neck's top is the head's own edge, z <= 0.024), stays where it is, so the seam never opens)
+    if (y < -0.085) w *= sstep(0.02, 0.055, z);
     if (w <= 0) continue;
     // (the chin down and back: what is ahead of the hinge goes down)
     const a = A * w;
@@ -884,25 +1106,11 @@ export function folkBody(k) {
   });
   const limb = (rows) => (B.thick ? slim(rows, 1 + B.thick) : rows);
   const T = trunk(fem ? FEM_TORSO : TORSO);
-  // (ROADMAP 13.11) a row more just under the jaw's line, where the throat begins: above it the neck is
-  // inside the head, and when the jaw drops it is what is seen through the mouth - dark, as a throat
-  // is (its normals' length, as the mouth's: render/glsl.js USE_ATLAS, vMouth). The head ends below it.
-  const N0 = fem ? FEM_NECK : MAN_NECK;
-  const NECK = [];
-  for (let r = 0; r < N0.length; r++) {
-    NECK.push(N0[r]);
-    const nx = N0[r + 1];
-    if (nx && N0[r][0] > -0.045 && nx[0] < -0.045) {
-      const t = (N0[r][0] + 0.045) / (N0[r][0] - nx[0]);
-      NECK.push(N0[r].map((v, k) => (k === 0 ? -0.045 : v + (nx[k] - v) * t)));
-    }
-  }
-  const neck = loft(NECK, 24);
-  faceMap(neck, -0.025);
-  const nn = neck.attributes.normal.array;
-  const np = neck.attributes.position.array;
-  for (let i = 0; i < np.length / 3; i++) if (np[i * 3 + 1] > -0.0452) for (let c = 0; c < 3; c++) nn[i * 3 + c] *= 2;
-  parts.neck = neck;
+  // (characters round) the neck: the head's own edge carried on down into the collar - one skin with
+  // the head, its top its ring (neckOf). No part of it is the mouth's inside any more: the head is
+  // closed under the chin down to the ring, below the mouth's floor
+  const NK = neckOf(H, parts.head.attributes.normal.array, spec);
+  parts.neck = NK.geo;
   parts.torso = region(loft(T, 32, false, true), JK.torso);
   // (the jacket worn open: its front edges proud of the body, widening into the lapels - a blazer's
   // open in a V from its button at the waist up to the collarbones, its lapels laid back either side)
@@ -941,7 +1149,8 @@ export function folkBody(k) {
       hairEdge: kit.edge,
       hairThick: kit.thick,
       locks,
-      rows: { torso: T, pelvis: PEL, upper: UP, fore: FO, thigh: TH, shin, neck: NECK },
+      rows: { torso: T, pelvis: PEL, upper: UP, fore: FO, thigh: TH, shin, neck: fem ? FEM_NECK : MAN_NECK },
+      neckSurf: NK.surf,
       skirt: dress ? skirtRows(0.6) : null,
       facePt,
     },

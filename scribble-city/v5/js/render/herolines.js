@@ -1,4 +1,5 @@
-import { TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS, NECK_Y, LOCKS, section, headSdf, headR, hairEdge, hairThick } from './heroshapes.js';
+import { TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, HERO_NECK_ROWS, LOCKS, section, headSdf, headR, hairEdge, hairThick } from './heroshapes.js';
+import { neckBend } from './neckbend.js';
 import { faceTone, stubble } from './heroink.js';
 
 // (v5, ROADMAP 13.1) The hero drawn in lines, as his drawing is: over his body (render/heroshapes.js,
@@ -63,7 +64,7 @@ function rowsAt(rows, y, out) {
 const _r = [0, 0, 0, 0, 0];
 const _q = [0, 0];
 // the point at height y, angle t (0 ahead, pi/2 its right in its frame), lifted off it; and its normal
-function surf(rows, y, t, lift, out, nrm) {
+function surfRows(rows, y, t, lift, out, nrm) {
   const [w, df, db, z, n] = rowsAt(rows, y, _r);
   section(t, w, df, db, n, _q);
   const x = _q[0];
@@ -93,7 +94,7 @@ let KIT = null;
 function heroKit() {
   return {
     sdf: headSdf, headR, hairEdge, hairThick, locks: LOCKS, tone: faceTone, beard: stubble, fem: false,
-    rows: { torso: TORSO, pelvis: PELVIS_ROWS, upper: UPPER_ROWS, fore: FORE_ROWS, thigh: THIGH_ROWS, shin: SHIN_ROWS, neck: NECK_ROWS },
+    rows: { torso: TORSO, pelvis: PELVIS_ROWS, upper: UPPER_ROWS, fore: FORE_ROWS, thigh: THIGH_ROWS, shin: SHIN_ROWS, neck: HERO_NECK_ROWS },
     top: { ink: LEATHER, dark: LEATHER_D, hi: LEATHER_HI }, bottom: { ink: CLOTH, dark: CLOTH_D, hi: CLOTH_HI }, hair: HAIR, hairHi: HAIR_HI,
   };
 }
@@ -154,6 +155,9 @@ class Part {
 function lofted(name, rows, o) {
   const P = new Part(name);
   const R = rng(o.seed);
+  // (a part whose surface is not its rows' alone - the city's people's neck, the head's own edge
+  // carried on down: its own surf)
+  const surf = o.surf || surfRows;
   const n = [0, 0, 0];
   const lift = o.lift ?? 0.003;
   const span = o.yb - o.ya;
@@ -348,12 +352,19 @@ function head() {
   return P;
 }
 
-// the neck: hatched down its sides, the shadow under the jaw
+// the neck: hatched down its sides, the shadow under the jaw (characters round: in the neck's own
+// frame - render/neckbend.js, J under the head at its origin - from the collar up to under the head:
+// the city's people's neck its own surface, the head's edge carried on down; the hero's his rows)
 function neck() {
-  const P = lofted('neck', KIT.rows.neck, { seed: 61, ya: -0.17, yb: -0.02, hatch: 0, cross: 36, crossThr: 0.35, around: 12, bands: 2, rim: 8, ink: SEPIA, dark: SEPIA, down: true, lift: 0.0022 });
-  void NECK_Y;
+  const own = KIT.neckSurf;
+  const P = lofted('neck', KIT.rows.neck, { seed: 61, ya: -0.075, yb: own ? -0.002 : 0.03, surf: own || null, hatch: 0, cross: 36, crossThr: 0.35, around: 12, bands: 2, rim: 8, ink: SEPIA, dark: SEPIA, down: true, lift: 0.0022 });
   return P;
 }
+
+// (a neck's stroke's point and normal, moved with it: render/neckbend.js)
+const _nb = new Float64Array(6);
+const _nm = [0, 0, 0];
+const _nn = [0, 0, 0];
 
 // ------------------------------------------------------------------ the whole of him
 export class HeroLines {
@@ -394,13 +405,17 @@ export class HeroLines {
   // and where its eyes look (gaze: [x, y], how far the iris goes on the ball)
   // (ROADMAP 14.1) faceOff: the face drawn as a portrait (render/portrait.js) - its features, its
   // shading and its outline are the portrait's own; only the hair's strokes and the edge light here
-  set(slot, part, m, ex = null, gaze = null, faceOff = false) {
+  // (characters round) def: a neck's move this frame (render/neckbend.js D) - its strokes go with it
+  // as its skin does in the graphics card
+  set(slot, part, m, ex = null, gaze = null, faceOff = false, def = null) {
     let s = this.slots[slot];
-    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: false };
+    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: false, def: new Float64Array(4), bent: false };
     s.e.set(m.elements);
     s.ex = ex;
     s.gaze = gaze;
     s.faceOff = faceOff;
+    s.bent = !!def;
+    if (def) for (let i = 0; i < 4; i++) s.def[i] = def[i];
     s.on = true;
   }
 
@@ -437,8 +452,21 @@ export class HeroLines {
         for (let i = 0; i < list.length && left > 0; i++) {
           const st = list[i];
           if (st.near && !near) continue;
-          // its normal and its middle, in the world
-          const n = st.n;
+          // its normal and its middle, in the world (a neck's moved with it first)
+          let n = st.n;
+          let m = st.mid;
+          const bent = s.bent;
+          if (bent) {
+            neckBend(m[0], m[1], m[2], n[0], n[1], n[2], s.def, _nb);
+            m = _nm;
+            n = _nn;
+            m[0] = _nb[0];
+            m[1] = _nb[1];
+            m[2] = _nb[2];
+            n[0] = _nb[3];
+            n[1] = _nb[4];
+            n[2] = _nb[5];
+          }
           let nx = e[0] * n[0] + e[4] * n[1] + e[8] * n[2];
           let ny = e[1] * n[0] + e[5] * n[1] + e[9] * n[2];
           let nz = e[2] * n[0] + e[6] * n[1] + e[10] * n[2];
@@ -446,7 +474,6 @@ export class HeroLines {
           nx /= nl;
           ny /= nl;
           nz /= nl;
-          const m = st.mid;
           const mx = e[0] * m[0] + e[4] * m[1] + e[8] * m[2] + e[12];
           const my = e[1] * m[0] + e[5] * m[1] + e[9] * m[2] + e[13];
           const mz = e[2] * m[0] + e[6] * m[1] + e[10] * m[2] + e[14];
@@ -512,6 +539,12 @@ export class HeroLines {
             if (st.eye && s.gaze) {
               x += s.gaze[0];
               y += s.gaze[1];
+            }
+            if (bent) {
+              neckBend(x, y, z, 0, 1, 0, s.def, _nb);
+              x = _nb[0];
+              y = _nb[1];
+              z = _nb[2];
             }
             const h = i * 3.17 + k * 1.31 + tick * 0.618;
             const j = st.kind === K.feature ? 0.0006 : 0.0022;

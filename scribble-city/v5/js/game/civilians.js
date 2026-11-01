@@ -746,6 +746,9 @@ class Civilian {
     if (sp > 0.2) this.yaw = dampAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), 8, dt);
     // (the way their scene has them face - not while they are turned to what happened, or down)
     else if (this.faceYaw !== null && this.ctrl && !(this.noticeT > 0 || this.cowerT > 0 || this.coverT > 0)) this.yaw = dampAngle(this.yaw, this.faceYaw, 6, dt);
+    // (characters round) somebody looked at far round for a while, standing: they turn to them - the
+    // body after the eyes, the head and the chest (game/doodle.js turnHead)
+    else if (fig.turnTo !== null && fig.turnTo !== undefined && !(this.cowerT > 0 || this.coverT > 0)) this.yaw = dampAngle(this.yaw, fig.turnTo, 3, dt);
     fig.yaw = this.yaw;
     // (a jogger at a red light runs on the spot: the stride goes on where the feet stay)
     fig.speed = this.jog && this.waitAt && sp < 0.3 ? 2.6 : sp;
