@@ -1,8 +1,8 @@
 import { Run, ceiling } from './stock.js';
 import { roomLight } from './products.js';
-import { rbox, rprint, wp, yawOut, put, later, liveOk, frameOf } from './shopkit.js';
+import { rbox, rprint, wp, yawOut, put, later, liveOk, frameOf, counterLen } from './shopkit.js';
 
-// (v5, ROADMAP 13.13) An electronics shop of the new kind, from the same kit (after the market and
+// (v5, ROADMAP 14.4) An electronics shop of the new kind, from the same kit (after the market and
 // the clothes shop): screens, not shelves of cans.
 //
 // The back wall a wall of televisions, all of them showing the same bright picture, a low cabinet of
@@ -171,12 +171,12 @@ function headphoneWall(R, run, len) {
 function counter(R, fr) {
   const S = R.psoup(false);
   const y0 = R.y0;
-  const len = Math.min(2.0, fr.W * 0.3);
+  const len = counterLen(R, fr, Math.min(2.0, fr.W * 0.3), 1.0);
+  if (!len) return null;
   const depth = 0.6;
   const top = y0 + 0.98;
   const d0 = R.da - 1.75;
   const run = fr.left ? new Run(R, R.ub - 0.3, d0, [-1, 0], [0, -1]) : new Run(R, R.ua + 0.3, d0, [1, 0], [0, -1]);
-  if (Math.abs((fr.left ? R.ub - 0.3 - len : R.ua + 0.3 + len) - (fr.left ? R.lane[1] : R.lane[0])) < 0.5) return null;
   rbox(R, S, run, 0, y0, -depth, len, top - 0.04, 0, WHITE, { skip: ['bottom'] });
   rbox(R, S, run, -0.03, top - 0.04, -depth - 0.03, len + 0.03, top, 0.03, OAK, { skip: ['bottom'] });
   const ts = len * 0.7;

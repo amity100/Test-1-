@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { seeded } from './kit.js';
 
-// (v5, ROADMAP 13.13) What is printed on the things a shop sells, drawn once into one picture: the
+// (v5, ROADMAP 14.4) What is printed on the things a shop sells, drawn once into one picture: the
 // labels round the cans and the bottles, the fronts of the boxes and the bags, the cartons, the
 // wrappers at the till, the strips of prices along the shelves, the signs over the aisles, the
 // till's screen, the posters, the papers at the door. Each is drawn the way an illustrator letters
@@ -1136,7 +1136,7 @@ function defineAll(A) {
     hand(g, [[w / 2, h / 2], [w / 2 + w * 0.2, h / 2 - w * 0.12]], INK, 4, rng);
     hand(g, [[w / 2, h / 2], [w / 2 - w * 0.05, h / 2 - w * 0.34]], INK, 3, rng);
   });
-  // (v5, 13.13: a clothes shop's - the signs over its bays, its bag, the tags, the patterns of cloth)
+  // (v5, 14.4: a clothes shop's - the signs over its bays, its bag, the tags, the patterns of cloth)
   for (const [n, t, f, l] of [['head.new', 'NEW SEASON', '#1e1e22', '#f4efe6'], ['head.denim', 'DENIM', '#2a4a78', '#f4efe6'], ['head.knit', 'KNITWEAR', '#6a3a2a', '#f4e7d2'], ['head.shoes', 'SHOES', '#1e1e22', '#e9c46a'], ['head.sale', 'SALE  30% OFF', '#c42a22', '#ffffff'], ['head.fit', 'FITTING ROOMS', '#2a2a30', '#f4efe6']]) {
     place(n, 'header', header(t, f, l, { fam: 'Cinzel' }));
   }
@@ -1175,7 +1175,7 @@ function defineAll(A) {
     g.fillStyle = 'rgba(30,20,20,0.25)';
     for (let x = 0; x < w; x += 16) for (let y = 0; y < h; y += 16) g.fillRect(x, y, 7, 7);
   });
-  // (v5, 13.13: an electronics shop's - what is on its screens, the cards by its phones, its signs)
+  // (v5, 14.4: an electronics shop's - what is on its screens, the cards by its phones, its signs)
   const pic = (g, w, h, k, rng) => {
     // a picture on a screen: a sunset over the sea, mountains under stars, the city's towers, a
     // phone's grid of apps

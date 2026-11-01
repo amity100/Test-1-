@@ -337,6 +337,19 @@ export function paintFolkFace(c, o = {}) {
       const L = (0.0038 + 0.003 * R()) * K;
       h.line(px, py, px + Math.cos(a) * L, py + Math.sin(a) * L, (fem ? 1.3 : 1.6) + R(), h.pick(BR.col), 0.8, 0.35);
     }
+    // (ROADMAP 14.1, a portrait's: the brow's line in ink over its hairs, as an artist draws it - it
+    // reads at any colour of hair, and on the portrait it goes where the brow goes: up, down, together)
+    if (flat) {
+      for (let pass = 0; pass < 3; pass++) {
+        const pts = [];
+        for (let i = 0; i <= 12; i++) {
+          const t = 0.04 + (i / 12) * 0.9;
+          const [bx, by] = at(t);
+          pts.push([X(bx), Y(by + thick * (0.1 - pass * 0.14) * (1 - t * 0.5))]);
+        }
+        h.path(pts, ((fem ? 1.5 : 2.1) - pass * 0.35) * (1 + (BR.thick || 1) * 0.25), fem ? '#3b2a26' : '#2e2420', 0.5 - pass * 0.1, 0.6);
+      }
+    }
   }
   // the furrow between the brows, the forehead's lines (with the years)
   if (!fem) for (const sd of [1, -1]) h.path([[X(sd * 0.005), Y(0.041)], [X(sd * 0.0045), Y(0.033)], [X(sd * 0.006), Y(0.028)]], 1.4, S.sh1[0], 0.2 + 0.3 * age, 0.8);

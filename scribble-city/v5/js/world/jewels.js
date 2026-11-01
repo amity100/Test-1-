@@ -2,7 +2,7 @@ import { Run, ceiling } from './stock.js';
 import { roomLight } from './products.js';
 import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk, frameOf } from './shopkit.js';
 
-// (v5, ROADMAP 13.13) A jeweller of the new kind (after the market, the clothes shop and the
+// (v5, ROADMAP 14.4) A jeweller of the new kind (after the market, the clothes shop and the
 // electronics shop): quiet, airy, its few things lit.
 //
 // Glass cases in a U - along the back, the seller behind it, and down both sides - each a dark base,

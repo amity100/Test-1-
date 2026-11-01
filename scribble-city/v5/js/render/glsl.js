@@ -1152,16 +1152,20 @@ void main() {
   } else if (vPart < 0.5) {
     // the lines the face makes as it moves (and with the years a little of them at rest)
     vec4 wm = texture(uWrinkle, vUv);
-    gWr = clamp(dot(wm, max(uWrinkleW, vec4(uAge * 0.28))), 0.0, 1.0);
-    tex.rgb = mix(tex.rgb, tex.rgb * vec3(0.5, 0.4, 0.38), gWr * 0.85);
+    gWr = clamp(dot(wm, max(uWrinkleW, vec4(uAge * 0.18))), 0.0, 1.0);
+    tex.rgb = mix(tex.rgb, tex.rgb * vec3(0.36, 0.28, 0.26), gWr * 0.9);
     // the inside of the mouth: the lips' wet insides, then dark a few millimetres in
     if (vMouthP > 0.02) {
       vec3 ins = mix(vec3(0.42, 0.15, 0.15), vec3(0.14, 0.035, 0.035), smoothstep(0.04, 0.16, vMouthP));
       ins = mix(ins, vec3(0.025, 0.007, 0.007), smoothstep(0.3, 0.75, vMouthP));
       tex.rgb = mix(tex.rgb, ins, smoothstep(0.015, 0.05, vMouthP));
     }
-    // its inside, seen only through the open mouth: dark, as a throat is
-    if (!gl_FrontFacing) tex.rgb = vec3(0.02, 0.006, 0.006);
+    // its inside: seen through the open mouth, dark, as a throat is; seen past the jaw (where the head
+    // meets the neck), the skin under it in its shade
+    if (!gl_FrontFacing) {
+      float throat = step(0.0, vLP.z) * step(abs(vLP.x), 0.034) * step(-0.105, vLP.y) * step(vLP.y, -0.02);
+      tex.rgb = mix(tex.rgb * vec3(0.5, 0.42, 0.4), vec3(0.02, 0.006, 0.006), throat);
+    }
   }
 #endif
 #ifndef SOLID
@@ -1269,18 +1273,31 @@ void main() {
   float wash = uWash;
 #ifdef PORTRAIT
   if (vPart < 0.5 || vPart > 3.5) {
-    // (ROADMAP 14.1) the strokes along the planes of the face (render/portrait.js planes); its
-    // hollows darker and drawn closer; the light gathering on the forehead, the nose, the cheekbones
+    // (ROADMAP 14.1) A portrait's own pencil, not the city's pens (a face drawn with a wall's
+    // strokes is a scratched face): its colour and the light as they are, and over them fine
+    // strokes of a sepia pencil laid along the planes of the face (render/portrait.js planes) -
+    // across the forehead, round the eyes, down the nose, along the cheekbones, round the mouth -
+    // only where the light falls away from it: a second layer across them deeper in the shade, and
+    // close dark strokes pressed into its hollows (the sockets, under the nose, the corners of the
+    // mouth, under the jaw). The lines it makes as it moves are in its picture (uWrinkle)
     vec4 pl = texture(uPlane, vUv);
     float a2 = atan(pl.g * 2.0 - 1.0, pl.r * 2.0 - 1.0);
     bool sideS = smoothstep(0.42, 0.78, abs(vLN.x)) > 0.5 && vPart < 0.5;
-    ang = sideS ? (vLP.y > -0.04 ? 1.35 : 0.6) * sign(vLP.x + 1e-4) : 0.5 * a2;
+    float fa = sideS ? (vLP.y > -0.04 ? 1.35 : 0.6) * sign(vLP.x + 1e-4) : 0.5 * a2;
+    ang = fa;
     float ao = vPart < 0.5 ? pl.b : 1.0;
-    light *= mix(0.42, 1.0, ao);
-    lit *= mix(0.78, 1.0, ao);
-    shade *= mix(0.72, 1.0, ao);
-    light = clamp(light + pl.a * 0.12 * (1.0 - gWr), 0.0, 1.0);
-    dens *= 1.0 + (1.0 - ao) * 0.7 + gWr * 0.6;
+    light *= mix(0.62, 1.0, ao);
+    light = clamp(light + pl.a * 0.1 * (1.0 - gWr), 0.0, 1.0);
+    float tone = clamp(max((1.0 - light) * 0.92, (1.0 - ao) * 1.15) + gWr * 0.4, 0.0, 1.0);
+    vec3 hk = vec3(1.0);
+    vec2 h1 = penLayer(p, dpx, dpy, fa, 3.4, 0.95, 101.0, 1.7);
+    hk *= mix(vec3(1.0), vec3(0.66, 0.56, 0.52), h1.x * step(fract(h1.y * 7.13), smoothstep(0.16, 0.72, tone)));
+    vec2 h2 = penLayer(p, dpx, dpy, fa + 0.95, 3.8, 0.85, 131.0, 1.3);
+    hk *= mix(vec3(1.0), vec3(0.6, 0.52, 0.52), h2.x * step(fract(h2.y * 7.13), smoothstep(0.46, 0.9, tone) * 0.95));
+    vec2 h3 = penLayer(p, dpx, dpy, fa - 0.4, 3.0, 1.0, 157.0, 1.0);
+    hk *= mix(vec3(1.0), vec3(0.42, 0.33, 0.32), h3.x * step(fract(h3.y * 7.13), smoothstep(0.64, 1.0, tone) * 0.7));
+    lit *= hk;
+    shade *= hk;
   } else {
     // (inside the mouth: in the lips' shade)
     light *= 0.35;

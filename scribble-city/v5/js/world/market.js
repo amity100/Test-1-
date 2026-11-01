@@ -2,9 +2,9 @@ import { Run, SC } from './stock.js';
 import { ceiling } from './stock.js';
 import { model, LINES, roomLight } from './products.js';
 import { labels } from './labels.js';
-import { rbox, rprint, rprintUp, rcyl, wp, yawOut, lookOf, fruitOf, put } from './shopkit.js';
+import { rbox, rprint, rprintUp, rcyl, wp, yawOut, lookOf, fruitOf, put, counterLen } from './shopkit.js';
 
-// (v5, ROADMAP 13.13) The neighbourhood market, laid out as a real one is and furnished to the
+// (v5, ROADMAP 14.4) The neighbourhood market, laid out as a real one is and furnished to the
 // small things - the first of the shops of the new kind, the one the others are measured by.
 //
 // Along the back wall the fridges, glass doors in steel frames, lit inside: the drinks in rows, the
@@ -449,19 +449,24 @@ function checkout(R, fr) {
   const S = R.psoup(false);
   const G = R.psoup(true);
   const y0 = R.y0;
-  const len = Math.min(2.5, fr.W * 0.36);
+  // (as long as there is room for between the wall and the way in, which stays clear)
+  const len = counterLen(R, fr, Math.min(2.5, fr.W * 0.36), 1.3);
+  if (!len) return null;
   const depth = 0.66;
   const top = y0 + 0.92;
   const d0 = R.da - FRONT + 0.6;
   const run = fr.left ? new Run(R, R.ub - 0.3, d0, [-1, 0], [0, -1]) : new Run(R, R.ua + 0.3, d0, [1, 0], [0, -1]);
-  if (Math.abs((fr.left ? R.ub - 0.3 - len : R.ua + 0.3 + len) - (fr.left ? R.lane[1] : R.lane[0])) < 0.5) return null;
   // the body: panels, the kick plate, the top with its rounded edge
   rbox(R, S, run, 0, y0, -depth, len, y0 + 0.1, -0.02, DARK, { skip: ['bottom'] });
   rbox(R, S, run, 0, y0 + 0.1, -depth, len, top - 0.04, 0, [0.34, 0.5, 0.42], { skip: ['bottom'] });
   for (let s = 0.5; s < len - 0.1; s += 0.5) rbox(R, S, run, s - 0.006, y0 + 0.12, -0.002, s + 0.006, top - 0.06, 0.004, [0.24, 0.36, 0.3], { skip: ['back'] });
   rbox(R, S, run, -0.03, top - 0.04, -depth - 0.04, len + 0.03, top, 0.04, [0.9, 0.88, 0.84], { skip: ['bottom'] });
+  // (a short counter - a narrow shop's: the till at its very end, the scanner just before it, the
+  // belt what is left)
+  const short = len < 2.2;
+  const ts = short ? len - 0.25 : len * 0.82;
   // the belt along the customer's half, its rollers at the ends, the bar that divides
-  const belt = len * 0.5;
+  const belt = short ? ts - 0.62 : len * 0.5;
   rbox(R, S, run, 0.06, top, -0.42, belt, top + 0.018, -0.06, [0.12, 0.12, 0.14], { skip: ['bottom'] });
   for (const s of [0.06, belt]) rcyl(R, S, run, s, -0.24, 0.02, top, 0.02, STEEL, { seg: 6 });
   rbox(R, S, run, 0.04, top, -0.43, belt + 0.02, top + 0.04, -0.41, [0.7, 0.72, 0.76], {});
@@ -471,7 +476,6 @@ function checkout(R, fr) {
   rbox(R, S, run, sc - 0.16, top - 0.004, -0.4, sc + 0.16, top + 0.004, -0.12, [0.16, 0.16, 0.18], { skip: ['bottom'] });
   rprintUp(R, S, run, sc - 0.15, -0.39, sc + 0.15, -0.13, top + 0.0045, 'ui.scanner', { pen: 'screen' });
   // the till: its base with the drawer, the keys, the screen on its stalk turned to the cashier
-  const ts = len * 0.82;
   rbox(R, S, run, ts - 0.22, top, -depth + 0.04, ts + 0.22, top + 0.13, -depth + 0.46, [0.2, 0.2, 0.22], { skip: ['bottom'] });
   rbox(R, S, run, ts - 0.2, top + 0.02, -depth + 0.035, ts + 0.2, top + 0.11, -depth + 0.04, [0.14, 0.14, 0.15], {});
   rbox(R, S, run, ts - 0.03, top + 0.06, -depth + 0.03, ts + 0.03, top + 0.075, -depth + 0.035, STEEL, {});
@@ -492,7 +496,8 @@ function checkout(R, fr) {
   rprint(R, S, run, cs - 0.04, top + 0.155, cs + 0.04, top + 0.295, -0.0895, 'ui.reader', { pen: 'screen' });
   // the bagging place at the far end, the bags hanging on their hooks
   rbox(R, S, run, len - 0.02, top, -0.5, len + 0.02, top + 0.32, -0.46, STEEL, {});
-  for (let k = 0; k < 6; k++) rbox(R, S, run, len - 0.24 + k * 0.004, top + 0.004 + k * 0.004, -0.42 + k * 0.006, len - 0.03, top + 0.008 + k * 0.004, -0.12, [0.96, 0.95, 0.9], {});
+  // (on a short counter the till takes their place: the bags under it)
+  if (len > 2.3) for (let k = 0; k < 6; k++) rbox(R, S, run, len - 0.24 + k * 0.004, top + 0.004 + k * 0.004, -0.42 + k * 0.006, len - 0.03, top + 0.008 + k * 0.004, -0.12, [0.96, 0.95, 0.9], {});
   // the sweets before it, at a child's height: a stepped rack of bars in their boxes
   if (!G.off) {
     const rr = new Run(R, ...run.ud(0.1, 0.02), [run.au, run.ad], [run.ou, run.od]);
@@ -532,7 +537,9 @@ function checkout(R, fr) {
   mark('belt', belt * 0.45, -0.24, top + 0.02);
   mark('belt2', belt * 0.8, -0.24, top + 0.02);
   mark('scan', sc, -0.26, top + 0.08);
-  mark('bag', len - 0.14, -0.28, top + 0.01);
+  // (the bag: at the far end; on a short counter on the cashier's side of the belt)
+  if (short) mark('bag', belt * 0.5, -0.56, top + 0.01);
+  else mark('bag', len - 0.14, -0.28, top + 0.01);
   mark('reader', cs, -0.1, top + 0.23);
   mark('drawer', ts, -depth + 0.1, top + 0.06);
   mark('keys', ts - 0.07, -depth + 0.15, top + 0.14);

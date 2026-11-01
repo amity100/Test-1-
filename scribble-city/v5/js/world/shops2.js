@@ -2,7 +2,7 @@ import { FURNISH, DECOR } from './rooms.js';
 import './mainland/furnish.js';
 import { nextId } from './kit.js';
 import { Run, L, SC, CLOTH, BRIGHT, PASTEL, CLOTH_REAL, CLOTH_LUX, SHOES_REAL, SPINES_REAL, GLASS_REAL, GEMS, SCREENS_REAL, OAK, shelving, gondola, fridges, produce, checkout, rail, foldTable, shoeWall, pegboard, vitrine, ceiling, poster, mannequin, entrance, goods, pk } from './stock.js';
-// (v5, ROADMAP 13.13) the shops of the new kind: furnished to the small things, their products made as
+// (v5, ROADMAP 14.4) the shops of the new kind: furnished to the small things, their products made as
 // they are, their people living their day in them (game/shoplife.js)
 import { market } from './market.js';
 import { fashion } from './fashion.js';
@@ -900,18 +900,18 @@ const PLANS = {
   pharmacy: (R) => grocery(R, { cat: 'pharmacy', unit: SC.white, fridges: false, produce: false, header: [0.32, 0.66, 0.46], basketCol: [0.32, 0.66, 0.46] }),
   hardware,
   books,
-  // (ROADMAP 13.13: the clothes shops of the new kind - world/fashion.js; the old plan, clothes(),
+  // (ROADMAP 14.4: the clothes shops of the new kind - world/fashion.js; the old plan, clothes(),
   // kept for whoever wants it)
   fashion: (R) => fashion(R, {}),
   boutique: (R) => fashion(R, { pal: CLOTH_LUX, curtain: [0.3, 0.22, 0.22] }),
   surf: (R) => fashion(R, { pal: [[0.98, 0.6, 0.25], [0.3, 0.7, 0.85], [0.98, 0.85, 0.35], [0.95, 0.4, 0.55], [0.55, 0.85, 0.5], [0.98, 0.98, 0.95], [0.17, 0.22, 0.33], [0.29, 0.39, 0.52]], curtain: [0.26, 0.56, 0.78] }),
   shoes,
-  // (ROADMAP 13.13: the electronics shops of the new kind - world/techstore.js; screens() kept)
+  // (ROADMAP 14.4: the electronics shops of the new kind - world/techstore.js; screens() kept)
   electronics: (R) => techstore(R, {}),
   phones: (R) => techstore(R, {}),
   toys,
   perfume,
-  // (ROADMAP 13.13: the jeweller of the new kind - world/jewels.js; the old plan, jewels(), kept)
+  // (ROADMAP 14.4: the jeweller of the new kind - world/jewels.js; the old plan, jewels(), kept)
   jewelry: jeweller,
   optics,
   sports,
@@ -927,7 +927,7 @@ const PLANS = {
   sushi: (R) => counterShop(R, { line: ['board', 'fridge', 'board'], front: [0.62, 0.44, 0.3], top: [0.9, 0.78, 0.6], food: [[0.95, 0.5, 0.4], [0.98, 0.98, 0.95], [0.3, 0.3, 0.32]] }),
 };
 
-// (ROADMAP 13.13: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
+// (ROADMAP 14.4: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
 const NEW_KINDS = new Set(['grocery', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry']);
 for (const [kind, fn] of Object.entries(PLANS)) {
   const plan = (R) => fn(R);

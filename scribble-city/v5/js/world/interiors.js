@@ -106,7 +106,7 @@ export class Interiors {
         }
         group.visible = true;
         self.verts += res.verts;
-        // (ROADMAP 13.13: its live products and its doors, for its people - game/shoplife.js)
+        // (ROADMAP 14.4: its live products and its doors, for its people - game/shoplife.js)
         c.rec.live = res.live || null;
         if (res.live) c.rec.liveGen = (c.rec.liveGen || 0) + 1;
       },

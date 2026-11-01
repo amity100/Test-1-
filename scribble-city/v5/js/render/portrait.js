@@ -117,10 +117,10 @@ function moves() {
   fromEx(AUI.blinkL, 6, 1, 0);
   fromEx(AUI.wide, 7, 1, 0);
   // the upper lid up off the eye (the shutting, the other way); a lid tightened (a little of it)
-  fromEx(AUI.au5R, 5, -0.3, 0);
-  fromEx(AUI.au5L, 6, -0.3, 0);
-  fromEx(AUI.au7R, 5, 0.2, 0);
-  fromEx(AUI.au7L, 6, 0.2, 0);
+  fromEx(AUI.au5R, 5, -0.45, 0);
+  fromEx(AUI.au5L, 6, -0.45, 0);
+  fromEx(AUI.au7R, 5, 0.3, 0);
+  fromEx(AUI.au7L, 6, 0.3, 0);
   // the nostrils flared; the lips pursed (narrower, and forward below); the folds from the nose to
   // the mouth deepened with the upper lip
   morph(AUI.au38, 'nose-flaring-incr', 1, 0);
@@ -147,14 +147,14 @@ function moves() {
     // the outer ends up
     const inB = gs(ax - 0.013, 0.013) * gs(y - 0.042, 0.012) * fr;
     const fh = gs(ax - 0.012, 0.022) * gs(y - 0.066, 0.02) * fr;
-    const u1 = 0.0055 * inB + 0.0022 * fh;
+    const u1 = 0.0095 * inB + 0.004 * fh;
     if (u1 > 1e-6) {
       add(AUI.au1R, i, 0, u1 * R, 0.0006 * inB * R);
       add(AUI.au1L, i, 0, u1 * L, 0.0006 * inB * L);
     }
     const outB = gs(ax - 0.044, 0.013) * gs(y - 0.04, 0.011) * fr;
     const fh2 = gs(ax - 0.04, 0.018) * gs(y - 0.065, 0.02) * fr;
-    const u2 = 0.005 * outB + 0.0018 * fh2;
+    const u2 = 0.0085 * outB + 0.0032 * fh2;
     if (u2 > 1e-6) {
       add(AUI.au2R, i, 0, u2 * R, 0.0005 * outB * R);
       add(AUI.au2L, i, 0, u2 * L, 0.0005 * outB * L);
@@ -166,9 +166,9 @@ function moves() {
     const pr = gs(ax, 0.008) * gs(y - 0.028, 0.009) * fr;
     const lf = gs(ax - 0.032, 0.012) * gs(y - 0.0295, 0.005) * fr;
     {
-      const dx = -sx * 0.0026 * bi;
-      const dy = -0.0042 * br - 0.0016 * pr - 0.0016 * lf;
-      const dz = 0.0013 * bi + 0.0008 * pr;
+      const dx = -sx * 0.0042 * bi;
+      const dy = -0.0075 * br - 0.0025 * pr - 0.0028 * lf;
+      const dz = 0.002 * bi + 0.0012 * pr;
       if (Math.abs(dy) + Math.abs(dx) > 1e-7) {
         add(AUI.au4R, i, dx * R, dy * R, dz * R);
         add(AUI.au4L, i, dx * L, dy * L, dz * L);
@@ -180,7 +180,7 @@ function moves() {
     const cr = gs(ax - 0.05, 0.007) * gs(y - 0.017, 0.008) * fr;
     {
       const dx = -sx * 0.001 * cr;
-      const dy = 0.0042 * ck + 0.002 * ll;
+      const dy = 0.0055 * ck + 0.003 * ll;
       const dz = 0.0016 * ck;
       if (dy > 1e-7) {
         add(AUI.au6R, i, dx * R, dy * R, dz * R);
@@ -190,8 +190,8 @@ function moves() {
     // a lid tightened: the lower lid up
     const ll2 = gs(ax - 0.033, 0.012) * gs(y - 0.0105, 0.004) * fr;
     if (ll2 > 1e-4) {
-      add(AUI.au7R, i, 0, 0.0017 * ll2 * R, 0);
-      add(AUI.au7L, i, 0, 0.0017 * ll2 * L, 0);
+      add(AUI.au7R, i, 0, 0.0028 * ll2 * R, 0);
+      add(AUI.au7L, i, 0, 0.0028 * ll2 * L, 0);
     }
     // the nose wrinkled: its bridge's skin and its wings up, the upper lip a little, the inner brows
     // down
@@ -200,15 +200,15 @@ function moves() {
       const wg = gs(ax - 0.0125, 0.0065) * gs(y + 0.021, 0.0065) * fr;
       const ul = gs(ax, 0.013) * gs(y + 0.042, 0.0055) * fr * (1 - lo);
       const ib = gs(ax - 0.012, 0.012) * gs(y - 0.038, 0.011) * fr;
-      const dy = 0.0016 * bd + 0.0028 * wg + 0.0012 * ul - 0.0012 * ib;
-      if (Math.abs(dy) > 1e-7) add(AUI.au9, i, 0, dy, 0.0005 * bd);
+      const dy = 0.0026 * bd + 0.0045 * wg + 0.0019 * ul - 0.002 * ib;
+      if (Math.abs(dy) > 1e-7) add(AUI.au9, i, 0, dy, 0.0008 * bd);
     }
     // the upper lip up off the teeth (most over the eye teeth), its inside with it; the wings of the
     // nose a little
     {
       const up = (1 - lo) * gs(y + 0.047, 0.0075) * sstep(0.03, 0.022, ax) * (0.65 + 0.35 * gs(ax - 0.011, 0.007)) * Math.max(fr, inner);
       const wg = gs(ax - 0.0125, 0.0065) * gs(y + 0.021, 0.0065) * fr;
-      const dy = 0.0042 * up + 0.0012 * wg;
+      const dy = 0.0058 * up + 0.0016 * wg;
       if (dy > 1e-7) {
         add(AUI.au10R, i, 0, dy * R, 0.0006 * up * R);
         add(AUI.au10L, i, 0, dy * L, 0.0006 * up * L);
@@ -229,7 +229,7 @@ function moves() {
     {
       const co = gs(ax - 0.025, 0.0085) * gs(y + 0.051, 0.0065) * fr;
       const li = gs(ax - 0.012, 0.011) * gs(y + 0.051, 0.0075) * Math.max(fr, inner);
-      const dx = sx * (0.0042 * co + 0.0016 * li);
+      const dx = sx * (0.005 * co + 0.0019 * li);
       if (Math.abs(dx) > 1e-7) {
         add(AUI.au20R, i, dx * R, -0.0007 * co * R, -0.0012 * co * R);
         add(AUI.au20L, i, dx * L, -0.0007 * co * L, -0.0012 * co * L);
@@ -240,8 +240,8 @@ function moves() {
       const ul = (1 - lo) * gs(ax, 0.018) * gs(y + 0.046, 0.006) * fr;
       const lL = lo * gs(ax, 0.018) * gs(y + 0.057, 0.006) * fr;
       const co = gs(ax - 0.025, 0.0085) * gs(y + 0.051, 0.0065) * fr;
-      const dy = -0.0011 * ul + 0.0011 * lL;
-      if (Math.abs(dy) + co > 1e-6) add(AUI.au23, i, -sx * 0.0008 * co, dy, -0.0009 * (ul + lL));
+      const dy = -0.0017 * ul + 0.0017 * lL;
+      if (Math.abs(dy) + co > 1e-6) add(AUI.au23, i, -sx * 0.0012 * co, dy, -0.0013 * (ul + lL));
     }
     // the lips pursed: forward
     {
@@ -454,36 +454,78 @@ function wrinkles() {
   if (WRINKLES) return WRINKLES;
   const W = 512;
   const H = Math.round((W * 0.37) / 0.19);
-  const chans = [0, 1, 2, 3].map(() => {
-    const c = document.createElement('canvas');
-    c.width = W;
-    c.height = H;
-    const g = c.getContext('2d');
-    g.lineCap = 'round';
-    g.lineJoin = 'round';
-    return { c, g };
-  });
+  // (drawn here a pixel at a time, not on a canvas: reading a canvas back waits on the graphics
+  // card - in a slow browser for everything it has still to draw, the game standing still)
+  const data = new Uint8Array(W * H * 4);
+  const cov = new Float32Array(W * H);
   let seed = 7;
   const R = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
+  // (the rows from the bottom, as the picture's v is)
   const px = (x) => FU(x) * W;
-  const py = (y) => (1 - FV(y)) * H;
+  const py = (y) => FV(y) * H;
+  // one stroke of a pencil along pts (pixels), w wide, a strong: its own coverage first (the most of
+  // its segments a pixel, so its joints are not darker), then laid over what is in the channel
+  const stroke = (ch, P, w, a) => {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const [x, y] of P) {
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+    const r = w / 2 + 1;
+    const i0 = Math.max(0, Math.floor(x0 - r));
+    const i1 = Math.min(W - 1, Math.ceil(x1 + r));
+    const j0 = Math.max(0, Math.floor(y0 - r));
+    const j1 = Math.min(H - 1, Math.ceil(y1 + r));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cov[j * W + i] = 0;
+    for (let s = 0; s + 1 < P.length; s++) {
+      const [ax, ay] = P[s];
+      const [bx, by] = P[s + 1];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const L2 = Math.max(1e-9, dx * dx + dy * dy);
+      const si0 = Math.max(i0, Math.floor(Math.min(ax, bx) - r));
+      const si1 = Math.min(i1, Math.ceil(Math.max(ax, bx) + r));
+      const sj0 = Math.max(j0, Math.floor(Math.min(ay, by) - r));
+      const sj1 = Math.min(j1, Math.ceil(Math.max(ay, by) + r));
+      for (let j = sj0; j <= sj1; j++) {
+        const cy = j + 0.5;
+        for (let i = si0; i <= si1; i++) {
+          const cx = i + 0.5;
+          const t = Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / L2));
+          const d = Math.hypot(cx - ax - dx * t, cy - ay - dy * t);
+          const c = Math.max(0, Math.min(1, w / 2 + 0.5 - d));
+          const q = j * W + i;
+          if (c > cov[q]) cov[q] = c;
+        }
+      }
+    }
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const q = j * W + i;
+        const c = cov[q] * a;
+        if (c <= 0) continue;
+        const o = q * 4 + ch;
+        data[o] = Math.round(data[o] + (255 - data[o]) * c);
+      }
+    }
+  };
   // a line in pencil: a few passes, each a little off, thinning to the ends
   const line = (ch, pts, w = 2.4, a = 0.8) => {
-    const g = chans[ch].g;
     for (let pass = 0; pass < 3; pass++) {
-      g.strokeStyle = `rgba(255,255,255,${a * (pass === 0 ? 1 : 0.45)})`;
-      g.lineWidth = w * (pass === 0 ? 1 : 0.6);
-      g.beginPath();
-      pts.forEach(([x, y], k) => {
+      const P = pts.map(([x, y]) => {
         const jx = (R() - 0.5) * 0.0004 * pass;
         const jy = (R() - 0.5) * 0.0004 * pass;
-        if (k) g.lineTo(px(x + jx), py(y + jy));
-        else g.moveTo(px(x + jx), py(y + jy));
+        return [px(x + jx), py(y + jy)];
       });
-      g.stroke();
+      stroke(ch, P, w * (pass === 0 ? 1 : 0.6), a * (pass === 0 ? 1 : 0.45));
     }
   };
   const curve = (f, x0, x1, n = 9) => Array.from({ length: n }, (_, k) => {
@@ -532,23 +574,10 @@ function wrinkles() {
     const y = -0.081 + Math.sin(a) * r * 0.8;
     line(3, [[x, y], [x + 0.0012, y - 0.0006]], 2.2, 0.55);
   }
-  // the four into one picture
-  const out = document.createElement('canvas');
-  out.width = W;
-  out.height = H;
-  const og = out.getContext('2d');
-  const img = og.createImageData(W, H);
-  const ch = chans.map((q) => q.g.getImageData(0, 0, W, H).data);
-  for (let p = 0; p < W * H; p++) {
-    for (let k = 0; k < 4; k++) img.data[p * 4 + k] = ch[k][p * 4 + 3];
-  }
-  // (alpha carries a channel of its own: no premultiplying of the rest by it)
-  const t = new THREE.DataTexture(new Uint8Array(img.data.buffer), W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
+  // (the four channels in one picture; its alpha a channel of its own, nothing premultiplied by it)
+  const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
   t.flipY = false;
-  // (the rows above as the canvas has them, top first: v from the bottom, so the rows turned over)
-  const flipped = new Uint8Array(W * H * 4);
-  for (let r = 0; r < H; r++) flipped.set(img.data.subarray((H - 1 - r) * W * 4, (H - r) * W * 4), r * W * 4);
-  t.image.data = flipped;
+  t.premultiplyAlpha = false;
   t.magFilter = THREE.LinearFilter;
   t.minFilter = THREE.LinearMipmapLinearFilter;
   t.generateMipmaps = true;
@@ -715,13 +744,15 @@ export class Portrait {
   // the picture of the face (flat) has come: the portrait can be drawn
   setPicture(bmp) {
     const tex = new THREE.Texture(bmp);
+    // (turned already, render/people.js: a picture of this kind is never turned on the way up)
+    tex.flipY = false;
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     tex.generateMipmaps = true;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
-    const m = makeSurface({ kind: 'skin', map: tex, line: 0.97, partR: 0.06, side: THREE.DoubleSide, noShadow: true, density: 1.15, wash: 0.5 });
+    const m = makeSurface({ kind: 'skin', map: tex, line: 0.97, partR: 0.06, side: THREE.DoubleSide, noShadow: true, density: 0, wash: 1 });
     m.defines.PORTRAIT = '';
     Object.assign(m.uniforms, {
       uAUPos: { value: this.auPos },
@@ -747,20 +778,6 @@ export class Portrait {
     this.mat = m;
     this.tex = tex;
     this.ready = true;
-  }
-
-  // (TEMP, a test's: the portrait drawn plainer, to find what costs what - window.__pv 'basic',
-  // 'surf' (the skin's own, no PORTRAIT) or 'full')
-  variant(v) {
-    if (v === this._v) return;
-    this._v = v;
-    if (!this.mats) this.mats = { full: this.mat };
-    if (!this.mats[v]) {
-      if (v === 'basic') this.mats[v] = new THREE.MeshBasicMaterial({ map: this.tex, side: THREE.DoubleSide });
-      else if (v === 'surf') this.mats[v] = makeSurface({ kind: 'skin', map: this.tex, line: 0.97, partR: 0.06, side: THREE.DoubleSide, noShadow: true, density: 1.15, wash: 0.5 });
-    }
-    this.mesh.material = this.mats[v] || this.mat;
-    console.log(`[portrait] variant ${v} at ${new Date().toISOString().slice(11, 19)}`);
   }
 
   // ---------------------------------------------------------------- how the face is this moment
@@ -807,7 +824,7 @@ export class Portrait {
     // the lids with the eyes: looking down, the upper lid follows them down; up, it lifts
     if (gaze) {
       const pitch = gaze[3];
-      if (pitch < 0) set('blink', Math.min(0.35, -pitch * 0.9));
+      if (pitch < 0) set('blink', Math.min(0.2, -pitch * 0.6));
       else set('au5', Math.min(0.4, pitch * 0.8));
     }
     // a face is never quite still: the brows, the lids, the mouth's corners now and then a little
@@ -823,11 +840,16 @@ export class Portrait {
       this.blinkT = 0;
       this.blinkAt = Math.random() < 0.15 ? 0.3 : 2 + Math.random() * 4;
     }
-    // eased: each move at its own pace, theirs one side a little more than the other
+    // eased: each move at its own pace (the same at any number of frames a second), theirs one side
+    // a little more than the other
     const w = this.w;
+    // (somebody else's face this frame - render/people.js gives a kind's portrait to the nearest of
+    // them: theirs at once, not eased from the last one's)
+    const snap = this.fresh;
+    this.fresh = false;
     for (let c = 0; c < NA; c++) {
       const t = Math.max(-0.2, Math.min(1.2, want[c] * this.asym[c]));
-      w[c] += (t - w[c]) * Math.min(1, dt * RATE[c]);
+      w[c] += (t - w[c]) * (snap ? 1 : 1 - Math.exp(-dt * RATE[c]));
     }
     if (this.blinkT >= 0) {
       this.blinkT += dt;
@@ -848,7 +870,6 @@ export class Portrait {
   // placed on the head (m: the head's frame in the world, as render/people.js draws its head)
   place(m) {
     if (!this.mesh) return;
-    if (typeof window !== 'undefined' && window.__pv) this.variant(window.__pv);
     this.mesh.matrix.copy(m);
     this.mesh.matrixWorld.copy(m);
     this.mesh.matrixWorldNeedsUpdate = true;

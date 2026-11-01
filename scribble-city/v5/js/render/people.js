@@ -284,13 +284,14 @@ function partWas(out, i, m, owner, shape) {
 const _fTile = [0];
 const _fEw = new Float32Array(8);
 // (ROADMAP 14.1) the portraits (render/portrait.js): which of the city's people are drawn near as a
-// portrait is - for now the first of them (FOLK 0, Bruno), the prototype - and how near
-const PORTRAIT_KINDS = new Set([0]);
+// portrait is - for now one of them (FOLK 2, Sal: sixty-three, no glasses over his eyes, the years
+// in his face), the prototype - and how near
+const PORTRAIT_KINDS = new Set([2]);
 // (?portrait=off: none; ?portrait=hide: made, never shown - for the tests)
 const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('portrait') : null;
 const PORTRAIT_NEAR = 6.5;
-// (TEMP while the memory is looked into: only the face lab's)
-let PORTRAIT_STREET = false;
+// (in the street too, not only the face lab's - game/facelab.js)
+const PORTRAIT_STREET = true;
 const _mP = new THREE.Matrix4();
 // (a frame framed by a body's right, up and forward is a mirror's: turned round as DrawClass.push
 // turns the people's parts)
@@ -1230,44 +1231,66 @@ export class PersonRenderer {
     // strokes their lines may have this frame, all of them together)
     if (this.atlas.renderer) this.atlas.update();
     this.folkLines = this.touch ? 1600 : 4200;
-    // (ROADMAP 14.1: the portraits hidden until somebody near is drawn with one again)
-    this.frameNo = (this.frameNo || 0) + 1;
-    if (this.portraits) for (const P of this.portraits.values()) if (P.mesh) P.mesh.visible = false;
+    // (ROADMAP 14.1) the portraits hidden until somebody is drawn with one again: each kind's to
+    // whoever of them was nearest the camera last frame (the face lab's, always)
+    if (this.portraits) {
+      for (const P of this.portraits.values()) {
+        if (P.mesh) P.mesh.visible = false;
+        if (P.next !== P.owner) P.fresh = true;
+        P.owner = P.next;
+        P.next = null;
+        P.nextD = Infinity;
+      }
+    }
   }
 
-  // (ROADMAP 14.1) somebody near enough to be drawn as a portrait (render/portrait.js): one a kind a
-  // frame - the face lab's whatever its distance (game/facelab.js, fig.__portrait)
+  // (ROADMAP 14.1) somebody near enough to be drawn as a portrait (render/portrait.js): one a kind,
+  // the nearest - the face lab's whatever its distance (game/facelab.js, fig.__portrait)
   portraitFor(fig, k, camDist) {
     if (PORTRAIT_MODE === 'off' || !PORTRAIT_KINDS.has(k) || fig.dead > 0 || fig.parts.head < 0.5 || this.touch || fig.__noPortrait) return null;
     if (!fig.__portrait && !(PORTRAIT_STREET && camDist < PORTRAIT_NEAR)) return null;
+    const P = this.portraits && this.portraits.get(k) ? this.portraits.get(k) : this.makePortrait(k);
+    const d = fig.__portrait ? -1 : camDist;
+    if (d < P.nextD) {
+      P.nextD = d;
+      P.next = fig;
+    }
+    return P.ready && P.owner === fig ? P : null;
+  }
+
+  // a kind's portrait: its head and its muscles' moves made now, its picture painted off the game's
+  // thread (render/heroworker.js), drawn once it has come
+  makePortrait(k) {
     if (!this.portraits) this.portraits = new Map();
-    let P = this.portraits.get(k);
-    if (!P) {
-      P = new Portrait(k, k, LAYERS.MIRRORLESS);
-      this.portraits.set(k, P);
-      paintPortrait(k, (bmp) => {
-        if (PORTRAIT_MODE === 'hide') return;
-        const t0 = performance.now();
-        P.setPicture(bmp);
-        console.log(`[portrait] picture set ${(performance.now() - t0).toFixed(0)} ms at ${new Date().toISOString().slice(14, 22)}`);
-        // (TEMP, a test's: window.__noadd holds it out of the scene)
-        if (typeof window !== 'undefined' && window.__noadd) P.pendingAdd = true;
-        else this.scene.add(P.mesh);
+    const P = new Portrait(k, k, LAYERS.MIRRORLESS);
+    P.next = null;
+    P.nextD = Infinity;
+    this.portraits.set(k, P);
+    paintPortrait(k, (bmp) => {
+      if (PORTRAIT_MODE === 'hide') return;
+      // (the picture's rows top first, as a canvas has them - a picture of this kind goes onto the
+      // graphics card as it is, never turned - and the face's v from the chin up: turned over first)
+      createImageBitmap(bmp, { imageOrientation: 'flipY' }).then((up) => {
+        bmp.close();
+        P.setPicture(up);
+        this.scene.add(P.mesh);
       });
-    }
-    if (P.pendingAdd && !(typeof window !== 'undefined' && window.__noadd)) {
-      P.pendingAdd = false;
-      this.scene.add(P.mesh);
-      console.log(`[portrait] added at ${new Date().toISOString().slice(14, 22)}`);
-    }
-    if (!P.ready || P.pendingAdd || P.taken === this.frameNo) return null;
-    P.taken = this.frameNo;
+    });
     return P;
+  }
+
+  // (ROADMAP 14.1) the portraits made while the city is still being put together: their heads, their
+  // muscles' moves and their pictures cost a few tenths of a second once - then, not when somebody
+  // first comes near in play
+  warmPortraits() {
+    if (PORTRAIT_MODE === 'off' || !PORTRAIT_STREET || this.touch) return;
+    for (const k of PORTRAIT_KINDS) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
   }
 
   // (the graphics card's: the city's people's pictures are written straight into their atlases)
   setRenderer(r) {
     this.atlas.renderer = r;
+    setTimeout(() => this.warmPortraits(), 1500);
   }
 
   // a plain ellipsoid at c in the frame (r, u, f) (the birds of the city, little things in the air)

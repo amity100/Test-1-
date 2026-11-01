@@ -1,8 +1,8 @@
 import { Run, ceiling } from './stock.js';
 import { model, roomLight } from './products.js';
-import { rbox, rprint, rprintUp, rcyl, wp, yawOut, put, later, liveOk, frameOf, curtain } from './shopkit.js';
+import { rbox, rprint, rprintUp, rcyl, wp, yawOut, put, later, liveOk, frameOf, curtain, counterLen } from './shopkit.js';
 
-// (v5, ROADMAP 13.13) A clothes shop of the new kind (after the market, world/market.js): the second
+// (v5, ROADMAP 14.4) A clothes shop of the new kind (after the market, world/market.js): the second
 // business built from the same kit, and laid out as a clothes shop is - not as a grocery.
 //
 // Its walls in bays: a bar of garments hanging side by side at a hand's height, the folded ones on
@@ -318,12 +318,12 @@ function cashWrap(R, fr, o) {
   const S = R.psoup(false);
   const G = R.psoup(true);
   const y0 = R.y0;
-  const len = Math.min(1.9, fr.W * 0.3);
+  const len = counterLen(R, fr, Math.min(1.9, fr.W * 0.3), 1.0);
+  if (!len) return null;
   const depth = 0.62;
   const top = y0 + 0.96;
   const d0 = R.da - 1.75;
   const run = fr.left ? new Run(R, R.ub - 0.3, d0, [-1, 0], [0, -1]) : new Run(R, R.ua + 0.3, d0, [1, 0], [0, -1]);
-  if (Math.abs((fr.left ? R.ub - 0.3 - len : R.ua + 0.3 + len) - (fr.left ? R.lane[1] : R.lane[0])) < 0.5) return null;
   rbox(R, S, run, 0, y0, -depth, len, top - 0.04, 0, [0.94, 0.93, 0.9], { skip: ['bottom'] });
   rbox(R, S, run, 0, y0, -depth, len, y0 + 0.1, 0.004, DARK, { skip: ['bottom'] });
   rbox(R, S, run, -0.03, top - 0.04, -depth - 0.03, len + 0.03, top, 0.03, OAKW, { skip: ['bottom'] });

@@ -108,7 +108,7 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
     case 'card':
       [x, y, z] = [side * 0.12, hipY + 0.4, 0.46];
       break;
-    // (v5, ROADMAP 13.13: a shop's real things in a hand - game/shoplife.js draws them, the pose is
+    // (v5, ROADMAP 14.4: a shop's real things in a hand - game/shoplife.js draws them, the pose is
     // here: a product held before the body, a basket by its handle at the side, a box held in both
     // hands; the shop's own small tools - a cloth to wipe the counter, the scanner, the bills)
     case 'held':
@@ -328,7 +328,7 @@ function shapesFor(fig, item, side, S) {
       _a.copy(h).addScaledVector(Z, 0.03 * S);
       e(_a, 0.045, 0.005, 0.03, fig.cardColor || [0.3, 0.45, 0.85]);
       break;
-    // (ROADMAP 13.13) a cloth bunched in the hand; the shop's scanner gun, its handle and its nose;
+    // (ROADMAP 14.4) a cloth bunched in the hand; the shop's scanner gun, its handle and its nose;
     // a few folded bills
     case 'cloth':
       _a.copy(h).addScaledVector(UP, -0.01 * S).addScaledVector(Z, 0.02 * S);

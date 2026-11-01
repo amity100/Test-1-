@@ -894,12 +894,20 @@ export class Game {
   loop() {
     if (this.params.has('test')) {
       window.__test = { buildWeaponModel, WEAPON_DEFS, BLUEPRINTS };
+      // (each test frame finished on the graphics card before the next is asked for: the tests'
+      // software card is far slower than the frames come, and fell minutes behind them - the
+      // browser's memory growing all the while, until it was closed. ?nosync: as it was)
+      const sync = !this.params.has('nosync');
       window.__frame = (n = 1, dt = 1 / 30) => {
         this.perf.frameStart();
         for (let i = 0; i < n; i++) this.update(dt);
         this.perf.afterUpdate();
         this.renderFrame();
         this.perf.frameEnd(dt);
+        if (sync) {
+          this.pipe.syncGpu();
+          this.renderer.setRenderTarget(null);
+        }
         return true;
       };
       window.__frame(1);

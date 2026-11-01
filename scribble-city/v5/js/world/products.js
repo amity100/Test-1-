@@ -3,7 +3,7 @@ import { makeSurface, srgb, lin3 } from '../render/materials.js';
 import { nextId } from './kit.js';
 import { labels } from './labels.js';
 
-// (v5, ROADMAP 13.13) The things a shop sells, made the way they are: a bottle has its foot, its
+// (v5, ROADMAP 14.4) The things a shop sells, made the way they are: a bottle has its foot, its
 // body, the label round it, its shoulder, its neck and its cap; a can its rims and its lid; a jar its
 // glass and its lid; a box of cereal its printed front and its sides; a bag of chips is a pillow
 // sealed at both ends; a carton of milk has its gable and its fin. Each is a model in its own frame

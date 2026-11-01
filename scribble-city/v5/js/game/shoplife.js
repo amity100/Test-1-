@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { productPens, model, place, PEN_KEYS } from '../world/products.js';
 import { BRANDS } from '../world/labels.js';
 import { fmt } from './money.js';
+import { LAYERS } from '../render/materials.js';
 
-// (v5, ROADMAP 13.13) A shop's day, as it really goes - the shops of the new kind (world/market.js):
+// (v5, ROADMAP 14.4) A shop's day, as it really goes - the shops of the new kind (world/market.js):
 // every action tied to a real thing in the shop.
 //
 // A customer comes in at the door, stops a step inside and looks round, takes a basket off the stack
@@ -234,6 +235,10 @@ class Movers {
       m.matrixAutoUpdate = false;
       m.renderOrder = 1;
       m.userData.dynamic = true;
+      // (in the shop - or in a hand at its door: out of the sun's map and the street's mirror, as the
+      // shelves' goods are)
+      m.userData.indoor = true;
+      m.layers.set(LAYERS.MIRRORLESS);
       this.game.scene.add(m);
       this.meshes[k] = m;
     }

@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { nextId } from './kit.js';
 import { model, place, lin, LINES, PRODUCE, PEN_KEYS } from './products.js';
 import { labels } from './labels.js';
+import { LAYERS } from '../render/materials.js';
 
-// (v5, ROADMAP 13.13) The pieces a shop of the new kind is built from (world/market.js, and the
+// (v5, ROADMAP 14.4) The pieces a shop of the new kind is built from (world/market.js, and the
 // other kinds after it): boxes and printed faces in a run's frame (world/stock.js Run: s along it, t
 // out of it towards the people, y up), lit as an illustrator lights them (world/products.js bake);
 // the products on a shelf, a group of the same side by side; and the live ones - the products a
@@ -231,6 +232,15 @@ export function liveOk(spot, most = 6) {
 }
 
 // the room's width, depth, where its door is (and on which side of the middle)
+// how long a counter by the window can be: from the wall on the side away from the door to the way in
+// (R.lane, kept clear, and a little room besides) - 0 when not even min fits there
+export function counterLen(R, fr, want, min) {
+  const wall = fr.left ? R.ub - 0.3 : R.ua + 0.3;
+  const room = fr.left ? wall - (R.lane[1] + 0.45) : R.lane[0] - 0.45 - wall;
+  const len = Math.min(want, room);
+  return len >= min ? len : 0;
+}
+
 export function frameOf(R) {
   const W = R.ub - R.ua;
   const D = R.da - R.db;
@@ -451,6 +461,11 @@ export class LiveSet {
       mesh.renderOrder = 1;
       mesh.userData.dynamic = true;
       mesh.userData.live = true;
+      // (inside a shop: out of the sun's map and the street's mirror - render/pipeline.js swapDepth,
+      // notInMirror; on the layer the mirror's camera does not see, as the shop's still goods are put
+      // by pipeline addStatic, which passes over what moves)
+      mesh.userData.indoor = true;
+      mesh.layers.set(LAYERS.MIRRORLESS);
       parent.add(mesh);
       this.meshes.push(mesh);
       this.geos[k] = g;

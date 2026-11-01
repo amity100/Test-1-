@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { AU, EXPRESSIONS } from '../render/portrait.js';
 
 // (v5, ROADMAP 14.1) The face lab: a test bench in the game for the portraits (render/portrait.js).
-// Opened with ?facelab in the address: Bruno, the first of the city's people, stands on the street
+// Opened with ?facelab in the address: Sal, sixty-three, one of the city's people, stands on the street
 // before the camera; a panel switches his expressions and how strong they are, works his face's
 // muscles one by one, turns him to the front, three quarters and profile, brings the camera close or
 // to where it is in play, turns the light round him - and shows him the old way, to compare.
@@ -11,9 +11,13 @@ import { AU, EXPRESSIONS } from '../render/portrait.js';
 const NAMES = {
   neutral: 'ניטרלי', angry: 'כעס', shout: 'צעקה', fear: 'פחד', distress: 'מצוקה', joy: 'שמחה', laugh: 'צחוק', sad: 'עצב', surprise: 'הפתעה', disgust: 'גועל',
 };
+// (the one drawn as a portrait for now: render/people.js PORTRAIT_KINDS)
+export const SUBJECT = 2;
 const VIEWS = { front: 0, quarter: 0.7, profile: 1.45 };
 const VIEW_NAMES = { front: 'מלפנים', quarter: 'שלושה רבעים', profile: 'פרופיל' };
-const DIST = { close: { dist: 0.9, height: 1.6, pitch: -0.02 }, game: { dist: 4.2, height: 1.45, pitch: -0.06 } };
+// (close: a portrait's lens - long, the face filling the picture as a portrait painter sees it from a
+// metre away; game: the game's own camera at the distance it is in play)
+const DIST = { close: { dist: 1.05, height: 1.6, pitch: -0.01, fov: 21 }, game: { dist: 4.2, height: 1.45, pitch: -0.06, fov: null } };
 // (the old way's nearest feeling, for comparing)
 const OLD = { angry: 'angry', shout: 'angry', fear: 'scared', distress: 'hurt', joy: 'joy', laugh: 'joy', sad: 'sad', surprise: 'surprised', disgust: 'angry' };
 // how the old way's eight moves go for each (render/people.js faceOf's feelings, with the jaw of a shout)
@@ -61,6 +65,8 @@ export class FaceLab {
     g.camRig.curDist = D.dist;
     g.camRig.yaw = Math.PI + this.turn;
     g.camRig.pitch = D.pitch;
+    if (this.fov0 === undefined) this.fov0 = g.camRig.baseFov;
+    g.camRig.baseFov = D.fov || this.fov0;
     // (his eyes on you from the front; ahead of him turned away)
     f.lookAt = this.lookCam && this.view === 'front' ? g.camera.position : null;
     if (this.old) {
@@ -83,7 +89,7 @@ export class FaceLab {
     const p = g.player.pos;
     this.at = { x: p.x - 3.6, z: p.z };
     import('./looks.js').then((m) => {
-      const c = g.civilians.spawnScripted(this.at.x, this.at.z, m.folkLook(0), null);
+      const c = g.civilians.spawnScripted(this.at.x, this.at.z, m.folkLook(SUBJECT), null);
       c.noCollide = true;
       c.ctrl = () => null;
       c.yaw = 0;
@@ -143,7 +149,7 @@ export class FaceLab {
       return s;
     };
     const title = document.createElement('div');
-    title.textContent = 'מעבדת פנים – ברונו';
+    title.textContent = 'מעבדת פנים – סאל';
     title.style.cssText = 'font-weight:800;font-size:15px';
     el.appendChild(title);
     h('הבעה');
