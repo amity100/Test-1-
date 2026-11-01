@@ -617,9 +617,10 @@ void portraitMove(inout vec3 P, inout vec3 N) {
     float sp = sin(-g.y);
     mat3 R = mat3(cy, 0.0, -sy, 0.0, 1.0, 0.0, sy, 0.0, cy) * mat3(1.0, 0.0, 0.0, 0.0, cp, sp, 0.0, -sp, cp);
     P = c + R * (P - c);
-    N = R * N;
+    N = dot(N, N) > 1e-6 ? R * N : normalize(P - c);
     return;
   }
+  vec3 N0 = N;
   for (int e = 0; e < 30; e++) {
     float w = uAU[e];
     if (abs(w) < 0.002) continue;
@@ -629,7 +630,8 @@ void portraitMove(inout vec3 P, inout vec3 N) {
     P += w * texelFetch(uAUPos, tc, 0).xyz;
     N += w * texelFetch(uAUNor, tc, 0).xyz;
   }
-  N = normalize(N);
+  // (a lid's normal in a blink can all but vanish: never one made from nothing)
+  N = dot(N, N) > 1e-6 ? normalize(N) : N0;
 }
 #endif
 #ifdef USE_EXPR
@@ -831,8 +833,16 @@ float gWr = 0.0;
 // pixels high; and how far it has come in (uFade - a screen-door dissolve over the city's face)
 float gDet = 1.0;
 uniform float uFade;
+// (characters round) its parts told apart for the outlines (render/pipeline.js edgeAt: round the eyes,
+// the teeth) only while the face is big enough on the screen to draw them whole (render/people.js
+// portraitFor): smaller, all of it one thing to the pen
+uniform float uIdK;
+// (how open its mouth is: render/portrait.js place - its dark inside seen only through an open one)
+uniform float uOpen;
+float gThr = 0.0;
 #endif
 in float vId;
+float gIdK = 1.0;
 in vec4 vRefl;
 in vec3 vCol;
 in float vGone;
@@ -1096,6 +1106,7 @@ void main() {
   // clean - its colours, its features, its light - its strokes and lines coming in only as it comes
   // near enough to show them (smaller, they would be a grey fuzz on it, moving)
   gDet = smoothstep(80.0, 170.0, 0.24 / max(length(fwidth(vLP)), 1e-5));
+  gIdK = uIdK;
   {
     // (ROADMAP 14.1) the strokes laid over the face as it is seen from the front, a millimetre a
     // millimetre of it; round its sides and the back of the head as a drawing goes round the turn
@@ -1186,6 +1197,8 @@ void main() {
     float gap = smoothstep(0.0, 0.08, k) * smoothstep(1.0, 0.92, k);
     vec3 tt = vec3(0.9, 0.86, 0.76) * mix(0.62, 1.0, gap);
     tt = mix(tt, vec3(0.7, 0.34, 0.36), smoothstep(0.78, 0.92, vUv.y));
+    // (behind closed lips, a few pixels away: in their shade - not a white line across the mouth)
+    tt *= mix(mix(0.5, 1.0, gDet), 1.0, uOpen);
     tex = vec4(tt * mix(1.0, 0.4, smoothstep(0.22, 0.48, abs(vUv.x - 0.5))), 1.0);
   } else if (vPart > 2.5 && vPart < 3.5) {
     // the tongue: its groove down the middle, darker to the back
@@ -1202,11 +1215,15 @@ void main() {
       ins = mix(ins, vec3(0.025, 0.007, 0.007), smoothstep(0.3, 0.75, vMouthP));
       tex.rgb = mix(tex.rgb, ins, smoothstep(0.015, 0.05, vMouthP));
     }
-    // its inside: seen through the open mouth, dark, as a throat is; seen past the jaw (where the head
-    // meets the neck), the skin under it in its shade
+    // its inside: seen through the open mouth, dark, as a throat is. Anywhere else it is seen only
+    // through a seam a hair wide - round the lids, between closed lips, where the head meets the neck
+    // - and a few pixels away a seam is a scatter of black specks: there the skin round it, in a
+    // crease's shade (characters round)
     if (!gl_FrontFacing) {
-      float throat = step(0.0, vLP.z) * step(abs(vLP.x), 0.034) * step(-0.105, vLP.y) * step(vLP.y, -0.02);
-      tex.rgb = mix(tex.rgb * vec3(0.5, 0.42, 0.4), vec3(0.02, 0.006, 0.006), throat);
+      gThr = step(0.0, vLP.z) * step(abs(vLP.x), 0.034) * step(-0.105, vLP.y) * step(vLP.y, -0.02) * uOpen;
+      // (its own place in the picture is no skin's - the cheek's colour, a little in shade)
+      vec3 skin = textureLod(uMap, vec2(0.316, 0.608), 4.0).rgb * 0.86;
+      tex.rgb = mix(skin, vec3(0.02, 0.006, 0.006), gThr);
     }
   }
 #endif
@@ -1223,12 +1240,17 @@ void main() {
   }
   vec3 N = gl_FrontFacing ? Nw : -Nw;
   vec3 V = normalize(cameraPosition - vWP);
+#ifdef PORTRAIT
+  // (characters round) the back of its skin seen through a seam: lit as the skin round it, turned to
+  // you - its light, its shadow - not as a surface turned away inside the head
+  if (!gl_FrontFacing && vPart < 0.5 && gThr < 0.5) N = V;
+#endif
   vec3 alb = uAlbedo * tex.rgb * (uNeonMask > 0.5 || uEmVColor > 0.5 ? vec3(1.0) : vCol);
   float kind = uKind;
   int probe = int(uProbe + 0.5);
   if ((probe & 16) != 0) {
     gColor = vec4(alb, 0.0);
-    gAux = vec4(0.5, 0.5, fract(uObj + vId * 0.6180339), uLine);
+    gAux = vec4(0.5, 0.5, fract(uObj + vId * gIdK * 0.6180339), uLine);
     gVel = vec4(0.0);
     return;
   }
@@ -1471,7 +1493,7 @@ void main() {
     gShade = uvec4(packHalf2x16(shade.rg), packHalf2x16(vec2(shade.b, hi)), packHalf2x16(dpx), packHalf2x16(dpy));
     gOwn = vec4(em, rings.z);
     vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
-    gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * 0.6180339), uLine);
+    gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * gIdK * 0.6180339), uLine);
 #ifdef USE_PREV
     gVel = vec4(vVel.xy, 0.0, vVel.z);
 #else
@@ -1491,7 +1513,7 @@ void main() {
   if ((probe & 8) == 0) col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
   vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
-  gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * 0.6180339), uLine);
+  gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * gIdK * 0.6180339), uLine);
 #ifdef USE_PREV
   gVel = vec4(vVel.xy, 0.0, vVel.z);
 #else

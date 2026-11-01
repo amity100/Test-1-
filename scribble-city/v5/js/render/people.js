@@ -297,6 +297,8 @@ const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(loca
 const PORTRAIT_NEAR = 80;
 const PORTRAIT_FAR = 68;
 const PORTRAIT_FADE = 0.25;
+// (its own outlines inside it - round the eyes, the lips, under the jaw - from this many pixels high)
+const PORTRAIT_LINES = 190;
 // (in the street too, not only the face lab's - game/facelab.js)
 const PORTRAIT_STREET = true;
 const _mP = new THREE.Matrix4();
@@ -321,9 +323,10 @@ function paintPortrait(k, cb, w = 1024) {
     portraitHelper.onmessage = (e) => {
       const f = portraitWait.get(e.data.folk);
       if (e.data.err) console.warn('portrait picture', e.data.err);
-      if (f && e.data.bmp) {
+      // (a picture that could not be painted: none - and the painter on to the next)
+      if (f && (e.data.bmp || e.data.err)) {
         portraitWait.delete(e.data.folk);
-        f(e.data.bmp);
+        f(e.data.bmp || null);
       }
     };
   }
@@ -1296,20 +1299,24 @@ export class PersonRenderer {
     if (PORTRAIT_MODE === 'off' || !portraitKind(k) || fig.dead > 0 || fig.parts.head < 0.5 || (this.touch && !fig.__portrait) || fig.__noPortrait) return null;
     const P0 = this.portraits && this.portraits.get(k);
     const mine = !!P0 && P0.owner === fig;
-    // (the face's height on the screen, in its pixels)
+    // (the face's height on the screen, in its pixels - from how far the head is, not the feet: near,
+    // the two are far apart)
     const cam = this.cam;
     const sh = this.atlas.renderer ? this.atlas.renderer.domElement.height : 720;
-    const px = cam && cam.isPerspectiveCamera ? (0.12 * sh) / (Math.max(0.3, camDist) * Math.tan((cam.fov * Math.PI) / 360)) : 166 / Math.max(0.3, camDist);
+    const hd = cam && fig.j && fig.j.headC ? cam.position.distanceTo(fig.j.headC) : camDist;
+    const px = cam && cam.isPerspectiveCamera ? (0.12 * sh) / (Math.max(0.3, hd) * Math.tan((cam.fov * Math.PI) / 360)) : 166 / Math.max(0.3, hd);
     const inRange = !!fig.__portrait || (PORTRAIT_STREET && px > (mine ? PORTRAIT_FAR : PORTRAIT_NEAR));
     // (going out: still theirs while it fades, unless somebody else of the kind comes near)
     if (!inRange && !(mine && P0.fade > 0.01)) return null;
     const P = P0 || this.makePortrait(k);
-    // (somebody near whose face is still being made: theirs next)
-    if (!P.built && this.portraitQueue && this.portraitQueue[0] !== P) {
-      const i = this.portraitQueue.indexOf(P);
-      if (i > 0) {
-        this.portraitQueue.splice(i, 1);
-        this.portraitQueue.unshift(P);
+    // (somebody near whose face is still being made, or painted: theirs next)
+    if (!P.ready) {
+      for (const Q of [this.portraitQueue, this.paintQueue]) {
+        const i = Q ? Q.indexOf(P) : -1;
+        if (i > 0) {
+          Q.splice(i, 1);
+          Q.unshift(P);
+        }
       }
     }
     const d = fig.__portrait ? -1 : inRange ? camDist : 1e5 + camDist;
@@ -1319,6 +1326,10 @@ export class PersonRenderer {
     }
     if (!(P.ready && P.owner === fig)) return null;
     P.fadeTo = inRange ? 1 : 0;
+    // (its own outlines - round the eyes, the lips, under the jaw - only while it is big enough on the
+    // screen for them to be drawn whole: smaller, broken specks over it; its outline alone then)
+    const big = px > (P.lineBig ? PORTRAIT_LINES - 25 : PORTRAIT_LINES);
+    if (big !== P.lineBig) P.setLines((P.lineBig = big));
     return P;
   }
 
@@ -1334,20 +1345,9 @@ export class PersonRenderer {
     P.onReady = (q) => this.scene.add(q.mesh);
     this.portraits.set(k, P);
     (this.portraitQueue || (this.portraitQueue = [])).push(P);
-    paintPortrait(
-      k,
-      (bmp) => {
-        if (PORTRAIT_MODE === 'hide') return;
-        // (the picture's rows top first, as a canvas has them - a picture of this kind goes onto the
-        // graphics card as it is, never turned - and the face's v from the chin up: turned over first)
-        createImageBitmap(bmp, { imageOrientation: 'flipY' }).then((up) => {
-          bmp.close();
-          P.setPicture(up);
-        });
-      },
-      // (the street's faces at half the close look's picture: a face a few metres off needs no more)
-      k === 2 ? 1024 : 512,
-    );
+    // (its picture painted off the game's thread - one at a time, whoever is wanted near first)
+    (this.paintQueue || (this.paintQueue = [])).push(P);
+    this.pumpPaint();
     return P;
   }
 
@@ -1360,6 +1360,29 @@ export class PersonRenderer {
     const ks = [2];
     for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k)) ks.push(k);
     for (const k of ks) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
+  }
+
+  // (characters round) the next face's picture to the painter (render/heroworker.js), when it is free
+  pumpPaint() {
+    if (this.painting || !this.paintQueue || !this.paintQueue.length) return;
+    const P = this.paintQueue.shift();
+    this.painting = P;
+    paintPortrait(
+      P.k,
+      (bmp) => {
+        this.painting = null;
+        this.pumpPaint();
+        if (!bmp || PORTRAIT_MODE === 'hide') return;
+        // (the picture's rows top first, as a canvas has them - a picture of this kind goes onto the
+        // graphics card as it is, never turned - and the face's v from the chin up: turned over first)
+        createImageBitmap(bmp, { imageOrientation: 'flipY' }).then((up) => {
+          bmp.close();
+          P.setPicture(up);
+        });
+      },
+      // (the street's faces at half the close look's picture: a face a few metres off needs no more)
+      P.k === 2 ? 1024 : 512,
+    );
   }
 
   // (characters round) the faces being made: a few milliseconds of it a frame

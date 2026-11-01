@@ -264,7 +264,8 @@ export class FaceLab {
     c.yaw = this.turn + VIEWS[this.view];
     c.faceYaw = c.yaw;
     const f = c.fig;
-    const D = DIST[this.dist];
+    // (distOver: a test's own camera distance - {dist, height, pitch, fov})
+    const D = this.distOver || DIST[this.dist];
     const r = g.camRig;
     r.focus = { x: this.at.x, y: c.pos.y, z: this.at.z };
     r.shoulder = 0;

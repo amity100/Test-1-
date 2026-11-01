@@ -866,6 +866,8 @@ export class Portrait {
       uNeckD: { value: this.neckD },
       uNeckToHead: { value: this.neckToHead },
       uFade: { value: 1 },
+      uIdK: { value: 1 },
+      uOpen: { value: 0 },
     });
     // (coming in over the city's way of drawing the same head: in front of it where it is drawn)
     m.polygonOffset = true;
@@ -884,6 +886,15 @@ export class Portrait {
     this.ready = true;
     if (this.onReady) this.onReady(this);
     return true;
+  }
+
+  // (characters round) its own outlines - round the eyes, the lips, under the jaw, its parts told
+  // apart (render/pipeline.js edgeAt) - when it is big enough on the screen for them to be drawn
+  // whole (big); smaller, its outline against what is behind it alone (its line weight marked 0.94)
+  setLines(big) {
+    if (!this.mat) return;
+    this.mat.uniforms.uIdK.value = big ? 1 : 0;
+    this.mat.uniforms.uLine.value = big ? 0.97 : 0.94;
   }
 
   // ---------------------------------------------------------------- how the face is this moment
@@ -976,7 +987,12 @@ export class Portrait {
   // placed on the head (m: the head's frame in the world, as render/people.js draws its head)
   place(m) {
     if (!this.mesh) return;
-    if (this.mat) this.mat.uniforms.uFade.value = this.fade === undefined ? 1 : this.fade;
+    if (this.mat) {
+      const u = this.mat.uniforms;
+      u.uFade.value = this.fade === undefined ? 1 : this.fade;
+      // (its mouth open - the jaw's move: its dark inside seen through it; closed, only seams)
+      u.uOpen.value = Math.min(1, Math.max(0, (this.w[0] - 0.02) / 0.08));
+    }
     this.mesh.matrix.copy(m);
     this.mesh.matrixWorld.copy(m);
     this.mesh.matrixWorldNeedsUpdate = true;

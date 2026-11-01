@@ -88,13 +88,18 @@ float edgeAt(vec2 uv, float r, float far, out float zc) {
   // the elbow or a leg at the knee - their line weight is marked 0.97; their outlines against
   // what is behind them and between their parts stay)
   float person = step(0.955, a0.w) * step(a0.w, 0.985);
+  // (characters round) a face drawn as a portrait, small on the screen (render/people.js portraitFor:
+  // its line weight marked 0.94): its outline against what is behind it alone - a jaw's over its
+  // neck, a nose's over its cheek, the eyes' round them drawn at that size are a few broken specks
+  float pfar = step(0.935, a0.w) * step(a0.w, 0.945);
   float e = smoothstep(0.025, 0.09, lap / w0) * (0.45 + 0.55 * behind) * mix(1.0, behind, person);
+  e = mix(e, smoothstep(0.12, 0.3, lap / w0) * behind, pfar);
   vec4 al = texture(tAux, TC(uv - ox));
   vec4 ar = texture(tAux, TC(uv + ox));
   vec4 ad = texture(tAux, TC(uv - oy));
   vec4 au = texture(tAux, TC(uv + oy));
   float dn = max(max(1.0 - dot(n0, nrm(al.xy)), 1.0 - dot(n0, nrm(ar.xy))), max(1.0 - dot(n0, nrm(ad.xy)), 1.0 - dot(n0, nrm(au.xy))));
-  e = max(e, smoothstep(0.1, 0.32, dn) * 0.85 * (1.0 - 0.6 * far) * (1.0 - person));
+  e = max(e, smoothstep(0.1, 0.32, dn) * 0.85 * (1.0 - 0.6 * far) * (1.0 - max(person, pfar)));
   float id = max(max(step(0.002, abs(al.z - a0.z)) * step(z0, zl + 0.08), step(0.002, abs(ar.z - a0.z)) * step(z0, zr + 0.08)),
                  max(step(0.002, abs(ad.z - a0.z)) * step(z0, zd + 0.08), step(0.002, abs(au.z - a0.z)) * step(z0, zu + 0.08)));
   e = max(e, id * 0.9 * (1.0 - 0.45 * far));
