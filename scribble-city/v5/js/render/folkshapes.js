@@ -290,7 +290,7 @@ const NECK_EASE = 0.035;
  * normals (H, hn): { geo, surf } - surf(rows, y, t, lift, out, nrm), a point on it at the neck's y and
  * the angle t round it (0 ahead, as render/herolines.js's surf), for its lines.
  */
-function neckOf(H, hn, spec) {
+export function neckOf(H, hn, spec) {
   const fem = !!spec.fem;
   const rows = fem ? FEM_NECK : MAN_NECK;
   const lat = (0.98 * 1.16 * Math.max(1, 0.92 * ((spec.build && spec.build.bulk) || 1)) * ((spec.shape && spec.shape.neck) || 1)) / ((spec.build && spec.build.head) || 1);

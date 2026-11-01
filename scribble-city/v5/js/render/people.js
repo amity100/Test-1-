@@ -508,6 +508,7 @@ const TEE = [0.93, 0.93, 0.91];
 const IRIS = [0.16, 0.11, 0.08];
 const SHADES = [0.05, 0.05, 0.07];
 const _mH = new THREE.Matrix4();
+const _mNk = new THREE.Matrix4();
 const _hcH = new THREE.Vector3();
 const EYE_WHITE = [0.96, 0.95, 0.92];
 const PUPIL = [0.06, 0.05, 0.08];
@@ -2055,7 +2056,17 @@ export class PersonRenderer {
       // doodle.js placeHead, render/neckbend.js); its lines with it
       const hs = fig.headScale * S;
       framed(fig.neckO, fig.neckR, fig.neckU, fig.neckF, hs, hs, hs, _mH);
-      q.neck.push(_mH, F.face, own, fig.headId, ind, fig.neckD);
+      // (a face drawn as a portrait draws its neck itself, in one skin with it: the same picture,
+      // the same pencil and light, no outline where they meet - render/portrait.js, part 7)
+      const portN = P.head > 0.5 ? this.portraitFor(fig, L.folk, camDist) : null;
+      if (portN && portN.neckN) {
+        _mNk.copy(_mH);
+        portN.neckD.fromArray(fig.neckD);
+        fig.__neckP = portN;
+      } else {
+        q.neck.push(_mH, F.face, own, fig.headId, ind, fig.neckD);
+        fig.__neckP = null;
+      }
       HL.set('neck', 'neck', _mH, null, null, false, fig.neckD);
     }
     // ---- the seat, and a dress's skirt from the waist over the thighs
@@ -2142,6 +2153,13 @@ export class PersonRenderer {
         }
         port.update(fdt, _fEw, mood, fig.__portrait || null, fig.say && !fig.say.done ? fig.say.tone : null, gaze);
         port.place(_mP);
+        // (its neck: from the neck's frame into the head's - render/portrait.js part 7)
+        // (no neck drawn for them this frame - their body hidden: none under the portrait either)
+        if (port.neckToHead) {
+          if (fig.__neckP === port) port.neckToHead.copy(_mP).invert().multiply(_mNk);
+          else port.neckToHead.makeScale(0, 0, 0);
+        }
+        fig.__neckP = null;
         HL.set('head', 'head', _mP, _fEw, gaze, true);
       } else {
         q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);

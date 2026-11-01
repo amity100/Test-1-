@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeSurface } from './materials.js';
-import { baseHead, headOf, exprMoves, EYE } from './folkshapes.js';
+import { baseHead, headOf, exprMoves, EYE, neckOf } from './folkshapes.js';
 import { MORPHS } from './folkheads.js';
 import { faceMap } from './heroshapes.js';
 import { FOLK } from './folkspec.js';
@@ -668,17 +668,66 @@ export class Portrait {
       }
       for (const v of g.index.array) idx.push(base + v);
     }
+    // (characters round) the neck, part 7: the head's own edge carried on down into the collar
+    // (render/folkshapes.js neckOf - the same as the city's way of drawing them), made in the neck's
+    // frame and bent in the graphics card (portraitMove) - so the face and the neck are one skin: one
+    // picture, one pencil, one light, and no outline where they meet
+    const hg = new THREE.BufferGeometry();
+    hg.setAttribute('position', new THREE.Float32BufferAttribute(H.pos, 3));
+    hg.setIndex(Array.from(H.idx));
+    hg.computeVertexNormals();
+    // (neckOf evens out the ring's normals, the head's side and the neck's alike: kept for the head)
+    const hn = hg.attributes.normal.array;
+    const NK = neckOf(H, hn, this.spec);
+    hg.dispose();
+    const ng = NK.geo;
+    const neck0 = pos.length / 3;
+    {
+      const np = ng.attributes.position.array;
+      const nu = ng.attributes.uv.array;
+      for (let i = 0; i < np.length / 3; i++) {
+        pos.push(np[i * 3], np[i * 3 + 1], np[i * 3 + 2]);
+        uv.push(nu[i * 2], nu[i * 2 + 1]);
+        part.push(7);
+        mouth.push(0);
+        extra.push(null);
+      }
+      if (ng.index) for (const v of ng.index.array) idx.push(neck0 + v);
+      else for (let i = 0; i < np.length / 3; i++) idx.push(neck0 + i);
+    }
+    this.neckN = pos.length / 3 - neck0;
+    this.neckD = new THREE.Vector4(0, 0, 0, -0.17);
+    this.neckToHead = new THREE.Matrix4();
     const N = pos.length / 3;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geo.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 1));
     geo.setAttribute('aMouth', new THREE.Float32BufferAttribute(mouth, 1));
-    geo.setAttribute('aId', new THREE.Float32BufferAttribute(part.map((p) => (p === 0 ? 0 : p * 0.13)), 1));
+    geo.setAttribute('aId', new THREE.Float32BufferAttribute(part.map((p) => (p === 0 || p === 7 ? 0 : p * 0.13)), 1));
     geo.setIndex(N > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
     geo.computeVertexNormals();
+    // (the neck's own normals: at its top the head's, so the light runs on across the join)
+    {
+      const nb = geo.attributes.normal.array;
+      const nn = ng.attributes.normal.array;
+      for (let i = 0; i < this.neckN * 3; i++) nb[neck0 * 3 + i] = nn[i];
+      // (and the head's ring: the same normals the neck's top has)
+      this.ringV = [];
+      for (let i = 0; i < n; i++) {
+        const d = Math.abs(nb[i * 3] - hn[i * 3]) + Math.abs(nb[i * 3 + 1] - hn[i * 3 + 1]) + Math.abs(nb[i * 3 + 2] - hn[i * 3 + 2]);
+        if (d > 1e-5) {
+          nb[i * 3] = hn[i * 3];
+          nb[i * 3 + 1] = hn[i * 3 + 1];
+          nb[i * 3 + 2] = hn[i * 3 + 2];
+          this.ringV.push(i);
+        }
+      }
+    }
+    ng.dispose();
     geo.computeBoundingSphere();
-    geo.boundingSphere.radius += 0.05;
+    // (the neck reaches down to the collar, and bends)
+    geo.boundingSphere.radius += 0.3;
     // the moves of every point (the head's from the base; the jaw's turn for the teeth below and the
     // tongue; nothing for the eyes, which turn by themselves) and of its normal
     const W = 2048;
@@ -726,6 +775,8 @@ export class Portrait {
       }
     }
     tmp.dispose();
+    // (the ring under the jaw keeps its evened normals whatever the face does: it does not move)
+    for (let c = 0; c < NA; c++) for (const i of this.ringV) dn[(c * N + i) * 4] = dn[(c * N + i) * 4 + 1] = dn[(c * N + i) * 4 + 2] = 0;
     const dt = (d) => {
       const t = new THREE.DataTexture(d, W, rows, THREE.RGBAFormat, THREE.FloatType);
       t.magFilter = THREE.NearestFilter;
@@ -767,6 +818,8 @@ export class Portrait {
       uWrinkleW: { value: new THREE.Vector4() },
       uAge: { value: this.spec.lines || 0 },
       uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
+      uNeckD: { value: this.neckD },
+      uNeckToHead: { value: this.neckToHead },
     });
     m.needsUpdate = true;
     const mesh = new THREE.Mesh(this.geo, m);

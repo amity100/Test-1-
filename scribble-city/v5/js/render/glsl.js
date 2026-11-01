@@ -587,11 +587,25 @@ uniform int uAUW;
 uniform int uAUNv;
 uniform vec3 uEyeC[2];
 uniform vec4 uGaze;
+// (its neck, part 7: made in the neck's frame, twisted and bent as the rig's (uNeckD - render/
+// neckbend.js), then carried into the head's frame (uNeckToHead))
+uniform vec4 uNeckD;
+uniform mat4 uNeckToHead;
+#ifndef USE_PULL
+${NECK_GLSL}
+#endif
 in float aPart;
 in float aMouth;
 flat out float vPart;
+out float vNeckP;
 out float vMouthP;
 void portraitMove(inout vec3 P, inout vec3 N) {
+  if (aPart > 6.5) {
+    neckBend(P, N, uNeckD);
+    P = (uNeckToHead * vec4(P, 1.0)).xyz;
+    N = normalize(mat3(uNeckToHead) * N);
+    return;
+  }
   if (aPart > 3.5) {
     // an eye: turned in its socket to where it looks
     int e = aPart > 4.5 ? 1 : 0;
@@ -683,7 +697,9 @@ void main() {
 #endif
 #ifdef PORTRAIT
   portraitMove(sPos, sNor);
-  vPart = aPart;
+  // (the neck is the face's skin)
+  vPart = aPart > 6.5 ? 0.0 : aPart;
+  vNeckP = aPart > 6.5 ? 1.0 : 0.0;
   vMouthP = aMouth;
 #endif
   vec3 pos = sPos;
@@ -801,6 +817,7 @@ in vec3 vLN;
 // of the face (the pens' direction, its hollows, where the light gathers), the lines it makes as it
 // moves and how far it makes them, its years
 flat in float vPart;
+in float vNeckP;
 in float vMouthP;
 uniform sampler2D uPlane;
 uniform sampler2D uWrinkle;
@@ -1300,6 +1317,8 @@ void main() {
     float fa = sideS ? (vLP.y > -0.04 ? 1.35 : 0.6) * sign(vLP.x + 1e-4) : 0.5 * a2;
     ang = fa;
     float ao = vPart < 0.5 ? pl.b : 1.0;
+    // (the neck: in the jaw's shade just under it, open lower down)
+    ao = mix(ao, mix(0.6, 0.94, smoothstep(-0.11, -0.17, vLP.y)), vNeckP);
     light *= mix(0.62, 1.0, ao);
     light = clamp(light + pl.a * 0.1 * (1.0 - gWr), 0.0, 1.0);
     light = mix(1.0, light, uPLayers.x);
