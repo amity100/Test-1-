@@ -5,6 +5,7 @@ import { FILL } from './looks.js';
 import { GOLD } from './looks.js';
 import { carryShapes, carryStrokes, carryPose, heldIn } from './carry.js';
 import { TATTOO_LINES, TATTOO_INK } from './wardrobe.js';
+import { NECK_J, neckMove, headFrame } from '../render/neckbend.js';
 
 // The people's rig: joints for every pose (walk / run / aim / melee / sit / crawl / fall / dance /
 // carry), and the solid shapes of the body for bullets and the eraser (render/people.js dresses
@@ -39,7 +40,9 @@ const COL_92_88_8 = [0.92, 0.88, 0.8];
 const COL_45_3_2 = [0.45, 0.3, 0.2];
 const COL_15_25_45 = [0.15, 0.25, 0.45];
 const COL_95_78_3 = [0.95, 0.78, 0.3];
-const UPPER = ['neck', 'headC', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'];
+const UPPER = ['neck', 'headC', 'neckTop', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR'];
+// (characters round) an angle into -pi..pi
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // a bike under somebody (body units, from their feet: up y, forward z): the saddle's height, the
 // crank's centre and its length; game/workers.js draws the bike round the same points
 export const RIDE = { hip: 0.9, crankY: 0.3, crankZ: 0.16, crank: 0.17 };
@@ -201,6 +204,40 @@ export class Doodle {
     this.idleLookT = Math.random() * 3;
     this.idleYaw = 0;
     this.idlePitch = 0;
+    // (characters round) a look is shared as a person's is: the eyes get there first (a saccade - quick,
+    // and a moving thing followed smoothly), the head after them (only for more than a glance, and
+    // never all the way), the chest and the shoulders last, for a look far round - each on a spring of
+    // its own, slower the heavier. lookYaw/lookPitch are the head's (relative to the body, pitch up +),
+    // chestYaw the chest's; the gaze is where the eyes are on (world yaw, elevation), eyeYaw/eyePitch
+    // the eyes in the head (render/people.js faceOf turns them so); turnTo: where the body would
+    // turn to, a look held far round long enough (game/civilians.js)
+    this.chestYaw = 0;
+    this.chestYawV = 0;
+    this.headWY = 0;
+    this.headWP = 0;
+    this.gazeYaw = 0;
+    this.gazePitch = 0;
+    this.gazeOn = false;
+    this.sacT = -1;
+    this.sacD = 0.1;
+    this.sacY0 = 0;
+    this.sacP0 = 0;
+    this.sacY1 = 0;
+    this.sacP1 = 0;
+    this.eyeYaw = 0;
+    this.eyePitch = 0;
+    this.blinkKick = false;
+    this.holdT = 0;
+    this.turnTo = null;
+    // (the neck: how it is twisted and bent this frame, where it is at rest - render/neckbend.js; the
+    // renderer draws it from these, so that the head is where the rig has it)
+    this.neckD = new Float32Array(4);
+    this.neckO = new THREE.Vector3();
+    this.neckR = new THREE.Vector3(1, 0, 0);
+    this.neckU = new THREE.Vector3(0, 1, 0);
+    this.neckF = new THREE.Vector3(0, 0, 1);
+    this.neckJ = look.folk !== undefined || look.heroModel ? NECK_J.folk : NECK_J.generic;
+    this.placed = false;
     this.visible = true;
     this.parts = { head: 1, torso: 1, armL: 1, armR: 1, legL: 1, legR: 1, pelvis: 1 };
     this.split = -1; // seconds since the waist was erased: the body falls apart
@@ -214,7 +251,7 @@ export class Doodle {
     this.paintColor = [1, 1, 1];
     this.color = look.pen.ink; // for code that colours the held weapon etc.
     this.j = {};
-    for (const k of ['hip', 'neck', 'headC', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR', 'kneeL', 'kneeR', 'footL', 'footR', 'hipL', 'hipR', 'toeL', 'toeR']) this.j[k] = new THREE.Vector3();
+    for (const k of ['hip', 'neck', 'headC', 'neckTop', 'shoulder', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR', 'kneeL', 'kneeR', 'footL', 'footR', 'hipL', 'hipR', 'toeL', 'toeR']) this.j[k] = new THREE.Vector3();
     this.forward = new THREE.Vector3(0, 0, 1);
     this.right = new THREE.Vector3(-1, 0, 0);
     this.aimDir = new THREE.Vector3(0, 0, 1);
@@ -224,6 +261,9 @@ export class Doodle {
     this.hu = new THREE.Vector3(0, 1, 0);
     this.hf = new THREE.Vector3(0, 0, 1);
     this.hr = new THREE.Vector3(-1, 0, 0);
+    // (the pelvis's own frame: it does not turn with the chest)
+    this.prgt = new THREE.Vector3(-1, 0, 0);
+    this.pfwd = new THREE.Vector3(0, 0, 1);
     this.pool = [];
     this.shapes = [];
     this.shapesDirty = false;
@@ -258,11 +298,11 @@ export class Doodle {
     this.carryT += dt;
     if (this.rag) {
       this.rag.pose(dt);
+      this.placeHead(dt);
       return;
     }
     const f = this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.right.set(-f.z, 0, f.x);
-    this.turnHead(dt);
     const sp = this.speed;
     const stride = sp > 5.5 ? 2.3 : 1.5;
     this.phase += (sp * dt * Math.PI * 2) / stride + this.dance * dt * 7;
@@ -302,6 +342,9 @@ export class Doodle {
       twist = out * this.punchSide * 0.1;
     } else if (this.kick >= 0) lean -= kickUp(this.kick) * 0.22;
     let leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
+    // (characters round) the head held up against the body's lean, so that the eyes stay on the world
+    // and not on the ground (not a blow's: that snaps the head back, below)
+    this.turnHead(dt, this.dead < 0.2 ? Math.min(Math.max(0, lean) * 0.75, crawl > 0.5 ? 0.6 : 0.75) : 0);
     if (this.recoil > 0) {
       lean -= this.recoil * this.recoil * 0.42;
       leanSide += this.recoil * this.recoilSide * 0.12;
@@ -314,8 +357,11 @@ export class Doodle {
     this.toWorld(nx, ny, nz, j.neck);
     const hOff = 0.1 + 0.12 * this.headScale;
     this.toWorld(nx * 1.2, ny + hOff * Math.cos(lean), nz + hOff * Math.sin(lean), j.headC);
-    this.toWorld(nx + sw, ny - 0.07, nz + twist, j.shoulderR);
-    this.toWorld(nx - sw, ny - 0.07, nz - twist, j.shoulderL);
+    // (characters round: the shoulders turned with the chest, for a look far round)
+    const chc = Math.cos(this.chestYaw);
+    const chs = Math.sin(this.chestYaw);
+    this.toWorld(nx + sw * chc, ny - 0.07, nz + twist + sw * chs, j.shoulderR);
+    this.toWorld(nx - sw * chc, ny - 0.07, nz - twist - sw * chs, j.shoulderL);
     j.shoulder.copy(j.shoulderR);
     this.toWorld(hw, hipY, 0, j.hipR);
     this.toWorld(-hw, hipY, 0, j.hipL);
@@ -474,10 +520,13 @@ export class Doodle {
         const out = 0.06 + (this.stagger ? 0.25 : 0);
         const sxl = side * (sw + out * 0.3);
         const ey = ny - 0.07 - Math.cos(a) * armU;
-        const ez = nz + Math.sin(a) * armU;
-        this.toWorld(nx + sxl, ey, ez, elbow);
+        const ez = Math.sin(a) * armU;
+        // (hanging from the shoulder as the chest is turned)
+        this.toWorld(nx + sxl * chc - ez * chs, ey, nz + sxl * chs + ez * chc, elbow);
         const b = a + 0.35 + A * 0.5;
-        this.toWorld(nx + sxl + side * 0.02, ey - Math.cos(b) * armF, ez + Math.sin(b) * armF, hand);
+        const hx = sxl + side * 0.02;
+        const hz = ez + Math.sin(b) * armF;
+        this.toWorld(nx + hx * chc - hz * chs, ey - Math.cos(b) * armF, nz + hx * chs + hz * chc, hand);
       }
     }
 
@@ -547,44 +596,157 @@ export class Doodle {
       const from = this.unragJ;
       for (const key in j) j[key].lerpVectors(from[key], j[key], e);
     }
+    // (characters round) the head on its neck, where the look has turned it
+    this.placeHead(dt);
     // the body's shapes (for drawing it and for what hits it) are made when they are next needed:
     // nobody asks for those of somebody out of sight
     this.center.lerpVectors(j.hip, j.neck, 0.5);
     this.shapesDirty = true;
   }
 
+  // (characters round) The head on the top of the neck (render/neckbend.js): the neck twisted by as
+  // far as the head is turned from the chest, bent by as far as it nods (a little more mid-turn, and
+  // tilted a little towards the turn, as a head goes), and the head carried rigidly on its top - its
+  // centre j.headC (which the pose put at rest along the spine), its frame hr, hu, hf, the neck's top
+  // j.neckTop. Then the eyes in it, on what they look at. The same for everybody, drawn near or far.
+  placeHead(dt = 0) {
+    const j = this.j;
+    const hs = this.headScale * this.scale;
+    const S = this.scale;
+    // the chest's frame where the neck leaves it: up the spine to the head, across the shoulders
+    const u0 = this.neckU.subVectors(j.headC, j.neck);
+    if (u0.lengthSq() < 1e-8) u0.set(0, 1, 0);
+    u0.normalize();
+    const rr = _q.subVectors(j.shoulderR, j.shoulderL);
+    rr.addScaledVector(u0, -rr.dot(u0));
+    if (rr.lengthSq() < 1e-8) rr.copy(this.right);
+    rr.normalize();
+    const r0 = this.neckR.copy(rr).negate();
+    const f0 = this.neckF.crossVectors(u0, rr).normalize();
+    const J = this.neckJ;
+    const O = this.neckO.copy(j.headC).addScaledVector(u0, J.y * hs).addScaledVector(f0, J.z * hs);
+    // (where it leaves the body: inside the collar, a little behind the spine's top)
+    _p.copy(j.neck).addScaledVector(u0, -0.03 * S).addScaledVector(f0, -0.008 * S).sub(O);
+    const yb = Math.min(-0.04, _p.dot(u0) / hs - 0.012);
+    let yaw = 0;
+    let pitch = 0;
+    // (a ragdoll's head is where its bones threw it; dying, the look eases away on its springs)
+    if (!this.rag) {
+      yaw = clamp(this.lookYaw - this.chestYaw, -1.2, 1.2);
+      pitch = this.lookPitch - 0.03 * Math.min(1, Math.abs(this.lookYawV) / 5);
+    }
+    neckMove(yaw, pitch, 0.06 * yaw, yb, this.neckD);
+    headFrame(O, r0, u0, f0, hs, J, this.neckD, j.headC, this.hr, this.hu, this.hf);
+    j.neckTop.copy(j.headC).addScaledVector(this.hu, J.y * hs).addScaledVector(this.hf, J.z * hs);
+    this.placed = true;
+    // the eyes in the head, on where they look (as far as eyes turn: at the edge of that, towards it)
+    if (this.gazeOn && !this.rag && this.dead < 0.2) {
+      const cp = Math.cos(this.gazePitch);
+      const gx = Math.sin(this.gazeYaw) * cp;
+      const gy = Math.sin(this.gazePitch);
+      const gz = Math.cos(this.gazeYaw) * cp;
+      const ax = gx * this.hr.x + gy * this.hr.y + gz * this.hr.z;
+      const ay = gx * this.hu.x + gy * this.hu.y + gz * this.hu.z;
+      const az = gx * this.hf.x + gy * this.hf.y + gz * this.hf.z;
+      this.eyeYaw = clamp(Math.atan2(ax, az), -0.6, 0.6);
+      this.eyePitch = clamp(Math.atan2(ay, Math.max(0.05, Math.hypot(ax, az))), -0.42, 0.38);
+    } else {
+      this.eyeYaw += (0 - this.eyeYaw) * Math.min(1, dt * 12);
+      this.eyePitch += (0 - this.eyePitch) * Math.min(1, dt * 12);
+    }
+  }
+
   // (ROADMAP 13.10) the head to where they look: a spring with a top speed - a glance quick, a long
   // turn slower, eased in and out; never round past the shoulder; with nothing to look at, now and
   // then a small look about, mostly ahead
-  turnHead(dt) {
-    let wy = 0;
-    let wp = 0;
+  // (characters round) ...and the look shared as a person's is (see the constructor): the eyes first,
+  // by a saccade or following; the head after them for more than a glance, most of the way; the chest
+  // and the shoulders for a look far round; and the head held up against the body's lean (comp)
+  turnHead(dt, comp = 0) {
+    const k = Math.min(dt, 0.05);
     const h = this.j.headC;
+    // where they would look: its world yaw and elevation
+    let tY = this.yaw;
+    let tP = 0;
+    let rawA = 0;
+    let has = false;
     if (this.lookAt && this.dead < 0.2) {
       const dx = this.lookAt.x - h.x;
       const dz = this.lookAt.z - h.z;
       const dy = this.lookAt.y - h.y;
-      let a = Math.atan2(dx, dz) - this.yaw;
-      a = Math.atan2(Math.sin(a), Math.cos(a));
+      rawA = wrapA(Math.atan2(dx, dz) - this.yaw);
       // (ROADMAP 13.12) behind the shoulder the head gives it up gradually, not all at once: a point
       // moving about back there no longer swings it from the side to straight ahead and back
-      const k = clamp((2.45 - Math.abs(a)) / 0.55, 0, 1);
-      if (k > 0) {
-        wy = clamp(a, -1.25, 1.25) * k;
-        wp = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.42) * k;
-      }
+      const fade = clamp((2.45 - Math.abs(rawA)) / 0.55, 0, 1);
+      tY = this.yaw + rawA * fade;
+      tP = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.75, 0.6) * fade;
+      has = fade > 0;
     } else if (this.dead < 0.2) {
+      // (one look about, the eyes' and the head's: mostly ahead - a small glance the eyes' alone, a
+      // larger one the head's too; walking, now and then a look down ahead of the feet)
       this.idleLookT -= dt;
       if (this.idleLookT <= 0) {
-        // (mostly ahead; now and then a look aside, down at the ground, up)
         const r = Math.random();
         this.idleLookT = 1.2 + Math.random() * 3.5;
-        this.idleYaw = r < 0.55 ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * 0.9;
-        this.idlePitch = r < 0.55 ? 0 : (Math.random() - 0.6) * 0.25;
+        const walk = this.speed > 0.6;
+        this.idleYaw = r < 0.55 ? (Math.random() - 0.5) * 0.12 : (Math.random() - 0.5) * (walk ? 0.5 : 0.9);
+        this.idlePitch = walk && r > 0.8 ? -0.2 - Math.random() * 0.12 : r < 0.55 ? (Math.random() - 0.5) * 0.06 : (Math.random() - 0.6) * 0.25;
       }
-      wy = this.idleYaw * (this.speed > 3 ? 0.3 : 1);
-      wp = this.idlePitch;
+      tY = this.yaw + this.idleYaw * (this.speed > 3 ? 0.3 : 1);
+      tP = this.idlePitch;
+      has = true;
     }
+    // the eyes: a saccade to somewhere new (quick, and the bigger the longer: 0.025 s + 2.2 ms a
+    // degree, eased as eyes go), following what moves on smoothly; a long one with a blink now and then
+    if (!this.gazeOn) {
+      this.gazeYaw = tY;
+      this.gazePitch = tP;
+      this.gazeOn = true;
+    }
+    const ey = wrapA(tY - this.gazeYaw);
+    const ep = tP - this.gazePitch;
+    if (this.sacT >= 0) {
+      this.sacT += dt;
+      this.sacY1 = this.sacY0 + wrapA(tY - this.sacY0);
+      this.sacP1 = tP;
+      const u = Math.min(1, this.sacT / this.sacD);
+      const m = u * u * u * (10 - 15 * u + 6 * u * u);
+      this.gazeYaw = this.sacY0 + (this.sacY1 - this.sacY0) * m;
+      this.gazePitch = this.sacP0 + (this.sacP1 - this.sacP0) * m;
+      if (u >= 1) this.sacT = -1;
+    } else if (Math.hypot(ey, ep) > 0.035) {
+      const amp = Math.hypot(ey, ep);
+      this.sacY0 = this.gazeYaw;
+      this.sacP0 = this.gazePitch;
+      this.sacY1 = this.gazeYaw + ey;
+      this.sacP1 = tP;
+      this.sacT = 0;
+      this.sacD = 0.025 + 0.0022 * amp * (180 / Math.PI);
+      if (amp > 0.6 && Math.random() < 0.7) this.blinkKick = true;
+    } else {
+      const g = Math.min(1, dt * 18);
+      this.gazeYaw += ey * g;
+      this.gazePitch += ep * g;
+    }
+    this.gazeYaw = wrapA(this.gazeYaw);
+    // the head: none of a glance, most of a larger look (relative to the body); up or down the same
+    let wy = 0;
+    let wp = 0;
+    let wc = 0;
+    if (has) {
+      const a = wrapA(tY - this.yaw);
+      const sa = Math.sign(a);
+      wy = clamp(sa * Math.max(0, Math.abs(a) - 0.17) * 0.9, -1.25, 1.25);
+      // (the chest for a look past about forty degrees: a little, slowly)
+      wc = sa * clamp((Math.abs(a) - 0.7) * 0.5, 0, 0.4);
+      wp = clamp(Math.sign(tP) * Math.max(0, Math.abs(tP) - 0.1) * 0.85, -0.5, 0.42);
+    }
+    // (the head sets off a moment after the eyes - they lead, it follows)
+    const lag = Math.min(1, dt / 0.06);
+    this.headWY += (wy - this.headWY) * lag;
+    this.headWP += (wp - this.headWP) * lag;
+    wy = this.headWY;
+    wp = this.headWP + comp;
     // (ROADMAP 13.11) a nod, listening; and the head with the words, a small dip on the strong
     // syllables (render/people.js faceOf)
     if (this.nodT > 0) {
@@ -593,15 +755,34 @@ export class Doodle {
     }
     if (this.speakNod > 0.36) wp -= (this.speakNod - 0.36) * 0.35;
     // (a critically damped spring: about a third of a second to get there, never faster than a turn
-    // of the head can be)
-    const w = 10;
-    const k = Math.min(dt, 0.05);
+    // of the head can be; the chest's slower - it starts later and takes most of a second)
+    const w = 9;
     this.lookYawV += (w * w * (wy - this.lookYaw) - 2 * w * this.lookYawV) * k;
     this.lookPitchV += (w * w * (wp - this.lookPitch) - 2 * w * this.lookPitchV) * k;
     this.lookYawV = clamp(this.lookYawV, -5, 5);
     this.lookPitchV = clamp(this.lookPitchV, -3, 3);
     this.lookYaw += this.lookYawV * k;
     this.lookPitch += this.lookPitchV * k;
+    const wcs = 4.5;
+    this.chestYawV += (wcs * wcs * (wc - this.chestYaw) - 2 * wcs * this.chestYawV) * k;
+    this.chestYawV = clamp(this.chestYawV, -2.5, 2.5);
+    this.chestYaw += this.chestYawV * k;
+    // the body turned round to somebody looked at far round for a while, standing (game/civilians.js)
+    const standing = this.speed < 0.3 && this.sit < 0.1 && this.crawl < 0.1 && !this.ride && !this.aim && this.punch < 0 && this.dead < 0.2;
+    // (once turning, round until they face them more or less)
+    if (this.lookAt && standing) {
+      if (this.turnTo !== null) this.turnTo = Math.abs(rawA) > 0.3 ? this.yaw + rawA : null;
+      else {
+        this.holdT = Math.abs(rawA) > 1.6 ? this.holdT + dt : 0;
+        if (this.holdT > 1.2) {
+          this.turnTo = this.yaw + rawA;
+          this.holdT = 0;
+        }
+      }
+    } else {
+      this.turnTo = null;
+      this.holdT = 0;
+    }
   }
 
   // let go of a ragdoll: the next moments of the pose start from where the joints are now
@@ -695,6 +876,8 @@ export class Doodle {
   }
 
   buildShapes() {
+    // (a body drawn before it has ever been posed: its head put on its neck first)
+    if (!this.placed) this.placeHead();
     this.shapes.length = 0;
     const L = this.look;
     const j = this.j;
@@ -712,19 +895,17 @@ export class Doodle {
     if (rgt.lengthSq() < 1e-6) rgt.copy(this.right);
     rgt.normalize();
     const fwd = this.bfwd.crossVectors(ax, rgt).normalize();
-    // head frame: up from the neck, facing the body (or a look target)
-    const hu = this.hu.subVectors(j.headC, j.neck);
-    if (hu.lengthSq() < 1e-6) hu.copy(ax);
-    hu.normalize();
-    const hf = this.hf.copy(fwd);
-    // (ROADMAP 13.10) turned as far as the head has turned by now (turnHead), up or down with it
-    if (Math.abs(this.lookYaw) > 1e-4 || Math.abs(this.lookPitch) > 1e-4) {
-      _a.crossVectors(ax, fwd);
-      hf.multiplyScalar(Math.cos(this.lookYaw)).addScaledVector(_a, Math.sin(this.lookYaw));
-      hu.addScaledVector(hf, -Math.sin(this.lookPitch)).normalize();
-    }
-    hf.addScaledVector(hu, -hf.dot(hu)).normalize();
-    const hr = this.hr.crossVectors(hf, hu).normalize().negate();
+    // (characters round) the pelvis's frame: across the hips - it stays with the legs when the chest
+    // turns (a look far round, a punch)
+    const prgt = this.prgt.subVectors(j.hipR, j.hipL);
+    prgt.addScaledVector(ax, -prgt.dot(ax));
+    if (prgt.lengthSq() < 1e-6) prgt.copy(rgt);
+    prgt.normalize();
+    const pfwd = this.pfwd.crossVectors(ax, prgt).normalize();
+    // the head's frame: as the rig placed it on its neck (placeHead - render/neckbend.js)
+    const hu = this.hu;
+    const hf = this.hf;
+    const hr = this.hr;
     // colours
     const skin = L.skin;
     const top = L.top;
@@ -745,7 +926,7 @@ export class Doodle {
     // pelvis (stays with the legs if the waist gets erased)
     if (P.pelvis > 0.5) {
       _a.copy(j.hip).addScaledVector(ax, 0.02);
-      this.ellipsoid('pelvis', 'pelvis', _a, rgt, ax, fwd, 0.155 * bulk * (L.fem ? 1.08 : 1) * S, 0.11 * S, 0.105 * bulk * S, longSkirt ? bot.color : pantsC);
+      this.ellipsoid('pelvis', 'pelvis', _a, prgt, ax, pfwd, 0.155 * bulk * (L.fem ? 1.08 : 1) * S, 0.11 * S, 0.105 * bulk * S, longSkirt ? bot.color : pantsC);
     }
     // torso
     if (P.torso > 0.5) {

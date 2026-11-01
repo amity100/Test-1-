@@ -19,11 +19,6 @@ import { Portrait } from './portrait.js';
 // knows (walking, running, aiming, sitting, carrying, falling, crawling) carries over.
 
 // ------------------------------------------------------------------ the shapes (the first boulevard's)
-const cap = (r, len, segs = 10) => {
-  const g = new THREE.CapsuleGeometry(r, Math.max(0.001, len - 2 * r), 4, segs);
-  g.translate(0, -len / 2, 0); // hangs down from its joint
-  return g;
-};
 
 // a body part that tapers (thighs, forearms): a lathe from the joint downwards, rounded at both
 // ends like a capsule, so two of them meet smoothly at the joint
@@ -240,6 +235,9 @@ const IN_CLASS = new Set(['eye', 'lowPelvis', 'skirt', 'midi', 'coatSkirt', 'low
 // left out of: the wet street's mirror (1), the sun's view (2)
 const NO_MIRROR = 1;
 const NO_SUN = 2;
+// (characters round) a neck: its points twisted and bent with the head in the graphics card - its move
+// (render/neckbend.js) in its instance's iClip (render/glsl.js)
+const NECK_FLAG = 8;
 // (v5) Three kinds of shape. A person near the camera is drawn in the picture in full ('full', the
 // picture only) and, for the sun's view and the wet street's mirror, in the simple shapes of the
 // far-off walkers ('low' ones on a layer of their own, LAYERS.AUX): the sun's view is a texel of
@@ -409,7 +407,7 @@ class DrawClass {
     // (the city's people's: whose pictures, and a face's moves - ROADMAP 13.7)
     let fl = sh.flags;
     if (sh.atlas) {
-      fl += 8 * _fTile[0];
+      fl += 16 * _fTile[0];
       if (sh.expr && this.iE) {
         fl += 4;
         const E = this.iE.array;
@@ -510,6 +508,7 @@ const TEE = [0.93, 0.93, 0.91];
 const IRIS = [0.16, 0.11, 0.08];
 const SHADES = [0.05, 0.05, 0.07];
 const _mH = new THREE.Matrix4();
+const _mNk = new THREE.Matrix4();
 const _hcH = new THREE.Vector3();
 const EYE_WHITE = [0.96, 0.95, 0.92];
 const PUPIL = [0.06, 0.05, 0.08];
@@ -733,7 +732,19 @@ function faceOf(fig, F, t, cam) {
   // its own sake)
   let lookYou = false;
   const at = fig.lookAt;
-  if (at && mood !== 'dead') {
+  // (characters round) the rig's eyes (game/doodle.js turnHead, placeHead): one look for the eyes,
+  // the head and the chest - the eyes there first, then held on it exactly as the head comes round
+  // (no lag, no overshoot); a blink with a long look round, now and then
+  const rig = fig.gazeOn !== undefined;
+  if (rig) {
+    lookYou = true;
+    st.toYaw = mood === 'dead' ? 0 : fig.eyeYaw;
+    st.toPitch = mood === 'dead' ? 0 : fig.eyePitch;
+    if (fig.blinkKick) {
+      fig.blinkKick = false;
+      if (st.blinkT < 0 && mood !== 'dead') st.blinkT = 0;
+    }
+  } else if (at && mood !== 'dead') {
     const hc = fig.j.headC;
     const dx = at.x - hc.x;
     const dy = at.y - hc.y;
@@ -758,10 +769,18 @@ function faceOf(fig, F, t, cam) {
     st.toPitch = r < 0.55 ? 0 : (Math.random() - 0.6) * 0.25;
   }
   if (mood === 'dead') st.toYaw = st.toPitch = 0;
-  // (the eyes jump to where they look - quick, as eyes do)
-  const k = Math.min(1, dt * 22);
+  // (the eyes jump to where they look - quick, as eyes do; the rig's are where they are)
+  const k = rig ? 1 : Math.min(1, dt * 22);
   st.yaw += (st.toYaw - st.yaw) * k;
   st.pitch += (st.toPitch - st.pitch) * k;
+  // (characters round) the lids go with the eyes: down over them as they look down (no white above
+  // the iris), the brows up a little as they look up
+  if (mood !== 'dead') {
+    const lid = Math.min(0.45, Math.max(0, -st.pitch * 1.1));
+    _fEw[5] = Math.max(_fEw[5], lid);
+    _fEw[6] = Math.max(_fEw[6], lid);
+    if (st.pitch > 0.1) _fEw[3] = Math.min(1, _fEw[3] + (st.pitch - 0.1) * 0.6);
+  }
   // (the lines are in the head's mirrored frame: towards its right is down its x)
   _gaze[0] = -Math.sin(st.yaw) * EYE.r;
   // (the tests: a face held as asked)
@@ -835,7 +854,9 @@ export class PersonRenderer {
       pocket: P(new THREE.BoxGeometry(0.06, 0.12, 0.1), M.cargo),
       shoe: P(new THREE.CapsuleGeometry(0.052, 0.15, 4, 10).rotateX(Math.PI / 2).scale(1, 0.72, 1), M.box),
       sole: P(new THREE.BoxGeometry(0.105, 0.025, 0.26), M.box),
-      neck: P(cap(0.05, 0.13), M.skin),
+      // (characters round: from inside the head down into the body, in the neck's own frame -
+      // render/neckbend.js - so that it turns and bends with the head)
+      neck: P(HERO.genericNeckGeo(), M.skin),
       head: P(new THREE.SphereGeometry(0.1, 18, 14), M.skin),
       jaw: P(new THREE.SphereGeometry(0.075, 12, 8).scale(1, 0.8, 1.05), M.skin),
       ear: P(new THREE.SphereGeometry(0.025, 8, 6).scale(0.5, 1, 0.8), M.skin),
@@ -951,6 +972,7 @@ export class PersonRenderer {
     // are on: the sun's view leaves them out; and in the wet street's mirror, at half the pixels
     // and smeared, they are not there either)
     for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'heroEarR', 'heroEarL', 'sole', 'pocket']) this.p[k].flags = NO_MIRROR | NO_SUN;
+    for (const k of Object.keys(this.p)) if (k === 'neck' || k === 'heroNeck' || /^folk\d+_neck$/.test(k)) this.p[k].flags |= NECK_FLAG;
     // (v5, ROADMAP 13.1) the hero's lines, over his body (render/herolines.js)
     this.heroLines = new HeroLines(touch);
     // (their drawings turned over once a frame, however many of one of them there are: end counts)
@@ -997,7 +1019,7 @@ export class PersonRenderer {
       tone: (x, y) => folkTone(x, y, spec.fem, spec.shape),
       beard: (x, y) => folkBeard(x, y, spec.beard),
       beardInk: spec.beardCol ? dark(spec.beardCol).map((v) => v * 0.8) : null,
-      rows: Ln.rows, skirt: Ln.skirt,
+      rows: Ln.rows, skirt: Ln.skirt, neckSurf: Ln.neckSurf,
       // (their real head's face, and how they look: render/folkshapes.js surfaceOf, folkspec.js expr)
       facePt: Ln.facePt, faceEx, mono: !!spec.eyes.mono,
       smile: { neutral: 0, soft: 0.35, half: 0.5, smile: 0.85, laugh: 1 }[spec.expr] || 0, half: spec.expr === 'half', gape: spec.gape || 0,
@@ -1585,20 +1607,26 @@ export class PersonRenderer {
         _c.copy(j.neck).addScaledVector(ax, -0.015 * S);
         p.collar.push(framed(_c, rgt, ax, fwd, k * br * 0.9, k * 0.8, k * br * 0.85), topC, own, id(), ind);
       }
-      // the neck
-      _c.copy(j.headC).addScaledVector(fig.hu, -0.06 * S);
-      p.neck.push(along(_c, j.neck, 0.13, k * 1.18 * Math.max(1, bulk * 0.9), rgt), skin, own, fig.headId, ind);
+      // the neck: from under the head down into the body, turned and bent as the head is (the rig's
+      // - game/doodle.js placeHead, render/neckbend.js); as thick as theirs
+      const hsN = fig.headScale * S;
+      const gN = (0.98 * 1.18 * Math.max(1, bulk * 0.9)) / fig.headScale;
+      framed(fig.neckO, fig.neckR, fig.neckU, fig.neckF, hsN * gN, hsN, hsN * gN, _mH);
+      p.neck.push(_mH, skin, own, fig.headId, ind, fig.neckD);
     }
     if (P.pelvis > 0.5) {
+      // (characters round: the pelvis in its own frame, the hips' - not turned with the chest)
+      const prgt = fig.prgt;
+      const pfwd = fig.pfwd;
       _a.copy(j.hip).addScaledVector(ax, 0.02 * S);
       const pc = longSkirt ? skirtC : botC;
-      (longSkirt || midi ? p.pelvisSkirt : cargo ? p.pelvis : p.pelvis).push(framed(_a, rgt, ax, fwd, k * bulk * (L.fem ? 1.06 : 1), k, k * bulk), pc, own, id(), ind);
+      (longSkirt || midi ? p.pelvisSkirt : cargo ? p.pelvis : p.pelvis).push(framed(_a, prgt, ax, pfwd, k * bulk * (L.fem ? 1.06 : 1), k, k * bulk), pc, own, id(), ind);
       if (midi && P.torso > 0.5 && fig.sit < 0.3) {
         // a midi skirt, swinging a little as she walks
         _a.copy(j.hip).addScaledVector(ax, 0.05 * S);
         const sw = Math.sin(fig.phase) * 0.06 * Math.min(1, fig.speed / 1.4);
-        _c.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
-        p.midi.push(framed(_a, rgt, _c, _d.crossVectors(rgt, _c), k * bulk, k * (1 - fig.crouch * 0.4), k * bulk), botC, own, id(), ind);
+        _c.copy(pfwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+        p.midi.push(framed(_a, prgt, _c, _d.crossVectors(prgt, _c), k * bulk, k * (1 - fig.crouch * 0.4), k * bulk), botC, own, id(), ind);
       }
       if (longSkirt && P.torso > 0.5) {
         // a long skirt from the waist to the ankles; sitting, it drapes over the knees
@@ -1608,10 +1636,10 @@ export class PersonRenderer {
         const kk = k * bulk;
         if (sit < 0.3) {
           const sw = Math.sin(fig.phase) * 0.05 * Math.min(1, fig.speed / 1.4);
-          _c.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
-          p.skirt.push(framed(_a, rgt, _c, _d.crossVectors(rgt, _c), kk, k * (1 - fig.crouch * 0.4), kk), skirtC, own, id(), ind);
+          _c.copy(pfwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+          p.skirt.push(framed(_a, prgt, _c, _d.crossVectors(prgt, _c), kk, k * (1 - fig.crouch * 0.4), kk), skirtC, own, id(), ind);
         } else {
-          p.skirt.push(framed(_a, rgt, ax, fwd, kk, k * 0.32, kk), skirtC, own, id(), ind);
+          p.skirt.push(framed(_a, prgt, ax, pfwd, kk, k * 0.32, kk), skirtC, own, id(), ind);
           _c.lerpVectors(j.kneeL, j.kneeR, 0.5);
           _d.lerpVectors(j.footL, j.footR, 0.5);
           // over the lap to the knees, and from the knees down to the ankles
@@ -1732,6 +1760,8 @@ export class PersonRenderer {
             _c.copy(hc).addScaledVector(hr, sd * 0.036 * hs).addScaledVector(hu, 0.02 * hs).addScaledVector(hf, 0.098 * hs);
             if (!masked) p.eyeWhite.push(framed(_c, hr, hu, hf, hs, hs, hs), linC(EYE_WHITE), own, id(), ind);
             _c.addScaledVector(hf, 0.006 * hs);
+            // (characters round: the pupils where the eyes look - they lead, the head follows)
+            if (!masked) _c.addScaledVector(hr, Math.sin(fig.eyeYaw || 0) * 0.011 * hs).addScaledVector(hu, Math.sin(fig.eyePitch || 0) * 0.008 * hs);
             p.eye.push(framed(_c, hr, hu, hf, hs * (masked ? 1.3 : 0.8), hs * (masked ? 1.3 : 0.8), hs * 0.8), linC(masked ? MASK_EYE : PUPIL), own, id(), ind);
           }
           if (!masked) {
@@ -1842,16 +1872,15 @@ export class PersonRenderer {
         _c.copy(j.hip).addScaledVector(ax, 0.07 * S);
         p.heroTorso.push(framed(_c, rgt, ax, fwd, bw * 1.09, sy * 0.8, bw * 1.15), linC(top.color), own, id(), ind);
       }
-      // the neck, from under the back of the skull down into the collar
+      // the neck, from under the back of the skull down into the collar (its own drawing: the ink
+      // draws the jaw's line over it). (characters round) In its own frame under his head, twisted and
+      // bent as his head is turned - the rig's (game/doodle.js placeHead, render/neckbend.js) - its
+      // lines with it
       const hs = fig.headScale * S;
-      _c.copy(j.headC).addScaledVector(fig.hu, -0.083 * hs).addScaledVector(fig.hf, -0.018 * hs);
-      _d.copy(j.neck).addScaledVector(ax, -0.03 * S).addScaledVector(fwd, -0.008 * S);
-      // (its own drawing: the ink draws the jaw's line over it. Framed by his left, so that its
-      // front - the throat, as the face's picture has it - is ahead of him: along() makes its z
-      // the side's x up, and his right's would be behind him)
-      _nL.copy(rgt).negate();
-      p.heroNeck.push(along(_c, _d, 0.17, k * 1.16 * Math.max(1, bulk * 0.92), _nL), white, own, fig.headId, ind);
-      HL.set('neck', 'neck', _m);
+      const gN = (0.98 * 1.16 * Math.max(1, bulk * 0.92)) / fig.headScale;
+      framed(fig.neckO, fig.neckR, fig.neckU, fig.neckF, hs * gN, hs, hs * gN, _mH);
+      p.heroNeck.push(_mH, white, own, fig.headId, ind, fig.neckD);
+      HL.set('neck', 'neck', _mH, null, null, false, fig.neckD);
       // his chain: round the neck and down onto the shirt, link by link
       const cid = (seed * 3.1 + 0.7) % 1;
       for (let i = 0; i + 1 < _chain.length; i++) {
@@ -1863,7 +1892,7 @@ export class PersonRenderer {
       }
     }
     if (P.pelvis > 0.5) {
-      p.heroPelvis.push(framed(j.hip, rgt, ax, fwd, bw, k, bw), jeansC, own, id(), ind);
+      p.heroPelvis.push(framed(j.hip, fig.prgt, ax, fig.pfwd, bw, k, bw), jeansC, own, id(), ind);
       HL.set('pelvis', 'pelvis', _m);
     }
     // ---- arms in their sleeves, the hands; the watch on the left wrist
@@ -2022,16 +2051,27 @@ export class PersonRenderer {
       _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
       const ck = fem ? 0.92 : 1;
       q.collar.push(framed(_c, rgt, ax, fwd, k * 1.04 * ck, k * F.collar, k * 1.04 * ck), white, own, id(), ind);
+      // (characters round) the neck: the head's own edge carried on down into the collar
+      // (render/folkshapes.js neckOf), twisted and bent as the head is turned - the rig's (game/
+      // doodle.js placeHead, render/neckbend.js); its lines with it
       const hs = fig.headScale * S;
-      _c.copy(j.headC).addScaledVector(fig.hu, -0.083 * hs).addScaledVector(fig.hf, -0.018 * hs);
-      _d.copy(j.neck).addScaledVector(ax, -0.03 * S).addScaledVector(fwd, -0.008 * S);
-      _nL.copy(rgt).negate();
-      q.neck.push(along(_c, _d, 0.17, k * 1.16 * Math.max(1, bulk * 0.92) * F.neck, _nL), F.face, own, fig.headId, ind);
-      HL.set('neck', 'neck', _m);
+      framed(fig.neckO, fig.neckR, fig.neckU, fig.neckF, hs, hs, hs, _mH);
+      // (a face drawn as a portrait draws its neck itself, in one skin with it: the same picture,
+      // the same pencil and light, no outline where they meet - render/portrait.js, part 7)
+      const portN = P.head > 0.5 ? this.portraitFor(fig, L.folk, camDist) : null;
+      if (portN && portN.neckN) {
+        _mNk.copy(_mH);
+        portN.neckD.fromArray(fig.neckD);
+        fig.__neckP = portN;
+      } else {
+        q.neck.push(_mH, F.face, own, fig.headId, ind, fig.neckD);
+        fig.__neckP = null;
+      }
+      HL.set('neck', 'neck', _mH, null, null, false, fig.neckD);
     }
     // ---- the seat, and a dress's skirt from the waist over the thighs
     if (P.pelvis > 0.5) {
-      framed(j.hip, rgt, ax, fwd, bw, k, bw, _mH);
+      framed(j.hip, fig.prgt, ax, fig.pfwd, bw, k, bw, _mH);
       q.pelvis.push(_mH, white, own, id(), ind);
       HL.set('pelvis', 'pelvis', _mH);
       if (dress) {
@@ -2113,6 +2153,13 @@ export class PersonRenderer {
         }
         port.update(fdt, _fEw, mood, fig.__portrait || null, fig.say && !fig.say.done ? fig.say.tone : null, gaze);
         port.place(_mP);
+        // (its neck: from the neck's frame into the head's - render/portrait.js part 7)
+        // (no neck drawn for them this frame - their body hidden: none under the portrait either)
+        if (port.neckToHead) {
+          if (fig.__neckP === port) port.neckToHead.copy(_mP).invert().multiply(_mNk);
+          else port.neckToHead.makeScale(0, 0, 0);
+        }
+        fig.__neckP = null;
         HL.set('head', 'head', _mP, _fEw, gaze, true);
       } else {
         q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
@@ -2256,22 +2303,24 @@ export class PersonRenderer {
     }
     if (P.pelvis > 0.5) {
       _a.copy(j.hip).addScaledVector(ax, 0.02 * S);
-      p.lowPelvis.put(aux, framed(_a, rgt, ax, fwd, k * bulk * (L.fem ? 1.06 : 1), k, k * bulk), longSkirt ? skirtC : botC, own, id(), ind);
+      const prgt = fig.prgt;
+      const pfwd = fig.pfwd;
+      p.lowPelvis.put(aux, framed(_a, prgt, ax, pfwd, k * bulk * (L.fem ? 1.06 : 1), k, k * bulk), longSkirt ? skirtC : botC, own, id(), ind);
       if (midi && P.torso > 0.5 && fig.sit < 0.3) {
         _a.copy(j.hip).addScaledVector(ax, 0.05 * S);
         const sw = Math.sin(fig.phase) * 0.06 * Math.min(1, fig.speed / 1.4);
-        _c.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
-        p.lowMidi.put(aux, framed(_a, rgt, _c, _d.crossVectors(rgt, _c), k * bulk, k * (1 - fig.crouch * 0.4), k * bulk), botC, own, id(), ind);
+        _c.copy(pfwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+        p.lowMidi.put(aux, framed(_a, prgt, _c, _d.crossVectors(prgt, _c), k * bulk, k * (1 - fig.crouch * 0.4), k * bulk), botC, own, id(), ind);
       }
       if (longSkirt && P.torso > 0.5) {
         _a.copy(j.hip).addScaledVector(ax, 0.05 * S);
         const kk = k * bulk;
         if (fig.sit < 0.3) {
           const sw = Math.sin(fig.phase) * 0.05 * Math.min(1, fig.speed / 1.4);
-          _c.copy(fwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
-          p.lowSkirt.put(aux, framed(_a, rgt, _c, _d.crossVectors(rgt, _c), kk, k * (1 - fig.crouch * 0.4), kk), skirtC, own, id(), ind);
+          _c.copy(pfwd).multiplyScalar(Math.sin(sw)).addScaledVector(ax, Math.cos(sw));
+          p.lowSkirt.put(aux, framed(_a, prgt, _c, _d.crossVectors(prgt, _c), kk, k * (1 - fig.crouch * 0.4), kk), skirtC, own, id(), ind);
         } else {
-          p.lowSkirt.put(aux, framed(_a, rgt, ax, fwd, kk, k * 0.32, kk), skirtC, own, id(), ind);
+          p.lowSkirt.put(aux, framed(_a, prgt, ax, pfwd, kk, k * 0.32, kk), skirtC, own, id(), ind);
           if (!aux) {
             _c.lerpVectors(j.kneeL, j.kneeR, 0.5);
             _d.lerpVectors(j.footL, j.footR, 0.5);
@@ -2380,7 +2429,6 @@ const _hx = new THREE.Vector3();
 const _hz = new THREE.Vector3();
 const _hL = new THREE.Vector3();
 const _hR = new THREE.Vector3();
-const _nL = new THREE.Vector3();
 const _hCtx = { cam: null, L: null, Lr: null, dark: 0, t: 0, dist: 0 };
 // (ROADMAP 13.6: the city's people's drawn as he is - drawFolk)
 const _fCtx = { cam: null, L: null, Lr: null, dark: 0, t: 0, dist: 0 };

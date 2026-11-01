@@ -20,8 +20,11 @@ const S = 0.104;
 const EYE_Y = 7.2841;
 const EYE_Z = 1.2454;
 const toOurs = (x, y, z) => [S * x, S * (y - EYE_Y) + 0.0185, S * (z - EYE_Z) + 0.072];
-// (the head and its neck's top: everything above this, in the base mesh's decimetres)
-const CUT = 6.2;
+// (the head and its neck's top: everything above this, in the base mesh's decimetres. 6.0, our y
+// -0.115: below the chin's whole underside - the head closed under the jaw down to one clean ring
+// round the throat and the nape (46 points, y -0.096..-0.118), which the neck carries on from,
+// render/folkshapes.js neckOf. 6.2 cut through the skin under the chin and left a slot there)
+const CUT = 6.0;
 
 // ------------------------------------------------------------------ the base mesh
 const V = [];

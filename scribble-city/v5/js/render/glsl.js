@@ -1,3 +1,4 @@
+import { NECK_GLSL } from './neckbend.js';
 // The scribble-art look. Every surface is drawn with coloured pens: thin strokes stuck to
 // the world, wandering a little, tapering at their ends, each in its own colour - a pen
 // for where the sun hits, a cooler one for the shade, a neighbouring hue now and then,
@@ -570,6 +571,9 @@ out vec3 vVel;
 // left out of (1: the mirror, 2: the sun's view)
 uniform highp sampler2D uShapes;
 in vec4 iS;
+// (a neck - iS.w's 8: twisted and bent with the head it carries, its move in iClip - render/
+// neckbend.js)
+${NECK_GLSL}
 #endif
 #ifdef PORTRAIT
 // (ROADMAP 14.1) a portrait's face (render/portrait.js): thirty moves of its muscles, each as far as
@@ -583,11 +587,25 @@ uniform int uAUW;
 uniform int uAUNv;
 uniform vec3 uEyeC[2];
 uniform vec4 uGaze;
+// (its neck, part 7: made in the neck's frame, twisted and bent as the rig's (uNeckD - render/
+// neckbend.js), then carried into the head's frame (uNeckToHead))
+uniform vec4 uNeckD;
+uniform mat4 uNeckToHead;
+#ifndef USE_PULL
+${NECK_GLSL}
+#endif
 in float aPart;
 in float aMouth;
 flat out float vPart;
+out float vNeckP;
 out float vMouthP;
 void portraitMove(inout vec3 P, inout vec3 N) {
+  if (aPart > 6.5) {
+    neckBend(P, N, uNeckD);
+    P = (uNeckToHead * vec4(P, 1.0)).xyz;
+    N = normalize(mat3(uNeckToHead) * N);
+    return;
+  }
   if (aPart > 3.5) {
     // an eye: turned in its socket to where it looks
     int e = aPart > 4.5 ? 1 : 0;
@@ -667,6 +685,10 @@ void main() {
     }
   }
 #endif
+  // (a neck: as the head it carries is turned - render/neckbend.js; its move is in iClip, so it is
+  // no plane cutting it)
+  bool neckPart = mod(floor(iS.w / 8.0), 2.0) > 0.5;
+  if (neckPart) neckBend(sPos, sNor, iClip);
 #else
   vec3 sPos = position;
   vec3 sNor = normal;
@@ -675,7 +697,9 @@ void main() {
 #endif
 #ifdef PORTRAIT
   portraitMove(sPos, sNor);
-  vPart = aPart;
+  // (the neck is the face's skin)
+  vPart = aPart > 6.5 ? 0.0 : aPart;
+  vNeckP = aPart > 6.5 ? 1.0 : 0.0;
   vMouthP = aMouth;
 #endif
   vec3 pos = sPos;
@@ -746,10 +770,13 @@ void main() {
   vX = iX;
   vClip = iClip;
   vId += iX.y;
+#ifdef USE_PULL
+  if (neckPart) vClip = vec4(0.0);
+#endif
 #endif
 #ifdef USE_ATLAS
   // (which of the city's people: their pictures' place in the atlases - ROADMAP 13.7)
-  vTile = floor(iS.w / 8.0);
+  vTile = floor(iS.w / 16.0);
 #endif
   vGone = 0.0;
 #ifdef USE_OBJ
@@ -790,6 +817,7 @@ in vec3 vLN;
 // of the face (the pens' direction, its hollows, where the light gathers), the lines it makes as it
 // moves and how far it makes them, its years
 flat in float vPart;
+in float vNeckP;
 in float vMouthP;
 uniform sampler2D uPlane;
 uniform sampler2D uWrinkle;
@@ -1289,6 +1317,8 @@ void main() {
     float fa = sideS ? (vLP.y > -0.04 ? 1.35 : 0.6) * sign(vLP.x + 1e-4) : 0.5 * a2;
     ang = fa;
     float ao = vPart < 0.5 ? pl.b : 1.0;
+    // (the neck: in the jaw's shade just under it, open lower down)
+    ao = mix(ao, mix(0.6, 0.94, smoothstep(-0.11, -0.17, vLP.y)), vNeckP);
     light *= mix(0.62, 1.0, ao);
     light = clamp(light + pl.a * 0.1 * (1.0 - gWr), 0.0, 1.0);
     light = mix(1.0, light, uPLayers.x);

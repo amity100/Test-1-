@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FACE, JK, PT } from './heroink.js';
+import { NECK_J, HEAD_DROP } from './neckbend.js';
 
 // (v5, ROADMAP 11.29, 13.1) The hero's own body. The passers-by are drawn in a few round shapes (a
 // ball for a head, a barrel for a chest, tubes for limbs, a blob for a hand); the hero, always near
@@ -521,10 +522,38 @@ export const NECK_ROWS = [
 ];
 // (the neck's top in the head's frame: its y 0 is the head's -0.025 - render/people.js drawHero)
 export const NECK_Y = -0.025;
+// (characters round) the rows as they are in the neck's own frame (render/neckbend.js: J, under the
+// head, at the origin - in head units; NECK_J.folk, as his head is placed as the city's people's):
+// as the old neck stood under his head, its middle a little forward as it goes down
+export const HERO_NECK_J = { y: NECK_J.folk.y + HEAD_DROP, z: NECK_J.folk.z };
+export const HERO_NECK_ROWS = NECK_ROWS.map(([y, w, df, db]) => [y + NECK_Y - HERO_NECK_J.y, w, df, db, -0.018 - 0.06 * y - HERO_NECK_J.z]);
 export function heroNeckGeo() {
-  const g = loft(NECK_ROWS, 24);
-  faceMap(g, NECK_Y);
+  const g = loft(HERO_NECK_ROWS, 24);
+  // (his face's picture laid on it from the front, where it is under his head)
+  g.translate(0, HERO_NECK_J.y, HERO_NECK_J.z);
+  faceMap(g);
+  g.translate(0, -HERO_NECK_J.y, -HERO_NECK_J.z);
   return g;
+}
+// (characters round) the simple people's neck (render/people.js drawFull): a tube from inside the
+// head, through J (NECK_J.generic) down deep into the body - so that it twists and bends with the
+// head as everybody's does (render/neckbend.js). As wide as a person's of 1.78 m (0.05) - their own
+// girth in their frame's scale
+export function genericNeckGeo() {
+  const rows = [
+    [0.075, 0.012, 0.012, 0.012],
+    [0.07, 0.03, 0.03, 0.03],
+    [0.06, 0.045, 0.045, 0.045],
+    [0.045, 0.05, 0.05, 0.05],
+    [0.0, 0.05, 0.05, 0.05],
+    [-0.04, 0.05, 0.05, 0.05],
+    [-0.08, 0.051, 0.051, 0.051],
+    [-0.12, 0.052, 0.052, 0.052],
+    [-0.16, 0.05, 0.05, 0.05],
+    [-0.175, 0.04, 0.04, 0.04],
+    [-0.185, 0.015, 0.015, 0.015],
+  ];
+  return loft(rows, 12);
 }
 
 // (ROADMAP 13.5) an ear: a shell against the side of the head - its rim (the helix) curled round from
