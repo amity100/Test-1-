@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
-import { groundHeight, worldEdge } from '../world/layout.js';
+import { groundHeight, worldEdge, pageDist, PAGE } from '../world/layout.js';
 import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
 import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake } from './rides.js';
 import { hybridStep, updateBalloon } from './hybrid.js';
@@ -285,6 +285,9 @@ function cityCopterModel(livery = 'news') {
 }
 
 // ------------------------------------------------------------------ one vehicle
+// (v5) how far before the edge of the page what goes out toward it begins to be held back
+const EDGE_SOFT = 45;
+
 class Vehicle {
   constructor(mgr, kind, grade, score, stock = null) {
     this.mgr = mgr;
@@ -450,7 +453,7 @@ class Vehicle {
     if (input && (this.drawn || this.fuseGuns) && this.turrets) this.drawnGuns(dt, input);
     else if (input && this.turret && this.drawn) this.drawnGun(dt, input);
     // (v5) the edge of the world, flying or sailing as well: it goes no further (world/layout.js)
-    this.keepIn();
+    this.keepIn(dt);
     this.wheelSpin += (this.speed * dt) / 0.36;
     if (this.kind === 'car') return;
     this.group.position.copy(this.pos);
@@ -651,7 +654,27 @@ class Vehicle {
 
   // (v5) held at the edge of the world, its way on out of it taken off it - no wall in the air
   // there, nor over the bay and the ocean any more (world/ground.js, world/mainland/ground.js)
-  keepIn() {
+  keepIn(dt = 0) {
+    // (v5: the edge of the page, world/pageedge.js - the last stretch before it holds what goes out
+    // toward it back, softly and more as it nears it, so that it comes to rest at the edge rather
+    // than against something in the air)
+    const pd = pageDist(this.pos.x, this.pos.z);
+    if (pd < EDGE_SOFT && dt > 0 && this.vx !== undefined && this.vz !== undefined) {
+      const P = PAGE;
+      const x = this.pos.x;
+      const z = this.pos.z;
+      const m = Math.min(x - P.x0, P.x1 - x, z - P.z0, P.z1 - z);
+      const nx = m === x - P.x0 ? -1 : m === P.x1 - x ? 1 : 0;
+      const nz = nx ? 0 : m === z - P.z0 ? -1 : 1;
+      const out = this.vx * nx + this.vz * nz;
+      if (out > 0) {
+        const k = 1 - Math.max(0, pd) / EDGE_SOFT;
+        const cut = out * (1 - Math.exp(-7 * k * k * dt));
+        this.vx -= nx * cut;
+        this.vz -= nz * cut;
+        if (this.speed !== undefined && this.kind !== 'plane') this.speed = this.vx * Math.sin(this.yaw) + this.vz * Math.cos(this.yaw);
+      }
+    }
     const e = worldEdge(this.pos.x, this.pos.z);
     if (!e) return;
     const nx = e.x - this.pos.x;
@@ -669,7 +692,7 @@ class Vehicle {
     const g = this.game;
     if (this.driver === g.player && !(this.edgeSaid > g.time)) {
       this.edgeSaid = g.time + 8;
-      g.hud.toast('כאן נגמר העולם — חוזרים פנימה', 'info', 2.4);
+      g.hud.toast('כאן נגמר הדף — העיר מצוירת עד כאן', 'info', 2.4);
     }
   }
 
@@ -942,7 +965,10 @@ class Vehicle {
     this.pos.x += this.vx * dt;
     this.pos.z += this.vz * dt;
     // up and down: on the ground (and up the ramps), or flying
-    let g = Math.max(groundHeight(this.pos.x, this.pos.z) * 0.5, rampAt(this.pos.x, this.pos.z));
+    // (a curb, the dunes: the wheels half up them, as always; v5: the hills, the ground itself - a car
+    // flying low over them came down inside them, half their height up)
+    const gh = groundHeight(this.pos.x, this.pos.z);
+    let g = Math.max(gh * 0.5, gh - 0.6, rampAt(this.pos.x, this.pos.z));
     // (ROADMAP 11.20: up steps on teeth, down onto a roof when it flies - game/fuse.js)
     if ((this.fz || this.fzSink) && this.game.fuse) g = this.game.fuse.floor(this, g);
     // (ROADMAP 11.23: the lab's mission - its bridge, its island)

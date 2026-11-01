@@ -243,16 +243,21 @@ export class Knock {
       const dz = z - v.pos.z;
       return Math.abs(dx * f.x + dz * f.z) < L + r && Math.abs(dx * f.z - dz * f.x) < W + r;
     };
+    // (v5: only what it really runs into - a car flying over a lamp, a bench, a palm forty metres
+    // under it knocked it down, and was braked by it: in the air over a street of them it slowed and
+    // slowed, stuck in the air)
+    const vy = v.pos.y;
     for (const o of game.world.objects.within(v.pos.x, v.pos.z, L + 1, this._near)) {
       const K = KIND[o.kind];
       if (!K || (K.topple && sp < TOPPLE_SPEED)) continue;
+      if (vy > (o.y1 || 1) + 0.15) continue;
       if (!inside((o.x0 + o.x1) / 2, (o.z0 + o.z1) / 2, 0.2)) continue;
       if (K.topple) this.topple(o, v);
       else this.knock(o, v);
     }
     // (the fence round a hole in the road: the car's circles, as its walls see them - vehicles.js)
     const WK = game.workers;
-    if (WK.sites && sp > CRASH_SPEED && v.kind !== 'bike') {
+    if (WK.sites && sp > CRASH_SPEED && v.kind !== 'bike' && vy < 1.2) {
       const R = (v.kind === 'tank' ? 1.7 : 1.0) + 0.25;
       const o = v.kind === 'tank' ? 2 : 1.2;
       for (const s of WK.sites) {
@@ -271,6 +276,7 @@ export class Knock {
     }
     for (const p of this.pieces) {
       if (p.fall || p.sink || p.kickT > game.time || !inside(p.pos.x, p.pos.z, p.r * 0.5)) continue;
+      if (vy > p.pos.y + (p.r || 0.5) + 0.3) continue;
       if (p.pos.y - groundHeight(p.pos.x, p.pos.z) > 1.6) continue;
       this.launch(p, v);
       this.stats.kicks++;

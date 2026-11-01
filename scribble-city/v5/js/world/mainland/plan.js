@@ -296,10 +296,25 @@ export function placeBlock(p) {
 export function hillsHeight(x, z) {
   let h = 0;
   const n = -1212 - z;
-  if (n > 0) h = Math.max(h, (1 - Math.exp(-n / 38)) * (70 + 18 * Math.sin(x * 0.011) + 9 * Math.sin(x * 0.031 + 1.7)));
+  // (v5: down to the bay at their east end, rather than cut off over the water)
+  const e = Math.min(1, Math.max(0, (-612 - x) / 90));
+  if (n > 0) h = Math.max(h, (1 - Math.exp(-n / 38)) * (70 + 18 * Math.sin(x * 0.011) + 9 * Math.sin(x * 0.031 + 1.7)) * e * e * (3 - 2 * e));
   const w = -1884 - x;
   if (w > 0) h = Math.max(h, (1 - Math.exp(-w / 30)) * (55 + 14 * Math.sin(z * 0.013 + 0.4) + 8 * Math.sin(z * 0.041)));
-  return h;
+  // (v5) behind their crests they come down again, to the bare paper at the edge of the page
+  // (world/pageedge.js; render/pagedge.js draws them as the same)
+  return h > 0 ? h * pageTaper(x, z) : 0;
+}
+
+// (v5) The page the whole city is drawn on (world/layout.js PAGE, world/pageedge.js): its corners
+export const PAGE = { x0: -2250, z0: -1580, x1: 640, z1: 1230 };
+// how far in from the edge the hills are their full height (0 at the edge's margin, 1 past it)
+export function pageTaper(x, z) {
+  const d = Math.min(x - PAGE.x0, PAGE.x1 - x, z - PAGE.z0, PAGE.z1 - z);
+  const t = (d - 40) / 190;
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
 }
 
 // on the mainland at all (and not the bay or the island)?

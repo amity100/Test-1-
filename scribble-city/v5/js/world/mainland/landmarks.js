@@ -970,11 +970,19 @@ function arenaShell(ctx) {
     }
   }
   // its body for the collision (a ring of boxes along its wall) and the maps
+  // (v5: as high as the wall is drawn, to the rim of its roof - the ring stood six metres over it, a
+  // wall in the air round the roof that a car flying over stuck on, or came down on)
   for (let k = 0; k < N; k++) {
     if (arenaDoor(((k + 0.5) / N) * Math.PI * 2)) continue;
     const [x0, z0] = P((k / N) * Math.PI * 2, 0.99);
     const [x1, z1] = P(((k + 1) / N) * Math.PI * 2, 0.99);
-    ctx.col.addBox(Math.min(x0, x1) - 0.9, Math.min(z0, z1) - 0.9, Math.max(x0, x1) + 0.9, Math.max(z0, z1) + 0.9, 0, h + 6, 'wall');
+    ctx.col.addBox(Math.min(x0, x1) - 0.9, Math.min(z0, z1) - 0.9, Math.max(x0, x1) + 0.9, Math.max(z0, z1) + 0.9, 0, y0 + h + 0.15, 'wall');
+  }
+  // (and its roof, to come down on: in steps under the shell, each no higher than the shell over it)
+  for (const s of [0.96, 0.78, 0.58, 0.36]) {
+    const ha = a * s * 0.7;
+    const hb = b * s * 0.7;
+    ctx.col.addBox(cx - ha, cz - hb, cx + ha, cz + hb, y0 + h - 0.6, y0 + h + 6.5 * (1 - s * s), 'wall');
   }
   for (let k = 0; k < 12; k++) {
     const t0 = (k / 12) * Math.PI * 2;

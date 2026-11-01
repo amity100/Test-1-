@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { srgb } from '../render/materials.js';
 import { nextId } from './kit.js';
-import { AVES, STREETS, BLVD, STREET_X0, STREET_X1, WALK_X0, PROM_X1, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, CURB, PIER, WATER_X, PARK_X1 } from './layout.js';
+import { AVES, STREETS, BLVD, STREET_X0, STREET_X1, WALK_X0, PROM_X1, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, CURB, PIER, WATER_X, PARK_X1, NORTH_ST, NORTH_SHORE, PAGE } from './layout.js';
 
 // The ground of the city: the wet streets, the crossings and their zebras, the sidewalks of
 // pavers raised by a curb, the promenade along the bay, the sea wall and its railing, the water.
@@ -50,11 +50,16 @@ export function buildGround(ctx) {
   const M = ctx.M;
   const ZN = NORTH_EDGE;
   const ZS = SOUTH_EDGE;
+  // (v5: with the mainland, the island's north end past 15th Street - its blocks, world/northend.js
+  // - and the whole page round it, world/pageedge.js; with ?island=1 the island as it was)
+  const north = !!ctx.mainland;
+  // where Ocean Drive and the park's sidewalk begin, to the north
+  const zBlvd = north ? NORTH_ST.z - NORTH_ST.half : ZN - 60;
 
   // ---- Bayview Blvd: one long wet street, the first boulevard's texture, tiles every 16 m
   {
-    const g = new THREE.PlaneGeometry(STREET_X1 - STREET_X0, ZS - ZN + 60, 1, 1).rotateX(-Math.PI / 2);
-    g.translate((STREET_X0 + STREET_X1) / 2, 0, (ZN - 60 + ZS) / 2 + 30);
+    const g = new THREE.PlaneGeometry(STREET_X1 - STREET_X0, ZS - zBlvd, 1, 1).rotateX(-Math.PI / 2);
+    g.translate((STREET_X0 + STREET_X1) / 2, 0, (zBlvd + ZS) / 2);
     const uv = g.attributes.uv;
     const p = g.attributes.position;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i), -p.getZ(i) / 16);
@@ -92,20 +97,21 @@ export function buildGround(ctx) {
     const x0 = aveEdges[k];
     const x1 = aveEdges[k + 1];
     for (let i = 0; i <= STREETS.length; i++) {
-      const z0 = i === 0 ? ZN - 40 : STREETS[i - 1].z + STREETS[i - 1].half;
+      // (v5: the north end's row reaches to 17th Street, its curb along it)
+      const z0 = i === 0 ? (north ? NORTH_ST.z + NORTH_ST.half : ZN - 40) : STREETS[i - 1].z + STREETS[i - 1].half;
       const z1 = i === STREETS.length ? ZS + 4 : STREETS[i].z - STREETS[i].half;
       slab(ctx, M.walk, x0, x1, z0, z1);
       // curbs along the roads
       if (k > 0) curb(ctx, x0, x0 + 0.18, z0, z1);
       curb(ctx, x1 - 0.18, x1, z0, z1);
-      if (i > 0) curb(ctx, x0, x1, z0, z0 + 0.18);
+      if (i > 0 || north) curb(ctx, x0, x1, z0, z0 + 0.18);
       if (i < STREETS.length) curb(ctx, x0, x1, z1 - 0.18, z1);
     }
   }
   // ---- the sidewalk on the park's side (v5: the park, the dunes and the beach go on east of it,
   // world/ocean.js; there is no sea wall)
-  slab(ctx, M.prom, STREET_X1, PROM_X1, ZN - 60, ZS + 4);
-  curb(ctx, STREET_X1, STREET_X1 + 0.18, ZN - 60, ZS + 4);
+  slab(ctx, M.prom, STREET_X1, PROM_X1, north ? NORTH_SHORE : ZN - 60, ZS + 4);
+  curb(ctx, STREET_X1, STREET_X1 + 0.18, zBlvd, ZS + 4);
   if (!ctx.oceanDrive) ctx.B.box(M.wallSolid, PROM_X1, -1.6, ZN - 60, PROM_X1 + 0.6, 0.35, ZS + 30, nextId(), { color: srgb(0.86, 0.8, 0.74) });
   const rail = M.rail;
   // (ROADMAP 8.4, not with ?classic: where the railing's posts and rails are, by their numbers, so
@@ -134,31 +140,37 @@ export function buildGround(ctx) {
     ctx.parent.add(m);
     return m;
   };
-  plane(M.water, WATER_X - 6, WATER_X + 3000, -3200, 2400, -0.8);
-  plane(M.water, -2600, WATER_X - 6, ZS + 40, 2400, -0.8);
-  plane(M.water, -2600, WEST_EDGE - 30, -3200, ZS + 40, -0.8);
-  // the land: north of the city (up to the beach), and downtown across the bay
-  plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, -3200, ZN - 40, -0.02);
-  // (v5, ROADMAP 11.17: the mainland is a city of its own now, its ground world/mainland/ground.js;
-  // under it, and out to the horizon past its hills, the land goes on lower down)
-  if (ctx.mainland) plane(M.land, -4200, -650, -4200, 642, -0.5);
-  else plane(M.land, -2600, -650, -3200, ZS + 40, -0.02);
+  if (north) {
+    // (v5) the sea, the bay and the water off the island's tip, out to the edge of the page and no
+    // further (past it, the desk: world/pageedge.js)
+    plane(M.water, WATER_X - 6, PAGE.x1, PAGE.z0, PAGE.z1, -0.8);
+    plane(M.water, PAGE.x0, WATER_X - 6, ZS + 40, PAGE.z1, -0.8);
+    plane(M.water, PAGE.x0, WEST_EDGE - 30, PAGE.z0, ZS + 40, -0.8);
+    plane(M.water, WEST_EDGE - 30, WATER_X - 6, PAGE.z0, NORTH_SHORE, -0.8);
+    // the land under the north end's blocks, and under the mainland (world/mainland/ground.js)
+    plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, NORTH_SHORE, ZN - 40, -0.02);
+    plane(M.land, PAGE.x0, -650, PAGE.z0, 642, -0.5);
+  } else {
+    plane(M.water, WATER_X - 6, WATER_X + 3000, -3200, 2400, -0.8);
+    plane(M.water, -2600, WATER_X - 6, ZS + 40, 2400, -0.8);
+    plane(M.water, -2600, WEST_EDGE - 30, -3200, ZS + 40, -0.8);
+    // the land: north of the city (up to the beach), and downtown across the bay
+    plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, -3200, ZN - 40, -0.02);
+    plane(M.land, -2600, -650, -3200, ZS + 40, -0.02);
+  }
   // the beach at the south end (and round the corner to the ocean's)
   slab(ctx, M.sand, WEST_EDGE - 30, STREET_X1, ZS + 4, ZS + 40, -0.6, 0.12, 6);
   // the walls you cannot pass: the edges of the city
   // (v5, ROADMAP 11.17: open where the causeways go over the bay, at 15th and 5th)
   // (v5: only as high as walking and driving need - what flies is held at the edge of the world,
   // world/layout.js worldEdge, and no wall stands over the bay: you swim in it, game/swim.js)
+  // (v5: none of them now - the street goes on north past 15th Street to the island's tip, the park
+  // by the bay is a park to walk in, its sea wall the edge of the water; the beach at the south end
+  // goes down into the sea: the only edge is the page's, world/layout.js worldEdge)
+  if (north) return;
   const H = 4;
-  const X0 = ctx.mainland ? WEST_EDGE - 30.2 : WEST_EDGE - 40;
-  if (ctx.mainland) {
-    let z0 = ZN - 80;
-    for (const zc of [STREETS[0].z, STREETS[5].z]) {
-      ctx.col.addBox(X0, z0, WEST_EDGE - 2, zc - 6.4, -2, H, 'bound');
-      z0 = zc + 6.4;
-    }
-    ctx.col.addBox(X0, z0, WEST_EDGE - 2, ZS + 60, -2, H, 'bound');
-  } else ctx.col.addBox(X0, ZN - 80, WEST_EDGE - 2, ZS + 60, -2, H, 'bound');
+  const X0 = WEST_EDGE - 40;
+  ctx.col.addBox(X0, ZN - 80, WEST_EDGE - 2, ZS + 60, -2, H, 'bound');
   ctx.col.addBox(X0, ZN - 80, WATER_X + 260, ZN - 1, -2, H, 'bound');
   ctx.col.addBox(X0, ZS + 38, WATER_X + 260, ZS + 80, -2, H, 'bound');
 }

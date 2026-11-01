@@ -495,7 +495,7 @@ function valets(ctx) {
 // 11th, coconut palms down 15th and 7th; 5th, the busy one, has the pay stations instead
 const STREET_STYLE = { '15th St': 'palms', '13th St': 'shade', '11th St': 'royal', '9th St': 'shade', '7th St': 'palms', '5th St': 'main' };
 
-function streets(ctx) {
+function streets(ctx, list = STREETS) {
   const r = ctx.rng;
   const spans = [];
   for (let i = 0; i < 3; i++) {
@@ -504,7 +504,7 @@ function streets(ctx) {
     spans.push([a.x + a.half + a.walk, b.blvd ? WALK_X0 : b.x - b.half - b.walk]);
   }
   spans.push([WEST_EDGE + 1, AVES[0].x - AVES[0].half - AVES[0].walk]);
-  for (const s of STREETS) {
+  for (const s of list) {
     const style = STREET_STYLE[s.sign] || 'palms';
     for (const side of [-1, 1]) {
       const zl = s.z + side * (s.half + 0.95);
@@ -549,6 +549,22 @@ function streets(ctx) {
       }
     }
   }
+}
+
+// (v5) the island's north end, furnished as the rest of the city (world/northend.js): the avenues'
+// sidewalks between 15th Street and ns (17th Street), and that street's own
+export function furnishNorth(ctx, ns) {
+  for (const a of AVES) {
+    if (a.blvd) continue;
+    const style = AVE_STYLE[a.sign] || 'main';
+    for (const side of [-1, 1]) {
+      const o = { a, side, z0: ns.z + 13.5, z1: STREETS[0].z - 13.5, bus: side > 0, j: 5, xl: a.x + side * (a.half + 0.95), yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2, ax: -side };
+      if (style === 'home') homeSide(ctx, o);
+      else if (style === 'hotels') hotelSide(ctx, o);
+      else mainSide(ctx, o);
+    }
+  }
+  streets(ctx, [ns]);
 }
 
 // ------------------------------------------------------------------ parked cars

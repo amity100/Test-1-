@@ -11,6 +11,9 @@ import { TOOLS, BOTTLE } from './ink.js';
 import { Dining, BarLife, LobbyLife, eatPlate } from './venuelife.js';
 import { DanceGame } from './minigames/dance.js';
 import { worldAt } from '../ui/minigame.js';
+// (v5, ROADMAP 13.13) the life of a shop of the new kind: its customers, its cashier, the one who fills
+// its shelves, its live products
+import { ShopLife, PROFILES as LIFE_PROFILES } from './shoplife.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -510,6 +513,15 @@ export class StreetLife {
     const game = this.game;
     const p = game.player;
     if (p.mode !== 'foot' || game.inBar) return null;
+    // (ROADMAP 13.13: in a shop of the new kind, a product in front of you on a shelf: E to take it and
+    // look at it - unless the keeper is right there)
+    for (const a of this.active.values()) {
+      if (!a.life2 || !a.room || !a.room.inside(p.pos.x, p.pos.z, 0.2, p.pos.y)) continue;
+      const k = a.keeper;
+      if (k && k.alive && Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) < 1.6) break;
+      const slot = a.life2.target(p);
+      if (slot) return { shop: a, slot, label: a.life2.label(slot) };
+    }
     let best = null;
     let bd = 2.4;
     let knock = false;
@@ -547,6 +559,10 @@ export class StreetLife {
   interact() {
     const t = this.target();
     if (!t || !t.shop.open) return false;
+    if (t.slot) {
+      t.shop.life2.inspect(t.slot);
+      return true;
+    }
     if (t.knock) t.shop.knock();
     else t.shop.talk();
     return true;
@@ -1155,6 +1171,8 @@ class OpenShop {
       this.queueDir = R.queueDir || null;
     }
     this.queue = [];
+    // (ROADMAP 13.13) a shop of the new kind runs its day its own way: game/shoplife.js
+    this.life2 = R && R.newKind && R.pay && LIFE_PROFILES[s.kind] && !this.game.classic ? new ShopLife(this) : null;
     // a couple of people at the cafe tables out on the sidewalk
     if (s.spots.tables) {
       const n = this.game.touch ? 1 : s.spots.tables.length;
@@ -1327,6 +1345,13 @@ class OpenShop {
     } else {
       v.pts = [{ x: s.door[0], z: s.door[2], bell: true }, { x: R.door.x, z: R.door.z, inRoom: true }, ...R.path(R.door.x, R.door.z, spot.x, spot.z)];
     }
+    // (ROADMAP 13.13: a shopper of a shop of the new kind - in at the door, or at a shelf already)
+    if (this.life2 && mode === 'browse' && spot && !spot.lift) {
+      v.life = true;
+      v.shop = false;
+      if (!o.already) v.pts = null;
+      this.life2.enlist(v, o);
+    }
     if (mode === 'seat' && s.kind === 'cafe') c.fig.carry = 'coffee';
     if (mode === 'seat' && s.kind === 'books') c.fig.carry = 'book';
     if (mode === 'seat' && s.kind === 'lobby') c.fig.carry = 'newspaper';
@@ -1366,6 +1391,8 @@ class OpenShop {
     const c = v.c;
     v.t += dt;
     if (v.phase !== 'at') c.fig.sit = Math.max(0, c.fig.sit - dt * 3);
+    // (ROADMAP 13.13: a customer of a shop of the new kind, until on the way out)
+    if (v.life && v.L && this.life2 && v.phase !== 'out') return this.life2.visit(v, dt);
     // (v5, GTA IV round: a party at the restaurant, a moviegoer in the lobby - game/venuelife.js -
     // until they are on their way out)
     if (v.dine && v.phase !== 'out') return this.dining.visit(v, dt);
@@ -1541,6 +1568,11 @@ class OpenShop {
     // (each one a whole person: the most where you can see in, a few through the windows down the
     // street)
     const k = R.inside(p.x, p.z, 0.5, p.y) ? 1 : d < 14 ? 0.8 : d < 30 ? 0.45 : 0.25;
+    // (ROADMAP 13.13: a shop of the new kind - each of them doing the whole of their shopping: a few)
+    if (this.life2) {
+      const crowd = this.life2.prof.crowd || 6;
+      return Math.max(1, Math.round((touch ? Math.ceil(crowd / 2) : crowd) * Math.max(0.5, k)));
+    }
     return Math.max(1, Math.min(R.browse.length, Math.round(base * k * (touch ? 0.5 : 1))));
   }
 
@@ -1756,6 +1788,13 @@ class OpenShop {
   spawnStaff() {
     const R = this.room;
     const s = this.shop;
+    // (ROADMAP 13.13: the one who fills the shelves of a shop of the new kind - game/shoplife.js)
+    if (this.life2) {
+      const c = this.life2.spawnStocker(shopkeeperLook(s.kind, Math.random() < 0.5));
+      this.extras.push(c);
+      this.staffer = c;
+      return;
+    }
     const stops = (R.staff && R.staff.length ? R.staff : R.browse).concat(R.browse.slice(0, 4));
     const first = stops[0];
     const c = this.game.civilians.spawnScripted(first.x, first.z, shopkeeperLook(s.kind, Math.random() < 0.5), this);
@@ -1963,6 +2002,13 @@ class OpenShop {
   sendOut(c) {
     const v = this.visitors.find((q) => q.c === c);
     if (!v || v.phase === 'out' || v.dine || v.lobbyMan || !this.room) return false;
+    // (ROADMAP 13.13: what they had in their hands back where it came from, then out)
+    if (v.life && v.L && this.life2) {
+      c.fig.sit = 0;
+      c.noCollide = false;
+      this.life2.goOut(v);
+      return true;
+    }
     c.fig.sit = 0;
     c.noCollide = false;
     this.leave(v);
@@ -1971,6 +2017,8 @@ class OpenShop {
 
   // a visitor scared off (or rubbed out): let them go (they find their own way out of the door)
   drop(v) {
+    // (ROADMAP 13.13: frightened in a shop of the new kind - what was in their hands falls)
+    if (v.L && this.life2) this.life2.release(v);
     const i = this.visitors.indexOf(v);
     if (i >= 0) this.visitors.splice(i, 1);
     this.clearDish(v);
@@ -2136,6 +2184,8 @@ class OpenShop {
     const fig = c.fig;
     if (s.kind === 'barber') return this.barberInside(c, dt);
     if (s.home) return this.residentLife(c, dt);
+    // (ROADMAP 13.13: the cashier of a shop of the new kind - game/shoplife.js)
+    if (this.life2) return this.life2.keeper(c, dt);
     if (s.kind === 'cafe' && this.room.seats.length >= 2) return this.waiterInside(c, dt);
     // (v5, GTA IV round: the chef at the pass; the barman behind the bar - game/venuelife.js)
     if (this.dining) return this.dining.chef(c, dt);
@@ -3240,6 +3290,7 @@ class OpenShop {
       }
     }
     if (this.staffer && this.staffer.owner !== this) this.staffer = null;
+    if (this.life2) this.life2.update(dt);
     if (this.lifts && this.lifts.length) this.liftLife(dt);
     if (this.shop.screen && this.open) this.film(dt);
     // (at home: the television on, the piano played)
@@ -3398,6 +3449,8 @@ class OpenShop {
 
   draw(fr) {
     const s = this.shop;
+    // (ROADMAP 13.13: the things in motion in a shop of the new kind, where the hands are now)
+    if (this.life2) this.life2.draw();
     if (this.lifts) {
       for (let k = 0; k < this.lifts.length; k++) if (this.lifts[k].open > 0.01) this.drawLift(fr, this.lifts[k], k);
     }
@@ -3440,6 +3493,8 @@ class OpenShop {
 
   dispose() {
     this.alive = false;
+    // (ROADMAP 13.13: the things in motion back where they came from, the doors shut)
+    if (this.life2) this.life2.dispose();
     // (ROADMAP 11.45) its people go on as they were, drawn the cheap way, where they are now
     // (game/shopcrowd.js): nobody vanishes when a shop is let go of
     const crowd = this.game.shopCrowd;

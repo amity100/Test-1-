@@ -268,6 +268,10 @@ export function buildSkyline(ctx, rand, mats) {
   }
   ctx.B = B0;
   // north, up the beach: the tall condominiums along the ocean, and the city behind them
+  // (v5: with the mainland, the island ends at its north end's tip, the sea beyond it to the edge
+  // of the page - world/northend.js, world/pageedge.js: these are thrown for nothing too, towers
+  // standing on nothing out there, so the dice after them fall as they did)
+  if (ctx.mainland) ctx.B = new B0.constructor();
   for (let i = 0; i < 70; i++) {
     const x = r.range(-300, 40);
     const z = r.range(-1650, -820);
@@ -276,6 +280,9 @@ export function buildSkyline(ctx, rand, mats) {
     // (by the ocean they are long slabs, their broad side to the sea)
     one(x, z, coast ? w * 0.6 : w, coast ? w * r.range(1.6, 2.3) : w * r.range(0.75, 1.3), coast ? r.range(70, 160) : r.range(60, 270));
   }
+  // (how much of the city's drawing that leaves out, in vertices: the build's stats, world/city.js)
+  if (ctx.mainland) ctx.skylineDropped = ctx.B.vcount;
+  ctx.B = B0;
   if (!ctx.mainland) bridge(ctx, r);
 }
 

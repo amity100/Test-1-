@@ -3,6 +3,10 @@ import { lin3 } from '../render/materials.js';
 import { nextId, seeded, quadGeo, Batch } from './kit.js';
 import { GOODS } from './paint.js';
 import { FSoup } from './soup.js';
+// (v5, ROADMAP 13.13) the products made the way they are, their printed labels, the live ones
+import { PSoup, productPens, PEN_KEYS } from './products.js';
+import { labels } from './labels.js';
+import { LiveSet, soupMeshes } from './shopkit.js';
 
 // Rooms on the ground floors. Every shop has a real room behind its front: you walk in through
 // the open door, see the shop through the window, and the keeper works behind the counter while
@@ -129,6 +133,8 @@ export const STORE_DECOR = {
   tacos: { wall: [0.92, 0.86, 0.78], band: [0.56, 0.32, 0.23], skirt: 0.12, floor: 'terrazzo', light: [1, 0.94, 0.84] },
   noodles: { wall: [0.88, 0.84, 0.78], band: [0.26, 0.18, 0.16], skirt: 0.12, floor: 'walnut', light: [1, 0.94, 0.84] },
   shop: { wall: WARM_WHITE, band: CHAR, skirt: 0.1, floor: 'porcelain', light: [1, 0.97, 0.92] },
+  // (ROADMAP 13.13) the neighbourhood market: pale walls, a green skirting, the floor's big tiles
+  grocery: { wall: [0.93, 0.94, 0.9], band: [0.24, 0.42, 0.3], skirt: 0.14, floor: 'porcelain', ceiling: [0.95, 0.95, 0.94], light: [0.98, 0.99, 1] },
 };
 // (the floors of real stuff: their own colours - not tinted)
 const REAL_FLOORS = new Set(['oak', 'walnut', 'porcelain', 'polished', 'terrazzo', 'rug', 'marble']);
@@ -141,6 +147,10 @@ const REAL_FLOORS = new Set(['oak', 'walnut', 'porcelain', 'polished', 'terrazzo
 export function buildRoom(ctx, f, spec) {
   // (ROADMAP 11.42: a shop in a mall is a store - its own light, its own decor)
   if (ctx.mall && spec.shop && !spec.store && ctx.M.store) spec = { ...spec, store: true };
+  // (ROADMAP 13.13: and a shop of the new kind on the street too - under the white light of its
+  // ceiling's panels, the colours of what it sells its own)
+  const fn0 = FURNISH[spec.kind];
+  if (fn0 && fn0.newKind && spec.shop && !spec.store && ctx.M.store) spec = { ...spec, store: true };
   const R = new Room(ctx, f, spec);
   // (v5, ROADMAP 11.18) a shop furnished to the small things: its shelves, its fixtures, where
   // people stand and what they bump into are laid out now; the thousands of things on the shelves
@@ -151,9 +161,16 @@ export function buildRoom(ctx, f, spec) {
   R.shell();
   R.furnish();
   R.collide();
+  // (ROADMAP 13.13: a shop of the new kind - its people's life is game/shoplife.js)
+  R.people.newKind = !!fn.newKind;
+  R.people.store = R.store;
   if (R.lazy) {
     const c = R.people.center;
-    ctx.stock.push({ f, spec: { ...spec, shop: null, outside: null }, kind: spec.kind, x: c.x, z: c.z, y: spec.y0 + (f.dy || 0), r: Math.max(R.ub - R.ua, R.da - R.db) / 2 });
+    const rec = { f, spec: { ...spec, shop: null, outside: null }, kind: spec.kind, x: c.x, z: c.z, y: spec.y0 + (f.dy || 0), r: Math.max(R.ub - R.ua, R.da - R.db) / 2 };
+    ctx.stock.push(rec);
+    // (ROADMAP 13.13: what the people of the shop need of its streamed things - the live products,
+    // the doors - when they are there: rec.live, world/interiors.js)
+    R.people.stock = rec;
   }
   return R.people;
 }
@@ -164,18 +181,57 @@ export function* buildStock(rec, M, parent, opts = {}) {
   const ctx = { M, R: new Batch(), col: null };
   // (ROADMAP 11.45: every part with the shop's id - drawn in by it, world/interiors.js)
   ctx.R.obj = opts.obj || 0;
-  const R = new Room(ctx, rec.f, { ...rec.spec, mode: 'stock' });
+  const fn = FURNISH[rec.spec.kind] || FURNISH.shop;
+  // (ROADMAP 13.13: a shop of the new kind - its labels drawn first, a few at a time)
+  if (fn.newKind) yield* labels().drawSteps(8);
+  const R = new Room(ctx, rec.f, { ...rec.spec, mode: 'stock', low: opts.low });
+  if (fn.newKind) R.live = new LiveSet(null);
   R.furnish();
+  // (ROADMAP 13.13: the goods of a shop of the new kind are put on its shelves a few at a time: a
+  // shelf, a fridge's door, a crate of fruit a job - a few milliseconds a frame)
+  let t = performance.now();
+  for (const job of R.jobs) {
+    job();
+    if (performance.now() - t > 3) {
+      yield;
+      t = performance.now();
+    }
+  }
+  // (and its products as meshes of their own, one a pen)
+  const own = [];
+  if (R.psoups && R.psoups.g) {
+    own.push(...soupMeshes(R.psoups.g, productPens(R.store ? 'store' : true), parent, opts.obj || 0));
+    delete R.psoups.g;
+    yield;
+  }
   R.flushSoups();
   yield;
   const meshes = yield* ctx.R.flushSteps(parent, { static: true, indoor: true, merge: opts.merge, steps: true, objAll: !!opts.obj });
   for (const m of meshes) m.renderOrder = 1;
-  return { meshes, verts: ctx.R.vcount };
+  meshes.push(...own);
+  let ov = 0;
+  for (const m of own) ov += m.geometry.attributes.position.count;
+  // (the live products and the doors, their own draws: they leave their places and come back)
+  let live = null;
+  let lv = 0;
+  if (R.live && R.live.slots.length + R.live.doors.length) {
+    R.live.build(productPens(R.store ? 'store' : true), parent, opts.obj || 0);
+    live = R.live;
+    lv = live.verts;
+  }
+  return { meshes, verts: ctx.R.vcount + lv + ov, live };
 }
 
 // a soup that keeps nothing (what is left for another time: the goods of a room whose goods are
 // streamed in, or the fixtures of a room whose fixtures went up with it)
 const NO_SOUP = { fbox() {}, fcyl() {}, fball() {}, box() {}, cyl() {}, ball() {}, quad() {}, full: false, n: 0 };
+// (the same for the products' soups: world/products.js place and world/shopkit.js keep out of it)
+const SINK = { P: { push() {} }, N: { push() {} }, U: { push() {} }, C: { push() {} }, I: { push() {} }, X: { push() {} }, n: 0 };
+const NO_PSOUP = { off: true, light: null, n: 0, buf() {
+  SINK.n = 0;
+  return SINK;
+}, flushTo() {} };
+void PEN_KEYS;
 
 class Room {
   constructor(ctx, f, spec) {
@@ -198,6 +254,14 @@ class Room {
     this.db = -spec.depth;
     this.y0 = spec.y0;
     this.y1 = spec.y0 + spec.h;
+    // (ROADMAP 13.13: a phone's shops, their products a little less round; the soups of the
+    // products and the printed things - world/products.js - and the live set, a stock's only)
+    this.low = !!(spec.low || ctx.low);
+    // (a stock's jobs: what is put on the shelves, a piece at a time - buildStock)
+    this.jobs = this.mode === 'stock' ? [] : null;
+    this.psoups = null;
+    this.live = null;
+    this.light = null;
     this.rng = new RNG(Math.floor(Math.abs(f.ox * 13.1 + f.oz * 7.7 + spec.u0 * 3.3)) + 11);
     this.spots = { browse: [], seats: [], chairs: [] };
     this.solid = []; // furniture footprints (for the collision)
@@ -239,14 +303,34 @@ class Room {
     return s;
   }
 
+  // (ROADMAP 13.13) the soup of products and printed faces (world/products.js PSoup): the fixtures'
+  // (goods false: built with the room) or the goods' (streamed in, as soup() has them)
+  psoup(goods = false) {
+    if (goods ? this.lazy : this.mode === 'stock') return NO_PSOUP;
+    const all = this.psoups || (this.psoups = {});
+    const k = goods ? 'g' : 'f';
+    let s = all[k];
+    if (!s) {
+      s = all[k] = new PSoup();
+      s.light = this.light;
+      // (the labels must be drawn by the time the room is seen: at once, the first time)
+      labels().drawNow();
+    }
+    return s;
+  }
+
   soupPen(kind) {
     const M = this.M;
     return kind === 'gloss' ? M.inGloss : kind === 'cyl' ? M.inCyl : kind === 'lamp' ? M.inLamp : M.inBox;
   }
 
   flushSoups() {
-    if (!this.soups) return;
-    for (const [kind, s] of Object.entries(this.soups)) s.flushTo(this.ctx.R, this.soupPen(kind));
+    if (this.soups) for (const [kind, s] of Object.entries(this.soups)) s.flushTo(this.ctx.R, this.soupPen(kind));
+    if (this.psoups) {
+      const pens = productPens(this.store ? 'store' : true);
+      for (const s of Object.values(this.psoups)) s.flushTo(this.ctx.R, pens);
+      this.psoups = null;
+    }
   }
 
   // a quad given by four points, wound so that its front faces n

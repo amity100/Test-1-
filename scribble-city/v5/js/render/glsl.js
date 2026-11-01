@@ -571,6 +571,49 @@ out vec3 vVel;
 uniform highp sampler2D uShapes;
 in vec4 iS;
 #endif
+#ifdef PORTRAIT
+// (ROADMAP 14.1) a portrait's face (render/portrait.js): thirty moves of its muscles, each as far as
+// it is made (uAU), every point's and its normal's move in two textures (uAUNv points a move, uAUW
+// texels a row); its part (0 the head, 1 the upper teeth, 2 the lower, 3 the tongue, 4 and 5 the
+// eyes) and how deep in the mouth it is
+uniform highp sampler2D uAUPos;
+uniform highp sampler2D uAUNor;
+uniform float uAU[30];
+uniform int uAUW;
+uniform int uAUNv;
+uniform vec3 uEyeC[2];
+uniform vec4 uGaze;
+in float aPart;
+in float aMouth;
+flat out float vPart;
+out float vMouthP;
+void portraitMove(inout vec3 P, inout vec3 N) {
+  if (aPart > 3.5) {
+    // an eye: turned in its socket to where it looks
+    int e = aPart > 4.5 ? 1 : 0;
+    vec3 c = uEyeC[e];
+    vec2 g = e == 0 ? uGaze.xy : uGaze.zw;
+    float cy = cos(g.x);
+    float sy = sin(g.x);
+    float cp = cos(-g.y);
+    float sp = sin(-g.y);
+    mat3 R = mat3(cy, 0.0, -sy, 0.0, 1.0, 0.0, sy, 0.0, cy) * mat3(1.0, 0.0, 0.0, 0.0, cp, sp, 0.0, -sp, cp);
+    P = c + R * (P - c);
+    N = R * N;
+    return;
+  }
+  for (int e = 0; e < 30; e++) {
+    float w = uAU[e];
+    if (abs(w) < 0.002) continue;
+    int aw = max(uAUW, 1);
+    int t = e * uAUNv + gl_VertexID;
+    ivec2 tc = ivec2(t % aw, t / aw);
+    P += w * texelFetch(uAUPos, tc, 0).xyz;
+    N += w * texelFetch(uAUNor, tc, 0).xyz;
+  }
+  N = normalize(N);
+}
+#endif
 #ifdef USE_EXPR
 // (ROADMAP 13.7) a face's expression: how far each of its moves is made (the jaw open, a smile, the
 // mouth's corners down, the brows up, the brows down, each eye shut, the mouth wide) - two to a
@@ -629,6 +672,11 @@ void main() {
   vec3 sNor = normal;
   vec2 sUv = uv;
   float sId = aId;
+#endif
+#ifdef PORTRAIT
+  portraitMove(sPos, sNor);
+  vPart = aPart;
+  vMouthP = aMouth;
 #endif
   vec3 pos = sPos;
 #ifdef USE_DENTS
@@ -737,6 +785,18 @@ in vec3 vN;
 in vec2 vUv;
 in vec3 vLP;
 in vec3 vLN;
+#ifdef PORTRAIT
+// (ROADMAP 14.1) a portrait's face (render/portrait.js): its part, how deep in the mouth; the planes
+// of the face (the pens' direction, its hollows, where the light gathers), the lines it makes as it
+// moves and how far it makes them, its years
+flat in float vPart;
+in float vMouthP;
+uniform sampler2D uPlane;
+uniform sampler2D uWrinkle;
+uniform vec4 uWrinkleW;
+uniform float uAge;
+float gWr = 0.0;
+#endif
 in float vId;
 in vec4 vRefl;
 in vec3 vCol;
@@ -993,6 +1053,28 @@ void main() {
   // (uPxK, render/pipeline.js: the drawing's pixel in the screen's; 1 when it is drawn whole)
   vec2 dpx = dFdx(p) * uPxK;
   vec2 dpy = dFdy(p) * uPxK;
+#ifdef PORTRAIT
+  {
+    // (ROADMAP 14.1) the strokes laid over the face as it is seen from the front, a millimetre a
+    // millimetre of it; round its sides and the back of the head as a drawing goes round the turn
+    // of a head - where the one meets the other a little ragged, as a drawing's are
+    vec2 pf = vec2((0.5 - vUv.x) * 0.19, (vUv.y - 0.5) * 0.37 - 0.06);
+    vec2 ps = vec2(atan(vLP.x, vLP.z) * 0.085, vLP.y);
+    vec2 fx = dFdx(pf);
+    vec2 fy = dFdy(pf);
+    vec2 sx2 = dFdx(ps);
+    vec2 sy2 = dFdy(ps);
+    float side = smoothstep(0.42, 0.78, abs(vLN.x)) + (h11(dot(floor(vLP.xy * 700.0), vec2(1.0, 57.0))) - 0.5) * 0.25;
+    bool useS = side > 0.5 && vPart < 0.5;
+    p = useS ? ps : pf;
+    dpx = (useS ? sx2 : fx) * uPxK;
+    dpy = (useS ? sy2 : fy) * uPxK;
+    // (a drawing redrawn as it moves, five times a second as the ink's lines are: its strokes laid
+    // again a hair off where they were - the subtle boil of a hand-drawn film)
+    float bt = floor(uBoil + 0.37);
+    p += (vec2(h11(bt * 1.731 + 0.3), h11(bt * 2.917 + 5.1)) - 0.5) * 0.0006;
+  }
+#endif
   // (the rain's rings: a pixel's size in their cells, taken here before anything branches. On
   // Windows the browser's translation into Direct3D cannot take it inside a branch: it would have
   // to work the whole branch out for every pixel of every surface)
@@ -1055,6 +1137,33 @@ void main() {
       tex.a *= 1.0 + max(0.0, lod) * 0.3;
     }
   }
+#ifdef PORTRAIT
+  if (vPart > 0.5 && vPart < 2.5) {
+    // the teeth: ivory, each its own, darker between them and towards the back; the gums over them
+    float k = fract(vUv.x * 12.0);
+    float gap = smoothstep(0.0, 0.08, k) * smoothstep(1.0, 0.92, k);
+    vec3 tt = vec3(0.9, 0.86, 0.76) * mix(0.62, 1.0, gap);
+    tt = mix(tt, vec3(0.7, 0.34, 0.36), smoothstep(0.78, 0.92, vUv.y));
+    tex = vec4(tt * mix(1.0, 0.4, smoothstep(0.22, 0.48, abs(vUv.x - 0.5))), 1.0);
+  } else if (vPart > 2.5 && vPart < 3.5) {
+    // the tongue: its groove down the middle, darker to the back
+    float gr = smoothstep(0.0, 0.06, abs(vUv.x - 0.5));
+    tex = vec4(vec3(0.64, 0.28, 0.28) * mix(0.75, 1.0, gr) * mix(0.55, 1.0, smoothstep(0.2, 0.75, vUv.y)), 1.0);
+  } else if (vPart < 0.5) {
+    // the lines the face makes as it moves (and with the years a little of them at rest)
+    vec4 wm = texture(uWrinkle, vUv);
+    gWr = clamp(dot(wm, max(uWrinkleW, vec4(uAge * 0.28))), 0.0, 1.0);
+    tex.rgb = mix(tex.rgb, tex.rgb * vec3(0.5, 0.4, 0.38), gWr * 0.85);
+    // the inside of the mouth: the lips' wet insides, then dark a few millimetres in
+    if (vMouthP > 0.02) {
+      vec3 ins = mix(vec3(0.42, 0.15, 0.15), vec3(0.14, 0.035, 0.035), smoothstep(0.04, 0.16, vMouthP));
+      ins = mix(ins, vec3(0.025, 0.007, 0.007), smoothstep(0.3, 0.75, vMouthP));
+      tex.rgb = mix(tex.rgb, ins, smoothstep(0.015, 0.05, vMouthP));
+    }
+    // its inside, seen only through the open mouth: dark, as a throat is
+    if (!gl_FrontFacing) tex.rgb = vec3(0.02, 0.006, 0.006);
+  }
+#endif
 #ifndef SOLID
   if (tex.a < uAlphaTest) discard;
 #endif
@@ -1158,6 +1267,26 @@ void main() {
   float ang = uAng;
   float dens = uDensity;
   float wash = uWash;
+#ifdef PORTRAIT
+  if (vPart < 0.5 || vPart > 3.5) {
+    // (ROADMAP 14.1) the strokes along the planes of the face (render/portrait.js planes); its
+    // hollows darker and drawn closer; the light gathering on the forehead, the nose, the cheekbones
+    vec4 pl = texture(uPlane, vUv);
+    float a2 = atan(pl.g * 2.0 - 1.0, pl.r * 2.0 - 1.0);
+    bool sideS = smoothstep(0.42, 0.78, abs(vLN.x)) > 0.5 && vPart < 0.5;
+    ang = sideS ? (vLP.y > -0.04 ? 1.35 : 0.6) * sign(vLP.x + 1e-4) : 0.5 * a2;
+    float ao = vPart < 0.5 ? pl.b : 1.0;
+    light *= mix(0.42, 1.0, ao);
+    lit *= mix(0.78, 1.0, ao);
+    shade *= mix(0.72, 1.0, ao);
+    light = clamp(light + pl.a * 0.12 * (1.0 - gWr), 0.0, 1.0);
+    dens *= 1.0 + (1.0 - ao) * 0.7 + gWr * 0.6;
+  } else {
+    // (inside the mouth: in the lips' shade)
+    light *= 0.35;
+    lit *= 0.7;
+  }
+#endif
 
   if (uGloss > 0.0) {
     // glossy paint and glass: the sunset in them

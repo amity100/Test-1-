@@ -10,6 +10,7 @@ import { AD_IDS } from './ads.js';
 import { CURB } from './layout.js';
 import { plotLot } from './plot.js';
 import { homeHouse, household, HOME_STYLES } from './home.js';
+import { ghostly } from './ghost.js';
 
 // (v5, ROADMAP 11.2) The avenues behind Ocean Drive, a lot at a time, the way South Beach was
 // built: a block's side is cut into lots of 25 and 50 feet, and a building takes one, two or
@@ -438,6 +439,15 @@ const BUILD = {
   vacant(ctx, a) {
     const { f, L, D } = a;
     a.lot.wall = null;
+    // (v5: on the island the lot is built on at last - its building goes up at the end of the city,
+    // world/northend.js; here the empty lot's dice and its props' numbers are spent as they always
+    // were, and nothing of it is drawn: world/ghost.js)
+    if (ctx.vacancies) {
+      ctx.vacancies.push({ f, L, D, sides: { ...a.sides }, corner: { ...a.corner }, env: { street: a.env.street, type: a.env.type, back: a.env.back, prevWall: a.env.prevWall }, lot: a.lot });
+      a.lot.ghost = true;
+      const sign = ctx.rng() < 0.6 ? 'forsale' : 'soon';
+      return ghostly(ctx, () => vacantLot(ctx, { f, L, D, sign }));
+    }
     return vacantLot(ctx, { f, L, D, sign: ctx.rng() < 0.6 ? 'forsale' : 'soon' });
   },
 
@@ -543,6 +553,11 @@ const BUILD = {
     return info;
   },
 };
+
+// (v5) one of the buildings above on a lot of its own (the empty lots built on: world/northend.js)
+export function sobeBuild(ctx, kind, a) {
+  return BUILD[kind](ctx, a);
+}
 
 // ------------------------------------------------------------------ (v5, ROADMAP 11.2ג) the yards
 // how far a building stands back from the sidewalk (sb), how deep a yard it keeps behind it on the

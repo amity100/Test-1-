@@ -23,6 +23,8 @@ import { MAINLAND_ON, WEST_X, NORTH_Z, SEA_Z } from './mainland/plan.js';
 import { buildCauseways, buildHills, farGround, buildShore } from './mainland/ground.js';
 import { buildMainlandTowers } from './mainland/far.js';
 import { buildLandmarks, moveLandmarks } from './mainland/landmarks.js';
+import { buildNorthEnd } from './northend.js';
+import { buildPageEdge } from './pageedge.js';
 
 // The whole city: Ocean Drive and the beach (v5), and the city behind them.
 export function buildCity(scene, o = {}) {
@@ -95,6 +97,8 @@ export function buildCity(scene, o = {}) {
 
   const t0 = performance.now();
   let penGroups = 0;
+  // (v5: the island's empty lots are built on at the end, with its north end - world/northend.js)
+  if (mainland) ctx.vacancies = [];
   buildGround(ctx);
   buildFirstBoulevard(ctx);
   // (v5, ROADMAP 11.2: the city behind Ocean Drive throws dice of its own; Ocean Drive, the beach
@@ -126,6 +130,23 @@ export function buildCity(scene, o = {}) {
     // (the pier, its wheel and its coaster; the lighthouse; the arena: world/mainland/landmarks.js)
     ctx.landmarks = buildLandmarks(ctx);
     ctx.rng = dice;
+    // (v5) the island's north end past 15th Street, and its empty lots built on at last - after all
+    // the rest, by dice of its own, so that everything before keeps its looks and its numbers
+    // (world/northend.js); and the page it is all drawn on, its edge, the desk under it
+    // (world/pageedge.js)
+    // (how much it adds to the city's batch, in vertices: the build's stats below)
+    const v0 = ctx.B.vcount;
+    try {
+      buildNorthEnd(ctx);
+    } catch (e) {
+      console.error('[north end] not built', e);
+    }
+    ctx.northVerts = ctx.B.vcount - v0;
+    try {
+      buildPageEdge(ctx);
+    } catch (e) {
+      console.error('[page edge] not built', e);
+    }
   }
   // the neon of every shop, in one texture
   M.signNeon.uniforms.uMap.value = neon.texture();
@@ -198,7 +219,7 @@ export function buildCity(scene, o = {}) {
     else if (far.has(pen)) cull.push({ m, r: o.low ? 170 : 260 });
   }
   penGroups = sharedPens.size;
-  const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, pens: penGroups, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length };
+  const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, pens: penGroups, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length, north: ctx.northVerts || 0, northParts: ctx.northParts || null, pageVerts: ctx.pageVerts || 0, skylineDropped: ctx.skylineDropped || 0 };
 
   // (v5, ROADMAP 11.17) the mainland's picture of its ground from afar; the groups its blocks are
   // shown in (made now, so the still city's pieces stay the ones the renderer was given at the
@@ -281,7 +302,7 @@ export function buildCity(scene, o = {}) {
     anims: [],
     // the ways people stroll where there are no blocks to walk round (the pier, the beach, the
     // promenades): [{ a: [x, z], b: [x, z] }] (game/civilians.js)
-    walks: [],
+    walks: ctx.walks || [],
     update(dt, t, cam) {
       if (ctx.wheel) turnWheel(ctx.wheel, dt);
       if (ctx.landmarks) moveLandmarks(ctx.landmarks, dt, cam);
@@ -296,6 +317,8 @@ export function buildCity(scene, o = {}) {
     },
   };
   world.objects.attach(world);
+  // (v5: the paper's colour at the edge of the page, as the light changes: world/pageedge.js)
+  if (ctx.pageEdgeUpdate) world.anims.push(ctx.pageEdgeUpdate);
   // (v5, ROADMAP 11.17) shops that come and go with the mainland's blocks: a number of their own
   // each, never used again (the shops' life is kept by it, game/streetlife.js)
   let shopId = 100000;

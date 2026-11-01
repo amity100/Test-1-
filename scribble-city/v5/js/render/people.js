@@ -8,6 +8,7 @@ import { HeroLines } from './herolines.js';
 import { FOLK, FOLK_ON, SKINS, hexRGB } from './folkspec.js';
 import { folkBody, eyeGeo, faceEx, exprMoves, EXPR, EYE } from './folkshapes.js';
 import { folkTone, folkBeard } from './folkink.js';
+import { Portrait } from './portrait.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
 // (the first boulevard's own people: a shaped torso, tapering limbs, a head with a jaw and ears,
@@ -282,6 +283,45 @@ function partWas(out, i, m, owner, shape) {
 // drawFolk before their parts are put down
 const _fTile = [0];
 const _fEw = new Float32Array(8);
+// (ROADMAP 14.1) the portraits (render/portrait.js): which of the city's people are drawn near as a
+// portrait is - for now the first of them (FOLK 0, Bruno), the prototype - and how near
+const PORTRAIT_KINDS = new Set([0]);
+// (?portrait=off: none; ?portrait=hide: made, never shown - for the tests)
+const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('portrait') : null;
+const PORTRAIT_NEAR = 6.5;
+// (TEMP while the memory is looked into: only the face lab's)
+let PORTRAIT_STREET = false;
+const _mP = new THREE.Matrix4();
+// (a frame framed by a body's right, up and forward is a mirror's: turned round as DrawClass.push
+// turns the people's parts)
+function unmirror(m) {
+  const e = m.elements;
+  if (e[0] * (e[5] * e[10] - e[6] * e[9]) - e[4] * (e[1] * e[10] - e[2] * e[9]) + e[8] * (e[1] * e[6] - e[2] * e[5]) < 0) {
+    e[0] = -e[0];
+    e[1] = -e[1];
+    e[2] = -e[2];
+  }
+  return m;
+}
+// a portrait's picture of the face, flat (its colours and features alone), drawn off the game's
+// thread by the same helper as everybody's pictures (render/heroworker.js)
+let portraitHelper = null;
+const portraitWait = new Map();
+function paintPortrait(k, cb) {
+  if (!portraitHelper) {
+    portraitHelper = new Worker(new URL('./heroworker.js', import.meta.url), { type: 'module' });
+    portraitHelper.onmessage = (e) => {
+      const f = portraitWait.get(e.data.folk);
+      if (e.data.err) console.warn('portrait picture', e.data.err);
+      if (f && e.data.bmp) {
+        portraitWait.delete(e.data.folk);
+        f(e.data.bmp);
+      }
+    };
+  }
+  portraitWait.set(k, cb);
+  portraitHelper.postMessage({ art: 'portrait', folk: k, name: 'face', i: 0, w: 1024, h: Math.round((1024 * 0.37) / 0.19), seed: 7, blink: false, flat: true });
+}
 // (a move's weight, -1..1, in a byte: 0 exactly 128)
 const byteOf = (a) => Math.round(Math.max(-1, Math.min(1, a)) * 127) + 128;
 
@@ -1190,6 +1230,39 @@ export class PersonRenderer {
     // strokes their lines may have this frame, all of them together)
     if (this.atlas.renderer) this.atlas.update();
     this.folkLines = this.touch ? 1600 : 4200;
+    // (ROADMAP 14.1: the portraits hidden until somebody near is drawn with one again)
+    this.frameNo = (this.frameNo || 0) + 1;
+    if (this.portraits) for (const P of this.portraits.values()) if (P.mesh) P.mesh.visible = false;
+  }
+
+  // (ROADMAP 14.1) somebody near enough to be drawn as a portrait (render/portrait.js): one a kind a
+  // frame - the face lab's whatever its distance (game/facelab.js, fig.__portrait)
+  portraitFor(fig, k, camDist) {
+    if (PORTRAIT_MODE === 'off' || !PORTRAIT_KINDS.has(k) || fig.dead > 0 || fig.parts.head < 0.5 || this.touch || fig.__noPortrait) return null;
+    if (!fig.__portrait && !(PORTRAIT_STREET && camDist < PORTRAIT_NEAR)) return null;
+    if (!this.portraits) this.portraits = new Map();
+    let P = this.portraits.get(k);
+    if (!P) {
+      P = new Portrait(k, k, LAYERS.MIRRORLESS);
+      this.portraits.set(k, P);
+      paintPortrait(k, (bmp) => {
+        if (PORTRAIT_MODE === 'hide') return;
+        const t0 = performance.now();
+        P.setPicture(bmp);
+        console.log(`[portrait] picture set ${(performance.now() - t0).toFixed(0)} ms at ${new Date().toISOString().slice(14, 22)}`);
+        // (TEMP, a test's: window.__noadd holds it out of the scene)
+        if (typeof window !== 'undefined' && window.__noadd) P.pendingAdd = true;
+        else this.scene.add(P.mesh);
+      });
+    }
+    if (P.pendingAdd && !(typeof window !== 'undefined' && window.__noadd)) {
+      P.pendingAdd = false;
+      this.scene.add(P.mesh);
+      console.log(`[portrait] added at ${new Date().toISOString().slice(14, 22)}`);
+    }
+    if (!P.ready || P.pendingAdd || P.taken === this.frameNo) return null;
+    P.taken = this.frameNo;
+    return P;
   }
 
   // (the graphics card's: the city's people's pictures are written straight into their atlases)
@@ -2000,8 +2073,27 @@ export class PersonRenderer {
       const hu = fig.hu;
       const hf = fig.hf;
       const hc = _hcH.copy(j.headC).addScaledVector(hu, -0.058 * hs);
-      q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
-      HL.set('head', 'head', _m, _fEw, gaze);
+      // (ROADMAP 14.1) near: the face drawn as a portrait is (render/portrait.js) - its muscles' moves,
+      // its teeth, its eyes, shaded by the light; the hair, the glasses and the ears as ever
+      const port = this.portraitFor(fig, L.folk, camDist);
+      if (port) {
+        unmirror(framed(hc, hr, hu, hf, hs, hs, hs, _mP));
+        const fdt = Math.min(0.1, Math.max(0, now - (port.lastT || now)));
+        port.lastT = now;
+        let mood = fig.mood || (fig.feel && fig.feel.until > now ? fig.feel.mood : null);
+        if (fig.dead > 0) mood = 'dead';
+        else if (!mood) {
+          if (fig.flail > 0 || fig.armsUp > 0.3 || fig.surrender > 0) mood = 'scared';
+          else if (fig.recoil > 0.2 || fig.stagger > 0) mood = 'hurt';
+          else if (fig.punch >= 0 || fig.kick >= 0 || fig.guard > 0.3) mood = 'angry';
+        }
+        port.update(fdt, _fEw, mood, fig.__portrait || null, fig.say && !fig.say.done ? fig.say.tone : null, gaze);
+        port.place(_mP);
+        HL.set('head', 'head', _mP, _fEw, gaze, true);
+      } else {
+        q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
+        HL.set('head', 'head', _m, _fEw, gaze);
+      }
       framed(hc, hr, hu, hf, hs, hs, hs, _mH);
       q.hair.push(_mH, white, own, id(), ind);
       if (q.locks) q.locks.push(_mH, white, own, id(), ind);
@@ -2011,7 +2103,7 @@ export class PersonRenderer {
       // (their eyes in their sockets, each turned to where they look. The head's frame is drawn
       // mirrored - DrawClass.push - and the eyes' with it: each in the mirror's place)
       _eyeR.makeRotationFromEuler(_eyeE.set(-gaze[3], gaze[2], 0, 'YXZ'));
-      for (let e = 0; e < 2; e++) {
+      for (let e = 0; e < (port ? 0 : 2); e++) {
         const c = F.eyes[e];
         _eyeT.makeTranslation(-c[0], c[1], c[2]).multiply(_eyeR);
         _eyeM.multiplyMatrices(_mH, _eyeT);

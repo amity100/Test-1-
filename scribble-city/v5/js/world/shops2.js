@@ -2,6 +2,12 @@ import { FURNISH, DECOR } from './rooms.js';
 import './mainland/furnish.js';
 import { nextId } from './kit.js';
 import { Run, L, SC, CLOTH, BRIGHT, PASTEL, CLOTH_REAL, CLOTH_LUX, SHOES_REAL, SPINES_REAL, GLASS_REAL, GEMS, SCREENS_REAL, OAK, shelving, gondola, fridges, produce, checkout, rail, foldTable, shoeWall, pegboard, vitrine, ceiling, poster, mannequin, entrance, goods, pk } from './stock.js';
+// (v5, ROADMAP 13.13) the shops of the new kind: furnished to the small things, their products made as
+// they are, their people living their day in them (game/shoplife.js)
+import { market } from './market.js';
+import { fashion } from './fashion.js';
+import { techstore } from './techstore.js';
+import { jewels as jeweller } from './jewels.js';
 
 // (v5, ROADMAP 11.18) The shops, laid out the way real ones are. Each kind has its plan: what
 // stands along its back wall and its side walls, what runs down its middle, where the checkout is
@@ -888,21 +894,25 @@ function FRONTONLY() {
 
 // ------------------------------------------------------------------ the plans, by kind
 const PLANS = {
-  grocery: (R) => grocery(R, { cat: 'grocery' }),
+  grocery: (R) => market(R, {}),
   deli: (R) => grocery(R, { cat: 'grocery', catMid: 'bread', header: [0.7, 0.3, 0.28], basketCol: [0.7, 0.3, 0.28] }),
   shop: (R) => grocery(R, { cat: 'general', fridges: true, produce: false, header: [0.4, 0.5, 0.8], basketCol: [0.3, 0.45, 0.85] }),
   pharmacy: (R) => grocery(R, { cat: 'pharmacy', unit: SC.white, fridges: false, produce: false, header: [0.32, 0.66, 0.46], basketCol: [0.32, 0.66, 0.46] }),
   hardware,
   books,
-  fashion: (R) => clothes(R, {}),
-  boutique: (R) => clothes(R, { cols: [[0.95, 0.45, 0.6], [0.98, 0.9, 0.94], [0.98, 0.9, 0.6], [0.75, 0.5, 0.85], [0.98, 0.98, 0.95], [0.86, 0.36, 0.42]], curtain: [0.82, 0.5, 0.68], counter: [0.98, 0.9, 0.94], bag: [0.98, 0.7, 0.8], storeCols: CLOTH_LUX, storeCurtain: [0.3, 0.22, 0.22], storeCounter: [0.86, 0.82, 0.74], storeTop: [0.94, 0.93, 0.9], storeBag: [0.1, 0.1, 0.11] }),
-  surf: (R) => clothes(R, { cols: [[0.98, 0.6, 0.25], [0.3, 0.7, 0.85], [0.98, 0.85, 0.35], [0.95, 0.4, 0.55], [0.55, 0.85, 0.5], [0.98, 0.98, 0.95]], curtain: [0.26, 0.56, 0.78] }),
+  // (ROADMAP 13.13: the clothes shops of the new kind - world/fashion.js; the old plan, clothes(),
+  // kept for whoever wants it)
+  fashion: (R) => fashion(R, {}),
+  boutique: (R) => fashion(R, { pal: CLOTH_LUX, curtain: [0.3, 0.22, 0.22] }),
+  surf: (R) => fashion(R, { pal: [[0.98, 0.6, 0.25], [0.3, 0.7, 0.85], [0.98, 0.85, 0.35], [0.95, 0.4, 0.55], [0.55, 0.85, 0.5], [0.98, 0.98, 0.95], [0.17, 0.22, 0.33], [0.29, 0.39, 0.52]], curtain: [0.26, 0.56, 0.78] }),
   shoes,
-  electronics: (R) => screens(R, {}),
-  phones: (R) => screens(R, { table: SC.white, header: [0.3, 0.3, 0.36] }),
+  // (ROADMAP 13.13: the electronics shops of the new kind - world/techstore.js; screens() kept)
+  electronics: (R) => techstore(R, {}),
+  phones: (R) => techstore(R, {}),
   toys,
   perfume,
-  jewelry: jewels,
+  // (ROADMAP 13.13: the jeweller of the new kind - world/jewels.js; the old plan, jewels(), kept)
+  jewelry: jeweller,
   optics,
   sports,
   cafe: (R) => counterShop(R, { line: ['espresso', 'shelves', 'fridge'], station: false, trays: false, tile: [0.36, 0.3, 0.26], goods: 'grocery', front: [0.5, 0.34, 0.26], top: [0.86, 0.74, 0.54], roundTables: true, tableCol: SC.white, chairCol: [0.45, 0.32, 0.24], menu: [0.2, 0.28, 0.24], accent: [0.98, 0.95, 0.85], food: [[0.85, 0.64, 0.36], [0.98, 0.7, 0.4], [0.6, 0.35, 0.2], [0.98, 0.9, 0.6]] }),
@@ -917,9 +927,12 @@ const PLANS = {
   sushi: (R) => counterShop(R, { line: ['board', 'fridge', 'board'], front: [0.62, 0.44, 0.3], top: [0.9, 0.78, 0.6], food: [[0.95, 0.5, 0.4], [0.98, 0.98, 0.95], [0.3, 0.3, 0.32]] }),
 };
 
+// (ROADMAP 13.13: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
+const NEW_KINDS = new Set(['grocery', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry']);
 for (const [kind, fn] of Object.entries(PLANS)) {
   const plan = (R) => fn(R);
   plan.stock = true;
+  if (NEW_KINDS.has(kind)) plan.newKind = true;
   FURNISH[kind] = plan;
 }
 
@@ -930,4 +943,4 @@ Object.assign(DECOR, {
   shop: { ...DECOR.shop, floor: 'tiles' },
 });
 
-export { PLANS };
+export { PLANS, clothes, screens, jewels };

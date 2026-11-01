@@ -1,4 +1,4 @@
-import { AVES, STREETS, BLOCK_TYPES, DISTRICT_NAMES, blockRect, westRect, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, STREET_X0, STREET_X1, WALK_X0, PROM_X1, PARK_X1, SAND_X0, BEACH_WALK } from '../world/layout.js';
+import { AVES, STREETS, BLOCK_TYPES, DISTRICT_NAMES, blockRect, westRect, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, STREET_X0, STREET_X1, WALK_X0, PROM_X1, PARK_X1, SAND_X0, BEACH_WALK, NORTH_ON, NORTH_ST, NORTH_END, NORTH_SHORE, NORTH_TYPES, northRect } from '../world/layout.js';
 // (v5) where the bay begins, west of the city
 const BAY_X = WEST_EDGE - 30;
 import { NODES } from '../world/roads.js';
@@ -174,6 +174,27 @@ function hash(i, j) {
   let h = (i * 374761393 + j * 668265263) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// the island's shore, d metres out into the water: down the ocean's side, along the beach at its
+// south end, up the bay's side (v5: and with the north end, round its tip - the sea wall straight
+// along it, the beach going down into the sea at its corner; without it, open to the north, the
+// city going on past the top of the map from zOpen)
+function shorePath(g, d, zOpen) {
+  g.beginPath();
+  if (NORTH_ON) {
+    g.moveTo(BAY_X - d, SHORE_Z + d);
+    g.lineTo(BAY_X - d, NORTH_SHORE - d);
+    g.lineTo(SAND_X0 + d * 0.25, NORTH_SHORE - d);
+    g.lineTo(WATER_X + d, NORTH_SHORE + 14 - d * 0.75);
+    g.lineTo(WATER_X + d, SHORE_Z + d);
+    g.closePath();
+    return;
+  }
+  g.moveTo(WATER_X + d, zOpen);
+  g.lineTo(WATER_X + d, SHORE_Z + d);
+  g.lineTo(BAY_X - d, SHORE_Z + d);
+  g.lineTo(BAY_X - d, zOpen);
 }
 
 function hhmm(h) {
@@ -511,6 +532,9 @@ export class CityMap {
     for (const c of w.courts || []) add({ cat: 'place', glyph: 'court', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: 'מגרש הכדורסל', note: 'בפארק הדקלים' });
     for (const m of w.markets || []) add({ cat: 'place', glyph: 'market', x: (m.x0 + m.x1) / 2, z: (m.z0 + m.z1) / 2, name: 'השוק', note: 'דוכנים של פירות, פרחים, דגים ובגדים' });
     add({ cat: 'place', glyph: 'beach', x: 80, z: -100, name: 'החוף', note: 'חול, סוכות מצילים, שמשיות והאוקיינוס' });
+    // (v5) the bandshell in the park at the island's tip (world/northend.js)
+    this.bandshell = (w.ctx && w.ctx.bandshell) || null;
+    if (this.bandshell) add({ cat: 'place', glyph: 'music', x: this.bandshell.x, z: (this.bandshell.z0 + this.bandshell.z1) / 2, name: 'הבמה בקצה האי', note: 'NORTH SHORE BANDSHELL: קשתות פסטל מעל הבמה, פסנתר, שורות כיסאות על הרחבה, והים מאחור' });
     if (ml) {
       for (const pl of PLACES) {
         const b = placeBlock(pl);
@@ -623,19 +647,14 @@ export class CityMap {
     g.fillRect(WATER_X, vis.z0 - 10, Math.max(0, vis.x1 - WATER_X + 10), vis.z1 - vis.z0 + 20);
     g.fillRect(vis.x0 - 10, SHORE_Z, Math.max(0, WATER_X - vis.x0 + 10), Math.max(0, vis.z1 - SHORE_Z + 10));
     g.fillRect(vis.x0 - 10, vis.z0 - 10, Math.max(0, BAY_X - vis.x0 + 10), Math.max(0, SHORE_Z - vis.z0 + 10));
+    // (v5: and past the island's tip, the water north of its sea wall)
+    if (NORTH_ON && vis.z0 < NORTH_SHORE + 14) g.fillRect(BAY_X - 1, vis.z0 - 10, WATER_X - BAY_X + 2, NORTH_SHORE + 14 - vis.z0 + 10);
     // lines along the shore, further and fainter (the way the old maps drew water)
-    const coast = (d) => {
-      g.beginPath();
-      g.moveTo(WATER_X + d, vis.z0 - 10);
-      g.lineTo(WATER_X + d, SHORE_Z + d);
-      g.lineTo(BAY_X - d, SHORE_Z + d);
-      g.lineTo(BAY_X - d, vis.z0 - 10);
-    };
     g.strokeStyle = COL.waterLine;
     for (const [d, a] of [[3, 0.5], [7.5, 0.32], [14, 0.18]]) {
       g.globalAlpha = a;
       g.lineWidth = 1.2 * px;
-      coast(d);
+      shorePath(g, d, vis.z0 - 10);
       g.stroke();
     }
     g.globalAlpha = 1;
@@ -654,7 +673,7 @@ export class CityMap {
         const x = (i + 0.2 + hash(i, j) * 0.6) * step;
         const z = (j + 0.2 + hash(j, i + 7) * 0.6) * step;
         const inBay = x > WATER_X + 18 || x < BAY_X - 18;
-        const inSea = z > SHORE_Z + 18 && x < WATER_X - 4;
+        const inSea = (z > SHORE_Z + 18 || (NORTH_ON && z < NORTH_SHORE - 18)) && x < WATER_X - 4;
         if (!inBay && !inSea) continue;
         if (x < PIER.x1 + 8 && z > PIER.z0 - 20 && z < PIER.z1 + 20) continue;
         if (Math.abs(z + 430) < 14) continue;
@@ -743,17 +762,32 @@ export class CityMap {
       g.strokeStyle = COL.farInk;
       g.strokeRect(f.x0, f.z0, f.x1 - f.x0, f.z1 - f.z0);
     }
-    // the city's pavers, and the street's sidewalks going on north
-    g.fillStyle = COL.north;
-    g.fillRect(WALK_X0, NORTH_EDGE - 60, PROM_X1 - WALK_X0, 60);
+    // the city's pavers, and the street's sidewalks going on north (v5: with the north end, up to
+    // the island's tip, the sea wall round it - the water beyond)
+    const top = NORTH_ON ? NORTH_SHORE : NORTH_EDGE - 60;
+    if (!NORTH_ON) {
+      g.fillStyle = COL.north;
+      g.fillRect(WALK_X0, NORTH_EDGE - 60, PROM_X1 - WALK_X0, 60);
+    }
     g.fillStyle = COL.ground;
     g.fillRect(WEST_EDGE, NORTH_EDGE, PROM_X1 - WEST_EDGE, SOUTH_EDGE + 4 - NORTH_EDGE);
-    g.fillRect(BAY_X, vis.z0 - 10, WEST_EDGE - BAY_X, SHORE_Z - vis.z0 + 10);
+    if (NORTH_ON) g.fillRect(BAY_X, NORTH_SHORE, PROM_X1 - BAY_X, NORTH_EDGE - NORTH_SHORE);
+    const zBay = NORTH_ON ? NORTH_SHORE : vis.z0 - 10;
+    g.fillRect(BAY_X, zBay, WEST_EDGE - BAY_X, SHORE_Z - zBay);
     // the beach (v5: all along the ocean, and round the south end), its sand dotted
     g.fillStyle = COL.sand;
     g.fillRect(WEST_EDGE - 30, SOUTH_EDGE + 4, STREET_X1 - WEST_EDGE + 30, SHORE_Z - SOUTH_EDGE - 4);
     g.fillRect(STREET_X1, SOUTH_EDGE + 4, WATER_X - STREET_X1, SHORE_Z - SOUTH_EDGE - 4);
-    g.fillRect(PARK_X1, vis.z0 - 10, WATER_X - PARK_X1, SHORE_Z - vis.z0 + 10);
+    if (NORTH_ON) {
+      // (round the tip the sand goes down into the sea)
+      g.beginPath();
+      g.moveTo(PARK_X1, NORTH_SHORE);
+      g.lineTo(SAND_X0, NORTH_SHORE);
+      g.lineTo(WATER_X, NORTH_SHORE + 14);
+      g.lineTo(WATER_X, SHORE_Z);
+      g.lineTo(PARK_X1, SHORE_Z);
+      g.fill();
+    } else g.fillRect(PARK_X1, vis.z0 - 10, WATER_X - PARK_X1, SHORE_Z - vis.z0 + 10);
     if (this.view.k > 1.3) {
       g.fillStyle = 'rgba(160, 120, 60, 0.45)';
       const d = 0.35 * Math.max(1, px * 1.6);
@@ -762,6 +796,7 @@ export class CityMap {
           const x = (i + hash(i, j)) * 5;
           const z = (j + hash(j, i)) * 5;
           if (z > SHORE_Z - 1 || x > WATER_X - 1) continue;
+          if (NORTH_ON && z < NORTH_SHORE + 1 + (x - SAND_X0) * 0.25) continue;
           if (z < SOUTH_EDGE + 5 && x < SAND_X0) continue;
           g.fillRect(x, z, d, d);
         }
@@ -769,23 +804,44 @@ export class CityMap {
     }
     // the park along the beach, the beach walk down it, the dunes' grass
     g.fillStyle = COL.grass;
-    g.fillRect(PROM_X1, NORTH_EDGE - 60, PARK_X1 - PROM_X1, SOUTH_EDGE + 4 - NORTH_EDGE + 60);
+    g.fillRect(PROM_X1, top, PARK_X1 - PROM_X1, SOUTH_EDGE + 4 - top);
     g.fillStyle = COL.path;
-    g.fillRect(BEACH_WALK[0], NORTH_EDGE - 60, BEACH_WALK[1] - BEACH_WALK[0], SOUTH_EDGE + 4 - NORTH_EDGE + 60);
-    for (const s of STREETS) g.fillRect(PROM_X1, s.z - 2.4, SAND_X0 - PROM_X1, 4.8);
+    g.fillRect(BEACH_WALK[0], top, BEACH_WALK[1] - BEACH_WALK[0], SOUTH_EDGE + 4 - top);
+    for (const s of NORTH_ON ? [NORTH_ST, ...STREETS] : STREETS) g.fillRect(PROM_X1, s.z - 2.4, SAND_X0 - PROM_X1, 4.8);
     g.fillStyle = 'rgba(120, 170, 90, 0.45)';
-    g.fillRect(PARK_X1, NORTH_EDGE - 60, SAND_X0 - PARK_X1, SOUTH_EDGE + 4 - NORTH_EDGE + 60);
+    g.fillRect(PARK_X1, top, SAND_X0 - PARK_X1, SOUTH_EDGE + 4 - top);
     // the sidewalk on the park's side of Ocean Drive
     g.fillStyle = '#f4dcc0';
-    g.fillRect(STREET_X1, NORTH_EDGE - 60, PROM_X1 - STREET_X1, SOUTH_EDGE + 4 - NORTH_EDGE + 60);
+    g.fillRect(STREET_X1, top, PROM_X1 - STREET_X1, SOUTH_EDGE + 4 - top);
+    // (v5) the park at the island's tip: the promenade on the sea wall, the lawns behind it, a path
+    // down from the end of every avenue, the bandshell's plaza on the line of Ocean Drive
+    // (world/northend.js)
+    if (NORTH_ON && vis.z0 < NORTH_END + 10) {
+      const zp = NORTH_SHORE + 8;
+      g.fillStyle = COL.grass;
+      g.fillRect(BAY_X, zp, STREET_X1 - BAY_X, NORTH_END - zp);
+      g.fillStyle = COL.path;
+      g.fillRect(BAY_X, NORTH_SHORE, PROM_X1 - BAY_X, zp - NORTH_SHORE);
+      for (const a of AVES) if (!a.blvd) g.fillRect(a.x - 3, zp, 6, NORTH_END - zp);
+      g.fillStyle = COL.plaza;
+      g.fillRect(-13, zp, PROM_X1 - 0.6 + 13, NORTH_END - zp);
+      // the bandshell: its shell of arches, round at the back, open to the plaza
+      const bs = this.bandshell;
+      if (bs) {
+        g.fillStyle = '#fbf3f6';
+        g.strokeStyle = COL.ink;
+        g.lineWidth = px;
+        g.beginPath();
+        g.ellipse(bs.x, bs.z1, bs.r, bs.z1 - bs.z0, 0, Math.PI, TAU);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
+    }
     // the shore: the ink line of the land
     g.strokeStyle = COL.ink;
     g.lineWidth = 1.6 * px;
-    g.beginPath();
-    g.moveTo(WATER_X, vis.z0 - 10);
-    g.lineTo(WATER_X, SHORE_Z);
-    g.lineTo(BAY_X, SHORE_Z);
-    g.lineTo(BAY_X, vis.z0 - 10);
+    shorePath(g, 0, vis.z0 - 10);
     g.stroke();
     // the alleys down the blocks
     g.fillStyle = COL.alley;
@@ -837,11 +893,13 @@ export class CityMap {
   roadRects() {
     if (this._roads) return this._roads;
     const r = [];
+    // (v5: with the north end, the avenues and Ocean Drive go on to 17th Street, and it across)
+    const z0 = NORTH_ON ? NORTH_ST.z - NORTH_ST.half : NORTH_EDGE;
     for (const a of AVES) {
-      if (a.blvd) r.push([STREET_X0, NORTH_EDGE - 60, STREET_X1, SOUTH_EDGE + 30]);
-      else r.push([a.x - a.half, NORTH_EDGE, a.x + a.half, SOUTH_EDGE]);
+      if (a.blvd) r.push([STREET_X0, NORTH_ON ? z0 : NORTH_EDGE - 60, STREET_X1, SOUTH_EDGE + 30]);
+      else r.push([a.x - a.half, z0, a.x + a.half, SOUTH_EDGE]);
     }
-    for (const s of STREETS) r.push([WEST_EDGE - 6, s.z - s.half, STREET_X0, s.z + s.half]);
+    for (const s of NORTH_ON ? [NORTH_ST, ...STREETS] : STREETS) r.push([WEST_EDGE - 6, s.z - s.half, STREET_X0, s.z + s.half]);
     // (v5, ROADMAP 11.17) the mainland's, and the causeways over the bay
     if (MAINLAND_ON) {
       for (const a of M_AVES) r.push([a.x - a.half, a.z0 - 6, a.x + a.half, a.z1 + 6]);
@@ -864,8 +922,9 @@ export class CityMap {
     if (k < 1.5) return;
     // the lines down the middle: yellow between the two ways, dashes between the lanes
     const segZ = [];
+    const top = NORTH_ON ? NORTH_ST.z + NORTH_ST.half + 1 : NORTH_EDGE;
     for (let j = 0; j < STREETS.length; j++) {
-      const a = j === 0 ? NORTH_EDGE : STREETS[j - 1].z + STREETS[j - 1].half + 1;
+      const a = j === 0 ? top : STREETS[j - 1].z + STREETS[j - 1].half + 1;
       segZ.push([a, STREETS[j].z - STREETS[j].half - 1]);
     }
     segZ.push([STREETS[STREETS.length - 1].z + STREETS[STREETS.length - 1].half + 1, SOUTH_EDGE]);
@@ -873,7 +932,7 @@ export class CityMap {
     g.lineCap = 'butt';
     for (const a of AVES) {
       for (const [z0, z1] of segZ) {
-        const za = a.blvd && z0 === NORTH_EDGE ? NORTH_EDGE - 60 : z0;
+        const za = a.blvd && z0 === top ? (NORTH_ON ? NORTH_ST.z - NORTH_ST.half : NORTH_EDGE - 60) : z0;
         const zb = a.blvd && z1 === SOUTH_EDGE ? SOUTH_EDGE + 30 : z1;
         if (zb < vis.z0 || za > vis.z1) continue;
         g.setLineDash([]);
@@ -906,7 +965,7 @@ export class CityMap {
     g.strokeStyle = COL.yellow;
     g.lineWidth = Math.max(0.3, 1.3 * px);
     g.beginPath();
-    for (const s of STREETS) {
+    for (const s of NORTH_ON ? [NORTH_ST, ...STREETS] : STREETS) {
       if (s.z < vis.z0 - 10 || s.z > vis.z1 + 10) continue;
       let x = WEST_EDGE - 6;
       for (const a of AVES) {
@@ -1390,7 +1449,7 @@ export class CityMap {
       }
     }
     const cols = k < 2.1 ? [1] : [0, 1, 2, 3];
-    for (const s of STREETS) {
+    for (const s of NORTH_ON ? [NORTH_ST, ...STREETS] : STREETS) {
       if (k < 1.3 || s.half * 2 * k < st + 2) continue;
       const name = both ? `${s.name} · ${s.sign}` : s.name;
       for (const c of cols) {
@@ -1413,10 +1472,11 @@ export class CityMap {
     }
     // the districts, written big across their blocks (on two lines when the block is narrow)
     const fade = k > 5 ? 0.45 : 0.92;
-    for (let row = 0; row < 5; row++) {
+    for (let row = NORTH_ON ? -1 : 0; row < 5; row++) {
       for (let col = 0; col < 3; col++) {
-        const r = blockRect(col, row);
-        const type = BLOCK_TYPES[row][col];
+        // (v5: row -1, the north end's)
+        const r = row < 0 ? northRect(col) : blockRect(col, row);
+        const type = row < 0 ? NORTH_TYPES[col] : BLOCK_TYPES[row][col];
         const name = DISTRICT_NAMES[type];
         const bw = (r.x1 - r.x0) * k;
         const x = this.sx((r.x0 + r.x1) / 2);
@@ -1443,8 +1503,8 @@ export class CityMap {
     }
     // the houses west of Coral Ave, the promenade, the pier, the beach, the bridge
     const side = clamp(10 + k * 4, 14, 28);
-    for (const row of k < 0.75 ? [] : k < 2.1 ? [1, 3] : [0, 1, 2, 3, 4]) {
-      const r = westRect(row);
+    for (const row of k < 0.75 ? [] : k < 2.1 ? [1, 3] : NORTH_ON ? [-1, 0, 1, 2, 3, 4] : [0, 1, 2, 3, 4]) {
+      const r = row < 0 ? northRect(-1) : westRect(row);
       const x = this.sx((r.x0 + r.x1) / 2);
       const y = this.sy((r.z0 + r.z1) / 2);
       if (on(x, y, 150)) this.text(g, DISTRICT_NAMES.west, x, y, { font: `${side}px ${hand}`, rot: -Math.PI / 2, halo: 5, alpha: fade });

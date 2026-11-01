@@ -22,7 +22,7 @@ const STEAM = [0.55, 0.55, 0.6];
 const TRASH = [0.1, 0.1, 0.12];
 
 // held with both hands (the left hand follows the right one's item)
-const TWO_HANDED = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell', 'box']);
+const TWO_HANDED = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell', 'box', 'boxHeld']);
 
 export function heldIn(fig, side) {
   if (side === 1) return fig.carry;
@@ -107,6 +107,31 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
       break;
     case 'card':
       [x, y, z] = [side * 0.12, hipY + 0.4, 0.46];
+      break;
+    // (v5, ROADMAP 13.13: a shop's real things in a hand - game/shoplife.js draws them, the pose is
+    // here: a product held before the body, a basket by its handle at the side, a box held in both
+    // hands; the shop's own small tools - a cloth to wipe the counter, the scanner, the bills)
+    case 'held':
+      [x, y, z] = [side * 0.1, ny - 0.3, 0.28];
+      break;
+    case 'basketHeld':
+      [x, y, z] = [side * 0.24, hipY + 0.04, 0.08];
+      break;
+    case 'boxHeld':
+      [x, y, z] = [side * 0.19, hipY + 0.16, 0.3];
+      break;
+    case 'bagHeld':
+      [x, y, z] = [side * 0.2, hipY - 0.02, 0.06];
+      break;
+    case 'cloth':
+      [x, y, z] = [side * 0.14, hipY + 0.12, 0.3];
+      break;
+    case 'scanner':
+      if (!R) return false;
+      [x, y, z] = [0.12, ny - 0.18, 0.34];
+      break;
+    case 'cash':
+      [x, y, z] = [side * 0.12, hipY + 0.38, 0.42];
       break;
     case 'laundry':
       [x, y, z] = [side * 0.21, hipY + 0.05, 0.27];
@@ -302,6 +327,23 @@ function shapesFor(fig, item, side, S) {
     case 'card':
       _a.copy(h).addScaledVector(Z, 0.03 * S);
       e(_a, 0.045, 0.005, 0.03, fig.cardColor || [0.3, 0.45, 0.85]);
+      break;
+    // (ROADMAP 13.13) a cloth bunched in the hand; the shop's scanner gun, its handle and its nose;
+    // a few folded bills
+    case 'cloth':
+      _a.copy(h).addScaledVector(UP, -0.01 * S).addScaledVector(Z, 0.02 * S);
+      e(_a, 0.06, 0.03, 0.05, fig.clothColor || [0.36, 0.62, 0.86]);
+      break;
+    case 'scanner': {
+      _a.copy(h).addScaledVector(UP, 0.05 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.03, 0.035, 0.07, [0.16, 0.16, 0.18]);
+      _b.copy(h).addScaledVector(UP, -0.01 * S);
+      e(_b, 0.022, 0.05, 0.025, [0.96, 0.78, 0.14]);
+      break;
+    }
+    case 'cash':
+      _a.copy(h).addScaledVector(Z, 0.035 * S);
+      e(_a, 0.06, 0.006, 0.032, [0.52, 0.72, 0.46]);
       break;
     case 'trashbag':
       // a black bin bag, tied at the top (the garbage truck's crew: game/fleet.js)

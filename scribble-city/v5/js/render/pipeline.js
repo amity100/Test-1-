@@ -5,6 +5,8 @@ import { HEAD, FUNCS, PENS_FRAG } from './glsl.js';
 import { Occlusion } from './occlusion.js';
 import { motion, motionUpload } from './motion.js';
 import { Solid } from './solid.js';
+// (v5) the edge of the page: the drawing thinning out to the paper there (render/pagedge.js)
+import { PAGE_GLSL, pageUniforms } from './pagedge.js';
 
 // One frame of the drawing:
 //  1. the sun's view of the street (shadows)
@@ -134,6 +136,8 @@ vec3 worldAt(vec2 uv, out float dist) {
   return (uCamWorld * vec4(v.xyz, 1.0)).xyz;
 }
 
+// (v5) the edge of the page (render/pagedge.js)
+${PAGE_GLSL}
 void main() {
   vec4 c = texture(tColor, TC(vUv));
   float zn;
@@ -156,6 +160,13 @@ void main() {
       float z0;
       anew = step(0.05, abs(lineAt(tick0, w, far, steady, r, z0) - e));
     }
+  }
+  // (v5: toward the edge of the page the drawing thins out to the paper - render/pagedge.js)
+  if (uPageK.y > 0.5) {
+    float pd = pgDist(w.xz);
+    // (how much of the ground one pixel covers: worked out here, where every pixel takes this way)
+    float pgPx = max(length(dFdx(w.xz)), length(dFdy(w.xz)));
+    if (pd < uPageK.x + 80.0 && pd > -0.5 && texture(tDepth, TC(vUv)).r < 1.0) c.rgb = pageEdge(c.rgb, w, zn, e, pgPx);
   }
   // far away the lines get pale and take the colour of what they outline, then give way to the haze
   float fz = smoothstep(30.0, 380.0, z);
@@ -699,6 +710,8 @@ export class Pipeline {
       tColor: { value: null }, tAux: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() },
       uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uBoilPrev: { value: 0 }, uTaa: { value: 0 }, uPR: shared.uPR, uLineW: { value: 1 },
       uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uUvK: uvK, uUvLo: uvLo,
+      // (v5: the edge of the page, render/pagedge.js)
+      ...pageUniforms, uFogDensity: shared.uFogDensity,
     });
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });

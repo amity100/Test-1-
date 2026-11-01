@@ -102,7 +102,9 @@ export function buildBlocks(ctx) {
     for (let col = 0; col < 3; col++) buildBlock(ctx, col, row, BLOCK_TYPES[row][col]);
     westRow(ctx, row);
   }
-  farBlocks(ctx);
+  // (the shapes of the blocks in the haze north of the city; v5: with the mainland, real blocks
+  // stand there now, the island's north end - built last, world/northend.js)
+  if (!ctx.mainland) farBlocks(ctx);
 }
 
 // a building's look: colours, neon, awning, how tall
@@ -255,8 +257,8 @@ export function rooftopName(ctx, f, L, top, name, col) {
   addLight(p[0], p[1], p[2], 18, c, 0.9);
 }
 
-function buildBlock(ctx, col, row, type) {
-  const R = blockRect(col, row);
+// (v5: R - a block of the north end, row -1, world/northend.js)
+export function buildBlock(ctx, col, row, type, R = blockRect(col, row)) {
   // (where the gangs are, a window boarded up now and then: world/deco.js)
   ctx.wearGang = type === 'gang';
   const blvd = col === 2;
@@ -462,9 +464,13 @@ export function towers(ctx, R) {
     const opts = {
       mats: ctx.towerMats || [ctx.M.wall], steel: ctx.M.steel, neon: ctx.M.neon, rand: r, chunk: undefined,
       trimCol: srgb(0.88, 0.84, 0.94), crownCol: hex(lk.signCol), y0: top, podium: false, style: pi === 0 ? 'deco' : 'cut',
+      solids: [],
     };
     const peak = skyscraper(ctx, xc, zc, tw, td, h, opts);
-    ctx.col.addBox(xc - tw / 2, zc - td / 2, xc + tw / 2, zc + td / 2, top, peak, 'wall');
+    // (v5: solid as it is drawn - its setbacks, its crown, its spire - box by box, world/skyline.js; one
+    // box the size of its foot up to the tip of its spire left walls in the air round its upper floors
+    // that a car flying by stuck on, and a roof over them it came down on)
+    for (const [x0, z0, x1, z1, y0, y1] of opts.solids) ctx.col.addBox(x0, z0, x1, z1, y0, y1, 'wall');
     if (ctx.footprints) ctx.footprints.push({ x0: xc - tw / 2, z0: zc - td / 2, x1: xc + tw / 2, z1: zc + td / 2, top: peak, tower: true, style: opts.style });
     fbox(ctx, f, ctx.M.neon, 2.6, top - 0.3, -0.05, L - 2.6, top - 0.1, 0.1, hex(lk.signCol));
   });

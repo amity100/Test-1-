@@ -55,6 +55,11 @@ function base() {
   }
   return BASE;
 }
+// (ROADMAP 14.1) the base head itself - its points, triangles, uv and the mouth's depth - for the
+// portraits drawn from it (render/portrait.js)
+export function baseHead() {
+  return base();
+}
 // the base face's front: at each millimetre of it, the triangle nearest ahead - so that a point of
 // the face's drawing is found on any head moved from it (facePtOf)
 const FG = { x0: -0.1, y0: -0.13, n: 200, m: 300, d: 0.001 };

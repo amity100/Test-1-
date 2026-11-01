@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/util.js';
-import { WATER_X, PIER, groundHeight, WEST_EDGE } from '../world/layout.js';
+import { WATER_X, PIER, groundHeight, WEST_EDGE, pageDist } from '../world/layout.js';
+import { MAINLAND_ON } from '../world/mainland/plan.js';
 import { SHORE_X, SEA_Z, ISLAND_X } from '../world/mainland/plan.js';
 import { srgb, makeSurface } from '../render/materials.js';
 import { Batch } from '../world/kit.js';
@@ -24,7 +25,9 @@ const FAR_Z = SEA_Z + 320;
 // (v5) the sand you wade out onto: just over the water's line (a wall, a dock or the pier is higher:
 // E climbs out there)
 const WADE = SURF + 0.45;
-const far = (x, z) => x >= FAR_X || (x < WEST_EDGE && z > FAR_Z);
+// (v5: with the mainland, out to the edge of the page - the current holds you a few strokes short
+// of where the paper ends, world/pageedge.js)
+const far = MAINLAND_ON ? (x, z) => pageDist(x, z) < 6 : (x, z) => x >= FAR_X || (x < WEST_EDGE && z > FAR_Z);
 
 const FISH = [[1.0, 0.55, 0.2], [1.0, 0.82, 0.25], [0.35, 0.6, 0.95], [0.95, 0.4, 0.55], [0.6, 0.85, 0.75]];
 const _c = new THREE.Vector3();
@@ -295,7 +298,7 @@ export class Swim {
     }
     if (far(p.pos.x + Math.sign(this.v.x) * 6, p.pos.z + Math.sign(this.v.z) * 6) && !this.saidFar) {
       this.saidFar = true;
-      g.hud.toast('הזרם חזק מדי כאן — חזרה לכיוון החוף', 'info', 2.4);
+      g.hud.toast(MAINLAND_ON ? 'כאן נגמר הדף — שוחים חזרה פנימה' : 'הזרם חזק מדי כאן — חזרה לכיוון החוף', 'info', 2.4);
     }
     this.head = clamp(this.head + this.v.y * dt, FLOOR + 0.5, Math.max(top, this.head - 0.02));
     if (this.head > top) this.head = damp(this.head, top, 6, dt);

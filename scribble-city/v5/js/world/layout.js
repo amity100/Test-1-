@@ -7,7 +7,7 @@
 // to 43, the dunes to 52, the sand down to the water at 108. Behind the hotels the city goes on:
 // Collins Ave, Washington Ave, Meridian Ave, and the numbered streets across them.
 
-import { MAINLAND_ON, mainlandHeight, mDistrictName, CAUSEWAYS, WEST_X, NORTH_Z, SEA_Z } from './mainland/plan.js';
+import { MAINLAND_ON, mainlandHeight, mDistrictName, CAUSEWAYS, PAGE } from './mainland/plan.js';
 
 export const CURB = 0.15;
 
@@ -48,14 +48,34 @@ export const NORTH_EDGE = STREETS[0].z - STREETS[0].half - STREETS[0].walk; // -
 export const SOUTH_EDGE = STREETS[5].z + STREETS[5].half + STREETS[5].walk; // 312
 export const WATER_X = 108;
 
-export const BOUNDS = { minX: WEST_EDGE + 1, maxX: WATER_X - 1, minZ: NORTH_EDGE + 1, maxZ: SOUTH_EDGE + 30 };
+// (v5) The island's north end, past 15th Street: a row of blocks up to 17th Street, its sidewalk,
+// then the park along the shore and the sea wall at the island's tip, the water beyond it - where
+// the blocks used to be only shapes in the distance (world/northend.js; not with ?island=1)
+export const NORTH_ON = MAINLAND_ON;
+export const NORTH_ST = { z: -515, half: 6, walk: 5, name: 'רחוב 17', sign: '17th St' };
+// 17th Street's own sidewalk on its far side ends here; the shore park, then the sea wall
+export const NORTH_END = NORTH_ST.z - NORTH_ST.half - NORTH_ST.walk;
+export const NORTH_SHORE = -562;
 
-// (v5) The edge of the world, for what flies and sails as well as what drives: the island and the
-// sea east of it to its walls (world/ground.js); with the mainland, it, the bay and the ocean off
-// its beach as far out as a swimmer may go (to the foot of its hills: world/mainland/ground.js).
+export const BOUNDS = { minX: WEST_EDGE + 1, maxX: WATER_X - 1, minZ: (NORTH_ON ? NORTH_END : NORTH_EDGE) + 1, maxZ: SOUTH_EDGE + 30 };
+
+// (v5) The page the whole city is drawn on (world/pageedge.js): the island, the bay, the mainland
+// and its hills, and the sea round them, out to where the paper ends - the edge of the world, for
+// what walks, drives, sails and flies alike. Nothing stops you short of it any more: no wall over
+// the water, none at the end of a street; in the last stretch before it the drawing thins out to
+// the bare paper, and there it ends, the pages under it and the desk below.
+export { PAGE };
+// how far in from the paper's edge the drawing begins to thin out (render/pagedge.js)
+export const PAGE_BAND = 230;
+// how far in from the edge it is (negative: past it)
+export function pageDist(x, z) {
+  return Math.min(x - PAGE.x0, PAGE.x1 - x, z - PAGE.z0, PAGE.z1 - z);
+}
+
+// (v5) The edge of the world, for what flies and sails as well as what drives: the edge of the page
+// (with ?island=1, the island alone, as it was: the island and the sea east of it to its walls).
 // null inside it; outside, the nearest place in it
-const EDGES = [[WEST_EDGE - 40, NORTH_EDGE - 80, WATER_X + 260, SOUTH_EDGE + 80]];
-if (MAINLAND_ON) EDGES.push([WEST_X + 71, NORTH_Z + 37, WEST_EDGE, SEA_Z + 300]);
+const EDGES = MAINLAND_ON ? [[PAGE.x0 + 0.6, PAGE.z0 + 0.6, PAGE.x1 - 0.6, PAGE.z1 - 0.6]] : [[WEST_EDGE - 40, NORTH_EDGE - 80, WATER_X + 260, SOUTH_EDGE + 80]];
 export function worldEdge(x, z) {
   let best = null;
   let bd = Infinity;
@@ -128,27 +148,59 @@ export function blockAt(x, z) {
     const w = westRect(row);
     if (x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1) return { col: -1, row, type: 'west', rect: w };
   }
+  // (v5) the island's north end (row -1, world/northend.js)
+  if (NORTH_ON && z < NORTH_EDGE && z > NORTH_ST.z) {
+    for (let col = 0; col < 3; col++) {
+      const r = northRect(col);
+      if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return { col, row: -1, type: NORTH_TYPES[col], rect: r };
+    }
+    const w = northRect(-1);
+    if (x >= w.x0 && x <= w.x1 && z >= w.z0 && z <= w.z1) return { col: -1, row: -1, type: 'west', rect: w };
+  }
   return null;
+}
+
+// (v5) what the north end's blocks are, west to east (the houses west of Meridian are 'west')
+export const NORTH_TYPES = ['shops', 'hotels', 'hotels'];
+
+// the land of a block of the north end, between 15th and 17th Street (col -1: the houses west of
+// Meridian Ave)
+export function northRect(col) {
+  const z0 = NORTH_ST.z + NORTH_ST.half + NORTH_ST.walk;
+  const z1 = NORTH_EDGE;
+  if (col < 0) {
+    const a = AVES[0];
+    return { x0: WEST_EDGE, x1: a.x - a.half - a.walk, z0, z1 };
+  }
+  const a = AVES[col];
+  const b = AVES[col + 1];
+  return { x0: a.x + a.half + a.walk, x1: b.blvd ? WALK_X0 : b.x - b.half - b.walk, z0, z1 };
 }
 
 // on a road (and which): the asphalt is at 0, everything else is a curb higher
 export function roadAt(x, z) {
-  if (z > NORTH_EDGE && z < SOUTH_EDGE) {
+  if (z > AVE_Z0 && z < SOUTH_EDGE) {
     for (const a of AVES) if (Math.abs(x - a.x) < a.half) return { ave: a };
   }
   if (x > WEST_EDGE && x < STREET_X0) {
     for (const s of STREETS) if (Math.abs(z - s.z) < s.half) return { street: s };
+    if (NORTH_ON && Math.abs(z - NORTH_ST.z) < NORTH_ST.half) return { street: NORTH_ST };
   }
   return null;
 }
 
+// (v5) where the avenues begin, to the north: at 15th Street, or with the north end at the far side
+// of 17th Street
+const AVE_Z0 = NORTH_ON ? NORTH_ST.z - NORTH_ST.half : NORTH_EDGE;
+
 // on a road at all? (roadAt without the answer: asked for every walker every frame)
 function onRoad(x, z) {
-  if (z > NORTH_EDGE && z < SOUTH_EDGE) {
+  if (z > AVE_Z0 && z < SOUTH_EDGE) {
     for (let i = 0; i < AVES.length; i++) if (Math.abs(x - AVES[i].x) < AVES[i].half) return true;
   }
   if (x > WEST_EDGE && x < STREET_X0) {
     for (let i = 0; i < STREETS.length; i++) if (Math.abs(z - STREETS[i].z) < STREETS[i].half) return true;
+    if (NORTH_ON && Math.abs(z - NORTH_ST.z) < NORTH_ST.half) return true;
   }
   return false;
 }
@@ -186,10 +238,28 @@ function onCauseway(z) {
   return false;
 }
 
+// (v5) the desk the page lies on, under the pages beneath it (world/pageedge.js)
+export const DESK_Y = -30;
+
 // Height of the walkable ground (sidewalks, blocks and the park are raised by a curb).
 export function groundHeight(x, z) {
-  // (v5, ROADMAP 11.17: the bay, the causeways over it and the mainland: world/mainland/plan.js)
-  if (MAINLAND_ON && x < WEST_EDGE - 2 && (x < WEST_EDGE - 30 || onCauseway(z))) return mainlandHeight(x, z);
+  if (MAINLAND_ON) {
+    // (v5: past the edge of the page, the desk; world/pageedge.js)
+    if (x < PAGE.x0 || x > PAGE.x1 || z < PAGE.z0 || z > PAGE.z1) return DESK_Y;
+    // (v5, ROADMAP 11.17: the bay, the causeways over it and the mainland: world/mainland/plan.js)
+    if (x < WEST_EDGE - 2 && (x < WEST_EDGE - 30 || onCauseway(z))) return mainlandHeight(x, z);
+    // (v5) off the island's ends: the water - north of the sea wall at its tip (the sand round the
+    // tip on the beach's side, down into it), south of the beach at its foot
+    if (z < NORTH_SHORE + 14) {
+      if (x <= SAND_X0) {
+        if (z < NORTH_SHORE) return -0.8;
+      } else if (x <= WATER_X) {
+        const y = beachHeight(x, z) - (NORTH_SHORE + 14 - z) * 0.075;
+        return y < -0.78 ? -0.8 : y;
+      }
+    }
+    if (z > SOUTH_EDGE + 40) return -0.8;
+  }
   if (x > PROM_X1) {
     if (z > PIER.z0 && z < PIER.z1 && x > PIER.x0 && x < PIER.x1) return 0.35;
     if (x > WATER_X) return -0.8;

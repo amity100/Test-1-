@@ -6,6 +6,7 @@ import { strut, parkCar } from './kits.js';
 import { palm } from './palms.js';
 import { shadeTree, clump } from './streetscape.js';
 import { CURB } from './layout.js';
+import { ghostly } from './ghost.js';
 
 // (v5, ROADMAP 11.2ג) The yards. A real city is not a wall of fronts on the sidewalk and a wall of
 // backs on the alley: the hotels and the flats stand back behind a forecourt or a garden, the towers
@@ -557,7 +558,11 @@ export function rowYards(ctx, lots, o) {
   }
   for (const lot of lots) {
     if (lot.open) {
-      if (lot.kind === 'vacant') overgrown(ctx, lot, o);
+      // (v5: a lot built on at the end of the city - its weeds and saplings only in name: world/ghost.js)
+      if (lot.kind === 'vacant') {
+        if (lot.ghost) ghostly(ctx, () => overgrown(ctx, lot, o));
+        else overgrown(ctx, lot, o);
+      }
       continue;
     }
     if (lot.backYard > 0.6) backYard(ctx, lot, o, home);

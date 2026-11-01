@@ -573,3 +573,43 @@ export function buildRoofs(ctx) {
   }
   ctx.roofWorld = { col: RC, routes, boards, terraces, ms: performance.now() - t0 };
 }
+
+// (v5) the roofs of the buildings put up after all the rest (the island's north end, its empty lots
+// built on at last: world/northend.js) - their solids, their ways up, a terrace now and then - into
+// the city's own. from: { b, e, k }, where their buildings, escapes and backs begin in the lists
+export function addRoofs(ctx, from) {
+  const R = ctx.roofs;
+  const W = ctx.roofWorld;
+  if (!R || !W) return;
+  const RC = W.col;
+  for (let i = from.b; i < R.buildings.length; i++) roofSolids(RC, R.buildings[i]);
+  const routes = [];
+  for (let i = from.e; i < R.escapes.length; i++) {
+    const r = escapeRoute(ctx, RC, R.escapes[i]);
+    if (r) routes.push(r);
+  }
+  const done = new Set(routes.map((r) => r.info));
+  for (let i = from.k; i < R.backs.length; i++) {
+    const b = R.backs[i];
+    if (!b.info || done.has(b.info)) continue;
+    const c = b.bf.p(b.L * 0.5, 0, 0);
+    if (hash(c[0], c[2]) > 0.34) continue;
+    const r = backRoute(ctx, b);
+    if (r) {
+      routes.push(r);
+      done.add(b.info);
+    }
+  }
+  for (const r of routes) (r.info.tops || (r.info.tops = [])).push(r.last);
+  for (const r of routes) {
+    if (r.info.board || r.info.terrace) continue;
+    const k = hash(r.last.x * 1.7, r.last.z * 0.9);
+    if (k > 0.34) continue;
+    const t = terrace(ctx, RC, r, k / 0.34);
+    if (t) {
+      W.terraces.push(t);
+      r.info.terrace = t;
+    }
+  }
+  for (const r of routes) W.routes.push(r);
+}

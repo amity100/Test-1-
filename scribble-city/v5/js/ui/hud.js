@@ -1,4 +1,4 @@
-import { BOUNDS, AVES, STREETS, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, STREET_X0, STREET_X1, PROM_X1, PARK_X1, SAND_X0 } from '../world/layout.js';
+import { BOUNDS, AVES, STREETS, districtName, WATER_X, PIER, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, STREET_X0, STREET_X1, PROM_X1, PARK_X1, SAND_X0, NORTH_ON, NORTH_ST, NORTH_END, NORTH_SHORE } from '../world/layout.js';
 import { GRADE } from '../game/weapons.js';
 import { INKS } from '../game/freeform.js';
 import { BLUEPRINTS, drawBlueprint } from '../game/blueprints.js';
@@ -137,7 +137,9 @@ export class HUD {
       g.stroke();
     }
     // the land (pavers), the bay to the east and the sea to the south
-    if (ml) R(BOUNDS.minX - pad, BOUNDS.minZ - pad, x1, BOUNDS.maxZ + pad, '#d9b9c4');
+    // (v5: with the north end, the island up to its tip and its sea wall, the water beyond)
+    const tip = ml && NORTH_ON;
+    if (ml) R(BOUNDS.minX - pad, tip ? NORTH_SHORE : BOUNDS.minZ - pad, x1, BOUNDS.maxZ + pad, '#d9b9c4');
     else R(x0, z0, x1, z1, '#d9b9c4');
     R(WATER_X, z0, x1, z1, '#34307a');
     R(x0, SOUTH_EDGE + 36, x1, z1, '#34307a');
@@ -146,18 +148,25 @@ export class HUD {
     if (ml) for (const cw of CAUSEWAYS) R(cw.x0, cw.z - cw.half, WEST_EDGE, cw.z + cw.half, '#4a4258');
     R(WEST_EDGE - 40, SOUTH_EDGE + 4, WATER_X, SOUTH_EDGE + 36, '#f0d9a8');
     // the sidewalk on the park's side, the park, the dunes, the beach
-    R(STREET_X1, NORTH_EDGE - 60, PROM_X1, SOUTH_EDGE + 4, '#efc9b4');
-    R(PROM_X1, NORTH_EDGE - 60, PARK_X1, SOUTH_EDGE + 4, '#8cc98a');
-    R(PARK_X1, z0, SAND_X0, SOUTH_EDGE + 4, '#d8d39a');
-    R(SAND_X0, z0, WATER_X, SOUTH_EDGE + 36, '#f0d9a8');
+    R(STREET_X1, tip ? NORTH_SHORE : NORTH_EDGE - 60, PROM_X1, SOUTH_EDGE + 4, '#efc9b4');
+    R(PROM_X1, tip ? NORTH_SHORE : NORTH_EDGE - 60, PARK_X1, SOUTH_EDGE + 4, '#8cc98a');
+    R(PARK_X1, tip ? NORTH_SHORE : z0, SAND_X0, SOUTH_EDGE + 4, '#d8d39a');
+    R(SAND_X0, tip ? NORTH_SHORE : z0, WATER_X, SOUTH_EDGE + 36, '#f0d9a8');
+    // (the park at the tip: its lawns, the promenade along the sea wall)
+    if (tip) {
+      R(WEST_EDGE - 30, NORTH_SHORE + 8, STREET_X1, NORTH_END, '#8cc98a');
+      R(WEST_EDGE - 30, NORTH_SHORE, PROM_X1, NORTH_SHORE + 8, '#efc9b4');
+    }
     R(PIER.x0, PIER.z0, PIER.x1, PIER.z1, '#c98f68');
     // the roads
     const road = '#4a4258';
+    // (v5: with the north end, on to 17th Street, and it across)
+    const za = tip ? NORTH_ST.z - NORTH_ST.half : NORTH_EDGE;
     for (const a of AVES) {
-      if (a.blvd) R(STREET_X0, NORTH_EDGE - 60, STREET_X1, SOUTH_EDGE + 30, road);
-      else R(a.x - a.half, NORTH_EDGE, a.x + a.half, SOUTH_EDGE, road);
+      if (a.blvd) R(STREET_X0, tip ? za : NORTH_EDGE - 60, STREET_X1, SOUTH_EDGE + 30, road);
+      else R(a.x - a.half, za, a.x + a.half, SOUTH_EDGE, road);
     }
-    for (const st of STREETS) R(WEST_EDGE - 6, st.z - st.half, STREET_X0, st.z + st.half, road);
+    for (const st of tip ? [NORTH_ST, ...STREETS] : STREETS) R(WEST_EDGE - 6, st.z - st.half, STREET_X0, st.z + st.half, road);
     // parks, plazas, the market
     const w = this.game.world;
     for (const p of w.parks || []) R(p.x0, p.z0, p.x1, p.z1, '#7fc485');

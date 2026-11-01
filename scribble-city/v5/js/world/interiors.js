@@ -82,7 +82,7 @@ export class Interiors {
     let res;
     let done = false;
     try {
-      res = yield* buildStock(c.rec, world.ctx.M, group, { merge: obj ? world.mergeObj : world.merge, obj });
+      res = yield* buildStock(c.rec, world.ctx.M, group, { merge: obj ? world.mergeObj : world.merge, obj, low: this.low });
       done = true;
     } finally {
       // (let go of before it was all there: its id back)
@@ -106,10 +106,15 @@ export class Interiors {
         }
         group.visible = true;
         self.verts += res.verts;
+        // (ROADMAP 13.13: its live products and its doors, for its people - game/shoplife.js)
+        c.rec.live = res.live || null;
+        if (res.live) c.rec.liveGen = (c.rec.liveGen || 0) + 1;
       },
       detach() {
         if (self.pipe) self.pipe.removeStatic(group);
         if (group.parent) group.parent.remove(group);
+        if (c.rec.live === res.live) c.rec.live = null;
+        if (res.live) res.live.dispose();
         live.dispose();
         self.verts -= res.verts;
       },

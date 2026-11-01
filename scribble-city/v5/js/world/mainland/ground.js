@@ -3,7 +3,7 @@ import { makeSurface, srgb, hex, canvasTexture, addLight } from '../../render/ma
 import { nextId, canvas } from '../kit.js';
 import { palm } from '../palms.js';
 import { prism, rectPts } from '../skyline.js';
-import { M_AVES, M_STREETS, CAUSEWAYS, deckY, M_BLOCKS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z, hillsHeight, CURB, PIER_M, JETTY, MARINA } from './plan.js';
+import { M_AVES, M_STREETS, CAUSEWAYS, deckY, M_BLOCKS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z, hillsHeight, CURB, PIER_M, JETTY, MARINA, PAGE, pageTaper } from './plan.js';
 
 // (v5, ROADMAP 11.17) The mainland's ground as it is built at the start, all of it at once (it is
 // cheap): the picture of its roads and sidewalks seen from afar, the hills and their letters, the
@@ -99,7 +99,8 @@ export function buildHills(ctx) {
       const x = p.getX(i);
       const z = p.getZ(i);
       const h = hillsHeight(x, z);
-      p.setY(i, h > 0.05 ? h : -0.06);
+      // (v5: behind them, at the page's margin, the ground you may stand on: world/pageedge.js)
+      p.setY(i, h > 0.05 ? h : pageTaper(x, z) < 0.999 ? CURB - 0.02 : -0.06);
       const t = 0.5 + 0.5 * Math.sin(x * 0.05 + z * 0.031) * Math.cos(x * 0.017 - z * 0.04);
       c.copy(dry).lerp(green, t * 0.8);
       col[i * 3] = c.r;
@@ -110,8 +111,9 @@ export function buildHills(ctx) {
     g.computeVertexNormals();
     ctx.B.add(M.grass, g, null, nextId(), { chunk: 'hills' });
   };
-  sheet(WEST_X - 420, SHORE_X + 40, NORTH_Z - 420, -1196, 9);
-  sheet(WEST_X - 420, -1878, -1196, SEA_Z + 60, 9);
+  // (v5: no further than the edge of the page)
+  sheet(PAGE.x0, SHORE_X + 40, PAGE.z0, -1196, 9);
+  sheet(PAGE.x0, -1878, -1196, SEA_Z + 60, 9);
   // scrub and trees over the slopes (cheap: low cones, far pens)
   const r = ctx.rng;
   for (let i = 0; i < 260; i++) {
@@ -362,8 +364,12 @@ export function buildShore(ctx) {
   }
   // the walls: the hills to the north and west (their foot; over them, what flies is held at the
   // edge of the world: world/layout.js worldEdge)
-  ctx.col.addBox(WEST_X - 200, NORTH_Z - 300, SHORE_X + 40, -1213, -2, 6, 'bound');
-  ctx.col.addBox(WEST_X - 200, -1213, -1889, SEA_Z + 40, -2, 6, 'bound');
+  // (v5: a wall along their foot only, where the slope begins - the boxes reached back over the whole
+  // of the hills, six metres high: behind the crests, where the hills come down to the edge of the
+  // page, a car flying low over them came down on their top, a floor in the air; and they went on
+  // out over the bay)
+  ctx.col.addBox(WEST_X - 60, -1217, SHORE_X, -1213, -2, 6, 'bound');
+  ctx.col.addBox(-1893, -1217, -1889, SEA_Z + 40, -2, 6, 'bound');
   // (v5: the ocean is open - you swim out from the beach as far as the current lets you, game/swim.js;
   // under the pier and the jetty a low wall, below their decks, keeps the swimmers off - you walk
   // out over it; world/mainland/landmarks.js)

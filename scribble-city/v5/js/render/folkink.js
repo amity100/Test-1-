@@ -112,8 +112,11 @@ export function paintFolkFace(c, o = {}) {
     const y = ym(py);
     return 0.7 * blush * blob(Math.abs(x), y, 0.044, -0.008, 0.019, 0.016) + 0.6 * blob(x, y, 0, -0.018, 0.009, 0.012) + 0.4 * smooth(0.06, 0.075, Math.abs(x));
   }, 0.9, 26, 1.8, S.warm, 0.32);
+  // (ROADMAP 14.1) flat: the portrait's own picture (render/portrait.js) - its colours and its
+  // features alone, no shading laid on it: its shade is the light's, where it falls, as the face moves
+  const flat = !!o.flat;
   // the neck in the jaw's shadow: a warm dark laid over it first, deepest right under the jaw
-  {
+  if (!flat) {
     const [nr, ng, nb] = S.neck;
     const ya = Y(fem ? -0.096 : -0.1);
     const yb = Y(-0.245);
@@ -129,6 +132,7 @@ export function paintFolkFace(c, o = {}) {
   const tone = (px, py) => folkTone(xm(px), ym(py), fem, P.shape);
   const neckK = (py) => smooth(-0.112, -0.132, ym(py));
   const soft = fem ? 0.8 : 1;
+  if (!flat) {
   h.hatch(0, 0, W, H, N(7600), (px, py) => tone(px, py) * 1.15 * soft * (1 - neckK(py)), 1.0, 28, 1.8, S.sh1, 0.55);
   h.hatch(0, 0, W, H, N(6200), (px, py) => (tone(px, py) - 0.2) * 1.5 * soft * (1 - neckK(py)), -0.65, 24, 1.7, S.sh2, 0.5);
   h.hatch(0, 0, W, H, N(3600), (px, py) => (tone(px, py) - 0.5) * 2.2 * soft * (1 - neckK(py)), 0.25, 20, 1.9, S.sh3, 0.55);
@@ -145,6 +149,7 @@ export function paintFolkFace(c, o = {}) {
   // the city's light caught in the drawing: pink along one side, blue along the other
   h.hatch(0, 0, W, H, N(900), (px, py) => 0.5 * smooth(0.04, 0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#e0709a', '#d860a8', '#f0909a'], 0.28);
   h.hatch(0, 0, W, H, N(900), (px, py) => 0.5 * smooth(-0.04, -0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#5a8ad8', '#6aa0e0', '#7a70d0'], 0.28);
+  }
   // ---- freckles: across the nose and the tops of the cheeks
   if (P.freckles) {
     for (let i = 0; i < N(520) * P.freckles; i++) {
@@ -344,7 +349,7 @@ export function paintFolkFace(c, o = {}) {
   const nw = P.head.nose || 1;
   for (const sd of [1, -1]) {
     h.lines([[X(sd * 0.0085 * nw), Y(0.027)], [X(sd * 0.0098 * nw), Y(0.008)], [X(sd * 0.0112 * nw), Y(-0.008)], [X(sd * 0.0142 * nw), Y(-0.018)]], 1.8, S.sh1[0], fem ? 0.4 : 0.6, 2, 1);
-    h.hatch(X(sd * 0.007 * nw), Y(0.02), X(sd * 0.016 * nw), Y(-0.016), 220, () => (fem ? 0.5 : 0.75), 1.2, 14, 1.5, [S.sh1[0], S.sh2[0], S.sh1[1]], 0.45);
+    if (!flat) h.hatch(X(sd * 0.007 * nw), Y(0.02), X(sd * 0.016 * nw), Y(-0.016), 220, () => (fem ? 0.5 : 0.75), 1.2, 14, 1.5, [S.sh1[0], S.sh2[0], S.sh1[1]], 0.45);
     const wx = sd * 0.0168 * nw;
     const pts = [];
     for (let i = 0; i <= 10; i++) {
@@ -362,7 +367,7 @@ export function paintFolkFace(c, o = {}) {
     g.fill();
     g.restore();
   }
-  h.hatch(X(0.012 * nw), Y(-0.02), X(-0.012 * nw), Y(-0.034), 160, () => 0.6, 0.2, 12, 1.4, S.sh1, 0.45);
+  if (!flat) h.hatch(X(0.012 * nw), Y(-0.02), X(-0.012 * nw), Y(-0.034), 160, () => 0.6, 0.2, 12, 1.4, S.sh1, 0.45);
   h.hatch(X(0.004), Y(0.022), X(-0.004), Y(-0.019), 80, () => 0.8, Math.PI / 2, 18, 1.5, S.light, 0.5, 0.2);
   // ---- the mouth: its width, its lips' fullness and colour (lipstick: deeper, glossy) - and how
   // they look: a smile lifts its corners (one of them, a half-smile), a laugh opens it on the teeth
@@ -484,7 +489,7 @@ export function paintFolkFace(c, o = {}) {
     }
   }
   // the shade under the lower lip, the cleft of the chin, the folds from the nose to the mouth
-  h.hatch(X(0.017), Y(-0.061), X(-0.017), Y(-0.07), 140, () => 0.7, 0.15, 14, 1.5, S.sh2, 0.45);
+  if (!flat) h.hatch(X(0.017), Y(-0.061), X(-0.017), Y(-0.07), 140, () => 0.7, 0.15, 14, 1.5, S.sh2, 0.45);
   if (!fem) h.path([[X(0.0005), Y(-0.083)], [X(-0.0005), Y(-0.092)]], 1.4, S.sh1[0], 0.35, 0.8);
   for (const sd of [1, -1]) {
     const sm = ex === 'half' && sd < 0 ? 0.15 : smile;
@@ -501,7 +506,7 @@ export function paintFolkFace(c, o = {}) {
       pts.push([X(x), Y(-0.118 - 0.006 * (1 - (x / 0.034) ** 2))]);
     }
     h.lines(pts, 1.8, S.sh2[0], 0.45 * dbl, 2, 1);
-    h.hatch(X(0.03), Y(-0.12), X(-0.03), Y(-0.134), 160, () => 0.6 * dbl, 0.1, 18, 1.6, S.sh1, 0.4);
+    if (!flat) h.hatch(X(0.03), Y(-0.12), X(-0.03), Y(-0.134), 160, () => 0.6 * dbl, 0.1, 18, 1.6, S.sh1, 0.4);
   }
   for (const sd of [1, -1]) h.path([[X(sd * 0.0035), Y(-0.034)], [X(sd * 0.0052), Y(-0.0448)]], 1.1, S.sh1[0], 0.3, 0.6);
   g.globalAlpha = 1;

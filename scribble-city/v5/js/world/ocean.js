@@ -8,7 +8,7 @@ import { hydrant, trashCan, newsBox, free, streetLamp } from './streets.js';
 import { AD_IDS } from './ads.js';
 import { palm } from './palms.js';
 import { slab } from './ground.js';
-import { STREETS, BLOCK_TYPES, blockRect, CURB, WALK_X0, STREET_X0, PROM_X1, PARK_X1, SAND_X0, SAND_TOP, WATER_X, BEACH_WALK, PIER, NORTH_EDGE, SOUTH_EDGE, beachHeight } from './layout.js';
+import { STREETS, BLOCK_TYPES, blockRect, CURB, WALK_X0, STREET_X0, PROM_X1, PARK_X1, SAND_X0, SAND_TOP, WATER_X, BEACH_WALK, PIER, NORTH_EDGE, SOUTH_EDGE, beachHeight, NORTH_ON, NORTH_SHORE, groundHeight } from './layout.js';
 
 // (v5) Ocean Drive, the way it is: on its west side a row of Art Deco hotels behind their
 // terraces, each its own building on its own lot (world/hotels.js); on the sidewalk the cafés'
@@ -19,6 +19,8 @@ import { STREETS, BLOCK_TYPES, blockRect, CURB, WALK_X0, STREET_X0, PROM_X1, PAR
 // rows of umbrellas and loungers, the towels; the surf, and the ocean.
 
 const TW = 3.2; // the terraces' depth
+// (all the island's streets; the park and the dunes may be given others: the north end's)
+const STREETS_ALL = STREETS;
 const CAFE_X = -5.7; // the middle of the cafés' strip by the curb
 const WHITE = srgb(0.98, 0.97, 0.95);
 const WOOD = srgb(0.66, 0.48, 0.32);
@@ -52,7 +54,8 @@ function nearCross(z, pad) {
 export function buildOceanDrive(ctx) {
   const r = ctx.rng;
   const S = { names: shuffle(r, HOTEL_NAMES.slice()), pals: shuffle(r, HOTEL_PALS.slice()), terraces: shuffle(r, TERRACE_NAMES.slice()), n: 0, p: 0, t: 0 };
-  ctx.ocean = { hotels: [] };
+  // (v5: the names and colours go on round where they left off on the north end's row, world/northend.js)
+  ctx.ocean = { hotels: [], S };
   for (let row = 0; row < 5; row++) hotelRow(ctx, row, S);
   sidewalk(ctx);
   park(ctx);
@@ -61,10 +64,11 @@ export function buildOceanDrive(ctx) {
 }
 
 // ------------------------------------------------------------------ the hotels
-function hotelRow(ctx, row, S) {
+// (v5: o.R, o.type - a row of the north end, world/northend.js)
+export function hotelRow(ctx, row, S, o = {}) {
   const r = ctx.rng;
-  const R = blockRect(2, row);
-  const type = BLOCK_TYPES[row][2];
+  const R = o.R || blockRect(2, row);
+  const type = o.type || BLOCK_TYPES[row][2];
   const x = R.x1;
   let lots;
   if (type === 'first') lots = FIRST.map((o) => ({ ...o }));
@@ -381,23 +385,26 @@ function sidewalk(ctx) {
 }
 
 // ------------------------------------------------------------------ the park
-function park(ctx) {
+// (v5: o.z0, o.z1, o.streets - the stretch of it along the north end, world/northend.js, the paths
+// at the ends of its own streets and no pier)
+export function park(ctx, o = {}) {
   const M = ctx.M;
   const r = ctx.rng;
-  const z0 = NORTH_EDGE - 50;
-  const z1 = SOUTH_EDGE + 4;
+  const z0 = o.z0 !== undefined ? o.z0 : NORTH_EDGE - 50;
+  const z1 = o.z1 !== undefined ? o.z1 : SOUTH_EDGE + 4;
+  const STREETS = o.streets || STREETS_ALL;
   const X0 = PROM_X1;
   const X1 = PARK_X1;
   const [bw0, bw1] = BEACH_WALK;
-  const pz0 = PIER.z0 - 3;
-  const pz1 = PIER.z1 + 3;
+  const pz0 = o.streets ? 1e9 : PIER.z0 - 3;
+  const pz1 = o.streets ? 1e9 : PIER.z1 + 3;
   // the ground under it (the park is a curb high, like the sidewalks)
   ctx.B.box(M.wallSolid, X0, -1.6, z0, X1, CURB - 0.01, z1, nextId(), { color: srgb(0.62, 0.52, 0.42), chunk: 'beach' });
   // the crossings of the park: at the end of every street a paved path to the beach, the pier's
   // plaza; between them the lawns
   const cuts = [];
   for (const s of STREETS) cuts.push([s.z - 2.4, s.z + 2.4]);
-  cuts.push([pz0, pz1]);
+  if (!o.streets) cuts.push([pz0, pz1]);
   cuts.sort((a, b) => a[0] - b[0]);
   const spans = [];
   let z = z0;
@@ -422,7 +429,7 @@ function park(ctx) {
   // the beach walk, all the way along; the paths across; the pier's plaza
   for (let za = z0; za < z1 - 0.1; za += 48) slab(ctx, M.prom, bw0, bw1, za, Math.min(z1, za + 48), CURB - 0.01, CURB + 0.02, 8, { chunk: 'beach' });
   for (const s of STREETS) slab(ctx, M.prom, X0, X1, s.z - 2.4, s.z + 2.4, CURB - 0.01, CURB + 0.02, 8, { chunk: 'beach' });
-  slab(ctx, M.plaza, X0, X1, pz0, pz1, CURB - 0.01, CURB + 0.025, 4);
+  if (!o.streets) slab(ctx, M.plaza, X0, X1, pz0, pz1, CURB - 0.01, CURB + 0.025, 4);
   // a low wall of coral stone along the sidewalk, open at the paths and every so often
   {
     const id = nextId();
@@ -510,14 +517,16 @@ function park(ctx) {
 }
 
 // ------------------------------------------------------------------ the dunes
-function dunes(ctx) {
+// (v5: o.z0, o.z1, o.streets as the park's)
+export function dunes(ctx, o = {}) {
   const M = ctx.M;
   const r = ctx.rng;
-  const z0 = NORTH_EDGE - 50;
-  const z1 = SOUTH_EDGE + 2;
+  const z0 = o.z0 !== undefined ? o.z0 : NORTH_EDGE - 50;
+  const z1 = o.z1 !== undefined ? o.z1 : SOUTH_EDGE + 2;
+  const STREETS = o.streets || STREETS_ALL;
   const X0 = PARK_X1;
   const X1 = SAND_X0;
-  const crossing = (z) => STREETS.some((s) => Math.abs(z - s.z) < 3.4) || (z > PIER.z0 - 3 && z < PIER.z1 + 3);
+  const crossing = (z) => STREETS.some((s) => Math.abs(z - s.z) < 3.4) || (!o.streets && z > PIER.z0 - 3 && z < PIER.z1 + 3);
   // the sea oats: tufts of long thin blades, straw and green, in pieces along the dunes
   const blades = [srgb(0.78, 0.74, 0.46), srgb(0.62, 0.68, 0.36), srgb(0.84, 0.8, 0.56)];
   for (let za = z0; za < z1; za += 30) {
@@ -740,8 +749,14 @@ export function towel(ctx, x, z, col, col2) {
 function beach(ctx) {
   const M = ctx.M;
   const r = ctx.rng;
-  // (the beach goes on north, past where you can walk, as far as you can see)
-  const z0 = NORTH_EDGE - 610;
+  // (the beach goes on north, past where you can walk, as far as you can see; v5: round the north
+  // end's tip and down into the water there, world/northend.js)
+  const z0 = NORTH_ON ? NORTH_SHORE - 18 : NORTH_EDGE - 610;
+  const sandY = NORTH_ON ? (x, z) => {
+    if (z >= NORTH_SHORE + 14) return beachHeight(x, z);
+    const y = groundHeight(Math.min(x, WATER_X), z);
+    return y <= -0.79 ? -1.3 : y;
+  } : beachHeight;
   const z1 = SOUTH_EDGE + 40;
   const X0 = PARK_X1 - 0.2;
   const X1 = WATER_X + 26;
@@ -760,8 +775,8 @@ function beach(ctx) {
       const z = za + ((zb - za) * j) / nz;
       for (let i = 0; i <= nx; i++) {
         const x = X0 + ((X1 - X0) * i) / nx;
-        let y = beachHeight(Math.max(x, X0 + 0.21), z);
-        if (x > WATER_X) y = SAND_TOP - ((SAND_TOP + 0.8) * (x - SAND_X0)) / (WATER_X - SAND_X0);
+        let y = sandY(Math.max(x, X0 + 0.21), z);
+        if (x > WATER_X) y = SAND_TOP - ((SAND_TOP + 0.8) * (x - SAND_X0)) / (WATER_X - SAND_X0) - (NORTH_ON && z < NORTH_SHORE + 14 ? (NORTH_SHORE + 14 - z) * 0.075 : 0);
         pos.push(x, y - 0.005, z);
         uv.push(x / 6, -z / 6);
       }
@@ -786,6 +801,8 @@ function beach(ctx) {
     const S = new Shape();
     const up = [0, 1, 0];
     for (let z = za; z < zb - 0.01; z += DZ) {
+      // (v5: not where the sand goes down into the water round the island's tip)
+      if (NORTH_ON && z < NORTH_SHORE + 15) continue;
       const z2 = Math.min(zb, z + DZ);
       const xa = WATER_X - 9;
       const xb = WATER_X + 0.4;
