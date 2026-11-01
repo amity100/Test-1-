@@ -1437,7 +1437,7 @@ export class Game {
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !(this.facelab && this.facelab.interact()) && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -2143,6 +2143,12 @@ export class Game {
       // (at the service station: what stopping here does, game/garage.js)
       const gp = this.garage.prompt();
       if (gp) prompt = gp;
+    } else if (p.mode === 'foot' && this.facelab && (this.facelab.target() || (this.facelab.viewing && this.facelab.visit))) {
+      // (ROADMAP 14.1: Sal, come over to be looked at close - game/facelab.js)
+      enter = true;
+      const ft = this.facelab.target();
+      const label = ft ? ft.label : 'E — חזרה למשחק';
+      prompt = touch ? label.replace('E — ', '') : label;
     } else if (p.mode === 'foot' && this.events.prompt()) {
       // somebody near you needs a hand (game/events.js)
       enter = true;

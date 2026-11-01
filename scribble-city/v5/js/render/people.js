@@ -1247,7 +1247,8 @@ export class PersonRenderer {
   // (ROADMAP 14.1) somebody near enough to be drawn as a portrait (render/portrait.js): one a kind,
   // the nearest - the face lab's whatever its distance (game/facelab.js, fig.__portrait)
   portraitFor(fig, k, camDist) {
-    if (PORTRAIT_MODE === 'off' || !PORTRAIT_KINDS.has(k) || fig.dead > 0 || fig.parts.head < 0.5 || this.touch || fig.__noPortrait) return null;
+    // (on a phone, the face lab's alone: in the street the city's way, for the frames' sake)
+    if (PORTRAIT_MODE === 'off' || !PORTRAIT_KINDS.has(k) || fig.dead > 0 || fig.parts.head < 0.5 || (this.touch && !fig.__portrait) || fig.__noPortrait) return null;
     if (!fig.__portrait && !(PORTRAIT_STREET && camDist < PORTRAIT_NEAR)) return null;
     const P = this.portraits && this.portraits.get(k) ? this.portraits.get(k) : this.makePortrait(k);
     const d = fig.__portrait ? -1 : camDist;

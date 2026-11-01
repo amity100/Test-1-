@@ -36,7 +36,9 @@ export class CameraRig {
    * target: feet position of the followed object. opts: { dist, height, shoulder, aim }
    */
   update(dt, target, opts = {}) {
-    // (a test's view from further off: its script sets camRig.over = { dist, height })
+    // (a test's view from further off: its script sets camRig.over = { dist, height }; and what it
+    // looks at instead of you - game/facelab.js: somebody's face, close)
+    if (this.focus) target = this.focus;
     const ov = this.over;
     const dist = ov ? ov.dist : (opts.dist || this.dist) * (opts.aim ? 0.62 : 1);
     const height = ov ? ov.height : opts.height || this.height;

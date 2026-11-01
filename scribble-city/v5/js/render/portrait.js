@@ -766,6 +766,7 @@ export class Portrait {
       uWrinkle: { value: wrinkles() },
       uWrinkleW: { value: new THREE.Vector4() },
       uAge: { value: this.spec.lines || 0 },
+      uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
     });
     m.needsUpdate = true;
     const mesh = new THREE.Mesh(this.geo, m);
