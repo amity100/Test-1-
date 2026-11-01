@@ -1,0 +1,2752 @@
+From c6f98e762079ade3bea1ac1acc351b13077639e7 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 10:28:02 +0000
+Subject: [PATCH] WIP characters/portrait 1 (stopped mid-work): a shared
+ portrait kit, per-person slots, maps off the main thread, budgets, cross-fade
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0153GfthkSpGNsVr8EsmCE1z
+---
+ scribble-city/v5/bench/portraits.html      |  15 +
+ scribble-city/v5/bench/portraits.js        | 137 ++++
+ scribble-city/v5/js/game/facelab.js        |   9 +-
+ scribble-city/v5/js/game/figure.js         |   3 +-
+ scribble-city/v5/js/game/game.js           |   5 +
+ scribble-city/v5/js/render/folkink.js      |  39 +-
+ scribble-city/v5/js/render/glsl.js         |  35 +-
+ scribble-city/v5/js/render/herolines.js    |  14 +-
+ scribble-city/v5/js/render/heroworker.js   |  56 ++
+ scribble-city/v5/js/render/people.js       | 144 ++--
+ scribble-city/v5/js/render/portrait.js     | 907 +++++++++++----------
+ scribble-city/v5/js/render/portraitmaps.js | 434 ++++++++++
+ scribble-city/v5/js/render/portraits.js    | 494 +++++++++++
+ 13 files changed, 1757 insertions(+), 535 deletions(-)
+ create mode 100644 scribble-city/v5/bench/portraits.html
+ create mode 100644 scribble-city/v5/bench/portraits.js
+ create mode 100644 scribble-city/v5/js/render/portraitmaps.js
+ create mode 100644 scribble-city/v5/js/render/portraits.js
+
+diff --git a/scribble-city/v5/bench/portraits.html b/scribble-city/v5/bench/portraits.html
+new file mode 100644
+index 0000000..81aa950
+--- /dev/null
++++ b/scribble-city/v5/bench/portraits.html
+@@ -0,0 +1,15 @@
++<!doctype html>
++<html lang="he" dir="rtl">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
++<title>ספסל בדיקה: פורטרטים</title>
++<style>html, body { margin: 0; height: 100%; background: #f4efe2; overflow: hidden; } #viewport canvas { display: block; } #info { position: fixed; bottom: 6px; right: 8px; font: 12px system-ui, sans-serif; color: #2a2018; background: rgba(250,246,236,0.85); padding: 3px 6px; border-radius: 6px; }</style>
++<script type="importmap">{ "imports": { "three": "../../js/vendor/three.module.min.js" } }</script>
++</head>
++<body>
++<div id="viewport"></div>
++<div id="info">ספסל הפורטרטים</div>
++<script type="module" src="portraits.js"></script>
++</body>
++</html>
+diff --git a/scribble-city/v5/bench/portraits.js b/scribble-city/v5/bench/portraits.js
+new file mode 100644
+index 0000000..3f82d6a
+--- /dev/null
++++ b/scribble-city/v5/bench/portraits.js
+@@ -0,0 +1,137 @@
++import * as THREE from 'three';
++import { shared, pens, makeSurface, LAYERS } from '../js/render/materials.js';
++import { Pipeline } from '../js/render/pipeline.js';
++import { FigureRenderer } from '../js/game/figure.js';
++import { Doodle } from '../js/game/doodle.js';
++import { folkLook } from '../js/game/looks.js';
++import { DayNight } from '../js/game/daynight.js';
++import { initProvoke } from '../js/render/provoke.js';
++import { cacheUniformArrays } from '../js/render/glcache.js';
++import { FOLK } from '../js/render/folkspec.js';
++
++// (v5, ROADMAP 14.1) A bench for the portraits (render/portraits.js): the city's people standing on
++// a plain lawn in the afternoon light, drawn exactly as the game draws them (its pipeline, its
++// people's renderer, their rig), and nothing else of the city - it loads in seconds. For the tests:
++//   window.__bench.place([[kind, x, z, yaw], ...], { hold })   people (hold: a face held as asked -
++//                                                              { expr, k } - drawn as a portrait
++//                                                              whatever the distance)
++//   window.__bench.cam([x, y, z], [x, y, z], fov)              the camera
++//   window.__bench.head(i)                                     person i's head's middle
++//   window.__frame(n, dt)                                      n steps, one picture
++// ?low: a phone's budget; ?portrait=...: render/portraits.js
++
++const params = new URLSearchParams(location.search);
++const low = params.has('low');
++const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
++renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
++renderer.setSize(window.innerWidth, window.innerHeight);
++renderer.setClearColor(0x000000, 0);
++document.getElementById('viewport').appendChild(renderer.domElement);
++const gl = renderer.getContext();
++initProvoke(gl, false);
++cacheUniformArrays(gl);
++shared.uQuality.value = low ? 0 : 1;
++const scene = new THREE.Scene();
++const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 400);
++camera.rotation.order = 'YXZ';
++const pipe = new Pipeline(renderer, scene, camera, { low });
++pipe.scale = 1;
++pipe.defaultScale = 1;
++pipe.minScale = 1;
++pipe.maxScale = 1;
++shared.uPR.value = pipe.pixelsPerCss;
++pens.can = pipe.hdr && !params.has('onepass') && gl.getParameter(gl.MAX_DRAW_BUFFERS) >= 6 && gl.getParameter(gl.MAX_COLOR_ATTACHMENTS) >= 6;
++pipe.pensMode = pens.can ? 'two' : 'one';
++pipe.setPens(pens.can && !low);
++pipe.depthFirst = false;
++pipe.depthFixed = true;
++// a lawn, and a wall far behind (something for the light and the pens to fall on)
++const lawn = new THREE.Mesh(new THREE.PlaneGeometry(120, 120).rotateX(-Math.PI / 2), makeSurface({ kind: 'ground', color: new THREE.Color(0.42, 0.62, 0.3) }));
++scene.add(lawn);
++const wall = new THREE.Mesh(new THREE.BoxGeometry(60, 6, 0.4).translate(0, 3, -14), makeSurface({ kind: 'wall', color: new THREE.Color(0.86, 0.8, 0.7) }));
++scene.add(wall);
++const game = { params, pipe, world: null, weather: null };
++const day = new DayNight(game);
++day.setHour(params.has('hour') ? +params.get('hour') : 14.5);
++const fr = new FigureRenderer(scene);
++const bodies = fr.bodies;
++bodies.setRenderer(renderer);
++bodies.setPortraitBudget(low ? 'phone' : 'desktop');
++bodies.lodFar = low ? 32 : 55;
++let people = [];
++let time = 0;
++const center = new THREE.Vector3();
++
++function place(list, o = {}) {
++  for (const p of people) p.fig.dispose();
++  people = list.map(([k, x, z, yaw], i) => {
++    const fig = new Doodle(fr, folkLook(k), { seed: 11 + i * 7.3 });
++    fig.pos.set(x, 0, z);
++    fig.yaw = yaw || 0;
++    fig.speed = 0;
++    fig.lookAt = null;
++    if (o.hold) fig.__portrait = { expr: o.hold.expr || 'neutral', k: o.hold.k === undefined ? 1 : o.hold.k, au: o.hold.au || {} };
++    return { k, fig };
++  });
++  return people.length;
++}
++
++function cam(pos, look, fov) {
++  camera.position.set(pos[0], pos[1], pos[2]);
++  camera.lookAt(look[0], look[1], look[2]);
++  if (fov) camera.fov = fov;
++  camera.aspect = window.innerWidth / window.innerHeight;
++  camera.updateProjectionMatrix();
++  camera.updateMatrixWorld();
++}
++
++function step(dt) {
++  time += dt;
++  shared.uTime.value = time;
++  camera.updateMatrixWorld();
++  fr.begin(camera);
++  for (const p of people) {
++    p.fig.update(dt);
++    p.fig.draw(camera.position);
++  }
++  fr.end();
++}
++
++function frame(n = 1, dt = 1 / 30) {
++  for (let i = 0; i < n; i++) step(dt);
++  center.copy(camera.position);
++  pipe.render(center);
++  pipe.syncGpu();
++  renderer.setRenderTarget(null);
++  return true;
++}
++
++function head(i) {
++  const f = people[i] && people[i].fig;
++  if (!f) return null;
++  const h = f.j.headC;
++  const v = h.clone().project(camera);
++  return { x: h.x, y: h.y, z: h.z, sx: (v.x * 0.5 + 0.5) * window.innerWidth, sy: (0.5 - v.y * 0.5) * window.innerHeight };
++}
++
++cam([0, 1.6, 3], [0, 1.5, 0], 40);
++place([]);
++window.__bench = { place, cam, frame, head, people: () => people, bodies, pipe, renderer, scene, camera, FOLK, step };
++window.__frame = frame;
++window.addEventListener('resize', () => {
++  renderer.setSize(window.innerWidth, window.innerHeight);
++  camera.aspect = window.innerWidth / window.innerHeight;
++  camera.updateProjectionMatrix();
++});
++// (every shader made before the first picture, as the game does)
++const progs = pipe.precompile();
++(async () => {
++  const t0 = performance.now();
++  if (renderer.extensions.has('KHR_parallel_shader_compile')) {
++    while (progs.some((p) => !p.isReady()) && performance.now() - t0 < 60000) await new Promise((r) => setTimeout(r, 50));
++  }
++  frame(1);
++  window.__ready = true;
++  document.getElementById('info').textContent = `ספסל הפורטרטים · ${progs.length} shaders`;
++})();
++void LAYERS;
+diff --git a/scribble-city/v5/js/game/facelab.js b/scribble-city/v5/js/game/facelab.js
+index 3fb5152..a8b584e 100644
+--- a/scribble-city/v5/js/game/facelab.js
++++ b/scribble-city/v5/js/game/facelab.js
+@@ -16,7 +16,7 @@ import { AU, EXPRESSIONS } from '../render/portrait.js';
+ const NAMES = {
+   neutral: 'ניטרלי', angry: 'כעס', shout: 'צעקה', fear: 'פחד', distress: 'מצוקה', joy: 'שמחה', laugh: 'צחוק', sad: 'עצב', surprise: 'הפתעה', disgust: 'גועל',
+ };
+-// (the one drawn as a portrait for now: render/people.js PORTRAIT_KINDS)
++// (the visitor: Sal - any of the city's people is drawn as a portrait near enough, render/portraits.js)
+ export const SUBJECT = 2;
+ const VIEWS = { front: 0, quarter: 0.7, profile: 1.45 };
+ const VIEW_NAMES = { front: 'מלפנים', quarter: 'שלושה רבעים', profile: 'פרופיל' };
+@@ -104,6 +104,9 @@ export class FaceLab {
+     const fz = Math.cos(yaw);
+     const x = p.x + fx * 11 + fz * 1.2;
+     const z = p.z + fz * 11 - fx * 1.2;
++    // (his close picture painted while he comes over: render/portraits.js)
++    const bodies = g.figures && g.figures.bodies;
++    if (bodies && bodies.requestCloseUp) bodies.requestCloseUp(SUBJECT);
+     import('./looks.js').then((m) => {
+       const c = g.civilians.spawnScripted(x, z, m.folkLook(SUBJECT), null);
+       c.brave = true;
+@@ -311,7 +314,7 @@ export class FaceLab {
+   // the portrait's layers (render/glsl.js PORTRAIT uPLayers)
+   layersTo(a, b, c, d) {
+     const bodies = this.game.figures && this.game.figures.bodies;
+-    const P = bodies && bodies.portraits && bodies.portraits.get(SUBJECT);
++    const P = bodies && bodies.portraitSlotOf ? bodies.portraitSlotOf(this.c && this.c.fig) : null;
+     if (P && P.mat && P.mat.uniforms.uPLayers) P.mat.uniforms.uPLayers.value.set(a, b, c, d);
+   }
+ 
+@@ -321,6 +324,8 @@ export class FaceLab {
+     const g = this.game;
+     const p = g.player.pos;
+     this.at = { x: p.x - 3.6, z: p.z };
++    const bodies = g.figures && g.figures.bodies;
++    if (bodies && bodies.requestCloseUp) bodies.requestCloseUp(SUBJECT);
+     import('./looks.js').then((m) => {
+       const c = g.civilians.spawnScripted(this.at.x, this.at.z, m.folkLook(SUBJECT), null);
+       c.noCollide = true;
+diff --git a/scribble-city/v5/js/game/figure.js b/scribble-city/v5/js/game/figure.js
+index d441143..821434e 100644
+--- a/scribble-city/v5/js/game/figure.js
++++ b/scribble-city/v5/js/game/figure.js
+@@ -25,7 +25,8 @@ export class FigureRenderer {
+ 
+   begin(camera) {
+     this.batch.clear();
+-    this.bodies.begin();
++    // (the camera: who is on the screen to be drawn as a portrait - render/portraits.js)
++    this.bodies.begin(camera);
+     this.camPos.copy(camera.position);
+   }
+ 
+diff --git a/scribble-city/v5/js/game/game.js b/scribble-city/v5/js/game/game.js
+index d4a43c6..4151208 100644
+--- a/scribble-city/v5/js/game/game.js
++++ b/scribble-city/v5/js/game/game.js
+@@ -160,6 +160,9 @@ export class Game {
+     this.figures.bodies.lodFar = this.pipe.low ? 32 : 55;
+     // (ROADMAP 13.7: the city's people's pictures written straight into their atlases)
+     this.figures.bodies.setRenderer(this.renderer);
++    // (ROADMAP 14.1: how many of them are drawn as portraits at once, from how near - a phone's
++    // fewer and nearer: render/portraits.js BUDGETS)
++    this.figures.bodies.setPortraitBudget(this.pipe.low || this.touch ? 'phone' : 'desktop');
+     this.figures.bodies.detailFar = this.pipe.low ? 28 : 60;
+     this.detail = 0;
+     this.bubbles = new Bubbles(this.pipe.overlay);
+@@ -1138,6 +1141,8 @@ export class Game {
+     const player = this.player;
+     const fr = this.figures;
+     // dynamic ink (figures, projectiles, particles, beams) is rebuilt every running frame
++    // (ROADMAP 14.1: on a phone, nobody drawn as a portrait while you drive - render/portraits.js)
++    if (this.touch) fr.bodies.holdPortraits(!!player && player.mode !== 'foot');
+     if (dt > 0) fr.begin(this.camera);
+     if (playing) this.handleKeys();
+     const look = input.consumeLook();
+diff --git a/scribble-city/v5/js/render/folkink.js b/scribble-city/v5/js/render/folkink.js
+index b040485..ba49a6a 100644
+--- a/scribble-city/v5/js/render/folkink.js
++++ b/scribble-city/v5/js/render/folkink.js
+@@ -82,7 +82,12 @@ export function paintFolkFace(c, o = {}) {
+   const fem = !!P.fem;
+   const g = c.getContext('2d', { willReadFrequently: true });
+   const W = c.width;
+-  const H = c.height;
++  // (ROADMAP 14.1: o.H - the picture's height in full, of which only the canvas's top rows are
++  // painted: a portrait's, render/portraits.js, where nothing of the face below them is looked up.
++  // Strokes laid over the whole of it are as many as over that much of the full one)
++  const H = o.H || c.height;
++  const Hc = Math.min(H, c.height);
++  const NV = (n) => (Hc === H ? n : Math.round((n * Hc) / H));
+   const K = W / FACE.W;
+   const s = K / 4000;
+   const X = (x) => W / 2 - x * K;
+@@ -102,12 +107,12 @@ export function paintFolkFace(c, o = {}) {
+   // ---- the skin; its pencil grain
+   g.globalAlpha = 1;
+   g.fillStyle = S.base;
+-  g.fillRect(0, 0, W, H);
+-  h.hatch(0, 0, W, H, N(4200), () => 0.8, 1.05, 30, 1.6, S.grain, 0.32, 0.5);
+-  h.hatch(0, 0, W, H, N(2000), () => 0.6, -0.55, 24, 1.4, S.grain, 0.22, 0.5);
++  g.fillRect(0, 0, W, Hc);
++  h.hatch(0, 0, W, Hc, NV(4200), () => 0.8, 1.05, 30, 1.6, S.grain, 0.32, 0.5);
++  h.hatch(0, 0, W, Hc, NV(2000), () => 0.6, -0.55, 24, 1.4, S.grain, 0.22, 0.5);
+   // the warmth: the cheeks (rosier made up), the nose, the ears' side
+   const blush = 0.6 + (P.blush || 0) * 0.9;
+-  h.hatch(0, 0, W, H, N(900 + 600 * (P.blush || 0)), (px, py) => {
++  h.hatch(0, 0, W, Hc, NV(900 + 600 * (P.blush || 0)), (px, py) => {
+     const x = xm(px);
+     const y = ym(py);
+     return 0.7 * blush * blob(Math.abs(x), y, 0.044, -0.008, 0.019, 0.016) + 0.6 * blob(x, y, 0, -0.018, 0.009, 0.012) + 0.4 * smooth(0.06, 0.075, Math.abs(x));
+@@ -133,22 +138,22 @@ export function paintFolkFace(c, o = {}) {
+   const neckK = (py) => smooth(-0.112, -0.132, ym(py));
+   const soft = fem ? 0.8 : 1;
+   if (!flat) {
+-  h.hatch(0, 0, W, H, N(7600), (px, py) => tone(px, py) * 1.15 * soft * (1 - neckK(py)), 1.0, 28, 1.8, S.sh1, 0.55);
+-  h.hatch(0, 0, W, H, N(6200), (px, py) => (tone(px, py) - 0.2) * 1.5 * soft * (1 - neckK(py)), -0.65, 24, 1.7, S.sh2, 0.5);
+-  h.hatch(0, 0, W, H, N(3600), (px, py) => (tone(px, py) - 0.5) * 2.2 * soft * (1 - neckK(py)), 0.25, 20, 1.9, S.sh3, 0.55);
+-  h.hatch(0, 0, W, H, N(fem ? 1400 : 2400), (px, py) => tone(px, py) * neckK(py), 1.38, fem ? 24 : 34, 1.7, S.sh1, fem ? 0.24 : 0.36, 0.3);
+-  h.hatch(0, 0, W, H, N(fem ? 600 : 1100), (px, py) => (tone(px, py) - 0.4) * 1.6 * neckK(py), 1.18, 30, 1.7, S.sh2, fem ? 0.3 : 0.42, 0.3);
++  h.hatch(0, 0, W, Hc, NV(7600), (px, py) => tone(px, py) * 1.15 * soft * (1 - neckK(py)), 1.0, 28, 1.8, S.sh1, 0.55);
++  h.hatch(0, 0, W, Hc, NV(6200), (px, py) => (tone(px, py) - 0.2) * 1.5 * soft * (1 - neckK(py)), -0.65, 24, 1.7, S.sh2, 0.5);
++  h.hatch(0, 0, W, Hc, NV(3600), (px, py) => (tone(px, py) - 0.5) * 2.2 * soft * (1 - neckK(py)), 0.25, 20, 1.9, S.sh3, 0.55);
++  h.hatch(0, 0, W, Hc, NV(fem ? 1400 : 2400), (px, py) => tone(px, py) * neckK(py), 1.38, fem ? 24 : 34, 1.7, S.sh1, fem ? 0.24 : 0.36, 0.3);
++  h.hatch(0, 0, W, Hc, NV(fem ? 600 : 1100), (px, py) => (tone(px, py) - 0.4) * 1.6 * neckK(py), 1.18, 30, 1.7, S.sh2, fem ? 0.3 : 0.42, 0.3);
+   // the light: the forehead's middle, the bridge of the nose, the cheekbones' tops, the chin (and on
+   // a made-up face, the light on the cheekbones a little more)
+-  h.hatch(0, 0, W, H, N(1500 + (fem ? 500 : 0)), (px, py) => {
++  h.hatch(0, 0, W, Hc, NV(1500 + (fem ? 500 : 0)), (px, py) => {
+     const x = xm(px);
+     const y = ym(py);
+     const ax = Math.abs(x);
+     return 0.6 * blob(x, y, 0, 0.055, 0.03, 0.014) + 0.75 * blob(x, y, 0, 0.004, 0.0055, 0.022) + (fem ? 0.7 : 0.5) * blob(ax, y, 0.045, 0.008, 0.014, 0.007) + 0.4 * blob(x, y, 0, -0.088, 0.012, 0.007);
+   }, 1.05, 24, 1.6, S.light, 0.42);
+   // the city's light caught in the drawing: pink along one side, blue along the other
+-  h.hatch(0, 0, W, H, N(900), (px, py) => 0.5 * smooth(0.04, 0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#e0709a', '#d860a8', '#f0909a'], 0.28);
+-  h.hatch(0, 0, W, H, N(900), (px, py) => 0.5 * smooth(-0.04, -0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#5a8ad8', '#6aa0e0', '#7a70d0'], 0.28);
++  h.hatch(0, 0, W, Hc, NV(900), (px, py) => 0.5 * smooth(0.04, 0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#e0709a', '#d860a8', '#f0909a'], 0.28);
++  h.hatch(0, 0, W, Hc, NV(900), (px, py) => 0.5 * smooth(-0.04, -0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#5a8ad8', '#6aa0e0', '#7a70d0'], 0.28);
+   }
+   // ---- freckles: across the nose and the tops of the cheeks
+   if (P.freckles) {
+@@ -172,10 +177,10 @@ export function paintFolkFace(c, o = {}) {
+     const growth = kind === 'mustache' ? (px) => Math.PI / 2 + Math.sign(xm(px)) * (0.25 + Math.abs(xm(px)) * 14) : (px, py) => Math.PI / 2 + xm(px) * 9 * (ym(py) > -0.07 ? 1 : 0.4);
+     const dens = kind === 'shadow' ? 0.55 : kind === 'short' || kind === 'mustache' ? 1.0 : 0.9;
+     // (a beard's mass first: its shade under the hairs)
+-    if (kind !== 'shadow') h.hatch(0, 0, W, H, N(5200), (px, py) => st(px, py) * 0.95, 1.3, 16, 2.0, B, 0.42, 0.6);
+-    h.hatch(0, 0, W, H, N(2200), (px, py) => st(px, py) * 0.85 * dens, 1.25, 20, 1.6, ['#6a5a6a', '#5a4a58', '#7a6a70'], 0.26);
+-    h.ticks(0, 0, W, H, N(kind === 'shadow' ? 16000 : 34000), (px, py) => st(px, py) * 0.62 * dens, growth, kind === 'shadow' ? 3.6 : kind === 'mustache' ? 7.5 : 5.6, kind === 'shadow' ? 1.1 : kind === 'mustache' ? 1.7 : 1.4, B, kind === 'shadow' ? 0.6 : 0.82, 0.7);
+-    if (kind !== 'shadow') h.ticks(0, 0, W, H, N(9000), (px, py) => st(px, py) * 0.5, growth, 2.4, 1.5, B.slice(-2), 0.7, 1.5);
++    if (kind !== 'shadow') h.hatch(0, 0, W, Hc, NV(5200), (px, py) => st(px, py) * 0.95, 1.3, 16, 2.0, B, 0.42, 0.6);
++    h.hatch(0, 0, W, Hc, NV(2200), (px, py) => st(px, py) * 0.85 * dens, 1.25, 20, 1.6, ['#6a5a6a', '#5a4a58', '#7a6a70'], 0.26);
++    h.ticks(0, 0, W, Hc, NV(kind === 'shadow' ? 16000 : 34000), (px, py) => st(px, py) * 0.62 * dens, growth, kind === 'shadow' ? 3.6 : kind === 'mustache' ? 7.5 : 5.6, kind === 'shadow' ? 1.1 : kind === 'mustache' ? 1.7 : 1.4, B, kind === 'shadow' ? 0.6 : 0.82, 0.7);
++    if (kind !== 'shadow') h.ticks(0, 0, W, Hc, NV(9000), (px, py) => st(px, py) * 0.5, growth, 2.4, 1.5, B.slice(-2), 0.7, 1.5);
+   }
+   // ---- the eyes
+   const E = P.eyes;
+diff --git a/scribble-city/v5/js/render/glsl.js b/scribble-city/v5/js/render/glsl.js
+index 5979fb6..7e34b71 100644
+--- a/scribble-city/v5/js/render/glsl.js
++++ b/scribble-city/v5/js/render/glsl.js
+@@ -574,17 +574,23 @@ in vec4 iS;
+ #ifdef PORTRAIT
+ // (ROADMAP 14.1) a portrait's face (render/portrait.js): thirty moves of its muscles, each as far as
+ // it is made (uAU), every point's and its normal's move in two textures (uAUNv points a move, uAUW
+-// texels a row); its part (0 the head, 1 the upper teeth, 2 the lower, 3 the tongue, 4 and 5 the
+-// eyes) and how deep in the mouth it is
++// texels a row) - the same for every kind of person, the base head's; but where a kind's own head
++// turns a normal otherwise (aFix: its row + 1, render/portraitmaps.js fixes), that point's own
++// normal moves (uAUFix, thirty texels a point); the lower teeth and the tongue turned with the jaw
++// from where their mouth is (uJawFix); its part (0 the head, 1 the upper teeth, 2 the lower, 3 the
++// tongue, 4 and 5 the eyes) and how deep in the mouth it is
+ uniform highp sampler2D uAUPos;
+ uniform highp sampler2D uAUNor;
++uniform highp sampler2D uAUFix;
+ uniform float uAU[30];
+ uniform int uAUW;
+ uniform int uAUNv;
+ uniform vec3 uEyeC[2];
+ uniform vec4 uGaze;
++uniform vec3 uJawFix;
+ in float aPart;
+ in float aMouth;
++in float aFix;
+ flat out float vPart;
+ out float vMouthP;
+ void portraitMove(inout vec3 P, inout vec3 N) {
+@@ -602,15 +608,22 @@ void portraitMove(inout vec3 P, inout vec3 N) {
+     N = R * N;
+     return;
+   }
++  int aw = max(uAUW, 1);
++  int fx = int(aFix + 0.5) - 1;
++  int fw = textureSize(uAUFix, 0).x;
+   for (int e = 0; e < 30; e++) {
+     float w = uAU[e];
+     if (abs(w) < 0.002) continue;
+-    int aw = max(uAUW, 1);
+     int t = e * uAUNv + gl_VertexID;
+     ivec2 tc = ivec2(t % aw, t / aw);
+     P += w * texelFetch(uAUPos, tc, 0).xyz;
+-    N += w * texelFetch(uAUNor, tc, 0).xyz;
++    if (fx >= 0) {
++      int f = fx * 30 + e;
++      N += w * texelFetch(uAUFix, ivec2(f % fw, f / fw), 0).xyz;
++    } else N += w * texelFetch(uAUNor, tc, 0).xyz;
+   }
++  // (the lower teeth and the tongue: 2 and 3)
++  if (aPart > 1.5) P += uAU[0] * uJawFix;
+   N = normalize(N);
+ }
+ #endif
+@@ -798,6 +811,10 @@ uniform float uAge;
+ // (the face lab's layers, game/facelab.js: the light, the pencil, the lines it makes, the pencil's
+ // directions shown in colour)
+ uniform vec4 uPLayers;
++// (its picture: only its top rows painted - from v uPicV.x up, uPicV.y times as tall as they are;
++// render/portraits.js) and how far it has come in over the city's way of drawing the face
++uniform vec2 uPicV;
++uniform float uFade;
+ float gWr = 0.0;
+ #endif
+ in float vId;
+@@ -1024,6 +1041,12 @@ void main() {
+   if (vX.x > 0.5 && inPersonHole(vX.x, vWP)) discard;
+   if (vX.w < 0.5 && dot(vClip.xyz, vClip.xyz) > 0.0 && dot(vWP, vClip.xyz) > vClip.w) discard;
+ #endif
++#ifdef PORTRAIT
++  // (ROADMAP 14.1) a portrait coming in (or going): drawn in over the city's way of drawing the face
++  // beneath it - in little patches held on the face as it moves, and in single pixels between them -
++  // never both at once on a pixel, never one through the other. In the depth's own pass as well
++  if (uFade < 0.999 && n2(vLP.xy * 260.0 + vLP.z * 91.0) * 0.6 + h11(dot(floor(gl_FragCoord.xy), vec2(1.0, 57.0))) * 0.4 > uFade) discard;
++#endif
+ #ifdef USE_CABIN
+   // (the car you drive, iX.z = -1: its side windows down, and the trim under them; both are
+   // marked v = 1 in their uv, render/cars.js. ROADMAP 4.5)
+@@ -1121,8 +1144,12 @@ void main() {
+       if (!gl_FrontFacing) tex.rgb = vec3(0.02, 0.006, 0.006);
+ #endif
+ #endif
++#else
++#ifdef PORTRAIT
++      tex = texture(uMap, vec2(vUv.x, (vUv.y - uPicV.x) * uPicV.y), uMipBias);
+ #else
+       tex = texture(uMap, uWorldMap > 0.0 ? p / uWorldMap : vUv + uScroll * uTime, uMipBias);
++#endif
+ #endif
+     }
+     if (uNeonMask > 0.5) tex = vec4(mix(vCol, vec3(1.0), tex.g * 0.55), tex.r);
+diff --git a/scribble-city/v5/js/render/herolines.js b/scribble-city/v5/js/render/herolines.js
+index 95b02bd..8844995 100644
+--- a/scribble-city/v5/js/render/herolines.js
++++ b/scribble-city/v5/js/render/herolines.js
+@@ -393,14 +393,15 @@ export class HeroLines {
+   // face's moves this frame (ROADMAP 13.7: ex, as far as each is made - render/folkshapes.js EXPR)
+   // and where its eyes look (gaze: [x, y], how far the iris goes on the ball)
+   // (ROADMAP 14.1) faceOff: the face drawn as a portrait (render/portrait.js) - its features, its
+-  // shading and its outline are the portrait's own; only the hair's strokes and the edge light here
+-  set(slot, part, m, ex = null, gaze = null, faceOff = false) {
++  // shading and its outline are the portrait's own; only the hair's strokes and the edge light here.
++  // How far (0..1): the rest of the face's strokes fade as the portrait comes in over it
++  set(slot, part, m, ex = null, gaze = null, faceOff = 0) {
+     let s = this.slots[slot];
+-    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: false };
++    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: 0 };
+     s.e.set(m.elements);
+     s.ex = ex;
+     s.gaze = gaze;
+-    s.faceOff = faceOff;
++    s.faceOff = +faceOff;
+     s.on = true;
+   }
+ 
+@@ -431,7 +432,8 @@ export class HeroLines {
+       if (!mid && (kind === K.hatch || kind === K.cross || kind === K.rim || kind === K.hairhi || kind === K.shine)) continue;
+       for (const s of slots) {
+         if (!s.on) continue;
+-        if (s.faceOff && kind !== K.hair && kind !== K.hairhi && kind !== K.rim) continue;
++        const faceK = kind !== K.hair && kind !== K.hairhi && kind !== K.rim ? 1 - s.faceOff : 1;
++        if (faceK <= 0.02) continue;
+         const e = s.e;
+         const list = this.parts[s.part].by[oi];
+         for (let i = 0; i < list.length && left > 0; i++) {
+@@ -460,7 +462,7 @@ export class HeroLines {
+           const f = nx * vx + ny * vy + nz * vz;
+           const lit = 0.5 + 0.5 * (nx * L.x + ny * L.y + nz * L.z);
+           let col = st.col;
+-          let a = st.a;
++          let a = st.a * faceK;
+           if (kind === K.contour) {
+             if (f < -0.12 || f > 0.34) continue;
+           } else if (kind === K.shine) {
+diff --git a/scribble-city/v5/js/render/heroworker.js b/scribble-city/v5/js/render/heroworker.js
+index 8623831..426b4f3 100644
+--- a/scribble-city/v5/js/render/heroworker.js
++++ b/scribble-city/v5/js/render/heroworker.js
+@@ -1,10 +1,66 @@
+ import { PAINTERS } from './heroink.js';
+ import { FOLK_PAINTERS } from './folkink.js';
++import { planesData, wrinklesData, NormalMoves } from './portraitmaps.js';
+ 
+ // (v5, ROADMAP 13.1) The helper that draws the hero's drawings off the game's own thread - and, ROADMAP
+ // 13.6, the city's people's drawn as he is (render/heroart.js asks; each comes back as a picture)
++// (ROADMAP 14.1) and everything the portraits take long to work out (render/portraits.js asks):
++// how the light falls on the base head as each of its muscles moves it, the pictures of the face's
++// planes and lines, each kind's own normal moves where theirs differ, their faces' pictures
++let NM = null;
++let baseDn = null;
++async function portrait(d) {
++  const t0 = performance.now();
++  if (d.art === 'portraitInit') {
++    NM = new NormalMoves(d.idx, d.nt, d.dp, d.na);
++    const A = NM.all(d.pos, d.W);
++    baseDn = A.data;
++    // (a copy kept here for each kind's own, the other given)
++    const out = A.data.slice();
++    self.postMessage({ art: d.art, data: out, rows: A.rows, ms: performance.now() - t0 }, [out.buffer]);
++    return;
++  }
++  if (d.art === 'portraitMaps') {
++    const P = planesData();
++    const W = wrinklesData(d.wrW || 512);
++    self.postMessage({ art: d.art, planes: P, wrinkles: W, ms: performance.now() - t0 }, [P.data.buffer, W.data.buffer]);
++    return;
++  }
++  // a kind's face: its own normal moves first if asked (d.pos: its head at rest), then its picture -
++  // flat (its colours and features without shading), w wide of a picture d.H high, only its top
++  // d.h rows painted (all the head's uv reach), turned over for the graphics card (the face's v
++  // from the chin up)
++  let fix = null;
++  const tr = [];
++  if (d.pos && NM && baseDn) {
++    fix = NM.fixes(d.pos, baseDn, d.W, d.lim || 2);
++    tr.push(fix.fix.buffer, fix.data.buffer);
++  }
++  const t1 = performance.now();
++  const c = new OffscreenCanvas(d.w, d.h);
++  FOLK_PAINTERS.face(c, { seed: d.seed, blink: false, spec: d.folk, flat: true, H: d.H });
++  let bmp = null;
++  try {
++    bmp = await createImageBitmap(c, { imageOrientation: 'flipY' });
++  } catch (e) {
++    // (turned by hand where the browser cannot)
++    const c2 = new OffscreenCanvas(d.w, d.h);
++    const g = c2.getContext('2d');
++    g.translate(0, d.h);
++    g.scale(1, -1);
++    g.drawImage(c, 0, 0);
++    bmp = c2.transferToImageBitmap();
++  }
++  tr.push(bmp);
++  self.postMessage({ art: d.art, folk: d.folk, w: d.w, h: d.h, H: d.H, close: !!d.close, bmp, fix, ms: [t1 - t0, performance.now() - t1] }, tr);
++}
++
+ self.onmessage = (e) => {
+   const { art, folk, name, i, w, h, seed, blink, flat } = e.data;
++  if (typeof art === 'string' && art.startsWith('portrait')) {
++    portrait(e.data).catch((err) => self.postMessage({ art, folk, close: !!e.data.close, err: String((err && err.stack) || err).slice(0, 400) }));
++    return;
++  }
+   try {
+     const c = new OffscreenCanvas(w, h);
+     // (ROADMAP 13.6: or one of the city's people's, by their number)
+diff --git a/scribble-city/v5/js/render/people.js b/scribble-city/v5/js/render/people.js
+index e6660ee..196794d 100644
+--- a/scribble-city/v5/js/render/people.js
++++ b/scribble-city/v5/js/render/people.js
+@@ -8,7 +8,7 @@ import { HeroLines } from './herolines.js';
+ import { FOLK, FOLK_ON, SKINS, hexRGB } from './folkspec.js';
+ import { folkBody, eyeGeo, faceEx, exprMoves, EXPR, EYE } from './folkshapes.js';
+ import { folkTone, folkBeard } from './folkink.js';
+-import { Portrait } from './portrait.js';
++import { Portraits } from './portraits.js';
+ 
+ // The people of the city, drawn like everything else: a body of rounded parts under their clothes
+ // (the first boulevard's own people: a shaped torso, tapering limbs, a head with a jaw and ears,
+@@ -283,15 +283,8 @@ function partWas(out, i, m, owner, shape) {
+ // drawFolk before their parts are put down
+ const _fTile = [0];
+ const _fEw = new Float32Array(8);
+-// (ROADMAP 14.1) the portraits (render/portrait.js): which of the city's people are drawn near as a
+-// portrait is - for now one of them (FOLK 2, Sal: sixty-three, no glasses over his eyes, the years
+-// in his face), the prototype - and how near
+-const PORTRAIT_KINDS = new Set([2]);
+-// (?portrait=off: none; ?portrait=hide: made, never shown - for the tests)
+-const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('portrait') : null;
+-const PORTRAIT_NEAR = 6.5;
+-// (in the street too, not only the face lab's - game/facelab.js)
+-const PORTRAIT_STREET = true;
++// (ROADMAP 14.1) the portraits (render/portrait.js, render/portraits.js): any of the city's people near
++// the camera drawn as a portrait is, as many at once as there are slots for - the head's frame
+ const _mP = new THREE.Matrix4();
+ // (a frame framed by a body's right, up and forward is a mirror's: turned round as DrawClass.push
+ // turns the people's parts)
+@@ -304,25 +297,6 @@ function unmirror(m) {
+   }
+   return m;
+ }
+-// a portrait's picture of the face, flat (its colours and features alone), drawn off the game's
+-// thread by the same helper as everybody's pictures (render/heroworker.js)
+-let portraitHelper = null;
+-const portraitWait = new Map();
+-function paintPortrait(k, cb) {
+-  if (!portraitHelper) {
+-    portraitHelper = new Worker(new URL('./heroworker.js', import.meta.url), { type: 'module' });
+-    portraitHelper.onmessage = (e) => {
+-      const f = portraitWait.get(e.data.folk);
+-      if (e.data.err) console.warn('portrait picture', e.data.err);
+-      if (f && e.data.bmp) {
+-        portraitWait.delete(e.data.folk);
+-        f(e.data.bmp);
+-      }
+-    };
+-  }
+-  portraitWait.set(k, cb);
+-  portraitHelper.postMessage({ art: 'portrait', folk: k, name: 'face', i: 0, w: 1024, h: Math.round((1024 * 0.37) / 0.19), seed: 7, blink: false, flat: true });
+-}
+ // (a move's weight, -1..1, in a byte: 0 exactly 128)
+ const byteOf = (a) => Math.round(Math.max(-1, Math.min(1, a)) * 127) + 128;
+ 
+@@ -940,6 +914,15 @@ export class PersonRenderer {
+       this.p[name].atlas = true;
+     }
+     this.folk = Array.from({ length: nK }, (_, k) => this.folkKind(FOLK[k], k, touch, P));
++    // (ROADMAP 14.1) every one of them drawn near as a portrait (render/portraits.js): what they share
++    // made now, each kind's head from their own, the drawings kept ready in the scene now - their
++    // shader made with the rest before the game begins (render/pipeline.js precompile)
++    this.portraits = Portraits.make(scene, touch, LAYERS.MIRRORLESS);
++    for (const F of this.folk) {
++      if (this.portraits) this.portraits.addKind(F.k, F.spec, F.headPos, F.headNor, F.eyes);
++      F.headPos = null;
++      F.headNor = null;
++    }
+     for (const [k, sh] of Object.entries(this.p)) sh.lod = SHARED.has(k) ? 'shared' : k.startsWith('low') ? 'low' : 'full';
+     // (farther than this a person is drawn in the simple shapes in the picture too: game.js sets
+     // it for a phone and a computer)
+@@ -1010,6 +993,9 @@ export class PersonRenderer {
+       lines: new HeroLines(touch, kit, 0.5),
+       // (where their eyes are in their head: they turn there to look - drawFolk)
+       eyes: body.eyes,
++      // (their head's points and normals, for their portrait - render/portraits.js)
++      headPos: G.head.attributes.position.array,
++      headNor: G.head.attributes.normal.array,
+       // (their ears' lobes on their head: render/folkshapes.js)
+       lobes: body.lobes,
+       // (a thick neck or a slender one; a heavy body's girth)
+@@ -1226,72 +1212,48 @@ export class PersonRenderer {
+     this.dirty = true;
+   }
+ 
+-  begin() {
++  begin(camera = null) {
+     // (ROADMAP 13.7: the city's people's pictures that came this frame - their smaller copies; and the
+     // strokes their lines may have this frame, all of them together)
+     if (this.atlas.renderer) this.atlas.update();
+     this.folkLines = this.touch ? 1600 : 4200;
+-    // (ROADMAP 14.1) the portraits hidden until somebody is drawn with one again: each kind's to
+-    // whoever of them was nearest the camera last frame (the face lab's, always)
+-    if (this.portraits) {
+-      for (const P of this.portraits.values()) {
+-        if (P.mesh) P.mesh.visible = false;
+-        if (P.next !== P.owner) P.fresh = true;
+-        P.owner = P.next;
+-        P.next = null;
+-        P.nextD = Infinity;
+-      }
+-    }
++    // (ROADMAP 14.1) who of them is drawn as a portrait this frame - from who was near last frame
++    // (render/portraits.js) - and what has come from the helper for them
++    if (this.portraits) this.portraits.begin(camera, shared.uTime.value, this.atlas.queue.length > 0 || this.atlas.busy > 0);
+   }
+ 
+-  // (ROADMAP 14.1) somebody near enough to be drawn as a portrait (render/portrait.js): one a kind,
+-  // the nearest - the face lab's whatever its distance (game/facelab.js, fig.__portrait)
+-  portraitFor(fig, k, camDist) {
+-    // (on a phone, the face lab's alone: in the street the city's way, for the frames' sake)
+-    if (PORTRAIT_MODE === 'off' || !PORTRAIT_KINDS.has(k) || fig.dead > 0 || fig.parts.head < 0.5 || (this.touch && !fig.__portrait) || fig.__noPortrait) return null;
+-    if (!fig.__portrait && !(PORTRAIT_STREET && camDist < PORTRAIT_NEAR)) return null;
+-    const P = this.portraits && this.portraits.get(k) ? this.portraits.get(k) : this.makePortrait(k);
+-    const d = fig.__portrait ? -1 : camDist;
+-    if (d < P.nextD) {
+-      P.nextD = d;
+-      P.next = fig;
+-    }
+-    return P.ready && P.owner === fig ? P : null;
++  // (ROADMAP 14.1, game/game.js) a phone's portraits or a computer's (render/portraits.js BUDGETS);
++  // none for now (a phone's player driving)
++  setPortraitBudget(name) {
++    if (this.portraits && this.portraits.budgetName !== name) this.portraits.setBudget(name);
+   }
+ 
+-  // a kind's portrait: its head and its muscles' moves made now, its picture painted off the game's
+-  // thread (render/heroworker.js), drawn once it has come
+-  makePortrait(k) {
+-    if (!this.portraits) this.portraits = new Map();
+-    const P = new Portrait(k, k, LAYERS.MIRRORLESS);
+-    P.next = null;
+-    P.nextD = Infinity;
+-    this.portraits.set(k, P);
+-    paintPortrait(k, (bmp) => {
+-      if (PORTRAIT_MODE === 'hide') return;
+-      // (the picture's rows top first, as a canvas has them - a picture of this kind goes onto the
+-      // graphics card as it is, never turned - and the face's v from the chin up: turned over first)
+-      createImageBitmap(bmp, { imageOrientation: 'flipY' }).then((up) => {
+-        bmp.close();
+-        P.setPicture(up);
+-        this.scene.add(P.mesh);
+-      });
+-    });
+-    return P;
++  holdPortraits(on) {
++    if (this.portraits) this.portraits.hold = !!on;
++  }
++
++  // (game/facelab.js) somebody's portrait now, if they are drawn as one; their close picture asked for
++  portraitSlotOf(fig) {
++    return this.portraits ? this.portraits.slotOf(fig) : null;
++  }
++
++  requestCloseUp(k) {
++    if (this.portraits) this.portraits.requestCloseUp(k);
++  }
++
++  // (the tests) how many are drawn as portraits this frame; what the portraits are doing
++  portraitCount() {
++    return this.portraits ? this.portraits.count() : 0;
+   }
+ 
+-  // (ROADMAP 14.1) the portraits made while the city is still being put together: their heads, their
+-  // muscles' moves and their pictures cost a few tenths of a second once - then, not when somebody
+-  // first comes near in play
+-  warmPortraits() {
+-    if (PORTRAIT_MODE === 'off' || !PORTRAIT_STREET || this.touch) return;
+-    for (const k of PORTRAIT_KINDS) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
++  portraitDebug() {
++    return this.portraits ? this.portraits.debug() : null;
+   }
+ 
+   // (the graphics card's: the city's people's pictures are written straight into their atlases)
+   setRenderer(r) {
+     this.atlas.renderer = r;
+-    setTimeout(() => this.warmPortraits(), 1500);
++    if (this.portraits) this.portraits.setRenderer(r);
+   }
+ 
+   // a plain ellipsoid at c in the frame (r, u, f) (the birds of the city, little things in the air)
+@@ -2000,6 +1962,7 @@ export class PersonRenderer {
+     // (ROADMAP 13.7: their pictures - their tile of the atlases, drawn the first time they are about -
+     // and how their face is this frame)
+     this.atlas.want(L.folk, camDist);
++    if (this.portraits) this.portraits.wantKind(L.folk, camDist);
+     _fTile[0] = L.folk + 1;
+     // (on the game's clock: a face slows with the game, and stops when it stops)
+     const now = shared.uTime.value;
+@@ -2098,12 +2061,14 @@ export class PersonRenderer {
+       const hf = fig.hf;
+       const hc = _hcH.copy(j.headC).addScaledVector(hu, -0.058 * hs);
+       // (ROADMAP 14.1) near: the face drawn as a portrait is (render/portrait.js) - its muscles' moves,
+-      // its teeth, its eyes, shaded by the light; the hair, the glasses and the ears as ever
+-      const port = this.portraitFor(fig, L.folk, camDist);
++      // its teeth, its eyes, shaded by the light; the hair, the glasses and the ears as ever. While it
++      // fades in (or out) over the city's way of drawing it, that is drawn beneath it, its eyes too
++      const port = this.portraits ? this.portraits.slotFor(fig, L.folk, camDist) : null;
+       if (port) {
+         unmirror(framed(hc, hr, hu, hf, hs, hs, hs, _mP));
+-        const fdt = Math.min(0.1, Math.max(0, now - (port.lastT || now)));
+-        port.lastT = now;
++        const face = port.face;
++        const fdt = face.lastT < 0 ? 0 : Math.min(0.1, Math.max(0, now - face.lastT));
++        face.lastT = now;
+         let mood = fig.mood || (fig.feel && fig.feel.until > now ? fig.feel.mood : null);
+         if (fig.dead > 0) mood = 'dead';
+         else if (!mood) {
+@@ -2111,9 +2076,12 @@ export class PersonRenderer {
+           else if (fig.recoil > 0.2 || fig.stagger > 0) mood = 'hurt';
+           else if (fig.punch >= 0 || fig.kick >= 0 || fig.guard > 0.3) mood = 'angry';
+         }
+-        port.update(fdt, _fEw, mood, fig.__portrait || null, fig.say && !fig.say.done ? fig.say.tone : null, gaze);
+-        port.place(_mP);
+-        HL.set('head', 'head', _mP, _fEw, gaze, true);
++        face.update(fdt, _fEw, mood, fig.__portrait || null, fig.say && !fig.say.done ? fig.say.tone : null, gaze);
++        // (lit as the room it is in: the casino's floor 5, a club 4, any other indoors 1)
++        port.place(_mP, ind === 4 ? 5 : ind === 3 ? 4 : ind);
++        if (port.fade < 1) q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
++        // (the city's lines of the face fade as the portrait comes in: render/herolines.js)
++        HL.set('head', 'head', _mP, _fEw, gaze, port.fade);
+       } else {
+         q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
+         HL.set('head', 'head', _m, _fEw, gaze);
+@@ -2127,7 +2095,7 @@ export class PersonRenderer {
+       // (their eyes in their sockets, each turned to where they look. The head's frame is drawn
+       // mirrored - DrawClass.push - and the eyes' with it: each in the mirror's place)
+       _eyeR.makeRotationFromEuler(_eyeE.set(-gaze[3], gaze[2], 0, 'YXZ'));
+-      for (let e = 0; e < (port ? 0 : 2); e++) {
++      for (let e = 0; e < (port && port.fade >= 1 ? 0 : 2); e++) {
+         const c = F.eyes[e];
+         _eyeT.makeTranslation(-c[0], c[1], c[2]).multiply(_eyeR);
+         _eyeM.multiplyMatrices(_mH, _eyeT);
+diff --git a/scribble-city/v5/js/render/portrait.js b/scribble-city/v5/js/render/portrait.js
+index f21bbee..61aa9f0 100644
+--- a/scribble-city/v5/js/render/portrait.js
++++ b/scribble-city/v5/js/render/portrait.js
+@@ -1,9 +1,8 @@
+ import * as THREE from 'three';
+-import { makeSurface } from './materials.js';
+-import { baseHead, headOf, exprMoves, EYE } from './folkshapes.js';
++import { makeSurface, sortDefines } from './materials.js';
++import { baseHead, exprMoves, EYE } from './folkshapes.js';
+ import { MORPHS } from './folkheads.js';
+ import { faceMap } from './heroshapes.js';
+-import { FOLK } from './folkspec.js';
+ 
+ // (v5, ROADMAP 14.1) A portrait: one of the city's people drawn near as a portrait is drawn - not a
+ // mask with a pencil picture laid over it, but a face that moves as a face does and is shaded by
+@@ -29,11 +28,15 @@ import { FOLK } from './folkspec.js';
+ // to the mouth, the chin's dimpling - are drawn in as it makes them.
+ //
+ // Near enough, the person's head is drawn this way instead of the city's way (render/people.js
+-// drawFolk); farther, as everybody is.
++// drawFolk); farther, as everybody is. Any of the city's people, as many at once as there are
++// slots for them (render/portraits.js): what all of them share is made once (PortraitKit: the
++// muscles' moves, the planes of the face, the mouth's inside, the eyes); each kind of person their
++// own head and picture (PortraitKind); each person their own face's moment (PortraitFace); each
++// portrait on the street one of a few drawings kept ready (PortraitSlot).
+ 
+ // the moves, by name ('...R': the face's right, x > 0 on the head; '...L' its left)
+ export const AU = ['jaw', 'au1R', 'au1L', 'au2R', 'au2L', 'au4R', 'au4L', 'au5R', 'au5L', 'au6R', 'au6L', 'au7R', 'au7L', 'au9', 'au10R', 'au10L', 'au12R', 'au12L', 'au15R', 'au15L', 'au16', 'au17', 'au20R', 'au20L', 'au23', 'au38', 'blinkR', 'blinkL', 'pucker', 'wide'];
+-const NA = AU.length;
++export const NA = AU.length;
+ const AUI = Object.fromEntries(AU.map((n, i) => [n, i]));
+ // how fast each comes and goes (per second): the lids quickest, the cheeks slowest
+ const RATE = AU.map((n) => (n.startsWith('blink') ? 30 : n.startsWith('au5') || n.startsWith('au7') ? 14 : n.startsWith('au1') || n.startsWith('au2') || n.startsWith('au4') ? 9 : n === 'jaw' || n === 'wide' || n === 'pucker' ? 16 : n.startsWith('au6') ? 5 : n.startsWith('au12') ? 7 : 8));
+@@ -346,405 +349,360 @@ function tongue() {
+   return { pos, uv, idx };
+ }
+ 
+-// ------------------------------------------------------------------ the pictures of the face's planes
+-// (in the base face's uv: every head moved from it shares them) - rg: the pens' direction there
+-// (twice its angle, so that a stroke and its reverse are the same), b: how open it is to the light
+-// (its hollows dark), a: where the light gathers (the forehead, the bridge and tip of the nose, the
+-// cheekbones' tops, the chin)
+-const FU = (x) => 0.5 - x / 0.19;
+-const FV = (y) => 0.5 + (y + 0.06) / 0.37;
+-let PLANES = null;
+-function planes() {
+-  if (PLANES) return PLANES;
+-  const W = 256;
+-  const H = 512;
+-  const data = new Uint8Array(W * H * 4);
+-  for (let j = 0; j < H; j++) {
+-    const v = (j + 0.5) / H;
+-    const y = (v - 0.5) * 0.37 - 0.06;
+-    for (let i = 0; i < W; i++) {
+-      const u = (i + 0.5) / W;
+-      const x = (0.5 - u) * 0.19;
+-      const ax = Math.abs(x);
+-      const sx = x >= 0 ? 1 : -1;
+-      let cx = 0;
+-      let cy = 0;
+-      const put = (w, th) => {
+-        const k = w * w * w;
+-        cx += k * Math.cos(2 * th);
+-        cy += k * Math.sin(2 * th);
+-      };
+-      put(0.12, 0.6);
+-      // the forehead: across it, its lines curving down to the temples
+-      put(sstep(0.045, 0.06, y), -sx * 0.18 * Math.min(1, ax / 0.05));
+-      // the brows' ridge: along the brows
+-      put(gs(y - 0.04, 0.008) * sstep(0.065, 0.05, ax), -sx * 0.3 * Math.min(1, ax / 0.05));
+-      // round the eyes in their sockets
+-      {
+-        const dx = x - sx * 0.032;
+-        const dy = y - 0.0185;
+-        put(gs(Math.hypot(dx, dy * 1.25), 0.016), Math.atan2(dy, dx) + Math.PI / 2);
+-      }
+-      // down the bridge of the nose; down its sides; round its wings
+-      put(gs(ax, 0.0065) * sstep(-0.02, -0.01, y) * sstep(0.032, 0.02, y), Math.PI / 2);
+-      put(gs(ax - 0.012, 0.0045) * sstep(-0.026, -0.016, y) * sstep(0.022, 0.012, y), Math.PI / 2 + sx * 0.35);
+-      {
+-        const dx = x - sx * 0.0125;
+-        const dy = y + 0.022;
+-        put(gs(Math.hypot(dx, dy), 0.0075), Math.atan2(dy, dx) + Math.PI / 2);
+-      }
+-      // the cheek, up towards the temple; the cheekbone, along it
+-      put(gs(ax - 0.035, 0.014) * gs(y + 0.018, 0.016), sx * 0.6);
+-      put(gs(ax - 0.05, 0.012) * gs(y - 0.004, 0.009), sx * 0.2);
+-      // the folds from the nose down past the mouth
+-      put(gs(ax - 0.024, 0.009) * gs(y + 0.04, 0.016), Math.PI / 2 + sx * 0.45);
+-      // round the mouth
+-      {
+-        const dy = y + 0.051;
+-        const r = Math.hypot(x, dy * 1.4);
+-        put(gs(r - 0.016, 0.009), Math.atan2(dy, x) + Math.PI / 2);
+-      }
+-      // the chin, across it; the jaw, along it; the temples, down them
+-      put(gs(y + 0.084, 0.012) * gs(ax, 0.028), sx * 0.25 * Math.min(1, ax / 0.02));
+-      put(gs(ax - 0.052, 0.014) * gs(y + 0.065, 0.02), sx * 0.7);
+-      put(sstep(0.055, 0.07, ax) * sstep(-0.01, 0.01, y), Math.PI / 2 - sx * 0.15);
+-      const a2 = Math.atan2(cy, cx);
+-      // the hollows (b) and where the light gathers (a)
+-      let dark = 0;
+-      dark += 0.38 * gs(ax - 0.03, 0.013) * gs(y - 0.03, 0.0055);
+-      dark += 0.42 * gs(ax - 0.018, 0.0045) * gs(y - 0.018, 0.005);
+-      dark += 0.15 * gs(ax - 0.033, 0.012) * gs(y - 0.006, 0.0045);
+-      dark += 0.45 * gs(ax - 0.0165, 0.003) * gs(y + 0.021, 0.006);
+-      dark += 0.75 * gs(ax - 0.0075, 0.003) * gs(y + 0.028, 0.0022);
+-      dark += 0.25 * gs(ax, 0.007) * gs(y + 0.031, 0.0025);
+-      dark += 0.5 * gs(ax - 0.0255, 0.0032) * gs(y + 0.0515, 0.003);
+-      dark += 0.3 * gs(y + 0.0512, 0.0011) * sstep(0.027, 0.02, ax);
+-      dark += 0.32 * gs(ax, 0.014) * gs(y + 0.067, 0.0035);
+-      dark += 0.4 * sstep(-0.088, -0.1, y);
+-      dark += 0.15 * sstep(0.09, 0.105, y);
+-      dark += 0.2 * sstep(0.07, 0.085, ax);
+-      dark += 0.12 * gs(ax - 0.06, 0.008) * gs(y - 0.03, 0.015);
+-      let hi = 0;
+-      hi += 0.6 * gs(ax, 0.02) * gs(y - 0.06, 0.015);
+-      hi += 0.7 * gs(ax, 0.004) * gs(y, 0.02);
+-      hi += 0.6 * gs(ax - 0.045, 0.01) * gs(y - 0.005, 0.006);
+-      hi += 0.5 * gs(ax, 0.01) * gs(y + 0.088, 0.006);
+-      hi += 0.3 * gs(ax - 0.004, 0.004) * gs(y + 0.041, 0.003);
+-      const o = (j * W + i) * 4;
+-      data[o] = Math.round((0.5 + 0.5 * Math.cos(a2)) * 255);
+-      data[o + 1] = Math.round((0.5 + 0.5 * Math.sin(a2)) * 255);
+-      data[o + 2] = Math.round(Math.max(0, Math.min(1, 1 - dark)) * 255);
+-      data[o + 3] = Math.round(Math.max(0, Math.min(1, hi)) * 255);
+-    }
+-  }
+-  const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
+-  t.magFilter = THREE.LinearFilter;
+-  t.minFilter = THREE.LinearFilter;
++// ------------------------------------------------------------------ what every portrait shares
++// (the moves' textures: a texel a point a move, this many a row)
++export const AUW = 2048;
++// (the jaw's turn at its full, render/folkshapes.js exprMoves)
++const JAW_A = 0.26;
++const dataTex = (data, w, h, type = THREE.FloatType) => {
++  const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, type);
++  t.magFilter = THREE.NearestFilter;
++  t.minFilter = THREE.NearestFilter;
+   t.generateMipmaps = false;
+   t.needsUpdate = true;
+-  PLANES = t;
+   return t;
+-}
+-
+-// the lines a face makes as it moves, drawn in pencil: r - across the forehead (its brows up), g -
+-// the frown between the brows and the nose wrinkled, b - the crow's feet and under the eyes (its
+-// cheeks up, its lids tight), a - the folds from the nose to the mouth and the chin's dimpling
+-let WRINKLES = null;
+-function wrinkles() {
+-  if (WRINKLES) return WRINKLES;
+-  const W = 512;
+-  const H = Math.round((W * 0.37) / 0.19);
+-  // (drawn here a pixel at a time, not on a canvas: reading a canvas back waits on the graphics
+-  // card - in a slow browser for everything it has still to draw, the game standing still)
+-  const data = new Uint8Array(W * H * 4);
+-  const cov = new Float32Array(W * H);
+-  let seed = 7;
+-  const R = () => {
+-    seed = (seed * 16807) % 2147483647;
+-    return seed / 2147483647;
+-  };
+-  // (the rows from the bottom, as the picture's v is)
+-  const px = (x) => FU(x) * W;
+-  const py = (y) => FV(y) * H;
+-  // one stroke of a pencil along pts (pixels), w wide, a strong: its own coverage first (the most of
+-  // its segments a pixel, so its joints are not darker), then laid over what is in the channel
+-  const stroke = (ch, P, w, a) => {
+-    let x0 = Infinity;
+-    let y0 = Infinity;
+-    let x1 = -Infinity;
+-    let y1 = -Infinity;
+-    for (const [x, y] of P) {
+-      x0 = Math.min(x0, x);
+-      y0 = Math.min(y0, y);
+-      x1 = Math.max(x1, x);
+-      y1 = Math.max(y1, y);
+-    }
+-    const r = w / 2 + 1;
+-    const i0 = Math.max(0, Math.floor(x0 - r));
+-    const i1 = Math.min(W - 1, Math.ceil(x1 + r));
+-    const j0 = Math.max(0, Math.floor(y0 - r));
+-    const j1 = Math.min(H - 1, Math.ceil(y1 + r));
+-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cov[j * W + i] = 0;
+-    for (let s = 0; s + 1 < P.length; s++) {
+-      const [ax, ay] = P[s];
+-      const [bx, by] = P[s + 1];
+-      const dx = bx - ax;
+-      const dy = by - ay;
+-      const L2 = Math.max(1e-9, dx * dx + dy * dy);
+-      const si0 = Math.max(i0, Math.floor(Math.min(ax, bx) - r));
+-      const si1 = Math.min(i1, Math.ceil(Math.max(ax, bx) + r));
+-      const sj0 = Math.max(j0, Math.floor(Math.min(ay, by) - r));
+-      const sj1 = Math.min(j1, Math.ceil(Math.max(ay, by) + r));
+-      for (let j = sj0; j <= sj1; j++) {
+-        const cy = j + 0.5;
+-        for (let i = si0; i <= si1; i++) {
+-          const cx = i + 0.5;
+-          const t = Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / L2));
+-          const d = Math.hypot(cx - ax - dx * t, cy - ay - dy * t);
+-          const c = Math.max(0, Math.min(1, w / 2 + 0.5 - d));
+-          const q = j * W + i;
+-          if (c > cov[q]) cov[q] = c;
+-        }
+-      }
+-    }
+-    for (let j = j0; j <= j1; j++) {
+-      for (let i = i0; i <= i1; i++) {
+-        const q = j * W + i;
+-        const c = cov[q] * a;
+-        if (c <= 0) continue;
+-        const o = q * 4 + ch;
+-        data[o] = Math.round(data[o] + (255 - data[o]) * c);
+-      }
+-    }
+-  };
+-  // a line in pencil: a few passes, each a little off, thinning to the ends
+-  const line = (ch, pts, w = 2.4, a = 0.8) => {
+-    for (let pass = 0; pass < 3; pass++) {
+-      const P = pts.map(([x, y]) => {
+-        const jx = (R() - 0.5) * 0.0004 * pass;
+-        const jy = (R() - 0.5) * 0.0004 * pass;
+-        return [px(x + jx), py(y + jy)];
+-      });
+-      stroke(ch, P, w * (pass === 0 ? 1 : 0.6), a * (pass === 0 ? 1 : 0.45));
+-    }
+-  };
+-  const curve = (f, x0, x1, n = 9) => Array.from({ length: n }, (_, k) => {
+-    const x = x0 + ((x1 - x0) * k) / (n - 1);
+-    return [x, f(x)];
+-  });
+-  // the forehead's lines: across it, broken, curving down at the ends
+-  for (let k = 0; k < 4; k++) {
+-    const y0 = 0.057 + k * 0.0085;
+-    const span = 0.04 - k * 0.003;
+-    let x = -span;
+-    while (x < span) {
+-      const len = 0.012 + R() * 0.02;
+-      const x1 = Math.min(span, x + len);
+-      line(0, curve((xx) => y0 - 0.006 * (xx / 0.042) ** 2 + Math.sin(xx * 140 + k) * 0.0006, x, x1, 6), 2.6 - k * 0.3, 0.85 - k * 0.12);
+-      x = x1 + 0.003 + R() * 0.006;
+-    }
+-  }
+-  for (const sd of [1, -1]) {
+-    // the frown: two upright lines between the brows; a crease across the root of the nose
+-    line(1, [[sd * 0.0045, 0.025], [sd * 0.0052, 0.034], [sd * 0.0068, 0.044]], 2.8, 0.9);
+-    line(1, [[sd * 0.0085, 0.028], [sd * 0.0095, 0.037]], 2, 0.55);
+-    // the nose wrinkled: short lines down its sides
+-    for (let k = 0; k < 3; k++) line(1, [[sd * (0.0075 + k * 0.0012), 0.014 - k * 0.003], [sd * (0.011 + k * 0.0012), 0.009 - k * 0.003]], 2, 0.7);
+-    // the crow's feet: out from the eye's outer corner; under the eye, its arcs
+-    for (let k = 0; k < 4; k++) {
+-      const a = -0.45 + k * 0.32;
+-      const r0 = 0.004;
+-      const r1 = 0.009 + R() * 0.005;
+-      const cx = sd * 0.047;
+-      const cy = 0.0175;
+-      line(2, [[cx + sd * Math.cos(a) * r0, cy + Math.sin(a) * r0], [cx + sd * Math.cos(a) * (r0 + r1) * 0.55, cy + Math.sin(a) * (r0 + r1) * 0.55 + 0.0004], [cx + sd * Math.cos(a) * (r0 + r1), cy + Math.sin(a) * (r0 + r1)]], 2.2, 0.8);
+-    }
+-    line(2, curve((x) => 0.0062 - 0.0035 * ((Math.abs(x) - 0.033) / 0.011) ** 2, sd * 0.023, sd * 0.043, 7), 2, 0.65);
+-    line(2, curve((x) => 0.0025 - 0.003 * ((Math.abs(x) - 0.035) / 0.012) ** 2, sd * 0.026, sd * 0.044, 7), 1.6, 0.4);
+-    // the folds from the nose to the mouth (and on down past its corners)
+-    line(3, [[sd * 0.0165, -0.0195], [sd * 0.0225, -0.028], [sd * 0.027, -0.037], [sd * 0.0295, -0.047], [sd * 0.0305, -0.057]], 3.2, 0.95);
+-    line(3, [[sd * 0.019, -0.022], [sd * 0.0255, -0.033], [sd * 0.0285, -0.044]], 1.8, 0.45);
+-    line(3, [[sd * 0.0265, -0.056], [sd * 0.0275, -0.064], [sd * 0.0285, -0.072]], 1.6, 0.4);
+-  }
+-  // the chin's dimpling
+-  for (let k = 0; k < 26; k++) {
+-    const a = R() * Math.PI * 2;
+-    const r = Math.sqrt(R()) * 0.009;
+-    const x = Math.cos(a) * r * 1.3;
+-    const y = -0.081 + Math.sin(a) * r * 0.8;
+-    line(3, [[x, y], [x + 0.0012, y - 0.0006]], 2.2, 0.55);
+-  }
+-  // (the four channels in one picture; its alpha a channel of its own, nothing premultiplied by it)
+-  const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
+-  t.flipY = false;
+-  t.premultiplyAlpha = false;
+-  t.magFilter = THREE.LinearFilter;
+-  t.minFilter = THREE.LinearMipmapLinearFilter;
+-  t.generateMipmaps = true;
+-  t.needsUpdate = true;
+-  WRINKLES = t;
+-  return t;
+-}
+-
+-// ------------------------------------------------------------------ one person's portrait
+-export class Portrait {
+-  // spec: render/folkspec.js FOLK's (or its number); paint(spec, cb): the picture of the face, flat,
+-  // drawn off the game's thread (render/people.js gives it)
+-  constructor(spec, k, layer = null) {
+-    this.k = k;
+-    this.spec = typeof spec === 'number' ? FOLK[spec] : spec;
+-    this.ready = false;
+-    this.mesh = null;
+-    this.w = new Float32Array(NA);
+-    this.want = new Float32Array(NA);
+-    this.layer = layer;
+-    // (their own: one side a little more than the other, as nobody's face is the same both sides)
+-    const h = (n) => {
+-      const v = Math.sin((k + 1) * 91.7 + n * 12.9898) * 43758.5453;
+-      return v - Math.floor(v);
+-    };
+-    this.asym = AU.map((n, i) => (n.endsWith('R') ? 1 + (h(i) - 0.5) * 0.24 : n.endsWith('L') ? 1 - (h(i - 1) - 0.5) * 0.24 : 1));
+-    this.blinkAt = 1 + Math.random() * 3;
+-    this.blinkT = -1;
+-    this.noiseT = Math.random() * 10;
+-    this.build();
+-  }
++};
+ 
+-  build() {
++// Made once for all of them: every head moved from the base shares its points, its triangles and
++// its drawing's places (render/folkshapes.js headOf) - and so the moves of its muscles (the same
++// for every head: the teeth below and the tongue go with the jaw's turn, each kind's own mouth
++// then only somewhere else, uJawFix), the mouth's inside and the eyes, and the pictures of the
++// face's planes and of its lines. How the light falls on a head as it moves is the base head's
++// too, but for the points where a head's own shape turns it otherwise (an eyelid over a rounder
++// eye): each kind has its own for those (render/portraitmaps.js NormalMoves.fixes). None of the
++// head's counts are written down here: they are the head's own data's.
++export class PortraitKit {
++  constructor() {
+     const t0 = performance.now();
+     const M = moves();
+     const B = baseHead();
+-    const H = headOf(this.spec);
+     const n = M.n;
+-    // the head's points as theirs, then the teeth, the tongue and the eyes after them
+-    const pos = Array.from(H.pos);
+-    const uv = Array.from(B.uv);
+-    const part = new Array(n).fill(0);
+-    const mouth = Array.from(B.mouth);
+-    const idx = Array.from(H.idx);
+-    // (the mouth's place on their head: where their lips went from the base's)
+-    const mv = [0, 0, 0];
+-    let mn = 0;
+-    for (let i = 0; i < n; i++) {
+-      if (!(B.mouth[i] > 0.2)) continue;
+-      for (let c = 0; c < 3; c++) mv[c] += H.pos[i * 3 + c] - B.pos[i * 3 + c];
+-      mn++;
+-    }
+-    if (mn) for (let c = 0; c < 3; c++) mv[c] /= mn;
+-    const extra = [];
+-    const addPart = (P, code, lower) => {
+-      const base = pos.length / 3;
++    this.n = n;
++    // the mouth's inside after the head: the upper teeth (with the skull), the lower teeth and the
++    // tongue (with the jaw), in the base head's frame
++    const xp = [];
++    const xu = [];
++    const xpart = [];
++    const xidx = [];
++    const lower = [];
++    const add = (P, code, low) => {
++      const base = n + xp.length / 3;
+       for (let i = 0; i < P.pos.length / 3; i++) {
+-        const p = [P.pos[i * 3] + mv[0], P.pos[i * 3 + 1] + mv[1], P.pos[i * 3 + 2] + mv[2]];
+-        pos.push(p[0], p[1], p[2]);
+-        uv.push(P.uv[i * 2], P.uv[i * 2 + 1]);
+-        part.push(code);
+-        mouth.push(0);
+-        extra.push({ p, lower });
++        xp.push(P.pos[i * 3], P.pos[i * 3 + 1], P.pos[i * 3 + 2]);
++        xu.push(P.uv[i * 2], P.uv[i * 2 + 1]);
++        xpart.push(code);
++        lower.push(low);
+       }
+-      for (const v of P.idx) idx.push(base + v);
++      for (const v of P.idx) xidx.push(base + v);
+     };
+-    addPart(arch(0.0215, 0.017, 0.0815, -0.0425, -0.0518, 0.006, 24), 1, false);
+-    addPart(arch(0.0195, 0.0155, 0.082, -0.0505, -0.059, 0.0055, 24), 2, true);
+-    addPart(tongue(), 3, true);
+-    // the eyes: each a ball in its socket, its picture where the base head has it
+-    this.eyeC = [];
++    add(arch(0.0215, 0.017, 0.0815, -0.0425, -0.0518, 0.006, 24), 1, false);
++    add(arch(0.0195, 0.0155, 0.082, -0.0505, -0.059, 0.0055, 24), 2, true);
++    add(tongue(), 3, true);
++    // (the points that move with the muscles: the head and the mouth's inside - the eyes, after
++    // them, turn by themselves)
++    const NT = n + xp.length / 3;
++    this.NT = NT;
++    // the eyes: each a ball round its middle, its picture where the base head has it
++    const ep = [];
++    const eu = [];
++    const epart = [];
++    const eidx = [];
+     for (const [e, sd] of [[0, 1], [1, -1]]) {
+       const g = new THREE.SphereGeometry(EYE.r, 24, 18);
+       g.translate(sd * EYE.x, EYE.y, EYE.z);
+       faceMap(g);
+       g.translate(-sd * EYE.x, -EYE.y, -EYE.z);
+-      const c = H.eyes[e];
+-      this.eyeC.push(new THREE.Vector3(c[0], c[1], c[2]));
+-      const base = pos.length / 3;
++      const base = NT + ep.length / 3;
+       const gp = g.attributes.position.array;
+       const gu = g.attributes.uv.array;
+       for (let i = 0; i < gp.length / 3; i++) {
+-        pos.push(gp[i * 3] + c[0], gp[i * 3 + 1] + c[1], gp[i * 3 + 2] + c[2]);
+-        uv.push(gu[i * 2], gu[i * 2 + 1]);
+-        part.push(4 + e);
+-        mouth.push(0);
+-        extra.push(null);
++        ep.push(gp[i * 3], gp[i * 3 + 1], gp[i * 3 + 2]);
++        eu.push(gu[i * 2], gu[i * 2 + 1]);
++        epart.push(4 + e);
+       }
+-      for (const v of g.index.array) idx.push(base + v);
++      for (const v of g.index.array) eidx.push(base + v);
++      g.dispose();
+     }
+-    const N = pos.length / 3;
+-    const geo = new THREE.BufferGeometry();
+-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+-    geo.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 1));
+-    geo.setAttribute('aMouth', new THREE.Float32BufferAttribute(mouth, 1));
+-    geo.setAttribute('aId', new THREE.Float32BufferAttribute(part.map((p) => (p === 0 ? 0 : p * 0.13)), 1));
+-    geo.setIndex(N > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
+-    geo.computeVertexNormals();
+-    geo.computeBoundingSphere();
+-    geo.boundingSphere.radius += 0.05;
+-    // the moves of every point (the head's from the base; the jaw's turn for the teeth below and the
+-    // tongue; nothing for the eyes, which turn by themselves) and of its normal
+-    const W = 2048;
+-    const rows = Math.ceil((NA * N) / W);
+-    const dp = new Float32Array(W * rows * 4);
+-    const dn = new Float32Array(W * rows * 4);
++    const N = NT + ep.length / 3;
++    this.N = N;
++    this.eyeN = ep.length / 6;
++    // the attributes every kind shares (three.js puts each on the graphics card once, whatever
++    // number of heads use it)
++    const uv = new Float32Array(N * 2);
++    uv.set(B.uv.subarray(0, n * 2));
++    uv.set(xu, n * 2);
++    uv.set(eu, NT * 2);
++    const part = new Float32Array(N);
++    part.set(xpart, n);
++    part.set(epart, NT);
++    const mouth = new Float32Array(N);
++    mouth.set(B.mouth.subarray(0, n));
++    const aId = part.map((p) => (p === 0 ? 0 : p * 0.13));
++    const IA = N > 65535 ? Uint32Array : Uint16Array;
++    const idx = new IA(B.idx.length + xidx.length + eidx.length);
++    idx.set(B.idx);
++    idx.set(xidx, B.idx.length);
++    idx.set(eidx, B.idx.length + xidx.length);
++    this.idx = idx;
++    this.attr = {
++      uv: new THREE.BufferAttribute(uv, 2),
++      aPart: new THREE.BufferAttribute(part, 1),
++      aMouth: new THREE.BufferAttribute(mouth, 1),
++      aId: new THREE.BufferAttribute(aId, 1),
++    };
++    this.index = new THREE.BufferAttribute(idx, 1);
++    // the mouth's inside and the eyes at rest, and their normals (the head's triangles never touch
++    // them: theirs are their own, the same wherever a kind's mouth and eyes are)
++    this.xPos = Float32Array.from(xp);
++    this.ePos = Float32Array.from(ep);
++    {
++      const g = new THREE.BufferGeometry();
++      g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from([...xp, ...ep]), 3));
++      g.setIndex(Array.from(idx.subarray(B.idx.length), (v) => v - n));
++      g.computeVertexNormals();
++      this.xNor = g.attributes.normal.array.slice(0, xp.length);
++      this.eNor = g.attributes.normal.array.slice(xp.length);
++      g.dispose();
++    }
++    this.lower = lower;
++    // the moves of every point: the head's from the base; the lower teeth and the tongue the jaw's
++    // turn (in the base head's frame: a kind's mouth elsewhere adds its uJawFix); nothing for the
++    // eyes, which turn by themselves
++    const rows = Math.ceil((NA * NT) / AUW);
++    const dp = new Float32Array(AUW * rows * 4);
+     for (let c = 0; c < NA; c++) {
+       for (let i = 0; i < n; i++) {
+-        const o = (c * N + i) * 4;
++        const o = (c * NT + i) * 4;
+         const s = (c * n + i) * 3;
+         dp[o] = M.d[s];
+         dp[o + 1] = M.d[s + 1];
+         dp[o + 2] = M.d[s + 2];
+       }
+     }
+-    for (let k = 0; k < extra.length; k++) {
+-      const ex = extra[k];
+-      if (!ex || !ex.lower) continue;
+-      const q = jawTurn(ex.p, 1);
+-      const o = (AUI.jaw * N + n + k) * 4;
+-      dp[o] = q[0] - ex.p[0];
+-      dp[o + 1] = q[1] - ex.p[1];
+-      dp[o + 2] = q[2] - ex.p[2];
++    for (let k = 0; k < lower.length; k++) {
++      if (!lower[k]) continue;
++      const p = [xp[k * 3], xp[k * 3 + 1], xp[k * 3 + 2]];
++      const q = jawTurn(p, 1);
++      const o = (AUI.jaw * NT + n + k) * 4;
++      dp[o] = q[0] - p[0];
++      dp[o + 1] = q[1] - p[1];
++      dp[o + 2] = q[2] - p[2];
++    }
++    this.dp = dp;
++    this.auPos = dataTex(dp, AUW, rows);
++    // (until the helper has worked them out - render/portraitmaps.js - plain: no portrait is drawn
++    // before they have come)
++    this.blank = dataTex(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.UnsignedByteType);
++    this.noFix = dataTex(new Float32Array(4), 1, 1);
++    this.U = {
++      uAUPos: { value: this.auPos },
++      uAUNor: { value: this.noFix },
++      uAUW: { value: AUW },
++      uAUNv: { value: NT },
++      uPlane: { value: dataTex(new Uint8Array([128, 128, 255, 0]), 1, 1, THREE.UnsignedByteType) },
++      uWrinkle: { value: dataTex(new Uint8Array(4), 1, 1, THREE.UnsignedByteType) },
++    };
++    this.has = { normals: false, maps: false };
++    // (the base head as a portrait: what the slots hold before anybody's head is theirs)
++    const bp = new Float32Array(N * 3);
++    bp.set(B.pos.subarray(0, n * 3));
++    bp.set(this.xPos, n * 3);
++    const bn = new Float32Array(N * 3);
++    {
++      const g = new THREE.BufferGeometry();
++      g.setAttribute('position', new THREE.BufferAttribute(B.pos.slice(0, n * 3), 3));
++      g.setIndex(new THREE.BufferAttribute(B.idx, 1));
++      g.computeVertexNormals();
++      bn.set(g.attributes.normal.array);
++      g.dispose();
++    }
++    bn.set(this.xNor, n * 3);
++    for (let e = 0; e < 2; e++) {
++      const o = NT + e * this.eyeN;
++      for (let i = 0; i < this.eyeN; i++) {
++        for (let c = 0; c < 3; c++) {
++          bp[(o + i) * 3 + c] = this.ePos[(e * this.eyeN + i) * 3 + c] + [(e ? -1 : 1) * EYE.x, EYE.y, EYE.z][c];
++          bn[(o + i) * 3 + c] = this.eNor[(e * this.eyeN + i) * 3 + c];
++        }
++      }
+     }
+-    // the normals each move makes: the head moved by it, its normals worked out again
+-    const nb = geo.attributes.normal.array;
+-    const tmp = new THREE.BufferGeometry();
+-    const tp = new Float32Array(pos.length);
+-    tmp.setAttribute('position', new THREE.BufferAttribute(tp, 3));
+-    tmp.setIndex(geo.index);
++    this.geo = this.geometry(bp, bn, new Float32Array(N));
++    // (the picture of the face: only the rows the head reaches - its uv's lowest, less a margin for
++    // its smaller copies - are painted; below them nothing is ever looked up)
++    let vmin = 1;
++    for (let i = 0; i < n; i++) vmin = Math.min(vmin, B.uv[i * 2 + 1]);
++    for (let i = 0; i < eu.length / 2; i++) vmin = Math.min(vmin, eu[i * 2 + 1]);
++    this.picV0 = Math.max(0, vmin - 0.02);
++    console.log(`[portrait] kit: ${N} points (${n} the head's), ${idx.length / 3} triangles, ${NA} moves, the picture from v ${this.picV0.toFixed(3)}, ${(performance.now() - t0).toFixed(0)} ms`);
++  }
++
++  // a portrait's geometry: its own points and normals (and which of its points have their own
++  // normal moves, aFix), everything else the kit's
++  geometry(pos, nor, fix) {
++    const g = new THREE.BufferGeometry();
++    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
++    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
++    for (const [k, a] of Object.entries(this.attr)) g.setAttribute(k, a);
++    g.setAttribute('aFix', new THREE.BufferAttribute(fix, 1));
++    g.setIndex(this.index);
++    g.computeBoundingSphere();
++    g.boundingSphere.radius += 0.05;
++    return g;
++  }
++
++  // what the helper (render/heroworker.js) needs to work out how the light falls as the face
++  // moves: the head and the mouth's inside at rest, their triangles, the moves
++  normalJob() {
++    const n = this.n;
++    const NT = this.NT;
++    const B = baseHead();
++    const pos = new Float32Array(NT * 3);
++    pos.set(B.pos.subarray(0, n * 3));
++    pos.set(this.xPos, n * 3);
++    const dp = new Float32Array(NA * NT * 3);
+     for (let c = 0; c < NA; c++) {
+-      for (let i = 0; i < N; i++) {
+-        const o = (c * N + i) * 4;
+-        tp[i * 3] = pos[i * 3] + dp[o];
+-        tp[i * 3 + 1] = pos[i * 3 + 1] + dp[o + 1];
+-        tp[i * 3 + 2] = pos[i * 3 + 2] + dp[o + 2];
+-      }
+-      tmp.computeVertexNormals();
+-      const tn = tmp.attributes.normal.array;
+-      for (let i = 0; i < N; i++) {
+-        const o = (c * N + i) * 4;
+-        dn[o] = tn[i * 3] - nb[i * 3];
+-        dn[o + 1] = tn[i * 3 + 1] - nb[i * 3 + 1];
+-        dn[o + 2] = tn[i * 3 + 2] - nb[i * 3 + 2];
++      for (let i = 0; i < NT; i++) {
++        const o = (c * NT + i) * 4;
++        const s = (c * NT + i) * 3;
++        dp[s] = this.dp[o];
++        dp[s + 1] = this.dp[o + 1];
++        dp[s + 2] = this.dp[o + 2];
+       }
+     }
+-    tmp.dispose();
+-    const dt = (d) => {
+-      const t = new THREE.DataTexture(d, W, rows, THREE.RGBAFormat, THREE.FloatType);
+-      t.magFilter = THREE.NearestFilter;
+-      t.minFilter = THREE.NearestFilter;
+-      t.generateMipmaps = false;
+-      t.needsUpdate = true;
+-      return t;
+-    };
+-    this.geo = geo;
+-    this.N = N;
+-    this.auPos = dt(dp);
+-    this.auNor = dt(dn);
+-    console.log(`[portrait] ${this.spec.key}: ${N} points, ${idx.length / 3} triangles, ${NA} moves, ${(performance.now() - t0).toFixed(0)} ms`);
++    // (the head's triangles and the mouth's inside's: the eyes' are not needed)
++    let nt = 0;
++    while (nt < this.idx.length && this.idx[nt] < NT && this.idx[nt + 1] < NT && this.idx[nt + 2] < NT) nt += 3;
++    return { idx: Uint32Array.from(this.idx.subarray(0, nt)), nt: NT, na: NA, pos, dp, W: AUW };
++  }
++
++  // the base head's normal moves, from the helper
++  setNormals(data, rows) {
++    const t = dataTex(data, AUW, rows);
++    this.U.uAUNor.value = t;
++    this.has.normals = true;
++    return t;
+   }
+ 
+-  // the picture of the face (flat) has come: the portrait can be drawn
+-  setPicture(bmp) {
++  // the pictures of the face's planes and of the lines it makes, from the helper
++  setMaps(P, Wr) {
++    const pt = new THREE.DataTexture(P.data, P.W, P.H, THREE.RGBAFormat, THREE.UnsignedByteType);
++    pt.magFilter = THREE.LinearFilter;
++    pt.minFilter = THREE.LinearFilter;
++    pt.generateMipmaps = false;
++    pt.needsUpdate = true;
++    // (the four channels in one picture; its alpha a channel of its own, nothing premultiplied by it)
++    const wt = new THREE.DataTexture(Wr.data, Wr.W, Wr.H, THREE.RGBAFormat, THREE.UnsignedByteType);
++    wt.flipY = false;
++    wt.premultiplyAlpha = false;
++    wt.magFilter = THREE.LinearFilter;
++    wt.minFilter = THREE.LinearMipmapLinearFilter;
++    wt.generateMipmaps = true;
++    wt.needsUpdate = true;
++    this.U.uPlane.value = pt;
++    this.U.uWrinkle.value = wt;
++    this.has.maps = true;
++    return [pt, wt];
++  }
++
++  get ready() {
++    return this.has.normals && this.has.maps;
++  }
++}
++
++// ------------------------------------------------------------------ one kind of the city's people
++// Their own head (render/folkshapes.js folkBody's, as the city draws it: its points and its
++// normals) with the kit's mouth and eyes put where their mouth and eyes are; their picture, painted
++// off the game's thread when they are about (render/portraits.js), a closer one for a close look.
++export class PortraitKind {
++  constructor(kit, k, spec, headPos, headNor, eyes) {
++    this.kit = kit;
++    this.k = k;
++    this.spec = spec;
++    const B = baseHead();
++    const n = kit.n;
++    const NT = kit.NT;
++    const N = kit.N;
++    const pos = new Float32Array(N * 3);
++    const nor = new Float32Array(N * 3);
++    for (let i = 0; i < n * 3; i++) pos[i] = headPos[i];
++    for (let i = 0; i < n; i++) {
++      // (the city's head's normals are longer in the mouth, render/folkshapes.js headGeo: as they were)
++      const x = headNor[i * 3];
++      const y = headNor[i * 3 + 1];
++      const z = headNor[i * 3 + 2];
++      const l = Math.hypot(x, y, z) || 1;
++      nor[i * 3] = x / l;
++      nor[i * 3 + 1] = y / l;
++      nor[i * 3 + 2] = z / l;
++    }
++    // (the mouth's place on their head: where their lips went from the base's)
++    const mv = [0, 0, 0];
++    let mn = 0;
++    for (let i = 0; i < n; i++) {
++      if (!(B.mouth[i] > 0.2)) continue;
++      for (let c = 0; c < 3; c++) mv[c] += headPos[i * 3 + c] - B.pos[i * 3 + c];
++      mn++;
++    }
++    if (mn) for (let c = 0; c < 3; c++) mv[c] /= mn;
++    for (let i = 0; i < NT - n; i++) for (let c = 0; c < 3; c++) pos[(n + i) * 3 + c] = kit.xPos[i * 3 + c] + mv[c];
++    nor.set(kit.xNor, n * 3);
++    const eN = kit.eyeN;
++    for (let e = 0; e < 2; e++) {
++      for (let i = 0; i < eN; i++) for (let c = 0; c < 3; c++) pos[(NT + e * eN + i) * 3 + c] = kit.ePos[(e * eN + i) * 3 + c] + eyes[e][c];
++    }
++    nor.set(kit.eNor, NT * 3);
++    this.fix = new Float32Array(N);
++    this.geo = kit.geometry(pos, nor, this.fix);
++    // (the jaw turns the lower teeth and the tongue round its hinge: theirs, somewhere else by mv,
++    // turn by (R - I) mv more than the base's - render/glsl.js PORTRAIT uJawFix)
++    const ca = Math.cos(JAW_A);
++    const sa = Math.sin(JAW_A);
++    this.jawFix = new THREE.Vector3(0, (ca - 1) * mv[1] - sa * mv[2], sa * mv[1] + (ca - 1) * mv[2]);
++    this.eyeC = eyes.map((c) => new THREE.Vector3(c[0], c[1], c[2]));
++    this.age = spec.lines || 0;
++    // (the pictures: the street's, a closer one; how the light falls where theirs is their own)
++    this.pic = null;
++    this.close = null;
++    this.fixTex = null;
++    this.fixed = false;
++    this.jobs = 0;
++    this.closeJob = false;
++    this.lastUsed = -1e9;
++    this.closeUsed = -1e9;
++    this.users = 0;
++  }
++
++  get ready() {
++    return !!this.pic && this.fixed && this.kit.ready;
++  }
++
++  // the head and the mouth's inside at rest, for the helper
++  rest() {
++    return this.geo.attributes.position.array.slice(0, this.kit.NT * 3);
++  }
++
++  // their own normal moves where theirs are not the base's (render/portraitmaps.js fixes)
++  setFix(fix, data, W, rows) {
++    this.fix.fill(0);
++    this.fix.set(fix.subarray(0, Math.min(fix.length, this.kit.NT)));
++    this.geo.attributes.aFix.needsUpdate = true;
++    if (this.fixTex) this.fixTex.dispose();
++    this.fixTex = dataTex(data, W, rows);
++    this.fixed = true;
++    return this.fixTex;
++  }
++
++  dropFix() {
++    if (this.fixTex) this.fixTex.dispose();
++    this.fixTex = null;
++    this.fixed = false;
++  }
++
++  // a picture of the face, painted flat (render/folkink.js paintFolkFace): w wide, of a picture H
++  // high only its top rows (from the top of the head down to below the chin), turned already
++  static picture(bmp, w, H, rows) {
+     const tex = new THREE.Texture(bmp);
+-    // (turned already, render/people.js: a picture of this kind is never turned on the way up)
++    // (turned already, render/heroworker.js: a picture of this kind is never turned on the way up)
+     tex.flipY = false;
+     tex.colorSpace = THREE.SRGBColorSpace;
+     tex.anisotropy = 4;
+@@ -752,36 +710,39 @@ export class Portrait {
+     tex.minFilter = THREE.LinearMipmapLinearFilter;
+     tex.magFilter = THREE.LinearFilter;
+     tex.needsUpdate = true;
+-    const m = makeSurface({ kind: 'skin', map: tex, line: 0.97, partR: 0.06, side: THREE.DoubleSide, noShadow: true, density: 0, wash: 1 });
+-    m.defines.PORTRAIT = '';
+-    Object.assign(m.uniforms, {
+-      uAUPos: { value: this.auPos },
+-      uAUNor: { value: this.auNor },
+-      uAUW: { value: 2048 },
+-      uAUNv: { value: this.N },
+-      uAU: { value: this.w },
+-      uEyeC: { value: this.eyeC },
+-      uGaze: { value: new THREE.Vector4() },
+-      uPlane: { value: planes() },
+-      uWrinkle: { value: wrinkles() },
+-      uWrinkleW: { value: new THREE.Vector4() },
+-      uAge: { value: this.spec.lines || 0 },
+-      uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
+-    });
+-    m.needsUpdate = true;
+-    const mesh = new THREE.Mesh(this.geo, m);
+-    mesh.matrixAutoUpdate = false;
+-    mesh.frustumCulled = true;
+-    mesh.visible = false;
+-    if (this.layer !== null) mesh.layers.set(this.layer);
+-    mesh.userData.noShadow = true;
+-    this.mesh = mesh;
+-    this.mat = m;
+-    this.tex = tex;
+-    this.ready = true;
++    // (once it is on the graphics card, the picture itself is let go)
++    tex.onUpdate = () => {
++      if (bmp.close) bmp.close();
++    };
++    return { tex, w, v: new THREE.Vector2(1 - rows / H, H / rows) };
++  }
++
++  static drop(p) {
++    if (p) p.tex.dispose();
++  }
++}
++
++// ------------------------------------------------------------------ one person's face this moment
++// (their own: one side a little more than the other, blinking when they do, their face's moves each
++// at its own pace)
++export class PortraitFace {
++  constructor(seed) {
++    const h = (n) => {
++      const v = Math.sin((seed + 1) * 91.7 + n * 12.9898) * 43758.5453;
++      return v - Math.floor(v);
++    };
++    this.asym = AU.map((n, i) => (n.endsWith('R') ? 1 + (h(i) - 0.5) * 0.24 : n.endsWith('L') ? 1 - (h(i - 1) - 0.5) * 0.24 : 1));
++    this.w = new Float32Array(NA);
++    this.want = new Float32Array(NA);
++    this.blinkAt = 1 + h(77) * 3;
++    this.blinkT = -1;
++    this.noiseT = h(91) * 10;
++    this.lastT = -1;
++    this.fresh = true;
++    this.gaze = new THREE.Vector4();
++    this.wr = new THREE.Vector4();
+   }
+ 
+-  // ---------------------------------------------------------------- how the face is this moment
+   // ew: the city's eight moves of it (render/people.js faceOf: the jaw, a smile, the corners down,
+   // the brows up, the brows down, each eye shut, the mouth wide), mood: what they feel (or null),
+   // o: { expr, k, au } held as asked (the face lab), say: their words' tone, gaze: [x, y, yaw, pitch]
+@@ -798,8 +759,8 @@ export class Portrait {
+     if (o) {
+       // (held as asked: an expression and how strong, and any move on its own)
+       const E = EXPRESSIONS[o.expr] || {};
+-      for (const [name, v] of Object.entries(E)) set(name, v * o.k);
+-      if (o.au) for (const [name, v] of Object.entries(o.au)) if (v > 0) set(name, v);
++      for (const name in E) set(name, E[name] * o.k);
++      if (o.au) for (const name in o.au) if (o.au[name] > 0) set(name, o.au[name]);
+     } else {
+       // the city's moves of the face, the feeling's own on them
+       set('jaw', ew[0]);
+@@ -811,7 +772,7 @@ export class Portrait {
+       set('wide', Math.max(0, ew[7]));
+       set('pucker', Math.max(0, -ew[7]) * 0.9);
+       const P = mood && MOOD[mood] ? EXPRESSIONS[MOOD[mood]] : null;
+-      if (P) for (const [name, v] of Object.entries(P)) if (name !== 'jaw') set(name, v);
++      if (P) for (const name in P) if (name !== 'jaw') set(name, P[name]);
+       // (a word shouted: the upper lip off the teeth, the brows down, the nostrils wide)
+       if (say === 'alarm') {
+         set('au10', 0.45);
+@@ -830,7 +791,8 @@ export class Portrait {
+     }
+     // a face is never quite still: the brows, the lids, the mouth's corners now and then a little
+     this.noiseT += dt;
+-    const nz = (f, ph) => Math.sin(this.noiseT * f + ph) * 0.5 + Math.sin(this.noiseT * f * 2.3 + ph * 1.7) * 0.25;
++    const T = this.noiseT;
++    const nz = (f, ph) => Math.sin(T * f + ph) * 0.5 + Math.sin(T * f * 2.3 + ph * 1.7) * 0.25;
+     want[AUI.au1R] += 0.04 * nz(0.7, 1);
+     want[AUI.au1L] += 0.04 * nz(0.7, 1.4);
+     want[AUI.au12R] += 0.03 * nz(0.4, 2);
+@@ -842,10 +804,8 @@ export class Portrait {
+       this.blinkAt = Math.random() < 0.15 ? 0.3 : 2 + Math.random() * 4;
+     }
+     // eased: each move at its own pace (the same at any number of frames a second), theirs one side
+-    // a little more than the other
++    // a little more than the other - or at once, a face just drawn as a portrait (render/portraits.js)
+     const w = this.w;
+-    // (somebody else's face this frame - render/people.js gives a kind's portrait to the nearest of
+-    // them: theirs at once, not eased from the last one's)
+     const snap = this.fresh;
+     this.fresh = false;
+     for (let c = 0; c < NA; c++) {
+@@ -859,21 +819,134 @@ export class Portrait {
+       w[AUI.blinkR] = Math.max(w[AUI.blinkR], b);
+       w[AUI.blinkL] = Math.max(w[AUI.blinkL], b);
+     }
+-    // the lines the face makes, as far as it makes them
+-    if (this.mat) {
+-      const W = this.mat.uniforms.uWrinkleW.value;
+-      const av = (n) => 0.5 * (w[AUI[`${n}R`]] + w[AUI[`${n}L`]]);
+-      W.set(Math.max(av('au1'), av('au2')), Math.max(av('au4'), w[AUI.au9] * 0.8), Math.max(av('au6'), av('au7') * 0.7, av('au12') * 0.45), Math.max(av('au10'), av('au12') * 0.8, w[AUI.au9] * 0.6, w[AUI.au17]));
+-      if (gaze) this.mat.uniforms.uGaze.value.set(gaze[2], gaze[3], gaze[2], gaze[3]);
+-    }
++    // the lines the face makes, as far as it makes them; where the eyes look
++    const av = (r, l) => 0.5 * (w[r] + w[l]);
++    this.wr.set(
++      Math.max(av(AUI.au1R, AUI.au1L), av(AUI.au2R, AUI.au2L)),
++      Math.max(av(AUI.au4R, AUI.au4L), w[AUI.au9] * 0.8),
++      Math.max(av(AUI.au6R, AUI.au6L), av(AUI.au7R, AUI.au7L) * 0.7, av(AUI.au12R, AUI.au12L) * 0.45),
++      Math.max(av(AUI.au10R, AUI.au10L), av(AUI.au12R, AUI.au12L) * 0.8, w[AUI.au9] * 0.6, w[AUI.au17]),
++    );
++    if (gaze) this.gaze.set(gaze[2], gaze[3], gaze[2], gaze[3]);
++  }
++}
++
++// ------------------------------------------------------------------ a portrait drawn
++// One of the few drawings kept ready (render/portraits.js): its own pen (the same shader as all of
++// them - made with the rest before the game begins, render/pipeline.js precompile), given a kind's
++// head and picture and a person's face for as long as that person is drawn this way. Fading in
++// over the city's way of drawing them and out again (uFade: the face drawn in over the old one,
++// pixel by pixel, the old one beneath it until it is gone - render/glsl.js PORTRAIT).
++export class PortraitSlot {
++  constructor(kit, layer = null) {
++    this.kit = kit;
++    const m = makeSurface({ kind: 'skin', map: kit.blank, line: 0.97, partR: 0.06, side: THREE.DoubleSide, noShadow: true, density: 0, wash: 1 });
++    m.defines.PORTRAIT = '';
++    const U = kit.U;
++    Object.assign(m.uniforms, {
++      uAUPos: U.uAUPos,
++      uAUNor: U.uAUNor,
++      uAUW: U.uAUW,
++      uAUNv: U.uAUNv,
++      uPlane: U.uPlane,
++      uWrinkle: U.uWrinkle,
++      uAUFix: { value: kit.noFix },
++      uAU: { value: new Float32Array(NA) },
++      uEyeC: { value: [new THREE.Vector3(EYE.x, EYE.y, EYE.z), new THREE.Vector3(-EYE.x, EYE.y, EYE.z)] },
++      uGaze: { value: new THREE.Vector4() },
++      uWrinkleW: { value: new THREE.Vector4() },
++      uAge: { value: 0 },
++      uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
++      uJawFix: { value: new THREE.Vector3() },
++      uPicV: { value: new THREE.Vector2(0, 1) },
++      uFade: { value: 1 },
++    });
++    sortDefines(m);
++    m.needsUpdate = true;
++    m.polygonOffsetFactor = -1;
++    m.polygonOffsetUnits = -1;
++    const mesh = new THREE.Mesh(kit.geo, m);
++    mesh.matrixAutoUpdate = false;
++    mesh.frustumCulled = true;
++    mesh.visible = false;
++    if (layer !== null) mesh.layers.set(layer);
++    mesh.userData.noShadow = true;
++    this.mesh = mesh;
++    this.mat = m;
++    this.u = m.uniforms;
++    this.kind = null;
++    this.fig = null;
++    this.face = null;
++    this.pic = null;
++    this.fade = 0;
++    this.dir = 0;
++    this.seen = -1;
++    this.since = 0;
++    this.px = 0;
++    this.nearT = 0;
++    // (what it holds when nobody's face is in it)
++    this.rest = { w: m.uniforms.uAU.value, gaze: m.uniforms.uGaze.value, wr: m.uniforms.uWrinkleW.value };
++  }
++
++  // a kind's head and picture, a person's face
++  bind(kind, fig, face, now) {
++    this.kind = kind;
++    this.fig = fig;
++    this.face = face;
++    const u = this.u;
++    this.mesh.geometry = kind.geo;
++    u.uAUFix.value = kind.fixTex || this.kit.noFix;
++    u.uEyeC.value = kind.eyeC;
++    u.uJawFix.value = kind.jawFix;
++    u.uAge.value = kind.age;
++    u.uAU.value = face.w;
++    u.uGaze.value = face.gaze;
++    u.uWrinkleW.value = face.wr;
++    this.setPicture(kind.pic);
++    this.fade = 0;
++    this.dir = 1;
++    this.since = now;
++    this.nearT = 0;
++    kind.users++;
++  }
++
++  setPicture(p) {
++    this.pic = p;
++    this.u.uMap.value = p.tex;
++    this.u.uPicV.value = p.v;
++  }
++
++  release() {
++    if (this.kind) this.kind.users--;
++    this.kind = null;
++    this.fig = null;
++    this.face = null;
++    this.pic = null;
++    this.dir = 0;
++    this.fade = 0;
++    const u = this.u;
++    this.mesh.visible = false;
++    this.mesh.geometry = this.kit.geo;
++    u.uMap.value = this.kit.blank;
++    u.uAUFix.value = this.kit.noFix;
++    u.uAU.value = this.rest.w;
++    u.uGaze.value = this.rest.gaze;
++    u.uWrinkleW.value = this.rest.wr;
++    u.uPLayers.value.set(1, 1, 1, 0);
+   }
+ 
+-  // placed on the head (m: the head's frame in the world, as render/people.js draws its head)
+-  place(m) {
+-    if (!this.mesh) return;
+-    this.mesh.matrix.copy(m);
+-    this.mesh.matrixWorld.copy(m);
+-    this.mesh.matrixWorldNeedsUpdate = true;
+-    this.mesh.visible = true;
++  // placed on the head (m: the head's frame in the world, as render/people.js draws its head), lit
++  // as the room it is in (render/materials.js uIndoor)
++  place(m, indoor) {
++    const mesh = this.mesh;
++    mesh.matrix.copy(m);
++    mesh.matrixWorld.copy(m);
++    mesh.matrixWorldNeedsUpdate = true;
++    mesh.visible = true;
++    const u = this.u;
++    u.uIndoor.value = indoor;
++    u.uFade.value = this.fade;
++    // (while it fades, drawn just in front of the city's head beneath it: the two never fight)
++    this.mat.polygonOffset = this.fade < 1;
+   }
+ }
+diff --git a/scribble-city/v5/js/render/portraitmaps.js b/scribble-city/v5/js/render/portraitmaps.js
+new file mode 100644
+index 0000000..c510856
+--- /dev/null
++++ b/scribble-city/v5/js/render/portraitmaps.js
+@@ -0,0 +1,434 @@
++// (v5, ROADMAP 14.1) What the portraits (render/portrait.js) are worked out from that takes long:
++// the pictures of the face's planes and of the lines it makes as it moves, and how the light falls
++// on each point of a head as each of its muscles moves it. Nothing of three.js here: the helper off
++// the game's thread (render/heroworker.js) does all of it, and the game never waits for any of it.
++
++const sstep = (a, b, v) => {
++  const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
++  return t * t * (3 - 2 * t);
++};
++const gs = (v, s) => Math.exp(-(v * v) / (s * s));
++
++// ------------------------------------------------------------------ the pictures of the face's planes
++// (in the base face's uv: every head moved from it shares them) - rg: the pens' direction there
++// (twice its angle, so that a stroke and its reverse are the same), b: how open it is to the light
++// (its hollows dark), a: where the light gathers (the forehead, the bridge and tip of the nose, the
++// cheekbones' tops, the chin)
++export function planesData() {
++  const W = 256;
++  const H = 512;
++  const data = new Uint8Array(W * H * 4);
++  for (let j = 0; j < H; j++) {
++    const v = (j + 0.5) / H;
++    const y = (v - 0.5) * 0.37 - 0.06;
++    for (let i = 0; i < W; i++) {
++      const u = (i + 0.5) / W;
++      const x = (0.5 - u) * 0.19;
++      const ax = Math.abs(x);
++      const sx = x >= 0 ? 1 : -1;
++      let cx = 0;
++      let cy = 0;
++      const put = (w, th) => {
++        const k = w * w * w;
++        cx += k * Math.cos(2 * th);
++        cy += k * Math.sin(2 * th);
++      };
++      put(0.12, 0.6);
++      // the forehead: across it, its lines curving down to the temples
++      put(sstep(0.045, 0.06, y), -sx * 0.18 * Math.min(1, ax / 0.05));
++      // the brows' ridge: along the brows
++      put(gs(y - 0.04, 0.008) * sstep(0.065, 0.05, ax), -sx * 0.3 * Math.min(1, ax / 0.05));
++      // round the eyes in their sockets
++      {
++        const dx = x - sx * 0.032;
++        const dy = y - 0.0185;
++        put(gs(Math.hypot(dx, dy * 1.25), 0.016), Math.atan2(dy, dx) + Math.PI / 2);
++      }
++      // down the bridge of the nose; down its sides; round its wings
++      put(gs(ax, 0.0065) * sstep(-0.02, -0.01, y) * sstep(0.032, 0.02, y), Math.PI / 2);
++      put(gs(ax - 0.012, 0.0045) * sstep(-0.026, -0.016, y) * sstep(0.022, 0.012, y), Math.PI / 2 + sx * 0.35);
++      {
++        const dx = x - sx * 0.0125;
++        const dy = y + 0.022;
++        put(gs(Math.hypot(dx, dy), 0.0075), Math.atan2(dy, dx) + Math.PI / 2);
++      }
++      // the cheek, up towards the temple; the cheekbone, along it
++      put(gs(ax - 0.035, 0.014) * gs(y + 0.018, 0.016), sx * 0.6);
++      put(gs(ax - 0.05, 0.012) * gs(y - 0.004, 0.009), sx * 0.2);
++      // the folds from the nose down past the mouth
++      put(gs(ax - 0.024, 0.009) * gs(y + 0.04, 0.016), Math.PI / 2 + sx * 0.45);
++      // round the mouth
++      {
++        const dy = y + 0.051;
++        const r = Math.hypot(x, dy * 1.4);
++        put(gs(r - 0.016, 0.009), Math.atan2(dy, x) + Math.PI / 2);
++      }
++      // the chin, across it; the jaw, along it; the temples, down them
++      put(gs(y + 0.084, 0.012) * gs(ax, 0.028), sx * 0.25 * Math.min(1, ax / 0.02));
++      put(gs(ax - 0.052, 0.014) * gs(y + 0.065, 0.02), sx * 0.7);
++      put(sstep(0.055, 0.07, ax) * sstep(-0.01, 0.01, y), Math.PI / 2 - sx * 0.15);
++      const a2 = Math.atan2(cy, cx);
++      // the hollows (b) and where the light gathers (a)
++      let dark = 0;
++      dark += 0.38 * gs(ax - 0.03, 0.013) * gs(y - 0.03, 0.0055);
++      dark += 0.42 * gs(ax - 0.018, 0.0045) * gs(y - 0.018, 0.005);
++      dark += 0.15 * gs(ax - 0.033, 0.012) * gs(y - 0.006, 0.0045);
++      dark += 0.45 * gs(ax - 0.0165, 0.003) * gs(y + 0.021, 0.006);
++      dark += 0.75 * gs(ax - 0.0075, 0.003) * gs(y + 0.028, 0.0022);
++      dark += 0.25 * gs(ax, 0.007) * gs(y + 0.031, 0.0025);
++      dark += 0.5 * gs(ax - 0.0255, 0.0032) * gs(y + 0.0515, 0.003);
++      dark += 0.3 * gs(y + 0.0512, 0.0011) * sstep(0.027, 0.02, ax);
++      dark += 0.32 * gs(ax, 0.014) * gs(y + 0.067, 0.0035);
++      dark += 0.4 * sstep(-0.088, -0.1, y);
++      dark += 0.15 * sstep(0.09, 0.105, y);
++      dark += 0.2 * sstep(0.07, 0.085, ax);
++      dark += 0.12 * gs(ax - 0.06, 0.008) * gs(y - 0.03, 0.015);
++      let hi = 0;
++      hi += 0.6 * gs(ax, 0.02) * gs(y - 0.06, 0.015);
++      hi += 0.7 * gs(ax, 0.004) * gs(y, 0.02);
++      hi += 0.6 * gs(ax - 0.045, 0.01) * gs(y - 0.005, 0.006);
++      hi += 0.5 * gs(ax, 0.01) * gs(y + 0.088, 0.006);
++      hi += 0.3 * gs(ax - 0.004, 0.004) * gs(y + 0.041, 0.003);
++      const o = (j * W + i) * 4;
++      data[o] = Math.round((0.5 + 0.5 * Math.cos(a2)) * 255);
++      data[o + 1] = Math.round((0.5 + 0.5 * Math.sin(a2)) * 255);
++      data[o + 2] = Math.round(Math.max(0, Math.min(1, 1 - dark)) * 255);
++      data[o + 3] = Math.round(Math.max(0, Math.min(1, hi)) * 255);
++    }
++  }
++  return { W, H, data };
++}
++
++// the lines a face makes as it moves, drawn in pencil: r - across the forehead (its brows up), g -
++// the frown between the brows and the nose wrinkled, b - the crow's feet and under the eyes (its
++// cheeks up, its lids tight), a - the folds from the nose to the mouth and the chin's dimpling
++const FU = (x) => 0.5 - x / 0.19;
++const FV = (y) => 0.5 + (y + 0.06) / 0.37;
++export function wrinklesData(W = 512) {
++  const H = Math.round((W * 0.37) / 0.19);
++  // (the strokes' sizes were set for a picture 512 wide: a smaller one, each smaller)
++  const sz = W / 512;
++  // (drawn here a pixel at a time, not on a canvas: reading a canvas back waits on the graphics
++  // card - in a slow browser for everything it has still to draw, the game standing still)
++  const data = new Uint8Array(W * H * 4);
++  const cov = new Float32Array(W * H);
++  let seed = 7;
++  const R = () => {
++    seed = (seed * 16807) % 2147483647;
++    return seed / 2147483647;
++  };
++  // (the rows from the bottom, as the picture's v is)
++  const px = (x) => FU(x) * W;
++  const py = (y) => FV(y) * H;
++  // one stroke of a pencil along pts (pixels), w wide, a strong: its own coverage first (the most of
++  // its segments a pixel, so its joints are not darker), then laid over what is in the channel
++  const stroke = (ch, P, w, a) => {
++    let x0 = Infinity;
++    let y0 = Infinity;
++    let x1 = -Infinity;
++    let y1 = -Infinity;
++    for (const [x, y] of P) {
++      x0 = Math.min(x0, x);
++      y0 = Math.min(y0, y);
++      x1 = Math.max(x1, x);
++      y1 = Math.max(y1, y);
++    }
++    const r = w / 2 + 1;
++    const i0 = Math.max(0, Math.floor(x0 - r));
++    const i1 = Math.min(W - 1, Math.ceil(x1 + r));
++    const j0 = Math.max(0, Math.floor(y0 - r));
++    const j1 = Math.min(H - 1, Math.ceil(y1 + r));
++    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cov[j * W + i] = 0;
++    for (let s = 0; s + 1 < P.length; s++) {
++      const [ax, ay] = P[s];
++      const [bx, by] = P[s + 1];
++      const dx = bx - ax;
++      const dy = by - ay;
++      const L2 = Math.max(1e-9, dx * dx + dy * dy);
++      const si0 = Math.max(i0, Math.floor(Math.min(ax, bx) - r));
++      const si1 = Math.min(i1, Math.ceil(Math.max(ax, bx) + r));
++      const sj0 = Math.max(j0, Math.floor(Math.min(ay, by) - r));
++      const sj1 = Math.min(j1, Math.ceil(Math.max(ay, by) + r));
++      for (let j = sj0; j <= sj1; j++) {
++        const cy = j + 0.5;
++        for (let i = si0; i <= si1; i++) {
++          const cx = i + 0.5;
++          const t = Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / L2));
++          const d = Math.hypot(cx - ax - dx * t, cy - ay - dy * t);
++          const c = Math.max(0, Math.min(1, w / 2 + 0.5 - d));
++          const q = j * W + i;
++          if (c > cov[q]) cov[q] = c;
++        }
++      }
++    }
++    for (let j = j0; j <= j1; j++) {
++      for (let i = i0; i <= i1; i++) {
++        const q = j * W + i;
++        const c = cov[q] * a;
++        if (c <= 0) continue;
++        const o = q * 4 + ch;
++        data[o] = Math.round(data[o] + (255 - data[o]) * c);
++      }
++    }
++  };
++  // a line in pencil: a few passes, each a little off, thinning to the ends
++  const line = (ch, pts, w = 2.4, a = 0.8) => {
++    for (let pass = 0; pass < 3; pass++) {
++      const P = pts.map(([x, y]) => {
++        const jx = (R() - 0.5) * 0.0004 * pass;
++        const jy = (R() - 0.5) * 0.0004 * pass;
++        return [px(x + jx), py(y + jy)];
++      });
++      stroke(ch, P, Math.max(1, w * sz) * (pass === 0 ? 1 : 0.6), a * (pass === 0 ? 1 : 0.45));
++    }
++  };
++  const curve = (f, x0, x1, n = 9) => Array.from({ length: n }, (_, k) => {
++    const x = x0 + ((x1 - x0) * k) / (n - 1);
++    return [x, f(x)];
++  });
++  // the forehead's lines: across it, broken, curving down at the ends
++  for (let k = 0; k < 4; k++) {
++    const y0 = 0.057 + k * 0.0085;
++    const span = 0.04 - k * 0.003;
++    let x = -span;
++    while (x < span) {
++      const len = 0.012 + R() * 0.02;
++      const x1 = Math.min(span, x + len);
++      line(0, curve((xx) => y0 - 0.006 * (xx / 0.042) ** 2 + Math.sin(xx * 140 + k) * 0.0006, x, x1, 6), 2.6 - k * 0.3, 0.85 - k * 0.12);
++      x = x1 + 0.003 + R() * 0.006;
++    }
++  }
++  for (const sd of [1, -1]) {
++    // the frown: two upright lines between the brows; a crease across the root of the nose
++    line(1, [[sd * 0.0045, 0.025], [sd * 0.0052, 0.034], [sd * 0.0068, 0.044]], 2.8, 0.9);
++    line(1, [[sd * 0.0085, 0.028], [sd * 0.0095, 0.037]], 2, 0.55);
++    // the nose wrinkled: short lines down its sides
++    for (let k = 0; k < 3; k++) line(1, [[sd * (0.0075 + k * 0.0012), 0.014 - k * 0.003], [sd * (0.011 + k * 0.0012), 0.009 - k * 0.003]], 2, 0.7);
++    // the crow's feet: out from the eye's outer corner; under the eye, its arcs
++    for (let k = 0; k < 4; k++) {
++      const a = -0.45 + k * 0.32;
++      const r0 = 0.004;
++      const r1 = 0.009 + R() * 0.005;
++      const cx = sd * 0.047;
++      const cy = 0.0175;
++      line(2, [[cx + sd * Math.cos(a) * r0, cy + Math.sin(a) * r0], [cx + sd * Math.cos(a) * (r0 + r1) * 0.55, cy + Math.sin(a) * (r0 + r1) * 0.55 + 0.0004], [cx + sd * Math.cos(a) * (r0 + r1), cy + Math.sin(a) * (r0 + r1)]], 2.2, 0.8);
++    }
++    line(2, curve((x) => 0.0062 - 0.0035 * ((Math.abs(x) - 0.033) / 0.011) ** 2, sd * 0.023, sd * 0.043, 7), 2, 0.65);
++    line(2, curve((x) => 0.0025 - 0.003 * ((Math.abs(x) - 0.035) / 0.012) ** 2, sd * 0.026, sd * 0.044, 7), 1.6, 0.4);
++    // the folds from the nose to the mouth (and on down past its corners)
++    line(3, [[sd * 0.0165, -0.0195], [sd * 0.0225, -0.028], [sd * 0.027, -0.037], [sd * 0.0295, -0.047], [sd * 0.0305, -0.057]], 3.2, 0.95);
++    line(3, [[sd * 0.019, -0.022], [sd * 0.0255, -0.033], [sd * 0.0285, -0.044]], 1.8, 0.45);
++    line(3, [[sd * 0.0265, -0.056], [sd * 0.0275, -0.064], [sd * 0.0285, -0.072]], 1.6, 0.4);
++  }
++  // the chin's dimpling
++  for (let k = 0; k < 26; k++) {
++    const a = R() * Math.PI * 2;
++    const r = Math.sqrt(R()) * 0.009;
++    const x = Math.cos(a) * r * 1.3;
++    const y = -0.081 + Math.sin(a) * r * 0.8;
++    line(3, [[x, y], [x + 0.0012, y - 0.0006]], 2.2, 0.55);
++  }
++  return { W, H, data };
++}
++
++// ------------------------------------------------------------------ how the light falls as it moves
++// Every point's normal as each of the face's moves makes it (at its full), less its normal at rest:
++// a head moved by a move, its normals worked out again - as three.js does (the triangles' sides
++// crossed, so a bigger triangle counts for more, summed at their corners) - but only round the
++// points that move: a move moves a few hundred of the head's thousands. pos: the head at rest (nt
++// points), idx: its triangles, dp: each move's moves of its points (na moves, nt points, 3 each)
++export class NormalMoves {
++  constructor(idx, nt, dp, na) {
++    this.idx = idx;
++    this.nt = nt;
++    this.na = na;
++    this.dp = dp;
++    const T = idx.length / 3;
++    // (which triangles each move moves, and the points they have)
++    const moved = new Uint8Array(nt);
++    const mark = new Int32Array(nt).fill(-1);
++    this.tris = [];
++    this.pts = [];
++    for (let c = 0; c < na; c++) {
++      moved.fill(0);
++      const o = c * nt * 3;
++      for (let i = 0; i < nt; i++) if (dp[o + i * 3] || dp[o + i * 3 + 1] || dp[o + i * 3 + 2]) moved[i] = 1;
++      const tl = [];
++      const pl = [];
++      for (let t = 0; t < T; t++) {
++        const a = idx[t * 3];
++        const b = idx[t * 3 + 1];
++        const d = idx[t * 3 + 2];
++        if (!(moved[a] || moved[b] || moved[d])) continue;
++        tl.push(t);
++        for (const v of [a, b, d]) {
++          if (mark[v] === c) continue;
++          mark[v] = c;
++          pl.push(v);
++        }
++      }
++      this.tris.push(Int32Array.from(tl));
++      this.pts.push(Int32Array.from(pl));
++    }
++    this.sum = new Float64Array(nt * 3);
++    this.tmp = new Float64Array(nt * 3);
++    this.cr = new Float64Array(T * 3);
++  }
++
++  // the normals at rest of the head at pos (unit; and their sums kept for the moves)
++  rest(pos, out) {
++    const idx = this.idx;
++    const S = this.sum;
++    const cr = this.cr;
++    S.fill(0);
++    for (let t = 0; t < idx.length / 3; t++) {
++      const a = idx[t * 3] * 3;
++      const b = idx[t * 3 + 1] * 3;
++      const c = idx[t * 3 + 2] * 3;
++      // (three.js: (c - b) x (a - b))
++      const ux = pos[c] - pos[b];
++      const uy = pos[c + 1] - pos[b + 1];
++      const uz = pos[c + 2] - pos[b + 2];
++      const vx = pos[a] - pos[b];
++      const vy = pos[a + 1] - pos[b + 1];
++      const vz = pos[a + 2] - pos[b + 2];
++      const nx = uy * vz - uz * vy;
++      const ny = uz * vx - ux * vz;
++      const nz = ux * vy - uy * vx;
++      cr[t * 3] = nx;
++      cr[t * 3 + 1] = ny;
++      cr[t * 3 + 2] = nz;
++      for (const v of [a, b, c]) {
++        S[v] += nx;
++        S[v + 1] += ny;
++        S[v + 2] += nz;
++      }
++    }
++    for (let i = 0; i < this.nt; i++) {
++      const l = Math.hypot(S[i * 3], S[i * 3 + 1], S[i * 3 + 2]) || 1;
++      out[i * 3] = S[i * 3] / l;
++      out[i * 3 + 1] = S[i * 3 + 1] / l;
++      out[i * 3 + 2] = S[i * 3 + 2] / l;
++    }
++    return out;
++  }
++
++  // move c's normal moves of the head at pos (rest() first, for the same pos), into each(i, dx, dy,
++  // dz) for every point whose normal it moves
++  move(pos, nrm, c, each) {
++    const idx = this.idx;
++    const S = this.sum;
++    const Q = this.tmp;
++    const cr = this.cr;
++    const dp = this.dp;
++    const o = c * this.nt * 3;
++    const pl = this.pts[c];
++    for (let k = 0; k < pl.length; k++) {
++      const v = pl[k] * 3;
++      Q[v] = S[v];
++      Q[v + 1] = S[v + 1];
++      Q[v + 2] = S[v + 2];
++    }
++    const tl = this.tris[c];
++    for (let k = 0; k < tl.length; k++) {
++      const t = tl[k];
++      const a = idx[t * 3] * 3;
++      const b = idx[t * 3 + 1] * 3;
++      const d = idx[t * 3 + 2] * 3;
++      const ax = pos[a] + dp[o + a];
++      const ay = pos[a + 1] + dp[o + a + 1];
++      const az = pos[a + 2] + dp[o + a + 2];
++      const bx = pos[b] + dp[o + b];
++      const by = pos[b + 1] + dp[o + b + 1];
++      const bz = pos[b + 2] + dp[o + b + 2];
++      const ux = pos[d] + dp[o + d] - bx;
++      const uy = pos[d + 1] + dp[o + d + 1] - by;
++      const uz = pos[d + 2] + dp[o + d + 2] - bz;
++      const vx = ax - bx;
++      const vy = ay - by;
++      const vz = az - bz;
++      const nx = uy * vz - uz * vy - cr[t * 3];
++      const ny = uz * vx - ux * vz - cr[t * 3 + 1];
++      const nz = ux * vy - uy * vx - cr[t * 3 + 2];
++      for (const v of [a, b, d]) {
++        Q[v] += nx;
++        Q[v + 1] += ny;
++        Q[v + 2] += nz;
++      }
++    }
++    for (let k = 0; k < pl.length; k++) {
++      const v = pl[k] * 3;
++      const l = Math.hypot(Q[v], Q[v + 1], Q[v + 2]) || 1;
++      each(pl[k], Q[v] / l - nrm[v], Q[v + 1] / l - nrm[v + 1], Q[v + 2] / l - nrm[v + 2]);
++    }
++  }
++
++  // every move's normal moves of the head at pos, as the shader reads them (render/glsl.js PORTRAIT:
++  // a texel each, move after move, W a row)
++  all(pos, W) {
++    const nt = this.nt;
++    const rows = Math.ceil((this.na * nt) / W);
++    const out = new Float32Array(W * rows * 4);
++    const nrm = this.rest(pos, new Float32Array(nt * 3));
++    for (let c = 0; c < this.na; c++) {
++      this.move(pos, nrm, c, (i, x, y, z) => {
++        const t = (c * nt + i) * 4;
++        out[t] = x;
++        out[t + 1] = y;
++        out[t + 2] = z;
++      });
++    }
++    return { data: out, W, rows };
++  }
++
++  // (ROADMAP 14.1) the head of one of the city's people (pos) against the base head's normal moves
++  // (base, as all() gave them): wherever theirs turn a normal more than lim degrees from where the
++  // base's would (at any move's full - an eyelid shut over a rounder eye, the nose's wings on a
++  // broader nose), that point's own moves, all of them - the rest of the head shares the base's.
++  // fix: for each point, its row + 1 (0: the base's); data: a texel a move, row after row
++  fixes(pos, base, W, lim = 2) {
++    const nt = this.nt;
++    const na = this.na;
++    const nrm = this.rest(pos, new Float32Array(nt * 3));
++    const own = new Float32Array(na * nt * 3);
++    const bad = new Uint8Array(nt);
++    const cosL = Math.cos((lim * Math.PI) / 180);
++    for (let c = 0; c < na; c++) {
++      this.move(pos, nrm, c, (i, x, y, z) => {
++        const o = (c * nt + i) * 3;
++        own[o] = x;
++        own[o + 1] = y;
++        own[o + 2] = z;
++        if (bad[i]) return;
++        const t = (c * nt + i) * 4;
++        const ax = nrm[i * 3] + x;
++        const ay = nrm[i * 3 + 1] + y;
++        const az = nrm[i * 3 + 2] + z;
++        const bx = nrm[i * 3] + base[t];
++        const by = nrm[i * 3 + 1] + base[t + 1];
++        const bz = nrm[i * 3 + 2] + base[t + 2];
++        const l = Math.hypot(ax, ay, az) * Math.hypot(bx, by, bz);
++        // (a point with no normal of its own - the tongue's tip, where its triangles meet in one: none)
++        if (l < 1e-8) return;
++        if ((ax * bx + ay * by + az * bz) / l < cosL) bad[i] = 1;
++      });
++    }
++    let n = 0;
++    const fix = new Float32Array(nt);
++    for (let i = 0; i < nt; i++) if (bad[i]) fix[i] = ++n;
++    const rows = Math.max(1, Math.ceil((n * na) / W));
++    const data = new Float32Array(W * rows * 4);
++    for (let i = 0; i < nt; i++) {
++      if (!fix[i]) continue;
++      const f = fix[i] - 1;
++      for (let c = 0; c < na; c++) {
++        const o = (c * nt + i) * 3;
++        const t = (f * na + c) * 4;
++        data[t] = own[o];
++        data[t + 1] = own[o + 1];
++        data[t + 2] = own[o + 2];
++      }
++    }
++    return { fix, data, W, rows, n };
++  }
++}
+diff --git a/scribble-city/v5/js/render/portraits.js b/scribble-city/v5/js/render/portraits.js
+new file mode 100644
+index 0000000..7f650da
+--- /dev/null
++++ b/scribble-city/v5/js/render/portraits.js
+@@ -0,0 +1,494 @@
++import * as THREE from 'three';
++import { PortraitKit, PortraitKind, PortraitFace, PortraitSlot, AUW } from './portrait.js';
++
++// (v5, ROADMAP 14.1) The portraits on the street (render/portrait.js): who of the city's people near
++// the camera are drawn as a portrait, each with their own face - as many at once as the computer
++// can afford, never a stop in the frames for it.
++//
++// What all of them share is made once (PortraitKit). Each kind of person has their head from the
++// start; their picture is painted off the game's thread (render/heroworker.js) when one of them
++// comes within reach, the nearest first - a dozen kinds kept, the longest unseen let go for the
++// next (the pictures are painted from fixed dice: painted again, the same). A few drawings are kept
++// ready (PortraitSlot), made with the rest of the game's shaders before it begins; each frame the
++// nearest people facing the camera, on the screen, get them - whoever has one keeps it a little
++// longer than the next would get it, so two people at the same distance do not trade it back and
++// forth - and a face drawn this way fades in over the city's way of drawing it (and out again), so
++// it never pops.
++
++// how many at once, from how near (in, and out a little farther: no flicker at the edge), how far
++// ahead their pictures are painted, how many kinds kept, their pictures' widths (the street's; a
++// close look's - the face lab, anybody near enough to fill a good part of the screen)
++export const BUDGETS = {
++  desktop: { slots: 8, near: 6.5, far: 7.5, prefetch: 30, kinds: 12, pic: 512, close: 1024, closes: 2, closePx: 420, wrinkles: 512, fadeIn: 0.3, fadeOut: 0.3, minSlots: 3, frameMs: 1000 / 60 },
++  phone: { slots: 2, near: 4, far: 4.8, prefetch: 14, kinds: 4, pic: 384, close: 768, closes: 1, closePx: 300, wrinkles: 256, fadeIn: 0.25, fadeOut: 0.25, minSlots: 0, frameMs: 1000 / 30 },
++};
++// (?portrait=off: none; hide: made, never shown; only:K one kind alone; gov: the frames' governor on
++// in a test too; any of BUDGETS' own, as slots:16,closes:0 - for the tests)
++function modeOf() {
++  const o = { off: false, hide: false, only: -1, gov: false, over: {} };
++  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
++  const v = q && q.get('portrait');
++  if (v) {
++    for (const p of v.split(',')) {
++      const [a, b] = p.split(':');
++      if (a === 'off') o.off = true;
++      else if (a === 'hide') o.hide = true;
++      else if (a === 'gov') o.gov = true;
++      else if (a === 'only' && b !== undefined) o.only = +b;
++      else if (b !== undefined) o.over[a] = +b;
++    }
++  }
++  o.test = !!(q && q.has('test'));
++  return o;
++}
++// (a picture of the face is 0.37 m high for 0.19 m across: render/heroink.js FACE)
++const ASPECT = 0.37 / 0.19;
++const _v = new THREE.Vector3();
++const _sph = new THREE.Sphere();
++const _pm = new THREE.Matrix4();
++
++export class Portraits {
++  // (null when there are to be none at all)
++  static make(scene, touch, layer) {
++    const mode = modeOf();
++    return mode.off ? null : new Portraits(scene, touch, layer, mode);
++  }
++
++  constructor(scene, touch, layer, mode) {
++    this.mode = mode;
++    this.touch = touch;
++    this.kit = new PortraitKit();
++    this.kinds = [];
++    this.want = new Float32Array(0);
++    this.setBudget(touch ? 'phone' : 'desktop');
++    // (the drawings kept ready: as many as there may be at once, and two fading out)
++    const n = this.B.slots + 2;
++    this.slots = [];
++    for (let i = 0; i < n; i++) {
++      const s = new PortraitSlot(this.kit, layer);
++      scene.add(s.mesh);
++      this.slots.push(s);
++    }
++    // (who may get one, last frame: kept in place, no garbage)
++    this.cand = Array.from({ length: 64 }, () => ({ fig: null, k: 0, d: 0, s: 0 }));
++    this.nc = 0;
++    this.frame = 0;
++    this.lastNow = 0;
++    this.frustum = new THREE.Frustum();
++    this.camPos = new THREE.Vector3();
++    this.hasCam = false;
++    this.pxK = 600;
++    this.worker = null;
++    this.busy = false;
++    this.sys = [];
++    this.pending = [];
++    this.renderer = null;
++    // (no portraits for now: a phone's player driving - game/game.js)
++    this.hold = false;
++    // (the frames' governor: their times, a few seconds of them)
++    this.ft = new Float32Array(120);
++    this.ftS = new Float32Array(120);
++    this.ftN = 0;
++    this.ftAt = 0;
++    this.govAt = 0;
++    this.stats = { pictures: 0, paintMs: 0, fixMs: 0, evicted: 0, uploads: 0, uploadMax: 0, initMs: 0, mapsMs: 0 };
++  }
++
++  addKind(k, spec, pos, nor, eyes) {
++    this.kinds[k] = new PortraitKind(this.kit, k, spec, pos, nor, eyes);
++    if (this.want.length < this.kinds.length) this.want = new Float32Array(this.kinds.length).fill(Infinity);
++  }
++
++  // (game/game.js: a phone's, or a computer's)
++  setBudget(name) {
++    const B = (this.B = { ...BUDGETS[name] });
++    for (const k in this.mode.over) if (k in B) B[k] = this.mode.over[k];
++    this.budgetName = name;
++    this.S = B.slots;
++  }
++
++  allowed(k) {
++    return this.mode.only < 0 || this.mode.only === k;
++  }
++
++  // (the graphics card's: the helper starts on what all of them share - how the light falls as a
++  // face moves, the pictures of its planes and lines - and then on whoever is near)
++  setRenderer(r) {
++    this.renderer = r;
++    r.initTexture(this.kit.auPos);
++    this.worker = new Worker(new URL('./heroworker.js', import.meta.url), { type: 'module' });
++    this.worker.onmessage = (e) => this.arrive(e.data);
++    const J = this.kit.normalJob();
++    this.post({ art: 'portraitInit', ...J }, [J.idx.buffer, J.pos.buffer, J.dp.buffer]);
++    this.sys.push({ art: 'portraitMaps', wrW: this.B.wrinkles });
++  }
++
++  post(msg, tr) {
++    this.busy = true;
++    this.worker.postMessage(msg, tr || []);
++  }
++
++  arrive(d) {
++    this.busy = false;
++    if (d.err) {
++      console.warn('portrait', d.err);
++      const K = this.kinds[d.folk];
++      if (K) {
++        if (d.close) K.closeJob = false;
++        else K.jobs = 0;
++        K.failed = (K.failed || 0) + 1;
++      }
++      return;
++    }
++    this.pending.push(d);
++  }
++
++  // what has come from the helper onto the graphics card: one a frame, never in the frame a face
++  // first shows it
++  upload(now) {
++    const d = this.pending.shift();
++    if (!d) return;
++    const r = this.renderer;
++    const t0 = performance.now();
++    if (d.art === 'portraitInit') {
++      r.initTexture(this.kit.setNormals(d.data, d.rows));
++      this.stats.initMs = Math.round(d.ms);
++    } else if (d.art === 'portraitMaps') {
++      for (const t of this.kit.setMaps(d.planes, d.wrinkles)) r.initTexture(t);
++      this.stats.mapsMs = Math.round(d.ms);
++    } else {
++      const K = this.kinds[d.folk];
++      if (!K) return;
++      if (d.fix) {
++        r.initTexture(K.setFix(d.fix.fix, d.fix.data, d.fix.W, d.fix.rows));
++        this.stats.fixMs = Math.max(this.stats.fixMs, Math.round(d.ms[0]));
++      }
++      const p = PortraitKind.picture(d.bmp, d.w, d.H, d.h);
++      r.initTexture(p.tex);
++      if (d.close) {
++        PortraitKind.drop(K.close);
++        K.close = p;
++        K.closeJob = false;
++        K.closeUsed = now;
++      } else {
++        PortraitKind.drop(K.pic);
++        K.pic = p;
++        K.jobs = 0;
++        K.lastUsed = now;
++      }
++      this.stats.pictures++;
++      this.stats.paintMs = Math.max(this.stats.paintMs, Math.round(d.ms[1]));
++    }
++    const ms = performance.now() - t0;
++    this.stats.uploads++;
++    this.stats.uploadMax = Math.max(this.stats.uploadMax, Math.round(ms * 10) / 10);
++  }
++
++  // ---------------------------------------------------------------- each frame (render/people.js)
++  // their pictures painted ahead: how near each kind is this frame (drawFolk)
++  wantKind(k, d) {
++    if (d < this.B.prefetch && d < this.want[k]) this.want[k] = d;
++  }
++
++  // somebody drawn near enough (render/people.js drawFolk, their head): a candidate for the next
++  // frame, and their portrait if they have one now (fading in or out, or whole)
++  slotFor(fig, k, d) {
++    if (!(fig.dead > 0) && !fig.__noPortrait && (fig.__portrait || d < this.B.far) && this.allowed(k) && this.nc < this.cand.length) {
++      const c = this.cand[this.nc++];
++      c.fig = fig;
++      c.k = k;
++      c.d = d;
++    }
++    const s = fig.__pslot;
++    if (!s || s.fig !== fig) return null;
++    if (s.kind.k !== k) {
++      this.free(s);
++      return null;
++    }
++    s.seen = this.frame;
++    s.px = (this.pxK * 0.25) / Math.max(0.1, d);
++    return s;
++  }
++
++  slotOf(fig) {
++    const s = fig && fig.__pslot;
++    return s && s.fig === fig ? s : null;
++  }
++
++  // (game/facelab.js: the visitor's close picture painted before he is looked at closely)
++  requestCloseUp(k) {
++    const K = this.kinds[k];
++    if (K) K.closeWant = this.lastNow + 30;
++  }
++
++  free(s) {
++    if (s.fig && s.fig.__pslot === s) s.fig.__pslot = null;
++    s.release();
++  }
++
++  // (render/people.js begin, before anybody is drawn: from last frame's candidates)
++  begin(camera, now, atlasBusy) {
++    this.frame++;
++    const F = this.frame;
++    const dt = Math.min(0.1, Math.max(0, now - this.lastNow));
++    this.lastNow = now;
++    this.govern();
++    this.upload(now);
++    const B = this.B;
++    // the portraits fading in and out; those nobody drew for a while let go
++    let active = 0;
++    for (const s of this.slots) {
++      s.mesh.visible = false;
++      if (!s.fig) continue;
++      if (F - s.seen > 2) {
++        this.free(s);
++        continue;
++      }
++      if (s.dir > 0) {
++        s.fade = Math.min(1, s.fade + dt / B.fadeIn);
++        active++;
++      } else {
++        s.fade -= dt / B.fadeOut;
++        if (s.fade <= 0) this.free(s);
++      }
++    }
++    // the camera: what is on the screen, how big a head is there
++    if (camera) {
++      _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
++      this.frustum.setFromProjectionMatrix(_pm);
++      this.camPos.copy(camera.position);
++      this.hasCam = true;
++      const h = this.renderer ? this.renderer.domElement.height : 720;
++      this.pxK = h / (2 * Math.tan(((camera.fov || 55) * Math.PI) / 360));
++    }
++    // who gets one: the nearest, on the screen, facing the camera - those who have one a little
++    // ahead of the rest (and for half a second whatever comes), the face lab's always
++    const S = this.hold || this.mode.hide || !this.kit.ready ? 0 : this.S;
++    const cand = this.cand;
++    const n = this.nc;
++    for (let i = 0; i < n; i++) {
++      const c = cand[i];
++      const fig = c.fig;
++      const held = fig.__pslot && fig.__pslot.fig === fig && fig.__pslot.dir > 0 ? fig.__pslot : null;
++      const forced = !!fig.__portrait;
++      const hc = fig.j && fig.j.headC;
++      const on = !this.hasCam || !hc || this.frustum.intersectsSphere(_sph.set(hc, 0.3));
++      if (!forced && !held && (c.d >= B.near || !on)) {
++        c.s = Infinity;
++        continue;
++      }
++      let sc = forced ? -100 : c.d;
++      if (!on) sc += 100;
++      if (this.hasCam && hc && fig.hf) {
++        _v.subVectors(this.camPos, hc);
++        const l = _v.length();
++        if (l > 1e-3 && fig.hf.dot(_v) / l < -0.2) sc += 2.5;
++      }
++      if (held) {
++        sc -= 0.75;
++        if (now - held.since < 0.5) sc -= 3;
++      }
++      c.s = sc;
++    }
++    // (in order, in place)
++    for (let i = 1; i < n; i++) {
++      const c = cand[i];
++      let j = i - 1;
++      while (j >= 0 && cand[j].s > c.s) {
++        cand[j + 1] = cand[j];
++        j--;
++      }
++      cand[j + 1] = c;
++    }
++    let w = 0;
++    for (; w < n && w < S; w++) {
++      const c = cand[w];
++      if (c.s === Infinity) break;
++      c.fig.__pwin = F;
++      const K = this.kinds[c.k];
++      // (whose picture is not there yet: painted next)
++      if (!K.ready) this.want[c.k] = -1;
++      else K.lastUsed = now;
++    }
++    // those who had one and are no longer among them: faded out; those fading out who are again:
++    // faded back in, as there is room
++    for (const s of this.slots) {
++      if (s.fig && s.dir > 0 && s.fig.__pwin !== F) {
++        s.dir = -1;
++        active--;
++      }
++    }
++    for (const s of this.slots) {
++      if (s.fig && s.dir < 0 && s.fig.__pwin === F && active < S) {
++        s.dir = 1;
++        active++;
++      }
++    }
++    // and the new ones
++    for (let i = 0; i < w && active < S; i++) {
++      const c = cand[i];
++      const fig = c.fig;
++      if (fig.__pslot && fig.__pslot.fig === fig) continue;
++      const K = this.kinds[c.k];
++      if (!K.ready) continue;
++      let slot = null;
++      for (const s of this.slots) {
++        if (!s.fig) {
++          slot = s;
++          break;
++        }
++      }
++      if (!slot) break;
++      const face = fig.__face || (fig.__face = new PortraitFace(fig.seed || 0));
++      // (a face drawn this way again after a while: as it is now, not eased from how it was)
++      if (face.lastT < 0 || now - face.lastT > 0.5) face.fresh = true;
++      slot.bind(K, fig, face, now);
++      slot.seen = F;
++      fig.__pslot = slot;
++      active++;
++      K.lastUsed = now;
++    }
++    for (let i = 0; i < n; i++) cand[i].fig = null;
++    this.nc = 0;
++    // a close look (the face lab's; a face filling a good part of the screen a little while): the
++    // closer picture, once it is there
++    for (const s of this.slots) {
++      if (!s.fig) continue;
++      s.nearT = s.px > B.closePx ? s.nearT + dt : 0;
++      const K = s.kind;
++      const close = !!s.fig.__portrait || s.nearT > 0.5;
++      if (close) K.closeWant = Math.max(K.closeWant || 0, now + 1);
++      const p = close && K.close ? K.close : K.pic;
++      if (p === K.close) K.closeUsed = now;
++      if (s.pic !== p) s.setPicture(p);
++    }
++    this.pump(now, atlasBusy);
++    this.want.fill(Infinity);
++  }
++
++  // the helper's next picture: the face lab's close one first, then the nearest kind's who has none
++  pump(now, atlasBusy) {
++    if (!this.worker || this.busy) return;
++    if (this.sys.length) {
++      this.post(this.sys.shift());
++      return;
++    }
++    // (a phone's helpers: one at a time - the city's people's own pictures first, render/heroart.js)
++    if (this.touch && atlasBusy) return;
++    const B = this.B;
++    const kit = this.kit;
++    const K = this.kinds;
++    // a close picture
++    let cl = null;
++    for (const k of K) if (k && this.allowed(k.k) && k.closeWant > now && !k.close && !k.closeJob && k.pic && (!cl || k.closeWant > cl.closeWant)) cl = k;
++    if (cl) {
++      let has = 0;
++      let old = null;
++      for (const k of K) {
++        if (!k || !k.close) continue;
++        has++;
++        if (now - k.closeUsed > 2 && (!old || k.closeUsed < old.closeUsed)) old = k;
++      }
++      if (has >= B.closes && old) {
++        PortraitKind.drop(old.close);
++        old.close = null;
++        has--;
++      }
++      if (has < B.closes) {
++        this.paint(cl, true);
++        return;
++      }
++    }
++    // the nearest kind wanted with no picture
++    let best = null;
++    for (const k of K) {
++      if (!k || k.pic || k.jobs || !this.allowed(k.k) || (k.failed || 0) > 2) continue;
++      const d = this.want[k.k];
++      if (d === Infinity) continue;
++      if (!best || d < this.want[best.k]) best = k;
++    }
++    if (!best) return;
++    let held = 0;
++    for (const k of K) if (k && (k.pic || k.jobs)) held++;
++    if (held >= B.kinds) {
++      // (room made: the kind longest unseen and not wanted now - or, for a kind wanted nearer, the
++      // one wanted farthest)
++      let out = null;
++      for (const k of K) {
++        if (!k || !k.pic || k.users > 0) continue;
++        if (this.want[k.k] === Infinity) {
++          if (!out || this.want[out.k] !== Infinity || k.lastUsed < out.lastUsed) out = k;
++        } else if (this.want[k.k] > this.want[best.k] + 5 && (!out || (this.want[out.k] !== Infinity && this.want[k.k] > this.want[out.k]))) out = k;
++      }
++      if (!out) return;
++      this.evict(out);
++    }
++    this.paint(best, false);
++  }
++
++  paint(K, close) {
++    const w = close ? this.B.close : this.B.pic;
++    const H = Math.round(w * ASPECT);
++    const h = Math.min(H, Math.ceil((1 - this.kit.picV0) * H));
++    const msg = { art: 'portrait', folk: K.k, w, H, h, seed: 7, W: AUW, close };
++    const tr = [];
++    if (!K.fixed && !close) {
++      msg.pos = K.rest();
++      tr.push(msg.pos.buffer);
++    }
++    if (close) K.closeJob = true;
++    else K.jobs = 1;
++    this.post(msg, tr);
++  }
++
++  evict(K) {
++    PortraitKind.drop(K.pic);
++    PortraitKind.drop(K.close);
++    K.pic = null;
++    K.close = null;
++    K.dropFix();
++    this.stats.evicted++;
++  }
++
++  // (the frames' governor: frames slower than they should be for a few seconds - one portrait fewer
++  // for a while; quick again - one more. Not in the tests, whose frames are as slow as they come)
++  govern() {
++    if (this.mode.test && !this.mode.gov) return;
++    const t = performance.now();
++    const ms = t - (this.ftAt || t);
++    this.ftAt = t;
++    if (ms <= 0 || ms > 1000) return;
++    this.ft[this.ftN++ % this.ft.length] = ms;
++    if (this.ftN < this.ft.length || this.ftN % 30) return;
++    this.ftS.set(this.ft);
++    this.ftS.sort();
++    const med = this.ftS[this.ft.length >> 1];
++    const B = this.B;
++    if (med > B.frameMs * 1.15 && this.S > B.minSlots && t > this.govAt) {
++      this.S--;
++      this.govAt = t + 10000;
++    } else if (med < B.frameMs * 0.9 && this.S < B.slots && t > this.govAt) {
++      this.S++;
++      this.govAt = t + 10000;
++    }
++  }
++
++  // (the tests)
++  count() {
++    let n = 0;
++    for (const s of this.slots) if (s.fig && s.seen === this.frame) n++;
++    return n;
++  }
++
++  debug() {
++    const K = this.kinds.filter((k) => k && (k.pic || k.jobs));
++    return {
++      budget: this.budgetName,
++      S: this.S,
++      ready: this.kit.ready,
++      kinds: K.map((k) => `${k.k}${k.pic ? '' : '…'}${k.close ? '+' : ''}${k.fixTex ? `f${k.fixTex.image.height}` : ''}`).join(' '),
++      slots: this.slots.filter((s) => s.fig).map((s) => `${s.kind.k}:${s.fade.toFixed(2)}${s.dir < 0 ? 'v' : ''}${s.pic === s.kind.close ? 'C' : ''}`).join(' '),
++      stats: this.stats,
++    };
++  }
++}
+-- 
+2.43.0
+
