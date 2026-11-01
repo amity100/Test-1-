@@ -14,7 +14,8 @@ try {
   ({ chromium } = require('/opt/node22/lib/node_modules/playwright'));
 }
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// ROOT=<dir> serves another copy of the project (a git worktree) with the same tools
+const root = process.env.ROOT ? path.resolve(process.env.ROOT) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.svg': 'image/svg+xml' };
 
 export function startServer(port = 0) {
