@@ -509,6 +509,7 @@ const IRIS = [0.16, 0.11, 0.08];
 const SHADES = [0.05, 0.05, 0.07];
 const _mH = new THREE.Matrix4();
 const _mNk = new THREE.Matrix4();
+const _shU = new THREE.Vector3();
 const _hcH = new THREE.Vector3();
 const EYE_WHITE = [0.96, 0.95, 0.92];
 const PUPIL = [0.06, 0.05, 0.08];
@@ -1712,13 +1713,15 @@ export class PersonRenderer {
       }
       // a sneaker: a rounded sole and a toe, pointing where the foot points
       _z.subVectors(to, ft);
-      _z.y = 0;
+      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
+      // lands (game/doodle.js gaitFeet)
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
+      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.035);
-      p.shoe.push(framed(_c, _x, UP, _z, k, k, k), shoeC, own, id(), ind);
+      p.shoe.push(framed(_c, _x, _shU, _z, k, k, k), shoeC, own, id(), ind);
       // (the hero's boots: a shaft up over the ankle, the jeans' hem over it)
       if (L.hero && !far && !midi && !longSkirt && !shorts) {
         _a.copy(ft).addScaledVector(UP, 0.01 * S);
@@ -1728,7 +1731,7 @@ export class PersonRenderer {
       }
       if (!far) {
         _c.y -= 0.032 * S;
-        p.sole.push(framed(_c, _x, UP, _z, k, k, k), linC(SOLE), own, id(), ind);
+        p.sole.push(framed(_c, _x, _shU, _z, k, k, k), linC(SOLE), own, id(), ind);
       }
     }
     // ---- the head (the first boulevard's: a skull, a jaw, ears, two eyes)
@@ -1936,13 +1939,15 @@ export class PersonRenderer {
       p.heroShin.push(along(kn, ft, 0.47, legK, fwd), jeansC, own, legId, ind);
       HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
       _z.subVectors(to, ft);
-      _z.y = 0;
+      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
+      // lands (game/doodle.js gaitFeet)
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
+      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
-      framed(_c, _x, UP, _z, k, k, k, _mH);
+      framed(_c, _x, _shU, _z, k, k, k, _mH);
       p.heroShoe.push(_mH, white, own, id(), ind);
       p.heroSole.push(_mH, linC(HERO_SOLE), own, id(), ind);
     }
@@ -2120,13 +2125,15 @@ export class PersonRenderer {
       q.shin.push(along(kn, ft, 0.47, legK, fwd), white, own, legId, ind);
       if (!dress) HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
       _z.subVectors(to, ft);
-      _z.y = 0;
+      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
+      // lands (game/doodle.js gaitFeet)
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
+      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
-      framed(_c, _x, UP, _z, fk, fk, fk, _mH);
+      framed(_c, _x, _shU, _z, fk, fk, fk, _mH);
       q.shoe.push(_mH, white, own, id(), ind);
       p.heroSole.push(_mH, F.sole, own, id(), ind);
     }
@@ -2370,13 +2377,15 @@ export class PersonRenderer {
         (shorts ? p.lowShinSkin : wide ? p.lowShinWide : cargo ? p.lowShinCargo : p.lowShin).put(aux, along(kn, ft, 0.43, legK, fwd), shorts ? skin : longSkirt ? skirtC : botC, own, shorts ? id() : legId, ind);
       }
       _z.subVectors(to, ft);
-      _z.y = 0;
+      // (characters round) pitched as the foot is: its heel up as it pushes off, its toes up as it
+      // lands (game/doodle.js gaitFeet)
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
+      _shU.crossVectors(_z, _x);
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.035);
-      p.lowShoe.put(aux, framed(_c, _x, UP, _z, k, k, k), shoeC, own, id(), ind);
+      p.lowShoe.put(aux, framed(_c, _x, _shU, _z, k, k, k), shoeC, own, id(), ind);
     }
     // ---- the head (no face: smaller than a pixel from where this is drawn)
     if (P.head > 0.5) {

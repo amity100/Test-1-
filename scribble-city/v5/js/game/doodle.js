@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../core/util.js';
+
+// 0..1 eased (clamped), smoothstep's curve
+function smooth01(x) {
+  const t = x < 0 ? 0 : x > 1 ? 1 : x;
+  return t * t * (3 - 2 * t);
+}
 import { MAX_HOLES } from '../render/glsl.js';
 import { FILL } from './looks.js';
 import { GOLD } from './looks.js';
@@ -149,6 +155,12 @@ export class Doodle {
     this.pos = new THREE.Vector3();
     this.yaw = 0;
     this.speed = 0;
+    this.gaitK = 0;
+    this.gaitV = 0;
+    this.idleT = Math.random() * 10;
+    this.shiftT = Math.random() * 5;
+    this.shiftTo = Math.random() < 0.5 ? -1 : 1;
+    this.shiftW = 0;
     this.phase = Math.random() * 6;
     this.air = false;
     this.aim = 0;
@@ -280,6 +292,60 @@ export class Doodle {
     this.visible = v;
   }
 
+  // (characters round) where the walk puts the feet this moment, in the body's frame (x right, y up,
+  // z ahead; the body's units): each leg's cycle u (0 its heel down, then flat on the ground going
+  // back at exactly the ground's speed - no sliding - then rolled off its ball, then swung through
+  // in the air to land ahead again), and the hips' height (lowest with both feet down)
+  gaitFeet(ph, fStep, legL) {
+    const G = this._gf || (this._gf = { hipY: 0.93, feet: [{ y: 0.04, z: 0, pf: 0 }, { y: 0.04, z: 0, pf: 0 }] });
+    const v = this.gaitV;
+    const s = this.scale || 1;
+    const Ls = v / fStep / s;
+    const run = smooth01((v - 2.2) / 1.2);
+    // (landing about a foot ahead of the hips - farther would make the hips sink to reach it; on
+    // the ground as long as the leg can reach back (the foot leaves it about half a metre behind),
+    // so the faster, the shorter: a walk's both feet down together, a run's in the air between;
+    // the heel off the ground about half way through, the foot rolled over its toes to push off)
+    const TL = 0.15;
+    const zA = 0.06 + Math.min(0.3, Ls * 0.34);
+    const D = Ls > 1e-3 ? clamp((zA + 0.58) / (2 * Ls), 0.3, 0.65) : 0.62;
+    const Da = D * 0.5;
+    const H = lerp(0.07, 0.2, run) * Math.min(1, 0.4 + v / 2);
+    const PF = 1.1;
+    // (where the foot leaves the ground: its toes still where they were, the heel up)
+    const zOff = zA - 2 * Ls * D + TL - TL * Math.cos(PF);
+    const yOff = 0.04 + TL * Math.sin(PF);
+    for (let li = 0; li < 2; li++) {
+      const f = G.feet[li];
+      let u = (ph + (li ? Math.PI : 0)) / (2 * Math.PI);
+      u -= Math.floor(u);
+      if (u < Da) {
+        f.z = zA - 2 * Ls * u;
+        f.y = 0.04;
+        f.pf = 0;
+      } else if (u < D) {
+        const r = PF * (u - Da) / (D - Da);
+        const ball = zA - 2 * Ls * u + TL;
+        f.z = ball - TL * Math.cos(r);
+        f.y = 0.04 + TL * Math.sin(r);
+        f.pf = r;
+      } else {
+        const w = (u - D) / (1 - D);
+        const m = w * w * w * (10 - 15 * w + 6 * w * w);
+        f.z = zOff + (zA - zOff) * m;
+        const lift = H * Math.pow(Math.sin(Math.PI * w), 1.3);
+        const rest = (yOff - 0.04) * (1 - smooth01(w / 0.35));
+        f.y = 0.04 + Math.max(lift, rest);
+        f.pf = PF * (1 - smooth01(w / 0.3)) - 0.15 * smooth01((w - 0.7) / 0.3);
+      }
+    }
+    // the hips: as high as the legs allow when a foot lands far ahead, up over the planted leg
+    const reach = 2 * legL;
+    const low = Math.min(0.93, 0.04 + Math.sqrt(Math.max(0, reach * reach - zA * zA)));
+    G.hipY = low + (0.93 - low) * (0.5 - 0.5 * Math.cos(2 * ph)) + run * 0.03 * Math.max(0, -Math.cos(2 * ph));
+    return G;
+  }
+
   toWorld(x, y, z, out) {
     const s = this.scale;
     out.set(this.pos.x + (this.right.x * x + this.forward.x * z) * s, this.pos.y + y * s, this.pos.z + (this.right.z * x + this.forward.z * z) * s);
@@ -304,8 +370,19 @@ export class Doodle {
     const f = this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.right.set(-f.z, 0, f.x);
     const sp = this.speed;
-    const stride = sp > 5.5 ? 2.3 : 1.5;
-    this.phase += (sp * dt * Math.PI * 2) / stride + this.dance * dt * 7;
+    // (characters round) the steps: a real cadence (about 1.8 steps a second at a walk, 3 at a
+    // run), each foot planted on the ground and still there while the body goes over it, rolled
+    // off its ball, lifted and swung through, the knee bent by the leg's own length (gaitFeet).
+    // Stopping, the feet come together under the body and the walk fades out; standing, the body
+    // breathes and shifts its weight from leg to leg
+    const moving = sp > 0.05;
+    const fStep = clamp(1.05 + 0.55 * sp, 1.35, 3.6);
+    this.gaitK += ((moving ? 1 : 0) - this.gaitK) * (1 - Math.exp(-dt * (moving ? 7 : 5)));
+    if (moving) this.gaitV = sp;
+    else this.gaitV *= Math.exp(-dt * 6);
+    if (moving || this.gaitK > 0.01) this.phase += Math.PI * fStep * dt;
+    this.phase += this.dance * dt * 7;
+    this.idleT += dt;
     const A = clamp(sp / 7.5, 0, 1);
     const ph = this.phase;
     const j = this.j;
@@ -318,7 +395,10 @@ export class Doodle {
     const hw = (fem ? 0.095 : 0.085) * bulk;
     const legGone = (this.parts.legL < 0.5 ? 1 : 0) + (this.parts.legR < 0.5 ? 1 : 0);
 
-    let hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A + Math.sin(ph * 2) * 0.01;
+    const legLen = 0.47 * (this.look.build.legs || 1);
+    const legIK = Math.min(legLen, (0.93 - 0.04) / 2 / 0.9995);
+    const GF = this.gaitFeet(ph, fStep, legIK);
+    let hipY = lerp(0.93, GF.hipY, this.gaitK);
     hipY += this.dance * Math.abs(Math.sin(ph)) * 0.05;
     hipY = lerp(hipY, 0.5, sit);
     hipY = lerp(hipY, 0.25, crawl);
@@ -342,6 +422,17 @@ export class Doodle {
       twist = out * this.punchSide * 0.1;
     } else if (this.kick >= 0) lean -= kickUp(this.kick) * 0.22;
     let leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
+    // (standing: the weight on one leg, then after a while the other; a little sway)
+    const still = (1 - this.gaitK) * (1 - sit) * (1 - crawl) * (1 - crouch) * (1 - this.dance) * (this.ride > 0 ? 0 : 1) * (this.dead > 0 ? 0 : 1);
+    this.shiftT -= dt;
+    if (this.shiftT <= 0) {
+      this.shiftT = 4 + ((this.seed * 7.31 + this.idleT * 0.37) % 1) * 5;
+      this.shiftTo = this.shiftTo > 0 ? -1 : 1;
+    }
+    this.shiftW += (this.shiftTo - this.shiftW) * (1 - Math.exp(-dt * 1.6));
+    const it = this.idleT;
+    const hipShift = still * (0.02 * this.shiftW + 0.004 * Math.sin(1.32 * it + this.seed) + 0.003 * Math.sin(2.32 * it + this.seed * 2.1));
+    leanSide -= still * 0.012 * this.shiftW;
     // (characters round) the head held up against the body's lean, so that the eyes stay on the world
     // and not on the ground (not a blow's: that snaps the head back, below)
     this.turnHead(dt, this.dead < 0.2 ? Math.min(Math.max(0, lean) * 0.75, crawl > 0.5 ? 0.6 : 0.75) : 0);
@@ -349,10 +440,12 @@ export class Doodle {
       lean -= this.recoil * this.recoil * 0.42;
       leanSide += this.recoil * this.recoilSide * 0.12;
     }
-    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
+    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05 + hipShift, hipY, 0, j.hip);
     const spine = 0.5;
-    const nx = leanSide;
-    const ny = hipY + spine * Math.cos(lean);
+    const nx = leanSide + hipShift * 0.6;
+    // (breathing: the chest and the shoulders rise and fall a little, slower at rest)
+    const breath = Math.sin(it * (1.4 + 0.4 * ((this.seed * 3.7) % 1)) * (1 + this.gaitK * 0.6)) * (0.004 + 0.002 * this.gaitK) * (1 - sit * 0.5);
+    const ny = hipY + spine * Math.cos(lean) + breath;
     const nz = spine * Math.sin(lean);
     this.toWorld(nx, ny, nz, j.neck);
     const hOff = 0.1 + 0.12 * this.headScale;
@@ -363,11 +456,15 @@ export class Doodle {
     this.toWorld(nx + sw * chc, ny - 0.07, nz + twist + sw * chs, j.shoulderR);
     this.toWorld(nx - sw * chc, ny - 0.07, nz - twist - sw * chs, j.shoulderL);
     j.shoulder.copy(j.shoulderR);
-    this.toWorld(hw, hipY, 0, j.hipR);
-    this.toWorld(-hw, hipY, 0, j.hipL);
+    this.toWorld(hw + hipShift, hipY, 0, j.hipR);
+    this.toWorld(-hw + hipShift, hipY, 0, j.hipL);
 
     // legs
-    const legL = 0.47 * (this.look.build.legs || 1);
+    // (the legs' two bones as long as the hips are high over the ankles: standing, a straight leg
+    // reaches the ground - not bent, not short)
+    const legL = legIK;
+    // (how much of the plain walk shows: the special poses take the legs over)
+    const plain = (1 - sit) * (1 - crawl) * (1 - crouch) * (1 - this.climb) * (this.air ? 0 : 1) * (this.kick >= 0 ? 1 - kickUp(this.kick) : 1) * (1 - this.dance);
     // (the joints never change: the lists are made once)
     const legs = this._legs || (this._legs = [[j.kneeR, j.footR, j.toeR, 0], [j.kneeL, j.footL, j.toeL, Math.PI]]);
     for (let li = 0; li < 2; li++) {
@@ -376,8 +473,16 @@ export class Doodle {
       const toe = legs[li][2];
       const off = legs[li][3];
       const side = off === 0 ? 1 : -1;
-      let th = Math.sin(ph + off) * (0.18 + 0.62 * A);
-      let kb = Math.max(0, Math.sin(ph + off - Math.PI * 0.5)) * (0.25 + 0.9 * A) + 0.05;
+      // the foot where the step puts it, the thigh and the shin reaching it (two equal bones)
+      const ft = GF.feet[li];
+      const fzT = lerp(side > 0 ? 0.025 : -0.015, ft.z, this.gaitK);
+      const fyT = lerp(0.04, ft.y, this.gaitK);
+      const ddy = fyT - hipY;
+      const dd = Math.min(Math.hypot(ddy, fzT), 2 * legL * 0.999);
+      const al = Math.atan2(fzT, -ddy);
+      const be = Math.acos(clamp(dd / (2 * legL), -1, 1));
+      let th = al + be;
+      let kb = 2 * be;
       if (this.dance > 0) {
         th = lerp(th, Math.sin(ph + off) * 0.25, this.dance);
         kb = lerp(kb, 0.25 + Math.max(0, Math.sin(ph + off)) * 0.5, this.dance);
@@ -424,20 +529,24 @@ export class Doodle {
       const sx = side * hw * (1 + sit * 0.4);
       const ky = hipY - Math.cos(th) * legL;
       const kz = Math.sin(th) * legL;
-      this.toWorld(sx, ky, kz, knee);
+      // (standing on one leg more than the other: the hips over it, the feet where they are)
+      this.toWorld(sx + hipShift * 0.5, ky, kz, knee);
       const sh = th - kb;
       let fy = ky - Math.cos(sh) * legL;
       const fz = kz + Math.sin(sh) * legL;
       fy = Math.max(fy, 0.04);
       this.toWorld(sx, fy, fz, foot);
-      this.toWorld(sx, Math.max(0.03, fy - 0.01), fz + 0.13, toe);
+      // (the foot rolled: its heel up off the ball as it pushes off, its toes up as it lands;
+      // turned out a little, as feet are)
+      const pf = lerp(0, ft.pf, this.gaitK) * plain;
+      this.toWorld(sx + side * 0.013, Math.max(0.03, fy - 0.13 * Math.sin(pf)), fz + 0.13 * Math.cos(pf), toe);
     }
     if (this.ride > 0) this.pedal(hw, legL);
 
     // arms
     const armU = 0.31 * (this.look.build.arms || 1);
     const armF = 0.29 * (this.look.build.arms || 1);
-    const swing = (0.15 + 0.7 * A) * (1 - sit);
+    const swing = (0.15 + 0.7 * A) * (1 - sit) * this.gaitK;
     const arms = this._arms || (this._arms = [[j.shoulderR, j.elbowR, j.handR, 1, 0], [j.shoulderL, j.elbowL, j.handL, -1, Math.PI]]);
     const aimP = this.aimPitch;
     const ay = this.yaw + this.aimYaw;
