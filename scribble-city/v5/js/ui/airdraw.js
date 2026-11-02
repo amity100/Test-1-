@@ -267,7 +267,7 @@ export class AirDraw {
     return out.copy(this.C).addScaledVector(this.U, u).addScaledVector(this.V, v);
   }
 
-  show(bpId) {
+  show(bpId, opts = {}) {
     const g = this.game;
     if (g.pad) g.pad.startDrawing();
     this.strokes = [];
@@ -284,6 +284,14 @@ export class AirDraw {
     this.footEl.classList.remove('hidden');
     document.body.classList.add('air-drawing');
     this.setBp(bpId);
+    // (ROADMAP 15.2) learning a blueprint found: its lines in blue on the sheet, to go over - once;
+    // from then on it is made with a touch. Going over them here costs no points
+    this.learning = !!opts.learn;
+    if (this.learning) {
+      this.ghost = true;
+      this.ghostBtn.classList.add('on');
+      this.titleEl.textContent = `לומדים לצייר: ${this.bp.name} — עוברים על הקווים הכחולים, פעם אחת`;
+    }
     // (the ink in the pen: ROADMAP 9.4, not with ?classic)
     this.dryShown = false;
     this.inkEl.classList.toggle('hidden', !g.ink);

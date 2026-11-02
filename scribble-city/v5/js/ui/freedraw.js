@@ -127,6 +127,45 @@ function costOfBp(bp) {
   return bp.kind === 'vehicle' ? 14 + d * 6 : bp.kind === 'weapon' ? 8 + d * 5 : 6 + d * 3;
 }
 
+// (ROADMAP 15.2) where a vehicle summoned with a touch stands: right before you, its nose the way you
+// look, on free ground (null: nowhere free close by - it goes where a drawn one would)
+function frontSpot(game, v, box) {
+  const an = game.camera.getWorldDirection(new THREE.Vector3());
+  an.y = 0;
+  if (an.lengthSq() < 1e-6) an.set(0, 0, -1);
+  an.normalize();
+  const ax = new THREE.Vector3().crossVectors(an, UP).normalize();
+  const yaw = Math.atan2(an.x, an.z);
+  const q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
+  const p = game.player.pos;
+  const halfLen = (box.max.z - box.min.z) / 2 + 0.2;
+  const halfWid = (box.max.x - box.min.x) / 2 + 0.2;
+  const mid = (box.max.z + box.min.z) / 2;
+  const col = game.world.collision;
+  const others = game.vehicles.list.filter((o) => !o.dead && o !== v);
+  const step = Math.max(0.6, halfLen / 3);
+  const free = (x, z) => {
+    for (const o of others) if (Math.hypot(o.pos.x - x, o.pos.z - z) < halfLen + (o.halfLen || 2) + 0.4) return false;
+    for (let a = -halfLen; a <= halfLen + 1e-3; a += step) {
+      for (const c of [-halfWid, 0, halfWid]) {
+        const px = x + an.x * a + ax.x * c;
+        const pz = z + an.z * a + ax.z * c;
+        if (groundHeight(px, pz) < -0.45 || Math.abs(groundHeight(px, pz) - groundHeight(p.x, p.z)) > 0.9) return false;
+        if (col.pointInside(px, 1.0, pz, 0.3)) return false;
+      }
+    }
+    return true;
+  };
+  for (const d of [halfLen + 1.1, halfLen + 2.3, halfLen + 3.6]) {
+    for (const side of [0, 1.3, -1.3, 2.6, -2.6]) {
+      const x = p.x + an.x * d + ax.x * side;
+      const z = p.z + an.z * d + ax.z * side;
+      if (free(x, z)) return { x: x - an.x * mid, z: z - an.z * mid, yaw, q };
+    }
+  }
+  return null;
+}
+
 // how it came out, in a word
 const GRADE_WORD = { perfect: 'מושלם', good: 'טוב', wonky: 'עקום' };
 const moreLines = (n) => (n === 1 ? 'עוד קו אחד' : `עוד ${n} קווים`);
@@ -428,7 +467,11 @@ export class FreeDraw {
         return;
       }
       const it = e.target.closest('[data-i]');
-      if (it && !it.classList.contains('lock')) this.choose(this.force === it.dataset.i ? null : it.dataset.i);
+      if (!it) return;
+      // (ROADMAP 15.2) a thing you know: here at once. Lines already on the page: the touch picks it
+      // for them instead, as it did (what you are drawing is that one)
+      if (this.strokes.length && !it.classList.contains('lock')) this.choose(this.force === it.dataset.i ? null : it.dataset.i);
+      else this.quick(it.dataset.i);
     });
     press($('fd-kind'), () => this.menu(this.menuEl.classList.contains('hidden')));
     // (ROADMAP 11.10) a part's menu: what else that line could be; which way it faces
@@ -532,10 +575,17 @@ export class FreeDraw {
         // (ROADMAP 11.24: in a car - the part to draw, 1-3)
         mine();
         this.game.fuse.pen.pick(PEN_CATS[+k.slice(-1) - 1]);
-      } else if (this.catalogOn() && /^(Digit|Numpad)[1-3]$/.test(k)) {
-        // (ROADMAP 11.40: on foot, the catalog's categories - weapons, vehicles, gear)
+      } else if (this.catalogOn() && (k === 'ArrowLeft' || k === 'ArrowRight')) {
+        // (ROADMAP 15.2: the shelves - weapons, vehicles, gear - with the arrows; right to left, as
+        // the legend reads)
         mine();
-        this.setShelf(SHELVES[+k.slice(-1) - 1]);
+        const i = SHELVES.indexOf(this.shelf);
+        this.setShelf(SHELVES[(i + (k === 'ArrowLeft' ? 1 : SHELVES.length - 1)) % SHELVES.length]);
+      } else if (this.catalogOn() && /^(Digit|Numpad)[1-9]$/.test(k)) {
+        // (ROADMAP 15.2: on foot, the shelf's known things by their numbers - made at once)
+        mine();
+        const it = this.legEl && this.legEl.querySelector(`[data-n="${k.slice(-1)}"]`);
+        if (it) this.quick(it.dataset.i);
       } else if (/^(Digit|Numpad)[0-5]$/.test(k)) {
         // (what is drawn: 1-5 each of the five, together; 0 anything - the weapons wait)
         mine();
@@ -1543,7 +1593,9 @@ export class FreeDraw {
     const R = on ? this.R : null;
     const lit = R && R.lit ? R.lit : '';
     const ids = on ? shelfIds(this.shelf) : [];
-    const sig = `${on}|${this.shelf}|${lit}|${this.force || ''}|${ids.map((id) => (this.bpOpen(id) ? 1 : 0)).join('')}`;
+    const al = this.game.album;
+    const st = (id) => (!al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
+    const sig = `${on}|${this.shelf}|${lit}|${this.force || ''}|${ids.map(st).join('')}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     document.body.classList.toggle('fd-catalog', on);
@@ -1552,19 +1604,83 @@ export class FreeDraw {
       return;
     }
     const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('');
+    // (ROADMAP 15.2) the ones you know: a touch (or its number) and it is made, no drawing; the ones
+    // found and not learned yet: drawn once over their lines; the rest: where they are to be found
+    let n = 0;
     const items = ids.map((id) => {
       const bp = BLUEPRINTS[id];
-      const lock = !this.bpOpen(id);
-      const cls = ['fd-it', lit === id ? 'on' : '', this.force === id ? 'pick' : '', lock ? 'lock' : ''].filter(Boolean).join(' ');
-      return `<div class="${cls}" data-i="${id}">${bpSvg(bp)}<b>${bp.name}</b><i>${bp.strokes.length} חלקים</i></div>`;
+      const s = st(id);
+      const lock = s === 'x';
+      const num = s === 'k' && n < 9 ? ++n : 0;
+      const cls = ['fd-it', lit === id ? 'on' : '', this.force === id ? 'pick' : '', lock ? 'lock' : '', s === 'l' ? 'learn' : '', s === 'k' ? 'known' : ''].filter(Boolean).join(' ');
+      const tag = s === 'l' ? '✎ ללמוד' : lock ? '🔒 לא נמצא' : `${costOfBp(bp)} דיו`;
+      return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${tag}</i></div>`;
     }).join('');
-    el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">מה שמציירים מכאן — זה מה שיוצא</span></div><div class="fd-its">${items}</div>`;
+    const say = this.game.touch ? 'נגיעה בדבר שאתם מכירים — והוא כאן. או ציירו אותו' : 'נגיעה או 1–9: והוא כאן · ←→ מדפים · אפשר גם לצייר';
+    el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${say}</span></div><div class="fd-its">${items}</div>`;
+  }
+
+  // (ROADMAP 15.2) a thing you know how to draw, made with a touch (or its number): nothing to draw -
+  // the lines of its own blueprint are inked before you for a blink and fly onto it, and it is real
+  // in under a second, at its best (what counts is that you know it, not the hand). A vehicle stands
+  // right before you, facing the way you look, and you are in it the moment it is real
+  quick(id) {
+    const game = this.game;
+    const bp = BLUEPRINTS[id];
+    const al = game.album;
+    if (!bp || !al || !this.catalogOn() || game.player.mode !== 'foot') return false;
+    if (!al.known(id)) {
+      if (al.toLearn(id)) return this.learn(id);
+      game.hud.toast(`${bp.name}: עוד לא נמצא — ${al.where(id)}`, 'info', 3.2);
+      game.audio.play('click', 0.3);
+      return false;
+    }
+    const why = game.gadgets ? game.gadgets.cannot(id) : null;
+    if (why) {
+      game.hud.toast(why, 'info', 2.8);
+      return false;
+    }
+    const cost = costOfBp(bp);
+    const ink = game.ink;
+    if (ink && ink.level < cost) {
+      game.hud.toast(`ל${bp.name} צריך ${cost} דיו, ויש ${Math.floor(ink.level)} — הדיו חוזר לאט, או בקבוק בחנות כתיבה`, 'bad', 3);
+      return false;
+    }
+    if (!this.isOpen) this.layout();
+    // its lines, inked where it will hang (a weapon: to the right of the middle, where the hand is)
+    const b = blueprintBounds(bp);
+    const cw = window.innerWidth;
+    const ch = window.innerHeight;
+    const w = Math.min(cw * (bp.kind === 'vehicle' ? 0.42 : 0.26), ch * 0.36 * (b.w / Math.max(1e-3, b.h)));
+    const h = (w * b.h) / Math.max(1e-3, b.w);
+    const cx = cw * (bp.kind === 'weapon' ? 0.6 : 0.5);
+    const cy = ch * (bp.kind === 'weapon' ? 0.56 : 0.5);
+    const U = this.U;
+    this.strokes = bp.strokes.map((st) => ({ p: st.pts.map(([x, y]) => [(cx + ((x - b.x0) / b.w - 0.5) * w) / U, (cy + ((y - b.y0) / b.h - 0.5) * h) / U]), c: this.ink }));
+    this.force = null;
+    this.bake();
+    this.render();
+    const R = { bp, kind: id, grade: 'perfect', score: 1, cost, remembered: false };
+    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle' });
+    this.stats.quick = (this.stats.quick || 0) + 1;
+    return true;
+  }
+
+  // (ROADMAP 15.2) found, not learned yet: its first time - on the sheet in the air, over its lines
+  learn(id) {
+    const game = this.game;
+    this.close();
+    game.hud.toast(`${BLUEPRINTS[id].name} — חדש! מציירים אותו פעם אחת על הקווים הכחולים, ומאז הוא מוכן בנגיעה`, 'info', 3.4);
+    game.beginDrawing(id);
+    return true;
   }
 
   // made from the catalog: the album's own way of making a drawn blueprint real (game/game.js
   // onDrawingDone) - it hangs in the air where it was drawn as it turns real, a weapon then into
-  // the hand; a vehicle turns real beside you - the grade by how alike the drawing is
-  makeCatalog(R) {
+  // the hand; a vehicle turns real beside you - the grade by how alike the drawing is. opts (ROADMAP
+  // 15.2, made with a touch): speed - the show's pace; front - a vehicle right before you, facing
+  // the way you look, got into once real
+  makeCatalog(R, opts = {}) {
     const game = this.game;
     const bp = R.bp;
     const res = { grade: R.grade, score: Math.round(R.score * 100) };
@@ -1576,6 +1692,20 @@ export class FreeDraw {
     const perPx = (2 * D * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / window.innerHeight;
     const plan = planDrawing(game, bp, res, { C, W: (where.w * perPx) / 0.66, H: (where.h * perPx) / 0.66 });
     plan.landed = true;
+    if (opts.speed) plan.speed = opts.speed;
+    if (opts.front && plan.vehicle && plan.vehicle.kind !== 'boat') {
+      const v = plan.vehicle;
+      const box = v.kind === 'car' ? game.cars.boxOf(v.carKind) : localBox(v.group);
+      const sp = frontSpot(game, v, box);
+      if (sp) {
+        v.pos.set(sp.x, v.flies ? 0 : groundHeight(sp.x, sp.z) * 0.5, sp.z);
+        v.yaw = sp.yaw;
+        v.group.position.copy(v.pos);
+        v.group.rotation.set(0, v.yaw, 0);
+        plan.frame = makeFrame(cam, v.pos, sp.q, 1, box);
+        plan.autoEnter = true;
+      }
+    }
     // (drawn on the run: it goes along with you as it turns real)
     plan.follow = new THREE.Vector3();
     if (this.force) this.memory.learn(this.memory.signature(this.strokes), this.force);

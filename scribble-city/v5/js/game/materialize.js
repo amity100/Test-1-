@@ -308,7 +308,9 @@ export class Materialize {
   update(dt) {
     if (!this.list.length) return;
     for (const r of this.list) {
-      r.t += dt;
+      // (ROADMAP 15.2: a thing you know, made at once - quicker; the first time you learn one -
+      // slower, a moment of its own)
+      r.t += dt * (r.speed || 1);
       this.apply(r);
     }
     this.list = this.list.filter((r) => !r.done);

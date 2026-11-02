@@ -1092,7 +1092,13 @@ export class Game {
     // moving; what you see go by as it really goes - the pen, its camera - keeps the real step. The
     // regular game: only in a car - on foot the pen draws on the run, as it did)
     this.realDt = dt;
-    if (this.fuse) dt *= this.fuse.timeK(dt, !!(this.freedraw && this.freedraw.isOpen && (this.lab || this.freedraw.carOpen)) && this.state === 'play');
+    // (ROADMAP 15.2) and on foot when it is hot round you - the police after you, just hurt: time to
+    // make a thing you know without being shot through it. A breath, not a hiding place: six seconds of
+    // it each time the pen comes out, then the city at its pace again
+    const fd = this.freedraw;
+    const penSlow = !!(fd && fd.isOpen) && this.state === 'play' && (this.lab || fd.carOpen || (this.police && this.police.level > 0) || this.time - this.player.lastHurt < 3);
+    this.penSlowT = penSlow ? (this.penSlowT || 0) + dt : 0;
+    if (this.fuse) dt *= this.fuse.timeK(dt, penSlow && this.penSlowT < 6);
     // (ROADMAP 11.28: frozen while the rewind runs back, slow a moment after it - game/gear.js)
     if (this.gear) dt *= this.gear.timeK(this.realDt);
     this.time += dt;
@@ -1153,6 +1159,14 @@ export class Game {
       this.vehicles.update(dt);
       if (!this.classic && player.mode === 'vehicle') player.seatIn(dt);
       this.materialize.update(dt);
+      // (ROADMAP 15.2) a vehicle summoned with a touch: in it the moment it is real (still on foot,
+      // still beside it)
+      const av = this.autoEnterV;
+      if (av && !av.materializing) {
+        this.autoEnterV = null;
+        const p = this.player;
+        if (!av.dead && p.mode === 'foot' && !p.inVehicle && Math.hypot(av.pos.x - p.pos.x, av.pos.z - p.pos.z) < 9) this.enterVehicle(av);
+      }
       this.weapons.update(dt);
       if (this.arsenal) this.arsenal.update(dt);
       this.enemies.update(dt);
@@ -1619,7 +1633,7 @@ export class Game {
     if (ALL_OPEN) {
       // the whole library is open: pick what to draw
       this.album.show(
-        (id) => this.beginDrawing(id),
+        (id, draw) => (draw || this.classic || !this.album.known(id) ? this.beginDrawing(id) : this.quickSummon(id)),
         () => {
           if (!this.touch && this.state === 'play' && !this.airdraw.open) this.input.requestLock();
         },
@@ -1643,6 +1657,12 @@ export class Game {
     }
   }
 
+  // (ROADMAP 15.2) a thing you know, made with a touch (ui/freedraw.js quick)
+  quickSummon(id) {
+    if (this.freedraw) return this.freedraw.quick(id);
+    return this.beginDrawing(id);
+  }
+
   beginDrawing(id) {
     const p = this.player;
     if (p.mode !== 'foot' || this.chute.open) return;
@@ -1660,7 +1680,8 @@ export class Game {
     this.nudgeDraw = false;
     this.drewOnce = true;
     $('draw-hint').classList.add('hidden');
-    this.airdraw.show(id);
+    // (ROADMAP 15.2: found, not learned yet - the first time is drawn over its lines, the learning)
+    this.airdraw.show(id, { learn: !this.classic && this.album.toLearn(id) });
     if (!p.hidden) this.hud.toast('זהירות — לא מוסתרים! האויבים ימשיכו לתקוף', 'bad', 2.2);
   }
 
@@ -1672,7 +1693,11 @@ export class Game {
   onDrawingDone(bp, res, strokes, plan = null) {
     const p = this.player;
     if (p.mode === 'draw') p.mode = 'foot';
+    // (ROADMAP 15.2) the first time one found is drawn: learned - from now on made with a touch
+    const learned = !this.classic && this.album.toLearn(bp.id);
     this.album.recordGrade(bp.id, res.score);
+    if (learned && plan) plan.speed = 0.72;
+    const speed = plan && plan.speed ? plan.speed : 1;
     const grade = res.grade;
     const msg = bp.the ? GRADE_THE[grade](bp, AGREE[bp.g || 'm']) : GRADE_TEXT[grade](bp.name);
     // (what the drawing became is said once it is all there, not over the show)
@@ -1684,6 +1709,10 @@ export class Game {
       if (this.minds && plan && plan.frame) this.minds.happened('drawn', plan.frame.matrix.elements[12], plan.frame.matrix.elements[14], true);
     };
     say(msg, grade === 'fail' ? 'bad' : grade === 'wonky' ? 'info' : 'good', 3.2);
+    if (learned) {
+      say(`✦ למדתם לצייר ${bp.the || bp.name}! מעכשיו — ${this.touch ? 'העיפרון ונגיעה בו' : 'Q ונגיעה בו (או המספר שלו)'}: מוכן תוך שנייה`, 'good', 4.2);
+      this.audio.play('cheer', 0.7);
+    }
     // a thing that flies to the hero once it is real (the plaster, the parachute)
     const toHero = (where, then) => {
       if (!plan || !plan.model) return then();
@@ -1692,7 +1721,7 @@ export class Game {
       root.matrix.copy(plan.frame.matrix);
       root.matrixWorldNeedsUpdate = true;
       this.scene.add(root);
-      this.materialize.begin({ frame: plan.frame, root, toHero: where, onArrive: then, onReal });
+      this.materialize.begin({ frame: plan.frame, root, toHero: where, onArrive: then, onReal, speed });
     };
     if (bp.kind === 'heal') {
       toHero('chest', () => {
@@ -1727,7 +1756,7 @@ export class Game {
           root.matrix.copy(plan.frame.matrix);
           root.matrixWorldNeedsUpdate = true;
           this.scene.add(root);
-          this.materialize.begin({ frame: plan.frame, root, onReal });
+          this.materialize.begin({ frame: plan.frame, root, onReal, speed });
           G.place(bp.id, grade, plan.spot, root);
         } else {
           const s = G.spot(bp.id);
@@ -1744,17 +1773,19 @@ export class Game {
       if (plan) {
         // it hangs in the air where it was drawn, turns real, then flies into the hand
         slot.present = { matrix: plan.frame.matrix.clone(), k: 0 };
-        this.materialize.begin({ frame: plan.frame, root: model.group, held: slot, follow: plan.follow, onReal });
+        this.materialize.begin({ frame: plan.frame, root: model.group, held: slot, follow: plan.follow, onReal, speed });
       } else slot.popAt = this.time;
       this.hud.updateWeapon();
     } else {
       let v;
       if (plan && plan.vehicle) {
         v = this.vehicles.add(plan.vehicle);
-        this.materialize.begin({ frame: plan.frame, root: v.kind === 'car' ? null : v.group, car: v.kind === 'car' ? v : null, vehicle: v, onReal });
+        this.materialize.begin({ frame: plan.frame, root: v.kind === 'car' ? null : v.group, car: v.kind === 'car' ? v : null, vehicle: v, onReal, speed });
+        // (ROADMAP 15.2: summoned with a touch - you are in it the moment it is real)
+        if (plan.autoEnter) this.autoEnterV = v;
       } else v = this.vehicles.spawn(bp.id, grade, res.score);
       const getIn = bp.the ? `לעלות על ${bp.the}` : `להיכנס ל${bp.name}`;
-      say(this.touch ? `לחצו על כפתור הרכב הירוק כדי ${getIn}` : `לחצו E כדי ${getIn}`, 'info', 3);
+      if (!(plan && plan.autoEnter)) say(this.touch ? `לחצו על כפתור הרכב הירוק כדי ${getIn}` : `לחצו E כדי ${getIn}`, 'info', 3);
       v.strokes = strokes;
       if (bp.id === 'car') this.goalFlags.car = true;
     }

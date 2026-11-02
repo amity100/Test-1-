@@ -29,6 +29,10 @@ const FOUND_IN = {
   umbrella: 'במכולות שבשדרות',
 };
 
+// (ROADMAP 15.2) what every new game starts knowing how to draw: a paint gun, a car, a ramp - made
+// with a touch from the first minute; the rest found in the city, then learned once
+export const START_KIT = ['paint', 'car', 'ramp'];
+
 // the library's shelves
 // (v5, ROADMAP 11.36: the weapons first - the paint gun, the pencil rifle, the eraser bazooka...)
 const SHELVES = [
@@ -63,6 +67,8 @@ export class Album {
     } catch (e) {
       // storage unavailable: start empty
     }
+    // (ROADMAP 15.2) the start's kit: found and known from the first minute
+    for (const id of START_KIT) if (BLUEPRINTS[id] && !this.items.has(id)) this.items.set(id, { best: 0, kit: true });
   }
 
   save() {
@@ -75,6 +81,20 @@ export class Album {
 
   has(id) {
     return this.allOpen ? !!BLUEPRINTS[id] : this.items.has(id);
+  }
+
+  // (ROADMAP 15.2) known: learned - drawn once by hand, from its picture (or the start's kit), or
+  // everything open. A known thing is made with a touch, no drawing (ui/freedraw.js quick)
+  known(id) {
+    if (!BLUEPRINTS[id]) return false;
+    if (this.allOpen) return true;
+    const it = this.items.get(id);
+    return !!(it && it.best !== null);
+  }
+
+  // found, and not learned yet: its first time is drawn by hand, over its lines (the learning)
+  toLearn(id) {
+    return !this.allOpen && this.items.has(id) && !this.known(id);
   }
 
   // (ROADMAP 9.1, not with ?classic: all open, or found one by one)
@@ -225,15 +245,23 @@ export class Album {
     meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? 'כלי רכב' : bp.kind === 'gear' ? 'ציוד' : bp.kind === 'heal' ? 'עזרה ראשונה' : bp.kind === 'tool' ? 'כלי' : 'נשק') : ''}${best}`;
     item.appendChild(meta);
     if (got) {
+      // (ROADMAP 15.2) known: made at once (a pencil beside it to draw it anyway); found, not learned
+      // yet: drawn once, by hand, over its lines
+      const known = this.game.classic || this.known(id);
       const go = document.createElement('div');
-      go.className = 'go';
-      go.textContent = '✏ לצייר באוויר';
+      go.className = `go${known ? ' now' : ' learn'}`;
+      go.textContent = this.game.classic ? '✏ לצייר באוויר' : known ? '⚡ לזמן עכשיו' : '✎ ללמוד: לצייר פעם אחת על הקווים';
       item.appendChild(go);
-    }
-    if (got) {
-      item.addEventListener('click', () => {
+      if (known && !this.game.classic) {
+        const dr = document.createElement('div');
+        dr.className = 'go draw';
+        dr.textContent = '✏ לצייר בעצמי';
+        item.appendChild(dr);
+      }
+      item.addEventListener('click', (e) => {
+        const draw = !!e.target.closest('.draw');
         this.hide(true);
-        if (this.onPick) this.onPick(id);
+        if (this.onPick) this.onPick(id, draw);
       });
     }
     this.list.appendChild(item);
