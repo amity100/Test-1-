@@ -408,7 +408,9 @@ export function airPar(F, v, dt, input) {
     v.vx += (P[0] * hz + P[2] * hx) * dt;
     v.vz += (-P[0] * hx + P[2] * hz) * dt;
   }
-  const winged = Lw >= 0.5 && Lw >= Lr;
+  // (on its wings once they hold it up by themselves - fast enough: a rotor beside them only lifts
+  // the more. Off the ground on a rotor, wings and a turbo: up on the spot, then away like a plane)
+  const winged = Lw >= 1 || (Lw >= 0.5 && Lw >= Lr);
   if (winged && input) {
     // on its wings: a plane - its engine (W) holds its speed, S its air brakes; it goes where it points,
     // banking round
