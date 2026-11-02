@@ -253,6 +253,8 @@ export function finishPar(v, H, fz) {
   if (fz.rotor >= 1 && fz.thrust) C.push('jetcopter');
   if (v.armor >= 0.4 && fz.wheels && fz.wheels.r > 0.5) C.push('breaker');
   if (fz.vtol && fz.wingA) C.push('harrier');
+  // (the car's own combinations, game/fuse.js, may have said one already)
+  fz.combos = [...new Set(C)];
 }
 
 // what it does now, in a few words (the tag by the car once it is on)
