@@ -48,6 +48,8 @@ class Part {
     this.N = [];
     this.U = [];
     this.X = [];
+    // (how many normals were not numbers, and put right: model() says so)
+    this.fixed = 0;
   }
 
   get n() {
@@ -56,6 +58,15 @@ class Part {
 
   vert(x, y, z, nx, ny, nz, u, v) {
     this.P.push(x, y, z);
+    // (ROADMAP 16.1: a normal that is not a number - or has no length - goes to the graphics card as
+    // NaN in every pixel of every triangle it is a corner of, and the glow spreads that over a
+    // large part of the screen as black: its place's up instead, and counted)
+    if (!(nx * nx + ny * ny + nz * nz > 1e-12)) {
+      nx = 0;
+      ny = 1;
+      nz = 0;
+      this.fixed++;
+    }
     this.N.push(nx, ny, nz);
     this.U.push(u, v);
     return this.n - 1;
@@ -335,6 +346,9 @@ export function model(name, low = false) {
     if (!fn) throw new Error(`no product ${name}`);
     m = fn(low);
     m.name = name;
+    let fixed = 0;
+    for (const p of m.parts) fixed += p.fixed || 0;
+    if (fixed) console.warn(`[products] ${name}${low ? ' (low)' : ''}: ${fixed} normals were not numbers - put right`);
     CACHE.set(key, m);
   }
   return m;
@@ -756,7 +770,9 @@ function shirtModel(o) {
     const slope = o.slope || 0.09;
     // (the panels: z of the cloth at (x, y) - the folds, the chest's fullness)
     const zAt = (x, y, side) => {
-      const k = 1 - y / H;
+      // (never below 0: the step above the top edge, for the normal at the collar's foot, made it
+      // 0 ** 1.4 of a negative number - NaN - at the low shirts' middle vertex, ROADMAP 16.1)
+      const k = Math.max(0, 1 - y / H);
       const fold = Math.sin((x / W) * Math.PI * (o.folds || 5) + side * 0.6 + y * 3.1) * 0.012 * Math.pow(k, 1.4);
       const full = 0.016 * Math.sin(Math.PI * Math.min(1, Math.max(0, x / W + 0.5))) * (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, y / H)));
       return side * (0.006 + full) + fold;

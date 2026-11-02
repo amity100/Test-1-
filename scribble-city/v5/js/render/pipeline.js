@@ -197,6 +197,9 @@ uniform vec2 uUvLo;
 #endif
 vec3 pick(vec2 uv) {
   vec4 c = texture(tSrc, TC(uv));
+  // (ROADMAP 16.1: a pixel that is not a number - a surface with a broken normal - is nothing to the
+  // glow: its blur carried it over a third of the screen, black)
+  if (any(isnan(c)) || any(isinf(c))) return vec3(0.0);
   float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   return c.rgb * clamp(smoothstep(1.1, 2.6, l) + c.a * 0.7, 0.0, 2.0);
 }
