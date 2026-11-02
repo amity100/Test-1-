@@ -396,6 +396,8 @@ export class PartPen {
     }
     this.showRow();
     this.showLegend();
+    // (the pen's line over the street: how this category is drawn)
+    if (fd && fd.isOpen) fd.info();
   }
 
   // (ROADMAP 15.3) the part to draw, of the drawn parts: wings, a turbo, a rotor... (a touch, or 1-6)
