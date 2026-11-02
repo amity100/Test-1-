@@ -628,6 +628,9 @@ export class PartPen {
     });
     const same = INV.list.filter((o) => o.base && v.bp && o.base.bp === v.bp.id).slice(0, 1);
     for (const o of same) choices.push({ label: `גרסה חדשה של "${o.name}"`, fn: () => done(o.name) });
+    // (kept: the drawing is done - the pen closes, and the name is chosen over the road, by touch, a
+    // click or its number)
+    if (g.freedraw && g.freedraw.isOpen) g.freedraw.close();
     g.dialog.show('המצאה חדשה', 'איך לקרוא לה?', choices);
     return true;
   }
