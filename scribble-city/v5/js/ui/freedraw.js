@@ -1577,6 +1577,12 @@ export class FreeDraw {
   setShelf(shelf) {
     if ((!SHELVES.includes(shelf) && shelf !== 'inv') || shelf === this.shelf) return;
     this.shelf = shelf;
+    // (another shelf: the ramp, bridge or barrier that was said is let go)
+    if (this.world) {
+      this.world = null;
+      this.wFelt = '';
+      this.info();
+    }
     if (this.force && BLUEPRINTS[this.force] && shelfOf(BLUEPRINTS[this.force]) !== shelf) this.force = null;
     this.memKey = null;
     this.game.audio.play('click', 0.35);
