@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Doodle } from './doodle.js';
-import { civilianLook, cityLook } from './looks.js';
+import { civilianLook, cityLook, FOLK_LIVE } from './looks.js';
 import { holeRadius } from './enemies.js';
 import { AVES, STREETS, BLOCK_TYPES, groundHeight, blockRect, westRect, PIER, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
 import { NODES, CYCLE } from '../world/roads.js';
@@ -962,6 +962,15 @@ export class Civilians {
     this.game = game;
     this.list = [];
     this.t = 0;
+    // (ROADMAP 14.9) how many of each of the city's drawn kinds are about now (game/looks.js folkPick)
+    FOLK_LIVE.of = () => {
+      const a = new Uint16Array(128);
+      for (const c of this.list) {
+        const k = c.fig && c.fig.look ? c.fig.look.folk : undefined;
+        if (k !== undefined && !c.dead) a[k]++;
+      }
+      return a;
+    };
     // (GTA IV pass) the corners where somebody is waiting to cross: who stands where
     this.curbs = new Map();
   }

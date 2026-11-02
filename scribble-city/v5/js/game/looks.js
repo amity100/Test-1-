@@ -128,6 +128,8 @@ const FOLK_HOW = { street: ['street', 'denim'], denim: ['denim', 'street'], smar
 // (a kind is used again only once every other kind that could be has been)
 const FOLK_USED = new Float64Array(128);
 let folkTurn = 0;
+// (game/civilians.js: how many of each kind are walking about now - a kind nobody about has comes first)
+export const FOLK_LIVE = { of: null };
 export function folkPick(o = {}) {
   const how = o.kind ? FOLK_HOW[o.kind] : null;
   const all = [];
@@ -143,10 +145,17 @@ export function folkPick(o = {}) {
   if (!all.length) return -1;
   // (the clothes asked for only while one dressed so is as long unused as any: a face nobody about
   // has comes first)
-  const minOf = (a) => a.reduce((m, k) => Math.min(m, FOLK_USED[k]), Infinity);
+  let live = null;
+  try {
+    live = FOLK_LIVE.of ? FOLK_LIVE.of() : null;
+  } catch (e) {
+    live = null;
+  }
+  const score = (k) => (live ? live[k] * 1e9 : 0) + FOLK_USED[k];
+  const minOf = (a) => a.reduce((m, k) => Math.min(m, score(k)), Infinity);
   if (!ok.length || minOf(ok) > minOf(all)) ok = all;
   const least = minOf(ok);
-  ok = ok.filter((k) => FOLK_USED[k] === least);
+  ok = ok.filter((k) => score(k) === least);
   const k = pick(ok);
   FOLK_USED[k] = ++folkTurn;
   return k;
