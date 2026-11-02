@@ -29,6 +29,8 @@ const CRIMES = {
   quietSteal: { heat: 0.6 },
   alarm: { heat: 1.0, always: true },
   burglary: { heat: 0.8, civ: true },
+  // (ROADMAP 15.5) a tank, an armoured car drawn up in the street, in sight of people
+  warmachine: { heat: 0.6, civ: true },
 };
 // who comes in each car, by stars
 const CREWS = [

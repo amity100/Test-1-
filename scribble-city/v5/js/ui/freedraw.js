@@ -1858,6 +1858,9 @@ export class FreeDraw {
       plan.vehicle.invName = opts.name || null;
       game.pendingInv = plan.vehicle;
     }
+    // (ROADMAP 15.5: the world answers) a war machine made in the street - a tank, an armoured car:
+    // whoever sees it come up phones the police (game/police.js)
+    if ((bp.id === 'tank' || bp.id === 'armored') && plan.vehicle && game.police && !game.classic) game.police.crime('warmachine', plan.vehicle.pos.x, plan.vehicle.pos.z);
     // (drawn on the run: it goes along with you as it turns real)
     plan.follow = new THREE.Vector3();
     if (this.force) this.memory.learn(this.memory.signature(this.strokes), this.force);
