@@ -1750,7 +1750,15 @@ export class FreeDraw {
   // the pen before any ink is spent (a few times a second)
   feelWorld() {
     const now = performance.now();
-    if (now - (this.wFeltAt || 0) < 140) return;
+    const wait = 140 - (now - (this.wFeltAt || 0));
+    if (wait > 0) {
+      // (and once more when the pen stops: what it says is the whole line's)
+      if (!this.wFeltT) this.wFeltT = setTimeout(() => {
+        this.wFeltT = 0;
+        if (this.cur && this.world) this.feelWorld();
+      }, wait + 5);
+      return;
+    }
     this.wFeltAt = now;
     const c = this.cur;
     const G = this.game.gadgets;
