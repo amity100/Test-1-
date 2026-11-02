@@ -36,6 +36,13 @@ function office() {
 }
 
 function tourist() {
+  // (ROADMAP 14.9: one of the city's drawn people, a face nobody about has; the hand-drawn tourist -
+  // bright tee, bucket hat - only if there is none)
+  const C = cityLook({ kind: chance(0.5) ? 'summer' : 'street' });
+  if (C.folk !== undefined) {
+    C.role = 'tourist';
+    return C;
+  }
   const L = civilianLook({ kind: chance(0.5) ? 'summer' : 'street' });
   L.top = { kind: pick(['tee', 'polo', 'shirt']), color: pick(BRIGHT), sleeves: 'short' };
   L.hat = { kind: pick(['bucket', 'cap', 'bucket']), color: pick([[0.95, 0.94, 0.88], [0.86, 0.76, 0.56], ...BRIGHT]) };
@@ -57,6 +64,12 @@ function parent() {
 }
 
 function youth() {
+  // (ROADMAP 14.9: the young of the city's drawn people)
+  const C = cityLook({ kind: 'street', fem: chance(0.35) });
+  if (C.folk !== undefined) {
+    C.role = 'youth';
+    return C;
+  }
   const L = civilianLook({ kind: 'street', fem: chance(0.35) });
   if (!L.fem && chance(0.6)) L.hat = { kind: pick(['capBack', 'beanie', 'cap']), color: pick([[0.12, 0.12, 0.14], [0.8, 0.2, 0.25], [0.95, 0.95, 0.94], [0.2, 0.3, 0.6]]) };
   L.role = 'youth';
