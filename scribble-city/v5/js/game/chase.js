@@ -56,6 +56,8 @@ export class Chase {
     }
     const v = this.game.player.inVehicle;
     if (!v || v.flies || v.kind === 'boat' || v.kind === 'tank' || v.dead) return null;
+    // (ROADMAP 15.3: a car up in the air on what is drawn on it - no rolling block, no PIT from below)
+    if (v.air && v.pos.y - groundHeight(v.pos.x, v.pos.z) > 3) return null;
     return Math.abs(v.speed || 0) > 4 ? v : null;
   }
 

@@ -1762,6 +1762,9 @@ export class Traffic {
     if (v.flies && v.alt > 2) return;
     for (const c of this.list) {
       if (c.poofT !== undefined) continue;
+      // (ROADMAP 15.3: up in the air on what is drawn on it - wings, a rotor - or over it off a ramp:
+      // no car down on the road meets it)
+      if (v.air && Math.abs((v.pos.y || 0) - (c.pos.y || 0)) > 2.2) continue;
       const dx = v.pos.x - c.pos.x;
       const dz = v.pos.z - c.pos.z;
       const d = Math.hypot(dx, dz);

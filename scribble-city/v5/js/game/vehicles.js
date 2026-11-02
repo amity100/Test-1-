@@ -755,6 +755,8 @@ class Vehicle {
     }
     for (const v of this.mgr.list) {
       if (v === this || v.dead) continue;
+      // (ROADMAP 15.3: one up in the air over the other - flying on what is drawn on it - meets nothing)
+      if ((this.air || v.air) && Math.abs(this.pos.y - v.pos.y) > 2.2) continue;
       const dx = this.pos.x - v.pos.x;
       const dz = this.pos.z - v.pos.z;
       const d = Math.hypot(dx, dz);
