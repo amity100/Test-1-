@@ -1,4 +1,4 @@
-import { civilianLook, elderLook } from './looks.js';
+import { civilianLook, elderLook, cityLook } from './looks.js';
 import { groundHeight, blockAt, CURB } from '../world/layout.js';
 
 // Everyday life on the street (ROADMAP 3.1). The benches, the bus stops and the café tables on
@@ -292,7 +292,7 @@ export class Routines {
     // (lunch downtown: the office people out of their towers)
     const office = lunchHour(this.game) && Math.random() < 0.45;
     const elder = pl.park && Math.random() < 0.45;
-    const look = elder ? elderLook(Math.random() < 0.5) : civilianLook(office ? { kind: 'office' } : {});
+    const look = elder ? elderLook(Math.random() < 0.5) : cityLook(office ? { kind: 'office' } : {});
     const c = this.game.civilians.spawnScripted(spot.x, spot.z, look, this);
     // (a grandparent on a park bench: the pigeons' friend, now and then)
     if (elder) {
@@ -537,7 +537,7 @@ export class Routines {
       // off the bus and away along the sidewalk
       const n = Math.random() < 0.7 ? 1 + Math.floor(Math.random() * 2) : 0;
       for (let i = 0; i < n; i++) {
-        const c = game.civilians.spawnScripted(door.x, door.z, civilianLook(), null);
+        const c = game.civilians.spawnScripted(door.x, door.z, cityLook(), null);
         c.yaw = car.yaw + Math.PI / 2;
         game.civilians.release(c);
         c.scripted = false;

@@ -1144,7 +1144,8 @@ export class Civilians {
         // (a jogger is dressed for it; in the morning many are out running, and the others are
         // dressed for work; late at night for going out)
         const jog = Math.random() < (R ? R.jog : 0.07);
-        let look = jog ? civilianLook({ kind: 'sporty' }) : null;
+        // (ROADMAP 14.9: a jogger one of the city's drawn people too, in their street clothes)
+        let look = jog ? cityLook({ kind: 'street' }) : null;
         const dress = R ? Math.max(R.commute, R.night) * 0.6 : 0;
         if (!look && dress > 0 && Math.random() < dress) {
           const kinds = R.commute > R.night ? WORK_CLOTHES : NIGHT_CLOTHES;
