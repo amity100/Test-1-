@@ -1743,6 +1743,8 @@ export class FreeDraw {
     game.audio.play('pageflip', 0.35);
     this.legSig = '';
     this.showLegend();
+    // (how to draw it, over the street until the line is drawn)
+    this.info();
     return true;
   }
 
