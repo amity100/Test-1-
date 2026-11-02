@@ -833,7 +833,7 @@ export class Gadgets {
       // (its line, straightened into a few lengths - no longer than 14 m in all)
       const flat = simplify(P.map((p) => [p[0], p[2]]), 0.6);
       let total = 0;
-      const pts = [flat[0]];
+      const pts = [[r2(flat[0][0]), r2(flat[0][1])]];
       for (let i = 1; i < flat.length && total < 14; i++) {
         const [px, pz] = pts[pts.length - 1];
         let [qx, qz] = flat[i];
@@ -868,28 +868,33 @@ export class Gadgets {
   groundAt(sx, sy, maxD = 70) {
     const g = this.game;
     const cam = g.camera;
+    const col = g.world.collision;
     const d = _gd.set((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
     const o = cam.position;
-    let t0 = 0.4;
+    let yPrev = o.y;
     for (let t = 0.4; t < maxD; t += 0.4) {
       const x = o.x + d.x * t;
       const y = o.y + d.y * t;
       const z = o.z + d.z * t;
-      if (y <= this.floorAt(x, z, y + 0.05)) {
+      // (a floor crossed coming down since the last step: a roof, a ledge, the street - the first one
+      // the line of sight goes down onto; nothing it only passes under)
+      const top = Math.max(y, yPrev) + 0.05;
+      if (y <= this.floorAt(x, z, top)) {
         // (closer: halving the step back)
-        let lo = t0;
+        let lo = t - 0.4;
         let hi = t;
         for (let k = 0; k < 6; k++) {
           const m = (lo + hi) / 2;
-          const yy = o.y + d.y * m;
-          if (yy <= this.floorAt(o.x + d.x * m, o.z + d.z * m, yy + 0.05)) hi = m;
+          if (o.y + d.y * m <= this.floorAt(o.x + d.x * m, o.z + d.z * m, top)) hi = m;
           else lo = m;
         }
         const X = o.x + d.x * hi;
         const Z = o.z + d.z * hi;
-        return [X, this.floorAt(X, Z, o.y + d.y * hi + 0.05), Z];
+        return [X, this.floorAt(X, Z, top), Z];
       }
-      t0 = t;
+      // (into a wall, a trunk: not through it)
+      if (t > 1.5 && col.pointInside(x, y, z, 0)) return null;
+      yPrev = y;
     }
     return null;
   }
