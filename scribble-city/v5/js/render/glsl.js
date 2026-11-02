@@ -1221,8 +1221,8 @@ void main() {
     // crease's shade (characters round)
     if (!gl_FrontFacing) {
       gThr = step(0.0, vLP.z) * step(abs(vLP.x), 0.034) * step(-0.105, vLP.y) * step(vLP.y, -0.02) * uOpen;
-      // (its own place in the picture is no skin's - the cheek's colour, a little in shade)
-      vec3 skin = textureLod(uMap, vec2(0.316, 0.608), 4.0).rgb * 0.86;
+      // (its own place in the picture is no skin's - the cheek's colour, in a crease's shade)
+      vec3 skin = textureLod(uMap, vec2(0.316, 0.608), 4.0).rgb * 0.7;
       tex.rgb = mix(skin, vec3(0.02, 0.006, 0.006), gThr);
     }
   }
