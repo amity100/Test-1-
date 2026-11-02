@@ -430,8 +430,9 @@ export class Game {
         if (!locked && !this.touch) this.phone.camBack();
         return;
       }
-      // (the free drawing's page out: the mouse is drawing - a lock that came late is let go again)
-      if (locked && this.freedraw && this.freedraw.open) {
+      // (the free drawing's page out: the mouse is drawing - a lock that came late is let go again;
+      // ROADMAP 15.5: a dialog up, the same - its answers are clicked)
+      if (locked && ((this.freedraw && this.freedraw.open) || this.dialog.isOpen)) {
         this.input.releaseLock();
         return;
       }

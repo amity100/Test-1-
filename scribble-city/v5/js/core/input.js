@@ -104,6 +104,13 @@ export class Input {
     }, { passive: true });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === c;
+      // (ROADMAP 15.5) a page came over the game while the lock was on its way - a dialog opened as
+      // the pen closed: the mouse stays free for it
+      if (this.locked && (this.releasedAt || 0) > (this.lockAskedAt || 0)) {
+        this.lockRequest = null;
+        document.exitPointerLock();
+        return;
+      }
       this.skipMoves = 2;
       this.lockRequest = null;
       if (this.locked) this.lockFailures = 0;
@@ -127,6 +134,7 @@ export class Input {
     if (this.lockRequest && performance.now() - this.lockRequest.t < 1500) return;
     const req = { gesture, t: performance.now() };
     this.lockRequest = req;
+    this.lockAskedAt = req.t;
     try {
       const p = this.canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => this.onLockError(req));
