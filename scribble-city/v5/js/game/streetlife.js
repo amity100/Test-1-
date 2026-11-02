@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shopkeeperLook, civilianLook, friendLook, kidLook, elderLook } from './looks.js';
+import { shopkeeperLook, civilianLook, friendLook, kidLook, elderLook, cityLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
 import { BLUEPRINTS, BLUEPRINT_MORE, BLUEPRINT_CARS, BLUEPRINT_TOOLS } from './blueprints.js';
 import { dampAngle } from '../core/util.js';
@@ -1024,10 +1024,10 @@ SERVICES.homeLux = { verb: 'לצלצל בפעמון', ask: 'לדבר עם בעל
 const HOME_KINDS = new Set(['homeFamily', 'homeArtist', 'homeGrandma', 'homeLux']);
 // who else is at home (the visitors of a house: game/streetlife.js addVisitor)
 const HOME_GUESTS = {
-  homeFamily: () => (Math.random() < 0.65 ? kidLook() : civilianLook({ kind: 'casual' })),
+  homeFamily: () => (Math.random() < 0.65 ? kidLook() : cityLook({ kind: 'casual' })),
   homeGrandma: () => elderLook(Math.random() < 0.4),
-  homeArtist: () => civilianLook({ kind: pick(['street', 'knit', 'denim']) }),
-  homeLux: () => civilianLook({ kind: pick(['chic', 'smart']) }),
+  homeArtist: () => cityLook({ kind: pick(['street', 'knit', 'denim']) }),
+  homeLux: () => cityLook({ kind: pick(['chic', 'smart']) }),
 };
 // grandmother's stories of the drawn city
 const STORIES = [
@@ -1311,7 +1311,7 @@ class OpenShop {
       // (o.from: where somebody already in it stands - ROADMAP 11.45, game/shopcrowd.js; o.look:
       // who they are)
       const at = o.from || (o.already ? spot : { x: s.door[0] + s.nx * 1.4 + s.rx * (Math.random() - 0.5) * 3, z: s.door[2] + s.nz * 1.4 + s.rz * (Math.random() - 0.5) * 3 });
-      const look = o.look || (HOME_GUESTS[s.kind] ? HOME_GUESTS[s.kind]() : civilianLook());
+      const look = o.look || (HOME_GUESTS[s.kind] ? HOME_GUESTS[s.kind]() : cityLook());
       c = this.game.civilians.spawnScripted(at.x, at.z, look, this);
       c.yaw = o.from ? o.from.yaw : o.already ? spot.yaw : s.face + Math.PI;
       if (o.already) c.noCollide = true;
@@ -2069,7 +2069,7 @@ class OpenShop {
     const side = w ? w.side : Math.random() < 0.5 ? 1 : -1;
     const x = tb.x + s.rx * side * 0.72;
     const z = tb.z + s.rz * side * 0.72;
-    const c = this.game.civilians.spawnScripted(x, z, w ? w.look : civilianLook(), this);
+    const c = this.game.civilians.spawnScripted(x, z, w ? w.look : cityLook(), this);
     c.atTable = { table: s.spots.tables.indexOf(tb), side };
     c.noCollide = true;
     if (w) c.fig.sit = 1;
@@ -2100,7 +2100,7 @@ class OpenShop {
   newCustomer(already = false) {
     const s = this.shop;
     const ch = s.spots.chair;
-    const look = civilianLook();
+    const look = cityLook();
     let x = ch.x;
     let z = ch.z;
     if (!already) {
@@ -2617,7 +2617,7 @@ class OpenShop {
       if (!this.open) continue;
       // somebody comes along the promenade for a magic pencil
       const from = Math.random() < 0.5 ? 1 : -1;
-      const a = civs.spawnScripted(s.door[0] + s.rx * from * 9 + s.nx * 2.2, s.door[2] + s.rz * from * 9 + s.nz * 2.2, civilianLook(), this);
+      const a = civs.spawnScripted(s.door[0] + s.rx * from * 9 + s.nx * 2.2, s.door[2] + s.rz * from * 9 + s.nz * 2.2, cityLook(), this);
       a.goal = null;
       a.ctrl = (civ) => civ.goal;
       this.extras.push(a);
@@ -3412,7 +3412,7 @@ class OpenShop {
   // somebody down in the lift: across the lobby, out of the door, on along the sidewalk
   fromLift(l) {
     const s = this.shop;
-    const c = this.game.civilians.spawnScripted(l.x + s.nx * 0.35, l.z + s.nz * 0.35, civilianLook(), this);
+    const c = this.game.civilians.spawnScripted(l.x + s.nx * 0.35, l.z + s.nz * 0.35, cityLook(), this);
     c.yaw = s.face;
     c.noCollide = true;
     if (Math.random() < 0.3) c.fig.carry = pick(['phone', 'coffee', 'newspaper']);

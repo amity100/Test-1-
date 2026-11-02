@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { NODES, lightAt, laneOffsets, stopDist, lanePoint, exitsFrom } from '../world/roads.js';
 import { randomCarSpec, drawWipers, wiperSweep, KINDS } from '../render/cars.js';
-import { civilianLook, copLook, swatLook } from './looks.js';
+import { civilianLook, copLook, swatLook, cityLook } from './looks.js';
 import { damp, dampAngle, angleDiff } from '../core/util.js';
 import { Curbs, lotHeight } from './curbs.js';
 
@@ -189,7 +189,7 @@ export class Traffic {
       halfLen: bus ? 5.8 : K ? K.len / 2 : moto ? 1.1 : spec.kind === 'van' ? 2.5 : 2.3,
       halfWid: bus ? 1.25 : K ? K.W / 2 : moto ? 0.45 : 0.98,
       ink: 120,
-      driver: o.driver === false ? null : { look: civilianLook(), fig: null },
+      driver: o.driver === false ? null : { look: cityLook(), fig: null },
       crew: null,
       police: !!spec.police,
       mode: 'drive',

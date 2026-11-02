@@ -130,18 +130,22 @@ const FOLK_USED = new Float64Array(128);
 let folkTurn = 0;
 export function folkPick(o = {}) {
   const how = o.kind ? FOLK_HOW[o.kind] : null;
+  const all = [];
   let ok = [];
   for (let k = 0; k < FOLK_ON.n; k++) {
     const F = FOLK[k];
     if (o.fem !== undefined && !!F.fem !== !!o.fem) continue;
+    if (o.old && !(F.age >= 60)) continue;
+    all.push(k);
     if (how && F.how && !how.includes(F.how)) continue;
     ok.push(k);
   }
-  // (none dressed that way left unused: any of them, so as not to repeat a face)
-  if (ok.length < 6 && how) return folkPick({ fem: o.fem });
-  if (!ok.length) return -1;
-  let least = Infinity;
-  for (const k of ok) least = Math.min(least, FOLK_USED[k]);
+  if (!all.length) return -1;
+  // (the clothes asked for only while one dressed so is as long unused as any: a face nobody about
+  // has comes first)
+  const minOf = (a) => a.reduce((m, k) => Math.min(m, FOLK_USED[k]), Infinity);
+  if (!ok.length || minOf(ok) > minOf(all)) ok = all;
+  const least = minOf(ok);
   ok = ok.filter((k) => FOLK_USED[k] === least);
   const k = pick(ok);
   FOLK_USED[k] = ++folkTurn;
@@ -705,6 +709,9 @@ export function kidLook(fem = chance(0.5)) {
 
 // grandma and grandpa
 export function elderLook(fem) {
+  // (ROADMAP 14.9: one of the city's drawn people past sixty, if there is one not about already)
+  const k = folkPick({ fem, old: true });
+  if (k >= 0) return folkLook(k);
   const L = civilianLook({ fem, kind: 'casual', pen: pick(['pencil', 'sepia', 'ballpoint']) });
   const grey = pick([[0.78, 0.78, 0.8], [0.9, 0.9, 0.88], [0.62, 0.62, 0.65]]);
   L.top = { kind: 'sweater', color: pick([[0.55, 0.45, 0.35], [0.45, 0.5, 0.6], [0.6, 0.35, 0.38], [0.4, 0.5, 0.4]]), sleeves: 'long' };

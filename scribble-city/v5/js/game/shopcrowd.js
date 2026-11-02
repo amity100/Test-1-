@@ -1,4 +1,4 @@
-import { civilianLook, kidLook, elderLook, shopkeeperLook } from './looks.js';
+import { civilianLook, kidLook, elderLook, shopkeeperLook, cityLook } from './looks.js';
 import { groundHeight } from '../world/layout.js';
 
 // (v5, ROADMAP 11.35) The people in the stores that are not open whole. Only the shops nearest you
@@ -124,13 +124,13 @@ export class ShopCrowd {
         used.add(k);
         const sp = spots[k];
         const r = Math.random();
-        const look = r < 0.08 ? kidLook() : r < 0.16 ? elderLook(Math.random() < 0.5) : civilianLook({ kind: KINDS[Math.floor(Math.random() * KINDS.length)] });
+        const look = r < 0.08 ? kidLook() : r < 0.16 ? elderLook(Math.random() < 0.5) : cityLook({ kind: KINDS[Math.floor(Math.random() * KINDS.length)] });
         people.push(this.person(s, look, sp.x, sp.z, sp.yaw || 0, { sit: R.seats && R.seats.includes(sp) ? 1 : 0, at: sp, t: 4 + Math.random() * 14 }));
       }
     }
     // the café's tables out on the sidewalk, somebody with a coffee at each (game/streetlife.js seat)
     const T = s.spots && s.spots.tables;
-    if (T) for (let i = 0; i < Math.min(T.length, this.game.touch ? 1 : T.length); i++) people.push(this.atTable(s, i, civilianLook(), Math.random() < 0.5 ? 1 : -1));
+    if (T) for (let i = 0; i < Math.min(T.length, this.game.touch ? 1 : T.length); i++) people.push(this.atTable(s, i, cityLook(), Math.random() < 0.5 ? 1 : -1));
     // the keeper behind the counter, or at the stand: the one the shop has when it is opened
     const keeperLook = shopkeeperLook(s.kind, s.fem);
     const k = this.keeperSpot(s);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Scene } from './vignettes.js';
-import { civilianLook, copLook, elderLook, modest } from './looks.js';
+import { civilianLook, copLook, elderLook, modest, cityLook } from './looks.js';
 import { sidewalkLoop } from './civilians.js';
 import { groundHeight, BLOCK_TYPES } from '../world/layout.js';
 import { randomCarSpec } from '../render/cars.js';
@@ -692,7 +692,7 @@ function* chaseScene(sc, def) {
 // ------------------------------------------------------------------ somebody fell
 function* helpScene(sc, def) {
   const game = sc.game;
-  const look = chance(0.4) ? elderLook(chance(0.5)) : civilianLook();
+  const look = chance(0.4) ? elderLook(chance(0.5)) : cityLook();
   const v = sc.spawn(look, def.x, def.z, def.yaw);
   v.noCollide = true;
   v.fig.dead = 0.92;
@@ -929,7 +929,7 @@ function* protestScene(sc, def) {
     const o = offs[i];
     const x = def.from.x - ux * o.back - uz * o.side;
     const z = def.from.z - uz * o.back + ux * o.side;
-    const c = sc.spawn(civilianLook({ kind: pick(['street', 'denim', 'knit', 'smart']) }), x, z, yaw);
+    const c = sc.spawn(cityLook({ kind: pick(['street', 'denim', 'knit', 'smart']) }), x, z, yaw);
     c.sign = { color: pick(SIGNS), hand: new THREE.Vector3() };
     c.speed = 1.0;
     people.push(c);

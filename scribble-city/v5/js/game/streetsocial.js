@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook } from './looks.js';
+import { civilianLook, cityLook } from './looks.js';
 import { sidewalkLoop, walksNear, blockType, rightFree } from './civilians.js';
 import { groundHeight } from '../world/layout.js';
 import { NIGHT_CLOTHES } from './rhythm.js';
@@ -252,13 +252,13 @@ export class StreetSocial {
       case 'youth':
         return L.youth();
       case 'neighbours':
-        return chance(0.55) ? L.elder() : civilianLook({ kind: pick(['knit', 'denim', 'street', 'smart']) });
+        return chance(0.55) ? L.elder() : cityLook({ kind: pick(['knit', 'denim', 'street', 'smart']) });
       case 'shoppers':
         return L.shopper();
       case 'night':
-        return civilianLook({ kind: pick(NIGHT_CLOTHES) });
+        return cityLook({ kind: pick(NIGHT_CLOTHES) });
       default:
-        return civilianLook();
+        return cityLook();
     }
   }
 
