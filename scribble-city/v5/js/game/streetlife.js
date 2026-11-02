@@ -14,6 +14,7 @@ import { worldAt } from '../ui/minigame.js';
 // (v5, ROADMAP 14.4) the life of a shop of the new kind: its customers, its cashier, the one who fills
 // its shelves, its live products
 import { ShopLife, PROFILES as LIFE_PROFILES } from './shoplife.js';
+import { EateryLife } from './eaterylife.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
@@ -518,6 +519,33 @@ export class StreetLife {
     for (const a of this.active.values()) {
       if (!a.life2 || !a.room || !a.room.inside(p.pos.x, p.pos.z, 0.2, p.pos.y)) continue;
       const k = a.keeper;
+      // (ROADMAP 16.3: an eatery - order at the till; with yours in your hand, a free seat to sit
+      // and eat it at - game/eaterylife.js)
+      if (a.life2.food && a.open) {
+        const L2 = a.life2;
+        const m = L2.mine;
+        if (m && m.st === 'carry') {
+          let seat = null;
+          let sd = 1.3;
+          for (const st of a.room.seats) {
+            const d = Math.hypot(st.x - p.pos.x, st.z - p.pos.z);
+            if (d < sd && L2.freeSeat(st) === st) {
+              sd = d;
+              seat = st;
+            }
+          }
+          if (seat) return { shop: a, sit: seat, label: `E — לשבת ולאכול: ${m.item.heb}` };
+          continue;
+        }
+        if (!m) {
+          const ps = a.room.pay;
+          const kk = a.keeper;
+          const dp = ps ? Math.hypot(ps.x - p.pos.x, ps.z - p.pos.z) : 99;
+          const dk = kk && kk.alive ? Math.hypot(kk.pos.x - p.pos.x, kk.pos.z - p.pos.z) : 99;
+          if (dp < 1.6 || dk < 2.2) return { shop: a, order: true, label: 'E — להזמין' };
+        }
+        continue;
+      }
       // (ROADMAP 16.2: with things to pay for, at the till - game/shopper.js)
       const you = a.life2.you;
       if (you && you.items.length && !you.pv && a.open) {
@@ -535,6 +563,8 @@ export class StreetLife {
     let knock = false;
     for (const a of this.active.values()) {
       const s = a.shop;
+      // (an eatery of the new kind: ordered at its till, above)
+      if (a.life2 && a.life2.food) continue;
       // a shop with a room: you walk in and talk to the keeper at his counter
       const dd = a.room ? 99 : Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
       const kp = a.keeper && a.keeper.alive && (a.open || !a.room) ? a.keeper.pos : a.home;
@@ -569,6 +599,14 @@ export class StreetLife {
     if (!t || !t.shop.open) return false;
     if (t.pay) {
       t.shop.life2.you.checkout();
+      return true;
+    }
+    if (t.order) {
+      t.shop.life2.order();
+      return true;
+    }
+    if (t.sit) {
+      t.shop.life2.sitMine(t.sit);
       return true;
     }
     if (t.slot) {
@@ -1184,7 +1222,7 @@ class OpenShop {
     }
     this.queue = [];
     // (ROADMAP 14.4) a shop of the new kind runs its day its own way: game/shoplife.js
-    this.life2 = R && R.newKind && R.pay && LIFE_PROFILES[s.kind] && !this.game.classic ? new ShopLife(this) : null;
+    this.life2 = R && R.newKind && R.pay && LIFE_PROFILES[s.kind] && !this.game.classic ? (LIFE_PROFILES[s.kind].flow === 'food' ? new EateryLife(this) : new ShopLife(this)) : null;
     // a couple of people at the cafe tables out on the sidewalk
     if (s.spots.tables) {
       const n = this.game.touch ? 1 : s.spots.tables.length;
@@ -1250,7 +1288,7 @@ class OpenShop {
     for (let i = 0; i < nSeat; i++) {
       const v = this.addVisitor(null, { mode: 'seat', spot: seats[i], already: true });
       // (v5, GTA IV round: here before you came - some halfway through what the kitchen brought)
-      if (v && DISH[kind] && kind !== 'cafe' && Math.random() < 0.6) this.plateFor(v);
+      if (v && !v.life && DISH[kind] && kind !== 'cafe' && Math.random() < 0.6) this.plateFor(v);
     }
     if (this.barLife) this.barLife.populateRoom();
     // (a bar's own standing places - the pool table, the darts, the tall tables - are the bar's)
@@ -1358,13 +1396,14 @@ class OpenShop {
       v.pts = [{ x: s.door[0], z: s.door[2], bell: true }, { x: R.door.x, z: R.door.z, inRoom: true }, ...R.path(R.door.x, R.door.z, spot.x, spot.z)];
     }
     // (ROADMAP 14.4: a shopper of a shop of the new kind - in at the door, or at a shelf already)
-    if (this.life2 && mode === 'browse' && spot && !spot.lift) {
+    // (ROADMAP 16.3: and at an eatery of the new kind, those at its tables too - game/eaterylife.js)
+    if (this.life2 && (mode === 'browse' || (this.life2.food && mode === 'seat')) && spot && !spot.lift) {
       v.life = true;
       v.shop = false;
       if (!o.already) v.pts = null;
       this.life2.enlist(v, o);
     }
-    if (mode === 'seat' && s.kind === 'cafe') c.fig.carry = 'coffee';
+    if (mode === 'seat' && s.kind === 'cafe' && !v.life) c.fig.carry = 'coffee';
     if (mode === 'seat' && s.kind === 'books') c.fig.carry = 'book';
     if (mode === 'seat' && s.kind === 'lobby') c.fig.carry = 'newspaper';
     if (mode === 'seat' && s.kind === 'theatre' && Math.random() < 0.5) c.fig.carry = 'soda';

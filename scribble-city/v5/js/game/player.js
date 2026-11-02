@@ -197,6 +197,21 @@ export class Player {
       this.bagUntil = 0;
       if (fig.carryL === 'bag' || fig.carryL === 'basket') fig.carryL = null;
     }
+    // (ROADMAP 16.3: what you took away from an eatery, eaten when you need it - hurt, and out of
+    // the worst of it a moment: game/eaterylife.js)
+    if (this.meals && this.meals.length && this.mode === 'foot' && !this.inVehicle && this.hp < this.maxHp * 0.45 && this.game.time - this.lastHurt > 1.2 && !(this.eatT > 0)) {
+      const m = this.meals.shift();
+      this.hp = Math.min(this.maxHp, this.hp + (m.hp || 10));
+      if (m.coffee) this.coffeeT = Math.max(this.coffeeT || 0, m.coffee);
+      this.eatT = 1.6;
+      this.eatCarry = fig.carry;
+      fig.carry = /cup|juice|shake|soda|mug/i.test(m.model || '') ? (/soda|juice|shake/i.test(m.model) ? 'soda' : 'coffee') : /cone|gelato/i.test(m.model || '') ? 'icecream' : 'burger';
+      this.game.hud.toast(`אכלתם את ה${m.heb} שלקחתם: +${m.hp || 10} חיים`, 'good', 2.4);
+    }
+    if (this.eatT > 0) {
+      this.eatT -= dt;
+      if (this.eatT <= 0 && (fig.carry === 'soda' || fig.carry === 'coffee' || fig.carry === 'icecream' || fig.carry === 'burger')) fig.carry = this.eatCarry || null;
+    }
     if (this.mode === 'dead') {
       fig.dead = Math.min(1, fig.dead + dt * 2.5);
       fig.speed = 0;

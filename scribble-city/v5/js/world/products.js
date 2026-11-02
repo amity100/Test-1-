@@ -338,6 +338,10 @@ export function tube(part, pts, r, seg = 6, o = {}) {
 // Each maker of a model: (low) -> Model. seg: how round (fewer on a phone)
 const MAKERS = {};
 const CACHE = new Map();
+// (ROADMAP 16.3: the food and its china, world/foods.js - made by the same hands, kept with the rest)
+export function addMaker(name, fn) {
+  MAKERS[name] = fn;
+}
 export function model(name, low = false) {
   const key = `${name}|${low ? 1 : 0}`;
   let m = CACHE.get(key);

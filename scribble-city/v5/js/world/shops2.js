@@ -8,6 +8,7 @@ import { market } from './market.js';
 import { fashion } from './fashion.js';
 import { techstore } from './techstore.js';
 import { jewels as jeweller } from './jewels.js';
+import { eatery } from './eatery.js';
 
 // (v5, ROADMAP 11.18) The shops, laid out the way real ones are. Each kind has its plan: what
 // stands along its back wall and its side walls, what runs down its middle, where the checkout is
@@ -915,20 +916,23 @@ const PLANS = {
   jewelry: jeweller,
   optics,
   sports,
-  cafe: (R) => counterShop(R, { line: ['espresso', 'shelves', 'fridge'], station: false, trays: false, tile: [0.36, 0.3, 0.26], goods: 'grocery', front: [0.5, 0.34, 0.26], top: [0.86, 0.74, 0.54], roundTables: true, tableCol: SC.white, chairCol: [0.45, 0.32, 0.24], menu: [0.2, 0.28, 0.24], accent: [0.98, 0.95, 0.85], food: [[0.85, 0.64, 0.36], [0.98, 0.7, 0.4], [0.6, 0.35, 0.2], [0.98, 0.9, 0.6]] }),
-  bagel: (R) => counterShop(R, { line: ['shelves', 'oven', 'board'], goods: 'bread', front: [0.66, 0.46, 0.28], top: [0.95, 0.86, 0.7], roundTables: true, drinks: true }),
-  pizza: (R) => counterShop(R, { line: ['oven', 'board', 'fridge'], boxes: true, pizza: true, front: [0.82, 0.32, 0.3], top: SC.white, tile: [0.95, 0.95, 0.92], food: [[0.98, 0.75, 0.3], [0.95, 0.5, 0.3], [0.98, 0.85, 0.5]], panels: false }),
-  burger: (R) => counterShop(R, { line: ['fryer', 'grill', 'pass', 'fryer', 'fridge'], tile: [0.95, 0.85, 0.3], front: [0.86, 0.26, 0.2], top: SC.white, case: false, panels: true, light: [1, 0.95, 0.85] }),
-  tacos: (R) => counterShop(R, { line: ['grill', 'board', 'pots'], front: [0.86, 0.36, 0.3], top: [0.98, 0.86, 0.5], roundTables: true }),
-  noodles: (R) => counterShop(R, { line: ['pots', 'board', 'fridge'], front: [0.62, 0.16, 0.18], top: SC.lwood, case: false, accent: [0.86, 0.2, 0.2] }),
-  diner: (R) => counterShop(R, { line: ['grill', 'pass', 'fryer', 'fridge'], front: [0.86, 0.26, 0.3], top: [0.95, 0.95, 0.95], case: true, panels: true }),
-  juice: (R) => counterShop(R, { line: ['blender', 'shelves', 'fridge'], goods: 'drinks', front: [0.98, 0.62, 0.22], top: SC.white, roundTables: true, food: [[0.98, 0.6, 0.2], [0.55, 0.85, 0.35], [0.95, 0.35, 0.5]] }),
-  icecream: (R) => counterShop(R, { line: ['fridge', 'board', 'fridge'], front: [0.95, 0.75, 0.82], top: SC.white, roundTables: true, panels: true, round: true, food: [[0.98, 0.72, 0.8], [0.6, 0.4, 0.25], [0.98, 0.95, 0.85], [0.6, 0.85, 0.55], [0.98, 0.8, 0.4], [0.7, 0.6, 0.9]] }),
-  sushi: (R) => counterShop(R, { line: ['board', 'fridge', 'board'], front: [0.62, 0.44, 0.3], top: [0.9, 0.78, 0.6], food: [[0.95, 0.5, 0.4], [0.98, 0.98, 0.95], [0.3, 0.3, 0.32]] }),
+  // (ROADMAP 16.3: the eateries of the new kind - world/eatery.js; the old plan, counterShop(), kept
+  // for whoever wants it)
+  cafe: (R) => eatery(R, { kind: 'cafe' }),
+  bagel: (R) => eatery(R, { kind: 'bagel' }),
+  pizza: (R) => eatery(R, { kind: 'pizza' }),
+  burger: (R) => eatery(R, { kind: 'burger' }),
+  tacos: (R) => eatery(R, { kind: 'tacos' }),
+  noodles: (R) => eatery(R, { kind: 'noodles' }),
+  diner: (R) => eatery(R, { kind: 'diner' }),
+  juice: (R) => eatery(R, { kind: 'juice' }),
+  icecream: (R) => eatery(R, { kind: 'icecream' }),
+  sushi: (R) => eatery(R, { kind: 'sushi' }),
+  falafel: (R) => eatery(R, { kind: 'falafel' }),
 };
 
 // (ROADMAP 14.4: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
-const NEW_KINDS = new Set(['grocery', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry']);
+const NEW_KINDS = new Set(['grocery', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
 for (const [kind, fn] of Object.entries(PLANS)) {
   const plan = (R) => fn(R);
   plan.stock = true;
@@ -943,4 +947,4 @@ Object.assign(DECOR, {
   shop: { ...DECOR.shop, floor: 'tiles' },
 });
 
-export { PLANS, clothes, screens, jewels };
+export { PLANS, clothes, screens, jewels, counterShop };

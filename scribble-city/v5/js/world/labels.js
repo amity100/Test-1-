@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { seeded } from './kit.js';
+import { MENUS } from './menus.js';
 
 // (v5, ROADMAP 14.4) What is printed on the things a shop sells, drawn once into one picture: the
 // labels round the cans and the bottles, the fronts of the boxes and the bags, the cartons, the
@@ -9,12 +10,13 @@ import { seeded } from './kit.js';
 // edge, a little drawing (a fruit, a sun, a wave), lines of small print - so that up close a can
 // reads as a can of tomatoes of one maker and not a red cylinder. The names are made up.
 //
-// The picture is one atlas (2048 x 2048, a few cells a step while the first shop is built:
+// The picture is one atlas (2048 x 3072, a few cells a step while the first shop is built:
 // world/products.js uses it through the shops' printed pen). A cell is asked for by its name; its
 // place comes back as [u0, v0, u1, v1] (v up, as the graphics card has it).
 
 const W = 2048;
-const H = 2048;
+// (taller than wide since the eateries' menu boards came: ROADMAP 16.3; ~2250 of it in use)
+const H = 3072;
 const PAD = 6;
 
 const INK = '#1b1722';
@@ -1048,6 +1050,45 @@ function defineAll(A) {
   till('ui.till', 'BAY GROCERY  #2', [['FIZZLE 0.5L', 1.96], ['CRUNCHLINES', 3.6], ['MARGIN MILK', 2.55], ['DOODLE-OS', 2.85], ['APPLES x2', 3.49]], ['#123f6e', '#1f6fb0', '#174b80', '#f4e04a']);
   till('ui.till.wear', 'CHECKOUT  1', [['LINEN SHIRT', 49], ['SLIM CHINOS', 59], ['TEE x2', 38], ['SOCKS 3-PACK', 12], ['TOTE BAG', 15]], ['#2b2730', '#5a4a5e', '#36303c', '#e8c9a0']);
   till('ui.till.tech', 'CHECKOUT  2', [['USB-C CABLE 2M', 19], ['EARBUDS PRO', 129], ['PHONE CASE', 25], ['SCREEN GUARD', 15], ['POWER BANK', 39]], ['#0f2430', '#1d6f8c', '#163646', '#7fe0ff']);
+  // (ROADMAP 16.3) an eatery's till: an order rung up
+  till('ui.till.food', 'ORDER  #47', [['CAPPUCCINO x2', 8], ['CROISSANT', 3], ['SLICE', 4], ['SODA', 2], ['TIP', 2]], ['#2a1f1a', '#7a3b26', '#3a2a22', '#f2c35a']);
+  // (ROADMAP 16.3) an eatery's menu over its kitchen: a chalkboard - the place's name for what it
+  // makes, each thing and its price in chalk, a little drawing in the corner
+  const BOARD = { cafe: 'COFFEE & PASTRY', bagel: 'FRESH FROM THE OVEN', pizza: 'PIZZA', burger: 'BURGERS & SHAKES', diner: 'DINER CLASSICS', tacos: 'TACOS', noodles: 'NOODLE BAR', sushi: 'SUSHI', juice: 'FRESH JUICE', icecream: 'GELATO', falafel: 'FALAFEL' };
+  for (const [kind, items] of Object.entries(MENUS)) {
+    A.place(`menu.${kind}`, 256, 144, (g, w, h) => {
+      g.fillStyle = '#1f2a24';
+      g.fillRect(0, 0, w, h);
+      // (the chalk's haze, rubbed out and written over)
+      g.globalAlpha = 0.07;
+      g.fillStyle = '#ffffff';
+      for (let i = 0; i < 26; i++) g.fillRect((i * 97) % w, (i * 53) % h, 40 + (i % 5) * 18, 3);
+      g.globalAlpha = 1;
+      g.strokeStyle = '#8a6a44';
+      g.lineWidth = 6;
+      g.strokeRect(3, 3, w - 6, h - 6);
+      g.fillStyle = '#f4e9a8';
+      g.font = font(19, 'Permanent Marker', 400);
+      g.textBaseline = 'middle';
+      const t = BOARD[kind] || kind.toUpperCase();
+      g.fillText(t, (w - g.measureText(t).width) / 2, 19);
+      const rows = items.slice(0, 5);
+      const rh = Math.min(22, (h - 40) / rows.length);
+      rows.forEach((it, i) => {
+        const y = 40 + i * rh + rh / 2;
+        g.fillStyle = i % 2 ? '#e9f3ee' : '#ffffff';
+        g.font = font(13, 'Caveat', 700);
+        g.fillText(it.name, 16, y);
+        const ps = `$${it.price}`;
+        g.fillStyle = '#ffd46a';
+        g.fillText(ps, w - 16 - g.measureText(ps).width, y);
+        // (the dots to the price)
+        g.fillStyle = 'rgba(255,255,255,0.35)';
+        const x0 = 22 + g.measureText(it.name).width;
+        for (let x = x0; x < w - 26 - g.measureText(ps).width; x += 7) g.fillRect(x, y + 4, 2, 2);
+      });
+    });
+  }
   A.place('ui.keys', 96, 96, (g, w, h) => {
     g.fillStyle = '#2a2a30';
     g.fillRect(0, 0, w, h);

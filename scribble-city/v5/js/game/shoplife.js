@@ -162,7 +162,30 @@ const JEWEL = {
     help: ['Of course - let me take it out for you.', 'A lovely piece. Here, have a closer look.'],
   },
 };
-export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL };
+// (an eatery: nothing taken off a shelf - ordered at the till, made, drawn, served: game/eaterylife.js)
+const FOOD = {
+  flow: 'food',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 6,
+  prices: {},
+  names: {},
+  heb: {},
+  food: new Set(),
+  say: {
+    hi: ['Hi!', 'Hello there!', 'Welcome in!'],
+    player: ['Hi! The board\'s up there - take your time.', 'Welcome! Today\'s special is on the board.', 'Hey! Sit anywhere you like.'],
+    found: ['What can I get you?'],
+    total: (n) => [`That's ${n} dollars.`],
+    thanks: ['Enjoy!', 'Thanks!'],
+    bye: ['Bye!', 'See you!'],
+    run: ['Careful - hot food!', 'Easy, please!'],
+    bump: ['Oh! Sorry.', 'Watch the tray!', 'Excuse me!'],
+    help: ['Anything else?'],
+    stock: [''],
+  },
+};
+export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL, cafe: FOOD, bagel: FOOD, pizza: FOOD, burger: FOOD, tacos: FOOD, noodles: FOOD, diner: FOOD, juice: FOOD, icecream: FOOD, sushi: FOOD, falafel: FOOD };
 
 // ------------------------------------------------------------------ the things in motion
 // Every product, basket, bag and box in a hand, on the counter or on the floor: one geometry a pen
@@ -2421,7 +2444,7 @@ export class ShopLife {
     this.sync();
     this.t += dt;
     // (once its stock is in - the room is there round it - and not where they make food)
-    if (!this.muralOn && this.live && this.shop.kind !== 'deli') {
+    if (!this.muralOn && this.live && this.open.open && this.shop.kind !== 'deli') {
       this.muralOn = true;
       this.mural.start();
     }
