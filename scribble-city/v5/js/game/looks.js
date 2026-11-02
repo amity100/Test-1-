@@ -123,7 +123,7 @@ export function heroLook() {
 // (ROADMAP 13.7) one of the city's people drawn as the hero is, for whoever walks the city: a person
 // of the kind asked (how they dress; a woman or a man) among those the renderer made (FOLK_ON), now
 // and then one of the older wardrobe instead
-const FOLK_HOW = { street: ['street', 'denim'], denim: ['denim', 'street'], smart: ['smart', 'chic'], office: ['smart', 'chic'], chic: ['chic', 'smart'], summer: ['denim', 'street'], knit: ['smart', 'denim'], casual: ['street', 'denim'], trench: ['chic', 'smart'] };
+const FOLK_HOW = { street: ['street', 'denim'], denim: ['denim', 'street'], smart: ['smart', 'chic'], office: ['smart', 'chic'], chic: ['chic', 'smart'], summer: ['denim', 'street'], knit: ['smart', 'denim'], casual: ['street', 'denim'], trench: ['chic', 'smart'], sporty: ['street', 'denim'], bomber: ['street', 'denim'], puffer: ['street', 'denim'], dress: ['chic', 'smart'] };
 // (ROADMAP 14.9) the one of them used longest ago - so that the people about are all of them different
 // (a kind is used again only once every other kind that could be has been)
 const FOLK_USED = new Float64Array(128);

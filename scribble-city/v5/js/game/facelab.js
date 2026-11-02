@@ -42,7 +42,8 @@ export class FaceLab {
     this.game = game;
     const P = game.params;
     this.on = !!(P && P.has('facelab'));
-    this.visit = !this.on && !!P && (P.has('sal') || !(P.has('test') || P.has('nosal')));
+    // (ROADMAP 14.9: only when asked for - ?sal - he no longer comes after you in a new game)
+    this.visit = !this.on && !!P && P.has('sal');
     this.c = null;
     this.expr = 'neutral';
     this.k = 1;

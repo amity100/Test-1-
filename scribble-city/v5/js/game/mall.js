@@ -474,7 +474,7 @@ export class MallLife {
         const a = (i / k) * Math.PI * 2 + Math.random() * 0.5;
         const px = sp.x + Math.sin(a) * 0.9;
         const pz = sp.z + Math.cos(a) * 0.9;
-        const L = civilianLook({ kind: pick(['street', 'sporty', 'denim', 'street']) });
+        const L = cityLook({ kind: pick(['street', 'sporty', 'denim', 'street']) });
         // (younger: a little shorter, the street's own things on)
         L.build.height *= 0.94;
         if (Math.random() < 0.5) L.hat = { kind: pick(['cap', 'capBack', 'bucket']), color: pick(STYLE_COLS) };

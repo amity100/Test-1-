@@ -301,6 +301,9 @@ const PORTRAIT_FADE = 0.25;
 const PORTRAIT_LINES = 190;
 // (in the street too, not only the face lab's - game/facelab.js)
 const PORTRAIT_STREET = true;
+// (ROADMAP 14.9) a phone's: how many drawn so at once, and how many kept made
+const PORTRAIT_PHONE = 3;
+const PORTRAIT_PHONE_KEEP = 10;
 const _mP = new THREE.Matrix4();
 // (a frame framed by a body's right, up and forward is a mirror's: turned round as DrawClass.push
 // turns the people's parts)
@@ -1269,6 +1272,17 @@ export class PersonRenderer {
     // (ROADMAP 14.1) the portraits hidden until somebody is drawn with one again: each kind's to
     // whoever of them was nearest the camera last frame (the face lab's, always)
     if (this.portraits) {
+      // (ROADMAP 14.9) on a phone the three nearest of last frame's alone, for the frames' sake (the
+      // face lab's always): the others the city's way until one of the three goes
+      if (this.touch) {
+        const near = [];
+        for (const P of this.portraits.values()) {
+          P.allow = false;
+          if (P.next) near.push(P);
+        }
+        near.sort((a, b) => a.nextD - b.nextD);
+        for (let i = 0; i < near.length && i < PORTRAIT_PHONE; i++) near[i].allow = true;
+      }
       // (the fades on the game's clock)
       const now = shared.uTime.value;
       const fdt = Math.min(0.1, Math.max(0, now - (this._fadeAt === undefined ? now : this._fadeAt)));
@@ -1296,9 +1310,9 @@ export class PersonRenderer {
   // (ROADMAP 14.1) somebody near enough to be drawn as a portrait (render/portrait.js): one a kind,
   // the nearest - the face lab's whatever its distance (game/facelab.js, fig.__portrait)
   portraitFor(fig, k, camDist) {
-    // (on a phone, the face lab's alone: in the street the city's way, for the frames' sake)
-    if (PORTRAIT_MODE === 'off' || !portraitKind(k) || fig.dead > 0 || fig.parts.head < 0.5 || (this.touch && !fig.__portrait) || fig.__noPortrait) return null;
-    const P0 = this.portraits && this.portraits.get(k);
+    // (on a phone too, since ROADMAP 14.9 - a few at a time: begin)
+    if (PORTRAIT_MODE === 'off' || !portraitKind(k) || fig.dead > 0 || fig.parts.head < 0.5 || fig.__noPortrait) return null;
+    let P0 = this.portraits && this.portraits.get(k);
     const mine = !!P0 && P0.owner === fig;
     // (the face's height on the screen, in its pixels - from how far the head is, not the feet: near,
     // the two are far apart)
@@ -1307,6 +1321,9 @@ export class PersonRenderer {
     const hd = cam && fig.j && fig.j.headC ? cam.position.distanceTo(fig.j.headC) : camDist;
     const px = cam && cam.isPerspectiveCamera ? (0.12 * sh) / (Math.max(0.3, hd) * Math.tan((cam.fov * Math.PI) / 360)) : 166 / Math.max(0.3, hd);
     const inRange = !!fig.__portrait || (PORTRAIT_STREET && px > (mine ? PORTRAIT_FAR : PORTRAIT_NEAR));
+    // (ROADMAP 14.9: a phone makes a face a little at a time - a few seconds: begun while they are
+    // still coming, two or three times as far, so that it is there by the time they are near)
+    if (!P0 && this.touch && PORTRAIT_STREET && px > PORTRAIT_NEAR * 0.38 && !(this.portraitQueue && this.portraitQueue.length > 1)) P0 = this.makePortrait(k);
     // (going out: still theirs while it fades, unless somebody else of the kind comes near)
     if (!inRange && !(mine && P0.fade > 0.01)) return null;
     const P = P0 || this.makePortrait(k);
@@ -1326,7 +1343,10 @@ export class PersonRenderer {
       P.next = fig;
     }
     if (!(P.ready && P.owner === fig)) return null;
-    P.fadeTo = inRange ? 1 : 0;
+    // (a phone's: only the nearest few - P.allow, begin; the one already showing fades out)
+    if (this.touch && !fig.__portrait && !P.allow && !(P.fade > 0.01)) return null;
+    P.usedAt = shared.uTime.value;
+    P.fadeTo = inRange && (!this.touch || fig.__portrait || P.allow) ? 1 : 0;
     // (its own outlines - round the eyes, the lips, under the jaw - only while it is big enough on the
     // screen for them to be drawn whole: smaller, broken specks over it; its outline alone then)
     const big = px > (P.lineBig ? PORTRAIT_LINES - 25 : PORTRAIT_LINES);
@@ -1338,9 +1358,22 @@ export class PersonRenderer {
   // thread (render/heroworker.js), drawn once it has come
   makePortrait(k) {
     if (!this.portraits) this.portraits = new Map();
+    // (ROADMAP 14.9: a phone keeps a few - the one nobody has had longest let go for a new one)
+    if (this.touch && this.portraits.size >= PORTRAIT_PHONE_KEEP) {
+      let old = null;
+      for (const Q of this.portraits.values()) {
+        if (!Q.ready || Q.owner || Q.next || Q === this.painting || Q.k === 2) continue;
+        if (!old || (Q.usedAt || 0) < (old.usedAt || 0)) old = Q;
+      }
+      if (old) {
+        this.portraits.delete(old.k);
+        old.dispose();
+      }
+    }
     // (characters round: made a little at a time, a few milliseconds a frame - stepPortraits - so no
     // frame of the game stops for a face; drawn once it and its picture are both there)
     const P = new Portrait(k, k, LAYERS.MIRRORLESS, true);
+    P.usedAt = shared.uTime.value;
     P.next = null;
     P.nextD = Infinity;
     P.onReady = (q) => this.scene.add(q.mesh);

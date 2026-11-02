@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook, kidLook, elderLook, painterLook } from './looks.js';
+import { civilianLook, cityLook, kidLook, elderLook, painterLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
 import { groundHeight } from '../world/layout.js';
 
@@ -385,7 +385,7 @@ function* painterScene(sc, def) {
       door.open = i / 12;
       yield 0.04;
     }
-    const look = civilianLook();
+    const look = cityLook();
     const guest = g.civilians.spawnAt(x, wallZ + 0.45, look);
     guest.yaw = 0;
     let leg = 0;
@@ -523,7 +523,7 @@ function* hairScene(sc, def) {
   const g = sc.game;
   const mx = def.x;
   const mz = def.z;
-  const mum = sc.spawn(civilianLook({ fem: true, kind: pick(['street', 'knit', 'denim', 'puffer']) }), mx, mz, Math.PI / 2);
+  const mum = sc.spawn(cityLook({ fem: true, kind: pick(['street', 'knit', 'denim', 'puffer']) }), mx, mz, Math.PI / 2);
   const kid = sc.spawn(kidLook(true), mx + 1.0, mz + 0.1, -Math.PI / 2, { scale: 0.62 });
   sc.face(mum, kid);
   sc.face(kid, mum);
@@ -681,7 +681,7 @@ function drawBalloons(fr) {
 function* dogScene(sc, def) {
   const g = sc.game;
   const P = def.path;
-  const man = sc.spawn(civilianLook({ fem: Math.random() < 0.4, kind: pick(['casual', 'sporty', 'office']) }), P.x, P.z0, 0);
+  const man = sc.spawn(cityLook({ fem: Math.random() < 0.4, kind: pick(['casual', 'sporty', 'office']) }), P.x, P.z0, 0);
   yield 0.6;
   const dog = { x: 0, z: 0, y: 0, yaw: 0, speed: 0, t: 0, wag: 0, mode: 'none', col: pick([[0.55, 0.36, 0.2], [0.85, 0.75, 0.55], [0.25, 0.22, 0.2], [0.95, 0.95, 0.92]]) };
   sc.props.dog = { draw: drawDog, dog };
@@ -835,7 +835,7 @@ function drawDog(fr) {
 function* rainScene(sc, def) {
   const g = sc.game;
   const P = def.path;
-  const man = sc.spawn(civilianLook({ fem: false, kind: pick(['office', 'casual']) }), P.x, P.z0, 0);
+  const man = sc.spawn(cityLook({ fem: false, kind: pick(['office', 'casual']) }), P.x, P.z0, 0);
   const cloud = { x: man.pos.x, y: 4, z: man.pos.z, size: 0, follow: man, drops: [], t: 0, alpha: 1, umbrellaOver: null };
   sc.props.cloud = { draw: drawCloud, cloud };
   sc.onTick = (dt) => {

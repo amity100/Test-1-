@@ -1772,7 +1772,21 @@ export class Doodle {
     if (!this.visible || alphaMul <= 0.02) return;
     this.ensureShapes();
     const camDist = camPos.distanceTo(this.pos);
+    // (ROADMAP 14.9: somebody walking right through the camera - not you - not drawn while it is in
+    // them: the inside of a head that near filled the screen, a black hole in the middle of the game)
+    if (!this.__mine && camDist < 3 && this.inCamera(camPos)) return;
     this.fr.bodies.draw(this, camDist);
     if (camDist < this.fr.bodies.detailFar) this.drawDetails();
+  }
+
+  // (the camera inside this one: near the head, or within the body - its feet to the top of its head)
+  inCamera(c) {
+    const S = this.scale || 1;
+    const h = this.j && this.j.headC;
+    if (h && c.distanceTo(h) < 0.62 * S) return true;
+    const dx = c.x - this.pos.x;
+    const dz = c.z - this.pos.z;
+    const dy = c.y - this.pos.y;
+    return dx * dx + dz * dz < 0.42 * 0.42 * S * S && dy > -0.1 && dy < (h ? h.y - this.pos.y + 0.3 * S : 1.9 * S);
   }
 }

@@ -888,6 +888,23 @@ export class Portrait {
     return true;
   }
 
+  // (ROADMAP 14.9: a phone keeps only the few faces it has used last - render/people.js - the rest let
+  // go: their shape, their normals' moves and their picture; the moves of the points are everyone's)
+  dispose() {
+    if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    if (this.geo) this.geo.dispose();
+    if (this.auNor && this.auNor !== this.auPos) this.auNor.dispose();
+    if (this.tex) {
+      if (this.tex.image && this.tex.image.close) this.tex.image.close();
+      this.tex.dispose();
+    }
+    if (this.mat) this.mat.dispose();
+    if (this._pic && this._pic.close) this._pic.close();
+    this.mesh = this.geo = this.auNor = this.tex = this.mat = this._pic = this._gen = null;
+    this.ready = false;
+    this.gone = true;
+  }
+
   // (characters round) its own outlines - round the eyes, the lips, under the jaw, its parts told
   // apart (render/pipeline.js edgeAt) - when it is big enough on the screen for them to be drawn
   // whole (big); smaller, its outline against what is behind it alone (its line weight marked 0.94)

@@ -17,6 +17,8 @@ export class Player {
   constructor(game) {
     this.game = game;
     this.fig = new Doodle(game.figures, heroLook(), { seed: 7 });
+    // (yours: drawn however near the camera comes - game/doodle.js inCamera)
+    this.fig.__mine = true;
     this.pos = this.fig.pos;
     this.vel = new THREE.Vector3();
     this.yaw = 0;

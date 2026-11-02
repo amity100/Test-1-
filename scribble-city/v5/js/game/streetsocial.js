@@ -959,7 +959,7 @@ export class StreetSocial {
     }
     if (ring.length < 3) return null;
     const civs = game.civilians;
-    const look = civilianLook({ kind: pick(['street', 'denim', 'knit', 'smart']) });
+    const look = cityLook({ kind: pick(['street', 'denim', 'knit', 'smart']) });
     look.hat = chance(0.6) ? { kind: pick(['beanie', 'bucket', 'beret', 'cap']), color: pick([[0.12, 0.12, 0.14], [0.75, 0.18, 0.2], [0.36, 0.4, 0.3], [0.86, 0.66, 0.26]]) } : look.hat;
     const c = civs.spawnScripted(x, z, look, this);
     c.fig.carry = 'guitar';

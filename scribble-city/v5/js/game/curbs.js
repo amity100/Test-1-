@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { M_AVES, M_STREETS } from '../world/mainland/plan.js';
 import { CAR_COLORS, TAXI_YELLOW } from '../render/cars.js';
 import { NODES, laneOffsets, stopDist } from '../world/roads.js';
-import { civilianLook } from './looks.js';
+import { civilianLook, cityLook } from './looks.js';
 import { groundHeight } from '../world/layout.js';
 import { damp } from '../core/util.js';
 
@@ -351,7 +351,7 @@ export class Curbs {
       const vz = start[1] - cam.position.z;
       const vd = Math.hypot(vx, vz) || 1;
       if (vd < 50 && (vx * fwd.x + vz * fwd.z) / vd > 0.25) return false;
-      look = civilianLook();
+      look = cityLook();
       w = civs.spawnScripted(start[0], start[1], look, this);
       w.speed = 1.35;
       if (Math.random() < 0.5) w.fig.carry = Math.random() < 0.5 ? 'phone' : 'coffee';
@@ -715,7 +715,7 @@ export class Curbs {
     const gf = Math.min(2.6, this.freeRun(c, 0, 1) - c.halfLen);
     const gb = Math.min(2.6, this.freeRun(c, 0, -1) - c.halfLen);
     const gu = gf >= gb ? c.halfLen + Math.max(0.5, gf) / 2 : -(c.halfLen + Math.max(0.5, gb) / 2);
-    const look = c.driver ? c.driver.look : civilianLook();
+    const look = c.driver ? c.driver.look : cityLook();
     T.removeCar(c);
     c.gone = true;
     const rx = -fz;

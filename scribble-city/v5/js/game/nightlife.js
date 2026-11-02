@@ -1,4 +1,4 @@
-import { civilianLook, bouncerLook } from './looks.js';
+import { civilianLook, cityLook, bouncerLook } from './looks.js';
 
 // The queues of the evening: people lined up along the wall for the cinema's next show and for the
 // club, chatting, on their phones; the bouncer at the rope lets one in now and then and the line
@@ -52,7 +52,7 @@ export class Nightlife {
   }
 
   person(q, x, z) {
-    const look = civilianLook({ kind: ['chic', 'street', 'denim', 'trench', 'smart', 'bomber', 'puffer'][Math.floor(Math.random() * 7)] });
+    const look = cityLook({ kind: ['chic', 'street', 'denim', 'trench', 'smart', 'bomber', 'puffer'][Math.floor(Math.random() * 7)] });
     const c = this.game.civilians.spawnScripted(x, z, look, this);
     c.speed = 1.2;
     if (Math.random() < 0.3) c.fig.carry = 'phone';

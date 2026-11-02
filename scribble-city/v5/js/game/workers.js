@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook, copLook, shopkeeperLook, modest } from './looks.js';
+import { civilianLook, cityLook, copLook, shopkeeperLook, modest } from './looks.js';
 import { sidewalkLoop } from './civilians.js';
 import { RIDE } from './doodle.js';
 import { AVES, STREETS, BLOCK_TYPES, blockRect, groundHeight, NORTH_EDGE, SOUTH_EDGE, CURB } from '../world/layout.js';
@@ -534,7 +534,7 @@ export class Workers {
       // (now and then just somebody riding a bike, no box on the back: ROADMAP 4.1)
       const casual = Math.random() < 0.5;
       const color = casual ? pick(BIKES) : pick(COURIERS);
-      const c = this.game.civilians.spawnScripted(x, z, casual ? civilianLook({ kind: pick(['sporty', 'street', 'denim', 'summer']) }) : courierLook(color), this);
+      const c = this.game.civilians.spawnScripted(x, z, casual ? cityLook({ kind: pick(['sporty', 'street', 'denim', 'summer']) }) : courierLook(color), this);
       c.scripted = false;
       c.noCollide = true;
       c.fig.ride = 1;

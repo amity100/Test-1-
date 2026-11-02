@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook, shopkeeperLook, bartenderLook, modest } from './looks.js';
+import { civilianLook, cityLook, shopkeeperLook, bartenderLook, modest } from './looks.js';
 
 // (v5, GTA IV round) The life of the places you sit down in (world/venues2.js lays them out; an
 // OpenShop of game/streetlife.js runs each one while you are near, and hands its people to these).
@@ -94,7 +94,7 @@ function waiterLook(fem) {
 }
 
 function dinerLook() {
-  return civilianLook({ kind: pick(['smart', 'chic', 'trench', 'knit', 'office', 'smart']) });
+  return cityLook({ kind: pick(['smart', 'chic', 'trench', 'knit', 'office', 'smart']) });
 }
 
 // a sit-down party's colours of drink
@@ -1333,7 +1333,7 @@ export class BarLife {
   patron(sp, already) {
     const o = this.o;
     const s = o.shop;
-    const c = this.game.civilians.spawnScripted(already ? sp.x : s.door[0] + s.nx * 1.4, already ? sp.z : s.door[2] + s.nz * 1.4, civilianLook({ kind: pick(['smart', 'chic', 'street', 'denim', 'trench', 'bomber']) }), o);
+    const c = this.game.civilians.spawnScripted(already ? sp.x : s.door[0] + s.nx * 1.4, already ? sp.z : s.door[2] + s.nz * 1.4, cityLook({ kind: pick(['smart', 'chic', 'street', 'denim', 'trench', 'bomber']) }), o);
     const v = o.addVisitor(c, { spot: sp, mode: 'seat', already });
     if (!v) {
       this.game.civilians.remove(c);
@@ -1355,7 +1355,7 @@ export class BarLife {
   stander(sp, already) {
     const o = this.o;
     const s = o.shop;
-    const c = this.game.civilians.spawnScripted(already ? sp.x : s.door[0] + s.nx * 1.4, already ? sp.z : s.door[2] + s.nz * 1.4, civilianLook({ kind: pick(['street', 'denim', 'bomber', 'smart', 'chic']) }), o);
+    const c = this.game.civilians.spawnScripted(already ? sp.x : s.door[0] + s.nx * 1.4, already ? sp.z : s.door[2] + s.nz * 1.4, cityLook({ kind: pick(['street', 'denim', 'bomber', 'smart', 'chic']) }), o);
     const v = o.addVisitor(c, { spot: sp, mode: 'browse', already });
     if (!v) {
       this.game.civilians.remove(c);
@@ -1847,7 +1847,7 @@ export class LobbyLife {
       const rows = this.rows.slice();
       for (let i = 0; i < k && rows.length; i++) {
         const sp = rows.splice(Math.floor(Math.random() * rows.length), 1)[0];
-        const c = this.game.civilians.spawnScripted(sp.x, sp.z, civilianLook(), o);
+        const c = this.game.civilians.spawnScripted(sp.x, sp.z, cityLook(), o);
         const v = o.addVisitor(c, { spot: sp, mode: 'seat', already: true });
         if (!v) {
           this.game.civilians.remove(c);
@@ -1882,7 +1882,7 @@ export class LobbyLife {
     const o = this.o;
     const s = o.shop;
     const R = o.room;
-    const c = this.game.civilians.spawnScripted(s.door[0] + s.nx * 1.4 + s.rx * (Math.random() - 0.5) * 2, s.door[2] + s.nz * 1.4 + s.rz * (Math.random() - 0.5) * 2, civilianLook(), o);
+    const c = this.game.civilians.spawnScripted(s.door[0] + s.nx * 1.4 + s.rx * (Math.random() - 0.5) * 2, s.door[2] + s.nz * 1.4 + s.rz * (Math.random() - 0.5) * 2, cityLook(), o);
     const v = o.addVisitor(c, { spot: R.door, mode: 'browse' });
     if (!v) {
       this.game.civilians.remove(c);
