@@ -1249,6 +1249,19 @@ export class Game {
       this.gps.update(dt);
       if (this.state === 'play') this.saves.update(dt);
     }
+    // (ROADMAP 16.1) in a shop: which one's room you are standing in - the camera comes in nearer
+    // there, and stays under its ceiling (this was read and never set: the camera stood off as far as
+    // in the street, and up through the ceiling looking down)
+    player.indoor = null;
+    if (this.streetlife && player.mode === 'foot' && !player.inVehicle) {
+      for (const a of this.streetlife.active.values()) {
+        const R = a.room;
+        if (R && R.inside(player.pos.x, player.pos.z, -0.05, player.pos.y)) {
+          player.indoor = R;
+          break;
+        }
+      }
+    }
     // camera
     // (the look as quick as ever - but through a drawn sight, aimed: below)
     this.camRig.lookK = 1;
@@ -1306,9 +1319,16 @@ export class Game {
         // (a game played in the world: the camera held behind you, its screen in front - ui/minigame.js)
         const hold = this.minigames && this.minigames.camHold;
         if (hold) this.camRig.holdAt(dt, hold.pos, hold.look, hold.fov);
-        else this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: this.player.indoor ? 2.6 : 3.3 });
+        else {
+          const IR = player.indoor;
+          this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: IR ? 2.6 : 3.3, maxY: IR && IR.height ? IR.floor + IR.height - 0.3 : undefined });
+        }
       }
     }
+    // (ROADMAP 16.1) the camera brought in close behind you in a narrow place (game/camera.js): you
+    // out of its way - its picture would be the back of your head
+    const hc = player.fig && player.fig.j && player.fig.j.headC;
+    player.camNear = !player.inVehicle && !!hc && this.camera.position.distanceTo(hc) < 0.3;
     // (ROADMAP 11.21) the pen out in the car you drive: the camera close by it, held in its frame
     if (this.fuse && player.inVehicle) this.fuse.sketchCam(player.inVehicle, this.realDt);
     const tipsy = this.inkwell.tipsy;

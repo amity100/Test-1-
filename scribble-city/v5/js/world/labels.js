@@ -1018,30 +1018,36 @@ function defineAll(A) {
   CARDS.forEach(([a, b], i) => place(`card.${i}`, 'card', card(a, b)));
   place('card.special', 'card', card('Special!', 'Today only', '#ffe14f'));
   // (the till's screen, the reader's keys and screen, the scanner's glass, the doors' signs)
-  A.place('ui.till', 176, 132, (g, w, h, rng) => {
-    g.fillStyle = '#123f6e';
+  // (ROADMAP 16.1: each kind of shop's own - a clothes shop's till had the grocery's bill on it)
+  const till = (name, title, items, cols) => A.place(name, 176, 132, (g, w, h) => {
+    g.fillStyle = cols[0];
     g.fillRect(0, 0, w, h);
-    g.fillStyle = '#1f6fb0';
+    g.fillStyle = cols[1];
     g.fillRect(0, 0, w, 18);
     g.fillStyle = '#ffffff';
     g.font = font(12, 'Rubik', 700);
     g.textBaseline = 'middle';
-    g.fillText('BAY GROCERY  #2', 6, 9);
-    const items = ['FIZZLE 0.5L', 'CRUNCHLINES', 'MARGIN MILK', 'DOODLE-OS', 'APPLES x2'];
-    items.forEach((t, i) => {
-      g.fillStyle = i % 2 ? '#174b80' : '#123f6e';
+    g.fillText(title, 6, 9);
+    let sum = 0;
+    items.forEach(([t, p], i) => {
+      g.fillStyle = i % 2 ? cols[2] : cols[0];
       g.fillRect(0, 22 + i * 16, w, 16);
-      g.fillStyle = '#e8f2ff';
+      g.fillStyle = '#eef4ff';
       g.font = font(11, 'Rubik', 500);
       g.fillText(t, 6, 30 + i * 16);
-      g.fillText(`${(1 + rng() * 4).toFixed(2)}`, w - 40, 30 + i * 16);
+      const ps = p.toFixed(2);
+      g.fillText(ps, w - 8 - g.measureText(ps).width, 30 + i * 16);
+      sum += p;
     });
-    g.fillStyle = '#f4e04a';
+    g.fillStyle = cols[3];
     g.fillRect(0, h - 24, w, 24);
-    g.fillStyle = '#123f6e';
+    g.fillStyle = cols[0];
     g.font = font(15, 'Rubik', 800);
-    g.fillText('TOTAL  14.36', 8, h - 12);
+    g.fillText(`TOTAL  ${sum.toFixed(2)}`, 8, h - 12);
   });
+  till('ui.till', 'BAY GROCERY  #2', [['FIZZLE 0.5L', 1.96], ['CRUNCHLINES', 3.6], ['MARGIN MILK', 2.55], ['DOODLE-OS', 2.85], ['APPLES x2', 3.49]], ['#123f6e', '#1f6fb0', '#174b80', '#f4e04a']);
+  till('ui.till.wear', 'CHECKOUT  1', [['LINEN SHIRT', 49], ['SLIM CHINOS', 59], ['TEE x2', 38], ['SOCKS 3-PACK', 12], ['TOTE BAG', 15]], ['#2b2730', '#5a4a5e', '#36303c', '#e8c9a0']);
+  till('ui.till.tech', 'CHECKOUT  2', [['USB-C CABLE 2M', 19], ['EARBUDS PRO', 129], ['PHONE CASE', 25], ['SCREEN GUARD', 15], ['POWER BANK', 39]], ['#0f2430', '#1d6f8c', '#163646', '#7fe0ff']);
   A.place('ui.keys', 96, 96, (g, w, h) => {
     g.fillStyle = '#2a2a30';
     g.fillRect(0, 0, w, h);

@@ -98,8 +98,27 @@ export function wfaces(R, run, list) {
   return out;
 }
 
+// (ROADMAP 16.2) what is up against a wall of the room - a bay, a screen, a sign, a panel, a shelf:
+// kept (in the room's own frame, the heights the world's), so that a mural is not painted over it
+// (game/shopmural.js through the room's wallBusy, world/rooms.js)
+function onWall(R, run, s0, y0, t0, s1, y1, t1) {
+  if (R.ua === undefined || !R.P) return;
+  const [ua, da] = run.ud(s0, t0);
+  const [ub, db] = run.ud(s1, t1);
+  const u0 = Math.min(ua, ub);
+  const u1 = Math.max(ua, ub);
+  const d0 = Math.min(da, db);
+  const d1 = Math.max(da, db);
+  const near = 0.3;
+  if (u0 > R.ua + near && u1 < R.ub - near && d0 > R.db + near) return;
+  const ya = R.P(u0, Math.min(y0, y1), d0)[1];
+  const yb = R.P(u0, Math.max(y0, y1), d0)[1];
+  (R.wallStuff || (R.wallStuff = [])).push([u0, d0, u1, d1, ya, yb]);
+}
+
 // a box in a run's frame into soup S (pen 'plain' unless o.pen)
 export function rbox(R, S, run, s0, y0, t0, s1, y1, t1, col, o = {}) {
+  onWall(R, run, s0, y0, t0, s1, y1, t1);
   const a = wp(R, run, s0, y0, t0);
   const b = wp(R, run, s1, y1, t1);
   return wbox(S, o.pen || 'plain', a, b, col, { ...o, skip: o.skip ? wfaces(R, run, o.skip) : [] });
@@ -108,6 +127,7 @@ export function rbox(R, S, run, s0, y0, t0, s1, y1, t1, col, o = {}) {
 // a printed face standing in the run at t, facing out (to the people), s0..s1 by y0..y1: the atlas
 // cell's square (uv: a part of it [u0, v0, u1, v1] in the cell's own 0..1), or a plain colour
 export function rprint(R, S, run, s0, y0, s1, y1, t, cell, o = {}) {
+  onWall(R, run, s0, y0, t, s1, y1, t);
   const A = labels();
   const c = cell ? A.cells.get(cell) : null;
   const pen = o.pen || (c ? 'print' : 'plain');
@@ -166,6 +186,7 @@ function quad(S, pen, a, b, c, d, n, col, uv, o = {}) {
 
 // an upright cylinder at a run's (s, t), into soup S (a post, a pole, a tub)
 export function rcyl(R, S, run, s, t, r, y0, h, col, o = {}) {
+  onWall(R, run, s - r, y0, t - r, s + r, y0 + h, t + r);
   if (S.off) return 0;
   const p = wp(R, run, s, y0, t);
   const B = S.buf(o.pen || 'plain');

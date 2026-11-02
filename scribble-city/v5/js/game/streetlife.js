@@ -518,6 +518,14 @@ export class StreetLife {
     for (const a of this.active.values()) {
       if (!a.life2 || !a.room || !a.room.inside(p.pos.x, p.pos.z, 0.2, p.pos.y)) continue;
       const k = a.keeper;
+      // (ROADMAP 16.2: with things to pay for, at the till - game/shopper.js)
+      const you = a.life2.you;
+      if (you && you.items.length && !you.pv && a.open) {
+        const ps = a.room.pay;
+        const dp = ps ? Math.hypot(ps.x - p.pos.x, ps.z - p.pos.z) : 99;
+        const dk = k && k.alive ? Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) : 99;
+        if (dp < 1.6 || dk < 2.2) return { shop: a, pay: true, label: `E — לשלם בקופה (${you.items.length} · ${fmt(you.total())})` };
+      }
       if (k && k.alive && Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) < 1.6) break;
       const slot = a.life2.target(p);
       if (slot) return { shop: a, slot, label: a.life2.label(slot) };
@@ -559,6 +567,10 @@ export class StreetLife {
   interact() {
     const t = this.target();
     if (!t || !t.shop.open) return false;
+    if (t.pay) {
+      t.shop.life2.you.checkout();
+      return true;
+    }
     if (t.slot) {
       t.shop.life2.inspect(t.slot);
       return true;

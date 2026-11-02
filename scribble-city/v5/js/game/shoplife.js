@@ -3,6 +3,8 @@ import { productPens, model, place, PEN_KEYS } from '../world/products.js';
 import { BRANDS } from '../world/labels.js';
 import { fmt } from './money.js';
 import { LAYERS } from '../render/materials.js';
+import { Shopper } from './shopper.js';
+import { ShopMural } from './shopmural.js';
 
 // (v5, ROADMAP 14.4) A shop's day, as it really goes - the shops of the new kind (world/market.js):
 // every action tied to a real thing in the shop.
@@ -380,6 +382,11 @@ export class ShopLife {
     this.player = { in: false, greetT: -99, runT: -99, out: 0 };
     this.cool = new Map();
     this.stats = { taken: 0, back: 0, bought: 0, scanned: 0, restocked: 0, dropped: 0, doors: 0, baskets: 0, bags: 0 };
+    // (you in the shop: your basket, the till, walking out without paying, a hold-up - game/shopper.js)
+    this.you = new Shopper(this);
+    // (now and then one of them at a wall, painting a mural: game/shopmural.js)
+    this.mural = new ShopMural(this);
+    this.muralOn = false;
     this.sync();
   }
 
@@ -1512,11 +1519,19 @@ export class ShopLife {
     const f = c.fig;
     const K = (this.K = this.K || { st: 'idle', t: 0, act: 'look', actT: 0, reach: new THREE.Vector3(), look: new THREE.Vector3() });
     K.t += dt;
+    // (held up: hands up, the till into a bag - game/shopper.js)
+    if (this.you.rob && this.you.rob.k === c) {
+      if (K.hold) {
+        this.giveBack(K.hold);
+        K.hold = null;
+      }
+      return this.you.robKeeper(c, dt);
+    }
     const home = this.open.home;
     const yaw = this.open.homeYaw;
     const pv = this.payer;
     // serving: the belt has their things and they are at the till
-    if (pv && pv.L && (pv.L.st === 'waitScan' || pv.L.st === 'unload' || pv.L.st === 'pay' || pv.L.st === 'waitBag')) return this.serve(c, pv, dt);
+    if (pv && pv.L && (pv.L.st === 'waitScan' || pv.L.st === 'unload' || pv.L.st === 'pay' || pv.L.st === 'card' || pv.L.st === 'waitBag')) return this.serve(c, pv, dt);
     if (K.hold) {
       // (the one being served went: what was in the hand back where it came from)
       this.giveBack(K.hold);
@@ -1674,6 +1689,7 @@ export class ShopLife {
           this.movers.remove(it);
           K.hold = this.movers.add(look, true);
           K.hold.slot = slot;
+          K.hold.price = it.price;
           K.hold.at = { x: m.x, y: m.y, z: m.z, yaw: this.open.homeYaw };
           this.open.sound('pageflip', 0.4, 10);
         }
@@ -1715,8 +1731,8 @@ export class ShopLife {
         if (K.t > 0.45) {
           if (K.hold) {
             this.movers.remove(K.hold);
-            const what = K.hold.slot ? K.hold.slot.what : K.hold.price || null;
-            K.sum += this.prof.prices[what] || 2;
+            const what = K.hold.slot ? K.hold.slot.what : null;
+            K.sum += K.hold.price || this.prof.prices[what] || 2;
             if (K.hold.slot) this.setSlot(K.hold.slot, 'gone');
             K.hold = null;
             K.n++;
@@ -2404,6 +2420,11 @@ export class ShopLife {
   update(dt) {
     this.sync();
     this.t += dt;
+    // (once its stock is in - the room is there round it - and not where they make food)
+    if (!this.muralOn && this.live && this.shop.kind !== 'deli') {
+      this.muralOn = true;
+      this.mural.start();
+    }
     // (the staff let go of - frightened, or gone: what was in their hands falls where they were)
     const S = this.S;
     if (S && (!S.c.alive || S.c.owner !== this.open)) {
@@ -2438,10 +2459,13 @@ export class ShopLife {
           at.c.fig.carryL = 'bag';
           at.c.fig.bagBread = true;
           at.c.carryUntil = this.game.time + 50;
+          // (yours: carried a while down the street - game/player.js)
+          if (at.c.player) this.game.player.bagUntil = this.game.time + 40;
         }
       }
     }
     this.notice(dt);
+    this.you.update(dt);
     // (yours: bought and in your hand a moment; or the look at it given up some other way)
     const g = this.game;
     if (this.pocket && g.time > this.pocket.until) {
@@ -2599,6 +2623,22 @@ export class ShopLife {
         it.roll = 0;
         return;
       }
+      if (at.how === 'armful') {
+        // (yours, not paid for yet: game/shopper.js) over your left arm - a garment by its hanger's
+        // hook, a box held, one over another
+        const h = f.j.handL;
+        const k = at.k || 0;
+        if (it.t.hang) {
+          it.pos.set(h.x, h.y - it.t.hang + 0.03 + k * 0.012, h.z);
+          it.yaw = yaw + Math.PI / 2 + (k - 1) * 0.16;
+        } else {
+          it.pos.set(h.x, h.y - it.t.size[1] * 0.6 + k * it.t.size[1], h.z);
+          it.yaw = yaw;
+        }
+        it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
       if (at.how === 'against') {
         // a garment held up against the body at the mirror: its hook at the chin, hanging before them
         const fx = Math.sin(yaw);
@@ -2697,39 +2737,32 @@ export class ShopLife {
       else if (this.K) this.K.greet = { c: p, until: game.time + 2.4 };
       this.say(helper, pick(this.prof.say.help), this.prof.flow === 'jewel' ? 1 : 0.5);
     }
-    game.dialog.show(brand ? `${brand}` : this.prof.heb[s.what] || 'מוצר', `${this.prof.heb[s.what] || ''} — ${name}. ${this.prof.flow ? 'המחיר' : 'המחיר על המדף'}: ${fmt(price)}`, [
-      {
-        label: `לקנות · ${fmt(price)}`,
+    // (ROADMAP 16.2: kept - into the basket, over your arm, boxed, on the counter - and paid for at
+    // the till, as everybody does: game/shopper.js)
+    const you = this.you;
+    const take = you.takeLabel(price);
+    const full = !take && !you.pv ? ' · הידיים מלאות: קודם לקופה' : '';
+    const choices = [];
+    if (take) {
+      choices.push({
+        label: take,
         fn: () => {
-          if (M && !M.pay(price, brand || name)) {
-            this.inspecting = null;
-            back();
-            M.refuse(this.prof.heb[s.what] || 'מוצר', price, false, () => {});
-            return;
-          }
-          // (rung up at the till: the cashier's beep, a word; the slot empty until it is filled again)
-          this.setSlot(s, 'gone');
-          this.stats.bought++;
-          this.open.sound('beep', 0.7, 14);
-          if (k && k.alive) this.say(k, pick(['Got it, thanks!', 'I\'ll ring that up.', 'Enjoy!']), 0.9);
-          it.at = { c: p, how: 'grip' };
           p.fig.reachR = null;
-          if (this.prof.food.has(s.what)) {
-            p.hp = Math.min(p.maxHp, p.hp + 8);
-            game.hud.toast('יאמי! +8 חיים', 'good', 2);
-          } else game.hud.toast(`קניתם ${this.prof.heb[s.what] || 'מוצר'}`, 'good', 2);
-          this.pocket = { it, until: game.time + 2.5 };
           this.inspecting = null;
+          you.take(it, s, price);
+          if (k && k.alive && Math.random() < 0.25) this.say(k, pick(['Good choice!', 'Those are fresh today.', 'Let me know if you need a bag.']), 0.6);
         },
+      });
+    }
+    choices.push({
+      label: 'להחזיר למדף',
+      fn: () => {
+        back();
+        this.inspecting = null;
       },
-      {
-        label: 'להחזיר למדף',
-        fn: () => {
-          back();
-          this.inspecting = null;
-        },
-      },
-    ]);
+    });
+    void M;
+    game.dialog.show(brand ? `${brand}` : this.prof.heb[s.what] || 'מוצר', `${this.prof.heb[s.what] || ''} — ${name}. ${this.prof.flow ? 'המחיר' : 'המחיר על המדף'}: ${fmt(price)}${you.have()}${full}`, choices);
     // (if the dialog is closed some other way: back on the shelf)
     this.inspecting = { it, s, back, t: game.time };
   }
@@ -2741,6 +2774,8 @@ export class ShopLife {
   }
 
   dispose() {
+    this.you.dispose();
+    this.mural.dispose();
     // (whatever is in motion goes back where it came from)
     for (const it of [...this.movers.items]) {
       if (it.slot && (it.slot.state === 'held' || it.slot.state === 'aim')) this.setSlot(it.slot, 'shelf');

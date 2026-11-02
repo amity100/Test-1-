@@ -332,7 +332,7 @@ function cashWrap(R, fr, o) {
   rbox(R, S, run, ts - 0.05, top, -depth + 0.18, ts + 0.05, top + 0.12, -depth + 0.24, DARK, {});
   rbox(R, S, run, ts - 0.13, top + 0.1, -depth + 0.2, ts + 0.13, top + 0.28, -depth + 0.23, [0.1, 0.1, 0.11], {});
   const back = new Run(R, ...run.ud(len, -depth + 0.199), [-run.au, -run.ad], [-run.ou, -run.od]);
-  rprint(R, S, back, len - ts - 0.12, top + 0.11, len - ts + 0.12, top + 0.27, 0, 'ui.till', { pen: 'screen' });
+  rprint(R, S, back, len - ts - 0.12, top + 0.11, len - ts + 0.12, top + 0.27, 0, 'ui.till.wear', { pen: 'screen' });
   // the card reader to the customer
   const cs = len * 0.5;
   rbox(R, S, run, cs - 0.045, top, -0.14, cs + 0.045, top + 0.05, -0.05, DARK, {});

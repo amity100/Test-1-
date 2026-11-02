@@ -606,6 +606,15 @@ class Room {
         return { x: p[0], z: p[2] };
       }),
       path: (ax, az, bx, bz) => this.path(ax, az, bx, bz),
+      // (ROADMAP 16.2) something up against the wall there - a bay, a screen, a sign, a panel - by
+      // world/shopkit.js: game/shopmural.js keeps its pictures off them
+      wallBusy: (x, y, z, pad = 0.06) => {
+        const W = this.wallStuff;
+        if (!W) return false;
+        const [u, d] = this.toUD(x, z);
+        for (const b of W) if (u > b[0] - pad && u < b[2] + pad && d > b[1] - pad && d < b[3] + pad && y > b[4] - pad && y < b[5] + pad) return true;
+        return false;
+      },
       // (y: where the feet are, when it matters - the mega mall's stores stand one over another)
       inside: (x, z, pad = 0, y = null) => {
         const [u, d] = this.toUD(x, z);

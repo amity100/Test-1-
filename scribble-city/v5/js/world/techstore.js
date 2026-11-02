@@ -183,7 +183,7 @@ function counter(R, fr) {
   rbox(R, S, run, ts - 0.04, top, -depth + 0.15, ts + 0.04, top + 0.2, -depth + 0.2, DARK, {});
   rbox(R, S, run, ts - 0.17, top + 0.18, -depth + 0.15, ts + 0.17, top + 0.4, -depth + 0.18, [0.1, 0.1, 0.11], {});
   const back = new Run(R, ...run.ud(len, -depth + 0.149), [-run.au, -run.ad], [-run.ou, -run.od]);
-  rprint(R, S, back, len - ts - 0.16, top + 0.19, len - ts + 0.16, top + 0.39, 0, 'ui.till', { pen: 'screen' });
+  rprint(R, S, back, len - ts - 0.16, top + 0.19, len - ts + 0.16, top + 0.39, 0, 'ui.till.tech', { pen: 'screen' });
   const cs = len * 0.45;
   rbox(R, S, run, cs - 0.04, top, -0.13, cs + 0.04, top + 0.18, -0.09, [0.12, 0.12, 0.14], {});
   rprint(R, S, run, cs - 0.035, top + 0.04, cs + 0.035, top + 0.175, -0.0895, 'ui.reader', { pen: 'screen' });

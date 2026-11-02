@@ -191,6 +191,12 @@ export class Player {
       fig.sneak = 0;
     }
     if (this.invuln > 0) this.invuln -= dt;
+    // (ROADMAP 16.2: a shop's bag, or its basket walked out with, carried a while down the street -
+    // game/shopper.js)
+    if (this.bagUntil && this.game.time > this.bagUntil) {
+      this.bagUntil = 0;
+      if (fig.carryL === 'bag' || fig.carryL === 'basket') fig.carryL = null;
+    }
     if (this.mode === 'dead') {
       fig.dead = Math.min(1, fig.dead + dt * 2.5);
       fig.speed = 0;
@@ -488,6 +494,8 @@ export class Player {
     if (this.mode === 'vehicle' && !(this.inVehicle && this.inVehicle.seat)) return;
     // (your own eyes in the coaster's front car: game/fairground.js)
     if (this.rideHidden) return;
+    // (the camera close behind you in a narrow place: game/game.js)
+    if (this.camNear) return;
     this.fig.draw(camPos);
   }
 }
