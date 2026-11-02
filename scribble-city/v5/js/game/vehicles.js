@@ -723,6 +723,25 @@ class Vehicle {
         if (this.game.knock && res.box && res.box.tag === 'bound' && Math.abs(this.speed) * along > 5) this.game.knock.fence(p.x - res.nx * r, p.z - res.nz * r, this);
       }
     }
+    // (ROADMAP 15.3) its drawn parts that stick out - long wings, a wide rotor: they catch a narrow
+    // street's walls, a lamp post, a tree too
+    // (near the ground only: up in the air, past the palms' trunks, its wing tips do not stop it)
+    const ex = this.fz && this.fz.cols;
+    if (ex && ex.length && (!this.air || this.pos.y - groundHeight(this.pos.x, this.pos.z) < 2.5)) {
+      const rx = f.z;
+      const rz = -f.x;
+      for (const c of ex) {
+        const p = new THREE.Vector3(this.pos.x + f.x * c.a + rx * c.b, this.pos.y + 0.2, this.pos.z + f.z * c.a + rz * c.b);
+        const before = p.clone();
+        const res = col.resolveCylinder(p, c.r, 1.5, this.fz.step || 0.45);
+        if (res.hitWall) {
+          hit = true;
+          this.pos.x += p.x - before.x;
+          this.pos.z += p.z - before.z;
+          impact = Math.max(impact, Math.abs(this.speed) * Math.abs(f.x * res.nx + f.z * res.nz) * 0.6);
+        }
+      }
+    }
     if (hit) {
       if (impact > 7) {
         this.hurt(impact * 1.6);
@@ -968,7 +987,7 @@ class Vehicle {
     // (a curb, the dunes: the wheels half up them, as always; v5: the hills, the ground itself - a car
     // flying low over them came down inside them, half their height up)
     const gh = groundHeight(this.pos.x, this.pos.z);
-    let g = Math.max(gh * 0.5, gh - 0.6, rampAt(this.pos.x, this.pos.z));
+    let g = Math.max(gh * 0.5, gh - 0.6, rampAt(this.pos.x, this.pos.z), DECKS.length ? deckAt(this.pos.x, this.pos.z, this.pos.y) : -Infinity);
     // (ROADMAP 11.20: up steps on teeth, down onto a roof when it flies - game/fuse.js)
     if ((this.fz || this.fzSink) && this.game.fuse) g = this.game.fuse.floor(this, g);
     // (ROADMAP 11.23: the lab's mission - its bridge, its island)
@@ -1569,6 +1588,8 @@ export const RAMPS = [
 
 // how high a ramp's top is at (x, z), coming up it from its low end (0: not on one)
 export function rampAt(x, z) {
+  // (ROADMAP 15.4: drawn ones can cross - the highest of them under it)
+  let best = 0;
   for (const r of RAMPS) {
     const dx = x - r.x;
     const dz = z - r.z;
@@ -1576,9 +1597,28 @@ export function rampAt(x, z) {
     const fz = Math.cos(r.yaw);
     const along = dx * fx + dz * fz;
     const across = -dx * fz + dz * fx;
-    if (along >= 0 && along <= r.len && Math.abs(across) <= r.w / 2) return (along / r.len) * r.h;
+    if (along >= 0 && along <= r.len && Math.abs(across) <= r.w / 2) best = Math.max(best, (along / r.len) * r.h);
   }
-  return 0;
+  return best;
+}
+
+// (ROADMAP 15.4) bridges drawn from one point to another: decks a car drives over - { x, z (its near
+// end), y0, y1 (its ends' heights), yaw, len, w }. Under it, it is no floor (a car goes under a bridge)
+export const DECKS = [];
+export function deckAt(x, z, y) {
+  let best = -Infinity;
+  for (const d of DECKS) {
+    const dx = x - d.x;
+    const dz = z - d.z;
+    const fx = Math.sin(d.yaw);
+    const fz = Math.cos(d.yaw);
+    const along = dx * fx + dz * fz;
+    const across = -dx * fz + dz * fx;
+    if (along < -0.3 || along > d.len + 0.3 || Math.abs(across) > d.w / 2) continue;
+    const dy = d.y0 + ((d.y1 - d.y0) * clamp(along, 0, d.len)) / d.len;
+    if (dy <= y + 1.1 && dy > best) best = dy;
+  }
+  return best;
 }
 
 // (the dark pen comes out as the road's own ink: the marks are drawn grey, rubbed in)

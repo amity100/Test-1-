@@ -7,6 +7,10 @@ import { ITEMS as CAT_ITEMS, CAT_NAME as CAT_NAMES } from './itemcat.js';
 import { gunOf } from './partsum.js';
 import { INKS } from './freeform.js';
 import { clamp } from '../core/util.js';
+import { PAR, PAR_ORDER, readPar, parSay, WORLD_PAR, WORLD_NAME, WORLD_ICON, parOpen, PAR_GATE } from './inkparts.js';
+import { WORLD_SAY } from './gadgets.js';
+import { BLUEPRINTS } from './blueprints.js';
+import { worldSay } from '../ui/freedraw.js';
 
 // (ROADMAP 11.25) The part pen: a category said, a thing drawn - the game knows which of them.
 //
@@ -297,12 +301,14 @@ export class PartPen {
   constructor(fz) {
     this.fz = fz;
     this.game = fz.game;
-    // the category the pen draws in now
+    // the category the pen draws in now (ROADMAP 15.3: 'par' - a part chosen, then drawn: this.par)
     this.cat = 'func';
+    this.par = 'wing';
     this.isOpen = false;
     // the last of each category made: { weapon, func, armor, last } (the slots)
     this.book = this.loadBook();
-    if (this.book.last && PEN_CATS.includes(this.book.last)) this.cat = this.book.last;
+    if (this.book.last && (PEN_CATS.includes(this.book.last) || this.book.last === 'par')) this.cat = this.book.last;
+    if (this.book.par && PAR[this.book.par]) this.par = this.book.par;
     // the ink flying to its place: { v, from (px lines), to (the car's frame, a point for each), side,
     // c, t0, part, ms } - and ink that was none of them, going: { from, c, t0 }
     this.flights = [];
@@ -374,7 +380,7 @@ export class PartPen {
 
   // the category to draw in: tapped, or 1-3. The drawing still wet is read in it now
   pick(cat) {
-    if (!PEN_CATS.includes(cat)) return;
+    if (!PEN_CATS.includes(cat) && cat !== 'par') return;
     const changed = cat !== this.cat;
     this.cat = cat;
     this.book.last = cat;
@@ -390,6 +396,28 @@ export class PartPen {
     }
     this.showRow();
     this.showLegend();
+  }
+
+  // (ROADMAP 15.3) the part to draw, of the drawn parts: wings, a turbo, a rotor... (a touch, or 1-6)
+  choosePar(type) {
+    if (!PAR[type] && !WORLD_PAR.includes(type)) return;
+    // (ROADMAP 15.5: not open yet in the story - where it is to be had)
+    if (PAR[type] && !parOpen(this.game, type)) {
+      const play = this.game.gear && this.game.gear.play;
+      this.game.hud.toast(`${PAR[type].name} עוד נעול — ${play ? play.lockSay(PAR_GATE[type]) : ''}`, 'info', 3);
+      this.game.audio.play('click', 0.3);
+      return;
+    }
+    this.par = type;
+    this.book.par = type;
+    if (this.cat !== 'par') this.pick('par');
+    else this.saveBook();
+    this.game.audio.play('click', 0.4);
+    this.made = null;
+    this.legSig = '';
+    this.showLegend();
+    const fd = this.game.freedraw;
+    if (fd && fd.group.length) this.feel(fd.group.map((st) => st.P), null, true);
   }
 
   // ------------------------------------------------------------------ the drawing, read
@@ -444,7 +472,7 @@ export class PartPen {
     }
     this.liveAt = t;
     const o = this.own();
-    this.live = o && strokes.length ? this.read(strokes, o) : null;
+    this.live = o && strokes.length ? (this.cat === 'par' ? { par: this.par, item: null, text: PAR[this.par] ? PAR[this.par].how : WORLD_SAY[this.par], ok: true } : this.read(strokes, o)) : null;
     this.showLive(strokes);
     this.showLegend();
   }
@@ -465,9 +493,10 @@ export class PartPen {
   // (game/freedraw.js finishGroup) the drawing done: what it is, on the car - the ink flies there
   // first. None of the category's things: it says so, and the ink goes. strokes: lines of screen px,
   // inkI its ink. true if something went on
-  make(strokes, inkI = 1) {
+  make(strokes, inkI = 1, caps = null) {
     const g = this.game;
     const fz = this.fz;
+    if (this.cat === 'par') return this.makePar(strokes, inkI, caps);
     this.tipping = false;
     this.showTip();
     this.live = null;
@@ -516,6 +545,117 @@ export class PartPen {
     // (ROADMAP 11.27: a designed one - what it does, said once it has taken shape, not over it)
     if (L && L.T3) this.later = { at: performance.now() + FLY_MS + TIDY_MS + FILL_MS, item, res };
     else this.tell(item, res);
+    this.legSig = '';
+    this.showLegend();
+    return true;
+  }
+
+  // (ROADMAP 15.3) the part chosen, as drawn: as big as the lines are in metres, where they meet the
+  // car, the way they go (game/inkparts.js) - the game's own model of it made so, the ink flying there.
+  // Said at once: what it does now, and what it makes with what is on already
+  makePar(strokes, inkI, caps) {
+    const g = this.game;
+    const fz = this.fz;
+    this.live = null;
+    this.showLive();
+    const lines = strokes.filter((L) => L && L.length >= 2);
+    const o = this.own();
+    if (!o || !lines.length) return false;
+    const type = this.par;
+    const from = lines.map((L) => L.map((q) => q.slice()));
+    // (ROADMAP 15.4) a ramp, a bridge, a barrier: the line on the road, not on the car
+    if (WORLD_PAR.includes(type)) return this.makeWorld(type, lines, from, inkI);
+    const cs = (caps || []).filter(Boolean);
+    const part = cs.length ? readPar(type, cs, o.ctx, inkI, g.time) : null;
+    if (!part || part.why) {
+      this.flights.push({ v: null, from, c: inkI, t0: performance.now() });
+      g.audio.play('rubber', 0.5);
+      g.hud.toast(part && part.why ? part.why : `${PAR[type].name}: ${PAR[type].how}`, 'bad', 3.2);
+      return false;
+    }
+    fz.justAdded = part;
+    fz.popDelay = FLY_MS;
+    const res = fz.onVehicle(o.v, part);
+    fz.justAdded = null;
+    fz.popDelay = 0;
+    if (!res) return false;
+    fz.stats.made++;
+    fz.stats.byType[part.type] = (fz.stats.byType[part.type] || 0) + 1;
+    fz.last = { kind: 'veh', ref: o.v, part, t: g.time, rt: performance.now(), alts: [], M: null };
+    this.flights.push({ v: o.v, from, at: part.at.slice(), c: inkI, t0: performance.now(), part, a: 1 });
+    const say = parSay(part, o.v);
+    g.hud.toast(`${say.name}: ${say.text}${say.combo ? ` · ✦ ${say.combo}` : ''}`, 'good', 4.4);
+    g.audio.play('magic', 0.4);
+    this.made = { v: o.v, cat: 'par', item: null, par: type, part, rt: performance.now() };
+    this.tally.made++;
+    this.legSig = '';
+    this.showLegend();
+    return true;
+  }
+
+  // (ROADMAP 15.5) the car as it is now - its drawn parts, their sizes, places and ways - kept as an
+  // invention under a name (one it has already: its next version); made again from the pen on foot
+  saveInvention(name = null) {
+    const g = this.game;
+    const v = g.player.inVehicle;
+    const INV = g.inventions;
+    if (!v || !INV) return false;
+    const done = (n) => {
+      const r = INV.store(n, v);
+      if (!r.ok) {
+        g.hud.toast(r.why, 'bad', 3);
+        return;
+      }
+      g.audio.play('cheer', 0.5);
+      g.hud.toast(`✦ נשמרה: ${r.o.name}${r.o.v > 1 ? ` (גרסה ${r.o.v})` : ''} — ${g.touch ? 'העיפרון' : 'Q'} ← "המצאות", ונגיעה בה מביאה אותה עם כל החלקים`, 'good', 4.4);
+      this.legSig = '';
+      this.showLegend();
+    };
+    if (name) return done(name), true;
+    const names = INV.names(v);
+    const choices = names.map((n) => ({ label: n, fn: () => done(n) }));
+    choices.push({
+      label: 'שם משלכם…',
+      fn: () => {
+        let n = null;
+        try {
+          n = window.prompt('איך לקרוא להמצאה?', names[0] || '');
+        } catch (e) {
+          n = null;
+        }
+        if (n) done(n);
+      },
+    });
+    const same = INV.list.filter((o) => o.base && v.bp && o.base.bp === v.bp.id).slice(0, 1);
+    for (const o of same) choices.push({ label: `גרסה חדשה של "${o.name}"`, fn: () => done(o.name) });
+    g.dialog.show('המצאה חדשה', 'איך לקרוא לה?', choices);
+    return true;
+  }
+
+  // (ROADMAP 15.4) a ramp, a bridge, a barrier drawn from the car: its last line laid on the world -
+  // there it goes up, for its ink; the city still slow a moment
+  makeWorld(type, lines, from, inkI) {
+    const g = this.game;
+    const G = g.gadgets;
+    if (!G) return false;
+    const r = G.fromLine(type, G.lineOnWorld(lines[lines.length - 1]));
+    if (!r.ok) {
+      this.flights.push({ v: null, from, c: inkI, t0: performance.now() });
+      g.audio.play('rubber', 0.5);
+      g.hud.toast(r.why, 'bad', 3.2);
+      return false;
+    }
+    const bp = BLUEPRINTS[type];
+    const cost = bp ? 6 + (bp.difficulty || 1) * 3 : 9;
+    if (g.ink && g.ink.level < cost) {
+      g.hud.toast(`ל${WORLD_NAME[type]} צריך ${cost} דיו, ויש ${Math.floor(g.ink.level)}`, 'bad', 3);
+      return false;
+    }
+    if (g.ink) g.ink.spend(cost);
+    G.raise(r.id, r.s, 1.6);
+    g.audio.play('magic', 0.45);
+    g.hud.toast(worldSay(r), 'good', 3.4);
+    this.made = { v: null, cat: 'par', item: null, par: type, rt: performance.now() };
     this.legSig = '';
     this.showLegend();
     return true;
@@ -906,7 +1046,7 @@ export class PartPen {
     const row = document.createElement('div');
     row.className = 'pp-row';
     row.id = 'pp-row';
-    row.innerHTML = `${PEN_CATS.map((c, i) => `<button class="pp-part" data-c="${c}" aria-label="${CAT_NAME[c]}">${CAT_ICON[c]}<b>${CAT_NAME[c]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</button>`).join('')}<button class="pp-ok" data-ok="1" aria-label="שימו על המכונית">✓</button>`;
+    row.innerHTML = `${PEN_CATS.map((c, i) => `<button class="pp-part" data-c="${c}" aria-label="${CAT_NAME[c]}">${CAT_ICON[c]}<b>${CAT_NAME[c]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</button>`).join('')}<button class="pp-part pp-par" data-c="par" aria-label="חלקים לציור חופשי"><svg viewBox="0 0 24 24"><path d="M4 20 L8 19 L19 8 L16 5 L5 16 Z"/><path d="M14 7 L17 10"/></svg><b>חלקים</b>${touch ? '' : '<kbd>4</kbd>'}</button><button class="pp-ok" data-ok="1" aria-label="שימו על המכונית">✓</button>`;
     const act = (e) => {
       const b = e.target.closest('button');
       if (!b) return;
@@ -927,6 +1067,20 @@ export class PartPen {
     const leg = document.createElement('div');
     leg.className = 'pp-legend';
     leg.id = 'pp-legend';
+    leg.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-save]')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.saveInvention();
+        return;
+      }
+      const b = e.target.closest('[data-par]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.choosePar(b.dataset.par);
+    });
+    stop(leg);
     document.body.appendChild(leg);
     const live = document.createElement('div');
     live.className = 'pp-live';
@@ -992,11 +1146,25 @@ export class PartPen {
     const lit = L && L.item ? L.item : M ? M.item : '';
     // (ROADMAP 11.28: what is open yet, and at what level - game/gearplay.js)
     const play = this.game.gear && this.game.gear.play;
-    const sig = `${this.isOpen}|${this.cat}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}|${play ? `${play.state.open.length}:${JSON.stringify(play.state.lv)}` : ''}`;
+    const vv = this.game.player.inVehicle;
+    const sig = `${this.isOpen}|${this.cat}|${this.par}|${vv && vv.fuse ? vv.fuse.parts.length : 0}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}|${play ? `${play.state.open.length}:${JSON.stringify(play.state.lv)}` : ''}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     el.classList.toggle('on', this.isOpen);
     if (!this.isOpen) return;
+    // (ROADMAP 15.3) the drawn parts: chosen with a touch (or 1-6), how each is drawn under them
+    el.classList.toggle('par', this.cat === 'par');
+    if (this.cat === 'par') {
+      const touch = !!this.game.touch;
+      const all = [...PAR_ORDER, ...WORLD_PAR];
+      const its = all.map((t, i) => `<div class="pp-it${t === this.par ? ' on' : ''}${WORLD_PAR.includes(t) ? ' world' : ''}${PAR[t] && !parOpen(this.game, t) ? ' lock' : ''}" data-par="${t}"><svg viewBox="0 0 24 24">${PAR[t] ? PAR[t].icon : WORLD_ICON[t]}</svg><b>${PAR[t] ? PAR[t].name : WORLD_NAME[t]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</div>`).join('');
+      const said = M && M.par && PAR[M.par] ? 'לא יצא כמו שרציתם? ↶ ומציירים שוב — הגודל, המקום והכיוון הם מה שתציירו' : PAR[this.par] ? PAR[this.par].how : `${WORLD_NAME[this.par]} על הכביש: ${WORLD_SAY[this.par]}`;
+      // (ROADMAP 15.5) what is on it now, kept as an invention of yours
+      const v = this.game.player.inVehicle;
+      const canSave = !!(this.game.inventions && v && v.fuse && v.fuse.parts.some((q) => q.par));
+      el.innerHTML = `<div class="pp-say">${said}</div><div class="pp-its">${its}</div>${canSave ? '<button class="pp-inv-save" data-save="1">✦ לשמור כהמצאה</button>' : ''}`;
+      return;
+    }
     const say = L && L.ask ? 'עוד פרט אחד יכריע' : M ? 'לא יצא נכון? ↶ ומציירים שוב' : 'מה שמציירים — זה מה שיוצא';
     const items = CATS[this.cat].map((id) => {
       const shut = play && !play.isOpen(id);
@@ -1023,6 +1191,10 @@ export class PartPen {
       this.liveName.textContent = `${ITEMS[L.ask[0]].name}?`;
       this.liveText.textContent = 'עוד פרט אחד יכריע';
       this.liveText.classList.add('bad');
+    } else if (L.par) {
+      this.liveName.textContent = PAR[L.par] ? PAR[L.par].name : WORLD_NAME[L.par];
+      this.liveText.textContent = L.text;
+      this.liveText.classList.remove('bad');
     } else if (L.item) {
       this.liveName.textContent = L.vname || ITEMS[L.item].name;
       this.liveText.textContent = L.text;
@@ -1032,7 +1204,7 @@ export class PartPen {
       this.liveText.textContent = 'לא זוהה עדיין';
       this.liveText.classList.add('bad');
     }
-    el.classList.toggle('none', !L.item || !!L.ask);
+    el.classList.toggle('none', (!L.item && !L.par) || !!L.ask);
     el.classList.add('on');
     this.place(strokes);
     this.showTip();

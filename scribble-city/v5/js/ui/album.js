@@ -24,6 +24,7 @@ const FOUND_IN = {
   // (ROADMAP 9.2)
   ladder: 'בחנות כלי העבודה',
   ramp: 'בחנות כלי העבודה',
+  barrier: 'בחנות כלי העבודה',
   bridge: 'בחנות כלי העבודה',
   key: 'בחנות כלי העבודה',
   umbrella: 'במכולות שבשדרות',
@@ -31,7 +32,7 @@ const FOUND_IN = {
 
 // (ROADMAP 15.2) what every new game starts knowing how to draw: a paint gun, a car, a ramp - made
 // with a touch from the first minute; the rest found in the city, then learned once
-export const START_KIT = ['paint', 'car', 'ramp'];
+export const START_KIT = ['paint', 'car', 'ramp', 'barrier'];
 
 // the library's shelves
 // (v5, ROADMAP 11.36: the weapons first - the paint gun, the pencil rifle, the eraser bazooka...)

@@ -3,7 +3,9 @@
 // made by an older version still loads (what it does not know keeps its default).
 
 const KEY = 'scribble-city-v5-settings';
-const VERSION = 1;
+// (2: ROADMAP 15.5 - "every blueprint open" was on by itself until then; a save from before keeps
+// everything else, and begins the story)
+const VERSION = 2;
 
 export const DEFAULTS = {
   sound: true,
@@ -37,8 +39,10 @@ export const DEFAULTS = {
   // faster here, tried in play; 'two'; 'one', as it always was
   pens: 'auto',
   // (ROADMAP 9.1, not with ?classic) every blueprint open to draw from the start; off, they are
-  // found in the city (photographed, bought, won, given: ui/album.js)
-  allOpen: true,
+  // found in the city (photographed, bought, won, given: ui/album.js). (ROADMAP 15.5: the sandbox -
+  // every drawing and part open, the ink without end; off (as a new game begins), the story: found,
+  // learned and opened up along the way)
+  allOpen: false,
   // (ROADMAP 11.24, the lab) drawing on your car: 'parts' - a category said (a weapon, movement,
   // protection), then drawn, and which of its things it is read (game/partpen.js, ROADMAP 11.25);
   // 'old', as in 11.22 - what is drawn is read as what it looks like, where it is
@@ -61,6 +65,7 @@ export class Settings {
     if (!s || typeof s !== 'object' || !s.v || !(s.version <= VERSION)) return;
     for (const k of Object.keys(DEFAULTS)) {
       if (!(k in s.v)) continue;
+      if (k === 'allOpen' && !(s.version >= 2)) continue;
       const d = DEFAULTS[k];
       const x = s.v[k];
       if (d === null ? x === null || typeof x === 'boolean' : typeof x === typeof d) this.v[k] = x;

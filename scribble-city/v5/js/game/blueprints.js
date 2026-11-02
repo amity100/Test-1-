@@ -768,6 +768,25 @@ Object.assign(BLUEPRINTS, {
     fills: [{ poly: [[4, 82], [88, 30], [96, 36], [14, 84]], color: '#d8b07a' }],
     scale: 1,
   },
+  // (ROADMAP 15.4) a barrier drawn as a line on the ground, there and as long as drawn
+  barrier: {
+    id: 'barrier',
+    name: 'מחסום',
+    the: 'המחסום',
+    g: 'm',
+    nameEn: 'ROAD BARRIER',
+    kind: 'tool',
+    difficulty: 1,
+    desc: 'קו על הקרקע — והמחסום עומד שם, באורך שציירתם (עד 14 מטר). מכוניות ושוטרים נעצרים בו.',
+    strokes: [
+      { label: 'קורה', en: 'board', pts: close([[6, 40], [94, 40], [94, 54], [6, 54]]) },
+      { label: 'רגל', en: 'leg', pts: [[16, 54], [16, 86]] },
+      { label: 'רגל', en: 'leg', pts: [[84, 54], [84, 86]] },
+      { label: 'פס', en: 'stripe', pts: [[30, 40], [40, 54]] },
+    ],
+    fills: [{ poly: [[6, 40], [94, 40], [94, 54], [6, 54]], color: '#e8574a' }],
+    scale: 1,
+  },
   bridge: {
     id: 'bridge',
     name: 'גשר',
@@ -1024,7 +1043,7 @@ export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
 // (ROADMAP 11.41: the catalog's cars - in the album, not with ?classic; no boards of their own)
 export const BLUEPRINT_CARS = ['muscle', 'limo', 'hyper', 'monster', 'armored', 'firetruck'];
 // (ROADMAP 9.2: in the album, not with ?classic; to be had in the shops, no boards of their own)
-export const BLUEPRINT_TOOLS = ['ladder', 'ramp', 'bridge', 'umbrella', 'key'];
+export const BLUEPRINT_TOOLS = ['ladder', 'ramp', 'bridge', 'barrier', 'umbrella', 'key'];
 
 export function blueprintBounds(bp) {
   let x0 = Infinity;

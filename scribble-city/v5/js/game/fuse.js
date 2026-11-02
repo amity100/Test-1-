@@ -8,6 +8,7 @@ import { isWater } from './rides.js';
 import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
 import { gunOf } from './partsum.js';
+import { applyPar, finishPar, airPar, preDrivePar } from './inkparts.js';
 import { HANDLING } from './vehicles.js';
 import { groundHeight, WATER_X, WEST_EDGE } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
@@ -38,6 +39,10 @@ import { clamp, damp } from '../core/util.js';
 // On what is yours (your car, you, your gun) it stays; on others (a police car, a gangster, a man in
 // the street) it does its thing for a few seconds and goes.
 
+// (ROADMAP 15.3) a jet's and a propeller's own axis - its flame out of -z - and the way drawn
+const _jetAxis = new THREE.Vector3(0, 0, -1);
+const _jetDir = new THREE.Vector3();
+
 export const PARTS = {
   wheel: { name: 'גלגל', mark: 'עיגול, נמוך', cost: 8, col: [0.24, 0.24, 0.28] },
   wing: { name: 'כנף', mark: 'צורה צרה או קו — לצד', cost: 10, col: [0.95, 0.93, 0.88] },
@@ -55,6 +60,8 @@ export const PARTS = {
   chute: { name: 'מצנח', mark: 'קשת ∩ — מעליה', cost: 10, col: [0.95, 0.38, 0.32] },
   float: { name: 'מצופים', mark: 'צורה ארוכה — מתחת, לאורכה', cost: 12, col: [1, 0.55, 0.16] },
   spike: { name: 'קוצים', mark: '', cost: 10, col: [0.62, 0.64, 0.7] },
+  // (ROADMAP 15.3) a propeller drawn on it, pushing the way its wind does not go (game/inkparts.js)
+  prop: { name: 'מדחף', mark: '', cost: 10, col: [0.86, 0.78, 0.5] },
   // (ROADMAP 11.22) anything else drawn out of your car: on it as drawn
   deco3: { name: 'קישוט', mark: '', cost: 6, col: [0.94, 0.92, 0.86] },
   // (ROADMAP 11.28) a thing of the pen with its own behaviour (game/gear.js)
@@ -64,7 +71,7 @@ export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 
 
 // what a part can be put on
 const ALLOW = {
-  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3', 'gear']),
+  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3', 'gear', 'prop']),
   hero: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'chute']),
   weapon: new Set(['barrel', 'blade', 'spring', 'magnet', 'jet', 'wing', 'armor', 'rotor']),
   car: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel', 'barrel', 'wing']),
@@ -1002,7 +1009,7 @@ export class Fuse {
     // (one of each, but two guns and three things of your own; a wheel replaces the wheels - the
     // part pen's, ROADMAP 11.25: one of each of its things, a flamethrower and a jet both on)
     const same = R.parts.filter((p) => p.type === part.type && (p.item || '') === (part.item || ''));
-    const keep = part.type === 'barrel' ? 1 : part.type === 'deco3' ? 2 : 0;
+    const keep = part.type === 'barrel' ? 1 : part.type === 'deco3' ? 2 : part.par && (part.type === 'jet' || part.type === 'prop') ? 1 : 0;
     while (same.length > keep) this.removeVeh(v, same.shift(), true);
     if (R.parts.length >= MAX_ON_VEH) this.removeVeh(v, R.parts[0], true);
     R.parts.push(part);
@@ -1110,6 +1117,15 @@ export class Fuse {
     for (const p of R.parts) {
       has[p.type] = p;
       const n = p.n;
+      // (ROADMAP 15.3) chosen, then drawn: as big as drawn, where drawn, the way drawn
+      // (game/inkparts.js) - its wheels as any drawn wheel
+      if (p.par) {
+        fz.par = true;
+        if (p.type !== 'wheel') {
+          applyPar(v, p, H, fz, vehDims(v));
+          continue;
+        }
+      }
       if (p.type === 'wheel') {
         const big = p.v === 'big' || p.v === 'bigteeth';
         const teeth = p.v === 'teeth' || p.v === 'bigteeth';
@@ -1250,12 +1266,14 @@ export class Fuse {
     }
     // (ROADMAP 11.26) wings: fast enough for their size, it flies on them - not if it can never go
     // that fast
-    if (has.wing && has.wing.v !== 'spoiler') {
+    if (has.wing && has.wing.v !== 'spoiler' && !has.wing.par) {
       fz.takeoff = takeoffOf(has.wing.n, H.mass);
       fz.wingFly = fz.takeoff <= H.top * WING_TOP;
     }
     // (ROADMAP 11.28: and what they make of each other)
     if (this.game.gear) this.game.gear.finish(v, R.parts, H, fz);
+    // (ROADMAP 15.3: the drawn ones, together - their lift for its weight, the names of what they make)
+    finishPar(v, H, fz);
     v.handling = H;
     v.spaceIsMine = B.spaceIsMine || !!(fz.jump || fz.rotor || fz.balloon || fz.vtol || fz.wingFly);
     v.fuseUp = !!(fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || fz.vtol || fz.wingFly);
@@ -1322,23 +1340,27 @@ export class Fuse {
           root.add(m);
           R.models.push({ p, m, role: 'wing' });
         } else {
-          const span = clamp(p.n.span || 1.4, 0.7, 4);
-          const chord = clamp(p.n.chord || 0.7, 0.35, 1.6);
+          const span = clamp(p.n.span || 1.4, 0.7, p.par ? 5.6 : 4);
+          const chord = clamp(p.n.chord || 0.7, 0.35, p.par ? 2.2 : 1.6);
           for (const s of [1, -1]) {
             const m = wingModel(span, chord, s, col);
-            m.position.set(s * (D.hw - 0.08), K ? beltAt(K, 0.5) - 0.12 : D.h * 0.5, clamp(p.at[2], -D.hl * 0.5, D.hl * 0.4));
+            m.position.set(s * (D.hw - 0.08), K ? beltAt(K, 0.5) - 0.12 : D.h * 0.5, p.par ? clamp(p.at[2], -D.hl * 0.85, D.hl * 0.85) : clamp(p.at[2], -D.hl * 0.5, D.hl * 0.4));
             root.add(m);
             R.models.push({ p, m, role: 'wing', side: s });
           }
         }
       } else if (p.type === 'rotor') {
         const m = rotorModel(clamp(p.n.span || 2.5, 1, 9), col);
-        m.position.set(0, (K ? K.roofY : D.h) - 0.02, clamp(p.at[2], -D.hl * 0.3, D.hl * 0.3));
+        m.position.set(p.par ? clamp(p.at[0], -D.hw * 0.5, D.hw * 0.5) : 0, (K ? K.roofY : D.h) - 0.02, clamp(p.at[2], -D.hl * (p.par ? 0.7 : 0.3), D.hl * (p.par ? 0.7 : 0.3)));
         root.add(m);
         R.models.push({ p, m, role: 'rotor' });
       } else if (p.type === 'jet') {
         const m = jetModel(p.n.len || 1, col);
-        if (p.v === 'front') {
+        if (p.par && p.dir) {
+          // (ROADMAP 15.3) where it was drawn, pointing its flame the way it was drawn
+          m.position.set(p.at[0], Math.max(0.25, p.at[1]), p.at[2]);
+          m.quaternion.setFromUnitVectors(_jetAxis, _jetDir.set(p.dir[0], p.dir[1], p.dir[2]).normalize());
+        } else if (p.v === 'front') {
           m.position.set(0, D.h * 0.32, D.hl + 0.05);
           m.rotation.y = Math.PI;
         } else if (p.v === 'under') {
@@ -1440,6 +1462,13 @@ export class Fuse {
           root.add(pm);
           R.models.push({ p, m: pm, role: 'prop' });
         }
+      } else if (p.type === 'prop') {
+        // (ROADMAP 15.3) a propeller where it was drawn, its wind the way it was drawn
+        const m = propModel(clamp((p.n.len || 1) * 0.42, 0.25, 0.95), col);
+        m.position.set(p.at[0], Math.max(0.3, p.at[1]), p.at[2]);
+        if (p.dir) m.quaternion.setFromUnitVectors(_jetAxis, _jetDir.set(p.dir[0], p.dir[1], p.dir[2]).normalize());
+        root.add(m);
+        R.models.push({ p, m, role: 'prop' });
       } else if (p.type === 'spike') {
         const m = spikesModel(D, clamp(p.n.len || 1, 0.4, 3), K ? K.clear : 0.25);
         root.add(m);
@@ -1494,6 +1523,8 @@ export class Fuse {
   preDrive(v, dt, input) {
     const fz = v.fz;
     if (!fz || !input) return;
+    // (ROADMAP 15.3) drawn parts: their fuel, their pushes, off on what they lift together
+    if (fz.par) preDrivePar(this, v, dt, input);
     const up = input.keys.has('Space') || input.flyUp;
     const press = input.wasPressed('Space') || (input.flyUp && !v.fzUpWas);
     v.fzUpWas = !!input.flyUp;
@@ -1529,6 +1560,8 @@ export class Fuse {
   air(v, dt, input) {
     const fz = v.fz;
     if (!fz) return 1;
+    // (ROADMAP 15.3) drawn parts: every lift and push added up (game/inkparts.js)
+    if (fz.par) return airPar(this, v, dt, input);
     const g = this.game;
     const up = !!input && (input.keys.has('Space') || input.flyUp);
     const down = !!input && (input.keys.has('KeyC') || input.flyDown);

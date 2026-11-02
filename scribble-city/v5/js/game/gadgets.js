@@ -3,7 +3,8 @@ import { damp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { Route } from '../world/roofs.js';
 import { Kit, itemMats, linC } from './items.js';
-import { RAMPS, rampAt } from './vehicles.js';
+import { RAMPS, rampAt, DECKS } from './vehicles.js';
+import { makeFrame, localBox } from './materialize.js';
 
 // (ROADMAP 9.2, not with ?classic) Drawings that solve problems.
 //   - a ladder: drawn facing a building's wall, it stands against it up to the roof (over the
@@ -25,7 +26,14 @@ import { RAMPS, rampAt } from './vehicles.js';
 // What is put up stays where it was put, three of each at most (a fourth takes the place of the
 // oldest), and in the save.
 
-export const PLACED = new Set(['ladder', 'ramp', 'bridge', 'spring']);
+export const PLACED = new Set(['ladder', 'ramp', 'bridge', 'spring', 'dbridge', 'barrier']);
+// (ROADMAP 15.4) what is drawn as a line on the world and comes up the way it was drawn - and how
+export const DRAWN_ON = new Set(['ramp', 'bridge', 'barrier']);
+export const WORLD_SAY = {
+  ramp: 'קו על הכביש: מאיפה היא מתחילה ולאן היא עולה. קצר — תלולה, ארוך — מתונה',
+  bridge: 'קו מנקודה לנקודה: מקצה גג לגג, מעל רחוב או מים (עד 40 מ\')',
+  barrier: 'קו על הקרקע: איפה שהוא יעמוד, באורך שתציירו (עד 14 מ\')',
+};
 const MAX_EACH = 3;
 const RUNG = 0.32;
 // how fast a drawn umbrella lets you come down (m/s; a fall hurts from 17)
@@ -52,9 +60,19 @@ const WHY = {
   far: 'אין צד שני קרוב מספיק (עד 28 מטר), בגובה שלכם',
   short: 'הצד השני קרוב מאוד: אפשר פשוט לקפוץ',
   noroofs: 'אין כאן לאן לטפס',
+  // (ROADMAP 15.4: drawn on the world, as a line)
+  line: 'ציירו קו על הקרקע: מאיפה מתחילים ולאן',
+  rampLine: 'רמפה: קו על הכביש — מאיפה היא מתחילה ולאן היא עולה. קצר — תלולה, ארוך — מתונה',
+  rampFree: 'אין כאן מקום פנוי וישר לרמפה (בלי קיר, מכונית או מים)',
+  bridgeLine: 'גשר: קו מנקודה לנקודה — מקצה גג לגג, מעל רחוב, מעל מים',
+  bridgeLong: 'ארוך מדי — גשר מצויר מגיע עד 40 מטר',
+  bridgeSteep: 'תלול מדי לגשר — הקצוות רחוקים מדי בגובה',
+  barrierLine: 'מחסום: קו על הקרקע, איפה שהוא יעמוד',
+  barrierFree: 'המחסום נכנס בקיר או במכונית — ציירו אותו במקום פנוי',
 };
 
 const _d = new THREE.Vector3();
+const _gd = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _v = new THREE.Vector3();
@@ -67,6 +85,25 @@ function hash(n) {
 }
 
 // a box turned about its own x axis (a plank up a slope): its middle, its size, the turn
+// (ROADMAP 15.4) a drawn line as a few straight lengths: points off the straight by less than tol left out
+function simplify(P, tol) {
+  if (P.length < 3) return P.slice();
+  const [ax, az] = P[0];
+  const [bx, bz] = P[P.length - 1];
+  const L = Math.hypot(bx - ax, bz - az) || 1e-6;
+  let far = 0;
+  let at = 0;
+  for (let i = 1; i < P.length - 1; i++) {
+    const d = Math.abs((bx - ax) * (az - P[i][1]) - (ax - P[i][0]) * (bz - az)) / L;
+    if (d > far) {
+      far = d;
+      at = i;
+    }
+  }
+  if (far <= tol) return [P[0], P[P.length - 1]];
+  return simplify(P.slice(0, at + 1), tol).slice(0, -1).concat(simplify(P.slice(at), tol));
+}
+
 function tbox(K, mat, cx, cy, cz, sx, sy, sz, rx, color, ry = 0) {
   const g = new THREE.BoxGeometry(sx, sy, sz);
   if (rx) g.rotateX(rx);
@@ -152,6 +189,69 @@ function bridgeModel(K, M, s, grade) {
     for (const t of [L * 0.5, L - 0.25]) for (const x of [-0.7, 0.7]) K.box(M.matte, x - 0.1, -3.2, t - 0.1, x + 0.1, -0.05, t + 0.1, WOOD_DARK);
     for (const x of [-0.25, 0.25]) K.box(M.matte, x - 0.03, -1.9, L + 0.05, x + 0.03, 0.9, L + 0.11, WOOD);
     for (let yy = -1.7; yy < 0.7; yy += RUNG) K.box(M.matte, -0.25, yy - 0.02, L + 0.06, 0.25, yy + 0.02, L + 0.1, WOOD_LIGHT);
+  }
+}
+
+// (ROADMAP 15.4) a bridge drawn from point to point, in its own frame: from its near end at the origin
+// along z, len long, dy higher at its far end, w wide - planks across, beams under them, a rail
+// either side on its posts, a post down at each end
+function dbridgeModel(K, M, s) {
+  const L = s.len;
+  const dy = s.dy;
+  const slope = Math.atan2(dy, L);
+  const y = (t) => (dy * t) / L;
+  const W = s.w;
+  let i = 0;
+  for (let t = 0.05; t < L - 0.1; t += 0.36) {
+    i++;
+    const c = hash(i * 5.3) * 0.12;
+    tbox(K, M.matte, 0, y(t + 0.16) - 0.04, t + 0.16, W, 0.08, 0.32, -slope, linC(0.72 - c, 0.52 - c, 0.31 - c * 0.6));
+  }
+  for (const x of [-W * 0.32, 0, W * 0.32]) tbox(K, M.matte, x, dy / 2 - 0.2, L / 2, 0.16, 0.22, Math.hypot(L, dy), -slope, WOOD_DARK);
+  for (const x of [-W / 2 + 0.05, W / 2 - 0.05]) {
+    const n = Math.max(2, Math.round(L / 1.8));
+    for (let k = 0; k <= n; k++) {
+      const t = (k / n) * (L - 0.1) + 0.05;
+      K.box(M.matte, x - 0.05, y(t) - 0.08, t - 0.05, x + 0.05, y(t) + 1.0, t + 0.05, WOOD_DARK);
+    }
+    tbox(K, M.matte, x, dy / 2 + 0.98, L / 2, 0.09, 0.08, Math.hypot(L, dy), -slope, WOOD);
+    tbox(K, M.matte, x, dy / 2 + 0.5, L / 2, 0.05, 0.05, Math.hypot(L, dy), -slope, WOOD);
+  }
+  // (posts down to what it stands on at either end)
+  for (const t of [0.15, L - 0.15]) for (const x of [-W / 2 + 0.2, W / 2 - 0.2]) K.box(M.matte, x - 0.09, y(t) - 1.4, t - 0.09, x + 0.09, y(t) - 0.05, t + 0.09, WOOD_DARK);
+}
+
+// (ROADMAP 15.4) a barrier drawn along the ground, in the world's own frame from s.x, s.z: each length
+// of it a row of striped boards on legs, as long as drawn (s.pts: the line, flat)
+function barrierModel(K, M, s) {
+  const P = s.pts;
+  for (let i = 0; i + 1 < P.length; i++) {
+    const ax = P[i][0] - s.x;
+    const az = P[i][1] - s.z;
+    const bx = P[i + 1][0] - s.x;
+    const bz = P[i + 1][1] - s.z;
+    const L = Math.hypot(bx - ax, bz - az);
+    if (L < 0.05) continue;
+    const ry = Math.atan2(bx - ax, bz - az);
+    const cx = (ax + bx) / 2;
+    const cz = (az + bz) / 2;
+    const y0 = s.ys ? s.ys[i] : 0;
+    // two boards, red and white in turns, and the legs under them
+    for (const [h, t] of [[0.62, 0.22], [0.98, 0.2]]) {
+      const n = Math.max(1, Math.round(L / 0.7));
+      for (let k = 0; k < n; k++) {
+        const u = (k + 0.5) / n - 0.5;
+        tbox(K, M.matte, cx + Math.sin(ry) * u * L, y0 + h, cz + Math.cos(ry) * u * L, 0.08, t, L / n + 0.01, 0, (k + (h > 0.8 ? 1 : 0)) % 2 ? linC(0.94, 0.93, 0.9) : linC(0.86, 0.16, 0.14), ry);
+      }
+    }
+    const legs = Math.max(2, Math.round(L / 1.6) + 1);
+    for (let k = 0; k < legs; k++) {
+      const u = (k / (legs - 1) - 0.5) * (L - 0.2);
+      const lx = cx + Math.sin(ry) * u;
+      const lz = cz + Math.cos(ry) * u;
+      tbox(K, M.matte, lx, y0 + 0.55, lz, 0.07, 1.1, 0.07, 0, RAMP_LEG, ry);
+      tbox(K, M.matte, lx, y0 + 0.04, lz, 0.6, 0.08, 0.14, 0, RAMP_LEG, ry + Math.PI / 2);
+    }
   }
 }
 
@@ -511,6 +611,17 @@ export class Gadgets {
         O.set(s.x + s.dx * s.sA, s.yA, s.z + s.dz * s.sA);
         q.setFromAxisAngle(UP, Math.atan2(s.dx, s.dz));
       }
+    } else if (id === 'dbridge') {
+      const sp = s || { len: 4, dy: 0, w: 3 };
+      dbridgeModel(K, M, sp);
+      if (s) {
+        O.set(s.x, s.y0, s.z);
+        q.setFromAxisAngle(UP, s.yaw);
+      }
+    } else if (id === 'barrier') {
+      const sp = s || { x: 0, z: 0, pts: [[-1.5, 0], [1.5, 0]] };
+      barrierModel(K, M, sp);
+      if (s) O.set(s.x, 0, s.z);
     } else if (id === 'spring') {
       springModel(K, M, s || { coils: 4 }, grade);
       if (s) {
@@ -583,6 +694,48 @@ export class Gadgets {
         along(t0, t1, 0.78, 0.9, y, y + 1.05, 'prop');
       }
     }
+    if (id === 'dbridge') {
+      // (ROADMAP 15.4) the deck for cars (game/vehicles.js deckAt), and for feet: squares along it
+      const D = { x: s.x, z: s.z, y0: s.y0, y1: s.y0 + s.dy, yaw: s.yaw, len: s.len, w: s.w };
+      DECKS.push(D);
+      it.deck = D;
+      const col = g.world.collision;
+      const boxes = (it.boxes = []);
+      const fx = Math.sin(s.yaw);
+      const fz = Math.cos(s.yaw);
+      const n = Math.max(1, Math.ceil(s.len / 0.6));
+      for (let k = 0; k < n; k++) {
+        const t = ((k + 0.5) / n) * s.len;
+        const cx = s.x + fx * t;
+        const cz = s.z + fz * t;
+        const y = s.y0 + (s.dy * t) / s.len;
+        const h = s.w * 0.4;
+        boxes.push(col.addBox(cx - h, cz - h, cx + h, cz + h, y - 0.3, y, 'prop'));
+      }
+    } else if (id === 'barrier') {
+      // (ROADMAP 15.4) a wall a car stops at (and a police car), people go round it; the traffic sees
+      // it as a car stopped there
+      const col = g.world.collision;
+      const boxes = (it.boxes = []);
+      const near = (it.nears = []);
+      const P = s.pts;
+      for (let i = 0; i + 1 < P.length; i++) {
+        const [ax, az] = P[i];
+        const [bx, bz] = P[i + 1];
+        const L = Math.hypot(bx - ax, bz - az);
+        const n = Math.max(1, Math.ceil(L / 0.5));
+        const y0 = s.ys ? s.ys[i] : 0;
+        for (let k = 0; k <= n; k++) {
+          const cx = ax + ((bx - ax) * k) / n;
+          const cz = az + ((bz - az) * k) / n;
+          boxes.push(col.addBox(cx - 0.2, cz - 0.2, cx + 0.2, cz + 0.2, y0, y0 + 1.15, 'prop'));
+        }
+        const o = { cx: (ax + bx) / 2, cz: (az + bz) / 2, r: Math.max(0.6, L / 2), back: 0 };
+        near.push(o);
+        this.ramps.push(o);
+      }
+      if (g.world.nav && g.world.nav.refresh) g.world.nav.refresh();
+    }
     this.placed.push(it);
     this.stats[id] = (this.stats[id] || 0) + 1;
     // (three of each at most: the oldest goes)
@@ -619,6 +772,152 @@ export class Gadgets {
       if (j >= 0) this.ramps.splice(j, 1);
     }
     if (it.boxes) for (const id of it.boxes) g.world.collision.remove(id);
+    // (ROADMAP 15.4: a drawn bridge's deck, a barrier's place in the traffic's way)
+    if (it.deck) {
+      const k = DECKS.indexOf(it.deck);
+      if (k >= 0) DECKS.splice(k, 1);
+    }
+    if (it.nears) for (const o of it.nears) {
+      const j = this.ramps.indexOf(o);
+      if (j >= 0) this.ramps.splice(j, 1);
+    }
+  }
+
+  // ---------------------------------------------------------------- drawn on the world (ROADMAP 15.4)
+  // a line drawn on the world - P: the points where it lands ([x, y, z], from where it began) - as
+  // the thing: a ramp (where it starts, which way, how long: short is steep, long is gentle), a bridge
+  // (from its first point to its last), a barrier (along it). { ok, id, s } or { why }
+  fromLine(id, P) {
+    const g = this.game;
+    const col = g.world.collision;
+    if (!P || P.length < 2) return { why: WHY.line };
+    const a = P[0];
+    const b = P[P.length - 1];
+    const r2 = (v) => Math.round(v * 100) / 100;
+    if (id === 'ramp') {
+      const dx = b[0] - a[0];
+      const dz = b[2] - a[2];
+      const L0 = Math.hypot(dx, dz);
+      if (L0 < 1.8) return { why: WHY.rampLine };
+      const len = Math.min(16, Math.max(2.6, L0));
+      const fx = dx / L0;
+      const fz = dz / L0;
+      const W = 3.4;
+      const H = Math.min(1.7, len * 0.62);
+      const y0 = groundHeight(a[0], a[2]);
+      const cars = [...g.traffic.list, ...(g.traffic.parked || []), ...g.vehicles.list.filter((v) => !v.dead && v !== g.player.inVehicle)];
+      for (let t = 0; t <= len + 0.01; t += len / 5) {
+        for (const c of [-W / 2, 0, W / 2]) {
+          const px = a[0] + fx * t + fz * c;
+          const pz = a[2] + fz * t - fx * c;
+          const gy = groundHeight(px, pz);
+          if (gy < -0.45 || Math.abs(gy - y0) > 0.3 || col.pointInside(px, y0 + 0.6, pz, 0.15) || col.pointInside(px, y0 + 1.4, pz, 0.15)) return { why: WHY.rampFree };
+        }
+      }
+      const mx = a[0] + fx * (len / 2);
+      const mz = a[2] + fz * (len / 2);
+      if (cars.some((c) => !c.gone && Math.hypot(c.pos.x - mx, c.pos.z - mz) < 3.4)) return { why: WHY.rampFree };
+      return { ok: true, id: 'ramp', s: { x: r2(a[0]), z: r2(a[2]), yaw: Math.round(Math.atan2(fx, fz) * 1e4) / 1e4, len: r2(len), w: W, h: r2(H), drawn: true } };
+    }
+    if (id === 'bridge') {
+      const dx = b[0] - a[0];
+      const dz = b[2] - a[2];
+      const L = Math.hypot(dx, dz);
+      if (L < 3) return { why: WHY.bridgeLine };
+      if (L > 40) return { why: WHY.bridgeLong };
+      const dy = b[1] - a[1];
+      if (Math.abs(dy) / L > 0.45) return { why: WHY.bridgeSteep };
+      return { ok: true, id: 'dbridge', s: { x: r2(a[0]), z: r2(a[2]), y0: r2(a[1]), dy: r2(dy), yaw: Math.round(Math.atan2(dx, dz) * 1e4) / 1e4, len: r2(L), w: 3.2 } };
+    }
+    if (id === 'barrier') {
+      // (its line, straightened into a few lengths - no longer than 14 m in all)
+      const flat = simplify(P.map((p) => [p[0], p[2]]), 0.6);
+      let total = 0;
+      const pts = [flat[0]];
+      for (let i = 1; i < flat.length && total < 14; i++) {
+        const [px, pz] = pts[pts.length - 1];
+        let [qx, qz] = flat[i];
+        const L = Math.hypot(qx - px, qz - pz);
+        if (total + L > 14) {
+          const k = (14 - total) / L;
+          qx = px + (qx - px) * k;
+          qz = pz + (qz - pz) * k;
+        }
+        total += Math.hypot(qx - px, qz - pz);
+        pts.push([r2(qx), r2(qz)]);
+      }
+      if (total < 1.2) return { why: WHY.barrierLine };
+      const ys = [];
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const mx = (pts[i][0] + pts[i + 1][0]) / 2;
+        const mz = (pts[i][1] + pts[i + 1][1]) / 2;
+        ys.push(r2(Math.max(0, this.floorAt(mx, mz, a[1] + 1))));
+        for (let k = 0; k <= 4; k++) {
+          const px = pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * k) / 4;
+          const pz = pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * k) / 4;
+          if (col.pointInside(px, ys[i] + 0.7, pz, 0.1) || groundHeight(px, pz) < -0.45) return { why: WHY.barrierFree };
+        }
+      }
+      return { ok: true, id: 'barrier', s: { x: pts[0][0], z: pts[0][1], pts, ys, len: r2(total) } };
+    }
+    return { why: WHY.line };
+  }
+
+  // (ROADMAP 15.4) a point on the screen (px) down onto what is under it - the street, a roof, a
+  // ledge, the pier: [x, y, z], or null (the sky)
+  groundAt(sx, sy, maxD = 70) {
+    const g = this.game;
+    const cam = g.camera;
+    const d = _gd.set((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
+    const o = cam.position;
+    let t0 = 0.4;
+    for (let t = 0.4; t < maxD; t += 0.4) {
+      const x = o.x + d.x * t;
+      const y = o.y + d.y * t;
+      const z = o.z + d.z * t;
+      if (y <= this.floorAt(x, z, y + 0.05)) {
+        // (closer: halving the step back)
+        let lo = t0;
+        let hi = t;
+        for (let k = 0; k < 6; k++) {
+          const m = (lo + hi) / 2;
+          const yy = o.y + d.y * m;
+          if (yy <= this.floorAt(o.x + d.x * m, o.z + d.z * m, yy + 0.05)) hi = m;
+          else lo = m;
+        }
+        const X = o.x + d.x * hi;
+        const Z = o.z + d.z * hi;
+        return [X, this.floorAt(X, Z, o.y + d.y * hi + 0.05), Z];
+      }
+      t0 = t;
+    }
+    return null;
+  }
+
+  // a line drawn on the screen (px) laid on the world, at most n points of it
+  lineOnWorld(P, n = 24) {
+    const out = [];
+    const step = Math.max(1, Math.floor(P.length / n));
+    for (let i = 0; i < P.length; i += step) {
+      const q = this.groundAt(P[i][0], P[i][1]);
+      if (q) out.push(q);
+    }
+    const last = P[P.length - 1];
+    const q = this.groundAt(last[0], last[1]);
+    if (q) out.push(q);
+    return out;
+  }
+
+  // (ROADMAP 15.4) up out of its drawing where it was drawn - pace: the show's (game/materialize.js)
+  raise(id, s, pace = 1.3) {
+    const g = this.game;
+    const m = this.model(id, 'perfect', s);
+    const frame = makeFrame(g.camera, m.O, m.q, 1, localBox(m.group));
+    m.group.matrix.copy(frame.matrix);
+    m.group.matrixWorldNeedsUpdate = true;
+    g.scene.add(m.group);
+    g.materialize.begin({ frame, root: m.group, speed: pace });
+    return this.place(id, 'perfect', s, m.group);
   }
 
   // into the scene where it goes, and up (the save)

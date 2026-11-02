@@ -603,6 +603,9 @@ function makePart(type, caps, ctx, o) {
     n.len = clamp(reach, 0.4, 3);
     shape.W = clamp(shortM * 0.55, 0.18, 0.7);
     v = face === 'front' ? 'front' : face === 'bottom' ? 'under' : 'back';
+    // (ROADMAP 15.3: which way it points - where it meets the car to its far end - the way its flame
+    // goes, for whoever asks)
+    if (reach > 0.05) dir = [(far[0] - A[0]) / reach, (far[1] - A[1]) / reach, (far[2] - A[2]) / reach];
   } else if (type === 'barrel') {
     n.len = clamp(reach, 0.5, 3.2);
     n.r = clamp(shortM * 0.5, 0.05, 0.22);

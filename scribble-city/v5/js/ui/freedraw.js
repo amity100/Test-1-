@@ -22,6 +22,8 @@ import { DrawMemory } from '../game/drawmemory.js';
 import { matchCatalog, gradeOf, drawnWhole, tooEarly, MATCH_MIN, PICK_SLACK, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
 import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
+import { PAR_ORDER, WORLD_PAR } from '../game/inkparts.js';
+import { DRAWN_ON, WORLD_SAY } from '../game/gadgets.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -164,6 +166,21 @@ function frontSpot(game, v, box) {
     }
   }
   return null;
+}
+
+// (ROADMAP 15.5) an invention's parts, in a word each
+const PART_ABBR = { wing: 'כנפיים', jet: 'טורבו', rotor: 'רוטור', prop: 'מדחף', wheel: 'גלגלי שטח', armor: 'שריון' };
+
+// (ROADMAP 15.4) a thing drawn on the world, in a few words: what came of the line
+export function worldSay(r) {
+  const s = r.s;
+  if (r.id === 'ramp') {
+    const deg = Math.round((Math.atan2(s.h, s.len) * 180) / Math.PI);
+    return `רמפה: ${s.len.toFixed(1)} מ', ${deg}° — ${deg >= 24 ? 'תלולה: קפיצה גבוהה וקצרה' : deg >= 14 ? 'קפיצה רגילה' : 'מתונה: קפיצה ארוכה ונמוכה'}`;
+  }
+  if (r.id === 'dbridge') return `גשר: ${s.len.toFixed(1)} מ'${Math.abs(s.dy) > 0.5 ? `, ${s.dy > 0 ? 'עולה' : 'יורד'} ${Math.abs(s.dy).toFixed(1)} מ'` : ''} — גם למכוניות`;
+  if (r.id === 'barrier') return `מחסום: ${s.len.toFixed(1)} מ' — מכוניות ושוטרים נעצרים בו`;
+  return '';
 }
 
 // how it came out, in a word
@@ -376,7 +393,8 @@ export class FreeDraw {
           this.render();
         }, LONG_PRESS * 1000);
       }
-      this.hintEl.classList.add('gone');
+      // (ROADMAP 15.4: a line on the world - what it would make, by the pen as it is drawn)
+      if (!this.world || this.penOn()) this.hintEl.classList.add('gone');
       game.audio.scratchStart();
       this.render();
     };
@@ -391,6 +409,7 @@ export class FreeDraw {
       this.render();
       // (ROADMAP 11.24: in a car, the part pen - what the drawing makes, by the pen)
       if (moved && this.penOn()) this.feelPen();
+      else if (moved && this.world) this.feelWorld();
     };
     const up = (e) => {
       if (!this.cur || e.pointerId !== this.cur.pid) return;
@@ -464,6 +483,12 @@ export class FreeDraw {
       const t = e.target.closest('[data-s]');
       if (t) {
         this.setShelf(t.dataset.s);
+        return;
+      }
+      // (ROADMAP 15.5) an invention: here at once, its parts and all
+      const iv = e.target.closest('[data-inv]');
+      if (iv) {
+        this.summonInv(iv.dataset.inv);
         return;
       }
       const it = e.target.closest('[data-i]');
@@ -571,21 +596,28 @@ export class FreeDraw {
       } else if (k === 'Delete') {
         mine();
         this.clear();
-      } else if (this.penOn() && /^(Digit|Numpad)[1-3]$/.test(k)) {
-        // (ROADMAP 11.24: in a car - the part to draw, 1-3)
+      } else if (this.penOn() && this.game.fuse.pen.cat === 'par' && /^(Digit|Numpad)[1-9]$/.test(k)) {
+        // (ROADMAP 15.3: the drawn parts - 1-6 the part to draw; ROADMAP 15.4: 7-9 a ramp, a bridge, a
+        // barrier on the road)
         mine();
-        this.game.fuse.pen.pick(PEN_CATS[+k.slice(-1) - 1]);
+        this.game.fuse.pen.choosePar([...PAR_ORDER, ...WORLD_PAR][+k.slice(-1) - 1]);
+      } else if (this.penOn() && /^(Digit|Numpad)[1-4]$/.test(k)) {
+        // (ROADMAP 11.24: in a car - the part to draw, 1-3; ROADMAP 15.3: 4 - the drawn parts)
+        mine();
+        this.game.fuse.pen.pick(k.slice(-1) === '4' ? 'par' : PEN_CATS[+k.slice(-1) - 1]);
       } else if (this.catalogOn() && (k === 'ArrowLeft' || k === 'ArrowRight')) {
         // (ROADMAP 15.2: the shelves - weapons, vehicles, gear - with the arrows; right to left, as
         // the legend reads)
         mine();
-        const i = SHELVES.indexOf(this.shelf);
-        this.setShelf(SHELVES[(i + (k === 'ArrowLeft' ? 1 : SHELVES.length - 1)) % SHELVES.length]);
+        const SH = this.game.inventions ? [...SHELVES, 'inv'] : SHELVES;
+        const i = SH.indexOf(this.shelf);
+        this.setShelf(SH[(i + (k === 'ArrowLeft' ? 1 : SH.length - 1)) % SH.length]);
       } else if (this.catalogOn() && /^(Digit|Numpad)[1-9]$/.test(k)) {
         // (ROADMAP 15.2: on foot, the shelf's known things by their numbers - made at once)
         mine();
         const it = this.legEl && this.legEl.querySelector(`[data-n="${k.slice(-1)}"]`);
-        if (it) this.quick(it.dataset.i);
+        if (it && it.dataset.inv) this.summonInv(it.dataset.inv);
+        else if (it) this.quick(it.dataset.i);
       } else if (/^(Digit|Numpad)[0-5]$/.test(k)) {
         // (what is drawn: 1-5 each of the five, together; 0 anything - the weapons wait)
         mine();
@@ -652,6 +684,7 @@ export class FreeDraw {
     }
     if (fz && fz.pen && fz.pen.isOpen) fz.pen.close();
     this.isOpen = false;
+    this.world = null;
     this.shutAt = performance.now();
     this.menu(false);
     this.partMenu(-1);
@@ -736,6 +769,11 @@ export class FreeDraw {
       c.p = [];
       for (let i = 0; i <= 8; i++) c.p.push([x + Math.cos((i / 8) * Math.PI * 2) * 0.008, y + Math.sin((i / 8) * Math.PI * 2) * 0.008]);
     }
+    // (ROADMAP 15.4) on foot, a ramp, a bridge, a barrier said: this line is it, on the world
+    if (this.world && !this.penOn()) {
+      this.worldStroke(c);
+      return;
+    }
     // (in a car, the regular game's too: the lines go onto it - ROADMAP 11.30)
     if (this.game.lab || this.carOpen) {
       this.steady(c);
@@ -756,7 +794,9 @@ export class FreeDraw {
     // as it is on the screen; no quick signs here, nothing read. Done when the pen rests
     if (this.penOn()) {
       const U = this.U;
-      this.group.push({ pen: true, P: raw.map(([x, y]) => [x * U, y * U]), c: c.c });
+      // (ROADMAP 15.3: and where each point of it is on the car - a part chosen is read by that)
+      const fz = this.game.fuse;
+      this.group.push({ pen: true, P: raw.map(([x, y]) => [x * U, y * U]), c: c.c, cap: fz && fz.pen && fz.pen.cat === 'par' ? fz.capture(raw, U, c.c) : null });
       this.groupAt = performance.now() + (this.game.touch ? PEN_REST_TOUCH : PEN_REST);
       this.bake();
       this.render();
@@ -874,7 +914,7 @@ export class FreeDraw {
       this.strokes = [];
       this.bake();
       this.render();
-      if (fz && fz.pen) fz.pen.make(caps.map((st) => st.P), inkI);
+      if (fz && fz.pen) fz.pen.make(caps.map((st) => st.P), inkI, caps.map((st) => st.cap));
       return;
     }
     if (!fz || !raws.length) return;
@@ -1535,7 +1575,7 @@ export class FreeDraw {
   }
 
   setShelf(shelf) {
-    if (!SHELVES.includes(shelf) || shelf === this.shelf) return;
+    if ((!SHELVES.includes(shelf) && shelf !== 'inv') || shelf === this.shelf) return;
     this.shelf = shelf;
     if (this.force && BLUEPRINTS[this.force] && shelfOf(BLUEPRINTS[this.force]) !== shelf) this.force = null;
     this.memKey = null;
@@ -1595,7 +1635,7 @@ export class FreeDraw {
     const ids = on ? shelfIds(this.shelf) : [];
     const al = this.game.album;
     const st = (id) => (!al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
-    const sig = `${on}|${this.shelf}|${lit}|${this.force || ''}|${ids.map(st).join('')}`;
+    const sig = `${on}|${this.shelf}|${lit}|${this.force || ''}|${this.world || ''}|${ids.map(st).join('')}|${this.game.inventions ? this.game.inventions.list.map((o) => o.id + o.v).join() : ''}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     document.body.classList.toggle('fd-catalog', on);
@@ -1603,7 +1643,17 @@ export class FreeDraw {
       el.innerHTML = '';
       return;
     }
-    const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('');
+    const INV = this.game.inventions;
+    const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('') + (INV ? `<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ המצאות</button>` : '');
+    if (this.shelf === 'inv' && INV) {
+      // (ROADMAP 15.5) what you invented and kept: a touch (or its number) and it is here, parts and all
+      const its = INV.list.length
+        ? INV.list.map((o, i) => `<div class="fd-it known inv" data-inv="${o.id}"${i < 9 ? ` data-n="${i + 1}"` : ''}>${i < 9 ? `<em class="fd-n">${i + 1}</em>` : ''}${bpSvg(BLUEPRINTS[(o.base && o.base.bp) || 'car'] || BLUEPRINTS.car)}<b>${esc(o.name)}</b><i>${o.parts.map((q) => PART_ABBR[q.type] || '').join(' ')}${o.v > 1 ? ` · גרסה ${o.v}` : ''}</i></div>`).join('')
+        : '<div class="fd-inv-none">עוד אין המצאות: במכונית — העיפרון, "חלקים", מציירים כנפיים, טורבו, רוטור... ושומרים</div>';
+      el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${this.game.touch ? 'נגיעה — וההמצאה כאן, עם כל החלקים' : 'נגיעה או 1–9 — וההמצאה כאן, עם כל החלקים'}</span></div><div class="fd-its">${its}</div>`;
+      document.body.classList.toggle('fd-catalog', on);
+      return;
+    }
     // (ROADMAP 15.2) the ones you know: a touch (or its number) and it is made, no drawing; the ones
     // found and not learned yet: drawn once over their lines; the rest: where they are to be found
     let n = 0;
@@ -1612,7 +1662,7 @@ export class FreeDraw {
       const s = st(id);
       const lock = s === 'x';
       const num = s === 'k' && n < 9 ? ++n : 0;
-      const cls = ['fd-it', lit === id ? 'on' : '', this.force === id ? 'pick' : '', lock ? 'lock' : '', s === 'l' ? 'learn' : '', s === 'k' ? 'known' : ''].filter(Boolean).join(' ');
+      const cls = ['fd-it', lit === id ? 'on' : '', this.force === id || this.world === id ? 'pick' : '', lock ? 'lock' : '', s === 'l' ? 'learn' : '', s === 'k' ? 'known' : ''].filter(Boolean).join(' ');
       const tag = s === 'l' ? '✎ ללמוד' : lock ? '🔒 לא נמצא' : `${costOfBp(bp)} דיו`;
       return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${tag}</i></div>`;
     }).join('');
@@ -1624,23 +1674,25 @@ export class FreeDraw {
   // the lines of its own blueprint are inked before you for a blink and fly onto it, and it is real
   // in under a second, at its best (what counts is that you know it, not the hand). A vehicle stands
   // right before you, facing the way you look, and you are in it the moment it is real
-  quick(id) {
+  quick(id, inv = null) {
     const game = this.game;
     const bp = BLUEPRINTS[id];
     const al = game.album;
     if (!bp || !al || !this.catalogOn() || game.player.mode !== 'foot') return false;
-    if (!al.known(id)) {
+    if (!inv && !al.known(id)) {
       if (al.toLearn(id)) return this.learn(id);
       game.hud.toast(`${bp.name}: עוד לא נמצא — ${al.where(id)}`, 'info', 3.2);
       game.audio.play('click', 0.3);
       return false;
     }
+    // (ROADMAP 15.4) a ramp, a bridge, a barrier: drawn on the world - the next line, where it goes
+    if (!inv && game.gadgets && DRAWN_ON.has(id)) return this.worldMode(id);
     const why = game.gadgets ? game.gadgets.cannot(id) : null;
     if (why) {
       game.hud.toast(why, 'info', 2.8);
       return false;
     }
-    const cost = costOfBp(bp);
+    const cost = inv && game.inventions ? game.inventions.inkOf(inv, costOfBp(bp)) : costOfBp(bp);
     const ink = game.ink;
     if (ink && ink.level < cost) {
       game.hud.toast(`ל${bp.name} צריך ${cost} דיו, ויש ${Math.floor(ink.level)} — הדיו חוזר לאט, או בקבוק בחנות כתיבה`, 'bad', 3);
@@ -1661,8 +1713,94 @@ export class FreeDraw {
     this.bake();
     this.render();
     const R = { bp, kind: id, grade: 'perfect', score: 1, cost, remembered: false };
-    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle' });
+    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle', parts: inv ? inv.parts : null, name: inv ? inv.name : null });
     this.stats.quick = (this.stats.quick || 0) + 1;
+    return true;
+  }
+
+  // (ROADMAP 15.5) an invention kept: its car summoned the quick way, its parts on it once it is real
+  summonInv(id) {
+    const INV = this.game.inventions;
+    const o = INV && INV.list.find((x) => x.id === id);
+    if (!o) return false;
+    const bpId = o.base && o.base.bp && BLUEPRINTS[o.base.bp] && BLUEPRINTS[o.base.bp].kind === 'vehicle' ? o.base.bp : 'car';
+    return this.quick(bpId, o);
+  }
+
+  // (ROADMAP 15.4) the next line is drawn on the world: a ramp, a bridge, a barrier - where it lands
+  // is where it goes, as long as it is, the way it goes
+  worldMode(id) {
+    const game = this.game;
+    if (!this.isOpen) this.show();
+    if (!this.isOpen) return false;
+    this.world = id;
+    this.wFelt = '';
+    this.strokes = [];
+    this.force = null;
+    this.bake();
+    this.render();
+    game.hud.toast(`${BLUEPRINTS[id].name}: ${WORLD_SAY[id]}`, 'info', 3.6);
+    game.audio.play('pageflip', 0.35);
+    this.legSig = '';
+    this.showLegend();
+    return true;
+  }
+
+  // (ROADMAP 15.4) while a line is drawn on the world: what it would make there, or why not - said by
+  // the pen before any ink is spent (a few times a second)
+  feelWorld() {
+    const now = performance.now();
+    if (now - (this.wFeltAt || 0) < 140) return;
+    this.wFeltAt = now;
+    const c = this.cur;
+    const G = this.game.gadgets;
+    if (!c || !G || c.p.length < 2) return;
+    const U = this.U;
+    const r = G.fromLine(this.world, G.lineOnWorld(c.p.map(([x, y]) => [x * U, y * U]), 10));
+    this.wFelt = r.ok ? `✓ ${worldSay(r)} · עוזבים — וזה קם` : `⚠ ${r.why}`;
+    this.hintEl.textContent = this.wFelt;
+    this.hintEl.classList.remove('gone');
+  }
+
+  // the line drawn on the world (ROADMAP 15.4): what it makes there - or why not (and the next line
+  // tries again)
+  worldStroke(c) {
+    const game = this.game;
+    const G = game.gadgets;
+    const id = this.world;
+    const bp = BLUEPRINTS[id];
+    const U = this.U;
+    const r = G.fromLine(id, G.lineOnWorld(c.p.map(([x, y]) => [x * U, y * U])));
+    this.wFelt = '';
+    if (!r.ok) {
+      game.hud.toast(r.why, 'bad', 3.2);
+      game.audio.play('rubber', 0.5);
+      this.strokes = [];
+      this.bake();
+      this.render();
+      return false;
+    }
+    const cost = costOfBp(bp);
+    if (game.ink && game.ink.level < cost) {
+      game.hud.toast(`ל${bp.name} צריך ${cost} דיו, ויש ${Math.floor(game.ink.level)}`, 'bad', 3);
+      this.strokes = [];
+      this.bake();
+      this.render();
+      return false;
+    }
+    if (game.ink) game.ink.spend(cost);
+    this.strokes = [{ p: c.p, c: c.c }];
+    this.bake();
+    this.render();
+    this.flyAway();
+    this.strokes = [];
+    this.world = null;
+    this.bake();
+    G.raise(r.id, r.s, 1.3);
+    this.stats.world = (this.stats.world || 0) + 1;
+    game.audio.play('magic', 0.5);
+    game.hud.toast(worldSay(r), 'good', 3.4);
+    this.close();
     return true;
   }
 
@@ -1705,6 +1843,12 @@ export class FreeDraw {
         plan.frame = makeFrame(cam, v.pos, sp.q, 1, box);
         plan.autoEnter = true;
       }
+    }
+    // (ROADMAP 15.5) an invention: its parts go on once its car is real (game/game.js)
+    if (opts.parts && plan.vehicle) {
+      plan.vehicle.pendingParts = opts.parts;
+      plan.vehicle.invName = opts.name || null;
+      game.pendingInv = plan.vehicle;
     }
     // (drawn on the run: it goes along with you as it turns real)
     plan.follow = new THREE.Vector3();
@@ -1795,14 +1939,20 @@ export class FreeDraw {
     // (ROADMAP 11.27: nor over a thing taking shape on the car, nor while its name is up)
     const pp = this.penOn() ? game.fuse.pen : null;
     const shaping = !!(pp && (pp.flights.length || pp.focus || (pp.made && !pp.made.old)));
-    this.hintEl.classList.toggle('gone', has || !!this.cur || shaping);
+    // (ROADMAP 15.4: a ramp, a bridge, a barrier said - how to draw it, and as it is drawn, what it makes)
+    const W = !!this.world && !this.penOn();
+    this.hintEl.classList.toggle('gone', W ? false : has || !!this.cur || shaping);
     this.signsEl.classList.toggle('hidden', !this.game.lab || has || !!this.cur || !!this.game.player.inVehicle);
     // (ROADMAP 11.20) the parts you can draw onto things, how each is drawn - (ROADMAP 11.22) behind
     // its "?", on foot; none in a car: what you draw on it is what it gets
     const helpOk = !!this.game.fuse && !this.carOpen;
     this.fuseEl.classList.toggle('hidden', !helpOk || !this.fuseHelp || has || !!this.cur);
     this.el.querySelector('#fd-fuse-q').classList.toggle('hidden', !helpOk || has || !!this.cur);
-    this.hintEl.textContent = game.fuse && game.player.inVehicle
+    this.hintEl.textContent = W
+      ? this.cur && this.wFelt
+        ? this.wFelt
+        : `${BLUEPRINTS[this.world].name}: ${WORLD_SAY[this.world]}${game.touch ? '' : ' · Esc — ביטול'}`
+      : game.fuse && game.player.inVehicle
       ? this.penOn()
         ? game.touch
           ? 'בחרו נשק, תנועה או הגנה, וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע'

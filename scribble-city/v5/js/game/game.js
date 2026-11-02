@@ -15,6 +15,7 @@ import { Civilians } from './civilians.js';
 import { Traffic } from './traffic.js';
 import { HUD } from '../ui/hud.js';
 import { Album, ALL_OPEN } from '../ui/album.js';
+import { Inventions } from './inventions.js';
 import { Materialize } from './materialize.js';
 import { Signals } from './signals.js';
 import { Perf } from './perf.js';
@@ -213,6 +214,8 @@ export class Game {
     // the outlines redrawn a few times a second: lively on a big screen, calm on a phone
     this.boilOn = !this.touch;
     this.album = new Album(this);
+    // (ROADMAP 15.5) the inventions you made and kept (not with ?classic)
+    this.inventions = new Inventions(this);
     this.album.onAdd = (id) => this.onAlbumAdd(id);
     this.airdraw = new AirDraw(this);
     this.airsketch = new AirSketches(this);
@@ -1161,6 +1164,23 @@ export class Game {
       this.materialize.update(dt);
       // (ROADMAP 15.2) a vehicle summoned with a touch: in it the moment it is real (still on foot,
       // still beside it)
+      // (ROADMAP 15.5) an invention made again: once its car is real, its parts on it one after another
+      const iv = this.pendingInv;
+      if (iv && !iv.materializing) {
+        this.pendingInv = null;
+        if (!iv.dead && this.fuse) {
+          iv.pendingParts.forEach((q, i) => {
+            const part = { ...q, n: { ...q.n }, at: q.at ? q.at.slice() : [0, 1, 0], dir: q.dir ? q.dir.slice() : null, par: true, t0: this.time, cost: 0, id: Math.random().toString(36).slice(2, 8) };
+            this.fuse.justAdded = part;
+            this.fuse.popDelay = 120 + i * 180;
+            this.fuse.onVehicle(iv, part);
+            this.fuse.justAdded = null;
+            this.fuse.popDelay = 0;
+          });
+          if (iv.invName) this.hud.toast(`✦ ${iv.invName} — מוכנה`, 'good', 2.6);
+        }
+        iv.pendingParts = null;
+      }
       const av = this.autoEnterV;
       if (av && !av.materializing) {
         this.autoEnterV = null;
