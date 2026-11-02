@@ -951,7 +951,8 @@ export class PersonRenderer {
     // them are about, their parts are drawn in a handful of draws; phones fewer of them
     this.touch = touch;
     this.folkLines = 0;
-    const nK = Math.min(FOLK.length, touch ? 16 : 32);
+    // (ROADMAP 14.9: 72 kinds of them, a phone 36)
+    const nK = Math.min(FOLK.length, touch ? 36 : 72);
     FOLK_ON.n = nK;
     const A = (this.atlas = new FolkAtlas(touch, nK));
     const FP = (o, name) => {

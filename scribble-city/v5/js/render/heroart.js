@@ -72,7 +72,8 @@ const ORDER = ['face', 'jacket', 'pants', 'hair', 'boots'];
 export class FolkAtlas {
   constructor(touch, n) {
     this.n = n;
-    this.cols = 8;
+    // (ROADMAP 14.9: more of them - 12 across, so that no picture is taller than a card's 4096)
+    this.cols = n > 32 ? 12 : 8;
     this.rows = Math.ceil(n / this.cols);
     const q = touch ? 0.6 : 1;
     const fw = Math.round(320 * q);

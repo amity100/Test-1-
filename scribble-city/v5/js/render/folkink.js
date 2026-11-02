@@ -61,13 +61,19 @@ export function folkBeard(x, y, kind) {
     const bot = -0.0465 - 0.007 * smooth(0.018, 0.03, ax);
     return Math.max(0, Math.min(1, smooth(top + 0.002, top - 0.003, y) * smooth(bot - 0.002, bot + 0.002, y) * (1 - smooth(0.029, 0.034, ax))));
   }
-  const lift = kind === 'shadow' ? 0 : kind === 'short' ? 0.012 : 0.006;
+  // (ROADMAP 14.9) a goatee: the moustache and a patch down the chin, the cheeks bare
+  if (kind === 'goatee') {
+    const chin = smooth(-0.06, -0.066, y) * smooth(-0.124, -0.112, y) * (1 - smooth(0.019, 0.028, ax));
+    return Math.max(folkBeard(x, y, 'mustache'), Math.max(0, Math.min(1, chin)));
+  }
+  // (a full beard: up the cheeks higher, and down under the jaw)
+  const lift = kind === 'shadow' ? 0 : kind === 'full' ? 0.022 : kind === 'short' ? 0.012 : 0.006;
   const edge = (ax > 0.066 ? 0.026 : ax > 0.052 ? -0.022 + ((ax - 0.052) / 0.014) * 0.048 : ax > 0.03 ? -0.04 + ((ax - 0.03) / 0.022) * 0.018 : -0.041) + lift * smooth(0.02, 0.05, ax);
   let s = smooth(edge + 0.003, edge - 0.006, y);
   if (ax < 0.027 && y < -0.033 && y > -0.045) s = Math.max(s, 0.95 * smooth(0.027, 0.019, ax) * smooth(-0.033, -0.036, y));
   if (ax < 0.025 && y < -0.045 && y > -0.062) s *= 0.05 + 0.95 * smooth(0.019, 0.025, ax);
   s *= 1 - smooth(0.074, 0.086, ax);
-  s *= smooth(kind === 'shadow' ? -0.168 : -0.15, kind === 'shadow' ? -0.14 : -0.128, y);
+  s *= smooth(kind === 'shadow' ? -0.168 : kind === 'full' ? -0.172 : -0.15, kind === 'shadow' ? -0.14 : kind === 'full' ? -0.146 : -0.128, y);
   return Math.max(0, Math.min(1, s));
 }
 
@@ -170,7 +176,7 @@ export function paintFolkFace(c, o = {}) {
     const B = P.beardCol || ['#22160f', '#2c1e16', '#1a120c'];
     const st = (px, py) => folkBeard(xm(px), ym(py), kind);
     const growth = kind === 'mustache' ? (px) => Math.PI / 2 + Math.sign(xm(px)) * (0.25 + Math.abs(xm(px)) * 14) : (px, py) => Math.PI / 2 + xm(px) * 9 * (ym(py) > -0.07 ? 1 : 0.4);
-    const dens = kind === 'shadow' ? 0.55 : kind === 'short' || kind === 'mustache' ? 1.0 : 0.9;
+    const dens = kind === 'shadow' ? 0.55 : kind === 'short' || kind === 'mustache' || kind === 'full' || kind === 'goatee' ? 1.0 : 0.9;
     // (a beard's mass first: its shade under the hairs)
     if (kind !== 'shadow') h.hatch(0, 0, W, H, N(5200), (px, py) => st(px, py) * 0.95, 1.3, 16, 2.0, B, 0.42, 0.6);
     h.hatch(0, 0, W, H, N(2200), (px, py) => st(px, py) * 0.85 * dens, 1.25, 20, 1.6, ['#6a5a6a', '#5a4a58', '#7a6a70'], 0.26);

@@ -124,18 +124,30 @@ export function heroLook() {
 // of the kind asked (how they dress; a woman or a man) among those the renderer made (FOLK_ON), now
 // and then one of the older wardrobe instead
 const FOLK_HOW = { street: ['street', 'denim'], denim: ['denim', 'street'], smart: ['smart', 'chic'], office: ['smart', 'chic'], chic: ['chic', 'smart'], summer: ['denim', 'street'], knit: ['smart', 'denim'], casual: ['street', 'denim'], trench: ['chic', 'smart'] };
+// (ROADMAP 14.9) the one of them used longest ago - so that the people about are all of them different
+// (a kind is used again only once every other kind that could be has been)
+const FOLK_USED = new Float64Array(128);
+let folkTurn = 0;
 export function folkPick(o = {}) {
   const how = o.kind ? FOLK_HOW[o.kind] : null;
-  const ok = [];
+  let ok = [];
   for (let k = 0; k < FOLK_ON.n; k++) {
     const F = FOLK[k];
     if (o.fem !== undefined && !!F.fem !== !!o.fem) continue;
     if (how && F.how && !how.includes(F.how)) continue;
     ok.push(k);
   }
-  return ok.length ? pick(ok) : -1;
+  // (none dressed that way left unused: any of them, so as not to repeat a face)
+  if (ok.length < 6 && how) return folkPick({ fem: o.fem });
+  if (!ok.length) return -1;
+  let least = Infinity;
+  for (const k of ok) least = Math.min(least, FOLK_USED[k]);
+  ok = ok.filter((k) => FOLK_USED[k] === least);
+  const k = pick(ok);
+  FOLK_USED[k] = ++folkTurn;
+  return k;
 }
-export function cityLook(o = {}, share = 0.85) {
+export function cityLook(o = {}, share = 1) {
   if (o.kind && !FOLK_HOW[o.kind]) return civilianLook(o);
   const k = chance(share) ? folkPick(o) : -1;
   return k >= 0 ? folkLook(k) : civilianLook(o);
