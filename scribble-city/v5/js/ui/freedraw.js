@@ -176,7 +176,7 @@ export function worldSay(r) {
   const s = r.s;
   if (r.id === 'ramp') {
     const deg = Math.round((Math.atan2(s.h, s.len) * 180) / Math.PI);
-    return `רמפה: ${s.len.toFixed(1)} מ', ${deg}° — ${deg >= 24 ? 'תלולה: קפיצה גבוהה וקצרה' : deg >= 14 ? 'קפיצה רגילה' : 'מתונה: קפיצה ארוכה ונמוכה'}`;
+    return `רמפה: ${s.len.toFixed(1)} מ', ${deg}° — ${deg >= 24 ? 'תלולה: קפיצה גבוהה ורחוקה' : deg >= 14 ? 'קפיצה בינונית' : 'מתונה: קפיצה נמוכה ונחיתה רכה'}`;
   }
   if (r.id === 'dbridge') return `גשר: ${s.len.toFixed(1)} מ'${Math.abs(s.dy) > 0.5 ? `, ${s.dy > 0 ? 'עולה' : 'יורד'} ${Math.abs(s.dy).toFixed(1)} מ'` : ''} — גם למכוניות`;
   if (r.id === 'barrier') return `מחסום: ${s.len.toFixed(1)} מ' — מכוניות ושוטרים נעצרים בו`;
