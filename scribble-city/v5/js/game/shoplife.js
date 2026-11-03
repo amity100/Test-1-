@@ -3012,21 +3012,28 @@ export class ShopLife {
         return;
       }
       if (at.how === 'head') {
-        // headphones on: the band over the head, the cups at the ears
+        // headphones on: the band over the head, the cups at the ears - turned with the head
         const hc = f.j.headC;
         it.pos.set(hc.x, hc.y - 0.2, hc.z);
-        it.yaw = yaw;
+        it.yaw = f.hf ? Math.atan2(f.hf.x, f.hf.z) : yaw;
         it.tilt = 0;
         it.roll = 0;
         return;
       }
       if (at.how === 'face') {
-        // (ROADMAP 16.7) frames tried on: on the nose, before the eyes
+        // (ROADMAP 16.7) frames tried on: on the nose, before the eyes - the head's own way (its
+        // frame: game/doodle.js headFrame), not the body's: a head turned to the mirror, this way and
+        // that, takes them with it
         const hc = f.j.headC;
-        const fx = Math.sin(yaw);
-        const fz = Math.cos(yaw);
-        it.pos.set(hc.x + fx * 0.088, hc.y + 0.005, hc.z + fz * 0.088);
-        it.yaw = yaw;
+        const hf = f.hf;
+        const k = 0.088 * (f.headScale || 1) * (f.scale || 1);
+        if (hf) {
+          it.pos.set(hc.x + hf.x * k, hc.y + 0.005 + hf.y * k, hc.z + hf.z * k);
+          it.yaw = Math.atan2(hf.x, hf.z);
+        } else {
+          it.pos.set(hc.x + Math.sin(yaw) * k, hc.y + 0.005, hc.z + Math.cos(yaw) * k);
+          it.yaw = yaw;
+        }
         it.tilt = 0;
         it.roll = 0;
         return;
