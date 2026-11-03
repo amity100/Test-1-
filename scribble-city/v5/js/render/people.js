@@ -300,7 +300,9 @@ const PORTRAIT_NEAR = 80;
 const PORTRAIT_FAR = 60;
 const PORTRAIT_FADE = 0.4;
 // (its own outlines inside it - round the eyes, the lips, under the jaw - from this many pixels high)
-const PORTRAIT_LINES = 190;
+// (characters round 3: 190 drew them as dark rims and specks round the eyes of a face across the
+// street - 290, where they are whole lines; out below 245)
+const PORTRAIT_LINES = 290;
 // (in the street too, not only the face lab's - game/facelab.js)
 const PORTRAIT_STREET = true;
 // (ROADMAP 14.9) a phone's: how many drawn so at once, and how many kept made

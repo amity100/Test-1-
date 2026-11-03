@@ -832,6 +832,12 @@ float gWr = 0.0;
 // (characters round) how near the face is: 1 near enough for every stroke, 0 a face a few dozen
 // pixels high; and how far it has come in (uFade - a screen-door dissolve over the city's face)
 float gDet = 1.0;
+// (characters round 3) the pencil's own: its first layer from a face 130 pixels high, all of it by 330;
+// the layer across it (gPen2) and the dark one pressed into the hollows (gPen3) only on a big face -
+// smaller, the strokes are a dark mesh over it, not a drawing
+float gPen = 1.0;
+float gPen2 = 1.0;
+float gPen3 = 1.0;
 uniform float uFade;
 // (characters round) its parts told apart for the outlines (render/pipeline.js edgeAt: round the eyes,
 // the teeth) only while the face is big enough on the screen to draw them whole (render/people.js
@@ -1105,7 +1111,11 @@ void main() {
   // how big the face is on the screen (in the drawing's pixels): a face a few dozen pixels high drawn
   // clean - its colours, its features, its light - its strokes and lines coming in only as it comes
   // near enough to show them (smaller, they would be a grey fuzz on it, moving)
-  gDet = smoothstep(80.0, 170.0, 0.24 / max(length(fwidth(vLP)), 1e-5));
+  float facePx = 0.24 / max(length(fwidth(vLP)), 1e-5);
+  gDet = smoothstep(80.0, 170.0, facePx);
+  gPen = smoothstep(130.0, 330.0, facePx);
+  gPen2 = smoothstep(180.0, 400.0, facePx);
+  gPen3 = smoothstep(230.0, 460.0, facePx);
   gIdK = uIdK;
   {
     // (ROADMAP 14.1) the strokes laid over the face as it is seen from the front, a millimetre a
@@ -1361,10 +1371,10 @@ void main() {
     vec2 h1 = penLayer(p, dpx, dpy, fa, 3.4, 0.95, 101.0, 1.7);
     hk *= mix(vec3(1.0), vec3(0.66, 0.56, 0.52), h1.x * step(fract(h1.y * 7.13), smoothstep(0.16, 0.72, tone)));
     vec2 h2 = penLayer(p, dpx, dpy, fa + 0.95, 3.8, 0.85, 131.0, 1.3);
-    hk *= mix(vec3(1.0), vec3(0.6, 0.52, 0.52), h2.x * step(fract(h2.y * 7.13), smoothstep(0.46, 0.9, tone) * 0.95));
+    hk *= mix(vec3(1.0), vec3(0.6, 0.52, 0.52), h2.x * step(fract(h2.y * 7.13), smoothstep(0.46, 0.9, tone) * 0.95) * max(gPen2, uPLayers.w));
     vec2 h3 = penLayer(p, dpx, dpy, fa - 0.4, 3.0, 1.0, 157.0, 1.0);
-    hk *= mix(vec3(1.0), vec3(0.42, 0.33, 0.32), h3.x * step(fract(h3.y * 7.13), smoothstep(0.64, 1.0, tone) * 0.7));
-    hk = mix(vec3(1.0), hk, max(uPLayers.y * gDet, uPLayers.w));
+    hk *= mix(vec3(1.0), vec3(0.42, 0.33, 0.32), h3.x * step(fract(h3.y * 7.13), smoothstep(0.64, 1.0, tone) * 0.7) * max(gPen3, uPLayers.w));
+    hk = mix(vec3(1.0), hk, max(uPLayers.y * gPen, uPLayers.w));
     if (uPLayers.w > 0.5) {
       vec3 fc = clamp(abs(fract(a2 / 6.2832 + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
       lit = mix(lit, fc, 0.5);
