@@ -805,12 +805,19 @@ class Civilian {
   // of the sidewalk with nowhere at all to go turns round
   progress(ox, oz, speed, far, dt) {
     // (only while on the way somewhere - not on their mark, not sitting down, not across a room)
-    if (speed > 0.5 && far > 0.5 && !this.noCollide && !this.scripted && !(this.fig.sit > 0.3)) {
-      this.progWant += speed * dt;
-      this.progGot += Math.hypot(this.pos.x - ox, this.pos.z - oz);
-    }
+    if (speed > 0.5 && far > 0.5 && !this.noCollide && !this.scripted && !(this.fig.sit > 0.3)) this.progWant += speed * dt;
     this.progT += dt;
     if (this.progT < 1) return;
+    // (how far they really got in the second - from where they were at its start to where they are
+    // now: pressed into a car that pushes them back out each step, they walk the whole second and get
+    // nowhere, and step by step it looked like walking)
+    if (this.progX === undefined) {
+      this.progX = this.pos.x;
+      this.progZ = this.pos.z;
+    }
+    this.progGot = Math.hypot(this.pos.x - this.progX, this.pos.z - this.progZ);
+    this.progX = this.pos.x;
+    this.progZ = this.pos.z;
     const stuck = this.progWant > 0.6 && this.progGot < this.progWant * 0.25;
     this.stuckN = stuck ? this.stuckN + 1 : 0;
     this.progT = 0;
@@ -2127,7 +2134,7 @@ export class Civilians {
       for (let i = 0; i < T.length; i++) {
         const v = T[i];
         if (v.poofT !== undefined || !v.halfLen) continue;
-        if (Math.abs(v.pos.x - p.x) < 50 && Math.abs(v.pos.z - p.z) < 50) out.push(v);
+        if (Math.abs(v.pos.x - p.x) < 90 && Math.abs(v.pos.z - p.z) < 90) out.push(v);
       }
     }
     const V = game.vehicles && game.vehicles.list;
@@ -2135,7 +2142,7 @@ export class Civilians {
       for (let i = 0; i < V.length; i++) {
         const v = V[i];
         if (v.dead || (v.flies && v.alt > 2) || !v.halfLen) continue;
-        if (Math.abs(v.pos.x - p.x) < 50 && Math.abs(v.pos.z - p.z) < 50) out.push(v);
+        if (Math.abs(v.pos.x - p.x) < 90 && Math.abs(v.pos.z - p.z) < 90) out.push(v);
       }
     }
   }
