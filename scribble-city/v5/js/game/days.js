@@ -139,6 +139,8 @@ export class Days {
       c.goal = null;
       return;
     }
+    // (on the way to meet a friend: the meeting is game/streetsocial.js date's - it keeps the goal)
+    if (S.kind === 'date') return;
     D.t += step;
     const civs = this.game.civilians;
     if (D.acted) {
@@ -223,7 +225,10 @@ export class Days {
       if (R && R.open && !R.open(s.kind)) continue;
       const d = Math.hypot(s.door[0] - c.pos.x, s.door[2] - c.pos.z);
       if (d < 6 || d > 110) continue;
-      list.push({ s, d });
+      // (their own block's shops first: across the street only now and then, and not far)
+      const own = this.sameWalk(c, { x: s.door[0], z: s.door[2] });
+      if (!own && d > 60) continue;
+      list.push({ s, d: own ? d : d * 2.5 + 20 });
     }
     const p = this.choose(list);
     return p ? { kind: 'shop', s: p.s, at: { x: p.s.door[0], z: p.s.door[2] } } : null;
@@ -244,10 +249,10 @@ export class Days {
     return p ? { kind: 'cart', s: p.s, at: { x: p.s.door[0], z: p.s.door[2] } } : null;
   }
 
-  // a door to go in at: an office's ('lobby') or a home's - facing the street, with its way out. Their
-  // own sidewalk's doors first: one of them is where they live, or work, more often than not, and
-  // there is no street to cross to it; a door a block or two off only now and then (the walk crosses
-  // to it: game/civilians.js routeTo), and none further off than a short walk
+  // a door to go in at: an office's ('lobby') or a home's - facing the street, with its way out. One on
+  // their own block's sidewalk: where they live or work is the block they are walking round (a door
+  // across the street is a block they would have to find their way round to; game/civilians.js
+  // routeTo gets them to a shop over there, a door they would miss as often as not)
   doorNear(c, what) {
     const shops = this.game.world.shops || [];
     const list = [];
@@ -255,16 +260,15 @@ export class Days {
       if (!s.door) continue;
       if (what === 'home' ? !s.home : s.kind !== 'lobby' || s.home) continue;
       const d = Math.hypot(s.door[0] - c.pos.x, s.door[2] - c.pos.z);
-      if (d < 8 || d > 75) continue;
+      if (d < 8 || d > 110) continue;
       const n = this.normalOf(s);
       if (!n) continue;
       // (where they turn in at: in front of the door, out past the front yard - game/streetsocial.js
       // goHome walks them in from there)
       const out = 1.6 + (s.yard || 0);
       const at = { x: s.door[0] + n[0] * out, z: s.door[2] + n[1] * out };
-      const own = this.sameWalk(c, at);
-      if (!own && d > 50) continue;
-      list.push({ s, d: own ? d * 0.35 : d + 30, n, at });
+      if (!this.sameWalk(c, at)) continue;
+      list.push({ s, d, n, at });
     }
     const p = this.choose(list);
     if (!p) return null;

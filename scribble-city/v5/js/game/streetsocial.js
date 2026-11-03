@@ -37,6 +37,13 @@ const chance = (p) => Math.random() < p;
 // (intelligence round) your coin for the musician (game/streetsocial.js target)
 const TIP = 2;
 const TIP_THANKS = ['[joy] Thank you, friend!', '[joy] Hey, thank you! Very kind.', '[joy] Bless you! Any requests?'];
+// (intelligence round) a friend met on purpose (StreetSocial.date): the wait, the one late, the two
+// of them off together - or nobody comes
+const WAIT_SAY = { f: ['Where is she?', 'Come on, come on...', 'Five more minutes. Then I go.', 'She is always late.', 'Did I say this corner, or the next one?'], m: ['Where is he?', 'Come on, come on...', 'Five more minutes. Then I go.', 'He is always late.', 'Did I say this corner, or the next one?'] };
+const THERE = ['[joy] There you are!', '[joy] Finally!', '[joy] Hey! Over here!'];
+const LATE = ['[surprised] Sorry, sorry! I am late!', 'I know, I know - the bus!', '[joy] Have you been waiting long?', '[surprised] Sorry! I got lost.'];
+const OFF_TOGETHER = [['[joy] So - coffee?', '[joy] Yes please. I need one.'], ['[joy] Come on, the place is just round the corner.', '[joy] Lead the way.'], ['[joy] I am starving. Lunch?', '[joy] Always.'], ['[joy] Shall we?', '[joy] Let us go.']];
+const STOOD_UP = ['[sad] Typical.', '[angry] Unbelievable.', '[sad] Okay. Next time, then.'];
 const FOR_YOU = ['[joy] This next one is for my friend here!', '[joy] For the kind stranger - this one is yours!', '[joy] A song for you, my friend.'];
 const UP = new THREE.Vector3(0, 1, 0);
 const _c = new THREE.Vector3();
@@ -70,6 +77,7 @@ export class StreetSocial {
     this.meets = [];
     this.calls = [];
     this.homes = [];
+    this.dates = [];
     this.busker = null;
     this.flying = [];
     this.huddleT = 1;
@@ -78,9 +86,11 @@ export class StreetSocial {
     this.callT = 5;
     this.buskT = 3;
     this.homeT = 4;
+    this.dateT = 12;
+    this.dateCool = 0;
     this._cand = [];
     // (counted for the tests)
-    this.stats = { huddles: 0, groupTalks: 0, mimes: 0, laughs: 0, partings: 0, meets: 0, hugs: 0, shakes: 0, bumps: 0, calls: 0, callLines: 0, busks: 0, listeners: 0, claps: 0, coins: 0, home: 0 };
+    this.stats = { huddles: 0, groupTalks: 0, mimes: 0, laughs: 0, partings: 0, meets: 0, hugs: 0, shakes: 0, bumps: 0, calls: 0, callLines: 0, busks: 0, listeners: 0, claps: 0, coins: 0, home: 0, dates: 0, metUp: 0, stoodUp: 0 };
   }
 
   get touch() {
@@ -110,6 +120,11 @@ export class StreetSocial {
       this.callT = 2.5;
       this.callScan(now, rain);
     }
+    this.dateT -= dt;
+    if (this.dateT <= 0) {
+      this.dateT = 3;
+      this.dateScan(now, h, rain);
+    }
     this.buskT -= dt;
     if (this.buskT <= 0) {
       this.buskT = 2.5;
@@ -128,6 +143,8 @@ export class StreetSocial {
     sweep(this.calls, 'done');
     for (let i = 0; i < this.homes.length; i++) this.tendHome(this.homes[i], dt, now);
     sweep(this.homes, 'done');
+    for (let i = 0; i < this.dates.length; i++) this.tendDate(this.dates[i], dt, p, now);
+    sweep(this.dates, 'done');
     if (this.busker) this.tendBusker(this.busker, dt, p, now, rain);
     if (this.flying.length) {
       for (const f of this.flying) {
@@ -741,9 +758,22 @@ export class StreetSocial {
         if (!M.ex) M.rounds = 0;
         return;
       }
+      // (intelligence round: met on purpose - not goodbye: off somewhere together)
+      if (M.together) {
+        M.phase = 'off';
+        M.ex = voices.talk([a, b], pick(OFF_TOGETHER).slice());
+        M.t = 0;
+        return;
+      }
       M.phase = 'bye';
       M.ex = voices.talk([a, b], pick(LINES.MEET_BYE));
       M.t = 0;
+      return;
+    }
+    if (M.phase === 'off' && ((M.ex && M.ex.done) || !M.ex || M.t > 7)) {
+      this.endMeet(M);
+      // (side by side from here: the one who waited leads - game/civilians.js pairUp)
+      if (a.alive && !a.gone && b.alive && !b.gone && civs.pairUp(a, b)) this.stats.metUp++;
       return;
     }
     if (M.phase === 'bye' && ((M.ex && M.ex.done) || !M.ex || M.t > 7)) this.endMeet(M);
@@ -915,12 +945,203 @@ export class StreetSocial {
       if (d < bd) {
         bd = d;
         const l = Math.sqrt(l2);
-        best = { ux: dx / l, uz: dz / l, wx: -dz / l, wz: dx / l, t: t * l, len: l };
+        best = { ux: dx / l, uz: dz / l, wx: -dz / l, wz: dx / l, t: t * l, len: l, px: a[0] + dx * t, pz: a[1] + dz * t };
       }
     }
     // (not at a corner: there the wall is round it)
     if (!best || bd > 2.2 || best.t < 6 || best.t > best.len - 6) return null;
     return best;
+  }
+
+  // ------------------------------------------------------------------ a friend met on purpose
+  // (intelligence round) Somebody stops by the wall, out of the way of the walk, and waits: the phone
+  // out, a look up the street one way and the other - mostly the way the friend will come - and now
+  // and then a word ("Where is she?"). The friend is one of the walkers of the same block, a way off,
+  // on their way to that spot now (their goal: game/civilians.js routeTo; game/days.js leaves a
+  // 'date' step to us) and a little quicker for being late. Near: a wave, "There you are!" - "Sorry,
+  // sorry! I am late!" - a hug (a handshake for colleagues), a few words, and off together side by
+  // side (Civilians.pairUp). Nobody in a minute and a quarter: "Typical.", and off alone
+  dateScan(now, h, rain) {
+    const game = this.game;
+    if (this.dates.length || now < this.dateCool || rain > 0.2 || h < 8 || h > 23 || game.player.inVehicle) return;
+    const civs = game.civilians;
+    const cam = game.camera.position;
+    const busy = (c) => (c.day && c.day.steps[c.day.i]) || c.jog || c.role === 'kid' || c.role === 'tourist' || c.couple;
+    for (const a of civs.list) {
+      if (!civs.plain(a) || busy(a) || (a.dateT || 0) > now) continue;
+      const dx = a.pos.x - cam.x;
+      const dz = a.pos.z - cam.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < 9 * 9 || d2 > 32 * 32) continue;
+      a.dateT = now + 60;
+      const leg = this.legOf(a);
+      if (!leg || leg.t < 9 || leg.t > leg.len - 9) continue;
+      const x = leg.px + leg.wx * 1.25;
+      const z = leg.pz + leg.wz * 1.25;
+      if (this.byDoor(x, z, 2.2) || this.crowded(x, z, 6)) continue;
+      // (the friend: a way off along the same block's walk)
+      let b = null;
+      let bd = Infinity;
+      for (const c of civs.list) {
+        if (c === a || c.col !== a.col || c.row !== a.row || !civs.plain(c) || busy(c)) continue;
+        const d = Math.hypot(c.pos.x - a.pos.x, c.pos.z - a.pos.z);
+        if (d < 14 || d > 46) continue;
+        if (d < bd) {
+          bd = d;
+          b = c;
+        }
+      }
+      if (!b) continue;
+      this.startDate(a, b, leg, x, z);
+      this.dateCool = now + 50 + Math.random() * 60;
+      return;
+    }
+  }
+
+  startDate(a, b, leg, x, z) {
+    const D = { a, b, x, z, ux: leg.ux, uz: leg.uz, wx: leg.wx, wz: leg.wz, phase: 'wait', t: 0, lookT: 1.5, sayT: 6 + Math.random() * 6, phoneT: 0, at: false, done: false, look: new THREE.Vector3(), fem: !!(b.fig.look && b.fig.look.fem) };
+    a.scripted = true;
+    a.owner = this;
+    a.dateOf = D;
+    a.ctrl = (me) => {
+      if (D.phase !== 'wait') return null;
+      if (!D.at && Math.hypot(D.x - me.pos.x, D.z - me.pos.z) > 0.3) return { x: D.x, z: D.z, speed: Math.min(me.speed, 1.2) };
+      D.at = true;
+      return null;
+    };
+    // (the friend on their way to it: late, a little quicker)
+    b.dateOf = D;
+    b.day = { why: 'out', steps: [{ kind: 'date', at: { x, z } }], i: 0, t: 0, acted: false };
+    b.goal = b.day.steps[0].at;
+    D.speed0 = b.speed;
+    b.speed = Math.max(b.speed, 1.45 + Math.random() * 0.2);
+    this.dates.push(D);
+    this.stats.dates++;
+  }
+
+  tendDate(D, dt, p, now) {
+    if (D.done) return;
+    const game = this.game;
+    const civs = game.civilians;
+    const voices = game.voices;
+    const { a, b } = D;
+    D.t += dt;
+    if (!a.alive || a.gone || a.panicT > 0 || a.owner !== this || a.dateOf !== D || Math.hypot(a.pos.x - p.x, a.pos.z - p.z) > 95) {
+      this.endDate(D);
+      return;
+    }
+    const bOk = b.alive && !b.gone && !(b.panicT > 0) && b.dateOf === D;
+    const fig = a.fig;
+    if (D.phase === 'wait') {
+      if (D.at) {
+        // turned to the street; the phone; a look up the walk, mostly the way the friend will come
+        a.faceYaw = Math.atan2(-D.wx, -D.wz);
+        D.phoneT -= dt;
+        if (D.phoneT <= 0) {
+          D.phoneT = 4 + Math.random() * 5;
+          if (fig.carry === 'phone') fig.carry = null;
+          else if (!fig.carry) fig.carry = 'phone';
+        }
+        D.lookT -= dt;
+        if (D.lookT <= 0) {
+          D.lookT = 2.2 + Math.random() * 2.8;
+          const s = bOk && (b.pos.x - a.pos.x) * D.ux + (b.pos.z - a.pos.z) * D.uz < 0 ? -1 : 1;
+          const way = Math.random() < 0.75 ? s : -s;
+          D.look.set(a.pos.x + D.ux * way * 14 - D.wx * 2, a.pos.y + 1.55, a.pos.z + D.uz * way * 14 - D.wz * 2);
+          a.glanceAt = D.look;
+          a.glanceUntil = now + 1.3 + Math.random() * 0.8;
+        }
+        D.sayT -= dt;
+        if (D.sayT <= 0) {
+          D.sayT = 14 + Math.random() * 10;
+          if (Math.hypot(a.pos.x - p.x, a.pos.z - p.z) < 16 && !(fig.say && !fig.say.done)) voices.say(a, pick(WAIT_SAY[D.fem ? 'f' : 'm']), 'plain');
+        }
+      }
+      // (nobody: stood up)
+      if (!bOk || D.t > 75) {
+        if (Math.hypot(a.pos.x - p.x, a.pos.z - p.z) < 20) voices.say(a, pick(STOOD_UP), 'plain');
+        this.stats.stoodUp++;
+        this.endDate(D);
+        return;
+      }
+      // the friend near: a wave, the last steps to them - in front of them
+      const d = Math.hypot(b.pos.x - a.pos.x, b.pos.z - a.pos.z);
+      if (D.at && d < 9 && civs.plain(b)) {
+        D.phase = 'come';
+        D.t = 0;
+        if (fig.carry === 'phone') fig.carry = null;
+        a.gestNext = 'wave';
+        a.glanceAt = b.fig.j.headC;
+        a.glanceUntil = now + 4;
+        b.scripted = true;
+        b.owner = this;
+        b.ctrl = (me) => {
+          const tx = a.pos.x - D.wx * 0.9 + (me.pos.x - a.pos.x) * 0.15;
+          const tz = a.pos.z - D.wz * 0.9 + (me.pos.z - a.pos.z) * 0.15;
+          if (Math.hypot(tx - me.pos.x, tz - me.pos.z) < 0.25) return null;
+          return { x: tx, z: tz, speed: me.speed };
+        };
+        D.ex = voices.talk([a, b], [pick(THERE), pick(LATE)]);
+      }
+      return;
+    }
+    if (D.phase === 'come') {
+      if (!bOk || b.owner !== this) {
+        this.endDate(D);
+        return;
+      }
+      a.faceYaw = Math.atan2(b.pos.x - a.pos.x, b.pos.z - a.pos.z);
+      const d = Math.hypot(b.pos.x - a.pos.x, b.pos.z - a.pos.z);
+      if (d < 1.5 || D.t > 9) {
+        if (d > 3) {
+          this.endDate(D);
+          return;
+        }
+        // (now the meeting's: the hug, a few words, off together - StreetSocial.tendMeet)
+        D.done = true;
+        a.dateOf = null;
+        b.dateOf = null;
+        if (b.day && b.day.steps[b.day.i] && b.day.steps[b.day.i].kind === 'date') b.day = null;
+        b.goal = null;
+        if (D.speed0) b.speed = D.speed0;
+        const work = a.role === 'office' && b.role === 'office';
+        const full = a.fig.carry || b.fig.carry || a.fig.carryL || b.fig.carryL;
+        const greet = work || full ? 'shake' : 'hug';
+        const M = { a, b, phase: 'greet', t: 0, greet, ex: null, gt: 0, done: false, va: new THREE.Vector3(), vb: new THREE.Vector3(), mid: new THREE.Vector3(), together: true };
+        a.meet = M;
+        b.meet = M;
+        for (const c of [a, b]) {
+          c.scripted = true;
+          c.owner = this;
+          c.ctrl = (me) => this.meetStep(me, M);
+        }
+        this.meetPlaces(M, greet === 'hug' ? 0.5 : 0.95);
+        this.meets.push(M);
+        this.stats.meets++;
+      }
+    }
+  }
+
+  // the waiting over without the friend (or something else took one of them): each their own way
+  endDate(D) {
+    if (D.done) return;
+    D.done = true;
+    const civs = this.game.civilians;
+    const now = this.game.time;
+    for (const c of [D.a, D.b]) {
+      if (c.dateOf === D) c.dateOf = null;
+      c.dateT = now + 120;
+      if (c === D.a && c.fig.carry === 'phone') c.fig.carry = null;
+      if (c.owner === this && c.alive && !c.gone) {
+        civs.release(c);
+        c.scripted = false;
+        civs.rejoin(c);
+      }
+    }
+    const b = D.b;
+    if (b.day && b.day.steps[b.day.i] && b.day.steps[b.day.i].kind === 'date') b.day = null;
+    if (b.goal && b.goal.x === D.x && b.goal.z === D.z) b.goal = null;
+    if (D.speed0) b.speed = D.speed0;
   }
 
   // ------------------------------------------------------------------ you and the musician
@@ -1437,6 +1658,7 @@ export class StreetSocial {
     this.meets = [];
     this.calls = [];
     this.homes = [];
+    this.dates = [];
     this.busker = null;
     this.flying = [];
   }
@@ -1449,6 +1671,8 @@ export class StreetSocial {
     this.meets = [];
     for (const K of this.calls) this.endCall(K);
     this.calls = [];
+    for (const D of this.dates) this.endDate(D);
+    this.dates = [];
     if (this.busker) this.dropBusker(this.busker, true);
   }
 }

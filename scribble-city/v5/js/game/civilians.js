@@ -117,6 +117,39 @@ const FEELERS = [0, 0.26, -0.26];
 // the ways tried round it, a little to one side first, then further, then nearly across
 const AV_ANGLES = [0.5, 1.0, 1.5];
 // a way out when stuck: twelve directions
+// (intelligence round) a ray from (ox, oz) along (vx, vz) against a car's box (its length and width, and
+// pad more all round): how far along it meets it, Infinity if it does not within maxT
+function rayCar(ox, oz, vx, vz, maxT, v, pad) {
+  const fx = Math.sin(v.yaw);
+  const fz = Math.cos(v.yaw);
+  const rx = ox - v.pos.x;
+  const rz = oz - v.pos.z;
+  const p0 = [rx * fx + rz * fz, rx * fz - rz * fx];
+  const d0 = [vx * fx + vz * fz, vx * fz - vz * fx];
+  const h0 = [v.halfLen + pad, v.halfWid + pad];
+  let t0 = 0;
+  let t1 = maxT;
+  for (let k = 0; k < 2; k++) {
+    const p = p0[k];
+    const d = d0[k];
+    const h = h0[k];
+    if (Math.abs(d) < 1e-6) {
+      if (p > h || p < -h) return Infinity;
+      continue;
+    }
+    let ta = (-h - p) / d;
+    let tb = (h - p) / d;
+    if (ta > tb) {
+      const q = ta;
+      ta = tb;
+      tb = q;
+    }
+    if (ta > t0) t0 = ta;
+    if (tb < t1) t1 = tb;
+    if (t0 > t1) return Infinity;
+  }
+  return t0;
+}
 const OUT_DIRS = Array.from({ length: 12 }, (_, i) => [Math.sin((i / 12) * Math.PI * 2), Math.cos((i / 12) * Math.PI * 2)]);
 
 // beyond this far from the camera a walker steps every other frame (see Civilians.update)
@@ -567,13 +600,33 @@ class Civilian {
     return null;
   }
 
-  // something solid at knee height within reach along (vx, vz) - from the middle or a shoulder
+  // something solid at knee height within reach along (vx, vz) - from the middle or a shoulder: a
+  // wall, a pole, a bench; or a car - one stopped across the crossing, one parked up on the curb, yours
+  // (Civilians.carsNear: the walls do not know them)
   blocked(vx, vz, reach) {
     const col = this.game.world.collision;
     const y = this.pos.y + 0.45;
     for (let i = 0; i < FEELERS.length; i++) {
       const o = FEELERS[i];
       if (col.raycast(this.pos.x + vz * o, y, this.pos.z - vx * o, vx, 0, vz, reach + 0.33)) return true;
+    }
+    const cars = this.mgr.cars;
+    if (cars && cars.length && !this.riding) {
+      const px = this.pos.x;
+      const pz = this.pos.z;
+      for (let k = 0; k < cars.length; k++) {
+        const v = cars[k];
+        const R = reach + v.halfLen + 0.8;
+        const dx = v.pos.x - px;
+        const dz = v.pos.z - pz;
+        if (dx > R || dx < -R || dz > R || dz < -R) continue;
+        // (up on it - the roof of a car - is not in the way)
+        if (this.pos.y > v.pos.y + 1.2) continue;
+        for (let i = 0; i < FEELERS.length; i++) {
+          const o = FEELERS[i];
+          if (rayCar(px + vz * o, pz - vx * o, vx, vz, reach + 0.33, v, 0.05) < Infinity) return true;
+        }
+      }
     }
     return false;
   }
@@ -945,6 +998,17 @@ class Civilian {
         tx = st.x;
         tz = st.z;
         speed *= st.k;
+        // (intelligence round: you in the way, no room round you, and staying there: after a few
+        // seconds, back the way they came - not walking on the spot into you for ever)
+        if (st.wait) {
+          this.youWaitT = (this.youWaitT || 0) + dt;
+          if (this.youWaitT > 4 && this.loop && !this.ctrl) {
+            this.youWaitT = 0;
+            const n = this.loop.length;
+            this.dir = -this.dir;
+            this.target = n === 2 ? (this.target ? 0 : 1) : (this.target + this.dir + n) % n;
+          }
+        } else if (this.youWaitT) this.youWaitT = Math.max(0, this.youWaitT - dt);
       }
     }
     if (legless) speed = Math.min(speed, 0.8);
@@ -1348,6 +1412,7 @@ export class Civilians {
   update(dt) {
     const game = this.game;
     const p = game.anchorPos();
+    this.carsNear(p);
     this.t -= dt;
     if (this.t <= 0) {
       this.t = 1;
@@ -1562,6 +1627,31 @@ export class Civilians {
     if (p && p.mode === 'foot') add(p);
   }
 
+  // (intelligence round) the cars near you - in the traffic, parked, yours - for the walkers' feelers
+  // (Civilian.blocked): the walls do not know them, and without them a car stopped across the crossing
+  // or parked up on the curb is walked into and slid along
+  carsNear(p) {
+    const out = this.cars || (this.cars = []);
+    out.length = 0;
+    const game = this.game;
+    const T = game.traffic && game.traffic.list;
+    if (T) {
+      for (let i = 0; i < T.length; i++) {
+        const v = T[i];
+        if (v.poofT !== undefined || !v.halfLen) continue;
+        if (Math.abs(v.pos.x - p.x) < 50 && Math.abs(v.pos.z - p.z) < 50) out.push(v);
+      }
+    }
+    const V = game.vehicles && game.vehicles.list;
+    if (V) {
+      for (let i = 0; i < V.length; i++) {
+        const v = V[i];
+        if (v.dead || (v.flies && v.alt > 2) || !v.halfLen) continue;
+        if (Math.abs(v.pos.x - p.x) < 50 && Math.abs(v.pos.z - p.z) < 50) out.push(v);
+      }
+    }
+  }
+
   // where a walker heading for (tx, tz) actually goes: a step to the side of the one coming the
   // other way (to the right, as people do), slower behind one in the way; never through anybody
   steer(c, tx, tz, out) {
@@ -1580,6 +1670,8 @@ export class Civilians {
     const rz = -dx;
     let side = 0;
     let slow = 1;
+    let you = false;
+    const pl = this.game.player;
     const cx = Math.floor(c.pos.x / 2);
     const cz = Math.floor(c.pos.z / 2);
     for (let i = -1; i <= 1; i++) {
@@ -1601,6 +1693,7 @@ export class Civilians {
           const ahead = (ox * dx + oz * dz) / d;
           if (ahead < 0.35) continue;
           const lat = ox * rx + oz * rz;
+          if (o === pl && d < 1.3 && ahead > 0.6 && Math.abs(lat) < 0.55) you = true;
           // (coming this way, or standing: round them; going the same way and slower: behind them)
           const ov = o.vel ? o.vel.x * dx + o.vel.z * dz : 0;
           const w = (2.2 - d) / 2.2;
@@ -1615,6 +1708,16 @@ export class Civilians {
       out.z = c.pos.z + dz * 2 + rz * s;
     }
     out.k = slow;
+    out.wait = false;
+    // (intelligence round) you standing in their way where there is no room round you - a stall on
+    // one side, the wall on the other: they stop and wait ("Excuse me": game/voices.js) rather than
+    // walk on the spot into you (Civilian.update: and you staying there, back the other way)
+    if (you && c.blocked(rx, rz, 0.9) && c.blocked(-rx, -rz, 0.9)) {
+      out.x = c.pos.x + dx * 0.3;
+      out.z = c.pos.z + dz * 0.3;
+      out.k = 0;
+      out.wait = true;
+    }
     return out;
   }
 
@@ -2224,8 +2327,16 @@ export class Civilians {
     c.buddy = b;
     const h = this.game.daynight ? this.game.daynight.hour : 12;
     const couple = o.couple !== undefined ? o.couple : Math.random() < (h > 18.5 || h < 2 ? 0.55 : 0.2);
-    const gap = couple ? 0.58 : 0.85;
     if (couple) b.couple = true;
+    b.ctrl = this.follower(b, couple);
+    this.list.push(b);
+    return b;
+  }
+
+  // walking alongside their friend (b.buddyOf): beside them, a word now and then; turned to each other
+  // when they stop. couple: hand in hand, closer
+  follower(b, couple) {
+    const gap = couple ? 0.58 : 0.85;
     const lines = ['No way!', 'Ha ha ha!', 'Seriously?', 'I know, right?', 'Let\'s get pizza.', 'Did you see that?', 'Tell me more!'];
     let talkT = 2 + Math.random() * 4;
     const follow = (me, dt) => {
@@ -2297,9 +2408,19 @@ export class Civilians {
       }
       return { x: tx, z: tz, speed: Math.min(4, lsp + d * 1.2) };
     };
-    b.ctrl = follow;
-    this.list.push(b);
-    return b;
+    return follow;
+  }
+
+  // (intelligence round) two of the street's own, on together from here: b alongside c, as a friend out
+  // with them is (a friend met on purpose: game/streetsocial.js date)
+  pairUp(c, b, couple = false) {
+    if (c.buddy || c.buddyOf || b.buddy || b.buddyOf || c.prom || !c.loop || c.loop.length < 4) return false;
+    b.buddyOf = c;
+    c.buddy = b;
+    c.chatty = true;
+    if (couple) b.couple = true;
+    b.ctrl = this.follower(b, couple);
+    return true;
   }
 
   // (ROADMAP 13.12) c, parted from the friend they were out with when the friend ran: once neither
