@@ -22,7 +22,7 @@ const CSS = `
 #pl-obj .t b { color: #ffd23f; font-weight: 800; }
 #pl-obj .u { margin: 6px auto 0; height: 3px; width: 0; background: linear-gradient(90deg, transparent, #ffd23f, transparent); transition: width 0.9s 0.15s; }
 #pl-obj.on .u { width: 100%; }
-#pl-title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.5s; direction: ltr; }
+#pl-title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 15vh; opacity: 0; transition: opacity 0.5s; direction: ltr; }
 #pl-title.on { opacity: 1; }
 #pl-title .name { font-family: "Permanent Marker", "Rubik", sans-serif; font-size: clamp(46px, 10.5vw, 150px); color: #fff4e0; letter-spacing: 0.04em; line-height: 1; transform: rotate(-3deg) scale(1.25); transition: transform 1.1s cubic-bezier(.16,1,.3,1), letter-spacing 2.4s ease-out;
   text-shadow: 0 0 2px #1c1030, 4px 4px 0 #ff4f9a, 8px 8px 0 #2a1650, 0 0 40px rgba(255,120,80,0.65); -webkit-text-stroke: 2px #1c1030; }

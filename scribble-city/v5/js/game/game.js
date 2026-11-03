@@ -2235,6 +2235,11 @@ export class Game {
 
   // ------------------------------------------------------------------ prompts & goals
   updatePrompts() {
+    // (v5, ROADMAP 18: while the prologue is told, no prompts - its own words are on the screen)
+    if (this.prologue && this.prologue.active) {
+      this.hud.setPrompt('');
+      return;
+    }
     if (this.state !== 'play') {
       this.hud.setPrompt('');
       return;

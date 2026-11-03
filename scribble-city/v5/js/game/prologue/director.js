@@ -1438,12 +1438,14 @@ export class Prologue {
     // the top of the arc: time nearly still; the title in the picture
     this.slow(0.035, 9);
     this.cue('title');
+    // (the camera swings out from behind its rear quarter to its side, low over the street - the car
+    // in the top half of the picture against the towers and the sunset, the title under it)
     const c0 = car.pos.clone();
     this.shot({
-      path: [v3(c0.x + 5, c0.y + 1, c0.z + 4.5), v3(c0.x + 2, c0.y + 2.2, c0.z + 12), v3(c0.x - 4, c0.y + 4, c0.z + 26)],
-      look: () => v3(car.pos.x - 6, car.pos.y - 1.2, car.pos.z - 4),
-      fov: 46,
-      fovTo: 58,
+      path: [v3(c0.x + 4.5, c0.y + 0.6, c0.z + 3.5), v3(c0.x + 1.5, c0.y - 1.2, c0.z + 9), v3(c0.x - 3, c0.y - 3.2, c0.z + 14)],
+      look: () => v3(car.pos.x - 1.5, car.pos.y - 2.2, car.pos.z),
+      fov: 44,
+      fovTo: 54,
       dur: 5.4,
       ease: 'inout',
       hand: 0.2,
@@ -1530,7 +1532,7 @@ export class Prologue {
     car.vx = car.vz = 0;
     car.speed = 0;
     // facing the water, the pier off to the north
-    this.shot({ from: this.carSide(car, 1, 2.8, 1.4, 1.2), look: this.cabin(car, 1.05), fov: 40, dur: 30, hand: 0.35 });
+    this.shot({ from: this.carSide(car, 1, 2.3, 1.85, 1.0), look: this.cabin(car, 0.95), fov: 42, dur: 30, hand: 0.35 });
     yield 2.4;
     this.feel(L.fig, 'angry', 6);
     yield* this.say('L16', L.fig, 1.3);
