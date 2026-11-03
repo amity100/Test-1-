@@ -121,6 +121,8 @@ export class Days {
   aim(c) {
     const S = c.day && c.day.steps[c.day.i];
     c.goal = S ? S.at : null;
+    // (critic round: and the way there now - not on to the far corner first, away from it)
+    if (c.goal && c.headFor) c.headFor(c.goal);
   }
 
   next(c) {
@@ -128,6 +130,7 @@ export class Days {
     D.i++;
     D.t = 0;
     D.acted = false;
+    D.near = undefined;
     this.stats.steps++;
     this.aim(c);
   }
@@ -162,11 +165,16 @@ export class Days {
     if (this.act(c, S)) {
       D.acted = true;
       D.t = 0;
-    } else if (d < 2.5) {
-      // (closed, full: never mind)
+    } else if (d < 2.5 || d > (D.near === undefined ? Infinity : D.near) + 1.2) {
+      // (closed, full: never mind. (critic round) Past it by now - a shop's door is a few steps
+      // off the walk, not often within reach of it: on to the next thing, not to and fro in front
+      // of the full shop)
+      D.near = undefined;
       this.stats.skipped++;
       this.next(c);
+      return;
     }
+    D.near = Math.min(D.near === undefined ? Infinity : D.near, d);
   }
 
   // do the step: into the shop, to the cart, in at the door
@@ -268,6 +276,10 @@ export class Days {
       const out = 1.6 + (s.yard || 0);
       const at = { x: s.door[0] + n[0] * out, z: s.door[2] + n[1] * out };
       if (!this.sameWalk(c, at)) continue;
+      // (critic round: and the door itself on their block - inside their walk round it. The front
+      // yard of a house across the street reached out to their walk, and in they went: over the
+      // street, through somebody else's garden, and stuck there against its fence)
+      if (!this.inWalk(c, s.door[0], s.door[2])) continue;
       list.push({ s, d, n, at });
     }
     const p = this.choose(list);
@@ -278,6 +290,23 @@ export class Days {
       p.s.nz = p.n[1];
     }
     return { kind: 'door', s: p.s, at: p.at };
+  }
+
+  // (x, z) inside the walk round their block (a block's walk is a rectangle round it)
+  inWalk(c, x, z) {
+    const L = c.loop;
+    if (!L || L.length !== 4) return true;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (const p of L) {
+      x0 = Math.min(x0, p[0]);
+      x1 = Math.max(x1, p[0]);
+      z0 = Math.min(z0, p[1]);
+      z1 = Math.max(z1, p[1]);
+    }
+    return x > x0 && x < x1 && z > z0 && z < z1;
   }
 
   normalOf(s) {

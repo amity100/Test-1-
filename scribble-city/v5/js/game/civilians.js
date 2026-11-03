@@ -10,6 +10,7 @@ import { damp, dampAngle, clamp } from '../core/util.js';
 import { WORK_CLOTHES, NIGHT_CLOTHES } from './rhythm.js';
 import { downStep, drawStars, CIV_KO } from './fists.js';
 import { shared } from '../render/materials.js';
+import { waitBeat, stopWait } from './waiting.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
 // what somebody punched in the street says (ROADMAP 5.4)
@@ -116,6 +117,9 @@ const _av = { x: 0, z: 0 };
 const FEELERS = [0, 0.26, -0.26];
 // the ways tried round it, a little to one side first, then further, then nearly across
 const AV_ANGLES = [0.5, 1.0, 1.5];
+// (critic round) a hand on the wall (Civilian.avoid): the turns tried from the way they are going,
+// round towards the wall first (round its corner), then along it, then away from it
+const WF_TURNS = [Math.PI / 2, Math.PI / 4, 0, -Math.PI / 4, -Math.PI / 2, (-3 * Math.PI) / 4];
 // a way out when stuck: twelve directions
 // (intelligence round) a ray from (ox, oz) along (vx, vz) against a car's box (its length and width, and
 // pad more all round): how far along it meets it, Infinity if it does not within maxT
@@ -151,6 +155,65 @@ function rayCar(ox, oz, vx, vz, maxT, v, pad) {
   return t0;
 }
 const OUT_DIRS = Array.from({ length: 12 }, (_, i) => [Math.sin((i / 12) * Math.PI * 2), Math.cos((i / 12) * Math.PI * 2)]);
+
+// (critic round) The crossings from corner k of block (col, row) - [col, row, corner] of each block
+// across the street or the avenue (the mainland's: only those built). Corners: 0 NW, 1 NE, 2 SE, 3 SW;
+// the mainland's columns run west
+function crossesFrom(game, col, row, k) {
+  const north = k < 2;
+  const west = k === 0 || k === 3;
+  const opts = [];
+  if (col >= 100) {
+    const live = game.world.mainland && game.world.mainland.blocks;
+    const ok = (c, r) => {
+      const b = mainBlock(c, r);
+      return b && (!live || live.has(b.id));
+    };
+    if (north && ok(col, row - 1)) opts.push([col, row - 1, west ? 3 : 2]);
+    if (!north && ok(col, row + 1)) opts.push([col, row + 1, west ? 0 : 1]);
+    if (west && ok(col + 1, row)) opts.push([col + 1, row, north ? 1 : 2]);
+    if (!west && ok(col - 1, row)) opts.push([col - 1, row, north ? 0 : 3]);
+  } else {
+    if (north && row > 0) opts.push([col, row - 1, west ? 3 : 2]);
+    if (!north && row < 4) opts.push([col, row + 1, west ? 0 : 1]);
+    if (west && col > 0) opts.push([col - 1, row, north ? 1 : 2]);
+    if (west && col === 0) opts.push([-1, row, north ? 0 : 1]);
+    if (!west && col < 2) opts.push([col + 1, row, north ? 0 : 3]);
+  }
+  return opts;
+}
+// (a corner of a block as one number, for the walking distances: routeField)
+const cornerKey = (col, row, k) => ((col + 8) * 512 + (row + 8)) * 4 + k;
+// (what a crossing costs on top of its width: the wait at the light, as metres of sidewalk)
+const CROSS_WAIT = 8;
+// where p is along a block's walk, from its corner 0 the way of its corners (m), how far off the walk
+// it is, and the walk's whole length
+function arcOf(L, x, z) {
+  let s = 0;
+  let best = Infinity;
+  let at = 0;
+  for (let i = 0; i < L.length; i++) {
+    const a = L[i];
+    const b = L[(i + 1) % L.length];
+    const vx = b[0] - a[0];
+    const vz = b[1] - a[1];
+    const len = Math.hypot(vx, vz) || 1;
+    const t = Math.max(0, Math.min(len, ((x - a[0]) * vx + (z - a[1]) * vz) / len));
+    const d = Math.hypot(a[0] + (vx / len) * t - x, a[1] + (vz / len) * t - z);
+    if (d < best) {
+      best = d;
+      at = s + t;
+    }
+    s += len;
+  }
+  return { s: at, off: best, per: s };
+}
+// the way along the walk from corner k to its corner j going dir (+1: the way of the corners)
+function arcFrom(L, k, dir) {
+  const n = L.length;
+  const j = (k + dir + n) % n;
+  return Math.hypot(L[j][0] - L[k][0], L[j][1] - L[k][1]);
+}
 
 // beyond this far from the camera a walker steps every other frame (see Civilians.update)
 const FAR_STEP = 40;
@@ -400,40 +463,72 @@ class Civilian {
   // (intelligence round) the crossings from the corner they are at: [col, row, corner] of each block
   // across the street or the avenue (the mainland's: only those built)
   crossOpts() {
-    const k = this.target;
-    const north = k < 2;
-    const west = k === 0 || k === 3;
-    const opts = [];
-    if (this.col >= 100) {
-      const live = this.game.world.mainland && this.game.world.mainland.blocks;
-      const ok = (c, r) => {
-        const b = mainBlock(c, r);
-        return b && (!live || live.has(b.id));
-      };
-      if (north && ok(this.col, this.row - 1)) opts.push([this.col, this.row - 1, west ? 3 : 2]);
-      if (!north && ok(this.col, this.row + 1)) opts.push([this.col, this.row + 1, west ? 0 : 1]);
-      if (west && ok(this.col + 1, this.row)) opts.push([this.col + 1, this.row, north ? 1 : 2]);
-      if (!west && ok(this.col - 1, this.row)) opts.push([this.col - 1, this.row, north ? 0 : 3]);
-    } else {
-      if (north && this.row > 0) opts.push([this.col, this.row - 1, west ? 3 : 2]);
-      if (!north && this.row < 4) opts.push([this.col, this.row + 1, west ? 0 : 1]);
-      if (west && this.col > 0) opts.push([this.col - 1, this.row, north ? 1 : 2]);
-      if (west && this.col === 0) opts.push([-1, this.row, north ? 0 : 1]);
-      if (!west && this.col < 2) opts.push([this.col + 1, this.row, north ? 0 : 3]);
-    }
-    return opts;
+    return crossesFrom(this.game, this.col, this.row, this.target);
   }
 
   // (intelligence round) Somewhere to get to (game/days.js: their goal): at each corner the way that
   // brings them nearest it - on round this block, back the other way, or across to the next block -
   // and never straight back over the street they just crossed. Their own block's sidewalk passing
   // the place: round it the short way, no crossing. Returns false to walk on as anybody does
+  // (critic round: nearest by the way they would walk it - Civilians.routeField - not by the corner
+  // nearest it as the crow flies. That had them to and fro between two corners for ever, the door
+  // they were going to a few metres round the bend from one of them and never in reach; and the
+  // street they had crossed for lunch was never crossed back to the office)
   routeTo(g) {
     const L = this.loop;
     const n = L.length;
     const k = this.target;
     const fwd = (k + this.dir + n) % n;
     const back = (k - this.dir + n) % n;
+    const F = n === 4 && !this.prom && this.col >= 0 ? this.mgr.routeField(g) : null;
+    if (F) {
+      let kind = null;
+      let o = null;
+      if (F.col === this.col && F.row === this.row) {
+        // (on this block's walk: round it the shorter way)
+        const sk = arcOf(L, L[k][0], L[k][1]).s;
+        const ahead = this.dir > 0 ? (F.s - sk + F.per) % F.per : (sk - F.s + F.per) % F.per;
+        kind = F.per - ahead + 1 < ahead ? 'back' : 'fwd';
+      } else {
+        let best = Infinity;
+        const dF = F.dist.get(cornerKey(this.col, this.row, fwd));
+        const dB = F.dist.get(cornerKey(this.col, this.row, back));
+        if (dF !== undefined) {
+          best = dF + arcFrom(L, k, this.dir);
+          kind = 'fwd';
+        }
+        if (dB !== undefined && dB + arcFrom(L, k, -this.dir) < best) {
+          best = dB + arcFrom(L, k, -this.dir);
+          kind = 'back';
+        }
+        for (const q of crossesFrom(this.game, this.col, this.row, k)) {
+          const dq = F.dist.get(cornerKey(q[0], q[1], q[2]));
+          if (dq === undefined) continue;
+          const p = sidewalkLoop(q[0], q[1])[q[2]];
+          const d = dq + Math.hypot(p[0] - L[k][0], p[1] - L[k][1]) + CROSS_WAIT;
+          if (d < best) {
+            best = d;
+            kind = 'cross';
+            o = q;
+          }
+        }
+      }
+      if (kind === 'cross') {
+        this.lastBlock = [this.col, this.row];
+        this.setBlock(o[0], o[1], false);
+        this.target = o[2];
+        this.crossing = true;
+        return true;
+      }
+      if (kind) {
+        this.crossing = false;
+        if (kind === 'back') {
+          this.dir = -this.dir;
+          this.target = back;
+        } else this.target = fwd;
+        return true;
+      }
+    }
     // (the place on this block's walk: no crossing)
     let onWalk = false;
     for (let i = 0; i < n && !onWalk; i++) {
@@ -473,6 +568,37 @@ class Civilian {
       this.target = back;
     } else this.target = fwd;
     return true;
+  }
+
+  // (critic round) Somewhere new to go (game/days.js, a friend waiting: game/streetsocial.js date):
+  // turned the right way at once - not on to the far corner first, away from it, and back the long way
+  // round. Mid-block, the shorter of the two ways (Civilians.routeField)
+  headFor(g) {
+    const L = this.loop;
+    if (!g || this.prom || this.crossing || this.via || this.ctrl || !L || L.length !== 4 || this.col < 0) return;
+    const F = this.mgr.routeField(g);
+    if (!F) return;
+    const n = 4;
+    const k = this.target;
+    const prev = (k - this.dir + n) % n;
+    let turn;
+    if (F.col === this.col && F.row === this.row) {
+      const s = arcOf(L, this.pos.x, this.pos.z).s;
+      const ahead = this.dir > 0 ? (F.s - s + F.per) % F.per : (s - F.s + F.per) % F.per;
+      turn = F.per - ahead + 2 < ahead;
+    } else {
+      const dk = F.dist.get(cornerKey(this.col, this.row, k));
+      const dp = F.dist.get(cornerKey(this.col, this.row, prev));
+      if (dk === undefined || dp === undefined) return;
+      turn = dp + Math.hypot(L[prev][0] - this.pos.x, L[prev][1] - this.pos.z) + 2 < dk + Math.hypot(L[k][0] - this.pos.x, L[k][1] - this.pos.z);
+    }
+    if (turn) {
+      this.dir = -this.dir;
+      this.target = prev;
+      this.crossOK = false;
+      this.crossNode = undefined;
+      this.mgr.stats.turned = (this.mgr.stats.turned || 0) + 1;
+    }
   }
 
   nextCorner() {
@@ -559,6 +685,48 @@ class Civilian {
     }
     const ux = dx / L;
     const uz = dz / L;
+    // (critic round) out of a pocket along its wall, a hand on it (progress): round the end of the
+    // hedge, the planter, the parked van - until the way straight on is open and they are nearer
+    // where they are going than where they met it
+    if (this.wf) {
+      const W = this.wf;
+      W.t -= dt;
+      W.clock -= dt;
+      const T = this.loop && this.loop[this.target];
+      const gx = this.via ? this.via.x : T ? T[0] : tx;
+      const gz = this.via ? this.via.z : T ? T[1] : tz;
+      const gd = Math.hypot(gx - px, gz - pz) || 1;
+      if (W.t <= 0 || W.target !== this.target || this.ctrl) this.wf = null;
+      else if (W.clock <= 0) {
+        W.clock = 0.2;
+        if (gd < W.d0 - 0.5 && !this.blocked((gx - px) / gd, (gz - pz) / gd, Math.min(Math.max(gd - 0.4, 0.3), 2.5))) this.wf = null;
+        else {
+          let found = false;
+          for (let i = 0; i < WF_TURNS.length && !found; i++) {
+            const a = WF_TURNS[i] * W.side;
+            const c = Math.cos(a);
+            const s = Math.sin(a);
+            const vx = W.hx * c - W.hz * s;
+            const vz = W.hx * s + W.hz * c;
+            if (!this.blocked(vx, vz, 0.9)) {
+              W.hx = vx;
+              W.hz = vz;
+              found = true;
+            }
+          }
+          if (!found) {
+            W.hx = -W.hx;
+            W.hz = -W.hz;
+          }
+        }
+      }
+      if (this.wf) {
+        this.avT = 0;
+        _av.x = px + W.hx * 2;
+        _av.z = pz + W.hz * 2;
+        return _av;
+      }
+    }
     this.avClock -= dt;
     if (this.avClock <= 0) {
       this.avClock = 0.2;
@@ -651,8 +819,36 @@ class Civilian {
     if (this.stuckN < 2) return;
     this.stuckN = 0;
     this.mgr.stats.unstuck++;
+    // (critic round) hopeless - out of a pocket and back into it again and again (the inside of a
+    // garden's fence, its gate far off): where nobody can see it, back on their own sidewalk, as the
+    // big games do with somebody stuck out of sight
+    const tNow = this.game.time;
+    const ups = this.unstuckAt || (this.unstuckAt = []);
+    ups.push(tNow);
+    while (ups.length && tNow - ups[0] > 45) ups.shift();
+    if (ups.length >= 4 && this.warpOut()) return;
+    // (critic round) stuck while following a wall already: the other way round it
+    if (this.wf) {
+      const W = this.wf;
+      W.side = -W.side;
+      W.hx = -W.hx;
+      W.hz = -W.hz;
+      W.t = Math.max(W.t, 8);
+      return;
+    }
+    // (critic round) at the curb, waiting for the walk, and the place at its edge out of reach - a
+    // pole, a bin: they wait where they are. (That counted as being at the corner across the street:
+    // the next corner over there their goal now, not crossing any more, and they set off straight
+    // over the road through the cars, the light never looked at)
+    if (this.crossing && !this.crossOK) {
+      if (this.waitAt) this.waitAt.walkT = 99;
+      return;
+    }
     // (the corner they are making for has something standing on it - a pole, a hydrant: near enough
-    // is there; on round the next one)
+    // is there; on round the next one) - (critic round) the corner itself, not wherever the step
+    // round somebody, or the squeeze past a group, had them heading for this moment
+    const T0 = this.loop && this.loop[this.target];
+    if (T0) far = Math.hypot(T0[0] - this.pos.x, T0[1] - this.pos.z);
     if (far < 2 && !this.ctrl && this.loop && !this.via) {
       this.nextCorner();
       this.crossOK = false;
@@ -677,6 +873,25 @@ class Civilian {
         best = i;
       }
     }
+    // (critic round) stuck again where they were got out of a moment ago - the inside corner of a
+    // front yard's hedge, an L of planters: the free way for a second and a half only took them out
+    // and back into it, again and again. Now a hand on the wall (avoid), round it to the open
+    const now = this.game.time;
+    const E = this.escAt;
+    const again = E && now - E.t < 12 && Math.hypot(this.pos.x - E.x, this.pos.z - E.z) < 3.5;
+    this.escAt = { t: now, x: this.pos.x, z: this.pos.z };
+    if (best >= 0 && again && !this.ctrl && this.loop && this.loop[this.target]) {
+      const T = this.via ? [this.via.x, this.via.z] : this.loop[this.target];
+      const gx = T[0] - this.pos.x;
+      const gz = T[1] - this.pos.z;
+      const hx = OUT_DIRS[best][0];
+      const hz = OUT_DIRS[best][1];
+      const cr = hx * gz - hz * gx;
+      this.wf = { hx, hz, side: cr > 0 ? 1 : cr < 0 ? -1 : Math.random() < 0.5 ? 1 : -1, t: 20, clock: 0, d0: Math.hypot(gx, gz), target: this.target };
+      this.avT = 0;
+      this.mgr.stats.walled = (this.mgr.stats.walled || 0) + 1;
+      return;
+    }
     if (best >= 0) {
       this.avX = OUT_DIRS[best][0];
       this.avZ = OUT_DIRS[best][1];
@@ -687,6 +902,48 @@ class Civilian {
       this.dir = -this.dir;
       this.target = n === 2 ? (this.target ? 0 : 1) : (this.target + this.dir + n) % n;
     }
+  }
+
+  // (critic round) out of sight - behind the camera, or far off - set back on the walk round their block,
+  // at the point of it nearest them: false if it would be seen
+  warpOut() {
+    const L = this.loop;
+    if (!L || L.length !== 4 || this.ctrl || this.scripted || this.crossing || this.prom) return false;
+    const cam = this.game.camera;
+    const cp = cam.position;
+    const fw = cam.getWorldDirection(_rd);
+    const dx = this.pos.x - cp.x;
+    const dz = this.pos.z - cp.z;
+    const dist = Math.hypot(dx, dz) || 1;
+    if (dist < 45 && dx * fw.x + dz * fw.z > -0.2 * dist) return false;
+    let best = null;
+    let bd = Infinity;
+    for (let i = 0; i < 4; i++) {
+      const a = L[i];
+      const b = L[(i + 1) % 4];
+      const vx = b[0] - a[0];
+      const vz = b[1] - a[1];
+      const k = clamp(((this.pos.x - a[0]) * vx + (this.pos.z - a[1]) * vz) / (vx * vx + vz * vz || 1), 0, 1);
+      const qx = a[0] + vx * k;
+      const qz = a[1] + vz * k;
+      const d = Math.hypot(qx - this.pos.x, qz - this.pos.z);
+      if (d < bd) {
+        bd = d;
+        best = [qx, qz, i];
+      }
+    }
+    if (!best) return false;
+    this.pos.x = best[0];
+    this.pos.z = best[1];
+    this.vel.set(0, 0, 0);
+    this.target = this.dir > 0 ? (best[2] + 1) % 4 : best[2];
+    this.wf = null;
+    this.via = null;
+    this.avT = 0;
+    this.unstuckAt.length = 0;
+    this.mgr.stats.warped = (this.mgr.stats.warped || 0) + 1;
+    if (this.goal) this.headFor(this.goal);
+    return true;
   }
 
   update(dt) {
@@ -728,6 +985,11 @@ class Civilian {
     }
     // (knocked down in a fist fight - or out cold, seeing stars - then up and away: ROADMAP 5.4)
     if ((this.downT > 0 || this.upT > 0) && this.updateDown(dt)) return;
+    // (critic round: a moment at the corner cut short - a fright, a scene - the phone away again)
+    if (this.pausing && (this.panicT > 0 || this.ctrl || this.cowerT > 0 || this.coverT > 0 || this.noticeT > 0 || this.callT > 0 || this.browse || this.headless)) {
+      stopWait(this, this.pausing);
+      this.pausing = null;
+    }
     let tx;
     let tz;
     let speed = this.speed * this.rush;
@@ -908,11 +1170,40 @@ class Civilian {
       const t = this.loop[this.target];
       tx = t[0];
       tz = t[1];
+      // (critic round) out in the road and not crossing it - shoved out into the intersection by a
+      // car, let go in the middle of it, a frightened run that ended there: back onto the sidewalk
+      // first, the short way - not on from there straight across the traffic to the next corner, in
+      // front of the cars waiting for them to get out of the way (and they for the cars)
+      this.offT = (this.offT === undefined ? Math.random() : this.offT) - dt;
+      if (this.offT <= 0 && !this.via && !this.crossing && !this.prom && this.loop.length === 4) {
+        this.offT = 1;
+        const L = this.loop;
+        const a = L[(this.target - this.dir + 4) % 4];
+        const vx = t[0] - a[0];
+        const vz = t[1] - a[1];
+        const k = clamp(((this.pos.x - a[0]) * vx + (this.pos.z - a[1]) * vz) / (vx * vx + vz * vz || 1), 0, 1);
+        const qx = a[0] + vx * k;
+        const qz = a[1] + vz * k;
+        // (out in the road: off the walk on its outer side, away from the block - the inside of a
+        // block, a plaza, a front yard, is not the road, and the wall-follow is there for it)
+        const bx = (L[0][0] + L[1][0] + L[2][0] + L[3][0]) / 4;
+        const bz = (L[0][1] + L[1][1] + L[2][1] + L[3][1]) / 4;
+        if (Math.hypot(qx - this.pos.x, qz - this.pos.z) > 4.2 && (this.pos.x - qx) * (bx - qx) + (this.pos.z - qz) * (bz - qz) < 0) {
+          this.via = { x: qx, z: qz, until: game.time + 15 };
+          const st = this.mgr.stats;
+          st.offWalk = (st.offWalk || 0) + 1;
+          const log = st.offLog || (st.offLog = []);
+          log.push({ x: +this.pos.x.toFixed(1), z: +this.pos.z.toFixed(1), d: +Math.hypot(qx - this.pos.x, qz - this.pos.z).toFixed(1), col: this.col, row: this.row, t: this.target, day: this.day ? this.day.why : null });
+          if (log.length > 20) log.shift();
+        }
+      }
       // (ROADMAP 13.12) off their sidewalk after a fright, something in the way of the corner: back
       // onto the sidewalk first, the short way (game/brain.js resume)
       const via = this.via;
       if (via) {
-        if (Math.hypot(via.x - this.pos.x, via.z - this.pos.z) < 0.8 || this.game.time > via.until) this.via = null;
+        // (critic round: a way of a few steps - out of a front yard by its path and its gate - one
+        // point after the other)
+        if (Math.hypot(via.x - this.pos.x, via.z - this.pos.z) < 0.8 || this.game.time > via.until) this.via = via.next || null;
         else {
           tx = via.x;
           tz = via.z;
@@ -921,7 +1212,8 @@ class Civilian {
       // (v5, ROADMAP 11.18) along the way: a shop's window to look in, a look at the phone, a
       // look at the time
       this.idleT = (this.idleT === undefined ? 3 + Math.random() * 10 : this.idleT) - dt;
-      if (this.idleT <= 0 && !this.crossing && !this.jog && this.stopT <= 0) {
+      // (critic round: late to meet a friend - no window-shopping on the way)
+      if (this.idleT <= 0 && !this.crossing && !this.jog && this.stopT <= 0 && !this.dateOf) {
         this.idleT = 5 + Math.random() * 9;
         // (GTA IV pass: an old man stops for a breather now and then, a hand to his back)
         if (this.role === 'elder' && Math.random() < 0.35) {
@@ -940,7 +1232,12 @@ class Civilian {
         this.crossOK = false;
         this.crossNode = undefined;
         this.hurry = false;
-        if (!this.crossing && Math.random() < (this.chatty ? 0.4 : 0.15)) this.stopT = 1 + Math.random() * (this.chatty ? 6 : 3);
+        if (!this.crossing && !this.dateOf && Math.random() < (this.chatty ? 0.4 : 0.15)) {
+          this.stopT = 1 + Math.random() * (this.chatty ? 6 : 3);
+          // (critic round) a moment at the corner with something to it - the phone, a look down the
+          // street one way and the other - not standing there staring at nothing (game/waiting.js)
+          this.pausing = this.pauseW || (this.pauseW = {});
+        }
       }
       if (this.crossing && !this.crossOK) {
         // at the curb: across only when the cars of that road have the red light. (GTA IV pass)
@@ -987,6 +1284,10 @@ class Civilian {
       if (this.stopT > 0) {
         this.stopT -= dt;
         speed = 0;
+        if (this.pausing) waitBeat(game, this, this.pausing, dt, { street: true });
+      } else if (this.pausing) {
+        stopWait(this, this.pausing);
+        this.pausing = null;
       }
       // (v5, ROADMAP 11.18: round the others on the sidewalk, not through them)
       // (where you can see it: past 36 m nobody can tell, and it costs a little for every walker)
@@ -1595,6 +1896,8 @@ export class Civilians {
       c.update(step);
       if (c.dog) this.walkDog(c, step);
     }
+    // (critic round) eyes on the street, not only on you
+    this.glances(dt);
     // the rain: umbrellas open, people hurry, some wait under an awning for it to stop
     this.rainT = (this.rainT || 0) - dt;
     if (this.rainT <= 0) {
@@ -1607,6 +1910,119 @@ export class Civilians {
         c.dispose();
         return false;
       });
+    }
+  }
+
+  // (critic round) Eyes on the street. Somebody walking along looks at what is going on round them,
+  // not only at you: the one coming the other way (a look, and away - and now and then the other one
+  // looks back, the eyes meet for a moment), a child, a dog, somebody talking or running, the
+  // musician playing, a car tearing past or with its horn going. The curious look more and longer,
+  // the timid less and quickly away; on the phone, hardly at all.
+  // Only near the camera (past 30 m nobody could tell), a few people a frame
+  glances(dt) {
+    this.glT = (this.glT || 0) - dt;
+    if (this.glT > 0) return;
+    this.glT = 0.1;
+    const list = this.list;
+    const n = list.length;
+    if (!n || this.game.classic) return;
+    const game = this.game;
+    const now = game.time;
+    const cam = game.camera.position;
+    const G = this.grid;
+    const pl = game.player;
+    const minds = game.minds;
+    const busker = game.crowds && game.crowds.social && game.crowds.social.busker;
+    const cars = this.cars;
+    for (let q = 0; q < Math.min(n, 5); q++) {
+      this.glI = ((this.glI || 0) + 1) % n;
+      const c = list[this.glI];
+      if (!c.alive || c.inside || c.headless || c.scripted || c.panicT > 0 || c.convo || c.waitAt || c.browse || c.listenTo || c.onCall) continue;
+      if ((c.glanceUntil || 0) > now || (c.ambT || 0) > now || !c.fig || !c.fig.j) continue;
+      if (c.fig.lookAt && c.fig.lookAt !== c._look) continue;
+      const dx0 = c.pos.x - cam.x;
+      const dz0 = c.pos.z - cam.z;
+      if (dx0 * dx0 + dz0 * dz0 > 900) continue;
+      const m = minds ? minds.of(c) : null;
+      const curious = m ? m.curious : 0.5;
+      const timid = m ? m.bold < 0.3 : false;
+      // (the next look a while off: sooner for the curious, much later with the phone at the ear)
+      c.ambT = now + (2.2 + Math.random() * 3.5) * (1.4 - curious * 0.7) * (c.fig.carry === 'phone' ? 2.5 : 1);
+      const f = c.fig.forward;
+      let best = null;
+      let bs = 0.25;
+      let who = null;
+      const consider = (p, s, o) => {
+        // (in front of them or to the side - nobody looks back over their shoulder at nothing)
+        const ox = p.x - c.pos.x;
+        const oz = p.z - c.pos.z;
+        const d = Math.hypot(ox, oz) || 1;
+        const ahead = (ox * f.x + oz * f.z) / d;
+        if (ahead < -0.1) return;
+        const sc = s * (0.6 + 0.4 * ahead) * (0.7 + Math.random() * 0.6);
+        if (sc > bs) {
+          bs = sc;
+          best = p;
+          who = o || null;
+        }
+      };
+      // the people round them (not you - that is game/voices.js and game/minds.js - nor the friend at
+      // their side, who they are talking with)
+      if (G) {
+        const cx = Math.floor(c.pos.x / 2);
+        const cz = Math.floor(c.pos.z / 2);
+        for (let i = -3; i <= 3; i++) {
+          for (let j = -3; j <= 3; j++) {
+            const a = G.get((cx + i) * 4096 + cz + j);
+            if (!a) continue;
+            for (const o of a) {
+              if (o === c || o === pl || o === c.buddy || o === c.buddyOf || !o.fig || !o.fig.j || o.headless) continue;
+              const d = Math.hypot(o.pos.x - c.pos.x, o.pos.z - c.pos.z);
+              if (d < 1.2 || d > 7) continue;
+              let s = 0.45 * (1 - d / 9);
+              // (coming this way: the look people give the one they are about to pass)
+              if (o.vel && o.vel.x * f.x + o.vel.z * f.z < -0.4) s += 0.3;
+              if (o.role === 'kid' || o.fig.look.kid) s += 0.25;
+              if (o.dog) s += 0.3;
+              if (o.talkUntil > now) s += 0.2;
+              if (o.panicT > 0) s += 0.6;
+              if (o.jog) s += 0.15;
+              consider(o.fig.j.headC, s, o);
+            }
+          }
+        }
+      }
+      // the musician, playing
+      if (busker && busker.c && busker.c.alive && busker.c.fig && busker.c.fig.j) {
+        const d = Math.hypot(busker.c.pos.x - c.pos.x, busker.c.pos.z - c.pos.z);
+        if (d < 14 && d > 1.5) consider(busker.c.fig.j.headC, 0.7 * (1 - d / 16) + curious * 0.3);
+      }
+      // a car going by fast, or a horn
+      if (cars) {
+        for (let i = 0; i < cars.length; i++) {
+          const v = cars[i];
+          const d = Math.hypot(v.pos.x - c.pos.x, v.pos.z - c.pos.z);
+          if (d > 16 || d < 2) continue;
+          const sp = Math.abs(v.speed || 0);
+          // (only one that draws the eye: its horn going, or tearing past - not every car going by)
+          if ((v.hornT || 0) > 0 || (v.horn || 0) > 0 || sp > 13) {
+            const p = c._carLook || (c._carLook = new THREE.Vector3());
+            consider(p.set(v.pos.x, (v.pos.y || 0) + 0.9, v.pos.z), 0.6 * (1 - d / 20));
+          }
+        }
+      }
+      if (!best) continue;
+      const look = (timid ? 0.5 : 0.8) + Math.random() * (0.6 + curious * 1.2);
+      c.glanceAt = best;
+      c.glanceUntil = now + look;
+      this.stats.looked = (this.stats.looked || 0) + 1;
+      // (and the eyes meet, now and then: the other one looks back - a moment, then each away)
+      if (who && who.alive && !who.scripted && !who.convo && !(who.glanceUntil > now) && !(who.panicT > 0) && Math.random() < 0.3 && who.fig.forward.x * (c.pos.x - who.pos.x) + who.fig.forward.z * (c.pos.z - who.pos.z) > 0) {
+        who.glanceAt = c.fig.j.headC;
+        who.glanceUntil = now + 0.5 + Math.random() * 0.7;
+        who.ambT = now + 3;
+        this.stats.eyes = (this.stats.eyes || 0) + 1;
+      }
     }
   }
 
@@ -1625,6 +2041,78 @@ export class Civilians {
     for (const c of this.list) if (!c.inside && c.dying < 0) add(c);
     const p = this.game.player;
     if (p && p.mode === 'foot') add(p);
+  }
+
+  // (critic round) How far it is to walk to g - a place on a block's sidewalk, the door they are going
+  // to - from each corner round it: along the sidewalks and over the crossings (each costs its wait at
+  // the light), the shorter way round every block (the walking distance, as a person reckons it, not
+  // the distance as the crow flies). A few dozen corners, once for everybody going there: kept with
+  // the place a while (blocks are built as you come near, and their crossings with them). Null where
+  // the place is on no block's walk
+  routeField(g) {
+    const now = this.game.time;
+    const old = g._route;
+    if (old && now - old.t < 12) return old.ok ? old : null;
+    const F = { t: now, ok: false, dist: new Map(), col: 0, row: 0, s: 0, per: 0 };
+    g._route = F;
+    const ml = this.game.world.mainland;
+    const live = ml && ml.blocks;
+    let gb = null;
+    let gd = 4.6;
+    for (const w of walksNear(g, 4.6)) {
+      if (w[0] < 0 || w[2] >= gd) continue;
+      if (w[0] >= 100 && live && !live.has(mainBlock(w[0], w[1]).id)) continue;
+      gd = w[2];
+      gb = w;
+    }
+    if (!gb) return null;
+    F.col = gb[0];
+    F.row = gb[1];
+    const GL = sidewalkLoop(F.col, F.row);
+    if (GL.length !== 4) return null;
+    const ga = arcOf(GL, g.x, g.z);
+    F.s = ga.s;
+    F.per = ga.per;
+    // (Dijkstra from the place outwards: the four corners of its block first, each the shorter way
+    // round to it)
+    const open = [];
+    const dist = F.dist;
+    const put = (col, row, k, d) => {
+      const key = cornerKey(col, row, k);
+      const was = dist.get(key);
+      if (was !== undefined && was <= d) return;
+      dist.set(key, d);
+      open.push({ col, row, k, d, key });
+    };
+    let s = 0;
+    for (let i = 0; i < 4; i++) {
+      const fw = (F.s - s + F.per) % F.per;
+      put(F.col, F.row, i, Math.min(fw, F.per - fw));
+      s += arcFrom(GL, i, 1);
+    }
+    const done = new Set();
+    for (let guard = 0; guard < 600 && open.length; guard++) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].d < open[bi].d) bi = i;
+      const q = open[bi];
+      open[bi] = open[open.length - 1];
+      open.pop();
+      if (done.has(q.key) || dist.get(q.key) < q.d) continue;
+      done.add(q.key);
+      const L = sidewalkLoop(q.col, q.row);
+      const p = L[q.k];
+      // (far enough: nobody going there walks from further off)
+      if (Math.abs(p[0] - g.x) > 240 || Math.abs(p[1] - g.z) > 240) continue;
+      put(q.col, q.row, (q.k + 1) % 4, q.d + arcFrom(L, q.k, 1));
+      put(q.col, q.row, (q.k + 3) % 4, q.d + arcFrom(L, q.k, -1));
+      for (const o of crossesFrom(this.game, q.col, q.row, q.k)) {
+        if (o[0] < 0) continue;
+        const r = sidewalkLoop(o[0], o[1])[o[2]];
+        put(o[0], o[1], o[2], q.d + Math.hypot(r[0] - p[0], r[1] - p[1]) + CROSS_WAIT);
+      }
+    }
+    F.ok = true;
+    return F;
   }
 
   // (intelligence round) the cars near you - in the traffic, parked, yours - for the walkers' feelers
@@ -1671,6 +2159,12 @@ export class Civilians {
     let side = 0;
     let slow = 1;
     let you = false;
+    // (critic round) people standing in the way - a group talking, somebody on the phone: round
+    // them on the side where there is room, further out; squeezing past ("Excuse me") where there is
+    // none, rather than pushing against them on the spot
+    let stand = 0;
+    const now = this.game.time;
+    const squeeze = c.squeezeT > now;
     const pl = this.game.player;
     const cx = Math.floor(c.pos.x / 2);
     const cz = Math.floor(c.pos.z / 2);
@@ -1684,8 +2178,9 @@ export class Civilians {
           const oz = o.pos.z - c.pos.z;
           const d = Math.hypot(ox, oz);
           if (d > 2.2 || d < 1e-4) continue;
-          // (too close: apart)
-          if (d < 0.62 && !c.noCollide) {
+          const still = o !== pl && (!o.vel || o.vel.x * o.vel.x + o.vel.z * o.vel.z < 0.09);
+          // (too close: apart - not while squeezing past people standing)
+          if (d < 0.62 && !c.noCollide && !(squeeze && still)) {
             const push = (0.62 - d) * 0.5;
             c.pos.x -= (ox / d) * push;
             c.pos.z -= (oz / d) * push;
@@ -1694,6 +2189,8 @@ export class Civilians {
           if (ahead < 0.35) continue;
           const lat = ox * rx + oz * rz;
           if (o === pl && d < 1.3 && ahead > 0.6 && Math.abs(lat) < 0.55) you = true;
+          if (squeeze && still) continue;
+          if (still && d < 1.5 && Math.abs(lat) < 0.8) stand++;
           // (coming this way, or standing: round them; going the same way and slower: behind them)
           const ov = o.vel ? o.vel.x * dx + o.vel.z * dz : 0;
           const w = (2.2 - d) / 2.2;
@@ -1702,13 +2199,43 @@ export class Civilians {
         }
       }
     }
+    out.k = slow;
+    out.wait = false;
     if (side) {
-      const s = Math.max(-1, Math.min(1, side)) * 0.9;
+      // (not round on the side of the wall, the shop fronts, the planters - no way past there: the
+      // other side; looked at now and then, not every frame)
+      if (!(c.sideAt > now)) {
+        c.sideAt = now + 0.35;
+        c.sideWall = (c.blocked(rx, rz, 1.0) ? 1 : 0) | (c.blocked(-rx, -rz, 1.0) ? 2 : 0);
+      }
+      let sg = side > 0 ? 1 : -1;
+      const wall = c.sideWall || 0;
+      const bad = sg > 0 ? wall & 1 : wall & 2;
+      const other = sg > 0 ? wall & 2 : wall & 1;
+      if (bad && !other) sg = -sg;
+      else if (bad && other && stand) {
+        // (nowhere round them: a moment, a word, and through - sideways, close)
+        c.standT = (c.standT || 0) + 1 / 30;
+        if (c.standT > 0.8) {
+          c.standT = 0;
+          c.squeezeT = now + 2.2;
+          this.stats.squeezed = (this.stats.squeezed || 0) + 1;
+          // (a word now and then - most squeeze past without one, and nobody says it twice running)
+          if (this.game.voices && Math.random() < 0.3 && !(c.squeezeSaidT > now)) {
+            c.squeezeSaidT = now + 30;
+            this.game.voices.say(c, ['Excuse me.', 'Sorry, just squeezing past.', 'Pardon me.', 'Coming through, sorry.', 'Sorry - sorry.', 'May I?'][Math.floor(Math.random() * 6)], 'plain');
+          }
+        }
+        out.x = c.pos.x + dx * 0.3;
+        out.z = c.pos.z + dz * 0.3;
+        out.k = 0.2;
+        return out;
+      }
+      const s = Math.min(1, Math.abs(side)) * (stand ? 1.35 : 0.9) * sg;
       out.x = c.pos.x + dx * 2 + rx * s;
       out.z = c.pos.z + dz * 2 + rz * s;
     }
-    out.k = slow;
-    out.wait = false;
+    if (squeeze) out.k = Math.min(out.k, 0.55);
     // (intelligence round) you standing in their way where there is no room round you - a stall on
     // one side, the wall on the other: they stop and wait ("Excuse me": game/voices.js) rather than
     // walk on the spot into you (Civilian.update: and you staying there, back the other way)
@@ -1831,6 +2358,8 @@ export class Civilians {
     }
     c.target = c.dir > 0 ? (leg + 1) % n : leg;
     c.crossing = false;
+    // (critic round: somewhere to be - the next shop of their errands, home: that way, the short way)
+    if (c.goal) c.headFor(c.goal);
   }
 
   remove(c) {
@@ -1876,7 +2405,9 @@ export class Civilians {
 
   // a walker nobody has a use for (the far crowd may take them over: game/farcrowd.js)
   plain(c) {
-    if (c.scripted || c.ctrl || c.owner || !c.alive || c.headless || c.panicT > 0 || c.inside || c.dog || c.buddy || c.buddyOf || c.crossing || c.photo || c.exitRoom || c.huddle || c.onCall || c.goingHome || c.meet || c.pose) return false;
+    // (critic round: nor somebody on their way to meet a friend - a phone call, a chat, the musician
+    // took them, and the friend waited for nobody: game/streetsocial.js date)
+    if (c.scripted || c.ctrl || c.owner || !c.alive || c.headless || c.panicT > 0 || c.inside || c.dog || c.buddy || c.buddyOf || c.crossing || c.photo || c.exitRoom || c.huddle || c.onCall || c.goingHome || c.meet || c.pose || c.dateOf) return false;
     // (ROADMAP 13.12: nor somebody in the middle of a reaction, or just over a fright - game/brain.js)
     if (this.game.brain && this.game.brain.busy(c)) return false;
     const P = c.fig.parts;

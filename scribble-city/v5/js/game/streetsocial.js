@@ -979,15 +979,18 @@ export class StreetSocial {
       const x = leg.px + leg.wx * 1.25;
       const z = leg.pz + leg.wz * 1.25;
       if (this.byDoor(x, z, 2.2) || this.crowded(x, z, 6)) continue;
-      // (the friend: a way off along the same block's walk)
+      // (the friend: a way off along the same block's walk - (critic round) one already coming this
+      // way rather than one walking off from it, who would have the whole block to go round)
       let b = null;
       let bd = Infinity;
       for (const c of civs.list) {
         if (c === a || c.col !== a.col || c.row !== a.row || !civs.plain(c) || busy(c)) continue;
         const d = Math.hypot(c.pos.x - a.pos.x, c.pos.z - a.pos.z);
         if (d < 14 || d > 46) continue;
-        if (d < bd) {
-          bd = d;
+        const coming = c.vel.x * (a.pos.x - c.pos.x) + c.vel.z * (a.pos.z - c.pos.z) > 0;
+        const score = d - (coming ? 20 : 0);
+        if (score < bd) {
+          bd = score;
           b = c;
         }
       }
@@ -1015,6 +1018,8 @@ export class StreetSocial {
     b.goal = b.day.steps[0].at;
     D.speed0 = b.speed;
     b.speed = Math.max(b.speed, 1.45 + Math.random() * 0.2);
+    // (critic round: the way to the friend now - turned round if they were walking off from them)
+    b.headFor(b.goal);
     this.dates.push(D);
     this.stats.dates++;
   }
@@ -1064,9 +1069,12 @@ export class StreetSocial {
         this.endDate(D);
         return;
       }
-      // the friend near: a wave, the last steps to them - in front of them
+      // the friend near: a wave, the last steps to them - in front of them. (critic round: the friend
+      // on the way is nobody else's - Civilians.plain says no to a date - so asked as it is: free, on
+      // the sidewalk, not running)
       const d = Math.hypot(b.pos.x - a.pos.x, b.pos.z - a.pos.z);
-      if (D.at && d < 9 && civs.plain(b)) {
+      const bFree = !b.ctrl && !b.scripted && !b.inside && !b.crossing && !b.convo && !b.huddle && !b.onCall && !b.meet && !b.buddy && !b.buddyOf && !(b.downT > 0) && !(game.brain && game.brain.busy(b));
+      if (D.at && d < 9 && bFree) {
         D.phase = 'come';
         D.t = 0;
         if (fig.carry === 'phone') fig.carry = null;
@@ -1594,6 +1602,19 @@ export class StreetSocial {
         civs.release(c);
         c.scripted = false;
         civs.rejoin(c);
+        // (critic round) let go in the front yard - in at the gate already, too long about it: out the
+        // way they came, back to the path and along it out of the gate - not straight at the corner of
+        // the block through the hedge, pressed into its inside corner for good
+        const s = H.s;
+        const out = 1.6 + (s.yard || 0);
+        const rel = [c.pos.x - s.door[0], c.pos.z - s.door[2]];
+        const depth = rel[0] * s.nx + rel[1] * s.nz;
+        const side = Math.abs(rel[0] * s.nz - rel[1] * s.nx);
+        if (depth < out - 0.4 && side < 4 && !(c.panicT > 0)) {
+          const at = Math.max(0.5, depth);
+          c.via = { x: s.door[0] + s.nx * at, z: s.door[2] + s.nz * at, until: now + 4, next: { x: s.door[0] + s.nx * (out + 0.4), z: s.door[2] + s.nz * (out + 0.4), until: now + 12 } };
+          this.stats.yardOut = (this.stats.yardOut || 0) + 1;
+        }
       }
       c.goingHome = false;
       H.done = true;

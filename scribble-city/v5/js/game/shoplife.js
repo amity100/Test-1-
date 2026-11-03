@@ -11,6 +11,7 @@ import { TechLife } from './techlife.js';
 import { BeautyLife } from './beautylife.js';
 import { HobbyLife } from './hobbylife.js';
 import { ServiceLife } from './servicelife.js';
+import { waitBeat, stopWait } from './waiting.js';
 
 // (v5, ROADMAP 14.4) A shop's day, as it really goes - the shops of the new kind (world/market.js):
 // every action tied to a real thing in the shop.
@@ -836,6 +837,8 @@ export class ShopLife {
     const f = c.fig;
     const L = v.L;
     L.t += dt;
+    // (critic round: out of the line - the phone away, the hands and the eyes free: game/waiting.js)
+    if (L.wait && L.wait.kind && L.st !== 'queue' && L.st !== 'waitScan') stopWait(c, L.wait);
     switch (L.st) {
       case 'enter': {
         if (!v.pts) v.pts = [{ x: this.shop.door[0], z: this.shop.door[2], bell: true }, { x: this.room.door.x, z: this.room.door.z, inRoom: true }, ...this.room.path(this.room.door.x, this.room.door.z, L.orient.x, L.orient.z)];
@@ -1230,8 +1233,20 @@ export class ShopLife {
           this.go(v, tx, tz);
         }
         const m = this.open.follow(v);
-        if (m) return m;
+        // (critic round: all but there and not getting any nearer - the one ahead a little back from
+        // their place, a display's corner: they stand where they are, in the line - not walking on the
+        // spot, nothing else going on, until the line moves)
+        if (m && Math.hypot(tx - c.pos.x, tz - c.pos.z) < 0.9 && Math.hypot(c.vel.x, c.vel.z) < 0.2 && v.t > 1.5) v.pts = null;
+        else if (m) {
+          if (L.wait && L.wait.kind) stopWait(c, L.wait);
+          return m;
+        }
         c.faceYaw = Math.atan2(ps.x - c.pos.x, ps.z - c.pos.z);
+        // (critic round) and waiting as people wait - not a statue facing the till: the phone, a look
+        // at the one ahead or at the cashier at work, along the shelves, into the basket; a word when
+        // it is slow (game/waiting.js)
+        const ahead = i > 0 ? this.queue[i - 1] : this.payer;
+        waitBeat(this.game, c, L.wait || (L.wait = {}), dt, { ahead: ahead && ahead.c, cashier: this.open.keeper, n: this.queue.length + (this.payer ? 1 : 0) });
         return null;
       }
       case 'toTill': {
@@ -1245,10 +1260,11 @@ export class ShopLife {
       case 'unload':
         return this.unload(v, dt);
       case 'waitScan': {
-        // the cashier at work: watching
+        // the cashier at work: watching - (critic round) the hands at it mostly, a look up at the
+        // cashier, the phone now and then; not a stare at one point (game/waiting.js)
         const k = this.open.keeper;
         c.faceYaw = this.room.pay.yaw;
-        if (k && k.alive) f.lookAt = k.fig.j.headC;
+        if (k && k.alive) waitBeat(this.game, c, L.wait || (L.wait = {}), dt, { till: true, cashier: k });
         if (L.t > 40) this.goOut(v);
         return null;
       }
@@ -1763,6 +1779,7 @@ export class ShopLife {
     const L = v.L;
     const c = v.c;
     this.unwear(v);
+    if (L.wait) stopWait(c, L.wait);
     const qi = this.queue.indexOf(v);
     if (qi >= 0) this.queue.splice(qi, 1);
     if (this.payer === v) this.payer = null;

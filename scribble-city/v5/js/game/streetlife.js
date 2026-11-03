@@ -15,6 +15,7 @@ import { worldAt } from '../ui/minigame.js';
 // (v5, ROADMAP 14.4) the life of a shop of the new kind: its customers, its cashier, the one who fills
 // its shelves, its live products
 import { ShopLife, PROFILES as LIFE_PROFILES } from './shoplife.js';
+import { waitBeat, stopWait } from './waiting.js';
 import { EateryLife } from './eaterylife.js';
 
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
@@ -1552,6 +1553,8 @@ class OpenShop {
   visit(v, dt) {
     const c = v.c;
     v.t += dt;
+    // (critic round: out of the line - the phone away, the hands free: game/waiting.js)
+    if (v.wait && v.wait.kind && v.phase !== 'queue') stopWait(c, v.wait);
     if (v.phase !== 'at') c.fig.sit = Math.max(0, c.fig.sit - dt * 3);
     // (ROADMAP 14.4: a customer of a shop of the new kind, until on the way out)
     if (v.life && v.L && this.life2 && v.phase !== 'out') return this.life2.visit(v, dt);
@@ -1913,15 +1916,17 @@ class OpenShop {
 
   // in the line: a step forward each time the one at the till is done; the first one up when it is
   // free
-  queueing(v) {
+  queueing(v, dt) {
     const c = v.c;
     const i = this.queue.indexOf(v);
     if (i < 0 || !this.paySpot) {
+      if (v.wait) stopWait(c, v.wait);
       this.leave(v);
       return null;
     }
     const ps = this.paySpot;
     if (i === 0 && (!this.payer || this.payer === v || !this.payer.c.alive || this.payer.phase === 'out')) {
+      if (v.wait) stopWait(c, v.wait);
       this.queue.shift();
       this.payer = v;
       v.phase = 'pay-go';
@@ -1939,10 +1944,18 @@ class OpenShop {
       v.t = 0;
     }
     const m = this.follow(v);
-    if (m) return m;
-    // waiting: facing the till, a look at the phone now and then
+    // (critic round: all but there and not getting nearer: in the line where they stand)
+    if (m && Math.hypot(tx - c.pos.x, tz - c.pos.z) < 0.9 && Math.hypot(c.vel.x, c.vel.z) < 0.2 && v.t > 1.5) v.pts = null;
+    else if (m) {
+      if (v.wait && v.wait.kind) stopWait(c, v.wait);
+      return m;
+    }
+    // waiting: facing the till - (critic round) and as people wait: the phone out and a look at it, at
+    // the one ahead, along the shelves; a word when it is slow (game/waiting.js) - not the phone at
+    // the ear for good and the eyes on nothing
     c.faceYaw = Math.atan2(ps.x - c.pos.x, ps.z - c.pos.z);
-    if (!c.fig.carry && Math.random() < 0.002) c.fig.carry = 'phone';
+    const ahead = i > 0 ? this.queue[i - 1] : this.payer;
+    waitBeat(this.game, c, v.wait || (v.wait = {}), dt || 1 / 30, { ahead: ahead && ahead.c, cashier: this.keeper, n: this.queue.length + (this.payer ? 1 : 0) });
     return null;
   }
 

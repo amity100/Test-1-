@@ -75,7 +75,12 @@ const TELL_THERE = {
   kill: [['[sad] Somebody was killed today, not far from here.', '[scared] In this neighborhood? I do not believe it.']],
   theft: [['[angry] Some lunatic stole a car right in front of people!', '[surprised] In broad daylight?'], ['[angry] Another car stolen around here.', '[sad] I am selling mine.']],
   blast: [['[surprised] Something blew up earlier, did you hear it?', '[scared] What is going on lately?']],
-  crash: [['[surprised] There was a bad crash on the boulevard.', '[sad] Again? Somebody will get killed.']],
+  crash: [
+    ['[surprised] There was a bad crash on the boulevard.', '[sad] Again? Somebody will get killed.'],
+    ['[surprised] Did you hear? Two cars, right at the lights.', '[sad] I hope nobody was hurt.'],
+    ['[angry] Somebody ran the red light again, I heard. Smashed right into a car.', '[angry] They drive like maniacs around here.'],
+    ['[sad] The traffic is all stuck back there - an accident.', '[joy] Good thing we walk, then.'],
+  ],
   wow: [['[surprised] I saw a guy draw a car - and then drive it away!', '[joy] Come on. Really?'], ['[joy] There is an artist whose drawings come alive!', '[surprised] I want to see that!'], ['[surprised] A drawing! It just stood up and walked!', '[joy] No way!']],
   kind: [['[joy] Somebody helped an old lady up on the corner today. A stranger!', '[joy] See? People are not so bad.'], ['[joy] I heard a guy stopped to help somebody who fell.', '[joy] That is nice to hear, for once.']],
   hero: [['[surprised] Somebody caught a shop robber earlier, with his bare hands!', '[joy] Good. About time somebody did.'], ['[joy] They say a stranger stopped a hold-up today.', '[surprised] Like a superhero?']],
@@ -381,20 +386,32 @@ export class Minds {
       if (Math.abs(a.pos.x - p.x) > 20 || Math.abs(a.pos.z - p.z) > 20) continue;
       const ma = this.of(a);
       if (ma.chatty < 0.35) continue;
+      // (what a knows: what they saw, else the latest news - told as it was, here or elsewhere)
+      // (critic round: news gets old. Each tells a thing once, and a thing is told a few times round
+      // here, not by every pair standing in the street - one crash on the boulevard was told a dozen
+      // times over in two minutes, in the same words)
+      const heard = ma.toldOf || (ma.toldOf = new Set());
+      let n = ma.saw && now - ma.sawT < 300 && !heard.has(ma.saw) ? ma.saw : null;
+      if (!n) for (let i = news.length - 1; i >= 0 && !n; i--) if (!heard.has(news[i]) && (news[i].toldN || 0) < 3) n = news[i];
+      if (!n) continue;
       for (const b of civs) {
         if (b === a || !b.alive || b.convo || b.scripted || b.panicT > 0 || b.inside || !b.fig) continue;
         if (Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) > 2.6) continue;
-        // (what a knows: what they saw, else the latest news - told as it was, here or elsewhere)
-        const n = ma.saw && now - ma.sawT < 300 ? ma.saw : news[news.length - 1];
         const what = n.what || 'street';
         const told = TOLD[n.kind] || (what === 'wow' ? 'wow' : 'fight');
         const N = news.find((q) => q.kind === n.kind) || news[news.length - 1];
         const here = N && Math.hypot(N.x - a.pos.x, N.z - a.pos.z) < 45 && now - N.t < 90;
         const sets = (here ? TELL_HERE : TELL_THERE)[told] || TELL_THERE.fight;
-        const set = pick(sets);
+        // (and not in the words just used)
+        let set = pick(sets);
+        if (sets.length > 1 && set === this.lastSet) set = sets[(sets.indexOf(set) + 1) % sets.length];
         if (!game.voices.talk([a, b], set.slice())) return;
+        this.lastSet = set;
+        heard.add(n);
+        n.toldN = (n.toldN || 0) + 1;
         // (and now b knows it - and what to think of you, if it was you)
         const mb = this.of(b);
+        (mb.toldOf || (mb.toldOf = new Set())).add(n);
         mb.heard = n;
         if (n.you && what === 'bad') mb.you = Math.max(-1, mb.you - 0.25);
         if (n.you && what === 'wow') mb.you = Math.min(1, mb.you + 0.25);
