@@ -607,7 +607,8 @@ function tables(R, fr, d0, K, ku, cond) {
   for (let d = d1; d > R.db + 0.9; d -= 1.7) {
     for (let u = R.ua + 0.95 + (k % 2) * 0.35; u < R.ub - 0.85; u += 1.75) {
       if (d <= d0 && u > ku[0] - 0.95 && u < ku[1] + 0.95) continue;
-      if (cond && Math.abs(u - cond.u) < 1.35 && Math.abs(d - cond.d) < 1.45) continue;
+      // (clear of the napkins and the bin by the wall: the table and its chairs, not over them)
+      if (cond && u + 0.75 > cond.u0 && u - 0.75 < cond.u1 && d + 0.45 > cond.d0 && d - 0.45 < cond.d1) continue;
       // (the way in from the door stays clear)
       if (u > R.lane[0] - 0.85 && u < R.lane[1] + 0.85 && d > R.da - 2.3) continue;
       R.table(u, d, { round: !!K.round, r: 0.36, color: K.tableCol || [0.95, 0.94, 0.9], chairs: [[1, 0], [-1, 0]], chairColor: K.chairCol });
@@ -641,5 +642,5 @@ function condiments(R, fr, cd) {
   rbox(R, S, run, 0.9, R.y0, 0.02, 1.25, R.y0 + 0.9, 0.38, [0.3, 0.3, 0.32], { skip: ['bottom'] });
   rbox(R, S, run, 0.95, R.y0 + 0.75, 0.381, 1.2, R.y0 + 0.82, 0.383, DARK, {});
   run.solid(0, -0.02, 1.25, 0.44, R.y0 + 0.95);
-  return { u: side > 0 ? R.ub - 0.25 : R.ua + 0.25, d: d + 0.4 };
+  return side > 0 ? { u0: R.ub - 0.5, u1: R.ub, d0: d - 0.05, d1: d + 1.3 } : { u0: R.ua, u1: R.ua + 0.5, d0: d - 0.05, d1: d + 1.3 };
 }
