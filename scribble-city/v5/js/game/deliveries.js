@@ -1,4 +1,4 @@
-import { civilianLook, modest } from './looks.js';
+import { civilianLook, modest, roleLook } from './looks.js';
 import { groundHeight } from '../world/layout.js';
 
 // (GTA IV) The deliveries: a van or a box truck of one of the city's firms comes along the curb
@@ -28,6 +28,9 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const DECEL = 3.6;
 
 function workerLook(firm) {
+  // (characters round 2: the driver one of the city's couriers, the firm's cap on)
+  const W = roleLook('courier', { hat: { kind: 'cap', color: firm.cap } });
+  if (W) return W;
   const L = civilianLook({ kind: 'worker' });
   L.top = { kind: 'polo', color: firm.shirt, sleeves: L.fem ? 'long' : 'short' };
   L.bottom = L.fem ? { kind: 'wide', color: [0.17, 0.18, 0.22] } : { kind: 'cargo', color: [0.2, 0.2, 0.23] };

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Scene } from './vignettes.js';
-import { civilianLook, copLook, elderLook, modest, cityLook } from './looks.js';
+import { civilianLook, copLook, elderLook, modest, cityLook, roleLook } from './looks.js';
 import { sidewalkLoop } from './civilians.js';
 import { groundHeight, BLOCK_TYPES } from '../world/layout.js';
 import { randomCarSpec } from '../render/cars.js';
@@ -410,6 +410,9 @@ export class Events {
 
 // ------------------------------------------------------------------ the hold-up
 function robberLook() {
+  // (characters round 2: one of the city's drawn people - the robbers' own - a beanie pulled down)
+  const W = roleLook('robber', { hat: { kind: 'beanie', color: [0.1, 0.1, 0.12] } });
+  if (W) return W;
   const L = civilianLook({ kind: 'street', fem: false });
   L.top = { kind: 'hoodie', color: pick([[0.14, 0.14, 0.16], [0.25, 0.27, 0.3], [0.3, 0.2, 0.18]]), sleeves: 'long' };
   L.bottom = { kind: 'pants', color: [0.12, 0.12, 0.14] };
@@ -743,6 +746,8 @@ function* helpScene(sc, def) {
 
 // ------------------------------------------------------------------ the street show
 function jugglerLook() {
+  const W = roleLook('busker', { hat: { kind: 'beret', color: [0.75, 0.18, 0.2] } });
+  if (W) return W;
   const L = civilianLook({ kind: 'street' });
   L.top = { kind: 'tee', color: pick([[0.95, 0.35, 0.35], [0.35, 0.6, 0.95], [0.98, 0.78, 0.2]]), sleeves: 'long' };
   L.bottom = { kind: 'pants', color: [0.18, 0.18, 0.22] };
@@ -1010,6 +1015,8 @@ function drawSigns(fr, sc) {
 
 // ------------------------------------------------------------------ the wedding
 function brideLook() {
+  const W = roleLook('bride');
+  if (W) return W;
   const L = civilianLook({ fem: true, kind: 'chic' });
   // (all in white, sleeves to the wrist, the skirt to the ground)
   L.top = { kind: 'blouse', color: [0.98, 0.97, 0.95], sleeves: 'long' };
@@ -1024,6 +1031,8 @@ function brideLook() {
 }
 
 function groomLook() {
+  const W = roleLook('groom');
+  if (W) return W;
   const L = civilianLook({ fem: false, kind: 'office' });
   L.top = { kind: 'suit', color: [0.14, 0.15, 0.2], sleeves: 'long', shirt: [0.97, 0.97, 0.96], tie: [0.75, 0.2, 0.3] };
   L.bottom = { kind: 'pants', color: [0.14, 0.15, 0.2] };

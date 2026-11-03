@@ -5,7 +5,7 @@ import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 import * as HERO from './heroshapes.js';
 import { HeroArt, FolkAtlas } from './heroart.js';
 import { HeroLines } from './herolines.js';
-import { FOLK, FOLK_ON, SKINS, hexRGB } from './folkspec.js';
+import { FOLK, FOLK_ON, FOLK_PHONE, SKINS, hexRGB } from './folkspec.js';
 import { folkBody, eyeGeo, faceEx, exprMoves, EXPR, EYE } from './folkshapes.js';
 import { folkTone, folkBeard } from './folkink.js';
 import { Portrait } from './portrait.js';
@@ -294,9 +294,11 @@ const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(loca
 // and more (PORTRAIT_NEAR; out below 68 - no flicker at the edge). Smaller, its strokes and its eyes
 // are a dark fuzz on it: the same face then in the city's way of drawing, its ink lines clear at any
 // size. Coming in and going out over a quarter of a second, never a pop
+// (characters round 2: out only below 60 - a face held at about the edge does not go back and forth;
+// coming in and going out over two fifths of a second)
 const PORTRAIT_NEAR = 80;
-const PORTRAIT_FAR = 68;
-const PORTRAIT_FADE = 0.25;
+const PORTRAIT_FAR = 60;
+const PORTRAIT_FADE = 0.4;
 // (its own outlines inside it - round the eyes, the lips, under the jaw - from this many pixels high)
 const PORTRAIT_LINES = 190;
 // (in the street too, not only the face lab's - game/facelab.js)
@@ -954,8 +956,9 @@ export class PersonRenderer {
     // them are about, their parts are drawn in a handful of draws; phones fewer of them
     this.touch = touch;
     this.folkLines = 0;
-    // (ROADMAP 14.9: 72 kinds of them, a phone 36)
-    const nK = Math.min(FOLK.length, touch ? 36 : 72);
+    // (ROADMAP 14.9: 72 kinds of them, a phone 36; characters round 2: and the people at work - all
+    // of them on a computer, a phone the first of each work's - render/folkspec.js FOLK_PHONE)
+    const nK = touch ? FOLK_PHONE : FOLK.length;
     FOLK_ON.n = nK;
     const A = (this.atlas = new FolkAtlas(touch, nK));
     const FP = (o, name) => {
@@ -1277,10 +1280,13 @@ export class PersonRenderer {
       if (this.touch) {
         const near = [];
         for (const P of this.portraits.values()) {
+          // (characters round 2: one showing keeps its place unless another is clearly nearer - a
+          // third nearer - so two at about the same distance do not take turns)
+          P.rank = P.nextD * (P.allow ? 0.67 : 1);
           P.allow = false;
           if (P.next) near.push(P);
         }
-        near.sort((a, b) => a.nextD - b.nextD);
+        near.sort((a, b) => a.rank - b.rank);
         for (let i = 0; i < near.length && i < PORTRAIT_PHONE; i++) near[i].allow = true;
       }
       // (the fades on the game's clock)
@@ -1289,13 +1295,20 @@ export class PersonRenderer {
       this._fadeAt = now;
       for (const P of this.portraits.values()) {
         if (P.mesh) P.mesh.visible = false;
-        if (P.next !== P.owner) {
-          P.fresh = true;
-          // (somebody new: theirs comes in from nothing - the face lab's at once)
-          P.fade = P.next && P.next.__portrait ? 1 : 0;
-          P.fadeTo = 1;
-        }
-        P.owner = P.next;
+        // (characters round 2) somebody else of the kind nearer now, and whoever has it still drawn:
+        // theirs goes back to the city's way first, over the fade - the next one's comes in after it
+        // has, never one face popping out as another pops in
+        P.handing = !!(P.next && P.owner && P.next !== P.owner && P.ownerSeen && !P.next.__portrait && P.fade > 0.02);
+        if (!P.handing) {
+          if (P.next !== P.owner) {
+            P.fresh = true;
+            // (somebody new: theirs comes in from nothing - the face lab's at once)
+            P.fade = P.next && P.next.__portrait ? 1 : 0;
+            P.fadeTo = 1;
+          }
+          P.owner = P.next;
+        } else P.fadeTo = 0;
+        P.ownerSeen = false;
         P.next = null;
         P.nextD = Infinity;
         if (P.fade === undefined) P.fade = 0;
@@ -1314,6 +1327,7 @@ export class PersonRenderer {
     if (PORTRAIT_MODE === 'off' || !portraitKind(k) || fig.dead > 0 || fig.parts.head < 0.5 || fig.__noPortrait) return null;
     let P0 = this.portraits && this.portraits.get(k);
     const mine = !!P0 && P0.owner === fig;
+    if (mine) P0.ownerSeen = true;
     // (the face's height on the screen, in its pixels - from how far the head is, not the feet: near,
     // the two are far apart)
     const cam = this.cam;
@@ -1337,7 +1351,8 @@ export class PersonRenderer {
         }
       }
     }
-    const d = fig.__portrait ? -1 : inRange ? camDist : 1e5 + camDist;
+    // (characters round 2: the one who has it keeps it unless another of the kind is a third nearer)
+    const d = fig.__portrait ? -1 : (inRange ? camDist : 1e5 + camDist) * (mine ? 0.67 : 1);
     if (d < P.nextD) {
       P.nextD = d;
       P.next = fig;
@@ -1346,10 +1361,13 @@ export class PersonRenderer {
     // (a phone's: only the nearest few - P.allow, begin; the one already showing fades out)
     if (this.touch && !fig.__portrait && !P.allow && !(P.fade > 0.01)) return null;
     P.usedAt = shared.uTime.value;
-    P.fadeTo = inRange && (!this.touch || fig.__portrait || P.allow) ? 1 : 0;
+    P.fadeTo = inRange && !P.handing && (!this.touch || fig.__portrait || P.allow) ? 1 : 0;
+    // (how big the face is on the screen: the face's own ink going as the portrait's pencil comes in -
+    // drawFolk)
+    P.px = px;
     // (its own outlines - round the eyes, the lips, under the jaw - only while it is big enough on the
     // screen for them to be drawn whole: smaller, broken specks over it; its outline alone then)
-    const big = px > (P.lineBig ? PORTRAIT_LINES - 25 : PORTRAIT_LINES);
+    const big = px > (P.lineBig ? PORTRAIT_LINES - 45 : PORTRAIT_LINES);
     if (big !== P.lineBig) P.setLines((P.lineBig = big));
     return P;
   }
@@ -2245,7 +2263,10 @@ export class PersonRenderer {
       p.heroSole.push(_mH, F.sole, own, id(), ind);
     }
     // ---- the head: its face drawn on it, the hair (its cap, its locks, a fall of it, a bun), the ears
-    if (P.head > 0.5) {
+    // (characters round 2: under a ski mask none of it - the mask is the rig's own shape, over the
+    // head - and under a hat no locks or bun to come through it)
+    const hatK = L.hat && L.hat.kind;
+    if (P.head > 0.5 && hatK !== 'skimask') {
       const hs = fig.headScale * S;
       const hr = fig.hr;
       const hu = fig.hu;
@@ -2274,7 +2295,11 @@ export class PersonRenderer {
           else port.neckToHead.makeScale(0, 0, 0);
         }
         fig.__neckP = null;
-        HL.set('head', 'head', _mP, _fEw, gaze, port.fade > 0.5);
+        // (characters round 2) the face's own ink - its outline, its features, its shading - kept over
+        // the portrait while it is small on the screen and going as the portrait's own pencil comes in
+        // (render/glsl.js PORTRAIT gDet: as the face grows from 80 to 170 of the drawing's pixels): at
+        // no size, and at no moment of its coming in, is the face without its lines
+        HL.set('head', 'head', _mP, _fEw, gaze, port.fade * Math.max(0, Math.min(1, ((port.px || 0) - 95) / 110)));
       }
       // (the city's way of drawing the face - under the portrait while it comes in or goes)
       if (!port || port.fade < 0.999) {
@@ -2283,9 +2308,9 @@ export class PersonRenderer {
       }
       framed(hc, hr, hu, hf, hs, hs, hs, _mH);
       q.hair.push(_mH, white, own, id(), ind);
-      if (q.locks) q.locks.push(_mH, white, own, id(), ind);
+      if (q.locks && !hatK) q.locks.push(_mH, white, own, id(), ind);
       if (q.fall) q.fall.push(_mH, white, own, id(), ind);
-      if (q.bun) q.bun.push(_mH, white, own, id(), ind);
+      if (q.bun && !hatK) q.bun.push(_mH, white, own, id(), ind);
       if (q.glasses) q.glasses.push(_mH, F.glasses, own, id(), ind);
       // (their eyes in their sockets, each turned to where they look. The head's frame is drawn
       // mirrored - DrawClass.push - and the eyes' with it: each in the mirror's place)

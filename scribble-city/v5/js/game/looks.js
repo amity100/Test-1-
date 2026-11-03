@@ -136,6 +136,8 @@ export function folkPick(o = {}) {
   let ok = [];
   for (let k = 0; k < FOLK_ON.n; k++) {
     const F = FOLK[k];
+    // (characters round 2: the people at work are picked for their work - rolePick)
+    if (F.role) continue;
     if (o.fem !== undefined && !!F.fem !== !!o.fem) continue;
     if (o.old && !(F.age >= 60)) continue;
     all.push(k);
@@ -166,6 +168,38 @@ export function cityLook(o = {}, share = 1) {
   return k >= 0 ? folkLook(k) : civilianLook(o);
 }
 
+// (characters round 2) one of the city's drawn people at their work (render/folkspec.js ROLES): of
+// those the renderer made, the one used longest ago - a woman or a man if asked, one way of dressing
+// for it if asked (variant: the shop's)
+const ROLE_USED = new Float64Array(256);
+let roleTurn = 0;
+export function rolePick(role, o = {}) {
+  let best = -1;
+  let bu = Infinity;
+  for (let k = 0; k < FOLK_ON.n; k++) {
+    const F = FOLK[k];
+    if (F.role !== role) continue;
+    // (the way of dressing asked for first, a woman or a man as asked next - any of them before none:
+    // a phone has fewer of them)
+    const u = ROLE_USED[k] + (o.variants && !o.variants.includes(F.variant) ? 1e12 : 0) + (o.fem !== undefined && !!F.fem !== !!o.fem ? 1e9 : 0);
+    if (u < bu) {
+      bu = u;
+      best = k;
+    }
+  }
+  if (best >= 0) ROLE_USED[best] = ++roleTurn;
+  return best;
+}
+// their look: one of them dressed for it, a hat on top where the work has one (the rig's own shapes)
+export function roleLook(role, o = {}) {
+  const k = rolePick(role, o);
+  if (k < 0) return null;
+  const L = folkLook(k);
+  if (o.hat) L.hat = o.hat;
+  if (o.acc) L.acc.push(...o.acc);
+  return L;
+}
+
 export function folkLook(k) {
   const F = FOLK[k];
   const L = baseLook({ pen: 'fineliner', fem: F.fem });
@@ -185,6 +219,30 @@ export function folkLook(k) {
 
 // ------------------------------------------------------------------ gangs (NY street crime, GTA flavour)
 export function gangLook(kind = 'street') {
+  // (characters round 2: each crew one of the city's drawn people in its colours, its hats the rig's)
+  {
+    let W = null;
+    if (kind === 'street') {
+      const red = chance(0.5);
+      const crew = red ? [0.72, 0.12, 0.14] : [0.15, 0.3, 0.7];
+      W = roleLook(red ? 'gangRed' : 'gangBlue', { hat: chance(0.6) ? { kind: pick(['capBack', 'cap', 'beanie']), color: chance(0.5) ? crew : pick(DARK) } : null });
+      if (W) {
+        W.bandana = crew;
+        if (chance(0.45)) W.acc.push('bandanaMouth');
+        if (chance(0.55)) W.acc.push('chain');
+      }
+    } else if (kind === 'mob') W = roleLook('mob', { hat: chance(0.65) ? { kind: 'fedora', color: pick([[0.18, 0.17, 0.18], [0.4, 0.33, 0.25]]) } : null, acc: chance(0.5) ? ['ring'] : [] });
+    else if (kind === 'biker') {
+      W = roleLook('biker', { hat: chance(0.5) ? { kind: 'bandanaHead', color: pick([[0.72, 0.12, 0.14], [0.15, 0.15, 0.18]]) } : null, acc: chance(0.5) ? ['chain'] : [] });
+    } else if (kind === 'eraser') {
+      W = roleLook('eraser', { hat: chance(0.6) ? { kind: pick(['beanie', 'capBack']), color: [0.98, 0.62, 0.7] } : null });
+      if (W) {
+        W.bandana = [0.3, 0.45, 0.85];
+        if (chance(0.5)) W.acc.push('bandanaMouth');
+      }
+    } else W = roleLook('robber', { hat: { kind: 'skimask', color: pick([[0.12, 0.12, 0.14], [0.55, 0.15, 0.15], [0.2, 0.3, 0.2]]) } });
+    if (W) return W;
+  }
   if (kind === 'street') {
     const L = baseLook({ pen: pick(['fineliner', 'marker', 'comic', 'ballpoint']), build: pick(['normal', 'normal', 'stocky', 'lanky']) });
     const crew = pick([[0.72, 0.12, 0.14], [0.15, 0.3, 0.7]]); // red or blue crew
@@ -251,6 +309,8 @@ export function gangLook(kind = 'street') {
 
 // ------------------------------------------------------------------ police
 export function copLook() {
+  const W = roleLook('police', { hat: { kind: 'police', color: [0.12, 0.14, 0.26] }, acc: ['badge', 'belt'] });
+  if (W) return W;
   const L = baseLook({ pen: pick(['fineliner', 'ballpoint', 'marker']), build: pick(['normal', 'stocky', 'normal', 'big']), fem: chance(0.3) });
   const navy = jit([0.16, 0.2, 0.38], 0.04);
   L.top = { kind: 'uniform', color: navy, sleeves: chance(0.5) ? 'short' : 'long' };
@@ -265,6 +325,8 @@ export function copLook() {
 
 // (ROADMAP 8.4) a firefighter: the red helmet, the long tan coat and trousers
 export function firefighterLook() {
+  const W = roleLook('fire', { hat: { kind: 'fire', color: [0.84, 0.12, 0.12] } });
+  if (W) return W;
   const L = baseLook({ pen: pick(['marker', 'fineliner', 'ballpoint']), build: pick(['normal', 'stocky', 'big']), fem: chance(0.25) });
   const coat = jit([0.6, 0.48, 0.24], 0.04);
   L.top = { kind: 'vest', color: coat, under: jit([0.56, 0.44, 0.22], 0.03), sleeves: 'long' };
@@ -278,6 +340,8 @@ export function firefighterLook() {
 
 // riot unit: helmet with a visor, padded vest
 export function swatLook() {
+  const W = roleLook('swat', { hat: { kind: 'helmet', color: [0.16, 0.18, 0.26] }, acc: ['badge', 'belt'] });
+  if (W) return W;
   const L = baseLook({ pen: pick(['marker', 'fineliner', 'comic']), build: pick(['stocky', 'big', 'normal']), fem: chance(0.2) });
   const navy = jit([0.14, 0.16, 0.26], 0.03);
   L.top = { kind: 'vest', color: [0.2, 0.22, 0.3], under: navy, sleeves: 'long' };
@@ -304,6 +368,14 @@ const BOOTS = [[0.12, 0.1, 0.1], [0.45, 0.3, 0.2], [0.55, 0.4, 0.26]];
 const BAGS = [[0.12, 0.11, 0.13], [0.6, 0.42, 0.28], [0.92, 0.88, 0.8], [0.62, 0.2, 0.26], [0.8, 0.72, 0.92]];
 
 export function civilianLook(o = {}) {
+  // (characters round 2) one of the city's drawn people first, whoever asks - dressed their own way
+  // (what is asked of the clothes after this is the old way's, and goes unseen; a hat is still worn)
+  // - the old way only where its clothes are the point (a team's colours: o.old) or for a child's
+  // build (kidLook asks for one of the children first)
+  if (!o.old && o.build !== 'chibi') {
+    const k = folkPick({ fem: o.fem, kind: FOLK_HOW[o.kind] ? o.kind : undefined });
+    if (k >= 0) return folkLook(k);
+  }
   const fem = o.fem !== undefined ? o.fem : chance(0.5);
   const pen = o.pen || pick(['fineliner', 'fineliner', 'ballpoint', 'marker', 'pencil', 'comic']);
   const L = baseLook({ pen, build: o.build || pick(['normal', 'normal', 'normal', 'lanky', 'stocky']), fem });
@@ -483,6 +555,9 @@ const BAR_STYLES = {
 };
 
 export function barLook(style, o = {}, tries = 0) {
+  // (characters round 2: the bar's crowd the city's drawn people too)
+  const k = folkPick({ fem: o.fem });
+  if (k >= 0) return folkLook(k);
   const L = (BAR_STYLES[style] || BAR_STYLES.ballpointGuy)();
   if (o.fem !== undefined && L.fem !== o.fem && tries < 8) return barLook(style, o, tries + 1);
   return modest(L);
@@ -492,6 +567,8 @@ export const BAR_STYLE_NAMES = Object.keys(BAR_STYLES);
 
 // the club's bouncer: big, all in black, shades after dark
 export function bouncerLook() {
+  const W = roleLook('bouncer');
+  if (W) return W;
   const L = baseLook({ pen: 'marker', build: 'big' });
   L.top = { kind: 'bomber', color: [0.08, 0.08, 0.1], sleeves: 'long', inner: [0.1, 0.1, 0.12] };
   L.bottom = { kind: 'pants', color: [0.08, 0.08, 0.1] };
@@ -505,6 +582,8 @@ export function bouncerLook() {
 
 // the bartender: white shirt, black vest, a proud moustache
 export function bartenderLook() {
+  const W = roleLook('bartender');
+  if (W) return W;
   const L = baseLook({ pen: 'fineliner', build: 'stocky' });
   L.top = { kind: 'vest', color: [0.12, 0.12, 0.14], sleeves: 'long', under: [0.96, 0.95, 0.92] };
   L.bottom = { kind: 'pants', color: [0.14, 0.14, 0.16] };
@@ -516,6 +595,14 @@ export function bartenderLook() {
 
 // ------------------------------------------------------------------ people at work on the street
 const WHITE = [0.97, 0.96, 0.93];
+// (characters round 2: which of the staff's ways of dressing - render/folkspec.js ROLES staff: 0 black,
+// 1 green, 2 a white coat, 3 denim, 4 a kitchen's whites, 5 burgundy - each kind of shop has)
+const FOOD = [4, 4, 1];
+const STAFF_DRESS = {
+  pizza: FOOD, bagel: FOOD, cafe: [4, 1, 3], burger: FOOD, tacos: FOOD, noodles: FOOD, diner: [4, 1], juice: [1, 4], icecream: [4, 1], sushi: [4, 0], falafel: FOOD,
+  grocery: [1, 3], deli: [4, 1], shop: [1, 3], pharmacy: [2], optics: [2, 0], perfume: [0, 5], jewelry: [0, 5], fashion: [0, 5, 3], boutique: [0, 5],
+  electronics: [0, 3], phones: [0, 3], shoes: [1, 3, 0], sports: [1, 3], surf: [3, 1], books: [3, 5], music: [3, 0], toys: [1, 3], flowers: [1, 3], hardware: [3, 1], laundry: [1, 3], gym: [1, 0], barber: [0, 3],
+};
 export function shopkeeperLook(kind, femIs = undefined) {
   // (v5: who lives in a house - grandmother is grandmother)
   if (kind === 'homeGrandma') {
@@ -525,7 +612,13 @@ export function shopkeeperLook(kind, femIs = undefined) {
     return G;
   }
   const fem = femIs === undefined ? chance(0.45) : femIs;
-  const L = civilianLook({ fem, kind: 'casual', pen: pick(['fineliner', 'ballpoint', 'marker', 'comic', 'sepia']) });
+  // (characters round 2: whoever works the shop one of the city's drawn people, dressed as the shop
+  // has them - a kitchen's whites, a pharmacy's white coat, black at a boutique, a sports shop's green)
+  {
+    const W = roleLook('staff', { fem, variants: STAFF_DRESS[kind] || [0, 1, 3, 5] });
+    if (W) return W;
+  }
+  const L = civilianLook({ fem, kind: 'casual', pen: pick(['fineliner', 'ballpoint', 'marker', 'comic', 'sepia']), old: true });
   L.acc = L.acc.filter((a) => a === 'earrings');
   const apron = (c) => {
     L.apron = c;
@@ -703,6 +796,8 @@ export function friendLook() {
 
 // a kid (drawn with fewer, rounder lines)
 export function kidLook(fem = chance(0.5)) {
+  const W = roleLook('kid', { fem });
+  if (W) return W;
   const L = civilianLook({ fem, kind: 'casual', build: 'chibi', pen: pick(['fineliner', 'gelPurple', 'ballpoint', 'marker']) });
   L.face.beard = null;
   L.face.lips = null;
@@ -737,6 +832,8 @@ export function elderLook(fem) {
 
 // the street painter: beret, striped shirt, paint on the apron
 export function painterLook() {
+  const W = roleLook('painter', { hat: { kind: 'beret', color: [0.75, 0.18, 0.2] }, acc: ['scarf'] });
+  if (W) return W;
   const L = civilianLook({ fem: chance(0.4), kind: 'artsy', pen: 'marker' });
   L.top = { kind: 'tee', color: [0.95, 0.95, 0.92], sleeves: 'long' };
   L.bottom = { kind: 'pants', color: [0.25, 0.28, 0.4] };

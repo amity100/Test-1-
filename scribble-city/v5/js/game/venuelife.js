@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook, cityLook, shopkeeperLook, bartenderLook, modest } from './looks.js';
+import { civilianLook, cityLook, shopkeeperLook, bartenderLook, modest, roleLook } from './looks.js';
 
 // (v5, GTA IV round) The life of the places you sit down in (world/venues2.js lays them out; an
 // OpenShop of game/streetlife.js runs each one while you are near, and hands its people to these).
@@ -84,6 +84,9 @@ const MOVIE_TALK = [
 
 // ------------------------------------------------------------------ the looks
 function waiterLook(fem) {
+  // (characters round 2: the waiters the bar's staff - black jacket, white shirt)
+  const W = roleLook('bartender', { fem });
+  if (W) return W;
   const L = civilianLook({ fem, kind: 'smart' });
   L.top = { kind: 'vest', color: [0.12, 0.12, 0.14], sleeves: 'long', under: [0.97, 0.96, 0.93] };
   L.bottom = { kind: 'pants', color: [0.12, 0.12, 0.14] };

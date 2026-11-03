@@ -3,7 +3,7 @@ import { Kit, linC } from './items.js';
 import { clubMats, pictureGeo } from './venuekit.js';
 import { flashLight, makeSurface, canvasTexture } from '../render/materials.js';
 import { worldAt } from '../ui/minigame.js';
-import { barLook, BAR_STYLE_NAMES, bouncerLook, bartenderLook, civilianLook, modest } from './looks.js';
+import { barLook, BAR_STYLE_NAMES, bouncerLook, bartenderLook, civilianLook, modest, roleLook } from './looks.js';
 import { DanceGame } from './minigames/dance.js';
 import { venueFrame, floorQuad, wallQuad, canvas, PartySound, drawPeople, Boxes, ringMesh } from './partykit.js';
 import { paintLED, paintFloor, paintNeon, paintBackdrop, paintBand } from './partyart.js';
@@ -466,8 +466,8 @@ export class ClubNight {
       path = [start, [uc, start[1]], [uc, v.d]];
     }
     for (let k = 0; k < 2; k++) {
-      const L = modest(civilianLook({ fem: k === 0, kind: 'office', pen: 'fineliner' }));
-      L.top = { kind: 'vest', color: [0.08, 0.08, 0.1], sleeves: 'long', under: [0.95, 0.95, 0.92] };
+      const L = roleLook('bartender', { fem: k === 0 }) || modest(civilianLook({ fem: k === 0, kind: 'office', pen: 'fineliner', old: true }));
+      if (!L.folk && L.folk !== 0) L.top = { kind: 'vest', color: [0.08, 0.08, 0.1], sleeves: 'long', under: [0.95, 0.95, 0.92] };
       const [x, , z] = F.P(start[0] - k * 0.9, 0, start[1]);
       // (the second a step behind the first all the way)
       const mine = path.map(([u, d], i) => (i === 0 ? [u - k * 0.9, d] : i === path.length - 1 ? [u, d - k * 0.6] : [u, d - k * 0.6]));

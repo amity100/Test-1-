@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook, cityLook, kidLook, elderLook, modest, folkLook } from './looks.js';
+import { civilianLook, cityLook, kidLook, elderLook, modest, folkLook, roleLook } from './looks.js';
 import { FOLK_ON } from '../render/folkspec.js';
 import { lightList } from '../render/materials.js';
 import { CURB } from '../world/mainland/plan.js';
@@ -122,12 +122,17 @@ const PAINTER_SAY = ['Don\'t move... perfect.', 'Chin up a little.', 'Almost don
 const SITTER_SAY = ['I love it!', 'Is that really me?', 'Can I keep it?', 'You made me look great!', 'Wow, thank you!'];
 
 function kioskLook(kind) {
+  // (characters round 2: the mall's staff the city's drawn people at work)
+  const W = roleLook('staff', { variants: [1, 3] });
+  if (W) return W;
   const L = civilianLook({ kind: pick(['casual', 'street', 'smart']) });
   L.top = { kind: 'polo', color: KIOSK_COL[kind] || [0.4, 0.5, 0.8], sleeves: L.fem ? 'long' : 'short' };
   return modest(L);
 }
 
 function guardLook() {
+  const W = roleLook('staff', { variants: [0], hat: { kind: 'cap', color: [0.12, 0.12, 0.15] }, acc: ['belt'] });
+  if (W) return W;
   const L = civilianLook({ kind: 'smart' });
   L.top = { kind: 'polo', color: [0.16, 0.17, 0.2], sleeves: L.fem ? 'long' : 'short' };
   L.bottom = L.fem ? { kind: 'wide', color: [0.13, 0.13, 0.16] } : { kind: 'pants', color: [0.13, 0.13, 0.16] };
@@ -137,6 +142,8 @@ function guardLook() {
 }
 
 function cleanerLook() {
+  const W = roleLook('staff', { variants: [1] });
+  if (W) return W;
   const L = civilianLook({ kind: 'casual' });
   L.top = { kind: 'polo', color: [0.2, 0.5, 0.56], sleeves: 'long' };
   L.bottom = { kind: 'pants', color: [0.3, 0.32, 0.36] };

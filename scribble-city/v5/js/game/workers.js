@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { civilianLook, cityLook, copLook, shopkeeperLook, modest } from './looks.js';
+import { civilianLook, cityLook, copLook, shopkeeperLook, modest, roleLook } from './looks.js';
 import { sidewalkLoop } from './civilians.js';
 import { RIDE } from './doodle.js';
 import { AVES, STREETS, BLOCK_TYPES, blockRect, groundHeight, NORTH_EDGE, SOUTH_EDGE, CURB } from '../world/layout.js';
@@ -107,6 +107,9 @@ function nearLoops(p, maxD) {
 
 // ------------------------------------------------------------------ how they are dressed
 function sweeperLook() {
+  // (characters round 2: the city's workers drawn as everybody is - the high-visibility jacket)
+  const W = roleLook('worker', { hat: { kind: 'cap', color: [0.28, 0.36, 0.3] } });
+  if (W) return W;
   const L = civilianLook({ kind: 'street' });
   L.top = { kind: 'vest', color: HIVIS, sleeves: 'long', under: [0.3, 0.38, 0.34] };
   L.bottom = { kind: 'pants', color: [0.28, 0.36, 0.3] };
@@ -116,6 +119,11 @@ function sweeperLook() {
 }
 
 function postLook() {
+  const W = roleLook('courier', { variants: [1], hat: { kind: 'cap', color: POST_BLUE }, acc: ['tote'] });
+  if (W) {
+    W.bagColor = [0.5, 0.34, 0.2];
+    return W;
+  }
   const L = civilianLook({ kind: 'smart' });
   L.top = { kind: 'polo', color: POST_BLUE, sleeves: L.fem ? 'long' : 'short' };
   L.bottom = L.fem ? { kind: 'wide', color: [0.16, 0.2, 0.32] } : { kind: 'pants', color: [0.16, 0.2, 0.32] };
@@ -126,6 +134,8 @@ function postLook() {
 }
 
 function courierLook(color) {
+  const W = roleLook('courier', { variants: [color[2] > color[0] ? 1 : 0], hat: { kind: 'cap', color } });
+  if (W) return W;
   const L = civilianLook({ kind: 'sporty' });
   L.top = { kind: 'track', color, sleeves: 'long' };
   L.bottom = { kind: 'pants', color: [0.14, 0.14, 0.17] };
@@ -142,6 +152,8 @@ function trafficCopLook() {
 }
 
 function roadLook() {
+  const W = roleLook('worker', { hat: { kind: 'hardhat', color: [0.96, 0.8, 0.2] } });
+  if (W) return W;
   const L = civilianLook({ kind: 'worker', fem: false });
   L.top = { kind: 'vest', color: HIVIS, sleeves: 'short', under: pick([[0.9, 0.9, 0.88], [0.3, 0.42, 0.6]]) };
   L.hat = { kind: 'hardhat', color: [0.96, 0.8, 0.2] };

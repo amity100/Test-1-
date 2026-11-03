@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Doodle } from './doodle.js';
-import { civilianLook } from './looks.js';
+import { civilianLook, roleLook } from './looks.js';
 import { randomCarSpec, TAXI_YELLOW } from '../render/cars.js';
 import { groundHeight } from '../world/layout.js';
 import { Deliveries } from './deliveries.js';
@@ -474,7 +474,8 @@ export class Fleet {
     const cam = game.camera.position;
     const d = Math.hypot(c.pos.x - cam.x, c.pos.z - cam.z);
     if (!G.man && d < 90) {
-      const look = civilianLook({ kind: 'worker' });
+      // (characters round 2: the depot's man one of the city's workers)
+      const look = roleLook('worker') || civilianLook({ kind: 'worker' });
       look.hat = { kind: 'cap', color: [0.98, 0.6, 0.15] };
       G.man = new Doodle(game.figures, look, { seed: Math.random() * 100 });
     } else if (G.man && d > 110) {

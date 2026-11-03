@@ -262,35 +262,6 @@ const SHOES = {
 };
 const MEN = ['Marco', 'Theo', 'Jonah', 'Ravi', 'Omar', 'Felix', 'Kenji', 'Luca', 'Andre', 'Samuel', 'Viktor', 'Diego', 'Hugo', 'Malik', 'Ezra', 'Tomas', 'Bodhi', 'Caspar', 'Dante', 'Elio', 'Gustav', 'Idris', 'Jasper', 'Kofi', 'Lev', 'Milo', 'Nikos', 'Otto', 'Pablo', 'Rafi', 'Silas', 'Wendell'];
 const WOMEN = ['Nora', 'Priya', 'Sofia', 'Amara', 'Ines', 'Hana', 'Clara', 'Zoe', 'Leila', 'Mira', 'Esther', 'Rosa', 'Yuki', 'Talia', 'Greta', 'Noor', 'Agnes', 'Beatriz', 'Cleo', 'Dalia', 'Edie', 'Frida', 'Gemma', 'Ilse', 'Juno', 'Kaia', 'Lotte', 'Maud', 'Odette', 'Pia', 'Rhea', 'Sunny'];
-const HEADS = ['head-round', 'head-oval', 'head-rectangular', 'head-square', 'head-triangular', 'head-invertedtriangular', 'head-diamond'];
-// the features a face is moved by: each [incr, decr] (one of a pair at a time), or a lone one
-const FEATURES = [
-  ['nose-scale-horiz-incr', 'nose-scale-horiz-decr'], ['nose-scale-vert-incr', 'nose-scale-vert-decr'], ['nose-scale-depth-incr', 'nose-scale-depth-decr'],
-  ['nose-hump-incr', 'nose-hump-decr'], ['nose-point-up', 'nose-point-down'], ['nose-point-width-incr', 'nose-point-width-decr'], ['nose-nostrils-width-incr', 'nose-nostrils-width-decr'],
-  ['nose-curve-convex', 'nose-curve-concave'], ['nose-volume-incr', 'nose-volume-decr'], ['nose-greek-incr', 'nose-greek-decr'],
-  ['mouth-scale-horiz-incr', 'mouth-scale-horiz-decr'], ['mouth-upperlip-volume-incr', 'mouth-upperlip-volume-decr'], ['mouth-lowerlip-volume-incr', 'mouth-lowerlip-volume-decr'],
-  ['mouth-cupidsbow-incr', 'mouth-cupidsbow-decr'], ['mouth-philtrum-volume-incr', 'mouth-philtrum-volume-decr'],
-  ['chin-prominent-incr', 'chin-prominent-decr'], ['chin-width-incr', 'chin-width-decr'], ['chin-height-incr', 'chin-height-decr'], ['chin-bones-incr', 'chin-bones-decr'],
-  ['chin-cleft-incr'], ['chin-prognathism-incr', 'chin-prognathism-decr'],
-  ['eye-scale-incr', 'eye-scale-decr'], ['eye-corner1-up', 'eye-corner1-down'], ['eye-eyefold-down', 'eye-eyefold-up'], ['eye-bag-incr', 'eye-bag-decr'],
-  ['eyebrows-trans-up', 'eyebrows-trans-down'], ['eyebrows-angle-up', 'eyebrows-angle-down'], ['eyebrows-trans-forward', 'eyebrows-trans-backward'],
-  ['forehead-scale-vert-incr', 'forehead-scale-vert-decr'], ['forehead-trans-forward', 'forehead-trans-backward'],
-  ['ear-scale-incr', 'ear-scale-decr'], ['ear-lobe-incr', 'ear-lobe-decr'], ['cheek-inner-incr', 'cheek-inner-decr'],
-  ['head-back-scale-depth-incr', 'head-back-scale-depth-decr'],
-];
-// (ROADMAP 13.11) as far as a real face goes each way: a face differs from the next by a little here and
-// a little there - not a stretched head, a nose half again as long, a chin out past the lips, eyes
-// shrunk to beads. (The head's height and width are its build's, not stretched: build.head)
-const CAP = {
-  'nose-hump-incr': 0.5, 'nose-scale-vert-incr': 0.4, 'nose-volume-incr': 0.4, 'nose-scale-horiz-incr': 0.5, 'nose-scale-depth-incr': 0.45, 'nose-point-down': 0.45,
-  'chin-prognathism-incr': 0.3, 'chin-prognathism-decr': 0.3, 'chin-height-incr': 0.35, 'chin-height-decr': 0.4, 'chin-prominent-incr': 0.45,
-  'forehead-scale-vert-incr': 0.3, 'forehead-scale-vert-decr': 0.4, 'forehead-trans-forward': 0.4,
-  'eye-scale-decr': 0.15, 'eye-bag-incr': 0.45, 'eye-corner1-up': 0.45, 'eye-corner1-down': 0.45,
-  'ear-scale-incr': 0.35, 'mouth-scale-horiz-incr': 0.4, 'mouth-scale-horiz-decr': 0.35,
-  'eyebrows-trans-up': 0.35, 'eyebrows-trans-down': 0.35, 'head-back-scale-depth-incr': 0.4, 'head-back-scale-depth-decr': 0.35,
-};
-// (the skull's own shapes, the odd ones only a little)
-const HEAD_MAX = { 'head-round': 0.6, 'head-oval': 0.65, 'head-rectangular': 0.45, 'head-square': 0.5, 'head-triangular': 0.35, 'head-invertedtriangular': 0.4, 'head-diamond': 0.3 };
 function rngOf(seed) {
   let a = seed >>> 0;
   return () => {
@@ -301,6 +272,98 @@ function rngOf(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// (characters round 2) What makes a face a person's own is not a little here and a little there - a
+// dozen of the head's targets each a third of the way, a face 2 mm from the next on average (2.2 mm
+// from the base head: every one of them the same sculpted face) - but a few things about it that are
+// strongly so: a long face or a short one, broad or narrow, a square jaw or a soft one, the chin out
+// or back, a big nose or a small one, broad or fine, hooked or snub, a heavy brow, small eyes or
+// large, slanting up or down, full lips or thin, a wide mouth, full cheeks or hollow, a high forehead,
+// big ears. Sixteen such dimensions, each between its two ends (a set of the head's targets at each,
+// as far as a real face goes); each person a place among them - five to seven of them strongly, the
+// rest a little - and of a few dozen places tried, the one furthest from everybody made before, so
+// that no two of the city's people share a face.
+const DIMS = [
+  // [its two ends: the head's targets at full, and how much it shows in a face (the eye is drawn to the
+  // nose, the eyes and the mouth before the back of the skull)]
+  [{ 'chin-height-incr': 0.7, 'forehead-scale-vert-incr': 0.3, 'head-oval': 0.6, 'head-scale-vert-incr': 0.3 }, { 'chin-height-decr': 0.8, 'head-round': 0.65, 'forehead-scale-vert-decr': 0.4, 'head-scale-vert-decr': 0.3 }, 1.2],
+  [{ 'head-square': 0.6, 'chin-width-incr': 0.8, 'cheek-bones-incr': 0.4, 'head-scale-horiz-incr': 0.35 }, { 'head-invertedtriangular': 0.75, 'chin-width-decr': 0.8, 'head-scale-horiz-decr': 0.35 }, 1.1],
+  [{ 'chin-bones-incr': 0.9, 'head-rectangular': 0.45 }, { 'chin-bones-decr': 0.9, 'head-diamond': 0.45 }, 0.9],
+  [{ 'chin-prominent-incr': 0.8, 'chin-prognathism-incr': 0.35 }, { 'chin-prominent-decr': 0.8, 'chin-prognathism-decr': 0.4 }, 0.9],
+  [{ 'nose-scale-vert-incr': 0.7, 'nose-scale-depth-incr': 0.6, 'nose-volume-incr': 0.5 }, { 'nose-scale-vert-decr': 0.6, 'nose-scale-depth-decr': 0.6, 'nose-volume-decr': 0.5 }, 1.3],
+  [{ 'nose-scale-horiz-incr': 0.8, 'nose-nostrils-width-incr': 0.8, 'nose-flaring-incr': 0.5 }, { 'nose-scale-horiz-decr': 0.8, 'nose-nostrils-width-decr': 0.6, 'nose-point-width-decr': 0.6 }, 1.2],
+  [{ 'nose-hump-incr': 0.8, 'nose-curve-convex': 0.7, 'nose-point-down': 0.5 }, { 'nose-curve-concave': 0.8, 'nose-point-up': 0.8 }, 1.2],
+  [{ 'eyebrows-trans-forward': 0.8, 'forehead-trans-forward': 0.4, 'eyebrows-trans-down': 0.5 }, { 'eyebrows-trans-backward': 0.7, 'forehead-trans-backward': 0.6, 'eyebrows-trans-up': 0.5 }, 1.0],
+  [{ 'eye-scale-incr': 0.6 }, { 'eye-scale-decr': 0.4, 'eye-bag-incr': 0.5 }, 1.1],
+  [{ 'eye-corner1-up': 0.9, 'eyebrows-angle-up': 0.6 }, { 'eye-corner1-down': 0.9, 'eyebrows-angle-down': 0.6 }, 1.1],
+  [{ 'mouth-upperlip-volume-incr': 0.9, 'mouth-lowerlip-volume-incr': 1.0, 'mouth-cupidsbow-incr': 0.6 }, { 'mouth-upperlip-volume-decr': 0.9, 'mouth-lowerlip-volume-decr': 0.8, 'mouth-cupidsbow-decr': 0.5 }, 1.1],
+  [{ 'mouth-scale-horiz-incr': 0.8 }, { 'mouth-scale-horiz-decr': 0.7 }, 1.0],
+  [{ 'cheek-volume-incr': 0.8, 'cheek-inner-incr': 0.5 }, { 'cheek-volume-decr': 0.8, 'cheek-inner-decr': 0.7, 'cheek-bones-incr': 0.5 }, 0.9],
+  [{ 'forehead-scale-vert-incr': 0.5, 'forehead-trans-backward': 0.4 }, { 'forehead-scale-vert-decr': 0.7 }, 0.7],
+  [{ 'ear-scale-incr': 0.8, 'ear-lobe-incr': 0.6 }, { 'ear-scale-decr': 0.7, 'ear-lobe-decr': 0.5 }, 0.5],
+  [{ 'head-back-scale-depth-incr': 0.6 }, { 'head-back-scale-depth-decr': 0.6 }, 0.4],
+];
+// (each dimension's name, for the rest of the face to follow it: the drawn nose as broad as the
+// shaped one, the lips as full, the eyes as open)
+const D = { long: 0, wide: 1, jaw: 2, chin: 3, nose: 4, noseW: 5, hook: 6, brow: 7, eyes: 8, tilt: 9, lips: 10, mouth: 11, cheeks: 12, forehead: 13, ears: 14, skull: 15 };
+// (the places already given: of those made by the rule, in order - the first of them the phone's too)
+const PLACES = [];
+// a place among the dimensions: five to seven of them strongly (two thirds of the way to all the way),
+// the rest a little either way
+function placeOf(R) {
+  const v = DIMS.map(() => (R() * 2 - 1) * 0.3);
+  const n = 5 + Math.floor(R() * 3);
+  for (let k = 0; k < n; k++) {
+    const d = Math.floor(R() * DIMS.length);
+    v[d] = (R() < 0.5 ? -1 : 1) * (0.65 + R() * 0.35);
+  }
+  return v;
+}
+const apart = (a, b) => {
+  let s = 0;
+  for (let d = 0; d < DIMS.length; d++) s += ((a[d] - b[d]) * DIMS[d][2]) ** 2;
+  return Math.sqrt(s);
+};
+// the place furthest from all the others, of 32 tried
+function farPlace(R) {
+  let best = null;
+  let bd = -1;
+  for (let t = 0; t < 32; t++) {
+    const v = placeOf(R);
+    let d = Infinity;
+    for (const q of PLACES) d = Math.min(d, apart(v, q));
+    if (d > bd) {
+      bd = d;
+      best = v;
+    }
+  }
+  PLACES.push(best);
+  return best;
+}
+// a place as the head's targets: each end's set, as far as the place goes towards it; a target named
+// twice its larger; a pair (incr and decr) netted to the one that wins
+function morphOf(v) {
+  const m = {};
+  for (let d = 0; d < DIMS.length; d++) {
+    const end = v[d] >= 0 ? DIMS[d][0] : DIMS[d][1];
+    const k = Math.abs(v[d]);
+    for (const [name, w] of Object.entries(end)) m[name] = Math.max(m[name] || 0, +(w * k).toFixed(2));
+  }
+  for (const [a, b] of [['incr', 'decr'], ['up', 'down'], ['forward', 'backward'], ['convex', 'concave']]) {
+    for (const name of Object.keys(m)) {
+      if (!name.endsWith('-' + a)) continue;
+      const other = name.slice(0, -a.length) + b;
+      if (!(other in m)) continue;
+      const net = m[name] - m[other];
+      delete m[name];
+      delete m[other];
+      if (net > 0.02) m[name] = +net.toFixed(2);
+      else if (net < -0.02) m[other] = +(-net).toFixed(2);
+    }
+  }
+  for (const name of Object.keys(m)) if (m[name] < 0.04) delete m[name];
+  return m;
+}
+
 // (ROADMAP 14.9) the ones after the first 32: further apart - younger and older, thinner and heavier,
 // taller and shorter, more of the face moved and further each way (still a real face), dyed hair,
 // a goatee or a full beard, blue or amber eyes, square frames - each of them nobody else
@@ -316,34 +379,28 @@ function made(i) {
   const heavy = R() < (wild ? 0.3 : 0.25);
   const thin = !heavy && wild && R() < 0.3;
   const bulk = heavy ? range(1.08, wild ? 1.34 : 1.26) : thin ? range(0.76, 0.86) : range(0.84, 1.02);
-  // the face: a head's shape, then a handful of its features, each its own way
-  const hs = pick(HEADS);
-  const morph = { [hs]: +Math.min(0.85, HEAD_MAX[hs] * range(wild ? 0.7 : 0.5, wild ? 1.25 : 1)).toFixed(2), 'cheek-bones-decr': +range(0.2, 0.45).toFixed(2) };
-  if (wild && R() < 0.5) {
-    // (a second shape of the skull, a little: between two of them)
-    const h2 = pick(HEADS);
-    if (h2 !== hs) morph[h2] = +(HEAD_MAX[h2] * range(0.25, 0.55)).toFixed(2);
+  // the face: its place among the dimensions (DIMS), as far from everybody's as it can be - a woman's
+  // jaw and nose a little finer, a heavy face fuller, a thin one hollow (the place itself, so the
+  // targets never pull against each other)
+  const place = farPlace(R);
+  const lean = (d, by) => (place[d] = Math.max(-1, Math.min(1, place[d] + by)));
+  if (fem) {
+    lean(D.wide, -0.3);
+    lean(D.jaw, -0.35);
+    lean(D.noseW, -0.25);
+    lean(D.brow, -0.3);
   }
-  const used = new Set();
-  for (let n = Math.round(wild ? range(11, 17) : range(7, 12)); n > 0; n--) {
-    const f = Math.floor(R() * FEATURES.length);
-    if (used.has(f)) continue;
-    used.add(f);
-    const pair = FEATURES[f];
-    const name = pair.length > 1 && R() < 0.5 ? pair[1] : pair[0];
-    morph[name] = +Math.min((CAP[name] || 0.6) * (wild ? 1.3 : 1), wild ? range(0.3, 0.85) : range(0.15, 0.65)).toFixed(2);
-  }
+  if (heavy) lean(D.cheeks, 0.6);
+  if (thin) lean(D.cheeks, -0.6);
+  const morph = morphOf(place);
   // (eyes a touch larger than life read as eyes in a drawing - never beads)
   if (!morph['eye-scale-decr']) morph['eye-scale-incr'] = Math.max(morph['eye-scale-incr'] || 0, +range(0.12, 0.3).toFixed(2));
   if (old) morph['head-age-incr'] = +range(0.4, 1.0).toFixed(2);
   else if (age < 28) morph['head-age-decr'] = +range(0.1, wild && age < 22 ? 0.6 : 0.35).toFixed(2);
-  if (thin) Object.assign(morph, { 'head-fat-decr': +range(0.4, 0.8).toFixed(2), 'cheek-volume-decr': +range(0.3, 0.7).toFixed(2), 'cheek-bones-incr': +range(0.2, 0.5).toFixed(2) });
-  delete morph[thin ? 'cheek-bones-decr' : 'cheek-bones-incr'];
-  if (heavy) Object.assign(morph, { 'head-fat-incr': +range(0.4, 0.9).toFixed(2), 'cheek-volume-incr': +range(0.3, 0.7).toFixed(2), 'neck-double-incr': +range(0.2, 0.8).toFixed(2) });
-  else if (R() < 0.4) Object.assign(morph, { 'head-fat-decr': +range(0.2, 0.5).toFixed(2), 'cheek-volume-decr': +range(0.1, 0.5).toFixed(2) });
-  if (fem) Object.assign(morph, { 'chin-width-decr': Math.max(morph['chin-width-decr'] || 0, 0.3), 'nose-scale-horiz-decr': Math.max(morph['nose-scale-horiz-decr'] || 0, 0.15) });
+  if (thin) Object.assign(morph, { 'head-fat-decr': +range(0.4, 0.8).toFixed(2) });
+  if (heavy) Object.assign(morph, { 'head-fat-incr': +range(0.4, 0.9).toFixed(2), 'neck-double-incr': +range(0.2, 0.8).toFixed(2) });
+  else if (!thin && R() < 0.4) morph['head-fat-decr'] = +range(0.2, 0.5).toFixed(2);
   if (skin === 'golden' && R() < 0.6) Object.assign(morph, { 'eye-eyefold-down': 0.55, 'eye-epicanthus-in': 0.5 });
-  if (morph['mouth-scale-horiz-incr'] && morph['mouth-scale-horiz-decr']) delete morph['mouth-scale-horiz-decr'];
   // the hair
   const dyed = wild && R() < (age < 40 ? 0.28 : 0.1);
   const hairName = dyed ? pick(['platinum', 'cherry', 'pink', 'violet', 'teal', 'blue', 'platinum']) : old && R() < 0.75 ? pick(['grey', 'silver', 'white', 'ash', 'grey']) : skin === 'deep' || skin === 'tan' || skin === 'golden' ? pick(['black', 'black', 'espresso', 'brown']) : pick(wild ? ['black', 'espresso', 'brown', 'chestnut', 'auburn', 'copper', 'honey', 'blonde', 'ash', 'ginger', 'ginger'] : ['black', 'espresso', 'brown', 'chestnut', 'auburn', 'copper', 'honey', 'blonde', 'ash']);
@@ -382,17 +439,19 @@ function made(i) {
       : { height: +range(fem ? 0.92 : 0.96, fem ? 1.02 : 1.08).toFixed(2), head: +range(0.95, 1.04).toFixed(2), bulk: +bulk.toFixed(2), limbs: +range(0.95, 1.05).toFixed(2) },
     body: heavy ? { belly: +range(0.5, 1.0).toFixed(2), chest: +range(0.1, 0.3).toFixed(2), thick: +range(0.06, 0.16).toFixed(2) } : { belly: +range(-0.3, 0.2).toFixed(2), chest: +range(0, 0.2).toFixed(2), thick: +range(-0.06, 0.04).toFixed(2) },
     morph,
-    shape: { cheeks: heavy ? range(0.6, 1.0) : range(-0.6, 0.6), jaw: range(fem ? 0.84 : 0.94, fem ? 0.98 : 1.14), dbl: heavy ? range(0.4, 1.0) : 0, neck: heavy ? range(1.1, 1.22) : range(0.92, 1.02) },
+    shape: { cheeks: heavy ? range(0.6, 1.0) : Math.max(-0.8, Math.min(0.8, place[D.cheeks] * 0.8)), jaw: (fem ? 0.91 : 1.04) + place[D.jaw] * 0.08, dbl: heavy ? range(0.4, 1.0) : 0, neck: heavy ? range(1.1, 1.22) : range(0.92, 1.02) },
     expr,
-    head: { jaw: fem ? 0 : range(0.95, 1.1), chin: range(0.85, 1.0), nose: range(0.8, 1.25), lips: range(0.8, 1.2), brow: fem ? range(0.5, 0.7) : range(0.95, 1.1) },
+    // (what is drawn on the face as its shape is: the nose as broad, the lips as full, the brow as heavy)
+    head: { jaw: fem ? 0 : 1.02 + place[D.jaw] * 0.1, chin: 0.92 + place[D.chin] * 0.08, nose: 1.02 + place[D.noseW] * 0.24, lips: 1 + place[D.lips] * 0.22, brow: fem ? 0.6 + place[D.brow] * 0.12 : 1.02 + place[D.brow] * 0.1 },
     skin,
     eyes: {
       iris: skin === 'fair' || skin === 'light' ? pick(wild ? ['brown', 'hazel', 'green', 'grey', 'blue', 'blue', 'amber'] : ['brown', 'hazel', 'green', 'grey', 'brown']) : pick(wild ? ['brown', 'dark', 'dark', 'hazel', 'amber'] : ['brown', 'dark', 'dark']),
-      open: range(wild ? 0.74 : 0.82, wild ? 1.16 : 1.1), lid: range(0.2, 0.75), lashes: fem ? range(0.5, 1.0) : range(0.1, 0.35), liner: fem ? range(0.1, 0.8) : 0,
+      open: Math.max(0.7, Math.min(1.2, range(0.9, 1.04) + place[D.eyes] * 0.14)), lid: range(0.2, 0.75), lashes: fem ? range(0.5, 1.0) : range(0.1, 0.35), liner: fem ? range(0.1, 0.8) : 0,
       ...(fem ? { shadow: pick(['#a07a6a', '#8a6a5a', '#b48a7a']) } : {}), ...(morph['eye-eyefold-down'] ? { mono: true } : {}),
     },
-    brows: browsOf(hairName, fem ? range(0.7, 0.9) : range(1.0, 1.4), fem ? range(0.3, 0.75) : range(0.1, 0.35)),
-    mouth: { w: range(0.94, 1.06), full: range(0.8, 1.2), lip: lipstick ? [pick(['#a8262e', '#b8485a', '#9a3a3a']), '#c8505a'] : [shade(SKINS[skin].warm[0], 0.85), SKINS[skin].warm[1]], lipstick: lipstick || null },
+    // (brows of every kind: fine or bushy, straight or arched - an arch up where the eyes slant up)
+    brows: browsOf(hairName, fem ? range(0.55, 1.0) : range(0.8, 1.75), Math.max(0, Math.min(0.9, (fem ? range(0.25, 0.7) : range(0.05, 0.4)) + place[D.tilt] * 0.2))),
+    mouth: { w: 1 + place[D.mouth] * 0.07, full: Math.max(0.7, Math.min(1.3, 1 + place[D.lips] * 0.25)), lip: lipstick ? [pick(['#a8262e', '#b8485a', '#9a3a3a']), '#c8505a'] : [shade(SKINS[skin].warm[0], 0.85), SKINS[skin].warm[1]], lipstick: lipstick || null },
     beard, ...(beard ? { beardCol: [shade(hair.base, 0.8), hair.base, shade(hair.base, 0.6), shade(hair.base, 0.45)] } : {}),
     lines: old ? range(0.6, 1.0) : age > 35 ? range(0.15, 0.4) : 0, freckles: (skin === 'fair' || skin === 'light') && (hairName === 'ginger' || R() < (wild ? 0.4 : 0.25)) ? range(0.5, 1) : 0, blush: fem ? range(0.25, 0.55) : range(0, 0.3),
     hair,
@@ -403,8 +462,137 @@ function made(i) {
     acc: { ...(R() < 0.4 ? { watch: pick(['#c8a860', '#b0b0b8']) } : {}), ...(fem && R() < 0.6 ? { earrings: pick(['#e0c070', '#e8e4dc']) } : {}) },
   };
 }
+// (characters round 2) the six drawn by hand first: their faces further their own way (a third again,
+// never past a real face's), so that they are no nearer each other than the rest are
+for (const F of FOLK) for (const name of Object.keys(F.morph || {})) F.morph[name] = +Math.min(0.95, F.morph[name] * 1.35).toFixed(2);
 // (ROADMAP 14.9: 72 of them - a phone makes the first 36: render/people.js)
-for (let i = FOLK.length; i < 72; i++) FOLK.push(made(i));
+const CIVIL = [];
+for (let i = FOLK.length; i < 72; i++) CIVIL.push(made(i));
+
+// ------------------------------------------------------------------ the city's people at work
+// (characters round 2) Everybody drawn the one way - not only the passers-by: the police and their
+// riot unit, the firefighters, whoever works the shops and the bars, the doormen, the street crews and
+// the mob, the bikers, the Erasers, the masked robbers, children, a street painter, a bride and her
+// groom, a courier, a busker. Each of them one of the city's people as the rule makes them (their own
+// face, as far from everybody's as it can be: farPlace), dressed for what they do; a hat, a badge, a
+// mask - what a costume has on top - the rig's own (game/looks.js roleLook). The first of each the
+// phone's too.
+const ink = (base) => ({ base, dark: [shade(base, 0.62), shade(base, 0.7), shade(base, 0.55)], light: [pale(base, 0.3), pale(base, 0.4)] });
+const jacket = (kind, fabric, base, o = {}) => ({ kind, fabric, ...cloth(base), buttons: '#2a2420', ...o });
+const under = (kind, base, o = {}) => ({ kind, ...ink(base), ...(kind === 'shirt' ? { collar: true, open: 1 } : {}), ...o });
+const legs = (kind, base, o = {}) => ({ kind, ...cloth(base), ...(kind === 'trousers' ? { crease: true } : kind === 'jeans' ? { stitch: '#6a6a70' } : {}), ...o });
+const feet = (kind, base) => ({ kind, base, dark: [shade(base, 0.6), shade(base, 0.7), shade(base, 0.5)], light: [pale(base, 0.3), pale(base, 0.4), pale(base, 0.22)], sole: kind === 'sneaker' ? [0.95, 0.94, 0.9] : [0.12, 0.09, 0.07], ...(kind === 'sneaker' ? { lace: '#f8f8f4', accent: base } : {}) });
+const BELT = { col: '#141214', buckle: '#c8b080' };
+// each: what they do, how many (the first n of them the phone's too), which of them a woman (fem: the
+// share), their ages, what they wear (dress), their build, their hair, a beard
+const ROLES = [
+  { role: 'police', n: 4, phone: 2, fem: 0.5, age: [24, 56], hair: ['side', 'buzz', 'back'], hairF: ['bun'], beard: [null, null, 'short', 'mustache'],
+    dress: () => ({ top: jacket('blazer', 'wool', '#1e2a46', { buttons: '#c8a848', square: '#d8b040' }), inner: under('shirt', '#9ab8d8'), bottom: legs('trousers', '#1a2234'), belt: BELT, shoes: feet('oxford', '#141212') }) },
+  { role: 'swat', n: 2, phone: 1, fem: 0, age: [26, 46], hair: ['buzz'], beard: [null, 'short'], build: { bulk: 1.12 },
+    dress: () => ({ top: jacket('bomber', 'nylon', '#23262e', { rib: '#16181c', lining: '#2a2a2a' }), inner: under('tee', '#2e323a'), bottom: legs('trousers', '#1c1f26'), belt: BELT, shoes: feet('oxford', '#121212') }) },
+  { role: 'fire', n: 1, phone: 1, fem: 0, age: [26, 50], hair: ['buzz', 'side'], beard: [null, 'mustache', 'short'],
+    dress: () => ({ top: jacket('bomber', 'nylon', '#a8884c', { rib: '#6a5630', lining: '#e0c83a' }), inner: under('tee', '#3a3a3e'), bottom: legs('trousers', '#9a7c46'), belt: BELT, shoes: feet('oxford', '#141212') }) },
+  { role: 'staff', n: 6, phone: 3, fem: 0.5, age: [19, 58], hair: ['side', 'back', 'curls', 'buzz'], hairF: ['bun', 'long', 'curls'], beard: [null, null, 'short', 'trim'],
+    dress: (j) => [
+      { top: jacket('blazer', 'crepe', '#1c1c22'), inner: under('shirt', '#ffffff'), bottom: legs('trousers', '#1c1c22'), belt: BELT, shoes: feet('oxford', '#141212') },
+      { top: jacket('bomber', 'nylon', '#2e5a3e', { rib: '#1e3a28', lining: '#c8a050' }), inner: under('tee', '#f2f0ea'), bottom: legs('chinos', '#cbb48e', { cuff: true }), belt: BELT, shoes: feet('sneaker', '#f2f2ee') },
+      { top: jacket('blazer', 'linen', '#f2f2ee'), inner: under('shirt', '#a8c8e6'), bottom: legs('trousers', '#5a5a62'), belt: BELT, shoes: feet('loafer', '#2a1a12') },
+      { top: jacket('denim', 'denim', '#5a7aa0', { stitch: '#d8964a', buttons: '#a8743a' }), inner: under('tee', '#f2f0ea'), bottom: legs('jeans', '#1a1a1e'), belt: BELT, shoes: feet('sneaker', '#1a1a1e') },
+      { top: jacket('blazer', 'linen', '#f4f2ec', { buttons: '#d8d4cc' }), inner: under('tee', '#ffffff'), bottom: legs('trousers', '#2a2a30'), belt: BELT, shoes: feet('sneaker', '#1a1a1e') },
+      { top: jacket('blazer', 'wool', '#5a1e28'), inner: under('shirt', '#ffffff'), bottom: legs('trousers', '#1c1c22'), belt: BELT, shoes: feet('oxford', '#141212') },
+    ][j % 6] },
+  { role: 'bartender', n: 2, phone: 1, fem: 0.5, age: [22, 45], hair: ['back', 'side'], hairF: ['bun', 'long'], beard: [null, 'trim', 'short'],
+    dress: () => ({ top: jacket('blazer', 'crepe', '#16141a', { square: '#a8262e' }), inner: under('shirt', '#ffffff'), bottom: legs('trousers', '#16141a'), belt: BELT, shoes: feet('oxford', '#141212') }) },
+  { role: 'bouncer', n: 2, phone: 1, fem: 0, age: [26, 50], hair: ['buzz'], beard: [null, 'short', 'goatee'], build: { bulk: 1.3, height: 1.08 },
+    dress: () => ({ top: jacket('bomber', 'nylon', '#141418', { rib: '#0e0e10', lining: '#2a2a2a' }), inner: under('tee', '#16161a'), bottom: legs('trousers', '#141418'), belt: BELT, shoes: feet('oxford', '#101010') }) },
+  { role: 'gangRed', n: 2, phone: 1, fem: 0, age: [17, 32], hair: ['buzz', 'curls'], beard: [null, 'shadow', 'goatee'],
+    dress: (j) => ({ top: jacket('bomber', 'nylon', '#8a1e24', { rib: '#5a1216', lining: '#1a1a1a' }), inner: under('tee', j % 2 ? '#16161a' : '#f2f0ea'), bottom: legs('jeans', '#2a3a5a'), belt: BELT, shoes: feet('sneaker', '#f2f2ee') }) },
+  { role: 'gangBlue', n: 2, phone: 1, fem: 0, age: [17, 32], hair: ['buzz', 'side'], beard: [null, 'shadow', 'goatee'],
+    dress: (j) => ({ top: jacket('bomber', 'nylon', '#24407a', { rib: '#16284e', lining: '#1a1a1a' }), inner: under('tee', j % 2 ? '#f2f0ea' : '#16161a'), bottom: legs('jeans', '#1a1a1e'), belt: BELT, shoes: feet('sneaker', '#1a1a1e') }) },
+  { role: 'mob', n: 2, phone: 1, fem: 0, age: [34, 66], hair: ['back'], beard: [null, 'mustache', 'trim'],
+    dress: (j) => ({ top: jacket('blazer', 'wool', j % 2 ? '#3a3a40' : '#1e1e24', { square: '#f2ecdc' }), inner: under('shirt', '#f4f0e6'), bottom: legs('trousers', j % 2 ? '#3a3a40' : '#1e1e24'), belt: BELT, shoes: feet('oxford', '#1a1412') }) },
+  { role: 'biker', n: 2, phone: 1, fem: 0, age: [30, 60], hair: ['long', 'buzz', 'back'], beard: ['full', 'full', 'goatee'], build: { bulk: 1.18 },
+    dress: (j) => ({ top: jacket('bomber', 'nylon', '#1a1614', { rib: '#100e0c', lining: '#3a2a20' }), inner: under('tee', j % 2 ? '#1e1e22' : '#e8e6e0'), bottom: legs('jeans', '#3e5878'), belt: BELT, shoes: feet('oxford', '#1a1412') }) },
+  { role: 'eraser', n: 2, phone: 1, fem: 0.25, age: [17, 30], hair: ['buzz', 'side'], hairF: ['bun', 'curls'], beard: [null],
+    dress: (j) => ({ top: jacket('bomber', 'nylon', j % 2 ? '#f4f2ee' : '#f39eb3', { rib: '#4c72d8', lining: '#f39eb3' }), inner: under('tee', '#ffffff'), bottom: legs('jeans', '#4d73d9'), belt: BELT, shoes: feet('sneaker', '#f39eb3') }) },
+  { role: 'robber', n: 1, phone: 1, fem: 0, age: [20, 40], hair: ['buzz'], beard: [null],
+    dress: () => ({ top: jacket('bomber', 'nylon', '#202226', { rib: '#141518', lining: '#2a2a2a' }), inner: under('tee', '#e8e6e0'), bottom: legs('trousers', '#22242a'), belt: BELT, shoes: feet('oxford', '#161616') }) },
+  { role: 'kid', n: 4, phone: 2, fem: 0.5, age: [7, 11], hair: ['side', 'curls', 'buzz'], hairF: ['long', 'bun', 'curls'], beard: [null], build: { height: 0.66, head: 1.12, bulk: 0.86, limbs: 0.92 },
+    dress: (j) => ({ top: jacket(j % 2 ? 'denim' : 'bomber', j % 2 ? 'denim' : 'nylon', ['#e8783a', '#5a7aa0', '#3a8a5a', '#8eaccc'][j % 4], { rib: '#2a2a30', lining: '#e8c860', stitch: '#d8964a' }), inner: under('tee', ['#e8c860', '#f2f0ea', '#a83a3a', '#3a5a8a'][j % 4]), bottom: legs('jeans', '#4a6a8a'), belt: null, shoes: feet('sneaker', ['#f2f2ee', '#e86a5a', '#5a7ae8', '#f2f2ee'][j % 4]) }) },
+  { role: 'painter', n: 1, phone: 1, fem: 0, age: [26, 60], hair: ['curls', 'long', 'side'], beard: ['full', 'trim', null],
+    dress: () => ({ top: jacket('denim', 'denim', '#8eaccc', { stitch: '#d8964a', buttons: '#a8743a' }), inner: under('tee', '#f2f0ea'), bottom: legs('chinos', '#e0d8c4', { cuff: true }), belt: BELT, shoes: feet('sneaker', '#f2f2ee') }) },
+  { role: 'bride', n: 1, phone: 1, fem: 1, age: [24, 36], hair: [], hairF: ['bun', 'long'], beard: [null],
+    dress: () => ({ top: jacket('blazer', 'crepe', '#f8f6f0', { buttons: '#e8e4dc' }), inner: under('dress', '#fbf9f4', { flower: ['#ffffff', '#f4ecdc', '#fff8ec'] }), bottom: { kind: 'dress', ...cloth('#fbf9f4'), flower: ['#ffffff', '#f4ecdc', '#fff8ec'] }, belt: null, shoes: feet('bootie', '#f2eee6') }) },
+  { role: 'groom', n: 1, phone: 1, fem: 0, age: [26, 40], hair: ['back', 'side'], beard: [null, 'trim'],
+    dress: () => ({ top: jacket('blazer', 'wool', '#141418', { square: '#ffffff' }), inner: under('shirt', '#ffffff'), bottom: legs('trousers', '#141418'), belt: BELT, shoes: feet('oxford', '#0e0e0e') }) },
+  { role: 'courier', n: 2, phone: 1, fem: 0.5, age: [19, 34], hair: ['buzz', 'side'], hairF: ['bun'], beard: [null, 'shadow'],
+    dress: (j) => ({ top: jacket('bomber', 'nylon', j % 2 ? '#2a4a8a' : '#e07a2a', { rib: '#2a2a30', lining: '#2a2a30' }), inner: under('tee', j % 2 ? '#a8c8e6' : '#2a2a30'), bottom: legs(j % 2 ? 'trousers' : 'jeans', j % 2 ? '#1c2438' : '#1a1a1e'), belt: BELT, shoes: feet('sneaker', '#f2f2ee') }) },
+  // (the city's own workers: the sweepers, the road crews, the drivers - the high-visibility jacket)
+  { role: 'worker', n: 2, phone: 1, fem: 0.25, age: [22, 60], hair: ['buzz', 'side', 'back'], hairF: ['bun'], beard: [null, 'short', 'mustache', 'full'],
+    dress: (j) => ({ top: jacket('bomber', 'nylon', '#e8a020', { rib: '#5a5a5a', lining: '#d8d8d0' }), inner: under('tee', j % 2 ? '#3a5a8a' : '#e8e6e0'), bottom: legs('trousers', '#3a4a3e'), belt: BELT, shoes: feet('oxford', '#2a1e14') }) },
+  { role: 'busker', n: 1, phone: 1, fem: 0, age: [22, 50], hair: ['long', 'curls'], beard: ['full', 'trim', null],
+    dress: () => ({ top: jacket('denim', 'denim', '#3e5878', { stitch: '#d8964a', buttons: '#a8743a' }), inner: under('tee', '#a83a3a'), bottom: legs('jeans', '#2a2a30'), belt: BELT, shoes: feet('bootie', '#6a4a32') }) },
+];
+// one of them: one of the city's people as the rule makes them, a woman or a man as asked, as old as
+// the work has them (a child a child's face and build), dressed for it
+function roleMade(R0, def, j, seed) {
+  const fem = def.fem >= 1 || (def.fem > 0 && (j % Math.round(1 / def.fem) === 1 % Math.round(1 / def.fem)));
+  const R = rngOf(seed);
+  const pick = (a) => a[Math.floor(R() * a.length)];
+  // (made's own rule - a woman at the odd numbers: the next of the right one)
+  let i = 200 + seed * 2 + (fem ? 1 : 0);
+  const kid = def.role === 'kid';
+  const F = made(i);
+  F.key = `${def.role}${j}`;
+  F.role = def.role;
+  F.variant = j;
+  const [a0, a1] = def.age;
+  F.age = Math.round(a0 + (a1 - a0) * R());
+  // (the years in the face as the work's age has them)
+  delete F.morph['head-age-incr'];
+  delete F.morph['head-age-decr'];
+  if (kid) F.morph['head-age-decr'] = 1;
+  else if (F.age > 52) F.morph['head-age-incr'] = +(0.3 + (F.age - 52) / 30).toFixed(2);
+  else if (F.age < 28) F.morph['head-age-decr'] = +(0.15 + (28 - F.age) / 30).toFixed(2);
+  F.lines = F.age > 55 ? 0.7 : F.age > 38 ? 0.3 : 0;
+  Object.assign(F, def.dress(j));
+  const style = pick(F.fem ? def.hairF || def.hair : def.hair.length ? def.hair : ['side']);
+  if (style) {
+    const greyOk = F.age > 50;
+    const name = kid ? pick(['black', 'brown', 'chestnut', 'blonde', 'espresso']) : greyOk && R() < 0.5 ? pick(['grey', 'silver', 'ash']) : pick(F.skin === 'deep' || F.skin === 'tan' ? ['black', 'espresso'] : ['black', 'espresso', 'brown', 'chestnut', 'auburn', 'blonde']);
+    F.hair = hairOf(name, style, style === 'long' ? { len: +(0.12 + R() * 0.16).toFixed(2), wave: R() < 0.4 ? 1 : 0 } : {});
+    F.brows = browsOf(name, F.brows.thick, F.brows.arch);
+  }
+  F.beard = F.fem || kid ? null : pick(def.beard);
+  if (F.beard) F.beardCol = [shade(F.hair.base, 0.8), F.hair.base, shade(F.hair.base, 0.6), shade(F.hair.base, 0.45)];
+  else delete F.beardCol;
+  if (kid || def.role === 'swat' || def.role === 'robber' || def.role === 'bride') delete F.glasses;
+  F.acc = { ...(R() < 0.4 && !kid ? { watch: '#b0b0b8' } : {}), ...(F.fem && R() < 0.5 ? { earrings: '#e8e4dc' } : {}) };
+  if (def.build) F.build = { ...F.build, ...def.build };
+  if (kid) {
+    F.body = { belly: 0, chest: 0, thick: -0.04 };
+    F.lines = 0;
+    F.freckles = R() < 0.3 ? 0.6 : 0;
+    // (a child's face as it is: no paint on it)
+    F.eyes = { ...F.eyes, liner: 0, lashes: Math.min(F.eyes.lashes, 0.4) };
+    delete F.eyes.shadow;
+    F.mouth = { ...F.mouth, lipstick: null, lip: [shade(SKINS[F.skin].warm[0], 0.85), SKINS[F.skin].warm[1]] };
+    F.blush = 0.2;
+  }
+  F.how = 'work';
+  void R0;
+  return F;
+}
+const ROLE = [];
+let seedN = 0;
+for (const def of ROLES) for (let j = 0; j < def.n; j++) ROLE.push(Object.assign(roleMade(null, def, j, ++seedN), { phone: j < def.phone }));
+// (in order: the first 36 of the city's people - a phone's - then the phone's own of those at work, the
+// rest at work, then the other 36 people: what a phone makes is the first FOLK_PHONE of them)
+FOLK.push(...CIVIL.slice(0, 30));
+FOLK.push(...ROLE.filter((F) => F.phone));
+FOLK.push(...ROLE.filter((F) => !F.phone));
+FOLK.push(...CIVIL.slice(30));
+export const FOLK_PHONE = 36 + ROLE.filter((F) => F.phone).length;
 
 // (how many of them the city's renderer made: phones fewer - render/people.js; game/looks.js picks
 // from those)

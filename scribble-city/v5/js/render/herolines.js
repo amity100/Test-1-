@@ -405,15 +405,17 @@ export class HeroLines {
   // and where its eyes look (gaze: [x, y], how far the iris goes on the ball)
   // (ROADMAP 14.1) faceOff: the face drawn as a portrait (render/portrait.js) - its features, its
   // shading and its outline are the portrait's own; only the hair's strokes and the edge light here
+  // (characters round 2: how far, 0..1 - the face's own ink going as the portrait's pencil comes in,
+  // a little at a time as it comes nearer, never all at once: true is all the way)
   // (characters round) def: a neck's move this frame (render/neckbend.js D) - its strokes go with it
   // as its skin does in the graphics card
   set(slot, part, m, ex = null, gaze = null, faceOff = false, def = null) {
     let s = this.slots[slot];
-    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: false, def: new Float64Array(4), bent: false };
+    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: 0, def: new Float64Array(4), bent: false };
     s.e.set(m.elements);
     s.ex = ex;
     s.gaze = gaze;
-    s.faceOff = faceOff;
+    s.faceOff = faceOff === true ? 1 : faceOff || 0;
     s.bent = !!def;
     if (def) for (let i = 0; i < 4; i++) s.def[i] = def[i];
     s.on = true;
@@ -446,7 +448,9 @@ export class HeroLines {
       if (!mid && (kind === K.hatch || kind === K.cross || kind === K.rim || kind === K.hairhi || kind === K.shine)) continue;
       for (const s of slots) {
         if (!s.on) continue;
-        if (s.faceOff && kind !== K.hair && kind !== K.hairhi && kind !== K.rim) continue;
+        const inked = kind !== K.hair && kind !== K.hairhi && kind !== K.rim;
+        if (inked && s.faceOff >= 0.999) continue;
+        const keep = inked ? 1 - s.faceOff : 1;
         const e = s.e;
         const list = this.parts[s.part].by[oi];
         for (let i = 0; i < list.length && left > 0; i++) {
@@ -487,7 +491,7 @@ export class HeroLines {
           const f = nx * vx + ny * vy + nz * vz;
           const lit = 0.5 + 0.5 * (nx * L.x + ny * L.y + nz * L.z);
           let col = st.col;
-          let a = st.a;
+          let a = st.a * keep;
           if (kind === K.contour) {
             if (f < -0.12 || f > 0.34) continue;
           } else if (kind === K.shine) {

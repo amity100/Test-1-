@@ -56,7 +56,8 @@ const _f = new THREE.Vector3();
 
 // a player of a team: its shirt and its shorts, sneakers; a referee in grey; a coach in a suit
 function playerLook(team) {
-  const L = civilianLook({ fem: false, kind: 'sporty' });
+  // (a team's colours are the point of its players: the old way, its clothes drawn as asked)
+  const L = civilianLook({ fem: false, kind: 'sporty', old: true });
   const c = TEAMS[team].col;
   L.top = { kind: 'tank', color: c.slice(), sleeves: 'none' };
   L.bottom = { kind: 'shorts', color: c.map((v) => v * 0.8) };
@@ -67,7 +68,7 @@ function playerLook(team) {
   return L;
 }
 function refLook() {
-  const L = civilianLook({ fem: false, kind: 'smart' });
+  const L = civilianLook({ fem: false, kind: 'smart', old: true });
   L.top = { kind: 'tee', color: [0.62, 0.62, 0.64], sleeves: 'short' };
   L.bottom = { kind: 'pants', color: [0.1, 0.1, 0.12] };
   L.shoes = [0.1, 0.1, 0.1];
