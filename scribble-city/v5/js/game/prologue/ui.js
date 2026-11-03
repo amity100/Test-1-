@@ -53,11 +53,14 @@ const CSS = `
 #pl-skip .ring { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.35); vertical-align: -2px; margin-inline-start: 6px; background: conic-gradient(#ffd23f var(--k, 0%), transparent 0); }
 #pl-draw { position: absolute; inset: 0; pointer-events: auto; cursor: crosshair; display: none; touch-action: none; }
 #pl-draw.on { display: block; }
+#pl-draw.settle { display: block; pointer-events: none; cursor: default; }
+#pl-vig { position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s; background: radial-gradient(ellipse 82% 78% at 50% 50%, rgba(10,7,22,0) 50%, rgba(10,7,22,0.42) 80%, rgba(10,7,22,0.74) 100%); }
+#pl-vig.on { opacity: 1; }
 #pl-draw canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s; letter-spacing: 0.02em; }
 #pl-hint.on { opacity: 1; }
 #pl-hint small { display: block; font-size: 0.55em; font-weight: 600; opacity: 0.85; margin-top: 6px; direction: rtl; }
-body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl { display: none !important; }
+body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue #btn-draw, body.prologue #btn-photo { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }
 `;
 
@@ -85,7 +88,7 @@ export class PrologueUI {
     }
     const r = document.createElement('div');
     r.id = 'pl-root';
-    r.innerHTML = `<div class="bar top"></div><div class="bar bot"></div>
+    r.innerHTML = `<div id="pl-vig"></div><div class="bar top"></div><div class="bar bot"></div>
       <div id="pl-subs"><span class="who"></span><span class="txt"></span></div>
       <div id="pl-obj"><div class="t"></div><div class="u"></div></div>
       <div id="pl-title"><div class="name"></div><div class="rule"></div><div class="by"></div></div>
@@ -106,7 +109,13 @@ export class PrologueUI {
     this.skipEl = r.querySelector('#pl-skip');
     this.hintEl = r.querySelector('#pl-hint');
     this.drawEl = r.querySelector('#pl-draw');
+    this.vigEl = r.querySelector('#pl-vig');
     this.subT = 0;
+  }
+
+  // time all but stopped: the edges of the picture dark, the eye to its middle
+  vignette(on) {
+    this.vigEl.classList.toggle('on', !!on);
   }
 
   film(on) {

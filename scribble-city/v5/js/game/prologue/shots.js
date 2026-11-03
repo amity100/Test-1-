@@ -13,6 +13,8 @@ const ease = {
   out: (t) => 1 - Math.pow(1 - t, 3),
   inout: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
   soft: (t) => t * t * (3 - 2 * t),
+  // (off quickly, settling slowly: a crane's swoop)
+  swoop: (t) => 0.35 * t * t * (3 - 2 * t) + 0.65 * (1 - Math.pow(1 - t, 2.4)),
 };
 
 export class Shots {
@@ -31,8 +33,8 @@ export class Shots {
     return !!this.shot;
   }
 
-  // a shot: { from, to, look, lookTo, path: [points], lookPath, fov, fovTo, dur, ease, hand (0..1),
-  // follow: () => ({ from, look }) }
+  // a shot: { from, to, look, lookTo, path: [points], lookPath, arc (the path at an even pace), fov,
+  // fovTo, dur, ease, hand (0..1), follow: () => ({ from, look }) }
   cut(s) {
     const sh = { dur: 3, ease: 'inout', hand: 0.6, fov: 50, ...s };
     if (sh.path) sh.curve = new THREE.CatmullRomCurve3(sh.path.map(V), false, 'centripetal', 0.5);
@@ -63,13 +65,16 @@ export class Shots {
     const e = (ease[sh.ease] || ease.inout)(k);
     const P = this._p;
     const L = this._l;
-    if (sh.curve) sh.curve.getPoint(e, P);
+    // (arc: along the path at an even pace, the look at the same place along its own path as the
+    // camera is along its: each look point stays with the camera point it was written with)
+    const tt = sh.curve && sh.arc ? sh.curve.getUtoTmapping(e) : e;
+    if (sh.curve) sh.curve.getPoint(tt, P);
     else {
       const f = typeof sh.from === 'function' ? sh.from() : sh.from;
       P.copy(f);
       if (sh.to) P.lerp(typeof sh.to === 'function' ? sh.to() : sh.to, e);
     }
-    if (sh.lookCurve) sh.lookCurve.getPoint(e, L);
+    if (sh.lookCurve) sh.lookCurve.getPoint(tt, L);
     else {
       const l = typeof sh.look === 'function' ? sh.look() : sh.look;
       if (l) L.copy(l);

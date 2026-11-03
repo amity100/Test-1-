@@ -258,6 +258,22 @@ function lowerBody(K, lo = false) {
   cap(S - 1, true);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  // (v5, ROADMAP 18) its top between the windscreen and the back window, inside the sills - the
+  // cabin's floor-high lid - marked v = 1 like the windows: in the car you drive it is open, and
+  // what is in the cabin (the seats, the people in them) is seen down to the floor, not cut off at
+  // the sills (render/glsl.js USE_CABIN)
+  if (!lo && K.glass) {
+    const zr = K.glass.tA * L - L / 2 + 0.06;
+    const zf = K.glass.tD * L - L / 2 - 0.06;
+    const n = pos.length / 3;
+    const uv = new Float32Array(n * 2);
+    for (let i = 0; i < S * N; i++) {
+      const k = i % N;
+      const z = pos[i * 3 + 2];
+      if (z > zr && z < zf && Math.sin((k / N) * Math.PI * 2) > 0.8) uv[i * 2 + 1] = 1;
+    }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  }
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
@@ -804,7 +820,13 @@ const _s = new THREE.Vector3(1, 1, 1);
 const WHITE = [1, 1, 1];
 // (the inside of the car you drive)
 const SEAT = [0.09, 0.085, 0.1];
+const SEAT_EDGE = [0.13, 0.12, 0.13];
 const DASH = [0.05, 0.05, 0.06];
+const DASH_HI = [0.16, 0.16, 0.18];
+// (the dials' faces, lit a little)
+const DIALS = [0.55, 0.62, 0.7];
+const _r = new THREE.Matrix4();
+const _s2 = new THREE.Vector3();
 
 // ---- the wipers (in the rain): two pen strokes sweeping the windscreen, pivoting at its foot
 const wiperRigs = {};
@@ -1233,22 +1255,76 @@ export class CarRenderer {
     }
   }
 
-  // the seats seen through the open windows: the two in front (their backs, the headrests), the
-  // bench behind them if there is room, the wheel, the dashboard under the windscreen
+  // the inside seen through the open windows of the car you drive: the two seats in front - each a
+  // cushion between its bolsters and a back raked over it, bolstered too, a headrest on its two posts
+  // - the bench behind them if there is room, the wheel (a rim on three spokes, on its column, tilted
+  // to the one driving), the dashboard with the hood over the dials, the console between the seats
+  // with the gear lever, and the mirror at the top of the windscreen
   seats(K, m) {
     const S = K.seat;
     const C = K.cab;
     const y0 = S.y + 0.42;
+    const RAKE = -0.2;
     for (let sd = -1; sd <= 1; sd += 2) {
-      this.box(this.trimBox, m, sd * S.s, y0 + 0.3, S.u - 0.3, 0.46, 0.66, 0.12, SEAT, null);
-      this.box(this.trimBox, m, sd * S.s, y0 + 0.74, S.u - 0.33, 0.26, 0.17, 0.1, SEAT, null);
-      this.box(this.trimBox, m, sd * S.s, y0 - 0.04, S.u - 0.05, 0.46, 0.12, 0.5, SEAT, null);
+      const x = sd * S.s;
+      this.box(this.trimBox, m, x, y0 - 0.04, S.u - 0.05, 0.42, 0.11, 0.5, SEAT, null);
+      for (const b of [-1, 1]) this.box(this.trimBox, m, x + b * 0.22, y0, S.u - 0.04, 0.07, 0.12, 0.5, SEAT_EDGE, null);
+      this.boxR(this.trimBox, m, x, y0 + 0.3, S.u - 0.33, 0.4, 0.62, 0.1, RAKE, SEAT);
+      for (const b of [-1, 1]) this.boxR(this.trimBox, m, x + b * 0.215, y0 + 0.27, S.u - 0.31, 0.07, 0.56, 0.15, RAKE, SEAT_EDGE);
+      this.boxR(this.trimBox, m, x, y0 + 0.76, S.u - 0.44, 0.25, 0.16, 0.09, RAKE, SEAT);
+      for (const b of [-1, 1]) this.box(this.trimBox, m, x + b * 0.075, y0 + 0.66, S.u - 0.41, 0.014, 0.07, 0.014, CHROME, null);
     }
     // (kept inside the body where it rounds in under the windows)
-    if (S.u - C.zr > 1.25) this.box(this.trimBox, m, 0, S.y + 0.6, C.zr + 0.32, S.s * 2 + 0.3, 0.5, 0.14, SEAT, null);
-    // (the wheel: on the driver's side, its left: +x)
-    this.box(this.trimBox, m, S.s, S.y + 1.0, S.u + 0.6, 0.34, 0.3, 0.04, DASH, null);
-    this.box(this.trimBox, m, 0, S.y + 0.83, Math.min(S.u + 0.85, C.zf - 0.15), S.s * 2 + 0.2, 0.14, 0.3, DASH, null);
+    if (S.u - C.zr > 1.25) {
+      this.box(this.trimBox, m, 0, S.y + 0.6, C.zr + 0.32, S.s * 2 + 0.3, 0.5, 0.14, SEAT, null);
+      this.box(this.trimBox, m, 0, S.y + 0.36, C.zr + 0.55, S.s * 2 + 0.3, 0.12, 0.42, SEAT, null);
+    }
+    // the wheel, on the driver's side (its left: +x): a rim of twelve, three spokes, the boss, the
+    // column into the dash
+    const wx = S.s;
+    const wy = S.y + 1.0;
+    const wz = S.u + 0.58;
+    const TILT = 0.45;
+    const R = 0.17;
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      _r.makeRotationZ(a + Math.PI / 2).scale(_s2.set(0.095, 0.03, 0.03)).setPosition(Math.cos(a) * R, Math.sin(a) * R, 0);
+      this.wheelBit(m, wx, wy, wz, TILT, _r, DASH);
+    }
+    for (const a of [0, Math.PI, -Math.PI / 2]) {
+      _r.makeRotationZ(a).scale(_s2.set(R, 0.035, 0.018)).setPosition(Math.cos(a) * R * 0.5, Math.sin(a) * R * 0.5, 0);
+      this.wheelBit(m, wx, wy, wz, TILT, _r, DASH);
+    }
+    _r.makeScale(0.08, 0.07, 0.05).setPosition(0, 0, 0.01);
+    this.wheelBit(m, wx, wy, wz, TILT, _r, DASH_HI);
+    _r.makeScale(0.05, 0.05, 0.3).setPosition(0, 0, 0.17);
+    this.wheelBit(m, wx, wy, wz, TILT, _r, DASH);
+    // the dashboard, the hood over the dials, the console and its lever, the mirror
+    const dz = Math.min(S.u + 0.85, C.zf - 0.15);
+    this.box(this.trimBox, m, 0, S.y + 0.83, dz, S.s * 2 + 0.2, 0.14, 0.3, DASH, null);
+    this.box(this.trimBox, m, wx, S.y + 0.95, dz - 0.08, 0.36, 0.07, 0.18, DASH, null);
+    this.box(this.trimBox, m, wx, S.y + 0.9, dz - 0.17, 0.3, 0.1, 0.01, DIALS, null);
+    this.box(this.trimBox, m, 0, y0 - 0.02, S.u + 0.12, 0.18, 0.2, 0.7, DASH, null);
+    this.box(this.trimBox, m, 0, y0 + 0.14, S.u + 0.3, 0.02, 0.14, 0.02, CHROME, null);
+    this.box(this.trimBox, m, 0, y0 + 0.22, S.u + 0.3, 0.045, 0.045, 0.045, DASH_HI, null);
+    const zTop = K.glass.tC * K.len - K.len / 2;
+    this.box(this.trimBox, m, 0, K.roofY - 0.1, zTop - 0.06, 0.24, 0.07, 0.025, DASH, null);
+    this.box(this.trimBox, m, 0, K.roofY - 0.04, zTop - 0.04, 0.02, 0.07, 0.02, DASH, null);
+  }
+
+  // a box turned back (about its own x) by rx
+  boxR(pool, base, x, y, z, w, h, d, rx, color, rv = null) {
+    _w.makeRotationX(rx).scale(_s2.set(w, h, d)).setPosition(x, y, z);
+    _w.premultiply(base);
+    pool.push(_w, color, 0, rv);
+  }
+
+  // one piece of the wheel: L in the wheel's own frame (x across, y up its face, z along the column
+  // towards the dash), the wheel at (x, y, z) in the car's, tilted to the driver
+  wheelBit(base, x, y, z, tilt, L, color) {
+    _w.makeRotationX(tilt).setPosition(x, y, z).multiply(L);
+    _w.premultiply(base);
+    this.trimBox.push(_w, color, 0, null);
   }
 
   box(pool, base, x, y, z, w, h, d, color, rv = null) {

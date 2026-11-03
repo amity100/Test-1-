@@ -845,6 +845,8 @@ uniform float uFade;
 uniform float uIdK;
 // (how open its mouth is: render/portrait.js place - its dark inside seen only through an open one)
 uniform float uOpen;
+// (ROADMAP 18: a gap between the two upper front teeth, a third of one of them wide at 1)
+uniform float uGap;
 float gThr = 0.0;
 #endif
 in float vId;
@@ -1206,6 +1208,8 @@ void main() {
     float k = fract(vUv.x * 12.0);
     float gap = smoothstep(0.0, 0.08, k) * smoothstep(1.0, 0.92, k);
     vec3 tt = vec3(0.9, 0.86, 0.76) * mix(0.62, 1.0, gap);
+    // (ROADMAP 18: a gap between the upper front teeth - the mouth's dark between them)
+    tt = mix(tt, vec3(0.12, 0.035, 0.035), uGap * step(vPart, 1.5) * (1.0 - smoothstep(0.012, 0.021, abs(vUv.x - 0.5))));
     tt = mix(tt, vec3(0.7, 0.34, 0.36), smoothstep(0.78, 0.92, vUv.y));
     // (behind closed lips, a few pixels away: in their shade - not a white line across the mouth)
     tt *= mix(mix(0.5, 1.0, gDet), 1.0, uOpen);

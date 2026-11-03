@@ -862,6 +862,8 @@ export class Portrait {
       uWrinkle: { value: wrinkles() },
       uWrinkleW: { value: new THREE.Vector4() },
       uAge: { value: this.spec.lines || 0 },
+      // (ROADMAP 18: a gap between the front teeth - render/folkspec.js gap)
+      uGap: { value: this.spec.gap || 0 },
       uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
       uNeckD: { value: this.neckD },
       uNeckToHead: { value: this.neckToHead },
@@ -954,6 +956,8 @@ export class Portrait {
       }
       // (a smile reaches the eyes)
       if (ew[1] > 0.3) set('au6', ew[1] * 0.6);
+      // (ROADMAP 18: and a toothy one shows the teeth - render/folkspec.js grin)
+      if (this.spec.grin && ew[1] > 0.3) set('au10', ew[1] * this.spec.grin);
     }
     // the lids with the eyes: looking down, the upper lid follows them down; up, it lifts
     if (gaze) {

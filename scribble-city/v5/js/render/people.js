@@ -1015,7 +1015,7 @@ export class PersonRenderer {
     const G = body.parts;
     // (the shoes: the hero's shape, in their own pictures)
     G.shoe = HERO.heroShoeGeo();
-    const PEN = { head: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
+    const PEN = { head: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tail: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
     const TWO = new Set(['upper', 'fore', 'thigh', 'shin', 'shoe']);
     const sh = {};
     for (const [name, geo] of Object.entries(G)) {
@@ -1068,6 +1068,8 @@ export class PersonRenderer {
       earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
       // (long hair over the ears: no earrings seen)
       earsOn: spec.hair.style !== 'long',
+      // (ROADMAP 18: what is worn in the hair - a clip, beads, a feather - in their colours)
+      bits: body.bits ? body.bits.map((b) => ({ ...b, col: linC(hexRGB(b.col)) })) : null,
     };
   }
 
@@ -1599,12 +1601,25 @@ export class PersonRenderer {
         a += (up - a) * cheer;
         b += (up + 0.12 - b) * cheer;
       }
+      // (v5, ROADMAP 18: one hand up, waving from side to side - to somebody down on the pier, or
+      // up in the big wheel; or a phone held up in front of the face, filming)
+      const wv = ai === 0 ? w.wave || 0 : 0;
+      const fm = ai === 0 && !wv ? w.film || 0 : 0;
+      if (wv > 0) {
+        a += (Math.PI - 0.62 - a) * wv;
+        b += (Math.PI - 0.3 - b) * wv;
+      }
+      if (fm > 0) {
+        a += (1.0 - a) * fm;
+        b += (2.35 - b) * fm;
+      }
+      const wx = wv ? Math.sin(w.pump || 0) * 0.16 * wv : fm ? -0.12 * fm : 0;
       const sx = side * (sw + 0.02 + cheer * 0.05);
       at(_a, sx, ny - 0.07, nz);
       const ey = ny - 0.07 - Math.cos(a) * armU;
       const ez = nz + Math.sin(a) * armU;
-      at(_b, sx + side * cheer * 0.06, ey, ez);
-      at(_c, sx + side * (0.02 + cheer * 0.1), ey - Math.cos(b) * armF, ez + Math.sin(b) * armF);
+      at(_b, sx + side * (cheer * 0.06 + wv * 0.08), ey, ez);
+      at(_c, sx + side * (0.02 + cheer * 0.1 + wv * 0.12) + wx, ey - Math.cos(b) * armF, ez + Math.sin(b) * armF);
       (shortS || noS ? p.lowUpperSkin : p.lowUpper).push(along(_a, _b, 0.29, armK, F), shortS || noS ? skin : topC, own, armId, ind);
       (shortS || noS ? p.lowForeSkin : p.lowFore).push(along(_b, _c, 0.26, armK, F), shortS || noS ? skin : topC, own, armId, ind);
     }
@@ -2190,6 +2205,8 @@ export class PersonRenderer {
       q.zip.push(_mH, white, own, id(), ind);
       q.tee.push(_mH, white, own, id(), ind);
       if (q.welt) q.welt.push(_mH, white, own, id(), ind);
+      // (ROADMAP 18: a hoodie's hood, down on the back)
+      if (q.hood) q.hood.push(_mH, white, own, id(), ind);
       // (characters round) the neck: the head's own edge carried on down into the collar
       // (render/folkshapes.js neckOf), twisted and bent as the head is turned - the rig's (game/
       // doodle.js placeHead, render/neckbend.js); its lines with it
@@ -2320,6 +2337,7 @@ export class PersonRenderer {
       if (q.locks && !hatK) q.locks.push(_mH, white, own, id(), ind);
       if (q.fall) q.fall.push(_mH, white, own, id(), ind);
       if (q.bun && !hatK) q.bun.push(_mH, white, own, id(), ind);
+      if (q.tail) q.tail.push(_mH, white, own, id(), ind);
       if (q.glasses) q.glasses.push(_mH, F.glasses, own, id(), ind);
       // (their eyes in their sockets, each turned to where they look. The head's frame is drawn
       // mirrored - DrawClass.push - and the eyes' with it: each in the mirror's place)
@@ -2335,6 +2353,18 @@ export class PersonRenderer {
         for (const v of F.lobes) {
           _c.copy(hc).addScaledVector(hr, v[0] * hs).addScaledVector(hu, v[1] * hs).addScaledVector(hf, v[2] * hs);
           p.sphere.push(framed(_c, hr, hu, hf, 0.0055 * hs, 0.008 * hs, 0.0055 * hs), F.earring, own, id(), ind);
+        }
+      }
+      // (ROADMAP 18) what is worn in the hair - a clip, beads on a braid, a feather (render/
+      // folkshapes.js hairBits): in the head's frame (its x towards their left, as the lobes'), each a
+      // small shape in its colour
+      if (F.bits && !hatK) {
+        for (const b of F.bits) {
+          _c.copy(hc).addScaledVector(hr, b.c[0] * hs).addScaledVector(hu, b.c[1] * hs).addScaledVector(hf, b.c[2] * hs);
+          _x.copy(hr).multiplyScalar(b.x[0]).addScaledVector(hu, b.x[1]).addScaledVector(hf, b.x[2]);
+          _y.copy(hr).multiplyScalar(b.y[0]).addScaledVector(hu, b.y[1]).addScaledVector(hf, b.y[2]);
+          _z.copy(hr).multiplyScalar(b.z[0]).addScaledVector(hu, b.z[1]).addScaledVector(hf, b.z[2]);
+          p.sphere.push(framed(_c, _x, _y, _z, b.r[0] * hs, b.r[1] * hs, b.r[2] * hs), b.col, own, id(), ind);
         }
       }
     }

@@ -31,7 +31,8 @@ import { clamp } from '../../core/util.js';
 
 // (on for every new game once all of it is checked through; till then only with ?prologue=1)
 export const PROLOGUE_ON = false;
-export const GAME_TITLE = '[GAME TITLE]';
+// (a working title, until the name is chosen)
+export const GAME_TITLE = 'OUTLINE';
 export const CREDIT = 'AN AMITAI DAHAN GAME';
 const DONE_KEY = 'scribble.prologue.v1';
 
@@ -51,7 +52,9 @@ const THUGS = [
   { x: 19.6, z: 324.6 },
 ];
 const DANNY_CAR = { x: 0.6, z: 326.8, yaw: Math.PI };
-const RUNUP = { x: 6.5, z: 320, yaw: -Math.PI / 2 };
+const RUNUP = { x: -4, z: 320, yaw: -Math.PI / 2 };
+// (the game's camera, looking down the roof as it is drawn on: its pitch)
+const DRAW_PITCH = -0.34;
 const ROOF_A = GARAGE_A.Y[GARAGE_A.Y.length - 1];
 const ROOF_B = GARAGE_B.Y[GARAGE_B.Y.length - 1];
 const LAND = { x: -72, y: ROOF_B, z0: 317, z1: 323 };
@@ -300,7 +303,7 @@ export class Prologue {
     this.k += (this.kWant - this.k) * (1 - Math.exp(-this.kRate * dt));
     if (Math.abs(this.k - this.kWant) < 0.002) this.k = this.kWant;
     this.ui.update(dt);
-    if (this.draw && this.draw.on) this.draw.frame(dt);
+    if (this.draw && (this.draw.on || this.draw.settle)) this.draw.frame(dt);
     if (this.ramp && !this.ramp.grown) this.ramp.update(dt);
     for (const p of this.pursuers || []) p.update(dt * this.k);
     this.watchdog(dt);
@@ -506,7 +509,9 @@ export class Prologue {
   }
 
   // a camera by a car, in its own frame: side +1 Lily's (the passenger's, the right), -1 Danny's; out
-  // from it, along it (forwards +), up from its floor - the windows are down: through them
+  // from it, along it (forwards +), up from its floor - the windows are down: through them (a face
+  // through a side window from no more than ~0.4 m ahead of the seat: further forward, the
+  // windscreen's pillar is across it)
   carSide(v, side, out, h, along = 0) {
     return () => {
       const fx = Math.sin(v.yaw);
@@ -516,18 +521,39 @@ export class Prologue {
     };
   }
 
+  // a camera inside a car, in its own frame: x to its left (the driver's side), y up from the seats'
+  // floor, u forward of the front seats' line - in under the roof, behind the windscreen, looking back
+  // at the faces in front (a car's dialogue shot: no pillar across them, nothing but the cabin round)
+  inCar(v, x, y, u) {
+    return () => {
+      const S = v.seatOf ? v.seatOf() : { u: -0.25, y: 0 };
+      const fx = Math.sin(v.yaw);
+      const fz = Math.cos(v.yaw);
+      const uu = S.u + u;
+      // (its left: (fz, -fx); its forward: (fx, fz))
+      return v3(v.pos.x + fz * x + fx * uu, (v.pos.y || 0) + S.y + y, v.pos.z - fx * x + fz * uu);
+    };
+  }
+
   cabin(v, h = 1.05) {
     return () => v3(v.pos.x, (v.pos.y || 0) + h, v.pos.z);
   }
 
+  // where somebody's head is: the middle of it, as their figure is posed this frame (sitting in a
+  // car, a child, bending) - until it has been posed once, where a grown-up's head would be
+  head(c) {
+    const j = c.fig && c.fig.j && c.fig.j.headC;
+    return j && (j.x !== 0 || j.y !== 0 || j.z !== 0) ? j : null;
+  }
+
   headH(c) {
-    const j = c.fig && c.fig.j && c.fig.j.head;
+    const j = this.head(c);
     return j ? j.y - c.pos.y : 1.6;
   }
 
   faceOf(c) {
     return () => {
-      const j = c.fig && c.fig.j && c.fig.j.head;
+      const j = this.head(c);
       return j ? v3(j.x, j.y, j.z) : v3(c.pos.x, c.pos.y + 1.6, c.pos.z);
     };
   }
@@ -570,11 +596,13 @@ export class Prologue {
       const fz = Math.cos(v.yaw);
       L.riding = true;
       L.noCollide = true;
-      L.pos.set(v.pos.x + fx * S.u - fz * S.s, (v.pos.y || 0) + S.y, v.pos.z + fz * S.u + fx * S.s);
+      // (on a booster cushion, as a child of her size rides: her face over the door, in the window)
+      const boost = L.fig.scale && L.fig.scale < 0.9 ? 0.22 : 0;
+      L.pos.set(v.pos.x + fx * S.u - fz * S.s, (v.pos.y || 0) + S.y + boost, v.pos.z + fz * S.u + fx * S.s);
       L.vel.set(0, 0, 0);
       L.yaw = v.yaw;
       L.faceYaw = v.yaw;
-      L.baseY = S.y;
+      L.baseY = S.y + boost;
       L.fig.sit = 1;
       // (holding on to her seat)
       L.fig.reachR = null;
@@ -851,9 +879,9 @@ export class Prologue {
       c.vel.set(0, 0, 0);
       c.yaw = face;
       c.faceYaw = face;
-      if (h.wave && c.fig.j && c.fig.j.head) {
+      const hd = this.head(c);
+      if (h.wave && hd) {
         // (a hand up, waving to somebody down on the pier)
-        const hd = c.fig.j.head;
         const w = Math.sin(t * 7 + h.ph) * 0.22;
         c.fig.reachR = c.fig.reachR || new THREE.Vector3();
         c.fig.reachR.set(hd.x + fx * 0.25 - fz * (0.22 + w), hd.y + 0.32, hd.z + fz * 0.25 + fx * (0.22 + w));
@@ -935,7 +963,7 @@ export class Prologue {
     yield 1.7;
     this.shot({ from: this.faceCam(L, 1.0, -0.25), look: this.faceOf(L), fov: 32, dur: 2.4, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
-    L.fig.lookAt = P.fig.j ? P.fig.j.head : null;
+    L.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     yield* this.say('L08', L.fig, 0.9);
     // what he is looking at: the evening, where it was
     this.shot({ from: () => v3(P.pos.x, 1.72, P.pos.z), look: [WHEEL.x, 24, WHEEL.z], lookTo: [WHEEL.x, 26, WHEEL.z], fov: 44, dur: 2.6, hand: 0.25 });
@@ -949,8 +977,8 @@ export class Prologue {
     const M = this.cast.man;
     this.putDanny(GUYS[0].x - 1.5, GUYS[0].z + 0.9, Math.atan2(1.5, -0.9));
     this.faceTo(g1, P.pos.x, P.pos.z);
-    g1.fig.lookAt = P.fig.j ? P.fig.j.head : null;
-    g2.fig.lookAt = P.fig.j ? P.fig.j.head : null;
+    g1.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
+    g2.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.feel(P.fig, 'angry', 3);
     this.shot({ from: this.ots(g1, P), look: this.faceOf(P), fov: 40, dur: 3, hand: 0.7 });
     yield* this.say('D06', P.fig, 0.15);
@@ -974,14 +1002,14 @@ export class Prologue {
     // the other man
     this.putDanny(MAN.x - 1.1, MAN.z - 1.2, Math.atan2(1.1, 1.2));
     this.faceTo(M, P.pos.x, P.pos.z);
-    M.fig.lookAt = P.fig.j ? P.fig.j.head : null;
+    M.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.shot({ from: this.ots(M, P), look: this.faceOf(P), fov: 42, dur: 4, hand: 0.7 });
     yield* this.say('D10', P.fig, 0.2);
     this.faceTo(M, WHEEL.x, WHEEL.z);
     M.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
     yield 1.0;
     this.faceTo(M, P.pos.x, P.pos.z);
-    M.fig.lookAt = P.fig.j ? P.fig.j.head : null;
+    M.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.shot({ from: this.ots(P, M, { h: 1.62 }), look: this.faceOf(M), fov: 36, dur: 3, hand: 0.5 });
     yield* this.say('M01', M.fig, 0.5);
     // all round him, the evening as it was: nobody saw anything
@@ -993,7 +1021,7 @@ export class Prologue {
     this.putDanny(VIEW.x + 1.3, VIEW.z + 0.5, Math.atan2(-1.3, -0.5));
     this.faceTo(L, P.pos.x, P.pos.z);
     L.yaw = L.pl.face;
-    L.fig.lookAt = P.fig.j ? P.fig.j.head : null;
+    L.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.shot({ from: this.ots(P, L, { h: 1.45, back: 0.8, side: 0.45 }), look: this.faceOf(L), fov: 34, dur: 3, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
     yield* this.say('L09', L.fig, 0.4);
@@ -1010,7 +1038,7 @@ export class Prologue {
     this.ui.sketch(this.sketch);
     yield 1.0;
     this.ui.sketch(null);
-    L.fig.lookAt = P.fig.j ? P.fig.j.head : null;
+    L.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.shot({ from: this.faceCam(L, 0.95, -0.22), look: this.faceOf(L), fov: 28, dur: 4.5, hand: 0.3 });
     this.feel(L.fig, 'sad', 8);
     yield* this.say('L10', L.fig, 0.2);
@@ -1076,6 +1104,9 @@ export class Prologue {
     yield 2.4;
     this.phoneRing(false);
     this.ui.call('live', 'BENNY');
+    // (the phone out of his pocket and to his ear, walking on)
+    P.fig.carry = 'phone';
+    g.audio.play('click', 0.4);
     yield* this.say('P01', null, 0.3);
     yield* this.say('D16', P.fig, 0.3);
     yield* this.say('P02', null, 0.3);
@@ -1083,6 +1114,7 @@ export class Prologue {
     yield* this.say('P03', null, 0.4);
     this.ui.call('off');
     g.audio.play('click', 0.5);
+    P.fig.carry = null;
     // the dark car by the car park, the two men by it
     yield () => this.dist(THUGS[0].x, THUGS[0].z) < 17;
     const t1 = this.cast.t1;
@@ -1096,8 +1128,8 @@ export class Prologue {
     this.putDanny(t1.pos.x - Math.sin(a) * 6.5, t1.pos.z - Math.cos(a) * 6.5, a);
     this.put(L, P.pos.x - Math.sin(a) * 1.2 + Math.cos(a) * 0.9, P.pos.z - Math.cos(a) * 1.2 - Math.sin(a) * 0.9, a);
     L.pl.follow = false;
-    t1.fig.lookAt = P.fig.j ? P.fig.j.head : null;
-    t2.fig.lookAt = P.fig.j ? P.fig.j.head : null;
+    t1.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
+    t2.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.faceTo(t1, P.pos.x, P.pos.z);
     this.faceTo(t2, P.pos.x, P.pos.z);
     this.shot({ from: () => v3(P.pos.x - Math.sin(a) * 3 + Math.cos(a) * 1.4, 1.8, P.pos.z - Math.cos(a) * 3 - Math.sin(a) * 1.4), look: () => v3(t1.pos.x, 1.3, t1.pos.z), fov: 44, dur: 4, hand: 0.5 });
@@ -1177,7 +1209,7 @@ export class Prologue {
         c.hitDone = true;
         g.audio.play('punch', 1);
         g.camRig.addShake(0.35);
-        const h = c.fig.j && c.fig.j.head ? c.fig.j.head : c.pos;
+        const h = this.head(c) || c.pos;
         const F = g.weapons && g.weapons.fists;
         if (F) F.burst(h.x, h.y, h.z, 1.2);
         c.downT = 2.6;
@@ -1343,46 +1375,116 @@ export class Prologue {
     this.shot({ from: () => v3(v.pos.x - 1.6, ROOF_A + 1.45, v.pos.z - 1.1), look: () => (pc ? v3(pc.pos.x, ROOF_A + 1.2, pc.pos.z) : v3(20, ROOF_A, 330)), fov: 40, dur: 2.6, hand: 0.6 });
     yield 2.4;
     // Lily
-    this.shot({ from: this.carSide(v, 1, 1.9, 1.2, 0.5), look: this.faceOf(L), fov: 34, dur: 3.2, hand: 0.4 });
+    L.fig.lookAt = this.head(P);
+    this.shot({ from: this.inCar(v, -0.06, 1.16, 0.5), look: this.faceOf(L), fov: 52, dur: 3.2, hand: 0.35 });
     yield* this.say('L14', L.fig, 0.4);
     // Danny looks across again: an idea. A crazy one
-    this.shot({ from: this.carSide(v, -1, 1.7, 1.35, 0.6), look: this.faceOf(P), fov: 30, dur: 2.2, hand: 0.3 });
+    this.shot({ from: this.inCar(v, 0.02, 1.2, 0.5), look: this.faceOf(P), fov: 46, dur: 2.2, hand: 0.3 });
     P.fig.lookAt = v3(-80, ROOF_B, 320);
     yield 2.0;
-    // time all but stops; the gap; the sheet over it - draw
+    // time all but stops. The camera pulls back out of Danny's window, round behind the car and up -
+    // to where the game's own camera is, behind it, looking down the roof to its edge - and from there
+    // it is the player's: the black bars go, and the first drawing of the game is drawn the way every
+    // drawing in it is: on the live picture, from where the player is, over the roof ahead
     this.cue('slowmo');
     this.slow(0.05, 3);
-    // (from over the end of the short street, the sun behind: South Pointe's roof on the left, the
-    // gap and the street far below in the middle, Pointe West's roof on the right - drawn left to
-    // right)
-    const camPos = v3(-50, ROOF_A + 11, 296);
-    const camLook = v3(-47, ROOF_A - 1.5, 326);
-    this.shot({ from: () => v3(v.pos.x + 6, ROOF_A + 4, v.pos.z - 7), to: camPos, look: () => v3(v.pos.x - 8, ROOF_A + 1, v.pos.z), lookTo: camLook, fov: 50, fovTo: 58, dur: 2.2, ease: 'inout', hand: 0.15 });
-    yield 2.3;
-    this.shot({ from: camPos, look: camLook, fov: 58, dur: 999, hand: 0.05 });
-    yield 0.05;
-    const cam = g.camera;
-    cam.updateMatrixWorld();
+    g.audio.play('whoosh', 0.75);
+    this.ui.vignette(true);
+    const rig = g.camRig;
+    rig.yaw = v.yaw;
+    rig.pitch = DRAW_PITCH;
+    rig.curDist = 8.5;
+    rig.curLift = 0;
+    rig.curShoulder = 0;
+    // (where it will be: the rig's own sum, with what is round it - worked out now, the car still)
+    rig.update(0, v.pos, { dist: 8.5, height: 3.1, shoulder: 0 });
+    const gp = g.camera.position.clone();
+    const cp = Math.cos(DRAW_PITCH);
+    const fx = Math.sin(v.yaw);
+    const fz = Math.cos(v.yaw);
+    const gl = gp.clone().add(v3(fx * cp * 30, Math.sin(DRAW_PITCH) * 30, fz * cp * 30));
+    // (the car's left, Danny's side: (fz, -fx))
+    const at = (side, along, up) => v3(v.pos.x + fx * along + fz * side, ROOF_A + up, v.pos.z + fz * along - fx * side);
+    this.shot({
+      path: [this.shots.lastPos.clone(), at(3.0, -0.4, 1.9), at(2.6, -5.2, 4.2), gp],
+      lookPath: [this.shots.lastLook.clone(), at(0.2, 4, 1.2), at(0, 16, 0.8), gl],
+      fov: this.shots.lastFov,
+      fovTo: rig.baseFov,
+      dur: 2.9,
+      ease: 'inout',
+      hand: 0.12,
+    });
+    yield 2.9;
+    // the player's: the game's camera (it is exactly where the shot left it), the bars away, the
+    // screen to draw on
+    this.shots.release();
+    this.holdCam = false;
+    this.drawing = true;
+    this.ui.film(false);
+    g.hud.show();
+    rig.yaw = v.yaw;
+    rig.pitch = DRAW_PITCH;
     this.draw = new RampDraw(g, this.ui);
     let prof = null;
-    this.draw.open({ camera: cam, roofY: ROOF_A, laneZ: RUNUP.z, startX: GARAGE_A.x0 + 12, edgeX: GARAGE_A.x0 }, (p) => {
+    this.draw.open({ camera: g.camera, roofY: ROOF_A, laneZ: v.pos.z, carX: v.pos.x, edgeX: GARAGE_A.x0 }, (p) => {
       prof = p;
     });
-    g.audio.play('pageflip', 0.6);
-    yield () => !!prof;
+    g.audio.play('pageflip', 0.5);
+    // (a heart in the slowed time while the line is drawn)
+    let beat = 0.3;
+    yield () => {
+      beat -= this.dtR || 0.016;
+      if (beat <= 0) {
+        beat = 1.05;
+        g.audio.play('heartbeat', 0.9);
+      }
+      return !!prof;
+    };
+    this.drawing = false;
     g.audio.play('scribble', 0.8);
-    // the line grows into the ramp
+    // the film again: the line lies down on the roof, and grows into the ramp while the camera swings
+    // round it - up off the roof, along its side as it goes up, out past its lip over the street, and
+    // round to look back up it at the car
+    this.film(true);
     this.ramp = new Ramp(g, prof);
     this.set.garages[0].extra.push(this.ramp);
-    this.shot({ from: camPos, to: v3(-44, ROOF_A + 7, 300), look: camLook, lookTo: v3(-38, ROOF_A + 1.5, 321), fov: 58, fovTo: 48, dur: 3.2, ease: 'inout', hand: 0.1 });
+    this.draw.settleTo(this.ramp.inkLine());
+    const R = prof;
+    const Y = ROOF_A;
+    const S = R.startX;
+    const Lp = R.lipX;
+    const rz = R.z;
+    const H = R.h;
+    const mid = (S + Lp) / 2;
+    const cam = g.camera;
+    const c0 = cam.position.clone();
+    const dir = new THREE.Vector3();
+    cam.getWorldDirection(dir);
+    // (round its side in the low sun - the light behind the camera - and out past its lip over the
+    // street: the whole of it from there, the lip near, the car small at the far end of it)
+    this.shot({
+      path: [c0, v3(S + 5, Y + 5.6, rz - 6), v3(mid + 3, Y + 3.0, rz - 11.5), v3(Lp + 1, Y + 2.6, rz - 12.5), v3(Lp - 6.5, Y + H + 0.6, rz - 10.5)],
+      lookPath: [c0.clone().addScaledVector(dir, 25), v3(S - 3, Y + 0.8, rz), v3(mid, Y + H * 0.4, rz), v3(Lp + 3, Y + H * 0.75, rz), v3(mid + 4, Y + H * 0.45, rz + 0.5)],
+      arc: true,
+      fov: cam.fov,
+      fovTo: 48,
+      dur: 6.2,
+      ease: 'swoop',
+      hand: 0.12,
+    });
     yield () => this.ramp.grown;
     g.audio.play('magic', 0.7);
-    yield 0.5;
-    // back with them in the car
+    yield () => this.shots.done;
+    yield 0.35;
+    // back with them in the car, the time its own again: Lily, at her open window, staring at what
+    // is in front of them; Danny, at his, his hands on the wheel
     this.slow(1, 3);
-    this.shot({ from: this.carSide(v, 1, 2.9, 1.45, 1.4), look: this.cabin(v, 1.05), fov: 40, dur: 6, hand: 0.4 });
+    this.ui.vignette(false);
+    L.fig.lookAt = this.head(P);
+    this.shot({ from: this.inCar(v, -0.02, 1.14, 0.52), look: this.faceOf(L), fov: 50, dur: 3.2, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
-    yield* this.say('L15', L.fig, 0.3);
+    yield* this.say('L15', L.fig, 0.25);
+    this.shot({ from: this.inCar(v, -0.04, 1.2, 0.5), look: this.faceOf(P), fov: 46, dur: 2.6, hand: 0.35 });
     this.feel(P.fig, 'angry', 4);
     yield* this.say('D23', P.fig, 0.2);
     P.fig.lookAt = null;
@@ -1577,6 +1679,9 @@ export class Prologue {
     }
     this.done = true;
     this.co = null;
+    this.drawing = false;
+    if (this.draw && this.draw.on) this.draw.close();
+    this.ui.vignette(false);
     for (const p of this.pursuers || []) p.dispose();
     this.pursuers = [];
     if (this.blockCol !== undefined) g.world.collision.remove(this.blockCol);

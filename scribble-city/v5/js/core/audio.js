@@ -605,6 +605,13 @@ export class Audio {
         this.hiss(0.16, 0.32 * v, 2800, 1.6, 'bandpass', 0, 900);
         this.tone('triangle', 1400, 2400, 0.08, 0.05 * v);
         break;
+      // (a heart, slowed with the time: lub-dub, low, felt more than heard - the prologue's drawing)
+      case 'heartbeat':
+        this.tone('sine', 62, 38, 0.16, 0.55 * v);
+        this.hiss(0.1, 0.12 * v, 140, 0.7, 'lowpass');
+        this.tone('sine', 56, 34, 0.14, 0.38 * v, 0.24);
+        this.hiss(0.08, 0.08 * v, 120, 0.7, 'lowpass', 0.24);
+        break;
       case 'whoosh':
         this.hiss(0.4, 0.28 * v, 600, 1.2, 'bandpass', 0, 2200);
         this.tone('sine', 220, 440, 0.18, 0.08 * v);

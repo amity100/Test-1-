@@ -872,10 +872,11 @@ export function heroThighGeo() {
 }
 // (v5, ROADMAP 13.1) a cargo pocket on the side of the thigh, a little forward (the thigh's frame:
 // x ahead, z to the right; sd 1 its right side, -1 its left) - both legs are the same shape, so each
-// has one on both its sides
-function cargoPocket(sd) {
+// has one on both its sides. (ROADMAP 18: on anybody's thigh - its rows - in cargo trousers:
+// render/folkshapes.js)
+export function cargoPocket(sd, thigh = THIGH_ROWS) {
   // (from the knee up: rowAt walks up the rows)
-  const rows = THIGH_ROWS.slice().reverse();
+  const rows = thigh.slice().reverse();
   const pos = [];
   const uv = [];
   const idx = [];

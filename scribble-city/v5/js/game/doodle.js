@@ -1271,6 +1271,46 @@ export class Doodle {
       this.capsule('torso', 'chest', _a, _b, 0.011 * S, bagC);
       this.ellipsoid('torso', 'chest', _b, rgt, ax, fwd, 0.04 * S, 0.17 * S, 0.17 * S, bagC);
     }
+    // (v5, ROADMAP 18) a backpack on both shoulders (L.backpack: { color, flap, strap, patches: [[across,
+    // up, how wide, how tall, colour], ...] on its face, toy: the colour of the toy on its keyring}): its
+    // body against the back, the flap over its top, a pocket on its face, the straps over the shoulders
+    // and down under the arms
+    if (L.backpack) {
+      const B = L.backpack;
+      const back = 0.12 * this.bulk * S;
+      _c.lerpVectors(j.hip, j.neck, 0.56).addScaledVector(fwd, -(back + 0.07 * S));
+      this.ellipsoid('torso', 'chest', _c, rgt, ax, fwd, 0.15 * S, 0.2 * S, 0.075 * S, B.color);
+      _a.copy(_c).addScaledVector(ax, 0.12 * S).addScaledVector(fwd, -0.02 * S);
+      this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, 0.14 * S, 0.095 * S, 0.07 * S, B.flap || B.color);
+      _a.copy(_c).addScaledVector(ax, -0.08 * S).addScaledVector(fwd, -0.06 * S);
+      this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, 0.1 * S, 0.075 * S, 0.035 * S, B.flap || B.color);
+      for (const p of B.patches || []) {
+        _a.copy(_c).addScaledVector(rgt, p[0] * S).addScaledVector(ax, p[1] * S).addScaledVector(fwd, -0.072 * S);
+        this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, p[2] * S, p[3] * S, 0.008 * S, p[4]);
+      }
+      if (B.toy) {
+        // (a little stuffed rabbit on its keyring, at its side: its body, its head, its ears)
+        _a.copy(_c).addScaledVector(rgt, -0.155 * S).addScaledVector(ax, -0.06 * S).addScaledVector(fwd, -0.02 * S);
+        this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, 0.028 * S, 0.036 * S, 0.026 * S, B.toy);
+        _a.addScaledVector(ax, 0.05 * S);
+        this.ellipsoid('torso', 'chest', _a, rgt, ax, fwd, 0.024 * S, 0.022 * S, 0.022 * S, B.toy);
+        for (const sd of [-1, 1]) {
+          _b.copy(_a).addScaledVector(ax, 0.035 * S).addScaledVector(rgt, sd * 0.01 * S);
+          this.ellipsoid('torso', 'chest', _b, rgt, ax, fwd, 0.007 * S, 0.022 * S, 0.006 * S, B.toy);
+        }
+      }
+      const st = B.strap || B.color;
+      for (const [sh, sd] of [[j.shoulderR, 1], [j.shoulderL, -1]]) {
+        // over the shoulder by the neck, down the front of it, under the arm to the bottom of the pack
+        _a.lerpVectors(j.neck, sh, 0.55).addScaledVector(ax, 0.02 * S);
+        _b.copy(_a).addScaledVector(fwd, back * 0.95).addScaledVector(ax, -0.13 * S);
+        _d.copy(_c).addScaledVector(rgt, sd * 0.1 * S).addScaledVector(ax, 0.17 * S);
+        this.capsule('torso', 'chest', _d, _a, 0.012 * S, st);
+        this.capsule('torso', 'chest', _a, _b, 0.012 * S, st);
+        _d.copy(_c).addScaledVector(rgt, sd * 0.11 * S).addScaledVector(ax, -0.16 * S);
+        this.capsule('torso', 'chest', _b, _d, 0.011 * S, st);
+      }
+    }
   }
 
   // ------------------------------------------------------------------ bones & holes

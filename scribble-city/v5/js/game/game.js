@@ -448,11 +448,14 @@ export class Game {
       // (the free drawing's page out: the mouse is drawing - a lock that came late is let go again;
       // ROADMAP 15.5: a dialog up, the same - its answers are clicked)
       const plDraw = !!(this.prologue && this.prologue.draw && this.prologue.draw.on);
+      // (the prologue's drawing just put away: the mouse asked back for the camera - not given, or not
+      // yet, is no reason to pause the film)
+      const plShut = !!(this.prologue && this.prologue.draw && performance.now() - (this.prologue.draw.shutAt || -1e9) < 1500);
       if (locked && ((this.freedraw && this.freedraw.open) || this.dialog.isOpen || plDraw)) {
         this.input.releaseLock();
         return;
       }
-      if (!locked && this.state === 'play' && !plDraw && performance.now() - (this.input.releasedAt || -1e9) > 600 && !this.airdraw.open && !(this.freedraw && (this.freedraw.open || performance.now() - this.freedraw.shutAt < 1500)) && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !(this.minigames && this.minigames.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && !plDraw && !plShut && performance.now() - (this.input.releasedAt || -1e9) > 600 && !this.airdraw.open && !(this.freedraw && (this.freedraw.open || performance.now() - this.freedraw.shutAt < 1500)) && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !(this.minigames && this.minigames.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -1179,7 +1182,7 @@ export class Game {
     const look = input.consumeLook();
     // (the weapon wheel open: the mouse points at a weapon, not the camera; ROADMAP 6.6)
     if (this.wheel && this.wheel.open) this.wheel.look(look.x, look.y);
-    else if (playing && !this.airdraw.open && !(this.freedraw && this.freedraw.open) && !(pro && pro.holdCam)) {
+    else if (playing && !this.airdraw.open && !(this.freedraw && this.freedraw.open) && !(pro && (pro.holdCam || pro.drawing))) {
       this.camRig.applyLook(look.x, look.y);
       if (look.x || look.y) this.lastLookInput = this.time;
     }

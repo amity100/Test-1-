@@ -18,14 +18,18 @@
 //             toms, and the hook on top. Left to itself it climbs a little as it goes;
 //  - slowmo   time slowing: everything drops away, then a drone, a heartbeat and a swell held under
 //             the action for as long as it lasts;
-//  - title    the top of the jump: the hit on the call, a bright chord, the hook's first two bars
-//             big; four and a half seconds on it lands on A and hands back to the chase at full heat;
-//  - ending   the lookout: an electric piano and a pad at 66 bpm, never quite coming home;
+//  - title    the top of the jump: the hit on the call (whatever played is cut off by it), a bright
+//             chord, the hook's first two bars big; four and a half seconds on it lands on A and
+//             hands back to the chase at full heat;
+//  - ending   the lookout: an electric piano and a pad at 66 bpm, never quite coming home; the hook
+//             comes back on the piano as the camera draws away, and stops short of home;
 //  - and three stings that play over whatever is playing: discovery (the men by the car park: a
 //    low swell), hit (a punch), land (a car coming down hard).
 // play(name, { fade }) crossfades from what plays to the cue, stop({ fade }) fades it out, heat(k)
-// says how hot the chase is, level(v) turns the whole score down or up. The notes are written a
-// moment ahead by update() and by a timer of the score's own, so a late frame leaves no gap.
+// says how hot the chase is, level(v) turns the whole score down or up, now is the audio's clock.
+// The notes are written a moment ahead by a timer of the score's own (and by update(), if it is
+// called every frame), so a late frame leaves no gap; the sound off or the music turned down to
+// nothing, no notes are written at all.
 
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
@@ -41,7 +45,7 @@ const AHEAD = 0.35;
 // the whole score's level into the music volume, and each cue's against the others (the chase
 // under the title's hit; the ending and the discovery under the words said over them)
 const TRIM = 0.55;
-const LEVEL = { opening: 1, chase: 0.82, slowmo: 0.9, title: 1, ending: 0.65, discovery: 0.6, hit: 1.5, land: 1 };
+const LEVEL = { opening: 1, chase: 0.82, slowmo: 0.9, title: 1, ending: 1, discovery: 0.6, hit: 1.5, land: 1 };
 // how loud the room comes back
 const ROOM = 2.5;
 
@@ -63,24 +67,80 @@ function noiseBuf(c) {
   return b;
 }
 
-// the room: a couple of seconds of noise dying away, darker as it dies (the highs go first), a
-// little different in each ear, the same room every time
+// the room: a couple of seconds of noise dying away (to a thousandth by its end), darker as it
+// dies (the highs go first), a little different in each ear, made by hand (whole numbers for the
+// noise, one multiplication a sample for the dying away) - the same room every time
 function roomIR(c, secs) {
   const n = Math.floor(c.sampleRate * secs);
   const pre = Math.floor(c.sampleRate * 0.014);
+  const m = n - pre;
   const b = c.createBuffer(2, n, c.sampleRate);
+  const fall = Math.exp(-6.9 / m);
   let s = 4242;
-  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647) * 2 - 1;
   for (let ch = 0; ch < 2; ch++) {
     const d = b.getChannelData(ch);
     let lp = 0;
-    for (let i = pre; i < n; i++) {
-      const x = (i - pre) / (n - pre);
-      lp += (rnd() - lp) * (0.88 - 0.72 * x);
-      d[i] = lp * Math.exp(-x * 6.9);
+    let env = 1;
+    for (let i = 0; i < m; i++) {
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      lp += ((s | 0) / 2147483648 - lp) * (0.88 - (0.72 * i) / m);
+      d[pre + i] = lp * env;
+      env *= fall;
     }
   }
   return b;
+}
+
+// The room hung in the reverb: in the game, the same thing rendered to one side - the noise through
+// a filter closing and a level dying away, played by an offline context on a thread of its own, so
+// that nothing of it is on the game's frames - and hung in when it is ready (the first moment of the
+// first cue rings without it). Rendered offline itself (the score's tests), or with no offline
+// context to be had, made by hand on the spot.
+function hangRoom(c, verb, noise, secs) {
+  const W = typeof window !== 'undefined' ? window : globalThis;
+  const OAC = W.OfflineAudioContext || W.webkitOfflineAudioContext;
+  const byHand = () => {
+    try {
+      verb.buffer = roomIR(c, secs);
+    } catch (e) {
+      // (no room: the score plays dry)
+    }
+  };
+  if (!OAC || c instanceof OAC || !noise) return byHand();
+  try {
+    const off = new OAC(2, Math.floor(c.sampleRate * secs), c.sampleRate);
+    const mg = off.createChannelMerger(2);
+    for (let ch = 0; ch < 2; ch++) {
+      const s = off.createBufferSource();
+      s.buffer = noise;
+      s.loop = true;
+      s.connect(mg, 0, ch);
+      s.start(0.014, ch * 0.41);
+    }
+    const f = off.createBiquadFilter();
+    f.type = 'lowpass';
+    f.Q.value = 0;
+    f.frequency.setValueAtTime(15000, 0);
+    f.frequency.exponentialRampToValueAtTime(1200, secs);
+    const g = off.createGain();
+    g.gain.setValueAtTime(1, 0);
+    g.gain.exponentialRampToValueAtTime(0.001, secs);
+    mg.connect(f).connect(g).connect(off.destination);
+    const hang = (b) => {
+      try {
+        verb.buffer = b;
+      } catch (e) {
+        // (no room: the score plays dry)
+      }
+    };
+    const p = off.startRendering();
+    if (p && p.then) p.then(hang, byHand);
+    else off.oncomplete = (e) => hang(e.renderedBuffer);
+  } catch (e) {
+    byHand();
+  }
 }
 
 // ------------------------------------------------------------------ the charts
@@ -643,11 +703,11 @@ class Opening extends Cue {
     // (a little lazy: the off sixteenths a touch late)
     this.swing = 0.08;
     const spb = 60 / this.bpm / 4;
-    this.drums = this.bus(0.1);
+    this.drums = this.bus(0.14);
     this.snrOut = this.drums;
     this.low = this.bus(0.02);
-    this.keys = this.bus(0.3);
-    this.lead = this.bus(0.26);
+    this.keys = this.bus(0.45);
+    this.lead = this.bus(0.38);
     this.hat = this.chan('highpass', 8200, 0.7, this.drums, 0.1);
     this.ohat = this.chan('highpass', 6800, 0.6, this.drums, 0.4);
     this.shk = this.chan('bandpass', 6200, 1.6, this.drums, 0.7);
@@ -1064,7 +1124,7 @@ class Ending extends Cue {
     o.detune.linearRampToValueAtTime(-38, t + dur);
     const g = c.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.011, t + dur * 0.5);
+    g.gain.linearRampToValueAtTime(0.008, t + dur * 0.5);
     g.gain.setTargetAtTime(0, t + dur * 0.7, dur * 0.12);
     o.connect(g).connect(this.keys);
     o.start(t);
@@ -1079,12 +1139,12 @@ class Ending extends Cue {
     const up = n >= 13 ? 12 : 0;
     const ghost = n === 9 || n === 15;
     if (k === 0) {
-      this.pad(t, B.ch, 16 * spb, this.kin, { vol: 0.022, a: 1.4, r: 2.2, cut: 900, det: 7, wide: 0.7 });
-      this.sub.note(t, B.r - 12 >= 28 ? B.r - 12 : B.r, 15.5 * spb, { vol: 0.13, a: 0.25, d: 1.5, s: 0.7, r: 0.6 });
+      this.pad(t, B.ch, 16 * spb, this.kin, { vol: 0.034, a: 1.4, r: 2.2, cut: 900, det: 7, wide: 0.7 });
+      this.sub.note(t, B.r - 12 >= 28 ? B.r - 12 : B.r, 15.5 * spb, { vol: 0.05, a: 0.25, d: 1.5, s: 0.7, r: 0.6 });
     }
     // the piano: up through the chord, or (under the hook, under the ghost) the chord once, softly
-    for (const [st, j, oct, v] of hb >= 0 || ghost ? P_SPARSE : P_ARP) if (st === k) this.piano(t, (j < 0 ? B.r : B.ch[j]) + oct, 0.055 * v, this.kin);
-    if (hb >= 0) for (const [st, m, len] of E_HOOK[hb]) if (st === k) this.piano(t, m + up, up ? 0.032 : 0.06, this.kin, 1.2 + len * spb);
+    for (const [st, j, oct, v] of hb >= 0 || ghost ? P_SPARSE : P_ARP) if (st === k) this.piano(t, (j < 0 ? B.r : B.ch[j]) + oct, 0.085 * v, this.kin);
+    if (hb >= 0) for (const [st, m, len] of E_HOOK[hb]) if (st === k) this.piano(t, m + up, up ? 0.055 : 0.095, this.kin, 1.2 + len * spb);
     if (ghost && k === 4) this.ghost(t, 88, 11 * spb);
     // (a breath in before it goes round again)
     if (n === 15 && k === 8) this.riser(t, 8 * spb, 0.016, this.keys, 600, 3500);
@@ -1264,7 +1324,7 @@ export class Score {
     const verb = c.createConvolver();
     const g = this.game;
     // (a smaller room on a phone)
-    verb.buffer = roomIR(c, g.touch || (g.pipe && g.pipe.low) ? 1.4 : 2.2);
+    hangRoom(c, verb, this.noise, g.touch || (g.pipe && g.pipe.low) ? 1.4 : 2.2);
     const back = c.createGain();
     back.gain.value = ROOM;
     this.room.connect(verb).connect(back).connect(this.mix);

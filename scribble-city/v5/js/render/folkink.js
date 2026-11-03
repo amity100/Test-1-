@@ -170,6 +170,20 @@ export function paintFolkFace(c, o = {}) {
       g.fill();
     }
   }
+  // (ROADMAP 18) marks of their own, where their face has them: a mole (P.mole: [x, y]), a scratch
+  // healing on a cheek (P.scratch: its two ends) - a thin red line, its paler edge beside it
+  if (P.mole) {
+    g.globalAlpha = 0.85;
+    g.fillStyle = '#5a3424';
+    g.beginPath();
+    g.arc(X(P.mole[0]), Y(P.mole[1]), 4.6 * s, 0, Math.PI * 2);
+    g.fill();
+  }
+  if (P.scratch) {
+    const [a, b] = P.scratch;
+    h.line(X(a[0]), Y(a[1]), X(b[0]), Y(b[1]), 3.4, '#b04a40', 0.75, 0.12);
+    h.line(X(a[0]), Y(a[1] - 0.0012), X(b[0]), Y(b[1] - 0.0012), 2.6, '#e0907e', 0.5, 0.12);
+  }
   // ---- the beard: short dark hairs growing down and out along the jaw (grey ones in a grey beard)
   if (P.beard) {
     const kind = P.beard;
@@ -320,10 +334,12 @@ export function paintFolkFace(c, o = {}) {
   // ---- the brows, drawn hair by hair - arched on a woman's face, low and straight on a man's
   const BR = P.brows;
   for (const sd of [1, -1]) {
-    const arch = BR.arch ?? 0.3;
-    const P0 = [sd * 0.013, 0.0322 + (fem ? 0.0015 : 0)];
-    const P1 = [sd * 0.035, 0.0418 + arch * 0.004 + (fem ? 0.002 : 0)];
-    const P2 = [sd * 0.057, 0.0336 + (fem ? 0.002 : 0)];
+    // (ROADMAP 18: uneven - the one higher and more arched than the other)
+    const odd = (BR.uneven || 0) * sd;
+    const arch = (BR.arch ?? 0.3) + odd * 0.4;
+    const P0 = [sd * 0.013, 0.0322 + (fem ? 0.0015 : 0) + odd * 0.001];
+    const P1 = [sd * 0.035, 0.0418 + arch * 0.004 + (fem ? 0.002 : 0) + odd * 0.002];
+    const P2 = [sd * 0.057, 0.0336 + (fem ? 0.002 : 0) + odd * 0.0016];
     const at = (t) => {
       const a = (1 - t) * (1 - t);
       const b = 2 * t * (1 - t);
@@ -549,22 +565,23 @@ export function paintFolkHair(c, o = {}) {
   g.globalAlpha = 1;
   g.fillStyle = HR.base;
   g.fillRect(0, 0, W, H);
+  // (little coils of hair: tight curls' all over, a curly ponytail's through its strands)
+  const coil = (cols, n, r0, a) => {
+    for (let i = 0; i < n * k; i++) {
+      const x = R() * W;
+      const y = R() * H;
+      const r = (r0 * (0.7 + 0.6 * R())) * s;
+      const a0 = R() * Math.PI * 2;
+      const pts = [];
+      for (let t = 0; t <= 1.0001; t += 0.125) {
+        const an = a0 + t * Math.PI * 1.7;
+        pts.push([x + Math.cos(an) * r * (1 - 0.3 * t), y + Math.sin(an) * r * (1 - 0.3 * t)]);
+      }
+      h.path(pts, 1.6 + R(), h.pick(cols), a * (0.6 + 0.4 * R()), 0.6);
+    }
+  };
   if (HR.style === 'curls') {
     // tight curls: little coils all over, dark, a lighter edge on each
-    const coil = (cols, n, r0, a) => {
-      for (let i = 0; i < n * k; i++) {
-        const x = R() * W;
-        const y = R() * H;
-        const r = (r0 * (0.7 + 0.6 * R())) * s;
-        const a0 = R() * Math.PI * 2;
-        const pts = [];
-        for (let t = 0; t <= 1.0001; t += 0.125) {
-          const an = a0 + t * Math.PI * 1.7;
-          pts.push([x + Math.cos(an) * r * (1 - 0.3 * t), y + Math.sin(an) * r * (1 - 0.3 * t)]);
-        }
-        h.path(pts, 1.6 + R(), h.pick(cols), a * (0.6 + 0.4 * R()), 0.6);
-      }
-    };
     coil(HR.dark, 2600, 7, 0.85);
     coil(HR.mid, 1500, 6, 0.7);
     coil(HR.light, 500, 5, 0.55);
@@ -580,7 +597,7 @@ export function paintFolkHair(c, o = {}) {
     g.globalAlpha = 1;
     return c;
   }
-  const long = HR.style === 'long' || HR.style === 'bun';
+  const long = HR.style === 'long' || HR.style === 'bun' || HR.style === 'pony';
   const strand = (cols, n, w, a, lo, hi, lit = null) => {
     for (let i = 0; i < n * k; i++) {
       const x = R() * W;
@@ -605,6 +622,12 @@ export function paintFolkHair(c, o = {}) {
   strand(['#c0609a', '#d07aa8'], 60, 1.1, 0.28, 0.1, 0.8);
   strand(['#4aa8c8', '#5ab8d8'], 60, 1.1, 0.26, 0.1, 0.8);
   h.hatch(0, H * 0.82, W, H, 600 * k, () => 0.8, Math.PI / 2, 26, 2.2, HR.dark, 0.6, 0.6);
+  // (ROADMAP 18: curly and messy - curls all through the strands, their light edges caught)
+  if (HR.style === 'pony') {
+    coil(HR.dark, 1100, 6.5, 0.75);
+    coil(HR.mid, 800, 6, 0.65);
+    coil(HR.light, 500, 5, 0.6);
+  }
   g.globalAlpha = 1;
   return c;
 }
@@ -718,6 +741,63 @@ function flowers(h, x0, y0, x1, y1, n, f) {
     g.ellipse(x + Math.cos(a) * r * 1.2, y + Math.sin(a) * r * 1.2, r * 0.55, r * 0.2, a, 0, Math.PI * 2);
     g.fill();
   }
+}
+
+// (ROADMAP 18) a print on a tee, seen in the open jacket (PT.front): a rocket going up through stars,
+// its flame under it. at(y, x): the picture's pixel for a point of the front - y its height on the
+// body, x across it (metres, as the body's: render/folkshapes.js frontPatch) - so that the print keeps
+// its shape however the picture is laid
+function rocketPrint(h, at, s) {
+  const g = h.g;
+  const R = h.R;
+  const shape = (pts, fill, ink) => {
+    g.beginPath();
+    pts.forEach(([y, x], i) => (i ? g.lineTo(...at(y, x)) : g.moveTo(...at(y, x))));
+    g.closePath();
+    g.globalAlpha = 0.95;
+    g.fillStyle = fill;
+    g.fill();
+    if (ink) {
+      g.globalAlpha = 0.8;
+      g.strokeStyle = ink;
+      g.lineWidth = 3.2 * s;
+      g.stroke();
+    }
+  };
+  const NAVY = '#2a2a48';
+  // the stars round it, five-pointed, yellow
+  const star = (y, x, r) => {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + R() * 0.2;
+      const q = i % 2 ? r * 0.45 : r;
+      pts.push([y + Math.cos(a) * q, x + Math.sin(a) * q]);
+    }
+    shape(pts, '#f2c230', '#b07a18');
+  };
+  for (const [y, x, r] of [[0.395, -0.03, 0.011], [0.125, 0.032, 0.012], [0.3, 0.036, 0.008], [0.2, -0.036, 0.009], [0.07, -0.022, 0.008], [0.36, 0.028, 0.006]]) star(y, x, r);
+  // the flame
+  shape([[0.17, 0], [0.205, -0.014], [0.215, 0], [0.205, 0.014]], '#f0902a', null);
+  shape([[0.185, 0], [0.208, -0.007], [0.215, 0], [0.208, 0.007]], '#f8d848', null);
+  // the fins, red
+  for (const sd of [1, -1]) shape([[0.205, sd * 0.012], [0.215, sd * 0.03], [0.245, sd * 0.03], [0.255, sd * 0.012]], '#d8402e', NAVY);
+  // the body, white to its red nose
+  const body = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    const y = 0.21 + t * 0.15;
+    body.push([y, 0.016 * Math.sqrt(Math.max(0, 1 - ((t - 0.3) / 0.72) ** 2)) + 0.0005]);
+  }
+  shape([...body, ...body.slice().reverse().map(([y, x]) => [y, -x])], '#f4efe6', NAVY);
+  const nose = body.filter(([y]) => y >= 0.32);
+  shape([...nose, ...nose.slice().reverse().map(([y, x]) => [y, -x])], '#d8402e', NAVY);
+  // its window, blue in a ring
+  const win = [];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    win.push([0.285 + Math.cos(a) * 0.0085, Math.sin(a) * 0.0085]);
+  }
+  shape(win, '#4a78d0', NAVY);
 }
 
 // ------------------------------------------------------------------ what they wear over: JK's layout
@@ -872,8 +952,8 @@ export function paintFolkTop(c, o = {}) {
       const pts = [];
       for (let i = 0; i <= 10; i++) pts.push(Pt(i / 10, 0.06));
       seam(h, T, pts, 0, -5, stitch, twice);
-      // (a bomber's pocket on the left sleeve: its zip, its pull)
-      if (kind === 'bomber') {
+      // (a bomber's pocket on the left sleeve: its zip, its pull - not a hoodie's)
+      if (kind === 'bomber' && !T.hood) {
         const [xa, ya] = Pt(0.62, 0.22);
         const [xb, yb] = Pt(0.82, 0.48);
         h.lines([[xa, ya], [xb, ya], [xb, yb], [xa, yb], [xa, ya]], 1.8, T.dark[0], 0.8, 2, 0.6);
@@ -898,8 +978,26 @@ export function paintFolkTop(c, o = {}) {
       }
     }
   }
-  // ---- the collar: a blazer's of its cloth (its felt under); a bomber's rib; a denim's
-  {
+  // ---- (ROADMAP 18) a hoodie's hood, down, where the collar was drawn (render/folkshapes.js hoodGeo:
+  // no collar is made now): the hood's cloth below v 0.7, the seam down its middle, its folds; its rim
+  // rolled round the neck above v 0.75, the seam along it and the darker inside of the opening
+  if (T.hood) {
+    const r = regionOf(c, JK.collar);
+    fabric(h, r.x0, r.y0, r.x1, r.y1, 8000 * k, 0.1, T, stuff, (u, vv) => 0.3 + 0.4 * vv);
+    h.lines([[r.x(0.5), r.y(0.0)], [r.x(0.5), r.y(0.35)], [r.x(0.5), r.y(0.7)]], 2.2, T.dark[0], 0.75, 2, 0.8);
+    for (let i = 0; i < 8; i++) {
+      const u = 0.12 + R() * 0.76;
+      if (Math.abs(u - 0.5) < 0.06) continue;
+      const vv = 0.15 + R() * 0.45;
+      crease(h, T, [[r.x(u), r.y(vv)], [r.x(u + (u < 0.5 ? -0.05 : 0.05)), r.y(vv + 0.12)]], 1.8);
+    }
+    g.globalAlpha = 0.85;
+    g.fillStyle = T.lining || T.dark[0];
+    g.fillRect(r.x0, r.y(0.93), r.x1 - r.x0, r.y(0.85) - r.y(0.93));
+    h.lines([[r.x(0), r.y(0.75)], [r.x(0.5), r.y(0.75)], [r.x(1), r.y(0.75)]], 2.2, T.dark[0], 0.75, 2, 0.8);
+    h.lines([[r.x(0), r.y(0.85)], [r.x(0.5), r.y(0.85)], [r.x(1), r.y(0.85)]], 1.6, T.dark[1], 0.6, 2, 0.8);
+  } else {
+    // ---- the collar: a blazer's of its cloth (its felt under); a bomber's rib; a denim's
     const r = regionOf(c, JK.collar);
     if (kind === 'bomber') {
       g.globalAlpha = 1;
@@ -1066,6 +1164,29 @@ export function paintFolkBottom(c, o = {}) {
           h.stitches([[xa, ya], [xb, ya], [xb, yb], [(xa + xb) / 2, yb + 12 * s], [xa, yb], [xa, ya]], 1.2, stitch, 0.6);
         }
       }
+    } else if (key === 'pocket' && B.cargo) {
+      // (ROADMAP 18: cargo trousers) the pocket on the thigh's side: its face, its flap with a snap,
+      // its pleat, stitched round (render/folkshapes.js puts it on, as the hero's is)
+      const m = 9 * s;
+      const fy = r.y0 + (r.y1 - r.y0) * 0.3;
+      g.globalAlpha = 0.55;
+      g.fillStyle = B.dark[2] || B.dark[0];
+      g.fillRect(r.x0, fy, r.x1 - r.x0, 10 * s);
+      h.lines([[r.x0 + 3 * s, fy], [r.x1 - 3 * s, fy]], 2.4, B.dark[0], 0.85, 2, 0.6);
+      h.stitches([[r.x0 + m, r.y0 + m], [r.x1 - m, r.y0 + m], [r.x1 - m, fy - m * 0.6], [r.x0 + m, fy - m * 0.6], [r.x0 + m, r.y0 + m]], 1.1, B.light[0], 0.55);
+      h.stitches([[r.x0 + m, fy + m * 1.5], [r.x0 + m, r.y1 - m], [r.x1 - m, r.y1 - m], [r.x1 - m, fy + m * 1.5]], 1.1, B.light[0], 0.5);
+      h.lines([[(r.x0 + r.x1) / 2, fy + 14 * s], [(r.x0 + r.x1) / 2, r.y1 - 6 * s]], 1.5, B.dark[0], 0.5, 2, 0.8);
+      const sx = (r.x0 + r.x1) / 2;
+      const sy = (r.y0 + fy) / 2 + 6 * s;
+      g.globalAlpha = 0.95;
+      g.fillStyle = B.dark[1];
+      g.beginPath();
+      g.arc(sx, sy, 7 * s, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = B.light[1] || B.light[0];
+      g.beginPath();
+      g.arc(sx - 2 * s, sy - 2 * s, 2.4 * s, 0, Math.PI * 2);
+      g.fill();
     }
   }
   // ---- the front: what they wear under the jacket, seen in its opening (the picture's x along it
@@ -1109,6 +1230,12 @@ export function paintFolkBottom(c, o = {}) {
       }
       h.lines(pts, 2.2, I.dark[0], 0.7, 2, 0.6);
       h.lines(pts.map(([x, y]) => [x + 6 * s, y]), 1.2, I.dark[1], 0.45, 2, 0.6);
+      // (ROADMAP 18: its print - across the opening as wide as the jacket is worn open: render/
+      // folkshapes.js)
+      if (I.print === 'rocket') {
+        const half = (P.fem ? 0.042 : 0.047) + (P.top.open || 0);
+        rocketPrint(h, (y, x) => [xAt(y), yAt(0.5 + x / (2 * half))], s);
+      }
     } else if (I.kind === 'blouse') {
       // its high round neck, a soft drape across it, the silk's light
       const pts = [];

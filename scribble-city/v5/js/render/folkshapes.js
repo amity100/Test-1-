@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FACE, JK, PT } from './heroink.js';
-import { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, section, neckbandGeo, frontPatch, TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS } from './heroshapes.js';
+import { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, section, neckbandGeo, frontPatch, cargoPocket, TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS } from './heroshapes.js';
 import { FOLK } from './folkspec.js';
 import { HEAD, MORPHS } from './folkheads.js';
 import { NECK_J, HEAD_DROP } from './neckbend.js';
@@ -806,6 +806,18 @@ const STYLES = {
     thick: (th, phi) => 0.006 + 0.012 * Math.max(0, Math.cos(th)) + 0.008 * Math.sin(th) * (1 - Math.max(0, Math.cos(phi)) * 0.6),
     clumps: 0.014,
   },
+  // (ROADMAP 18) curly and messy, drawn back into a ponytail high at the back (the tail: ponyGeo):
+  // its edge round the face and up behind the ears, which stand clear of it; full, its curls' lumps
+  // all over
+  pony: {
+    edge: lineOf([[0, 0.6], [0.55, 0.62], [1.05, 1.0], [1.4, 1.1], [1.75, 1.12], [2.15, 1.5], [2.6, 1.72], [Math.PI, 1.8]]),
+    thick: (th, phi) => {
+      const top = Math.max(0, Math.cos(th));
+      const bump = 0.003 * (Math.sin(th * 23 + phi * 5) * Math.sin(phi * 19 - th * 7) + 0.7);
+      return 0.006 + 0.012 * top ** 1.2 + 0.004 * Math.sin(th) + bump;
+    },
+    clumps: 0.012,
+  },
 };
 
 function hairKit(spec, headR) {
@@ -943,8 +955,339 @@ function locksOf(style, R) {
       add(phi, 0.08 + R() * 0.3, 0.9, sd * (0.5 + 0.3 * R()), 0.06 + 0.04 * R(), 0.016 + 0.005 * R(), 0.004, 0.25);
     }
     for (const sd of [-1, 1]) for (let i = 0; i < 4; i++) add(sd * (0.75 + 0.15 * i), 0.62 + R() * 0.1, 1, sd * 0.15, 0.07 + 0.02 * R(), 0.015, 0.004, 0.6);
+  } else if (style === 'pony') {
+    // (ROADMAP 18) drawn back from the face to where it is tied, curls lifting out of it here and
+    // there; the sides drawn back above the ears; and a few flying loose on top, as a child's does by
+    // the end of the day (the curls hanging loose at the temples and the nape: ponyGeo)
+    for (let i = 0; i < 22; i++) {
+      const phi = (R() - 0.5) * 2.8;
+      add(phi, 0.22 + R() * 0.3, 0, 0, 0.07 + 0.04 * R(), 0.014 + 0.005 * R(), 0.004 + 0.003 * R(), 0, true);
+    }
+    for (const sd of [-1, 1]) for (let i = 0; i < 4; i++) add(sd * (1.25 + R() * 0.5), 0.6 + R() * 0.18, 0, 0, 0.05 + 0.02 * R(), 0.012, 0.003, 0, true);
+    // (the loose ones up and over, away from the face: never down onto the forehead)
+    for (let i = 0; i < 6; i++) add((R() - 0.5) * 3.2, 0.15 + R() * 0.3, -(0.2 + 0.4 * R()), R() - 0.5, 0.025 + 0.02 * R(), 0.009, 0.007);
   }
   return L;
+}
+
+// (ROADMAP 18: a ponytail) tied high at the back of the head, and falling from there down behind the
+// neck in curls: the tail, lumpy as curls are, and ringlets wound round it that come loose at its
+// end - all on the hair's picture (its strands run along them, as long hair's do). The lines along
+// the ringlets and down the tail's sides go into out, as the locks' do (render/herolines.js)
+function ponyGeo(kit, R, out) {
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const th0 = 1.0;
+  const n0 = V(0, Math.cos(th0), -Math.sin(th0));
+  // (tied a little inside the hair's cap, so that it comes out of it)
+  const P0 = n0.clone().multiplyScalar(kit.capR(n0.x, n0.y, n0.z) - 0.003);
+  // its way: out from the head a little and up off the tie, then down behind the neck
+  const P1 = P0.clone().add(V(0, 0.014, -0.034));
+  const P2 = V(0, -0.02, -0.15);
+  const P3 = V(0, -0.118, -0.128);
+  const at = (t, o) => {
+    const a = (1 - t) ** 3;
+    const b = 3 * t * (1 - t) ** 2;
+    const c = 3 * t * t * (1 - t);
+    const d = t ** 3;
+    return o.set(0, 0, 0).addScaledVector(P0, a).addScaledVector(P1, b).addScaledVector(P2, c).addScaledVector(P3, d);
+  };
+  const tanAt = (t, o) => {
+    const a = -3 * (1 - t) ** 2;
+    const b = 3 * (1 - t) ** 2 - 6 * t * (1 - t);
+    const c = 6 * t * (1 - t) - 3 * t * t;
+    const d = 3 * t * t;
+    return o.set(0, 0, 0).addScaledVector(P0, a).addScaledVector(P1, b).addScaledVector(P2, c).addScaledVector(P3, d).normalize();
+  };
+  // (it lies in the head's middle: x across it, N the other way round it)
+  const X = V(1, 0, 0);
+  const frame = (t, C, T, N) => {
+    at(t, C);
+    tanAt(t, T);
+    return N.crossVectors(X, T).normalize();
+  };
+  // how thick: narrow at the tie, full of curls below it, thin at its end
+  const rad = (t) => 0.004 + 0.026 * Math.sin(Math.PI * Math.min(1, 0.12 + t * 0.95)) ** 0.7 + 0.012 * Math.exp(-(((t - 0.3) / 0.25) ** 2));
+  const ph = R() * 6.3;
+  const pos = [];
+  const uv = [];
+  const idx = [];
+  const C = V(0, 0, 0);
+  const T = V(0, 0, 0);
+  const N = V(0, 0, 0);
+  const tube = (n, ringN, ptAt, uv0) => {
+    const base = pos.length / 3;
+    for (let j = 0; j <= n; j++) {
+      for (let i = 0; i <= ringN; i++) {
+        const q = ptAt(j / n, (i / ringN) * Math.PI * 2);
+        pos.push(q.x, q.y, q.z);
+        uv.push(uv0[0] + (i / ringN) * (uv0[1] - uv0[0]), 0.15 + 0.8 * (j / n));
+      }
+    }
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < ringN; i++) {
+        const a = base + j * (ringN + 1) + i;
+        const c = a + ringN + 1;
+        idx.push(a, c, a + 1, a + 1, c, c + 1);
+      }
+    }
+  };
+  // the tail
+  const q = V(0, 0, 0);
+  tube(24, 18, (t, a) => {
+    frame(t, C, T, N);
+    const lump = 1 + 0.17 * Math.sin(a * 3 + t * 17 + ph) * Math.sin(a * 5 - t * 11 + ph * 0.7) + 0.08 * Math.sin(a * 7 + t * 29);
+    const r = rad(t) * lump;
+    return q.copy(C).addScaledVector(X, Math.cos(a) * r * 1.15).addScaledVector(N, Math.sin(a) * r * 0.9);
+  }, [0, 1]);
+  // a curl of hair along a curve (along(s, o): its point at s, 0..1), w thick, thinner at its end;
+  // ref: a way across it
+  const M = V(0, 0, 0);
+  const Bn = V(0, 0, 0);
+  const strand = (along, w, ref) => tube(30, 5, (s, a) => {
+    along(s, M);
+    along(Math.min(1, s + 0.02), Bn);
+    if (s >= 0.98) {
+      along(s - 0.02, Bn);
+      Bn.sub(M).negate().add(M);
+    }
+    const tg = Bn.sub(M).normalize();
+    const sideV = V(0, 0, 0).crossVectors(tg, ref);
+    if (sideV.lengthSq() < 1e-6) sideV.set(0, 1, 0);
+    sideV.normalize();
+    const upV = V(0, 0, 0).crossVectors(sideV, tg).normalize();
+    const ww = w * (1 - 0.5 * s);
+    return q.copy(M).addScaledVector(sideV, Math.cos(a) * ww).addScaledVector(upV, Math.sin(a) * ww);
+  }, [0.42, 0.58]);
+  // the ringlets: wound round it, a little proud of it, each its own way round and its own length
+  for (let k = 0; k < 7; k++) {
+    const p0 = (k / 7) * Math.PI * 2 + R() * 0.6;
+    const t0 = 0.08 + R() * 0.12;
+    const t1 = 0.86 + R() * 0.16;
+    const turns = (R() < 0.5 ? -1 : 1) * (1.6 + R() * 0.8);
+    const w = 0.0055 + 0.002 * R();
+    const along = (s, o) => {
+      const t = t0 + (t1 - t0) * s;
+      const tc = Math.min(1, t);
+      frame(tc, C, T, N);
+      const a = p0 + turns * Math.PI * 2 * s;
+      // (past the tail's end, loose: hanging on down)
+      const out2 = Math.max(0, t - 1) * 0.2;
+      const rr = rad(tc) * 0.85 + 0.002;
+      return o.copy(C).addScaledVector(X, Math.cos(a) * rr * 1.15).addScaledVector(N, Math.sin(a) * rr * 0.9).addScaledVector(T, out2);
+    };
+    strand(along, w, X);
+    // (its line: along its middle, every other point; facing out from the tail)
+    const mid = [];
+    const edge = [];
+    for (let i = 0; i <= 12; i++) {
+      along(i / 12, M);
+      mid.push(M.toArray());
+      edge.push(M.clone().addScaledVector(X, 0.0012).toArray());
+    }
+    along(0.5, M);
+    frame(Math.min(1, t0 + (t1 - t0) * 0.5), C, T, N);
+    out.push({ mid, edge, n: M.clone().sub(C).normalize().toArray(), w });
+  }
+  // (the tail's sides, in ink)
+  for (const sd of [-1, 1]) {
+    const mid = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = 0.04 + (i / 12) * 0.94;
+      frame(t, C, T, N);
+      mid.push(C.clone().addScaledVector(X, sd * rad(t) * 1.15).toArray());
+    }
+    out.push({ mid, edge: mid.slice(), n: [sd, 0, 0], w: 0.02 });
+  }
+  // the curls come loose: at the temples, hanging in front of the ears beside the face, and at the
+  // nape under the tail - each wound round as it falls, out of the hair's edge
+  const H = V(0, 0, 0);
+  for (const [phi, len, turns] of [[1.0, 0.06, 2.2], [1.16, 0.045, 1.8], [-1.02, 0.055, -2.4], [-1.18, 0.04, 1.9], [2.75, 0.04, 1.6], [-2.8, 0.035, -1.7]]) {
+    const th = kit.edge(phi) - 0.06;
+    const n = V(Math.sin(th) * Math.sin(phi), Math.cos(th), Math.sin(th) * Math.cos(phi));
+    const top = n.clone().multiplyScalar(kit.capR(n.x, n.y, n.z) + 0.001);
+    // (down, a little out from the head)
+    const D = V(n.x * 0.25, -1, n.z * 0.25).normalize();
+    const U = V(0, 0, 0).crossVectors(D, V(0, 1, 0)).normalize();
+    if (U.lengthSq() < 1e-6) U.set(1, 0, 0);
+    const W = V(0, 0, 0).crossVectors(U, D).normalize();
+    const p0 = R() * 6.3;
+    const along = (s, o) => {
+      const a = p0 + turns * Math.PI * 2 * s;
+      const rh = 0.0045 * (0.4 + 0.6 * Math.min(1, s * 3));
+      o.copy(top).addScaledVector(D, s * len);
+      // (clear of the head below the hair's edge, as the face widens under it)
+      const r = o.length() || 1;
+      const want = kit.capR(o.x / r, o.y / r, o.z / r) + 0.0045 * Math.min(1, s * 4);
+      if (r < want) o.multiplyScalar(want / r);
+      return o.addScaledVector(U, Math.cos(a) * rh).addScaledVector(W, Math.sin(a) * rh);
+    };
+    strand(along, 0.0026, D);
+    const mid = [];
+    for (let i = 0; i <= 10; i++) mid.push(along(i / 10, H).toArray());
+    out.push({ mid, edge: mid.slice(), n: n.toArray(), w: 0.0026 });
+  }
+  const g = make(pos, uv, idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// (ROADMAP 18) what is worn in the hair (spec.hair.bits): a clip above the ear, a thin braid hanging
+// beside the face strung with beads, a feather at its end - each a small shape of its own colour in
+// the head's frame (render/people.js drawFolk puts them on): { c: its middle, x, y, z: its axes, r:
+// how far along each, col }. side: which side of the head (1 its left, -1 its right, as the head's x)
+function hairBits(B, kit, headR) {
+  const out = [];
+  const sd = B.side || 1;
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const put = (c, x, y, r, col) => {
+    const z = V(0, 0, 0).crossVectors(x, y).normalize();
+    out.push({ c: c.toArray(), x: x.toArray(), y: y.toArray(), z: z.toArray(), r, col });
+  };
+  // the clip: on the hair above the ear, along it towards the back and a little down
+  if (B.clip) {
+    const th = 0.88;
+    const phi = sd * 1.02;
+    const n = V(Math.sin(th) * Math.sin(phi), Math.cos(th), Math.sin(th) * Math.cos(phi));
+    const c = n.clone().multiplyScalar(kit.capR(n.x, n.y, n.z) + 0.004);
+    const back = V(Math.cos(phi), 0, -Math.sin(phi)).multiplyScalar(sd).addScaledVector(V(0, -1, 0), 0.45);
+    const ax = back.addScaledVector(n, -back.dot(n)).normalize();
+    const ay = V(0, 0, 0).crossVectors(n, ax).normalize();
+    put(c, ax, ay, [0.019, 0.0055, 0.003], B.clip);
+  }
+  // the braid: from the hair's edge at the temple, straight down beside the face, clear of the cheek
+  // (as far out as the face is anywhere along it)
+  if (B.beads && B.beads.length) {
+    const phi = sd * 1.3;
+    const hx = Math.sin(phi);
+    const hz = Math.cos(phi);
+    const y0 = 0.03;
+    const y1 = 0.012 - (B.beads.length - 1) * 0.0135;
+    let far = 0;
+    for (let y = y1 - 0.01; y <= y0; y += 0.004) {
+      let rho = 0.08;
+      for (let i = 0; i < 6; i++) {
+        const L = Math.hypot(rho, y);
+        const r = headR((hx * rho) / L, y / L, (hz * rho) / L);
+        rho = Math.sqrt(Math.max(0, r * r - y * y));
+      }
+      far = Math.max(far, rho);
+    }
+    const rho = far + 0.0062;
+    const P = (y) => V(hx * rho, y, hz * rho);
+    const down = V(0, -1, 0);
+    const outV = V(hx, 0, hz);
+    const across = V(0, 0, 0).crossVectors(down, outV).normalize();
+    const hair = B.braid || '#2a1a10';
+    // (out of the hair's edge there, down to the first bead)
+    {
+      const th = kit.edge(phi) - 0.04;
+      const n = V(Math.sin(th) * Math.sin(phi), Math.cos(th), Math.sin(th) * Math.cos(phi));
+      const top = n.multiplyScalar(kit.capR(n.x, n.y, n.z) - 0.002);
+      const first = P(0.012 + 0.0046);
+      const dir = top.clone().sub(first);
+      const len = dir.length();
+      dir.normalize();
+      put(top.clone().add(first).multiplyScalar(0.5), V(0, 0, 0).crossVectors(dir, outV).normalize(), dir, [0.0017, len / 2, 0.0017], hair);
+    }
+    let prev = 0.012 + 0.0046;
+    B.beads.forEach((col, i) => {
+      const y = 0.012 - i * 0.0135;
+      // (the braid between the beads)
+      if (i) put(P((prev + y + 0.0046) / 2), across, down, [0.0017, Math.max(0.002, (prev - y - 0.0046) / 2), 0.0017], hair);
+      put(P(y), across, down, [0.0043, 0.0046, 0.0043], col);
+      prev = y - 0.0046;
+    });
+    // the feather: hanging from the last bead, flat, its face out; its tip dark
+    if (B.feather) {
+      const tilt = V(0, -1, 0).addScaledVector(outV, 0.12).normalize();
+      const tx = V(0, 0, 0).crossVectors(tilt, outV).normalize();
+      const fy = prev - 0.022;
+      put(P(fy), tx, tilt, [0.0058, 0.021, 0.0012], B.feather[0]);
+      put(P(fy - 0.017).addScaledVector(outV, 0.0006), tx, tilt, [0.0042, 0.0062, 0.0013], B.feather[1]);
+      put(P(fy).addScaledVector(outV, 0.0008), tx, tilt, [0.0007, 0.021, 0.0013], B.feather[1]);
+    }
+  }
+  return out;
+}
+
+// (ROADMAP 18: a hoodie's hood, down) lying on the upper back from round the foot of the neck: its rim
+// rolled round the back and the sides of the neck to the zip, the rest of it down over the shoulder
+// blades. In the torso's frame, on the jacket's picture where its collar was drawn (JK.collar: no
+// collar is made now) - the rim at the top of it (v 0.75 up), the hood below
+function hoodGeo(T) {
+  const parts = [];
+  // the hood: a U of cloth down the back, full in the middle, its edges on the back
+  {
+    const NX = 10;
+    const NY = 12;
+    const yb = 0.27;
+    const yt = 0.475;
+    const pos = [];
+    const uv = [];
+    const idx = [];
+    for (let j = 0; j <= NY; j++) {
+      const s = j / NY;
+      const y = yb + (yt - yb) * s;
+      const [w, , db, z, n] = rowAt(T, y);
+      // (never wider than the back is there: it narrows to the neck)
+      const hw = Math.min(0.032 + 0.088 * s ** 0.6, w * 0.82);
+      for (let i = 0; i <= NX; i++) {
+        const x = -hw + (2 * hw * i) / NX;
+        const u = Math.min(0.999, Math.abs(x) / w);
+        const across = Math.sqrt(Math.max(0, 1 - (x / hw) ** 2));
+        const lift = 0.005 + 0.026 * Math.sin(Math.PI * s ** 0.8) * across + 0.008 * s * across;
+        pos.push(x, y, -(db * (1 - u ** n) ** (1 / n)) + z - lift);
+        uv.push(i / NX, 0.7 * s);
+      }
+    }
+    for (let j = 0; j < NY; j++) {
+      for (let i = 0; i < NX; i++) {
+        const a = j * (NX + 1) + i;
+        idx.push(a, a + NX + 1, a + 1, a + 1, a + NX + 1, a + NX + 2);
+      }
+    }
+    parts.push(finish(make(pos, uv, idx), (x, y, z, out) => ((out[0] = 0), (out[1] = y), (out[2] = 0), out)));
+  }
+  // its rim: a roll round the back and the sides of the neck, thinner as it comes round to the front
+  {
+    const NA = 26;
+    const NR = 10;
+    const A = 2.35;
+    const pos = [];
+    const uv = [];
+    const idx = [];
+    const ctr = (a, o) => {
+      const k = (1 - Math.cos(a)) / 2;
+      o[0] = Math.sin(a) * 0.1;
+      o[1] = 0.478 - 0.03 * k ** 1.5;
+      o[2] = -0.006 - Math.cos(a) * (0.104 - 0.012 * k);
+      return o;
+    };
+    const c0 = [0, 0, 0];
+    const c1 = [0, 0, 0];
+    for (let j = 0; j <= NA; j++) {
+      const a = -A + (2 * A * j) / NA;
+      ctr(a, c0);
+      ctr(a + 0.01, c1);
+      const t = new THREE.Vector3(c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]).normalize();
+      const sideV = new THREE.Vector3().crossVectors(t, new THREE.Vector3(0, 1, 0)).normalize();
+      const upV = new THREE.Vector3().crossVectors(sideV, t).normalize();
+      const r = 0.008 + 0.012 * Math.cos((a / A) * (Math.PI / 2)) ** 0.7;
+      for (let i = 0; i <= NR; i++) {
+        const b = (i / NR) * Math.PI * 2;
+        pos.push(c0[0] + (sideV.x * Math.cos(b) + upV.x * Math.sin(b)) * r, c0[1] + (sideV.y * Math.cos(b) + upV.y * Math.sin(b)) * r * 0.8, c0[2] + (sideV.z * Math.cos(b) + upV.z * Math.sin(b)) * r);
+        uv.push(j / NA, 0.75 + 0.25 * (i / NR));
+      }
+    }
+    for (let j = 0; j < NA; j++) {
+      for (let i = 0; i < NR; i++) {
+        const a = j * (NR + 1) + i;
+        idx.push(a, a + NR + 1, a + 1, a + 1, a + NR + 1, a + NR + 2);
+      }
+    }
+    parts.push(finish(make(pos, uv, idx), (x, y, z, out) => ctr(Math.max(-A, Math.min(A, Math.atan2(x, -(z + 0.006)))), out)));
+  }
+  return region(merge(parts), JK.collar);
 }
 
 // (long hair) the rest of it falling from under the cap down over the shoulders - open at the face -
@@ -1070,10 +1413,11 @@ function skirtGeo(len) {
 // ------------------------------------------------------------------ all of one of them
 /**
  * Their body's parts, each a geometry laid on its place in their pictures: head, hair (cap, locks, and
- * long hair's fall or a bun), neck, the jacket (torso, its front edges, its collar, the chest pockets'
- * flaps when it has them), what is under it (tee), the seat, the sleeves, the legs (or a skirt over
- * them), and the lines' kit for render/herolines.js (sdf, headR, hair edge and thickness, the locks,
- * the rows of each part).
+ * long hair's fall, a bun or a ponytail's tail), neck, the jacket (torso, its front edges, its collar,
+ * the chest pockets' flaps when it has them, a hood down on its back), what is under it (tee), the
+ * seat, the sleeves, the legs (cargo pockets on them, or a skirt over them), and the lines' kit for
+ * render/herolines.js (sdf, headR, hair edge and thickness, the locks, the rows of each part); what
+ * is worn in the hair (bits).
  */
 export function folkBody(k) {
   const spec = FOLK[k];
@@ -1093,6 +1437,9 @@ export function folkBody(k) {
   if (lockList.length) parts.locks = locksGeo(kit, headR, lockList, locks);
   if (style === 'long') parts.fall = longHairGeo(kit, headR, spec.hair.len || 0.27);
   if (style === 'bun') parts.bun = bunGeo(headR);
+  if (style === 'pony') parts.tail = ponyGeo(kit, R, locks);
+  // (ROADMAP 18: a clip, beads, a feather in the hair - render/people.js drawFolk)
+  const bits = spec.hair.bits ? hairBits(spec.hair.bits, kit, headR) : null;
   // (its ears' lobes and tops, where it has them now: earrings, glasses)
   const at = (i) => [H.pos[i * 3], H.pos[i * 3 + 1], H.pos[i * 3 + 2]];
   const lobes = HEAD.lobe.map((i, e) => {
@@ -1126,6 +1473,8 @@ export function folkBody(k) {
   // its own: render/heroshapes.js neckbandGeo)
   parts.band = neckbandGeo((y, t, lift, out) => NK.surf(null, y, t, lift, out));
   parts.torso = region(loft(T, 32, false, true), JK.torso);
+  // (ROADMAP 18: a hoodie's hood, down on the back)
+  if (spec.top.hood) parts.hood = hoodGeo(T);
   // (the jacket worn open: its front edges proud of the body, widening into the lapels - a blazer's
   // open in a V from its button at the waist up to the collarbones, its lapels laid back either side)
   if (spec.top.kind === 'blazer') {
@@ -1134,9 +1483,11 @@ export function folkBody(k) {
     parts.zip = merge([edge(1), edge(-1)]);
     parts.tee = region(frontPatch(T, half), PT.front, true);
   } else {
-    const edge = (sd) => region(patch(T, -0.086, 0.455, () => sd * (fem ? 0.039 : 0.043), (y) => sd * ((fem ? 0.052 : 0.058) + Math.max(0, y - 0.33) * 0.42), 0.0062, 2, 18), JK.edge, true);
+    // (ROADMAP 18: open: worn open wider than that by so much - a child's hoodie hanging open)
+    const o = spec.top.open || 0;
+    const edge = (sd) => region(patch(T, -0.086, 0.455, () => sd * ((fem ? 0.039 : 0.043) + o), (y) => sd * ((fem ? 0.052 : 0.058) + o + Math.max(0, y - 0.33) * 0.42), 0.0062, 2, 18), JK.edge, true);
     parts.zip = merge([edge(1), edge(-1)]);
-    parts.tee = region(frontPatch(T, () => (fem ? 0.042 : 0.047)), PT.front, true);
+    parts.tee = region(frontPatch(T, () => (fem ? 0.042 : 0.047) + o), PT.front, true);
   }
   if (spec.top.kind === 'denim') {
     const flap = (sd) => region(patch(T, 0.29, 0.335, () => sd * (fem ? 0.05 : 0.052), () => sd * (fem ? 0.108 : 0.122), 0.0058, 4, 3), JK.flap);
@@ -1152,6 +1503,8 @@ export function folkBody(k) {
   const dress = spec.bottom.kind === 'dress';
   const shin = limb(spec.bottom.kind === 'wide' ? wideShin(fem ? FEM_SHIN : SHIN_ROWS) : fem ? FEM_SHIN : SHIN_ROWS);
   parts.thigh = region(loft(TH, 20, false, true), PT.thigh);
+  // (ROADMAP 18: cargo trousers - a pocket on each side of the thigh, as the hero's have)
+  if (spec.bottom.cargo) parts.thigh = merge([parts.thigh, cargoPocket(1, TH), cargoPocket(-1, TH)]);
   parts.shin = region(loft(shin, 20, false, true), PT.shin);
   if (dress) parts.skirt = skirtGeo(0.6);
   return {
@@ -1171,6 +1524,7 @@ export function folkBody(k) {
     lobes,
     // (where their eyes are in their head: render/people.js drawFolk)
     eyes: H.eyes,
+    bits,
   };
 }
 

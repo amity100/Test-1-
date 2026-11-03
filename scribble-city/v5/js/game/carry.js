@@ -139,6 +139,10 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
     case 'book':
       [x, y, z] = [side * 0.1, ny - 0.17, 0.3];
       break;
+    // (v5, ROADMAP 18: a child's sketchbook, held shut by its edge in front of the hip, its cover out)
+    case 'sketchbook':
+      [x, y, z] = [side * 0.15, hipY + 0.12, 0.14];
+      break;
     case 'newspaper':
       [x, y, z] = [side * 0.21, ny - 0.1, 0.32];
       break;
@@ -328,6 +332,18 @@ function shapesFor(fig, item, side, S) {
       _a.copy(h).addScaledVector(Z, 0.03 * S);
       e(_a, 0.045, 0.005, 0.03, fig.cardColor || [0.3, 0.45, 0.85]);
       break;
+    case 'sketchbook': {
+      // its cover: flat, upright, facing out and a little to the side, the hand at its outer edge -
+      // an oblong with rounded corners: its middle, and a corner's worth towards each corner
+      sketchbookFrame(fig, side, h, S);
+      const col = fig.bookColor || [0.32, 0.3, 0.52];
+      fig.ellipsoid(part, bone, _m, _x, _y, _z, 0.094 * S, 0.13 * S, 0.012 * S, col);
+      for (const [u, v] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+        _c.copy(_m).addScaledVector(_x, u * 0.04 * S).addScaledVector(_y, v * 0.058 * S);
+        fig.ellipsoid(part, bone, _c, _x, _y, _z, 0.06 * S, 0.08 * S, 0.012 * S, col);
+      }
+      break;
+    }
     // (ROADMAP 14.4) a cloth bunched in the hand; the shop's scanner gun, its handle and its nose;
     // a few folded bills
     case 'cloth':
@@ -420,6 +436,16 @@ function shapesFor(fig, item, side, S) {
     default:
       break;
   }
+}
+
+// (ROADMAP 18) a sketchbook held by its edge: its middle (_m) and its frame - _x across it towards
+// the body's middle, _y up it, _z out of its cover (forward, and out to the hand's side a little)
+function sketchbookFrame(fig, side, h, S) {
+  _z.copy(fig.forward).addScaledVector(fig.right, side * 0.25).normalize();
+  _x.copy(fig.right).multiplyScalar(-side).addScaledVector(_z, side * _z.dot(fig.right)).normalize();
+  _y.crossVectors(_z, _x).normalize();
+  if (_y.dot(UP) < 0) _y.negate();
+  _m.copy(h).addScaledVector(_x, 0.09 * S).addScaledVector(_y, -0.04 * S);
 }
 
 // the guitar hangs across the belly, neck up to the left hand
@@ -632,6 +658,42 @@ function strokesFor(fig, item, side, w) {
           line(fig, _c, _d, i === 0 || i === 3 ? ink : [0.97, 0.96, 0.92], i === 0 || i === 3 ? w : w * 4, 62 + i + (k > 0 ? 5 : 0));
         }
       }
+      break;
+    }
+    case 'sketchbook': {
+      // (ROADMAP 18) its edges drawn round, the spiral along its top, stars and a heart stuck on it;
+      // its pages' edges, cream, round its sides and its foot
+      sketchbookFrame(fig, side, h, S);
+      const at = (u, v, o, z = 0.0125) => o.copy(_m).addScaledVector(_x, u * S).addScaledVector(_y, v * S).addScaledVector(_z, z * S);
+      const hw = 0.088;
+      const hh = 0.122;
+      const rc = 0.035;
+      for (const [u0, v0, u1, v1, k] of [[-hw - 0.004, hh - 0.02, -hw - 0.004, -hh + 0.02, 0], [hw + 0.004, hh - 0.02, hw + 0.004, -hh + 0.02, 1], [-hw + 0.02, -hh - 0.004, hw - 0.02, -hh - 0.004, 2]]) {
+        line(fig, at(u0, v0, _a, 0), at(u1, v1, _b, 0), [0.96, 0.93, 0.84], w * 0.6, sd + 181 + k);
+      }
+      const ring = [];
+      for (const [cu, cv, a0] of [[hw - rc, hh - rc, 0], [-hw + rc, hh - rc, Math.PI / 2], [-hw + rc, -hh + rc, Math.PI], [hw - rc, -hh + rc, Math.PI * 1.5]]) {
+        for (let i = 0; i <= 2; i++) {
+          const a = a0 + (i / 2) * (Math.PI / 2);
+          ring.push([cu + Math.cos(a) * rc, cv + Math.sin(a) * rc]);
+        }
+      }
+      for (let i = 0; i < ring.length; i++) {
+        const p = ring[i];
+        const q = ring[(i + 1) % ring.length];
+        line(fig, at(p[0], p[1], _a), at(q[0], q[1], _b), ink, w * 0.9, sd + 150 + i);
+      }
+      for (let i = 0; i < 8; i++) {
+        const u = -0.07 + i * 0.02;
+        line(fig, at(u, hh - 0.016, _a), at(u + 0.004, hh + 0.012, _b), [0.72, 0.72, 0.76], w * 0.7, sd + 165 + i);
+      }
+      for (const [cu, cv, r, col, k] of [[-0.03, 0.04, 0.022, [0.95, 0.76, 0.19], 0], [0.042, 0.062, 0.013, [0.5, 0.72, 0.95], 3]]) {
+        for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * Math.PI + 0.3;
+          line(fig, at(cu + Math.cos(a) * r, cv + Math.sin(a) * r, _a), at(cu - Math.cos(a) * r, cv - Math.sin(a) * r, _b), col, w * 1.4, sd + 174 + k + i);
+        }
+      }
+      line(fig, at(0.03, -0.06, _a), at(0.036, -0.046, _b), [0.91, 0.35, 0.63], w * 2.2, sd + 180);
       break;
     }
     case 'newspaper': {

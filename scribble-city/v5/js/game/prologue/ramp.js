@@ -5,21 +5,25 @@ import { clamp } from '../../core/util.js';
 
 // (v5, ROADMAP 18) The first drawing: a ramp off the roof.
 //
-// Time all but stops; the camera stands off to the side of the roof, the gap and the street far below
-// it in the picture, the other car park's roof across the street; a sheet of the notebook is over the
-// picture, and a faint dotted line shows the way - from the car to the roof's edge, up. Whatever the
-// player draws over it (a line, roughly that way: it is the first drawing of the game, and it is
-// forgiving) is laid onto the roof where it was drawn - and grows: the ink line itself first, then
-// the deck plates one after another along it, the columns up from the roof under them, the girders,
-// the braces, the rails, the hazard stripes at the lip, the hatching - white as the paper, all of it,
-// until the colour sweeps along it from the car to the lip and it is a real thing, made of steel,
-// strong enough to take a car at speed. The car then flies off it (Jump, below) on a line that lands
-// it on the other roof.
+// Time all but stops, and the drawing is the player's - in the game's own picture, from behind the
+// car, the way every drawing in the game is drawn: on the screen, over the world. A faint dotted line
+// shows the way, from the car's nose down the roof to its edge; whatever is drawn over it (a line,
+// roughly that way: it is the first drawing of the game, and it is forgiving) is laid onto the roof
+// where it was drawn. Let go of, the line settles into the world - onto the ramp's own spine - and
+// grows: the deck plates one after another along it, the columns up from the roof under them, the
+// girders, the braces, the rails, the hazard stripes at the lip, the hatching - white as the paper,
+// all of it, until the colour sweeps along it from the car to the lip and it is a real thing, made of
+// steel, strong enough to take a car at speed. The car then flies off it (Jump, below) on a line that
+// lands it on the other roof.
 
 const UP = new THREE.Vector3(0, 1, 0);
+// (the kick plate at its start, from the roof up onto the deck: how long)
+const KICK = 1.4;
 
 export class RampDraw {
-  // ui: game/prologue/ui.js; spec: { roofY, laneZ, carX, edgeX, landX, camera }
+  // ui: game/prologue/ui.js; spec: { camera, roofY, laneZ, carX, edgeX } - drawn from where the player
+  // is, the game's own camera behind the car, the way every ramp in the game is drawn: a line on the
+  // ground, from where it starts to where it goes (game/gadgets.js fromLine)
   constructor(game, ui) {
     this.game = game;
     this.ui = ui;
@@ -45,7 +49,7 @@ export class RampDraw {
     // (the mouse let go of the game's camera: it draws now - game/game.js keeps it free while the
     // sheet is up, and does not take it for the pause)
     if (!this.game.touch) this.game.input.releaseLock();
-    this.ui.hint('Draw a ramp to jump across<small>גררו קו מהמכונית אל קצה הגג — כלפי מעלה</small>');
+    this.ui.hint('Draw a ramp to jump across<small>ציירו קו על הגג — מהמכונית אל הקצה</small>');
     this.t = 0;
     this.drawing = false;
     const P = (e) => [e.clientX * dpr, e.clientY * dpr];
@@ -59,7 +63,7 @@ export class RampDraw {
       } catch (er) {
         // (not everywhere)
       }
-      this.game.audio.play('click', 0.4);
+      this.game.audio.play('scribble', 0.35);
     };
     this.onMove = (e) => {
       if (!this.drawing) return;
@@ -76,30 +80,34 @@ export class RampDraw {
     el.addEventListener('pointermove', this.onMove);
     el.addEventListener('pointerup', this.onUp);
     el.addEventListener('pointercancel', this.onUp);
-    // the guide: where a ramp would go, dotted, on the screen
-    this.guide = this.guideCurve();
   }
 
   close() {
     const el = this.ui.drawEl;
     el.classList.remove('on');
+    if (!this.settle) this.g.clearRect(0, 0, this.cv.width, this.cv.height);
     el.removeEventListener('pointerdown', this.onDown);
     el.removeEventListener('pointermove', this.onMove);
     el.removeEventListener('pointerup', this.onUp);
     el.removeEventListener('pointercancel', this.onUp);
     this.ui.hint(null);
     this.on = false;
+    // (when: the mouse is asked back for the camera as it closes - a lock that comes late, or not at
+    // all, is no reason to pause; game/game.js)
+    this.shutAt = performance.now();
   }
 
-  // a world point on the screen (canvas pixels)
+  // a world point on the screen (canvas pixels); null behind the camera
   toScreen(x, y, z, out = [0, 0]) {
     const v = new THREE.Vector3(x, y, z).project(this.spec.camera);
+    if (v.z > 1) return null;
     out[0] = ((v.x + 1) / 2) * this.cv.width;
     out[1] = ((1 - v.y) / 2) * this.cv.height;
     return out;
   }
 
-  // a screen point onto the upright plane through the run-up (z = laneZ)
+  // a screen point down onto the roof (the plane it is drawn on: the roof's own, and on out over its
+  // edge - the line can run on past it, into the air over the street)
   toWorld(px, py) {
     const cam = this.spec.camera;
     const nx = (px / this.cv.width) * 2 - 1;
@@ -107,20 +115,23 @@ export class RampDraw {
     const p = new THREE.Vector3(nx, ny, 0.5).unproject(cam);
     const o = cam.position;
     const d = p.sub(o).normalize();
-    if (Math.abs(d.z) < 1e-4) return null;
-    const t = (this.spec.laneZ - o.z) / d.z;
-    if (t < 0) return null;
-    return new THREE.Vector3(o.x + d.x * t, o.y + d.y * t, this.spec.laneZ);
+    if (d.y > -1e-3) return null;
+    const t = (this.spec.roofY - o.y) / d.y;
+    if (t < 0 || t > 160) return null;
+    return new THREE.Vector3(o.x + d.x * t, this.spec.roofY, o.z + d.z * t);
   }
 
+  // the way shown, dotted on the roof: from the car's nose to the edge (worked out every frame from
+  // where the camera is)
   guideCurve() {
     const s = this.spec;
     const pts = [];
-    for (let i = 0; i <= 24; i++) {
-      const u = i / 24;
-      const x = s.startX + (s.edgeX - s.startX) * u;
-      const y = s.roofY + 0.2 + 4 * Math.pow(u, 1.5);
-      pts.push(this.toScreen(x, y, s.laneZ, [0, 0]));
+    const x0 = s.carX - 3.4;
+    const x1 = s.edgeX - 0.8;
+    for (let i = 0; i <= 28; i++) {
+      const x = x0 + ((x1 - x0) * i) / 28;
+      const q = this.toScreen(x, s.roofY + 0.04, s.laneZ, [0, 0]);
+      if (q) pts.push(q);
     }
     return pts;
   }
@@ -129,103 +140,176 @@ export class RampDraw {
     const P = this.pts;
     let len = 0;
     for (let i = 1; i < P.length; i++) len += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
-    if (len < 70 * this.dpr || P.length < 3) {
-      // (too short to be a ramp: again, with the way shown plainer)
+    const W = P.map(([x, y]) => this.toWorld(x, y)).filter(Boolean);
+    const xs = W.map((p) => p.x);
+    const ext = xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+    if (len < 60 * this.dpr || W.length < 3 || ext < 3) {
+      // (too short to be a ramp, or not on the roof: again, with the way shown plainer)
       this.fails++;
       this.pts = [];
-      this.ui.hint('Draw a ramp to jump across<small>קו ארוך יותר: מהמכונית אל הקצה, ולמעלה</small>');
+      this.ui.hint('Draw a ramp to jump across<small>קו ארוך יותר, על הגג: מהמכונית אל הקצה</small>');
       this.game.audio.play('meh', 0.4);
       return;
     }
-    // onto the roof's plane; whatever way it was drawn, it starts at the car's end
-    const W = P.map(([x, y]) => this.toWorld(x, y)).filter(Boolean);
-    const prof = fitProfile(W, this.spec, this.fails);
+    // how much the line bows up on the screen from its chord: a kick to the ramp's curve
+    const a = P[0];
+    const b = P[P.length - 1];
+    const cl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    let bow = 0;
+    for (const q of P) {
+      const cross = ((b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0])) / cl;
+      bow = Math.max(bow, Math.abs(cross));
+    }
+    const prof = fitProfile(W, this.spec, bow / cl);
+    // (the line stays where it was drawn until the ramp's own line is there to settle onto)
+    this.settle = { from: resample(P, 40), to3: null, t: 0 };
+    this.ui.drawEl.classList.add('settle');
     this.close();
     // (and the mouse back to the camera, on this same click)
     if (!this.game.touch) this.game.input.requestLock(true);
     this.done(prof, P.map((p) => [p[0] / this.dpr, p[1] / this.dpr]));
   }
 
-  // every frame while it is open: the guide breathing, the line as it is drawn
+  // the line let go of settles into the world: onto the ramp's own spine (P3: its points, from the
+  // car's end to the lip), wherever that is in the picture as the camera moves - then the ink there
+  // has it, and the line on the screen fades
+  settleTo(P3) {
+    const S = this.settle;
+    if (!S) return;
+    const n = S.from.length;
+    const to3 = [];
+    for (let i = 0; i < n; i++) {
+      const u = (i / (n - 1)) * (P3.length - 1);
+      const a = P3[Math.floor(u)];
+      const b = P3[Math.min(P3.length - 1, Math.floor(u) + 1)];
+      to3.push(a.clone().lerp(b, u - Math.floor(u)));
+    }
+    // (drawn from the edge back to the car: the same way round)
+    const q0 = this.toScreen(to3[0].x, to3[0].y, to3[0].z);
+    const q1 = this.toScreen(to3[n - 1].x, to3[n - 1].y, to3[n - 1].z);
+    if (q0 && q1) {
+      const f = S.from;
+      const same = Math.hypot(f[0][0] - q0[0], f[0][1] - q0[1]) + Math.hypot(f[n - 1][0] - q1[0], f[n - 1][1] - q1[1]);
+      const flip = Math.hypot(f[0][0] - q1[0], f[0][1] - q1[1]) + Math.hypot(f[n - 1][0] - q0[0], f[n - 1][1] - q0[1]);
+      if (flip < same) to3.reverse();
+    }
+    S.to3 = to3;
+    S.t = 0;
+  }
+
+  ink(pts, alpha = 1) {
+    const g = this.g;
+    const d = this.dpr;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.globalAlpha = alpha;
+    for (const [w, col] of [[11, 'rgba(255, 252, 244, 0.85)'], [6.5, '#1c1830']]) {
+      g.strokeStyle = col;
+      g.lineWidth = w * d;
+      g.beginPath();
+      pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
+
+  // every frame while it is open: the guide breathing, the line as it is drawn - in the ink the
+  // game draws with, a pale edge round it so it shows over anything
   frame(dt) {
-    if (!this.on) return;
-    this.t += dt;
     const g = this.g;
     const W = this.cv.width;
     const H = this.cv.height;
-    g.clearRect(0, 0, W, H);
-    // the paper's grain over the picture, faintly
-    g.fillStyle = 'rgba(250,245,232,0.08)';
-    g.fillRect(0, 0, W, H);
-    // the guide
-    const a = 0.35 + 0.35 * Math.sin(this.t * 4);
-    g.save();
-    g.setLineDash([10 * this.dpr, 12 * this.dpr]);
-    g.lineDashOffset = -this.t * 40 * this.dpr;
-    g.strokeStyle = `rgba(255,255,255,${a})`;
-    g.lineWidth = 4 * this.dpr;
-    g.lineCap = 'round';
-    g.beginPath();
-    this.guide.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.stroke();
-    g.restore();
-    // its arrowhead at the lip
-    const n = this.guide.length;
-    const [ex, ey] = this.guide[n - 1];
-    const [px, py] = this.guide[n - 3];
-    const ang = Math.atan2(ey - py, ex - px);
-    g.fillStyle = `rgba(255,255,255,${a})`;
-    g.beginPath();
-    g.moveTo(ex + Math.cos(ang) * 16 * this.dpr, ey + Math.sin(ang) * 16 * this.dpr);
-    g.lineTo(ex + Math.cos(ang + 2.5) * 14 * this.dpr, ey + Math.sin(ang + 2.5) * 14 * this.dpr);
-    g.lineTo(ex + Math.cos(ang - 2.5) * 14 * this.dpr, ey + Math.sin(ang - 2.5) * 14 * this.dpr);
-    g.fill();
-    // the line being drawn: the city's ink, a pass and a lighter second pass
-    if (this.pts.length > 1) {
-      for (const [w, al] of [[7, 0.95], [3.5, 0.45]]) {
-        g.strokeStyle = `rgba(28,24,48,${al})`;
-        g.lineWidth = w * this.dpr;
-        g.lineCap = 'round';
-        g.lineJoin = 'round';
-        g.beginPath();
-        this.pts.forEach(([x, y], i) => (i ? g.lineTo(x + (al < 0.9 ? 1.5 : 0), y + (al < 0.9 ? -1 : 0)) : g.moveTo(x, y)));
-        g.stroke();
+    if (!this.on) {
+      const S = this.settle;
+      if (!S) return;
+      g.clearRect(0, 0, W, H);
+      S.t += dt;
+      if (!S.to3) {
+        this.ink(S.from);
+        return;
       }
+      const k = Math.min(1, S.t / 0.42);
+      const e = 1 - Math.pow(1 - k, 3);
+      const fade = S.t < 0.5 ? 1 : 1 - (S.t - 0.5) / 0.35;
+      if (fade <= 0) {
+        this.settle = null;
+        this.ui.drawEl.classList.remove('settle');
+        return;
+      }
+      const q = [0, 0];
+      const pts = S.from.map((p, i) => {
+        const w = S.to3[i];
+        const s = this.toScreen(w.x, w.y, w.z, q);
+        return s ? [p[0] + (s[0] - p[0]) * e, p[1] + (s[1] - p[1]) * e] : p;
+      });
+      this.ink(pts, fade);
+      return;
     }
+    this.t += dt;
+    const d = this.dpr;
+    g.clearRect(0, 0, W, H);
+    this.guide = this.guideCurve();
+    const a = 0.45 + 0.35 * Math.sin(this.t * 4);
+    if (this.guide.length > 3) {
+      g.save();
+      g.setLineDash([12 * d, 12 * d]);
+      g.lineDashOffset = -this.t * 46 * d;
+      g.strokeStyle = `rgba(255,255,255,${a})`;
+      g.lineWidth = 5 * d;
+      g.lineCap = 'round';
+      g.beginPath();
+      this.guide.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+      g.stroke();
+      g.restore();
+      // its arrowhead at the edge
+      const n = this.guide.length;
+      const [ex, ey] = this.guide[n - 1];
+      const [px, py] = this.guide[n - 3];
+      const ang = Math.atan2(ey - py, ex - px);
+      g.fillStyle = `rgba(255,255,255,${a})`;
+      g.beginPath();
+      g.moveTo(ex + Math.cos(ang) * 18 * d, ey + Math.sin(ang) * 18 * d);
+      g.lineTo(ex + Math.cos(ang + 2.5) * 15 * d, ey + Math.sin(ang + 2.5) * 15 * d);
+      g.lineTo(ex + Math.cos(ang - 2.5) * 15 * d, ey + Math.sin(ang - 2.5) * 15 * d);
+      g.fill();
+    }
+    if (this.pts.length > 1) this.ink(this.pts);
   }
 }
 
-// the ramp's shape from the line drawn: where it starts (by the car), its lip (at the roof's edge,
-// a little out over the street), how high the lip stands and how it curves up to it - all of it
-// from the drawing, kept within what a car can take
-export function fitProfile(W, s, fails = 0) {
-  let xs = W.map((p) => p.x);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const startX = clamp(maxX, s.edgeX + 9, s.edgeX + 15);
-  const lipX = clamp(minX, s.edgeX - 2.5, s.edgeX - 0.5);
-  // the height at the lip: the drawing's at its far end, a sensible ramp's if it was drawn down
-  const far = W.reduce((a, p) => (p.x < a.x ? p : a), W[0]);
-  const near = W.reduce((a, p) => (p.x > a.x ? p : a), W[0]);
-  let h = far.y - s.roofY;
-  if (!(h > 1)) h = far.y - near.y;
-  h = clamp(h, 3.2, 5.4);
-  // its curve: how high the drawing is halfway along, for the shape of the kick
-  const midX = (startX + lipX) / 2;
-  let mid = null;
-  let md = Infinity;
-  for (const p of W) {
-    const d = Math.abs(p.x - midX);
-    if (d < md) {
-      md = d;
-      mid = p;
-    }
+// a line (screen points) as n points evenly along it
+function resample(P, n) {
+  if (P.length < 2) return Array.from({ length: n }, () => P[0].slice());
+  const cum = [0];
+  for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+  const L = cum[cum.length - 1] || 1;
+  const out = [];
+  let j = 1;
+  for (let i = 0; i < n; i++) {
+    const s = (i / (n - 1)) * L;
+    while (j < P.length - 1 && cum[j] < s) j++;
+    const a = P[j - 1];
+    const b = P[j];
+    const t = (s - cum[j - 1]) / Math.max(1e-6, cum[j] - cum[j - 1]);
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
   }
-  let k = mid ? (mid.y - Math.min(near.y, s.roofY + 0.5)) / Math.max(0.5, far.y - Math.min(near.y, s.roofY + 0.5)) : 0.4;
-  k = clamp(k, 0.22, 0.6);
-  const pow = clamp(Math.log(k) / Math.log(0.5), 0.75, 2.2);
-  void fails;
-  xs = null;
+  return out;
+}
+
+// the ramp's shape from the line drawn on the roof: where it starts (where the line starts, towards the
+// car - a few metres short of it at most), its lip (at the roof's edge, a little out over the street),
+// how high and how it curves - from the drawing (a longer line, a longer and higher ramp; a line bowed
+// up, more of a kick), kept within what a car can take. Whatever way it was drawn, and wherever across
+// the roof: it goes the way the car is pointing
+export function fitProfile(W, s, bow = 0) {
+  const xs = W.map((p) => p.x);
+  const near = Math.max(...xs);
+  const far = Math.min(...xs);
+  const startX = clamp(near, s.edgeX + 9, Math.min(s.edgeX + 24, s.carX - 4));
+  const lipX = clamp(far, s.edgeX - 2.5, s.edgeX - 0.4);
+  const L = startX - lipX;
+  const h = clamp(L * 0.34, 3.6, 5.4);
+  const pow = clamp(1.05 + bow * 4, 1.0, 2.1);
   return { startX, lipX, h, pow, z: s.laneZ, half: 3.4, roofY: s.roofY };
 }
 
@@ -254,9 +338,22 @@ export class Ramp {
   floorAt(x, z, y) {
     const P = this.P;
     if (!this.solid) return -Infinity;
-    if (Math.abs(z - P.z) > P.half || x > P.startX || x < P.lipX) return -Infinity;
-    const h = P.roofY + 0.3 + rampH(P, x);
+    if (Math.abs(z - P.z) > P.half || x > P.startX + KICK || x < P.lipX) return -Infinity;
+    // (the kick plate onto it: up from the roof to the deck)
+    const h = x > P.startX ? P.roofY + 0.3 * (1 - (x - P.startX) / KICK) : P.roofY + 0.3 + rampH(P, x);
     return h <= y + 1.6 ? h : -Infinity;
+  }
+
+  // its spine: the line drawn, as it lies along the deck's middle (n points from the car's end to
+  // the lip)
+  inkLine(n = 40) {
+    const P = this.P;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);
+      out.push(new THREE.Vector3(P.startX + (P.lipX - P.startX) * u, P.roofY + 0.36 + P.h * Math.pow(u, P.pow), P.z));
+    }
+    return out;
   }
 
   piece(at, delay, fn, grow = 'y', pivot = null) {
@@ -306,7 +403,21 @@ export class Ramp {
         }
       }, 'none');
     }
-    // 1: the deck plates, one after another from the car to the lip
+    // 1: the kick plate up onto it from the roof (a wedge, its nose chamfered), then the deck
+    // plates, one after another from the car to the lip
+    this.piece(new THREE.Vector3(P.startX + KICK / 2, Y, z), 0.1, (K, M) => {
+      const g = new THREE.BoxGeometry(Math.hypot(KICK, 0.3), 0.07, half * 2);
+      // (its far end, at the deck, up: it rises towards -x)
+      g.rotateZ(-Math.atan2(0.3, KICK));
+      g.translate(P.startX + KICK / 2, Y + 0.15, z);
+      K.add(M.metal, g, STEEL);
+      // its bolts along the roof edge, and the yellow nose
+      K.box(M.paint, P.startX + KICK - 0.18, Y, z - half, P.startX + KICK + 0.02, Y + 0.05, z + half, YEL);
+      for (let k = 0; k < 7; k++) {
+        const bz = z - half + 0.3 + (k * (half * 2 - 0.6)) / 6;
+        K.box(M.metal, P.startX + KICK - 0.45, Y, bz - 0.05, P.startX + KICK - 0.35, Y + 0.09, bz + 0.05, DARK);
+      }
+    }, 'all');
     for (let i = 0; i < N; i++) {
       const u0 = i / N;
       const u1 = (i + 1) / N;
@@ -332,7 +443,13 @@ export class Ramp {
           bar.translate(bx, by + 0.02, z);
           K.add(M.metal, bar, STEEL);
         }
-        for (const s of [-1, 1]) K.box(M.metal, Math.min(xa, xb), Math.min(ya, yb) - 0.32, z + s * half - 0.08, Math.max(xa, xb), Math.max(ya, yb) - 0.0, z + s * half + 0.08, DARK);
+        // its edges: a channel along each side, sloped with it (the deck's fascia, seen from the side)
+        for (const s of [-1, 1]) {
+          const e = new THREE.BoxGeometry(len, 0.46, 0.16);
+          e.rotateZ(pitch);
+          e.translate(cx, cy - 0.21, z + s * (half - 0.02));
+          K.add(M.metal, e, DARK);
+        }
       }, 'all');
     }
     // 2: the columns up from the roof under the girders, and the girders along the edges
