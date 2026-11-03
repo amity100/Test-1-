@@ -122,6 +122,8 @@ export class Events {
 
   // ------------------------------------------------------------------ every frame
   update(dt) {
+    // (v5, ROADMAP 18: nothing happening in the street while the prologue is being told)
+    if (this.hold) return;
     const game = this.game;
     if (game.classic || game.inBar) return;
     const p = game.anchorPos();

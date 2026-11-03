@@ -435,7 +435,16 @@ class Vehicle {
       pop = Math.max(0.1, 1 + 2.70158 * k * k * k + 1.70158 * k * k);
     }
     this.pop = pop;
-    const input = this.driver ? this.game.input : null;
+    // (v5, ROADMAP 18: somebody else at the wheel - the prologue's men in the dark car, driving after
+    // you with a hand of their own on it: game/prologue/chase.js)
+    const input = this.driver ? this.game.input : this.ai || null;
+    // (and a moment taken out of its own hands altogether: the jump off the roof, flown by the
+    // prologue - game/prologue/ramp.js)
+    if (this.script) {
+      this.script(dt);
+      this.wheelSpin += (this.speed * dt) / 0.36;
+      if (this.kind === 'car') return;
+    }
     // (ROADMAP 11.8: drawn to go more than one way - it drives, flies, floats as it can: game/hybrid.js)
     if (this.hybrid) {
       hybridStep(this, dt, input);
@@ -846,7 +855,7 @@ class Vehicle {
     this.speedAbs = Math.abs(this.speed);
     this.collideWorld(dt);
     this.runOver();
-    if (input) this.game.audio.engine(this.speedAbs / maxF, bike ? 'bike' : 'car');
+    if (input && !input.ai) this.game.audio.engine(this.speedAbs / maxF, bike ? 'bike' : 'car');
   }
 
   // ------------------------------------------------------------------ driving (ROADMAP 4.3)
@@ -994,6 +1003,8 @@ class Vehicle {
     if ((this.fz || this.fzSink) && this.game.fuse) g = this.game.fuse.floor(this, g);
     // (ROADMAP 11.23: the lab's mission - its bridge, its island)
     if (this.game.mission) g = Math.max(g, this.game.mission.floorAt(this.pos.x, this.pos.z, this.pos.y));
+    // (v5, ROADMAP 18: the prologue's car parks - their decks and ramps, and the ramp drawn on the roof)
+    if (this.game.prolSet && this.game.prolSet.built) g = Math.max(g, this.game.prolSet.floorAt(this.pos.x, this.pos.z, this.pos.y));
     if (this.air) {
       // (ROADMAP 11.20: the lift of a rotor, a balloon, a jet drawn onto it - and steering in the air)
       const pull = this.fz && this.game.fuse ? this.game.fuse.air(this, dt, input) : 1;
@@ -1054,7 +1065,7 @@ class Vehicle {
     }
     this.runOver();
     // (a bicycle's, a scooter's: no engine; a bicycle's bell on H)
-    if (input) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car');
+    if (input && !input.ai) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car');
     if (input && this.model === 'bicycle' && input.wasPressed('KeyH')) this.game.audio.play('bikebell', 0.7);
   }
 

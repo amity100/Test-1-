@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { makeSurface, srgb, hex, addLight, mergeMoving } from '../render/materials.js';
+import { makeSurface, srgb, hex, addLight } from '../render/materials.js';
 import { nextId, quadGeo, seeded } from './kit.js';
-import { AVES, STREETS, STREET_X0, STREET_X1, WALK_X0, PROM_X1, WEST_EDGE, CURB, PIER, WATER_X, blockRect, westRect } from './layout.js';
+import { AVES, STREETS, STREET_X0, STREET_X1, WALK_X0, PROM_X1, WEST_EDGE, CURB, PIER, blockRect, westRect } from './layout.js';
 import { NODES, stopDist, parkingSpots } from './roads.js';
 import { palm } from './palms.js';
 import { bench } from './blocks.js';
@@ -10,14 +10,14 @@ import { shopFronts } from './shopfronts.js';
 import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
 import { randomCarSpec } from '../render/cars.js';
-import { Batch, Facade } from './kit.js';
+import { Facade } from './kit.js';
 import { softBox } from './yards.js';
 
 // The furniture of the streets, in the first boulevard's own pens: palms and lamps down every
 // avenue, traffic lights at the crossings with the names of the streets, bus stops, phone booths
 // (a good place to hide), hydrants, trash cans, newspaper boxes; the cars parked along the curbs;
 // the billboards with the blueprints you photograph; DRAW YOURSELF A FRIEND on the promenade;
-// the pier with its big wheel.
+// the pier with its helipad.
 
 const POLE = srgb(0.16, 0.14, 0.22);
 const STEEL = srgb(0.62, 0.62, 0.68);
@@ -991,93 +991,11 @@ function pier(ctx, world) {
     billboard(ctx, x1 - 27, z1 - 1.9, 0, -1, 'bb_parachute', { w: 7, legH: 2.6, y0: top });
     ctx.helipad = { x: hx, z: hz, y: top };
   }
-  // the big wheel, turning slowly (its own meshes, outside the city's batches)
-  // (v5: the pier starts at the dunes; the wheel stands out over the water)
-  const wx = WATER_X + 35;
-  const wz = (z0 + z1) / 2;
-  const R = 15;
-  const wy = R + 3.2;
-  const B = new Batch();
-  const steel = srgb(0.97, 0.96, 0.98);
-  for (const s of [-1.2, 1.2]) {
-    const ring = new THREE.TorusGeometry(R, 0.18, 6, 48).rotateY(Math.PI / 2);
-    ring.translate(s, 0, 0);
-    B.add(M.steel, ring, null, nextId(), { color: steel });
-    const hub = new THREE.TorusGeometry(R * 0.32, 0.1, 6, 24).rotateY(Math.PI / 2);
-    hub.translate(s, 0, 0);
-    B.add(M.steel, hub, null, nextId(), { color: srgb(0.98, 0.45, 0.6) });
-  }
-  const N = 16;
-  for (let k = 0; k < N; k++) {
-    const a = (k / N) * Math.PI * 2;
-    for (const s of [-1.2, 1.2]) {
-      const sp = new THREE.CylinderGeometry(0.06, 0.06, R, 5);
-      sp.translate(0, R / 2, 0);
-      sp.rotateX(a);
-      sp.translate(s, 0, 0);
-      B.add(M.steel, sp, null, nextId(), { color: steel });
-    }
-    const bar = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 5).rotateZ(Math.PI / 2);
-    bar.translate(0, Math.cos(a) * R, Math.sin(a) * R);
-    B.add(M.steel, bar, null, nextId(), { color: steel });
-    // bulbs round the rim
-    for (let m = 0; m < 3; m++) {
-      const b2 = a + (m / 3) * ((Math.PI * 2) / N);
-      for (const s of [-1.35, 1.35]) {
-        const g = new THREE.BoxGeometry(0.16, 0.16, 0.16);
-        g.translate(s, Math.cos(b2) * R, Math.sin(b2) * R);
-        B.add(M.bulb, g, null, nextId(), { color: RAINBOW[(k + m) % RAINBOW.length] });
-      }
-    }
-  }
-  const axle = new THREE.CylinderGeometry(0.5, 0.5, 3.4, 12).rotateZ(Math.PI / 2);
-  B.add(M.steel, axle, null, nextId(), { color: srgb(0.5, 0.48, 0.56) });
-  // the wheel turns about x; its rim stands across the pier (z), seen whole from the promenade
-  const wheel = new THREE.Group();
-  wheel.position.set(wx, top + wy, wz);
-  ctx.parent.add(wheel);
-  const holder = new THREE.Group();
-  wheel.add(holder);
-  B.flush(holder, { dynamic: true, merge: mergeMoving });
-  // the legs (static), the gondolas (they hang level as it turns)
-  for (const s of [-1, 1]) {
-    for (const dz of [-1, 1]) {
-      const fx = wx + s * 1.7;
-      const fzz = wz + dz * 6.5;
-      const dx = 0;
-      const len = Math.hypot(6.5, wy);
-      const g = new THREE.CylinderGeometry(0.22, 0.3, len, 8);
-      g.rotateX(-dz * Math.atan2(6.5, wy));
-      g.translate(fx + dx, top + wy / 2, (fzz + wz) / 2);
-      ctx.B.add(M.steel, g, null, nextId(), { color: srgb(0.85, 0.84, 0.9) });
-      ctx.col.addCircle(fx, fzz, 0.35, 0, 3, 'pole');
-    }
-  }
-  const gondolas = [];
-  const GB = new Batch();
-  const gcols = [srgb(0.98, 0.45, 0.55), srgb(0.18, 0.72, 0.72), srgb(1.0, 0.82, 0.3), srgb(0.62, 0.42, 0.85), srgb(0.42, 0.75, 0.4), srgb(0.98, 0.62, 0.22)];
-  const gondolaGroup = new THREE.Group();
-  ctx.parent.add(gondolaGroup);
-  for (let k = 0; k < N; k += 2) {
-    const c = gcols[(k / 2) % gcols.length];
-    const g1 = new THREE.BoxGeometry(2.0, 1.4, 1.6);
-    g1.translate(0, -1.0, 0);
-    const holderG = new THREE.Group();
-    const B2 = new Batch();
-    B2.add(M.prop, g1, null, nextId(), { color: c });
-    const roof = new THREE.ConeGeometry(1.25, 0.6, 4).rotateY(Math.PI / 4);
-    roof.scale(1.15, 1, 0.92);
-    roof.translate(0, 0.0, 0);
-    B2.add(M.awning, roof, null, nextId(), { color: srgb(0.98, 0.96, 0.92) });
-    const win = new THREE.BoxGeometry(2.04, 0.5, 1.2);
-    win.translate(0, -0.85, 0);
-    B2.add(M.winGlass, win, null, nextId());
-    B2.flush(holderG, { dynamic: true, merge: mergeMoving });
-    gondolaGroup.add(holderG);
-    gondolas.push({ g: holderG, a: (k / N) * Math.PI * 2 });
-  }
-  void GB;
-  ctx.wheel = { group: wheel, holder, gondolas, x: wx, y: top + wy, z: wz, R, angle: 0 };
+  // (v5, ROADMAP 18: the big wheel that stood out over the water is gone. Until the prologue's last
+  // sunset a wheel of its own stands there, full of people (game/prologue/set.js), and then it is rubbed
+  // out, and nobody remembers there was ever one. The ids its parts took are still thrown, so that
+  // everything built after it keeps the ids it always had)
+  for (let i = 0; i < 177; i++) nextId();
   void world;
 }
 
@@ -1091,7 +1009,7 @@ function gangs(ctx) {
     if (a.gang) ctx.territories.push({ x, z, r: 42, kinds: ['crim', 'crim', 'brute'], count: 4, name: 'gang' });
     else if (a.type === 'towers' || (a.type === 'shops' && (a.row + a.col) % 2 === 1)) ctx.territories.push({ x, z, r: 30, kinds: ['crim'], count: 2, name: a.type });
   }
-  // under the big wheel, at the end of the pier
+  // at the end of the pier
   ctx.territories.push({ x: PIER.x1 - 30, z: (PIER.z0 + PIER.z1) / 2, r: 10, kinds: ['crim'], count: 2, name: 'pier' });
 }
 

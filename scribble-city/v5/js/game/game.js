@@ -93,6 +93,8 @@ import { SketchPad } from '../ui/sketchpad.js';
 import { MiniGames } from '../ui/minigame.js';
 import { Calendar } from './calendar.js';
 import { Festival } from './festival.js';
+import { PrologueSet } from './prologue/set.js';
+import { Prologue, PROLOGUE_ON } from './prologue/director.js';
 import { ArtNight } from './artnight.js';
 import { Arcade } from './arcade.js';
 import { Casino } from './casino.js';
@@ -357,6 +359,14 @@ export class Game {
     // (ROADMAP 12.3, 12.4) the city's week of events, and the festival on the water
     this.calendar = this.classic ? null : new Calendar(this);
     this.festival = this.classic ? null : new Festival(this);
+    // (v5, ROADMAP 18) the prologue's pieces of the city: the Sunset Wheel, the ice cream stand,
+    // Michael's boards, the two car parks (game/prologue/set.js)
+    this.prolSet = this.classic ? null : new PrologueSet(this);
+    // (and the prologue itself, THE LAST SUNSET: told at the start of a new game - game/prologue/director.js;
+    // once it has been told, its pieces stay in the city - all but the wheel)
+    this.prologue = this.classic ? null : new Prologue(this);
+    const telling = !!(this.prologue && this.prologue.wants());
+    if (this.prolSet && !telling && !this.lab && (this.params.has('prolset') || (this.prologue && this.prologue.done) || !PROLOGUE_ON)) this.prolSet.build({ wheel: this.params.has('prolset') || !(this.prologue && this.prologue.done) });
     // (ROADMAP 12.5) Paintwood's Walls, and Art Night in them
     this.artnight = this.classic ? null : new ArtNight(this);
     // (ROADMAP 12.7) INK ARCADE on Inkwood Boulevard
@@ -597,6 +607,11 @@ export class Game {
       }
     } else {
       this.input.requestLock(true);
+    }
+    // (v5, ROADMAP 18) a new game opens with its prologue: no welcome, no hints - the city first
+    if (this.prologue && this.prologue.wants()) {
+      this.prologue.begin();
+      return;
     }
     const welcome = () => {
       this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
@@ -1110,6 +1125,8 @@ export class Game {
     if (this.fuse) dt *= this.fuse.timeK(dt, penSlow && this.penSlowT < 6);
     // (ROADMAP 11.28: frozen while the rewind runs back, slow a moment after it - game/gear.js)
     if (this.gear) dt *= this.gear.timeK(this.realDt);
+    // (v5, ROADMAP 18: the prologue's slow motion - the drawing, the top of the jump)
+    if (this.prologue) dt *= this.prologue.timeK();
     this.time += dt;
     shared.uTime.value = this.time;
     // the gamepad first: it presses the same keys the keyboard does
@@ -1154,11 +1171,14 @@ export class Game {
     const fr = this.figures;
     // dynamic ink (figures, projectiles, particles, beams) is rebuilt every running frame
     if (dt > 0) fr.begin(this.camera);
-    if (playing) this.handleKeys();
+    // (v5, ROADMAP 18: in the prologue's scenes the keys wait, the camera is the film's)
+    const pro = this.prologue && this.prologue.active ? this.prologue : null;
+    if (pro) pro.input(input);
+    if (playing && !(pro && pro.locked)) this.handleKeys();
     const look = input.consumeLook();
     // (the weapon wheel open: the mouse points at a weapon, not the camera; ROADMAP 6.6)
     if (this.wheel && this.wheel.open) this.wheel.look(look.x, look.y);
-    else if (playing && !this.airdraw.open && !(this.freedraw && this.freedraw.open)) {
+    else if (playing && !this.airdraw.open && !(this.freedraw && this.freedraw.open) && !(pro && pro.holdCam)) {
       this.camRig.applyLook(look.x, look.y);
       if (look.x || look.y) this.lastLookInput = this.time;
     }
@@ -1227,6 +1247,8 @@ export class Game {
       this.events.update(dt);
       if (this.calendar) this.calendar.update(dt);
       if (this.festival) this.festival.update(dt);
+      if (this.prolSet) this.prolSet.update(dt);
+      if (this.prologue) this.prologue.update(this.realDt);
       if (this.artnight) this.artnight.update(dt);
       if (this.arcade) this.arcade.update(dt);
       if (this.casino) this.casino.update(dt);
@@ -1280,6 +1302,8 @@ export class Game {
       const v = this.freeCam;
       this.camera.position.set(v[0], v[1], v[2]);
       this.camera.rotation.set(v[4] || 0, v[3] || 0, 0, 'YXZ');
+    } else if (this.prologue && this.prologue.cam(this.realDt)) {
+      // (the prologue's own shots: game/prologue/director.js)
     } else if (this.fair && this.fair.cam(dt)) {
       // (from the coaster's front car: game/fairground.js)
     } else if (player.inVehicle && this.hoodCam && !this.classic && !player.inVehicle.drawn && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike')) {
@@ -1382,6 +1406,7 @@ export class Game {
       this.farCrowd.draw(this.camera.position);
       this.shopCrowd.draw(this.camera.position);
       if (this.festival) this.festival.draw(fr);
+      if (this.prolSet) this.prolSet.draw(fr);
       if (this.artnight) this.artnight.draw(fr);
       if (this.arcade) this.arcade.draw(fr);
       if (this.casino) this.casino.draw(fr);
@@ -1399,6 +1424,7 @@ export class Game {
       this.garage.draw(fr);
       this.signals.draw(this.camera.position);
       this.vehicles.draw(this.cars);
+      if (this.prolSet) this.prolSet.drawCars(this.cars);
       this.cars.end();
       if (this.fuse) this.fuse.draw(fr, dt);
       if (this.mission) this.mission.draw(fr);

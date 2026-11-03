@@ -159,6 +159,8 @@ export class Police {
   }
 
   addHeat(h, x, z, seen) {
+    // (v5, ROADMAP 18: not while the prologue is being told - its fight is between Danny and them)
+    if (this.hold) return;
     const before = this.level;
     this.heat += h;
     let lv = 0;
