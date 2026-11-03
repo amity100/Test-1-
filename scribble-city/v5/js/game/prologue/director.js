@@ -359,6 +359,12 @@ export class Prologue {
   *say(id, fig = null, after = 0.28) {
     if (this.ff) return;
     const d = this.voices.say(id, fig);
+    // (the hands and the face go with the words - one of the city's people talks with them; the
+    // one listening turns to whoever speaks)
+    const g = this.game;
+    const L = LINES[id];
+    const c = fig ? Object.values(this.cast).find((q) => q.fig === fig) : null;
+    if (c && L && g.civilians.spoke) g.civilians.spoke(c, L.en, /!/.test(L.en) ? 'alarm' : 'talk');
     yield d + after;
   }
 
@@ -497,6 +503,21 @@ export class Prologue {
       const hh = h !== null ? h : this.headH(c);
       return v3(c.pos.x + fx * dist - fz * side, c.pos.y + hh, c.pos.z + fz * dist + fx * side);
     };
+  }
+
+  // a camera by a car, in its own frame: side +1 Lily's (the passenger's, the right), -1 Danny's; out
+  // from it, along it (forwards +), up from its floor - the windows are down: through them
+  carSide(v, side, out, h, along = 0) {
+    return () => {
+      const fx = Math.sin(v.yaw);
+      const fz = Math.cos(v.yaw);
+      // (its right: -fz, fx)
+      return v3(v.pos.x + fx * along - fz * side * out, (v.pos.y || 0) + h, v.pos.z + fz * along + fx * side * out);
+    };
+  }
+
+  cabin(v, h = 1.05) {
+    return () => v3(v.pos.x, (v.pos.y || 0) + h, v.pos.z);
   }
 
   headH(c) {
@@ -1215,9 +1236,11 @@ export class Prologue {
     // the two of them in it (off the street: their car drives itself here)
     for (const c of [t1, t2]) {
       if (!c) continue;
+      // (in their car: out of the street altogether, nothing to run into)
       c.fig.setVisible(false);
       c.pl.ride = v;
       c.noCollide = true;
+      c.inside = true;
     }
     const P = new Pursuer(g, v, g.player.inVehicle);
     P.seed([[THUG_CAR.x - 2, 0.15, THUG_CAR.z - 4], [THUG_CAR.x - 6, 0.15, 320.5], [12, 0.15, 320], [6, 0.15, 320]]);
@@ -1308,6 +1331,7 @@ export class Prologue {
     if (t2 && pc) {
       t2.pl.ride = null;
       t2.riding = false;
+      t2.inside = false;
       t2.fig.setVisible(true);
       this.put(t2, pc.pos.x - 2.2, pc.pos.z - 1.6, Math.atan2(v.pos.x - pc.pos.x, v.pos.z - pc.pos.z));
       t2.pos.y = ROOF_A;
@@ -1319,20 +1343,23 @@ export class Prologue {
     this.shot({ from: () => v3(v.pos.x - 1.6, ROOF_A + 1.45, v.pos.z - 1.1), look: () => (pc ? v3(pc.pos.x, ROOF_A + 1.2, pc.pos.z) : v3(20, ROOF_A, 330)), fov: 40, dur: 2.6, hand: 0.6 });
     yield 2.4;
     // Lily
-    this.shot({ from: () => v3(v.pos.x - Math.sin(v.yaw) * 0.3 + Math.cos(v.yaw) * 2.4, ROOF_A + 1.4, v.pos.z - Math.cos(v.yaw) * 0.3 - Math.sin(v.yaw) * 2.4), look: () => v3(L.pos.x, L.pos.y + 0.9, L.pos.z), fov: 34, dur: 3.2, hand: 0.4 });
+    this.shot({ from: this.carSide(v, 1, 1.9, 1.2, 0.5), look: this.faceOf(L), fov: 34, dur: 3.2, hand: 0.4 });
     yield* this.say('L14', L.fig, 0.4);
     // Danny looks across again: an idea. A crazy one
-    this.shot({ from: () => v3(v.pos.x - 2.6, ROOF_A + 1.5, v.pos.z - 1.5), look: () => v3(P.pos.x, P.pos.y + 1.2, P.pos.z), fov: 30, dur: 2.2, hand: 0.3 });
+    this.shot({ from: this.carSide(v, -1, 1.7, 1.35, 0.6), look: this.faceOf(P), fov: 30, dur: 2.2, hand: 0.3 });
     P.fig.lookAt = v3(-80, ROOF_B, 320);
     yield 2.0;
     // time all but stops; the gap; the sheet over it - draw
     this.cue('slowmo');
     this.slow(0.05, 3);
-    const camPos = v3(-36, ROOF_A + 13, 270);
-    const camLook = v3(-36, ROOF_A - 2.5, 326);
-    this.shot({ from: [-30, ROOF_A + 6, 300], to: camPos, look: [-30, ROOF_A, 322], lookTo: camLook, fov: 50, fovTo: 52, dur: 2.2, ease: 'inout', hand: 0.15 });
+    // (from over the end of the short street, the sun behind: South Pointe's roof on the left, the
+    // gap and the street far below in the middle, Pointe West's roof on the right - drawn left to
+    // right)
+    const camPos = v3(-50, ROOF_A + 11, 296);
+    const camLook = v3(-47, ROOF_A - 1.5, 326);
+    this.shot({ from: () => v3(v.pos.x + 6, ROOF_A + 4, v.pos.z - 7), to: camPos, look: () => v3(v.pos.x - 8, ROOF_A + 1, v.pos.z), lookTo: camLook, fov: 50, fovTo: 58, dur: 2.2, ease: 'inout', hand: 0.15 });
     yield 2.3;
-    this.shot({ from: camPos, look: camLook, fov: 52, dur: 999, hand: 0.05 });
+    this.shot({ from: camPos, look: camLook, fov: 58, dur: 999, hand: 0.05 });
     yield 0.05;
     const cam = g.camera;
     cam.updateMatrixWorld();
@@ -1347,13 +1374,13 @@ export class Prologue {
     // the line grows into the ramp
     this.ramp = new Ramp(g, prof);
     this.set.garages[0].extra.push(this.ramp);
-    this.shot({ from: camPos, to: v3(-30, ROOF_A + 8, 290), look: camLook, lookTo: v3(-36, ROOF_A + 1, 322), fov: 52, fovTo: 46, dur: 3.2, ease: 'inout', hand: 0.1 });
+    this.shot({ from: camPos, to: v3(-44, ROOF_A + 7, 300), look: camLook, lookTo: v3(-38, ROOF_A + 1.5, 321), fov: 58, fovTo: 48, dur: 3.2, ease: 'inout', hand: 0.1 });
     yield () => this.ramp.grown;
     g.audio.play('magic', 0.7);
     yield 0.5;
     // back with them in the car
     this.slow(1, 3);
-    this.shot({ from: () => v3(v.pos.x - Math.sin(v.yaw) * 0.4 + Math.cos(v.yaw) * 2.3, ROOF_A + 1.35, v.pos.z - Math.cos(v.yaw) * 0.4 - Math.sin(v.yaw) * 2.3), look: () => v3((L.pos.x + P.pos.x) / 2, P.pos.y + 1.0, (L.pos.z + P.pos.z) / 2), fov: 40, dur: 6, hand: 0.4 });
+    this.shot({ from: this.carSide(v, 1, 2.9, 1.45, 1.4), look: this.cabin(v, 1.05), fov: 40, dur: 6, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
     yield* this.say('L15', L.fig, 0.3);
     this.feel(P.fig, 'angry', 4);
@@ -1439,9 +1466,10 @@ export class Prologue {
       for (let i = 0; i < 4; i++) g.fx.sparks(car.pos.x + (Math.random() - 0.5) * 3, car.pos.y + 0.2, car.pos.z + (Math.random() - 0.5) * 2, 12, [1, 0.8, 0.35]);
       g.fx.smoke(car.pos.x, car.pos.y + 0.4, car.pos.z, 2.4);
     }
-    // it slews round towards the wall; he fights it
-    car.yawRate = (car.yawRate || 0) + 1.5;
-    car.vz = (car.vz || 0) + 5;
+    // it slews round towards the wall, the tyres screaming, scrubbing off its speed; he fights it
+    car.vx *= 0.42;
+    car.vz = car.vz * 0.42 + 4;
+    car.yawRate = (car.yawRate || 0) + 1.2;
     this.shot({ from: () => v3(car.pos.x - 6, car.pos.y + 2.2, car.pos.z - 7), look: () => v3(car.pos.x, car.pos.y + 0.5, car.pos.z), fov: 48, dur: 1.4, hand: 1 });
     yield 1.2;
     this.film(false);
@@ -1502,8 +1530,7 @@ export class Prologue {
     car.vx = car.vz = 0;
     car.speed = 0;
     // facing the water, the pier off to the north
-    const side = () => v3(car.pos.x + Math.cos(car.yaw) * 2.4 - Math.sin(car.yaw) * 0.3, car.pos.y + 1.3, car.pos.z - Math.sin(car.yaw) * 2.4 - Math.cos(car.yaw) * 0.3);
-    this.shot({ from: side, look: () => v3((L.pos.x + P.pos.x) / 2, car.pos.y + 1.0, (L.pos.z + P.pos.z) / 2), fov: 40, dur: 30, hand: 0.35 });
+    this.shot({ from: this.carSide(car, 1, 2.8, 1.4, 1.2), look: this.cabin(car, 1.05), fov: 40, dur: 30, hand: 0.35 });
     yield 2.4;
     this.feel(L.fig, 'angry', 6);
     yield* this.say('L16', L.fig, 1.3);

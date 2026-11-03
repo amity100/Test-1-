@@ -8,6 +8,8 @@ import { LINES } from './lines.js';
 // them, coming back in the silence after.
 
 const url = (name) => new URL(`../../../audio/prologue/${name}.mp3`, import.meta.url).href;
+// (lines seen and not heard: a laugh a voice model would only make sound false - her face laughs)
+const SILENT = new Set(['L05']);
 
 export class PrologueVoices {
   constructor(game, ui) {
@@ -57,7 +59,7 @@ export class PrologueVoices {
     const dur = L.dur;
     const c = this.ctx;
     const b = this.buf.get(id);
-    if (c && b && this.game.audio.enabled) {
+    if (c && b && this.game.audio.enabled && !SILENT.has(id)) {
       const s = c.createBufferSource();
       s.buffer = b;
       const g = c.createGain();

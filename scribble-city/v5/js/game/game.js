@@ -447,11 +447,12 @@ export class Game {
       }
       // (the free drawing's page out: the mouse is drawing - a lock that came late is let go again;
       // ROADMAP 15.5: a dialog up, the same - its answers are clicked)
-      if (locked && ((this.freedraw && this.freedraw.open) || this.dialog.isOpen)) {
+      const plDraw = !!(this.prologue && this.prologue.draw && this.prologue.draw.on);
+      if (locked && ((this.freedraw && this.freedraw.open) || this.dialog.isOpen || plDraw)) {
         this.input.releaseLock();
         return;
       }
-      if (!locked && this.state === 'play' && performance.now() - (this.input.releasedAt || -1e9) > 600 && !this.airdraw.open && !(this.freedraw && (this.freedraw.open || performance.now() - this.freedraw.shutAt < 1500)) && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !(this.minigames && this.minigames.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
+      if (!locked && this.state === 'play' && !plDraw && performance.now() - (this.input.releasedAt || -1e9) > 600 && !this.airdraw.open && !(this.freedraw && (this.freedraw.open || performance.now() - this.freedraw.shutAt < 1500)) && !this.album.open && !this.dialog.open && !this.dialog.justClosed && !(this.paintshop && this.paintshop.open) && !(this.sketchpad && this.sketchpad.open) && !(this.minigames && this.minigames.open) && !this.inkwell.flipping && !this.perf.reportOpen && !this.touch && !this.input.lockFailed) this.pause();
     });
   }
 
@@ -1324,10 +1325,17 @@ export class Game {
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
         : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
+      // (v5, ROADMAP 18: under a car park's deck the camera keeps under the deck over it - lower,
+      // closer; game/prologue/garage.js)
+      let optC = opt;
+      if (this.prolSet && this.prolSet.built) {
+        const cy = this.prolSet.ceilingAt(v.pos.x, v.pos.z, v.pos.y || 0);
+        if (cy < Infinity) optC = { ...opt, height: Math.min(opt.height || 3.1, Math.max(1.1, cy - (v.pos.y || 0) - 0.55)), dist: Math.min(opt.dist || 8.5, 6.4), maxY: cy - 0.2 };
+      }
       // (ROADMAP 11.28: the turbo on - the picture wider, the camera back a little: game/gearmove.js)
       const G = this.gear;
-      if (G && (G.fovK > 1.001 || G.camPull > 0.01)) this.camRig.update(dt, v.pos, { ...opt, fovMul: (opt.fovMul || 1) * G.fovK, dist: (opt.dist || 8.5) + G.camPull });
-      else this.camRig.update(dt, v.pos, opt);
+      if (G && (G.fovK > 1.001 || G.camPull > 0.01)) this.camRig.update(dt, v.pos, { ...optC, fovMul: (optC.fovMul || 1) * G.fovK, dist: (optC.dist || 8.5) + G.camPull });
+      else this.camRig.update(dt, v.pos, optC);
     } else {
       if (this.airdraw.open) this.camRig.update(dt, player.pos, this.airdraw.camOpts);
       else if (this.chute.open) this.camRig.update(dt, player.pos, { height: 2.6, dist: 8.5, shoulder: 0 });
@@ -1351,7 +1359,10 @@ export class Game {
         if (hold) this.camRig.holdAt(dt, hold.pos, hold.look, hold.fov);
         else {
           const IR = player.indoor;
-          this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: IR ? 2.6 : 3.3, maxY: IR && IR.height ? IR.floor + IR.height - 0.3 : undefined });
+          // (v5, ROADMAP 18: and under a car park's deck, under the deck)
+          const gcy = this.prolSet && this.prolSet.built ? this.prolSet.ceilingAt(player.pos.x, player.pos.z, player.pos.y) : Infinity;
+          const maxY = IR && IR.height ? IR.floor + IR.height - 0.3 : gcy < Infinity ? gcy - 0.2 : undefined;
+          this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: IR ? 2.6 : 3.3, maxY });
         }
       }
     }

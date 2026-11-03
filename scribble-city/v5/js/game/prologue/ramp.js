@@ -42,6 +42,9 @@ export class RampDraw {
     this.g = cv.getContext('2d');
     this.dpr = dpr;
     el.classList.add('on');
+    // (the mouse let go of the game's camera: it draws now - game/game.js keeps it free while the
+    // sheet is up, and does not take it for the pause)
+    if (!this.game.touch) this.game.input.releaseLock();
     this.ui.hint('Draw a ramp to jump across<small>גררו קו מהמכונית אל קצה הגג — כלפי מעלה</small>');
     this.t = 0;
     this.drawing = false;
@@ -138,6 +141,8 @@ export class RampDraw {
     const W = P.map(([x, y]) => this.toWorld(x, y)).filter(Boolean);
     const prof = fitProfile(W, this.spec, this.fails);
     this.close();
+    // (and the mouse back to the camera, on this same click)
+    if (!this.game.touch) this.game.input.requestLock(true);
     this.done(prof, P.map((p) => [p[0] / this.dpr, p[1] / this.dpr]));
   }
 
