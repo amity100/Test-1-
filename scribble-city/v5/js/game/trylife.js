@@ -46,13 +46,13 @@ export class TryLife {
     this.game = life.game;
     this.M = life.marks;
     this.seats = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 16; i++) {
       const m = this.M[`try.${i}`];
       if (!m) break;
       this.seats.push({ m, v: null });
     }
     this.mirrors = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       const m = this.M[`lowMirror.${i}`];
       if (!m) break;
       this.mirrors.push(m);

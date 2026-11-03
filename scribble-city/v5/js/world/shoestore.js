@@ -170,17 +170,26 @@ function boxWall(R, run, len) {
 // ------------------------------------------------------------------ the benches, the low mirrors
 function benches(R, fr, front) {
   const S = R.psoup(false);
-  const y0 = R.y0;
   // (room at the ends for the mirrors and for whoever stands at them)
   const inner = fr.W - 2 * 1.2;
   const dm = (R.db + 0.6 + front) / 2;
   const bl = Math.min(2.6, inner - 2.0);
   if (bl < 1.0 || front - R.db < 3.2) return;
+  // (a wide shop: two or three of them across it, each with its mirrors)
+  const unit = bl + 2.6;
+  const nb = Math.max(1, Math.min(3, Math.floor((inner + 0.6) / unit)));
   const um = (R.ua + R.ub) / 2;
+  const ks = { k: 0, m: 0 };
+  for (let b = 0; b < nb; b++) bench(R, S, um + (b - (nb - 1) / 2) * unit, dm, bl, ks, b === 0);
+}
+
+// one bench: the low back between its two sides, the two sides back to back with their cushions, the
+// seats; the low mirrors at its ends, leaning on the floor; (the first) the plate that measures a foot
+function bench(R, S, um, dm, bl, ks, measure) {
+  const y0 = R.y0;
   const run = new Run(R, um - bl / 2, dm, [1, 0], [0, 1]);
   const seat = [0.18, 0.18, 0.2];
   const pad = [0.62, 0.38, 0.3];
-  // the low back between the two benches, the two benches back to back, their cushions
   rbox(R, S, run, 0, y0, -0.06, bl, y0 + 0.72, 0.06, OAKW, {});
   for (const side of [-1, 1]) {
     const t0 = side > 0 ? 0.06 : -0.48;
@@ -191,17 +200,14 @@ function benches(R, fr, front) {
   run.solid(0, -0.48, bl, 0.48, y0 + 0.45);
   // the seats - two a side on a long bench, one on a short one
   const n = bl > 1.8 ? 2 : 1;
-  let k = 0;
+  R.spots.marks = R.spots.marks || [];
   for (const side of [-1, 1]) {
     for (let i = 0; i < n; i++) {
       const s = (bl * (i + 0.5)) / n;
       const [u, d] = run.ud(s, side * 0.3);
-      R.spots.marks = R.spots.marks || [];
-      R.spots.marks.push({ name: `try.${k++}`, u, d, y: 0, face: [0, side] });
+      R.spots.marks.push({ name: `try.${ks.k++}`, u, d, y: 0, face: [0, side] });
     }
   }
-  // the low mirrors at the ends, leaning on the floor, turned to the bench's ends
-  let m = 0;
   for (const end of [-1, 1]) {
     const s = end < 0 ? -0.95 : bl + 0.95;
     const mr = new Run(R, ...run.ud(s, -0.25), [0, 1], [-end, 0]);
@@ -213,9 +219,9 @@ function benches(R, fr, front) {
     }
     mr.solid(-0.02, -0.18, 0.52, 0.02, y0 + 0.6);
     const [u, d] = mr.ud(0.25, 0.6);
-    R.spots.marks.push({ name: `lowMirror.${m++}`, u, d, y: 0, face: [end, 0] });
+    R.spots.marks.push({ name: `lowMirror.${ks.m++}`, u, d, y: 0, face: [end, 0] });
   }
-  // the plate that measures a foot, on the floor by the bench's end
+  if (!measure) return;
   const [pu, pd] = run.ud(-0.25, 0.75);
   const pr = new Run(R, pu, pd, [1, 0], [0, 1]);
   rbox(R, S, pr, -0.07, y0, -0.18, 0.07, y0 + 0.02, 0.18, [0.58, 0.6, 0.64], { pen: 'gloss' });
