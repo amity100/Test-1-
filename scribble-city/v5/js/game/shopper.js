@@ -392,6 +392,8 @@ export class Shopper {
     let kits = 0;
     let worn = null;
     let run = false;
+    // (ROADMAP 16.5: a ring, a watch, a necklace - kept, to give at a bar: game/streetlife.js giveGift)
+    const gifts = [];
     for (const r of list) {
       const u = USE[r.what];
       if (u) {
@@ -401,6 +403,7 @@ export class Shopper {
         pain = Math.max(pain, u.pain || 0);
         kits += u.kit || 0;
       }
+      if (r.what === 'ring' || r.what === 'watch' || r.what === 'necklace') gifts.push({ what: r.what, heb: r.heb });
       // (clothes: put on - the last of each kind)
       const model = r.look && r.look.model;
       const w = WEAR[model] || (r.what === 'shoe' ? WEAR.shoe : null);
@@ -424,6 +427,7 @@ export class Shopper {
     if (energy) P.energyT = Math.max(P.energyT || 0, energy);
     if (pain) P.painT = Math.max(P.painT || 0, pain);
     if (kits) P.kits = (P.kits || 0) + kits;
+    if (gifts.length) P.gifts = (P.gifts || []).concat(gifts);
     // (ROADMAP 16.5: wanted, and out of the police's sight - something new on: they lose you, a star
     // less; not for what was just stolen)
     const cop = g.police;
@@ -440,6 +444,7 @@ export class Shopper {
       kits ? `ערכת עזרה ראשונה בכיס (${P.kits})` : null,
       run ? 'נעלי ריצה: ספרינט מהיר ב־10%' : null,
       lost ? 'השוטרים לא מזהים אתכם: כוכב אחד פחות' : null,
+      gifts.length ? 'אפשר לתת במתנה בבר' : null,
       worn ? 'לבשתם את זה' : null,
     ].filter(Boolean).join(', ');
     g.hud.toast(`${stolen ? 'גנבתם' : 'קניתם'}: ${summary(list.map((r) => r.heb))}${fx ? ` (${fx})` : ''}`, stolen ? 'bad' : 'good', 3);

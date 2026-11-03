@@ -570,6 +570,26 @@ export class StreetLife {
       const slot = a.life2.target(p);
       if (slot) return { shop: a, slot, label: a.life2.label(slot) };
     }
+    // (ROADMAP 16.5: a piece of jewellery bought and kept - at a bar, given to whoever is beside you)
+    const gifts = p.gifts;
+    if (gifts && gifts.length) {
+      for (const a of this.active.values()) {
+        if (!a.barLife || !a.open || !a.room || !a.room.inside(p.pos.x, p.pos.z, 0.2, p.pos.y)) continue;
+        let who = null;
+        let wd = 1.7;
+        const near = (c) => {
+          if (!c || !c.alive || c === a.keeper) return;
+          const d = Math.hypot(c.pos.x - p.pos.x, c.pos.z - p.pos.z);
+          if (d < wd) {
+            wd = d;
+            who = c;
+          }
+        };
+        for (const v of a.visitors) near(v.c);
+        for (const c of a.extras) near(c);
+        if (who) return { shop: a, gift: who, label: `E — לתת מתנה: ${gifts[0].heb}` };
+      }
+    }
     let best = null;
     let bd = 2.4;
     let knock = false;
@@ -607,6 +627,20 @@ export class StreetLife {
     return { shop: best, label: best.open ? `E — ${best.room ? best.shop.ask || info.ask || info.verb : info.verb}` : 'החנות סגורה — המוכר ברח' };
   }
 
+  // (ROADMAP 16.5) a piece of jewellery given at a bar: their delight, and something drawn for you in
+  // return - a blueprint the album does not have yet
+  giveGift(c) {
+    const game = this.game;
+    const p = game.player;
+    const g = p.gifts && p.gifts.shift();
+    if (!g) return;
+    c.faceYaw = Math.atan2(p.pos.x - c.pos.x, p.pos.z - c.pos.z);
+    if (game.bubbles) game.bubbles.say(c, pick(['For me?! It\'s beautiful!', 'Oh my - you shouldn\'t have!', 'Wow... thank you!']), 'plain', 2.6);
+    if (game.audio) game.audio.play('magic', 0.6);
+    game.hud.toast(`נתתם את ה${g.heb} במתנה. בתמורה ציירו לכם משהו:`, 'good', 2.6);
+    giftBlueprint(game);
+  }
+
   interact() {
     const t = this.target();
     if (!t || !t.shop.open) return false;
@@ -628,6 +662,10 @@ export class StreetLife {
     }
     if (t.scratch) {
       t.shop.life2.counter.scratch();
+      return true;
+    }
+    if (t.gift) {
+      this.giveGift(t.gift);
       return true;
     }
     if (t.slot) {

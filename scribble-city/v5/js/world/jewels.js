@@ -95,6 +95,14 @@ function vitrine(R, run, len, side) {
   rbox(R, S, run, 0.04, top + gh - 0.03, -deep + 0.04, len - 0.04, top + gh - 0.02, -deep + 0.1, [1, 0.94, 0.82], { pen: 'glow', skip: ['top'] });
   // (the glints on the glass's front)
   for (let s = 0.2; s < len - 0.2; s += 0.9) rprint(R, S, run, s, top + 0.03, s + 0.04, top + gh - 0.04, 0.002, null, { pen: 'gloss', col: [0.95, 0.98, 1] });
+  // (ROADMAP 16.5) the spotlights over it on the ceiling, each a can and its lit lens, and the pool of
+  // its light on the velvet
+  const cy = R.y1 - 0.02;
+  for (let s = 0.35; s < len - 0.2; s += 0.8) {
+    rcyl(R, S, run, s, -deep * 0.5, 0.055, cy - 0.12, 0.12, [0.12, 0.12, 0.13], { seg: 10 });
+    rcyl(R, S, run, s, -deep * 0.5, 0.042, cy - 0.125, 0.006, [1, 0.95, 0.82], { pen: 'glow', seg: 10 });
+    rcyl(R, S, run, s, -deep * 0.5, 0.15, top + 0.0125, 0.002, [0.24, 0.27, 0.42], { seg: 14 });
+  }
   run.solid(0, -deep, len, 0, top + gh);
   const spots = [];
   const ns = Math.max(1, Math.floor(len / 1.1));
