@@ -78,6 +78,7 @@ export class EateryLife extends ShopLife {
       L.dur = 25 + Math.random() * 30;
       L.dish = this.serveAt(L.item, v.spot);
       v.c.fig.sit = 1;
+      L.sitK = 1;
       return L;
     }
     if (o.already) {
@@ -312,7 +313,10 @@ export class EateryLife extends ShopLife {
     c.pos.x = s.x;
     c.pos.z = s.z;
     c.faceYaw = s.yaw;
-    f.sit = Math.min(1, f.sit + dt * 3);
+    // (sat down: kept on the visitor - game/streetlife.js OpenShop.visit lets everybody's sitting go
+    // each frame unless they are 'at' a place of its own)
+    L.sitK = Math.min(1, (L.sitK || 0) + dt * 3);
+    f.sit = L.sitK;
     const it = L.dish;
     const drink = it && DRINKS.has(it.look.model);
     if (drink) {
@@ -335,10 +339,11 @@ export class EateryLife extends ShopLife {
     } else forkToMouth(v, s, this.room.floor, dt);
     // (emptier as it goes)
     if (it && !drink) {
-      const steps = EATEN[it.look.model] || [];
+      const steps = EATEN[(L.item && L.item.model) || it.look.model] || [];
       const k = L.t / L.dur;
       const want = Math.min(steps.length, Math.floor(k * (steps.length + 1)));
-      if (want > (it.stage || 0) && steps[want - 1] !== undefined) this.swapDish(L, steps[want - 1]);
+      // (what is eaten whole - a muffin, a cone - stays there until the last bite: gone at the end)
+      if (want > (it.stage || 0) && steps[want - 1]) this.swapDish(L, steps[want - 1]);
     }
     if (Math.random() < 0.0015) this.say(c, pick(SAY.eat), 0.6);
     if (L.t < L.dur) return null;
@@ -348,10 +353,11 @@ export class EateryLife extends ShopLife {
     f.drinkT = -1;
     if (L.dish) {
       if (L.sipping) L.dish.at = L.home;
-      const steps = EATEN[L.dish.look.model] || [null];
+      // (what the dish was, not what is left of it now: a plate of crumbs stays for the cook to clear)
+      const steps = EATEN[(L.item && L.item.model) || L.dish.look.model] || [null];
       const last = steps[steps.length - 1];
       if (last) {
-        this.swapDish(L, last);
+        if (L.dish.look.model !== last) this.swapDish(L, last);
         this.left.push({ it: L.dish, seat: s, until: this.game.time + 60 });
       } else this.movers.remove(L.dish);
       L.dish = null;
@@ -469,7 +475,14 @@ export class EateryLife extends ShopLife {
   // ---------------------------------------------------------------- the cook
   // (the shop's second pair of hands: game/streetlife.js spawnStaff - here they cook)
   stockerWork(c, dt) {
-    if (this.orders.some((o) => o.st === 'new' || (o.st === 'cook' && o.by === c))) return this.cook(c, dt);
+    // (a plate in the hand goes to the sink first; between orders, when the tables fill up with
+    // what is left, one of them cleared before the next order)
+    const T = this.T;
+    if (T && T.job && T.job.st === 'back') return this.tidy(c, dt);
+    const cooking = this.orders.some((o) => o.st === 'cook' && o.by === c);
+    const waiting = this.orders.filter((o) => o.st === 'new').length;
+    if (!cooking && (T && T.job ? true : this.left.length >= 3 && waiting <= 1)) return this.tidy(c, dt);
+    if (cooking || waiting) return this.cook(c, dt);
     return this.tidy(c, dt);
   }
 
@@ -618,6 +631,9 @@ export class EateryLife extends ShopLife {
       if (l) {
         l.by = c;
         T.job = { l, st: 'go', pts: null };
+        // (the clock the walk is timed by starts again: game/streetlife.js follow steps through
+        // after half a minute stuck)
+        T.t = 0;
       }
     }
     if (T.job) {
@@ -636,6 +652,7 @@ export class EateryLife extends ShopLife {
         f.reachR = null;
         f.carry = 'held';
         J.st = 'back';
+        T.t = 0;
         const sk = this.marks['st.sink'] || this.marks.cook;
         J.pts = sk ? this.room.path(c.pos.x, c.pos.z, sk.x, sk.z) : null;
         return null;
@@ -690,10 +707,12 @@ export class EateryLife extends ShopLife {
         if (m) this.puff(n, m, dt, 'idle');
       }
     }
-    // (the plates nobody came for: cleared by the shop in the end)
-    if (this.left.length && !this.S) {
-      for (const l of this.left) if (g.time > l.until) this.movers.remove(l.it);
-      this.left = this.left.filter((l) => g.time <= l.until);
+    // (the plates nobody came for: cleared by the shop in the end - sooner with nobody to clear them)
+    if (this.left.length) {
+      const late = this.S ? 100 : 0;
+      const gone = this.left.filter((l) => g.time > l.until + late && !l.by);
+      for (const l of gone) this.movers.remove(l.it);
+      if (gone.length) this.left = this.left.filter((l) => !gone.includes(l));
     }
     // (an order left on the counter too long: whoever ordered it is gone)
     for (const o of this.orders) {
@@ -799,7 +818,7 @@ export class EateryLife extends ShopLife {
       const dur = DRINKS.has(m.item.model) ? 10 : 14;
       const steps = EATEN[m.item.model] || [];
       const want = Math.min(steps.length, Math.floor((m.eatT / dur) * (steps.length + 1)));
-      if (want > (m.stage || 0) && steps[want - 1] !== undefined) {
+      if (want > (m.stage || 0) && steps[want - 1]) {
         m.stage = want;
         const L = { dish: m.it };
         this.swapDish(L, steps[want - 1]);

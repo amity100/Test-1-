@@ -11,14 +11,14 @@ export const MENUS = {
   cafe: [
     { id: 'cappuccino', name: 'CAPPUCCINO', heb: 'קפוצ׳ינו', price: 4, model: 'mug', tint: MUG, shape: 'cup', hp: 4, coffee: 60, at: ['grinder', 'espresso', 'milk'] },
     { id: 'latte', name: 'LATTE TO GO', heb: 'לאטה לדרך', price: 5, model: 'cupGo', tint: KRAFT, cap: [0.42, 0.28, 0.18], shape: 'cup', hp: 4, coffee: 60, at: ['grinder', 'espresso', 'milk'], go: true },
-    { id: 'croissant', name: 'CROISSANT', heb: 'קרואסון', price: 3, model: 'croissant', shape: 'bagel', hp: 12, at: ['oven'] },
+    { id: 'croissant', name: 'CROISSANT', heb: 'קרואסון', price: 3, model: 'croissant', shape: 'croissant', hp: 12, at: ['oven'] },
     { id: 'muffin', name: 'BLUEBERRY MUFFIN', heb: 'מאפין אוכמניות', price: 3, model: 'muffin', tint: [0.6, 0.4, 0.3], cap: [0.35, 0.45, 0.85], shape: 'dessert', hp: 10, at: ['case'] },
     { id: 'cake', name: 'CHEESECAKE', heb: 'עוגת גבינה', price: 5, model: 'cake', tint: [0.98, 0.9, 0.7], shape: 'dessert', hp: 15, at: ['case'] },
   ],
   bagel: [
     { id: 'bagel', name: 'SESAME BAGEL', heb: 'בייגל שומשום', price: 3, model: 'bagel', shape: 'bagel', hp: 15, at: ['deck', 'prep'] },
     { id: 'donut', name: 'PINK DONUT', heb: 'דונאט ורוד', price: 2, model: 'donut', tint: [0.95, 0.56, 0.7], cap: [0.3, 0.6, 0.95], shape: 'donut', hp: 10, at: ['racks'] },
-    { id: 'croissant', name: 'CROISSANT', heb: 'קרואסון', price: 3, model: 'croissant', shape: 'bagel', hp: 12, at: ['deck'] },
+    { id: 'croissant', name: 'CROISSANT', heb: 'קרואסון', price: 3, model: 'croissant', shape: 'croissant', hp: 12, at: ['deck'] },
     { id: 'coffee', name: 'COFFEE TO GO', heb: 'קפה לדרך', price: 3, model: 'cupGo', tint: KRAFT, cap: [0.6, 0.3, 0.2], shape: 'cup', hp: 3, coffee: 60, at: ['espresso'], go: true },
   ],
   pizza: [

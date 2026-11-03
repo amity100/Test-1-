@@ -56,18 +56,39 @@ export function eatery(R, o = {}) {
   ceiling(R, { round: !!K.round, light: [1, 0.95, 0.86] });
   R.spots.marks = R.spots.marks || [];
   const mark = (name, u, d, y, face) => R.spots.marks.push({ name, u, d, y: y - R.y0, face });
+  // (as long as a real kitchen and counter, on the side away from the door: in a wide room the rest
+  // of it, back to the wall, is tables too)
+  const W = R.ub - R.ua;
+  const KL = Math.max(2, Math.min(W - 1.3, W > 9 ? 7.2 : 6.2));
+  const bl = Math.min(W - 0.24, KL + 0.9);
+  const far = fr.left;
+  const kw = Math.max(bl, KL + 1.0);
+  // (where the line and the counter start: at the wall away from the door, or - a wide room - so that
+  // the kitchen is the middle of the back wall, seen from the door)
+  const u0 = W > 11.5 ? (far ? (R.ua + R.ub) / 2 + kw / 2 : (R.ua + R.ub) / 2 - kw / 2) : far ? R.ub - 0.12 : R.ua + 0.12;
+  const ku = far ? [u0 - kw, u0 + 0.12] : [u0 - 0.12, u0 + kw];
   // the line along the back wall
-  const back = new Run(R, R.ua + 0.12, R.db + 0.66, [1, 0], [0, 1]);
-  const bl = R.ub - R.ua - 0.24;
+  const back = far ? new Run(R, u0, R.db + 0.66, [-1, 0], [0, 1]) : new Run(R, u0, R.db + 0.66, [1, 0], [0, 1]);
   line(R, back, bl, K.line, kind, mark);
   // the menu over it
   boards(R, back, bl, kind);
   // the counter across the shop, its till, its case, where the orders go out
   const cd = R.db + 2.1;
-  const counter = serveCounter(R, fr, cd, K, kind, mark);
-  // the tables in the rest of it
-  tables(R, fr, cd + 0.9, K);
-  condiments(R, fr, cd);
+  const counter = serveCounter(R, fr, cd, K, kind, mark, KL, u0);
+  // (a wide room's kitchen stands free of the side wall: a panel closes it at the till's end, the
+  // counter's own front and top, so nobody walks in round it)
+  if (Math.abs(u0 - (far ? R.ub - 0.12 : R.ua + 0.12)) > 0.05) {
+    const S = R.psoup(false);
+    const side = new Run(R, u0 + (far ? 0.12 : -0.12), R.db, [0, 1], [far ? 1 : -1, 0]);
+    const dl = cd - R.db;
+    rbox(R, S, side, 0, R.y0, -0.08, dl, R.y0 + 0.1, 0, DARK, { skip: ['bottom'] });
+    rbox(R, S, side, 0, R.y0 + 0.1, -0.08, dl, R.y0 + 0.96, 0, K.front, { skip: ['bottom'] });
+    rbox(R, S, side, -0.02, R.y0 + 0.96, -0.1, dl, R.y0 + 1.0, 0.03, K.top, {});
+    side.solid(0, -0.1, dl, 0.03, R.y0 + 1.0);
+  }
+  // the napkins, the straws, the lids by the wall; the tables in the rest of it, clear of them
+  const cond = condiments(R, fr, cd);
+  tables(R, fr, cd + 0.9, K, ku, cond);
   // (the cook's own place, between the line and the counter)
   const [cu, cdd] = back.ud(bl * 0.5, 0.55);
   mark('cook', cu, cdd, R.y0, [0, 1]);
@@ -100,6 +121,63 @@ function line(R, run, len, pieces, kind, mark) {
     mark(`st.${p}`, u, d, y0, [0, -1]);
     mark(`at.${p}`, hu, hd, top + 0.12, [0, -1]);
     s += w + 0.08;
+  }
+  // what is left of the line: places to work, the shelves over them
+  let k = 0;
+  while (s < len - 0.6) {
+    const w = Math.min(0.95, len - 0.05 - s);
+    filler(R, S, run, s, top, w, k++, kind);
+    s += w + 0.08;
+  }
+}
+
+// what the shelves over the line hold, by the kind of place: [colour of what is in the jars, of the lids]
+const PANTRY = {
+  cafe: [[0.42, 0.26, 0.14], [0.2, 0.2, 0.22]],
+  bagel: [[0.95, 0.9, 0.8], [0.62, 0.42, 0.24]],
+  pizza: [[0.82, 0.22, 0.14], [0.3, 0.55, 0.25]],
+  burger: [[0.85, 0.2, 0.15], [0.98, 0.84, 0.25]],
+  diner: [[0.42, 0.26, 0.14], [0.85, 0.2, 0.15]],
+  tacos: [[0.86, 0.36, 0.2], [0.3, 0.55, 0.3]],
+  noodles: [[0.86, 0.3, 0.2], [0.3, 0.2, 0.14]],
+  sushi: [[0.97, 0.96, 0.92], [0.12, 0.16, 0.12]],
+  juice: [[0.98, 0.6, 0.18], [0.5, 0.78, 0.3]],
+  icecream: [[0.95, 0.6, 0.7], [0.55, 0.35, 0.22]],
+  falafel: [[0.6, 0.45, 0.2], [0.3, 0.55, 0.3]],
+};
+
+// a stretch of the line with no machine on it: a board and a knife, or the plates stacked, or the
+// cups; a steel shelf on the wall over it with the jars and the tins of what is used
+function filler(R, S, run, s, top, w, k, kind) {
+  const [jar, lid] = PANTRY[kind] || PANTRY.cafe;
+  // (the shelf, its brackets)
+  rbox(R, S, run, s + 0.02, top + 0.74, -0.66, s + w - 0.02, top + 0.76, -0.4, STEEL, {});
+  for (const e of [0.08, w - 0.08]) rbox(R, S, run, s + e - 0.01, top + 0.62, -0.66, s + e + 0.01, top + 0.74, -0.62, DSTEEL, {});
+  const n = Math.max(2, Math.floor((w - 0.1) / 0.16));
+  for (let i = 0; i < n; i++) {
+    const x = s + 0.1 + ((w - 0.2) * (i + 0.5)) / n;
+    if (i % 3 === 2) rbox(R, S, run, x - 0.05, top + 0.76, -0.6, x + 0.05, top + 0.92, -0.5, i % 2 ? lid : [0.92, 0.9, 0.84], {});
+    else {
+      rcyl(R, S, run, x, -0.53, 0.045, top + 0.76, 0.12, i % 2 ? lid : jar, { pen: 'gloss', seg: 8 });
+      rcyl(R, S, run, x, -0.53, 0.047, top + 0.88, 0.02, DARK, { seg: 8 });
+    }
+  }
+  // on the line under it
+  if (k % 3 === 0) {
+    // (a board, the knife on it, a bowl)
+    rbox(R, S, run, s + 0.12, top, -0.5, s + Math.min(w - 0.12, 0.62), top + 0.025, -0.18, [0.62, 0.42, 0.24], {});
+    rbox(R, S, run, s + 0.2, top + 0.025, -0.3, s + 0.42, top + 0.03, -0.27, STEEL, {});
+    rbox(R, S, run, s + 0.42, top + 0.022, -0.31, s + 0.5, top + 0.035, -0.26, DARK, {});
+    if (w > 0.75) rcyl(R, S, run, s + w - 0.18, -0.36, 0.1, top, 0.07, WHITE, { seg: 10 });
+  } else if (k % 3 === 1) {
+    // (the plates stacked, the bowls)
+    for (let i = 0; i < 2; i++) rcyl(R, S, run, s + 0.2 + i * 0.3, -0.38, 0.12, top, 0.09 + i * 0.03, WHITE, { seg: 12 });
+    if (w > 0.8) rcyl(R, S, run, s + 0.78, -0.36, 0.08, top, 0.12, WHITE, { seg: 10 });
+  } else {
+    // (the cups upside down on a tray, the cloth)
+    rbox(R, S, run, s + 0.08, top, -0.55, s + Math.min(w - 0.08, 0.6), top + 0.01, -0.15, DSTEEL, {});
+    for (let i = 0; i < 6; i++) rcyl(R, S, run, s + 0.16 + (i % 3) * 0.14, -0.45 + Math.floor(i / 3) * 0.18, 0.04, top + 0.01, 0.08, WHITE, { seg: 8 });
+    if (w > 0.7) rbox(R, S, run, s + 0.66, top, -0.4, s + 0.86, top + 0.012, -0.2, [0.85, 0.3, 0.3], {});
   }
 }
 
@@ -140,13 +218,28 @@ const STATION = {
     if (kind === 'pizza') {
       // the pizza oven: the dome of brick, its mouth and the fire in it, the flue, the peel by it
       const w = 1.3;
-      rbox(R, S, run, s, top - 0.9, -0.66, s + w, top + 0.15, 0.1, [0.75, 0.42, 0.32], { skip: ['bottom'] });
-      for (let k = 0; k < 6; k++) rbox(R, S, run, s + 0.1 + k * 0.19, top + 0.15, -0.6 + k * 0.03, s + w - 0.1 - k * 0.19, top + 0.25 + k * 0.08, 0.05 - k * 0.04, [0.72 - k * 0.02, 0.4, 0.3], {});
-      rbox(R, S, run, s + 0.3, top + 0.0, 0.1, s + w - 0.3, top + 0.32, 0.104, [0.12, 0.08, 0.06], {});
-      rbox(R, S, run, s + 0.36, top + 0.02, 0.104, s + w - 0.36, top + 0.22, 0.108, FIRE, { pen: 'glow' });
-      rcyl(R, S, run, s + w / 2, -0.3, 0.1, top + 0.7, R.y1 - top - 0.7, [0.3, 0.3, 0.32], { seg: 8 });
-      rbox(R, S, run, s + w + 0.02, top - 0.9, 0.06, s + w + 0.06, top + 0.6, 0.1, [0.62, 0.42, 0.24], {});
-      rbox(R, S, run, s + w - 0.12, top + 0.45, 0.04, s + w + 0.2, top + 0.85, 0.12, [0.7, 0.5, 0.3], {});
+      const cs = s + w / 2;
+      const ct = -0.3;
+      // (its base of brick, a dome of brick rounded over the hearth - courses of it, each a little less)
+      rbox(R, S, run, s, top - 0.9, -0.66, s + w, top + 0.15, 0.22, [0.66, 0.36, 0.28], { skip: ['bottom'] });
+      for (let k = 0; k < 4; k++) rbox(R, S, run, s - 0.001, top - 0.84 + k * 0.24, 0.221, s + w + 0.001, top - 0.83 + k * 0.24, 0.223, [0.84, 0.8, 0.74], {});
+      const dome = [[0.52, 0.1], [0.5, 0.08], [0.45, 0.07], [0.38, 0.06], [0.28, 0.05], [0.15, 0.04]];
+      let y = top + 0.15;
+      dome.forEach(([r, h], k) => {
+        rcyl(R, S, run, cs, ct, r, y, h, k % 2 ? [0.74, 0.42, 0.32] : [0.7, 0.38, 0.29], { seg: 16 });
+        y += h;
+      });
+      // (its mouth: an arch of darker brick, the fire burning in it)
+      rbox(R, S, run, cs - 0.27, top + 0.15, 0.13, cs + 0.27, top + 0.42, 0.24, [0.45, 0.24, 0.18], {});
+      rbox(R, S, run, cs - 0.2, top + 0.15, 0.2, cs + 0.2, top + 0.34, 0.243, [0.1, 0.06, 0.05], {});
+      rbox(R, S, run, cs - 0.15, top + 0.15, 0.205, cs + 0.15, top + 0.24, 0.245, FIRE, { pen: 'glow' });
+      rbox(R, S, run, cs - 0.08, top + 0.24, 0.21, cs + 0.08, top + 0.3, 0.246, [1, 0.78, 0.35], { pen: 'glow' });
+      // (the flue up to the ceiling)
+      rcyl(R, S, run, cs, ct, 0.09, y, R.y1 - y, [0.3, 0.3, 0.32], { seg: 8 });
+      // the peel leaning by it, the firewood stacked under the line
+      rbox(R, S, run, s + w + 0.02, top - 0.9, 0.06, s + w + 0.05, top + 0.6, 0.1, [0.62, 0.42, 0.24], {});
+      rbox(R, S, run, s + w - 0.12, top + 0.45, 0.04, s + w + 0.2, top + 0.85, 0.07, [0.7, 0.5, 0.3], {});
+      for (let k = 0; k < 7; k++) rcyl(R, S, run, s + w + 0.1 + (k % 3) * 0.1 + Math.floor(k / 3) * 0.05, 0.12, 0.045, top - 0.9 + Math.floor(k / 3) * 0.085, 0.085, [0.48, 0.32, 0.2], { seg: 7 });
       return w + 0.25;
     }
     const w = 0.6;
@@ -340,31 +433,35 @@ const STATION = {
 // ------------------------------------------------------------------ the menu boards
 function boards(R, run, len, kind) {
   const S = R.psoup(false);
-  const y = R.y1 - 0.48;
+  // (under the hood, over the shelves: as big as fits between them)
+  const top = R.y0 + 0.9;
+  const yt = R.y1 - 0.86;
+  const yb = Math.max(top + 0.95, yt - 0.78);
+  const bh = yt - yb;
+  if (bh < 0.3) return;
   const n = len > 4.2 ? 2 : 1;
-  const bw = Math.min(1.5, (len - 0.4) / n - 0.2);
+  const bw = Math.min(1.5, bh * 1.78, (len - 0.4) / n - 0.2);
   for (let i = 0; i < n; i++) {
     const c = (len * (i + 0.5)) / n;
-    rbox(R, S, run, c - bw / 2 - 0.04, y - bw * 0.56 - 0.04, -0.66, c + bw / 2 + 0.04, y + 0.04, -0.6, [0.36, 0.26, 0.18], {});
-    rprint(R, S, run, c - bw / 2, y - bw * 0.56, c + bw / 2, y, -0.599, `menu.${kind}`);
-    // (a lamp on its arm over each)
-    rbox(R, S, run, c - 0.02, y + 0.06, -0.6, c + 0.02, y + 0.1, -0.35, DARK, {});
-    rbox(R, S, run, c - 0.08, y + 0.02, -0.38, c + 0.08, y + 0.08, -0.3, DARK, {});
-    rbox(R, S, run, c - 0.07, y + 0.015, -0.37, c + 0.07, y + 0.02, -0.31, [1, 0.92, 0.75], { pen: 'glow' });
+    rbox(R, S, run, c - bw / 2 - 0.04, yb - 0.04, -0.66, c + bw / 2 + 0.04, yt + 0.04, -0.6, [0.36, 0.26, 0.18], {});
+    rprint(R, S, run, c - bw / 2, yb, c + bw / 2, yt, -0.596, `menu.${kind}`);
+    // (a little lamp on an arm over each, under the hood's edge)
+    rbox(R, S, run, c - 0.015, yt + 0.02, -0.6, c + 0.015, yt + 0.05, -0.42, DARK, {});
+    rbox(R, S, run, c - 0.09, yt - 0.01, -0.45, c + 0.09, yt + 0.04, -0.38, DARK, {});
+    rbox(R, S, run, c - 0.08, yt - 0.015, -0.445, c + 0.08, yt - 0.01, -0.385, [1, 0.92, 0.75], { pen: 'glow' });
   }
 }
 
 // ------------------------------------------------------------------ the counter
-function serveCounter(R, fr, cd, K, kind, mark) {
+function serveCounter(R, fr, cd, K, kind, mark, KL, u0) {
   const S = R.psoup(false);
   const G = R.psoup(true);
   const y0 = R.y0;
   const top = y0 + 1.0;
   const depth = 0.62;
-  // (from the wall away from the door, to a gap for the staff before the other wall)
-  const W = R.ub - R.ua;
-  const len = Math.max(2, W - 1.3);
-  const run = fr.left ? new Run(R, R.ub - 0.12, cd, [-1, 0], [0, 1]) : new Run(R, R.ua + 0.12, cd, [1, 0], [0, 1]);
+  // (from the wall away from the door; past its end a gap for the staff)
+  const len = KL;
+  const run = fr.left ? new Run(R, u0, cd, [-1, 0], [0, 1]) : new Run(R, u0, cd, [1, 0], [0, 1]);
   rbox(R, S, run, 0, y0, -depth, len, y0 + 0.1, -0.02, DARK, { skip: ['bottom'] });
   rbox(R, S, run, 0, y0 + 0.1, -depth, len, top - 0.04, 0, K.front, { skip: ['bottom'] });
   for (let s = 0.45; s < len - 0.1; s += 0.45) rbox(R, S, run, s - 0.006, y0 + 0.14, -0.002, s + 0.006, top - 0.07, 0.004, K.front.map((c) => c * 0.75), { skip: ['back'] });
@@ -383,10 +480,11 @@ function serveCounter(R, fr, cd, K, kind, mark) {
   rbox(R, S, run, cs - 0.045, top + 0.05, -0.14, cs + 0.045, top + 0.2, -0.11, [0.12, 0.12, 0.14], {});
   rprint(R, S, run, cs - 0.04, top + 0.055, cs + 0.04, top + 0.195, -0.1095, 'ui.reader', { pen: 'screen' });
   // a tip jar
-  rcyl(R, S, run, ts + 0.62, -0.2, 0.05, top, 0.12, GLASS, { pen: 'gloss', seg: 8 });
-  // the case of what is ready
-  const c0 = ts + 0.85;
-  const c1 = Math.min(len - 1.0, c0 + 1.8);
+  const narrow = len < 3.6;
+  rcyl(R, S, run, ts + (narrow ? 0.52 : 0.62), -0.2, 0.05, top, 0.12, GLASS, { pen: 'gloss', seg: 8 });
+  // the case of what is ready (in a narrow shop closer up to the till: it is what the place is)
+  const c0 = ts + (narrow ? 0.62 : 0.85);
+  const c1 = Math.min(len - (narrow ? 0.78 : 1.0), c0 + 1.8);
   if (K.case && c1 - c0 > 0.7) foodCase(R, S, G, run, c0, c1, top, depth, K.case, kind, mark);
   // where the orders are put out: the counter's other end
   const ps = len - 0.45;
@@ -430,9 +528,18 @@ function serveCounter(R, fr, cd, K, kind, mark) {
 function foodCase(R, S, G, run, c0, c1, top, depth, what, kind, mark) {
   const h = 0.42;
   rbox(R, S, run, c0, top, -depth + 0.06, c1, top + 0.02, -0.06, [0.85, 0.85, 0.83], {});
-  rbox(R, S, run, c0, top + 0.02, -0.08, c1, top + h, -0.06, GLASS, { pen: 'gloss', dim: 0.9 });
-  rbox(R, S, run, c0, top + h, -depth + 0.06, c1, top + h + 0.02, -0.06, GLASS, { pen: 'gloss', dim: 0.9 });
-  for (const s of [c0, c1]) rbox(R, S, run, s - 0.01, top, -depth + 0.06, s + 0.01, top + h + 0.02, -0.06, DSTEEL, {});
+  // (the glass is not drawn as a pane, the way the market's fridge doors are not: a steel frame round
+  // it, and the long pale glints where the light catches it - what is in it seen through)
+  for (const s of [c0, c1]) rbox(R, S, run, s - 0.012, top, -depth + 0.06, s + 0.012, top + h + 0.02, -0.06, DSTEEL, {});
+  rbox(R, S, run, c0, top + h, -0.075, c1, top + h + 0.02, -0.055, DSTEEL, {});
+  rbox(R, S, run, c0, top + h, -depth + 0.06, c1, top + h + 0.02, -depth + 0.08, DSTEEL, {});
+  rbox(R, S, run, c0, top + 0.02, -0.075, c1, top + 0.045, -0.055, DSTEEL, {});
+  const gl = [0.9, 0.95, 1];
+  for (let g = c0 + 0.12; g < c1 - 0.1; g += 0.55) {
+    rprint(R, S, run, g, top + 0.08, g + 0.03, top + h - 0.05, -0.054, null, { pen: 'gloss', col: gl });
+    rprint(R, S, run, g + 0.07, top + 0.12, g + 0.082, top + h - 0.09, -0.054, null, { pen: 'gloss', col: gl });
+    rprintUp(R, S, run, g + 0.05, -depth + 0.12, g + 0.08, -0.1, top + h + 0.021, null, { pen: 'gloss', col: gl });
+  }
   rbox(R, S, run, c0 + 0.02, top + h - 0.02, -depth + 0.1, c1 - 0.02, top + h - 0.01, -0.12, [1, 0.96, 0.86], { pen: 'glow' });
   // (where the cook reaches into it from behind)
   const [u, d] = run.ud((c0 + c1) / 2, -depth - 0.45);
@@ -467,11 +574,15 @@ function foodCase(R, S, G, run, c0, c1, top, depth, what, kind, mark) {
     else if (what === 'gelato') {
       // the twelve tubs, two rows, each its flavour
       const FL = [[0.98, 0.72, 0.8], [0.55, 0.35, 0.22], [0.98, 0.95, 0.85], [0.6, 0.85, 0.55], [0.98, 0.8, 0.4], [0.7, 0.6, 0.9], [0.95, 0.5, 0.45], [0.4, 0.26, 0.18], [0.98, 0.9, 0.6], [0.5, 0.8, 0.85], [0.95, 0.85, 0.75], [0.85, 0.3, 0.5]];
+      // (side by side along the case, each its long way back from the glass; a little smaller when
+      // the case is short, so that all twelve are there)
+      const step = Math.min(0.185, (c1 - c0 - 0.1) / 6);
+      const sc = Math.min(1, step / 0.18);
       let i = 0;
-      for (let s = c0 + 0.12; s < c1 - 0.1 && i < 12; s += 0.18) {
-        for (const t of [-0.2, -0.44]) {
-          if (i >= 12) break;
-          put(R, { line: 'food', model: 'tub', cell: null, tint: FL[i] }, wp(R, run, s, top + 0.03, t), yaw + Math.PI / 2, { live: t > -0.3, zone, what: 'tub', kind: 'food' });
+      for (let k = 0; k < 6; k++) {
+        const s = c0 + 0.05 + step * (k + 0.5);
+        for (const t of [-0.19, -0.43]) {
+          put(R, { line: 'food', model: 'tub', cell: null, tint: FL[i] }, wp(R, run, s, top + 0.03, t * (0.6 + 0.4 * sc)), yaw, { live: t > -0.3, zone, what: 'tub', kind: 'food', scale: sc });
           i++;
         }
       }
@@ -488,12 +599,15 @@ function foodCase(R, S, G, run, c0, c1, top, depth, what, kind, mark) {
 }
 
 // ------------------------------------------------------------------ the tables
-function tables(R, fr, d0, K) {
+function tables(R, fr, d0, K, ku, cond) {
   const d1 = R.da - 0.95;
   if (d1 - d0 < 0.5) return;
   let k = 0;
-  for (let d = d1; d > d0; d -= 1.7) {
+  // (in front of the counter; past the kitchen's end, all the way back to the wall)
+  for (let d = d1; d > R.db + 0.9; d -= 1.7) {
     for (let u = R.ua + 0.95 + (k % 2) * 0.35; u < R.ub - 0.85; u += 1.75) {
+      if (d <= d0 && u > ku[0] - 0.95 && u < ku[1] + 0.95) continue;
+      if (cond && Math.abs(u - cond.u) < 1.35 && Math.abs(d - cond.d) < 1.45) continue;
       // (the way in from the door stays clear)
       if (u > R.lane[0] - 0.85 && u < R.lane[1] + 0.85 && d > R.da - 2.3) continue;
       R.table(u, d, { round: !!K.round, r: 0.36, color: K.tableCol || [0.95, 0.94, 0.9], chairs: [[1, 0], [-1, 0]], chairColor: K.chairCol });
@@ -515,9 +629,8 @@ function condiments(R, fr, cd) {
   const side = fr.left ? 1 : -1;
   const u = side > 0 ? R.ub - 0.32 : R.ua + 0.32;
   const d = Math.min(R.da - 1.6, cd + 1.2);
-  if (d < cd + 0.6) return;
+  if (d < cd + 0.6) return null;
   const run = side > 0 ? new Run(R, R.ub - 0.02, d, [0, 1], [-1, 0]) : new Run(R, R.ua + 0.02, d, [0, 1], [1, 0]);
-  void u;
   rbox(R, S, run, 0, R.y0, -0.02, 0.8, R.y0 + 0.92, 0.42, [0.36, 0.28, 0.22], { skip: ['bottom'] });
   rbox(R, S, run, -0.02, R.y0 + 0.92, -0.02, 0.82, R.y0 + 0.95, 0.44, [0.9, 0.88, 0.84], {});
   rbox(R, S, run, 0.05, R.y0 + 0.95, 0.05, 0.25, R.y0 + 1.15, 0.2, [0.75, 0.77, 0.8], {});
@@ -528,4 +641,5 @@ function condiments(R, fr, cd) {
   rbox(R, S, run, 0.9, R.y0, 0.02, 1.25, R.y0 + 0.9, 0.38, [0.3, 0.3, 0.32], { skip: ['bottom'] });
   rbox(R, S, run, 0.95, R.y0 + 0.75, 0.381, 1.2, R.y0 + 0.82, 0.383, DARK, {});
   run.solid(0, -0.02, 1.25, 0.44, R.y0 + 0.95);
+  return { u: side > 0 ? R.ub - 0.25 : R.ua + 0.25, d: d + 0.4 };
 }

@@ -1275,6 +1275,9 @@ class OpenShop {
         this.addVisitor(null, { mode: seat ? 'seat' : spot && spot.lift ? 'lift' : spot ? 'browse' : null, spot, already: true, look: w.look, from: { x: w.x, z: w.z, yaw: w.yaw } });
       }
       this.crowd = null;
+      // (ROADMAP 16.3: a shop of the new kind has its second pair of hands - the cook, the one who
+      // fills the shelves - whoever was in it already)
+      if (this.life2 && R.pay && R.staff && R.staff.length && (!touch || R.big)) this.spawnStaff();
       return;
     }
     this.crowd = null;

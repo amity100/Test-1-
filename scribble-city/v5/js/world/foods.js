@@ -242,12 +242,14 @@ addMaker('croissant', (low) => {
   m.size = [0.2, 0.05, 0.2];
   const y = plate(m, 0.09, low ? 9 : 14, WHITE, 0);
   const p = m.part('plain', CRUST, 1);
+  // (a real crescent, its rolled layers a row of ridges along it)
   const pts = [];
-  for (let i = 0; i <= 8; i++) {
-    const a = Math.PI * (0.15 + (0.7 * i) / 8);
-    pts.push([Math.cos(a) * 0.06, y + 0.018, Math.sin(a) * 0.035 - 0.015]);
+  const n = low ? 12 : 24;
+  for (let i = 0; i <= n; i++) {
+    const a = Math.PI * (0.08 + (0.84 * i) / n);
+    pts.push([Math.cos(a) * 0.064, y + 0.016, Math.sin(a) * 0.05 - 0.026]);
   }
-  tube(p, pts, (t) => 0.008 + Math.sin(t * Math.PI) * 0.016, low ? 5 : 7);
+  tube(p, pts, (t) => (0.006 + Math.sin(t * Math.PI) * 0.018) * (low ? 1 : 0.88 + 0.16 * Math.abs(Math.cos(t * Math.PI * 4.5))), low ? 5 : 8);
   return m;
 });
 addMaker('muffin', (low) => {
@@ -293,7 +295,7 @@ addMaker('donut', (low) => {
   torus(m.part('plain', CRUST, 1), 0.033, 0.017, y + 0.016, low ? 5 : 7, low ? 10 : 14);
   // the icing (tint), a ring over its top; the sprinkles
   const ic = m.part('gloss', null, 2);
-  lathe(ic, [[0.018, y + 0.026], [0.03, y + 0.033], [0.042, y + 0.032], [0.05, y + 0.024]], low ? 10 : 14);
+  lathe(ic, [[0.051, y + 0.026], [0.043, y + 0.035], [0.03, y + 0.0365], [0.017, y + 0.028]], low ? 10 : 14);
   const sp = m.part('plain', 'cap', 3);
   for (let i = 0; i < (low ? 5 : 10); i++) {
     const a = i * 1.3;
@@ -543,7 +545,10 @@ addMaker('tacos', (low) => {
 addMaker('sushi', (low) => {
   const m = new Model();
   m.size = [0.26, 0.05, 0.12];
-  box(m.part('plain', [0.1, 0.1, 0.11], 0), -0.13, 0, -0.06, 0.13, 0.012, 0.06);
+  // (on a light wooden board on its two feet, so the rolls show against it)
+  const wd = m.part('plain', [0.84, 0.68, 0.46], 0);
+  box(wd, -0.13, 0.006, -0.06, 0.13, 0.016, 0.06);
+  for (const x of [-0.1, 0.1]) box(wd, x - 0.012, 0, -0.055, x + 0.012, 0.006, 0.055, { skip: ['ny'] });
   const seg = low ? 7 : 10;
   const no = m.part('plain', NORI, 1);
   const ri = m.part('plain', RICE, 2);
@@ -551,19 +556,19 @@ addMaker('sushi', (low) => {
   for (let i = 0; i < 4; i++) {
     const x = -0.1 + i * 0.034;
     const b0 = no.n;
-    lathe(no, [[0.015, 0.012], [0.015, 0.034]], seg, { flat: true });
+    lathe(no, [[0.015, 0.016], [0.015, 0.04]], seg, { flat: true });
     const b1 = ri.n;
-    disc(ri, 0.013, 0.034, seg, true);
+    disc(ri, 0.013, 0.04, seg, true);
     const b2 = fi.n;
-    disc(fi, 0.006, 0.0345, seg, true);
+    disc(fi, 0.006, 0.0405, seg, true);
     for (const [p, b] of [[no, b0], [ri, b1], [fi, b2]]) for (let j = b; j < p.P.length / 3; j++) p.P[j * 3] += x;
   }
   for (let i = 0; i < 2; i++) {
     const x = 0.04 + i * 0.045;
-    box(ri, x - 0.018, 0.012, -0.012, x + 0.018, 0.028, 0.012);
-    box(m.part('plain', SALMON, 4), x - 0.021, 0.028, -0.014, x + 0.021, 0.034, 0.014, { skip: ['ny'] });
+    box(ri, x - 0.018, 0.016, -0.012, x + 0.018, 0.032, 0.012);
+    box(m.part('plain', SALMON, 4), x - 0.021, 0.032, -0.014, x + 0.021, 0.038, 0.014, { skip: ['ny'] });
   }
-  ball(m.part('plain', [0.98, 0.78, 0.72], 5), 0.11, 0.016, 0.03, 0.012, 0.5, 3, 6);
+  ball(m.part('plain', [0.98, 0.78, 0.72], 5), 0.11, 0.02, 0.03, 0.012, 0.5, 3, 6);
   return m;
 });
 // a bowl of noodles: the bowl (tint), the broth, the noodles heaped in it, the egg, the chopsticks
