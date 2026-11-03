@@ -117,6 +117,18 @@ const EXCUSE = ['Excuse me.', 'Pardon me.', 'Sorry, can I just...', 'Coming thro
 const EXCUSE_AGAIN = ['Seriously?', 'Do you mind?', 'Okay... going round.', 'Move, please!'];
 // a look at you going by: for somebody odd (running, a pencil the size of an arm), a word too
 const GLANCE_ODD = ['Is that... a pencil?', 'Huh.', 'What are they doing?', 'Okay then.', 'Nice outfit.'];
+// (intelligence round) your hello (game/voices.js hello), and what you get back
+const HERO_HI = ['Hey there!', 'Hi!', 'Hello!', 'How is it going?', 'Nice day, huh?'];
+const HI_WARM = ['[joy] Hi! Lovely to meet you.', '[joy] Hey! Beautiful day, right?', '[joy] Hello there!', '[joy] Hi! You are new around here?', '[joy] Hey, how are you doing?'];
+const HI_PLAIN = ['Hey.', 'Hi.', 'Hello.', 'Uh, hi.', 'Good, thanks. You?'];
+const HI_COLD = ['[angry] Do I know you?', '[angry] Not interested.', '[angry] I do not have any change.', '[angry] Whatever you are selling - no.'];
+const HI_TIMID = ['[surprised] Oh! Uh... hi.', '[surprised] H-hello.', '[surprised] Sorry - do I know you?'];
+const HI_BUSY = ['Hi - sorry, I am late for work!', 'Hey! Cannot stop, sorry!', 'Morning! Gotta run.'];
+const HI_AGAIN = ['[joy] Hey, you again!', '[joy] Hi again! Twice in one day.', '[joy] Oh, hey! Good to see you.'];
+const HI_FAN = ['[joy] Oh my god, it is you! The artist!', '[joy] Can I get a picture with you?', '[joy] I love your drawings!'];
+const HI_FEARED = ['[scared] Please... I do not want any trouble.', '[scared] Just leave me alone, okay?', '[scared] I - I have to go.'];
+const HI_BAD_BOLD = ['[angry] Hi? After what I saw you do?', '[angry] Get away from me.', '[angry] You have some nerve.'];
+const HI_BAD_TIMID = ['[scared] Please do not hurt me!', '[scared] I did not see anything!', '[scared] Stay away!'];
 
 // (GTA IV pass) a group standing on the sidewalk, talking - each line by the next of them in turn,
 // by who they are (game/streetsocial.js); and the laugh after
@@ -711,6 +723,103 @@ export class Voices {
       this.linger = close;
       this.lingerT = 0;
     }
+  }
+
+  // (intelligence round) Somebody right in front of you, near enough to speak to - standing, walking,
+  // sitting, at work - and nobody else's conversation; not somebody running for their life
+  helloTarget() {
+    const game = this.game;
+    const pl = game.player;
+    if (!pl || pl.mode !== 'foot' || pl.inVehicle || game.classic) return null;
+    const now = game.time;
+    if (this.helloCache && this.helloCache.t === now) return this.helloCache.c;
+    const fwd = game.camera.getWorldDirection(_f);
+    let best = null;
+    let bs = 0;
+    for (const c of game.civilians.list) {
+      if (!c.alive || c.dying >= 0 || c.inside || c.headless || c.panicT > 0 || c.convo || c.downT > 0 || c.lieT > 0) continue;
+      const dx = c.pos.x - pl.pos.x;
+      const dz = c.pos.z - pl.pos.z;
+      if (dx > 2.6 || dx < -2.6 || dz > 2.6 || dz < -2.6) continue;
+      const d = Math.hypot(dx, dz);
+      if (d > 2.4 || d < 0.3) continue;
+      const a = (dx * fwd.x + dz * fwd.z) / d;
+      if (a < 0.55) continue;
+      const sc = a - d * 0.2;
+      if (sc > bs) {
+        bs = sc;
+        best = c;
+      }
+    }
+    this.helloCache = { t: now, c: best };
+    return best;
+  }
+
+  // (intelligence round) You say hello. They stop if they were walking, turn to you, and answer as
+  // they are: by their temper, by what they think of you (what they saw you do, how famous or how
+  // feared you are), by where they are going (game/days.js), and by whether they have met you before
+  // - a hello they remember: warmer to you after a friendly word, and the next time "You again!"
+  hello() {
+    const c = this.helloTarget();
+    if (!c) return false;
+    const game = this.game;
+    const now = game.time;
+    if ((this.helloT || 0) > now) return true;
+    this.helloT = now + 1.2;
+    const pl = game.player;
+    const M = game.minds;
+    const m = M ? M.of(c) : null;
+    // (yours, in your bubble)
+    if (game.bubbles && pl.fig) game.bubbles.say(pl, pick(HERO_HI), 'plain', 1.6);
+    // (they stop and turn to you)
+    if (!c.scripted && !c.ctrl) c.stopT = Math.max(c.stopT || 0, 2.4);
+    c.faceYaw = Math.atan2(pl.pos.x - c.pos.x, pl.pos.z - c.pos.z);
+    if (pl.fig && pl.fig.j) {
+      c.glanceAt = pl.fig.j.headC;
+      c.glanceUntil = now + 2.6;
+    }
+    let line;
+    let feel = null;
+    const met = m && (m.metN || 0) > 0;
+    if (m && m.saw && m.saw.you && now - m.sawT < 240 && m.saw.what === 'bad') {
+      line = pick(m.bold > 0.55 ? HI_BAD_BOLD : HI_BAD_TIMID);
+      feel = m.bold > 0.55 ? 'angry' : 'scared';
+    } else if (M && M.dread > 1.2 && m && m.bold < 0.5) {
+      line = pick(HI_FEARED);
+      feel = 'scared';
+    } else if (M && M.fame > 0.8 && m && m.curious > 0.35) {
+      line = pick(HI_FAN);
+      feel = 'joy';
+    } else if (met && m.you > 0.1) {
+      line = pick(HI_AGAIN);
+      feel = 'joy';
+    } else if (c.day && c.day.why === 'work' && c.day.steps[c.day.i] && Math.random() < 0.6) {
+      line = pick(HI_BUSY);
+    } else if (m && m.temper > 0.72 && m.warm < 0.4) {
+      line = pick(HI_COLD);
+      feel = 'angry';
+    } else if (m && m.bold < 0.25) {
+      line = pick(HI_TIMID);
+      feel = 'surprised';
+    } else if (m && m.warm > 0.55) {
+      line = pick(HI_WARM);
+      feel = 'joy';
+      if (c.day && Math.random() < 0.5 && game.days) line += ' ' + game.days.lineFor(c);
+    } else line = pick(HI_PLAIN);
+    if (feel) c.fig.feel = { mood: feel, until: now + 2.6 };
+    // (remembered: a friendly word makes a friend, a little)
+    if (m) {
+      m.metN = (m.metN || 0) + 1;
+      if (!feel || feel === 'joy' || feel === 'surprised') m.you = Math.min(1, m.you + 0.15);
+      m.nextT = now + 8;
+    }
+    const tone = feel === 'angry' ? 'alarm' : 'plain';
+    // (a beat to take it in, game time: game/game.js inkwell.after)
+    game.inkwell.after(0.65, () => {
+      if (c.alive && !c.gone && !(c.panicT > 0)) this.sayToYou(c, line, tone);
+    });
+    this.stats.hellos = (this.stats.hellos || 0) + 1;
+    return true;
   }
 
   aimAt(dt) {

@@ -1867,7 +1867,11 @@ export class Game {
 
   tryEnter() {
     const t = this.enterTarget();
-    if (!t) return;
+    // (intelligence round) nothing to get into: somebody right in front of you - a hello
+    if (!t) {
+      if (this.voices && this.voices.hello) this.voices.hello();
+      return;
+    }
     if (t.kind === 'vehicle') this.enterVehicle(t.target);
     else if (t.kind === 'carjack') this.carjack(t.target);
     else this.stealParked(t.target);
@@ -2307,6 +2311,10 @@ export class Game {
         // (one drawn freehand: by its own name, ROADMAP 11.6)
         const on = et.kind === 'vehicle' && et.target.drawn ? `ה${et.target.label}` : et.kind === 'vehicle' && et.target.model && BLUEPRINTS[et.target.model] ? BLUEPRINTS[et.target.model].the : null;
         prompt = touch ? '' : on ? `E — לעלות על ${on}` : `E — ${verb}${et.label}`;
+      } else if (this.voices && this.voices.helloTarget && this.voices.helloTarget()) {
+        // (intelligence round) somebody right in front of you: E to say hello (game/voices.js hello)
+        enter = true;
+        prompt = touch ? 'להגיד שלום' : 'E — להגיד שלום';
       } else {
         const b = this.photoTarget();
         if (b) {

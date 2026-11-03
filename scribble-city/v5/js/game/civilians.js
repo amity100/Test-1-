@@ -583,7 +583,7 @@ class Civilian {
   // of the sidewalk with nowhere at all to go turns round
   progress(ox, oz, speed, far, dt) {
     // (only while on the way somewhere - not on their mark, not sitting down, not across a room)
-    if (speed > 0.5 && far > 1.2 && !this.noCollide && !this.scripted && !(this.fig.sit > 0.3)) {
+    if (speed > 0.5 && far > 0.5 && !this.noCollide && !this.scripted && !(this.fig.sit > 0.3)) {
       this.progWant += speed * dt;
       this.progGot += Math.hypot(this.pos.x - ox, this.pos.z - oz);
     }
@@ -597,6 +597,15 @@ class Civilian {
     if (this.stuckN < 2) return;
     this.stuckN = 0;
     this.mgr.stats.unstuck++;
+    // (the corner they are making for has something standing on it - a pole, a hydrant: near enough
+    // is there; on round the next one)
+    if (far < 2 && !this.ctrl && this.loop && !this.via) {
+      this.nextCorner();
+      this.crossOK = false;
+      this.crossNode = undefined;
+      this.hurry = false;
+      return;
+    }
     // (what it was, for the tests: the last few)
     const log = this.mgr.stats.stuckLog || (this.mgr.stats.stuckLog = []);
     log.push({ ctrl: !!this.ctrl, scripted: !!this.scripted, far: +far.toFixed(1), x: +this.pos.x.toFixed(1), z: +this.pos.z.toFixed(1), role: this.role || null, cross: !!this.crossing, buddy: !!(this.buddyOf || this.buddy) });
