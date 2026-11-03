@@ -1436,7 +1436,9 @@ export class PersonRenderer {
     if (PORTRAIT_MODE === 'off' || !PORTRAIT_STREET || this.touch) return;
     // (Sal's first - he comes over at the start - then every kind of the city's people, a little a frame)
     const ks = [2];
-    for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k)) ks.push(k);
+    // (characters round 2: the people at work theirs when they are first near - not all of them made
+    // ahead: a few dozen more faces in the memory for nothing)
+    for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k) && !FOLK[k].role) ks.push(k);
     for (const k of ks) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
   }
 
