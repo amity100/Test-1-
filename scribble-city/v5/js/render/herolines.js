@@ -357,7 +357,7 @@ function head() {
 // the city's people's neck its own surface, the head's edge carried on down; the hero's his rows)
 function neck() {
   const own = KIT.neckSurf;
-  const P = lofted('neck', KIT.rows.neck, { seed: 61, ya: -0.075, yb: own ? -0.002 : 0.03, surf: own || null, hatch: 0, cross: 36, crossThr: 0.35, around: 12, bands: 2, rim: 8, ink: SEPIA, dark: SEPIA, down: true, lift: 0.0022 });
+  const P = lofted('neck', KIT.rows.neck, { seed: 61, ya: -0.026, yb: own ? -0.002 : 0.03, surf: own || null, hatch: 0, cross: 36, crossThr: 0.35, around: 12, bands: 2, rim: 8, ink: SEPIA, dark: SEPIA, down: true, lift: 0.0022 });
   return P;
 }
 

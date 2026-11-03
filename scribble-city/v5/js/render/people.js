@@ -307,29 +307,6 @@ const PORTRAIT_STREET = true;
 const PORTRAIT_PHONE = 3;
 const PORTRAIT_PHONE_KEEP = 10;
 const _mP = new THREE.Matrix4();
-// (characters round 2) the collar's stand round the neck (render/heroshapes.js heroCollarGeo: rs)
-const COLLAR_R = 0.068;
-// a neck's base: its half width and its depth behind, over its lowest sixth (render/folkshapes.js
-// neckOf: in its head's measure)
-function neckBase(g) {
-  if (!g || !g.attributes || !g.attributes.position) return { neckW: 0.068, neckB: 0.062 };
-  const a = g.attributes.position.array;
-  let y0 = Infinity;
-  let y1 = -Infinity;
-  for (let i = 1; i < a.length; i += 3) {
-    if (a[i] < y0) y0 = a[i];
-    if (a[i] > y1) y1 = a[i];
-  }
-  const top = y0 + (y1 - y0) / 6;
-  let w = 0;
-  let b = 0;
-  for (let i = 0; i < a.length; i += 3) {
-    if (a[i + 1] > top) continue;
-    w = Math.max(w, Math.abs(a[i]));
-    b = Math.max(b, -a[i + 2]);
-  }
-  return { neckW: w || 0.068, neckB: b || 0.062 };
-}
 // (a frame framed by a body's right, up and forward is a mirror's: turned round as DrawClass.push
 // turns the people's parts)
 function unmirror(m) {
@@ -923,7 +900,7 @@ export class PersonRenderer {
       heroNeck: P(HERO.heroNeckGeo(), M.heroFace, 4),
       heroEarR: P(HERO.heroEarGeo(1), M.skin, 16),
       heroEarL: P(HERO.heroEarGeo(-1), M.skin, 16),
-      heroCollar: P(HERO.heroCollarGeo(), M.heroJacket, 4),
+      heroBand: P(HERO.heroBandGeo(), M.heroJacket, 4),
       heroTorso: P(HERO.heroTorsoGeo(), M.heroJacket, 8),
       heroZip: P(HERO.heroZipGeo(), M.heroJacket, 4),
       heroTee: P(HERO.heroTeeGeo(), M.heroPants, 4),
@@ -1014,7 +991,8 @@ export class PersonRenderer {
     // are on: the sun's view leaves them out; and in the wet street's mirror, at half the pixels
     // and smeared, they are not there either)
     for (const k of ['eye', 'eyeWhite', 'brow', 'nose', 'mouth', 'ear', 'heroEarR', 'heroEarL', 'sole', 'pocket']) this.p[k].flags = NO_MIRROR | NO_SUN;
-    for (const k of Object.keys(this.p)) if (k === 'neck' || k === 'heroNeck' || /^folk\d+_neck$/.test(k)) this.p[k].flags |= NECK_FLAG;
+    // (and the jacket's cloth round a neck's foot: bent and turned with it - render/heroshapes.js neckbandGeo)
+    for (const k of Object.keys(this.p)) if (k === 'neck' || k === 'heroNeck' || k === 'heroBand' || /^folk\d+_(neck|band)$/.test(k)) this.p[k].flags |= NECK_FLAG;
     // (v5, ROADMAP 13.1) the hero's lines, over his body (render/herolines.js)
     this.heroLines = new HeroLines(touch);
     // (their drawings turned over once a frame, however many of one of them there are: end counts)
@@ -1033,8 +1011,7 @@ export class PersonRenderer {
     const pens = this.folkPens;
     const body = folkBody(k);
     const G = body.parts;
-    // (the jacket's collar and the shoes: the hero's shapes, in their own pictures)
-    G.collar = HERO.heroCollarGeo();
+    // (the shoes: the hero's shape, in their own pictures)
     G.shoe = HERO.heroShoeGeo();
     const PEN = { head: 'face', neck: 'face', hair: 'hair', locks: 'hair', fall: 'hair', bun: 'hair', tee: 'bottom', pelvis: 'bottom', thigh: 'bottom', shin: 'bottom', skirt: 'bottom', shoe: 'shoes' };
     const TWO = new Set(['upper', 'fore', 'thigh', 'shin', 'shoe']);
@@ -1084,12 +1061,6 @@ export class PersonRenderer {
       skin: linC(SKINS[spec.skin].rgb.map((v, i) => v * [0.92, 0.84, 0.8][i])),
       // (a fair face's drawing a little deeper in the hall's bright light)
       face: { fair: [0.9, 0.86, 0.84], light: [0.94, 0.91, 0.89] }[spec.skin] || PAPER_W,
-      // (the collar of a jacket worn open: a blazer's lies low under its lapels, a bomber's is a ribbed
-      // band, a denim jacket's a shirt's)
-      collar: { blazer: 0.5, bomber: 0.38, denim: 0.62 }[spec.top.kind] || 0.6,
-      // (characters round 2: the neck where it goes down into the collar - its half width and its
-      // depth behind - so that the collar stands round it, never inside it: drawFolk)
-      ...neckBase(body.parts.neck),
       sole: linC(spec.shoes.sole),
       watch: spec.acc.watch ? linC(hexRGB(spec.acc.watch)) : null,
       earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
@@ -2017,28 +1988,19 @@ export class PersonRenderer {
     _hL.set(_hx.x + _hz.x * 0.75, 0.65, _hx.z + _hz.z * 0.75).normalize().multiplyScalar(dark).addScaledVector(sd, 1 - dark).normalize();
     _hR.set(-_hx.x * 0.25 - _hz.x, 0.15, -_hx.z * 0.25 - _hz.z).normalize();
     const HL = this.heroLines;
-    // ---- the jacket open over the shirt; its edges, the flaps of its pockets, its collar
+    // ---- the jacket open over the shirt; its edges, the flaps of its pockets; its cloth round the neck
     let sy = 1;
+    let tid = 0;
     if (P.torso > 0.5) {
       sy = Math.max(0.3, _b.subVectors(j.neck, j.hip).length()) / 0.5;
       framed(j.hip, rgt, ax, fwd, bw, sy, bw, _mH);
-      p.heroTorso.push(_mH, jC, own, id(), ind);
+      // (its part's id kept: the jacket's cloth round his neck is the same part - heroBand below)
+      tid = id();
+      p.heroTorso.push(_mH, jC, own, tid, ind);
       HL.set('torso', 'torso', _mH);
       p.heroZip.push(_mH, jC, own, id(), ind);
       p.heroWelt.push(_mH, jC, own, id(), ind);
       p.heroTee.push(_mH, white, own, id(), ind);
-      _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
-      // (characters round 2: round his neck, a centimetre clear of it, not inside it - render/
-      // heroshapes.js heroNeckGeo, its base 0.078 wide each side, 0.06 behind, in his head's measure
-      // and his neck's girth - and a little lower, its fold on the leather and not up under his skull)
-      {
-        const gC = (0.98 * 1.16 * Math.max(1, bulk * 0.92)) / fig.headScale;
-        const hsC = fig.headScale * S * gC;
-        const cx = Math.max(k * 1.03, (0.078 * hsC + 0.01 * S) / COLLAR_R);
-        const cz = Math.max(k * 1.03, (0.06 * hsC + 0.01 * S) / (COLLAR_R * 0.94));
-        _c.addScaledVector(ax, -0.012 * S);
-        p.heroCollar.push(framed(_c, rgt, ax, fwd, cx, k * 0.82, cz), jC, own, id(), ind);
-      }
       if (top.armor) {
         // (the vest of notebook covers, over the jacket)
         _c.copy(j.hip).addScaledVector(ax, 0.07 * S);
@@ -2052,6 +2014,10 @@ export class PersonRenderer {
       const gN = (0.98 * 1.16 * Math.max(1, bulk * 0.92)) / fig.headScale;
       framed(fig.neckO, fig.neckR, fig.neckU, fig.neckF, hs * gN, hs, hs * gN, _mH);
       p.heroNeck.push(_mH, white, own, fig.headId, ind, fig.neckD);
+      // (characters round 3) no collar of its own: the jacket's leather carried on up round the
+      // neck's foot and turned in onto it - made on his neck, bent and turned with it, the jacket's
+      // part (render/heroshapes.js heroBandGeo)
+      p.heroBand.push(_mH, jC, own, tid, ind, fig.neckD);
       HL.set('neck', 'neck', _mH, null, null, false, fig.neckD);
       // his chain: round the neck and down onto the shirt, link by link
       const cid = (seed * 3.1 + 0.7) % 1;
@@ -2215,20 +2181,13 @@ export class PersonRenderer {
     if (P.torso > 0.5) {
       const sy = Math.max(0.3, _b.subVectors(j.neck, j.hip).length()) / 0.5;
       framed(j.hip, rgt, ax, fwd, bw, sy, bw, _mH);
-      q.torso.push(_mH, white, own, id(), ind);
+      // (its part's id kept: the jacket's cloth round the neck is the same part - q.band below)
+      const tid = id();
+      q.torso.push(_mH, white, own, tid, ind);
       HL.set('torso', 'torso', _mH);
       q.zip.push(_mH, white, own, id(), ind);
       q.tee.push(_mH, white, own, id(), ind);
       if (q.welt) q.welt.push(_mH, white, own, id(), ind);
-      _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
-      const ck = fem ? 0.92 : 1;
-      // (characters round 2) round their own neck, a centimetre clear of it - a heavy man's neck is a
-      // third again as thick as a slight woman's: a collar of one size stood inside the thick ones, its
-      // stand hidden in the neck and its fold a band floating round it, sunk into the back
-      const hsC = fig.headScale * S;
-      const cx = Math.max(k * 1.04 * ck, (F.neckW * hsC + 0.01 * S) / COLLAR_R);
-      const cz = Math.max(k * 1.04 * ck, (F.neckB * hsC + 0.01 * S) / (COLLAR_R * 0.94));
-      q.collar.push(framed(_c, rgt, ax, fwd, cx, k * F.collar, cz), white, own, id(), ind);
       // (characters round) the neck: the head's own edge carried on down into the collar
       // (render/folkshapes.js neckOf), twisted and bent as the head is turned - the rig's (game/
       // doodle.js placeHead, render/neckbend.js); its lines with it
@@ -2243,6 +2202,10 @@ export class PersonRenderer {
         fig.__neckP = portN;
       } else fig.__neckP = null;
       if (!(portN && portN.neckN) || portN.fade < 0.999) q.neck.push(_mH, F.face, own, fig.headId, ind, fig.neckD);
+      // (characters round 3) no collar of its own: the jacket's cloth carried on up round the neck's
+      // foot and turned in onto it - made on their own neck, bent and turned with it, the jacket's part
+      // (render/heroshapes.js neckbandGeo); round a neck the portrait draws too
+      q.band.push(_mH, white, own, tid, ind, fig.neckD);
       HL.set('neck', 'neck', _mH, null, null, false, fig.neckD);
     }
     // ---- the seat, and a dress's skirt from the waist over the thighs

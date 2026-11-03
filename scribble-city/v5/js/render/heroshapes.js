@@ -619,71 +619,107 @@ function faceMap(g, dy = 0) {
   uv.needsUpdate = true;
 }
 
-// (v5, ROADMAP 13.1) the leather jacket's collar: a stand round the neck, folded over and down, its
-// points spread out over the chest; open at the throat. Both its sides drawn (it is seen from
-// inside where it opens). In the collar's frame: the neck's base at y 0, z ahead
-export function heroCollarGeo() {
+// (characters round 3) No collar of its own: the jacket's own cloth carried on up from the shoulders
+// round the neck's foot, a few millimetres off it, and turned in onto it at the top - drawn in the
+// jacket's pen, colour and part (render/people.js), one with it. Made on the neck itself, in the
+// neck's frame (render/neckbend.js: bent and turned with it), so it fits every neck - a slender one,
+// a thick one, a neck set back on its shoulders. surf(y, t, lift, out): a point on the neck at its
+// y and the angle t round it (0 ahead), lifted off it along its normal. From ya (deep in the jacket)
+// up to yb (its edge, in the neck's measure: the jacket's top is about -0.048 of it); its picture
+// the jacket's own, at the top of its body (JK.torso), the seam at the back as the jacket's
+export function neckbandGeo(surf, ya = -0.096, yb = -0.024, gap = 0.006) {
+  const COLS = 32;
+  const prof = [];
+  const N = 8;
+  // (its edge rounded over onto the neck, a little inside it at the last)
+  const r = 0.005;
+  for (let i = 0; i <= N; i++) prof.push([ya + (yb - r - ya) * (i / N), gap]);
+  for (let i = 1; i <= 4; i++) {
+    const a = (i / 4) * (Math.PI / 2);
+    prof.push([yb - r + Math.sin(a) * r, gap - (gap + 0.0015) * (1 - Math.cos(a))]);
+  }
   const pos = [];
   const uv = [];
   const idx = [];
-  const COLS = 26;
-  const ROWS = 9;
-  const open = 0.42;
-  const vert = (u, v, out) => {
-    // u from one point round the back to the other; v from the stand's foot up, over the fold,
-    // down to the fall's edge
-    const phi = open + u * (Math.PI * 2 - 2 * open);
-    const tip = Math.max(0, 1 - Math.min(u, 1 - u) / 0.16);
-    const sp = Math.sin(phi);
-    const cp = Math.cos(phi);
-    const yf = 0.085 + 0.012 * Math.abs(cp) * (cp < 0 ? 1 : 0) - 0.024 * tip;
-    const rs = 0.068;
-    let r;
-    let y;
-    if (v < 0.42) {
-      const t = v / 0.42;
-      r = rs - 0.002 * t;
-      y = -0.012 + (yf + 0.012) * t;
-    } else {
-      const t = (v - 0.42) / 0.58;
-      const drop = 0.042 + 0.06 * tip * tip;
-      r = rs + 0.004 + (0.016 + 0.05 * tip) * t;
-      y = yf - drop * t * (0.85 + 0.15 * t);
-    }
-    // (the front points lie forward on the chest)
-    out[0] = sp * r;
-    out[1] = y;
-    out[2] = cp * r * 0.94 + (cp > 0 ? 0.012 * tip * (v > 0.42 ? (v - 0.42) / 0.58 : 0) : 0);
-    return out;
-  };
   const q = [0, 0, 0];
-  for (const side of [1, -1]) {
-    const base = pos.length / 3;
-    for (let r = 0; r <= ROWS; r++) {
-      for (let i = 0; i <= COLS; i++) {
-        const u = i / COLS;
-        const v = r / ROWS;
-        vert(u, v, q);
-        // (the inner face a little inside the outer)
-        const k = side > 0 ? 1 : 1 - 0.035;
-        pos.push(q[0] * k, q[1], q[2] * k);
-        uv.push(u, v);
-      }
-    }
-    for (let r = 0; r < ROWS; r++) {
-      for (let i = 0; i < COLS; i++) {
-        const a = base + r * (COLS + 1) + i;
-        const b = a + 1;
-        const c = a + COLS + 1;
-        const d = c + 1;
-        if (side > 0) idx.push(a, c, b, b, c, d);
-        else idx.push(a, b, c, b, d, c);
-      }
+  const R = prof.length;
+  for (let j = 0; j < R; j++) {
+    const [y, lift] = prof[j];
+    for (let i = 0; i <= COLS; i++) {
+      surf(y, Math.PI + (i / COLS) * Math.PI * 2, lift, q);
+      pos.push(q[0], q[1], q[2]);
+      uv.push(i / COLS, 0.975 + 0.025 * (j / (R - 1)));
     }
   }
-  const g = make(pos, uv, idx);
-  g.computeVertexNormals();
-  return region(g, JK.collar);
+  for (let j = 0; j < R - 1; j++) {
+    for (let i = 0; i < COLS; i++) {
+      const a = j * (COLS + 1) + i;
+      idx.push(a, a + COLS + 1, a + 1, a + 1, a + COLS + 1, a + COLS + 2);
+    }
+  }
+  // (its foot closed, deep in the jacket)
+  const pole = pos.length / 3;
+  let mx = 0;
+  let mz = 0;
+  for (let i = 0; i < COLS; i++) {
+    mx += pos[i * 3];
+    mz += pos[i * 3 + 2];
+  }
+  pos.push(mx / COLS, ya, mz / COLS);
+  uv.push(0.5, 0.975);
+  for (let i = 0; i < COLS; i++) idx.push(pole, i + 1, i);
+  const seams = [];
+  for (let j = 0; j < R; j++) seams.push([j * (COLS + 1), j * (COLS + 1) + COLS]);
+  // (inside: the neck's own middle at that height)
+  const mid = (x, y, z, out) => {
+    surf(y, 0, 0, q);
+    const zf = q[2];
+    surf(y, Math.PI, 0, q);
+    out[0] = 0;
+    out[1] = y;
+    out[2] = (zf + q[2]) / 2;
+    return out;
+  };
+  return region(finish(make(pos, uv, idx), mid, seams), JK.torso);
+}
+
+// (characters round 3) the hero's neck as a surface (its rows, HERO_NECK_ROWS: neckbandGeo's surf)
+export function heroNeckSurf(y, t, lift, out) {
+  const R = HERO_NECK_ROWS;
+  let a = R[0];
+  let b = R[R.length - 1];
+  for (let i = 0; i < R.length - 1; i++) {
+    if ((y - R[i][0]) * (y - R[i + 1][0]) <= 0) {
+      a = R[i];
+      b = R[i + 1];
+      break;
+    }
+  }
+  const s = b[0] === a[0] ? 0 : Math.max(0, Math.min(1, (y - a[0]) / (b[0] - a[0])));
+  const w = a[1] + (b[1] - a[1]) * s;
+  const df = a[2] + (b[2] - a[2]) * s;
+  const db = a[3] + (b[3] - a[3]) * s;
+  const z = (a[4] || 0) + ((b[4] || 0) - (a[4] || 0)) * s;
+  const sn = Math.sin(t);
+  const c = Math.cos(t);
+  const d = c >= 0 ? df : db;
+  // (an ellipse: its point at the angle t, and its normal there)
+  const x = w * sn;
+  const zz = d * c;
+  let nx = sn / w;
+  let nz = c / d;
+  const L = Math.hypot(nx, nz) || 1;
+  nx /= L;
+  nz /= L;
+  out[0] = x + nx * lift;
+  out[1] = y;
+  out[2] = zz + z + nz * lift;
+  return out;
+}
+
+// the hero's: round his neck (his jacket's leather, up round its foot)
+export function heroBandGeo() {
+  return neckbandGeo(heroNeckSurf);
 }
 
 // ------------------------------------------------------------------ the jacket and what is under it

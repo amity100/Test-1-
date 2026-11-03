@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FACE, JK, PT } from './heroink.js';
-import { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, section, TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS } from './heroshapes.js';
+import { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, section, neckbandGeo, TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS } from './heroshapes.js';
 import { FOLK } from './folkspec.js';
 import { HEAD, MORPHS } from './folkheads.js';
 import { NECK_J, HEAD_DROP } from './neckbend.js';
@@ -1115,6 +1115,9 @@ export function folkBody(k) {
   // closed under the chin down to the ring, below the mouth's floor
   const NK = neckOf(H, parts.head.attributes.normal.array, spec);
   parts.neck = NK.geo;
+  // (characters round 3) the jacket's own cloth round the neck's foot, made on the neck (no collar of
+  // its own: render/heroshapes.js neckbandGeo)
+  parts.band = neckbandGeo((y, t, lift, out) => NK.surf(null, y, t, lift, out));
   parts.torso = region(loft(T, 32, false, true), JK.torso);
   // (the jacket worn open: its front edges proud of the body, widening into the lapels - a blazer's
   // open in a V from its button at the waist up to the collarbones, its lapels laid back either side)
