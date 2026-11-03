@@ -1503,7 +1503,7 @@ export class Game {
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !(this.facelab && this.facelab.interact()) && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !(this.facelab && this.facelab.interact()) && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !(this.crowds && this.crowds.social && this.crowds.social.interact && this.crowds.social.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -2282,6 +2282,11 @@ export class Game {
       enter = true;
       const ft = this.friend.target();
       prompt = touch ? ft.label.replace('E — ', '') : ft.label;
+    } else if (p.mode === 'foot' && this.crowds && this.crowds.social && this.crowds.social.target && this.crowds.social.target()) {
+      // (intelligence round) a coin for the street musician (game/streetsocial.js)
+      enter = true;
+      const bt = this.crowds.social.target();
+      prompt = touch ? bt.label.replace('E — ', '') : bt.label;
     } else if (p.mode === 'foot' && this.streetlife.target()) {
       const sh = this.streetlife.target();
       enter = sh.shop.open;

@@ -244,7 +244,10 @@ export class Days {
     return p ? { kind: 'cart', s: p.s, at: { x: p.s.door[0], z: p.s.door[2] } } : null;
   }
 
-  // a door to go in at: an office's ('lobby') or a home's - facing the street, with its way out
+  // a door to go in at: an office's ('lobby') or a home's - facing the street, with its way out. Their
+  // own sidewalk's doors first: one of them is where they live, or work, more often than not, and
+  // there is no street to cross to it; a door a block or two off only now and then (the walk crosses
+  // to it: game/civilians.js routeTo), and none further off than a short walk
   doorNear(c, what) {
     const shops = this.game.world.shops || [];
     const list = [];
@@ -252,10 +255,16 @@ export class Days {
       if (!s.door) continue;
       if (what === 'home' ? !s.home : s.kind !== 'lobby' || s.home) continue;
       const d = Math.hypot(s.door[0] - c.pos.x, s.door[2] - c.pos.z);
-      if (d < 8 || d > 130) continue;
+      if (d < 8 || d > 75) continue;
       const n = this.normalOf(s);
       if (!n) continue;
-      list.push({ s, d, n });
+      // (where they turn in at: in front of the door, out past the front yard - game/streetsocial.js
+      // goHome walks them in from there)
+      const out = 1.6 + (s.yard || 0);
+      const at = { x: s.door[0] + n[0] * out, z: s.door[2] + n[1] * out };
+      const own = this.sameWalk(c, at);
+      if (!own && d > 50) continue;
+      list.push({ s, d: own ? d * 0.35 : d + 30, n, at });
     }
     const p = this.choose(list);
     if (!p) return null;
@@ -264,7 +273,7 @@ export class Days {
       p.s.nx = p.n[0];
       p.s.nz = p.n[1];
     }
-    return { kind: 'door', s: p.s, at: { x: p.s.door[0] + p.s.nx * 1.6, z: p.s.door[2] + p.s.nz * 1.6 } };
+    return { kind: 'door', s: p.s, at: p.at };
   }
 
   normalOf(s) {

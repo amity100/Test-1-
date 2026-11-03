@@ -2079,7 +2079,10 @@ export class ShopLife {
           if (K.hold) {
             this.movers.remove(K.hold);
             const what = K.hold.slot ? K.hold.slot.what : null;
-            K.sum += K.hold.price || this.prof.prices[what] || 2;
+            // (a box's price is the name of what is in it - 'phone', 'ring' - the price list's key; a
+            // number is a price as it is)
+            const pr = K.hold.price;
+            K.sum += (typeof pr === 'number' ? pr : this.prof.prices[pr]) || this.prof.prices[what] || 2;
             if (K.hold.slot) this.setSlot(K.hold.slot, 'gone');
             K.hold = null;
             K.n++;
@@ -2095,7 +2098,7 @@ export class ShopLife {
         c.faceYaw = Math.atan2(pv.c.pos.x - c.pos.x, pv.c.pos.z - c.pos.z);
         if (K.t > 0.2 && !K.said) {
           K.said = true;
-          const n = Math.max(1, Math.round(K.sum || K.n * 2));
+          const n = Math.max(1, Math.round(K.sum || K.n * 2) || 2);
           this.say(c, pick(this.prof.say.total(n)), 0.85);
           // (the till's drawer: a tap on its key)
           this.open.sound('till', 0.25, 12);

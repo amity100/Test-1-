@@ -128,6 +128,8 @@ const HI_AGAIN = ['[joy] Hey, you again!', '[joy] Hi again! Twice in one day.', 
 const HI_FAN = ['[joy] Oh my god, it is you! The artist!', '[joy] Can I get a picture with you?', '[joy] I love your drawings!'];
 const HI_FEARED = ['[scared] Please... I do not want any trouble.', '[scared] Just leave me alone, okay?', '[scared] I - I have to go.'];
 const HI_BAD_BOLD = ['[angry] Hi? After what I saw you do?', '[angry] Get away from me.', '[angry] You have some nerve.'];
+const HI_GOOD = ['[joy] Hey! You are the one who helped back there!', '[joy] Oh, hi! That was really decent of you, earlier.', '[joy] Hello, hero!'];
+const HI_FRIEND = ['[joy] Hey, my friend! How are you?', '[joy] There you are! Good to see you.', '[joy] Hi! I was hoping I would run into you.'];
 const HI_BAD_TIMID = ['[scared] Please do not hurt me!', '[scared] I did not see anything!', '[scared] Stay away!'];
 
 // (GTA IV pass) a group standing on the sidewalk, talking - each line by the next of them in turn,
@@ -637,6 +639,11 @@ export class Voices {
           this.sayToYou(c, pick(RAN_AFTER), 'plain');
         }
       }
+      // (intelligence round) talking with you (a hello: hello), not in their way
+      if (c.faceYouUntil > now) {
+        c.blockT = 0;
+        continue;
+      }
       if (free && !c.crossing) {
         // (intelligence round) you about to walk into them: a small step out of your way - as people
         // do on a sidewalk - only when your ways would really meet (where you will both be in the
@@ -773,7 +780,7 @@ export class Voices {
     if (game.bubbles && pl.fig) game.bubbles.say(pl, pick(HERO_HI), 'plain', 1.6);
     // (they stop and turn to you)
     if (!c.scripted && !c.ctrl) c.stopT = Math.max(c.stopT || 0, 2.4);
-    c.faceYaw = Math.atan2(pl.pos.x - c.pos.x, pl.pos.z - c.pos.z);
+    c.faceYouUntil = now + 2.6;
     if (pl.fig && pl.fig.j) {
       c.glanceAt = pl.fig.j.headC;
       c.glanceUntil = now + 2.6;
@@ -784,6 +791,12 @@ export class Voices {
     if (m && m.saw && m.saw.you && now - m.sawT < 240 && m.saw.what === 'bad') {
       line = pick(m.bold > 0.55 ? HI_BAD_BOLD : HI_BAD_TIMID);
       feel = m.bold > 0.55 ? 'angry' : 'scared';
+    } else if (m && m.saw && m.saw.you && now - m.sawT < 240 && m.saw.what === 'good') {
+      line = pick(HI_GOOD);
+      feel = 'joy';
+    } else if (m && m.you > 0.6) {
+      line = pick(HI_FRIEND);
+      feel = 'joy';
     } else if (M && M.dread > 1.2 && m && m.bold < 0.5) {
       line = pick(HI_FEARED);
       feel = 'scared';
@@ -812,6 +825,8 @@ export class Voices {
       m.metN = (m.metN || 0) + 1;
       if (!feel || feel === 'joy' || feel === 'surprised') m.you = Math.min(1, m.you + 0.15);
       m.nextT = now + 8;
+      // (and not a second hello from them a moment later: game/minds.js notice)
+      m.noticeT = now + 30;
     }
     const tone = feel === 'angry' ? 'alarm' : 'plain';
     // (a beat to take it in, game time: game/game.js inkwell.after)

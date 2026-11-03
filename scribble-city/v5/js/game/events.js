@@ -489,6 +489,8 @@ function* robberyScene(sc, def) {
   if (sc.caught && r.alive) {
     // caught: the bag back, hands up
     sc.dir.stats.caught++;
+    // (intelligence round: seen by the street - game/minds.js)
+    if (game.minds) game.minds.happened('stopped', r.pos.x, r.pos.z, true);
     r.fig.carry = null;
     r.fig.carryL = null;
     r.fig.armsUp = 1;
@@ -733,6 +735,14 @@ function* helpScene(sc, def) {
     game.player.fig.reachR = null;
     sc.dir.stats.helped++;
     sc.say(v, pick(['Thank you so much!', "You're very kind!", 'Bless you, dear.']));
+    // (intelligence round) a kindness, seen: the ones round about think better of you, and say so; and
+    // the one you helped up remembers you (game/minds.js)
+    if (game.minds) {
+      game.minds.happened('helped', v.pos.x, v.pos.z, true);
+      const mv = game.minds.of(v);
+      mv.you = Math.min(1, mv.you + 0.7);
+      mv.metN = (mv.metN || 0) + 1;
+    }
     const pl = game.player;
     pl.hp = Math.min(pl.maxHp, pl.hp + 15);
     game.hud.toast('עזרתם למישהו לקום. +15 חיים, ממצב הרוח הטוב', 'good', 3);

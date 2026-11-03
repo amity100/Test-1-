@@ -4,6 +4,7 @@ import { sidewalkLoop, walksNear, blockType, rightFree } from './civilians.js';
 import { groundHeight } from '../world/layout.js';
 import { NIGHT_CLOTHES } from './rhythm.js';
 import { LINES } from './voices.js';
+import { fmt } from './money.js';
 
 // (GTA IV pass) The social life of the sidewalk: what makes a street of people walking past each
 // other into a street of people.
@@ -33,6 +34,10 @@ import { LINES } from './voices.js';
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const chance = (p) => Math.random() < p;
+// (intelligence round) your coin for the musician (game/streetsocial.js target)
+const TIP = 2;
+const TIP_THANKS = ['[joy] Thank you, friend!', '[joy] Hey, thank you! Very kind.', '[joy] Bless you! Any requests?'];
+const FOR_YOU = ['[joy] This next one is for my friend here!', '[joy] For the kind stranger - this one is yours!', '[joy] A song for you, my friend.'];
 const UP = new THREE.Vector3(0, 1, 0);
 const _c = new THREE.Vector3();
 const _r = new THREE.Vector3();
@@ -918,6 +923,59 @@ export class StreetSocial {
     return best;
   }
 
+  // ------------------------------------------------------------------ you and the musician
+  // (intelligence round) by the open case, the musician playing: a coin for the song (E). A kindness,
+  // and seen as one (game/minds.js); the next song is for you
+  target() {
+    const B = this.busker;
+    const game = this.game;
+    const pl = game.player;
+    if (!B || !B.c || !B.c.alive || B.c.panicT > 0 || pl.mode !== 'foot' || pl.inVehicle) return null;
+    if (Math.hypot(B.caseAt.x - pl.pos.x, B.caseAt.z - pl.pos.z) > 2.3) return null;
+    if ((B.youT || 0) > game.time) return null;
+    if (game.money && !game.money.can(TIP)) return null;
+    return { label: `E — לזרוק מטבע לנגן (${fmt(TIP)})` };
+  }
+
+  interact() {
+    if (!this.target()) return false;
+    const game = this.game;
+    const B = this.busker;
+    const pl = game.player;
+    if (game.money && !game.money.pay(TIP, 'מטבע לנגן רחוב')) return true;
+    B.youT = game.time + 4;
+    // (the coin from your hand into the case)
+    const j = pl.fig && pl.fig.j ? pl.fig.j.handR : null;
+    const y0 = j ? j.y : pl.pos.y + 1;
+    this.flying.push({ x0: j ? j.x : pl.pos.x, y0, z0: j ? j.z : pl.pos.z, x1: B.caseAt.x + (Math.random() - 0.5) * 0.3, z1: B.caseAt.z + (Math.random() - 0.5) * 0.1, y1: B.gy + 0.1, t: 0, dur: 0.5, B });
+    B.coins++;
+    this.stats.coins++;
+    this.stats.yours = (this.stats.yours || 0) + 1;
+    game.audio.play('coins', 0.45);
+    if (pl.fig) {
+      const at = new THREE.Vector3(B.caseAt.x, B.gy + 0.85, B.caseAt.z);
+      pl.fig.reachR = at;
+      game.inkwell.after(0.55, () => {
+        if (pl.fig.reachR === at) pl.fig.reachR = null;
+      });
+    }
+    // (the musician: a nod and a thank-you; and the next song for you)
+    B.forYou = true;
+    game.inkwell.after(0.7, () => {
+      if (B.c && B.c.alive && this.busker === B) {
+        B.c.gestNext = 'none';
+        game.voices.sayToYou(B.c, pick(TIP_THANKS));
+      }
+    });
+    if (game.minds) {
+      game.minds.happened('tipped', B.caseAt.x, B.caseAt.z, true);
+      const m = game.minds.of(B.c);
+      m.you = Math.min(1, m.you + 0.35);
+      m.metN = (m.metN || 0) + 1;
+    }
+    return true;
+  }
+
   // ------------------------------------------------------------------ the musician
   buskScan(p, h, rain) {
     const game = this.game;
@@ -1058,6 +1116,12 @@ export class StreetSocial {
       B.t = 0;
       B.songT = 22 + Math.random() * 16;
       c.fig.hunch = 0;
+      // (intelligence round: you gave something - the next song is yours, said to you)
+      if (B.forYou && d < 20) {
+        B.forYou = false;
+        c.gestNext = 'none';
+        game.voices.sayToYou(c, pick(FOR_YOU));
+      }
     } else if (B.t > 1.2) c.fig.hunch = Math.max(0, 0.7 - (B.t - 1.2) * 1.2);
     // the people passing who stop to listen
     B.recruitT -= dt;

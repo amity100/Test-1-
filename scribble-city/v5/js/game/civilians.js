@@ -297,6 +297,7 @@ class Civilian {
     this.listenUntil = 0;
     this.glanceAt = null;
     this.glanceUntil = 0;
+    this.faceYouUntil = 0;
     this._look = null;
     this.waitAt = null;
   }
@@ -1006,6 +1007,9 @@ class Civilian {
     if (sp > 0.2) this.yaw = dampAngle(this.yaw, Math.atan2(this.vel.x, this.vel.z), 8, dt);
     // (the way their scene has them face - not while they are turned to what happened, or down)
     else if (this.faceYaw !== null && this.ctrl && !(this.noticeT > 0 || this.cowerT > 0 || this.coverT > 0)) this.yaw = dampAngle(this.yaw, this.faceYaw, 6, dt);
+    // (intelligence round) you said hello: they turn to you, the whole of them, while they answer
+    // (game/voices.js hello)
+    else if (this.faceYouUntil > game.time && game.player && !(this.cowerT > 0 || this.coverT > 0)) this.yaw = dampAngle(this.yaw, Math.atan2(game.player.pos.x - this.pos.x, game.player.pos.z - this.pos.z), 5, dt);
     // (characters round) somebody looked at far round for a while, standing: they turn to them - the
     // body after the eyes, the head and the chest (game/doodle.js turnHead)
     else if (fig.turnTo !== null && fig.turnTo !== undefined && !(this.cowerT > 0 || this.coverT > 0)) this.yaw = dampAngle(this.yaw, fig.turnTo, 3, dt);
