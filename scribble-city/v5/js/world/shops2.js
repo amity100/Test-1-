@@ -9,6 +9,8 @@ import { fashion } from './fashion.js';
 import { techstore } from './techstore.js';
 import { jewels as jeweller } from './jewels.js';
 import { eatery } from './eatery.js';
+import { shoeStore } from './shoestore.js';
+import { sportStore } from './sportstore.js';
 
 // (v5, ROADMAP 11.18) The shops, laid out the way real ones are. Each kind has its plan: what
 // stands along its back wall and its side walls, what runs down its middle, where the checkout is
@@ -908,7 +910,9 @@ const PLANS = {
   fashion: (R) => fashion(R, {}),
   boutique: (R) => fashion(R, { pal: CLOTH_LUX, curtain: [0.3, 0.22, 0.22] }),
   surf: (R) => fashion(R, { pal: [[0.98, 0.6, 0.25], [0.3, 0.7, 0.85], [0.98, 0.85, 0.35], [0.95, 0.4, 0.55], [0.55, 0.85, 0.5], [0.98, 0.98, 0.95], [0.17, 0.22, 0.33], [0.29, 0.39, 0.52]], curtain: [0.26, 0.56, 0.78] }),
-  shoes,
+  // (ROADMAP 16.5: the shoe shop and the sports shop of the new kind - world/shoestore.js,
+  // world/sportstore.js; the old plans, shoes() and sports(), kept for whoever wants them)
+  shoes: (R) => shoeStore(R, {}),
   // (ROADMAP 14.4: the electronics shops of the new kind - world/techstore.js; screens() kept)
   electronics: (R) => techstore(R, {}),
   phones: (R) => techstore(R, {}),
@@ -917,7 +921,7 @@ const PLANS = {
   // (ROADMAP 14.4: the jeweller of the new kind - world/jewels.js; the old plan, jewels(), kept)
   jewelry: jeweller,
   optics,
-  sports,
+  sports: (R) => sportStore(R, {}),
   // (ROADMAP 16.3: the eateries of the new kind - world/eatery.js; the old plan, counterShop(), kept
   // for whoever wants it)
   cafe: (R) => eatery(R, { kind: 'cafe' }),
@@ -934,7 +938,7 @@ const PLANS = {
 };
 
 // (ROADMAP 14.4: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
-const NEW_KINDS = new Set(['grocery', 'deli', 'shop', 'pharmacy', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
+const NEW_KINDS = new Set(['grocery', 'deli', 'shop', 'pharmacy', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'shoes', 'sports', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
 for (const [kind, fn] of Object.entries(PLANS)) {
   const plan = (R) => fn(R);
   plan.stock = true;
@@ -951,4 +955,4 @@ Object.assign(DECOR, {
   pharmacy: { ...DECOR.pharmacy, floor: 'tiles' },
 });
 
-export { PLANS, clothes, screens, jewels, counterShop };
+export { PLANS, clothes, screens, jewels, counterShop, shoes, sports };

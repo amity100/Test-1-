@@ -357,7 +357,7 @@ export class Player {
     // (ROADMAP 11.20: wheels drawn under your feet - game/fuse.js)
     const fuse = this.game.fuse;
     const skate = fuse && !this.crouched ? fuse.heroSpeedK(sprint) : 1;
-    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? (8.2 + (skills ? skills.sprintBonus : 0)) * (this.energyT > 0 ? 1.15 : 1) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate;
+    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? (8.2 + (skills ? skills.sprintBonus : 0)) * (this.energyT > 0 ? 1.15 : 1) * (this.runShoes ? 1.1 : 1) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate;
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;

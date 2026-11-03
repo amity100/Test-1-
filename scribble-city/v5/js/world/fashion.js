@@ -81,7 +81,8 @@ export function fashion(R, o = {}) {
 // the k-th garment of a bay: what it is (a shirt, a tee, a coat, a dress, trousers), its colour
 function garmentLook(R, pal, o = {}) {
   const r = R.rng.r();
-  const models = o.denim ? ['trousers', 'shirt', 'coat'] : o.knit ? ['tee', 'shirt', 'coat'] : ['shirt', 'tee', 'dress', 'coat', 'trousers', 'shirtPrint'];
+  // (a sports shop's bar: the jerseys, the track jackets, the track trousers - world/sportstore.js)
+  const models = o.sport ? ['tee', 'tee', 'coat', 'trousers', 'tee'] : o.denim ? ['trousers', 'shirt', 'coat'] : o.knit ? ['tee', 'shirt', 'coat'] : ['shirt', 'tee', 'dress', 'coat', 'trousers', 'shirtPrint'];
   const m = models[Math.floor(r * models.length)];
   const col = o.denim ? [[0.22, 0.32, 0.5], [0.3, 0.4, 0.56], [0.16, 0.2, 0.3], [0.5, 0.58, 0.68]][Math.floor(R.rng.r() * 4)] : pal[Math.floor(R.rng.r() * pal.length)];
   return { line: 'garment', model: m, cell: m === 'shirtPrint' ? (R.rng.r() < 0.5 ? 'cloth.stripe' : 'cloth.check') : null, tint: col, cap: null };
@@ -91,7 +92,7 @@ function garmentLook(R, pal, o = {}) {
 // The bar of garments at a hand's height (side by side, as they hang in a real shop: seen edge on,
 // each its own), two shelves of folded ones over it, the bay's name on its header; a place to stand
 // before it every metre and a half, the garments in reach of each live.
-function wallBay(R, run, len, pal, head, o = {}) {
+export function wallBay(R, run, len, pal, head, o = {}) {
   const S = R.psoup(false);
   const y0 = R.y0;
   // the bay's back: a panel of pale wood, its skirting
@@ -314,7 +315,7 @@ function mannequins(R, fr, till, pal) {
 
 // the counter by the window on the far side from the door: a white body with an oak top, the till's
 // tablet on its stand turned to the clerk, the card reader, tissue paper, the bags behind
-function cashWrap(R, fr, o) {
+export function cashWrap(R, fr, o) {
   const S = R.psoup(false);
   const G = R.psoup(true);
   const y0 = R.y0;

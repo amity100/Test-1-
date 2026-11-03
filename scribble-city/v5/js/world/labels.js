@@ -1257,6 +1257,22 @@ function defineAll(A) {
     g.font = font(11, 'Rubik', 700);
     g.fillText('♥ 72', w / 2, h * 0.76);
   });
+  // the deli's scale: what is on it, by the pound, and what it comes to
+  A.place('ui.scale', 96, 48, (g, w, h) => {
+    g.fillStyle = '#d9e6c4';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#18240e';
+    g.font = font(15, 'Rubik', 800);
+    g.textBaseline = 'middle';
+    g.textAlign = 'right';
+    g.fillText('0.52 lb', w - 6, h * 0.32);
+    g.font = font(12, 'Rubik', 800);
+    g.fillText('$2.60', w - 6, h * 0.74);
+    g.font = font(8, 'Rubik', 700);
+    g.textAlign = 'left';
+    g.fillText('NET', 5, h * 0.32);
+    g.fillText('TOTAL', 5, h * 0.74);
+  });
   // a ticket from the deli's number machine
   A.place('tag.number', 48, 32, (g, w, h) => {
     g.fillStyle = '#ffe7e0';
@@ -1365,6 +1381,27 @@ function defineAll(A) {
   for (const [n, t, f, l] of [['head.new', 'NEW SEASON', '#1e1e22', '#f4efe6'], ['head.denim', 'DENIM', '#2a4a78', '#f4efe6'], ['head.knit', 'KNITWEAR', '#6a3a2a', '#f4e7d2'], ['head.shoes', 'SHOES', '#1e1e22', '#e9c46a'], ['head.sale', 'SALE  30% OFF', '#c42a22', '#ffffff'], ['head.fit', 'FITTING ROOMS', '#2a2a30', '#f4efe6']]) {
     place(n, 'header', header(t, f, l, { fam: 'Cinzel' }));
   }
+  // (ROADMAP 16.5: the shoe shop's, the sports shop's - over their walls, the treadmill's screen)
+  for (const [n, t, f, l] of [['head.run', 'RUNNING', '#16314f', '#ffd23f'], ['head.team', 'TEAM SPORTS', '#b8231f', '#ffffff'], ['head.bikes', 'BIKES', '#1f3a2a', '#f4efe6']]) {
+    place(n, 'header', header(t, f, l, { fam: 'Rubik' }));
+  }
+  A.place('ui.tread', 96, 40, (g, w, h) => {
+    g.fillStyle = '#0d1a14';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#5dff9a';
+    g.font = font(13, 'Rubik', 800);
+    g.textBaseline = 'middle';
+    g.textAlign = 'left';
+    g.fillText('3.4 MPH', 6, h * 0.32);
+    g.textAlign = 'right';
+    g.fillText('12:40', w - 6, h * 0.32);
+    g.font = font(9, 'Rubik', 700);
+    g.fillStyle = '#9fe8bf';
+    g.textAlign = 'left';
+    g.fillText('INCLINE 2', 6, h * 0.74);
+    g.textAlign = 'right';
+    g.fillText('♥ 118', w - 6, h * 0.74);
+  });
   A.place('bag.chic', 160, 184, (g, w, h, rng) => {
     g.fillStyle = '#f2ece2';
     g.fillRect(0, 0, w, h);

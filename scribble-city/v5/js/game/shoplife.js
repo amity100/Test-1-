@@ -6,6 +6,7 @@ import { LAYERS } from '../render/materials.js';
 import { Shopper } from './shopper.js';
 import { ShopMural } from './shopmural.js';
 import { CounterLife } from './counterlife.js';
+import { TryLife } from './trylife.js';
 
 // (v5, ROADMAP 14.4) A shop's day, as it really goes - the shops of the new kind (world/market.js):
 // every action tied to a real thing in the shop.
@@ -163,6 +164,66 @@ const JEWEL = {
     help: ['Of course - let me take it out for you.', 'A lovely piece. Here, have a closer look.'],
   },
 };
+// (ROADMAP 16.5: a shoe shop: the shoes on the wall are its samples - one taken down, sat with on a
+// bench, a size asked for; the box comes out of the stock room, tried on, looked at in the low mirror;
+// game/trylife.js)
+const SHOES = {
+  flow: 'shoes',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 4,
+  prices: { shoe: 89 },
+  names: { shoe: 'a pair of shoes' },
+  heb: { shoe: 'נעליים' },
+  food: new Set(),
+  say: {
+    shelf: ['Ooh, these.', 'Do these come in black?', 'Hmm, nice.', 'Are these comfortable?'],
+    back: ['Not for me.', 'Too pricey.'],
+    keep: ['I\'ll take them.', 'These ones.'],
+    hi: ['Hi! Welcome in!', 'Hello!'],
+    player: ['Hi! Let me know your size and I\'ll bring a pair out.', 'Welcome! Everything on the wall comes in all sizes.'],
+    found: ['Great choice!', 'Those are really popular.'],
+    total: (n) => [`That's ${n} dollars.`, `${n} dollars, please.`],
+    card: ['Card, please.'],
+    thanks: ['Enjoy them!', 'Wear them well!', 'Thanks, come again!'],
+    bye: ['Thanks!', 'Bye!'],
+    run: ['Easy, please!', 'No running - unless you\'re testing the shoes!'],
+    bump: ['Oh! Sorry.', 'Excuse me!'],
+    stock: ['New ones in!'],
+    help: ['Want to try those on? I\'ll get your size.', 'Those run a little small.', 'That one\'s on sale this week.'],
+  },
+};
+// (a sports shop: the team's clothes as in a clothes shop, the running shoes as in a shoe shop; the
+// balls bounced, the treadmill walked on, the bikes looked at - game/trylife.js)
+const SPORTS = {
+  flow: 'fashion',
+  baskets: 0,
+  items: [1, 2],
+  crowd: 5,
+  prices: { garment: 39, folded: 25, shoe: 99 },
+  names: { garment: 'a jersey', folded: 'a training shirt', shoe: 'a pair of running shoes' },
+  heb: { garment: 'בגד ספורט', folded: 'חולצת אימון', shoe: 'נעלי ריצה' },
+  food: new Set(),
+  say: {
+    shelf: ['That\'s our team!', 'Do you have it in a large?', 'Nice colours.', 'Is this breathable?'],
+    back: ['Not my team.', 'Too big.'],
+    keep: ['This one.', 'I\'ll take it.'],
+    mirror: ['Looks fast!', 'Hmm...', 'Not bad!'],
+    out: ['How does it look?', 'Ready for the game!'],
+    hi: ['Hey! Welcome in!', 'Hi there!'],
+    player: ['Hey! Try the treadmill if you like.', 'Welcome! Running shoes are on the lit wall.'],
+    found: ['Great pick!', 'That one\'s our best seller.'],
+    total: (n) => [`That's ${n} dollars.`, `${n} dollars, please.`],
+    card: ['Card, please.'],
+    thanks: ['Have a great game!', 'Enjoy!', 'Thanks!'],
+    bye: ['See you!', 'Bye!'],
+    run: ['Save it for the track!', 'Easy there!'],
+    bump: ['Oh! Sorry.', 'Excuse me!'],
+    praise: ['That looks great on you.', 'Very sporty!'],
+    stock: ['New jerseys on the rail!'],
+    help: ['Need a size?', 'Those are great for running.', 'The treadmill\'s free - give it a go.'],
+  },
+};
 // (an eatery: nothing taken off a shelf - ordered at the till, made, drawn, served: game/eaterylife.js)
 const FOOD = {
   flow: 'food',
@@ -186,7 +247,7 @@ const FOOD = {
     stock: [''],
   },
 };
-export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL, cafe: FOOD, bagel: FOOD, pizza: FOOD, burger: FOOD, tacos: FOOD, noodles: FOOD, diner: FOOD, juice: FOOD, icecream: FOOD, sushi: FOOD, falafel: FOOD };
+export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL, shoes: SHOES, sports: SPORTS, cafe: FOOD, bagel: FOOD, pizza: FOOD, burger: FOOD, tacos: FOOD, noodles: FOOD, diner: FOOD, juice: FOOD, icecream: FOOD, sushi: FOOD, falafel: FOOD };
 
 // ------------------------------------------------------------------ the things in motion
 // Every product, basket, bag and box in a hand, on the counter or on the floor: one geometry a pen
@@ -413,6 +474,9 @@ export class ShopLife {
     this.muralOn = false;
     // (ROADMAP 16.4: the deli's counter, the pharmacy's, the slush machine, the chair - game/counterlife.js)
     this.counter = CounterLife.for(this);
+    // (ROADMAP 16.5: a shoe shop's benches - a size from the stock room, tried on; a sports shop's balls,
+    // its treadmill, its bikes - game/trylife.js)
+    this.tries = TryLife.for(this);
     this.sync();
   }
 
@@ -518,6 +582,7 @@ export class ShopLife {
     const c = v.c.pos;
     out.sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
     if (this.counter) this.counter.plan(v, out);
+    if (this.tries) this.tries.plan(v, out);
     // (an electronics shop: a while before the wall of screens, now and then)
     if (this.prof.flow === 'tech' && Math.random() < 0.45) {
       const tv = this.room.browse.filter((b) => b.what === 'look');
@@ -642,7 +707,7 @@ export class ShopLife {
             return null;
           }
           // (the deli's counter, the pharmacy's window, the chair: game/counterlife.js)
-          if (q.svc && this.counter) {
+          if (q.svc && (this.counter || this.tries)) {
             L.svc = q.svc;
             L.S = null;
             L.st = 'svc';
@@ -676,6 +741,8 @@ export class ShopLife {
         return null;
       }
       case 'svc':
+        // (a pair tried on, a ball bounced, the treadmill, the bikes: game/trylife.js)
+        if (this.tries && this.tries.has(L.svc)) return this.tries.visit(v, dt);
         if (!this.counter) {
           L.st = 'next';
           return null;
@@ -822,6 +889,15 @@ export class ShopLife {
         f.reachR = null;
         f.lookAt = null;
         if (L.item) L.item.at = { c, how: 'grip' };
+        // (a shoe on a shoe shop's wall, a sports shop's: sat down with it, a size from the stock room -
+        // game/trylife.js; or back on its shelf)
+        if (this.tries && L.item && L.item.look.line === 'shoe') {
+          if (this.tries.decide(v)) return null;
+          if (this.prof.flow === 'shoes') {
+            L.st = 'putBack';
+            return null;
+          }
+        }
         // (a clothes shop: to the mirror with it, maybe into a fitting room)
         if (this.prof.flow === 'fashion') return this.decideClothes(v);
         // (an electronics shop: the seller comes to show it; headphones put on)
@@ -1518,6 +1594,7 @@ export class ShopLife {
     const L = v.L;
     if (!L) return;
     if (this.counter) this.counter.release(v);
+    if (this.tries) this.tries.release(v);
     const c = v.c;
     this.unwear(v);
     const qi = this.queue.indexOf(v);
@@ -1874,6 +1951,9 @@ export class ShopLife {
     if (!S || S.c !== c) return null;
     // (a deli's clerk, a pharmacist: behind the counter all day - game/counterlife.js)
     if (this.counter && this.counter.kind) return this.counter.staff(c, dt);
+    // (a shoe shop's: to the stock room for a size, the box to the bench; the boxes left there taken
+    // back - game/trylife.js)
+    if (this.tries && S.st && S.st.startsWith('try')) return this.tries.staff(c, S, dt);
     const f = c.fig;
     S.t += dt;
     const v = S;
@@ -1887,6 +1967,11 @@ export class ShopLife {
         const fallen = this.floor.find((it) => !it.claimed);
         const gone = [];
         for (const z of this.zones) for (const s of z.slots) if (s.state === 'gone') gone.push(s);
+        // (a size wanted from the stock room, a box left on a bench: game/trylife.js)
+        if (this.tries && !fallen) {
+          const r = this.tries.job(c, S);
+          if (r !== undefined) return r;
+        }
         if (this.prof.flow === 'fashion' && !fallen) return this.associate(c, S);
         if (this.prof.flow === 'tech' && !fallen && S.call) return this.explainGo(c, S);
         if (this.prof.flow === 'jewel') return this.seller(c, S);
@@ -2466,6 +2551,7 @@ export class ShopLife {
     this.sync();
     this.t += dt;
     if (this.counter) this.counter.update(dt);
+    if (this.tries) this.tries.update(dt);
     // (once its stock is in - the room is there round it - and not where they make food)
     if (!this.muralOn && this.live && this.open.open && this.shop.kind !== 'deli') {
       this.muralOn = true;
@@ -2786,7 +2872,7 @@ export class ShopLife {
     // (ROADMAP 16.2: kept - into the basket, over your arm, boxed, on the counter - and paid for at
     // the till, as everybody does: game/shopper.js)
     const you = this.you;
-    const take = you.takeLabel(price);
+    const take = you.takeLabel(price, s);
     const full = !take && !you.pv ? ' · הידיים מלאות: קודם לקופה' : '';
     const choices = [];
     if (take) {
@@ -2823,6 +2909,7 @@ export class ShopLife {
     this.you.dispose();
     this.mural.dispose();
     if (this.counter) this.counter.dispose();
+    if (this.tries) this.tries.dispose();
     // (whatever is in motion goes back where it came from)
     for (const it of [...this.movers.items]) {
       if (it.slot && (it.slot.state === 'held' || it.slot.state === 'aim')) this.setSlot(it.slot, 'shelf');

@@ -115,9 +115,14 @@ export class Shopper {
 
   // ---------------------------------------------------------------- taking things
   // the shelf's dialog (game/shoplife.js inspect): its choice to keep it, or null when your hands are full
-  takeLabel(price) {
+  takeLabel(price, s = null) {
     if (this.pv || this.items.length >= this.max) return null;
     const f = this.life.prof.flow;
+    // (ROADMAP 16.5: a shoe on the wall is a sample - your size comes out of the stock room)
+    if (this.life.tries && s && s.what === 'shoe' && this.life.tries.seats.length + (this.life.marks.stock ? 1 : 0) > 0) {
+      if (this.life.tries.mine) return null;
+      return `לבקש את המידה שלי מהמחסן · ${fmt(price)}`;
+    }
     if (f === 'tech') return `לקחת אחד באריזה לקופה · ${fmt(price)}`;
     if (f === 'jewel') return `לשמור לי בקופה · ${fmt(price)}`;
     if (f === 'fashion') return `לקחת לקופה · ${fmt(price)}`;
@@ -134,7 +139,17 @@ export class Shopper {
 
   take(it, s, price) {
     const L = this.life;
-    const rec = { it, s, what: s.what, price, heb: L.prof.heb[s.what] || 'מוצר', look: s.look };
+    // (a shoe shop's sample back on its shelf; the seller brings your size out in its box -
+    // game/trylife.js)
+    let boxed = false;
+    if (L.tries && s.what === 'shoe') {
+      L.giveBack(it);
+      if (L.tries.forYou(s, price)) return;
+      // (nobody to fetch it: a box from under the counter)
+      it = L.movers.add({ line: 'box', model: 'stockBox', cell: 'box.stock', tint: [0.9, 0.46, 0.16] }, true);
+      boxed = true;
+    }
+    const rec = { it, s: boxed ? null : s, what: s.what, price, heb: L.prof.heb[s.what] || 'מוצר', look: s.look };
     it.price = price;
     if (L.prof.flow === 'tech' && L.prof.boxed) {
       // (the one on the table is the shop's, to try: a boxed one from the back for you)
@@ -376,6 +391,7 @@ export class Shopper {
     let pain = 0;
     let kits = 0;
     let worn = null;
+    let run = false;
     for (const r of list) {
       const u = USE[r.what];
       if (u) {
@@ -393,6 +409,11 @@ export class Shopper {
         try {
           wear(g, part, item);
           worn = r.heb;
+          // (ROADMAP 16.5: running shoes - a white or coloured sole, or a sports shop's: a faster sprint)
+          if (part === 'shoes') {
+            P.runShoes = !!r.look.sport;
+            run = run || P.runShoes;
+          }
         } catch (e) {
           void e;
         }
@@ -403,12 +424,22 @@ export class Shopper {
     if (energy) P.energyT = Math.max(P.energyT || 0, energy);
     if (pain) P.painT = Math.max(P.painT || 0, pain);
     if (kits) P.kits = (P.kits || 0) + kits;
+    // (ROADMAP 16.5: wanted, and out of the police's sight - something new on: they lose you, a star
+    // less; not for what was just stolen)
+    const cop = g.police;
+    let lost = false;
+    if (worn && !stolen && cop && cop.level > 0 && g.time - cop.seenT > 3) {
+      cop.drop(1);
+      lost = true;
+    }
     const fx = [
       hp ? `+${hp} חיים` : null,
       coffee ? `מהירות ל־${coffee} שניות` : null,
       energy ? `ריצה בלי להתעייף ל־${energy} שניות` : null,
       pain ? `פחות נזק ל־${pain} שניות` : null,
       kits ? `ערכת עזרה ראשונה בכיס (${P.kits})` : null,
+      run ? 'נעלי ריצה: ספרינט מהיר ב־10%' : null,
+      lost ? 'השוטרים לא מזהים אתכם: כוכב אחד פחות' : null,
       worn ? 'לבשתם את זה' : null,
     ].filter(Boolean).join(', ');
     g.hud.toast(`${stolen ? 'גנבתם' : 'קניתם'}: ${summary(list.map((r) => r.heb))}${fx ? ` (${fx})` : ''}`, stolen ? 'bad' : 'good', 3);

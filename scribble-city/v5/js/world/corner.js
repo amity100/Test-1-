@@ -267,7 +267,7 @@ export function deliCounter(R, u0, u1, flip) {
   const sk = len - 0.55;
   rbox(R, S, run, sk - 0.16, top + 0.03, -depth + 0.1, sk + 0.16, top + 0.08, -depth + 0.4, STEEL, { pen: 'gloss' });
   rbox(R, S, run, sk - 0.08, top + 0.08, -depth + 0.36, sk + 0.08, top + 0.2, -depth + 0.4, DARK);
-  rprint(R, S, run, sk - 0.07, top + 0.1, sk + 0.07, top + 0.19, -depth + 0.401, 'ui.bp', { pen: 'screen', part: [0, 0.1, 1, 0.65] });
+  rprint(R, S, run, sk - 0.07, top + 0.1, sk + 0.07, top + 0.19, -depth + 0.401, 'ui.scale', { pen: 'screen' });
   rbox(R, S, run, len - 0.35, y0 + 0.93, back + 0.05, len - 0.05, y0 + 1.05, back + 0.2, [0.97, 0.96, 0.93]);
   mark(R, 'deli.wrap', run, len - 0.2, back + 0.35, y0 + 0.96);
   // the salamis hanging from their rail over the work table (not in front of the board)
