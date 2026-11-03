@@ -64,7 +64,9 @@ export class Skills {
   }
 
   get spreadMul() {
-    return spreadOf(this.level('shoot'));
+    // (ROADMAP 16.7: clear glasses from the optician - a steadier aim)
+    const L = this.game.player && this.game.player.fig && this.game.player.fig.look;
+    return spreadOf(this.level('shoot')) * (L && L.face && L.face.glasses === 'round' ? 0.8 : 1);
   }
 
   get kickMul() {
@@ -97,7 +99,8 @@ export class Skills {
       if (P.sprinting) this.restT = 0;
       this.stamina = Math.min(100, this.stamina + dt * 30);
     } else if (P.mode === 'foot' && P.sprinting) {
-      this.stamina = Math.max(0, this.stamina - dt * drainOf(this.level('run')));
+      // (ROADMAP 16.6: with music in your ears a run tires you less)
+      this.stamina = Math.max(0, this.stamina - dt * drainOf(this.level('run')) * (P.music ? 0.75 : 1));
       this.restT = 0;
       this.add('run', (Math.hypot(P.vel.x, P.vel.z) * dt) / 25);
       if (this.stamina <= 0 && !this.winded) {

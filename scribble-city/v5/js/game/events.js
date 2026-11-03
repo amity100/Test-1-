@@ -5,6 +5,7 @@ import { sidewalkLoop } from './civilians.js';
 import { groundHeight, BLOCK_TYPES } from '../world/layout.js';
 import { randomCarSpec } from '../render/cars.js';
 import { fmt } from './money.js';
+import { newsFlash } from './techlife.js';
 
 // Things that happen in the city now and then, not on any map (ROADMAP 3.4). Every 20-45 s the
 // city may start one near you, picked by where you are, the hour and how busy it is:
@@ -460,6 +461,8 @@ function* robberyScene(sc, def) {
   r.fig.carryL = 'bag';
   if (k.alive) k.fig.armsUp = 0;
   sc.robbed = true;
+  // (ROADMAP 16.6: on the news - an electronics shop's televisions)
+  newsFlash(game, { kind: 'rob', head: `HOLD-UP AT ${String(s.name || 'A SHOP').toUpperCase()}`, sub: 'THE ROBBER GOT AWAY ON FOOT' });
   r.speed = 4.4;
   yield* sc.walkPath(r, [...R.path(r.pos.x, r.pos.z, R.door.x, R.door.z), { x: s.door[0], z: s.door[2] }], 3.6);
   r.noCollide = false;

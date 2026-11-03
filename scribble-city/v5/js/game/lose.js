@@ -31,7 +31,8 @@ function lookKey(L) {
   const top = L.wornTop || L.top;
   const hat = L.hat;
   const hair = L.hair;
-  return JSON.stringify([top && top.kind, top && top.color, L.bottom && L.bottom.kind, L.bottom && L.bottom.color, L.shoes, hat && hat.kind, hat && hat.color, hair && hair.style, hair && hair.color, L.acc]);
+  // (ROADMAP 16.7: and the glasses on the face - sunglasses from the optician)
+  return JSON.stringify([top && top.kind, top && top.color, L.bottom && L.bottom.kind, L.bottom && L.bottom.color, L.shoes, hat && hat.kind, hat && hat.color, hair && hair.style, hair && hair.color, L.acc, L.face && L.face.glasses]);
 }
 
 export class Lose {

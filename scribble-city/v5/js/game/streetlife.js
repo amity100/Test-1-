@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { charmed } from './shopper.js';
 import { shopkeeperLook, civilianLook, friendLook, kidLook, elderLook, cityLook } from './looks.js';
 import { HAIR_SKETCH } from './airsketch.js';
 import { BLUEPRINTS, BLUEPRINT_MORE, BLUEPRINT_CARS, BLUEPRINT_TOOLS } from './blueprints.js';
@@ -1000,6 +1001,49 @@ SERVICES.electronics = { verb: 'להיכנס לחנות האלקטרוניקה',
   ['אפליקציית מפות: איפה השרטוט הקרוב', 'phone', (game) => bookHint(game)],
   ['טלפון חדש: "אזעקת שווא, שוטר" (כוכב משטרה אחד פחות)', 'phone', (game) => SERVICES.phones.offers[0][2](game)],
 ] };
+// (v5, ROADMAP 16.6) an electronics shop of the new kind, a phone shop: from the seller at the till -
+// a police scanner (the police on your map ten minutes), the map that shows every blueprint's page,
+// the call that tells the police it was all a false alarm (each with its own price)
+SERVICES_NC.electronics = { ...SERVICES.electronics, greet: 'המסכים הכי חדשים, הטלפונים הכי מהירים. ויש לי גם כמה דברים... שימושיים. מה מחפשים?', offers: [
+  ['סורק משטרתי (הניידות והשוטרים על המפה ל־10 דקות)', 'phone', (game) => policeScanner(game), 150],
+  ['MAP PRO: כל דפי השרטוט על המפה', 'phone', (game) => mapPro(game), (g) => (g.player.mapPages ? 0 : 60)],
+  ['טלפון חדש: "אזעקת שווא, שוטר" (כוכב משטרה אחד פחות)', 'phone', (game) => SERVICES.phones.offers[0][2](game), (g) => (g.police.level > 0 ? 60 * g.police.level : 0)],
+] };
+SERVICES_NC.phones = { ...SERVICES.phones, offers: SERVICES_NC.electronics.offers };
+// (ROADMAP 16.9) the gym's trainer: the strength as before, and a session on the treadmill, one at the
+// bag - a level of running, of fighting (game/skills.js)
+SERVICES_NC.gym = { ...SERVICES.gym, greet: 'עשר חזרות ואתה בנאדם חדש. מה עושים היום?', offers: [
+  SERVICES.gym.offers[0],
+  ['אימון ריצה על ההליכון (ריצה: רמה אחת למעלה)', 'dumbbell', (game) => gymSkill(game, 'run', 'הרגליים מרגישות את זה'), (g) => (g.skills && g.skills.level('run') < 5 ? 40 : 0)],
+  ['אימון אגרוף על השק (קרב: רמה אחת למעלה)', 'dumbbell', (game) => gymSkill(game, 'fight', 'האגרופים מהירים יותר'), (g) => (g.skills && g.skills.level('fight') < 5 ? 40 : 0)],
+] };
+
+function gymSkill(game, id, text) {
+  const S = game.skills;
+  if (!S || S.level(id) >= 5) {
+    game.hud.toast('כבר ברמה הכי גבוהה', 'info', 2);
+    return;
+  }
+  const want = (S.level(id) + 1) * 20 - S.points[id];
+  S.add(id, Math.max(1, want));
+  game.hud.toast(text, 'good', 2.2);
+}
+
+function policeScanner(game) {
+  const P = game.player;
+  P.scannerT = Math.max(P.scannerT || 0, 600);
+  game.hud.toast('סורק משטרתי: הניידות והשוטרים על המפה ל־10 דקות', 'good', 3);
+}
+
+function mapPro(game) {
+  const P = game.player;
+  if (P.mapPages) {
+    game.hud.toast('MAP PRO כבר אצלכם', 'info', 2);
+    return;
+  }
+  P.mapPages = true;
+  game.hud.toast('MAP PRO: כל דפי השרטוט שעוד לא מצאתם על המפה ועל מפת העיר', 'good', 3.2);
+}
 SERVICES.jewelry = { verb: 'להיכנס לחנות התכשיטים', ask: 'לראות את התכשיטים', who: 'הצורפת', greet: 'זהב, כסף, ויהלום מצויר אחד שנוצץ באמת. במה אפשר לעזור?', offers: [
   ['שרשרת זהב', 'chain', (game) => { wear(game, 'acc', JEWELS[0]); game.hud.toast('נוצץ!', 'good', 2); }],
   ['משקפי שמש מעוצבים', 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), 'קול.')],
@@ -1390,6 +1434,11 @@ class OpenShop {
     const used = new Set(this.visitors.map((v) => v.spot));
     const free = (list) => list.filter((p) => !used.has(p));
     if (kind === 'barber') {
+      // (ROADMAP 16.7: a barber's of the new kind - now and then someone in for what is on the wall)
+      if (this.life2 && R.browse.length && Math.random() < 0.3) {
+        const br = free(R.browse);
+        if (br.length) return { spot: pick(br), mode: 'browse' };
+      }
       const ch = free(R.chairs.slice(0, 1));
       if (ch.length && !this.heroJob) return { spot: ch[0], mode: 'chair' };
       const se = free(R.seats);
@@ -2459,6 +2508,9 @@ class OpenShop {
     const R = this.room;
     const fig = c.fig;
     let job = this.heroJob;
+    // (ROADMAP 16.7: a barber's of the new kind - someone at the till is seen to first, between cuts)
+    const B = this.life2 && this.life2.beauty;
+    if (!job && this.life2 && !this.npcJob && (this.life2.payer || this.life2.queue.length)) return this.life2.keeper(c, dt);
     if (!job) {
       // the next one from the bench takes the chair
       const chair = R.chairs[0];
@@ -2477,6 +2529,8 @@ class OpenShop {
         this.npcJob = null;
         fig.reachR = null;
         fig.lookAt = null;
+        // (between cuts: at the till)
+        if (this.life2) return this.life2.keeper(c, dt);
         c.faceYaw = this.homeYaw;
         return { x: this.home.x, z: this.home.z, speed: 0.9 };
       }
@@ -2504,6 +2558,8 @@ class OpenShop {
           job.phase = 'erase';
           job.t = 0;
           fig.carry = 'eraser';
+          // (ROADMAP 16.7) the cape round them first
+          if (B) B.capeOn(job.who);
           if (job.npc && Math.random() < 0.6) this.say(job.who, pick(['Something new, please!', 'Surprise me.', 'Not too short!', 'The usual.']));
         }
         break;
@@ -2557,9 +2613,10 @@ class OpenShop {
         }
         break;
       default:
-        // admire: a look in the mirror
+        // admire: a look in the mirror (ROADMAP 16.7: the hand mirror held up behind their head)
         fig.lookAt = null;
         fig.reachR = null;
+        if (B) B.mirrorShow(c, job.who, job.t < 1.8);
         if (job.t > 0.4 && !job.said) {
           job.said = true;
           if (job.npc) this.say(job.who, pick(['Looking sharp!', 'Love it!', 'Ten years younger!', 'Wow!']));
@@ -2567,6 +2624,11 @@ class OpenShop {
           if (job.npc) this.sound('cheer', 0.25, 10);
         }
         if (job.t > 2.2) {
+          // (the cape off, shaken out: the hair on the floor round the chair)
+          if (B) {
+            B.mirrorShow(c, null, false);
+            B.capeOff(job.who, job.chair);
+          }
           if (job.npc) {
             this.leave(job.v);
             this.npcJob = null;
@@ -2861,9 +2923,10 @@ class OpenShop {
     // (ROADMAP 8.2: at a place of yours it is all on the house)
     const PR = game.props;
     const own = !!(PR && PR.owns(this.shop));
-    const choices = info.offers.map(([label, sketch, fn], i) => {
+    const choices = info.offers.map(([label, sketch, fn, price], i) => {
       if (sketch === 'menu') return { label, fn: () => fn(game, this) };
-      const p = M ? M.priceOf(prices[i]) : 0;
+      // (an offer with its own price - ROADMAP 16.6 - or the shop's list's, by its place in it)
+      const p = M ? charmed(game, M.priceOf(price !== undefined ? price : prices[i])) : 0;
       const n = own ? 0 : p;
       return { label: n ? `${label} · ${fmt(n)}` : p ? `${label} · על חשבון הבית` : label, fn: () => this.buy(n, label, () => this.serve(sketch, fn)) };
     });
@@ -3563,7 +3626,7 @@ class OpenShop {
   draw(fr) {
     const s = this.shop;
     // (ROADMAP 14.4: the things in motion in a shop of the new kind, where the hands are now)
-    if (this.life2) this.life2.draw();
+    if (this.life2) this.life2.draw(fr);
     if (this.lifts) {
       for (let k = 0; k < this.lifts.length; k++) if (this.lifts[k].open > 0.01) this.drawLift(fr, this.lifts[k], k);
     }

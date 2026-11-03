@@ -97,7 +97,7 @@ export class SaveGame {
       where: districtName(at.x, at.z) || '',
       clock: g.daynight ? g.daynight.clock : '',
       playTime: Math.round(this.playTime),
-      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade, colours: p.parachute.colours || null } : null, armor: p.armor || 0 },
+      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade, colours: p.parachute.colours || null } : null, armor: p.armor || 0, perks: perksOf(p) },
       hero: { hair: L.hair.style !== 'none' ? { style: L.hair.style, color: L.hair.color } : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: p.fig.bulk, maxHp: p.maxHp },
       // (one drawn freehand: its drawing, to make it again - ROADMAP 11.6)
       weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score, free: s.free || null })),
@@ -238,6 +238,19 @@ export class SaveGame {
     p.hp = Math.max(1, Math.min(p.maxHp, P.hp));
     p.invuln = 3;
     p.parachute = P.parachute ? { grade: P.parachute.grade, colours: Array.isArray(P.parachute.colours) ? P.parachute.colours : null } : null;
+    // (ROADMAP 16.4-16.6: what the shops' things do for you - kept)
+    const K = P.perks || {};
+    p.kits = K.kits || 0;
+    p.runShoes = !!K.runShoes;
+    p.gifts = Array.isArray(K.gifts) ? K.gifts.slice(0, 12) : [];
+    p.zoomCam = !!K.zoomCam;
+    p.copRadio = !!K.copRadio;
+    p.mapPages = !!K.mapPages;
+    p.music = !!K.music;
+    p.scannerT = Math.max(0, Math.min(600, K.scannerT || 0));
+    p.charmT = Math.max(0, Math.min(600, K.charmT || 0));
+    p.paintCans = Math.max(0, Math.min(20, K.paintCans || 0));
+    p.tape = Math.max(0, Math.min(20, K.tape || 0));
     // (the vest, ROADMAP 5.7)
     if (!g.classic) {
       p.armor = P.armor || 0;
@@ -355,4 +368,11 @@ export class SaveGame {
     this.autoT = AUTO_EVERY;
     g.hud.toast(`נטען: ${s.where || 'העיר'} · ${s.clock}`, 'good', 2.4);
   }
+}
+
+// (ROADMAP 16.4-16.6) the shops' things that stay with you: the first-aid kits in your pocket, running
+// shoes, jewellery to give, the phone's zoom, the laptop's police radio, MAP PRO, the music, the
+// scanner's minutes left
+function perksOf(p) {
+  return { kits: p.kits || 0, runShoes: !!p.runShoes, gifts: (p.gifts || []).map((x) => ({ what: x.what, heb: x.heb })), zoomCam: !!p.zoomCam, copRadio: !!p.copRadio, mapPages: !!p.mapPages, music: !!p.music, scannerT: Math.round(p.scannerT || 0), charmT: Math.round(p.charmT || 0), paintCans: p.paintCans || 0, tape: p.tape || 0 };
 }

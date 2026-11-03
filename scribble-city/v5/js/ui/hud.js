@@ -575,6 +575,20 @@ export class HUD {
       g.restore();
     }
     for (const v of game.vehicles.list) if (Math.abs(v.pos.x - p.x) <= reach && Math.abs(v.pos.z - p.z) <= reach) dot(v.pos.x, v.pos.z, 4, '#5f8be8', '#141418');
+    // (ROADMAP 16.6: the police's radio - a scanner for ten minutes, a laptop for good - their cars and
+    // their officers, wherever they are on the minimap; red and blue, blinking)
+    const P = game.player;
+    if (P.copRadio || P.scannerT > 0) {
+      const on = Math.floor(game.time * 3) % 2;
+      for (const c of game.traffic.list) {
+        if (!c.police || c.wrecked || Math.abs(c.pos.x - p.x) > reach || Math.abs(c.pos.z - p.z) > reach) continue;
+        dot(c.pos.x, c.pos.z, 5, on ? '#e2335f' : '#3a6ad6', '#141418');
+      }
+      for (const e of game.enemies.list) {
+        if (!e.alive || e.faction !== 'police' || Math.abs(e.pos.x - p.x) > reach || Math.abs(e.pos.z - p.z) > reach) continue;
+        dot(e.pos.x, e.pos.z, 3.2, on ? '#3a6ad6' : '#e2335f', '#141418');
+      }
+    }
     for (const e of game.enemies.list) {
       if (!e.alive) continue;
       const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);

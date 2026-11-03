@@ -169,7 +169,7 @@ function balls(R, run, len) {
 // ------------------------------------------------------------------ the treadmill
 // Its deck and the belt on it (its slats running: game/trylife.js), the side rails, the uprights and
 // the console with its screen, the handles; a strip of running track on the floor before it.
-function treadmill(R, um, dm) {
+export function treadmill(R, um, dm) {
   const S = R.psoup(false);
   const y0 = R.y0;
   // (its length along u: the runner faces +u's way, the console at the far end)

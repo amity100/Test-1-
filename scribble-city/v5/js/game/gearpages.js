@@ -122,8 +122,10 @@ export class GearPages {
   mini(g, p, s) {
     if (!this.on) return;
     const F = this.G.play.state.found;
+    // (ROADMAP 16.6: with MAP PRO from an electronics shop, every one - as far as the minimap shows)
+    const r = this.game.player.mapPages ? 400 : 70;
     for (const q of this.spots) {
-      if (F.includes(q.id) || Math.abs(q.x - p.x) > 70 || Math.abs(q.z - p.z) > 70) continue;
+      if (F.includes(q.id) || Math.abs(q.x - p.x) > r || Math.abs(q.z - p.z) > r) continue;
       g.save();
       g.translate(q.x - p.x, q.z - p.z);
       g.fillStyle = '#2f62d0';

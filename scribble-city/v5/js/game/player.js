@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { carCare } from './hobbylife.js';
 import { Doodle } from './doodle.js';
 import { heroLook } from './looks.js';
 import { groundHeight, WATER_X, worldEdge } from '../world/layout.js';
@@ -208,6 +209,18 @@ export class Player {
     if (this.painT > 0) {
       this.painT -= dt;
       if (this.painT <= 0) this.game.hud.toast('משככי הכאבים הפסיקו לפעול', 'info', 1.8);
+    }
+    // (ROADMAP 16.8: a spray can, tape from the hardware store - your car looked after)
+    if (this.inVehicle && (this.paintCans > 0 || this.tape > 0)) carCare(this.game, dt);
+    // (ROADMAP 16.7: a scent from the perfumery - the shops charmed for ten minutes)
+    if (this.charmT > 0) {
+      this.charmT -= dt;
+      if (this.charmT <= 0) this.game.hud.toast('ריח הבושם התפוגג', 'info', 1.8);
+    }
+    // (ROADMAP 16.6: the police scanner from an electronics shop - ten minutes of their radio)
+    if (this.scannerT > 0) {
+      this.scannerT -= dt;
+      if (this.scannerT <= 0) this.game.hud.toast('הסוללה של הסורק המשטרתי נגמרה', 'info', 2);
     }
     if (this.kits > 0 && this.mode === 'foot' && this.hp > 0 && this.hp < this.maxHp * 0.3 && this.game.time - this.lastHurt > 1.2) {
       this.kits--;

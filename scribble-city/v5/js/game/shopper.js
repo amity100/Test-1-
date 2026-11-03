@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { fmt } from './money.js';
-import { wear } from './wardrobe.js';
+import { wear, ACCS } from './wardrobe.js';
+import { newsFlash } from './techlife.js';
 
 // (v5, ROADMAP 16.2) You in a shop of the new kind (game/shoplife.js), as its customers are.
 //
@@ -123,7 +124,15 @@ export class Shopper {
       if (this.life.tries.mine) return null;
       return `לבקש את המידה שלי מהמחסן · ${fmt(price)}`;
     }
+    // (ROADMAP 16.7: a scent bought - the shops charmed: a tenth off for ten minutes)
+    price = charmed(this.game, price);
     if (f === 'tech') return `לקחת אחד באריזה לקופה · ${fmt(price)}`;
+    // (ROADMAP 16.7: a perfumery's, an optician's - the one on the shelf is to try: yours from the back)
+    if (f === 'perfume') return `לקחת אחד באריזה לקופה · ${fmt(price)}`;
+    if (f === 'optics') return `לקחת לקופה, בנרתיק · ${fmt(price)}`;
+    // (ROADMAP 16.8: a florist's bunch - wrapped as a bouquet at the counter)
+    if (f === 'florist') return `זר כזה, עטוף, לקופה · ${fmt(price)}`;
+    if (f === 'books' || f === 'records' || f === 'toys') return `לקחת לקופה · ${fmt(price)}`;
     if (f === 'jewel') return `לשמור לי בקופה · ${fmt(price)}`;
     if (f === 'fashion') return `לקחת לקופה · ${fmt(price)}`;
     return `לשים בסל · ${fmt(price)}`;
@@ -149,9 +158,10 @@ export class Shopper {
       it = L.movers.add({ line: 'box', model: 'shoeBox', cell: null, tint: [0.9, 0.46, 0.16], cap: [0.97, 0.97, 0.95] }, true);
       boxed = true;
     }
+    price = charmed(this.game, price);
     const rec = { it, s: boxed ? null : s, what: s.what, price, heb: L.prof.heb[s.what] || 'מוצר', look: s.look };
     it.price = price;
-    if (L.prof.flow === 'tech' && L.prof.boxed) {
+    if (L.prof.boxed) {
       // (the one on the table is the shop's, to try: a boxed one from the back for you)
       L.giveBack(it);
       rec.it = L.movers.add(L.prof.boxed, true);
@@ -394,6 +404,9 @@ export class Shopper {
     let run = false;
     // (ROADMAP 16.5: a ring, a watch, a necklace - kept, to give at a bar: game/streetlife.js giveGift)
     const gifts = [];
+    // (ROADMAP 16.6: an electronics shop's - what each does for you from now on)
+    const tech = [];
+    let slick = false;
     for (const r of list) {
       const u = USE[r.what];
       if (u) {
@@ -404,6 +417,102 @@ export class Shopper {
         kits += u.kit || 0;
       }
       if (r.what === 'ring' || r.what === 'watch' || r.what === 'necklace') gifts.push({ what: r.what, heb: r.heb });
+      // a phone: its camera's zoom - the blueprints' boards photographed from almost twice as far
+      if (r.what === 'phone' && !P.zoomCam) {
+        P.zoomCam = true;
+        tech.push('מצלמה עם זום: מצלמים שלטי שרטוט מרחוק');
+      }
+      // a laptop: the police's radio on it - their cars and officers on your map, always
+      if (r.what === 'laptop' && !P.copRadio) {
+        P.copRadio = true;
+        tech.push('רדיו משטרתי במחשב: השוטרים תמיד במפה');
+      }
+      // (ROADMAP 16.7) a scent: for ten minutes the shops charmed - a tenth off; glasses on your face
+      // (clear: a steadier aim - game/skills.js; dark: a face the police know less - game/lose.js);
+      // pomade: the hair slicked back - a new look
+      if (r.what === 'perfume' || r.what === 'tester') {
+        P.charmT = Math.max(P.charmT || 0, 600);
+        if (!tech.includes('בושם: 10% הנחה בחנויות ל־10 דקות')) tech.push('בושם: 10% הנחה בחנויות ל־10 דקות');
+      }
+      if (r.what === 'glasses' || r.what === 'sunglasses') {
+        const L = P.fig.look;
+        L.face = L.face || {};
+        L.face.glasses = r.what === 'sunglasses' ? 'shades' : 'round';
+        worn = r.heb;
+        if (r.what === 'glasses') tech.push('משקפיים: מכוונים יציב יותר');
+        if (g.streetlife && g.streetlife.saveHero) g.streetlife.saveHero();
+      }
+      if (r.what === 'pomade') {
+        const L = P.fig.look;
+        if (L.hair && L.hair.style !== 'none') {
+          L.hair = { style: 'slick', color: L.hair.color };
+          worn = r.heb;
+          slick = true;
+          if (g.streetlife && g.streetlife.saveHero) g.streetlife.saveHero();
+        }
+      }
+      // (ROADMAP 16.8) a book: the city's guide - the nearest blueprint's board on your map; a record:
+      // music in your ears; a bear, a bouquet: a gift to give at a bar; a spray can, a can of paint:
+      // your car repainted when the police lose sight of you; tape, a tool: your car patched up when it
+      // is nearly a wreck (game/hobbylife.js carCare)
+      if (r.what === 'book' && !tech.includes('מדריך העיר')) {
+        const p = P.pos;
+        let best = null;
+        let bd = Infinity;
+        for (const b of g.world.billboards || []) {
+          if (!b.id || (g.album && g.album.has(b.id))) continue;
+          const d = Math.hypot(b.x - p.x, b.z - p.z);
+          if (d < bd) {
+            bd = d;
+            best = b;
+          }
+        }
+        if (best && g.gps) {
+          g.gps.set(best.x, best.z, 'שלט שרטוט');
+          tech.push('מדריך העיר');
+          tech.push(`השלט הקרוב מסומן במפה (${Math.round(bd)} מ')`);
+        }
+      }
+      if (r.what === 'record') {
+        if (!P.music) tech.push('מוזיקה באוזניים: מתעייפים פחות בריצה');
+        P.music = true;
+      }
+      if (r.what === 'toy' || r.what === 'flowers') gifts.push({ what: r.what, heb: r.heb });
+      if (r.what === 'spray' || r.what === 'paint') {
+        P.paintCans = (P.paintCans || 0) + 1;
+        tech.push(`צבע לרכב (${P.paintCans}): כשהמשטרה מאבדת אתכם ברכב, הוא נצבע מחדש`);
+      }
+      if (r.what === 'tape' || r.what === 'tool') {
+        P.tape = (P.tape || 0) + 1;
+        tech.push(`ערכת תיקון (${P.tape}): כשהרכב כמעט הרוס, הוא מתוקן`);
+      }
+      // (ROADMAP 16.9) soap: what you have on, clean - its paint, its holes gone; a pair of dumbbells:
+      // stronger (more life); water: breath again and a little life
+      if (r.what === 'soap' && P.fig) {
+        P.fig.paintT = 0;
+        if (P.fig.holes) P.fig.holes.length = 0;
+        tech.push('הבגדים נקיים: בלי כתמים ובלי חורים');
+      }
+      if (r.what === 'dumbbell' && P.maxHp < 150) {
+        P.maxHp = Math.min(150, P.maxHp + 5);
+        P.hp = Math.min(P.maxHp, P.hp + 5);
+        tech.push(`משקולות בבית: מקסימום חיים ${P.maxHp}`);
+      }
+      if (r.what === 'water') {
+        if (g.skills) g.skills.stamina = 100;
+        P.hp = Math.min(P.maxHp, P.hp + 5);
+        tech.push('נשימה חזרה: ריצה מלאה, +5 חיים');
+      }
+      // headphones: on your head, music as you go - a run tires you less
+      if (r.what === 'headphones') {
+        try {
+          wear(g, 'acc', ACCS.find((a) => a.acc === 'headphones'));
+        } catch (e) {
+          void e;
+        }
+        if (!P.music) tech.push('מוזיקה באוזניים: מתעייפים פחות בריצה');
+        P.music = true;
+      }
       // (clothes: put on - the last of each kind)
       const model = r.look && r.look.model;
       const w = WEAR[model] || (r.what === 'shoe' ? WEAR.shoe : null);
@@ -445,7 +554,8 @@ export class Shopper {
       run ? 'נעלי ריצה: ספרינט מהיר ב־10%' : null,
       lost ? 'השוטרים לא מזהים אתכם: כוכב אחד פחות' : null,
       gifts.length ? 'אפשר לתת במתנה בבר' : null,
-      worn ? 'לבשתם את זה' : null,
+      ...tech,
+      slick ? 'השיער מסורק לאחור: מראה חדש' : worn ? 'לבשתם את זה' : null,
     ].filter(Boolean).join(', ');
     g.hud.toast(`${stolen ? 'גנבתם' : 'קניתם'}: ${summary(list.map((r) => r.heb))}${fx ? ` (${fx})` : ''}`, stolen ? 'bad' : 'good', 3);
   }
@@ -480,6 +590,8 @@ export class Shopper {
     const k = L.open.keeper;
     if (k && k.alive && k.owner === L.open) L.say(k, pick(LINES.thief), 1);
     if (g.police) g.police.crime('alarm', d.x, d.z);
+    // (ROADMAP 16.6: on the news - an electronics shop's televisions)
+    newsFlash(g, { kind: 'steal', head: `SHOPLIFTER AT ${String(L.shop.name || 'A SHOP').toUpperCase()}`, sub: 'POLICE ASK FOR WITNESSES' });
     L.stats.stolen = (L.stats.stolen || 0) + list.length;
     this.use(list, true);
     g.hud.toast(`יצאתם בלי לשלם (${fmt(value)}) — האזעקה בדלת צפצפה`, 'bad', 3.2);
@@ -701,6 +813,7 @@ export class Shopper {
     if (g.police) {
       // (a hold-up is more than a thing walked out with: two stars - a jeweller's, three)
       g.police.crime('alarm', d.x, d.z);
+      newsFlash(g, { kind: 'rob', head: `ARMED HOLD-UP AT ${String(L.shop.name || 'A SHOP').toUpperCase()}`, sub: 'THE SUSPECT FLED WITH THE CASH' });
       g.police.addHeat(L.prof.flow === 'jewel' ? 2.7 : 0.95, d.x, d.z, false);
     }
     if (R.k.alive) L.say(R.k, pick(LINES.after), 1);
@@ -753,4 +866,9 @@ function summary(names) {
   const m = new Map();
   for (const n of names) m.set(n, (m.get(n) || 0) + 1);
   return [...m].map(([n, k]) => (k > 1 ? `${k}× ${n}` : n)).join(', ');
+}
+
+// (ROADMAP 16.7) a price while a scent from the perfumery charms the shops: a tenth off
+export function charmed(game, n) {
+  return game && game.player && game.player.charmT > 0 ? Math.max(1, Math.round(n * 0.9)) : n;
 }

@@ -7,6 +7,9 @@ import { Run, L, SC, CLOTH, BRIGHT, PASTEL, CLOTH_REAL, CLOTH_LUX, SHOES_REAL, S
 import { market } from './market.js';
 import { fashion } from './fashion.js';
 import { techstore } from './techstore.js';
+import { perfumeStore, opticsStore, barberShop } from './beauty.js';
+import { bookShop, recordShop, toyShop, florist, hardwareStore } from './hobby.js';
+import { laundromat, gymHall } from './services.js';
 import { jewels as jeweller } from './jewels.js';
 import { eatery } from './eatery.js';
 import { shoeStore } from './shoestore.js';
@@ -903,8 +906,6 @@ const PLANS = {
   deli: (R) => market(R, { kind: 'deli' }),
   shop: (R) => market(R, { kind: '247' }),
   pharmacy: (R) => market(R, { kind: 'pharmacy' }),
-  hardware,
-  books,
   // (ROADMAP 14.4: the clothes shops of the new kind - world/fashion.js; the old plan, clothes(),
   // kept for whoever wants it)
   fashion: (R) => fashion(R, {}),
@@ -916,11 +917,24 @@ const PLANS = {
   // (ROADMAP 14.4: the electronics shops of the new kind - world/techstore.js; screens() kept)
   electronics: (R) => techstore(R, {}),
   phones: (R) => techstore(R, {}),
-  toys,
-  perfume,
+  // (ROADMAP 16.7: the perfumery, the optician and the barber of the new kind - world/beauty.js; the
+  // old plans, perfume() and optics(), kept for whoever wants them; the barber's, world/rooms.js)
+  perfume: (R) => perfumeStore(R, {}),
   // (ROADMAP 14.4: the jeweller of the new kind - world/jewels.js; the old plan, jewels(), kept)
   jewelry: jeweller,
-  optics,
+  optics: (R) => opticsStore(R, {}),
+  barber: (R) => barberShop(R, {}),
+  // (ROADMAP 16.8: the bookshop, the record shop, the toy shop, the florist, the hardware store of the
+  // new kind - world/hobby.js; the old plans, books(), toys(), hardware(), kept)
+  books: (R) => bookShop(R, {}),
+  music: (R) => recordShop(R, {}),
+  toys: (R) => toyShop(R, {}),
+  flowers: (R) => florist(R, {}),
+  hardware: (R) => hardwareStore(R, {}),
+  // (ROADMAP 16.9: the laundromat and the gym of the new kind - world/services.js; the old rooms,
+  // world/rooms.js)
+  laundry: (R) => laundromat(R, {}),
+  gym: (R) => gymHall(R, {}),
   sports: (R) => sportStore(R, {}),
   // (ROADMAP 16.3: the eateries of the new kind - world/eatery.js; the old plan, counterShop(), kept
   // for whoever wants it)
@@ -938,7 +952,7 @@ const PLANS = {
 };
 
 // (ROADMAP 14.4: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
-const NEW_KINDS = new Set(['grocery', 'deli', 'shop', 'pharmacy', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'shoes', 'sports', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
+const NEW_KINDS = new Set(['grocery', 'deli', 'shop', 'pharmacy', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'shoes', 'sports', 'perfume', 'optics', 'barber', 'books', 'music', 'toys', 'flowers', 'hardware', 'laundry', 'gym', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
 for (const [kind, fn] of Object.entries(PLANS)) {
   const plan = (R) => fn(R);
   plan.stock = true;
@@ -955,4 +969,4 @@ Object.assign(DECOR, {
   pharmacy: { ...DECOR.pharmacy, floor: 'tiles' },
 });
 
-export { PLANS, clothes, screens, jewels, counterShop, shoes, sports };
+export { PLANS, clothes, screens, jewels, counterShop, shoes, sports, perfume, optics, books, toys, hardware };

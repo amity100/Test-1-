@@ -1510,6 +1510,36 @@ function defineAll(A) {
     print(g, 8, 30, w - 16, 4, 'rgba(30,25,35,0.6)', 7, rng);
     title(g, '$599', w / 2, h - 12, w * 0.6, 14, '#c42a22', { edge: false });
   });
+  // (ROADMAP 16.6) the cards on the scanners' case by the till: the police scanner, the map of the
+  // blueprints' pages
+  A.place('card.scan', 96, 72, (g, w, h) => {
+    g.fillStyle = '#16233a';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#e2335f';
+    g.fillRect(0, 0, w / 2, 6);
+    g.fillStyle = '#3a6ad6';
+    g.fillRect(w / 2, 0, w / 2, 6);
+    title(g, 'POLICE', w / 2, 22, w * 0.86, 15, '#ffffff', { edge: false });
+    title(g, 'SCANNER', w / 2, 38, w * 0.86, 13, '#9fd0ff', { edge: false });
+    title(g, '$150', w / 2, h - 13, w * 0.6, 15, '#ffd23f', { edge: false });
+  });
+  A.place('card.mappro', 96, 72, (g, w, h) => {
+    g.fillStyle = '#f4efe2';
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(47,98,208,0.35)';
+    g.lineWidth = 1;
+    for (let x = 8; x < w; x += 12) {
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x, h);
+      g.stroke();
+    }
+    g.fillStyle = '#2f62d0';
+    g.fillRect(w * 0.7, 8, 12, 15);
+    title(g, 'MAP PRO', w * 0.4, 20, w * 0.66, 14, INK, { edge: false });
+    title(g, 'every page', w / 2, 40, w * 0.86, 11, '#2f62d0', { edge: false, fam: 'Caveat', wt: 700 });
+    title(g, '$60', w / 2, h - 13, w * 0.6, 15, '#c42a22', { edge: false });
+  });
   A.place('box.laptop', 128, 96, (g, w, h, rng) => {
     g.fillStyle = '#f4f4f2';
     g.fillRect(0, 0, w, h);
@@ -1517,6 +1547,70 @@ function defineAll(A) {
     g.fillRect(w * 0.18, h * 0.22, w * 0.64, h * 0.42);
     pic(g, w * 0.6, h * 0.36, 0, rng);
     title(g, 'FOLIO AIR', w / 2, h * 0.82, w * 0.8, 14, INK, { edge: false });
+  });
+  // (ROADMAP 16.8) the bookshop's, the record shop's, the toy shop's, the florist's, the hardware
+  // store's bands; the bookshop's little boards over its bays; the record sleeves; the toys' boxes
+  for (const [n, t, f, l] of [['head.gym', 'TRAIN  HARD', '#141416', '#ffd23f'], ['head.records', 'RECORDS', '#141416', '#ff6fb1'], ['head.toys', 'TOYS  &  GAMES', '#2f62d0', '#ffd23f'], ['head.flowers', 'FRESH  FLOWERS', '#2e5a34', '#fbf6ea'], ['head.paint', 'PAINT', '#c8501c', '#ffffff'], ['head.tools', 'TOOLS  &  FIXINGS', '#202024', '#ffb03a']]) place(n, 'header', header(t, f, l));
+  for (const [n, t] of [['head.fiction', 'FICTION'], ['head.mystery', 'MYSTERY'], ['head.art', 'ART'], ['head.travel', 'TRAVEL'], ['head.kids', 'KIDS'], ['head.history', 'HISTORY']]) {
+    A.place(n, 160, 34, (g, w, h) => {
+      g.fillStyle = '#2a1c14';
+      g.fillRect(0, 0, w, h);
+      title(g, t, w / 2, h * 0.55, w * 0.84, h * 0.62, '#e8cf8a', { edge: false, fam: 'Rubik', wt: 700 });
+    });
+  }
+  for (let k = 0; k < 6; k++) {
+    A.place(`sleeve.${k}`, 96, 96, (g, w, h, rng) => {
+      const pal = [['#e2335f', '#ffd23f'], ['#141418', '#e8cf8a'], ['#3a6ad6', '#ffffff'], ['#3fbf7f', '#141418'], ['#ff9a3c', '#2a1c14'], ['#9a6fe0', '#fbf6ea']][k];
+      g.fillStyle = pal[0];
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = pal[1];
+      if (k % 3 === 0) {
+        g.beginPath();
+        g.arc(w / 2, h / 2, w * 0.3, 0, Math.PI * 2);
+        g.fill();
+      } else if (k % 3 === 1) for (let i = 0; i < 5; i++) g.fillRect(0, (h * i) / 5 + 4, w, h / 12);
+      else for (let i = 0; i < 6; i++) g.fillRect(rng() * w, rng() * h, w / 5, w / 5);
+      title(g, ['INKWAVE', 'THE SCRIBBLES', 'BAY BEAT', 'PENCIL PUSH', 'GRAPHITE', 'NIGHT SKETCH'][k], w / 2, h * 0.86, w * 0.9, 13, k % 3 === 0 ? '#141418' : '#ffffff', { edge: false, wt: 800 });
+    });
+  }
+  for (let k = 0; k < 4; k++) {
+    A.place(`box.toy${k}`, 80, 80, (g, w, h, rng) => {
+      g.fillStyle = ['#ffd23f', '#e2335f', '#3a6ad6', '#3fbf7f'][k];
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = '#ffffff';
+      g.fillRect(w * 0.12, h * 0.14, w * 0.76, h * 0.56);
+      drawing(g, ['sun', 'bolt', 'cow', 'fish'][k], w / 2, h * 0.42, w * 0.22, rng);
+      title(g, ['SUNNY DAYS', 'ROBO BOLT', 'MOO FARM', 'GO FISH'][k], w / 2, h * 0.84, w * 0.86, 11, '#141418', { edge: false });
+    });
+  }
+  A.place('card.new', 96, 64, (g, w, h) => {
+    g.fillStyle = '#e2335f';
+    g.fillRect(0, 0, w, h);
+    title(g, 'NEW', w / 2, h * 0.52, w * 0.7, 30, '#ffffff', { edge: false });
+  });
+  A.place('card.picks', 96, 64, (g, w, h) => {
+    g.fillStyle = '#fbf6ea';
+    g.fillRect(0, 0, w, h);
+    title(g, 'STAFF', w / 2, h * 0.34, w * 0.8, 18, '#2a1c14', { edge: false });
+    title(g, 'PICKS', w / 2, h * 0.7, w * 0.8, 18, '#c42a22', { edge: false });
+  });
+  // (ROADMAP 16.7) the perfumery's, the optician's, the barber's bands; the eye chart
+  for (const [n, t, f, l] of [['head.perfume', 'FRAGRANCE', '#0b0b0d', '#e8cf8a'], ['head.optics', 'EYEWEAR', '#f4f4f2', '#1d2c4a'], ['head.sun', 'SUNGLASSES', '#16181e', '#ffd23f'], ['head.care', 'HAIR  CARE', '#1a1f33', '#f4efe6']]) place(n, 'header', header(t, f, l));
+  A.place('ui.eyechart', 96, 140, (g, w, h) => {
+    g.fillStyle = '#fbfbf8';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#141418';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const rows = [['E', 30], ['F P', 21], ['T O Z', 15], ['L P E D', 11], ['P E C F D', 8.5], ['E D F C Z P', 7], ['F E L O P Z D', 6]];
+    let y = 18;
+    for (const [t, s] of rows) {
+      g.font = `700 ${s}px Rubik, Arial, sans-serif`;
+      g.fillText(t, w / 2, y);
+      y += s * 0.75 + 7;
+    }
+    g.fillStyle = '#c42a22';
+    g.fillRect(8, y - 4, w - 16, 1.2);
   });
   for (const [n, t, f, l] of [['head.tv', 'TV  &  CINEMA', '#1e1e22', '#f4efe6'], ['head.laptops', 'LAPTOPS', '#1e1e22', '#9ad0f0'], ['head.sound', 'SOUND', '#1e1e22', '#f4c43a'], ['head.jewels', 'FINE JEWELLERY', '#1a2238', '#e8cf8a']]) place(n, 'header', header(t, f, l));
   // (the paper bag a market gives you, the cardboard box the stock comes in)

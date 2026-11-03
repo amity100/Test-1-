@@ -1575,9 +1575,11 @@ export class Game {
       const dy = b.y - cam.position.y;
       const dz = b.z - cam.position.z;
       const d = Math.hypot(dx, dy, dz);
-      if (d > 85) continue;
+      // (ROADMAP 16.6: a phone with a zoom camera from an electronics shop - almost twice as far)
+      const zoom = this.player.zoomCam ? 1.8 : 1;
+      if (d > 85 * zoom) continue;
       // (a board up on a roof is photographed from up there: ROADMAP 5.1)
-      if (b.roof && (cam.position.y < b.top - 1 || d > 30)) continue;
+      if (b.roof && (cam.position.y < b.top - 1 || d > 30 * zoom)) continue;
       // in view: within ~25 degrees of the centre, more when the board fills the frame
       const cos = (dx * fwd.x + dy * fwd.y + dz * fwd.z) / d;
       if (Math.acos(Math.min(1, cos)) > 0.45 + Math.atan2(b.w * 0.5, d) * 0.8) continue;

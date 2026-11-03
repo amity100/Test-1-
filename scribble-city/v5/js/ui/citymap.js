@@ -1638,8 +1638,38 @@ export class CityMap {
       g.stroke();
       g.restore();
     }
-    // the police, while they look for you
-    if (game.police && game.police.level > 0) {
+    // the police, while they look for you (ROADMAP 16.6: or always, on the police's radio - a scanner,
+    // a laptop - and their officers on foot too)
+    const radio = game.player.copRadio || game.player.scannerT > 0;
+    if (radio) {
+      for (const e of game.enemies.list) {
+        if (!e.alive || e.faction !== 'police') continue;
+        g.fillStyle = '#3a6ad6';
+        g.strokeStyle = COL.ink;
+        g.lineWidth = 1.6;
+        g.beginPath();
+        g.arc(this.sx(e.pos.x), this.sy(e.pos.z), 3.4, 0, TAU);
+        g.fill();
+        g.stroke();
+      }
+    }
+    // (ROADMAP 16.6: MAP PRO - every blueprint's page not found yet, a little blue sheet)
+    const pages = game.player.mapPages && game.gear && game.gear.pages;
+    if (pages && pages.on) {
+      const F = pages.G.play.state.found;
+      for (const q of pages.spots) {
+        if (F.includes(q.id)) continue;
+        const x = this.sx(q.x);
+        const y = this.sy(q.z);
+        if (x < -8 || y < -8 || x > this.W + 8 || y > this.H + 8) continue;
+        g.fillStyle = '#2f62d0';
+        g.strokeStyle = '#f2f6ff';
+        g.lineWidth = 1.5;
+        g.fillRect(x - 4, y - 5, 8, 10);
+        g.strokeRect(x - 4, y - 5, 8, 10);
+      }
+    }
+    if ((game.police && game.police.level > 0) || radio) {
       for (const c of game.traffic.list) {
         if (!c.police || c.wrecked) continue;
         const x = this.sx(c.pos.x);

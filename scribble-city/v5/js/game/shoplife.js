@@ -7,6 +7,10 @@ import { Shopper } from './shopper.js';
 import { ShopMural } from './shopmural.js';
 import { CounterLife } from './counterlife.js';
 import { TryLife } from './trylife.js';
+import { TechLife } from './techlife.js';
+import { BeautyLife } from './beautylife.js';
+import { HobbyLife } from './hobbylife.js';
+import { ServiceLife } from './servicelife.js';
 
 // (v5, ROADMAP 14.4) A shop's day, as it really goes - the shops of the new kind (world/market.js):
 // every action tied to a real thing in the shop.
@@ -129,6 +133,11 @@ const TECH = {
     reply: ['Really?', 'How much is it?', 'Nice...', 'Does it come in black?', 'Hmm, interesting.'],
     listen: ['Wow, the sound!', 'So clear!', 'Hmm, a bit tight.'],
     watch: ['Look at those colours!', 'That screen is huge.', 'I need one of those.'],
+    // (ROADMAP 16.6: the news on the screens; the seller's selfie)
+    wanted: ['Whoa - a police chase!', 'They\'re still looking for that guy...', 'Wait... isn\'t that around here?'],
+    news: ['Did you hear? Somebody robbed a shop!', 'This city, I tell you...', 'That\'s just down the street!'],
+    selfie: ['Watch this camera - say cheese!', 'Let\'s try the camera. Smile!'],
+    onTV: ['Ha! We\'re on the TV!', 'Look - it\'s on all the screens!', 'That\'s a great picture!'],
     stock: ['One from the back, coming up!'],
     help: ['Want me to show you what it does?', 'That one\'s on special this week.', 'Go ahead - it\'s a demo, try it.'],
   },
@@ -224,6 +233,190 @@ const SPORTS = {
     help: ['Need a size?', 'Those are great for running.', 'The treadmill\'s free - give it a go.'],
   },
 };
+// (ROADMAP 16.7) a perfumery: a bottle on the wall looked at; at the island a tester sprayed on a strip
+// of paper, waved and smelled (game/beautylife.js); what is bought comes boxed from the counter
+const PERFUME = {
+  flow: 'perfume',
+  baskets: 0,
+  items: [1, 2],
+  crowd: 5,
+  prices: { perfume: 79, tester: 79 },
+  names: { perfume: 'a perfume', tester: 'a perfume' },
+  heb: { perfume: 'בושם', tester: 'בושם' },
+  food: new Set(),
+  boxed: { line: 'perfume', model: 'perfumeBox', cell: null, tint: [0.1, 0.1, 0.11], cap: [0.86, 0.7, 0.36] },
+  say: {
+    shelf: ['Is this the new one?', 'So many...', 'What does this one smell like?', 'Pretty bottle!'],
+    back: ['Too sweet for me.', 'Not quite.'],
+    keep: ['I\'ll take this one.', 'This is the one.'],
+    hi: ['Hello! Welcome.', 'Good afternoon!'],
+    player: ['Welcome! Would you like to try something?', 'Hello! Our new scent just arrived.'],
+    found: ['Lovely choice.', 'That one is our favourite.'],
+    total: (n) => [`That's ${n} dollars.`, `${n}, please.`],
+    card: ['Card, please.'],
+    thanks: ['Enjoy it!', 'Thank you - come again!'],
+    bye: ['Goodbye!', 'Bye!'],
+    run: ['Careful - the bottles!'],
+    bump: ['Oh! Pardon me.', 'Excuse me!'],
+    sniff: ['Mmm... roses.', 'Oh, that\'s lovely.', 'Too strong!', 'Smells like summer.', 'Vanilla!', 'Hmm, a bit woody.'],
+    offer: ['Would you like to try our new scent?', 'May I spray one for you?', 'Try this - it\'s new!'],
+    stock: ['Back in a moment!'],
+    help: ['Something fresh, or something warm?', 'Spray it on a strip first.'],
+  },
+};
+// (ROADMAP 16.7) an optician: frames tried on before a mirror; the eyes tested in the chair at the
+// machine, the chart read out (game/beautylife.js); what is bought comes in its case
+const OPTICS = {
+  flow: 'optics',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 4,
+  prices: { glasses: 120, sunglasses: 85 },
+  names: { glasses: 'glasses', sunglasses: 'sunglasses' },
+  heb: { glasses: 'משקפיים', sunglasses: 'משקפי שמש' },
+  food: new Set(),
+  boxed: { line: 'case', model: 'perfumeBox', cell: null, tint: [0.16, 0.22, 0.4], cap: [0.86, 0.7, 0.36] },
+  say: {
+    shelf: ['These are nice.', 'Too round?', 'I like the colour.', 'Hmm, which ones...'],
+    back: ['Not my face.', 'Too big.'],
+    keep: ['I\'ll take these.', 'These ones!'],
+    mirror: ['What do you think?', 'Very smart.', 'Hmm... not sure.', 'I look like a professor!'],
+    hi: ['Hello! Welcome in.'],
+    player: ['Hello! Would you like an eye test? It\'s free.', 'Welcome! Try any frames you like.'],
+    found: ['They suit you.', 'Good choice.'],
+    total: (n) => [`That's ${n} dollars.`, `${n}, please.`],
+    card: ['Card, please.'],
+    thanks: ['See you clearly!', 'Thank you!'],
+    bye: ['Bye!', 'Take care!'],
+    run: ['Easy there!'],
+    bump: ['Oh! Sorry.', 'Excuse me!'],
+    read: ['E...', 'F... P...', 'T, O, Z...', 'L, P... E, D?', 'P, E, C... F?'],
+    test: ['One... or two?', 'Better now?', 'And the next line?', 'Read the smallest you can.'],
+    done: ['Perfect - twenty-twenty!', 'A little short-sighted. Nothing serious.'],
+    stock: ['One moment!'],
+    help: ['These are very light.', 'Would you like them with sun lenses?'],
+  },
+};
+// (ROADMAP 16.7) a barber's: the cut in the chair (game/streetlife.js barber - the old hair rubbed out,
+// the new one drawn); the cape, the mirror shown behind, the hair swept up (game/beautylife.js); what
+// is sold for hair on the wall
+const BARBER = {
+  flow: 'barber',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 2,
+  prices: { pomade: 18 },
+  names: { pomade: 'a pomade' },
+  heb: { pomade: 'מוצר לשיער' },
+  food: new Set(),
+  say: {
+    shelf: ['Does this hold all day?', 'Smells good.', 'For curly hair?'],
+    back: ['Maybe next time.'],
+    keep: ['I\'ll take one.'],
+    hi: ['Hey! Take a seat.', 'Hi there!'],
+    player: ['Hey! Have a seat - you\'re next.', 'Looking for a fresh cut?'],
+    found: ['Good stuff, that.'],
+    total: (n) => [`That's ${n}.`, `${n} dollars.`],
+    card: ['Card\'s fine.'],
+    thanks: ['Looking sharp!', 'See you in a month!'],
+    bye: ['Take it easy!', 'Bye!'],
+    run: ['Whoa - scissors in here!'],
+    bump: ['Easy!', 'Sorry!'],
+    sweep: ['There we go.', 'All clean.'],
+    stock: ['Back in a sec!'],
+    help: ['That one\'s great for a pompadour.', 'Matte finish, strong hold.'],
+  },
+};
+// (ROADMAP 16.8) the bookshop, the record shop, the toy shop, the florist, the hardware store: what is
+// done with their things (game/hobbylife.js), what they cost, what they say
+const HOBBY_SAY = {
+  hi: ['Hi there!', 'Hello!'],
+  total: (n) => [`That's ${n} dollars.`, `${n}, please.`],
+  card: ['Card, please.'],
+  bye: ['Bye!', 'Take care!'],
+  bump: ['Oh! Sorry.', 'Excuse me!'],
+  stock: ['Back in a moment!'],
+};
+const BOOKS = {
+  flow: 'books',
+  baskets: 0,
+  items: [1, 2],
+  crowd: 5,
+  prices: { book: 15 },
+  names: { book: 'a book' },
+  heb: { book: 'ספר' },
+  food: new Set(),
+  say: { ...HOBBY_SAY, shelf: ['Ooh, a new one.', 'I loved this!', 'Is this the sequel?', 'Hmm...'], back: ['Maybe next time.'], keep: ['I\'ll take this one.'], read: ['Mm.', 'Listen to this...', 'Good opening.', 'Huh!'], player: ['Hello! Looking for anything in particular?', 'Welcome - the new ones are on the tables.'], found: ['A wonderful book.'], thanks: ['Happy reading!'], run: ['Shh - this is a bookshop!'], help: ['That one\'s a page-turner.'] },
+};
+const RECORDS = {
+  flow: 'records',
+  baskets: 0,
+  items: [1, 2],
+  crowd: 4,
+  prices: { record: 22 },
+  names: { record: 'a record' },
+  heb: { record: 'תקליט' },
+  food: new Set(),
+  say: { ...HOBBY_SAY, shelf: ['No way - first pressing!', 'I\'ve been looking for this.', 'Great cover.'], back: ['Already have it.'], keep: ['This one\'s mine.'], listen: ['Oh, this is good.', 'What a bass line!', 'Classic.'], player: ['Hey! Try anything at the listening post.', 'Welcome - new arrivals in the front crates.'], found: ['Great record.'], thanks: ['Enjoy the music!'], run: ['Careful with the crates!'], help: ['That one\'s a classic.'] },
+};
+const TOYS = {
+  flow: 'toys',
+  baskets: 0,
+  items: [1, 2],
+  crowd: 5,
+  prices: { toy: 25 },
+  names: { toy: 'a teddy bear' },
+  heb: { toy: 'דובי' },
+  food: new Set(),
+  say: { ...HOBBY_SAY, shelf: ['So cute!', 'Look at this one!', 'Can I have it?'], back: ['Maybe for the birthday.'], keep: ['This one!'], hug: ['Aww!', 'It\'s so soft!', 'I love him!'], player: ['Hi! Watch the train go round!', 'Welcome to the toy shop!'], found: ['A favourite!'], thanks: ['Have fun!'], run: ['No running near the train!'], help: ['That one squeaks!'] },
+};
+const FLORIST = {
+  flow: 'florist',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 3,
+  prices: { flowers: 30 },
+  names: { flowers: 'a bouquet' },
+  heb: { flowers: 'זר פרחים' },
+  food: new Set(),
+  boxed: { line: 'flowers', model: 'bouquet', cell: null, tint: [0.96, 0.36, 0.5], cap: [0.96, 0.86, 0.78] },
+  say: { ...HOBBY_SAY, shelf: ['Beautiful.', 'Are these fresh?', 'What are these called?'], back: ['Not today.'], keep: ['A bouquet of these, please.'], smell: ['Mmm...', 'They smell lovely.', 'Like spring!'], player: ['Hello! Something for someone special?', 'Welcome - everything came in this morning.'], found: ['Lovely choice.'], thanks: ['She\'ll love them!', 'Enjoy!'], run: ['Mind the buckets!'], help: ['Roses last longest in cool water.'] },
+};
+const HARDWARE = {
+  flow: 'hardware',
+  baskets: 1,
+  items: [1, 3],
+  crowd: 4,
+  prices: { paint: 24, tool: 16, spray: 12, tape: 6 },
+  names: { paint: 'a can of paint', tool: 'a tool', spray: 'a spray can', tape: 'a roll of tape' },
+  heb: { paint: 'פחית צבע', tool: 'כלי עבודה', spray: 'ספריי צבע', tape: 'נייר דבק' },
+  food: new Set(),
+  say: { ...HOBBY_SAY, shelf: ['Is this the right size?', 'Hmm, metric?', 'This should do it.'], back: ['Wrong size.'], keep: ['That\'ll do.'], player: ['Hey! Need a hand finding something?', 'Welcome - paint\'s at the back, I can mix it.'], found: ['Good choice.'], thanks: ['Good luck with the job!'], run: ['Watch the nails!'], help: ['That\'s the strong stuff.'] },
+};
+// (ROADMAP 16.9) the laundromat: the washing done (game/servicelife.js); soap on its shelf. The gym:
+// the dumbbells curled, the bag hit, the barbell pressed; water in the cooler
+const LAUNDRY = {
+  flow: 'laundry',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 4,
+  prices: { soap: 6 },
+  names: { soap: 'a box of soap' },
+  heb: { soap: 'אבקת כביסה' },
+  food: new Set(),
+  say: { ...HOBBY_SAY, shelf: ['The blue one cleans best.', 'Do I need softener?'], back: ['I\'ve got some at home.'], keep: ['This one.'], player: ['Hi! Machines on the left are free.', 'Need change? I\'ve got coins.'], found: ['Good stuff.'], thanks: ['Have a nice day!'], run: ['Careful - the floor\'s wet!'], help: ['Thirty minutes a wash.'] },
+};
+const GYM = {
+  flow: 'gym',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 5,
+  prices: { water: 2, dumbbell: 30 },
+  names: { water: 'a bottle of water', dumbbell: 'a pair of dumbbells' },
+  heb: { water: 'בקבוק מים', dumbbell: 'זוג משקולות' },
+  food: new Set(['water']),
+  say: { ...HOBBY_SAY, shelf: ['Need a heavier pair.', 'Ugh, these are heavy.'], back: ['Later.'], keep: ['I\'ll take one.'], player: ['Hey! Ready to sweat?', 'Welcome! Talk to me about a session.'], found: ['Stay hydrated!'], thanks: ['Good workout!'], run: ['Save it for the treadmill!'], help: ['Keep your back straight.'] },
+};
 // (an eatery: nothing taken off a shelf - ordered at the till, made, drawn, served: game/eaterylife.js)
 const FOOD = {
   flow: 'food',
@@ -247,7 +440,7 @@ const FOOD = {
     stock: [''],
   },
 };
-export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL, shoes: SHOES, sports: SPORTS, cafe: FOOD, bagel: FOOD, pizza: FOOD, burger: FOOD, tacos: FOOD, noodles: FOOD, diner: FOOD, juice: FOOD, icecream: FOOD, sushi: FOOD, falafel: FOOD };
+export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL, shoes: SHOES, sports: SPORTS, perfume: PERFUME, optics: OPTICS, barber: BARBER, books: BOOKS, music: RECORDS, toys: TOYS, flowers: FLORIST, hardware: HARDWARE, laundry: LAUNDRY, gym: GYM, cafe: FOOD, bagel: FOOD, pizza: FOOD, burger: FOOD, tacos: FOOD, noodles: FOOD, diner: FOOD, juice: FOOD, icecream: FOOD, sushi: FOOD, falafel: FOOD };
 
 // ------------------------------------------------------------------ the things in motion
 // Every product, basket, bag and box in a hand, on the counter or on the floor: one geometry a pen
@@ -477,6 +670,14 @@ export class ShopLife {
     // (ROADMAP 16.5: a shoe shop's benches - a size from the stock room, tried on; a sports shop's balls,
     // its treadmill, its bikes - game/trylife.js)
     this.tries = TryLife.for(this);
+    // (ROADMAP 16.6: an electronics shop's news on its televisions, its phones' cords, the seller's selfie)
+    this.tech = TechLife.for(this);
+    // (ROADMAP 16.7: a perfumery's testers, an optician's frames and chair, a barber's cape and broom)
+    this.beauty = BeautyLife.for(this);
+    // (ROADMAP 16.8: books read, records listened to, bears hugged, flowers smelled, paint shaken)
+    this.hobby = HobbyLife.for(this);
+    // (ROADMAP 16.9: the washing loaded, waited for, folded; the bag hit, the barbell pressed)
+    this.service = ServiceLife.for(this);
     this.sync();
   }
 
@@ -583,6 +784,8 @@ export class ShopLife {
     out.sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
     if (this.counter) this.counter.plan(v, out);
     if (this.tries) this.tries.plan(v, out);
+    if (this.beauty) this.beauty.plan(v, out);
+    if (this.service) this.service.plan(v, out);
     // (an electronics shop: a while before the wall of screens, now and then)
     if (this.prof.flow === 'tech' && Math.random() < 0.45) {
       const tv = this.room.browse.filter((b) => b.what === 'look');
@@ -707,7 +910,7 @@ export class ShopLife {
             return null;
           }
           // (the deli's counter, the pharmacy's window, the chair: game/counterlife.js)
-          if (q.svc && (this.counter || this.tries)) {
+          if (q.svc && (this.counter || this.tries || this.beauty || this.hobby || this.service)) {
             L.svc = q.svc;
             L.S = null;
             L.st = 'svc';
@@ -743,6 +946,10 @@ export class ShopLife {
       case 'svc':
         // (a pair tried on, a ball bounced, the treadmill, the bikes: game/trylife.js)
         if (this.tries && this.tries.has(L.svc)) return this.tries.visit(v, dt);
+        // (a scent tried on a strip, frames tried on, the eyes tested: game/beautylife.js)
+        if (this.beauty && this.beauty.has(L.svc)) return this.beauty.visit(v, dt);
+        if (this.hobby && this.hobby.has(L.svc)) return this.hobby.visit(v, dt);
+        if (this.service && this.service.has(L.svc)) return this.service.visit(v, dt);
         if (!this.counter) {
           L.st = 'next';
           return null;
@@ -891,6 +1098,9 @@ export class ShopLife {
         if (L.item) L.item.at = { c, how: 'grip' };
         // (a shoe on a shoe shop's wall, a sports shop's: sat down with it, a size from the stock room -
         // game/trylife.js; or back on its shelf)
+        if (this.beauty && L.item && this.beauty.decide(v)) return null;
+        if (this.hobby && L.item && this.hobby.decide(v)) return null;
+        if (this.service && L.item && this.service.decide(v)) return null;
         if (this.tries && L.item && L.item.look.line === 'shoe') {
           if (this.tries.decide(v)) return null;
           if (this.prof.flow === 'shoes') {
@@ -1196,6 +1406,14 @@ export class ShopLife {
         // trying it where it lies tied to its table: the screen turned to them, a thumb on it; the
         // seller over to show what it does
         c.faceYaw = L.zone ? L.zone.yaw : c.yaw;
+        // (ROADMAP 16.6: the seller's selfie with them - the phone up at arm's length, both smiling at it)
+        if (L.selfieUntil && this.game.time < L.selfieUntil && L.item) {
+          L.item.at = { c, how: 'selfie' };
+          f.reachR = L.reach.copy(L.item.pos);
+          f.reachL = null;
+          f.lookAt = L.item.pos;
+          return null;
+        }
         f.reachR = this.showAt(c, L.reach);
         f.reachR.y -= 0.12;
         f.reachL = L.reachL.set(f.reachR.x + Math.sin(L.t * 3) * 0.03, f.reachR.y + 0.02, f.reachR.z + Math.cos(L.t * 2.3) * 0.03);
@@ -1220,7 +1438,9 @@ export class ShopLife {
         c.faceYaw = L.zone ? L.zone.yaw : c.yaw;
         if (L.item) L.item.at = { c, how: 'head' };
         f.reachR = L.reach.set(f.j.headC.x + Math.sin(c.yaw + 1.57) * 0.12, f.j.headC.y - 0.02, f.j.headC.z + Math.cos(c.yaw + 1.57) * 0.12);
-        f.lookAt = null;
+        // (ROADMAP 16.6) the head nodding to the beat
+        const hc = f.j.headC;
+        f.lookAt = L.look.set(hc.x + Math.sin(c.yaw) * 1.4, hc.y - 0.1 + Math.abs(Math.sin(L.t * 4.4)) * 0.32, hc.z + Math.cos(c.yaw) * 1.4);
         if (L.t > 0.8 && !L.said) {
           L.said = true;
           this.say(c, pick(this.prof.say.listen), 0.5);
@@ -1228,6 +1448,7 @@ export class ShopLife {
         if (L.t < L.dur) return null;
         L.said = false;
         f.reachR = null;
+        f.lookAt = null;
         if (L.item) L.item.at = { c, how: 'grip' };
         if (Math.random() < 0.35) L.buy = L.item ? L.item.look : null;
         L.st = 'putBack';
@@ -1240,7 +1461,10 @@ export class ShopLife {
         f.lookAt = L.look.set(L.spot.x + Math.sin(L.spot.yaw) * 2, c.pos.y + 1.5, L.spot.z + Math.cos(L.spot.yaw) * 2);
         if (L.t > 1.5 && !L.said) {
           L.said = true;
-          this.say(c, pick(this.prof.say.watch), 0.4);
+          // (ROADMAP 16.6: the news on the screens - the police after someone, a hold-up)
+          const pol = this.game.police;
+          const lines = this.tech && pol && pol.level > 0 ? this.prof.say.wanted : this.tech && (this.game.news || []).some((n) => this.game.time - n.t < 300) ? this.prof.say.news : this.prof.say.watch;
+          this.say(c, pick(lines || this.prof.say.watch), 0.5);
         }
         if (L.t < 4) return null;
         L.said = false;
@@ -1595,6 +1819,9 @@ export class ShopLife {
     if (!L) return;
     if (this.counter) this.counter.release(v);
     if (this.tries) this.tries.release(v);
+    if (this.beauty) this.beauty.release(v);
+    if (this.hobby) this.hobby.release(v);
+    if (this.service) this.service.release(v);
     const c = v.c;
     this.unwear(v);
     const qi = this.queue.indexOf(v);
@@ -1954,6 +2181,9 @@ export class ShopLife {
     // (a shoe shop's: to the stock room for a size, the box to the bench; the boxes left there taken
     // back - game/trylife.js)
     if (this.tries && S.st && S.st.startsWith('try')) return this.tries.staff(c, S, dt);
+    // (a strip sprayed for someone, the eyes tested, the hair swept up: game/beautylife.js)
+    if (this.beauty && S.st && S.st[0] === 'b' && S.st[1] >= 'A' && S.st[1] <= 'Z') return this.beauty.staff(c, S, dt);
+    if (this.hobby && S.st && S.st[0] === 'h' && S.st[1] >= 'A' && S.st[1] <= 'Z') return this.hobby.staff(c, S, dt);
     const f = c.fig;
     // (somebody on a bench waiting for a size: the facing and the scanning can wait)
     if (this.tries && (S.st === 'toZone' || S.st === 'face' || S.st === 'check') && this.tries.waiting()) {
@@ -1979,6 +2209,14 @@ export class ShopLife {
         // (a size wanted from the stock room, a box left on a bench: game/trylife.js)
         if (this.tries && !fallen) {
           const r = this.tries.job(c, S);
+          if (r !== undefined) return r;
+        }
+        if (this.beauty && !fallen) {
+          const r = this.beauty.job(c, S);
+          if (r !== undefined) return r;
+        }
+        if (this.hobby && !fallen) {
+          const r = this.hobby.job(c, S);
           if (r !== undefined) return r;
         }
         if (this.prof.flow === 'fashion' && !fallen) return this.associate(c, S);
@@ -2259,6 +2497,30 @@ export class ShopLife {
         f.lookAt = S.t % 3 < 1.6 ? v2.c.fig.j.headC : v2.L.item ? v2.L.item.pos : null;
         if (v2.L.item && S.t % 3 > 0.4 && S.t % 3 < 1.4) f.reachR = S.reach.set(v2.L.item.pos.x, v2.L.item.pos.y + 0.05, v2.L.item.pos.z);
         else f.reachR = null;
+        // (ROADMAP 16.6) now and then the camera shown off: a selfie of the two of them - the flash, and
+        // the picture up on every screen in the shop
+        if (this.tech && S.n === 1 && S.selfie === undefined) {
+          S.selfie = Math.random() < 0.45 && v2.L.item ? 0 : null;
+          if (S.selfie === 0) {
+            this.say(c, pick(this.prof.say.selfie), 1);
+            v2.L.selfieUntil = this.game.time + 2.4;
+            v2.L.dur = Math.max(v2.L.dur, v2.L.t + 5);
+          }
+        }
+        if (S.selfie !== null && S.selfie !== undefined && S.selfie < 2.4) {
+          S.selfie += dt;
+          // (both turned to the phone held up; the seller leaning in)
+          c.faceYaw = v2.c.yaw;
+          f.lookAt = v2.L.item ? v2.L.item.pos : null;
+          f.reachR = null;
+          if (S.selfie > 1.3 && !S.snapped && v2.L.item) {
+            S.snapped = true;
+            const p = v2.L.item.pos;
+            this.tech.snap(p.x, p.y, p.z);
+          }
+          if (S.selfie >= 2.4) this.say(v2.c, pick(this.prof.say.onTV), 0.9);
+          return null;
+        }
         if (S.t > S.n * 3 + 0.3) {
           S.n++;
           if (S.n % 2) this.say(c, pick(this.prof.say.explain), 0.9);
@@ -2508,6 +2770,8 @@ export class ShopLife {
     S.call = null;
     if (!v || !v.c.alive || !v.L || v.L.st !== 'demo') return null;
     S.job = { kind: 'explain', v };
+    S.selfie = undefined;
+    S.snapped = false;
     const p = v.c.pos;
     const fx = Math.sin(v.c.yaw);
     const fz = Math.cos(v.c.yaw);
@@ -2561,6 +2825,10 @@ export class ShopLife {
     this.t += dt;
     if (this.counter) this.counter.update(dt);
     if (this.tries) this.tries.update(dt);
+    if (this.tech) this.tech.update(dt);
+    if (this.beauty) this.beauty.update(dt);
+    if (this.hobby) this.hobby.update(dt);
+    if (this.service) this.service.update(dt);
     // (once its stock is in - the room is there round it - and not where they make food)
     if (!this.muralOn && this.live && this.open.open && this.shop.kind !== 'deli') {
       this.muralOn = true;
@@ -2573,6 +2841,8 @@ export class ShopLife {
       if (S.item && S.item.slot && S.item.slot.state === 'refill') S.item.slot.state = 'gone';
       if (S.job && S.job.slots) for (const q of S.job.slots) if (q.state === 'refill') q.state = 'gone';
       if (this.tries) this.tries.letGo(S);
+      if (this.beauty) this.beauty.letGo(S);
+      if (this.hobby) this.hobby.letGo(S);
       this.S = null;
     }
     const k = this.open.keeper;
@@ -2635,7 +2905,8 @@ export class ShopLife {
         P.greetT = g.time;
         if (this.K === undefined) this.K = { st: 'idle', t: 0, act: 'look', actT: 0, reach: new THREE.Vector3(), look: new THREE.Vector3() };
         this.K.greet = { c: p, until: g.time + 2.2 };
-        this.say(k, pick(this.prof.say.player), 1);
+        // (ROADMAP 16.7: with a scent from the perfumery on, a compliment first)
+        this.say(k, this.game.player.charmT > 0 ? pick(['Mmm - you smell lovely!', 'What is that scent? Gorgeous.', 'Oh, someone smells nice today!']) : pick(this.prof.say.player), 1);
       }
       // (one of the customers glances over, most do not)
       const near = this.open.visitors.filter((v) => v.L && v.c.alive && Math.hypot(v.c.pos.x - p.pos.x, v.c.pos.z - p.pos.z) < 6);
@@ -2678,9 +2949,11 @@ export class ShopLife {
 
   // every frame, after everybody has moved (their hands where they are now): the things in motion
   // put where they are
-  draw() {
+  draw(fr) {
     for (const it of this.movers.items) this.place(it);
     this.movers.update();
+    if (this.tech) this.tech.draw(fr);
+    if (this.beauty) this.beauty.draw(fr);
   }
 
   place(it) {
@@ -2744,6 +3017,99 @@ export class ShopLife {
         it.pos.set(hc.x, hc.y - 0.2, hc.z);
         it.yaw = yaw;
         it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
+      if (at.how === 'face') {
+        // (ROADMAP 16.7) frames tried on: on the nose, before the eyes
+        const hc = f.j.headC;
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        it.pos.set(hc.x + fx * 0.088, hc.y + 0.005, hc.z + fz * 0.088);
+        it.yaw = yaw;
+        it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
+      if (at.how === 'bar') {
+        // (ROADMAP 16.9) a barbell in both hands, across between them
+        _b.addVectors(f.j.handR, f.j.handL).multiplyScalar(0.5);
+        it.pos.set(_b.x, _b.y - 0.22, _b.z);
+        it.yaw = yaw;
+        it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
+      if (at.how === 'open') {
+        // (ROADMAP 16.8) a book open in both hands before the chest, tipped up to the eyes
+        const hc = f.j.headC;
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        it.pos.set(c.pos.x + fx * 0.3, hc.y - 0.44, c.pos.z + fz * 0.3);
+        it.yaw = yaw + Math.PI / 2;
+        it.tilt = 0;
+        it.roll = -0.6;
+        return;
+      }
+      if (at.how === 'hug') {
+        // (a bear held to the chest)
+        const hc = f.j.headC;
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        it.pos.set(c.pos.x + fx * 0.2, hc.y - 0.62, c.pos.z + fz * 0.2);
+        it.yaw = yaw;
+        it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
+      if (at.how === 'gripL') {
+        // (in the left hand, upright: the barber's hand mirror)
+        const h = f.j.handL;
+        it.pos.set(h.x, h.y - 0.06, h.z);
+        it.yaw = yaw + Math.PI;
+        it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
+      if (at.how === 'pinchL') {
+        // (a strip of paper held up by its end in the left hand)
+        const h = f.j.handL;
+        it.pos.set(h.x, h.y - 0.02, h.z);
+        it.yaw = yaw;
+        it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
+      if (at.how === 'cape') {
+        // (the barber's cape: round the neck, down over the body in the chair)
+        const hc = f.j.headC;
+        it.pos.set(hc.x, hc.y - 0.82, hc.z);
+        it.yaw = yaw;
+        it.tilt = 0;
+        it.roll = 0;
+        return;
+      }
+      if (at.how === 'broom') {
+        // (held before them by the handle in both hands, its head on the floor, pushed to and fro)
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        const sw = Math.sin((this.t || 0) * 6) * 0.12;
+        it.pos.set(c.pos.x + fx * (0.55 + sw), c.pos.y, c.pos.z + fz * (0.55 + sw));
+        // (its brush across the way they face, the handle leaning back to their hands)
+        it.yaw = yaw;
+        it.tilt = -0.45;
+        it.roll = 0;
+        f.reachR = (f._broomR || (f._broomR = new THREE.Vector3())).set(c.pos.x + fx * (0.3 + sw), c.pos.y + 1.0, c.pos.z + fz * (0.3 + sw));
+        return;
+      }
+      if (at.how === 'selfie') {
+        // (ROADMAP 16.6) held up at arm's length before the face, its screen to them
+        const hc = f.j.headC;
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        it.pos.set(hc.x + fx * 0.46 + fz * 0.1, hc.y + 0.08, hc.z + fz * 0.46 - fx * 0.1);
+        it.yaw = yaw + Math.PI;
+        it.tilt = Math.PI / 2 - 0.15;
         it.roll = 0;
         return;
       }
@@ -2813,8 +3179,9 @@ export class ShopLife {
     it.pos.set(at.x, at.y, at.z);
     it.yaw = at.yaw || 0;
     it.tilt = at.tilt || 0;
-    it.roll = 0;
-    if (at.tilt && it.look.model !== 'basket') it.pos.y += Math.min(it.t.size[0], it.t.size[2]) * 0.5;
+    // (ROADMAP 16.9: a drum turning, a bag swinging - their own roll, their own height)
+    it.roll = at.roll || 0;
+    if (at.tilt && !at.keepY && it.look.model !== 'basket') it.pos.y += Math.min(it.t.size[0], it.t.size[2]) * 0.5;
   }
 
   // ---------------------------------------------------------------- you, at a shelf
@@ -2920,6 +3287,10 @@ export class ShopLife {
     this.mural.dispose();
     if (this.counter) this.counter.dispose();
     if (this.tries) this.tries.dispose();
+    if (this.tech) this.tech.dispose();
+    if (this.beauty) this.beauty.dispose();
+    if (this.hobby) this.hobby.dispose();
+    if (this.service) this.service.dispose();
     // (whatever is in motion goes back where it came from)
     for (const it of [...this.movers.items]) {
       if (it.slot && (it.slot.state === 'held' || it.slot.state === 'aim')) this.setSlot(it.slot, 'shelf');
