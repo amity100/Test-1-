@@ -1955,6 +1955,15 @@ export class ShopLife {
     // back - game/trylife.js)
     if (this.tries && S.st && S.st.startsWith('try')) return this.tries.staff(c, S, dt);
     const f = c.fig;
+    // (somebody on a bench waiting for a size: the facing and the scanning can wait)
+    if (this.tries && (S.st === 'toZone' || S.st === 'face' || S.st === 'check') && this.tries.waiting()) {
+      f.reachR = null;
+      f.lookAt = null;
+      if (f.carry === 'scanner') f.carry = null;
+      c.crouchW = 0;
+      S.st = 'idle';
+      S.job = null;
+    }
     S.t += dt;
     const v = S;
     const walk = () => this.open.follow(v);
@@ -2563,6 +2572,7 @@ export class ShopLife {
       for (const it of [S.item, S.box]) if (it) this.drop(it, S.c.pos.x, S.c.pos.z);
       if (S.item && S.item.slot && S.item.slot.state === 'refill') S.item.slot.state = 'gone';
       if (S.job && S.job.slots) for (const q of S.job.slots) if (q.state === 'refill') q.state = 'gone';
+      if (this.tries) this.tries.letGo(S);
       this.S = null;
     }
     const k = this.open.keeper;

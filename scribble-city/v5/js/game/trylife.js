@@ -480,17 +480,20 @@ export class TryLife {
 
   // ---------------------------------------------------------------- the one who works here
   // between other jobs (game/shoplife.js stockerWork 'idle'): a box wanted, a box left on a bench
+  // anybody waiting for a box (game/shoplife.js: the shelves can wait for them)
+  waiting() {
+    return this.queue.some((q) => q.st === 'wait');
+  }
+
   job(c, S) {
-    const req = this.queue.find((q) => q.st === 'wait');
-    if (req) {
-      req.st = 'fetch';
-      S.job = { kind: 'try', req };
-      S.st = 'tryStock';
+    // (whoever is waiting - up to three - their boxes fetched in one trip)
+    const reqs = this.queue.filter((q) => q.st === 'wait').slice(0, 3);
+    if (reqs.length) {
       const m = this.M.stock;
-      if (!m) {
-        req.st = 'wait';
-        return undefined;
-      }
+      if (!m) return undefined;
+      for (const q of reqs) q.st = 'fetch';
+      S.job = { kind: 'try', reqs, k: 0, req: reqs[0], boxes: [] };
+      S.st = 'tryStock';
       this.life.goS(c, m.x, m.z);
       this.say(c, pick(SAY.fetch), 0.7);
       return null;
@@ -528,32 +531,27 @@ export class TryLife {
           c.inside = true;
           f.setVisible(false);
         }
-        if (S.t < 2.6) return null;
+        if (S.t < 1.8 + (J.reqs ? J.reqs.length : 1) * 0.6) return null;
         S.hid = false;
         c.inside = false;
         f.setVisible(true);
-        const req = J.req;
-        if (!req || req.dead) return this.idle(S);
-        // out again with the shoe box under the arm
-        const col = pick([[0.9, 0.46, 0.16], [0.14, 0.14, 0.16], [0.95, 0.94, 0.9], [0.78, 0.18, 0.18], [0.2, 0.36, 0.7]]);
-        J.box = this.life.movers.add({ line: 'box', model: 'shoeBox', cell: null, tint: col, cap: [0.97, 0.97, 0.95] }, true);
-        J.box.at = { c, how: 'grip' };
-        f.carry = 'held';
-        S.st = 'tryBring';
-        S.t = 0;
-        this.toCustomer(c, S, req);
-        return null;
+        // out again with the boxes in the arms, one over another
+        J.reqs = (J.reqs || [J.req]).filter((q) => q && !q.dead);
+        if (!J.reqs.length) return this.idle(S);
+        J.boxes = J.reqs.map((q, k) => {
+          const col = pick([[0.9, 0.46, 0.16], [0.14, 0.14, 0.16], [0.95, 0.94, 0.9], [0.78, 0.18, 0.18], [0.2, 0.36, 0.7]]);
+          const b = this.life.movers.add({ line: 'box', model: 'shoeBox', cell: null, tint: col, cap: [0.97, 0.97, 0.95] }, true);
+          b.at = { c, how: 'armful', k };
+          return b;
+        });
+        J.k = 0;
+        return this.nextBox(c, S);
       }
       case 'tryBring': {
         const req = J.req;
         if (!req || req.dead) {
-          // (whoever it was for has gone: back into the stock room with it)
-          if (!J.box) return this.idle(S);
-          S.st = 'tryShelve';
-          S.t = 0;
-          const m = this.M.stock;
-          if (m) this.life.goS(c, m.x, m.z);
-          return null;
+          // (whoever it was for has gone: the next one, or back into the stock room with what is left)
+          return this.nextBox(c, S, true);
         }
         // (you move about: followed)
         if (!req.v && (S.t > 1.5 || !S.pts || !S.pts.length)) {
@@ -586,11 +584,11 @@ export class TryLife {
           f.reachR = _a.set(P.pos.x, P.pos.y + 1.0, P.pos.z);
           if (S.t < 0.5) return null;
           f.reachR = null;
-          f.carry = null;
           this.giveYou(J.box, req);
           J.box = null;
           this.say(c, pick(SAY.yours), 0.9);
-          return this.idle(S);
+          J.k++;
+          return this.nextBox(c, S);
         }
         // kneeling at their feet: the box down on the floor before them
         const m = req.seat.m;
@@ -606,11 +604,11 @@ export class TryLife {
           J.box = null;
         }
         req.st = 'given';
-        f.carry = null;
         f.reachR = null;
         c.crouchW = 0;
         this.say(c, pick(SAY.give), 0.8);
-        return this.idle(S);
+        J.k++;
+        return this.nextBox(c, S);
       }
       case 'tryTidy': {
         const b = J.box;
@@ -635,13 +633,84 @@ export class TryLife {
         const mv = walk();
         if (mv) return mv;
         if (J.box) this.life.movers.remove(J.box);
+        for (const b of J.shelve || []) this.life.movers.remove(b);
         J.box = null;
+        J.shelve = null;
         f.carry = null;
         return this.idle(S);
       }
       default:
         return this.idle(S);
     }
+  }
+
+  // the next of the boxes in the arms, to whoever it is for (skip: the one in the hand was for somebody
+  // gone); none left: back to the shelves - a box for nobody back into the stock room first
+  nextBox(c, S, skip = false) {
+    const J = S.job;
+    const f = c.fig;
+    J.left = J.left || [];
+    if (skip) {
+      if (J.box) J.left.push(J.box);
+      J.box = null;
+      J.k++;
+    }
+    while (J.k < J.reqs.length && J.reqs[J.k].dead) {
+      if (J.boxes[J.k]) J.left.push(J.boxes[J.k]);
+      J.k++;
+    }
+    if (J.k >= J.reqs.length) {
+      if (J.left.length) {
+        J.box = null;
+        J.shelve = J.left;
+        J.left = [];
+        S.st = 'tryShelve';
+        S.t = 0;
+        const m = this.M.stock;
+        if (m) this.life.goS(c, m.x, m.z);
+        return null;
+      }
+      f.carry = null;
+      return this.idle(S);
+    }
+    J.req = J.reqs[J.k];
+    J.box = J.boxes[J.k];
+    // (the one for them in the hand, the rest over the arm)
+    J.box.at = { c, how: 'grip' };
+    let k = 0;
+    for (let i = J.k + 1; i < J.boxes.length; i++) if (J.boxes[i] && !J.reqs[i].dead) J.boxes[i].at = { c, how: 'armful', k: k++ };
+    f.carry = 'held';
+    S.st = 'tryBring';
+    S.t = 0;
+    this.toCustomer(c, S, J.req);
+    return null;
+  }
+
+  // the one who works here let go of mid-job (frightened, gone - game/shoplife.js update): out of the
+  // stock room if they were in it; the boxes in their arms down on the floor where they stand (the
+  // next one takes them back), and whoever was waiting for one back in the line
+  letGo(S) {
+    const c = S.c;
+    if (S.hid) {
+      S.hid = false;
+      c.inside = false;
+      if (c.fig) c.fig.setVisible(true);
+    }
+    const J = S.job;
+    if (!J) return;
+    const held = new Set([J.box, ...(J.boxes || []), ...(J.shelve || []), ...(J.left || [])]);
+    let k = 0;
+    for (const b of held) {
+      if (!b) continue;
+      if (b.at && b.at.c === c) {
+        const a = k++ * 2.1;
+        b.at = { x: c.pos.x + Math.cos(a) * 0.3, y: this.life.room.floor, z: c.pos.z + Math.sin(a) * 0.3, yaw: a };
+        if (!this.left.includes(b)) this.left.push(b);
+      }
+      b.claimed = false;
+    }
+    for (const q of J.reqs || []) if (q.st === 'fetch') q.st = 'wait';
+    S.job = null;
   }
 
   idle(S) {
