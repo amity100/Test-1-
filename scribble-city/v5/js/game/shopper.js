@@ -36,6 +36,18 @@ const USE = {
   fruit: { hp: 6 },
   coffee: { coffee: 60 },
   meds: { hp: 25 },
+  // (ROADMAP 16.4) the corner shop's and the pharmacy's: a sprint that does not run out, a blow that
+  // hurts less, a kit in the pocket for the worst moment; a hot dog, a slush
+  energy: { hp: 4, energy: 60 },
+  pain: { pain: 60 },
+  kit: { kit: 1 },
+  hotdog: { hp: 18 },
+  slush: { hp: 6 },
+  // (the deli's: made and sliced at its counter - game/counterlife.js)
+  sandwich: { hp: 40 },
+  club: { hp: 35 },
+  cheese: { hp: 15 },
+  salami: { hp: 18 },
 };
 // a garment off the rail, as the hero wears it (game/wardrobe.js)
 const INNER = [0.96, 0.95, 0.92];
@@ -360,12 +372,18 @@ export class Shopper {
     const P = g.player;
     let hp = 0;
     let coffee = 0;
+    let energy = 0;
+    let pain = 0;
+    let kits = 0;
     let worn = null;
     for (const r of list) {
       const u = USE[r.what];
       if (u) {
         hp += u.hp || 0;
         coffee = Math.max(coffee, u.coffee || 0);
+        energy = Math.max(energy, u.energy || 0);
+        pain = Math.max(pain, u.pain || 0);
+        kits += u.kit || 0;
       }
       // (clothes: put on - the last of each kind)
       const model = r.look && r.look.model;
@@ -382,7 +400,17 @@ export class Shopper {
     }
     if (hp) P.hp = Math.min(P.maxHp, P.hp + hp);
     if (coffee) P.coffeeT = Math.max(P.coffeeT || 0, coffee);
-    const fx = [hp ? `+${hp} חיים` : null, coffee ? `מהירות ל־${coffee} שניות` : null, worn ? 'לבשתם את זה' : null].filter(Boolean).join(', ');
+    if (energy) P.energyT = Math.max(P.energyT || 0, energy);
+    if (pain) P.painT = Math.max(P.painT || 0, pain);
+    if (kits) P.kits = (P.kits || 0) + kits;
+    const fx = [
+      hp ? `+${hp} חיים` : null,
+      coffee ? `מהירות ל־${coffee} שניות` : null,
+      energy ? `ריצה בלי להתעייף ל־${energy} שניות` : null,
+      pain ? `פחות נזק ל־${pain} שניות` : null,
+      kits ? `ערכת עזרה ראשונה בכיס (${P.kits})` : null,
+      worn ? 'לבשתם את זה' : null,
+    ].filter(Boolean).join(', ');
     g.hud.toast(`${stolen ? 'גנבתם' : 'קניתם'}: ${summary(list.map((r) => r.heb))}${fx ? ` (${fx})` : ''}`, stolen ? 'bad' : 'good', 3);
   }
 

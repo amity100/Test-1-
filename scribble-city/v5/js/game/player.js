@@ -155,6 +155,8 @@ export class Player {
         this.game.hud.toast('האפוד נקרע', 'bad', 1.8);
       }
     }
+    // (ROADMAP 16.4: painkillers from the pharmacy - a blow hurts less while they work)
+    if (this.painT > 0 && kind !== 'drown' && kind !== 'fall') amount *= 0.6;
     if (amount < full * 0.5) at = null;
     this.hp -= amount;
     // (v5, ROADMAP 11.29: a hit no longer rubs a hole out of the hero's own drawing - it read as a
@@ -196,6 +198,22 @@ export class Player {
     if (this.bagUntil && this.game.time > this.bagUntil) {
       this.bagUntil = 0;
       if (fig.carryL === 'bag' || fig.carryL === 'basket') fig.carryL = null;
+    }
+    // (ROADMAP 16.4: an energy drink, painkillers - each for a while; a first-aid kit in the pocket,
+    // used at the worst moment, a moment after the last blow)
+    if (this.energyT > 0) {
+      this.energyT -= dt;
+      if (this.energyT <= 0) this.game.hud.toast('האנרגיה מהמשקה נגמרה', 'info', 1.8);
+    }
+    if (this.painT > 0) {
+      this.painT -= dt;
+      if (this.painT <= 0) this.game.hud.toast('משככי הכאבים הפסיקו לפעול', 'info', 1.8);
+    }
+    if (this.kits > 0 && this.mode === 'foot' && this.hp > 0 && this.hp < this.maxHp * 0.3 && this.game.time - this.lastHurt > 1.2) {
+      this.kits--;
+      this.hp = Math.min(this.maxHp, this.hp + 60);
+      this.game.hud.toast(`השתמשתם בערכת עזרה ראשונה: +60 חיים${this.kits ? ` (נשארו ${this.kits})` : ''}`, 'good', 2.6);
+      if (this.game.audio) this.game.audio.play('magic');
     }
     // (ROADMAP 16.3: what you took away from an eatery, eaten when you need it - hurt, and out of
     // the worst of it a moment: game/eaterylife.js)
@@ -339,7 +357,7 @@ export class Player {
     // (ROADMAP 11.20: wheels drawn under your feet - game/fuse.js)
     const fuse = this.game.fuse;
     const skate = fuse && !this.crouched ? fuse.heroSpeedK(sprint) : 1;
-    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? 8.2 + (skills ? skills.sprintBonus : 0) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate;
+    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? (8.2 + (skills ? skills.sprintBonus : 0)) * (this.energyT > 0 ? 1.15 : 1) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate;
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;

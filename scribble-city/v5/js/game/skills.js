@@ -91,7 +91,12 @@ export class Skills {
   update(dt) {
     const P = this.game.player;
     // the stamina: down while sprinting (out of breath at the bottom), back up after a breather
-    if (P.mode === 'foot' && P.sprinting) {
+    // (ROADMAP 16.4: on an energy drink a sprint costs no breath)
+    if (P.energyT > 0) {
+      this.winded = false;
+      if (P.sprinting) this.restT = 0;
+      this.stamina = Math.min(100, this.stamina + dt * 30);
+    } else if (P.mode === 'foot' && P.sprinting) {
       this.stamina = Math.max(0, this.stamina - dt * drainOf(this.level('run')));
       this.restT = 0;
       this.add('run', (Math.hypot(P.vel.x, P.vel.z) * dt) / 25);

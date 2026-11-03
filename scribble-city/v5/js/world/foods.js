@@ -647,6 +647,102 @@ addMaker('sandwich', (low) => {
   return m;
 });
 
+// ------------------------------------------------------------------ the corner shop's, the deli's, the pharmacy's
+// (ROADMAP 16.4)
+const SAUSAGE = [0.72, 0.3, 0.2];
+const MUSTARD = [0.96, 0.78, 0.12];
+// a hot dog in its bun, mustard down it, in a paper boat
+addMaker('hotdog', (low) => {
+  const m = new Model();
+  const seg = low ? 5 : 7;
+  const L = 0.16;
+  m.size = [L + 0.02, 0.06, 0.06];
+  const boat = m.part('plain', PAPER, 0);
+  slab(boat, [[-L / 2 - 0.01, -0.03], [L / 2 + 0.01, -0.03], [L / 2 + 0.01, 0.03], [-L / 2 - 0.01, 0.03]], 0, 0.008);
+  const bun = m.part('plain', BUN, 1);
+  for (const z of [-0.012, 0.012]) tube(bun, [[-L / 2, 0.026, z], [L / 2, 0.026, z]], (t) => 0.017 * (0.75 + 0.25 * Math.sin(t * Math.PI)), seg);
+  tube(m.part('plain', SAUSAGE, 2), [[-L / 2 - 0.012, 0.036, 0], [L / 2 + 0.012, 0.036, 0]], (t) => 0.011 * (0.8 + 0.2 * Math.sin(t * Math.PI)), seg);
+  const pts = [];
+  for (let i = 0; i <= 10; i++) pts.push([-L / 2 + 0.01 + (i / 10) * (L - 0.02), 0.047, (i % 2 ? 1 : -1) * 0.006]);
+  tube(m.part('plain', MUSTARD, 3), pts, 0.0028, 4);
+  return m;
+});
+// a sausage on the roller, alone
+addMaker('sausage', (low) => {
+  const m = new Model();
+  m.size = [0.17, 0.024, 0.024];
+  tube(m.part('gloss', SAUSAGE, 0), [[-0.085, 0.012, 0], [0.085, 0.012, 0]], (t) => 0.011 * (0.8 + 0.2 * Math.sin(t * Math.PI)), low ? 5 : 7);
+  return m;
+});
+// the slush machine's auger: a shaft, and the two blades crossed on it that turn the ice
+addMaker('paddle', () => {
+  const m = new Model();
+  m.size = [0.17, 0.28, 0.17];
+  const p = m.part('gloss', [0.94, 0.95, 0.97], 0);
+  box(p, -0.008, 0, -0.008, 0.008, 0.28, 0.008);
+  for (let k = 0; k < 3; k++) {
+    const y = 0.04 + k * 0.08;
+    box(p, -0.08, y, -0.004, 0.08, y + 0.05, 0.004);
+    box(p, -0.004, y + 0.03, -0.08, 0.004, y + 0.08, 0.08);
+  }
+  return m;
+});
+// a prescription in its white paper bag: the top folded over, stapled, its label
+addMaker('rxbag', () => {
+  const m = new Model();
+  const w = 0.14;
+  const h = 0.2;
+  const d = 0.07;
+  m.size = [w, h + 0.02, d];
+  box(m.part('plain', [0.97, 0.96, 0.93], 0), -w / 2, 0, -d / 2, w / 2, h, d / 2);
+  box(m.part('plain', [0.92, 0.91, 0.88], 1), -w / 2, h, -0.006, w / 2, h + 0.02, 0.006);
+  const lb = m.part('plain', [0.32, 0.56, 0.86], 2);
+  box(lb, -w / 2 + 0.02, h * 0.45, d / 2, w / 2 - 0.02, h * 0.62, d / 2 + 0.002, { skip: ['nz'] });
+  box(m.part('plain', [0.62, 0.64, 0.68], 3), -0.012, h + 0.008, 0.006, 0.012, h + 0.013, 0.008, { skip: ['nz'] });
+  return m;
+});
+// what is sliced, wrapped in white paper, its sticker
+addMaker('deliPack', () => {
+  const m = new Model();
+  m.size = [0.17, 0.045, 0.11];
+  box(m.part('plain', [0.97, 0.96, 0.93], 0), -0.085, 0, -0.055, 0.085, 0.045, 0.055);
+  box(m.part('plain', [0.92, 0.36, 0.3], 1), -0.03, 0.045, -0.02, 0.03, 0.047, 0.02, { skip: ['ny'] });
+  return m;
+});
+// a salami (or a ham) on the slicer's carriage: the log, its cut face
+addMaker('meatLog', (low) => {
+  const m = new Model();
+  m.size = [0.22, 0.09, 0.09];
+  const seg = low ? 7 : 10;
+  tube(m.part('plain', null, 0), [[-0.11, 0.045, 0], [0.11, 0.045, 0]], 0.043, seg);
+  // (its ends closed: the cut face at the blade's end, the tied end at the other)
+  tube(m.part('plain', 'cap', 1), [[0.11, 0.045, 0], [0.1115, 0.045, 0], [0.113, 0.045, 0]], (t) => 0.043 * (1 - t), seg);
+  tube(m.part('plain', null, 0), [[-0.11, 0.045, 0], [-0.118, 0.045, 0], [-0.124, 0.045, 0]], (t) => 0.043 * (1 - t * 0.9), seg);
+  return m;
+});
+// the slicer: its steel body, the round blade standing in its guard, the carriage, the handle
+addMaker('slicer', (low) => {
+  const m = new Model();
+  m.size = [0.5, 0.42, 0.42];
+  const st = m.part('gloss', STEEL, 0);
+  box(st, -0.25, 0, -0.2, 0.25, 0.08, 0.2);
+  box(st, -0.05, 0.08, -0.2, 0.05, 0.3, -0.12);
+  // (the blade: a disc on its edge, facing the carriage)
+  const bl = m.part('gloss', [0.88, 0.9, 0.94], 1);
+  const ring = [];
+  const n = low ? 14 : 22;
+  for (let i = 0; i < n; i++) ring.push([Math.cos((i / n) * Math.PI * 2) * 0.13, 0.24 + Math.sin((i / n) * Math.PI * 2) * 0.13]);
+  stand(bl, ring, -0.12, -0.108);
+  const gd = m.part('plain', [0.7, 0.72, 0.76], 2);
+  const half = ring.filter(([, y]) => y >= 0.24);
+  stand(gd, [...half, [-0.135, 0.24]], -0.106, -0.096);
+  // (the carriage the meat rides on, its handle)
+  box(st, -0.18, 0.08, -0.08, 0.14, 0.1, 0.14);
+  box(st, -0.18, 0.1, 0.1, 0.14, 0.2, 0.12);
+  tube(m.part('plain', [0.16, 0.16, 0.18], 3), [[0.1, 0.22, 0.16], [0.1, 0.34, 0.2]], 0.012, 5);
+  return m;
+});
+
 // what is left when it has been eaten: a dish -> its half -> its plate (null: it is gone - a cup, a
 // cone eaten down to nothing)
 export const EATEN = {

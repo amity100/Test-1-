@@ -896,9 +896,11 @@ function FRONTONLY() {
 // ------------------------------------------------------------------ the plans, by kind
 const PLANS = {
   grocery: (R) => market(R, {}),
-  deli: (R) => grocery(R, { cat: 'grocery', catMid: 'bread', header: [0.7, 0.3, 0.28], basketCol: [0.7, 0.3, 0.28] }),
-  shop: (R) => grocery(R, { cat: 'general', fridges: true, produce: false, header: [0.4, 0.5, 0.8], basketCol: [0.3, 0.45, 0.85] }),
-  pharmacy: (R) => grocery(R, { cat: 'pharmacy', unit: SC.white, fridges: false, produce: false, header: [0.32, 0.66, 0.46], basketCol: [0.32, 0.66, 0.46] }),
+  // (ROADMAP 16.4: the deli, the corner shop open all night, the pharmacy - on the market's plan,
+  // each with its own counter: world/corner.js; the old plan, grocery(), kept for whoever wants it)
+  deli: (R) => market(R, { kind: 'deli' }),
+  shop: (R) => market(R, { kind: '247' }),
+  pharmacy: (R) => market(R, { kind: 'pharmacy' }),
   hardware,
   books,
   // (ROADMAP 14.4: the clothes shops of the new kind - world/fashion.js; the old plan, clothes(),
@@ -932,7 +934,7 @@ const PLANS = {
 };
 
 // (ROADMAP 14.4: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
-const NEW_KINDS = new Set(['grocery', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
+const NEW_KINDS = new Set(['grocery', 'deli', 'shop', 'pharmacy', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
 for (const [kind, fn] of Object.entries(PLANS)) {
   const plan = (R) => fn(R);
   plan.stock = true;
@@ -944,7 +946,9 @@ for (const [kind, fn] of Object.entries(PLANS)) {
 // suits them (the big shops' tiles, the clothes' wood)
 Object.assign(DECOR, {
   grocery: { ...DECOR.grocery, wall: [0.96, 0.97, 0.94], band: [0.44, 0.66, 0.42], floor: 'tiles' },
-  shop: { ...DECOR.shop, floor: 'tiles' },
+  shop: { ...DECOR.shop, wall: [0.95, 0.95, 0.93], band: [0.86, 0.26, 0.22], floor: 'tiles' },
+  deli: { ...DECOR.deli, wall: [0.97, 0.94, 0.88], band: [0.66, 0.24, 0.2], floor: 'tiles' },
+  pharmacy: { ...DECOR.pharmacy, floor: 'tiles' },
 });
 
 export { PLANS, clothes, screens, jewels, counterShop };

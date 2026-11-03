@@ -554,6 +554,18 @@ export class StreetLife {
         const dk = k && k.alive ? Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) : 99;
         if (dp < 1.6 || dk < 2.2) return { shop: a, pay: true, label: `E — לשלם בקופה (${you.items.length} · ${fmt(you.total())})` };
       }
+      // (ROADMAP 16.4: the deli's counter, the pharmacy's window, the chair - game/counterlife.js;
+      // at the corner shop's till with nothing to pay for, a scratch card)
+      const ctr = a.life2.counter;
+      if (ctr && a.open) {
+        const ct = ctr.target(p);
+        if (ct) return { shop: a, ...ct };
+        if (ctr.M.scratch && (!you || !you.items.length) && !(you && you.pv)) {
+          const ps = a.room.pay;
+          const dp = ps ? Math.hypot(ps.x - p.pos.x, ps.z - p.pos.z) : 99;
+          if (dp < 1.3 && k && k.alive) return { shop: a, scratch: true, label: 'E — כרטיס גירוד · $2' };
+        }
+      }
       if (k && k.alive && Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) < 1.6) break;
       const slot = a.life2.target(p);
       if (slot) return { shop: a, slot, label: a.life2.label(slot) };
@@ -563,8 +575,9 @@ export class StreetLife {
     let knock = false;
     for (const a of this.active.values()) {
       const s = a.shop;
-      // (an eatery of the new kind: ordered at its till, above)
-      if (a.life2 && a.life2.food) continue;
+      // (an eatery of the new kind: ordered at its till, above; the deli, the pharmacy, the corner
+      // shop: their counters, above)
+      if (a.life2 && (a.life2.food || a.life2.counter)) continue;
       // a shop with a room: you walk in and talk to the keeper at his counter
       const dd = a.room ? 99 : Math.hypot(s.door[0] - p.pos.x, s.door[2] - p.pos.z);
       const kp = a.keeper && a.keeper.alive && (a.open || !a.room) ? a.keeper.pos : a.home;
@@ -607,6 +620,14 @@ export class StreetLife {
     }
     if (t.sit) {
       t.shop.life2.sitMine(t.sit);
+      return true;
+    }
+    if (t.counter) {
+      t.shop.life2.counter.act(t);
+      return true;
+    }
+    if (t.scratch) {
+      t.shop.life2.counter.scratch();
       return true;
     }
     if (t.slot) {

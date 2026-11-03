@@ -36,7 +36,16 @@ export const BRANDS = {
     ['INKWELL', '#4f9ad8', '#e9f4fb', '#ffffff', 'mountain'],
     ['BLUE PAGE', '#2d62b5', '#cfe6f7', '#ffffff', 'wave'],
   ],
-  energy: [['GRAPHITE', '#141416', '#7cf03a', '#7cf03a', 'bolt']],
+  energy: [['GRAPHITE', '#141416', '#7cf03a', '#7cf03a', 'bolt'], ['VOLT LINE', '#1d3fa3', '#ffde2a', '#ffde2a', 'bolt']],
+  // (ROADMAP 16.4: the pharmacy's - the painkillers, the first-aid kit, the shampoo and the creams)
+  pain: [['PAIN-AWAY', '#ffffff', '#2a6fd0', '#2a6fd0', 'cross'], ['EASE-INK', '#eef4fb', '#d0282e', '#d0282e', 'drop']],
+  kit: [['FIRST AID', '#d0282e', '#ffffff', '#ffffff', 'cross']],
+  care: [
+    ['SOFT PAGE', '#f2f6fb', '#7bb3e6', '#2a5f9c', 'drop'],
+    ['INK-FRESH', '#e9f7ee', '#2fae63', '#1d6b3e', 'leaf'],
+    ['SUN SKETCH', '#ffd65a', '#f07a1d', '#7a3a0a', 'sun'],
+    ['MINT MOUTH', '#d9f3f1', '#26a69a', '#0d5c55', 'sparkle'],
+  ],
   juice: [
     ['SUNSET SQUEEZE', '#f6a21b', '#fff5d6', '#2b6e2f', 'orange'],
     ['APPLE LINE', '#cf2f2a', '#fdf1d8', '#2d5e22', 'apple'],
@@ -992,6 +1001,9 @@ function defineAll(A) {
   place('side.dark', 'side', boxSide('#c9b48a'));
   BRANDS.tea.forEach((b, i) => place(`small.${i}`, 'small', boxFront(b)));
   BRANDS.meds.forEach((b, i) => place(`small.med${i}`, 'small', boxFront(b)));
+  BRANDS.pain.forEach((b, i) => place(`small.pain${i}`, 'small', boxFront(b)));
+  BRANDS.kit.forEach((b, i) => place(`small.kit${i}`, 'small', boxFront(b)));
+  BRANDS.care.forEach((b, i) => place(`bottle.care${i}`, 'bottle', wrapLabel(b, { bandY: 0.7 })));
   BRANDS.chips.forEach((b, i) => place(`bag.chips${i}`, 'bag', bagFront(b, { burst: i === 0 ? ['#2f6cc2', '2 FOR 1'] : null })));
   BRANDS.bags.forEach((b, i) => place(`bag.dry${i}`, 'bag', bagFront(b)));
   BRANDS.bread.forEach((b, i) => place(`bag.bread${i}`, 'bag', bagFront(b)));
@@ -1008,6 +1020,10 @@ function defineAll(A) {
     ['head.home', 'HOME  •  CLEANING', '#6a4fb0', '#ffffff', null],
     ['head.fresh', 'FRESH  PRODUCE', '#3f8a2f', '#fff3c2', 'apple'],
     ['head.bakery', 'BAKERY', '#b8742e', '#fff3d8', 'wheat'],
+    ['head.health', 'HEALTH  •  PHARMACY', '#2f8a6c', '#ffffff', null],
+    ['head.care', 'CARE  •  BEAUTY', '#d9578f', '#ffffff', null],
+    ['head.deli', 'DELI  •  CHEESE  •  MEATS', '#b23a2b', '#fff3d8', null],
+    ['head.hot', 'HOT DOGS  •  SLUSH  •  COFFEE', '#e0452b', '#ffffff', null],
   ];
   for (const [n, t, f, l, p] of HEAD) place(n, 'header', header(t, f, l, { pic: p }));
   place('poster.0', 'poster', poster(BRANDS.soda[0], 'Draw the Fizz!'));
@@ -1089,6 +1105,168 @@ function defineAll(A) {
       });
     });
   }
+  // ---- (ROADMAP 16.4) the corner shop open all night, the deli, the pharmacy
+  // the security camera's screen behind the till: four views of the shop, grey, the time running
+  A.place('ui.cctv', 128, 96, (g, w, h, rng) => {
+    g.fillStyle = '#0d0f12';
+    g.fillRect(0, 0, w, h);
+    for (let k = 0; k < 4; k++) {
+      const x = 4 + (k % 2) * 62;
+      const y = 4 + Math.floor(k / 2) * 44;
+      g.fillStyle = ['#5d6268', '#4f555c', '#585e64', '#626870'][k];
+      g.fillRect(x, y, 58, 40);
+      // (shelves in perspective, a figure or two)
+      g.strokeStyle = 'rgba(20,22,26,0.7)';
+      g.lineWidth = 1.5;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.moveTo(x + 4, y + 10 + i * 10);
+        g.lineTo(x + 54, y + 6 + i * 12);
+        g.stroke();
+      }
+      g.fillStyle = 'rgba(25,25,30,0.85)';
+      const fx = x + 12 + ((k * 17) % 30);
+      g.beginPath();
+      g.arc(fx, y + 18, 3, 0, Math.PI * 2);
+      g.fill();
+      g.fillRect(fx - 3, y + 21, 6, 12);
+      g.fillStyle = 'rgba(255,255,255,0.08)';
+      for (let i = 0; i < 6; i++) g.fillRect(x, y + rng() * 40, 58, 1);
+    }
+    g.fillStyle = '#ff3a2a';
+    g.beginPath();
+    g.arc(9, 9, 3, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#f0f0f0';
+    g.font = font(8, 'Rubik', 700);
+    g.textBaseline = 'top';
+    g.fillText('REC', 15, 5);
+    g.textAlign = 'right';
+    g.fillText('CAM 1-4   23:41:07', w - 6, h - 12);
+  });
+  // the scratch cards in their dispenser behind the counter: a row of them, each its game
+  A.place('tix.scratch', 256, 96, (g, w, h, rng) => {
+    const T = [['LUCKY INK', '#e2263a', '$2'], ['GOLD LINES', '#e3a21a', '$5'], ['SKETCH 7', '#2e7bd6', '$2'], ['CASH DOODLE', '#2fae63', '$1'], ['STAR SCRIBBLE', '#7a3fb8', '$5'], ['BIG BRUSH', '#f06a1d', '$10']];
+    g.fillStyle = '#1b1a1f';
+    g.fillRect(0, 0, w, h);
+    const cw = w / T.length;
+    T.forEach(([n, c, p], i) => {
+      const x = i * cw + 2;
+      g.fillStyle = c;
+      g.fillRect(x, 4, cw - 4, h - 8);
+      g.fillStyle = 'rgba(255,255,255,0.9)';
+      g.font = font(9, 'Rubik', 900);
+      g.textAlign = 'center';
+      g.textBaseline = 'top';
+      g.fillText(n.split(' ')[0], x + cw / 2 - 2, 9);
+      g.fillText(n.split(' ')[1] || '', x + cw / 2 - 2, 20);
+      // (the silver to scratch)
+      g.fillStyle = '#c9ccd2';
+      g.fillRect(x + 5, 36, cw - 14, 26);
+      g.strokeStyle = 'rgba(80,80,90,0.5)';
+      for (let k = 0; k < 4; k++) {
+        g.beginPath();
+        g.moveTo(x + 7, 40 + k * 6);
+        g.lineTo(x + cw - 11, 38 + k * 6 + rng() * 2);
+        g.stroke();
+      }
+      g.fillStyle = '#fff4b0';
+      g.font = font(14, 'Rubik', 900);
+      g.fillText(p, x + cw / 2 - 2, 68);
+    });
+    void rng;
+  });
+  // the slush machine's front: its name, the two flavours under it
+  A.place('sign.slush', 192, 72, (g, w, h, rng) => {
+    g.fillStyle = '#16233f';
+    g.fillRect(0, 0, w, h);
+    title(g, 'ICY SKETCH', w / 2, h * 0.36, w * 0.86, h * 0.44, '#9fe3ff', { edge: '#0a1530' });
+    g.fillStyle = '#e8303e';
+    g.fillRect(w * 0.08, h * 0.68, w * 0.38, h * 0.22);
+    g.fillStyle = '#2f6fe0';
+    g.fillRect(w * 0.54, h * 0.68, w * 0.38, h * 0.22);
+    g.fillStyle = '#ffffff';
+    g.font = font(10, 'Rubik', 800);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('CHERRY', w * 0.27, h * 0.79);
+    g.fillText('BLUE RASP', w * 0.73, h * 0.79);
+    void rng;
+  });
+  A.place('sign.hotdog', 192, 56, (g, w, h, rng) => {
+    g.fillStyle = '#f7d23b';
+    g.fillRect(0, 0, w, h);
+    title(g, 'HOT DOGS 2 FOR $3', w / 2, h / 2, w * 0.9, h * 0.5, '#c42a22', { edge: '#ffffff' });
+    hand(g, [[3, 3], [w - 3, 3], [w - 3, h - 3], [3, h - 3], [3, 3]], INK, 2, rng);
+  });
+  // the deli's board over its counter
+  A.place('menu.deli', 256, 144, (g, w, h, rng) => {
+    g.fillStyle = '#1f2a24';
+    g.fillRect(0, 0, w, h);
+    title(g, 'DELI COUNTER', w / 2, 18, w * 0.8, 20, '#ffe08a', { edge: false });
+    const L = [['PASTRAMI ON RYE', '$7'], ['TURKEY CLUB', '$6'], ['SWISS CHEESE 1/2 LB', '$4'], ['SALAMI 1/2 LB', '$5'], ['POTATO SALAD', '$3']];
+    g.font = font(12, 'Rubik', 700);
+    g.textBaseline = 'middle';
+    L.forEach(([n, p], i) => {
+      const y = 44 + i * 19;
+      g.fillStyle = '#f4f0e6';
+      g.textAlign = 'left';
+      g.fillText(n, 14, y);
+      g.textAlign = 'right';
+      g.fillStyle = '#ffd36b';
+      g.fillText(p, w - 14, y);
+      g.strokeStyle = 'rgba(255,255,255,0.18)';
+      g.setLineDash([2, 3]);
+      g.beginPath();
+      g.moveTo(14 + g.measureText(n).width + 6, y + 2);
+      g.lineTo(w - 36, y + 2);
+      g.stroke();
+      g.setLineDash([]);
+    });
+    hand(g, [[3, 3], [w - 3, 3], [w - 3, h - 3], [3, h - 3], [3, 3]], '#c9a26a', 3, rng);
+  });
+  // the pharmacy's sign over its counter, the windows of the counter
+  A.place('sign.pharmacy', 384, 72, (g, w, h, rng) => {
+    g.fillStyle = '#f7f9f8';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#2f8a6c';
+    const cx = 40;
+    const cy = h / 2;
+    g.fillRect(cx - 9, cy - 24, 18, 48);
+    g.fillRect(cx - 24, cy - 9, 48, 18);
+    title(g, 'PHARMACY', w / 2 + 26, h / 2, w * 0.72, h * 0.56, '#2f8a6c', { edge: false });
+    hand(g, [[3, 3], [w - 3, 3], [w - 3, h - 3], [3, h - 3], [3, 3]], INK, 2, rng);
+  });
+  for (const [n, t, c] of [['sign.pickup', 'PICK UP', '#2f8a6c'], ['sign.dropoff', 'DROP OFF', '#2a6fd0']]) {
+    A.place(n, 192, 56, (g, w, h, rng) => {
+      g.fillStyle = c;
+      g.fillRect(0, 0, w, h);
+      title(g, t, w / 2, h / 2, w * 0.8, h * 0.56, '#ffffff', { edge: false });
+      void rng;
+    });
+  }
+  // the blood pressure machine's little screen
+  A.place('ui.bp', 96, 64, (g, w, h) => {
+    g.fillStyle = '#c8e8d8';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#123a2a';
+    g.font = font(18, 'Rubik', 800);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('120/80', w / 2, h * 0.38);
+    g.font = font(11, 'Rubik', 700);
+    g.fillText('♥ 72', w / 2, h * 0.76);
+  });
+  // a ticket from the deli's number machine
+  A.place('tag.number', 48, 32, (g, w, h) => {
+    g.fillStyle = '#ffe7e0';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#c42a22';
+    g.font = font(16, 'Rubik', 900);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('42', w / 2, h / 2 + 1);
+  });
   A.place('ui.keys', 96, 96, (g, w, h) => {
     g.fillStyle = '#2a2a30';
     g.fillRect(0, 0, w, h);

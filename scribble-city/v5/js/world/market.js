@@ -3,6 +3,7 @@ import { ceiling } from './stock.js';
 import { model, LINES, roomLight } from './products.js';
 import { labels } from './labels.js';
 import { rbox, rprint, rprintUp, rcyl, wp, yawOut, lookOf, fruitOf, put, counterLen } from './shopkit.js';
+import { hotFood, HOT_DEPTH, cornerTill, deliCounter, pharmacyCounter, bpChair } from './corner.js';
 
 // (v5, ROADMAP 14.4) The neighbourhood market, laid out as a real one is and furnished to the
 // small things - the first of the shops of the new kind, the one the others are measured by.
@@ -37,12 +38,17 @@ const ZONES = {
   snacks: { head: 'head.snacks', rows: [['chips'], ['chips'], ['small', 'chips'], ['small']] },
   sweets: { head: 'head.snacks', rows: [['small'], ['dry', 'small'], ['cereal'], ['dry']] },
   home: { head: 'head.home', rows: [['meds'], ['meds', 'small'], ['clean'], ['clean']] },
+  // (ROADMAP 16.4: the pharmacy's - the medicines, the painkillers, the first-aid kits; the care)
+  health: { head: 'head.health', rows: [['meds'], ['pain', 'meds'], ['kit', 'pain'], ['meds', 'small'], ['meds']] },
+  care: { head: 'head.care', rows: [['care'], ['care', 'small'], ['care', 'meds'], ['clean']] },
 };
 
 // ------------------------------------------------------------------ the plan
 export function market(R, o = {}) {
   const fr = frame(R);
   const rng = () => R.rng.r();
+  // (ROADMAP 16.4: '247' the corner shop open all night, 'deli', 'pharmacy' - world/corner.js)
+  const kind = o.kind || 'grocery';
   R.noLamps = true;
   R.light = roomLight(R.f);
   if (R.live) R.live.S.light = R.light;
@@ -51,12 +57,30 @@ export function market(R, o = {}) {
   const front = R.da - FRONT;
   const back = R.db + 0.78;
   const till = checkout(R, fr);
+  if (kind === '247') cornerTill(R, till);
   // the back wall: the stock room's door at the till's end, the fridges along the rest
   const doorW = 1.0;
   const sdU = fr.left ? R.ub - 0.25 - doorW : R.ua + 0.25;
   staffDoor(R, sdU, doorW);
   let f0 = fr.left ? R.ua + 0.2 : sdU + doorW + 0.35;
   let f1 = fr.left ? sdU - 0.35 : R.ub - 0.2;
+  // (the deli's counter, the pharmacy's: the part of the back wall away from the stock room's door)
+  let svc = null;
+  if ((kind === 'deli' || kind === 'pharmacy') && f1 - f0 > 2.6) {
+    const sl = Math.min(4.6, Math.max(2.4, (f1 - f0) * 0.62));
+    const a = fr.left ? f0 : f1 - sl;
+    const b = fr.left ? f0 + sl : f1;
+    svc = kind === 'deli' ? deliCounter(R, a, b, !fr.left) : pharmacyCounter(R, a, b, !fr.left);
+    svc.u0 = a;
+    svc.u1 = b;
+    if (fr.left) f0 = b + 0.9;
+    else f1 = a - 0.9;
+    if (kind === 'pharmacy' && f1 - f0 > 1.0) {
+      // (no fridges in a pharmacy: the rest of the back wall shelving)
+      shelving(R, new Run(R, f0, R.db + 0.46, [1, 0], [0, 1]), f1 - f0, { zone: 'care', h: 2.05, depth: 0.44 });
+      f1 = f0;
+    }
+  }
   // (a corner shop's fridges: eight doors at most; the rest of the back wall shelving, by the door to
   // the stock room - the cleaning things, the medicines)
   const most = 0.76 * 8;
@@ -71,23 +95,44 @@ export function market(R, o = {}) {
       f0 = f1 - most;
     }
   }
-  if (f1 - f0 > 1.4) fridges(R, f0, f1);
-  // the side walls: shelving from the fridges to the front
-  const sideLen = front - 0.2 - back;
-  if (sideLen > 1.2) {
-    const left = new Run(R, R.ua + 0.44, back, [0, 1], [1, 0]);
-    const right = new Run(R, R.ub - 0.44, back, [0, 1], [-1, 0]);
-    shelving(R, left, sideLen, { zone: o.leftZone || 'pantry', h: 2.05, depth: 0.44 });
-    shelving(R, right, sideLen, { zone: o.rightZone || 'breakfast', h: 2.05, depth: 0.44 });
+  if (f1 - f0 > 1.4) fridges(R, f0, f1, { energy: kind === '247' });
+  // (the window along the door's other side: the fruit there, or the corner shop's hot counter - a
+  // narrow corner shop's goes on the wall by the door instead, where the shelving would end)
+  const pu0 = fr.left ? R.ua + 0.25 : till ? till.end + 0.6 : R.lane[1] + 0.4;
+  const pu1 = fr.left ? (till ? till.end - 0.6 : R.lane[0] - 0.4) : R.ub - 0.25;
+  const lo = fr.left ? pu0 : Math.max(pu0, R.lane[1] + 0.35);
+  const hi = fr.left ? Math.min(pu1, R.lane[0] - 0.35) : pu1;
+  let hot = null;
+  if (kind === '247') {
+    if (hi - lo > 1.5) hot = { run: new Run(R, lo, R.da - 0.25 - HOT_DEPTH, [1, 0], [0, -1]), len: Math.min(3.2, hi - lo) };
+    else {
+      const L = Math.min(2.6, (front - back) * 0.45);
+      const dEnd = front - 0.3;
+      hot = fr.left ? { run: new Run(R, R.ua + 0.04 + HOT_DEPTH, dEnd - L, [0, 1], [1, 0]), len: L, side: 'l', d0: dEnd - L } : { run: new Run(R, R.ub - 0.04 - HOT_DEPTH, dEnd, [0, -1], [-1, 0]), len: L, side: 'r', d0: dEnd - L };
+    }
   }
+  // the side walls: shelving from the fridges to the front (on the service counter's side, from past
+  // where its customers stand)
+  const svcBack = svc ? R.db + svc.depth + 1.15 : back;
+  const lBack = svc && fr.left ? svcBack : back;
+  const rBack = svc && !fr.left ? svcBack : back;
+  // (the pharmacy's chair stands where the shelving on the till's side would end)
+  const chair = kind === 'pharmacy' ? (fr.left ? 'r' : 'l') : null;
+  const lEnd = hot && hot.side === 'l' ? hot.d0 - 0.3 : chair === 'l' ? front - 1.6 : front - 0.2;
+  const rEnd = hot && hot.side === 'r' ? hot.d0 - 0.3 : chair === 'r' ? front - 1.6 : front - 0.2;
+  const sideLen = front - 0.2 - back;
+  const zl = o.leftZone || (kind === 'pharmacy' ? 'health' : kind === '247' ? 'snacks' : 'pantry');
+  const zr = o.rightZone || (kind === 'pharmacy' ? 'care' : 'breakfast');
+  if (lEnd - lBack > 1.2) shelving(R, new Run(R, R.ua + 0.44, lBack, [0, 1], [1, 0]), lEnd - lBack, { zone: zl, h: 2.05, depth: 0.44 });
+  if (rEnd - rBack > 1.2) shelving(R, new Run(R, R.ub - 0.44, rBack, [0, 1], [-1, 0]), rEnd - rBack, { zone: zr, h: 2.05, depth: 0.44 });
   // the gondolas down the middle, parallel to the front
   const g0 = R.ua + 0.44 + AISLE + 0.4;
   const g1 = R.ub - 0.44 - AISLE - 0.4;
   const cs = [];
   if (g1 - g0 > 1.6) {
-    const zones = [['snacks', 'sweets'], ['home', 'snacks']];
+    const zones = kind === 'pharmacy' ? [['health', 'care'], ['care', 'snacks']] : [['snacks', 'sweets'], ['home', 'snacks']];
     let k = 0;
-    for (let c = back + AISLE + 0.45; c + 0.45 < front - 0.95; c += 0.9 + AISLE) {
+    for (let c = (svc ? svcBack + 0.35 : back + AISLE) + 0.45; c + 0.45 < front - 0.95; c += 0.9 + AISLE) {
       const [za, zb] = zones[k % zones.length];
       gondola(R, g0, g1, c, za, zb);
       cs.push(c);
@@ -95,12 +140,12 @@ export function market(R, o = {}) {
     }
   }
   hangingSigns(R, cs, (g0 + g1) / 2);
-  // the fruit along the window on the door's other side
-  const pu0 = fr.left ? R.ua + 0.25 : till ? till.end + 0.6 : R.lane[1] + 0.4;
-  const pu1 = fr.left ? (till ? till.end - 0.6 : R.lane[0] - 0.4) : R.ub - 0.25;
-  const lo = fr.left ? pu0 : Math.max(pu0, R.lane[1] + 0.35);
-  const hi = fr.left ? Math.min(pu1, R.lane[0] - 0.35) : pu1;
-  if (hi - lo > 1.3) produce(R, lo, Math.min(hi, lo + 3.4), R.da - 0.25);
+  // the fruit along the window on the door's other side (the corner shop: its hot counter)
+  if (hot) hotFood(R, hot.run, hot.len);
+  else if (kind === 'pharmacy') {
+    // (the pharmacy: the chair to take your blood pressure, by the window on the door's other side)
+    bpChair(R, fr.left ? 1 : -1, front - 0.3);
+  } else if (hi - lo > 1.3) produce(R, lo, Math.min(hi, lo + 3.4), R.da - 0.25);
   // the bread rack and the papers between the checkout and the way in; the baskets by the door
   const midU = fr.left ? R.lane[1] + 0.6 : R.lane[0] - 1.4;
   if (Math.abs(midU - (till ? till.mid : 0)) > 1.4) breadRack(R, midU, front + 0.45);
@@ -111,7 +156,9 @@ export function market(R, o = {}) {
   const b = R.spots.browse;
   R.spots.staff = [];
   for (let i = 0; i < 3 && b.length; i++) R.spots.staff.push(b[Math.floor(((i + 0.5) * b.length) / 3)]);
-  R.spots.big = fr.W * fr.D > 55;
+  // (a counter that serves - the deli's, the pharmacy's - has its second pair of hands even on a phone)
+  R.spots.big = fr.W * fr.D > 55 || !!svc;
+  R.spots.kind = kind;
   R.spots.marks = R.spots.marks || [];
   R.spots.marks.push({ name: 'stock', u: sdU + doorW / 2, d: R.db + 0.9, face: [0, -1] });
 }
@@ -319,7 +366,7 @@ function fillShelf(R, run, s0, s1, y, hMax, depth, lines, o = {}) {
 // cold white, the light along the top; wire shelves with the drinks on them (the milk and the
 // yoghurt in the last doors); the glass doors in their steel frames, each with its handle - the
 // doors open (game/shoplife.js: a hand on the handle, the door swung, the bottle taken, shut).
-function fridges(R, u0, u1) {
+function fridges(R, u0, u1, o = {}) {
   const S = R.psoup(false);
   const G = R.psoup(true);
   const y0 = R.y0;
@@ -358,7 +405,7 @@ function fridges(R, u0, u1) {
     }
     for (let k = 0; k < nd; k++) {
       const dairy = k >= dairyFrom;
-      const lines = dairy ? (i < 2 ? ['yogurt', 'cartons'] : ['cartons']) : i === 0 ? ['water'] : i === 4 ? ['cans'] : i === 3 ? ['soda', 'juice'] : ['soda', 'cans', 'juice'];
+      const lines = dairy ? (i < 2 ? ['yogurt', 'cartons'] : ['cartons']) : i === 0 ? ['water'] : i === 4 ? ['cans'] : i === 3 ? (o.energy && k % 2 === 0 ? ['energy'] : ['soda', 'juice']) : o.energy && k === 0 ? ['energy', 'cans'] : ['soda', 'cans', 'juice'];
       later(R, () => fillFridge(R, run, k * dw + 0.05, (k + 1) * dw - 0.05, y, step - 0.03, lines, dairy ? 'dairy' : 'drink', i >= 2 && i <= 3 ? spots[k] : null));
     }
   }

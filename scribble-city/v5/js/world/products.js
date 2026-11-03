@@ -523,6 +523,24 @@ function boxModel(w, h, d, label) {
 MAKERS.cereal = boxModel(0.19, 0.28, 0.068, 'box');
 MAKERS.dry = boxModel(0.16, 0.22, 0.06, 'box');
 MAKERS.small = boxModel(0.13, 0.09, 0.062, 'small');
+// (ROADMAP 16.4) a first-aid kit: a red box, its front printed with the cross, a handle on top
+MAKERS.kit = () => {
+  const m = new Model();
+  const w = 0.22;
+  const h = 0.15;
+  const d = 0.075;
+  m.size = [w, h + 0.03, d];
+  m.label = 'small';
+  box(m.part('print', [1, 1, 1], 1), -w / 2, 0, -d / 2, w / 2, h, d / 2, { skip: ['px', 'nx', 'py', 'ny'], label: ['pz', 'nz'] });
+  box(m.part('plain', null, 0), -w / 2, 0, -d / 2, w / 2, h, d / 2, { skip: ['pz', 'nz'] });
+  // (the latches, the handle)
+  const hd = m.part('plain', [0.22, 0.22, 0.24], 2);
+  for (const x of [-0.07, 0.07]) box(hd, x - 0.012, h - 0.03, d / 2, x + 0.012, h - 0.005, d / 2 + 0.006, { skip: ['nz'] });
+  box(hd, -0.05, h, -0.008, -0.04, h + 0.026, 0.008, { skip: ['ny'] });
+  box(hd, 0.04, h, -0.008, 0.05, h + 0.026, 0.008, { skip: ['ny'] });
+  box(hd, -0.05, h + 0.02, -0.009, 0.05, h + 0.03, 0.009);
+  return m;
+};
 
 // a bag of chips: a pillow sealed top and bottom
 function bagModel(w, h, d, label) {
@@ -1526,6 +1544,11 @@ export const LINES = {
   bread: { model: 'loaf', cells: ['bag.bread0', 'bag.bread1'], tints: [[0.94, 0.88, 0.76], [0.95, 0.93, 0.88]] },
   clean: { model: 'jug', cells: ['jug.0', 'jug.1', 'jug.2'], tints: [[0.18, 0.42, 0.82], [0.88, 0.84, 0.96], [0.18, 0.66, 0.38]], caps: [[0.96, 0.95, 0.92], [0.55, 0.42, 0.8], [0.98, 0.9, 0.3]] },
   candy: { model: 'candy', cells: [0, 1, 2, 3, 4, 5].map((i) => `candy.${i}`), tints: [[0.8, 0.8, 0.8]] },
+  // (ROADMAP 16.4: the corner shop's and the pharmacy's own)
+  energy: { model: 'can', cells: ['can.energy0', 'can.energy1'], tints: [[0.8, 0.8, 0.8]] },
+  pain: { model: 'small', cells: ['small.pain0', 'small.pain1'], side: 'side.light', tints: [[0.96, 0.96, 0.96], [0.92, 0.95, 0.99]] },
+  kit: { model: 'kit', cells: ['small.kit0'], tints: [[0.84, 0.16, 0.18]] },
+  care: { model: 'sauce', cells: [0, 1, 2, 3].map((i) => `bottle.care${i}`), tints: [[0.94, 0.96, 0.99], [0.9, 0.97, 0.92], [0.99, 0.86, 0.4], [0.85, 0.96, 0.95]], caps: [[0.3, 0.5, 0.85], [0.2, 0.6, 0.35], [0.95, 0.5, 0.15], [0.15, 0.6, 0.55]] },
 };
 
 // the fruit and vegetables: the model, its colours (a little different, each one)

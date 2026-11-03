@@ -5,6 +5,7 @@ import { fmt } from './money.js';
 import { LAYERS } from '../render/materials.js';
 import { Shopper } from './shopper.js';
 import { ShopMural } from './shopmural.js';
+import { CounterLife } from './counterlife.js';
 
 // (v5, ROADMAP 14.4) A shop's day, as it really goes - the shops of the new kind (world/market.js):
 // every action tied to a real thing in the shop.
@@ -43,10 +44,10 @@ const GROCERY = {
   // (how many customers at once: game/streetlife.js wantVisitors, the most when you are inside)
   crowd: 6,
   // (whole dollars: game/money.js)
-  prices: { soda: 2, water: 1, cans: 1, juice: 3, cartons: 3, yogurt: 1, tins: 2, jars: 3, sauce: 3, oil: 5, cereal: 4, dry: 2, small: 2, meds: 5, chips: 2, coffee: 6, bread: 3, clean: 5, candy: 1, fruit: 1 },
-  names: { soda: 'a bottle of pop', water: 'a bottle of water', cans: 'a can of pop', juice: 'a bottle of juice', cartons: 'a carton', yogurt: 'a yoghurt', tins: 'a tin', jars: 'a jar', sauce: 'a bottle of sauce', oil: 'a bottle of oil', cereal: 'a box of cereal', dry: 'a box', small: 'a small box', meds: 'a box of medicine', chips: 'a bag of chips', coffee: 'a bag of coffee', bread: 'a loaf', clean: 'a bottle of cleaner', candy: 'a bar of chocolate', fruit: 'a piece of fruit' },
-  heb: { soda: 'בקבוק משקה', water: 'בקבוק מים', cans: 'פחית משקה', juice: 'בקבוק מיץ', cartons: 'קרטון חלב/מיץ', yogurt: 'יוגורט', tins: 'שימורים', jars: 'צנצנת', sauce: 'רוטב', oil: 'שמן', cereal: 'דגני בוקר', dry: 'קופסה', small: 'קופסה קטנה', meds: 'תרופה', chips: 'שקית צ\'יפס', coffee: 'שקית קפה', bread: 'לחם', clean: 'חומר ניקוי', candy: 'חטיף שוקולד', fruit: 'פרי' },
-  food: new Set(['soda', 'water', 'cans', 'juice', 'cartons', 'yogurt', 'chips', 'bread', 'candy', 'fruit']),
+  prices: { soda: 2, water: 1, cans: 1, juice: 3, cartons: 3, yogurt: 1, tins: 2, jars: 3, sauce: 3, oil: 5, cereal: 4, dry: 2, small: 2, meds: 5, chips: 2, coffee: 6, bread: 3, clean: 5, candy: 1, fruit: 1, energy: 3, pain: 6, kit: 12, care: 5, hotdog: 2, slush: 2 },
+  names: { soda: 'a bottle of pop', water: 'a bottle of water', cans: 'a can of pop', juice: 'a bottle of juice', cartons: 'a carton', yogurt: 'a yoghurt', tins: 'a tin', jars: 'a jar', sauce: 'a bottle of sauce', oil: 'a bottle of oil', cereal: 'a box of cereal', dry: 'a box', small: 'a small box', meds: 'a box of medicine', chips: 'a bag of chips', coffee: 'a bag of coffee', bread: 'a loaf', clean: 'a bottle of cleaner', candy: 'a bar of chocolate', fruit: 'a piece of fruit', energy: 'an energy drink', pain: 'a box of painkillers', kit: 'a first-aid kit', care: 'a bottle of shampoo', hotdog: 'a hot dog', slush: 'a slush' },
+  heb: { soda: 'בקבוק משקה', water: 'בקבוק מים', cans: 'פחית משקה', juice: 'בקבוק מיץ', cartons: 'קרטון חלב/מיץ', yogurt: 'יוגורט', tins: 'שימורים', jars: 'צנצנת', sauce: 'רוטב', oil: 'שמן', cereal: 'דגני בוקר', dry: 'קופסה', small: 'קופסה קטנה', meds: 'תרופה', chips: 'שקית צ\'יפס', coffee: 'שקית קפה', bread: 'לחם', clean: 'חומר ניקוי', candy: 'חטיף שוקולד', fruit: 'פרי', energy: 'משקה אנרגיה', pain: 'משככי כאבים', kit: 'ערכת עזרה ראשונה', care: 'שמפו', hotdog: 'נקניקייה', slush: 'ברד' },
+  food: new Set(['soda', 'water', 'cans', 'juice', 'cartons', 'yogurt', 'chips', 'bread', 'candy', 'fruit', 'energy', 'hotdog', 'slush']),
   say: {
     shelf: ['Hmm, which one...', 'Two for one? Nice.', 'Where is the milk?', 'This one\'s cheaper.', 'We\'re out of eggs again?', 'Ooh, a new flavour.', 'Is this the low-fat one?', 'I always forget something.'],
     back: ['Nah.', 'Not today.', 'Too sweet.', 'Maybe next time.'],
@@ -410,6 +411,8 @@ export class ShopLife {
     // (now and then one of them at a wall, painting a mural: game/shopmural.js)
     this.mural = new ShopMural(this);
     this.muralOn = false;
+    // (ROADMAP 16.4: the deli's counter, the pharmacy's, the slush machine, the chair - game/counterlife.js)
+    this.counter = CounterLife.for(this);
     this.sync();
   }
 
@@ -514,6 +517,7 @@ export class ShopLife {
     }
     const c = v.c.pos;
     out.sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
+    if (this.counter) this.counter.plan(v, out);
     // (an electronics shop: a while before the wall of screens, now and then)
     if (this.prof.flow === 'tech' && Math.random() < 0.45) {
       const tv = this.room.browse.filter((b) => b.what === 'look');
@@ -637,6 +641,15 @@ export class ShopLife {
             this.go(v, q.tv.x, q.tv.z);
             return null;
           }
+          // (the deli's counter, the pharmacy's window, the chair: game/counterlife.js)
+          if (q.svc && this.counter) {
+            L.svc = q.svc;
+            L.S = null;
+            L.st = 'svc';
+            L.t = 0;
+            v.pts = null;
+            return null;
+          }
           if (!q.busy || q.busy === v || !q.busy.c.alive) z = q;
         }
         if (z) {
@@ -662,6 +675,12 @@ export class ShopLife {
         L.t = 0;
         return null;
       }
+      case 'svc':
+        if (!this.counter) {
+          L.st = 'next';
+          return null;
+        }
+        return this.counter.visit(v, dt);
       case 'linger': {
         if (v.pts) {
           const m = this.open.follow(v);
@@ -1498,6 +1517,7 @@ export class ShopLife {
   release(v) {
     const L = v.L;
     if (!L) return;
+    if (this.counter) this.counter.release(v);
     const c = v.c;
     this.unwear(v);
     const qi = this.queue.indexOf(v);
@@ -1852,6 +1872,8 @@ export class ShopLife {
   stockerWork(c, dt) {
     const S = this.S;
     if (!S || S.c !== c) return null;
+    // (a deli's clerk, a pharmacist: behind the counter all day - game/counterlife.js)
+    if (this.counter && this.counter.kind) return this.counter.staff(c, dt);
     const f = c.fig;
     S.t += dt;
     const v = S;
@@ -2443,6 +2465,7 @@ export class ShopLife {
   update(dt) {
     this.sync();
     this.t += dt;
+    if (this.counter) this.counter.update(dt);
     // (once its stock is in - the room is there round it - and not where they make food)
     if (!this.muralOn && this.live && this.open.open && this.shop.kind !== 'deli') {
       this.muralOn = true;
@@ -2799,6 +2822,7 @@ export class ShopLife {
   dispose() {
     this.you.dispose();
     this.mural.dispose();
+    if (this.counter) this.counter.dispose();
     // (whatever is in motion goes back where it came from)
     for (const it of [...this.movers.items]) {
       if (it.slot && (it.slot.state === 'held' || it.slot.state === 'aim')) this.setSlot(it.slot, 'shelf');
