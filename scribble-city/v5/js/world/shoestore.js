@@ -2,6 +2,7 @@ import { Run, ceiling } from './stock.js';
 import { roomLight } from './products.js';
 import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk, frameOf } from './shopkit.js';
 import { cashWrap } from './fashion.js';
+import './sportgear.js';
 
 // (v5, ROADMAP 16.5) A shoe shop of the new kind (after the market, the clothes shop, the jeweller):
 //
@@ -211,12 +212,11 @@ function bench(R, S, um, dm, bl, ks, measure) {
   for (const end of [-1, 1]) {
     const s = end < 0 ? -0.95 : bl + 0.95;
     const mr = new Run(R, ...run.ud(s, -0.25), [0, 1], [-end, 0]);
-    // (the frame leaning back; the glass)
-    for (let j = 0; j < 4; j++) {
-      const lean = j * 0.035;
-      rbox(R, S, mr, 0, y0 + j * 0.15, -lean - 0.03, 0.5, y0 + (j + 1) * 0.15, -lean, DARK, {});
-      rprint(R, S, mr, 0.03, y0 + 0.02 + j * 0.15, 0.47, y0 + (j + 1) * 0.15 - 0.005, -lean + 0.001, null, { pen: 'gloss', col: [0.82, 0.88, 0.93] });
-    }
+    // (its frame, the glass in it, the foot it leans back on)
+    rbox(R, S, mr, 0, y0 + 0.02, -0.06, 0.5, y0 + 0.66, -0.03, DARK, {});
+    rprint(R, S, mr, 0.035, y0 + 0.055, 0.465, y0 + 0.625, -0.029, null, { pen: 'gloss', col: [0.8, 0.87, 0.93] });
+    for (let g = 0.08; g < 0.42; g += 0.17) rprint(R, S, mr, g, y0 + 0.12, g + 0.025, y0 + 0.56, -0.028, null, { pen: 'gloss', col: [0.95, 0.98, 1] });
+    rbox(R, S, mr, 0.05, y0, -0.2, 0.45, y0 + 0.02, -0.06, DARK, {});
     mr.solid(-0.02, -0.18, 0.52, 0.02, y0 + 0.6);
     const [u, d] = mr.ud(0.25, 0.6);
     R.spots.marks.push({ name: `lowMirror.${ks.m++}`, u, d, y: 0, face: [end, 0] });

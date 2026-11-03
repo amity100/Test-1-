@@ -146,7 +146,7 @@ export class Shopper {
       L.giveBack(it);
       if (L.tries.forYou(s, price)) return;
       // (nobody to fetch it: a box from under the counter)
-      it = L.movers.add({ line: 'box', model: 'stockBox', cell: 'box.stock', tint: [0.9, 0.46, 0.16] }, true);
+      it = L.movers.add({ line: 'box', model: 'shoeBox', cell: null, tint: [0.9, 0.46, 0.16], cap: [0.97, 0.97, 0.95] }, true);
       boxed = true;
     }
     const rec = { it, s: boxed ? null : s, what: s.what, price, heb: L.prof.heb[s.what] || 'מוצר', look: s.look };

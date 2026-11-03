@@ -142,8 +142,9 @@ export class TryLife {
           S.st = 'tryOn';
           S.t = 0;
         }
-        // (nobody came: up, and the sample back where it was)
-        if (S.t > 70) {
+        // (nobody came: up, and the sample back where it was - a box on its way goes back to the stock room)
+        if (S.t > 150) {
+          if (S.req) S.req.dead = true;
           this.queue = this.queue.filter((q) => q !== S.req);
           return this.getUp(v, false);
         }
@@ -513,7 +514,7 @@ export class TryLife {
     switch (S.st) {
       case 'tryStock': {
         const mv = walk();
-        if (mv) return { ...mv, speed: 1.05 };
+        if (mv) return { ...mv, speed: 1.3 };
         // into the stock room a moment, for the size
         const m = this.M.stock;
         c.faceYaw = m.yaw + Math.PI;
@@ -533,9 +534,9 @@ export class TryLife {
         f.setVisible(true);
         const req = J.req;
         if (!req || req.dead) return this.idle(S);
-        // out again with the box under the arm
+        // out again with the shoe box under the arm
         const col = pick([[0.9, 0.46, 0.16], [0.14, 0.14, 0.16], [0.95, 0.94, 0.9], [0.78, 0.18, 0.18], [0.2, 0.36, 0.7]]);
-        J.box = this.life.movers.add({ line: 'box', model: 'stockBox', cell: 'box.stock', tint: col }, true);
+        J.box = this.life.movers.add({ line: 'box', model: 'shoeBox', cell: null, tint: col, cap: [0.97, 0.97, 0.95] }, true);
         J.box.at = { c, how: 'grip' };
         f.carry = 'held';
         S.st = 'tryBring';
@@ -546,10 +547,13 @@ export class TryLife {
       case 'tryBring': {
         const req = J.req;
         if (!req || req.dead) {
-          if (J.box) this.life.movers.remove(J.box);
-          J.box = null;
-          f.carry = null;
-          return this.idle(S);
+          // (whoever it was for has gone: back into the stock room with it)
+          if (!J.box) return this.idle(S);
+          S.st = 'tryShelve';
+          S.t = 0;
+          const m = this.M.stock;
+          if (m) this.life.goS(c, m.x, m.z);
+          return null;
         }
         // (you move about: followed)
         if (!req.v && (S.t > 1.5 || !S.pts || !S.pts.length)) {
@@ -560,7 +564,7 @@ export class TryLife {
           }
         }
         const mv = walk();
-        if (mv) return { ...mv, speed: 1.0 };
+        if (mv) return { ...mv, speed: 1.2 };
         if (!req.v) {
           const P = this.game.player;
           if (Math.hypot(P.pos.x - c.pos.x, P.pos.z - c.pos.z) > 1.5) {

@@ -99,3 +99,14 @@ addMaker('slat', () => {
   box(m.part('plain', [0.24, 0.24, 0.27], 0), -0.02, 0, -0.22, 0.02, 0.006, 0.22);
   return m;
 });
+
+// a shoe box: its body (the maker's colour, the look's tint), the lid's edge a shade darker, the
+// white label at its end (the look's cap)
+addMaker('shoeBox', () => {
+  const m = new Model();
+  m.size = [0.34, 0.13, 0.21];
+  box(m.part('plain', null, 0), -0.17, 0, -0.105, 0.17, 0.12, 0.105);
+  box(m.part('plain', [0.2, 0.2, 0.22], 1), -0.172, 0.1, -0.107, 0.172, 0.126, 0.107);
+  box(m.part('plain', 'cap', 2), 0.172, 0.03, -0.06, 0.174, 0.085, 0.06, { skip: ['nx'] });
+  return m;
+});
