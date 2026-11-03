@@ -122,8 +122,13 @@ function tvWall(R, run, len) {
     for (let s = 0.6; s < len - 0.5; s += 1.15) {
       for (const y of [y0 + 0.62, y0 + 1.5]) put(R, { line: 'tv', model: 'tv', cell: `ui.tv${Math.floor(R.rng.r() * 3)}`, tint: DARK }, wp(R, run, s, y - 0.08, -0.44), yaw, {});
     }
-    // (the speakers on the cabinet)
-    for (let s = 0.4; s < len - 0.3; s += 0.9) rbox(R, R.psoup(true), run, s - 0.09, y0 + 0.55, -0.32, s + 0.09, y0 + 0.82, -0.14, [0.12, 0.12, 0.13], { skip: ['bottom'] });
+    // (the speakers on the cabinet: a low soundbar under each set - under its screen, not over it -
+    // and a narrow speaker standing in each gap between two sets)
+    const SP = R.psoup(true);
+    for (let s = 0.6; s < len - 0.5; s += 1.15) {
+      rbox(R, SP, run, s - 0.31, y0 + 0.55, -0.3, s + 0.31, y0 + 0.6, -0.23, [0.12, 0.12, 0.13], { skip: ['bottom'] });
+      if (s + 1.15 < len - 0.5) rbox(R, SP, run, s + 0.575 - 0.045, y0 + 0.55, -0.32, s + 0.575 + 0.045, y0 + 0.8, -0.22, [0.12, 0.12, 0.13], { skip: ['bottom'] });
+    }
   });
 }
 
