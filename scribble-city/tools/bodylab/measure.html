@@ -1,0 +1,54 @@
+<!doctype html><html><head><meta charset="utf-8">
+<script type="importmap">{ "imports": { "three": "/js/vendor/three.module.min.js" } }</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import * as HERO from '/v5/js/render/heroshapes.js';
+import { folkBody } from '/v5/js/render/folkshapes.js';
+import { FOLK } from '/v5/js/render/folkspec.js';
+try {
+  const cap = await (await fetch('/lab/cap.json')).json();
+  const fix = (a) => { const m = new THREE.Matrix4().fromArray(a); const e = m.elements; if (e[0] * (e[5] * e[10] - e[6] * e[9]) - e[4] * (e[1] * e[10] - e[2] * e[9]) + e[8] * (e[1] * e[6] - e[2] * e[5]) < 0) { e[0] = -e[0]; e[1] = -e[1]; e[2] = -e[2]; } return m; };
+  const owners = new Map();
+  for (const r of cap) { const m = r.n.match(/^folk(\d+)_(torso|neck)$/); if (m) { const o = owners.get(r.owner) || { k: +m[1] }; o[m[2]] = r.m; owners.set(r.owner, o); } }
+  const H = { k: -1, torso: cap.find((r) => r.n === 'heroTorso').m, neck: cap.find((r) => r.n === 'heroNeck').m };
+  const list = [['hero', H], ...[...owners.entries()].filter(([, o]) => o.torso && o.neck)];
+  const v = new THREE.Vector3();
+  const geoCache = new Map();
+  const out = [];
+  for (const [own, o] of list) {
+    const Mt = fix(o.torso), Mn = fix(o.neck);
+    const inv = Mt.clone().invert();
+    let g;
+    if (o.k < 0) g = HERO.heroNeckGeo();
+    else { g = geoCache.get(o.k); if (!g) { g = folkBody(o.k).parts.neck; geoCache.set(o.k, g); } }
+    const P = g.attributes.position;
+    // the neck's section in the torso's measure at a few heights: half width, front, back (from all its points within 4 mm of the height)
+    const H0 = [0.48, 0.495, 0.51, 0.525, 0.54];
+    const res = H0.map(() => ({ w: 0, f: -9, b: 9, n: 0 }));
+    const pts = [];
+    for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i).applyMatrix4(Mn).applyMatrix4(inv); pts.push(v.x, v.y, v.z); }
+    // (the loft's own rows are far apart: the section between them by the triangles' edges)
+    const idx = g.index ? g.index.array : null;
+    const tri = idx ? idx.length / 3 : P.count / 3;
+    const I = (t, c) => (idx ? idx[t * 3 + c] : t * 3 + c);
+    for (let t = 0; t < tri; t++) {
+      for (let c = 0; c < 3; c++) {
+        const a = I(t, c), b = I(t, (c + 1) % 3);
+        const ya = pts[a * 3 + 1], yb = pts[b * 3 + 1];
+        H0.forEach((h, j) => {
+          if ((ya - h) * (yb - h) > 0 || ya === yb) return;
+          const s = (h - ya) / (yb - ya);
+          const x = pts[a * 3] + (pts[b * 3] - pts[a * 3]) * s;
+          const z = pts[a * 3 + 2] + (pts[b * 3 + 2] - pts[a * 3 + 2]) * s;
+          const R = res[j]; R.w = Math.max(R.w, Math.abs(x)); R.f = Math.max(R.f, z); R.b = Math.min(R.b, z); R.n++;
+        });
+      }
+    }
+    const sc = [0, 1, 2].map((c) => new THREE.Vector3().setFromMatrixColumn(Mt, c).length());
+    const sn = [0, 1, 2].map((c) => new THREE.Vector3().setFromMatrixColumn(Mn, c).length());
+    out.push({ own, k: o.k, fem: o.k >= 0 ? !!FOLK[o.k].fem : false, top: o.k >= 0 ? FOLK[o.k].top.kind : 'hero', role: o.k >= 0 ? FOLK[o.k].role || '' : '', thick: o.k >= 0 ? (FOLK[o.k].body || {}).thick || 0 : 0, neckK: o.k >= 0 ? (FOLK[o.k].shape || {}).neck || 1 : 1, ts: sc.map((x) => +x.toFixed(3)), ns: sn.map((x) => +x.toFixed(3)), sec: res.map((R) => [+R.w.toFixed(4), +R.f.toFixed(4), +R.b.toFixed(4)]) });
+  }
+  window.__out = out;
+} catch (e) { window.__out = { err: e.message + ' ' + e.stack }; }
+window.__done = true;
+</script></body></html>
