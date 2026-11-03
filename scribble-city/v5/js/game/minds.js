@@ -36,6 +36,16 @@ const LINGER_WARM = ['[joy] Hey there! Lovely day, right?', '[joy] Hi! Can I hel
 const LINGER_COLD = ['[angry] What are you looking at?', '[angry] Do I owe you money?', '[angry] Take a picture, it lasts longer.', '[angry] Personal space, buddy.'];
 const LINGER_TIMID = ['[scared] Uh... hi?', '[scared] Sorry, am I in your way?', '[surprised] Oh! You startled me.'];
 const LINGER_CURIOUS = ['[surprised] Is that a real pencil? It is huge!', 'Do I know you from somewhere?', '[surprised] Wait... are you the one who draws stuff?', 'Can I help you?'];
+// (intelligence round) noticing you in passing: a hello by the time of day, a look at somebody
+// drawing in the air, a child's discovery, a word to somebody tearing past
+const HELLO = {
+  morning: ['[joy] Morning!', '[joy] Good morning.', 'Morning.', '[joy] Hi there!'],
+  day: ['[joy] Hey there.', '[joy] Hi!', 'Afternoon.', '[joy] Nice day, huh?', '[joy] Hello!'],
+  evening: ['[joy] Evening.', '[joy] Good evening!', 'Hey.', '[joy] Nice night, huh?'],
+};
+const WATCH_DRAW = ['[surprised] What is he drawing?', '[surprised] Is that... a car?', '[surprised] Look - he is drawing on the air!', '[surprised] How is he doing that?', '[joy] No way. Look at this!'];
+const KID_POINT = ['[surprised] Mom, look!', '[surprised] Whoa! Look at him!', '[joy] Cool!', '[surprised] Dad! Dad, look!'];
+const TORE_PAST = ['[angry] Watch it!', '[angry] Slow down!', '[angry] Where is the fire?', '[surprised] Whoa!'];
 // what they tell each other: about you, and about the street - what it was, as it was (a fist fight is
 // not told as a blast), and whether it was right here a moment ago or somewhere else a while back
 const TOLD = {
@@ -173,6 +183,7 @@ export class Minds {
     const armed = !!(w && w.current && w.current.def && w.current.def.kind === 'gun');
     const head = pl.fig && pl.fig.j ? pl.fig.j.headC : null;
     let said = now < this.saidT;
+    let X = null;
     for (const c of civs) {
       if (!c.alive || c.inside || c.gone || c.headless || !c.fig) continue;
       const dx = c.pos.x - p.x;
@@ -194,6 +205,14 @@ export class Minds {
           m.glanceT = now + 3 + Math.random() * 5;
           c.glanceAt = head;
           c.glanceUntil = now + 0.8 + Math.random() * 0.8;
+        }
+      }
+      // (intelligence round) aware of you
+      if (onFoot && !feel && d < 12 && d > 0.7 && !(c.panicT > 0) && !c.convo && now > (m.noticeT || 0)) {
+        if (!X) X = this.heroNow(pl, armed, head);
+        if (this.notice(c, m, d, dx, dz, step, X, said)) {
+          said = true;
+          this.saidT = now + 2.5;
         }
       }
       // a word to you, now and then: one person at a time, one line every few seconds in all
@@ -222,6 +241,99 @@ export class Minds {
       this.tellT = 5 + Math.random() * 5;
       this.gossip(p);
     }
+  }
+
+  // (intelligence round) how you are, as somebody in the street sees it
+  heroNow(pl, armed, head) {
+    const game = this.game;
+    const v = Math.hypot(pl.vel.x, pl.vel.z);
+    const h = game.daynight && game.daynight.hour !== undefined ? game.daynight.hour : 12;
+    return {
+      p: pl.pos,
+      head,
+      armed,
+      sprint: v > 6.4 || !!pl.sprinting,
+      still: v < 0.3,
+      drawing: !!((game.airdraw && game.airdraw.open) || (game.freedraw && game.freedraw.open)),
+      part: h < 11.5 ? 'morning' : h < 17.5 ? 'day' : 'evening',
+    };
+  }
+
+  // (intelligence round) Aware of you. What is in front of them, near and in plain view, is seen -
+  // not a ring round you that everybody inside knows of: noticed now and then, as people notice
+  // somebody in the street, the more often the more there is to see (close by, right there not
+  // moving, tearing past, a gun out, drawing in the air, famous). What they do then is their own: the
+  // warm smile and say hello (by the time of day), the curious look longer, the shy glance and look
+  // away, the cold and busy hardly look; a child stares and points; somebody drawing in the air
+  // stops people, who watch. Returns whether they said something
+  notice(c, m, d, dx, dz, step, X, said) {
+    const game = this.game;
+    const now = game.time;
+    const f = c.fig.forward;
+    const front = -(dx * f.x + dz * f.z) / d;
+    if (front < 0.25) return false;
+    let s = 0.06 + (d < 3 ? 0.3 : d < 6 ? 0.12 : 0) + m.curious * 0.15 + Math.min(0.45, this.fame * 0.15);
+    if (X.still && d < 3) s += 0.2;
+    if (X.sprint) s += 0.35;
+    if (X.armed) s += 0.6;
+    if (X.drawing) s += 0.9;
+    if (c.role === 'kid') s += 0.3;
+    if (Math.random() > s * step * 1.6) return false;
+    if (d > 4 && game.brain && game.brain.clear && !game.brain.clear(c.pos.x, c.pos.z, X.p.x, X.p.z, d)) {
+      m.noticeT = now + 2;
+      return false;
+    }
+    m.noticeT = now + 18 + Math.random() * 22;
+    this.stats.noticed = (this.stats.noticed || 0) + 1;
+    const free = !c.scripted && !c.ctrl;
+    let look = 1.1 + Math.random() * 0.8;
+    let feel = null;
+    let line = null;
+    if (X.drawing && d < 12) {
+      // (stopped by it: they watch)
+      look = 3 + m.curious * 3;
+      feel = 'surprised';
+      if (free) c.stopT = Math.max(c.stopT || 0, look);
+      if (m.chatty > 0.4) line = pick(WATCH_DRAW);
+    } else if (c.role === 'kid' && d < 8) {
+      look = 2.5;
+      feel = 'surprised';
+      if (X.armed || this.fame > 0.6 || X.sprint || Math.random() < 0.3) {
+        c.gestNext = 'point';
+        line = pick(KID_POINT);
+      }
+    } else if (X.armed) {
+      feel = m.bold > 0.6 ? 'angry' : 'scared';
+      look = m.bold > 0.6 ? 1.6 : 0.8;
+    } else if (X.sprint && d < 4 && m.temper > 0.6) {
+      feel = 'angry';
+      if (m.chatty > 0.3) line = pick(TORE_PAST);
+    } else if (this.fame > 0.8 && m.curious > 0.45 && d < 6) {
+      feel = 'joy';
+      look = 2.5;
+      line = pick(FAN);
+      this.stats.fans++;
+    } else if (m.bold < 0.28 && d < 4) {
+      // (a quick look and away)
+      look = 0.6;
+    } else if (m.warm > 0.6 && d < 4.5 && !X.sprint) {
+      feel = 'joy';
+      if (m.chatty > 0.45) {
+        line = pick(HELLO[X.part]);
+        c.gestNext = 'wave';
+      }
+    } else if (m.curious > 0.7) look = 2.2 + Math.random();
+    else if (m.warm < 0.3) look = 0.7;
+    if (X.head) {
+      c.glanceAt = X.head;
+      c.glanceUntil = now + look;
+    }
+    if (feel) c.fig.feel = { mood: feel, until: now + look + 0.4 };
+    if (!line || said || c.convo || d > 7) return false;
+    game.voices.sayToYou(c, line);
+    m.nextT = now + 20 + Math.random() * 20;
+    this.stats.said++;
+    return true;
   }
 
   // two people near you standing or walking together: one tells the other what happened lately

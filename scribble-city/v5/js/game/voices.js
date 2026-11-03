@@ -567,11 +567,12 @@ export class Voices {
     const moving = pl.fig.speed > 1.2;
     const still = pl.fig.speed < 0.3;
     const fwd = game.camera.getWorldDirection(_f);
-    // (GTA IV pass) how you are going: at a run (the hero's own pace is a run: 5 m/s), at a sprint;
-    // something odd about you (a weapon out, a pencil the size of an arm)
+    // (GTA IV pass) how you are going; something odd about you (a weapon out, a pencil the size of an
+    // arm). (intelligence round) Running is a sprint: the hero's own pace (5 m/s) was counted as one,
+    // and so every walk up to somebody was a run at them - a dodge, a "Whoa!", a stare at the madman
     const now = game.time;
     const psp = Math.hypot(pl.vel.x, pl.vel.z);
-    const running = psp > 4.2;
+    const running = psp > 6.4 || !!pl.sprinting;
     const pvx = psp > 0.1 ? pl.vel.x / psp : 0;
     const pvz = psp > 0.1 ? pl.vel.z / psp : 0;
     const w = game.weapons;
@@ -591,7 +592,13 @@ export class Voices {
       if (d < 0.75 && moving && (c.bumpT || 0) < now && !c.convo) {
         c.bumpT = now + 6;
         const hard = running && free;
-        if (!c.scripted && !c.ctrl) c.dodgeV.set((dx / (d || 1)) * (hard ? 3.4 : 2.2), 0, (dz / (d || 1)) * (hard ? 3.4 : 2.2));
+        // (pushed aside - not into the wall behind them: c.blocked)
+        if (!c.scripted && !c.ctrl) {
+          const ux = dx / (d || 1);
+          const uz = dz / (d || 1);
+          const k = c.blocked && c.blocked(ux, uz, 0.8) ? 0.4 : 1;
+          c.dodgeV.set(ux * (hard ? 3.4 : 2.2) * k, 0, uz * (hard ? 3.4 : 2.2) * k);
+        }
         if (hard) {
           c.reelT = 0.45;
           c.fig.recoil = 0.8;
@@ -619,17 +626,33 @@ export class Voices {
         }
       }
       if (free && !c.crossing) {
-        // you coming at them at a run: a quick step out of your way (and maybe a word)
-        if (running && d < 4.5 && d > 0.8 && (dx * pvx + dz * pvz) / d > 0.85 && (c.dodgedT || 0) < now) {
-          c.dodgedT = now + 4;
-          const s = dx * pvz - dz * pvx > 0 ? 1 : -1;
-          c.dodgeV.set(pvz * s * 2.6, 0, -pvx * s * 2.6);
-          if (head) {
-            c.glanceAt = head;
-            c.glanceUntil = now + 1.6;
+        // (intelligence round) you about to walk into them: a small step out of your way - as people
+        // do on a sidewalk - only when your ways would really meet (where you will both be in the
+        // next second and a half, nearer than a shoulder's width), to the side away from your path
+        // and only if there is room there; a word only if you came at a sprint. Not a dash: the step
+        // is half a metre (Civilian.update: a step aside is no longer summed into the walk)
+        if (psp > 1.5 && d < 6 && d > 0.6 && (c.dodgedT || 0) < now) {
+          const rvx = pl.vel.x - c.vel.x;
+          const rvz = pl.vel.z - c.vel.z;
+          const rv2 = rvx * rvx + rvz * rvz;
+          const tca = rv2 > 0.01 ? (dx * rvx + dz * rvz) / rv2 : -1;
+          if (tca > 0 && tca < 1.5 && Math.hypot(rvx * tca - dx, rvz * tca - dz) < 0.85) {
+            c.dodgedT = now + 3;
+            // (the side of your path they are on; a wall there: they stop and let you by - not a
+            // step across your path)
+            const s = dx * pvz - dz * pvx > 0 ? 1 : -1;
+            if (!(c.blocked && c.blocked(pvz * s, -pvx * s, 0.9))) {
+              const k = running ? 2.4 : 1.7;
+              c.dodgeV.set(pvz * s * k, 0, -pvx * s * k);
+            } else c.stopT = Math.max(c.stopT || 0, 0.7);
+            if (head && (running || Math.random() < 0.5)) {
+              c.glanceAt = head;
+              c.glanceUntil = now + 1.2;
+            }
+            this.stats.sidesteps = (this.stats.sidesteps || 0) + 1;
+            if (running && Math.random() < 0.35 && d < 3.5) this.sayToYou(c, pick(DODGE_RUN), 'plain');
+            continue;
           }
-          if (Math.random() < 0.35 && d < 3.5) this.sayToYou(c, pick(DODGE_RUN), 'plain');
-          continue;
         }
         // in their way, standing still on the sidewalk: "Excuse me" - and round you (the walk
         // steps round anyway: Civilians.steer); stay there and they lose patience

@@ -110,6 +110,14 @@ const LUNCH = ['burger', 'hotdog', 'noodleBox', 'soda', 'noodleBox', 'burger'];
 const BAG_COLORS = [[0.95, 0.45, 0.6], [0.98, 0.97, 0.94], [0.2, 0.22, 0.26], [0.62, 0.78, 0.92], [0.86, 0.66, 0.26], [0.55, 0.38, 0.24], [0.4, 0.68, 0.5], [0.72, 0.2, 0.24]];
 
 const _steer = { x: 0, z: 0, k: 1 };
+// (intelligence round) where a walker goes this frame instead, round something in the way
+// (Civilian.avoid); the shoulders' feelers, either side of the middle one
+const _av = { x: 0, z: 0 };
+const FEELERS = [0, 0.26, -0.26];
+// the ways tried round it, a little to one side first, then further, then nearly across
+const AV_ANGLES = [0.5, 1.0, 1.5];
+// a way out when stuck: twelve directions
+const OUT_DIRS = Array.from({ length: 12 }, (_, i) => [Math.sin((i / 12) * Math.PI * 2), Math.cos((i / 12) * Math.PI * 2)]);
 
 // beyond this far from the camera a walker steps every other frame (see Civilians.update)
 const FAR_STEP = 40;
@@ -248,6 +256,20 @@ class Civilian {
     this.vel = new THREE.Vector3();
     this.stopT = 0;
     this.dodgeV = new THREE.Vector3();
+    // (intelligence round) the step aside added this frame - taken off again before the next, so it
+    // is never summed into the walk itself (Civilian.update)
+    this.dodgeApplied = new THREE.Vector3();
+    // the way round something in the way (avoid): which way, for how long, the side taken last; and
+    // whether they are getting anywhere (stuck)
+    this.avX = 0;
+    this.avZ = 0;
+    this.avT = 0;
+    this.avSide = 0;
+    this.avClock = Math.random() * 0.2;
+    this.progT = 0;
+    this.progWant = 0;
+    this.progGot = 0;
+    this.stuckN = 0;
     // time not yet walked (far away they step every other frame)
     this.owed = 0;
     // a fist fight (ROADMAP 5.4, game/fists.js): how dazed, reeling from a blow, on the ground (out
@@ -398,6 +420,125 @@ class Civilian {
 
   get headless() {
     return this.fig.parts.head < 0.5;
+  }
+
+  // (intelligence round) Round what stands in the way - a hydrant, a bin, a bench, a planter, the
+  // works' fence, the corner of a wall - never into it, never walking on the spot against it. Five
+  // times a second a feeler at knee height a step or two ahead, as wide as they are (the middle and
+  // either shoulder); something there, the way bent to whichever side is free - the side taken last
+  // time first, then the other (no dithering), a little first, then more - and held for a moment.
+  // Not at the very end of the way: the bench they are going to sit on, the door they go into.
+  // Returns where to go instead, or null
+  avoid(tx, tz, speed, dt) {
+    if (speed < 0.15 || this.noCollide || this.riding) {
+      this.avT = 0;
+      return null;
+    }
+    const px = this.pos.x;
+    const pz = this.pos.z;
+    const dx = tx - px;
+    const dz = tz - pz;
+    const L = Math.hypot(dx, dz);
+    if (L < 0.45) {
+      this.avT = 0;
+      return null;
+    }
+    const ux = dx / L;
+    const uz = dz / L;
+    this.avClock -= dt;
+    if (this.avClock <= 0) {
+      this.avClock = 0.2;
+      const reach = Math.min(L - 0.4, 0.8 + speed * 0.5);
+      if (reach > 0.2) {
+        if (this.blocked(ux, uz, reach)) {
+          const first = this.avSide || (Math.random() < 0.5 ? 1 : -1);
+          let found = false;
+          for (let a = 0; a < AV_ANGLES.length && !found; a++) {
+            for (let q = 0; q < 2 && !found; q++) {
+              const s = q ? -first : first;
+              const c = Math.cos(AV_ANGLES[a] * s);
+              const n = Math.sin(AV_ANGLES[a] * s);
+              const vx = ux * c - uz * n;
+              const vz = ux * n + uz * c;
+              if (!this.blocked(vx, vz, reach)) {
+                if (!(this.avT > 0)) this.mgr.stats.avoided++;
+                this.avX = vx;
+                this.avZ = vz;
+                this.avSide = s;
+                this.avT = 0.55;
+                found = true;
+              }
+            }
+          }
+          if (!found) this.avT = 0;
+        } else if (this.avT > 0.2) this.avT = 0.2;
+      }
+    }
+    if (this.avT > 0) {
+      this.avT -= dt;
+      const k = Math.min(L, 2);
+      _av.x = px + this.avX * k;
+      _av.z = pz + this.avZ * k;
+      return _av;
+    }
+    if (this.avT <= -3) this.avSide = 0;
+    else this.avT -= dt;
+    return null;
+  }
+
+  // something solid at knee height within reach along (vx, vz) - from the middle or a shoulder
+  blocked(vx, vz, reach) {
+    const col = this.game.world.collision;
+    const y = this.pos.y + 0.45;
+    for (let i = 0; i < FEELERS.length; i++) {
+      const o = FEELERS[i];
+      if (col.raycast(this.pos.x + vz * o, y, this.pos.z - vx * o, vx, 0, vz, reach + 0.33)) return true;
+    }
+    return false;
+  }
+
+  // (intelligence round) getting anywhere? Meaning to walk and hardly moving for two seconds -
+  // pressed into a corner the feelers missed, hemmed in - a way out: the free direction nearest to
+  // where they are going (to the side, back if it must be), taken for a second and a half; a walker
+  // of the sidewalk with nowhere at all to go turns round
+  progress(ox, oz, speed, dt) {
+    if (speed > 0.5 && !this.noCollide) {
+      this.progWant += speed * dt;
+      this.progGot += Math.hypot(this.pos.x - ox, this.pos.z - oz);
+    }
+    this.progT += dt;
+    if (this.progT < 1) return;
+    const stuck = this.progWant > 0.6 && this.progGot < this.progWant * 0.25;
+    this.stuckN = stuck ? this.stuckN + 1 : 0;
+    this.progT = 0;
+    this.progWant = 0;
+    this.progGot = 0;
+    if (this.stuckN < 2) return;
+    this.stuckN = 0;
+    this.mgr.stats.unstuck++;
+    const f = this.fig.forward;
+    let best = -1;
+    let bs = -Infinity;
+    for (let i = 0; i < OUT_DIRS.length; i++) {
+      const [vx, vz] = OUT_DIRS[i];
+      if (this.blocked(vx, vz, 1.2)) continue;
+      // (ahead of them best, then the sides; back last)
+      const s = vx * f.x + vz * f.z + Math.random() * 0.3;
+      if (s > bs) {
+        bs = s;
+        best = i;
+      }
+    }
+    if (best >= 0) {
+      this.avX = OUT_DIRS[best][0];
+      this.avZ = OUT_DIRS[best][1];
+      this.avT = 1.5;
+    } else if (!this.ctrl && this.loop && !this.crossing) {
+      // (back to the corner they came from)
+      const n = this.loop.length;
+      this.dir = -this.dir;
+      this.target = n === 2 ? (this.target ? 0 : 1) : (this.target + this.dir + n) % n;
+    }
   }
 
   update(dt) {
@@ -725,17 +866,42 @@ class Civilian {
     }
     fig.crawl = damp(fig.crawl, legless ? 1 : 0, 6, dt);
     if (!this.headless) fig.stagger = this.reelT > 0 ? 0.8 : limping ? 0.6 : 0;
+    // (intelligence round) round whatever stands in the way, not into it (avoid)
+    const way = this.avoid(tx, tz, speed, dt);
+    if (way) {
+      tx = way.x;
+      tz = way.z;
+    }
     const dx = tx - this.pos.x;
     const dz = tz - this.pos.z;
     const l = Math.hypot(dx, dz) || 1;
     // slow down on arrival instead of overshooting (scripted people stop on their marks)
     if (this.ctrl && l < 0.6) speed *= l / 0.6;
-    this.vel.x = damp(this.vel.x, (dx / l) * speed, 6, dt) + this.dodgeV.x;
-    this.vel.z = damp(this.vel.z, (dz / l) * speed, 6, dt) + this.dodgeV.z;
+    // (intelligence round) a step aside (dodgeV) is on top of the walk for this frame only: it was
+    // added into the walk's own velocity every frame, and summed up - a half-metre step out of your
+    // way became a dash of six to eleven metres at a sprint (the more frames a second, the further):
+    // somebody you walked up to shot off sideways like somebody running for their life
+    const dA = this.dodgeApplied;
+    this.vel.x = damp(this.vel.x - dA.x, (dx / l) * speed, 6, dt) + this.dodgeV.x;
+    this.vel.z = damp(this.vel.z - dA.z, (dz / l) * speed, 6, dt) + this.dodgeV.z;
+    dA.copy(this.dodgeV);
     this.dodgeV.multiplyScalar(Math.exp(-5 * dt));
+    const ox = this.pos.x;
+    const oz = this.pos.z;
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
-    if (!this.noCollide) game.world.collision.resolveCylinder(this.pos, 0.33, 1.7, 0.5);
+    if (!this.noCollide) {
+      const hit = game.world.collision.resolveCylinder(this.pos, 0.33, 1.7, 0.5);
+      // (against something: along it, not into it - what goes into it is lost, not stored up)
+      if (hit.hitWall) {
+        const vn = this.vel.x * hit.nx + this.vel.z * hit.nz;
+        if (vn < 0) {
+          this.vel.x -= hit.nx * vn;
+          this.vel.z -= hit.nz * vn;
+        }
+      }
+    }
+    this.progress(ox, oz, speed, dt);
     // (the friend riding with you is in the car on purpose: ROADMAP 4.5)
     if (!this.riding) game.vehicles.pushOut(this.pos, 0.33);
     const gy = groundHeight(this.pos.x, this.pos.z) + (this.baseY || 0);
@@ -973,6 +1139,8 @@ export class Civilians {
     };
     // (GTA IV pass) the corners where somebody is waiting to cross: who stands where
     this.curbs = new Map();
+    // (intelligence round) how often somebody went round something, and was got out of a corner
+    this.stats = { avoided: 0, unstuck: 0 };
   }
 
   // ------------------------------------------------------------------ at the curb
