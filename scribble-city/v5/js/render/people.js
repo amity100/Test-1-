@@ -307,6 +307,29 @@ const PORTRAIT_STREET = true;
 const PORTRAIT_PHONE = 3;
 const PORTRAIT_PHONE_KEEP = 10;
 const _mP = new THREE.Matrix4();
+// (characters round 2) the collar's stand round the neck (render/heroshapes.js heroCollarGeo: rs)
+const COLLAR_R = 0.068;
+// a neck's base: its half width and its depth behind, over its lowest sixth (render/folkshapes.js
+// neckOf: in its head's measure)
+function neckBase(g) {
+  if (!g || !g.attributes || !g.attributes.position) return { neckW: 0.068, neckB: 0.062 };
+  const a = g.attributes.position.array;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (let i = 1; i < a.length; i += 3) {
+    if (a[i] < y0) y0 = a[i];
+    if (a[i] > y1) y1 = a[i];
+  }
+  const top = y0 + (y1 - y0) / 6;
+  let w = 0;
+  let b = 0;
+  for (let i = 0; i < a.length; i += 3) {
+    if (a[i + 1] > top) continue;
+    w = Math.max(w, Math.abs(a[i]));
+    b = Math.max(b, -a[i + 2]);
+  }
+  return { neckW: w || 0.068, neckB: b || 0.062 };
+}
 // (a frame framed by a body's right, up and forward is a mirror's: turned round as DrawClass.push
 // turns the people's parts)
 function unmirror(m) {
@@ -1064,6 +1087,9 @@ export class PersonRenderer {
       // (the collar of a jacket worn open: a blazer's lies low under its lapels, a bomber's is a ribbed
       // band, a denim jacket's a shirt's)
       collar: { blazer: 0.5, bomber: 0.38, denim: 0.62 }[spec.top.kind] || 0.6,
+      // (characters round 2: the neck where it goes down into the collar - its half width and its
+      // depth behind - so that the collar stands round it, never inside it: drawFolk)
+      ...neckBase(body.parts.neck),
       sole: linC(spec.shoes.sole),
       watch: spec.acc.watch ? linC(hexRGB(spec.acc.watch)) : null,
       earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
@@ -2000,7 +2026,17 @@ export class PersonRenderer {
       p.heroWelt.push(_mH, jC, own, id(), ind);
       p.heroTee.push(_mH, white, own, id(), ind);
       _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
-      p.heroCollar.push(framed(_c, rgt, ax, fwd, k * 1.03, k, k * 1.03), jC, own, id(), ind);
+      // (characters round 2: round his neck, a centimetre clear of it, not inside it - render/
+      // heroshapes.js heroNeckGeo, its base 0.078 wide each side, 0.06 behind, in his head's measure
+      // and his neck's girth - and a little lower, its fold on the leather and not up under his skull)
+      {
+        const gC = (0.98 * 1.16 * Math.max(1, bulk * 0.92)) / fig.headScale;
+        const hsC = fig.headScale * S * gC;
+        const cx = Math.max(k * 1.03, (0.078 * hsC + 0.01 * S) / COLLAR_R);
+        const cz = Math.max(k * 1.03, (0.06 * hsC + 0.01 * S) / (COLLAR_R * 0.94));
+        _c.addScaledVector(ax, -0.012 * S);
+        p.heroCollar.push(framed(_c, rgt, ax, fwd, cx, k * 0.82, cz), jC, own, id(), ind);
+      }
       if (top.armor) {
         // (the vest of notebook covers, over the jacket)
         _c.copy(j.hip).addScaledVector(ax, 0.07 * S);
@@ -2184,7 +2220,13 @@ export class PersonRenderer {
       if (q.welt) q.welt.push(_mH, white, own, id(), ind);
       _c.copy(j.neck).addScaledVector(ax, -0.004 * S).addScaledVector(fwd, -0.004 * S);
       const ck = fem ? 0.92 : 1;
-      q.collar.push(framed(_c, rgt, ax, fwd, k * 1.04 * ck, k * F.collar, k * 1.04 * ck), white, own, id(), ind);
+      // (characters round 2) round their own neck, a centimetre clear of it - a heavy man's neck is a
+      // third again as thick as a slight woman's: a collar of one size stood inside the thick ones, its
+      // stand hidden in the neck and its fold a band floating round it, sunk into the back
+      const hsC = fig.headScale * S;
+      const cx = Math.max(k * 1.04 * ck, (F.neckW * hsC + 0.01 * S) / COLLAR_R);
+      const cz = Math.max(k * 1.04 * ck, (F.neckB * hsC + 0.01 * S) / (COLLAR_R * 0.94));
+      q.collar.push(framed(_c, rgt, ax, fwd, cx, k * F.collar, cz), white, own, id(), ind);
       // (characters round) the neck: the head's own edge carried on down into the collar
       // (render/folkshapes.js neckOf), twisted and bent as the head is turned - the rig's (game/
       // doodle.js placeHead, render/neckbend.js); its lines with it

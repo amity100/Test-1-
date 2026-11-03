@@ -50,6 +50,10 @@ function base() {
       if (!T) continue;
       let fz = 0;
       for (let t = 0; t < 3; t++) fz += pos[T.v[t] * 3 + 2] * T.w[t];
+      // (characters round 2: only the front half of the head - the mouth and the throat behind it; the
+      // back of the head at the mouth's height is the nape, not the mouth: it was drawn as the inside of
+      // one, a dark slot across the back of every neck)
+      if (pos[i * 3 + 2] < 0) continue;
       mouth[i] = Math.min(1, Math.max(0, (fz - pos[i * 3 + 2] - 0.0008) / 0.0045));
     }
     BASE.mouth = mouth;
