@@ -1112,9 +1112,12 @@ export class StreetSocial {
         if (b.day && b.day.steps[b.day.i] && b.day.steps[b.day.i].kind === 'date') b.day = null;
         b.goal = null;
         if (D.speed0) b.speed = D.speed0;
+        // (as StreetSocial.startMeet: colleagues shake hands; a hand round a coffee shakes no hand - a
+        // wave then; arms full of shopping hug nobody)
         const work = a.role === 'office' && b.role === 'office';
-        const full = a.fig.carry || b.fig.carry || a.fig.carryL || b.fig.carryL;
-        const greet = work || full ? 'shake' : 'hug';
+        const right = a.fig.carry || b.fig.carry;
+        const left = a.fig.carryL || b.fig.carryL;
+        const greet = right ? 'wave' : work || left ? 'shake' : 'hug';
         const M = { a, b, phase: 'greet', t: 0, greet, ex: null, gt: 0, done: false, va: new THREE.Vector3(), vb: new THREE.Vector3(), mid: new THREE.Vector3(), together: true };
         a.meet = M;
         b.meet = M;
