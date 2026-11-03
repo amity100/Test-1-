@@ -37,9 +37,11 @@ const NIGHT = curve([[0, 1], [3.5, 1], [5, 0], [20.5, 0], [22, 1], [24, 1]]);
 const SHOP_HOURS = {
   hotdog: [9, 21],
   tacos: null, lobby: null, pharmacy: null, diner: null,
+  // (ROADMAP 16.4: the corner shops - Bay Mart, Corner Store, Open 24 Hours - never close)
+  shop: null,
   bar: [11, 26], cinema: [11, 24.5], arcade: [10, 25], pizza: [11, 25], falafel: [11, 26], sushi: [11.5, 23], icecream: [10, 23.5],
   cafe: [6.5, 21], grocery: [7, 23], deli: [7, 20], bagel: [6, 19], flowers: [8, 20], books: [9, 21.5], hardware: [7.5, 19],
-  laundry: [7, 22], shop: [9, 21], phones: [9, 21], optics: [9, 19], gym: [6, 23], music: [10, 22], barber: [9, 20],
+  laundry: [7, 22], phones: [9, 21], optics: [9, 19], gym: [6, 23], music: [10, 22], barber: [9, 20],
   juice: [7.5, 20], surf: [8, 19.5], boutique: [10, 21], friends: [9, 22.5],
   // (v5, ROADMAP 11.17) the mainland's: the malls' stores keep the malls' hours, the food court a
   // little longer, the gourmet kitchen opens for the evening, the club for the night

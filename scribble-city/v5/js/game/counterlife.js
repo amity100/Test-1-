@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { fmt } from './money.js';
+import { makeSurface, canvasTexture } from '../render/materials.js';
 
 // (v5, ROADMAP 16.4) The counters of the shops on the market's plan that serve (world/corner.js): the
 // deli's, the pharmacy's - and the corner shop's slush machine turning, the blood pressure chair, the
@@ -92,9 +93,11 @@ export class CounterLife {
     const cv = document.createElement('canvas');
     cv.width = 128;
     cv.height = 56;
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.28), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+    // (the game's own screen pen - a stock material has no answer for the drawing's other pictures,
+    // render/pipeline.js, and is not drawn at all)
+    const tex = canvasTexture(cv, { mips: false });
+    const mat = makeSurface({ kind: 'uv', indoor: true, noShadow: true, map: tex, emMap: tex, emissive: new THREE.Color(1.1, 1.1, 1.1), wash: 0.95, density: 0.25, line: 0.6 });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.28), mat);
     const yaw = m.yaw !== undefined ? m.yaw : 0;
     mesh.position.set(m.x + Math.sin(yaw) * 0.004, m.y, m.z + Math.cos(yaw) * 0.004);
     mesh.rotation.y = yaw;

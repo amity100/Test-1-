@@ -73,12 +73,14 @@ export function hotFood(R, run, len) {
     const cols = [[0.9, 0.16, 0.22], [0.2, 0.42, 0.95]];
     cols.forEach((c, i) => {
       const s = s0 + 0.17 + i * 0.3;
-      // (what is in the bowl, the empty top of the bowl - its glints - the lid)
-      rcyl(R, S, run, s, -0.34, 0.12, top + 0.2, 0.25, c, { pen: 'gloss', seg: 12 });
-      rcyl(R, S, run, s, -0.34, 0.125, top + 0.45, 0.012, [0.92, 0.94, 0.98], { seg: 12 });
-      rbox(R, S, run, s - 0.05, top + 0.22, -0.218, s - 0.035, top + 0.52, -0.214, GLINT, { pen: 'gloss' });
-      rbox(R, S, run, s + 0.02, top + 0.26, -0.218, s + 0.028, top + 0.5, -0.214, GLINT, { pen: 'gloss' });
-      rcyl(R, S, run, s, -0.34, 0.128, top + 0.53, 0.04, WHITE, { seg: 12 });
+      // (what is in the bowl - half full, so the auger is seen turning over it - its frost line, the
+      // clear top of the bowl: its rim and its glints; the lid)
+      rcyl(R, S, run, s, -0.34, 0.116, top + 0.2, 0.15, c, { pen: 'gloss', seg: 12 });
+      rcyl(R, S, run, s, -0.34, 0.117, top + 0.33, 0.02, [c[0] * 0.4 + 0.6, c[1] * 0.4 + 0.6, c[2] * 0.4 + 0.6], { seg: 12, top: false });
+      rcyl(R, S, run, s, -0.34, 0.122, top + 0.49, 0.012, [0.92, 0.94, 0.98], { seg: 12, top: false });
+      rbox(R, S, run, s - 0.05, top + 0.22, -0.218, s - 0.035, top + 0.48, -0.214, GLINT, { pen: 'gloss' });
+      rbox(R, S, run, s + 0.02, top + 0.26, -0.218, s + 0.028, top + 0.46, -0.214, GLINT, { pen: 'gloss' });
+      rcyl(R, S, run, s, -0.34, 0.128, top + 0.5, 0.05, WHITE, { seg: 12 });
       // (the auger in it: turned - game/counterlife.js)
       mark(R, `spin.${i}`, run, s, -0.34, top + 0.24);
       // the tap, the drip tray under it
@@ -206,7 +208,10 @@ export function deliCounter(R, u0, u1, flip) {
   rbox(R, S, run, 0, shelf, -0.02, len, shelf + 0.05, 0.02, DSTEEL);
   rbox(R, S, run, 0, top - 0.02, -0.18, len, top, -0.12, DSTEEL);
   glints(R, S, run, 0, len, shelf + 0.05, top - 0.03, 0.021, 0.45);
-  rbox(R, S, run, 0.02, top - 0.04, -depth + 0.1, len - 0.02, top - 0.03, -0.22, [1, 0.96, 0.86], { pen: 'glow' });
+  // (the glass top: its long glints; the lamp under the clerk's side of the top, its lit edge to the
+  // customer - not a lit board to look down on)
+  for (const t of [-0.42, -0.3]) rbox(R, S, run, 0.06, top - 0.012, t - 0.006, len - 0.06, top - 0.008, t + 0.006, GLINT, { pen: 'gloss' });
+  rbox(R, S, run, 0.02, top - 0.05, -0.56, len - 0.02, top - 0.004, -0.5, [1, 0.96, 0.86], { pen: 'glow', skip: ['back', 'top'] });
   // (the top at the back, the clerk's side: where the scale is and what is handed over)
   rbox(R, S, run, -0.02, top, -depth - 0.02, len + 0.02, top + 0.03, -0.5, [0.9, 0.88, 0.84]);
   run.solid(-0.02, -depth - 0.02, len + 0.02, 0.03, top);

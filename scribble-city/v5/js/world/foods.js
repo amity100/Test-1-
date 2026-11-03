@@ -678,7 +678,7 @@ addMaker('sausage', (low) => {
 addMaker('paddle', () => {
   const m = new Model();
   m.size = [0.17, 0.28, 0.17];
-  const p = m.part('gloss', [0.94, 0.95, 0.97], 0);
+  const p = m.part('gloss', [0.66, 0.7, 0.76], 0);
   box(p, -0.008, 0, -0.008, 0.008, 0.28, 0.008);
   for (let k = 0; k < 3; k++) {
     const y = 0.04 + k * 0.08;

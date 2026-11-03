@@ -148,7 +148,8 @@ export function market(R, o = {}) {
   } else if (hi - lo > 1.3) produce(R, lo, Math.min(hi, lo + 3.4), R.da - 0.25);
   // the bread rack and the papers between the checkout and the way in; the baskets by the door
   const midU = fr.left ? R.lane[1] + 0.6 : R.lane[0] - 1.4;
-  if (Math.abs(midU - (till ? till.mid : 0)) > 1.4) breadRack(R, midU, front + 0.45);
+  // (no bread in a pharmacy)
+  if (kind !== 'pharmacy' && Math.abs(midU - (till ? till.mid : 0)) > 1.4) breadRack(R, midU, front + 0.45);
   baskets(R, fr);
   // the clock over the checkout, posters over the shelving, the sign in the window
   wallThings(R, fr, front, back, sideLen);

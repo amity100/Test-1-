@@ -1343,6 +1343,11 @@ export class Game {
       const o = window.__camOverride;
       this.camera.position.set(o.pos[0], o.pos[1], o.pos[2]);
       this.camera.lookAt(o.look[0], o.look[1], o.look[2]);
+      // (a wide look for a plan of a room)
+      if (o.fov && this.camera.fov !== o.fov) {
+        this.camera.fov = o.fov;
+        this.camera.updateProjectionMatrix();
+      }
     }
     // the performance test route drives the camera (and the city's life follows it)
     if (this.perf.bench) this.perf.benchCamera(dt);
