@@ -63,6 +63,7 @@ import { Animals } from './animals.js';
 import { Voices } from './voices.js';
 import { Talkers } from './talkers.js';
 import { Minds } from './minds.js';
+import { Days } from './days.js';
 import { Brain } from './brain.js';
 import { FaceLab } from './facelab.js';
 import { Fleet } from './fleet.js';
@@ -278,6 +279,8 @@ export class Game {
     this.talkers = new Talkers(this);
     // (ROADMAP 13.9: what the city's people think of you, remember and pass on)
     this.minds = new Minds(this);
+    // (intelligence round) a day of their own for everybody out near you: going somewhere, for a reason
+    this.days = new Days(this);
     // (ROADMAP 13.10: how they take what happens round them, each their own way)
     this.brain = new Brain(this);
     // (ROADMAP 14.1) the face lab (?facelab): the portraits' test bench - game/facelab.js
@@ -1207,6 +1210,7 @@ export class Game {
       this.routines.update(dt);
       this.workers.update(dt);
       this.crowds.update(dt);
+      this.days.update(dt);
       this.nightlife.update(dt);
       this.vignettes.update(dt);
       this.airsketch.update(dt);

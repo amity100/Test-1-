@@ -363,12 +363,91 @@ class Civilian {
   }
 
   // at a corner of the block: on round it, or across the road to the next block
+  // (intelligence round) the crossings from the corner they are at: [col, row, corner] of each block
+  // across the street or the avenue (the mainland's: only those built)
+  crossOpts() {
+    const k = this.target;
+    const north = k < 2;
+    const west = k === 0 || k === 3;
+    const opts = [];
+    if (this.col >= 100) {
+      const live = this.game.world.mainland && this.game.world.mainland.blocks;
+      const ok = (c, r) => {
+        const b = mainBlock(c, r);
+        return b && (!live || live.has(b.id));
+      };
+      if (north && ok(this.col, this.row - 1)) opts.push([this.col, this.row - 1, west ? 3 : 2]);
+      if (!north && ok(this.col, this.row + 1)) opts.push([this.col, this.row + 1, west ? 0 : 1]);
+      if (west && ok(this.col + 1, this.row)) opts.push([this.col + 1, this.row, north ? 1 : 2]);
+      if (!west && ok(this.col - 1, this.row)) opts.push([this.col - 1, this.row, north ? 0 : 3]);
+    } else {
+      if (north && this.row > 0) opts.push([this.col, this.row - 1, west ? 3 : 2]);
+      if (!north && this.row < 4) opts.push([this.col, this.row + 1, west ? 0 : 1]);
+      if (west && this.col > 0) opts.push([this.col - 1, this.row, north ? 1 : 2]);
+      if (west && this.col === 0) opts.push([-1, this.row, north ? 0 : 1]);
+      if (!west && this.col < 2) opts.push([this.col + 1, this.row, north ? 0 : 3]);
+    }
+    return opts;
+  }
+
+  // (intelligence round) Somewhere to get to (game/days.js: their goal): at each corner the way that
+  // brings them nearest it - on round this block, back the other way, or across to the next block -
+  // and never straight back over the street they just crossed. Their own block's sidewalk passing
+  // the place: round it the short way, no crossing. Returns false to walk on as anybody does
+  routeTo(g) {
+    const L = this.loop;
+    const n = L.length;
+    const k = this.target;
+    const fwd = (k + this.dir + n) % n;
+    const back = (k - this.dir + n) % n;
+    // (the place on this block's walk: no crossing)
+    let onWalk = false;
+    for (let i = 0; i < n && !onWalk; i++) {
+      const a = L[i];
+      const b = L[(i + 1) % n];
+      const vx = b[0] - a[0];
+      const vz = b[1] - a[1];
+      const l2 = vx * vx + vz * vz || 1;
+      const t = Math.max(0, Math.min(1, ((g.x - a[0]) * vx + (g.z - a[1]) * vz) / l2));
+      if (Math.hypot(a[0] + vx * t - g.x, a[1] + vz * t - g.z) < 4.5) onWalk = true;
+    }
+    const D = (p) => Math.hypot(p[0] - g.x, p[1] - g.z);
+    let best = { d: D(L[fwd]), kind: 'fwd' };
+    const db = D(L[back]) + 2;
+    if (db < best.d) best = { d: db, kind: 'back' };
+    if (!onWalk) {
+      for (const o of this.crossOpts()) {
+        const loop = sidewalkLoop(o[0], o[1]);
+        const p = loop[o[2]];
+        if (!p) continue;
+        // (a crossing costs a wait at the light; straight back over the same street, a lot)
+        let d = D(p) + 3;
+        if (this.lastBlock && this.lastBlock[0] === o[0] && this.lastBlock[1] === o[1]) d += 25;
+        if (d < best.d) best = { d, kind: 'cross', o };
+      }
+    }
+    if (best.kind === 'cross') {
+      this.lastBlock = [this.col, this.row];
+      this.setBlock(best.o[0], best.o[1], false);
+      this.target = best.o[2];
+      this.crossing = true;
+      return true;
+    }
+    this.crossing = false;
+    if (best.kind === 'back') {
+      this.dir = -this.dir;
+      this.target = back;
+    } else this.target = fwd;
+    return true;
+  }
+
   nextCorner() {
     const n = this.loop.length;
     if (this.prom || n === 2) {
       this.target = this.target ? 0 : 1;
       return;
     }
+    if (this.goal && this.routeTo(this.goal)) return;
     const k = this.target;
     if (Math.random() < 0.28 && this.col >= 100) {
       // (v5, ROADMAP 11.17: the mainland's blocks: their columns run west, and a block is there to
@@ -430,7 +509,8 @@ class Civilian {
   // Not at the very end of the way: the bench they are going to sit on, the door they go into.
   // Returns where to go instead, or null
   avoid(tx, tz, speed, dt) {
-    if (speed < 0.15 || this.noCollide || this.riding) {
+    // (somebody a scene moves - at work, on a stage - is where the scene puts them)
+    if (speed < 0.15 || this.noCollide || this.riding || this.scripted) {
       this.avT = 0;
       return null;
     }
@@ -501,8 +581,9 @@ class Civilian {
   // pressed into a corner the feelers missed, hemmed in - a way out: the free direction nearest to
   // where they are going (to the side, back if it must be), taken for a second and a half; a walker
   // of the sidewalk with nowhere at all to go turns round
-  progress(ox, oz, speed, dt) {
-    if (speed > 0.5 && !this.noCollide) {
+  progress(ox, oz, speed, far, dt) {
+    // (only while on the way somewhere - not on their mark, not sitting down, not across a room)
+    if (speed > 0.5 && far > 1.2 && !this.noCollide && !this.scripted && !(this.fig.sit > 0.3)) {
       this.progWant += speed * dt;
       this.progGot += Math.hypot(this.pos.x - ox, this.pos.z - oz);
     }
@@ -516,6 +597,10 @@ class Civilian {
     if (this.stuckN < 2) return;
     this.stuckN = 0;
     this.mgr.stats.unstuck++;
+    // (what it was, for the tests: the last few)
+    const log = this.mgr.stats.stuckLog || (this.mgr.stats.stuckLog = []);
+    log.push({ ctrl: !!this.ctrl, scripted: !!this.scripted, far: +far.toFixed(1), x: +this.pos.x.toFixed(1), z: +this.pos.z.toFixed(1), role: this.role || null, cross: !!this.crossing, buddy: !!(this.buddyOf || this.buddy) });
+    if (log.length > 40) log.shift();
     const f = this.fig.forward;
     let best = -1;
     let bs = -Infinity;
@@ -901,7 +986,7 @@ class Civilian {
         }
       }
     }
-    this.progress(ox, oz, speed, dt);
+    this.progress(ox, oz, speed, l, dt);
     // (the friend riding with you is in the car on purpose: ROADMAP 4.5)
     if (!this.riding) game.vehicles.pushOut(this.pos, 0.33);
     const gy = groundHeight(this.pos.x, this.pos.z) + (this.baseY || 0);

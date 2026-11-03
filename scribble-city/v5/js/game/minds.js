@@ -378,6 +378,9 @@ export class Minds {
     if (m.saw && m.saw.you && this.game.time - m.sawT < 240) return m.saw.what === 'bad' ? pick(m.bold > 0.55 ? SAW_BAD_BOLD : SAW_BAD_TIMID) : pick(SAW_WOW);
     if (m.you < -0.3) return pick(LINGER_COLD);
     if (this.fame > 1 && m.curious > 0.4) return pick(FAN);
+    // (intelligence round: on their way somewhere - game/days.js - and they tell you where, the warm
+    // and the chatty; the busy ones by how they say it)
+    if (c.day && (m.warm > 0.4 || m.chatty > 0.5) && Math.random() < 0.6 && this.game.days) return this.game.days.lineFor(c);
     if (m.bold < 0.3) return pick(LINGER_TIMID);
     if (m.temper > 0.7 && m.warm < 0.5) return pick(LINGER_COLD);
     if (m.curious > 0.65) return pick(LINGER_CURIOUS);
