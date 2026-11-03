@@ -69,6 +69,8 @@ export class Garage {
     const lim = y + 1.1;
     if (this.inside(x, z)) {
       const Y = this.s.Y;
+      // (the street floor's own slab, a curb's height up)
+      if (Y[0] <= lim) best = Y[0];
       for (let k = 1; k < Y.length; k++) {
         if (Y[k] > lim) break;
         let open = false;
@@ -156,6 +158,26 @@ export class Garage {
         const xb = r.xLow + ((r.xHigh - r.xLow) * (i + 1)) / n;
         const ya = yA + ((yB - yA) * i) / n;
         wall(Math.min(xa, xb), bz - 0.15, Math.max(xa, xb), bz + 0.15, ya - 0.2, ya + (yB - yA) / n + WALL);
+      }
+      // under it, solid (a wedge of concrete down to the deck below: no driving in under a ramp
+      // the wrong way and coming up through it), in steps for the collision
+      {
+        const sh = new THREE.Shape();
+        sh.moveTo(r.xLow, yA - 0.02);
+        sh.lineTo(r.xHigh, yA - 0.02);
+        sh.lineTo(r.xHigh, yB - SLAB);
+        sh.lineTo(r.xLow, yA - 0.02);
+        const g = new THREE.ExtrudeGeometry(sh, { depth: a[1] - a[0] - 0.1, bevelEnabled: false });
+        g.translate(0, 0, a[0] + 0.05);
+        K.add(M.matte, g, CONC_D);
+        const m = 6;
+        for (let i = 0; i < m; i++) {
+          const xa = r.xLow + ((r.xHigh - r.xLow) * i) / m;
+          const xb = r.xLow + ((r.xHigh - r.xLow) * (i + 1)) / m;
+          const top = yA + ((yB - yA) * i) / m - SLAB;
+          if (top - yA < 0.25) continue;
+          wall(Math.min(xa, xb), a[0] + 0.05, Math.max(xa, xb), a[1] - 0.05, yA - 0.3, top);
+        }
       }
       // arrows painted up it
       const dir = Math.sign(r.xHigh - r.xLow);

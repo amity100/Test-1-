@@ -891,6 +891,11 @@ export class PrologueSet {
     }
   }
 
+  // (a gondola whose riders are real people for a close look: the director's)
+  hideRiders(gi, on) {
+    for (const r of this.riders) if (r.gi === gi) r.hidden = on;
+  }
+
   // the cheap figures: in the gondolas, and on the pier under them
   draw() {
     if (!this.built) return;
@@ -907,7 +912,7 @@ export class PrologueSet {
       if (d > far || (d > 6 && (dx * fwd.x + dy * fwd.y + dz * fwd.z) / d < -0.2)) return;
       bodies.drawCheap(w);
     };
-    if (!this.wheelGone && !(this.erasing && this.erasing.t > 0)) for (const r of this.riders) one(r);
+    if (!this.wheelGone && !(this.erasing && this.erasing.t > 0)) for (const r of this.riders) if (!r.hidden) one(r);
     for (const b of this.below) one(b);
     for (const b of this.staff || []) one(b);
   }

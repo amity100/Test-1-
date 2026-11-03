@@ -541,7 +541,8 @@ export class Jump {
     this.t = 0;
     const lipY = P.roofY + 0.3 + P.h;
     const p = car.pos;
-    const sp = Math.max(Math.abs(car.speed || 0), 24);
+    // (as fast as it came - but within what makes a jump to remember, and lands it)
+    const sp = clamp(Math.abs(car.speed || 0), 19, 23);
     const fx = Math.sin(car.yaw);
     const fz = Math.cos(car.yaw);
     // where it lands: on the far roof, along the way it is going (kept on the clear aisle)

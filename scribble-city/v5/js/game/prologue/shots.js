@@ -38,9 +38,9 @@ export class Shots {
     if (sh.path) sh.curve = new THREE.CatmullRomCurve3(sh.path.map(V), false, 'centripetal', 0.5);
     if (sh.lookPath) sh.lookCurve = new THREE.CatmullRomCurve3(sh.lookPath.map(V), false, 'centripetal', 0.5);
     if (sh.from) sh.from = typeof sh.from === 'function' ? sh.from : V(sh.from);
-    if (sh.to) sh.to = V(sh.to);
+    if (sh.to) sh.to = typeof sh.to === 'function' ? sh.to : V(sh.to);
     if (sh.look) sh.look = typeof sh.look === 'function' ? sh.look : V(sh.look);
-    if (sh.lookTo) sh.lookTo = V(sh.lookTo);
+    if (sh.lookTo) sh.lookTo = typeof sh.lookTo === 'function' ? sh.lookTo : V(sh.lookTo);
     this.shot = sh;
     this.t = 0;
     return sh;
@@ -67,13 +67,13 @@ export class Shots {
     else {
       const f = typeof sh.from === 'function' ? sh.from() : sh.from;
       P.copy(f);
-      if (sh.to) P.lerp(sh.to, e);
+      if (sh.to) P.lerp(typeof sh.to === 'function' ? sh.to() : sh.to, e);
     }
     if (sh.lookCurve) sh.lookCurve.getPoint(e, L);
     else {
       const l = typeof sh.look === 'function' ? sh.look() : sh.look;
       if (l) L.copy(l);
-      if (sh.lookTo) L.lerp(sh.lookTo, e);
+      if (sh.lookTo) L.lerp(typeof sh.lookTo === 'function' ? sh.lookTo() : sh.lookTo, e);
     }
     // a hand-held breath: slow, small, never still
     const T = this.game.realTime || this.t;

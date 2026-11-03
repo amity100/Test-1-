@@ -43,7 +43,7 @@ const CSS = `
 #pl-call.ring .ic { animation: plring 0.5s infinite; }
 #pl-call .ic { display: inline-block; }
 @keyframes plring { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
-#pl-sketch { position: absolute; left: 50%; top: 50%; width: min(62vw, 88vh); transform: translate(-50%, -46%) rotate(-2.5deg) scale(0.92); opacity: 0; transition: opacity 0.45s, transform 0.6s cubic-bezier(.2,.9,.3,1); }
+#pl-sketch { position: absolute; left: 50%; top: 44%; width: min(52vw, 70vh); transform: translate(-50%, -46%) rotate(-2.5deg) scale(0.92); opacity: 0; transition: opacity 0.45s, transform 0.6s cubic-bezier(.2,.9,.3,1); }
 #pl-sketch.on { opacity: 1; transform: translate(-50%, -50%) rotate(-1.5deg) scale(1); }
 #pl-sketch canvas { width: 100%; height: auto; display: block; border-radius: 6px; box-shadow: 0 16px 50px rgba(0,0,0,0.55); }
 #pl-fade { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity 0.8s; }
