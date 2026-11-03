@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FACE, JK, PT } from './heroink.js';
-import { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, section, neckbandGeo, TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS } from './heroshapes.js';
+import { make, finish, merge, region, loft, rowAt, patch, polar, faceMap, section, neckbandGeo, frontPatch, TORSO, PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, THIGH_ROWS, SHIN_ROWS, NECK_ROWS } from './heroshapes.js';
 import { FOLK } from './folkspec.js';
 import { HEAD, MORPHS } from './folkheads.js';
 import { NECK_J, HEAD_DROP } from './neckbend.js';
@@ -1109,7 +1109,14 @@ export function folkBody(k) {
     return [y, w * (1 + 0.14 * b + 0.05 * c), df * (1 + 0.55 * b + 0.12 * c), db * (1 + 0.06 * b), z, n];
   });
   const limb = (rows) => (B.thick ? slim(rows, 1 + B.thick) : rows);
-  const T = trunk(fem ? FEM_TORSO : TORSO);
+  // (characters round 3) the jacket's back up to the back of the neck: their neck stands a little
+  // behind the hero's on their shoulders, and its foot showed bare behind the jacket's top - the back
+  // filled out up to it there, as cloth over the muscles from the neck to the shoulders
+  const BACK = fem ? [[0.462, 0.092], [0.482, 0.093], [0.497, 0.091]] : [[0.462, 0.097], [0.482, 0.099], [0.497, 0.097]];
+  const T = trunk(fem ? FEM_TORSO : TORSO).map((r) => {
+    const b = BACK.find((q) => Math.abs(q[0] - r[0]) < 1e-6);
+    return b && r[3] < b[1] ? [r[0], r[1], r[2], b[1], r[4], r[5]] : r;
+  });
   // (characters round) the neck: the head's own edge carried on down into the collar - one skin with
   // the head, its top its ring (neckOf). No part of it is the mouth's inside any more: the head is
   // closed under the chin down to the ring, below the mouth's floor
@@ -1125,11 +1132,11 @@ export function folkBody(k) {
     const half = (y) => 0.026 + Math.max(0, y - 0.1) * 0.17 + Math.max(0, 0.1 - y) * 0.12;
     const edge = (sd) => region(patch(T, -0.086, 0.455, (y) => sd * (half(y) - 0.004), (y) => sd * (half(y) + 0.014 + Math.max(0, y - 0.2) * 0.2), 0.0062, 2, 18), JK.edge, true);
     parts.zip = merge([edge(1), edge(-1)]);
-    parts.tee = region(patch(T, -0.086, 0.43, (y) => -half(y), (y) => half(y), 0.0032, 4, 18), PT.front, true);
+    parts.tee = region(frontPatch(T, half), PT.front, true);
   } else {
     const edge = (sd) => region(patch(T, -0.086, 0.455, () => sd * (fem ? 0.039 : 0.043), (y) => sd * ((fem ? 0.052 : 0.058) + Math.max(0, y - 0.33) * 0.42), 0.0062, 2, 18), JK.edge, true);
     parts.zip = merge([edge(1), edge(-1)]);
-    parts.tee = region(patch(T, -0.086, 0.43, () => (fem ? -0.042 : -0.047), () => (fem ? 0.042 : 0.047), 0.0032, 4, 18), PT.front, true);
+    parts.tee = region(frontPatch(T, () => (fem ? 0.042 : 0.047)), PT.front, true);
   }
   if (spec.top.kind === 'denim') {
     const flap = (sd) => region(patch(T, 0.29, 0.335, () => sd * (fem ? 0.05 : 0.052), () => sd * (fem ? 0.108 : 0.122), 0.0058, 4, 3), JK.flap);

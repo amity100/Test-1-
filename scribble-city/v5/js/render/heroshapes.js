@@ -619,15 +619,16 @@ function faceMap(g, dy = 0) {
   uv.needsUpdate = true;
 }
 
-// (characters round 3) No collar of its own: the jacket's own cloth carried on up from the shoulders
-// round the neck's foot, a few millimetres off it, and turned in onto it at the top - drawn in the
-// jacket's pen, colour and part (render/people.js), one with it. Made on the neck itself, in the
-// neck's frame (render/neckbend.js: bent and turned with it), so it fits every neck - a slender one,
-// a thick one, a neck set back on its shoulders. surf(y, t, lift, out): a point on the neck at its
-// y and the angle t round it (0 ahead), lifted off it along its normal. From ya (deep in the jacket)
-// up to yb (its edge, in the neck's measure: the jacket's top is about -0.048 of it); its picture
-// the jacket's own, at the top of its body (JK.torso), the seam at the back as the jacket's
-export function neckbandGeo(surf, ya = -0.096, yb = -0.024, gap = 0.006) {
+// (characters round 3) No collar: the jacket's own neckline, where its cloth meets the neck - made
+// on the neck itself, a few millimetres off it and turned in onto it at the top, so that the jacket
+// ends round every neck in a clean edge (a slender one, a thick one, one set back on its shoulders),
+// never a ragged cut where the jacket's top goes into it, never the neck's foot bare behind it. No
+// higher than the jacket's own top (about -0.048 of the neck's measure; its edge -0.042): not a
+// collar standing up round the neck. Drawn in the jacket's pen, colour and part (render/people.js),
+// one with it; in the neck's frame (render/neckbend.js: bent and turned with it). surf(y, t, lift,
+// out): a point on the neck at its y and the angle t round it (0 ahead), lifted off it along its
+// normal; ya deep in the jacket; its picture the jacket's own, at the top of its body (JK.torso)
+export function neckbandGeo(surf, ya = -0.096, yb = -0.042, gap = 0.003) {
   const COLS = 32;
   const prof = [];
   const N = 8;
@@ -738,8 +739,10 @@ export const TORSO = [
   [0.405, 0.196, 0.112, 0.112, -0.006, 2.6],
   [0.437, 0.178, 0.096, 0.1, -0.008, 2.4],
   [0.462, 0.135, 0.08, 0.088, -0.01, 2.2],
-  [0.482, 0.092, 0.07, 0.075, -0.008, 2],
-  [0.497, 0.07, 0.061, 0.066, -0.006, 2],
+  // (characters round 3: its back up to the back of his neck - the neck's foot a centimetre behind
+  // it showed bare over the leather)
+  [0.482, 0.092, 0.07, 0.078, -0.008, 2],
+  [0.497, 0.07, 0.061, 0.078, -0.006, 2],
   [0.503, 0.045, 0.04, 0.044, -0.006, 2],
 ];
 export function heroTorsoGeo() {
@@ -765,9 +768,25 @@ export function heroZipGeo() {
   return merge([one(1), one(-1)]);
 }
 export function heroTeeGeo() {
-  // (up to the collar's foot: not up the neck)
-  const g = patch(TORSO, -0.086, 0.43, () => -0.047, () => 0.047, 0.0032, 4, 18);
-  return region(g, PT.front, true);
+  return region(frontPatch(TORSO, () => 0.047), PT.front, true);
+}
+
+// (characters round 3) what is worn under an open jacket, seen in its opening: from the jacket's hem
+// up over the top of the chest to the neck itself - not stopped a hand short of it, the jacket's cloth
+// across the throat as if it were closed there. Its picture (render/heroink.js, folkink.js: the front)
+// laid as it was painted, from -0.088 to 0.48 of the torso; above that, its top edge's
+export function frontPatch(rows, half) {
+  const top = 0.502;
+  // (over the top of the chest it narrows to the throat: the jacket's cloth stays round the sides of
+  // the neck, as an open jacket's does)
+  const hw = (y) => Math.min(half(y), rowAt(rows, y)[0] * (0.9 - 0.28 * Math.max(0, Math.min(1, (y - 0.46) / (top - 0.46)))));
+  // (across it in a dozen steps: wide over the curve of the chest, it would cut into it between them)
+  const g = patch(rows, -0.086, top, (y) => -hw(y), hw, 0.0032, 12, 22);
+  const p = g.attributes.position;
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setY(i, Math.min(1, (p.getY(i) + 0.088) / (0.48 + 0.088)));
+  uv.needsUpdate = true;
+  return g;
 }
 export function heroWeltGeo() {
   const one = (sd) => region(patch(TORSO, 0.302, 0.345, () => sd * 0.052, () => sd * 0.122, 0.0058, 4, 3), JK.flap);
