@@ -103,14 +103,29 @@ export class Bubbles {
       const z = head ? head.z : w.pos.z;
       const cp = camera.position;
       const d = Math.hypot(cp.x - x, cp.y - y, cp.z - z);
+      // (v5, ROADMAP 16.7) a word is shown only where it could be seen said: not through a wall - an
+      // order at the juice bar next door is not drawn over the perfumery's shelves, nor a word in a
+      // shop over the street's walls. The line from the camera to the bubble looked along five times a
+      // second (the bubble's, over the heads and the shelves, so that a shelf hides nobody); the
+      // bubble eased out behind a wall and in again, never a blink
+      if (this.col && (b.look = (b.look || 0) - dt) <= 0) {
+        b.look = 0.2;
+        const lx = x - cp.x;
+        const ly = y - cp.y;
+        const lz = z - cp.z;
+        const L = Math.hypot(lx, ly, lz);
+        b.hidden = L > 1 && !!this.col.raycast(cp.x, cp.y, cp.z, lx, ly, lz, L - 0.5);
+        if (b.seen === undefined) b.seen = b.hidden ? 0 : 1;
+      }
+      b.seen = b.seen === undefined ? 1 : Math.max(0, Math.min(1, b.seen + (b.hidden ? -dt : dt) * 6));
       // grows a little with distance so it stays readable, pops in with a bounce
       const k = Math.min(1, b.t / 0.16);
       const pop = 1 + Math.sin(k * Math.PI) * 0.18;
       const size = Math.max(1.5, d * 0.24) * pop;
       s.position.set(x, y + b.rise + Math.min(0.15, b.t * 0.1), z);
       s.scale.set(size, size * (H / W), 1);
-      s.material.opacity = Math.min(1, b.t / 0.08) * Math.min(1, (b.life + 0.25 - b.t) / 0.25);
-      s.visible = d < 70;
+      s.material.opacity = Math.min(1, b.t / 0.08) * Math.min(1, (b.life + 0.25 - b.t) / 0.25) * b.seen;
+      s.visible = d < 70 && b.seen > 0.01;
     }
     this.list = keep;
   }

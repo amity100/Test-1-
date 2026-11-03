@@ -164,6 +164,8 @@ export class Game {
     this.figures.bodies.detailFar = this.pipe.low ? 28 : 60;
     this.detail = 0;
     this.bubbles = new Bubbles(this.pipe.overlay);
+    // (a word not shown through a wall: ui/bubbles.js)
+    this.bubbles.col = this.world.collision;
     this.fx = new Effects(this);
     this.cars = new CarRenderer(scene);
     this.vehicles = new Vehicles(this);
