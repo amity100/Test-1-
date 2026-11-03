@@ -280,12 +280,15 @@ export function deliCounter(R, u0, u1, flip) {
     rcyl(R, S, run, s, back + 0.22, 0.004, ry - 0.06, 0.06, [0.9, 0.86, 0.76], { seg: 3 });
     rcyl(R, S, run, s, back + 0.22, 0.032, ry - 0.06 - h, h, [0.5 + ((s * 13) % 3) * 0.04, 0.16, 0.14], { seg: 8 });
   }
-  // the board of what is made here
-  rbox(R, S, run, len / 2 - bw / 2 - 0.04, y0 + 1.42, -1.5, len / 2 + bw / 2 + 0.04, y0 + 1.42 + bw * 0.56 + 0.08, -1.48, [0.4, 0.28, 0.18]);
-  rprint(R, S, run, len / 2 - bw / 2, y0 + 1.46, len / 2 + bw / 2, y0 + 1.46 + bw * 0.56, -1.478, 'menu.deli');
-  // the header over the case
-  rprint(R, S, run, len / 2 - 0.9, y0 + 2.1, len / 2 + 0.9, y0 + 2.4, -0.2, 'head.deli');
-  rbox(R, S, run, len / 2 - 0.92, y0 + 2.08, -0.24, len / 2 + 0.92, y0 + 2.42, -0.202, [0.6, 0.2, 0.14]);
+  // the board of what is made here, on the back wall over the work table; the deli's name over it
+  // (nothing hung in front of either: the screen of whose turn it is hangs over the case's far end)
+  const bh = bw * 0.56;
+  const by0 = Math.min(y0 + 1.48, R.y1 - 0.5 - bh);
+  rbox(R, S, run, len / 2 - bw / 2 - 0.04, by0 - 0.04, -1.5, len / 2 + bw / 2 + 0.04, by0 + bh + 0.04, -1.48, [0.4, 0.28, 0.18]);
+  rprint(R, S, run, len / 2 - bw / 2, by0, len / 2 + bw / 2, by0 + bh, -1.478, 'menu.deli');
+  const hy0 = Math.min(by0 + bh + 0.12, R.y1 - 0.38);
+  rbox(R, S, run, len / 2 - 0.92, hy0 - 0.02, -1.5, len / 2 + 0.92, hy0 + 0.32, -1.47, [0.6, 0.2, 0.14]);
+  rprint(R, S, run, len / 2 - 0.9, hy0, len / 2 + 0.9, hy0 + 0.3, -1.468, 'head.deli');
   // the number machine at the case's corner, the screen of whose turn it is over the case
   const nm = len + 0.25;
   rcyl(R, S, run, nm, 0.25, 0.025, y0, 1.15, DSTEEL, { seg: 8 });
@@ -295,9 +298,10 @@ export function deliCounter(R, u0, u1, flip) {
   run.solid(nm - 0.18, 0.08, nm + 0.18, 0.42, y0 + 1.36);
   mark(R, 'deli.ticket', run, nm, 0.36, y0 + 1.19);
   const nsY = Math.min(R.y1 - 0.4, y0 + 1.95);
-  rbox(R, S, run, len / 2 - 0.012, nsY + 0.3, -0.4, len / 2 + 0.012, R.y1, -0.38, DARK);
-  rbox(R, S, run, len / 2 - 0.34, nsY, -0.44, len / 2 + 0.34, nsY + 0.3, -0.34, [0.12, 0.12, 0.14]);
-  mark(R, 'deli.serving', run, len / 2, -0.339, nsY + 0.15, [run.ou, run.od]);
+  const ns = Math.max(0.5, len - 0.5);
+  rbox(R, S, run, ns - 0.012, nsY + 0.3, -0.4, ns + 0.012, R.y1, -0.38, DARK);
+  rbox(R, S, run, ns - 0.34, nsY, -0.44, ns + 0.34, nsY + 0.3, -0.34, [0.12, 0.12, 0.14]);
+  mark(R, 'deli.serving', run, ns, -0.339, nsY + 0.15, [run.ou, run.od]);
   // where the clerk stands, where the customer waits and is served, where it is handed over
   mark(R, 'deli.clerk', run, len / 2, -depth - 0.3, y0);
   mark(R, 'deli.give', run, len / 2, -0.32, top + 0.04);
