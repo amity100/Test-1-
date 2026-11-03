@@ -326,7 +326,7 @@ let portraitHelper = null;
 const portraitWait = new Map();
 function paintPortrait(k, cb, w = 1024) {
   if (!portraitHelper) {
-    portraitHelper = new Worker(new URL('./heroworker.js', import.meta.url), { type: 'module' });
+    portraitHelper = new Worker(window.__gameBase ? new URL('js/render/heroworker.js', window.__gameBase) : new URL('./heroworker.js', import.meta.url), { type: 'module' });
     portraitHelper.onmessage = (e) => {
       const f = portraitWait.get(e.data.folk);
       if (e.data.err) console.warn('portrait picture', e.data.err);

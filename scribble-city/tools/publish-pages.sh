@@ -14,6 +14,17 @@ git fetch -q origin gh-pages
 git worktree add -q --detach "$tmp" origin/gh-pages
 rm -rf "${tmp:?}/scribble-city"
 git archive HEAD scribble-city | tar -x -C "$tmp"
+# (the game's code in one file, made small - one download instead of hundreds, and less for a phone
+# to read before it can start; the files one by one stay too, for its helper thread. Without
+# esbuild: published as it is)
+ESBUILD="${ESBUILD:-npx --yes esbuild@0.24.0}"
+v5="$tmp/scribble-city/v5"
+if (cd "$tmp/scribble-city" && $ESBUILD v5/js/main.js --bundle --format=esm --minify --target=es2020 --alias:three=./js/vendor/three.module.min.js --outfile=v5/js/main.bundle.js --log-level=error); then
+  sed -i 's#src="js/main.js"#src="js/main.bundle.js"#' "$v5/index.html"
+  echo "bundled: $(du -h "$v5/js/main.bundle.js" | cut -f1)"
+else
+  echo "bundling failed - published as it is"
+fi
 cd "$tmp"
 git add -A scribble-city
 if git diff --cached --quiet; then

@@ -541,19 +541,19 @@ export class Prologue {
 
   // where somebody's head is: the middle of it, as their figure is posed this frame (sitting in a
   // car, a child, bending) - until it has been posed once, where a grown-up's head would be
-  head(c) {
+  headJ(c) {
     const j = c.fig && c.fig.j && c.fig.j.headC;
     return j && (j.x !== 0 || j.y !== 0 || j.z !== 0) ? j : null;
   }
 
   headH(c) {
-    const j = this.head(c);
+    const j = this.headJ(c);
     return j ? j.y - c.pos.y : 1.6;
   }
 
   faceOf(c) {
     return () => {
-      const j = this.head(c);
+      const j = this.headJ(c);
       return j ? v3(j.x, j.y, j.z) : v3(c.pos.x, c.pos.y + 1.6, c.pos.z);
     };
   }
@@ -879,7 +879,7 @@ export class Prologue {
       c.vel.set(0, 0, 0);
       c.yaw = face;
       c.faceYaw = face;
-      const hd = this.head(c);
+      const hd = this.headJ(c);
       if (h.wave && hd) {
         // (a hand up, waving to somebody down on the pier)
         const w = Math.sin(t * 7 + h.ph) * 0.22;
@@ -1209,7 +1209,7 @@ export class Prologue {
         c.hitDone = true;
         g.audio.play('punch', 1);
         g.camRig.addShake(0.35);
-        const h = this.head(c) || c.pos;
+        const h = this.headJ(c) || c.pos;
         const F = g.weapons && g.weapons.fists;
         if (F) F.burst(h.x, h.y, h.z, 1.2);
         c.downT = 2.6;
@@ -1375,7 +1375,7 @@ export class Prologue {
     this.shot({ from: () => v3(v.pos.x - 1.6, ROOF_A + 1.45, v.pos.z - 1.1), look: () => (pc ? v3(pc.pos.x, ROOF_A + 1.2, pc.pos.z) : v3(20, ROOF_A, 330)), fov: 40, dur: 2.6, hand: 0.6 });
     yield 2.4;
     // Lily
-    L.fig.lookAt = this.head(P);
+    L.fig.lookAt = this.headJ(P);
     this.shot({ from: this.inCar(v, -0.06, 1.16, 0.5), look: this.faceOf(L), fov: 52, dur: 3.2, hand: 0.35 });
     yield* this.say('L14', L.fig, 0.4);
     // Danny looks across again: an idea. A crazy one
@@ -1480,7 +1480,7 @@ export class Prologue {
     // is in front of them; Danny, at his, his hands on the wheel
     this.slow(1, 3);
     this.ui.vignette(false);
-    L.fig.lookAt = this.head(P);
+    L.fig.lookAt = this.headJ(P);
     this.shot({ from: this.inCar(v, -0.02, 1.14, 0.52), look: this.faceOf(L), fov: 50, dur: 3.2, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
     yield* this.say('L15', L.fig, 0.25);

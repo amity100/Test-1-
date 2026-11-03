@@ -40,7 +40,7 @@ function helperOf() {
   helper = null;
   try {
     if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap !== 'undefined') {
-      helper = new Worker(new URL('./heroworker.js', import.meta.url), { type: 'module' });
+      helper = new Worker(window.__gameBase ? new URL('js/render/heroworker.js', window.__gameBase) : new URL('./heroworker.js', import.meta.url), { type: 'module' });
       helper.onmessage = (e) => {
         if (e.data.err) console.warn('[heroart] a picture not drawn:', e.data.folk, e.data.name, e.data.err);
         const a = arts[e.data.art];

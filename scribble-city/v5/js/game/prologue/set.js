@@ -786,7 +786,7 @@ export class PrologueSet {
       sk.poly([[px, 18], [px + pw, 18], [px + pw, 18 + ph], [px, 18 + ph]], true, { width: 6, color: '#f4efe2' });
       tex.needsUpdate = true;
     };
-    img.src = new URL(`../../../img/prologue/michael_${right ? 'smile' : 'look'}.jpg`, import.meta.url).href;
+    img.src = new URL(`${window.__gameBase ? '' : '../../../'}img/prologue/michael_${right ? 'smile' : 'look'}.jpg`, window.__gameBase || import.meta.url).href;
     return tex;
   }
 

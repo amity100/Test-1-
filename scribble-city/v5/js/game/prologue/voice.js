@@ -7,7 +7,9 @@ import { LINES } from './lines.js';
 // wheel - their calls and their laughing, cut off at once when it goes - and the memory of two of
 // them, coming back in the silence after.
 
-const url = (name) => new URL(`../../../audio/prologue/${name}.mp3`, import.meta.url).href;
+// (the game's folder as main.js tells it - the same whether the code comes one file at a time or
+// all in one; without it, from this file's own place)
+const url = (name) => new URL(`${window.__gameBase ? '' : '../../../'}audio/prologue/${name}.mp3`, window.__gameBase || import.meta.url).href;
 // (lines seen and not heard: a laugh a voice model would only make sound false - her face laughs)
 const SILENT = new Set(['L05']);
 
