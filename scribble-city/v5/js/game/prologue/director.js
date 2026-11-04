@@ -1690,7 +1690,9 @@ export class Prologue {
     this.shooting = true;
     this.everyFrame = (dt) => this.gunfire(dt);
     this.check = { x: RUNUP.x, y: RUNUP.y + 0.05, z: RUNUP.z + 6, yaw: RUNUP.yaw, back: { x: PARK.main.xc - 4, z: RUNUP.z - 2 } };
-    yield* this.say('L14', L.fig, 0.2);
+    // (said as he floors it - not waited for: out of the turn fast, he is at the sixty metres before
+    // she has finished it, and the edge does not wait)
+    this.say('L14', L.fig, 0.2).next();
     // sixty metres short of the edge: time all but stops
     yield () => {
       const c = v();
