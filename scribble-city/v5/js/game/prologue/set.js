@@ -5,6 +5,11 @@ import { Sketcher, makeCanvas, FONT_UI, FONT_SIGN, BLACK2D } from '../../render/
 import { letter } from '../../world/letters.js';
 import { kidLook, civilianLook } from '../looks.js';
 import { Garage } from './garage.js';
+import { CarPark } from './carpark.js';
+
+// (5th Street Garage and Bayshore Parking across the street from it: the chase's car park, the one
+// the director is moving to - game/prologue/carpark.js)
+export { PARK } from './carpark.js';
 
 // (v5, ROADMAP 18) The prologue's own pieces of the city, set up for its last sunset and taken
 // down after it:
@@ -133,6 +138,7 @@ export class PrologueSet {
     this.wheelGone = false;
     this.wheelCols = [];
     this.garages = [new Garage(GARAGE_A), new Garage(GARAGE_B)];
+    this.park = new CarPark(game);
   }
 
   // ------------------------------------------------------------------ all of it
@@ -156,6 +162,7 @@ export class PrologueSet {
     grp.updateMatrix();
     g.scene.add(grp);
     this.objs.push(grp);
+    this.park.build();
   }
 
   add(obj) {
@@ -1045,19 +1052,21 @@ export class PrologueSet {
       const h = gar.floorAt(x, z, y);
       if (h > best) best = h;
     }
-    return best;
+    const hp = this.park.floorAt(x, z, y);
+    return hp > best ? hp : best;
   }
 
   // the underside of the deck over (x, z), for the camera (Infinity in the open)
   ceilingAt(x, z, y) {
     let c = Infinity;
     for (const gar of this.garages) c = Math.min(c, gar.ceilingAt(x, z, y));
-    return c;
+    return Math.min(c, this.park.ceilingAt(x, z, y));
   }
 
   update(dt) {
     if (!this.built) return;
     this.t += dt;
+    this.park.update();
     this.moveBoats(dt);
     this.walkBelow(dt);
     this.moveBag();
@@ -1100,7 +1109,7 @@ export class PrologueSet {
     // (the nearest of them, as many as the city's cars leave room for)
     const near = this.nearCars || (this.nearCars = []);
     near.length = 0;
-    for (const gar of this.garages) {
+    for (const gar of [...this.garages, ...this.park.parts]) {
       const s = gar.s;
       // (the whole car park out of sight or far off: none of them)
       const mx = Math.max(s.x0 - cp.x, 0, cp.x - s.x1);
@@ -1118,8 +1127,13 @@ export class PrologueSet {
     if (near.length > 26) near.sort((a, b) => a.d - b.d);
     for (let i = 0; i < Math.min(26, near.length); i++) {
       const c = near[i];
+      // (one parked on a sloping floor sits on it)
+      o.tilt = c.tilt || 0;
+      o.roll = c.roll || 0;
       cars.draw(c.spec.kind, c.spec.color, c.x, c.y, c.z, c.yaw, o);
     }
+    o.tilt = 0;
+    o.roll = 0;
   }
 
   // (a gondola whose riders are real people for a close look: the director's)
@@ -1511,6 +1525,7 @@ export class PrologueSet {
     this.cols = [];
     this.wheelCols = [];
     for (const gar of this.garages) gar.dispose(col);
+    this.park.dispose();
     this.built = false;
   }
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { srgb, hex, addLight } from '../render/materials.js';
 import { nextId, seeded, Facade } from './kit.js';
 import { AVES, STREETS, NORTH_ST, NORTH_EDGE, NORTH_SHORE, NORTH_TYPES, northRect, WEST_EDGE, STREET_X0, STREET_X1, PROM_X1, PARK_X1, SAND_X0, CURB } from './layout.js';
-import { buildBlock, bench } from './blocks.js';
+import { buildBlock, bench, vacated } from './blocks.js';
 import { sobeRow, sobeBuild } from './sobe.js';
 import { bayEdge } from './yards.js';
 import { hotelRow, park as beachPark, dunes } from './ocean.js';
@@ -377,29 +377,36 @@ function walks(ctx) {
 function buildVacancies(ctx) {
   const list = ctx.vacancies || [];
   for (const v of list) {
-    const r = ctx.rng;
-    const { f, L, D, env } = v;
-    const inset = 0.25;
-    const p = f.p(inset, 0, 0);
-    const f2 = new Facade(p[0], p[2], f.ux, f.uz, f.nx, f.nz);
-    const L2 = L - inset * 2;
-    const home = env.street === 'meridian' || env.street === 'west';
-    const kind = home ? (L2 > 11 ? 'apt' : 'house') : L2 >= 12 ? 'deco' : 'narrow';
-    const lot = { kind, za: v.lot.za, zb: v.lot.zb };
-    const info = sobeBuild(ctx, kind, { f: f2, L: L2, D, sides: { a: false, b: false }, corner: { a: false, b: false }, lot, env: { ...env, arcade: false, arcadeDone: true, prevStyle: null } });
-    // (a house's garden in front of it: a lawn, a low hedge along the sidewalk, a path to its door)
-    if (kind === 'house' && lot.front > 1.5) {
-      const M = ctx.M;
-      fbox(ctx, f2, M.grass, 0.2, CURB, -lot.front + 0.2, L2 - 0.2, CURB + 0.02, -0.4, srgb(0.5, 0.76, 0.44));
-      fbox(ctx, f2, M.leaf, 0.2, CURB, -0.95, L2 * 0.5 - 0.8, CURB + 0.85, -0.45, srgb(0.3, 0.55, 0.3));
-      fbox(ctx, f2, M.leaf, L2 * 0.5 + 0.8, CURB, -0.95, L2 - 0.2, CURB + 0.85, -0.45, srgb(0.3, 0.55, 0.3));
-      fbox(ctx, f2, M.court, L2 * 0.5 - 0.6, CURB + 0.02, -lot.front, L2 * 0.5 + 0.6, CURB + 0.03, -0.4, srgb(0.86, 0.84, 0.8));
-    }
-    // (the map's record of the lot)
-    for (const q of ctx.lots || []) if (q.kind === 'vacant' && Math.abs(q.z0 - v.lot.za) < 0.01 && Math.abs(q.z1 - v.lot.zb) < 0.01) q.kind = kind;
-    v.built = { kind, top: info ? info.top : null };
-    void r;
+    // (one in a block left empty for something else - world/blocks.js VACANT: built and taken out
+    // again, its dice thrown all the same)
+    if (v.vacated) vacated(ctx, () => buildVacancy(ctx, v));
+    else buildVacancy(ctx, v);
   }
+}
+
+function buildVacancy(ctx, v) {
+  const r = ctx.rng;
+  const { f, L, D, env } = v;
+  const inset = 0.25;
+  const p = f.p(inset, 0, 0);
+  const f2 = new Facade(p[0], p[2], f.ux, f.uz, f.nx, f.nz);
+  const L2 = L - inset * 2;
+  const home = env.street === 'meridian' || env.street === 'west';
+  const kind = home ? (L2 > 11 ? 'apt' : 'house') : L2 >= 12 ? 'deco' : 'narrow';
+  const lot = { kind, za: v.lot.za, zb: v.lot.zb };
+  const info = sobeBuild(ctx, kind, { f: f2, L: L2, D, sides: { a: false, b: false }, corner: { a: false, b: false }, lot, env: { ...env, arcade: false, arcadeDone: true, prevStyle: null } });
+  // (a house's garden in front of it: a lawn, a low hedge along the sidewalk, a path to its door)
+  if (kind === 'house' && lot.front > 1.5) {
+    const M = ctx.M;
+    fbox(ctx, f2, M.grass, 0.2, CURB, -lot.front + 0.2, L2 - 0.2, CURB + 0.02, -0.4, srgb(0.5, 0.76, 0.44));
+    fbox(ctx, f2, M.leaf, 0.2, CURB, -0.95, L2 * 0.5 - 0.8, CURB + 0.85, -0.45, srgb(0.3, 0.55, 0.3));
+    fbox(ctx, f2, M.leaf, L2 * 0.5 + 0.8, CURB, -0.95, L2 - 0.2, CURB + 0.85, -0.45, srgb(0.3, 0.55, 0.3));
+    fbox(ctx, f2, M.court, L2 * 0.5 - 0.6, CURB + 0.02, -lot.front, L2 * 0.5 + 0.6, CURB + 0.03, -0.4, srgb(0.86, 0.84, 0.8));
+  }
+  // (the map's record of the lot)
+  for (const q of ctx.lots || []) if (q.kind === 'vacant' && Math.abs(q.z0 - v.lot.za) < 0.01 && Math.abs(q.z1 - v.lot.zb) < 0.01) q.kind = kind;
+  v.built = { kind, top: info ? info.top : null };
+  void r;
 }
 
 // the panes of the shop windows of the buildings put up here (world/glass.js buildPanes, for the
