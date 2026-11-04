@@ -292,9 +292,8 @@ export class Prologue {
       input.aim = false;
       for (const k of ['KeyE', 'KeyF', 'KeyQ', 'KeyT', 'KeyG', 'KeyR', 'KeyV', 'Tab', 'KeyM', 'KeyP', 'Space', 'KeyC']) input.pressed.delete(k);
     }
-    // (the drawing is not his yet: its first time is the ramp - and out of the car only when the
-    // story says)
-    for (const k of ['KeyQ', 'KeyT', 'KeyG']) input.pressed.delete(k);
+    // (ROADMAP 18.9: the drawing is his from the start - the trial's players are to have all of it -
+    // in the player's own hands; in the film, the keys wait as all the others do, above)
     // (out of the car whenever he likes before the chase - the city is his, and Lily is met on foot;
     // in the chase, only when the story says)
     if (this.game.player.inVehicle && (this.sceneN || 0) >= 5) input.pressed.delete('KeyE');
@@ -450,6 +449,15 @@ export class Prologue {
   // ------------------------------------------------------------------ the film's tools
   film(on) {
     this.ui.film(on);
+    // (in the film his hands are bare, whatever he drew and took up in his own time - ROADMAP 18.9)
+    if (on) {
+      const W = this.game.weapons;
+      const i = W && W.slots ? W.slots.findIndex((q) => q.def && q.def.bare) : -1;
+      if (i >= 0 && W.index !== i) {
+        W.fistsTold = true;
+        W.select(i);
+      }
+    }
     this.holdCam = on;
     this.lock(on);
     // (the city's chatter over people's heads: none in the film, and what was up, gone)
@@ -1045,6 +1053,10 @@ export class Prologue {
       card(null);
       yield 0.4;
     }
+    // (and the drawing, for whoever wants it: told once, on its own, while he goes on his way)
+    card('Draw anything', touch ? 'כפתור העיפרון פותח את המחברת: מה שמציירים - מכונית, מסוק, נשק - נהיה אמיתי' : '<kbd>Q</kbd> פותח את המחברת: מה שמציירים - מכונית, מסוק, נשק - נהיה אמיתי');
+    yield 5.5;
+    card(null);
     this.objective(null);
   }
 
