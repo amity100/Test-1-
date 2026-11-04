@@ -486,7 +486,7 @@ void main() {
   c = toSRGB(clamp(c, 0.0, 1.0));
   if (uGradeK > 0.001) {
     // (a film's curve: the darks a little deeper, the lights a little fuller)
-    c = mix(c, c * c * (3.0 - 2.0 * c), 0.28 * uGradeK);
+    c = mix(c, c * c * (3.0 - 2.0 * c), 0.38 * uGradeK);
   }
   if (uGrainK > 0.001) {
     vec2 gp = gl_FragCoord.xy + vec2(uGrainT * 37.0, uGrainT * 91.0);
@@ -941,7 +941,7 @@ export class Pipeline {
     // strong; its colour from the sun, and cool from the sky when the sun is behind the camera), the
     // grade (how much; the shadows' tint and the lights'), the grain, how much heavier the people's
     // outlines. All 0 / 1: the game as it always was
-    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.84, 0.87, 1.13], lightT: [1.08, 0.99, 0.88], grain: 0, personW: 1 };
+    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8], grain: 0, personW: 1 };
     this._sunNdc = new THREE.Vector3();
     // (and the same three passes that look up the drawing in its corner: the same uniforms; only
     // with the steady pace, so as it always was the passes are just what they were)

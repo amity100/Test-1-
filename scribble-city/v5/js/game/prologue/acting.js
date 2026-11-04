@@ -33,6 +33,8 @@ export const ACTS = {
   L07: { mood: 'surprised', beats: [[0, 1, 'hip']], shake: true, hear: 'laugh' },
   D05: { mood: 'laugh', beats: [[0, 0.45, 'surrender'], [0.5, 1, 'open', 'joy']], hear: 'joy' },
   L08: { mood: 'shock' },
+  L22: { mood: 'shock', beats: [[0.1, 1, 'point']] },
+  D29: { mood: 'shock', beats: [[0, 0.35, 'open'], [0.4, 1, 'point']], shake: true },
   // ---- 4. nobody remembers
   D06: { mood: 'shout', beats: [[0, 0.45, 'wave'], [0.45, 1, 'point']] },
   G01: { mood: 'surprised', beats: [[0, 1, 'shrug']] },

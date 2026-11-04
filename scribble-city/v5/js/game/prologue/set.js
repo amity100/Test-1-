@@ -47,7 +47,7 @@ const _w3 = new THREE.Vector3();
 // and how much one going-over of it takes off (the colours go at ~0.3, the lines at ~0.75+)
 // (ROADMAP 18.9: five seconds, a row a second - long enough to be seen happening, with the pencil
 // whose eraser does it)
-const ERASE = { px: 256, half: 35, grid: 64, w: 15, T: 5, rows: 5, hz: 4.2, pass: 0.5 };
+const ERASE = { px: 256, half: 35, grid: 64, w: 15, T: 7, rows: 6, hz: 4.2, pass: 0.5 };
 // (the giant pencil: its eraser end's radius, how far in front of the wheel - the city's side - its
 // tip rubs, how long it takes to come down out of the sky and to go back up into it)
 const PENCIL = { r: 4, front: 5.5, down: 1.8, up: 1.1 };
@@ -1127,12 +1127,32 @@ export class PrologueSet {
     }
   }
 
-  // the mark on a stranger's bag: something like an eraser, and not one - seen for half a second
-  markBag(c) {
+  // (ROADMAP 18.9) the mark on a stranger's shirt, over his heart - the same as the one on the bag:
+  // something like an eraser and not one, a hole through it with lines going out of it, as if
+  // something had been rubbed out from inside. On a patch of his shirt's own dark, a hand wide
+  markShirt(c) {
+    const cv = this.markCanvas('#1b1a1e');
+    const tex = canvasTexture(cv);
+    const M = itemMats();
+    const K = new Kit();
+    const face = makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.3, 0.3, 0.3), ang: 1.45, wash: 0.9, line: 0.4 });
+    const q = new THREE.PlaneGeometry(0.2, 0.2);
+    K.add(face, q, linC(1, 1, 1));
+    void M;
+    const grp = K.build({ seed: 0.6 });
+    grp.matrixAutoUpdate = true;
+    this.game.scene.add(grp);
+    this.objs.push(grp);
+    this.shirt = { c, grp };
+    return this.shirt;
+  }
+
+  // the mark itself, on a ground of col
+  markCanvas(col) {
     const W = 256;
     const cv = makeCanvas(W, W);
     const g = cv.getContext('2d');
-    g.fillStyle = '#2a2622';
+    g.fillStyle = col;
     g.fillRect(0, 0, W, W);
     g.save();
     g.translate(W / 2, W / 2);
@@ -1170,6 +1190,12 @@ export class PrologueSet {
     g.arc(-6, 0, 6, 0, Math.PI * 2);
     g.fill();
     g.restore();
+    return cv;
+  }
+
+  // the mark on a stranger's bag: something like an eraser, and not one - seen for half a second
+  markBag(c) {
+    const cv = this.markCanvas('#2a2622');
     const tex = canvasTexture(cv);
     const M = itemMats();
     const K = new Kit();
@@ -1188,6 +1214,21 @@ export class PrologueSet {
   }
 
   moveBag() {
+    // (the mark on the shirt: on his chest, facing out from it; gone with him)
+    const sh = this.shirt;
+    if (sh) {
+      const c = sh.c;
+      const j = c.fig && c.fig.j;
+      if (!c.alive || !j || !j.neck || c.fig.dissolve > 0.55 || !c.fig.visible) sh.grp.visible = false;
+      else {
+        const fx = Math.sin(c.yaw);
+        const fz = Math.cos(c.yaw);
+        const S = c.fig.scale || 1;
+        sh.grp.visible = true;
+        sh.grp.position.set(j.neck.x + (j.hip.x - j.neck.x) * 0.32 + fx * 0.165 * S, j.neck.y + (j.hip.y - j.neck.y) * 0.32, j.neck.z + (j.hip.z - j.neck.z) * 0.32 + fz * 0.165 * S);
+        sh.grp.rotation.set(0, c.yaw, 0);
+      }
+    }
     const b = this.bag;
     if (!b) return;
     const c = b.c;
