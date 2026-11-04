@@ -428,7 +428,15 @@ export class Player {
       p.x = edge.x;
       p.z = edge.z;
     }
+    const gx = p.x;
+    const gz = p.z;
     const col = this.game.world.collision.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25, prevY);
+    // (v5, ROADMAP 18.9: walked by the prologue's film - through a café's chairs, not caught on them;
+    // still on whatever floor is under him)
+    if (this.ghost) {
+      p.x = gx;
+      p.z = gz;
+    }
     let floor = col.floor;
     // (up on the roofs, what stands there: world/roofs.js)
     if (climb && climb.col && p.y > 3.5) floor = Math.max(floor, climb.col.resolveCylinder(p, this.radius, this.height, this.onGround ? 0.5 : 0.25, prevY).floor);

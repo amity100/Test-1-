@@ -648,6 +648,8 @@ export class Prologue {
     }
     this.holdCam = on;
     this.lock(on);
+    // (walked by the film, nothing catches him: game/player.js ghost)
+    this.game.player.ghost = on;
     // (the city's chatter over people's heads: none while the prologue is told - the film and the
     // player's part of it alike, ROADMAP 18.9 - and what was up, gone)
     const B = this.game.bubbles;
@@ -1340,7 +1342,15 @@ export class Prologue {
     this.walkTo = { x: meet.x, z: meet.z, speed: 0.4 };
     this.faceTo(L, meet.x, meet.z);
     L.fig.lookAt = null;
-    this.shot({ from: [31.0, 1.28, 229.4], to: [31.5, 1.3, 229.7], look: [41.2, 1.45, 233.9], fov: 48, dur: 4.6, hand: 0.35 });
+    // (ROADMAP 18.9: behind his shoulder as he walks the last steps - her ahead of him at the stand,
+    // looking up; before, from far off across a café table, he was not in it)
+    this.shot({
+      from: () => { const dx = L.pos.x - P.pos.x; const dz = L.pos.z - P.pos.z; const d = Math.hypot(dx, dz) || 1; return v3(P.pos.x - (dx / d) * 2.3 - (dz / d) * 0.75, 1.72, P.pos.z - (dz / d) * 2.3 + (dx / d) * 0.75); },
+      look: () => { const h = this.headJ(L) || v3(L.pos.x, 1.0, L.pos.z); return v3(h.x, h.y + 0.15, h.z); },
+      fov: 42,
+      dur: 4.6,
+      hand: 0.4,
+    });
     yield 1.6;
     // (ROADMAP 18.9: her face as she sees him - not small at the stand behind his back - and her card)
     L.fig.lookAt = P.fig.j.headC;
