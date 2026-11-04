@@ -1227,6 +1227,12 @@ export class Prologue {
     P.fig.lookAt = bag.fig.j ? bag.fig.j.hip : null;
     yield 0.6;
     P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
+    // (and on the cut he has walked on, out of the wide's way: not across the camera)
+    {
+      const f = P.fig.forward;
+      this.put(bag, P.pos.x - f.x * 3.4 - f.z * 12, P.pos.z - f.z * 3.4 + f.x * 12);
+      this.go(bag, P.pos.x - f.x * 3.4 - f.z * 40, P.pos.z - f.z * 3.4 + f.x * 40, 1.4);
+    }
     wide();
     yield 1.4;
     // (ROADMAP 18.9) something under the evening's sounds that should not be there; their eyes go up
