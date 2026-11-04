@@ -249,10 +249,12 @@ export function paintFace(c, o = {}) {
     const ya = Y(-0.1);
     const yb = Y(-0.245);
     const gr = g.createLinearGradient(0, ya, 0, yb);
-    gr.addColorStop(0, 'rgba(74,38,26,0)');
-    gr.addColorStop(0.12, 'rgba(74,38,26,0.62)');
-    gr.addColorStop(0.4, 'rgba(74,38,26,0.42)');
-    gr.addColorStop(1, 'rgba(52,28,22,0.62)');
+    // (ROADMAP 18.9: lighter and less red than it was - in the sunset it read as a long orange
+    // tube under his face)
+    gr.addColorStop(0, 'rgba(92,62,58,0)');
+    gr.addColorStop(0.12, 'rgba(92,62,58,0.34)');
+    gr.addColorStop(0.4, 'rgba(92,62,58,0.22)');
+    gr.addColorStop(1, 'rgba(70,50,52,0.34)');
     g.globalAlpha = 1;
     g.fillStyle = gr;
     g.fillRect(0, ya, W, yb - ya);
@@ -574,6 +576,27 @@ export function paintFace(c, o = {}) {
   for (const sd of [1, -1]) h.lines([[X(sd * 0.0188), Y(-0.0215)], [X(sd * (0.0262 + Math.max(0, smile) * 0.002)), Y(-0.036 + Math.max(0, smile) * 0.002)], [X(sd * (0.0292 + Math.max(0, smile) * 0.003)), Y(-0.05 + corner(0.0245))], [X(sd * 0.0298), Y(-0.06 - jo * 0.5)]], 1.7, '#7a4a3a', 0.5 + Math.max(0, smile) * 0.3, 2, 1.1);
   // the philtrum
   for (const sd of [1, -1]) h.path([[X(sd * 0.0035), Y(-0.034)], [X(sd * 0.0052), Y(-0.0448)]], 1.1, '#7a4a3a', 0.35, 0.6);
+  // (ROADMAP 18.9) the foot of the neck in his shirt's crew collar - dark, under the jacket: the neck
+  // no longer a long bare column from the jaw to the jacket's own collar
+  {
+    const ya = Y(-0.172);
+    const yb = Y(-0.19);
+    const gr = g.createLinearGradient(0, ya, 0, yb);
+    gr.addColorStop(0, 'rgba(30,26,36,0)');
+    gr.addColorStop(1, 'rgba(30,26,36,1)');
+    g.globalAlpha = 1;
+    g.fillStyle = gr;
+    g.fillRect(0, ya, W, yb - ya);
+    g.fillStyle = '#1e1a24';
+    g.fillRect(0, yb, W, H - yb);
+    // (its rib, a lighter line round its edge)
+    g.strokeStyle = 'rgba(90,84,104,0.8)';
+    g.lineWidth = Math.max(1.5, 0.002 * K);
+    g.beginPath();
+    g.moveTo(0, yb + 0.0035 * K);
+    g.lineTo(W, yb + 0.0035 * K);
+    g.stroke();
+  }
   g.globalAlpha = 1;
   return c;
 }
