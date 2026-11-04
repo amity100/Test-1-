@@ -69,6 +69,7 @@ const CSS = `
 #pl-hint kbd { display: inline-block; min-width: 1.6em; padding: 1px 7px; margin: 0 2px; border-radius: 6px; background: #fff4e0; color: #1a1426; font: 800 0.95em "Rubik", sans-serif; box-shadow: 0 3px 0 #b8a98e; direction: ltr; }
 body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue-film #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }
+body.prologue-film #gear-bar, body.prologue-film #gear-rw, body.prologue-film #gear-sea { display: none !important; }
 /* (ROADMAP 18.9: while the prologue is told, the HUD only the map and the task - no money, no clock,
    no bars: one film, the player's part of it too) */
 body.prologue #topbar, body.prologue #money, body.prologue #clock, body.prologue #district, body.prologue #ink, body.prologue #wanted { display: none !important; }

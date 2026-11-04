@@ -2754,34 +2754,46 @@ export class Prologue {
     // (stopped where it is)
     car.vx = car.vz = 0;
     car.speed = 0;
-    // facing the water, the pier off to the north
-    this.shot({ from: this.carSide(car, 1, 2.3, 1.85, 1.0), look: this.cabin(car, 0.95), fov: 42, dur: 30, hand: 0.35 });
+    // facing the water, the pier off to the north - from outside, the two of them in it, still
+    this.shot({ from: this.carSide(car, 1, 2.3, 1.85, 1.0), to: this.carSide(car, 1, 2.0, 1.75, 0.8), look: this.cabin(car, 0.95), fov: 42, dur: 9, hand: 0.35 });
     yield 2.4;
+    // (ROADMAP 18.9: the talk in the car not one long picture from outside - in under the roof, each
+    // face as it speaks and as it listens)
+    const onD = (o = {}) => this.shot({ from: this.inCar(car, -0.1, 1.18, 0.52), look: this.faceOf(P), fov: 40, dur: 6, hand: 0.25, ...o });
+    const onL = (o = {}) => this.shot({ from: this.inCar(car, 0.1, 1.12, 0.52), look: this.faceOf(L), fov: 42, dur: 6, hand: 0.25, ...o });
     this.feel(L.fig, 'angry', 6);
-    yield* this.say('L16', L.fig, 1.3);
+    L.fig.lookAt = P.fig.j.headC;
+    onL();
+    yield* this.say('L16', L.fig, 0.9);
     this.feel(P.fig, 'sad', 10);
+    onD();
     yield* this.say('D24', P.fig, 0.6);
     this.feel(L.fig, 'sad', 10);
+    onL();
     yield* this.say('L17', L.fig, 0.5);
+    onD({ fov: 36 });
     yield* this.say('D25', P.fig, 0.6);
-    // her drawing on her knees: she looks at it
+    // her drawing on her knees: she looks at it - the two of them, the page between
     const page = this.lilyPage();
     page.hold(L.fig, null, 'read');
     L.fig.lookAt = page.at;
+    this.shot({ from: this.inCar(car, 0, 1.24, 0.62), look: this.cabin(car, 0.85), fov: 58, dur: 6, hand: 0.25 });
     yield 1.4;
     yield* this.say('L18', L.fig, 0.4);
     yield 0.6;
     L.fig.lookAt = P.fig.j.headC;
+    onD({ fov: 34 });
     yield* this.say('D26', P.fig, 0.3);
     page.hold(L.fig, null, 'hug');
     L.fig.lookAt = null;
-    // a few seconds, nobody saying anything
+    // a few seconds, nobody saying anything: outside again, from her side, the water past them
+    this.shot({ from: this.carSide(car, -1, 2.6, 1.6, -0.6), look: this.cabin(car, 1.0), fov: 40, dur: 4, hand: 0.3 });
     yield 3.2;
     // the camera draws back over the water: the bay at the last of the sunset, the city alive - and
     // out there on the pier, the evening where the wheel stood
     const c0 = car.pos.clone();
     this.shot({
-      path: [v3(c0.x + 2, c0.y + 1.5, c0.z + 2), v3(c0.x + 12, c0.y + 6, c0.z + 6), v3(c0.x + 30, c0.y + 16, c0.z + 4), v3(c0.x + 48, c0.y + 28, c0.z - 6)],
+      path: [v3(c0.x + 3.6, c0.y + 2.6, c0.z + 3.2), v3(c0.x + 12, c0.y + 6, c0.z + 6), v3(c0.x + 30, c0.y + 16, c0.z + 4), v3(c0.x + 48, c0.y + 28, c0.z - 6)],
       lookPath: [v3(c0.x, c0.y + 1, c0.z), v3(c0.x + 20, c0.y + 4, c0.z - 40), v3(WHEEL.x - 4, 18, WHEEL.z + 6), v3(WHEEL.x, 24, WHEEL.z)],
       fov: 46,
       fovTo: 54,
