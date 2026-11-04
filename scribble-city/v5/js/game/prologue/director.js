@@ -1252,21 +1252,26 @@ export class Prologue {
       return true;
     };
     const C = this.comic;
-    // (close on it: the eraser over the top gondolas, their colours going to paper, the crumbs)
-    this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: [WHEEL.x, 25, WHEEL.z], lookTo: [WHEEL.x, 20, WHEEL.z], fov: 32, fovTo: 30, dur: 1.4, hand: 0.45 });
-    if (C) C.word('SHHHK!', [0.62, 0.3], { life: 0.9, size: 0.09, fill: '#fffaf0', burst: '#ff6f9a', tilt: -0.16 });
+    // (close on it, the camera after it: the eraser over the top gondolas, their colours going to
+    // paper, its crumbs falling)
+    const X = S.eraser;
+    const onX = (dy = 0) => () => (X ? v3(X.pos.x, X.pos.y + dy, X.pos.z) : v3(WHEEL.x, 40, WHEEL.z));
+    this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: onX(-3), fov: 27, fovTo: 25, dur: 1.4, hand: 0.45 });
+    if (C && X) C.word('SHHHK!', v3(X.pos.x, X.pos.y + 9, X.pos.z), { life: 0.9, size: 0.085, fill: '#fffaf0', burst: '#ff6f9a', tilt: -0.16 });
     yield () => kids() && et() > 1.25;
-    // the two of them, from in front and below: she grabs his hand, his arm goes out in front of her
+    // the two of them, from in front and below, close: she has come to him and holds on to his arm with
+    // both hands; his arm across in front of her - their eyes on it
     {
+      this.put(L, VIEW.x + rx * 0.72, VIEW.z + rz * 0.72, toW);
       const mx = (L.pos.x + P.pos.x) / 2;
       const mz = (L.pos.z + P.pos.z) / 2;
-      this.shot({ from: [mx + ux * 2.7 - rx * 0.1, 0.95, mz + uz * 2.7 - rz * 0.1], to: [mx + ux * 2.45 - rx * 0.1, 0.97, mz + uz * 2.45 - rz * 0.1], look: [mx, 1.33, mz], fov: 46, dur: 1.4, hand: 0.5 });
+      this.shot({ from: [mx + ux * 2.05, 0.92, mz + uz * 2.05], to: [mx + ux * 1.85, 0.94, mz + uz * 1.85], look: [mx - rx * 0.05, 1.3, mz - rz * 0.05], fov: 44, dur: 1.4, hand: 0.5 });
       this.feel(L.fig, 'scared', 12);
       this.feel(P.fig, 'shock', 12);
-      L.fig.reachR = P.fig.j.handL;
-      P.fig.reachL = v3(L.pos.x + ux * 0.32 + rx * 0.1, (L.pos.y || 0) + 0.85, L.pos.z + uz * 0.32 + rz * 0.1);
+      P.fig.reachL = v3(L.pos.x + ux * 0.26 - rx * 0.05, (L.pos.y || 0) + 0.92, L.pos.z + uz * 0.26 - rz * 0.05);
+      L.fig.reachR = P.fig.j.elbowL;
+      L.fig.reachL = P.fig.j.handL;
     }
-    if (C) C.word('SHHHK!', [0.3, 0.26], { life: 0.7, size: 0.07, fill: '#fffaf0', burst: '#ff6f9a', tilt: 0.14 });
     yield () => kids() && et() > 2.55;
     // the whole of it from behind them: half of it gone, the eraser going on down it
     this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 21, WHEEL.z], fov: 52, dur: 1.2, ease: 'lin', hand: 0.4 });
@@ -1278,8 +1283,8 @@ export class Prologue {
         [[0.405, 0.03], [0.69, 0.03], [0.655, 0.97], [0.37, 0.97]],
         [[0.705, 0.03], [0.985, 0.03], [0.985, 0.97], [0.67, 0.97]],
       ]);
-      this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: [WHEEL.x, 6, WHEEL.z], lookTo: [WHEEL.x, 2, WHEEL.z], fov: 32, dur: 1.4, hand: 0.5 });
-      C.panel(0, { u: 0.5, v: 0.45 });
+      this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: onX(2), fov: 30, dur: 1.4, hand: 0.5 });
+      C.panel(0, { u: 0.5, v: 0.5 });
       C.word('SHHHHK!', [0.2, 0.32], { life: 0.8, size: 0.075, fill: '#fffaf0', burst: '#ff6f9a', tilt: -0.2 });
       yield () => kids() && et() > 3.95;
       this.shot({ ...this.single(L, v3(WHEEL.x, 1.1, WHEEL.z), { dist: 1.05, side: 0.12, up: -0.2, drop: -0.05 }), fov: 38, dur: 1.4, hand: 0.4 });
@@ -1304,6 +1309,7 @@ export class Prologue {
     P.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
     yield 1.2;
     L.fig.reachR = null;
+    L.fig.reachL = null;
     P.fig.reachL = null;
     // he does not move
     this.feel(P.fig, 'surprised', 8);

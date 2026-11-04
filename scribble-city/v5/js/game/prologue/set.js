@@ -1436,7 +1436,7 @@ export class PrologueSet {
       if (this.root && g.fx) {
         const w = this.toWorld(_w2.set(0, p.y, p.z), _w3);
         // (a few crumbs of eraser and of the drawing it takes: grey, pink, a little of its colours)
-        g.fx.spray(w.x, w.y, w.z, (Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4, 14, 8, CRUMB, { bits: true, len: 2.4, life: 2.4, cone: 1.2 });
+        g.fx.spray(w.x, w.y, w.z, (Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4, 10, 7, CRUMB, { bits: true, len: 1.1, life: 1.5, cone: 1.1 });
       }
     } else if (e.t > ERASE.T + 0.4) {
       if (this.eraser) this.eraser.on = false;
