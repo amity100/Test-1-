@@ -186,8 +186,21 @@ export class PrologueUI {
     } else el.classList.remove('on');
   }
 
-  fade(on) {
+  // to black, or back from it (secs: how long it takes; the usual 0.8 s if not said)
+  fade(on, secs = 0) {
+    this.fadeEl.style.transition = secs ? `opacity ${secs}s` : '';
     this.fadeEl.classList.toggle('on', on);
+    this.blackOn = on;
+  }
+
+  // black at once, no fading to it: the film's first moments, while the game settles in behind it
+  black() {
+    const el = this.fadeEl;
+    el.style.transition = 'none';
+    el.classList.add('on');
+    void el.offsetWidth;
+    el.style.transition = '';
+    this.blackOn = true;
   }
 
   skip(k) {

@@ -179,7 +179,13 @@ export class Prologue {
     if (m && +m[1] > 1) {
       this.co = this.prep(+m[1]);
       this.wait = 0;
-    } else this.start(1);
+    } else {
+      // (from black: the first moments of a new game make the street's people, begin the shops'
+      // insides near him, send the film's pieces up to the graphics card - a few heavy frames,
+      // behind black; then the evening fades in, s1)
+      this.ui.black();
+      this.start(1);
+    }
   }
 
   // (for a test from the middle: what the scenes before it would have left)
@@ -805,7 +811,12 @@ export class Prologue {
       ease: 'soft',
       hand: 0.25,
     });
-    yield 26.6;
+    // (out of the black it began in: once the first heavy frames are behind it, over the open sea)
+    if (this.ui.blackOn) {
+      yield 0.9;
+      this.ui.fade(false, 1.6);
+      yield 25.7;
+    } else yield 26.6;
     if (I && I.stream) I.stream.calm = false;
     // the city, his: no words, no task, for forty seconds
     this.film(false);
@@ -1627,6 +1638,8 @@ export class Prologue {
     const E = PARK.entrance;
     P.seed([[THUG_CAR.x + 4, 0.17, THUG_CAR.z - 0.4], [E.x - 3, 0.17, E.z + 4.2], [E.x, 0.17, E.z + 0.8], [E.x, 0.17, E.z - 7]]);
     P.keep = 10;
+    // (up through the car park: never left far behind - game/prologue/chase.js catchUpNow)
+    P.catchUp = true;
     this.pursuers = [P];
     this.pursuer = P;
   }
@@ -1682,6 +1695,8 @@ export class Prologue {
     };
     const car = v();
     this.shooting = false;
+    // (where they are now they stay: no bringing them up while he draws and takes the jump)
+    if (Pu) Pu.catchUp = false;
     this.objective(null);
     this.cue('slowmo');
     // (all but stopped: the car still going, a few centimetres a second - nothing to drift from under
@@ -1939,6 +1954,8 @@ export class Prologue {
       Q.prey = v();
       Q.paused = false;
       Q.keep = 5;
+      // (out on the street he has to lose them: no catching up here)
+      Q.catchUp = false;
       Q.trail.length = 0;
       Q.i = 0;
       const G = PARK.down[PARK.down.length - 1];
