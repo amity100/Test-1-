@@ -121,6 +121,20 @@ export class Comic {
       q.cv.getContext('2d').drawImage(src, cx, cy, cw, ch, 0, 0, W, H);
     } catch (e) {
       // (nothing to take this frame)
+      return;
+    }
+    // (a panel's first picture onto the sheet at once: not a frame of black ink before it)
+    if (!q.shown) {
+      q.shown = true;
+      const g = this.g;
+      const Wc = this.cv.width;
+      g.save();
+      g.beginPath();
+      q.pts.forEach(([x, y], i) => (i ? g.lineTo(x * Wc, r.top + y * r.ph) : g.moveTo(x * Wc, r.top + y * r.ph)));
+      g.closePath();
+      g.clip();
+      g.drawImage(q.cv, r.x, r.y, r.w, r.h);
+      g.restore();
     }
   }
 

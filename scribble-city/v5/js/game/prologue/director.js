@@ -1307,7 +1307,9 @@ export class Prologue {
       this.feel(c.fig, 'joy', 60);
       return c;
     };
-    this.heroes = [mk('hk1', kidLook(false), -1.0, -0.55, 1), mk('hk2', kidLook(true), -1.0, 0.55, 1), mk('hp', civilianLook(), 0.25, 0.1, 0)];
+    // (the two kids at the sill; their parent no longer beside them - from the camera's side his back
+    // filled half the picture)
+    this.heroes = [mk('hk1', kidLook(false), -1.0, -0.55, 1), mk('hk2', kidLook(true), -1.0, 0.55, 1)];
   }
 
   tickHeroes() {
