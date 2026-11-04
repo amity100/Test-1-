@@ -632,21 +632,24 @@ export const LILY = {
   build: { height: 0.71, head: 1.14, bulk: 0.86, limbs: 0.92 },
   // (a child's: no waist or bust drawn in under the hoodie)
   body: { belly: 0, chest: -0.9, thick: -0.04 },
+  // (ROADMAP 18.9: a little girl's face, sweet - rounder and shorter, the chin small, big eyes, a
+  // small nose turned up, a small mouth, full cheeks. It had a grown-up's length and a wide mouth, and
+  // close up, talking or startled, she was frightening)
   morph: {
-    'head-age-decr': 1, 'head-round': 0.35, 'cheek-volume-incr': 0.35, 'eye-scale-incr': 0.3, 'nose-scale-vert-decr': 0.3, 'nose-point-up': 0.45, 'nose-scale-horiz-decr': 0.15,
-    'mouth-scale-horiz-incr': 0.25, 'mouth-angles-up': 0.3, 'ear-scale-incr': 0.8, 'chin-width-decr': 0.25, 'chin-prominent-decr': 0.1, 'eyebrows-angle-up': 0.15, 'forehead-scale-vert-incr': 0.15,
+    'head-age-decr': 1, 'head-round': 0.75, 'head-scale-vert-decr': 0.22, 'cheek-volume-incr': 0.65, 'cheek-bones-decr': 0.3, 'eye-scale-incr': 0.7, 'nose-scale-vert-decr': 0.5, 'nose-point-up': 0.55, 'nose-scale-horiz-decr': 0.3,
+    'mouth-scale-horiz-decr': 0.22, 'mouth-angles-up': 0.35, 'ear-scale-incr': 0.25, 'chin-width-decr': 0.3, 'chin-prominent-decr': 0.4, 'chin-height-decr': 0.45, 'eyebrows-angle-up': 0.1, 'forehead-scale-vert-incr': 0.3,
   },
-  shape: { cheeks: 0.35, jaw: 0.9, dbl: 0, neck: 0.88 },
+  shape: { cheeks: 0.65, jaw: 0.82, dbl: 0, neck: 0.86 },
   expr: 'smile',
-  head: { jaw: 0, chin: 0.9, nose: 0.88, lips: 1.02, brow: 0.58 },
-  skin: 'golden', eyes: { iris: 'hazel', open: 1.12, lid: 0.3, lashes: 0.4, liner: 0 },
-  // (uneven: the one arched higher than the other - render/folkink.js)
-  brows: { col: ['#3a2216', '#4a2c1c', '#2a1810'], thick: 1.0, arch: 0.32, uneven: 0.5 },
-  mouth: { w: 1.04, full: 1.0, lip: [shade(SKINS.golden.warm[0], 0.85), SKINS.golden.warm[1]], lipstick: null },
-  beard: null, lines: 0, freckles: 1, blush: 0.4,
-  // (her own marks, where her face has them - x her left, as the head's: render/folkink.js; the gap
-  // between her front teeth, and a smile that shows them: render/portrait.js)
-  mole: [0.02, -0.0605], scratch: [[-0.05, -0.011], [-0.04, -0.019]], gap: 1, grin: 0.5,
+  head: { jaw: 0, chin: 0.78, nose: 0.78, lips: 0.95, brow: 0.5 },
+  skin: 'golden', eyes: { iris: 'hazel', open: 1.22, lid: 0.25, lashes: 0.55, liner: 0 },
+  // (uneven: the one arched a little higher than the other - render/folkink.js)
+  brows: { col: ['#3a2216', '#4a2c1c', '#2a1810'], thick: 0.9, arch: 0.26, uneven: 0.2 },
+  mouth: { w: 0.9, full: 1.0, lip: [shade(SKINS.golden.warm[0], 0.85), SKINS.golden.warm[1]], lipstick: null },
+  beard: null, lines: 0, freckles: 1, blush: 0.55,
+  // (her own mark, where her face has it - x her left, as the head's: render/folkink.js. Her mouth
+  // opening less wide, her upper lip kept over her teeth: render/portrait.js jawK, lipK)
+  mole: [0.02, -0.0605], jawK: 0.55, lipK: 0.25,
   // (style 'pony': render/folkshapes.js; bits: what is in it - side -1 her right)
   hair: {
     ...hairOf('espresso', 'pony'), base: '#3c2416', dark: ['#1c100a', '#24140c', '#160c06'], mid: ['#4e3020', '#5a3826', '#462a1a'], light: ['#8a5a34', '#9a6a3e', '#7a4c2a'], wave: 1,
