@@ -376,10 +376,13 @@ export class Doodle {
     }
     this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
     const spine = 0.5;
-    const nx = leanSide;
-    // (standing, a breath: the chest and the shoulders rise and fall a little)
+    // (standing, a breath: the chest and the shoulders rise and fall a little - and in the prologue's
+    // film, where the camera comes close and stays, a deeper one, and the body above the hips swaying
+    // slowly over its feet: nobody stands as still as a post, ROADMAP 18.9)
     this.breathT = (this.breathT || this.seed) + dt;
-    const ny = hipY + spine * Math.cos(lean) + Math.sin(this.breathT * 1.6) * 0.003 * (1 - wa) * (1 - sit * 0.5);
+    const idle = (1 - wa) * (1 - sit * 0.5) * (Doodle.twos.on ? 1 : 0.35);
+    const nx = leanSide + Math.sin(this.breathT * 0.41 + this.seed * 3) * 0.014 * idle * (1 - sit);
+    const ny = hipY + spine * Math.cos(lean) + Math.sin(this.breathT * 1.6) * 0.009 * idle;
     const nz = spine * Math.sin(lean);
     this.toWorld(nx, ny, nz, j.neck);
     const hOff = 0.1 + 0.12 * this.headScale;
