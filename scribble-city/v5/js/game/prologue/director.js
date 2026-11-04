@@ -1440,8 +1440,10 @@ export class Prologue {
     });
     yield () => Math.hypot(L.pos.x - B.lx - B.rx * 0.55, L.pos.z - B.lz - B.rz * 0.55) < 0.6 || this.shots.t > 2.4;
     L.fig.reachR = v3(B.x - B.rx * 2, B.cy + 0.6, B.z - B.rz * 2);
+    // (ROADMAP 18.9: the board seen, then her face as she asks - not a speck under it for her line)
+    L.fig.lookAt = v3(B.x, B.cy, B.z);
+    this.shot({ ...this.single(L, v3(B.x, B.cy, B.z), { dist: 1.15, side: 0.42, up: 0.04, drop: 0.04 }), fov: 38, dur: 3.2, hand: 0.35 });
     yield* this.say('L03', L.fig, 0.4);
-    yield () => this.shots.t > 5.4;
     // his answer over the board itself, from below, beside him: the face that wants the city
     L.fig.reachR = null;
     this.walkTo = null;
