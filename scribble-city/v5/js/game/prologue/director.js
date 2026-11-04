@@ -1603,9 +1603,16 @@ export class Prologue {
     const page = this.lilyPage();
     let drawK = 0.02;
     const drawOn = () => page.draw(lilyDrawing, drawK);
-    this.put(L, VIEW.x, VIEW.z, toW);
+    // (ROADMAP 18.9: sitting on a bench a step back from the railing, her sketchbook on her knees, the
+    // pencil going - the player's word: she sits, and she is seen drawing)
+    const bx = VIEW.x - ux * 1.1;
+    const bz = VIEW.z - uz * 1.1;
+    if (this.set && this.set.bench) this.set.bench(bx, L.pos.y || 0, bz, toW);
+    this.put(L, bx, bz, toW);
+    L.fig.sit = 1;
+    L.baseY = 0.3;
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
-    page.hold(L.fig, null, 'read');
+    page.hold(L.fig, null, 'draw');
     drawOn();
     L.fig.lookAt = page.at;
     P.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
@@ -1680,7 +1687,8 @@ export class Prologue {
           g.gps.set(man.pos.x, man.pos.z, 'Man');
         }
         const d = Math.hypot(P.pos.x - man.pos.x, P.pos.z - man.pos.z);
-        return (t > 3.5 && d < 9) || t > 14;
+        // (ROADMAP 18.9: not a long walk after him - a few seconds, and the people come between)
+        return (t > 2.5 && d < 11) || t > 7;
       };
     }
     // (gone: lost in the people coming along the pier - a knot of them crosses between, and when they
@@ -1703,7 +1711,10 @@ export class Prologue {
     drawK = 1;
     drawOn();
     this.film(true);
-    // she cannot wait to show him: the page held up to him - the page, and her face over it
+    // she cannot wait to show him: up off the bench, the page held up to him - the page, and her face
+    // over it
+    L.fig.sit = 0;
+    L.baseY = 0;
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, Math.atan2(-rx, -rz));
     this.put(L, VIEW.x + rx * 0.4, VIEW.z + rz * 0.4, Math.atan2(rx, rz));
     page.hold(L.fig, () => P.fig.j.headC, 'show');
@@ -2260,8 +2271,8 @@ export class Prologue {
     };
     // (he turns and goes along with them as the first of them come up to him)
     const near = () => crowd.some((q) => Math.hypot(q.pos.x - c.pos.x, q.pos.z - c.pos.z) < 2.6);
-    while (t < 14) {
-      if (!walking && (near() || t > 6)) {
+    while (t < 10) {
+      if (!walking && (near() || t > 3)) {
         walking = true;
         this.go(c, c.pos.x - px * 14, c.pos.z - pz * 14, 0.8);
       }
@@ -2277,7 +2288,7 @@ export class Prologue {
       }
       if (hid && walking) break;
       // (and at the latest, only where nobody is looking)
-      if (t > 10 && !seen()) break;
+      if (t > 7 && !seen()) break;
       yield 0.001;
       t += this.dtR || 1 / 30;
     }
