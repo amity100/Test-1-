@@ -1229,20 +1229,21 @@ export class Prologue {
     P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
     wide();
     yield 1.4;
-    // (ROADMAP 18.9) something under the evening's sounds that should not be there - and out of the sky
-    // over the wheel, a pencil as tall as a building, its eraser end coming down to the top of it
-    // (game/prologue/set.js); their eyes go up to it
+    // (ROADMAP 18.9) something under the evening's sounds that should not be there; their eyes go up
+    // to the top of the wheel - and it begins to be rubbed out there: no eraser seen, only what it does
+    // (game/prologue/set.js: the paper coming through under it, its crumbs; the comic's rubbing marks
+    // round it, game/prologue/comic.js rub) - row after row, five seconds; their eyes on it as it goes
     g.audio.play('dread', 1);
     if (S.pencilIn) S.pencilIn(1.8);
-    const tip = S.pencil ? S.pencil.tip : W0;
+    const tip = S.pencil && S.pencil.grp.visible ? S.pencil.tip : S.eraser ? S.eraser.pos : W0;
     yield 0.6;
     L.fig.lookAt = tip;
     P.fig.lookAt = tip;
     this.feel(L.fig, 'surprised', 4);
     this.feel(P.fig, 'surprised', 4);
     yield 1.25;
-    // it touches the paper, and rubs: the top of the wheel going, row after row - five seconds
     S.erase();
+    if (this.comic && S.eraser) this.comic.rub(S.eraser);
     const et = () => (S.erasing ? S.erasing.t : 99);
     // (the kids' voices going as they go)
     const kids = () => {
@@ -1267,7 +1268,7 @@ export class Prologue {
     }
     if (C) C.word('SHHHK!', [0.3, 0.26], { life: 0.7, size: 0.07, fill: '#fffaf0', burst: '#ff6f9a', tilt: 0.14 });
     yield () => kids() && et() > 2.55;
-    // the whole of it from behind them: half of it gone, the pencil going on down it
+    // the whole of it from behind them: half of it gone, the eraser going on down it
     this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 21, WHEEL.z], fov: 52, dur: 1.2, ease: 'lin', hand: 0.4 });
     yield () => kids() && et() > 3.45;
     // a comic's page, as it ends: the eraser over the last gondolas; her face; his
@@ -1289,10 +1290,11 @@ export class Prologue {
       yield () => kids() && et() > 5.0;
       C.endPage(0.15);
     }
-    // the last of it, and the pencil lifted off it, up and away into the sky it came from
+    // the last of it
     this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 26, WHEEL.z], fov: 52, dur: 2.6, ease: 'lin', hand: 0.3 });
     yield () => kids() && !S.erasing;
     // (gone: the air rushing in where it stood - and the kids' voices with it)
+    if (this.comic) this.comic.rub(null);
     g.audio.play('gone', 1);
     this.voices.bed(false);
     this.cue('stop', { fade: 0.02 });

@@ -1007,6 +1007,8 @@ uniform vec4 uMatBand;   // (width of the band of light, paper ahead of it 0..1,
 // has been, in the thing's own upright plane - uEraseMat takes the world there (u, v in 0..1)
 uniform sampler2D uEraseMask;
 uniform mat4 uEraseMat;
+// (ROADMAP 18.9) where the eraser is rubbing now (its mask's u, v) and how far it reaches there
+uniform vec3 uEraserAt;
 #endif
 
 // raindrops falling into a puddle: a ring spreading from each one (xy: which way it pushes the
@@ -1108,6 +1110,12 @@ void main() {
     float eg = n2(vWP.xy * 5.3 + vWP.z * 2.1) * 0.65 + n2(vWP.zy * 15.0 + 7.0) * 0.35;
     if (em > 0.74 + eg * 0.3) discard;
     mPaper = max(mPaper, smoothstep(0.03, 0.26 + eg * 0.18, em));
+    // (ROADMAP 18.9: and under the eraser as it rubs, the paper already coming through, rubbed in
+    // streaks - where it is going on is plain to see)
+    if (uEraserAt.z > 0.0) {
+      float ed = distance(eq.xy, uEraserAt.xy) / uEraserAt.z;
+      mPaper = max(mPaper, (1.0 - smoothstep(0.45, 1.0, ed)) * (0.7 + 0.3 * eg));
+    }
   }
 #endif
   bool inside = uIndoor > 0.5 || vX.z > 0.5;

@@ -91,6 +91,81 @@ export class Comic {
     pg.cur = i;
   }
 
+  // (ROADMAP 18.9) the eraser's own marks as it rubs - nothing of an eraser seen, only what it does:
+  // quick strokes of paper-white back and forth along its rubbing, round where it is, a puff of its
+  // dust - drawn anew twelve times a second, as an animated film's effects are. src: game/prologue/
+  // set.js eraser ({ pos, dir, along, on, w }); null: none
+  rub(src) {
+    this.rubSrc = src;
+    this.rubKey = -1;
+  }
+
+  drawRub(W, H) {
+    const X = this.rubSrc;
+    const c = this.at(X.pos);
+    if (!c) return;
+    const a = this.at(_v.copy(X.pos).addScaledVector(X.dir, X.w * 0.45));
+    const b = this.at(_v.copy(X.pos).addScaledVector(X.along, X.w * 0.5));
+    if (!a || !b) return;
+    const cx = c[0] * W;
+    const cy = c[1] * H;
+    const dx = (a[0] - c[0]) * W;
+    const dy = (a[1] - c[1]) * H;
+    const ax = (b[0] - c[0]) * W;
+    const ay = (b[1] - c[1]) * H;
+    // (a new set of marks twelve times a second, the same ones between)
+    const key = Math.floor((this.clock || 0) * 12);
+    if (key !== this.rubKey || !this.rubMarks) {
+      this.rubKey = key;
+      const M = [];
+      for (let i = 0; i < 9; i++) {
+        const o = (Math.random() * 2 - 1) * 0.95;
+        const q = (Math.random() * 2 - 1) * 0.35;
+        const len = 0.45 + Math.random() * 0.6;
+        const n = 3 + Math.floor(Math.random() * 3);
+        const pts = [];
+        for (let k = 0; k <= n; k++) {
+          const f = -len + (2 * len * k) / n;
+          const side = (k % 2 ? 1 : -1) * (0.05 + Math.random() * 0.06);
+          pts.push([o + side, q + f]);
+        }
+        M.push({ pts, w: 1.5 + Math.random() * 4, a: 0.55 + Math.random() * 0.4 });
+      }
+      const D = [];
+      for (let i = 0; i < 7; i++) D.push([(Math.random() * 2 - 1) * 1.1, (Math.random() * 2 - 1) * 0.8, 2 + Math.random() * 6]);
+      this.rubMarks = { M, D };
+    }
+    const g = this.g;
+    const P = (u, v) => [cx + ax * u + dx * v, cy + ay * u + dy * v];
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (const pass of [0, 1]) {
+      for (const m of this.rubMarks.M) {
+        g.beginPath();
+        m.pts.forEach(([u, v], i) => {
+          const [x, y] = P(u, v);
+          if (i) g.lineTo(x, y);
+          else g.moveTo(x, y);
+        });
+        // (under each mark a shadow of the eraser's pink; over it the paper's white)
+        g.globalAlpha = pass ? m.a : m.a * 0.35;
+        g.strokeStyle = pass ? '#fffaf2' : '#ff86ad';
+        g.lineWidth = (m.w + (pass ? 0 : 3.5)) * this.dpr;
+        g.stroke();
+      }
+    }
+    g.fillStyle = '#fff6f0';
+    for (const [u, v, r] of this.rubMarks.D) {
+      const [x, y] = P(u, v);
+      g.globalAlpha = 0.35;
+      g.beginPath();
+      g.arc(x, y, r * this.dpr, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+  }
+
   // the page gone (fade seconds): the film again
   endPage(fade = 0.3) {
     if (this.pg) this.pg.out = Math.max(0.01, fade);
@@ -226,6 +301,8 @@ export class Comic {
 
   update(dt) {
     const g = this.g;
+    this.clock = (this.clock || 0) + dt;
+    const rubbing = !!(this.rubSrc && this.rubSrc.on && !this.pg);
     if (this.pg) {
       this.resize();
       g.clearRect(0, 0, this.cv.width, this.cv.height);
@@ -233,7 +310,7 @@ export class Comic {
       this.drawPage(dt);
       if (!this.words.length && !this.speed && !this.hit) return;
     }
-    if (!this.words.length && !this.speed && !this.hit) {
+    if (!this.words.length && !this.speed && !this.hit && !rubbing) {
       if (this.dirty) {
         g.clearRect(0, 0, this.cv.width, this.cv.height);
         this.dirty = false;
@@ -245,6 +322,7 @@ export class Comic {
     const H = this.cv.height;
     if (!this.pg) g.clearRect(0, 0, W, H);
     this.dirty = true;
+    if (rubbing) this.drawRub(W, H);
     // ---- the impact frame
     if (this.hit) {
       const h = this.hit;
@@ -387,6 +465,7 @@ export class Comic {
 
   clear() {
     this.pg = null;
+    this.rubSrc = null;
     this.words = [];
     this.speed = null;
     this.hit = null;

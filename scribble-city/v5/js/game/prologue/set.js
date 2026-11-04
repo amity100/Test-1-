@@ -51,6 +51,8 @@ const ERASE = { px: 256, half: 35, grid: 64, w: 15, T: 5, rows: 5, hz: 4.2, pass
 // (the giant pencil: its eraser end's radius, how far in front of the wheel - the city's side - its
 // tip rubs, how long it takes to come down out of the sky and to go back up into it)
 const PENCIL = { r: 4, front: 5.5, down: 1.8, up: 1.1 };
+// (the pencil not shown for now - the erasing alone, made plain on the wheel itself: ?pencil=1 to see it)
+const PENCIL_SHOWN = typeof location !== 'undefined' && new URLSearchParams(location.search).get('pencil') === '1';
 const HUB = new THREE.Vector3();
 // (crumbs: the eraser's grey and pink, the paper's white, a bit of the wheel's own colours)
 const CRUMB = [[0.62, 0.6, 0.62], [0.85, 0.62, 0.66], [0.96, 0.95, 0.92], [0.5, 0.48, 0.52], [0.98, 0.45, 0.62], [0.35, 0.72, 0.8]];
@@ -340,7 +342,7 @@ export class PrologueSet {
     this.makeRiders();
     this.placeGondolas();
     this.prepErase();
-    this.buildPencil();
+    if (PENCIL_SHOWN) this.buildPencil();
   }
 
   // one gondola, round its pivot (its own frame: the wheel's, x along the axle): open above the
@@ -1228,7 +1230,7 @@ export class PrologueSet {
     const H = ERASE.half;
     const toLocal = new THREE.Matrix4().makeRotationY(-WHEEL.yaw).multiply(new THREE.Matrix4().makeTranslation(-WHEEL.x, -hubY, -WHEEL.z));
     const toUv = new THREE.Matrix4().set(0, 0, 1 / (2 * H), 0.5, 0, 1 / (2 * H), 0, 0.5, 0, 0, 0, 0, 0, 0, 0, 1);
-    const U = { uEraseMask: { value: tex }, uEraseMat: { value: toUv.multiply(toLocal) } };
+    const U = { uEraseMask: { value: tex }, uEraseMat: { value: toUv.multiply(toLocal) }, uEraserAt: { value: new THREE.Vector3(0, 0, 0) } };
     const copies = new Map();
     for (const p of [this.root, this.platG]) {
       p.traverse((m) => {
@@ -1249,6 +1251,13 @@ export class PrologueSet {
     // (where the eraser has been, coarsely, for the riders: rubbed or not)
     const G = ERASE.grid;
     this.eraseMask = { c, ctx, tex, U, grid: new Float32Array(G * G), mats: [...copies.values()] };
+    // (ROADMAP 18.9) where the eraser is in the world, which way it rubs there, and whether it is
+    // rubbing: for the eyes of whoever watches it and for the comic's rubbing marks (game/prologue/
+    // comic.js rub)
+    HUB.set(WHEEL.x, WHEEL.deck + WHEEL.hubUp, WHEEL.z);
+    this.eraser = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0.83, 0.55).normalize().applyAxisAngle(UPV, WHEEL.yaw), along: new THREE.Vector3(0, 0, 1).applyAxisAngle(UPV, WHEEL.yaw), on: false, rub: 0, w: ERASE.w };
+    const p0 = this.eraserAt(0, { z: 0, y: 0, rub: 0 });
+    this.eraser.pos.set(-1, p0.y, p0.z).applyAxisAngle(UPV, WHEEL.yaw).add(HUB);
   }
 
   erase() {
@@ -1258,6 +1267,7 @@ export class PrologueSet {
       this.pencil.mode = 'rub';
       this.pencil.grp.visible = true;
     }
+    if (this.eraser) this.eraser.on = true;
   }
 
   // (ROADMAP 18.9) what rubs it out, seen: a giant pencil out of the sky, its eraser end down on the
@@ -1302,7 +1312,7 @@ export class PrologueSet {
   // (the director, the moment before) it comes down out of the sky to the top of the wheel
   pencilIn(dur = PENCIL.down) {
     const P = this.pencil;
-    if (!P || this.wheelGone) return;
+    if (!P || this.wheelGone || !PENCIL_SHOWN) return;
     P.mode = 'down';
     P.t = 0;
     P.dur = dur;
@@ -1409,6 +1419,13 @@ export class PrologueSet {
         e.last.y = p.y;
       }
       E.tex.needsUpdate = true;
+      // (where it is: its glow on the wheel, the eyes on it, the comic's marks round it)
+      const X = this.eraser;
+      if (X) {
+        X.pos.set(-1, p.y, p.z).applyAxisAngle(UPV, WHEEL.yaw).add(HUB);
+        X.rub = p.rub;
+        E.U.uEraserAt.value.set(p.z / (2 * ERASE.half) + 0.5, p.y / (2 * ERASE.half) + 0.5, (ERASE.w * 0.62) / (2 * ERASE.half));
+      }
       // a stroke's turn: its sound, its crumbs
       const turn = Math.sign(p.rub) !== Math.sign(e.lastRub || 0);
       e.lastRub = p.rub;
@@ -1419,9 +1436,10 @@ export class PrologueSet {
       if (this.root && g.fx) {
         const w = this.toWorld(_w2.set(0, p.y, p.z), _w3);
         // (a few crumbs of eraser and of the drawing it takes: grey, pink, a little of its colours)
-        g.fx.spray(w.x, w.y, w.z, (Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4, 6, 6, CRUMB, { bits: true, len: 1.7, life: 2.2, cone: 1.0 });
+        g.fx.spray(w.x, w.y, w.z, (Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4, 14, 8, CRUMB, { bits: true, len: 2.4, life: 2.4, cone: 1.2 });
       }
     } else if (e.t > ERASE.T + 0.4) {
+      if (this.eraser) this.eraser.on = false;
       this.removeWheel();
       this.erasing = null;
       return;
