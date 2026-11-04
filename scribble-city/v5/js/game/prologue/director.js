@@ -1261,8 +1261,9 @@ export class Prologue {
     // (close on it, the camera after it: the eraser over the top gondolas, their colours going to
     // paper, its crumbs falling)
     const X = S.eraser;
-    const onX = (dy = 0) => () => (X ? v3(X.pos.x, X.pos.y + dy, X.pos.z) : v3(WHEEL.x, 40, WHEEL.z));
-    this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: onX(-3), fov: 27, fovTo: 25, dur: 1.4, hand: 0.45 });
+    // (half way between the eraser and the wheel's middle across: after it, the wheel kept in the picture)
+    const onX = (dy = 0) => () => (X ? v3((X.pos.x + WHEEL.x) / 2, X.pos.y + dy, (X.pos.z + WHEEL.z) / 2) : v3(WHEEL.x, 40, WHEEL.z));
+    this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: onX(-5), fov: 30, fovTo: 28, dur: 1.4, hand: 0.45 });
     if (C && X) C.word('SHHHK!', v3(X.pos.x, X.pos.y + 9, X.pos.z), { life: 0.9, size: 0.085, fill: '#fffaf0', burst: '#ff6f9a', tilt: -0.16 });
     yield () => kids() && et() > 1.25;
     // the two of them, from in front and below, close: she has come to him and holds on to his arm with
@@ -1271,10 +1272,10 @@ export class Prologue {
       this.put(L, VIEW.x + rx * 0.72, VIEW.z + rz * 0.72, toW);
       const mx = (L.pos.x + P.pos.x) / 2;
       const mz = (L.pos.z + P.pos.z) / 2;
-      this.shot({ from: [mx + ux * 2.05, 0.92, mz + uz * 2.05], to: [mx + ux * 1.85, 0.94, mz + uz * 1.85], look: [mx - rx * 0.05, 1.3, mz - rz * 0.05], fov: 44, dur: 1.4, hand: 0.5 });
+      this.shot({ from: [mx + ux * 2.7, 1.05, mz + uz * 2.7], to: [mx + ux * 2.5, 1.06, mz + uz * 2.5], look: [mx - rx * 0.05, 1.42, mz - rz * 0.05], fov: 46, dur: 1.4, hand: 0.5 });
       this.feel(L.fig, 'scared', 12);
       this.feel(P.fig, 'shock', 12);
-      P.fig.reachL = v3(L.pos.x + ux * 0.26 - rx * 0.05, (L.pos.y || 0) + 0.92, L.pos.z + uz * 0.26 - rz * 0.05);
+      P.fig.reachL = v3(L.pos.x + ux * 0.24 - rx * 0.08, (L.pos.y || 0) + 0.72, L.pos.z + uz * 0.24 - rz * 0.08);
       L.fig.reachR = P.fig.j.elbowL;
       L.fig.reachL = P.fig.j.handL;
     }
