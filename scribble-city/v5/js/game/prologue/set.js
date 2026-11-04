@@ -1304,7 +1304,9 @@ export class PrologueSet {
   erase() {
     if (this.wheelGone || this.erasing || !this.eraseMask) return;
     this.erasing = { t: 0, last: null, rubT: 0, rubs: 0, gone: 0, total: this.riders.length };
-    if (this.pencil) {
+    // (the giant pencil only when asked for, ?pencil=1: otherwise it was made visible here, never
+    // moved - its tick waits for the same - and hung in the sky over where the wheel had been)
+    if (this.pencil && PENCIL_SHOWN) {
       this.pencil.mode = 'rub';
       this.pencil.grp.visible = true;
     }
@@ -1575,6 +1577,7 @@ export class PrologueSet {
     this.platG = null;
     this.wheelGone = true;
     this.riders = [];
+    if (this.pencil) this.pencil.grp.visible = false;
     // (the eraser's mask and the pens that read it)
     if (this.eraseMask) {
       for (const m of this.eraseMask.mats) m.dispose();

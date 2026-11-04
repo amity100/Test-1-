@@ -1565,7 +1565,8 @@ export class Prologue {
     {
       const mx = (L.pos.x + P.pos.x) / 2;
       const mz = (L.pos.z + P.pos.z) / 2;
-      this.shot({ from: [mx + ux * 3.2 + rx * 0.6, 1.22, mz + uz * 3.2 + rz * 0.6], to: [mx + ux * 2.9 + rx * 0.55, 1.22, mz + uz * 2.9 + rz * 0.55], look: [mx, 1.15, mz], fov: 40, dur: 3.4, hand: 0.35 });
+      // (far enough and high enough for his head with hers: it went off the top of the picture)
+      this.shot({ from: [mx + ux * 3.8 + rx * 0.6, 1.32, mz + uz * 3.8 + rz * 0.6], to: [mx + ux * 3.5 + rx * 0.55, 1.32, mz + uz * 3.5 + rz * 0.55], look: [mx, 1.3, mz], fov: 42, dur: 3.4, hand: 0.35 });
     }
     this.feel(P.fig, 'joy', 3);
     this.feel(L.fig, 'joy', 6);
