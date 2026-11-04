@@ -21,7 +21,8 @@ import { LINES } from './lines.js';
 //   voices.space(name)            the place's acoustics, crossfaded: 'open' (the pier, the beach: a short
 //                                 slap back, no tail), 'street', 'carpark' (concrete: a long echo), 'car'
 //                                 (a small dry cabin), 'roof' (open, dry). 'open' to begin with.
-//   voices.bedAt(x, y, z)         where the kids on the wheel are heard from (the wheel's middle)
+//   voices.bedAt(x, y, z)         where the kids on the wheel are heard from (the wheel's middle). The kids
+//                                 (the bed, K01, K02) are never heard closer than 30-35 m, whatever the camera
 //   voices.bed(on, k)             the kids on the wheel: on (k: how loud, 1 as it was), or cut dead
 //   voices.memory(gain)           the echo of two kids' calls, inside the head; returns its length (s)
 //   voices.stop()                 everything quiet (skipped, or over)
@@ -33,13 +34,17 @@ import { LINES } from './lines.js';
 const url = (name) => new URL(`${window.__gameBase ? '' : '../../../'}audio/prologue/${name}.mp3`, window.__gameBase || import.meta.url).href;
 // (lines seen and not heard - none any more: Lily's laugh is a real one now)
 const SILENT = new Set();
+// (what the mouth does for a line that isn't words: a giggle's quick hee-hee, a laugh's open ha-ha)
+const MOUTH = { LG1: 'hi hi hi hi', L05: 'ha ha ha ha ha' };
 
 // how a voice falls off with distance (metres; the panner's 'exponential' model: (d / ref) ^ -roll):
 // talking - full up to 2.5 m, then -3.6 dB each time the distance doubles (15 m: -9 dB, 30 m: -13 dB);
-// a kid shouting from the wheel is a louder source (full to 8 m), and the whole wheelful louder still
+// a kid shouting from the wheel is a louder source (full to 8 m), and the whole wheelful louder still.
+// The kids up on the wheel are never heard close, wherever the camera is (min: a long lens on them
+// from the ground) - always at least that far, in the same direction
 const TALK = { ref: 2.5, roll: 0.6 };
-const SHOUT = { ref: 8, roll: 0.75 };
-const WHEEL = { ref: 12, roll: 0.8 };
+const SHOUT = { ref: 8, roll: 0.75, min: 30 };
+const WHEEL = { ref: 12, roll: 0.8, min: 35 };
 // (the angle to a voice narrowed a little, as a film's mix has it: one to the side is heard to the side,
 // but nobody hard in one ear)
 const WIDTH = 0.7;
@@ -273,9 +278,18 @@ export class PrologueVoices {
     const h = r.head();
     const K = this.cam;
     if (!h || !K) return;
-    const vx = h.x - K.x;
-    const vy = h.y - K.y;
-    const vz = h.z - K.z;
+    let vx = h.x - K.x;
+    let vy = h.y - K.y;
+    let vz = h.z - K.z;
+    if (r.P.min) {
+      const d0 = Math.hypot(vx, vy, vz) || 1;
+      if (d0 < r.P.min) {
+        const k = r.P.min / d0;
+        vx *= k;
+        vy *= k;
+        vz *= k;
+      }
+    }
     const lx = vx * K.rx + vy * K.ry + vz * K.rz;
     const ly = vx * K.ux + vy * K.uy + vz * K.uz;
     const lz = vx * K.fx + vy * K.fy + vz * K.fz;
@@ -369,7 +383,8 @@ export class PrologueVoices {
         for (const k of ['g', 'lp', 'pan', 'send']) if (rec[k]) rec[k].disconnect();
       };
     }
-    if (fig) fig.say = { text: L.en, tone: o.tone || 'talk', at: 0, atT: this.game.time, cps: L.en.length / Math.max(0.4, dur), wait: false, done: false };
+    const mouth = MOUTH[id] || L.en;
+    if (fig) fig.say = { text: mouth, tone: o.tone || 'talk', at: 0, atT: this.game.time, cps: mouth.length / Math.max(0.4, dur), wait: false, done: false };
     if (this.ui && o.sub !== false) this.ui.sub(L.who, L.en, L.he, dur + 0.35);
     return dur;
   }
