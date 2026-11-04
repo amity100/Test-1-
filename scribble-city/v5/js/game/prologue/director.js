@@ -199,6 +199,8 @@ export class Prologue {
       this.put(L, VIEW.x, VIEW.z, Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z));
     }
     if (n >= 5) {
+      // (her ice cream long gone by now)
+      if (L.fig.carry === 'icecream') L.fig.carry = null;
       this.putDanny(VIEW.x + 1.3, VIEW.z + 0.5, Math.PI);
       this.put(L, VIEW.x, VIEW.z, Math.PI);
       L.pl.follow = true;

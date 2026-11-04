@@ -179,6 +179,9 @@ export class Comic {
     g.translate(x, y);
     g.rotate(w.tilt);
     g.globalAlpha = a;
+    // (the words are English, left to right - the page round the sheet reads right to left, and would
+    // put a BANG!'s mark in front of it)
+    g.direction = 'ltr';
     // the burst behind it: a jagged star
     let s = Math.floor(w.seed * 1000) + 7;
     const rnd = () => {
