@@ -1046,11 +1046,13 @@ export class Prologue {
     // draw smoothly; down here the nearest of it hides the rest, and it is the promenade's evening
     // that is seen, its people, its palms)
     this.shot({
-      path: [v3(338, 7, 270), v3(262, 8.5, 268), v3(196, 10, 270), v3(150, 13, 272), v3(96, 12.5, 232), v3(56, 10, 150), v3(31, 7.5, 64), v3(19.5, 4.2, 14.5), v3(17.2, 2.6, 9.6)],
-      lookPath: [v3(128, 26, 243), v3(128, 26, 243), v3(126, 27, 243), v3(110, 18, 226), v3(42, 6, 160), v3(21, 3.2, 60), v3(16, 2.4, 10), v3(17, 1.9, 3), v3(17, 1.9, -12)],
+      path: [v3(262, 8.5, 268), v3(196, 10, 270), v3(150, 13, 272), v3(96, 12.5, 232), v3(56, 10, 150), v3(31, 7.5, 64), v3(19.5, 4.2, 14.5), v3(17.2, 2.6, 9.6)],
+      lookPath: [v3(128, 26, 243), v3(126, 27, 243), v3(110, 18, 226), v3(42, 6, 160), v3(21, 3.2, 60), v3(16, 2.4, 10), v3(17, 1.9, 3), v3(17, 1.9, -12)],
       fov: 52,
       fovTo: 58,
-      dur: first ? 27 : 1,
+      // (ROADMAP 18.9: shorter - 17 seconds, not 27: the sea's first stretch left out, the wheel the
+      // first thing it flies past)
+      dur: first ? 17 : 1,
       ease: 'soft',
       hand: 0.25,
     });
@@ -1058,8 +1060,8 @@ export class Prologue {
     if (this.ui.blackOn) {
       yield 0.9;
       this.ui.fade(false, 1.6);
-      yield 25.7;
-    } else yield 26.6;
+      yield 16.1;
+    } else yield 17;
     if (I && I.stream) I.stream.calm = false;
     // the city, his - and the game showing him round it (ROADMAP 18.9): a few things to do, each
     // told plainly, then Lily
