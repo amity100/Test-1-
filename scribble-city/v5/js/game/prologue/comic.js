@@ -467,7 +467,7 @@ export class Comic {
       f.key = key;
       const M = [];
       const n = Math.round(150 * f.k);
-      for (let i = 0; i < n; i++) M.push([Math.random() * Math.PI * 2, 0.3 + Math.random() * 0.22, 0.0015 + Math.random() * 0.006]);
+      for (let i = 0; i < n; i++) M.push([Math.random() * Math.PI * 2, 0.3 + Math.random() * 0.22, 0.004 + Math.random() * 0.011]);
       f.marks = M;
     }
     const fade = Math.min(1, f.t / 0.1, (f.life - f.t) / 0.3);
@@ -475,7 +475,7 @@ export class Comic {
     const sx = 1.0;
     const sy = 0.78;
     g.save();
-    g.globalAlpha = 0.82 * fade;
+    g.globalAlpha = 0.9 * fade;
     g.fillStyle = '#0c0a12';
     for (const [a, r0f, wdt] of f.marks) {
       // (a wedge from past the edge in to near the face: thin at its inner end)

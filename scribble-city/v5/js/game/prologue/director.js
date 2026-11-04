@@ -13,6 +13,7 @@ import { civilianLook, kidLook, roleLook } from '../looks.js';
 import { Doodle } from '../doodle.js';
 import { Soundscape, airAt } from './soundscape.js';
 import { loadTrack, trackBuf } from './tracks.js';
+import { howto as howtoCard } from './howto.js';
 import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
 
@@ -139,6 +140,9 @@ export class Prologue {
     const g = this.game;
     this.active = true;
     document.body.classList.add('prologue');
+    // (ROADMAP 18.9: everything the pen can make open while it is told - a helicopter, wings, a turbo
+    // on the car, every weapon - whatever the settings say: the game's own again after, finish)
+    if (g.setAllOpen) g.setAllOpen(true);
     const lang = g.params.get('subs') === 'en' ? 'en' : 'he';
     this.ui = new PrologueUI(lang);
     this.voices = new PrologueVoices(g, this.ui);
@@ -366,7 +370,28 @@ export class Prologue {
     const gq = this._bq || (this._bq = new THREE.Quaternion());
     gp.copy(cam.position);
     gq.copy(cam.quaternion);
-    cam.position.lerpVectors(B.pos, gp, k);
+    // (round him, not through him: from the film's picture of his face to the game's behind his back
+    // the straight way went through his head - ROADMAP 18.9. Round the middle of him instead: the
+    // distance out from him, the height, and the angle round him each eased on its own, the shorter
+    // way round)
+    const P = this.game.player;
+    const H = this._bh || (this._bh = new THREE.Vector3());
+    H.set(P.pos.x, P.pos.y + 1.2, P.pos.z);
+    const ax = B.pos.x - H.x;
+    const az = B.pos.z - H.z;
+    const bx = gp.x - H.x;
+    const bz = gp.z - H.z;
+    const ra = Math.hypot(ax, az);
+    const rb = Math.hypot(bx, bz);
+    if (ra > 0.2 && rb > 0.2 && ra < 12 && rb < 12) {
+      const a0 = Math.atan2(az, ax);
+      let da = Math.atan2(bz, bx) - a0;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const r = Math.max(ra + (rb - ra) * k, 0.9);
+      const a = a0 + da * k;
+      cam.position.set(H.x + Math.cos(a) * r, B.pos.y + (gp.y - B.pos.y) * k, H.z + Math.sin(a) * r);
+    } else cam.position.lerpVectors(B.pos, gp, k);
     cam.quaternion.slerpQuaternions(B.q, gq, k);
     const f = B.fov + (cam.fov - B.fov) * k;
     if (Math.abs(f - cam.fov) > 0.01) {
@@ -628,6 +653,11 @@ export class Prologue {
   film(on) {
     const was = !!this.holdCam;
     this.ui.film(on);
+    // (no how-to card over the film)
+    if (on) {
+      this.howTok = (this.howTok || 0) + 1;
+      this.ui.card(null);
+    }
     // (in the film his hands are bare, whatever he drew and took up in his own time - ROADMAP 18.9)
     if (on) {
       const W = this.game.weapons;
@@ -639,6 +669,8 @@ export class Prologue {
     }
     this.holdCam = on;
     this.lock(on);
+    // (walked by the film, nothing catches him: game/player.js ghost)
+    this.game.player.ghost = on;
     // (the city's chatter over people's heads: none while the prologue is told - the film and the
     // player's part of it alike, ROADMAP 18.9 - and what was up, gone)
     const B = this.game.bubbles;
@@ -666,6 +698,23 @@ export class Prologue {
   shot(s) {
     this.shots.cut(s);
     return s.dur || 3;
+  }
+
+  // (ROADMAP 18.9) how to play what comes now: its card (game/prologue/howto.js) - kept up while the
+  // player is at it (life 0), or for life seconds; a newer card, or the film, takes it away
+  howto(key, life = 0) {
+    const o = howtoCard(key, this.game.touch);
+    const tok = (this.howTok = (this.howTok || 0) + 1);
+    if (!o || this.ff) {
+      this.ui.card(null);
+      return;
+    }
+    this.ui.card(o);
+    if (life > 0) {
+      setTimeout(() => {
+        if (this.howTok === tok) this.ui.card(null);
+      }, life * 1000);
+    }
   }
 
   // (ROADMAP 18.9) a freeze frame, as the animated films bring their people in: the world held still
@@ -1161,13 +1210,14 @@ export class Prologue {
     this.film(false);
     yield* this.tutorial();
     this.objective('Meet <b>Lily</b> at the ice cream stand', STAND.x, STAND.z, 'Lily');
+    this.howto('lily', 14);
     // (in a car by her: out of it to meet her)
     let outTold = false;
     yield () => {
       const near = this.dist(LILY_SEAT.x, LILY_SEAT.z) < 30;
       if (near && g.player.inVehicle && !outTold) {
         outTold = true;
-        this.ui.card('Get out', g.touch ? 'נוגעים בכפתור הרכב כדי לצאת ממנו' : '<kbd>E</kbd> - לצאת מהרכב');
+        this.ui.card({ title: 'יוצאים מהמכונית', say: 'הגעתם! את לילי פוגשים ברגל - חנו ליד הדוכן.', lines: [[g.touch ? 'כפתור הרכב' : 'E', 'לצאת מהמכונית']] });
       }
       if (outTold && !g.player.inVehicle) this.ui.card(null);
       return this.dist(LILY_SEAT.x, LILY_SEAT.z) < 8.5 && !g.player.inVehicle;
@@ -1183,38 +1233,36 @@ export class Prologue {
   *tutorial() {
     const g = this.game;
     const P = g.player;
-    const touch = g.touch;
-    const card = (title, how) => this.ui.card(title, how);
     let t = 0;
-    // walk, look round
+    // 1. walk, look round
     this.objective('<b>Explore</b> the city');
-    card('Explore the city', touch ? 'הג׳ויסטיק משמאל - ללכת ולרוץ · גוררים על המסך - להסתכל מסביב' : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ללכת · <kbd>Shift</kbd> לרוץ · העכבר מסתכל מסביב');
+    this.howto('explore');
     const p0 = P.pos.clone();
     yield () => {
       t += this.dtR;
-      return t > 10 || (t > 3 && P.pos.distanceTo(p0) > 16);
+      return t > 14 || (t > 4 && P.pos.distanceTo(p0) > 16);
     };
-    card(null);
-    yield 0.5;
-    // a shop: in through its door
+    this.howto(null);
+    yield 0.6;
+    // 2. a shop: in through its door
     if (!P.inVehicle) {
       this.objective('Walk into a <b>shop</b>');
-      card('Walk into a shop', 'בכל חנות שהדלת שלה פתוחה אפשר להיכנס פנימה: לקנות, לאכול, להסתכל - ולפעמים גם לגנוב');
+      this.howto('shop');
       t = 0;
       let inside = false;
       yield () => {
         t += this.dtR;
         if (P.indoor && !inside) {
           inside = true;
-          t = Math.max(t, 21);
-          card('You are inside', touch ? 'ניגשים לדלפק או למדף ונוגעים בכפתור שמופיע' : 'ניגשים לדלפק או למדף ולוחצים <kbd>E</kbd>');
+          t = Math.max(t, 22);
+          this.howto('inside');
         }
-        return t > (inside ? 25 : 22) || !!P.inVehicle;
+        return t > (inside ? 30 : 26) || !!P.inVehicle;
       };
-      card(null);
-      yield 0.5;
+      this.howto(null);
+      yield 0.6;
     }
-    // a car: the nearest one parked, his
+    // 3. a car: the nearest one parked, his
     const parked = () => {
       let best = null;
       let bd = 1e9;
@@ -1232,7 +1280,7 @@ export class Prologue {
     if (!P.inVehicle) {
       let car = parked();
       this.objective('Take a <b>car</b>', car ? car.pos.x : null, car ? car.pos.z : null, 'Car');
-      card('Take a car', touch ? 'ניגשים לדלת של מכונית חונה ונוגעים בכפתור הרכב - היא שלכם' : 'ניגשים לדלת של מכונית חונה ולוחצים <kbd>E</kbd> - היא שלכם');
+      this.howto('car');
       t = 0;
       let gpsT = 0;
       yield () => {
@@ -1243,29 +1291,45 @@ export class Prologue {
           car = parked();
           if (car && g.gps) g.gps.set(car.pos.x, car.pos.z, 'Car');
         }
-        return !!P.inVehicle || t > 45;
+        return !!P.inVehicle || t > 60;
       };
-      card(null);
-      yield 0.4;
+      this.howto(null);
+      if (g.gps) g.gps.clear();
+      yield 0.5;
     }
-    // drive it
+    // 4. drive it
     if (P.inVehicle) {
       this.objective('<b>Drive</b> - get a feel for it');
-      card('Drive', touch ? 'הג׳ויסטיק - גז, ברקס והגה · כפתור הרכב - לצאת' : '<kbd>W</kbd> גז · <kbd>S</kbd> ברקס ורוורס · <kbd>A</kbd><kbd>D</kbd> הגה · <kbd>Space</kbd> בלם יד · <kbd>E</kbd> לצאת');
+      this.howto('drive');
       const q0 = P.pos.clone();
       t = 0;
       yield () => {
         t += this.dtR;
-        return t > 14 || (t > 5 && P.pos.distanceTo(q0) > 140);
+        return t > 18 || (t > 6 && P.pos.distanceTo(q0) > 140);
       };
-      card(null);
-      yield 0.4;
+      this.howto(null);
+      yield 0.5;
     }
-    // (and the drawing, for whoever wants it: told once, on its own, while he goes on his way)
-    card('Draw anything', touch ? 'כפתור העיפרון פותח את המחברת: מה שמציירים - מכונית, מסוק, נשק - נהיה אמיתי' : '<kbd>Q</kbd> פותח את המחברת: מה שמציירים - מכונית, מסוק, נשק - נהיה אמיתי');
-    yield 5.5;
-    card(null);
+    // 5. the pen: open, everything in it open (begin: setAllOpen) - till it has been opened and put
+    // away again, or a while has gone by
+    this.objective('<b>Draw</b> something - it comes to life');
+    this.howto('draw');
+    {
+      const F = g.freedraw;
+      let opened = false;
+      t = 0;
+      yield () => {
+        t += this.dtR;
+        if (F && F.isOpen) {
+          opened = true;
+          return false;
+        }
+        return (opened && t > 3) || t > 30;
+      };
+    }
+    this.howto(null);
     this.objective(null);
+    yield 0.4;
   }
 
   spawnLily() {
@@ -1299,7 +1363,15 @@ export class Prologue {
     this.walkTo = { x: meet.x, z: meet.z, speed: 0.4 };
     this.faceTo(L, meet.x, meet.z);
     L.fig.lookAt = null;
-    this.shot({ from: [31.0, 1.28, 229.4], to: [31.5, 1.3, 229.7], look: [41.2, 1.45, 233.9], fov: 48, dur: 4.6, hand: 0.35 });
+    // (ROADMAP 18.9: behind his shoulder as he walks the last steps - her ahead of him at the stand,
+    // looking up; before, from far off across a café table, he was not in it)
+    this.shot({
+      from: () => { const dx = L.pos.x - P.pos.x; const dz = L.pos.z - P.pos.z; const d = Math.hypot(dx, dz) || 1; return v3(P.pos.x - (dx / d) * 2.3 - (dz / d) * 0.75, 1.72, P.pos.z - (dz / d) * 2.3 + (dx / d) * 0.75); },
+      look: () => { const h = this.headJ(L) || v3(L.pos.x, 1.0, L.pos.z); return v3(h.x, h.y + 0.15, h.z); },
+      fov: 42,
+      dur: 4.6,
+      hand: 0.4,
+    });
     yield 1.6;
     // (ROADMAP 18.9: her face as she sees him - not small at the stand behind his back - and her card)
     L.fig.lookAt = P.fig.j.headC;
@@ -1368,8 +1440,10 @@ export class Prologue {
     });
     yield () => Math.hypot(L.pos.x - B.lx - B.rx * 0.55, L.pos.z - B.lz - B.rz * 0.55) < 0.6 || this.shots.t > 2.4;
     L.fig.reachR = v3(B.x - B.rx * 2, B.cy + 0.6, B.z - B.rz * 2);
+    // (ROADMAP 18.9: the board seen, then her face as she asks - not a speck under it for her line)
+    L.fig.lookAt = v3(B.x, B.cy, B.z);
+    this.shot({ ...this.single(L, v3(B.x, B.cy, B.z), { dist: 1.15, side: 0.42, up: 0.04, drop: 0.04 }), fov: 38, dur: 3.2, hand: 0.35 });
     yield* this.say('L03', L.fig, 0.4);
-    yield () => this.shots.t > 5.4;
     // his answer over the board itself, from below, beside him: the face that wants the city
     L.fig.reachR = null;
     this.walkTo = null;
@@ -1420,6 +1494,7 @@ export class Prologue {
     L.pl.follow = true;
     this.film(false);
     this.objective('Walk with <b>Lily</b> to the pier', VIEW.x, VIEW.z, 'Pier');
+    this.howto('pier', 8);
     yield () => this.dist(VIEW.x, VIEW.z) < 4.5;
     this.start(3);
   }
@@ -1583,6 +1658,7 @@ export class Prologue {
     // out where he walks)
     this.film(false);
     this.objective('Who is <b>that</b>? Follow him', man.pos.x, man.pos.z, 'Man');
+    this.howto('follow', 8);
     man.fig.lookAt = null;
     this.go(man, man.pos.x + ux * 9 + 1.5, 248.6, 1.05);
     {
@@ -1607,6 +1683,7 @@ export class Prologue {
     yield 1.4;
     // back to her - she has finished it
     this.objective('Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
+    this.howto('back', 8);
     yield () => {
       drawK = Math.max(drawK, 0.9);
       return Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z) < 3.4;
@@ -1803,6 +1880,7 @@ export class Prologue {
     P.fig.lookAt = null;
     L.pl.follow = true;
     this.objective('Find out what happened to the <b>wheel</b>', SITE.x, SITE.z, 'Wheel');
+    this.howto('site', 9);
     yield () => this.dist(SITE.x, SITE.z) < 6 && Math.hypot(L.pos.x - P.pos.x, L.pos.z - P.pos.z) < 4.5;
     this.objective(null);
     if (g.gps) g.gps.clear();
@@ -1938,6 +2016,8 @@ export class Prologue {
     this.shot({ from: [86, 3.2, 247], to: [88, 3.0, 245.5], look: [104, 1.5, 243], lookTo: [112, 5, 243], fov: 50, dur: 3.8, hand: 0.4 });
     yield 3.4;
     // Danny, at the two guys by the railing
+    // (ROADMAP 18.9: the camera on his left, the guys' on their right - his right arm, waving and pointing
+    // at where the wheel was, no longer coming at the lens across the picture)
     const g1 = this.cast.g1;
     const g2 = this.cast.g2;
     const M = this.cast.man;
@@ -1949,11 +2029,11 @@ export class Prologue {
     this.feel(g1.fig, 'joy', 30);
     this.feel(g2.fig, 'joy', 30);
     // (him tilted one way, them the other: they do not stand in the same world)
-    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.7, roll: 0.07 });
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.7, roll: 0.07 });
     yield* this.say('D06', P.fig, 0.15);
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2, hand: 0.4, roll: -0.05 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2, hand: 0.4, roll: -0.05 });
     yield* this.say('G01', g1.fig, 0.15);
-    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2.2, hand: 0.7, roll: 0.08 });
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.2, hand: 0.7, roll: 0.08 });
     P.fig.reachR = v3(WHEEL.x, 20, WHEEL.z);
     const d07 = this.say('D07', P.fig, 0.15);
     const d07w = d07.next().value || 0;
@@ -1970,12 +2050,12 @@ export class Prologue {
     // (they look where he points, and back at him, smiling)
     g1.fig.lookAt = P.fig.j.headC;
     g2.fig.lookAt = P.fig.j.headC;
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
     yield* this.say('G02', g1.fig, 0.2);
     // (him: closer as he says it)
     {
-      const A = this.single(P, g1, { dist: 1.6, side: 0.4, up: -0.1 });
-      const B = this.single(P, g1, { dist: 1.15, side: 0.34, up: -0.08 });
+      const A = this.single(P, g1, { dist: 1.6, side: -0.4, up: -0.1 });
+      const B = this.single(P, g1, { dist: 1.15, side: -0.34, up: -0.08 });
       this.shot({ from: A.from, to: B.from, look: A.look, fov: 34, dur: 6.8, ease: 'lin', hand: 0.8, roll: 0.1 });
     }
     yield* this.say('D08', P.fig, 0.15);
@@ -1987,15 +2067,15 @@ export class Prologue {
       const dz = mz - P.pos.z;
       const d = Math.hypot(dx, dz) || 1;
       // (far enough back for the two of them, heads and all: past his shoulder, off to his side)
-      this.shot({ from: [P.pos.x - (dx / d) * 0.35 - (dz / d) * 1.05, 1.62, P.pos.z - (dz / d) * 0.35 + (dx / d) * 1.05], look: [mx, 1.5, mz], fov: 40, dur: 4, hand: 0.5, roll: -0.07 });
+      this.shot({ from: [P.pos.x - (dx / d) * 0.35 + (dz / d) * 1.05, 1.62, P.pos.z - (dz / d) * 0.35 - (dx / d) * 1.05], look: [mx, 1.5, mz], fov: 40, dur: 4, hand: 0.5, roll: -0.07 });
       this.faceTo(g1, P.pos.x, P.pos.z);
       this.faceTo(g2, P.pos.x, P.pos.z);
     }
     yield* this.say('G03', g1.fig, 0.3);
-    this.shot({ ...this.single(P, g1, { dist: 1.3, side: 0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5, roll: 0.12 });
+    this.shot({ ...this.single(P, g1, { dist: 1.3, side: -0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5, roll: 0.12 });
     yield* this.say('D09', P.fig, 0.2);
     this.feel(g1.fig, 'surprised', 2);
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
     yield* this.say('G04', g1.fig, 0.4);
     // the other man
     this.putDanny(MAN.x - 1.1, MAN.z - 1.2, Math.atan2(1.1, 1.2));
@@ -2096,6 +2176,7 @@ export class Prologue {
     this.cue('stop', { fade: 4 });
     this.hour(18.42, 0.0035);
     this.objective('Get to your <b>car</b>', GARAGE_IN.x, GARAGE_IN.z, 'Car park');
+    this.howto('tocar', 9);
     this.start(5);
   }
 
@@ -2137,16 +2218,25 @@ export class Prologue {
     const pz = -ux;
     const crowd = [];
     const rows = [-2.0, -1.3, -0.6, 0.6];
+    // (each of them made where the camera does not see - out past the edge of the picture, further
+    // along their way if need be - and walking in: nobody appears out of nothing)
+    const _p = new THREE.Vector3();
+    const offScreen = (x, z) => {
+      _p.set(x, 1.0, z).project(cam);
+      return _p.z > 1 || Math.abs(_p.x) > 1.08 || Math.abs(_p.y) > 1.08;
+    };
     for (let i = 0; i < 9; i++) {
       const row = rows[i % 4];
-      const side = 3.6 + Math.floor(i / 2) * 0.7 + (i % 2) * 0.3;
+      let side = 3.6 + Math.floor(i / 2) * 0.7 + (i % 2) * 0.3;
+      while (side < 24 && !offScreen(c.pos.x + ux * row + px * side, c.pos.z + uz * row + pz * side)) side += 0.8;
       const x = c.pos.x + ux * row + px * side;
       const z = c.pos.z + uz * row + pz * side;
       const q = this.person('crowd' + i, x, z, i % 4 === 1 ? kidLook(i % 2 === 0) : civilianLook());
-      this.go(q, x - px * 18, z - pz * 18, 1.25 + (i % 3) * 0.1);
+      this.go(q, x - px * (side + 14), z - pz * (side + 14), 1.35 + (i % 3) * 0.1);
       crowd.push(q);
     }
-    c.pl.speed = 0;
+    // (he walks on, unhurried, till they are up to him - not stood waiting for them)
+    c.pl.speed = Math.min(c.pl.speed || 0.8, 0.8);
     let t = 0;
     let walking = false;
     const tc = new THREE.Vector3();
@@ -2156,9 +2246,10 @@ export class Prologue {
       tq.set(c.pos.x, c.pos.y + 1.2, c.pos.z).project(cam);
       return tq.z < 1 && Math.abs(tq.x) < 1.05 && Math.abs(tq.y) < 1.05;
     };
-    while (t < 9) {
-      // (as the first of them reach him, he turns and goes along with them)
-      if (!walking && t > 1.6) {
+    // (he turns and goes along with them as the first of them come up to him)
+    const near = () => crowd.some((q) => Math.hypot(q.pos.x - c.pos.x, q.pos.z - c.pos.z) < 2.6);
+    while (t < 14) {
+      if (!walking && (near() || t > 6)) {
         walking = true;
         this.go(c, c.pos.x - px * 14, c.pos.z - pz * 14, 0.8);
       }
@@ -2172,9 +2263,9 @@ export class Prologue {
         const dq = tq.length();
         if (dq < dc - 0.5 && tq.normalize().dot(tc) > Math.cos(0.035)) hid = true;
       }
-      if (hid && t > 1.0) break;
+      if (hid && walking) break;
       // (and at the latest, only where nobody is looking)
-      if (t > 6 && !seen()) break;
+      if (t > 10 && !seen()) break;
       yield 0.001;
       t += this.dtR || 1 / 30;
     }
@@ -2408,6 +2499,7 @@ export class Prologue {
     this.film(false);
     g.camRig.yaw = v.yaw;
     this.objective('<b>Lose them</b> - up through the car park', PARK.route[1].x, PARK.route[1].z, 'Up');
+    this.howto('climb', 10);
     this.climb = true;
     this.climbI = -1;
     this.start(6);
@@ -2593,6 +2685,7 @@ export class Prologue {
     // a hundred metres straight to the edge, the sky over it, 5th Street under it and Bayshore's roof
     // across; the dark car on the turn behind them - and the one in it with the gun out of its window
     this.objective('<b>Floor it!</b>', PARK.edge.x, PARK.edge.z, 'Edge');
+    this.howto('floor', 6);
     if (g.gps) g.gps.clear();
     if (Pu) Pu.keep = 5;
     this.gunman = this.cast.t2 || null;
@@ -2733,6 +2826,7 @@ export class Prologue {
     this.film(false);
     g.camRig.yaw = car.yaw;
     this.objective('<b>Floor it!</b> - up the ramp');
+    this.howto('ramp', 6);
     if (Pu) {
       Pu.paused = false;
       Pu.keep = 6;
@@ -2839,6 +2933,7 @@ export class Prologue {
     this.film(false);
     g.camRig.yaw = car.yaw;
     this.objective('Get down to the <b>street</b>', PARK.down[0].x, PARK.down[0].z, 'Street');
+    this.howto('down', 8);
     this.descend = true;
     this.downI = -1;
     this.check = { x: PARK.land.x, y: PARK.land.y + 0.05, z: PARK.land.z, yaw: 0 };
@@ -2882,6 +2977,7 @@ export class Prologue {
     yield () => v() && v().pos.y < 1 && v().pos.z < PARK.landing.z0 - 1;
     this.descend = false;
     this.objective('<b>Lose them</b>', LOOKOUT.x, LOOKOUT.z, 'Beach');
+    this.howto('lose', 9);
     this.check = { x: PARK.down[PARK.down.length - 1].x, y: 0.15, z: PARK.down[PARK.down.length - 1].z - 1, yaw: Math.PI / 2 };
     // they give up once he is far enough away, or out on the sand where they will not follow
     yield () => {
@@ -2898,6 +2994,7 @@ export class Prologue {
     }
     this.cue('chase', { heat: 0.2 });
     this.objective('Find somewhere <b>quiet</b>', LOOKOUT.x, LOOKOUT.z, 'Beach');
+    this.howto('quiet', 8);
     yield () => v() && this.dist(LOOKOUT.x, LOOKOUT.z) < 14 && Math.abs(v().speed) < 6;
     // the car stopped; the engine running; his breath
     this.check = null;
@@ -2975,6 +3072,7 @@ export class Prologue {
   // ------------------------------------------------------------------ the end
   finish() {
     const g = this.game;
+    if (g.setAllOpen && g.settings) g.setAllOpen(!!g.settings.v.allOpen);
     try {
       localStorage.setItem(DONE_KEY, '1');
     } catch (e) {
