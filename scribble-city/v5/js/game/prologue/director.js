@@ -1252,7 +1252,7 @@ export class Prologue {
         [[0.36, 0.03], [0.655, 0.03], [0.62, 0.97], [0.325, 0.97]],
         [[0.67, 0.03], [0.985, 0.03], [0.985, 0.97], [0.635, 0.97]],
       ]);
-      C.panel(0, { u: 0.56, v: 0.42 });
+      C.panel(0, { u: 0.46, v: 0.42 });
       yield () => kids() > 0.42 || !S.erasing;
       this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: [WHEEL.x, 26, WHEEL.z], lookTo: [WHEEL.x, 30, WHEEL.z], fov: 24, fovTo: 22, dur: 1.4, hand: 0.4 });
       C.panel(1, { u: 0.5, v: 0.45 });
