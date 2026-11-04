@@ -1154,7 +1154,8 @@ export class Prologue {
     const parked = () => {
       let best = null;
       let bd = 1e9;
-      for (const c of (g.traffic && g.traffic.list) || []) {
+      // (the traffic's parked cars: game/curbs.js, Traffic.parked)
+      for (const c of (g.traffic && g.traffic.parked) || []) {
         if (!c.parkedCar || c.gone || c.wrecked) continue;
         const d = Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
         if (d < bd) {
