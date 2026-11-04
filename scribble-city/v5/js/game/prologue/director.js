@@ -406,7 +406,7 @@ export class Prologue {
 
   // (ROADMAP 18.9) the look of the film while it plays: what is behind its people painted, as by a
   // brush - the brush wider away from where the camera looks - and its people drawn twelve times a
-  // second. In the game's own hands between the shots: the game's own look
+  // second (in the film only: in the player's hands they move as they always do)
   tickLook() {
     const g = this.game;
     const film = !!this.holdCam;
@@ -416,9 +416,13 @@ export class Prologue {
     if (P && P.fig) P.fig.ones = !!P.inVehicle;
     const pipe = g.pipe;
     if (!pipe) return;
-    pipe.paintWant = film && this.paintOn ? 1 : 0;
+    // (the painted look the whole prologue through - in the player's own hands too, between the
+    // scenes: one film, the walk to her and to the wheel in it. Where it looks: the film's shot, or
+    // the player)
+    pipe.paintWant = this.paintOn ? 1 : 0;
     const S = this.shots;
-    if (S && S.on) pipe.paintFocus = clamp(S.lastPos.distanceTo(S.lastLook), 1.2, 90);
+    if (film && S && S.on) pipe.paintFocus = clamp(S.lastPos.distanceTo(S.lastLook), 1.2, 90);
+    else if (P && P.pos) pipe.paintFocus = clamp(g.camera.position.distanceTo(P.pos), 1.5, 30);
   }
 
   // ------------------------------------------------------------------ the film's tools
