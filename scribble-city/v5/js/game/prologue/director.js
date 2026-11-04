@@ -787,6 +787,11 @@ export class Prologue {
     // Lily, waiting at the stand (her look as soon as her sheet is in: game/prologue/cast.js)
     yield () => this.castReady;
     this.spawnLily();
+    // (the shops' insides round Danny are built at their ordinary pace while the camera is far off
+    // over the city - not rushed in, a frame's worth at a time, while the film flies in:
+    // world/mainland/stream.js calm)
+    const I = g.world && g.world.interiors;
+    if (I && I.stream) I.stream.calm = true;
     // in off the sea: past the yachts and the wheel, low over the beach and along the promenade, down
     // to Danny. (Low: from up high the whole city is in the picture at once - more than a phone can
     // draw smoothly; down here the nearest of it hides the rest, and it is the promenade's evening
@@ -801,6 +806,7 @@ export class Prologue {
       hand: 0.25,
     });
     yield 26.6;
+    if (I && I.stream) I.stream.calm = false;
     // the city, his: no words, no task, for forty seconds
     this.film(false);
     let t = 0;

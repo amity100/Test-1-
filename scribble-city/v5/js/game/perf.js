@@ -46,6 +46,8 @@ const PASS_HE = { shadow: 'צל', reflection: 'השתקפות', main: 'ציור'
 // points and draws cost by themselves); city: without the people and the cars
 const DIAG = [['all', 0], ['noPens', 1], ['noSun', 2], ['noLamps', 4], ['noHaze', 8], ['flat', 16], ['tiny', 0], ['city', 0]];
 const DIAG_HE = { all: 'כמו שהוא', noPens: 'בלי העטים', noSun: 'בלי הצל', noLamps: 'בלי הפנסים', noHaze: 'בלי הערפל', flat: 'רק צבע', tiny: 'ב־1/16 מהפיקסלים', city: 'בלי אנשים ומכוניות' };
+// the steps of getting ready (main.js mark), as they are shown with the numbers
+const LOAD_HE = { modules: 'הקוד', 'before city': 'הכנות', city: 'העיר', mainland: 'היבשה', interiors: 'פנים החנויות', 'shadow bake': 'אפיית הצל', 'static shadow': 'הצל הקבוע', occlusion: 'הסתרה', 'walls, waters': 'קירות ומים', solid: 'מוצקים', nav: 'דרכים', precompile: 'הכנת העטים', 'game init': 'המשחק', 'shaders ready': 'העטים בכרטיס' };
 // (until each part was timed three times, no longer than a minute and a half)
 const DIAG_N = 3;
 const DIAG_MS = 90000;
@@ -572,8 +574,19 @@ export class Perf {
       `<span class="perf-sys">${top}</span>`,
       `<span class="perf-sys">${g.pipe.software ? 'בלי כרטיס מסך (תוכנה): ' : ''}${g.pipe.gpuName || ''}</span>`,
       this.shaderLine(),
+      this.loadLine(),
       g.tele && g.tele.line() ? `<span class="perf-sys">${g.tele.line()}</span>` : '',
     ].filter(Boolean).join('<br>');
+  }
+
+  // how long the game took to get ready on this device, step by step (main.js mark): the steps of
+  // a tenth of a second or more, in seconds
+  loadLine() {
+    const g = this.game;
+    const L = g.loadSteps;
+    if (!L || !L.length) return '';
+    const parts = L.filter(([, ms]) => ms >= 100).map(([k, ms]) => `${LOAD_HE[k] || k} ${(ms / 1000).toFixed(1)}`);
+    return `<span class="perf-sys">טעינה ${(g.loadTotal / 1000).toFixed(1)} שנ׳: ${parts.join(' · ')}</span>`;
   }
 
   // ---------------------------------------------------------------- the test route

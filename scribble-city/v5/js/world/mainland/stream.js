@@ -152,6 +152,9 @@ export class Streamer {
     // the slice of time: more when the cell is close to you and not there
     const near = this.distTo(this.job.cell, x, z);
     let slice = near < 70 ? this.rush * 1.6 : near < 140 ? this.rush : this.budget;
+    // (calm: nobody is near enough to see it come - a film's camera far off over the city - so no
+    // rushing: its ordinary share of a frame, whatever is missing)
+    if (this.calm) slice = Math.min(slice, this.budget);
     if (this.adaptive) {
       const gap = lastAt ? t0 - lastAt : 0;
       if (gap > 45 && near > 40) slice = Math.min(slice, near < 140 ? this.rush * 0.5 : this.budget * 0.5);

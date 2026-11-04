@@ -93,6 +93,15 @@ export class Pursuer {
     while (da < -Math.PI) da += Math.PI * 2;
     // how far behind him along the trail they are
     const gap = Math.hypot(this.prey.pos.x - v.pos.x, this.prey.pos.z - v.pos.z) + Math.abs(this.prey.pos.y - v.pos.y) * 2;
+    // (fallen behind on a long straight: their engine the stronger the further back they are - up to a
+    // third again - so they are on his heels again by the next turn; never past him: near him the
+    // throttle below holds them off)
+    const base = this.baseQ || (this.baseQ = v.q);
+    const qk = gap > 18 ? Math.min(1.35, 1 + (gap - 18) / 60) : 1;
+    if (Math.abs(qk - (this.qk || 1)) > 0.02 || (qk === 1 && this.qk !== 1)) {
+      this.qk = qk;
+      v.q = qk === 1 ? base : { ...base, speed: base.speed * qk, accel: base.accel * qk };
+    }
     const preySpeed = Math.abs(this.prey.speed || 0);
     let throttle = 1;
     if (gap < this.keep) throttle = gap < this.keep * 0.6 ? -0.6 : 0.15 + (preySpeed > 4 ? 0.5 : 0);
@@ -119,7 +128,10 @@ export class Pursuer {
   }
 
   dispose() {
-    if (this.car) this.car.ai = null;
+    if (this.car) {
+      this.car.ai = null;
+      if (this.baseQ) this.car.q = this.baseQ;
+    }
     this.car = null;
   }
 }

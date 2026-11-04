@@ -40,7 +40,9 @@ window.addEventListener('unhandledrejection', (e) => fatal(e.reason));
 
 // (how long each step of getting ready takes: logged together when the game is ready - the load's
 // own numbers, to see where its time goes on any computer)
-const loadT = [];
+// (the first: the page's code itself, every module of it, fetched and read - from the page's start
+// until this one runs)
+const loadT = [['modules', Math.round(performance.now())]];
 let loadAt = performance.now();
 function mark(name) {
   const now = performance.now();
@@ -329,6 +331,9 @@ async function boot() {
   await shadersReady(renderer, [...new Set(progs)]);
   mark('shaders ready');
   if (catalog) warmCatalog(game, catalog);
+  // (and shown with the frame's numbers, F3: game/perf.js - the whole of it from the page's start)
+  game.loadSteps = loadT;
+  game.loadTotal = Math.round(performance.now());
   setStatus('');
   const startBtn = document.getElementById('start-btn');
   startBtn.disabled = false;

@@ -1723,7 +1723,9 @@ export class Civilians {
     this.carsNear(p);
     this.t -= dt;
     if (this.t <= 0) {
-      this.t = 1;
+      // (four times a second, a quarter of the people each time: the same numbers, and no frame of
+      // its own every second that makes a dozen of them at once - the steady pace's own beat)
+      this.t = 0.25;
       // a busy city: more people on the sidewalks around you (fewer late at night: game/rhythm.js)
       const R = game.rhythm;
       const max = Math.round((game.touch ? 18 : 40) * (R ? R.people : 1));
@@ -1764,10 +1766,12 @@ export class Civilians {
           return !c.gone;
         });
       }
-      const first = !this.filled;
+      // (the first second fills the streets: its four turns have a quarter of the sixty each)
+      this.fillTicks = (this.fillTicks || 0) + 1;
+      const first = this.fillTicks <= 4;
       this.filled = true;
       // (v5, ROADMAP 11.18: a street fills up again quickly when you come into it)
-      let tries = first ? 60 : 14;
+      let tries = first ? 15 : 4;
       // the walks that pass near you (on the mainland: of the blocks built near you)
       const ml = game.world.mainland;
       const built = ml && ml.blocks ? new Set(ml.blocks.keys()) : null;
