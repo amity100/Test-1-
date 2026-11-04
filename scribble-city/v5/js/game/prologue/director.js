@@ -2522,7 +2522,9 @@ export class Prologue {
     // (the car's left, Danny's side: (fz, -fx))
     const at = (side, along, up) => v3(car.pos.x + fx * along + fz * side, car.pos.y + up, car.pos.z + fz * along - fx * side);
     this.shot({
-      path: [this.shots.lastPos.clone(), at(3.0, -0.4, 1.9), at(2.6, -5.2, 4.2), gp],
+      // (up and back more than out to the side: three metres out it went through whatever stood
+      // beside the car - the stairs' tower, a wall - ROADMAP 18.9)
+      path: [this.shots.lastPos.clone(), at(1.0, -1.2, 2.3), at(0.7, -5.2, 4.0), gp],
       lookPath: [this.shots.lastLook.clone(), at(0.2, 4, 1.2), at(0, 16, 0.8), gl],
       fov: this.shots.lastFov,
       fovTo: rig.baseFov,
@@ -2812,7 +2814,15 @@ export class Prologue {
     const page = this.lilyPage();
     page.hold(L.fig, null, 'read');
     L.fig.lookAt = page.at;
-    this.shot({ from: this.inCar(car, 0, 1.24, 0.62), look: this.cabin(car, 0.85), fov: 58, dur: 6, hand: 0.25 });
+    // (the two faces and the page under them: looking between their heads, a little low)
+    const fD = this.faceOf(P);
+    const fL = this.faceOf(L);
+    const mid = () => {
+      const a = typeof fD === 'function' ? fD() : fD;
+      const b = typeof fL === 'function' ? fL() : fL;
+      return v3((a.x + b.x) / 2, (a.y + b.y) / 2 - 0.14, (a.z + b.z) / 2);
+    };
+    this.shot({ from: this.inCar(car, 0, 1.24, 0.62), look: mid, fov: 60, dur: 6, hand: 0.25 });
     yield 1.4;
     yield* this.say('L18', L.fig, 0.4);
     yield 0.6;
