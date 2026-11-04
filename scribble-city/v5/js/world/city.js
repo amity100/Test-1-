@@ -73,6 +73,8 @@ export function buildCity(scene, o = {}) {
     lightCount: () => lightList().length,
   };
   if (o.rooms !== false) ctx.room = (f, spec) => buildRoom(ctx, f, spec);
+  // (v5, ROADMAP 18: the block that is 5th Street Garage's left empty for it - world/blocks.js VACANT)
+  if (o.vacate) ctx.vacate = true;
   // (ROADMAP 5.1, not with ?classic: the roofs to walk on, gathered as the buildings go up)
   if (o.roofs) ctx.roofs = { buildings: [], escapes: [], backs: [], cur: null };
   // (ROADMAP 8.3, not with ?classic: the shop windows' panes, gathered as the fronts go up)

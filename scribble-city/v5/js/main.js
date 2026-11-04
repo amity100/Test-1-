@@ -195,7 +195,10 @@ async function boot() {
     buildPanes(ctx);
   };
   mark('before city');
-  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false });
+  // (the block 5th Street Garage stands on left empty for it: not in the lab, where the prologue's
+  // pieces are not built - game/prologue/carpark.js)
+  const vacate = !params.has('lab') && !window.SC_LAB;
+  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false, vacate });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
   mark('city');
   // (v5, ROADMAP 11.17) the mainland across the bay: built near you as you go (its far bodies
