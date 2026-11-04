@@ -2016,6 +2016,8 @@ export class Prologue {
     this.shot({ from: [86, 3.2, 247], to: [88, 3.0, 245.5], look: [104, 1.5, 243], lookTo: [112, 5, 243], fov: 50, dur: 3.8, hand: 0.4 });
     yield 3.4;
     // Danny, at the two guys by the railing
+    // (ROADMAP 18.9: the camera on his left, the guys' on their right - his right arm, waving and pointing
+    // at where the wheel was, no longer coming at the lens across the picture)
     const g1 = this.cast.g1;
     const g2 = this.cast.g2;
     const M = this.cast.man;
@@ -2027,11 +2029,11 @@ export class Prologue {
     this.feel(g1.fig, 'joy', 30);
     this.feel(g2.fig, 'joy', 30);
     // (him tilted one way, them the other: they do not stand in the same world)
-    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.7, roll: 0.07 });
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.7, roll: 0.07 });
     yield* this.say('D06', P.fig, 0.15);
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2, hand: 0.4, roll: -0.05 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2, hand: 0.4, roll: -0.05 });
     yield* this.say('G01', g1.fig, 0.15);
-    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2.2, hand: 0.7, roll: 0.08 });
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.2, hand: 0.7, roll: 0.08 });
     P.fig.reachR = v3(WHEEL.x, 20, WHEEL.z);
     const d07 = this.say('D07', P.fig, 0.15);
     const d07w = d07.next().value || 0;
@@ -2048,12 +2050,12 @@ export class Prologue {
     // (they look where he points, and back at him, smiling)
     g1.fig.lookAt = P.fig.j.headC;
     g2.fig.lookAt = P.fig.j.headC;
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
     yield* this.say('G02', g1.fig, 0.2);
     // (him: closer as he says it)
     {
-      const A = this.single(P, g1, { dist: 1.6, side: 0.4, up: -0.1 });
-      const B = this.single(P, g1, { dist: 1.15, side: 0.34, up: -0.08 });
+      const A = this.single(P, g1, { dist: 1.6, side: -0.4, up: -0.1 });
+      const B = this.single(P, g1, { dist: 1.15, side: -0.34, up: -0.08 });
       this.shot({ from: A.from, to: B.from, look: A.look, fov: 34, dur: 6.8, ease: 'lin', hand: 0.8, roll: 0.1 });
     }
     yield* this.say('D08', P.fig, 0.15);
@@ -2065,15 +2067,15 @@ export class Prologue {
       const dz = mz - P.pos.z;
       const d = Math.hypot(dx, dz) || 1;
       // (far enough back for the two of them, heads and all: past his shoulder, off to his side)
-      this.shot({ from: [P.pos.x - (dx / d) * 0.35 - (dz / d) * 1.05, 1.62, P.pos.z - (dz / d) * 0.35 + (dx / d) * 1.05], look: [mx, 1.5, mz], fov: 40, dur: 4, hand: 0.5, roll: -0.07 });
+      this.shot({ from: [P.pos.x - (dx / d) * 0.35 + (dz / d) * 1.05, 1.62, P.pos.z - (dz / d) * 0.35 - (dx / d) * 1.05], look: [mx, 1.5, mz], fov: 40, dur: 4, hand: 0.5, roll: -0.07 });
       this.faceTo(g1, P.pos.x, P.pos.z);
       this.faceTo(g2, P.pos.x, P.pos.z);
     }
     yield* this.say('G03', g1.fig, 0.3);
-    this.shot({ ...this.single(P, g1, { dist: 1.3, side: 0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5, roll: 0.12 });
+    this.shot({ ...this.single(P, g1, { dist: 1.3, side: -0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5, roll: 0.12 });
     yield* this.say('D09', P.fig, 0.2);
     this.feel(g1.fig, 'surprised', 2);
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
     yield* this.say('G04', g1.fig, 0.4);
     // the other man
     this.putDanny(MAN.x - 1.1, MAN.z - 1.2, Math.atan2(1.1, 1.2));
