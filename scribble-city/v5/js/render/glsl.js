@@ -76,6 +76,8 @@ uniform float uDepthOnly;
 // each one - 1 the pens, 2 the sun's shadow, 4 the lamps, 8 the haze, 16 all but the colour, 32 the
 // mirror image in the street. Always 0 but then)
 uniform float uProbe;
+// (ROADMAP 18.9: how busy the pens are over everything - render/materials.js)
+uniform float uPenDens;
 uniform float uPxK;
 uniform float uMipBias;
 uniform float uPRo;
@@ -1007,6 +1009,8 @@ uniform vec4 uMatBand;   // (width of the band of light, paper ahead of it 0..1,
 // has been, in the thing's own upright plane - uEraseMat takes the world there (u, v in 0..1)
 uniform sampler2D uEraseMask;
 uniform mat4 uEraseMat;
+// (ROADMAP 18.9) where the eraser is rubbing now (its mask's u, v) and how far it reaches there
+uniform vec3 uEraserAt;
 #endif
 
 // raindrops falling into a puddle: a ring spreading from each one (xy: which way it pushes the
@@ -1108,6 +1112,12 @@ void main() {
     float eg = n2(vWP.xy * 5.3 + vWP.z * 2.1) * 0.65 + n2(vWP.zy * 15.0 + 7.0) * 0.35;
     if (em > 0.74 + eg * 0.3) discard;
     mPaper = max(mPaper, smoothstep(0.03, 0.26 + eg * 0.18, em));
+    // (ROADMAP 18.9: and under the eraser as it rubs, the paper already coming through, rubbed in
+    // streaks - where it is going on is plain to see)
+    if (uEraserAt.z > 0.0) {
+      float ed = distance(eq.xy, uEraserAt.xy) / uEraserAt.z;
+      mPaper = max(mPaper, (1.0 - smoothstep(0.45, 1.0, ed)) * (0.7 + 0.3 * eg));
+    }
   }
 #endif
   bool inside = uIndoor > 0.5 || vX.z > 0.5;
@@ -1366,7 +1376,7 @@ void main() {
   em *= 1.0 - vBurnt;
 #endif
   float ang = uAng;
-  float dens = uDensity;
+  float dens = uDensity * uPenDens;
   float wash = uWash;
 #ifdef PORTRAIT
   if (vPart < 0.5 || vPart > 3.5) {
@@ -1619,7 +1629,8 @@ void main() {
     cl = max(cl, smoothstep(0.62 - 0.4 * uOvercast, 0.8 - 0.36 * uOvercast, cv) * smoothstep(0.0, 0.05, el) * uOvercast);
   }
   // the page shows between the strokes, tinted by the sky
-  vec3 col = mix(uPaper * 0.97, sky, 0.62);
+  // (the pens fewer - uPenDens: the sky itself, laid on, less of the page between)
+  vec3 col = mix(uPaper * 0.97, sky, mix(0.97, 0.62, clamp(uPenDens, 0.0, 1.0)));
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
   // (the graphics card's own test: the sky's pens left out, game/perf.js)
   if ((int(uProbe + 0.5) & 1) == 0) {
@@ -1629,19 +1640,19 @@ void main() {
     vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
     pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
     pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
-    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9));
+    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9 * uPenDens));
     // B: across it, looser
     gZig = 0.38;
     vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
     vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
     pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
-    col = mix(col, pb, B.x * step(fract(B.y * 7.13), 0.62 + 0.3 * cl));
+    col = mix(col, pb, B.x * step(fract(B.y * 7.13), (0.62 + 0.3 * cl) * uPenDens));
     if (uQuality > 0.5) {
       // C: a few steep accents in a darker pen
       gZig = 0.18;
       vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
       vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
-      col = mix(col, pc, C.x * step(fract(C.y * 7.13), 0.22 + 0.3 * cl));
+      col = mix(col, pc, C.x * step(fract(C.y * 7.13), (0.22 + 0.3 * cl) * uPenDens));
     }
   }
   gZig = 0.0;

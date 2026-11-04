@@ -59,11 +59,20 @@ const CSS = `
 #pl-vig { position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s; background: radial-gradient(ellipse 82% 78% at 50% 50%, rgba(10,7,22,0) 50%, rgba(10,7,22,0.42) 80%, rgba(10,7,22,0.74) 100%); }
 #pl-vig.on { opacity: 1; }
 #pl-draw canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-#pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s; letter-spacing: 0.02em; }
-#pl-hint.on { opacity: 1; }
+#pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%) translateY(-8px); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s, transform 0.4s; letter-spacing: 0.02em; }
+#pl-hint.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 #pl-hint small { display: block; font-size: 0.55em; font-weight: 600; opacity: 0.85; margin-top: 6px; direction: rtl; }
-body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue #btn-draw, body.prologue #btn-photo { display: none !important; }
+/* (ROADMAP 18.9: the game showing the player round - a card: what to do, and how, its keys as keys) */
+#pl-hint.card { background: linear-gradient(180deg, rgba(24,16,40,0.86), rgba(14,10,26,0.86)); border: 2px solid rgba(255,210,63,0.75); border-radius: 16px; padding: 14px 22px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); text-shadow: none; font-size: clamp(17px, 2.2vw, 26px); min-width: min(78vw, 420px); }
+#pl-hint.card .tag { display: block; font-size: 0.48em; font-weight: 800; letter-spacing: 0.18em; color: #ffd23f; margin-bottom: 4px; }
+#pl-hint.card small { font-size: 0.62em; line-height: 1.7; opacity: 0.95; margin-top: 8px; }
+#pl-hint kbd { display: inline-block; min-width: 1.6em; padding: 1px 7px; margin: 0 2px; border-radius: 6px; background: #fff4e0; color: #1a1426; font: 800 0.95em "Rubik", sans-serif; box-shadow: 0 3px 0 #b8a98e; direction: ltr; }
+body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue-film #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }
+body.prologue-film #gear-bar, body.prologue-film #gear-rw, body.prologue-film #gear-sea { display: none !important; }
+/* (ROADMAP 18.9: while the prologue is told, the HUD only the map and the task - no money, no clock,
+   no bars: one film, the player's part of it too) */
+body.prologue #topbar, body.prologue #money, body.prologue #clock, body.prologue #district, body.prologue #ink, body.prologue #wanted { display: none !important; }
 `;
 
 // the speakers' names and colours over their words
@@ -213,6 +222,13 @@ export class PrologueUI {
     this.skipEl.querySelector('.ring').style.setProperty('--k', `${Math.round(k * 100)}%`);
   }
 
+  // (ROADMAP 18.9) a card of the game's own advice: what to do (in English, as the objectives),
+  // and how (Hebrew, its keys as keys); null: away
+  card(title, how) {
+    this.hintEl.classList.toggle('card', !!title);
+    this.hint(title ? `<span class="tag">HOW TO PLAY</span>${title}<small>${how}</small>` : null);
+  }
+
   hint(html) {
     if (!html) this.hintEl.classList.remove('on');
     else {
@@ -237,10 +253,13 @@ export class PrologueUI {
 // Lily's drawing in her sketchbook: the wheel, its gondolas with the kids in them waving, the sun,
 // the sea - in crayon and felt pen, the way a nine-year-old who draws a lot draws (ruled paper, her
 // name in the corner)
-export function lilyDrawing() {
+// (ROADMAP 18.9) and drawn a little at a time: k of it (0 the page alone .. 1 all of it), into
+// canvas (a new one if none) - the same strokes in the same order, so that a page drawn at k and
+// then at more is the same page with more on it
+export function lilyDrawing(k = 1, canvas = null) {
   const W = 1100;
   const H = 820;
-  const c = document.createElement('canvas');
+  const c = canvas || document.createElement('canvas');
   c.width = W;
   c.height = H;
   const g = c.getContext('2d');
@@ -271,8 +290,9 @@ export function lilyDrawing() {
     g.arc(x, 22, 9, 0, Math.PI * 2);
     g.fill();
   }
-  // a crayon stroke: wobbly, waxy, a few passes
-  const crayon = (pts, col, w = 7, passes = 3) => {
+  // (each stroke of hers a step; only the first k of them drawn)
+  const steps = [];
+  const crayonNow = (pts, col, w = 7, passes = 3) => {
     for (let p = 0; p < passes; p++) {
       g.strokeStyle = col;
       g.globalAlpha = p ? 0.45 : 0.85;
@@ -290,23 +310,67 @@ export function lilyDrawing() {
     }
     g.globalAlpha = 1;
   };
-  const scribbleFill = (cx, cy, r, col, w = 5) => {
-    g.save();
-    g.beginPath();
-    g.arc(cx, cy, r, 0, Math.PI * 2);
-    g.clip();
-    g.strokeStyle = col;
-    g.globalAlpha = 0.6;
-    g.lineWidth = w;
-    for (let i = -r * 2; i < r * 2; i += w * 1.3) {
+  // a crayon stroke: wobbly, waxy, a few passes
+  const crayon = (pts, col, w = 7, passes = 3) => steps.push(() => crayonNow(pts, col, w, passes));
+  const scribbleFill = (cx, cy, r, col, w = 5) =>
+    steps.push(() => {
+      g.save();
       g.beginPath();
-      g.moveTo(cx - r, cy + i);
-      g.lineTo(cx + r, cy + i - r);
-      g.stroke();
-    }
-    g.restore();
-    g.globalAlpha = 1;
-  };
+      g.arc(cx, cy, r, 0, Math.PI * 2);
+      g.clip();
+      g.strokeStyle = col;
+      g.globalAlpha = 0.6;
+      g.lineWidth = w;
+      for (let i = -r * 2; i < r * 2; i += w * 1.3) {
+        g.beginPath();
+        g.moveTo(cx - r, cy + i);
+        g.lineTo(cx + r, cy + i - r);
+        g.stroke();
+      }
+      g.restore();
+      g.globalAlpha = 1;
+    });
+  // the wheel first (what she looks at), then its gondolas and who is in them, then the sky, the
+  // sea and the pier round it, and last her name
+  const cx = 480;
+  const cy = 360;
+  const R = 220;
+  crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * R, cy + Math.sin((i / 40) * Math.PI * 2) * R]), '#e8457c', 9);
+  crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * (R - 18), cy + Math.sin((i / 40) * Math.PI * 2) * (R - 18)]), '#7a6ad8', 5, 2);
+  for (let q = 0; q < 12; q++) {
+    const a = (q / 12) * Math.PI * 2;
+    crayon([[cx, cy], [cx + Math.cos(a) * (R - 16), cy + Math.sin(a) * (R - 16)]], '#5c6ad0', 4, 2);
+  }
+  crayon([[cx - 10, cy], [cx - 150, 600]], '#6a6a7a', 10);
+  crayon([[cx + 10, cy], [cx + 150, 600]], '#6a6a7a', 10);
+  scribbleFill(cx, cy, 26, '#ffd23f', 6);
+  // the gondolas, each with somebody waving in it
+  const GC = ['#ff5a7a', '#3fc6c0', '#ffc53a', '#9b6ae0', '#5cc45a', '#ff8a3a'];
+  for (let q = 0; q < 12; q++) {
+    const a = (q / 12) * Math.PI * 2 + 0.15;
+    const x = cx + Math.cos(a) * R;
+    const y = cy + Math.sin(a) * R + 26;
+    const col = GC[q % GC.length];
+    steps.push(() => {
+      g.fillStyle = col;
+      g.globalAlpha = 0.8;
+      g.fillRect(x - 26, y - 14, 52, 32);
+      g.globalAlpha = 1;
+      crayonNow([[x - 28, y - 16], [x + 28, y - 16], [x + 28, y + 18], [x - 28, y + 18], [x - 28, y - 16]], '#2a2440', 3.5, 1);
+      crayonNow([[x, y - 16], [x, y - 28]], '#2a2440', 3, 1);
+      // a little head, an arm up
+      g.fillStyle = '#f2c79a';
+      g.beginPath();
+      g.arc(x - 6, y - 4, 8, 0, Math.PI * 2);
+      g.fill();
+      crayonNow([[x - 6, y - 4], [x + 8, y - 18]], '#f2c79a', 3.5, 1);
+      if (q % 3 === 0) {
+        g.beginPath();
+        g.arc(x + 12, y - 2, 6, 0, Math.PI * 2);
+        g.fill();
+      }
+    });
+  }
   // the sky: orange and pink bands, the sun going down
   for (let i = 0; i < 6; i++) {
     const y = 140 + i * 38;
@@ -322,50 +386,16 @@ export function lilyDrawing() {
   // the pier
   crayon([[100, 600], [1080, 600]], '#8a5a3c', 14);
   for (let x = 140; x < 1080; x += 70) crayon([[x, 600], [x + 4, 690]], '#7a4a2c', 7);
-  // the wheel: the rim, the spokes, the legs
-  const cx = 480;
-  const cy = 360;
-  const R = 220;
-  crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * R, cy + Math.sin((i / 40) * Math.PI * 2) * R]), '#e8457c', 9);
-  crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * (R - 18), cy + Math.sin((i / 40) * Math.PI * 2) * (R - 18)]), '#7a6ad8', 5, 2);
-  for (let k = 0; k < 12; k++) {
-    const a = (k / 12) * Math.PI * 2;
-    crayon([[cx, cy], [cx + Math.cos(a) * (R - 16), cy + Math.sin(a) * (R - 16)]], '#5c6ad0', 4, 2);
-  }
-  crayon([[cx - 10, cy], [cx - 150, 600]], '#6a6a7a', 10);
-  crayon([[cx + 10, cy], [cx + 150, 600]], '#6a6a7a', 10);
-  scribbleFill(cx, cy, 26, '#ffd23f', 6);
-  // the gondolas, each with somebody waving in it
-  const GC = ['#ff5a7a', '#3fc6c0', '#ffc53a', '#9b6ae0', '#5cc45a', '#ff8a3a'];
-  for (let k = 0; k < 12; k++) {
-    const a = (k / 12) * Math.PI * 2 + 0.15;
-    const x = cx + Math.cos(a) * R;
-    const y = cy + Math.sin(a) * R + 26;
-    const col = GC[k % GC.length];
-    g.fillStyle = col;
-    g.globalAlpha = 0.8;
-    g.fillRect(x - 26, y - 14, 52, 32);
-    g.globalAlpha = 1;
-    crayon([[x - 28, y - 16], [x + 28, y - 16], [x + 28, y + 18], [x - 28, y + 18], [x - 28, y - 16]], '#2a2440', 3.5, 1);
-    crayon([[x, y - 16], [x, y - 28]], '#2a2440', 3, 1);
-    // a little head, an arm up
-    g.fillStyle = '#f2c79a';
-    g.beginPath();
-    g.arc(x - 6, y - 4, 8, 0, Math.PI * 2);
-    g.fill();
-    crayon([[x - 6, y - 4], [x + 8, y - 18]], '#f2c79a', 3.5, 1);
-    if (k % 3 === 0) {
-      g.beginPath();
-      g.arc(x + 12, y - 2, 6, 0, Math.PI * 2);
-      g.fill();
-    }
-  }
   // her name, and a heart
-  g.fillStyle = '#7a4ad0';
-  g.font = '700 46px "Caveat", "Permanent Marker", cursive';
-  g.fillText('Lily ♥', 870, 770);
-  g.font = '600 30px "Caveat", cursive';
-  g.fillStyle = '#c0406a';
-  g.fillText('the big wheel!!', 130, 95);
+  steps.push(() => {
+    g.fillStyle = '#7a4ad0';
+    g.font = '700 46px "Caveat", "Permanent Marker", cursive';
+    g.fillText('Lily ♥', 870, 770);
+    g.font = '600 30px "Caveat", cursive';
+    g.fillStyle = '#c0406a';
+    g.fillText('the big wheel!!', 130, 95);
+  });
+  const n = Math.round(Math.max(0, Math.min(1, k)) * steps.length);
+  for (let i = 0; i < n; i++) steps[i]();
   return c;
 }

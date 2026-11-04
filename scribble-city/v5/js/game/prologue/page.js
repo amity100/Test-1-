@@ -49,11 +49,23 @@ export class HeldPage {
     game.scene.add(this.grp);
     this.mats = [front, paper];
     this.tex = tex;
+    this.canvas = canvas;
+    this.drawn = 1;
     this.fig = null;
     this.to = null;
     this.mode = 'show';
     // (where its middle is: for a camera to look at, a hand to go to)
     this.at = new THREE.Vector3();
+  }
+
+  // (ROADMAP 18.9) her drawing as far as she has got with it: k of it (game/prologue/ui.js
+  // lilyDrawing), drawn again only when there is more of it
+  draw(fn, k) {
+    const q = Math.round(Math.max(0, Math.min(1, k)) * 60) / 60;
+    if (q === this.drawn) return;
+    this.drawn = q;
+    fn(q, this.canvas);
+    this.tex.needsUpdate = true;
   }
 
   // held up by fig, its picture towards `to` (a point, or a function giving one); mode 'show' (held

@@ -639,10 +639,13 @@ export class Audio {
         break;
       // (v5, ROADMAP 18) a giant eraser's stroke on paper: a dry, deep rub, a little higher on the way
       // back (the prologue's wheel, rubbed out)
+      // (ROADMAP 18.9: fuller - the rubber's squeak on the paper over it, and the paper's own low drag -
+      // so that it is heard over the evening as what it is)
       case 'rub':
-        this.hiss(0.13, 0.3 * v, 900 + Math.random() * 500, 0.9, 'bandpass', 0, 2600 + Math.random() * 600);
-        this.hiss(0.11, 0.2 * v, 260, 0.8, 'lowpass');
-        this.hiss(0.05, 0.08 * v, 5200, 1.4, 'highpass', 0.04);
+        this.hiss(0.16, 0.42 * v, 900 + Math.random() * 500, 0.9, 'bandpass', 0, 2600 + Math.random() * 600);
+        this.hiss(0.14, 0.3 * v, 240, 0.8, 'lowpass');
+        this.hiss(0.06, 0.1 * v, 5200, 1.4, 'highpass', 0.05);
+        this.tone('triangle', 1700 + Math.random() * 500, 1500, 0.07, 0.025 * v, 0.03);
         break;
       // (ROADMAP 18) a handgun across a car park: the crack, its thump, the echo off the concrete
       case 'pistol':

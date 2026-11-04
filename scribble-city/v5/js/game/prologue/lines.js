@@ -23,6 +23,10 @@ export const LINES = {
   K01: { who: "KB", en: "Mom! Mom, look at me!", he: "אמא! אמא, תראי אותי!", dur: 2.33 },
   K02: { who: "KG", en: "Dad! Look how high we are!", he: "אבא! תראה כמה אנחנו גבוהים!", dur: 2.19 },
   L08: { who: "L", en: "Dad...?", he: "אבא...?", dur: 0.57 },
+  // (ROADMAP 18.9: said in the player's own hands, the moment it is gone - not voiced yet: the open
+  // voice model's weights could not be fetched here; the subtitles meanwhile)
+  L22: { who: "L", en: "What?! The wheel... it's gone! What happened?!", he: "מה?! הגלגל... הוא נעלם! מה קרה?!", dur: 2.7 },
+  D29: { who: "D", en: "What the f-... Was it... erased? What the hell?", he: "מה לעז... זה... נמחק? מה לעזאזל?", dur: 3.4 },
   D06: { who: "D", en: "Hey! Hey, you two! What the hell just happened?!", he: "היי! היי, אתם! מה לעזאזל קרה פה?!", dur: 4.13 },
   G01: { who: "G", en: "What?", he: "מה?", dur: 0.47 },
   D07: { who: "D", en: "The Ferris wheel! Did you see that?! It just vanished!", he: "הגלגל הענק! ראיתם את זה?! הוא פשוט נעלם!", dur: 5.79 },

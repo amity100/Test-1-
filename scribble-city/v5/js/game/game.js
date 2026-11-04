@@ -918,6 +918,9 @@ export class Game {
       tele.frameBegin();
     }
     this.pipe.render(sc);
+    // (ROADMAP 18.9: the film's comic page takes the frame just drawn into its live panel)
+    const C = this.prologue && this.prologue.comic;
+    if (C && C.pg) C.grab(this.renderer.domElement);
     if (tele) tele.frameEnd();
     shared.uFogDensity.value = fog;
   }
@@ -1372,6 +1375,8 @@ export class Game {
         }
       }
     }
+    // (v5, ROADMAP 18.9: out of the prologue's film, the game's camera eased in from its last picture)
+    if (this.prologue && this.prologue.blend) this.prologue.blendCam(this.realDt);
     // (ROADMAP 16.1) the camera brought in close behind you in a narrow place (game/camera.js): you
     // out of its way - its picture would be the back of your head
     const hc = player.fig && player.fig.j && player.fig.j.headC;

@@ -19,7 +19,7 @@ export const ACTS = {
   LG1: { mood: 'laugh', beats: [[0, 1, 'laugh']] },
   L02: { mood: 'tease', beats: [[0, 1, 'hip']], nod: true, hear: 'smirk' },
   L03: { mood: 'surprised', beats: [[0, 0.75, 'pointUp']] },
-  D02: { mood: 'smirk', beats: [[0.05, 0.45, 'chin'], [0.5, 1, 'open']], nod: true, hear: 'surprised' },
+  D02: { mood: 'smirk', beats: [[0.05, 0.45, 'weigh'], [0.5, 1, 'open']], nod: true, hear: 'surprised' },
   L04: { mood: 'surprised', beats: [[0.15, 0.9, 'shrug']] },
   D03: { mood: 'smirk', beats: [[0.25, 0.85, 'beat']], nod: true, hear: 'laugh' },
   L05: { mood: 'laugh', beats: [[0, 1, 'laugh']] },
@@ -29,10 +29,12 @@ export const ACTS = {
   L21: { mood: 'pleading', beats: [[0.1, 1, 'plead']], nod: true, hear: 'tender' },
   D27: { mood: 'tender', beats: [[0.15, 0.85, 'open']], nod: true, hear: 'joy' },
   L06: { mood: 'joy' },
-  D04: { mood: 'smirk', beats: [[0.2, 0.8, 'chin']], hear: 'surprised' },
+  D04: { mood: 'smirk', beats: [[0.2, 0.8, 'weigh']], hear: 'surprised' },
   L07: { mood: 'surprised', beats: [[0, 1, 'hip']], shake: true, hear: 'laugh' },
   D05: { mood: 'laugh', beats: [[0, 0.45, 'surrender'], [0.5, 1, 'open', 'joy']], hear: 'joy' },
   L08: { mood: 'shock' },
+  L22: { mood: 'shock', beats: [[0.1, 1, 'point']] },
+  D29: { mood: 'shock', beats: [[0, 0.35, 'open'], [0.4, 1, 'point']], shake: true },
   // ---- 4. nobody remembers
   D06: { mood: 'shout', beats: [[0, 0.45, 'wave'], [0.45, 1, 'point']] },
   G01: { mood: 'surprised', beats: [[0, 1, 'shrug']] },
@@ -100,6 +102,14 @@ function gestureX(kind, side, t, ph, out) {
     case 'surrender': {
       const k = Math.min(1, t * 4);
       out.set(side * (0.22 + 0.06 * k), 1.22 + 0.24 * k, 0.26);
+      return true;
+    }
+    // (ROADMAP 18.9: weighing it up - one palm up and out at the waist, tipping; not a hand to the
+    // chin, which from the front reads as a hand over the face)
+    case 'weigh': {
+      if (side < 0) return false;
+      const k = Math.sin(t * 4 + ph);
+      out.set(0.25 + 0.03 * k, 1.07 + 0.04 * k, 0.32);
       return true;
     }
     // (a hand on the heart)

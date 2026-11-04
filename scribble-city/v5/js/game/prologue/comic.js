@@ -7,6 +7,8 @@ import * as THREE from 'three';
 // held a moment, gone. Drawn over the film on a sheet of its own, under the words and the bars.
 
 const _v = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _f = new THREE.Vector3();
 const WORD_FONT = '"Permanent Marker", "Rubik", sans-serif';
 
 export class Comic {
@@ -69,20 +71,273 @@ export class Comic {
     }
   }
 
+  // (ROADMAP 18.9) a comic's page in the film, at its peak: the picture cut into panels on a sheet of
+  // paper between the bars - each panel the film itself as it is drawn (its camera, cropped to the
+  // panel) while it is the one being drawn, held still once the next one comes. panels: their corners
+  // ([x, y] of the page between the bars, 0..1), clockwise from the top left
+  page(panels) {
+    this.pg = { panels: panels.map((q) => ({ pts: q, cv: null, on: false, t: 0, u: 0.5, v: 0.5, zoom: 1 })), t: 0, out: -1 };
+  }
+
+  // panel i the live one from now (o.u, o.v: the middle of its crop in the film's picture, 0..1; o.zoom:
+  // more than 1 nearer)
+  panel(i, o = {}) {
+    const pg = this.pg;
+    if (!pg || !pg.panels[i]) return;
+    const q = pg.panels[i];
+    q.on = true;
+    q.t = 0;
+    q.u = o.u !== undefined ? o.u : 0.5;
+    q.v = o.v !== undefined ? o.v : 0.5;
+    q.zoom = o.zoom || 1;
+    pg.cur = i;
+  }
+
+  // (ROADMAP 18.9) the eraser's own marks as it rubs - nothing of an eraser seen, only what it does:
+  // quick strokes of paper-white back and forth along its rubbing, round where it is, a puff of its
+  // dust - drawn anew twelve times a second, as an animated film's effects are. src: game/prologue/
+  // set.js eraser ({ pos, dir, along, on, w }); null: none
+  rub(src) {
+    this.rubSrc = src;
+    this.rubKey = -1;
+  }
+
+  drawRub(W, H) {
+    const X = this.rubSrc;
+    // (only where the camera looks at it: never behind it, nor off at the edge of the picture)
+    const cam = this.game.camera;
+    cam.getWorldDirection(_f);
+    _d.copy(X.pos).sub(cam.position).normalize();
+    if (_d.dot(_f) < Math.cos(((cam.fov || 50) * Math.PI) / 180)) return;
+    const c = this.at(X.pos);
+    if (!c) return;
+    const a = this.at(_v.copy(X.pos).addScaledVector(X.dir, X.w * 0.45));
+    const b = this.at(_v.copy(X.pos).addScaledVector(X.along, X.w * 0.5));
+    if (!a || !b) return;
+    const cx = c[0] * W;
+    const cy = c[1] * H;
+    const dx = (a[0] - c[0]) * W;
+    const dy = (a[1] - c[1]) * H;
+    const ax = (b[0] - c[0]) * W;
+    const ay = (b[1] - c[1]) * H;
+    // (a new set of marks twelve times a second, the same ones between)
+    const key = Math.floor((this.clock || 0) * 12);
+    if (key !== this.rubKey || !this.rubMarks) {
+      this.rubKey = key;
+      const M = [];
+      for (let i = 0; i < 9; i++) {
+        const o = (Math.random() * 2 - 1) * 0.95;
+        const q = (Math.random() * 2 - 1) * 0.35;
+        const len = 0.45 + Math.random() * 0.6;
+        const n = 3 + Math.floor(Math.random() * 3);
+        const pts = [];
+        for (let k = 0; k <= n; k++) {
+          const f = -len + (2 * len * k) / n;
+          const side = (k % 2 ? 1 : -1) * (0.05 + Math.random() * 0.06);
+          pts.push([o + side, q + f]);
+        }
+        M.push({ pts, w: 1.5 + Math.random() * 4, a: 0.55 + Math.random() * 0.4 });
+      }
+      const D = [];
+      for (let i = 0; i < 7; i++) D.push([(Math.random() * 2 - 1) * 1.1, (Math.random() * 2 - 1) * 0.8, 2 + Math.random() * 6]);
+      this.rubMarks = { M, D };
+    }
+    const g = this.g;
+    const P = (u, v) => [cx + ax * u + dx * v, cy + ay * u + dy * v];
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (const pass of [0, 1]) {
+      for (const m of this.rubMarks.M) {
+        g.beginPath();
+        m.pts.forEach(([u, v], i) => {
+          const [x, y] = P(u, v);
+          if (i) g.lineTo(x, y);
+          else g.moveTo(x, y);
+        });
+        // (under each mark a shadow of the eraser's pink; over it the paper's white)
+        g.globalAlpha = pass ? m.a : m.a * 0.35;
+        g.strokeStyle = pass ? '#fffaf2' : '#ff86ad';
+        g.lineWidth = (m.w + (pass ? 0 : 3.5)) * this.dpr;
+        g.stroke();
+      }
+    }
+    g.fillStyle = '#fff6f0';
+    for (const [u, v, r] of this.rubMarks.D) {
+      const [x, y] = P(u, v);
+      g.globalAlpha = 0.35;
+      g.beginPath();
+      g.arc(x, y, r * this.dpr, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  // the page gone (fade seconds): the film again
+  endPage(fade = 0.3) {
+    if (this.pg) this.pg.out = Math.max(0.01, fade);
+  }
+
+  // (game.js, right after a frame is drawn) the live panel's picture: the frame just drawn, cropped
+  grab(src) {
+    const pg = this.pg;
+    if (!pg || pg.cur === undefined || pg.out >= 0) return;
+    const q = pg.panels[pg.cur];
+    const r = this.rect(q.pts);
+    const W = Math.max(8, Math.round(r.w));
+    const H = Math.max(8, Math.round(r.h));
+    if (!q.cv || q.cv.width !== W || q.cv.height !== H) {
+      q.cv = document.createElement('canvas');
+      q.cv.width = W;
+      q.cv.height = H;
+    }
+    // (the crop: the panel's own shape, as much of the film's height as is between the bars, less by
+    // its zoom; round its middle, kept inside the picture)
+    const sw = src.width;
+    const sh = src.height;
+    const ch = (sh * 0.77) / q.zoom;
+    const cw = Math.min(sw, (ch * W) / H);
+    const cx = Math.min(sw - cw, Math.max(0, q.u * sw - cw / 2));
+    const cy = Math.min(sh - ch, Math.max(0, q.v * sh - ch / 2));
+    try {
+      q.cv.getContext('2d').drawImage(src, cx, cy, cw, ch, 0, 0, W, H);
+    } catch (e) {
+      // (nothing to take this frame)
+      return;
+    }
+    // (a panel's first picture onto the sheet at once: not a frame of black ink before it)
+    if (!q.shown) {
+      q.shown = true;
+      const g = this.g;
+      const Wc = this.cv.width;
+      g.save();
+      g.beginPath();
+      q.pts.forEach(([x, y], i) => (i ? g.lineTo(x * Wc, r.top + y * r.ph) : g.moveTo(x * Wc, r.top + y * r.ph)));
+      g.closePath();
+      g.clip();
+      g.drawImage(q.cv, r.x, r.y, r.w, r.h);
+      g.restore();
+    }
+  }
+
+  // a panel's box on the sheet, in its pixels
+  rect(pts) {
+    const W = this.cv.width;
+    const H = this.cv.height;
+    const top = H * 0.115;
+    const ph = H - top * 2;
+    let x0 = 1e9;
+    let y0 = 1e9;
+    let x1 = -1e9;
+    let y1 = -1e9;
+    for (const [x, y] of pts) {
+      x0 = Math.min(x0, x * W);
+      x1 = Math.max(x1, x * W);
+      y0 = Math.min(y0, top + y * ph);
+      y1 = Math.max(y1, top + y * ph);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, top, ph };
+  }
+
+  drawPage(dt) {
+    const pg = this.pg;
+    const g = this.g;
+    const W = this.cv.width;
+    const H = this.cv.height;
+    pg.t += dt;
+    let a = Math.min(1, pg.t / 0.08);
+    if (pg.out >= 0) {
+      pg.outT = (pg.outT || 0) + dt;
+      a = Math.max(0, 1 - pg.outT / pg.out);
+      if (a <= 0) {
+        this.pg = null;
+        return;
+      }
+    }
+    g.save();
+    g.globalAlpha = a;
+    // the sheet: paper, a faint dot of print over it
+    g.fillStyle = '#f2e8d5';
+    g.fillRect(0, 0, W, H);
+    if (!this.dots) {
+      const d = document.createElement('canvas');
+      d.width = d.height = 12;
+      const x = d.getContext('2d');
+      x.fillStyle = 'rgba(190,120,90,0.16)';
+      x.beginPath();
+      x.arc(6, 6, 2.2, 0, Math.PI * 2);
+      x.fill();
+      this.dots = g.createPattern(d, 'repeat');
+    }
+    g.fillStyle = this.dots;
+    g.fillRect(0, 0, W, H);
+    const top = H * 0.115;
+    const ph = H - top * 2;
+    const ink = Math.max(3, H * 0.0065);
+    for (const q of pg.panels) {
+      if (!q.on) continue;
+      q.t += dt;
+      // (a panel comes in with a little pop: from a hair bigger, at once)
+      const k = q.t < 0.07 ? 1.06 - (q.t / 0.07) * 0.06 : 1;
+      const r = this.rect(q.pts);
+      const cx = r.x + r.w / 2;
+      const cy = r.y + r.h / 2;
+      g.save();
+      g.translate(cx, cy);
+      g.scale(k, k);
+      g.translate(-cx, -cy);
+      g.beginPath();
+      q.pts.forEach(([x, y], i) => (i ? g.lineTo(x * W, top + y * ph) : g.moveTo(x * W, top + y * ph)));
+      g.closePath();
+      g.save();
+      g.clip();
+      if (q.cv) g.drawImage(q.cv, r.x, r.y, r.w, r.h);
+      else {
+        g.fillStyle = '#16121e';
+        g.fillRect(r.x, r.y, r.w, r.h);
+      }
+      g.restore();
+      g.lineWidth = ink;
+      g.lineJoin = 'round';
+      g.strokeStyle = '#120e18';
+      g.stroke();
+      g.restore();
+    }
+    g.restore();
+  }
+
   update(dt) {
     const g = this.g;
-    if (!this.words.length && !this.speed && !this.hit) {
-      if (this.dirty) {
-        g.clearRect(0, 0, this.cv.width, this.cv.height);
-        this.dirty = false;
-      }
+    this.clock = (this.clock || 0) + dt;
+    // (the eraser done: its marks with it)
+    if (this.rubSrc && !this.rubSrc.on) this.rubSrc = null;
+    const rubbing = !!(this.rubSrc && !this.pg);
+    // (the sheet hidden while it has nothing on it, shown again as soon as it has: a sheet only cleared
+    // could still be shown as it last was)
+    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing);
+    if (busy !== this.shown) {
+      this.shown = busy;
+      this.cv.style.visibility = busy ? 'visible' : 'hidden';
+    }
+    if (this.pg) {
+      this.resize();
+      g.clearRect(0, 0, this.cv.width, this.cv.height);
+      this.dirty = true;
+      this.drawPage(dt);
+      if (!this.words.length && !this.speed && !this.hit) return;
+    }
+    if (!this.words.length && !this.speed && !this.hit && !rubbing) {
+      // (nothing of its own: the sheet kept clear, whatever was on it)
+      g.clearRect(0, 0, this.cv.width, this.cv.height);
+      this.dirty = false;
       return;
     }
     this.resize();
     const W = this.cv.width;
     const H = this.cv.height;
-    g.clearRect(0, 0, W, H);
+    if (!this.pg) g.clearRect(0, 0, W, H);
     this.dirty = true;
+    if (rubbing) this.drawRub(W, H);
     // ---- the impact frame
     if (this.hit) {
       const h = this.hit;
@@ -224,6 +479,8 @@ export class Comic {
   }
 
   clear() {
+    this.pg = null;
+    this.rubSrc = null;
     this.words = [];
     this.speed = null;
     this.hit = null;
