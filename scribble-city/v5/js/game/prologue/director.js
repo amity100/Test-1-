@@ -370,7 +370,28 @@ export class Prologue {
     const gq = this._bq || (this._bq = new THREE.Quaternion());
     gp.copy(cam.position);
     gq.copy(cam.quaternion);
-    cam.position.lerpVectors(B.pos, gp, k);
+    // (round him, not through him: from the film's picture of his face to the game's behind his back
+    // the straight way went through his head - ROADMAP 18.9. Round the middle of him instead: the
+    // distance out from him, the height, and the angle round him each eased on its own, the shorter
+    // way round)
+    const P = this.game.player;
+    const H = this._bh || (this._bh = new THREE.Vector3());
+    H.set(P.pos.x, P.pos.y + 1.2, P.pos.z);
+    const ax = B.pos.x - H.x;
+    const az = B.pos.z - H.z;
+    const bx = gp.x - H.x;
+    const bz = gp.z - H.z;
+    const ra = Math.hypot(ax, az);
+    const rb = Math.hypot(bx, bz);
+    if (ra > 0.2 && rb > 0.2 && ra < 12 && rb < 12) {
+      const a0 = Math.atan2(az, ax);
+      let da = Math.atan2(bz, bx) - a0;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      const r = Math.max(ra + (rb - ra) * k, 0.9);
+      const a = a0 + da * k;
+      cam.position.set(H.x + Math.cos(a) * r, B.pos.y + (gp.y - B.pos.y) * k, H.z + Math.sin(a) * r);
+    } else cam.position.lerpVectors(B.pos, gp, k);
     cam.quaternion.slerpQuaternions(B.q, gq, k);
     const f = B.fov + (cam.fov - B.fov) * k;
     if (Math.abs(f - cam.fov) > 0.01) {
