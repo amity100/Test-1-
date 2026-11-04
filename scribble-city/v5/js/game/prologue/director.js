@@ -1346,8 +1346,9 @@ export class Prologue {
         return (t > 3.5 && d < 9) || t > 14;
       };
     }
-    // (gone: rubbed out from his heart outwards - his crumbs, the rub, the comic's marks on him)
-    yield* this.rubOut(man);
+    // (gone: lost in the people coming along the pier - a knot of them crosses between, and when they
+    // have gone by he is not there)
+    yield* this.loseInCrowd(man);
     this.objective(null);
     if (g.gps) g.gps.clear();
     yield 1.4;
@@ -1767,6 +1768,63 @@ export class Prologue {
     if (this.set && this.set.markShirt) this.set.markShirt(c);
     c.fig.portraitPx = 60;
     return c;
+  }
+
+  // (ROADMAP 18.9) somebody lost in a crowd: a knot of people comes along the pier across the way
+  // between the camera and him; the moment one of them is in front of him he is gone (or, at the
+  // latest, as they pass) - and they walk on, and are let go of further along
+  *loseInCrowd(c) {
+    const g = this.game;
+    const cam = g.camera;
+    const P = g.player;
+    // (across the line from Danny to him, a few metres short of him)
+    const dx = c.pos.x - P.pos.x;
+    const dz = c.pos.z - P.pos.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const ux = dx / d;
+    const uz = dz / d;
+    const mx = c.pos.x - ux * 2.2;
+    const mz = c.pos.z - uz * 2.2;
+    const crowd = [];
+    for (let i = 0; i < 6; i++) {
+      const side = -5.5 - i * 0.9 - (i % 2) * 0.4;
+      const off = (i % 3 - 1) * 0.55;
+      const x = mx - uz * side + ux * off;
+      const z = mz + ux * side + uz * off;
+      const q = this.person('crowd' + i, x, z, i % 3 === 1 ? kidLook(i % 2 === 0) : civilianLook());
+      this.go(q, x + uz * 16, z - ux * 16, 1.25 + (i % 3) * 0.12);
+      crowd.push(q);
+    }
+    c.pl.speed = 0;
+    let t = 0;
+    const tc = new THREE.Vector3();
+    const tq = new THREE.Vector3();
+    while (t < 4.5) {
+      // (one of them in front of him, from the camera: he is gone)
+      tc.set(c.pos.x, c.pos.y + 1.2, c.pos.z).sub(cam.position);
+      const dc = tc.length();
+      tc.normalize();
+      let hid = false;
+      for (const q of crowd) {
+        tq.set(q.pos.x, q.pos.y + 1.1, q.pos.z).sub(cam.position);
+        const dq = tq.length();
+        if (dq < dc - 0.5 && tq.normalize().dot(tc) > Math.cos(0.035)) hid = true;
+      }
+      if (hid && t > 0.8) break;
+      yield 0.001;
+      t += this.dtR || 1 / 30;
+    }
+    if (this.set && this.set.shirt && this.set.shirt.c === c) this.set.shirt.grp.visible = false;
+    g.civilians.remove(c);
+    delete this.cast.mark;
+    // (the knot of them let go of once they are well along)
+    const crowdCast = crowd.slice();
+    setTimeout(() => {
+      crowdCast.forEach((q, i) => {
+        if (q.alive) g.civilians.remove(q);
+        if (this.cast['crowd' + i] === q) delete this.cast['crowd' + i];
+      });
+    }, 14000);
   }
 
   // (ROADMAP 18.9) somebody rubbed out where they stand: from their heart outwards, the rub's sound,
