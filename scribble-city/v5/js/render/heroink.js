@@ -598,6 +598,26 @@ export function paintFace(c, o = {}) {
     g.lineTo(W, yb + 0.0035 * K);
     g.stroke();
   }
+  // (ROADMAP 18.9) the back of the neck: it takes its picture from the picture's side edges
+  // (render/heroshapes.js faceMap), one column for each height - and the strokes there laid it in
+  // stripes round the nape, seen from behind. Out past the jaw and the ears, under them, where
+  // nothing of the front is: one even nape, in the shade, its tone going down smoothly to the collar
+  {
+    const ya = Y(-0.07);
+    const yb = Y(-0.172);
+    const gr = g.createLinearGradient(0, ya, 0, yb);
+    gr.addColorStop(0, 'rgba(146,98,78,0)');
+    gr.addColorStop(0.15, 'rgba(146,98,78,1)');
+    gr.addColorStop(0.7, 'rgba(126,86,72,1)');
+    gr.addColorStop(1, 'rgba(96,68,64,1)');
+    g.fillStyle = gr;
+    for (const [x0, x1, a] of [[0.08, 0.1, 1], [0.0765, 0.08, 0.6], [0.073, 0.0765, 0.3]]) {
+      g.globalAlpha = a;
+      g.fillRect(X(x1), ya, X(x0) - X(x1), yb - ya);
+      g.fillRect(X(-x0), ya, X(-x1) - X(-x0), yb - ya);
+    }
+    g.globalAlpha = 1;
+  }
   g.globalAlpha = 1;
   return c;
 }

@@ -1583,7 +1583,7 @@ export class Prologue {
     const gi = this.lowGondola();
     this.heroRiders(gi);
     const kid = this.heroes[0];
-    this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.6), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, -0.55), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 20, fovTo: 46, dur: 4.4, ease: 'inout', hand: 0.45 });
+    this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.12), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, 0), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 20, fovTo: 46, dur: 4.4, ease: 'inout', hand: 0.45 });
     yield 4.2;
     // the two of them at the railing from behind, the wheel turning against the sky - and under the
     // evening something that should not be there: the waltz winding down, out of tune, and the
@@ -1717,7 +1717,9 @@ export class Prologue {
     };
     // (the two kids at the sill; their parent no longer beside them - from the camera's side his back
     // filled half the picture)
-    this.heroes = [mk('hk1', kidLook(false), -1.0, -0.55, 1), mk('hk2', kidLook(true), -1.0, 0.55, 1)];
+    // (each in the middle of a pane - the window's bars are at +-0.5 across it, set.js gondolaParts:
+    // stood behind one, a bar ran down the middle of the face)
+    this.heroes = [mk('hk1', kidLook(false), -1.0, 0.0, 1), mk('hk2', kidLook(true), -1.0, 0.95, 1)];
   }
 
   tickHeroes() {
@@ -1807,6 +1809,10 @@ export class Prologue {
     const P = g.player;
     const L = this.cast.lily;
     this.film(true);
+    // (she stays where she has come to, by where it stood, while he goes from one to the next - not at
+    // his heels: following him, she was behind him when he turned back to her, and the camera on her
+    // side of him saw the back of his head)
+    if (L) this.put(L, L.pos.x, L.pos.z, Math.atan2(WHEEL.x - L.pos.x, WHEEL.z - L.pos.z));
     // (ROADMAP 18.9) nobody remembers it - a dream gone wrong: the wheel's own waltz half as fast and
     // flat (score.js surreal), the evening's air as it always is, the picture a little off true
     this.cue('surreal', { fade: 2 });
@@ -1863,7 +1869,10 @@ export class Prologue {
       const dx = mx - P.pos.x;
       const dz = mz - P.pos.z;
       const d = Math.hypot(dx, dz) || 1;
-      this.shot({ from: [P.pos.x + (dx / d) * 0.6 - (dz / d) * 0.9, 1.45, P.pos.z + (dz / d) * 0.6 + (dx / d) * 0.9], look: [mx, 1.55, mz], fov: 42, dur: 4, hand: 0.5, roll: -0.07 });
+      // (far enough back for the two of them, heads and all: past his shoulder, off to his side)
+      this.shot({ from: [P.pos.x - (dx / d) * 0.35 - (dz / d) * 1.05, 1.62, P.pos.z - (dz / d) * 0.35 + (dx / d) * 1.05], look: [mx, 1.5, mz], fov: 40, dur: 4, hand: 0.5, roll: -0.07 });
+      this.faceTo(g1, P.pos.x, P.pos.z);
+      this.faceTo(g2, P.pos.x, P.pos.z);
     }
     yield* this.say('G03', g1.fig, 0.3);
     this.shot({ ...this.single(P, g1, { dist: 1.3, side: 0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5, roll: 0.12 });
