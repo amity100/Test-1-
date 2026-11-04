@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Kit, itemMats, linC } from '../items.js';
-import { makeSurface, canvasTexture, surfaceVariant, srgb } from '../../render/materials.js';
+import { makeSurface, canvasTexture, surfaceVariant, sortDefines, srgb } from '../../render/materials.js';
 import { Sketcher, makeCanvas, FONT_UI, FONT_SIGN, BLACK2D } from '../../render/sketch2d.js';
 import { letter } from '../../world/letters.js';
 import { kidLook, civilianLook } from '../looks.js';
@@ -78,6 +78,13 @@ const RIM_C = [linC(1, 0.35, 0.6), linC(0.3, 0.85, 1), linC(1, 0.85, 0.3)];
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const UPV = new THREE.Vector3(0, 1, 0);
+const _w2 = new THREE.Vector3();
+const _w3 = new THREE.Vector3();
+// the eraser: its mask's pixels and how many metres it covers either side of the hub; its grid for
+// the riders; how wide it is (metres), how long it takes, how many rows, how quick its rubbing
+const ERASE = { px: 256, half: 35, grid: 64, w: 15, T: 2.5, rows: 5, hz: 4.2 };
+// (crumbs: the eraser's grey and pink, the paper's white, a bit of the wheel's own colours)
+const CRUMB = [[0.62, 0.6, 0.62], [0.85, 0.62, 0.66], [0.96, 0.95, 0.92], [0.5, 0.48, 0.52], [0.98, 0.45, 0.62], [0.35, 0.72, 0.8]];
 
 // a round beam from a to b (in the Kit's frame)
 function beam(K, mat, a, b, r, color, segs = 8) {
@@ -361,6 +368,7 @@ export class PrologueSet {
     // ---- the people in them, and the people on the pier waiting and waving
     this.makeRiders();
     this.placeGondolas();
+    this.prepErase();
   }
 
   // one gondola, round its pivot (its own frame: the wheel's, x along the axle): open above the
@@ -760,33 +768,39 @@ export class PrologueSet {
     sk.fill([[0, 0], [W, 0], [W, H], [0, H]], '#ffffff', { spacing: 5, alpha: 0.05, overshoot: 0, angle: -0.6 });
     const text = (str, x, y, size, color, font = FONT_UI, weight = 800, o = {}) => sk.text(str, x, y, { size, color, font, weight, dir: 'ltr', align: o.align || 'left', maxWidth: o.maxWidth, outline: o.outline, outlineWidth: o.outlineWidth, passes: 1 });
     const right = kind === 'b';
-    const tx = right ? 40 : 470;
-    text('MICHAEL', tx, 150, 108, '#ffffff', FONT_UI, 900, { maxWidth: 520 });
-    text('CRUZ', tx, 262, 124, '#ffd23f', FONT_UI, 900, { maxWidth: 520 });
-    text('FOR MAYOR', tx + 4, 312, 34, '#f4efe2', FONT_UI, 700);
-    text('A BETTER CITY', tx, 380, 52, '#ffffff', FONT_SIGN, 400, { maxWidth: 520 });
-    text('FOR EVERYONE', tx, 432, 52, '#ffffff', FONT_SIGN, 400, { maxWidth: 520 });
-    text('VOTE CRUZ  ★  NOV 7', W / 2, H - 22, 34, '#ffffff', FONT_UI, 800, { align: 'center' });
+    // (what he is running for, read first and from far off: FOR MAYOR, the biggest thing on it;
+    // then who, then the promise; the day to vote along the red band)
+    const tx = right ? 34 : 482;
+    const tw = 508;
+    text('MICHAEL CRUZ', tx, 84, 64, '#ffffff', FONT_UI, 900, { maxWidth: tw });
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillRect(tx, 104, tw, 6);
+    text('FOR', tx, 186, 70, '#ffd23f', FONT_UI, 900, { maxWidth: tw });
+    text('MAYOR', tx, 300, 132, '#ffd23f', FONT_UI, 900, { maxWidth: tw, outline: '#0b1236', outlineWidth: 10 });
+    text('"A better city', tx + 2, 360, 44, '#f4efe2', FONT_SIGN, 400, { maxWidth: tw });
+    text('for everyone"', tx + 2, 410, 44, '#f4efe2', FONT_SIGN, 400, { maxWidth: tw });
+    text('VOTE NOV 7  ★  CRUZ FOR MAYOR  ★  VOTE NOV 7', W / 2, H - 22, 32, '#ffffff', FONT_UI, 800, { align: 'center' });
     const tex = canvasTexture(c);
-    // his face, from his sheet: drawn in when the picture is in
+    // his face, from his sheet, as the game draws (tools/illustrate_portrait.py): in when the
+    // picture is in
     const img = new Image();
     img.onload = () => {
-      const px = right ? W - 470 : 20;
-      const pw = 440;
-      const ph = H - 100;
+      const px = right ? W - 466 : 16;
+      const pw = 450;
+      const ph = H - 98;
       ctx.save();
       ctx.beginPath();
-      ctx.rect(px, 18, pw, ph);
+      ctx.rect(px, 14, pw, ph);
       ctx.clip();
       const s = Math.max(pw / img.width, ph / img.height);
       const iw = img.width * s;
       const ih = img.height * s;
-      ctx.drawImage(img, px + (pw - iw) / 2, 18 + (ph - ih) * 0.35, iw, ih);
+      ctx.drawImage(img, px + (pw - iw) / 2, 14 + (ph - ih) * 0.35, iw, ih);
       ctx.restore();
-      sk.poly([[px, 18], [px + pw, 18], [px + pw, 18 + ph], [px, 18 + ph]], true, { width: 6, color: '#f4efe2' });
+      sk.poly([[px, 14], [px + pw, 14], [px + pw, 14 + ph], [px, 14 + ph]], true, { width: 7, color: '#f4efe2' });
       tex.needsUpdate = true;
     };
-    img.src = new URL(`${window.__gameBase ? '' : '../../../'}img/prologue/michael_${right ? 'smile' : 'look'}.jpg`, window.__gameBase || import.meta.url).href;
+    img.src = new URL(`${window.__gameBase ? '' : '../../../'}img/prologue/michael_${right ? 'smile' : 'look'}_ill.jpg`, window.__gameBase || import.meta.url).href;
     return tex;
   }
 
@@ -1127,7 +1141,7 @@ export class PrologueSet {
       if (d > far || (d > 6 && (dx * fwd.x + dy * fwd.y + dz * fwd.z) / d < -0.2)) return;
       bodies.drawCheap(w);
     };
-    if (!this.wheelGone && !(this.erasing && this.erasing.t > 0)) for (const r of this.riders) if (!r.hidden) one(r);
+    if (!this.wheelGone) for (const r of this.riders) if (!r.hidden && !r.gone) one(r);
     for (const b of this.below) one(b);
     for (const b of this.staff || []) one(b);
   }
@@ -1247,47 +1261,194 @@ export class PrologueSet {
   }
 
   // ------------------------------------------------------------------ rubbed out
-  // the wheel as only its outlines, white as the paper, for a blink; then nothing where it was. Its
-  // riders go with it at once
-  erase() {
-    if (this.wheelGone || this.erasing) return;
-    const U = {
-      uMatOn: { value: 1 },
-      uMatFlat: { value: new THREE.Vector4(0, 1, 0, 0) },
-      uMatK: { value: 1 },
-      uMatSweep: { value: new THREE.Vector4(1, 0, 0, -1e6) },
-      uMatBand: { value: new THREE.Vector4(0.3, 1, 0, 0) },
-    };
-    const swaps = [];
+  // (v5, ROADMAP 18) as a pencil drawing is rubbed out: an eraser going over it in strokes, back and
+  // forth, row after row from its top down - wherever it has been once the colours are gone and the
+  // paper shows through, its lines all that is left; where it has been again, those go too. Crumbs of
+  // it falling; whoever rides it gone as the eraser comes over them. Two and a half seconds, and then
+  // the evening where it stood.
+  //
+  // The mask the eraser leaves (a picture of where it has been, in the wheel's own upright plane - its
+  // axle's way flattened out of it) is in the wheel's pens from the moment it is built
+  // (render/glsl.js USE_ERASEMASK), so that nothing new has to be made ready for the graphics card
+  // the moment it is rubbed out: on a phone that would stop the picture for a moment, right then.
+  prepErase() {
+    const S = ERASE.px;
+    const c = makeCanvas(S, S);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, S, S);
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    // the world -> the wheel's frame (its turn undone, the hub at the origin) -> (u, v): its z across,
+    // its y up, ERASE.half metres either side of the hub
+    const hubY = WHEEL.deck + WHEEL.hubUp;
+    const H = ERASE.half;
+    const toLocal = new THREE.Matrix4().makeRotationY(-WHEEL.yaw).multiply(new THREE.Matrix4().makeTranslation(-WHEEL.x, -hubY, -WHEEL.z));
+    const toUv = new THREE.Matrix4().set(0, 0, 1 / (2 * H), 0.5, 0, 1 / (2 * H), 0, 0.5, 0, 0, 0, 0, 0, 0, 0, 1);
+    const U = { uEraseMask: { value: tex }, uEraseMat: { value: toUv.multiply(toLocal) } };
     const copies = new Map();
-    const parts = [this.root, this.platG];
-    for (const p of parts) {
+    for (const p of [this.root, this.platG]) {
       p.traverse((m) => {
         if (!m.isMesh || !m.material || !m.material.uniforms || !m.material.uniforms.uMatOn) return;
-        let c = copies.get(m.material);
-        if (!c) {
-          c = surfaceVariant(m.material, U);
-          copies.set(m.material, c);
+        let v = copies.get(m.material);
+        if (!v) {
+          v = surfaceVariant(m.material, U);
+          delete v.defines.SOLID;
+          v.defines.USE_ERASEMASK = '';
+          sortDefines(v);
+          // (its shadow as it was, until it is gone)
+          v.userData.depth = m.material.userData.depth || null;
+          copies.set(m.material, v);
         }
-        swaps.push([m, m.material]);
-        m.material = c;
+        m.material = v;
       });
     }
-    this.erasing = { t: 0, swaps, copies: [...copies.values()], U };
+    // (where the eraser has been, coarsely, for the riders: rubbed or not)
+    const G = ERASE.grid;
+    this.eraseMask = { c, ctx, tex, U, grid: new Float32Array(G * G), mats: [...copies.values()] };
+  }
+
+  erase() {
+    if (this.wheelGone || this.erasing || !this.eraseMask) return;
+    this.erasing = { t: 0, last: null, rubT: 0, rubs: 0, gone: 0, total: this.riders.length };
+  }
+
+  // how rubbed the wheel is at (z, y) in its own frame (0 untouched; more than 0.45 its colours gone)
+  rubbed(z, y) {
+    const E = this.eraseMask;
+    if (!E) return 0;
+    const G = ERASE.grid;
+    const i = Math.floor((z / (2 * ERASE.half) + 0.5) * G);
+    const j = Math.floor((y / (2 * ERASE.half) + 0.5) * G);
+    if (i < 0 || j < 0 || i >= G || j >= G) return 0;
+    return E.grid[j * G + i];
+  }
+
+  // a point of the world -> how rubbed it is there
+  rubbedAt(p) {
+    if (!this.root) return 1;
+    _v.copy(p).sub(this.root.position).applyAxisAngle(UPV, -WHEEL.yaw);
+    return this.rubbed(_v.z, _v.y);
+  }
+
+  // where the eraser is at time t of its two and a half seconds (the wheel's frame: z across, y up)
+  eraserAt(t, out) {
+    const T = ERASE.T;
+    const rows = ERASE.rows;
+    const k = Math.min(1, t / T);
+    const row = Math.min(rows - 1, Math.floor(k * rows));
+    const f = k * rows - row;
+    const top = 25;
+    const bot = -31;
+    const y = top + ((bot - top) * row) / (rows - 1);
+    const span = 33;
+    const dir = row % 2 === 0 ? 1 : -1;
+    // (eased at each row's end, as a hand turns)
+    const ff = f * f * (3 - 2 * f);
+    const z = dir * (-span + 2 * span * ff);
+    // rubbing: back and forth along a slant, quick, as a hand rubs
+    const rub = Math.sin(t * Math.PI * 2 * ERASE.hz);
+    out.z = z + rub * 4.2 * 0.55;
+    out.y = y + rub * 4.2 * 0.83 + Math.sin(t * 3.1) * 1.5;
+    out.rub = rub;
+    return out;
   }
 
   stepErase(dt) {
     const e = this.erasing;
+    const E = this.eraseMask;
     e.t += dt;
-    // (a blink: on, off, on - then gone)
-    const vis = e.t < 0.07 || (e.t > 0.1 && e.t < 0.16);
-    this.root.visible = vis;
-    this.platG.visible = vis;
-    if (e.t >= 0.16) {
-      for (const [m, mat] of e.swaps) m.material = mat;
-      for (const c of e.copies) c.dispose();
+    const g = this.game;
+    if (e.t <= ERASE.T + 0.05) {
+      // its way since the last frame, in a few short steps (the strokes stay round at fast rubbing)
+      const steps = 4;
+      const p = { z: 0, y: 0, rub: 0 };
+      if (!e.last) e.last = { ...this.eraserAt(Math.max(0, e.t - dt), p) };
+      for (let s = 1; s <= steps; s++) {
+        this.eraserAt(Math.max(0, e.t - dt + (dt * s) / steps), p);
+        this.rubStroke(e.last, p);
+        e.last.z = p.z;
+        e.last.y = p.y;
+      }
+      E.tex.needsUpdate = true;
+      // a stroke's turn: its sound, its crumbs
+      const turn = Math.sign(p.rub) !== Math.sign(e.lastRub || 0);
+      e.lastRub = p.rub;
+      if (turn) {
+        g.audio.play('rub', 0.9 + Math.random() * 0.3);
+        e.rubs++;
+      }
+      if (this.root && g.fx) {
+        const w = this.toWorld(_w2.set(0, p.y, p.z), _w3);
+        // (a few crumbs of eraser and of the drawing it takes: grey, pink, a little of its colours)
+        g.fx.spray(w.x, w.y, w.z, (Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4, 3, 5, CRUMB, { bits: true, len: 1.1, life: 1.9, cone: 0.9 });
+      }
+    } else if (e.t > ERASE.T + 0.35) {
+      // what is left of it (a line or two the eraser missed): gone with the last of it
       this.removeWheel();
       this.erasing = null;
+      return;
+    }
+    // whoever rides: gone as the eraser comes over them
+    let gone = 0;
+    for (const r of this.riders) {
+      if (!r.gone) {
+        const o = this.gPos[r.gi];
+        if (this.rubbed(o.z + r.lz, o.y - FLOOR + 1) > 0.42) r.gone = true;
+      }
+      if (r.gone) gone++;
+    }
+    e.gone = gone;
+    e.k = e.total ? gone / e.total : 1;
+  }
+
+  // the eraser from a to b (the wheel's frame): into the mask, and into the coarse grid
+  rubStroke(a, b) {
+    const E = this.eraseMask;
+    const ctx = E.ctx;
+    const S = ERASE.px;
+    const H = ERASE.half;
+    const cx = (z) => (z / (2 * H) + 0.5) * S;
+    const cy = (y) => (0.5 - y / (2 * H)) * S;
+    const w = (ERASE.w / (2 * H)) * S;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    // (an eraser's stroke: streaked along its way, rubbed harder in the middle)
+    const dx = b.z - a.z;
+    const dy = b.y - a.y;
+    const l = Math.hypot(dx, dy) || 1;
+    const nx = -dy / l;
+    const ny = dx / l;
+    for (let k = -2; k <= 2; k++) {
+      const o = (k / 2) * ERASE.w * 0.32;
+      ctx.strokeStyle = `rgba(255,255,255,${(k === 0 ? 0.11 : 0.07).toFixed(3)})`;
+      ctx.lineWidth = w * (k === 0 ? 1 : 0.55);
+      ctx.beginPath();
+      ctx.moveTo(cx(a.z + nx * o), cy(a.y + ny * o));
+      ctx.lineTo(cx(b.z + nx * o), cy(b.y + ny * o));
+      ctx.stroke();
+    }
+    ctx.restore();
+    // the grid: the same, roughly (its middle)
+    const G = ERASE.grid;
+    const hw = ERASE.w * 0.5;
+    const cell = (2 * H) / G;
+    const i0 = Math.max(0, Math.floor((Math.min(a.z, b.z) - hw + H) / cell));
+    const i1 = Math.min(G - 1, Math.floor((Math.max(a.z, b.z) + hw + H) / cell));
+    const j0 = Math.max(0, Math.floor((Math.min(a.y, b.y) - hw + H) / cell));
+    const j1 = Math.min(G - 1, Math.floor((Math.max(a.y, b.y) + hw + H) / cell));
+    for (let j = j0; j <= j1; j++) {
+      const y = -H + (j + 0.5) * cell;
+      for (let i = i0; i <= i1; i++) {
+        const z = -H + (i + 0.5) * cell;
+        // distance to the segment
+        const t = Math.max(0, Math.min(1, ((z - a.z) * dx + (y - a.y) * dy) / (l * l)));
+        const d = Math.hypot(z - (a.z + dx * t), y - (a.y + dy * t));
+        if (d < hw) E.grid[j * G + i] += 0.11 * (1 - (d / hw) * 0.5);
+      }
     }
   }
 
@@ -1306,6 +1467,12 @@ export class PrologueSet {
     this.platG = null;
     this.wheelGone = true;
     this.riders = [];
+    // (the eraser's mask and the pens that read it)
+    if (this.eraseMask) {
+      for (const m of this.eraseMask.mats) m.dispose();
+      this.eraseMask.tex.dispose();
+      this.eraseMask = null;
+    }
     // (what was solid of it)
     const col = g.world.collision;
     for (const id of this.wheelCols || []) col.remove(id);

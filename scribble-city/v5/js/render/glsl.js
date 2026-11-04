@@ -1002,6 +1002,12 @@ uniform float uNeonMask; // the neon sign atlas: r is the tube, g its white-hot 
 uniform float uMatOn;    // a drawing turning into a thing: the sweep that brings its colours
 uniform vec4 uMatSweep;  // (direction, where the sweep is along it)
 uniform vec4 uMatBand;   // (width of the band of light, paper ahead of it 0..1, glow, -)
+#ifdef USE_ERASEMASK
+// (v5, ROADMAP 18) rubbed out as an eraser rubs a page (game/prologue/set.js eraseMask): where it
+// has been, in the thing's own upright plane - uEraseMat takes the world there (u, v in 0..1)
+uniform sampler2D uEraseMask;
+uniform mat4 uEraseMat;
+#endif
 
 // raindrops falling into a puddle: a ring spreading from each one (xy: which way it pushes the
 // mirror image, z: how much of a ring is at p). Two grids of cells a little over half a metre
@@ -1091,6 +1097,19 @@ void main() {
     mPaper = smoothstep(-0.5, 0.5, sb) * bd.y;
     mGlow = exp(-5.0 * sb * sb) * bd.z;
   }
+#ifdef USE_ERASEMASK
+  {
+    // where the eraser has been once, its colours are gone - the paper comes through and its lines
+    // are all that is left of it; where it has been again, its lines go too. The paper's grain
+    // makes the rubbing uneven, as it is on a page
+    vec4 eq = uEraseMat * vec4(vWP, 1.0);
+    float em = 0.0;
+    if (eq.x > 0.0 && eq.x < 1.0 && eq.y > 0.0 && eq.y < 1.0) em = textureLod(uEraseMask, eq.xy, 0.0).r;
+    float eg = n2(vWP.xy * 5.3 + vWP.z * 2.1) * 0.65 + n2(vWP.zy * 15.0 + 7.0) * 0.35;
+    if (em > 0.5 + eg * 0.38) discard;
+    mPaper = max(mPaper, smoothstep(0.04, 0.22 + eg * 0.16, em));
+  }
+#endif
   bool inside = uIndoor > 0.5 || vX.z > 0.5;
   // (ROADMAP 11.31) a mall's great hall under its glass roof (2): indoors, but in daylight
   bool hall = (uIndoor > 1.5 && uIndoor < 2.5) || (vX.z > 1.5 && vX.z < 2.5);

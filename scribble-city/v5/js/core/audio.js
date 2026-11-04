@@ -291,6 +291,31 @@ export class Audio {
     o.stop(t + dur + 0.05);
   }
 
+  // notes swelling up over dur (each [from, to] Hz), and cut at the top - no fall
+  swell(notes, dur, vol, type = 'sawtooth') {
+    const c = this.ctx;
+    const t = c.currentTime;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(300, t);
+    lp.frequency.exponentialRampToValueAtTime(type === 'sine' ? 8000 : 1600, t + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0002, vol), t + dur);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.04);
+    lp.connect(g).connect(this.fx);
+    for (const [f0, f1] of notes) {
+      const o = c.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      o.connect(lp);
+      o.start(t);
+      o.stop(t + dur + 0.08);
+    }
+  }
+
   hiss(dur, vol, freq, q = 1, type = 'bandpass', at = 0, f1 = null, off = null) {
     const c = this.ctx;
     const t = c.currentTime + at;
@@ -611,6 +636,26 @@ export class Audio {
         this.hiss(0.1, 0.12 * v, 140, 0.7, 'lowpass');
         this.tone('sine', 56, 34, 0.14, 0.38 * v, 0.24);
         this.hiss(0.08, 0.08 * v, 120, 0.7, 'lowpass', 0.24);
+        break;
+      // (v5, ROADMAP 18) a giant eraser's stroke on paper: a dry, deep rub, a little higher on the way
+      // back (the prologue's wheel, rubbed out)
+      case 'rub':
+        this.hiss(0.13, 0.3 * v, 900 + Math.random() * 500, 0.9, 'bandpass', 0, 2600 + Math.random() * 600);
+        this.hiss(0.11, 0.2 * v, 260, 0.8, 'lowpass');
+        this.hiss(0.05, 0.08 * v, 5200, 1.4, 'highpass', 0.04);
+        break;
+      // (ROADMAP 18) the moment before it: a low drone swelling, two notes rubbing against each other,
+      // a thin high whine over it - and cut
+      case 'dread':
+        this.swell([[46, 61], [48.7, 64.5], [97, 122]], 1.7, 0.3 * v);
+        this.swell([[2900, 3500]], 1.7, 0.018 * v, 'sine');
+        this.hiss(1.7, 0.16 * v, 300, 0.6, 'lowpass', 0, 1400);
+        break;
+      // (ROADMAP 18) the wheel going: a deep thud, and the air rushing into where it was
+      case 'gone':
+        this.tone('sine', 70, 26, 1.6, 0.6 * v);
+        this.hiss(2.4, 0.3 * v, 500, 0.6, 'lowpass', 0, 90);
+        this.hiss(1.2, 0.12 * v, 2400, 1.2, 'bandpass', 0.05, 700);
         break;
       case 'whoosh':
         this.hiss(0.4, 0.28 * v, 600, 1.2, 'bandpass', 0, 2200);
