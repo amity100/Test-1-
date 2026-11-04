@@ -372,11 +372,12 @@ export function paintFace(c, o = {}) {
     g.fill();
     g.fillStyle = '#fff8ee';
     g.beginPath();
-    g.arc(irx - ir * 0.32, iry - ir * 0.38, ir * 0.16, 0, Math.PI * 2);
+    // (ROADMAP 18.9: the light in it bigger - it is what keeps a face alive at a distance)
+    g.arc(irx - ir * 0.32, iry - ir * 0.38, ir * 0.22, 0, Math.PI * 2);
     g.fill();
     g.globalAlpha = 0.6;
     g.beginPath();
-    g.arc(irx + ir * 0.3, iry + ir * 0.25, ir * 0.07, 0, Math.PI * 2);
+    g.arc(irx + ir * 0.3, iry + ir * 0.25, ir * 0.09, 0, Math.PI * 2);
     g.fill();
     // (the lid's shadow over the top of it)
     h.hatch(cx - ew, cy - eh * 1.4, cx + ew, cy + eh, 120, (px, py) => smooth(cy - eh * 0.1, cy - eh * 0.85, py), 0.15, 12, 1.6, ['#3a241c', '#4a3028'], 0.55);

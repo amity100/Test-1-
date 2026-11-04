@@ -548,8 +548,19 @@ export class Prologue {
       shared.uPenDens.value = 0.3;
       // (the colour of the story: the evening golden - and once the wheel is gone, the warmth out of
       // it, the light a little lower, colder, until they leave the pier: ROADMAP 18.9)
-      const after = !!(this.set && this.set.wheelGone) && (this.sceneN || 0) <= 4;
-      const want = after ? [[0.7, 0.84, 1.27], [1.0, 0.97, 0.95], 0.9] : [[0.74, 0.9, 1.2], [1.13, 0.97, 0.8], 1];
+      // (each scene its own colour - a colour script: the flight in and the city golden, meeting her a
+      // candy pink, the wheel gold again, the chase on harder teal and orange)
+      const n = this.sceneN || 0;
+      const after = !!(this.set && this.set.wheelGone) && n <= 4;
+      const want = after
+        ? [[0.7, 0.84, 1.27], [1.0, 0.97, 0.95], 0.9]
+        : n <= 1
+          ? [[0.76, 0.88, 1.16], [1.15, 0.98, 0.76], 1]
+          : n === 2
+            ? [[0.84, 0.82, 1.17], [1.14, 0.95, 0.88], 1]
+            : n >= 5
+              ? [[0.7, 0.9, 1.25], [1.13, 0.96, 0.8], 1]
+              : [[0.74, 0.9, 1.2], [1.13, 0.97, 0.8], 1];
       const e = 1 - Math.exp(-(this.dtR || 0.016) * 0.6);
       for (let i = 0; i < 3; i++) {
         LK.shadowT[i] += (want[0][i] - LK.shadowT[i]) * e;
