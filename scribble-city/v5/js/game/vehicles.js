@@ -524,7 +524,7 @@ class Vehicle {
     const U = this.up;
     cars.draw(this.carKind, this.dirt > 0.05 ? this.dustyColor() : this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0), roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: this.bodyPitch || 0, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      lift: wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0), roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: (this.bodyPitch || 0) + (this.floorTilt || 0), reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
       // (ROADMAP 11.20: wheels drawn onto it in place of its own - game/fuse.js)
       noWheels: !!(this.fz && this.fz.hideWheels),
       // (yours: the side windows down, you and whoever rides with you seen through them)
@@ -1004,7 +1004,22 @@ class Vehicle {
     // (ROADMAP 11.23: the lab's mission - its bridge, its island)
     if (this.game.mission) g = Math.max(g, this.game.mission.floorAt(this.pos.x, this.pos.z, this.pos.y));
     // (v5, ROADMAP 18: the prologue's car parks - their decks and ramps, and the ramp drawn on the roof)
-    if (this.game.prolSet && this.game.prolSet.built) g = Math.max(g, this.game.prolSet.floorAt(this.pos.x, this.pos.z, this.pos.y));
+    if (this.game.prolSet && this.game.prolSet.built) {
+      const ps = this.game.prolSet;
+      g = Math.max(g, ps.floorAt(this.pos.x, this.pos.z, this.pos.y));
+      // (on their slopes and ramps a car sits along the floor, its nose up the way it rises: the
+      // floor under its front wheels against the floor under its back ones)
+      let want = 0;
+      if (!this.air && this.kind === 'car') {
+        const L = (this.halfLen || 2.3) * 0.8;
+        const fx = Math.sin(this.yaw);
+        const fz = Math.cos(this.yaw);
+        const a = ps.floorAt(this.pos.x + fx * L, this.pos.z + fz * L, this.pos.y + 0.6);
+        const b = ps.floorAt(this.pos.x - fx * L, this.pos.z - fz * L, this.pos.y + 0.6);
+        if (a > -Infinity && b > -Infinity && Math.abs(a - b) < L) want = -Math.atan2(a - b, 2 * L);
+      }
+      this.floorTilt = damp(this.floorTilt || 0, want, 14, dt);
+    }
     if (this.air) {
       // (ROADMAP 11.20: the lift of a rotor, a balloon, a jet drawn onto it - and steering in the air)
       const pull = this.fz && this.game.fuse ? this.game.fuse.air(this, dt, input) : 1;

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { clamp } from '../../core/util.js';
 
 // (v5, ROADMAP 18) The men in the dark car, at its wheel: they drive after Danny the way he went -
@@ -7,6 +8,13 @@ import { clamp } from '../../core/util.js';
 // again. Their hands on the car are an input of its own (game/vehicles.js: Vehicle.ai).
 
 const LOOK = 7; // how far ahead along the trail they aim (metres, more at speed)
+// (catching up out of sight: further behind than this, brought to about this far behind him)
+const LOST = 45;
+const BACK = 24;
+
+const _f = new THREE.Frustum();
+const _m = new THREE.Matrix4();
+const _s = new THREE.Sphere(new THREE.Vector3(), 3.5);
 
 export class Pursuer {
   constructor(game, car, prey) {
@@ -21,6 +29,11 @@ export class Pursuer {
     this.stuckT = 0;
     this.backT = 0;
     this.paused = false;
+    // (brought up along his trail when far behind and out of sight: on in the car park's climb, off
+    // where he has to lose them - game/prologue/director.js)
+    this.catchUp = false;
+    this.catchT = 0;
+    this.caught = 0;
     const keys = new Set();
     this.input = {
       ai: true,
@@ -93,7 +106,21 @@ export class Pursuer {
     while (da < -Math.PI) da += Math.PI * 2;
     // how far behind him along the trail they are
     const gap = Math.hypot(this.prey.pos.x - v.pos.x, this.prey.pos.z - v.pos.z) + Math.abs(this.prey.pos.y - v.pos.y) * 2;
+    // (fallen behind on a long straight: their engine the stronger the further back they are - up to a
+    // third again - so they are on his heels again by the next turn; never past him: near him the
+    // throttle below holds them off)
+    const base = this.baseQ || (this.baseQ = v.q);
+    const qk = gap > 18 ? Math.min(1.35, 1 + (gap - 18) / 60) : 1;
+    if (Math.abs(qk - (this.qk || 1)) > 0.02 || (qk === 1 && this.qk !== 1)) {
+      this.qk = qk;
+      v.q = qk === 1 ? base : { ...base, speed: base.speed * qk, accel: base.accel * qk };
+    }
     const preySpeed = Math.abs(this.prey.speed || 0);
+    // (far behind him and out of sight - round the last turn, a floor down: brought along his own
+    // trail to a few car lengths behind him, at his speed. Nobody sees it - not where it was, not where
+    // it comes to - and the chase stays a chase: the way the big games keep theirs close)
+    this.catchT = Math.max(0, this.catchT - dt);
+    if (this.catchUp && gap > LOST && this.catchT === 0) this.catchUpNow(preySpeed);
     let throttle = 1;
     if (gap < this.keep) throttle = gap < this.keep * 0.6 ? -0.6 : 0.15 + (preySpeed > 4 ? 0.5 : 0);
     // slower into a sharp turn
@@ -118,8 +145,62 @@ export class Pursuer {
     this.mv.y = throttle;
   }
 
+  catchUpNow(preySpeed) {
+    const v = this.car;
+    const T = this.trail;
+    // (tried again a moment later if not now)
+    this.catchT = 0.5;
+    const j = this.back(BACK);
+    if (j <= this.i || this.seen(v.pos)) return;
+    const q = T[j];
+    if (this.seen(q)) return;
+    // (which way the trail goes from there: the next point a metre or more on)
+    let n = null;
+    for (let k = j + 1; k < T.length && !n; k++) if (Math.hypot(T[k].x - q.x, T[k].z - q.z) > 1) n = T[k];
+    if (!n) return;
+    const yaw = Math.atan2(n.x - q.x, n.z - q.z);
+    const sp = Math.max(Math.abs(v.speed || 0), preySpeed * 0.9);
+    v.pos.set(q.x, q.y, q.z);
+    v.yaw = yaw;
+    v.speed = sp;
+    v.vx = Math.sin(yaw) * sp;
+    v.vz = Math.cos(yaw) * sp;
+    v.vy = 0;
+    v.air = false;
+    this.i = j;
+    this.stuckT = 0;
+    this.backT = 0;
+    this.catchT = 4;
+    this.caught++;
+  }
+
+  // the trail's point about m metres back from its end (along it, the climbs counted)
+  back(m) {
+    const T = this.trail;
+    let run = 0;
+    for (let k = T.length - 1; k > 0; k--) {
+      run += Math.hypot(T[k].x - T[k - 1].x, T[k].z - T[k - 1].z) + Math.abs(T[k].y - T[k - 1].y);
+      if (run >= m) return k - 1;
+    }
+    return -1;
+  }
+
+  // in the camera's picture (a car's size round p)
+  seen(p) {
+    const cam = this.game.camera;
+    if (!cam) return true;
+    cam.updateMatrixWorld();
+    _m.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    _f.setFromProjectionMatrix(_m);
+    _s.center.set(p.x, p.y + 0.8, p.z);
+    return _f.intersectsSphere(_s);
+  }
+
   dispose() {
-    if (this.car) this.car.ai = null;
+    if (this.car) {
+      this.car.ai = null;
+      if (this.baseQ) this.car.q = this.baseQ;
+    }
     this.car = null;
   }
 }

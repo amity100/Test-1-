@@ -366,7 +366,10 @@ export class Game {
     // once it has been told, its pieces stay in the city - all but the wheel)
     this.prologue = this.classic ? null : new Prologue(this);
     const telling = !!(this.prologue && this.prologue.wants());
-    if (this.prolSet && !telling && !this.lab && (this.params.has('prolset') || (this.prologue && this.prologue.done) || !PROLOGUE_ON)) this.prolSet.build({ wheel: this.params.has('prolset') || !(this.prologue && this.prologue.done) });
+    // (built now, with the city, also when it is about to be told: its shaders made and its pieces on
+    // the graphics card while the game loads - built when the film began, they stopped its opening
+    // shot for a second or more, and again as each of them first came into the picture)
+    if (this.prolSet && !this.lab && (telling || this.params.has('prolset') || (this.prologue && this.prologue.done) || !PROLOGUE_ON)) this.prolSet.build({ wheel: telling || this.params.has('prolset') || !(this.prologue && this.prologue.done) });
     // (ROADMAP 12.5) Paintwood's Walls, and Art Night in them
     this.artnight = this.classic ? null : new ArtNight(this);
     // (ROADMAP 12.7) INK ARCADE on Inkwood Boulevard

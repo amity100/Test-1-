@@ -3,9 +3,12 @@ import { PrologueUI, lilyDrawing } from './ui.js';
 import { PrologueVoices } from './voice.js';
 import { Shots } from './shots.js';
 import { LINES } from './lines.js';
-import { WHEEL, STAND, GARAGE_A, GARAGE_B } from './set.js';
+import { WHEEL, STAND, PARK } from './set.js';
 import { Pursuer } from './chase.js';
 import { RampDraw, Ramp, Jump, rampH } from './ramp.js';
+import { HeldPage } from './page.js';
+import { Acting, ACTS } from './acting.js';
+import { Comic } from './comic.js';
 import { civilianLook, kidLook } from '../looks.js';
 import { clamp } from '../../core/util.js';
 
@@ -15,13 +18,18 @@ import { clamp } from '../../core/util.js';
 //    the pier, over the beach and the promenade, and down to Danny Cruz. Forty seconds of the city
 //    are his before anything is asked; then: meet Lily at the ice cream stand.
 // 2. Lily, with her ice cream and her sketchbook. They walk; she sees her uncle's face on a board.
-// 3. The wheel against the sunset, full of kids; Danny really looks at it; Lily's drawing of it.
-// 4. A strange mark on a stranger's bag, a glimpse; then the wheel is rubbed out - its outline, white,
-//    for a blink, and then the sky. Nobody remembers it. Only the two of them. Her question, and his
+// 3. The wheel against the sunset, full of kids: so high, so many colours, can she go on it too; her
+//    drawing of it, held up to him; a boy up there shouting down to his mother. A strange mark on a
+//    stranger's bag, a glimpse; something under the evening's sounds; then the wheel is rubbed out,
+//    stroke by stroke, as an eraser rubs out a drawing - two and a half seconds - and the sky.
+// 4. Nobody remembers it. Only the two of them. Her drawing still has it. Her question, and his
 //    silence.
-// 5. The phone; the men waiting by the car park; a punch; into the car.
-// 6. The chase through the car park: the way out blocked, up and up to the roof - a dead end.
-// 7. The first drawing: a ramp, drawn by the player, growing out of the line into steel.
+// 5. The phone; the two men waiting by 5th Street Garage, in the middle of the city, the same two to
+//    the end; their guns; into the garage and the car, the shots going all round them.
+// 6. The chase up through the garage: its long sloping straights, floor after floor, the dark car close
+//    behind - to the roof.
+// 7. The roof run, a hundred metres straight to the edge over 5th Street: time all but stops, and the
+//    first drawing - a ramp, drawn by the player, growing out of the line into steel at the edge.
 // 8. The jump: in the air, time all but stopped, the title over the city. The landing, hard.
 // 9. Away, and quiet, over the bay. "It was there." The camera draws back over the water; where the
 //    wheel stood there is only the evening.
@@ -33,7 +41,9 @@ import { clamp } from '../../core/util.js';
 export const PROLOGUE_ON = false;
 // (a working title, until the name is chosen)
 export const GAME_TITLE = 'OUTLINE';
-export const CREDIT = 'AN AMITAI DAHAN GAME';
+// (who made it, under the name - in the player's own language, as the rest of what is put over the
+// picture is)
+export const CREDIT = 'יוצר: אמיתי דהן';
 const DONE_KEY = 'scribble.prologue.v1';
 
 // the places
@@ -45,30 +55,31 @@ const GUYS = [
   { x: 72.3, z: 236.8 },
 ];
 const MAN = { x: 69.6, z: 242.6 };
-const GARAGE_IN = { x: 15.5, z: 320 };
-const THUG_CAR = { x: 21.5, z: 327.6, yaw: Math.PI };
-const THUGS = [
-  { x: 18.6, z: 322.2 },
-  { x: 19.6, z: 324.6 },
-];
-const DANNY_CAR = { x: 0.6, z: 326.8, yaw: Math.PI };
-const RUNUP = { x: -4, z: 320, yaw: -Math.PI / 2 };
-// (the game's camera, looking down the roof as it is drawn on: its pitch)
-const DRAW_PITCH = -0.34;
-const ROOF_A = GARAGE_A.Y[GARAGE_A.Y.length - 1];
-const ROOF_B = GARAGE_B.Y[GARAGE_B.Y.length - 1];
-const LAND = { x: -72, y: ROOF_B, z0: 317, z1: 323 };
+// (5th Street Garage, inland on the block of 5th to 7th Street, and Bayshore Parking across 5th
+// Street from it - game/prologue/carpark.js PARK: where the two men wait and where Danny stops, his
+// car, the way up, the roof run and its edge, the roof across the street, the way down)
+const GARAGE_IN = { x: PARK.dannyStop.x, z: PARK.dannyStop.z };
+const THUG_CAR = PARK.thugCar;
+const THUGS = PARK.thugs;
+const DANNY_CAR = PARK.heroCar;
+const RUNUP = PARK.runup;
+// (the roof run's own frame: the drawing, the ramp and the jump are worked out along -x in it)
+const RUNF = PARK.runFrame;
+const ROOF = RUNF.roofY;
+// (game/prologue/ramp.js wants the run's frame: x along it, z across)
+const loc = (x, z) => RUNF.toLocal(x, z);
+const wld = (lx, y, lz) => {
+  const [x, z] = RUNF.toWorld(lx, lz);
+  return new THREE.Vector3(x, y, z);
+};
+// (the game's camera, looking down the roof as it is drawn on: its pitch - shallow enough that the
+// edge sixty metres off, and the roof across the street past it, stand well inside the picture)
+const DRAW_PITCH = -0.22;
+// where the jump comes down: Bayshore's roof across the street, in the run's frame
+const LAND = { x: loc(PARK.land.x, PARK.land.z)[0], y: PARK.land.y, z0: PARK.land.zone.x0, z1: PARK.land.zone.x1, frame: RUNF };
 // (on the dry sand south of the pier, looking north-east at it - into the sunset)
 const LOOKOUT = { x: 60, z: 298 };
 const DARK = [0.1, 0.1, 0.12];
-
-// where the way goes up through South Pointe Garage, deck by deck (for the marker)
-const CLIMB = [
-  { lv: 0, x: -30, z: 344 },
-  { lv: 1, x: 8, z: 332 },
-  { lv: 2, x: -30, z: 344 },
-  { lv: 3, x: 8, z: 332 },
-];
 
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -119,10 +130,18 @@ export class Prologue {
     this.ui = new PrologueUI(lang);
     this.voices = new PrologueVoices(g, this.ui);
     this.shots = new Shots(g);
+    // (how each line is acted: the hands, the face, the head, the listener - game/prologue/acting.js)
+    this.acting = new Acting(g);
+    // (the action's comic moments: impact frames, speed lines, sound words - game/prologue/comic.js)
+    this.comic = new Comic(g, this.ui.root);
     this.voices.load();
     // its pieces of the city (the wheel among them)
     if (g.prolSet) g.prolSet.build();
     this.set = g.prolSet;
+    // (Lily's drawing, the page itself: made now, its picture sent to the graphics card now - not
+    // the moment she holds it up)
+    const page = this.lilyPage();
+    if (g.renderer && g.renderer.initTexture) g.renderer.initTexture(page.tex);
     // the evening held at its most beautiful, and the clock moved on by the story
     if (g.daynight) {
       this.dayMin0 = g.daynight.dayMin;
@@ -160,7 +179,13 @@ export class Prologue {
     if (m && +m[1] > 1) {
       this.co = this.prep(+m[1]);
       this.wait = 0;
-    } else this.start(1);
+    } else {
+      // (from black: the first moments of a new game make the street's people, begin the shops'
+      // insides near him, send the film's pieces up to the graphics card - a few heavy frames,
+      // behind black; then the evening fades in, s1)
+      this.ui.black();
+      this.start(1);
+    }
   }
 
   // (for a test from the middle: what the scenes before it would have left)
@@ -171,9 +196,17 @@ export class Prologue {
     const L = this.cast.lily;
     L.fig.sit = 0;
     L.baseY = 0;
-    if (n >= 4) this.spawnPier();
-    if (n >= 5) {
+    if (n >= 4) {
+      this.spawnPier();
       if (this.set) this.set.removeWheel();
+    }
+    if (n >= 4 && n < 5) {
+      this.putDanny(VIEW.x + 1.5, VIEW.z + 0.9, Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z));
+      this.put(L, VIEW.x, VIEW.z, Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z));
+    }
+    if (n >= 5) {
+      // (her ice cream long gone by now)
+      if (L.fig.carry === 'icecream') L.fig.carry = null;
       this.putDanny(VIEW.x + 1.3, VIEW.z + 0.5, Math.PI);
       this.put(L, VIEW.x, VIEW.z, Math.PI);
       L.pl.follow = true;
@@ -187,15 +220,36 @@ export class Prologue {
       g.enterVehicle(v);
       L.pl.ride = v;
       this.startPursuit();
-      this.objective('<b>Lose them</b> - get out of the car park', GARAGE_A.x0 + 1, 320, 'Exit');
+      this.objective('<b>Lose them</b> - up through the car park', PARK.route[1].x, PARK.route[1].z, 'Up');
+      this.climb = true;
+      this.climbI = -1;
       this.cue('chase');
     }
-    g.camRig.yaw = Math.PI;
+    if (n >= 7) {
+      // (at the start of the roof run, the dark car coming round the turn behind)
+      const v = this.dannyCar;
+      v.pos.set(RUNUP.x, RUNUP.y + 0.05, RUNUP.z);
+      v.yaw = RUNUP.yaw;
+      v.speed = 0;
+      const c = this.pursuer && this.pursuer.car;
+      if (c) {
+        c.pos.set(PARK.main.xc - 4, RUNUP.y + 0.05, RUNUP.z - 3);
+        c.yaw = -Math.PI / 2;
+        this.pursuer.trail.length = 0;
+        this.pursuer.i = 0;
+        this.pursuer.seed([[c.pos.x, c.pos.y, c.pos.z], [RUNUP.x, RUNUP.y, RUNUP.z]]);
+      }
+      this.climb = false;
+    }
+    g.camRig.yaw = n >= 6 && this.dannyCar ? this.dannyCar.yaw : Math.PI;
     this.start(n);
   }
 
   start(n) {
     const S = [null, this.s1, this.s2, this.s3, this.s4, this.s5, this.s6, this.s7, this.s8, this.s9];
+    // (the place's own echo for its voices: the pier and the beach, the street, the car's cabin)
+    const SPACE = [null, 'open', 'open', 'open', 'open', 'street', 'car', 'car', 'car', 'car'];
+    if (this.voices.space) this.voices.space(SPACE[n]);
     this.sceneN = n;
     this.sceneAt = this.clock || 0;
     this.co = S[n].call(this, true);
@@ -303,12 +357,20 @@ export class Prologue {
     this.k += (this.kWant - this.k) * (1 - Math.exp(-this.kRate * dt));
     if (Math.abs(this.k - this.kWant) < 0.002) this.k = this.kWant;
     this.ui.update(dt);
+    // (the ear where the camera is; every voice from its speaker's head)
+    if (this.voices.update) this.voices.update(dt, this.game.camera);
     if (this.draw && (this.draw.on || this.draw.settle)) this.draw.frame(dt);
     if (this.ramp && !this.ramp.grown) this.ramp.update(dt);
     for (const p of this.pursuers || []) p.update(dt * this.k);
     this.watchdog(dt);
     this.tickCast(dt);
     this.tickHeroes();
+    if (this.page) this.page.update();
+    this.acting.update(dt);
+    this.comic.update(dt);
+    this.tickGuns(dt);
+    // (Danny walking somewhere in a shot, on his own feet - or running)
+    if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
     this.tickMarker();
     if (this.everyFrame) this.everyFrame(dt);
     // the script: on to its next step once the wait is over
@@ -341,6 +403,12 @@ export class Prologue {
     this.ui.film(on);
     this.holdCam = on;
     this.lock(on);
+    // (the city's chatter over people's heads: none in the film, and what was up, gone)
+    const B = this.game.bubbles;
+    if (B) {
+      B.hold = on;
+      if (on && B.clear) B.clear();
+    }
     if (!on) {
       this.ff = false;
       this.shots.release();
@@ -362,12 +430,19 @@ export class Prologue {
   *say(id, fig = null, after = 0.28) {
     if (this.ff) return;
     const d = this.voices.say(id, fig);
-    // (the hands and the face go with the words - one of the city's people talks with them; the
-    // one listening turns to whoever speaks)
     const g = this.game;
     const L = LINES[id];
-    const c = fig ? Object.values(this.cast).find((q) => q.fig === fig) : null;
-    if (c && L && g.civilians.spoke) g.civilians.spoke(c, L.en, /!/.test(L.en) ? 'alarm' : 'talk');
+    // (the hands, the face and the head go with the words, beat by beat - and whoever it is said to
+    // takes it as it lands: everybody looking at the speaker)
+    if (fig && ACTS[id]) {
+      const all = [g.player.fig, ...Object.values(this.cast).map((q) => q.fig), ...(this.heroes || []).map((q) => q.fig)];
+      const listeners = all.filter((f) => f && f !== fig && fig.j && f.lookAt === fig.j.headC);
+      this.acting.play(fig, id, d, listeners);
+    } else {
+      // (a line with no acting of its own: one of the city's people talks with their hands as they do)
+      const c = fig ? Object.values(this.cast).find((q) => q.fig === fig) : null;
+      if (c && L && g.civilians.spoke) g.civilians.spoke(c, L.en, /!/.test(L.en) ? 'alarm' : 'talk');
+    }
     yield d + after;
   }
 
@@ -541,19 +616,19 @@ export class Prologue {
 
   // where somebody's head is: the middle of it, as their figure is posed this frame (sitting in a
   // car, a child, bending) - until it has been posed once, where a grown-up's head would be
-  head(c) {
+  headJ(c) {
     const j = c.fig && c.fig.j && c.fig.j.headC;
     return j && (j.x !== 0 || j.y !== 0 || j.z !== 0) ? j : null;
   }
 
   headH(c) {
-    const j = this.head(c);
+    const j = this.headJ(c);
     return j ? j.y - c.pos.y : 1.6;
   }
 
   faceOf(c) {
     return () => {
-      const j = this.head(c);
+      const j = this.headJ(c);
       return j ? v3(j.x, j.y, j.z) : v3(c.pos.x, c.pos.y + 1.6, c.pos.z);
     };
   }
@@ -571,7 +646,7 @@ export class Prologue {
     p.fig.yaw = yaw;
   }
 
-  walkDanny(x, z, speed = 0.45) {
+  walkDanny(x, z, speed = 0.45, sprint = false) {
     const g = this.game;
     const p = g.player;
     const dx = x - p.pos.x;
@@ -581,7 +656,7 @@ export class Prologue {
       return true;
     }
     g.camRig.yaw = Math.atan2(dx, dz);
-    this.auto = { x: 0, y: speed, sprint: false };
+    this.auto = { x: 0, y: speed, sprint };
     return false;
   }
 
@@ -615,19 +690,46 @@ export class Prologue {
     void dt;
   }
 
-  // the marker over where to go, kept on the way up through the car park
+  // the marker over where to go, kept on the way up through the car park: the next mark of the way
+  // up (game/prologue/carpark.js PARK.route) above the level the car is on
   tickMarker() {
+    if (this.descend) return this.tickDown();
     if (!this.climb) return;
     const g = this.game;
     const v = g.player.inVehicle;
     if (!v) return;
-    const Y = GARAGE_A.Y;
-    let lv = 0;
-    for (let k = 0; k < Y.length; k++) if (v.pos.y > Y[k] - 0.6) lv = k;
-    if (lv !== this.climbLv) {
-      this.climbLv = lv;
-      const c = CLIMB[Math.min(lv, CLIMB.length - 1)];
-      if (g.gps) g.gps.set(c.x, c.z, 'Roof');
+    const lv = PARK.levelAt(v.pos.x, v.pos.z, v.pos.y + 0.3);
+    if (lv === null || lv >= 10) return;
+    const R = PARK.route;
+    let i = R.findIndex((c) => c.lv > lv + 0.3);
+    if (i < 0) i = R.length - 1;
+    if (i !== this.climbI) {
+      this.climbI = i;
+      if (g.gps) g.gps.set(R[i].x, R[i].z, i === R.length - 1 ? 'Roof' : 'Up');
+      // (and a wreck from here on starts again at the foot of this straight: the turn it came round)
+      const t = R[i - 1];
+      if (t && t.what === 'turn') {
+        const north = t.z < (PARK.main.zN + PARK.main.zS) / 2;
+        this.check = { x: R[i].x, y: t.y + 0.05, z: north ? PARK.main.zN - 1.5 : PARK.main.zS + 1.5, yaw: north ? 0 : Math.PI, back: { x: t.x, z: t.z } };
+      }
+    }
+  }
+
+  // the marker down through Bayshore Parking: the next of its way down (PARK.down) below the level
+  // the car is on
+  tickDown() {
+    const g = this.game;
+    const v = g.player.inVehicle;
+    if (!v) return;
+    const lv = PARK.levelAt(v.pos.x, v.pos.z, v.pos.y + 0.3);
+    if (lv === null || lv < 10) return;
+    const D = PARK.down;
+    const k = lv - 10;
+    // (the ramp off the roof, the turn on each level under it, the gate, the street)
+    const i = k > 3.7 ? 0 : k > 2.7 ? 1 : k > 1.7 ? 2 : k > 0.7 ? 3 : 4;
+    if (i !== this.downI) {
+      this.downI = i;
+      if (g.gps) g.gps.set(D[i].x, D[i].z, i >= 4 ? 'Street' : 'Down');
     }
   }
 
@@ -685,23 +787,40 @@ export class Prologue {
     const P = g.player;
     this.putDanny(DANNY0.x, DANNY0.z, DANNY0.yaw);
     P.pos.y = 0.3;
+    // (behind the black it opens in: the shops' insides round him built now, all at once - nobody
+    // sees the frame it takes - so that nothing of them is left to build while the film flies in;
+    // before the music, which a long frame would trip)
+    const I = g.world && g.world.interiors;
+    if (I && this.ui.blackOn) I.fill(P.pos.x, P.pos.z, 1500, P.pos.y);
     this.film(true);
     this.hour(18.2, 0.004);
     this.cue('opening');
     // Lily, waiting at the stand (her look as soon as her sheet is in: game/prologue/cast.js)
     yield () => this.castReady;
     this.spawnLily();
-    // in off the sea: past the yachts and the wheel, over the beach and the promenade, down to Danny
+    // (and whatever is still to come of them is built at its ordinary pace while the camera is far
+    // off over the city - not rushed in, a frame's worth at a time: world/mainland/stream.js calm)
+    if (I && I.stream) I.stream.calm = true;
+    // in off the sea: past the yachts and the wheel, low over the beach and along the promenade, down
+    // to Danny. (Low: from up high the whole city is in the picture at once - more than a phone can
+    // draw smoothly; down here the nearest of it hides the rest, and it is the promenade's evening
+    // that is seen, its people, its palms)
     this.shot({
-      path: [v3(338, 7, 270), v3(262, 8.5, 268), v3(196, 11, 270), v3(150, 17, 274), v3(96, 26, 236), v3(52, 26, 150), v3(30, 15, 64), v3(19.5, 4.2, 14.5), v3(17.2, 2.6, 9.6)],
-      lookPath: [v3(128, 26, 243), v3(128, 26, 243), v3(126, 28, 243), v3(110, 22, 226), v3(40, 10, 160), v3(20, 4, 60), v3(16, 2.5, 10), v3(17, 1.9, 3), v3(17, 1.9, -12)],
+      path: [v3(338, 7, 270), v3(262, 8.5, 268), v3(196, 10, 270), v3(150, 13, 272), v3(96, 12.5, 232), v3(56, 10, 150), v3(31, 7.5, 64), v3(19.5, 4.2, 14.5), v3(17.2, 2.6, 9.6)],
+      lookPath: [v3(128, 26, 243), v3(128, 26, 243), v3(126, 27, 243), v3(110, 18, 226), v3(42, 6, 160), v3(21, 3.2, 60), v3(16, 2.4, 10), v3(17, 1.9, 3), v3(17, 1.9, -12)],
       fov: 52,
       fovTo: 58,
       dur: first ? 27 : 1,
       ease: 'soft',
       hand: 0.25,
     });
-    yield 26.6;
+    // (out of the black it began in: once the first heavy frames are behind it, over the open sea)
+    if (this.ui.blackOn) {
+      yield 0.9;
+      this.ui.fade(false, 1.6);
+      yield 25.7;
+    } else yield 26.6;
+    if (I && I.stream) I.stream.calm = false;
     // the city, his: no words, no task, for forty seconds
     this.film(false);
     let t = 0;
@@ -736,109 +855,270 @@ export class Prologue {
     // she looks up from her drawing and sees him coming
     this.putDanny(LILY_SEAT.x - 2.6, LILY_SEAT.z - 1.4, Math.atan2(2.6, 1.4));
     this.faceTo(L, P.pos.x, P.pos.z);
-    this.shot({ from: this.ots(P, L, { back: 1.0, side: 0.6, h: 1.45 }), look: this.head(L, 0.85), fov: 36, dur: 4, hand: 0.5 });
+    this.shot({ from: this.ots(P, L, { back: 1.0, side: 0.6, h: 1.45 }), look: this.faceOf(L), fov: 36, dur: 4, hand: 0.5 });
     yield 0.6;
     L.fig.sit = 0;
     L.baseY = 0;
+    L.fig.lookAt = P.fig.j.headC;
     this.feel(L.fig, 'joy', 4);
     yield* this.say('L01', L.fig);
-    // over her shoulder: him
-    this.shot({ from: () => v3(L.pos.x + 0.9, 1.25, L.pos.z + 0.75), look: () => v3(P.pos.x, 1.55, P.pos.z), fov: 38, dur: 4, hand: 0.5 });
-    yield* this.say('D01', P.fig, 0.35);
-    this.shot({ from: [LILY_SEAT.x - 1.3, 1.3, LILY_SEAT.z + 3.6], to: [LILY_SEAT.x - 1.5, 1.35, LILY_SEAT.z + 3.3], look: () => v3((L.pos.x + P.pos.x) / 2, 1.15, (L.pos.z + P.pos.z) / 2), fov: 44, dur: 4, hand: 0.5 });
-    this.feel(L.fig, 'joy', 3);
+    // over her shoulder: him - and from here on the two of them look at each other as they talk
+    P.fig.lookAt = L.fig.j.headC;
+    this.shot({ from: () => v3(L.pos.x + 0.9, 1.25, L.pos.z + 0.75), look: this.faceOf(P), fov: 38, dur: 4, hand: 0.5 });
+    yield* this.say('D01', P.fig, 0.3);
+    // the two of them: a giggle first - then she teases him
+    this.shot({ from: [LILY_SEAT.x - 1.3, 1.3, LILY_SEAT.z + 3.6], to: [LILY_SEAT.x - 1.5, 1.35, LILY_SEAT.z + 3.3], look: () => v3((L.pos.x + P.pos.x) / 2, 1.15, (L.pos.z + P.pos.z) / 2), fov: 44, dur: 5, hand: 0.5 });
+    this.feel(L.fig, 'joy', 4);
+    yield* this.say('LG1', L.fig, 0.12);
     yield* this.say('L02', L.fig, 0.25);
     // (a little smile from him)
-    this.feel(P.fig, 'joy', 1.6);
-    yield 1.1;
+    this.feel(P.fig, 'joy', 1.8);
+    yield 0.8;
+    // her uncle, up on a board by the way onto the pier: she sees him - and runs over to it
+    const B = this.lilyBoard();
+    L.fig.lookAt = v3(B.x, B.cy, B.z);
+    this.feel(L.fig, 'surprised', 1.0);
+    yield 0.45;
+    this.feel(L.fig, 'joy', 12);
+    this.go(L, B.lx, B.lz, 3.4);
+    P.fig.lookAt = L.fig.j.headC;
+    this.shot({ from: this.ots(P, L, { back: 1.3, side: 0.5, h: 1.72 }), look: this.faceOf(L), fov: 42, dur: 1.6, hand: 0.6 });
+    yield 1.25;
+    // (cut) the board, the camera rising to it as she gets there and points up at him
+    this.put(L, B.lx + B.nx * 6, B.lz + B.nz * 6, B.face);
+    this.go(L, B.lx, B.lz, 3.4);
+    this.putDanny(B.lx + B.nx * 11 - B.rx * 1.2, B.lz + B.nz * 11 - B.rz * 1.2, B.face);
+    this.walkTo = { x: B.dx, z: B.dz, speed: 0.5 };
+    this.shot({
+      path: [v3(B.x + B.nx * 12.9 + B.rx * 0.3, 1.0, B.z + B.nz * 12.9 + B.rz * 0.3), v3(B.x + B.nx * 11.6 - B.rx * 0.8, 1.6, B.z + B.nz * 11.6 - B.rz * 0.8), v3(B.x + B.nx * 10.5 - B.rx * 1.6, 2.2, B.z + B.nz * 10.5 - B.rz * 1.6)],
+      look: this.faceOf(L),
+      lookTo: v3(B.x + B.nx * 0.4, B.cy - 1.6, B.z + B.nz * 0.4),
+      fov: 42,
+      fovTo: 50,
+      dur: 6.4,
+      ease: 'swoop',
+      hand: 0.3,
+    });
+    yield () => Math.hypot(L.pos.x - B.lx, L.pos.z - B.lz) < 0.6 || this.shots.t > 2.4;
+    L.fig.reachR = v3(B.x - B.rx * 2, B.cy + 0.6, B.z - B.rz * 2);
+    yield* this.say('L03', L.fig, 0.4);
+    yield () => this.shots.t > 5.4;
+    // the two of them under it, small, the board over them: he looks up at his brother's face
+    this.shot({ from: v3(B.lx + B.nx * 5.4 - B.rx * 1.5, 0.85, B.lz + B.nz * 5.4 - B.rz * 1.5), to: v3(B.lx + B.nx * 5.0 - B.rx * 1.4, 0.9, B.lz + B.nz * 5.0 - B.rz * 1.4), look: v3(B.x + B.nx, 4.5, B.z + B.nz), fov: 52, dur: 8, hand: 0.35 });
+    L.fig.reachR = null;
+    P.fig.lookAt = v3(B.x, B.cy, B.z);
+    yield 0.5;
+    this.feel(P.fig, 'neutral', 3);
+    yield* this.say('D02', P.fig, 0.25);
+    // she turns to him
+    L.fig.lookAt = P.fig.j.headC;
+    this.faceTo(L, P.pos.x, P.pos.z);
+    yield* this.say('L04', L.fig, 0.2);
+    // his face: deadpan, an eye on the board, then on her
+    this.walkTo = null;
+    P.yaw = Math.atan2(L.pos.x - P.pos.x, L.pos.z - P.pos.z) * 0.5 + B.face * 0.5;
+    P.fig.yaw = P.yaw;
+    this.shot({ from: this.faceCam(P, 1.3, 0.35), look: this.faceOf(P), fov: 32, dur: 3.2, hand: 0.35 });
+    P.fig.lookAt = v3(B.x, B.cy, B.z);
+    yield 0.35;
+    yield* this.say('D03', P.fig, 0.05);
+    P.fig.lookAt = L.fig.j.headC;
+    // and she laughs - a real laugh (over his shoulder)
+    this.shot({ from: this.ots(P, L, { back: 0.7, side: 0.42, h: 1.58 }), look: this.faceOf(L), fov: 34, dur: 2.6, hand: 0.4 });
+    this.feel(L.fig, 'joy', 3);
+    this.feel(P.fig, 'joy', 3);
+    yield* this.say('L05', L.fig, 0.4);
+    L.fig.lookAt = null;
+    P.fig.lookAt = null;
     // the walk: her at his side, the marker on the pier
     L.pl.follow = true;
     this.film(false);
     this.objective('Walk with <b>Lily</b> to the pier', VIEW.x, VIEW.z, 'Pier');
-    yield 3.2;
-    // the board with her uncle's face on it
-    const B = this.set && this.set.boards ? this.set.boards.find((b) => Math.abs(b.z - 255.5) < 1) : null;
-    if (B) {
-      L.fig.lookAt = v3(B.x, 6.5, B.z);
-    }
-    yield* this.say('L03', L.fig, 0.3);
-    yield* this.say('D02', P.fig, 0.3);
-    yield* this.say('L04', L.fig, 0.3);
-    yield* this.say('D03', P.fig, 0.1);
-    this.feel(L.fig, 'joy', 2.6);
-    yield* this.say('L05', L.fig, 0.2);
-    L.fig.lookAt = null;
     yield () => this.dist(VIEW.x, VIEW.z) < 4.5;
     this.start(3);
   }
 
+  // Lily's board: her uncle's face on it, on the way out onto the pier, facing the stand - where it is
+  // (x, z its foot; cy the middle of the picture), which way it faces (n) and its left (r, seen from
+  // the front); where she stands under it (lx, lz) and where he comes to beside her (dx, dz)
+  lilyBoard() {
+    if (this.boardB) return this.boardB;
+    const b = (this.set && this.set.boards && this.set.boards.find((q) => Math.abs(q.z - 257.1) < 1)) || { x: 44.4, z: 257.1, nx: -0.45, nz: -0.89, w: 9, leg: 3.4 };
+    const n = Math.hypot(b.nx, b.nz);
+    const nx = b.nx / n;
+    const nz = b.nz / n;
+    const B = { x: b.x, z: b.z, nx, nz, rx: nz, rz: -nx, cy: 0.15 + b.leg + b.w / 4 };
+    B.lx = b.x + nx * 4.4;
+    B.lz = b.z + nz * 4.4;
+    B.dx = B.lx + nx * 0.5 - B.rx * 1.05;
+    B.dz = B.lz + nz * 0.5 - B.rz * 1.05;
+    B.face = Math.atan2(-nx, -nz);
+    this.boardB = B;
+    return B;
+  }
+
   // ------------------------------------------------------------------ 3. THE WHEEL
+  // The wheel against the sunset; Lily at the railing - so high, so many colours, can she go on it
+  // too; her drawing of it, held up to him; a kid up there shouting down to his mother. A few seconds
+  // more of it. Then something under the sounds of the evening that should not be there - and the
+  // wheel is rubbed out, stroke by stroke, kids and all, in two and a half seconds.
   *s3() {
     const g = this.game;
     const P = g.player;
     const L = this.cast.lily;
+    const S = this.set;
     this.objective(null);
     if (g.gps) g.gps.clear();
     this.film(true);
     this.hour(18.3, 0.004);
-    // the two of them at the railing, the wheel ahead
-    this.putDanny(VIEW.x + 1.5, VIEW.z + 0.9, Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z));
-    this.put(L, VIEW.x, VIEW.z, Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z));
-    this.spawnPier();
-    this.voices.bed(true, 0.55);
-    // against the sunset: the wheel from the beach, full of people
-    this.shot({ from: [76, 2.4, 297], to: [83, 4.2, 289], look: [128, 28, 243], lookTo: [128, 30, 243], fov: 54, fovTo: 49, dur: 6.5, hand: 0.35 });
-    yield 1.6;
-    yield* this.say('K01', null, 0.6);
-    // up close: a gondola going by low, kids at its sill waving
-    const gi = this.lowGondola();
-    this.heroRiders(gi);
-    this.shot({ from: () => this.gondolaCam(gi, -6.5, -1.2, 2.2), look: () => this.gondolaAt(gi, 0, -2.6, 0), fov: 38, dur: 4.5, hand: 0.6 });
-    yield 1.2;
-    yield* this.say('K02', null, 0.5);
-    // the parents down on the pier, waving up at them, filming
-    this.shot({ from: [94, 1.7, 251.5], to: [96, 1.9, 250.5], look: [118, 16, 242], fov: 50, dur: 3.6, hand: 0.6 });
-    yield 3.4;
-    // Lily, at the railing: the two of them from behind, the wheel beyond them
-    this.voices.bed(true, 0.35);
     const toW = Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z);
     const ux = Math.sin(toW);
     const uz = Math.cos(toW);
-    this.shot({ from: [VIEW.x - ux * 4.4 + uz * 1.7, 1.75, VIEW.z - uz * 4.4 - ux * 1.7], to: [VIEW.x - ux * 3.9 + uz * 1.5, 1.7, VIEW.z - uz * 3.9 - ux * 1.5], look: [VIEW.x + ux * 22, 10, VIEW.z + uz * 22], fov: 44, dur: 3.4, hand: 0.5 });
-    L.fig.reachR = v3(WHEEL.x, 30, WHEEL.z);
-    this.feel(L.fig, 'joy', 3);
-    yield* this.say('L06', L.fig, 0.4);
+    // the two of them at the railing, the wheel ahead
+    this.putDanny(VIEW.x + 1.5, VIEW.z + 0.9, toW);
+    this.put(L, VIEW.x, VIEW.z, toW);
+    this.spawnPier();
+    if (this.voices.bedAt) this.voices.bedAt(WHEEL.x, 32, WHEEL.z);
+    this.voices.bed(true, 1.1);
+    // against the sunset: the wheel from the beach, full of people
+    this.shot({ from: [76, 2.4, 297], to: [80, 3.6, 292], look: [128, 28, 243], lookTo: [128, 29, 243], fov: 54, fovTo: 50, dur: 4.6, hand: 0.35 });
+    yield 4.2;
+    // Lily at the railing: up at it, her arm up at it - so high!
+    this.voices.bed(true, 0.9);
+    const W0 = v3(WHEEL.x, 34, WHEEL.z);
+    L.fig.lookAt = W0;
+    P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
+    L.fig.reachR = v3(WHEEL.x, 44, WHEEL.z);
+    this.shot({ from: [VIEW.x - ux * 2.3 - uz * 1.3, 0.95, VIEW.z - uz * 2.3 + ux * 1.3], to: [VIEW.x - ux * 1.9 - uz * 1.15, 1.0, VIEW.z - uz * 1.9 + ux * 1.15], look: [WHEEL.x, 31, WHEEL.z], fov: 50, dur: 4.2, hand: 0.4 });
+    this.feel(L.fig, 'surprised', 2.4);
+    yield 0.3;
+    yield* this.say('L19', L.fig, 0.15);
+    // its lights, its colours
     L.fig.reachR = null;
-    // Danny looks: his face (the camera before him, the wheel behind it); then what he sees, slowly,
-    // all of it
-    P.fig.lookAt = v3(WHEEL.x, 32, WHEEL.z);
-    this.shot({ from: () => v3(P.pos.x + ux * 1.6 - uz * 0.55, P.pos.y + 1.42, P.pos.z + uz * 1.6 + ux * 0.55), to: () => v3(P.pos.x + ux * 1.35 - uz * 0.5, P.pos.y + 1.45, P.pos.z + uz * 1.35 + ux * 0.5), look: this.head(P, 1.68), fov: 32, dur: 2.6, hand: 0.4 });
-    yield 2.4;
-    this.shot({ from: () => v3(P.pos.x, 1.72, P.pos.z), look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x + 2, 40, WHEEL.z - 2], fov: 40, fovTo: 27, dur: 5.5, ease: 'inout', hand: 0.3 });
-    yield 5.2;
-    // and the player looks too: the camera theirs for a moment (he stays where he is)
-    this.holdCam = false;
-    this.ui.film(true);
-    g.camRig.yaw = Math.atan2(WHEEL.x - P.pos.x, WHEEL.z - P.pos.z);
-    g.camRig.pitch = 0.22;
-    yield 7;
-    this.holdCam = true;
-    // the sketchbook: her drawing of it
-    this.shot({ from: () => v3(L.pos.x - 0.9, 1.35, L.pos.z - 1.2), look: () => v3(L.pos.x, 0.95, L.pos.z), fov: 40, dur: 2.2, hand: 0.4 });
-    yield 1.4;
-    this.sketch = this.sketch || lilyDrawing();
-    this.ui.sketch(this.sketch);
-    yield 1.6;
-    yield* this.say('D04', P.fig, 0.3);
-    this.ui.sketch(null);
-    this.shot({ from: () => v3(VIEW.x + 0.4, 1.3, VIEW.z - 2.8), look: () => v3((L.pos.x + P.pos.x) / 2, 1.2, (L.pos.z + P.pos.z) / 2), fov: 44, dur: 6, hand: 0.4 });
-    this.feel(L.fig, 'surprised', 1.6);
-    yield* this.say('L07', L.fig, 0.25);
-    this.feel(P.fig, 'joy', 2);
-    yield* this.say('D05', P.fig, 0.3);
+    this.feel(L.fig, 'joy', 6);
+    this.shot({ from: [VIEW.x + ux * 0.2 + uz * 1.3, 1.2, VIEW.z + uz * 0.2 - ux * 1.3], look: [WHEEL.x, 21, WHEEL.z], lookTo: [WHEEL.x, 27, WHEEL.z], fov: 23, fovTo: 20, dur: 3.4, hand: 0.25 });
+    yield* this.say('L20', L.fig, 0.25);
+    // to him: can she go on it too? please? (a step to him, his hand in hers, tugging at it)
+    const near = { x: P.pos.x - (P.pos.x - L.pos.x) * 0.55, z: P.pos.z - (P.pos.z - L.pos.z) * 0.55 };
+    this.put(L, near.x, near.z, Math.atan2(P.pos.x - near.x, P.pos.z - near.z));
+    // (and he turns to her: from here they talk face to face)
+    P.yaw = Math.atan2(near.x - P.pos.x, near.z - P.pos.z);
+    P.fig.yaw = P.yaw;
+    L.fig.lookAt = P.fig.j.headC;
+    P.fig.lookAt = L.fig.j.headC;
+    L.fig.reachL = P.fig.j.handR;
+    {
+      // (from the side of the two of them, close: her face up to his)
+      const mx = (L.pos.x + P.pos.x) / 2;
+      const mz = (L.pos.z + P.pos.z) / 2;
+      const dx = P.pos.x - L.pos.x;
+      const dz = P.pos.z - L.pos.z;
+      const dl = Math.hypot(dx, dz) || 1;
+      // (on their north side, where the pier is open)
+      const sg = dx / dl > 0 ? -1 : 1;
+      const px = (-dz / dl) * sg;
+      const pz = (dx / dl) * sg;
+      this.shot({ from: [mx + px * 2.9, 1.25, mz + pz * 2.9], to: [mx + px * 2.7, 1.27, mz + pz * 2.7], look: [mx, 1.15, mz], fov: 47, dur: 3.6, hand: 0.4 });
+    }
+    yield* this.say('L21', L.fig, 0.25);
+    L.fig.reachL = null;
+    // him, warm
+    this.shot({ from: this.faceCam(P, 1.25, 0.3), look: this.faceOf(P), fov: 30, dur: 2.4, hand: 0.3 });
+    this.feel(P.fig, 'joy', 2.4);
+    yield* this.say('D27', P.fig, 0.3);
+    // her drawing of it: the page out of her sketchbook, held up to him
+    const page = this.lilyPage();
+    page.hold(L.fig, () => P.fig.j.headC, 'show');
+    // (from his eyes: the page held up to him, her face over it)
+    this.shot({ from: () => { const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z); const f = P.fig.forward; return v3(h.x + f.x * 0.12, h.y - 0.02, h.z + f.z * 0.12); }, look: () => v3((page.at.x * 2 + L.fig.j.headC.x) / 3, (page.at.y * 2 + L.fig.j.headC.y) / 3, (page.at.z * 2 + L.fig.j.headC.z) / 3), fov: 42, dur: 3.2, hand: 0.35 });
     this.feel(L.fig, 'joy', 3);
-    yield 1.2;
+    yield 0.35;
+    yield* this.say('L06', L.fig, 0.3);
+    // he takes his time over it
+    P.fig.lookAt = page.at;
+    this.shot({ from: this.ots(L, P, { back: 0.55, side: 0.3, h: 1.05 }), look: this.faceOf(P), fov: 34, dur: 2.4, hand: 0.35 });
+    yield 0.45;
+    P.fig.lookAt = L.fig.j.headC;
+    yield* this.say('D04', P.fig, 0.2);
+    // not bad?!
+    page.hold(L.fig, () => P.fig.j.headC, 'low');
+    this.shot({ from: this.faceCam(L, 1.05, -0.42), look: this.faceOf(L), fov: 32, dur: 1.8, hand: 0.35 });
+    this.feel(L.fig, 'surprised', 1.4);
+    yield* this.say('L07', L.fig, 0.2);
+    // the two of them, laughing
+    this.shot({ from: () => v3(VIEW.x + 0.4, 1.3, VIEW.z - 2.8), look: () => v3((L.pos.x + P.pos.x) / 2, 1.2, (L.pos.z + P.pos.z) / 2), fov: 44, dur: 3.4, hand: 0.4 });
+    this.feel(P.fig, 'joy', 3);
+    this.feel(L.fig, 'joy', 6);
+    yield* this.say('D05', P.fig, 0.1);
+    page.hold(L.fig, null, 'hug');
+    yield 0.7;
+    page.release();
+    L.fig.lookAt = W0;
+    P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
+    this.faceTo(L, WHEEL.x, WHEEL.z);
+    // up there: a boy at his gondola's sill, waving, shouting down to his mother - and the camera
+    // drawing back from him until the whole wheel is in it again
+    const gi = this.lowGondola();
+    this.heroRiders(gi);
+    const kid = this.heroes[0];
+    this.voices.bed(true, 1.2);
+    this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.6), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, -0.55), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 28, fovTo: 46, dur: 6.2, ease: 'inout', hand: 0.45 });
+    yield 0.5;
+    yield* this.say('K01', kid.fig, 0.9);
+    yield* this.say('K02', null, 0.4);
+    yield () => this.shots.t > 5.6;
+    // a few seconds more of it: the two of them at the railing, the wheel turning against the sky
+    this.voices.bed(true, 1.0);
+    const wide = () => this.shot({ from: [VIEW.x - ux * 3.8 - uz * 0.6, 1.5, VIEW.z - uz * 3.8 + ux * 0.6], to: [VIEW.x - ux * 3.2 - uz * 0.55, 1.55, VIEW.z - uz * 3.2 + ux * 0.55], look: [WHEEL.x, 23.5, WHEEL.z], fov: 47, dur: 9, ease: 'lin', hand: 0.3 });
+    wide();
+    yield 2.0;
+    // (a glance aside: a man going by, a mark on his bag - from Danny's own eyes, and gone)
+    const bag = this.bagMan();
+    this.shot({ from: this.head(P, 1.66), look: () => v3(bag.pos.x, bag.pos.y + 0.95, bag.pos.z), fov: 30, dur: 1.2, hand: 1 });
+    P.fig.lookAt = bag.fig.j ? bag.fig.j.hip : null;
+    yield 0.6;
+    P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
+    wide();
+    yield 1.4;
+    // something under the evening's sounds that should not be there
+    g.audio.play('dread', 1);
+    yield 1.7;
+    // and it is rubbed out
+    g.audio.play('gone', 1);
+    S.erase();
+    // (the kids' voices going as they go)
+    yield () => {
+      const e = S.erasing;
+      if (e && e.total) this.voices.bed(true, 1.0 * Math.max(0, 1 - (e.k || 0) * 1.15));
+      return !S.erasing;
+    };
+    this.voices.bed(false);
+    this.cue('stop', { fade: 0.02 });
+    // (and at once nobody down there is waving up at anything)
+    S.forget();
+    yield 0.7;
+    // he does not move
+    this.feel(P.fig, 'surprised', 8);
+    this.shot({ from: this.faceCam(P, 1.25, 0.3), to: this.faceCam(P, 1.1, 0.27), look: this.faceOf(P), fov: 30, dur: 2.3, hand: 0.25 });
+    yield 2.0;
+    this.feel(L.fig, 'scared', 8);
+    L.fig.lookAt = P.fig.j.headC;
+    this.faceTo(L, P.pos.x, P.pos.z);
+    // (the two of them from the side, close: her face up to his)
+    this.shot({ from: () => v3(VIEW.x + 0.6, 1.25, VIEW.z - 2.3), look: () => v3((L.pos.x * 2 + P.pos.x) / 3, 1.15, (L.pos.z * 2 + P.pos.z) / 3), fov: 36, dur: 2.6, hand: 0.4 });
+    yield 0.4;
+    yield* this.say('L08', L.fig, 0.7);
+    // where it was: the evening - and the kids' voices, far off, coming back to him
+    this.shot({ from: () => v3(P.pos.x, 1.72, P.pos.z), look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 25, WHEEL.z], fov: 44, fovTo: 40, dur: 3.6, hand: 0.2 });
+    this.voices.memory(0.42);
+    yield 3.4;
     this.start(4);
+  }
+
+  // Lily's drawing, the page itself in her hands (made ready with the rest: game/prologue/page.js)
+  lilyPage() {
+    if (!this.page) this.page = new HeldPage(this.game, this.sketch || (this.sketch = lilyDrawing()));
+    return this.page;
   }
 
   // the gondola the camera goes up close to: real people in it (faces, smiles, hands), not the
@@ -863,10 +1143,19 @@ export class Prologue {
   tickHeroes() {
     if (!this.heroes) return;
     const S = this.set;
-    if (!S || S.wheelGone || (S.erasing && S.erasing.t > 0)) {
+    if (!S || S.wheelGone) {
       for (const c of this.heroes) this.game.civilians.remove(c);
       this.heroes = null;
       return;
+    }
+    // (rubbed out with their gondola: each of them as the eraser comes over them)
+    if (S.erasing) {
+      for (const c of this.heroes) {
+        if (!c.gone && S.rubbedAt(c.pos) > 0.6) {
+          c.gone = true;
+          c.fig.setVisible(false);
+        }
+      }
     }
     const t = this.clock || 0;
     const face = Math.atan2(-Math.cos(WHEEL.yaw), Math.sin(WHEEL.yaw));
@@ -879,7 +1168,7 @@ export class Prologue {
       c.vel.set(0, 0, 0);
       c.yaw = face;
       c.faceYaw = face;
-      const hd = this.head(c);
+      const hd = this.headJ(c);
       if (h.wave && hd) {
         // (a hand up, waving to somebody down on the pier)
         const w = Math.sin(t * 7 + h.ph) * 0.22;
@@ -937,37 +1226,7 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     const L = this.cast.lily;
-    const S = this.set;
-    // a glance aside: a man going by, a mark on his bag - half a second, from Danny's own eyes
-    const bag = this.bagMan();
-    this.shot({ from: this.head(P, 1.66), look: () => v3(bag.pos.x, bag.pos.y + 0.95, bag.pos.z), fov: 30, dur: 1.2, hand: 1 });
-    P.fig.lookAt = bag.fig.j ? bag.fig.j.hip : null;
-    yield 0.55;
-    // (it is gone into the people as fast)
-    P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
-    // Lily, still looking at it, happy; the wheel turning against the sky
-    this.voices.bed(true, 0.5);
-    this.shot({ from: () => v3(VIEW.x - 3.6, 2.1, VIEW.z + 2.2), look: [WHEEL.x, 27, WHEEL.z], fov: 50, dur: 6, hand: 0.35 });
-    this.feel(L.fig, 'joy', 4);
-    yield 3.6;
-    // and then, without anything before it: rubbed out
-    S.erase();
-    // (and at once nobody down there is waving up at anything)
-    S.forget();
-    this.voices.bed(false);
-    this.cue('stop', { fade: 0.02 });
-    yield 2.2;
-    // he does not move
-    this.feel(P.fig, 'surprised', 6);
-    this.shot({ from: this.faceCam(P, 1.25, 0.3), look: this.faceOf(P), fov: 30, dur: 2.2, hand: 0.3 });
-    yield 1.7;
-    this.shot({ from: this.faceCam(L, 1.0, -0.25), look: this.faceOf(L), fov: 32, dur: 2.4, hand: 0.4 });
-    this.feel(L.fig, 'scared', 6);
-    L.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    yield* this.say('L08', L.fig, 0.9);
-    // what he is looking at: the evening, where it was
-    this.shot({ from: () => v3(P.pos.x, 1.72, P.pos.z), look: [WHEEL.x, 24, WHEEL.z], lookTo: [WHEEL.x, 26, WHEEL.z], fov: 44, dur: 2.6, hand: 0.25 });
-    yield 2.5;
+    this.film(true);
     // nobody else: the parents walk off, the phone goes back in a pocket, the guys chat
     this.shot({ from: [86, 3.2, 247], to: [86.5, 3.4, 246], look: [104, 1.5, 243], fov: 50, dur: 3.2, hand: 0.5 });
     yield 3.0;
@@ -1028,16 +1287,19 @@ export class Prologue {
     this.shot({ from: this.ots(L, P, { h: 1.05, back: 0.6, side: 0.3 }), look: this.faceOf(P), fov: 32, dur: 2.2, hand: 0.4 });
     this.feel(P.fig, 'sad', 4);
     yield* this.say('D11', P.fig, 0.5);
-    // her drawing: it is still in it
-    this.ui.sketch(this.sketch || (this.sketch = lilyDrawing()));
-    yield 2.6;
-    this.ui.sketch(null);
-    this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.1, back: 0.9, side: 0.4 }), look: [WHEEL.x, 24, WHEEL.z], fov: 46, dur: 1.8, hand: 0.4 });
+    // her drawing: she holds it up against where it stood - in it, it is still there
+    const page = this.lilyPage();
+    this.faceTo(L, WHEEL.x, WHEEL.z);
+    L.fig.lookAt = page.at;
+    page.hold(L.fig, null, 'read');
+    this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 0.95, back: 0.6, side: 0.3 }), look: () => v3(page.at.x + (WHEEL.x - L.pos.x) * 0.05, page.at.y + 0.5, page.at.z + (WHEEL.z - L.pos.z) * 0.05), fov: 44, dur: 3.2, hand: 0.35 });
+    yield 2.0;
+    // past it: nothing
+    this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.12, back: 0.55, side: 0.28 }), look: () => v3(page.at.x, page.at.y, page.at.z), lookTo: [WHEEL.x, 20, WHEEL.z], fov: 40, fovTo: 44, dur: 2.2, hand: 0.35 });
     L.fig.lookAt = v3(WHEEL.x, 24, WHEEL.z);
-    yield 1.8;
-    this.ui.sketch(this.sketch);
-    yield 1.0;
-    this.ui.sketch(null);
+    yield 2.0;
+    page.hold(L.fig, null, 'hug');
+    this.faceTo(L, P.pos.x, P.pos.z);
     L.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.shot({ from: this.faceCam(L, 0.95, -0.22), look: this.faceOf(L), fov: 28, dur: 4.5, hand: 0.3 });
     this.feel(L.fig, 'sad', 8);
@@ -1055,17 +1317,20 @@ export class Prologue {
     this.feel(P.fig, 'sad', 8);
     yield 2.3;
     this.shot({ from: () => { const a = this.ots(L, P, { back: 2.6, side: 1.6, h: 1.35 })(); return a; }, look: () => v3((L.pos.x + P.pos.x) / 2, 1.2, (L.pos.z + P.pos.z) / 2), fov: 40, dur: 9, hand: 0.35 });
-    yield* this.say('D12', P.fig, 0.9);
-    this.ui.sketch(this.sketch);
-    yield 1.2;
+    yield* this.say('D12', P.fig, 0.6);
+    // his hands over hers, on the page: keep it
+    P.fig.reachL = page.at;
+    P.fig.reachR = page.at;
+    yield 0.6;
     yield* this.say('D13', P.fig, 0.4);
-    this.ui.sketch(null);
     yield* this.say('L11', L.fig, 0.5);
     yield* this.say('D14', P.fig, 0.6);
+    P.fig.reachR = null;
     // his hand out to hers
     P.fig.reachL = L.fig.j ? L.fig.j.handR || null : null;
     yield* this.say('D15', P.fig, 0.4);
     P.fig.reachL = null;
+    page.release();
     P.fig.lookAt = null;
     L.fig.lookAt = null;
     L.pl.follow = true;
@@ -1096,10 +1361,10 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     const L = this.cast.lily;
-    // the thugs, and their car by the way in
+    // the two men, their car at the curb of 5th Street, Danny's in its bay inside the garage
     this.spawnThugs();
     // the phone, half way there
-    yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 70;
+    yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 90;
     this.phoneRing(true);
     yield 2.4;
     this.phoneRing(false);
@@ -1115,136 +1380,233 @@ export class Prologue {
     this.ui.call('off');
     g.audio.play('click', 0.5);
     P.fig.carry = null;
-    // the dark car by the car park, the two men by it
-    yield () => this.dist(THUGS[0].x, THUGS[0].z) < 17;
+    // the garage's door on 5th Street: the dark car at the curb, the two men by it - the same two from
+    // here to the end: the one who talks (t1), the one beside him (t2)
+    yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 15 || this.dist(THUGS[0].x, THUGS[0].z) < 16;
     const t1 = this.cast.t1;
     const t2 = this.cast.t2;
     this.objective(null);
     if (g.gps) g.gps.clear();
     this.film(true);
     this.cue('discovery');
-    // (where he stopped: a few steps before them)
-    const a = Math.atan2(t1.pos.x - P.pos.x, t1.pos.z - P.pos.z);
-    this.putDanny(t1.pos.x - Math.sin(a) * 6.5, t1.pos.z - Math.cos(a) * 6.5, a);
-    this.put(L, P.pos.x - Math.sin(a) * 1.2 + Math.cos(a) * 0.9, P.pos.z - Math.cos(a) * 1.2 - Math.sin(a) * 0.9, a);
+    // (where it happens - game/prologue/carpark.js PARK: Danny stopped on the sidewalk between the way in
+    // and the door, the two of them twelve metres off by their car, the sidewalk open between them;
+    // Lily at his back)
+    const D = PARK.dannyStop;
+    const T = THUGS[0];
+    const tx = T.x - D.x;
+    const tz = T.z - D.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const ux = tx / tl;
+    const uz = tz / tl;
+    const a = Math.atan2(ux, uz);
+    this.putDanny(D.x, D.z, a);
+    this.put(L, D.x - ux * 1.1 - uz * 0.6, D.z - uz * 1.1 + ux * 0.6, a);
     L.pl.follow = false;
-    t1.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    t2.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.faceTo(t1, P.pos.x, P.pos.z);
-    this.faceTo(t2, P.pos.x, P.pos.z);
-    this.shot({ from: () => v3(P.pos.x - Math.sin(a) * 3 + Math.cos(a) * 1.4, 1.8, P.pos.z - Math.cos(a) * 3 - Math.sin(a) * 1.4), look: () => v3(t1.pos.x, 1.3, t1.pos.z), fov: 44, dur: 4, hand: 0.5 });
-    this.go(t1, t1.pos.x - Math.sin(a) * 2.5, t1.pos.z - Math.cos(a) * 2.5, 1.2);
+    const S1 = THUGS[0];
+    const S2 = THUGS[1];
+    this.put(t1, S1.x, S1.z, a + Math.PI);
+    this.put(t2, S2.x, S2.z, a + Math.PI);
+    for (const c of [t1, t2]) {
+      c.downT = 0;
+      c.upT = 0;
+      c.fig.lookAt = P.fig.j.headC;
+    }
+    // over their shoulders: him and Lily, small, at the door of the car park - they have been waiting
+    // for him
+    this.shot({ from: () => v3(t1.pos.x + ux * 2.2 - uz * 1.1, 1.75, t1.pos.z + uz * 2.2 + ux * 1.1), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 40, dur: 3.6, hand: 0.5 });
+    this.go(t1, S1.x - ux * 2.0, S1.z - uz * 2.0, 1.0);
+    yield 0.5;
     yield* this.say('T01', t1.fig, 0.3);
     // he stops; puts her behind him
-    this.put(L, P.pos.x - Math.sin(a) * 1.0 - Math.cos(a) * 0.3, P.pos.z - Math.cos(a) * 1.0 + Math.sin(a) * 0.3, a);
-    this.feel(L.fig, 'scared', 20);
-    this.feel(P.fig, 'angry', 12);
-    this.shot({ from: () => v3(t1.pos.x + Math.cos(a) * 1.0, 1.7, t1.pos.z - Math.sin(a) * 1.0), look: () => v3(P.pos.x, 1.6, P.pos.z), fov: 36, dur: 2.6, hand: 0.5 });
+    this.put(L, P.pos.x - ux * 1.0 + uz * 0.25, P.pos.z - uz * 1.0 - ux * 0.25, a);
+    L.fig.lookAt = t1.fig.j.headC;
+    this.feel(L.fig, 'scared', 30);
+    this.feel(P.fig, 'angry', 14);
+    P.fig.lookAt = t1.fig.j.headC;
+    // (from behind the two of them: Danny, Lily at his back - and the two men down the sidewalk)
+    this.shot({ from: () => v3(P.pos.x - ux * 2.6 + uz * 0.9, 1.7, P.pos.z - uz * 2.6 - ux * 0.9), look: () => v3(t1.pos.x, 1.35, t1.pos.z), fov: 38, dur: 2.6, hand: 0.5 });
     yield* this.say('D18', P.fig, 0.3);
-    this.shot({ from: () => v3(P.pos.x + Math.cos(a) * 0.9, 1.7, P.pos.z - Math.sin(a) * 0.9), look: () => v3(t1.pos.x, 1.6, t1.pos.z), fov: 38, dur: 3.2, hand: 0.5 });
+    this.shot({ from: () => v3(P.pos.x - ux * 0.9 + uz * 0.55, 1.68, P.pos.z - uz * 0.9 - ux * 0.55), look: this.faceOf(t1), fov: 26, dur: 3.2, hand: 0.5 });
     yield* this.say('T02', t1.fig, 0.25);
-    this.shot({ from: () => v3(t1.pos.x + Math.cos(a) * 1.0, 1.7, t1.pos.z - Math.sin(a) * 1.0), look: () => v3(P.pos.x, 1.6, P.pos.z), fov: 34, dur: 3, hand: 0.5 });
+    this.shot({ from: () => v3(t1.pos.x + ux * 1.0 - uz * 0.5, 1.72, t1.pos.z + uz * 1.0 + ux * 0.5), look: this.faceOf(P), fov: 26, dur: 3, hand: 0.5 });
     yield* this.say('D19', P.fig, 0.25);
-    this.shot({ from: () => v3(P.pos.x + Math.cos(a) * 0.9, 1.7, P.pos.z - Math.sin(a) * 0.9), look: () => v3(t1.pos.x, 1.6, t1.pos.z), fov: 34, dur: 3.2, hand: 0.6 });
-    // they come on: one in his way
-    this.go(t1, P.pos.x + Math.sin(a) * 1.25, P.pos.z + Math.cos(a) * 1.25, 1.1);
-    this.go(t2, P.pos.x + Math.sin(a) * 1.4 + Math.cos(a) * 1.3, P.pos.z + Math.cos(a) * 1.4 - Math.sin(a) * 1.3, 1.2);
-    yield* this.say('T03', t1.fig, 0.1);
-    // there is no talking it out: a punch, a shove, her hand, the car
-    this.shot({ from: () => v3(P.pos.x - Math.cos(a) * 3.2 + Math.sin(a) * 0.6, 1.5, P.pos.z + Math.sin(a) * 3.2 + Math.cos(a) * 0.6), look: () => v3((P.pos.x + t1.pos.x) / 2, 1.4, (P.pos.z + t1.pos.z) / 2), fov: 40, dur: 2.2, hand: 0.9 });
-    yield* this.punch(t1, a);
-    yield* this.shove(t2, a);
-    this.cue('chase');
-    // into the car park, to the car - and in
+    // the other one moves out to the side - slowly, his hand inside his jacket (towards the curb: the
+    // building's face is on the other side)
+    this.go(t2, S2.x - ux * 1.5 + uz * 1.4, S2.z - uz * 1.5 - ux * 1.4, 0.8);
+    this.shot({ from: () => v3(P.pos.x - ux * 1.6 + uz * 1.2, 1.5, P.pos.z - uz * 1.6 - ux * 1.2), look: () => v3((t1.pos.x + t2.pos.x) / 2, 1.4, (t1.pos.z + t2.pos.z) / 2), fov: 30, dur: 3.4, hand: 0.6 });
+    yield* this.say('T03', t1.fig, 0.25);
+    // wrong answer: the guns
+    this.shot({ from: () => v3(t1.pos.x - ux * 1.5 + uz * 1.4, 1.05, t1.pos.z - uz * 1.5 - ux * 1.4), look: this.faceOf(t1), fov: 34, dur: 2.0, hand: 0.6 });
+    this.armThug(t1, P);
+    g.audio.play('click', 0.6);
+    this.comic.impact(this.headJ(t1) || t1.pos, 0.1);
+    yield 0.2;
+    yield* this.say('T05', t1.fig, 0.05);
+    this.armThug(t2, P);
+    // him: the car, now
+    this.shot({ from: this.faceCam(P, 1.4, 0.35), look: this.faceOf(P), fov: 34, dur: 1.6, hand: 0.8 });
+    this.feel(P.fig, 'scared', 3);
+    yield* this.say('D28', P.fig, 0.0);
+    // they fire - from down the sidewalk, the shots going all round the two of them as they run in
+    // through the way in and round to the car
+    this.firing = { at: () => P.pos, t: 0.15 };
+    this.feel(L.fig, 'scared', 10);
     const v = this.dannyCar;
-    this.putDanny(v.pos.x - 1.6, v.pos.z + 0.2, 0);
-    this.put(L, v.pos.x + 1.6, v.pos.z + 0.2, 0);
-    this.shot({ from: () => v3(v.pos.x - 4.2, 1.4, v.pos.z - 5.5), look: () => v3(v.pos.x, 0.9, v.pos.z), fov: 46, dur: 2, hand: 0.8 });
-    yield 0.8;
+    const run = PARK.dannyRun;
+    // (Lily ahead of him, to the far door: round the car's nose)
+    this.lilyRun = [[run[1][0] - 0.4, run[1][1] + 0.3], [run[2][0] + 0.2, run[2][1] - 1.5], [v.pos.x - 3.1, v.pos.z - 2.0], [v.pos.x - 0.4, v.pos.z - 1.75]];
+    this.lilyRunI = 0;
+    const lilyNext = () => {
+      const q = this.lilyRun && this.lilyRun[this.lilyRunI];
+      if (q) this.go(L, q[0], q[1], 4.4);
+    };
+    lilyNext();
+    // (inside the car park looking out through the way in: the two of them coming in at a run, the
+    // men's muzzle flashes out on the sidewalk beyond - drawn on twos, the speed lines in)
+    // (from the aisle by the car's nose, west of it: the way in straight ahead, the two of them coming
+    // in through it at a run and round to the car on the left, the men out on the sidewalk beyond)
+    const inside = v3(v.pos.x - 6.4, 1.45, v.pos.z - 0.7);
+    this.shot({ from: inside, to: v3(inside.x + 0.3, 1.35, inside.z + 0.9), look: () => v3((P.pos.x + L.pos.x) / 2, 1.0, (P.pos.z + L.pos.z) / 2), fov: 50, dur: 3.2, hand: 1, step: 12 });
+    this.comic.lines(null, 1.6, 0.8);
+    for (let i = 1; i < run.length; i++) {
+      this.walkTo = { x: run[i][0], z: run[i][1], speed: 1, sprint: true };
+      let t = 0;
+      yield () => {
+        t += this.dtR;
+        // (Lily on along her own way, a point at a time)
+        const q = this.lilyRun && this.lilyRun[this.lilyRunI];
+        if (q && Math.hypot(L.pos.x - q[0], L.pos.z - q[1]) < 0.7 && this.lilyRunI < this.lilyRun.length - 1) {
+          this.lilyRunI++;
+          lilyNext();
+        }
+        return !this.walkTo || Math.hypot(P.pos.x - run[i][0], P.pos.z - run[i][1]) < 0.75 || t > 3.5;
+      };
+    }
+    this.walkTo = null;
+    // (and his feet off the pedal: the run's forward push must not carry into the car)
+    this.auto = null;
+    this.lilyRun = null;
+    // in, and the engine
     g.enterVehicle(v);
     L.pl.ride = v;
-    g.audio.play('roar', 0.9);
-    this.shot({ from: () => v3(GARAGE_IN.x - 6, 1.3, GARAGE_IN.z + 1.5), look: () => v3(t2.pos.x, 1.3, t2.pos.z), fov: 44, dur: 2.6, hand: 0.9 });
-    t2.downT = 0;
-    this.go(t2, THUG_CAR.x - 1.5, THUG_CAR.z, 3.5);
-    yield* this.say('T04', t2.fig, 0.2);
-    // their car comes after them
+    g.audio.play('roar', 1);
+    // (from the way in, past the two men coming to it with their guns up: the car starting in its bay)
+    this.go(t1, run[1][0] - 3.5, run[1][1] + 2.4, 2.2);
+    this.go(t2, run[1][0] - 5.2, run[1][1] + 3.6, 2.2);
+    this.shot({ from: () => v3(t1.pos.x - uz * 0.9 - ux * 1.2, 1.6, t1.pos.z + ux * 0.9 - uz * 1.2), look: () => v3(v.pos.x, 0.9, v.pos.z), fov: 42, dur: 2.2, hand: 1 });
+    this.comic.word('VROOOM!', v3(v.pos.x, 1.4, v.pos.z), { fill: '#ff6f3a', burst: '#ffd23f', size: 0.1, life: 1.0 });
+    yield 0.4;
+    yield* this.say('T06', t2.fig, 0.1);
+    // their car comes after them; the guns still going as they run back to it
+    this.firing = null;
+    this.disarmThug(t1);
+    this.disarmThug(t2);
+    this.cue('chase');
     this.startPursuit();
-    this.check = { x: DANNY_CAR.x, y: GARAGE_A.Y[0], z: 320, yaw: -Math.PI / 2, back: { x: 12, z: 320 } };
+    this.check = { x: DANNY_CAR.x, y: DANNY_CAR.y + 0.05, z: DANNY_CAR.z, yaw: DANNY_CAR.yaw, back: { x: PARK.entrance.x, z: PARK.entrance.z + 4 } };
     this.film(false);
-    this.objective('<b>Lose them</b> - get out of the car park', GARAGE_A.x0 + 1, 320, 'Exit');
+    g.camRig.yaw = v.yaw;
+    this.objective('<b>Lose them</b> - up through the car park', PARK.route[1].x, PARK.route[1].z, 'Up');
+    this.climb = true;
+    this.climbI = -1;
     this.start(6);
+  }
+
+  // a man drawing his gun: his arm up and out at whoever (by), the gun in his hand drawn each frame
+  armThug(c, by) {
+    const G = this.gunmen || (this.gunmen = []);
+    if (!G.find((q) => q.c === c)) G.push({ c, by, t: 0, next: 0.3 + Math.random() * 0.4 });
+  }
+
+  disarmThug(c) {
+    if (!this.gunmen) return;
+    this.gunmen = this.gunmen.filter((q) => q.c !== c);
+    if (c.fig) {
+      c.fig.aim = 0;
+      c.fig.aimYaw = 0;
+      c.fig.aimPitch = 0;
+    }
+  }
+
+  // every frame: the guns in their hands, aimed; and while they fire, the shots - a flash at the
+  // muzzle, the crack carried over the floor, the bullet's hit near the two of them (never on them):
+  // sparks off the concrete, a car's window
+  tickGuns(dt) {
+    const G = this.gunmen;
+    if (!G || !G.length) return;
+    const g = this.game;
+    const fr = g.figures;
+    for (const q of G) {
+      const f = q.c.fig;
+      if (!f || !f.j || !q.c.alive) continue;
+      const B = q.by.pos || q.by;
+      const yaw = Math.atan2(B.x - q.c.pos.x, B.z - q.c.pos.z);
+      f.aim = 1;
+      let dy = yaw - f.yaw;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      f.aimYaw = dy;
+      f.aimPitch = Math.atan2((B.y || 0) + 1.0 - f.j.handR.y, Math.hypot(B.x - q.c.pos.x, B.z - q.c.pos.z));
+      const h = f.j.handR;
+      const d = f.aimDir;
+      if (fr && h.lengthSq() > 0) {
+        // (a pistol: its slide along the aim, its grip down in the hand)
+        fr.lineXYZ(h.x - d.x * 0.03, h.y - d.y * 0.03 + 0.025, h.z - d.z * 0.03, h.x + d.x * 0.2, h.y + d.y * 0.2 + 0.025, h.z + d.z * 0.2, [0.06, 0.06, 0.08], 6, 900 + q.c.id, 1, 0.004, 0);
+        fr.lineXYZ(h.x, h.y + 0.02, h.z, h.x - d.x * 0.02, h.y - 0.1, h.z - d.z * 0.02, [0.06, 0.06, 0.08], 5, 901 + q.c.id, 1, 0.004, 0);
+      }
+      if (!this.firing) continue;
+      q.next -= dt;
+      if (q.next > 0) continue;
+      q.next = 0.38 + Math.random() * 0.55;
+      const mx = h.x + d.x * 0.24;
+      const my = h.y + d.y * 0.24 + 0.025;
+      const mz = h.z + d.z * 0.24;
+      if (g.fx) {
+        g.fx.muzzle(mx, my, mz, 0.8);
+        g.fx.flash(mx, my, mz, 1.6);
+      }
+      const cam = g.camera.position;
+      const far = Math.hypot(mx - cam.x, mz - cam.z);
+      g.audio.play('pistol', Math.max(0.25, Math.min(1, 9 / Math.max(3, far))));
+      this.bangs = (this.bangs || 0) + 1;
+      if (this.bangs <= 3 && this.comic) this.comic.word(this.bangs === 2 ? 'BLAM!' : 'BANG!', v3(mx, my + 0.3, mz), { fill: '#fff4d6', burst: '#ff3b4f', size: 0.075, life: 0.55 });
+      // where it goes: a metre or three wide of them, low
+      const at = this.firing.at();
+      const ang = Math.random() * Math.PI * 2;
+      const r = 1.1 + Math.random() * 2;
+      const hx = at.x + Math.cos(ang) * r;
+      const hz = at.z + Math.sin(ang) * r;
+      const v = this.dannyCar;
+      const nearCar = v && Math.hypot(hx - v.pos.x, hz - v.pos.z) < 2.6 && Math.random() < 0.45;
+      const hy = nearCar ? 1.1 + Math.random() * 0.3 : 0.05 + Math.random() * 0.2;
+      if (g.fx) {
+        g.fx.sparks(hx, hy, hz, 7, [1, 0.85, 0.45]);
+        g.fx.impact(hx, hy, hz, 0.7);
+        if (!nearCar) g.fx.crumbs(hx, hy, hz, 6, 2.2, true);
+      }
+      g.audio.play(nearCar ? 'glass' : 'ricochet', nearCar ? 0.35 : 0.6);
+    }
   }
 
   spawnThugs() {
     const g = this.game;
     if (!this.thugCar) {
-      this.thugCar = g.vehicles.spawnStock({ kind: 'sedan', color: DARK }, { x: THUG_CAR.x, z: THUG_CAR.z }, THUG_CAR.yaw);
+      // (at the curb, its nose to the way in: they mean to follow him in)
+      this.thugCar = g.vehicles.spawnStock({ kind: 'sedan', color: DARK }, { x: THUG_CAR.x, z: THUG_CAR.z }, Math.PI / 2);
       this.thugCar.kept = true;
       this.thugCar.pos.y = 0.15;
     }
     if (!this.dannyCar) {
       this.dannyCar = g.vehicles.spawnStock({ kind: 'muscle', color: [0.58, 0.1, 0.12] }, { x: DANNY_CAR.x, z: DANNY_CAR.z }, DANNY_CAR.yaw);
       this.dannyCar.kept = true;
-      this.dannyCar.pos.y = 0.15;
+      this.dannyCar.pos.y = DANNY_CAR.y;
     }
     if (!this.cast.t1) {
       const lk = () => civilianLook({ fem: false, kind: 'street' });
-      this.person('t1', THUGS[0].x, THUGS[0].z, lk(), { face: -1.2 });
-      this.person('t2', THUGS[1].x, THUGS[1].z, lk(), { face: -1.6 });
+      this.person('t1', THUGS[0].x, THUGS[0].z, lk(), { face: PARK.thugsFace });
+      this.person('t2', THUGS[1].x, THUGS[1].z, lk(), { face: PARK.thugsFace });
     }
-  }
-
-  *punch(c, a) {
-    const g = this.game;
-    const P = g.player;
-    const fig = P.fig;
-    P.yaw = Math.atan2(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
-    fig.yaw = P.yaw;
-    g.audio.play('swing', 0.7);
-    for (let t = 0; t < 0.36; t += this.dtR || 0.016) {
-      fig.punch = Math.min(1, t / 0.36);
-      fig.punchSide = 1;
-      if (t > 0.16 && !c.hitDone) {
-        c.hitDone = true;
-        g.audio.play('punch', 1);
-        g.camRig.addShake(0.35);
-        const h = this.head(c) || c.pos;
-        const F = g.weapons && g.weapons.fists;
-        if (F) F.burst(h.x, h.y, h.z, 1.2);
-        c.downT = 2.6;
-        c.upT = 0;
-        c.yaw = a + Math.PI;
-        c.vel.set(Math.sin(a) * 3, 0, Math.cos(a) * 3);
-        c.dodgeV.set(Math.sin(a) * 2.4, 0, Math.cos(a) * 2.4);
-        c.pl.speed = 0;
-        c.pl.x = c.pos.x + Math.sin(a) * 1.6;
-        c.pl.z = c.pos.z + Math.cos(a) * 1.6;
-        this.feel(c.fig, 'hurt', 3);
-      }
-      yield 0;
-    }
-    fig.punch = -1;
-  }
-
-  *shove(c, a) {
-    const g = this.game;
-    const P = g.player;
-    P.yaw = Math.atan2(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
-    P.fig.yaw = P.yaw;
-    P.fig.reachR = v3(c.pos.x, 1.3, c.pos.z);
-    P.fig.reachL = v3(c.pos.x, 1.3, c.pos.z);
-    yield 0.18;
-    g.audio.play('block', 0.8);
-    const b = Math.atan2(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
-    c.dodgeV.set(Math.sin(b) * 3.2, 0, Math.cos(b) * 3.2);
-    c.downT = 1.4;
-    c.upT = 0;
-    this.feel(c.fig, 'hurt', 2);
-    yield 0.3;
-    P.fig.reachR = null;
-    P.fig.reachL = null;
-    void a;
   }
 
   phoneRing(on) {
@@ -1275,8 +1637,12 @@ export class Prologue {
       c.inside = true;
     }
     const P = new Pursuer(g, v, g.player.inVehicle);
-    P.seed([[THUG_CAR.x - 2, 0.15, THUG_CAR.z - 4], [THUG_CAR.x - 6, 0.15, 320.5], [12, 0.15, 320], [6, 0.15, 320]]);
+    // (along the curb to the way in, and in after him)
+    const E = PARK.entrance;
+    P.seed([[THUG_CAR.x + 4, 0.17, THUG_CAR.z - 0.4], [E.x - 3, 0.17, E.z + 4.2], [E.x, 0.17, E.z + 0.8], [E.x, 0.17, E.z - 7]]);
     P.keep = 10;
+    // (up through the car park: never left far behind - game/prologue/chase.js catchUpNow)
+    P.catchUp = true;
     this.pursuers = [P];
     this.pursuer = P;
   }
@@ -1286,49 +1652,26 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     const L = this.cast.lily;
+    const v = () => P.inVehicle;
+    const lvOf = (c) => {
+      const lv = c ? PARK.levelAt(c.pos.x, c.pos.z, c.pos.y + 0.3) : null;
+      return lv === null || lv >= 10 ? -1 : lv;
+    };
     yield 2.2;
     yield* this.say('L12', L.fig, 0.25);
     yield* this.say('D20', P.fig, 0.25);
     yield* this.say('L13', L.fig, 0.2);
     yield* this.say('D21', P.fig, 0.3);
-    // the way out at the far end: a car swings into it
-    const v = () => P.inVehicle;
-    yield () => v() && v().pos.x < -14 && v().pos.y < 1.5;
-    this.blockExit();
-    yield 0.6;
+    // up and up: the way up has no way out but the roof - half way, the dark car still on them
+    yield () => lvOf(v()) >= 2.4;
     yield* this.say('D22', P.fig, 0.2);
-    this.objective('Head <b>up</b> - go for the roof', CLIMB[0].x, CLIMB[0].z, 'Ramp');
-    this.climb = true;
-    this.climbLv = -1;
-    // up and up: on the roof, a dead end
-    this.check = { x: -36, y: GARAGE_A.Y[0], z: 344, yaw: Math.PI / 2, back: { x: -36, z: 320 } };
-    yield () => v() && v().pos.y > ROOF_A - 0.5;
-    this.climb = false;
-    yield () => v() && (v().pos.x < -6 || Math.abs(v().speed) < 3) && v().pos.y > ROOF_A - 0.5;
-    this.start(7);
-  }
-
-  blockExit() {
-    const g = this.game;
-    const b = g.vehicles.spawnStock({ kind: 'suv', color: DARK }, { x: GARAGE_A.x0 - 12, z: 318 }, Math.PI / 2);
-    b.kept = true;
-    this.blocker = b;
-    const x1 = GARAGE_A.x0 - 2.6;
-    let t = 0;
-    // in it comes, sliding sideways across the way out, and stops there
-    b.script = (dt) => {
-      t += dt;
-      const k = Math.min(1, t / 0.9);
-      const e = 1 - Math.pow(1 - k, 3);
-      b.pos.x = GARAGE_A.x0 - 12 + (x1 - (GARAGE_A.x0 - 12)) * e;
-      b.pos.z = 318 + 2 * e;
-      b.pos.y = 0.15;
-      b.yaw = Math.PI / 2 - e * (Math.PI / 2) * 0.95;
-      b.speed = (1 - k) * 12;
-      if (k >= 1) b.script = null;
+    // the roof run: the west half's top floor, open to the sky, heading south to the edge
+    yield () => {
+      const c = v();
+      return !!c && lvOf(c) >= 4.9 && c.pos.x < PARK.main.xc && c.pos.z > RUNUP.z + 6;
     };
-    g.audio.play('skid', 0.8);
-    this.blockCol = g.world.collision.addBox(x1 - 2.6, 316, x1 + 1.2, 324, -1, 1.8, 'wall');
+    this.climb = false;
+    this.start(7);
   }
 
   // ------------------------------------------------------------------ 7. THE FIRST DRAWING
@@ -1336,97 +1679,82 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     const L = this.cast.lily;
-    const v = P.inVehicle || this.dannyCar;
+    const v = () => P.inVehicle;
     const Pu = this.pursuer;
-    this.objective(null);
+    // a hundred metres straight to the edge, the sky over it, 5th Street under it and Bayshore's roof
+    // across; the dark car on the turn behind them - and the one in it with the gun out of its window
+    this.objective('<b>Floor it!</b>', PARK.edge.x, PARK.edge.z, 'Edge');
     if (g.gps) g.gps.clear();
-    this.film(true);
-    // the car at the far end of the roof's way, facing the edge; the dark car up behind it
-    v.speed = 0;
-    v.vx = v.vz = 0;
-    v.pos.set(RUNUP.x, ROOF_A, RUNUP.z);
-    v.yaw = RUNUP.yaw;
-    if (Pu) {
-      Pu.paused = true;
-      const c = Pu.car;
-      c.pos.set(GARAGE_A.x1 - 2.4, ROOF_A, 328.2);
-      c.yaw = -Math.PI / 2 - 0.65;
-      c.vx = c.vz = 0;
-      c.speed = 0;
-    }
-    // ahead: the edge, the street, the roof across
-    this.shot({ from: () => v3(v.pos.x + 4.5, ROOF_A + 2.4, v.pos.z + 1.2), look: [-60, ROOF_B + 1, 320], fov: 50, dur: 3, hand: 0.5 });
-    yield 2.6;
-    // behind: the dark car; one of them out of it with a gun
-    const t2 = this.cast.t2;
-    const pc = Pu ? Pu.car : null;
-    if (t2 && pc) {
-      t2.pl.ride = null;
-      t2.riding = false;
-      t2.inside = false;
-      t2.fig.setVisible(true);
-      this.put(t2, pc.pos.x - 2.2, pc.pos.z - 1.6, Math.atan2(v.pos.x - pc.pos.x, v.pos.z - pc.pos.z));
-      t2.pos.y = ROOF_A;
-      t2.baseY = ROOF_A - 0.15;
-      t2.fig.reachR = v3(v.pos.x, ROOF_A + 1.2, v.pos.z);
-      t2.fig.reachL = v3(v.pos.x, ROOF_A + 1.2, v.pos.z);
-      this.gunman = t2;
-    }
-    this.shot({ from: () => v3(v.pos.x - 1.6, ROOF_A + 1.45, v.pos.z - 1.1), look: () => (pc ? v3(pc.pos.x, ROOF_A + 1.2, pc.pos.z) : v3(20, ROOF_A, 330)), fov: 40, dur: 2.6, hand: 0.6 });
-    yield 2.4;
-    // Lily
-    L.fig.lookAt = this.head(P);
-    this.shot({ from: this.inCar(v, -0.06, 1.16, 0.5), look: this.faceOf(L), fov: 52, dur: 3.2, hand: 0.35 });
-    yield* this.say('L14', L.fig, 0.4);
-    // Danny looks across again: an idea. A crazy one
-    this.shot({ from: this.inCar(v, 0.02, 1.2, 0.5), look: this.faceOf(P), fov: 46, dur: 2.2, hand: 0.3 });
-    P.fig.lookAt = v3(-80, ROOF_B, 320);
-    yield 2.0;
-    // time all but stops. The camera pulls back out of Danny's window, round behind the car and up -
-    // to where the game's own camera is, behind it, looking down the roof to its edge - and from there
-    // it is the player's: the black bars go, and the first drawing of the game is drawn the way every
-    // drawing in it is: on the live picture, from where the player is, over the roof ahead
+    if (Pu) Pu.keep = 5;
+    this.gunman = this.cast.t2 || null;
+    this.shooting = true;
+    this.everyFrame = (dt) => this.gunfire(dt);
+    this.check = { x: RUNUP.x, y: RUNUP.y + 0.05, z: RUNUP.z + 6, yaw: RUNUP.yaw, back: { x: PARK.main.xc - 4, z: RUNUP.z - 2 } };
+    // (said as he floors it - not waited for: out of the turn fast, he is at the sixty metres before
+    // she has finished it, and the edge does not wait)
+    this.say('L14', L.fig, 0.2).next();
+    // sixty metres short of the edge: time all but stops
+    yield () => {
+      const c = v();
+      return !!c && c.pos.z > PARK.edge.z - 62 && c.pos.x < PARK.main.xc;
+    };
+    const car = v();
+    this.shooting = false;
+    // (where they are now they stay: no bringing them up while he draws and takes the jump)
+    if (Pu) Pu.catchUp = false;
+    this.objective(null);
     this.cue('slowmo');
-    this.slow(0.05, 3);
+    // (all but stopped: the car still going, a few centimetres a second - nothing to drift from under
+    // the camera while the line is drawn)
+    this.slow(0.015, 8);
     g.audio.play('whoosh', 0.75);
     this.ui.vignette(true);
+    this.film(true);
+    // Danny's eyes on the edge, the roof across the street: an idea. A crazy one
+    P.fig.lookAt = v3(PARK.land.x, PARK.land.y, PARK.land.z);
+    this.shot({ from: this.inCar(car, 0.02, 1.2, 0.5), look: this.faceOf(P), fov: 44, dur: 1.6, hand: 0.25 });
+    yield 1.5;
+    // the camera pulls back out of his window, round behind the car and up - to where the game's own
+    // camera is, behind it, looking down the roof to its edge - and from there it is the player's: the
+    // black bars go, and the first drawing of the game is drawn the way every drawing in it is: on
+    // the live picture, from where the player is, over the roof ahead
     const rig = g.camRig;
-    rig.yaw = v.yaw;
+    rig.yaw = car.yaw;
     rig.pitch = DRAW_PITCH;
     rig.curDist = 8.5;
     rig.curLift = 0;
     rig.curShoulder = 0;
-    // (where it will be: the rig's own sum, with what is round it - worked out now, the car still)
-    rig.update(0, v.pos, { dist: 8.5, height: 3.1, shoulder: 0 });
+    rig.update(0, car.pos, { dist: 8.5, height: 3.1, shoulder: 0 });
     const gp = g.camera.position.clone();
     const cp = Math.cos(DRAW_PITCH);
-    const fx = Math.sin(v.yaw);
-    const fz = Math.cos(v.yaw);
+    const fx = Math.sin(car.yaw);
+    const fz = Math.cos(car.yaw);
     const gl = gp.clone().add(v3(fx * cp * 30, Math.sin(DRAW_PITCH) * 30, fz * cp * 30));
     // (the car's left, Danny's side: (fz, -fx))
-    const at = (side, along, up) => v3(v.pos.x + fx * along + fz * side, ROOF_A + up, v.pos.z + fz * along - fx * side);
+    const at = (side, along, up) => v3(car.pos.x + fx * along + fz * side, car.pos.y + up, car.pos.z + fz * along - fx * side);
     this.shot({
       path: [this.shots.lastPos.clone(), at(3.0, -0.4, 1.9), at(2.6, -5.2, 4.2), gp],
       lookPath: [this.shots.lastLook.clone(), at(0.2, 4, 1.2), at(0, 16, 0.8), gl],
       fov: this.shots.lastFov,
       fovTo: rig.baseFov,
-      dur: 2.9,
+      dur: 2.6,
       ease: 'inout',
       hand: 0.12,
     });
-    yield 2.9;
-    // the player's: the game's camera (it is exactly where the shot left it), the bars away, the
-    // screen to draw on
+    yield 2.6;
+    // the player's: the game's camera (exactly where the shot left it), the bars away, the screen to
+    // draw on - the roof's own way, along -x in its frame
     this.shots.release();
     this.holdCam = false;
     this.drawing = true;
     this.ui.film(false);
     g.hud.show();
-    rig.yaw = v.yaw;
+    rig.yaw = car.yaw;
     rig.pitch = DRAW_PITCH;
+    const [cx, cz] = loc(car.pos.x, car.pos.z);
     this.draw = new RampDraw(g, this.ui);
     let prof = null;
-    this.draw.open({ camera: g.camera, roofY: ROOF_A, laneZ: v.pos.z, carX: v.pos.x, edgeX: GARAGE_A.x0 }, (p) => {
+    this.draw.open({ camera: g.camera, roofY: ROOF, laneZ: cz, carX: cx, edgeX: RUNF.edgeX, frame: RUNF, floorY: (x, z) => PARK.floorAt(x, z, ROOF + 2) }, (p) => {
       prof = p;
     });
     g.audio.play('pageflip', 0.5);
@@ -1444,13 +1772,13 @@ export class Prologue {
     g.audio.play('scribble', 0.8);
     // the film again: the line lies down on the roof, and grows into the ramp while the camera swings
     // round it - up off the roof, along its side as it goes up, out past its lip over the street, and
-    // round to look back up it at the car
+    // round to look back up it at the car (the points in the run's frame: wld)
     this.film(true);
     this.ramp = new Ramp(g, prof);
-    this.set.garages[0].extra.push(this.ramp);
+    PARK.extra.push(this.ramp);
     this.draw.settleTo(this.ramp.inkLine());
     const R = prof;
-    const Y = ROOF_A;
+    const Y = ROOF;
     const S = R.startX;
     const Lp = R.lipX;
     const rz = R.z;
@@ -1460,11 +1788,11 @@ export class Prologue {
     const c0 = cam.position.clone();
     const dir = new THREE.Vector3();
     cam.getWorldDirection(dir);
-    // (round its side in the low sun - the light behind the camera - and out past its lip over the
-    // street: the whole of it from there, the lip near, the car small at the far end of it)
+    // (round its side in the low sun and out past its lip over the street: the whole of it from there,
+    // the lip near, the car small at the far end of the roof)
     this.shot({
-      path: [c0, v3(S + 5, Y + 5.6, rz - 6), v3(mid + 3, Y + 3.0, rz - 11.5), v3(Lp + 1, Y + 2.6, rz - 12.5), v3(Lp - 6.5, Y + H + 0.6, rz - 10.5)],
-      lookPath: [c0.clone().addScaledVector(dir, 25), v3(S - 3, Y + 0.8, rz), v3(mid, Y + H * 0.4, rz), v3(Lp + 3, Y + H * 0.75, rz), v3(mid + 4, Y + H * 0.45, rz + 0.5)],
+      path: [c0, wld(S + 5, Y + 5.6, rz - 6), wld(mid + 3, Y + 3.0, rz - 11.5), wld(Lp + 1, Y + 2.6, rz - 12.5), wld(Lp - 6.5, Y + H + 0.6, rz - 10.5)],
+      lookPath: [c0.clone().addScaledVector(dir, 25), wld(S - 3, Y + 0.8, rz), wld(mid, Y + H * 0.4, rz), wld(Lp + 3, Y + H * 0.75, rz), wld(mid + 4, Y + H * 0.45, rz + 0.5)],
       arc: true,
       fov: cam.fov,
       fovTo: 48,
@@ -1475,36 +1803,35 @@ export class Prologue {
     yield () => this.ramp.grown;
     g.audio.play('magic', 0.7);
     yield () => this.shots.done;
-    yield 0.35;
-    // back with them in the car, the time its own again: Lily, at her open window, staring at what
-    // is in front of them; Danny, at his, his hands on the wheel
-    this.slow(1, 3);
-    this.ui.vignette(false);
-    L.fig.lookAt = this.head(P);
-    this.shot({ from: this.inCar(v, -0.02, 1.14, 0.52), look: this.faceOf(L), fov: 50, dur: 3.2, hand: 0.4 });
+    yield 0.3;
+    // back with them in the car, the time still held: Lily, at her open window, staring at what is in
+    // front of them; Danny, his hands on the wheel
+    L.fig.lookAt = this.headJ(P);
+    this.shot({ from: this.inCar(car, -0.02, 1.14, 0.52), look: this.faceOf(L), fov: 50, dur: 2.4, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
-    yield* this.say('L15', L.fig, 0.25);
-    this.shot({ from: this.inCar(v, -0.04, 1.2, 0.5), look: this.faceOf(P), fov: 46, dur: 2.6, hand: 0.35 });
+    yield* this.say('L15', L.fig, 0.2);
+    this.shot({ from: this.inCar(car, -0.04, 1.2, 0.5), look: this.faceOf(P), fov: 46, dur: 2.0, hand: 0.35 });
     this.feel(P.fig, 'angry', 4);
-    yield* this.say('D23', P.fig, 0.2);
+    yield* this.say('D23', P.fig, 0.1);
     P.fig.lookAt = null;
-    // the engine; the player's foot on it
+    // the engine; the time its own again; the player's foot on it, all the way to the lip
     this.cue('chase', { heat: 1 });
     g.audio.play('roar', 1);
+    this.slow(1, 2.5);
+    this.ui.vignette(false);
     this.film(false);
-    g.camRig.yaw = v.yaw;
-    this.objective('<b>Floor it!</b>');
+    g.camRig.yaw = car.yaw;
+    this.objective('<b>Floor it!</b> - up the ramp');
     if (Pu) {
       Pu.paused = false;
       Pu.keep = 6;
     }
     this.shooting = true;
-    this.everyFrame = (dt) => this.gunfire(dt);
-    this.check = { x: RUNUP.x, y: ROOF_A, z: RUNUP.z, yaw: RUNUP.yaw, minY: ROOF_A - 1.5, back: { x: GARAGE_A.x1 - 3, z: 330 } };
+    this.check = { x: RUNUP.x, y: RUNUP.y + 0.05, z: RUNUP.z + 6, yaw: RUNUP.yaw, minY: ROOF - 3.5, back: { x: PARK.main.xc - 4, z: RUNUP.z - 2 } };
     this.start(8);
   }
 
-  // the man on the roof shooting after them (wide: they are only meant to hurry)
+  // the man in the dark car shooting after them (wide: they are only meant to hurry)
   gunfire(dt) {
     if (!this.shooting || !this.gunman) return;
     const g = this.game;
@@ -1516,7 +1843,7 @@ export class Prologue {
     g.audio.play('shotgun', 0.25);
     const x = v.pos.x + (Math.random() - 0.5) * 6;
     const z = v.pos.z + (Math.random() - 0.5) * 4;
-    if (g.fx) g.fx.sparks(x, ROOF_A + 0.1, z, 6, [1, 0.85, 0.4]);
+    if (g.fx) g.fx.sparks(x, v.pos.y + 0.1, z, 6, [1, 0.85, 0.4]);
   }
 
   // ------------------------------------------------------------------ 8. THE JUMP
@@ -1525,27 +1852,42 @@ export class Prologue {
     const P = g.player;
     const v = () => P.inVehicle;
     const prof = this.ramp.P;
-    // up the ramp, over its lip: flown from here
-    yield () => v() && v().pos.x < prof.lipX + 0.6 && v().pos.y > ROOF_A + prof.h * 0.6;
+    // up the ramp, over its lip: flown from here (along -x in the run's frame)
+    yield () => v() && loc(v().pos.x, v().pos.z)[0] < prof.lipX + 0.6 && v().pos.y > ROOF + prof.h * 0.6;
     this.objective(null);
     this.shooting = false;
     const car = v();
     const J = new Jump(g, car, prof, LAND);
     this.jump = J;
+    // (the dark car behind: on its brakes, stopped on the roof short of the ramp)
+    const Pc = this.pursuer && this.pursuer.car;
+    if (Pc) {
+      Pc.vx *= 0.3;
+      Pc.vz *= 0.3;
+      Pc.speed = (Pc.speed || 0) * 0.3;
+    }
+    // (a point a way off from the car, by the run's frame: along it, across it, up)
+    const off = (c, along, side, up) => {
+      const [dx, dz] = RUNF.toWorld(along, side);
+      return v3(c.pos.x + dx, c.pos.y + up, c.pos.z + dz);
+    };
+    // (off the lip: the picture struck for an instant, then the air streaming past)
+    this.comic.impact(car.pos, 0.09);
+    this.comic.lines(null, 1.4, 1);
     if (this.pursuer) this.pursuer.paused = true;
     this.film(true);
     // the rear three-quarters of it leaving the lip, then wide as it hangs over the street
-    this.shot({ from: () => v3(car.pos.x + 7, car.pos.y + 1.2, car.pos.z + 5), look: () => v3(car.pos.x, car.pos.y + 0.6, car.pos.z), fov: 50, dur: 1.2, hand: 0.4 });
+    this.shot({ from: () => off(car, 7, 5, 1.2), look: () => v3(car.pos.x, car.pos.y + 0.6, car.pos.z), fov: 50, dur: 1.2, hand: 0.4 });
     yield () => J.apex;
     // the top of the arc: time nearly still; the title in the picture
     this.slow(0.035, 9);
     this.cue('title');
     // (the camera swings out from behind its rear quarter to its side, low over the street - the car
     // in the top half of the picture against the towers and the sunset, the title under it)
-    const c0 = car.pos.clone();
+    const c0 = { pos: car.pos.clone() };
     this.shot({
-      path: [v3(c0.x + 4.5, c0.y + 0.6, c0.z + 3.5), v3(c0.x + 1.5, c0.y - 1.2, c0.z + 9), v3(c0.x - 3, c0.y - 3.2, c0.z + 14)],
-      look: () => v3(car.pos.x - 1.5, car.pos.y - 2.2, car.pos.z),
+      path: [off(c0, 4.5, 3.5, 0.6), off(c0, 1.5, 9, -1.2), off(c0, -3, 14, -3.2)],
+      look: () => off(car, -1.5, 0, -2.2),
       fov: 44,
       fovTo: 54,
       dur: 5.4,
@@ -1560,26 +1902,35 @@ export class Prologue {
     yield 0.6;
     // and on: the far roof coming up fast
     this.slow(1, 2.5);
-    this.shot({ from: () => v3(car.pos.x + 9, car.pos.y + 3.5, car.pos.z + 7), look: () => v3(LAND.x - 4, ROOF_B, 320), fov: 52, dur: 2.2, hand: 0.6 });
+    this.shot({ from: () => off(car, 9, 7, 3.5), look: () => v3(PARK.land.x, PARK.land.y, PARK.land.z + 4), fov: 52, dur: 2.2, hand: 0.6 });
     yield () => J.done;
     // down: hard
     g.camRig.addShake(1.1);
     g.audio.play('crash', 1);
     g.audio.play('skid', 1);
+    this.comic.impact(car.pos, 0.1);
+    this.comic.word('CRASH!', v3(car.pos.x, car.pos.y + 1.6, car.pos.z), { fill: '#ffd23f', burst: '#ff4f6a', size: 0.11, life: 0.9 });
+    this.comic.word('SKRRRT', off(car, 3, 1, 0.6), { fill: '#fff4d6', burst: '#3fc6c0', size: 0.06, life: 1.1, tilt: -0.2 });
     if (g.fx) {
       for (let i = 0; i < 4; i++) g.fx.sparks(car.pos.x + (Math.random() - 0.5) * 3, car.pos.y + 0.2, car.pos.z + (Math.random() - 0.5) * 2, 12, [1, 0.8, 0.35]);
       g.fx.smoke(car.pos.x, car.pos.y + 0.4, car.pos.z, 2.4);
     }
-    // it slews round towards the wall, the tyres screaming, scrubbing off its speed; he fights it
-    car.vx *= 0.42;
-    car.vz = car.vz * 0.42 + 4;
+    // it slews round, the tyres screaming, scrubbing off its speed; he fights it (sideways: across the
+    // run, in its frame)
+    {
+      const [sx, sz] = RUNF.toWorld(0, 3);
+      car.vx = car.vx * 0.3 + sx;
+      car.vz = car.vz * 0.3 + sz;
+    }
     car.yawRate = (car.yawRate || 0) + 1.2;
-    this.shot({ from: () => v3(car.pos.x - 6, car.pos.y + 2.2, car.pos.z - 7), look: () => v3(car.pos.x, car.pos.y + 0.5, car.pos.z), fov: 48, dur: 1.4, hand: 1 });
+    this.shot({ from: () => off(car, -6, -7, 2.2), look: () => v3(car.pos.x, car.pos.y + 0.5, car.pos.z), fov: 48, dur: 1.4, hand: 1 });
     yield 1.2;
     this.film(false);
     g.camRig.yaw = car.yaw;
-    this.objective('Get down to the <b>street</b>', -64, 344, 'Street');
-    this.check = { x: LAND.x - 4, y: ROOF_B, z: 320, yaw: -Math.PI / 2 };
+    this.objective('Get down to the <b>street</b>', PARK.down[0].x, PARK.down[0].z, 'Street');
+    this.descend = true;
+    this.downI = -1;
+    this.check = { x: PARK.land.x, y: PARK.land.y + 0.05, z: PARK.land.z, yaw: 0 };
     this.hour(18.62, 0.004);
     this.start(9);
   }
@@ -1590,21 +1941,37 @@ export class Prologue {
     const P = g.player;
     const L = this.cast.lily;
     const v = () => P.inVehicle;
-    // out of the second car park into the short street - where the other car is waiting
+    // down Bayshore's ramps; on its street floor - the dark car comes round the block onto 5th Street
     if (this.pursuer) this.pursuer.paused = true;
-    yield () => v() && v().pos.y < 1 && v().pos.x > GARAGE_B.x1 - 6;
-    const b = this.blocker;
-    if (b) {
-      if (this.blockCol !== undefined) g.world.collision.remove(this.blockCol);
-      this.blockCol = undefined;
-      const Q = new Pursuer(g, b, v());
+    yield () => {
+      const c = v();
+      const lv = c ? PARK.levelAt(c.pos.x, c.pos.z, c.pos.y + 0.3) : null;
+      return !!c && ((lv !== null && lv >= 10 && lv < 10.5) || c.pos.y < 1);
+    };
+    const b = this.thugCar;
+    if (b && !b.dead) {
+      // (they came down the other way and round: on 5th Street west of the gate, coming east)
+      b.pos.set(PARK.landing.x0 + 14, 0.15, PARK.landing.z0 - 6.5);
+      b.yaw = Math.PI / 2;
+      b.vx = b.vz = 0;
+      b.speed = 0;
+      const Q = this.pursuer && this.pursuer.car === b ? this.pursuer : new Pursuer(g, b, v());
+      Q.prey = v();
+      Q.paused = false;
       Q.keep = 5;
-      Q.seed([[b.pos.x, 0.15, b.pos.z], [-52, 0.15, 330]]);
+      // (out on the street he has to lose them: no catching up here)
+      Q.catchUp = false;
+      Q.trail.length = 0;
+      Q.i = 0;
+      const G = PARK.down[PARK.down.length - 1];
+      Q.seed([[b.pos.x, 0.15, b.pos.z], [G.x - 6, 0.15, G.z - 1.5], [G.x, 0.15, G.z]]);
       this.pursuers = [Q];
       this.pursuer = Q;
     }
+    yield () => v() && v().pos.y < 1 && v().pos.z < PARK.landing.z0 - 1;
+    this.descend = false;
     this.objective('<b>Lose them</b>', LOOKOUT.x, LOOKOUT.z, 'Beach');
-    this.check = { x: -50, y: 0.15, z: 340, yaw: Math.PI / 2 };
+    this.check = { x: PARK.down[PARK.down.length - 1].x, y: 0.15, z: PARK.down[PARK.down.length - 1].z - 1, yaw: Math.PI / 2 };
     // they give up once he is far enough away, or out on the sand where they will not follow
     yield () => {
       const car = v();
@@ -1643,12 +2010,17 @@ export class Prologue {
     this.feel(L.fig, 'sad', 10);
     yield* this.say('L17', L.fig, 0.5);
     yield* this.say('D25', P.fig, 0.6);
-    this.ui.sketch(this.sketch || (this.sketch = lilyDrawing()));
+    // her drawing on her knees: she looks at it
+    const page = this.lilyPage();
+    page.hold(L.fig, null, 'read');
+    L.fig.lookAt = page.at;
     yield 1.4;
     yield* this.say('L18', L.fig, 0.4);
     yield 0.6;
+    L.fig.lookAt = P.fig.j.headC;
     yield* this.say('D26', P.fig, 0.3);
-    this.ui.sketch(null);
+    page.hold(L.fig, null, 'hug');
+    L.fig.lookAt = null;
     // a few seconds, nobody saying anything
     yield 3.2;
     // the camera draws back over the water: the bay at the last of the sunset, the city alive - and
@@ -1680,11 +2052,16 @@ export class Prologue {
     this.done = true;
     this.co = null;
     this.drawing = false;
+    if (this.acting) this.acting.clear();
+    if (this.comic) this.comic.clear();
+    if (this.page) {
+      this.page.dispose();
+      this.page = null;
+    }
     if (this.draw && this.draw.on) this.draw.close();
     this.ui.vignette(false);
     for (const p of this.pursuers || []) p.dispose();
     this.pursuers = [];
-    if (this.blockCol !== undefined) g.world.collision.remove(this.blockCol);
     this.voices.stop();
     if (this.score) this.score.stop({ fade: 4 });
     this.slow(1, 20);

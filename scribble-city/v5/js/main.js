@@ -16,6 +16,10 @@ import { initProvoke } from './render/provoke.js';
 import { cacheUniformArrays } from './render/glcache.js';
 import { readMemo } from './render/depthtrial.js';
 import { BUILD } from './game/telemetry.js';
+
+// (the game's own folder, v5/ - for its pictures, sounds and data, wherever the code is loaded from:
+// these modules one by one, or all of them in one file next to this one - tools/publish-pages.sh)
+window.__gameBase = new URL('../', import.meta.url).href;
 import { browserName } from './game/perf.js';
 
 // עיר השרבוטים: the first boulevard on the water at sunset, and the whole city around it, drawn
@@ -33,6 +37,18 @@ window.addEventListener('error', (e) => {
   if (e.error) fatal(e.error);
 });
 window.addEventListener('unhandledrejection', (e) => fatal(e.reason));
+
+// (how long each step of getting ready takes: logged together when the game is ready - the load's
+// own numbers, to see where its time goes on any computer)
+// (the first: the page's code itself, every module of it, fetched and read - from the page's start
+// until this one runs)
+const loadT = [['modules', Math.round(performance.now())]];
+let loadAt = performance.now();
+function mark(name) {
+  const now = performance.now();
+  loadT.push([name, Math.round(now - loadAt)]);
+  loadAt = now;
+}
 
 function setStatus(t) {
   const el = document.getElementById('load-status');
@@ -180,24 +196,31 @@ async function boot() {
     // (the shop windows' panes, last: ROADMAP 8.3)
     buildPanes(ctx);
   };
-  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false });
+  mark('before city');
+  // (the block 5th Street Garage stands on left empty for it: not in the lab, where the prologue's
+  // pieces are not built - game/prologue/carpark.js)
+  const vacate = !params.has('lab') && !window.SC_LAB;
+  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false, vacate });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
+  mark('city');
   // (v5, ROADMAP 11.17) the mainland across the bay: built near you as you go (its far bodies
   // from the bake, world/mainland/far.json, when it is there)
   if (world.ctx.mainland) {
     let farData = null;
     try {
-      const res = await fetch(new URL('./world/mainland/far.json', import.meta.url));
+      const res = await fetch(new URL('js/world/mainland/far.json', window.__gameBase));
       if (res.ok) farData = await res.json();
     } catch (e) {
       farData = null;
     }
     world.mainland = new Mainland(world, { renderer, pipe, low, farData });
   }
+  mark('mainland');
   // (v5, ROADMAP 11.18) what is on the shops' shelves, built near you (the island's rooms now, each
   // block's with it)
   world.interiors = new Interiors(world, { pipe, low, warm: world.mainland ? (m) => world.mainland.warm(m) : null });
   world.interiors.addAll(world.stockRecs);
+  mark('interiors');
 
   setStatus('השמש שוקעת על העיר…');
   await frame();
@@ -208,15 +231,18 @@ async function boot() {
   } catch (err) {
     console.warn('shadow bake failed', err);
   }
+  mark('shadow bake');
   // the still city's own map of the sun's view around you (drawn again only when you have gone far
   // enough, or a prop was rubbed out): each frame only what moves is drawn for the sun
   if (!params.has('noshadowcache')) pipe.setStatic(world.group, { cull: (p) => world.cull(p), version: () => world.objects.castVersion });
+  mark('static shadow');
   // what is behind the buildings' bodies is not drawn (the city's still pieces, not the moving ones)
   if (!params.has('noocclusion')) {
     const skip = new Set(pipe.staticSkip || []);
     const pieces = world.group.children.filter((o) => o.isMesh && !skip.has(o));
     pipe.setOcclusion(world.occluders, pieces, () => world.objects.spots);
   }
+  mark('occlusion');
   // (v5) the walls' depth first, alone: their backs and what is behind them are not worked out
   // with the pens (render/pipeline.js setWalls: off for now, timed by the test route; ?walls: on)
   pipe.setWalls(world.group);
@@ -224,6 +250,7 @@ async function boot() {
   // the streets are wet - render/pipeline.js setWaters; ?mirroralways: every frame, as it was)
   pipe.setWaters(world.group);
   if (params.has('mirroralways')) pipe.mirrorAlways = true;
+  mark('walls, waters');
   // (ROADMAP 11.32) a mall's great hall: the mirror is its polished floor's, the floor the camera is
   // over (a hair over its stone); ?nofloormirror: the hall's light in the floor instead, as a phone
   if (!params.has('nofloormirror')) {
@@ -259,9 +286,11 @@ async function boot() {
   // or crumbling: the graphics card leaves out what is hidden before the pens are worked out
   // (render/solid.js; ?nosolid: as it was)
   if (!params.has('nosolid')) pipe.setSolid(world.group, () => world.objects.spots, () => world.objects.fading.length > 0);
+  mark('solid');
   setStatus('מסמנים דרכים…');
   await frame();
   world.buildNav();
+  mark('nav');
   // every pen of the city made ready now, not in the middle of the first walk down the street
   // (the graphics card compiles them side by side where it can, and the page stays alive): asked
   // for now, while the game's people and cars are made; theirs after, and all of them waited for
@@ -275,6 +304,7 @@ async function boot() {
   if (catalog) scene.add(catalog);
   const progs = pipe.precompile();
   if (catalog) scene.remove(catalog);
+  mark('precompile');
 
   const resize = () => {
     const w = window.innerWidth;
@@ -296,9 +326,14 @@ async function boot() {
     window.__THREE = THREE;
   }
   await game.init();
+  mark('game init');
   for (const p of pipe.precompile()) progs.push(p);
   await shadersReady(renderer, [...new Set(progs)]);
+  mark('shaders ready');
   if (catalog) warmCatalog(game, catalog);
+  // (and shown with the frame's numbers, F3: game/perf.js - the whole of it from the page's start)
+  game.loadSteps = loadT;
+  game.loadTotal = Math.round(performance.now());
   setStatus('');
   const startBtn = document.getElementById('start-btn');
   startBtn.disabled = false;
@@ -307,6 +342,7 @@ async function boot() {
   if (params.has('autostart')) game.start();
   else game.showContinue();
   window.__ready = true;
+  console.log('load steps (ms)', JSON.stringify(loadT));
   // (the pens' shaders for the other way of drawing, made ready in the background a little after the
   // game begins - for trying the two in play: render/pipeline.js prepareOtherPens)
   pipe.otherAt = performance.now() + 1500;

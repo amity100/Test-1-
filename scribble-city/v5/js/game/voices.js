@@ -11,10 +11,10 @@ import { PIER, PROM_X1, NORTH_EDGE, SOUTH_EDGE } from '../world/layout.js';
 //   to you          walk into somebody and you hear about it; stand too close for too long and
 //                   they ask what you want; point a gun at somebody and their hands go up (keep
 //                   it on them and they run); drive at them and they shout
-// Every line said in the city (game.bubbles.say) also comes by here: spoken aloud by the
-// browser's own voice when that is asked for in the settings (one at a time, a voice for each
-// person, nearer is louder), and as a subtitle when the subtitles are on (whatever is spoken near
-// you; without the voice, what is said to you by somebody you can't see).
+// Every line said in the city (game.bubbles.say) also comes by here: in a subtitle when the
+// subtitles are on (what is said to you by somebody you can't see; the talkers by where you come in,
+// game/talkers.js, near you). Never aloud: the browser's own voice was heard as a narrator over the
+// city, not as its people - it is off for everybody, whatever a setting kept from before says.
 // (?classic: none of it)
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -225,10 +225,6 @@ const TIP_SAY = ['Great song!', 'Love it!', 'Keep it up!', 'Beautiful!', 'Bravo!
 const LISTEN_SAY = ['So good.', 'I love this song.', 'Wow.', 'Nice voice!', 'Play another!'];
 export const LINES = { GROUP, LAUGHS, GROUP_BYE, GROUP_JOIN, GROUP_LEAVE, NAMES, MEET, MEET_BYE, CALLS, LYRICS, BUSK_SAY, TIP_SAY, LISTEN_SAY };
 
-// (the names a browser gives its voices: whose is whose, roughly)
-const FEM_VOICE = /female|zira|samantha|victoria|karen|moira|tessa|fiona|susan|hazel|serena|allison|ava|kate|libby|sonia|jenny|aria|emma|amy|joanna|salli|kimberly/i;
-const MALE_VOICE = /\bmale|david|mark|daniel|alex|fred|tom\b|george|ryan|guy|james|oliver|arthur|brian|matthew|joey|justin/i;
-
 const _f = new THREE.Vector3();
 
 export class Voices {
@@ -244,11 +240,8 @@ export class Voices {
     this.linger = null;
     this.lingerT = 0;
     this.places = null;
-    // the browser's voice (the settings: off unless asked for), and the subtitles of what people
-    // say (with the radio's)
+    // (no browser voice: off for good) and the subtitles of what people say (with the radio's)
     this.spoken = false;
-    this.voiceList = null;
-    this.lastTone = 'plain';
     this.subs = [];
     this.direct = false;
     // (counted for the tests)
@@ -916,15 +909,13 @@ export class Voices {
     const civs = this.game.civilians;
     if (civs && who.mgr === civs && who.fig) civs.spoke(who, text, tone);
     // (ROADMAP 13.8) the mouth says the words: render/people.js faceOf reads them off, sound by sound,
-    // at a speaker's pace - in step with the voice, when there is one (speak)
+    // at a speaker's pace
     if (who.fig) who.fig.say = { text, tone, at: 0, atT: this.game.time, cps: 14, wait: false, done: false };
     const cam = this.game.camera.position;
     const d = Math.hypot(who.pos.x - cam.x, who.pos.z - cam.z);
-    // (ROADMAP 13.8: some of them always aloud - game/talkers.js)
-    const spoken = this.spoken || !!who.voiced;
-    if (spoken) this.speak(who, text, tone, d);
-    // a subtitle: whatever is spoken near you; without the voice, what is said to you by
-    // somebody you can't see
+    // a subtitle: what the talkers by where you come in say near you (game/talkers.js - they were
+    // heard once, in the browser's voice: no more), and what is said to you by somebody you can't see
+    const spoken = !!who.voiced;
     const hud = this.game.hud;
     if (!hud || hud.subtitles === false || d > 16) return;
     let behind = false;
@@ -973,97 +964,15 @@ export class Voices {
     el.classList.remove('hidden');
   }
 
-  // the browser's own voice (the settings): on or off
-  setSpoken(on) {
-    const S = typeof window !== 'undefined' ? window.speechSynthesis : null;
-    this.spoken = !!on && !!S && !this.game.classic;
-    if (!this.spoken) this.hush();
-    else if (S && !this.voiceHooked) {
-      this.voiceHooked = true;
-      const again = () => {
-        this.voiceList = null;
-      };
-      if (S.addEventListener) S.addEventListener('voiceschanged', again);
-      else S.onvoiceschanged = again;
-    }
+  // the browser's own voice: off, for everybody (a setting saved before it went cannot turn it on)
+  setSpoken() {
+    this.spoken = false;
+    this.hush();
   }
 
   // quiet now (the pause, the sound off)
   hush() {
     const S = typeof window !== 'undefined' ? window.speechSynthesis : null;
     if (S && (S.speaking || S.pending)) S.cancel();
-  }
-
-  speak(who, text, tone, d) {
-    const S = window.speechSynthesis;
-    const audio = this.game.audio;
-    if (!S || !audio.enabled || this.game.state !== 'play') return;
-    const fx = audio.vol ? audio.vol.fx : 1;
-    if (fx < 0.02 || d > 18) return;
-    const words = text.replace(/[♪♫*]/g, '').trim();
-    if (!/[a-z]/i.test(words)) return;
-    // one at a time: a shout cuts in, anything else waits for quiet or is let go
-    if (S.speaking || S.pending) {
-      if (tone !== 'alarm' || this.lastTone === 'alarm') return;
-      S.cancel();
-    }
-    const u = new SpeechSynthesisUtterance(words);
-    u.lang = 'en-US';
-    const fig = who.fig;
-    // (the mouth waits for the voice to start, then keeps to its words)
-    const say = fig && fig.say && fig.say.text === text ? fig.say : null;
-    const look = fig ? fig.look : null;
-    const seed = fig ? fig.seed || 0 : 0;
-    const v = this.voiceFor(look, seed);
-    if (v) u.voice = v;
-    // a voice for each person: higher or lower, quicker or slower (a child's, an old one's)
-    const kid = fig && fig.scale < 0.8;
-    const elder = look && look.role === 'elder';
-    let pitch = (look && look.fem ? 1.15 : 0.9) + (((seed * 7.31) % 1) - 0.5) * 0.3;
-    if (kid) pitch = 1.7;
-    if (elder) pitch *= 0.85;
-    u.pitch = Math.max(0.1, Math.min(2, pitch));
-    u.rate = (0.95 + ((seed * 3.17) % 1) * 0.2) * (tone === 'alarm' ? 1.15 : 1) * (elder ? 0.85 : 1);
-    u.volume = Math.max(0.05, Math.min(1, fx * fx * (1 - d / 18) * 1.1));
-    if (say) {
-      say.text = words;
-      say.cps = 14 * u.rate;
-      say.wait = true;
-      u.onstart = () => {
-        say.wait = false;
-        say.at = 0;
-        say.atT = this.game.time;
-      };
-      u.onboundary = (e) => {
-        if (e.name && e.name !== 'word') return;
-        say.at = e.charIndex;
-        say.atT = this.game.time;
-        say.wait = false;
-      };
-      u.onend = () => {
-        say.done = true;
-      };
-    }
-    this.lastTone = tone;
-    try {
-      S.speak(u);
-      this.stats.spoken++;
-    } catch (e) {
-      // (no voice after all)
-    }
-  }
-
-  voiceFor(look, seed) {
-    const S = window.speechSynthesis;
-    if (!this.voiceList || !this.voiceList.length) {
-      const all = (S.getVoices() || []).filter((v) => /^en/i.test(v.lang));
-      this.voiceList = all;
-      this.voiceF = all.filter((v) => FEM_VOICE.test(v.name));
-      this.voiceM = all.filter((v) => !FEM_VOICE.test(v.name) && MALE_VOICE.test(v.name));
-    }
-    const pool = look && look.fem ? this.voiceF : this.voiceM;
-    const list = pool && pool.length ? pool : this.voiceList;
-    if (!list.length) return null;
-    return list[Math.floor(seed * 13.7) % list.length];
   }
 }

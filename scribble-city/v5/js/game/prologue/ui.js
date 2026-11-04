@@ -29,6 +29,8 @@ const CSS = `
 #pl-title.on .name { transform: rotate(-3deg) scale(1); letter-spacing: 0.09em; }
 #pl-title .by { margin-top: 2.4vh; font-size: clamp(12px, 1.6vw, 20px); font-weight: 600; letter-spacing: 0.55em; color: #fff; opacity: 0; transition: opacity 1.2s 0.7s, letter-spacing 2.6s 0.7s; text-shadow: 0 2px 6px #000; padding-left: 0.55em; }
 #pl-title.on .by { opacity: 0.92; letter-spacing: 0.75em; }
+#pl-title .by[dir=rtl] { padding-left: 0; padding-right: 0.55em; letter-spacing: 0.3em; font-size: clamp(14px, 2vw, 26px); }
+#pl-title.on .by[dir=rtl] { letter-spacing: 0.42em; }
 #pl-title .rule { width: 0; height: 2px; margin-top: 1.6vh; background: linear-gradient(90deg, transparent, #ffd23f, #ff4f9a, transparent); transition: width 1.4s 0.5s; }
 #pl-title.on .rule { width: min(46vw, 560px); }
 #pl-call { position: absolute; right: 3vw; bottom: 16vh; width: 230px; background: rgba(18,16,26,0.92); border: 2px solid #3d3557; border-radius: 22px; padding: 14px 16px; color: #fff; direction: ltr; transform: translateX(130%); transition: transform 0.45s cubic-bezier(.2,.9,.3,1.2); box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
@@ -158,7 +160,10 @@ export class PrologueUI {
   title(on, name = '', by = '') {
     if (on) {
       this.titleEl.querySelector('.name').textContent = name;
-      this.titleEl.querySelector('.by').textContent = by;
+      const b = this.titleEl.querySelector('.by');
+      b.textContent = by;
+      // (a credit in Hebrew reads right to left)
+      b.dir = /[\u0590-\u05FF]/.test(by) ? 'rtl' : 'ltr';
     }
     this.titleEl.classList.toggle('on', on);
   }
@@ -181,8 +186,21 @@ export class PrologueUI {
     } else el.classList.remove('on');
   }
 
-  fade(on) {
+  // to black, or back from it (secs: how long it takes; the usual 0.8 s if not said)
+  fade(on, secs = 0) {
+    this.fadeEl.style.transition = secs ? `opacity ${secs}s` : '';
     this.fadeEl.classList.toggle('on', on);
+    this.blackOn = on;
+  }
+
+  // black at once, no fading to it: the film's first moments, while the game settles in behind it
+  black() {
+    const el = this.fadeEl;
+    el.style.transition = 'none';
+    el.classList.add('on');
+    void el.offsetWidth;
+    el.style.transition = '';
+    this.blackOn = true;
   }
 
   skip(k) {

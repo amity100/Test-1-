@@ -64,6 +64,8 @@ export class Bubbles {
 
   // who: anything with a fig (head joint) or a pos; tone: 'plain' | 'alarm' | 'cop'
   say(who, text, tone = 'plain', life = 1.9) {
+    // (held: while a film is told over the city - game/prologue/director.js - nobody's chatter in it)
+    if (this.hold) return;
     for (const b of this.list) {
       if (b.who === who) {
         b.t = b.life;

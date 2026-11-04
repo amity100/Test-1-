@@ -326,7 +326,7 @@ let portraitHelper = null;
 const portraitWait = new Map();
 function paintPortrait(k, cb, w = 1024) {
   if (!portraitHelper) {
-    portraitHelper = new Worker(new URL('./heroworker.js', import.meta.url), { type: 'module' });
+    portraitHelper = new Worker(window.__gameBase ? new URL('js/render/heroworker.js', window.__gameBase) : new URL('./heroworker.js', import.meta.url), { type: 'module' });
     portraitHelper.onmessage = (e) => {
       const f = portraitWait.get(e.data.folk);
       if (e.data.err) console.warn('portrait picture', e.data.err);
@@ -579,6 +579,16 @@ const MOODS = {
   sad: [0, 0, 1, 0.55, 0, 0.1, 0.1, 0],
   surprised: [0.5, 0, 0, 1, 0, 0, 0, 0],
   dead: [0.22, 0, 0.3, 0, 0, 1, 1, 0],
+  // (v5, ROADMAP 18: the prologue's people as they speak - a laugh, a shout, a smirk, teasing, tender,
+  // worried, pleading, shocked)
+  laugh: [0.55, 1, 0, 0.45, 0, 0.42, 0.42, 0],
+  shout: [0.72, 0, 0.35, 0.15, 0.95, 0.12, 0.12, 0.3],
+  smirk: [0.04, 0.45, 0, 0.12, 0.1, 0.12, 0.05, 0],
+  tease: [0.12, 0.75, 0, 0.5, 0, 0.3, 0.08, 0],
+  tender: [0.03, 0.5, 0, 0.3, 0, 0.12, 0.12, 0],
+  worried: [0.06, 0, 0.5, 0.85, 0.35, 0, 0, 0.1],
+  pleading: [0.18, 0.25, 0.15, 1, 0, 0, 0, 0.15],
+  shock: [0.7, 0, 0.2, 1, 0, 0, 0, 0.55],
 };
 const REST = { neutral: 0, soft: 0.3, half: 0.4, smile: 0.62, laugh: 0.8 };
 // (ROADMAP 13.11) a line's mouth, worked out once, as people's mouths go and not a shape a letter: the
@@ -648,6 +658,38 @@ function mouthTrack(text, loud) {
 }
 const _want = new Float32Array(8);
 const _gaze = [0, 0, 0, 0];
+// (v5, ROADMAP 18) the hero's face this moment (render/heroart.js EXPRS): his mouth open and shut with
+// the words he says, at the voice's pace (the same syllables as anybody's: mouthTrack), and what he
+// feels - or null, his face as it is drawn
+function heroFace(fig, t) {
+  const mood = fig.mood || (fig.feel && fig.feel.until > t ? fig.feel.mood : null);
+  const say = fig.say;
+  let jaw = -1;
+  if (say && !say.done && !say.wait) {
+    const n = say.text.length;
+    const p = say.at + (t - say.atT) * say.cps;
+    if (p > n + 1) say.done = true;
+    else if (p >= 0) {
+      const tr = say.track || (say.track = mouthTrack(say.text, say.tone === 'alarm' || say.text.indexOf('!') >= 0));
+      jaw = tr[Math.min(n + 1, Math.floor(p)) * 2];
+    }
+  }
+  const glad = mood === 'joy' || mood === 'laugh' || mood === 'smirk' || mood === 'tender' || mood === 'tease';
+  const mad = mood === 'angry' || mood === 'shout';
+  const fear = mood === 'surprised' || mood === 'scared' || mood === 'shock';
+  const low = mood === 'sad' || mood === 'worried' || mood === 'hurt' || mood === 'pleading';
+  if (jaw >= 0) {
+    if (jaw > 0.3) return mood === 'laugh' ? 'laugh' : glad ? 'smileTalk' : mad ? 'shout' : fear ? 'surprised' : low ? 'worriedTalk' : 'talk2';
+    if (jaw > 0.1) return glad ? 'smileTalk' : mad ? 'angryTalk' : low ? 'worriedTalk' : 'talk1';
+  }
+  if (mood === 'laugh') return 'laugh';
+  if (glad) return 'smile';
+  if (mood === 'shout') return 'shout';
+  if (mad) return 'angry';
+  if (fear) return 'surprised';
+  if (low) return 'worried';
+  return null;
+}
 const _eyeR = new THREE.Matrix4();
 const _eyeT = new THREE.Matrix4();
 const _eyeM = new THREE.Matrix4();
@@ -675,7 +717,8 @@ function faceOf(fig, F, t, cam) {
   if (mood && MOODS[mood]) {
     const M = MOODS[mood];
     for (let e = 0; e < 8; e++) _want[e] = Math.max(e === 1 ? 0 : _want[e], M[e]);
-    if (mood !== 'joy') _want[1] = 0;
+    // (no smile at rest under a feeling that has none of its own)
+    if (!(M[1] > 0)) _want[1] = 0;
   }
   // (ROADMAP 13.8) the words said: each sound's mouth, read off the line at the voice's pace - the jaw
   // dropped for an a, the lips wide for an e or an i, rounded for an o or a u, shut for an m, a b or a
@@ -707,8 +750,8 @@ function faceOf(fig, F, t, cam) {
       fig.speakNod = ja + (tr[j * 2] - ja) * f;
       // (the brows with what is stressed: a little up on the strong syllables)
       if (ja > 0.42) _want[3] = Math.max(_want[3], (ja - 0.42) * 0.9);
-      // (a smile at rest gives way to the words; joy keeps it)
-      if (mood !== 'joy') _want[1] = Math.min(_want[1], 0.15);
+      // (a smile at rest gives way to the words; joy keeps it - and whatever feeling has a smile in it)
+      if (!(mood && MOODS[mood] && MOODS[mood][1] > 0)) _want[1] = Math.min(_want[1], 0.15);
       const end = p / Math.max(1, n);
       const q = say.text.indexOf('?') >= 0;
       const x = say.text.indexOf('!') >= 0;
@@ -1971,7 +2014,7 @@ export class PersonRenderer {
     // the page now - his face redrawn a dozen times a second
     const art = this.heroArt;
     art.step();
-    art.frame(performance.now() / 1000, _heroTex);
+    art.frame(performance.now() / 1000, _heroTex, heroFace(fig, shared.uTime.value));
     const U = this.heroMat.uniforms;
     for (let i = 0; i < 5; i++) U[`uMapS${i}`].value = _heroTex[HERO_SET[i]];
     // his jacket in its drawing's own colours; another colour (the shops', a splash of paint) tints it

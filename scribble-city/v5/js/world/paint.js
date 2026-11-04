@@ -252,12 +252,14 @@ export function frondTexture() {
   // the colour and the leaf's shape are painted apart: the green reaches into the gaps between
   // the leaflets too (where the leaf is see-through), so the smaller copies of the texture that
   // the far palms are drawn with stay green instead of going black at their edges
+  // (both read back afterwards: kept in the computer's memory, not the graphics card's - reading a
+  // picture back off the card makes the page wait for it, a long moment on a phone)
   const c = canvas(w, h);
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', { willReadFrequently: true });
   g.fillStyle = '#3d9455';
   g.fillRect(0, 0, w, h);
   const m = canvas(w, h);
-  const k = m.getContext('2d');
+  const k = m.getContext('2d', { willReadFrequently: true });
   k.fillStyle = '#000';
   k.fillRect(0, 0, w, h);
   for (const q of [g, k]) q.lineCap = 'round';

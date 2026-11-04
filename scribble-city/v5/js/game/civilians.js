@@ -243,7 +243,7 @@ const POINT_RE = /(that way|over there|look at|right there|just there|this way|o
 // where the hand is for a gesture (body space: x right, y up, z forward), side 1 the right, -1
 // the left; t seconds into it, ph the person's own phase (no two people move alike). false: that
 // hand is not in it
-function gestureAt(kind, side, t, ph, out) {
+export function gestureAt(kind, side, t, ph, out) {
   switch (kind) {
     case 'explain':
       out.set(side * (0.17 + 0.05 * Math.sin(3.1 * t + ph + side)), 1.02 + 0.08 * Math.sin(2.3 * t + ph * 1.7 + (side > 0 ? 0 : 1.4)), 0.3 + 0.06 * Math.cos(3.1 * t + ph));
@@ -1723,7 +1723,9 @@ export class Civilians {
     this.carsNear(p);
     this.t -= dt;
     if (this.t <= 0) {
-      this.t = 1;
+      // (four times a second, a quarter of the people each time: the same numbers, and no frame of
+      // its own every second that makes a dozen of them at once - the steady pace's own beat)
+      this.t = 0.25;
       // a busy city: more people on the sidewalks around you (fewer late at night: game/rhythm.js)
       const R = game.rhythm;
       const max = Math.round((game.touch ? 18 : 40) * (R ? R.people : 1));
@@ -1764,10 +1766,12 @@ export class Civilians {
           return !c.gone;
         });
       }
-      const first = !this.filled;
+      // (the first second fills the streets: its four turns have a quarter of the sixty each)
+      this.fillTicks = (this.fillTicks || 0) + 1;
+      const first = this.fillTicks <= 4;
       this.filled = true;
       // (v5, ROADMAP 11.18: a street fills up again quickly when you come into it)
-      let tries = first ? 60 : 14;
+      let tries = first ? 15 : 4;
       // the walks that pass near you (on the mainland: of the blocks built near you)
       const ml = game.world.mainland;
       const built = ml && ml.blocks ? new Set(ml.blocks.keys()) : null;

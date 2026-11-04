@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { srgb, hex, addLight } from '../render/materials.js';
+import { srgb, hex, addLight, lightList } from '../render/materials.js';
 import { nextId, Facade } from './kit.js';
 import { decoBuilding, fbox, windowRows, neonSign, adQuad, FH, GROUND } from './deco.js';
 import { skyscraper } from './skyline.js';
@@ -74,6 +74,65 @@ const DEEP = 19;
 // the avenue each row faces: a block's west row, its east row (col 2's east row is Ocean Drive's)
 const STREET_OF = [['meridian', 'washington'], ['washington', 'collins'], ['collins', null]];
 
+// (v5, ROADMAP 18) the blocks given over to something the game builds there itself: the one
+// between Meridian and Washington Avenues, 5th to 7th Street, is 5th Street Garage's
+// (game/prologue/carpark.js). Not with ?classic, nor in the lab (main.js: ctx.vacate)
+export const VACANT = [{ col: 0, row: 4 }];
+
+// a block built as ever and then taken out again, every part of it: what it put into the city's
+// batches and onto the scene, its collision, its lights (out, for good), its props (let go of),
+// what it added to the city's lists (its shops, its lots, its alley, its roofs...). So everything
+// after it is built from the same dice, with the same numbers, exactly as before - the block is
+// only not there
+export function vacated(ctx, build) {
+  const seq = [ctx.B.seq, ctx.R.seq];
+  const nBox = ctx.col.boxes.length;
+  const nLight = lightList().length;
+  const nObj = ctx.objects.list.length;
+  const nKids = ctx.parent.children.length;
+  const lists = [];
+  const listsOf = (o) => {
+    for (const k of Object.keys(o)) {
+      // (not its own working state: the deck of shop kinds goes on being dealt from)
+      if (k[0] === '_' || !Array.isArray(o[k])) continue;
+      lists.push([o[k], o[k].length]);
+    }
+  };
+  listsOf(ctx);
+  for (const k of ['roofs', 'fences']) if (ctx[k] && typeof ctx[k] === 'object') listsOf(ctx[k]);
+  const ends = new Set(Object.keys(ctx.blockEnds || {}));
+  build();
+  [ctx.B, ctx.R].forEach((B, i) => {
+    for (const byChunk of B.groups.values()) {
+      for (const [key, list] of byChunk) {
+        if (!list.some((it) => it.seq >= seq[i])) continue;
+        for (const it of list) if (it.seq >= seq[i]) B.vcount -= it.geo.attributes.position.count;
+        byChunk.set(key, list.filter((it) => it.seq < seq[i]));
+      }
+    }
+  });
+  for (let i = nBox; i < ctx.col.boxes.length; i++) {
+    ctx.col.remove(i);
+    // (and no longer what it was: the minimap draws the walls it finds, the map the trees)
+    ctx.col.boxes[i].tag = 'vacated';
+  }
+  const L = lightList();
+  for (let i = nLight; i < L.length; i++) {
+    L[i].on = false;
+    L[i].dead = true;
+    L[i].x = L[i].z = 1e7;
+  }
+  for (let i = nObj; i < ctx.objects.list.length; i++) if (ctx.objects.list[i]) ctx.objects.list[i].state = 'freed';
+  for (const m of ctx.parent.children.slice(nKids)) ctx.parent.remove(m);
+  for (const [a, n] of lists) {
+    // (its empty lots stay on the list, marked: world/northend.js builds on them at the end, these
+    // the same way - built and taken out again - so the dice after them fall as they did)
+    if (a === ctx.vacancies) for (let i = n; i < a.length; i++) a[i].vacated = true;
+    else a.length = n;
+  }
+  for (const k of Object.keys(ctx.blockEnds || {})) if (!ends.has(k)) delete ctx.blockEnds[k];
+}
+
 export function buildBlocks(ctx) {
   const r = ctx.rng;
   ctx.nameUse = new Map();
@@ -99,7 +158,10 @@ export function buildBlocks(ctx) {
     return list[n % list.length];
   };
   for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 3; col++) buildBlock(ctx, col, row, BLOCK_TYPES[row][col]);
+    for (let col = 0; col < 3; col++) {
+      if (ctx.vacate && VACANT.some((v) => v.col === col && v.row === row)) vacated(ctx, () => buildBlock(ctx, col, row, BLOCK_TYPES[row][col]));
+      else buildBlock(ctx, col, row, BLOCK_TYPES[row][col]);
+    }
     westRow(ctx, row);
   }
   // (the shapes of the blocks in the haze north of the city; v5: with the mainland, real blocks

@@ -2,10 +2,10 @@ import { folkLook } from './looks.js';
 import { FOLK_ON } from '../render/folkspec.js';
 
 // (v5, ROADMAP 13.8) People who talk: a few of the city's people standing together on the sidewalk near
-// where you come into the city, in the middle of a conversation - each line said aloud in their own
-// voice (the browser's: game/voices.js speak), its mouth read off it sound by sound and its feeling on
-// their face (render/people.js faceOf), in a bubble and in the subtitles; the others turn to whoever
-// is talking. Come up to them and they turn to you.
+// where you come into the city, in the middle of a conversation - each line's mouth read off it sound by
+// sound and its feeling on their face (render/people.js faceOf), in a bubble and in the subtitles (not
+// aloud: the browser's voice they had was heard as a narrator - game/voices.js); the others turn to
+// whoever is talking. Come up to them and they turn to you.
 //
 // A line: [who (their number in the group; -1: whoever is nearest you), what - '[joy] ...' says how
 // they feel saying it: joy, surprised, angry, sad, scared].

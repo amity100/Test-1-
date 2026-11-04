@@ -20,10 +20,18 @@ const UP = new THREE.Vector3(0, 1, 0);
 // (the kick plate at its start, from the roof up onto the deck: how long)
 const KICK = 1.4;
 
+// (a frame: where the roof run does not go along -x - 5th Street Garage's goes south, +z - the
+// drawing, the ramp and the jump are worked out along -x all the same, in the run's own frame:
+// toLocal(x, z) gives its [x, z], toWorld(lx, lz) the world's, rotY the turn that puts what is built
+// in it back in the world. game/prologue/carpark.js PARK.runFrame. None: the world's own)
+const NOFRAME = { toLocal: (x, z) => [x, z], toWorld: (x, z) => [x, z], rotY: 0 };
+
 export class RampDraw {
-  // ui: game/prologue/ui.js; spec: { camera, roofY, laneZ, carX, edgeX } - drawn from where the player
-  // is, the game's own camera behind the car, the way every ramp in the game is drawn: a line on the
-  // ground, from where it starts to where it goes (game/gadgets.js fromLine)
+  // ui: game/prologue/ui.js; spec: { camera, roofY, laneZ, carX, edgeX, frame, floorY } - drawn from
+  // where the player is, the game's own camera behind the car, the way every ramp in the game is
+  // drawn: a line on the ground, from where it starts to where it goes (game/gadgets.js fromLine).
+  // laneZ, carX, edgeX in the frame's terms; floorY(x, z): the roof's own height in the world there
+  // (a roof run that still slopes up near the car), roofY where it gives none
   constructor(game, ui) {
     this.game = game;
     this.ui = ui;
@@ -34,6 +42,11 @@ export class RampDraw {
 
   open(spec, done) {
     this.spec = spec;
+    this.F = spec.frame || NOFRAME;
+    this.floorY = (x, z) => {
+      const h = spec.floorY ? spec.floorY(x, z) : spec.roofY;
+      return Number.isFinite(h) ? h : spec.roofY;
+    };
     this.done = done;
     this.on = true;
     this.pts = [];
@@ -49,7 +62,7 @@ export class RampDraw {
     // (the mouse let go of the game's camera: it draws now - game/game.js keeps it free while the
     // sheet is up, and does not take it for the pause)
     if (!this.game.touch) this.game.input.releaseLock();
-    this.ui.hint('Draw a ramp to jump across<small>ציירו קו על הגג — מהמכונית אל הקצה</small>');
+    this.ui.hint('Draw a ramp to jump across<small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>');
     this.t = 0;
     this.drawing = false;
     const P = (e) => [e.clientX * dpr, e.clientY * dpr];
@@ -116,9 +129,16 @@ export class RampDraw {
     const o = cam.position;
     const d = p.sub(o).normalize();
     if (d.y > -1e-3) return null;
-    const t = (this.spec.roofY - o.y) / d.y;
+    // (onto the roof as it is there: the plane at its top first, then the floor's own height where
+    // that falls, a few times over - a slope's)
+    let y = this.spec.roofY;
+    let t = (y - o.y) / d.y;
+    for (let i = 0; i < 4 && t > 0; i++) {
+      y = this.floorY(o.x + d.x * t, o.z + d.z * t);
+      t = (y - o.y) / d.y;
+    }
     if (t < 0 || t > 160) return null;
-    return new THREE.Vector3(o.x + d.x * t, this.spec.roofY, o.z + d.z * t);
+    return new THREE.Vector3(o.x + d.x * t, y, o.z + d.z * t);
   }
 
   // the way shown, dotted on the roof: from the car's nose to the edge (worked out every frame from
@@ -130,7 +150,8 @@ export class RampDraw {
     const x1 = s.edgeX - 0.8;
     for (let i = 0; i <= 28; i++) {
       const x = x0 + ((x1 - x0) * i) / 28;
-      const q = this.toScreen(x, s.roofY + 0.04, s.laneZ, [0, 0]);
+      const [wx, wz] = this.F.toWorld(x, s.laneZ);
+      const q = this.toScreen(wx, this.floorY(wx, wz) + 0.04, wz, [0, 0]);
       if (q) pts.push(q);
     }
     return pts;
@@ -140,14 +161,20 @@ export class RampDraw {
     const P = this.pts;
     let len = 0;
     for (let i = 1; i < P.length; i++) len += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
-    const W = P.map(([x, y]) => this.toWorld(x, y)).filter(Boolean);
+    // (on the roof in the world; then in the run's own frame, where the ramp is worked out)
+    const W = P.map(([x, y]) => this.toWorld(x, y))
+      .filter(Boolean)
+      .map((p) => {
+        const [lx, lz] = this.F.toLocal(p.x, p.z);
+        return new THREE.Vector3(lx, p.y, lz);
+      });
     const xs = W.map((p) => p.x);
     const ext = xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
     if (len < 60 * this.dpr || W.length < 3 || ext < 3) {
       // (too short to be a ramp, or not on the roof: again, with the way shown plainer)
       this.fails++;
       this.pts = [];
-      this.ui.hint('Draw a ramp to jump across<small>קו ארוך יותר, על הגג: מהמכונית אל הקצה</small>');
+      this.ui.hint('Draw a ramp to jump across<small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>');
       this.game.audio.play('meh', 0.4);
       return;
     }
@@ -161,6 +188,7 @@ export class RampDraw {
       bow = Math.max(bow, Math.abs(cross));
     }
     const prof = fitProfile(W, this.spec, bow / cl);
+    prof.frame = this.spec.frame || null;
     // (the line stays where it was drawn until the ramp's own line is there to settle onto)
     this.settle = { from: resample(P, 40), to3: null, t: 0 };
     this.ui.drawEl.classList.add('settle');
@@ -272,8 +300,73 @@ export class RampDraw {
       g.lineTo(ex + Math.cos(ang + 2.5) * 15 * d, ey + Math.sin(ang + 2.5) * 15 * d);
       g.lineTo(ex + Math.cos(ang - 2.5) * 15 * d, ey + Math.sin(ang - 2.5) * 15 * d);
       g.fill();
+      // (v5, ROADMAP 18) until a line is begun: what to do, shown - where to put the pen down (a
+      // dot breathing there), where to take it (a ring at the edge), and a pen drawing it once,
+      // slowly, over and over, its line fading after it
+      if (!this.drawing && this.pts.length < 2) this.teach(g, d);
     }
     if (this.pts.length > 1) this.ink(this.pts);
+  }
+
+  teach(g, d) {
+    const G = this.guide;
+    const n = G.length;
+    const [sx, sy] = G[0];
+    const [ex, ey] = G[n - 1];
+    const pulse = 0.5 + 0.5 * Math.sin(this.t * 5);
+    // the start: here
+    g.save();
+    g.globalAlpha = 0.9;
+    g.fillStyle = '#ffd23f';
+    g.beginPath();
+    g.arc(sx, sy, (9 + 3 * pulse) * d, 0, Math.PI * 2);
+    g.fill();
+    g.globalAlpha = 0.55 * (1 - pulse);
+    g.strokeStyle = '#ffd23f';
+    g.lineWidth = 3 * d;
+    g.beginPath();
+    g.arc(sx, sy, (16 + 20 * pulse) * d, 0, Math.PI * 2);
+    g.stroke();
+    // the end: there
+    g.globalAlpha = 0.8;
+    g.strokeStyle = '#ff6fa8';
+    g.lineWidth = 3.5 * d;
+    g.beginPath();
+    g.arc(ex, ey, (15 + 2 * pulse) * d, 0, Math.PI * 2);
+    g.stroke();
+    // the pen, drawing it: 1.6 s along, a moment to see it, again
+    const T = 2.4;
+    const u = Math.min(1, (this.t % T) / 1.6);
+    const e = u * u * (3 - 2 * u);
+    const k = Math.max(1, Math.floor(e * (n - 1)));
+    const tail = G.slice(0, k + 1);
+    const fade = this.t % T > 1.9 ? 1 - (this.t % T - 1.9) / 0.5 : 1;
+    if (tail.length > 1) this.ink(tail, 0.55 * fade);
+    const [px, py] = tail[tail.length - 1];
+    // (a pencil, leaning as a hand holds one: its tip on the line)
+    g.translate(px, py);
+    g.rotate(-0.75);
+    g.globalAlpha = 0.95 * fade;
+    g.fillStyle = '#ffcf4a';
+    g.fillRect(4 * d, -5 * d, 46 * d, 10 * d);
+    g.fillStyle = '#f2a6b8';
+    g.fillRect(50 * d, -5 * d, 9 * d, 10 * d);
+    g.fillStyle = '#f3dcb4';
+    g.beginPath();
+    g.moveTo(4 * d, -5 * d);
+    g.lineTo(-8 * d, 0);
+    g.lineTo(4 * d, 5 * d);
+    g.fill();
+    g.fillStyle = '#1c1830';
+    g.beginPath();
+    g.moveTo(-3 * d, -2 * d);
+    g.lineTo(-8 * d, 0);
+    g.lineTo(-3 * d, 2 * d);
+    g.fill();
+    g.strokeStyle = '#1c1830';
+    g.lineWidth = 1.6 * d;
+    g.strokeRect(4 * d, -5 * d, 55 * d, 10 * d);
+    g.restore();
   }
 }
 
@@ -327,17 +420,22 @@ export class Ramp {
     this.P = P;
     this.t = 0;
     this.pieces = [];
+    this.F = P.frame || NOFRAME;
     this.root = new THREE.Group();
     this.root.matrixAutoUpdate = true;
+    // (built along -x in its frame; turned into the world with it - the frames are turns about the
+    // origin, nothing more)
+    this.root.rotation.y = this.F.rotY || 0;
     game.scene.add(this.root);
     this.build();
     this.grown = false;
   }
 
   // its floor (a car on it), for the car park it stands on (Garage.extra)
-  floorAt(x, z, y) {
+  floorAt(wx, wz, y) {
     const P = this.P;
     if (!this.solid) return -Infinity;
+    const [x, z] = this.F.toLocal(wx, wz);
     if (Math.abs(z - P.z) > P.half || x > P.startX + KICK || x < P.lipX) return -Infinity;
     // (the kick plate onto it: up from the roof to the deck)
     const h = x > P.startX ? P.roofY + 0.3 * (1 - (x - P.startX) / KICK) : P.roofY + 0.3 + rampH(P, x);
@@ -351,9 +449,16 @@ export class Ramp {
     const out = [];
     for (let i = 0; i < n; i++) {
       const u = i / (n - 1);
-      out.push(new THREE.Vector3(P.startX + (P.lipX - P.startX) * u, P.roofY + 0.36 + P.h * Math.pow(u, P.pow), P.z));
+      const [wx, wz] = this.F.toWorld(P.startX + (P.lipX - P.startX) * u, P.z);
+      out.push(new THREE.Vector3(wx, P.roofY + 0.36 + P.h * Math.pow(u, P.pow), wz));
     }
     return out;
+  }
+
+  // a point of its frame (x along it, y up, z across) in the world
+  world(x, y, z) {
+    const [wx, wz] = this.F.toWorld(x, z);
+    return new THREE.Vector3(wx, y, wz);
   }
 
   piece(at, delay, fn, grow = 'y', pivot = null) {
@@ -599,12 +704,14 @@ export class Ramp {
   paper(k) {
     const P = this.P;
     if (!this.U) {
-      // the sweep runs along -x (from the car's end to the lip)
+      // the sweep runs along -x of its frame (from the car's end to the lip): in the world, that
+      // turned (the sweep is worked out on the world's positions)
+      const [sx, sz] = this.F.toWorld(-1, 0);
       this.U = {
         uMatOn: { value: 1 },
         uMatFlat: { value: new THREE.Vector4(0, 1, 0, 0) },
         uMatK: { value: 1 },
-        uMatSweep: { value: new THREE.Vector4(-1, 0.25, 0, 0) },
+        uMatSweep: { value: new THREE.Vector4(sx, 0.25, sz, 0) },
         uMatBand: { value: new THREE.Vector4(0.6, 1, 1.2, 0) },
       };
       this.swaps = [];
@@ -620,9 +727,13 @@ export class Ramp {
         m.material = c;
       });
     }
-    // along (-1, 0.25, 0): from the car's end (-startX) to beyond the lip
-    const d0 = -P.startX + P.roofY * 0.25 - 1;
-    const d1 = -P.lipX + (P.roofY + P.h) * 0.25 + 1;
+    // along (-1, 0.25, 0) of its frame: from the car's end (-startX) to beyond the lip (the lane's
+    // own share of it, across: the same at both ends)
+    const [sx, sz] = this.F.toWorld(-1, 0);
+    const [ax, az] = this.F.toWorld(P.startX, P.z);
+    const [bx, bz] = this.F.toWorld(P.lipX, P.z);
+    const d0 = ax * sx + az * sz + P.roofY * 0.25 - 1;
+    const d1 = bx * sx + bz * sz + (P.roofY + P.h) * 0.25 + 1;
     this.U.uMatSweep.value.w = d0 + (d1 - d0) * k;
   }
 
@@ -661,29 +772,36 @@ export class Jump {
     this.game = game;
     this.car = car;
     this.t = 0;
+    // (land: x along the way, z0..z1 across, y - in the frame of the run, as P is)
+    const F = (this.F = land.frame || P.frame || NOFRAME);
     const lipY = P.roofY + 0.3 + P.h;
-    const p = car.pos;
+    const [px, pz] = F.toLocal(car.pos.x, car.pos.z);
     // (as fast as it came - but within what makes a jump to remember, and lands it)
     const sp = clamp(Math.abs(car.speed || 0), 19, 23);
-    const fx = Math.sin(car.yaw);
-    const fz = Math.cos(car.yaw);
+    const [fx, fz] = F.toLocal(Math.sin(car.yaw), Math.cos(car.yaw));
     // where it lands: on the far roof, along the way it is going (kept on the clear aisle)
-    const D0 = Math.max(10, (p.x - land.x) / Math.max(0.3, -fx));
-    const lz = clamp(p.z + fz * D0, land.z0, land.z1);
-    const dx = land.x - p.x;
-    const dz = lz - p.z;
+    const D0 = Math.max(10, (px - land.x) / Math.max(0.3, -fx));
+    const lz = clamp(pz + fz * D0, land.z0, land.z1);
+    const dx = land.x - px;
+    const dz = lz - pz;
     const D = Math.hypot(dx, dz);
     this.T = D / sp;
     this.vh = sp;
     this.dir = [dx / D, dz / D];
-    this.y0 = Math.max(p.y, lipY);
-    this.x0 = p.x;
-    this.z0 = p.z;
+    this.y0 = Math.max(car.pos.y, lipY);
+    this.x0 = px;
+    this.z0 = pz;
     this.vy = (land.y - this.y0 + 10 * this.T * this.T) / this.T;
     this.apexT = this.vy / 20;
     this.landY = land.y;
     this.yaw0 = car.yaw;
-    this.yaw1 = Math.atan2(dx, dz);
+    const [wx, wz] = F.toWorld(this.dir[0], this.dir[1]);
+    this.wdir = [wx, wz];
+    // (the shorter way round from the yaw it has to the one it flies at)
+    let y1 = Math.atan2(wx, wz);
+    while (y1 - this.yaw0 > Math.PI) y1 -= Math.PI * 2;
+    while (y1 - this.yaw0 < -Math.PI) y1 += Math.PI * 2;
+    this.yaw1 = y1;
     this.done = false;
     car.air = true;
     car.script = (dt) => this.step(dt);
@@ -697,15 +815,16 @@ export class Jump {
     const v = this.car;
     this.t += dt;
     const t = Math.min(this.t, this.T);
-    v.pos.x = this.x0 + this.dir[0] * this.vh * t;
-    v.pos.z = this.z0 + this.dir[1] * this.vh * t;
+    const [wx, wz] = this.F.toWorld(this.x0 + this.dir[0] * this.vh * t, this.z0 + this.dir[1] * this.vh * t);
+    v.pos.x = wx;
+    v.pos.z = wz;
     v.pos.y = this.y0 + this.vy * t - 10 * t * t;
     const vyNow = this.vy - 20 * t;
     // (its nose with the arc, turned onto its line)
     v.bodyPitch = clamp(Math.atan2(vyNow, this.vh) * 0.55, -0.35, 0.3);
     v.yaw = this.yaw0 + (this.yaw1 - this.yaw0) * Math.min(1, t / 0.4);
-    v.vx = this.dir[0] * this.vh;
-    v.vz = this.dir[1] * this.vh;
+    v.vx = this.wdir[0] * this.vh;
+    v.vz = this.wdir[1] * this.vh;
     v.speed = this.vh;
     v.speedAbs = this.vh;
     if (this.t >= this.T) {

@@ -20,6 +20,19 @@ import { PAGE_GLSL, pageUniforms } from './pagedge.js';
 // (ROADMAP 11.4: 3 may be drawn in two passes - the surfaces writing what their pens need, then the
 // pens over the whole picture, once a pixel, then what is see-through over them. drawMain)
 
+// (ROADMAP 18.8) a value that is no number - not a number, or past the largest a picture between the
+// passes holds - told by its bits. isnan() and isinf() are not enough: a graphics card's compiler
+// that takes every value to be a number may drop them, and on such a card one broken pixel (a
+// surface with a normal of no length, a light divided by nothing) went through the glow's blur and
+// came out a black octagon over a fifth of the screen. What the glow is given is also held below
+// what half a float can carry, so that it can never grow past it on the way.
+const NONUM = /* glsl */ `
+bool nonum(float x) { return (floatBitsToUint(x) & 0x7f800000u) == 0x7f800000u; }
+bool nonum3(vec3 c) { return nonum(c.r) || nonum(c.g) || nonum(c.b); }
+bool nonum4(vec4 c) { return nonum(c.r) || nonum(c.g) || nonum(c.b) || nonum(c.a); }
+vec3 fin3(vec3 c) { return nonum3(c) ? vec3(0.0) : clamp(c, vec3(-6.0e4), vec3(6.0e4)); }
+`;
+
 const QUAD_VERT = /* glsl */ `
 out vec2 vUv;
 void main() {
@@ -195,11 +208,15 @@ uniform vec2 uUvLo;
 #else
 #define TC(uv) (uv)
 #endif
+${NONUM}
 vec3 pick(vec2 uv) {
   vec4 c = texture(tSrc, TC(uv));
   // (ROADMAP 16.1: a pixel that is not a number - a surface with a broken normal - is nothing to the
-  // glow: its blur carried it over a third of the screen, black)
-  if (any(isnan(c)) || any(isinf(c))) return vec3(0.0);
+  // glow: its blur carried it over a third of the screen, black. By its bits: NONUM)
+  if (nonum4(c)) return vec3(0.0);
+  // (and a light brighter than any the glow needs counts as that bright: 32 times the white of
+  // the page; twice that, and the four of a pixel, still far below what half a float holds)
+  c.rgb = clamp(c.rgb, vec3(0.0), vec3(32.0));
   float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   return c.rgb * clamp(smoothstep(1.1, 2.6, l) + c.a * 0.7, 0.0, 2.0);
 }
@@ -214,6 +231,7 @@ in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
 uniform sampler2D tSrc;
 uniform vec2 uTexel;
+${NONUM}
 void main() {
   vec2 o = uTexel;
   vec3 c = texture(tSrc, vUv).rgb * 4.0;
@@ -221,7 +239,7 @@ void main() {
   c += texture(tSrc, vUv + vec2(o.x, -o.y)).rgb;
   c += texture(tSrc, vUv + vec2(-o.x, o.y)).rgb;
   c += texture(tSrc, vUv + vec2(o.x, o.y)).rgb;
-  fragColor = vec4(c / 8.0, 1.0);
+  fragColor = vec4(fin3(c / 8.0), 1.0);
 }`;
 
 const UP_FRAG = /* glsl */ `
@@ -230,6 +248,7 @@ layout(location = 0) out vec4 fragColor;
 uniform sampler2D tSrc;
 uniform sampler2D tAdd;
 uniform vec2 uTexel;
+${NONUM}
 void main() {
   vec2 o = uTexel;
   vec3 c = texture(tSrc, vUv + vec2(-o.x * 2.0, 0.0)).rgb;
@@ -240,7 +259,7 @@ void main() {
   c += texture(tSrc, vUv + vec2(o.x, -o.y)).rgb * 2.0;
   c += texture(tSrc, vUv + vec2(0.0, -o.y * 2.0)).rgb;
   c += texture(tSrc, vUv + vec2(-o.x, -o.y)).rgb * 2.0;
-  fragColor = vec4(c / 12.0 + texture(tAdd, vUv).rgb, 1.0);
+  fragColor = vec4(fin3(c / 12.0 + texture(tAdd, vUv).rgb), 1.0);
 }`;
 
 const FINAL_FRAG = /* glsl */ `
@@ -264,6 +283,7 @@ uniform vec2 uUvLo;
 #else
 #define TC(uv) (uv)
 #endif
+${NONUM}
 float aces1(float x) {
   return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
@@ -280,13 +300,13 @@ vec3 toSRGB(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
 vec3 grade(vec2 uv) {
-  vec3 s = texture(tSrc, TC(uv)).rgb;
+  vec3 s = fin3(texture(tSrc, TC(uv)).rgb);
   // (the smart drawing: the rain, drawn over the finished picture at its own size)
   if (uRainOn > 0.5) {
     vec4 rn = texture(tRain, uv);
-    s = s * (1.0 - rn.a) + rn.rgb;
+    if (!nonum4(rn)) s = s * (1.0 - rn.a) + rn.rgb;
   }
-  vec3 c = tonemap((s + texture(tBloom, uv).rgb * uBloom) * uExposure);
+  vec3 c = tonemap((s + fin3(texture(tBloom, uv).rgb) * uBloom) * uExposure);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   return clamp(vec3(l) + (c - vec3(l)) * 1.25, 0.0, 1.0);
 }
@@ -339,6 +359,7 @@ uniform float uMoveLo;
 uniform float uMoveHi;
 uniform float uMaxWMove;
 
+${NONUM}
 vec3 ycc(vec3 c) { return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.r - 0.5 * c.b, -0.25 * c.r + 0.5 * c.g - 0.25 * c.b); }
 vec3 unycc(vec3 y) { return vec3(y.x + y.y - y.z, y.x + y.z, y.x - y.y - y.z); }
 // c pulled towards the middle of the box (bl, bh) until it is inside it
@@ -397,6 +418,9 @@ void main() {
     for (int x = -1; x <= 1; x++) {
       ivec2 q = clamp(c0 + ivec2(x, y), ivec2(0), lim);
       vec4 s = texelFetch(tCur, q, 0);
+      // (a sample that is no number is left out: gathered, it would stay in the picture for good,
+      // and spread a little each frame - NONUM)
+      if (nonum4(s)) continue;
       // (a line drawn anew here this frame: marked by the outlines' pass, over the glow's share)
       float anew = step(1.5, s.a);
       s.a -= 2.0 * anew;
@@ -464,6 +488,10 @@ void main() {
   if (redrawn > 0.5) W = 0.0;
   W *= min(max(max(a00.x, a10.x), max(a01.x, a11.x)), mix(uMaxW, uMaxWMove, moving)) * (1.0 - react);
   vec4 h = histAt(prev);
+  if (nonum4(h)) {
+    h = vec4(cur, curA);
+    W = 0.0;
+  }
   vec3 mu = m1 / 9.0;
   vec3 sg = sqrt(max(m2 / 9.0 - mu * mu, vec3(0.0)));
   vec3 hy = ycc(h.rgb);
@@ -481,11 +509,16 @@ void main() {
   hy = mix(hy, clip(hy, mu - sg * 1.25, mu + sg * 1.25), max(react, moving));
   float ha = clamp(h.a, aLo, aHi);
   vec3 cy = ycc(cur);
+  if (nonum(W)) W = 0.0;
   // (a bright light counts for no more than its share: weighed by the inverse of its brightness)
   float wh = W / (1.0 + max(hy.x, 0.0));
   float wn = wc / (1.0 + max(cy.x, 0.0));
   vec3 o = (unycc(hy) * wh + cur * wn) / (wh + wn);
   float oa = (ha * wh + curA * wn) / (wh + wn);
+  if (nonum3(o) || nonum(oa)) {
+    o = fin3(cur);
+    oa = nonum(curA) ? 0.0 : curA;
+  }
   oColor = vec4(max(o, vec3(0.0)), oa);
   oMeta = vec4(W + wc, zNow, 0.0, 0.0);
 }`;
