@@ -23,7 +23,22 @@ if (cd "$tmp/scribble-city" && $ESBUILD v5/js/main.js --bundle --format=esm --mi
   sed -i 's#src="js/main.js"#src="js/main.bundle.js"#' "$v5/index.html"
   echo "bundled: $(du -h "$v5/js/main.bundle.js" | cut -f1)"
 else
-  echo "bundling failed - published as it is"
+  # (no bundle: every module the game reaches named up front in the page, so the browser asks for
+  # all of them at once - not a level of imports at a time, each level a round trip)
+  if node "$root/scribble-city/tools/modulepreload.mjs" "$v5" > "$tmp/preload.txt"; then
+    python3 - "$v5/index.html" "$tmp/preload.txt" <<'PYEOF'
+import sys
+page, links = sys.argv[1], open(sys.argv[2]).read()
+s = open(page).read()
+tag = '<script type="module" src="js/main.js"></script>'
+if tag in s and 'rel="modulepreload"' not in s:
+    s = s.replace(tag, links + tag)
+    open(page, 'w').write(s)
+PYEOF
+    echo "bundling failed - published as it is, its $(wc -l < "$tmp/preload.txt") modules preloaded"
+  else
+    echo "bundling failed - published as it is"
+  fi
 fi
 cd "$tmp"
 git add -A scribble-city
