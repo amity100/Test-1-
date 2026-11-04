@@ -531,10 +531,10 @@ export class Comic {
     g.strokeRect(g.lineWidth / 2, top + g.lineWidth / 2, W - g.lineWidth, bot - top - g.lineWidth);
     // the slab: a brush stroke across, wiped in from its side
     const wipe = Math.min(1, t / 0.16);
-    const sw = W * 0.46;
-    const sh = H * 0.16;
+    const sw = W * 0.52;
+    const sh = H * 0.2;
     const cy = top + (bot - top) * c.v;
-    const sx0 = c.side < 0 ? W * 0.04 : W * 0.96 - sw;
+    const sx0 = c.side < 0 ? W * 0.03 : W * 0.97 - sw;
     const sxW = sw * wipe;
     const sxs = c.side < 0 ? sx0 : sx0 + sw - sxW;
     g.save();

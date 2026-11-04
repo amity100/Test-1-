@@ -382,13 +382,25 @@ export class Prologue {
     const cp = g.camera.position;
     const H = this.hidden || (this.hidden = new Set());
     const mine = new Set(Object.values(this.cast));
+    // (ROADMAP 18.9: and nobody of the city's between the camera and whoever the shot is on - a
+    // passer-by on his phone across half of the thugs' scene: from the camera to well short of its
+    // subject, in front of it, out of the picture until they are past)
+    const S = this.shots;
+    const fx = S.lastLook.x - cp.x;
+    const fz = S.lastLook.z - cp.z;
+    const fd = Math.hypot(fx, fz) || 1;
+    const reach = Math.min(4.5, Math.max(2.2, fd * 0.8));
     for (const c of g.civilians.list) {
       if (!c.alive || mine.has(c) || (this.heroes && this.heroes.includes(c))) continue;
-      const d = Math.hypot(c.pos.x - cp.x, c.pos.z - cp.z);
-      if (d < 2.2 && !H.has(c)) {
+      const dx = c.pos.x - cp.x;
+      const dz = c.pos.z - cp.z;
+      const d = Math.hypot(dx, dz);
+      const ahead = (dx * fx + dz * fz) / (fd * (d || 1));
+      const inWay = d < 2.2 || (d < reach && ahead > 0.55);
+      if (inWay && !H.has(c)) {
         c.fig.setVisible(false);
         H.add(c);
-      } else if (d > 3 && H.has(c)) {
+      } else if (!inWay && d > 2.6 && H.has(c)) {
         c.fig.setVisible(true);
         H.delete(c);
       }
@@ -1296,7 +1308,15 @@ export class Prologue {
     yield 0.3;
     yield* this.say('L01', L.fig, 0.1);
     yield* this.freezeCard({ name: 'LILY', tag: 'age 9 - draws everything she sees', col: '#f2b630', at: () => this.headJ(L), side: -1 });
-    this.shot({ from: [31.4, 1.3, 229.6], to: [31.6, 1.3, 229.8], look: () => v3(P.pos.x, 1.45, P.pos.z), fov: 44, dur: 3, hand: 0.35 });
+    // (and him as she sees him, coming the last steps to her: from where she sits, a little over her
+    // shoulder, up at him)
+    this.shot({
+      from: () => { const h = this.headJ(L) || v3(L.pos.x, 1.0, L.pos.z); const dx = P.pos.x - h.x; const dz = P.pos.z - h.z; const d = Math.hypot(dx, dz) || 1; return v3(h.x - (dx / d) * 0.35 + (dz / d) * 0.22, h.y + 0.06, h.z - (dz / d) * 0.35 - (dx / d) * 0.22); },
+      look: () => { const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z); return v3(h.x, h.y - 0.25, h.z); },
+      fov: 38,
+      dur: 3,
+      hand: 0.35,
+    });
     yield () => !this.walkTo || this.shots.t > 4.0;
     // (on the cut: where he was going - and she is up off her stool: she sat at the stand from the
     // start of the game, and nothing stood her up again; she walked and ran sitting - ROADMAP 18.9)
