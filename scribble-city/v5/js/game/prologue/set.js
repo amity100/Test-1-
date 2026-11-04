@@ -4,7 +4,6 @@ import { makeSurface, canvasTexture, surfaceVariant, sortDefines, srgb } from '.
 import { Sketcher, makeCanvas, FONT_UI, FONT_SIGN, BLACK2D } from '../../render/sketch2d.js';
 import { letter } from '../../world/letters.js';
 import { kidLook, civilianLook } from '../looks.js';
-import { Garage } from './garage.js';
 import { CarPark } from './carpark.js';
 
 // (5th Street Garage and Bayshore Parking across the street from it: the chase's car park, the one
@@ -16,12 +15,13 @@ export { PARK } from './carpark.js';
 //  - the Sunset Wheel at the pier, the biggest wheel the city ever had (48 m across, its hub 29 m
 //    up), turning slowly with its lights on, every gondola full: mostly kids, at the windows,
 //    waving; their parents with them, teenagers filming; more parents down on the pier, waving
-//    back. Until it is rubbed out (erase(): the outline of it, white as the paper, for a blink -
-//    and then the sky where it was);
+//    back. Until it is rubbed out (erase(): an eraser over it, row by row, two and a half seconds -
+//    the paper coming through, crumbs flying - and then the sky where it was);
 //  - Sunset Scoops, the ice cream stand at the pier's gate, where Lily waits;
 //  - Michael Cruz's campaign boards (his face from his sheet, his name, his slogan);
-//  - the two car parks out at the island's southern tip, and the short street between them
-//    (garage.js): the chase goes up one and the car flies across to the roof of the other.
+//  - 5th Street Garage, inland in the middle of the city, and Bayshore Parking across 5th Street
+//    from it (carpark.js): the chase goes up the one and the car flies across to the roof of the
+//    other. (The two smaller car parks out at the island's southern tip it replaced are gone.)
 //
 // The wheel stands across the pier at an angle (its axle pointing east-north-east), so that its
 // face is seen from the promenade and the pier's gate, and from the beach south of the pier with
@@ -30,49 +30,6 @@ export { PARK } from './carpark.js';
 export const WHEEL = { x: 128, z: 243, deck: 0.35, R: 26, hubUp: 32.5, yaw: Math.asin(0.6), n: 26, spin: 0.028 };
 export const STAND = { x: 36.5, z: 228.5 };
 const FLOOR = 3.4; // a gondola's floor under its pivot
-
-export const GARAGE_A = {
-  name: 'A',
-  x0: -41, x1: 13, z0: 314, z1: 350,
-  Y: [0.15, 3.4, 6.65, 9.9],
-  ramps: [
-    { lv: 0, aisle: 'S', xLow: -24, xHigh: -4 },
-    { lv: 1, aisle: 'N', xLow: -4, xHigh: -24 },
-    { lv: 2, aisle: 'S', xLow: -24, xHigh: -4 },
-  ],
-  // the way in on the street floor (east, the north aisle); the way out west (blocked, the chase)
-  open: [{ lv: 0, side: 'E', aisle: 'N' }, { lv: 0, side: 'W', aisle: 'N' }],
-  band: linC(0.95, 0.42, 0.36),
-  sign: { text: 'SOUTH POINTE GARAGE', side: 'N', x: -14, col: linC(1, 0.55, 0.42) },
-  pSign: { x: 15.5, z: 312.5 },
-  tower: { x0: 6, x1: 12.6, z0: 342.5, z1: 349.6 },
-  seed: 31,
-  // (Danny's bay on the street floor, east end; the roof's run-up kept clear)
-  keepFree: [{ lv: 0, x0: -2, x1: 4 }, { lv: 3, x0: -42, x1: -20 }],
-};
-
-export const GARAGE_B = {
-  name: 'B',
-  x0: -117, x1: -63, z0: 314, z1: 350,
-  Y: [0.15, 3.4, 6.65],
-  // (down from the roof where the car lands: the north aisle's ramp ahead of it going west, round at
-  // the west end, the south aisle's down going east, and out on the street floor to the short street)
-  ramps: [
-    { lv: 0, aisle: 'S', xLow: -80, xHigh: -100 },
-    { lv: 1, aisle: 'N', xLow: -108, xHigh: -88 },
-  ],
-  open: [{ lv: 0, side: 'E', aisle: 'S' }],
-  band: linC(0.3, 0.62, 0.86),
-  sign: { text: 'POINTE WEST PARKING', side: 'N', x: -90, col: linC(0.45, 0.85, 1) },
-  pSign: { x: -119.5, z: 312.5 },
-  tower: { x0: -116.6, x1: -110, z0: 342.5, z1: 349.6 },
-  seed: 57,
-  // (the roof where the car comes down: no cars parked in its way)
-  keepFree: [{ lv: 2, x0: -90, x1: -60 }],
-};
-
-// the street between them: from 5th Street down to the water
-export const STUB = { x0: -59, x1: -45, z0: 311, z1: 352 };
 
 const GOND_C = [
   [0.98, 0.42, 0.55], [0.2, 0.74, 0.76], [1.0, 0.8, 0.26], [0.6, 0.42, 0.9], [0.4, 0.78, 0.38], [0.99, 0.56, 0.2],
@@ -137,7 +94,8 @@ export class PrologueSet {
     this.erasing = null;
     this.wheelGone = false;
     this.wheelCols = [];
-    this.garages = [new Garage(GARAGE_A), new Garage(GARAGE_B)];
+    // (the old car parks at the southern tip: gone, 5th Street Garage in their place)
+    this.garages = [];
     this.park = new CarPark(game);
   }
 
@@ -157,7 +115,6 @@ export class PrologueSet {
     const M = itemMats();
     const K = new Kit();
     for (const gar of this.garages) gar.build(K, M, col);
-    this.buildStub(K, M);
     const grp = K.build({ seed: 0.43 });
     grp.updateMatrix();
     g.scene.add(grp);
@@ -1002,46 +959,6 @@ export class PrologueSet {
       b.g.rotation.z = Math.sin(t * 0.7 + b.bob) * 0.025;
       b.g.rotation.x = Math.sin(t * 0.55 + b.bob * 2) * 0.02;
       if (b.wake && this.game.fx && Math.random() < dt * 10) this.game.fx.splash(b.x + (Math.random() - 0.5) * 1.6, 0.1, b.z + 4.2, 3, 2.4);
-    }
-  }
-
-  // ------------------------------------------------------------------ the street between the car parks
-  buildStub(K, M) {
-    const S = STUB;
-    const ASPH = linC(0.3, 0.3, 0.34);
-    const WALK = linC(0.78, 0.76, 0.72);
-    K.box(M.matte, S.x0, 0.02, S.z0, S.x1, 0.16, S.z1, ASPH);
-    for (let z = S.z0 + 2; z < S.z1 - 2; z += 4) K.box(M.paint, -52.1, 0.16, z, -51.9, 0.17, z + 2, linC(0.98, 0.85, 0.3));
-    for (const [x0, x1] of [[-63, S.x0], [S.x1, -41]]) K.box(M.matte, x0, 0.02, S.z0, x1, 0.3, S.z1, WALK);
-    // the street's end at the water: a low wall, bollards before it, DEAD END
-    K.box(M.matte, -63, 0.02, 350.6, -41, 1.0, 351.6, linC(0.7, 0.68, 0.66));
-    this.addCol(-63, 350.6, -41, 351.6, -1, 1.0, 'wall');
-    for (let x = -58; x <= -46; x += 2) {
-      K.cyl(M.paint, 0.13, 0.13, 0.16, 1.0, linC(0.95, 0.75, 0.15), { axis: 'y', x, z: 349.4, segs: 10 });
-      K.box(M.paint, x - 0.135, 0.75, 349.265, x + 0.135, 0.85, 349.535, linC(0.12, 0.12, 0.14));
-      this.cols.push(this.game.world.collision.addCircle(x, 349.4, 0.15, 0, 1.0, 'pole'));
-    }
-    K.cyl(M.metal, 0.04, 0.04, 0.3, 2.6, linC(0.5, 0.5, 0.55), { axis: 'y', x: -44.4, z: 314, segs: 6 });
-    K.box(M.paint, -45.0, 2.0, 313.95, -43.8, 2.6, 314.0, linC(0.98, 0.85, 0.2));
-    letter('DEAD END', 0.13, (a0, b0, a1, b1) => K.box(M.paint, -44.4 + a0, 2.24 + b0, 313.92, -44.4 + a1, 2.24 + b1, 313.95, linC(0.1, 0.1, 0.12)));
-    // a crosswalk where it meets 5th Street
-    for (let x = S.x0 + 0.6; x < S.x1 - 0.5; x += 1.1) K.box(M.paint, x, 0.161, S.z0 + 0.3, x + 0.55, 0.168, S.z0 + 3.0, linC(0.95, 0.95, 0.92));
-    // a hydrant, a dumpster against Pointe West's wall, a newspaper box
-    K.cyl(M.paint, 0.14, 0.16, 0.3, 0.95, linC(0.85, 0.14, 0.14), { axis: 'y', x: -60.2, z: 330, segs: 10 });
-    K.sphere(M.paint, 0.15, -60.2, 0.98, 330, linC(0.85, 0.14, 0.14), 1, 0.7, 1, 10);
-    K.box(M.paint, -60.45, 0.65, 329.92, -59.95, 0.75, 330.08, linC(0.85, 0.14, 0.14));
-    this.cols.push(this.game.world.collision.addCircle(-60.2, 330, 0.2, 0, 1.0, 'pole'));
-    K.box(M.paint, -62.6, 0.3, 336, -61.2, 1.55, 338.4, linC(0.2, 0.45, 0.32));
-    K.box(M.paint, -62.7, 1.55, 335.9, -61.1, 1.65, 338.5, linC(0.15, 0.3, 0.22));
-    this.addCol(-62.7, 335.9, -61.1, 338.5, -1, 1.65, 'prop');
-    K.box(M.paint, -43.8, 0.3, 325, -43.3, 1.35, 325.5, linC(0.15, 0.35, 0.75));
-    K.box(M.glass, -43.83, 0.95, 325.05, -43.79, 1.25, 325.45, linC(0.7, 0.8, 0.9));
-    for (const x of [-60.6, -43.4]) {
-      for (const z of [322, 340]) {
-        K.cyl(M.metal, 0.09, 0.12, 0.3, 6.6, linC(0.2, 0.2, 0.24), { axis: 'y', x, z, segs: 8 });
-        K.box(M.glow, x - 0.3, 6.5, z - 0.3, x + 0.3, 6.7, z + 0.3, linC(1, 0.9, 0.7));
-        this.cols.push(this.game.world.collision.addCircle(x, z, 0.15, 0, 6.6, 'pole'));
-      }
     }
   }
 
