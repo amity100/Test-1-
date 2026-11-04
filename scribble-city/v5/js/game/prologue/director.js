@@ -1502,7 +1502,7 @@ export class Prologue {
     man.pl.speed = 0;
     man.fig.lookAt = P.fig.j.headC;
     P.fig.lookAt = man.fig.j && man.fig.j.headC ? man.fig.j.headC : v3(man.pos.x, 1.6, man.pos.z);
-    g.audio.play('dread', 0.45);
+    g.audio.play('dread', 0.8);
     {
       const ph = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
       // (from just beside his eyes, long: the man in the crowd, and then only his chest)
@@ -1614,6 +1614,9 @@ export class Prologue {
     const gi = this.lowGondola();
     this.heroRiders(gi);
     const kid = this.heroes[0];
+    // (ROADMAP 18.9: the unease from here - under the boy waving, the waltz going wrong - so that it
+    // has grown through all of it by the time the wheel is gone: score.js FILES.unease)
+    this.cue('unease', { fade: 2.5 });
     this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.12), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, 0), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 20, fovTo: 46, dur: 4.4, ease: 'inout', hand: 0.45 });
     yield 4.2;
     // the two of them at the railing from behind, the wheel turning against the sky - and under the
@@ -1622,7 +1625,6 @@ export class Prologue {
     const wideFrom = [VIEW.x - ux * 4.2 + rx * 1.9, 1.1, VIEW.z - uz * 4.2 + rz * 1.9];
     const wideTo = [VIEW.x - ux * 3.9 + rx * 1.85, 1.12, VIEW.z - uz * 3.9 + rz * 1.85];
     this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 24, WHEEL.z], fov: 50, dur: 6, ease: 'lin', hand: 0.3 });
-    this.cue('unease', { fade: 1.5 });
     yield 2.4;
     // it begins to be rubbed out, at the top: no eraser seen, only what it does (game/prologue/set.js:
     // the paper coming through where it goes, its crumbs, its rub; the comic's marks round it) - row
@@ -1632,7 +1634,7 @@ export class Prologue {
     P.fig.lookAt = tip;
     S.erase();
     // (and under the procedural rubs, the recorded one: a great eraser on paper, the whole of it)
-    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.85);
+    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.55);
     const C = this.comic;
     if (C && S.eraser) C.rub(S.eraser);
     const et = () => (S.erasing ? S.erasing.t : 99);
@@ -2052,23 +2054,40 @@ export class Prologue {
     const d = Math.hypot(dx, dz) || 1;
     const ux = dx / d;
     const uz = dz / d;
-    const mx = c.pos.x - ux * 2.2;
-    const mz = c.pos.z - uz * 2.2;
+    // (ROADMAP 18.9: they come from his side across the line between Danny and him - before it was
+    // away from it, and nothing ever came between them: he only went, all at once, when the time was
+    // up. Now a knot of nine, in rows - between Danny and him, round him, past him - and he goes with
+    // them, slower: the first rows in front of him, and when one of them is between him and the
+    // camera, he is not there any more)
+    const px = uz;
+    const pz = -ux;
     const crowd = [];
-    for (let i = 0; i < 6; i++) {
-      const side = -5.5 - i * 0.9 - (i % 2) * 0.4;
-      const off = (i % 3 - 1) * 0.55;
-      const x = mx - uz * side + ux * off;
-      const z = mz + ux * side + uz * off;
-      const q = this.person('crowd' + i, x, z, i % 3 === 1 ? kidLook(i % 2 === 0) : civilianLook());
-      this.go(q, x + uz * 16, z - ux * 16, 1.25 + (i % 3) * 0.12);
+    const rows = [-2.0, -1.3, -0.6, 0.6];
+    for (let i = 0; i < 9; i++) {
+      const row = rows[i % 4];
+      const side = 3.6 + Math.floor(i / 2) * 0.7 + (i % 2) * 0.3;
+      const x = c.pos.x + ux * row + px * side;
+      const z = c.pos.z + uz * row + pz * side;
+      const q = this.person('crowd' + i, x, z, i % 4 === 1 ? kidLook(i % 2 === 0) : civilianLook());
+      this.go(q, x - px * 18, z - pz * 18, 1.25 + (i % 3) * 0.1);
       crowd.push(q);
     }
     c.pl.speed = 0;
     let t = 0;
+    let walking = false;
     const tc = new THREE.Vector3();
     const tq = new THREE.Vector3();
-    while (t < 4.5) {
+    const seen = () => {
+      // (on the screen at all: in front of the camera, inside its picture)
+      tq.set(c.pos.x, c.pos.y + 1.2, c.pos.z).project(cam);
+      return tq.z < 1 && Math.abs(tq.x) < 1.05 && Math.abs(tq.y) < 1.05;
+    };
+    while (t < 9) {
+      // (as the first of them reach him, he turns and goes along with them)
+      if (!walking && t > 1.6) {
+        walking = true;
+        this.go(c, c.pos.x - px * 14, c.pos.z - pz * 14, 0.8);
+      }
       // (one of them in front of him, from the camera: he is gone)
       tc.set(c.pos.x, c.pos.y + 1.2, c.pos.z).sub(cam.position);
       const dc = tc.length();
@@ -2079,7 +2098,9 @@ export class Prologue {
         const dq = tq.length();
         if (dq < dc - 0.5 && tq.normalize().dot(tc) > Math.cos(0.035)) hid = true;
       }
-      if (hid && t > 0.8) break;
+      if (hid && t > 1.0) break;
+      // (and at the latest, only where nobody is looking)
+      if (t > 6 && !seen()) break;
       yield 0.001;
       t += this.dtR || 1 / 30;
     }
