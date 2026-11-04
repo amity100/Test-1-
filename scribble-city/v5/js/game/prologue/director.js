@@ -1292,9 +1292,9 @@ export class Prologue {
     P.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
     this.feel(L.fig, 'joy', 8);
     {
-      // (her at it, the wheel beyond her: from her left, low)
+      // (her at it, in profile from her left, her face and the page; he beside her, at the wheel)
       const h = this.headJ(L) || v3(L.pos.x, 1.1, L.pos.z);
-      this.shot({ from: [h.x - rx * 1.25 - ux * 0.6, h.y - 0.1, h.z - rz * 1.25 - uz * 0.6], to: [h.x - rx * 1.1 - ux * 0.5, h.y - 0.08, h.z - rz * 1.1 - uz * 0.5], look: [h.x + ux * 4, h.y + 0.9, h.z + uz * 4], fov: 46, dur: 3.0, hand: 0.25 });
+      this.shot({ from: [h.x - rx * 1.5 + ux * 0.35, h.y - 0.05, h.z - rz * 1.5 + uz * 0.35], to: [h.x - rx * 1.35 + ux * 0.3, h.y - 0.04, h.z - rz * 1.35 + uz * 0.3], look: [h.x + rx * 0.2, h.y - 0.12, h.z + rz * 0.2], fov: 38, dur: 3.0, hand: 0.25 });
     }
     // (she looks up at it and down at her page, as one who draws from the thing does)
     this.everyFrame = (dt) => {
@@ -1304,12 +1304,16 @@ export class Prologue {
       L.fig.lookAt = Math.sin(tt * 1.3) > 0.35 ? W0 : page.at;
     };
     yield 2.6;
-    // (over her shoulder: the first lines of it on the page)
-    this.shot({ from: () => v3(page.at.x - ux * 0.45 - rx * 0.25, page.at.y + 0.42, page.at.z - uz * 0.45 - rz * 0.25), look: () => page.at, fov: 40, dur: 2.2, hand: 0.25 });
+    // (over her shoulder: the first lines of it on her page - and the wheel itself beyond it)
+    this.shot({ from: () => v3(page.at.x - ux * 0.55 + rx * 0.3, page.at.y + 0.38, page.at.z - uz * 0.55 + rz * 0.3), look: () => v3(page.at.x + ux * 3, page.at.y + 0.9, page.at.z + uz * 3), fov: 44, dur: 2.2, hand: 0.25 });
     yield 2.0;
     // a man along the pier, by the wheel's gate - on his shirt, over his heart, a mark that is
     // something like an eraser, and not one. Danny sees it; the man turns his head to him
     const man = this.markMan();
+    // (he stops, and looks back at Danny - the mark on his chest towards him)
+    this.faceTo(man, P.pos.x, P.pos.z);
+    man.pl.speed = 0;
+    man.fig.lookAt = P.fig.j.headC;
     P.fig.lookAt = man.fig.j && man.fig.j.headC ? man.fig.j.headC : v3(man.pos.x, 1.6, man.pos.z);
     g.audio.play('dread', 0.45);
     {
@@ -1326,7 +1330,8 @@ export class Prologue {
     // out where he walks)
     this.film(false);
     this.objective('Who is <b>that</b>? Follow him', man.pos.x, man.pos.z, 'Man');
-    this.go(man, man.pos.x + 7, 248.6, 1.05);
+    man.fig.lookAt = null;
+    this.go(man, man.pos.x + ux * 9 + 1.5, 248.6, 1.05);
     {
       let t = 0;
       let gpsT = 0;
@@ -1755,7 +1760,6 @@ export class Prologue {
     const x = VIEW.x + ux * 14 - uz * 2.5;
     const z = VIEW.z + uz * 14 + ux * 2.5;
     const c = this.person('mark', x, z, civilianLook({ fem: false, kind: 'casual' }), { face: Math.atan2(-ux, -uz) });
-    this.go(c, x + ux * 2 + 1.5, z + 1.8, 0.75);
     if (this.set && this.set.markShirt) this.set.markShirt(c);
     c.fig.portraitPx = 60;
     return c;
