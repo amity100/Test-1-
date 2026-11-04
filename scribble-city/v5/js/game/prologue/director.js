@@ -9,7 +9,7 @@ import { RampDraw, Ramp, Jump, rampH } from './ramp.js';
 import { HeldPage } from './page.js';
 import { Acting, ACTS } from './acting.js';
 import { Comic } from './comic.js';
-import { civilianLook, kidLook } from '../looks.js';
+import { civilianLook, kidLook, roleLook } from '../looks.js';
 import { Doodle } from '../doodle.js';
 import { Soundscape, airAt } from './soundscape.js';
 import { loadTrack, trackBuf } from './tracks.js';
@@ -559,11 +559,14 @@ export class Prologue {
     // (the painted look the whole prologue through - in the player's own hands too, between the
     // scenes: one film, the walk to her and to the wheel in it. Where it looks: the film's shot, or
     // the player)
-    pipe.paintWant = this.paintOn ? 1 : 0;
+    // (ROADMAP 18.9: from the moment he meets her - the flight in and the city's tour as the game
+    // looks: the film's own look is the story's)
+    const story = (this.sceneN || 0) >= 2;
+    pipe.paintWant = this.paintOn && story ? 1 : 0;
     // (and its light and colour: the people inked bolder and lit round their edge, the shadows cool
     // and the lights warm, a grain - more of all of it while it is filmed; render/pipeline.js look)
     const LK = pipe.look;
-    if (LK && this.paintOn && this.lookOn) {
+    if (LK && this.paintOn && this.lookOn && story) {
       LK.rim = film ? 0.9 : 0.6;
       LK.grade = 1;
       LK.grain = film ? 0.03 : 0.02;
@@ -1266,9 +1269,12 @@ export class Prologue {
     yield 0.35;
     yield* this.say('L01', L.fig, 0.25);
     yield () => !this.walkTo || this.shots.t > 4.0;
-    // (on the cut: where he was going)
+    // (on the cut: where he was going - and she is up off her stool: she sat at the stand from the
+    // start of the game, and nothing stood her up again; she walked and ran sitting - ROADMAP 18.9)
     this.walkTo = null;
     this.auto = null;
+    L.fig.sit = 0;
+    L.baseY = 0;
     this.putDanny(meet.x, meet.z, Math.atan2(L.pos.x - meet.x, L.pos.z - meet.z));
     this.faceTo(L, meet.x, meet.z);
     // him, from her side and from below: a father as his kid sees him
@@ -2026,7 +2032,8 @@ export class Prologue {
     const uz = Math.cos(toW);
     const x = VIEW.x + ux * 14 - uz * 2.5;
     const z = VIEW.z + uz * 14 + ux * 2.5;
-    const c = this.person('mark', x, z, civilianLook({ fem: false, kind: 'casual' }), { face: Math.atan2(-ux, -uz) });
+    // (ROADMAP 18.9: a face of his own, nobody else's in the city - render/folkspec.js 'marked')
+    const c = this.person('mark', x, z, roleLook('marked') || civilianLook({ fem: false, kind: 'casual' }), { face: Math.atan2(-ux, -uz) });
     if (this.set && this.set.markShirt) this.set.markShirt(c);
     c.fig.portraitPx = 60;
     return c;
@@ -2188,15 +2195,26 @@ export class Prologue {
       c.downT = 0;
       c.upT = 0;
       c.fig.lookAt = P.fig.j.headC;
+      // (ROADMAP 18.9: men who have come to hurt him - and their faces say so, from the first moment)
+      this.feel(c.fig, 'angry', 90);
     }
     // over their shoulders: him and Lily, small, at the door of the car park - they have been waiting
     // for him
     this.shot({ from: () => v3(t1.pos.x + ux * 2.2 - uz * 1.1, 1.75, t1.pos.z + uz * 2.2 + ux * 1.1), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 40, dur: 2.2, hand: 0.5 });
     this.go(t1, S1.x - ux * 2.0, S1.z - uz * 2.0, 1.0);
+    this.go(t2, S2.x - ux * 1.6, S2.z - uz * 1.6, 1.0);
     yield 1.6;
-    // (ROADMAP 18.9: whoever speaks is the one seen speaking) him, the one who talks, coming down the
-    // sidewalk at Danny, a smile that is not one; the other one at his shoulder
-    this.shot({ ...this.single(t1, P, { dist: 2.3, side: -0.55, up: -0.25, drop: 0.3 }), fov: 38, dur: 2.8, hand: 0.5 });
+    // (ROADMAP 18.9: the two of them, both, coming at him - from low down in front of them, looking up:
+    // the big one a step behind the one who talks; whoever speaks is the one the picture is on)
+    this.shot({
+      from: () => v3((t1.pos.x + t2.pos.x) / 2 - ux * 3.1 + uz * 0.5, 0.75, (t1.pos.z + t2.pos.z) / 2 - uz * 3.1 - ux * 0.5),
+      to: () => v3((t1.pos.x + t2.pos.x) / 2 - ux * 2.5 + uz * 0.4, 0.8, (t1.pos.z + t2.pos.z) / 2 - uz * 2.5 - ux * 0.4),
+      look: () => v3(t1.pos.x * 0.6 + t2.pos.x * 0.4, 1.45, t1.pos.z * 0.6 + t2.pos.z * 0.4),
+      fov: 40,
+      dur: 2.8,
+      ease: 'lin',
+      hand: 0.5,
+    });
     yield 0.2;
     yield* this.say('T01', t1.fig, 0.3);
     // he stops; puts her behind him
@@ -2389,9 +2407,12 @@ export class Prologue {
       this.dannyCar.pos.y = DANNY_CAR.y;
     }
     if (!this.cast.t1) {
-      const lk = () => civilianLook({ fem: false, kind: 'street' });
-      const a = this.person('t1', THUGS[0].x, THUGS[0].z, lk(), { face: PARK.thugsFace });
-      const b = this.person('t2', THUGS[1].x, THUGS[1].z, lk(), { face: PARK.thugsFace });
+      // (ROADMAP 18.9: men who have come to hurt him, and look it - the one who talks in a dark suit,
+      // his hair combed back; the other one big, in black, his head shaved: render/folkspec.js 'mob',
+      // 'bouncer')
+      const lk = (role) => roleLook(role) || civilianLook({ fem: false, kind: 'street' });
+      const a = this.person('t1', THUGS[0].x, THUGS[0].z, lk('mob'), { face: PARK.thugsFace });
+      const b = this.person('t2', THUGS[1].x, THUGS[1].z, lk('bouncer'), { face: PARK.thugsFace });
       // (their drawn faces in the film's middle shots, as Lily's: ROADMAP 18.9)
       a.fig.portraitPx = 46;
       b.fig.portraitPx = 46;

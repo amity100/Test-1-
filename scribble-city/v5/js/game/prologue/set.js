@@ -1131,12 +1131,14 @@ export class PrologueSet {
   // something like an eraser and not one, a hole through it with lines going out of it, as if
   // something had been rubbed out from inside. On a patch of his shirt's own dark, a hand wide
   markShirt(c) {
-    const cv = this.markCanvas('#1b1a1e');
+    // (ROADMAP 18.9: printed on his black sweatshirt - the mark alone, nothing round it: no square of
+    // its own colour over the cloth, no ink line round a square)
+    const cv = this.markCanvas(null);
     const tex = canvasTexture(cv);
     const M = itemMats();
     const K = new Kit();
-    const face = makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.3, 0.3, 0.3), ang: 1.45, wash: 0.9, line: 0.4 });
-    const q = new THREE.PlaneGeometry(0.2, 0.2);
+    const face = makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.14, 0.14, 0.14), ang: 1.45, wash: 0.9, line: 0, alphaTest: 0.5 });
+    const q = new THREE.PlaneGeometry(0.17, 0.17);
     K.add(face, q, linC(1, 1, 1));
     void M;
     const grp = K.build({ seed: 0.6 });
@@ -1152,8 +1154,11 @@ export class PrologueSet {
     const W = 256;
     const cv = makeCanvas(W, W);
     const g = cv.getContext('2d');
-    g.fillStyle = col;
-    g.fillRect(0, 0, W, W);
+    // (col null: nothing round it - see through to whatever it is printed on)
+    if (col) {
+      g.fillStyle = col;
+      g.fillRect(0, 0, W, W);
+    }
     g.save();
     g.translate(W / 2, W / 2);
     g.rotate(-0.38);

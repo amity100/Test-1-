@@ -532,6 +532,25 @@ const ROLES = [
     dress: (j) => ({ top: jacket('bomber', 'nylon', '#e8a020', { rib: '#5a5a5a', lining: '#d8d8d0' }), inner: under('tee', j % 2 ? '#3a5a8a' : '#e8e6e0'), bottom: legs('trousers', '#3a4a3e'), belt: BELT, shoes: feet('oxford', '#2a1e14') }) },
   { role: 'busker', n: 1, phone: 1, fem: 0, age: [22, 50], hair: ['long', 'curls'], beard: ['full', 'trim', null],
     dress: () => ({ top: jacket('denim', 'denim', '#3e5878', { stitch: '#d8964a', buttons: '#a8743a' }), inner: under('tee', '#a83a3a'), bottom: legs('jeans', '#2a2a30'), belt: BELT, shoes: feet('bootie', '#6a4a32') }) },
+  // (v5, ROADMAP 18.9) the man with the mark on his shirt in the prologue: nobody else's face - long,
+  // pale, hollow-cheeked under silver hair combed straight back, the eyes deep in it and pale; a black
+  // sweatshirt, closed, the mark printed on its chest (game/prologue/set.js markShirt). Last in
+  // the list, so that nobody before him is changed by him
+  { role: 'marked', n: 1, phone: 1, fem: 0, age: [50, 54], hair: ['back'], beard: [null], build: { height: 1.07, bulk: 0.86, limbs: 1.02 },
+    dress: () => ({ top: jacket('bomber', 'cotton', '#1b1a1e', { rib: '#141318', lining: '#1b1a1e', buttons: '#1b1a1e', open: 0 }), inner: under('tee', '#1b1a1e'), bottom: legs('trousers', '#22222a'), belt: BELT, shoes: feet('oxford', '#141212') }),
+    tweak: (F) => {
+      F.skin = 'fair';
+      F.hair = hairOf('silver', 'back');
+      F.brows = browsOf('silver', 1.25, 0.55);
+      F.morph = { ...F.morph, 'head-scale-vert-incr': 0.35, 'head-scale-horiz-decr': 0.3, 'cheek-volume-decr': 0.8, 'cheek-inner-decr': 0.6, 'cheek-bones-incr': 0.7, 'chin-prominent-incr': 0.35, 'chin-height-incr': 0.3, 'nose-scale-vert-incr': 0.45, 'nose-hump-incr': 0.4, 'mouth-scale-horiz-decr': 0.2, 'mouth-upperlip-volume-decr': 0.5, 'mouth-lowerlip-volume-decr': 0.4, 'eye-scale-decr': 0.15, 'eye-bag-incr': 0.5 };
+      F.shape = { ...F.shape, cheeks: -0.7, jaw: 1.04 };
+      F.eyes = { ...F.eyes, iris: 'grey', open: 0.96 };
+      F.expr = 'neutral';
+      F.lines = 0.75;
+      F.freckles = 0;
+      F.blush = 0;
+      delete F.glasses;
+    } },
 ];
 // one of them: one of the city's people as the rule makes them, a woman or a man as asked, as old as
 // the work has them (a child a child's face and build), dressed for it
@@ -580,6 +599,7 @@ function roleMade(R0, def, j, seed) {
     F.blush = 0.2;
   }
   F.how = 'work';
+  if (def.tweak) def.tweak(F);
   void R0;
   return F;
 }

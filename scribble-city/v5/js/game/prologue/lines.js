@@ -3,11 +3,11 @@
 // with ElevenLabs v3, one fixed voice for each of them, every line with its feeling: Danny (Chris), Lily
 // (Jessica, lifted a semitone and a half - an actress playing a girl of eight), the guy at the railing
 // (Will), the man by him (Bill), the man on the phone (Roger, through a phone), the two who wait by the
-// car park (Callum, Harry). The two kids on the wheel (K01, K02) are no longer heard.
+// car park (Vince and Bruno: voices made for them - ElevenLabs Voice Design). The two kids on the wheel (K01, K02) are no longer heard.
 export const LINES = {
   L01: { who: "L", en: "Dad! Finally!", he: "אבא! סוף סוף!", dur: 1.92 },
   D01: { who: "D", en: "What do you mean, finally? It's been two minutes.", he: "מה סוף סוף? עברו שתי דקות.", dur: 2.33 },
-  LG1: { who: "L", en: "(giggles)", he: "(מצחקקת)", dur: 1.75 },
+  LG1: { who: "L", en: "(giggles)", he: "(מצחקקת)", dur: 1.27 },
   L02: { who: "L", en: "That's what you always say.", he: "זה מה שאתה אומר תמיד.", dur: 1.68 },
   L03: { who: "L", en: "Dad, is Uncle Michael really gonna be mayor?", he: "אבא, דוד מייקל באמת יהיה ראש העיר?", dur: 2.62 },
   D02: { who: "D", en: "If there's one thing he knows how to do, it's getting people to vote for him.", he: "אם יש דבר אחד שהוא יודע לעשות, זה לגרום לאנשים להצביע לו.", dur: 3.74 },
@@ -27,7 +27,7 @@ export const LINES = {
   L08: { who: "L", en: "Dad...?", he: "אבא...?", dur: 1.03 },
   // (ROADMAP 18.9: said in the player's own hands, the moment it is gone)
   L22: { who: "L", en: "What?! The wheel... it's gone! What happened?!", he: "מה?! הגלגל... הוא נעלם! מה קרה?!", dur: 5.76 },
-  D29: { who: "D", en: "What the f-... Was it... erased? What the hell?", he: "מה לעז... זה... נמחק? מה לעזאזל?", dur: 4.7 },
+  D29: { who: "D", en: "What the f-... Was it... erased? What the hell?", he: "מה לעז... זה... נמחק? מה לעזאזל?", dur: 4.8 },
   D06: { who: "D", en: "Hey! Hey, you two! What the hell just happened?!", he: "היי! היי, אתם! מה לעזאזל קרה פה?!", dur: 4.06 },
   G01: { who: "G", en: "What?", he: "מה?", dur: 1.1 },
   D07: { who: "D", en: "The Ferris wheel! Did you see that?! It just vanished!", he: "הגלגל הענק! ראיתם את זה?! הוא פשוט נעלם!", dur: 2.81 },
@@ -51,15 +51,15 @@ export const LINES = {
   P02: { who: "P", en: "We've got a problem.", he: "יש לנו בעיה.", dur: 1.99 },
   D17: { who: "D", en: "We'll deal with it tomorrow.", he: "נטפל בזה מחר.", dur: 2.06 },
   P03: { who: "P", en: "You don't get it. There are people looking for you.", he: "אתה לא מבין. יש אנשים שמחפשים אותך.", dur: 3.43 },
-  T01: { who: "T", en: "Danny! We were just looking for you.", he: "דני! בדיוק חיפשנו אותך.", dur: 2.71 },
+  T01: { who: "T", en: "Danny! We were just looking for you.", he: "דני! בדיוק חיפשנו אותך.", dur: 2.78 },
   D18: { who: "D", en: "Not today.", he: "לא היום.", dur: 1.54 },
-  T02: { who: "T", en: "There's something you need to give back.", he: "יש משהו שאתה צריך להחזיר.", dur: 2.5 },
+  T02: { who: "T", en: "There's something you need to give back.", he: "יש משהו שאתה צריך להחזיר.", dur: 2.47 },
   D19: { who: "D", en: "Tell your boss we'll talk tomorrow.", he: "תגיד לבוס שלך שנדבר מחר.", dur: 2.71 },
-  T03: { who: "T", en: "You're not in a position to decide when.", he: "אתה לא במצב לקבוע מתי.", dur: 2.38 },
-  T05: { who: "T", en: "Wrong answer.", he: "תשובה לא נכונה.", dur: 1.34 },
+  T03: { who: "T", en: "You're not in a position to decide when.", he: "אתה לא במצב לקבוע מתי.", dur: 2.62 },
+  T05: { who: "T", en: "Wrong answer.", he: "תשובה לא נכונה.", dur: 1.58 },
   D28: { who: "D", en: "Lily! The car! Now!", he: "לילי! לאוטו! עכשיו!", dur: 2.26 },
-  T04: { who: "T2", en: "Don't let him get out!", he: "אל תיתן לו לצאת!", dur: 1.82 },
-  T06: { who: "T2", en: "Get them!", he: "תתפסו אותם!", dur: 0.94 },
+  T04: { who: "T2", en: "Don't let him get out!", he: "אל תיתן לו לצאת!", dur: 1.73 },
+  T06: { who: "T2", en: "Get them!", he: "תתפסו אותם!", dur: 1.78 },
   L12: { who: "L", en: "Dad! Who are these people?!", he: "אבא! מי האנשים האלה?!", dur: 2.28 },
   D20: { who: "D", en: "People from work.", he: "אנשים מהעבודה.", dur: 1.46 },
   L13: { who: "L", en: "What work?!", he: "איזה עבודה?!", dur: 1.27 },
