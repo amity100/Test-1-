@@ -2193,16 +2193,25 @@ export class Prologue {
     const pz = -ux;
     const crowd = [];
     const rows = [-2.0, -1.3, -0.6, 0.6];
+    // (each of them made where the camera does not see - out past the edge of the picture, further
+    // along their way if need be - and walking in: nobody appears out of nothing)
+    const _p = new THREE.Vector3();
+    const offScreen = (x, z) => {
+      _p.set(x, 1.0, z).project(cam);
+      return _p.z > 1 || Math.abs(_p.x) > 1.08 || Math.abs(_p.y) > 1.08;
+    };
     for (let i = 0; i < 9; i++) {
       const row = rows[i % 4];
-      const side = 3.6 + Math.floor(i / 2) * 0.7 + (i % 2) * 0.3;
+      let side = 3.6 + Math.floor(i / 2) * 0.7 + (i % 2) * 0.3;
+      while (side < 24 && !offScreen(c.pos.x + ux * row + px * side, c.pos.z + uz * row + pz * side)) side += 0.8;
       const x = c.pos.x + ux * row + px * side;
       const z = c.pos.z + uz * row + pz * side;
       const q = this.person('crowd' + i, x, z, i % 4 === 1 ? kidLook(i % 2 === 0) : civilianLook());
-      this.go(q, x - px * 18, z - pz * 18, 1.25 + (i % 3) * 0.1);
+      this.go(q, x - px * (side + 14), z - pz * (side + 14), 1.35 + (i % 3) * 0.1);
       crowd.push(q);
     }
-    c.pl.speed = 0;
+    // (he walks on, unhurried, till they are up to him - not stood waiting for them)
+    c.pl.speed = Math.min(c.pl.speed || 0.8, 0.8);
     let t = 0;
     let walking = false;
     const tc = new THREE.Vector3();
@@ -2212,9 +2221,10 @@ export class Prologue {
       tq.set(c.pos.x, c.pos.y + 1.2, c.pos.z).project(cam);
       return tq.z < 1 && Math.abs(tq.x) < 1.05 && Math.abs(tq.y) < 1.05;
     };
-    while (t < 9) {
-      // (as the first of them reach him, he turns and goes along with them)
-      if (!walking && t > 1.6) {
+    // (he turns and goes along with them as the first of them come up to him)
+    const near = () => crowd.some((q) => Math.hypot(q.pos.x - c.pos.x, q.pos.z - c.pos.z) < 2.6);
+    while (t < 14) {
+      if (!walking && (near() || t > 6)) {
         walking = true;
         this.go(c, c.pos.x - px * 14, c.pos.z - pz * 14, 0.8);
       }
@@ -2228,9 +2238,9 @@ export class Prologue {
         const dq = tq.length();
         if (dq < dc - 0.5 && tq.normalize().dot(tc) > Math.cos(0.035)) hid = true;
       }
-      if (hid && t > 1.0) break;
+      if (hid && walking) break;
       // (and at the latest, only where nobody is looking)
-      if (t > 6 && !seen()) break;
+      if (t > 10 && !seen()) break;
       yield 0.001;
       t += this.dtR || 1 / 30;
     }
