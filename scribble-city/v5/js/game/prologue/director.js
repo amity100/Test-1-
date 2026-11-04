@@ -600,10 +600,11 @@ export class Prologue {
   // them (drop: the face in the upper third, the shoulders in). Worked out every frame from where they
   // are: { from, look } for a shot
   single(c, at, o = {}) {
-    const dist = o.dist !== undefined ? o.dist : 1.3;
-    const side = o.side !== undefined ? o.side : 0.45;
+    const dist0 = o.dist !== undefined ? o.dist : 1.3;
+    const side0 = o.side !== undefined ? o.side : 0.45;
     const up = o.up !== undefined ? o.up : -0.04;
     const drop = o.drop !== undefined ? o.drop : 0.1;
+    const fig = at && !at.isVector3;
     const frame = () => {
       const h = this.headJ(c) || v3(c.pos.x, c.pos.y + 1.6, c.pos.z);
       const A = at ? (at.isVector3 ? at : this.headJ(at) || at.pos) : null;
@@ -612,16 +613,25 @@ export class Prologue {
       const d = Math.hypot(ux, uz) || 1;
       ux /= d;
       uz /= d;
-      return { h, ux, uz };
+      // (the one they talk to near them, their head at the camera's height: the camera never as far
+      // as them - in front of their head it would be the back of it across the picture - but nearer,
+      // and more to the side. A child's head well under it, a grown-up's well over: past them)
+      let dist = dist0;
+      let side = side0;
+      if (fig && dist > d * 0.6 && Math.abs(A.y - (h.y + up)) < 0.3) {
+        dist = d * 0.6;
+        side = Math.sign(side0 || 1) * Math.max(Math.abs(side0), 0.6);
+      }
+      return { h, ux, uz, dist, side };
     };
     return {
       // (their right: -uz, ux)
       from: () => {
-        const { h, ux, uz } = frame();
+        const { h, ux, uz, dist, side } = frame();
         return v3(h.x + ux * dist - uz * side, h.y + up, h.z + uz * dist + ux * side);
       },
       look: () => {
-        const { h, ux, uz } = frame();
+        const { h, ux, uz, side } = frame();
         return v3(h.x - uz * side * 0.12, h.y - drop, h.z + ux * side * 0.12);
       },
     };
