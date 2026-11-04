@@ -39,13 +39,16 @@ export const ACTS = {
   D06: { mood: 'shout', beats: [[0, 0.45, 'wave'], [0.45, 1, 'point']] },
   G01: { mood: 'surprised', beats: [[0, 1, 'shrug']] },
   D07: { mood: 'shout', beats: [[0, 0.55, 'point'], [0.55, 1, 'open']] },
-  G02: { mood: 'smirk', beats: [[0, 1, 'shrug']] },
+  G02: { mood: 'smirk', beats: [[0.15, 0.75, 'shrug']] },
   D08: { mood: 'shout', beats: [[0, 0.5, 'point'], [0.5, 1, 'beat']] },
-  G03: { mood: 'joy', beats: [[0, 1, 'explain']], shake: true },
+  // (ROADMAP 18.9: no hands going round and round - 'explain' is a loop, and over a whole line it
+  // looked foolish: palms open at the question, a shrug at 'man', a hand out at 'here')
+  G03: { mood: 'joy', beats: [[0.05, 0.4, 'open'], [0.45, 0.62, 'shrug'], [0.7, 1, 'point']] },
   D09: { mood: 'shock', beats: [[0.1, 1, 'open']] },
-  G04: { mood: 'worried', beats: [[0, 1, 'open']] },
+  G04: { mood: 'worried', beats: [[0.1, 0.6, 'open']] },
   D10: { mood: 'worried', beats: [[0, 0.5, 'plead'], [0.5, 1, 'point']] },
-  M01: { mood: 'smirk', shake: true },
+  // (still as a post as he says it, flat: the stillness is what is wrong with him)
+  M01: { mood: 'neutral' },
   L09: { mood: 'worried' },
   D11: { mood: 'tender', nod: true },
   L10: { mood: 'worried' },

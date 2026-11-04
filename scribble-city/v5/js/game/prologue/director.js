@@ -1996,8 +1996,10 @@ export class Prologue {
       c.pl.face = Math.atan2(WHEEL.x - c.pos.x, WHEEL.z - c.pos.z);
       c.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
     }
-    // (one of them films it on his phone)
+    // (people out for the evening, as they are: one with his phone, the other his coffee - ROADMAP 18.9)
     g2.fig.reachR = null;
+    g2.fig.carry = 'phone';
+    g1.fig.carry = 'coffee';
   }
 
   // ------------------------------------------------------------------ 4. GONE
