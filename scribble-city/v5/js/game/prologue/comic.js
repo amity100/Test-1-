@@ -7,6 +7,8 @@ import * as THREE from 'three';
 // held a moment, gone. Drawn over the film on a sheet of its own, under the words and the bars.
 
 const _v = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _f = new THREE.Vector3();
 const WORD_FONT = '"Permanent Marker", "Rubik", sans-serif';
 
 export class Comic {
@@ -102,6 +104,11 @@ export class Comic {
 
   drawRub(W, H) {
     const X = this.rubSrc;
+    // (only where the camera looks at it: never behind it, nor off at the edge of the picture)
+    const cam = this.game.camera;
+    cam.getWorldDirection(_f);
+    _d.copy(X.pos).sub(cam.position).normalize();
+    if (_d.dot(_f) < Math.cos(((cam.fov || 50) * Math.PI) / 180)) return;
     const c = this.at(X.pos);
     if (!c) return;
     const a = this.at(_v.copy(X.pos).addScaledVector(X.dir, X.w * 0.45));

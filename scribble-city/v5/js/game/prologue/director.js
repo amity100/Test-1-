@@ -1275,6 +1275,8 @@ export class Prologue {
       this.shot({ from: [mx + ux * 2.7, 1.05, mz + uz * 2.7], to: [mx + ux * 2.5, 1.06, mz + uz * 2.5], look: [mx - rx * 0.05, 1.42, mz - rz * 0.05], fov: 46, dur: 1.4, hand: 0.5 });
       this.feel(L.fig, 'scared', 12);
       this.feel(P.fig, 'shock', 12);
+      // (the eraser's marks with the eraser: not in a shot of the two of them)
+      if (C) C.rub(null);
       P.fig.reachL = v3(L.pos.x + ux * 0.24 - rx * 0.08, (L.pos.y || 0) + 0.72, L.pos.z + uz * 0.24 - rz * 0.08);
       L.fig.reachR = P.fig.j.elbowL;
       L.fig.reachL = P.fig.j.handL;
@@ -1282,6 +1284,7 @@ export class Prologue {
     yield () => kids() && et() > 2.55;
     // the whole of it from behind them: half of it gone, the eraser going on down it
     this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 21, WHEEL.z], fov: 52, dur: 1.2, ease: 'lin', hand: 0.4 });
+    if (C && S.eraser) C.rub(S.eraser);
     yield () => kids() && et() > 3.45;
     // a comic's page, as it ends: the eraser over the last gondolas; her face; his
     if (C && C.page) {
