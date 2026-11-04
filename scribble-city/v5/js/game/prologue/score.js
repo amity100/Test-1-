@@ -1714,6 +1714,20 @@ export class Score {
     const now = this.c.currentTime;
     const dt = clamp(now - (this.last || now), 0, 1);
     this.last = now;
+    // (ROADMAP 18.9: a cue begun on its synthesis because its recording was not in yet - the recording
+    // in now: crossfaded over to it)
+    {
+      const q0 = this.cue;
+      const F = q0 && FILES[q0.name];
+      if (F && !F.once && !(q0 instanceof FileCue) && now > q0.t0 && trackBuf(F.path)) {
+        const nq = new FileCue(this, now + 0.05, q0.name, q0.o || {}, trackBuf(F.path), F);
+        q0.release(now + 0.05, 2.5, null);
+        this.gone.push(q0);
+        nq.fadeIn(now + 0.05, 2.5);
+        this.cue = nq;
+        nq.schedule(now);
+      }
+    }
     const q = this.cue;
     if (q) {
       if (q.name === 'chase' && !this.pinned && this.h < 0.88) {
