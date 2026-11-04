@@ -730,19 +730,24 @@ export class CarPark {
           wallWord(K, M.paint, LEVEL_C[lv], LEVEL_NAME[lv], 0.72, h === 'W' ? MX0 - 0.02 : MX1 + 0.02, f(zz) + 0.1, zz, h === 'W' ? -1 : 1, 0, 0.01);
         }
         // the floor's edge where the halves part (the other half's floor a little higher or lower
-        // there): a curb, a steel rail on posts
+        // there): a curb, a steel rail on posts. (A top floor's all along it but at its low end: there
+        // the other half's floor below it comes up to the same level - the last turn, open: the west
+        // half's is the turn onto the roof run at the north end, the east half's the way down's
+        // first turn at the south end)
+        const zrA = j === NDECK - 1 && h === 'W' ? MZN : zA;
+        const zrB = j === NDECK - 1 && h === 'E' ? MZS : zB;
         const xc0 = h === 'W' ? MXC - 0.32 : MXC;
         const xc1 = h === 'W' ? MXC : MXC + 0.32;
-        K.add(M.matte, prism('z', profile(f, zA, zB, kn, 0.42), xc0, xc1, (s, y) => y - 0.05), CONC_COL);
+        K.add(M.matte, prism('z', profile(f, zrA, zrB, kn, 0.42), xc0, xc1, (s, y) => y - 0.05), CONC_COL);
         const xr = h === 'W' ? MXC - 0.16 : MXC + 0.16;
-        K.add(M.metal, prism('z', profile(f, zA, zB, kn, 1.06), xr - 0.04, xr + 0.04, (s, y) => y - 0.08), YEL);
-        K.add(M.metal, prism('z', profile(f, zA, zB, kn, 0.76), xr - 0.04, xr + 0.04, (s, y) => y - 0.06), STEEL);
-        for (let z = zA + 2.5; z < zB - 1; z += 5) {
+        K.add(M.metal, prism('z', profile(f, zrA, zrB, kn, 1.06), xr - 0.04, xr + 0.04, (s, y) => y - 0.08), YEL);
+        K.add(M.metal, prism('z', profile(f, zrA, zrB, kn, 0.76), xr - 0.04, xr + 0.04, (s, y) => y - 0.06), STEEL);
+        for (let z = zrA + 2.5; z < zrB - 1; z += 5) {
           if (COLZ.some((c) => Math.abs(c - z) < 0.6)) continue;
           K.box(M.metal, xr - 0.035, f(z) + 0.42, z - 0.035, xr + 0.035, f(z) + 1.06, z + 0.035, STEEL);
         }
-        for (let z = zA; z < zB - 0.01; z += 4) {
-          const z1 = Math.min(zB, z + 4);
+        for (let z = zrA; z < zrB - 0.01; z += 4) {
+          const z1 = Math.min(zrB, z + 4);
           wall(xc0 - 0.05, z, xc1 + 0.05, z1, Math.min(f(z), f(z1)) - 0.3, Math.max(f(z), f(z1)) + 1.1);
         }
         // the floor for whoever walks on it (and for the camera's look, and a bullet): in steps
