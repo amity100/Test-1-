@@ -33,6 +33,8 @@ export class Streamer {
     // (the height you are at, for the cells that have one: null, none)
     this.y = null;
     this.job = null;
+    // (frames to leave out after a long step)
+    this.rest = 0;
     this.live = new Map();
     this.stats = { built: 0, freed: 0, ms: 0, last: '' };
     // what to warm up before a finished cell is shown (its meshes, one a frame)
@@ -140,6 +142,12 @@ export class Streamer {
       this.show(p);
       return;
     }
+    // (a step that ran long - a shop's whole counter at once - is followed by a frame without any:
+    // one slow frame, not several in a row)
+    if (this.rest > 0) {
+      this.rest--;
+      return;
+    }
     if (!this.job && this.redo.length) {
       const c = this.redo.shift();
       if (this.live.has(c.id)) this.job = { cell: c, it: c.build(c), ms: 0, swap: true };
@@ -182,7 +190,11 @@ export class Streamer {
         this.pending.push({ cell: job.cell, live, meshes, swap: !!job.swap });
         return;
       }
-      if (performance.now() - t0 > slice) break;
+      const el = performance.now() - t0;
+      if (el > slice) {
+        if (el > slice * 3) this.rest = 1;
+        break;
+      }
     }
     job.ms += performance.now() - t0;
   }

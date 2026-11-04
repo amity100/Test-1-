@@ -787,16 +787,19 @@ export class Prologue {
     const P = g.player;
     this.putDanny(DANNY0.x, DANNY0.z, DANNY0.yaw);
     P.pos.y = 0.3;
+    // (behind the black it opens in: the shops' insides round him built now, all at once - nobody
+    // sees the frame it takes - so that nothing of them is left to build while the film flies in;
+    // before the music, which a long frame would trip)
+    const I = g.world && g.world.interiors;
+    if (I && this.ui.blackOn) I.fill(P.pos.x, P.pos.z, 1500, P.pos.y);
     this.film(true);
     this.hour(18.2, 0.004);
     this.cue('opening');
     // Lily, waiting at the stand (her look as soon as her sheet is in: game/prologue/cast.js)
     yield () => this.castReady;
     this.spawnLily();
-    // (the shops' insides round Danny are built at their ordinary pace while the camera is far off
-    // over the city - not rushed in, a frame's worth at a time, while the film flies in:
-    // world/mainland/stream.js calm)
-    const I = g.world && g.world.interiors;
+    // (and whatever is still to come of them is built at its ordinary pace while the camera is far
+    // off over the city - not rushed in, a frame's worth at a time: world/mainland/stream.js calm)
     if (I && I.stream) I.stream.calm = true;
     // in off the sea: past the yachts and the wheel, low over the beach and along the promenade, down
     // to Danny. (Low: from up high the whole city is in the picture at once - more than a phone can
