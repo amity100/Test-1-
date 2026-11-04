@@ -209,6 +209,9 @@ export const shared = {
   // and log2 of it for the pictures; the screen's pixels per CSS pixel; the last frame's view (no
   // shift), how far this frame's samples are shifted; what moves on its own (render/motion.js)
   uPxK: { value: 1 },
+  // (ROADMAP 18.9) how busy the pens are over everything, the sky's too: 1 as the city is drawn; less,
+  // its colours laid on flatter, as a painter's (the prologue's film - render/pipeline.js paints them)
+  uPenDens: { value: 1 },
   uMipBias: { value: 0 },
   uPRo: { value: 1 },
   uPrevVP: { value: new THREE.Matrix4() },

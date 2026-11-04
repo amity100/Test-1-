@@ -11,6 +11,7 @@ import { Acting, ACTS } from './acting.js';
 import { Comic } from './comic.js';
 import { civilianLook, kidLook } from '../looks.js';
 import { Doodle } from '../doodle.js';
+import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
 
 // (v5, ROADMAP 18) THE LAST SUNSET - the game's prologue, directed.
@@ -430,7 +431,12 @@ export class Prologue {
       LK.grade = 1;
       LK.grain = film ? 0.03 : 0.02;
       LK.personW = film ? 1.7 : 1.3;
-    } else if (LK) Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1 });
+      // (and the pens over everything fewer: its colours laid on flat, painted - render/glsl.js)
+      shared.uPenDens.value = 0.3;
+    } else if (LK) {
+      Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1 });
+      shared.uPenDens.value = 1;
+    }
     const S = this.shots;
     if (film && S && S.on) pipe.paintFocus = clamp(S.lastPos.distanceTo(S.lastLook), 1.2, 90);
     else if (P && P.pos) pipe.paintFocus = clamp(g.camera.position.distanceTo(P.pos), 1.5, 30);
@@ -2315,6 +2321,7 @@ export class Prologue {
       g.pipe.paintWant = 0;
       Object.assign(g.pipe.look, { rim: 0, grade: 0, grain: 0, personW: 1 });
     }
+    shared.uPenDens.value = 1;
     if (this.acting) this.acting.clear();
     if (this.comic) this.comic.clear();
     if (this.page) {

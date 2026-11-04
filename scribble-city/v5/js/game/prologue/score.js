@@ -45,7 +45,7 @@ const AHEAD = 0.35;
 // the whole score's level into the music volume, and each cue's against the others (the chase
 // under the title's hit; the ending and the discovery under the words said over them)
 const TRIM = 0.55;
-const LEVEL = { opening: 1, chase: 0.82, slowmo: 0.9, title: 1, ending: 1, discovery: 0.6, hit: 1.5, land: 1 };
+const LEVEL = { opening: 1, chase: 0.82, slowmo: 0.9, title: 1, ending: 1, discovery: 0.6, hit: 1.5, land: 1, wheel: 1.25, unease: 1.05, memory: 0.9 };
 // how loud the room comes back
 const ROOM = 2.5;
 
@@ -1151,6 +1151,153 @@ class Ending extends Cue {
   }
 }
 
+
+// ------------------------------------------------------------------ the wheel (ROADMAP 18.9)
+
+// the wheel's own tune, a waltz on its music box, heard from along the pier: bells over a soft
+// oom-pah-pah, a little out of the way of the words (instead of kids' voices: the wheel's life heard
+// as a fairground's music). Going into the unease, it winds down - slower, sagging out of tune -
+// as a music box does
+const W_TUNE = [
+  [[0, 72], [4, 76], [8, 79]], [[0, 84, 1], [8, 83]], [[0, 81], [4, 79], [8, 76]], [[0, 79, 1]],
+  [[0, 72], [4, 74], [8, 76]], [[0, 77, 1], [8, 76]], [[0, 74], [4, 71], [8, 74]], [[0, 72, 1]],
+];
+const W_BASS = [48, 43, 45, 43, 48, 41, 43, 48];
+const W_CH = [[64, 67], [62, 67], [64, 69], [62, 67], [64, 67], [65, 69], [62, 65], [64, 67]];
+
+class Wheel extends Cue {
+  constructor(s, t0, o) {
+    super(s, t0, 'wheel', o);
+    this.bpm = 138;
+    const c = this.c;
+    // (from along the pier: dulled, and more of the room than of itself)
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 2600;
+    f.Q.value = 0.4;
+    this.far = c.createGain();
+    this.far.connect(f).connect(this.bus(0.65));
+    this.loops.push(this.far, f);
+    this.warpT = Infinity;
+  }
+
+  // (the music box winding down: from t, slower and slower, sagging under its note)
+  warp(t) {
+    this.warpT = t;
+  }
+
+  tick(i, t) {
+    // (3/4: a bar is twelve sixteenths)
+    const k = i % 12;
+    const bar = Math.floor(i / 12) % 8;
+    const w = Math.max(0, t - this.warpT);
+    const sag = -w * 0.9;
+    if (w > 0) this.bpm = Math.max(46, 138 - w * 26);
+    if (k === 0) this.piano(t, W_BASS[bar] + sag, 0.05, this.far, 1.2);
+    if (k === 4 || k === 8) for (const m of W_CH[bar]) this.piano(t, m + sag, 0.022, this.far, 0.6);
+    for (const [st, m, long] of W_TUNE[bar]) if (st === k) this.steel(t, m + sag + (w > 0 ? Math.sin(i * 1.7) * w * 0.15 : 0), 0.05, this.far, long ? 1.4 : 0.7);
+  }
+
+  release(t, fade, next) {
+    if (next === 'unease') this.warp(t);
+    super.release(t, next === 'unease' ? Math.max(fade, 4) : fade);
+  }
+}
+
+// what should not be there, growing under the evening as the wheel goes: a cluster deep down (A,
+// B flat, E a little off), opening up slowly; a heart, faint and then not; glass trembling high up
+// on a tritone; a breath of air climbing - and all of it cut dead when the wheel is gone
+class Unease extends Cue {
+  constructor(s, t0, o) {
+    super(s, t0, 'unease', o);
+    this.bpm = 58;
+    const c = this.c;
+    const T = 11;
+    this.body = this.bus(0.25);
+    this.air = this.bus(0.6);
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.Q.value = 3;
+    f.frequency.setValueAtTime(110, t0);
+    f.frequency.exponentialRampToValueAtTime(1500, t0 + T);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.11, t0 + T * 0.6);
+    g.gain.linearRampToValueAtTime(0.16, t0 + T);
+    f.connect(g).connect(this.body);
+    this.loops.push(f, g);
+    for (const [m, det, type] of [[33, 0, 'sawtooth'], [34, -6, 'sawtooth'], [40, 14, 'sawtooth'], [21, 0, 'sine']]) {
+      const o = c.createOscillator();
+      o.type = type;
+      o.frequency.value = hz(m);
+      o.detune.setValueAtTime(det, t0);
+      o.detune.linearRampToValueAtTime(det - 30, t0 + T);
+      o.connect(f);
+      o.start(t0);
+      this.live.push(o);
+    }
+    // the glass: E and B flat high up, trembling faster as it holds
+    const tr = c.createGain();
+    tr.gain.value = 0.5;
+    const tl = c.createOscillator();
+    tl.frequency.setValueAtTime(4, t0);
+    tl.frequency.linearRampToValueAtTime(11, t0 + T);
+    const tg = c.createGain();
+    tg.gain.value = 0.5;
+    tl.connect(tg).connect(tr.gain);
+    tl.start(t0);
+    this.live.push(tl);
+    const cg = c.createGain();
+    cg.gain.value = 0;
+    cg.gain.setValueAtTime(0.0001, t0 + 1.5);
+    cg.gain.exponentialRampToValueAtTime(0.022, t0 + T);
+    tr.connect(cg).connect(this.air);
+    this.loops.push(tr, cg, tg);
+    for (const m of [88, 94]) {
+      const o = c.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = hz(m);
+      o.connect(tr);
+      o.start(t0);
+      this.live.push(o);
+    }
+    // the air climbing
+    this.sw = this.chan('bandpass', 300, 1.2, this.air, 0.4);
+    this.sw.f.setValueAtTime(300, t0);
+    this.sw.f.exponentialRampToValueAtTime(3800, t0 + T);
+    this.sw.g.setValueAtTime(0.0001, t0);
+    this.sw.g.exponentialRampToValueAtTime(0.05, t0 + T);
+  }
+
+  tick(i, t) {
+    // the heart: faint at first, then not (lub on the beat, dub a sixteenth after)
+    const k = i % 4;
+    const n = Math.floor(i / 4);
+    const v = Math.min(1, 0.25 + n * 0.07);
+    if (k === 0) this.kick(t, 0.3 * v, this.body, 120, 38, 0.26, 0.06);
+    if (k === 1) this.kick(t, 0.2 * v, this.body, 100, 36, 0.24, 0.06);
+  }
+
+  release(t, fade) {
+    // (cut dead: the wheel gone, and with it this)
+    super.release(t, Math.min(fade, 0.05));
+  }
+}
+
+// the wheel's tune remembered: its first bar on the music box, far off, out of tune, in a long room
+class Memory extends Cue {
+  constructor(s, t0, o) {
+    super(s, t0, 'memory', o);
+    this.sting();
+    const out = this.bus(0.95, 0.8);
+    const spb = 60 / 120 / 4;
+    const notes = [[0, 72], [4, 76], [8, 79], [12, 84], [20, 83]];
+    for (const [st, m] of notes) this.steel(t0 + st * spb * 1.6, m - 0.35, 0.045, out, 1.8);
+    this.until = t0 + 6;
+    this.dead = t0 + 9;
+  }
+}
+
 // ------------------------------------------------------------------ the stings
 
 // the men by the car park: a low swell (A against B flat, a rumble, a tritone trembling high up),
@@ -1267,6 +1414,10 @@ const CUES = {
   title: { K: Title, lead: 0.02, hard: true, cut: 0.12 },
   ending: { K: Ending, lead: 0.06 },
   discovery: { K: Discovery, sting: true },
+  // (ROADMAP 18.9: the wheel's own music, the unease as it goes, its tune remembered after)
+  wheel: { K: Wheel, lead: 0.05 },
+  unease: { K: Unease, lead: 0.03 },
+  memory: { K: Memory, sting: true },
   hit: { K: Hit, sting: true },
   land: { K: Land, sting: true },
 };
