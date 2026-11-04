@@ -337,6 +337,42 @@ export class Prologue {
     return on;
   }
 
+  // (after the game's own camera has been put where it wants to be this frame: from the film's
+  // last picture to there, eased - the nearer and the less turned, the quicker; a long way off,
+  // a cut. game/game.js calls it after the camera rig.)
+  blendCam(dt) {
+    const B = this.blend;
+    if (!B) return;
+    if (this.holdCam || !this.active) {
+      this.blend = null;
+      return;
+    }
+    const cam = this.game.camera;
+    if (B.dur === undefined) {
+      const d = B.pos.distanceTo(cam.position);
+      const a = B.q.angleTo(cam.quaternion);
+      B.dur = d > 28 ? 0 : clamp(0.6 + d * 0.04 + a * 0.3, 0.6, 1.5);
+    }
+    B.t += dt;
+    if (B.t >= B.dur) {
+      this.blend = null;
+      return;
+    }
+    const u = B.t / B.dur;
+    const k = u * u * u * (u * (u * 6 - 15) + 10);
+    const gp = this._bp || (this._bp = new THREE.Vector3());
+    const gq = this._bq || (this._bq = new THREE.Quaternion());
+    gp.copy(cam.position);
+    gq.copy(cam.quaternion);
+    cam.position.lerpVectors(B.pos, gp, k);
+    cam.quaternion.slerpQuaternions(B.q, gq, k);
+    const f = B.fov + (cam.fov - B.fov) * k;
+    if (Math.abs(f - cam.fov) > 0.01) {
+      cam.fov = f;
+      cam.updateProjectionMatrix();
+    }
+  }
+
   // nobody walking right up against the lens in a shot: a passer-by too close to the camera is
   // left out of the picture until they have gone by (the prologue's own people never)
   clearLens() {
@@ -538,7 +574,12 @@ export class Prologue {
       if (on && B.clear) B.clear();
     }
     if (!on) {
+      const skipped = this.ff;
       this.ff = false;
+      // (the film's last picture held, and the game's camera eased in from it - not a jump: blendCam;
+      // skipped through, straight back)
+      const cam = this.game.camera;
+      if (this.holdCam && !skipped) this.blend = { pos: cam.position.clone(), q: cam.quaternion.clone(), fov: cam.fov, t: 0, dur: undefined };
       this.shots.release();
       const g = this.game;
       // (the game's camera back behind Danny, as the scene left him)

@@ -1375,6 +1375,8 @@ export class Game {
         }
       }
     }
+    // (v5, ROADMAP 18.9: out of the prologue's film, the game's camera eased in from its last picture)
+    if (this.prologue && this.prologue.blend) this.prologue.blendCam(this.realDt);
     // (ROADMAP 16.1) the camera brought in close behind you in a narrow place (game/camera.js): you
     // out of its way - its picture would be the back of your head
     const hc = player.fig && player.fig.j && player.fig.j.headC;
