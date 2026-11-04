@@ -1,7 +1,8 @@
 import { LINES } from './lines.js';
 
-// (v5, ROADMAP 18) The prologue's voices: every line recorded (v5/audio/prologue/<id>.mp3, acted by an
-// open neural voice model - one voice for each of them), loaded as soon as there is sound, played as it
+// (v5, ROADMAP 18) The prologue's voices: every line recorded (v5/audio/prologue/<id>.mp3 - ROADMAP
+// 18.9: ElevenLabs v3, one fixed voice for each of them, each line with its feeling; game/prologue/
+// lines.js), loaded as soon as there is sound, played as it
 // is said, the speaker's mouth saying the words with it (render/people.js reads them off the text at the
 // voice's own pace) and the words under the picture. Every voice is heard from where it is said: from
 // the speaker's head, as far and as much to one side as the camera has it, in the place's own echo. Also
