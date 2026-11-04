@@ -9,6 +9,8 @@
 // a cry; scratch(t, dur, k) a pencil's stroke on paper. In the game the director's tick works the levels out from where the ear is (update); for a
 // film made of the game, the same calls are made into an offline context from what was logged.
 
+import { Looper } from './tracks.js';
+
 const STEP_DUR = 0.11;
 
 export class Soundscape {
@@ -83,12 +85,38 @@ export class Soundscape {
     this.stepAt = 0;
   }
 
+  // (ROADMAP 18.9) recordings of the real thing under the synthesis (ElevenLabs, v5/audio/prologue/
+  // sfx/): a pier's crowd, the sea under it with its gulls - each its own loop (game/prologue/
+  // tracks.js Looper), at the same level the synthesis is; the synthesis itself let down under them
+  useLoops(crowd, sea) {
+    const c = this.c;
+    const mk = (buf) => {
+      const g = c.createGain();
+      g.gain.value = 0;
+      g.connect(this.out);
+      return { g, L: new Looper(c, buf, g, { x: 2, from: Math.random() * buf.duration * 0.5 }) };
+    };
+    if (crowd && !this.crowdRec) this.crowdRec = mk(crowd);
+    if (sea && !this.seaRec) this.seaRec = mk(sea);
+  }
+
   // where each is going from t (0..1), over a moment
   levels(t, sea, crowd, city) {
     const T = 0.35;
     this.seaK = sea;
-    this.crowd.gain.setTargetAtTime(0.3 * crowd, t, T);
+    const cr = this.crowdRec;
+    const sr = this.seaRec;
+    this.crowd.gain.setTargetAtTime((cr ? 0.12 : 0.3) * crowd, t, T);
+    this.seaMix = sr ? 0.5 : 1;
     this.city.g.gain.setTargetAtTime(0.16 * city, t, T);
+    if (cr) {
+      cr.g.gain.setTargetAtTime(0.38 * crowd, t, T);
+      cr.L.pump(t, 2.5);
+    }
+    if (sr) {
+      sr.g.gain.setTargetAtTime(0.95 * sea, t, T);
+      sr.L.pump(t, 2.5);
+    }
     this.waves(t);
   }
 
@@ -96,7 +124,7 @@ export class Soundscape {
   // foam hisses out after it; the next one some seconds on (the sea's level its height)
   waves(t) {
     const g = this.seaAmp.gain;
-    const k = this.seaK || 0;
+    const k = (this.seaK || 0) * (this.seaMix || 1);
     while (this.waveAt < t + 4) {
       const t0 = Math.max(this.waveAt, t);
       const up = 1.6 + Math.random() * 1.2;

@@ -31,6 +31,8 @@
 // called every frame), so a late frame leaves no gap; the sound off or the music turned down to
 // nothing, no notes are written at all.
 
+import { loadTrack, trackBuf, Looper } from './tracks.js';
+
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 // nothing below a, all of it above b, a smooth way between
@@ -1437,6 +1439,99 @@ class Land extends Cue {
 // the cues: what each is, how long from the call to its first sound (lead), whether it comes in at
 // once whatever the fade (hard), whether what it follows falls away under it (drops) or is cut off
 // short by it (cut: the most it is given to go, seconds)
+// ------------------------------------------------------------------ the recorded ones
+
+// (ROADMAP 18.9) the wheel's waltz, the unease, the dream after it and the waltz remembered, made as
+// recordings (ElevenLabs Music, v5/audio/prologue/music/) and played from them (game/prologue/
+// tracks.js): through the cue's own way into the mix like every other - its fades, its filter when
+// time slows, the room. Where a file is not in (yet, or at all), the synthesised cue as it was.
+// a, b: the stretch played over and over (x: its crossfade); from: where the first time starts in
+// it; once: the one time only; gain, lp (a low-pass: from along the pier), send (to the room)
+const FILES = {
+  // (the music box from along the pier: dulled, more of the room than of itself)
+  wheel: { path: 'music/wheel_waltz.mp3', a: 2, b: 55, x: 2.5, gain: 0.5, lp: 3600, send: 0.45 },
+  // (from 6.4 s in: its climb at its height, and its last pulse, as the wheel goes - cut dead there)
+  unease: { path: 'music/unease.mp3', from: 6.4, once: true, gain: 1.0, send: 0.25 },
+  surreal: { path: 'music/surreal.mp3', a: 0.5, b: 84, x: 3, gain: 0.8, send: 0.35 },
+  // (a bar or two of the waltz, slowed, far off, mostly the room)
+  memory: { path: 'music/wheel_waltz.mp3', from: 4, b: 11, once: true, rate: 0.82, gain: 0.55, lp: 1700, send: 0.9 },
+};
+
+class FileCue extends Cue {
+  constructor(s, t0, name, o, buf, F) {
+    super(s, t0, name, o);
+    const c = this.c;
+    const g = c.createGain();
+    g.gain.value = F.gain;
+    let head = g;
+    if (F.lp) {
+      const f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = F.lp;
+      f.Q.value = 0.4;
+      g.connect(f);
+      head = f;
+      this.loops.push(f);
+    }
+    head.connect(this.out);
+    if (F.send) {
+      const w = c.createGain();
+      w.gain.value = F.send;
+      head.connect(w).connect(this.wet);
+      this.loops.push(w);
+    }
+    this.loops.push(g);
+    this.F = F;
+    this.L = new Looper(c, buf, g, { a: F.a, b: F.b, x: F.x, from: F.from, rate: F.rate, once: F.once, t0 });
+    if (F.once) {
+      const len = (Math.min(F.b || buf.duration, buf.duration) - (F.from || 0)) / (F.rate || 1);
+      this.until = t0 + len;
+      this.dead = t0 + len + 1.5;
+    }
+  }
+
+  // (as a sting: in over a moment, out over the last of it)
+  sting() {
+    const t = this.t0;
+    const v = this.vol;
+    const len = this.until - t;
+    for (const p of [this.out.gain, this.wet.gain]) {
+      p.setValueAtTime(0, t);
+      p.linearRampToValueAtTime(v, t + 0.6);
+      p.setValueAtTime(v, t + Math.max(0.7, len - 2));
+      p.linearRampToValueAtTime(0, t + len);
+    }
+  }
+
+  schedule(now) {
+    this.L.pump(now, AHEAD + 1.5);
+  }
+
+  release(t, fade, next) {
+    // (the music box winding down under what comes: slower, lower)
+    const f = this.name === 'wheel' && next === 'unease' ? Math.max(fade, 4) : fade;
+    if (f !== fade) this.L.sag(t, 0.78, f);
+    super.release(t, f);
+    this.L.stop(t + Math.max(0.02, f) * 1.8 + 0.05);
+  }
+
+  dispose() {
+    this.L.stop(this.c.currentTime);
+    super.dispose();
+  }
+}
+
+// the recording when it is in, the synthesis when not (called with new: what it returns is the cue)
+const fileOr = (Synth, name) =>
+  function (s, t0, o) {
+    const F = FILES[name];
+    const b = F && trackBuf(F.path);
+    if (!b) return new Synth(s, t0, o);
+    const q = new FileCue(s, t0, name, o, b, F);
+    if (F.once && CUES[name] && CUES[name].sting) q.sting();
+    return q;
+  };
+
 const CUES = {
   opening: { K: Opening, lead: 0.06 },
   chase: { K: Chase, lead: 0.04, hard: true },
@@ -1445,10 +1540,10 @@ const CUES = {
   ending: { K: Ending, lead: 0.06 },
   discovery: { K: Discovery, sting: true },
   // (ROADMAP 18.9: the wheel's own music, the unease as it goes, its tune remembered after)
-  wheel: { K: Wheel, lead: 0.05 },
-  unease: { K: Unease, lead: 0.03 },
-  memory: { K: Memory, sting: true },
-  surreal: { K: Surreal, lead: 0.05 },
+  wheel: { K: fileOr(Wheel, 'wheel'), lead: 0.05 },
+  unease: { K: fileOr(Unease, 'unease'), lead: 0.03 },
+  memory: { K: fileOr(Memory, 'memory'), sting: true },
+  surreal: { K: fileOr(Surreal, 'surreal'), lead: 0.05 },
   hit: { K: Hit, sting: true },
   land: { K: Land, sting: true },
 };
@@ -1515,6 +1610,8 @@ export class Score {
     this.nodes = [this.mix, this.duckG, comp, this.master, this.room, verb, back];
     // (rendered offline, the clock is driven by hand: no timer)
     this.offline = typeof OfflineAudioContext !== 'undefined' && c instanceof OfflineAudioContext;
+    // (the recorded cues, fetched now - long before the wheel: FILES)
+    if (!this.offline) for (const F of Object.values(FILES)) loadTrack(c, F.path);
     if (this.offline) this.sleep();
     return true;
   }

@@ -12,6 +12,7 @@ import { Comic } from './comic.js';
 import { civilianLook, kidLook } from '../looks.js';
 import { Doodle } from '../doodle.js';
 import { Soundscape, airAt } from './soundscape.js';
+import { loadTrack, trackBuf } from './tracks.js';
 import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
 
@@ -461,6 +462,11 @@ export class Prologue {
     if (!this.air) {
       this.air = new Soundscape(A.ctx, A.fx, A.noise);
       this.airClass = Soundscape;
+      // (the recorded crowd and sea under it, once they are in: game/prologue/tracks.js)
+      const air = this.air;
+      Promise.all([loadTrack(A.ctx, 'sfx/crowd_loop.mp3'), loadTrack(A.ctx, 'sfx/sea_loop.mp3')]).then(([cr, se]) => air.useLoops(cr, se));
+      loadTrack(A.ctx, 'sfx/erase_rub.mp3');
+      loadTrack(A.ctx, 'sfx/gone_whoosh.mp3');
       this.airT = 0;
       this.gullT = 3 + Math.random() * 4;
       this.steps = {};
@@ -518,6 +524,24 @@ export class Prologue {
       this.air.step(now, wood, kk);
       if (this.airLog) this.airLog.push([this.clock || 0, 'step', wood ? 1 : 0, kk]);
     }
+  }
+
+  // a recorded sound (game/prologue/tracks.js) played once into the game's own sounds, if it is in;
+  // kept in the air's log too, for a film made of the game
+  sample(path, vol = 1) {
+    const A = this.game.audio;
+    const b = trackBuf(path);
+    if (!A || !A.ctx || !A.fx || !b || A.enabled === false) return null;
+    const c = A.ctx;
+    const s = c.createBufferSource();
+    s.buffer = b;
+    const g = c.createGain();
+    g.gain.value = vol;
+    s.connect(g).connect(A.fx);
+    s.start();
+    s.onended = () => g.disconnect();
+    if (this.airLog) this.airLog.push([this.clock || 0, 'sample', path, vol]);
+    return s;
   }
 
   // (ROADMAP 18.9) the look of the film while it plays: what is behind its people painted, as by a
@@ -1601,6 +1625,8 @@ export class Prologue {
     L.fig.lookAt = tip;
     P.fig.lookAt = tip;
     S.erase();
+    // (and under the procedural rubs, the recorded one: a great eraser on paper, the whole of it)
+    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.85);
     const C = this.comic;
     if (C && S.eraser) C.rub(S.eraser);
     const et = () => (S.erasing ? S.erasing.t : 99);
@@ -1668,6 +1694,15 @@ export class Prologue {
     if (C && C.endPage) C.endPage(0.01);
     // gone: the air rushing in where it stood; the unease cut dead with it
     g.audio.play('gone', 1);
+    if (this.rubRec) {
+      try {
+        this.rubRec.stop();
+      } catch (e) {
+        // (over already)
+      }
+      this.rubRec = null;
+    }
+    this.sample('sfx/gone_whoosh.mp3', 0.9);
     this.cue('stop', { fade: 0.02 });
     // (and at once nobody down there is waving up at anything)
     S.forget();
