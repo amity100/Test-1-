@@ -1254,18 +1254,16 @@ export class Prologue {
       ]);
       C.panel(0, { u: 0.46, v: 0.42 });
       yield () => kids() > 0.42 || !S.erasing;
-      this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: [WHEEL.x, 26, WHEEL.z], lookTo: [WHEEL.x, 30, WHEEL.z], fov: 24, fovTo: 22, dur: 1.4, hand: 0.4 });
+      // (the eraser goes down it from the top: the gondolas still left, going)
+      this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: [WHEEL.x, 13, WHEEL.z], lookTo: [WHEEL.x, 9, WHEEL.z], fov: 30, fovTo: 28, dur: 1.4, hand: 0.4 });
       C.panel(1, { u: 0.5, v: 0.45 });
       C.word('SHHHK!', [0.5, 0.3], { life: 0.9, size: 0.085, fill: '#fffaf0', burst: '#9a8cff', tilt: -0.18 });
       yield () => kids() > 0.72 || !S.erasing;
-      {
-        const mx = (L.pos.x + P.pos.x) / 2;
-        const mz = (L.pos.z + P.pos.z) / 2;
-        this.shot({ from: [mx + ux * 2.3, 0.75, mz + uz * 2.3], look: [mx, 1.38, mz], fov: 50, dur: 2, hand: 0.3 });
-      }
+      // (her face, from below, turned up to it as it goes - the panel tall and narrow: her face alone)
+      this.shot({ ...this.single(L, v3(WHEEL.x, 1.1, WHEEL.z), { dist: 1.1, side: 0.15, up: -0.22, drop: -0.04 }), fov: 38, dur: 2, hand: 0.3 });
       this.feel(P.fig, 'surprised', 8);
       this.feel(L.fig, 'scared', 8);
-      C.panel(2, { u: 0.5, v: 0.52, zoom: 1.15 });
+      C.panel(2, { u: 0.5, v: 0.5 });
     }
     yield () => kids() >= 1 && !S.erasing;
     yield 0.45;
