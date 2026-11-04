@@ -1300,7 +1300,9 @@ export class Prologue {
       this.shot({ ...this.single(P, v3(WHEEL.x, 1.7, WHEEL.z), { dist: 1.35, side: -0.12, up: -0.22, drop: -0.04 }), fov: 36, dur: 1.4, hand: 0.4 });
       C.panel(2, { u: 0.5, v: 0.48 });
       yield () => kids() && et() > 5.0;
-      C.endPage(0.15);
+      // (the page cut away, as a comic's is: the film again, the eraser done)
+      C.endPage(0.01);
+      C.rub(null);
     }
     // the last of it
     this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 26, WHEEL.z], fov: 52, dur: 2.6, ease: 'lin', hand: 0.3 });
@@ -1326,7 +1328,7 @@ export class Prologue {
     this.feel(L.fig, 'scared', 8);
     L.fig.lookAt = P.fig.j.headC;
     this.faceTo(L, P.pos.x, P.pos.z);
-    this.shot({ ...this.single(L, P, { dist: 1.0, side: 0.55, up: -0.06, drop: 0.07 }), fov: 34, dur: 2.6, hand: 0.35 });
+    this.shot({ ...this.single(L, P, { dist: 1.0, side: -0.5, up: -0.06, drop: 0.07 }), fov: 34, dur: 2.6, hand: 0.35 });
     yield 0.4;
     yield* this.say('L08', L.fig, 0.7);
     // where it was: the evening, the same picture without it - and the kids' voices, far off, coming

@@ -302,7 +302,9 @@ export class Comic {
   update(dt) {
     const g = this.g;
     this.clock = (this.clock || 0) + dt;
-    const rubbing = !!(this.rubSrc && this.rubSrc.on && !this.pg);
+    // (the eraser done: its marks with it)
+    if (this.rubSrc && !this.rubSrc.on) this.rubSrc = null;
+    const rubbing = !!(this.rubSrc && !this.pg);
     if (this.pg) {
       this.resize();
       g.clearRect(0, 0, this.cv.width, this.cv.height);
@@ -311,10 +313,9 @@ export class Comic {
       if (!this.words.length && !this.speed && !this.hit) return;
     }
     if (!this.words.length && !this.speed && !this.hit && !rubbing) {
-      if (this.dirty) {
-        g.clearRect(0, 0, this.cv.width, this.cv.height);
-        this.dirty = false;
-      }
+      // (nothing of its own: the sheet kept clear, whatever was on it)
+      g.clearRect(0, 0, this.cv.width, this.cv.height);
+      this.dirty = false;
       return;
     }
     this.resize();
