@@ -59,9 +59,14 @@ const CSS = `
 #pl-vig { position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s; background: radial-gradient(ellipse 82% 78% at 50% 50%, rgba(10,7,22,0) 50%, rgba(10,7,22,0.42) 80%, rgba(10,7,22,0.74) 100%); }
 #pl-vig.on { opacity: 1; }
 #pl-draw canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-#pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s; letter-spacing: 0.02em; }
-#pl-hint.on { opacity: 1; }
+#pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%) translateY(-8px); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s, transform 0.4s; letter-spacing: 0.02em; }
+#pl-hint.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 #pl-hint small { display: block; font-size: 0.55em; font-weight: 600; opacity: 0.85; margin-top: 6px; direction: rtl; }
+/* (ROADMAP 18.9: the game showing the player round - a card: what to do, and how, its keys as keys) */
+#pl-hint.card { background: linear-gradient(180deg, rgba(24,16,40,0.86), rgba(14,10,26,0.86)); border: 2px solid rgba(255,210,63,0.75); border-radius: 16px; padding: 14px 22px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); text-shadow: none; font-size: clamp(17px, 2.2vw, 26px); min-width: min(78vw, 420px); }
+#pl-hint.card .tag { display: block; font-size: 0.48em; font-weight: 800; letter-spacing: 0.18em; color: #ffd23f; margin-bottom: 4px; }
+#pl-hint.card small { font-size: 0.62em; line-height: 1.7; opacity: 0.95; margin-top: 8px; }
+#pl-hint kbd { display: inline-block; min-width: 1.6em; padding: 1px 7px; margin: 0 2px; border-radius: 6px; background: #fff4e0; color: #1a1426; font: 800 0.95em "Rubik", sans-serif; box-shadow: 0 3px 0 #b8a98e; direction: ltr; }
 body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }
 `;
@@ -211,6 +216,13 @@ export class PrologueUI {
     if (!this.skipEl.innerHTML) this.skipEl.innerHTML = 'החזיקו Enter לדילוג <span class="ring"></span>';
     this.skipEl.classList.add('on');
     this.skipEl.querySelector('.ring').style.setProperty('--k', `${Math.round(k * 100)}%`);
+  }
+
+  // (ROADMAP 18.9) a card of the game's own advice: what to do (in English, as the objectives),
+  // and how (Hebrew, its keys as keys); null: away
+  card(title, how) {
+    this.hintEl.classList.toggle('card', !!title);
+    this.hint(title ? `<span class="tag">HOW TO PLAY</span>${title}<small>${how}</small>` : null);
   }
 
   hint(html) {

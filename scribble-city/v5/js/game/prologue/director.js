@@ -295,7 +295,9 @@ export class Prologue {
     // (the drawing is not his yet: its first time is the ramp - and out of the car only when the
     // story says)
     for (const k of ['KeyQ', 'KeyT', 'KeyG']) input.pressed.delete(k);
-    if (this.game.player.inVehicle) input.pressed.delete('KeyE');
+    // (out of the car whenever he likes before the chase - the city is his, and Lily is met on foot;
+    // in the chase, only when the story says)
+    if (this.game.player.inVehicle && (this.sceneN || 0) >= 5) input.pressed.delete('KeyE');
   }
 
   lock(on) {
@@ -939,16 +941,111 @@ export class Prologue {
       yield 25.7;
     } else yield 26.6;
     if (I && I.stream) I.stream.calm = false;
-    // the city, his: no words, no task, for forty seconds
+    // the city, his - and the game showing him round it (ROADMAP 18.9): a few things to do, each
+    // told plainly, then Lily
     this.film(false);
+    yield* this.tutorial();
+    this.objective('Meet <b>Lily</b> at the ice cream stand', STAND.x, STAND.z, 'Lily');
+    // (in a car by her: out of it to meet her)
+    let outTold = false;
+    yield () => {
+      const near = this.dist(LILY_SEAT.x, LILY_SEAT.z) < 30;
+      if (near && g.player.inVehicle && !outTold) {
+        outTold = true;
+        this.ui.card('Get out', g.touch ? 'נוגעים בכפתור הרכב כדי לצאת ממנו' : '<kbd>E</kbd> - לצאת מהרכב');
+      }
+      if (outTold && !g.player.inVehicle) this.ui.card(null);
+      return this.dist(LILY_SEAT.x, LILY_SEAT.z) < 8.5 && !g.player.inVehicle;
+    };
+    this.ui.card(null);
+    this.start(2);
+  }
+
+  // (ROADMAP 18.9) the game showing the player round, between the flight in and Lily: walk and look
+  // round; a shop - walk in; a car - take it; drive it. Each told on a card (what, and how: its
+  // keys), each done when it is done or let go after a while, in the order it is done in. No drawing
+  // yet: the first time is on the roof, in the chase (scene 7)
+  *tutorial() {
+    const g = this.game;
+    const P = g.player;
+    const touch = g.touch;
+    const card = (title, how) => this.ui.card(title, how);
     let t = 0;
+    // walk, look round
+    this.objective('<b>Explore</b> the city');
+    card('Explore the city', touch ? 'הג׳ויסטיק משמאל - ללכת ולרוץ · גוררים על המסך - להסתכל מסביב' : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ללכת · <kbd>Shift</kbd> לרוץ · העכבר מסתכל מסביב');
+    const p0 = P.pos.clone();
     yield () => {
       t += this.dtR;
-      return t > 40 || this.dist(STAND.x, STAND.z) < 22;
+      return t > 10 || (t > 3 && P.pos.distanceTo(p0) > 16);
     };
-    this.objective('Meet <b>Lily</b> at the ice cream stand', STAND.x, STAND.z, 'Lily');
-    yield () => this.dist(LILY_SEAT.x, LILY_SEAT.z) < 8.5 && !g.player.inVehicle;
-    this.start(2);
+    card(null);
+    yield 0.5;
+    // a shop: in through its door
+    if (!P.inVehicle) {
+      this.objective('Walk into a <b>shop</b>');
+      card('Walk into a shop', 'בכל חנות שהדלת שלה פתוחה אפשר להיכנס פנימה: לקנות, לאכול, להסתכל - ולפעמים גם לגנוב');
+      t = 0;
+      let inside = false;
+      yield () => {
+        t += this.dtR;
+        if (P.indoor && !inside) {
+          inside = true;
+          t = Math.max(t, 21);
+          card('You are inside', touch ? 'ניגשים לדלפק או למדף ונוגעים בכפתור שמופיע' : 'ניגשים לדלפק או למדף ולוחצים <kbd>E</kbd>');
+        }
+        return t > (inside ? 25 : 22) || !!P.inVehicle;
+      };
+      card(null);
+      yield 0.5;
+    }
+    // a car: the nearest one parked, his
+    const parked = () => {
+      let best = null;
+      let bd = 1e9;
+      for (const c of (g.traffic && g.traffic.list) || []) {
+        if (!c.parkedCar || c.gone || c.wrecked) continue;
+        const d = Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
+        if (d < bd) {
+          bd = d;
+          best = c;
+        }
+      }
+      return best;
+    };
+    if (!P.inVehicle) {
+      let car = parked();
+      this.objective('Take a <b>car</b>', car ? car.pos.x : null, car ? car.pos.z : null, 'Car');
+      card('Take a car', touch ? 'ניגשים לדלת של מכונית חונה ונוגעים בכפתור הרכב - היא שלכם' : 'ניגשים לדלת של מכונית חונה ולוחצים <kbd>E</kbd> - היא שלכם');
+      t = 0;
+      let gpsT = 0;
+      yield () => {
+        t += this.dtR;
+        gpsT += this.dtR;
+        if (gpsT > 1.5) {
+          gpsT = 0;
+          car = parked();
+          if (car && g.gps) g.gps.set(car.pos.x, car.pos.z, 'Car');
+        }
+        return !!P.inVehicle || t > 45;
+      };
+      card(null);
+      yield 0.4;
+    }
+    // drive it
+    if (P.inVehicle) {
+      this.objective('<b>Drive</b> - get a feel for it');
+      card('Drive', touch ? 'הג׳ויסטיק - גז, ברקס והגה · כפתור הרכב - לצאת' : '<kbd>W</kbd> גז · <kbd>S</kbd> ברקס ורוורס · <kbd>A</kbd><kbd>D</kbd> הגה · <kbd>Space</kbd> בלם יד · <kbd>E</kbd> לצאת');
+      const q0 = P.pos.clone();
+      t = 0;
+      yield () => {
+        t += this.dtR;
+        return t > 14 || (t > 5 && P.pos.distanceTo(q0) > 140);
+      };
+      card(null);
+      yield 0.4;
+    }
+    this.objective(null);
   }
 
   spawnLily() {
