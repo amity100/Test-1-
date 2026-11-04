@@ -62,7 +62,7 @@ const CSS = `
 #pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s; letter-spacing: 0.02em; }
 #pl-hint.on { opacity: 1; }
 #pl-hint small { display: block; font-size: 0.55em; font-weight: 600; opacity: 0.85; margin-top: 6px; direction: rtl; }
-body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue #btn-draw, body.prologue #btn-photo { display: none !important; }
+body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }
 `;
 

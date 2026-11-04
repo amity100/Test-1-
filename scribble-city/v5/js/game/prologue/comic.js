@@ -69,8 +69,156 @@ export class Comic {
     }
   }
 
+  // (ROADMAP 18.9) a comic's page in the film, at its peak: the picture cut into panels on a sheet of
+  // paper between the bars - each panel the film itself as it is drawn (its camera, cropped to the
+  // panel) while it is the one being drawn, held still once the next one comes. panels: their corners
+  // ([x, y] of the page between the bars, 0..1), clockwise from the top left
+  page(panels) {
+    this.pg = { panels: panels.map((q) => ({ pts: q, cv: null, on: false, t: 0, u: 0.5, v: 0.5, zoom: 1 })), t: 0, out: -1 };
+  }
+
+  // panel i the live one from now (o.u, o.v: the middle of its crop in the film's picture, 0..1; o.zoom:
+  // more than 1 nearer)
+  panel(i, o = {}) {
+    const pg = this.pg;
+    if (!pg || !pg.panels[i]) return;
+    const q = pg.panels[i];
+    q.on = true;
+    q.t = 0;
+    q.u = o.u !== undefined ? o.u : 0.5;
+    q.v = o.v !== undefined ? o.v : 0.5;
+    q.zoom = o.zoom || 1;
+    pg.cur = i;
+  }
+
+  // the page gone (fade seconds): the film again
+  endPage(fade = 0.3) {
+    if (this.pg) this.pg.out = Math.max(0.01, fade);
+  }
+
+  // (game.js, right after a frame is drawn) the live panel's picture: the frame just drawn, cropped
+  grab(src) {
+    const pg = this.pg;
+    if (!pg || pg.cur === undefined || pg.out >= 0) return;
+    const q = pg.panels[pg.cur];
+    const r = this.rect(q.pts);
+    const W = Math.max(8, Math.round(r.w));
+    const H = Math.max(8, Math.round(r.h));
+    if (!q.cv || q.cv.width !== W || q.cv.height !== H) {
+      q.cv = document.createElement('canvas');
+      q.cv.width = W;
+      q.cv.height = H;
+    }
+    // (the crop: the panel's own shape, as much of the film's height as is between the bars, less by
+    // its zoom; round its middle, kept inside the picture)
+    const sw = src.width;
+    const sh = src.height;
+    const ch = (sh * 0.77) / q.zoom;
+    const cw = Math.min(sw, (ch * W) / H);
+    const cx = Math.min(sw - cw, Math.max(0, q.u * sw - cw / 2));
+    const cy = Math.min(sh - ch, Math.max(0, q.v * sh - ch / 2));
+    try {
+      q.cv.getContext('2d').drawImage(src, cx, cy, cw, ch, 0, 0, W, H);
+    } catch (e) {
+      // (nothing to take this frame)
+    }
+  }
+
+  // a panel's box on the sheet, in its pixels
+  rect(pts) {
+    const W = this.cv.width;
+    const H = this.cv.height;
+    const top = H * 0.115;
+    const ph = H - top * 2;
+    let x0 = 1e9;
+    let y0 = 1e9;
+    let x1 = -1e9;
+    let y1 = -1e9;
+    for (const [x, y] of pts) {
+      x0 = Math.min(x0, x * W);
+      x1 = Math.max(x1, x * W);
+      y0 = Math.min(y0, top + y * ph);
+      y1 = Math.max(y1, top + y * ph);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, top, ph };
+  }
+
+  drawPage(dt) {
+    const pg = this.pg;
+    const g = this.g;
+    const W = this.cv.width;
+    const H = this.cv.height;
+    pg.t += dt;
+    let a = Math.min(1, pg.t / 0.08);
+    if (pg.out >= 0) {
+      pg.outT = (pg.outT || 0) + dt;
+      a = Math.max(0, 1 - pg.outT / pg.out);
+      if (a <= 0) {
+        this.pg = null;
+        return;
+      }
+    }
+    g.save();
+    g.globalAlpha = a;
+    // the sheet: paper, a faint dot of print over it
+    g.fillStyle = '#f2e8d5';
+    g.fillRect(0, 0, W, H);
+    if (!this.dots) {
+      const d = document.createElement('canvas');
+      d.width = d.height = 12;
+      const x = d.getContext('2d');
+      x.fillStyle = 'rgba(190,120,90,0.16)';
+      x.beginPath();
+      x.arc(6, 6, 2.2, 0, Math.PI * 2);
+      x.fill();
+      this.dots = g.createPattern(d, 'repeat');
+    }
+    g.fillStyle = this.dots;
+    g.fillRect(0, 0, W, H);
+    const top = H * 0.115;
+    const ph = H - top * 2;
+    const ink = Math.max(3, H * 0.0065);
+    for (const q of pg.panels) {
+      if (!q.on) continue;
+      q.t += dt;
+      // (a panel comes in with a little pop: from a hair bigger, at once)
+      const k = q.t < 0.07 ? 1.06 - (q.t / 0.07) * 0.06 : 1;
+      const r = this.rect(q.pts);
+      const cx = r.x + r.w / 2;
+      const cy = r.y + r.h / 2;
+      g.save();
+      g.translate(cx, cy);
+      g.scale(k, k);
+      g.translate(-cx, -cy);
+      g.beginPath();
+      q.pts.forEach(([x, y], i) => (i ? g.lineTo(x * W, top + y * ph) : g.moveTo(x * W, top + y * ph)));
+      g.closePath();
+      g.save();
+      g.clip();
+      if (q.cv) g.drawImage(q.cv, r.x, r.y, r.w, r.h);
+      else {
+        g.fillStyle = '#16121e';
+        g.fillRect(r.x, r.y, r.w, r.h);
+      }
+      g.restore();
+      g.lineWidth = ink;
+      g.lineJoin = 'round';
+      g.strokeStyle = '#120e18';
+      g.stroke();
+      g.restore();
+    }
+    g.restore();
+  }
+
   update(dt) {
     const g = this.g;
+    if (this.pg) {
+      this.resize();
+      g.clearRect(0, 0, this.cv.width, this.cv.height);
+      this.dirty = true;
+      this.drawPage(dt);
+      if (!this.words.length && !this.speed && !this.hit) return;
+    }
     if (!this.words.length && !this.speed && !this.hit) {
       if (this.dirty) {
         g.clearRect(0, 0, this.cv.width, this.cv.height);
@@ -81,7 +229,7 @@ export class Comic {
     this.resize();
     const W = this.cv.width;
     const H = this.cv.height;
-    g.clearRect(0, 0, W, H);
+    if (!this.pg) g.clearRect(0, 0, W, H);
     this.dirty = true;
     // ---- the impact frame
     if (this.hit) {
@@ -224,6 +372,7 @@ export class Comic {
   }
 
   clear() {
+    this.pg = null;
     this.words = [];
     this.speed = null;
     this.hit = null;

@@ -137,6 +137,9 @@ function makeShape() {
 }
 
 export class Doodle {
+  // (ROADMAP 18.9) the film's people on twos: on while it plays, n its twelve-a-second clock
+  static twos = { on: false, n: 0 };
+
   constructor(fr, look, o = {}) {
     this.fr = fr;
     this.look = look;
@@ -294,6 +297,22 @@ export class Doodle {
 
   // ------------------------------------------------------------------ pose
   update(dt) {
+    // (ROADMAP 18.9) on twos, as an animated film's people are drawn: in the film (Doodle.twos.on,
+    // game/prologue/director.js) their pose is drawn anew twelve times a second (Doodle.twos.n, the
+    // film's clock) and held between - the camera and the world going on smoothly round them. Not
+    // for somebody on their way (the camera with them, they would shake in it), riding in something
+    // that moves (fig.ones), or falling
+    const tw = Doodle.twos;
+    if (tw.on && !this.ones && !this.rag && this.speed < 0.7) {
+      this.twoDt = (this.twoDt || 0) + dt;
+      if (this.twoN === tw.n) return;
+      this.twoN = tw.n;
+      dt = Math.min(0.25, this.twoDt);
+      this.twoDt = 0;
+    } else {
+      this.twoDt = 0;
+      this.twoN = -1;
+    }
     if (this.paintT > 0) this.paintT -= dt;
     if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 4);
     this.carryT += dt;

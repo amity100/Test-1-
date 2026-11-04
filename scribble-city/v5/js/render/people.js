@@ -1378,7 +1378,9 @@ export class PersonRenderer {
     const sh = this.atlas.renderer ? this.atlas.renderer.domElement.height : 720;
     const hd = cam && fig.j && fig.j.headC ? cam.position.distanceTo(fig.j.headC) : camDist;
     const px = cam && cam.isPerspectiveCamera ? (0.12 * sh) / (Math.max(0.3, hd) * Math.tan((cam.fov * Math.PI) / 360)) : 166 / Math.max(0.3, hd);
-    const inRange = !!fig.__portrait || (PORTRAIT_STREET && px > (mine ? PORTRAIT_FAR : PORTRAIT_NEAR));
+    // (ROADMAP 18.9: the film's own people - Lily - from a smaller face on: fig.portraitPx)
+    const near = fig.portraitPx || PORTRAIT_NEAR;
+    const inRange = !!fig.__portrait || (PORTRAIT_STREET && px > (mine ? Math.min(PORTRAIT_FAR, near * 0.75) : near));
     // (ROADMAP 14.9: a phone makes a face a little at a time - a few seconds: begun while they are
     // still coming, two or three times as far, so that it is there by the time they are near)
     if (!P0 && this.touch && PORTRAIT_STREET && px > PORTRAIT_NEAR * 0.38 && !(this.portraitQueue && this.portraitQueue.length > 1)) P0 = this.makePortrait(k);

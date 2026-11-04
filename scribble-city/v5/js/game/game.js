@@ -918,6 +918,9 @@ export class Game {
       tele.frameBegin();
     }
     this.pipe.render(sc);
+    // (ROADMAP 18.9: the film's comic page takes the frame just drawn into its live panel)
+    const C = this.prologue && this.prologue.comic;
+    if (C && C.pg) C.grab(this.renderer.domElement);
     if (tele) tele.frameEnd();
     shared.uFogDensity.value = fog;
   }

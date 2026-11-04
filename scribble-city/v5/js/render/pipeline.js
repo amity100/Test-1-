@@ -262,6 +262,94 @@ void main() {
   fragColor = vec4(fin3(c / 12.0 + texture(tAdd, vUv).rgb), 1.0);
 }`;
 
+// (ROADMAP 18.9) The film's painted look - the animated films of a three-dimensional world painted
+// by hand: what is behind the people laid on in strokes of a brush, the people themselves left
+// sharp, in their pens (the last pass, FINAL_FRAG, by the people's mark in the outlines' picture).
+// A brush of four quarters (after Kuwahara, and its kinder generalisation): round each pixel the
+// four quarters of a little square, the colour of the quarter that is most even taken - by how even
+// each is - so that a flat stays flat and an edge stays where it is, while the small things inside
+// a stroke's reach melt into it. The square turned along the edge here and drawn out along it, a
+// stroke laid along a form and not across it; a wider brush away from where the film looks (uFocus:
+// what is behind the one in focus, as a painter leaves it), a narrow one there. And the brush's
+// own streaks, faintly, along the stroke. Drawn at half the picture's size (paintRT).
+const PAINT_FRAG = /* glsl */ `
+in vec2 vUv;
+layout(location = 0) out vec4 fragColor;
+uniform sampler2D tSrc;
+uniform highp sampler2D tDepth;
+uniform sampler2D uNoise;
+uniform vec2 uTexel;
+uniform float uR;
+uniform float uRFar;
+uniform float uFocus;
+uniform float uNear;
+uniform float uFar;
+uniform float uGrain;
+#ifdef DYN
+uniform vec2 uUvK;
+uniform vec2 uUvLo;
+#define TC(uv) (clamp(uv, uUvLo, 1.0 - uUvLo) * uUvK)
+#else
+#define TC(uv) (uv)
+#endif
+${NONUM}
+float linZ(vec2 uv) {
+  float d = texture(tDepth, TC(uv)).r;
+  float z = d * 2.0 - 1.0;
+  return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear));
+}
+// (the colours worked with as the eye weighs them: a light far brighter than the page counts for
+// little more than a bright one)
+vec3 S(vec2 uv) {
+  vec3 c = max(fin3(texture(tSrc, TC(uv)).rgb), vec3(0.0));
+  return c / (1.0 + c);
+}
+float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+void main() {
+  vec2 uv = vUv;
+  float z = linZ(uv);
+  float far = smoothstep(uFocus * 1.2 + 0.6, uFocus * 3.2 + 8.0, z);
+  float r = mix(uR, uRFar, far);
+  vec2 t = uTexel * r;
+  // the edge here: the slope of the colour, the stroke along it
+  float gx = lum(S(uv + vec2(t.x, 0.0))) - lum(S(uv - vec2(t.x, 0.0)));
+  float gy = lum(S(uv + vec2(0.0, t.y))) - lum(S(uv - vec2(0.0, t.y)));
+  float gl = length(vec2(gx, gy));
+  vec2 along = gl > 1e-4 ? vec2(-gy, gx) / gl : vec2(0.7071, 0.7071);
+  float an = clamp(gl * 7.0, 0.0, 1.0);
+  vec2 ax = along * (1.0 + 0.9 * an) * 0.5 * t;
+  vec2 ay = vec2(-along.y, along.x) * (1.0 - 0.35 * an) * 0.5 * t;
+  vec3 sum = vec3(0.0);
+  float wsum = 0.0;
+  for (int q = 0; q < 4; q++) {
+    float sx = (q == 1 || q == 3) ? 1.0 : -1.0;
+    float sy = q >= 2 ? 1.0 : -1.0;
+    vec3 m = vec3(0.0);
+    vec3 m2 = vec3(0.0);
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 3; j++) {
+        vec3 c = S(uv + ax * (float(i) * sx) + ay * (float(j) * sy));
+        m += c;
+        m2 += c * c;
+      }
+    }
+    m /= 9.0;
+    vec3 v = max(m2 / 9.0 - m * m, vec3(0.0));
+    float sd = sqrt(v.r + v.g + v.b) * 40.0;
+    float w = 1.0 / (1.0 + sd * sd * sd * sd);
+    sum += m * w;
+    wsum += w;
+  }
+  vec3 c = sum / max(wsum, 1e-5);
+  // the brush's own streaks, along the stroke (fewer where the colour is flat and dark)
+  vec2 px = uv / uTexel;
+  vec2 sp = vec2(dot(px, along) / 7.0, dot(px, vec2(-along.y, along.x)) / 1.3);
+  float n = textureLod(uNoise, (sp + 0.5) / 256.0, 0.0).r - 0.5;
+  c *= 1.0 + n * uGrain * (0.4 + 0.6 * smoothstep(0.05, 0.3, lum(c)));
+  c = clamp(c, vec3(0.0), vec3(0.985));
+  fragColor = vec4(fin3(c / (1.0 - c)), 1.0);
+}`;
+
 const FINAL_FRAG = /* glsl */ `
 in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
@@ -275,6 +363,13 @@ uniform vec2 uSrcTexel;
 uniform float uSharp;
 uniform sampler2D tRain;
 uniform float uRainOn;
+// (ROADMAP 18.9: the film's painted look - PAINT_FRAG's picture, how much of it, and the outlines'
+// picture: the people in it are left as they are drawn)
+uniform sampler2D tPaint;
+uniform sampler2D tAux;
+uniform float uPaint;
+uniform vec2 uAuxTexel;
+uniform vec2 uAuxK;
 // (the steady pace, DYN: the picture in the corner of the drawing's, as in the ink)
 #ifdef DYN
 uniform vec2 uUvK;
@@ -299,8 +394,34 @@ vec3 tonemap(vec3 c) {
 vec3 toSRGB(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
-vec3 grade(vec2 uv) {
+// (ROADMAP 18.9) one of the people here (their mark in the outlines' picture: 0.97 their bodies,
+// 0.94 a face drawn small); their face's own strokes over them leave no mark, so the people are
+// looked for a little round - the strokes inside them are theirs too
+float who(vec2 uv) {
+  float w = texture(tAux, TC(uv) * uAuxK).w;
+  return step(0.925, w) * step(w, 0.99);
+}
+float people(vec2 uv) {
+  vec2 o = uAuxTexel * 2.0;
+  float k = who(uv);
+  k = max(k, max(who(uv + vec2(o.x, 0.0)), who(uv - vec2(o.x, 0.0))));
+  k = max(k, max(who(uv + vec2(0.0, o.y)), who(uv - vec2(0.0, o.y))));
+  k = max(k, max(who(uv + o), who(uv - o)));
+  k = max(k, max(who(uv + vec2(o.x, -o.y)), who(uv + vec2(-o.x, o.y))));
+  return k;
+}
+float lumc(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+vec3 grade(vec2 uv, float paint) {
   vec3 s = fin3(texture(tSrc, TC(uv)).rgb);
+  // (the painted look: the brush's picture over what is behind the people - the darkest of the pens'
+  // lines kept through it, as a painter keeps the drawing under the paint)
+  if (paint > 0.001) {
+    vec3 p = fin3(texture(tPaint, uv).rgb);
+    float lp = lumc(p);
+    float line = smoothstep(0.18, 0.6, (lp - lumc(s)) / (lp + 0.03));
+    p = mix(p, s, line * 0.75);
+    s = mix(s, p, paint);
+  }
   // (the smart drawing: the rain, drawn over the finished picture at its own size)
   if (uRainOn > 0.5) {
     vec4 rn = texture(tRain, uv);
@@ -313,15 +434,16 @@ vec3 grade(vec2 uv) {
 void main() {
   // contrast-adaptive sharpening (after AMD's CAS): crisp pen lines even when the drawing was
   // made at a lower resolution than the screen
-  vec3 b = grade(vUv + vec2(0.0, -uSrcTexel.y));
-  vec3 d = grade(vUv + vec2(-uSrcTexel.x, 0.0));
-  vec3 e = grade(vUv);
-  vec3 f = grade(vUv + vec2(uSrcTexel.x, 0.0));
-  vec3 h = grade(vUv + vec2(0.0, uSrcTexel.y));
+  float pk = uPaint > 0.001 ? uPaint * (1.0 - people(vUv)) : 0.0;
+  vec3 b = grade(vUv + vec2(0.0, -uSrcTexel.y), pk);
+  vec3 d = grade(vUv + vec2(-uSrcTexel.x, 0.0), pk);
+  vec3 e = grade(vUv, pk);
+  vec3 f = grade(vUv + vec2(uSrcTexel.x, 0.0), pk);
+  vec3 h = grade(vUv + vec2(0.0, uSrcTexel.y), pk);
   vec3 mn = min(min(min(d, e), min(f, b)), h);
   vec3 mx = max(max(max(d, e), max(f, b)), h);
   vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0));
-  vec3 wgt = -amp * mix(0.125, 0.2, uSharp);
+  vec3 wgt = -amp * mix(0.125, 0.2, uSharp) * (1.0 - 0.6 * pk);
   vec3 c = (e + (b + d + f + h) * wgt) / (1.0 + 4.0 * wgt);
   c = toSRGB(clamp(c, 0.0, 1.0));
   // a breath of shade at the edges of the page
@@ -757,7 +879,17 @@ export class Pipeline {
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) } });
+    // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
+    // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
+    // looks (paintFocus, metres from the camera), the brush's streaks
+    this.mPaint = mk(PAINT_FRAG, { tSrc: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() }, uR: { value: 2 }, uRFar: { value: 5 }, uFocus: { value: 8 }, uNear: { value: 0.1 }, uFar: { value: 3000 }, uGrain: { value: 0.1 }, uUvK: uvK, uUvLo: uvLo });
+    this.mPaintD = mk(PAINT_FRAG, this.mPaint.uniforms, { DYN: '' });
+    this.paint = 0;
+    this.paintWant = 0;
+    this.paintFocus = 8;
+    this.paintR = [2.2, 5.5];
+    this.paintRT = null;
     // (and the same three passes that look up the drawing in its corner: the same uniforms; only
     // with the steady pace, so as it always was the passes are just what they were)
     this.mInkD = mk(INK_FRAG, this.mInk.uniforms, { DYN: '' });
@@ -980,6 +1112,8 @@ export class Pipeline {
     (this.ups || []).forEach(dispose);
     (this.hist || []).forEach(dispose);
     dispose(this.rainRT);
+    dispose(this.paintRT);
+    this.paintRT = null;
     this.hist = null;
     this.rainRT = null;
     const opt = { type: this.type, depthBuffer: false };
@@ -1193,7 +1327,7 @@ export class Pipeline {
       }
       if (this.solid) add(r.compile(this.solid.standIns(), this.camera));
       if (this.afterInk.children.length) add(r.compile(this.afterInk, this.camera));
-      quad([this.mInk, this.mInkD, this.mBright, this.mBrightD, this.mDown, this.mUp, this.mTaa, this.deferred ? this.mPens : null]);
+      quad([this.mInk, this.mInkD, this.mBright, this.mBrightD, this.mDown, this.mUp, this.mTaa, this.mPaint, this.mPaintD, this.deferred ? this.mPens : null]);
       r.setRenderTarget(null);
       quad([this.mFinal, this.mFinalD]);
       // (and a speech bubble's, ui/bubbles.js - made by the first one said, in play - a stand-in
@@ -2456,6 +2590,7 @@ export class Pipeline {
     f.uSharp.value = sharp;
     f.uRainOn.value = taa && any ? 1 : 0;
     f.tRain.value = taa && any ? this.rainRT.texture : BLANK;
+    this.drawPaint(src, sw, taa);
     if (T) T.begin('final');
     this.pass(this._corner ? this.mFinalD : this.mFinal, null);
     if (this.overlay.children.length) {
@@ -2619,6 +2754,57 @@ export class Pipeline {
   }
 
   // 5. the glow of what is bright in the picture src (its size sw): the last of its levels
+  // (ROADMAP 18.9) the film's painted look: the brush's picture, at half the picture's size (a third
+  // on a weak device), and how much of it the last pass lays over what is behind the people
+  drawPaint(src, sw, taa) {
+    const f = this.mFinal.uniforms;
+    // (eased: in and out over about half a second, by the frames' own clock)
+    const now = performance.now();
+    const dt = Math.min(0.1, Math.max(0, (now - (this._paintAt || now)) / 1000));
+    this._paintAt = now;
+    const want = this.paintWant;
+    this.paint += (want - this.paint) * (1 - Math.exp(-dt * 6));
+    if (Math.abs(this.paint - want) < 0.01) this.paint = want;
+    if (this.paint < 0.01) {
+      f.uPaint.value = 0;
+      f.tPaint.value = BLANK;
+      f.tAux.value = BLANK;
+      return;
+    }
+    const div = this.low ? 3 : 2;
+    const pw = Math.max(2, Math.round(this.outSize.x / div));
+    const ph = Math.max(2, Math.round(this.outSize.y / div));
+    if (!this.paintRT || this.paintRT.width !== pw || this.paintRT.height !== ph) {
+      if (this.paintRT) this.paintRT.dispose();
+      this.paintRT = new THREE.WebGLRenderTarget(pw, ph, { type: this.type, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+      this.paintRT.texture.generateMipmaps = false;
+    }
+    const u = this.mPaint.uniforms;
+    u.tSrc.value = src;
+    u.tDepth.value = this.gRT.depthTexture;
+    u.uTexel.value.set(1 / pw, 1 / ph);
+    // (the brush's reach the same share of the picture at any size: given at 720 lines)
+    const k = ph / (720 / div);
+    u.uR.value = this.paintR[0] * k * (2 / div);
+    u.uRFar.value = this.paintR[1] * k * (2 / div);
+    u.uFocus.value = this.paintFocus;
+    u.uNear.value = this.camera.near;
+    u.uFar.value = this.camera.far;
+    const T = this.timer;
+    if (T) T.begin('paint');
+    this.pass(this._corner ? this.mPaintD : this.mPaint, this.paintRT);
+    if (T) T.end();
+    f.tPaint.value = this.paintRT.texture;
+    f.tAux.value = this.gRT.textures[1];
+    f.uAuxTexel.value.set(1 / this.size.x, 1 / this.size.y);
+    // (the outlines' picture in the corner of its own with the smart drawing and the steady pace;
+    // without the smart drawing the last pass's own corner, DYN, takes care of it)
+    if (taa) f.uAuxK.value.copy(this.uvK);
+    else f.uAuxK.value.set(1, 1);
+    f.uPaint.value = this.paint;
+    void sw;
+  }
+
   drawGlow(src, sw) {
     const b = this.mBright.uniforms;
     b.tSrc.value = src;

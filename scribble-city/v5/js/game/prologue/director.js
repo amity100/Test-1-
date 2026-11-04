@@ -10,6 +10,7 @@ import { HeldPage } from './page.js';
 import { Acting, ACTS } from './acting.js';
 import { Comic } from './comic.js';
 import { civilianLook, kidLook } from '../looks.js';
+import { Doodle } from '../doodle.js';
 import { clamp } from '../../core/util.js';
 
 // (v5, ROADMAP 18) THE LAST SUNSET - the game's prologue, directed.
@@ -108,6 +109,10 @@ export class Prologue {
     this.cast = {};
     this.zero = { x: 0, y: 0, sprint: false };
     this.auto = null;
+    // (ROADMAP 18.9) the film's look: painted behind its people (render/pipeline.js PAINT_FRAG), its
+    // people on twos (game/doodle.js) - ?paint=0, ?twos=0 without them
+    this.paintOn = !(P && P.get('paint') === '0');
+    this.twosOn = !(P && P.get('twos') === '0');
   }
 
   // the prologue plays at the start of a new game (not in the tests, unless asked for)
@@ -365,6 +370,7 @@ export class Prologue {
     this.watchdog(dt);
     this.tickCast(dt);
     this.tickHeroes();
+    this.tickLook();
     if (this.page) this.page.update();
     this.acting.update(dt);
     this.comic.update(dt);
@@ -396,6 +402,23 @@ export class Prologue {
       this.wait = r.value === undefined ? 0 : r.value;
       if (typeof this.wait === 'number' && this.wait > 0 && !this.ff) break;
     }
+  }
+
+  // (ROADMAP 18.9) the look of the film while it plays: what is behind its people painted, as by a
+  // brush - the brush wider away from where the camera looks - and its people drawn twelve times a
+  // second. In the game's own hands between the shots: the game's own look
+  tickLook() {
+    const g = this.game;
+    const film = !!this.holdCam;
+    Doodle.twos.on = film && this.twosOn;
+    Doodle.twos.n = Math.floor((this.clock || 0) * 12);
+    const P = g.player;
+    if (P && P.fig) P.fig.ones = !!P.inVehicle;
+    const pipe = g.pipe;
+    if (!pipe) return;
+    pipe.paintWant = film && this.paintOn ? 1 : 0;
+    const S = this.shots;
+    if (S && S.on) pipe.paintFocus = clamp(S.lastPos.distanceTo(S.lastLook), 1.2, 90);
   }
 
   // ------------------------------------------------------------------ the film's tools
@@ -571,6 +594,65 @@ export class Prologue {
     return () => v3(c.pos.x, c.pos.y + h, c.pos.z);
   }
 
+  // (ROADMAP 18.9) a clean single: c's face from in front of them, a little to one side - their head
+  // and shoulders, nobody's back of the head across it. at: whom (a figure) or what (a point) they face;
+  // dist from the face, side to their right (+) or left (-), up from the eyes; the look a little below
+  // them (drop: the face in the upper third, the shoulders in). Worked out every frame from where they
+  // are: { from, look } for a shot
+  single(c, at, o = {}) {
+    const dist = o.dist !== undefined ? o.dist : 1.3;
+    const side = o.side !== undefined ? o.side : 0.45;
+    const up = o.up !== undefined ? o.up : -0.04;
+    const drop = o.drop !== undefined ? o.drop : 0.1;
+    const frame = () => {
+      const h = this.headJ(c) || v3(c.pos.x, c.pos.y + 1.6, c.pos.z);
+      const A = at ? (at.isVector3 ? at : this.headJ(at) || at.pos) : null;
+      let ux = A ? A.x - h.x : Math.sin(c.yaw || 0);
+      let uz = A ? A.z - h.z : Math.cos(c.yaw || 0);
+      const d = Math.hypot(ux, uz) || 1;
+      ux /= d;
+      uz /= d;
+      return { h, ux, uz };
+    };
+    return {
+      // (their right: -uz, ux)
+      from: () => {
+        const { h, ux, uz } = frame();
+        return v3(h.x + ux * dist - uz * side, h.y + up, h.z + uz * dist + ux * side);
+      },
+      look: () => {
+        const { h, ux, uz } = frame();
+        return v3(h.x - uz * side * 0.12, h.y - drop, h.z + ux * side * 0.12);
+      },
+    };
+  }
+
+  // (ROADMAP 18.9) the two of them side by side in the picture, in profile to each other: from the side
+  // of the line between them (sgn which side; along it towards b, +), dist away, at height h over
+  // their feet; looking at the middle of them at lookH. As they are now: from(k) a little nearer
+  // (k metres), for a slow push in
+  two(a, b, o = {}) {
+    const dist = o.dist !== undefined ? o.dist : 3.2;
+    const h = o.h !== undefined ? o.h : 1.2;
+    const lh = o.lookH !== undefined ? o.lookH : h;
+    const sgn = o.sgn || 1;
+    const along = o.along || 0;
+    const A = a.pos;
+    const B = b.pos;
+    const dx = B.x - A.x;
+    const dz = B.z - A.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const ux = dx / d;
+    const uz = dz / d;
+    const mx = (A.x + B.x) / 2;
+    const mz = (A.z + B.z) / 2;
+    const y0 = Math.min(A.y || 0, B.y || 0);
+    return {
+      from: (k = 0) => v3(mx - uz * (dist - k) * sgn + ux * along, y0 + h, mz + ux * (dist - k) * sgn + uz * along),
+      look: () => v3(mx, y0 + lh, mz),
+    };
+  }
+
   // before somebody, at their face: dist ahead along where they face, side to their right (+) or
   // left (-), at height h (a kid's face lower)
   faceCam(c, dist = 1.3, side = 0.3, h = null) {
@@ -671,6 +753,8 @@ export class Prologue {
       const fz = Math.cos(v.yaw);
       L.riding = true;
       L.noCollide = true;
+      // (moving with the car: not on twos in it)
+      L.fig.ones = true;
       // (on a booster cushion, as a child of her size rides: her face over the door, in the window)
       const boost = L.fig.scale && L.fig.scale < 0.9 ? 0.22 : 0;
       L.pos.set(v.pos.x + fx * S.u - fz * S.s, (v.pos.y || 0) + S.y + boost, v.pos.z + fz * S.u + fx * S.s);
@@ -837,6 +921,8 @@ export class Prologue {
     if (this.cast.lily) return;
     const look = this.lilyLookFn ? this.lilyLookFn() : kidLook(true);
     const L = this.person('lily', LILY_SEAT.x, LILY_SEAT.z, look, { face: LILY_SEAT.yaw });
+    // (her drawn face in the film's middle shots too, not only close: render/people.js portraitFor)
+    L.fig.portraitPx = 40;
     L.fig.sit = 1;
     L.baseY = 0.32;
     if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, true);
@@ -844,6 +930,9 @@ export class Prologue {
   }
 
   // ------------------------------------------------------------------ 2. LILY
+  // (ROADMAP 18.9: staged again from the comic's panels that worked - each face from in front, head and
+  // shoulders, nobody's back of the head across it; everybody looking at whoever speaks, and at what
+  // is happening)
   *s2() {
     const g = this.game;
     const P = g.player;
@@ -852,28 +941,40 @@ export class Prologue {
     if (g.gps) g.gps.clear();
     this.cue('stop', { fade: 3 });
     this.film(true);
-    // she looks up from her drawing and sees him coming
-    this.putDanny(LILY_SEAT.x - 2.6, LILY_SEAT.z - 1.4, Math.atan2(2.6, 1.4));
-    this.faceTo(L, P.pos.x, P.pos.z);
-    this.shot({ from: this.ots(P, L, { back: 1.0, side: 0.6, h: 1.45 }), look: this.faceOf(L), fov: 36, dur: 4, hand: 0.5 });
-    yield 0.6;
-    L.fig.sit = 0;
-    L.baseY = 0;
+    // she looks up from her drawing and sees him coming: from behind him, low, her at the stand in the
+    // evening ahead of him - he walks the last steps into it
+    const meet = { x: LILY_SEAT.x - 2.6, z: LILY_SEAT.z - 1.4 };
+    this.putDanny(LILY_SEAT.x - 5.2, LILY_SEAT.z - 2.5, Math.atan2(2.6, 1.1));
+    this.walkTo = { x: meet.x, z: meet.z, speed: 0.4 };
+    this.faceTo(L, meet.x, meet.z);
+    L.fig.lookAt = null;
+    this.shot({ from: [31.0, 1.28, 229.4], to: [31.5, 1.3, 229.7], look: [41.2, 1.45, 233.9], fov: 48, dur: 4.6, hand: 0.35 });
+    yield 1.1;
     L.fig.lookAt = P.fig.j.headC;
-    this.feel(L.fig, 'joy', 4);
-    yield* this.say('L01', L.fig);
-    // over her shoulder: him - and from here on the two of them look at each other as they talk
+    this.feel(L.fig, 'joy', 5);
+    yield 0.35;
+    yield* this.say('L01', L.fig, 0.25);
+    yield () => !this.walkTo || this.shots.t > 4.0;
+    // (on the cut: where he was going)
+    this.walkTo = null;
+    this.auto = null;
+    this.putDanny(meet.x, meet.z, Math.atan2(L.pos.x - meet.x, L.pos.z - meet.z));
+    this.faceTo(L, meet.x, meet.z);
+    // him, from her side and from below: a father as his kid sees him
     P.fig.lookAt = L.fig.j.headC;
-    this.shot({ from: () => v3(L.pos.x + 0.9, 1.25, L.pos.z + 0.75), look: this.faceOf(P), fov: 38, dur: 4, hand: 0.5 });
-    yield* this.say('D01', P.fig, 0.3);
-    // the two of them: a giggle first - then she teases him
-    this.shot({ from: [LILY_SEAT.x - 1.3, 1.3, LILY_SEAT.z + 3.6], to: [LILY_SEAT.x - 1.5, 1.35, LILY_SEAT.z + 3.3], look: () => v3((L.pos.x + P.pos.x) / 2, 1.15, (L.pos.z + P.pos.z) / 2), fov: 44, dur: 5, hand: 0.5 });
+    this.shot({ ...this.single(P, L, { dist: 1.5, side: -0.38, up: -0.32, drop: 0.14 }), fov: 36, dur: 3.4, hand: 0.3 });
+    yield 0.2;
+    yield* this.say('D01', P.fig, 0.25);
+    // her: a giggle - then she teases him
+    this.shot({ ...this.single(L, P, { dist: 1.15, side: 0.42, up: 0.02, drop: 0.07 }), fov: 34, dur: 3.4, hand: 0.3 });
     this.feel(L.fig, 'joy', 4);
-    yield* this.say('LG1', L.fig, 0.12);
-    yield* this.say('L02', L.fig, 0.25);
-    // (a little smile from him)
+    yield* this.say('LG1', L.fig, 0.1);
+    yield* this.say('L02', L.fig, 0.2);
+    // (and he smiles, the two of them)
+    const two0 = this.two(P, L, { dist: 3.7, h: 1.18, lookH: 1.12 });
+    this.shot({ from: two0.from(), to: two0.from(0.3), look: two0.look(), fov: 44, dur: 2.2, hand: 0.4 });
     this.feel(P.fig, 'joy', 1.8);
-    yield 0.8;
+    yield 0.6;
     // her uncle, up on a board by the way onto the pier: she sees him - and runs over to it
     const B = this.lilyBoard();
     L.fig.lookAt = v3(B.x, B.cy, B.z);
@@ -882,13 +983,12 @@ export class Prologue {
     this.feel(L.fig, 'joy', 12);
     this.go(L, B.lx, B.lz, 3.4);
     P.fig.lookAt = L.fig.j.headC;
-    this.shot({ from: this.ots(P, L, { back: 1.3, side: 0.5, h: 1.72 }), look: this.faceOf(L), fov: 42, dur: 1.6, hand: 0.6 });
-    yield 1.25;
+    yield 0.9;
     // (cut) the board, the camera rising to it as she gets there and points up at him
     this.put(L, B.lx + B.nx * 6, B.lz + B.nz * 6, B.face);
-    this.go(L, B.lx, B.lz, 3.4);
+    this.go(L, B.lx + B.rx * 0.55, B.lz + B.rz * 0.55, 3.4);
     this.putDanny(B.lx + B.nx * 11 - B.rx * 1.2, B.lz + B.nz * 11 - B.rz * 1.2, B.face);
-    this.walkTo = { x: B.dx, z: B.dz, speed: 0.5 };
+    this.walkTo = { x: B.lx - B.rx * 0.6 + B.nx * 0.4, z: B.lz - B.rz * 0.6 + B.nz * 0.4, speed: 0.5 };
     this.shot({
       path: [v3(B.x + B.nx * 12.9 + B.rx * 0.3, 1.0, B.z + B.nz * 12.9 + B.rz * 0.3), v3(B.x + B.nx * 11.6 - B.rx * 0.8, 1.6, B.z + B.nz * 11.6 - B.rz * 0.8), v3(B.x + B.nx * 10.5 - B.rx * 1.6, 2.2, B.z + B.nz * 10.5 - B.rz * 1.6)],
       look: this.faceOf(L),
@@ -899,32 +999,51 @@ export class Prologue {
       ease: 'swoop',
       hand: 0.3,
     });
-    yield () => Math.hypot(L.pos.x - B.lx, L.pos.z - B.lz) < 0.6 || this.shots.t > 2.4;
+    yield () => Math.hypot(L.pos.x - B.lx - B.rx * 0.55, L.pos.z - B.lz - B.rz * 0.55) < 0.6 || this.shots.t > 2.4;
     L.fig.reachR = v3(B.x - B.rx * 2, B.cy + 0.6, B.z - B.rz * 2);
     yield* this.say('L03', L.fig, 0.4);
     yield () => this.shots.t > 5.4;
-    // the two of them under it, small, the board over them: he looks up at his brother's face
-    this.shot({ from: v3(B.lx + B.nx * 5.4 - B.rx * 1.5, 0.85, B.lz + B.nz * 5.4 - B.rz * 1.5), to: v3(B.lx + B.nx * 5.0 - B.rx * 1.4, 0.9, B.lz + B.nz * 5.0 - B.rz * 1.4), look: v3(B.x + B.nx, 4.5, B.z + B.nz), fov: 52, dur: 8, hand: 0.35 });
+    // his answer over the board itself, from below, beside him: the face that wants the city
     L.fig.reachR = null;
-    P.fig.lookAt = v3(B.x, B.cy, B.z);
-    yield 0.5;
-    this.feel(P.fig, 'neutral', 3);
-    yield* this.say('D02', P.fig, 0.25);
+    this.walkTo = null;
+    this.auto = null;
+    this.putDanny(B.lx - B.rx * 0.6 + B.nx * 0.4, B.lz - B.rz * 0.6 + B.nz * 0.4, B.face);
+    this.put(L, B.lx + B.rx * 0.55, B.lz + B.rz * 0.55, B.face);
+    const top = v3(B.x, B.cy + 0.4, B.z);
+    P.fig.lookAt = top;
+    L.fig.lookAt = top;
+    {
+      const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
+      this.shot({ from: v3(h.x + B.nx * 1.3 - B.rx * 0.9, h.y - 0.4, h.z + B.nz * 1.3 - B.rz * 0.9), to: v3(h.x + B.nx * 1.45 - B.rx * 1.0, h.y - 0.45, h.z + B.nz * 1.45 - B.rz * 1.0), look: v3(B.x - B.rx * 1.2, B.cy + 0.3, B.z - B.rz * 1.2), fov: 46, dur: 4, hand: 0.3 });
+    }
+    this.feel(P.fig, 'smirk', 5);
+    const d02 = this.say('D02', P.fig, 0.25);
+    const d02w = d02.next().value || 0;
+    yield 2.0;
+    // (and on him, as he says it: the board, then her)
+    this.shot({ ...this.single(P, top, { dist: 1.45, side: 0.4, up: -0.28, drop: 0.12 }), fov: 36, dur: 3.2, hand: 0.3 });
+    yield Math.max(0, d02w - 2.0);
     // she turns to him
-    L.fig.lookAt = P.fig.j.headC;
     this.faceTo(L, P.pos.x, P.pos.z);
+    L.fig.lookAt = P.fig.j.headC;
+    P.fig.lookAt = L.fig.j.headC;
+    this.shot({ ...this.single(L, P, { dist: 1.05, side: 0.5, up: -0.04, drop: 0.07 }), fov: 34, dur: 2.6, hand: 0.3 });
+    yield 0.25;
     yield* this.say('L04', L.fig, 0.2);
     // his face: deadpan, an eye on the board, then on her
-    this.walkTo = null;
     P.yaw = Math.atan2(L.pos.x - P.pos.x, L.pos.z - P.pos.z) * 0.5 + B.face * 0.5;
     P.fig.yaw = P.yaw;
-    this.shot({ from: this.faceCam(P, 1.3, 0.35), look: this.faceOf(P), fov: 32, dur: 3.2, hand: 0.35 });
-    P.fig.lookAt = v3(B.x, B.cy, B.z);
+    this.shot({ ...this.single(P, L, { dist: 1.4, side: -0.42, up: -0.26, drop: 0.12 }), fov: 34, dur: 3.4, hand: 0.3 });
+    P.fig.lookAt = top;
     yield 0.35;
-    yield* this.say('D03', P.fig, 0.05);
+    const d03 = this.say('D03', P.fig, 0.05);
+    const d03w = d03.next().value || 0;
+    yield Math.min(1.2, d03w);
     P.fig.lookAt = L.fig.j.headC;
-    // and she laughs - a real laugh (over his shoulder)
-    this.shot({ from: this.ots(P, L, { back: 0.7, side: 0.42, h: 1.58 }), look: this.faceOf(L), fov: 34, dur: 2.6, hand: 0.4 });
+    yield Math.max(0, d03w - 1.2);
+    // and she laughs - a real laugh: the two of them, the board over them
+    const two1 = this.two(P, L, { dist: 3.4, h: 1.1, lookH: 1.3, sgn: -1 });
+    this.shot({ from: two1.from(), to: two1.from(0.25), look: two1.look(), fov: 44, dur: 2.8, hand: 0.4 });
     this.feel(L.fig, 'joy', 3);
     this.feel(P.fig, 'joy', 3);
     yield* this.say('L05', L.fig, 0.4);
@@ -974,8 +1093,13 @@ export class Prologue {
     const toW = Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z);
     const ux = Math.sin(toW);
     const uz = Math.cos(toW);
-    // the two of them at the railing, the wheel ahead
-    this.putDanny(VIEW.x + 1.5, VIEW.z + 0.9, toW);
+    // (to the wheel: u; to her right, where he stands: (-uz, ux))
+    const rx = -uz;
+    const rz = ux;
+    // (her ice cream finished on the way: her hands free for her drawing)
+    if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, false);
+    // the two of them at the railing, the wheel ahead (he on her right)
+    this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
     this.put(L, VIEW.x, VIEW.z, toW);
     this.spawnPier();
     if (this.voices.bedAt) this.voices.bedAt(WHEEL.x, 32, WHEEL.z);
@@ -983,23 +1107,31 @@ export class Prologue {
     // against the sunset: the wheel from the beach, full of people
     this.shot({ from: [76, 2.4, 297], to: [80, 3.6, 292], look: [128, 28, 243], lookTo: [128, 29, 243], fov: 54, fovTo: 50, dur: 4.6, hand: 0.35 });
     yield 4.2;
-    // Lily at the railing: up at it, her arm up at it - so high!
+    // the two of them small at the railing from behind and low, the wheel over them: so high!
     this.voices.bed(true, 0.9);
     const W0 = v3(WHEEL.x, 34, WHEEL.z);
     L.fig.lookAt = W0;
     P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
     L.fig.reachR = v3(WHEEL.x, 44, WHEEL.z);
-    this.shot({ from: [VIEW.x - ux * 2.3 - uz * 1.3, 0.95, VIEW.z - uz * 2.3 + ux * 1.3], to: [VIEW.x - ux * 1.9 - uz * 1.15, 1.0, VIEW.z - uz * 1.9 + ux * 1.15], look: [WHEEL.x, 31, WHEEL.z], fov: 50, dur: 4.2, hand: 0.4 });
+    this.shot({ from: [VIEW.x - ux * 5.6 - rx * 1.4, 0.95, VIEW.z - uz * 5.6 - rz * 1.4], to: [VIEW.x - ux * 5.0 - rx * 1.3, 0.98, VIEW.z - uz * 5.0 - rz * 1.3], look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 23, WHEEL.z], fov: 52, dur: 3.6, hand: 0.35 });
     this.feel(L.fig, 'surprised', 2.4);
     yield 0.3;
     yield* this.say('L19', L.fig, 0.15);
-    // its lights, its colours
+    // her in profile at the edge of the picture, the wheel huge beyond her: its lights, its colours
     L.fig.reachR = null;
     this.feel(L.fig, 'joy', 6);
-    this.shot({ from: [VIEW.x + ux * 0.2 + uz * 1.3, 1.2, VIEW.z + uz * 0.2 - ux * 1.3], look: [WHEEL.x, 21, WHEEL.z], lookTo: [WHEEL.x, 27, WHEEL.z], fov: 23, fovTo: 20, dur: 3.4, hand: 0.25 });
-    yield* this.say('L20', L.fig, 0.25);
-    // to him: can she go on it too? please? (a step to him, his hand in hers, tugging at it)
-    const near = { x: P.pos.x - (P.pos.x - L.pos.x) * 0.55, z: P.pos.z - (P.pos.z - L.pos.z) * 0.55 };
+    {
+      const h = this.headJ(L) || v3(L.pos.x, 1.15, L.pos.z);
+      this.shot({ from: [h.x - rx * 1.15 - ux * 0.25, h.y - 0.05, h.z - rz * 1.15 - uz * 0.25], to: [h.x - rx * 1.05 - ux * 0.2, h.y - 0.04, h.z - rz * 1.05 - uz * 0.2], look: [h.x + ux * 7, h.y + 2.2, h.z + uz * 7], fov: 46, dur: 3.2, hand: 0.25 });
+    }
+    yield 0.2;
+    yield* this.say('L20', L.fig, 0.1);
+    // (what she sees: the lights)
+    this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: [WHEEL.x, 21, WHEEL.z], lookTo: [WHEEL.x, 27, WHEEL.z], fov: 23, fovTo: 20, dur: 2.0, hand: 0.25 });
+    yield 1.8;
+    // to him: can she go on it too? please? (a step to him, his hand in hers, tugging at it) - the two of
+    // them from behind and low, the wheel between them
+    const near = { x: VIEW.x + rx * 0.45, z: VIEW.z + rz * 0.45 };
     this.put(L, near.x, near.z, Math.atan2(P.pos.x - near.x, P.pos.z - near.z));
     // (and he turns to her: from here they talk face to face)
     P.yaw = Math.atan2(near.x - P.pos.x, near.z - P.pos.z);
@@ -1008,68 +1140,78 @@ export class Prologue {
     P.fig.lookAt = L.fig.j.headC;
     L.fig.reachL = P.fig.j.handR;
     {
-      // (from the side of the two of them, close: her face up to his)
-      const mx = (L.pos.x + P.pos.x) / 2;
-      const mz = (L.pos.z + P.pos.z) / 2;
-      const dx = P.pos.x - L.pos.x;
-      const dz = P.pos.z - L.pos.z;
-      const dl = Math.hypot(dx, dz) || 1;
-      // (on their north side, where the pier is open)
-      const sg = dx / dl > 0 ? -1 : 1;
-      const px = (-dz / dl) * sg;
-      const pz = (dx / dl) * sg;
-      this.shot({ from: [mx + px * 2.9, 1.25, mz + pz * 2.9], to: [mx + px * 2.7, 1.27, mz + pz * 2.7], look: [mx, 1.15, mz], fov: 47, dur: 3.6, hand: 0.4 });
+      const mx = (near.x + P.pos.x) / 2;
+      const mz = (near.z + P.pos.z) / 2;
+      this.shot({ from: [mx - ux * 3.4, 1.15, mz - uz * 3.4], to: [mx - ux * 3.1, 1.17, mz - uz * 3.1], look: [mx, 1.22, mz], fov: 40, dur: 3.2, hand: 0.35 });
     }
+    yield 0.15;
     yield* this.say('L21', L.fig, 0.25);
     L.fig.reachL = null;
-    // him, warm
-    this.shot({ from: this.faceCam(P, 1.25, 0.3), look: this.faceOf(P), fov: 30, dur: 2.4, hand: 0.3 });
-    this.feel(P.fig, 'joy', 2.4);
+    // him, warm: from her side, below
+    this.shot({ ...this.single(P, L, { dist: 1.4, side: -0.36, up: -0.3, drop: 0.12 }), fov: 34, dur: 2.6, hand: 0.3 });
+    this.feel(P.fig, 'joy', 2.6);
     yield* this.say('D27', P.fig, 0.3);
-    // her drawing of it: the page out of her sketchbook, held up to him
+    // her drawing of it: the page out of her sketchbook, held up to him - the page, and her face over it
     const page = this.lilyPage();
     page.hold(L.fig, () => P.fig.j.headC, 'show');
-    // (from his eyes: the page held up to him, her face over it)
-    this.shot({ from: () => { const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z); const f = P.fig.forward; return v3(h.x + f.x * 0.12, h.y - 0.02, h.z + f.z * 0.12); }, look: () => v3((page.at.x * 2 + L.fig.j.headC.x) / 3, (page.at.y * 2 + L.fig.j.headC.y) / 3, (page.at.z * 2 + L.fig.j.headC.z) / 3), fov: 42, dur: 3.2, hand: 0.35 });
     this.feel(L.fig, 'joy', 3);
-    yield 0.35;
+    yield 0.5;
+    {
+      const pa = page.at;
+      const hD = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
+      const dx = hD.x - pa.x;
+      const dz = hD.z - pa.z;
+      const d = Math.hypot(dx, dz) || 1;
+      this.shot({ from: [pa.x + (dx / d) * 0.85, pa.y + 0.3, pa.z + (dz / d) * 0.85], to: [pa.x + (dx / d) * 0.75, pa.y + 0.28, pa.z + (dz / d) * 0.75], look: [pa.x, pa.y + 0.14, pa.z], fov: 44, dur: 3.0, hand: 0.3 });
+    }
+    yield 0.2;
     yield* this.say('L06', L.fig, 0.3);
     // he takes his time over it
     P.fig.lookAt = page.at;
-    this.shot({ from: this.ots(L, P, { back: 0.55, side: 0.3, h: 1.05 }), look: this.faceOf(P), fov: 34, dur: 2.4, hand: 0.35 });
-    yield 0.45;
+    this.feel(P.fig, 'smirk', 3);
+    this.shot({ ...this.single(P, L, { dist: 1.4, side: 0.36, up: -0.3, drop: 0.12 }), fov: 34, dur: 2.4, hand: 0.3 });
+    yield 0.5;
     P.fig.lookAt = L.fig.j.headC;
     yield* this.say('D04', P.fig, 0.2);
     // not bad?!
     page.hold(L.fig, () => P.fig.j.headC, 'low');
-    this.shot({ from: this.faceCam(L, 1.05, -0.42), look: this.faceOf(L), fov: 32, dur: 1.8, hand: 0.35 });
+    this.shot({ ...this.single(L, P, { dist: 1.05, side: 0.52, up: -0.03, drop: 0.08 }), fov: 34, dur: 1.9, hand: 0.3 });
     this.feel(L.fig, 'surprised', 1.4);
     yield* this.say('L07', L.fig, 0.2);
-    // the two of them, laughing
-    this.shot({ from: () => v3(VIEW.x + 0.4, 1.3, VIEW.z - 2.8), look: () => v3((L.pos.x + P.pos.x) / 2, 1.2, (L.pos.z + P.pos.z) / 2), fov: 44, dur: 3.4, hand: 0.4 });
+    // the two of them, laughing: from the wheel's side, the city behind them
+    {
+      const mx = (L.pos.x + P.pos.x) / 2;
+      const mz = (L.pos.z + P.pos.z) / 2;
+      this.shot({ from: [mx + ux * 3.2 + rx * 0.6, 1.22, mz + uz * 3.2 + rz * 0.6], to: [mx + ux * 2.9 + rx * 0.55, 1.22, mz + uz * 2.9 + rz * 0.55], look: [mx, 1.15, mz], fov: 40, dur: 3.4, hand: 0.35 });
+    }
     this.feel(P.fig, 'joy', 3);
     this.feel(L.fig, 'joy', 6);
     yield* this.say('D05', P.fig, 0.1);
     page.hold(L.fig, null, 'hug');
     yield 0.7;
     page.release();
+    // both of them back to the railing, at the wheel
+    this.put(L, VIEW.x, VIEW.z, toW);
+    this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
     L.fig.lookAt = W0;
     P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
-    this.faceTo(L, WHEEL.x, WHEEL.z);
     // up there: a boy at his gondola's sill, waving, shouting down to his mother - and the camera
     // drawing back from him until the whole wheel is in it again
     const gi = this.lowGondola();
     this.heroRiders(gi);
     const kid = this.heroes[0];
     this.voices.bed(true, 1.2);
-    this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.6), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, -0.55), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 28, fovTo: 46, dur: 6.2, ease: 'inout', hand: 0.45 });
+    this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.6), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, -0.55), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 20, fovTo: 46, dur: 6.2, ease: 'inout', hand: 0.45 });
     yield 0.5;
     yield* this.say('K01', kid.fig, 0.9);
     yield* this.say('K02', null, 0.4);
     yield () => this.shots.t > 5.6;
-    // a few seconds more of it: the two of them at the railing, the wheel turning against the sky
+    // a few seconds more of it: the two of them at the railing from behind, the wheel turning against
+    // the sky - the picture the wheel will be gone from
     this.voices.bed(true, 1.0);
-    const wide = () => this.shot({ from: [VIEW.x - ux * 3.8 - uz * 0.6, 1.5, VIEW.z - uz * 3.8 + ux * 0.6], to: [VIEW.x - ux * 3.2 - uz * 0.55, 1.55, VIEW.z - uz * 3.2 + ux * 0.55], look: [WHEEL.x, 23.5, WHEEL.z], fov: 47, dur: 9, ease: 'lin', hand: 0.3 });
+    const wideFrom = [VIEW.x - ux * 4.2 + rx * 1.9, 1.1, VIEW.z - uz * 4.2 + rz * 1.9];
+    const wideTo = [VIEW.x - ux * 3.9 + rx * 1.85, 1.12, VIEW.z - uz * 3.9 + rz * 1.85];
+    const wide = (dur = 9) => this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 24, WHEEL.z], fov: 50, dur, ease: 'lin', hand: 0.3 });
     wide();
     yield 2.0;
     // (a glance aside: a man going by, a mark on his bag - from Danny's own eyes, and gone)
@@ -1087,11 +1229,40 @@ export class Prologue {
     g.audio.play('gone', 1);
     S.erase();
     // (the kids' voices going as they go)
-    yield () => {
+    const kids = () => {
       const e = S.erasing;
       if (e && e.total) this.voices.bed(true, 1.0 * Math.max(0, 1 - (e.k || 0) * 1.15));
-      return !S.erasing;
+      return e ? e.k || 0 : 1;
     };
+    // (ROADMAP 18.9) the page of a comic, as it goes: three panels, side by side, each the film itself
+    // while it is drawn - the wheel from behind the two of them; up close, its gondolas going under the
+    // eraser; their two faces, looking up at it - held still as the next comes (game/prologue/comic.js)
+    const C = this.comic;
+    yield () => kids() > 0.12 || !S.erasing;
+    if (C && C.page) {
+      C.page([
+        [[0.015, 0.03], [0.345, 0.03], [0.31, 0.97], [0.015, 0.97]],
+        [[0.36, 0.03], [0.655, 0.03], [0.62, 0.97], [0.325, 0.97]],
+        [[0.67, 0.03], [0.985, 0.03], [0.985, 0.97], [0.635, 0.97]],
+      ]);
+      C.panel(0, { u: 0.56, v: 0.42 });
+      yield () => kids() > 0.42 || !S.erasing;
+      this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: [WHEEL.x, 26, WHEEL.z], lookTo: [WHEEL.x, 30, WHEEL.z], fov: 24, fovTo: 22, dur: 1.4, hand: 0.4 });
+      C.panel(1, { u: 0.5, v: 0.45 });
+      C.word('SHHHK!', [0.5, 0.3], { life: 0.9, size: 0.085, fill: '#fffaf0', burst: '#9a8cff', tilt: -0.18 });
+      yield () => kids() > 0.72 || !S.erasing;
+      {
+        const mx = (L.pos.x + P.pos.x) / 2;
+        const mz = (L.pos.z + P.pos.z) / 2;
+        this.shot({ from: [mx + ux * 2.3, 0.75, mz + uz * 2.3], look: [mx, 1.38, mz], fov: 50, dur: 2, hand: 0.3 });
+      }
+      this.feel(P.fig, 'surprised', 8);
+      this.feel(L.fig, 'scared', 8);
+      C.panel(2, { u: 0.5, v: 0.52, zoom: 1.15 });
+    }
+    yield () => kids() >= 1 && !S.erasing;
+    yield 0.45;
+    if (C && C.endPage) C.endPage(0.12);
     this.voices.bed(false);
     this.cue('stop', { fade: 0.02 });
     // (and at once nobody down there is waving up at anything)
@@ -1099,17 +1270,18 @@ export class Prologue {
     yield 0.7;
     // he does not move
     this.feel(P.fig, 'surprised', 8);
-    this.shot({ from: this.faceCam(P, 1.25, 0.3), to: this.faceCam(P, 1.1, 0.27), look: this.faceOf(P), fov: 30, dur: 2.3, hand: 0.25 });
+    this.shot({ ...this.single(P, v3(WHEEL.x, 1.7, WHEEL.z), { dist: 1.45, side: 0.3, up: -0.12, drop: 0.1 }), fov: 34, dur: 2.3, hand: 0.25 });
     yield 2.0;
+    // she turns to him
     this.feel(L.fig, 'scared', 8);
     L.fig.lookAt = P.fig.j.headC;
     this.faceTo(L, P.pos.x, P.pos.z);
-    // (the two of them from the side, close: her face up to his)
-    this.shot({ from: () => v3(VIEW.x + 0.6, 1.25, VIEW.z - 2.3), look: () => v3((L.pos.x * 2 + P.pos.x) / 3, 1.15, (L.pos.z * 2 + P.pos.z) / 3), fov: 36, dur: 2.6, hand: 0.4 });
+    this.shot({ ...this.single(L, P, { dist: 1.0, side: 0.55, up: -0.06, drop: 0.07 }), fov: 34, dur: 2.6, hand: 0.35 });
     yield 0.4;
     yield* this.say('L08', L.fig, 0.7);
-    // where it was: the evening - and the kids' voices, far off, coming back to him
-    this.shot({ from: () => v3(P.pos.x, 1.72, P.pos.z), look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 25, WHEEL.z], fov: 44, fovTo: 40, dur: 3.6, hand: 0.2 });
+    // where it was: the evening, the same picture without it - and the kids' voices, far off, coming
+    // back to him
+    this.shot({ from: wideFrom, to: wideTo, look: [WHEEL.x, 24, WHEEL.z], fov: 50, dur: 3.6, ease: 'lin', hand: 0.2 });
     this.voices.memory(0.42);
     yield 3.4;
     this.start(4);
@@ -1132,6 +1304,7 @@ export class Prologue {
       const c = this.person(key, VIEW.x, VIEW.z, look, { face });
       c.riding = true;
       c.noCollide = true;
+      c.fig.ones = true;
       c.pl.ride = 'wheel';
       c.hero = { gi, lx, lz, wave, ph: Math.random() * 6 };
       this.feel(c.fig, 'joy', 60);
@@ -1239,37 +1412,37 @@ export class Prologue {
     g1.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     g2.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.feel(P.fig, 'angry', 3);
-    this.shot({ from: this.ots(g1, P), look: this.faceOf(P), fov: 40, dur: 3, hand: 0.7 });
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.7 });
     yield* this.say('D06', P.fig, 0.15);
-    this.shot({ from: this.ots(P, g1, { h: 1.62 }), look: this.faceOf(g1), fov: 38, dur: 2, hand: 0.6 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2, hand: 0.6 });
     yield* this.say('G01', g1.fig, 0.15);
-    this.shot({ from: this.ots(g1, P), look: this.faceOf(P), fov: 40, dur: 3.5, hand: 0.7 });
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 3.5, hand: 0.7 });
     P.fig.reachR = v3(WHEEL.x, 20, WHEEL.z);
     yield* this.say('D07', P.fig, 0.15);
     P.fig.reachR = null;
-    this.shot({ from: this.ots(P, g1, { h: 1.62 }), look: this.faceOf(g1), fov: 38, dur: 2.4, hand: 0.6 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.6 });
     yield* this.say('G02', g1.fig, 0.2);
-    this.shot({ from: this.ots(g1, P), look: this.faceOf(P), fov: 36, dur: 4.5, hand: 0.8 });
+    this.shot({ ...this.single(P, g1, { dist: 1.4, side: 0.4, up: -0.1 }), fov: 34, dur: 4.5, hand: 0.8 });
     yield* this.say('D08', P.fig, 0.15);
     this.shot({ from: this.ots(P, g1, { h: 1.62, back: 1.3, side: 0.7 }), look: () => v3((g1.pos.x + g2.pos.x) / 2, 1.6, (g1.pos.z + g2.pos.z) / 2), fov: 42, dur: 5, hand: 0.6 });
     yield* this.say('G03', g1.fig, 0.3);
-    this.shot({ from: this.ots(g1, P, { back: 0.7, side: 0.4 }), look: this.faceOf(P), fov: 30, dur: 2.2, hand: 0.5 });
+    this.shot({ ...this.single(P, g1, { dist: 1.3, side: 0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5 });
     yield* this.say('D09', P.fig, 0.2);
     this.feel(g1.fig, 'surprised', 2);
-    this.shot({ from: this.ots(P, g1, { h: 1.62 }), look: this.faceOf(g1), fov: 38, dur: 2.4, hand: 0.6 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.6 });
     yield* this.say('G04', g1.fig, 0.4);
     // the other man
     this.putDanny(MAN.x - 1.1, MAN.z - 1.2, Math.atan2(1.1, 1.2));
     this.faceTo(M, P.pos.x, P.pos.z);
     M.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.shot({ from: this.ots(M, P), look: this.faceOf(P), fov: 42, dur: 4, hand: 0.7 });
+    this.shot({ ...this.single(P, M, { dist: 1.6, side: 0.42, up: -0.1 }), fov: 36, dur: 4, hand: 0.7 });
     yield* this.say('D10', P.fig, 0.2);
     this.faceTo(M, WHEEL.x, WHEEL.z);
     M.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
     yield 1.0;
     this.faceTo(M, P.pos.x, P.pos.z);
     M.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.shot({ from: this.ots(P, M, { h: 1.62 }), look: this.faceOf(M), fov: 36, dur: 3, hand: 0.5 });
+    this.shot({ ...this.single(M, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.5 });
     yield* this.say('M01', M.fig, 0.5);
     // all round him, the evening as it was: nobody saw anything
     this.feel(P.fig, 'scared', 4);
@@ -1281,10 +1454,10 @@ export class Prologue {
     this.faceTo(L, P.pos.x, P.pos.z);
     L.yaw = L.pl.face;
     L.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.shot({ from: this.ots(P, L, { h: 1.45, back: 0.8, side: 0.45 }), look: this.faceOf(L), fov: 34, dur: 3, hand: 0.4 });
+    this.shot({ ...this.single(L, P, { dist: 1.05, side: 0.5, up: -0.04, drop: 0.07 }), fov: 34, dur: 3, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
     yield* this.say('L09', L.fig, 0.4);
-    this.shot({ from: this.ots(L, P, { h: 1.05, back: 0.6, side: 0.3 }), look: this.faceOf(P), fov: 32, dur: 2.2, hand: 0.4 });
+    this.shot({ ...this.single(P, L, { dist: 1.4, side: -0.36, up: -0.3, drop: 0.12 }), fov: 34, dur: 2.2, hand: 0.4 });
     this.feel(P.fig, 'sad', 4);
     yield* this.say('D11', P.fig, 0.5);
     // her drawing: she holds it up against where it stood - in it, it is still there
@@ -1301,11 +1474,11 @@ export class Prologue {
     page.hold(L.fig, null, 'hug');
     this.faceTo(L, P.pos.x, P.pos.z);
     L.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.shot({ from: this.faceCam(L, 0.95, -0.22), look: this.faceOf(L), fov: 28, dur: 4.5, hand: 0.3 });
+    this.shot({ ...this.single(L, P, { dist: 1.0, side: -0.4, up: -0.03, drop: 0.07 }), fov: 32, dur: 4.5, hand: 0.3 });
     this.feel(L.fig, 'sad', 8);
     yield* this.say('L10', L.fig, 0.2);
     // the silence: he looks at her, his mouth a little open as if to answer - nothing comes
-    this.shot({ from: this.faceCam(P, 1.35, 0.3), to: this.faceCam(P, 1.1, 0.25), look: this.faceOf(P), fov: 26, dur: 3, hand: 0.25 });
+    this.shot({ ...this.single(P, L, { dist: 1.45, side: 0.34, up: -0.22, drop: 0.11 }), fov: 30, dur: 3, hand: 0.25 });
     this.feel(P.fig, 'surprised', 2.6);
     yield 2.8;
     // the empty place; the kids' voices come back to him
@@ -1313,7 +1486,7 @@ export class Prologue {
     this.voices.memory(0.42);
     yield 3.1;
     // he swallows; back at her
-    this.shot({ from: this.faceCam(P, 1.2, 0.3), look: this.faceOf(P), fov: 28, dur: 2.4, hand: 0.25 });
+    this.shot({ ...this.single(P, L, { dist: 1.35, side: -0.34, up: -0.22, drop: 0.11 }), fov: 30, dur: 2.4, hand: 0.25 });
     this.feel(P.fig, 'sad', 8);
     yield 2.3;
     this.shot({ from: () => { const a = this.ots(L, P, { back: 2.6, side: 1.6, h: 1.35 })(); return a; }, look: () => v3((L.pos.x + P.pos.x) / 2, 1.2, (L.pos.z + P.pos.z) / 2), fov: 40, dur: 9, hand: 0.35 });
@@ -1414,9 +1587,13 @@ export class Prologue {
     }
     // over their shoulders: him and Lily, small, at the door of the car park - they have been waiting
     // for him
-    this.shot({ from: () => v3(t1.pos.x + ux * 2.2 - uz * 1.1, 1.75, t1.pos.z + uz * 2.2 + ux * 1.1), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 40, dur: 3.6, hand: 0.5 });
+    this.shot({ from: () => v3(t1.pos.x + ux * 2.2 - uz * 1.1, 1.75, t1.pos.z + uz * 2.2 + ux * 1.1), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 40, dur: 2.2, hand: 0.5 });
     this.go(t1, S1.x - ux * 2.0, S1.z - uz * 2.0, 1.0);
-    yield 0.5;
+    yield 1.6;
+    // (ROADMAP 18.9: whoever speaks is the one seen speaking) him, the one who talks, coming down the
+    // sidewalk at Danny, a smile that is not one; the other one at his shoulder
+    this.shot({ ...this.single(t1, P, { dist: 2.3, side: -0.55, up: -0.25, drop: 0.3 }), fov: 38, dur: 2.8, hand: 0.5 });
+    yield 0.2;
     yield* this.say('T01', t1.fig, 0.3);
     // he stops; puts her behind him
     this.put(L, P.pos.x - ux * 1.0 + uz * 0.25, P.pos.z - uz * 1.0 - ux * 0.25, a);
@@ -1427,17 +1604,19 @@ export class Prologue {
     // (from behind the two of them: Danny, Lily at his back - and the two men down the sidewalk)
     this.shot({ from: () => v3(P.pos.x - ux * 2.6 + uz * 0.9, 1.7, P.pos.z - uz * 2.6 - ux * 0.9), look: () => v3(t1.pos.x, 1.35, t1.pos.z), fov: 38, dur: 2.6, hand: 0.5 });
     yield* this.say('D18', P.fig, 0.3);
-    this.shot({ from: () => v3(P.pos.x - ux * 0.9 + uz * 0.55, 1.68, P.pos.z - uz * 0.9 - ux * 0.55), look: this.faceOf(t1), fov: 26, dur: 3.2, hand: 0.5 });
+    this.shot({ ...this.single(t1, P, { dist: 1.6, side: -0.42, up: -0.15, drop: 0.14 }), fov: 34, dur: 3.2, hand: 0.5 });
     yield* this.say('T02', t1.fig, 0.25);
-    this.shot({ from: () => v3(t1.pos.x + ux * 1.0 - uz * 0.5, 1.72, t1.pos.z + uz * 1.0 + ux * 0.5), look: this.faceOf(P), fov: 26, dur: 3, hand: 0.5 });
+    // (Danny, Lily at his back behind his shoulder)
+    this.shot({ ...this.single(P, t1, { dist: 1.75, side: 0.5, up: -0.28, drop: 0.16 }), fov: 36, dur: 3, hand: 0.5 });
     yield* this.say('D19', P.fig, 0.25);
     // the other one moves out to the side - slowly, his hand inside his jacket (towards the curb: the
     // building's face is on the other side)
     this.go(t2, S2.x - ux * 1.5 + uz * 1.4, S2.z - uz * 1.5 - ux * 1.4, 0.8);
     this.shot({ from: () => v3(P.pos.x - ux * 1.6 + uz * 1.2, 1.5, P.pos.z - uz * 1.6 - ux * 1.2), look: () => v3((t1.pos.x + t2.pos.x) / 2, 1.4, (t1.pos.z + t2.pos.z) / 2), fov: 30, dur: 3.4, hand: 0.6 });
     yield* this.say('T03', t1.fig, 0.25);
-    // wrong answer: the guns
-    this.shot({ from: () => v3(t1.pos.x - ux * 1.5 + uz * 1.4, 1.05, t1.pos.z - uz * 1.5 - ux * 1.4), look: this.faceOf(t1), fov: 34, dur: 2.0, hand: 0.6 });
+    // wrong answer: the guns - from low beside the line of his arm, the gun big in the picture, his face
+    // over it
+    this.shot({ from: () => v3(t1.pos.x - ux * 2.4 + uz * 0.95, 1.2, t1.pos.z - uz * 2.4 - ux * 0.95), look: () => { const h = this.headJ(t1) || v3(t1.pos.x, 1.6, t1.pos.z); return v3(h.x - ux * 0.35, h.y - 0.3, h.z - uz * 0.35); }, fov: 40, dur: 2.0, hand: 0.6 });
     this.armThug(t1, P);
     g.audio.play('click', 0.6);
     this.comic.impact(this.headJ(t1) || t1.pos, 0.1);
@@ -1445,7 +1624,7 @@ export class Prologue {
     yield* this.say('T05', t1.fig, 0.05);
     this.armThug(t2, P);
     // him: the car, now
-    this.shot({ from: this.faceCam(P, 1.4, 0.35), look: this.faceOf(P), fov: 34, dur: 1.6, hand: 0.8 });
+    this.shot({ ...this.single(P, t1, { dist: 1.5, side: 0.4, up: -0.15, drop: 0.12 }), fov: 36, dur: 1.6, hand: 0.8 });
     this.feel(P.fig, 'scared', 3);
     yield* this.say('D28', P.fig, 0.0);
     // they fire - from down the sidewalk, the shots going all round the two of them as they run in
@@ -1551,9 +1730,12 @@ export class Prologue {
       const h = f.j.handR;
       const d = f.aimDir;
       if (fr && h.lengthSq() > 0) {
-        // (a pistol: its slide along the aim, its grip down in the hand)
-        fr.lineXYZ(h.x - d.x * 0.03, h.y - d.y * 0.03 + 0.025, h.z - d.z * 0.03, h.x + d.x * 0.2, h.y + d.y * 0.2 + 0.025, h.z + d.z * 0.2, [0.06, 0.06, 0.08], 6, 900 + q.c.id, 1, 0.004, 0);
-        fr.lineXYZ(h.x, h.y + 0.02, h.z, h.x - d.x * 0.02, h.y - 0.1, h.z - d.z * 0.02, [0.06, 0.06, 0.08], 5, 901 + q.c.id, 1, 0.004, 0);
+        // (a pistol: its slide along the aim, its grip down in the hand - drawn as a comic draws one, a
+        // little bigger than life and black, a grey glint along its top: read at a glance across the
+        // sidewalk, ROADMAP 18.9)
+        fr.lineXYZ(h.x - d.x * 0.05, h.y - d.y * 0.05 + 0.03, h.z - d.z * 0.05, h.x + d.x * 0.27, h.y + d.y * 0.27 + 0.03, h.z + d.z * 0.27, [0.04, 0.04, 0.06], 10, 900 + q.c.id, 1, 0.003, 0);
+        fr.lineXYZ(h.x, h.y + 0.025, h.z, h.x - d.x * 0.035, h.y - 0.13, h.z - d.z * 0.035, [0.04, 0.04, 0.06], 8, 901 + q.c.id, 1, 0.003, 0);
+        fr.lineXYZ(h.x - d.x * 0.03, h.y - d.y * 0.03 + 0.05, h.z - d.z * 0.03, h.x + d.x * 0.24, h.y + d.y * 0.24 + 0.05, h.z + d.z * 0.24, [0.62, 0.64, 0.7], 2.5, 902 + q.c.id, 1, 0.003, 0);
       }
       if (!this.firing) continue;
       q.next -= dt;
@@ -1604,8 +1786,11 @@ export class Prologue {
     }
     if (!this.cast.t1) {
       const lk = () => civilianLook({ fem: false, kind: 'street' });
-      this.person('t1', THUGS[0].x, THUGS[0].z, lk(), { face: PARK.thugsFace });
-      this.person('t2', THUGS[1].x, THUGS[1].z, lk(), { face: PARK.thugsFace });
+      const a = this.person('t1', THUGS[0].x, THUGS[0].z, lk(), { face: PARK.thugsFace });
+      const b = this.person('t2', THUGS[1].x, THUGS[1].z, lk(), { face: PARK.thugsFace });
+      // (their drawn faces in the film's middle shots, as Lily's: ROADMAP 18.9)
+      a.fig.portraitPx = 46;
+      b.fig.portraitPx = 46;
     }
   }
 
@@ -2052,6 +2237,8 @@ export class Prologue {
     this.done = true;
     this.co = null;
     this.drawing = false;
+    Doodle.twos.on = false;
+    if (g.pipe) g.pipe.paintWant = 0;
     if (this.acting) this.acting.clear();
     if (this.comic) this.comic.clear();
     if (this.page) {
