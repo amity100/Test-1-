@@ -55,6 +55,9 @@ uniform float uBoilPrev;
 uniform float uTaa;
 uniform float uPR;
 uniform float uLineW;
+// (ROADMAP 18.9) how much heavier the people's outlines are drawn (the film: as an animated film
+// inks its characters, bolder than the world round them)
+uniform float uPersonW;
 uniform mat4 uInvProj;
 uniform mat4 uCamWorld;
 // (the steady pace, DYN: the drawing made in the corner of its pictures, uUvK of each side of them;
@@ -167,6 +170,10 @@ void main() {
   float ph = fract(texture(tAux, TC(vUv)).z * 7.13);
   float tick = floor(uBoil + ph);
   float r = max(uLineW * uPR * mix(1.0, 0.6, far), 1.0);
+  {
+    float aw = texture(tAux, TC(vUv)).w;
+    r *= mix(1.0, uPersonW, step(0.925, aw) * step(aw, 0.99) * (1.0 - far));
+  }
   float z;
   float e = lineAt(tick, w, far, steady, r, z);
   // (the smart drawing: where this thing's line was drawn anew this frame and is not where it
@@ -341,6 +348,12 @@ void main() {
     wsum += w;
   }
   vec3 c = sum / max(wsum, 1e-5);
+  // (flatter, as a painting's shapes are: the tone drawn a little towards a few bands)
+  {
+    float l = lum(c);
+    float lq = (floor(l * 7.0) + smoothstep(0.3, 0.7, fract(l * 7.0))) / 7.0;
+    c *= mix(1.0, lq / max(l, 1e-3), 0.35);
+  }
   // the brush's own streaks, along the stroke (fewer where the colour is flat and dark)
   vec2 px = uv / uTexel;
   vec2 sp = vec2(dot(px, along) / 7.0, dot(px, vec2(-along.y, along.x)) / 1.3);
@@ -370,6 +383,17 @@ uniform sampler2D tAux;
 uniform float uPaint;
 uniform vec2 uAuxTexel;
 uniform vec2 uAuxK;
+// (ROADMAP 18.9) the film's light and colour: a rim of the light round the people where what is
+// behind them lies towards it (uRimDir: that way on the screen; uRimCol, its colour and strength),
+// the shadows cooled and the lights warmed (uShadowT, uLightT, by uGradeK), a film's curve, and a
+// grain drawn anew twelve times a second (uGrainK, uGrainT)
+uniform vec2 uRimDir;
+uniform vec4 uRimCol;
+uniform vec3 uShadowT;
+uniform vec3 uLightT;
+uniform float uGradeK;
+uniform float uGrainK;
+uniform float uGrainT;
 // (the steady pace, DYN: the picture in the corner of the drawing's, as in the ink)
 #ifdef DYN
 uniform vec2 uUvK;
@@ -445,7 +469,30 @@ void main() {
   vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0));
   vec3 wgt = -amp * mix(0.125, 0.2, uSharp) * (1.0 - 0.6 * pk);
   vec3 c = (e + (b + d + f + h) * wgt) / (1.0 + 4.0 * wgt);
+  if (uRimCol.a > 0.001) {
+    // the rim: on one of the people, with what is behind them a few pixels towards the light
+    float me = who(vUv);
+    if (me > 0.5) {
+      vec2 o = uRimDir * uAuxTexel * 2.5;
+      float bg = max(1.0 - who(vUv + o), (1.0 - who(vUv + o * 2.2)) * 0.55);
+      c += uRimCol.rgb * uRimCol.a * bg * (1.0 - c * 0.6);
+    }
+  }
+  if (uGradeK > 0.001) {
+    float l = lumc(c);
+    vec3 tint = mix(uShadowT, uLightT, smoothstep(0.04, 0.55, l));
+    c = mix(c, c * tint, uGradeK);
+  }
   c = toSRGB(clamp(c, 0.0, 1.0));
+  if (uGradeK > 0.001) {
+    // (a film's curve: the darks a little deeper, the lights a little fuller)
+    c = mix(c, c * c * (3.0 - 2.0 * c), 0.28 * uGradeK);
+  }
+  if (uGrainK > 0.001) {
+    vec2 gp = gl_FragCoord.xy + vec2(uGrainT * 37.0, uGrainT * 91.0);
+    float gn = fract(sin(dot(gp, vec2(12.9898, 78.233))) * 43758.5453);
+    c += (gn - 0.5) * uGrainK;
+  }
   // a breath of shade at the edges of the page
   vec2 q = vUv - 0.5;
   c *= 1.0 - dot(q, q) * 0.28;
@@ -871,7 +918,7 @@ export class Pipeline {
     const uvLo = { value: this.uvLo };
     this.mInk = mk(INK_FRAG, {
       tColor: { value: null }, tAux: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() },
-      uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uBoilPrev: { value: 0 }, uTaa: { value: 0 }, uPR: shared.uPR, uLineW: { value: 1 },
+      uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uBoilPrev: { value: 0 }, uTaa: { value: 0 }, uPR: shared.uPR, uLineW: { value: 1 }, uPersonW: { value: 1 },
       uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uUvK: uvK, uUvLo: uvLo,
       // (v5: the edge of the page, render/pagedge.js)
       ...pageUniforms, uFogDensity: shared.uFogDensity,
@@ -879,7 +926,7 @@ export class Pipeline {
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 } });
     // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
     // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
     // looks (paintFocus, metres from the camera), the brush's streaks
@@ -890,6 +937,12 @@ export class Pipeline {
     this.paintFocus = 8;
     this.paintR = [2.2, 5.5];
     this.paintRT = null;
+    // (ROADMAP 18.9) the film's light and colour (the last pass): the rim round the people (how
+    // strong; its colour from the sun, and cool from the sky when the sun is behind the camera), the
+    // grade (how much; the shadows' tint and the lights'), the grain, how much heavier the people's
+    // outlines. All 0 / 1: the game as it always was
+    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.84, 0.87, 1.13], lightT: [1.08, 0.99, 0.88], grain: 0, personW: 1 };
+    this._sunNdc = new THREE.Vector3();
     // (and the same three passes that look up the drawing in its corner: the same uniforms; only
     // with the steady pace, so as it always was the passes are just what they were)
     this.mInkD = mk(INK_FRAG, this.mInk.uniforms, { DYN: '' });
@@ -2591,6 +2644,7 @@ export class Pipeline {
     f.uRainOn.value = taa && any ? 1 : 0;
     f.tRain.value = taa && any ? this.rainRT.texture : BLANK;
     this.drawPaint(src, sw, taa);
+    this.setLook();
     if (T) T.begin('final');
     this.pass(this._corner ? this.mFinalD : this.mFinal, null);
     if (this.overlay.children.length) {
@@ -2803,6 +2857,39 @@ export class Pipeline {
     else f.uAuxK.value.set(1, 1);
     f.uPaint.value = this.paint;
     void sw;
+  }
+
+  // (ROADMAP 18.9) the film's light and colour, for the last pass (this.look)
+  setLook() {
+    const L = this.look;
+    const f = this.mFinal.uniforms;
+    this.mInk.uniforms.uPersonW.value = L.personW;
+    f.uGradeK.value = L.grade;
+    f.uShadowT.value.set(L.shadowT[0], L.shadowT[1], L.shadowT[2]);
+    f.uLightT.value.set(L.lightT[0], L.lightT[1], L.lightT[2]);
+    f.uGrainK.value = L.grain;
+    f.uGrainT.value = Math.floor(performance.now() / 83.3) % 997;
+    if (L.rim <= 0.001) {
+      f.uRimCol.value.w = 0;
+      return;
+    }
+    // where the sun is on the screen: the rim on the side towards it - or, the sun behind the
+    // camera, a cooler rim from the sky above
+    const cam = this.camera;
+    const sd = shared.uSunDir.value;
+    const p = this._sunNdc.copy(cam.position).addScaledVector(sd, 1000).project(cam);
+    let k = L.rim;
+    let col = L.rimCol;
+    if (p.z > 1 || p.z < -1) {
+      f.uRimDir.value.set(0, 1);
+      col = L.skyCol;
+      k *= 0.55;
+    } else {
+      const l = Math.hypot(p.x, p.y);
+      if (l < 1e-3) f.uRimDir.value.set(0, 1);
+      else f.uRimDir.value.set(p.x / l, p.y / l);
+    }
+    f.uRimCol.value.set(col[0], col[1], col[2], k);
   }
 
   drawGlow(src, sw) {

@@ -113,6 +113,8 @@ export class Prologue {
     // people on twos (game/doodle.js) - ?paint=0, ?twos=0 without them
     this.paintOn = !(P && P.get('paint') === '0');
     this.twosOn = !(P && P.get('twos') === '0');
+    // (?look=0: the painted look without the film's light and colour - to compare the two)
+    this.lookOn = !(P && P.get('look') === '0');
   }
 
   // the prologue plays at the start of a new game (not in the tests, unless asked for)
@@ -420,6 +422,15 @@ export class Prologue {
     // scenes: one film, the walk to her and to the wheel in it. Where it looks: the film's shot, or
     // the player)
     pipe.paintWant = this.paintOn ? 1 : 0;
+    // (and its light and colour: the people inked bolder and lit round their edge, the shadows cool
+    // and the lights warm, a grain - more of all of it while it is filmed; render/pipeline.js look)
+    const LK = pipe.look;
+    if (LK && this.paintOn && this.lookOn) {
+      LK.rim = film ? 0.9 : 0.6;
+      LK.grade = 1;
+      LK.grain = film ? 0.03 : 0.02;
+      LK.personW = film ? 1.7 : 1.3;
+    } else if (LK) Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1 });
     const S = this.shots;
     if (film && S && S.on) pipe.paintFocus = clamp(S.lastPos.distanceTo(S.lastLook), 1.2, 90);
     else if (P && P.pos) pipe.paintFocus = clamp(g.camera.position.distanceTo(P.pos), 1.5, 30);
@@ -2300,7 +2311,10 @@ export class Prologue {
     this.co = null;
     this.drawing = false;
     Doodle.twos.on = false;
-    if (g.pipe) g.pipe.paintWant = 0;
+    if (g.pipe) {
+      g.pipe.paintWant = 0;
+      Object.assign(g.pipe.look, { rim: 0, grade: 0, grain: 0, personW: 1 });
+    }
     if (this.acting) this.acting.clear();
     if (this.comic) this.comic.clear();
     if (this.page) {
