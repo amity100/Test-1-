@@ -1501,7 +1501,9 @@ export class Score {
     comp.ratio.value = 12;
     comp.attack.value = 0.002;
     comp.release.value = 0.15;
-    this.mix.connect(this.master).connect(comp).connect(a.musicBus);
+    // (under the words: the music let down while somebody speaks - under(), from the director's say)
+    this.duckG = c.createGain();
+    this.mix.connect(this.duckG).connect(this.master).connect(comp).connect(a.musicBus);
     this.room = c.createGain();
     const verb = c.createConvolver();
     const g = this.game;
@@ -1510,11 +1512,23 @@ export class Score {
     const back = c.createGain();
     back.gain.value = ROOM;
     this.room.connect(verb).connect(back).connect(this.mix);
-    this.nodes = [this.mix, comp, this.master, this.room, verb, back];
+    this.nodes = [this.mix, this.duckG, comp, this.master, this.room, verb, back];
     // (rendered offline, the clock is driven by hand: no timer)
     this.offline = typeof OfflineAudioContext !== 'undefined' && c instanceof OfflineAudioContext;
     if (this.offline) this.sleep();
     return true;
+  }
+
+  // a line being said for dur seconds: the music down to k of itself under it, quickly, and back up
+  // slowly after it (a line on top of another: from where it is)
+  under(dur, k = 0.6) {
+    if (!this.c || !this.duckG || !(dur > 0)) return;
+    const t = this.c.currentTime;
+    const p = this.duckG.gain;
+    p.cancelScheduledValues(t);
+    p.setValueAtTime(p.value, t);
+    p.setTargetAtTime(k, t, 0.06);
+    p.setTargetAtTime(1, t + dur + 0.1, 0.4);
   }
 
   // (the sound off, or the music turned all the way down: no notes written)
@@ -1649,6 +1663,7 @@ export class Score {
     if (this.nodes) for (const n of this.nodes) n.disconnect();
     this.nodes = null;
     this.master = null;
+    this.duckG = null;
     this.c = null;
     this.idle = 0;
   }

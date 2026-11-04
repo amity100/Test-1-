@@ -263,6 +263,7 @@ export class Prologue {
     const SPACE = [null, 'open', 'open', 'open', 'open', 'street', 'car', 'car', 'car', 'car'];
     if (this.voices.space) this.voices.space(SPACE[n]);
     this.sceneN = n;
+    this.sketching = false;
     this.sceneAt = this.clock || 0;
     this.co = S[n].call(this, true);
     this.wait = 0;
@@ -485,6 +486,20 @@ export class Prologue {
         if (this.airLog) this.airLog.push([this.clock || 0, 'gull', vol, pan]);
       }
     }
+    // (Lily drawing - this.sketching: her pencil on the page, strokes and the gaps between them, heard
+    // only near her)
+    const Ly = this.cast.lily;
+    if (this.sketching && Ly) {
+      this.scrT = (this.scrT || 0) - dt;
+      const d = Math.hypot(Ly.pos.x - ear.x, Ly.pos.z - ear.z);
+      if (this.scrT <= 0 && d < 7) {
+        const dur = 0.12 + Math.random() * 0.3;
+        this.scrT = dur + 0.05 + Math.random() * (Math.random() < 0.2 ? 0.7 : 0.18);
+        const kk = Math.max(0.2, 1 - d / 7) * (0.7 + Math.random() * 0.4);
+        this.air.scratch(now, dur, kk);
+        if (this.airLog) this.airLog.push([this.clock || 0, 'scratch', dur, kk]);
+      }
+    }
     // steps: each time a stride's foot comes down (its phase past a half turn), heard from the ear
     const P = g.player;
     const L = this.cast.lily;
@@ -601,6 +616,8 @@ export class Prologue {
     const d = this.voices.say(id, fig);
     const g = this.game;
     const L = LINES[id];
+    // (the music let down under the words: game/prologue/score.js under)
+    if (this.score && this.score.under) this.score.under(d);
     // (the hands, the face and the head go with the words, beat by beat - and whoever it is said to
     // takes it as it lands: everybody looking at the speaker)
     if (fig && ACTS[id]) {
@@ -1423,6 +1440,7 @@ export class Prologue {
       this.shot({ from: [h.x - rx * 1.5 + ux * 0.35, h.y - 0.05, h.z - rz * 1.5 + uz * 0.35], to: [h.x - rx * 1.35 + ux * 0.3, h.y - 0.04, h.z - rz * 1.35 + uz * 0.3], look: [h.x + rx * 0.2, h.y - 0.12, h.z + rz * 0.2], fov: 38, dur: 3.0, hand: 0.25 });
     }
     // (she looks up at it and down at her page, as one who draws from the thing does)
+    this.sketching = true;
     this.everyFrame = (dt) => {
       drawK = Math.min(1, drawK + dt * 0.032);
       drawOn();
@@ -1497,6 +1515,7 @@ export class Prologue {
     this.objective(null);
     if (g.gps) g.gps.clear();
     this.everyFrame = null;
+    this.sketching = false;
     drawK = 1;
     drawOn();
     this.film(true);

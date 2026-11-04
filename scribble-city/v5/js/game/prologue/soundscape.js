@@ -6,7 +6,7 @@
 //
 // All of it is made on the fly (noise through filters, a gull's glide), and driven by levels:
 // levels(t, sea, crowd, city) sets where each is going at t; step(t, wood, k) a footstep; gull(t, pan)
-// a cry. In the game the director's tick works the levels out from where the ear is (update); for a
+// a cry; scratch(t, dur, k) a pencil's stroke on paper. In the game the director's tick works the levels out from where the ear is (update); for a
 // film made of the game, the same calls are made into an offline context from what was logged.
 
 const STEP_DUR = 0.11;
@@ -175,6 +175,39 @@ export class Soundscape {
       o.start(t);
       o.stop(t + 0.2);
     }
+  }
+
+  // a pencil stroke on paper: a dry, grainy hiss up in the highs, the lead's grain rattling in it,
+  // dur seconds long (k: how near, how hard)
+  scratch(t, dur, k = 1) {
+    const c = this.c;
+    const s = c.createBufferSource();
+    s.buffer = this.noise;
+    const f = c.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.setValueAtTime(3200 + Math.random() * 900, t);
+    f.frequency.linearRampToValueAtTime(2600 + Math.random() * 1400, t + dur);
+    f.Q.value = 1.1;
+    const hp = c.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1400;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.11 * k, t + 0.02);
+    g.gain.setValueAtTime(0.11 * k, t + dur * 0.7);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    // (the grain: the level shaken fast, unevenly)
+    const r = c.createOscillator();
+    r.type = 'square';
+    r.frequency.value = 38 + Math.random() * 30;
+    const rg = c.createGain();
+    rg.gain.value = 0.04 * k;
+    r.connect(rg).connect(g.gain);
+    s.connect(f).connect(hp).connect(g).connect(this.out);
+    s.start(t, Math.random() * 1.5);
+    s.stop(t + dur + 0.05);
+    r.start(t);
+    r.stop(t + dur + 0.05);
   }
 }
 
