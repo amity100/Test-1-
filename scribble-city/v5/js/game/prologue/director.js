@@ -1877,6 +1877,10 @@ export class Prologue {
     this.feel(P.fig, 'shock', 8);
     P.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
     L.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
+    // (ROADMAP 18.9, as a director would have it understood: first the place it stood, in the very
+    // picture we last saw it whole in - nothing there; then the faces)
+    this.shot({ from: wideFrom, look: [WHEEL.x, 24, WHEEL.z], fov: 50, dur: 2.2, hand: 0.12 });
+    yield 1.7;
     if (C) {
       const wv = v3(WHEEL.x, 1.7, WHEEL.z);
       const A = this.single(P, wv, { dist: 1.9, side: 0.25, up: -0.12, drop: 0.06 });
@@ -1890,6 +1894,10 @@ export class Prologue {
       if (C.focus) C.focus(() => this.headJ(L), 0.9, 0.8);
       yield 0.85;
     }
+    // (and all round them the evening goes on: along the pier, people strolling, talking, eating - not
+    // one of them looking up. That is what is wrong)
+    this.shot({ from: [VIEW.x + rx * 1.6 - ux * 0.5, 1.55, VIEW.z + rz * 1.6 - uz * 0.5], to: [VIEW.x + rx * 1.8 - ux * 0.8, 1.55, VIEW.z + rz * 1.8 - uz * 0.8], look: [VIEW.x - ux * 14 + rx * 2, 1.3, VIEW.z - uz * 14 + rz * 2], fov: 44, dur: 1.9, hand: 0.3 });
+    yield 1.7;
     // (the player's again: her, him - and over there, where it stood, to see)
     this.film(false);
     L.fig.lookAt = P.fig.j.headC;
