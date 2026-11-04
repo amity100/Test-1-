@@ -312,6 +312,13 @@ export class Comic {
     // (the eraser done: its marks with it)
     if (this.rubSrc && !this.rubSrc.on) this.rubSrc = null;
     const rubbing = !!(this.rubSrc && !this.pg);
+    // (the sheet hidden while it has nothing on it, shown again as soon as it has: a sheet only cleared
+    // could still be shown as it last was)
+    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing);
+    if (busy !== this.shown) {
+      this.shown = busy;
+      this.cv.style.visibility = busy ? 'visible' : 'hidden';
+    }
     if (this.pg) {
       this.resize();
       g.clearRect(0, 0, this.cv.width, this.cv.height);
