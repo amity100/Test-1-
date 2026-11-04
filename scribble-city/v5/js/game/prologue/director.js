@@ -603,6 +603,13 @@ export class Prologue {
     const S = this.shots;
     if (film && S && S.on) pipe.paintFocus = clamp(S.lastPos.distanceTo(S.lastLook), 1.2, 90);
     else if (P && P.pos) pipe.paintFocus = clamp(g.camera.position.distanceTo(P.pos), 1.5, 30);
+    // (ROADMAP 18.9: a lens's depth in the film - close on a face, what is behind it painted broader
+    // and softer, the face kept sharp; wide, the brush as it was)
+    if (pipe.paintR) {
+      const close = film ? clamp((5 - pipe.paintFocus) / 3.5, 0, 1) : 0;
+      pipe.paintR[0] = 2.2 - 0.3 * close;
+      pipe.paintR[1] = 5.5 + 4.5 * close;
+    }
   }
 
   // ------------------------------------------------------------------ the film's tools
@@ -647,6 +654,24 @@ export class Prologue {
   shot(s) {
     this.shots.cut(s);
     return s.dur || 3;
+  }
+
+  // (ROADMAP 18.9) a freeze frame, as the animated films bring their people in: the world held still
+  // and the camera with it, a card over it (game/prologue/comic.js card: a slab, the name, who they
+  // are) - a whoosh, the music let down under it - and then on again, from the next shot
+  *freezeCard(o) {
+    if (this.ff || !this.comic) return;
+    const g = this.game;
+    const S = this.shots;
+    const life = o.life || 1.9;
+    const k0 = this.kWant;
+    this.k = this.kWant = 0.0002;
+    S.cut({ from: S.lastPos.clone(), look: S.lastLook.clone(), fov: S.lastFov, dur: life + 1, hand: 0 });
+    g.audio.play('whoosh', 0.55);
+    if (this.score && this.score.under) this.score.under(life, 0.45);
+    this.comic.card({ ...o, life });
+    yield life + 0.04;
+    this.k = this.kWant = k0 || 1;
   }
 
   // a line said: its voice, its subtitle, the speaker's mouth; the script waits for it to end
@@ -1263,11 +1288,15 @@ export class Prologue {
     this.faceTo(L, meet.x, meet.z);
     L.fig.lookAt = null;
     this.shot({ from: [31.0, 1.28, 229.4], to: [31.5, 1.3, 229.7], look: [41.2, 1.45, 233.9], fov: 48, dur: 4.6, hand: 0.35 });
-    yield 1.1;
+    yield 1.6;
+    // (ROADMAP 18.9: her face as she sees him - not small at the stand behind his back - and her card)
     L.fig.lookAt = P.fig.j.headC;
     this.feel(L.fig, 'joy', 5);
-    yield 0.35;
-    yield* this.say('L01', L.fig, 0.25);
+    this.shot({ ...this.single(L, P, { dist: 1.05, side: 0.38, up: 0.0, drop: 0.05 }), fov: 34, dur: 3.2, hand: 0.3 });
+    yield 0.3;
+    yield* this.say('L01', L.fig, 0.1);
+    yield* this.freezeCard({ name: 'LILY', tag: 'age 9 - draws everything she sees', col: '#f2b630', at: () => this.headJ(L), side: -1 });
+    this.shot({ from: [31.4, 1.3, 229.6], to: [31.6, 1.3, 229.8], look: () => v3(P.pos.x, 1.45, P.pos.z), fov: 44, dur: 3, hand: 0.35 });
     yield () => !this.walkTo || this.shots.t > 4.0;
     // (on the cut: where he was going - and she is up off her stool: she sat at the stand from the
     // start of the game, and nothing stood her up again; she walked and ran sitting - ROADMAP 18.9)
@@ -1281,7 +1310,8 @@ export class Prologue {
     P.fig.lookAt = L.fig.j.headC;
     this.shot({ ...this.single(P, L, { dist: 1.5, side: -0.38, up: -0.32, drop: 0.14 }), fov: 36, dur: 3.4, hand: 0.3 });
     yield 0.2;
-    yield* this.say('D01', P.fig, 0.25);
+    yield* this.say('D01', P.fig, 0.15);
+    yield* this.freezeCard({ name: 'DANNY', tag: 'her dad - it is complicated', col: '#4fa3d8', at: () => this.headJ(P), side: 1 });
     // her: a giggle - then she teases him
     this.shot({ ...this.single(L, P, { dist: 1.15, side: 0.42, up: 0.02, drop: 0.07 }), fov: 34, dur: 3.4, hand: 0.3 });
     this.feel(L.fig, 'joy', 4);
@@ -1508,6 +1538,8 @@ export class Prologue {
       // (from just beside his eyes, long: the man in the crowd, and then only his chest)
       this.shot({ from: [ph.x - rx * 0.2, ph.y - 0.05, ph.z - rz * 0.2], look: () => { const j = man.fig.j; return j && j.neck ? v3(j.neck.x, j.neck.y - 0.12, j.neck.z) : v3(man.pos.x, 1.35, man.pos.z); }, fov: 16, fovTo: 9, dur: 2.0, ease: 'in', hand: 0.6 });
     }
+    // (ROADMAP 18.9: the anime's focus lines rushing in at him as the lens closes on him)
+    if (this.comic && this.comic.focus) this.comic.focus(() => this.headJ(man), 2.0, 0.7);
     yield 2.0;
     // (ROADMAP 18.9: and the mark itself, close - a cut in to it on his chest, held a breath, pushing in:
     // what it is the picture's to say, not anybody's words)
@@ -1518,6 +1550,10 @@ export class Prologue {
       const fz = Math.cos(man.yaw);
       this.shot({ from: () => v3(mp().x + fx * 0.8 + fz * 0.12, mp().y - 0.06, mp().z + fz * 0.8 - fx * 0.12), to: () => v3(mp().x + fx * 0.62 + fz * 0.08, mp().y - 0.04, mp().z + fz * 0.62 - fx * 0.08), look: () => v3(mp().x, mp().y + 0.02, mp().z), fov: 34, fovTo: 30, dur: 1.4, ease: 'in', hand: 0.3 });
       yield 1.35;
+      // (and him, held: who is this - nobody says)
+      this.shot({ ...this.single(man, P, { dist: 1.6, side: -0.3, up: -0.12, drop: 0.1 }), fov: 30, dur: 3, hand: 0.2 });
+      yield 0.25;
+      yield* this.freezeCard({ name: '???', tag: 'nobody has ever seen him before', col: '#5b7bd6', at: () => this.headJ(man), side: 1, life: 1.6 });
     }
     // his face: what was that
     this.feel(P.fig, 'worried', 4);
@@ -1717,10 +1753,27 @@ export class Prologue {
     L.fig.reachR = null;
     L.fig.reachL = null;
     P.fig.reachL = null;
-    // (the player's again, at once: her, him - and over there, where it stood, to see)
+    // (ROADMAP 18.9: the moment it is gone, on his face - in fast and close, an impact frame, the focus
+    // lines; then hers)
+    this.feel(L.fig, 'shock', 8);
+    this.feel(P.fig, 'shock', 8);
+    P.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
+    L.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
+    if (C) {
+      const wv = v3(WHEEL.x, 1.7, WHEEL.z);
+      const A = this.single(P, wv, { dist: 1.9, side: 0.25, up: -0.12, drop: 0.06 });
+      const B = this.single(P, wv, { dist: 0.95, side: 0.14, up: -0.06, drop: 0.04 });
+      this.shot({ from: A.from, to: B.from, look: A.look, fov: 40, fovTo: 30, dur: 0.35, ease: 'out', hand: 0.4 });
+      yield 0.12;
+      if (C.impact) C.impact(this.headJ(P), 0.1);
+      if (C.focus) C.focus(() => this.headJ(P), 1.4, 1);
+      yield 1.15;
+      this.shot({ ...this.single(L, wv, { dist: 0.9, side: -0.2, up: 0.0, drop: 0.04 }), fov: 32, dur: 1.2, hand: 0.5 });
+      if (C.focus) C.focus(() => this.headJ(L), 0.9, 0.8);
+      yield 0.85;
+    }
+    // (the player's again: her, him - and over there, where it stood, to see)
     this.film(false);
-    this.feel(L.fig, 'shock', 6);
-    this.feel(P.fig, 'shock', 6);
     L.fig.lookAt = P.fig.j.headC;
     yield 0.3;
     yield* this.say('L22', L.fig, 0.25);
@@ -1951,6 +2004,7 @@ export class Prologue {
       const sz = dx / d;
       this.feel(P.fig, 'shock', 6);
       this.shot({ from: [h.x + sx * 1.1, h.y - 0.05, h.z + sz * 1.1], to: [h.x + sx * 3.4, h.y - 0.05, h.z + sz * 3.4], look: [h.x, h.y - 0.08, h.z], fov: 50, fovTo: 17.5, dur: 3.2, ease: 'inout', hand: 0.2 });
+      if (this.comic && this.comic.focus) this.comic.focus(() => this.headJ(P), 3.0, 0.55);
     }
     yield Math.max(2.6, m01w - 0.9);
     // all round him, the evening as it was: nobody saw anything
@@ -2236,7 +2290,11 @@ export class Prologue {
       ease: 'lin',
       hand: 0.5,
     });
-    yield 0.2;
+    yield 1.0;
+    // (ROADMAP 18.9: their card, the two of them held as they come)
+    yield* this.freezeCard({ name: 'VINCE & BRUNO', tag: 'they want something back', col: '#d23a32', at: () => this.headJ(t1), side: -1 });
+    this.shot({ ...this.single(t1, P, { dist: 2.0, side: -0.5, up: -0.22, drop: 0.25 }), fov: 36, dur: 2.8, hand: 0.5 });
+    yield 0.1;
     yield* this.say('T01', t1.fig, 0.3);
     // he stops; puts her behind him
     this.put(L, P.pos.x - ux * 1.0 + uz * 0.25, P.pos.z - uz * 1.0 - ux * 0.25, a);
@@ -2911,6 +2969,7 @@ export class Prologue {
     if (this.air && g.audio && g.audio.ctx) this.air.levels(g.audio.ctx.currentTime, 0, 0, 0);
     if (g.pipe) {
       g.pipe.paintWant = 0;
+      if (g.pipe.paintR) g.pipe.paintR = [2.2, 5.5];
       Object.assign(g.pipe.look, { rim: 0, grade: 0, grain: 0, personW: 1 });
     }
     shared.uPenDens.value = 1;
