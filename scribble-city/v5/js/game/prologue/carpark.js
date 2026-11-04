@@ -62,7 +62,6 @@ const U_OUT = 0.3;
 const U_AISLE = 5.7;
 const U_IN = 13.7;
 const U_MID = 19.1;
-const U_HALF = MXC - MX0;
 // the lines of columns across it (the end ones in the end walls)
 const COLZ = [176.8, 184.9, 193, 203, 213, 223, 233, 243, 253, 263, 273, 281.1, 289.2];
 // the stair and lift towers at its corners (across, along)
@@ -113,11 +112,18 @@ export const PARK = {
   main: { x0: MX0, x1: MX1, z0: MZ0, z1: MZ1, xc: MXC, zN: MZN, zS: MZS, levels: [0, 1, 2, 3, 4, 5, 6].map(LV), floorToFloor: DH, grade: DH / (MZS - MZN) },
   landing: { name: 'BAYSHORE PARKING', x0: LX0, x1: LX1, z0: LZ0, z1: LZ1, levels: LY.slice(), floorToFloor: LDH, grade: LDH / (34 - L_RAMP_EASE) },
   // the street door of the stair tower at the corner of 5th Street and Washington Avenue (the
-  // way in on foot): the door, the sidewalk before it where the two men wait, which way they face
-  // (to the east, up 5th Street, where Danny comes from)
+  // way in on foot, through its lobby to the street floor), where the two men wait, which way they
+  // face (east, down 5th Street, where Danny comes from)
   door: { x: MX1 - CORE_W / 2, z: MZ1 + 0.1, y: Y0 },
-  thugs: [{ x: -150.6, z: 292.2 }, { x: -148.9, z: 293.1 }],
+  // (the two men on the sidewalk west of the way in, by their car; Danny stopped 12-14 m from them
+  // between the way in and the door, facing them; the sidewalk between them clear: no walls, no
+  // street furniture - the camera can stand anywhere on it, the building's face 3 m to the north;
+  // his run from there into the way in and round to the driver's door of his car - their shots
+  // at him pass through the way in's opening)
+  thugs: [{ x: -164.8, z: 293.0 }, { x: -166.6, z: 293.9 }],
   thugsFace: Math.PI / 2,
+  dannyStop: { x: -152.5, z: 292.8, yaw: -Math.PI / 2 },
+  dannyRun: [[-152.5, 292.8], [-157.5, 289.6], [-157.2, 283.6], [-153.2, 281.6]],
   // their car, at the curb of 5th Street in front of the garage, west of its way in (parked the way
   // that side's traffic goes: west)
   thugCar: { x: -171.5, z: 296.7, yaw: -Math.PI / 2 },
@@ -150,6 +156,18 @@ export const PARK = {
   // the edge it flies from: the south face of the west half at the roof run's high end (a
   // parapet 1.05 m high along it, x0..x1), over 5th Street
   edge: { z: MZ1, x0: MX0, x1: MXC, x: W_AISLE_X, y: LV(6), parapet: PAR },
+  // (the drawn ramp and the jump - game/prologue/ramp.js - are worked out along -x, a lane at one
+  // z: the roof run is that turned a quarter round. toLocal(x, z) gives the [x, z] they take, a
+  // group turned rotY about y puts what they build back in the world; edgeX, laneZ, carX for
+  // RampDraw.open, landX for the landing's x there)
+  runFrame: {
+    toLocal: (x, z) => [-z, x],
+    toWorld: (lx, lz) => [lz, -lx],
+    rotY: Math.PI / 2,
+    edgeX: -MZ1,
+    laneZ: W_AISLE_X,
+    roofY: LV(6),
+  },
   // where it comes down: Bayshore's roof straight ahead across the street (kept clear: no cars,
   // no lamp posts, no openings), its height; land: a point in it
   land: { x: W_AISLE_X, z: 328, y: LY[4], zone: { x0: KEEP.land.x0, x1: KEEP.land.x1, z0: LZ0 + 1, z1: LZ1 - 1 } },
@@ -163,6 +181,19 @@ export const PARK = {
     { x: -195.5, z: 323.4, y: LY[0], what: 'gate' },
     { x: -195.5, z: 309, y: 0, what: 'street' },
   ],
+  // places a camera shows them well from: [where it is, what it looks at]
+  shots: {
+    // the garage from the corner of 5th and Washington, Danny's way to it
+    corner: [[-128, 1.7, 296], [-165, 8, 270]],
+    // the door on foot, the two men by it
+    door: [[-146, 1.7, 300], [-152, 1.6, 289]],
+    // the roof run from behind the car's start, the edge far off
+    run: [[-180.3, LV(5) + 2.4, MZ0 + 2], [-180.3, LV(6) + 0.5, MZ1]],
+    // over the edge: 5th Street below, Bayshore's roof across it
+    edge: [[-180.3, LV(6) + 2.1, MZ1 - 21], [-180.3, LY[4] - 1, 332]],
+    // from Bayshore's roof up at the edge it comes from
+    landing: [[-172, LY[4] + 1.6, 342], [-180.3, LV(6) + 1, MZ1]],
+  },
   // the floor under (x, z) for something at height y (the highest floor no more than a step over
   // it), -Infinity off them; the underside of what is over (x, z) for the camera there (Infinity in
   // the open). The vehicles and the camera ask them through PrologueSet
@@ -447,12 +478,12 @@ function mulberry(seed) {
 }
 
 // ------------------------------------------------------------------ the colours
-const CONC = linC(0.76, 0.74, 0.71);
 const CONC_TOP = linC(0.66, 0.65, 0.64);
 const CONC_ROOF = linC(0.58, 0.57, 0.58);
 const CONC_UNDER = linC(0.6, 0.59, 0.61);
 const CONC_COL = linC(0.82, 0.8, 0.76);
 const PANEL = linC(0.88, 0.86, 0.82);
+const BASE = linC(0.5, 0.47, 0.46);
 const FILL = linC(0.55, 0.54, 0.55);
 const STEEL = linC(0.66, 0.68, 0.72);
 const DARK = linC(0.2, 0.2, 0.24);
@@ -470,7 +501,6 @@ const GLASS = linC(0.42, 0.58, 0.72);
 // violet), on its columns, its signs, its band round the outside
 const LEVEL_C = [[0.46, 0.55, 0.68], [0.86, 0.24, 0.26], [0.97, 0.55, 0.18], [0.98, 0.8, 0.2], [0.32, 0.72, 0.42], [0.26, 0.5, 0.88], [0.62, 0.38, 0.84]].map(([r, g, b]) => linC(r, g, b));
 const LEVEL_NAME = ['G', '1', '2', '3', '4', '5', 'R'];
-const BAY_C = linC(0.3, 0.62, 0.86);
 
 // ------------------------------------------------------------------ the car park
 export class CarPark {
@@ -497,27 +527,31 @@ export class CarPark {
     const KS = new Kit();
     const KI = new Kit();
     const KL = new Kit();
+    const KLI = new Kit();
     this.mainShell(KS, M);
     this.mainCores(KS, M);
     this.mainSigns(KS, M);
     this.street(KS, M);
     this.mainInside(KI, M);
     this.landShell(KL, M);
-    this.landInside(KL, M);
+    this.landInside(KLI, M);
     this.parkCars();
-    this.inside = null;
-    for (const [K, seed, name] of [[KS, 0.21, 'shell'], [KI, 0.47, 'inside'], [KL, 0.63, 'landing']]) {
+    // (what is inside each - the paint, the lights, the pipes, the signs - is drawn near it only,
+    // and not for the sun: its shadows are the floors')
+    this.near = [];
+    for (const [K, seed, name, inside] of [[KS, 0.21, 'shell', false], [KI, 0.47, 'inside', true], [KL, 0.63, 'landing', false], [KLI, 0.71, 'landing-inside', true]]) {
       const g = K.build({ seed });
       g.name = `carpark-${name}`;
       for (const m of g.children) {
         // (each draws only when it is in the picture: Kit's meshes are drawn wherever they are)
         m.frustumCulled = true;
+        if (inside) m.userData.noShadow = true;
         this.tris += m.geometry.attributes.position.count / 3;
       }
       g.updateMatrix();
       this.game.scene.add(g);
       this.groups.push(g);
-      if (name === 'inside') this.inside = g;
+      if (inside) this.near.push({ g, s: name === 'inside' ? this.main.s : this.land.s });
     }
     // (on the city's map, and on the minimap's picture of the city - drawn before these were built)
     const w = this.game.world;
@@ -541,12 +575,49 @@ export class CarPark {
       }
       g.setTransform(1, 0, 0, 1, 0, 0);
     }
+    this.clearWays();
     // (what pedestrians and the police find their way round)
     const nav = this.game.world.nav;
     if (nav && nav.queueRefresh) {
       nav.queueRefresh(MX0 - 2, MZ0 - 2, MX1 + 2, MZ1 + 2);
       nav.queueRefresh(LX0 - 2, LZ0 - 2, LX1 + 2, LZ1 + 2);
     }
+  }
+
+  // the city's things in the way of its ways in and out: the street furniture on the sidewalks
+  // they cross (taken out as a prop is when it is rubbed out, at once), the cars parked at the curb
+  // before them and where the two men's car stops
+  clearWays() {
+    const g = this.game;
+    const w = g.world;
+    // (the sidewalk along the front on 5th Street from the two men's car to Washington Avenue -
+    // the ways in on foot and by car - the way out onto 7th Street, Bayshore's gate)
+    const walks = [[PARK.thugCar.x - 4.5, MZ1, MX1 + 2, 295.6], [W_AISLE_X - 4.8, 170.4, W_AISLE_X + 4.8, MZ0], [L_GATE[0] - 0.5, 306.4, L_GATE[1] + 0.5, LZ0]];
+    const curbs = [[E_AISLE_X - 7, 294, E_AISLE_X + 7, 301], [W_AISLE_X - 7, 165, W_AISLE_X + 7, 172], [L_GATE[0] - 3, 301, L_GATE[1] + 3, 308], [PARK.thugCar.x - 4.5, 294, PARK.thugCar.x + 4.5, 299.5]];
+    const hit = (r, x0, z0, x1, z1) => x1 > r[0] && x0 < r[2] && z1 > r[1] && z0 < r[3];
+    this.cleared = { props: 0, cars: 0 };
+    const O = w.objects;
+    if (O && O.list && w.nav) {
+      for (const o of O.list) {
+        if (!o || o.state !== 'here' || !o.boxes.length) continue;
+        if (!walks.some((r) => hit(r, o.x0, o.z0, o.x1, o.z1))) continue;
+        O.remove(o);
+        this.cleared.props++;
+      }
+    }
+    const gone = (c) => curbs.some((r) => hit(r, c.x - 1, c.z - 1, c.x + 1, c.z + 1));
+    // (out of the lists in place: whoever holds them holds the same ones)
+    const T = g.traffic;
+    if (T && T.parked) {
+      for (let i = T.parked.length - 1; i >= 0; i--) {
+        const c = T.parked[i];
+        if (!gone(c)) continue;
+        if (c.box !== undefined) w.collision.remove(c.box);
+        T.parked.splice(i, 1);
+        this.cleared.cars++;
+      }
+    }
+    if (w.parked) for (let i = w.parked.length - 1; i >= 0; i--) if (gone(w.parked[i])) w.parked.splice(i, 1);
   }
 
   floorAt(x, z, y) {
@@ -574,13 +645,16 @@ export class CarPark {
     return null;
   }
 
-  // what is inside the garage is drawn near it only
+  // what is inside them is drawn near them only
   update() {
-    if (!this.inside) return;
+    if (!this.near) return;
     const c = this.game.camera.position;
-    const dx = Math.max(MX0 - c.x, 0, c.x - MX1);
-    const dz = Math.max(MZ0 - c.z, 0, c.z - MZ1);
-    this.inside.visible = Math.hypot(dx, dz) < (this.game.touch ? 140 : 220);
+    const far = this.game.touch ? 140 : 220;
+    for (const { g, s } of this.near) {
+      const dx = Math.max(s.x0 - c.x, 0, c.x - s.x1);
+      const dz = Math.max(s.z0 - c.z, 0, c.z - s.z1);
+      g.visible = Math.hypot(dx, dz) < far;
+    }
   }
 
   dispose() {
@@ -592,7 +666,7 @@ export class CarPark {
       });
     }
     this.groups = [];
-    this.inside = null;
+    this.near = null;
     for (const id of this.cols) g.world.collision.remove(id);
     this.cols = [];
     this.built = false;
@@ -603,10 +677,11 @@ export class CarPark {
     const wall = this.wall;
     // the street floor where it is not the first floors' (the west half's south end, the east
     // half's north end), and round the stair towers
-    K.box(M.matte, MX0, 0.02, MZS, MXC, Y0 - 0.004, MZ1, CONC_TOP);
-    K.box(M.matte, MXC, 0.02, MZ0, MX1, Y0 - 0.004, MZN, CONC_TOP);
+    K.box(M.matte, MX0 + 0.05, 0.02, MZS, MXC, Y0 - 0.004, MZ1 - 0.05, CONC_TOP);
+    K.box(M.matte, MXC, 0.02, MZ0 + 0.05, MX1 - 0.05, Y0 - 0.004, MZN, CONC_TOP);
     for (const h of ['W', 'E']) {
-      const xo = hx(h, 0);
+      // (the floors' outer edges and ends a little behind the panels round them)
+      const xo = hx(h, 0.05);
       const xi = MXC;
       const xa = Math.min(xo, xi);
       const xb = Math.max(xo, xi);
@@ -617,15 +692,15 @@ export class CarPark {
         if (j === 0) {
           // the first floor rises off the street: solid under its slope (the ground filled up to
           // it), a slab over the street floor where it is a storey up
-          const zf = h === 'W' ? [MZ0, MZS] : [MZN, MZ1];
-          const zs = h === 'W' ? [MZS, MZ1] : [MZ0, MZN];
+          const zf = h === 'W' ? [MZ0 + 0.05, MZS] : [MZN, MZ1 - 0.05];
+          const zs = h === 'W' ? [MZS, MZ1 - 0.05] : [MZ0 + 0.05, MZN];
           K.add(M.matte, prism('z', profile(f, zf[0], zf[1], kn), xa, xb, () => 0.02), FILL);
           K.add(M.matte, prism('z', profile(f, zs[0], zs[1], kn), xa, xb, (s, y) => y - SLAB), top);
           // (the fill's face to the street floor's end, under the slab: a wall)
           const zw = h === 'W' ? MZS : MZN;
           const zt = zw + (h === 'W' ? -0.3 : 0.3);
           wall(xa, Math.min(zw, zt), xb, Math.max(zw, zt), Y0 - 0.3, LV(1) - SLAB);
-        } else K.add(M.matte, prism('z', profile(f, MZ0, MZ1, kn), xa, xb, (s, y) => y - SLAB), top);
+        } else K.add(M.matte, prism('z', profile(f, MZ0 + 0.05, MZ1 - 0.05, kn), xa, xb, (s, y) => y - SLAB), top);
         // its underside's beams across, at the lines of columns (not over the filled ground)
         for (const z of COLZ.slice(1, -1)) {
           if (j === 0 && (h === 'W' ? z < MZS + 1 : z > MZN - 1)) continue;
@@ -640,12 +715,19 @@ export class CarPark {
         // painted along them outside
         const xp0 = h === 'W' ? MX0 : MX1 - 0.25;
         const xp1 = h === 'W' ? MX0 + 0.25 : MX1;
-        K.add(M.matte, prism('z', profile(f, MZ0 + 0.01, MZ1 - 0.01, kn, PAR), xp0, xp1, (s, y) => y - PAR - SLAB - 0.22), PANEL);
+        // (the first floor's, along the street, a darker stone: the building's base)
+        K.add(M.matte, prism('z', profile(f, MZ0 + 0.01, MZ1 - 0.01, kn, PAR), xp0, xp1, (s, y) => (j === 0 ? 0.02 : y - PAR - SLAB - 0.22)), j === 0 ? BASE : PANEL);
         const xb0 = h === 'W' ? MX0 - 0.02 : MX1;
         K.add(M.paint, prism('z', profile(f, MZ0 + CORE_D, MZ1 - CORE_D, kn, PAR - 0.14), xb0, xb0 + 0.02, (s, y) => y - 0.2), LEVEL_C[j]);
         for (let z = MZ0; z < MZ1 - 0.01; z += 8) {
           const z1 = Math.min(MZ1, z + 8);
           wall(Math.min(xp0, xp1) - 0.05, z, Math.max(xp0, xp1) + 0.05, z1, Math.min(f(z), f(z1)) - 0.3, Math.max(f(z), f(z1)) + PAR);
+        }
+        // the level, big, painted on the panels outside near each end (the floor's level there)
+        for (const zz of [MZ0 + CORE_D + 1.6, MZ1 - CORE_D - (h === 'E' ? 4.6 : 1.6)]) {
+          const lv = Math.round((f(zz) - Y0) / DH);
+          if (lv < 1) continue;
+          wallWord(K, M.paint, LEVEL_C[lv], LEVEL_NAME[lv], 0.72, h === 'W' ? MX0 - 0.02 : MX1 + 0.02, f(zz) + 0.1, zz, h === 'W' ? -1 : 1, 0, 0.01);
         }
         // the floor's edge where the halves part (the other half's floor a little higher or lower
         // there): a curb, a steel rail on posts
@@ -693,7 +775,7 @@ export class CarPark {
             const z0 = zz;
             const z1 = zz + nz * 0.25;
             const top = k === 0 ? y + PAR + 0.25 : y + PAR;
-            K.box(M.matte, r0, k === 0 ? 0.02 : y - SLAB - 0.22, Math.min(z0, z1), r1, top, Math.max(z0, z1), PANEL);
+            K.box(M.matte, r0, k === 0 ? 0.02 : y - SLAB - 0.22, Math.min(z0, z1), r1, top, Math.max(z0, z1), k === 0 ? BASE : PANEL);
             K.box(M.paint, r0, top - 0.34, Math.min(z0, z0 - nz * 0.02), r1, top - 0.14, Math.max(z0, z0 - nz * 0.02), LEVEL_C[k]);
             wall(r0, Math.min(z0, z1) - 0.05, r1, Math.max(z0, z1) + 0.05, y - 0.3, top);
           }
@@ -991,9 +1073,9 @@ export class CarPark {
       K.box(M.paint, xa, 2.12, bz - 0.09, xa + (x1 - x0 - 0.8) / 10, 2.35, bz + 0.09, i % 2 ? INK : YEL);
     }
     wallWord(K, M.paint, WHITE, 'MAX HEADROOM 2.1M', 0.13, E_AISLE_X, 2.17, bz + 0.1, 0, 1, 0.01);
-    // the tariff board by the way in, on its two posts at the sidewalk's edge, lit from over it
+    // the tariff board by the way in, on its two posts against the wall, lit from over it
     const tx = E_AISLE_X - 7.2;
-    const tz = MZ1 + 0.6;
+    const tz = MZ1 + 0.18;
     for (const sx of [tx - 1.1, tx + 1.1]) {
       K.box(M.metal, sx - 0.05, 0.15, tz - 0.05, sx + 0.05, 2.45, tz + 0.05, DARK);
       wall(sx - 0.07, tz - 0.07, sx + 0.07, tz + 0.07, 0, 2.45, 'pole');
@@ -1090,8 +1172,7 @@ export class CarPark {
         const bx = hx(h, backU);
         const y = fz(b.z);
         K.box(M.matte, bx - 0.12, y, b.z - 0.85, bx + 0.12, y + 0.13, b.z + 0.85, linC(0.72, 0.7, 0.66));
-        K.box(M.paint, bx - 0.12, y + 0.13, b.z - 0.85, bx + 0.12, y + 0.135, b.z - 0.55, YEL);
-        K.box(M.paint, bx - 0.12, y + 0.13, b.z + 0.55, bx + 0.12, y + 0.135, b.z + 0.85, YEL);
+        for (const [z0, z1] of [[b.z - 0.85, b.z - 0.55], [b.z + 0.55, b.z + 0.85]]) paintQuad(K, M.paint, YEL, [[bx - 0.12, z0], [bx + 0.12, z0], [bx + 0.12, z1], [bx - 0.12, z1]], () => y + 0.13, 0.004);
       }
       if (rng() < 0.45) {
         const sx = hx(h, (b.u0 + b.u1) / 2 + (rng() - 0.5) * 1.6);
@@ -1185,8 +1266,7 @@ export class CarPark {
     K.add(M.metal, prism('z', profile(fz, z0 + 0.5, z1 - 0.5, kn, -0.62), xp - 0.06, xp + 0.06, (s, y) => y - 0.12), RED);
     for (let z = z0 + 2; z < z1 - 1; z += 4.2) {
       const y = fz(z) - 0.74;
-      K.box(M.metal, xp - 0.03, y - 0.12, z - 0.03, xp + 0.03, y, z + 0.03, STEEL);
-      K.box(M.metal, xp - 0.07, y - 0.16, z - 0.07, xp + 0.07, y - 0.12, z + 0.07, linC(0.85, 0.7, 0.3));
+      K.box(M.metal, xp - 0.05, y - 0.16, z - 0.05, xp + 0.05, y, z + 0.05, linC(0.85, 0.7, 0.3));
     }
     const xc = hx(h, U_OUT + 0.25);
     K.add(M.metal, prism('z', profile(fz, z0 + 0.5, z1 - 0.5, kn, -0.2), xc - 0.04, xc + 0.04, (s, y) => y - 0.08), linC(0.56, 0.57, 0.62));
@@ -1279,14 +1359,24 @@ export class CarPark {
         const mz = zNose - nz * 0.45;
         K.box(M.metal, MXC - 0.03, y + 2.0, Math.min(zNose, mz), MXC + 0.03, y + 2.06, Math.max(zNose, mz), STEEL);
         K.sphere(M.glass, 0.36, MXC, y + 2.05, mz - nz * 0.05, linC(0.75, 0.82, 0.9), 1, 1, 0.35, 10);
-        K.torus(M.paint, 0.36, 0.035, MXC, y + 2.05, mz - nz * 0.05, linC(0.95, 0.5, 0.15), 0, 0);
-        // the sign hung over the turn from the floor over it: the level in its colour, both sides
-        if (k < 5) {
-          const sy = LV(k + 1) - SLAB - BEAM - 0.05;
-          const sz = zEnd + nz * 9;
-          for (const sx of [MXC - 2.4, MXC + 2.4]) K.box(M.metal, sx - 0.02, sy - 0.2, sz - 0.02, sx + 0.02, sy + 0.05, sz + 0.02, STEEL);
-          K.box(M.paint, MXC - 2.9, sy - 0.85, sz - 0.04, MXC + 2.9, sy - 0.2, sz + 0.04, LEVEL_C[k]);
-          for (const sd of [-1, 1]) wallWord(K, M.paint, WHITE, `LEVEL ${LEVEL_NAME[k]}`, 0.36, MXC, sy - 0.72, sz + sd * 0.04, 0, sd, 0.02);
+        K.add(M.paint, new THREE.TorusGeometry(0.36, 0.035, 4, 14).translate(MXC, y + 2.05, mz - nz * 0.05), linC(0.95, 0.5, 0.15));
+        // (a camera over the mirror, watching the turn, its little red light)
+        K.box(M.metal, MXC - 0.05, y + 2.55, Math.min(zNose, mz), MXC + 0.05, y + 2.62, Math.max(zNose, mz), STEEL);
+        K.box(M.paint, MXC - 0.11, y + 2.47, mz - 0.19, MXC + 0.11, y + 2.66, mz + 0.19, WHITE);
+        K.box(M.glass, MXC - 0.07, y + 2.5, mz - nz * 0.19 - 0.02, MXC + 0.07, y + 2.62, mz - nz * 0.19 + 0.02, DARK);
+        K.box(M.glow, MXC + 0.07, y + 2.62, mz - 0.03, MXC + 0.1, y + 2.65, mz, RED);
+        // the signs hung over each aisle where it comes off its slope into the turn, under the beams
+        // of the floor over it: the level in its colour, both faces
+        for (const h of ['W', 'E']) {
+          // (none where that half has no floor over this level at this end: the roof)
+          const over = end === 'N' ? (h === 'W' ? k + 1 <= 5 : k + 1 <= 6) : h === 'W' ? k + 1 <= 6 : k + 1 <= 5;
+          if (!over) continue;
+          const ax = hx(h, (U_AISLE + U_IN) / 2);
+          const sz = zNose - nz * 1.2;
+          const sy = LV(k + 1) - SLAB - BEAM - 0.02;
+          for (const sx of [ax - 1.4, ax + 1.4]) K.box(M.metal, sx - 0.02, sy - 0.1, sz - 0.02, sx + 0.02, sy + 0.02, sz + 0.02, STEEL);
+          K.box(M.paint, ax - 1.7, sy - 0.48, sz - 0.04, ax + 1.7, sy - 0.1, sz + 0.04, LEVEL_C[k]);
+          for (const sd of [-1, 1]) wallWord(K, M.paint, WHITE, `LEVEL ${LEVEL_NAME[k]}`, 0.24, ax, sy - 0.41, sz + sd * 0.04, 0, sd, 0.01);
         }
         // the level, big, on the end wall's inside, in its colour
         const wz = zEnd + nz * 0.26;
@@ -1562,8 +1652,9 @@ export class CarPark {
       const roof = b.j === NDECK - 1;
       const top = b.j >= 4;
       if (rng() > (roof ? 0.42 : top ? 0.55 : 0.68)) continue;
-      if (Math.hypot(b.x - KEEP.heroBay.x, b.z - KEEP.heroBay.z) < 2.5) continue;
       const y = b.j < 0 ? Y0 : deckY(b.h, b.j, b.z);
+      // (Danny's bay and the bays either side of it empty, on his floor: room at both doors)
+      if (Math.abs(y - Y0) < 1 && Math.hypot(b.x - KEEP.heroBay.x, b.z - KEEP.heroBay.z) < 3.6) continue;
       // (nose in, towards the wall it backs onto; now and then backed in)
       const back = rng() < 0.2;
       const yaw = (b.nx > 0) !== back ? Math.PI / 2 : -Math.PI / 2;
