@@ -1327,11 +1327,12 @@ export class Prologue {
     this.feel(P.fig, 'surprised', 8);
     this.shot({ ...this.single(P, v3(WHEEL.x, 1.7, WHEEL.z), { dist: 1.45, side: 0.3, up: -0.12, drop: 0.1 }), fov: 34, dur: 2.3, hand: 0.25 });
     yield 2.0;
-    // she turns to him
+    // she turns to him (a step back from him first, on the cut: the camera between them, clear of him)
     this.feel(L.fig, 'scared', 8);
+    this.put(L, VIEW.x, VIEW.z, toW);
     L.fig.lookAt = P.fig.j.headC;
     this.faceTo(L, P.pos.x, P.pos.z);
-    this.shot({ ...this.single(L, P, { dist: 1.0, side: -0.5, up: -0.06, drop: 0.07 }), fov: 34, dur: 2.6, hand: 0.35 });
+    this.shot({ ...this.single(L, P, { dist: 0.85, side: -0.5, up: -0.06, drop: 0.07 }), fov: 34, dur: 2.6, hand: 0.35 });
     yield 0.4;
     yield* this.say('L08', L.fig, 0.7);
     // where it was: the evening, the same picture without it - and the kids' voices, far off, coming
