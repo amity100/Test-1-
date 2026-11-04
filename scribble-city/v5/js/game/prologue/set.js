@@ -822,8 +822,9 @@ export class PrologueSet {
       { x: 24.5, z: 60, nx: 0, nz: -1, w: 10, leg: 4.2, m: mA },
       // by the promenade near 7th, facing north
       { x: 24.5, z: 178, nx: -0.6, nz: -0.8, w: 10, leg: 4.2, m: mB },
-      // on the way out onto the pier (the one Lily sees), facing the gate
-      { x: 47.5, z: 255.5, nx: -0.45, nz: -0.89, w: 9, leg: 3.4, m: mA },
+      // on the way out onto the pier (the one Lily sees), facing the gate - a little along from the
+      // beach walk's lamp post, so that nothing stands between it and whoever looks up at it
+      { x: 44.4, z: 257.1, nx: -0.45, nz: -0.89, w: 9, leg: 3.4, m: mA },
       // at the end of Ocean Drive by the car parks
       { x: 18, z: 306, nx: -0.8, nz: -0.6, w: 10, leg: 4.6, m: mB },
     ];

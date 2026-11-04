@@ -8,6 +8,7 @@ import { Pursuer } from './chase.js';
 import { RampDraw, Ramp, Jump, rampH } from './ramp.js';
 import { HeldPage } from './page.js';
 import { Acting, ACTS } from './acting.js';
+import { Comic } from './comic.js';
 import { civilianLook, kidLook } from '../looks.js';
 import { clamp } from '../../core/util.js';
 
@@ -128,6 +129,8 @@ export class Prologue {
     this.shots = new Shots(g);
     // (how each line is acted: the hands, the face, the head, the listener - game/prologue/acting.js)
     this.acting = new Acting(g);
+    // (the action's comic moments: impact frames, speed lines, sound words - game/prologue/comic.js)
+    this.comic = new Comic(g, this.ui.root);
     this.voices.load();
     // its pieces of the city (the wheel among them)
     if (g.prolSet) g.prolSet.build();
@@ -335,6 +338,7 @@ export class Prologue {
     this.tickHeroes();
     if (this.page) this.page.update();
     this.acting.update(dt);
+    this.comic.update(dt);
     this.tickGuns(dt);
     // (Danny walking somewhere in a shot, on his own feet - or running)
     if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
@@ -863,7 +867,7 @@ export class Prologue {
   // the front); where she stands under it (lx, lz) and where he comes to beside her (dx, dz)
   lilyBoard() {
     if (this.boardB) return this.boardB;
-    const b = (this.set && this.set.boards && this.set.boards.find((q) => Math.abs(q.z - 255.5) < 1)) || { x: 47.5, z: 255.5, nx: -0.45, nz: -0.89, w: 9, leg: 3.4 };
+    const b = (this.set && this.set.boards && this.set.boards.find((q) => Math.abs(q.z - 257.1) < 1)) || { x: 44.4, z: 257.1, nx: -0.45, nz: -0.89, w: 9, leg: 3.4 };
     const n = Math.hypot(b.nx, b.nz);
     const nx = b.nx / n;
     const nz = b.nz / n;
@@ -1359,6 +1363,7 @@ export class Prologue {
     this.shot({ from: () => v3(t1.pos.x - ux * 1.5 - uz * 1.4, 1.05, t1.pos.z - uz * 1.5 + ux * 1.4), look: this.faceOf(t1), fov: 34, dur: 2.0, hand: 0.6 });
     this.armThug(t1, P);
     g.audio.play('click', 0.6);
+    this.comic.impact(this.headJ(t1) || t1.pos, 0.1);
     yield 0.2;
     yield* this.say('T05', t1.fig, 0.05);
     this.armThug(t2, P);
@@ -1372,7 +1377,8 @@ export class Prologue {
     const v = this.dannyCar;
     this.walkTo = { x: v.pos.x - Math.cos(v.yaw) * 1.6, z: v.pos.z + Math.sin(v.yaw) * 1.6, speed: 1, sprint: true };
     this.go(L, v.pos.x + Math.cos(v.yaw) * 1.6, v.pos.z - Math.sin(v.yaw) * 1.6, 4.2);
-    this.shot({ from: () => v3(C.x - ux * 5 + uz * 4.5, 1.2, C.z - uz * 5 - ux * 4.5), look: () => v3((P.pos.x + L.pos.x) / 2, 1.0, (P.pos.z + L.pos.z) / 2), fov: 44, dur: 2.4, hand: 1 });
+    this.shot({ from: () => v3(C.x - ux * 5 + uz * 4.5, 1.2, C.z - uz * 5 - ux * 4.5), look: () => v3((P.pos.x + L.pos.x) / 2, 1.0, (P.pos.z + L.pos.z) / 2), fov: 44, dur: 2.4, hand: 1, step: 12 });
+    this.comic.lines(null, 1.6, 0.8);
     yield () => !this.walkTo || this.shots.t > 1.9;
     this.walkTo = null;
     // in, and the engine
@@ -1380,6 +1386,7 @@ export class Prologue {
     L.pl.ride = v;
     g.audio.play('roar', 1);
     this.shot({ from: () => v3(t1.pos.x + ux * 1.8 + uz * 1.2, 1.6, t1.pos.z + uz * 1.8 - ux * 1.2), look: () => v3(v.pos.x, 0.9, v.pos.z), fov: 40, dur: 2.2, hand: 1 });
+    this.comic.word('VROOOM!', v3(v.pos.x, 1.4, v.pos.z), { fill: '#ff6f3a', burst: '#ffd23f', size: 0.1, life: 1.0 });
     yield 0.4;
     yield* this.say('T06', t2.fig, 0.1);
     // their car comes after them; the guns still going
@@ -1450,6 +1457,8 @@ export class Prologue {
       const cam = g.camera.position;
       const far = Math.hypot(mx - cam.x, mz - cam.z);
       g.audio.play('pistol', Math.max(0.25, Math.min(1, 9 / Math.max(3, far))));
+      this.bangs = (this.bangs || 0) + 1;
+      if (this.bangs <= 3 && this.comic) this.comic.word(this.bangs === 2 ? 'BLAM!' : 'BANG!', v3(mx, my + 0.3, mz), { fill: '#fff4d6', burst: '#ff3b4f', size: 0.075, life: 0.55 });
       // where it goes: a metre or three wide of them, low
       const at = this.firing.at();
       const ang = Math.random() * Math.PI * 2;
@@ -1772,6 +1781,9 @@ export class Prologue {
     const car = v();
     const J = new Jump(g, car, prof, LAND);
     this.jump = J;
+    // (off the lip: the picture struck for an instant, then the air streaming past)
+    this.comic.impact(car.pos, 0.09);
+    this.comic.lines(null, 1.4, 1);
     if (this.pursuer) this.pursuer.paused = true;
     this.film(true);
     // the rear three-quarters of it leaving the lip, then wide as it hangs over the street
@@ -1806,6 +1818,9 @@ export class Prologue {
     g.camRig.addShake(1.1);
     g.audio.play('crash', 1);
     g.audio.play('skid', 1);
+    this.comic.impact(car.pos, 0.1);
+    this.comic.word('CRASH!', v3(car.pos.x, car.pos.y + 1.6, car.pos.z), { fill: '#ffd23f', burst: '#ff4f6a', size: 0.11, life: 0.9 });
+    this.comic.word('SKRRRT', v3(car.pos.x + 3, car.pos.y + 0.6, car.pos.z + 1), { fill: '#fff4d6', burst: '#3fc6c0', size: 0.06, life: 1.1, tilt: -0.2 });
     if (g.fx) {
       for (let i = 0; i < 4; i++) g.fx.sparks(car.pos.x + (Math.random() - 0.5) * 3, car.pos.y + 0.2, car.pos.z + (Math.random() - 0.5) * 2, 12, [1, 0.8, 0.35]);
       g.fx.smoke(car.pos.x, car.pos.y + 0.4, car.pos.z, 2.4);
@@ -1926,6 +1941,7 @@ export class Prologue {
     this.co = null;
     this.drawing = false;
     if (this.acting) this.acting.clear();
+    if (this.comic) this.comic.clear();
     if (this.page) {
       this.page.dispose();
       this.page = null;

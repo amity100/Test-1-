@@ -61,7 +61,10 @@ export class Shots {
     const sh = this.shot;
     if (!sh) return false;
     this.t += dt;
-    const k = Math.min(1, this.t / sh.dur);
+    // (step: so many moves a second, the camera held between them - an animated film's action drawn
+    // on twos)
+    const tq = sh.step ? Math.floor(this.t * sh.step) / sh.step : this.t;
+    const k = Math.min(1, tq / sh.dur);
     const e = (ease[sh.ease] || ease.inout)(k);
     const P = this._p;
     const L = this._l;

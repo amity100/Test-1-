@@ -49,7 +49,7 @@ export class RampDraw {
     // (the mouse let go of the game's camera: it draws now - game/game.js keeps it free while the
     // sheet is up, and does not take it for the pause)
     if (!this.game.touch) this.game.input.releaseLock();
-    this.ui.hint('Draw a ramp to jump across<small>ציירו קו על הגג — מהמכונית אל הקצה</small>');
+    this.ui.hint('Draw a ramp to jump across<small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>');
     this.t = 0;
     this.drawing = false;
     const P = (e) => [e.clientX * dpr, e.clientY * dpr];
@@ -147,7 +147,7 @@ export class RampDraw {
       // (too short to be a ramp, or not on the roof: again, with the way shown plainer)
       this.fails++;
       this.pts = [];
-      this.ui.hint('Draw a ramp to jump across<small>קו ארוך יותר, על הגג: מהמכונית אל הקצה</small>');
+      this.ui.hint('Draw a ramp to jump across<small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>');
       this.game.audio.play('meh', 0.4);
       return;
     }
@@ -272,8 +272,73 @@ export class RampDraw {
       g.lineTo(ex + Math.cos(ang + 2.5) * 15 * d, ey + Math.sin(ang + 2.5) * 15 * d);
       g.lineTo(ex + Math.cos(ang - 2.5) * 15 * d, ey + Math.sin(ang - 2.5) * 15 * d);
       g.fill();
+      // (v5, ROADMAP 18) until a line is begun: what to do, shown - where to put the pen down (a
+      // dot breathing there), where to take it (a ring at the edge), and a pen drawing it once,
+      // slowly, over and over, its line fading after it
+      if (!this.drawing && this.pts.length < 2) this.teach(g, d);
     }
     if (this.pts.length > 1) this.ink(this.pts);
+  }
+
+  teach(g, d) {
+    const G = this.guide;
+    const n = G.length;
+    const [sx, sy] = G[0];
+    const [ex, ey] = G[n - 1];
+    const pulse = 0.5 + 0.5 * Math.sin(this.t * 5);
+    // the start: here
+    g.save();
+    g.globalAlpha = 0.9;
+    g.fillStyle = '#ffd23f';
+    g.beginPath();
+    g.arc(sx, sy, (9 + 3 * pulse) * d, 0, Math.PI * 2);
+    g.fill();
+    g.globalAlpha = 0.55 * (1 - pulse);
+    g.strokeStyle = '#ffd23f';
+    g.lineWidth = 3 * d;
+    g.beginPath();
+    g.arc(sx, sy, (16 + 20 * pulse) * d, 0, Math.PI * 2);
+    g.stroke();
+    // the end: there
+    g.globalAlpha = 0.8;
+    g.strokeStyle = '#ff6fa8';
+    g.lineWidth = 3.5 * d;
+    g.beginPath();
+    g.arc(ex, ey, (15 + 2 * pulse) * d, 0, Math.PI * 2);
+    g.stroke();
+    // the pen, drawing it: 1.6 s along, a moment to see it, again
+    const T = 2.4;
+    const u = Math.min(1, (this.t % T) / 1.6);
+    const e = u * u * (3 - 2 * u);
+    const k = Math.max(1, Math.floor(e * (n - 1)));
+    const tail = G.slice(0, k + 1);
+    const fade = this.t % T > 1.9 ? 1 - (this.t % T - 1.9) / 0.5 : 1;
+    if (tail.length > 1) this.ink(tail, 0.55 * fade);
+    const [px, py] = tail[tail.length - 1];
+    // (a pencil, leaning as a hand holds one: its tip on the line)
+    g.translate(px, py);
+    g.rotate(-0.75);
+    g.globalAlpha = 0.95 * fade;
+    g.fillStyle = '#ffcf4a';
+    g.fillRect(4 * d, -5 * d, 46 * d, 10 * d);
+    g.fillStyle = '#f2a6b8';
+    g.fillRect(50 * d, -5 * d, 9 * d, 10 * d);
+    g.fillStyle = '#f3dcb4';
+    g.beginPath();
+    g.moveTo(4 * d, -5 * d);
+    g.lineTo(-8 * d, 0);
+    g.lineTo(4 * d, 5 * d);
+    g.fill();
+    g.fillStyle = '#1c1830';
+    g.beginPath();
+    g.moveTo(-3 * d, -2 * d);
+    g.lineTo(-8 * d, 0);
+    g.lineTo(-3 * d, 2 * d);
+    g.fill();
+    g.strokeStyle = '#1c1830';
+    g.lineWidth = 1.6 * d;
+    g.strokeRect(4 * d, -5 * d, 55 * d, 10 * d);
+    g.restore();
   }
 }
 
