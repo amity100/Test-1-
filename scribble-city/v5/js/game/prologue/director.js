@@ -7,6 +7,7 @@ import { WHEEL, STAND, GARAGE_A, GARAGE_B } from './set.js';
 import { Pursuer } from './chase.js';
 import { RampDraw, Ramp, Jump, rampH } from './ramp.js';
 import { HeldPage } from './page.js';
+import { Acting, ACTS } from './acting.js';
 import { civilianLook, kidLook } from '../looks.js';
 import { clamp } from '../../core/util.js';
 
@@ -16,11 +17,14 @@ import { clamp } from '../../core/util.js';
 //    the pier, over the beach and the promenade, and down to Danny Cruz. Forty seconds of the city
 //    are his before anything is asked; then: meet Lily at the ice cream stand.
 // 2. Lily, with her ice cream and her sketchbook. They walk; she sees her uncle's face on a board.
-// 3. The wheel against the sunset, full of kids; Danny really looks at it; Lily's drawing of it.
-// 4. A strange mark on a stranger's bag, a glimpse; then the wheel is rubbed out - its outline, white,
-//    for a blink, and then the sky. Nobody remembers it. Only the two of them. Her question, and his
+// 3. The wheel against the sunset, full of kids: so high, so many colours, can she go on it too; her
+//    drawing of it, held up to him; a boy up there shouting down to his mother. A strange mark on a
+//    stranger's bag, a glimpse; something under the evening's sounds; then the wheel is rubbed out,
+//    stroke by stroke, as an eraser rubs out a drawing - two and a half seconds - and the sky.
+// 4. Nobody remembers it. Only the two of them. Her drawing still has it. Her question, and his
 //    silence.
-// 5. The phone; the men waiting by the car park; a punch; into the car.
+// 5. The phone; the two men waiting by the car park, the same two to the end; their guns; into the car,
+//    the shots going all round them.
 // 6. The chase through the car park: the way out blocked, up and up to the roof - a dead end.
 // 7. The first drawing: a ramp, drawn by the player, growing out of the line into steel.
 // 8. The jump: in the air, time all but stopped, the title over the city. The landing, hard.
@@ -122,6 +126,8 @@ export class Prologue {
     this.ui = new PrologueUI(lang);
     this.voices = new PrologueVoices(g, this.ui);
     this.shots = new Shots(g);
+    // (how each line is acted: the hands, the face, the head, the listener - game/prologue/acting.js)
+    this.acting = new Acting(g);
     this.voices.load();
     // its pieces of the city (the wheel among them)
     if (g.prolSet) g.prolSet.build();
@@ -209,6 +215,9 @@ export class Prologue {
 
   start(n) {
     const S = [null, this.s1, this.s2, this.s3, this.s4, this.s5, this.s6, this.s7, this.s8, this.s9];
+    // (the place's own echo for its voices: the pier and the beach, the street, the car's cabin)
+    const SPACE = [null, 'open', 'open', 'open', 'open', 'street', 'car', 'car', 'car', 'car'];
+    if (this.voices.space) this.voices.space(SPACE[n]);
     this.sceneN = n;
     this.sceneAt = this.clock || 0;
     this.co = S[n].call(this, true);
@@ -316,6 +325,8 @@ export class Prologue {
     this.k += (this.kWant - this.k) * (1 - Math.exp(-this.kRate * dt));
     if (Math.abs(this.k - this.kWant) < 0.002) this.k = this.kWant;
     this.ui.update(dt);
+    // (the ear where the camera is; every voice from its speaker's head)
+    if (this.voices.update) this.voices.update(dt, this.game.camera);
     if (this.draw && (this.draw.on || this.draw.settle)) this.draw.frame(dt);
     if (this.ramp && !this.ramp.grown) this.ramp.update(dt);
     for (const p of this.pursuers || []) p.update(dt * this.k);
@@ -323,8 +334,10 @@ export class Prologue {
     this.tickCast(dt);
     this.tickHeroes();
     if (this.page) this.page.update();
-    // (Danny walking somewhere in a shot, on his own feet)
-    if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed)) this.walkTo = null;
+    this.acting.update(dt);
+    this.tickGuns(dt);
+    // (Danny walking somewhere in a shot, on his own feet - or running)
+    if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
     this.tickMarker();
     if (this.everyFrame) this.everyFrame(dt);
     // the script: on to its next step once the wait is over
@@ -378,12 +391,19 @@ export class Prologue {
   *say(id, fig = null, after = 0.28) {
     if (this.ff) return;
     const d = this.voices.say(id, fig);
-    // (the hands and the face go with the words - one of the city's people talks with them; the
-    // one listening turns to whoever speaks)
     const g = this.game;
     const L = LINES[id];
-    const c = fig ? Object.values(this.cast).find((q) => q.fig === fig) : null;
-    if (c && L && g.civilians.spoke) g.civilians.spoke(c, L.en, /!/.test(L.en) ? 'alarm' : 'talk');
+    // (the hands, the face and the head go with the words, beat by beat - and whoever it is said to
+    // takes it as it lands: everybody looking at the speaker)
+    if (fig && ACTS[id]) {
+      const all = [g.player.fig, ...Object.values(this.cast).map((q) => q.fig), ...(this.heroes || []).map((q) => q.fig)];
+      const listeners = all.filter((f) => f && f !== fig && fig.j && f.lookAt === fig.j.headC);
+      this.acting.play(fig, id, d, listeners);
+    } else {
+      // (a line with no acting of its own: one of the city's people talks with their hands as they do)
+      const c = fig ? Object.values(this.cast).find((q) => q.fig === fig) : null;
+      if (c && L && g.civilians.spoke) g.civilians.spoke(c, L.en, /!/.test(L.en) ? 'alarm' : 'talk');
+    }
     yield d + after;
   }
 
@@ -587,7 +607,7 @@ export class Prologue {
     p.fig.yaw = yaw;
   }
 
-  walkDanny(x, z, speed = 0.45) {
+  walkDanny(x, z, speed = 0.45, sprint = false) {
     const g = this.game;
     const p = g.player;
     const dx = x - p.pos.x;
@@ -597,7 +617,7 @@ export class Prologue {
       return true;
     }
     g.camRig.yaw = Math.atan2(dx, dz);
-    this.auto = { x: 0, y: speed, sprint: false };
+    this.auto = { x: 0, y: speed, sprint };
     return false;
   }
 
@@ -878,12 +898,13 @@ export class Prologue {
     this.putDanny(VIEW.x + 1.5, VIEW.z + 0.9, toW);
     this.put(L, VIEW.x, VIEW.z, toW);
     this.spawnPier();
-    this.voices.bed(true, 0.55);
+    if (this.voices.bedAt) this.voices.bedAt(WHEEL.x, 32, WHEEL.z);
+    this.voices.bed(true, 1.1);
     // against the sunset: the wheel from the beach, full of people
     this.shot({ from: [76, 2.4, 297], to: [80, 3.6, 292], look: [128, 28, 243], lookTo: [128, 29, 243], fov: 54, fovTo: 50, dur: 4.6, hand: 0.35 });
     yield 4.2;
     // Lily at the railing: up at it, her arm up at it - so high!
-    this.voices.bed(true, 0.4);
+    this.voices.bed(true, 0.9);
     const W0 = v3(WHEEL.x, 34, WHEEL.z);
     L.fig.lookAt = W0;
     P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
@@ -900,6 +921,9 @@ export class Prologue {
     // to him: can she go on it too? please? (a step to him, his hand in hers, tugging at it)
     const near = { x: P.pos.x - (P.pos.x - L.pos.x) * 0.55, z: P.pos.z - (P.pos.z - L.pos.z) * 0.55 };
     this.put(L, near.x, near.z, Math.atan2(P.pos.x - near.x, P.pos.z - near.z));
+    // (and he turns to her: from here they talk face to face)
+    P.yaw = Math.atan2(near.x - P.pos.x, near.z - P.pos.z);
+    P.fig.yaw = P.yaw;
     L.fig.lookAt = P.fig.j.headC;
     P.fig.lookAt = L.fig.j.headC;
     L.fig.reachL = P.fig.j.handR;
@@ -914,7 +938,7 @@ export class Prologue {
       const sg = dx / dl > 0 ? -1 : 1;
       const px = (-dz / dl) * sg;
       const pz = (dx / dl) * sg;
-      this.shot({ from: [mx + px * 2.3, 1.2, mz + pz * 2.3], to: [mx + px * 2.1, 1.22, mz + pz * 2.1], look: [mx, 1.25, mz], fov: 38, dur: 3.6, hand: 0.4 });
+      this.shot({ from: [mx + px * 2.9, 1.25, mz + pz * 2.9], to: [mx + px * 2.7, 1.27, mz + pz * 2.7], look: [mx, 1.15, mz], fov: 47, dur: 3.6, hand: 0.4 });
     }
     yield* this.say('L21', L.fig, 0.25);
     L.fig.reachL = null;
@@ -925,7 +949,8 @@ export class Prologue {
     // her drawing of it: the page out of her sketchbook, held up to him
     const page = this.lilyPage();
     page.hold(L.fig, () => P.fig.j.headC, 'show');
-    this.shot({ from: this.ots(P, L, { back: 0.75, side: 0.42, h: 1.6 }), look: () => v3((page.at.x + L.fig.j.headC.x) / 2, (page.at.y * 2 + L.fig.j.headC.y) / 3, (page.at.z + L.fig.j.headC.z) / 2), fov: 33, dur: 3.2, hand: 0.35 });
+    // (from his eyes: the page held up to him, her face over it)
+    this.shot({ from: () => { const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z); const f = P.fig.forward; return v3(h.x + f.x * 0.12, h.y - 0.02, h.z + f.z * 0.12); }, look: () => v3((page.at.x * 2 + L.fig.j.headC.x) / 3, (page.at.y * 2 + L.fig.j.headC.y) / 3, (page.at.z * 2 + L.fig.j.headC.z) / 3), fov: 42, dur: 3.2, hand: 0.35 });
     this.feel(L.fig, 'joy', 3);
     yield 0.35;
     yield* this.say('L06', L.fig, 0.3);
@@ -937,7 +962,7 @@ export class Prologue {
     yield* this.say('D04', P.fig, 0.2);
     // not bad?!
     page.hold(L.fig, () => P.fig.j.headC, 'low');
-    this.shot({ from: this.faceCam(L, 1.0, -0.22), look: this.faceOf(L), fov: 32, dur: 1.8, hand: 0.35 });
+    this.shot({ from: this.faceCam(L, 1.05, -0.42), look: this.faceOf(L), fov: 32, dur: 1.8, hand: 0.35 });
     this.feel(L.fig, 'surprised', 1.4);
     yield* this.say('L07', L.fig, 0.2);
     // the two of them, laughing
@@ -956,15 +981,15 @@ export class Prologue {
     const gi = this.lowGondola();
     this.heroRiders(gi);
     const kid = this.heroes[0];
-    this.voices.bed(true, 0.75);
-    this.shot({ from: () => this.gondolaCam(gi, -3.1, -2.35, -0.75), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: this.faceOf(kid), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 30, fovTo: 46, dur: 6.2, ease: 'inout', hand: 0.45 });
+    this.voices.bed(true, 1.2);
+    this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.6), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, -0.55), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 28, fovTo: 46, dur: 6.2, ease: 'inout', hand: 0.45 });
     yield 0.5;
     yield* this.say('K01', kid.fig, 0.9);
     yield* this.say('K02', null, 0.4);
     yield () => this.shots.t > 5.6;
     // a few seconds more of it: the two of them at the railing, the wheel turning against the sky
-    this.voices.bed(true, 0.5);
-    const wide = () => this.shot({ from: [VIEW.x - ux * 3.8 + uz * 0.35, 1.5, VIEW.z - uz * 3.8 - ux * 0.35], to: [VIEW.x - ux * 3.2 + uz * 0.3, 1.55, VIEW.z - uz * 3.2 - ux * 0.3], look: [WHEEL.x, 23.5, WHEEL.z], fov: 47, dur: 9, ease: 'lin', hand: 0.3 });
+    this.voices.bed(true, 1.0);
+    const wide = () => this.shot({ from: [VIEW.x - ux * 3.8 - uz * 0.6, 1.5, VIEW.z - uz * 3.8 + ux * 0.6], to: [VIEW.x - ux * 3.2 - uz * 0.55, 1.55, VIEW.z - uz * 3.2 + ux * 0.55], look: [WHEEL.x, 23.5, WHEEL.z], fov: 47, dur: 9, ease: 'lin', hand: 0.3 });
     wide();
     yield 2.0;
     // (a glance aside: a man going by, a mark on his bag - from Danny's own eyes, and gone)
@@ -984,7 +1009,7 @@ export class Prologue {
     // (the kids' voices going as they go)
     yield () => {
       const e = S.erasing;
-      if (e && e.total) this.voices.bed(true, 0.5 * Math.max(0, 1 - (e.k || 0) * 1.15));
+      if (e && e.total) this.voices.bed(true, 1.0 * Math.max(0, 1 - (e.k || 0) * 1.15));
       return !S.erasing;
     };
     this.voices.bed(false);
@@ -996,10 +1021,11 @@ export class Prologue {
     this.feel(P.fig, 'surprised', 8);
     this.shot({ from: this.faceCam(P, 1.25, 0.3), to: this.faceCam(P, 1.1, 0.27), look: this.faceOf(P), fov: 30, dur: 2.3, hand: 0.25 });
     yield 2.0;
-    this.shot({ from: this.faceCam(L, 1.0, -0.25), look: this.faceOf(L), fov: 32, dur: 2.6, hand: 0.4 });
     this.feel(L.fig, 'scared', 8);
     L.fig.lookAt = P.fig.j.headC;
     this.faceTo(L, P.pos.x, P.pos.z);
+    // (the two of them from the side, close: her face up to his)
+    this.shot({ from: () => v3(VIEW.x + 0.6, 1.25, VIEW.z - 2.3), look: () => v3((L.pos.x * 2 + P.pos.x) / 3, 1.15, (L.pos.z * 2 + P.pos.z) / 3), fov: 36, dur: 2.6, hand: 0.4 });
     yield 0.4;
     yield* this.say('L08', L.fig, 0.7);
     // where it was: the evening - and the kids' voices, far off, coming back to him
@@ -1045,7 +1071,7 @@ export class Prologue {
     // (rubbed out with their gondola: each of them as the eraser comes over them)
     if (S.erasing) {
       for (const c of this.heroes) {
-        if (!c.gone && S.rubbedAt(c.pos) > 0.42) {
+        if (!c.gone && S.rubbedAt(c.pos) > 0.6) {
           c.gone = true;
           c.fig.setVisible(false);
         }
@@ -1186,7 +1212,7 @@ export class Prologue {
     this.faceTo(L, WHEEL.x, WHEEL.z);
     L.fig.lookAt = page.at;
     page.hold(L.fig, null, 'read');
-    this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.12, back: 0.55, side: 0.28 }), look: () => v3(page.at.x + (WHEEL.x - L.pos.x) * 0.02, page.at.y + 0.02, page.at.z + (WHEEL.z - L.pos.z) * 0.02), fov: 40, dur: 3.2, hand: 0.35 });
+    this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 0.95, back: 0.6, side: 0.3 }), look: () => v3(page.at.x + (WHEEL.x - L.pos.x) * 0.05, page.at.y + 0.5, page.at.z + (WHEEL.z - L.pos.z) * 0.05), fov: 44, dur: 3.2, hand: 0.35 });
     yield 2.0;
     // past it: nothing
     this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.12, back: 0.55, side: 0.28 }), look: () => v3(page.at.x, page.at.y, page.at.z), lookTo: [WHEEL.x, 20, WHEEL.z], fov: 40, fovTo: 44, dur: 2.2, hand: 0.35 });
@@ -1274,65 +1300,172 @@ export class Prologue {
     this.ui.call('off');
     g.audio.play('click', 0.5);
     P.fig.carry = null;
-    // the dark car by the car park, the two men by it
-    yield () => this.dist(THUGS[0].x, THUGS[0].z) < 17;
+    // the dark car by the car park, the two men by it - the same two from here to the end: the one
+    // who talks (t1), the one beside him (t2)
+    yield () => this.dist(THUGS[0].x, THUGS[0].z) < 22;
     const t1 = this.cast.t1;
     const t2 = this.cast.t2;
     this.objective(null);
     if (g.gps) g.gps.clear();
     this.film(true);
     this.cue('discovery');
-    // (where he stopped: a few steps before them)
-    const a = Math.atan2(t1.pos.x - P.pos.x, t1.pos.z - P.pos.z);
-    this.putDanny(t1.pos.x - Math.sin(a) * 6.5, t1.pos.z - Math.cos(a) * 6.5, a);
-    this.put(L, P.pos.x - Math.sin(a) * 1.2 + Math.cos(a) * 0.9, P.pos.z - Math.cos(a) * 1.2 - Math.sin(a) * 0.9, a);
+    // (where it happens: Danny a few steps from his car, the two of them a good way off by theirs -
+    // between them the open floor; Lily at his back, the car behind her)
+    const C = this.dannyCar.pos;
+    const T = v3(THUGS[0].x, 0, THUGS[0].z);
+    const tx = T.x - C.x;
+    const tz = T.z - C.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const ux = tx / tl;
+    const uz = tz / tl;
+    const a = Math.atan2(ux, uz);
+    const D = { x: C.x + ux * 4.2 - uz * 1.2, z: C.z + uz * 4.2 + ux * 1.2 };
+    this.putDanny(D.x, D.z, a);
+    this.put(L, D.x - ux * 1.1 + uz * 0.7, D.z - uz * 1.1 - ux * 0.7, a);
     L.pl.follow = false;
-    t1.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    t2.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.faceTo(t1, P.pos.x, P.pos.z);
-    this.faceTo(t2, P.pos.x, P.pos.z);
-    this.shot({ from: () => v3(P.pos.x - Math.sin(a) * 3 + Math.cos(a) * 1.4, 1.8, P.pos.z - Math.cos(a) * 3 - Math.sin(a) * 1.4), look: () => v3(t1.pos.x, 1.3, t1.pos.z), fov: 44, dur: 4, hand: 0.5 });
-    this.go(t1, t1.pos.x - Math.sin(a) * 2.5, t1.pos.z - Math.cos(a) * 2.5, 1.2);
+    // the two of them: some ten metres off, at their car, turning to him
+    const S1 = { x: D.x + ux * 10.5, z: D.z + uz * 10.5 };
+    const S2 = { x: D.x + ux * 11.5 - uz * 1.8, z: D.z + uz * 11.5 + ux * 1.8 };
+    this.put(t1, S1.x, S1.z, a + Math.PI);
+    this.put(t2, S2.x, S2.z, a + Math.PI);
+    for (const c of [t1, t2]) {
+      c.downT = 0;
+      c.upT = 0;
+      c.fig.lookAt = P.fig.j.headC;
+    }
+    // over their shoulders: him and Lily, small, by his car - they have been waiting for him
+    this.shot({ from: () => v3(t1.pos.x + ux * 2.2 - uz * 1.1, 1.75, t1.pos.z + uz * 2.2 + ux * 1.1), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 40, dur: 3.6, hand: 0.5 });
+    this.go(t1, S1.x - ux * 2.0, S1.z - uz * 2.0, 1.0);
+    yield 0.5;
     yield* this.say('T01', t1.fig, 0.3);
     // he stops; puts her behind him
-    this.put(L, P.pos.x - Math.sin(a) * 1.0 - Math.cos(a) * 0.3, P.pos.z - Math.cos(a) * 1.0 + Math.sin(a) * 0.3, a);
-    this.feel(L.fig, 'scared', 20);
-    this.feel(P.fig, 'angry', 12);
-    this.shot({ from: () => v3(t1.pos.x + Math.cos(a) * 1.0, 1.7, t1.pos.z - Math.sin(a) * 1.0), look: () => v3(P.pos.x, 1.6, P.pos.z), fov: 36, dur: 2.6, hand: 0.5 });
+    this.put(L, P.pos.x - ux * 1.0 + uz * 0.25, P.pos.z - uz * 1.0 - ux * 0.25, a);
+    L.fig.lookAt = t1.fig.j.headC;
+    this.feel(L.fig, 'scared', 30);
+    this.feel(P.fig, 'angry', 14);
+    P.fig.lookAt = t1.fig.j.headC;
+    // (from behind the two of them: Danny, Lily at his back - and the two men across the floor)
+    this.shot({ from: () => v3(P.pos.x - ux * 2.6 + uz * 0.9, 1.7, P.pos.z - uz * 2.6 - ux * 0.9), look: () => v3(t1.pos.x, 1.35, t1.pos.z), fov: 38, dur: 2.6, hand: 0.5 });
     yield* this.say('D18', P.fig, 0.3);
-    this.shot({ from: () => v3(P.pos.x + Math.cos(a) * 0.9, 1.7, P.pos.z - Math.sin(a) * 0.9), look: () => v3(t1.pos.x, 1.6, t1.pos.z), fov: 38, dur: 3.2, hand: 0.5 });
+    this.shot({ from: () => v3(P.pos.x - ux * 0.9 + uz * 0.55, 1.68, P.pos.z - uz * 0.9 - ux * 0.55), look: this.faceOf(t1), fov: 26, dur: 3.2, hand: 0.5 });
     yield* this.say('T02', t1.fig, 0.25);
-    this.shot({ from: () => v3(t1.pos.x + Math.cos(a) * 1.0, 1.7, t1.pos.z - Math.sin(a) * 1.0), look: () => v3(P.pos.x, 1.6, P.pos.z), fov: 34, dur: 3, hand: 0.5 });
+    this.shot({ from: () => v3(t1.pos.x + ux * 1.0 - uz * 0.5, 1.72, t1.pos.z + uz * 1.0 + ux * 0.5), look: this.faceOf(P), fov: 26, dur: 3, hand: 0.5 });
     yield* this.say('D19', P.fig, 0.25);
-    this.shot({ from: () => v3(P.pos.x + Math.cos(a) * 0.9, 1.7, P.pos.z - Math.sin(a) * 0.9), look: () => v3(t1.pos.x, 1.6, t1.pos.z), fov: 34, dur: 3.2, hand: 0.6 });
-    // they come on: one in his way
-    this.go(t1, P.pos.x + Math.sin(a) * 1.25, P.pos.z + Math.cos(a) * 1.25, 1.1);
-    this.go(t2, P.pos.x + Math.sin(a) * 1.4 + Math.cos(a) * 1.3, P.pos.z + Math.cos(a) * 1.4 - Math.sin(a) * 1.3, 1.2);
-    yield* this.say('T03', t1.fig, 0.1);
-    // there is no talking it out: a punch, a shove, her hand, the car
-    this.shot({ from: () => v3(P.pos.x - Math.cos(a) * 3.2 + Math.sin(a) * 0.6, 1.5, P.pos.z + Math.sin(a) * 3.2 + Math.cos(a) * 0.6), look: () => v3((P.pos.x + t1.pos.x) / 2, 1.4, (P.pos.z + t1.pos.z) / 2), fov: 40, dur: 2.2, hand: 0.9 });
-    yield* this.punch(t1, a);
-    yield* this.shove(t2, a);
-    this.cue('chase');
-    // into the car park, to the car - and in
+    // the other one moves out to the side - slowly, his hand inside his jacket
+    this.go(t2, S2.x - ux * 1.5 - uz * 2.2, S2.z - uz * 1.5 + ux * 2.2, 0.8);
+    this.shot({ from: () => v3(P.pos.x - ux * 1.6 + uz * 1.2, 1.5, P.pos.z - uz * 1.6 - ux * 1.2), look: () => v3((t1.pos.x + t2.pos.x) / 2, 1.4, (t1.pos.z + t2.pos.z) / 2), fov: 30, dur: 3.4, hand: 0.6 });
+    yield* this.say('T03', t1.fig, 0.25);
+    // wrong answer: the guns
+    this.shot({ from: () => v3(t1.pos.x - ux * 1.5 - uz * 1.4, 1.05, t1.pos.z - uz * 1.5 + ux * 1.4), look: this.faceOf(t1), fov: 34, dur: 2.0, hand: 0.6 });
+    this.armThug(t1, P);
+    g.audio.play('click', 0.6);
+    yield 0.2;
+    yield* this.say('T05', t1.fig, 0.05);
+    this.armThug(t2, P);
+    // him: the car, now
+    this.shot({ from: this.faceCam(P, 1.4, 0.35), look: this.faceOf(P), fov: 34, dur: 1.6, hand: 0.8 });
+    this.feel(P.fig, 'scared', 3);
+    yield* this.say('D28', P.fig, 0.0);
+    // they fire - from over there, the shots going all round the two of them as they run for it
+    this.firing = { at: () => P.pos, t: 0.15 };
+    this.feel(L.fig, 'scared', 10);
     const v = this.dannyCar;
-    this.putDanny(v.pos.x - 1.6, v.pos.z + 0.2, 0);
-    this.put(L, v.pos.x + 1.6, v.pos.z + 0.2, 0);
-    this.shot({ from: () => v3(v.pos.x - 4.2, 1.4, v.pos.z - 5.5), look: () => v3(v.pos.x, 0.9, v.pos.z), fov: 46, dur: 2, hand: 0.8 });
-    yield 0.8;
+    this.walkTo = { x: v.pos.x - Math.cos(v.yaw) * 1.6, z: v.pos.z + Math.sin(v.yaw) * 1.6, speed: 1, sprint: true };
+    this.go(L, v.pos.x + Math.cos(v.yaw) * 1.6, v.pos.z - Math.sin(v.yaw) * 1.6, 4.2);
+    this.shot({ from: () => v3(C.x - ux * 5 + uz * 4.5, 1.2, C.z - uz * 5 - ux * 4.5), look: () => v3((P.pos.x + L.pos.x) / 2, 1.0, (P.pos.z + L.pos.z) / 2), fov: 44, dur: 2.4, hand: 1 });
+    yield () => !this.walkTo || this.shots.t > 1.9;
+    this.walkTo = null;
+    // in, and the engine
     g.enterVehicle(v);
     L.pl.ride = v;
-    g.audio.play('roar', 0.9);
-    this.shot({ from: () => v3(GARAGE_IN.x - 6, 1.3, GARAGE_IN.z + 1.5), look: () => v3(t2.pos.x, 1.3, t2.pos.z), fov: 44, dur: 2.6, hand: 0.9 });
-    t2.downT = 0;
-    this.go(t2, THUG_CAR.x - 1.5, THUG_CAR.z, 3.5);
-    yield* this.say('T04', t2.fig, 0.2);
-    // their car comes after them
+    g.audio.play('roar', 1);
+    this.shot({ from: () => v3(t1.pos.x + ux * 1.8 + uz * 1.2, 1.6, t1.pos.z + uz * 1.8 - ux * 1.2), look: () => v3(v.pos.x, 0.9, v.pos.z), fov: 40, dur: 2.2, hand: 1 });
+    yield 0.4;
+    yield* this.say('T06', t2.fig, 0.1);
+    // their car comes after them; the guns still going
+    this.firing = null;
+    this.disarmThug(t1);
+    this.disarmThug(t2);
+    this.cue('chase');
     this.startPursuit();
     this.check = { x: DANNY_CAR.x, y: GARAGE_A.Y[0], z: 320, yaw: -Math.PI / 2, back: { x: 12, z: 320 } };
     this.film(false);
     this.objective('<b>Lose them</b> - get out of the car park', GARAGE_A.x0 + 1, 320, 'Exit');
     this.start(6);
+  }
+
+  // a man drawing his gun: his arm up and out at whoever (by), the gun in his hand drawn each frame
+  armThug(c, by) {
+    const G = this.gunmen || (this.gunmen = []);
+    if (!G.find((q) => q.c === c)) G.push({ c, by, t: 0, next: 0.3 + Math.random() * 0.4 });
+  }
+
+  disarmThug(c) {
+    if (!this.gunmen) return;
+    this.gunmen = this.gunmen.filter((q) => q.c !== c);
+    if (c.fig) {
+      c.fig.aim = 0;
+      c.fig.aimYaw = 0;
+      c.fig.aimPitch = 0;
+    }
+  }
+
+  // every frame: the guns in their hands, aimed; and while they fire, the shots - a flash at the
+  // muzzle, the crack carried over the floor, the bullet's hit near the two of them (never on them):
+  // sparks off the concrete, a car's window
+  tickGuns(dt) {
+    const G = this.gunmen;
+    if (!G || !G.length) return;
+    const g = this.game;
+    const fr = g.figures;
+    for (const q of G) {
+      const f = q.c.fig;
+      if (!f || !f.j || !q.c.alive) continue;
+      const B = q.by.pos || q.by;
+      const yaw = Math.atan2(B.x - q.c.pos.x, B.z - q.c.pos.z);
+      f.aim = 1;
+      let dy = yaw - f.yaw;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      f.aimYaw = dy;
+      f.aimPitch = Math.atan2((B.y || 0) + 1.0 - f.j.handR.y, Math.hypot(B.x - q.c.pos.x, B.z - q.c.pos.z));
+      const h = f.j.handR;
+      const d = f.aimDir;
+      if (fr && h.lengthSq() > 0) {
+        // (a pistol: its slide along the aim, its grip down in the hand)
+        fr.lineXYZ(h.x - d.x * 0.03, h.y - d.y * 0.03 + 0.025, h.z - d.z * 0.03, h.x + d.x * 0.2, h.y + d.y * 0.2 + 0.025, h.z + d.z * 0.2, [0.06, 0.06, 0.08], 6, 900 + q.c.id, 1, 0.004, 0);
+        fr.lineXYZ(h.x, h.y + 0.02, h.z, h.x - d.x * 0.02, h.y - 0.1, h.z - d.z * 0.02, [0.06, 0.06, 0.08], 5, 901 + q.c.id, 1, 0.004, 0);
+      }
+      if (!this.firing) continue;
+      q.next -= dt;
+      if (q.next > 0) continue;
+      q.next = 0.38 + Math.random() * 0.55;
+      const mx = h.x + d.x * 0.24;
+      const my = h.y + d.y * 0.24 + 0.025;
+      const mz = h.z + d.z * 0.24;
+      if (g.fx) {
+        g.fx.muzzle(mx, my, mz, 0.8);
+        g.fx.flash(mx, my, mz, 1.6);
+      }
+      const cam = g.camera.position;
+      const far = Math.hypot(mx - cam.x, mz - cam.z);
+      g.audio.play('pistol', Math.max(0.25, Math.min(1, 9 / Math.max(3, far))));
+      // where it goes: a metre or three wide of them, low
+      const at = this.firing.at();
+      const ang = Math.random() * Math.PI * 2;
+      const r = 1.1 + Math.random() * 2;
+      const hx = at.x + Math.cos(ang) * r;
+      const hz = at.z + Math.sin(ang) * r;
+      const v = this.dannyCar;
+      const nearCar = v && Math.hypot(hx - v.pos.x, hz - v.pos.z) < 2.6 && Math.random() < 0.45;
+      const hy = nearCar ? 1.1 + Math.random() * 0.3 : 0.05 + Math.random() * 0.2;
+      if (g.fx) {
+        g.fx.sparks(hx, hy, hz, 7, [1, 0.85, 0.45]);
+        g.fx.impact(hx, hy, hz, 0.7);
+        if (!nearCar) g.fx.crumbs(hx, hy, hz, 6, 2.2, true);
+      }
+      g.audio.play(nearCar ? 'glass' : 'ricochet', nearCar ? 0.35 : 0.6);
+    }
   }
 
   spawnThugs() {
@@ -1352,58 +1485,6 @@ export class Prologue {
       this.person('t1', THUGS[0].x, THUGS[0].z, lk(), { face: -1.2 });
       this.person('t2', THUGS[1].x, THUGS[1].z, lk(), { face: -1.6 });
     }
-  }
-
-  *punch(c, a) {
-    const g = this.game;
-    const P = g.player;
-    const fig = P.fig;
-    P.yaw = Math.atan2(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
-    fig.yaw = P.yaw;
-    g.audio.play('swing', 0.7);
-    for (let t = 0; t < 0.36; t += this.dtR || 0.016) {
-      fig.punch = Math.min(1, t / 0.36);
-      fig.punchSide = 1;
-      if (t > 0.16 && !c.hitDone) {
-        c.hitDone = true;
-        g.audio.play('punch', 1);
-        g.camRig.addShake(0.35);
-        const h = this.headJ(c) || c.pos;
-        const F = g.weapons && g.weapons.fists;
-        if (F) F.burst(h.x, h.y, h.z, 1.2);
-        c.downT = 2.6;
-        c.upT = 0;
-        c.yaw = a + Math.PI;
-        c.vel.set(Math.sin(a) * 3, 0, Math.cos(a) * 3);
-        c.dodgeV.set(Math.sin(a) * 2.4, 0, Math.cos(a) * 2.4);
-        c.pl.speed = 0;
-        c.pl.x = c.pos.x + Math.sin(a) * 1.6;
-        c.pl.z = c.pos.z + Math.cos(a) * 1.6;
-        this.feel(c.fig, 'hurt', 3);
-      }
-      yield 0;
-    }
-    fig.punch = -1;
-  }
-
-  *shove(c, a) {
-    const g = this.game;
-    const P = g.player;
-    P.yaw = Math.atan2(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
-    P.fig.yaw = P.yaw;
-    P.fig.reachR = v3(c.pos.x, 1.3, c.pos.z);
-    P.fig.reachL = v3(c.pos.x, 1.3, c.pos.z);
-    yield 0.18;
-    g.audio.play('block', 0.8);
-    const b = Math.atan2(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
-    c.dodgeV.set(Math.sin(b) * 3.2, 0, Math.cos(b) * 3.2);
-    c.downT = 1.4;
-    c.upT = 0;
-    this.feel(c.fig, 'hurt', 2);
-    yield 0.3;
-    P.fig.reachR = null;
-    P.fig.reachL = null;
-    void a;
   }
 
   phoneRing(on) {
@@ -1844,6 +1925,7 @@ export class Prologue {
     this.done = true;
     this.co = null;
     this.drawing = false;
+    if (this.acting) this.acting.clear();
     if (this.page) {
       this.page.dispose();
       this.page = null;

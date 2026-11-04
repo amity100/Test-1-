@@ -82,7 +82,8 @@ const _w2 = new THREE.Vector3();
 const _w3 = new THREE.Vector3();
 // the eraser: its mask's pixels and how many metres it covers either side of the hub; its grid for
 // the riders; how wide it is (metres), how long it takes, how many rows, how quick its rubbing
-const ERASE = { px: 256, half: 35, grid: 64, w: 15, T: 2.5, rows: 5, hz: 4.2 };
+// and how much one going-over of it takes off (the colours go at ~0.3, the lines at ~0.75+)
+const ERASE = { px: 256, half: 35, grid: 64, w: 15, T: 2.5, rows: 5, hz: 4.2, pass: 0.5 };
 // (crumbs: the eraser's grey and pink, the paper's white, a bit of the wheel's own colours)
 const CRUMB = [[0.62, 0.6, 0.62], [0.85, 0.62, 0.66], [0.96, 0.95, 0.92], [0.5, 0.48, 0.52], [0.98, 0.45, 0.62], [0.35, 0.72, 0.8]];
 
@@ -809,7 +810,7 @@ export class PrologueSet {
     const M = itemMats();
     const texA = this.boardTexture('a');
     const texB = this.boardTexture('b');
-    const mat = (tex) => makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.82, line: 0.45, gloss: 0.1 });
+    const mat = (tex) => makeSurface({ kind: 'box', map: tex, emMap: tex, emissive: new THREE.Color(0.3, 0.3, 0.29), ang: 1.45, wash: 0.95, line: 0.25, gloss: 0.1 });
     const mA = mat(texA);
     const mB = mat(texB);
     const STEEL = linC(0.95, 0.94, 0.92);
@@ -1345,8 +1346,11 @@ export class PrologueSet {
     const y = top + ((bot - top) * row) / (rows - 1);
     const span = 33;
     const dir = row % 2 === 0 ? 1 : -1;
-    // (eased at each row's end, as a hand turns)
-    const ff = f * f * (3 - 2 * f);
+    // (across the row and back again: once over it the colours go - the paper comes through, the
+    // lines all that is left - and on the way back the lines go too. Eased at each turn, as a hand
+    // turns)
+    const gf = f < 0.5 ? f * 2 : 2 - f * 2;
+    const ff = gf * gf * (3 - 2 * gf);
     const z = dir * (-span + 2 * span * ff);
     // rubbing: back and forth along a slant, quick, as a hand rubs
     const rub = Math.sin(t * Math.PI * 2 * ERASE.hz);
@@ -1383,20 +1387,29 @@ export class PrologueSet {
       if (this.root && g.fx) {
         const w = this.toWorld(_w2.set(0, p.y, p.z), _w3);
         // (a few crumbs of eraser and of the drawing it takes: grey, pink, a little of its colours)
-        g.fx.spray(w.x, w.y, w.z, (Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4, 3, 5, CRUMB, { bits: true, len: 1.1, life: 1.9, cone: 0.9 });
+        g.fx.spray(w.x, w.y, w.z, (Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4, 6, 6, CRUMB, { bits: true, len: 1.7, life: 2.2, cone: 1.0 });
       }
-    } else if (e.t > ERASE.T + 0.35) {
-      // what is left of it (a line or two the eraser missed): gone with the last of it
+    } else if (e.t > ERASE.T + 0.4) {
       this.removeWheel();
       this.erasing = null;
       return;
+    } else {
+      // what is left of it (a line or two the eraser missed): rubbed away with the last of it
+      const S = ERASE.px;
+      E.ctx.save();
+      E.ctx.globalCompositeOperation = 'lighter';
+      E.ctx.fillStyle = `rgba(255,255,255,${Math.min(0.5, dt * 2.6).toFixed(3)})`;
+      E.ctx.fillRect(0, 0, S, S);
+      E.ctx.restore();
+      E.tex.needsUpdate = true;
+      for (let i = 0; i < E.grid.length; i++) E.grid[i] += dt * 2.6;
     }
     // whoever rides: gone as the eraser comes over them
     let gone = 0;
     for (const r of this.riders) {
       if (!r.gone) {
         const o = this.gPos[r.gi];
-        if (this.rubbed(o.z + r.lz, o.y - FLOOR + 1) > 0.42) r.gone = true;
+        if (this.rubbed(o.z + r.lz, o.y - FLOOR + 1) > 0.6) r.gone = true;
       }
       if (r.gone) gone++;
     }
@@ -1422,9 +1435,12 @@ export class PrologueSet {
     const l = Math.hypot(dx, dy) || 1;
     const nx = -dy / l;
     const ny = dx / l;
+    // (how much one going-over takes off, whatever the frame rate: a point under the eraser is under
+    // about w / l of these steps as it goes by - so each gives l / w of ERASE.pass)
+    const per = Math.min(0.3, (ERASE.pass * Math.hypot(dx, dy)) / ERASE.w);
     for (let k = -2; k <= 2; k++) {
       const o = (k / 2) * ERASE.w * 0.32;
-      ctx.strokeStyle = `rgba(255,255,255,${(k === 0 ? 0.11 : 0.07).toFixed(3)})`;
+      ctx.strokeStyle = `rgba(255,255,255,${(per * (k === 0 ? 0.62 : 0.4)).toFixed(4)})`;
       ctx.lineWidth = w * (k === 0 ? 1 : 0.55);
       ctx.beginPath();
       ctx.moveTo(cx(a.z + nx * o), cy(a.y + ny * o));
@@ -1447,7 +1463,7 @@ export class PrologueSet {
         // distance to the segment
         const t = Math.max(0, Math.min(1, ((z - a.z) * dx + (y - a.y) * dy) / (l * l)));
         const d = Math.hypot(z - (a.z + dx * t), y - (a.y + dy * t));
-        if (d < hw) E.grid[j * G + i] += 0.11 * (1 - (d / hw) * 0.5);
+        if (d < hw) E.grid[j * G + i] += per * (1 - (d / hw) * 0.5);
       }
     }
   }

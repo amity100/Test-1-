@@ -644,6 +644,18 @@ export class Audio {
         this.hiss(0.11, 0.2 * v, 260, 0.8, 'lowpass');
         this.hiss(0.05, 0.08 * v, 5200, 1.4, 'highpass', 0.04);
         break;
+      // (ROADMAP 18) a handgun across a car park: the crack, its thump, the echo off the concrete
+      case 'pistol':
+        this.hiss(0.06, 0.55 * v, 2600, 0.8, 'bandpass', 0, 900);
+        this.tone('sine', 150, 60, 0.12, 0.35 * v);
+        this.hiss(0.5, 0.13 * v, 900, 0.6, 'lowpass', 0.07, 180);
+        break;
+      // (a bullet off the concrete, close)
+      case 'ricochet':
+        this.tone('sine', 2600 + Math.random() * 900, 900, 0.2, 0.06 * v);
+        this.hiss(0.05, 0.22 * v, 4200, 2, 'highpass');
+        this.hiss(0.08, 0.12 * v, 1200, 1, 'bandpass', 0.01);
+        break;
       // (ROADMAP 18) the moment before it: a low drone swelling, two notes rubbing against each other,
       // a thin high whine over it - and cut
       case 'dread':

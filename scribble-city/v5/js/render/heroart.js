@@ -209,6 +209,23 @@ export class FolkAtlas {
   }
 }
 
+// (v5, ROADMAP 18) the hero's face as he speaks and feels (render/heroink.js paintFace o.expr): drawn
+// once each, after his other drawings; render/people.js drawHero picks one each frame (heroFace) - the
+// mouth open and shut with the words, a smile, a laugh, anger, a shout, surprise, worry
+export const EXPRS = {
+  talk1: { jaw: 0.35 },
+  talk2: { jaw: 0.75 },
+  smile: { smile: 0.85 },
+  smileTalk: { smile: 0.6, jaw: 0.4 },
+  laugh: { smile: 1, jaw: 0.7, teeth: true },
+  angry: { brow: 'down', smile: -0.45 },
+  angryTalk: { brow: 'down', smile: -0.3, jaw: 0.45 },
+  shout: { brow: 'down', jaw: 0.9, smile: -0.25 },
+  surprised: { brow: 'up', jaw: 0.5 },
+  worried: { brow: 'worried', smile: -0.5 },
+  worriedTalk: { brow: 'worried', smile: -0.35, jaw: 0.4 },
+};
+
 export class HeroArt {
   // folk: one of the city's people drawn as he is (render/folkspec.js FOLK's number): smaller pictures,
   // fewer of each, all of them drawn by the helper (a plain colour until theirs come)
@@ -240,6 +257,9 @@ export class HeroArt {
     this.blinkTex = null;
     this.todo = Object.entries(this.sets).flatMap(([name, S]) => Array.from({ length: S.n - first }, (_, i) => [name, i + first]));
     this.todo.unshift(['face', 'blink']);
+    // (his expressions: the hero's only - x:<name>)
+    this.exprTex = {};
+    if (folk === null) for (const k of Object.keys(EXPRS)) this.todo.push(['face', `x:${k}`]);
     this.wait = 0;
     // (the helper: the rest drawn off the game's thread, sent back as pictures - the city's people's
     // only once they are first about: want)
@@ -273,7 +293,8 @@ export class HeroArt {
   post(list) {
     for (const [name, i] of list) {
       const S = this.sets[name];
-      this.worker.postMessage({ art: this.id, folk: this.folk, name, i, w: Math.round(S.w), h: Math.round(S.h), seed: this.seedOf(name, i === 'blink' ? 0 : i), blink: i === 'blink' });
+      const x = typeof i === 'string' && i.startsWith('x:') ? EXPRS[i.slice(2)] : null;
+      this.worker.postMessage({ art: this.id, folk: this.folk, name, i, w: Math.round(S.w), h: Math.round(S.h), seed: this.seedOf(name, i === 'blink' || x ? 0 : i), blink: i === 'blink', expr: x });
     }
   }
 
@@ -281,9 +302,9 @@ export class HeroArt {
     return 1009 + i * 7919 + name.length * 31;
   }
 
-  make(name, S, i, blink = false) {
+  make(name, S, i, blink = false, expr = null) {
     const c = canvas(Math.round(S.w), Math.round(S.h));
-    this.painters[name](c, { seed: this.seedOf(name, i), blink, spec: this.folk });
+    this.painters[name](c, { seed: this.seedOf(name, i), blink, spec: this.folk, expr });
     return canvasTexture(c, { mips: true });
   }
 
@@ -305,6 +326,7 @@ export class HeroArt {
     d.bmp.close();
     const t = canvasTexture(c, { mips: true });
     if (d.i === 'blink') this.blinkTex = t;
+    else if (typeof d.i === 'string' && d.i.startsWith('x:')) this.exprTex[d.i.slice(2)] = t;
     else this.put(S, t);
     if (d.i === 0 && this.firstLeft > 0 && --this.firstLeft === 0 && this.later.length && this.worker) {
       this.post(this.later);
@@ -324,11 +346,13 @@ export class HeroArt {
     const [name, i] = this.todo.shift();
     const S = this.sets[name];
     if (i === 'blink') this.blinkTex = this.make(name, S, 0, true);
+    else if (typeof i === 'string' && i.startsWith('x:')) this.exprTex[i.slice(2)] = this.make(name, S, 0, false, EXPRS[i.slice(2)]);
     else this.put(S, this.make(name, S, i));
   }
 
-  // which drawing is on the page at time t (seconds): out: { face, hair, jacket, pants, boots }
-  frame(t, out) {
+  // which drawing is on the page at time t (seconds): out: { face, hair, jacket, pants, boots }; expr:
+  // his face's expression now (EXPRS), or null - his face as it is, its lines boiling
+  frame(t, out, expr = null) {
     const tick = Math.floor(t * 12);
     if (tick !== this.tick) {
       this.tick = tick;
@@ -348,7 +372,9 @@ export class HeroArt {
       }
     }
     for (const name of Object.keys(this.cur)) out[name] = this.sets[name].list[this.cur[name]];
-    if (this.blinking > 0 && this.blinkTex) out.face = this.blinkTex;
+    const x = expr && this.exprTex[expr];
+    if (x) out.face = x;
+    else if (this.blinking > 0 && this.blinkTex) out.face = this.blinkTex;
     return out;
   }
 }

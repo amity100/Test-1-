@@ -211,9 +211,15 @@ export function stubble(x, y) {
 
 /**
  * The hero's face: a portrait in pencil, the head seen from the front. o.seed: this drawing's dice
- * (the same face, each stroke its own); o.blink: the eyes shut.
+ * (the same face, each stroke its own); o.blink: the eyes shut. o.expr (v5, ROADMAP 18: his face
+ * as he speaks and feels - render/heroart.js EXPRS): { jaw: 0..1 the mouth open, smile: -1..1 its
+ * corners up or down, brow: 'up' | 'down' | 'worried', teeth: the upper teeth showing }
  */
 export function paintFace(c, o = {}) {
+  const E = o.expr || {};
+  const jaw = E.jaw || 0;
+  const smile = E.smile || 0;
+  const brow = E.brow || null;
   const g = c.getContext('2d', { willReadFrequently: true });
   const W = c.width;
   const H = c.height;
@@ -281,7 +287,8 @@ export function paintFace(c, o = {}) {
     const cx = X(sd * 0.032);
     const cy = Y(0.0185);
     const ew = 0.0262 * K;
-    const eh = 0.0064 * K;
+    // (wide open with the brows up; narrowed by a real smile, the cheeks pushing up under them)
+    const eh = 0.0064 * K * (brow === 'up' ? 1.28 : 1) * (1 - Math.max(0, smile) * 0.16);
     // (the inner corner by the nose, a touch lower; the outer a touch higher)
     const ix = cx + sd * ew * 0.5;
     const iy = cy + 0.06 * eh;
@@ -392,10 +399,13 @@ export function paintFace(c, o = {}) {
     }
   }
   // ---- the brows: thick, low, drawn hair by hair; the scar through the left one
+  // (up: the whole brow raised, surprise; down: the inner ends pulled down and in, anger; worried: the
+  // inner ends up, the outer down a little)
+  const BR = brow === 'up' ? [0.0062, 0.0072, 0.005] : brow === 'down' ? [-0.0058, -0.0022, 0.0014] : brow === 'worried' ? [0.0064, 0.0022, -0.0018] : [0, 0, 0];
   for (const sd of [1, -1]) {
-    const P0 = [sd * 0.012, 0.0318];
-    const P1 = [sd * 0.035, 0.0418];
-    const P2 = [sd * 0.058, 0.0338];
+    const P0 = [sd * (0.012 - (brow === 'down' ? 0.0012 : 0)), 0.0318 + BR[0]];
+    const P1 = [sd * 0.035, 0.0418 + BR[1]];
+    const P2 = [sd * 0.058, 0.0338 + BR[2]];
     const at = (t) => {
       const a = (1 - t) * (1 - t);
       const b = 2 * t * (1 - t);
@@ -423,22 +433,24 @@ export function paintFace(c, o = {}) {
     }
     // (his left: the picture's x is his body's, and his left is its +x - render/people.js push())
     if (sd > 0) {
-      const a0 = [X(0.0398), Y(0.0505)];
-      const a1 = [X(0.0362), Y(0.0298)];
+      const a0 = [X(0.0398), Y(0.0505 + BR[1])];
+      const a1 = [X(0.0362), Y(0.0298 + BR[1])];
       h.lines([a0, [(a0[0] + a1[0]) / 2 - 2 * s, (a0[1] + a1[1]) / 2], a1], 3, '#e8b8a4', 0.85, 2, 0.6);
       h.path([[a0[0] - 2.5 * s, a0[1]], [a1[0] - 2.5 * s, a1[1]]], 1, '#8a5a4a', 0.5, 0.4);
     }
   }
-  // the furrow between the brows
-  for (const sd of [1, -1]) h.path([[X(sd * 0.005), Y(0.041)], [X(sd * 0.0045), Y(0.033)], [X(sd * 0.006), Y(0.028)]], 1.4, '#6a4436', 0.45, 0.8);
-  // the forehead's lines
-  for (const y of [0.054, 0.063]) {
+  // the furrow between the brows (dug in, in anger or worry)
+  const furrow = brow === 'down' ? 0.85 : brow === 'worried' ? 0.7 : 0.45;
+  for (const sd of [1, -1]) h.path([[X(sd * 0.005), Y(0.041)], [X(sd * 0.0045), Y(0.033)], [X(sd * 0.006), Y(0.028)]], brow === 'down' ? 2.2 : 1.4, '#6a4436', furrow, 0.8);
+  // the forehead's lines (a third, and darker, with the brows up)
+  const lines = brow === 'up' || brow === 'worried' ? [0.05, 0.058, 0.066] : [0.054, 0.063];
+  for (const y of lines) {
     const pts = [];
     for (let i = 0; i <= 8; i++) {
       const x = -0.03 + (i / 8) * 0.06;
-      pts.push([X(x), Y(y + Math.sin(i * 0.9 + y * 300) * 0.0012)]);
+      pts.push([X(x), Y(y + Math.sin(i * 0.9 + y * 300) * 0.0012 + (brow === 'worried' ? 0.004 * (1 - Math.abs(i / 4 - 1)) : 0))]);
     }
-    h.path(pts, 1.3, '#8a5a48', 0.3, 1.2);
+    h.path(pts, 1.3, '#8a5a48', brow === 'up' || brow === 'worried' ? 0.55 : 0.3, 1.2);
   }
   // ---- the nose: its bridge, the shade down its sides, the wings, the nostrils, the light on its tip
   for (const sd of [1, -1]) {
@@ -463,24 +475,37 @@ export function paintFace(c, o = {}) {
   }
   h.hatch(X(0.012), Y(-0.02), X(-0.012), Y(-0.034), 160, () => 0.6, 0.2, 12, 1.4, ['#6a3e30', '#5a3428'], 0.5);
   h.hatch(X(0.004), Y(0.022), X(-0.004), Y(-0.019), 80, () => 0.8, Math.PI / 2, 18, 1.5, ['#f0caa4', '#f8dcbc'], 0.5, 0.2);
-  // ---- the mouth: firm, the corners a little down; the lips' colour, the light on the lower one
+  // ---- the mouth: firm, the corners a little down; the lips' colour, the light on the lower one -
+  // its corners up in a smile, further down when he is grim; open as he speaks (the dark of it, the
+  // upper teeth under the lip), the lower lip and the chin dropping with the jaw
+  const jo = jaw * 0.0135;
+  const corner = (x) => smile * 0.0058 * (Math.abs(x) / 0.0245) ** 2;
+  // (how open it is across: nothing at the corners, all of it in the middle)
+  const gape = (x) => jo * Math.max(0, 1 - (x / 0.0235) ** 2) ** 0.7;
   {
     const cy = Y(-0.0522);
+    const wide = 1 + Math.max(0, smile) * 0.1 + jaw * 0.04;
     const up = [];
     for (let i = 0; i <= 12; i++) {
-      const x = 0.0245 * (i / 6 - 1);
-      const bow = Math.abs(x) < 0.008 ? 0.0012 * Math.cos((x / 0.008) * Math.PI) : 0;
-      up.push([X(x), Y(-0.0458 - 0.0045 * (Math.abs(x) / 0.0245) ** 2 + bow * 0.5 - 0.0008)]);
+      const x = 0.0245 * (i / 6 - 1) * wide;
+      const xx = x / wide;
+      const bow = Math.abs(xx) < 0.008 ? 0.0012 * Math.cos((xx / 0.008) * Math.PI) : 0;
+      up.push([X(x), Y(-0.0458 - 0.0045 * (Math.abs(xx) / 0.0245) ** 2 + bow * 0.5 - 0.0008 + corner(xx) + jo * 0.12)]);
     }
     const mid = [];
+    const midLo = [];
     for (let i = 0; i <= 12; i++) {
-      const x = 0.0245 * (i / 6 - 1);
-      mid.push([X(x), Y(-0.0522 - 0.0016 * (Math.abs(x) / 0.0245) ** 3)]);
+      const x = 0.0245 * (i / 6 - 1) * wide;
+      const xx = x / wide;
+      const y = -0.0522 - 0.0016 * (Math.abs(xx) / 0.0245) ** 3 + corner(xx);
+      mid.push([X(x), Y(y + jo * 0.12)]);
+      midLo.push([X(x), Y(y - gape(xx))]);
     }
     const low = [];
     for (let i = 0; i <= 12; i++) {
-      const x = 0.021 * (i / 6 - 1);
-      low.push([X(x), Y(-0.0525 - 0.0072 * (1 - (x / 0.021) ** 2))]);
+      const x = 0.021 * (i / 6 - 1) * wide;
+      const xx = x / wide;
+      low.push([X(x), Y(-0.0525 - 0.0072 * (1 - (xx / 0.021) ** 2) + corner(xx) * 0.7 - gape(xx * 1.12))]);
     }
     g.globalAlpha = 0.85;
     g.fillStyle = '#94584a';
@@ -489,22 +514,64 @@ export function paintFace(c, o = {}) {
     for (const [x, y] of up) g.lineTo(x, y);
     for (let i = 12; i >= 0; i--) g.lineTo(mid[i][0], mid[i][1]);
     g.fill();
+    if (jaw > 0.04) {
+      // the mouth open: its dark, the tongue's low glow at the back, the upper teeth along the lip
+      g.globalAlpha = 1;
+      g.fillStyle = '#2a1012';
+      g.beginPath();
+      g.moveTo(mid[0][0], mid[0][1]);
+      for (const [x, y] of mid) g.lineTo(x, y);
+      for (let i = 12; i >= 0; i--) g.lineTo(midLo[i][0], midLo[i][1]);
+      g.fill();
+      g.save();
+      g.clip();
+      g.globalAlpha = 0.55;
+      g.fillStyle = '#7a3a3a';
+      g.beginPath();
+      g.ellipse(X(0), Y(-0.0522 - jo * 0.95), 0.012 * K, jo * 0.5 * K + 1, 0, 0, Math.PI * 2);
+      g.fill();
+      if (E.teeth || jaw > 0.3) {
+        g.globalAlpha = 0.95;
+        g.fillStyle = '#ece2d2';
+        g.beginPath();
+        g.moveTo(mid[2][0], mid[2][1]);
+        for (let i = 2; i <= 10; i++) g.lineTo(mid[i][0], mid[i][1]);
+        for (let i = 10; i >= 2; i--) g.lineTo(mid[i][0], mid[i][1] + Math.min(0.0034, jo * 0.42 + 0.001) * K);
+        g.fill();
+        g.globalAlpha = 0.5;
+        g.strokeStyle = '#b8a894';
+        g.lineWidth = 1.2 * s;
+        for (let i = 3; i <= 9; i++) {
+          g.beginPath();
+          g.moveTo(mid[i][0], mid[i][1]);
+          g.lineTo(mid[i][0], mid[i][1] + Math.min(0.003, jo * 0.4) * K);
+          g.stroke();
+        }
+      }
+      g.restore();
+    }
+    g.globalAlpha = 0.85;
     g.fillStyle = '#a86656';
     g.beginPath();
-    g.moveTo(mid[0][0], mid[0][1]);
-    for (const [x, y] of mid) g.lineTo(x, y);
+    g.moveTo(midLo[0][0], midLo[0][1]);
+    for (const [x, y] of midLo) g.lineTo(x, y);
     for (let i = 12; i >= 0; i--) g.lineTo(low[i][0], low[i][1] + (i === 0 || i === 12 ? -0.0004 * K : 0));
     g.fill();
     h.hatch(up[0][0], up[0][1] - 0.006 * K, up[12][0], cy, 120, () => 0.7, 0.4, 10, 1.3, ['#6a3a32', '#7a443a'], 0.5);
-    h.hatch(X(0.012), cy + 0.002 * K, X(-0.012), cy + 0.0058 * K, 60, () => 0.7, 0.05, 14, 1.6, ['#e0a090', '#d8988a'], 0.45);
+    h.hatch(X(0.012), cy + (0.002 + jo) * K, X(-0.012), cy + (0.0058 + jo) * K, 60, () => 0.7, 0.05, 14, 1.6, ['#e0a090', '#d8988a'], 0.45);
     h.lines(mid, 2.6, '#341a16', 0.9, 2, 0.8);
+    if (jaw > 0.04) h.lines(midLo, 2.2, '#341a16', 0.85, 2, 0.8);
     h.path(up, 1.2, '#7a4038', 0.5, 0.6);
+    // (a smile's dimples at its corners; a grim mouth's lines down from them)
+    if (smile > 0.3) for (const sd of [1, -1]) h.path([[X(sd * 0.0265 * wide), Y(-0.049 + corner(0.0245))], [X(sd * 0.0285 * wide), Y(-0.054 + corner(0.0245))]], 1.4, '#6a4034', 0.55 * smile, 0.5);
+    if (smile < -0.2) for (const sd of [1, -1]) h.path([[X(sd * 0.025), Y(-0.054 + corner(0.0245))], [X(sd * 0.027), Y(-0.062)]], 1.3, '#6a4034', -smile * 0.6, 0.5);
     void cy;
   }
   // the shade under the lower lip, the cleft of the chin, the folds from the nose to the mouth
-  h.hatch(X(0.017), Y(-0.061), X(-0.017), Y(-0.07), 140, () => 0.7, 0.15, 14, 1.5, ['#4e2e2a', '#5a3a34'], 0.5);
-  h.path([[X(0.0005), Y(-0.083)], [X(-0.0005), Y(-0.092)]], 1.4, '#6a4034', 0.4, 0.8);
-  for (const sd of [1, -1]) h.lines([[X(sd * 0.0188), Y(-0.0215)], [X(sd * 0.0262), Y(-0.036)], [X(sd * 0.0292), Y(-0.05)], [X(sd * 0.0298), Y(-0.06)]], 1.7, '#7a4a3a', 0.5, 2, 1.1);
+  h.hatch(X(0.017), Y(-0.061 - jo), X(-0.017), Y(-0.07 - jo), 140, () => 0.7, 0.15, 14, 1.5, ['#4e2e2a', '#5a3a34'], 0.5);
+  h.path([[X(0.0005), Y(-0.083 - jo * 0.8)], [X(-0.0005), Y(-0.092 - jo * 0.8)]], 1.4, '#6a4034', 0.4, 0.8);
+  // (the folds deepen and lift with a smile)
+  for (const sd of [1, -1]) h.lines([[X(sd * 0.0188), Y(-0.0215)], [X(sd * (0.0262 + Math.max(0, smile) * 0.002)), Y(-0.036 + Math.max(0, smile) * 0.002)], [X(sd * (0.0292 + Math.max(0, smile) * 0.003)), Y(-0.05 + corner(0.0245))], [X(sd * 0.0298), Y(-0.06 - jo * 0.5)]], 1.7, '#7a4a3a', 0.5 + Math.max(0, smile) * 0.3, 2, 1.1);
   // the philtrum
   for (const sd of [1, -1]) h.path([[X(sd * 0.0035), Y(-0.034)], [X(sd * 0.0052), Y(-0.0448)]], 1.1, '#7a4a3a', 0.35, 0.6);
   g.globalAlpha = 1;

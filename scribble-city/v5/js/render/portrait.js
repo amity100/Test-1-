@@ -52,7 +52,7 @@ export const EXPRESSIONS = {
   disgust: { au9: 0.95, au10: 0.6, au15: 0.3, au17: 0.3, au4: 0.35 },
 };
 // (the city's feelings, render/people.js faceOf: what each is as a portrait's)
-const MOOD = { angry: 'angry', scared: 'fear', hurt: 'distress', joy: 'joy', sad: 'sad', surprised: 'surprise', dead: null };
+const MOOD = { angry: 'angry', scared: 'fear', hurt: 'distress', joy: 'joy', sad: 'sad', surprised: 'surprise', dead: null, laugh: 'laugh', shout: 'shout', worried: 'distress', shock: 'surprise' };
 
 const sstep = (a, b, v) => {
   const t = Math.max(0, Math.min(1, (v - a) / (b - a)));

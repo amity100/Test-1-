@@ -1106,8 +1106,8 @@ void main() {
     float em = 0.0;
     if (eq.x > 0.0 && eq.x < 1.0 && eq.y > 0.0 && eq.y < 1.0) em = textureLod(uEraseMask, eq.xy, 0.0).r;
     float eg = n2(vWP.xy * 5.3 + vWP.z * 2.1) * 0.65 + n2(vWP.zy * 15.0 + 7.0) * 0.35;
-    if (em > 0.5 + eg * 0.38) discard;
-    mPaper = max(mPaper, smoothstep(0.04, 0.22 + eg * 0.16, em));
+    if (em > 0.74 + eg * 0.3) discard;
+    mPaper = max(mPaper, smoothstep(0.03, 0.26 + eg * 0.18, em));
   }
 #endif
   bool inside = uIndoor > 0.5 || vX.z > 0.5;

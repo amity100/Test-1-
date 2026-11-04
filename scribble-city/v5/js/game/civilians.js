@@ -243,7 +243,7 @@ const POINT_RE = /(that way|over there|look at|right there|just there|this way|o
 // where the hand is for a gesture (body space: x right, y up, z forward), side 1 the right, -1
 // the left; t seconds into it, ph the person's own phase (no two people move alike). false: that
 // hand is not in it
-function gestureAt(kind, side, t, ph, out) {
+export function gestureAt(kind, side, t, ph, out) {
   switch (kind) {
     case 'explain':
       out.set(side * (0.17 + 0.05 * Math.sin(3.1 * t + ph + side)), 1.02 + 0.08 * Math.sin(2.3 * t + ph * 1.7 + (side > 0 ? 0 : 1.4)), 0.3 + 0.06 * Math.cos(3.1 * t + ph));

@@ -20,7 +20,8 @@ export const DEFAULTS = {
   touchDrive: 'buttons',
   // the radio's words on the screen, and what people say (near you, behind you, or aloud)
   subtitles: true,
-  // what people say, aloud in the browser's own voice (game/voices.js)
+  // (what people say, aloud in the browser's own voice: gone - heard as a narrator over the city,
+  // game/voices.js. Always false; a true saved before is not loaded)
   voices: false,
   perf: false,
   // null: as the device likes it (the lines tremble with a mouse and keep still on a phone, a
@@ -66,6 +67,7 @@ export class Settings {
     for (const k of Object.keys(DEFAULTS)) {
       if (!(k in s.v)) continue;
       if (k === 'allOpen' && !(s.version >= 2)) continue;
+      if (k === 'voices') continue;
       const d = DEFAULTS[k];
       const x = s.v[k];
       if (d === null ? x === null || typeof x === 'boolean' : typeof x === typeof d) this.v[k] = x;
