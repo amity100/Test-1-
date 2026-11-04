@@ -87,8 +87,8 @@ export class Soundscape {
   levels(t, sea, crowd, city) {
     const T = 0.35;
     this.seaK = sea;
-    this.crowd.gain.setTargetAtTime(0.06 * crowd, t, T);
-    this.city.g.gain.setTargetAtTime(0.05 * city, t, T);
+    this.crowd.gain.setTargetAtTime(0.3 * crowd, t, T);
+    this.city.g.gain.setTargetAtTime(0.16 * city, t, T);
     this.waves(t);
   }
 
@@ -100,8 +100,8 @@ export class Soundscape {
     while (this.waveAt < t + 4) {
       const t0 = Math.max(this.waveAt, t);
       const up = 1.6 + Math.random() * 1.2;
-      const peak = (0.05 + 0.04 * Math.random()) * k;
-      const low = 0.018 * k;
+      const peak = (0.26 + 0.16 * Math.random()) * k;
+      const low = 0.09 * k;
       g.setTargetAtTime(peak, t0, up / 3);
       g.setTargetAtTime(low, t0 + up, 1.1);
       this.waveAt = t0 + up + 2.2 + Math.random() * 3.5;
