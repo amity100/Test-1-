@@ -1430,7 +1430,8 @@ export class PrologueSet {
       const turn = Math.sign(p.rub) !== Math.sign(e.lastRub || 0);
       e.lastRub = p.rub;
       if (turn) {
-        g.audio.play('rub', 0.9 + Math.random() * 0.3);
+        // (ROADMAP 18.9: loud enough to be heard over the evening as what it is)
+        g.audio.play('rub', 1.8 + Math.random() * 0.6);
         e.rubs++;
       }
       if (this.root && g.fx) {
