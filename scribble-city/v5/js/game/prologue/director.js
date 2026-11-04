@@ -1472,8 +1472,12 @@ export class Prologue {
     if (C && X) C.rub(X);
     if (C && X) C.word('SHHHHK!', v3(X.pos.x, X.pos.y + 6, X.pos.z), { life: 0.8, size: 0.075, fill: '#fffaf0', burst: '#ff6f9a', tilt: 0.18 });
     yield () => et() > 7.0;
-    // as it goes: a comic's page, for a moment - where it was; her face; his
+    // as it goes: a comic's page, for a moment - where it was; her face; his (their arms down: the
+    // panels their faces alone)
     if (C) C.rub(null);
+    L.fig.reachR = null;
+    L.fig.reachL = null;
+    P.fig.reachL = null;
     if (C && C.page) {
       C.page([
         [[0.015, 0.03], [0.39, 0.03], [0.355, 0.97], [0.015, 0.97]],
