@@ -11,6 +11,7 @@ import { Acting, ACTS } from './acting.js';
 import { Comic } from './comic.js';
 import { civilianLook, kidLook } from '../looks.js';
 import { Doodle } from '../doodle.js';
+import { Soundscape, airAt } from './soundscape.js';
 import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
 
@@ -378,6 +379,7 @@ export class Prologue {
     this.tickCast(dt);
     this.tickHeroes();
     this.tickLook();
+    this.tickAir(dt);
     if (this.page) this.page.update();
     this.acting.update(dt);
     this.comic.update(dt);
@@ -411,6 +413,62 @@ export class Prologue {
     }
   }
 
+  // (ROADMAP 18.9) the evening's air under all of it (game/prologue/soundscape.js): its levels from
+  // where the ear is - the film's camera, or Danny in the player's hands - a few times a second; a gull
+  // now and then near the sea; Danny's steps and Lily's, by their strides, on the pier's boards or on
+  // stone. What is played is kept (airLog) for a film made of the game to play it again
+  tickAir(dt) {
+    const g = this.game;
+    const A = g.audio;
+    if (!A || !A.ctx || !A.fx) return;
+    if (!this.air) {
+      this.air = new Soundscape(A.ctx, A.fx, A.noise);
+      this.airClass = Soundscape;
+      this.airT = 0;
+      this.gullT = 3 + Math.random() * 4;
+      this.steps = {};
+    }
+    const c = A.ctx;
+    const now = c.currentTime;
+    const ear = this.holdCam ? g.camera.position : g.player.pos;
+    this.airT -= dt;
+    if (this.airT <= 0) {
+      this.airT = 0.25;
+      const a = airAt(g, ear);
+      this.air.levels(now, a.sea, a.crowd, a.city);
+      if (this.airLog) this.airLog.push([this.clock || 0, 'lv', a.sea, a.crowd, a.city]);
+      this.airSea = a.sea;
+    }
+    this.gullT -= dt;
+    if (this.gullT <= 0) {
+      this.gullT = 4 + Math.random() * 7;
+      if ((this.airSea || 0) > 0.3) {
+        const pan = Math.random() * 1.6 - 0.8;
+        const vol = 0.4 + Math.random() * 0.5;
+        this.air.gull(now, vol, pan);
+        if (this.airLog) this.airLog.push([this.clock || 0, 'gull', vol, pan]);
+      }
+    }
+    // steps: each time a stride's foot comes down (its phase past a half turn), heard from the ear
+    const P = g.player;
+    const L = this.cast.lily;
+    for (const [key, who, k] of [['d', P, 1], ['l', L, 0.6]]) {
+      const f = who && who.fig;
+      if (!f || (who === P && P.inVehicle) || (who === L && L.riding)) continue;
+      const sp = Math.hypot((who.vel && who.vel.x) || 0, (who.vel && who.vel.z) || 0) || f.speed || 0;
+      const n = Math.floor((f.phase || 0) / Math.PI);
+      const was = this.steps[key];
+      this.steps[key] = n;
+      if (was === undefined || n === was || sp < 0.4) continue;
+      const d = Math.hypot(who.pos.x - ear.x, who.pos.z - ear.z);
+      if (d > 18) continue;
+      const wood = who.pos.z > 234 && who.pos.z < 252 && who.pos.x > 30;
+      const kk = k * Math.max(0.15, 1 - d / 18) * Math.min(1.3, 0.6 + sp * 0.12);
+      this.air.step(now, wood, kk);
+      if (this.airLog) this.airLog.push([this.clock || 0, 'step', wood ? 1 : 0, kk]);
+    }
+  }
+
   // (ROADMAP 18.9) the look of the film while it plays: what is behind its people painted, as by a
   // brush - the brush wider away from where the camera looks - and its people drawn twelve times a
   // second (in the film only: in the player's hands they move as they always do)
@@ -437,6 +495,18 @@ export class Prologue {
       LK.personW = film ? 1.7 : 1.3;
       // (and the pens over everything fewer: its colours laid on flat, painted - render/glsl.js)
       shared.uPenDens.value = 0.3;
+      // (the colour of the story: the evening golden - and once the wheel is gone, the warmth out of
+      // it, the light a little lower, colder, until they leave the pier: ROADMAP 18.9)
+      const after = !!(this.set && this.set.wheelGone) && (this.sceneN || 0) <= 4;
+      const want = after ? [[0.7, 0.84, 1.27], [1.0, 0.97, 0.95], 0.9] : [[0.74, 0.9, 1.2], [1.13, 0.97, 0.8], 1];
+      const e = 1 - Math.exp(-(this.dtR || 0.016) * 0.6);
+      for (let i = 0; i < 3; i++) {
+        LK.shadowT[i] += (want[0][i] - LK.shadowT[i]) * e;
+        LK.lightT[i] += (want[1][i] - LK.lightT[i]) * e;
+      }
+      // (on the day's own light, set every frame before this: a share of it)
+      this.expK = (this.expK || 1) + (want[2] - (this.expK || 1)) * e;
+      if (pipe.exposure !== undefined) pipe.exposure *= this.expK;
     } else if (LK) {
       Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1 });
       shared.uPenDens.value = 1;
@@ -460,10 +530,11 @@ export class Prologue {
     }
     this.holdCam = on;
     this.lock(on);
-    // (the city's chatter over people's heads: none in the film, and what was up, gone)
+    // (the city's chatter over people's heads: none while the prologue is told - the film and the
+    // player's part of it alike, ROADMAP 18.9 - and what was up, gone)
     const B = this.game.bubbles;
     if (B) {
-      B.hold = on;
+      B.hold = true;
       if (on && B.clear) B.clear();
     }
     if (!on) {
@@ -2592,6 +2663,9 @@ export class Prologue {
     this.co = null;
     this.drawing = false;
     Doodle.twos.on = false;
+    if (g.bubbles) g.bubbles.hold = false;
+    // (the evening's air let go quietly: the game's own from here)
+    if (this.air && g.audio && g.audio.ctx) this.air.levels(g.audio.ctx.currentTime, 0, 0, 0);
     if (g.pipe) {
       g.pipe.paintWant = 0;
       Object.assign(g.pipe.look, { rim: 0, grade: 0, grain: 0, personW: 1 });
