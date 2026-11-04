@@ -60,6 +60,23 @@ export class Comic {
     this.speed = { where, t: 0, life, k };
   }
 
+  // (ROADMAP 18.9) a freeze frame's card - as the animated films bring their people in: the picture
+  // held, its colours pushed towards the card's, a comic's print of dots over one side, an ink frame
+  // round it, and across it a brush-stroke slab with the name on it, big, in ink, and a line under it
+  // (who they are); a stroke from the slab to them. o: name, tag, col (the slab's), at (a point of
+  // the world, or a function giving one: whose card), side (-1 the slab on the left, 1 the right),
+  // life (s)
+  card(o) {
+    this.cd = { name: o.name, tag: o.tag || '', col: o.col || '#ff5a7a', at: o.at || null, side: o.side || -1, life: o.life || 1.8, t: 0, seed: Math.random() * 1000, v: o.v !== undefined ? o.v : 0.66 };
+  }
+
+  // (ROADMAP 18.9) an anime's focus lines: dark strokes rushing in from all round the picture at a
+  // face (a point of the world), leaving it clear - for the moment something lands on somebody; drawn
+  // anew twelve times a second. k how many and how dark
+  focus(where, life = 1, k = 1) {
+    this.fl = { where, t: 0, life, k, key: -1, marks: null };
+  }
+
   // an impact frame: for an instant the picture in two inks (the film's own canvas, filtered), and
   // lines bursting from the hit (a point of the world, or the middle)
   impact(where = null, life = 0.12) {
@@ -314,7 +331,7 @@ export class Comic {
     const rubbing = !!(this.rubSrc && !this.pg);
     // (the sheet hidden while it has nothing on it, shown again as soon as it has: a sheet only cleared
     // could still be shown as it last was)
-    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing);
+    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl);
     if (busy !== this.shown) {
       this.shown = busy;
       this.cv.style.visibility = busy ? 'visible' : 'hidden';
@@ -326,7 +343,7 @@ export class Comic {
       this.drawPage(dt);
       if (!this.words.length && !this.speed && !this.hit) return;
     }
-    if (!this.words.length && !this.speed && !this.hit && !rubbing) {
+    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl) {
       // (nothing of its own: the sheet kept clear, whatever was on it)
       g.clearRect(0, 0, this.cv.width, this.cv.height);
       this.dirty = false;
@@ -338,6 +355,20 @@ export class Comic {
     if (!this.pg) g.clearRect(0, 0, W, H);
     this.dirty = true;
     if (rubbing) this.drawRub(W, H);
+    // ---- the focus lines, under the rest
+    if (this.fl) {
+      const f = this.fl;
+      f.t += dt;
+      if (f.t > f.life) this.fl = null;
+      else this.drawFocus(f, W, H);
+    }
+    // ---- a freeze frame's card
+    if (this.cd) {
+      const c = this.cd;
+      c.t += dt;
+      if (c.t > c.life) this.cd = null;
+      else this.drawCard(c, W, H);
+    }
     // ---- the impact frame
     if (this.hit) {
       const h = this.hit;
@@ -425,6 +456,153 @@ export class Comic {
     g.restore();
   }
 
+  drawFocus(f, W, H) {
+    const g = this.g;
+    const p = typeof f.where === 'function' ? f.where() : f.where;
+    const c = (p && this.at(p)) || [0.5, 0.42];
+    const x = c[0] * W;
+    const y = c[1] * H;
+    const key = Math.floor((this.clock || 0) * 12);
+    if (key !== f.key || !f.marks) {
+      f.key = key;
+      const M = [];
+      const n = Math.round(150 * f.k);
+      for (let i = 0; i < n; i++) M.push([Math.random() * Math.PI * 2, 0.3 + Math.random() * 0.22, 0.0015 + Math.random() * 0.006]);
+      f.marks = M;
+    }
+    const fade = Math.min(1, f.t / 0.1, (f.life - f.t) / 0.3);
+    const R = Math.hypot(W, H) * 0.75;
+    const sx = 1.0;
+    const sy = 0.78;
+    g.save();
+    g.globalAlpha = 0.82 * fade;
+    g.fillStyle = '#0c0a12';
+    for (const [a, r0f, wdt] of f.marks) {
+      // (a wedge from past the edge in to near the face: thin at its inner end)
+      const r0 = R * r0f;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      g.beginPath();
+      g.moveTo(x + ca * r0 * sx, y + sa * r0 * sy);
+      g.lineTo(x + Math.cos(a + wdt) * R, y + Math.sin(a + wdt) * R);
+      g.lineTo(x + Math.cos(a - wdt) * R, y + Math.sin(a - wdt) * R);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  }
+
+  drawCard(c, W, H) {
+    const g = this.g;
+    const t = c.t;
+    const fade = Math.min(1, (c.life - t) / 0.18);
+    const top = H * 0.115;
+    const bot = H - top;
+    let s = Math.floor(c.seed);
+    const rnd = () => {
+      s = (s * 16807 + 11) % 2147483647;
+      return (s % 10000) / 10000;
+    };
+    g.save();
+    g.globalAlpha = fade;
+    // the picture held, pushed toward the card's colour - and a comic's dots over the side it is on
+    g.fillStyle = c.col;
+    g.globalAlpha = 0.18 * fade;
+    g.fillRect(0, top, W, bot - top);
+    g.globalAlpha = 0.5 * fade;
+    const dot = Math.max(5, H * 0.012);
+    g.fillStyle = '#0c0a12';
+    const x0 = c.side < 0 ? 0 : W * 0.5;
+    for (let yy = top + dot; yy < bot; yy += dot * 1.6) {
+      for (let xx = x0 + ((yy / (dot * 1.6)) % 2) * dot * 0.8; xx < x0 + W * 0.5; xx += dot * 1.6) {
+        // (bigger towards the outer edge: the print fading out into the picture)
+        const e = c.side < 0 ? 1 - xx / (W * 0.5) : (xx - W * 0.5) / (W * 0.5);
+        const r = dot * 0.42 * Math.max(0, e - 0.15);
+        if (r < 0.6) continue;
+        g.beginPath();
+        g.arc(xx, yy, r, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    // the ink frame round the held picture
+    g.globalAlpha = fade;
+    g.strokeStyle = '#0c0a12';
+    g.lineWidth = Math.max(4, H * 0.012);
+    g.strokeRect(g.lineWidth / 2, top + g.lineWidth / 2, W - g.lineWidth, bot - top - g.lineWidth);
+    // the slab: a brush stroke across, wiped in from its side
+    const wipe = Math.min(1, t / 0.16);
+    const sw = W * 0.52;
+    const sh = H * 0.2;
+    const cy = top + (bot - top) * c.v;
+    const sx0 = c.side < 0 ? W * 0.03 : W * 0.97 - sw;
+    const sxW = sw * wipe;
+    const sxs = c.side < 0 ? sx0 : sx0 + sw - sxW;
+    g.save();
+    g.translate(0, cy);
+    g.rotate(-0.045 * c.side);
+    g.beginPath();
+    const n = 18;
+    for (let i = 0; i <= n; i++) g.lineTo(sxs + (sxW * i) / n, -sh / 2 + (rnd() - 0.5) * sh * 0.12);
+    for (let i = n; i >= 0; i--) g.lineTo(sxs + (sxW * i) / n, sh / 2 + (rnd() - 0.5) * sh * 0.12);
+    g.closePath();
+    g.fillStyle = c.col;
+    g.fill();
+    g.lineWidth = Math.max(3, H * 0.006);
+    g.strokeStyle = '#0c0a12';
+    g.stroke();
+    // (a dry-brush edge: streaks of paper through it)
+    g.globalAlpha = 0.35 * fade;
+    g.strokeStyle = '#fff6e8';
+    for (let i = 0; i < 9; i++) {
+      const yy = (rnd() - 0.5) * sh * 0.8;
+      g.lineWidth = 1 + rnd() * 2.5;
+      g.beginPath();
+      g.moveTo(sxs + sxW * rnd() * 0.3, yy);
+      g.lineTo(sxs + sxW * (0.6 + rnd() * 0.4), yy + (rnd() - 0.5) * 4);
+      g.stroke();
+    }
+    g.globalAlpha = fade;
+    // the name: big, white, inked, popped in past its size and back
+    if (t > 0.1) {
+      const k = t < 0.18 ? 1.3 - ((t - 0.1) / 0.08) * 0.3 : 1;
+      const fs = sh * 0.62 * k;
+      g.font = `${Math.round(fs)}px ${WORD_FONT}`;
+      g.textBaseline = 'middle';
+      g.textAlign = 'center';
+      const tx = sx0 + sw / 2;
+      g.lineJoin = 'round';
+      g.lineWidth = fs * 0.16;
+      g.strokeStyle = '#0c0a12';
+      g.strokeText(c.name, tx, -sh * 0.08);
+      g.fillStyle = '#fffaf0';
+      g.fillText(c.name, tx, -sh * 0.08);
+      if (c.tag) {
+        const ts = sh * 0.2;
+        g.font = `${Math.round(ts)}px ${WORD_FONT}`;
+        g.lineWidth = ts * 0.22;
+        g.strokeText(c.tag, tx, sh * 0.33);
+        g.fillStyle = '#ffe9a8';
+        g.fillText(c.tag, tx, sh * 0.33);
+      }
+    }
+    g.restore();
+    // a stroke from the slab to them
+    const p = typeof c.at === 'function' ? c.at() : c.at;
+    const q = p && this.at(p);
+    if (q && t > 0.14) {
+      const ax = c.side < 0 ? sx0 + sw * 0.85 : sx0 + sw * 0.15;
+      const ay = cy - sh * 0.5;
+      g.strokeStyle = '#0c0a12';
+      g.lineWidth = Math.max(3, H * 0.005);
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(ax, ay);
+      g.quadraticCurveTo((ax + q[0] * W) / 2, ay - H * 0.06, q[0] * W, q[1] * H + H * 0.05);
+      g.stroke();
+    }
+    g.restore();
+  }
+
   drawWord(w, W, H, k, a) {
     const g = this.g;
     const size = w.size * H * k;
@@ -481,6 +659,8 @@ export class Comic {
   clear() {
     this.pg = null;
     this.rubSrc = null;
+    this.cd = null;
+    this.fl = null;
     this.words = [];
     this.speed = null;
     this.hit = null;
