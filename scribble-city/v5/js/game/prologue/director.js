@@ -598,7 +598,9 @@ export class Prologue {
     // the player)
     // (ROADMAP 18.9: from the moment he meets her - the flight in and the city's tour as the game
     // looks: the film's own look is the story's)
-    const story = (this.sceneN || 0) >= 2;
+    // (and only while it is the film: the player's own walks and drives between its scenes look as the
+    // game does - ROADMAP 18.9, the player's word)
+    const story = (this.sceneN || 0) >= 2 && film;
     pipe.paintWant = this.paintOn && story ? 1 : 0;
     // (and its light and colour: the people inked bolder and lit round their edge, the shadows cool
     // and the lights warm, a grain - more of all of it while it is filmed; render/pipeline.js look)
