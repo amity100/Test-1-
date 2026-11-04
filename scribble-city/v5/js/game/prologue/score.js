@@ -1450,9 +1450,11 @@ class Land extends Cue {
 const FILES = {
   // (the music box from along the pier: dulled, more of the room than of itself)
   wheel: { path: 'music/wheel_waltz.mp3', a: 2, b: 55, x: 2.5, gain: 0.5, lp: 3600, send: 0.45 },
-  // (from 1.4 s in, begun under the boy waving from his gondola: its climb at its height and its own
-  // hard stop just as the wheel goes, some 15 s on - measured in a film of it. Loud: over the eraser)
-  unease: { path: 'music/unease.mp3', from: 1.4, once: true, gain: 1.6, send: 0.25 },
+  // (ROADMAP 18.9: the player's word - cute and disturbing at once, a little horror film: a sweet
+  // music box that goes out of tune and melts while a dark drone, scraping strings and a heart grow
+  // under it - begun under the boy waving from his gondola, cut dead the moment the wheel goes, some
+  // 15 s on. Loud: over the eraser, the air and all)
+  unease: { path: 'music/horror_box.mp3', from: 0, once: true, gain: 1.25, send: 0.2 },
   surreal: { path: 'music/surreal.mp3', a: 0.5, b: 84, x: 3, gain: 0.8, send: 0.35 },
   // (a bar or two of the waltz, slowed, far off, mostly the room)
   memory: { path: 'music/wheel_waltz.mp3', from: 4, b: 11, once: true, rate: 0.82, gain: 0.55, lp: 1700, send: 0.9 },

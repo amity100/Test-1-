@@ -1479,7 +1479,7 @@ export class PrologueSet {
       e.lastRub = p.rub;
       if (turn) {
         // (ROADMAP 18.9: loud enough to be heard over the evening as what it is)
-        g.audio.play('rub', 1.8 + Math.random() * 0.6);
+        g.audio.play('rub', 1.1 + Math.random() * 0.4);
         e.rubs++;
       }
       if (this.root && g.fx) {

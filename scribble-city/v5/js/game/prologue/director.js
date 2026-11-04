@@ -515,6 +515,12 @@ export class Prologue {
     if (this.airT <= 0) {
       this.airT = 0.25;
       const a = airAt(g, ear);
+      // (ROADMAP 18.9: under the music at its height - the wheel going - the evening's air a step back,
+      // never gone: airDip)
+      const dip = this.airDip !== undefined ? this.airDip : 1;
+      a.sea *= dip;
+      a.crowd *= dip;
+      a.city *= dip;
       this.air.levels(now, a.sea, a.crowd, a.city);
       if (this.airLog) this.airLog.push([this.clock || 0, 'lv', a.sea, a.crowd, a.city]);
       this.airSea = a.sea;
@@ -1769,7 +1775,8 @@ export class Prologue {
     P.fig.lookAt = tip;
     S.erase();
     // (and under the procedural rubs, the recorded one: a great eraser on paper, the whole of it)
-    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.55);
+    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.4);
+    this.airDip = 0.5;
     const C = this.comic;
     if (C && S.eraser) C.rub(S.eraser);
     const et = () => (S.erasing ? S.erasing.t : 99);
@@ -1846,6 +1853,7 @@ export class Prologue {
       this.rubRec = null;
     }
     this.sample('sfx/gone_whoosh.mp3', 0.9);
+    this.airDip = 1;
     this.cue('stop', { fade: 0.02 });
     // (and at once nobody down there is waving up at anything)
     S.forget();
