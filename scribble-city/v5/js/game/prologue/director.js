@@ -580,6 +580,7 @@ export class Prologue {
 
   // ------------------------------------------------------------------ the film's tools
   film(on) {
+    const was = !!this.holdCam;
     this.ui.film(on);
     // (in the film his hands are bare, whatever he drew and took up in his own time - ROADMAP 18.9)
     if (on) {
@@ -605,7 +606,7 @@ export class Prologue {
       // (the film's last picture held, and the game's camera eased in from it - not a jump: blendCam;
       // skipped through, straight back)
       const cam = this.game.camera;
-      if (this.holdCam && !skipped) this.blend = { pos: cam.position.clone(), q: cam.quaternion.clone(), fov: cam.fov, t: 0, dur: undefined };
+      if (was && !skipped) this.blend = { pos: cam.position.clone(), q: cam.quaternion.clone(), fov: cam.fov, t: 0, dur: undefined };
       this.shots.release();
       const g = this.game;
       // (the game's camera back behind Danny, as the scene left him)
