@@ -1021,7 +1021,7 @@ export class Prologue {
     const d02w = d02.next().value || 0;
     yield 2.0;
     // (and on him, as he says it: the board, then her)
-    this.shot({ ...this.single(P, top, { dist: 1.45, side: 0.4, up: -0.28, drop: 0.12 }), fov: 36, dur: 3.2, hand: 0.3 });
+    this.shot({ ...this.single(P, top, { dist: 1.55, side: 0.4, up: -0.2, drop: 0.0 }), fov: 36, dur: 3.2, hand: 0.3 });
     yield Math.max(0, d02w - 2.0);
     // she turns to him
     this.faceTo(L, P.pos.x, P.pos.z);
@@ -1042,7 +1042,7 @@ export class Prologue {
     P.fig.lookAt = L.fig.j.headC;
     yield Math.max(0, d03w - 1.2);
     // and she laughs - a real laugh: the two of them, the board over them
-    const two1 = this.two(P, L, { dist: 3.4, h: 1.1, lookH: 1.3, sgn: -1 });
+    const two1 = this.two(P, L, { dist: 2.5, h: 1.12, lookH: 1.28, sgn: -1 });
     this.shot({ from: two1.from(), to: two1.from(0.25), look: two1.look(), fov: 44, dur: 2.8, hand: 0.4 });
     this.feel(L.fig, 'joy', 3);
     this.feel(P.fig, 'joy', 3);
@@ -1113,17 +1113,14 @@ export class Prologue {
     L.fig.lookAt = W0;
     P.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
     L.fig.reachR = v3(WHEEL.x, 44, WHEEL.z);
-    this.shot({ from: [VIEW.x - ux * 5.6 - rx * 1.4, 0.95, VIEW.z - uz * 5.6 - rz * 1.4], to: [VIEW.x - ux * 5.0 - rx * 1.3, 0.98, VIEW.z - uz * 5.0 - rz * 1.3], look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 23, WHEEL.z], fov: 52, dur: 3.6, hand: 0.35 });
+    this.shot({ from: [VIEW.x - ux * 5.6, 0.95, VIEW.z - uz * 5.6], to: [VIEW.x - ux * 5.0 + rx * 0.05, 0.98, VIEW.z - uz * 5.0 + rz * 0.05], look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 23, WHEEL.z], fov: 52, dur: 3.6, hand: 0.35 });
     this.feel(L.fig, 'surprised', 2.4);
     yield 0.3;
     yield* this.say('L19', L.fig, 0.15);
-    // her in profile at the edge of the picture, the wheel huge beyond her: its lights, its colours
+    // her face, from in front and below, turned up to it: its lights, its colours
     L.fig.reachR = null;
     this.feel(L.fig, 'joy', 6);
-    {
-      const h = this.headJ(L) || v3(L.pos.x, 1.15, L.pos.z);
-      this.shot({ from: [h.x - rx * 1.15 - ux * 0.25, h.y - 0.05, h.z - rz * 1.15 - uz * 0.25], to: [h.x - rx * 1.05 - ux * 0.2, h.y - 0.04, h.z - rz * 1.05 - uz * 0.2], look: [h.x + ux * 7, h.y + 2.2, h.z + uz * 7], fov: 46, dur: 3.2, hand: 0.25 });
-    }
+    this.shot({ ...this.single(L, W0, { dist: 1.05, side: 0.38, up: -0.24, drop: -0.02 }), fov: 36, dur: 3.2, hand: 0.25 });
     yield 0.2;
     yield* this.say('L20', L.fig, 0.1);
     // (what she sees: the lights)
