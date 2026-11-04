@@ -1722,9 +1722,13 @@ export class Prologue {
     const P = g.player;
     const L = this.cast.lily;
     this.film(true);
-    // nobody else: the parents walk off, the phone goes back in a pocket, the guys chat
-    this.shot({ from: [86, 3.2, 247], to: [86.5, 3.4, 246], look: [104, 1.5, 243], fov: 50, dur: 3.2, hand: 0.5 });
-    yield 3.0;
+    // (ROADMAP 18.9) nobody remembers it - a dream gone wrong: the wheel's own waltz half as fast and
+    // flat (score.js surreal), the evening's air as it always is, the picture a little off true
+    this.cue('surreal', { fade: 2 });
+    // the evening as it was, where it stood: people strolling, the end of the pier open to the sky -
+    // nothing there, and nobody looking
+    this.shot({ from: [86, 3.2, 247], to: [88, 3.0, 245.5], look: [104, 1.5, 243], lookTo: [112, 5, 243], fov: 50, dur: 3.8, hand: 0.4 });
+    yield 3.4;
     // Danny, at the two guys by the railing
     const g1 = this.cast.g1;
     const g2 = this.cast.g2;
@@ -1734,41 +1738,86 @@ export class Prologue {
     g1.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     g2.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
     this.feel(P.fig, 'angry', 3);
-    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.7 });
+    this.feel(g1.fig, 'joy', 30);
+    this.feel(g2.fig, 'joy', 30);
+    // (him tilted one way, them the other: they do not stand in the same world)
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.7, roll: 0.07 });
     yield* this.say('D06', P.fig, 0.15);
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2, hand: 0.6 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2, hand: 0.4, roll: -0.05 });
     yield* this.say('G01', g1.fig, 0.15);
-    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 3.5, hand: 0.7 });
+    this.shot({ ...this.single(P, g1, { dist: 1.55, side: 0.42, up: -0.1 }), fov: 36, dur: 2.2, hand: 0.7, roll: 0.08 });
     P.fig.reachR = v3(WHEEL.x, 20, WHEEL.z);
-    yield* this.say('D07', P.fig, 0.15);
+    const d07 = this.say('D07', P.fig, 0.15);
+    const d07w = d07.next().value || 0;
+    yield 1.6;
+    // (where he points: the evening, nothing in it)
+    {
+      const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
+      this.shot({ from: [h.x, h.y + 0.05, h.z], look: [WHEEL.x, 22, WHEEL.z], lookTo: [WHEEL.x, 28, WHEEL.z], fov: 40, dur: 2.2, hand: 0.4, roll: 0.04 });
+    }
+    g1.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
+    g2.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
+    yield Math.max(0.3, d07w - 1.6);
     P.fig.reachR = null;
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.6 });
+    // (they look where he points, and back at him, smiling)
+    g1.fig.lookAt = P.fig.j.headC;
+    g2.fig.lookAt = P.fig.j.headC;
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
     yield* this.say('G02', g1.fig, 0.2);
-    this.shot({ ...this.single(P, g1, { dist: 1.4, side: 0.4, up: -0.1 }), fov: 34, dur: 4.5, hand: 0.8 });
+    // (him: closer as he says it)
+    {
+      const A = this.single(P, g1, { dist: 1.6, side: 0.4, up: -0.1 });
+      const B = this.single(P, g1, { dist: 1.15, side: 0.34, up: -0.08 });
+      this.shot({ from: A.from, to: B.from, look: A.look, fov: 34, dur: 6.8, ease: 'lin', hand: 0.8, roll: 0.1 });
+    }
     yield* this.say('D08', P.fig, 0.15);
-    this.shot({ from: this.ots(P, g1, { h: 1.62, back: 1.3, side: 0.7 }), look: () => v3((g1.pos.x + g2.pos.x) / 2, 1.6, (g1.pos.z + g2.pos.z) / 2), fov: 42, dur: 5, hand: 0.6 });
+    // the two of them, laughing it off together
+    {
+      const mx = (g1.pos.x + g2.pos.x) / 2;
+      const mz = (g1.pos.z + g2.pos.z) / 2;
+      const dx = mx - P.pos.x;
+      const dz = mz - P.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      this.shot({ from: [P.pos.x + (dx / d) * 0.6 - (dz / d) * 0.9, 1.45, P.pos.z + (dz / d) * 0.6 + (dx / d) * 0.9], look: [mx, 1.55, mz], fov: 42, dur: 4, hand: 0.5, roll: -0.07 });
+    }
     yield* this.say('G03', g1.fig, 0.3);
-    this.shot({ ...this.single(P, g1, { dist: 1.3, side: 0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5 });
+    this.shot({ ...this.single(P, g1, { dist: 1.3, side: 0.34, up: -0.08 }), fov: 32, dur: 2.2, hand: 0.5, roll: 0.12 });
     yield* this.say('D09', P.fig, 0.2);
     this.feel(g1.fig, 'surprised', 2);
-    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.6 });
+    this.shot({ ...this.single(g1, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 2.4, hand: 0.4, roll: -0.06 });
     yield* this.say('G04', g1.fig, 0.4);
     // the other man
     this.putDanny(MAN.x - 1.1, MAN.z - 1.2, Math.atan2(1.1, 1.2));
     this.faceTo(M, P.pos.x, P.pos.z);
     M.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.shot({ ...this.single(P, M, { dist: 1.6, side: 0.42, up: -0.1 }), fov: 36, dur: 4, hand: 0.7 });
+    this.feel(P.fig, 'worried', 6);
+    this.shot({ ...this.single(P, M, { dist: 1.6, side: 0.42, up: -0.1 }), fov: 36, dur: 4, hand: 0.7, roll: 0.06 });
     yield* this.say('D10', P.fig, 0.2);
     this.faceTo(M, WHEEL.x, WHEEL.z);
     M.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
     yield 1.0;
     this.faceTo(M, P.pos.x, P.pos.z);
     M.fig.lookAt = P.fig.j ? P.fig.j.headC : null;
-    this.shot({ ...this.single(M, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 3, hand: 0.5 });
-    yield* this.say('M01', M.fig, 0.5);
+    this.shot({ ...this.single(M, P, { dist: 1.55, side: -0.42, up: -0.1 }), fov: 36, dur: 1.4, hand: 0.3, roll: -0.04 });
+    const m01 = this.say('M01', M.fig, 0.5);
+    const m01w = m01.next().value || 0;
+    yield 0.9;
+    // (and the ground goes from under him: the camera drawing back from him as it closes in on him,
+    // so that he stays where he is and the world behind him rushes away - his face, in profile)
+    {
+      const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
+      const dx = M.pos.x - P.pos.x;
+      const dz = M.pos.z - P.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const sx = -dz / d;
+      const sz = dx / d;
+      this.feel(P.fig, 'shock', 6);
+      this.shot({ from: [h.x + sx * 1.1, h.y - 0.05, h.z + sz * 1.1], to: [h.x + sx * 3.4, h.y - 0.05, h.z + sz * 3.4], look: [h.x, h.y - 0.08, h.z], fov: 50, fovTo: 17.5, dur: 3.2, ease: 'inout', hand: 0.2 });
+    }
+    yield Math.max(2.6, m01w - 0.9);
     // all round him, the evening as it was: nobody saw anything
     this.feel(P.fig, 'scared', 4);
-    this.shot({ path: [v3(P.pos.x + 3, 2.2, P.pos.z), v3(P.pos.x, 2.4, P.pos.z + 3.2), v3(P.pos.x - 3, 2.6, P.pos.z)], look: () => v3(P.pos.x, 1.5, P.pos.z), fov: 46, dur: 4, ease: 'inout', hand: 0.5 });
+    this.shot({ path: [v3(P.pos.x + 3, 2.2, P.pos.z), v3(P.pos.x, 2.4, P.pos.z + 3.2), v3(P.pos.x - 3, 2.6, P.pos.z)], look: () => v3(P.pos.x, 1.5, P.pos.z), fov: 46, dur: 4, ease: 'inout', hand: 0.5, roll: 0.09 });
     yield 3.8;
     for (const c of [g1, g2, M]) c.fig.lookAt = null;
     // back to her (where she stands, by where it was)
@@ -1831,13 +1880,13 @@ export class Prologue {
     L.fig.lookAt = null;
     L.pl.follow = true;
     this.film(false);
+    // (the dream's waltz out as they go: the evening's air only, on the way)
+    this.cue('stop', { fade: 4 });
     this.hour(18.42, 0.0035);
     this.objective('Get to your <b>car</b>', GARAGE_IN.x, GARAGE_IN.z, 'Car park');
     this.start(5);
   }
 
-  // the man with the bag: going by behind them, a strange mark on it (something like an eraser,
-  // and not), into the people and gone
   // (ROADMAP 18.9) the man with the mark on his shirt: along the pier ahead of them, crossing it
   // slowly towards the wheel's gate (the mark: game/prologue/set.js markShirt)
   markMan() {

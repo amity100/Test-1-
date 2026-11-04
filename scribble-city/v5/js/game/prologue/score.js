@@ -45,7 +45,7 @@ const AHEAD = 0.35;
 // the whole score's level into the music volume, and each cue's against the others (the chase
 // under the title's hit; the ending and the discovery under the words said over them)
 const TRIM = 0.55;
-const LEVEL = { opening: 1, chase: 0.82, slowmo: 0.9, title: 1, ending: 1, discovery: 0.6, hit: 1.5, land: 1, wheel: 1.25, unease: 1.05, memory: 0.9 };
+const LEVEL = { opening: 1, chase: 0.82, slowmo: 0.9, title: 1, ending: 1, discovery: 0.6, hit: 1.5, land: 1, wheel: 1.25, unease: 1.05, memory: 0.9, surreal: 1.0 };
 // how loud the room comes back
 const ROOM = 2.5;
 
@@ -1284,6 +1284,36 @@ class Unease extends Cue {
   }
 }
 
+// (ROADMAP 18.9) nobody remembers it: the wheel's waltz as a dream has it - half as fast, a quarter
+// tone flat, its bells ringing on too long, over a pad that will not settle and a low bell now and
+// then; the cheerful tune gone wrong
+class Surreal extends Cue {
+  constructor(s, t0, o) {
+    super(s, t0, 'surreal', o);
+    this.bpm = 72;
+    const c = this.c;
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 3200;
+    this.box = c.createGain();
+    this.box.connect(f).connect(this.bus(0.8));
+    this.loops.push(this.box, f);
+    this.pads = this.bus(0.7);
+  }
+
+  tick(i, t, spb) {
+    const k = i % 12;
+    const bar = Math.floor(i / 12) % 8;
+    const flat = -0.45 + Math.sin(i * 0.05) * 0.15;
+    if (k === 0 && bar % 2 === 0) {
+      const ch = W_CH[bar].map((m) => m - 12 + flat);
+      this.pad(t, [W_BASS[bar] + flat, ...ch], 24 * spb, this.pads, { vol: 0.02, a: 1.5, r: 2.5, cut: 700, det: 18, wide: 0.8 });
+    }
+    if (k === 0 && bar % 4 === 0) this.piano(t, W_BASS[bar] - 12 + flat, 0.05, this.box, 4);
+    for (const [st, m, long] of W_TUNE[bar]) if (st === k) this.steel(t, m + flat, 0.045, this.box, long ? 2.6 : 1.6);
+  }
+}
+
 // the wheel's tune remembered: its first bar on the music box, far off, out of tune, in a long room
 class Memory extends Cue {
   constructor(s, t0, o) {
@@ -1418,6 +1448,7 @@ const CUES = {
   wheel: { K: Wheel, lead: 0.05 },
   unease: { K: Unease, lead: 0.03 },
   memory: { K: Memory, sting: true },
+  surreal: { K: Surreal, lead: 0.05 },
   hit: { K: Hit, sting: true },
   land: { K: Land, sting: true },
 };
