@@ -48,6 +48,11 @@ export class Comic {
 
   // a sound word: at a point of the world (or [u, v] on the sheet), its colours, its size (of the
   // sheet's height), a tilt; held for life seconds
+  // (round 9) a flash over the whole picture (life seconds, colour, how strong at first)
+  flash(life = 0.16, col = '#ffffff', a = 0.9) {
+    this.fx = { t: 0, life, col, a };
+  }
+
   word(text, where, o = {}) {
     const uv = Array.isArray(where) ? where : this.at(where);
     if (!uv) return;
@@ -331,7 +336,7 @@ export class Comic {
     const rubbing = !!(this.rubSrc && !this.pg);
     // (the sheet hidden while it has nothing on it, shown again as soon as it has: a sheet only cleared
     // could still be shown as it last was)
-    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl);
+    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl || this.fx);
     if (busy !== this.shown) {
       this.shown = busy;
       this.cv.style.visibility = busy ? 'visible' : 'hidden';
@@ -343,7 +348,7 @@ export class Comic {
       this.drawPage(dt);
       if (!this.words.length && !this.speed && !this.hit) return;
     }
-    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl) {
+    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl && !this.fx) {
       // (nothing of its own: the sheet kept clear, whatever was on it)
       g.clearRect(0, 0, this.cv.width, this.cv.height);
       this.dirty = false;
@@ -391,6 +396,19 @@ export class Comic {
         const c = (s.where && this.at(s.where)) || [0.5, 0.5];
         const fade = Math.min(1, s.t / 0.12, (s.life - s.t) / 0.25);
         this.streaks(c[0] * W, c[1] * H, W, H, s.k * fade);
+      }
+    }
+    // ---- (round 9) a flash of light: a cut's punch, over everything, gone in a breath
+    if (this.fx) {
+      const x = this.fx;
+      x.t += dt;
+      if (x.t > x.life) this.fx = null;
+      else {
+        g.save();
+        g.globalAlpha = Math.max(0, 1 - x.t / x.life) * x.a;
+        g.fillStyle = x.col;
+        g.fillRect(0, 0, W, H);
+        g.restore();
       }
     }
     // ---- the sound words
@@ -661,6 +679,7 @@ export class Comic {
     this.rubSrc = null;
     this.cd = null;
     this.fl = null;
+    this.fx = null;
     this.words = [];
     this.speed = null;
     this.hit = null;
