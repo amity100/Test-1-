@@ -53,6 +53,64 @@ export class Comic {
     this.fx = { t: 0, life, col, a };
   }
 
+  // (round 13) a picture of the film kept now (the frame just drawn - game.js), for a memory later
+  keepNext() {
+    this.wantKeep = true;
+  }
+
+  keep(src) {
+    this.wantKeep = false;
+    try {
+      const W = Math.max(8, Math.round(src.width / 2));
+      const H = Math.max(8, Math.round(src.height / 2));
+      const cv = this.memCv || (this.memCv = document.createElement('canvas'));
+      cv.width = W;
+      cv.height = H;
+      const c2 = cv.getContext('2d', { willReadFrequently: true });
+      c2.drawImage(src, 0, 0, W, H);
+      // (bleached once, here, as a memory is: nearly grey, a little sepia, light - a canvas filter at
+      // each frame cost a phone, and Safari draws without one)
+      try {
+        const im = c2.getImageData(0, 0, W, H);
+        const d = im.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i];
+          const gg = d[i + 1];
+          const b = d[i + 2];
+          const l = 0.299 * r + 0.587 * gg + 0.114 * b;
+          let R = r + (l - r) * 0.85;
+          let G = gg + (l - gg) * 0.85;
+          let B = b + (l - b) * 0.85;
+          R = R * 0.65 + (0.393 * R + 0.769 * G + 0.189 * B) * 0.35;
+          G = G * 0.65 + (0.349 * R + 0.686 * G + 0.168 * B) * 0.35;
+          B = B * 0.65 + (0.272 * R + 0.534 * G + 0.131 * B) * 0.35;
+          d[i] = Math.max(0, Math.min(255, (R * 1.55 - 128) * 0.85 + 128));
+          d[i + 1] = Math.max(0, Math.min(255, (G * 1.55 - 128) * 0.85 + 128));
+          d[i + 2] = Math.max(0, Math.min(255, (B * 1.55 - 128) * 0.85 + 128));
+        }
+        c2.putImageData(im, 0, 0);
+      } catch (e) {
+        // (its colours as they were)
+      }
+      this.memOk = true;
+    } catch (e) {
+      this.memOk = false;
+    }
+  }
+
+  // (round 13) inside somebody's head: the picture kept, over the screen for a breath - bleached, its
+  // colours gone to the paper's, shaking a little, then gone
+  memory(life = 0.55, a = 0.85) {
+    if (this.memOk) this.mem = { t: 0, life, a };
+  }
+
+  // (round 13) a heart heard in somebody's head: the picture's edges closing in dark on each beat -
+  // lub, dub - and opening again (beats: how many; per: seconds a beat; col: the dark's [r, g, b]; k:
+  // how far; vol: the heart's own sound with it, core/audio.js heartbeat)
+  pulse(beats = 2, o = {}) {
+    this.pu = { t: 0, n: -1, per: o.per || 0.82, life: beats * (o.per || 0.82) + 0.15, col: o.col || [34, 6, 16], k: o.k !== undefined ? o.k : 1, vol: o.vol !== undefined ? o.vol : 0.75 };
+  }
+
   word(text, where, o = {}) {
     const uv = Array.isArray(where) ? where : this.at(where);
     if (!uv) return;
@@ -336,7 +394,7 @@ export class Comic {
     const rubbing = !!(this.rubSrc && !this.pg);
     // (the sheet hidden while it has nothing on it, shown again as soon as it has: a sheet only cleared
     // could still be shown as it last was)
-    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl || this.fx);
+    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl || this.fx || this.mem || this.pu);
     if (busy !== this.shown) {
       this.shown = busy;
       this.cv.style.visibility = busy ? 'visible' : 'hidden';
@@ -348,7 +406,7 @@ export class Comic {
       this.drawPage(dt);
       if (!this.words.length && !this.speed && !this.hit) return;
     }
-    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl && !this.fx) {
+    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl && !this.fx && !this.mem && !this.pu) {
       // (nothing of its own: the sheet kept clear, whatever was on it)
       g.clearRect(0, 0, this.cv.width, this.cv.height);
       this.dirty = false;
@@ -396,6 +454,50 @@ export class Comic {
         const c = (s.where && this.at(s.where)) || [0.5, 0.5];
         const fade = Math.min(1, s.t / 0.12, (s.life - s.t) / 0.25);
         this.streaks(c[0] * W, c[1] * H, W, H, s.k * fade);
+      }
+    }
+    // ---- (round 13) the heart: the edges in dark on its beats
+    if (this.pu) {
+      const p = this.pu;
+      p.t += dt;
+      if (p.t > p.life) this.pu = null;
+      else {
+        const n = Math.floor(p.t / p.per);
+        if (n !== p.n) {
+          p.n = n;
+          if (p.vol > 0 && this.game.audio && n * p.per < p.life - 0.3) this.game.audio.play('heartbeat', p.vol);
+        }
+        const ph = p.t - n * p.per;
+        const b = Math.exp(-ph * 8) + (ph > 0.24 ? 0.65 * Math.exp(-(ph - 0.24) * 8) : 0);
+        const a = Math.min(1, b) * p.k * Math.min(1, (p.life - p.t) / 0.35, p.t / 0.04);
+        const R = Math.hypot(W, H) / 2;
+        const gr = g.createRadialGradient(W / 2, H / 2, R * (0.58 - 0.16 * a), W / 2, H / 2, R);
+        const [r0, g0, b0] = p.col;
+        gr.addColorStop(0, `rgba(${r0},${g0},${b0},0)`);
+        gr.addColorStop(0.55, `rgba(${r0},${g0},${b0},${(0.45 * a).toFixed(3)})`);
+        gr.addColorStop(1, `rgba(${r0},${g0},${b0},${(0.92 * a).toFixed(3)})`);
+        g.save();
+        g.fillStyle = gr;
+        g.fillRect(0, 0, W, H);
+        g.restore();
+      }
+    }
+    // ---- (round 13) a memory: the kept picture, bleached, a little shaken, over everything a breath
+    if (this.mem && this.memCv) {
+      const m = this.mem;
+      m.t += dt;
+      if (m.t > m.life) this.mem = null;
+      else {
+        const k = m.t / m.life;
+        // (a soft one, round 13: up slowly, held, down slowly - a memory coming, not a flash)
+        const soft = m.a < 0.6;
+        const up = soft ? 0.35 : 0.15;
+        const a = (k < up ? k / up : 1 - (k - up) / (1 - up)) * m.a;
+        const j = (1 - k) * (soft ? 1.5 : 6);
+        g.save();
+        g.globalAlpha = a;
+        g.drawImage(this.memCv, (Math.random() - 0.5) * j, (Math.random() - 0.5) * j, W, H);
+        g.restore();
       }
     }
     // ---- (round 9) a flash of light: a cut's punch, over everything, gone in a breath
@@ -675,6 +777,8 @@ export class Comic {
   }
 
   clear() {
+    this.mem = null;
+    this.pu = null;
     this.pg = null;
     this.rubSrc = null;
     this.cd = null;

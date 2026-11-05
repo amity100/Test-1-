@@ -388,7 +388,9 @@ export class PrologueVoices {
       };
     }
     const mouth = MOUTH[id] || L.en;
-    if (fig) fig.say = { text: mouth, tone: o.tone || 'talk', at: 0, atT: this.game.time, cps: mouth.length / Math.max(0.4, dur), wait: false, done: false };
+    // (round 13: the mouth on the real clock, as the voice is - on a slow phone the game's own clock
+    // lags it, and the lips went on after the words: render/people.js)
+    if (fig) fig.say = { text: mouth, tone: o.tone || 'talk', at: 0, atT: performance.now() / 1000, real: true, cps: mouth.length / Math.max(0.4, dur), wait: false, done: false };
     if (this.ui && o.sub !== false) this.ui.sub(L.who, L.en, L.he, dur + 0.35);
     return dur;
   }

@@ -667,7 +667,7 @@ function heroFace(fig, t) {
   let jaw = -1;
   if (say && !say.done && !say.wait) {
     const n = say.text.length;
-    const p = say.at + (t - say.atT) * say.cps;
+    const p = say.at + ((say.real ? performance.now() / 1000 : t) - say.atT) * say.cps;
     if (p > n + 1) say.done = true;
     else if (p >= 0) {
       const tr = say.track || (say.track = mouthTrack(say.text, say.tone === 'alarm' || say.text.indexOf('!') >= 0));
@@ -716,7 +716,11 @@ function faceOf(fig, F, t, cam) {
   }
   if (mood && MOODS[mood]) {
     const M = MOODS[mood];
-    for (let e = 0; e < 8; e++) _want[e] = Math.max(e === 1 ? 0 : _want[e], M[e]);
+    // (v5, round 13: a child's face startled or afraid opens its mouth a little - not a grown man's
+    // gape, the lips pulled wide over the teeth: spec.moodMouthK, the feeling's jaw and wide mouth; its
+    // words still move it as they do)
+    const mk = F.spec.moodMouthK !== undefined ? F.spec.moodMouthK : 1;
+    for (let e = 0; e < 8; e++) _want[e] = Math.max(e === 1 ? 0 : _want[e], e === 0 || e === 7 ? M[e] * mk : M[e]);
     // (no smile at rest under a feeling that has none of its own)
     if (!(M[1] > 0)) _want[1] = 0;
   }
@@ -733,7 +737,7 @@ function faceOf(fig, F, t, cam) {
       say.atT = t;
     }
     const n = say.text.length;
-    const p = say.wait ? -1 : say.at + (t - say.atT) * say.cps;
+    const p = say.wait ? -1 : say.at + ((say.real ? performance.now() / 1000 : t) - say.atT) * say.cps;
     if (p > n + 1) say.done = true;
     else if (p >= 0) {
       saying = true;
