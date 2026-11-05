@@ -612,15 +612,17 @@ FOLK.push(...CIVIL.slice(0, 30));
 FOLK.push(...ROLE.filter((F) => F.phone));
 FOLK.push(...ROLE.filter((F) => !F.phone));
 FOLK.push(...CIVIL.slice(30));
-export const FOLK_PHONE = 36 + ROLE.filter((F) => F.phone).length;
+// (round 11: Lily - below - goes in right after the phone's own, so that a phone makes her too)
+const PHONE_N = 36 + ROLE.filter((F) => F.phone).length;
 
 // ------------------------------------------------------------------ the story's own
 // (v5, ROADMAP 18) The prologue's people drawn as the city's people are, after all of them (nobody's
 // number moves, nobody's face or hair is made another way), and none of the city's to walk its
 // streets: each has a role of their own - game/looks.js folkPick passes over everybody with a role,
 // rolePick finds only the role asked - and game/prologue/cast.js dresses them for their scenes.
-// (A computer makes them; a phone makes the first FOLK_PHONE only, and cast.js draws them the old way
-// there.)
+// (round 11, the player's word - on a phone she was the simple shapes of the old way, cast.js
+// lilyOldWay, the phone making only its first FOLK_PHONE: she is one of those now, right after the
+// phone's own - the numbers of those after her one on.)
 // Lily Cruz, the hero's daughter, as her sheet has her: nine, a child's build and a child's face,
 // curious and smiling; dark brown hair, curly and messy, drawn back into a ponytail, loose curls at her
 // temples, a braid of beads ending in a feather by her right ear and a yellow clip above it; hazel
@@ -664,7 +666,8 @@ export const LILY = {
   shoes: { ...feet('sneaker', '#5e4280'), accent: '#efe8da' },
   acc: {},
 };
-FOLK.push(LILY);
+FOLK.splice(PHONE_N, 0, LILY);
+export const FOLK_PHONE = PHONE_N + 1;
 
 // (how many of them the city's renderer made: phones fewer - render/people.js; game/looks.js picks
 // from those)

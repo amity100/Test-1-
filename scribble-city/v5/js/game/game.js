@@ -2290,8 +2290,10 @@ export class Game {
     // (on a phone the buttons are on the screen; with a gamepad the prompt says which to press)
     const touch = this.touch && !this.pad.active;
     if (p.inVehicle) {
-      enter = true;
-      prompt = touch ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+      // (round 11: in the prologue's chase the car is not to be got out of - nothing offered)
+      const held = !!(this.prologue && this.prologue.active && (this.prologue.sceneN || 0) >= 5);
+      enter = !held;
+      prompt = touch || held ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
       // (ROADMAP 4.8: the plane's controls; out of a boat only by the shore; the bicycle's bell)
       const pv = p.inVehicle;
       if (!touch && pv.kind === 'plane') prompt = pv.flying ? 'W/S — מצערת · A/D — הטיה · רווח/C — האף למעלה/למטה · E — לקפוץ' : 'W — מצערת (מסלול ישר!) · במהירות: רווח להמראה · E — לצאת';

@@ -16,7 +16,7 @@ const BROWN = [0.5, 0.33, 0.2];
 // rocket's red, a yellow star, a blue one - and the little rabbit on its keyring. Far off she is the
 // simple shapes of her look (render/people.js drawLow): a child's build, the ponytail, the purple
 // hoodie open over the cream tee, the olive cargo trousers. (A phone makes only the first of the
-// city's drawn people - render/folkspec.js FOLK_PHONE: there she is drawn the old way, dressed the
+// city's drawn people - render/folkspec.js FOLK_PHONE - she among them since round 11; the old way, dressed the
 // same.)
 export function lilyLook() {
   const L = LILY_K >= 0 && LILY_K < FOLK_ON.n ? folkLook(LILY_K) : lilyOldWay();

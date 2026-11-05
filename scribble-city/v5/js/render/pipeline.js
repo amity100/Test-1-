@@ -406,6 +406,11 @@ uniform float uComic;
 // a colour, dark, they lit (uEmote: how far, uEmoteCol: the colour)
 uniform vec2 uSmear;
 uniform float uEmote;
+// (round 11) the people's own light, as an animated film lights them: a key on them when the sun is
+// behind them - what is dark on them lifted, their ink left as it is (uFill: how much, uFillCol: its
+// colour)
+uniform float uFill;
+uniform vec3 uFillCol;
 uniform vec3 uEmoteCol;
 uniform float uDotPx;
 uniform float uMis;
@@ -549,12 +554,24 @@ void main() {
     }
   }
   if (uEmote > 0.001) {
-    // (the moment: the world behind them gone into a colour and the dark, them lit)
+    // (the moment: what is behind them gone - round 11: not the world tinted, a filter's look, but a
+    // field of the colour as an anime paints it, light round them and dark to the edges, the world
+    // under it only a faint grain of itself; them lit)
     float me = who(vUv);
     vec2 q0 = vUv - 0.5;
-    float vig = 1.0 - smoothstep(0.15, 0.75, length(q0 * vec2(1.6, 1.0)));
-    vec3 bgc = uEmoteCol * (0.25 + 0.75 * lumc(c)) * (0.35 + 0.65 * vig);
+    float r0 = length(q0 * vec2(1.6, 1.0));
+    float vig = 1.0 - smoothstep(0.04, 0.82, r0);
+    vec3 field = uEmoteCol * (0.22 + 1.0 * vig * vig);
+    vec3 bgc = mix(field, uEmoteCol * (0.25 + 0.75 * lumc(c)), 0.16);
     c = mix(c, mix(bgc, c * 1.12, me), uEmote);
+  }
+  if (uFill > 0.001) {
+    float me = who(vUv);
+    if (me > 0.5) {
+      float l = lumc(c);
+      c *= 1.0 + uFill * (1.0 - smoothstep(0.08, 0.5, l)) * smoothstep(0.015, 0.06, l);
+      c += uFillCol * uFill * 0.05 * smoothstep(0.03, 0.12, l);
+    }
   }
   if (uGradeK > 0.001) {
     float l = lumc(c);
@@ -1005,7 +1022,7 @@ export class Pipeline {
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
     // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
     // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
     // looks (paintFocus, metres from the camera), the brush's streaks
@@ -1020,7 +1037,7 @@ export class Pipeline {
     // strong; its colour from the sun, and cool from the sky when the sun is behind the camera), the
     // grade (how much; the shadows' tint and the lights'), the grain, how much heavier the people's
     // outlines. All 0 / 1: the game as it always was
-    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8], grain: 0, personW: 1, comic: 0, mis: 0, dotInk: [0.3, 0.22, 0.5], smear: 0, emote: 0, emoteCol: [0.6, 0.1, 0.12] };
+    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8], grain: 0, personW: 1, comic: 0, mis: 0, dotInk: [0.3, 0.22, 0.5], smear: 0, emote: 0, emoteCol: [0.6, 0.1, 0.12], fill: 0 };
     this._sunNdc = new THREE.Vector3();
     // (and the same three passes that look up the drawing in its corner: the same uniforms; only
     // with the steady pace, so as it always was the passes are just what they were)
@@ -2960,15 +2977,18 @@ export class Pipeline {
     f.uEmote.value = L.emote || 0;
     f.uEmoteCol.value.set(L.emoteCol[0], L.emoteCol[1], L.emoteCol[2]);
     this.mPaint.uniforms.uGrain.value = 0.1 * (1 - Math.min(1, L.comic || 0));
+    const cam = this.camera;
+    const sd = shared.uSunDir.value;
+    const p = this._sunNdc.copy(cam.position).addScaledVector(sd, 1000).project(cam);
+    // (round 11: the people's key light - the more the camera looks into the sun, the more)
+    const front = !(p.z > 1 || p.z < -1);
+    f.uFill.value = front && L.fill ? L.fill * Math.min(1, Math.max(0, 1.25 - Math.hypot(p.x, p.y) * 0.45)) : 0;
     if (L.rim <= 0.001) {
       f.uRimCol.value.w = 0;
       return;
     }
     // where the sun is on the screen: the rim on the side towards it - or, the sun behind the
     // camera, a cooler rim from the sky above
-    const cam = this.camera;
-    const sd = shared.uSunDir.value;
-    const p = this._sunNdc.copy(cam.position).addScaledVector(sd, 1000).project(cam);
     let k = L.rim;
     let col = L.rimCol;
     if (p.z > 1 || p.z < -1) {
