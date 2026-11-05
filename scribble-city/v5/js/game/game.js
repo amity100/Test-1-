@@ -2271,8 +2271,11 @@ export class Game {
 
   // ------------------------------------------------------------------ prompts & goals
   updatePrompts() {
-    // (v5, ROADMAP 18: while the prologue is told, no prompts - its own words are on the screen)
-    if (this.prologue && this.prologue.active) {
+    // (v5, ROADMAP 18: while the prologue's film is shown, no prompts; in the player's own time in it
+    // they are there as everywhere - what E does at a shop's counter, the phone's car button and
+    // pedals: without them there was no getting out of the car on a phone, ROADMAP 18.9 round 9)
+    const pro = this.prologue && this.prologue.active ? this.prologue : null;
+    if (pro && (pro.locked || pro.holdCam)) {
       this.hud.setPrompt('');
       return;
     }

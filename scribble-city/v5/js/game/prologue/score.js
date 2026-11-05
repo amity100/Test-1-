@@ -1449,13 +1449,17 @@ class Land extends Cue {
 // it; once: the one time only; gain, lp (a low-pass: from along the pier), send (to the room)
 const FILES = {
   // (the music box from along the pier: dulled, more of the room than of itself)
-  wheel: { path: 'music/wheel_waltz.mp3', a: 2, b: 55, x: 2.5, gain: 0.5, lp: 3600, send: 0.45 },
+  // (round 9, the player's word: not heard at the wheel - louder, and less muffled)
+  wheel: { path: 'music/wheel_waltz.mp3', a: 2, b: 55, x: 2.5, gain: 0.85, lp: 6000, send: 0.4 },
   // (ROADMAP 18.9: the player's word - cute and disturbing at once, a little horror film: a sweet
   // music box that goes out of tune and melts while a dark drone, scraping strings and a heart grow
   // under it - begun under the boy waving from his gondola, cut dead the moment the wheel goes, some
   // 15 s on. Loud: over the eraser, the air and all)
   unease: { path: 'music/horror_box.mp3', from: 0, once: true, gain: 1.25, send: 0.2 },
   surreal: { path: 'music/surreal.mp3', a: 0.5, b: 84, x: 3, gain: 0.8, send: 0.35 },
+  // (round 9: once it is gone - not silence: dread. A music box played wrong over a low dissonant
+  // drone, a ringing in the ears, a heart - ElevenLabs, round and round until the questions)
+  shock: { path: 'music/shock.mp3', a: 0.5, b: 39.5, x: 3, gain: 1.0, send: 0.25 },
   // (a bar or two of the waltz, slowed, far off, mostly the room)
   memory: { path: 'music/wheel_waltz.mp3', from: 4, b: 11, once: true, rate: 0.82, gain: 0.55, lp: 1700, send: 0.9 },
 };
@@ -1547,6 +1551,7 @@ const CUES = {
   unease: { K: fileOr(Unease, 'unease'), lead: 0.03 },
   memory: { K: fileOr(Memory, 'memory'), sting: true },
   surreal: { K: fileOr(Surreal, 'surreal'), lead: 0.05 },
+  shock: { K: fileOr(Unease, 'shock'), lead: 0.02 },
   hit: { K: Hit, sting: true },
   land: { K: Land, sting: true },
 };

@@ -12,7 +12,7 @@ import { Comic } from './comic.js';
 import { civilianLook, kidLook, roleLook } from '../looks.js';
 import { Doodle } from '../doodle.js';
 import { Soundscape, airAt } from './soundscape.js';
-import { loadTrack, trackBuf } from './tracks.js';
+import { loadTrack, trackBuf, Looper } from './tracks.js';
 import { howto as howtoCard } from './howto.js';
 import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
@@ -503,6 +503,8 @@ export class Prologue {
       const air = this.air;
       Promise.all([loadTrack(A.ctx, 'sfx/crowd_loop.mp3'), loadTrack(A.ctx, 'sfx/sea_loop.mp3')]).then(([cr, se]) => air.useLoops(cr, se));
       loadTrack(A.ctx, 'sfx/erase_rub.mp3');
+      loadTrack(A.ctx, 'sfx/pencil_sketch.mp3');
+      loadTrack(A.ctx, 'sfx/sting.mp3');
       loadTrack(A.ctx, 'sfx/gone_whoosh.mp3');
       this.airT = 0;
       this.gullT = 3 + Math.random() * 4;
@@ -538,15 +540,32 @@ export class Prologue {
     // (Lily drawing - this.sketching: her pencil on the page, strokes and the gaps between them, heard
     // only near her)
     const Ly = this.cast.lily;
-    if (this.sketching && Ly) {
-      this.scrT = (this.scrT || 0) - dt;
-      const d = Math.hypot(Ly.pos.x - ear.x, Ly.pos.z - ear.z);
-      if (this.scrT <= 0 && d < 7) {
-        const dur = 0.12 + Math.random() * 0.3;
-        this.scrT = dur + 0.05 + Math.random() * (Math.random() < 0.2 ? 0.7 : 0.18);
-        const kk = Math.max(0.2, 1 - d / 7) * (0.7 + Math.random() * 0.4);
-        this.air.scratch(now, dur, kk);
-        if (this.airLog) this.airLog.push([this.clock || 0, 'scratch', dur, kk]);
+    // (round 9, the player's word: too loud, and not a pencil - a pencil on paper, recorded, soft,
+    // round and round while she draws, heard only near her: sfx/pencil_sketch.mp3)
+    {
+      const d = Ly ? Math.hypot(Ly.pos.x - ear.x, Ly.pos.z - ear.z) : 99;
+      const want = this.sketching && Ly && d < 7 ? 0.32 * Math.max(0.15, 1 - d / 7) : 0;
+      // (for the tests' film of it: the level heard, as it changes)
+      if (this.airLog && Math.abs(want - (this.pencilLogged || 0)) > 0.02) {
+        this.pencilLogged = want;
+        this.airLog.push([this.clock || 0, 'pencil', want]);
+      }
+      const buf = trackBuf('sfx/pencil_sketch.mp3');
+      if (want > 0 && buf && !this.pencilLoop) {
+        const gN = c.createGain();
+        gN.gain.value = 0;
+        gN.connect(this.air.out);
+        this.pencilLoop = { g: gN, L: new Looper(c, buf, gN, { a: 0, b: buf.duration, x: 0.4 }) };
+      }
+      const pl = this.pencilLoop;
+      if (pl) {
+        pl.L.pump(now);
+        pl.g.gain.setTargetAtTime(want, now, 0.25);
+        if (!this.sketching) {
+          pl.L.stop(now + 1);
+          setTimeout(() => pl.g.disconnect(), 1500);
+          this.pencilLoop = null;
+        }
       }
     }
     // steps: each time a stride's foot comes down (its phase past a half turn), heard from the ear
@@ -1336,9 +1355,10 @@ export class Prologue {
       t = 0;
       yield () => {
         t += this.dtR;
+        // (left open, it goes on all the same after a while: the pen is the player's, not the tour's)
         if (F && F.isOpen) {
           opened = true;
-          return false;
+          return t > 45;
         }
         return (opened && t > 3) || t > 30;
       };
@@ -1873,7 +1893,9 @@ export class Prologue {
     }
     this.sample('sfx/gone_whoosh.mp3', 0.9);
     this.airDip = 1;
-    this.cue('stop', { fade: 0.02 });
+    // (round 9, the player's word: not silence once it is gone - dread: score.js FILES.shock, round and
+    // round until the questions; a sting on his face as it lands)
+    this.cue('shock', { fade: 0.4 });
     // (and at once nobody down there is waving up at anything)
     S.forget();
     L.fig.reachR = null;
@@ -1897,6 +1919,7 @@ export class Prologue {
       yield 0.12;
       if (C.impact) C.impact(this.headJ(P), 0.1);
       if (C.focus) C.focus(() => this.headJ(P), 1.4, 1);
+      this.sample('sfx/sting.mp3', 0.75);
       yield 1.15;
       this.shot({ ...this.single(L, wv, { dist: 0.9, side: -0.2, up: 0.0, drop: 0.04 }), fov: 32, dur: 1.2, hand: 0.5 });
       if (C.focus) C.focus(() => this.headJ(L), 0.9, 0.8);
@@ -2703,12 +2726,14 @@ export class Prologue {
     yield* this.say('L13', L.fig, 0.2);
     yield* this.say('D21', P.fig, 0.3);
     // up and up: the way up has no way out but the roof - half way, the dark car still on them
-    yield () => lvOf(v()) >= 2.4;
+    // (round 8's car park is eight floors, not six: its levels from PARK - the roof run the top floor)
+    const TOP = PARK.main.levels.length - 2;
+    yield () => lvOf(v()) >= TOP * 0.48;
     yield* this.say('D22', P.fig, 0.2);
     // the roof run: the west half's top floor, open to the sky, heading south to the edge
     yield () => {
       const c = v();
-      return !!c && lvOf(c) >= 4.9 && c.pos.x < PARK.main.xc && c.pos.z > RUNUP.z + 6;
+      return !!c && lvOf(c) >= TOP - 0.1 && c.pos.x < PARK.main.xc && c.pos.z > RUNUP.z + 6;
     };
     this.climb = false;
     this.start(7);

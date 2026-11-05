@@ -75,10 +75,24 @@ const CSS = `
 #pl-hint.card.how li .k { flex: 0 0 auto; min-width: 7.2em; text-align: center; direction: ltr; }
 #pl-hint.card.how .tip { margin-top: 9px; font-size: 0.56em; font-weight: 600; color: #ffd23f; line-height: 1.45; }
 #pl-hint.card.how .tip::before { content: "💡 "; }
+/* (round 9) docked: small, at the side - on a computer the right, under nothing (the goals are away
+   in the prologue); on a phone at the top, between the map and the buttons */
+#pl-hint.card.how.dock { left: auto; right: 16px; top: 26vh; transform: none; min-width: 0; width: min(300px, 28vw); padding: 10px 14px 11px; font-size: 18px; animation: plDock 0.35s ease-out; }
+#pl-hint.card.how.dock .say, #pl-hint.card.how.dock .tip { display: none; }
+#pl-hint.card.how.dock .t { font-size: 1em; }
+#pl-hint.card.how.dock li { font-size: 0.66em; margin: 3px 0; }
+#pl-hint.card.how.dock li .k { min-width: 5.4em; }
+@keyframes plDock { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+body.touch #pl-hint.card.how { font-size: 15px; top: 8vh; padding: 10px 16px; max-width: min(70vw, 460px); }
+body.touch #pl-hint.card.how.dock { right: auto; left: 50%; top: 4px; transform: translateX(-50%); width: auto; max-width: 44vw; padding: 5px 10px 6px; font-size: 12px; animation: none; }
+body.touch #pl-hint.card.how.dock .tag { display: none; }
+body.touch #pl-hint.card.how.dock li { margin: 1px 0; }
 #pl-hint kbd { display: inline-block; min-width: 1.6em; padding: 1px 7px; margin: 0 2px; border-radius: 6px; background: #fff4e0; color: #1a1426; font: 800 0.95em "Rubik", sans-serif; box-shadow: 0 3px 0 #b8a98e; direction: ltr; }
-body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue-film #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
+body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue-film #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue-film #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }
 body.prologue-film #gear-bar, body.prologue-film #gear-rw, body.prologue-film #gear-sea, body.prologue-film #pp-slots, body.prologue-film #pp-tip { display: none !important; }
+/* (and a phone's buttons: nothing to press while the film is shown) */
+body.prologue-film #touch { visibility: hidden !important; }
 /* (ROADMAP 18.9: while the prologue is told, the HUD only the map and the task - no money, no clock,
    no bars: one film, the player's part of it too) */
 body.prologue #topbar, body.prologue #money, body.prologue #clock, body.prologue #district, body.prologue #ink, body.prologue #wanted { display: none !important; }
@@ -244,15 +258,30 @@ export class PrologueUI {
       const lines = (o.lines || []).map(([k, w]) => `<li><span class="k">${keys(k)}</span><span>${w}</span></li>`).join('');
       this.hintEl.classList.add('card', 'how');
       this.hint(`<span class="tag">${tag}</span><b class="t">${o.title}</b>${o.say ? `<div class="say">${o.say}</div>` : ''}${lines ? `<ul>${lines}</ul>` : ''}${o.tip ? `<div class="tip">${o.tip}</div>` : ''}`);
+      // (round 9, the player's word: it covered the screen - big for a moment, then off to the side,
+      // small, its keys still there, the game playable round it)
+      this.dock(false);
+      clearTimeout(this.dockT);
+      this.dockT = setTimeout(() => this.dock(true), o.big !== undefined ? o.big * 1000 : 2800);
       return;
     }
+    clearTimeout(this.dockT);
+    this.dock(false);
     this.hintEl.classList.remove('how');
     this.hintEl.classList.toggle('card', !!title);
     this.hint(title ? `<span class="tag">HOW TO PLAY</span>${title}<small>${how}</small>` : null);
   }
 
+  // the card off to the side (or back in the middle)
+  dock(on) {
+    this.hintEl.classList.toggle('dock', !!on);
+  }
+
   hint(html) {
-    if (!html) this.hintEl.classList.remove('on');
+    if (!html) {
+      clearTimeout(this.dockT);
+      this.hintEl.classList.remove('on');
+    }
     else {
       this.hintEl.innerHTML = html;
       this.hintEl.classList.add('on');

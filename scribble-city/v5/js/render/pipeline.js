@@ -446,7 +446,7 @@ float people(vec2 uv) {
 }
 float lumc(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 // (ROADMAP 18.9, round 8) the comic book's print over the finished picture (as the eye sees it,
-// sRGB): its people a little less - their faces are the film's
+// sRGB) - behind the people only (round 9: on them it flattened the drawing of their faces)
 vec3 comicPrint(vec3 c, vec2 uv) {
   float me = who(uv);
   float k = uComic;
@@ -457,7 +457,7 @@ vec3 comicPrint(vec3 c, vec2 uv) {
   float n = 5.0;
   float f = l * n;
   float lb = (floor(f) + smoothstep(0.3, 0.7, fract(f))) / n;
-  c = mix(c, clamp(c * ((lb + 0.04) / max(l, 0.02)), 0.0, 1.0), (0.5 - 0.3 * me) * k);
+  c = mix(c, clamp(c * ((lb + 0.04) / max(l, 0.02)), 0.0, 1.0), 0.5 * k * bg);
   l = lumc(c);
   float aa = 0.9 / uDotPx + 0.02;
   // behind the people every colour is a screen of dots, as a comic prints its flat colours: the
@@ -481,8 +481,8 @@ vec3 comicPrint(vec3 c, vec2 uv) {
   float dl = 1.0 - smoothstep(0.22 * hl - aa, 0.22 * hl + aa, d2);
   c = mix(c, min(c * vec3(1.06, 1.02, 0.95) + 0.03, 1.0), dl * 0.6 * k);
   // the deepest darks the ink's own black, and the paper warm under the rest
-  c = mix(c, vec3(0.075, 0.055, 0.11), smoothstep(0.1, 0.025, l) * 0.6 * k * (1.0 - 0.5 * me));
-  c *= mix(vec3(1.0), vec3(1.0, 0.985, 0.94), 0.5 * k);
+  c = mix(c, vec3(0.075, 0.055, 0.11), smoothstep(0.1, 0.025, l) * 0.6 * k * bg);
+  c *= mix(vec3(1.0), vec3(1.0, 0.985, 0.94), 0.5 * k * bg);
   return c;
 }
 vec3 grade(vec2 uv, float paint) {
