@@ -55,6 +55,9 @@ function mark(name) {
 function setStatus(t) {
   const el = document.getElementById('load-status');
   if (el) el.textContent = t;
+  // (and the loading screen's line under its bar, index.html #loader)
+  const ld = document.getElementById('ld-status');
+  if (ld && t) ld.textContent = t;
 }
 
 // (v5, ROADMAP 18.9) how far the load has got, 0..1 - the loading screen's bar (index.html #loading):
@@ -236,6 +239,11 @@ async function boot() {
     const note = document.getElementById('gpu-note');
     note.textContent = 'הדפדפן מצייר את המשחק בלי כרטיס המסך, ולכן הוא איטי מאוד. כדי שירוץ חלק מדליקים בהגדרות של הדפדפן את "האצת החומרה" (בכרום: הגדרות ← מערכת), ופותחים את הדפדפן מחדש.';
     note.classList.remove('hidden');
+    const ldNote = document.getElementById('ld-note');
+    if (ldNote) {
+      ldNote.textContent = note.textContent;
+      ldNote.classList.remove('hidden');
+    }
   }
   pipe.maxScale = 1;
   if (params.has('taafrac')) pipe.taaFrac = Math.min(1, Math.max(0.4, +params.get('taafrac') || 0.67));
