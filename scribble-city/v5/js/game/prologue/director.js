@@ -491,6 +491,7 @@ export class Prologue {
     if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
     this.tickMarker();
     this.tickLeaving(dt);
+    this.tickThoughts(dt);
     if (this.everyFrame) this.everyFrame(dt);
     // the script: on to its next step once the wait is over
     let guard = 0;
@@ -2212,15 +2213,34 @@ export class Prologue {
     if (!document.getElementById('pro-thought-css')) {
       const st = document.createElement('style');
       st.id = 'pro-thought-css';
-      st.textContent = '.pro-thought{position:fixed;z-index:58;left:50%;top:15%;transform:translateX(-50%) rotate(-1.5deg);max-width:min(560px,86vw);padding:8px 18px 10px;background:rgba(14,10,26,.72);border:2px solid rgba(255,248,236,.55);border-radius:14px 10px 15px 9px;color:#fff8ec;font:italic 600 clamp(17px,3.2vw,26px)/1.25 "Rubik",system-ui,sans-serif;direction:rtl;text-align:center;pointer-events:none;animation:proThought var(--life) ease-out forwards;box-shadow:0 0 0 4px rgba(14,10,26,.25)}@keyframes proThought{0%{opacity:0;transform:translateX(-50%) rotate(-1.5deg) scale(.92)}12%{opacity:1;transform:translateX(-50%) rotate(-1.5deg) scale(1)}82%{opacity:1}100%{opacity:0;transform:translateX(-50%) rotate(-1.5deg) translateY(-6px)}}';
+      st.textContent = '.pro-thought{position:fixed;z-index:58;left:50%;top:15%;max-width:min(560px,86vw);padding:8px 18px 10px;background:rgba(14,10,26,.72);border:2px solid rgba(255,248,236,.55);border-radius:14px 10px 15px 9px;color:#fff8ec;font:italic 600 clamp(17px,3.2vw,26px)/1.25 "Rubik",system-ui,sans-serif;direction:rtl;text-align:center;pointer-events:none;box-shadow:0 0 0 4px rgba(14,10,26,.25);opacity:0}';
       document.head.appendChild(st);
     }
     const el = document.createElement('div');
     el.className = 'pro-thought';
-    el.style.setProperty('--life', `${life}s`);
     el.textContent = `(${text})`;
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), life * 1000 + 50);
+    // (on the film's own clock, as everything in it: tickThoughts - a paused game holds it)
+    (this.thoughts || (this.thoughts = [])).push({ el, t: 0, life });
+  }
+
+  tickThoughts(dt) {
+    if (!this.thoughts || !this.thoughts.length) return;
+    this.thoughts = this.thoughts.filter((q) => {
+      q.t += dt;
+      const k = q.t / q.life;
+      if (k >= 1) {
+        q.el.remove();
+        return false;
+      }
+      // (in a little bigger and settling, held, up a touch and out)
+      const a = k < 0.12 ? k / 0.12 : k > 0.82 ? (1 - k) / 0.18 : 1;
+      const sc = k < 0.12 ? 0.92 + 0.08 * (k / 0.12) : 1;
+      const up = k > 0.82 ? -6 * ((k - 0.82) / 0.18) : 0;
+      q.el.style.opacity = a.toFixed(3);
+      q.el.style.transform = `translateX(-50%) translateY(${up.toFixed(1)}px) rotate(-1.5deg) scale(${sc.toFixed(3)})`;
+      return true;
+    });
   }
 
   // (round 13) inside his head, a flash: the wheel as it was a moment ago - white, the picture of it
@@ -2729,9 +2749,9 @@ export class Prologue {
       const q = this.person('crowd' + i, x, z, i % 5 === 2 ? kidLook(i % 2 === 0) : civilianLook(), { face: -Math.PI / 2 });
       q.noCollide = true;
       if (q.fig) q.fig.lodFar = 0;
-      // (on along the pier, past the railing and on to its gate - off it, back to the town; a little
-      // across as they go)
-      this.go(q, rnd(38, 44), z + rnd(-1.5, 1.5), rnd(1.05, 1.45));
+      // (on along the pier, past the railing and its gate and off it, spreading out onto the
+      // promenade - back to the town; a little across as they go)
+      this.go(q, rnd(26, 36), z + rnd(-7, 4), rnd(1.05, 1.45));
       list.push(q);
     }
     return list;
@@ -2800,8 +2820,9 @@ export class Prologue {
     crowd.forEach((q, i) => this.letGo(q, 'crowd' + i));
   }
 
-  // (round 13) somebody of the film's let go of where nobody sees it: once off the picture and 18 m
-  // from him (tickLeaving)
+  // (round 13) somebody of the film's let go of where nobody sees it: once off the picture and 45 m
+  // from him (tickLeaving) - till then the evening's people round him, the wheel's going and his
+  // search among them
   letGo(c, key) {
     if (!c) return;
     (this.leaving || (this.leaving = [])).push({ c, key, t: 0 });
@@ -2819,8 +2840,8 @@ export class Prologue {
       if (!c.alive) return false;
       q.set(c.pos.x, c.pos.y + 1, c.pos.z).project(cam);
       const onPic = q.z < 1 && Math.abs(q.x) < 1.15 && Math.abs(q.y) < 1.15;
-      const far = Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) > 18;
-      if ((far && !onPic) || e.t > 90) {
+      const far = Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) > 45;
+      if ((far && !onPic) || e.t > 180) {
         g.civilians.remove(c);
         if (e.key && this.cast[e.key] === c) delete this.cast[e.key];
         return false;
@@ -3812,6 +3833,13 @@ export class Prologue {
 
   finish() {
     const g = this.game;
+    // (a thought still up: gone with the film)
+    for (const q of this.thoughts || []) q.el.remove();
+    this.thoughts = [];
+    if (this.muffled && g.audio.muffle) {
+      g.audio.muffle(false);
+      this.muffled = false;
+    }
     if (this.autopilot) {
       this.autopilot.stop();
       this.autopilot = null;
