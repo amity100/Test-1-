@@ -2369,8 +2369,9 @@ export class Prologue {
       P.fig.lookAt = c.fig.j && c.fig.j.headC ? c.fig.j.headC : v3(c.pos.x, 1.6, c.pos.z);
       P.fig.reachR = v3(WHEEL.x, 20, WHEEL.z);
       P.fig.say = mouth(ASK[i % 2], 1.3, 'alarm');
-      // (over his shoulder at them, tilted - they do not stand in his world any more)
-      this.shot({ ...this.single(c, P, { dist: 1.45, side: i ? -0.4 : 0.4, up: -0.08 }), fov: 34, dur: 1.6, hand: 0.6, roll: i ? -0.07 : 0.07 });
+      // (over his shoulder at them, tilted - they do not stand in his world any more: his shoulder and
+      // his hand at where it stood, their face)
+      this.shot({ from: this.ots(P, c, { back: 0.7, side: i ? -0.42 : 0.42, h: 1.62 }), look: () => { const h = this.headJ(c); return h ? v3(h.x, h.y - 0.08, h.z) : v3(c.pos.x, 1.5, c.pos.z); }, fov: 36, dur: 1.6, hand: 0.6, roll: i ? -0.07 : 0.07 });
       yield 0.85;
       // (a smile, a shrug: what wheel?)
       this.feel(c.fig, 'joy', 3);
