@@ -68,6 +68,8 @@ export class Autopilot {
   stop() {
     const P = this.P;
     const inp = this.g.input;
+    inp.flyUp = false;
+    inp.flyDown = false;
     if (P.saveRead === this.mine) P.saveRead = this.orig;
     if (inp.readMove === this.mine) inp.readMove = this.orig;
   }
@@ -197,6 +199,20 @@ export class Autopilot {
       this.drawRamp(c, P.draw);
       return;
     }
+    // (round 12: the rotor drawn on the car in the air - a line across over its roof, as a hand draws
+    // it, on the pen's own page; again if it did not take)
+    if (P.drawingRotor && c) {
+      const fd = g.freedraw;
+      // (a beat first, the teaching pencil seen at its line - as a player would watch it)
+      this.once('rotorSeen', () => {});
+      const seen = (performance.now() - (this.seenAt || (this.seenAt = performance.now()))) / 1000;
+      if (fd && fd.isOpen && seen > 2.2 && (this.since('rotor') < 0 || this.since('rotor') > 3.5)) {
+        this.did.rotor = g.time;
+        this.drawRotor(c);
+      }
+      this.set(0, 0);
+      return;
+    }
     // (the film's own walking while it holds the keys: lock's readMove - not touched then)
     if (P.holdCam || P.locked) {
       this.set(0, 0);
@@ -294,7 +310,7 @@ export class Autopilot {
       }
       return;
     }
-    if (n === 9 && c) return this.away(o, c);
+    if (n === 9 && c) return this.flyHome(c);
     this.set(0, 0);
   }
 
@@ -385,6 +401,48 @@ export class Autopilot {
       return;
     }
     this.set(0, 0);
+  }
+
+  // the line over the roof drawn as a pointer would: down, across, up
+  drawRotor(c) {
+    const cv = typeof document !== 'undefined' ? document.getElementById('fd-air') : null;
+    if (!cv || !this.P.rotorLine) return;
+    const [[x0, y0], [x1, y1]] = this.P.rotorLine(c);
+    const ev = (type, x, y) => {
+      try {
+        cv.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 71, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      } catch (e) {
+        // (no pointer events here)
+      }
+    };
+    ev('pointerdown', x0, y0);
+    for (let i = 1; i <= 16; i++) ev('pointermove', x0 + ((x1 - x0) * i) / 16, y0 + ((y1 - y0) * i) / 16);
+    ev('pointerup', x1, y1);
+  }
+
+  // (round 12) on its rotor to the beach: high over the hotels, on, and down onto the sand
+  flyHome(c) {
+    const g = this.g;
+    const inp = g.input;
+    const flying = !!(c.fz && c.fz.rotor > 0) && c.air;
+    const d = Math.hypot(LOOKOUT.x - c.pos.x, LOOKOUT.z - c.pos.z);
+    if (!flying) {
+      inp.flyUp = false;
+      inp.flyDown = false;
+      this.set(0, c.speed > 1 ? -0.6 : 0);
+      return;
+    }
+    inp.flyUp = d > 40 && c.pos.y < 52;
+    inp.flyDown = d < 24;
+    if (d < 24) {
+      this.set(0, 0);
+      return;
+    }
+    // (as a helicopter is flown: turned to it first, then on - slower the nearer it is)
+    const da = wrap(Math.atan2(LOOKOUT.x - c.pos.x, LOOKOUT.z - c.pos.z) - c.yaw);
+    const steer = Math.max(-1, Math.min(1, da * 2.2));
+    const on = Math.abs(da) > 0.5 ? 0 : d > 70 ? 1 : d > 35 ? 0.45 : 0.22;
+    this.set(-steer, on);
   }
 
   away(o, c) {

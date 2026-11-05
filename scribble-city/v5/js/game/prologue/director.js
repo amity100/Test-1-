@@ -5,7 +5,7 @@ import { Shots } from './shots.js';
 import { LINES } from './lines.js';
 import { WHEEL, STAND, PARK } from './set.js';
 import { Pursuer } from './chase.js';
-import { RampDraw, Ramp, Jump, rampH } from './ramp.js';
+import { RampDraw, Ramp, Jump, Flight, rampH } from './ramp.js';
 import { PaintFight } from './paintfight.js';
 import { HeldPage } from './page.js';
 import { Acting, ACTS } from './acting.js';
@@ -3292,8 +3292,12 @@ export class Prologue {
     this.objective(null);
     this.shooting = false;
     const car = v();
-    const J = new Jump(g, car, prof, LAND);
+    // (round 12, the player's word: off the lip it flies - far out and high, and there is no roof
+    // across the street to come down on: only a rotor drawn on it in the air will hold it up)
+    const J = new Flight(g, car, prof);
     this.jump = J;
+    this.flight = J;
+    const L = this.cast.lily;
     // (the dark car behind: on its brakes, stopped on the roof short of the ramp)
     const Pc = this.pursuer && this.pursuer.car;
     if (Pc) {
@@ -3311,16 +3315,15 @@ export class Prologue {
     this.comic.lines(null, 1.4, 1);
     if (this.pursuer) this.pursuer.paused = true;
     this.film(true);
-    // the rear three-quarters of it leaving the lip, then wide as it hangs over the street
-    // (round 9: a kick and a tilt as it leaves the lip)
-    this.shot({ from: () => off(car, 7, 5, 1.2), look: () => v3(car.pos.x, car.pos.y + 0.6, car.pos.z), fov: 50, dur: 1.2, hand: 0.4, shake: 0.12, roll: 0.08, rollTo: 0.02 });
+    // the rear three-quarters of it leaving the lip, then wide as it soars out over the street
+    this.shot({ from: () => off(car, 7, 5, 1.2), look: () => v3(car.pos.x, car.pos.y + 0.6, car.pos.z), fov: 50, dur: 1.4, hand: 0.4, shake: 0.12, roll: 0.08, rollTo: 0.02 });
     this.flash(0.1, '#ffffff');
     yield () => J.apex;
     // the top of the arc: time nearly still; the title in the picture
-    this.slow(0.035, 9);
+    this.slow(0.03, 9);
     this.cue('title');
-    // (the camera swings out from behind its rear quarter to its side, low over the street - the car
-    // in the top half of the picture against the towers and the sunset, the title under it)
+    // (the camera swings out from behind its rear quarter to its side, low under it - the car high in
+    // the picture against the towers and the sunset, the title under it)
     const c0 = { pos: car.pos.clone() };
     this.shot({
       path: [off(c0, 4.5, 3.5, 0.6), off(c0, 1.5, 9, -1.2), off(c0, -3, 14, -3.2)],
@@ -3332,83 +3335,138 @@ export class Prologue {
       hand: 0.2,
     });
     yield 0.9;
-    // a moment of their faces: Danny on the wheel, Lily holding on
     this.ui.title(true, GAME_TITLE, CREDIT);
     yield 3.4;
     this.ui.title(false);
-    yield 0.6;
-    // and on: the far roof coming up fast
-    this.slow(1, 2.5);
-    this.shot({ from: () => off(car, 9, 7, 3.5), look: () => v3(PARK.land.x, PARK.land.y, PARK.land.z + 4), fov: 52, dur: 2.2, hand: 0.6 });
-    yield () => J.done;
-    // down: hard
-    g.camRig.addShake(1.1);
-    this.flash(0.14, '#ffffff');
-    g.audio.play('crash', 1);
-    g.audio.play('skid', 1);
-    this.comic.impact(car.pos, 0.1);
-    this.comic.word('CRASH!', v3(car.pos.x, car.pos.y + 1.6, car.pos.z), { fill: '#ffd23f', burst: '#ff4f6a', size: 0.11, life: 0.9 });
-    this.comic.word('SKRRRT', off(car, 3, 1, 0.6), { fill: '#fff4d6', burst: '#3fc6c0', size: 0.06, life: 1.1, tilt: -0.2 });
-    if (g.fx) {
-      for (let i = 0; i < 4; i++) g.fx.sparks(car.pos.x + (Math.random() - 0.5) * 3, car.pos.y + 0.2, car.pos.z + (Math.random() - 0.5) * 2, 12, [1, 0.8, 0.35]);
-      g.fx.smoke(car.pos.x, car.pos.y + 0.4, car.pos.z, 2.4);
-    }
-    // it slews round, the tyres screaming, scrubbing off its speed; he fights it (sideways: across the
-    // run, in its frame)
-    {
-      const [sx, sz] = RUNF.toWorld(0, 3);
-      car.vx = car.vx * 0.3 + sx;
-      car.vz = car.vz * 0.3 + sz;
-    }
-    car.yawRate = (car.yawRate || 0) + 1.2;
-    this.shot({ from: () => off(car, -6, -7, 2.2), look: () => v3(car.pos.x, car.pos.y + 0.5, car.pos.z), fov: 48, dur: 1.4, hand: 1, shake: 0.16, roll: -0.07 });
-    yield 1.2;
-    // (round 11, the player's word - the car parks simple to drive: the way down Bayshore cut, not
-    // driven - downCut)
-    yield* this.downCut(car);
+    yield 0.4;
+    // and under it: nothing - the street far down, the open ground to the water. From below, the car
+    // hanging against the sky; her voice
+    this.shot({ from: () => off(car, 3, -6, -8), look: () => v3(car.pos.x, car.pos.y + 0.4, car.pos.z), fov: 46, dur: 2.4, hand: 0.25, roll: -0.06 });
+    if (L) {
+      this.feel(L.fig, 'scared', 4);
+      yield* this.say('L08', L.fig, 0.3);
+    } else yield 1.2;
+    // the second drawing: a rotor, on the car in the air
+    yield* this.rotor(car);
+    // (its rotor turning: its own again in the air, held up where it is)
+    J.release();
+    this.jump = null;
+    this.check = null;
+    // (the game's camera eased in from the drawing's - film(false))
     this.film(false);
     g.camRig.yaw = car.yaw;
-    this.descend = false;
-    this.check = { x: -195.5, y: 0.2, z: 309, yaw: Math.PI };
+    g.audio.play('magic', 0.8);
+    this.flash(0.08, '#fff4d6');
+    this.comic.word('WHUP-WHUP!', v3(car.pos.x, car.pos.y + 2.2, car.pos.z), { fill: '#ffd23f', burst: '#ff4f8b', size: 0.085, life: 1.2, tilt: -0.12 });
+    this.slow(1, 3);
+    this.cue('chase', { heat: 0.3 });
+    this.objective('Fly to the <b>beach</b> - set down on the sand', LOOKOUT.x, LOOKOUT.z, 'Beach');
+    this.howto('fly', 12);
     this.hour(18.62, 0.004);
     this.start(9);
   }
 
-  // down Bayshore not driven: the screen gone black over the tyres screaming down its ramps - then
-  // from across 5th Street, the car bursting out of its gate into the evening, swerving onto the
-  // street - the street the player's again (round 11: three shots inside its dark floors showed
-  // nothing of the car)
-  *downCut(car) {
+  // (round 12) the rotor, drawn on the car in the air - the game's own part pen (game/partpen.js,
+  // game/fuse.js): the camera the player's, close on the car; the pen out on it, the rotor chosen;
+  // and a pencil over the roof drawing a straight line across it, again and again, till the player
+  // draws - whatever is drawn there is the rotor
+  *rotor(car) {
     const g = this.game;
-    const B = PARK.landing;
-    const LY = B.levels;
-    const put = (x, y, z, yaw, sp) => {
-      car.pos.set(x, y + 0.06, z);
-      car.yaw = yaw;
-      car.speed = sp;
-      car.vx = Math.sin(yaw) * sp;
-      car.vz = Math.cos(yaw) * sp;
-      car.vy = 0;
-      car.air = false;
+    const fd = g.freedraw;
+    // (the car in the middle of the picture from behind and over it, the sky over its roof to draw on -
+    // held there, steady, as it hangs: the pen's own camera put by - game/fuse.js sketchCam)
+    if (g.fuse) g.fuse.camHeld = true;
+    const back = () => {
+      const fx = Math.sin(car.yaw);
+      const fz = Math.cos(car.yaw);
+      return v3(car.pos.x - fx * 7.5, car.pos.y + 3.2, car.pos.z - fz * 7.5);
     };
-    if (this.pursuer) this.pursuer.paused = true;
-    this.ui.fade(true, 0.25);
-    g.audio.play('skid', 0.8);
-    yield 0.45;
-    g.audio.play('skid', 0.6);
-    yield 0.4;
-    g.audio.play('skid', 0.7);
-    // (in the gate, coming out)
-    const gx = (B.gate[0] + B.gate[1]) / 2;
-    put(gx, LY[0], B.z0 + 4, Math.PI, 15);
-    this.film(true);
-    this.shot({ from: v3(gx + 12, 1.25, B.z0 - 15), look: () => v3(car.pos.x, car.pos.y + 0.7, car.pos.z), fov: 42, dur: 1.9, hand: 0.45 });
-    yield 0.15;
-    this.ui.fade(false, 0.3);
-    yield 0.55;
-    g.audio.play('roar', 0.8);
-    this.comic.word('SKRRT!', v3(car.pos.x, car.pos.y + 1.2, car.pos.z), { fill: '#fff4d6', burst: '#ff4f8b', size: 0.07, life: 0.9, tilt: -0.15 });
-    yield 1.0;
+    // (the car a little under the middle, the sky over its roof clear - the pen's rows of parts put
+    // away: the rotor is chosen already, and on a phone they covered the picture)
+    this.shot({ from: back, look: () => v3(car.pos.x, car.pos.y + 2.1, car.pos.z), fov: 50, dur: 600, hand: 0 });
+    if (!document.getElementById('pro-rotor-css')) {
+      const st = document.createElement('style');
+      st.id = 'pro-rotor-css';
+      st.textContent = 'body.pro-rotor .pp-legend, body.pro-rotor .pp-row, body.pro-rotor .pp-slots, body.pro-rotor #fd-hint { display: none !important; }';
+      document.head.appendChild(st);
+    }
+    document.body.classList.add('pro-rotor');
+    this.ui.film(false);
+    g.hud.show();
+    this.drawingRotor = true;
+    this.howto('rotor', 0);
+    const teach = this.teachRotor(car);
+    const has = () => !!(car.fz && car.fz.rotor > 0);
+    let t = 0;
+    yield () => {
+      t += this.dtR || 0.016;
+      if (has()) return true;
+      if (fd && !fd.isOpen && g.player.inVehicle === car) {
+        fd.show();
+        if (g.fuse && g.fuse.pen && g.fuse.pen.choosePar) g.fuse.pen.choosePar('rotor');
+      }
+      teach.update(!!(fd && (fd.cur || (fd.group && fd.group.length))));
+      return false;
+    };
+    teach.remove();
+    document.body.classList.remove('pro-rotor');
+    if (g.fuse) g.fuse.camHeld = false;
+    // (whatever its size, big enough to hold the car up - the story's)
+    car.fz.rotor = Math.max(car.fz.rotor || 0, 1.3);
+    car.fz.airCtl = Math.max(car.fz.airCtl || 0, 1);
+    car.fuseUp = true;
+    if (fd && fd.isOpen) fd.close();
+    this.drawingRotor = false;
+    this.ui.card(null);
+  }
+
+  // where on the screen the rotor goes: a line across over the car's roof, its two ends ([x, y] px)
+  rotorLine(car) {
+    const cam = this.game.camera;
+    const H = (car.heightM || 1.45) + 0.85;
+    const rx = Math.cos(car.yaw);
+    const rz = -Math.sin(car.yaw);
+    const a = v3(car.pos.x - rx * 1.9, car.pos.y + H, car.pos.z - rz * 1.9).project(cam);
+    const b = v3(car.pos.x + rx * 1.9, car.pos.y + H, car.pos.z + rz * 1.9).project(cam);
+    const W = window.innerWidth;
+    const Hh = window.innerHeight;
+    const P0 = [((a.x + 1) / 2) * W, ((1 - a.y) / 2) * Hh];
+    const P1 = [((b.x + 1) / 2) * W, ((1 - b.y) / 2) * Hh];
+    return P0[0] <= P1[0] ? [P0, P1] : [P1, P0];
+  }
+
+  // the pencil that shows how: over the car's roof, a straight line drawn across it from one side to
+  // the other, its dashes left behind it, again and again - gone while the player draws
+  teachRotor(car) {
+    const el = document.createElement('div');
+    el.className = 'pro-teach';
+    el.innerHTML = '<svg><line class="tl"/><g class="tp"><path d="M12 2h38v12H12z" fill="#ffd23f" stroke="#1b1430" stroke-width="2"/><path d="M50 2h8v12h-8z" fill="#ff7ab8" stroke="#1b1430" stroke-width="2"/><path d="M12 2L1.5 8 12 14z" fill="#f3d7a8" stroke="#1b1430" stroke-width="2" stroke-linejoin="round"/><path d="M1.5 8l4.5-2.6v5.2z" fill="#1b1430"/></g></svg>';
+    if (!document.getElementById('pro-teach-css')) {
+      const st = document.createElement('style');
+      st.id = 'pro-teach-css';
+      st.textContent = '.pro-teach{position:fixed;inset:0;z-index:60;pointer-events:none;transition:opacity .25s}.pro-teach.off{opacity:0}.pro-teach svg{width:100%;height:100%;overflow:visible}.pro-teach .tl{stroke:#fff8ec;stroke-width:6;stroke-linecap:round;stroke-dasharray:14 12;filter:drop-shadow(0 0 4px #1b1430)}';
+      document.head.appendChild(st);
+    }
+    document.body.appendChild(el);
+    const line = el.querySelector('.tl');
+    const pen = el.querySelector('.tp');
+    const t0 = performance.now();
+    return {
+      update: (drawing) => {
+        el.classList.toggle('off', drawing);
+        const [[x0, y0], [x1, y1]] = this.rotorLine(car);
+        // (1.5 s across, a breath at the end, again)
+        const k = Math.min(1, ((performance.now() - t0) % 2000) / 1500);
+        const x = x0 + (x1 - x0) * k;
+        const y = y0 + (y1 - y0) * k;
+        line.setAttribute('x1', x0);
+        line.setAttribute('y1', y0);
+        line.setAttribute('x2', x);
+        line.setAttribute('y2', y);
+        pen.setAttribute('transform', `translate(${x} ${y}) rotate(-38) translate(-2 -8) scale(1.4)`);
+      },
+      remove: () => el.remove(),
+    };
   }
 
   // ------------------------------------------------------------------ 9. AWAY, AND QUIET
@@ -3417,55 +3475,17 @@ export class Prologue {
     const P = g.player;
     const L = this.cast.lily;
     const v = () => P.inVehicle;
-    // down Bayshore's ramps; on its street floor - the dark car comes round the block onto 5th Street
-    if (this.pursuer) this.pursuer.paused = true;
-    yield () => {
-      const c = v();
-      const lv = c ? PARK.levelAt(c.pos.x, c.pos.z, c.pos.y + 0.3) : null;
-      return !!c && ((lv !== null && lv >= 10 && lv < 10.5) || c.pos.y < 1);
-    };
-    const b = this.thugCar;
-    if (b && !b.dead) {
-      // (they came down the other way and round: on 5th Street west of the gate, coming east)
-      b.pos.set(PARK.landing.x0 + 14, 0.15, PARK.landing.z0 - 6.5);
-      b.yaw = Math.PI / 2;
-      b.vx = b.vz = 0;
-      b.speed = 0;
-      const Q = this.pursuer && this.pursuer.car === b ? this.pursuer : new Pursuer(g, b, v());
-      Q.prey = v();
-      Q.paused = false;
-      Q.keep = 5;
-      // (out on the street he has to lose them: no catching up here)
-      Q.catchUp = false;
-      Q.trail.length = 0;
-      Q.i = 0;
-      const G = PARK.down[PARK.down.length - 1];
-      Q.seed([[b.pos.x, 0.15, b.pos.z], [G.x - 6, 0.15, G.z - 1.5], [G.x, 0.15, G.z]]);
-      this.pursuers = [Q];
-      this.pursuer = Q;
-    }
-    yield () => v() && v().pos.y < 1 && v().pos.z < PARK.landing.z0 - 1;
-    this.descend = false;
-    this.objective('<b>Lose them</b>', LOOKOUT.x, LOOKOUT.z, 'Beach');
-    this.howto('lose', 9);
-    this.check = { x: PARK.down[PARK.down.length - 1].x, y: 0.15, z: PARK.down[PARK.down.length - 1].z - 1, yaw: Math.PI / 2 };
-    // they give up once he is far enough away, or out on the sand where they will not follow
-    yield () => {
-      const car = v();
-      const Q = this.pursuer;
-      if (!car || !Q || !Q.car) return true;
-      const d = Math.hypot(car.pos.x - Q.car.pos.x, car.pos.z - Q.car.pos.z);
-      this.loseT = d > 75 || car.pos.x > 46 ? (this.loseT || 0) + this.dtR : 0;
-      return this.loseT > 2.5;
-    };
+    // (round 12: flown to the beach on its rotor - the dark car left on the roof behind - and set down on
+    // the sand near the water: the ending)
     if (this.pursuer) {
       this.pursuer.paused = true;
       this.pursuer.input.handbrake = true;
     }
-    this.cue('chase', { heat: 0.2 });
-    this.objective('Find somewhere <b>quiet</b>', LOOKOUT.x, LOOKOUT.z, 'Beach');
-    this.howto('quiet', 8);
-    yield () => v() && this.dist(LOOKOUT.x, LOOKOUT.z) < 14 && Math.abs(v().speed) < 6;
+    this.descend = false;
+    yield () => {
+      const c = v();
+      return !!c && !c.air && this.dist(LOOKOUT.x, LOOKOUT.z) < 45 && Math.abs(c.speed || 0) < 6;
+    };
     // the car stopped; the engine running; his breath
     this.check = null;
     this.objective(null);
