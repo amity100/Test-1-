@@ -1739,6 +1739,8 @@ export class Traffic {
 
   // the eraser rubs at a car; when it runs out of ink it is gone (the driver jumps out first)
   rub(c, amount, at) {
+    // (nothing rubbed out while he only draws: game.canErase)
+    if (!this.game.canErase) return;
     c.ink -= amount;
     c.stopped = true;
     this.game.world.objects.addSpot(at.x, at.y, at.z, 0.4);

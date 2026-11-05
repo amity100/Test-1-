@@ -288,7 +288,13 @@ export class Weapons {
       slot.spin = Math.max(0, Math.min(1, slot.spin + (want ? dt * 1.5 : -dt * 0.9)));
       if (want && slot.spin < 0.4 && Math.random() < dt * 14) game.audio.play('click', 0.4);
     }
-    if (canAct && def.kind === 'melee') {
+    if (canAct && def.kind === 'melee' && def.id === 'pencil' && !game.canErase) {
+      // (only drawing for now: the pencil's eraser end does nothing yet - said, now and then)
+      if (input.firePressed && game.time - (this.drawOnlyT || -99) > 6) {
+        this.drawOnlyT = game.time;
+        game.hud.toast(game.touch ? 'בינתיים רק מציירים: כפתור העיפרון ✏ — וציירו' : 'בינתיים רק מציירים: Q — וציירו באוויר', 'info', 2.6);
+      }
+    } else if (canAct && def.kind === 'melee') {
       if ((input.firePressed || input.fire) && this.cooldown <= 0) {
         this.swingT = 0;
         this.swingHit = false;
@@ -694,7 +700,7 @@ export class Weapons {
       if (el && c.alive) this.inkOn(el, c, true, c.fig.center, f, def.damage);
       any = true;
     }
-    if (!any) {
+    if (!any && game.canErase) {
       // nobody there: the eraser rubs out whatever is in front (cars, lamps, walls, the street)
       // (a toothed blade saws: more of it, ROADMAP 11.11)
       const saw = def.saw ? 1.6 : 1;

@@ -344,8 +344,10 @@ export class HUD {
 
   updateWeapon() {
     const s = this.game.weapons.current;
-    this.weaponName.textContent = s.def.name;
     const d = s.def;
+    // (only drawing for now: the pencil is a pencil - game.canErase)
+    const drawOnly = d.id === 'pencil' && !this.game.canErase;
+    this.weaponName.textContent = drawOnly ? 'עיפרון' : d.name;
     // (the bare fists, ROADMAP 5.4: how the combo goes)
     this.weaponAmmo.textContent = d.bare ? (this.game.touch ? 'שלוש מכות ברצף — בעיטה' : 'שלוש ברצף — בעיטה · קליק ימני — הגנה')
       : d.block && s.uses !== undefined ? `המגן יחזיק עוד ${s.uses} מכות`
@@ -353,6 +355,7 @@ export class HUD {
       : d.kind === 'beam' ? `${Math.ceil(s.ammo)} שניות של אור`
       : d.projectile === 'scissors' ? (s.out ? 'באוויר… חוזרים אליך' : 'זורקים — וחוזרים')
       : d.projectile === 'inkbomb' ? `${s.ammo} בקבוקי דיו`
+      : drawOnly ? (this.game.touch ? 'לצייר: כפתור העיפרון' : 'לצייר: Q')
       : s.ammo === Infinity ? 'תמיד איתך' : (this.game.arsenal && this.game.arsenal.ammoText(s)) || `${s.ammo} יריות`;
     this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear || d.bare || d.free ? '' : s.grade;
     // (one drawn freehand, ROADMAP 11.6: no blueprint to measure it by)
