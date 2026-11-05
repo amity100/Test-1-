@@ -401,6 +401,12 @@ uniform float uGrainT;
 // darks the ink's, the paper warm under the light - and what is far from where the film looks in
 // plates a little out of register (uMis, pixels at 720 lines... given for this picture)
 uniform float uComic;
+// (round 9, the film's language) a whip pan's smear across the picture (uSmear: its length and way,
+// in the picture's own measure); the anime's moment of feeling - what is behind the people sunk into
+// a colour, dark, they lit (uEmote: how far, uEmoteCol: the colour)
+uniform vec2 uSmear;
+uniform float uEmote;
+uniform vec3 uEmoteCol;
 uniform float uDotPx;
 uniform float uMis;
 uniform vec3 uDotInk;
@@ -487,6 +493,13 @@ vec3 comicPrint(vec3 c, vec2 uv) {
 }
 vec3 grade(vec2 uv, float paint) {
   vec3 s = fin3(texture(tSrc, TC(uv)).rgb);
+  if (dot(uSmear, uSmear) > 1e-6) {
+    // (the whip: the picture dragged along the way it is swung)
+    vec3 acc = s;
+    for (int i = 1; i <= 6; i++) acc += fin3(texture(tSrc, TC(uv + uSmear * (float(i) / 6.0 - 0.5))).rgb);
+    s = acc / 7.0;
+    paint = 0.0;
+  }
   // (the painted look: the brush's picture over what is behind the people - the darkest of the pens'
   // lines kept through it, as a painter keeps the drawing under the paint)
   if (paint > 0.001) {
@@ -534,6 +547,14 @@ void main() {
       float bg = max(1.0 - who(vUv + o), (1.0 - who(vUv + o * 2.2)) * 0.55);
       c += uRimCol.rgb * uRimCol.a * bg * (1.0 - c * 0.6);
     }
+  }
+  if (uEmote > 0.001) {
+    // (the moment: the world behind them gone into a colour and the dark, them lit)
+    float me = who(vUv);
+    vec2 q0 = vUv - 0.5;
+    float vig = 1.0 - smoothstep(0.15, 0.75, length(q0 * vec2(1.6, 1.0)));
+    vec3 bgc = uEmoteCol * (0.25 + 0.75 * lumc(c)) * (0.35 + 0.65 * vig);
+    c = mix(c, mix(bgc, c * 1.12, me), uEmote);
   }
   if (uGradeK > 0.001) {
     float l = lumc(c);
@@ -984,7 +1005,7 @@ export class Pipeline {
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
     // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
     // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
     // looks (paintFocus, metres from the camera), the brush's streaks
@@ -999,7 +1020,7 @@ export class Pipeline {
     // strong; its colour from the sun, and cool from the sky when the sun is behind the camera), the
     // grade (how much; the shadows' tint and the lights'), the grain, how much heavier the people's
     // outlines. All 0 / 1: the game as it always was
-    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8], grain: 0, personW: 1, comic: 0, mis: 0, dotInk: [0.3, 0.22, 0.5] };
+    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8], grain: 0, personW: 1, comic: 0, mis: 0, dotInk: [0.3, 0.22, 0.5], smear: 0, emote: 0, emoteCol: [0.6, 0.1, 0.12] };
     this._sunNdc = new THREE.Vector3();
     // (and the same three passes that look up the drawing in its corner: the same uniforms; only
     // with the steady pace, so as it always was the passes are just what they were)
@@ -2934,6 +2955,10 @@ export class Pipeline {
     f.uDotPx.value = Math.max(4.2, oh / 140);
     f.uMis.value = (L.mis || 0) * (oh / 720);
     f.uDotInk.value.set(L.dotInk[0], L.dotInk[1], L.dotInk[2]);
+    // (round 9: the whip's smear - across the picture, its way on the screen - and the moment's colour)
+    f.uSmear.value.set((L.smear || 0) * 0.09, 0);
+    f.uEmote.value = L.emote || 0;
+    f.uEmoteCol.value.set(L.emoteCol[0], L.emoteCol[1], L.emoteCol[2]);
     this.mPaint.uniforms.uGrain.value = 0.1 * (1 - Math.min(1, L.comic || 0));
     if (L.rim <= 0.001) {
       f.uRimCol.value.w = 0;

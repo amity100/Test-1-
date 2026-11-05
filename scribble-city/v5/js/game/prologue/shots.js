@@ -35,6 +35,14 @@ export class Shots {
 
   // a shot: { from, to, look, lookTo, path: [points], lookPath, arc (the path at an even pace), fov,
   // fovTo, dur, ease, hand (0..1), follow: () => ({ from, look }) }
+  // (ROADMAP 18.9, round 9 - the film's own camera language, as an animated feature's:
+  //   roll, rollTo   the frame tilted (a Dutch angle), and turning as the shot goes
+  //   vertigo        the subject kept the same size as the camera travels: the lens widens as it
+  //                  comes in, narrows as it goes back - the world behind stretching away (a dolly zoom)
+  //   shake          a kick of it at the start, dying away (an impact, a slam)
+  //   whip           the last part of the shot (seconds) a whip pan out to the next: the smear across
+  //                  the picture - render/pipeline.js uSmear
+  //   focus          [from, to] where the lens is sharp, metres from the camera: a rack focus)
   cut(s) {
     const sh = { dur: 3, ease: 'inout', hand: 0.6, fov: 50, ...s };
     if (sh.path) sh.curve = new THREE.CatmullRomCurve3(sh.path.map(V), false, 'centripetal', 0.5);
@@ -43,8 +51,14 @@ export class Shots {
     if (sh.to) sh.to = typeof sh.to === 'function' ? sh.to : V(sh.to);
     if (sh.look) sh.look = typeof sh.look === 'function' ? sh.look : V(sh.look);
     if (sh.lookTo) sh.lookTo = typeof sh.lookTo === 'function' ? sh.lookTo : V(sh.lookTo);
+    if (sh.vertigo) {
+      const f0 = typeof sh.from === 'function' ? sh.from() : sh.from;
+      const l0 = typeof sh.look === 'function' ? sh.look() : sh.look;
+      sh.vd0 = f0 && l0 ? f0.distanceTo(l0) : 1;
+    }
     this.shot = sh;
     this.t = 0;
+    this.smear = 0;
     return sh;
   }
 
@@ -92,11 +106,39 @@ export class Shots {
       L.x += Math.sin(T * 0.7 + 3) * h * 0.6;
       L.y += Math.sin(T * 1.1 + 5) * h * 0.6;
     }
+    // (a kick, dying away)
+    if (sh.shake) {
+      const a = sh.shake * Math.exp(-this.t * 6);
+      P.x += (Math.random() - 0.5) * a;
+      P.y += (Math.random() - 0.5) * a;
+      L.x += (Math.random() - 0.5) * a * 0.6;
+    }
+    // (the whip out at the end: the look swung hard aside, faster and faster)
+    this.smear = 0;
+    if (sh.whip && sh.dur - this.t < sh.whip) {
+      const w = 1 - Math.max(0, sh.dur - this.t) / sh.whip;
+      const side = sh.whipSide || 1;
+      const fx = L.x - P.x;
+      const fz = L.z - P.z;
+      const a = side * w * w * 1.1;
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      L.set(P.x + fx * c - fz * sn, L.y, P.z + fx * sn + fz * c);
+      this.smear = side * Math.min(1, w * 1.6);
+    }
     const cam = this.game.camera;
     cam.position.copy(P);
     cam.lookAt(L);
-    if (sh.roll) cam.rotateZ(sh.roll);
-    const fov = sh.fovTo !== undefined ? sh.fov + (sh.fovTo - sh.fov) * e : sh.fov;
+    const roll = sh.rollTo !== undefined ? (sh.roll || 0) + (sh.rollTo - (sh.roll || 0)) * e : sh.roll;
+    if (roll) cam.rotateZ(roll);
+    let fov = sh.fovTo !== undefined ? sh.fov + (sh.fovTo - sh.fov) * e : sh.fov;
+    if (sh.vertigo) {
+      // (the subject the same size however far: tan(fov/2) as the distance)
+      const d = Math.max(0.2, P.distanceTo(L));
+      fov = (2 * Math.atan(Math.tan((sh.fov * Math.PI) / 360) * (sh.vd0 / d)) * 180) / Math.PI;
+      fov = Math.min(110, Math.max(6, fov));
+    }
+    this.focus = sh.focus ? sh.focus[0] + (sh.focus[1] - sh.focus[0]) * (ease.inout)(Math.min(1, this.t / (sh.focusDur || sh.dur))) : null;
     if (Math.abs(cam.fov - fov) > 0.01) {
       cam.fov = fov;
       cam.updateProjectionMatrix();
