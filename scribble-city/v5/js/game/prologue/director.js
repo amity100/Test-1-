@@ -95,6 +95,28 @@ const DARK = [0.1, 0.1, 0.12];
 
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
+// (round 14) where each stroke begins in a recording of rubbing: the peaks of its loudness, 10 ms at a
+// time, at least 60 ms apart and over 45% of the loudest
+function strokesOf(b) {
+  const d = b.getChannelData(0);
+  const W = Math.max(1, Math.round(b.sampleRate / 100));
+  const env = [];
+  for (let i = 0; i + W < d.length; i += W) {
+    let q = 0;
+    for (let k = i; k < i + W; k++) q += d[k] * d[k];
+    env.push(Math.sqrt(q / W));
+  }
+  let mx = 0;
+  for (const v of env) mx = Math.max(mx, v);
+  const out = [];
+  for (let i = 3; i < env.length - 3; i++) {
+    let top = true;
+    for (let k = i - 3; k <= i + 3; k++) if (env[k] > env[i]) top = false;
+    if (top && env[i] > 0.45 * mx && (!out.length || i * 0.01 - out[out.length - 1] > 0.06)) out.push(i * 0.01);
+  }
+  return out;
+}
+
 export class Prologue {
   constructor(game) {
     this.game = game;
@@ -1995,6 +2017,21 @@ export class Prologue {
     // pencils, the colours going on under them, the sky, the sun, the sea, her name; not a drawing that
     // is just there)
     this.film(true);
+    // (the tour's group done with its walking: gathered round its guide along the north railing, out of
+    // the way of the wheel and the two of them - the shots to come look along the pier)
+    if (this.crowds && this.crowds.tour) {
+      const T = this.crowds.tour;
+      T.goal = { x: 86, z: 246.3 };
+      T.speed = 0.9;
+      // (there already if nobody sees: not marching through the next shots)
+      T.c.x = T.goal.x;
+      T.c.z = T.goal.z;
+      for (const q of T.members) {
+        if (!q.alive) continue;
+        const [ox, oz] = T.offs[q.tourI];
+        this.put(q, T.c.x + ox, T.c.z + oz, Math.atan2(-ox, -oz));
+      }
+    }
     {
       const fx = Math.sin(L.yaw || toW);
       const fz = Math.cos(L.yaw || toW);
@@ -2129,9 +2166,13 @@ export class Prologue {
     const tip = S.eraser ? S.eraser.pos : W0;
     L.fig.lookAt = tip;
     P.fig.lookAt = tip;
+    // (round 14, the player's word - the wheel's sound with what is seen: each stroke of the eraser heard
+    // as it turns, a stroke of the recorded rub on it (set.js onRub, rubGrain) - the recording played
+    // whole had a rhythm of its own and rubbed on after the eraser had stopped; and the moment it is
+    // gone, on the very frame it goes: set.js onGone, goneNow)
+    S.onRub = () => this.rubGrain();
+    S.onGone = () => this.goneNow();
     S.erase();
-    // (and under the procedural rubs, the recorded one: a great eraser on paper, the whole of it)
-    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.4);
     this.airDip = 0.5;
     const C = this.comic;
     if (C && S.eraser) C.rub(S.eraser);
@@ -2167,64 +2208,33 @@ export class Prologue {
     this.shot({ from: [VIEW.x - ux * 9 + rx * 6, 9.5, VIEW.z - uz * 9 + rz * 6], to: [VIEW.x - ux * 8.4 + rx * 5.6, 10.2, VIEW.z - uz * 8.4 + rz * 5.6], look: [WHEEL.x, 14, WHEEL.z], fov: 54, dur: 1.4, ease: 'lin', hand: 0.3, roll: 0.06 });
     if (C && X) C.rub(X);
     yield () => et() > 5.0;
-    // the two of them from in front and below, close: she has come to him and holds on to his arm with
-    // both hands; his arm across in front of her
-    {
-      this.put(L, VIEW.x + rx * 0.72, VIEW.z + rz * 0.72, toW);
-      const mx = (L.pos.x + P.pos.x) / 2;
-      const mz = (L.pos.z + P.pos.z) / 2;
-      this.shot({ from: [mx + ux * 2.7, 1.05, mz + uz * 2.7], to: [mx + ux * 2.5, 1.06, mz + uz * 2.5], look: [mx - rx * 0.05, 1.42, mz - rz * 0.05], fov: 46, dur: 1.4, hand: 0.5 });
-      if (C) C.rub(null);
-      P.fig.reachL = v3(L.pos.x + ux * 0.24 - rx * 0.08, (L.pos.y || 0) + 0.72, L.pos.z + uz * 0.24 - rz * 0.08);
-      L.fig.reachR = P.fig.j.elbowL;
-      L.fig.reachL = P.fig.j.handL;
-    }
-    yield () => et() > 6.1;
-    // (the last of it: the bottom gondolas going)
-    this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: onX(2), fov: 32, dur: 1.1, hand: 0.5, roll: 0.05, rollTo: 0.12, whip: 0.22 });
-    if (C && X) C.rub(X);
-    if (C && X) C.word('SHHHHK!', v3(X.pos.x, X.pos.y + 6, X.pos.z), { life: 0.8, size: 0.075, fill: '#fffaf0', burst: '#ff6f9a', tilt: 0.18 });
-    yield () => et() > 7.0;
-    // as it goes: a comic's page, for a moment - where it was; her face; his (their arms down: the
-    // panels their faces alone)
+    // (round 14: the comic's page now, while the last third of it goes - where it is going, her face,
+    // his - and then the last of it seen to go, on the screen, not behind the page as it was)
     if (C) C.rub(null);
-    L.fig.reachR = null;
-    L.fig.reachL = null;
-    P.fig.reachL = null;
     if (C && C.page) {
       C.page([
         [[0.015, 0.03], [0.39, 0.03], [0.355, 0.97], [0.015, 0.97]],
         [[0.405, 0.03], [0.69, 0.03], [0.655, 0.97], [0.37, 0.97]],
         [[0.705, 0.03], [0.985, 0.03], [0.985, 0.97], [0.67, 0.97]],
       ]);
-      this.shot({ from: wideFrom, look: [WHEEL.x, 24, WHEEL.z], fov: 46, dur: 1, hand: 0.3 });
-      C.panel(0, { u: 0.56, v: 0.42 });
-      yield 0.4;
+      this.shot({ from: wideFrom, look: [WHEEL.x, 14, WHEEL.z], fov: 46, dur: 1, hand: 0.3 });
+      C.panel(0, { u: 0.56, v: 0.5 });
+      yield 0.38;
       this.shot({ ...this.single(L, v3(WHEEL.x, 1.1, WHEEL.z), { dist: 1.0, side: 0.12, up: -0.2, drop: -0.05 }), fov: 38, dur: 1, hand: 0.3 });
       C.panel(1, { u: 0.5, v: 0.48 });
-      yield 0.4;
+      yield 0.36;
       this.shot({ ...this.single(P, v3(WHEEL.x, 1.7, WHEEL.z), { dist: 1.3, side: -0.12, up: -0.22, drop: -0.04 }), fov: 36, dur: 1, hand: 0.3 });
       C.panel(2, { u: 0.5, v: 0.48 });
-      yield 0.6;
+      yield 0.42;
+      if (C.endPage) C.endPage(0.1);
     }
+    // the last of it, from behind them at the railing: its bottom going, row after row - and gone, the
+    // flash and the rush of air on the very frame (goneNow)
+    this.shot({ from: wideFrom, look: [WHEEL.x, 9, WHEEL.z], lookTo: [WHEEL.x, 13, WHEEL.z], fov: 44, dur: 2.4, hand: 0.25, roll: 0.03, rollTo: 0.07 });
+    if (C && X) C.rub(X);
+    if (C && X) C.word('SHHHHK!', v3(X.pos.x, X.pos.y + 6, X.pos.z), { life: 0.8, size: 0.075, fill: '#fffaf0', burst: '#ff6f9a', tilt: 0.18 });
     yield () => !S.erasing;
-    if (C && C.endPage) C.endPage(0.01);
-    // gone: the air rushing in where it stood; a flash of white as the last of it goes
-    g.audio.play('gone', 1);
-    this.flash(0.22, '#fffaf0');
-    if (this.rubRec) {
-      try {
-        this.rubRec.stop();
-      } catch (e) {
-        // (over already)
-      }
-      this.rubRec = null;
-    }
-    this.sample('sfx/gone_whoosh.mp3', 0.9);
-    this.airDip = 1;
-    // (round 9, the player's word: not silence once it is gone - dread: score.js FILES.shock, round and
-    // round until the questions; a sting on his face as it lands)
-    this.cue('shock', { fade: 0.4 });
+    if (C) C.rub(null);
     // (and at once nobody down there is waving up at anything)
     S.forget();
     L.fig.reachR = null;
@@ -2285,6 +2295,42 @@ export class Prologue {
     // walked by the player)
     yield* this.searchMontage();
     this.start(4);
+  }
+
+  // (round 14) the moment the wheel is gone, on the very frame the last of it goes (set.js onGone): a
+  // flash of white, the air rushing in where it stood, and the dread - not silence: score.js shock
+  goneNow() {
+    const g = this.game;
+    if (this.comic && this.comic.endPage) this.comic.endPage(0.01);
+    g.audio.play('gone', 1);
+    this.flash(0.22, '#fffaf0');
+    this.sample('sfx/gone_whoosh.mp3', 0.9);
+    this.airDip = 1;
+    this.cue('shock', { fade: 0.4 });
+  }
+
+  // (round 14) a stroke of the eraser heard as it is seen: on each turn of its rub (set.js onRub) a
+  // stroke of the recorded rub - from one of the recording's own strokes, a little under a fifth of a
+  // second of it, in and out softly - so the rubbing heard is the rubbing seen, stroke for stroke
+  rubGrain() {
+    const A = this.game.audio;
+    const b = trackBuf('sfx/erase_rub.mp3');
+    if (!A || !A.ctx || !A.fx || !b || A.enabled === false) return;
+    if (!this.rubOn) this.rubOn = strokesOf(b);
+    const on = this.rubOn;
+    if (!on.length) return;
+    this.rubI = ((this.rubI || 0) + 1 + Math.floor(Math.random() * 3)) % on.length;
+    const c = A.ctx;
+    const t = c.currentTime;
+    const s = c.createBufferSource();
+    s.buffer = b;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.55, t + 0.01);
+    g.gain.setTargetAtTime(0, t + 0.11, 0.035);
+    s.connect(g).connect(A.fx);
+    s.start(t, Math.max(0, on[this.rubI] - 0.02), 0.3);
+    s.onended = () => g.disconnect();
   }
 
   // (round 13) a thought: words in someone's head, as an anime puts them - in a box at the top of the
@@ -2946,9 +2992,22 @@ export class Prologue {
     if (!C) return;
     const T = C.tour;
     if (T) {
-      T.c.x += T.dir * T.speed * dt;
-      if (T.c.x > T.x1) T.dir = -1;
-      if (T.c.x < T.x0) T.dir = 1;
+      if (T.goal) {
+        // (to a place of its own along the north railing, and there it stays, round its guide)
+        const dx = T.goal.x - T.c.x;
+        const dz = T.goal.z - T.c.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 0.05) {
+          const st = Math.min(d, T.speed * dt);
+          T.c.x += (dx / d) * st;
+          T.c.z += (dz / d) * st;
+          T.dir = dx >= 0 ? 1 : -1;
+        }
+      } else {
+        T.c.x += T.dir * T.speed * dt;
+        if (T.c.x > T.x1) T.dir = -1;
+        if (T.c.x < T.x0) T.dir = 1;
+      }
       for (const q of T.members) {
         if (!q.alive) continue;
         const [ox, oz] = T.offs[q.tourI];
@@ -2981,13 +3040,14 @@ export class Prologue {
     const A = new THREE.Vector3();
     const B = new THREE.Vector3();
     const dist = () => Math.hypot(P.pos.x - man.pos.x, P.pos.z - man.pos.z);
-    // (seen: his head or chest in the picture, and nobody between him and the camera there)
-    const visible = () => {
+    // (seen: his head or chest in the picture, and nobody between him and the camera there - where he
+    // is, or where he would be)
+    const visible = (x = man.pos.x, z = man.pos.z) => {
       if (!man.alive) return false;
       for (const h of [1.55, 1.15]) {
-        A.set(man.pos.x, man.pos.y + h, man.pos.z).project(cam);
+        A.set(x, man.pos.y + h, z).project(cam);
         if (A.z > 1 || Math.abs(A.x) > 0.96 || Math.abs(A.y) > 0.96) continue;
-        B.set(man.pos.x, man.pos.y + h, man.pos.z).sub(cam.position);
+        B.set(x, man.pos.y + h, z).sub(cam.position);
         const dm = B.length();
         B.divideScalar(dm);
         let occ = false;
@@ -3095,21 +3155,23 @@ export class Prologue {
             st.side = -st.side;
           }
         } else if (!vis && st.t - st.lastSeen > 13 && st.t < MIN - 4) {
-          // (let himself be seen: across the way, at a group's edge, looking at him)
+          // (let himself be seen: across the way, in a group there - from behind them, where nobody sees
+          // him come, out to its edge, looking at him)
           const G = pick(true);
-          if (G) {
-            const e = edgeOf(G);
-            man.pos.set(e.x, man.pos.y, e.z);
-            this.put(man, e.x, e.z, Math.atan2(P.pos.x - e.x, P.pos.z - e.z));
+          const sl = G ? slotIn(G) : null;
+          if (G && !visible(sl.x, sl.z)) {
+            this.put(man, sl.x, sl.z, null);
             st.G = G;
             st.mode = 'peek';
             st.modeT = 0;
           }
         }
       } else if (st.mode === 'peek') {
-        this.faceTo(man, P.pos.x, P.pos.z);
+        const e = edgeOf(st.G);
+        this.go(man, e.x, e.z, 1.2);
+        if (Math.hypot(man.pos.x - e.x, man.pos.z - e.z) < 0.4) this.faceTo(man, P.pos.x, P.pos.z);
         if (P.fig.j) man.fig.lookAt = P.fig.j.headC;
-        if (st.modeT > 3.6 || dP < 12 || (vis && st.seenT > 1.5)) {
+        if (st.modeT > 4.5 || dP < 12 || (vis && st.seenT > 1.6)) {
           st.to = pick(false);
           st.mode = st.to ? 'flee' : 'hide';
           st.modeT = 0;

@@ -1516,8 +1516,10 @@ export class PrologueSet {
       const turn = Math.sign(p.rub) !== Math.sign(e.lastRub || 0);
       e.lastRub = p.rub;
       if (turn) {
-        // (ROADMAP 18.9: loud enough to be heard over the evening as what it is)
-        g.audio.play('rub', 1.1 + Math.random() * 0.4);
+        // (ROADMAP 18.9: loud enough to be heard over the evening as what it is; round 14: under a
+        // stroke of the recorded rub, the director's - onRub)
+        g.audio.play('rub', 0.7 + Math.random() * 0.3);
+        if (this.onRub) this.onRub();
         e.rubs++;
       }
       if (this.root && g.fx) {
@@ -1620,6 +1622,14 @@ export class PrologueSet {
     this.platG = null;
     this.wheelGone = true;
     this.riders = [];
+    // (round 14: whoever waits for the moment it is gone - the director's flash and its sounds - on this
+    // very frame)
+    this.onRub = null;
+    if (this.onGone) {
+      const f = this.onGone;
+      this.onGone = null;
+      f();
+    }
     if (this.pencil) this.pencil.grp.visible = false;
     // (the eraser's mask and the pens that read it)
     if (this.eraseMask) {
