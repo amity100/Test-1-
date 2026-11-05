@@ -14,7 +14,12 @@ const _n = new THREE.Vector3();
 const _x = new THREE.Vector3();
 const _y = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+const _l = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+const hexRgb = (h) => {
+  const n = parseInt(h.slice(1), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+};
 
 export class HeldPage {
   constructor(game, canvas) {
@@ -56,15 +61,21 @@ export class HeldPage {
     this.mode = 'show';
     // (where its middle is: for a camera to look at, a hand to go to)
     this.at = new THREE.Vector3();
+    // (round 14: where her pencil is on it as she draws - its place on the page (u across, v down),
+    // its colour - and that place in the world: follow, her hand and pencil on it)
+    this.tip = { u: 0.5, v: 0.5, col: '#e8457c', done: false };
+    this.tipW = new THREE.Vector3();
+    this.follow = false;
   }
 
   // (ROADMAP 18.9) her drawing as far as she has got with it: k of it (game/prologue/ui.js
   // lilyDrawing), drawn again only when there is more of it
   draw(fn, k) {
-    const q = Math.round(Math.max(0, Math.min(1, k)) * 60) / 60;
+    // (fine enough that a stroke grows smoothly under her pencil when it is seen close: round 14)
+    const q = Math.round(Math.max(0, Math.min(1, k)) * 1500) / 1500;
     if (q === this.drawn) return;
     this.drawn = q;
-    fn(q, this.canvas);
+    fn(q, this.canvas, this.tip);
     this.tex.needsUpdate = true;
   }
 
@@ -166,7 +177,10 @@ export class HeldPage {
     _n.copy(f.forward).multiplyScalar(-Math.cos(0.95));
     _n.y = Math.sin(0.95);
     _n.normalize();
-    _x.crossVectors(UP, f.forward).normalize();
+    // (round 14: the picture the right way up to her - its top the edge away from her, its right on
+    // her right; it lay upside down on her knees, which nobody saw until her pencil was seen on it)
+    _l.crossVectors(UP, f.forward).normalize();
+    _x.copy(_l).negate();
     _y.crossVectors(_n, _x).normalize();
     _m.makeBasis(_x, _y, _n);
     this.grp.matrix.copy(_m).setPosition(_c);
@@ -177,10 +191,26 @@ export class HeldPage {
     f.reachL = f.reachL || new THREE.Vector3();
     // her left hand on the book's edge; the right one drawing: across a little and down a little, in
     // short strokes, now and then lifted off to look up at what she draws
-    f.reachL.copy(_c).addScaledVector(_x, hw).addScaledVector(_y, -0.03);
-    const t = (this.game.time || 0) + (this.ph || (this.ph = Math.random() * 10));
-    const lift = Math.max(0, Math.sin(t * 0.9)) > 0.93 ? 0.05 : 0;
-    f.reachR.copy(_c).addScaledVector(_x, -0.04 + Math.sin(t * 6.3) * 0.05 + Math.sin(t * 1.7) * 0.03).addScaledVector(_y, Math.sin(t * 3.7) * 0.035 + Math.sin(t * 0.8) * 0.03).addScaledVector(_n, 0.018 + lift);
+    f.reachL.copy(_c).addScaledVector(_l, hw).addScaledVector(_y, -0.03);
+    // (where her pencil is on the page, in the world: the page's own place for it, on its bowed face)
+    const lx = (this.tip.u - 0.5) * this.W;
+    const ly = (0.5 - this.tip.v) * this.H;
+    const u = lx / (this.W / 2);
+    this.tipW.copy(_c).addScaledVector(_x, lx).addScaledVector(_y, ly).addScaledVector(_n, 0.004 - 0.018 * (1 - u * u));
+    if (this.follow && !this.tip.done) {
+      // (round 14: her pencil's point on the page where the colour is going on - the hand as far back
+      // from it along her forearm as the pencil is long - and the pencil the colour it draws)
+      const el = j.elbowR;
+      _x.subVectors(this.tipW, el);
+      const l = _x.length() || 1;
+      f.reachR.copy(this.tipW).addScaledVector(_x, -(0.27 * S) / l).addScaledVector(_n, 0.006);
+      f.pencilCol = hexRgb(this.tip.col);
+    } else {
+      const t = (this.game.time || 0) + (this.ph || (this.ph = Math.random() * 10));
+      const lift = Math.max(0, Math.sin(t * 0.9)) > 0.93 ? 0.05 : 0;
+      f.reachR.copy(_c).addScaledVector(_l, -0.04 + Math.sin(t * 6.3) * 0.05 + Math.sin(t * 1.7) * 0.03).addScaledVector(_y, -(Math.sin(t * 3.7) * 0.035 + Math.sin(t * 0.8) * 0.03)).addScaledVector(_n, 0.018 + lift);
+      if (!this.follow) f.pencilCol = null;
+    }
     if (f.carry !== 'pencil') f.carry = 'pencil';
   }
 

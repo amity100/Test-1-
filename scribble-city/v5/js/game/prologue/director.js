@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PrologueUI, lilyDrawing } from './ui.js';
+import { PrologueUI, lilyDrawing, lilyParts } from './ui.js';
 import { PrologueVoices } from './voice.js';
 import { Shots } from './shots.js';
 import { LINES } from './lines.js';
@@ -493,6 +493,7 @@ export class Prologue {
     // (Danny walking somewhere in a shot, on his own feet - or running)
     if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
     this.tickMarker();
+    this.tickCrowds(this.dtR ? Math.min(dt, this.game.realDt || dt) : dt);
     this.tickLeaving(dt);
     this.tickThoughts(dt);
     if (this.everyFrame) this.everyFrame(dt);
@@ -1808,6 +1809,8 @@ export class Prologue {
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
     this.put(L, VIEW.x, VIEW.z, toW);
     this.spawnPier();
+    // (round 14: the pier full of the evening's people, in groups - the man's crowd to hide in)
+    this.crowdGroups();
     // (ROADMAP 18.9: no kids' voices - the wheel's life heard as its music; round 11: the music box's
     // waltz cute but tense, on from her stand - score.js FILES.tense - and so not begun again here)
     this.cue('dread', { fade: 2.5 });
@@ -1874,7 +1877,10 @@ export class Prologue {
     // (ROADMAP 18.9) she will draw it: her sketchbook out, at the railing, the page against it - and
     // she starts, the wheel first. Her drawing comes as she draws it (game/prologue/ui.js lilyDrawing k)
     const page = this.lilyPage();
-    let drawK = 0.02;
+    // (round 14: her time over the page - the wheel's lines and its gondolas while he is away; the
+    // colours, the sky, the sea, her name, when he comes back and sees her at it: lilyParts)
+    const LP = lilyParts();
+    let drawK = 0;
     const drawOn = () => page.draw(lilyDrawing, drawK);
     // (ROADMAP 18.9: sitting on a bench a step back from the railing, her sketchbook on her knees, the
     // pencil going - the player's word: she sits, and she is seen drawing)
@@ -1886,6 +1892,8 @@ export class Prologue {
     L.baseY = 0.3;
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
     page.hold(L.fig, null, 'draw');
+    // (her coloured pencil on the page where the colour goes on: page.js follow)
+    page.follow = true;
     drawOn();
     L.fig.lookAt = page.at;
     P.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
@@ -1898,28 +1906,44 @@ export class Prologue {
     // (she looks up at it and down at her page, as one who draws from the thing does)
     this.sketching = true;
     this.everyFrame = (dt) => {
-      drawK = Math.min(1, drawK + dt * 0.032);
+      // (the wheel's lines and its gondolas, at a child's pace; then a while over the same lines again,
+      // her pencil not on a new one: follow off)
+      const cap = LP.sky - 0.001;
+      drawK = Math.min(cap, drawK + dt * 0.0105);
+      page.follow = drawK < cap;
       drawOn();
       const tt = this.clock || 0;
-      L.fig.lookAt = Math.sin(tt * 1.3) > 0.35 ? W0 : page.at;
+      L.fig.lookAt = Math.sin(tt * 1.3) > 0.35 ? W0 : page.tipW;
     };
     yield 2.6;
     // (over her shoulder: the first lines of it on her page - and the wheel itself beyond it)
     this.shot({ from: () => v3(page.at.x - ux * 0.55 + rx * 0.3, page.at.y + 0.38, page.at.z - uz * 0.55 + rz * 0.3), look: () => v3(page.at.x + ux * 3, page.at.y + 0.9, page.at.z + uz * 3), fov: 44, dur: 2.2, hand: 0.25 });
     yield 2.0;
-    // a man along the pier, by the wheel's gate - on his shirt, over his heart, a mark that is
-    // something like an eraser, and not one. Danny sees it; the man turns his head to him
-    const man = this.markMan();
-    // (he stops, and looks back at Danny - the mark on his chest towards him)
+    // (round 14, the player's word) the man: Danny feels it and looks round - behind them, among the
+    // evening's people, a man standing still, looking at him; on his shirt, over his heart, a mark that
+    // is something like an eraser, and not one
+    const man = this.markMan(VIEW.x - ux * 11 + rx * 3.4, VIEW.z - uz * 11 + rz * 3.4);
     this.faceTo(man, P.pos.x, P.pos.z);
     man.pl.speed = 0;
-    man.fig.lookAt = P.fig.j.headC;
+    if (P.fig.j) man.fig.lookAt = P.fig.j.headC;
+    // (him, from in front, the wheel behind him: his eyes go, then his head)
+    {
+      const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
+      this.shot({ from: [h.x + ux * 1.3 - rx * 0.3, h.y - 0.1, h.z + uz * 1.3 - rz * 0.3], to: [h.x + ux * 1.15 - rx * 0.27, h.y - 0.09, h.z + uz * 1.15 - rz * 0.27], look: [h.x, h.y - 0.05, h.z], fov: 34, dur: 1.5, hand: 0.2 });
+    }
+    yield 0.45;
     P.fig.lookAt = man.fig.j && man.fig.j.headC ? man.fig.j.headC : v3(man.pos.x, 1.6, man.pos.z);
+    yield 0.95;
+    // (round, facing him)
+    P.yaw = Math.atan2(man.pos.x - P.pos.x, man.pos.z - P.pos.z);
+    P.fig.yaw = P.yaw;
     g.audio.play('dread', 0.8);
     {
       const ph = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
-      // (from just beside his eyes, long: the man in the crowd, and then only his chest)
-      this.shot({ from: [ph.x - rx * 0.2, ph.y - 0.05, ph.z - rz * 0.2], look: () => { const j = man.fig.j; return j && j.neck ? v3(j.neck.x, j.neck.y - 0.12, j.neck.z) : v3(man.pos.x, 1.35, man.pos.z); }, fov: 16, fovTo: 9, dur: 2.0, ease: 'in', hand: 0.6 });
+      const fx0 = Math.sin(P.yaw);
+      const fz0 = Math.cos(P.yaw);
+      // (from just beside his eyes, long: the man among the people, and then only his chest)
+      this.shot({ from: [ph.x + fx0 * 0.25 + fz0 * 0.2, ph.y - 0.05, ph.z + fz0 * 0.25 - fx0 * 0.2], look: () => { const j = man.fig.j; return j && j.neck ? v3(j.neck.x, j.neck.y - 0.12, j.neck.z) : v3(man.pos.x, 1.35, man.pos.z); }, fov: 16, fovTo: 9, dur: 2.0, ease: 'in', hand: 0.6 });
     }
     // (ROADMAP 18.9: the anime's focus lines rushing in at him as the lens closes on him; round 13:
     // and Danny's heart, the picture's edges closing in on each beat - inside his head)
@@ -1935,40 +1959,94 @@ export class Prologue {
       const fz = Math.cos(man.yaw);
       this.shot({ from: () => v3(mp().x + fx * 0.8 + fz * 0.12, mp().y - 0.06, mp().z + fz * 0.8 - fx * 0.12), to: () => v3(mp().x + fx * 0.62 + fz * 0.08, mp().y - 0.04, mp().z + fz * 0.62 - fx * 0.08), look: () => v3(mp().x, mp().y + 0.02, mp().z), fov: 34, fovTo: 30, dur: 1.4, ease: 'in', hand: 0.3 });
       yield 1.35;
-      // (round 13, the player's word: nothing written on him, no card - seen for a moment, that is all)
     }
-    // his face: what was that - and behind the camera, along the pier, the evening's crowd coming
-    // this way from the wheel's gate (round 13: crowdAhead)
+    // (his face: what was that)
     this.feel(P.fig, 'worried', 4);
-    this.shot({ ...this.single(P, man, { dist: 1.35, side: 0.34, up: -0.18, drop: 0.08 }), fov: 32, dur: 1.8, hand: 0.35 });
-    const crowd = this.crowdAhead(man);
-    yield 1.7;
-    // (the player's: after him - he walks off along the pier, unhurried; a few steps on, he is rubbed
-    // out where he walks)
-    this.film(false);
-    this.objective('Who is <b>that</b>? Follow him', man.pos.x, man.pos.z, 'Man');
-    this.howto('follow', 8);
+    this.shot({ ...this.single(P, man, { dist: 1.35, side: 0.34, up: -0.18, drop: 0.08 }), fov: 32, dur: 1.5, hand: 0.35 });
+    // (and along the pier from the town a tour's whole group coming this way, behind its guide - the
+    // man turns from Danny and walks off fast, straight into them; they close round him)
+    const tour = this.tourGroup(man);
+    yield 1.3;
     man.fig.lookAt = null;
-    // (round 13: he walks on along the pier - forward, into the people coming the other way, through
-    // them, this way and that between them; and somewhere in them he is not there any more)
-    yield* this.loseInCrowd(man, crowd);
-    this.objective(null);
+    {
+      const ph = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
+      const fx0 = Math.sin(P.yaw);
+      const fz0 = Math.cos(P.yaw);
+      const from = v3(ph.x + fx0 * 0.3 - fz0 * 0.35, ph.y - 0.02, ph.z + fz0 * 0.3 + fx0 * 0.35);
+      this.shot({ from, look: () => v3(man.pos.x, man.pos.y + 1.3, man.pos.z), fov: 30, fovTo: 26, dur: 3.2, hand: 0.45 });
+    }
+    {
+      let t = 0;
+      yield () => {
+        t += this.dtR || 1 / 30;
+        const c = tour.c;
+        this.go(man, c.x, c.z, 2.3);
+        return t > 3.0 || (t > 1.8 && Math.hypot(man.pos.x - c.x, man.pos.z - c.z) < 1.0);
+      };
+    }
+    // (the player's: where did he go - he is in among them somewhere, and he does not mean to be found)
+    this.film(false);
+    this.objective('Where did he go? <b>Find him</b> in the crowd');
     if (g.gps) g.gps.clear();
-    yield 1.4;
-    // back to her - she has finished it
-    this.objective('Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
-    this.howto('back', 8);
-    yield () => {
-      drawK = Math.max(drawK, 0.9);
-      return Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z) < 3.4;
-    };
+    this.howto('follow', 9);
+    yield* this.hideAndSeek(man);
     this.objective(null);
-    if (g.gps) g.gps.clear();
+    // (round 14, the player's word: back with her, and the drawing done in front of us - her coloured
+    // pencils, the colours going on under them, the sky, the sun, the sea, her name; not a drawing that
+    // is just there)
+    this.film(true);
+    {
+      const fx = Math.sin(L.yaw || toW);
+      const fz = Math.cos(L.yaw || toW);
+      // (her right: (-fz, fx))
+      // (over the page from her right side and above it - clear of her head and her hair)
+      const camOver = () => v3(page.at.x - fx * 0.12 - fz * 0.38, page.at.y + 0.5, page.at.z - fz * 0.12 + fx * 0.38);
+      // (him a few steps off along the pier, coming back to her)
+      const d0x = bx - ux * 6.5 + rx * 2.4;
+      const d0z = bz - uz * 6.5 + rz * 2.4;
+      this.putDanny(d0x, d0z, Math.atan2(bx - d0x, bz - d0z));
+      P.fig.lookAt = null;
+      drawK = Math.max(drawK, LP.sky);
+      page.follow = true;
+      // (a part of it in each shot: the sky in the first, the sun, the sea and the pier, her name)
+      const segs = [[LP.sky, LP.sun, 3.0], [LP.sun, LP.sea, 1.9], [LP.sea, LP.name, 2.7], [LP.name, 1, 1.8]];
+      let si = 0;
+      let st = 0;
+      this.everyFrame = (dt) => {
+        if (si < segs.length) {
+          const sg = segs[si];
+          st += dt;
+          const f = Math.min(1, st / sg[2]);
+          drawK = sg[0] + (sg[1] - sg[0]) * f;
+          if (f >= 1) {
+            si++;
+            st = 0;
+          }
+        }
+        drawOn();
+        L.fig.lookAt = page.tipW;
+      };
+      this.feel(L.fig, 'joy', 12);
+      // 1. close over her shoulder: the sky going on under her pencil, band by band
+      this.shot({ from: camOver, look: () => page.tipW.clone().lerp(page.at, 0.35), fov: 30, dur: 3.0, hand: 0.12, dof: 0.6 });
+      yield 3.0;
+      // 2. her face, low and in front of her: all of her in it
+      this.shot({ ...this.single(L, W0, { dist: 0.85, side: 0.26, up: -0.2, drop: 0.03 }), fov: 34, dur: 1.9, hand: 0.2 });
+      yield 1.9;
+      // 3. from the wheel's side, wide: her on the bench colouring, and him coming back along the pier
+      this.walkTo = { x: VIEW.x + rx * 1.3, z: VIEW.z + rz * 1.3, speed: 0.42 };
+      this.shot({ from: [bx + ux * 3.6 + rx * 1.4, 1.25, bz + uz * 3.6 + rz * 1.4], look: [bx - ux * 1.5 + rx * 0.9, 0.9, bz - uz * 1.5 + rz * 0.9], fov: 44, dur: 2.7, hand: 0.25 });
+      yield 2.7;
+      // 4. close: her name, the last of it
+      this.shot({ from: () => camOver().lerp(page.tipW, 0.25), look: () => page.tipW, fov: 26, dur: 1.8, hand: 0.1, dof: 0.7 });
+      yield 1.8;
+      this.walkTo = null;
+    }
     this.everyFrame = null;
     this.sketching = false;
     drawK = 1;
     drawOn();
-    this.film(true);
+    page.follow = false;
     // she cannot wait to show him: up off the bench, the page held up to him - the page, and her face
     // over it
     L.fig.sit = 0;
@@ -2521,6 +2599,8 @@ export class Prologue {
     // his heels: following him, she was behind him when he turned back to her, and the camera on her
     // side of him saw the back of his head)
     if (L) this.put(L, L.pos.x, L.pos.z, Math.atan2(WHEEL.x - L.pos.x, WHEEL.z - L.pos.z));
+    // (round 14: the evening's groups off on their ways - where it stood, only the few)
+    this.dropCrowds();
     // (ROADMAP 18.9) nobody remembers it - a dream gone wrong: the wheel's own waltz half as fast and
     // flat (score.js surreal), the evening's air as it always is, the picture a little off true
     this.cue('surreal', { fade: 2 });
@@ -2753,13 +2833,13 @@ export class Prologue {
 
   // (ROADMAP 18.9) the man with the mark on his shirt: along the pier ahead of them, crossing it
   // slowly towards the wheel's gate (the mark: game/prologue/set.js markShirt)
-  markMan() {
+  markMan(px = null, pz = null) {
     if (this.cast.mark) return this.cast.mark;
     const toW = Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z);
     const ux = Math.sin(toW);
     const uz = Math.cos(toW);
-    const x = VIEW.x + ux * 14 - uz * 2.5;
-    const z = VIEW.z + uz * 14 + ux * 2.5;
+    const x = px !== null ? px : VIEW.x + ux * 14 - uz * 2.5;
+    const z = pz !== null ? pz : VIEW.z + uz * 14 + ux * 2.5;
     // (ROADMAP 18.9: a face of his own, nobody else's in the city - render/folkspec.js 'marked')
     const c = this.person('mark', x, z, roleLook('marked') || civilianLook({ fem: false, kind: 'casual' }), { face: Math.atan2(-ux, -uz) });
     if (this.set && this.set.markShirt) this.set.markShirt(c);
@@ -2767,91 +2847,287 @@ export class Prologue {
     return c;
   }
 
-  // (round 13) the evening's crowd along the pier, made beyond him towards the wheel's gate - out of
-  // the camera's sight, it on Danny's face - walking this way, the pier's whole width of them, at
-  // their own paces, some in twos
-  crowdAhead(man) {
+  // (round 14) the evening's people on the pier, in groups as people are: at the railings looking at
+  // the sea, taking pictures, chatting by the wheel's gate - spread along it, none of them just where
+  // the two of them stand. Each a member of its group, round its middle, turned to it; their own
+  // looks, the city's. On a phone fewer of them
+  crowdGroups() {
+    if (this.crowds) return this.crowds;
     const g = this.game;
-    // (the player's word: a very big crowd - drawn in full only as near as the city's own people are,
-    // not as far as the story's: fig.lodFar)
-    const n = g.touch ? 22 : 30;
-    const list = [];
+    const few = !!g.touch;
     const rnd = (a, b) => a + Math.random() * (b - a);
-    for (let i = 0; i < n; i++) {
-      const x = man.pos.x + rnd(7, 30);
-      const z = rnd(238.8, 247.6);
-      const q = this.person('crowd' + i, x, z, i % 5 === 2 ? kidLook(i % 2 === 0) : civilianLook(), { face: -Math.PI / 2 });
-      q.noCollide = true;
-      if (q.fig) q.fig.lodFar = 0;
-      // (on along the pier, past the railing and its gate and off it, spreading out onto the
-      // promenade - back to the town; a little across as they go)
-      this.go(q, rnd(26, 36), z + rnd(-7, 4), rnd(1.05, 1.45));
-      list.push(q);
+    const C = (this.crowds = { groups: [], all: [] });
+    const at = [
+      [80, 247.2, 6, 'sea'],
+      [74.5, 246.6, 5, 'talk'],
+      [95, 244.2, 6, 'talk'],
+      [50.5, 246, 5, 'talk'],
+      [111, 246.8, 5, 'sea'],
+      [88, 239.8, 4, 'talk'],
+    ];
+    let id = 0;
+    for (const [x, z, n0, how] of at) {
+      const n = few ? Math.max(3, n0 - 2) : n0;
+      const G = { c: { x, z }, r: 1.1 + n * 0.12, members: [], moving: false };
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd(-0.3, 0.3);
+        const rr = G.r * rnd(0.75, 1.1);
+        const px = how === 'sea' ? x + (i - (n - 1) / 2) * 0.75 : x + Math.cos(a) * rr;
+        const pz = how === 'sea' ? z + rnd(-0.3, 0.4) : z + Math.sin(a) * rr;
+        const face = how === 'sea' ? 0 : Math.atan2(x - px, z - pz);
+        const q = this.person('grp' + id++, px, pz, i % 6 === 4 ? kidLook(i % 2 === 0) : civilianLook(), { face });
+        q.noCollide = true;
+        if (q.fig) q.fig.lodFar = 0;
+        if (how === 'sea' && i % 3 === 1) q.fig.carry = 'phone';
+        q.grp = G;
+        G.members.push(q);
+        C.all.push(q);
+      }
+      C.groups.push(G);
     }
-    return list;
+    return C;
   }
 
-  // (round 13, the player's word) lost in the crowd: he walks on along the pier - forward, into the
-  // people coming the other way, this way and that between them, quicker now; and the moment one of
-  // them is between him and the camera, deep enough in them, he is not there any more (or at the
-  // latest, where nobody is looking). They walk on past, and are let go of further along
-  *loseInCrowd(c, crowd) {
+  // (round 14) a tour's group along the pier from the town behind its guide, the guide's hand up -
+  // made a few metres beyond the man, walking this way at a stroll, on along the pier towards the
+  // wheel and back: the crowd the man walks into
+  tourGroup(man) {
+    const C = this.crowdGroups();
+    if (C.tour) return C.tour;
     const g = this.game;
-    const cam = g.camera;
-    const P = g.player;
-    const x0 = c.pos.x;
-    // (his way through them: a point and a point, from one side of the pier to the other)
-    const zig = [];
-    for (let k = 1; k <= 7; k++) zig.push([x0 + k * 4.2, k % 2 ? 246.2 : 239.6]);
-    let zi = 0;
-    this.go(c, zig[0][0], zig[0][1], 1.55);
-    let t = 0;
-    let gpsT = 0;
-    const tc = new THREE.Vector3();
-    const tq = new THREE.Vector3();
-    const seen = () => {
-      tq.set(c.pos.x, c.pos.y + 1.2, c.pos.z).project(cam);
-      return tq.z < 1 && Math.abs(tq.x) < 1.05 && Math.abs(tq.y) < 1.05;
-    };
-    const front = () => Math.min(...crowd.filter((q) => q.alive).map((q) => q.pos.x));
-    while (t < 16) {
-      // (on to his next point once he is near it)
-      if (zi < zig.length && Math.hypot(c.pos.x - zig[zi][0], c.pos.z - zig[zi][1]) < 1.2) {
-        zi++;
-        if (zi < zig.length) this.go(c, zig[zi][0], zig[zi][1], 1.55);
-      }
-      if (g.gps && (gpsT += this.dtR || 1 / 30) > 0.4) {
-        gpsT = 0;
-        g.gps.set(c.pos.x, c.pos.z, 'Man');
-      }
-      // (one of them between him and the camera, and him well into them: gone)
-      tc.set(c.pos.x, c.pos.y + 1.25, c.pos.z).sub(cam.position);
-      const dc = tc.length();
-      tc.normalize();
-      let hid = false;
-      for (const q of crowd) {
+    const n = g.touch ? 9 : 13;
+    const toW = Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z);
+    const ux = Math.sin(toW);
+    const uz = Math.cos(toW);
+    // (along the pier's middle, two metres clear of Danny where it goes by him)
+    const c = { x: man.pos.x - ux * 7, z: Math.max(242.6, Math.min(245.4, man.pos.z - uz * 7 + 0.6)) };
+    const G = { c, r: 1.9, members: [], moving: true, dir: 1, x0: 45, x1: 118, speed: 0.55, offs: [] };
+    for (let i = 0; i <= n; i++) {
+      const guide = i === 0;
+      const row = guide ? -1.3 : Math.floor((i - 1) / 4);
+      const col = guide ? 0 : ((i - 1) % 4) - 1.5;
+      const ox = -row * 0.85 + (Math.random() - 0.5) * 0.25;
+      const oz = col * 0.8 + (Math.random() - 0.5) * 0.25;
+      G.offs.push([ox, oz]);
+      const q = this.person('tour' + i, c.x + ox, c.z + oz, i % 5 === 3 ? kidLook(i % 2 === 0) : civilianLook(), { face: Math.PI / 2 });
+      q.noCollide = true;
+      if (q.fig) q.fig.lodFar = 0;
+      q.grp = G;
+      q.tourI = i;
+      if (guide) q.guide = true;
+      G.members.push(q);
+      C.all.push(q);
+    }
+    C.groups.push(G);
+    C.tour = G;
+    return G;
+  }
+
+  // (round 14) the evening's groups break up and go their ways along the pier to the town - each let go
+  // of once out of the picture and far off (letGo): by where the wheel stood, the questions are asked
+  // of the few who are there
+  dropCrowds() {
+    const C = this.crowds;
+    if (!C) return;
+    this.crowds = null;
+    for (const q of C.all) {
+      if (!q.alive) continue;
+      q.fig.reachR = null;
+      this.go(q, 26 + Math.random() * 10, Math.max(238.8, Math.min(247.5, q.pos.z + (Math.random() - 0.5) * 4)), 1.05 + Math.random() * 0.35);
+      const key = Object.keys(this.cast).find((k) => this.cast[k] === q);
+      this.letGo(q, key);
+    }
+  }
+
+  // every frame: the tour walking (its people in their places round its middle, the guide in front,
+  // her hand up), the rest at their ease
+  tickCrowds(dt) {
+    const C = this.crowds;
+    if (!C) return;
+    const T = C.tour;
+    if (T) {
+      T.c.x += T.dir * T.speed * dt;
+      if (T.c.x > T.x1) T.dir = -1;
+      if (T.c.x < T.x0) T.dir = 1;
+      for (const q of T.members) {
         if (!q.alive) continue;
-        tq.set(q.pos.x, q.pos.y + 1.15, q.pos.z).sub(cam.position);
-        const dq = tq.length();
-        if (dq < dc - 0.4 && tq.normalize().dot(tc) > Math.cos(0.06)) {
-          hid = true;
-          break;
+        const [ox, oz] = T.offs[q.tourI];
+        const tx = T.c.x + ox * T.dir;
+        const tz = T.c.z + oz;
+        this.go(q, tx, tz, Math.min(1.6, T.speed + Math.hypot(tx - q.pos.x, tz - q.pos.z) * 0.8));
+        if (q.guide && q.fig && q.fig.j && q.fig.j.headC) {
+          q.fig.reachR = q.fig.reachR || new THREE.Vector3();
+          q.fig.reachR.set(q.pos.x + T.dir * 0.1, q.fig.j.headC.y + 0.45, q.pos.z + 0.15);
         }
       }
-      const deep = c.pos.x - front() > 3 || t > 6;
-      if (hid && deep && t > 1.5) break;
-      if (t > 11 && !seen()) break;
-      // (close up to him - he slips between two of them)
-      if (t > 3 && Math.hypot(P.pos.x - c.pos.x, P.pos.z - c.pos.z) < 2.2 && hid) break;
-      yield 0.001;
-      t += this.dtR || 1 / 30;
     }
-    if (this.set && this.set.shirt && this.set.shirt.c === c) this.set.shirt.grp.visible = false;
-    g.civilians.remove(c);
-    delete this.cast.mark;
-    // (they walk on, and each is let go of once off the camera's picture and well away - not before:
-    // twenty-six seconds after, they were gone from beside Lily's bench in front of him)
-    crowd.forEach((q, i) => this.letGo(q, 'crowd' + i));
+  }
+
+  // (round 14, the player's word) the search: a minute and more - he is among the people and does not
+  // mean to be found. Hidden in a group on its far side from Danny, moving with it; come near him, or
+  // look at him a moment, and he is off - quick, through the people, to another group, and wherever
+  // nobody sees him on the way he is there already. Now and then, when he has not been seen a while,
+  // he lets himself be seen - at the edge of a group across the way, looking at Danny - and is off
+  // again as Danny comes. Never caught. Past the minute, hidden and out of the picture, he is gone
+  // for good: nobody sees him go
+  *hideAndSeek(man) {
+    const g = this.game;
+    const P = g.player;
+    const cam = g.camera;
+    const C = this.crowdGroups();
+    const MIN = 62;
+    const MAX = 95;
+    const st = { t: 0, G: C.tour || C.groups[0], mode: 'hide', modeT: 0, seenT: 0, lastSeen: 0, unseenSince: 0, gone: false, goneT: 0, msgT: 0, to: null, side: Math.random() < 0.5 ? 1 : -1 };
+    const A = new THREE.Vector3();
+    const B = new THREE.Vector3();
+    const dist = () => Math.hypot(P.pos.x - man.pos.x, P.pos.z - man.pos.z);
+    // (seen: his head or chest in the picture, and nobody between him and the camera there)
+    const visible = () => {
+      if (!man.alive) return false;
+      for (const h of [1.55, 1.15]) {
+        A.set(man.pos.x, man.pos.y + h, man.pos.z).project(cam);
+        if (A.z > 1 || Math.abs(A.x) > 0.96 || Math.abs(A.y) > 0.96) continue;
+        B.set(man.pos.x, man.pos.y + h, man.pos.z).sub(cam.position);
+        const dm = B.length();
+        B.divideScalar(dm);
+        let occ = false;
+        for (const q of C.all) {
+          if (!q.alive) continue;
+          const ox = q.pos.x - cam.position.x;
+          const oz = q.pos.z - cam.position.z;
+          const oy = q.pos.y + h - cam.position.y;
+          const al = ox * B.x + oy * B.y + oz * B.z;
+          if (al < 0.4 || al > dm - 0.35) continue;
+          const px = ox - B.x * al;
+          const pz = oz - B.z * al;
+          if (px * px + pz * pz < 0.09) {
+            occ = true;
+            break;
+          }
+        }
+        if (!occ) return true;
+      }
+      return false;
+    };
+    // (inside a group, on its side away from Danny)
+    const slotIn = (G) => {
+      const dx = G.c.x - P.pos.x;
+      const dz = G.c.z - P.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      return { x: G.c.x + (dx / d) * G.r * 0.35 + (-dz / d) * st.side * 0.3, z: G.c.z + (dz / d) * G.r * 0.35 + (dx / d) * st.side * 0.3 };
+    };
+    // (at its edge towards Danny: to be seen)
+    const edgeOf = (G) => {
+      const dx = P.pos.x - G.c.x;
+      const dz = P.pos.z - G.c.z;
+      const d = Math.hypot(dx, dz) || 1;
+      return { x: G.c.x + (dx / d) * (G.r + 0.5), z: G.c.z + (dz / d) * (G.r + 0.5) };
+    };
+    const onPic = (x, z) => {
+      A.set(x, 1.2, z).project(cam);
+      return A.z < 1 && Math.abs(A.x) < 0.8 && Math.abs(A.y) < 0.9;
+    };
+    // (where to go: another group, the further from Danny the better - or, to be seen, one across the
+    // way that is in his picture, not too near nor too far)
+    const pick = (toBeSeen) => {
+      let best = null;
+      let bs = -1e9;
+      for (const G of C.groups) {
+        if (G === st.G) continue;
+        const d = Math.hypot(G.c.x - P.pos.x, G.c.z - P.pos.z);
+        let sc;
+        if (toBeSeen) sc = onPic(G.c.x, G.c.z) && d > 13 && d < 30 ? 50 - Math.abs(d - 20) : -1e6;
+        else sc = d > 11 ? d + Math.random() * 6 : -1e6;
+        if (sc > bs) {
+          bs = sc;
+          best = G;
+        }
+      }
+      return bs > -1e5 ? best : null;
+    };
+    const say = (h, life = 2.6) => {
+      this.objective(h);
+      st.msgT = life;
+    };
+    const FIND = 'Where did he go? <b>Find him</b> in the crowd';
+    let wasVis = false;
+    for (;;) {
+      const dt = this.dtR || 1 / 30;
+      st.t += dt;
+      st.modeT += dt;
+      if (st.msgT > 0 && (st.msgT -= dt) <= 0) this.objective(st.gone ? null : FIND);
+      if (st.gone) {
+        st.goneT += dt;
+        if (st.goneT > 3.5) break;
+        yield 0.001;
+        continue;
+      }
+      const vis = visible();
+      const dP = dist();
+      if (vis) {
+        st.seenT += dt;
+        // (seen again after a while: his heart, and the line)
+        if (!wasVis && st.t - st.lastSeen > 4) {
+          if (this.comic && this.comic.pulse) this.comic.pulse(1, { k: 0.4, vol: 0.55 });
+          say('There he is! <b>Catch him</b>', 2.2);
+        }
+        st.lastSeen = st.t;
+      } else st.seenT = 0;
+      wasVis = vis;
+      // (gone for good: past the minute, in among a group, out of the picture a while)
+      if ((st.t > MIN && st.mode === 'hide' && !vis && st.t - st.lastSeen > 2.5) || (st.t > MAX && !vis)) {
+        if (this.set && this.set.shirt && this.set.shirt.c === man) this.set.shirt.grp.visible = false;
+        g.civilians.remove(man);
+        delete this.cast.mark;
+        st.gone = true;
+        say("He's <b>gone</b>...", 3.2);
+        continue;
+      }
+      if (st.mode === 'hide') {
+        const sl = slotIn(st.G);
+        this.go(man, sl.x, sl.z, 1.5);
+        man.fig.lookAt = null;
+        if (dP < 8.5 || (vis && st.seenT > 1.1 && dP < 24)) {
+          st.to = pick(false);
+          if (st.to) {
+            st.mode = 'flee';
+            st.modeT = 0;
+            st.side = -st.side;
+          }
+        } else if (!vis && st.t - st.lastSeen > 13 && st.t < MIN - 4) {
+          // (let himself be seen: across the way, at a group's edge, looking at him)
+          const G = pick(true);
+          if (G) {
+            const e = edgeOf(G);
+            man.pos.set(e.x, man.pos.y, e.z);
+            this.put(man, e.x, e.z, Math.atan2(P.pos.x - e.x, P.pos.z - e.z));
+            st.G = G;
+            st.mode = 'peek';
+            st.modeT = 0;
+          }
+        }
+      } else if (st.mode === 'peek') {
+        this.faceTo(man, P.pos.x, P.pos.z);
+        if (P.fig.j) man.fig.lookAt = P.fig.j.headC;
+        if (st.modeT > 3.6 || dP < 12 || (vis && st.seenT > 1.5)) {
+          st.to = pick(false);
+          st.mode = st.to ? 'flee' : 'hide';
+          st.modeT = 0;
+        }
+      } else if (st.mode === 'flee') {
+        man.fig.lookAt = null;
+        const sl = slotIn(st.to);
+        this.go(man, sl.x, sl.z, dP < 5 ? 3.8 : 2.6);
+        // (wherever nobody sees him on the way, he is there already)
+        if (!vis && st.modeT > 0.35 && !onPic(sl.x, sl.z)) this.put(man, sl.x, sl.z, null);
+        if (Math.hypot(man.pos.x - sl.x, man.pos.z - sl.z) < 0.9) {
+          st.G = st.to;
+          st.mode = 'hide';
+          st.modeT = 0;
+        }
+      }
+      yield 0.001;
+    }
   }
 
   // (round 13) somebody of the film's let go of where nobody sees it: once off the picture and 45 m

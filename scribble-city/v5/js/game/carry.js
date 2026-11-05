@@ -774,11 +774,19 @@ function strokesFor(fig, item, side, w) {
       _d.subVectors(h, el).normalize();
       _a.copy(h).addScaledVector(_d, -0.1 * S);
       _b.copy(h).addScaledVector(_d, 0.2 * S);
-      line(fig, _a, _b, [0.96, 0.78, 0.22], w * 3.6, sd + 120);
+      // (v5, round 14: a coloured pencil, fig.pencilCol - its body and its point the colour it draws,
+      // the bare wood between them)
+      const pc = fig.pencilCol;
+      line(fig, _a, _b, pc || [0.96, 0.78, 0.22], w * 3.6, sd + 120);
       _c.copy(_b).addScaledVector(_d, 0.07 * S);
-      line(fig, _b, _c, [0.25, 0.22, 0.2], w * 2, sd + 121);
+      line(fig, _b, _c, pc ? [0.93, 0.8, 0.62] : [0.25, 0.22, 0.2], w * 2, sd + 121);
+      if (pc) {
+        _a.copy(_c).addScaledVector(_d, -0.025 * S);
+        line(fig, _a, _c, pc, w * 1.2, sd + 123);
+        _a.copy(h).addScaledVector(_d, -0.1 * S);
+      }
       _c.copy(_a).addScaledVector(_d, -0.05 * S);
-      line(fig, _a, _c, [0.95, 0.6, 0.66], w * 3.6, sd + 122);
+      line(fig, _a, _c, pc ? [0.2, 0.2, 0.22] : [0.95, 0.6, 0.66], w * 3.6, sd + 122);
       break;
     }
     case 'magicPencil': {
