@@ -433,7 +433,8 @@ export class Ramp {
     // there as it goes; only then is it filled in, white as the page, and coloured. The pieces wait
     // for the drawing: buildSketch, update)
     this.buildSketch();
-    for (const p of this.pieces) if (p.grow !== 'none') p.delay = this.SK + p.delay * 0.3;
+    // (the line laid on the roof too: the drawing is the pencil's now - it comes with the rest)
+    for (const p of this.pieces) p.delay = this.SK + p.delay * 0.3;
     this.grown = false;
   }
 
@@ -465,7 +466,7 @@ export class Ramp {
       const u = c / 4;
       S.push(line(4, (t) => v(xAt(u), yAt(u) + 0.1, z + (c % 2 ? 1 : -1) * half * (1 - 2 * t))));
     }
-    const INK = linC(0.09, 0.07, 0.15);
+    const LIGHT = linC(1, 0.86, 0.5);
     const grp = (this.sketch = new THREE.Group());
     grp.rotation.y = this.F.rotY || 0;
     grp.matrixAutoUpdate = true;
@@ -478,7 +479,8 @@ export class Ramp {
       const K = new Kit();
       const M = itemMats();
       const segs = Math.max(8, Math.round(len * 3));
-      K.add(M.matte, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), segs, 0.085, 5, false), INK);
+      // (lit, as a line of light: dark ink on the dark roof would not be seen being drawn)
+      K.add(M.glow, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), segs, 0.12, 5, false), LIGHT);
       const g = K.build({ seed: Math.random() });
       g.matrixAutoUpdate = true;
       const meshes = [];
@@ -502,7 +504,8 @@ export class Ramp {
     const M = itemMats();
     K.cyl(M.round, 0.012, R * 0.3, 0, R * 0.95, linC(0.16, 0.15, 0.2), { axis: 'y', segs: 12 });
     K.cyl(M.matte, R * 0.3, R, R * 0.95, R * 3.3, linC(0.93, 0.74, 0.5), { axis: 'y', segs: 12 });
-    K.cyl(M.paint, R, R, R * 3.3, R * 25, linC(0.99, 0.76, 0.14), { axis: 'y', segs: 6 });
+    // (matte: a gloss would give it the sky's white)
+    K.cyl(M.matte, R, R, R * 3.3, R * 25, linC(0.99, 0.7, 0.08), { axis: 'y', segs: 6 });
     K.cyl(M.metal, R * 1.05, R * 1.05, R * 25, R * 26.4, linC(0.84, 0.84, 0.88), { axis: 'y', segs: 16 });
     for (const yy of [25.4, 25.9]) K.torus(M.metal, R * 1.07, R * 0.05, 0, R * yy, 0, linC(0.5, 0.5, 0.56), Math.PI / 2);
     K.cyl(M.round, R, R * 0.82, R * 26.4, R * 28, linC(0.98, 0.56, 0.64), { axis: 'y', segs: 16 });
@@ -859,6 +862,8 @@ export class Ramp {
       this.paper(t < s0 ? 0 : clamp((t - s0) / 0.8, 0, 1));
       if (t >= s0 + 0.85) {
         this.swept = true;
+        // (the drawing's lines go into the thing they drew)
+        if (this.sketch) this.sketch.visible = false;
         this.unpaper();
         this.solid = true;
         this.grown = true;

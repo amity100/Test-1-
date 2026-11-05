@@ -2840,18 +2840,18 @@ export class Prologue {
         const St = car.seatOf ? car.seatOf() : { u: -0.25, y: 0 };
         const fx = Math.sin(car.yaw);
         const fz = Math.cos(car.yaw);
-        const u = St.u + 0.62;
-        // (forward of his chest, a little to the right of it, up at the windscreen)
-        hand.set(car.pos.x + fx * u - fz * 0.14, (car.pos.y || 0) + St.y + 1.3, car.pos.z + fz * u + fx * 0.14);
+        const u = St.u + 0.55;
+        // (out in front of him at the height of his eyes, at the windscreen: pointing the way)
+        hand.set(car.pos.x + fx * u + fz * 0.25, (car.pos.y || 0) + St.y + 1.25, car.pos.z + fz * u - fx * 0.25);
         fig.holdUpR = hand;
         return hand;
       };
       aim();
       // (the giant pencil comes down as his goes up: it lands as the picture cuts to it)
       this.ramp.t = -1.3;
-      // his: in front of him, over the bonnet, looking back in through the windscreen at him and at
-      // the pencil he points out at us - the lines rushing in round his hand
-      this.shot({ from: this.inCar(car, -0.12, 1.3, 1.7), look: () => aim().clone().lerp(this.headJ(P) || hand, 0.35), fov: 40, dur: 1.6, hand: 0.3 });
+      // his: from outside his open window, at his side - his face, and his arm up with the pencil
+      // pointed out ahead at the roof's edge; the lines rushing in round his hand
+      this.shot({ from: this.inCar(car, 1.75, 1.3, 0.75), look: () => aim().clone().lerp(this.headJ(P) || hand, 0.4), fov: 44, dur: 1.6, hand: 0.3 });
       if (this.comic && this.comic.focus) this.comic.focus(() => aim(), 1.4, 0.65);
       g.audio.play('whoosh', 0.5);
       let tt = 0;
