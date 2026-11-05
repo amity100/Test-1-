@@ -2677,11 +2677,15 @@ export class Prologue {
     // her drawing: she holds it up against where it stood - in it, it is still there
     const page = this.lilyPage();
     this.faceTo(L, WHEEL.x, WHEEL.z);
+    // (turned to it at the cut, not still turning through the shot: the page goes where she faces, and
+    // it went out of the picture)
+    L.yaw = L.pl.face;
+    L.faceYaw = L.pl.face;
     L.fig.lookAt = page.at;
     // (round 13: held up high against the sky, the camera low behind her shoulder - the drawing over
     // the empty evening where it stood; before, her head was across it and the page was not seen)
     page.hold(L.fig, null, 'up');
-    this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 0.82, back: 0.5, side: 0.4 }), look: () => v3(page.at.x + (WHEEL.x - L.pos.x) * 0.02, page.at.y + 0.08, page.at.z + (WHEEL.z - L.pos.z) * 0.02), fov: 46, dur: 3.2, hand: 0.35, focus: [0.75, 0.75], dof: 1 });
+    this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 0.8, back: 0.5, side: 0.46 }), look: () => v3(page.at.x + (WHEEL.x - L.pos.x) * 0.01, page.at.y + 0.02, page.at.z + (WHEEL.z - L.pos.z) * 0.01), fov: 44, dur: 3.2, hand: 0.3, focus: [0.75, 0.75], dof: 1 });
     // (round 10: in it, it is still there - the world behind it gone gold, the drawing lit)
     this.emote([1.0, 0.75, 0.35]);
     yield 2.0;
