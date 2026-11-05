@@ -1688,7 +1688,9 @@ export class Prologue {
     // the run not seen - cut on it, as an animated film does: the run was a doll's)
     this.put(L, B.lx + B.rx * 0.55, B.lz + B.rz * 0.55, B.face);
     this.putDanny(B.lx - B.rx * 0.6 + B.nx * 0.4, B.lz - B.rz * 0.6 + B.nz * 0.4, B.face);
+    // (round 14: his feet stopped too - walkTo alone left this.auto walking him on)
     this.walkTo = null;
+    this.auto = null;
     this.shot({
       path: [v3(B.x + B.nx * 12.9 + B.rx * 0.3, 1.0, B.z + B.nz * 12.9 + B.rz * 0.3), v3(B.x + B.nx * 11.6 - B.rx * 0.8, 1.6, B.z + B.nz * 11.6 - B.rz * 0.8), v3(B.x + B.nx * 10.5 - B.rx * 1.6, 2.2, B.z + B.nz * 10.5 - B.rz * 1.6)],
       look: this.faceOf(L),
@@ -2077,7 +2079,10 @@ export class Prologue {
       // 4. close: her name, the last of it
       this.shot({ from: () => camOver().lerp(page.tipW, 0.25), look: () => page.tipW, fov: 26, dur: 1.8, hand: 0.1, dof: 0.7 });
       yield 1.8;
+      // (his walk stopped where it is: walkTo alone left his feet going - this.auto - and he walked off
+      // out of the next shots)
       this.walkTo = null;
+      this.auto = null;
     }
     this.everyFrame = null;
     this.sketching = false;
@@ -3453,6 +3458,7 @@ export class Prologue {
     this.putDanny(v.pos.x + Math.cos(v.yaw) * 1.3, v.pos.z - Math.sin(v.yaw) * 1.3, v.yaw);
     this.put(L, v.pos.x - Math.cos(v.yaw) * 1.3, v.pos.z + Math.sin(v.yaw) * 1.3, v.yaw);
     this.walkTo = null;
+    this.auto = null;
     // (and his feet off the pedal: the run's forward push must not carry into the car)
     this.auto = null;
     this.lilyRun = null;
