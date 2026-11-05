@@ -50,7 +50,9 @@ export const GAME_TITLE = 'OUTLINE';
 // (who made it, under the name - in the player's own language, as the rest of what is put over the
 // picture is)
 export const CREDIT = 'יוצר: אמיתי דהן';
-const DONE_KEY = 'scribble.prologue.v1';
+// (v2, round 13: the prologue told again to everyone who has seen it - it is a new film since; and
+// watched in the admin's viewer it never counts as seen: finish)
+const DONE_KEY = 'scribble.prologue.v2';
 
 // the places
 const DANNY0 = { x: 17, z: 6, yaw: Math.PI };
@@ -3877,7 +3879,9 @@ export class Prologue {
     }
     if (g.setAllOpen && g.settings) g.setAllOpen(!!g.settings.v.allOpen);
     try {
-      localStorage.setItem(DONE_KEY, '1');
+      // (watched as a film, scene by scene, in the admin's viewer: not played - a new game still
+      // opens with it)
+      if (!this.admin) localStorage.setItem(DONE_KEY, '1');
     } catch (e) {
       // (private browsing: it plays again next time)
     }
