@@ -3035,7 +3035,7 @@ export class Prologue {
     const cam = g.camera;
     const C = this.crowdGroups();
     const MIN = 62;
-    const MAX = 95;
+    const MAX = 80;
     const st = { t: 0, G: C.tour || C.groups[0], mode: 'hide', modeT: 0, seenT: 0, lastSeen: 0, unseenSince: 0, gone: false, goneT: 0, msgT: 0, to: null, side: Math.random() < 0.5 ? 1 : -1 };
     const A = new THREE.Vector3();
     const B = new THREE.Vector3();
@@ -3135,7 +3135,7 @@ export class Prologue {
       } else st.seenT = 0;
       wasVis = vis;
       // (gone for good: past the minute, in among a group, out of the picture a while)
-      if ((st.t > MIN && st.mode === 'hide' && !vis && st.t - st.lastSeen > 2.5) || (st.t > MAX && !vis)) {
+      if ((st.t > MIN && !vis && st.t - st.lastSeen > 1.2) || (st.t > MAX && !vis)) {
         if (this.set && this.set.shirt && this.set.shirt.c === man) this.set.shirt.grp.visible = false;
         g.civilians.remove(man);
         delete this.cast.mark;
