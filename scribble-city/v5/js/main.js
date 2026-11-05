@@ -470,26 +470,43 @@ async function boot() {
   mark('pictures');
   progress('shaders', 0);
   for (const p of pipe.precompile()) progs.push(p);
-  await shadersReady(renderer, [...new Set(progs)]);
-  mark('shaders ready');
-  if (catalog) warmCatalog(game, catalog);
-  // (and shown with the frame's numbers, F3: game/perf.js - the whole of it from the page's start)
-  game.loadSteps = loadT;
-  game.loadTotal = Math.round(performance.now());
-  setStatus('');
-  progress('shaders', 1);
-  if (window.__loadDone) window.__loadDone();
+  const allProgs = [...new Set(progs)];
   const startBtn = document.getElementById('start-btn');
-  startBtn.disabled = false;
-  startBtn.textContent = 'יוצאים לעיר';
-  game.loop();
-  if (params.has('autostart')) game.start();
-  else game.showContinue();
-  window.__ready = true;
-  console.log('load steps (ms)', JSON.stringify(loadT));
-  // (the pens' shaders for the other way of drawing, made ready in the background a little after the
-  // game begins - for trying the two in play: render/pipeline.js prepareOtherPens)
-  pipe.otherAt = performance.now() + 1500;
+  const open = () => {
+    setStatus('');
+    progress('shaders', 1);
+    if (window.__loadDone) window.__loadDone();
+    startBtn.disabled = false;
+    startBtn.textContent = 'יוצאים לעיר';
+  };
+  const run = () => {
+    mark('shaders ready');
+    if (catalog) warmCatalog(game, catalog);
+    // (and shown with the frame's numbers, F3: game/perf.js - the whole of it from the page's start)
+    game.loadSteps = loadT;
+    game.loadTotal = Math.round(performance.now());
+    game.loop();
+    if (params.has('autostart')) game.start();
+    window.__ready = true;
+    console.log('load steps (ms)', JSON.stringify(loadT));
+    // (the pens' shaders for the other way of drawing, made ready in the background a little after
+    // the game begins - for trying the two in play: render/pipeline.js prepareOtherPens)
+    pipe.otherAt = performance.now() + 1500;
+  };
+  if (params.has('test') || params.has('autostart')) {
+    await shadersReady(renderer, allProgs);
+    open();
+    run();
+    if (!params.has('autostart')) game.showContinue();
+    return;
+  }
+  // (ROADMAP 18.9, round 9: the loading shorter - the title page as soon as the city and the game are
+  // made; the graphics card makes its shaders behind it, while it is read and its button pressed, and
+  // the city comes up behind it once they are made. A game begun before that waits the moment out
+  // behind the prologue's black)
+  open();
+  game.showContinue();
+  shadersReady(renderer, allProgs).then(run, run).catch(fatal);
 }
 
 // (ROADMAP 11.47) a stand-in for every pen of the city, as the blocks will wear it: the pen itself,

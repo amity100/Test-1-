@@ -545,6 +545,11 @@ export class Prologue {
     {
       const d = Ly ? Math.hypot(Ly.pos.x - ear.x, Ly.pos.z - ear.z) : 99;
       const want = this.sketching && Ly && d < 7 ? 0.32 * Math.max(0.15, 1 - d / 7) : 0;
+      // (for the tests' film of it: the level heard, as it changes)
+      if (this.airLog && Math.abs(want - (this.pencilLogged || 0)) > 0.02) {
+        this.pencilLogged = want;
+        this.airLog.push([this.clock || 0, 'pencil', want]);
+      }
       const buf = trackBuf('sfx/pencil_sketch.mp3');
       if (want > 0 && buf && !this.pencilLoop) {
         const gN = c.createGain();
@@ -2721,12 +2726,14 @@ export class Prologue {
     yield* this.say('L13', L.fig, 0.2);
     yield* this.say('D21', P.fig, 0.3);
     // up and up: the way up has no way out but the roof - half way, the dark car still on them
-    yield () => lvOf(v()) >= 2.4;
+    // (round 8's car park is eight floors, not six: its levels from PARK - the roof run the top floor)
+    const TOP = PARK.main.levels.length - 2;
+    yield () => lvOf(v()) >= TOP * 0.48;
     yield* this.say('D22', P.fig, 0.2);
     // the roof run: the west half's top floor, open to the sky, heading south to the edge
     yield () => {
       const c = v();
-      return !!c && lvOf(c) >= 4.9 && c.pos.x < PARK.main.xc && c.pos.z > RUNUP.z + 6;
+      return !!c && lvOf(c) >= TOP - 0.1 && c.pos.x < PARK.main.xc && c.pos.z > RUNUP.z + 6;
     };
     this.climb = false;
     this.start(7);
