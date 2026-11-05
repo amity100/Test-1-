@@ -638,11 +638,17 @@ export class Prologue {
         LK.shadowT[i] += (want[0][i] - LK.shadowT[i]) * e;
         LK.lightT[i] += (want[1][i] - LK.lightT[i]) * e;
       }
+      // (round 8, the player's word: a comic book, not a painting - its print over the film: a few flat
+      // tones, the shadows in its dots, the ink's black, and far off the plates out of register;
+      // the dots in the shadows' own colour, deeper: render/pipeline.js comicPrint)
+      LK.comic = film ? 1 : 0;
+      LK.mis = film ? 1.8 : 0;
+      for (let i = 0; i < 3; i++) LK.dotInk[i] = 0.34 * Math.pow(LK.shadowT[i], 1.6);
       // (on the day's own light, set every frame before this: a share of it)
       this.expK = (this.expK || 1) + (want[2] - (this.expK || 1)) * e;
       if (pipe.exposure !== undefined) pipe.exposure *= this.expK;
     } else if (LK) {
-      Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1 });
+      Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1, comic: 0, mis: 0 });
       shared.uPenDens.value = 1;
     }
     const S = this.shots;
@@ -650,10 +656,12 @@ export class Prologue {
     else if (P && P.pos) pipe.paintFocus = clamp(g.camera.position.distanceTo(P.pos), 1.5, 30);
     // (ROADMAP 18.9: a lens's depth in the film - close on a face, what is behind it painted broader
     // and softer, the face kept sharp; wide, the brush as it was)
+    // (round 8: a narrower brush - the paint only flattens what is behind them into the comic's
+    // colours, its print does the rest; not smeared)
     if (pipe.paintR) {
       const close = film ? clamp((5 - pipe.paintFocus) / 3.5, 0, 1) : 0;
-      pipe.paintR[0] = 2.2 - 0.3 * close;
-      pipe.paintR[1] = 5.5 + 4.5 * close;
+      pipe.paintR[0] = 1.5 - 0.2 * close;
+      pipe.paintR[1] = 2.8 + 2.2 * close;
     }
   }
 
@@ -2819,10 +2827,60 @@ export class Prologue {
     const rz = R.z;
     const H = R.h;
     const mid = (S + Lp) / 2;
+    // (round 8, the player's word: he takes out his pencil and draws it from where he sits - over his
+    // shoulder, his hand up with it at the windscreen, and far off at the roof's edge a giant one
+    // coming down out of the sky to draw what his draws, line by line: game/prologue/ramp.js
+    // buildSketch. The lines rush in round his hand, an anime's moment)
+    {
+      const fig = P.fig;
+      const was = fig.carry;
+      fig.carry = 'pencil';
+      const hand = new THREE.Vector3();
+      const aim = () => {
+        const St = car.seatOf ? car.seatOf() : { u: -0.25, y: 0 };
+        const fx = Math.sin(car.yaw);
+        const fz = Math.cos(car.yaw);
+        const u = St.u + 0.62;
+        // (forward of his chest, a little to the right of it, up at the windscreen)
+        hand.set(car.pos.x + fx * u - fz * 0.14, (car.pos.y || 0) + St.y + 1.3, car.pos.z + fz * u + fx * 0.14);
+        fig.holdUpR = hand;
+        return hand;
+      };
+      aim();
+      // (the giant pencil comes down as his goes up: it lands as the picture cuts to it)
+      this.ramp.t = -1.3;
+      // his: in front of him, over the bonnet, looking back in through the windscreen at him and at
+      // the pencil he points out at us - the lines rushing in round his hand
+      this.shot({ from: this.inCar(car, -0.12, 1.3, 1.7), look: () => aim().clone().lerp(this.headJ(P) || hand, 0.35), fov: 40, dur: 1.6, hand: 0.3 });
+      if (this.comic && this.comic.focus) this.comic.focus(() => aim(), 1.4, 0.65);
+      g.audio.play('whoosh', 0.5);
+      let tt = 0;
+      let said = false;
+      let cut = false;
+      yield () => {
+        aim();
+        tt += this.dtR || 0.016;
+        // then far off at the roof's edge, on a long lens from over the car: the giant one, down out
+        // of the sky, and drawing
+        if (!cut && tt >= 1.6) {
+          cut = true;
+          this.shot({ from: wld(R.startX + 18, Y + 6.2, rz + 3.5), look: wld(R.startX - 5, Y + 1.6, rz), fov: 30, dur: 1.5, hand: 0.2 });
+        }
+        // (and as its point touches the roof, the scratch of it, in letters)
+        if (!said && this.ramp.t > 0.5 && this.comic && this.ramp.sketch) {
+          said = true;
+          const w = this.ramp.sketch.localToWorld(this.ramp.strokes[0].pts[0].clone());
+          this.comic.word('SKRITCH!', v3(w.x, w.y + 2.5, w.z), { fill: '#ffd23f', burst: '#1b1430', size: 0.075, life: 1.3, tilt: 0.15 });
+        }
+        return tt >= 3.1;
+      };
+      fig.holdUpR = null;
+      fig.carry = was;
+    }
     const cam = g.camera;
-    const c0 = cam.position.clone();
-    const dir = new THREE.Vector3();
-    cam.getWorldDirection(dir);
+    // (and out of the car: from beside it, behind, the lines going on far ahead)
+    const c0 = wld(S + 14, Y + 3.4, rz - 7.5);
+    const dir = wld(mid, Y + 1.2, rz).sub(c0).normalize();
     // (round its side in the low sun and out past its lip over the street: the whole of it from there,
     // the lip near, the car small at the far end of the roof)
     this.shot({

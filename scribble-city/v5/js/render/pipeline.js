@@ -360,7 +360,9 @@ void main() {
   float n = textureLod(uNoise, (sp + 0.5) / 256.0, 0.0).r - 0.5;
   c *= 1.0 + n * uGrain * (0.4 + 0.6 * smoothstep(0.05, 0.3, lum(c)));
   c = clamp(c, vec3(0.0), vec3(0.985));
-  fragColor = vec4(fin3(c / (1.0 - c)), 1.0);
+  // (and how far it is, for the last pass: the comic's print, its plates out of register away from
+  // where the film looks - FINAL_FRAG grade)
+  fragColor = vec4(fin3(c / (1.0 - c)), far);
 }`;
 
 const FINAL_FRAG = /* glsl */ `
@@ -394,6 +396,14 @@ uniform vec3 uLightT;
 uniform float uGradeK;
 uniform float uGrainK;
 uniform float uGrainT;
+// (ROADMAP 18.9, round 8) the film as a comic book is printed (uComic, 0..1): its tones laid on in a
+// few flat ones, the shadows in the print's dots (uDotPx: their screen, in pixels), the deepest
+// darks the ink's, the paper warm under the light - and what is far from where the film looks in
+// plates a little out of register (uMis, pixels at 720 lines... given for this picture)
+uniform float uComic;
+uniform float uDotPx;
+uniform float uMis;
+uniform vec3 uDotInk;
 // (the steady pace, DYN: the picture in the corner of the drawing's, as in the ink)
 #ifdef DYN
 uniform vec2 uUvK;
@@ -435,12 +445,59 @@ float people(vec2 uv) {
   return k;
 }
 float lumc(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+// (ROADMAP 18.9, round 8) the comic book's print over the finished picture (as the eye sees it,
+// sRGB): its people a little less - their faces are the film's
+vec3 comicPrint(vec3 c, vec2 uv) {
+  float me = who(uv);
+  float k = uComic;
+  float bg = 1.0 - me;
+  float l = lumc(c);
+  // the tones drawn together into a few flat ones, as a colourist lays them on (the people a little:
+  // their faces are the film's own)
+  float n = 5.0;
+  float f = l * n;
+  float lb = (floor(f) + smoothstep(0.3, 0.7, fract(f))) / n;
+  c = mix(c, clamp(c * ((lb + 0.04) / max(l, 0.02)), 0.0, 1.0), (0.5 - 0.3 * me) * k);
+  l = lumc(c);
+  float aa = 0.9 / uDotPx + 0.02;
+  // behind the people every colour is a screen of dots, as a comic prints its flat colours: the
+  // same colour, a little deeper, in dots as big as the tone is dark
+  vec2 g = mat2(0.9135, 0.4067, -0.4067, 0.9135) * (gl_FragCoord.xy / uDotPx);
+  float d = length(fract(g) - 0.5);
+  float tone = clamp(1.0 - l, 0.0, 1.0);
+  float rc = 0.5 * sqrt(tone) * smoothstep(0.02, 0.2, l);
+  float dc = 1.0 - smoothstep(rc - aa, rc + aa, d);
+  c = mix(c, c * 0.8, dc * 0.55 * k * bg);
+  // the shadows in the print's own ink, cool and dark, the dots running together where they are
+  // deepest
+  float shade = smoothstep(0.42, 0.06, l);
+  float rad = 0.72 * sqrt(shade);
+  float dt = 1.0 - smoothstep(rad - aa, rad + aa, d);
+  c = mix(c, c * uDotInk, dt * 0.8 * k * bg);
+  // and the light's own dots, small and few, in the light's colour - the sky as a comic prints it
+  float hl = smoothstep(0.62, 0.95, l) * bg;
+  vec2 g2 = mat2(0.866, -0.5, 0.5, 0.866) * (gl_FragCoord.xy / (uDotPx * 0.85));
+  float d2 = length(fract(g2) - 0.5);
+  float dl = 1.0 - smoothstep(0.22 * hl - aa, 0.22 * hl + aa, d2);
+  c = mix(c, min(c * vec3(1.06, 1.02, 0.95) + 0.03, 1.0), dl * 0.6 * k);
+  // the deepest darks the ink's own black, and the paper warm under the rest
+  c = mix(c, vec3(0.075, 0.055, 0.11), smoothstep(0.1, 0.025, l) * 0.6 * k * (1.0 - 0.5 * me));
+  c *= mix(vec3(1.0), vec3(1.0, 0.985, 0.94), 0.5 * k);
+  return c;
+}
 vec3 grade(vec2 uv, float paint) {
   vec3 s = fin3(texture(tSrc, TC(uv)).rgb);
   // (the painted look: the brush's picture over what is behind the people - the darkest of the pens'
   // lines kept through it, as a painter keeps the drawing under the paint)
   if (paint > 0.001) {
-    vec3 p = fin3(texture(tPaint, uv).rgb);
+    vec4 P4 = texture(tPaint, uv);
+    vec3 p = fin3(P4.rgb);
+    if (uMis > 0.01) {
+      // (the red plate and the blue a little apart, the farther the more)
+      vec2 o = vec2(1.0, 0.45) * uMis * clamp(P4.a, 0.0, 1.0) * uSrcTexel;
+      p.r = fin3(texture(tPaint, uv + o).rgb).r;
+      p.b = fin3(texture(tPaint, uv - o).rgb).b;
+    }
     float lp = lumc(p);
     float line = smoothstep(0.18, 0.6, (lp - lumc(s)) / (lp + 0.03));
     p = mix(p, s, line * 0.75);
@@ -484,6 +541,7 @@ void main() {
     c = mix(c, c * tint, uGradeK);
   }
   c = toSRGB(clamp(c, 0.0, 1.0));
+  if (uComic > 0.001) c = comicPrint(c, vUv);
   if (uGradeK > 0.001) {
     // (a film's curve: the darks a little deeper, the lights a little fuller)
     c = mix(c, c * c * (3.0 - 2.0 * c), 0.38 * uGradeK);
@@ -926,7 +984,7 @@ export class Pipeline {
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
     // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
     // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
     // looks (paintFocus, metres from the camera), the brush's streaks
@@ -941,7 +999,7 @@ export class Pipeline {
     // strong; its colour from the sun, and cool from the sky when the sun is behind the camera), the
     // grade (how much; the shadows' tint and the lights'), the grain, how much heavier the people's
     // outlines. All 0 / 1: the game as it always was
-    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8], grain: 0, personW: 1 };
+    this.look = { rim: 0, rimCol: [1.0, 0.7, 0.42], skyCol: [0.55, 0.62, 1.0], grade: 0, shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8], grain: 0, personW: 1, comic: 0, mis: 0, dotInk: [0.3, 0.22, 0.5] };
     this._sunNdc = new THREE.Vector3();
     // (and the same three passes that look up the drawing in its corner: the same uniforms; only
     // with the steady pace, so as it always was the passes are just what they were)
@@ -2869,6 +2927,14 @@ export class Pipeline {
     f.uLightT.value.set(L.lightT[0], L.lightT[1], L.lightT[2]);
     f.uGrainK.value = L.grain;
     f.uGrainT.value = Math.floor(performance.now() / 83.3) % 997;
+    // (round 8: the comic's print - its dots the same share of the picture at any size; and with it
+    // no brush's streaks in the paint)
+    const oh = this.outSize ? this.outSize.y : 720;
+    f.uComic.value = L.comic || 0;
+    f.uDotPx.value = Math.max(4.2, oh / 140);
+    f.uMis.value = (L.mis || 0) * (oh / 720);
+    f.uDotInk.value.set(L.dotInk[0], L.dotInk[1], L.dotInk[2]);
+    this.mPaint.uniforms.uGrain.value = 0.1 * (1 - Math.min(1, L.comic || 0));
     if (L.rim <= 0.001) {
       f.uRimCol.value.w = 0;
       return;
