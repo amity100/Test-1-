@@ -27,7 +27,10 @@ import { buildNorthEnd } from './northend.js';
 import { buildPageEdge } from './pageedge.js';
 
 // The whole city: Ocean Drive and the beach (v5), and the city behind them.
-export function buildCity(scene, o = {}) {
+// (v5, ROADMAP 18.9: built a part at a time - a breath between the parts, o.breathe(label): the page
+// and the computer under it are not held up the whole while, the loading screen moves on with it)
+export async function buildCity(scene, o = {}) {
+  const breathe = o.breathe || (() => null);
   const group = new THREE.Group();
   group.name = 'city';
   scene.add(group);
@@ -102,7 +105,9 @@ export function buildCity(scene, o = {}) {
   // (v5: the island's empty lots are built on at the end, with its north end - world/northend.js)
   if (mainland) ctx.vacancies = [];
   buildGround(ctx);
+  await breathe('ground');
   buildFirstBoulevard(ctx);
+  await breathe('boulevard');
   // (v5, ROADMAP 11.2: the city behind Ocean Drive throws dice of its own; Ocean Drive, the beach
   // and the streets after it get the city's dice where the old rows of shops left them - 9296
   // throws on - so they stay exactly as they were)
@@ -111,15 +116,19 @@ export function buildCity(scene, o = {}) {
     ctx.rng = seeded(20261013);
     // (v5, ROADMAP 11.2ב: the life and the wear of its windows, by dice of their own, world/deco.js)
     if (o.roofs) ctx.wear = seeded(4242421);
-    buildBlocks(ctx);
+    await buildBlocks(ctx, breathe);
     ctx.wear = null;
     ctx.rng = dice;
     for (let i = 0; i < 9296; i++) dice();
   }
   // (v5) Ocean Drive: its hotels, its sidewalk cafés, the park, the dunes, the beach
+  await breathe('blocks');
   buildOceanDrive(ctx);
+  await breathe('ocean');
   if (o.streets !== false) buildStreets(ctx);
+  await breathe('streets');
   if (o.extra) o.extra(ctx);
+  await breathe('extra');
   // (v5, ROADMAP 11.17) the mainland's part of the start: its causeways, its hills and their
   // letters, its towers, its shore (by dice of its own: nothing of the island moves)
   if (mainland) {
@@ -127,10 +136,13 @@ export function buildCity(scene, o = {}) {
     ctx.rng = seeded(20261117);
     buildCauseways(ctx);
     buildHills(ctx);
+    await breathe('hills');
     buildShore(ctx);
     ctx.mainTowers = buildMainlandTowers(ctx);
+    await breathe('towers');
     // (the pier, its wheel and its coaster; the lighthouse; the arena: world/mainland/landmarks.js)
     ctx.landmarks = buildLandmarks(ctx);
+    await breathe('landmarks');
     ctx.rng = dice;
     // (v5) the island's north end past 15th Street, and its empty lots built on at last - after all
     // the rest, by dice of its own, so that everything before keeps its looks and its numbers
@@ -140,6 +152,7 @@ export function buildCity(scene, o = {}) {
     const v0 = ctx.B.vcount;
     try {
       buildNorthEnd(ctx);
+      await breathe('north');
     } catch (e) {
       console.error('[north end] not built', e);
     }
@@ -204,8 +217,11 @@ export function buildCity(scene, o = {}) {
   };
   // (v5: the pens with little of them in the whole city, one draw each, kit.js; not the ones
   // hidden by distance, nor the rooms)
+  await breathe('pens');
   const meshes = ctx.B.flush(group, { static: true, merge, whole: { max: 25000, ok: (pens) => !pens.some((p) => small.has(p) || far.has(p)) } });
+  await breathe('meshes');
   const rooms = ctx.R.flush(group, { static: true, indoor: true, merge });
+  await breathe('rooms');
   for (const m of rooms) m.renderOrder = 1;
   const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN', 'beach', 'whole', 'hills', 'shore']);
   const cull = [];

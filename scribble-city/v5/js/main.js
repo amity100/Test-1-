@@ -11,6 +11,8 @@ import { buildStation } from './world/station.js';
 import { buildRoofs } from './world/roofs.js';
 import { buildPanes } from './world/glass.js';
 import { Game } from './game/game.js';
+import { prebuildFolkBodies } from './render/folkshapes.js';
+import { FOLK, FOLK_PHONE } from './render/folkspec.js';
 import { isTouchDevice } from './core/util.js';
 import { initProvoke } from './render/provoke.js';
 import { cacheUniformArrays } from './render/glcache.js';
@@ -55,6 +57,102 @@ function setStatus(t) {
   if (el) el.textContent = t;
 }
 
+// (v5, ROADMAP 18.9) how far the load has got, 0..1 - the loading screen's bar (index.html #loading):
+// each step its share of the whole, as long as they take on a computer; within a step, by its parts
+const SHARE = { fonts: 0.03, city: 0.36, mainland: 0.02, upload: 0.03, shadow: 0.03, people: 0.1, nav: 0.02, pens: 0.03, init: 0.14, pictures: 0.04, shaders: 0.2 };
+const ORDER = Object.keys(SHARE);
+let progStep = 'fonts';
+let progIn = 0;
+function progress(step, within = 0) {
+  if (step) progStep = step;
+  progIn = Math.max(0, Math.min(1, within));
+  let p = 0;
+  for (const k of ORDER) {
+    if (k === progStep) {
+      p += SHARE[k] * progIn;
+      break;
+    }
+    p += SHARE[k];
+  }
+  if (window.__loadProgress) window.__loadProgress(Math.min(1, p));
+}
+
+// (v5, ROADMAP 18.9) a breath for the page while it loads: after some 40 ms of work, the thread given
+// back for a moment - the loading screen moves, the computer under it is not held up. Called between
+// the parts of a long step (world/city.js, render/folkshapes.js): null when it is not yet time
+let breathAt = performance.now();
+let breathN = 0;
+function breathe(label) {
+  breathN++;
+  const now = performance.now();
+  if (now - breathAt < 40) return null;
+  // (what still held the page long, before this breath: the test route reads it)
+  if (now - breathAt > 250) (window.__slowBreaths = window.__slowBreaths || []).push([label, Math.round(now - breathAt)]);
+  if (label === 'block' || label === 'ground' || label === 'boulevard' || label === 'blocks' || label === 'ocean' || label === 'streets' || label === 'extra' || label === 'hills' || label === 'towers' || label === 'landmarks' || label === 'north' || label === 'pens' || label === 'meshes' || label === 'rooms') progress('city', Math.min(0.98, breathN / 30));
+  return new Promise((r) =>
+    setTimeout(() => {
+      breathAt = performance.now();
+      r();
+    }, 0),
+  );
+}
+
+// (v5, ROADMAP 18.9) the city's meshes sent up to the graphics card a few at a time, before anything
+// needs them all at once (the sun's view of the whole city, next): each drawn once, alone, by a
+// stand-in sharing its geometry into a speck of a picture - its buffers up on the card - some 16 MB
+// a breath. All at once they held the card, and the computer with it, for seconds
+async function uploadGradually(renderer, group, step) {
+  const list = [];
+  group.traverse((o) => {
+    if ((o.isMesh || o.isLineSegments || o.isPoints) && o.geometry && o.geometry.attributes && o.geometry.attributes.position) list.push(o);
+  });
+  const rt = new THREE.WebGLRenderTarget(4, 4);
+  const sc = new THREE.Scene();
+  const basic = new THREE.MeshBasicMaterial();
+  const cam = new THREE.OrthographicCamera(-1e6, 1e6, 1e6, -1e6, -1e6, 1e6);
+  const keep = renderer.getRenderTarget();
+  // (drawn with none of their points: three.js sends a shape's buffers up as it is put in the
+  // picture, before it looks how many of its points to draw - so the card is given the buffers and
+  // nothing to draw with them)
+  const bytes = (g) => {
+    let n = g.index ? g.index.array.byteLength : 0;
+    for (const k in g.attributes) n += g.attributes[k].array ? g.attributes[k].array.byteLength : 0;
+    return n;
+  };
+  const seen = new Set();
+  let budget = 0;
+  let held = [];
+  for (let i = 0; i < list.length; i++) {
+    const g = list[i].geometry;
+    if (!seen.has(g)) {
+      seen.add(g);
+      const stand = new THREE.Mesh(g, basic);
+      stand.frustumCulled = false;
+      sc.add(stand);
+      held.push([g, g.drawRange.start, g.drawRange.count]);
+      g.setDrawRange(0, 0);
+      budget += bytes(g);
+    }
+    if (budget > 16e6 || i === list.length - 1) {
+      try {
+        renderer.setRenderTarget(rt);
+        renderer.render(sc, cam);
+      } catch (e) {
+        // (whatever could not go up now goes up when it is first drawn, as before)
+      }
+      for (const [hg, a, n] of held) hg.setDrawRange(a, n);
+      held = [];
+      renderer.setRenderTarget(keep);
+      sc.clear();
+      budget = 0;
+      progress(step, (i + 1) / list.length);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+  rt.dispose();
+  basic.dispose();
+}
+
 async function loadFonts() {
   if (!document.fonts || !document.fonts.load) return;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -88,7 +186,9 @@ async function boot() {
   const touch = isTouchDevice();
   if (touch) document.body.classList.add('touch');
   setStatus('מחדדים את העטים…');
+  progress('fonts', 0.2);
   await loadFonts();
+  progress('city', 0);
 
   const low = touch || params.has('low');
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: params.has('test') });
@@ -200,7 +300,7 @@ async function boot() {
   // (the block 5th Street Garage stands on left empty for it: not in the lab, where the prologue's
   // pieces are not built - game/prologue/carpark.js)
   const vacate = !params.has('lab') && !window.SC_LAB;
-  const world = buildCity(scene, params.has('classic') ? { low } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false, vacate });
+  const world = await buildCity(scene, params.has('classic') ? { low, breathe } : { low, extra, neonRows: 56, roofs: true, glass: true, fences: false, vacate, breathe });
   console.log('city built', Math.round(performance.now() - t0), 'ms', JSON.stringify(world.stats));
   mark('city');
   // (v5, ROADMAP 11.17) the mainland across the bay: built near you as you go (its far bodies
@@ -216,13 +316,19 @@ async function boot() {
     world.mainland = new Mainland(world, { renderer, pipe, low, farData });
   }
   mark('mainland');
+  progress('mainland', 1);
   // (v5, ROADMAP 11.18) what is on the shops' shelves, built near you (the island's rooms now, each
   // block's with it)
   world.interiors = new Interiors(world, { pipe, low, warm: world.mainland ? (m) => world.mainland.warm(m) : null });
   world.interiors.addAll(world.stockRecs);
   mark('interiors');
 
+  // (ROADMAP 18.9: the city up on the graphics card a little at a time, first)
+  setStatus('מעלים את העיר…');
+  await uploadGradually(renderer, world.group, 'upload');
+  mark('upload');
   setStatus('השמש שוקעת על העיר…');
+  progress('shadow', 0.1);
   await frame();
   // the sun's view of the whole city, made once (the long evening shadows across every street)
   world.bakeShadows = () => pipe.bakeFarShadows(world.group, new THREE.Box3(new THREE.Vector3(-262, -1, -600), new THREE.Vector3(36, 95, 345)), low ? 2048 : 4096);
@@ -232,6 +338,19 @@ async function boot() {
     console.warn('shadow bake failed', err);
   }
   mark('shadow bake');
+  // (ROADMAP 18.9: the city's people's bodies made now, a few at a time - not all at once inside the
+  // game's own start: render/folkshapes.js prebuildFolkBodies)
+  setStatus('מציירים את האנשים…');
+  {
+    const nK = touch ? FOLK_PHONE : FOLK.length;
+    let made = 0;
+    await prebuildFolkBodies(nK, (label) => {
+      made += 4;
+      progress('people', made / nK);
+      return breathe(label);
+    });
+  }
+  mark('people');
   // the still city's own map of the sun's view around you (drawn again only when you have gone far
   // enough, or a prop was rubbed out): each frame only what moves is drawn for the sun
   if (!params.has('noshadowcache')) pipe.setStatic(world.group, { cull: (p) => world.cull(p), version: () => world.objects.castVersion });
@@ -288,9 +407,12 @@ async function boot() {
   if (!params.has('nosolid')) pipe.setSolid(world.group, () => world.objects.spots, () => world.objects.fading.length > 0);
   mark('solid');
   setStatus('מסמנים דרכים…');
+  progress('nav', 0);
   await frame();
   world.buildNav();
   mark('nav');
+  progress('pens', 0);
+  await frame();
   // every pen of the city made ready now, not in the middle of the first walk down the street
   // (the graphics card compiles them side by side where it can, and the page stays alive): asked
   // for now, while the game's people and cars are made; theirs after, and all of them waited for
@@ -325,8 +447,20 @@ async function boot() {
     window.__shared = shared;
     window.__THREE = THREE;
   }
+  progress('init', 0);
+  await frame();
+  game.breathe = (label) => {
+    progress('init', Math.min(0.95, (game.__inits = (game.__inits || 0) + 1) / 9));
+    return breathe(label);
+  };
   await game.init();
+  game.breathe = null;
   mark('game init');
+  // (ROADMAP 18.9: and every picture they are drawn with sent up, one at a time)
+  progress('pictures', 0);
+  await picturesUp(renderer, scene);
+  mark('pictures');
+  progress('shaders', 0);
   for (const p of pipe.precompile()) progs.push(p);
   await shadersReady(renderer, [...new Set(progs)]);
   mark('shaders ready');
@@ -335,6 +469,8 @@ async function boot() {
   game.loadSteps = loadT;
   game.loadTotal = Math.round(performance.now());
   setStatus('');
+  progress('shaders', 1);
+  if (window.__loadDone) window.__loadDone();
   const startBtn = document.getElementById('start-btn');
   startBtn.disabled = false;
   startBtn.textContent = 'יוצאים לעיר';
@@ -430,16 +566,66 @@ function warmCatalog(game, catalog) {
 // (11.5) the shaders asked for (render/pipeline.js precompile) all made, where the graphics card
 // makes them alongside the game - counted on the loading page; elsewhere they were made as asked.
 // Never more than two minutes: then the frames make what is left, as before
+// (ROADMAP 18.9: where the card cannot say whether a shader is made without waiting for it, each is
+// waited for by itself, a breath between - the page alive, not held for all of them at once in the
+// first frame)
 async function shadersReady(renderer, progs) {
-  if (!renderer.extensions.has('KHR_parallel_shader_compile')) return;
-  const t0 = performance.now();
   const n = progs.length;
+  if (!renderer.extensions.has('KHR_parallel_shader_compile')) {
+    for (let i = 0; i < n; i++) {
+      try {
+        progs[i].getUniforms();
+      } catch (e) {
+        // (one that will not make: the frame says why, as before)
+      }
+      setStatus(`מכינים את העטים… ${i + 1}/${n}`);
+      progress('shaders', (i + 1) / n);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    return;
+  }
+  const t0 = performance.now();
   for (;;) {
     let left = 0;
     for (const p of progs) if (!p.isReady()) left++;
+    progress('shaders', (n - left) / Math.max(1, n));
     if (!left || performance.now() - t0 > 120000) return;
     setStatus(`מכינים את העטים… ${n - left}/${n}`);
     await new Promise((r) => setTimeout(r, 60));
+  }
+}
+
+// (ROADMAP 18.9) every picture the city and its people are drawn with sent up to the graphics card
+// one at a time, a breath between - not all of them in the first frame (the people's atlases, the
+// city's pens' pictures, the signs')
+async function picturesUp(renderer, scene) {
+  const texs = new Set();
+  const take = (v) => {
+    if (v && v.isTexture && !v.isRenderTargetTexture) texs.add(v);
+  };
+  const look = (m) => {
+    if (!m) return;
+    for (const k in m) take(m[k]);
+    if (m.uniforms)
+      for (const k in m.uniforms) {
+        const v = m.uniforms[k] && m.uniforms[k].value;
+        if (Array.isArray(v)) v.forEach(take);
+        else take(v);
+      }
+  };
+  scene.traverse((o) => {
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(look);
+  });
+  const list = [...texs];
+  for (let i = 0; i < list.length; i++) {
+    try {
+      renderer.initTexture(list[i]);
+    } catch (e) {
+      // (it goes up when it is first drawn, as before)
+    }
+    progress('pictures', (i + 1) / list.length);
+    const b = breathe('pictures');
+    if (b) await b;
   }
 }
 
