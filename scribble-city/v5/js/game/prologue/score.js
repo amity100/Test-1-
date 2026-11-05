@@ -1450,7 +1450,11 @@ class Land extends Cue {
 const FILES = {
   // (the music box from along the pier: dulled, more of the room than of itself)
   // (round 9, the player's word: not heard at the wheel - louder, and less muffled)
-  wheel: { path: 'music/wheel_waltz.mp3', a: 2, b: 55, x: 2.5, gain: 0.85, lp: 6000, send: 0.4 },
+  // (round 11, the player's word: from the first sight of the wheel, music cute but very tense - a
+  // music box's carnival waltz in a minor key over a racing pizzicato, a clock, tremolo strings and a
+  // low drone, growing all the way (ElevenLabs): from her stand on, round its fuller half until the
+  // boy waves from his gondola. The old waltz the wheel's own no more)
+  tense: { path: 'music/wheel_tense.mp3', from: 0, a: 48, b: 131, x: 3, gain: 0.9, send: 0.3 },
   // (ROADMAP 18.9: the player's word - cute and disturbing at once, a little horror film: a sweet
   // music box that goes out of tune and melts while a dark drone, scraping strings and a heart grow
   // under it - begun under the boy waving from his gondola, cut dead the moment the wheel goes, some
@@ -1461,7 +1465,7 @@ const FILES = {
   // drone, a ringing in the ears, a heart - ElevenLabs, round and round until the questions)
   shock: { path: 'music/shock.mp3', a: 0.5, b: 39.5, x: 3, gain: 1.0, send: 0.25 },
   // (a bar or two of the waltz, slowed, far off, mostly the room)
-  memory: { path: 'music/wheel_waltz.mp3', from: 4, b: 11, once: true, rate: 0.82, gain: 0.55, lp: 1700, send: 0.9 },
+  memory: { path: 'music/wheel_tense.mp3', from: 2, b: 13, once: true, rate: 0.82, gain: 0.6, lp: 1700, send: 0.9 },
 };
 
 class FileCue extends Cue {
@@ -1548,6 +1552,7 @@ const CUES = {
   discovery: { K: Discovery, sting: true },
   // (ROADMAP 18.9: the wheel's own music, the unease as it goes, its tune remembered after)
   wheel: { K: fileOr(Wheel, 'wheel'), lead: 0.05 },
+  tense: { K: fileOr(Wheel, 'tense'), lead: 0.05 },
   unease: { K: fileOr(Unease, 'unease'), lead: 0.03 },
   memory: { K: fileOr(Memory, 'memory'), sting: true },
   surreal: { K: fileOr(Surreal, 'surreal'), lead: 0.05 },

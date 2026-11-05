@@ -390,6 +390,13 @@ class Vehicle {
     if (this.fuse && this.game.fuse) this.game.fuse.onHurt(this, amount);
     this.game.hud.hurtFlash();
     this.game.audio.play('clang', 0.5);
+    // (v5, round 11: a car the story keeps - the prologue's chase - is never blown up: its keeper is
+    // told instead, game/prologue/director.js caught)
+    if (this.hp <= 0 && this.keepAlive) {
+      this.hp = 1;
+      this.keepAlive();
+      return;
+    }
     if (this.hp <= 0) this.destroy();
   }
 
@@ -766,6 +773,10 @@ class Vehicle {
       if (v === this || v.dead) continue;
       // (ROADMAP 15.3: one up in the air over the other - flying on what is drawn on it - meets nothing)
       if ((this.air || v.air) && Math.abs(this.pos.y - v.pos.y) > 2.2) continue;
+      // (v5, round 11: one on a floor over the other - a car park's - meets nothing either; and a car
+      // that gives way (the prologue's gang) is pushed off by the player's, never the other way round)
+      if (Math.abs(this.pos.y - v.pos.y) > 2.2) continue;
+      if (v.yields && this.driver) continue;
       const dx = this.pos.x - v.pos.x;
       const dz = this.pos.z - v.pos.z;
       const d = Math.hypot(dx, dz);

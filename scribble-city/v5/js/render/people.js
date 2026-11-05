@@ -1709,7 +1709,7 @@ export class PersonRenderer {
   // ------------------------------------------------------------------ one person
   // fig: a Doodle (its joints, its look, its body frames); camDist: how far from the camera
   draw(fig, camDist) {
-    if (camDist > this.lodFar) {
+    if (camDist > (fig.lodFar || this.lodFar)) {
       this.drawLow(fig, false);
       return;
     }

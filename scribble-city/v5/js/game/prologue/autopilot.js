@@ -11,13 +11,25 @@ const SITE = { x: 101.5, z: 242.6 };
 const LOOKOUT = { x: 60, z: 298 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-// the climb: up each straight, round each turn (5th Street Garage: the east half north on the even
-// floors, the west half south on the odd), to the roof run
-const E = -158.7;
-const W = -180.3;
-const MXC = -169.5;
-const UP = [[E, 283.5]];
-for (let j = 0; j < 7; j++) UP.push(...(j % 2 === 0 ? [[E, 200], [MXC, 182.5], [W, 188]] : [[W, 270], [MXC, 283.5], [E, 278]]));
+// the climb (round 11's car park): along a lane into the turn at the end of the floor, across it,
+// into the other lane, up its ramp - floor after floor - and on the roof round the north end's turn
+// into the run, west of its barriers
+const RN = PARK.main.zN;
+const RS = PARK.main.zS;
+const WLC = (PARK.lanes.W[0] + PARK.lanes.W[1]) / 2;
+const ELC = (PARK.lanes.E[0] + PARK.lanes.E[1]) / 2;
+const MX = PARK.main.xc;
+// (each ramp's foot come at straight along its lane: a point well short of it, in the lane, then the
+// ramp itself - a third number, how near is near enough, where it must be close)
+const UP = [[ELC, 268]];
+// (where the way up each floor starts in it: after a reset to a floor, the way on from there)
+const UP_AT = [];
+for (const r of PARK.ramps) {
+  UP_AT[r.k] = UP.length;
+  if (r.zLow === RN) UP.push([ELC, RN - 2], [ELC - 6, PARK.turnN], [MX, PARK.turnN - 4], [WLC + 2, PARK.turnN - 2], [WLC, RN - 8, 3], [WLC, RN + 3, 3], [WLC, RS + 5]);
+  else UP.push([WLC, RS + 2], [WLC + 6, PARK.turnS], [MX, PARK.turnS + 4], [ELC - 2, PARK.turnS + 2], [ELC, RS + 8, 3], [ELC, RS - 3, 3], [ELC, RN - 5]);
+}
+UP.push([ELC - 5, PARK.turnN], [MX, PARK.turnN - 3], [PARK.runup.x, PARK.turnN], [PARK.runup.x, RN + 12]);
 // and down Bayshore: a ramp a floor, round at the west end, round in the cross aisle
 const DOWN = [[-190, 340.6]];
 for (let k = 7; k >= 0; k--) {
@@ -44,6 +56,13 @@ export class Autopilot {
     this.stuck = 0;
     this.back = 0;
     this.dt = 0.016;
+  }
+
+  // (back at where he came onto floor k - caught, or the car wrecked: the way on from there)
+  onReset(k) {
+    if (this.phase === 'up') this.wp = UP_AT[k] !== undefined ? UP_AT[k] : 0;
+    this.stuck = 0;
+    this.back = 0;
   }
 
   stop() {
@@ -88,6 +107,9 @@ export class Autopilot {
     let thr = top;
     if (Math.abs(da) > 0.6 && Math.abs(c.speed) > 8) thr = 0.1;
     if (Math.abs(da) > 1.1 && Math.abs(c.speed) > 5) thr = -0.4;
+    // (near the point and well off it: slow, not round and round it)
+    const dist = Math.hypot(x - c.pos.x, z - c.pos.z);
+    if (dist < 12 && Math.abs(da) > 0.5) thr = Math.min(thr, Math.abs(c.speed) > 6 ? -0.3 : 0.35);
     let steer = Math.max(-1, Math.min(1, da * 2.2));
     // (against something: back off a moment, the wheel the other way, and on)
     if (thr > 0.3 && Math.abs(c.speed) < 1.0) this.stuck += this.dt;
@@ -118,7 +140,7 @@ export class Autopilot {
   follow(list, near = 5, top = 0.8) {
     const c = this.g.player.inVehicle;
     if (!c) return;
-    while (this.wp < list.length && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < near) this.wp++;
+    while (this.wp < list.length && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < (list[this.wp][2] || near)) this.wp++;
     if (this.wp >= list.length) {
       this.set(0, 0);
       return;
