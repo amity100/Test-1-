@@ -77,6 +77,15 @@ const CORE_D = 7.4;
 // (on the roof, a line of concrete barriers from the north end's turn to the edge: the roof run west
 // of them - over Bayshore's roof, the way the car flies)
 const ROOF_BAR_X = -176;
+// (round 12) the launch deck: the roof run carried on 8 m out past the south face over 5th Street,
+// from the west wall to the barriers - the edge the car flies from at its end
+const CANT = 8;
+const CX0 = MX0 + 0.5;
+const CX1 = ROOF_BAR_X + 0.32;
+// (round 12, the player's word: no roof across the street to come down on - the car flies off the
+// edge into the open, and only a rotor drawn on it in the air holds it up. Bayshore Parking is not
+// built; what is below kept for the day it is wanted again)
+const LAND_ON = false;
 // Bayshore Parking: its ground, its levels, its two aisles, its ramps (from xLow at level lv up
 // to xHigh at level lv + 1), the cross aisle in its middle
 const LX0 = -250;
@@ -165,10 +174,10 @@ export const PARK = {
   ],
   // the roof run: from the north end of the roof, round the turn off the last ramp, straight south
   // west of the barriers to the edge - 100 m and more, all of it flat
-  runup: { x: W_AISLE_X, z: MZ0 + 12, y: LV(NDECK), yaw: 0, dir: [0, 1], len: MZ1 - MZ0 - 12, flatFrom: MZ0 },
+  runup: { x: W_AISLE_X, z: MZ0 + 12, y: LV(NDECK), yaw: 0, dir: [0, 1], len: MZ1 + CANT - MZ0 - 12, flatFrom: MZ0 },
   // the edge it flies from: the south face of the west half at the roof run's high end (a
   // parapet 1.05 m high along it, x0..x1), over 5th Street
-  edge: { z: MZ1, x0: MX0, x1: ROOF_BAR_X, x: W_AISLE_X, y: LV(NDECK), parapet: PAR },
+  edge: { z: MZ1 + CANT, x0: CX0, x1: CX1, x: W_AISLE_X, y: LV(NDECK), parapet: PAR },
   // (the drawn ramp and the jump - game/prologue/ramp.js - are worked out along -x, a lane at one
   // z: the roof run is that turned a quarter round. toLocal(x, z) gives the [x, z] they take, a
   // group turned rotY about y puts what they build back in the world; edgeX, laneZ, carX for
@@ -177,7 +186,7 @@ export const PARK = {
     toLocal: (x, z) => [-z, x],
     toWorld: (lx, lz) => [lz, -lx],
     rotY: Math.PI / 2,
-    edgeX: -MZ1,
+    edgeX: -(MZ1 + CANT),
     laneZ: W_AISLE_X,
     roofY: LV(NDECK),
   },
@@ -258,6 +267,8 @@ function inCore(x, z, pad = 0) {
 }
 
 function mainFloor(x, z, y) {
+  // (the launch deck, out past the south face at the roof's height)
+  if (z > MZ1 && z <= MZ1 + CANT && x > CX0 && x < CX1) return LV(NDECK) <= y + 1.1 ? LV(NDECK) : -Infinity;
   if (x < MX0 || x > MX1 || z < MZ0 || z > MZ1) return -Infinity;
   const lim = y + 1.1;
   let best = -Infinity;
@@ -310,6 +321,7 @@ function landHole(k, x, z) {
   return false;
 }
 function landFloor(x, z, y) {
+  if (!LAND_ON) return -Infinity;
   if (x < LX0 || x > LX1 || z < LZ0 || z > LZ1) return -Infinity;
   const lim = y + 1.1;
   let best = -Infinity;
@@ -353,7 +365,7 @@ for (const r of [2.5, 5, 7]) for (let i = 0; i < 8; i++) RING.push([Math.cos((i 
 function parkCeiling(x, z, y) {
   // (outside them it is the camera's own look, stopped by their floors' edges, that keeps it out)
   const inMain = x > MX0 - 1 && x < MX1 + 1 && z > MZ0 - 1 && z < MZ1 + 1;
-  const inLand = x > LX0 - 1 && x < LX1 + 1 && z > LZ0 - 1 && z < LZ1 + 1;
+  const inLand = LAND_ON && x > LX0 - 1 && x < LX1 + 1 && z > LZ0 - 1 && z < LZ1 + 1;
   if (!inMain && !inLand) return Infinity;
   let c = Infinity;
   for (const [dx, dz] of RING) {
@@ -549,8 +561,12 @@ export class CarPark {
     this.mainSigns(KS, M);
     this.street(KS, M);
     this.mainInside(KI, M);
-    this.landShell(KL, M);
-    this.landInside(KLI, M);
+    this.facade(KS, M);
+    this.details(KI, M);
+    if (LAND_ON) {
+      this.landShell(KL, M);
+      this.landInside(KLI, M);
+    } else this.landBays = [];
     this.parkCars();
     // (what is inside each - the paint, the lights, the pipes, the signs - is drawn near it only,
     // and not for the sun: its shadows are the floors')
@@ -573,7 +589,7 @@ export class CarPark {
     const w = this.game.world;
     const fp = [
       { x0: MX0, z0: MZ0, x1: MX1, z1: MZ1, top: LV(NDECK), color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.1, 0.34, 0.78) },
-      { x0: LX0, z0: LZ0, x1: LX1, z1: LZ1, top: LY[LY.length - 1], color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.22, 0.62, 0.7) },
+      ...(LAND_ON ? [{ x0: LX0, z0: LZ0, x1: LX1, z1: LZ1, top: LY[LY.length - 1], color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.22, 0.62, 0.7) }] : []),
     ];
     if (w.footprints) w.footprints.push(...fp);
     const hud = this.game.hud;
@@ -596,7 +612,7 @@ export class CarPark {
     const nav = this.game.world.nav;
     if (nav && nav.queueRefresh) {
       nav.queueRefresh(MX0 - 2, MZ0 - 2, MX1 + 2, MZ1 + 2);
-      nav.queueRefresh(LX0 - 2, LZ0 - 2, LX1 + 2, LZ1 + 2);
+      if (LAND_ON) nav.queueRefresh(LX0 - 2, LZ0 - 2, LX1 + 2, LZ1 + 2);
     }
   }
 
@@ -650,7 +666,7 @@ export class CarPark {
     if (x > MX0 && x < MX1 && z > MZ0 && z < MZ1) {
       for (let k = 1; k <= NDECK; k++) if (y > LV(k) - SLAB && y < LV(k) && !mainHole(k, x, z)) return `main L${k}`;
     }
-    if (x > LX0 && x < LX1 && z > LZ0 && z < LZ1) {
+    if (LAND_ON && x > LX0 && x < LX1 && z > LZ0 && z < LZ1) {
       for (let k = 1; k < LY.length; k++) if (y > LY[k] - SLAB && y < LY[k] && !landHole(k, x, z)) return `land L${k}`;
     }
     return null;
@@ -761,7 +777,7 @@ export class CarPark {
       const top = y + (k === NDECK ? PAR : 1.3);
       const bot = k === 0 ? 0.02 : y - SLAB - 0.15;
       for (const [zz, nz] of [[MZ0, -1], [MZ1, 1]]) {
-        const runs = k === 0 && nz > 0 ? [[MX0, E_AISLE_X - 4.4], [E_AISLE_X + 4.4, MX1]] : [[MX0, MX1]];
+        const runs = k === 0 && nz > 0 ? [[MX0, E_AISLE_X - 4.4], [E_AISLE_X + 4.4, MX1]] : k === NDECK && nz > 0 ? [[MX0, CX0], [CX1, MX1]] : [[MX0, MX1]];
         for (const [x0, x1] of runs) {
           const za = Math.min(zz, zz - nz * 0.25);
           const zb = Math.max(zz, zz - nz * 0.25);
@@ -821,6 +837,192 @@ export class CarPark {
     }
   }
 
+  // ------------------------------------------------------------------ (round 12) its skin and its lights
+  // The player's word: far more real, and impressive. Its four faces screened in fins of bronze
+  // aluminium, floor to floor, close set, deeper and shallower by turns - the evening through them in
+  // slats; every floor's edge a band of concrete with a line of warm light under it, so that at dusk
+  // the whole of it is drawn in lines of light; the stair towers clad in dark glass, their landings
+  // lit; planters on the floors' edges along Washington Avenue, green spilling over; and the launch
+  // deck - the roof run carried on out over 5th Street, glass along its sides, the edge the car flies
+  // from
+  facade(K, M) {
+    const wall = this.wall;
+    const FIN = linC(0.72, 0.6, 0.42);
+    const FIN_D = linC(0.58, 0.47, 0.32);
+    const BAND = linC(0.66, 0.64, 0.6);
+    const LED = linC(1, 0.84, 0.58);
+    const LED_C = linC(0.5, 0.92, 1);
+    const sides = [
+      { a0: MZ0, a1: MZ1, fixed: MX0, n: -1, axis: 'x' },
+      { a0: MZ0, a1: MZ1, fixed: MX1, n: 1, axis: 'x' },
+      { a0: MX0, a1: MX1, fixed: MZ0, n: -1, axis: 'z' },
+      { a0: MX0, a1: MX1, fixed: MZ1, n: 1, axis: 'z' },
+    ];
+    // (a box out from a face: along a0..a1 on it, d0..d1 out from it, y0..y1)
+    const onFace = (sd, a0, a1, d0, d1, y0, y1, mat, col) => {
+      const f0 = sd.fixed + sd.n * d0;
+      const f1 = sd.fixed + sd.n * d1;
+      if (sd.axis === 'x') K.box(mat, Math.min(f0, f1), y0, a0, Math.max(f0, f1), y1, a1, col);
+      else K.box(mat, a0, y0, Math.min(f0, f1), a1, y1, Math.max(f0, f1), col);
+    };
+    const inCoreSpan = (sd, a) => (sd.axis === 'x' ? a < MZ0 + CORE_D + 0.2 || a > MZ1 - CORE_D - 0.2 : a < MX0 + CORE_W + 0.2 || a > MX1 - CORE_W - 0.2);
+    for (let k = 0; k <= NDECK; k++) {
+      const y = LV(k);
+      // ---- the slab's edge: its band, and the light under it (not the street floor's)
+      if (k > 0) {
+        for (const sd of sides) {
+          const runs = k === NDECK && sd.axis === 'z' && sd.n > 0 ? [[sd.a0, CX0], [CX1, sd.a1]] : [[sd.a0, sd.a1]];
+          for (const [a0, a1] of runs) {
+            onFace(sd, a0, a1, -0.05, 0.16, y - SLAB - 0.18, y + 0.04, M.matte, BAND);
+            onFace(sd, a0, a1, 0.02, 0.12, y - SLAB - 0.24, y - SLAB - 0.18, M.glow, k === NDECK ? LED_C : LED);
+          }
+        }
+      }
+      if (k === NDECK) continue;
+      // ---- the fins, floor to floor (over the panels' top to the next band)
+      const yb = y + 1.3;
+      const yt = LV(k + 1) - SLAB - 0.24;
+      for (const sd of sides) {
+        let i = 0;
+        for (let a = sd.a0 + 0.45; a < sd.a1 - 0.3; a += 0.62, i++) {
+          if (inCoreSpan(sd, a)) continue;
+          // (none over the way in, nor the door from the street)
+          if (k === 0 && sd.axis === 'z' && sd.n > 0 && a > E_AISLE_X - 4.8 && a < E_AISLE_X + 4.8) continue;
+          const deep = i % 3 === 0 ? 0.46 : i % 3 === 1 ? 0.3 : 0.22;
+          onFace(sd, a - 0.03, a + 0.03, 0.04, 0.04 + deep, k === 0 ? 2.6 : yb, yt, M.metal, i % 3 === 0 ? FIN : FIN_D);
+        }
+        // (a rail along their tops and their feet, holding them)
+        onFace(sd, sd.a0 + 0.2, sd.a1 - 0.2, 0.04, 0.12, yt - 0.08, yt, M.metal, FIN_D);
+      }
+      // ---- planters on its edge along Washington Avenue, green spilling over (not on the street floor)
+      if (k > 0) {
+        const rng = mulberry(500 + k);
+        for (let z = MZ0 + CORE_D + 4; z < MZ1 - CORE_D - 3; z += 9.2) {
+          const x0 = MX1 + 0.12;
+          K.box(M.matte, x0, y + 0.05, z - 1.6, x0 + 0.55, y + 0.62, z + 1.6, linC(0.36, 0.34, 0.32));
+          for (let j = 0; j < 5; j++) {
+            const r = 0.28 + rng() * 0.22;
+            K.sphere(M.matte, r, x0 + 0.3 + rng() * 0.25, y + 0.55 - j * 0.32, z - 1.3 + rng() * 2.6, linC(0.16 + rng() * 0.1, 0.42 + rng() * 0.16, 0.2), 1, 1.3, 1, 7);
+          }
+        }
+      }
+    }
+    // ---- the launch deck: its slab out over the street, glass along its sides and across its end,
+    // the light under its edge
+    const RY = LV(NDECK);
+    const z0 = MZ1;
+    const z1 = MZ1 + CANT;
+    K.box(M.matte, CX0, RY - SLAB - 0.25, z0, CX1, RY, z1, CONC_ROOF);
+    // (its underside tapering into the face: a deep beam on each side)
+    for (const x of [CX0, CX1 - 0.5]) K.add(M.matte, prism('z', [[z0, RY - SLAB - 0.25], [z1, RY - SLAB - 0.25]], x, x + 0.5, (s) => RY - SLAB - 0.25 - 1.6 * (1 - (s - z0) / CANT)), CONC_UNDER);
+    wall(CX0, z0, CX1, z1, RY - SLAB - 0.2, RY, 'floor');
+    for (const [xa, xb] of [[CX0, CX0 + 0.08], [CX1 - 0.08, CX1]]) {
+      K.box(M.glass, xa, RY, z0, xb, RY + PAR, z1, linC(0.6, 0.78, 0.86));
+      K.box(M.metal, xa - 0.02, RY + PAR, z0, xb + 0.02, RY + PAR + 0.06, z1, STEEL);
+      wall(xa, z0, xb, z1, RY - 0.3, RY + PAR);
+    }
+    K.box(M.glass, CX0, RY, z1 - 0.08, CX1, RY + PAR, z1, linC(0.6, 0.78, 0.86));
+    K.box(M.metal, CX0, RY + PAR, z1 - 0.1, CX1, RY + PAR + 0.06, z1 + 0.02, STEEL);
+    wall(CX0, z1 - 0.25, CX1, z1, RY - 0.3, RY + PAR);
+    K.box(M.glow, CX0, RY - SLAB - 0.31, z1 - 0.06, CX1, RY - SLAB - 0.25, z1 + 0.02, LED_C);
+    for (const x of [CX0, CX1]) K.box(M.glow, x - 0.04, RY - SLAB - 0.31, z0, x + 0.04, RY - SLAB - 0.25, z1, LED_C);
+    // (the run painted out to its end: the edge's hatching)
+    for (let i = 0; i < 7; i++) {
+      const xa = CX0 + 0.6 + i * ((CX1 - CX0 - 1.2) / 7);
+      K.box(M.paint, xa, RY + 0.005, z1 - 1.6, xa + (CX1 - CX0 - 1.2) / 14, RY + 0.02, z1 - 0.3, i % 2 ? INK : YEL);
+    }
+  }
+
+  // ------------------------------------------------------------------ (round 12) what a real one has inside
+  // On every floor: speed bumps at the foot of each ramp; wheel stops in the bays; the oil's stains
+  // and the tyres' black arcs in the turns; a duct and a cable tray along the ceiling down the middle;
+  // a convex mirror and a camera at each turn; a fire extinguisher on a column now and then; the
+  // columns' numbers; charging posts at a few bays
+  details(K, M) {
+    const rng = mulberry(8080);
+    const STAIN = linC(0.22, 0.21, 0.23);
+    const TYRE = linC(0.12, 0.11, 0.13);
+    const DUCT = linC(0.56, 0.58, 0.6);
+    const TRAY = linC(0.42, 0.43, 0.46);
+    const EXT = linC(0.86, 0.12, 0.1);
+    const EV = linC(0.18, 0.7, 0.42);
+    for (let k = 0; k <= NDECK; k++) {
+      const y = LV(k);
+      const flat = () => y;
+      const r = k < NDECK ? RAMPS[k] : null;
+      // ---- the speed bump at the ramp's foot
+      if (r) {
+        const up = Math.sign(r.zHigh - r.zLow);
+        const zb = r.zLow - up * 3.2;
+        for (let i = 0; i < 8; i++) {
+          const xa = r.x0 + 0.5 + i * ((r.x1 - r.x0 - 1) / 8);
+          K.box(M.paint, xa, y, zb - 0.22, xa + (r.x1 - r.x0 - 1) / 8, y + 0.07, zb + 0.22, i % 2 ? INK : YEL);
+        }
+      }
+      // ---- wheel stops in the bays, stains under some
+      for (const b of this.bays) {
+        if (b.k !== k) continue;
+        const fx = Math.sin(b.yaw);
+        const wx = b.x + fx * 1.9;
+        K.box(M.matte, wx - 0.1, y, b.z - 0.85, wx + 0.1, y + 0.12, b.z + 0.85, linC(0.62, 0.6, 0.56));
+        if (rng() < 0.35) K.cyl(M.paint, 0.35 + rng() * 0.4, 0.35 + rng() * 0.4, y + 0.004, y + 0.012, STAIN, { axis: 'y', x: b.x + (rng() - 0.5) * 1.2, z: b.z + (rng() - 0.5) * 1.4, segs: 10 });
+        // (a charging post at a few, on the street floor and the first)
+        if (k <= 1 && rng() < 0.12) {
+          const px = b.x + fx * 2.6;
+          K.box(M.paint, px - 0.15, y, b.z - 0.15, px + 0.15, y + 1.35, b.z + 0.15, linC(0.9, 0.92, 0.9));
+          K.box(M.glow, px - 0.16, y + 1.0, b.z - 0.1, px + 0.16, y + 1.18, b.z + 0.1, EV);
+        }
+      }
+      // ---- the tyres' black arcs and the oil in the turns
+      for (const zc of [(MZ0 + CORE_D + RN) / 2, (RS + MZ1 - CORE_D) / 2]) {
+        for (let j = 0; j < 3; j++) {
+          const R0 = 6 + rng() * 5;
+          const cx = MXC + (rng() - 0.5) * 8;
+          const a0 = rng() * Math.PI;
+          let px = cx + Math.cos(a0) * R0;
+          let pz = zc + Math.sin(a0) * R0 * 0.6;
+          for (let s = 1; s <= 6; s++) {
+            const a = a0 + s * 0.28;
+            const nx = cx + Math.cos(a) * R0;
+            const nz = zc + Math.sin(a) * R0 * 0.6;
+            if (!inCore(nx, nz, 0.5) && nz > MZ0 + 0.5 && nz < MZ1 - 0.5) paintLine(K, M.paint, TYRE, px, pz, nx, nz, 0.22, flat, 0.012);
+            px = nx;
+            pz = nz;
+          }
+        }
+        for (let j = 0; j < 4; j++) K.cyl(M.paint, 0.3 + rng() * 0.6, 0.3 + rng() * 0.6, y + 0.004, y + 0.011, STAIN, { axis: 'y', x: MXC + (rng() - 0.5) * 26, z: zc + (rng() - 0.5) * 12, segs: 9 });
+      }
+      if (k === NDECK) continue;
+      const cy = LV(k + 1) - SLAB - BEAM;
+      // ---- a duct and a cable tray along the ceiling, down the middle beside the bays
+      K.box(M.metal, MXC - 7.6, cy - 0.62, RN - 4, MXC - 6.4, cy - 0.02, RS + 4, DUCT);
+      for (let z = RN - 4; z < RS + 4; z += 6) K.box(M.metal, MXC - 7.7, cy - 0.66, z, MXC - 6.3, cy - 0.6, z + 0.12, linC(0.4, 0.42, 0.45));
+      K.box(M.metal, MXC + 6.4, cy - 0.3, RN - 4, MXC + 7.2, cy - 0.24, RS + 4, TRAY);
+      // ---- at each turn a convex mirror on the column by the ramp, and a camera
+      for (const [zc, side] of [[RN - 1, -1], [RS + 1, 1]]) {
+        for (const x of [WL[1] + 0.75, EL[0] - 0.75]) {
+          K.cyl(M.metal, 0.03, 0.03, y + 2.0, y + 2.6, STEEL, { axis: 'y', x, z: zc, segs: 5 });
+          K.sphere(M.glass, 0.42, x, y + 2.75, zc + side * 0.1, linC(0.7, 0.78, 0.86), 1, 1, 0.35, 10);
+          K.cyl(M.paint, 0.46, 0.46, zc + side * 0.02, zc + side * 0.07, linC(0.95, 0.6, 0.1), { x, y: y + 2.75, segs: 12 });
+        }
+        K.box(M.paint, MXC - 0.15, cy - 0.32, zc - 0.12, MXC + 0.15, cy - 0.12, zc + 0.24, linC(0.14, 0.14, 0.16));
+        K.box(M.glow, MXC - 0.03, cy - 0.27, zc + side * 0.25 - 0.02, MXC + 0.03, cy - 0.21, zc + side * 0.25 + 0.02, RED);
+      }
+      // ---- a fire extinguisher on a column now and then; the columns' numbers
+      let ci = 0;
+      for (const [x, z] of this.colsAt) {
+        ci++;
+        const side = x < MXC ? 1 : -1;
+        const fx = x + side * 0.46;
+        if (ci % 3 === k % 3) {
+          K.box(M.paint, fx - 0.02, y + 0.9, z - 0.18, fx + side * 0.2, y + 1.55, z + 0.18, EXT);
+          K.box(M.paint, fx + side * 0.2, y + 1.6, z - 0.16, fx + side * 0.22, y + 1.8, z + 0.16, linC(0.95, 0.95, 0.92));
+        }
+        wallWord(K, M.paint, WHITE, `${LEVEL_NAME[k]}${ci}`, 0.32, x + side * 0.43, y + 2.2, z, side, 0, 0.012);
+      }
+    }
+  }
+
   // the stair and lift towers at its four corners, up past the roof; at each floor on the face to the
   // hall the stair's door, EXIT over it, the floor's number big beside it in its colour; the one at
   // 5th and Washington hollow on the street floor - its lobby, the way in on foot
@@ -835,8 +1037,17 @@ export class CarPark {
       const z1 = north ? MZ0 + CORE_D : MZ1;
       const lobby = !west && !north;
       const LT = Y0 + 2.9;
-      K.box(M.matte, x0, lobby ? LT : 0.02, z0, x1, top, z1, CONC_COL);
+      // (round 12: clad in dark glass, its landings lit behind it - a line of light half way up each
+      // floor, round its two street faces)
+      K.box(M.glass, x0, lobby ? LT : 0.02, z0, x1, top, z1, linC(0.2, 0.27, 0.36));
       K.box(M.paint, x0 - 0.04, top - 1.4, z0 - 0.04, x1 + 0.04, top - 0.2, z1 + 0.04, BLUE_P);
+      for (let k = 0; k < NDECK; k++) {
+        const ly = LV(k) + DH * 0.55;
+        const ox = west ? x0 - 0.03 : x1;
+        const oz = north ? z0 - 0.03 : z1;
+        K.box(M.glow, ox, ly, z0 + 0.2, ox + 0.03, ly + 0.07, z1 - 0.2, linC(1, 0.88, 0.66));
+        K.box(M.glow, x0 + 0.2, ly, oz, x1 - 0.2, ly + 0.07, oz + 0.03, linC(1, 0.88, 0.66));
+      }
       K.box(M.matte, x0 - 0.15, top, z0 - 0.15, x1 + 0.15, top + 0.25, z1 + 0.15, PANEL);
       wall(x0, z0, x1, z1, lobby ? LT : 0, top);
       if (lobby) this.lobby(K, M, x0, x1, z0, z1, LT);
@@ -975,7 +1186,7 @@ export class CarPark {
   street(K, M) {
     const wall = this.wall;
     const APRON = linC(0.7, 0.69, 0.67);
-    for (const [x, z0, z1] of [[E_AISLE_X, MZ1, 295], [W_AISLE_X, 171, MZ0], [(L_GATE[0] + L_GATE[1]) / 2, 307, LZ0]]) {
+    for (const [x, z0, z1] of [[E_AISLE_X, MZ1, 295], [W_AISLE_X, 171, MZ0], ...(LAND_ON ? [[(L_GATE[0] + L_GATE[1]) / 2, 307, LZ0]] : [])]) {
       K.box(M.matte, x - 4.2, 0.02, z0, x + 4.2, 0.158, z1, APRON);
       for (let i = 0; i < 6; i++) {
         const zz = z0 + ((z1 - z0) * (i + 0.5)) / 6;

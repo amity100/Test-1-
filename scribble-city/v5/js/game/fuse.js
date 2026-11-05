@@ -563,6 +563,11 @@ export class Fuse {
   sketchCam(v, rdt) {
     const g = this.game;
     const cam = g.camera;
+    // (v5, round 12: the prologue framing the car itself while its rotor is drawn in the air)
+    if (this.camHeld) {
+      this.sk = 0;
+      return;
+    }
     const on = !!(g.freedraw && g.freedraw.isOpen) && g.state === 'play';
     const c = Math.cos(v.yaw);
     const sn = Math.sin(v.yaw);

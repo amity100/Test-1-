@@ -1013,3 +1013,71 @@ export class Jump {
     }
   }
 }
+
+// ------------------------------------------------------------------ the flight (round 12)
+// Off the lip, the car is flown out into the open - far and high, nothing across the street to come
+// down on: as fast as it came up (and a little more), up into an arc gravity brings round slowly - the
+// prologue slows the time at its top (its dt here is the slowed one), and holds it there while a rotor
+// is drawn on it. With the rotor on, release(): the car's own again, held in the air by it
+// (game/fuse.js air) where it is.
+export class Flight {
+  constructor(game, car, P) {
+    this.game = game;
+    this.car = car;
+    this.t = 0;
+    const F = (this.F = P.frame || NOFRAME);
+    const lipY = P.roofY + 0.3 + P.h;
+    this.sp = clamp(Math.abs(car.speed || 0) * 1.25, 26, 34);
+    const [fx, fz] = F.toLocal(Math.sin(car.yaw), Math.cos(car.yaw));
+    const L = Math.hypot(fx, fz) || 1;
+    this.dir = [fx / L, fz / L];
+    const [px, pz] = F.toLocal(car.pos.x, car.pos.z);
+    this.x0 = px;
+    this.z0 = pz;
+    this.y0 = Math.max(car.pos.y, lipY);
+    this.vy = 12.5;
+    this.g = 12;
+    this.apexT = this.vy / this.g;
+    const [wx, wz] = F.toWorld(this.dir[0], this.dir[1]);
+    this.wdir = [wx, wz];
+    this.done = false;
+    car.air = true;
+    car.script = (dt) => this.step(dt);
+  }
+
+  get apex() {
+    return this.t >= this.apexT;
+  }
+
+  step(dt) {
+    const v = this.car;
+    this.t += dt;
+    const t = this.t;
+    const [wx, wz] = this.F.toWorld(this.x0 + this.dir[0] * this.sp * t, this.z0 + this.dir[1] * this.sp * t);
+    v.pos.x = wx;
+    v.pos.z = wz;
+    v.pos.y = this.y0 + this.vy * t - 0.5 * this.g * t * t;
+    const vyNow = this.vy - this.g * t;
+    // (its nose with the arc)
+    v.bodyPitch = clamp(Math.atan2(vyNow, this.sp) * 0.55, -0.4, 0.3);
+    v.vx = this.wdir[0] * this.sp;
+    v.vz = this.wdir[1] * this.sp;
+    v.vy = vyNow;
+    v.speed = this.sp;
+    v.speedAbs = this.sp;
+  }
+
+  // (the rotor on it: its own again where it is, its way on slowed - held up by the rotor)
+  release() {
+    const v = this.car;
+    v.script = null;
+    v.air = true;
+    v.vy = Math.max(-1, Math.min(1, v.vy || 0));
+    v.vx *= 0.45;
+    v.vz *= 0.45;
+    v.speed *= 0.45;
+    v.bodyPitch = 0;
+    this.done = true;
+  }
+}
+
