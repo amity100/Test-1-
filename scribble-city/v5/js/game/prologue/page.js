@@ -112,11 +112,14 @@ export class HeldPage {
       return;
     }
     const hug = mode === 'hug';
-    const read = mode === 'read';
+    // (round 13: 'up' - held up high at arms' length against the sky, the picture to her: her drawing
+    // over where the wheel stood)
+    const up = mode === 'up';
+    const read = mode === 'read' || up;
     // in front of her chest (up before her eyes to read it; lower, let down)
     _c.copy(j.shoulderL).add(j.shoulderR).multiplyScalar(0.5);
-    _c.addScaledVector(f.forward, (hug ? 0.12 : read ? 0.3 : 0.27) * S);
-    _c.y += (hug ? -0.13 : read ? 0.1 : mode === 'low' ? -0.2 : -0.06) * S;
+    _c.addScaledVector(f.forward, (hug ? 0.12 : up ? 0.36 : read ? 0.3 : 0.27) * S);
+    _c.y += (hug ? -0.13 : up ? 0.34 : read ? 0.1 : mode === 'low' ? -0.2 : -0.06) * S;
     // facing who looks at it (only so far round from her front), or her own eyes, or her chest
     const to = typeof this.to === 'function' ? this.to() : this.to;
     if (hug || read || !to) _n.copy(f.forward).multiplyScalar(hug || read ? -1 : 1);
@@ -134,7 +137,7 @@ export class HeldPage {
       }
     }
     // tilted up a little towards a taller looker (or down, held to her)
-    const tilt = hug ? -0.1 : read ? -0.25 : to ? Math.max(-0.1, Math.min(0.45, Math.atan2(to.y - _c.y, Math.hypot(to.x - _c.x, to.z - _c.z)))) * 0.8 : 0.2;
+    const tilt = hug ? -0.1 : up ? -0.42 : read ? -0.25 : to ? Math.max(-0.1, Math.min(0.45, Math.atan2(to.y - _c.y, Math.hypot(to.x - _c.x, to.z - _c.z)))) * 0.8 : 0.2;
     _n.y = Math.sin(tilt);
     _n.normalize();
     _x.crossVectors(UP, _n).normalize();

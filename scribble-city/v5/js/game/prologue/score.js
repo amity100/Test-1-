@@ -1455,6 +1455,11 @@ const FILES = {
   // low drone, growing all the way (ElevenLabs): from her stand on, round its fuller half until the
   // boy waves from his gondola. The old waltz the wheel's own no more)
   tense: { path: 'music/wheel_tense.mp3', from: 0, a: 48, b: 131, x: 3, gain: 0.9, send: 0.3 },
+  // (round 13, the player's word: the cute tune only for the first moments of the wheel - then, a
+  // couple of seconds on, it goes over slowly into the most disturbing music, and that stays with the
+  // scene till the wheel is gone: a carnival music box broken and dying over a drone that never
+  // resolves, a clock off the beat, a heart - ElevenLabs, round and round)
+  dread: { path: 'music/wheel_dread.mp3', from: 0, a: 2, b: 116, x: 3, gain: 0.72, send: 0.25 },
   // (ROADMAP 18.9: the player's word - cute and disturbing at once, a little horror film: a sweet
   // music box that goes out of tune and melts while a dark drone, scraping strings and a heart grow
   // under it - begun under the boy waving from his gondola, cut dead the moment the wheel goes, some
@@ -1553,6 +1558,7 @@ const CUES = {
   // (ROADMAP 18.9: the wheel's own music, the unease as it goes, its tune remembered after)
   wheel: { K: fileOr(Wheel, 'wheel'), lead: 0.05 },
   tense: { K: fileOr(Wheel, 'tense'), lead: 0.05 },
+  dread: { K: fileOr(Unease, 'dread'), lead: 0.03 },
   unease: { K: fileOr(Unease, 'unease'), lead: 0.03 },
   memory: { K: fileOr(Memory, 'memory'), sting: true },
   surreal: { K: fileOr(Surreal, 'surreal'), lead: 0.05 },

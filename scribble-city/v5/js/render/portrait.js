@@ -987,6 +987,15 @@ export class Portrait {
       this.blinkT = 0;
       this.blinkAt = Math.random() < 0.15 ? 0.3 : 2 + Math.random() * 4;
     }
+    // (v5, round 13: a child's face startled looks startled, not haunted - spec.wideK the lids lifted
+    // off the iris and the lips stretched to the sides, spec.browK the brows' climb and knit: at a
+    // grown man's full measure on Lily's big eyes, her fear was a horror film's)
+    if (this.spec.wideK !== undefined) {
+      for (const n of ['au5R', 'au5L', 'au20R', 'au20L']) want[AUI[n]] *= this.spec.wideK;
+    }
+    if (this.spec.browK !== undefined) {
+      for (const n of ['au1R', 'au1L', 'au2R', 'au2L', 'au4R', 'au4L']) want[AUI[n]] *= this.spec.browK;
+    }
     // eased: each move at its own pace (the same at any number of frames a second), theirs one side
     // a little more than the other
     const w = this.w;

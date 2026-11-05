@@ -468,7 +468,7 @@ vec3 comicPrint(vec3 c, vec2 uv) {
   float n = 5.0;
   float f = l * n;
   float lb = (floor(f) + smoothstep(0.3, 0.7, fract(f))) / n;
-  c = mix(c, clamp(c * ((lb + 0.04) / max(l, 0.02)), 0.0, 1.0), 0.5 * k * bg);
+  c = mix(c, clamp(c * ((lb + 0.04) / max(l, 0.02)), 0.0, 1.0), 0.62 * k * bg);
   l = lumc(c);
   float aa = 0.9 / uDotPx + 0.02;
   // behind the people every colour is a screen of dots, as a comic prints its flat colours: the
@@ -478,13 +478,14 @@ vec3 comicPrint(vec3 c, vec2 uv) {
   float tone = clamp(1.0 - l, 0.0, 1.0);
   float rc = 0.5 * sqrt(tone) * smoothstep(0.02, 0.2, l);
   float dc = 1.0 - smoothstep(rc - aa, rc + aa, d);
-  c = mix(c, c * 0.8, dc * 0.55 * k * bg);
+  // (round 13, the player's word - on a phone the print was not seen at all: its dots deeper)
+  c = mix(c, c * 0.7, dc * 0.72 * k * bg);
   // the shadows in the print's own ink, cool and dark, the dots running together where they are
   // deepest
   float shade = smoothstep(0.42, 0.06, l);
   float rad = 0.72 * sqrt(shade);
   float dt = 1.0 - smoothstep(rad - aa, rad + aa, d);
-  c = mix(c, c * uDotInk, dt * 0.8 * k * bg);
+  c = mix(c, c * uDotInk, dt * 0.88 * k * bg);
   // and the light's own dots, small and few, in the light's colour - the sky as a comic prints it
   float hl = smoothstep(0.62, 0.95, l) * bg;
   vec2 g2 = mat2(0.866, -0.5, 0.5, 0.866) * (gl_FragCoord.xy / (uDotPx * 0.85));
@@ -2969,7 +2970,9 @@ export class Pipeline {
     // no brush's streaks in the paint)
     const oh = this.outSize ? this.outSize.y : 720;
     f.uComic.value = L.comic || 0;
-    f.uDotPx.value = Math.max(4.2, oh / 140);
+    // (round 13: on a phone bigger - a hundred to the picture's height, not a hundred and forty: its
+    // dots were too fine to be seen there)
+    f.uDotPx.value = Math.max(4.2, oh / (this.low ? 100 : 135));
     f.uMis.value = (L.mis || 0) * (oh / 720);
     f.uDotInk.value.set(L.dotInk[0], L.dotInk[1], L.dotInk[2]);
     // (round 9: the whip's smear - across the picture, its way on the screen - and the moment's colour)

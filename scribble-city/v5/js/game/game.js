@@ -936,6 +936,8 @@ export class Game {
     // (ROADMAP 18.9: the film's comic page takes the frame just drawn into its live panel)
     const C = this.prologue && this.prologue.comic;
     if (C && C.pg) C.grab(this.renderer.domElement);
+    // (round 13: a picture kept for a memory's flash later - the wheel as it was)
+    if (C && C.wantKeep) C.keep(this.renderer.domElement);
     if (tele) tele.frameEnd();
     shared.uFogDensity.value = fog;
   }
@@ -1000,7 +1002,10 @@ export class Game {
           // (the frame's own time from here, not from the animation frame's stamp: a browser held
           // up by the card calls it late, and that wait is not the processor's)
           const t0 = performance.now();
-          this.clock.getDelta();
+          // (round 13: how much longer the frame really took than the game's step - the prologue's
+          // film keeps to the real time: rawK, update)
+          const rawS = this.clock.getDelta();
+          this.rawK = Math.min(Math.max(rawS, step), 0.25) / step;
           perf.frameStart();
           this.update(step);
           perf.afterUpdate();
@@ -1030,6 +1035,10 @@ export class Game {
       }
       const raw = this.clock.getDelta();
       const dt = Math.min(raw, 0.05);
+      // (v5, round 13: the real time this frame took - the prologue's script and its film keep to it,
+      // as its voices do: on a phone under 20 frames a second the game's own step is held at 50 ms, and
+      // the film fell behind its own voices - a second's silence after every line)
+      this.rawK = dt > 0 ? Math.min(Math.max(raw, dt), 0.25) / dt : 1;
       // (how long the free pace's frames take: where the steady pace's auto beat begins, pace.js)
       if (!perf.probeLeft) pace.freeFrame(raw);
       perf.frameStart();
@@ -1273,7 +1282,9 @@ export class Game {
       if (this.calendar) this.calendar.update(dt);
       if (this.festival) this.festival.update(dt);
       if (this.prolSet) this.prolSet.update(dt);
-      if (this.prologue) this.prologue.update(this.realDt);
+      // (the film on the real time: the game's step times how much longer the frame really took -
+      // nothing while the game is paused)
+      if (this.prologue) this.prologue.update(this.realDt * (this.rawK || 1));
       if (this.artnight) this.artnight.update(dt);
       if (this.arcade) this.arcade.update(dt);
       if (this.casino) this.casino.update(dt);
@@ -1327,7 +1338,7 @@ export class Game {
       const v = this.freeCam;
       this.camera.position.set(v[0], v[1], v[2]);
       this.camera.rotation.set(v[4] || 0, v[3] || 0, 0, 'YXZ');
-    } else if (this.prologue && this.prologue.cam(this.realDt)) {
+    } else if (this.prologue && this.prologue.cam(this.realDt * (this.rawK || 1))) {
       // (the prologue's own shots: game/prologue/director.js)
     } else if (this.fair && this.fair.cam(dt)) {
       // (from the coaster's front car: game/fairground.js)

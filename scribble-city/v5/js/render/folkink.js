@@ -262,7 +262,8 @@ export function paintFolkFace(c, o = {}) {
     // the iris: its strokes out from the pupil; the pupil; the light in it
     const irx = cx + sd * 0.0012 * K;
     const iry = cy - eh * 0.05;
-    const ir = 0.0054 * K * (fem ? 1.04 : 1);
+    // (eyes.irisK: a child's iris fills more of the eye - round 13, Lily's small ones stared)
+    const ir = 0.0054 * K * (fem ? 1.04 : 1) * (E.irisK || 1);
     g.globalAlpha = 1;
     g.fillStyle = iris[1];
     g.beginPath();
