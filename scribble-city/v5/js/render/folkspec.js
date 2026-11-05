@@ -655,8 +655,9 @@ export const LILY = {
   // (round 13, the player's word again - her eyes frightening in some of the talk, her mouth twisted:
   // startled, her lids lifted and her lips stretched at a third of a man's; her brows' climb and knit
   // at a little over half; the iris a little bigger in a little less open eye - render/portrait.js;
-  // startled, her mouth open a little, not gaping - render/people.js moodMouthK)
-  wideK: 0.35, browK: 0.6, moodMouthK: 0.45,
+  // startled, her mouth open a little, not gaping - render/people.js moodMouthK; and hardly a line on
+  // her forehead as her brows go up - creaseK)
+  wideK: 0.35, browK: 0.6, moodMouthK: 0.45, creaseK: 0.25,
   // (style 'pony': render/folkshapes.js; bits: what is in it - side -1 her right)
   hair: {
     ...hairOf('espresso', 'pony'), base: '#3c2416', dark: ['#1c100a', '#24140c', '#160c06'], mid: ['#4e3020', '#5a3826', '#462a1a'], light: ['#8a5a34', '#9a6a3e', '#7a4c2a'], wave: 1,

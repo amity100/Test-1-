@@ -1019,6 +1019,9 @@ export class Portrait {
       const W = this.mat.uniforms.uWrinkleW.value;
       const av = (n) => 0.5 * (w[AUI[`${n}R`]] + w[AUI[`${n}L`]]);
       W.set(Math.max(av('au1'), av('au2')), Math.max(av('au4'), w[AUI.au9] * 0.8), Math.max(av('au6'), av('au7') * 0.7, av('au12') * 0.45), Math.max(av('au10'), av('au12') * 0.8, w[AUI.au9] * 0.6, w[AUI.au17]));
+      // (round 13: a child's skin hardly creases - Lily's raised brows drew a grown woman's forehead
+      // lines: spec.creaseK)
+      if (this.spec.creaseK !== undefined) W.multiplyScalar(this.spec.creaseK);
       if (gaze) this.mat.uniforms.uGaze.value.set(gaze[2], gaze[3], gaze[2], gaze[3]);
     }
   }
