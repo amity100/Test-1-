@@ -428,7 +428,170 @@ export class Ramp {
     this.root.rotation.y = this.F.rotY || 0;
     game.scene.add(this.root);
     this.build();
+    // (round 8, the player's word: the ramp drawn before their eyes - a giant pencil, his, down out
+    // of the sky onto the roof, its point going round the ramp's lines one after another, each line
+    // there as it goes; only then is it filled in, white as the page, and coloured. The pieces wait
+    // for the drawing: buildSketch, update)
+    this.buildSketch();
+    for (const p of this.pieces) if (p.grow !== 'none') p.delay = this.SK + p.delay * 0.3;
     this.grown = false;
+  }
+
+  // the lines the pencil draws, in the order it draws them (the ramp's frame: x along it, y up, z
+  // across), each a tube of ink shown as far as the point has gone; and the pencil itself, point
+  // down - in a group of their own, beside the ramp's (they are ink, not to be whitened with it)
+  buildSketch() {
+    const P = this.P;
+    const Y = P.roofY;
+    const z = P.z;
+    const half = P.half;
+    const xAt = (u) => P.startX + (P.lipX - P.startX) * u;
+    const yAt = (u) => Y + 0.3 + P.h * Math.pow(u, P.pow);
+    const v = (x, y, zz) => new THREE.Vector3(x, y, zz);
+    const line = (n, f) => Array.from({ length: n + 1 }, (_, i) => f(i / n));
+    const S = [];
+    // its near end across, its left edge up to the lip, the lip across, its right edge back down
+    S.push(line(4, (t) => v(P.startX + KICK, Y + 0.06, z - half + 2 * half * t)));
+    S.push(line(28, (u) => v(xAt(u), yAt(u) + 0.08, z + half)));
+    S.push(line(4, (t) => v(P.lipX, yAt(1) + 0.08, z + half - 2 * half * t)));
+    S.push(line(28, (u) => v(xAt(1 - u), yAt(1 - u) + 0.08, z - half)));
+    // its legs down to the roof, one side then the other
+    for (const sd of [-1, 1]) for (const i of [1, 4, 7]) {
+      const u = (i + 0.4) / 8.4;
+      S.push(line(3, (t) => v(xAt(u), yAt(u) - (yAt(u) - Y) * t, z + sd * half)));
+    }
+    // the deck's planks across, a few, and the line up its middle
+    for (let c = 1; c <= 3; c++) {
+      const u = c / 4;
+      S.push(line(4, (t) => v(xAt(u), yAt(u) + 0.1, z + (c % 2 ? 1 : -1) * half * (1 - 2 * t))));
+    }
+    const INK = linC(0.09, 0.07, 0.15);
+    const grp = (this.sketch = new THREE.Group());
+    grp.rotation.y = this.F.rotY || 0;
+    grp.matrixAutoUpdate = true;
+    this.game.scene.add(grp);
+    this.strokes = [];
+    let t = 0.45;
+    for (const pts of S) {
+      let len = 0;
+      for (let i = 1; i < pts.length; i++) len += pts[i].distanceTo(pts[i - 1]);
+      const K = new Kit();
+      const M = itemMats();
+      const segs = Math.max(8, Math.round(len * 3));
+      K.add(M.matte, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), segs, 0.085, 5, false), INK);
+      const g = K.build({ seed: Math.random() });
+      g.matrixAutoUpdate = true;
+      const meshes = [];
+      g.traverse((m) => {
+        if (m.isMesh) {
+          const n = m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count;
+          meshes.push([m, n]);
+          m.geometry.setDrawRange(0, 0);
+        }
+      });
+      grp.add(g);
+      // (a long line at some 34 m a second, a short one in a breath; a hop between)
+      const dur = Math.max(0.1, len / 34);
+      this.strokes.push({ pts, len, t0: t, t1: t + dur, meshes, shown: 0 });
+      t += dur + 0.04;
+    }
+    // the pencil: graphite, the shaved wood, the six-sided yellow body, the tin band, the eraser -
+    // along +y from its point; 9 m of it
+    const R = 0.32;
+    const K = new Kit();
+    const M = itemMats();
+    K.cyl(M.round, 0.012, R * 0.3, 0, R * 0.95, linC(0.16, 0.15, 0.2), { axis: 'y', segs: 12 });
+    K.cyl(M.matte, R * 0.3, R, R * 0.95, R * 3.3, linC(0.93, 0.74, 0.5), { axis: 'y', segs: 12 });
+    K.cyl(M.paint, R, R, R * 3.3, R * 25, linC(0.99, 0.76, 0.14), { axis: 'y', segs: 6 });
+    K.cyl(M.metal, R * 1.05, R * 1.05, R * 25, R * 26.4, linC(0.84, 0.84, 0.88), { axis: 'y', segs: 16 });
+    for (const yy of [25.4, 25.9]) K.torus(M.metal, R * 1.07, R * 0.05, 0, R * yy, 0, linC(0.5, 0.5, 0.56), Math.PI / 2);
+    K.cyl(M.round, R, R * 0.82, R * 26.4, R * 28, linC(0.98, 0.56, 0.64), { axis: 'y', segs: 16 });
+    const pen = K.build({ seed: 0.31 });
+    pen.matrixAutoUpdate = true;
+    pen.visible = false;
+    grp.add(pen);
+    // (leaning back up towards the car it is drawn from, as a hand holds it)
+    const q = new THREE.Quaternion().setFromUnitVectors(UP, new THREE.Vector3(0.5, 1, -0.32).normalize());
+    this.pen = { obj: pen, q, tip: new THREE.Vector3(), fx: 0 };
+    // when the drawing is done, and the pencil off up out of the picture again
+    this.SK = t + 0.35;
+  }
+
+  // the point of the drawing at time t: [where, drawing or not]
+  penAt(t, out) {
+    const L = this.strokes;
+    const first = L[0].pts[0];
+    if (t < 0.45) {
+      // (down out of the sky onto the first line's start)
+      const k = clamp(t / 0.45, 0, 1);
+      const e = 1 - Math.pow(1 - k, 3);
+      out.set(first.x, first.y + 16 * (1 - e), first.z);
+      return false;
+    }
+    for (let i = 0; i < L.length; i++) {
+      const s = L[i];
+      if (t < s.t0) {
+        // (lifted between two lines: across in an arc)
+        const a = L[i - 1].pts[L[i - 1].pts.length - 1];
+        const b = s.pts[0];
+        const k = clamp((t - L[i - 1].t1) / Math.max(1e-3, s.t0 - L[i - 1].t1), 0, 1);
+        out.lerpVectors(a, b, k);
+        out.y += Math.sin(k * Math.PI) * 0.7;
+        return false;
+      }
+      if (t <= s.t1) {
+        const d = ((t - s.t0) / (s.t1 - s.t0)) * s.len;
+        let acc = 0;
+        for (let j = 1; j < s.pts.length; j++) {
+          const seg = s.pts[j].distanceTo(s.pts[j - 1]);
+          if (acc + seg >= d) {
+            out.lerpVectors(s.pts[j - 1], s.pts[j], (d - acc) / Math.max(1e-6, seg));
+            return true;
+          }
+          acc += seg;
+        }
+        out.copy(s.pts[s.pts.length - 1]);
+        return true;
+      }
+    }
+    // (done: up and away)
+    const last = L[L.length - 1].pts[L[L.length - 1].pts.length - 1];
+    const k = clamp((t - L[L.length - 1].t1) / 0.35, 0, 1);
+    out.set(last.x, last.y + 18 * k * k, last.z);
+    return false;
+  }
+
+  tickSketch(dt) {
+    const t = this.t;
+    const pen = this.pen;
+    if (!pen) return;
+    // each line as far as the point has gone
+    for (const s of this.strokes) {
+      const k = clamp((t - s.t0) / (s.t1 - s.t0), 0, 1);
+      if (k === s.shown) continue;
+      s.shown = k;
+      for (const [m, n] of s.meshes) m.geometry.setDrawRange(0, Math.floor((n * k) / 3) * 3);
+    }
+    const on = t > 0 && t < this.SK;
+    pen.obj.visible = on;
+    if (!on) return;
+    const drawing = this.penAt(t, pen.tip);
+    pen.obj.position.copy(pen.tip);
+    // (a hand's wobble as it goes)
+    pen.obj.quaternion.copy(pen.q);
+    pen.obj.rotateZ(Math.sin(t * 23) * 0.025);
+    pen.obj.rotateX(Math.cos(t * 17) * 0.02);
+    // the graphite's dust off the point, and its scratch
+    if (drawing) {
+      pen.fx -= dt;
+      if (pen.fx <= 0) {
+        pen.fx = 0.05;
+        const w = this.sketch.localToWorld(pen.tip.clone());
+        if (this.game.fx && this.game.fx.sparks) this.game.fx.sparks(w.x, w.y + 0.05, w.z, 3, [0.12, 0.1, 0.18]);
+      }
+      if (!pen.drawing && this.game.audio) this.game.audio.play('scribble', 0.32);
+    }
+    pen.drawing = drawing;
   }
 
   // its floor (a car on it), for the car park it stands on (Garage.extra)
@@ -669,6 +832,7 @@ export class Ramp {
   update(dt) {
     this.t += dt;
     const t = this.t;
+    this.tickSketch(dt);
     for (const p of this.pieces) {
       if (p.done) continue;
       const k = (t - p.delay) / 0.32;
@@ -691,8 +855,9 @@ export class Ramp {
     }
     // white as the paper until the end, then the colours sweep from the car to the lip
     if (!this.swept) {
-      this.paper(t < 2.1 ? 0 : clamp((t - 2.1) / 0.8, 0, 1));
-      if (t >= 2.95) {
+      const s0 = this.SK + 0.75;
+      this.paper(t < s0 ? 0 : clamp((t - s0) / 0.8, 0, 1));
+      if (t >= s0 + 0.85) {
         this.swept = true;
         this.unpaper();
         this.solid = true;
@@ -750,6 +915,12 @@ export class Ramp {
     this.root.traverse((m) => {
       if (m.isMesh) m.geometry.dispose();
     });
+    if (this.sketch) {
+      this.game.scene.remove(this.sketch);
+      this.sketch.traverse((m) => {
+        if (m.isMesh) m.geometry.dispose();
+      });
+    }
   }
 }
 

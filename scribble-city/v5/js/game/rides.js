@@ -268,8 +268,9 @@ export function seatOn(v, fig, dt) {
   const b = v.bar;
   at([b[0] - v.grip, b[1] + lift, b[2]], fig.wheel);
   at([b[0] + v.grip, b[1] + lift, b[2]], fig.wheelL);
-  // (a gun out: one hand on the bars, ROADMAP 4.7)
-  fig.reachR = fig.shootOut ? null : fig.wheel;
+  // (a gun out: one hand on the bars, ROADMAP 4.7; or the hand held up at something - the
+  // prologue's pencil, drawing from the driver's seat: ROADMAP 18.9, holdUpR)
+  fig.reachR = fig.holdUpR || (fig.shootOut ? null : fig.wheel);
   fig.reachL = fig.wheelL;
   fig.update(dt);
 }

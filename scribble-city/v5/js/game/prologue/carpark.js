@@ -10,19 +10,19 @@ import { randomCarSpec } from '../../render/cars.js';
 //
 // 5th Street Garage is the way big downtown car parks are built where the land is long: sloping
 // floors. It is two halves side by side, each the length of the block (113 m) and 20 m across, its
-// bays along both sides of its aisle; every floor of a half slopes the whole way along (4 %), the
-// west half's up to the south, the east half's up to the north, each one a whole storey (3.2 m)
+// bays along both sides of its aisle; every floor of a half slopes the whole way along (5.5 %), the
+// west half's up to the south, the east half's up to the north, each one a whole storey (4.4 m)
 // from one end to the other; at each end the floors are flat for 16.5 m and the two halves meet
 // there at one level - the turn. Up is a long straight, a turn at the end, another long straight
-// the other way: six of them from the street to the roof. Two ways wind through it, one inside
+// the other way: eight of them from the street to the roof. Two ways wind through it, one inside
 // the other (a double helix): the way up comes in from 5th Street at the south end and goes north
 // up the east half, round, south up the west half, and so on - its last straight is the west
 // half's top floor, open to the sky: the roof run, straight and clear for 100 m to the south
-// edge, 19.4 m over 5th Street, the street the car flies across. The way down is the other one,
+// edge, 35 m over 5th Street, the street the car flies across. The way down is the other one,
 // out at the north end onto 7th Street.
 //
-// Bayshore Parking is lower (its roof 4.8 m under the garage's) and plainer: flat floors, four of
-// them over the street floor, and a straight ramp from each down to the next (12 %, eased at both
+// Bayshore Parking is lower (its roof 4.8 m under the garage's) and plainer: flat floors, eight of
+// them over the street floor, and a straight ramp from each down to the next (13 %, eased at both
 // ends), turning at its west end and in a cross aisle in its middle, out onto 5th Street.
 //
 // Built the way the city is (game/items.js Kit, the city's pens), merged into a few meshes:
@@ -38,12 +38,15 @@ import { randomCarSpec } from '../../render/cars.js';
 // the street floor (a little over the pavers round it)
 const Y0 = 0.17;
 // floor to floor, a floor's slab, the beams under it, the parapet over it
-const DH = 3.2;
+// (round 8, the player's word: much taller and roomier - eight floors of 4.4 m, the roof run 35 m
+// over 5th Street; it was six of 3.2 m)
+const DH = 4.4;
 const SLAB = 0.3;
 const BEAM = 0.5;
 const PAR = 1.05;
-// the sloping floors of a half (0..5), the levels (0: the street .. 6: the roof run's high end)
-const NDECK = 6;
+// the sloping floors of a half (0..NDECK-1), the levels (0: the street .. NDECK: the roof run's high
+// end) - an even number of them, the last the west half's, the roof run going south to the edge
+const NDECK = 8;
 const LV = (k) => Y0 + k * DH;
 
 // 5th Street Garage: its ground, the line between its halves, where the floors slope
@@ -74,16 +77,16 @@ const LX0 = -250;
 const LX1 = -148;
 const LZ0 = 314.5;
 const LZ1 = 349;
-const LDH = 3.6;
-const LY = [0, 1, 2, 3, 4].map((k) => Y0 + k * LDH);
+// (round 8: as tall again as the garage it is across the street from - eight floors of 3.8 m, its
+// roof 4.8 m under the garage's still)
+const LDH = 3.8;
+const NLAND = 8;
+const LY = Array.from({ length: NLAND + 1 }, (_, k) => Y0 + k * LDH);
 const L_AISLE = { N: [319.8, 327.0], S: [337.0, 344.2] };
 const L_MID = 332;
-const L_RAMPS = [
-  { lv: 0, aisle: 'N', xLow: -202, xHigh: -236 },
-  { lv: 1, aisle: 'S', xLow: -236, xHigh: -202 },
-  { lv: 2, aisle: 'N', xLow: -202, xHigh: -236 },
-  { lv: 3, aisle: 'S', xLow: -236, xHigh: -202 },
-];
+// (a ramp from each floor to the next: up west in the north aisle from the even ones, up east in the
+// south aisle from the odd ones)
+const L_RAMPS = Array.from({ length: NLAND }, (_, lv) => (lv % 2 === 0 ? { lv, aisle: 'N', xLow: -202, xHigh: -236 } : { lv, aisle: 'S', xLow: -236, xHigh: -202 }));
 const L_RAMP_EASE = 4;
 const L_CROSS = [-202, -188];
 // (the middle rows end short of the east wall: the turn at that end)
@@ -109,7 +112,7 @@ export const PARK = {
   name: '5TH STREET GARAGE',
   // the garage's ground, the line between its halves, its levels (the street floor .. the roof
   // run's high end), floor to floor, the slope of its floors
-  main: { x0: MX0, x1: MX1, z0: MZ0, z1: MZ1, xc: MXC, zN: MZN, zS: MZS, levels: [0, 1, 2, 3, 4, 5, 6].map(LV), floorToFloor: DH, grade: DH / (MZS - MZN) },
+  main: { x0: MX0, x1: MX1, z0: MZ0, z1: MZ1, xc: MXC, zN: MZN, zS: MZS, levels: Array.from({ length: NDECK + 1 }, (_, k) => LV(k)), floorToFloor: DH, grade: DH / (MZS - MZN) },
   landing: { name: 'BAYSHORE PARKING', x0: LX0, x1: LX1, z0: LZ0, z1: LZ1, levels: LY.slice(), floorToFloor: LDH, grade: LDH / (34 - L_RAMP_EASE) },
   // the street door of the stair tower at the corner of 5th Street and Washington Avenue (the
   // way in on foot, through its lobby to the street floor), where the two men wait, which way they
@@ -138,24 +141,20 @@ export const PARK = {
   // or turn, its level (a turn's) or its two (a straight's), a word for it
   route: [
     { x: E_AISLE_X, z: MZ1 - 4, y: LV(0), lv: 0, what: 'in' },
-    { x: E_AISLE_X, z: (MZN + MZS) / 2, y: LV(0.5), lv: 0.5, what: 'up' },
-    { x: MXC, z: MZ0 + 6, y: LV(1), lv: 1, what: 'turn' },
-    { x: W_AISLE_X, z: (MZN + MZS) / 2, y: LV(1.5), lv: 1.5, what: 'up' },
-    { x: MXC, z: MZ1 - 6, y: LV(2), lv: 2, what: 'turn' },
-    { x: E_AISLE_X, z: (MZN + MZS) / 2, y: LV(2.5), lv: 2.5, what: 'up' },
-    { x: MXC, z: MZ0 + 6, y: LV(3), lv: 3, what: 'turn' },
-    { x: W_AISLE_X, z: (MZN + MZS) / 2, y: LV(3.5), lv: 3.5, what: 'up' },
-    { x: MXC, z: MZ1 - 6, y: LV(4), lv: 4, what: 'turn' },
-    { x: E_AISLE_X, z: (MZN + MZS) / 2, y: LV(4.5), lv: 4.5, what: 'up' },
-    { x: MXC, z: MZ0 + 6, y: LV(5), lv: 5, what: 'turn' },
-    { x: W_AISLE_X, z: MZ0 + 12, y: LV(5), lv: 5, what: 'roof' },
+    // (up each straight, round each turn: the east half north on the even floors, the west half
+    // south on the odd; the last turn onto the roof run)
+    ...Array.from({ length: NDECK - 1 }, (_, j) => [
+      { x: j % 2 === 0 ? E_AISLE_X : W_AISLE_X, z: (MZN + MZS) / 2, y: LV(j + 0.5), lv: j + 0.5, what: 'up' },
+      { x: MXC, z: j % 2 === 0 ? MZ0 + 6 : MZ1 - 6, y: LV(j + 1), lv: j + 1, what: 'turn' },
+    ]).flat(),
+    { x: W_AISLE_X, z: MZ0 + 12, y: LV(NDECK - 1), lv: NDECK - 1, what: 'roof' },
   ],
   // the roof run: from its start (the north end of the west half's top floor, open to the sky)
   // straight south down the aisle to the edge - 100 m and more; the last 26.5 m flat
-  runup: { x: W_AISLE_X, z: MZ0 + 6, y: LV(5), yaw: 0, dir: [0, 1], len: MZ1 - MZ0 - 6, flatFrom: MZT },
+  runup: { x: W_AISLE_X, z: MZ0 + 6, y: LV(NDECK - 1), yaw: 0, dir: [0, 1], len: MZ1 - MZ0 - 6, flatFrom: MZT },
   // the edge it flies from: the south face of the west half at the roof run's high end (a
   // parapet 1.05 m high along it, x0..x1), over 5th Street
-  edge: { z: MZ1, x0: MX0, x1: MXC, x: W_AISLE_X, y: LV(6), parapet: PAR },
+  edge: { z: MZ1, x0: MX0, x1: MXC, x: W_AISLE_X, y: LV(NDECK), parapet: PAR },
   // (the drawn ramp and the jump - game/prologue/ramp.js - are worked out along -x, a lane at one
   // z: the roof run is that turned a quarter round. toLocal(x, z) gives the [x, z] they take, a
   // group turned rotY about y puts what they build back in the world; edgeX, laneZ, carX for
@@ -166,18 +165,20 @@ export const PARK = {
     rotY: Math.PI / 2,
     edgeX: -MZ1,
     laneZ: W_AISLE_X,
-    roofY: LV(6),
+    roofY: LV(NDECK),
   },
   // where it comes down: Bayshore's roof straight ahead across the street (kept clear: no cars,
   // no lamp posts, no openings), its height; land: a point in it
-  land: { x: W_AISLE_X, z: 328, y: LY[4], zone: { x0: KEEP.land.x0, x1: KEEP.land.x1, z0: LZ0 + 1, z1: LZ1 - 1 } },
+  land: { x: W_AISLE_X, z: 328, y: LY[NLAND], zone: { x0: KEEP.land.x0, x1: KEEP.land.x1, z0: LZ0 + 1, z1: LZ1 - 1 } },
   // the way down from Bayshore's roof to 5th Street: west along its south aisle, down, round at
   // the west end, down, round in the cross aisle, down, round, down, and out of its gate
   down: [
-    { x: -196, z: 340.6, y: LY[4], what: 'ramp' },
-    { x: -244, z: 332, y: LY[3], what: 'turn' },
-    { x: -196, z: 332, y: LY[2], what: 'turn' },
-    { x: -244, z: 332, y: LY[1], what: 'turn' },
+    { x: -196, z: 340.6, y: LY[NLAND], what: 'ramp' },
+    // (round at the west end on the odd floors, in the cross aisle on the even ones)
+    ...Array.from({ length: NLAND - 1 }, (_, i) => {
+      const k = NLAND - 1 - i;
+      return { x: k % 2 === 1 ? -244 : -196, z: 332, y: LY[k], what: 'turn' };
+    }),
     { x: -195.5, z: 323.4, y: LY[0], what: 'gate' },
     { x: -195.5, z: 309, y: 0, what: 'street' },
   ],
@@ -188,11 +189,11 @@ export const PARK = {
     // the door on foot, the two men by it
     door: [[-146, 1.7, 300], [-152, 1.6, 289]],
     // the roof run from behind the car's start, the edge far off
-    run: [[-180.3, LV(5) + 2.4, MZ0 + 2], [-180.3, LV(6) + 0.5, MZ1]],
+    run: [[-180.3, LV(NDECK - 1) + 2.4, MZ0 + 2], [-180.3, LV(NDECK) + 0.5, MZ1]],
     // over the edge: 5th Street below, Bayshore's roof across it
-    edge: [[-180.3, LV(6) + 2.1, MZ1 - 21], [-180.3, LY[4] - 1, 332]],
+    edge: [[-180.3, LV(NDECK) + 2.1, MZ1 - 21], [-180.3, LY[NLAND] - 1, 332]],
     // from Bayshore's roof up at the edge it comes from
-    landing: [[-172, LY[4] + 1.6, 342], [-180.3, LV(6) + 1, MZ1]],
+    landing: [[-172, LY[NLAND] + 1.6, 342], [-180.3, LV(NDECK) + 1, MZ1]],
   },
   // the floor under (x, z) for something at height y (the highest floor no more than a step over
   // it), -Infinity off them; the underside of what is over (x, z) for the camera there (Infinity in
@@ -201,9 +202,9 @@ export const PARK = {
   ceilingAt: (x, z, y) => parkCeiling(x, z, y),
   // floors laid on it later (the ramp drawn on the roof: anything with floorAt(x, z, y))
   extra: [],
-  // which level something at (x, y, z) is on, in the garage (0 the street floor .. 6 the roof run's
-  // high end; between two on a slope: 2.4 is two fifths of the way up from 2 to 3); in Bayshore,
-  // its level (0 .. 4) plus 10; null outside both
+  // which level something at (x, y, z) is on, in the garage (0 the street floor .. NDECK the roof
+  // run's high end; between two on a slope: 2.4 is two fifths of the way up from 2 to 3); in
+  // Bayshore, its level (0 .. NLAND) plus 10; null outside both
   levelAt: (x, z, y) => {
     const m = mainFloor(x, z, y);
     if (m > -Infinity) return (m - Y0) / DH;
@@ -499,8 +500,9 @@ const STAIN_D = linC(0.31, 0.3, 0.33);
 const GLASS = linC(0.42, 0.58, 0.72);
 // each level its colour (the street floor slate, then red, orange, yellow, green, blue; the roof
 // violet), on its columns, its signs, its band round the outside
-const LEVEL_C = [[0.46, 0.55, 0.68], [0.86, 0.24, 0.26], [0.97, 0.55, 0.18], [0.98, 0.8, 0.2], [0.32, 0.72, 0.42], [0.26, 0.5, 0.88], [0.62, 0.38, 0.84]].map(([r, g, b]) => linC(r, g, b));
-const LEVEL_NAME = ['G', '1', '2', '3', '4', '5', 'R'];
+// (a colour and a name for each level, the street's to the roof run's high end - NDECK + 1 of them)
+const LEVEL_C = [[0.46, 0.55, 0.68], [0.86, 0.24, 0.26], [0.97, 0.55, 0.18], [0.98, 0.8, 0.2], [0.32, 0.72, 0.42], [0.2, 0.7, 0.72], [0.26, 0.5, 0.88], [0.62, 0.38, 0.84], [0.9, 0.36, 0.62]].map(([r, g, b]) => linC(r, g, b));
+const LEVEL_NAME = Array.from({ length: NDECK + 1 }, (_, k) => (k === 0 ? 'G' : k === NDECK ? 'R' : String(k)));
 
 // ------------------------------------------------------------------ the car park
 export class CarPark {
@@ -556,7 +558,7 @@ export class CarPark {
     // (on the city's map, and on the minimap's picture of the city - drawn before these were built)
     const w = this.game.world;
     const fp = [
-      { x0: MX0, z0: MZ0, x1: MX1, z1: MZ1, top: LV(6), color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.1, 0.34, 0.78) },
+      { x0: MX0, z0: MZ0, x1: MX1, z1: MZ1, top: LV(NDECK), color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.1, 0.34, 0.78) },
       { x0: LX0, z0: LZ0, x1: LX1, z1: LZ1, top: LY[LY.length - 1], color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.22, 0.62, 0.7) },
     ];
     if (w.footprints) w.footprints.push(...fp);
@@ -887,7 +889,7 @@ export class CarPark {
       const z0 = Math.min(zo, zi);
       const z1 = Math.max(zo, zi);
       const roof = deckY(h, NDECK - 1, (z0 + z1) / 2);
-      const top = Math.max(roof + 3.6, LV(6) + 2.8);
+      const top = Math.max(roof + 3.6, LV(NDECK) + 2.8);
       const nx = h === 'W' ? -1 : 1;
       const nz = end === 'N' ? -1 : 1;
       // (the one at 5th and Washington is hollow on the street floor: its lobby, the way in on foot)
@@ -1020,7 +1022,7 @@ export class CarPark {
     const sy = LV(1) + 0.4;
     K.box(M.matte, sx - lenS / 2 - 0.6, sy - 0.3, MZ1 + 0.25, sx + lenS / 2 + 0.6, sy + hS + 0.3, MZ1 + 0.4, DARK);
     wallWord(K, M.glow, linC(1, 0.92, 0.7), name, hS, sx, sy, MZ1 + 0.4, 0, 1, 0.08);
-    const ey = LV(4) + 0.5;
+    const ey = LV(Math.round(NDECK * 0.66)) + 0.5;
     const ez = (MZ0 + MZ1) / 2;
     K.box(M.matte, MX1 + 0.25, ey - 0.35, ez - lenS / 2 - 0.7, MX1 + 0.4, ey + hS + 0.35, ez + lenS / 2 + 0.7, DARK);
     wallWord(K, M.glow, linC(1, 0.92, 0.7), name, hS, MX1 + 0.4, ey, ez, 1, 0, 0.08);
@@ -1028,7 +1030,7 @@ export class CarPark {
     const bx = MX1 + 0.9;
     const bz = MZ1 - CORE_D - 1.6;
     const b0 = LV(1);
-    const b1 = LV(6) + 2.2;
+    const b1 = LV(NDECK) + 2.2;
     K.box(M.paint, bx - 0.25, b0, bz - 1.2, bx + 0.25, b1, bz + 1.2, BLUE_P);
     K.box(M.metal, MX1 - 0.02, b0 + 0.6, bz - 0.15, bx - 0.25, b0 + 0.9, bz + 0.15, STEEL);
     K.box(M.metal, MX1 - 0.02, b1 - 1.2, bz - 0.15, bx - 0.25, b1 - 0.9, bz + 0.15, STEEL);
@@ -1320,7 +1322,7 @@ export class CarPark {
     const R = (E_AISLE_X - W_AISLE_X) / 2;
     for (const [end, zEnd, nz] of [['N', MZ0, 1], ['S', MZ1, -1]]) {
       const zNose = end === 'N' ? MZN : MZS;
-      for (let k = 1; k <= 5; k++) {
+      for (let k = 1; k <= NDECK - 1; k++) {
         const y = LV(k);
         const f = () => y;
         // (the way up turns here on the odd levels at the north end, the even ones at the south)
