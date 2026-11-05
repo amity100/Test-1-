@@ -53,6 +53,8 @@
     </div>
     <div class="ld-row"><span id="ld-status">מחדדים את העטים…</span><span id="ld-pct">0%</span></div>
   </div>
+  <!-- (round 10: once loaded, this is the game's start screen - its buttons come here) -->
+  <div id="ld-start"></div>
 </div>
 <script>
 // (v5, ROADMAP 18.9) the loading screen's bar: how far (0..1, never back) and done - then it goes,
@@ -69,24 +71,34 @@
     var pc = document.getElementById('ld-pct');
     if (pc) pc.textContent = Math.round(p * 100) + '%';
   };
+  // (round 10, the player's word: the screen with the film is the game's own start screen - no other
+  // page after it. Its buttons are moved here; pressed, it goes, and the game begins)
+  var leave = function () {
+    if (L.classList.contains('out')) return;
+    L.classList.add('out');
+    setTimeout(function () {
+      L.classList.add('gone');
+      var v = document.getElementById('ld-video');
+      if (v) {
+        v.pause();
+        while (v.firstChild) v.removeChild(v.firstChild);
+        v.removeAttribute('src');
+        v.load();
+      }
+    }, 900);
+  };
   window.__loadDone = function () {
     window.__loadProgress(1);
+    if (L.classList.contains('gone')) return;
+    var btns = document.querySelector('.cover-btns');
+    var slot = document.getElementById('ld-start');
+    if (btns && slot) slot.appendChild(btns);
+    var t = document.getElementById('title');
+    if (t) t.style.visibility = 'hidden';
     L.classList.add('done');
-    var st = document.getElementById('ld-status');
-    if (st) st.textContent = 'מוכן — יוצאים לעיר!';
-    setTimeout(function () {
-      L.classList.add('out');
-      setTimeout(function () {
-        L.classList.add('gone');
-        var v = document.getElementById('ld-video');
-        if (v) {
-          v.pause();
-          while (v.firstChild) v.removeChild(v.firstChild);
-          v.removeAttribute('src');
-          v.load();
-        }
-      }, 900);
-    }, 700);
+    document.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('#start-btn, #continue-btn')) leave();
+    }, true);
   };
 })();
 </script>
