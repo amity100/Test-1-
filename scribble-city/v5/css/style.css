@@ -1902,3 +1902,20 @@ body.phone-cam #btn-rewind, body.phone-cam #btn-gear, body.touch.fd-open #btn-re
 @media (prefers-reduced-motion: reduce) {
   .ld-reel video, .ld-grain, .ld-pencil { animation: none; }
 }
+
+/* (round 10) the loading screen, once loaded, is the start screen: the bar away, the buttons in its
+   place - big, inked, the first one pulsing */
+#ld-start { position: absolute; left: 50%; bottom: max(6vh, 22px); transform: translateX(-50%); display: none; }
+#loader.done #ld-start { display: block; animation: ldIn 0.6s cubic-bezier(0.2, 0.9, 0.25, 1.15) both; }
+#loader.done .ld-track, #loader.done .ld-row { display: none; }
+#loader.done .ld-tips { bottom: calc(max(6vh, 22px) + 96px); }
+#ld-start .cover-btns { position: static; display: flex; gap: 16px; justify-content: center; align-items: center; flex-wrap: wrap; }
+#ld-start .btn { font-family: var(--font-hand); font-size: clamp(24px, 2.8vw, 38px); padding: 10px 40px 8px; color: #1b1430; background: #ffd23f; border: 3px solid #1b1430; border-radius: 12px 14px 11px 15px; box-shadow: 6px 6px 0 #1b1430; cursor: pointer; transform: rotate(-1deg); }
+#ld-start .btn.primary { animation: ldPulse 1.6s ease-in-out infinite; }
+#ld-start .btn:not(.primary) { background: #fff8ec; font-size: clamp(18px, 2vw, 26px); padding: 8px 26px 6px; }
+#ld-start .btn:active { transform: translate(3px, 3px) rotate(-1deg); box-shadow: 3px 3px 0 #1b1430; }
+#ld-start #continue-meta { display: block; font-family: "Rubik", sans-serif; font-size: 0.45em; opacity: 0.8; }
+@keyframes ldPulse { 0%, 100% { transform: rotate(-1deg) scale(1); } 50% { transform: rotate(-1deg) scale(1.05); } }
+@media (max-height: 480px) {
+  #loader.done .ld-tips { bottom: calc(max(5vh, 14px) + 76px); }
+}
