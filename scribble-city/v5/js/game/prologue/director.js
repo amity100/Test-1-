@@ -819,8 +819,8 @@ export class Prologue {
   }
 
   // (round 9) a flash of light over the picture, a cut's punch (comic.js flash)
-  flash(life = 0.16, col = '#ffffff') {
-    if (this.comic && this.comic.flash) this.comic.flash(life, col);
+  flash(life = 0.16, col = '#ffffff', a = 0.9) {
+    if (this.comic && this.comic.flash) this.comic.flash(life, col, a);
   }
 
   *freezeCard(o) {
@@ -2687,10 +2687,11 @@ export class Prologue {
     // the empty evening where it stood; before, her head was across it and the page was not seen)
     page.hold(L.fig, null, 'up');
     this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 0.8, back: 0.5, side: 0.46 }), look: () => v3(page.at.x + (WHEEL.x - L.pos.x) * 0.01, page.at.y + 0.02, page.at.z + (WHEEL.z - L.pos.z) * 0.01), fov: 44, dur: 3.2, hand: 0.3, focus: [0.75, 0.75], dof: 1 });
-    // (round 10: in it, it is still there - the world behind it gone gold, the drawing lit)
-    this.emote([1.0, 0.75, 0.35]);
-    yield 2.0;
-    this.emote(null);
+    // (round 10: in it, it is still there - the drawing lit; round 13: against the evening's own sky,
+    // not a field of gold - the gold field is laid over all but the people, and the page went under it:
+    // in no picture of it was the drawing ever seen)
+    this.flash(0.5, '#ffe2a0', 0.45);
+    yield 2.2;
     // past it: nothing
     this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.12, back: 0.55, side: 0.28 }), look: () => v3(page.at.x, page.at.y, page.at.z), lookTo: [WHEEL.x, 20, WHEEL.z], fov: 40, fovTo: 44, dur: 2.2, hand: 0.35 });
     L.fig.lookAt = v3(WHEEL.x, 24, WHEEL.z);
