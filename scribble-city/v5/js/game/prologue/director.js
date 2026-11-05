@@ -515,6 +515,12 @@ export class Prologue {
     if (this.airT <= 0) {
       this.airT = 0.25;
       const a = airAt(g, ear);
+      // (ROADMAP 18.9: under the music at its height - the wheel going - the evening's air a step back,
+      // never gone: airDip)
+      const dip = this.airDip !== undefined ? this.airDip : 1;
+      a.sea *= dip;
+      a.crowd *= dip;
+      a.city *= dip;
       this.air.levels(now, a.sea, a.crowd, a.city);
       if (this.airLog) this.airLog.push([this.clock || 0, 'lv', a.sea, a.crowd, a.city]);
       this.airSea = a.sea;
@@ -598,7 +604,9 @@ export class Prologue {
     // the player)
     // (ROADMAP 18.9: from the moment he meets her - the flight in and the city's tour as the game
     // looks: the film's own look is the story's)
-    const story = (this.sceneN || 0) >= 2;
+    // (and only while it is the film: the player's own walks and drives between its scenes look as the
+    // game does - ROADMAP 18.9, the player's word)
+    const story = (this.sceneN || 0) >= 2 && film;
     pipe.paintWant = this.paintOn && story ? 1 : 0;
     // (and its light and colour: the people inked bolder and lit round their edge, the shadows cool
     // and the lights warm, a grain - more of all of it while it is filmed; render/pipeline.js look)
@@ -630,11 +638,17 @@ export class Prologue {
         LK.shadowT[i] += (want[0][i] - LK.shadowT[i]) * e;
         LK.lightT[i] += (want[1][i] - LK.lightT[i]) * e;
       }
+      // (round 8, the player's word: a comic book, not a painting - its print over the film: a few flat
+      // tones, the shadows in its dots, the ink's black, and far off the plates out of register;
+      // the dots in the shadows' own colour, deeper: render/pipeline.js comicPrint)
+      LK.comic = film ? 1 : 0;
+      LK.mis = film ? 1.8 : 0;
+      for (let i = 0; i < 3; i++) LK.dotInk[i] = 0.34 * Math.pow(LK.shadowT[i], 1.6);
       // (on the day's own light, set every frame before this: a share of it)
       this.expK = (this.expK || 1) + (want[2] - (this.expK || 1)) * e;
       if (pipe.exposure !== undefined) pipe.exposure *= this.expK;
     } else if (LK) {
-      Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1 });
+      Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1, comic: 0, mis: 0 });
       shared.uPenDens.value = 1;
     }
     const S = this.shots;
@@ -642,10 +656,12 @@ export class Prologue {
     else if (P && P.pos) pipe.paintFocus = clamp(g.camera.position.distanceTo(P.pos), 1.5, 30);
     // (ROADMAP 18.9: a lens's depth in the film - close on a face, what is behind it painted broader
     // and softer, the face kept sharp; wide, the brush as it was)
+    // (round 8: a narrower brush - the paint only flattens what is behind them into the comic's
+    // colours, its print does the rest; not smeared)
     if (pipe.paintR) {
       const close = film ? clamp((5 - pipe.paintFocus) / 3.5, 0, 1) : 0;
-      pipe.paintR[0] = 2.2 - 0.3 * close;
-      pipe.paintR[1] = 5.5 + 4.5 * close;
+      pipe.paintR[0] = 1.5 - 0.2 * close;
+      pipe.paintR[1] = 2.8 + 2.2 * close;
     }
   }
 
@@ -1595,9 +1611,16 @@ export class Prologue {
     const page = this.lilyPage();
     let drawK = 0.02;
     const drawOn = () => page.draw(lilyDrawing, drawK);
-    this.put(L, VIEW.x, VIEW.z, toW);
+    // (ROADMAP 18.9: sitting on a bench a step back from the railing, her sketchbook on her knees, the
+    // pencil going - the player's word: she sits, and she is seen drawing)
+    const bx = VIEW.x - ux * 1.1;
+    const bz = VIEW.z - uz * 1.1;
+    if (this.set && this.set.bench) this.set.bench(bx, L.pos.y || 0, bz, toW);
+    this.put(L, bx, bz, toW);
+    L.fig.sit = 1;
+    L.baseY = 0.3;
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
-    page.hold(L.fig, null, 'read');
+    page.hold(L.fig, null, 'draw');
     drawOn();
     L.fig.lookAt = page.at;
     P.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
@@ -1672,7 +1695,8 @@ export class Prologue {
           g.gps.set(man.pos.x, man.pos.z, 'Man');
         }
         const d = Math.hypot(P.pos.x - man.pos.x, P.pos.z - man.pos.z);
-        return (t > 3.5 && d < 9) || t > 14;
+        // (ROADMAP 18.9: not a long walk after him - a few seconds, and the people come between)
+        return (t > 2.5 && d < 11) || t > 7;
       };
     }
     // (gone: lost in the people coming along the pier - a knot of them crosses between, and when they
@@ -1695,7 +1719,10 @@ export class Prologue {
     drawK = 1;
     drawOn();
     this.film(true);
-    // she cannot wait to show him: the page held up to him - the page, and her face over it
+    // she cannot wait to show him: up off the bench, the page held up to him - the page, and her face
+    // over it
+    L.fig.sit = 0;
+    L.baseY = 0;
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, Math.atan2(-rx, -rz));
     this.put(L, VIEW.x + rx * 0.4, VIEW.z + rz * 0.4, Math.atan2(rx, rz));
     page.hold(L.fig, () => P.fig.j.headC, 'show');
@@ -1767,7 +1794,8 @@ export class Prologue {
     P.fig.lookAt = tip;
     S.erase();
     // (and under the procedural rubs, the recorded one: a great eraser on paper, the whole of it)
-    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.55);
+    this.rubRec = this.sample('sfx/erase_rub.mp3', 0.4);
+    this.airDip = 0.5;
     const C = this.comic;
     if (C && S.eraser) C.rub(S.eraser);
     const et = () => (S.erasing ? S.erasing.t : 99);
@@ -1844,6 +1872,7 @@ export class Prologue {
       this.rubRec = null;
     }
     this.sample('sfx/gone_whoosh.mp3', 0.9);
+    this.airDip = 1;
     this.cue('stop', { fade: 0.02 });
     // (and at once nobody down there is waving up at anything)
     S.forget();
@@ -1856,6 +1885,10 @@ export class Prologue {
     this.feel(P.fig, 'shock', 8);
     P.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
     L.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
+    // (ROADMAP 18.9, as a director would have it understood: first the place it stood, in the very
+    // picture we last saw it whole in - nothing there; then the faces)
+    this.shot({ from: wideFrom, look: [WHEEL.x, 24, WHEEL.z], fov: 50, dur: 2.2, hand: 0.12 });
+    yield 1.7;
     if (C) {
       const wv = v3(WHEEL.x, 1.7, WHEEL.z);
       const A = this.single(P, wv, { dist: 1.9, side: 0.25, up: -0.12, drop: 0.06 });
@@ -1869,6 +1902,10 @@ export class Prologue {
       if (C.focus) C.focus(() => this.headJ(L), 0.9, 0.8);
       yield 0.85;
     }
+    // (and all round them the evening goes on: along the pier, people strolling, talking, eating - not
+    // one of them looking up. That is what is wrong)
+    this.shot({ from: [VIEW.x + rx * 1.6 - ux * 0.5, 1.55, VIEW.z + rz * 1.6 - uz * 0.5], to: [VIEW.x + rx * 1.8 - ux * 0.8, 1.55, VIEW.z + rz * 1.8 - uz * 0.8], look: [VIEW.x - ux * 14 + rx * 2, 1.3, VIEW.z - uz * 14 + rz * 2], fov: 44, dur: 1.9, hand: 0.3 });
+    yield 1.7;
     // (the player's again: her, him - and over there, where it stood, to see)
     this.film(false);
     L.fig.lookAt = P.fig.j.headC;
@@ -1994,8 +2031,10 @@ export class Prologue {
       c.pl.face = Math.atan2(WHEEL.x - c.pos.x, WHEEL.z - c.pos.z);
       c.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
     }
-    // (one of them films it on his phone)
+    // (people out for the evening, as they are: one with his phone, the other his coffee - ROADMAP 18.9)
     g2.fig.reachR = null;
+    g2.fig.carry = 'phone';
+    g1.fig.carry = 'coffee';
   }
 
   // ------------------------------------------------------------------ 4. GONE
@@ -2248,8 +2287,8 @@ export class Prologue {
     };
     // (he turns and goes along with them as the first of them come up to him)
     const near = () => crowd.some((q) => Math.hypot(q.pos.x - c.pos.x, q.pos.z - c.pos.z) < 2.6);
-    while (t < 14) {
-      if (!walking && (near() || t > 6)) {
+    while (t < 10) {
+      if (!walking && (near() || t > 3)) {
         walking = true;
         this.go(c, c.pos.x - px * 14, c.pos.z - pz * 14, 0.8);
       }
@@ -2265,7 +2304,7 @@ export class Prologue {
       }
       if (hid && walking) break;
       // (and at the latest, only where nobody is looking)
-      if (t > 10 && !seen()) break;
+      if (t > 7 && !seen()) break;
       yield 0.001;
       t += this.dtR || 1 / 30;
     }
@@ -2788,10 +2827,60 @@ export class Prologue {
     const rz = R.z;
     const H = R.h;
     const mid = (S + Lp) / 2;
+    // (round 8, the player's word: he takes out his pencil and draws it from where he sits - over his
+    // shoulder, his hand up with it at the windscreen, and far off at the roof's edge a giant one
+    // coming down out of the sky to draw what his draws, line by line: game/prologue/ramp.js
+    // buildSketch. The lines rush in round his hand, an anime's moment)
+    {
+      const fig = P.fig;
+      const was = fig.carry;
+      fig.carry = 'pencil';
+      const hand = new THREE.Vector3();
+      const aim = () => {
+        const St = car.seatOf ? car.seatOf() : { u: -0.25, y: 0 };
+        const fx = Math.sin(car.yaw);
+        const fz = Math.cos(car.yaw);
+        const u = St.u + 0.55;
+        // (out in front of him at the height of his eyes, at the windscreen: pointing the way)
+        hand.set(car.pos.x + fx * u + fz * 0.25, (car.pos.y || 0) + St.y + 1.25, car.pos.z + fz * u - fx * 0.25);
+        fig.holdUpR = hand;
+        return hand;
+      };
+      aim();
+      // (the giant pencil comes down as his goes up: it lands as the picture cuts to it)
+      this.ramp.t = -1.3;
+      // his: from outside his open window, at his side - his face, and his arm up with the pencil
+      // pointed out ahead at the roof's edge; the lines rushing in round his hand
+      this.shot({ from: this.inCar(car, 1.75, 1.3, 0.75), look: () => aim().clone().lerp(this.headJ(P) || hand, 0.4), fov: 44, dur: 1.6, hand: 0.3 });
+      if (this.comic && this.comic.focus) this.comic.focus(() => aim(), 1.4, 0.65);
+      g.audio.play('whoosh', 0.5);
+      let tt = 0;
+      let said = false;
+      let cut = false;
+      yield () => {
+        aim();
+        tt += this.dtR || 0.016;
+        // then far off at the roof's edge, on a long lens from over the car: the giant one, down out
+        // of the sky, and drawing
+        if (!cut && tt >= 1.6) {
+          cut = true;
+          this.shot({ from: wld(R.startX + 18, Y + 6.2, rz + 3.5), look: wld(R.startX - 5, Y + 1.6, rz), fov: 30, dur: 1.5, hand: 0.2 });
+        }
+        // (and as its point touches the roof, the scratch of it, in letters)
+        if (!said && this.ramp.t > 0.5 && this.comic && this.ramp.sketch) {
+          said = true;
+          const w = this.ramp.sketch.localToWorld(this.ramp.strokes[0].pts[0].clone());
+          this.comic.word('SKRITCH!', v3(w.x, w.y + 2.5, w.z), { fill: '#ffd23f', burst: '#1b1430', size: 0.075, life: 1.3, tilt: 0.15 });
+        }
+        return tt >= 3.1;
+      };
+      fig.holdUpR = null;
+      fig.carry = was;
+    }
     const cam = g.camera;
-    const c0 = cam.position.clone();
-    const dir = new THREE.Vector3();
-    cam.getWorldDirection(dir);
+    // (and out of the car: from beside it, behind, the lines going on far ahead)
+    const c0 = wld(S + 14, Y + 3.4, rz - 7.5);
+    const dir = wld(mid, Y + 1.2, rz).sub(c0).normalize();
     // (round its side in the low sun and out past its lip over the street: the whole of it from there,
     // the lip near, the car small at the far end of the roof)
     this.shot({

@@ -959,6 +959,15 @@ export class Portrait {
       // (ROADMAP 18: and a toothy one shows the teeth - render/folkspec.js grin)
       if (this.spec.grin && ew[1] > 0.3) set('au10', ew[1] * this.spec.grin);
     }
+    // (v5, ROADMAP 18.9: a gentle face - a child's - opens its mouth less wide and keeps its upper lip
+    // over its teeth: spec.jawK, spec.lipK; wide open and lips up, a little girl's face was a monster's)
+    if (this.spec.jawK !== undefined) want[AUI.jaw] *= this.spec.jawK;
+    if (this.spec.lipK !== undefined) {
+      want[AUI.au10R] *= this.spec.lipK;
+      want[AUI.au10L] *= this.spec.lipK;
+      want[AUI.au20R] *= this.spec.lipK;
+      want[AUI.au20L] *= this.spec.lipK;
+    }
     // the lids with the eyes: looking down, the upper lid follows them down; up, it lifts
     if (gaze) {
       const pitch = gaze[3];

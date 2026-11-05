@@ -105,6 +105,12 @@ export class HeldPage {
     const S = f.scale || 1;
     const j = f.j;
     const mode = this.mode;
+    // (ROADMAP 18.9: 'draw' - her sketchbook low before her, sitting, tipped up to her eyes; her left
+    // hand holding it, the pencil in her right going over the page in short strokes)
+    if (mode === 'draw') {
+      this.drawPose(f);
+      return;
+    }
     const hug = mode === 'hug';
     const read = mode === 'read';
     // in front of her chest (up before her eyes to read it; lower, let down)
@@ -145,6 +151,34 @@ export class HeldPage {
     f.reachL = f.reachL || new THREE.Vector3();
     f.reachR.copy(_c).addScaledVector(_x, -hw).addScaledVector(_y, -0.02);
     f.reachL.copy(_c).addScaledVector(_x, hw).addScaledVector(_y, -0.02);
+  }
+
+  drawPose(f) {
+    const S = f.scale || 1;
+    const j = f.j;
+    _c.copy(j.shoulderL).add(j.shoulderR).multiplyScalar(0.5);
+    _c.addScaledVector(f.forward, 0.27 * S);
+    _c.y -= 0.24 * S;
+    // (facing up and back to her: tipped some 55 degrees from upright)
+    _n.copy(f.forward).multiplyScalar(-Math.cos(0.95));
+    _n.y = Math.sin(0.95);
+    _n.normalize();
+    _x.crossVectors(UP, f.forward).normalize();
+    _y.crossVectors(_n, _x).normalize();
+    _m.makeBasis(_x, _y, _n);
+    this.grp.matrix.copy(_m).setPosition(_c);
+    this.grp.matrixWorldNeedsUpdate = true;
+    this.at.copy(_c);
+    const hw = this.W / 2 - 0.012;
+    f.reachR = f.reachR || new THREE.Vector3();
+    f.reachL = f.reachL || new THREE.Vector3();
+    // her left hand on the book's edge; the right one drawing: across a little and down a little, in
+    // short strokes, now and then lifted off to look up at what she draws
+    f.reachL.copy(_c).addScaledVector(_x, hw).addScaledVector(_y, -0.03);
+    const t = (this.game.time || 0) + (this.ph || (this.ph = Math.random() * 10));
+    const lift = Math.max(0, Math.sin(t * 0.9)) > 0.93 ? 0.05 : 0;
+    f.reachR.copy(_c).addScaledVector(_x, -0.04 + Math.sin(t * 6.3) * 0.05 + Math.sin(t * 1.7) * 0.03).addScaledVector(_y, Math.sin(t * 3.7) * 0.035 + Math.sin(t * 0.8) * 0.03).addScaledVector(_n, 0.018 + lift);
+    if (f.carry !== 'pencil') f.carry = 'pencil';
   }
 
   dispose() {

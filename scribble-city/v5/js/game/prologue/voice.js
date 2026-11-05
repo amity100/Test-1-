@@ -62,18 +62,20 @@ const wetAt = (d, P) => Math.pow(Math.max(d, P.ref) / P.ref, -0.25);
 // of it a close voice has (the echo is made to unit energy); the rest shapes it (seconds unless noted):
 // pre - before the tail, rt - its 60 dB decay, tail - its share against the reflections, damp - how
 // fast its highs go, bright - how bright it starts, taps - early reflections [ms, gain, left -1..1 right]
+// (ROADMAP 18.9: a quarter of what they were - the lines are recorded close and dry now, and with the
+// place's echo as loud as before they sounded said in a shower; the place a breath under them only)
 const SPACES = {
   // the pier and the beach: the stalls and the boardwalk's fronts 20-40 m off, the sea open - a slap or
   // two coming back, hardly a tail
-  open: { level: 0.24, len: 0.6, pre: 0.02, rt: 0.42, tail: 0.25, damp: 0.12, bright: 0.6, taps: [[38, 0.5, -0.4], [61, 0.32, 0.5], [97, 0.22, -0.2], [143, 0.12, 0.3]] },
+  open: { level: 0.06, len: 0.6, pre: 0.02, rt: 0.42, tail: 0.25, damp: 0.12, bright: 0.6, taps: [[38, 0.5, -0.4], [61, 0.32, 0.5], [97, 0.22, -0.2], [143, 0.12, 0.3]] },
   // between two rows of fronts: quick reflections from both sides, a short bright tail
-  street: { level: 0.32, len: 1.1, pre: 0.012, rt: 0.9, tail: 0.5, damp: 0.25, bright: 0.75, taps: [[14, 0.55, -0.7], [23, 0.45, 0.7], [41, 0.35, -0.6], [58, 0.3, 0.6], [79, 0.2, -0.5], [102, 0.15, 0.5]] },
+  street: { level: 0.09, len: 1.1, pre: 0.012, rt: 0.9, tail: 0.5, damp: 0.25, bright: 0.75, taps: [[14, 0.55, -0.7], [23, 0.45, 0.7], [41, 0.35, -0.6], [58, 0.3, 0.6], [79, 0.2, -0.5], [102, 0.15, 0.5]] },
   // concrete all round and a low roof: dense reflections and a long ringing tail
-  carpark: { level: 0.46, len: 2.3, pre: 0.006, rt: 1.9, tail: 1.0, damp: 0.6, bright: 0.85, taps: [[6, 0.6, 0.1], [11, 0.5, -0.5], [17, 0.45, 0.6], [23, 0.4, -0.3], [31, 0.35, 0.4], [44, 0.3, -0.6], [57, 0.25, 0.2]] },
+  carpark: { level: 0.16, len: 2.3, pre: 0.006, rt: 1.9, tail: 1.0, damp: 0.6, bright: 0.85, taps: [[6, 0.6, 0.1], [11, 0.5, -0.5], [17, 0.45, 0.6], [23, 0.4, -0.3], [31, 0.35, 0.4], [44, 0.3, -0.6], [57, 0.25, 0.2]] },
   // a car's cabin: a few reflections a metre off, gone at once, a little boxy
-  car: { level: 0.16, len: 0.18, pre: 0.001, rt: 0.12, tail: 0.6, damp: 0.03, bright: 0.4, taps: [[1.3, 0.6, 0.3], [2.4, 0.5, -0.4], [3.6, 0.4, 0.5], [5.1, 0.3, -0.3]] },
+  car: { level: 0.045, len: 0.18, pre: 0.001, rt: 0.12, tail: 0.6, damp: 0.03, bright: 0.4, taps: [[1.3, 0.6, 0.3], [2.4, 0.5, -0.4], [3.6, 0.4, 0.5], [5.1, 0.3, -0.3]] },
   // a roof: open sky and wind, only a faint slap from the next building
-  roof: { level: 0.1, len: 0.45, pre: 0.03, rt: 0.3, tail: 0.15, damp: 0.08, bright: 0.5, taps: [[118, 0.25, 0.4], [190, 0.12, -0.5]] },
+  roof: { level: 0.03, len: 0.45, pre: 0.03, rt: 0.3, tail: 0.15, damp: 0.08, bright: 0.5, taps: [[118, 0.25, 0.4], [190, 0.12, -0.5]] },
 };
 
 // one place's echo: two channels a little different (the echo all round you), unit energy each
@@ -364,7 +366,8 @@ export class PrologueVoices {
     if (c && b && this.game.audio.enabled && !SILENT.has(id)) {
       const s = c.createBufferSource();
       s.buffer = b;
-      const gain = o.gain !== undefined ? o.gain : 1.15;
+      // (ROADMAP 18.9: down from 1.15 - over the evening's air, not on top of it)
+      const gain = o.gain !== undefined ? o.gain : 0.74;
       // (the phone is in the ear: not placed, no echo - its own filter is in the recording)
       const head = L.who === 'P' ? null : this.headOf(fig, o, L.who);
       let rec;

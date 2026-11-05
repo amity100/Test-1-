@@ -1415,7 +1415,8 @@ export class Traffic {
     fig.speed = 0;
     if (!fig.wheel) fig.wheel = new THREE.Vector3();
     fig.wheel.set(pos.x + fx * (u + 0.55) - rx * s, pos.y + y + 1.04, pos.z + fz * (u + 0.55) - rz * s);
-    fig.reachR = side > 0 && !fig.shootOut ? fig.wheel : null;
+    // (or held up at something - the prologue's pencil: game/rides.js seatOn, holdUpR)
+    fig.reachR = fig.holdUpR || (side > 0 && !fig.shootOut ? fig.wheel : null);
     // (shooting out of the window: the left hand on the wheel instead, ROADMAP 4.7)
     if (fig.shootOut) fig.reachL = side > 0 ? fig.wheel : null;
     fig.update(dt);

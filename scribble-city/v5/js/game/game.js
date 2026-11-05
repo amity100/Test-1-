@@ -154,11 +154,15 @@ export class Game {
   }
 
   async init() {
+    // (v5, ROADMAP 18.9: the loading page given a breath now and then as all this is made - main.js
+    // breathe; null where it is not yet time)
+    const breath = (label) => (this.breathe ? this.breathe(label) : null);
     const { scene, camera, world } = this;
     this.input = new Input(this.renderer.domElement, this.touch);
     this.audio = new Audio();
     this.camRig = new CameraRig(camera, world.collision);
     this.figures = new FigureRenderer(scene);
+    await breath('init');
     // (v5: from how far a person is drawn in the simple shapes, render/people.js: on a phone's
     // small screen a person 40 m away is some 20 pixels tall)
     this.figures.bodies.lodFar = this.pipe.low ? 32 : 55;
@@ -171,10 +175,12 @@ export class Game {
     this.bubbles.col = this.world.collision;
     this.fx = new Effects(this);
     this.cars = new CarRenderer(scene);
+    await breath('init');
     this.vehicles = new Vehicles(this);
     this.chute = new Parachute(this);
     this.materialize = new Materialize(this);
     this.traffic = new Traffic(this);
+    await breath('init');
     this.signals = new Signals(this);
     this.player = new Player(this);
     this.perf = new Perf(this);
@@ -186,6 +192,7 @@ export class Game {
     this.enemies = new Enemies(this);
     this.weapons = new Weapons(this);
     this.hud = new HUD(this);
+    await breath('init');
     this.police = new Police(this);
     this.pickups = new Pickups(this);
     // a few drinks at the Neon Bar (or one ice cream too fast): the page sways for a while
@@ -219,6 +226,7 @@ export class Game {
     // the outlines redrawn a few times a second: lively on a big screen, calm on a phone
     this.boilOn = !this.touch;
     this.album = new Album(this);
+    await breath('init');
     // (ROADMAP 15.5) the inventions you made and kept (not with ?classic)
     this.inventions = new Inventions(this);
     this.album.onAdd = (id) => this.onAlbumAdd(id);
@@ -229,6 +237,7 @@ export class Game {
     this.friend = this.classic ? null : new Friendship(this);
     // (v5, ROADMAP 11.17: the rides on Palisade Pier - the big wheel, the coaster, the carousel)
     this.fair = this.classic || !this.world.landmarks ? null : new Fairground(this);
+    await breath('init');
     // (v5, ROADMAP 11.17: game night at the Bayfront Arena - the players, the crowd, the score)
     this.arenaGame = this.classic ? null : new ArenaGame(this);
     // (v5, ROADMAP 11.17: the people of the mainland's malls)
@@ -263,6 +272,7 @@ export class Game {
     // who walks where: suits downtown, tourists on the promenade, grandparents and families in the
     // park, young people on the alleys' corners (game/crowds.js)
     this.crowds = new Crowds(this);
+    await breath('init');
     // what happens now and then: a hold-up, a bump in the traffic, a chase, somebody who fell, a
     // street show, a protest, a wedding in the park (game/events.js)
     this.events = new Events(this);
@@ -287,6 +297,7 @@ export class Game {
     this.brain = new Brain(this);
     // (ROADMAP 14.1) the face lab (?facelab): the portraits' test bench - game/facelab.js
     this.facelab = new FaceLab(this);
+    await breath('init');
     // the rest of the street's traffic: trucks, motorbikes, the garbage truck, taxis waved down,
     // an ambulance, a fire engine (game/fleet.js)
     this.fleet = new Fleet(this);
@@ -372,6 +383,7 @@ export class Game {
     if (this.prolSet && !this.lab && (telling || this.params.has('prolset') || (this.prologue && this.prologue.done) || !PROLOGUE_ON)) this.prolSet.build({ wheel: telling || this.params.has('prolset') || !(this.prologue && this.prologue.done) });
     // (ROADMAP 12.5) Paintwood's Walls, and Art Night in them
     this.artnight = this.classic ? null : new ArtNight(this);
+    await breath('init');
     // (ROADMAP 12.7) INK ARCADE on Inkwood Boulevard
     this.arcade = this.classic ? null : new Arcade(this);
     // (ROADMAP 12.8) PALACE OF INK, the casino on the bay

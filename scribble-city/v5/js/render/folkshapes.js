@@ -1419,7 +1419,26 @@ function skirtGeo(len) {
  * render/herolines.js (sdf, headR, hair edge and thickness, the locks, the rows of each part); what
  * is worn in the hair (bits).
  */
+// (v5, ROADMAP 18.9) the city's people's bodies made before they are asked for, a few at a time with
+// a breath between (main.js, while the game loads): a body made so is handed over once, when asked
+const MADE = new Map();
+export async function prebuildFolkBodies(n, breathe) {
+  for (let k = 0; k < n; k++) {
+    if (!MADE.has(k)) MADE.set(k, makeFolkBody(k));
+    if (breathe && k % 4 === 3) await breathe('people');
+  }
+}
+
 export function folkBody(k) {
+  const b = MADE.get(k);
+  if (b) {
+    MADE.delete(k);
+    return b;
+  }
+  return makeFolkBody(k);
+}
+
+function makeFolkBody(k) {
   const spec = FOLK[k];
   const fem = !!spec.fem;
   const H = headOf(spec);

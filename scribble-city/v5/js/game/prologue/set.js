@@ -1199,6 +1199,37 @@ export class PrologueSet {
   }
 
   // the mark on a stranger's bag: something like an eraser, and not one - seen for half a second
+  // (ROADMAP 18.9) a bench on the pier where Lily sits to draw: wooden slats on two cast-iron ends, its
+  // back to the boards' far side - its seat 0.44 m over the deck at y, facing yaw. Made once; moved if
+  // asked again
+  bench(x, y, z, yaw) {
+    if (!this.benchGrp) {
+      const M = itemMats();
+      const K = new Kit();
+      const WOOD = linC(0.52, 0.34, 0.2);
+      const WOOD2 = linC(0.44, 0.28, 0.16);
+      const IRON = linC(0.16, 0.16, 0.18);
+      // (the seat's slats, then the back's - along x, its front to +z)
+      for (let i = 0; i < 4; i++) K.box(M.matte, -0.78, 0.4, -0.2 + i * 0.105, 0.78, 0.44, -0.12 + i * 0.105, i % 2 ? WOOD : WOOD2);
+      for (let i = 0; i < 3; i++) K.box(M.matte, -0.78, 0.55 + i * 0.12, -0.27 - i * 0.025, 0.78, 0.63 + i * 0.12, -0.24 - i * 0.025, i % 2 ? WOOD2 : WOOD);
+      // (the two iron ends: a leg front and back, an arm)
+      for (const sx of [-0.7, 0.7]) {
+        K.box(M.matte, sx - 0.03, 0, 0.1, sx + 0.03, 0.4, 0.15, IRON);
+        K.box(M.matte, sx - 0.03, 0, -0.26, sx + 0.03, 0.9, -0.2, IRON);
+        K.box(M.matte, sx - 0.03, 0.6, -0.24, sx + 0.03, 0.64, 0.14, IRON);
+      }
+      const grp = K.build({ seed: 0.31 });
+      grp.matrixAutoUpdate = true;
+      this.game.scene.add(grp);
+      this.objs.push(grp);
+      this.benchGrp = grp;
+    }
+    this.benchGrp.position.set(x, y, z);
+    this.benchGrp.rotation.set(0, yaw, 0);
+    this.benchGrp.visible = true;
+    return this.benchGrp;
+  }
+
   markBag(c) {
     const cv = this.markCanvas('#2a2622');
     const tex = canvasTexture(cv);
@@ -1479,7 +1510,7 @@ export class PrologueSet {
       e.lastRub = p.rub;
       if (turn) {
         // (ROADMAP 18.9: loud enough to be heard over the evening as what it is)
-        g.audio.play('rub', 1.8 + Math.random() * 0.6);
+        g.audio.play('rub', 1.1 + Math.random() * 0.4);
         e.rubs++;
       }
       if (this.root && g.fx) {

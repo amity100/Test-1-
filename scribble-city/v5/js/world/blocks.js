@@ -133,7 +133,7 @@ export function vacated(ctx, build) {
   for (const k of Object.keys(ctx.blockEnds || {})) if (!ends.has(k)) delete ctx.blockEnds[k];
 }
 
-export function buildBlocks(ctx) {
+export async function buildBlocks(ctx, breathe = null) {
   const r = ctx.rng;
   ctx.nameUse = new Map();
   // (where the rows' end walls are on the cross streets, for the boards: world/streets.js)
@@ -161,6 +161,8 @@ export function buildBlocks(ctx) {
     for (let col = 0; col < 3; col++) {
       if (ctx.vacate && VACANT.some((v) => v.col === col && v.row === row)) vacated(ctx, () => buildBlock(ctx, col, row, BLOCK_TYPES[row][col]));
       else buildBlock(ctx, col, row, BLOCK_TYPES[row][col]);
+      // (a breath between blocks: the city a block at a time - world/city.js)
+      if (breathe) await breathe('block');
     }
     westRow(ctx, row);
   }
