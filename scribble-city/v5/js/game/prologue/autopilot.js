@@ -107,6 +107,9 @@ export class Autopilot {
     let thr = top;
     if (Math.abs(da) > 0.6 && Math.abs(c.speed) > 8) thr = 0.1;
     if (Math.abs(da) > 1.1 && Math.abs(c.speed) > 5) thr = -0.4;
+    // (near the point and well off it: slow, not round and round it)
+    const dist = Math.hypot(x - c.pos.x, z - c.pos.z);
+    if (dist < 12 && Math.abs(da) > 0.5) thr = Math.min(thr, Math.abs(c.speed) > 6 ? -0.3 : 0.35);
     let steer = Math.max(-1, Math.min(1, da * 2.2));
     // (against something: back off a moment, the wheel the other way, and on)
     if (thr > 0.3 && Math.abs(c.speed) < 1.0) this.stuck += this.dt;

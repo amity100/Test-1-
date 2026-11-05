@@ -215,7 +215,7 @@ export class PaintFight {
     e.warned = false;
     g.audio.play('roar', 0.55);
     const C = this.P.comic;
-    if (C && C.word) C.word('VROOM!', new THREE.Vector3(c.pos.x, c.pos.y + 1.6, c.pos.z), { fill: PAINT_CSS[e.color], burst: '#1b1430', size: 0.075, life: 0.9 });
+    if (C && C.word && Q.seen(c.pos)) C.word('VROOM!', new THREE.Vector3(c.pos.x, c.pos.y + 1.6, c.pos.z), { fill: PAINT_CSS[e.color], burst: '#1b1430', size: 0.075, life: 0.9 });
   }
 
   // the man at its window: he takes aim (a red glint at the window - long enough to see), then a burst
@@ -398,7 +398,8 @@ export class PaintFight {
     // (now and then on the screen: the glass of the camera hit)
     if (Math.random() < 0.3) this.screenSplat(b.color);
     const C = this.P.comic;
-    if (C && C.word && (!this.wordT || performance.now() - this.wordT > 2500)) {
+    // (a word for it now and then - every hit's would be noise)
+    if (C && C.word && (!this.wordT || performance.now() - this.wordT > 6000)) {
       this.wordT = performance.now();
       C.word('SPLAT!', new THREE.Vector3(b.p.x, b.p.y + 0.4, b.p.z), { fill: PAINT_CSS[b.color], burst: '#ffffff', size: 0.07, life: 0.7 });
     }

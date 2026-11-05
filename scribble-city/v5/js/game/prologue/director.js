@@ -686,8 +686,15 @@ export class Prologue {
       // black: render/pipeline.js uFill)
       LK.fill = film ? 0.85 : 0;
       for (let i = 0; i < 3; i++) LK.dotInk[i] = 0.34 * Math.pow(LK.shadowT[i], 1.6);
-      // (on the day's own light, set every frame before this: a share of it)
-      this.expK = (this.expK || 1) + (want[2] - (this.expK || 1)) * e;
+      // (on the day's own light, set every frame before this: a share of it - round 11: and in the
+      // film inside the dark car park, more of it, its faces to be read)
+      let wantExp = want[2];
+      if (film) {
+        const cp = g.camera.position;
+        const lvC = PARK.levelAt(cp.x, cp.z, cp.y);
+        if (lvC !== null && lvC < 10 && PARK.ceilingAt(cp.x, cp.z, cp.y) < Infinity) wantExp *= 1.4;
+      }
+      this.expK = (this.expK || 1) + (wantExp - (this.expK || 1)) * (film ? Math.min(1, e * 8) : e);
       if (pipe.exposure !== undefined) pipe.exposure *= this.expK;
     } else if (LK) {
       Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1, comic: 0, mis: 0, fill: 0 });
@@ -2764,7 +2771,8 @@ export class Prologue {
       const E = [eyes(t1, P, 0.06), eyes(P, t1, -0.06), eyes(L, t1, 0.05)];
       for (let i = 0; i < 3; i++) {
         this.shot({ from: E[i].from, to: E[i].from.clone().lerp(E[i].look, 0.08), look: E[i].look, fov: 24, dur: 0.8, hand: 0.1, dof: 1 });
-        if (C5 && C5.panel) C5.panel(i, { u: 0.5, v: 0.5, zoom: 2.3 });
+        // (his eyes lower in the picture than theirs: he is the taller, his head's middle higher over them)
+        if (C5 && C5.panel) C5.panel(i, { u: 0.5, v: i === 0 ? 0.62 : 0.5, zoom: 2.3 });
         g.audio.play('heartbeat', 0.55);
         yield i < 2 ? 0.62 : 0.8;
       }
@@ -2833,7 +2841,12 @@ export class Prologue {
     // (from the way in, past the two men coming to it with their guns up: the car starting in its bay)
     this.go(t1, run[1][0] - 3.5, run[1][1] + 2.4, 2.2);
     this.go(t2, run[1][0] - 5.2, run[1][1] + 3.6, 2.2);
-    this.shot({ from: () => v3(t1.pos.x - uz * 0.9 - ux * 1.2, 1.6, t1.pos.z + ux * 0.9 - uz * 1.2), look: () => v3(v.pos.x, 0.9, v.pos.z), fov: 42, dur: 2.2, hand: 1 });
+    // (round 11: from inside, low, the car in its bay with its lights coming on and the two men at the
+    // way in behind it - from the sidewalk the new car park's wall hid it)
+    {
+      const E = PARK.entrance;
+      this.shot({ from: v3(v.pos.x - 3.4, 1.05, v.pos.z - 6.5), look: v3((v.pos.x + E.x) / 2, 0.95, (v.pos.z + E.z) / 2), fov: 52, dur: 2.2, hand: 1 });
+    }
     this.comic.word('VROOOM!', v3(v.pos.x, 1.4, v.pos.z), { fill: '#ff6f3a', burst: '#ffd23f', size: 0.1, life: 1.0 });
     yield 0.4;
     yield* this.say('T06', t2.fig, 0.1);
@@ -3361,14 +3374,14 @@ export class Prologue {
     this.start(9);
   }
 
-  // down Bayshore in three shots, the tyres screaming: over the crest of a ramp high up at the camera
-  // at its foot; along a lower one past the columns; out of its gate onto 5th Street - the street
-  // the player's again
+  // down Bayshore not driven: the screen gone black over the tyres screaming down its ramps - then
+  // from across 5th Street, the car bursting out of its gate into the evening, swerving onto the
+  // street - the street the player's again (round 11: three shots inside its dark floors showed
+  // nothing of the car)
   *downCut(car) {
     const g = this.game;
     const B = PARK.landing;
     const LY = B.levels;
-    const NL = LY.length - 1;
     const put = (x, y, z, yaw, sp) => {
       car.pos.set(x, y + 0.06, z);
       car.yaw = yaw;
@@ -3378,36 +3391,24 @@ export class Prologue {
       car.vy = 0;
       car.air = false;
     };
-    const aisleZ = (r) => (B.aisles[r.aisle][0] + B.aisles[r.aisle][1]) / 2;
-    const down = (r) => (r.xHigh > r.xLow ? -Math.PI / 2 : Math.PI / 2);
-    this.film(true);
     if (this.pursuer) this.pursuer.paused = true;
-    // 1. over the crest, at us
-    const r1 = B.ramps[NL - 2];
-    const z1 = aisleZ(r1);
-    const s1 = Math.sign(r1.xHigh - r1.xLow);
-    put(r1.xHigh + s1 * 3, LY[r1.lv + 1], z1, down(r1), 12);
-    this.shot({ from: v3(r1.xLow - s1 * 1.5, LY[r1.lv] + 0.9, z1 + 1.8), look: () => v3(car.pos.x, car.pos.y + 0.6, car.pos.z), fov: 46, dur: 1.5, hand: 0.6, roll: 0.06 });
-    g.audio.play('skid', 0.7);
-    this.comic.word('SKREEE!', v3(car.pos.x, car.pos.y + 1.4, car.pos.z), { fill: '#fff4d6', burst: '#ff4f8b', size: 0.07, life: 1.0, tilt: 0.15 });
-    yield 1.4;
-    // 2. along a lower one, the columns flicking past
-    const r2 = B.ramps[Math.max(1, NL - 5)];
-    const z2 = aisleZ(r2);
-    const s2 = Math.sign(r2.xHigh - r2.xLow);
-    put(r2.xHigh + s2 * 2, LY[r2.lv + 1], z2, down(r2), 13);
-    const side = z2 < 332 ? 1 : -1;
-    this.shot({ from: () => v3(car.pos.x - s2 * 6, car.pos.y + 1.2, z2 + side * 5.6), look: () => v3(car.pos.x, car.pos.y + 0.5, car.pos.z), fov: 50, dur: 1.4, hand: 0.5, whip: 0.25 });
+    this.ui.fade(true, 0.25);
+    g.audio.play('skid', 0.8);
+    yield 0.45;
     g.audio.play('skid', 0.6);
-    yield 1.3;
-    // 3. out of its gate onto 5th Street
+    yield 0.4;
+    g.audio.play('skid', 0.7);
+    // (in the gate, coming out)
     const gx = (B.gate[0] + B.gate[1]) / 2;
-    put(gx, LY[0], B.z0 + 14, Math.PI, 15);
-    this.shot({ from: v3(gx + 9, 1.3, B.z0 - 12), look: () => v3(car.pos.x, car.pos.y + 0.7, car.pos.z), fov: 44, dur: 1.7, hand: 0.4 });
-    yield 0.8;
+    put(gx, LY[0], B.z0 + 4, Math.PI, 15);
+    this.film(true);
+    this.shot({ from: v3(gx + 12, 1.25, B.z0 - 15), look: () => v3(car.pos.x, car.pos.y + 0.7, car.pos.z), fov: 42, dur: 1.9, hand: 0.45 });
+    yield 0.15;
+    this.ui.fade(false, 0.3);
+    yield 0.55;
     g.audio.play('roar', 0.8);
-    this.comic.impact(car.pos, 0.06);
-    yield 0.8;
+    this.comic.word('SKRRT!', v3(car.pos.x, car.pos.y + 1.2, car.pos.z), { fill: '#fff4d6', burst: '#ff4f8b', size: 0.07, life: 0.9, tilt: -0.15 });
+    yield 1.0;
   }
 
   // ------------------------------------------------------------------ 9. AWAY, AND QUIET
