@@ -43,8 +43,9 @@ import { clamp } from '../../core/util.js';
 // A scene is a script (a generator): it says lines, cuts between shots, gives the player the city
 // back and waits for them. What the player does in between is the game's own.
 
-// (on for every new game once all of it is checked through; till then only with ?prologue=1)
-export const PROLOGUE_ON = false;
+// (on for every new game once all of it is checked through; till then only with ?prologue=1 - on
+// since round 13, the player's word: a new game opens with it, the flight in and the how-to)
+export const PROLOGUE_ON = true;
 // (a working title, until the name is chosen)
 export const GAME_TITLE = 'OUTLINE';
 // (who made it, under the name - in the player's own language, as the rest of what is put over the

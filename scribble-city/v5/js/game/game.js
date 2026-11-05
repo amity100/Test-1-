@@ -607,7 +607,7 @@ export class Game {
     this.updateGoals();
   }
 
-  start() {
+  start(o = {}) {
     const intro = false;
     const title = $('title');
     if (intro) {
@@ -630,8 +630,9 @@ export class Game {
     } else {
       this.input.requestLock(true);
     }
-    // (v5, ROADMAP 18) a new game opens with its prologue: no welcome, no hints - the city first
-    if (this.prologue && this.prologue.wants()) {
+    // (v5, ROADMAP 18) a new game opens with its prologue: no welcome, no hints - the city first (not
+    // a saved game carried on: continueGame)
+    if (!o.saved && this.prologue && this.prologue.wants()) {
       this.prologue.begin();
       return;
     }
@@ -707,7 +708,7 @@ export class Game {
 
   async continueGame() {
     if (!this.continueSlot || this.state !== 'title') return;
-    this.start();
+    this.start({ saved: true });
     await this.saves.load(this.continueSlot);
   }
 
