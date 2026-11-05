@@ -2272,6 +2272,21 @@ export class Prologue {
     // (Lily after him)
     if (L) L.pl.follow = true;
     this.walkTo = { x: SITE.x - fx * 4, z: SITE.z - fz * 4, speed: 1, sprint: false };
+    // (the evening's people on his way: strolling this way along the pier, in twos and alone - he
+    // goes through them, and asks two of them. The crowd the man went into has gone by to the town)
+    const eve = [];
+    for (let i = 0; i < 7; i++) {
+      const along = 3.5 + i * 1.9 + Math.random() * 1.2;
+      const side = (i % 2 ? 1 : -1) * (0.9 + Math.random() * 2.4);
+      const x = P.pos.x + fx * along + fz * side;
+      const z = P.pos.z + fz * along - fx * side;
+      const q = this.person('eve' + i, x, z, i === 3 ? kidLook(true) : civilianLook(), { face: toS + Math.PI });
+      q.noCollide = true;
+      if (q.fig) q.fig.lodFar = 0;
+      this.go(q, x - fx * 40, z - fz * 40, 0.95 + Math.random() * 0.35);
+      eve.push(q);
+      this.letGo(q, 'eve' + i);
+    }
     // (inside his head: the world gone far off and muffled, only his heart loud - till he shouts at the
     // two at the railing, scene 4: core/audio.js muffle, comic.js pulse)
     if (g.audio.muffle) {
@@ -2296,7 +2311,8 @@ export class Prologue {
     // still, he walked into it)
     {
       const hd = () => this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
-      this.shot({ from: () => { const h = hd(); return v3(h.x + fx * 0.7, h.y + 0.02, h.z + fz * 0.7); }, look: () => { const h = hd(); return v3(h.x, h.y + 0.02, h.z); }, fov: 26, dur: 0.9, hand: 0.25 });
+      // (on his eyes, a little under them: the face, not the hair)
+      this.shot({ from: () => { const h = hd(); return v3(h.x + fx * 0.78, h.y - 0.03, h.z + fz * 0.78); }, look: () => { const h = hd(); return v3(h.x, h.y - 0.035, h.z); }, fov: 30, dur: 0.9, hand: 0.2 });
       const h = hd();
       P.fig.lookAt = v3(h.x + fz * 5, h.y, h.z - fx * 5);
       yield 0.45;
@@ -2566,8 +2582,8 @@ export class Prologue {
       this.faceTo(g2, P.pos.x, P.pos.z);
     }
     yield* this.say('G03', g1.fig, 0.1);
-    // (round 13: the joke that is not one, as a comic's page - the one grinning, the other grinning,
-    // and him, under them, the whole of its width)
+    // (round 13: the joke that is not one, as a comic's page - the two of them grinning, the one who
+    // said it, and him, under them, the whole of its width)
     {
       const C = this.comic;
       if (C && C.page) {
@@ -2579,11 +2595,20 @@ export class Prologue {
           [[0.515, 0.03], [0.985, 0.03], [0.985, 0.47], [0.485, 0.47]],
           [[0.015, 0.5], [0.985, 0.5], [0.985, 0.97], [0.015, 0.97]],
         ]);
-        this.shot({ ...this.single(g1, P, { dist: 1.25, side: 0.36, up: -0.08 }), fov: 34, dur: 1, hand: 0.3 });
-        C.panel(0, { u: 0.5, v: 0.45, zoom: 1.2 });
+        // (the two of them together, past his shoulder - one in front of the other from a single's place)
+        {
+          const mx = (g1.pos.x + g2.pos.x) / 2;
+          const mz = (g1.pos.z + g2.pos.z) / 2;
+          const dx = mx - P.pos.x;
+          const dz = mz - P.pos.z;
+          const d = Math.hypot(dx, dz) || 1;
+          this.shot({ from: [P.pos.x - (dx / d) * 0.2 + (dz / d) * 0.9, 1.6, P.pos.z - (dz / d) * 0.2 - (dx / d) * 0.9], look: [mx, 1.52, mz], fov: 32, dur: 1, hand: 0.3 });
+        }
+        C.panel(0, { u: 0.5, v: 0.42 });
         yield 0.45;
-        this.shot({ ...this.single(g2, P, { dist: 1.25, side: -0.36, up: -0.08 }), fov: 34, dur: 1, hand: 0.3 });
-        C.panel(1, { u: 0.5, v: 0.45, zoom: 1.2 });
+        // (the one who said it, close)
+        this.shot({ ...this.single(g1, P, { dist: 1.3, side: 0.42, up: -0.1 }), fov: 32, dur: 1, hand: 0.3 });
+        C.panel(1, { u: 0.5, v: 0.42, zoom: 1.15 });
         yield 0.45;
         this.shot({ ...this.single(P, g1, { dist: 1.2, side: -0.3, up: -0.06 }), fov: 30, dur: 1.2, hand: 0.3 });
         C.panel(2, { u: 0.5, v: 0.42 });
