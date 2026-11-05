@@ -265,6 +265,9 @@ export class Game {
     // everyday life on the benches, at the bus stops, at the café tables (game/routines.js);
     // ?classic leaves the street as it was before (the "same picture" check)
     this.classic = this.params.has('classic');
+    // (the player's word: at the start he only draws - rubbing the city out comes later, if at all:
+    // unlockErase. ?erase: on from the start, for trying it; ?classic: as it always was)
+    this.canErase = this.classic || this.params.has('erase');
     this.routines = new Routines(this);
     // people at work in the street: sweepers, the postman, couriers, a traffic officer, road
     // works, the market's sellers (game/workers.js)
@@ -2168,7 +2171,16 @@ export class Game {
   // ------------------------------------------------------------------ rubbing out the world
   // A spot of the drawing at (x, y, z) is rubbed back to blank paper; a prop hit there loses
   // ink and crumbles away when it runs out.
+  // (the eraser given to him later - by the story, when it comes to it)
+  unlockErase() {
+    if (this.canErase) return;
+    this.canErase = true;
+    if (this.weapons) this.hud.updateWeapon();
+  }
+
   eraseWorld(x, y, z, r, rub, box, hit) {
+    // (nothing rubbed out while he only draws: canErase)
+    if (!this.canErase) return;
     const objs = this.world.objects;
     const o = box ? objs.ofBox(box) : null;
     if (o) {
@@ -2199,6 +2211,7 @@ export class Game {
 
   // big rub: everything in the radius loses ink, the middle is wiped to paper
   eraseBlast(x, y, z, radius, power) {
+    if (!this.canErase) return;
     const objs = this.world.objects;
     for (const o of objs.within(x, z, radius, this._objs || (this._objs = []))) {
       const d = Math.hypot((o.x0 + o.x1) / 2 - x, (o.z0 + o.z1) / 2 - z);
