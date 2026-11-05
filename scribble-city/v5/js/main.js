@@ -18,6 +18,7 @@ import { initProvoke } from './render/provoke.js';
 import { cacheUniformArrays } from './render/glcache.js';
 import { readMemo } from './render/depthtrial.js';
 import { BUILD } from './game/telemetry.js';
+import { setupAdmin } from './ui/admin.js';
 
 // (the game's own folder, v5/ - for its pictures, sounds and data, wherever the code is loaded from:
 // these modules one by one, or all of them in one file next to this one - tools/publish-pages.sh)
@@ -506,6 +507,12 @@ async function boot() {
   // behind the prologue's black)
   open();
   game.showContinue();
+  // (the maker's door on the start screen: the prologue's films, behind a password - ui/admin.js)
+  try {
+    setupAdmin(game);
+  } catch (e) {
+    console.warn('admin', e);
+  }
   shadersReady(renderer, allProgs).then(run, run).catch(fatal);
 }
 

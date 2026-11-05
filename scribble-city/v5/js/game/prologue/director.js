@@ -116,6 +116,10 @@ export class Prologue {
     this.cast = {};
     this.zero = { x: 0, y: 0, sprint: false };
     this.auto = null;
+    // (the admin's film viewer - ui/admin.js: a scene chosen, and played by itself if asked)
+    this.autopilot = null;
+    this.wantAuto = false;
+    this.objKey = '';
     // (ROADMAP 18.9) the film's look: painted behind its people (render/pipeline.js PAINT_FRAG), its
     // people on twos (game/doodle.js) - ?paint=0, ?twos=0 without them
     this.paintOn = !(P && P.get('paint') === '0');
@@ -193,6 +197,19 @@ export class Prologue {
       });
     // (a scene asked for, for a test: ?prologue=s5)
     const m = /^s(\d)$/.exec(this.param || '');
+    // (watched again by its maker after it was played: the wheel back up for the scenes it is in)
+    const S = this.set;
+    if (this.admin && S && S.wheelGone && S.buildWheel && !(m && +m[1] >= 4)) {
+      S.wheelGone = false;
+      S.buildWheel();
+    }
+    if (this.wantAuto) {
+      import('./autopilot.js')
+        .then((am) => {
+          if (this.active) this.autopilot = new am.Autopilot(this);
+        })
+        .catch(() => {});
+    }
     if (m && +m[1] > 1) {
       this.co = this.prep(+m[1]);
       this.wait = 0;
@@ -284,6 +301,7 @@ export class Prologue {
   // ------------------------------------------------------------------ every frame (unscaled time)
   input(input) {
     if (!this.active) return;
+    if (this.autopilot) this.autopilot.tick(this.dtR || 0.016);
     // hold Enter to skip what is being shown (never the playing)
     const hold = this.holdCam && input.keys.has('Enter');
     this.skipT = hold ? this.skipT + (this.dtR || 0.016) : 0;
@@ -820,6 +838,7 @@ export class Prologue {
   }
 
   objective(html, x = null, z = null, name = null) {
+    this.objKey = html || '';
     this.ui.objective(html);
     const g = this.game;
     if (x !== null && g.gps) g.gps.set(x, z, name || 'Lily');
@@ -3333,8 +3352,19 @@ export class Prologue {
   }
 
   // ------------------------------------------------------------------ the end
+  // (the admin's film viewer: scene n (1..9) at the next start, played by itself if auto)
+  watch(n, auto) {
+    this.param = n > 1 ? 's' + n : '1';
+    this.admin = true;
+    this.wantAuto = !!auto;
+  }
+
   finish() {
     const g = this.game;
+    if (this.autopilot) {
+      this.autopilot.stop();
+      this.autopilot = null;
+    }
     if (g.setAllOpen && g.settings) g.setAllOpen(!!g.settings.v.allOpen);
     try {
       localStorage.setItem(DONE_KEY, '1');
