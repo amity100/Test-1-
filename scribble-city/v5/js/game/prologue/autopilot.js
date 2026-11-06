@@ -237,12 +237,10 @@ export class Autopilot {
     }
     if (n === 3) {
       const m = P.cast.mark;
-      // (round 14: the search - after him wherever he is, at a run; he is never caught)
-      if (/Follow|Find|Catch/.test(o) && m && m.alive) {
+      if (/Follow/.test(o) && m && m.alive) {
         this.walkTo(m.pos.x, m.pos.z, true, 2.5);
         return;
       }
-      if (/gone/.test(o)) return;
       if (/Go back to/.test(o) && L) {
         this.once('back', () => P.putDanny(L.pos.x + 2.4, L.pos.z + 1.2, Math.atan2(-2.4, -1.2)));
         this.walkTo(L.pos.x, L.pos.z, false, 1.6);

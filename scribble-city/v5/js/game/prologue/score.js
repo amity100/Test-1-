@@ -1421,47 +1421,6 @@ class Hit extends Cue {
   }
 }
 
-// (round 14) the marked man's own few notes, each time he is seen: a music box's, falling - a fourth,
-// then a half step, then down to the bottom of it - two of it a little out of true with each other,
-// the bells' ring high over them gone at once; under it, low, a breath of something wrong
-class Mark extends Cue {
-  constructor(s, t0, o) {
-    super(s, t0, 'mark', o);
-    this.sting();
-    const v = o.vol !== undefined ? o.vol : 1;
-    const c = this.c;
-    const out = this.bus(0.55);
-    const notes = [[86, 0], [81, 0.28], [80, 0.56], [74, 0.98]];
-    for (const [m, dt] of notes) {
-      const t = t0 + dt;
-      for (const [k, det, a, len] of [[1, -11, 0.1, 1.8], [1, 8, 0.085, 1.8], [3.51, 0, 0.03, 0.32], [5.02, 4, 0.012, 0.18]]) {
-        const osc = c.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = hz(m) * k;
-        osc.detune.value = det;
-        const g = c.createGain();
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(a * v, t + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.0006, t + len);
-        osc.connect(g).connect(out);
-        osc.start(t);
-        osc.stop(t + len + 0.05);
-      }
-    }
-    const d = c.createOscillator();
-    d.type = 'triangle';
-    d.frequency.value = hz(38);
-    const dg = c.createGain();
-    dg.gain.setValueAtTime(0, t0);
-    dg.gain.linearRampToValueAtTime(0.09 * v, t0 + 0.9);
-    dg.gain.setTargetAtTime(0, t0 + 1.3, 0.55);
-    d.connect(dg).connect(out);
-    d.start(t0);
-    d.stop(t0 + 4);
-    this.dead = t0 + 4.5;
-  }
-}
-
 // a car coming down hard: a kick, the boom, a blast, a crash
 class Land extends Cue {
   constructor(s, t0, o) {
@@ -1605,7 +1564,6 @@ const CUES = {
   surreal: { K: fileOr(Surreal, 'surreal'), lead: 0.05 },
   shock: { K: fileOr(Unease, 'shock'), lead: 0.02 },
   hit: { K: Hit, sting: true },
-  mark: { K: Mark, sting: true },
   land: { K: Land, sting: true },
 };
 

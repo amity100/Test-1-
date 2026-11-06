@@ -180,17 +180,10 @@ export class GPS {
   }
 
   set(x, z, name = null) {
-    // (round 14: the same place again - a parked car looked for anew every second and a half, a mark
-    // kept up to date - quietly, and not again where it has just been reached: its click and the ding
-    // of getting there were heard over and over)
-    const A = this.arrived;
-    if (A && A.name === name && Math.hypot(A.x - x, A.z - z) < 4) return;
-    const T = this.target;
-    const same = !!T && T.name === name && Math.hypot(T.x - x, T.z - z) < 4;
     this.target = { x, z, name };
     this.t = 0;
     this.find();
-    if (!same && this.game.audio) this.game.audio.play('click', 0.6);
+    if (this.game.audio) this.game.audio.play('click', 0.6);
   }
 
   clear() {
@@ -210,18 +203,11 @@ export class GPS {
   }
 
   update(dt) {
-    // (somewhere reached is somewhere to be sent to again once they have gone well away from it)
-    const A = this.arrived;
-    if (A) {
-      const w0 = this.where();
-      if (Math.hypot(w0.x - A.x, w0.z - A.z) > 12) this.arrived = null;
-    }
     if (!this.target) return;
     const w = this.where();
     const d = Math.hypot(w.x - this.target.x, w.z - this.target.z);
     if (d < (w.v ? ARRIVE_CAR : ARRIVE_FOOT)) {
       const name = this.target.name;
-      this.arrived = { x: this.target.x, z: this.target.z, name };
       this.clear();
       const hud = this.game.hud;
       if (hud) hud.toast(name ? `הגעתם: ${name}` : 'הגעתם ליעד!', 'good', 2.4);
