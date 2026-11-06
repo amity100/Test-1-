@@ -3797,8 +3797,8 @@ export class Prologue {
         // (round 11: a little further off and lower - at 0.55 m and the head's middle the strips held
         // hair, or nothing)
         return {
-          from: () => { const { h, ux, uz } = fr(); return v3(h.x + ux * 0.72 - uz * side, h.y + 0.02, h.z + uz * 0.72 + ux * side); },
-          look: () => { const { h } = fr(); return v3(h.x, h.y + 0.02, h.z); },
+          from: () => { const { h, ux, uz } = fr(); return v3(h.x + ux * 0.72 - uz * side, h.y - 0.01, h.z + uz * 0.72 + ux * side); },
+          look: () => { const { h } = fr(); return v3(h.x, h.y - 0.02, h.z); },
         };
       };
       this.airDip = 0.35;
