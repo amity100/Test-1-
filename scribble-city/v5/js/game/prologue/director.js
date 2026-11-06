@@ -2338,8 +2338,8 @@ export class Prologue {
         const hl = () => this.headJ(L) || v3(L.pos.x, 1.0, L.pos.z);
         this.shot({
           from: () => { const h = hl(); return v3(h.x + ux * 1.55 + rx * 0.55, h.y + 0.12, h.z + uz * 1.55 + rz * 0.55); },
-          look: () => { const h = hl(); const p = this.headJ(P) || v3(P.pos.x, 1.6, P.pos.z); return v3(h.x * 0.72 + p.x * 0.28, h.y - 0.12, h.z * 0.72 + p.z * 0.28); },
-          fov: 38,
+          look: () => { const h = hl(); const p = this.headJ(P) || v3(P.pos.x, 1.6, P.pos.z); return v3(h.x * 0.84 + p.x * 0.16, h.y - 0.05, h.z * 0.84 + p.z * 0.16); },
+          fov: 44,
           dur: 2.7,
           hand: 0.25,
         });
@@ -2893,6 +2893,10 @@ export class Prologue {
       c.pl.ride = 'wheel';
       c.hero = { gi, lx, lz, wave, ph: Math.random() * 6 };
       this.feel(c.fig, 'joy', 60);
+      // (round 14: his face his own from the first frame he is seen - it was dark half a second while
+      // his drawn face came in: render/people.js keepPortrait)
+      c.fig.keepPortrait = true;
+      c.fig.portraitPx = 40;
       return c;
     };
     // (the two kids at the sill; their parent no longer beside them - from the camera's side his back
