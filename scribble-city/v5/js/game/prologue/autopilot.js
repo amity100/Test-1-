@@ -237,8 +237,10 @@ export class Autopilot {
     }
     if (n === 3) {
       const m = P.cast.mark;
-      if (/Follow/.test(o) && m && m.alive) {
-        this.walkTo(m.pos.x, m.pos.z, true, 2.5);
+      // (round 15: looking for him - running along the pier the way he went, after him while he is there)
+      if (/Look for him/.test(o)) {
+        if (m && m.alive) this.walkTo(m.pos.x, m.pos.z, true, 2.5);
+        else this.walkTo(pl.pos.x + 6, pl.pos.z, true, 1);
         return;
       }
       if (/Go back to/.test(o) && L) {

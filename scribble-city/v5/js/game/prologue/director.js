@@ -1944,18 +1944,22 @@ export class Prologue {
     // (the player's: after him - he walks off along the pier, unhurried; a few steps on, he is rubbed
     // out where he walks)
     this.film(false);
-    this.objective('Who is <b>that</b>? Follow him', man.pos.x, man.pos.z, 'Man');
-    this.howto('follow', 8);
+    // (round 15, the player's word: a short search, no going round and round after him - he walks off
+    // fast into the people coming the other way and is lost in them; the player runs after him, this
+    // way or that, for a few seconds - and he is nowhere; then back to Lily. No marker on him)
+    this.objective('Where did he go? <b>Look for him</b>');
     man.fig.lookAt = null;
-    // (round 13: he walks on along the pier - forward, into the people coming the other way, through
-    // them, this way and that between them; and somewhere in them he is not there any more)
     yield* this.loseInCrowd(man, crowd);
-    this.objective(null);
-    if (g.gps) g.gps.clear();
-    yield 1.4;
+    {
+      const p0 = P.pos.clone();
+      let t = 0;
+      yield () => {
+        t += this.dtR || 1 / 30;
+        return t > 7 || (t > 3.5 && Math.hypot(P.pos.x - p0.x, P.pos.z - p0.z) > 9);
+      };
+    }
     // back to her - she has finished it
-    this.objective('Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
-    this.howto('back', 8);
+    this.objective('He is <b>gone</b>. Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
     yield () => {
       drawK = Math.max(drawK, 0.9);
       return Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z) < 3.4;
@@ -2802,9 +2806,8 @@ export class Prologue {
     const zig = [];
     for (let k = 1; k <= 7; k++) zig.push([x0 + k * 4.2, k % 2 ? 246.2 : 239.6]);
     let zi = 0;
-    this.go(c, zig[0][0], zig[0][1], 1.55);
+    this.go(c, zig[0][0], zig[0][1], 2.3);
     let t = 0;
-    let gpsT = 0;
     const tc = new THREE.Vector3();
     const tq = new THREE.Vector3();
     const seen = () => {
@@ -2812,15 +2815,11 @@ export class Prologue {
       return tq.z < 1 && Math.abs(tq.x) < 1.05 && Math.abs(tq.y) < 1.05;
     };
     const front = () => Math.min(...crowd.filter((q) => q.alive).map((q) => q.pos.x));
-    while (t < 16) {
+    while (t < 9) {
       // (on to his next point once he is near it)
       if (zi < zig.length && Math.hypot(c.pos.x - zig[zi][0], c.pos.z - zig[zi][1]) < 1.2) {
         zi++;
-        if (zi < zig.length) this.go(c, zig[zi][0], zig[zi][1], 1.55);
-      }
-      if (g.gps && (gpsT += this.dtR || 1 / 30) > 0.4) {
-        gpsT = 0;
-        g.gps.set(c.pos.x, c.pos.z, 'Man');
+        if (zi < zig.length) this.go(c, zig[zi][0], zig[zi][1], 2.3);
       }
       // (one of them between him and the camera, and him well into them: gone)
       tc.set(c.pos.x, c.pos.y + 1.25, c.pos.z).sub(cam.position);
@@ -2838,7 +2837,7 @@ export class Prologue {
       }
       const deep = c.pos.x - front() > 3 || t > 6;
       if (hid && deep && t > 1.5) break;
-      if (t > 11 && !seen()) break;
+      if (t > 4.5 && !seen()) break;
       // (close up to him - he slips between two of them)
       if (t > 3 && Math.hypot(P.pos.x - c.pos.x, P.pos.z - c.pos.z) < 2.2 && hid) break;
       yield 0.001;
