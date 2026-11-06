@@ -3198,9 +3198,11 @@ export class Prologue {
         const dx = WHEEL.x - h.x;
         const dz = WHEEL.z - h.z;
         const d = Math.hypot(dx, dz) || 1;
-        return v3(h.x - (dx / d) * 0.38 - (dz / d) * 0.62, h.y + 0.1, h.z - (dz / d) * 0.38 + (dx / d) * 0.62);
+        return v3(h.x - (dx / d) * 0.38 - (dz / d) * 0.62, h.y - 0.22, h.z - (dz / d) * 0.38 + (dx / d) * 0.62);
       };
-      this.shot({ from: behind, look: () => page.at.clone(), fov: 30, dur: 3.2, hand: 0.25, dof: 0.6 });
+      // (from a little under it, looking up: the drawing against the evening's sky itself - level with
+      // it, the pier and the sea were behind it)
+      this.shot({ from: behind, look: () => page.at.clone().add(v3(0, 0.05, 0)), fov: 30, dur: 3.2, hand: 0.25, dof: 0.6 });
     }
     // (round 10: in it, it is still there - the drawing lit; round 13: against the evening's own sky,
     // not a field of gold - the gold field is laid over all but the people, and the page went under it:
@@ -3238,13 +3240,12 @@ export class Prologue {
     // his hands over hers, on the page: keep it
     // (round 14: the beats of it each its own picture - ten seconds of one wide shot, the two of them
     // small, held all of it: their hands on the page, her face asking, his not answering, and then off)
-    P.fig.reachL = page.at;
-    P.fig.reachR = page.at;
+    // (not his hands onto the page - from where he stands they went straight out at it and did not
+    // reach: a hand held out to her as he says it, acting.js D13 offer; the two of them low from the
+    // side, the evening behind them)
     {
-      const pa = () => page.at.clone();
-      // (over his shoulder: the page held to her, facing him - his hands coming onto it, her face over it;
-      // from her side the page was edge on, the boards all of it)
-      this.shot({ from: this.ots(P, L, { back: 0.55, side: 0.4, h: 1.3 }), look: () => pa().add(v3(0, 0.12, 0)), fov: 34, dur: 2.6, hand: 0.2, dof: 0.6 });
+      const T = this.two(P, L, { dist: 1.8, h: 1.0, lookH: 1.25, along: 0.35 });
+      this.shot({ from: T.from(), look: T.look(), fov: 42, dur: 2.6, hand: 0.2 });
     }
     yield 0.6;
     yield* this.say('D13', P.fig, 0.4);
