@@ -10,6 +10,14 @@ const _v = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const WORD_FONT = '"Permanent Marker", "Rubik", sans-serif';
+// (a seeded random: the same puff drawn the same way frame to frame)
+const mulberry = (a) => () => {
+  a |= 0;
+  a = (a + 0x6d2b79f5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
 
 export class Comic {
   constructor(game, root) {
@@ -24,7 +32,165 @@ export class Comic {
     this.words = [];
     this.speed = null;
     this.hit = null;
+    // (round 14) drawn puffs of dust and smoke; the figures whose quick hands leave a smear
+    this.puffs = [];
+    this.smearFigs = null;
+    this.sm = [];
     this.resize();
+  }
+
+  // (round 14) a puff - of dust from a step or a fall, of smoke from a tyre, a gun - drawn as the
+  // animated films draw theirs: round clouds, flat, outlined in ink, billowing out and up on twos and
+  // gone. where: a point of the world; o.n blobs, o.size (of the picture's height at 5 m), o.life,
+  // o.col (fill), o.dir ([x, y] on the sheet it drifts), o.spread
+  puff(where, o = {}) {
+    if (!where) return;
+    const n = o.n || 6;
+    const rnd = mulberry((o.seed || 7) + this.puffs.length * 13 + Math.floor((this.clock || 0) * 97));
+    const dir = o.dir || [0, -1];
+    const spread = o.spread !== undefined ? o.spread : 1;
+    const blobs = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rnd() * 0.8;
+      blobs.push({
+        dx: Math.cos(a) * 0.035 * spread * (0.4 + rnd()),
+        dy: Math.sin(a) * 0.018 * spread * (0.4 + rnd()),
+        vx: dir[0] * 0.05 * (0.5 + rnd()) + Math.cos(a) * 0.05 * spread,
+        vy: dir[1] * 0.05 * (0.5 + rnd()) + Math.sin(a) * 0.02 * spread,
+        r0: 0.012 + rnd() * 0.01,
+        r1: 0.03 + rnd() * 0.025,
+        d: rnd() * 0.15,
+      });
+    }
+    this.puffs.push({ where: where.clone ? where.clone() : { x: where.x, y: where.y, z: where.z }, t: 0, life: o.life || 0.75, size: o.size || 1, col: o.col || '#f3ead8', ink: o.ink || '#2a2030', blobs });
+  }
+
+  drawPuffs(dt, W, H) {
+    const g = this.g;
+    const cam = this.game.camera;
+    for (let i = this.puffs.length - 1; i >= 0; i--) {
+      const P = this.puffs[i];
+      P.t += dt;
+      if (P.t > P.life) {
+        this.puffs.splice(i, 1);
+        continue;
+      }
+      const c = this.at(P.where);
+      if (!c) continue;
+      // (nearer, bigger: as far off as the camera is from it)
+      const dist = Math.max(0.8, cam.position.distanceTo(P.where));
+      const sz = (P.size * 5) / dist / Math.tan((cam.fov * Math.PI) / 360) * 0.45;
+      // (on twos: drawn anew twelve times a second, held between)
+      const tq = Math.floor(P.t * 12) / 12;
+      g.save();
+      g.lineJoin = 'round';
+      for (const b of P.blobs) {
+        const u = Math.max(0, Math.min(1, (tq / P.life - b.d) / (1 - b.d)));
+        if (u <= 0) continue;
+        const grow = 1 - (1 - u) * (1 - u) * (1 - u);
+        const r = (b.r0 + (b.r1 - b.r0) * grow) * (u > 0.75 ? 1 - (u - 0.75) * 2.6 : 1) * H * sz;
+        if (r < 1) continue;
+        const x = c[0] * W + (b.dx + b.vx * grow) * H * sz;
+        const y = c[1] * H + (b.dy + b.vy * grow) * H * sz;
+        const a = u > 0.6 ? 1 - (u - 0.6) / 0.4 : 1;
+        g.globalAlpha = 0.92 * a;
+        g.fillStyle = P.col;
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+        g.lineWidth = Math.max(1.2, r * 0.12);
+        g.strokeStyle = P.ink;
+        g.stroke();
+        // (its shade on the side away from the light, a crescent of it)
+        g.globalAlpha = 0.28 * a;
+        g.fillStyle = P.ink;
+        g.beginPath();
+        g.arc(x + r * 0.18, y + r * 0.2, r * 0.82, 0.1 * Math.PI, 0.95 * Math.PI);
+        g.arc(x, y, r * 0.98, 0.95 * Math.PI, 0.1 * Math.PI, true);
+        g.fill();
+      }
+      g.restore();
+    }
+  }
+
+  // (round 14) a quick hand drawn with the smear of its speed - a streak behind it for a frame or two,
+  // as on a drawn film's in-between: the figures this follows (smearFigs), only while it is a film
+  trackSmears(dt, W, H) {
+    const F = this.smearFigs;
+    if (!F || !F.length) {
+      this.sm.length = 0;
+      return;
+    }
+    let k = 0;
+    for (const f of F) {
+      if (!f || !f.j || f.visible === false) continue;
+      for (const hk of ['handR', 'handL']) {
+        const st = this.sm[k] || (this.sm[k] = { fig: null, pts: [], life: 0 });
+        k++;
+        if (st.fig !== f || st.hk !== hk) {
+          st.fig = f;
+          st.hk = hk;
+          st.pts.length = 0;
+          st.life = 0;
+        }
+        const c = this.at(f.j[hk]);
+        if (!c) {
+          st.pts.length = 0;
+          continue;
+        }
+        const p = [c[0] * W, c[1] * H];
+        const last = st.pts[st.pts.length - 1];
+        // (a new place of the hand - on twos, twelve times a second)
+        if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 0.5) {
+          st.pts.push(p);
+          if (st.pts.length > 3) st.pts.shift();
+          if (last && dt > 0) {
+            const v = Math.hypot(p[0] - last[0], p[1] - last[1]) / H;
+            // (more than a tenth of the picture's height at one step: a smear)
+            if (v > 0.1 && v < 0.6) st.life = 0.09;
+          }
+        }
+        if (st.life > 0) {
+          st.life -= dt;
+          this.drawSmear(st.pts, H);
+        }
+      }
+    }
+    this.sm.length = k;
+  }
+
+  drawSmear(pts, H) {
+    if (pts.length < 2) return;
+    const g = this.g;
+    const a = pts[pts.length - 2];
+    const b = pts[pts.length - 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const d = Math.hypot(dx, dy) || 1;
+    const nx = -dy / d;
+    const ny = dx / d;
+    const w = H * 0.016;
+    g.save();
+    // (a tapering streak from where it was to where it is - pale, inked on its edge - and two thin
+    // lines along it)
+    g.globalAlpha = 0.5;
+    g.fillStyle = '#fff6e6';
+    g.beginPath();
+    g.moveTo(a[0], a[1]);
+    g.lineTo(b[0] + nx * w, b[1] + ny * w);
+    g.lineTo(b[0] - nx * w, b[1] - ny * w);
+    g.closePath();
+    g.fill();
+    g.globalAlpha = 0.45;
+    g.strokeStyle = '#2a2030';
+    g.lineWidth = Math.max(1, H * 0.0022);
+    for (const s of [-1.6, 1.6]) {
+      g.beginPath();
+      g.moveTo(a[0] - dx * 0.2 + nx * w * s, a[1] - dy * 0.2 + ny * w * s);
+      g.lineTo(b[0] - dx * 0.35 + nx * w * s * 0.7, b[1] - dy * 0.35 + ny * w * s * 0.7);
+      g.stroke();
+    }
+    g.restore();
   }
 
   resize() {
@@ -394,7 +560,7 @@ export class Comic {
     const rubbing = !!(this.rubSrc && !this.pg);
     // (the sheet hidden while it has nothing on it, shown again as soon as it has: a sheet only cleared
     // could still be shown as it last was)
-    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl || this.fx || this.mem || this.pu);
+    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl || this.fx || this.mem || this.pu || this.puffs.length || this.smearFigs);
     if (busy !== this.shown) {
       this.shown = busy;
       this.cv.style.visibility = busy ? 'visible' : 'hidden';
@@ -406,7 +572,7 @@ export class Comic {
       this.drawPage(dt);
       if (!this.words.length && !this.speed && !this.hit) return;
     }
-    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl && !this.fx && !this.mem && !this.pu) {
+    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl && !this.fx && !this.mem && !this.pu && !this.puffs.length && !this.smearFigs) {
       // (nothing of its own: the sheet kept clear, whatever was on it)
       g.clearRect(0, 0, this.cv.width, this.cv.height);
       this.dirty = false;
@@ -418,6 +584,9 @@ export class Comic {
     if (!this.pg) g.clearRect(0, 0, W, H);
     this.dirty = true;
     if (rubbing) this.drawRub(W, H);
+    // ---- (round 14) the drawn puffs, and the smears of quick hands
+    if (this.puffs.length) this.drawPuffs(dt, W, H);
+    this.trackSmears(dt, W, H);
     // ---- the focus lines, under the rest
     if (this.fl) {
       const f = this.fl;
@@ -779,6 +948,8 @@ export class Comic {
   clear() {
     this.mem = null;
     this.pu = null;
+    this.puffs = [];
+    this.sm = [];
     this.pg = null;
     this.rubSrc = null;
     this.cd = null;

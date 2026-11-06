@@ -299,6 +299,10 @@ const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(loca
 const PORTRAIT_NEAR = 80;
 const PORTRAIT_FAR = 60;
 const PORTRAIT_FADE = 0.4;
+// (the face lab's held face - fig.__portrait - or one of the story's own people, whose face is theirs
+// near or far, never handed over or faded in after a cut: fig.keepPortrait - round 14, Lily's face dark
+// for a third of a second after every cut that brought her near)
+const heldFace = (f) => !!(f && (f.__portrait || f.keepPortrait));
 // (its own outlines inside it - round the eyes, the lips, under the jaw - from this many pixels high)
 // (characters round 3: 190 drew them as dark rims and specks round the eyes of a face across the
 // street - 290, where they are whole lines; out below 245)
@@ -1346,12 +1350,12 @@ export class PersonRenderer {
         // (characters round 2) somebody else of the kind nearer now, and whoever has it still drawn:
         // theirs goes back to the city's way first, over the fade - the next one's comes in after it
         // has, never one face popping out as another pops in
-        P.handing = !!(P.next && P.owner && P.next !== P.owner && P.ownerSeen && !P.next.__portrait && P.fade > 0.02);
+        P.handing = !!(P.next && P.owner && P.next !== P.owner && P.ownerSeen && !heldFace(P.next) && P.fade > 0.02);
         if (!P.handing) {
           if (P.next !== P.owner) {
             P.fresh = true;
             // (somebody new: theirs comes in from nothing - the face lab's at once)
-            P.fade = P.next && P.next.__portrait ? 1 : 0;
+            P.fade = heldFace(P.next) ? 1 : 0;
             P.fadeTo = 1;
           }
           P.owner = P.next;
@@ -1384,7 +1388,7 @@ export class PersonRenderer {
     const px = cam && cam.isPerspectiveCamera ? (0.12 * sh) / (Math.max(0.3, hd) * Math.tan((cam.fov * Math.PI) / 360)) : 166 / Math.max(0.3, hd);
     // (ROADMAP 18.9: the film's own people - Lily - from a smaller face on: fig.portraitPx)
     const near = fig.portraitPx || PORTRAIT_NEAR;
-    const inRange = !!fig.__portrait || (PORTRAIT_STREET && px > (mine ? Math.min(PORTRAIT_FAR, near * 0.75) : near));
+    const inRange = heldFace(fig) || (PORTRAIT_STREET && px > (mine ? Math.min(PORTRAIT_FAR, near * 0.75) : near));
     // (ROADMAP 14.9: a phone makes a face a little at a time - a few seconds: begun while they are
     // still coming, two or three times as far, so that it is there by the time they are near)
     if (!P0 && this.touch && PORTRAIT_STREET && px > PORTRAIT_NEAR * 0.38 && !(this.portraitQueue && this.portraitQueue.length > 1)) P0 = this.makePortrait(k);
@@ -1402,16 +1406,16 @@ export class PersonRenderer {
       }
     }
     // (characters round 2: the one who has it keeps it unless another of the kind is a third nearer)
-    const d = fig.__portrait ? -1 : (inRange ? camDist : 1e5 + camDist) * (mine ? 0.67 : 1);
+    const d = heldFace(fig) ? -1 : (inRange ? camDist : 1e5 + camDist) * (mine ? 0.67 : 1);
     if (d < P.nextD) {
       P.nextD = d;
       P.next = fig;
     }
     if (!(P.ready && P.owner === fig)) return null;
     // (a phone's: only the nearest few - P.allow, begin; the one already showing fades out)
-    if (this.touch && !fig.__portrait && !P.allow && !(P.fade > 0.01)) return null;
+    if (this.touch && !heldFace(fig) && !P.allow && !(P.fade > 0.01)) return null;
     P.usedAt = shared.uTime.value;
-    P.fadeTo = inRange && !P.handing && (!this.touch || fig.__portrait || P.allow) ? 1 : 0;
+    P.fadeTo = inRange && !P.handing && (!this.touch || heldFace(fig) || P.allow) ? 1 : 0;
     // (how big the face is on the screen: the face's own ink going as the portrait's pencil comes in -
     // drawFolk)
     P.px = px;

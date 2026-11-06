@@ -34,17 +34,17 @@ export const ACTS = {
   D05: { mood: 'laugh', beats: [[0, 0.45, 'surrender'], [0.5, 1, 'open', 'joy']], hear: 'joy' },
   L08: { mood: 'shock' },
   L22: { mood: 'shock', beats: [[0.1, 1, 'point']] },
-  D29: { mood: 'shock', beats: [[0, 0.35, 'open'], [0.4, 1, 'point']], shake: true },
+  D29: { mood: 'shock', beats: [[0, 0.3, 'open'], [0.34, 0.66, 'point'], [0.7, 1, 'head']], shake: true },
   // ---- 4. nobody remembers
   D06: { mood: 'shout', beats: [[0, 0.45, 'wave'], [0.45, 1, 'point']] },
-  G01: { mood: 'surprised', beats: [[0, 1, 'shrug']] },
+  G01: { mood: 'surprised', beats: [[0, 1, 'scratch']] },
   D07: { mood: 'shout', beats: [[0, 0.55, 'point'], [0.55, 1, 'open']] },
   G02: { mood: 'smirk', beats: [[0.15, 0.75, 'shrug']] },
   D08: { mood: 'shout', beats: [[0, 0.5, 'point'], [0.5, 1, 'beat']] },
   // (ROADMAP 18.9: no hands going round and round - 'explain' is a loop, and over a whole line it
   // looked foolish: palms open at the question, a shrug at 'man', a hand out at 'here')
   G03: { mood: 'joy', beats: [[0.05, 0.4, 'open'], [0.45, 0.62, 'shrug'], [0.7, 1, 'point']] },
-  D09: { mood: 'shock', beats: [[0.1, 1, 'open']] },
+  D09: { mood: 'shock', beats: [[0.1, 0.55, 'open'], [0.55, 1, 'head']] },
   G04: { mood: 'worried', beats: [[0.1, 0.6, 'open']] },
   D10: { mood: 'worried', beats: [[0, 0.5, 'plead'], [0.5, 1, 'point']] },
   // (still as a post as he says it, flat: the stillness is what is wrong with him)
@@ -53,19 +53,19 @@ export const ACTS = {
   D11: { mood: 'tender', nod: true },
   L10: { mood: 'worried' },
   D12: { mood: 'worried', shake: true },
-  D13: { mood: 'tender' },
+  D13: { mood: 'tender', beats: [[0.1, 1, 'offer']] },
   L11: { mood: 'worried' },
   D14: { mood: 'worried' },
-  D15: { mood: 'angry', beats: [[0.2, 1, 'open']] },
+  D15: { mood: 'angry', beats: [[0.2, 1, 'offer']] },
   // ---- 5. the phone; the two men
-  D16: { mood: 'angry' },
+  D16: { mood: 'angry', beats: [[0.05, 0.5, 'chest'], [0.55, 1, 'open']] },
   D17: { mood: 'angry', beats: [[0.2, 1, 'beat']] },
-  T01: { mood: 'smirk', beats: [[0, 1, 'open']] },
-  D18: { mood: 'angry', shake: true },
+  T01: { mood: 'smirk', beats: [[0, 0.55, 'open'], [0.6, 1, 'fold']] },
+  D18: { mood: 'angry', beats: [[0.05, 1, 'stop']], shake: true },
   T02: { mood: 'smirk', beats: [[0.2, 1, 'beat']] },
-  D19: { mood: 'angry', beats: [[0.1, 1, 'beat']] },
+  D19: { mood: 'angry', beats: [[0.05, 0.5, 'stop'], [0.5, 1, 'beat']] },
   T03: { mood: 'angry', beats: [[0, 1, 'explain']], shake: true, hear: 'angry' },
-  T05: { mood: 'angry' },
+  T05: { mood: 'angry', beats: [[0, 1, 'fists']] },
   D28: { mood: 'shout' },
   T06: { mood: 'shout', beats: [[0, 1, 'point']] },
   T04: { mood: 'shout', beats: [[0, 1, 'point']] },
@@ -120,6 +120,38 @@ function gestureX(kind, side, t, ph, out) {
       if (side < 0) return false;
       out.set(-0.06, 1.28, 0.16);
       return true;
+    // (round 14) both hands to the head: it cannot be
+    case 'head':
+      out.set(side * 0.16, 1.74, 0.06);
+      return true;
+    // (a palm out at them: stop, not now)
+    case 'stop':
+      if (side < 0) return false;
+      out.set(0.12, 1.3, 0.5);
+      return true;
+    // (a hand flat on his own chest: me? / I am with my kid)
+    case 'chest':
+      if (side < 0) return false;
+      out.set(-0.02, 1.24, 0.18);
+      return true;
+    // (a hand to the back of the head: lost for an answer)
+    case 'scratch':
+      if (side < 0) return false;
+      out.set(0.12 + 0.015 * Math.sin(t * 11 + ph), 1.72, -0.06);
+      return true;
+    // (the arms folded: in no hurry, and not going anywhere)
+    case 'fold':
+      out.set(side * -0.1, 1.12, 0.2);
+      return true;
+    // (a hand held out to them, palm up: come on / here)
+    case 'offer':
+      if (side < 0) return false;
+      out.set(0.2, 1.04, 0.45);
+      return true;
+    // (both fists down at the sides, held: the anger in them)
+    case 'fists':
+      out.set(side * 0.25, 0.86, 0.1);
+      return true;
     default:
       return gestureAt(kind, side, t, ph, out);
   }
@@ -127,6 +159,46 @@ function gestureX(kind, side, t, ph, out) {
 
 const _o = new THREE.Vector3();
 const _r = new THREE.Vector3();
+const _q = new THREE.Vector3();
+
+// (round 14) a line's stressed syllables, from its own recording: where its loudness comes up to a peak
+// well over the line's own level - the times (seconds) the head dips on and the hand hits
+const ACC = new Map();
+export function accentsOf(id, buf) {
+  if (ACC.has(id)) return ACC.get(id);
+  const out = [];
+  if (buf && buf.getChannelData) {
+    const a = buf.getChannelData(0);
+    const sr = buf.sampleRate;
+    const n = Math.round(sr * 0.02);
+    const env = [];
+    for (let i = 0; i + n <= a.length; i += n) {
+      let e = 0;
+      for (let j = i; j < i + n; j++) e += a[j] * a[j];
+      env.push(Math.sqrt(e / n));
+    }
+    // (smoothed over 60 ms: a syllable, not its pitch)
+    const sm = env.map((_, i) => (env[i - 1] || env[i]) * 0.25 + env[i] * 0.5 + (env[i + 1] || env[i]) * 0.25);
+    const mx = Math.max(1e-6, ...sm);
+    let last = -1;
+    for (let i = 2; i < sm.length - 2; i++) {
+      const v = sm[i];
+      if (v < mx * 0.5 || v < sm[i - 1] || v < sm[i + 1] || v < sm[i - 2] || v < sm[i + 2]) continue;
+      // (a rise into it - a syllable's start - not a long vowel's plateau)
+      const lo = Math.min(sm[i - 2], sm[i - 3] !== undefined ? sm[i - 3] : sm[i - 2], sm[i - 4] !== undefined ? sm[i - 4] : sm[i - 2]);
+      if (v < lo * 1.35) continue;
+      const t = (i * n) / sr;
+      if (t - last < 0.2) continue;
+      out.push(t);
+      last = t;
+    }
+  }
+  ACC.set(id, out);
+  return out;
+}
+
+// (a hand at rest at their side, in their own space, for the wind-up before a gesture)
+const REST_Y = 0.86;
 
 export class Acting {
   constructor(game) {
@@ -136,12 +208,15 @@ export class Acting {
 
   // a line begins: fig says it (dur seconds); listeners: the figures it is said to (they take it as it
   // lands - ACTS hear)
-  play(fig, id, dur, listeners = null) {
+  play(fig, id, dur, listeners = null, buf = null) {
     const A = ACTS[id];
     if (!fig || !A) return;
     // (one line at a time each: a new one takes over from the last)
     this.stop(fig);
-    const p = { fig, A, dur: Math.max(0.4, dur), t: 0, ph: (fig.seed || 0.3) * 5.1, hR: new THREE.Vector3(), hL: new THREE.Vector3(), look: null, lookV: new THREE.Vector3(), listeners, heard: false, mood: A.mood || null };
+    // (round 14: its stressed syllables - the head dips on them, the hand hits them, and the one who
+    // listens nods now and then as they land)
+    const acc = accentsOf(id, buf);
+    const p = { fig, A, dur: Math.max(0.4, dur), t: 0, ph: (fig.seed || 0.3) * 5.1, hR: new THREE.Vector3(), hL: new THREE.Vector3(), look: null, lookV: new THREE.Vector3(), listeners, heard: false, mood: A.mood || null, acc, ai: 0, hitT: 0, beatI: -1, windT: 0 };
     if (p.mood) this.feel(fig, p.mood, p.dur + 0.6);
     this.on.push(p);
   }
@@ -177,9 +252,35 @@ export class Acting {
         continue;
       }
       const A = p.A;
+      // ---- (round 14) the stressed syllables as they come: the head a little down on each, the hand
+      // with it; the one listening nodding on every third or so
+      while (p.ai < p.acc.length && p.acc[p.ai] <= p.t) {
+        p.ai++;
+        f.accT = 0.2;
+        f.accK = A.mood === 'shout' || A.mood === 'angry' ? 1.4 : 1;
+        p.hitT = 0.16;
+        if (p.listeners && p.ai % 3 === 2) for (const L of p.listeners) if (L && L !== f && !(L.accT > 0)) {
+          L.accT = 0.2;
+          L.accK = 0.8;
+        }
+      }
+      if (p.hitT > 0) p.hitT = Math.max(0, p.hitT - dt);
       // ---- the hands: the beat on now
       let beat = null;
-      for (const b of A.beats || []) if (k >= b[0] && k < b[1]) beat = b;
+      let bi = -1;
+      (A.beats || []).forEach((b, i) => {
+        if (k >= b[0] && k < b[1]) {
+          beat = b;
+          bi = i;
+        }
+      });
+      // (round 14: a gesture wound up first - the hand a little down and in, a tenth of a second - then
+      // out: anticipation)
+      if (bi !== p.beatI) {
+        p.beatI = bi;
+        p.windT = beat ? 0.1 : 0;
+      }
+      if (p.windT > 0) p.windT = Math.max(0, p.windT - dt);
       if (beat && beat[3] && p.mood !== beat[3]) {
         p.mood = beat[3];
         this.feel(f, p.mood, p.dur * (1.08 - k) + 0.6);
@@ -191,10 +292,12 @@ export class Acting {
         const bt = (k - beat[0]) * p.dur;
         // (in and out of each gesture smoothly: a beat's first and last tenth of a second)
         if (freeR && gestureX(beat[2], 1, bt, p.ph, _o)) {
+          this.shape(p, 1, _o);
           f.toWorld(_o.x, _o.y, _o.z, p.hR);
           f.reachR = p.hR;
         } else if (f.reachR === p.hR) f.reachR = null;
         if (freeL && gestureX(beat[2], -1, bt, p.ph, _o)) {
+          this.shape(p, -1, _o);
           f.toWorld(_o.x, _o.y, _o.z, p.hL);
           f.reachL = p.hL;
         } else if (f.reachL === p.hL) f.reachL = null;
@@ -219,11 +322,31 @@ export class Acting {
           f.lookAt = p.lookV;
         }
       }
-      // ---- the one they talk to: it lands
+      // ---- the one they talk to: it lands (round 14: a blink with it, and a nod)
       if (A.hear && !p.heard && k > 0.62 && p.listeners) {
         p.heard = true;
-        for (const L of p.listeners) if (L && L !== f) this.feel(L, A.hear, 2.4);
+        for (const L of p.listeners) if (L && L !== f) {
+          this.feel(L, A.hear, 2.4);
+          L.blinkKick = true;
+          if (!(L.nodT > 0)) L.nodT = 0.42;
+        }
       }
+    }
+  }
+
+  // (round 14) a gesture's place shaped by its moment: wound up first (anticipation - down a little,
+  // in towards the body), and on a stressed syllable a hit (down and out a touch, and back)
+  shape(p, side, o) {
+    if (p.windT > 0) {
+      const w = p.windT / 0.1;
+      o.x += (side * 0.2 - o.x) * 0.35 * w;
+      o.y += (REST_Y - 0.05 - o.y) * 0.35 * w;
+      o.z += (0.06 - o.z) * 0.35 * w;
+    }
+    if (p.hitT > 0) {
+      const h = Math.sin((1 - p.hitT / 0.16) * Math.PI);
+      o.y -= 0.045 * h;
+      o.z += 0.025 * h;
     }
   }
 

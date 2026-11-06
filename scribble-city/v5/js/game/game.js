@@ -1431,6 +1431,10 @@ export class Game {
     // the performance test route drives the camera (and the city's life follows it)
     if (this.perf.bench) this.perf.benchCamera(dt);
     this.camera.updateMatrixWorld();
+    // (round 14: the film's look and its comic sheet from the camera of this frame, not the last -
+    // game/prologue/director.js lateFrame; a cut's first frame had the rub marks of the shot before
+    // over it, and the game's look in it for a moment)
+    if (dt > 0 && this.prologue && this.prologue.lateFrame) this.prologue.lateFrame();
     // (the ink on its way onto the car, where the camera now sees it: game/partpen.js)
     if (this.fuse) this.fuse.pen.late();
     // (the camera under the bay: the world down there, ROADMAP 5.2)
