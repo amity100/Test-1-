@@ -383,6 +383,15 @@ export class Autopilot {
     }
     if (/Draw|draw<\/b> a weapon/.test(o)) {
       this.set(0, 0.2);
+      // (out of the car first: the list is the pen's on foot)
+      if (pl.inVehicle) {
+        const s = this.since('penout');
+        if (s < 0 || s > 1.2) {
+          this.did.penout = this.g.time;
+          this.press('KeyE');
+        }
+        return;
+      }
       // (round 15: one of the short list picked, and drawn as a player would - its own lines)
       this.once('pen', () => {
         if (g.freedraw) g.freedraw.learn('paint');

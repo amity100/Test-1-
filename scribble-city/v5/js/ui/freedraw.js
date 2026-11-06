@@ -1855,6 +1855,11 @@ export class FreeDraw {
     const game = this.game;
     const bp = BLUEPRINTS[id];
     if (!bp) return false;
+    // (the list is the pen's on foot: in a car it draws on the car)
+    if (game.player.mode !== 'foot' || this.carOpen) {
+      game.hud.toast('צריך לצאת מהרכב כדי לצייר את זה', 'info', 2.4);
+      return false;
+    }
     if (!this.isOpen) this.show();
     if (!this.isOpen) return false;
     const sh = shelfOf(bp);

@@ -1509,16 +1509,26 @@ export class Prologue {
     // 5. the pen: open, everything in it open (begin: setAllOpen) - till it has been opened and put
     // away again, or a while has gone by
     // (round 15: a weapon or a ride from the short list, drawn for real - till one is made, or a while)
-    this.objective('Open the pen and <b>draw</b> a weapon or a ride');
+    // (in the car, the pen draws on the car: a part on it counts too - the list is out of it, on foot)
+    const DRAW_FOOT = 'Open the pen and <b>draw</b> a weapon or a ride';
+    const DRAW_CAR = 'Step out, open the pen and <b>draw</b> a weapon or a ride';
+    this.objective(P.inVehicle ? DRAW_CAR : DRAW_FOOT);
     this.howto('draw');
     {
       const F = g.freedraw;
-      const made = () => (F && F.stats && F.stats.made ? Object.values(F.stats.made).reduce((a, b) => a + b, 0) : 0);
-      const m0 = made();
+      const made = () => (F && F.stats && F.stats.made ? Object.values(F.stats.made).reduce((a, b) => a + b, 0) : 0) + (P.inVehicle && P.inVehicle.fuse ? P.inVehicle.fuse.parts.length : 0);
+      let m0 = made();
+      let car = P.inVehicle;
       let tm = -1;
       t = 0;
       yield () => {
         t += this.dtR;
+        // (in or out of a car: what is counted from changes with it)
+        if (P.inVehicle !== car) {
+          car = P.inVehicle;
+          if (tm < 0) m0 = made();
+          if (tm < 0) this.objective(car ? DRAW_CAR : DRAW_FOOT);
+        }
         if (tm < 0 && made() > m0) tm = t;
         // (made: a breath to see it come to life; left be, it goes on all the same after a while)
         return (tm >= 0 && t > tm + 2.5 && !(F && F.isOpen)) || (tm >= 0 && t > tm + 6) || t > 90;

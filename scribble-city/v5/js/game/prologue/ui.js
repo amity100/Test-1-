@@ -18,6 +18,7 @@ const CSS = `
 #pl-root:not(.film) #pl-subs { bottom: 18vh; }
 #pl-obj { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%) translateY(10px); opacity: 0; transition: opacity 0.6s, transform 0.6s; text-align: center; direction: ltr; }
 #pl-obj.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+body.fd-open #pl-obj { opacity: 0; }
 #pl-obj .t { color: #fff; font-size: clamp(17px, 2.2vw, 26px); font-weight: 700; letter-spacing: 0.02em; text-shadow: 0 2px 4px #000, 0 0 12px rgba(0,0,0,0.8); }
 #pl-obj .t b { color: #ffd23f; font-weight: 800; }
 #pl-obj .u { margin: 6px auto 0; height: 3px; width: 0; background: linear-gradient(90deg, transparent, #ffd23f, transparent); transition: width 0.9s 0.15s; }
