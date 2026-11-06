@@ -1532,6 +1532,8 @@ export class Prologue {
     // (round 15: her face hers near and far - never handed to the city's simple face, dark with black
     // eyes, for a moment after a cut that brought her near: render/people.js keepPortrait)
     L.fig.keepPortrait = true;
+    // (drawn however close the camera comes - over her shoulder onto her page: game/doodle.js nearOk)
+    L.fig.nearOk = true;
     L.fig.sit = 1;
     L.baseY = 0.32;
     if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, true);
@@ -1959,7 +1961,9 @@ export class Prologue {
     {
       const fx = Math.sin(toW);
       const fz = Math.cos(toW);
-      this.putDanny(bx + rx * 0.95 - ux * 0.55, bz + rz * 0.95 - uz * 0.55, Math.atan2(bx - (bx + rx * 0.95 - ux * 0.55), bz - (bz + rz * 0.95 - uz * 0.55)));
+      const dX = bx + rx * 0.95 - ux * 0.55;
+      const dZ = bz + rz * 0.95 - uz * 0.55;
+      this.putDanny(dX, dZ, Math.atan2(bx - dX, bz - dZ));
       P.fig.lookAt = page.at;
       page.follow = true;
       this.feel(L.fig, 'joy', 16);
@@ -1984,17 +1988,21 @@ export class Prologue {
         L.fig.lookAt = page.tipW;
       };
       // 1. over his shoulder, down at her page as she colours - what he sees coming back
-      this.shot({ from: () => { const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z); return v3(h.x + fz * 0.12, h.y - 0.05, h.z - fx * 0.12); }, look: () => page.at.clone(), fov: 34, dur: 4.2, hand: 0.15, dof: 0.6 });
+      // (from where he now stands - not his head as it was posed a moment ago, across the pier)
+      this.shot({ from: v3(dX + fz * 0.12, (P.pos.y || 0) + 1.6, dZ - fx * 0.12), look: () => page.at.clone(), fov: 34, dur: 4.2, hand: 0.15, dof: 0.6 });
       yield 4.2;
       // 2. close on the page: the colour going on under her pencil
-      const camOver = () => v3(page.at.x - fx * 0.1 + rx * 0.3, page.at.y + 0.42, page.at.z - fz * 0.1 + rz * 0.3);
-      this.shot({ from: camOver, look: () => page.at.clone().lerp(page.tipW, 0.3), fov: 40, dur: 4.0, hand: 0.1, dof: 0.6 });
+      // (over her right shoulder, as she sees it: the page the right way up, her hand and her pencil
+      // coming in to it from the right, the colour going on where it is)
+      const camOver = () => v3(page.at.x - fx * 0.2 + rx * 0.3, page.at.y + 0.5, page.at.z - fz * 0.2 + rz * 0.3);
+      const atPen = () => page.at.clone().lerp(page.tipW, 0.45);
+      this.shot({ from: camOver, look: atPen, fov: 44, dur: 4.0, hand: 0.1, dof: 0.6 });
       yield 4.0;
       // 3. her face, low and in front: at it, the tip of her tongue out
       this.shot({ ...this.single(L, page.at, { dist: 0.85, side: 0.28, up: -0.22, drop: 0.05 }), fov: 34, dur: 2.2, hand: 0.2 });
       yield 2.2;
       // 4. close on the page again: the sea, the gondolas, her name
-      this.shot({ from: camOver, look: () => page.at.clone().lerp(page.tipW, 0.3), fov: 40, dur: 3.4, hand: 0.1, dof: 0.6 });
+      this.shot({ from: camOver, look: atPen, fov: 44, dur: 3.4, hand: 0.1, dof: 0.6 });
       yield () => drawK >= 1;
       yield 0.3;
     }
