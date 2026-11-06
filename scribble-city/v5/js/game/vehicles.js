@@ -842,13 +842,7 @@ class Vehicle {
       brake = input.keys.has('Space');
       if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
     }
-    // (round 15: just got into - a second to start it: game.js tickEntry)
-    if (this.holdT > 0) {
-      this.holdT -= dt;
-      throttle = 0;
-      steer = 0;
-      brake = true;
-    }
+
     if (this.stall > 0) {
       this.stall -= dt;
       throttle *= 0.1;
@@ -913,6 +907,12 @@ class Vehicle {
       // a phone's handbrake button is a handbrake whatever Space does)
       hand = (input.keys.has('Space') && !this.spaceIsMine) || !!input.handbrake;
       if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
+    }
+    // (round 15: just got into - a second to start it before it goes: game.js tickEntry)
+    if (this.holdT > 0) {
+      this.holdT -= dt;
+      throttle = 0;
+      steer = 0;
     }
     // (ROADMAP 11.23: going down in the sea, the engine drowns - game/fuse.js sea)
     if (this.fzSink > 0.4) throttle *= 0.05;

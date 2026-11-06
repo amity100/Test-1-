@@ -35,7 +35,7 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp, smoothstep } from '../core/util.js';
+import { clamp, smoothstep, dampAngle } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -1999,6 +1999,9 @@ export class Game {
     p.yaw = Math.atan2(-E.lx, -E.lz);
     f.yaw = p.yaw;
     f.speed = k < 1 ? 2.2 : 0;
+    // (the camera round behind him along the car's side: the window, the door and whoever comes out of
+    // it in the picture - not the back of his head)
+    this.camRig.yaw = dampAngle(this.camRig.yaw, Math.atan2(E.fx, E.fz), 6, dt);
     const vy = v.pos.y || 0;
     const win = this._entW || (this._entW = new THREE.Vector3());
     win.set(E.sx + E.lx * 0.86, vy + 1.18, E.sz + E.lz * 0.86);
