@@ -336,6 +336,16 @@ export class Audio {
 
   play(name, vol = 1) {
     if (!this.ctx || !this.enabled) return;
+    // (round 14: the same sound asked for again and again in a burst - twenty puffs in under half a
+    // second as a ramp went up - heard as a few, not piled up: at most four of a kind in a quarter of a
+    // second)
+    const now = this.ctx.currentTime;
+    const B = this._burst || (this._burst = new Map());
+    const q = B.get(name) || [];
+    while (q.length && now - q[0] > 0.25) q.shift();
+    if (q.length >= 4) return;
+    q.push(now);
+    B.set(name, q);
     const v = vol;
     switch (name) {
       case 'paint':
