@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PrologueUI, lilyDrawing } from './ui.js';
+import { PrologueUI, lilyDrawing, lilyParts } from './ui.js';
 import { PrologueVoices } from './voice.js';
 import { Shots } from './shots.js';
 import { LINES } from './lines.js';
@@ -1872,7 +1872,9 @@ export class Prologue {
     // (ROADMAP 18.9) she will draw it: her sketchbook out, at the railing, the page against it - and
     // she starts, the wheel first. Her drawing comes as she draws it (game/prologue/ui.js lilyDrawing k)
     const page = this.lilyPage();
-    let drawK = 0.02;
+    // (round 15: the shapes in pencil now, while he is away; its colours when he is back - lilyParts)
+    const LP = lilyParts();
+    let drawK = 0.004;
     const drawOn = () => page.draw(lilyDrawing, drawK);
     // (ROADMAP 18.9: sitting on a bench a step back from the railing, her sketchbook on her knees, the
     // pencil going - the player's word: she sits, and she is seen drawing)
@@ -1896,7 +1898,7 @@ export class Prologue {
     // (she looks up at it and down at her page, as one who draws from the thing does)
     this.sketching = true;
     this.everyFrame = (dt) => {
-      drawK = Math.min(1, drawK + dt * 0.032);
+      drawK = Math.min(LP.outline - 0.0005, drawK + dt * 0.012);
       drawOn();
       const tt = this.clock || 0;
       L.fig.lookAt = Math.sin(tt * 1.3) > 0.35 ? W0 : page.at;
@@ -1961,16 +1963,62 @@ export class Prologue {
     // back to her - she has finished it
     this.objective('He is <b>gone</b>. Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
     yield () => {
-      drawK = Math.max(drawK, 0.9);
+      drawK = Math.max(drawK, LP.outline - 0.0005);
       return Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z) < 3.4;
     };
     this.objective(null);
     if (g.gps) g.gps.clear();
+    this.film(true);
+    // (round 15, the player's word: her colours seen going on - she is at it as he comes back, bent
+    // over her page: the sky in its three colours, the sun, the sea, the gondolas, her name; under her
+    // pencil each of them spreads over the white, her pencil the colour it puts on: page.js follow)
+    {
+      const fx = Math.sin(toW);
+      const fz = Math.cos(toW);
+      this.putDanny(bx + rx * 0.95 - ux * 0.55, bz + rz * 0.95 - uz * 0.55, Math.atan2(bx - (bx + rx * 0.95 - ux * 0.55), bz - (bz + rz * 0.95 - uz * 0.55)));
+      P.fig.lookAt = page.at;
+      page.follow = true;
+      this.feel(L.fig, 'joy', 16);
+      // (the colouring's pace: to each k by each time)
+      const plan = [[LP.sky[0] + (LP.sky[1] - LP.sky[0]) * 0.42, 4.2], [LP.sky[1], 4.0], [LP.sea[0] + (LP.sea[1] - LP.sea[0]) * 0.3, 2.2], [1, 3.4]];
+      let pi = 0;
+      let pt = 0;
+      let k0 = drawK;
+      this.everyFrame = (dt) => {
+        if (pi < plan.length) {
+          pt += dt;
+          const [k1, d] = plan[pi];
+          const f = Math.min(1, pt / d);
+          drawK = k0 + (k1 - k0) * f;
+          if (f >= 1) {
+            pi++;
+            pt = 0;
+            k0 = drawK;
+          }
+        }
+        drawOn();
+        L.fig.lookAt = page.tipW;
+      };
+      // 1. over his shoulder, down at her page as she colours - what he sees coming back
+      this.shot({ from: () => { const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z); return v3(h.x + fz * 0.12, h.y - 0.05, h.z - fx * 0.12); }, look: () => page.at.clone(), fov: 34, dur: 4.2, hand: 0.15, dof: 0.6 });
+      yield 4.2;
+      // 2. close on the page: the colour going on under her pencil
+      const camOver = () => v3(page.at.x - fx * 0.1 + rx * 0.3, page.at.y + 0.42, page.at.z - fz * 0.1 + rz * 0.3);
+      this.shot({ from: camOver, look: () => page.at.clone().lerp(page.tipW, 0.3), fov: 40, dur: 4.0, hand: 0.1, dof: 0.6 });
+      yield 4.0;
+      // 3. her face, low and in front: at it, the tip of her tongue out
+      this.shot({ ...this.single(L, page.at, { dist: 0.85, side: 0.28, up: -0.22, drop: 0.05 }), fov: 34, dur: 2.2, hand: 0.2 });
+      yield 2.2;
+      // 4. close on the page again: the sea, the gondolas, her name
+      this.shot({ from: camOver, look: () => page.at.clone().lerp(page.tipW, 0.3), fov: 40, dur: 3.4, hand: 0.1, dof: 0.6 });
+      yield () => drawK >= 1;
+      yield 0.3;
+    }
     this.everyFrame = null;
     this.sketching = false;
+    page.follow = false;
     drawK = 1;
     drawOn();
-    this.film(true);
     // she cannot wait to show him: up off the bench, the page held up to him - the page, and her face
     // over it
     L.fig.sit = 0;
