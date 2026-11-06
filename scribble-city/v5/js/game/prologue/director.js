@@ -3768,14 +3768,22 @@ export class Prologue {
     // (round 9: the stand-off, as a western has it and an anime cuts it - his eyes, theirs, close and
     // still, the sound of the street gone under it; then the guns)
     {
+      // (round 14: worked out every frame from where their head is now - set once, a man still coming
+      // walked out of his own strip, the street in it)
       const eyes = (who, at, side) => {
-        const h = this.headJ(who) || v3(who.pos.x, 1.6, who.pos.z);
-        const dx = at.pos.x - who.pos.x;
-        const dz = at.pos.z - who.pos.z;
-        const d = Math.hypot(dx, dz) || 1;
+        const fr = () => {
+          const h = this.headJ(who) || v3(who.pos.x, 1.6, who.pos.z);
+          const dx = at.pos.x - who.pos.x;
+          const dz = at.pos.z - who.pos.z;
+          const d = Math.hypot(dx, dz) || 1;
+          return { h, ux: dx / d, uz: dz / d };
+        };
         // (round 11: a little further off and lower - at 0.55 m and the head's middle the strips held
         // hair, or nothing)
-        return { from: v3(h.x + (dx / d) * 0.72 + (-dz / d) * side, h.y - 0.01, h.z + (dz / d) * 0.72 + (dx / d) * side), look: v3(h.x, h.y - 0.02, h.z) };
+        return {
+          from: () => { const { h, ux, uz } = fr(); return v3(h.x + ux * 0.72 - uz * side, h.y + 0.02, h.z + uz * 0.72 + ux * side); },
+          look: () => { const { h } = fr(); return v3(h.x, h.y + 0.02, h.z); },
+        };
       };
       this.airDip = 0.35;
       // (round 11: the western's three strips, one over the other, each slammed in on a heartbeat -
@@ -3789,10 +3797,11 @@ export class Prologue {
       if (C5 && C5.page) C5.page(strips);
       const E = [eyes(t1, P, 0.06), eyes(P, t1, -0.06), eyes(L, t1, 0.05)];
       for (let i = 0; i < 3; i++) {
-        this.shot({ from: E[i].from, to: E[i].from.clone().lerp(E[i].look, 0.08), look: E[i].look, fov: 24, dur: 0.8, hand: 0.1, dof: 1 });
+        const Ei = E[i];
+        this.shot({ from: Ei.from, to: () => Ei.from().lerp(Ei.look(), 0.08), look: Ei.look, fov: 24, dur: 0.8, hand: 0.1, dof: 1 });
         // (round 14: each strip on the eyes - lower for him, it was his jaw in the dark and a bit of
         // pavement)
-        if (C5 && C5.panel) C5.panel(i, { u: 0.5, v: i === 0 ? 0.53 : 0.5, zoom: 2.3 });
+        if (C5 && C5.panel) C5.panel(i, { u: 0.5, v: 0.5, zoom: 2.3 });
         g.audio.play('heartbeat', 0.55);
         yield i < 2 ? 0.62 : 0.8;
       }
