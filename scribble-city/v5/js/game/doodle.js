@@ -19,15 +19,6 @@ const _d = new THREE.Vector3();
 const _e = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _p = new THREE.Vector3();
-const _bv = new THREE.Vector3();
-// (round 14) a hand's way to where it reaches: begun, sent somewhere else, let go - each eased, a
-// little past the mark and back (backOut), in the figure's own space so that it moves with them
-const armState = () => ({ on: false, t: 1, from: new THREE.Vector3(), cur: new THREE.Vector3(), last: new THREE.Vector3(), rel: new THREE.Vector3(), relT: 0 });
-const backOut = (t) => {
-  const c = 1.35;
-  const u = t - 1;
-  return 1 + (c + 1) * u * u * u + c * u * u;
-};
 const _q = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 // the parts of each arm and leg and the names of their bones (the same strings every time)
@@ -293,15 +284,6 @@ export class Doodle {
     this.visible = v;
   }
 
-  // (round 14) the other way: a point of the world in the figure's own space (x to their right, y up
-  // from their feet, z ahead)
-  toBody(w, out) {
-    const s = this.scale;
-    const dx = (w.x - this.pos.x) / s;
-    const dz = (w.z - this.pos.z) / s;
-    return out.set(dx * this.right.x + dz * this.right.z, (w.y - this.pos.y) / s, dx * this.forward.x + dz * this.forward.z);
-  }
-
   toWorld(x, y, z, out) {
     const s = this.scale;
     out.set(this.pos.x + (this.right.x * x + this.forward.x * z) * s, this.pos.y + y * s, this.pos.z + (this.right.z * x + this.forward.z * z) * s);
@@ -392,26 +374,14 @@ export class Doodle {
       lean -= this.recoil * this.recoil * 0.42;
       leanSide += this.recoil * this.recoilSide * 0.12;
     }
+    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
+    const spine = 0.5;
     // (standing, a breath: the chest and the shoulders rise and fall a little - and in the prologue's
     // film, where the camera comes close and stays, a deeper one, and the body above the hips swaying
     // slowly over its feet: nobody stands as still as a post, ROADMAP 18.9)
     this.breathT = (this.breathT || this.seed) + dt;
     const idle = (1 - wa) * (1 - sit * 0.5) * (Doodle.twos.on ? 1 : 0.35);
-    // (round 14: and the weight now on one foot, now on the other - the hips over it, the shoulders a
-    // little the other way - every few seconds, slowly: in the film, standing)
-    if (Doodle.twos.on && idle > 0.5 && sit < 0.1 && crawl < 0.1) {
-      this.wT = (this.wT === undefined ? this.seed * 3 : this.wT) - dt;
-      if (this.wT <= 0) {
-        this.wT = 3 + Math.random() * 4;
-        this.wWant = this.wWant > 0 ? -1 : 1;
-      }
-      this.wS = (this.wS || 0) + ((this.wWant || 0) - (this.wS || 0)) * Math.min(1, dt * 1.5);
-    } else if (this.wS) this.wS *= Math.max(0, 1 - dt * 3);
-    const wsx = (this.wS || 0) * Math.min(1, idle);
-    this.wsx = wsx;
-    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05 + wsx * 0.03, hipY - Math.abs(wsx) * 0.006, 0, j.hip);
-    const spine = 0.5;
-    const nx = leanSide + Math.sin(this.breathT * 0.41 + this.seed * 3) * 0.014 * idle * (1 - sit) - wsx * 0.012;
+    const nx = leanSide + Math.sin(this.breathT * 0.41 + this.seed * 3) * 0.014 * idle * (1 - sit);
     const ny = hipY + spine * Math.cos(lean) + Math.sin(this.breathT * 1.6) * 0.009 * idle;
     const nz = spine * Math.sin(lean);
     this.toWorld(nx, ny, nz, j.neck);
@@ -423,8 +393,8 @@ export class Doodle {
     this.toWorld(nx + sw * chc, ny - 0.07, nz + twist + sw * chs, j.shoulderR);
     this.toWorld(nx - sw * chc, ny - 0.07, nz - twist - sw * chs, j.shoulderL);
     j.shoulder.copy(j.shoulderR);
-    this.toWorld(hw + (this.wsx || 0) * 0.03, hipY + (this.wsx || 0) * 0.012, 0, j.hipR);
-    this.toWorld(-hw + (this.wsx || 0) * 0.03, hipY - (this.wsx || 0) * 0.012, 0, j.hipL);
+    this.toWorld(hw, hipY, 0, j.hipR);
+    this.toWorld(-hw, hipY, 0, j.hipL);
 
     // legs
     const legL = 0.47 * (this.look.build.legs || 1);
@@ -524,31 +494,6 @@ export class Doodle {
         if (d.length() > L) d.setLength(L);
         tgt.copy(shoulder).add(d);
         useIK = true;
-        // (round 14: a hand sent somewhere - a gesture begun, or another after it - gets there quickly,
-        // a little past it and back; not there in one frame. At a film's cut, there already: armSnap)
-        const S = side === 1 ? this.armR || (this.armR = armState()) : this.armL || (this.armL = armState());
-        this.toBody(tgt, S.cur);
-        if (!S.on || S.cur.distanceTo(S.last) > 0.16) {
-          this.toBody(hand, S.from);
-          // (a body never posed yet has its hand nowhere: there at once)
-          S.t = hand.lengthSq() < 1e-6 || S.from.lengthSq() > 9 ? 1 : 0;
-          S.on = true;
-        }
-        S.last.copy(S.cur);
-        if (this.armSnap) S.t = 1;
-        if (S.t < 1) {
-          S.t = Math.min(1, S.t + dt / 0.22);
-          _bv.copy(S.from).lerp(S.cur, backOut(S.t));
-          this.toWorld(_bv.x, _bv.y, _bv.z, tgt);
-        }
-        S.rel.copy(S.cur);
-        S.relT = 0.26;
-      }
-      // (a hand that something other than a reach has now: no way back from the reach to ease)
-      const S0 = side === 1 ? this.armR : this.armL;
-      if (S0 && !reach && useIK) {
-        S0.on = false;
-        S0.relT = 0;
       } else if (this.drinkT >= 0 && side === 1) {
         // glass up to the mouth and back
         const k = Math.sin(clamp(this.drinkT, 0, 1) * Math.PI);
@@ -614,23 +559,8 @@ export class Doodle {
         const hx = sxl + side * 0.02;
         const hz = ez + Math.sin(b) * armF;
         this.toWorld(nx + hx * chc - hz * chs, ey - Math.cos(b) * armF, nz + hx * chs + hz * chc, hand);
-        // (round 14: let go of where it reached - the gesture over - back down to the side over a
-        // quarter of a second, eased; not dropped in one frame)
-        if (S0) {
-          S0.on = false;
-          if (S0.relT > 0 && !this.armSnap) {
-            const k = S0.relT / 0.26;
-            this.toWorld(S0.rel.x, S0.rel.y, S0.rel.z, _bv);
-            tgt.copy(hand).lerp(_bv, k * k * (3 - 2 * k));
-            const pole = _d.set(this.right.x * side * 0.6, -1, this.right.z * side * 0.6);
-            ik(shoulder, tgt, armU * this.scale, armF * this.scale, pole, elbow);
-            hand.copy(tgt);
-            S0.relT -= dt;
-          } else S0.relT = 0;
-        }
       }
     }
-    this.armSnap = false;
 
     if (legGone && !crawl && !sit) {
       // missing a leg: sag to that side
@@ -783,21 +713,6 @@ export class Doodle {
       tY = this.yaw + rawA * fade;
       tP = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.75, 0.6) * fade;
       has = fade > 0;
-    }
-    // (round 14: the eyes on somebody never quite still - from one of their eyes to the other, down to
-    // the mouth and back, small quick jumps every half second or so; the head does not go with them)
-    const hY = tY;
-    const hP = tP;
-    if (this.lookAt && this.dead < 0.2) {
-      this.dartT = (this.dartT || 0) - dt;
-      if (this.dartT <= 0) {
-        this.dartT = 0.35 + Math.random() * 0.95;
-        const r = Math.random();
-        this.dartY = r < 0.35 ? 0 : (Math.random() < 0.5 ? -1 : 1) * (0.04 + Math.random() * 0.035);
-        this.dartP = r > 0.78 ? -0.055 : 0;
-      }
-      tY += this.dartY || 0;
-      tP += this.dartP || 0;
     } else if (this.dead < 0.2) {
       // (one look about, the eyes' and the head's: mostly ahead - a small glance the eyes' alone, a
       // larger one the head's too; walking, now and then a look down ahead of the feet)
@@ -851,28 +766,12 @@ export class Doodle {
     let wp = 0;
     let wc = 0;
     if (has) {
-      const a = wrapA(hY - this.yaw);
+      const a = wrapA(tY - this.yaw);
       const sa = Math.sign(a);
       wy = clamp(sa * Math.max(0, Math.abs(a) - 0.17) * 0.9, -1.25, 1.25);
       // (the chest for a look past about forty degrees: a little, slowly)
       wc = sa * clamp((Math.abs(a) - 0.7) * 0.5, 0, 0.4);
-      wp = clamp(Math.sign(hP) * Math.max(0, Math.abs(hP) - 0.1) * 0.85, -0.5, 0.42);
-    }
-    // (round 14: at a cut of the film, where they look already - not the head swinging round to it in
-    // the first frames of the new shot: fig.lookSnap, game/prologue/director.js snapPoses)
-    if (this.lookSnap) {
-      this.lookSnap = false;
-      this.headWY = wy;
-      this.headWP = wp;
-      this.lookYaw = wy;
-      this.lookPitch = wp + comp;
-      this.lookYawV = 0;
-      this.lookPitchV = 0;
-      this.chestYaw = wc;
-      this.chestYawV = 0;
-      this.gazeYaw = tY;
-      this.gazePitch = tP;
-      this.sacT = -1;
+      wp = clamp(Math.sign(tP) * Math.max(0, Math.abs(tP) - 0.1) * 0.85, -0.5, 0.42);
     }
     // (the head sets off a moment after the eyes - they lead, it follows)
     const lag = Math.min(1, dt / 0.06);
@@ -887,11 +786,6 @@ export class Doodle {
       wp += Math.sin(this.nodT * 12.5) * 0.17 * Math.min(1, this.nodT * 2.5);
     }
     if (this.speakNod > 0.36) wp -= (this.speakNod - 0.36) * 0.35;
-    // (round 14: and a small dip of the head on each stressed syllable of a line - acting.js accents)
-    if (this.accT > 0) {
-      this.accT = Math.max(0, this.accT - dt);
-      wp -= Math.sin((1 - this.accT / 0.2) * Math.PI) * 0.07 * (this.accK || 1);
-    }
     // (a critically damped spring: about a third of a second to get there, never faster than a turn
     // of the head can be; the chest's slower - it starts later and takes most of a second)
     const w = 9;
@@ -1951,15 +1845,10 @@ export class Doodle {
   inCamera(c) {
     const S = this.scale || 1;
     const h = this.j && this.j.headC;
-    // (round 14: the film's own people - nearOk, game/prologue/director.js person - the camera may come
-    // close to: over her shoulder onto her page, she was not drawn at all, the page floating over the
-    // boards. For them only the head itself, or the body's own width)
-    const hk = this.nearOk ? 0.22 : 0.62;
-    const bk = this.nearOk ? 0.19 : 0.42;
-    if (h && c.distanceTo(h) < hk * S) return true;
+    if (h && c.distanceTo(h) < 0.62 * S) return true;
     const dx = c.x - this.pos.x;
     const dz = c.z - this.pos.z;
     const dy = c.y - this.pos.y;
-    return dx * dx + dz * dz < bk * bk * S * S && dy > -0.1 && dy < (h ? h.y - this.pos.y + 0.3 * S : 1.9 * S);
+    return dx * dx + dz * dz < 0.42 * 0.42 * S * S && dy > -0.1 && dy < (h ? h.y - this.pos.y + 0.3 * S : 1.9 * S);
   }
 }

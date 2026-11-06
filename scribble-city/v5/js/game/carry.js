@@ -56,9 +56,7 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
       break;
     case 'icecream':
     case 'apple':
-      // (round 14: a cone held low, at her side - fig.coneLow, the prologue's Lily: at the chin, from any
-      // camera a little below her face its scoop was over her mouth)
-      [x, y, z] = fig.coneLow ? [side * 0.2, ny - 0.34, 0.2] : [side * 0.12, ny - 0.1, 0.27];
+      [x, y, z] = [side * 0.12, ny - 0.1, 0.27];
       break;
     case 'flower':
     case 'bouquet':
@@ -774,35 +772,13 @@ function strokesFor(fig, item, side, w) {
       // a big drawing pencil, tip forward along the forearm
       const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
       _d.subVectors(h, el).normalize();
-      // (round 14: her coloured pencil a child's - slim and short, the wood of its point bare and the
-      // lead its colour: the drawing pencil's size, close over her page, was a log across the page and
-      // her face. game/prologue/page.js puts her hand its length back from where it draws)
-      if (fig.pencilCol) {
-        const pc = fig.pencilCol;
-        _a.copy(h).addScaledVector(_d, -0.06 * S);
-        _b.copy(h).addScaledVector(_d, 0.1 * S);
-        line(fig, _a, _b, pc, w * 1.5, sd + 120);
-        _c.copy(_b).addScaledVector(_d, 0.032 * S);
-        line(fig, _b, _c, [0.93, 0.8, 0.62], w * 1.05, sd + 121);
-        _a.copy(_c).addScaledVector(_d, -0.012 * S);
-        line(fig, _a, _c, pc, w * 0.62, sd + 123);
-        break;
-      }
       _a.copy(h).addScaledVector(_d, -0.1 * S);
       _b.copy(h).addScaledVector(_d, 0.2 * S);
-      // (v5, round 14: a coloured pencil, fig.pencilCol - its body and its point the colour it draws,
-      // the bare wood between them)
-      const pc = fig.pencilCol;
-      line(fig, _a, _b, pc || [0.96, 0.78, 0.22], w * 3.6, sd + 120);
+      line(fig, _a, _b, [0.96, 0.78, 0.22], w * 3.6, sd + 120);
       _c.copy(_b).addScaledVector(_d, 0.07 * S);
-      line(fig, _b, _c, pc ? [0.93, 0.8, 0.62] : [0.25, 0.22, 0.2], w * 2, sd + 121);
-      if (pc) {
-        _a.copy(_c).addScaledVector(_d, -0.025 * S);
-        line(fig, _a, _c, pc, w * 1.2, sd + 123);
-        _a.copy(h).addScaledVector(_d, -0.1 * S);
-      }
+      line(fig, _b, _c, [0.25, 0.22, 0.2], w * 2, sd + 121);
       _c.copy(_a).addScaledVector(_d, -0.05 * S);
-      line(fig, _a, _c, pc ? [0.2, 0.2, 0.22] : [0.95, 0.6, 0.66], w * 3.6, sd + 122);
+      line(fig, _a, _c, [0.95, 0.6, 0.66], w * 3.6, sd + 122);
       break;
     }
     case 'magicPencil': {

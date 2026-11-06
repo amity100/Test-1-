@@ -2914,11 +2914,6 @@ export class Pipeline {
     const dt = Math.min(0.1, Math.max(0, (now - (this._paintAt || now)) / 1000));
     this._paintAt = now;
     const want = this.paintWant;
-    // (round 14: a film's cut into its painted look at once - game/prologue/director.js tickLook)
-    if (this.paintSnap) {
-      this.paintSnap = false;
-      this.paint = want;
-    }
     this.paint += (want - this.paint) * (1 - Math.exp(-dt * 6));
     if (Math.abs(this.paint - want) < 0.01) this.paint = want;
     if (this.paint < 0.01) {
@@ -2990,13 +2985,7 @@ export class Pipeline {
     const p = this._sunNdc.copy(cam.position).addScaledVector(sd, 1000).project(cam);
     // (round 11: the people's key light - the more the camera looks into the sun, the more)
     const front = !(p.z > 1 || p.z < -1);
-    // (round 14: and whenever it looks the sun's way, the sun in the picture or not - against the
-    // sunset beside the frame a face was black)
-    const fw = this._fw || (this._fw = new THREE.Vector3());
-    cam.getWorldDirection(fw);
-    const into = Math.min(1, Math.max(0, (fw.dot(sd) - 0.05) / 0.55));
-    const inPic = front ? Math.min(1, Math.max(0, 1.25 - Math.hypot(p.x, p.y) * 0.45)) : 0;
-    f.uFill.value = L.fill ? L.fill * Math.max(inPic, into) : 0;
+    f.uFill.value = front && L.fill ? L.fill * Math.min(1, Math.max(0, 1.25 - Math.hypot(p.x, p.y) * 0.45)) : 0;
     if (L.rim <= 0.001) {
       f.uRimCol.value.w = 0;
       return;

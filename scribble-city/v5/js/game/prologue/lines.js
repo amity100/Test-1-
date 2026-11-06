@@ -6,14 +6,6 @@
 // car park (Vince and Bruno: voices made for them - ElevenLabs Voice Design). The two kids on the wheel (K01, K02) are no longer heard.
 export const LINES = {
   L01: { who: "L", en: "Dad! Finally!", he: "אבא! סוף סוף!", dur: 1.80 },
-  // (round 14: his thoughts, whispered in his own voice - heard in his head, his lips still: director.js
-  // thought)
-  TH1: { who: "D", en: "One ordinary evening... just me and her.", he: "ערב אחד רגיל. רק אני והיא.", dur: 3.50 },
-  TH2: { who: "D", en: "That can't be.", he: "זה לא יכול להיות.", dur: 1.51 },
-  TH3: { who: "D", en: "Am I losing my mind?", he: "אני משתגע?", dur: 1.63 },
-  TH4: { who: "D", en: "Because it's the only proof... it was ever there.", he: "כי זו ההוכחה היחידה שהוא היה.", dur: 3.46 },
-  TH5: { who: "D", en: "Not now... not with her here.", he: "לא עכשיו. לא כשהיא איתי.", dur: 1.94 },
-  TH6: { who: "D", en: "Think... what flies?", he: "תחשוב... מה עף?", dur: 1.99 },
   D01: { who: "D", en: "What do you mean, finally? It's been two minutes.", he: "מה סוף סוף? עברו שתי דקות.", dur: 2.30 },
   LG1: { who: "L", en: "(giggles)", he: "(מצחקקת)", dur: 1.27 },
   L02: { who: "L", en: "That's what you always say.", he: "זה מה שאתה אומר תמיד.", dur: 1.68 },
