@@ -3713,7 +3713,10 @@ export class Prologue {
     // for him
     // (round 14: from their side of it, low at the curb - him coming, in the light, watched; over their
     // shoulders the striped post by the way in stood across the middle of the picture)
-    this.shot({ from: () => v3(t1.pos.x + ux * 2.0 - uz * 2.4, 0.9, t1.pos.z + uz * 2.0 + ux * 2.4), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 34, dur: 2.2, hand: 0.5 });
+    // (round 14: from where they wait for him, low on the street side, four and a half metres short of
+    // him - his face in the light, Lily at his back, the two men behind the camera, still to be seen:
+    // set from the stop, not from the man, who stood fourteen metres off)
+    this.shot({ from: v3(D.x + ux * 4.5 + uz * 1.6, 1.05, D.z + uz * 4.5 - ux * 1.6), look: () => v3(P.pos.x, 1.25, P.pos.z), fov: 36, dur: 2.2, hand: 0.5 });
     this.go(t1, S1.x - ux * 2.0, S1.z - uz * 2.0, 1.0);
     this.go(t2, S2.x - ux * 1.6, S2.z - uz * 1.6, 1.0);
     yield 1.6;
