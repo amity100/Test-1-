@@ -3242,7 +3242,9 @@ export class Prologue {
     P.fig.reachR = page.at;
     {
       const pa = () => page.at.clone();
-      this.shot({ from: () => { const a = page.at; const dx = P.pos.x - L.pos.x; const dz = P.pos.z - L.pos.z; const d = Math.hypot(dx, dz) || 1; return v3(a.x - (dz / d) * 0.75 + (dx / d) * 0.1, a.y + 0.3, a.z + (dx / d) * 0.75 + (dz / d) * 0.1); }, look: pa, fov: 34, dur: 2.6, hand: 0.2, dof: 0.6 });
+      // (over his shoulder: the page held to her, facing him - his hands coming onto it, her face over it;
+      // from her side the page was edge on, the boards all of it)
+      this.shot({ from: this.ots(P, L, { back: 0.55, side: 0.4, h: 1.3 }), look: () => pa().add(v3(0, 0.12, 0)), fov: 34, dur: 2.6, hand: 0.2, dof: 0.6 });
     }
     yield 0.6;
     yield* this.say('D13', P.fig, 0.4);
