@@ -307,17 +307,18 @@ export class PrologueUI {
 // (ROADMAP 18.9) and drawn a little at a time: k of it (0 the page alone .. 1 all of it), into
 // canvas (a new one if none) - the same strokes in the same order, so that a page drawn at k and
 // then at more is the same page with more on it
-export function lilyDrawing(k = 1, canvas = null) {
+export function lilyDrawing(k = 1, canvas = null, tip = null) {
   const W = 1100;
   const H = 820;
   const c = canvas || document.createElement('canvas');
   c.width = W;
   c.height = H;
   const g = c.getContext('2d');
-  let seed = 5;
-  const rnd = () => {
-    seed = (seed * 16807) % 2147483647;
-    return (seed % 10000) / 10000;
+  // (round 14: her hand's own wobble at each point of a stroke - the same at every redraw, however
+  // much of the stroke is drawn yet: no shimmer as a stroke grows under her pencil)
+  const jit = (a, b, cc) => {
+    const h = Math.sin(a * 127.1 + b * 311.7 + cc * 74.7) * 43758.5453;
+    return h - Math.floor(h) - 0.5;
   };
   // the page: cream, ruled lines, the spiral's holes at the top
   g.fillStyle = '#fbf6e8';
@@ -341,9 +342,36 @@ export function lilyDrawing(k = 1, canvas = null) {
     g.arc(x, 22, 9, 0, Math.PI * 2);
     g.fill();
   }
-  // (each stroke of hers a step; only the first k of them drawn)
+  // (each stroke of hers a step, as long as it takes her to draw it - its length - drawn as far as
+  // she has got with it: k is her time over the whole page; tip, if asked, where her pencil is now
+  // and in what colour)
   const steps = [];
-  const crayonNow = (pts, col, w = 7, passes = 3) => {
+  const marks = {};
+  const mark = (name) => (marks[name] = steps.length);
+  const lenOf = (pts) => {
+    let l = 0;
+    for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    return l;
+  };
+  // the first f of a line: its points up to there, the last one where it has got to
+  const part = (pts, f) => {
+    if (f >= 1) return pts;
+    const L = lenOf(pts) * f;
+    const out = [pts[0]];
+    let l = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      if (l + d >= L) {
+        const q = d ? (L - l) / d : 0;
+        out.push([pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * q, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * q]);
+        return out;
+      }
+      l += d;
+      out.push(pts[i]);
+    }
+    return out;
+  };
+  const crayonNow = (pts, col, w = 7, passes = 3, si = 0) => {
     for (let p = 0; p < passes; p++) {
       g.strokeStyle = col;
       g.globalAlpha = p ? 0.45 : 0.85;
@@ -352,8 +380,8 @@ export function lilyDrawing(k = 1, canvas = null) {
       g.lineJoin = 'round';
       g.beginPath();
       pts.forEach(([x, y], i) => {
-        const jx = x + (rnd() - 0.5) * 3.5;
-        const jy = y + (rnd() - 0.5) * 3.5;
+        const jx = x + jit(si, p, i) * 3.5;
+        const jy = y + jit(si, p, i + 0.5) * 3.5;
         if (i) g.lineTo(jx, jy);
         else g.moveTo(jx, jy);
       });
@@ -362,30 +390,48 @@ export function lilyDrawing(k = 1, canvas = null) {
     g.globalAlpha = 1;
   };
   // a crayon stroke: wobbly, waxy, a few passes
-  const crayon = (pts, col, w = 7, passes = 3) => steps.push(() => crayonNow(pts, col, w, passes));
-  const scribbleFill = (cx, cy, r, col, w = 5) =>
-    steps.push(() => {
-      g.save();
-      g.beginPath();
-      g.arc(cx, cy, r, 0, Math.PI * 2);
-      g.clip();
-      g.strokeStyle = col;
-      g.globalAlpha = 0.6;
-      g.lineWidth = w;
-      for (let i = -r * 2; i < r * 2; i += w * 1.3) {
+  const crayon = (pts, col, w = 7, passes = 3) => {
+    const si = steps.length;
+    steps.push({ w: lenOf(pts) + 30, col, draw: (f) => crayonNow(part(pts, f), col, w, passes, si), at: (f) => { const q = part(pts, f); return q[q.length - 1]; } });
+  };
+  const scribbleFill = (cx, cy, r, col, w = 5) => {
+    const lines = [];
+    for (let i = -r * 2; i < r * 2; i += w * 1.3) lines.push(i);
+    steps.push({
+      w: lines.length * r * 0.9,
+      col,
+      draw: (f) => {
+        g.save();
         g.beginPath();
-        g.moveTo(cx - r, cy + i);
-        g.lineTo(cx + r, cy + i - r);
-        g.stroke();
-      }
-      g.restore();
-      g.globalAlpha = 1;
+        g.arc(cx, cy, r, 0, Math.PI * 2);
+        g.clip();
+        g.strokeStyle = col;
+        g.globalAlpha = 0.6;
+        g.lineWidth = w;
+        const n = Math.ceil(lines.length * f);
+        for (let k2 = 0; k2 < n; k2++) {
+          const i = lines[k2];
+          g.beginPath();
+          g.moveTo(cx - r, cy + i);
+          g.lineTo(cx + r, cy + i - r);
+          g.stroke();
+        }
+        g.restore();
+        g.globalAlpha = 1;
+      },
+      at: (f) => {
+        const i = lines[Math.min(lines.length - 1, Math.floor(lines.length * f))];
+        const q = (lines.length * f) % 1;
+        return [cx - r + 2 * r * q, cy + i - r * q];
+      },
     });
+  };
   // the wheel first (what she looks at), then its gondolas and who is in them, then the sky, the
   // sea and the pier round it, and last her name
   const cx = 480;
   const cy = 360;
   const R = 220;
+  mark('wheel');
   crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * R, cy + Math.sin((i / 40) * Math.PI * 2) * R]), '#e8457c', 9);
   crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * (R - 18), cy + Math.sin((i / 40) * Math.PI * 2) * (R - 18)]), '#7a6ad8', 5, 2);
   for (let q = 0; q < 12; q++) {
@@ -395,58 +441,118 @@ export function lilyDrawing(k = 1, canvas = null) {
   crayon([[cx - 10, cy], [cx - 150, 600]], '#6a6a7a', 10);
   crayon([[cx + 10, cy], [cx + 150, 600]], '#6a6a7a', 10);
   scribbleFill(cx, cy, 26, '#ffd23f', 6);
-  // the gondolas, each with somebody waving in it
+  // the gondolas, each with somebody waving in it (each in its colour: the box filled across, its
+  // outline, the little one in it)
   const GC = ['#ff5a7a', '#3fc6c0', '#ffc53a', '#9b6ae0', '#5cc45a', '#ff8a3a'];
+  mark('gondolas');
   for (let q = 0; q < 12; q++) {
     const a = (q / 12) * Math.PI * 2 + 0.15;
     const x = cx + Math.cos(a) * R;
     const y = cy + Math.sin(a) * R + 26;
     const col = GC[q % GC.length];
-    steps.push(() => {
-      g.fillStyle = col;
-      g.globalAlpha = 0.8;
-      g.fillRect(x - 26, y - 14, 52, 32);
-      g.globalAlpha = 1;
-      crayonNow([[x - 28, y - 16], [x + 28, y - 16], [x + 28, y + 18], [x - 28, y + 18], [x - 28, y - 16]], '#2a2440', 3.5, 1);
-      crayonNow([[x, y - 16], [x, y - 28]], '#2a2440', 3, 1);
-      // a little head, an arm up
-      g.fillStyle = '#f2c79a';
-      g.beginPath();
-      g.arc(x - 6, y - 4, 8, 0, Math.PI * 2);
-      g.fill();
-      crayonNow([[x - 6, y - 4], [x + 8, y - 18]], '#f2c79a', 3.5, 1);
-      if (q % 3 === 0) {
+    const si = steps.length;
+    steps.push({
+      w: 260,
+      col,
+      draw: (f) => {
+        g.fillStyle = col;
+        g.globalAlpha = 0.8;
+        g.fillRect(x - 26, y - 14, 52 * Math.min(1, f / 0.5), 32);
+        g.globalAlpha = 1;
+        if (f < 0.5) return;
+        crayonNow([[x - 28, y - 16], [x + 28, y - 16], [x + 28, y + 18], [x - 28, y + 18], [x - 28, y - 16]], '#2a2440', 3.5, 1, si);
+        crayonNow([[x, y - 16], [x, y - 28]], '#2a2440', 3, 1, si + 0.3);
+        if (f < 0.75) return;
+        // a little head, an arm up
+        g.fillStyle = '#f2c79a';
         g.beginPath();
-        g.arc(x + 12, y - 2, 6, 0, Math.PI * 2);
+        g.arc(x - 6, y - 4, 8, 0, Math.PI * 2);
         g.fill();
-      }
+        crayonNow([[x - 6, y - 4], [x + 8, y - 18]], '#f2c79a', 3.5, 1, si + 0.6);
+        if (q % 3 === 0) {
+          g.beginPath();
+          g.arc(x + 12, y - 2, 6, 0, Math.PI * 2);
+          g.fill();
+        }
+      },
+      at: (f) => (f < 0.5 ? [x - 26 + 52 * (f / 0.5), y + 2 + Math.sin(f * 60) * 10] : f < 0.75 ? [x + 28 - 56 * ((f - 0.5) / 0.25), y - 16] : [x - 4, y - 8]),
     });
   }
   // the sky: orange and pink bands, the sun going down
+  mark('sky');
   for (let i = 0; i < 6; i++) {
     const y = 140 + i * 38;
     crayon([[110, y], [400, y + 6], [700, y - 4], [1060, y + 3]], ['#ffb24a', '#ff8a5c', '#ff6f91', '#f45d9c', '#c86fd6', '#9b7be0'][i], 26, 2);
   }
+  mark('sun');
   scribbleFill(860, 300, 70, '#ffd23f', 8);
   crayon(Array.from({ length: 26 }, (_, i) => [860 + Math.cos((i / 25) * Math.PI * 2) * 70, 300 + Math.sin((i / 25) * Math.PI * 2) * 70]), '#f4a21c', 6);
   // the sea
+  mark('sea');
   for (let i = 0; i < 5; i++) {
     const y = 600 + i * 34;
     crayon([[100, y], [300, y + 8], [500, y - 6], [760, y + 6], [1080, y]], i % 2 ? '#3fa7d6' : '#2a7fc0', 18, 2);
   }
   // the pier
+  mark('pier');
   crayon([[100, 600], [1080, 600]], '#8a5a3c', 14);
   for (let x = 140; x < 1080; x += 70) crayon([[x, 600], [x + 4, 690]], '#7a4a2c', 7);
-  // her name, and a heart
-  steps.push(() => {
-    g.fillStyle = '#7a4ad0';
-    g.font = '700 46px "Caveat", "Permanent Marker", cursive';
-    g.fillText('Lily ♥', 870, 770);
-    g.font = '600 30px "Caveat", cursive';
-    g.fillStyle = '#c0406a';
-    g.fillText('the big wheel!!', 130, 95);
+  // her name, and a heart (written letter by letter: shown as far as her pencil has got along it)
+  mark('name');
+  steps.push({
+    w: 520,
+    col: '#7a4ad0',
+    draw: (f) => {
+      g.save();
+      g.beginPath();
+      g.rect(860, 720, 260 * Math.min(1, f / 0.6), 70);
+      g.rect(120, 60, 320 * Math.max(0, (f - 0.6) / 0.4), 50);
+      g.clip();
+      g.fillStyle = '#7a4ad0';
+      g.font = '700 46px "Caveat", "Permanent Marker", cursive';
+      g.fillText('Lily ♥', 870, 770);
+      g.font = '600 30px "Caveat", cursive';
+      g.fillStyle = '#c0406a';
+      g.fillText('the big wheel!!', 130, 95);
+      g.restore();
+    },
+    at: (f) => (f < 0.6 ? [870 + 190 * (f / 0.6), 760 + Math.sin(f * 50) * 12] : [130 + 300 * ((f - 0.6) / 0.4), 88 + Math.sin(f * 60) * 8]),
   });
-  const n = Math.round(Math.max(0, Math.min(1, k)) * steps.length);
-  for (let i = 0; i < n; i++) steps[i]();
+  // (her time over the page: each step its share of it, by how long it is to draw)
+  let tot = 0;
+  for (const s2 of steps) tot += s2.w;
+  if (!lilyDrawing.parts) {
+    const parts = { end: 1 };
+    for (const [name, si] of Object.entries(marks)) {
+      let a = 0;
+      for (let q = 0; q < si; q++) a += steps[q].w;
+      parts[name] = a / tot;
+    }
+    lilyDrawing.parts = parts;
+  }
+  let T = Math.max(0, Math.min(1, k)) * tot;
+  let i = 0;
+  for (; i < steps.length && T >= steps[i].w; i++) {
+    steps[i].draw(1);
+    T -= steps[i].w;
+  }
+  if (i < steps.length && T > 0) steps[i].draw(T / steps[i].w);
+  if (tip) {
+    const s2 = steps[Math.min(i, steps.length - 1)];
+    const f = i < steps.length ? T / s2.w : 1;
+    const p = s2.at(Math.max(0, Math.min(1, f)));
+    tip.u = p[0] / W;
+    tip.v = p[1] / H;
+    tip.col = s2.col;
+    tip.done = i >= steps.length;
+  }
   return c;
+}
+
+// (round 14) where on her page each part of it begins, as her time over it (lilyDrawing k): the
+// wheel's lines, the gondolas, the sky, the sun, the sea, the pier, her name - as the drawing itself
+// weighs its steps
+export function lilyParts() {
+  if (!lilyDrawing.parts) lilyDrawing(0);
+  return lilyDrawing.parts;
 }

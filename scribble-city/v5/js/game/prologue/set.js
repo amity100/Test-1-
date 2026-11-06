@@ -1218,6 +1218,13 @@ export class PrologueSet {
         K.box(M.matte, sx - 0.03, 0, -0.26, sx + 0.03, 0.9, -0.2, IRON);
         K.box(M.matte, sx - 0.03, 0.6, -0.24, sx + 0.03, 0.64, 0.14, IRON);
       }
+      // (round 14: her tin of coloured pencils, open on the seat at her right hand - what the drawing
+      // is drawn with: each of its colours)
+      K.box(M.metal, -0.53, 0.44, -0.1, -0.37, 0.458, 0.1, linC(0.2, 0.32, 0.62));
+      ['#e8457c', '#7a6ad8', '#5c6ad0', '#ffd23f', '#ff8a5c', '#f45d9c', '#3fa7d6', '#8a5a3c', '#5cc45a'].forEach((h, i) => {
+        const n = parseInt(h.slice(1), 16);
+        K.cyl(M.paint, 0.0065, 0.0065, -0.088, 0.088, linC(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255), { x: -0.515 + i * 0.0165, y: 0.466, segs: 6 });
+      });
       const grp = K.build({ seed: 0.31 });
       grp.matrixAutoUpdate = true;
       this.game.scene.add(grp);
@@ -1509,8 +1516,10 @@ export class PrologueSet {
       const turn = Math.sign(p.rub) !== Math.sign(e.lastRub || 0);
       e.lastRub = p.rub;
       if (turn) {
-        // (ROADMAP 18.9: loud enough to be heard over the evening as what it is)
-        g.audio.play('rub', 1.1 + Math.random() * 0.4);
+        // (ROADMAP 18.9: loud enough to be heard over the evening as what it is; round 14: under a
+        // stroke of the recorded rub, the director's - onRub)
+        g.audio.play('rub', 0.7 + Math.random() * 0.3);
+        if (this.onRub) this.onRub();
         e.rubs++;
       }
       if (this.root && g.fx) {
@@ -1613,6 +1622,14 @@ export class PrologueSet {
     this.platG = null;
     this.wheelGone = true;
     this.riders = [];
+    // (round 14: whoever waits for the moment it is gone - the director's flash and its sounds - on this
+    // very frame)
+    this.onRub = null;
+    if (this.onGone) {
+      const f = this.onGone;
+      this.onGone = null;
+      f();
+    }
     if (this.pencil) this.pencil.grp.visible = false;
     // (the eraser's mask and the pens that read it)
     if (this.eraseMask) {

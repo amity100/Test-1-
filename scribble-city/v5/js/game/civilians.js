@@ -2711,6 +2711,12 @@ export class Civilians {
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
       if (c.inside) continue;
+      // (round 14: left out of a film's picture - game/prologue/director.js filmHide: the culling below
+      // set every figure's visibility anew each frame, and a figure hidden by the film was drawn anyway)
+      if (c.fig.filmHide) {
+        c.fig.setVisible(false);
+        continue;
+      }
       const dx = c.pos.x - camPos.x;
       const dz = c.pos.z - camPos.z;
       const d = Math.hypot(dx, dz);

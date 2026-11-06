@@ -1431,6 +1431,10 @@ export class Game {
     // the performance test route drives the camera (and the city's life follows it)
     if (this.perf.bench) this.perf.benchCamera(dt);
     this.camera.updateMatrixWorld();
+    // (round 14: the film's look and its comic sheet from the camera of this frame, not the last -
+    // game/prologue/director.js lateFrame; a cut's first frame had the rub marks of the shot before
+    // over it, and the game's look in it for a moment)
+    if (dt > 0 && this.prologue && this.prologue.lateFrame) this.prologue.lateFrame();
     // (the ink on its way onto the car, where the camera now sees it: game/partpen.js)
     if (this.fuse) this.fuse.pen.late();
     // (the camera under the bay: the world down there, ROADMAP 5.2)
@@ -1452,8 +1456,12 @@ export class Game {
       this.weapons.updateModels();
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
-      this.farCrowd.draw(this.camera.position);
-      this.shopCrowd.draw(this.camera.position);
+      // (round 14: in a film's moment of feeling - its colour round one of them - nobody of the
+      // city's own in the picture with them: game/prologue/director.js lateFrame, extrasOff)
+      if (!this.extrasOff) {
+        this.farCrowd.draw(this.camera.position);
+        this.shopCrowd.draw(this.camera.position);
+      }
       if (this.festival) this.festival.draw(fr);
       if (this.prolSet) this.prolSet.draw(fr);
       if (this.artnight) this.artnight.draw(fr);
@@ -1461,11 +1469,13 @@ export class Game {
       if (this.casino) this.casino.draw(fr);
       if (this.parties) this.parties.draw(fr);
       if (this.arenaGame) this.arenaGame.draw();
-      this.streetlife.draw(fr);
-      this.mallLife.draw(fr);
-      this.workers.draw(fr);
-      this.events.draw(fr);
-      this.vignettes.draw(fr);
+      if (!this.extrasOff) {
+        this.streetlife.draw(fr);
+        this.mallLife.draw(fr);
+        this.workers.draw(fr);
+        this.events.draw(fr);
+        this.vignettes.draw(fr);
+      }
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
       this.fleet.draw(fr);
