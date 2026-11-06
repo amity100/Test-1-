@@ -1,6 +1,7 @@
 import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, BLUEPRINT_CARS, BLUEPRINT_TOOLS, drawBlueprint } from '../game/blueprints.js';
 import { GRADE } from '../game/weapons.js';
 import { AVES, STREETS, nearestRoadInfo, districtName } from '../world/layout.js';
+import { EARLY_IDS } from '../game/drawlock.js';
 
 const KEY = 'scribble-city-v5-album';
 
@@ -53,6 +54,9 @@ export class Album {
     this.items = new Map(); // id -> { best }
     // (the settings' "every blueprint open", ROADMAP 9.1: game/game.js)
     this.allOpen = ALL_OPEN;
+    // (round 15, game/drawlock.js) a new player's short list till the jump off the roof: the ids
+    // drawn by hand so far, or null - not now
+    this.early = null;
     this.el = document.getElementById('album');
     this.list = document.getElementById('album-list');
     document.getElementById('album-close').addEventListener('click', () => this.hide());
@@ -81,21 +85,34 @@ export class Album {
   }
 
   has(id) {
+    if (this.early) return EARLY_IDS.includes(id);
     return this.allOpen ? !!BLUEPRINTS[id] : this.items.has(id);
   }
 
-  // (ROADMAP 15.2) known: learned - drawn once by hand, from its picture (or the start's kit), or
-  // everything open. A known thing is made with a touch, no drawing (ui/freedraw.js quick)
+  // (ROADMAP 15.2) known: learned - drawn once by hand, from its picture (or the start's kit). A known
+  // thing is made with a touch, no drawing (ui/freedraw.js quick). (round 15: everything open is open
+  // to be drawn - nothing is known before it has been drawn)
   known(id) {
     if (!BLUEPRINTS[id]) return false;
-    if (this.allOpen) return true;
+    if (this.early) return this.early.has(id);
     const it = this.items.get(id);
     return !!(it && it.best !== null);
   }
 
   // found, and not learned yet: its first time is drawn by hand, over its lines (the learning)
   toLearn(id) {
-    return !this.allOpen && this.items.has(id) && !this.known(id);
+    return !this.game.classic && this.has(id) && !this.known(id);
+  }
+
+  // (round 15) the short list, on (a new game's prologue, till the jump off the roof) or off
+  setEarly(on) {
+    if (!!on === !!this.early) return;
+    this.early = on && !this.game.classic ? new Set() : null;
+    const F = this.game.freedraw;
+    if (F) {
+      F.legSig = '';
+      F.showLegend();
+    }
   }
 
   // (ROADMAP 9.1, not with ?classic: all open, or found one by one)
@@ -160,6 +177,7 @@ export class Album {
   }
 
   recordGrade(id, score) {
+    if (this.early && EARLY_IDS.includes(id)) this.early.add(id);
     let it = this.items.get(id);
     if (!it) {
       if (!this.allOpen) return;
@@ -176,6 +194,7 @@ export class Album {
   }
 
   get size() {
+    if (this.early) return EARLY_IDS.length;
     return this.allOpen ? this.order.length : this.items.size;
   }
 

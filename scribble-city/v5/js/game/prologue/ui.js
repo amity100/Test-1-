@@ -18,6 +18,7 @@ const CSS = `
 #pl-root:not(.film) #pl-subs { bottom: 18vh; }
 #pl-obj { position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%) translateY(10px); opacity: 0; transition: opacity 0.6s, transform 0.6s; text-align: center; direction: ltr; }
 #pl-obj.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+body.fd-open #pl-obj { opacity: 0; }
 #pl-obj .t { color: #fff; font-size: clamp(17px, 2.2vw, 26px); font-weight: 700; letter-spacing: 0.02em; text-shadow: 0 2px 4px #000, 0 0 12px rgba(0,0,0,0.8); }
 #pl-obj .t b { color: #ffd23f; font-weight: 800; }
 #pl-obj .u { margin: 6px auto 0; height: 3px; width: 0; background: linear-gradient(90deg, transparent, #ffd23f, transparent); transition: width 0.9s 0.15s; }
@@ -258,11 +259,11 @@ export class PrologueUI {
       const lines = (o.lines || []).map(([k, w]) => `<li><span class="k">${keys(k)}</span><span>${w}</span></li>`).join('');
       this.hintEl.classList.add('card', 'how');
       this.hint(`<span class="tag">${tag}</span><b class="t">${o.title}</b>${o.say ? `<div class="say">${o.say}</div>` : ''}${lines ? `<ul>${lines}</ul>` : ''}${o.tip ? `<div class="tip">${o.tip}</div>` : ''}`);
-      // (round 9, the player's word: it covered the screen - big for a moment, then off to the side,
-      // small, its keys still there, the game playable round it)
-      this.dock(false);
+      // (round 9, the player's word: it covered the screen - big for a moment, then off to the side;
+      // round 15, the player's word again: big at all it was too much - at the side, small, from the
+      // start, its keys there, the game playable round it)
       clearTimeout(this.dockT);
-      this.dockT = setTimeout(() => this.dock(true), o.big !== undefined ? o.big * 1000 : 2800);
+      this.dock(true);
       return;
     }
     clearTimeout(this.dockT);
@@ -307,146 +308,283 @@ export class PrologueUI {
 // (ROADMAP 18.9) and drawn a little at a time: k of it (0 the page alone .. 1 all of it), into
 // canvas (a new one if none) - the same strokes in the same order, so that a page drawn at k and
 // then at more is the same page with more on it
-export function lilyDrawing(k = 1, canvas = null) {
-  const W = 1100;
-  const H = 820;
-  const c = canvas || document.createElement('canvas');
-  c.width = W;
-  c.height = H;
-  const g = c.getContext('2d');
-  let seed = 5;
-  const rnd = () => {
-    seed = (seed * 16807) % 2147483647;
-    return (seed % 10000) / 10000;
+// (round 15, the player's word: her drawing seen being made, its colours seen going on - not a
+// drawing that is there all at once) Her page in two goes: first the shapes in pencil, while Danny is
+// away (the wheel, its spokes and gondolas, the sun, the pier and the sea's line); then, when he is
+// back, the colouring - big parts of it, each filled with a crayon's dense scribble that spreads over
+// the white under her pencil of that colour: the sky in three bands (purple, pink, orange), the sun
+// yellow, the sea in two blues, the gondolas each its own colour, the wheel's rim pink, and her name.
+// k: how far (0..1); tip (if given): where her pencil is now (u across, v down), its colour, done
+const LW = 1100;
+const LH = 820;
+const CHAR = '#3a3448';
+let LSTEPS = null;
+// a seeded random of its own for each stroke, so that it is drawn the same every time
+const rndOf = (seed) => {
+  let s = (seed * 7919 + 13) % 2147483647 || 1;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s % 10000) / 10000;
   };
-  // the page: cream, ruled lines, the spiral's holes at the top
-  g.fillStyle = '#fbf6e8';
-  g.fillRect(0, 0, W, H);
-  g.strokeStyle = 'rgba(80,130,200,0.22)';
-  g.lineWidth = 2;
-  for (let y = 120; y < H; y += 42) {
+};
+const plen = (pts) => {
+  let l = 0;
+  for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  return l;
+};
+// the first f of a line of points (and where it ends)
+const partOf = (pts, f) => {
+  if (f >= 1) return { pts, end: pts[pts.length - 1] };
+  const L = plen(pts) * f;
+  const out = [pts[0]];
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    if (acc + d >= L) {
+      const u = d ? (L - acc) / d : 0;
+      const e = [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u];
+      out.push(e);
+      return { pts: out, end: e };
+    }
+    acc += d;
+    out.push(pts[i]);
+  }
+  return { pts: out, end: pts[pts.length - 1] };
+};
+const stroke = (g, pts, col, w, alpha, rnd, passes = 2) => {
+  if (pts.length < 2) return;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  for (let p = 0; p < passes; p++) {
+    g.strokeStyle = col;
+    g.globalAlpha = p ? alpha * 0.55 : alpha;
+    g.lineWidth = w * (p ? 0.7 : 1);
     g.beginPath();
-    g.moveTo(0, y);
-    g.lineTo(W, y);
+    pts.forEach(([x, y], i) => {
+      const jx = x + (rnd() - 0.5) * 3;
+      const jy = y + (rnd() - 0.5) * 3;
+      if (i) g.lineTo(jx, jy);
+      else g.moveTo(jx, jy);
+    });
     g.stroke();
   }
-  g.strokeStyle = 'rgba(220,80,90,0.3)';
-  g.beginPath();
-  g.moveTo(90, 0);
-  g.lineTo(90, H);
-  g.stroke();
-  for (let x = 40; x < W; x += 60) {
-    g.fillStyle = '#d8d0bc';
-    g.beginPath();
-    g.arc(x, 22, 9, 0, Math.PI * 2);
-    g.fill();
+  g.globalAlpha = 1;
+};
+const ring = (cx, cy, r, n = 40) => Array.from({ length: n + 1 }, (_, i) => [cx + Math.cos((i / n) * Math.PI * 2) * r, cy + Math.sin((i / n) * Math.PI * 2) * r]);
+// a crayon's scribble over a part of the page: back and forth, a little slanted, row under row
+const zig = (x0, x1, y0, y1, step, slant, rnd) => {
+  const pts = [];
+  let left = true;
+  for (let y = y0; y <= y1 + 0.1; y += step) {
+    const yy = Math.min(y1, y);
+    if (left) pts.push([x0 + rnd() * 10, yy + rnd() * 4], [x1 - rnd() * 10, yy + slant + rnd() * 4]);
+    else pts.push([x1 - rnd() * 10, yy + slant + rnd() * 4], [x0 + rnd() * 10, yy + rnd() * 4]);
+    left = !left;
   }
-  // (each stroke of hers a step; only the first k of them drawn)
-  const steps = [];
-  const crayonNow = (pts, col, w = 7, passes = 3) => {
-    for (let p = 0; p < passes; p++) {
-      g.strokeStyle = col;
-      g.globalAlpha = p ? 0.45 : 0.85;
-      g.lineWidth = w * (p ? 0.7 : 1);
-      g.lineCap = 'round';
-      g.lineJoin = 'round';
-      g.beginPath();
-      pts.forEach(([x, y], i) => {
-        const jx = x + (rnd() - 0.5) * 3.5;
-        const jy = y + (rnd() - 0.5) * 3.5;
-        if (i) g.lineTo(jx, jy);
-        else g.moveTo(jx, jy);
-      });
-      g.stroke();
-    }
-    g.globalAlpha = 1;
-  };
-  // a crayon stroke: wobbly, waxy, a few passes
-  const crayon = (pts, col, w = 7, passes = 3) => steps.push(() => crayonNow(pts, col, w, passes));
-  const scribbleFill = (cx, cy, r, col, w = 5) =>
-    steps.push(() => {
-      g.save();
-      g.beginPath();
-      g.arc(cx, cy, r, 0, Math.PI * 2);
-      g.clip();
-      g.strokeStyle = col;
-      g.globalAlpha = 0.6;
-      g.lineWidth = w;
-      for (let i = -r * 2; i < r * 2; i += w * 1.3) {
-        g.beginPath();
-        g.moveTo(cx - r, cy + i);
-        g.lineTo(cx + r, cy + i - r);
-        g.stroke();
-      }
-      g.restore();
-      g.globalAlpha = 1;
-    });
-  // the wheel first (what she looks at), then its gondolas and who is in them, then the sky, the
-  // sea and the pier round it, and last her name
+  return pts;
+};
+function lilySteps() {
+  if (LSTEPS) return LSTEPS;
+  const S = [];
   const cx = 480;
   const cy = 360;
   const R = 220;
-  crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * R, cy + Math.sin((i / 40) * Math.PI * 2) * R]), '#e8457c', 9);
-  crayon(Array.from({ length: 41 }, (_, i) => [cx + Math.cos((i / 40) * Math.PI * 2) * (R - 18), cy + Math.sin((i / 40) * Math.PI * 2) * (R - 18)]), '#7a6ad8', 5, 2);
+  // ---- the pencil: the shapes
+  const line = (name, pts, w = 4.5) => {
+    const seed = S.length + 1;
+    S.push({ name, kind: 'line', col: CHAR, w: plen(pts) * 0.6, pts, draw: (g, f) => {
+      const q = partOf(pts, f);
+      stroke(g, q.pts, CHAR, w, 0.9, rndOf(seed), 1);
+      return q.end;
+    } });
+  };
+  line('rim', ring(cx, cy, R));
+  line('rim2', ring(cx, cy, R - 18), 3.5);
   for (let q = 0; q < 12; q++) {
     const a = (q / 12) * Math.PI * 2;
-    crayon([[cx, cy], [cx + Math.cos(a) * (R - 16), cy + Math.sin(a) * (R - 16)]], '#5c6ad0', 4, 2);
+    line('spoke', [[cx, cy], [cx + Math.cos(a) * (R - 16), cy + Math.sin(a) * (R - 16)]], 3);
   }
-  crayon([[cx - 10, cy], [cx - 150, 600]], '#6a6a7a', 10);
-  crayon([[cx + 10, cy], [cx + 150, 600]], '#6a6a7a', 10);
-  scribbleFill(cx, cy, 26, '#ffd23f', 6);
-  // the gondolas, each with somebody waving in it
-  const GC = ['#ff5a7a', '#3fc6c0', '#ffc53a', '#9b6ae0', '#5cc45a', '#ff8a3a'];
+  line('leg', [[cx - 10, cy], [cx - 150, 600]], 5);
+  line('leg', [[cx + 10, cy], [cx + 150, 600]], 5);
+  line('hub', ring(cx, cy, 26, 18), 4);
+  const GB = [];
   for (let q = 0; q < 12; q++) {
     const a = (q / 12) * Math.PI * 2 + 0.15;
     const x = cx + Math.cos(a) * R;
     const y = cy + Math.sin(a) * R + 26;
-    const col = GC[q % GC.length];
-    steps.push(() => {
-      g.fillStyle = col;
-      g.globalAlpha = 0.8;
-      g.fillRect(x - 26, y - 14, 52, 32);
-      g.globalAlpha = 1;
-      crayonNow([[x - 28, y - 16], [x + 28, y - 16], [x + 28, y + 18], [x - 28, y + 18], [x - 28, y - 16]], '#2a2440', 3.5, 1);
-      crayonNow([[x, y - 16], [x, y - 28]], '#2a2440', 3, 1);
-      // a little head, an arm up
-      g.fillStyle = '#f2c79a';
+    GB.push([x, y]);
+    line('gondola', [[x, y - 16], [x, y - 28], [x, y - 16], [x - 28, y - 16], [x + 28, y - 16], [x + 28, y + 18], [x - 28, y + 18], [x - 28, y - 16]], 3.5);
+  }
+  line('sun', ring(860, 300, 70, 30), 4);
+  line('pier', [[100, 600], [1080, 600]], 5);
+  for (let x = 140; x < 1080; x += 70) line('post', [[x, 600], [x + 4, 690]], 3.5);
+  const OUT = S.length;
+  // ---- the colours: each part scribbled over with its crayon, the white going under it
+  const fill = (name, col, clip, pts, w, alpha = 0.82) => {
+    const seed = S.length + 101;
+    S.push({ name, kind: 'fill', col, w: plen(pts), pts, draw: (g, f) => {
+      const q = partOf(pts, f);
+      g.save();
+      clip(g);
+      stroke(g, q.pts, col, w, alpha, rndOf(seed), 2);
+      g.restore();
+      return q.end;
+    } });
+  };
+  const skyClip = (y0, y1) => (g) => {
+    g.beginPath();
+    g.rect(96, y0, 988, y1 - y0);
+    g.clip();
+    // (round the wheel and the sun, as a child colours round what is drawn)
+    g.beginPath();
+    g.rect(0, 0, LW, LH);
+    g.moveTo(cx + R + 4, cy);
+    g.arc(cx, cy, R + 4, 0, Math.PI * 2, true);
+    g.moveTo(860 + 72, 300);
+    g.arc(860, 300, 72, 0, Math.PI * 2, true);
+    g.clip('evenodd');
+  };
+  const SKY = [['#9b7be0', 110, 268], ['#f45d9c', 268, 428], ['#ffb24a', 428, 596]];
+  SKY.forEach(([col, y0, y1], i) => fill('sky', col, skyClip(y0, y1), zig(100, 1080, y0 + 4, y1 - 4, 15, 9, rndOf(200 + i)), 15));
+  fill('sun', '#ffd23f', (g) => {
+    g.beginPath();
+    g.arc(860, 300, 68, 0, Math.PI * 2);
+    g.clip();
+  }, zig(790, 930, 232, 368, 11, 6, rndOf(300)), 13, 0.9);
+  fill('sea', '#3fa7d6', (g) => {
+    g.beginPath();
+    g.rect(96, 604, 988, 90);
+    g.clip();
+  }, zig(100, 1080, 608, 690, 14, 8, rndOf(310)), 14);
+  fill('sea', '#2a7fc0', (g) => {
+    g.beginPath();
+    g.rect(96, 694, 988, 100);
+    g.clip();
+  }, zig(100, 1080, 698, 790, 14, 8, rndOf(311)), 14);
+  const GC = ['#ff5a7a', '#3fc6c0', '#ffc53a', '#9b6ae0', '#5cc45a', '#ff8a3a'];
+  GB.forEach(([x, y], q) => fill('gondolas', GC[q % GC.length], (g) => {
+    g.beginPath();
+    g.rect(x - 27, y - 15, 54, 32);
+    g.clip();
+  }, zig(x - 30, x + 30, y - 14, y + 16, 7, 3, rndOf(400 + q)), 8, 0.9));
+  // the wheel's rim gone over in pink, thick
+  {
+    const pts = ring(cx, cy, R - 9, 48);
+    const seed = 500;
+    S.push({ name: 'rim', kind: 'fill', col: '#e8457c', w: plen(pts) * 0.5, pts, draw: (g, f) => {
+      const q = partOf(pts, f);
+      stroke(g, q.pts, '#e8457c', 12, 0.85, rndOf(seed), 2);
+      return q.end;
+    } });
+  }
+  // her name, and the words over it - as her pencil goes along them
+  const words = (name, text, font, col, x, y, wpx) => {
+    S.push({ name, kind: 'name', col, w: wpx * 1.4, pts: [[x, y], [x + wpx, y]], draw: (g, f) => {
+      g.save();
       g.beginPath();
-      g.arc(x - 6, y - 4, 8, 0, Math.PI * 2);
+      g.rect(x - 4, y - 70, wpx * f + 4, 100);
+      g.clip();
+      g.fillStyle = col;
+      g.font = font;
+      g.fillText(text, x, y);
+      g.restore();
+      return [x + wpx * f, y - 14];
+    } });
+  };
+  words('name', 'Lily ♥', '700 46px "Caveat", "Permanent Marker", cursive', '#7a4ad0', 870, 770, 150);
+  words('name', 'the big wheel!!', '600 30px "Caveat", cursive', '#c0406a', 130, 95, 190);
+  let tot = 0;
+  for (const st of S) tot += st.w;
+  let acc = 0;
+  for (const st of S) {
+    st.k0 = acc / tot;
+    acc += st.w;
+    st.k1 = acc / tot;
+  }
+  S.OUT = S[OUT].k0;
+  LSTEPS = S;
+  return S;
+}
+
+// (round 15) where the parts of it begin and end on its k: the shapes (outline) and each colour
+export function lilyParts() {
+  const S = lilySteps();
+  const at = (name) => {
+    const q = S.filter((s) => s.name === name && s.kind !== 'line');
+    return q.length ? [q[0].k0, q[q.length - 1].k1] : [1, 1];
+  };
+  return { outline: S.OUT, sky: at('sky'), sun: at('sun'), sea: at('sea'), gondolas: at('gondolas'), rim: at('rim'), name: at('name') };
+}
+
+const LCACHE = new WeakMap();
+export function lilyDrawing(k = 1, canvas = null, tip = null) {
+  const W = LW;
+  const H = LH;
+  const c = canvas || document.createElement('canvas');
+  if (c.width !== W) c.width = W;
+  if (c.height !== H) c.height = H;
+  const S = lilySteps();
+  k = Math.max(0, Math.min(1, k));
+  // (what is finished kept on a sheet of its own: only what is going on now drawn anew)
+  let C = LCACHE.get(c);
+  const n = S.filter((s) => s.k1 <= k + 1e-9).length;
+  if (!C || C.n > n) {
+    const done = document.createElement('canvas');
+    done.width = W;
+    done.height = H;
+    const g = done.getContext('2d');
+    // the page: cream, ruled lines, the spiral's holes at the top
+    g.fillStyle = '#fbf6e8';
+    g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(80,130,200,0.22)';
+    g.lineWidth = 2;
+    for (let y = 120; y < H; y += 42) {
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(W, y);
+      g.stroke();
+    }
+    g.strokeStyle = 'rgba(220,80,90,0.3)';
+    g.beginPath();
+    g.moveTo(90, 0);
+    g.lineTo(90, H);
+    g.stroke();
+    for (let x = 40; x < W; x += 60) {
+      g.fillStyle = '#d8d0bc';
+      g.beginPath();
+      g.arc(x, 22, 9, 0, Math.PI * 2);
       g.fill();
-      crayonNow([[x - 6, y - 4], [x + 8, y - 18]], '#f2c79a', 3.5, 1);
-      if (q % 3 === 0) {
-        g.beginPath();
-        g.arc(x + 12, y - 2, 6, 0, Math.PI * 2);
-        g.fill();
-      }
-    });
+    }
+    C = { done, n: 0 };
+    LCACHE.set(c, C);
   }
-  // the sky: orange and pink bands, the sun going down
-  for (let i = 0; i < 6; i++) {
-    const y = 140 + i * 38;
-    crayon([[110, y], [400, y + 6], [700, y - 4], [1060, y + 3]], ['#ffb24a', '#ff8a5c', '#ff6f91', '#f45d9c', '#c86fd6', '#9b7be0'][i], 26, 2);
+  const gd = C.done.getContext('2d');
+  // (the colours under the pencil's shapes: drawn over them, the pencil gone over again at the end -
+  // as on paper, the crayon over the lines and the lines still seen through it)
+  while (C.n < n) {
+    S[C.n].draw(gd, 1);
+    C.n++;
+    if (C.n === S.length) for (const st of S) if (st.kind === 'line') st.draw(gd, 1);
   }
-  scribbleFill(860, 300, 70, '#ffd23f', 8);
-  crayon(Array.from({ length: 26 }, (_, i) => [860 + Math.cos((i / 25) * Math.PI * 2) * 70, 300 + Math.sin((i / 25) * Math.PI * 2) * 70]), '#f4a21c', 6);
-  // the sea
-  for (let i = 0; i < 5; i++) {
-    const y = 600 + i * 34;
-    crayon([[100, y], [300, y + 8], [500, y - 6], [760, y + 6], [1080, y]], i % 2 ? '#3fa7d6' : '#2a7fc0', 18, 2);
+  const g = c.getContext('2d');
+  g.globalAlpha = 1;
+  g.drawImage(C.done, 0, 0);
+  let end = null;
+  let col = S[Math.min(S.length - 1, n)].col;
+  if (n < S.length) {
+    const st = S[n];
+    const f = (k - st.k0) / Math.max(1e-9, st.k1 - st.k0);
+    if (f > 0) end = st.draw(g, Math.min(1, f));
+    else end = st.pts[0];
+    col = st.col;
   }
-  // the pier
-  crayon([[100, 600], [1080, 600]], '#8a5a3c', 14);
-  for (let x = 140; x < 1080; x += 70) crayon([[x, 600], [x + 4, 690]], '#7a4a2c', 7);
-  // her name, and a heart
-  steps.push(() => {
-    g.fillStyle = '#7a4ad0';
-    g.font = '700 46px "Caveat", "Permanent Marker", cursive';
-    g.fillText('Lily ♥', 870, 770);
-    g.font = '600 30px "Caveat", cursive';
-    g.fillStyle = '#c0406a';
-    g.fillText('the big wheel!!', 130, 95);
-  });
-  const n = Math.round(Math.max(0, Math.min(1, k)) * steps.length);
-  for (let i = 0; i < n; i++) steps[i]();
+  if (tip) {
+    if (end) {
+      tip.u = end[0] / W;
+      tip.v = end[1] / H;
+    }
+    tip.col = col;
+    tip.done = k >= 1;
+  }
   return c;
 }

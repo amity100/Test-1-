@@ -35,7 +35,7 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp, smoothstep } from '../core/util.js';
+import { clamp, smoothstep, dampAngle } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -1219,6 +1219,8 @@ export class Game {
     }
     if (dt > 0) {
       player.update(dt, input, this.camRig, this.weapons);
+      // (round 15: getting into a car, GTA's way - his feet and hands the sequence's: tickEntry)
+      if (this.entry) this.tickEntry(dt);
       this.chute.update(dt);
       this.vehicles.update(dt);
       if (!this.classic && player.mode === 'vehicle') player.seatIn(dt);
@@ -1752,6 +1754,11 @@ export class Game {
       this.hud.toast('צריך לצאת מהרכב כדי לצייר', 'info');
       return;
     }
+    // (round 15, game/drawlock.js: a new player's short list is the pen's own - drawn in the air)
+    if (this.album.early && this.freedraw && !this.classic) {
+      this.freedraw.show();
+      return;
+    }
     if (p.mode !== 'foot') return;
     if (this.album.size === 0) {
       this.hud.toast(this.touch ? 'האלבום ריק — קודם מצלמים שלט עם שרטוט (כפתור המצלמה ליד שלט)' : 'האלבום ריק — קודם מצלמים שלט עם שרטוט (F)', 'info', 3);
@@ -1948,8 +1955,132 @@ export class Game {
       return;
     }
     if (t.kind === 'vehicle') this.enterVehicle(t.target);
-    else if (t.kind === 'carjack') this.carjack(t.target);
-    else this.stealParked(t.target);
+    // (round 15, the player's word: into a car as GTA has it - beginEntry)
+    else if (t.kind === 'carjack') {
+      if (Math.abs(t.target.speed) > 7.5) this.hud.toast('המכונית נוסעת מהר מדי — עמדו מולה כדי שתעצור', 'info', 2.2);
+      else this.beginEntry('carjack', t.target);
+    } else this.beginEntry('parked', t.target);
+  }
+
+  // (round 15, the player's word) into a car as GTA has it: to its driver's door; a parked one's window
+  // smashed with the fist and the door opened from inside; one with somebody at the wheel, its door
+  // pulled open and the driver dragged out onto the road; in - and a second or so later, away. The car
+  // stands still from the start (out of the traffic: game/traffic.js take)
+  beginEntry(kind, c) {
+    const p = this.player;
+    if (this.entry || p.mode !== 'foot' || p.inVehicle) return;
+    const t = this.traffic.take(c);
+    const v = this.vehicles.spawnStock(t.spec, t.pos, t.yaw);
+    if (t.dmg && !this.classic) {
+      v.dmg = t.dmg;
+      this.damage.cars.add(v);
+    }
+    v.speed = 0;
+    const fx = Math.sin(t.yaw);
+    const fz = Math.cos(t.yaw);
+    // (its left, the driver's side: (fz, -fx))
+    const lx = fz;
+    const lz = -fx;
+    const sx = t.pos.x + fx * DRIVER_SEAT.u;
+    const sz = t.pos.z + fz * DRIVER_SEAT.u;
+    const quiet = kind === 'parked' && this.gadgets ? this.gadgets.useKey() : false;
+    this.entry = { kind, v, t, fx, fz, lx, lz, sx, sz, door: { x: sx + lx * 1.05, z: sz + lz * 1.05 }, from: p.pos.clone(), time: 0, quiet, hit: false, out: false, driver: null };
+  }
+
+  tickEntry(dt) {
+    const E = this.entry;
+    if (!E) return;
+    const p = this.player;
+    const f = p.fig;
+    E.time += dt;
+    const t = E.time;
+    const v = E.v;
+    // (to the door, facing the car)
+    const k = Math.min(1, t / 0.35);
+    const e = k * k * (3 - 2 * k);
+    p.pos.x = E.from.x + (E.door.x - E.from.x) * e;
+    p.pos.z = E.from.z + (E.door.z - E.from.z) * e;
+    p.vel.set(0, 0, 0);
+    p.yaw = Math.atan2(-E.lx, -E.lz);
+    f.yaw = p.yaw;
+    f.speed = k < 1 ? 2.2 : 0;
+    // (the camera round behind him along the car's side: the window, the door and whoever comes out of
+    // it in the picture - not the back of his head)
+    this.camRig.yaw = dampAngle(this.camRig.yaw, Math.atan2(E.fx, E.fz), 6, dt);
+    const vy = v.pos.y || 0;
+    const win = this._entW || (this._entW = new THREE.Vector3());
+    win.set(E.sx + E.lx * 0.86, vy + 1.18, E.sz + E.lz * 0.86);
+    let done = false;
+    if (E.kind === 'parked' && !E.quiet) {
+      // the fist through the window
+      f.punchSide = 1;
+      f.punch = t > 0.4 && t < 1.0 ? (t - 0.4) / 0.6 : -1;
+      if (!E.hit && t > 0.6) {
+        E.hit = true;
+        this.audio.play('punch', 0.8);
+        this.audio.play('glass', 0.9);
+        const fxs = this.fx;
+        if (fxs && fxs.particles) {
+          for (let i = 0; i < 46; i++) {
+            if (fxs.particles.length > 420) fxs.particles.shift();
+            const r = Math.random();
+            fxs.particles.push({ x: win.x + (Math.random() - 0.5) * 0.5, y: win.y + (Math.random() - 0.5) * 0.35, z: win.z + (Math.random() - 0.5) * 0.5, vx: -E.lx * (0.5 + Math.random() * 2) + (Math.random() - 0.5) * 1.6, vy: Math.random() * 1.6, vz: -E.lz * (0.5 + Math.random() * 2) + (Math.random() - 0.5) * 1.6, life: 0.6 + Math.random() * 0.6, t: 0, len: 0.06 + Math.random() * 0.1, color: r < 0.4 ? [0.85, 0.95, 1] : r < 0.7 ? [0.6, 0.8, 0.9] : [1, 1, 1], seed: Math.random() * 50, spin: Math.random() * 12 });
+          }
+          if (fxs.sprite) fxs.sprite('fx_impact', win.x, win.y, win.z, { size: 0.9, grow: 0.8, life: 0.2 });
+        }
+        if (Math.random() < 0.45) {
+          this.audio.play('alarm', 0.7);
+          this.hud.toast('אזעקה! מישהו בטח שמע…', 'bad', 1.8);
+          this.enemies.noise(v.pos, 35, 'alarm');
+        }
+      }
+      // (a hand in through it to the door's catch)
+      if (t > 1.0) f.reachR = win;
+      done = t > 1.45;
+    } else if (E.kind === 'carjack') {
+      const d = E.t.driver;
+      // the door pulled open, a hand on it - and him out of the seat by his collar
+      if (t > 0.35) f.reachL = win;
+      if (t > 0.5 && !E.driver && d) {
+        if (d.fig) d.fig.dispose();
+        E.driver = this.civilians.spawnAt(E.sx + E.lx * 0.45, E.sz + E.lz * 0.45, d.look);
+        if (E.driver) E.driver.yaw = Math.atan2(E.lx, E.lz);
+      }
+      const c = E.driver;
+      if (c && !E.out) {
+        const u = Math.min(1, Math.max(0, (t - 0.5) / 0.5));
+        c.pos.x = E.sx + E.lx * (0.45 + 1.4 * u) + E.fx * 0.4 * u;
+        c.pos.z = E.sz + E.lz * (0.45 + 1.4 * u) + E.fz * 0.4 * u;
+        c.vel.set(0, 0, 0);
+        if (c.fig && c.fig.j && c.fig.j.neck) f.reachR = c.fig.j.neck;
+        if (u >= 1) {
+          // (flung down onto the road)
+          E.out = true;
+          f.reachR = null;
+          this.audio.play('punch', 0.7);
+          if (this.civilians.struck) this.civilians.struck(c, { dmg: 0, push: 3.2, down: true }, new THREE.Vector3(E.lx, 0, E.lz), 1);
+          const lines = ['Hey!! My car!', 'Help! Thief!', 'Okay, okay!', 'Take it! Take it!'];
+          if (this.bubbles) this.bubbles.say(c, lines[Math.floor(Math.random() * lines.length)], 'alarm');
+        }
+      }
+      done = t > 1.5 || (!d && t > 0.9);
+    } else done = t > 0.7;
+    if (!done) return;
+    f.reachR = null;
+    f.reachL = null;
+    f.punch = -1;
+    this.entry = null;
+    this.enterVehicle(v);
+    // (a second or so to start it before it can go)
+    v.holdT = 1.1;
+    this.audio.play('roar', 0.8);
+    if (E.kind === 'carjack') {
+      if (E.t.police) this.onCrime('copcar', E.t.pos.x, E.t.pos.z);
+      else this.onCrime('carjack', E.t.pos.x, E.t.pos.z);
+    } else {
+      if (E.quiet) this.hud.toast('המפתח נכנס, הדלת נפתחת. אף אחד לא חושד', 'good', 2);
+      if (this.onCrime) this.onCrime(E.t.spec && E.t.spec.police && !this.classic ? 'copcar' : E.quiet ? 'quietSteal' : 'steal', E.t.pos.x, E.t.pos.z);
+    }
   }
 
   // pull the driver out of a car in traffic and drive off with it

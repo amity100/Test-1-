@@ -43,7 +43,7 @@ export class Inventions {
   // kept under a name - a name it already has: a new version of it, the old ones kept
   store(name, v) {
     const c = this.capture(v);
-    if (!c.parts.length) return { why: 'עוד אין עליה חלקים מצוירים — ציירו כנפיים, טורבו, רוטור...' };
+    if (!c.parts.length) return { why: 'עוד אין עליה חלקים מצוירים — ציירו טורבו, גלגלי שטח, שריון...' };
     name = String(name || '').trim().slice(0, 28) || 'המצאה';
     let o = this.list.find((x) => x.name === name);
     if (o) {

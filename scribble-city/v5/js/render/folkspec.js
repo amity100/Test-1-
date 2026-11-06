@@ -652,6 +652,9 @@ export const LILY = {
   // (round 10, the player's word: this face - the one she had before she was made rounder and became
   // a doll - only her mouth opening a little less wide when she talks or is startled: render/portrait.js)
   jawK: 0.78, lipK: 0.65,
+  // (round 15, the player's word: her mouth hardly moved as she talked - her words' own mouth half as
+  // big again, the jaw's cut above taken back for them: render/people.js talkK)
+  talkK: 1.75,
   // (round 13, the player's word again - her eyes frightening in some of the talk, her mouth twisted:
   // startled, her lids lifted and her lips stretched at a third of a man's; her brows' climb and knit
   // at a little over half; the iris a little bigger in a little less open eye - render/portrait.js;

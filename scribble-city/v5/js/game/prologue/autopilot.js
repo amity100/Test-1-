@@ -4,6 +4,7 @@
 // questions, the car park's climb, the ramp drawn, the jump, the way down, the beach - it plays
 // them, a cut here and there where the way is long; where the film holds the keys, it waits.
 import { PARK } from './carpark.js';
+import { BLUEPRINTS } from '../blueprints.js';
 
 const LILY_SEAT = { x: 40.2, z: 233.0 };
 const VIEW = { x: 63.5, z: 238.9 };
@@ -237,8 +238,10 @@ export class Autopilot {
     }
     if (n === 3) {
       const m = P.cast.mark;
-      if (/Follow/.test(o) && m && m.alive) {
-        this.walkTo(m.pos.x, m.pos.z, true, 2.5);
+      // (round 15: looking for him - running along the pier the way he went, after him while he is there)
+      if (/Look for him/.test(o)) {
+        if (m && m.alive) this.walkTo(m.pos.x, m.pos.z, true, 2.5);
+        else this.walkTo(pl.pos.x + 6, pl.pos.z, true, 1);
         return;
       }
       if (/Go back to/.test(o) && L) {
@@ -316,7 +319,7 @@ export class Autopilot {
 
   tour(o, pl, c) {
     const g = this.g;
-    if (/Explore/.test(o)) {
+    if (/Explore|Walk around/.test(o)) {
       this.set(0, 1, false);
       return;
     }
@@ -349,7 +352,7 @@ export class Autopilot {
       } else this.set(0, 1);
       return;
     }
-    if (/Take a/.test(o)) {
+    if (/Take a|Break into/.test(o)) {
       this.once('car', () => {
         let best = null;
         let bd = 1e9;
@@ -378,12 +381,33 @@ export class Autopilot {
       this.set(0, 0.8);
       return;
     }
-    if (/Draw/.test(o)) {
+    if (/Draw|draw<\/b> a weapon/.test(o)) {
       this.set(0, 0.2);
+      // (out of the car first: the list is the pen's on foot)
+      if (pl.inVehicle) {
+        const s = this.since('penout');
+        if (s < 0 || s > 1.2) {
+          this.did.penout = this.g.time;
+          this.press('KeyE');
+        }
+        return;
+      }
+      // (round 15: one of the short list picked, and drawn as a player would - its own lines)
       this.once('pen', () => {
-        if (g.freedraw) g.freedraw.show();
+        if (g.freedraw) g.freedraw.learn('paint');
       });
-      if (this.since('pen') > 3.2) {
+      if (this.since('pen') > 1.6) {
+        this.once('pendraw', () => {
+          const F = g.freedraw;
+          if (!F || !F.isOpen || !BLUEPRINTS.paint) return;
+          F.inkBp(BLUEPRINTS.paint);
+          F.bake();
+          F.read();
+          F.render();
+          F.make();
+        });
+      }
+      if (this.since('pen') > 5) {
         this.once('penshut', () => {
           if (g.freedraw) g.freedraw.close();
         });

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PrologueUI, lilyDrawing } from './ui.js';
+import { PrologueUI, lilyDrawing, lilyParts } from './ui.js';
 import { PrologueVoices } from './voice.js';
 import { Shots } from './shots.js';
 import { LINES } from './lines.js';
@@ -151,6 +151,12 @@ export class Prologue {
     // (ROADMAP 18.9: everything the pen can make open while it is told - a helicopter, wings, a turbo
     // on the car, every weapon - whatever the settings say: the game's own again after, finish)
     if (g.setAllOpen) g.setAllOpen(true);
+    // (round 15, game/drawlock.js: a new player's short list - a few weapons, a few rides, each drawn
+    // by hand before it is theirs - till the jump off the roof; not for a scene from the jump on)
+    {
+      const sN = /^s(\d)$/.exec(this.param || '');
+      if (g.album && g.album.setEarly) g.album.setEarly(!(sN && +sN[1] >= 8));
+    }
     const lang = g.params.get('subs') === 'en' ? 'en' : 'he';
     this.ui = new PrologueUI(lang);
     this.voices = new PrologueVoices(g, this.ui);
@@ -1443,35 +1449,17 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     let t = 0;
-    // 1. walk, look round
-    this.objective('<b>Explore</b> the city');
-    this.howto('explore');
+    // (round 15, the player's word: no how-to cards over the screen, no steps to follow - only: walk
+    // round the city and look at it; and then: break into a car and take it)
+    // 1. walk round, look at it
+    this.objective('Walk around the <b>city</b> - take a look at it');
     const p0 = P.pos.clone();
     yield () => {
       t += this.dtR;
-      return t > 14 || (t > 4 && P.pos.distanceTo(p0) > 16);
+      return t > 24 || (t > 9 && P.pos.distanceTo(p0) > 30);
     };
-    this.howto(null);
     yield 0.6;
-    // 2. a shop: in through its door
-    if (!P.inVehicle) {
-      this.objective('Walk into a <b>shop</b>');
-      this.howto('shop');
-      t = 0;
-      let inside = false;
-      yield () => {
-        t += this.dtR;
-        if (P.indoor && !inside) {
-          inside = true;
-          t = Math.max(t, 22);
-          this.howto('inside');
-        }
-        return t > (inside ? 30 : 26) || !!P.inVehicle;
-      };
-      this.howto(null);
-      yield 0.6;
-    }
-    // 3. a car: the nearest one parked, his
+    // 2. a car: the nearest one parked - his window smashed, in, away (game.js beginEntry)
     const parked = () => {
       let best = null;
       let bd = 1e9;
@@ -1488,8 +1476,7 @@ export class Prologue {
     };
     if (!P.inVehicle) {
       let car = parked();
-      this.objective('Take a <b>car</b>', car ? car.pos.x : null, car ? car.pos.z : null, 'Car');
-      this.howto('car');
+      this.objective('Break into a <b>car</b> and take it', car ? car.pos.x : null, car ? car.pos.z : null, 'Car');
       t = 0;
       let gpsT = 0;
       yield () => {
@@ -1497,19 +1484,19 @@ export class Prologue {
         gpsT += this.dtR;
         if (gpsT > 1.5) {
           gpsT = 0;
-          car = parked();
-          if (car && g.gps) g.gps.set(car.pos.x, car.pos.z, 'Car');
+          const c2 = parked();
+          // (sent to another only when the nearest is another - its marker's click once)
+          if (c2 && c2 !== car && g.gps) g.gps.set(c2.pos.x, c2.pos.z, 'Car');
+          car = c2 || car;
         }
-        return !!P.inVehicle || t > 60;
+        return !!P.inVehicle || t > 90;
       };
-      this.howto(null);
       if (g.gps) g.gps.clear();
       yield 0.5;
     }
     // 4. drive it
     if (P.inVehicle) {
       this.objective('<b>Drive</b> - get a feel for it');
-      this.howto('drive');
       const q0 = P.pos.clone();
       t = 0;
       yield () => {
@@ -1521,20 +1508,30 @@ export class Prologue {
     }
     // 5. the pen: open, everything in it open (begin: setAllOpen) - till it has been opened and put
     // away again, or a while has gone by
-    this.objective('<b>Draw</b> something - it comes to life');
+    // (round 15: a weapon or a ride from the short list, drawn for real - till one is made, or a while)
+    // (in the car, the pen draws on the car: a part on it counts too - the list is out of it, on foot)
+    const DRAW_FOOT = 'Open the pen and <b>draw</b> a weapon or a ride';
+    const DRAW_CAR = 'Step out, open the pen and <b>draw</b> a weapon or a ride';
+    this.objective(P.inVehicle ? DRAW_CAR : DRAW_FOOT);
     this.howto('draw');
     {
       const F = g.freedraw;
-      let opened = false;
+      const made = () => (F && F.stats && F.stats.made ? Object.values(F.stats.made).reduce((a, b) => a + b, 0) : 0) + (P.inVehicle && P.inVehicle.fuse ? P.inVehicle.fuse.parts.length : 0);
+      let m0 = made();
+      let car = P.inVehicle;
+      let tm = -1;
       t = 0;
       yield () => {
         t += this.dtR;
-        // (left open, it goes on all the same after a while: the pen is the player's, not the tour's)
-        if (F && F.isOpen) {
-          opened = true;
-          return t > 45;
+        // (in or out of a car: what is counted from changes with it)
+        if (P.inVehicle !== car) {
+          car = P.inVehicle;
+          if (tm < 0) m0 = made();
+          if (tm < 0) this.objective(car ? DRAW_CAR : DRAW_FOOT);
         }
-        return (opened && t > 3) || t > 30;
+        if (tm < 0 && made() > m0) tm = t;
+        // (made: a breath to see it come to life; left be, it goes on all the same after a while)
+        return (tm >= 0 && t > tm + 2.5 && !(F && F.isOpen)) || (tm >= 0 && t > tm + 6) || t > 90;
       };
     }
     this.howto(null);
@@ -1548,6 +1545,11 @@ export class Prologue {
     const L = this.person('lily', LILY_SEAT.x, LILY_SEAT.z, look, { face: LILY_SEAT.yaw });
     // (her drawn face in the film's middle shots too, not only close: render/people.js portraitFor)
     L.fig.portraitPx = 40;
+    // (round 15: her face hers near and far - never handed to the city's simple face, dark with black
+    // eyes, for a moment after a cut that brought her near: render/people.js keepPortrait)
+    L.fig.keepPortrait = true;
+    // (drawn however close the camera comes - over her shoulder onto her page: game/doodle.js nearOk)
+    L.fig.nearOk = true;
     L.fig.sit = 1;
     L.baseY = 0.32;
     if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, true);
@@ -1564,9 +1566,10 @@ export class Prologue {
     const L = this.cast.lily;
     this.objective(null);
     if (g.gps) g.gps.clear();
-    // (round 11, the player's word: the music cute but very tense from the first sight of the wheel -
-    // score.js FILES.tense - and on through the pier)
-    this.cue('tense', { fade: 3 });
+    // (round 15, the player's word: really frightening music the moment the giant wheel is first seen -
+    // not a cute tune going over slowly into it: the dread at once, at its full, from its loud part, a
+    // sting on the first sight of it - score.js FILES.dread)
+    this.cue('dread', { fade: 0.15 });
     this.film(true);
     // she looks up from her drawing and sees him coming: from behind him, low, her at the stand in the
     // evening ahead of him - he walks the last steps into it
@@ -1582,11 +1585,8 @@ export class Prologue {
       this.faceTo(L, WHEEL.x, WHEEL.z);
       L.fig.lookAt = W0;
       this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.0, back: 0.75, side: 0.32 }), look: W0, lookTo: v3(WHEEL.x, 31.5, WHEEL.z), fov: 40, fovTo: 33, dur: 3.6, ease: 'inout', hand: 0.15 });
-      // (round 13, the player's word: a second or two of the cute tune - then over, slowly, into the
-      // dread: score.js dread)
-      yield 1.5;
-      this.cue('dread', { fade: 5 });
-      yield 1.8;
+      this.sample('sfx/sting.mp3', 0.85);
+      yield 3.3;
       this.faceTo(L, meet.x, meet.z);
       L.fig.lookAt = null;
     }
@@ -1874,7 +1874,9 @@ export class Prologue {
     // (ROADMAP 18.9) she will draw it: her sketchbook out, at the railing, the page against it - and
     // she starts, the wheel first. Her drawing comes as she draws it (game/prologue/ui.js lilyDrawing k)
     const page = this.lilyPage();
-    let drawK = 0.02;
+    // (round 15: the shapes in pencil now, while he is away; its colours when he is back - lilyParts)
+    const LP = lilyParts();
+    let drawK = 0.004;
     const drawOn = () => page.draw(lilyDrawing, drawK);
     // (ROADMAP 18.9: sitting on a bench a step back from the railing, her sketchbook on her knees, the
     // pencil going - the player's word: she sits, and she is seen drawing)
@@ -1898,7 +1900,7 @@ export class Prologue {
     // (she looks up at it and down at her page, as one who draws from the thing does)
     this.sketching = true;
     this.everyFrame = (dt) => {
-      drawK = Math.min(1, drawK + dt * 0.032);
+      drawK = Math.min(LP.outline - 0.0005, drawK + dt * 0.012);
       drawOn();
       const tt = this.clock || 0;
       L.fig.lookAt = Math.sin(tt * 1.3) > 0.35 ? W0 : page.at;
@@ -1946,29 +1948,85 @@ export class Prologue {
     // (the player's: after him - he walks off along the pier, unhurried; a few steps on, he is rubbed
     // out where he walks)
     this.film(false);
-    this.objective('Who is <b>that</b>? Follow him', man.pos.x, man.pos.z, 'Man');
-    this.howto('follow', 8);
+    // (round 15, the player's word: a short search, no going round and round after him - he walks off
+    // fast into the people coming the other way and is lost in them; the player runs after him, this
+    // way or that, for a few seconds - and he is nowhere; then back to Lily. No marker on him)
+    this.objective('Where did he go? <b>Look for him</b>');
     man.fig.lookAt = null;
-    // (round 13: he walks on along the pier - forward, into the people coming the other way, through
-    // them, this way and that between them; and somewhere in them he is not there any more)
     yield* this.loseInCrowd(man, crowd);
-    this.objective(null);
-    if (g.gps) g.gps.clear();
-    yield 1.4;
+    {
+      const p0 = P.pos.clone();
+      let t = 0;
+      yield () => {
+        t += this.dtR || 1 / 30;
+        return t > 7 || (t > 3.5 && Math.hypot(P.pos.x - p0.x, P.pos.z - p0.z) > 9);
+      };
+    }
     // back to her - she has finished it
-    this.objective('Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
-    this.howto('back', 8);
+    this.objective('He is <b>gone</b>. Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
     yield () => {
-      drawK = Math.max(drawK, 0.9);
+      drawK = Math.max(drawK, LP.outline - 0.0005);
       return Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z) < 3.4;
     };
     this.objective(null);
     if (g.gps) g.gps.clear();
+    this.film(true);
+    // (round 15, the player's word: her colours seen going on - she is at it as he comes back, bent
+    // over her page: the sky in its three colours, the sun, the sea, the gondolas, her name; under her
+    // pencil each of them spreads over the white, her pencil the colour it puts on: page.js follow)
+    {
+      const fx = Math.sin(toW);
+      const fz = Math.cos(toW);
+      const dX = bx + rx * 0.95 - ux * 0.55;
+      const dZ = bz + rz * 0.95 - uz * 0.55;
+      this.putDanny(dX, dZ, Math.atan2(bx - dX, bz - dZ));
+      P.fig.lookAt = page.at;
+      page.follow = true;
+      this.feel(L.fig, 'joy', 16);
+      // (the colouring's pace: to each k by each time)
+      const plan = [[LP.sky[0] + (LP.sky[1] - LP.sky[0]) * 0.42, 4.2], [LP.sky[1], 4.0], [LP.sea[0] + (LP.sea[1] - LP.sea[0]) * 0.3, 2.2], [1, 3.4]];
+      let pi = 0;
+      let pt = 0;
+      let k0 = drawK;
+      this.everyFrame = (dt) => {
+        if (pi < plan.length) {
+          pt += dt;
+          const [k1, d] = plan[pi];
+          const f = Math.min(1, pt / d);
+          drawK = k0 + (k1 - k0) * f;
+          if (f >= 1) {
+            pi++;
+            pt = 0;
+            k0 = drawK;
+          }
+        }
+        drawOn();
+        L.fig.lookAt = page.tipW;
+      };
+      // 1. over his shoulder, down at her page as she colours - what he sees coming back
+      // (from where he now stands - not his head as it was posed a moment ago, across the pier)
+      this.shot({ from: v3(dX + fz * 0.12, (P.pos.y || 0) + 1.6, dZ - fx * 0.12), look: () => page.at.clone(), fov: 34, dur: 4.2, hand: 0.15, dof: 0.6 });
+      yield 4.2;
+      // 2. close on the page: the colour going on under her pencil
+      // (over her right shoulder, as she sees it: the page the right way up, her hand and her pencil
+      // coming in to it from the right, the colour going on where it is)
+      const camOver = () => v3(page.at.x - fx * 0.2 + rx * 0.3, page.at.y + 0.5, page.at.z - fz * 0.2 + rz * 0.3);
+      const atPen = () => page.at.clone().lerp(page.tipW, 0.45);
+      this.shot({ from: camOver, look: atPen, fov: 44, dur: 4.0, hand: 0.1, dof: 0.6 });
+      yield 4.0;
+      // 3. her face, low and in front: at it, the tip of her tongue out
+      this.shot({ ...this.single(L, page.at, { dist: 0.85, side: 0.28, up: -0.22, drop: 0.05 }), fov: 34, dur: 2.2, hand: 0.2 });
+      yield 2.2;
+      // 4. close on the page again: the sea, the gondolas, her name
+      this.shot({ from: camOver, look: atPen, fov: 44, dur: 3.4, hand: 0.1, dof: 0.6 });
+      yield () => drawK >= 1;
+      yield 0.3;
+    }
     this.everyFrame = null;
     this.sketching = false;
+    page.follow = false;
     drawK = 1;
     drawOn();
-    this.film(true);
     // she cannot wait to show him: up off the bench, the page held up to him - the page, and her face
     // over it
     L.fig.sit = 0;
@@ -2507,8 +2565,10 @@ export class Prologue {
     }
     // (people out for the evening, as they are: one with his phone, the other his coffee - ROADMAP 18.9)
     g2.fig.reachR = null;
-    g2.fig.carry = 'phone';
-    g1.fig.carry = 'coffee';
+    // (round 15, the player's word: nothing in their hands - the coffee cup sank into the hand that held
+    // it, and the phone with it)
+    g2.fig.carry = null;
+    g1.fig.carry = null;
   }
 
   // ------------------------------------------------------------------ 4. GONE
@@ -2804,9 +2864,8 @@ export class Prologue {
     const zig = [];
     for (let k = 1; k <= 7; k++) zig.push([x0 + k * 4.2, k % 2 ? 246.2 : 239.6]);
     let zi = 0;
-    this.go(c, zig[0][0], zig[0][1], 1.55);
+    this.go(c, zig[0][0], zig[0][1], 2.3);
     let t = 0;
-    let gpsT = 0;
     const tc = new THREE.Vector3();
     const tq = new THREE.Vector3();
     const seen = () => {
@@ -2814,15 +2873,11 @@ export class Prologue {
       return tq.z < 1 && Math.abs(tq.x) < 1.05 && Math.abs(tq.y) < 1.05;
     };
     const front = () => Math.min(...crowd.filter((q) => q.alive).map((q) => q.pos.x));
-    while (t < 16) {
+    while (t < 9) {
       // (on to his next point once he is near it)
       if (zi < zig.length && Math.hypot(c.pos.x - zig[zi][0], c.pos.z - zig[zi][1]) < 1.2) {
         zi++;
-        if (zi < zig.length) this.go(c, zig[zi][0], zig[zi][1], 1.55);
-      }
-      if (g.gps && (gpsT += this.dtR || 1 / 30) > 0.4) {
-        gpsT = 0;
-        g.gps.set(c.pos.x, c.pos.z, 'Man');
+        if (zi < zig.length) this.go(c, zig[zi][0], zig[zi][1], 2.3);
       }
       // (one of them between him and the camera, and him well into them: gone)
       tc.set(c.pos.x, c.pos.y + 1.25, c.pos.z).sub(cam.position);
@@ -2840,7 +2895,7 @@ export class Prologue {
       }
       const deep = c.pos.x - front() > 3 || t > 6;
       if (hid && deep && t > 1.5) break;
-      if (t > 11 && !seen()) break;
+      if (t > 4.5 && !seen()) break;
       // (close up to him - he slips between two of them)
       if (t > 3 && Math.hypot(P.pos.x - c.pos.x, P.pos.z - c.pos.z) < 2.2 && hid) break;
       yield 0.001;
@@ -3569,6 +3624,8 @@ export class Prologue {
   *s8() {
     const g = this.game;
     const P = g.player;
+    // (round 15: the jump off the roof - the short list is over, the rest of the pen opens)
+    if (g.album && g.album.setEarly) g.album.setEarly(false);
     const v = () => P.inVehicle;
     const prof = this.ramp.P;
     // up the ramp, over its lip: flown from here (along -x in the run's frame)
@@ -3878,6 +3935,7 @@ export class Prologue {
       this.autopilot.stop();
       this.autopilot = null;
     }
+    if (g.album && g.album.setEarly) g.album.setEarly(false);
     if (g.setAllOpen && g.settings) g.setAllOpen(!!g.settings.v.allOpen);
     try {
       // (watched as a film, scene by scene, in the admin's viewer: not played - a new game still

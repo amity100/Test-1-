@@ -1218,6 +1218,13 @@ export class PrologueSet {
         K.box(M.matte, sx - 0.03, 0, -0.26, sx + 0.03, 0.9, -0.2, IRON);
         K.box(M.matte, sx - 0.03, 0.6, -0.24, sx + 0.03, 0.64, 0.14, IRON);
       }
+      // (round 15: her tin of coloured pencils, open on the seat at her right hand - what the drawing
+      // is coloured with: each of its colours)
+      K.box(M.metal, -0.53, 0.44, -0.1, -0.37, 0.458, 0.1, linC(0.2, 0.32, 0.62));
+      ['#9b7be0', '#f45d9c', '#ffb24a', '#ffd23f', '#3fa7d6', '#2a7fc0', '#e8457c', '#5cc45a', '#ff8a3a'].forEach((h, i) => {
+        const n = parseInt(h.slice(1), 16);
+        K.cyl(M.paint, 0.0065, 0.0065, -0.088, 0.088, linC(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255), { x: -0.515 + i * 0.0165, y: 0.466, segs: 6 });
+      });
       const grp = K.build({ seed: 0.31 });
       grp.matrixAutoUpdate = true;
       this.game.scene.add(grp);

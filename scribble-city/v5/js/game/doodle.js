@@ -1845,10 +1845,15 @@ export class Doodle {
   inCamera(c) {
     const S = this.scale || 1;
     const h = this.j && this.j.headC;
-    if (h && c.distanceTo(h) < 0.62 * S) return true;
+    // (the film's own people - nearOk, game/prologue/director.js - the camera may come close to: over
+    // her shoulder onto her page she was not drawn at all, her hand and pencil gone from the colouring.
+    // For them only the head itself, or the body's own width)
+    const hk = this.nearOk ? 0.22 : 0.62;
+    const bk = this.nearOk ? 0.19 : 0.42;
+    if (h && c.distanceTo(h) < hk * S) return true;
     const dx = c.x - this.pos.x;
     const dz = c.z - this.pos.z;
     const dy = c.y - this.pos.y;
-    return dx * dx + dz * dz < 0.42 * 0.42 * S * S && dy > -0.1 && dy < (h ? h.y - this.pos.y + 0.3 * S : 1.9 * S);
+    return dx * dx + dz * dz < bk * bk * S * S && dy > -0.1 && dy < (h ? h.y - this.pos.y + 0.3 * S : 1.9 * S);
   }
 }

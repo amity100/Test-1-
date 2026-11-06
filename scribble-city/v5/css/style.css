@@ -1919,3 +1919,31 @@ body.phone-cam #btn-rewind, body.phone-cam #btn-gear, body.touch.fd-open #btn-re
 @media (max-height: 480px) {
   #loader.done .ld-tips { bottom: calc(max(5vh, 14px) + 76px); }
 }
+/* (round 15, game/drawlock.js) a new player's short list - a few weapons, a few rides - in front of the
+   face and small: the one picked big, to be drawn from in the air; the rest after the jump off the roof */
+body.fd-early .fd-leg { left: 50%; right: auto !important; top: calc(max(10px, env(safe-area-inset-top)) + 74px); bottom: auto; transform: translateX(-50%); width: min(410px, 90vw); max-height: none; padding: 6px 8px 7px; gap: 5px; }
+body.fd-early .fd-hint, body.fd-early #fd-album { display: none; }
+.fe-top { display: flex; flex-direction: column; align-items: center; gap: 1px; text-align: center; }
+.fe-top b { font: 800 16px var(--font-ui); color: var(--ink); }
+.fe-top span { font: 700 11px var(--font-ui); color: #6b6576; line-height: 1.2; }
+.fe-rows { display: flex; flex-direction: column; gap: 3px; }
+.fe-row { display: flex; align-items: center; gap: 4px; }
+.fe-sh { flex: none; width: 44px; font: 800 12px var(--font-ui); color: #6b6576; text-align: center; }
+.fe-row .fd-it { flex: 1 1 0; width: auto; }
+.fe-more { text-align: center; font: 700 10.5px var(--font-ui); color: #8a8494; }
+.fe-ref { display: flex; align-items: center; gap: 9px; }
+.fe-big { flex: none; width: 132px; height: 86px; padding: 4px; background: #fffdf6; border: 2px dashed #3d7bd9; border-radius: 10px 8px 11px 7px; }
+.fe-big svg { width: 100%; height: 100%; fill: none; stroke: var(--ink); stroke-linecap: round; stroke-linejoin: round; }
+.fe-big svg path { stroke-width: 2.4px; vector-effect: non-scaling-stroke; }
+.fe-what { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fe-what b { font: 800 17px var(--font-ui); color: var(--ink); }
+.fe-what span { font: 700 11.5px var(--font-ui); color: #3d7bd9; line-height: 1.25; }
+.fe-x { flex: none; align-self: flex-start; padding: 2px 8px; font: 700 12px var(--font-ui); color: var(--ink); background: var(--paper-2); border: 2px solid var(--ink); border-radius: 10px; cursor: pointer; }
+body.touch.fd-early .fd-leg { top: max(6px, env(safe-area-inset-top)); width: min(390px, 58vw); padding: 4px 6px 5px; gap: 3px; }
+body.touch .fe-top span, body.touch .fe-more { display: none; }
+body.touch .fe-big { width: 104px; height: 66px; }
+@media (max-height: 480px) {
+  body.fd-early .fd-leg { top: max(6px, env(safe-area-inset-top)); width: min(390px, 58vw); padding: 4px 6px 5px; gap: 3px; }
+  .fe-top span, .fe-more { display: none; }
+  .fe-big { width: 104px; height: 66px; }
+}

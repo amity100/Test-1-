@@ -1,4 +1,5 @@
 import { ITEMS, OPEN_ORDER, CATS, CAT_ORDER } from './itemcat.js';
+import { EARLY_GEAR, gearGone, isEarly } from './drawlock.js';
 
 // (ROADMAP 11.28) Not everything open: the things of the pen come as the game goes on.
 //
@@ -46,6 +47,10 @@ export class GearPlay {
   }
 
   isOpen(id) {
+    // (round 15, game/drawlock.js: the water kit and the flying things gone from the story; a new
+    // player's car, till the jump off the roof: the machine gun, the turbo, the armour)
+    if (gearGone(this.game, id)) return false;
+    if (!this.lab && isEarly(this.game)) return EARLY_GEAR.includes(id);
     return this.all() || this.state.open.includes(id);
   }
 
@@ -74,6 +79,8 @@ export class GearPlay {
 
   // (a drawing of a thing not open yet) what is said by it: its name and what it takes
   lockSay(id) {
+    if (gearGone(this.game, id)) return 'לא במשחק';
+    if (!this.lab && isEarly(this.game)) return 'נפתח אחרי הקפיצה מהגג';
     const n = this.pagesTo(id);
     return n === 1 ? 'עוד דף שרטוט אחד' : `עוד ${n} דפי שרטוט`;
   }
