@@ -97,8 +97,9 @@ function gestureX(kind, side, t, ph, out) {
       return true;
     // (hands together under the chin, bouncing a little: please)
     case 'plead': {
+      // (round 14: under the chin, not over the mouth - with her ice cream in it, it was over her face)
       const k = Math.sin(t * 9 + ph) * 0.025;
-      out.set(side * 0.05, 1.3 + k, 0.24);
+      out.set(side * 0.07, 1.16 + k, 0.3);
       return true;
     }
     // (both palms up and out: okay, okay)
