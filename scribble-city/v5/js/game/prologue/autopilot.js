@@ -4,6 +4,7 @@
 // questions, the car park's climb, the ramp drawn, the jump, the way down, the beach - it plays
 // them, a cut here and there where the way is long; where the film holds the keys, it waits.
 import { PARK } from './carpark.js';
+import { BLUEPRINTS } from '../blueprints.js';
 
 const LILY_SEAT = { x: 40.2, z: 233.0 };
 const VIEW = { x: 63.5, z: 238.9 };
@@ -380,12 +381,24 @@ export class Autopilot {
       this.set(0, 0.8);
       return;
     }
-    if (/Draw/.test(o)) {
+    if (/Draw|draw<\/b> a weapon/.test(o)) {
       this.set(0, 0.2);
+      // (round 15: one of the short list picked, and drawn as a player would - its own lines)
       this.once('pen', () => {
-        if (g.freedraw) g.freedraw.show();
+        if (g.freedraw) g.freedraw.learn('paint');
       });
-      if (this.since('pen') > 3.2) {
+      if (this.since('pen') > 1.6) {
+        this.once('pendraw', () => {
+          const F = g.freedraw;
+          if (!F || !F.isOpen || !BLUEPRINTS.paint) return;
+          F.inkBp(BLUEPRINTS.paint);
+          F.bake();
+          F.read();
+          F.render();
+          F.make();
+        });
+      }
+      if (this.since('pen') > 5) {
         this.once('penshut', () => {
           if (g.freedraw) g.freedraw.close();
         });

@@ -151,6 +151,12 @@ export class Prologue {
     // (ROADMAP 18.9: everything the pen can make open while it is told - a helicopter, wings, a turbo
     // on the car, every weapon - whatever the settings say: the game's own again after, finish)
     if (g.setAllOpen) g.setAllOpen(true);
+    // (round 15, game/drawlock.js: a new player's short list - a few weapons, a few rides, each drawn
+    // by hand before it is theirs - till the jump off the roof; not for a scene from the jump on)
+    {
+      const sN = /^s(\d)$/.exec(this.param || '');
+      if (g.album && g.album.setEarly) g.album.setEarly(!(sN && +sN[1] >= 8));
+    }
     const lang = g.params.get('subs') === 'en' ? 'en' : 'he';
     this.ui = new PrologueUI(lang);
     this.voices = new PrologueVoices(g, this.ui);
@@ -1502,20 +1508,20 @@ export class Prologue {
     }
     // 5. the pen: open, everything in it open (begin: setAllOpen) - till it has been opened and put
     // away again, or a while has gone by
-    this.objective('<b>Draw</b> something - it comes to life');
+    // (round 15: a weapon or a ride from the short list, drawn for real - till one is made, or a while)
+    this.objective('Open the pen and <b>draw</b> a weapon or a ride');
     this.howto('draw');
     {
       const F = g.freedraw;
-      let opened = false;
+      const made = () => (F && F.stats && F.stats.made ? Object.values(F.stats.made).reduce((a, b) => a + b, 0) : 0);
+      const m0 = made();
+      let tm = -1;
       t = 0;
       yield () => {
         t += this.dtR;
-        // (left open, it goes on all the same after a while: the pen is the player's, not the tour's)
-        if (F && F.isOpen) {
-          opened = true;
-          return t > 45;
-        }
-        return (opened && t > 3) || t > 30;
+        if (tm < 0 && made() > m0) tm = t;
+        // (made: a breath to see it come to life; left be, it goes on all the same after a while)
+        return (tm >= 0 && t > tm + 2.5 && !(F && F.isOpen)) || (tm >= 0 && t > tm + 6) || t > 90;
       };
     }
     this.howto(null);
@@ -3608,6 +3614,8 @@ export class Prologue {
   *s8() {
     const g = this.game;
     const P = g.player;
+    // (round 15: the jump off the roof - the short list is over, the rest of the pen opens)
+    if (g.album && g.album.setEarly) g.album.setEarly(false);
     const v = () => P.inVehicle;
     const prof = this.ramp.P;
     // up the ramp, over its lip: flown from here (along -x in the run's frame)
@@ -3917,6 +3925,7 @@ export class Prologue {
       this.autopilot.stop();
       this.autopilot = null;
     }
+    if (g.album && g.album.setEarly) g.album.setEarly(false);
     if (g.setAllOpen && g.settings) g.setAllOpen(!!g.settings.v.allOpen);
     try {
       // (watched as a film, scene by scene, in the admin's viewer: not played - a new game still

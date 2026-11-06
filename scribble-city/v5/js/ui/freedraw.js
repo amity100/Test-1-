@@ -21,9 +21,9 @@ import { fmt } from '../game/money.js';
 import { DrawMemory } from '../game/drawmemory.js';
 import { matchCatalog, gradeOf, drawnWhole, tooEarly, MATCH_MIN, PICK_SLACK, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
 import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
-import { PEN_CATS, PEN_REST, PEN_REST_TOUCH } from '../game/partpen.js';
-import { PAR_ORDER, WORLD_PAR } from '../game/inkparts.js';
+import { PEN_CATS, PEN_REST, PEN_REST_TOUCH, parList } from '../game/partpen.js';
 import { DRAWN_ON, WORLD_SAY } from '../game/gadgets.js';
+import { EARLY_KIT, isEarly } from '../game/drawlock.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -491,8 +491,21 @@ export class FreeDraw {
         this.summonInv(iv.dataset.inv);
         return;
       }
+      // (round 15) the one being drawn let go of: the list again
+      if (e.target.closest('[data-x]')) {
+        this.choose(null);
+        this.legSig = '';
+        this.showLegend();
+        return;
+      }
       const it = e.target.closest('[data-i]');
       if (!it) return;
+      // (round 15, game/drawlock.js) the short list: one not drawn yet is picked to be drawn - the
+      // lines on the page kept, they may be it
+      if (isEarly(this.game) && !this.game.album.known(it.dataset.i)) {
+        this.learn(it.dataset.i, true);
+        return;
+      }
       // (ROADMAP 15.2) a thing you know: here at once. Lines already on the page: the touch picks it
       // for them instead, as it did (what you are drawing is that one)
       if (this.strokes.length && !it.classList.contains('lock')) this.choose(this.force === it.dataset.i ? null : it.dataset.i);
@@ -600,7 +613,7 @@ export class FreeDraw {
         // (ROADMAP 15.3: the drawn parts - 1-6 the part to draw; ROADMAP 15.4: 7-9 a ramp, a bridge, a
         // barrier on the road)
         mine();
-        this.game.fuse.pen.choosePar([...PAR_ORDER, ...WORLD_PAR][+k.slice(-1) - 1]);
+        this.game.fuse.pen.choosePar(parList(this.game)[+k.slice(-1) - 1]);
       } else if (this.penOn() && /^(Digit|Numpad)[1-4]$/.test(k)) {
         // (ROADMAP 11.24: in a car - the part to draw, 1-3; ROADMAP 15.3: 4 - the drawn parts)
         mine();
@@ -1571,6 +1584,7 @@ export class FreeDraw {
   // (found, or all open: the album's own say - ui/album.js)
   bpOpen(id) {
     const a = this.game.album;
+    if (a && a.early) return a.has(id);
     return !a || a.allOpen || a.has(id);
   }
 
@@ -1641,12 +1655,18 @@ export class FreeDraw {
     const ids = on ? shelfIds(this.shelf) : [];
     const al = this.game.album;
     const st = (id) => (!al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
-    const sig = `${on}|${this.shelf}|${lit}|${this.force || ''}|${this.world || ''}|${ids.map(st).join('')}|${this.game.inventions ? this.game.inventions.list.map((o) => o.id + o.v).join() : ''}`;
+    const early = on && isEarly(this.game);
+    const sig = `${on}|${early}|${this.shelf}|${lit}|${this.force || ''}|${this.world || ''}|${ids.map(st).join('')}|${early ? Object.values(EARLY_KIT).flat().map(st).join('') : ''}|${this.game.inventions ? this.game.inventions.list.map((o) => o.id + o.v).join() : ''}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     document.body.classList.toggle('fd-catalog', on);
+    document.body.classList.toggle('fd-early', early);
     if (!on) {
       el.innerHTML = '';
+      return;
+    }
+    if (early) {
+      el.innerHTML = this.earlyLegend(lit);
       return;
     }
     const INV = this.game.inventions;
@@ -1655,7 +1675,7 @@ export class FreeDraw {
       // (ROADMAP 15.5) what you invented and kept: a touch (or its number) and it is here, parts and all
       const its = INV.list.length
         ? INV.list.map((o, i) => `<div class="fd-it known inv" data-inv="${o.id}"${i < 9 ? ` data-n="${i + 1}"` : ''}>${i < 9 ? `<em class="fd-n">${i + 1}</em>` : ''}${bpSvg(BLUEPRINTS[(o.base && o.base.bp) || 'car'] || BLUEPRINTS.car)}<b>${esc(o.name)}</b><i>${o.parts.map((q) => PART_ABBR[q.type] || '').join(' ')}${o.v > 1 ? ` · גרסה ${o.v}` : ''}</i></div>`).join('')
-        : '<div class="fd-inv-none">עוד אין המצאות: במכונית — העיפרון, "חלקים", מציירים כנפיים, טורבו, רוטור... ושומרים</div>';
+        : '<div class="fd-inv-none">עוד אין המצאות: במכונית — העיפרון, "חלקים", מציירים טורבו, גלגלי שטח, שריון... ושומרים</div>';
       el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${this.game.touch ? 'נגיעה — וההמצאה כאן, עם כל החלקים' : 'נגיעה או 1–9 — וההמצאה כאן, עם כל החלקים'}</span></div><div class="fd-its">${its}</div>`;
       document.body.classList.toggle('fd-catalog', on);
       return;
@@ -1685,7 +1705,8 @@ export class FreeDraw {
     const bp = BLUEPRINTS[id];
     const al = game.album;
     if (!bp || !al || !this.catalogOn() || game.player.mode !== 'foot') return false;
-    if (!inv && !al.known(id)) {
+    // (a ramp, a bridge, a barrier is drawn on the world each time: nothing to learn first)
+    if (!inv && !al.known(id) && !(game.gadgets && DRAWN_ON.has(id) && !al.early)) {
       if (al.toLearn(id)) return this.learn(id);
       game.hud.toast(`${bp.name}: עוד לא נמצא — ${al.where(id)}`, 'info', 3.2);
       game.audio.play('click', 0.3);
@@ -1705,7 +1726,19 @@ export class FreeDraw {
       return false;
     }
     if (!this.isOpen) this.layout();
-    // its lines, inked where it will hang (a weapon: to the right of the middle, where the hand is)
+    this.inkBp(bp);
+    this.force = null;
+    this.bake();
+    this.render();
+    const R = { bp, kind: id, grade: 'perfect', score: 1, cost, remembered: false };
+    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle', parts: inv ? inv.parts : null, name: inv ? inv.name : null });
+    this.stats.quick = (this.stats.quick || 0) + 1;
+    return true;
+  }
+
+  // its lines, inked where it will hang (a weapon: to the right of the middle, where the hand is) -
+  // (round 15) also the autopilot's hand, drawing one of the short list as a player would
+  inkBp(bp) {
     const b = blueprintBounds(bp);
     const cw = window.innerWidth;
     const ch = window.innerHeight;
@@ -1715,13 +1748,6 @@ export class FreeDraw {
     const cy = ch * (bp.kind === 'weapon' ? 0.56 : 0.5);
     const U = this.U;
     this.strokes = bp.strokes.map((st) => ({ p: st.pts.map(([x, y]) => [(cx + ((x - b.x0) / b.w - 0.5) * w) / U, (cy + ((y - b.y0) / b.h - 0.5) * h) / U]), c: this.ink }));
-    this.force = null;
-    this.bake();
-    this.render();
-    const R = { bp, kind: id, grade: 'perfect', score: 1, cost, remembered: false };
-    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle', parts: inv ? inv.parts : null, name: inv ? inv.name : null });
-    this.stats.quick = (this.stats.quick || 0) + 1;
-    return true;
   }
 
   // (ROADMAP 15.5) an invention kept: its car summoned the quick way, its parts on it once it is real
@@ -1821,12 +1847,51 @@ export class FreeDraw {
   }
 
   // (ROADMAP 15.2) found, not learned yet: its first time - on the sheet in the air, over its lines
-  learn(id) {
+  // (round 15) one not drawn yet: picked, and drawn here in the air the way everything is drawn - read
+  // against its picture as the catalog reads (game/catmatch.js); made, it is learned (game/game.js
+  // onDrawingDone: the album's) and from then on made with a touch. keep: the lines already drawn
+  // stay (they may be it)
+  learn(id, keep = false) {
     const game = this.game;
-    this.close();
-    game.hud.toast(`${BLUEPRINTS[id].name} — חדש! מציירים אותו פעם אחת על הקווים הכחולים, ומאז הוא מוכן בנגיעה`, 'info', 3.4);
-    game.beginDrawing(id);
+    const bp = BLUEPRINTS[id];
+    if (!bp) return false;
+    if (!this.isOpen) this.show();
+    if (!this.isOpen) return false;
+    const sh = shelfOf(bp);
+    if (sh !== this.shelf) this.setShelf(sh);
+    if (!keep && this.strokes.length) {
+      this.strokes = [];
+      this.bake();
+    }
+    this.choose(id);
+    this.legSig = '';
+    this.showLegend();
+    game.hud.toast(`${bp.name}: ציירו אותו באוויר, כמו בציור — וכשהוא מוכן, ${game.touch ? '✓' : 'Q'}. מאז הוא בספרייה, מוכן בנגיעה`, 'info', 3.6);
+    game.audio.play('pageflip', 0.35);
     return true;
+  }
+
+  // (round 15, game/drawlock.js) the short list, in front of the face: a few weapons, a few rides -
+  // the one picked big, to be drawn from; the ones drawn already, made with a touch (or a number)
+  earlyLegend(lit) {
+    const al = this.game.album;
+    const touch = !!this.game.touch;
+    const pick = this.force && BLUEPRINTS[this.force] && !al.known(this.force) ? this.force : null;
+    let n = 0;
+    const cell = (id) => {
+      const bp = BLUEPRINTS[id];
+      const k = al.known(id);
+      const num = k && n < 9 ? ++n : 0;
+      const cls = ['fd-it', lit === id ? 'on' : '', pick === id ? 'pick' : '', k ? 'known' : 'learn'].filter(Boolean).join(' ');
+      return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${k ? '✓ שלכם' : '✎ לצייר'}</i></div>`;
+    };
+    if (pick) {
+      const bp = BLUEPRINTS[pick];
+      return `<div class="fe-ref"><div class="fe-big">${bpSvg(bp)}</div><div class="fe-what"><b>${bp.name}</b><span>ציירו אותו באוויר, כמו בציור</span><span>בסוף ${touch ? '✓' : 'Q'} — והוא נוצר, ונשמר אצלכם</span></div><button class="fe-x" data-x="1">✕ משהו אחר</button></div>`;
+    }
+    const rows = Object.entries(EARLY_KIT).map(([sh, ids]) => `<div class="fe-row"><span class="fe-sh">${SHELF_NAME[sh]}</span>${ids.map(cell).join('')}</div>`).join('');
+    const say = touch ? 'נגיעה בציור — ומציירים אותו באוויר. מה שכבר ציירתם: נגיעה, והוא כאן' : 'לחיצה על ציור — ומציירים אותו באוויר · מה שכבר ציירתם: לחיצה או המספר, והוא כאן';
+    return `<div class="fe-top"><b>מה מציירים?</b><span>${say}</span></div><div class="fe-rows">${rows}</div><div class="fe-more">🔒 עוד ציורים ייפתחו בהמשך</div>`;
   }
 
   // made from the catalog: the album's own way of making a drawn blueprint real (game/game.js
@@ -1975,14 +2040,14 @@ export class FreeDraw {
       ? this.penOn() && game.fuse.pen.cat === 'par'
         ? game.touch
           ? 'בחרו חלק וציירו אותו על המכונית · הגודל, המקום והכיוון של הקו הם מה שהוא עושה'
-          : 'בחרו חלק (1–6) וציירו אותו על המכונית · הגודל, המקום והכיוון של הקו הם מה שהוא עושה · 7–9: על הכביש · Q חוזרים לנסוע'
+          : 'בחרו חלק (המספר שלו) וציירו אותו על המכונית · הגודל, המקום והכיוון של הקו הם מה שהוא עושה · Q חוזרים לנסוע'
         : this.penOn()
         ? game.touch
           ? 'בחרו נשק, תנועה או הגנה, וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע'
           : 'בחרו נשק, תנועה או הגנה (1–3), וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע · Q חוזרים לנסוע'
         : game.touch
           ? 'ציירו על המכונית — מה שתציירו יהיה עליה'
-          : 'ציירו על המכונית — מה שתציירו יהיה עליה: כנפיים, גלגלים, להבה, בלון... · Q חוזרים לנסוע'
+          : 'ציירו על המכונית — מה שתציירו יהיה עליה: גלגלים, להבה, שריון... · Q חוזרים לנסוע'
       : game.lab
       ? game.touch
         ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'

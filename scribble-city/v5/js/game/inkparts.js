@@ -1,6 +1,7 @@
 import { onPlane, readDrawing } from './fusedraw.js';
 import { clamp, damp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
+import { parGone } from './drawlock.js';
 
 // (ROADMAP 15.3) Parts you choose and then draw onto your car - and the drawing decides what they are.
 //
@@ -60,6 +61,10 @@ export const WORLD_ICON = {
 // the armour from the start, the wings, the wheels, the rotor as the city opens up
 export const PAR_GATE = { wing: 'wing', jet: 'turbo', rotor: 'rotor', prop: 'water', wheel: 'monster', armor: 'armor' };
 export function parOpen(game, type) {
+  // (round 15, game/drawlock.js: the wings, the rotor, the propeller gone from the story - the jump's
+  // own rotor apart)
+  if (parGone(game, type)) return false;
+  if (type === 'rotor' && game.prologue && game.prologue.drawingRotor) return true;
   const play = game.gear && game.gear.play;
   if (!play || !PAR_GATE[type]) return true;
   return play.isOpen(PAR_GATE[type]);

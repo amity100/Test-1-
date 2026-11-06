@@ -1754,6 +1754,11 @@ export class Game {
       this.hud.toast('צריך לצאת מהרכב כדי לצייר', 'info');
       return;
     }
+    // (round 15, game/drawlock.js: a new player's short list is the pen's own - drawn in the air)
+    if (this.album.early && this.freedraw && !this.classic) {
+      this.freedraw.show();
+      return;
+    }
     if (p.mode !== 'foot') return;
     if (this.album.size === 0) {
       this.hud.toast(this.touch ? 'האלבום ריק — קודם מצלמים שלט עם שרטוט (כפתור המצלמה ליד שלט)' : 'האלבום ריק — קודם מצלמים שלט עם שרטוט (F)', 'info', 3);

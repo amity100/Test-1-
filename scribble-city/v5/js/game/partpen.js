@@ -11,6 +11,7 @@ import { PAR, PAR_ORDER, readPar, parSay, WORLD_PAR, WORLD_NAME, WORLD_ICON, par
 import { WORLD_SAY } from './gadgets.js';
 import { BLUEPRINTS } from './blueprints.js';
 import { worldSay } from '../ui/freedraw.js';
+import { gearGone, parGone, isEarly } from './drawlock.js';
 
 // (ROADMAP 11.25) The part pen: a category said, a thing drawn - the game knows which of them.
 //
@@ -35,6 +36,12 @@ import { worldSay } from '../ui/freedraw.js';
 // onto it, and fills.
 
 export const PEN_CATS = CAT_ORDER;
+// (round 15, game/drawlock.js) the drawn parts as the pen offers them, 1-9 in this order: the water
+// kit's propeller and what flies gone from the story; nothing on the road for a new player till the
+// jump off the roof
+export function parList(game) {
+  return [...PAR_ORDER.filter((t) => !parGone(game, t)), ...(isEarly(game) && !game.lab ? [] : WORLD_PAR)];
+}
 // how long the pen rests before the drawing goes (ms): another line before that is more of it
 export const PEN_REST = 1000;
 export const PEN_REST_TOUCH = 1150;
@@ -360,6 +367,8 @@ export class PartPen {
     const H = this.game.mission && this.game.mission.hint;
     if (cat && PEN_CATS.includes(cat)) this.cat = cat;
     else if (H && H.cat && !this.book[H.cat]) this.cat = H.cat;
+    // (round 15: a part gone from the story, or not open yet - the turbo instead)
+    if (!parList(this.game).includes(this.par)) this.par = 'jet';
     this.live = null;
     this.made = null;
     this.tipping = false;
@@ -403,6 +412,7 @@ export class PartPen {
   // (ROADMAP 15.3) the part to draw, of the drawn parts: wings, a turbo, a rotor... (a touch, or 1-6)
   choosePar(type) {
     if (!PAR[type] && !WORLD_PAR.includes(type)) return;
+    if (!parList(this.game).includes(type)) return;
     // (ROADMAP 15.5: not open yet in the story - where it is to be had)
     if (PAR[type] && !parOpen(this.game, type)) {
       const play = this.game.gear && this.game.gear.play;
@@ -1161,7 +1171,7 @@ export class PartPen {
     el.classList.toggle('par', this.cat === 'par');
     if (this.cat === 'par') {
       const touch = !!this.game.touch;
-      const all = [...PAR_ORDER, ...WORLD_PAR];
+      const all = parList(this.game);
       const its = all.map((t, i) => `<div class="pp-it${t === this.par ? ' on' : ''}${WORLD_PAR.includes(t) ? ' world' : ''}${PAR[t] && !parOpen(this.game, t) ? ' lock' : ''}" data-par="${t}"><svg viewBox="0 0 24 24">${PAR[t] ? PAR[t].icon : WORLD_ICON[t]}</svg><b>${PAR[t] ? PAR[t].name : WORLD_NAME[t]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</div>`).join('');
       const said = M && M.par && PAR[M.par] ? 'לא יצא כמו שרציתם? ↶ ומציירים שוב — הגודל, המקום והכיוון הם מה שתציירו' : PAR[this.par] ? PAR[this.par].how : `${WORLD_NAME[this.par]} על הכביש: ${WORLD_SAY[this.par]}`;
       // (ROADMAP 15.5) what is on it now, kept as an invention of yours
@@ -1171,7 +1181,7 @@ export class PartPen {
       return;
     }
     const say = L && L.ask ? 'עוד פרט אחד יכריע' : M ? 'לא יצא נכון? ↶ ומציירים שוב' : 'מה שמציירים — זה מה שיוצא';
-    const items = CATS[this.cat].map((id) => {
+    const items = CATS[this.cat].filter((id) => !gearGone(this.game, id)).map((id) => {
       const shut = play && !play.isOpen(id);
       const lv = play && !shut && !play.all() ? play.level(id) : 0;
       const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : '', shut ? 'lock' : ''].filter(Boolean).join(' ');
