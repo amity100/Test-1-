@@ -3198,7 +3198,7 @@ export class Prologue {
         const dx = WHEEL.x - h.x;
         const dz = WHEEL.z - h.z;
         const d = Math.hypot(dx, dz) || 1;
-        return v3(h.x - (dx / d) * 0.42 - (dz / d) * 0.34, h.y + 0.08, h.z - (dz / d) * 0.42 + (dx / d) * 0.34);
+        return v3(h.x - (dx / d) * 0.38 - (dz / d) * 0.62, h.y + 0.1, h.z - (dz / d) * 0.38 + (dx / d) * 0.62);
       };
       this.shot({ from: behind, look: () => page.at.clone(), fov: 30, dur: 3.2, hand: 0.25, dof: 0.6 });
     }
