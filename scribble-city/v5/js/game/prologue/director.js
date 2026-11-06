@@ -3837,10 +3837,17 @@ export class Prologue {
     // (round 11: the run seen for a beat only - from just inside the way in, the two of them bursting
     // through it at us under the gunfire - and cut on it, to the car: the long run in the dark was
     // specks and dolls' legs)
-    // (round 14: on the way in's own line - off it, its pink wall filled half the picture)
-    const inside = v3(run[1][0] - 0.4, 1.25, run[1][1] - 6.5);
     this.walkTo = { x: run[1][0], z: run[1][1], speed: 1, sprint: true };
-    this.shot({ from: inside, to: v3(inside.x, 1.2, inside.z - 0.6), look: () => v3((P.pos.x + L.pos.x) / 2, 1.15, (P.pos.z + L.pos.z) / 2), fov: 42, dur: 1.8, hand: 1, step: 12 });
+    // (round 14: after them as they run for it, low behind him, the way in ahead of them and the shots
+    // going by - from inside it, its wall was half the picture and they came into it at its last frame)
+    {
+      const rx0 = run[1][0] - P.pos.x;
+      const rz0 = run[1][1] - P.pos.z;
+      const rl = Math.hypot(rx0, rz0) || 1;
+      const fx = rx0 / rl;
+      const fz = rz0 / rl;
+      this.shot({ from: () => v3(P.pos.x - fx * 2.3 + fz * 0.55, 1.35, P.pos.z - fz * 2.3 - fx * 0.55), look: () => v3(P.pos.x + fx * 3, 1.1, P.pos.z + fz * 3), fov: 48, dur: 1.8, hand: 1, step: 12, shake: 0.06 });
+    }
     this.comic.lines(null, 1.4, 0.8);
     {
       let t = 0;
