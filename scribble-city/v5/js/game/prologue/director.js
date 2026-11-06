@@ -624,9 +624,15 @@ export class Prologue {
   // script's step and the camera: a cut's first frame had the last shot's rub marks over it, and the
   // game's look for a moment at the start of a film
   lateFrame() {
-    if (!this.active || this._late === null || this._late === undefined) return;
+    if (!this.active) {
+      if (this.game.extrasOff) this.game.extrasOff = false;
+      return;
+    }
+    if (this._late === null || this._late === undefined) return;
     const dt = this._late;
     this._late = null;
+    // (round 14: a moment's colour holds only whose moment it is - the city's own extras out of it too)
+    this.game.extrasOff = !!(this.holdCam && this.emoteWant && this.emoteKeep);
     this.tickLook();
     // (round 14: the story's people's quick hands smeared as they go - in the film only: comic.js)
     if (this.holdCam) {
@@ -971,6 +977,7 @@ export class Prologue {
   shot(s) {
     this.shots.cut(s);
     this.cutNow = true;
+    if (this.comic && this.comic.cutSmears) this.comic.cutSmears();
     // (round 11: a moment's colour gone with the shot it was in - not bleeding into the next)
     const LK = this.game.pipe && this.game.pipe.look;
     if (LK && !this.emoteWant && LK.emote) LK.emote = 0;

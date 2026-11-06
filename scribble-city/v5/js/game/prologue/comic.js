@@ -114,18 +114,21 @@ export class Comic {
   }
 
   // (round 14) a quick hand drawn with the smear of its speed - a streak behind it for a frame or two,
-  // as on a drawn film's in-between: the figures this follows (smearFigs), only while it is a film
+  // as on a drawn film's in-between: the figures this follows (smearFigs), only while it is a film. Its
+  // speed is the hand's own, in the world - not on the picture, where a cut or a turn of the camera moved
+  // every hand at once
   trackSmears(dt, W, H) {
     const F = this.smearFigs;
     if (!F || !F.length) {
       this.sm.length = 0;
       return;
     }
+    this.smT = (this.smT || 0) + dt;
     let k = 0;
     for (const f of F) {
       if (!f || !f.j || f.visible === false) continue;
       for (const hk of ['handR', 'handL']) {
-        const st = this.sm[k] || (this.sm[k] = { fig: null, pts: [], life: 0 });
+        const st = this.sm[k] || (this.sm[k] = { fig: null, hk: '', pts: [], life: 0, at: 0 });
         k++;
         if (st.fig !== f || st.hk !== hk) {
           st.fig = f;
@@ -133,30 +136,35 @@ export class Comic {
           st.pts.length = 0;
           st.life = 0;
         }
-        const c = this.at(f.j[hk]);
-        if (!c) {
-          st.pts.length = 0;
-          continue;
-        }
-        const p = [c[0] * W, c[1] * H];
+        const w = f.j[hk];
         const last = st.pts[st.pts.length - 1];
         // (a new place of the hand - on twos, twelve times a second)
-        if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 0.5) {
-          st.pts.push(p);
+        if (!last || last.distanceToSquared(w) > 1e-4) {
+          const step = last ? last.distanceTo(w) : 0;
+          const gap = Math.max(1 / 30, this.smT - st.at);
+          st.at = this.smT;
+          st.pts.push(w.clone());
           if (st.pts.length > 3) st.pts.shift();
-          if (last && dt > 0) {
-            const v = Math.hypot(p[0] - last[0], p[1] - last[1]) / H;
-            // (more than a tenth of the picture's height at one step: a smear)
-            if (v > 0.1 && v < 0.6) st.life = 0.09;
-          }
+          // (a hand going more than a metre and a half a second, a good way: a smear)
+          if (last && step > 0.09 && step < 0.9 && step / gap > 1.5) st.life = 0.09;
         }
         if (st.life > 0) {
           st.life -= dt;
-          this.drawSmear(st.pts, H);
+          const a = st.pts.length > 1 ? this.at(st.pts[st.pts.length - 2]) : null;
+          const b = this.at(st.pts[st.pts.length - 1]);
+          if (a && b) this.drawSmear([[a[0] * W, a[1] * H], [b[0] * W, b[1] * H]], H);
         }
       }
     }
     this.sm.length = k;
+  }
+
+  // (a cut: no smear across it, from where a hand was in the last shot)
+  cutSmears() {
+    for (const st of this.sm) {
+      st.pts.length = 0;
+      st.life = 0;
+    }
   }
 
   drawSmear(pts, H) {

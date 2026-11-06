@@ -1456,8 +1456,12 @@ export class Game {
       this.weapons.updateModels();
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
-      this.farCrowd.draw(this.camera.position);
-      this.shopCrowd.draw(this.camera.position);
+      // (round 14: in a film's moment of feeling - its colour round one of them - nobody of the
+      // city's own in the picture with them: game/prologue/director.js lateFrame, extrasOff)
+      if (!this.extrasOff) {
+        this.farCrowd.draw(this.camera.position);
+        this.shopCrowd.draw(this.camera.position);
+      }
       if (this.festival) this.festival.draw(fr);
       if (this.prolSet) this.prolSet.draw(fr);
       if (this.artnight) this.artnight.draw(fr);
@@ -1465,11 +1469,13 @@ export class Game {
       if (this.casino) this.casino.draw(fr);
       if (this.parties) this.parties.draw(fr);
       if (this.arenaGame) this.arenaGame.draw();
-      this.streetlife.draw(fr);
-      this.mallLife.draw(fr);
-      this.workers.draw(fr);
-      this.events.draw(fr);
-      this.vignettes.draw(fr);
+      if (!this.extrasOff) {
+        this.streetlife.draw(fr);
+        this.mallLife.draw(fr);
+        this.workers.draw(fr);
+        this.events.draw(fr);
+        this.vignettes.draw(fr);
+      }
       this.airsketch.render(fr);
       this.traffic.draw(this.camera.position);
       this.fleet.draw(fr);
