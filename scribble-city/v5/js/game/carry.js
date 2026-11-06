@@ -772,6 +772,20 @@ function strokesFor(fig, item, side, w) {
       // a big drawing pencil, tip forward along the forearm
       const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
       _d.subVectors(h, el).normalize();
+      // (round 14: her coloured pencil a child's - slim and short, the wood of its point bare and the
+      // lead its colour: the drawing pencil's size, close over her page, was a log across the page and
+      // her face. game/prologue/page.js puts her hand its length back from where it draws)
+      if (fig.pencilCol) {
+        const pc = fig.pencilCol;
+        _a.copy(h).addScaledVector(_d, -0.06 * S);
+        _b.copy(h).addScaledVector(_d, 0.1 * S);
+        line(fig, _a, _b, pc, w * 1.5, sd + 120);
+        _c.copy(_b).addScaledVector(_d, 0.032 * S);
+        line(fig, _b, _c, [0.93, 0.8, 0.62], w * 1.05, sd + 121);
+        _a.copy(_c).addScaledVector(_d, -0.012 * S);
+        line(fig, _a, _c, pc, w * 0.62, sd + 123);
+        break;
+      }
       _a.copy(h).addScaledVector(_d, -0.1 * S);
       _b.copy(h).addScaledVector(_d, 0.2 * S);
       // (v5, round 14: a coloured pencil, fig.pencilCol - its body and its point the colour it draws,

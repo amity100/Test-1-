@@ -203,7 +203,8 @@ export class HeldPage {
       const el = j.elbowR;
       _x.subVectors(this.tipW, el);
       const l = _x.length() || 1;
-      f.reachR.copy(this.tipW).addScaledVector(_x, -(0.27 * S) / l).addScaledVector(_n, 0.006);
+      // (round 14: her coloured pencil a child's, its point 0.13 ahead of her hand - game/carry.js)
+      f.reachR.copy(this.tipW).addScaledVector(_x, -(0.132 * S) / l).addScaledVector(_n, 0.006);
       f.pencilCol = hexRgb(this.tip.col);
     } else {
       const t = (this.game.time || 0) + (this.ph || (this.ph = Math.random() * 10));

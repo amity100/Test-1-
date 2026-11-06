@@ -2286,14 +2286,17 @@ export class Prologue {
       yield 1.9;
       // 3. from the wheel's side, wide: her on the bench colouring, and him coming back along the pier
       this.walkTo = { x: VIEW.x + rx * 1.3, z: VIEW.z + rz * 1.3, speed: 0.42 };
-      // (round 14: the look between the two of them as he comes - both in it, him not a speck far off)
+      // (round 14: in front of her, at her - her colouring big in the picture, and over her shoulder,
+      // behind her, him coming back along the pier to her; from the wheel's side far off he was a speck)
       {
-        const mid = () => {
-          const a = this.headJ(L) || v3(L.pos.x, 1.0, L.pos.z);
-          const b = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
-          return v3(a.x * 0.55 + b.x * 0.45, Math.min(a.y, b.y) - 0.05, a.z * 0.55 + b.z * 0.45);
-        };
-        this.shot({ from: [bx + ux * 3.6 + rx * 1.4, 1.25, bz + uz * 3.6 + rz * 1.4], look: mid, fov: 38, dur: 2.7, hand: 0.25 });
+        const hl = () => this.headJ(L) || v3(L.pos.x, 1.0, L.pos.z);
+        this.shot({
+          from: () => { const h = hl(); return v3(h.x + ux * 1.55 + rx * 0.55, h.y + 0.12, h.z + uz * 1.55 + rz * 0.55); },
+          look: () => { const h = hl(); const p = this.headJ(P) || v3(P.pos.x, 1.6, P.pos.z); return v3(h.x * 0.72 + p.x * 0.28, h.y - 0.12, h.z * 0.72 + p.z * 0.28); },
+          fov: 38,
+          dur: 2.7,
+          hand: 0.25,
+        });
       }
       yield 2.7;
       // 4. close: her name, the last of it
