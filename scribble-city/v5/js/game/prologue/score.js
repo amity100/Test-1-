@@ -1459,7 +1459,8 @@ const FILES = {
   // couple of seconds on, it goes over slowly into the most disturbing music, and that stays with the
   // scene till the wheel is gone: a carnival music box broken and dying over a drone that never
   // resolves, a clock off the beat, a heart - ElevenLabs, round and round)
-  dread: { path: 'music/wheel_dread.mp3', from: 0, a: 2, b: 116, x: 3, gain: 0.72, send: 0.25 },
+  // (round 15: from its loud part, and louder - frightening from the first moment)
+  dread: { path: 'music/wheel_dread.mp3', from: 3, a: 2, b: 116, x: 3, gain: 0.95, send: 0.25 },
   // (ROADMAP 18.9: the player's word - cute and disturbing at once, a little horror film: a sweet
   // music box that goes out of tune and melts while a dark drone, scraping strings and a heart grow
   // under it - begun under the boy waving from his gondola, cut dead the moment the wheel goes, some

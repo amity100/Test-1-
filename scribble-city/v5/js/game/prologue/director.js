@@ -1564,9 +1564,10 @@ export class Prologue {
     const L = this.cast.lily;
     this.objective(null);
     if (g.gps) g.gps.clear();
-    // (round 11, the player's word: the music cute but very tense from the first sight of the wheel -
-    // score.js FILES.tense - and on through the pier)
-    this.cue('tense', { fade: 3 });
+    // (round 15, the player's word: really frightening music the moment the giant wheel is first seen -
+    // not a cute tune going over slowly into it: the dread at once, at its full, from its loud part, a
+    // sting on the first sight of it - score.js FILES.dread)
+    this.cue('dread', { fade: 0.15 });
     this.film(true);
     // she looks up from her drawing and sees him coming: from behind him, low, her at the stand in the
     // evening ahead of him - he walks the last steps into it
@@ -1582,11 +1583,8 @@ export class Prologue {
       this.faceTo(L, WHEEL.x, WHEEL.z);
       L.fig.lookAt = W0;
       this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.0, back: 0.75, side: 0.32 }), look: W0, lookTo: v3(WHEEL.x, 31.5, WHEEL.z), fov: 40, fovTo: 33, dur: 3.6, ease: 'inout', hand: 0.15 });
-      // (round 13, the player's word: a second or two of the cute tune - then over, slowly, into the
-      // dread: score.js dread)
-      yield 1.5;
-      this.cue('dread', { fade: 5 });
-      yield 1.8;
+      this.sample('sfx/sting.mp3', 0.85);
+      yield 3.3;
       this.faceTo(L, meet.x, meet.z);
       L.fig.lookAt = null;
     }
