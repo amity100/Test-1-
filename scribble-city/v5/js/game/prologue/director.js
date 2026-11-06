@@ -3640,7 +3640,9 @@ export class Prologue {
     }
     // over their shoulders: him and Lily, small, at the door of the car park - they have been waiting
     // for him
-    this.shot({ from: () => v3(t1.pos.x + ux * 2.2 - uz * 1.1, 1.75, t1.pos.z + uz * 2.2 + ux * 1.1), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 40, dur: 2.2, hand: 0.5 });
+    // (round 14: from their side of it, low at the curb - him coming, in the light, watched; over their
+    // shoulders the striped post by the way in stood across the middle of the picture)
+    this.shot({ from: () => v3(t1.pos.x + ux * 2.0 - uz * 2.4, 0.9, t1.pos.z + uz * 2.0 + ux * 2.4), look: () => v3(P.pos.x, 1.3, P.pos.z), fov: 34, dur: 2.2, hand: 0.5 });
     this.go(t1, S1.x - ux * 2.0, S1.z - uz * 2.0, 1.0);
     this.go(t2, S2.x - ux * 1.6, S2.z - uz * 1.6, 1.0);
     yield 1.6;
@@ -3668,7 +3670,9 @@ export class Prologue {
     this.feel(P.fig, 'angry', 14);
     P.fig.lookAt = t1.fig.j.headC;
     // (from behind the two of them: Danny, Lily at his back - and the two men down the sidewalk)
-    this.shot({ from: () => v3(P.pos.x - ux * 2.6 + uz * 0.9, 1.7, P.pos.z - uz * 2.6 - ux * 0.9), look: () => v3(t1.pos.x, 1.35, t1.pos.z), fov: 38, dur: 2.6, hand: 0.5 });
+    // (round 14: his face as he says it - from behind him it was his dark back by the striped post, the
+    // two of them specks down the sidewalk)
+    this.shot({ ...this.single(P, t1, { dist: 1.5, side: 0.45, up: -0.15, drop: 0.12 }), fov: 36, dur: 2.6, hand: 0.5 });
     yield* this.say('D18', P.fig, 0.3);
     this.shot({ ...this.single(t1, P, { dist: 1.6, side: -0.42, up: -0.15, drop: 0.14 }), fov: 34, dur: 3.2, hand: 0.5 });
     yield* this.say('T02', t1.fig, 0.25);
@@ -3678,7 +3682,9 @@ export class Prologue {
     // the other one moves out to the side - slowly, his hand inside his jacket (towards the curb: the
     // building's face is on the other side)
     this.go(t2, S2.x - ux * 1.5 + uz * 1.4, S2.z - uz * 1.5 - ux * 1.4, 0.8);
-    this.shot({ from: () => v3(P.pos.x - ux * 1.6 + uz * 1.2, 1.5, P.pos.z - uz * 1.6 - ux * 1.2), look: () => v3((t1.pos.x + t2.pos.x) / 2, 1.4, (t1.pos.z + t2.pos.z) / 2), fov: 30, dur: 3.4, hand: 0.6 });
+    // (round 14: the threat close on him - it was said in a wide down the sidewalk, the two of them
+    // specks; the other one going out to the side behind him)
+    this.shot({ ...this.single(t1, P, { dist: 1.2, side: -0.5, up: -0.12, drop: 0.12 }), fov: 32, dur: 3.4, hand: 0.6 });
     yield* this.say('T03', t1.fig, 0.25);
     // (round 9: the stand-off, as a western has it and an anime cuts it - his eyes, theirs, close and
     // still, the sound of the street gone under it; then the guns)
@@ -3716,7 +3722,9 @@ export class Prologue {
     }
     // wrong answer: the guns - from low beside the line of his arm, the gun big in the picture, his face
     // over it (a kick as they come up)
-    this.shot({ from: () => v3(t1.pos.x - ux * 2.4 + uz * 0.95, 1.2, t1.pos.z - uz * 2.4 - ux * 0.95), look: () => { const h = this.headJ(t1) || v3(t1.pos.x, 1.6, t1.pos.z); return v3(h.x - ux * 0.35, h.y - 0.3, h.z - uz * 0.35); }, fov: 40, dur: 2.0, hand: 0.6, shake: 0.08, roll: 0.05 });
+    // (round 14: from his other side, nearer - the two of them and the gun against the sky; from this
+    // side the striped post stood in front of it all)
+    this.shot({ from: () => v3(t1.pos.x - ux * 1.6 - uz * 0.75, 1.25, t1.pos.z - uz * 1.6 + ux * 0.75), look: () => { const h = this.headJ(t1) || v3(t1.pos.x, 1.6, t1.pos.z); return v3(h.x - ux * 0.3, h.y - 0.28, h.z - uz * 0.3); }, fov: 38, dur: 2.0, hand: 0.6, shake: 0.08, roll: 0.05 });
     this.armThug(t1, P);
     g.audio.play('click', 0.6);
     this.flash(0.12, '#ffffff');
@@ -3755,7 +3763,8 @@ export class Prologue {
     // (round 11: the run seen for a beat only - from just inside the way in, the two of them bursting
     // through it at us under the gunfire - and cut on it, to the car: the long run in the dark was
     // specks and dolls' legs)
-    const inside = v3(run[1][0] - 1.4, 1.25, run[1][1] - 6.5);
+    // (round 14: on the way in's own line - off it, its pink wall filled half the picture)
+    const inside = v3(run[1][0] - 0.4, 1.25, run[1][1] - 6.5);
     this.walkTo = { x: run[1][0], z: run[1][1], speed: 1, sprint: true };
     this.shot({ from: inside, to: v3(inside.x, 1.2, inside.z - 0.6), look: () => v3((P.pos.x + L.pos.x) / 2, 1.15, (P.pos.z + L.pos.z) / 2), fov: 42, dur: 1.8, hand: 1, step: 12 });
     this.comic.lines(null, 1.4, 0.8);
@@ -3785,7 +3794,8 @@ export class Prologue {
     // way in behind it - from the sidewalk the new car park's wall hid it)
     {
       const E = PARK.entrance;
-      this.shot({ from: v3(v.pos.x - 3.4, 1.05, v.pos.z - 6.5), look: v3((v.pos.x + E.x) / 2, 0.95, (v.pos.z + E.z) / 2), fov: 52, dur: 2.2, hand: 1 });
+      // (round 14: the car itself in the picture - it was cut by its edge)
+      this.shot({ from: v3(v.pos.x - 3.4, 1.05, v.pos.z - 6.5), look: v3(v.pos.x * 0.68 + E.x * 0.32, 0.95, v.pos.z * 0.68 + E.z * 0.32), fov: 52, dur: 2.2, hand: 1 });
     }
     this.comic.word('VROOOM!', v3(v.pos.x, 1.4, v.pos.z), { fill: '#ff6f3a', burst: '#ffd23f', size: 0.1, life: 1.0 });
     // (round 14: and the smoke off its back tyres, drawn)
