@@ -842,6 +842,13 @@ class Vehicle {
       brake = input.keys.has('Space');
       if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
     }
+    // (round 15: just got into - a second to start it: game.js tickEntry)
+    if (this.holdT > 0) {
+      this.holdT -= dt;
+      throttle = 0;
+      steer = 0;
+      brake = true;
+    }
     if (this.stall > 0) {
       this.stall -= dt;
       throttle *= 0.1;

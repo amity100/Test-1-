@@ -1443,35 +1443,17 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     let t = 0;
-    // 1. walk, look round
-    this.objective('<b>Explore</b> the city');
-    this.howto('explore');
+    // (round 15, the player's word: no how-to cards over the screen, no steps to follow - only: walk
+    // round the city and look at it; and then: break into a car and take it)
+    // 1. walk round, look at it
+    this.objective('Walk around the <b>city</b> - take a look at it');
     const p0 = P.pos.clone();
     yield () => {
       t += this.dtR;
-      return t > 14 || (t > 4 && P.pos.distanceTo(p0) > 16);
+      return t > 24 || (t > 9 && P.pos.distanceTo(p0) > 30);
     };
-    this.howto(null);
     yield 0.6;
-    // 2. a shop: in through its door
-    if (!P.inVehicle) {
-      this.objective('Walk into a <b>shop</b>');
-      this.howto('shop');
-      t = 0;
-      let inside = false;
-      yield () => {
-        t += this.dtR;
-        if (P.indoor && !inside) {
-          inside = true;
-          t = Math.max(t, 22);
-          this.howto('inside');
-        }
-        return t > (inside ? 30 : 26) || !!P.inVehicle;
-      };
-      this.howto(null);
-      yield 0.6;
-    }
-    // 3. a car: the nearest one parked, his
+    // 2. a car: the nearest one parked - his window smashed, in, away (game.js beginEntry)
     const parked = () => {
       let best = null;
       let bd = 1e9;
@@ -1488,8 +1470,7 @@ export class Prologue {
     };
     if (!P.inVehicle) {
       let car = parked();
-      this.objective('Take a <b>car</b>', car ? car.pos.x : null, car ? car.pos.z : null, 'Car');
-      this.howto('car');
+      this.objective('Break into a <b>car</b> and take it', car ? car.pos.x : null, car ? car.pos.z : null, 'Car');
       t = 0;
       let gpsT = 0;
       yield () => {
@@ -1497,19 +1478,19 @@ export class Prologue {
         gpsT += this.dtR;
         if (gpsT > 1.5) {
           gpsT = 0;
-          car = parked();
-          if (car && g.gps) g.gps.set(car.pos.x, car.pos.z, 'Car');
+          const c2 = parked();
+          // (sent to another only when the nearest is another - its marker's click once)
+          if (c2 && c2 !== car && g.gps) g.gps.set(c2.pos.x, c2.pos.z, 'Car');
+          car = c2 || car;
         }
-        return !!P.inVehicle || t > 60;
+        return !!P.inVehicle || t > 90;
       };
-      this.howto(null);
       if (g.gps) g.gps.clear();
       yield 0.5;
     }
     // 4. drive it
     if (P.inVehicle) {
       this.objective('<b>Drive</b> - get a feel for it');
-      this.howto('drive');
       const q0 = P.pos.clone();
       t = 0;
       yield () => {

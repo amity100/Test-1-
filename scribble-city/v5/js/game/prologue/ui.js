@@ -258,11 +258,11 @@ export class PrologueUI {
       const lines = (o.lines || []).map(([k, w]) => `<li><span class="k">${keys(k)}</span><span>${w}</span></li>`).join('');
       this.hintEl.classList.add('card', 'how');
       this.hint(`<span class="tag">${tag}</span><b class="t">${o.title}</b>${o.say ? `<div class="say">${o.say}</div>` : ''}${lines ? `<ul>${lines}</ul>` : ''}${o.tip ? `<div class="tip">${o.tip}</div>` : ''}`);
-      // (round 9, the player's word: it covered the screen - big for a moment, then off to the side,
-      // small, its keys still there, the game playable round it)
-      this.dock(false);
+      // (round 9, the player's word: it covered the screen - big for a moment, then off to the side;
+      // round 15, the player's word again: big at all it was too much - at the side, small, from the
+      // start, its keys there, the game playable round it)
       clearTimeout(this.dockT);
-      this.dockT = setTimeout(() => this.dock(true), o.big !== undefined ? o.big * 1000 : 2800);
+      this.dock(true);
       return;
     }
     clearTimeout(this.dockT);

@@ -329,7 +329,9 @@ export class Weapons {
       if (input.fire && slot.ammo > 0) this.fireBeam(slot, dt);
     }
     if (this.fists) {
-      if (onFoot && def.bare) this.fists.update(dt, input);
+      // (round 15: not while he gets into a car - its fist through the window is the sequence's own:
+      // game.js tickEntry)
+      if (onFoot && def.bare && !this.game.entry) this.fists.update(dt, input);
       else this.fists.idle(player.fig, dt);
     }
     if (this.swingT >= 0) {

@@ -318,7 +318,7 @@ export class Autopilot {
 
   tour(o, pl, c) {
     const g = this.g;
-    if (/Explore/.test(o)) {
+    if (/Explore|Walk around/.test(o)) {
       this.set(0, 1, false);
       return;
     }
@@ -351,7 +351,7 @@ export class Autopilot {
       } else this.set(0, 1);
       return;
     }
-    if (/Take a/.test(o)) {
+    if (/Take a|Break into/.test(o)) {
       this.once('car', () => {
         let best = null;
         let bd = 1e9;
