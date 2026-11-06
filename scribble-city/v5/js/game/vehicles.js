@@ -1,0 +1,1908 @@
+import * as THREE from 'three';
+import { BLUEPRINTS } from './blueprints.js';
+import { Kit, itemMats, warpFor, linC } from './items.js';
+import { groundHeight, worldEdge, pageDist, PAGE } from '../world/layout.js';
+import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
+import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake } from './rides.js';
+import { hybridStep, updateBalloon } from './hybrid.js';
+import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
+
+// The things you drive: the city's own cars (taken from the traffic or from the curb), and the
+// ones you drew - the scribble car, the crazy tank, the motorbike, the paper helicopter. They are
+// made like everything else in the city (glossy paint full of the sunset), and how well you drew
+// them shows: a wonky drawing pulls to one side, a bad one barely runs.
+
+const _v = new THREE.Vector3();
+const _tb = new THREE.Vector3();
+const _tz = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _stripe = new THREE.Matrix4();
+// (ROADMAP 4.6) the car's own frame this frame (render/cars.js), for what is drawn on it
+const _cm = new THREE.Matrix4();
+const _pa = new THREE.Vector3();
+const _pb = new THREE.Vector3();
+const MUD = [0.42, 0.33, 0.24];
+const MUD_INK = [0.36, 0.27, 0.2];
+const SHINE = [3.2, 3.2, 3.0];
+const RIM_UP = [null, [0.86, 0.86, 0.9], [0.2, 0.2, 0.24], [1.0, 0.78, 0.3]];
+const SIDES = [1, -1];
+const SIDE_L = [1];
+const SIDE_R = [-1];
+const UP = new THREE.Vector3(0, 1, 0);
+// (how much tougher the vehicles are than they were at first: Vehicle.hurt)
+const TOUGH = 4;
+
+const VEH = {
+  car: { width: 1.95, hp: 170, len: 2.26 },
+  tank: { width: 3.2, hp: 520, len: 3.3 },
+  bike: { width: 0.6, hp: 120, len: 1.1 },
+  copter: { width: 1.6, hp: 320, len: 3.0 },
+  // (ROADMAP 4.8: a jet ski's and a boat's, a light plane's)
+  boat: { width: 1.9, hp: 160, len: 2.6 },
+  plane: { width: 9.6, hp: 170, len: 3.8 },
+  // (ROADMAP 11.8: a hot air balloon, drawn)
+  balloon: { width: 3, hp: 140, len: 1.5 },
+};
+
+// (v5, ROADMAP 11.41) the catalog's cars, drawn from nothing: each one of the city's car shapes
+// (render/cars.js), its colour, its trim, how much tougher it is - and what it can do: a turbo,
+// crushing what it drives over, armour, a ram (its handling: HANDLING)
+export const CAR_BP = {
+  hyper: { kind: 'hyper', color: [0.08, 0.86, 0.8], extra: 'hyper', hp: 0.9, jets: 1 },
+  muscle: { kind: 'muscle', color: [0.95, 0.46, 0.08], extra: 'muscle', hp: 1.2, jets: 1 },
+  monster: { kind: 'monster', color: [0.42, 0.82, 0.18], extra: 'monster', hp: 2.0, crush: true, armor: 0.3 },
+  armored: { kind: 'armored', color: [0.17, 0.18, 0.2], extra: 'armored', hp: 2.6, armor: 0.6, ram: { k: 2, shield: true } },
+  limo: { kind: 'limo', color: [0.04, 0.04, 0.05], extra: 'limo', hp: 1.3 },
+  firetruck: { kind: 'firetruck', color: [0.82, 0.08, 0.06], extra: 'fire', hp: 2.2, ram: { k: 1.5 } },
+};
+
+const QUALITY = {
+  perfect: { speed: 1.15, accel: 1.2, pull: 0, stall: 0, wobble: 0, hp: 1.3, reload: 0.8 },
+  good: { speed: 1, accel: 1, pull: 0, stall: 0, wobble: 0, hp: 1, reload: 1 },
+  wonky: { speed: 0.7, accel: 0.7, pull: 0.28, stall: 0.05, wobble: 0.5, hp: 0.8, reload: 1.6 },
+  fail: { speed: 0.22, accel: 0.35, pull: 0.6, stall: 0.2, wobble: 1.4, hp: 0.5, reload: 3 },
+};
+
+// ------------------------------------------------------------------ the drawn ones' models
+// (a car's own frame: x right, y up, z forward; on the ground at y = 0)
+function tankModel(grade) {
+  const M = itemMats();
+  const hull = new Kit();
+  const olive = linC(0.62, 0.7, 0.44);
+  const dark = linC(0.32, 0.32, 0.36);
+  // the tracks, each a long rounded band with five wheels showing
+  for (const sx of [-1, 1]) {
+    hull.box(M.matte, sx * 1.6 - 0.32, 0.18, -2.8, sx * 1.6 + 0.32, 0.95, 2.8, dark);
+    hull.cyl(M.matte, 0.39, 0.39, sx * 1.6 - 0.32, sx * 1.6 + 0.32, dark, { axis: 'z', segs: 14 });
+    for (let k = 0; k < 5; k++) {
+      const z = -2.2 + k * 1.1;
+      const g = new THREE.CylinderGeometry(0.34, 0.34, 0.08, 14).rotateZ(Math.PI / 2);
+      g.translate(sx * (1.6 + 0.33), 0.5, z);
+      hull.add(M.metal, g, linC(0.6, 0.6, 0.64));
+    }
+    for (const z of [-2.8, 2.8]) {
+      const g = new THREE.CylinderGeometry(0.39, 0.39, 0.64, 14).rotateZ(Math.PI / 2);
+      g.translate(sx * 1.6, 0.57, z);
+      hull.add(M.matte, g, dark);
+    }
+  }
+  // the hull, sloping at the front, a plough like a big eraser blade
+  hull.box(M.paint, -1.3, 0.75, -2.7, 1.3, 1.55, 2.4, olive);
+  const nose = new THREE.BoxGeometry(2.6, 0.7, 0.9);
+  nose.rotateX(-0.6);
+  nose.translate(0, 1.1, 2.7);
+  hull.add(M.paint, nose, olive);
+  hull.box(M.round, -1.9, 0.12, 3.25, 1.9, 0.75, 3.45, linC(0.93, 0.55, 0.6));
+  hull.box(M.matte, -1.3, 1.55, -2.7, 1.3, 1.62, -1.8, linC(0.45, 0.5, 0.36));
+  const body = hull.build({ warp: warpFor(grade, 3) });
+  // the turret, its long barrel, the hatch, the antenna and its little flag
+  const tur = new Kit();
+  tur.cyl(M.paint, 1.15, 1.0, 0, 0.8, linC(0.56, 0.66, 0.4), { axis: 'y', segs: 18 });
+  tur.cyl(M.metal, 0.2, 0.18, 0.6, 4.2, linC(0.42, 0.46, 0.36), { y: 0.45, segs: 12 });
+  tur.cyl(M.metal, 0.26, 0.26, 4.0, 4.35, linC(0.3, 0.32, 0.3), { y: 0.45, segs: 12 });
+  tur.cyl(M.matte, 0.38, 0.38, 0.8, 0.95, linC(0.45, 0.5, 0.36), { axis: 'y', x: -0.35, segs: 12 });
+  tur.cyl(M.metal, 0.02, 0.02, 0.8, 2.6, linC(0.3, 0.3, 0.34), { axis: 'y', x: 0.6, z: -0.5, segs: 5 });
+  const flag = new THREE.BoxGeometry(0.03, 0.4, 0.6);
+  flag.translate(0.6, 2.35, -0.8);
+  tur.add(M.paint, flag, linC(0.98, 0.45, 0.5));
+  const turret = tur.build({ warp: warpFor(grade, 4) });
+  turret.matrixAutoUpdate = true;
+  turret.position.set(0, 1.55, -0.2);
+  body.add(turret);
+  return { body, turret, muzzle: new THREE.Vector3(0, 0.45, 4.4), wheelsZ: [] };
+}
+
+function bikeModel(grade) {
+  const M = itemMats();
+  const K = new Kit();
+  const red = linC(0.88, 0.25, 0.22);
+  const dark = linC(0.18, 0.18, 0.22);
+  // the frame, the tank and the fairing in glossy red, the seat, the exhaust
+  K.box(M.paint, -0.2, 0.55, -0.45, 0.2, 0.95, 0.55, red);
+  const fair = new THREE.BoxGeometry(0.42, 0.55, 0.5);
+  fair.rotateX(0.5);
+  fair.translate(0, 1.0, 0.72);
+  K.add(M.paint, fair, red);
+  K.box(M.matte, -0.17, 0.95, -0.75, 0.17, 1.05, 0.1, dark);
+  K.cyl(M.metal, 0.06, 0.05, -1.05, -0.2, linC(0.8, 0.8, 0.84), { x: 0.24, y: 0.42 });
+  K.box(M.metal, -0.08, 0.35, -0.2, 0.08, 0.6, 0.35, linC(0.55, 0.55, 0.6));
+  // the forks and the bars, the light
+  for (const sx of [-1, 1]) {
+    const f = new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6);
+    f.rotateX(-0.42);
+    f.translate(sx * 0.12, 0.85, 1.05);
+    K.add(M.metal, f, linC(0.8, 0.8, 0.84));
+  }
+  K.cyl(M.metal, 0.025, 0.025, -0.38, 0.38, dark, { axis: 'z', y: 1.38, segs: 6, rot: Math.PI / 2 });
+  const bars = new THREE.CylinderGeometry(0.025, 0.025, 0.76, 6).rotateZ(Math.PI / 2);
+  bars.translate(0, 1.38, 0.82);
+  K.add(M.metal, bars, dark);
+  K.sphere(M.glow, 0.09, 0, 1.15, 1.02, linC(1.0, 0.95, 0.75), 1, 1, 0.6, 10);
+  K.box(M.glow, -0.12, 0.72, -0.82, 0.12, 0.78, -0.78, linC(1.0, 0.2, 0.25));
+  const body = K.build({ warp: warpFor(grade, 5) });
+  // the wheels (they roll)
+  const wheels = [];
+  for (const z of [-0.72, 1.28]) {
+    const W = new Kit();
+    const tyre = new THREE.TorusGeometry(0.34, 0.09, 8, 20).rotateY(Math.PI / 2);
+    W.add(M.matte, tyre, dark);
+    const hub = new THREE.CylinderGeometry(0.1, 0.1, 0.12, 10).rotateZ(Math.PI / 2);
+    W.add(M.metal, hub, linC(0.75, 0.75, 0.8));
+    for (let k = 0; k < 5; k++) {
+      const sp = new THREE.BoxGeometry(0.02, 0.6, 0.03);
+      sp.rotateX((k / 5) * Math.PI);
+      W.add(M.metal, sp, linC(0.75, 0.75, 0.8));
+    }
+    const w = W.build();
+    w.matrixAutoUpdate = true;
+    w.position.set(0, 0.43, z);
+    body.add(w);
+    wheels.push(w);
+  }
+  return { body, wheels, seat: [0, 1.0, -0.3], bar: [0, 1.38, 0.82] };
+}
+
+function copterModel(grade) {
+  const M = itemMats();
+  const K = new Kit();
+  const paper = linC(0.97, 0.95, 0.9);
+  const lines = linC(0.62, 0.72, 0.9);
+  // a cabin folded from a notebook page: a faceted egg, a bubble window, a long tail, skids
+  const cab = new THREE.IcosahedronGeometry(1.0, 1);
+  cab.scale(1.0, 0.9, 1.45);
+  cab.translate(0, 1.6, 0.2);
+  K.add(M.matte, cab, paper);
+  K.sphere(M.glass, 0.72, 0, 1.75, 0.95, linC(0.6, 0.78, 0.95), 1, 0.85, 0.75, 12);
+  const tail = new THREE.CylinderGeometry(0.18, 0.4, 3.4, 6).rotateX(Math.PI / 2);
+  tail.translate(0, 1.75, -2.5);
+  K.add(M.matte, tail, paper);
+  const fin = new THREE.BoxGeometry(0.06, 1.0, 0.6);
+  fin.translate(0, 2.2, -4.0);
+  K.add(M.matte, fin, paper);
+  // the blue rules of the page, round the cabin
+  for (const y of [1.25, 1.55, 1.85]) K.cyl(M.matte, 0.985 * Math.sqrt(1 - ((y - 1.6) / 0.9) ** 2), 0.985 * Math.sqrt(1 - ((y - 1.6) / 0.9) ** 2), y, y + 0.02, lines, { axis: 'y', z: 0.2, segs: 20 });
+  for (const sx of [-1, 1]) {
+    K.cyl(M.metal, 0.04, 0.04, -0.9, 1.1, linC(0.35, 0.35, 0.4), { x: sx * 0.75, y: 0.15, segs: 6 });
+    for (const z of [-0.5, 0.7]) K.cyl(M.metal, 0.03, 0.03, 0.15, 0.75, linC(0.35, 0.35, 0.4), { axis: 'y', x: sx * 0.68, z, segs: 5 });
+  }
+  K.cyl(M.metal, 0.07, 0.07, 2.4, 2.9, linC(0.4, 0.4, 0.45), { axis: 'y', z: 0.2, segs: 8 });
+  const body = K.build({ warp: warpFor(grade, 6) });
+  const rot = (len, wid) => {
+    const R = new Kit();
+    for (const a of [0, Math.PI / 2]) {
+      const b = new THREE.BoxGeometry(len * 2, 0.02, wid);
+      b.rotateY(a);
+      R.add(M.matte, b, paper);
+    }
+    const g = R.build();
+    g.matrixAutoUpdate = true;
+    return g;
+  };
+  const rotor = rot(3.6, 0.32);
+  rotor.position.set(0, 2.92, 0.2);
+  body.add(rotor);
+  const tailRotor = rot(0.6, 0.12);
+  tailRotor.rotation.z = Math.PI / 2;
+  tailRotor.position.set(0.12, 2.25, -4.0);
+  body.add(tailRotor);
+  return { body, rotor, tailRotor };
+}
+
+// The city's own helicopters (the evening news over downtown, the police when it gets hot): a
+// real one's size and shape, so even far over the towers it reads as a helicopter. livery:
+// 'news' (white, an orange band) or 'police' (navy, white).
+function cityCopterModel(livery = 'news') {
+  const M = itemMats();
+  const K = new Kit();
+  const police = livery === 'police';
+  const top = police ? linC(0.13, 0.17, 0.4) : linC(0.96, 0.95, 0.96);
+  const belly = police ? linC(0.94, 0.94, 0.97) : linC(0.18, 0.2, 0.34);
+  const band = police ? linC(0.35, 0.62, 0.98) : linC(1.0, 0.5, 0.14);
+  const dark = linC(0.12, 0.12, 0.15);
+  const glass = linC(0.34, 0.5, 0.72);
+  // the cabin: a long egg, darker underneath, a band along its side, the glass nose
+  K.sphere(M.paint, 1, 0, 1.6, 0.5, top, 1.22, 1.18, 2.3, 16);
+  K.sphere(M.paint, 1, 0, 1.22, 0.5, belly, 1.26, 0.62, 2.34, 16);
+  K.sphere(M.paint, 1, 0, 1.55, 0.35, band, 1.245, 0.16, 2.18, 16);
+  K.sphere(M.glass, 1, 0, 1.92, 1.75, glass, 1.0, 0.82, 1.2, 14);
+  for (const sx of [-1, 1]) K.sphere(M.glass, 0.5, sx * 0.98, 1.85, 0.05, glass, 0.32, 0.75, 1.15, 10);
+  // the engine on its back, the mast, the hub
+  K.cyl(M.paint, 0.55, 0.42, -1.5, 1.0, top, { y: 2.72, segs: 12 });
+  K.cyl(M.metal, 0.11, 0.11, 2.9, 3.45, dark, { axis: 'y', z: 0.1, segs: 8 });
+  K.sphere(M.metal, 0.24, 0, 3.45, 0.1, dark, 1, 0.6, 1, 10);
+  // the tail boom, the fin, the little wings at the back
+  K.cyl(M.paint, 0.17, 0.44, -7.5, -1.4, top, { y: 1.95, segs: 10 });
+  const fin = new THREE.BoxGeometry(0.1, 1.6, 0.9);
+  fin.rotateX(-0.35);
+  fin.translate(0, 2.55, -7.35);
+  K.add(M.paint, fin, police ? band : belly);
+  K.box(M.paint, -1.15, 1.88, -6.4, 1.15, 1.98, -5.8, police ? band : belly);
+  // the skids
+  for (const sx of [-1, 1]) {
+    K.cyl(M.metal, 0.07, 0.07, -1.9, 2.4, dark, { x: sx * 1.15, y: 0.1, segs: 6 });
+    const tip = new THREE.CylinderGeometry(0.07, 0.07, 0.6, 6);
+    tip.rotateX(Math.PI / 2 - 0.7);
+    tip.translate(sx * 1.15, 0.28, 2.6);
+    K.add(M.metal, tip, dark);
+    for (const z of [-1.0, 1.4]) {
+      const st = new THREE.CylinderGeometry(0.05, 0.05, 0.9, 5);
+      st.rotateZ(sx * 0.45);
+      st.translate(sx * 0.98, 0.5, z);
+      K.add(M.metal, st, dark);
+    }
+  }
+  // the camera ball under the nose, the lights (red to the left, green to the right, a beacon)
+  K.sphere(M.metal, 0.26, 0, 0.62, 2.35, dark, 1, 1, 1, 10);
+  K.sphere(M.glow, 0.09, 1.15, 1.93, -6.1, linC(1.0, 0.2, 0.2), 1, 1, 1, 8);
+  K.sphere(M.glow, 0.09, -1.15, 1.93, -6.1, linC(0.3, 1.0, 0.4), 1, 1, 1, 8);
+  K.sphere(M.glow, 0.1, 0, 3.05, -1.3, linC(1.0, 0.25, 0.2), 1, 1, 1, 8);
+  if (police) K.box(M.glow, -0.5, 3.0, 0.6, 0.5, 3.1, 0.9, linC(0.4, 0.6, 1.0));
+  const body = K.build({ seed: 0.31 });
+  // four long blades, and two at the tail
+  const R = new Kit();
+  for (let k = 0; k < 4; k++) {
+    const b = new THREE.BoxGeometry(0.34, 0.05, 5.6);
+    b.translate(0, 0, 2.95);
+    b.rotateY((k * Math.PI) / 2);
+    R.add(M.metal, b, dark);
+  }
+  const rotor = R.build();
+  rotor.matrixAutoUpdate = true;
+  rotor.position.set(0, 3.5, 0.1);
+  body.add(rotor);
+  const T = new Kit();
+  for (const a of [0, Math.PI]) {
+    const b = new THREE.BoxGeometry(0.04, 0.85, 0.18);
+    b.translate(0, 0.45, 0);
+    b.rotateX(a);
+    T.add(M.metal, b, dark);
+  }
+  const tailRotor = T.build();
+  tailRotor.matrixAutoUpdate = true;
+  tailRotor.position.set(0.18, 2.55, -7.45);
+  body.add(tailRotor);
+  return { body, rotor, tailRotor };
+}
+
+// ------------------------------------------------------------------ one vehicle
+// (v5) how far before the edge of the page what goes out toward it begins to be held back
+const EDGE_SOFT = 45;
+
+class Vehicle {
+  constructor(mgr, kind, grade, score, stock = null) {
+    this.mgr = mgr;
+    this.game = mgr.game;
+    // (ROADMAP 4.8: the new drawings ride as one of the kinds - a bicycle as a bike, a jet ski
+    // as a boat - with a model of their own)
+    this.model = RIDES[kind] ? kind : null;
+    if (this.model) kind = RIDES[kind];
+    // (ROADMAP 11.41: the catalog's cars - a car of one of the city's shapes)
+    this.carBp = !stock && CAR_BP[kind] ? kind : null;
+    if (this.carBp) kind = 'car';
+    const cb = this.carBp ? CAR_BP[this.carBp] : null;
+    this.kind = kind;
+    this.grade = grade;
+    this.score = score;
+    this.q = QUALITY[grade];
+    this.bp = BLUEPRINTS[this.model || this.carBp || kind];
+    this.cfg = VEH[kind];
+    this.maxHp = Math.round(this.cfg.hp * this.q.hp * (cb ? cb.hp : 1));
+    this.hp = this.maxHp;
+    this.pos = new THREE.Vector3();
+    this.yaw = 0;
+    this.speed = 0;
+    this.speedAbs = 0;
+    this.vy = 0;
+    this.alt = 0;
+    this.turretYaw = 0;
+    this.reload = 0;
+    this.wheelSpin = 0;
+    this.time = 0;
+    this.reveal = 0;
+    this.dead = false;
+    this.driver = null;
+    this.steer = 0;
+    this.radius = kind === 'tank' ? 2.6 : kind === 'copter' ? 2.6 : kind === 'bike' ? 0.9 : 1.6;
+    this.flies = kind === 'copter';
+    this.stock = stock;
+    this.group = new THREE.Group();
+    if (kind === 'car') {
+      // a car: drawn by the city's car batches every frame (see draw)
+      this.carKind = stock ? stock.kind || 'sedan' : cb ? cb.kind : 'sports';
+      this.color = stock ? stock.color : cb ? cb.color.slice() : [0.98, 0.42, 0.36];
+      this.extra = stock ? (stock.police ? 'police' : stock.taxi ? 'taxi' : null) : cb ? cb.extra : null;
+      this.halfLen = 2.3;
+      this.halfWid = 0.98;
+      this.heightM = this.carKind === 'van' ? 2.15 : 1.45;
+      this.seat = true;
+      this.label = stock ? (stock.police ? 'ניידת' : stock.taxi ? 'מונית' : 'מכונית') : this.bp.name;
+      if (!stock && !cb) this.racing = true;
+      this.reveal = stock ? 1 : 0;
+      if (cb) {
+        // (as big as it is - the monster truck's tyres out beside it; and what it can do)
+        const K = KINDS[cb.kind];
+        this.halfLen = K.len / 2;
+        this.halfWid = K.W / 2 + (K.wx ? K.wx + 0.2 : 0);
+        this.heightM = K.glass.R;
+        this.radius = clamp(this.halfWid, 1.6, 2.6);
+        if (cb.jets) this.jets = cb.jets;
+        if (cb.crush) this.crush = true;
+        if (cb.armor) this.armor = cb.armor;
+        if (cb.ram) this.ram = { ...cb.ram };
+      }
+    } else if (this.model) {
+      const m = MODELS[this.model](grade);
+      Object.assign(this, m);
+      this.body.matrixAutoUpdate = true;
+      this.group.add(this.body);
+      this.seat = true;
+      this.label = this.bp.name;
+      this.flies = kind === 'plane';
+      if (kind === 'boat') this.pos.y = -0.8;
+      mgr.game.scene.add(this.group);
+    } else {
+      const m = kind === 'tank' ? tankModel(grade) : kind === 'bike' ? bikeModel(grade) : copterModel(grade);
+      Object.assign(this, m);
+      this.body.matrixAutoUpdate = true;
+      this.group.add(this.body);
+      this.halfLen = kind === 'tank' ? 3.3 : kind === 'bike' ? 1.2 : 2.6;
+      this.halfWid = kind === 'tank' ? 2.0 : kind === 'bike' ? 0.4 : 1.2;
+      this.heightM = kind === 'tank' ? 2.6 : kind === 'bike' ? 1.4 : 3.0;
+      if (kind === 'bike') this.seat = true;
+      this.muzzleLocal = this.muzzle;
+      mgr.game.scene.add(this.group);
+    }
+  }
+
+  dispose() {
+    this.game.scene.remove(this.group);
+    // (ROADMAP 11.20: the parts drawn onto a city car are the scene's, not its group's)
+    if (this.fuse && this.fuse.root && this.fuse.root.parent) this.fuse.root.parent.remove(this.fuse.root);
+  }
+
+  hurt(amount) {
+    if (this.dead) return;
+    // (v5: four times as tough as it was - a knock, a crash, a shot takes a quarter of what it did)
+    amount /= TOUGH;
+    // (armour drawn on it takes some of it: ROADMAP 11.8)
+    this.hp -= amount * (1 - (this.armor || 0));
+    // (ROADMAP 11.20: a hard knock can tear a part drawn on it off - game/fuse.js)
+    if (this.fuse && this.game.fuse) this.game.fuse.onHurt(this, amount);
+    this.game.hud.hurtFlash();
+    this.game.audio.play('clang', 0.5);
+    // (v5, round 11: a car the story keeps - the prologue's chase - is never blown up: its keeper is
+    // told instead, game/prologue/director.js caught)
+    if (this.hp <= 0 && this.keepAlive) {
+      this.hp = 1;
+      this.keepAlive();
+      return;
+    }
+    if (this.hp <= 0) this.destroy();
+  }
+
+  destroy() {
+    if (this.dead) return;
+    this.dead = true;
+    const game = this.game;
+    game.fx.boom(this.pos.x, this.pos.y + 1, this.pos.z, 6);
+    game.audio.play('boom');
+    game.camRig.addShake(0.6);
+    if (this.driver) {
+      game.exitVehicle(true);
+      game.player.hurt(20, this.pos.x, this.pos.z);
+    }
+    this.removeAt = game.time + 0.2;
+  }
+
+  // (a car: its kind's seats, render/cars.js K.seat; ROADMAP 4.5)
+  seatOf() {
+    return (KINDS[this.carKind] || KINDS.sedan).seat;
+  }
+
+  // forward unit vector
+  get fwd() {
+    return _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+  }
+
+  update(dt) {
+    this.time += dt;
+    if (this.materializing) {
+      // (still turning from the drawing into the thing: it stands still where it was drawn)
+      if (this.kind !== 'car') {
+        this.group.position.copy(this.pos);
+        this.group.rotation.set(0, this.yaw, 0);
+      }
+      return;
+    }
+    let pop = 1;
+    if (this.reveal < 1) {
+      // freshly drawn: it plops into the world with a little overshoot
+      this.reveal = Math.min(1, this.reveal + dt / 0.8);
+      const k = Math.min(1, this.reveal * 1.6) - 1;
+      pop = Math.max(0.1, 1 + 2.70158 * k * k * k + 1.70158 * k * k);
+    }
+    this.pop = pop;
+    // (v5, ROADMAP 18: somebody else at the wheel - the prologue's men in the dark car, driving after
+    // you with a hand of their own on it: game/prologue/chase.js)
+    const input = this.driver ? this.game.input : this.ai || null;
+    // (and a moment taken out of its own hands altogether: the jump off the roof, flown by the
+    // prologue - game/prologue/ramp.js)
+    if (this.script) {
+      this.script(dt);
+      this.wheelSpin += (this.speed * dt) / 0.36;
+      if (this.kind === 'car') return;
+    }
+    // (ROADMAP 11.8: drawn to go more than one way - it drives, flies, floats as it can: game/hybrid.js)
+    if (this.hybrid) {
+      hybridStep(this, dt, input);
+      if (this.dead) return;
+    } else if ((this.kind === 'car' || this.kind === 'bike') && !this.game.classic) this.drive(dt, input);
+    else if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
+    else if (this.kind === 'tank') this.updateTank(dt, input);
+    else if (this.kind === 'boat') updateBoat(this, dt, input);
+    else if (this.kind === 'plane') {
+      updatePlane(this, dt, input);
+      if (this.dead) return;
+    } else if (this.kind === 'balloon') updateBalloon(this, dt, input);
+    else this.updateCopter(dt, input);
+    // (a gun drawn on it, ROADMAP 11.6, 11.8: its turret after where you look, a click fires)
+    if (input && (this.drawn || this.fuseGuns) && this.turrets) this.drawnGuns(dt, input);
+    else if (input && this.turret && this.drawn) this.drawnGun(dt, input);
+    // (v5) the edge of the world, flying or sailing as well: it goes no further (world/layout.js)
+    this.keepIn(dt);
+    this.wheelSpin += (this.speed * dt) / 0.36;
+    if (this.kind === 'car') return;
+    this.group.position.copy(this.pos);
+    this.group.rotation.set(0, this.yaw, 0);
+    this.group.scale.setScalar(pop);
+    // (ROADMAP 11.12: a drawn one - how it stands, its propellers and fans going round)
+    if (this.stance) this.stand(dt);
+    if (this.model) {
+      // (ROADMAP 4.8) the pedals going round, the boat on the waves, the plane pitched and banked
+      if (this.crank) {
+        this.crankA = (this.crankA || 0) + (this.speed * dt) / (0.34 * 2.4);
+        this.crank.rotation.x = this.crankA;
+      }
+      if (this.kind === 'boat') {
+        this.body.rotation.x = this.pitchV || 0;
+        this.body.rotation.z = this.rollV || 0;
+      } else if (this.kind === 'balloon') {
+        // (its basket sways under it, leaning a little into where the wind takes it)
+        const side = (this.vx || 0) * Math.cos(this.yaw) - (this.vz || 0) * Math.sin(this.yaw);
+        this.body.rotation.z = Math.sin(this.time * 0.9) * 0.02 + clamp(side * 0.01, -0.08, 0.08);
+        this.body.rotation.x = Math.sin(this.time * 0.7 + 1) * 0.015 - clamp((this.speed || 0) * 0.01, -0.06, 0.06);
+      } else if (this.kind === 'plane') {
+        this.body.rotation.x = -(this.pitch || 0);
+        this.body.rotation.z = -(this.roll || 0);
+        this.prop.rotation.z += dt * (4 + (this.thr || 0) * 60);
+        for (const w of this.wheels) w.rotation.x = this.flying ? w.rotation.x : this.wheelSpin;
+        return;
+      }
+    }
+    if (this.kind === 'copter') {
+      // the rotor whirls (fast when someone flies it), the body leans into where it goes
+      const spin = this.driver ? 26 : this.alt > 1.2 ? 14 : 2;
+      if (this.rotorsAll && this.rotorsAll.length) for (const r of this.rotorsAll) r.rotation.y += dt * spin * (r.userData.dir || 1);
+      else this.rotor.rotation.y += dt * spin;
+      this.tailRotor.rotation.x += dt * spin * 1.6;
+      const fx = Math.sin(this.yaw);
+      const fz = Math.cos(this.yaw);
+      const fwdV = (this.vx || 0) * fx + (this.vz || 0) * fz;
+      const sideV = (this.vx || 0) * fz - (this.vz || 0) * fx;
+      this.body.rotation.x = damp(this.body.rotation.x, clamp(fwdV * 0.018, -0.3, 0.3) + (this.alt > 1.2 ? this.lean0 || 0 : 0), 3, dt);
+      this.body.rotation.z = damp(this.body.rotation.z, clamp(sideV * 0.02, -0.35, 0.35), 3, dt) + Math.sin(this.time * 4.1) * 0.03 * this.q.wobble;
+    } else if (this.kind === 'bike') {
+      for (const w of this.wheels) w.rotation.x = this.wheelSpin * (this.grade === 'fail' ? 0.6 : 1);
+      // leaning into the turns
+      this.body.rotation.z = damp(this.body.rotation.z, clamp(-(this.turn || 0) * Math.min(1, this.speedAbs / 10) * 0.35 * (this.leanK === undefined ? 1 : this.leanK), -0.5, 0.5), 6, dt);
+    }
+    if ((this.grade === 'fail' || this.grade === 'wonky') && this.kind !== 'copter') {
+      this.body.position.y = Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3);
+    }
+  }
+
+  // the cars are drawn with the city's car batches
+  draw(cars) {
+    if (this.kind !== 'car' || this.dead) return;
+    const wob = this.grade === 'fail' || this.grade === 'wonky' ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3) : 0;
+    const siren = (this.extra === 'police' || this.extra === 'armored' || this.extra === 'fire') && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
+    // (just drawn: still turning from the drawing into the car)
+    const rv = this.mat ? this.mat.carRV : null;
+    const U = this.up;
+    cars.draw(this.carKind, this.dirt > 0.05 ? this.dustyColor() : this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
+      spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
+      lift: wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0), roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: (this.bodyPitch || 0) + (this.floorTilt || 0), reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      // (ROADMAP 11.20: wheels drawn onto it in place of its own - game/fuse.js)
+      noWheels: !!(this.fz && this.fz.hideWheels),
+      // (yours: the side windows down, you and whoever rides with you seen through them)
+      open: !this.game.classic && !rv,
+      // (the garage's work: ROADMAP 4.6)
+      mods: U && !rv ? U : null, rim: U && U.tires ? RIM_UP[U.tires] : null, matrixOut: (this.design || this.dirt > 0.2 || this.shineT || this.fuse) && !rv ? _cm : null,
+    });
+    // (ROADMAP 11.20) the parts drawn onto it, in its frame
+    if (this.fuse && !rv && this.game.fuse) this.game.fuse.place(this, _cm);
+    if (!rv && (this.design || this.dirt > 0.2 || this.shineT)) this.drawOn(_cm);
+    // in the rain the wipers go (once somebody is at the wheel)
+    const w = this.game.weather;
+    if (w && w.cur.rain > 0.15 && this.driver && !rv) drawWipers(this.game.figures, this.carKind, this.pos.x, this.pos.y, this.pos.z, this.yaw, wiperSweep(this.game.time, w.cur.rain, 0.3), 991);
+    if (this.racing) {
+      // the drawn car has racing stripes over the bonnet and the roof
+      const fx = Math.sin(this.yaw);
+      const fz = Math.cos(this.yaw);
+      const rx = -fz;
+      const rz = fx;
+      for (const s of [-0.22, 0.22]) {
+        const x = this.pos.x + rx * s;
+        const z = this.pos.z + rz * s;
+        const base = _stripe.makeRotationY(this.yaw).setPosition(x, this.pos.y, z);
+        if (rv) base.premultiply(rv.pre);
+        cars.box(cars.trimBox, base, 0, 0.98, 1.0, 0.18, 0.05, 2.0, [0.98, 0.95, 0.88], rv);
+      }
+    }
+  }
+
+  // (ROADMAP 4.6) the dust on it: its colour gone a little brown (a step at a time, so the city's
+  // cache of colours stays small)
+  dustyColor() {
+    const q = Math.round(Math.min(1, this.dirt) * 8) / 8;
+    if (this._dq !== q || this._dc0 !== this.color) {
+      this._dq = q;
+      this._dc0 = this.color;
+      const k = q * 0.38;
+      this._dcol = this.color.map((c, i) => c + (MUD[i] - c) * k);
+    }
+    return this._dcol;
+  }
+
+  // what is drawn on the car (render/cars.js gave its frame, m): the design you drew in the paint
+  // shop, on both its sides; mud splashed behind the wheels; the sparkle of a fresh wash
+  drawOn(m) {
+    const game = this.game;
+    const fr = game.figures;
+    const cam = game.camera.position;
+    const d = Math.hypot(this.pos.x - cam.x, this.pos.z - cam.z);
+    if (d > 80) return;
+    // (a design keeps its size on the car: a little thinner from far away)
+    const wk = clamp(9 / Math.max(1, d), 0.4, 1.25);
+    // only the side that faces you (the other is behind the car), in fewer, longer strokes as it
+    // gets further away
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const camSide = (cam.x - this.pos.x) * fz - (cam.z - this.pos.z) * fx;
+    const along = Math.abs((cam.x - this.pos.x) * fx + (cam.z - this.pos.z) * fz);
+    const one = Math.abs(camSide) > along * 0.25;
+    const sides = one ? (camSide > 0 ? SIDE_L : SIDE_R) : SIDES;
+    // (seen from behind or in front, both sides are thin slivers: coarser still)
+    const step = (d < 18 ? 1 : d < 36 ? 2 : 3) * (one ? 3 : 6);
+    const D = this.design;
+    if (D) {
+      let seed = 3100;
+      for (const st of D.strokes) {
+        const P = st.p;
+        for (const side of sides) {
+          // (each point put in the world once: the end of one stroke is the start of the next)
+          let have = false;
+          for (let i = 0; i + step < P.length; i += step) {
+            seed++;
+            // (a break in the line: it went over a window or a wheel)
+            let j = i + step;
+            for (let k = i + 3; k <= j; k += 3) if (P[k] === null) j = -1;
+            if (j < 0 || P[i] === null) {
+              have = false;
+              continue;
+            }
+            if (!have) _pa.set(P[i] * side, P[i + 1], P[i + 2]).applyMatrix4(m);
+            _pb.set(P[j] * side, P[j + 1], P[j + 2]).applyMatrix4(m);
+            fr.lineXYZ(_pa.x, _pa.y, _pa.z, _pb.x, _pb.y, _pb.z, st.c, st.w * wk, seed, 1, 0.002, 0.01);
+            _pa.copy(_pb);
+            have = true;
+          }
+        }
+      }
+    }
+    if (this.dirt > 0.2) {
+      const K = KINDS[this.carKind] || KINDS.sedan;
+      if (!this._mud || this._mudKind !== this.carKind) {
+        // (behind each wheel, low down: the same splashes every time)
+        this._mudKind = this.carKind;
+        this._mud = [];
+        let r = 0.37;
+        const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+        for (const tw of K.wheels) {
+          const zw = tw * K.len - K.len / 2;
+          for (let k = 0; k < 5; k++) {
+            const z0 = zw - K.r * (1.25 + rnd() * 0.5);
+            const y0 = K.clear + 0.08 + rnd() * 0.3;
+            const a = sidePoint(this.carKind, z0, y0, 1);
+            const b = sidePoint(this.carKind, z0 - 0.15 - rnd() * 0.3, y0 + (rnd() - 0.6) * 0.18, 1);
+            if (a && b) this._mud.push(a, b);
+          }
+        }
+      }
+      const a = Math.min(1, (this.dirt - 0.2) * 1.6);
+      const M = this._mud;
+      for (const side of sides) {
+        for (let i = 0; i < M.length; i += 2) {
+          _pa.set(M[i][0] * side, M[i][1], M[i][2]).applyMatrix4(m);
+          _pb.set(M[i + 1][0] * side, M[i + 1][1], M[i + 1][2]).applyMatrix4(m);
+          fr.lineXYZ(_pa.x, _pa.y, _pa.z, _pb.x, _pb.y, _pb.z, i % 4 ? MUD : MUD_INK, 3.2 * wk, 4400 + i, a, 0.01, 0.02);
+        }
+      }
+    }
+    if (this.shineT) {
+      // (just washed: a few glints running over it)
+      const t = game.time - this.shineT;
+      if (t > 3) this.shineT = 0;
+      else {
+        const K = KINDS[this.carKind] || KINDS.sedan;
+        for (let k = 0; k < 4; k++) {
+          const ph = (t * 0.9 + k * 0.27) % 1;
+          const p = sidePoint(this.carKind, (k / 3 - 0.5) * K.len * 0.7, (K.clear + K.roofY) * 0.4, k % 2 ? 1 : -1);
+          if (!p) continue;
+          const s = Math.sin(ph * Math.PI) * 0.16;
+          _pa.set(p[0], p[1], p[2]).applyMatrix4(m);
+          fr.lineXYZ(_pa.x - s, _pa.y, _pa.z, _pa.x + s, _pa.y, _pa.z, SHINE, 2.2, 4600 + k, 1, 0, 0);
+          fr.lineXYZ(_pa.x, _pa.y - s, _pa.z, _pa.x, _pa.y + s, _pa.z, SHINE, 2.2, 4610 + k, 1, 0, 0);
+        }
+      }
+    }
+  }
+
+  // (v5) held at the edge of the world, its way on out of it taken off it - no wall in the air
+  // there, nor over the bay and the ocean any more (world/ground.js, world/mainland/ground.js)
+  keepIn(dt = 0) {
+    // (v5: the edge of the page, world/pageedge.js - the last stretch before it holds what goes out
+    // toward it back, softly and more as it nears it, so that it comes to rest at the edge rather
+    // than against something in the air)
+    const pd = pageDist(this.pos.x, this.pos.z);
+    if (pd < EDGE_SOFT && dt > 0 && this.vx !== undefined && this.vz !== undefined) {
+      const P = PAGE;
+      const x = this.pos.x;
+      const z = this.pos.z;
+      const m = Math.min(x - P.x0, P.x1 - x, z - P.z0, P.z1 - z);
+      const nx = m === x - P.x0 ? -1 : m === P.x1 - x ? 1 : 0;
+      const nz = nx ? 0 : m === z - P.z0 ? -1 : 1;
+      const out = this.vx * nx + this.vz * nz;
+      if (out > 0) {
+        const k = 1 - Math.max(0, pd) / EDGE_SOFT;
+        const cut = out * (1 - Math.exp(-7 * k * k * dt));
+        this.vx -= nx * cut;
+        this.vz -= nz * cut;
+        if (this.speed !== undefined && this.kind !== 'plane') this.speed = this.vx * Math.sin(this.yaw) + this.vz * Math.cos(this.yaw);
+      }
+    }
+    const e = worldEdge(this.pos.x, this.pos.z);
+    if (!e) return;
+    const nx = e.x - this.pos.x;
+    const nz = e.z - this.pos.z;
+    const d = Math.hypot(nx, nz);
+    this.pos.x = e.x;
+    this.pos.z = e.z;
+    if (this.vx !== undefined && this.vz !== undefined) {
+      const out = -(this.vx * nx + this.vz * nz) / d;
+      if (out > 0) {
+        this.vx += (nx / d) * out;
+        this.vz += (nz / d) * out;
+      }
+    }
+    const g = this.game;
+    if (this.driver === g.player && !(this.edgeSaid > g.time)) {
+      this.edgeSaid = g.time + 8;
+      g.hud.toast('כאן נגמר הדף — העיר מצוירת עד כאן', 'info', 2.4);
+    }
+  }
+
+  collideWorld(dt) {
+    // (what flies when it is hit is no wall: ROADMAP 8.3, game/knock.js)
+    if (this.game.knock) this.game.knock.sweep(this);
+    // three circles along the body
+    const col = this.game.world.collision;
+    const f = this.fwd.clone();
+    let hit = false;
+    let impact = 0;
+    const offs = this.circles || (this.kind === 'tank' ? [-2, 0, 2] : this.kind === 'bike' ? [-0.7, 0, 0.7] : [-1.2, 0, 1.2]);
+    const r = this.circleR || (this.kind === 'tank' ? 1.7 : this.kind === 'bike' ? 0.55 : 1.0);
+    for (const o of offs) {
+      const p = new THREE.Vector3(this.pos.x + f.x * o, this.pos.y + 0.2, this.pos.z + f.z * o);
+      const before = p.clone();
+      // (ROADMAP 11.20: wheels with teeth, huge wheels - up onto what a car's would hit)
+      const res = col.resolveCylinder(p, r, 1.5, this.fz && this.fz.step ? this.fz.step : 0.45);
+      if (res.hitWall) {
+        hit = true;
+        this.pos.x += p.x - before.x;
+        this.pos.z += p.z - before.z;
+        const along = Math.abs(f.x * res.nx + f.z * res.nz);
+        impact = Math.max(impact, Math.abs(this.speed) * along);
+        // (a shop window, hard enough: it breaks - ROADMAP 8.3)
+        if (this.game.knock && res.box && res.box.tag === 'roomwall' && Math.abs(this.speed) * along > 5) this.game.knock.glassHit(p.x - res.nx * r, 1.3, p.z - res.nz * r);
+        // (the sea wall's railing: off into the bay - ROADMAP 8.4)
+        if (this.game.knock && res.box && res.box.tag === 'bound' && Math.abs(this.speed) * along > 5) this.game.knock.fence(p.x - res.nx * r, p.z - res.nz * r, this);
+      }
+    }
+    // (ROADMAP 15.3) its drawn parts that stick out - long wings, a wide rotor: they catch a narrow
+    // street's walls, a lamp post, a tree too
+    // (near the ground only: up in the air, past the palms' trunks, its wing tips do not stop it)
+    const ex = this.fz && this.fz.cols;
+    if (ex && ex.length && (!this.air || this.pos.y - groundHeight(this.pos.x, this.pos.z) < 2.5)) {
+      const rx = f.z;
+      const rz = -f.x;
+      for (const c of ex) {
+        const p = new THREE.Vector3(this.pos.x + f.x * c.a + rx * c.b, this.pos.y + 0.2, this.pos.z + f.z * c.a + rz * c.b);
+        const before = p.clone();
+        const res = col.resolveCylinder(p, c.r, 1.5, this.fz.step || 0.45);
+        if (res.hitWall) {
+          hit = true;
+          this.pos.x += p.x - before.x;
+          this.pos.z += p.z - before.z;
+          impact = Math.max(impact, Math.abs(this.speed) * Math.abs(f.x * res.nx + f.z * res.nz) * 0.6);
+        }
+      }
+    }
+    if (hit) {
+      if (impact > 7) {
+        this.hurt(impact * 1.6);
+        // (the front, or the back, dented: game/damage.js)
+        if (this.game.damage && !this.game.classic) this.game.damage.wall(this, impact);
+        this.game.fx.sprite('fx_crash', this.pos.x + f.x * this.halfLen, this.pos.y + 1, this.pos.z + f.z * this.halfLen, { size: 2.2, life: 0.4 });
+        this.game.camRig.addShake(Math.min(0.6, impact * 0.03));
+        this.game.audio.play('crash', Math.min(1, impact / 20));
+      }
+      this.speed *= impact > 4 ? -0.25 : 0.85;
+    }
+    for (const v of this.mgr.list) {
+      if (v === this || v.dead) continue;
+      // (ROADMAP 15.3: one up in the air over the other - flying on what is drawn on it - meets nothing)
+      if ((this.air || v.air) && Math.abs(this.pos.y - v.pos.y) > 2.2) continue;
+      // (v5, round 11: one on a floor over the other - a car park's - meets nothing either; and a car
+      // that gives way (the prologue's gang) is pushed off by the player's, never the other way round)
+      if (Math.abs(this.pos.y - v.pos.y) > 2.2) continue;
+      if (v.yields && this.driver) continue;
+      const dx = this.pos.x - v.pos.x;
+      const dz = this.pos.z - v.pos.z;
+      const d = Math.hypot(dx, dz);
+      const rr = this.radius + v.radius - 0.6;
+      if (d < rr && d > 1e-3) {
+        this.pos.x += (dx / d) * (rr - d) * 0.5;
+        this.pos.z += (dz / d) * (rr - d) * 0.5;
+        this.speed *= 0.7;
+      }
+    }
+    this.game.traffic.collideVehicle(this);
+  }
+
+  runOver() {
+    if (Math.abs(this.speed) < 3 && !(this.kind === 'tank' && Math.abs(this.speed) > 1)) return;
+    const game = this.game;
+    const f = this.fwd;
+    for (const e of game.enemies.list) {
+      if (!e.alive) continue;
+      const dx = e.pos.x - this.pos.x;
+      const dz = e.pos.z - this.pos.z;
+      const along = dx * f.x + dz * f.z;
+      const side = Math.abs(dx * f.z - dz * f.x);
+      if (Math.abs(along) < this.halfLen + 0.4 && side < this.halfWid + 0.4) {
+        // (ROADMAP 11.12: a spring bumper at its front - thrown far, and it is not hurt)
+        if (this.bumper && along > 0 && game.ragdolls && !e.isMonster && !(e.fig && e.fig.rag)) {
+          game.ragdolls.carHit(e, this, this.speed * this.bumper.k);
+          e.leaveCover && e.leaveCover();
+          game.audio.play('jump', 0.6);
+          this.speed *= 0.9;
+          continue;
+        }
+        // (not with ?classic: thrown over the bonnet, ROADMAP 5.5; one already flying is left be;
+        // the tank still crushes)
+        if (game.ragdolls && !e.isMonster && this.kind !== 'tank') {
+          if (e.fig.rag) continue;
+          game.enemies.runOver(e, this);
+        } else game.enemies.damage(e, 'torso', 999, e.pos.clone().setY(e.pos.y + 1), f.clone(), 'run');
+        game.fx.sprite('fx_crash', e.pos.x, e.pos.y + 1, e.pos.z, { size: 1.6, life: 0.35 });
+        if (this.kind === 'car' || this.kind === 'bike') this.hurt(this.kind === 'bike' ? 6 : 4);
+      } else if (this.blades && this.blades.side && Math.abs(along) < this.halfLen && side < this.halfWid + 1.3 && (!e.bladeT || game.time - e.bladeT > 0.5)) {
+        // (ROADMAP 11.12: blades at its sides - whoever it passes close by is cut)
+        e.bladeT = game.time;
+        const sx = Math.sign(dx * f.z - dz * f.x) || 1;
+        game.enemies.damage(e, 'torso', this.blades.side, e.pos.clone().setY(e.pos.y + 1), new THREE.Vector3(f.z * sx, 0, -f.x * sx), 'melee');
+        game.fx.sparks(e.pos.x, e.pos.y + 0.9, e.pos.z, 6, [0.9, 0.9, 0.95]);
+      }
+    }
+    // (not with ?classic: at speed, somebody right at the bumper has no time to jump clear)
+    if (game.ragdolls && Math.abs(this.speed) > 7) game.civilians.runOver(this);
+    game.civilians.dodge(this.pos, f, this.halfLen + 1.5, this.halfWid + 1.2, this.speed);
+  }
+
+  updateCar(dt, input) {
+    const q = this.q;
+    let throttle = 0;
+    let steer = 0;
+    let brake = false;
+    if (input) {
+      const mv = input.readMove();
+      throttle = mv.y;
+      steer = -mv.x;
+      brake = input.keys.has('Space');
+      if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
+    }
+
+    if (this.stall > 0) {
+      this.stall -= dt;
+      throttle *= 0.1;
+      if (Math.random() < dt * 4) this.game.fx.smoke(this.pos.x - Math.sin(this.yaw) * 2, this.pos.y + 0.6, this.pos.z - Math.cos(this.yaw) * 2, 0.8);
+    }
+    const bike = this.kind === 'bike';
+    const maxF = (bike ? 36 : this.racing ? 32 : 27) * q.speed;
+    const maxR = (bike ? 6 : 9) * q.speed;
+    const acc = (bike ? 21 : 15) * q.accel;
+    if (throttle > 0) this.speed += acc * throttle * dt * (this.speed < 0 ? 2.2 : 1);
+    else if (throttle < 0) this.speed += acc * throttle * dt * (this.speed > 0 ? 2.2 : 0.8);
+    else this.speed = damp(this.speed, 0, 0.9, dt);
+    if (brake) this.speed = damp(this.speed, 0, 4, dt);
+    this.speed = clamp(this.speed, -maxR, maxF);
+    const turn = (steer + (input ? q.pull * Math.sign(this.speed || 1) * 0.5 : 0)) * clamp(Math.abs(this.speed) / 6, 0, 1) * (brake ? 2.0 : bike ? 1.8 : 1.35) * Math.sign(this.speed || 1);
+    this.turn = turn;
+    this.yaw += turn * dt;
+    const f = this.fwd;
+    this.pos.x += f.x * this.speed * dt;
+    this.pos.z += f.z * this.speed * dt;
+    this.pos.y = damp(this.pos.y, groundHeight(this.pos.x, this.pos.z) * 0.5, 12, dt);
+    this.speedAbs = Math.abs(this.speed);
+    this.collideWorld(dt);
+    this.runOver();
+    if (input && !input.ai) this.game.audio.engine(this.speedAbs / maxF, bike ? 'bike' : 'car');
+  }
+
+  // ------------------------------------------------------------------ driving (ROADMAP 4.3)
+  // The tyres grip: the car's speed along where it points pushed by the engine and slowed by the
+  // brakes, its sideways slip dying away (slowly with the handbrake on: it drifts); it turns as
+  // quick as its weight lets it; its body pitches when it speeds up or brakes and rolls in the
+  // turns; off a ramp (or a drop) it flies, and lands on its springs.
+  drive(dt, input) {
+    const q = this.q;
+    const bike = this.kind === 'bike';
+    // (one drawn freehand: its handling from its drawing, game/drawncar.js - ROADMAP 11.6)
+    const H = this.handling || HANDLING[bike ? this.model || 'bike' : this.carKind] || HANDLING.sedan;
+    // (the garage's upgrades, and the tank: game/garage.js, ROADMAP 4.6)
+    const U = this.up;
+    const dry = this.fuel === 0 ? 1 : 0;
+    // (its jets, Shift held - on a phone its turbo button, or the stick pushed all the way: game/drawncar.js)
+    const boost = this.jets && input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || (input.touch && (input.driveButtons ? input.boost : (input.stickMag || 0) > 0.92)) || (input.pad && input.pad.sprint)) ? 1 : 0;
+    this.boosting = boost;
+    // (ROADMAP 11.20: a jet drawn onto it - as strong as it is long, game/fuse.js)
+    const jk = this.fz ? this.fz.jetK || 1 : 1;
+    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1) * (1 + 0.4 * boost * jk);
+    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1) * (1 + 1.2 * boost * jk);
+    // (ROADMAP 11.12: a jet pointing forward - it brakes hard)
+    const brakeK = (U ? 1 + 0.18 * U.brakes : 1) * (H.brake || 1);
+    // (the driving skill: ROADMAP 5.6)
+    const S = this.driver === this.game.player ? this.game.skills : null;
+    const gripK = (U ? 1 + 0.08 * U.tires : 1) * (S ? S.gripMul : 1);
+    const steerK = S ? S.steerMul : 1;
+    let throttle = 0;
+    let steer = 0;
+    let hand = false;
+    if (input) {
+      const mv = input.readMove();
+      throttle = mv.y;
+      steer = -mv.x;
+      // (Space lifts a drawn one that flies, or jumps one on a spring: no handbrake - game/hybrid.js;
+      // a phone's handbrake button is a handbrake whatever Space does)
+      hand = (input.keys.has('Space') && !this.spaceIsMine) || !!input.handbrake;
+      if (q.stall && Math.random() < q.stall * dt * 3) this.stall = 0.6 + Math.random();
+    }
+    // (round 15: just got into - a second to start it before it goes: game.js tickEntry)
+    if (this.holdT > 0) {
+      this.holdT -= dt;
+      throttle = 0;
+      steer = 0;
+    }
+    // (ROADMAP 11.23: going down in the sea, the engine drowns - game/fuse.js sea)
+    if (this.fzSink > 0.4) throttle *= 0.05;
+    if (this.stall > 0) {
+      this.stall -= dt;
+      throttle *= 0.1;
+      if (Math.random() < dt * 4) this.game.fx.smoke(this.pos.x - Math.sin(this.yaw) * 2, this.pos.y + 0.6, this.pos.z - Math.cos(this.yaw) * 2, 0.8);
+    }
+    // (ROADMAP 11.12) rolled onto its roof, nothing there to drive it on: it scrapes to a stop - Space
+    // (a spring on its roof: by itself) and it is put back on its wheels
+    const stuck = this.flipped && !this.roofDrive;
+    if (stuck) {
+      throttle = 0;
+      steer = 0;
+      hand = false;
+      this.stuckT = (this.stuckT || 0) + dt;
+      if (this.rollT === undefined && ((input && (input.wasPressed('Space') || input.flyUp)) || (this.righter && this.stuckT > 0.7))) this.rollOver(1);
+    }
+    if (this.vx === undefined || this.physT === undefined || this.game.time - this.physT > 1) {
+      // (from where it is: its speed along where it points)
+      this.vx = Math.sin(this.yaw) * this.speed;
+      this.vz = Math.cos(this.yaw) * this.speed;
+      this.yawRate = 0;
+      this.vy = 0;
+      this.air = false;
+      this.bodyPitch = this.bodyPitch || 0;
+      this.pitchV = 0;
+      this.bodyRoll = this.bodyRoll || 0;
+      this.rollV = 0;
+      this.climb = 0;
+    }
+    this.physT = this.game.time;
+    // (ROADMAP 11.20) parts drawn onto it: up on its spring, off on its rotor, its balloon
+    if (this.fz && this.game.fuse) this.game.fuse.preDrive(this, dt, input);
+    // the steering: how quick it turns (less as it goes faster; more with the handbrake on)
+    const fx0 = Math.sin(this.yaw);
+    const fz0 = Math.cos(this.yaw);
+    let vL = this.vx * fx0 + this.vz * fz0;
+    if (!this.air) {
+      let k = Math.min(1, Math.abs(vL) / 5) * (1 - 0.45 * Math.min(1, Math.abs(vL) / top)) * (hand ? 1.55 : 1);
+      // (ROADMAP 11.12: on tracks it turns on the spot)
+      if (H.pivot) k = Math.max(k, 0.75);
+      const pull = input ? q.pull * 0.5 : 0;
+      const want = (steer + pull) * H.steer * k * Math.sign(vL || 1);
+      // (shoved round by a police car: for a moment the tyres let go - ROADMAP 6.1, game/chase.js)
+      if (this.spinT > 0) {
+        this.spinT -= dt;
+        this.yawRate *= Math.exp(-1.6 * dt);
+      } else this.yawRate = damp(this.yawRate, want, (9 / H.mass) * steerK, dt);
+    } else this.yawRate *= Math.exp(-0.8 * dt);
+    this.yaw += this.yawRate * dt;
+    // its speed along where it now points, and across
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    vL = this.vx * fx + this.vz * fz;
+    let vS = -this.vx * fz + this.vz * fx;
+    const v0 = vL;
+    if (!this.air) {
+      // the engine, the brakes, the reverse
+      if (throttle > 0) {
+        if (vL < -0.5) vL = Math.min(0, vL + 22 * throttle * dt);
+        else vL += power * throttle * dt * Math.pow(Math.max(0, 1 - Math.max(0, vL) / top), 0.6);
+      } else if (throttle < 0) {
+        if (vL > 0.5) vL = Math.max(0, vL + 24 * brakeK * throttle * dt);
+        else vL = Math.max(-9 * q.speed, vL + power * 0.6 * throttle * dt);
+      } else vL -= vL * (0.35 + 0.002 * Math.abs(vL)) * dt;
+      // (an empty tank: the engine coughs, the car slows to a crawl)
+      if (dry && vL > top) vL = Math.max(top, vL - 5 * dt);
+      // (on its roof: scraping along)
+      if (stuck) {
+        vL -= vL * 2.4 * dt;
+        if (Math.abs(vL) > 2 && Math.random() < dt * 20) this.game.fx.sparks(this.pos.x, this.pos.y + 0.1, this.pos.z, 3, [1.0, 0.8, 0.4]);
+      }
+      // the handbrake: the back wheels locked
+      if (hand) vL -= vL * 0.6 * dt;
+      // the tyres' grip across: the slip dies away (hardly, with the handbrake on)
+      const grip = (hand || this.spinT > 0 ? H.slide : H.grip * (1 - 0.25 * Math.min(1, (Math.abs(steer) * Math.abs(vL)) / top))) * gripK;
+      vS *= Math.exp(-grip * dt);
+    }
+    this.vx = fx * vL - fz * vS;
+    this.vz = fz * vL + fx * vS;
+    // (ROADMAP 11.12) how hard the turn pulls it sideways (its way turning, for how fast it goes) -
+    // high for how wide it is (game/partsum.js rideSpec: tipA), up on two wheels, and over
+    if (H.tipA && !this.air && this.rollT === undefined && !stuck) {
+      const sp = Math.hypot(this.vx, this.vz);
+      const hv = Math.atan2(this.vx, this.vz);
+      const dh = this.hv === undefined ? 0 : angleDiff(this.hv, hv);
+      const aLat = sp > 4 ? Math.abs(dh / Math.max(dt, 1e-3)) * sp : 0;
+      this.aLat = damp(this.aLat || 0, aLat, 10, dt);
+      this.tipSide = dh > 0 ? 1 : dh < 0 ? -1 : this.tipSide || 1;
+      if (this.aLat > H.tipA) {
+        this.tipT = (this.tipT || 0) + dt;
+        if (this.tipT > 0.3) this.rollOver(this.tipSide);
+      } else this.tipT = Math.max(0, (this.tipT || 0) - dt * 2);
+      this.hv = hv;
+    } else this.hv = undefined;
+    this.accelL = damp(this.accelL || 0, (vL - v0) / Math.max(dt, 1e-3), 8, dt);
+    this.pos.x += this.vx * dt;
+    this.pos.z += this.vz * dt;
+    // up and down: on the ground (and up the ramps), or flying
+    // (a curb, the dunes: the wheels half up them, as always; v5: the hills, the ground itself - a car
+    // flying low over them came down inside them, half their height up)
+    const gh = groundHeight(this.pos.x, this.pos.z);
+    let g = Math.max(gh * 0.5, gh - 0.6, rampAt(this.pos.x, this.pos.z), DECKS.length ? deckAt(this.pos.x, this.pos.z, this.pos.y) : -Infinity);
+    // (ROADMAP 11.20: up steps on teeth, down onto a roof when it flies - game/fuse.js)
+    if ((this.fz || this.fzSink) && this.game.fuse) g = this.game.fuse.floor(this, g);
+    // (ROADMAP 11.23: the lab's mission - its bridge, its island)
+    if (this.game.mission) g = Math.max(g, this.game.mission.floorAt(this.pos.x, this.pos.z, this.pos.y));
+    // (v5, ROADMAP 18: the prologue's car parks - their decks and ramps, and the ramp drawn on the roof)
+    if (this.game.prolSet && this.game.prolSet.built) {
+      const ps = this.game.prolSet;
+      g = Math.max(g, ps.floorAt(this.pos.x, this.pos.z, this.pos.y));
+      // (on their slopes and ramps a car sits along the floor, its nose up the way it rises: the
+      // floor under its front wheels against the floor under its back ones)
+      let want = 0;
+      if (!this.air && this.kind === 'car') {
+        const L = (this.halfLen || 2.3) * 0.8;
+        const fx = Math.sin(this.yaw);
+        const fz = Math.cos(this.yaw);
+        const a = ps.floorAt(this.pos.x + fx * L, this.pos.z + fz * L, this.pos.y + 0.6);
+        const b = ps.floorAt(this.pos.x - fx * L, this.pos.z - fz * L, this.pos.y + 0.6);
+        if (a > -Infinity && b > -Infinity && Math.abs(a - b) < L) want = -Math.atan2(a - b, 2 * L);
+      }
+      this.floorTilt = damp(this.floorTilt || 0, want, 14, dt);
+    }
+    if (this.air) {
+      // (ROADMAP 11.20: the lift of a rotor, a balloon, a jet drawn onto it - and steering in the air)
+      const pull = this.fz && this.game.fuse ? this.game.fuse.air(this, dt, input) : 1;
+      // (wings drawn on it, game/drawncar.js: it glides, coming down slower)
+      this.vy -= 20 * dt * pull * (this.glide ? 1 - this.glide * (this.vy < 0 ? 1 : 0.4) : 1);
+      // (ROADMAP 11.26: flying on its wings, it dives as fast as it is put down - and its nose with it)
+      if (this.glide && !this.fzWinged && this.vy < -6 * (1 - this.glide)) this.vy = damp(this.vy, -6 * (1 - this.glide), 3, dt);
+      this.pos.y += this.vy * dt;
+      this.bodyPitch = damp(this.bodyPitch, this.fzWinged ? clamp(-this.vy * 0.035, -0.28, 0.28) : 0.12, 1.2, dt);
+      if (this.pos.y <= g) {
+        const hit = -this.vy;
+        this.pos.y = g;
+        this.air = false;
+        this.vy = 0;
+        this.pitchV -= hit * 0.04 * H.pitch;
+        if (hit > 3) {
+          this.game.audio.play('crash', Math.min(0.6, hit / 20));
+          this.game.camRig.addShake(Math.min(0.5, hit * 0.035));
+        }
+        if (hit > 10 && !this.safeFall) this.hurt((hit - 10) * 2);
+        // (ROADMAP 11.15: heavy, on a spring - down from its jump it knocks over what is round it:
+        // game/combos.js)
+        if (this.stomp && hit > 6) this.stompAt(hit);
+      }
+    } else if (g < this.pos.y - 0.3) {
+      // off the edge: flying, as fast upwards as it was climbing
+      this.air = true;
+      this.vy = Math.max(0, this.climb);
+    } else {
+      const y0 = this.pos.y;
+      this.pos.y = g > y0 ? g : damp(y0, g, 14, dt);
+      this.climb = THREE.MathUtils.damp(this.climb, (this.pos.y - y0) / Math.max(dt, 1e-3), 20, dt);
+    }
+    this.speed = vL;
+    this.speedAbs = Math.abs(vL);
+    this.turn = this.yawRate;
+    this.slip = vS;
+    // the body on its springs: the nose down braking, up speeding up; leaning out of the turn
+    if (!bike) {
+      const aL = (vL - v0) / Math.max(dt, 1e-3);
+      const aS = this.yawRate * vL;
+      const pw = clamp(-aL * 0.006 * H.pitch, -0.07, 0.07);
+      const rw = clamp(-aS * 0.005 * H.roll, -0.09, 0.09);
+      this.pitchV += ((pw - this.bodyPitch) * 60 - this.pitchV * 9) * dt;
+      this.bodyPitch += this.pitchV * dt;
+      this.rollV += ((rw - this.bodyRoll) * 50 - this.rollV * 8) * dt;
+      this.bodyRoll += this.rollV * dt;
+    }
+    // the turn signals (slow, the wheel over), the skids, the tyres' screech
+    this.signal = input && Math.abs(steer) > 0.5 && this.speedAbs > 0.5 && this.speedAbs < 9 ? Math.sign(steer) : 0;
+    const sliding = !this.air && (Math.abs(vS) > 2.2 || (hand && this.speedAbs > 4) || (throttle < 0 && vL > 9));
+    this.skids(dt, sliding);
+    this.collideWorld(dt);
+    // (a wall or a car stopped it, or threw it back)
+    if (this.speed !== vL) {
+      this.vx = fx * this.speed - fz * vS * 0.3;
+      this.vz = fz * this.speed + fx * vS * 0.3;
+    }
+    this.runOver();
+    // (a bicycle's, a scooter's: no engine; a bicycle's bell on H)
+    if (input && !input.ai) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car');
+    if (input && this.model === 'bicycle' && input.wasPressed('KeyH')) this.game.audio.play('bikebell', 0.7);
+  }
+
+  // (ROADMAP 11.15) down from a jump, heavy: a shock round it - whoever is near thrown and hurt,
+  // the cars round it dented, the windows broken (the harder it lands, the more)
+  stompAt(hit) {
+    const game = this.game;
+    // (a spring's hop lands at 7 to 10 m/s: the whole of it within a few metres - those near thrown)
+    const k = clamp(hit / 10, 0.8, 1.5);
+    const r = this.stomp.r * k;
+    const x = this.pos.x;
+    const z = this.pos.z;
+    game.camRig.addShake(0.55);
+    game.audio.play('boom', 0.6);
+    game.fx.crumbs(x, this.pos.y + 0.2, z, 26, 6);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      game.fx.smoke(x + Math.cos(a) * r * 0.45, this.pos.y + 0.3, z + Math.sin(a) * r * 0.45, 1.6);
+    }
+    if (game.knock) game.knock.blast(x, this.pos.y, z, r);
+    game.enemies.explosion(x, this.pos.y + 0.5, z, r, this.stomp.dmg * k);
+    game.civilians.explosion(x, this.pos.y + 0.5, z, r * 0.7);
+    // (the cars round it: dented where it came down by them - none set alight)
+    const dmg = !game.classic && game.damage;
+    for (const c of [...game.traffic.list, ...game.traffic.parked]) {
+      if (c === this || c.taken || c.poofT !== undefined) continue;
+      const d = Math.hypot(c.pos.x - x, c.pos.z - z);
+      if (d > r * 0.6 + 1.5) continue;
+      const l = d || 1;
+      if (dmg) dmg.hit(c, c.pos.x + ((x - c.pos.x) / l) * Math.min(l, 2), 0.8, c.pos.z + ((z - c.pos.z) / l) * Math.min(l, 2), 20 + 30 * k * (1 - d / (r * 0.6 + 1.5)));
+      c.path = null;
+    }
+    game.enemies.noise(this.pos, 50, 'boom');
+    this.stomps = (this.stomps || 0) + 1;
+  }
+
+  // (ROADMAP 11.12) over it goes, round its length (dir: which way): onto its roof - or, on its roof,
+  // back onto its wheels with a hop
+  rollOver(dir) {
+    const game = this.game;
+    this.rollT = 0;
+    this.rollDir = dir;
+    this.rollFrom = this.flipped ? Math.PI * (this.rollSign || 1) : 0;
+    this.flipped = !this.flipped;
+    if (this.flipped) this.rollSign = dir;
+    this.tipT = 0;
+    this.stuckT = 0;
+    this.aLat = 0;
+    game.audio.play('crash', 0.7);
+    game.camRig.addShake(0.35);
+    game.fx.sparks(this.pos.x, this.pos.y + 0.4, this.pos.z, 10, [1.0, 0.8, 0.4]);
+    if (!this.flipped) {
+      this.air = true;
+      this.vy = 4.5;
+      this.physT = game.time;
+      return;
+    }
+    // (the roll takes its speed, and dents it)
+    if (this.vx !== undefined) {
+      this.vx *= 0.55;
+      this.vz *= 0.55;
+    }
+    this.hurt(8);
+    if (this.driver === game.player && !this.roofDrive) game.hud.toast(this.righter ? 'התהפך — הקפיץ על הגג מחזיר אותו לגלגלים' : game.touch ? 'התהפך! ▲ — להפוך בחזרה' : 'התהפך! רווח — להפוך בחזרה', 'info', 2.6);
+    else if (this.driver === game.player) game.hud.toast('התהפך — וממשיך לנסוע על גלגלי הגג', 'info', 2.2);
+  }
+
+  // (ROADMAP 11.12) how a drawn one stands (its model's stance, game/partbuild.js): on its tail, its
+  // nose, by its balance (game/partsum.js rideSpec: tilt); its nose up as it speeds off, its weight
+  // over its back wheels (wheelie), down as it brakes, its weight over its front (dive); up on two
+  // wheels in a turn too hard for how high it is; rolling over, on its roof; bumping along on square
+  // wheels; over the ground on its fans
+  stand(dt) {
+    const S = this.stance;
+    const at = this.standAt || {};
+    const H = this.handling || {};
+    const ground = this.mode === 'drive' && !this.air;
+    // (rolling over: half way round in half a second)
+    let roll = this.flipped ? Math.PI * (this.rollSign || 1) : 0;
+    if (this.rollT !== undefined) {
+      this.rollT += dt;
+      const t = Math.min(1, this.rollT / 0.55);
+      const e = t * t * (3 - 2 * t);
+      const to = this.flipped ? Math.PI * this.rollDir : 0;
+      roll = this.rollFrom + (to - this.rollFrom) * e;
+      if (t >= 1) this.rollT = undefined;
+    } else if (ground && H.tipA && this.aLat > H.tipA * 0.78 && !this.flipped) {
+      // (up on two wheels)
+      roll = this.tipSide * clamp((this.aLat / H.tipA - 0.78) * 1.6, 0, 0.32);
+    }
+    this.standR = this.rollT !== undefined ? roll : damp(this.standR || 0, roll, 10, dt);
+    // its nose up (+) or down
+    let pitch = 0;
+    if (ground && !this.flipped) {
+      pitch = this.tilt0 || 0;
+      const a = this.accelL || 0;
+      if (H.wheelie && a > 2) pitch += H.wheelie * clamp(a / 12, 0, 1) * 0.3;
+      if (H.dive && a < -4) pitch -= (H.dive - 1) * clamp(-a / 18, 0, 1) * 0.12;
+    }
+    this.standP = damp(this.standP || 0, pitch, 6, dt);
+    const top = at.top || 1.5;
+    const r = this.standR;
+    const p = this.standP;
+    S.rotation.set(-p, 0, r);
+    // (round its length: lifted as high as it rolls; nose up round its back wheels, down round its
+    // front ones)
+    const zp = p > 0 ? at.zr || 0 : at.zf || 0;
+    const side = this.rollT === undefined && !this.flipped ? Math.abs(Math.sin(r)) * (this.halfWid || 1) * 0.85 : 0;
+    let y = (top * (1 - Math.cos(r))) / 2 + side + zp * Math.sin(-p);
+    const z = zp - zp * Math.cos(p);
+    if (ground && H.bump) y += H.bump * Math.abs(Math.sin(this.wheelSpin * 2)) * Math.min(1, this.speedAbs / 2);
+    if (this.hoverH && (this.mode === 'drive' || this.mode === 'boat')) y += this.hoverH + Math.sin(this.time * 2.7) * 0.03;
+    S.position.set(0, y, z);
+    if (this.driver) {
+      for (const pr of this.props || []) pr.rotation.z += dt * (10 + this.speedAbs * 1.5);
+      for (const f of this.fans || []) f.rotation.y += dt * 24;
+    }
+    // (ROADMAP 11.13: a car that flies too - its rotors whirl while it flies, idle on the road)
+    if (this.kind !== 'copter' && this.rotorsAll) for (const r of this.rotorsAll) r.rotation.y += dt * (this.mode === 'copter' ? 26 : this.driver ? 3 : 0) * (r.userData.dir || 1);
+  }
+
+  // dark marks behind the back wheels while it slides (a long trail the city keeps a while)
+  skids(dt, on) {
+    const S = this.mgr.skidList || (this.mgr.skidList = []);
+    if (!on) {
+      this.skidPrev = null;
+      return;
+    }
+    this.skidT = (this.skidT || 0) - dt;
+    if (this.skidT > 0) return;
+    this.skidT = 0.05;
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const back = this.kind === 'bike' ? 0.62 : (this.halfLen || 2.3) * 0.62;
+    const half = this.kind === 'bike' ? 0 : (this.halfWid || 0.98) * 0.78;
+    const pts = [];
+    for (const s of this.kind === 'bike' ? [0] : [-1, 1]) pts.push([this.pos.x - fx * back - fz * half * s, this.pos.z - fz * back + fx * half * s]);
+    if (this.skidPrev) {
+      for (let i = 0; i < pts.length; i++) S.push({ a: this.skidPrev[i], b: pts[i], y: this.pos.y + 0.02, t: this.game.time });
+      while (S.length > 500) S.shift();
+    }
+    // and the tyres' smoke
+    if (Math.random() < 0.6) {
+      const p = pts[Math.floor(Math.random() * pts.length)];
+      this.game.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', p[0], this.pos.y + 0.35, p[1], { size: 0.9 + Math.random() * 0.6, grow: 1.6, life: 0.9, vy: 0.5, alpha: 0.5, tint: TYRE_SMOKE });
+    }
+    this.skidPrev = pts;
+    this.screechT = (this.screechT || 0) - 0.05;
+    if (this.screechT <= 0 && this.driver) {
+      this.screechT = 0.22;
+      this.game.audio.play('skid', Math.min(1, Math.abs(this.slip || 0) / 6 + 0.35));
+    }
+  }
+
+  updateTank(dt, input) {
+    const q = this.q;
+    let throttle = 0;
+    let turn = 0;
+    if (input) {
+      const mv = input.readMove();
+      throttle = mv.y;
+      turn = -mv.x;
+    }
+    const maxF = 11 * q.speed;
+    this.speed = damp(this.speed, throttle * maxF, 1.6 * q.accel, dt);
+    this.yaw += turn * 1.05 * dt * (this.grade === 'fail' ? 0.4 : 1) + (input ? q.pull * 0.2 * dt : 0);
+    const f = this.fwd;
+    this.pos.x += f.x * this.speed * dt;
+    this.pos.z += f.z * this.speed * dt;
+    this.pos.y = damp(this.pos.y, groundHeight(this.pos.x, this.pos.z) * 0.5, 12, dt);
+    this.speedAbs = Math.abs(this.speed);
+    this.collideWorld(dt);
+    this.runOver();
+    // the turret follows the camera
+    if (input) {
+      let want = this.game.camRig.yaw - this.yaw;
+      if (this.grade === 'fail') want = Math.sin(this.time * 0.7) * 2.5;
+      else if (this.grade === 'wonky') want += Math.sin(this.time * 2.3) * 0.25;
+      this.turretYaw = dampAngle(this.turretYaw, want, this.grade === 'wonky' ? 2 : 4, dt);
+      this.turret.rotation.y = this.turretYaw;
+      this.reload -= dt;
+      if ((input.fire || input.firePressed) && this.reload <= 0) this.fireCannon();
+      this.game.audio.engine(0.3 + this.speedAbs / 12, 'tank');
+    }
+  }
+
+  // (game/drawncar.js) the gun drawn on a vehicle: a cannon as the tank's; a machine gun (a thin
+  // barrel, ROADMAP 11.8) rattles on while the button is held
+  drawnGun(dt, input) {
+    this.turretYaw = dampAngle(this.turretYaw, this.game.camRig.yaw - this.yaw, 4, dt);
+    this.turret.rotation.y = this.turretYaw;
+    this.reload -= dt;
+    if (this.gunType === 'mg') {
+      if (input.fire && this.reload <= 0) this.fireMG();
+    } else if ((input.fire || input.firePressed) && this.reload <= 0) this.fireCannon();
+  }
+
+  // (ROADMAP 11.10) every barrel drawn on it, each on its turret after where you look (one on
+  // its top all the way round; one out of its nose, its side, only a little), each firing as it
+  // was drawn (game/partsum.js gunOf): a machine gun on while the button is held, a cannon again
+  // as soon as it can
+  drawnGuns(dt, input) {
+    const want = this.game.camRig.yaw - this.yaw;
+    const fire = input.fire || input.firePressed;
+    for (const t of this.turrets) {
+      // (ROADMAP 11.27: one still taking shape as it was drawn, game/partpen.js fly)
+      const target = t.p && t.p.shaping > performance.now() ? t.yaw0 : t.yaw0 + clamp(angleDiff(t.yaw0, want), -t.arc, t.arc);
+      t.yaw = dampAngle(t.yaw, target, 4, dt);
+      t.node.rotation.y = t.yaw;
+      t.cool -= dt;
+      if (fire && t.cool <= 0) this.fireTurret(t);
+    }
+  }
+
+  fireTurret(t) {
+    const game = this.game;
+    const g = t.gun;
+    t.cool = g.reload;
+    this.group.updateMatrixWorld(true);
+    const mw = t.muzzle.clone();
+    t.node.localToWorld(mw);
+    // (at what you aim at - or, one that cannot turn so far, straight along its barrel)
+    const along = _tb.copy(t.pivot || _tz.set(0, t.muzzle.y, 0));
+    t.node.localToWorld(along);
+    along.subVectors(mw, along).normalize();
+    const dir = game.weapons.aimPoint.clone().sub(mw).normalize();
+    if (dir.dot(along) < Math.cos(Math.min(Math.PI, t.arc + 0.45))) dir.copy(along);
+    const sp = g.spread || 0.02;
+    dir.x += (Math.random() - 0.5) * sp;
+    dir.y += (Math.random() - 0.5) * sp;
+    dir.z += (Math.random() - 0.5) * sp;
+    dir.normalize();
+    if (g.type === 'mg') {
+      const c = this.mgColor || [1.0, 0.82, 0.3];
+      const pr = { kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * g.speed, vy: dir.y * g.speed, vz: dir.z * g.speed, gravity: 2, damage: g.dmg, radius: 0, life: g.life || 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this };
+      // (ROADMAP 11.11: drawn in colour - a flamethrower's flames rise a little, water arcs down,
+      // light flies straight on through a wall or two; game/weapons.js inkHit)
+      if (g.el) {
+        pr.el = g.el;
+        if (g.el === 'fire') pr.gravity = -1.5;
+        else if (g.el === 'water') pr.gravity = 9;
+        else if (g.el === 'light') {
+          pr.gravity = 0;
+          pr.pierce = 2;
+        } else if (g.el === 'bounce') pr.bounce = 3;
+      }
+      game.weapons.projectiles.push(pr);
+      game.fx.muzzle(mw.x, mw.y, mw.z, g.el === 'fire' || g.el === 'water' ? 0.3 : 0.6 + t.r * 4);
+      if (g.el === 'fire' || g.el === 'water') {
+        if (Math.random() < 0.3) game.audio.play(g.el === 'fire' ? 'whoosh' : 'pour', 0.25);
+      } else game.audio.play(g.el === 'light' ? 'laser' : 'paint', this.turrets.length > 1 ? 0.3 : 0.45);
+      if (!g.quiet) game.enemies.noise(this.pos, 32);
+    } else if (g.el && g.el !== 'tippex') {
+      // (ROADMAP 11.11) a cannon drawn in colour: its ink where it goes off (glue, a shock, ink...)
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'shell');
+      const pr = game.weapons.projectiles[game.weapons.projectiles.length - 1];
+      pr.el = g.el;
+      pr.big = true;
+      if (g.el === 'bounce') pr.bounce = 3;
+      if (g.arc) this.lob(pr, mw);
+      game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
+      game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
+      game.camRig.addShake(clamp(0.15 + t.r * 1.4, 0.15, 0.5));
+      if (!g.quiet) game.enemies.noise(this.pos, 60, 'boom');
+      if (this.mode === 'drive' || this.kind === 'bike') this.speed -= t.r * 6;
+      if (g.recoil) this.recoilKick(dir, g.recoil);
+    } else {
+      // (the cannon's own: a glob of correction fluid - what it splashes is wiped off the page)
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', g.dmg, g.blast, g.speed, 'whiteShell');
+      if (g.arc) this.lob(game.weapons.projectiles[game.weapons.projectiles.length - 1], mw);
+      game.fx.muzzle(mw.x, mw.y, mw.z, 1.5 + t.r * 8);
+      game.fx.splash(mw.x, mw.y, mw.z, 6, 2.5, [1, 1, 0.98]);
+      game.audio.play('cannon', clamp(0.5 + t.r * 2, 0.5, 1));
+      game.camRig.addShake(clamp(0.15 + t.r * 1.4, 0.15, 0.5));
+      if (!g.quiet) game.enemies.noise(this.pos, 60, 'boom');
+      if (this.mode === 'drive' || this.kind === 'bike') this.speed -= t.r * 6;
+      if (g.recoil) this.recoilKick(dir, g.recoil);
+    }
+    // (ROADMAP 11.12: a silencer on it - nobody hears it, nobody calls it in)
+    if (g.quiet) return;
+    game.civilians.panic(this.pos, 40, 'shot', { by: 'player', armed: true });
+    game.onCrime('shoot', this.pos.x, this.pos.z);
+  }
+
+  // (ROADMAP 11.27) a mortar's shot: up high and down onto where you aim - as long in the air as it is
+  // far, over what is between
+  lob(pr, mw) {
+    const aim = this.game.weapons.aimPoint;
+    const dx = aim.x - mw.x;
+    const dz = aim.z - mw.z;
+    const h = Math.hypot(dx, dz) || 1;
+    const d = clamp(h, 8, 85);
+    const T = clamp(1 + d / 24, 1.3, 4);
+    const G = 14;
+    const dy = clamp(aim.y - mw.y, -20, 20);
+    pr.vx = (dx / h) * (d / T);
+    pr.vz = (dz / h) * (d / T);
+    pr.vy = (dy + 0.5 * G * T * T) / T;
+    pr.gravity = G;
+    pr.life = T + 1.5;
+  }
+
+  // (ROADMAP 11.12) a giant cannon throws what fires it back along its barrel - a light one off the
+  // ground
+  recoilKick(dir, k) {
+    const kx = -dir.x * k;
+    const kz = -dir.z * k;
+    if (this.mode === 'drive' || (this.kind === 'bike' && !this.mode)) {
+      if (this.vx === undefined || this.physT === undefined || this.game.time - this.physT > 1) {
+        this.vx = Math.sin(this.yaw) * (this.speed || 0);
+        this.vz = Math.cos(this.yaw) * (this.speed || 0);
+      }
+      this.vx += kx;
+      this.vz += kz;
+      this.physT = this.game.time;
+      if ((this.handling ? this.handling.mass : 1) < 1.3 && !this.air) {
+        this.air = true;
+        this.vy = k * 0.28;
+      }
+    } else if (this.mode === 'plane' || this.kind === 'plane') this.speed = Math.max(0, (this.speed || 0) - k * 0.4);
+    else {
+      this.vx = (this.vx || 0) + kx * 0.6;
+      this.vz = (this.vz || 0) + kz * 0.6;
+    }
+    this.game.camRig.addShake(clamp(0.3 + k * 0.025, 0.3, 0.8));
+  }
+
+  fireMG() {
+    const game = this.game;
+    this.reload = 0.1;
+    this.group.updateMatrixWorld(true);
+    const mw = this.muzzleLocal.clone();
+    this.turret.localToWorld(mw);
+    const dir = game.weapons.aimPoint.clone().sub(mw).normalize();
+    dir.x += (Math.random() - 0.5) * 0.035;
+    dir.y += (Math.random() - 0.5) * 0.035;
+    dir.z += (Math.random() - 0.5) * 0.035;
+    dir.normalize();
+    const sp = 88;
+    const c = this.mgColor || [1.0, 0.82, 0.3];
+    game.weapons.projectiles.push({ kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * sp, vy: dir.y * sp, vz: dir.z * sp, gravity: 2, damage: 13, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this });
+    game.fx.muzzle(mw.x, mw.y, mw.z, 0.9);
+    game.audio.play('paint', 0.45);
+    game.enemies.noise(this.pos, 32);
+    game.civilians.panic(this.pos, 40, 'shot', { by: 'player', armed: true });
+    game.onCrime('shoot', this.pos.x, this.pos.z);
+  }
+
+  fireCannon() {
+    const game = this.game;
+    this.reload = 1.6 * this.q.reload;
+    this.group.updateMatrixWorld(true);
+    const mw = this.muzzleLocal.clone();
+    this.turret.localToWorld(mw);
+    const aim = game.weapons.aimPoint;
+    const dir = aim.clone().sub(mw).normalize();
+    // the tank fires correction fluid: what the glob splashes over is wiped off the page
+    if (this.grade === 'fail') {
+      dir.set(Math.sin(this.yaw + this.turretYaw), 0.3, Math.cos(this.yaw + this.turretYaw)).normalize();
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', 60, 3, 9, 'whiteShell');
+    } else {
+      const spread = this.grade === 'wonky' ? 0.06 : 0.008;
+      dir.x += (Math.random() - 0.5) * spread;
+      dir.y += (Math.random() - 0.5) * spread;
+      dir.z += (Math.random() - 0.5) * spread;
+      dir.normalize();
+      game.weapons.spawnShell(mw.x, mw.y, mw.z, dir.x, dir.y, dir.z, 'player', this.grade === 'perfect' ? 260 : 200, this.grade === 'perfect' ? 8.5 : 7, 48, 'whiteShell');
+    }
+    game.fx.muzzle(mw.x, mw.y, mw.z, 3);
+    game.fx.splash(mw.x, mw.y, mw.z, 8, 3, [1, 1, 0.98]);
+    game.audio.play('cannon');
+    game.camRig.addShake(0.45);
+    game.enemies.noise(this.pos, 60, 'boom');
+    this.speed -= 1.5;
+  }
+
+  updateCopter(dt, input) {
+    const q = this.q;
+    const game = this.game;
+    let ax = 0;
+    let az = 0;
+    let up = 0;
+    if (input) {
+      const mv = input.readMove();
+      // (a phone's driving buttons: ◀ ▶ turn it as they turn a car - the view round, and its nose
+      // after it - not sideways as the stick does)
+      const turn = input.touch && input.driveButtons && mv !== input.pad ? mv.x : 0;
+      if (turn) game.camRig.yaw -= turn * 1.4 * dt;
+      const cy = game.camRig.yaw;
+      const fx = Math.sin(cy);
+      const fz = Math.cos(cy);
+      const sx = mv.x - turn;
+      ax = fx * mv.y - fz * sx;
+      az = fz * mv.y + fx * sx;
+      if (input.keys.has('Space')) up += 1;
+      if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || input.keys.has('ShiftLeft')) up -= 1;
+      if (input.flyUp) up += 1;
+      if (input.flyDown) up -= 1;
+      this.yaw = dampAngle(this.yaw, cy, 1.5, dt);
+    }
+    const maxS = 24 * q.speed;
+    this.vx = damp(this.vx || 0, ax * maxS, 1.6 * q.accel, dt);
+    this.vz = damp(this.vz || 0, az * maxS, 1.6 * q.accel, dt);
+    // (ROADMAP 11.12: its weight not under its rotor - it leans that way and drifts, flown or not)
+    if (this.lean0 && this.alt > 1.2) {
+      this.vx += Math.sin(this.yaw) * this.lean0 * 10 * dt;
+      this.vz += Math.cos(this.yaw) * this.lean0 * 10 * dt;
+    }
+    // (ROADMAP 11.13: one rotor and nothing to hold it straight - it turns round as it flies, and
+    // the view with it)
+    if (this.spin && this.alt > 1.2) {
+      this.yaw += this.spin * dt;
+      if (input) game.camRig.yaw += this.spin * dt;
+      if (input && !this.toldSpin) {
+        this.toldSpin = true;
+        game.hud.toast('אין רוטור זנב — הוא מסתובב סביב עצמו! ציירו רוטור קטן בזנב', 'info', 3);
+      }
+    }
+    const maxAlt = this.grade === 'fail' ? 1.2 : 70;
+    // (ROADMAP 11.15: what lifts it a little small for it - it rises slowly)
+    this.vy = damp(this.vy, up * 9 * (up > 0 ? q.climb || 1 : 1), 3, dt);
+    if (!this.driver) this.vy = damp(this.vy, (1.05 - this.alt) * 0.8, 1, dt);
+    this.alt = clamp(this.alt + this.vy * dt, 1.0, maxAlt);
+    if (q.wobble) {
+      this.vx += Math.sin(this.time * 1.3) * q.wobble * 1.5 * dt;
+      this.vz += Math.cos(this.time * 1.1) * q.wobble * 1.5 * dt;
+      if (this.grade === 'fail') this.alt = 1 + Math.abs(Math.sin(this.time * 3)) * 1.2;
+    }
+    this.pos.x += this.vx * dt;
+    this.pos.z += this.vz * dt;
+    const g = Math.max(0, groundHeight(this.pos.x, this.pos.z));
+    this.pos.y = g + this.alt - 1.0;
+    this.speedAbs = Math.hypot(this.vx, this.vz);
+    const col = game.world.collision;
+    const p = new THREE.Vector3(this.pos.x, this.pos.y + 0.3, this.pos.z);
+    const res = col.resolveCylinder(p, 2.8, 2.6, 0);
+    if (res.hitWall) {
+      this.pos.x = p.x;
+      this.pos.z = p.z;
+      this.vx *= 0.3;
+      this.vz *= 0.3;
+    }
+    // paper planes from the doors, at whatever you aim (a gun drawn on it fires instead: drawnGun)
+    if (!this.turret) this.reload -= dt;
+    if (input && input.fire && this.reload <= 0 && !this.turret) {
+      this.reload = this.grade === 'perfect' ? 0.45 : this.grade === 'good' ? 0.6 : this.grade === 'wonky' ? 0.9 : 2;
+      this.dropPlane();
+    }
+    if (input) game.audio.engine(0.45 + this.speedAbs / 30, 'ufo');
+  }
+
+  dropPlane() {
+    const game = this.game;
+    const w = game.weapons;
+    const side = (this.planeSide = -(this.planeSide || 1));
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const x = this.pos.x + fz * side * 1.2;
+    const y = this.pos.y + 1.0;
+    const z = this.pos.z - fx * side * 1.2;
+    const a = w.aimPoint;
+    const d = new THREE.Vector3(a.x - x, a.y - y, a.z - z).normalize();
+    const sp = 22;
+    const q = this.q;
+    w.projectiles.push({
+      kind: 'plane', owner: 'player', x, y, z, vx: d.x * sp, vy: d.y * sp, vz: d.z * sp, gravity: 0,
+      damage: 60 * q.hp, radius: 3.2, life: 6, t: 0, seed: Math.random() * 100, wobble: this.grade === 'fail' ? 2 : 0,
+      homing: 3.2, cruise: sp,
+    });
+    game.audio.play('whoosh', 0.8);
+    game.enemies.noise(this.pos, 40);
+    game.onCrime('shoot', this.pos.x, this.pos.z);
+  }
+
+  // the bike's rider: astride the seat, hands on the bars
+  seatRider(fig, dt) {
+    // (ROADMAP 4.8: on the saddle, the deck, at the helm, in the cockpit: game/rides.js)
+    if (this.model) {
+      seatOn(this, fig, dt);
+      return;
+    }
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const s = this.seat === true ? [0, 1.0, -0.3] : this.seatPos || [0, 1.0, -0.3];
+    const b = this.bar || [0, 1.38, 0.82];
+    fig.pos.set(this.pos.x + fx * s[2], this.pos.y + s[1] - 0.48, this.pos.z + fz * s[2]);
+    fig.yaw = this.yaw;
+    fig.sit = 1;
+    fig.speed = 0;
+    if (!fig.wheel) fig.wheel = new THREE.Vector3();
+    fig.wheel.set(this.pos.x + fx * b[2], this.pos.y + b[1], this.pos.z + fz * b[2]);
+    // (shooting off the bike: one hand on the bars, ROADMAP 4.7; or held up at something - the
+    // prologue's pencil: game/rides.js seatOn, holdUpR)
+    fig.reachR = fig.holdUpR || (fig.shootOut ? null : fig.wheel);
+    if (fig.shootOut) fig.reachL = fig.wheel;
+    fig.update(dt);
+  }
+}
+
+// the traffic's bigger cars (game/fleet.js), taken
+const BIG_STOCK = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', 'firetruck']);
+
+// How each kind handles (ROADMAP 4.3; not with ?classic): how heavy (slow to start turning, slow
+// to stop turning), how strong, how fast, how much the tyres grip sideways (and with the
+// handbrake on: a drift), how quick the steering, how much the body rolls and pitches
+export const HANDLING = {
+  sports: { mass: 1.0, power: 16, top: 33, grip: 9.5, slide: 1.12, steer: 1.6, roll: 0.45, pitch: 0.35 },
+  sedan: { mass: 1.25, power: 14, top: 28, grip: 8, slide: 1.01, steer: 1.4, roll: 0.75, pitch: 0.5 },
+  suv: { mass: 1.6, power: 13.5, top: 28, grip: 7, slide: 0.94, steer: 1.25, roll: 1.05, pitch: 0.6 },
+  van: { mass: 1.8, power: 11.5, top: 25, grip: 6.5, slide: 0.9, steer: 1.15, roll: 1.15, pitch: 0.65 },
+  ambulance: { mass: 1.9, power: 13, top: 29, grip: 6.5, slide: 0.9, steer: 1.15, roll: 1.15, pitch: 0.65 },
+  limo: { mass: 2.1, power: 12, top: 27, grip: 7, slide: 0.9, steer: 0.95, roll: 0.8, pitch: 0.45 },
+  classic: { mass: 1.5, power: 12.5, top: 28, grip: 5.8, slide: 0.98, steer: 1.3, roll: 1.4, pitch: 0.9 },
+  truck: { mass: 3.0, power: 8.5, top: 22, grip: 5.5, slide: 0.83, steer: 0.85, roll: 1.2, pitch: 0.55 },
+  garbage: { mass: 3.4, power: 7.5, top: 20, grip: 5.5, slide: 0.83, steer: 0.8, roll: 1.2, pitch: 0.55 },
+  firetruck: { mass: 3.6, power: 9, top: 25, grip: 5.5, slide: 0.83, steer: 0.8, roll: 1.1, pitch: 0.5 },
+  bike: { mass: 0.6, power: 20, top: 36, grip: 11, slide: 1.8, steer: 1.9, roll: 0, pitch: 0.4 },
+  // (ROADMAP 4.8: pedalled, kicked)
+  bicycle: { mass: 0.45, power: 4.2, top: 9.5, grip: 10, slide: 1.6, steer: 2.1, roll: 0, pitch: 0.2 },
+  scooter: { mass: 0.35, power: 3.0, top: 6.5, grip: 9, slide: 1.4, steer: 2.3, roll: 0, pitch: 0.15 },
+  // (ROADMAP 11.41: the catalog's cars)
+  hyper: { mass: 0.95, power: 22, top: 46, grip: 11, slide: 1.18, steer: 1.7, roll: 0.3, pitch: 0.3 },
+  muscle: { mass: 1.3, power: 20, top: 40, grip: 7.5, slide: 1.28, steer: 1.45, roll: 0.7, pitch: 0.85 },
+  monster: { mass: 2.4, power: 16, top: 31, grip: 7, slide: 1.0, steer: 1.2, roll: 1.3, pitch: 1.0 },
+  armored: { mass: 3.2, power: 13, top: 28, grip: 6.5, slide: 0.86, steer: 0.95, roll: 0.9, pitch: 0.5 },
+};
+
+// the stunt ramps in the alleys (with their wooden planks, drawn by the car batches)
+export const RAMPS = [
+  { x: -31.5, z: 70, yaw: 0, len: 5.5, w: 3.2, h: 1.35 },
+  { x: -100.5, z: 125, yaw: Math.PI, len: 5.5, w: 3.2, h: 1.35 },
+  { x: -31.5, z: 215, yaw: 0, len: 6.5, w: 3.2, h: 1.7 },
+];
+
+// how high a ramp's top is at (x, z), coming up it from its low end (0: not on one)
+export function rampAt(x, z) {
+  // (ROADMAP 15.4: drawn ones can cross - the highest of them under it)
+  let best = 0;
+  for (const r of RAMPS) {
+    const dx = x - r.x;
+    const dz = z - r.z;
+    const fx = Math.sin(r.yaw);
+    const fz = Math.cos(r.yaw);
+    const along = dx * fx + dz * fz;
+    const across = -dx * fz + dz * fx;
+    if (along >= 0 && along <= r.len && Math.abs(across) <= r.w / 2) best = Math.max(best, (along / r.len) * r.h);
+  }
+  return best;
+}
+
+// (ROADMAP 15.4) bridges drawn from one point to another: decks a car drives over - { x, z (its near
+// end), y0, y1 (its ends' heights), yaw, len, w }. Under it, it is no floor (a car goes under a bridge)
+export const DECKS = [];
+export function deckAt(x, z, y) {
+  let best = -Infinity;
+  for (const d of DECKS) {
+    const dx = x - d.x;
+    const dz = z - d.z;
+    const fx = Math.sin(d.yaw);
+    const fz = Math.cos(d.yaw);
+    const along = dx * fx + dz * fz;
+    const across = -dx * fz + dz * fx;
+    if (along < -0.3 || along > d.len + 0.3 || Math.abs(across) > d.w / 2) continue;
+    const dy = d.y0 + ((d.y1 - d.y0) * clamp(along, 0, d.len)) / d.len;
+    if (dy <= y + 1.1 && dy > best) best = dy;
+  }
+  return best;
+}
+
+// (the dark pen comes out as the road's own ink: the marks are drawn grey, rubbed in)
+const SKID = [0.44, 0.43, 0.5];
+const TYRE_SMOKE = [0.9, 0.9, 0.93];
+const RAMP_WOOD = [0.8, 0.64, 0.42];
+const RAMP_STRIPE = [0.98, 0.8, 0.12];
+const RAMP_LEG = [0.24, 0.24, 0.27];
+const _rm = new THREE.Matrix4();
+const _rq = new THREE.Quaternion();
+const _re = new THREE.Euler();
+const _rp = new THREE.Vector3();
+const _rs = new THREE.Vector3();
+
+export class Vehicles {
+  constructor(game) {
+    this.game = game;
+    this.list = [];
+  }
+
+  // a city car the player takes (no drawing needed)
+  spawnStock(stock, pos, yaw) {
+    // (a motorbike out of the traffic rides like the drawn one: game/fleet.js)
+    if (stock && stock.kind === 'moto') {
+      const b = new Vehicle(this, 'bike', 'good', 100);
+      b.pos.set(pos.x, 0, pos.z);
+      b.yaw = yaw;
+      b.reveal = 1;
+      b.stock = stock;
+      return this.add(b);
+    }
+    const v = new Vehicle(this, 'car', 'good', 100, stock);
+    // (a truck, a limousine...: as big as it is)
+    const K = BIG_STOCK.has(v.carKind) ? KINDS[v.carKind] : null;
+    if (K) {
+      v.halfLen = K.len / 2;
+      v.halfWid = K.W / 2;
+      v.heightM = K.glass.R;
+    }
+    v.pos.set(pos.x, 0, pos.z);
+    v.yaw = yaw;
+    this.list.push(v);
+    return v;
+  }
+
+  // a drawn vehicle about to land (see game/materialize.js): made now, out of sight until add()
+  create(kind, grade, score) {
+    const v = new Vehicle(this, kind, grade, score);
+    v.reveal = 1;
+    v.group.visible = false;
+    return v;
+  }
+
+  add(v) {
+    // (in place from its first frame: its update only runs next frame)
+    v.group.position.copy(v.pos);
+    v.group.rotation.set(0, v.yaw, 0);
+    v.group.visible = true;
+    this.list.push(v);
+    // keep at most 3 drawn vehicles around
+    while (this.list.filter((o) => !o.stock).length > 3) {
+      const old = this.list.find((o) => !o.driver && !o.stock && o !== v);
+      if (!old) break;
+      old.dispose();
+      this.list.splice(this.list.indexOf(old), 1);
+    }
+    return v;
+  }
+
+  // in front of the player, on free ground (or just in front, if nothing is free)
+  placeNear(v) {
+    const game = this.game;
+    const p = game.player.pos;
+    const f = game.player.fig.forward;
+    for (const d of [4.5, 6, 3.5, 8]) {
+      for (const side of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5]) {
+        const ang = Math.atan2(f.x, f.z) + side * 0.6;
+        const x = p.x + Math.sin(ang) * d;
+        const z = p.z + Math.cos(ang) * d;
+        if (groundHeight(x, z) >= 0 && !game.world.collision.pointInside(x, 1.0, z, v.radius * 0.8)) {
+          v.pos.set(x, v.flies ? 0 : groundHeight(x, z) * 0.5, z);
+          return;
+        }
+      }
+    }
+    v.pos.set(p.x + f.x * 4, 0, p.z + f.z * 4);
+  }
+
+  spawn(kind, grade, score) {
+    const game = this.game;
+    const v = new Vehicle(this, kind, grade, score);
+    // in front of the player, on free ground
+    const p = game.player.pos;
+    const f = game.player.fig.forward;
+    const tries = [4.5, 6, 3.5, 8];
+    let placed = false;
+    for (const d of tries) {
+      for (const side of [0, 1, -1, 2, -2]) {
+        const ang = Math.atan2(f.x, f.z) + side * 0.6;
+        const x = p.x + Math.sin(ang) * d;
+        const z = p.z + Math.cos(ang) * d;
+        const hit = game.world.collision.pointInside(x, 1.0, z, v.radius * 0.8);
+        if (!hit) {
+          v.pos.set(x, v.flies ? 0 : groundHeight(x, z) * 0.5, z);
+          placed = true;
+          break;
+        }
+      }
+      if (placed) break;
+    }
+    if (!placed) v.pos.set(p.x + f.x * 4, 0, p.z + f.z * 4);
+    v.yaw = game.player.yaw;
+    if (kind === 'copter') v.alt = 1.05;
+    this.list.push(v);
+    // keep at most 3 drawn vehicles around
+    while (this.list.filter((o) => !o.stock).length > 3) {
+      const old = this.list.find((o) => !o.driver && !o.stock);
+      if (!old) break;
+      old.dispose();
+      this.list.splice(this.list.indexOf(old), 1);
+    }
+    game.fx.smoke(v.pos.x, v.pos.y + 1, v.pos.z, 3);
+    game.fx.crumbs(v.pos.x, v.pos.y + 1, v.pos.z, 20, 4);
+    return v;
+  }
+
+  update(dt) {
+    const keep = [];
+    const pp = this.game.anchorPos();
+    for (const v of this.list) {
+      v.update(dt);
+      // (a car in your parking stays: game/garage.js)
+      const left = v.stock && !v.driver && !v.kept && Math.hypot(v.pos.x - pp.x, v.pos.z - pp.z) > 140;
+      if ((v.dead && this.game.time > v.removeAt) || left) {
+        v.dispose();
+        continue;
+      }
+      keep.push(v);
+    }
+    this.list = keep;
+  }
+
+  // (its colour changed: the dusty copy made again)
+  dirty(v) {
+    v._dq = -1;
+  }
+
+  draw(cars) {
+    for (const v of this.list) v.draw(cars);
+    if (!this.game.classic) this.drawExtras(cars);
+  }
+
+  // (ROADMAP 4.3) the skid marks, fading; the stunt ramps in the alleys
+  drawExtras(cars) {
+    const game = this.game;
+    // (the boats' wakes: game/rides.js)
+    for (const v of this.list) if (v.kind === 'boat' && v.wake) drawWake(v, game.figures, game.time);
+    const cam = game.camera.position;
+    const S = this.skidList;
+    if (S && S.length) {
+      const fr = game.figures;
+      const t = game.time;
+      for (let i = 0; i < S.length; i++) {
+        const k = S[i];
+        const age = t - k.t;
+        if (age > 40) continue;
+        const d = Math.hypot(k.a[0] - cam.x, k.a[1] - cam.z);
+        if (d > 70) continue;
+        fr.lineXYZ(k.a[0], k.y, k.a[1], k.b[0], k.y, k.b[1], SKID, Math.max(1.4, Math.min(8, 120 / Math.max(1, d))), 4000 + (i & 63), 0.6 * (1 - age / 40), 0.005, 0);
+      }
+    }
+    for (const r of RAMPS) {
+      // (a drawn one has a body of its own: game/gadgets.js)
+      if (r.drawn || Math.hypot(r.x - cam.x, r.z - cam.z) > 160) continue;
+      const slope = Math.atan2(r.h, r.len);
+      const plank = Math.hypot(r.h, r.len);
+      // the plank (tilted up its length), two stripes across it, the trestle under its high end
+      _rq.setFromEuler(_re.set(-slope, r.yaw, 0, 'YXZ'));
+      const fx = Math.sin(r.yaw);
+      const fz = Math.cos(r.yaw);
+      const mid = (r.len / 2);
+      _rm.compose(_rp.set(r.x + fx * mid, r.h / 2 + 0.06, r.z + fz * mid), _rq, _rs.set(r.w, 0.12, plank));
+      cars.trimBox.push(_rm, RAMP_WOOD, 0);
+      for (const u of [0.3, 0.62, 0.9]) {
+        _rm.compose(_rp.set(r.x + fx * r.len * u, r.h * u + 0.13, r.z + fz * r.len * u), _rq, _rs.set(r.w * 0.96, 0.02, 0.22));
+        cars.trimBox.push(_rm, RAMP_STRIPE, 0);
+      }
+      _rq.setFromEuler(_re.set(0, r.yaw, 0, 'YXZ'));
+      for (const s of [-1, 1]) {
+        _rm.compose(_rp.set(r.x + fx * (r.len - 0.2) - fz * s * (r.w / 2 - 0.2), r.h / 2, r.z + fz * (r.len - 0.2) + fx * s * (r.w / 2 - 0.2)), _rq, _rs.set(0.16, r.h, 0.16));
+        cars.trimBox.push(_rm, RAMP_LEG, 0);
+      }
+    }
+  }
+
+  nearest(pos, maxD) {
+    let best = null;
+    let bd = maxD;
+    for (const v of this.list) {
+      if (v.dead || v.materializing) continue;
+      const d = Math.hypot(v.pos.x - pos.x, v.pos.z - pos.z) - v.radius;
+      if (d < bd) {
+        bd = d;
+        best = v;
+      }
+    }
+    return best;
+  }
+
+  // push walkers out of vehicle footprints (oriented boxes)
+  pushOut(p, r) {
+    this.game.traffic.pushOut(p, r);
+    for (const v of this.list) {
+      if (v.dead || (v.flies && v.alt > 2)) continue;
+      const dx = p.x - v.pos.x;
+      const dz = p.z - v.pos.z;
+      const fx = Math.sin(v.yaw);
+      const fz = Math.cos(v.yaw);
+      const along = dx * fx + dz * fz;
+      const side = dx * fz - dz * fx;
+      const hl = v.halfLen + r;
+      const hw = v.halfWid + r;
+      if (Math.abs(along) < hl && Math.abs(side) < hw && p.y < v.pos.y + v.heightM) {
+        const pa = hl - Math.abs(along);
+        const ps = hw - Math.abs(side);
+        if (pa < ps) {
+          const s = Math.sign(along) || 1;
+          p.x += fx * pa * s;
+          p.z += fz * pa * s;
+        } else {
+          const s = Math.sign(side) || 1;
+          p.x += fz * ps * s;
+          p.z -= fx * ps * s;
+        }
+      }
+    }
+  }
+}
+
+export { angleDiff, _q, UP, copterModel, cityCopterModel };
