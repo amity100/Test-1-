@@ -261,6 +261,20 @@ export class Prologue {
     if (n >= 4) {
       this.spawnPier();
       if (this.set) this.set.removeWheel();
+      // (round 14: and the people who were under it gone on their way along the pier, as they have in
+      // the film by now - started here, they stood waving at the empty sky, one of them across every
+      // single of Danny's scene: set.js forget)
+      const S = this.set;
+      if (S && S.forget) {
+        S.forget();
+        for (const b of S.below || []) {
+          if (!b.walkTo) continue;
+          b.x = b.walkTo.x;
+          b.z = b.walkTo.z;
+          b.speed = 0;
+          b.walkDelay = 0;
+        }
+      }
     }
     if (n >= 4 && n < 5) {
       this.putDanny(SITE.x + 1.5, SITE.z + 0.9, Math.atan2(WHEEL.x - SITE.x, WHEEL.z - SITE.z));
