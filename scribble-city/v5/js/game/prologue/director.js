@@ -1548,6 +1548,9 @@ export class Prologue {
     const L = this.person('lily', LILY_SEAT.x, LILY_SEAT.z, look, { face: LILY_SEAT.yaw });
     // (her drawn face in the film's middle shots too, not only close: render/people.js portraitFor)
     L.fig.portraitPx = 40;
+    // (round 15: her face hers near and far - never handed to the city's simple face, dark with black
+    // eyes, for a moment after a cut that brought her near: render/people.js keepPortrait)
+    L.fig.keepPortrait = true;
     L.fig.sit = 1;
     L.baseY = 0.32;
     if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, true);
@@ -2557,8 +2560,10 @@ export class Prologue {
     }
     // (people out for the evening, as they are: one with his phone, the other his coffee - ROADMAP 18.9)
     g2.fig.reachR = null;
-    g2.fig.carry = 'phone';
-    g1.fig.carry = 'coffee';
+    // (round 15, the player's word: nothing in their hands - the coffee cup sank into the hand that held
+    // it, and the phone with it)
+    g2.fig.carry = null;
+    g1.fig.carry = null;
   }
 
   // ------------------------------------------------------------------ 4. GONE
