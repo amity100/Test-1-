@@ -56,7 +56,9 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
       break;
     case 'icecream':
     case 'apple':
-      [x, y, z] = [side * 0.12, ny - 0.1, 0.27];
+      // (round 14: a cone held low, at her side - fig.coneLow, the prologue's Lily: at the chin, from any
+      // camera a little below her face its scoop was over her mouth)
+      [x, y, z] = fig.coneLow ? [side * 0.2, ny - 0.34, 0.2] : [side * 0.12, ny - 0.1, 0.27];
       break;
     case 'flower':
     case 'bouquet':

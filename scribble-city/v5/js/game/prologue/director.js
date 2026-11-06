@@ -1807,6 +1807,7 @@ export class Prologue {
     this.repose(L);
     L.baseY = 0.32;
     if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, true);
+    L.fig.coneLow = true;
     if (this.castMod && this.castMod.giveSketchbook) this.castMod.giveSketchbook(L.fig, true);
   }
 
@@ -1912,7 +1913,7 @@ export class Prologue {
     // (round 11: near enough to read their faces - wide, they were specks by the stand)
     // (round 14: over his shoulder at her, teasing him - her face in the evening's light; the two of
     // them side on were two dark shapes against the sky at the picture's edges)
-    this.shot({ from: this.ots(P, L, { back: 0.75, side: 0.42, h: 1.62 }), look: () => { const h = this.headJ(L) || v3(L.pos.x, 1.1, L.pos.z); return v3(h.x, h.y - 0.12, h.z); }, fov: 38, dur: 2.2, hand: 0.4 });
+    this.shot({ from: this.ots(P, L, { back: 1.05, side: 0.66, h: 1.5 }), look: () => { const h = this.headJ(L) || v3(L.pos.x, 1.1, L.pos.z); return v3(h.x, h.y - 0.12, h.z); }, fov: 38, dur: 2.2, hand: 0.4 });
     this.feel(P.fig, 'joy', 1.8);
     yield 0.6;
     // her uncle, up on a board by the way onto the pier: she sees him - and runs over to it
@@ -1948,7 +1949,7 @@ export class Prologue {
     L.fig.reachR = null;
     L.fig.lookAt = v3(B.x, B.cy, B.z);
     // (round 14: from low, up at her as she looks up at it - the evening's sky and its palms over her)
-    this.shot({ ...this.single(L, v3(B.x, B.cy, B.z), { dist: 0.9, side: 0.5, up: -0.3, drop: -0.1 }), fov: 38, dur: 3.2, hand: 0.35 });
+    this.shot({ ...this.single(L, v3(B.x, B.cy, B.z), { dist: 0.95, side: -0.5, up: -0.22, drop: -0.08 }), fov: 38, dur: 3.2, hand: 0.35 });
     yield* this.say('L03', L.fig, 0.4);
     // his answer over the board itself, from below, beside him: the face that wants the city
     L.fig.reachR = null;
