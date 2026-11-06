@@ -392,14 +392,26 @@ export class Doodle {
       lean -= this.recoil * this.recoil * 0.42;
       leanSide += this.recoil * this.recoilSide * 0.12;
     }
-    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
-    const spine = 0.5;
     // (standing, a breath: the chest and the shoulders rise and fall a little - and in the prologue's
     // film, where the camera comes close and stays, a deeper one, and the body above the hips swaying
     // slowly over its feet: nobody stands as still as a post, ROADMAP 18.9)
     this.breathT = (this.breathT || this.seed) + dt;
     const idle = (1 - wa) * (1 - sit * 0.5) * (Doodle.twos.on ? 1 : 0.35);
-    const nx = leanSide + Math.sin(this.breathT * 0.41 + this.seed * 3) * 0.014 * idle * (1 - sit);
+    // (round 14: and the weight now on one foot, now on the other - the hips over it, the shoulders a
+    // little the other way - every few seconds, slowly: in the film, standing)
+    if (Doodle.twos.on && idle > 0.5 && sit < 0.1 && crawl < 0.1) {
+      this.wT = (this.wT === undefined ? this.seed * 3 : this.wT) - dt;
+      if (this.wT <= 0) {
+        this.wT = 3 + Math.random() * 4;
+        this.wWant = this.wWant > 0 ? -1 : 1;
+      }
+      this.wS = (this.wS || 0) + ((this.wWant || 0) - (this.wS || 0)) * Math.min(1, dt * 1.5);
+    } else if (this.wS) this.wS *= Math.max(0, 1 - dt * 3);
+    const wsx = (this.wS || 0) * Math.min(1, idle);
+    this.wsx = wsx;
+    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05 + wsx * 0.03, hipY - Math.abs(wsx) * 0.006, 0, j.hip);
+    const spine = 0.5;
+    const nx = leanSide + Math.sin(this.breathT * 0.41 + this.seed * 3) * 0.014 * idle * (1 - sit) - wsx * 0.012;
     const ny = hipY + spine * Math.cos(lean) + Math.sin(this.breathT * 1.6) * 0.009 * idle;
     const nz = spine * Math.sin(lean);
     this.toWorld(nx, ny, nz, j.neck);
@@ -411,8 +423,8 @@ export class Doodle {
     this.toWorld(nx + sw * chc, ny - 0.07, nz + twist + sw * chs, j.shoulderR);
     this.toWorld(nx - sw * chc, ny - 0.07, nz - twist - sw * chs, j.shoulderL);
     j.shoulder.copy(j.shoulderR);
-    this.toWorld(hw, hipY, 0, j.hipR);
-    this.toWorld(-hw, hipY, 0, j.hipL);
+    this.toWorld(hw + (this.wsx || 0) * 0.03, hipY + (this.wsx || 0) * 0.012, 0, j.hipR);
+    this.toWorld(-hw + (this.wsx || 0) * 0.03, hipY - (this.wsx || 0) * 0.012, 0, j.hipL);
 
     // legs
     const legL = 0.47 * (this.look.build.legs || 1);

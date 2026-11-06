@@ -2782,7 +2782,9 @@ export class Prologue {
       P.fig.say = mouth(ASK[i % 2], 1.3, 'alarm');
       // (over his shoulder at them, tilted - they do not stand in his world any more: his shoulder and
       // his hand at where it stood, their face)
-      this.shot({ from: this.ots(P, c, { back: 0.7, side: i ? -0.42 : 0.42, h: 1.62 }), look: () => { const h = this.headJ(c); return h ? v3(h.x, h.y - 0.08, h.z) : v3(c.pos.x, 1.5, c.pos.z); }, fov: 36, dur: 1.6, hand: 0.6, roll: i ? -0.07 : 0.07 });
+      // (round 14: over his left shoulder - his pointing arm on the far side of him, not his sleeve
+      // across half the picture; nearer the one he asks)
+      this.shot({ from: this.ots(P, c, { back: 0.62, side: i ? -0.38 : -0.46, h: 1.62 }), look: () => { const h = this.headJ(c); return h ? v3(h.x, h.y - 0.08, h.z) : v3(c.pos.x, 1.5, c.pos.z); }, fov: 31, dur: 1.6, hand: 0.6, roll: i ? -0.07 : 0.07 });
       yield 0.85;
       // (a smile, a shrug: what wheel?)
       this.feel(c.fig, 'joy', 3);
