@@ -686,7 +686,12 @@ export class Prologue {
       }
     }
     if (!Q.size) return;
+    // (her page too, where her hands now hold it - held up a moment ago, hugged now: placed before her
+    // arms are posed to it, and again after)
+    const pg = this.page && this.page.fig && this.page.grp && this.page.grp.visible ? this.page : null;
+    if (pg) pg.update();
     for (const c of [...Q]) this.reposeNow(c);
+    if (pg) pg.update();
     Q.clear();
   }
 
@@ -2464,8 +2469,9 @@ export class Prologue {
     }
     // the last of it, from behind them at the railing: its bottom going, row after row - and gone, the
     // flash and the rush of air on the very frame (goneNow)
-    // (round 14: in on the last of it - from as far back, its last gondolas big enough to be seen go)
-    this.shot({ from: wideFrom, look: [WHEEL.x, 9, WHEEL.z], lookTo: [WHEEL.x, 11, WHEEL.z], fov: 27, dur: 2.4, hand: 0.25, roll: 0.03, rollTo: 0.07 });
+    // (round 14: in on the last of it - its last gondolas big enough to be seen go; from beside him,
+    // his back at the edge of it - from behind him his back stood over where it went)
+    this.shot({ from: [VIEW.x - ux * 4.2 + rx * 3.4, 1.15, VIEW.z - uz * 4.2 + rz * 3.4], look: [WHEEL.x, 9, WHEEL.z], lookTo: [WHEEL.x, 11, WHEEL.z], fov: 27, dur: 2.4, hand: 0.25, roll: 0.03, rollTo: 0.07 });
     if (C && X) C.rub(X);
     if (C && X) C.word('SHHHHK!', v3(X.pos.x, X.pos.y + 6, X.pos.z), { life: 0.8, size: 0.075, fill: '#fffaf0', burst: '#ff6f9a', tilt: 0.18 });
     yield () => !S.erasing;
@@ -2718,7 +2724,8 @@ export class Prologue {
       this.cyclePanels([
         { from: () => { const h = hd(); return v3(h.x + fx * 0.62, h.y - 0.02, h.z + fz * 0.62); }, look: () => { const h = hd(); return v3(h.x, h.y - 0.03, h.z); }, fov: 30, dur: 4, hand: 0.25 },
         { from: () => { const h = hd(); return v3(h.x + fx * 0.32 - fz * 0.12, h.y, h.z + fz * 0.32 + fx * 0.12); }, look: () => { const h = hd(); sw += this.dtR || 1 / 30; return v3(h.x + fx * 9 + fz * Math.sin(sw * 1.4) * 3.5, h.y - 0.15, h.z + fz * 9 - fx * Math.sin(sw * 1.4) * 3.5); }, fov: 20, dur: 4, hand: 0.7 },
-        { from: () => { const h = hl(); return v3(h.x - fx * 0.95 + fz * 0.25, h.y + 0.02, h.z - fz * 0.95 - fx * 0.25); }, look: () => { const h = hl(); return v3(h.x, h.y - 0.04, h.z); }, fov: 32, dur: 4, hand: 0.4 },
+        // (in front of her as she comes after him - her face; from behind her it was the back of her head)
+        { from: () => { const h = hl(); return v3(h.x + fx * 0.95 + fz * 0.25, h.y + 0.02, h.z + fz * 0.95 - fx * 0.25); }, look: () => { const h = hl(); return v3(h.x, h.y - 0.04, h.z); }, fov: 32, dur: 4, hand: 0.4 },
       ]);
       this.feel(L.fig, 'scared', 6);
       L.fig.lookAt = P.fig.j.headC;
@@ -2985,7 +2992,9 @@ export class Prologue {
       const h = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
       // (round 14: the end of the pier where it stood - its empty boards, the sea past them - and up
       // from there into the sky it filled: nothing; at the sky alone it was a lamp and some pink)
-      this.shot({ from: this.eyeOf(P, WHEEL), look: [WHEEL.x, 2.6, WHEEL.z], lookTo: [WHEEL.x, 12, WHEEL.z], fov: 34, dur: 2.2, ease: 'inout', hand: 0.4, roll: 0.04 });
+      // (over his left shoulder - his arm pointing there leading the eye; from his own eyes his hand was
+      // a great fist across a corner of the picture)
+      this.shot({ from: this.ots(P, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { back: 0.35, side: -0.34, h: 1.66 }), look: [WHEEL.x, 2.6, WHEEL.z], lookTo: [WHEEL.x, 12, WHEEL.z], fov: 34, dur: 2.2, ease: 'inout', hand: 0.4, roll: 0.04 });
     }
     g1.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
     g2.fig.lookAt = v3(WHEEL.x, 20, WHEEL.z);
@@ -3127,9 +3136,9 @@ export class Prologue {
         const dx = WHEEL.x - h.x;
         const dz = WHEEL.z - h.z;
         const d = Math.hypot(dx, dz) || 1;
-        return v3(h.x - (dx / d) * 0.3 - (dz / d) * 0.17, h.y + 0.03, h.z - (dz / d) * 0.3 + (dx / d) * 0.17);
+        return v3(h.x - (dx / d) * 0.42 - (dz / d) * 0.34, h.y + 0.08, h.z - (dz / d) * 0.42 + (dx / d) * 0.34);
       };
-      this.shot({ from: behind, look: () => page.at.clone(), fov: 32, dur: 3.2, hand: 0.25, dof: 0.6 });
+      this.shot({ from: behind, look: () => page.at.clone(), fov: 30, dur: 3.2, hand: 0.25, dof: 0.6 });
     }
     // (round 10: in it, it is still there - the drawing lit; round 13: against the evening's own sky,
     // not a field of gold - the gold field is laid over all but the people, and the page went under it:
@@ -3165,18 +3174,27 @@ export class Prologue {
     this.shot({ from: () => { const a = this.ots(L, P, { back: 2.6, side: 1.6, h: 1.35 })(); return a; }, look: () => v3((L.pos.x + P.pos.x) / 2, 1.2, (L.pos.z + P.pos.z) / 2), fov: 40, dur: 9, hand: 0.35 });
     yield* this.say('D12', P.fig, 0.6);
     // his hands over hers, on the page: keep it
+    // (round 14: the beats of it each its own picture - ten seconds of one wide shot, the two of them
+    // small, held all of it: their hands on the page, her face asking, his not answering, and then off)
     P.fig.reachL = page.at;
     P.fig.reachR = page.at;
+    {
+      const pa = () => page.at.clone();
+      this.shot({ from: () => { const a = page.at; const dx = P.pos.x - L.pos.x; const dz = P.pos.z - L.pos.z; const d = Math.hypot(dx, dz) || 1; return v3(a.x - (dz / d) * 0.75 + (dx / d) * 0.1, a.y + 0.3, a.z + (dx / d) * 0.75 + (dz / d) * 0.1); }, look: pa, fov: 34, dur: 2.6, hand: 0.2, dof: 0.6 });
+    }
     yield 0.6;
     yield* this.say('D13', P.fig, 0.4);
+    this.shot({ ...this.single(L, P, { dist: 0.95, side: 0.36, up: -0.02, drop: 0.07 }), fov: 32, dur: 2.4, hand: 0.25 });
     yield* this.say('L11', L.fig, 0.2);
     // (round 13: what he does not say to her - in his head)
-    // (round 14: heard whole before the next thing is said)
+    // (round 14: heard whole before the next thing is said - on his face, close, as he does not say it)
+    this.shot({ ...this.single(P, L, { dist: 1.1, side: -0.3, up: -0.12, drop: 0.1 }), to: this.single(P, L, { dist: 0.95, side: -0.28, up: -0.11, drop: 0.1 }).from, fov: 28, dur: 3.6, hand: 0.2, dof: 1 });
     yield Math.max(1.3, this.thought('TH4', 2.4) - 0.7);
     yield* this.say('D14', P.fig, 0.6);
     P.fig.reachR = null;
     // his hand out to hers
     P.fig.reachL = L.fig.j ? L.fig.j.handR || null : null;
+    this.shot({ from: () => { const a = this.ots(L, P, { back: 2.6, side: 1.6, h: 1.35 })(); return a; }, look: () => v3((L.pos.x + P.pos.x) / 2, 1.2, (L.pos.z + P.pos.z) / 2), fov: 40, dur: 9, hand: 0.35 });
     yield* this.say('D15', P.fig, 0.4);
     P.fig.reachL = null;
     page.release();
