@@ -523,7 +523,9 @@ export class Prologue {
       } else if (!star) {
         const ahead = (dx * fx + dz * fz) / (fd * (d || 1));
         inWay = d < 2.2 || (d < reach && ahead > 0.55);
-        if (!inWay && (d < fd3 - 0.4 || (close && d < fd3 + 1.6)) && inPic(c, m)) {
+        // (in front of the subject only where they would be big in the picture - near the camera: a
+        // far shot's crowd is its point, the group he goes into, the evening going on)
+        if (!inWay && ((d < fd3 - 0.4 && d < 6) || (close && d < fd3 + 1.6)) && inPic(c, m)) {
           inWay = true;
           why = 1;
         }
@@ -2351,7 +2353,8 @@ export class Prologue {
       const mx = (L.pos.x + P.pos.x) / 2;
       const mz = (L.pos.z + P.pos.z) / 2;
       // (far enough and high enough for his head with hers: it went off the top of the picture)
-      this.shot({ from: [mx + ux * 3.8 + rx * 0.6, 1.32, mz + uz * 3.8 + rz * 0.6], to: [mx + ux * 3.5 + rx * 0.55, 1.32, mz + uz * 3.5 + rz * 0.55], look: [mx, 1.3, mz], fov: 42, dur: 3.4, hand: 0.35 });
+      // (round 14: nearer - the two of them big enough for their faces, his head still in it)
+      this.shot({ from: [mx + ux * 2.9 + rx * 0.5, 1.3, mz + uz * 2.9 + rz * 0.5], to: [mx + ux * 2.65 + rx * 0.46, 1.3, mz + uz * 2.65 + rz * 0.46], look: [mx, 1.32, mz], fov: 44, dur: 3.4, hand: 0.35 });
     }
     this.feel(P.fig, 'joy', 3);
     this.feel(L.fig, 'joy', 6);
@@ -3702,8 +3705,9 @@ export class Prologue {
       const E = [eyes(t1, P, 0.06), eyes(P, t1, -0.06), eyes(L, t1, 0.05)];
       for (let i = 0; i < 3; i++) {
         this.shot({ from: E[i].from, to: E[i].from.clone().lerp(E[i].look, 0.08), look: E[i].look, fov: 24, dur: 0.8, hand: 0.1, dof: 1 });
-        // (his eyes lower in the picture than theirs: he is the taller, his head's middle higher over them)
-        if (C5 && C5.panel) C5.panel(i, { u: 0.5, v: i === 0 ? 0.62 : 0.5, zoom: 2.3 });
+        // (round 14: each strip on the eyes - lower for him, it was his jaw in the dark and a bit of
+        // pavement)
+        if (C5 && C5.panel) C5.panel(i, { u: 0.5, v: i === 0 ? 0.53 : 0.5, zoom: 2.3 });
         g.audio.play('heartbeat', 0.55);
         yield i < 2 ? 0.62 : 0.8;
       }

@@ -530,7 +530,8 @@ export class Doodle {
         this.toBody(tgt, S.cur);
         if (!S.on || S.cur.distanceTo(S.last) > 0.16) {
           this.toBody(hand, S.from);
-          S.t = 0;
+          // (a body never posed yet has its hand nowhere: there at once)
+          S.t = hand.lengthSq() < 1e-6 || S.from.lengthSq() > 9 ? 1 : 0;
           S.on = true;
         }
         S.last.copy(S.cur);
