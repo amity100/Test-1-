@@ -65,7 +65,7 @@ export class RampDraw {
     // sheet is up, and does not take it for the pause)
     if (!this.game.touch) this.game.input.releaseLock();
     // (round 16: in the language chosen - core/lang.js)
-    this.ui.hint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>', 'Draw a ramp to jump across<small dir="ltr">① Press the dot by the car ② Drag a line along the roof to the edge ③ Let go</small>'));
+    this.ui.plainHint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>', 'Draw a ramp to jump across<small dir="ltr">① Press the dot by the car ② Drag a line along the roof to the edge ③ Let go</small>'));
     this.t = 0;
     this.drawing = false;
     const P = (e) => [e.clientX * dpr, e.clientY * dpr];
@@ -177,7 +177,7 @@ export class RampDraw {
       // (too short to be a ramp, or not on the roof: again, with the way shown plainer)
       this.fails++;
       this.pts = [];
-      this.ui.hint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>', 'Draw a ramp to jump across<small dir="ltr">A longer line: from the dot by the car, along the roof, to the edge</small>'));
+      this.ui.plainHint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>', 'Draw a ramp to jump across<small dir="ltr">A longer line: from the dot by the car, along the roof, to the edge</small>'));
       this.game.audio.play('meh', 0.4);
       return;
     }

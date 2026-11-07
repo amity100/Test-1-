@@ -3863,7 +3863,8 @@ export class Prologue {
       this.say('L08', L.fig, 0.1).next();
     }
     // just before it hits: the time all but stops - and the idea: what flies?
-    yield () => J.alt < 9.5 || J.t > 60;
+    // (round 17: a few metres more over the street than before - time to draw, however slowly)
+    yield () => J.alt < 12 || J.t > 60;
     this.slow(0.012, 14);
     this.film(true);
     this.feel(P.fig, 'angry', 3);
@@ -3926,6 +3927,9 @@ export class Prologue {
     document.body.classList.add('pro-rotor');
     this.ui.film(false);
     g.hud.show();
+    // (round 17: the time all but stopped while it is drawn - a slow hand's half a minute is a few
+    // metres of the fall)
+    this.slow(0.005, 20);
     this.drawingRotor = true;
     this.howto('rotor', 0);
     // (the pen's own make, for this drawing: drawn small, the lines spread from their middle till the
@@ -3988,30 +3992,32 @@ export class Prologue {
     this.ui.card(null);
   }
 
-  // where on the screen the rotor goes: the box over the car's roof an X four metres across is drawn
-  // in - its corners ([x, y] px: far left, far right, near right, near left, as the screen has them)
-  // and its middle
+  // where on the screen the rotor goes: a box over the car's roof, about as tall as it is wide, an X
+  // four metres across drawn in it (the car pen reads a drawing as seen from over the car - game/
+  // itemlook.js rotor - so an X square on the screen is a rotor's two blades square across each
+  // other; a flat one, two blades nearly side by side): its corners ([x, y] px - top left, top right,
+  // bottom right, bottom left) and its middle
   rotorBox(car) {
     const cam = this.game.camera;
     const H = (car.heightM || 1.45) + 0.85;
     const rx = Math.cos(car.yaw);
     const rz = -Math.sin(car.yaw);
-    const fx = Math.sin(car.yaw);
-    const fz = Math.cos(car.yaw);
     const W = window.innerWidth;
     const Hh = window.innerHeight;
-    const px = (a, f) => {
-      const q = v3(car.pos.x + rx * a + fx * f, car.pos.y + H, car.pos.z + rz * a + fz * f).project(cam);
+    const px = (a) => {
+      const q = v3(car.pos.x + rx * a, car.pos.y + H, car.pos.z + rz * a).project(cam);
       return [((q.x + 1) / 2) * W, ((1 - q.y) / 2) * Hh];
     };
-    // (across the car two metres each way, along it 1.3: an X seen from behind and over it, lying as
-    // it will turn)
-    const c = [px(-1.95, 1.3), px(1.95, 1.3), px(1.95, -1.3), px(-1.95, -1.3)];
-    if (c[0][0] > c[1][0]) {
-      [c[0], c[1]] = [c[1], c[0]];
-      [c[2], c[3]] = [c[3], c[2]];
-    }
-    return { c, m: px(0, 0) };
+    const m = px(0);
+    const L = px(-1.95);
+    const R = px(1.95);
+    // (half its width: two metres at the car, as the screen has it - within reason)
+    const hw = Math.max(60, Math.min(W * 0.3, Math.hypot(R[0] - L[0], R[1] - L[1]) / 2));
+    const hh = hw * 0.8;
+    // (over the roof, its foot a little above it, never off the top of the screen)
+    const cy = Math.max(hh + 70, m[1] - hh * 0.55);
+    const c = [[m[0] - hw, cy - hh], [m[0] + hw, cy - hh], [m[0] + hw, cy + hh], [m[0] - hw, cy + hh]];
+    return { c, m: [m[0], cy] };
   }
 
   // (round 17) the pencil that shows how a turbo is drawn on the car: a flame out of its back - its
