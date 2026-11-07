@@ -1549,7 +1549,13 @@ const fileOr = (Synth, name) =>
   function (s, t0, o) {
     const F = FILES[name];
     const b = F && trackBuf(F.path);
-    if (!b) return new Synth(s, t0, o);
+    if (!b) {
+      // (round 16: its synthesis under the cue's own name - so that the recording, once in, takes over
+      // from it (pump); under the synthesis's name it never did, and the whole scene went on with it)
+      const q = new Synth(s, t0, o);
+      q.name = name;
+      return q;
+    }
     const q = new FileCue(s, t0, name, o, b, F);
     if (F.once && CUES[name] && CUES[name].sting) q.sting();
     return q;
