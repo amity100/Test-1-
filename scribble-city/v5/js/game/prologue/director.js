@@ -19,7 +19,7 @@ import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
 import { Kit, itemMats, linC } from '../items.js';
 import { groundHeight } from '../../world/layout.js';
-import { lang } from '../../core/lang.js';
+import { lang, tr } from '../../core/lang.js';
 import { objT, markT, thoughtT } from './i18n.js';
 
 // (v5, ROADMAP 18) THE LAST SUNSET - the game's prologue, directed.
@@ -327,6 +327,8 @@ export class Prologue {
     if (this.voices.space) this.voices.space(SPACE[n]);
     this.sceneN = n;
     this.sketching = false;
+    // (round 18: the cars locked only on the way to his own - s5 sets it)
+    this.carOnly = null;
     this.sceneAt = this.clock || 0;
     // (round 17: a place marked for the scene before is not this one's)
     this.unbeacon();
@@ -1187,6 +1189,44 @@ export class Prologue {
   }
 
   // Danny: placed (between two shots), turned, walked a few steps
+  // (round 18, the player's word) on the way to his own car the game lets him into no other - carOnly:
+  // the one car he may get into now (game.js enterTarget), set from 'Get to your car' till he is in it;
+  // null, any
+  mayBoard(v) {
+    return !this.carOnly || v === this.carOnly;
+  }
+
+  // the words for a car by him he may not take now - or null
+  notYours() {
+    if (!this.carOnly) return null;
+    const g = this.game;
+    const P = g.player;
+    if (P.mode !== 'foot') return null;
+    const v = g.vehicles.nearest(P.pos, 3.2);
+    if (v && v === this.carOnly) return null;
+    if (!v && !g.traffic.nearestDoor(P.pos, 1.7)) return null;
+    return tr('לא עכשיו - המכונית שלכם בחניון. הולכים ברגל עם לילי', 'Not now - your car is in the car park. On foot, with Lily');
+  }
+
+  // (round 18, the player's word: the two men came to talk to Danny, and it was a car they talked to)
+  // out of whatever he is in before a film - and a car that is not one of the story's taken out of its
+  // picture, not left in the street between him and them
+  outOfCar() {
+    const g = this.game;
+    const P = g.player;
+    const v = P.inVehicle;
+    if (!v) return;
+    g.exitVehicle(true);
+    const L = this.cast.lily;
+    if (L && L.pl && L.pl.ride === v) L.pl.ride = null;
+    if (v === this.dannyCar || v === this.thugCar || v.kept) return;
+    const i = g.vehicles.list.indexOf(v);
+    if (i < 0) return;
+    v.dispose();
+    g.vehicles.list.splice(i, 1);
+    if (g.damage && g.damage.cars) g.damage.cars.delete(v);
+  }
+
   putDanny(x, z, yaw) {
     const p = this.game.player;
     p.pos.set(x, p.pos.y, z);
@@ -2051,6 +2091,7 @@ export class Prologue {
     // (round 17: where she is, marked round her)
     this.beacon(L.pos.x, L.pos.z, 1.9);
     yield () => Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z) < 3.4;
+    this.outOfCar();
     this.unbeacon();
     this.objective(null);
     if (g.gps) g.gps.clear();
@@ -3127,6 +3168,9 @@ export class Prologue {
     const L = this.cast.lily;
     // the two men, their car at the curb of 5th Street, Danny's in its bay inside the garage
     this.spawnThugs();
+    // (round 18, the player's word: 'Get to your car' - his own, and no other on the way: on foot,
+    // with Lily)
+    this.carOnly = this.dannyCar;
     // the phone, half way there
     yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 90;
     this.phoneRing(true);
@@ -3149,6 +3193,8 @@ export class Prologue {
     // the garage's door on 5th Street: the dark car at the curb, the two men by it - the same two from
     // here to the end: the one who talks (t1), the one beside him (t2)
     yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 15 || this.dist(THUGS[0].x, THUGS[0].z) < 16;
+    // (round 18: whatever he came in, he meets them on his feet)
+    this.outOfCar();
     const t1 = this.cast.t1;
     const t2 = this.cast.t2;
     this.objective(null);
@@ -3313,6 +3359,7 @@ export class Prologue {
     this.auto = null;
     this.lilyRun = null;
     // in, and the engine
+    this.carOnly = null;
     g.enterVehicle(v);
     L.pl.ride = v;
     g.audio.play('roar', 1);
@@ -4285,6 +4332,7 @@ export class Prologue {
 
   finish() {
     const g = this.game;
+    this.carOnly = null;
     // (a thought still up: gone with the film)
     for (const q of this.thoughts || []) q.el.remove();
     this.thoughts = [];
