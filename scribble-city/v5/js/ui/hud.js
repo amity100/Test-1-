@@ -242,7 +242,10 @@ export class HUD {
     if (!(this.game.pipe && this.game.pipe.low) || this.mapN % 2 === 0) this.drawMinimap();
   }
 
-  setPrompt(text) {
+  // (round 16, the player's word: driving, "E — out" was big over the road - small: a key's reminder
+  // low in the corner of the picture, not a sign)
+  setPrompt(text, small = false) {
+    this.promptEl.classList.toggle('small', !!small);
     if (text === this.prompt) return;
     this.prompt = text;
     // (with a gamepad in hand, its buttons instead of the keys)

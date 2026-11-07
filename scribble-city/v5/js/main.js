@@ -19,6 +19,7 @@ import { cacheUniformArrays } from './render/glcache.js';
 import { readMemo } from './render/depthtrial.js';
 import { BUILD } from './game/telemetry.js';
 import { setupAdmin } from './ui/admin.js';
+import { setupStartLang, applyStartLang } from './ui/startlang.js';
 
 // (the game's own folder, v5/ - for its pictures, sounds and data, wherever the code is loaded from:
 // these modules one by one, or all of them in one file next to this one - tools/publish-pages.sh)
@@ -189,6 +190,8 @@ const frame = () => new Promise((r) => setTimeout(r, 10));
 async function boot() {
   const touch = isTouchDevice();
   if (touch) document.body.classList.add('touch');
+  // (round 16: the start screen's language choice, and its words in it - ui/startlang.js)
+  setupStartLang();
   setStatus('מחדדים את העטים…');
   progress('fonts', 0.2);
   await loadFonts();
@@ -478,7 +481,8 @@ async function boot() {
     progress('shaders', 1);
     if (window.__loadDone) window.__loadDone();
     startBtn.disabled = false;
-    startBtn.textContent = 'יוצאים לעיר';
+    // (round 16: in the language chosen on the start screen - ui/startlang.js)
+    applyStartLang();
   };
   const run = () => {
     mark('shaders ready');

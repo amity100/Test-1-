@@ -1199,7 +1199,7 @@ void main() {
         float d = vMouth;
         // (the lips' wet insides, then dark at once - a mouth is dark a few millimetres in)
         vec3 inside = mix(vec3(0.42, 0.15, 0.15), vec3(0.16, 0.04, 0.04), smoothstep(0.04, 0.14, d));
-        inside = mix(inside, vec3(0.025, 0.007, 0.007), smoothstep(0.3, 0.75, d));
+        inside = mix(inside, vec3(0.13, 0.035, 0.04), smoothstep(0.3, 0.75, d));
         float tg = smoothstep(0.28, 0.42, d) * (1.0 - smoothstep(0.85, 1.0, d)) * (1.0 - up) * (1.0 - smoothstep(0.011, 0.019, bx));
         inside = mix(inside, vec3(0.36, 0.11, 0.11), tg * 0.75);
         float tU = smoothstep(0.05, 0.09, d) * (1.0 - smoothstep(0.24, 0.32, d)) * up * mid;
@@ -1208,8 +1208,13 @@ void main() {
         tex.rgb = mix(tex.rgb, inside, smoothstep(0.015, 0.05, d));
       }
 #ifdef FOLK_HEAD
-      // (a face drawn near: its inside, seen only through the open mouth - dark, as a throat is)
-      if (!gl_FrontFacing) tex.rgb = vec3(0.02, 0.006, 0.006);
+      // (a face drawn near: its inside, seen only through the open mouth - dark red, as a throat is;
+      // round 16: and only there - seen anywhere else (an eye not drawn), the skin's own, in shade:
+      // never a black hole for an eye)
+      if (!gl_FrontFacing) {
+        float thr = step(vLP.y, -0.015) * step(-0.11, vLP.y) * step(abs(vLP.x), 0.035) * step(0.0, vLP.z);
+        tex.rgb = mix(tex.rgb * 0.55, vec3(0.12, 0.03, 0.035), thr);
+      }
 #endif
 #endif
 #else
@@ -1254,8 +1259,10 @@ void main() {
     tex.rgb = mix(tex.rgb, tex.rgb * vec3(0.36, 0.28, 0.26), gWr * 0.9);
     // the inside of the mouth: the lips' wet insides, then dark a few millimetres in
     if (vMouthP > 0.02) {
-      vec3 ins = mix(vec3(0.42, 0.15, 0.15), vec3(0.14, 0.035, 0.035), smoothstep(0.04, 0.16, vMouthP));
-      ins = mix(ins, vec3(0.025, 0.007, 0.007), smoothstep(0.3, 0.75, vMouthP));
+      // (round 16, the player's word: her open mouth a black hole - a mouth's dark red, deepest at the
+      // back, not black)
+      vec3 ins = mix(vec3(0.46, 0.17, 0.17), vec3(0.24, 0.07, 0.07), smoothstep(0.04, 0.16, vMouthP));
+      ins = mix(ins, vec3(0.13, 0.035, 0.04), smoothstep(0.3, 0.75, vMouthP));
       tex.rgb = mix(tex.rgb, ins, smoothstep(0.015, 0.05, vMouthP));
     }
     // its inside: seen through the open mouth, dark, as a throat is. Anywhere else it is seen only
@@ -1266,7 +1273,7 @@ void main() {
       gThr = step(0.0, vLP.z) * step(abs(vLP.x), 0.034) * step(-0.105, vLP.y) * step(vLP.y, -0.02) * uOpen;
       // (its own place in the picture is no skin's - the cheek's colour, in a crease's shade)
       vec3 skin = textureLod(uMap, vec2(0.316, 0.608), 4.0).rgb * 0.7;
-      tex.rgb = mix(skin, vec3(0.02, 0.006, 0.006), gThr);
+      tex.rgb = mix(skin, vec3(0.12, 0.03, 0.035), gThr);
     }
   }
 #endif
@@ -1379,7 +1386,13 @@ void main() {
   float dens = uDensity * uPenDens;
   float wash = uWash;
 #ifdef PORTRAIT
-  if (vPart < 0.5 || vPart > 3.5) {
+  if (vPart > 3.5) {
+    // (round 16, the player's word: Lily's eyes black on some screens - the eyes their own picture,
+    // softly lit and never in the dark, no pencil over them, nothing undefined in them)
+    light = mix(0.66, 1.0, clamp(light, 0.0, 1.0));
+    lit = max(lit, tex.rgb * 0.85);
+    shade = max(shade, tex.rgb * 0.62);
+  } else if (vPart < 0.5) {
     // (ROADMAP 14.1) A portrait's own pencil, not the city's pens (a face drawn with a wall's
     // strokes is a scratched face): its colour and the light as they are, and over them fine
     // strokes of a sepia pencil laid along the planes of the face (render/portrait.js planes) -
@@ -1388,11 +1401,14 @@ void main() {
     // close dark strokes pressed into its hollows (the sockets, under the nose, the corners of the
     // mouth, under the jaw). The lines it makes as it moves are in its picture (uWrinkle)
     vec4 pl = texture(uPlane, vUv);
-    float a2 = atan(pl.g * 2.0 - 1.0, pl.r * 2.0 - 1.0);
-    bool sideS = smoothstep(0.42, 0.78, abs(vLN.x)) > 0.5 && vPart < 0.5;
+    // (round 16: atan(0, 0) is undefined in GLSL - black on some graphics cards where the strokes'
+    // direction blends to nothing, round the eyes and the mouth)
+    vec2 pd = vec2(pl.r * 2.0 - 1.0, pl.g * 2.0 - 1.0);
+    float a2 = dot(pd, pd) > 1e-6 ? atan(pd.y, pd.x) : 0.0;
+    bool sideS = smoothstep(0.42, 0.78, abs(vLN.x)) > 0.5;
     float fa = sideS ? (vLP.y > -0.04 ? 1.35 : 0.6) * sign(vLP.x + 1e-4) : 0.5 * a2;
     ang = fa;
-    float ao = vPart < 0.5 ? pl.b : 1.0;
+    float ao = pl.b;
     // (the neck: in the jaw's shade just under it, open lower down)
     ao = mix(ao, mix(0.6, 0.94, smoothstep(-0.11, -0.17, vLP.y)), vNeckP);
     light *= mix(mix(0.84, 0.62, gDet), 1.0, ao);

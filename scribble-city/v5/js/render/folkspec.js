@@ -654,7 +654,9 @@ export const LILY = {
   jawK: 0.78, lipK: 0.65,
   // (round 15, the player's word: her mouth hardly moved as she talked - her words' own mouth half as
   // big again, the jaw's cut above taken back for them: render/people.js talkK)
-  talkK: 1.75,
+  // (round 16, the player's word: her open mouth then a black hole - less of the jaw, its inside a
+  // dark red: render/glsl.js)
+  talkK: 1.25,
   // (round 13, the player's word again - her eyes frightening in some of the talk, her mouth twisted:
   // startled, her lids lifted and her lips stretched at a third of a man's; her brows' climb and knit
   // at a little over half; the iris a little bigger in a little less open eye - render/portrait.js;

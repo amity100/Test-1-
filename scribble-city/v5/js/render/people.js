@@ -964,12 +964,14 @@ export class PersonRenderer {
       heroPelvis: P(HERO.heroPelvisGeo(), M.heroPants, 4),
       heroUpper: P(HERO.heroUpperGeo(), M.heroJacket, 8),
       heroFore: P(HERO.heroForeGeo(), M.heroJacket, 8),
-      heroHandR: P(HERO.heroHandGeo(false), M.skin, 16),
-      heroHandL: P(HERO.heroHandGeo(true), M.skin, 16),
+      // (round 16: the city's people's hands are these too - drawFolk - 16 of them were full in a crowd
+      // of thirty, and the rest had none)
+      heroHandR: P(HERO.heroHandGeo(false), M.skin, 192),
+      heroHandL: P(HERO.heroHandGeo(true), M.skin, 192),
       heroThigh: P(HERO.heroThighGeo(), M.heroPants, 8),
       heroShin: P(HERO.heroShinGeo(), M.heroPants, 8),
       heroShoe: P(HERO.heroShoeGeo(), M.heroBoots, 8),
-      heroSole: P(HERO.heroSoleGeo(), M.box, 32),
+      heroSole: P(HERO.heroSoleGeo(), M.box, 384),
       // the shapes of hair, hats and the things people hold (ellipsoids and capsules)
       sphere: P(new THREE.SphereGeometry(1, 14, 10), M.hair, 2048),
       sphereGloss: P(new THREE.SphereGeometry(1, 12, 8), M.gloss, 256),

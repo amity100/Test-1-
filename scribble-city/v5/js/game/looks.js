@@ -200,6 +200,17 @@ export function roleLook(role, o = {}) {
   return L;
 }
 
+// (round 16, the player's word: the same people every time) the n-th of a role's faces - always the
+// same one, not whichever of them has been used least (rolePick)
+export function roleNth(role, n = 0) {
+  let i = 0;
+  for (let k = 0; k < FOLK_ON.n; k++) {
+    if (FOLK[k].role !== role) continue;
+    if (i++ === n) return folkLook(k);
+  }
+  return roleLook(role);
+}
+
 export function folkLook(k) {
   const F = FOLK[k];
   const L = baseLook({ pen: 'fineliner', fem: F.fem });
