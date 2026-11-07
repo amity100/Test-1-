@@ -1885,6 +1885,13 @@ export class Prologue {
     this.beacon(VIEW.x, VIEW.z, 2.8);
     yield () => this.dist(VIEW.x, VIEW.z) < 5;
     this.unbeacon();
+    // (round 18, the player's word: there, at the giant wheel - the frightening music from the moment
+    // it is seen, and a few seconds his, to walk about and look at it, before the film takes it up)
+    this.cue('thriller', { fade: 1.0 });
+    this.ui.card(null);
+    this.objective('Look at the <b>giant wheel</b>');
+    if (g.gps) g.gps.clear();
+    yield 6;
     this.start(3);
   }
 
@@ -1933,10 +1940,9 @@ export class Prologue {
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
     this.put(L, VIEW.x, VIEW.z, toW);
     this.spawnPier();
-    // (ROADMAP 18.9: no kids' voices - the wheel's life heard as its music; round 11: the music box's
-    // waltz cute but tense, on from her stand - score.js FILES.tense - and so not begun again here)
-    // (round 17: the wheel's cute waltz still - on from her stand, begun here only if it is not)
-    this.cue('wheel', { fade: 1.5 });
+    // (round 18, the player's word: the frightening music from the moment the giant wheel is seen - on
+    // from the pier, s2; begun here only if it is not: score.js play keeps a cue that is on)
+    this.cue('thriller', { fade: 1.2 });
     // against the sunset: the wheel from the beach, full of people
     this.shot({ from: [76, 2.4, 297], to: [80, 3.6, 292], look: [128, 28, 243], lookTo: [128, 29, 243], fov: 54, fovTo: 50, dur: 4.6, hand: 0.35 });
     // (round 13: this picture of it kept - the memory that flashes in his head once it is gone)
@@ -2196,9 +2202,9 @@ export class Prologue {
     // (ROADMAP 18.9: the unease from here - under the boy waving, the waltz going wrong - so that it
     // has grown through all of it by the time the wheel is gone: score.js FILES.unease)
     // (round 13: the dread on under it all, unbroken, till the wheel is gone - no new music here)
-    // (round 17, the player's word: the disturbing music begins here, as they look up at the kids -
-    // and the kids are heard: the boy calling down to his mother, and all of them up there, 'Mom,
-    // look!', 'we're so high!', from the wheel, till it is gone - voice.js bed)
+    // (round 17, the player's word: as they look up at the kids, the kids are heard: the boy calling
+    // down to his mother, and all of them up there, 'Mom, look!', 'we're so high!', from the wheel,
+    // till it is gone - voice.js bed; round 18: the frightening music on since the wheel was seen)
     this.cue('thriller', { fade: 1.2 });
     this.voices.bedAt(WHEEL.x, 30, WHEEL.z);
     this.voices.bed(true, 0.9);

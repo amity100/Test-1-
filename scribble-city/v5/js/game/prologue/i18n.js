@@ -16,6 +16,7 @@ const OBJ_HE = {
   'Open the pen and <b>draw</b> a weapon or a ride': 'פתחו את העט ו<b>ציירו</b> נשק או כלי רכב',
   'Open the pen and draw a <b>turbo</b> on the car': 'פתחו את העט וציירו <b>טורבו</b> על המכונית',
   'Walk with <b>Lily</b> to the pier': 'לכו עם <b>לילי</b> אל המזח',
+  'Look at the <b>giant wheel</b>': 'הסתכלו על <b>הגלגל הענק</b>',
   'Where did he go? <b>Look for him</b> on the pier': 'לאן הוא נעלם? <b>חפשו אותו</b> על המזח',
   'He is <b>gone</b>. Go back to <b>Lily</b>': 'הוא <b>נעלם</b>. חזרו אל <b>לילי</b>',
   '<b>Floor it!</b>': '<b>גז עד הסוף!</b>',
