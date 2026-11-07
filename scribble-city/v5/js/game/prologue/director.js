@@ -2384,7 +2384,6 @@ export class Prologue {
     const g = this.game;
     const col = g.world && g.world.collision;
     let y = groundHeight(x, z);
-    // (on the pier's deck, a floor's top: whatever is under the place from above)
     // (a floor a little over the ground only - not the top of a lamp or a bench over the place)
     const hit = col && col.raycast ? col.raycast(x, y + 1.2, z, 0, -1, 0, 3) : null;
     if (hit && hit.y > y - 0.5 && hit.y < y + 1.1) y = hit.y;
@@ -2394,27 +2393,32 @@ export class Prologue {
     K.torus(M.glow, r, 0.08, 0, 0, 0, yel, Math.PI / 2);
     K.torus(M.glow, r * 0.58, 0.05, 0, 0, 0, yel, Math.PI / 2);
     const ring = K.build({ seed: 0.31 });
-    const A = new Kit();
-    A.cyl(M.glow, 0, 0.45, 0, 0.8, yel, { axis: 'y', segs: 4 });
-    A.cyl(M.glow, 0.14, 0.14, 0.8, 1.65, yel, { axis: 'y', segs: 8 });
-    const arrow = A.build({ seed: 0.57 });
-    const root = new THREE.Group();
-    for (const o of [ring, arrow]) {
-      o.traverse((q) => (q.matrixAutoUpdate = true));
-      root.add(o);
+    ring.traverse((q) => (q.matrixAutoUpdate = true));
+    ring.position.set(x, y + 0.07, z);
+    g.scene.add(ring);
+    // (over it, on the screen, an arrow pointing down at it, bobbing: yellow inked dark round its
+    // edge - a glowing one in the world was lost against the sunset's own yellow)
+    const el = document.createElement('div');
+    el.className = 'pro-beacon';
+    el.innerHTML = '<svg viewBox="-24 -34 48 50"><path d="M-11 -32 H11 V-8 H21 L0 14 L-21 -8 H-11 Z" fill="#ffd23f" stroke="#1b1430" stroke-width="4" stroke-linejoin="round"/></svg>';
+    if (!document.getElementById('pro-beacon-css')) {
+      const st = document.createElement('style');
+      st.id = 'pro-beacon-css';
+      st.textContent = '.pro-beacon{position:fixed;left:0;top:0;width:44px;height:46px;margin:-46px 0 0 -22px;z-index:40;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));will-change:transform}.pro-beacon svg{width:100%;height:100%;overflow:visible}.pro-beacon.off{display:none}';
+      document.head.appendChild(st);
     }
-    root.position.set(x, y + 0.07, z);
-    g.scene.add(root);
-    this.beaconR = { root, ring, arrow, t: 0, x, z, r };
+    document.body.appendChild(el);
+    this.beaconR = { ring, el, t: 0, x, y, z, r };
   }
 
   unbeacon() {
     const B = this.beaconR;
     if (!B) return;
-    if (B.root.parent) B.root.parent.remove(B.root);
-    B.root.traverse((o) => {
+    if (B.ring.parent) B.ring.parent.remove(B.ring);
+    B.ring.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
     });
+    B.el.remove();
     this.beaconR = null;
   }
 
@@ -2423,9 +2427,17 @@ export class Prologue {
     if (!B) return;
     B.t += dt;
     B.ring.scale.setScalar(1 + Math.sin(B.t * 3.2) * 0.04);
-    B.arrow.position.y = 2.5 + Math.sin(B.t * 2.6) * 0.25;
-    B.arrow.rotation.y = B.t * 1.4;
-    B.root.visible = !this.holdCam;
+    B.ring.visible = !this.holdCam;
+    // (the arrow where the place is on the screen, a little over it - not behind the camera)
+    const cam = this.game.camera;
+    const q = v3(B.x, B.y + 1.6, B.z).project(cam);
+    const on = !this.holdCam && q.z < 1 && Math.abs(q.x) < 1.05 && Math.abs(q.y) < 1.05;
+    B.el.classList.toggle('off', !on);
+    if (on) {
+      const sx = ((q.x + 1) / 2) * window.innerWidth;
+      const sy = ((1 - q.y) / 2) * window.innerHeight - Math.abs(Math.sin(B.t * 3.4)) * 10;
+      B.el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
+    }
   }
 
   // (round 13) inside his head, a flash: the wheel as it was a moment ago - white, the picture of it
