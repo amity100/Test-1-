@@ -73,13 +73,18 @@ function protoDrip(color) {
 function protoPuff() {
   const K = new Kit();
   const M = itemMats();
-  K.sphere(M.glow, 0.09, 0, 0, 0, linC(0.92, 0.9, 0.86), 1, 1, 1, 8);
+  K.sphere(M.paint, 0.045, 0, 0, 0, linC(0.78, 0.76, 0.72), 1, 1, 1, 8);
   return K.build({ seed: 0.2 });
 }
 const UP = new THREE.Vector3(0, 1, 0);
 const MELTS = 14;
+// (what the paint flies past: the cars parked about - their own boxes - and the floors; it melts walls)
+const SKIP = new Set(['car', 'floor']);
 
 const prep = (g) => {
+  // (round 16: a Kit's group keeps its matrix as built - every ball, splat and glint of the fight was
+  // left at the world's origin, wherever it was put: never seen. Placed, it follows its position)
+  g.matrixAutoUpdate = true;
   for (const m of g.children) {
     m.userData.noShadow = true;
     m.frustumCulled = false;
@@ -264,9 +269,11 @@ export class PaintFight {
       // (half out of the window on his side: the chest, the arms and the head out over the door, the
       // rest of him in it - standing, sunk to the hips in the car: seated, turned to the window, his
       // legs would have come out through the door)
-      const out = (car.halfWid || 0.95) * 0.8;
+      // (inside the door's line - the body's own, not its collision box: that is wider - and low, his
+      // legs under the floor of it, his chest at the sill)
+      const out = 0.6;
       void sy;
-      c.pos.set(car.pos.x + fx * su + rx * side * out, (car.pos.y || 0) - 0.3, car.pos.z + fz * su + rz * side * out);
+      c.pos.set(car.pos.x + fx * su + rx * side * out, (car.pos.y || 0) - 0.72, car.pos.z + fz * su + rz * side * out);
       c.vel.set(0, 0, 0);
       c.riding = true;
       c.noCollide = true;
@@ -306,7 +313,7 @@ export class PaintFight {
   flash(p, color) {
     const m = prep(this.ballProto[color].clone());
     m.position.copy(p);
-    m.scale.setScalar(2.6);
+    m.scale.setScalar(1.7);
     this.root.add(m);
     this.flashes.push({ m, t: 0 });
   }
@@ -324,12 +331,12 @@ export class PaintFight {
     const crater = prep(this.craterProto[color].clone());
     crater.quaternion.copy(q);
     crater.position.copy(p).addScaledVector(n, 0.012);
-    crater.scale.setScalar(0.25);
+    crater.scale.setScalar(0.4);
     this.root.add(crater);
     const splat = prep(this.splatProto[color].clone());
     splat.quaternion.copy(q);
     splat.position.copy(p).addScaledVector(n, 0.03);
-    splat.scale.setScalar(0.45 + Math.random() * 0.25);
+    splat.scale.setScalar(0.7 + Math.random() * 0.3);
     this.root.add(splat);
     const t1 = new THREE.Vector3().crossVectors(n, UP);
     if (t1.lengthSq() < 1e-4) t1.set(1, 0, 0);
@@ -350,7 +357,7 @@ export class PaintFight {
       this.root.add(pm);
       puffs.push({ m: pm, v: 0.5 + Math.random() * 0.5, d: Math.random() * 0.4 });
     }
-    this.melts.push({ crater, splat, drips, puffs, n, t: 0, grow: 0.85 + Math.random() * 0.45 });
+    this.melts.push({ crater, splat, drips, puffs, n, t: 0, grow: 1.3 + Math.random() * 0.5 });
     while (this.melts.length > MELTS) this.dropMelt(this.melts.shift());
     const me = g.player.pos;
     const dd = Math.hypot(me.x - p.x, me.z - p.z);
@@ -367,7 +374,7 @@ export class PaintFight {
   tickMelts(dt) {
     for (const f of this.flashes) {
       f.t += dt;
-      f.m.scale.setScalar(Math.max(0.01, 2.6 * (1 - f.t / 0.1)));
+      f.m.scale.setScalar(Math.max(0.01, 1.7 * (1 - f.t / 0.1)));
     }
     this.flashes = this.flashes.filter((f) => {
       if (f.t < 0.1) return true;
@@ -378,12 +385,12 @@ export class PaintFight {
       o.t += dt;
       // (eaten in over a second and a half, the rim cooling after)
       const k = Math.min(1, o.t / 1.5);
-      o.crater.scale.setScalar(0.25 + (o.grow - 0.25) * (1 - (1 - k) * (1 - k)));
+      o.crater.scale.setScalar(0.4 + (o.grow - 0.4) * (1 - (1 - k) * (1 - k)));
       for (const d of o.drips) d.m.scale.set(1, Math.max(0.001, d.len * Math.min(1, (o.t * d.k) / 1.6)), 1);
       for (const q of o.puffs) {
         const u = Math.max(0, o.t - q.d);
         q.m.position.y += q.v * dt;
-        q.m.scale.setScalar(Math.max(0.01, (u < 0.3 ? u / 0.3 : Math.max(0, 1 - (u - 0.3) / 1.2)) * (1 + u)));
+        q.m.scale.setScalar(Math.max(0.01, (u < 0.2 ? u / 0.2 : Math.max(0, 1 - (u - 0.2) / 0.8)) * (1 + u * 0.6)));
       }
     }
   }
@@ -549,7 +556,7 @@ export class PaintFight {
         const dy = b.p.y - oy;
         const dz = b.p.z - oz;
         const L = Math.hypot(dx, dy, dz);
-        const h = L > 1e-4 ? col.raycast(ox, oy, oz, dx, dy, dz, L) : null;
+        const h = L > 1e-4 ? col.raycast(ox, oy, oz, dx, dy, dz, L, SKIP) : null;
         if (h && Math.abs(h.ny || 0) < 0.55) {
           this.wallMelt(h, b.color);
           b.live = false;
