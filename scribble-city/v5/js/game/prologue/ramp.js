@@ -65,7 +65,10 @@ export class RampDraw {
     // sheet is up, and does not take it for the pause)
     if (!this.game.touch) this.game.input.releaseLock();
     // (round 16: in the language chosen - core/lang.js)
-    this.ui.plainHint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>', 'Draw a ramp to jump across<small dir="ltr">① Press the dot by the car ② Drag a line along the roof to the edge ③ Let go</small>'));
+    // (round 18, the player's word: really drawing a ramp - seen from the side, its slope, up from the
+    // roof by the car to the edge: spec.side)
+    if (spec.side) this.ui.plainHint(tr('<span dir="rtl">ציירו רמפה!</span><small>① לחצו על הנקודה הצהובה ② ציירו קו שעולה למעלה עד הקצה של הגג ③ עזבו</small>', 'Draw a ramp!<small dir="ltr">① Press the yellow dot ② Draw a line climbing up to the roof\'s edge ③ Let go</small>'));
+    else this.ui.plainHint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>', 'Draw a ramp to jump across<small dir="ltr">① Press the dot by the car ② Drag a line along the roof to the edge ③ Let go</small>'));
     this.t = 0;
     this.drawing = false;
     const P = (e) => [e.clientX * dpr, e.clientY * dpr];
@@ -131,6 +134,17 @@ export class RampDraw {
     const p = new THREE.Vector3(nx, ny, 0.5).unproject(cam);
     const o = cam.position;
     const d = p.sub(o).normalize();
+    if (this.spec.side) {
+      // (seen from the side: onto the upright plane along the lane - the ramp's own, its height drawn)
+      const [ax, az] = this.F.toWorld(0, this.spec.laneZ);
+      const [bx, bz] = this.F.toWorld(1, this.spec.laneZ);
+      const n = new THREE.Vector3(-(bz - az), 0, bx - ax).normalize();
+      const dn = n.dot(d);
+      if (Math.abs(dn) < 1e-4) return null;
+      const t = (n.x * (ax - o.x) + n.z * (az - o.z)) / dn;
+      if (t <= 0 || t > 400) return null;
+      return new THREE.Vector3(o.x + d.x * t, o.y + d.y * t, o.z + d.z * t);
+    }
     if (d.y > -1e-3) return null;
     // (onto the roof as it is there: the plane at its top first, then the floor's own height where
     // that falls, a few times over - a slope's)
@@ -149,6 +163,18 @@ export class RampDraw {
   guideCurve() {
     const s = this.spec;
     const pts = [];
+    if (s.side) {
+      // (a ramp as one would draw it: its slope from the roof by the car up to over the edge)
+      const G = this.sideGuide();
+      for (let i = 0; i <= 28; i++) {
+        const u = i / 28;
+        const x = G.startX + (G.lipX - G.startX) * u;
+        const [wx, wz] = this.F.toWorld(x, s.laneZ);
+        const q = this.toScreen(wx, s.roofY + 0.3 + G.h * Math.pow(u, 1.4), wz, [0, 0]);
+        if (q) pts.push(q);
+      }
+      return pts;
+    }
     const x0 = s.carX - 3.4;
     const x1 = s.edgeX - 0.8;
     for (let i = 0; i <= 28; i++) {
@@ -158,6 +184,38 @@ export class RampDraw {
       if (q) pts.push(q);
     }
     return pts;
+  }
+
+  // (the ramp the guide shows, seen from the side: where it starts, its lip, its height)
+  sideGuide() {
+    const s = this.spec;
+    const startX = Math.min(s.edgeX + 17, s.carX - 4);
+    return { startX, lipX: s.edgeX - 1.2, h: 4.8 };
+  }
+
+  // its shape from the side: the ramp's foot, under the guide's start, and its lip, the roof's edge
+  // below it - the wedge drawn faint round the slope
+  sideShape(g, d) {
+    const s = this.spec;
+    const G = this.sideGuide();
+    const pt = (x, y) => {
+      const [wx, wz] = this.F.toWorld(x, s.laneZ);
+      return this.toScreen(wx, y, wz, [0, 0]);
+    };
+    const a = pt(G.startX, s.roofY + 0.3);
+    const b = pt(G.lipX, s.roofY + 0.3);
+    const c = pt(G.lipX, s.roofY + 0.3 + G.h);
+    if (!a || !b || !c) return;
+    g.save();
+    g.setLineDash([6 * d, 8 * d]);
+    g.strokeStyle = 'rgba(255,255,255,0.35)';
+    g.lineWidth = 3 * d;
+    g.beginPath();
+    g.moveTo(a[0], a[1]);
+    g.lineTo(b[0], b[1]);
+    g.lineTo(c[0], c[1]);
+    g.stroke();
+    g.restore();
   }
 
   finish() {
@@ -173,6 +231,19 @@ export class RampDraw {
       });
     const xs = W.map((p) => p.x);
     const ext = xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+    if (this.spec.side && len >= 60 * this.dpr && W.length >= 3 && ext >= 3) {
+      // (a ramp goes up: its far end - towards the edge - well over its near one)
+      const near = W.reduce((m, p) => (p.x > m.x ? p : m), W[0]);
+      const far = W.reduce((m, p) => (p.x < m.x ? p : m), W[0]);
+      const top = Math.max(...W.map((p) => p.y));
+      if (top - Math.min(near.y, far.y) < 1.2 || far.y < near.y + 0.6) {
+        this.fails++;
+        this.pts = [];
+        this.ui.plainHint(tr('<span dir="rtl">רמפה עולה למעלה!</span><small>ציירו קו שמטפס מהנקודה הצהובה, למעלה, עד הקצה</small>', 'A ramp goes up!<small dir="ltr">Draw a line that climbs from the yellow dot, up, to the edge</small>'));
+        this.game.audio.play('meh', 0.4);
+        return;
+      }
+    }
     if (len < 60 * this.dpr || W.length < 3 || ext < 3) {
       // (too short to be a ramp, or not on the roof: again, with the way shown plainer)
       this.fails++;
@@ -190,7 +261,7 @@ export class RampDraw {
       const cross = ((b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0])) / cl;
       bow = Math.max(bow, Math.abs(cross));
     }
-    const prof = fitProfile(W, this.spec, bow / cl);
+    const prof = this.spec.side ? fitSide(W, this.spec) : fitProfile(W, this.spec, bow / cl);
     prof.frame = this.spec.frame || null;
     // (the line stays where it was drawn until the ramp's own line is there to settle onto)
     this.settle = { from: resample(P, 40), to3: null, t: 0 };
@@ -306,6 +377,7 @@ export class RampDraw {
       // (v5, ROADMAP 18) until a line is begun: what to do, shown - where to put the pen down (a
       // dot breathing there), where to take it (a ring at the edge), and a pen drawing it once,
       // slowly, over and over, its line fading after it
+      if (this.spec.side) this.sideShape(g, d);
       if (!this.drawing && this.pts.length < 2) this.teach(g, d);
     }
     if (this.pts.length > 1) this.ink(this.pts);
@@ -406,6 +478,32 @@ export function fitProfile(W, s, bow = 0) {
   const L = startX - lipX;
   const h = clamp(L * 0.34, 3.6, 5.4);
   const pow = clamp(1.05 + bow * 4, 1.0, 2.1);
+  return { startX, lipX, h, pow, z: s.laneZ, half: 3.4, roofY: s.roofY };
+}
+
+// (round 18) the ramp from its side, as drawn: its foot where the line leaves the roof (towards the
+// car), its lip at the roof's edge, as high as the line climbs there and curving as it does - the
+// upper edge of whatever was drawn (a slope, or the whole wedge), kept within what a car can take
+export function fitSide(W, s) {
+  const xs = W.map((p) => p.x);
+  const startX = clamp(Math.max(...xs), s.edgeX + 9, Math.min(s.edgeX + 24, s.carX - 4));
+  const lipX = clamp(Math.min(...xs), s.edgeX - 2.5, s.edgeX - 0.4);
+  const span = Math.max(1, startX - lipX);
+  // the drawing's top along it: the highest of it within each stretch
+  const topAt = (u0, u1) => {
+    let m = -Infinity;
+    for (const p of W) {
+      const u = (startX - p.x) / span;
+      if (u >= u0 && u <= u1) m = Math.max(m, p.y);
+    }
+    return m;
+  };
+  const base = s.roofY + 0.3;
+  const hEnd = topAt(0.7, 1.2);
+  const h = clamp((Number.isFinite(hEnd) ? hEnd : Math.max(...W.map((p) => p.y))) - base, 3.0, 6.2);
+  const hMid = topAt(0.4, 0.6);
+  const r = Number.isFinite(hMid) ? clamp((hMid - base) / h, 0.2, 0.62) : 0.38;
+  const pow = clamp(Math.log(r) / Math.log(0.5), 1.0, 2.1);
   return { startX, lipX, h, pow, z: s.laneZ, half: 3.4, roofY: s.roofY };
 }
 

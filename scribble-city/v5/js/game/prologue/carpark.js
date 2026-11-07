@@ -1029,8 +1029,12 @@ export class CarPark {
   mainCores(K, M) {
     const wall = this.wall;
     this.cores = [];
-    const top = LV(NDECK) + 3.4;
     for (const [west, north] of [[true, true], [false, true], [true, false], [false, false]]) {
+      // (round 18, the player's word: the roof smooth where the ramp is drawn - the tower at its
+      // south-west corner, beside the roof run's lane, stood up through the ramp drawn along it. That
+      // one ends at the roof: its top flush with it, nothing over the roof there)
+      const flush = west && !north;
+      const top = flush ? LV(NDECK) - 0.03 : LV(NDECK) + 3.4;
       const x0 = west ? MX0 : MX1 - CORE_W;
       const x1 = west ? MX0 + CORE_W : MX1;
       const z0 = north ? MZ0 : MZ1 - CORE_D;
@@ -1040,7 +1044,7 @@ export class CarPark {
       // (round 12: clad in dark glass, its landings lit behind it - a line of light half way up each
       // floor, round its two street faces)
       K.box(M.glass, x0, lobby ? LT : 0.02, z0, x1, top, z1, linC(0.2, 0.27, 0.36));
-      K.box(M.paint, x0 - 0.04, top - 1.4, z0 - 0.04, x1 + 0.04, top - 0.2, z1 + 0.04, BLUE_P);
+      if (!flush) K.box(M.paint, x0 - 0.04, top - 1.4, z0 - 0.04, x1 + 0.04, top - 0.2, z1 + 0.04, BLUE_P);
       for (let k = 0; k < NDECK; k++) {
         const ly = LV(k) + DH * 0.55;
         const ox = west ? x0 - 0.03 : x1;
@@ -1048,21 +1052,25 @@ export class CarPark {
         K.box(M.glow, ox, ly, z0 + 0.2, ox + 0.03, ly + 0.07, z1 - 0.2, linC(1, 0.88, 0.66));
         K.box(M.glow, x0 + 0.2, ly, oz, x1 - 0.2, ly + 0.07, oz + 0.03, linC(1, 0.88, 0.66));
       }
-      K.box(M.matte, x0 - 0.15, top, z0 - 0.15, x1 + 0.15, top + 0.25, z1 + 0.15, PANEL);
+      if (!flush) K.box(M.matte, x0 - 0.15, top, z0 - 0.15, x1 + 0.15, top + 0.25, z1 + 0.15, PANEL);
       wall(x0, z0, x1, z1, lobby ? LT : 0, top);
       if (lobby) this.lobby(K, M, x0, x1, z0, z1, LT);
       const ox = west ? x0 : x1;
       const oz = north ? z0 : z1;
       const nx = west ? -1 : 1;
       const nz = north ? -1 : 1;
-      wallWord(K, M.glow, WHITE, 'P', 0.95, ox + nx * 0.06, top - 1.27, (z0 + z1) / 2, nx, 0, 0.05);
-      wallWord(K, M.glow, WHITE, 'P', 0.95, (x0 + x1) / 2, top - 1.27, oz + nz * 0.06, 0, nz, 0.05);
+      if (!flush) {
+        wallWord(K, M.glow, WHITE, 'P', 0.95, ox + nx * 0.06, top - 1.27, (z0 + z1) / 2, nx, 0, 0.05);
+        wallWord(K, M.glow, WHITE, 'P', 0.95, (x0 + x1) / 2, top - 1.27, oz + nz * 0.06, 0, nz, 0.05);
+      }
       // (on the face to the hall)
       const fx = west ? x1 + 0.02 : x0 - 0.02;
       const s = west ? 1 : -1;
       const zc = (z0 + z1) / 2;
       for (let k = 0; k <= NDECK; k++) {
         if (lobby && k === 0) continue;
+        // (no door out onto the roof from the one that ends at it)
+        if (flush && k === NDECK) continue;
         const y = LV(k);
         K.box(M.paint, Math.min(fx, fx + s * 0.06), y, zc - 2.4, Math.max(fx, fx + s * 0.06), y + 2.15, zc - 1.4, linC(0.32, 0.36, 0.42));
         K.box(M.paint, Math.min(fx, fx + s * 0.08), y + 2.3, zc - 2.7, Math.max(fx, fx + s * 0.08), y + 2.6, zc - 1.1, linC(0.06, 0.28, 0.14));
