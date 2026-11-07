@@ -3,7 +3,7 @@ import { makeSurface } from './materials.js';
 import { baseHead, headOf, exprMoves, EYE, neckOf } from './folkshapes.js';
 import { MORPHS } from './folkheads.js';
 import { faceMap } from './heroshapes.js';
-import { FOLK } from './folkspec.js';
+import { FOLK, IRIS } from './folkspec.js';
 
 // (v5, ROADMAP 14.1) A portrait: one of the city's people drawn near as a portrait is drawn - not a
 // mask with a pencil picture laid over it, but a face that moves as a face does and is shaded by
@@ -37,6 +37,24 @@ const NA = AU.length;
 const AUI = Object.fromEntries(AU.map((n, i) => [n, i]));
 // how fast each comes and goes (per second): the lids quickest, the cheeks slowest
 const RATE = AU.map((n) => (n.startsWith('blink') ? 30 : n.startsWith('au5') || n.startsWith('au7') ? 14 : n.startsWith('au1') || n.startsWith('au2') || n.startsWith('au4') ? 9 : n === 'jaw' || n === 'wide' || n === 'pucker' ? 16 : n.startsWith('au6') ? 5 : n.startsWith('au12') ? 7 : 8));
+
+// (round 17) an eye's own picture on its ball (render/glsl.js PORTRAIT, the eyes): its iris's colours
+// - its own, its dark, its light streaks (render/folkspec.js IRIS) - and the cosines of the angles at
+// which the iris's edge and the pupil's are round the ball from its front, as big as the face's
+// picture draws them (render/folkink.js: the iris 5.4 mm, a woman's a little more, a child's more
+// again - eyes.irisK; the pupil two fifths of it)
+function irisOf(spec) {
+  const E = (spec && spec.eyes) || {};
+  const pal = IRIS[E.iris] || IRIS.brown;
+  const ir = Math.min(0.6, (0.0054 * (spec && spec.fem ? 1.04 : 1) * (E.irisK || 1)) / EYE.r);
+  const pu = ir * 0.4;
+  return {
+    uIrisA: { value: new THREE.Color(pal[1]) },
+    uIrisB: { value: new THREE.Color(pal[0]) },
+    uIrisC: { value: new THREE.Color(pal[4] || pal[2]) },
+    uIrisR: { value: new THREE.Vector2(Math.cos(Math.asin(ir)), Math.cos(Math.asin(pu))) },
+  };
+}
 
 // what a face does for each feeling: its moves and how far (a name without its side: both sides)
 export const EXPRESSIONS = {
@@ -864,6 +882,8 @@ export class Portrait {
       uAge: { value: this.spec.lines || 0 },
       // (ROADMAP 18: a gap between the front teeth - render/folkspec.js gap)
       uGap: { value: this.spec.gap || 0 },
+      // (round 17) the eye's own colours and the iris's size on its ball - render/glsl.js PORTRAIT
+      ...irisOf(this.spec),
       uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
       uNeckD: { value: this.neckD },
       uNeckToHead: { value: this.neckToHead },

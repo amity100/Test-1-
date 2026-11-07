@@ -200,7 +200,7 @@ export class Autopilot {
       this.drawRamp(c, P.draw);
       return;
     }
-    // (round 12: the rotor drawn on the car in the air - a line across over its roof, as a hand draws
+    // (round 12: the rotor drawn on the car in the air - round 17: its X over the roof, as a hand draws
     // it, on the pen's own page; again if it did not take)
     if (P.drawingRotor && c) {
       const fd = g.freedraw;
@@ -381,6 +381,25 @@ export class Autopilot {
       this.set(0, 0.8);
       return;
     }
+    // (round 17: in the car, the pen out on it and the turbo drawn - the flame out of its back, along
+    // the teaching pencil's own line, as a hand draws it)
+    if (/turbo<\/b> on the car/.test(o) && pl.inVehicle) {
+      this.set(0, 0);
+      const F = g.freedraw;
+      if (F && !F.isOpen) {
+        const s = this.since('penopen');
+        if (s < 0 || s > 1.5) {
+          this.did.penopen = g.time;
+          F.show();
+        }
+        return;
+      }
+      if (this.since('penopen') > 2.4 && this.P.turboPts && (this.since('turbo') < 0 || this.since('turbo') > 4)) {
+        this.did.turbo = g.time;
+        this.drawLine(this.P.turboPts);
+      }
+      return;
+    }
     if (/Draw|draw<\/b> a weapon/.test(o)) {
       this.set(0, 0.2);
       // (out of the car first: the list is the pen's on foot)
@@ -427,11 +446,28 @@ export class Autopilot {
     this.set(0, 0);
   }
 
-  // the line over the roof drawn as a pointer would: down, across, up
+  // (round 17) one line (screen px) drawn as a pointer would: down, along it, up
+  drawLine(pts) {
+    const cv = typeof document !== 'undefined' ? document.getElementById('fd-air') : null;
+    if (!cv || !pts || pts.length < 2) return;
+    const ev = (type, x, y) => {
+      try {
+        cv.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 72, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      } catch (e) {
+        // (no pointer events here)
+      }
+    };
+    ev('pointerdown', pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ev('pointermove', pts[i][0], pts[i][1]);
+    ev('pointerup', pts[pts.length - 1][0], pts[pts.length - 1][1]);
+  }
+
+  // (round 17) the rotor's X over the roof drawn as a pointer would: one stroke corner to corner, the
+  // other across it (game/prologue/director.js rotorBox)
   drawRotor(c) {
     const cv = typeof document !== 'undefined' ? document.getElementById('fd-air') : null;
-    if (!cv || !this.P.rotorLine) return;
-    const [[x0, y0], [x1, y1]] = this.P.rotorLine(c);
+    if (!cv || !this.P.rotorBox) return;
+    const { c: q } = this.P.rotorBox(c);
     const ev = (type, x, y) => {
       try {
         cv.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 71, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true, pointerType: 'mouse' }));
@@ -439,9 +475,11 @@ export class Autopilot {
         // (no pointer events here)
       }
     };
-    ev('pointerdown', x0, y0);
-    for (let i = 1; i <= 16; i++) ev('pointermove', x0 + ((x1 - x0) * i) / 16, y0 + ((y1 - y0) * i) / 16);
-    ev('pointerup', x1, y1);
+    for (const [[x0, y0], [x1, y1]] of [[q[0], q[2]], [q[1], q[3]]]) {
+      ev('pointerdown', x0, y0);
+      for (let i = 1; i <= 16; i++) ev('pointermove', x0 + ((x1 - x0) * i) / 16, y0 + ((y1 - y0) * i) / 16);
+      ev('pointerup', x1, y1);
+    }
   }
 
   // (round 12) on its rotor to the beach: high over the hotels, on, and down onto the sand

@@ -22,8 +22,14 @@ const GONE_PAR = new Set(['wing', 'rotor', 'prop']);
 
 const story = (game) => !!game && !game.lab && !game.classic;
 
+// (round 17, the player's word: the rotor in the air drawn the game's own way - the car pen's rotor, an
+// X over the roof, game/prologue/director.js rotor) open for that moment alone
+export function storyGift(game, id) {
+  return id === 'rotor' && !!(game && game.prologue && game.prologue.drawingRotor);
+}
+
 export function gearGone(game, id) {
-  return story(game) && GONE_GEAR.has(id);
+  return story(game) && GONE_GEAR.has(id) && !storyGift(game, id);
 }
 
 export function parGone(game, type) {

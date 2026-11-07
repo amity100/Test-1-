@@ -771,7 +771,9 @@ export class Doodle {
       wy = clamp(sa * Math.max(0, Math.abs(a) - 0.17) * 0.9, -1.25, 1.25);
       // (the chest for a look past about forty degrees: a little, slowly)
       wc = sa * clamp((Math.abs(a) - 0.7) * 0.5, 0, 0.4);
-      wp = clamp(Math.sign(tP) * Math.max(0, Math.abs(tP) - 0.1) * 0.85, -0.5, 0.42);
+      // (round 17: up as far as a head goes up - the eyes turn only a little way up with the iris
+      // still seen, render/people.js gaze)
+      wp = clamp(Math.sign(tP) * Math.max(0, Math.abs(tP) - 0.08) * 0.9, -0.5, 0.55);
     }
     // (the head sets off a moment after the eyes - they lead, it follows)
     const lag = Math.min(1, dt / 0.06);

@@ -92,6 +92,15 @@ const _UP = new THREE.Vector3(0, 1, 0);
 const _hp = new THREE.Vector3();
 const _hd = new THREE.Vector3();
 const _md = new THREE.Vector3();
+// (round 17, the player's word) the big pencil held the right way up: its graphite point leading, the
+// hand round it near the eraser's end (game/items.js pencil: the point at -z, the eraser at +z) -
+// the way a pencil is carried by somebody who does not know yet that its other end rubs things out
+const PENCIL_GRIP = 0.7;
+const _pg = new THREE.Matrix4();
+function pencilHold(p, dir) {
+  const m = p.holdMatrix(_hd.copy(dir).negate());
+  return m.multiply(_pg.makeTranslation(0, 0, -PENCIL_GRIP));
+}
 
 /**
  * The hero's arsenal (pencil + weapons he drew), firing logic, projectiles of everyone.
@@ -877,7 +886,7 @@ export class Weapons {
       const pm = this.slots[0].model;
       if (dir && pm && pm.group) {
         pm.group.matrixAutoUpdate = false;
-        pm.group.matrix.copy(p.holdMatrix(dir));
+        pm.group.matrix.copy(pencilHold(p, dir));
         pm.group.matrixWorldNeedsUpdate = true;
         pm.group.updateMatrixWorld(true);
       }
@@ -915,7 +924,9 @@ export class Weapons {
       dir.normalize();
       // idle: rests diagonally, the business end up and out
       if (this.swingT < 0) dir.lerp(_w.set(fig.forward.x * 0.35, 0.85, fig.forward.z * 0.35).addScaledVector(fig.right, 0.25), 0.7).normalize();
-      m = p.holdMatrix(dir);
+      // (the pencil, while he does not know yet that its other end rubs things out - game.canErase:
+      // its point the business end, pencilHold; given the eraser, its eraser end, as before)
+      m = def.id === 'pencil' && !this.game.canErase ? pencilHold(p, dir) : p.holdMatrix(dir);
       if (def.block && !def.knack) {
         // the shield: held up in front of the chest, its face to the front (pushed out for a bash)
         const f = _u.copy(fig.forward).setY(0).normalize();

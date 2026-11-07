@@ -601,7 +601,12 @@ in float aMouth;
 flat out float vPart;
 out float vNeckP;
 out float vMouthP;
+// (round 17) an eye's point on its ball from its middle - as it was made (A), and as it is turned (B)
+out vec3 vEyeA;
+out vec3 vEyeB;
 void portraitMove(inout vec3 P, inout vec3 N) {
+  vEyeA = vec3(0.0);
+  vEyeB = vec3(0.0);
   if (aPart > 6.5) {
     neckBend(P, N, uNeckD);
     P = (uNeckToHead * vec4(P, 1.0)).xyz;
@@ -618,7 +623,9 @@ void portraitMove(inout vec3 P, inout vec3 N) {
     float cp = cos(-g.y);
     float sp = sin(-g.y);
     mat3 R = mat3(cy, 0.0, -sy, 0.0, 1.0, 0.0, sy, 0.0, cy) * mat3(1.0, 0.0, 0.0, 0.0, cp, sp, 0.0, -sp, cp);
-    P = c + R * (P - c);
+    vEyeA = P - c;
+    vEyeB = R * vEyeA;
+    P = c + vEyeB;
     N = dot(N, N) > 1e-6 ? R * N : normalize(P - c);
     return;
   }
@@ -823,6 +830,14 @@ in vec3 vLN;
 flat in float vPart;
 in float vNeckP;
 in float vMouthP;
+in vec3 vEyeA;
+in vec3 vEyeB;
+// (round 17) the eye's own colours: its iris (its own, its dark, its light streaks), and how far round
+// the ball the iris's edge and the pupil's are (their cosines)
+uniform vec3 uIrisA;
+uniform vec3 uIrisB;
+uniform vec3 uIrisC;
+uniform vec2 uIrisR;
 uniform sampler2D uPlane;
 uniform sampler2D uWrinkle;
 uniform vec4 uWrinkleW;
@@ -1198,8 +1213,9 @@ void main() {
         float mid = 1.0 - smoothstep(0.013, 0.02, bx);
         float d = vMouth;
         // (the lips' wet insides, then dark at once - a mouth is dark a few millimetres in)
-        vec3 inside = mix(vec3(0.42, 0.15, 0.15), vec3(0.16, 0.04, 0.04), smoothstep(0.04, 0.14, d));
-        inside = mix(inside, vec3(0.13, 0.035, 0.04), smoothstep(0.3, 0.75, d));
+        // (round 17: a warm red, the throat a deep maroon - never a black hole: render/glsl.js PORTRAIT)
+        vec3 inside = mix(vec3(0.5, 0.2, 0.19), vec3(0.3, 0.1, 0.09), smoothstep(0.04, 0.14, d));
+        inside = mix(inside, vec3(0.2, 0.06, 0.06), smoothstep(0.3, 0.75, d));
         float tg = smoothstep(0.28, 0.42, d) * (1.0 - smoothstep(0.85, 1.0, d)) * (1.0 - up) * (1.0 - smoothstep(0.011, 0.019, bx));
         inside = mix(inside, vec3(0.36, 0.11, 0.11), tg * 0.75);
         float tU = smoothstep(0.05, 0.09, d) * (1.0 - smoothstep(0.24, 0.32, d)) * up * mid;
@@ -1213,7 +1229,7 @@ void main() {
       // never a black hole for an eye)
       if (!gl_FrontFacing) {
         float thr = step(vLP.y, -0.015) * step(-0.11, vLP.y) * step(abs(vLP.x), 0.035) * step(0.0, vLP.z);
-        tex.rgb = mix(tex.rgb * 0.55, vec3(0.12, 0.03, 0.035), thr);
+        tex.rgb = mix(tex.rgb * 0.55, vec3(0.2, 0.06, 0.06), thr);
       }
 #endif
 #endif
@@ -1248,6 +1264,34 @@ void main() {
     // (behind closed lips, a few pixels away: in their shade - not a white line across the mouth)
     tt *= mix(mix(0.5, 1.0, gDet), 1.0, uOpen);
     tex = vec4(tt * mix(1.0, 0.4, smoothstep(0.22, 0.48, abs(vUv.x - 0.5))), 1.0);
+  } else if (vPart > 3.5) {
+    // (round 17, the player's word: her eyes white now and then, or black ovals) an eye's own picture
+    // all the way round its ball - the white, the iris, the pupil, the light in it. The face's picture
+    // has the eye only where the lids open on it (its iris cut by them, its skin all round): turned
+    // to look up, the painted eye went under the lid and the ball's skin came into the opening - pale
+    // in the light, black in the socket's shade
+    vec3 ea = normalize(vEyeA + vec3(0.0, 0.0, 1e-7));
+    vec3 eb = normalize(vEyeB + vec3(0.0, 0.0, 1e-7));
+    float ca = ea.z;
+    float aw = max(fwidth(ca), 1e-4) * 1.2;
+    float inI = smoothstep(uIrisR.x - aw, uIrisR.x + aw, ca);
+    float inP = smoothstep(uIrisR.y - aw, uIrisR.y + aw, ca);
+    // (0 at the iris's edge, 1 at the pupil's)
+    float it = clamp((ca - uIrisR.x) / max(1e-4, uIrisR.y - uIrisR.x), 0.0, 1.0);
+    float ang = dot(ea.xy, ea.xy) > 1e-8 ? atan(ea.y, ea.x) : 0.0;
+    float stk = 0.5 + 0.5 * sin(ang * 29.0 + 2.3 * sin(ang * 5.0));
+    vec3 ic = mix(uIrisB, uIrisA, smoothstep(0.0, 0.3, it));
+    ic = mix(ic, uIrisC, stk * 0.5 * smoothstep(0.12, 0.7, it));
+    // (its dark ring at the edge, and darker again round the pupil)
+    ic *= mix(0.5, 1.0, smoothstep(0.0, 0.2, it)) * mix(1.0, 0.75, smoothstep(0.75, 1.0, it));
+    // the white of it, not white: warm, greyer to the sides, in the lid's shade at the top
+    vec3 sc = vec3(0.88, 0.84, 0.79) * mix(0.8, 1.0, smoothstep(0.05, 0.7, ca)) * mix(1.0, 0.78, smoothstep(0.2, 0.8, eb.y));
+    vec3 ecol = mix(sc, ic, inI);
+    ecol = mix(ecol, vec3(0.03, 0.022, 0.02), inP);
+    // (the light in it where the light is, as the eye turns under it)
+    float hl = smoothstep(0.9965, 0.9985, dot(eb, normalize(vec3(-0.32, 0.36, 0.877))));
+    ecol = mix(ecol, vec3(1.0, 0.98, 0.94), hl * 0.9);
+    tex = vec4(ecol, 1.0);
   } else if (vPart > 2.5 && vPart < 3.5) {
     // the tongue: its groove down the middle, darker to the back
     float gr = smoothstep(0.0, 0.06, abs(vUv.x - 0.5));
@@ -1261,8 +1305,10 @@ void main() {
     if (vMouthP > 0.02) {
       // (round 16, the player's word: her open mouth a black hole - a mouth's dark red, deepest at the
       // back, not black)
-      vec3 ins = mix(vec3(0.46, 0.17, 0.17), vec3(0.24, 0.07, 0.07), smoothstep(0.04, 0.16, vMouthP));
-      ins = mix(ins, vec3(0.13, 0.035, 0.04), smoothstep(0.3, 0.75, vMouthP));
+      // (round 17, the player's word again: still too dark - a child's mouth's warm red, the throat a
+      // deep maroon, never black)
+      vec3 ins = mix(vec3(0.54, 0.22, 0.21), vec3(0.34, 0.11, 0.1), smoothstep(0.04, 0.16, vMouthP));
+      ins = mix(ins, vec3(0.22, 0.065, 0.065), smoothstep(0.3, 0.75, vMouthP));
       tex.rgb = mix(tex.rgb, ins, smoothstep(0.015, 0.05, vMouthP));
     }
     // its inside: seen through the open mouth, dark, as a throat is. Anywhere else it is seen only
@@ -1273,7 +1319,7 @@ void main() {
       gThr = step(0.0, vLP.z) * step(abs(vLP.x), 0.034) * step(-0.105, vLP.y) * step(vLP.y, -0.02) * uOpen;
       // (its own place in the picture is no skin's - the cheek's colour, in a crease's shade)
       vec3 skin = textureLod(uMap, vec2(0.316, 0.608), 4.0).rgb * 0.7;
-      tex.rgb = mix(skin, vec3(0.12, 0.03, 0.035), gThr);
+      tex.rgb = mix(skin, vec3(0.2, 0.06, 0.06), gThr);
     }
   }
 #endif

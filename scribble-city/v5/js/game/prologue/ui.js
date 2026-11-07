@@ -265,6 +265,7 @@ export class PrologueUI {
       // (round 16: an English card reads left to right)
       this.hintEl.classList.toggle('en', en);
       const lines = (o.lines || []).map(([k, w]) => `<li><span class="k">${keys(k)}</span><span>${w}</span></li>`).join('');
+      clearTimeout(this.cardOffT);
       this.hintEl.classList.add('card', 'how');
       this.hint(`<span class="tag">${tag}</span><b class="t">${o.title}</b>${o.say ? `<div class="say">${o.say}</div>` : ''}${lines ? `<ul>${lines}</ul>` : ''}${o.tip ? `<div class="tip">${o.tip}</div>` : ''}`);
       // (round 9, the player's word: it covered the screen - big for a moment, then off to the side;
@@ -275,15 +276,33 @@ export class PrologueUI {
       return;
     }
     clearTimeout(this.dockT);
+    clearTimeout(this.cardOffT);
+    // (round 17: going, its look kept till it has faded - not its words a moment bare and big over
+    // the picture, as every time a scene of the film began)
+    if (!title) {
+      this.hint(null);
+      this.cardOffT = setTimeout(() => {
+        if (!this.hintEl.classList.contains('on')) this.hintEl.classList.remove('how', 'card', 'dock', 'en');
+      }, 500);
+      return;
+    }
     this.dock(false);
     this.hintEl.classList.remove('how');
-    this.hintEl.classList.toggle('card', !!title);
-    this.hint(title ? `<span class="tag">HOW TO PLAY</span>${title}<small>${how}</small>` : null);
+    this.hintEl.classList.add('card');
+    this.hint(`<span class="tag">HOW TO PLAY</span>${title}<small>${how}</small>`);
   }
 
   // the card off to the side (or back in the middle)
   dock(on) {
     this.hintEl.classList.toggle('dock', !!on);
+  }
+
+  // (a hint of its own - the ramp's: the plain big line, never in a card's look that is still going)
+  plainHint(html) {
+    clearTimeout(this.cardOffT);
+    clearTimeout(this.dockT);
+    if (html) this.hintEl.classList.remove('how', 'card', 'dock', 'en');
+    this.hint(html);
   }
 
   hint(html) {

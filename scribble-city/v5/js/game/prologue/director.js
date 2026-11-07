@@ -17,6 +17,8 @@ import { loadTrack, trackBuf, Looper } from './tracks.js';
 import { howto as howtoCard } from './howto.js';
 import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
+import { Kit, itemMats, linC } from '../items.js';
+import { groundHeight } from '../../world/layout.js';
 import { lang } from '../../core/lang.js';
 import { objT, markT, thoughtT } from './i18n.js';
 
@@ -98,6 +100,29 @@ const LOOKOUT = { x: 60, z: 298 };
 const DARK = [0.1, 0.1, 0.12];
 
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// (round 17: the rotor drawn in the air - Prologue.rotor) a drawing's lines (screen px) spread from
+// their middle till its longer side is at least px long - at most three times as big
+function spreadTo(strokes, px) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const L of strokes) {
+    for (const q of L || []) {
+      x0 = Math.min(x0, q[0]);
+      x1 = Math.max(x1, q[0]);
+      y0 = Math.min(y0, q[1]);
+      y1 = Math.max(y1, q[1]);
+    }
+  }
+  const side = Math.max(x1 - x0, y1 - y0);
+  if (!(side > 0) || side >= px) return strokes;
+  const k = Math.min(3, px / side);
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  return strokes.map((L) => (L ? L.map((q) => [cx + (q[0] - cx) * k, cy + (q[1] - cy) * k, ...q.slice(2)]) : L));
+}
 
 export class Prologue {
   constructor(game) {
@@ -303,6 +328,8 @@ export class Prologue {
     this.sceneN = n;
     this.sketching = false;
     this.sceneAt = this.clock || 0;
+    // (round 17: a place marked for the scene before is not this one's)
+    this.unbeacon();
     // (round 13: the world never left muffled - searchMontage - into a scene after it)
     if (this.muffled && this.game.audio.muffle) {
       this.game.audio.muffle(false);
@@ -495,6 +522,7 @@ export class Prologue {
     if (this.fight) this.fight.update(dtG * this.k);
     this.watchdog(dt);
     this.tickCast(dt);
+    this.tickBeacon(dt);
     this.tickHeroes();
     this.tickLook();
     this.tickAir(dt);
@@ -551,6 +579,9 @@ export class Prologue {
       loadTrack(A.ctx, 'sfx/pencil_sketch.mp3');
       loadTrack(A.ctx, 'sfx/sting.mp3');
       loadTrack(A.ctx, 'sfx/gone_whoosh.mp3');
+      // (round 17: the gang's rifles - game/prologue/paintfight.js bang)
+      loadTrack(A.ctx, 'sfx/shot_a.mp3');
+      loadTrack(A.ctx, 'sfx/shot_b.mp3');
       this.airT = 0;
       this.gullT = 3 + Math.random() * 4;
       this.steps = {};
@@ -1434,6 +1465,8 @@ export class Prologue {
     yield* this.tutorial();
     this.objective('Meet <b>Lily</b> at the ice cream stand', STAND.x, STAND.z, 'Lily');
     this.howto('lily', 14);
+    // (round 17: the place by her stand, marked - reached anywhere in it)
+    this.beacon(LILY_SEAT.x - 2.2, LILY_SEAT.z - 1.2, 3);
     // (in a car by her: out of it to meet her)
     let outTold = false;
     yield () => {
@@ -1447,6 +1480,7 @@ export class Prologue {
       if (outTold && !g.player.inVehicle) this.ui.card(null);
       return this.dist(LILY_SEAT.x, LILY_SEAT.z) < 8.5 && !g.player.inVehicle;
     };
+    this.unbeacon();
     this.ui.card(null);
     this.start(2);
   }
@@ -1519,17 +1553,22 @@ export class Prologue {
     // 5. the pen: open, everything in it open (begin: setAllOpen) - till it has been opened and put
     // away again, or a while has gone by
     // (round 15: a weapon or a ride from the short list, drawn for real - till one is made, or a while)
-    // (in the car, the pen draws on the car: a part on it counts too - the list is out of it, on foot)
+    // (round 17, the player's word: in the car, no stepping out - the pen draws on the car, the turbo
+    // first of its things, and the game shows on the screen how a turbo is drawn: a flame out of its
+    // back. Whatever is drawn while the turbo is what is chosen is the turbo. On foot, the short list)
     const DRAW_FOOT = 'Open the pen and <b>draw</b> a weapon or a ride';
-    const DRAW_CAR = 'Step out, open the pen and <b>draw</b> a weapon or a ride';
+    const DRAW_CAR = 'Open the pen and draw a <b>turbo</b> on the car';
     this.objective(P.inVehicle ? DRAW_CAR : DRAW_FOOT);
-    this.howto('draw');
+    this.howto(P.inVehicle ? 'draw' : 'drawFoot');
     {
       const F = g.freedraw;
+      const pen = g.fuse && g.fuse.pen;
       const made = () => (F && F.stats && F.stats.made ? Object.values(F.stats.made).reduce((a, b) => a + b, 0) : 0) + (P.inVehicle && P.inVehicle.fuse ? P.inVehicle.fuse.parts.length : 0);
       let m0 = made();
       let car = P.inVehicle;
       let tm = -1;
+      let penWas = false;
+      let teach = null;
       t = 0;
       yield () => {
         t += this.dtR;
@@ -1537,12 +1576,36 @@ export class Prologue {
         if (P.inVehicle !== car) {
           car = P.inVehicle;
           if (tm < 0) m0 = made();
-          if (tm < 0) this.objective(car ? DRAW_CAR : DRAW_FOOT);
+          if (tm < 0) {
+            this.objective(car ? DRAW_CAR : DRAW_FOOT);
+            this.howto(car ? 'draw' : 'drawFoot');
+          }
         }
+        // (the pen out on the car: its things, the turbo's first - chosen each time it comes out)
+        const onCar = !!(car && F && F.isOpen && pen && pen.isOpen);
+        if (onCar && !penWas && pen.cat !== 'func') {
+          pen.cat = 'func';
+          pen.uiSig = '';
+          pen.legSig = '';
+          pen.showRow();
+          pen.showLegend();
+          if (F.info) F.info();
+        }
+        penWas = onCar;
+        const teaching = onCar && pen.cat === 'func' && tm < 0;
+        if (pen) pen.force = teaching ? 'turbo' : pen.force === 'turbo' ? null : pen.force;
+        if (teaching && !teach) teach = this.teachTurbo(car);
+        else if (!teaching && teach) {
+          teach.remove();
+          teach = null;
+        }
+        if (teach) teach.update(!!(F.cur || (F.group && F.group.length)));
         if (tm < 0 && made() > m0) tm = t;
         // (made: a breath to see it come to life; left be, it goes on all the same after a while)
         return (tm >= 0 && t > tm + 2.5 && !(F && F.isOpen)) || (tm >= 0 && t > tm + 6) || t > 90;
       };
+      if (teach) teach.remove();
+      if (pen && pen.force === 'turbo') pen.force = null;
     }
     this.howto(null);
     this.objective(null);
@@ -1558,6 +1621,11 @@ export class Prologue {
     // (round 15: her face hers near and far - never handed to the city's simple face, dark with black
     // eyes, for a moment after a cut that brought her near: render/people.js keepPortrait)
     L.fig.keepPortrait = true;
+    // (round 17: her face made now, while she is still far off - and kept hers: render/people.js
+    // keeper - so that it is there, whole, the first moment she is seen, on a phone too)
+    const B = this.game.figures && this.game.figures.bodies;
+    const k = look && look.folk;
+    if (B && B.makePortrait && k >= 0 && !(B.portraits && B.portraits.get(k))) B.makePortrait(k).keeper = L.fig;
     // (drawn however close the camera comes - over her shoulder onto her page: game/doodle.js nearOk)
     L.fig.nearOk = true;
     L.fig.sit = 1;
@@ -1580,7 +1648,10 @@ export class Prologue {
     // not a cute tune going over slowly into it: the dread at once, at its full, from its loud part, a
     // sting on the first sight of it - score.js FILES.dread)
     // (round 16: the thriller's piece - score.js FILES.thriller - from here to the car, unbroken)
-    this.cue('thriller', { fade: 0.15 });
+    // (round 17, the player's word: not yet - the disturbing music only from the moment they look up
+    // at the kids in the wheel's gondolas, scene 3. Till then the wheel's own tune: its music box's
+    // waltz, cute - score.js Wheel)
+    this.cue('wheel', { fade: 0.6 });
     this.film(true);
     // she looks up from her drawing and sees him coming: from behind him, low, her at the stand in the
     // evening ahead of him - he walks the last steps into it
@@ -1596,7 +1667,6 @@ export class Prologue {
       this.faceTo(L, WHEEL.x, WHEEL.z);
       L.fig.lookAt = W0;
       this.shot({ from: this.ots(L, { pos: v3(WHEEL.x, 0, WHEEL.z) }, { h: 1.0, back: 0.75, side: 0.32 }), look: W0, lookTo: v3(WHEEL.x, 31.5, WHEEL.z), fov: 40, fovTo: 33, dur: 3.6, ease: 'inout', hand: 0.15 });
-      this.sample('sfx/sting.mp3', 0.85);
       yield 3.3;
       this.faceTo(L, meet.x, meet.z);
       L.fig.lookAt = null;
@@ -1770,7 +1840,11 @@ export class Prologue {
     this.film(false);
     this.objective('Walk with <b>Lily</b> to the pier', VIEW.x, VIEW.z, 'Pier');
     this.howto('pier', 8);
-    yield () => this.dist(VIEW.x, VIEW.z) < 4.5;
+    // (round 17, the player's word: the very place it goes on from, marked there - and anywhere in the
+    // ring is there)
+    this.beacon(VIEW.x, VIEW.z, 2.8);
+    yield () => this.dist(VIEW.x, VIEW.z) < 5;
+    this.unbeacon();
     this.start(3);
   }
 
@@ -1821,7 +1895,8 @@ export class Prologue {
     this.spawnPier();
     // (ROADMAP 18.9: no kids' voices - the wheel's life heard as its music; round 11: the music box's
     // waltz cute but tense, on from her stand - score.js FILES.tense - and so not begun again here)
-    this.cue('thriller', { fade: 2.5 });
+    // (round 17: the wheel's cute waltz still - on from her stand, begun here only if it is not)
+    this.cue('wheel', { fade: 1.5 });
     // against the sunset: the wheel from the beach, full of people
     this.shot({ from: [76, 2.4, 297], to: [80, 3.6, 292], look: [128, 28, 243], lookTo: [128, 29, 243], fov: 54, fovTo: 50, dur: 4.6, hand: 0.35 });
     // (round 13: this picture of it kept - the memory that flashes in his head once it is gone)
@@ -1973,7 +2048,10 @@ export class Prologue {
     }
     // back to her - she is on the last of it
     this.objective('He is <b>gone</b>. Go back to <b>Lily</b>', L.pos.x, L.pos.z, 'Lily');
+    // (round 17: where she is, marked round her)
+    this.beacon(L.pos.x, L.pos.z, 1.9);
     yield () => Math.hypot(P.pos.x - L.pos.x, P.pos.z - L.pos.z) < 3.4;
+    this.unbeacon();
     this.objective(null);
     if (g.gps) g.gps.clear();
     this.film(true);
@@ -2077,6 +2155,13 @@ export class Prologue {
     // (ROADMAP 18.9: the unease from here - under the boy waving, the waltz going wrong - so that it
     // has grown through all of it by the time the wheel is gone: score.js FILES.unease)
     // (round 13: the dread on under it all, unbroken, till the wheel is gone - no new music here)
+    // (round 17, the player's word: the disturbing music begins here, as they look up at the kids -
+    // and the kids are heard: the boy calling down to his mother, and all of them up there, 'Mom,
+    // look!', 'we're so high!', from the wheel, till it is gone - voice.js bed)
+    this.cue('thriller', { fade: 1.2 });
+    this.voices.bedAt(WHEEL.x, 30, WHEEL.z);
+    this.voices.bed(true, 0.9);
+    if (kid && kid.fig) this.say('K01', kid.fig, 0).next();
     this.shot({ from: () => this.gondolaCam(gi, -3.0, -2.25, -0.12), to: () => this.gondolaCam(gi, -17, -7.5, 4.5), look: () => this.headJ(kid) || this.gondolaAt(gi, -1.0, -2.3, 0), lookTo: () => this.gondolaAt(gi, 0, -4, 0), fov: 20, fovTo: 46, dur: 4.4, ease: 'inout', hand: 0.45 });
     yield 4.2;
     // the two of them at the railing from behind, the wheel turning against the sky - and under the
@@ -2185,6 +2270,8 @@ export class Prologue {
     }
     this.sample('sfx/gone_whoosh.mp3', 0.9);
     this.airDip = 1;
+    // (round 17: and the kids' voices with it - cut dead)
+    this.voices.bed(false);
     // (round 9, the player's word: not silence once it is gone - round 16: the thriller's piece goes on
     // under it, the same, unbroken, to the car)
     // (and at once nobody down there is waving up at anything)
@@ -2289,10 +2376,77 @@ export class Prologue {
     });
   }
 
+  // (round 17, the player's word: where the story goes on from marked in the world, not only by the
+  // map's dot - 'players could look for an hour'): a ring of light on the ground there, as big as the
+  // place it begins in, and an arrow over it, bobbing; gone in the film, and once it is reached
+  beacon(x, z, r = 3) {
+    this.unbeacon();
+    const g = this.game;
+    const col = g.world && g.world.collision;
+    let y = groundHeight(x, z);
+    // (a floor a little over the ground only - not the top of a lamp or a bench over the place)
+    const hit = col && col.raycast ? col.raycast(x, y + 1.2, z, 0, -1, 0, 3) : null;
+    if (hit && hit.y > y - 0.5 && hit.y < y + 1.1) y = hit.y;
+    const yel = linC(1, 0.8, 0.18);
+    const M = itemMats();
+    const K = new Kit();
+    K.torus(M.glow, r, 0.08, 0, 0, 0, yel, Math.PI / 2);
+    K.torus(M.glow, r * 0.58, 0.05, 0, 0, 0, yel, Math.PI / 2);
+    const ring = K.build({ seed: 0.31 });
+    ring.traverse((q) => (q.matrixAutoUpdate = true));
+    ring.position.set(x, y + 0.07, z);
+    g.scene.add(ring);
+    // (over it, on the screen, an arrow pointing down at it, bobbing: yellow inked dark round its
+    // edge - a glowing one in the world was lost against the sunset's own yellow)
+    const el = document.createElement('div');
+    el.className = 'pro-beacon';
+    el.innerHTML = '<svg viewBox="-24 -34 48 50"><path d="M-11 -32 H11 V-8 H21 L0 14 L-21 -8 H-11 Z" fill="#ffd23f" stroke="#1b1430" stroke-width="4" stroke-linejoin="round"/></svg>';
+    if (!document.getElementById('pro-beacon-css')) {
+      const st = document.createElement('style');
+      st.id = 'pro-beacon-css';
+      st.textContent = '.pro-beacon{position:fixed;left:0;top:0;width:44px;height:46px;margin:-46px 0 0 -22px;z-index:40;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));will-change:transform}.pro-beacon svg{width:100%;height:100%;overflow:visible}.pro-beacon.off{display:none}';
+      document.head.appendChild(st);
+    }
+    document.body.appendChild(el);
+    this.beaconR = { ring, el, t: 0, x, y, z, r };
+  }
+
+  unbeacon() {
+    const B = this.beaconR;
+    if (!B) return;
+    if (B.ring.parent) B.ring.parent.remove(B.ring);
+    B.ring.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+    });
+    B.el.remove();
+    this.beaconR = null;
+  }
+
+  tickBeacon(dt) {
+    const B = this.beaconR;
+    if (!B) return;
+    B.t += dt;
+    B.ring.scale.setScalar(1 + Math.sin(B.t * 3.2) * 0.04);
+    B.ring.visible = !this.holdCam;
+    // (the arrow where the place is on the screen, a little over it - not behind the camera)
+    const cam = this.game.camera;
+    const q = v3(B.x, B.y + 1.6, B.z).project(cam);
+    const on = !this.holdCam && q.z < 1 && Math.abs(q.x) < 1.05 && Math.abs(q.y) < 1.05;
+    B.el.classList.toggle('off', !on);
+    if (on) {
+      const sx = ((q.x + 1) / 2) * window.innerWidth;
+      const sy = ((1 - q.y) / 2) * window.innerHeight - Math.abs(Math.sin(B.t * 3.4)) * 10;
+      B.el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
+    }
+  }
+
   // (round 13) inside his head, a flash: the wheel as it was a moment ago - white, the picture of it
   // over the empty sky, gone in a breath (comic.js flash, the wheel's own picture: memory)
   memoryFlash(soft = false) {
     const g = this.game;
+    // (round 17, the player's word: and the kids on it remembered with it - their calls, 'Mom, look at
+    // me!', 'Dad, look how high we are!', inside his head: voice.js memory)
+    if (this.voices && this.voices.memory) this.voices.memory(soft ? 0.4 : 0.55);
     // (soft: no white - the picture of it coming up slowly over what is there now, as a memory does,
     // and fading: round 13, the empty place in scene 4, her question in the car at the end)
     if (soft) {
@@ -3691,40 +3845,25 @@ export class Prologue {
     this.comic.lines(null, 1.4, 1);
     if (this.pursuer) this.pursuer.paused = true;
     this.film(true);
-    // (round 16, the player's word: three and a half seconds of it in the air, at the time's own pace,
-    // looking its best - then the title)
+    // (round 17, the player's word: the title as it was - at the top of the jump, a second off the lip -
+    // only on the screen longer)
     // the rear three-quarters of it leaving the lip
     this.shot({ from: () => off(car, 7, 5, 1.2), look: () => v3(car.pos.x, car.pos.y + 0.6, car.pos.z), fov: 50, dur: 1.4, hand: 0.4, shake: 0.12, roll: 0.08, rollTo: 0.02 });
     this.flash(0.1, '#ffffff');
-    yield 1.35;
-    // wide, from out to the side and below its way: the car soaring up over the street against the
-    // sunset and the towers, the camera turning after it
-    {
-      const c1 = { pos: car.pos.clone() };
-      this.shot({ from: off(c1, -26, 22, -9), to: off(c1, -30, 20, -8), look: () => v3(car.pos.x, car.pos.y + 0.3, car.pos.z), fov: 42, fovTo: 36, dur: 2.3, ease: 'inout', hand: 0.25 });
-    }
-    yield 2.15;
-    // the title: the time all but stopped, the camera round the car - the game's name and who made it,
-    // five seconds of it
+    yield () => J.apex;
+    // the title: at the top of it the time all but stopped, the camera drawing round and up and away -
+    // the game's name and who made it, five seconds of it
     this.slow(0.03, 9);
     this.cue('title');
     {
       const c0 = { pos: car.pos.clone() };
-      this.shot({
-        path: [off(c0, 6, 5.5, 1.2), off(c0, 1, 8.5, 0.4), off(c0, -5, 6.5, -0.2), off(c0, -8, 0.5, 0.6), off(c0, -5.5, -5.5, 1.4)],
-        look: () => v3(car.pos.x, car.pos.y + 0.35, car.pos.z),
-        fov: 46,
-        fovTo: 52,
-        dur: 5.8,
-        ease: 'inout',
-        hand: 0.15,
-      });
+      this.shot({ path: [off(c0, 4.5, 3.5, 0.6), off(c0, 1.5, 9, -1.2), off(c0, -3, 14, -3.2)], look: () => off(car, -1.5, 0, -2.2), fov: 44, fovTo: 54, dur: 6.8, ease: 'inout', hand: 0.15 });
     }
-    yield 0.35;
+    yield 0.9;
     this.ui.title(true, GAME_TITLE, lang() === 'en' ? CREDIT_EN : CREDIT);
     yield 5.0;
     this.ui.title(false);
-    yield 0.35;
+    yield 0.4;
     // and then the game's again: the time its own, the car falling as a car falls, its way on fading -
     // seen from behind it, the ground coming up. Her voice
     J.fall();
@@ -3736,7 +3875,8 @@ export class Prologue {
       this.say('L08', L.fig, 0.1).next();
     }
     // just before it hits: the time all but stops - and the idea: what flies?
-    yield () => J.alt < 9.5 || J.t > 60;
+    // (round 17: a few metres more over the street than before - time to draw, however slowly)
+    yield () => J.alt < 12 || J.t > 60;
     this.slow(0.012, 14);
     this.film(true);
     this.feel(P.fig, 'angry', 3);
@@ -3767,13 +3907,18 @@ export class Prologue {
     this.start(9);
   }
 
-  // (round 12) the rotor, drawn on the car in the air - the game's own part pen (game/partpen.js,
-  // game/fuse.js): the camera the player's, close on the car; the pen out on it, the rotor chosen;
-  // and a pencil over the roof drawing a straight line across it, again and again, till the player
-  // draws - whatever is drawn there is the rotor
+  // (round 12) the rotor, drawn on the car in the air - the game's own car pen (game/partpen.js,
+  // game/fuse.js): the camera close on the car from behind and over it, the pen out on it.
+  // (round 17, the player's word: 'just a line is silly - draw it the way the game draws a rotor on a
+  // car') the pen's own rotor, as it is drawn in the game: an X over the roof (game/itemcat.js rotor -
+  // 'an X or a helicopter'), the drawing itself the rotor's blades on a mast over the roof, turning
+  // (game/itemlook.js rotor). Whatever is drawn here is the rotor; drawn small, made big enough to
+  // carry the car. A pencil over the car draws the X, and the hub in its middle, again and again till
+  // the player draws
   *rotor(car) {
     const g = this.game;
     const fd = g.freedraw;
+    const pen = g.fuse && g.fuse.pen;
     // (the car in the middle of the picture from behind and over it, the sky over its roof to draw on -
     // held there, steady, as it hangs: the pen's own camera put by - game/fuse.js sketchCam)
     if (g.fuse) g.fuse.camHeld = true;
@@ -3782,52 +3927,75 @@ export class Prologue {
       const fz = Math.cos(car.yaw);
       return v3(car.pos.x - fx * 7.5, car.pos.y + 3.2, car.pos.z - fz * 7.5);
     };
-    // (the car a little under the middle, the sky over its roof clear - the pen's rows of parts put
+    // (the car a little under the middle, the sky over its roof clear - the pen's rows of things put
     // away: the rotor is chosen already, and on a phone they covered the picture)
     this.shot({ from: back, look: () => v3(car.pos.x, car.pos.y + 2.1, car.pos.z), fov: 50, dur: 600, hand: 0 });
     if (!document.getElementById('pro-rotor-css')) {
       const st = document.createElement('style');
       st.id = 'pro-rotor-css';
-      st.textContent = 'body.pro-rotor .pp-legend, body.pro-rotor .pp-row, body.pro-rotor .pp-slots, body.pro-rotor #fd-hint { display: none !important; }';
+      st.textContent = 'body.pro-rotor .pp-legend, body.pro-rotor .pp-row, body.pro-rotor .pp-slots, body.pro-rotor #fd-hint, body.pro-rotor .pp-live, body.pro-rotor .pp-tip { display: none !important; }';
       document.head.appendChild(st);
     }
     document.body.classList.add('pro-rotor');
     this.ui.film(false);
     g.hud.show();
+    // (round 17: the time all but stopped while it is drawn - a slow hand's half a minute is a few
+    // metres of the fall)
+    this.slow(0.005, 20);
     this.drawingRotor = true;
     this.howto('rotor', 0);
+    // (the pen's own make, for this drawing: drawn small, the lines spread from their middle till the
+    // rotor is a helicopter's - about four metres across at the car - then made as ever)
+    if (pen) {
+      const mk = Object.getPrototypeOf(pen).make;
+      pen.make = (strokes, inkI, caps) => {
+        const o = pen.own();
+        const per = o && o.F ? o.F.perPx : 0;
+        return mk.call(pen, per > 0 ? spreadTo(strokes, 3.9 / per) : strokes, inkI, caps);
+      };
+    }
     const teach = this.teachRotor(car);
     const has = () => !!(car.fz && car.fz.rotor > 0);
-    let t = 0;
+    // (an X is two strokes: after the first, the pen waits for the second a little longer than it
+    // waits for the rest of a drawing - game/partpen.js PEN_REST)
+    let waited = false;
     yield () => {
-      t += this.dtR || 0.016;
       if (has()) return true;
-      if (fd && !fd.isOpen && g.player.inVehicle === car) {
-        fd.show();
-        if (g.fuse && g.fuse.pen && g.fuse.pen.choosePar) g.fuse.pen.choosePar('rotor');
+      if (fd && fd.group) {
+        if (fd.group.length === 1 && !fd.cur && !waited) {
+          fd.groupAt = Math.max(fd.groupAt || 0, performance.now() + 1700);
+          waited = true;
+        } else if (!fd.group.length) waited = false;
+      }
+      if (fd && !fd.isOpen && g.player.inVehicle === car) fd.show();
+      // (the pen's things, the rotor of them chosen - whatever it is read as: game/partpen.js force)
+      if (pen && fd && fd.isOpen) {
+        if (pen.cat !== 'func') {
+          pen.cat = 'func';
+          pen.legSig = '';
+          if (pen.showLegend) pen.showLegend();
+        }
+        pen.force = 'rotor';
       }
       teach.update(!!(fd && (fd.cur || (fd.group && fd.group.length))));
       return false;
     };
     teach.remove();
+    if (pen) {
+      delete pen.make;
+      pen.force = null;
+    }
     document.body.classList.remove('pro-rotor');
     if (g.fuse) g.fuse.camHeld = false;
-    // (round 16, the player's word: the game's own rotor - on the middle of the roof, a helicopter's
-    // size, as the game puts one on (game/fuse.js rotorModel) - whatever the line's length and place)
+    // (whatever its size as drawn, a helicopter's lift - the story's)
     {
       const R = car.fuse;
       const rp = R && R.parts ? R.parts.find((q) => q.type === 'rotor') : null;
-      if (rp && g.fuse && g.fuse.applyVeh && g.fuse.buildVeh) {
-        if (Array.isArray(rp.at)) {
-          rp.at[0] = 0;
-          rp.at[2] = 0;
-        }
-        rp.n = { ...(rp.n || {}), span: clamp((rp.n && rp.n.span) || 4.2, 3.8, 4.6) };
+      if (rp && g.fuse && g.fuse.applyVeh) {
+        rp.n = { ...(rp.n || {}), span: Math.max((rp.n && rp.n.span) || 0, 4.2) };
         g.fuse.applyVeh(car);
-        g.fuse.buildVeh(car);
       }
     }
-    // (whatever its size, big enough to hold the car up - the story's)
     car.fz.rotor = Math.max(car.fz.rotor || 0, 1.3);
     car.fz.airCtl = Math.max(car.fz.airCtl || 0, 1);
     car.fuseUp = true;
@@ -3836,50 +4004,180 @@ export class Prologue {
     this.ui.card(null);
   }
 
-  // where on the screen the rotor goes: a line across over the car's roof, its two ends ([x, y] px)
-  rotorLine(car) {
+  // where on the screen the rotor goes: a box over the car's roof, about as tall as it is wide, an X
+  // four metres across drawn in it (the car pen reads a drawing as seen from over the car - game/
+  // itemlook.js rotor - so an X square on the screen is a rotor's two blades square across each
+  // other; a flat one, two blades nearly side by side): its corners ([x, y] px - top left, top right,
+  // bottom right, bottom left) and its middle
+  rotorBox(car) {
     const cam = this.game.camera;
     const H = (car.heightM || 1.45) + 0.85;
     const rx = Math.cos(car.yaw);
     const rz = -Math.sin(car.yaw);
-    const a = v3(car.pos.x - rx * 1.9, car.pos.y + H, car.pos.z - rz * 1.9).project(cam);
-    const b = v3(car.pos.x + rx * 1.9, car.pos.y + H, car.pos.z + rz * 1.9).project(cam);
     const W = window.innerWidth;
     const Hh = window.innerHeight;
-    const P0 = [((a.x + 1) / 2) * W, ((1 - a.y) / 2) * Hh];
-    const P1 = [((b.x + 1) / 2) * W, ((1 - b.y) / 2) * Hh];
-    return P0[0] <= P1[0] ? [P0, P1] : [P1, P0];
+    const px = (a) => {
+      const q = v3(car.pos.x + rx * a, car.pos.y + H, car.pos.z + rz * a).project(cam);
+      return [((q.x + 1) / 2) * W, ((1 - q.y) / 2) * Hh];
+    };
+    const m = px(0);
+    const L = px(-1.95);
+    const R = px(1.95);
+    // (half its width: two metres at the car, as the screen has it - within reason)
+    const hw = Math.max(60, Math.min(W * 0.3, Math.hypot(R[0] - L[0], R[1] - L[1]) / 2));
+    const hh = hw * 0.8;
+    // (over the roof, its foot a little above it, never off the top of the screen)
+    const cy = Math.max(hh + 70, m[1] - hh * 0.55);
+    const c = [[m[0] - hw, cy - hh], [m[0] + hw, cy - hh], [m[0] + hw, cy + hh], [m[0] - hw, cy + hh]];
+    return { c, m: [m[0], cy] };
   }
 
-  // the pencil that shows how: over the car's roof, a straight line drawn across it from one side to
-  // the other, its dashes left behind it, again and again - gone while the player draws
-  teachRotor(car) {
+  // (round 17) the pencil that shows how a turbo is drawn on the car: a flame out of its back - its
+  // outline drawn from the tail out and round, as the pen's own picture of it (game/itemcat.js turbo),
+  // its dashes left behind - a breath, and again; gone while the player draws
+  teachTurbo(car) {
+    const g = this.game;
+    const NS = 'http://www.w3.org/2000/svg';
     const el = document.createElement('div');
     el.className = 'pro-teach';
-    el.innerHTML = '<svg><line class="tl"/><g class="tp"><path d="M12 2h38v12H12z" fill="#ffd23f" stroke="#1b1430" stroke-width="2"/><path d="M50 2h8v12h-8z" fill="#ff7ab8" stroke="#1b1430" stroke-width="2"/><path d="M12 2L1.5 8 12 14z" fill="#f3d7a8" stroke="#1b1430" stroke-width="2" stroke-linejoin="round"/><path d="M1.5 8l4.5-2.6v5.2z" fill="#1b1430"/></g></svg>';
+    el.innerHTML = '<svg><path class="tl"/><g class="tp"><path d="M12 2h38v12H12z" fill="#ffd23f" stroke="#1b1430" stroke-width="2"/><path d="M50 2h8v12h-8z" fill="#ff7ab8" stroke="#1b1430" stroke-width="2"/><path d="M12 2L1.5 8 12 14z" fill="#f3d7a8" stroke="#1b1430" stroke-width="2" stroke-linejoin="round"/><path d="M1.5 8l4.5-2.6v5.2z" fill="#1b1430"/></g></svg>';
     if (!document.getElementById('pro-teach-css')) {
       const st = document.createElement('style');
       st.id = 'pro-teach-css';
-      st.textContent = '.pro-teach{position:fixed;inset:0;z-index:60;pointer-events:none;transition:opacity .25s}.pro-teach.off{opacity:0}.pro-teach svg{width:100%;height:100%;overflow:visible}.pro-teach .tl{stroke:#fff8ec;stroke-width:6;stroke-linecap:round;stroke-dasharray:14 12;filter:drop-shadow(0 0 4px #1b1430)}';
+      st.textContent = '.pro-teach{position:fixed;inset:0;z-index:60;pointer-events:none;transition:opacity .25s}.pro-teach.off{opacity:0}.pro-teach svg{width:100%;height:100%;overflow:visible}.pro-teach .tl{fill:none;stroke:#fff8ec;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:14 12;filter:drop-shadow(0 0 4px #1b1430)}';
       document.head.appendChild(st);
     }
     document.body.appendChild(el);
     const line = el.querySelector('.tl');
     const pen = el.querySelector('.tp');
+    // (the flame's outline, from its foot round to its tip and back - the pen's own icon, its foot at
+    // 12,22 and its tip up at 13,2 - sampled once)
+    const shape = document.createElementNS(NS, 'path');
+    shape.setAttribute('d', 'M12 22 C6 22 5 17 7 13 C8 15 9 15 9.5 14 C9 10 11 6 13 2 C13 6 17 8 17.5 12 C18.5 11 18.5 9.5 18 8.5 C21 12 20 22 12 22 Z');
+    const probe = document.createElementNS(NS, 'svg');
+    probe.style.cssText = 'position:fixed;width:0;height:0;visibility:hidden';
+    probe.appendChild(shape);
+    document.body.appendChild(probe);
+    const N = 64;
+    const P0 = [];
+    const len = shape.getTotalLength();
+    for (let i = 0; i <= N; i++) {
+      const q = shape.getPointAtLength((i / N) * len);
+      P0.push([q.x - 12, q.y - 22]);
+    }
+    probe.remove();
     const t0 = performance.now();
+    const LOOP = 2.6;
+    this.turboPts = null;
     return {
       update: (drawing) => {
         el.classList.toggle('off', drawing);
-        const [[x0, y0], [x1, y1]] = this.rotorLine(car);
-        // (1.5 s across, a breath at the end, again)
-        const k = Math.min(1, ((performance.now() - t0) % 2000) / 1500);
-        const x = x0 + (x1 - x0) * k;
-        const y = y0 + (y1 - y0) * k;
-        line.setAttribute('x1', x0);
-        line.setAttribute('y1', y0);
-        line.setAttribute('x2', x);
-        line.setAttribute('y2', y);
-        pen.setAttribute('transform', `translate(${x} ${y}) rotate(-38) translate(-2 -8) scale(1.4)`);
+        const cam = g.camera;
+        const D = g.fuse && g.fuse.drawCtx ? g.fuse.drawCtx(car).D : null;
+        const hl = D && D.hl ? D.hl : 2.2;
+        const fx = Math.sin(car.yaw);
+        const fz = Math.cos(car.yaw);
+        const W = window.innerWidth;
+        const Hh = window.innerHeight;
+        const px = (k, up) => {
+          const q = v3(car.pos.x - fx * k, car.pos.y + up, car.pos.z - fz * k).project(cam);
+          return [((q.x + 1) / 2) * W, ((1 - q.y) / 2) * Hh];
+        };
+        const tail = px(hl + 0.1, 0.55);
+        const out = px(hl + 1.3, 0.6);
+        const mid = px(0, 0.55);
+        // (out of the back of it as the screen has it - mostly to the side, a little down at most:
+        // seen from behind and over it, straight back is down the screen, into the pen's own rows)
+        let dx = out[0] - tail[0];
+        const dy0 = out[1] - tail[1];
+        if (Math.abs(dx) < 20) dx = (tail[0] - mid[0] || -1) * 3;
+        const sx = Math.sign(dx) || -1;
+        const sl = Math.max(-0.5, Math.min(0.35, dy0 / Math.max(1, Math.abs(dx))));
+        // (a turbo's size at the car - what is drawn is what is made, game/partpen.js nOf)
+        const L = Math.max(70, Math.min(130, Math.hypot(dx, dy0)));
+        let ux = sx / Math.hypot(1, sl);
+        let uy = sl / Math.hypot(1, sl);
+        // (and clear of the pen's rows at the foot of the screen)
+        if (tail[1] + uy * L > Hh - 190) {
+          uy = Math.min(uy, 0) - 0.15;
+          const n2 = Math.hypot(ux, uy);
+          ux /= n2;
+          uy /= n2;
+        }
+        // (the icon's up - its tip - along the way out, u; its right across it, (-uy, ux))
+        const k = L / 20;
+        const pts = P0.map(([x, y]) => [tail[0] + (-x * uy - y * ux) * k, tail[1] + (x * ux - y * uy) * k]);
+        this.turboPts = pts;
+        const tt = ((performance.now() - t0) / 1000) % LOOP;
+        const kk = Math.max(0, Math.min(1, tt / 1.6));
+        const n = Math.max(1, Math.round(kk * N));
+        let d = '';
+        for (let i = 0; i <= n; i++) d += `${i ? 'L' : 'M'}${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)}`;
+        line.setAttribute('d', d);
+        const tip = pts[n];
+        pen.setAttribute('transform', `translate(${tip[0].toFixed(1)} ${tip[1].toFixed(1)}) rotate(-38) translate(-2 -8) scale(1.4)`);
+      },
+      remove: () => {
+        el.remove();
+        this.turboPts = null;
+      },
+    };
+  }
+
+  // the pencil that shows how: over the car's roof the X drawn - one stroke corner to corner, the other
+  // across it, then a little ring in its middle, their dashes left behind - a breath, and again; gone
+  // while the player draws
+  teachRotor(car) {
+    const el = document.createElement('div');
+    el.className = 'pro-teach';
+    el.innerHTML = '<svg><path class="tl"/><path class="tl"/><path class="tl"/><g class="tp"><path d="M12 2h38v12H12z" fill="#ffd23f" stroke="#1b1430" stroke-width="2"/><path d="M50 2h8v12h-8z" fill="#ff7ab8" stroke="#1b1430" stroke-width="2"/><path d="M12 2L1.5 8 12 14z" fill="#f3d7a8" stroke="#1b1430" stroke-width="2" stroke-linejoin="round"/><path d="M1.5 8l4.5-2.6v5.2z" fill="#1b1430"/></g></svg>';
+    if (!document.getElementById('pro-teach-css')) {
+      const st = document.createElement('style');
+      st.id = 'pro-teach-css';
+      st.textContent = '.pro-teach{position:fixed;inset:0;z-index:60;pointer-events:none;transition:opacity .25s}.pro-teach.off{opacity:0}.pro-teach svg{width:100%;height:100%;overflow:visible}.pro-teach .tl{fill:none;stroke:#fff8ec;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:14 12;filter:drop-shadow(0 0 4px #1b1430)}';
+      document.head.appendChild(st);
+    }
+    document.body.appendChild(el);
+    const lines = [...el.querySelectorAll('.tl')];
+    const pen = el.querySelector('.tp');
+    const t0 = performance.now();
+    // (the first stroke 0.8 s, the pencil lifted, the second 0.8 s, the ring 0.6 s, a breath)
+    const SEG = [[0, 0.8], [1.0, 1.8], [2.0, 2.6]];
+    const LOOP = 3.4;
+    return {
+      update: (drawing) => {
+        el.classList.toggle('off', drawing);
+        const { c, m } = this.rotorBox(car);
+        const t = ((performance.now() - t0) / 1000) % LOOP;
+        const seg = [[c[0], c[2]], [c[1], c[3]]];
+        const r = Math.max(10, Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1]) * 0.07);
+        let tip = null;
+        for (let i = 0; i < 2; i++) {
+          const [a, b] = seg[i];
+          const k = Math.max(0, Math.min(1, (t - SEG[i][0]) / (SEG[i][1] - SEG[i][0])));
+          const x = a[0] + (b[0] - a[0]) * k;
+          const y = a[1] + (b[1] - a[1]) * k;
+          lines[i].setAttribute('d', k > 0 ? `M${a[0].toFixed(1)} ${a[1].toFixed(1)}L${x.toFixed(1)} ${y.toFixed(1)}` : '');
+          if (t >= SEG[i][0] && t <= SEG[i][1] + 0.1) tip = [x, y];
+        }
+        // (the ring round the middle, from its top)
+        const kr = Math.max(0, Math.min(1, (t - SEG[2][0]) / (SEG[2][1] - SEG[2][0])));
+        if (kr > 0) {
+          const n = Math.max(2, Math.ceil(kr * 24));
+          let d = '';
+          for (let i = 0; i <= n; i++) {
+            const a = -Math.PI / 2 + (i / n) * kr * Math.PI * 2;
+            d += `${i ? 'L' : 'M'}${(m[0] + Math.cos(a) * r).toFixed(1)} ${(m[1] + Math.sin(a) * r).toFixed(1)}`;
+          }
+          lines[2].setAttribute('d', d);
+          if (t <= SEG[2][1] + 0.1) {
+            const a = -Math.PI / 2 + kr * Math.PI * 2;
+            tip = [m[0] + Math.cos(a) * r, m[1] + Math.sin(a) * r];
+          }
+        } else lines[2].setAttribute('d', '');
+        // (between the strokes the pencil lifted, waiting where the next begins)
+        if (!tip) tip = t < SEG[1][0] ? c[1] : t < SEG[2][0] ? [m[0], m[1] - r] : c[0];
+        pen.setAttribute('transform', `translate(${tip[0].toFixed(1)} ${tip[1].toFixed(1)}) rotate(-38) translate(-2 -8) scale(1.4)`);
       },
       remove: () => el.remove(),
     };
@@ -4000,6 +4298,7 @@ export class Prologue {
     }
     if (g.album && g.album.setEarly) g.album.setEarly(false);
     if (g.weapons) g.weapons.filmPencil = null;
+    this.unbeacon();
     if (g.setAllOpen && g.settings) g.setAllOpen(!!g.settings.v.allOpen);
     try {
       // (watched as a film, scene by scene, in the admin's viewer: not played - a new game still

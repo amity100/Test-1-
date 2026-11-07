@@ -53,7 +53,18 @@ function howtoHe(key, touch) {
           ? [['ג׳ויסטיק', 'גז, ברקס והגה'], ['כפתור הרכב', 'לצאת מהמכונית']]
           : [['W', 'גז'], ['S', 'ברקס, ורוורס'], ['A D', 'הגה'], ['Space', 'בלם יד (להחלקות)'], ['E', 'לצאת מהמכונית']],
       };
+    // (round 17, the player's word: in the car - the pen draws on it, the turbo first, the game showing
+    // how it is drawn; on foot, the short list as before: 'drawFoot')
     case 'draw':
+      return {
+        step: 5, of: OF, title: 'מציירים - וזה נהיה אמיתי!',
+        say: 'מה שמציירים קם לחיים. ציירו על המכונית טורבו - להבה שיוצאת מאחוריה - והיא תזנק קדימה.',
+        lines: T
+          ? [['כפתור העיפרון', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['כפתור הטורבו', 'וטסים קדימה']]
+          : [['Q', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['Shift', 'וטסים קדימה']],
+        tip: 'במכונית אפשר לצייר גם מקלע ושריון. עוד ציורים ייפתחו בהמשך.',
+      };
+    case 'drawFoot':
       return {
         step: 5, of: OF, title: 'מציירים - וזה נהיה אמיתי!',
         say: 'מה שמציירים קם לחיים. בינתיים יש לכם כמה נשקים וכמה רכבים - בוחרים אחד ומציירים אותו.',
@@ -124,8 +135,8 @@ function howtoHe(key, touch) {
     case 'rotor':
       return {
         title: 'ציירו רוטור!',
-        say: 'אין על מה לנחות! ציירו קו ישר אחד מעל הגג של המכונית. זה רוטור של מסוק.',
-        lines: T ? [['אצבע', 'קו ישר מעל הגג']] : [['עכבר', 'קו ישר מעל הגג']],
+        say: 'אין על מה לנחות! ציירו X גדול מעל הגג של המכונית - מדחף של מסוק, כמו שרואים אותו מלמעלה.',
+        lines: T ? [['אצבע', 'קו אחד באלכסון, ואז קו שני שחוצה אותו']] : [['עכבר', 'קו אחד באלכסון, ואז קו שני שחוצה אותו']],
         tip: 'העיפרון מראה איפה ואיך.',
       };
     case 'fly':
@@ -198,6 +209,15 @@ function howtoEn(key, touch) {
     case 'draw':
       return {
         step: 5, of: OF, title: 'Draw - and it comes to life!',
+        say: 'What you draw becomes real. Draw a turbo on the car - a flame out of its back - and it leaps forward.',
+        lines: T
+          ? [['Pencil button', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Turbo button', 'and off you shoot']]
+          : [['Q', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Shift', 'and off you shoot']],
+        tip: 'In a car you can also draw a machine gun and armour. More drawings open up later.',
+      };
+    case 'drawFoot':
+      return {
+        step: 5, of: OF, title: 'Draw - and it comes to life!',
         say: 'What you draw becomes real. For now you have a few weapons and a few rides - pick one and draw it.',
         lines: T
           ? [['Pencil button', 'opens the list'], ['Touch a drawing', 'and draw it in the air, like the picture'], ['✓', 'and it is made - and kept for next time']]
@@ -239,8 +259,8 @@ function howtoEn(key, touch) {
     case 'rotor':
       return {
         title: 'Draw a rotor!',
-        say: 'Nothing to land on! Draw one straight line over the roof of the car. That is a helicopter\'s rotor.',
-        lines: T ? [['Finger', 'a straight line over the roof']] : [['Mouse', 'a straight line over the roof']],
+        say: 'Nothing to land on! Draw a big X over the roof of the car - a helicopter\'s rotor, as it looks from above.',
+        lines: T ? [['Finger', 'one line corner to corner, then one across it']] : [['Mouse', 'one line corner to corner, then one across it']],
         tip: 'The pencil shows where and how.',
       };
     case 'fly':

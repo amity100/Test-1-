@@ -14,7 +14,7 @@ const OBJ_HE = {
   'Break into a <b>car</b> and take it': 'פרצו ל<b>מכונית</b> וקחו אותה',
   '<b>Drive</b> - get a feel for it': '<b>סעו</b> קצת - להרגיש את המכונית',
   'Open the pen and <b>draw</b> a weapon or a ride': 'פתחו את העט ו<b>ציירו</b> נשק או כלי רכב',
-  'Step out, open the pen and <b>draw</b> a weapon or a ride': 'צאו מהמכונית, פתחו את העט ו<b>ציירו</b> נשק או כלי רכב',
+  'Open the pen and draw a <b>turbo</b> on the car': 'פתחו את העט וציירו <b>טורבו</b> על המכונית',
   'Walk with <b>Lily</b> to the pier': 'לכו עם <b>לילי</b> אל המזח',
   'Where did he go? <b>Look for him</b> on the pier': 'לאן הוא נעלם? <b>חפשו אותו</b> על המזח',
   'He is <b>gone</b>. Go back to <b>Lily</b>': 'הוא <b>נעלם</b>. חזרו אל <b>לילי</b>',

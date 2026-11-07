@@ -65,7 +65,7 @@ export class RampDraw {
     // sheet is up, and does not take it for the pause)
     if (!this.game.touch) this.game.input.releaseLock();
     // (round 16: in the language chosen - core/lang.js)
-    this.ui.hint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>', 'Draw a ramp to jump across<small dir="ltr">① Press the dot by the car ② Drag a line along the roof to the edge ③ Let go</small>'));
+    this.ui.plainHint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>', 'Draw a ramp to jump across<small dir="ltr">① Press the dot by the car ② Drag a line along the roof to the edge ③ Let go</small>'));
     this.t = 0;
     this.drawing = false;
     const P = (e) => [e.clientX * dpr, e.clientY * dpr];
@@ -177,7 +177,7 @@ export class RampDraw {
       // (too short to be a ramp, or not on the roof: again, with the way shown plainer)
       this.fails++;
       this.pts = [];
-      this.ui.hint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>', 'Draw a ramp to jump across<small dir="ltr">A longer line: from the dot by the car, along the roof, to the edge</small>'));
+      this.ui.plainHint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>', 'Draw a ramp to jump across<small dir="ltr">A longer line: from the dot by the car, along the roof, to the edge</small>'));
       this.game.audio.play('meh', 0.4);
       return;
     }
@@ -1031,7 +1031,8 @@ export class Flight {
     this.t = 0;
     const F = (this.F = P.frame || NOFRAME);
     const lipY = P.roofY + 0.3 + P.h;
-    this.sp = clamp(Math.abs(car.speed || 0) * 0.95, 20, 26);
+    // (round 17, the player's word: off the lip as it was - fast and up, at the top a second later)
+    this.sp = clamp(Math.abs(car.speed || 0) * 1.25, 26, 34);
     const [fx, fz] = F.toLocal(Math.sin(car.yaw), Math.cos(car.yaw));
     const L = Math.hypot(fx, fz) || 1;
     this.dir = [fx / L, fz / L];
@@ -1041,10 +1042,10 @@ export class Flight {
     this.y0 = Math.max(car.pos.y, lipY);
     this.y = this.y0;
     this.dist = 0;
-    // (up high in a film's slow arc first; fall(): as things fall)
-    this.vy = 16;
+    // (up, and over the top of it a second off the lip - the title there; fall(): as things fall)
+    this.vy = 12.5;
     this.vyNow = this.vy;
-    this.g = 8;
+    this.g = 12;
     this.drag = 0.28;
     this.apexT = this.vy / this.g;
     const [wx, wz] = F.toWorld(this.dir[0], this.dir[1]);

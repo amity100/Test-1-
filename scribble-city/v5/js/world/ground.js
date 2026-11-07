@@ -150,6 +150,10 @@ export function buildGround(ctx) {
     // the land under the north end's blocks, and under the mainland (world/mainland/ground.js)
     plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, NORTH_SHORE, ZN - 40, -0.02);
     plane(M.land, PAGE.x0, -650, PAGE.z0, 642, -0.5);
+    // (round 17, the player's word: bits of the road see-through, 'something yellow under it' - the
+    // desk under the page, thirty metres down, wherever a seam of the street was open: the land under
+    // the city's own blocks and streets too, a little under them)
+    plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, ZN - 40, ZS + 4, -0.25);
   } else {
     plane(M.water, WATER_X - 6, WATER_X + 3000, -3200, 2400, -0.8);
     plane(M.water, -2600, WATER_X - 6, ZS + 40, 2400, -0.8);
@@ -157,6 +161,8 @@ export function buildGround(ctx) {
     // the land: north of the city (up to the beach), and downtown across the bay
     plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, -3200, ZN - 40, -0.02);
     plane(M.land, -2600, -650, -3200, ZS + 40, -0.02);
+    // (round 17: and under the city's own blocks and streets, a little under them)
+    plane(M.land, WEST_EDGE - 30, PARK_X1 + 0.5, ZN - 40, ZS + 4, -0.25);
   }
   // the beach at the south end (and round the corner to the ocean's)
   slab(ctx, M.sand, WEST_EDGE - 30, STREET_X1, ZS + 4, ZS + 40, -0.6, 0.12, 6);
