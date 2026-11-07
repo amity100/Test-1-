@@ -571,9 +571,14 @@ export class Ramp {
     const t = this.t;
     const pen = this.pen;
     if (!pen) return;
-    // each line as far as the point has gone
+    // (round 18, the player's word: 'the game makes a ramp inside the ramp' - the pencil's glowing
+    // lines stood on round the steel growing out of them, a second ramp, its legs between the steel's.
+    // Now they go into it: drawn back along themselves in the moment the steel comes up, and gone)
+    const into = clamp((t - this.SK) / 0.45, 0, 1);
+    if (this.sketch) this.sketch.visible = into < 1;
+    // each line as far as the point has gone (and, the drawing done, less and less of it)
     for (const s of this.strokes) {
-      const k = clamp((t - s.t0) / (s.t1 - s.t0), 0, 1);
+      const k = clamp((t - s.t0) / (s.t1 - s.t0), 0, 1) * (1 - into);
       if (k === s.shown) continue;
       s.shown = k;
       for (const [m, n] of s.meshes) m.geometry.setDrawRange(0, Math.floor((n * k) / 3) * 3);

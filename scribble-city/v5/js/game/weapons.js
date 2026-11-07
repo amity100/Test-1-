@@ -939,10 +939,14 @@ export class Weapons {
     // with the pen keeps it: game/minigames)
     const mg = this.game.minigames;
     const playing = !!(mg && mg.isOpen && mg.worldMode && !(mg.world && mg.world.pen));
+    // (round 18, the player's word: 'don't show him holding a pencil, it's just weird' - till he
+    // knows its eraser (game.canErase) the pencil is only the pen he draws with, Q: in no hand)
+    const bare = !this.game.canErase;
     for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (!s.model || !s.model.group) continue;
-      s.model.group.visible = drawing ? i === 0 : i === this.index && (p.mode === 'foot' || this.shootOut) && !this.game.inBar && !s.out && !playing;
+      const hidden = bare && s.def && s.def.id === 'pencil';
+      s.model.group.visible = drawing ? i === 0 : i === this.index && !hidden && (p.mode === 'foot' || this.shootOut) && !this.game.inBar && !s.out && !playing;
     }
     const fig = p.fig;
     const j = fig.j;
@@ -965,14 +969,13 @@ export class Weapons {
       dir.normalize();
       // idle: rests diagonally, the business end up and out
       if (this.swingT < 0) dir.lerp(_w.set(fig.forward.x * 0.35, 0.85, fig.forward.z * 0.35).addScaledVector(fig.right, 0.25), 0.7).normalize();
-      // (the pencil, in his fist - pencilGrip: while he does not know yet that its other end rubs
-      // things out - game.canErase - its point the business end, at rest ahead of him and a little
-      // up, held by the eraser's end; given the eraser, its eraser end, up and out as before, held
-      // near the point. In a blow the business end leads, up off his arm's line)
+      // (the pencil, in his fist - pencilGrip: given the eraser, its eraser end up and out, held near
+      // the point; in a blow the eraser leads, up off his arm's line)
       if (def.id === 'pencil') {
-        const erase = !!this.game.canErase;
-        const want = this.swingT >= 0 ? _w.copy(dir).add(_UP) : erase ? _w.copy(dir) : _w.copy(fig.forward).addScaledVector(_UP, 0.42).addScaledVector(fig.right, 0.1);
-        m = erase ? pencilGrip(p, want, 0.02, true) : pencilGrip(p, want);
+        // (round 18: not in his hand at all till he knows its eraser - the hand as it hangs)
+        if (!this.game.canErase) return;
+        const want = this.swingT >= 0 ? _w.copy(dir).add(_UP) : _w.copy(dir);
+        m = pencilGrip(p, want, 0.02, true);
       } else m = p.holdMatrix(dir);
       if (def.block && !def.knack) {
         // the shield: held up in front of the chest, its face to the front (pushed out for a bash)
