@@ -1248,7 +1248,8 @@ export class Game {
       if (av && !av.materializing) {
         this.autoEnterV = null;
         const p = this.player;
-        if (!av.dead && p.mode === 'foot' && !p.inVehicle && Math.hypot(av.pos.x - p.pos.x, av.pos.z - p.pos.z) < 9) this.enterVehicle(av);
+        const lockd = !!(this.prologue && this.prologue.carOnly && !this.prologue.mayBoard(av));
+        if (!av.dead && !lockd && p.mode === 'foot' && !p.inVehicle && Math.hypot(av.pos.x - p.pos.x, av.pos.z - p.pos.z) < 9) this.enterVehicle(av);
       }
       this.weapons.update(dt);
       if (this.arsenal) this.arsenal.update(dt);
@@ -1939,8 +1940,12 @@ export class Game {
   // what E would get you into right now: { kind, target, label }
   enterTarget() {
     const p = this.player;
+    // (round 18, the player's word: on the prologue's way to his own car the game lets him into no
+    // other - game/prologue/director.js carOnly, mayBoard)
+    const pro = this.prologue && this.prologue.carOnly ? this.prologue : null;
     const v = this.vehicles.nearest(p.pos, 3.2);
-    if (v) return { kind: 'vehicle', target: v, label: v.label || BLUEPRINTS[v.kind].name };
+    if (v && (!pro || pro.mayBoard(v))) return { kind: 'vehicle', target: v, label: v.label || BLUEPRINTS[v.kind].name };
+    if (pro) return null;
     const c = this.traffic.nearestDoor(p.pos, 1.7);
     if (c && !c.wrecked) {
       const s = c.spec;
@@ -1953,6 +1958,12 @@ export class Game {
     const t = this.enterTarget();
     // (intelligence round) nothing to get into: somebody right in front of you - a hello
     if (!t) {
+      // (round 18: a car by him he may not take now - the prologue says why)
+      const no = this.prologue && this.prologue.notYours ? this.prologue.notYours() : null;
+      if (no) {
+        this.hud.toast(no, 'info', 2.6);
+        return;
+      }
       if (this.voices && this.voices.hello) this.voices.hello();
       return;
     }
@@ -2537,7 +2548,9 @@ export class Game {
       prompt = touch ? gt.label : `E — ${gt.label}`;
     } else if (p.mode === 'foot') {
       const et = this.enterTarget();
-      if (et) {
+      const notYours = !et && this.prologue && this.prologue.notYours ? this.prologue.notYours() : null;
+      if (notYours) prompt = notYours;
+      else if (et) {
         enter = true;
         const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? (this.gadgets && this.gadgets.key ? 'לפתוח במפתח את ה' : 'לגנוב את ה') : 'להיכנס ל';
         // (onto the new rides, ROADMAP 4.8: you get on them)
