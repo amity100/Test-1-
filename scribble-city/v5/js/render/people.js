@@ -842,6 +842,13 @@ function faceOf(fig, F, t, cam) {
     st.toPitch = r < 0.55 ? 0 : (Math.random() - 0.6) * 0.25;
   }
   if (mood === 'dead') st.toYaw = st.toPitch = 0;
+  // (round 17, the player's word: Lily's eyes white, or black, now and then - looking up at her father
+  // or at the wheel, the eyes alone turned so far that the iris was all under the upper lid, and the
+  // white of the eye was what was left - lit, white; in its shade, a black oval. As far as eyes turn
+  // with the iris still in the opening: up 0.18, down 0.28, to the side 0.42 - the head does the rest,
+  // game/doodle.js turnHead)
+  st.toYaw = Math.max(-0.42, Math.min(0.42, st.toYaw));
+  st.toPitch = Math.max(-0.28, Math.min(0.18, st.toPitch));
   // (the eyes jump to where they look - quick, as eyes do; the rig's are where they are)
   const k = rig ? 1 : Math.min(1, dt * 22);
   st.yaw += (st.toYaw - st.yaw) * k;
@@ -1383,6 +1390,10 @@ export class PersonRenderer {
     // (on a phone too, since ROADMAP 14.9 - a few at a time: begin)
     if (PORTRAIT_MODE === 'off' || !portraitKind(k) || fig.dead > 0 || fig.parts.head < 0.5 || fig.__noPortrait) return null;
     let P0 = this.portraits && this.portraits.get(k);
+    // (round 17, the player's word: Lily's eyes and mouth black now and then) a held face's portrait -
+    // the story's own people, render/people.js heldFace - is theirs alone: nobody else of the kind takes
+    // it while they are off the screen, to be handed back over frames of the city's way of drawing
+    if (P0 && P0.keeper && P0.keeper !== fig && !heldFace(fig)) return null;
     const mine = !!P0 && P0.owner === fig;
     if (mine) P0.ownerSeen = true;
     // (the face's height on the screen, in its pixels - from how far the head is, not the feet: near,
@@ -1400,6 +1411,7 @@ export class PersonRenderer {
     // (going out: still theirs while it fades, unless somebody else of the kind comes near)
     if (!inRange && !(mine && P0.fade > 0.01)) return null;
     const P = P0 || this.makePortrait(k);
+    if (heldFace(fig)) P.keeper = fig;
     // (somebody near whose face is still being made, or painted: theirs next)
     if (!P.ready) {
       for (const Q of [this.portraitQueue, this.paintQueue]) {
@@ -1415,6 +1427,15 @@ export class PersonRenderer {
     if (d < P.nextD) {
       P.nextD = d;
       P.next = fig;
+    }
+    // (round 17: a held face's own at once, the moment it is drawn again - after a cut, back on the
+    // screen - never a frame of the city's way first)
+    if (P.ready && P.owner !== fig && heldFace(fig)) {
+      P.owner = fig;
+      P.fresh = true;
+      P.handing = false;
+      P.fade = 1;
+      P.fadeTo = 1;
     }
     if (!(P.ready && P.owner === fig)) return null;
     // (a phone's: only the nearest few - P.allow, begin; the one already showing fades out)
@@ -1439,7 +1460,8 @@ export class PersonRenderer {
     if (this.touch && this.portraits.size >= PORTRAIT_PHONE_KEEP) {
       let old = null;
       for (const Q of this.portraits.values()) {
-        if (!Q.ready || Q.owner || Q.next || Q === this.painting || Q.k === 2) continue;
+        // (round 17: nor a held face's - Lily's - ever: made again, it is the city's way for seconds)
+        if (!Q.ready || Q.owner || Q.next || Q === this.painting || Q.k === 2 || Q.keeper) continue;
         if (!old || (Q.usedAt || 0) < (old.usedAt || 0)) old = Q;
       }
       if (old) {

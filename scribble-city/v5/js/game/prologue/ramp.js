@@ -1031,7 +1031,8 @@ export class Flight {
     this.t = 0;
     const F = (this.F = P.frame || NOFRAME);
     const lipY = P.roofY + 0.3 + P.h;
-    this.sp = clamp(Math.abs(car.speed || 0) * 0.95, 20, 26);
+    // (round 17, the player's word: off the lip as it was - fast and up, at the top a second later)
+    this.sp = clamp(Math.abs(car.speed || 0) * 1.25, 26, 34);
     const [fx, fz] = F.toLocal(Math.sin(car.yaw), Math.cos(car.yaw));
     const L = Math.hypot(fx, fz) || 1;
     this.dir = [fx / L, fz / L];
@@ -1041,10 +1042,10 @@ export class Flight {
     this.y0 = Math.max(car.pos.y, lipY);
     this.y = this.y0;
     this.dist = 0;
-    // (up high in a film's slow arc first; fall(): as things fall)
-    this.vy = 16;
+    // (up, and over the top of it a second off the lip - the title there; fall(): as things fall)
+    this.vy = 12.5;
     this.vyNow = this.vy;
-    this.g = 8;
+    this.g = 12;
     this.drag = 0.28;
     this.apexT = this.vy / this.g;
     const [wx, wz] = F.toWorld(this.dir[0], this.dir[1]);

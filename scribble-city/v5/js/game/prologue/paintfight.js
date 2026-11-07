@@ -526,8 +526,25 @@ export class PaintFight {
     b.mesh.visible = true;
     // (round 16, the player's word: heard as shots - the rifle's crack, as near as it is - and seen:
     // the muzzle's flash)
-    g.audio.play('paintrifle', Math.max(0.3, Math.min(1, 12 / Math.max(4, d))));
+    this.bang(d);
     this.flash(from, e.color);
+  }
+
+  // (round 17, the player's word: 'you do not really hear the shots') a rifle's report, recorded
+  // (audio/prologue/sfx/shot_a, shot_b - a crack and the concrete's echo; now and then a quick
+  // three), a little higher or lower each time, loud as near as it is; the music down under it for a
+  // moment so that it cuts through; and the paint's own hiss after it. Not yet loaded: the hiss alone,
+  // louder
+  bang(d) {
+    const g = this.g;
+    const P = this.P;
+    const k = Math.max(0.5, Math.min(1, 18 / Math.max(4, d)));
+    const s = P.sample ? P.sample(Math.random() < 0.75 ? 'sfx/shot_a.mp3' : 'sfx/shot_b.mp3', 1.25 * k) : null;
+    if (s) {
+      s.playbackRate.value = 0.9 + Math.random() * 0.2;
+      if (P.score && P.score.under) P.score.under(0.18, 0.55);
+      g.audio.play('paintrifle', 0.45 * k);
+    } else g.audio.play('paintrifle', Math.min(1, 1.4 * k));
   }
 
   fly(dt, me) {

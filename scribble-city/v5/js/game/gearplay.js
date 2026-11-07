@@ -1,5 +1,5 @@
 import { ITEMS, OPEN_ORDER, CATS, CAT_ORDER } from './itemcat.js';
-import { EARLY_GEAR, gearGone, isEarly } from './drawlock.js';
+import { EARLY_GEAR, gearGone, isEarly, storyGift } from './drawlock.js';
 
 // (ROADMAP 11.28) Not everything open: the things of the pen come as the game goes on.
 //
@@ -49,6 +49,7 @@ export class GearPlay {
   isOpen(id) {
     // (round 15, game/drawlock.js: the water kit and the flying things gone from the story; a new
     // player's car, till the jump off the roof: the machine gun, the turbo, the armour)
+    if (storyGift(this.game, id)) return true;
     if (gearGone(this.game, id)) return false;
     if (!this.lab && isEarly(this.game)) return EARLY_GEAR.includes(id);
     return this.all() || this.state.open.includes(id);
