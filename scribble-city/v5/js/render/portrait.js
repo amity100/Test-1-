@@ -947,6 +947,15 @@ export class Portrait {
       set('pucker', Math.max(0, -ew[7]) * 0.9);
       const P = mood && MOOD[mood] ? EXPRESSIONS[MOOD[mood]] : null;
       if (P) for (const [name, v] of Object.entries(P)) if (name !== 'jaw') set(name, v);
+      // (round 16, the player's word: the people talked without their lips moving - the lips with the
+      // words, not the jaw alone: the lower lip drops with it, the upper comes a little off the teeth
+      // on the open sounds, and on the closed ones (an m, a b, a p) the lips press together)
+      if (say) {
+        const j = ew[0];
+        set('au16', j * 0.6);
+        set('au10', j * 0.32);
+        if (j < 0.07) set('au23', 0.4);
+      }
       // (a word shouted: the upper lip off the teeth, the brows down, the nostrils wide)
       if (say === 'alarm') {
         set('au10', 0.45);

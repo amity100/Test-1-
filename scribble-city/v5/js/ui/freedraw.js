@@ -264,6 +264,7 @@ export class FreeDraw {
     this.el.innerHTML = `<canvas id="fd-air"></canvas>
       <div class="fd-cats" id="fd-cats"><span class="fd-cats-t">מה מציירים?</span>${cats}</div>
       <div class="fd-leg" id="fd-leg"></div>
+      <div class="fd-ref" id="fd-ref"></div>
       <div class="fd-zone" id="fd-zone-a"></div><div class="fd-zone" id="fd-zone-b"></div>
       <div class="fd-hint" id="fd-hint"></div>
       <div class="fd-signs hidden" id="fd-signs"><b>סימנים מהירים</b>
@@ -340,6 +341,7 @@ export class FreeDraw {
     this.colorBtn = $('fd-color');
     this.catsEl = $('fd-cats');
     this.legEl = $('fd-leg');
+    this.refEl = $('fd-ref');
     this.partsEl = $('fd-parts');
     this.pmenuEl = $('fd-pmenu');
     this.cardEl = $('fd-card');
@@ -461,6 +463,13 @@ export class FreeDraw {
     press($('fd-album'), () => {
       this.close();
       game.openDraw();
+    });
+    // (round 16: the picture of the one being drawn - its ✕ lets it go)
+    press($('fd-ref'), (e) => {
+      if (!e.target.closest('[data-x]')) return;
+      this.choose(null);
+      this.legSig = '';
+      this.showLegend();
     });
     press(this.catsEl, (e) => {
       const b = e.target.closest('.fd-cat');
@@ -1663,8 +1672,10 @@ export class FreeDraw {
     document.body.classList.toggle('fd-early', early);
     if (!on) {
       el.innerHTML = '';
+      this.showRef(null);
       return;
     }
+    if (!early) this.showRef(this.force && BLUEPRINTS[this.force] && al && !al.known(this.force) ? this.force : null);
     if (early) {
       el.innerHTML = this.earlyLegend(lit);
       return;
@@ -1876,6 +1887,19 @@ export class FreeDraw {
     return true;
   }
 
+  // (round 16) the one being drawn, small at the top of the screen: its picture to draw from, and a
+  // way to let it go
+  showRef(id) {
+    const el = this.refEl;
+    if (!el) return;
+    const bp = id && BLUEPRINTS[id] ? BLUEPRINTS[id] : null;
+    const sig = bp ? bp.id : '';
+    if (sig === this.refSig) return;
+    this.refSig = sig;
+    el.classList.toggle('on', !!bp);
+    el.innerHTML = bp ? `<div class="fe-big">${bpSvg(bp)}</div><div class="fe-what"><b>${bp.name}</b><span>${this.game.touch ? 'ציירו אותו, ובסוף ✓' : 'ציירו אותו, ובסוף Q'}</span></div><button class="fe-x" data-x="1" aria-label="משהו אחר">✕</button>` : '';
+  }
+
   // (round 15, game/drawlock.js) the short list, in front of the face: a few weapons, a few rides -
   // the one picked big, to be drawn from; the ones drawn already, made with a touch (or a number)
   earlyLegend(lit) {
@@ -1890,13 +1914,12 @@ export class FreeDraw {
       const cls = ['fd-it', lit === id ? 'on' : '', pick === id ? 'pick' : '', k ? 'known' : 'learn'].filter(Boolean).join(' ');
       return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${k ? '✓ שלכם' : '✎ לצייר'}</i></div>`;
     };
-    if (pick) {
-      const bp = BLUEPRINTS[pick];
-      return `<div class="fe-ref"><div class="fe-big">${bpSvg(bp)}</div><div class="fe-what"><b>${bp.name}</b><span>ציירו אותו באוויר, כמו בציור</span><span>בסוף ${touch ? '✓' : 'Q'} — והוא נוצר, ונשמר אצלכם</span></div><button class="fe-x" data-x="1">✕ משהו אחר</button></div>`;
-    }
+    // (round 16, the player's word: the list took the screen, no room left to draw - a strip over the
+    // pen's tools; the one being drawn a small picture at the top - showRef)
+    this.showRef(pick);
     const rows = Object.entries(EARLY_KIT).map(([sh, ids]) => `<div class="fe-row"><span class="fe-sh">${SHELF_NAME[sh]}</span>${ids.map(cell).join('')}</div>`).join('');
-    const say = touch ? 'נגיעה בציור — ומציירים אותו באוויר. מה שכבר ציירתם: נגיעה, והוא כאן' : 'לחיצה על ציור — ומציירים אותו באוויר · מה שכבר ציירתם: לחיצה או המספר, והוא כאן';
-    return `<div class="fe-top"><b>מה מציירים?</b><span>${say}</span></div><div class="fe-rows">${rows}</div><div class="fe-more">🔒 עוד ציורים ייפתחו בהמשך</div>`;
+    const say = touch ? 'נגיעה בציור ומציירים אותו · או סתם ציירו - המשחק יזהה' : 'לחיצה על ציור ומציירים אותו · או סתם ציירו - המשחק יזהה · מה שכבר ציירתם: המספר שלו';
+    return `<div class="fe-top"><b>מה מציירים?</b><span>${say}</span><em>🔒 עוד ייפתחו בהמשך</em></div><div class="fe-rows">${rows}</div>`;
   }
 
   // made from the catalog: the album's own way of making a drawn blueprint real (game/game.js

@@ -653,6 +653,22 @@ export class Audio {
         this.tone('sine', 150, 60, 0.12, 0.35 * v);
         this.hiss(0.5, 0.13 * v, 900, 0.6, 'lowpass', 0.07, 180);
         break;
+      // (round 16, the player's word: their shots heard as shots - a paint rifle's crack, its thump, the
+      // air of it and the car park's echo, hard off the concrete)
+      case 'paintrifle':
+        this.hiss(0.05, 0.75 * v, 2300, 0.8, 'bandpass', 0, 800);
+        this.tone('sine', 130, 48, 0.15, 0.5 * v);
+        this.hiss(0.09, 0.3 * v, 1500, 1.2, 'bandpass', 0.01, 600);
+        this.hiss(0.7, 0.16 * v, 800, 0.6, 'lowpass', 0.06, 150);
+        this.hiss(0.35, 0.07 * v, 1100, 0.8, 'bandpass', 0.24, 300);
+        break;
+      // (round 16: the paint eating into a wall - a hiss and a crackle, and the drip)
+      case 'sizzle':
+        this.hiss(0.9, 0.2 * v, 5200, 0.7, 'highpass');
+        this.hiss(0.6, 0.12 * v, 2400, 1.5, 'bandpass', 0.05, 1400);
+        for (let i = 0; i < 6; i++) this.hiss(0.025, 0.14 * v, 3000 + Math.random() * 2500, 2.5, 'bandpass', 0.05 + Math.random() * 0.7);
+        this.tone('sine', 900, 300, 0.12, 0.05 * v, 0.55);
+        break;
       // (a bullet off the concrete, close)
       case 'ricochet':
         this.tone('sine', 2600 + Math.random() * 900, 900, 0.2, 0.06 * v);

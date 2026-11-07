@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Kit, itemMats, linC } from '../items.js';
 import { surfaceVariant } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
+import { groundHeight } from '../../world/layout.js';
+import { tr } from '../../core/lang.js';
 
 // (v5, ROADMAP 18) The first drawing: a ramp off the roof.
 //
@@ -62,7 +64,8 @@ export class RampDraw {
     // (the mouse let go of the game's camera: it draws now - game/game.js keeps it free while the
     // sheet is up, and does not take it for the pause)
     if (!this.game.touch) this.game.input.releaseLock();
-    this.ui.hint('Draw a ramp to jump across<small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>');
+    // (round 16: in the language chosen - core/lang.js)
+    this.ui.hint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>① לחצו על הנקודה ליד המכונית ② גררו קו לאורך הגג עד הקצה ③ עזבו</small>', 'Draw a ramp to jump across<small dir="ltr">① Press the dot by the car ② Drag a line along the roof to the edge ③ Let go</small>'));
     this.t = 0;
     this.drawing = false;
     const P = (e) => [e.clientX * dpr, e.clientY * dpr];
@@ -174,7 +177,7 @@ export class RampDraw {
       // (too short to be a ramp, or not on the roof: again, with the way shown plainer)
       this.fails++;
       this.pts = [];
-      this.ui.hint('Draw a ramp to jump across<small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>');
+      this.ui.hint(tr('<span dir="rtl">ציירו רמפה כדי לקפוץ לגג שממול</span><small>קו ארוך יותר: מהנקודה ליד המכונית, לאורך הגג, עד הקצה</small>', 'Draw a ramp to jump across<small dir="ltr">A longer line: from the dot by the car, along the roof, to the edge</small>'));
       this.game.audio.play('meh', 0.4);
       return;
     }
@@ -1016,9 +1019,10 @@ export class Jump {
 
 // ------------------------------------------------------------------ the flight (round 12)
 // Off the lip, the car is flown out into the open - far and high, nothing across the street to come
-// down on: as fast as it came up (and a little more), up into an arc gravity brings round slowly - the
-// prologue slows the time at its top (its dt here is the slowed one), and holds it there while a rotor
-// is drawn on it. With the rotor on, release(): the car's own again, held in the air by it
+// down on. (round 16, the player's word) Up and out for three and a half seconds of it at the time's
+// own pace; then the title, the time all but stopped (the prologue's slowed dt here); then fall():
+// the earth's pull, as any car falls, its way on fading in the air - and just before the ground the
+// rotor is drawn on it. With the rotor on, release(): the car's own again, held in the air by it
 // (game/fuse.js air) where it is.
 export class Flight {
   constructor(game, car, P) {
@@ -1027,7 +1031,7 @@ export class Flight {
     this.t = 0;
     const F = (this.F = P.frame || NOFRAME);
     const lipY = P.roofY + 0.3 + P.h;
-    this.sp = clamp(Math.abs(car.speed || 0) * 1.25, 26, 34);
+    this.sp = clamp(Math.abs(car.speed || 0) * 0.95, 20, 26);
     const [fx, fz] = F.toLocal(Math.sin(car.yaw), Math.cos(car.yaw));
     const L = Math.hypot(fx, fz) || 1;
     this.dir = [fx / L, fz / L];
@@ -1035,12 +1039,18 @@ export class Flight {
     this.x0 = px;
     this.z0 = pz;
     this.y0 = Math.max(car.pos.y, lipY);
-    this.vy = 12.5;
-    this.g = 12;
+    this.y = this.y0;
+    this.dist = 0;
+    // (up high in a film's slow arc first; fall(): as things fall)
+    this.vy = 16;
+    this.vyNow = this.vy;
+    this.g = 8;
+    this.drag = 0.28;
     this.apexT = this.vy / this.g;
     const [wx, wz] = F.toWorld(this.dir[0], this.dir[1]);
     this.wdir = [wx, wz];
     this.done = false;
+    this.falling = false;
     car.air = true;
     car.script = (dt) => this.step(dt);
   }
@@ -1049,20 +1059,41 @@ export class Flight {
     return this.t >= this.apexT;
   }
 
+  // how high it is over the ground under it (m)
+  get alt() {
+    const v = this.car;
+    return v.pos.y - groundHeight(v.pos.x, v.pos.z);
+  }
+
+  // (round 16: after the title - the earth's pull, as any car falls)
+  fall() {
+    this.falling = true;
+    this.g = 9.8;
+  }
+
   step(dt) {
     const v = this.car;
     this.t += dt;
-    const t = this.t;
-    const [wx, wz] = this.F.toWorld(this.x0 + this.dir[0] * this.sp * t, this.z0 + this.dir[1] * this.sp * t);
+    this.vyNow -= this.g * dt;
+    this.y += this.vyNow * dt;
+    // (its way on fading in the air: it comes down not far past the roof across the street)
+    this.sp *= Math.exp(-this.drag * dt);
+    this.dist += this.sp * dt;
+    const [wx, wz] = this.F.toWorld(this.x0 + this.dir[0] * this.dist, this.z0 + this.dir[1] * this.dist);
     v.pos.x = wx;
     v.pos.z = wz;
-    v.pos.y = this.y0 + this.vy * t - 0.5 * this.g * t * t;
-    const vyNow = this.vy - this.g * t;
-    // (its nose with the arc)
-    v.bodyPitch = clamp(Math.atan2(vyNow, this.sp) * 0.55, -0.4, 0.3);
+    // (never into the ground: the rotor is drawn before it gets there)
+    const gy = groundHeight(wx, wz) + 0.7;
+    if (this.y < gy) {
+      this.y = gy;
+      this.vyNow = 0;
+    }
+    v.pos.y = this.y;
+    // (its nose with the arc; falling, it tips over forward)
+    v.bodyPitch = clamp(Math.atan2(this.vyNow, Math.max(4, this.sp)) * 0.55, -0.5, 0.3);
     v.vx = this.wdir[0] * this.sp;
     v.vz = this.wdir[1] * this.sp;
-    v.vy = vyNow;
+    v.vy = this.vyNow;
     v.speed = this.sp;
     v.speedAbs = this.sp;
   }

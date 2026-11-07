@@ -53,6 +53,32 @@ function protoSplat(color, seed) {
   }
   return K.build({ seed: 0.6 });
 }
+// (round 16, the player's word: the paint melts the wall) where it eats in: a dark crater with the
+// paint's glow at its rim (flat on y = 0, as a splat); a drip of it running down (hanging from y = 0)
+function protoCrater(color) {
+  const K = new Kit();
+  const M = itemMats();
+  K.sphere(M.glow, 0.36, 0, 0, 0, linC(...color), 1, 0.05, 1, 12);
+  K.sphere(M.paint, 0.3, 0, 0.006, 0, linC(0.07, 0.045, 0.05), 1, 0.05, 1, 12);
+  K.sphere(M.paint, 0.17, 0.02, 0.011, -0.03, linC(0.02, 0.012, 0.016), 1, 0.05, 1, 10);
+  return K.build({ seed: 0.4 });
+}
+function protoDrip(color) {
+  const K = new Kit();
+  const M = itemMats();
+  K.box(M.paint, -0.022, -1, -0.012, 0.022, 0, 0.012, linC(...color));
+  K.sphere(M.paint, 0.034, 0, -1, 0, linC(...color), 1, 1.3, 1, 8);
+  return K.build({ seed: 0.3 });
+}
+function protoPuff() {
+  const K = new Kit();
+  const M = itemMats();
+  K.sphere(M.glow, 0.09, 0, 0, 0, linC(0.92, 0.9, 0.86), 1, 1, 1, 8);
+  return K.build({ seed: 0.2 });
+}
+const UP = new THREE.Vector3(0, 1, 0);
+const MELTS = 14;
+
 const prep = (g) => {
   for (const m of g.children) {
     m.userData.noShadow = true;
@@ -73,6 +99,15 @@ export class PaintFight {
     this.hits = 0;
     this.ballProto = PAINT.map((c) => protoBall(c));
     this.splatProto = PAINT.map((c, i) => protoSplat(c, 11 + i * 7));
+    this.craterProto = PAINT.map((c) => protoCrater(c));
+    this.dripProto = PAINT.map((c) => protoDrip(c));
+    this.puffProto = protoPuff();
+    this.melts = [];
+    this.flashes = [];
+    // (round 16, the player's word: the same people every time, seen - the men at the windows: a few
+    // of the gang's own, always the same faces (game/prologue/director.js), each at the window of one
+    // of their cars that is after him, its rifle out)
+    this.shooters = [];
     this.warn = protoBall([1, 0.12, 0.1]);
     this.root = new THREE.Group();
     this.root.name = 'paintfight';
@@ -190,6 +225,167 @@ export class PaintFight {
       }
     }
     this.fly(dt, me);
+    this.placeShooters(me);
+    this.tickMelts(dt);
+  }
+
+  // (round 16) the gang's men at the windows: each of them at the window of one of theirs after him,
+  // the nearest first, towards him, the rifle out; none while it is not on
+  placeShooters(me) {
+    const pool = this.shooters;
+    if (!pool.length) return;
+    const act = me && this.on ? this.enemies.filter((e) => e.mode === 'chase' && e.gun && e.car && !e.car.dead && e.d !== undefined).sort((a, b) => a.d - b.d) : [];
+    for (let i = 0; i < pool.length; i++) {
+      const sh = pool[i];
+      const c = sh.c;
+      if (!c || !c.fig) continue;
+      const e = act[i] || null;
+      if (sh.e && sh.e !== e) sh.e.shooter = null;
+      sh.e = e;
+      if (!e) {
+        if (sh.shown) {
+          c.fig.setVisible(false);
+          c.fig.aim = 0;
+          c.inside = true;
+          sh.shown = false;
+        }
+        continue;
+      }
+      e.shooter = sh;
+      const car = e.car;
+      const fx = Math.sin(car.yaw);
+      const fz = Math.cos(car.yaw);
+      const rx = fz;
+      const rz = -fx;
+      const side = (me.pos.x - car.pos.x) * rx + (me.pos.z - car.pos.z) * rz > 0 ? 1 : -1;
+      const S = car.seatOf ? car.seatOf() : null;
+      const su = S && S.u !== undefined ? S.u : 0.15;
+      const sy = S && S.y !== undefined ? S.y : 0.5;
+      // (half out of the window on his side: the chest, the arms and the head out over the door, the
+      // rest of him in it - standing, sunk to the hips in the car: seated, turned to the window, his
+      // legs would have come out through the door)
+      const out = (car.halfWid || 0.95) * 0.8;
+      void sy;
+      c.pos.set(car.pos.x + fx * su + rx * side * out, (car.pos.y || 0) - 0.3, car.pos.z + fz * su + rz * side * out);
+      c.vel.set(0, 0, 0);
+      c.riding = true;
+      c.noCollide = true;
+      c.inside = false;
+      c.fig.ones = true;
+      c.fig.sit = 0;
+      const yaw = Math.atan2(me.pos.x - c.pos.x, me.pos.z - c.pos.z);
+      c.yaw = yaw;
+      c.faceYaw = yaw;
+      c.fig.aim = 2;
+      c.fig.aimYaw = 0;
+      c.fig.aimPitch = Math.atan2((me.pos.y || 0) + 0.7 - (c.pos.y + 1.1), Math.max(1, e.d));
+      c.fig.lookAt = me.pos;
+      if (!sh.shown) {
+        c.fig.setVisible(true);
+        sh.shown = true;
+      }
+      // the rifle in his hands, along his aim: drawn as a comic draws one - black, its paint tank on
+      // top in the gang's colour (game/figure.js lines)
+      const fr = this.g.figures;
+      const j = c.fig.j;
+      const d = c.fig.aimDir;
+      if (fr && j && j.handR && d && j.handR.lengthSq() > 0) {
+        const h = j.handR;
+        const id = 940 + (c.id || 0) * 4;
+        const col = PAINT[e.color];
+        fr.lineXYZ(h.x - d.x * 0.22, h.y - d.y * 0.22 - 0.02, h.z - d.z * 0.22, h.x + d.x * 0.62, h.y + d.y * 0.62 + 0.02, h.z + d.z * 0.62, [0.05, 0.05, 0.07], 13, id, 1, 0.003, 0);
+        fr.lineXYZ(h.x + d.x * 0.05, h.y + d.y * 0.05 + 0.08, h.z + d.z * 0.05, h.x + d.x * 0.3, h.y + d.y * 0.3 + 0.09, h.z + d.z * 0.3, col, 11, id + 1, 1, 0.003, 0);
+        fr.lineXYZ(h.x + d.x * 0.62, h.y + d.y * 0.62 + 0.02, h.z + d.z * 0.62, h.x + d.x * 0.7, h.y + d.y * 0.7 + 0.02, h.z + d.z * 0.7, col, 9, id + 2, 1, 0.003, 0);
+        sh.tip = sh.tip || new THREE.Vector3();
+        sh.tip.set(h.x + d.x * 0.72, h.y + d.y * 0.72 + 0.02, h.z + d.z * 0.72);
+      } else if (sh.tip) sh.tip = null;
+    }
+  }
+
+  // (round 16) the muzzle's flash: a burst of the paint's glow, gone in a blink
+  flash(p, color) {
+    const m = prep(this.ballProto[color].clone());
+    m.position.copy(p);
+    m.scale.setScalar(2.6);
+    this.root.add(m);
+    this.flashes.push({ m, t: 0 });
+  }
+
+  // (round 16, the player's word: the paint melts the wall) where it hits a wall: the paint on it, and
+  // under it the wall eaten in - dark, its rim aglow in the paint's colour - running down in drips,
+  // smoking, hissing
+  wallMelt(h, color) {
+    const g = this.g;
+    const n = new THREE.Vector3(h.nx, h.ny, h.nz);
+    if (n.lengthSq() < 0.5) return;
+    n.normalize();
+    const p = new THREE.Vector3(h.x, h.y, h.z);
+    const q = new THREE.Quaternion().setFromUnitVectors(UP, n);
+    const crater = prep(this.craterProto[color].clone());
+    crater.quaternion.copy(q);
+    crater.position.copy(p).addScaledVector(n, 0.012);
+    crater.scale.setScalar(0.25);
+    this.root.add(crater);
+    const splat = prep(this.splatProto[color].clone());
+    splat.quaternion.copy(q);
+    splat.position.copy(p).addScaledVector(n, 0.03);
+    splat.scale.setScalar(0.45 + Math.random() * 0.25);
+    this.root.add(splat);
+    const t1 = new THREE.Vector3().crossVectors(n, UP);
+    if (t1.lengthSq() < 1e-4) t1.set(1, 0, 0);
+    t1.normalize();
+    const drips = [];
+    for (let i = 0; i < 4; i++) {
+      const dm = prep(this.dripProto[color].clone());
+      dm.position.copy(p).addScaledVector(n, 0.035).addScaledVector(t1, (Math.random() - 0.5) * 0.5);
+      dm.position.y -= Math.random() * 0.12;
+      dm.scale.set(1, 0.001, 1);
+      this.root.add(dm);
+      drips.push({ m: dm, len: 0.35 + Math.random() * 0.7, k: 0.5 + Math.random() * 0.8 });
+    }
+    const puffs = [];
+    for (let i = 0; i < 3; i++) {
+      const pm = prep(this.puffProto.clone());
+      pm.position.copy(p).addScaledVector(n, 0.12).addScaledVector(t1, (Math.random() - 0.5) * 0.3);
+      this.root.add(pm);
+      puffs.push({ m: pm, v: 0.5 + Math.random() * 0.5, d: Math.random() * 0.4 });
+    }
+    this.melts.push({ crater, splat, drips, puffs, n, t: 0, grow: 0.85 + Math.random() * 0.45 });
+    while (this.melts.length > MELTS) this.dropMelt(this.melts.shift());
+    const me = g.player.pos;
+    const dd = Math.hypot(me.x - p.x, me.z - p.z);
+    if (dd < 40) {
+      g.audio.play('splat', Math.max(0.15, 0.6 - dd / 80));
+      g.audio.play('sizzle', Math.max(0.2, 1 - dd / 40));
+    }
+  }
+
+  dropMelt(o) {
+    for (const m of [o.crater, o.splat, ...o.drips.map((d) => d.m), ...o.puffs.map((q) => q.m)]) this.root.remove(m);
+  }
+
+  tickMelts(dt) {
+    for (const f of this.flashes) {
+      f.t += dt;
+      f.m.scale.setScalar(Math.max(0.01, 2.6 * (1 - f.t / 0.1)));
+    }
+    this.flashes = this.flashes.filter((f) => {
+      if (f.t < 0.1) return true;
+      this.root.remove(f.m);
+      return false;
+    });
+    for (const o of this.melts) {
+      o.t += dt;
+      // (eaten in over a second and a half, the rim cooling after)
+      const k = Math.min(1, o.t / 1.5);
+      o.crater.scale.setScalar(0.25 + (o.grow - 0.25) * (1 - (1 - k) * (1 - k)));
+      for (const d of o.drips) d.m.scale.set(1, Math.max(0.001, d.len * Math.min(1, (o.t * d.k) / 1.6)), 1);
+      for (const q of o.puffs) {
+        const u = Math.max(0, o.t - q.d);
+        q.m.position.y += q.v * dt;
+        q.m.scale.setScalar(Math.max(0.01, (u < 0.3 ? u / 0.3 : Math.max(0, 1 - (u - 0.3) / 1.2)) * (1 + u)));
+      }
+    }
   }
 
   wakeUp(e) {
@@ -257,6 +453,7 @@ export class PaintFight {
 
   // the gun's window: the side of the car towards him
   muzzle(e, me) {
+    if (e.shooter && e.shooter.tip) return _q.copy(e.shooter.tip);
     const c = e.car;
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
@@ -320,20 +517,45 @@ export class PaintFight {
     b.v = _v.clone();
     b.mesh.position.copy(from);
     b.mesh.visible = true;
-    g.audio.play('paint', 0.35);
+    // (round 16, the player's word: heard as shots - the rifle's crack, as near as it is - and seen:
+    // the muzzle's flash)
+    g.audio.play('paintrifle', Math.max(0.3, Math.min(1, 12 / Math.max(4, d))));
+    this.flash(from, e.color);
   }
 
   fly(dt, me) {
+    const col = this.g.world && this.g.world.collision;
     for (const b of this.balls) {
       if (!b.live) continue;
       b.life -= dt;
+      const ox = b.p.x;
+      const oy = b.p.y;
+      const oz = b.p.z;
       b.v.y -= 3 * dt;
       b.p.addScaledVector(b.v, dt);
       b.mesh.position.copy(b.p);
+      // (round 16: seen flying - bigger, drawn out along its way)
+      _v.copy(b.p).add(b.v);
+      b.mesh.lookAt(_v);
+      b.mesh.scale.set(1.7, 1.7, 3.2);
       if (me && this.hitCar(me, b)) {
         b.live = false;
         b.mesh.visible = false;
         continue;
+      }
+      // (round 16, the player's word: into a wall - and the wall melts where it lands)
+      if (col) {
+        const dx = b.p.x - ox;
+        const dy = b.p.y - oy;
+        const dz = b.p.z - oz;
+        const L = Math.hypot(dx, dy, dz);
+        const h = L > 1e-4 ? col.raycast(ox, oy, oz, dx, dy, dz, L) : null;
+        if (h && Math.abs(h.ny || 0) < 0.55) {
+          this.wallMelt(h, b.color);
+          b.live = false;
+          b.mesh.visible = false;
+          continue;
+        }
       }
       const f = PARK.floorAt(b.p.x, b.p.z, b.p.y + 0.4);
       if (b.p.y < f + 0.05) {
@@ -472,6 +694,8 @@ export class PaintFight {
   }
 
   dispose() {
+    for (const o of this.melts) this.dropMelt(o);
+    this.melts = [];
     for (const e of this.enemies.slice()) this.remove(e);
     for (const o of this.carSplats) o.car.group.remove(o.s);
     this.carSplats = [];

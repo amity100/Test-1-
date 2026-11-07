@@ -1461,6 +1461,12 @@ const FILES = {
   // resolves, a clock off the beat, a heart - ElevenLabs, round and round)
   // (round 15: from its loud part, and louder - frightening from the first moment)
   dread: { path: 'music/wheel_dread.mp3', from: 3, a: 2, b: 116, x: 3, gain: 0.95, send: 0.25 },
+  // (round 16, the player's word: one piece from the first sight of the wheel to the car - cute and
+  // very disturbing at once, a psychological thriller's: a sweet detuned music box and glockenspiel
+  // lullaby going round like a stuck memory over a dark low string cluster, a muffled heart, a
+  // whispering pad, tremolo strings at the edges (ElevenLabs) - round and round under it all, the
+  // wheel, the man, the questions, the walk to the car)
+  thriller: { path: 'music/thriller.mp3', from: 0, a: 4, b: 172, x: 3, gain: 0.95, send: 0.25 },
   // (ROADMAP 18.9: the player's word - cute and disturbing at once, a little horror film: a sweet
   // music box that goes out of tune and melts while a dark drone, scraping strings and a heart grow
   // under it - begun under the boy waving from his gondola, cut dead the moment the wheel goes, some
@@ -1560,6 +1566,7 @@ const CUES = {
   wheel: { K: fileOr(Wheel, 'wheel'), lead: 0.05 },
   tense: { K: fileOr(Wheel, 'tense'), lead: 0.05 },
   dread: { K: fileOr(Unease, 'dread'), lead: 0.03 },
+  thriller: { K: fileOr(Unease, 'thriller'), lead: 0.03 },
   unease: { K: fileOr(Unease, 'unease'), lead: 0.03 },
   memory: { K: fileOr(Memory, 'memory'), sting: true },
   surreal: { K: fileOr(Surreal, 'surreal'), lead: 0.05 },

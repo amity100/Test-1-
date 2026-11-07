@@ -1,3 +1,4 @@
+import { lang } from '../../core/lang.js';
 // (v5, ROADMAP 18) What the prologue puts over the picture: the black bars of a film scene, the
 // subtitles (the voices are English; the words under them in the player's language - Hebrew, or
 // English), the objective in the corner (English, the way the game's world speaks), the title card in
@@ -63,10 +64,12 @@ body.fd-open #pl-obj { opacity: 0; }
 #pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%) translateY(-8px); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s, transform 0.4s; letter-spacing: 0.02em; }
 #pl-hint.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 #pl-hint small { display: block; font-size: 0.55em; font-weight: 600; opacity: 0.85; margin-top: 6px; direction: rtl; }
+#pl-hint small[dir=ltr] { direction: ltr; }
 /* (ROADMAP 18.9: the game showing the player round - a card: what to do, and how, its keys as keys) */
 #pl-hint.card { background: linear-gradient(180deg, rgba(24,16,40,0.86), rgba(14,10,26,0.86)); border: 2px solid rgba(255,210,63,0.75); border-radius: 16px; padding: 14px 22px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); text-shadow: none; font-size: clamp(17px, 2.2vw, 26px); min-width: min(78vw, 420px); }
 #pl-hint.card .tag { display: block; font-size: 0.48em; font-weight: 800; letter-spacing: 0.18em; color: #ffd23f; margin-bottom: 4px; }
 #pl-hint.card small { font-size: 0.62em; line-height: 1.7; opacity: 0.95; margin-top: 8px; }
+#pl-hint.card.how.en { direction: ltr; text-align: left; }
 #pl-hint.card.how { direction: rtl; text-align: right; min-width: min(86vw, 470px); max-width: min(92vw, 560px); padding: 14px 22px 16px; }
 #pl-hint.card.how .tag { text-align: right; letter-spacing: 0.04em; font-size: 0.5em; }
 #pl-hint.card.how .t { display: block; font-size: 1.12em; color: #fff; margin-bottom: 4px; }
@@ -185,6 +188,8 @@ export class PrologueUI {
       return;
     }
     el.querySelector('.t').innerHTML = text;
+    // (round 16: a Hebrew objective read right to left)
+    el.style.direction = /[\u0590-\u05ff]/.test(text) ? 'rtl' : 'ltr';
     el.classList.remove('on');
     void el.offsetWidth;
     el.classList.add('on');
@@ -241,7 +246,7 @@ export class PrologueUI {
       this.skipEl.classList.remove('on');
       return;
     }
-    if (!this.skipEl.innerHTML) this.skipEl.innerHTML = 'החזיקו Enter לדילוג <span class="ring"></span>';
+    if (!this.skipEl.innerHTML) this.skipEl.innerHTML = `${lang() === 'en' ? 'Hold Enter to skip' : 'החזיקו Enter לדילוג'} <span class="ring"></span>`;
     this.skipEl.classList.add('on');
     this.skipEl.querySelector('.ring').style.setProperty('--k', `${Math.round(k * 100)}%`);
   }
@@ -255,7 +260,10 @@ export class PrologueUI {
     if (title && typeof title === 'object') {
       const o = title;
       const keys = (k) => String(k).split(' ').map((x) => (/^[A-Za-z0-9]{1,6}$|^(Shift|Space|Esc|Tab)$/.test(x) ? `<kbd>${x}</kbd>` : x)).join(' ');
-      const tag = o.step ? `איך משחקים · שלב ${o.step} מתוך ${o.of}` : o.tag || 'מה עושים עכשיו';
+      const en = lang() === 'en';
+      const tag = o.step ? (en ? `HOW TO PLAY · STEP ${o.step} OF ${o.of}` : `איך משחקים · שלב ${o.step} מתוך ${o.of}`) : o.tag || (en ? 'WHAT NOW' : 'מה עושים עכשיו');
+      // (round 16: an English card reads left to right)
+      this.hintEl.classList.toggle('en', en);
       const lines = (o.lines || []).map(([k, w]) => `<li><span class="k">${keys(k)}</span><span>${w}</span></li>`).join('');
       this.hintEl.classList.add('card', 'how');
       this.hint(`<span class="tag">${tag}</span><b class="t">${o.title}</b>${o.say ? `<div class="say">${o.say}</div>` : ''}${lines ? `<ul>${lines}</ul>` : ''}${o.tip ? `<div class="tip">${o.tip}</div>` : ''}`);

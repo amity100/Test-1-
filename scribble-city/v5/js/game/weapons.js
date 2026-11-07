@@ -865,6 +865,24 @@ export class Weapons {
   // Position held models each frame (called after the figure pose is updated).
   updateModels() {
     const p = this.game.player;
+    // (round 16, the player's word: in the prologue's car, the big pencil he carries the whole game
+    // taken out and held up to draw the ramp - not a little pencil, not his bare hand: the director's
+    // filmPencil gives the way it points, or null while it is not in his hand)
+    if (this.filmPencil) {
+      const dir = this.filmPencil();
+      for (let i = 0; i < this.slots.length; i++) {
+        const s = this.slots[i];
+        if (s.model && s.model.group) s.model.group.visible = i === 0 && !!dir;
+      }
+      const pm = this.slots[0].model;
+      if (dir && pm && pm.group) {
+        pm.group.matrixAutoUpdate = false;
+        pm.group.matrix.copy(p.holdMatrix(dir));
+        pm.group.matrixWorldNeedsUpdate = true;
+        pm.group.updateMatrixWorld(true);
+      }
+      return;
+    }
     const drawing = p.mode === 'draw';
     if (this.off) this.offModel(p, drawing);
     // (at a game in the world - a cabinet, a table, the claw - nothing in the hands; a game drawn

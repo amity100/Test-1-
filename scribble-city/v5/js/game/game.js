@@ -2563,7 +2563,7 @@ export class Game {
         }
       }
     }
-    this.hud.setPrompt(prompt);
+    this.hud.setPrompt(prompt, !!p.inVehicle);
     // (not with ?classic, on a phone: ▼ crouches on foot and dives in the water; ▲ comes up)
     if (this.touch && !this.classic) {
       const v = p.inVehicle;
