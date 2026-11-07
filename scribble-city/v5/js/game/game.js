@@ -1442,6 +1442,9 @@ export class Game {
     this.airdraw.frame(dt);
     // render dynamic figures
     if (dt > 0) {
+      // (the things in his hands put first: his right hand is drawn closed round the pencil as they
+      // put it in it - round 17, fig.grip)
+      this.weapons.updateModels();
       // (riding a bike seen from your own eyes: not your own head in the way)
       if (!this.perf.bench && !(this.hoodCam && player.inVehicle && player.inVehicle.kind === 'bike')) player.draw(this.camera.position);
       // your headlights on the road ahead at night (ROADMAP 4.3)
@@ -1451,7 +1454,6 @@ export class Game {
         const fz = Math.cos(v.yaw);
         flashLight(v.pos.x + fx * 7, (v.pos.y || 0) + 0.9, v.pos.z + fz * 7, 13, HEADLIGHT, 1.9 * Math.min(1, this.daynight.night));
       }
-      this.weapons.updateModels();
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
       this.farCrowd.draw(this.camera.position);

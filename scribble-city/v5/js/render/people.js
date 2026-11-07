@@ -502,6 +502,9 @@ function atW(out, x, y, z) {
   return out.set(_aw.x + (_cR.x * x + _cF.x * z) * S, _aw.y + y * S, _aw.z + (_cR.z * x + _cF.z * z) * S);
 }
 
+// (round 17: his fist's way on from the wrist, round the pencil - drawHero)
+const _gw = new THREE.Vector3();
+
 // a matrix that takes a part hanging down its local -y from a joint at a to b, as thick as k
 function along(a, b, len0, k, side, out = _m) {
   _y.subVectors(a, b);
@@ -974,6 +977,8 @@ export class PersonRenderer {
       // (round 16: the city's people's hands are these too - drawFolk - 16 of them were full in a crowd
       // of thirty, and the rest had none)
       heroHandR: P(HERO.heroHandGeo(false), M.skin, 192),
+      // (round 17: his right hand closed round what he holds - fig.grip, game/weapons.js)
+      heroGripR: P(HERO.heroHandGeo(false, 0.05), M.skin, 8),
       heroHandL: P(HERO.heroHandGeo(true), M.skin, 192),
       heroThigh: P(HERO.heroThighGeo(), M.heroPants, 8),
       heroShin: P(HERO.heroShinGeo(), M.heroPants, 8),
@@ -2145,7 +2150,15 @@ export class PersonRenderer {
       HL.set(ai ? 'foreL' : 'foreR', 'fore', _m);
       _c.subVectors(hd, el).normalize();
       _d.copy(hd).addScaledVector(_c, 0.19 * S);
-      (ai === 0 ? p.heroHandR : p.heroHandL).push(along(hd, _d, 0.19, k, fwd), skin, own, id(), ind);
+      // (round 17: holding the pencil - fig.grip, its way across the fist: game/weapons.js pencilGrip -
+      // the hand closed round it and turned to it)
+      const grip = ai === 0 ? fig.grip : null;
+      if (grip) {
+        // (bent at the wrist to lie square across it, as weapons.js put the pencil in it)
+        _gw.copy(_c).addScaledVector(grip, -_c.dot(grip));
+        if (_gw.lengthSq() > 1e-6) _d.copy(hd).addScaledVector(_gw.normalize(), 0.19 * S);
+      }
+      (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k, grip || fwd), skin, own, id(), ind);
       if (ai === 1) {
         // (a steel watch on a leather strap, just out of the cuff: its face on the back of the wrist)
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
