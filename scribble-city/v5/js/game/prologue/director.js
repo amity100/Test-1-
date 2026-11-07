@@ -3635,43 +3635,20 @@ export class Prologue {
     if (this.comic && this.comic.focus) this.comic.focus(() => this.headJ(P), 1.4, 0.7);
     yield 1.5;
     this.emote(null);
-    // (round 16, the player's word: he takes out the big pencil he carries the whole game - his hand
-    // back over his shoulder for it, and up with it, ready at the windscreen: seen from outside his
-    // open window. It stays in his hand while the player draws - the line is his)
-    {
-      const W = g.weapons;
-      const fig = P.fig;
-      const hand = new THREE.Vector3();
-      const dir = new THREE.Vector3();
-      let got = false;
-      const St = car.seatOf ? car.seatOf() : { u: -0.25, y: 0 };
-      this.pencilAt = (k) => {
-        const fx = Math.sin(car.yaw);
-        const fz = Math.cos(car.yaw);
-        const e = k * k * (3 - 2 * k);
-        // (from behind his left shoulder, up at his head's height, to out in front at the windscreen)
-        const u = St.u - 0.35 + 0.9 * e;
-        const sd = -0.12 + 0.37 * e;
-        const y = (car.pos.y || 0) + St.y + 1.38 - 0.13 * e;
-        hand.set(car.pos.x + fx * u + fz * sd, y, car.pos.z + fz * u - fx * sd);
-        fig.holdUpR = hand;
-        // (its point: up and back as it comes out, up and ahead once it is up)
-        dir.set(fx * (2 * e - 1) * 0.8, 0.7 + 0.2 * (1 - e), fz * (2 * e - 1) * 0.8).normalize();
-        return hand;
-      };
-      this.pencilAt(0);
-      if (W) W.filmPencil = () => (got ? dir : null);
-      this.shot({ from: this.inCar(car, 1.75, 1.3, 0.75), look: () => hand.clone().lerp(this.headJ(P) || hand, 0.5), fov: 46, dur: 1.9, hand: 0.25 });
-      g.audio.play('swish', 0.7);
-      let tt = 0;
-      yield () => {
-        tt += this.dtR || 0.016;
-        got = tt > 0.32;
-        this.pencilAt(Math.min(1, Math.max(0, (tt - 0.35) / 0.9)));
-        return tt >= 1.8;
-      };
-      this.pencilAt(1);
-    }
+    // (round 18, the player's word: no pencil in his hand - it looked odd. From outside his open
+    // window, his eyes on the roof's edge, a beat; then it is the player's, to draw - and the giant
+    // pencil out of the sky draws what is drawn)
+    this.shot({
+      from: this.inCar(car, 1.75, 1.3, 0.75),
+      look: () => {
+        const h = this.headJ(P) || v3(car.pos.x, (car.pos.y || 0) + 1.2, car.pos.z);
+        return v3(h.x + Math.sin(car.yaw) * 0.7, h.y - 0.05, h.z + Math.cos(car.yaw) * 0.7);
+      },
+      fov: 46,
+      dur: 1.4,
+      hand: 0.25,
+    });
+    yield 1.1;
     // the camera pulls back out of his window, round behind the car and up - to where the game's own
     // camera is, behind it, looking down the roof to its edge - and from there it is the player's: the
     // black bars go, and the first drawing of the game is drawn the way every drawing in it is: on
@@ -3744,51 +3721,28 @@ export class Prologue {
     const rz = R.z;
     const H = R.h;
     const mid = (S + Lp) / 2;
-    // (round 8, the player's word: he takes out his pencil and draws it from where he sits - over his
-    // shoulder, his hand up with it at the windscreen, and far off at the roof's edge a giant one
-    // coming down out of the sky to draw what his draws, line by line: game/prologue/ramp.js
-    // buildSketch. The lines rush in round his hand, an anime's moment)
+    // (round 8, the player's word: far off at the roof's edge a giant pencil coming down out of the
+    // sky to draw what was drawn, line by line - game/prologue/ramp.js buildSketch; round 18's: and
+    // no pencil in his hand - the picture goes straight to it, on a long lens from over the car)
     {
-      const fig = P.fig;
-      // (round 16: the big pencil in his hand, as he took it out - weapons.js filmPencil - not a
-      // little one)
-      const hand = new THREE.Vector3();
-      const aim = () => {
-        hand.copy(this.pencilAt ? this.pencilAt(1) : P.pos);
-        return hand;
-      };
-      aim();
-      // (the giant pencil comes down as his goes up: it lands as the picture cuts to it)
-      this.ramp.t = -1.3;
-      // his: from outside his open window, at his side - his face, and his arm up with the pencil
-      // pointed out ahead at the roof's edge; the lines rushing in round his hand
-      this.shot({ from: this.inCar(car, 1.75, 1.3, 0.75), look: () => aim().clone().lerp(this.headJ(P) || hand, 0.4), fov: 44, dur: 1.6, hand: 0.3 });
-      if (this.comic && this.comic.focus) this.comic.focus(() => aim(), 1.4, 0.65);
+      // (the giant one comes down as the picture cuts to it)
+      this.ramp.t = -0.1;
+      this.shot({ from: wld(R.startX + 18, Y + 6.2, rz + 3.5), look: wld(R.startX - 5, Y + 1.6, rz), fov: 30, dur: 2.1, hand: 0.2 });
       g.audio.play('whoosh', 0.5);
       let tt = 0;
       let said = false;
-      let cut = false;
       yield () => {
-        aim();
         tt += this.dtR || 0.016;
-        // then far off at the roof's edge, on a long lens from over the car: the giant one, down out
-        // of the sky, and drawing
-        if (!cut && tt >= 1.6) {
-          cut = true;
-          this.shot({ from: wld(R.startX + 18, Y + 6.2, rz + 3.5), look: wld(R.startX - 5, Y + 1.6, rz), fov: 30, dur: 1.5, hand: 0.2 });
-        }
         // (and as its point touches the roof, the scratch of it, in letters)
         if (!said && this.ramp.t > 0.5 && this.comic && this.ramp.sketch) {
           said = true;
           const w = this.ramp.sketch.localToWorld(this.ramp.strokes[0].pts[0].clone());
           this.comic.word('SKRITCH!', v3(w.x, w.y + 2.5, w.z), { fill: '#ffd23f', burst: '#1b1430', size: 0.075, life: 1.3, tilt: 0.15 });
         }
-        return tt >= 3.1;
+        return tt >= 1.9;
       };
-      fig.holdUpR = null;
-      // (put away again: back behind the seat)
+      P.fig.holdUpR = null;
       if (g.weapons) g.weapons.filmPencil = null;
-      this.pencilAt = null;
     }
     const cam = g.camera;
     // (and out of the car: from beside it, behind, the lines going on far ahead)
