@@ -96,10 +96,49 @@ const _md = new THREE.Vector3();
 // hand round it near the eraser's end (game/items.js pencil: the point at -z, the eraser at +z) -
 // the way a pencil is carried by somebody who does not know yet that its other end rubs things out
 const PENCIL_GRIP = 0.7;
-const _pg = new THREE.Matrix4();
-function pencilHold(p, dir) {
-  const m = p.holdMatrix(_hd.copy(dir).negate());
-  return m.multiply(_pg.makeTranslation(0, 0, -PENCIL_GRIP));
+// (round 17, the player's word: 'he should hold the pencil, not have it welded into his hand') the
+// pencil in his closed right fist - render/people.js draws the hand closed round it, fig.grip the way
+// it lies across the fist (towards its point). A fist holds a stick square across it: the hand bends at
+// the wrist to lie across the pencil - as far as a wrist bends to the side, GRIP_BEND - and past that
+// the pencil is turned, no further than that, from the way it was asked to point. at: where along the
+// pencil the fist is (its own z: from its middle towards the eraser); back: its eraser end leading
+// (once he knows it rubs things out), not its point
+const GRIP_BEND = 0.62;
+const _gc = new THREE.Vector3();
+const _gh = new THREE.Vector3();
+const _gn = new THREE.Vector3();
+const _gp = new THREE.Vector3();
+function pencilGrip(p, want, at = PENCIL_GRIP, back = false) {
+  const fig = p.fig;
+  const j = fig.j;
+  const S = fig.scale || 1;
+  const c = _gc.subVectors(j.handR, j.elbowR);
+  if (c.lengthSq() < 1e-8) c.set(0, -1, 0);
+  c.normalize();
+  const a = fig.gripDir || (fig.gripDir = new THREE.Vector3());
+  a.copy(want);
+  if (a.lengthSq() < 1e-8) a.copy(fig.forward);
+  a.normalize();
+  const d = a.dot(c);
+  const lim = Math.sin(GRIP_BEND);
+  if (Math.abs(d) > lim) {
+    // (along the forearm, or near it: turned off it, keeping to the side it leans to - or ahead)
+    a.addScaledVector(c, -d);
+    if (a.lengthSq() < 1e-6) a.copy(fig.forward).addScaledVector(c, -fig.forward.dot(c));
+    if (a.lengthSq() < 1e-6) a.copy(fig.right).addScaledVector(c, -fig.right.dot(c));
+    a.normalize().multiplyScalar(Math.cos(GRIP_BEND)).addScaledVector(c, Math.sign(d) * lim).normalize();
+  }
+  fig.grip = a;
+  // the fist: the hand on from the wrist square to the pencil (h), its palm towards n - the pencil's
+  // middle line through the hollow of the fist (render/heroshapes.js heroHandGeo: 0.07 down the
+  // hand, 0.062 out from the palm, the hand as thick as k)
+  const h = _gh.copy(c).addScaledVector(a, -c.dot(a)).normalize();
+  const n = _gn.crossVectors(a, h);
+  const H = _gp.copy(j.handR).addScaledVector(h, 0.07 * S).addScaledVector(n, 0.062 * S * 0.98);
+  const z = back ? _hd.copy(a) : _hd.copy(a).negate();
+  const m = p.holdMatrix(z);
+  m.setPosition(H.x - z.x * at, H.y - z.y * at, H.z - z.z * at);
+  return m;
 }
 
 /**
@@ -874,6 +913,8 @@ export class Weapons {
   // Position held models each frame (called after the figure pose is updated).
   updateModels() {
     const p = this.game.player;
+    // (round 17: his right hand closed round the pencil only while it is in it - pencilGrip)
+    p.fig.grip = null;
     // (round 16, the player's word: in the prologue's car, the big pencil he carries the whole game
     // taken out and held up to draw the ramp - not a little pencil, not his bare hand: the director's
     // filmPencil gives the way it points, or null while it is not in his hand)
@@ -886,7 +927,7 @@ export class Weapons {
       const pm = this.slots[0].model;
       if (dir && pm && pm.group) {
         pm.group.matrixAutoUpdate = false;
-        pm.group.matrix.copy(pencilHold(p, dir));
+        pm.group.matrix.copy(pencilGrip(p, dir));
         pm.group.matrixWorldNeedsUpdate = true;
         pm.group.updateMatrixWorld(true);
       }
@@ -924,9 +965,15 @@ export class Weapons {
       dir.normalize();
       // idle: rests diagonally, the business end up and out
       if (this.swingT < 0) dir.lerp(_w.set(fig.forward.x * 0.35, 0.85, fig.forward.z * 0.35).addScaledVector(fig.right, 0.25), 0.7).normalize();
-      // (the pencil, while he does not know yet that its other end rubs things out - game.canErase:
-      // its point the business end, pencilHold; given the eraser, its eraser end, as before)
-      m = def.id === 'pencil' && !this.game.canErase ? pencilHold(p, dir) : p.holdMatrix(dir);
+      // (the pencil, in his fist - pencilGrip: while he does not know yet that its other end rubs
+      // things out - game.canErase - its point the business end, at rest ahead of him and a little
+      // up, held by the eraser's end; given the eraser, its eraser end, up and out as before, held
+      // near the point. In a blow the business end leads, up off his arm's line)
+      if (def.id === 'pencil') {
+        const erase = !!this.game.canErase;
+        const want = this.swingT >= 0 ? _w.copy(dir).add(_UP) : erase ? _w.copy(dir) : _w.copy(fig.forward).addScaledVector(_UP, 0.42).addScaledVector(fig.right, 0.1);
+        m = erase ? pencilGrip(p, want, 0.02, true) : pencilGrip(p, want);
+      } else m = p.holdMatrix(dir);
       if (def.block && !def.knack) {
         // the shield: held up in front of the chest, its face to the front (pushed out for a bash)
         const f = _u.copy(fig.forward).setY(0).normalize();

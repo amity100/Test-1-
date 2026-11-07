@@ -992,7 +992,11 @@ export function heroSoleGeo() {
 // ------------------------------------------------------------------ the hands
 // (the right one: from the wrist, y 0, down -y to the fingertips; its thumb towards +x, its palm
 // towards -z; the left one is its mirror)
-export function heroHandGeo(left = false) {
+// (round 17, the player's word: 'he should hold the pencil, not have it welded into his hand') grip: the
+// radius of what the hand holds - a round thing across the palm (along x), in front of it, the four
+// fingers closed round it from below and the thumb over it from the other side; 0, the hand as it
+// hangs
+export function heroHandGeo(left = false, grip = 0) {
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const parts = [];
   // the palm and the back of the hand
@@ -1017,23 +1021,52 @@ export function heroHandGeo(left = false) {
     [-0.009, 0.077, 0.0084],
     [-0.027, 0.062, 0.0076],
   ];
-  for (const [x, len, r] of fingers) {
-    const a = V(x, -0.094, -0.002);
-    const l1 = len * 0.55;
-    const l2 = len * 0.45;
-    const d1 = V(0, -Math.cos(0.22), -Math.sin(0.22));
-    const b = a.clone().addScaledVector(d1, l1);
-    const d2 = V(0, -Math.cos(0.62), -Math.sin(0.62));
-    const c = b.clone().addScaledVector(d2, l2);
-    parts.push(capsule(a, b, r, r * 0.95, 8));
-    parts.push(capsule(b, c, r * 0.95, r * 0.82, 8));
+  if (grip > 0) {
+    // (what it holds: its middle a little up the palm from the knuckles, against the palm)
+    const yc = -0.07;
+    const zc = -0.012 - grip;
+    for (const [x, len, r] of fingers) {
+      // from the knuckle round it: three joints, each its share of the finger's length
+      const R = grip + r * 0.95;
+      let a = Math.atan2(-0.002 - zc, -0.094 - yc);
+      const pts = [V(x, -0.094, -0.002)];
+      for (const l of [len * 0.42, len * 0.33, len * 0.25]) {
+        a += l / R;
+        pts.push(V(x, yc + Math.cos(a) * R, zc + Math.sin(a) * R));
+      }
+      parts.push(capsule(pts[0], pts[1], r, r * 0.96, 8));
+      parts.push(capsule(pts[1], pts[2], r * 0.96, r * 0.9, 8));
+      parts.push(capsule(pts[2], pts[3], r * 0.9, r * 0.8, 8));
+    }
+    // the thumb from the heel of the hand over it, the other way round
+    const Rt = grip + 0.0105;
+    let a = Math.atan2(-0.008 - zc, -0.028 - yc);
+    const tp = [V(0.03, -0.028, -0.008)];
+    for (const l of [0.036, 0.032]) {
+      a -= l / Rt;
+      tp.push(V(0.033, yc + Math.cos(a) * Rt, zc + Math.sin(a) * Rt));
+    }
+    parts.push(capsule(tp[0], tp[1], 0.0115, 0.0098, 8));
+    parts.push(capsule(tp[1], tp[2], 0.0098, 0.0085, 8));
+  } else {
+    for (const [x, len, r] of fingers) {
+      const a = V(x, -0.094, -0.002);
+      const l1 = len * 0.55;
+      const l2 = len * 0.45;
+      const d1 = V(0, -Math.cos(0.22), -Math.sin(0.22));
+      const b = a.clone().addScaledVector(d1, l1);
+      const d2 = V(0, -Math.cos(0.62), -Math.sin(0.62));
+      const c = b.clone().addScaledVector(d2, l2);
+      parts.push(capsule(a, b, r, r * 0.95, 8));
+      parts.push(capsule(b, c, r * 0.95, r * 0.82, 8));
+    }
+    // the thumb, from the heel of the hand, along the fingers and in front of them
+    const t0 = V(0.03, -0.028, -0.008);
+    const t1 = t0.clone().addScaledVector(V(0.45, -0.8, -0.4).normalize(), 0.038);
+    const t2 = t1.clone().addScaledVector(V(0.15, -0.85, -0.5).normalize(), 0.032);
+    parts.push(capsule(t0, t1, 0.0115, 0.0098, 8));
+    parts.push(capsule(t1, t2, 0.0098, 0.0085, 8));
   }
-  // the thumb, from the heel of the hand, along the fingers and in front of them
-  const t0 = V(0.03, -0.028, -0.008);
-  const t1 = t0.clone().addScaledVector(V(0.45, -0.8, -0.4).normalize(), 0.038);
-  const t2 = t1.clone().addScaledVector(V(0.15, -0.85, -0.5).normalize(), 0.032);
-  parts.push(capsule(t0, t1, 0.0115, 0.0098, 8));
-  parts.push(capsule(t1, t2, 0.0098, 0.0085, 8));
   const g = merge(parts);
   if (left) {
     // (mirrored front to back: the left hand's palm towards +z, its thumb still ahead)
