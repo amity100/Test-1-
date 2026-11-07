@@ -153,6 +153,22 @@ export class Autopilot {
 
   // (the ramp, drawn as a player would: a line along the roof ahead to its edge, bowed up)
   drawRamp(c, D) {
+    // (round 18: from the side - its slope, climbing from the roof by the car to the edge)
+    if (D.spec && D.spec.side && D.sideGuide) {
+      const G = D.sideGuide();
+      const pts = [];
+      for (let i = 0; i <= 24; i++) {
+        const u = i / 24;
+        const x = G.startX + (G.lipX - G.startX) * u;
+        const [wx, wz] = D.F.toWorld(x, D.spec.laneZ);
+        const q = D.toScreen(wx, D.spec.roofY + 0.3 + (G.h + 0.3) * Math.pow(u, 1.3), wz, [0, 0]);
+        if (q) pts.push([q[0], q[1]]);
+      }
+      D.pts = pts;
+      D.finish();
+      this.phase = 'drawn';
+      return;
+    }
     const fx = Math.sin(c.yaw);
     const fz = Math.cos(c.yaw);
     const Ln = Math.max(10, (PARK.edge.z - c.pos.z) * Math.abs(fz) + 1.5);

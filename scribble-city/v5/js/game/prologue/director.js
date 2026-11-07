@@ -371,7 +371,11 @@ export class Prologue {
     // in the player's own hands; in the film, the keys wait as all the others do, above)
     // (out of the car whenever he likes before the chase - the city is his, and Lily is met on foot;
     // in the chase, only when the story says)
-    if (this.game.player.inVehicle && (this.sceneN || 0) >= 5) input.pressed.delete('KeyE');
+    if (this.game.player.inVehicle && (this.sceneN || 0) >= 5) {
+      // (round 18: down after the flight, E asks to get out - s9 ends the flight on it)
+      if (this.sceneN === 9 && !this.holdCam && input.pressed.has('KeyE')) this.outAsked = true;
+      input.pressed.delete('KeyE');
+    }
   }
 
   lock(on) {
@@ -3655,49 +3659,40 @@ export class Prologue {
       hand: 0.25,
     });
     yield 1.1;
-    // the camera pulls back out of his window, round behind the car and up - to where the game's own
-    // camera is, behind it, looking down the roof to its edge - and from there it is the player's: the
-    // black bars go, and the first drawing of the game is drawn the way every drawing in it is: on
-    // the live picture, from where the player is, over the roof ahead
-    const rig = g.camRig;
-    rig.yaw = car.yaw;
-    rig.pitch = DRAW_PITCH;
-    rig.curDist = 8.5;
-    rig.curLift = 0;
-    rig.curShoulder = 0;
-    rig.update(0, car.pos, { dist: 8.5, height: 3.1, shoulder: 0 });
-    const gp = g.camera.position.clone();
-    const cp = Math.cos(DRAW_PITCH);
+    // (round 18, the player's word: really drawing a ramp - not a line along the roof seen from behind,
+    // where its height cannot be drawn: the camera out of his window and round to the side of the
+    // roof run, the car on it and the edge, and the ramp drawn as one draws a ramp - its slope, up from
+    // the roof by the car to the edge. What is drawn is its height and its curve)
+    const [cx, cz] = loc(car.pos.x, car.pos.z);
+    // (centred on where the ramp goes: from 17 m short of the edge to over it)
+    const sideMid = RUNF.edgeX + 7.5;
+    const lw = (x, y, z) => {
+      const [wx, wz] = RUNF.toWorld(x, z);
+      return v3(wx, y, wz);
+    };
+    const sideCam = lw(sideMid, ROOF + 4.6, cz + 25);
+    const sideLook = lw(sideMid, ROOF + 2.6, cz);
     const fx = Math.sin(car.yaw);
     const fz = Math.cos(car.yaw);
-    const gl = gp.clone().add(v3(fx * cp * 30, Math.sin(DRAW_PITCH) * 30, fz * cp * 30));
-    // (the car's left, Danny's side: (fz, -fx))
     const at = (side, along, up) => v3(car.pos.x + fx * along + fz * side, car.pos.y + up, car.pos.z + fz * along - fx * side);
     this.shot({
-      // (up and back more than out to the side: three metres out it went through whatever stood
-      // beside the car - the stairs' tower, a wall - ROADMAP 18.9)
-      path: [this.shots.lastPos.clone(), at(1.0, -1.2, 2.3), at(0.7, -5.2, 4.0), gp],
-      lookPath: [this.shots.lastLook.clone(), at(0.2, 4, 1.2), at(0, 16, 0.8), gl],
+      path: [this.shots.lastPos.clone(), at(2.2, -1.5, 4.5), lw(cx - 12, ROOF + 9, cz + 16), sideCam],
+      lookPath: [this.shots.lastLook.clone(), at(0, 6, 1.0), lw(sideMid, ROOF + 2, cz), sideLook],
       fov: this.shots.lastFov,
-      fovTo: rig.baseFov,
-      dur: 2.6,
+      fovTo: 50,
+      dur: 2.8,
       ease: 'inout',
-      hand: 0.12,
+      hand: 0.1,
     });
-    yield 2.6;
-    // the player's: the game's camera (exactly where the shot left it), the bars away, the screen to
-    // draw on - the roof's own way, along -x in its frame
-    this.shots.release();
-    this.holdCam = false;
+    yield 2.8;
+    // the player's: held there, the bars away, the screen to draw on
+    this.shot({ from: sideCam, look: sideLook, fov: 50, dur: 600, hand: 0 });
     this.drawing = true;
     this.ui.film(false);
     g.hud.show();
-    rig.yaw = car.yaw;
-    rig.pitch = DRAW_PITCH;
-    const [cx, cz] = loc(car.pos.x, car.pos.z);
     this.draw = new RampDraw(g, this.ui);
     let prof = null;
-    this.draw.open({ camera: g.camera, roofY: ROOF, laneZ: cz, carX: cx, edgeX: RUNF.edgeX, frame: RUNF, floorY: (x, z) => PARK.floorAt(x, z, ROOF + 2) }, (p) => {
+    this.draw.open({ camera: g.camera, roofY: ROOF, laneZ: cz, carX: cx, edgeX: RUNF.edgeX, frame: RUNF, side: true, floorY: (x, z) => PARK.floorAt(x, z, ROOF + 2) }, (p) => {
       prof = p;
     });
     g.audio.play('pageflip', 0.5);
@@ -3881,18 +3876,64 @@ export class Prologue {
       this.feel(L.fig, 'scared', 4);
       this.say('L08', L.fig, 0.1).next();
     }
-    // just before it hits: the time all but stops - and the idea: what flies?
+    // (round 18, the player's word: the ground really seen coming at them - and only then, at the last
+    // second, him thinking, and the idea: a rotor; then the player draws it)
+    yield () => J.alt < 36 || J.t > 60;
+    this.film(true);
+    this.slow(0.3, 8);
+    {
+      const fx = Math.sin(car.yaw);
+      const fz = Math.cos(car.yaw);
+      // (its left, Danny's side: (fz, -fx))
+      // behind it and over it, looking down the way it falls: the water, the street's end, coming up
+      this.shot({ from: () => v3(car.pos.x - fx * 7 + fz * 1.5, car.pos.y + 3.2, car.pos.z - fz * 7 - fx * 1.5), look: () => v3(car.pos.x + fx * 9, car.pos.y - 7, car.pos.z + fz * 9), fov: 56, dur: 2.0, hand: 0.5, shake: 0.1 });
+      this.comic.lines(null, 1.6, 1);
+      g.audio.play('whoosh', 0.8);
+      yield 0.5;
+      // then low over the water beside where it is coming down: the car dropping at us, the surface
+      // under it close
+      // (far out to its side and low: the car and the surface under it both in the picture - the gap
+      // between them closing)
+      const gx = car.pos.x + fx * 20 + fz * 24;
+      const gz = car.pos.z + fz * 20 - fx * 24;
+      this.shot({ from: v3(gx, 4, gz), look: () => v3(car.pos.x, 4 + (car.pos.y - 4) * 0.45, car.pos.z), fov: 64, dur: 3, hand: 0.6, shake: 0.05 });
+      if (L) this.feel(L.fig, 'scared', 4);
+    }
+    // just before it hits: the time all but stops - him thinking: what flies?
     // (round 17: a few metres more over the street than before - time to draw, however slowly)
     yield () => J.alt < 12 || J.t > 60;
     this.slow(0.012, 14);
-    this.film(true);
     this.feel(P.fig, 'angry', 3);
-    this.shot({ from: this.inCar(car, -0.05, 1.2, 0.56), to: this.inCar(car, -0.05, 1.2, 0.5), look: this.faceOf(P), fov: 28, dur: 1.6, hand: 0.15, dof: 1 });
-    this.emote([1.0, 0.86, 0.45]);
+    {
+      // (from outside his window, close: the car nose down, and inside it was all car)
+      const fx = Math.sin(car.yaw);
+      const fz = Math.cos(car.yaw);
+      const face = () => this.headJ(P) || v3(car.pos.x, car.pos.y + 1.3, car.pos.z);
+      this.shot({
+        from: () => {
+          const h = face();
+          return v3(h.x + fz * 0.95 + fx * 0.85, h.y + 0.14, h.z - fx * 0.95 + fz * 0.85);
+        },
+        look: () => {
+          const h = face();
+          return v3(h.x, h.y - 0.02, h.z);
+        },
+        fov: 32,
+        dur: 3,
+        hand: 0.15,
+        dof: 1,
+      });
+    }
     if (this.comic && this.comic.focus) this.comic.focus(() => this.headJ(P), 1.4, 0.9);
-    this.thought('תחשוב... מה עף?', 1.7);
+    this.thought('תחשוב... מה עף?', 1.5);
     yield 1.4;
+    // and the idea, at the last second: a rotor
     this.flash(0.18, '#fffaf0');
+    this.emote([1.0, 0.86, 0.45]);
+    this.feel(P.fig, 'surprised', 1.2);
+    this.thought('רוטור!', 1.2);
+    g.audio.play('magic', 0.5);
+    yield 1.0;
     this.emote(null);
     // the second drawing: a rotor, on the car in the air
     yield* this.rotor(car);
@@ -4203,10 +4244,54 @@ export class Prologue {
       this.pursuer.input.handbrake = true;
     }
     this.descend = false;
+    // (round 18, the player's word: down from the flight there was no getting out of the car. Down on
+    // the ground and stopped: E is his - the flight ends there and then, wherever it came down - and
+    // stopped on the sand anywhere near the beach is the beach)
+    this.outAsked = false;
+    let still = 0;
+    let told = false;
+    let highT = 0;
     yield () => {
       const c = v();
-      return !!c && !c.air && this.dist(LOOKOUT.x, LOOKOUT.z) < 45 && Math.abs(c.speed || 0) < 6;
+      if (!c) return false;
+      // (a car on a rotor hangs on it a hand over the ground, and is in the air all the while: near
+      // the ground and slow is down)
+      const over = c.pos.y - groundHeight(c.pos.x, c.pos.z);
+      const low = !c.air || over < 3.5;
+      const down = low && Math.abs(c.speed || 0) < 6;
+      still = down ? still + (this.dtR || 1 / 30) : 0;
+      if (down && still > 0.4 && !told) {
+        told = true;
+        this.ui.plainHint(tr('<span dir="rtl">E - לצאת מהמכונית</span>', 'E - get out of the car'));
+      }
+      if (!down && told) {
+        told = false;
+        this.ui.hint(null);
+      }
+      if (this.outAsked && down) {
+        // (set down where it is)
+        c.air = false;
+        c.vy = 0;
+        c.pos.y = Math.max(c.pos.y - over, c.pos.y - 3.5);
+        return true;
+      }
+      if (this.outAsked && !down) {
+        // (too high, or still going: how to come down)
+        highT = 2.6;
+        this.ui.plainHint(tr('<span dir="rtl">כדי לצאת: נחתו קודם</span><small>' + (g.touch ? '▼ למטה, ועצרו' : 'C למטה, ועצרו') + '</small>', 'To get out: land first<small dir="ltr">' + (g.touch ? '▼ down, and stop' : 'C down, and stop') + '</small>'));
+        told = false;
+      }
+      this.outAsked = false;
+      if (highT > 0) {
+        highT -= this.dtR || 1 / 30;
+        if (highT <= 0) this.ui.hint(null);
+      }
+      const d = this.dist(LOOKOUT.x, LOOKOUT.z);
+      return down && (d < 45 || (still > 1.2 && d < 140));
     };
+    this.ui.hint(null);
+    const wantOut = this.outAsked;
+    this.outAsked = false;
     // the car stopped; the engine running; his breath
     this.check = null;
     this.objective(null);
@@ -4280,6 +4365,8 @@ export class Prologue {
     this.ui.fade(true);
     yield 2.4;
     this.finish();
+    // (he asked to get out: out, as the picture comes back - Lily with him)
+    if (wantOut && g.player.inVehicle) g.exitVehicle(true);
   }
 
   // ------------------------------------------------------------------ the end
@@ -4363,3 +4450,4 @@ export class Prologue {
 
 void LINES;
 void rampH;
+void DRAW_PITCH;

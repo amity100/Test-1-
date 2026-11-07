@@ -28,6 +28,7 @@ const MARK_HE = { 'Car park': 'חניון', Up: 'למעלה', Lily: 'לילי', 
 
 const THOUGHT_EN = {
   'ערב אחד רגיל. רק אני והיא.': 'One ordinary evening. Just me and her.',
+  'רוטור!': 'A rotor!',
   'זה לא יכול להיות.': 'This cannot be.',
   'אני משתגע?': 'Am I going crazy?',
   'כי זו ההוכחה היחידה שהוא היה.': 'Because it is the only proof it was ever there.',
