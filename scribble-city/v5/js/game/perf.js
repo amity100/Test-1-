@@ -808,7 +808,7 @@ export class Perf {
     const st = b.stages;
     const ms = (v) => (v || 0).toFixed(1);
     const lines = [
-      `עיר השרבוטים — מסלול מבחן (${Math.round(b.secs)} שניות, ${b.frames.length} פריימים)`,
+      `Beyond the Outline — מסלול מבחן (${Math.round(b.secs)} שניות, ${b.frames.length} פריימים)`,
       `מכשיר: ${device || 'לא ידוע'}`,
       `מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'}`,
       `פריימים בשנייה, ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
