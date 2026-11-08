@@ -1256,6 +1256,20 @@ export class Prologue {
   // every frame for the people: Lily in the car with him, the riders, the people on the pier
   tickCast(dt) {
     const g = this.game;
+    this.seatCast();
+    void dt;
+    // the clock moved on with the story
+    if (this.hourWant && g.daynight) {
+      const d = this.hourWant - g.daynight.hour;
+      if (Math.abs(d) > 0.0005) g.daynight.hour += Math.sign(d) * Math.min(Math.abs(d), this.hourRate * dt);
+    }
+  }
+
+  // (round 20, the player's word: Lily stuck out under the car as it flew - she was put in her seat
+  // after the city's people were moved, by where the car had been: a frame behind it, half a metre
+  // under it as it climbed. game/game.js calls this right after the cars move, as Danny is seated)
+  seatCast() {
+    if (!this.active) return;
     const L = this.cast.lily;
     if (L && L.pl && L.pl.ride && L.alive) {
       const v = L.pl.ride;
@@ -1278,12 +1292,6 @@ export class Prologue {
       // (holding on to her seat)
       L.fig.reachR = null;
     }
-    // the clock moved on with the story
-    if (this.hourWant && g.daynight) {
-      const d = this.hourWant - g.daynight.hour;
-      if (Math.abs(d) > 0.0005) g.daynight.hour += Math.sign(d) * Math.min(Math.abs(d), this.hourRate * dt);
-    }
-    void dt;
   }
 
   // the marker over where to go, kept on the way up through the car park: the next mark of the way
