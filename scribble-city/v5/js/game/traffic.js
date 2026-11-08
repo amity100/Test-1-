@@ -1412,6 +1412,8 @@ export class Traffic {
     fig.pos.set(pos.x + fx * u - rx * s, pos.y + y, pos.z + fz * u - rz * s);
     fig.yaw = yaw;
     fig.sit = 1;
+    // (in a car: its legs under the dash, not drawn - render/people.js inCar)
+    fig.seatedAt = performance.now();
     fig.speed = 0;
     if (!fig.wheel) fig.wheel = new THREE.Vector3();
     fig.wheel.set(pos.x + fx * (u + 0.55) - rx * s, pos.y + y + 1.04, pos.z + fz * (u + 0.55) - rz * s);

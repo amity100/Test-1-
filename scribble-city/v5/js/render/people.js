@@ -505,6 +505,13 @@ function atW(out, x, y, z) {
 // (round 17: his fist's way on from the wrist, round the pencil - drawHero)
 const _gw = new THREE.Vector3();
 
+// (round 20, the player's word: Danny's and Lily's legs stuck out under the car as it flew - seen from
+// below, out through its floor. Sat in a car - game/traffic.js seat, the prologue's Lily - the legs are
+// the car's floor's: not drawn; from its side the door hides them all the same)
+function inCar(fig) {
+  return !!fig.seatedAt && performance.now() - fig.seatedAt < 160;
+}
+
 // a matrix that takes a part hanging down its local -y from a joint at a to b, as thick as k
 function along(a, b, len0, k, side, out = _m) {
   _y.subVectors(a, b);
@@ -1926,7 +1933,7 @@ export class PersonRenderer {
     const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
     const shoeC = linC(L.shoes);
     for (let li = 0; li < 2; li++) {
-      if (P[LEG_PART[li]] < 0.5) continue;
+      if (P[LEG_PART[li]] < 0.5 || inCar(fig)) continue;
       const hp = legs[li][0];
       const kn = legs[li][1];
       const ft = legs[li][2];
@@ -2173,7 +2180,7 @@ export class PersonRenderer {
     const legs = fig._legJ || (fig._legJ = [[j.hipR, j.kneeR, j.footR, j.toeR], [j.hipL, j.kneeL, j.footL, j.toeL]]);
     const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
     for (let li = 0; li < 2; li++) {
-      if (P[LEG_PART[li]] < 0.5) continue;
+      if (P[LEG_PART[li]] < 0.5 || inCar(fig)) continue;
       const hp = legs[li][0];
       const kn = legs[li][1];
       const ft = legs[li][2];
@@ -2360,7 +2367,7 @@ export class PersonRenderer {
     const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
     const fk = k * (fem ? 0.9 : 1);
     for (let li = 0; li < 2; li++) {
-      if (P[LEG_PART[li]] < 0.5) continue;
+      if (P[LEG_PART[li]] < 0.5 || inCar(fig)) continue;
       const hp = legs[li][0];
       const kn = legs[li][1];
       const ft = legs[li][2];
@@ -2629,7 +2636,7 @@ export class PersonRenderer {
     const legK = k * Math.max(1, bulk * 0.9) * (fig.limbs || 1);
     const shoeC = linC(L.shoes);
     for (let li = 0; li < 2; li++) {
-      if (P[LEG_PART[li]] < 0.5) continue;
+      if (P[LEG_PART[li]] < 0.5 || inCar(fig)) continue;
       const hp = legs[li][0];
       const kn = legs[li][1];
       const ft = legs[li][2];

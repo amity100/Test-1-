@@ -19,6 +19,8 @@ import { tr } from '../../core/lang.js';
 // lands it on the other roof.
 
 const UP = new THREE.Vector3(0, 1, 0);
+// (round 20) where along the slope its legs are drawn, from the car's end
+const LEG_U = [0.3, 0.62, 0.9];
 // (the kick plate at its start, from the roof up onto the deck: how long)
 const KICK = 1.4;
 
@@ -163,6 +165,16 @@ export class RampDraw {
   guideCurve() {
     const s = this.spec;
     const pts = [];
+    if (s.side && this.slopeW) {
+      // (round 20: the slope drawn - now its legs, the next of them: from under the slope down to the roof)
+      const L = this.legAt(Math.min(this.legs.length, LEG_U.length - 1));
+      const [wx, wz] = this.F.toWorld(L.x, s.laneZ);
+      for (let i = 0; i <= 8; i++) {
+        const q = this.toScreen(wx, L.top + (s.roofY + 0.05 - L.top) * (i / 8), wz, [0, 0]);
+        if (q) pts.push(q);
+      }
+      return pts;
+    }
     if (s.side) {
       // (a ramp as one would draw it: its slope from the roof by the car up to over the edge)
       const G = this.sideGuide();
@@ -193,10 +205,51 @@ export class RampDraw {
     return { startX, lipX: s.edgeX - 1.2, h: 4.8 };
   }
 
+  // (round 20) a leg of the slope as drawn: where along it (LEG_U of its length from the car's end),
+  // the height of the drawn slope there
+  legAt(k) {
+    const W = this.slopeW;
+    const xs = W.map((p) => p.x);
+    const x0 = Math.max(...xs);
+    const x1 = Math.min(...xs);
+    const x = x0 + (x1 - x0) * LEG_U[k];
+    let top = -Infinity;
+    let best = Infinity;
+    for (const p of W) {
+      const dd = Math.abs(p.x - x);
+      if (dd < 1.2) top = Math.max(top, p.y);
+      if (dd < best) {
+        best = dd;
+        if (!Number.isFinite(top)) top = p.y;
+      }
+    }
+    if (!Number.isFinite(top)) top = this.spec.roofY + 2;
+    return { x, top };
+  }
+
   // its shape from the side: the ramp's foot, under the guide's start, and its lip, the roof's edge
-  // below it - the wedge drawn faint round the slope
+  // below it - the wedge drawn faint round the slope; the slope drawn, its legs' places
   sideShape(g, d) {
     const s = this.spec;
+    if (this.slopeW) {
+      g.save();
+      g.setLineDash([6 * d, 8 * d]);
+      g.strokeStyle = 'rgba(255,255,255,0.32)';
+      g.lineWidth = 3 * d;
+      for (let k = this.legs.length; k < LEG_U.length; k++) {
+        const L = this.legAt(k);
+        const [wx, wz] = this.F.toWorld(L.x, s.laneZ);
+        const a = this.toScreen(wx, L.top, wz, [0, 0]);
+        const b = this.toScreen(wx, s.roofY + 0.05, wz, [0, 0]);
+        if (!a || !b) continue;
+        g.beginPath();
+        g.moveTo(a[0], a[1]);
+        g.lineTo(b[0], b[1]);
+        g.stroke();
+      }
+      g.restore();
+      return;
+    }
     const G = this.sideGuide();
     const pt = (x, y) => {
       const [wx, wz] = this.F.toWorld(x, s.laneZ);
@@ -218,7 +271,93 @@ export class RampDraw {
     g.restore();
   }
 
+  // (round 20, the player's word: what is drawn is what the giant pencil then draws - the ramp as it
+  // draws it, seen from the side: its slope, then its legs down to the roof. Each line drawn kept on
+  // the page; the giant pencil goes over the very lines drawn here - Ramp.buildSketch, P.drawn)
+  finishSide() {
+    const P = this.pts;
+    const dpr = this.dpr;
+    this.pts = [];
+    let len = 0;
+    for (let i = 1; i < P.length; i++) len += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
+    const W = P.map(([x, y]) => this.toWorld(x, y))
+      .filter(Boolean)
+      .map((p) => {
+        const [lx, lz] = this.F.toLocal(p.x, p.z);
+        return new THREE.Vector3(lx, Math.max(this.spec.roofY + 0.05, p.y), lz);
+      });
+    const meh = (he, en) => {
+      this.fails++;
+      this.ui.plainHint(tr(he, en));
+      this.game.audio.play('meh', 0.4);
+    };
+    if (!this.slopeW) {
+      const xs = W.map((p) => p.x);
+      const ext = xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+      if (len < 60 * dpr || W.length < 3 || ext < 3) {
+        meh('<span dir="rtl">ציירו רמפה!</span><small>קו ארוך יותר: מהנקודה הצהובה, למעלה, עד הקצה של הגג</small>', 'Draw a ramp!<small dir="ltr">A longer line: from the yellow dot, up, to the roof\'s edge</small>');
+        return;
+      }
+      const near = W.reduce((m, p) => (p.x > m.x ? p : m), W[0]);
+      const far = W.reduce((m, p) => (p.x < m.x ? p : m), W[0]);
+      const top = Math.max(...W.map((p) => p.y));
+      if (top - Math.min(near.y, far.y) < 1.2 || far.y < near.y + 0.6) {
+        meh('<span dir="rtl">רמפה עולה למעלה!</span><small>ציירו קו שמטפס מהנקודה הצהובה, למעלה, עד הקצה</small>', 'A ramp goes up!<small dir="ltr">Draw a line that climbs from the yellow dot, up, to the edge</small>');
+        return;
+      }
+      this.slopeW = W;
+      this.slopeScr = P;
+      this.legs = [];
+      this.legScr = [];
+      this.t = 0;
+      this.game.audio.play('click', 0.5);
+      this.ui.plainHint(tr('<span dir="rtl">עכשיו הרגליים!</span><small>שלושה קווים מהרמפה ישר למטה, אל הגג</small>', 'Now its legs!<small dir="ltr">Three lines from the ramp straight down to the roof</small>'));
+      return;
+    }
+    // a leg: up and down, not across
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const [x, y] of P) {
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    }
+    if (W.length < 2 || y1 - y0 < 16 * dpr || y1 - y0 < (x1 - x0) * 1.1) {
+      meh('<span dir="rtl">רגל של רמפה</span><small>קו מהרמפה ישר למטה, אל הגג</small>', 'A leg of the ramp<small dir="ltr">A line from the ramp straight down to the roof</small>');
+      return;
+    }
+    this.legs.push(W);
+    this.legScr.push(P);
+    this.idleT = 0;
+    this.t = 0;
+    this.game.audio.play('click', 0.45);
+    if (this.legs.length >= LEG_U.length) {
+      this.completeSide();
+      return;
+    }
+    const left = LEG_U.length - this.legs.length;
+    this.ui.plainHint(tr(`<span dir="rtl">עוד ${left === 1 ? 'רגל אחת' : `${left} רגליים`}</span><small>קו מהרמפה ישר למטה, אל הגג</small>`, `${left} more leg${left === 1 ? '' : 's'}<small dir="ltr">A line from the ramp straight down to the roof</small>`));
+  }
+
+  completeSide() {
+    const prof = fitSide(this.slopeW, this.spec);
+    prof.frame = this.spec.frame || null;
+    prof.drawn = { slope: this.slopeW, legs: this.legs.slice() };
+    this.settle = { from: resample(this.slopeScr, 40), to3: null, t: 0, rest: this.legScr.slice() };
+    this.ui.drawEl.classList.add('settle');
+    this.close();
+    if (!this.game.touch) this.game.input.requestLock(true);
+    this.done(prof, this.slopeScr.map((p) => [p[0] / this.dpr, p[1] / this.dpr]));
+  }
+
   finish() {
+    if (this.spec.side) {
+      this.finishSide();
+      return;
+    }
     const P = this.pts;
     let len = 0;
     for (let i = 1; i < P.length; i++) len += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
@@ -328,6 +467,7 @@ export class RampDraw {
       S.t += dt;
       if (!S.to3) {
         this.ink(S.from);
+        for (const L of S.rest || []) this.ink(L);
         return;
       }
       const k = Math.min(1, S.t / 0.42);
@@ -338,6 +478,7 @@ export class RampDraw {
         this.ui.drawEl.classList.remove('settle');
         return;
       }
+      for (const L of S.rest || []) this.ink(L, Math.max(0, 1 - S.t / 0.4));
       const q = [0, 0];
       const pts = S.from.map((p, i) => {
         const w = S.to3[i];
@@ -380,7 +521,15 @@ export class RampDraw {
       if (this.spec.side) this.sideShape(g, d);
       if (!this.drawing && this.pts.length < 2) this.teach(g, d);
     }
+    // (round 20: what is drawn stays on the page as the rest is drawn)
+    if (this.slopeScr) this.ink(this.slopeScr);
+    for (const L of this.legScr || []) this.ink(L);
     if (this.pts.length > 1) this.ink(this.pts);
+    // (two legs, and the pen left alone a moment: that is the ramp)
+    if (this.slopeW && this.legs.length >= 2 && !this.drawing) {
+      this.idleT = (this.idleT || 0) + dt;
+      if (this.idleT > 1.8) this.completeSide();
+    }
   }
 
   teach(g, d) {
@@ -552,6 +701,23 @@ export class Ramp {
     const v = (x, y, zz) => new THREE.Vector3(x, y, zz);
     const line = (n, f) => Array.from({ length: n + 1 }, (_, i) => f(i / n));
     const S = [];
+    if (P.drawn && P.drawn.slope && P.drawn.slope.length > 1) {
+      // (round 20, the player's word: the giant pencil draws what the player drew - the very lines,
+      // the slope and its legs, on this side of the ramp and then the other; then across its foot and
+      // its lip)
+      const thin = (pts, n) => {
+        if (pts.length <= n) return pts;
+        return Array.from({ length: n }, (_, i) => pts[Math.round((i / (n - 1)) * (pts.length - 1))]);
+      };
+      const on = (pts, zz) => thin(pts, 30).map((p) => v(p.x, Math.max(Y + 0.06, p.y + 0.08), zz));
+      const D = P.drawn;
+      for (const zz of [z + half, z - half]) {
+        S.push(on(D.slope, zz));
+        for (const L of D.legs || []) if (L.length > 1) S.push(on(L, zz));
+      }
+      S.push(line(4, (t) => v(P.startX + KICK, Y + 0.06, z - half + 2 * half * t)));
+      S.push(line(4, (t) => v(P.lipX, yAt(1) + 0.08, z + half - 2 * half * t)));
+    } else {
     // its near end across, its left edge up to the lip, the lip across, its right edge back down
     S.push(line(4, (t) => v(P.startX + KICK, Y + 0.06, z - half + 2 * half * t)));
     S.push(line(28, (u) => v(xAt(u), yAt(u) + 0.08, z + half)));
@@ -566,6 +732,7 @@ export class Ramp {
     for (let c = 1; c <= 3; c++) {
       const u = c / 4;
       S.push(line(4, (t) => v(xAt(u), yAt(u) + 0.1, z + (c % 2 ? 1 : -1) * half * (1 - 2 * t))));
+    }
     }
     const LIGHT = linC(1, 0.86, 0.5);
     const grp = (this.sketch = new THREE.Group());
