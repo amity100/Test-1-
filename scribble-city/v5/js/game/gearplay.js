@@ -80,8 +80,8 @@ export class GearPlay {
 
   // (a drawing of a thing not open yet) what is said by it: its name and what it takes
   lockSay(id) {
-    if (gearGone(this.game, id)) return 'לא במשחק';
-    if (!this.lab && isEarly(this.game)) return 'נפתח אחרי הקפיצה מהגג';
+    if (gearGone(this.game, id)) return 'נפתח בהמשך';
+    if (!this.lab && isEarly(this.game)) return 'נפתח בהמשך הסיפור';
     const n = this.pagesTo(id);
     return n === 1 ? 'עוד דף שרטוט אחד' : `עוד ${n} דפי שרטוט`;
   }

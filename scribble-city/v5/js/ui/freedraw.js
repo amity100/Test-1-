@@ -511,6 +511,12 @@ export class FreeDraw {
       if (!it) return;
       // (round 15, game/drawlock.js) the short list: one not drawn yet is picked to be drawn - the
       // lines on the page kept, they may be it
+      if (isEarly(this.game) && it.classList.contains('lock')) {
+        // (round 19: shown, not open yet)
+        this.game.hud.toast(`${BLUEPRINTS[it.dataset.i] ? BLUEPRINTS[it.dataset.i].name : ''} — נפתח בהמשך הסיפור`, 'info', 2.2);
+        this.game.audio.play('click', 0.3);
+        return;
+      }
       if (isEarly(this.game) && !this.game.album.known(it.dataset.i)) {
         this.learn(it.dataset.i, true);
         return;
@@ -1917,7 +1923,17 @@ export class FreeDraw {
     // (round 16, the player's word: the list took the screen, no room left to draw - a strip over the
     // pen's tools; the one being drawn a small picture at the top - showRef)
     this.showRef(pick);
-    const rows = Object.entries(EARLY_KIT).map(([sh, ids]) => `<div class="fe-row"><span class="fe-sh">${SHELF_NAME[sh]}</span>${ids.map(cell).join('')}</div>`).join('');
+    // (round 19, the player's word: the whole catalog shown, as the game has it - the open ones first,
+    // the rest locked, to come later in the story)
+    const lockCell = (id) => {
+      const bp = BLUEPRINTS[id];
+      return `<div class="fd-it lock fe-lock" data-i="${id}" title="${bp.name} - נפתח בהמשך">${bpSvg(bp)}<b>${bp.name}</b><i>🔒</i></div>`;
+    };
+    const rows = SHELVES.map((sh) => {
+      const open = EARLY_KIT[sh] || [];
+      const rest = shelfIds(sh).filter((id) => !open.includes(id));
+      return `<div class="fe-row"><span class="fe-sh">${SHELF_NAME[sh]}</span>${open.map(cell).join('')}${rest.map(lockCell).join('')}</div>`;
+    }).join('');
     const say = touch ? 'נגיעה בציור ומציירים אותו · או סתם ציירו - המשחק יזהה' : 'לחיצה על ציור ומציירים אותו · או סתם ציירו - המשחק יזהה · מה שכבר ציירתם: המספר שלו';
     return `<div class="fe-top"><b>מה מציירים?</b><span>${say}</span><em>🔒 עוד ייפתחו בהמשך</em></div><div class="fe-rows">${rows}</div>`;
   }

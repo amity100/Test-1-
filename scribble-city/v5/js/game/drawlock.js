@@ -9,13 +9,15 @@
 // good (not in the lab): the water kit, and whatever makes the car fly - wings, the helicopter's rotor,
 // the balloon, the parachute; the turbo stays. The jump's own rotor, drawn by the story, is its own.
 
+// (round 19, the player's word: the whole list shown, as the game has it, the most of it locked - open
+// for now: on foot a car or a motorbike and a few weapons; on the car the turbo)
 export const EARLY_KIT = {
-  weapon: ['paint', 'stapler', 'rifle'],
-  vehicle: ['scooter', 'bicycle', 'car'],
+  weapon: ['paint', 'rifle', 'stapler', 'katana'],
+  vehicle: ['car', 'bike'],
 };
 export const EARLY_IDS = [...EARLY_KIT.weapon, ...EARLY_KIT.vehicle];
 // (game/itemcat.js ids)
-export const EARLY_GEAR = ['mg', 'turbo', 'armor'];
+export const EARLY_GEAR = ['turbo'];
 const GONE_GEAR = new Set(['water', 'wing', 'rotor', 'balloon', 'chute']);
 // (game/inkparts.js: the propeller is the water kit's)
 const GONE_PAR = new Set(['wing', 'rotor', 'prop']);

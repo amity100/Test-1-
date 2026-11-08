@@ -1978,9 +1978,12 @@ body.fd-early .fe-top { flex-direction: row; align-items: baseline; justify-cont
 body.fd-early .fe-top b { font-size: 13.5px; flex: none; }
 body.fd-early .fe-top span { flex: 1 1 auto; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.fd-early .fe-top em { flex: none; font: 700 10.5px var(--font-ui); font-style: normal; color: #8a8494; }
-body.fd-early .fe-rows { flex-direction: row; gap: 10px; justify-content: center; }
-body.fd-early .fe-row { gap: 3px; }
+/* (round 19: the whole catalog - a row a shelf, each its own way across, the locked ones small and dim) */
+body.fd-early .fe-rows { flex-direction: column; gap: 2px; }
+body.fd-early .fe-row { gap: 3px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; padding-bottom: 1px; }
 body.fd-early .fe-row .fd-it { flex: none; width: 62px; }
+body.fd-early .fe-row .fd-it.fe-lock { width: 50px; opacity: 0.42; filter: grayscale(0.7); }
+body.fd-early .fe-row .fd-it.fe-lock b { font-size: 8.5px; }
 body.fd-early .fe-sh { width: auto; font-size: 11px; writing-mode: vertical-rl; transform: rotate(180deg); }
 body.touch.fd-early .fd-leg { width: auto; top: auto; }
 @media (max-height: 480px) { body.fd-early .fd-leg { top: auto; } }
