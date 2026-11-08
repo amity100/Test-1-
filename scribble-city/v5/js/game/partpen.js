@@ -1183,8 +1183,11 @@ export class PartPen {
     const say = L && L.ask ? 'עוד פרט אחד יכריע' : M ? 'לא יצא נכון? ↶ ומציירים שוב' : 'מה שמציירים — זה מה שיוצא';
     // (round 17: a new player's car - the short list alone, the turbo first of its things: none of
     // the locked ones after it)
+    // (round 19, the player's word: all of them shown, the ones not open locked - the open first)
     const early = isEarly(this.game) && !!play;
-    const items = CATS[this.cat].filter((id) => !gearGone(this.game, id) && !(early && !play.isOpen(id))).map((id) => {
+    const list = CATS[this.cat].filter((id) => early || !gearGone(this.game, id));
+    const order = play ? [...list.filter((id) => play.isOpen(id)), ...list.filter((id) => !play.isOpen(id))] : list;
+    const items = order.map((id) => {
       const shut = play && !play.isOpen(id);
       const lv = play && !shut && !play.all() ? play.level(id) : 0;
       const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : '', shut ? 'lock' : ''].filter(Boolean).join(' ');
