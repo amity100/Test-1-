@@ -1224,6 +1224,8 @@ export class Game {
       this.chute.update(dt);
       this.vehicles.update(dt);
       if (!this.classic && player.mode === 'vehicle') player.seatIn(dt);
+      // (the prologue's riders in their seats where the car is now - before the people are moved)
+      if (this.prologue && this.prologue.seatCast) this.prologue.seatCast();
       this.materialize.update(dt);
       // (ROADMAP 15.2) a vehicle summoned with a touch: in it the moment it is real (still on foot,
       // still beside it)
