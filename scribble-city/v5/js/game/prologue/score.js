@@ -698,6 +698,14 @@ class Cue {
 
 // ------------------------------------------------------------------ the opening
 
+// (round 21: till the player's song is in - a moment, at the very start on a slow line - nothing,
+// rather than another tune first: fileOr crossfades over to the song once it is in)
+class Quiet extends Cue {
+  constructor(s, t0, o) {
+    super(s, t0, 'opening', o);
+  }
+}
+
 class Opening extends Cue {
   constructor(s, t0, o) {
     super(s, t0, 'opening', o);
@@ -1478,6 +1486,9 @@ const FILES = {
   shock: { path: 'music/shock.mp3', a: 0.5, b: 39.5, x: 3, gain: 1.0, send: 0.25 },
   // (a bar or two of the waltz, slowed, far off, mostly the room)
   memory: { path: 'music/wheel_tense.mp3', from: 2, b: 13, once: true, rate: 0.82, gain: 0.6, lp: 1700, send: 0.9 },
+  // (round 21, the player's word: the game's own music from the start - his song, in place of the
+  // synthesised opening, as long as the opening ran: from the flight in, round the city, to Lily)
+  opening: { path: 'music/opening.mp3', from: 0, a: 0, b: 218.6, x: 3, gain: 1.0, send: 0.12 },
 };
 
 class FileCue extends Cue {
@@ -1562,7 +1573,7 @@ const fileOr = (Synth, name) =>
   };
 
 const CUES = {
-  opening: { K: Opening, lead: 0.06 },
+  opening: { K: fileOr(Quiet, 'opening'), lead: 0.06 },
   chase: { K: Chase, lead: 0.04, hard: true },
   slowmo: { K: Slowmo, lead: 0.02, hard: true, drops: true },
   title: { K: Title, lead: 0.02, hard: true, cut: 0.12 },
@@ -1821,3 +1832,5 @@ export class Score {
     this.unrig();
   }
 }
+
+void Opening;

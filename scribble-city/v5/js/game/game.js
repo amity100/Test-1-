@@ -637,7 +637,7 @@ export class Game {
       return;
     }
     const welcome = () => {
-      this.hud.toast('ברוכים הבאים לעיר השרבוטים', 'info', 2.4);
+      this.hud.toast('ברוכים הבאים ל־Beyond the Outline', 'info', 2.4);
       setTimeout(() => {
         // (ROADMAP 11.6) the free drawing first: anything at all, on the run
         if (this.freedraw) {

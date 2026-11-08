@@ -18,9 +18,11 @@ export const EARLY_KIT = {
 export const EARLY_IDS = [...EARLY_KIT.weapon, ...EARLY_KIT.vehicle];
 // (game/itemcat.js ids)
 export const EARLY_GEAR = ['turbo'];
-const GONE_GEAR = new Set(['water', 'wing', 'rotor', 'balloon', 'chute']);
+// (round 21, the player's word: the rotor, the wings, the balloon and the rest back in the car's list,
+// as they were - locked at first like everything but the turbo, opened later as the rest is)
+const GONE_GEAR = new Set([]);
 // (game/inkparts.js: the propeller is the water kit's)
-const GONE_PAR = new Set(['wing', 'rotor', 'prop']);
+const GONE_PAR = new Set([]);
 
 const story = (game) => !!game && !game.lab && !game.classic;
 

@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const WORDS = {
   he: {
     kicker: 'חוף מיאמי · שקיעה',
-    title: 'עיר השרבוטים',
+    title: 'Beyond the Outline',
     sub: 'מה שמציירים — אמיתי',
     tip: 'טיפ',
     start: 'יוצאים לעיר',
@@ -25,7 +25,7 @@ const WORDS = {
   },
   en: {
     kicker: 'Miami Beach · Sunset',
-    title: 'Scribble City',
+    title: 'Beyond the Outline',
     sub: 'What you draw is real',
     tip: 'Tip',
     start: 'Into the city',

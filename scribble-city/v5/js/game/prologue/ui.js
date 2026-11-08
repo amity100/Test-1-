@@ -29,6 +29,7 @@ body.fd-open #pl-obj { opacity: 0; }
 #pl-title .name { font-family: "Permanent Marker", "Rubik", sans-serif; font-size: clamp(46px, 10.5vw, 150px); color: #fff4e0; letter-spacing: 0.04em; line-height: 1; transform: rotate(-3deg) scale(1.25); transition: transform 1.1s cubic-bezier(.16,1,.3,1), letter-spacing 2.4s ease-out;
   text-shadow: 0 0 2px #1c1030, 4px 4px 0 #ff4f9a, 8px 8px 0 #2a1650, 0 0 40px rgba(255,120,80,0.65); -webkit-text-stroke: 2px #1c1030; }
 #pl-title.on .name { transform: rotate(-3deg) scale(1); letter-spacing: 0.09em; }
+#pl-title .name .top { display: block; font-size: 0.36em; letter-spacing: 0.3em; margin-bottom: -0.05em; padding-left: 0.3em; text-align: center; }
 #pl-title .by { margin-top: 2.4vh; font-size: clamp(12px, 1.6vw, 20px); font-weight: 600; letter-spacing: 0.55em; color: #fff; opacity: 0; transition: opacity 1.2s 0.7s, letter-spacing 2.6s 0.7s; text-shadow: 0 2px 6px #000; padding-left: 0.55em; }
 #pl-title.on .by { opacity: 0.92; letter-spacing: 0.75em; }
 #pl-title .by[dir=rtl] { padding-left: 0; padding-right: 0.55em; letter-spacing: 0.3em; font-size: clamp(14px, 2vw, 26px); }
@@ -197,7 +198,17 @@ export class PrologueUI {
 
   title(on, name = '', by = '') {
     if (on) {
-      this.titleEl.querySelector('.name').textContent = name;
+      // (a name in two lines - 'small|big': its first words small over its last)
+      const nm = this.titleEl.querySelector('.name');
+      const [top, big] = name.includes('|') ? name.split('|') : ['', name];
+      nm.textContent = '';
+      if (top) {
+        const sm = document.createElement('span');
+        sm.className = 'top';
+        sm.textContent = top;
+        nm.appendChild(sm);
+      }
+      nm.appendChild(document.createTextNode(big));
       const b = this.titleEl.querySelector('.by');
       b.textContent = by;
       // (a credit in Hebrew reads right to left)

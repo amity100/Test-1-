@@ -51,7 +51,9 @@ import { objT, markT, thoughtT } from './i18n.js';
 // since round 13, the player's word: a new game opens with it, the flight in and the how-to)
 export const PROLOGUE_ON = true;
 // (a working title, until the name is chosen)
-export const GAME_TITLE = 'OUTLINE';
+// (round 21, the player's word: the game is called Beyond the Outline - its first words small over
+// the last, big: game/prologue/ui.js title)
+export const GAME_TITLE = 'BEYOND THE|OUTLINE';
 // (who made it, under the name - in the player's own language, as the rest of what is put over the
 // picture is)
 export const CREDIT = 'יוצר: אמיתי דהן';
@@ -4161,9 +4163,19 @@ export class Prologue {
           ux /= n2;
           uy /= n2;
         }
-        // (the icon's up - its tip - along the way out, u; its right across it, (-uy, ux))
+        void ux;
+        // (round 21, the player's word: the very shape the pen's list shows for the turbo - its flame
+        // upright, its tip up, not turned on its side: standing on the car's tail as the screen has it)
         const k = L / 20;
-        const pts = P0.map(([x, y]) => [tail[0] + (-x * uy - y * ux) * k, tail[1] + (x * ux - y * uy) * k]);
+        // (above the pen's list and its rows, whatever is under it: seen whole)
+        let top = Hh - 190;
+        for (const q of document.querySelectorAll('.pp-legend, .pp-row, .pp-slots, .fd-tools')) {
+          const r = q.getBoundingClientRect();
+          if (r.height > 0 && r.width > 0 && r.top > Hh * 0.35) top = Math.min(top, r.top - 14);
+        }
+        const by = Math.min(tail[1], top);
+        const bx = Math.max(L * 0.6, Math.min(W - L * 0.6, tail[0]));
+        const pts = P0.map(([x, y]) => [bx + x * k, by + y * k]);
         this.turboPts = pts;
         const tt = ((performance.now() - t0) / 1000) % LOOP;
         const kk = Math.max(0, Math.min(1, tt / 1.6));
