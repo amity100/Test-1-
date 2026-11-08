@@ -166,6 +166,18 @@ export class Autopilot {
       }
       D.pts = pts;
       D.finish();
+      // (round 20: and its legs, straight down from it to the roof)
+      for (let k = 0; k < 3 && D.on; k++) {
+        const Lg = D.legAt(k);
+        const [wx, wz] = D.F.toWorld(Lg.x, D.spec.laneZ);
+        const lp = [];
+        for (let i = 0; i <= 8; i++) {
+          const q = D.toScreen(wx, Lg.top + (D.spec.roofY + 0.05 - Lg.top) * (i / 8), wz, [0, 0]);
+          if (q) lp.push([q[0], q[1]]);
+        }
+        D.pts = lp;
+        D.finish();
+      }
       this.phase = 'drawn';
       return;
     }

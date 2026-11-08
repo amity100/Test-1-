@@ -1274,6 +1274,7 @@ export class Prologue {
       L.faceYaw = v.yaw;
       L.baseY = S.y + boost;
       L.fig.sit = 1;
+      L.fig.seatedAt = performance.now();
       // (holding on to her seat)
       L.fig.reachR = null;
     }
@@ -4260,6 +4261,7 @@ export class Prologue {
       const low = !c.air || over < 3.5;
       const down = low && Math.abs(c.speed || 0) < 6;
       still = down ? still + (this.dtR || 1 / 30) : 0;
+      this.canOut = down && still > 0.4;
       if (down && still > 0.4 && !told) {
         told = true;
         this.ui.plainHint(tr('<span dir="rtl">E - לצאת מהמכונית</span>', 'E - get out of the car'));
@@ -4290,7 +4292,7 @@ export class Prologue {
       return down && (d < 45 || (still > 1.2 && d < 140));
     };
     this.ui.hint(null);
-    const wantOut = this.outAsked;
+    this.canOut = false;
     this.outAsked = false;
     // the car stopped; the engine running; his breath
     this.check = null;
@@ -4365,8 +4367,21 @@ export class Prologue {
     this.ui.fade(true);
     yield 2.4;
     this.finish();
-    // (he asked to get out: out, as the picture comes back - Lily with him)
-    if (wantOut && g.player.inVehicle) g.exitVehicle(true);
+    // (round 20, the player's word: on a phone there was no getting out after it - the end of the film
+    // is the two of them out of the car, on their feet on the sand, the city his)
+    if (g.player.inVehicle) {
+      const c = g.player.inVehicle;
+      g.exitVehicle(true);
+      if (L && L.pl && L.pl.ride === c) {
+        L.pl.ride = null;
+        L.riding = false;
+        L.noCollide = false;
+        L.baseY = 0;
+        L.fig.sit = 0;
+        L.fig.ones = false;
+        this.put(L, g.player.pos.x + Math.cos(c.yaw) * 1.2, g.player.pos.z - Math.sin(c.yaw) * 1.2, c.yaw);
+      }
+    }
   }
 
   // ------------------------------------------------------------------ the end
@@ -4380,6 +4395,7 @@ export class Prologue {
   finish() {
     const g = this.game;
     this.carOnly = null;
+    this.canOut = false;
     // (a thought still up: gone with the film)
     for (const q of this.thoughts || []) q.el.remove();
     this.thoughts = [];
