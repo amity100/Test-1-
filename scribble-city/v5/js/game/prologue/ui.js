@@ -45,6 +45,9 @@ body.fd-open #pl-obj { opacity: 0; }
 #pl-call .b.no { background: #c8283c; }
 #pl-call .b.yes { background: #2bb673; }
 #pl-call.live .b.yes { display: none; }
+#pl-call.he { direction: rtl; }
+#pl-call.he .k { letter-spacing: 0.02em; font-size: 13px; }
+#pl-call.live .k { color: #5fe0a0; }
 #pl-call.ring .ic { animation: plring 0.5s infinite; }
 #pl-call .ic { display: inline-block; }
 @keyframes plring { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
@@ -235,6 +238,30 @@ export class PrologueUI {
     el.classList.toggle('on', state !== 'off');
     el.classList.toggle('ring', state === 'ring');
     el.classList.toggle('live', state === 'live');
+    // (round 23, the review: in the game's language - it was "INCOMING CALL" in a Hebrew game - and once
+    // it is answered, the call itself: "on the call" and its clock, not the ringing's words with only
+    // the red button left under them)
+    const he = lang() !== 'en';
+    el.classList.toggle('he', he);
+    const k = el.querySelector('.k');
+    clearInterval(this.callTick);
+    this.callTick = null;
+    if (state === 'live') {
+      const t0 = performance.now();
+      const tick = () => {
+        const s = Math.floor((performance.now() - t0) / 1000);
+        const mm = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        k.textContent = he ? `בשיחה · ${mm}` : `ON CALL · ${mm}`;
+      };
+      tick();
+      this.callTick = setInterval(tick, 500);
+    } else if (state === 'ring') {
+      k.textContent = he ? 'שיחה נכנסת ' : 'INCOMING CALL ';
+      const ic = document.createElement('span');
+      ic.className = 'ic';
+      ic.textContent = '📞';
+      k.appendChild(ic);
+    }
   }
 
   sketch(canvas) {
