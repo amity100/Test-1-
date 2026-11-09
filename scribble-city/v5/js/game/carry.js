@@ -200,6 +200,8 @@ function hframe(fig) {
   return [_x, UP, _z];
 }
 
+const _gh2 = new THREE.Vector3();
+const _gn2 = new THREE.Vector3();
 function handOf(fig, side) {
   return side === 1 ? fig.j.handR : fig.j.handL;
 }
@@ -785,6 +787,36 @@ function strokesFor(fig, item, side, w) {
       // (round 15: Lily's coloured pencil - fig.pencilCol: its body and its point the colour it puts on
       // the page, the bare wood between them; big enough to be seen, its point 0.17 ahead of her hand -
       // game/prologue/page.js)
+      // (round 24, the player's word: the pencils part of her hand - held now as a pencil is held,
+      // slanting through her fingers to its point on the page (fig.pencilAx, game/prologue/page.js):
+      // its point under her fingers, its end out over her knuckles; thinner than a finger, as it is.
+      // Her coloured one the colour it puts on; her drawing pencil yellow, its point graphite)
+      if (fig.pencilAx) {
+        const ax = fig.pencilAx;
+        const pc = fig.pencilCol || [0.96, 0.78, 0.22];
+        // (through the hollow of her fist - render/people.js closes it round the pencil, fig.grip - its
+        // point 0.075 below it)
+        const g = fig.grip;
+        _c.copy(h);
+        if (g) {
+          const hk = S * 0.862;
+          _gh2.subVectors(h, el);
+          _gh2.addScaledVector(g, -_gh2.dot(g));
+          if (_gh2.lengthSq() > 1e-8) {
+            _gh2.normalize();
+            _gn2.crossVectors(g, _gh2);
+            _c.addScaledVector(_gh2, 0.07 * hk).addScaledVector(_gn2, 0.0607 * hk);
+          }
+        }
+        _c.addScaledVector(ax, -0.075 * S);
+        _b.copy(_c).addScaledVector(ax, 0.034 * S);
+        _a.copy(_c).addScaledVector(ax, 0.175 * S);
+        line(fig, _b, _a, pc, w * 1.5, sd + 120);
+        line(fig, _c, _b, [0.93, 0.8, 0.62], w * 1.1, sd + 121);
+        _a.copy(_c).addScaledVector(ax, 0.012 * S);
+        line(fig, _c, _a, fig.pencilCol || [0.25, 0.22, 0.2], w * 0.75, sd + 123);
+        break;
+      }
       if (fig.pencilCol) {
         const pc = fig.pencilCol;
         _a.copy(h).addScaledVector(_d, -0.07 * S);

@@ -678,6 +678,18 @@ function mouthTrack(text, loud) {
   return out;
 }
 const _want = new Float32Array(8);
+// (round 24) how open the mouth is at this moment of the line, from the voice's own loudness
+// (game/prologue/voice.js envOf): -1 where there is none (no recording - the letters say it)
+function voiceJaw(say) {
+  const E = say && say.env;
+  if (!E || !E.a || !E.a.length) return -1;
+  const tt = (performance.now() / 1000 - say.atT) * E.rate;
+  if (tt < 0) return 0;
+  const i = Math.floor(tt);
+  if (i >= E.a.length - 1) return i >= E.a.length + 4 ? -1 : 0;
+  const f = tt - i;
+  return E.a[i] + (E.a[i + 1] - E.a[i]) * f;
+}
 const _gaze = [0, 0, 0, 0];
 // (v5, ROADMAP 18) the hero's face this moment (render/heroart.js EXPRS): his mouth open and shut with
 // the words he says, at the voice's pace (the same syllables as anybody's: mouthTrack), and what he
@@ -693,6 +705,9 @@ function heroFace(fig, t) {
     else if (p >= 0) {
       const tr = say.track || (say.track = mouthTrack(say.text, say.tone === 'alarm' || say.text.indexOf('!') >= 0));
       jaw = tr[Math.min(n + 1, Math.floor(p)) * 2];
+      // (round 24: the voice's own syllables, not the letters' - those trembled)
+      const vj = voiceJaw(say);
+      if (vj >= 0) jaw = vj * 0.62;
     }
   }
   const glad = mood === 'joy' || mood === 'laugh' || mood === 'smirk' || mood === 'tender' || mood === 'tease';
@@ -773,9 +788,21 @@ function faceOf(fig, F, t, cam) {
       // (round 15, the player's word: Lily's mouth hardly moved as she talked - spec.talkK, her words'
       // own mouth bigger; her startled one kept small: moodMouthK)
       const tk = F.spec.talkK || 1;
-      _want[0] = Math.max(_want[0], Math.min(1, (ja + (tr[j * 2] - ja) * f) * tk));
-      _want[7] = Math.max(-1, Math.min(1, (wa + (tr[j * 2 + 1] - wa) * f) * (tk > 1 ? 1 + (tk - 1) * 0.6 : 1)));
-      fig.speakNod = ja + (tr[j * 2] - ja) * f;
+      // (round 24, the player's word: mouths that hardly moved, or only trembled - read off the letters
+      // a character at a time, a mouth jumped twenty times a second. Opened now by the voice itself,
+      // syllable by syllable as it is heard, a little parted all through the words; the letters only
+      // shape the lips, wide or round, and that only as far as the mouth is open)
+      const vj = voiceJaw(say);
+      if (vj >= 0) {
+        const jw = vj > 0.03 ? 0.05 + vj * 0.6 : vj * 1.5;
+        _want[0] = Math.max(_want[0], Math.min(1, jw * Math.min(1.35, tk)));
+        _want[7] = Math.max(-1, Math.min(1, (wa + (tr[j * 2 + 1] - wa) * f) * Math.min(1, vj * 1.6)));
+        fig.speakNod = jw;
+      } else {
+        _want[0] = Math.max(_want[0], Math.min(1, (ja + (tr[j * 2] - ja) * f) * tk));
+        _want[7] = Math.max(-1, Math.min(1, (wa + (tr[j * 2 + 1] - wa) * f) * (tk > 1 ? 1 + (tk - 1) * 0.6 : 1)));
+        fig.speakNod = ja + (tr[j * 2] - ja) * f;
+      }
       // (the brows with what is stressed: a little up on the strong syllables)
       if (ja > 0.42) _want[3] = Math.max(_want[3], (ja - 0.42) * 0.9);
       // (a smile at rest gives way to the words; joy keeps it - and whatever feeling has a smile in it)
@@ -2359,7 +2386,15 @@ export class PersonRenderer {
       HL.set(ai ? 'foreL' : 'foreR', 'fore', _m);
       _c.subVectors(hd, el).normalize();
       _d.copy(hd).addScaledVector(_c, (fem ? 0.17 : 0.19) * S);
-      (ai === 0 ? p.heroHandR : p.heroHandL).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), fwd), skin, own, id(), ind);
+      // (round 24, the player's word: Lily's hands unnatural as she drew, the pencils part of her hand -
+      // her right hand now closed round her pencil as the hero's is round his: fig.grip, the way the
+      // pencil lies across the fist - game/prologue/page.js; bent at the wrist to lie square across it)
+      const grip = ai === 0 ? fig.grip : null;
+      if (grip) {
+        _gw.copy(_c).addScaledVector(grip, -_c.dot(grip));
+        if (_gw.lengthSq() > 1e-6) _d.copy(hd).addScaledVector(_gw.normalize(), (fem ? 0.17 : 0.19) * S);
+      }
+      (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), grip || fwd), skin, own, id(), ind);
       if (ai === 1 && F.watch) {
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
         _x.copy(rgt).multiplyScalar(-1).addScaledVector(_c, rgt.dot(_c)).normalize();

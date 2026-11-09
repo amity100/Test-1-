@@ -288,6 +288,36 @@ function cityCopterModel(livery = 'news') {
 // (v5) how far before the edge of the page what goes out toward it begins to be held back
 const EDGE_SOFT = 45;
 
+const _seatE = new THREE.Euler();
+const _seatQ = new THREE.Quaternion();
+const _seatP = new THREE.Vector3();
+
+// (round 24) somebody in a seat of a car (v): the seat's place (local s across, y up, u along) in the
+// car's body as it is drawn this frame - lifted, pitched and rolled with it - into out; and the
+// sitter sunk into it as far as the roof asks: the head's top, as they were posed last, kept under
+// the roof's inside wherever the seat is (a tall man in a low coupe, a child on a cushion, a car
+// pitched up a ramp or nose down out of the sky - the head came up through the roof)
+export function seatPlace(v, fig, s, y, u, out) {
+  const B = v && v.bodyPose ? v.bodyPose() : null;
+  const lift = B ? B.lift : 0;
+  const sc = B ? B.scale : 1;
+  _seatE.set(B ? B.tilt : 0, v.yaw, B ? B.roll : 0, 'YXZ');
+  _seatQ.setFromEuler(_seatE);
+  if (fig && B) {
+    const j = fig.j;
+    // (the head's top over the seat, upright, as last posed; in the body's frame, its height)
+    const above = j && j.headC && fig.pos && j.headC.lengthSq() > 0 ? j.headC.y - fig.pos.y + 0.13 * (fig.scale || 1) * (fig.headScale || 1) : 0;
+    if (above > 0.3 && above < 2.2) {
+      const top = y - (fig.seatDrop || 0) + above * Math.cos(B.tilt) * Math.cos(B.roll);
+      const over = top - (B.roofY - 0.06);
+      if (over > 0) fig.seatDrop = Math.min(0.4, (fig.seatDrop || 0) + over);
+      else if (over < -0.04 && fig.seatDrop > 0) fig.seatDrop = Math.max(0, fig.seatDrop - 0.01);
+    }
+  }
+  _seatP.set(s * sc, (y - (fig && fig.seatDrop ? fig.seatDrop : 0)) * sc, u * sc).applyQuaternion(_seatQ);
+  return out.set(v.pos.x + _seatP.x, (v.pos.y || 0) + lift + _seatP.y, v.pos.z + _seatP.z);
+}
+
 class Vehicle {
   constructor(mgr, kind, grade, score, stock = null) {
     this.mgr = mgr;
@@ -522,16 +552,29 @@ class Vehicle {
   }
 
   // the cars are drawn with the city's car batches
+  // (round 24) the body as it is drawn this frame: lifted off its wheels (a dip, a part's lift, a
+  // bump), pitched and rolled - the seats go with it, or the roof came down through the heads in it
+  bodyPose() {
+    const wob = this.grade === 'fail' || this.grade === 'wonky' ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3) : 0;
+    const B = this._bp || (this._bp = { lift: 0, tilt: 0, roll: 0, roofY: 1.4, scale: 1 });
+    B.lift = wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0);
+    B.roll = (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0);
+    B.tilt = (this.bodyPitch || 0) + (this.floorTilt || 0);
+    B.roofY = (KINDS[this.carKind] || KINDS.sedan).roofY || 1.4;
+    B.scale = this.pop || 1;
+    return B;
+  }
+
   draw(cars) {
     if (this.kind !== 'car' || this.dead) return;
-    const wob = this.grade === 'fail' || this.grade === 'wonky' ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3) : 0;
+    const BP = this.bodyPose();
     const siren = (this.extra === 'police' || this.extra === 'armored' || this.extra === 'fire') && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
     // (just drawn: still turning from the drawing into the car)
     const rv = this.mat ? this.mat.carRV : null;
     const U = this.up;
     cars.draw(this.carKind, this.dirt > 0.05 ? this.dustyColor() : this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0), roll: (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0), tilt: (this.bodyPitch || 0) + (this.floorTilt || 0), reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      lift: BP.lift, roll: BP.roll, tilt: BP.tilt, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
       // (ROADMAP 11.20: wheels drawn onto it in place of its own - game/fuse.js)
       noWheels: !!(this.fz && this.fz.hideWheels),
       // (yours: the side windows down, you and whoever rides with you seen through them)

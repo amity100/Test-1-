@@ -290,6 +290,14 @@ float gZig = 0.0; // > 0: the pen zigzags back and forth along the stroke (a scr
 // 0 near .. 1 far away: an artist draws the far end of a street with fewer, calmer strokes (a
 // wash of its colour), so a far window, a far palm, a far face still reads as what it is
 float gFar = 0.0;
+// (round 24, the player's word: mouths black when open, Lily's and others') how much of the open
+// mouth's inside this is - its own warm red, lit as the lips round it are, never a hole
+float gMouthK = 0.0;
+// (round 24) the line weight this pixel is marked with for the outlines (render/pipeline.js edgeAt):
+// < 0 its own (uLine); a face's eyes and the inside of its mouth 243/255 (drawn big) or 241/255
+// (small) - drawn there with a fine warm line, not the body's black one (that, round an open mouth,
+// filled it black). Whole steps of 1/255: an 8-bit picture keeps them apart
+float gLineW = -1.0;
 vec2 strokeFamily(vec2 p, vec2 d, vec2 n, float sp, float mppA, float mppL, float wpx, float seed, float lenK) {
   float along = dot(p, d) / sp;
   float across = dot(p, n) / sp;
@@ -1214,14 +1222,16 @@ void main() {
         float d = vMouth;
         // (the lips' wet insides, then dark at once - a mouth is dark a few millimetres in)
         // (round 17: a warm red, the throat a deep maroon - never a black hole: render/glsl.js PORTRAIT)
-        vec3 inside = mix(vec3(0.5, 0.2, 0.19), vec3(0.3, 0.1, 0.09), smoothstep(0.04, 0.14, d));
-        inside = mix(inside, vec3(0.2, 0.06, 0.06), smoothstep(0.3, 0.75, d));
+        // (round 24: brighter again - a mouth's warm pink-red, the throat a red, as an animated film's)
+        vec3 inside = mix(vec3(0.66, 0.32, 0.3), vec3(0.5, 0.2, 0.19), smoothstep(0.04, 0.14, d));
+        inside = mix(inside, vec3(0.36, 0.12, 0.11), smoothstep(0.3, 0.75, d));
         float tg = smoothstep(0.28, 0.42, d) * (1.0 - smoothstep(0.85, 1.0, d)) * (1.0 - up) * (1.0 - smoothstep(0.011, 0.019, bx));
         inside = mix(inside, vec3(0.36, 0.11, 0.11), tg * 0.75);
         float tU = smoothstep(0.05, 0.09, d) * (1.0 - smoothstep(0.24, 0.32, d)) * up * mid;
         float tL = smoothstep(0.12, 0.16, d) * (1.0 - smoothstep(0.2, 0.25, d)) * (1.0 - up) * mid * 0.25;
         inside = mix(inside, vec3(0.86, 0.83, 0.74), max(tU, tL));
         tex.rgb = mix(tex.rgb, inside, smoothstep(0.015, 0.05, d));
+        gMouthK = smoothstep(0.015, 0.05, d) * (1.0 - max(tU, tL));
       }
 #ifdef FOLK_HEAD
       // (a face drawn near: its inside, seen only through the open mouth - dark red, as a throat is;
@@ -1229,7 +1239,8 @@ void main() {
       // never a black hole for an eye)
       if (!gl_FrontFacing) {
         float thr = step(vLP.y, -0.015) * step(-0.11, vLP.y) * step(abs(vLP.x), 0.035) * step(0.0, vLP.z);
-        tex.rgb = mix(tex.rgb * 0.55, vec3(0.2, 0.06, 0.06), thr);
+        tex.rgb = mix(tex.rgb * 0.55, vec3(0.36, 0.12, 0.11), thr);
+        gMouthK = max(gMouthK, thr);
       }
 #endif
 #endif
@@ -1284,13 +1295,17 @@ void main() {
     ic = mix(ic, uIrisC, stk * 0.5 * smoothstep(0.12, 0.7, it));
     // (its dark ring at the edge, and darker again round the pupil)
     ic *= mix(0.5, 1.0, smoothstep(0.0, 0.2, it)) * mix(1.0, 0.75, smoothstep(0.75, 1.0, it));
+    // (round 24, the player's word: eyes black still - the iris a little lighter, its colour seen)
+    ic = min(ic * 1.3, vec3(1.0));
     // the white of it, not white: warm, greyer to the sides, in the lid's shade at the top
-    vec3 sc = vec3(0.88, 0.84, 0.79) * mix(0.8, 1.0, smoothstep(0.05, 0.7, ca)) * mix(1.0, 0.78, smoothstep(0.2, 0.8, eb.y));
+    vec3 sc = vec3(0.9, 0.86, 0.81) * mix(0.84, 1.0, smoothstep(0.05, 0.7, ca)) * mix(1.0, 0.86, smoothstep(0.2, 0.8, eb.y));
     vec3 ecol = mix(sc, ic, inI);
     ecol = mix(ecol, vec3(0.03, 0.022, 0.02), inP);
     // (the light in it where the light is, as the eye turns under it)
-    float hl = smoothstep(0.9965, 0.9985, dot(eb, normalize(vec3(-0.32, 0.36, 0.877))));
-    ecol = mix(ecol, vec3(1.0, 0.98, 0.94), hl * 0.9);
+    // (round 24: a bigger light in it, and a small second one below - eyes alive, not dark beads)
+    float hl = smoothstep(0.993, 0.9965, dot(eb, normalize(vec3(-0.32, 0.36, 0.877))));
+    hl = max(hl, 0.55 * smoothstep(0.9975, 0.999, dot(eb, normalize(vec3(0.2, -0.22, 0.955)))));
+    ecol = mix(ecol, vec3(1.0, 0.98, 0.94), hl * 0.95);
     tex = vec4(ecol, 1.0);
   } else if (vPart > 2.5 && vPart < 3.5) {
     // the tongue: its groove down the middle, darker to the back
@@ -1307,9 +1322,12 @@ void main() {
       // back, not black)
       // (round 17, the player's word again: still too dark - a child's mouth's warm red, the throat a
       // deep maroon, never black)
-      vec3 ins = mix(vec3(0.54, 0.22, 0.21), vec3(0.34, 0.11, 0.1), smoothstep(0.04, 0.16, vMouthP));
-      ins = mix(ins, vec3(0.22, 0.065, 0.065), smoothstep(0.3, 0.75, vMouthP));
+      // (round 24, the player's word a third time, with a picture: black still - its colours a little
+      // brighter, and below it is lit as the lips are, no pencil in it: gMouthK)
+      vec3 ins = mix(vec3(0.68, 0.33, 0.31), vec3(0.52, 0.2, 0.19), smoothstep(0.04, 0.16, vMouthP));
+      ins = mix(ins, vec3(0.38, 0.12, 0.11), smoothstep(0.3, 0.75, vMouthP));
       tex.rgb = mix(tex.rgb, ins, smoothstep(0.015, 0.05, vMouthP));
+      gMouthK = smoothstep(0.015, 0.05, vMouthP);
     }
     // its inside: seen through the open mouth, dark, as a throat is. Anywhere else it is seen only
     // through a seam a hair wide - round the lids, between closed lips, where the head meets the neck
@@ -1319,9 +1337,13 @@ void main() {
       gThr = step(0.0, vLP.z) * step(abs(vLP.x), 0.034) * step(-0.105, vLP.y) * step(vLP.y, -0.02) * uOpen;
       // (its own place in the picture is no skin's - the cheek's colour, in a crease's shade)
       vec3 skin = textureLod(uMap, vec2(0.316, 0.608), 4.0).rgb * 0.7;
-      tex.rgb = mix(skin, vec3(0.2, 0.06, 0.06), gThr);
+      tex.rgb = mix(skin, vec3(0.38, 0.12, 0.11), gThr);
+      gMouthK = max(gMouthK, gThr);
     }
   }
+#endif
+#ifdef PORTRAIT
+  if (vPart > 0.5 || gMouthK > 0.3) gLineW = uLine > 0.96 ? 243.0 / 255.0 : 241.0 / 255.0;
 #endif
 #ifndef SOLID
   if (tex.a < uAlphaTest) discard;
@@ -1428,6 +1450,8 @@ void main() {
   // (a burnt-out car's lamps are out)
   em *= 1.0 - vBurnt;
 #endif
+  // (round 24: the open mouth's inside a little of its own light, as the lips' - never below a warm red)
+  if (gMouthK > 0.0) em += alb * gMouthK * 0.22;
   float ang = uAng;
   float dens = uDensity * uPenDens;
   float wash = uWash;
@@ -1435,9 +1459,9 @@ void main() {
   if (vPart > 3.5) {
     // (round 16, the player's word: Lily's eyes black on some screens - the eyes their own picture,
     // softly lit and never in the dark, no pencil over them, nothing undefined in them)
-    light = mix(0.66, 1.0, clamp(light, 0.0, 1.0));
-    lit = max(lit, tex.rgb * 0.85);
-    shade = max(shade, tex.rgb * 0.62);
+    light = mix(0.72, 1.0, clamp(light, 0.0, 1.0));
+    lit = max(lit, tex.rgb * 0.9);
+    shade = max(shade, tex.rgb * 0.72);
   } else if (vPart < 0.5) {
     // (ROADMAP 14.1) A portrait's own pencil, not the city's pens (a face drawn with a wall's
     // strokes is a scratched face): its colour and the light as they are, and over them fine
@@ -1475,12 +1499,16 @@ void main() {
       lit = mix(lit, fc, 0.5);
       shade = mix(shade, fc * 0.85, 0.5);
     }
+    // (round 24: the open mouth's inside lit as the lips round it are, and no pencil over it - the
+    // strokes pressed into the hollows made a black hole of it)
+    hk = mix(hk, vec3(1.0), gMouthK * 0.92);
+    light = mix(light, max(light, 0.5), gMouthK);
     lit *= hk;
     shade *= hk;
   } else {
-    // (inside the mouth: in the lips' shade)
-    light *= 0.35;
-    lit *= 0.7;
+    // (inside the mouth: in the lips' shade - round 24: a little, not dark grey teeth in a black hole)
+    light *= 0.62;
+    lit *= 0.88;
   }
 #endif
 
@@ -1598,7 +1626,7 @@ void main() {
     gShade = uvec4(packHalf2x16(shade.rg), packHalf2x16(vec2(shade.b, hi)), packHalf2x16(dpx), packHalf2x16(dpy));
     gOwn = vec4(em, rings.z);
     vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
-    gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * gIdK * 0.6180339), uLine);
+    gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * gIdK * 0.6180339), gLineW >= 0.0 ? gLineW : uLine);
 #ifdef USE_PREV
     gVel = vec4(vVel.xy, 0.0, vVel.z);
 #else
@@ -1618,7 +1646,7 @@ void main() {
   if ((probe & 8) == 0) col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
   vec3 vn = normalize((viewMatrix * vec4(N, 0.0)).xyz);
-  gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * gIdK * 0.6180339), uLine);
+  gAux = vec4(vn.xy * 0.5 + 0.5, fract(uObj + vId * gIdK * 0.6180339), gLineW >= 0.0 ? gLineW : uLine);
 #ifdef USE_PREV
   gVel = vec4(vVel.xy, 0.0, vVel.z);
 #else
