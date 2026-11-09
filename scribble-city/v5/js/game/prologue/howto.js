@@ -8,8 +8,14 @@ import { lang } from '../../core/lang.js';
 
 const OF = 6;
 
+// (round 22: at the wheel of a phone, the buttons of the big phone games - ◀ ▶ under the left thumb, the
+// pedals under the right - and not the stick, unless it was chosen: game/game.js drive-btns)
+let BTN = null;
+const btns = () => (BTN !== null ? BTN : typeof document !== 'undefined' && document.body.classList.contains('drive-btns'));
+
 // (round 16: in the language chosen on the start screen - core/lang.js)
-export function howto(key, touch) {
+export function howto(key, touch, drivePads = null) {
+  BTN = drivePads;
   return lang() === 'en' ? howtoEn(key, touch) : howtoHe(key, touch);
 }
 
@@ -50,7 +56,9 @@ function howtoHe(key, touch) {
         step: 4, of: OF, title: 'נוהגים',
         say: 'סעו קצת ברחובות, להרגיש את המכונית.',
         lines: T
-          ? [['ג׳ויסטיק', 'גז, ברקס והגה'], ['כפתור הרכב', 'לצאת מהמכונית']]
+          ? btns()
+            ? [['◀ ▶', 'הגה'], ['גז, בלם', 'הדוושות מימין'], ['כפתור הרכב', 'לצאת מהמכונית']]
+            : [['ג׳ויסטיק', 'גז, ברקס והגה'], ['כפתור הרכב', 'לצאת מהמכונית']]
           : [['W', 'גז'], ['S', 'ברקס, ורוורס'], ['A D', 'הגה'], ['Space', 'בלם יד (להחלקות)'], ['E', 'לצאת מהמכונית']],
       };
     // (round 17, the player's word: in the car - the pen draws on it, the turbo first, the game showing
@@ -109,27 +117,27 @@ function howtoHe(key, touch) {
     case 'tocar':
       return {
         title: 'הולכים למכונית',
-        say: 'המכונית של דני חונה בחניון ברחוב החמישי. לילי באה איתכם.',
-        lines: [['המפה', 'הנקודה היא החניון']],
+        say: 'המכונית של דני חונה כאן קרוב, בצד הכביש - החץ הצהוב מעליה. לילי באה איתכם.',
+        lines: [['המפה', 'הנקודה היא המכונית']],
       };
     case 'climb':
       return {
         title: 'בורחים!',
         say: 'הם רודפים אחריכם ויורים צבע. עלו ברמפות, קומה אחרי קומה, עד הגג. מכוניות שלהם מחכות בחושך.',
-        lines: T ? [['ג׳ויסטיק', 'גז והגה']] : [['W', 'גז'], ['A D', 'הגה'], ['Space', 'בלם יד בפניות']],
+        lines: T ? (btns() ? [['◀ ▶', 'הגה'], ['גז', 'הדוושה מימין'], ['בלם יד', 'בפניות']] : [['ג׳ויסטיק', 'גז והגה']]) : [['W', 'גז'], ['A D', 'הגה'], ['Space', 'בלם יד בפניות']],
         tip: 'סעו מהר וזגזגו: לאט מדי, והצבע פוגע. הפס הצבעוני למטה הוא כוח המכונית.',
       };
     case 'floor':
       return {
         title: 'גז עד הסוף!',
         say: 'סעו ישר לקצה הגג, ואל תעצרו.',
-        lines: T ? [['ג׳ויסטיק', 'קדימה עד הסוף']] : [['W', 'גז עד הסוף']],
+        lines: T ? (btns() ? [['גז', 'לוחצים ולא עוזבים']] : [['ג׳ויסטיק', 'קדימה עד הסוף']]) : [['W', 'גז עד הסוף']],
       };
     case 'ramp':
       return {
         title: 'עולים על הרמפה!',
         say: 'הרמפה שציירתם מחכה. סעו עליה במלוא המהירות.',
-        lines: T ? [['ג׳ויסטיק', 'קדימה עד הסוף']] : [['W', 'גז עד הסוף']],
+        lines: T ? (btns() ? [['גז', 'לוחצים ולא עוזבים']] : [['ג׳ויסטיק', 'קדימה עד הסוף']]) : [['W', 'גז עד הסוף']],
       };
     // (round 12) the second drawing: a rotor, in the air
     case 'rotor':
@@ -143,7 +151,7 @@ function howtoHe(key, touch) {
       return {
         title: 'טסים!',
         say: 'הרוטור מחזיק אתכם באוויר. טוסו לחוף ונחתו על החול.',
-        lines: T ? [['ג׳ויסטיק', 'קדימה והגה'], ['▲ ▼', 'למעלה ולמטה']] : [['W A D', 'קדימה והגה'], ['Space', 'למעלה'], ['C', 'למטה']],
+        lines: T ? (btns() ? [['◀ ▶', 'הגה'], ['גז', 'קדימה'], ['▲ ▼', 'למעלה ולמטה']] : [['ג׳ויסטיק', 'קדימה והגה'], ['▲ ▼', 'למעלה ולמטה']]) : [['W A D', 'קדימה והגה'], ['Space', 'למעלה'], ['C', 'למטה']],
         tip: 'החץ במפה מראה את החוף.',
       };
     case 'down':
@@ -156,7 +164,7 @@ function howtoHe(key, touch) {
       return {
         title: 'מתחמקים מהם',
         say: 'הם עדיין אחריכם. התרחקו מהם - או סעו אל החוף. לשם הם לא ייכנסו.',
-        lines: T ? [['ג׳ויסטיק', 'גז והגה']] : [['W', 'גז'], ['A D', 'הגה']],
+        lines: T ? (btns() ? [['◀ ▶', 'הגה'], ['גז', 'הדוושה מימין']] : [['ג׳ויסטיק', 'גז והגה']]) : [['W', 'גז'], ['A D', 'הגה']],
       };
     case 'quiet':
       return {
@@ -204,7 +212,7 @@ function howtoEn(key, touch) {
       return {
         step: 4, of: OF, title: 'Drive',
         say: 'Drive a little through the streets, to get the feel of the car.',
-        lines: T ? [['Stick', 'gas, brake and steering'], ['Car button', 'get out of the car']] : [['W', 'gas'], ['S', 'brake, and reverse'], ['A D', 'steer'], ['Space', 'handbrake (for drifts)'], ['E', 'get out of the car']],
+        lines: T ? (btns() ? [['◀ ▶', 'steer'], ['Gas, brake', 'the pedals on the right'], ['Car button', 'get out of the car']] : [['Stick', 'gas, brake and steering'], ['Car button', 'get out of the car']]) : [['W', 'gas'], ['S', 'brake, and reverse'], ['A D', 'steer'], ['Space', 'handbrake (for drifts)'], ['E', 'get out of the car']],
       };
     case 'draw':
       return {
@@ -244,18 +252,18 @@ function howtoEn(key, touch) {
     case 'site':
       return { title: 'What happened to the wheel?!', say: 'Go to the end of the pier, where it stood, and ask someone. Lily comes with you.', lines: [['Map', 'the dot is the place']] };
     case 'tocar':
-      return { title: 'To the car', say: 'Danny\'s car is in the car park on 5th Street. Lily comes with you.', lines: [['Map', 'the dot is the car park']] };
+      return { title: 'To the car', say: 'Danny\'s car is parked close by, at the side of the road - the yellow arrow is over it. Lily comes with you.', lines: [['Map', 'the dot is the car']] };
     case 'climb':
       return {
         title: 'Get away!',
         say: 'They are after you, shooting paint. Up the ramps, floor after floor, to the roof. Their cars wait in the dark.',
-        lines: T ? [['Stick', 'gas and steering']] : [['W', 'gas'], ['A D', 'steer'], ['Space', 'handbrake in the turns']],
+        lines: T ? (btns() ? [['◀ ▶', 'steer'], ['Gas', 'the pedal on the right'], ['Handbrake', 'in the turns']] : [['Stick', 'gas and steering']]) : [['W', 'gas'], ['A D', 'steer'], ['Space', 'handbrake in the turns']],
         tip: 'Drive fast and zigzag: too slow, and the paint hits. The coloured bar below is the car\'s strength.',
       };
     case 'floor':
-      return { title: 'Floor it!', say: 'Drive straight to the edge of the roof, and do not stop.', lines: T ? [['Stick', 'forward, all the way']] : [['W', 'gas, all the way']] };
+      return { title: 'Floor it!', say: 'Drive straight to the edge of the roof, and do not stop.', lines: T ? (btns() ? [['Gas', 'hold it down, do not let go']] : [['Stick', 'forward, all the way']]) : [['W', 'gas, all the way']] };
     case 'ramp':
-      return { title: 'Up the ramp!', say: 'The ramp you drew is waiting. Drive onto it at full speed.', lines: T ? [['Stick', 'forward, all the way']] : [['W', 'gas, all the way']] };
+      return { title: 'Up the ramp!', say: 'The ramp you drew is waiting. Drive onto it at full speed.', lines: T ? (btns() ? [['Gas', 'hold it down, do not let go']] : [['Stick', 'forward, all the way']]) : [['W', 'gas, all the way']] };
     case 'rotor':
       return {
         title: 'Draw a rotor!',
@@ -267,13 +275,13 @@ function howtoEn(key, touch) {
       return {
         title: 'Flying!',
         say: 'The rotor holds you up. Fly to the beach and land on the sand.',
-        lines: T ? [['Stick', 'forward and steer'], ['▲ ▼', 'up and down']] : [['W A D', 'forward and steer'], ['Space', 'up'], ['C', 'down']],
+        lines: T ? (btns() ? [['◀ ▶', 'steer'], ['Gas', 'forward'], ['▲ ▼', 'up and down']] : [['Stick', 'forward and steer'], ['▲ ▼', 'up and down']]) : [['W A D', 'forward and steer'], ['Space', 'up'], ['C', 'down']],
         tip: 'The arrow on the map shows the beach.',
       };
     case 'down':
       return { title: 'Down to the street', say: 'You landed! Now take this car park\'s ramps down to the street.', lines: [['Map', 'the arrow shows the way down']] };
     case 'lose':
-      return { title: 'Shake them off', say: 'They are still after you. Get away from them - or drive to the beach. They will not go there.', lines: T ? [['Stick', 'gas and steering']] : [['W', 'gas'], ['A D', 'steer']] };
+      return { title: 'Shake them off', say: 'They are still after you. Get away from them - or drive to the beach. They will not go there.', lines: T ? (btns() ? [['◀ ▶', 'steer'], ['Gas', 'the pedal on the right']] : [['Stick', 'gas and steering']]) : [['W', 'gas'], ['A D', 'steer']] };
     case 'quiet':
       return { title: 'Find a quiet place', say: 'Drive to the beach, and stop there.', lines: [['Map', 'the dot is the place']] };
     default:

@@ -506,7 +506,10 @@ export class Game {
       this.pipe.reflections = pick('reflections');
       shared.uQuality.value = pick('quality') ? 1 : 0;
       this.pipe.taa = smartCan && (smartForced !== null ? smartForced : !!v.smart);
-      this.pace.setMode(paceForced !== null ? paceForced : v.pace);
+      // (round 22, the player's word: a steady 30 frames a second on a phone - the drawing's size kept
+      // to what holds it, game/pace.js; free on a computer, as it always was)
+      const paceDev = v.pace === 'device' ? (this.touch ? '30' : 'free') : v.pace;
+      this.pace.setMode(paceForced !== null ? paceForced : paceDev);
       this.pipe.setPensMode(pensForced !== null ? pensForced : v.pens);
       if (!!v.perf !== !!this.perf.on) this.perf.toggle(v.perf);
       // (every blueprint open, or found in the city: ROADMAP 9.1, not with ?classic)
@@ -641,7 +644,7 @@ export class Game {
       setTimeout(() => {
         // (ROADMAP 11.6) the free drawing first: anything at all, on the run
         if (this.freedraw) {
-          this.hud.toast(this.touch ? 'העיפרון ✏ — ציירו באוויר נשק או רכב, גם תוך כדי ריצה' : 'Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'info', 4.2);
+          this.hud.toast(this.touch ? 'העיפרון ✏ — ציירו באוויר נשק או רכב: כל המסך הוא הדף' : 'Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'info', 4.2);
           // (v5, ROADMAP 11.36) and the library of the drawn city's own weapons, as at the start of
           // the game it always was: picked, then drawn in the air
           setTimeout(() => this.hud.toast(this.touch ? 'ובעיפרון ← 📒 שרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים' : 'T — ספריית השרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים', 'info', 5), 4600);
@@ -1140,6 +1143,14 @@ export class Game {
   update(dt) {
     const playing = this.state === 'play' || this.state === 'dead';
     if (this.state === 'paused') dt = 0;
+    // (round 22: paused - the pause menu, the city's map - the body says so: what floats over the game
+    // from outside it (the car's part slots, the story's own layer) put away under the menu,
+    // css body.paused)
+    const paused = this.state === 'paused';
+    if (paused !== this.pausedCls) {
+      this.pausedCls = paused;
+      document.body.classList.toggle('paused', paused);
+    }
     // (a game inside the game on its sheet: the city stands still behind it)
     if (this.minigames && this.minigames.covering) dt = 0;
     // (the weapon wheel open: the city slows right down, ROADMAP 6.6)

@@ -8,6 +8,7 @@ import { lang } from '../../core/lang.js';
 
 const OBJ_HE = {
   'Get to your <b>car</b>': 'הולכים ל<b>מכונית</b> שלכם',
+  'Drive to the <b>car park</b> on 5th Street': 'סעו אל <b>החניון</b> ברחוב החמישי',
   '<b>Lose them</b> - up through the car park': '<b>ברחו מהם</b> - למעלה, דרך החניון',
   'Meet <b>Lily</b> at the ice cream stand': 'פגשו את <b>לילי</b> ליד דוכן הגלידה',
   'Walk around the <b>city</b> - take a look at it': 'הסתובבו ב<b>עיר</b> ותסתכלו מסביב',

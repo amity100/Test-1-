@@ -4,8 +4,9 @@
 
 const KEY = 'scribble-city-v5-settings';
 // (2: ROADMAP 15.5 - "every blueprint open" was on by itself until then; a save from before keeps
-// everything else, and begins the story)
-const VERSION = 2;
+// everything else, and begins the story. 3: round 22 - the frames' pace as the device likes it, a
+// steady 30 on a phone: a save from before keeps everything but its pace)
+const VERSION = 3;
 
 export const DEFAULTS = {
   sound: true,
@@ -33,8 +34,9 @@ export const DEFAULTS = {
   // the frames before. A choice to make: faster, but softer as you move (off to begin with)
   smart: false,
   // (game/pace.js) the frames' pace: free (as many as can be, as it always was), or steady: auto,
-  // 60, 30 a second
-  pace: 'free',
+  // 60, 30 a second. (round 22, the player's word: a steady 30 on a phone - 'device': free on a
+  // computer, 30 on a phone, game/game.js bindSettings)
+  pace: 'device',
   // (ROADMAP 11.4, render/pipeline.js) how the drawing is made on a computer: 'auto' - in two passes
   // (the surfaces, then the pens over the whole picture, once a pixel) or in one, whichever is
   // faster here, tried in play; 'two'; 'one', as it always was
@@ -68,6 +70,7 @@ export class Settings {
     for (const k of Object.keys(DEFAULTS)) {
       if (!(k in s.v)) continue;
       if (k === 'allOpen' && !(s.version >= 2)) continue;
+      if (k === 'pace' && !(s.version >= 3)) continue;
       if (k === 'voices') continue;
       const d = DEFAULTS[k];
       const x = s.v[k];

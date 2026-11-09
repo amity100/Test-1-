@@ -82,6 +82,11 @@ const GARAGE_IN = { x: PARK.dannyStop.x, z: PARK.dannyStop.z };
 const THUG_CAR = PARK.thugCar;
 const THUGS = PARK.thugs;
 const DANNY_CAR = PARK.heroCar;
+// (round 22, the player's word: after the wheel his car not far off, and plain where it is - at the
+// curb of Ocean Drive across the park from where the pier comes ashore, in the lane kept for parking,
+// its nose to 5th Street; and where the cut after the wheel leaves the two of them, coming off the pier)
+const PIER_CAR = { x: -0.9, z: 248.5, yaw: 0 };
+const PIER_OFF = { x: 47.5, z: 243.2 };
 const RUNUP = PARK.runup;
 // (the roof run's own frame: the drawing, the ramp and the jump are worked out along -x in it)
 const RUNF = PARK.runFrame;
@@ -287,7 +292,13 @@ export class Prologue {
       this.putDanny(VIEW.x + 1.3, VIEW.z + 0.5, Math.PI);
       this.put(L, VIEW.x, VIEW.z, Math.PI);
       L.pl.follow = true;
-      this.objective('Get to your <b>car</b>', GARAGE_IN.x, GARAGE_IN.z, 'Car park');
+    }
+    if (n === 5) {
+      // (round 22: coming off the pier, his car across the park at the curb)
+      const car = this.parkPierCar();
+      this.putDanny(PIER_OFF.x, PIER_OFF.z + 0.55, -Math.PI / 2);
+      this.put(L, PIER_OFF.x + 0.4, PIER_OFF.z - 0.75, -Math.PI / 2);
+      this.objective('Get to your <b>car</b>', car.pos.x, car.pos.z, 'Car');
     }
     if (n >= 6) {
       // (in the car, the dark car after them)
@@ -318,7 +329,7 @@ export class Prologue {
       }
       this.climb = false;
     }
-    g.camRig.yaw = n >= 6 && this.dannyCar ? this.dannyCar.yaw : Math.PI;
+    g.camRig.yaw = n >= 6 && this.dannyCar ? this.dannyCar.yaw : n === 5 ? -Math.PI / 2 : Math.PI;
     this.start(n);
   }
 
@@ -848,7 +859,10 @@ export class Prologue {
   // (ROADMAP 18.9) how to play what comes now: its card (game/prologue/howto.js) - kept up while the
   // player is at it (life 0), or for life seconds; a newer card, or the film, takes it away
   howto(key, life = 0) {
-    const o = howtoCard(key, this.game.touch);
+    // (round 22: on a phone, whether a car is driven by the buttons - ◀ ▶ and the pedals - or the stick:
+    // the cards say the one on the screen)
+    const g = this.game;
+    const o = howtoCard(key, g.touch, g.touch && !(g.settings && g.settings.get && g.settings.get('touchDrive') === 'stick'));
     const tok = (this.howTok = (this.howTok || 0) + 1);
     if (!o || this.ff) {
       this.ui.card(null);
@@ -1211,7 +1225,8 @@ export class Prologue {
     const v = g.vehicles.nearest(P.pos, 3.2);
     if (v && v === this.carOnly) return null;
     if (!v && !g.traffic.nearestDoor(P.pos, 1.7)) return null;
-    return tr('לא עכשיו - המכונית שלכם בחניון. הולכים ברגל עם לילי', 'Not now - your car is in the car park. On foot, with Lily');
+    // (round 22: his car is the red one at the curb by the pier now, not one in the car park)
+    return tr('לא את זו - המכונית של דני היא האדומה', "Not this one - Danny's car is the red one");
   }
 
   // (round 18, the player's word: the two men came to talk to Danny, and it was a car they talked to)
@@ -1231,6 +1246,35 @@ export class Prologue {
     v.dispose();
     g.vehicles.list.splice(i, 1);
     if (g.damage && g.damage.cars) g.damage.cars.delete(v);
+  }
+
+  // (round 22) his car where he left it before the evening began: at the curb of Ocean Drive by the pier
+  parkPierCar() {
+    const g = this.game;
+    if (this.dannyCar) return this.dannyCar;
+    const v = g.vehicles.spawnStock({ kind: 'muscle', color: [0.58, 0.1, 0.12] }, { x: PIER_CAR.x, z: PIER_CAR.z }, PIER_CAR.yaw);
+    v.kept = true;
+    v.pos.y = groundHeight(PIER_CAR.x, PIER_CAR.z);
+    // (not blown up on the way, whatever it runs into: he needs it at the car park)
+    v.keepAlive = () => {
+      v.hp = Math.max(v.hp, v.maxHp * 0.3);
+    };
+    this.dannyCar = v;
+    return v;
+  }
+
+  // (round 22) Lily out of the car she rode in, on her feet beside it (or where she is put after)
+  lilyOut() {
+    const L = this.cast.lily;
+    if (!L || !L.pl || !L.pl.ride) return;
+    const c = L.pl.ride;
+    L.pl.ride = null;
+    L.riding = false;
+    L.noCollide = false;
+    L.baseY = 0;
+    L.fig.sit = 0;
+    L.fig.ones = false;
+    if (c && c.pos) this.put(L, c.pos.x - Math.cos(c.yaw) * 1.3, c.pos.z + Math.sin(c.yaw) * 1.3, c.yaw);
   }
 
   putDanny(x, z, yaw) {
@@ -2441,7 +2485,7 @@ export class Prologue {
   // (round 17, the player's word: where the story goes on from marked in the world, not only by the
   // map's dot - 'players could look for an hour'): a ring of light on the ground there, as big as the
   // place it begins in, and an arrow over it, bobbing; gone in the film, and once it is reached
-  beacon(x, z, r = 3) {
+  beacon(x, z, r = 3, h = 1.6) {
     this.unbeacon();
     const g = this.game;
     const col = g.world && g.world.collision;
@@ -2470,7 +2514,7 @@ export class Prologue {
       document.head.appendChild(st);
     }
     document.body.appendChild(el);
-    this.beaconR = { ring, el, t: 0, x, y, z, r };
+    this.beaconR = { ring, el, t: 0, x, y, z, r, h };
   }
 
   unbeacon() {
@@ -2489,11 +2533,11 @@ export class Prologue {
     if (!B) return;
     B.t += dt;
     B.ring.scale.setScalar(1 + Math.sin(B.t * 3.2) * 0.04);
-    B.ring.visible = !this.holdCam;
+    B.ring.visible = B.film || !this.holdCam;
     // (the arrow where the place is on the screen, a little over it - not behind the camera)
     const cam = this.game.camera;
-    const q = v3(B.x, B.y + 1.6, B.z).project(cam);
-    const on = !this.holdCam && q.z < 1 && Math.abs(q.x) < 1.05 && Math.abs(q.y) < 1.05;
+    const q = v3(B.x, B.y + (B.h || 1.6), B.z).project(cam);
+    const on = (B.film || !this.holdCam) && q.z < 1 && Math.abs(q.x) < 1.05 && Math.abs(q.y) < 1.05;
     B.el.classList.toggle('off', !on);
     if (on) {
       const sx = ((q.x + 1) / 2) * window.innerWidth;
@@ -3002,10 +3046,30 @@ export class Prologue {
     P.fig.lookAt = null;
     L.fig.lookAt = null;
     L.pl.follow = true;
+    // (round 22, the player's word: his car not far off, and plain where it is - a cut on, the two of
+    // them coming off the pier, and over their shoulders across the park his car at the curb, the arrow
+    // over it)
+    const car = this.parkPierCar();
+    this.putDanny(PIER_OFF.x, PIER_OFF.z + 0.55, -Math.PI / 2);
+    this.put(L, PIER_OFF.x + 0.4, PIER_OFF.z - 0.75, -Math.PI / 2);
+    this.beacon(car.pos.x, car.pos.z, 3.1, 2.9);
+    // (the arrow over it seen in the film too, these two shots)
+    this.beaconR.film = true;
+    this.objective('Get to your <b>car</b>', car.pos.x, car.pos.z, 'Car');
+    // over their shoulders, high enough to see over the park's hedges: the road across the park, the
+    // arrow over the car
+    this.shot({ from: v3(PIER_OFF.x + 4.4, 4.2, PIER_OFF.z + 2.0), to: v3(PIER_OFF.x + 3.8, 4.0, PIER_OFF.z + 1.7), look: v3(car.pos.x, 1.0, car.pos.z), fov: 24, dur: 2.0, hand: 0.25 });
+    yield 1.9;
+    // the car itself, from the lane it is parked in, in front of it (not the sidewalk: its palms in the
+    // way): the red one, at the curb, the arrow bobbing over it
+    this.shot({ from: v3(car.pos.x - 1.4, 2.3, car.pos.z + 10.0), to: v3(car.pos.x - 1.2, 2.2, car.pos.z + 9.2), look: v3(car.pos.x + 0.1, 1.45, car.pos.z + 0.3), fov: 38, dur: 2.2, hand: 0.2 });
+    yield 2.1;
+    if (this.beaconR) this.beaconR.film = false;
     this.film(false);
+    // (behind him, looking the way he is to go)
+    g.camRig.yaw = -Math.PI / 2;
     // (round 16: the thriller's piece with them on the way, to the car)
     this.hour(18.42, 0.0035);
-    this.objective('Get to your <b>car</b>', GARAGE_IN.x, GARAGE_IN.z, 'Car park');
     this.howto('tocar', 9);
     this.start(5);
   }
@@ -3188,17 +3252,35 @@ export class Prologue {
     const P = g.player;
     const L = this.cast.lily;
     // the two men, their car at the curb of 5th Street, Danny's in its bay inside the garage
+    // (round 22: his car at the curb by the pier - made first, so that the car park's bay stays empty)
+    const own = this.parkPierCar();
     this.spawnThugs();
-    // (round 18, the player's word: 'Get to your car' - his own, and no other on the way: on foot,
-    // with Lily)
-    this.carOnly = this.dannyCar;
-    // the phone, half way there
-    yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 90;
+    // (round 18, the player's word: 'Get to your car' - his own, and no other on the way)
+    this.carOnly = own;
+    // (round 22, the player's word: the car close by and plain where; in it, Lily beside him, and driven
+    // to the car park on 5th Street - where the men looking for him are)
+    if (P.inVehicle !== own) {
+      if (!this.beaconR) this.beacon(own.pos.x, own.pos.z, 3.1, 2.9);
+      yield () => P.inVehicle === own;
+    }
+    this.unbeacon();
+    L.pl.follow = false;
+    L.pl.ride = own;
+    g.audio.play('click', 0.35);
+    this.objective('Drive to the <b>car park</b> on 5th Street', GARAGE_IN.x, GARAGE_IN.z, 'Car park');
+    // the phone, on the way
+    {
+      let t = 0;
+      yield () => {
+        t += this.dtR;
+        return t > 3.2 || this.dist(GARAGE_IN.x, GARAGE_IN.z) < 120;
+      };
+    }
     this.phoneRing(true);
     yield 2.4;
     this.phoneRing(false);
     this.ui.call('live', 'BENNY');
-    // (the phone out of his pocket and to his ear, walking on)
+    // (the phone out of his pocket and to his ear - round 22: at the wheel, driving on)
     P.fig.carry = 'phone';
     g.audio.play('click', 0.4);
     yield* this.say('P01', null, 0.3);
@@ -3213,9 +3295,19 @@ export class Prologue {
     this.thought('לא עכשיו. לא כשהיא איתי.', 2.4);
     // the garage's door on 5th Street: the dark car at the curb, the two men by it - the same two from
     // here to the end: the one who talks (t1), the one beside him (t2)
-    yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 15 || this.dist(THUGS[0].x, THUGS[0].z) < 16;
-    // (round 18: whatever he came in, he meets them on his feet)
+    yield () => this.dist(GARAGE_IN.x, GARAGE_IN.z) < 24 || this.dist(THUGS[0].x, THUGS[0].z) < 22;
+    // (round 18: whatever he came in, he meets them on his feet. Round 22: he has driven here - the car
+    // left in its bay inside, the two of them come out of the car park's door onto the sidewalk, and
+    // the men are there)
     this.outOfCar();
+    this.lilyOut();
+    own.pos.set(DANNY_CAR.x, DANNY_CAR.y, DANNY_CAR.z);
+    own.yaw = DANNY_CAR.yaw;
+    own.vx = own.vz = own.vy = 0;
+    own.speed = 0;
+    own.air = false;
+    own.hp = own.maxHp;
+    own.keepAlive = null;
     const t1 = this.cast.t1;
     const t2 = this.cast.t2;
     this.objective(null);

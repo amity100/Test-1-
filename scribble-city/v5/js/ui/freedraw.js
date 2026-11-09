@@ -691,6 +691,9 @@ export class FreeDraw {
     if (this.penOn()) game.fuse.pen.open();
     if (!game.touch) game.input.releaseLock();
     game.input.fire = false;
+    // (round 22: on a phone the whole screen is the page while it is open - the stick, the pedals,
+    // the buttons put away under it: css body.touch.fd-open)
+    if (game.touch && game.input.holdTouch) game.input.holdTouch(true);
     this.layout();
     this.read();
     this.render();
@@ -718,6 +721,7 @@ export class FreeDraw {
     this.partMenu(-1);
     this.el.classList.add('hidden');
     document.body.classList.remove('fd-open');
+    if (game.input.holdTouch) game.input.holdTouch(false);
     document.body.classList.remove('fd-car');
     document.body.classList.remove('fd-pp');
     document.body.classList.remove('fd-pen');
@@ -937,6 +941,8 @@ export class FreeDraw {
     const inkI = this.strokes.length ? this.strokes[this.strokes.length - 1].c : this.ink;
     this.group = [];
     this.groupAt = 0;
+    // (round 22: its lines gone, nothing of them read)
+    this.R = null;
     // (ROADMAP 11.24: the part pen's - the part chosen, made of the lines as drawn; the ink flies there)
     if (caps.length && caps[0].pen) {
       this.strokes = [];
@@ -2264,8 +2270,10 @@ export class FreeDraw {
     this.partsEl.classList.toggle('drawing', !!this.cur);
     // which way it points (its muzzle, its tip, its nose)
     const R = this.PR ? { cat: 'vehicle', mirror: !!(this.P && this.P.flip) } : this.R;
-    if (R && R.cat && !this.cur) {
-      const b = this.bounds();
+    // (round 22: not with nothing drawn - the drawing on the car just made, its reading still kept, and
+    // the pen could not be shut over it)
+    const b = R && R.cat && !this.cur ? this.bounds() : null;
+    if (b) {
       const x0 = b.x0 / U;
       const x1 = b.x1 / U;
       const y0 = b.y0 / U;
