@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Kit, linC } from '../items.js';
 import { makeSurface, canvasTexture } from '../../render/materials.js';
+import { MARKER_TIP } from '../carry.js';
 
 // (v5, ROADMAP 18) Lily's drawing - the page itself, out of her sketchbook, in her two hands: held
 // up to whoever she shows it to, its picture to them, the back of it to her; or held to her chest.
@@ -99,6 +100,9 @@ export class HeldPage {
   hold(fig, to, mode = 'show') {
     // (her fist round the pencil let go: it is put away while she holds the page in her two hands)
     if (fig && this.gripV && fig.grip === this.gripV) fig.grip = null;
+    // (and round the edges, till the page is held again this frame - update)
+    if (fig && fig.grip && fig.grip === this.gripR) fig.grip = null;
+    if (fig && fig.gripL && fig.gripL === this.gripL) fig.gripL = null;
     // (round 24: held another way by the same hands - it goes there, it does not jump)
     if (this.fig === fig && this.grp.visible && mode !== this.mode) {
       this.fromP.setFromMatrixPosition(this.grp.matrix);
@@ -122,7 +126,8 @@ export class HeldPage {
       f.reachR = null;
       f.reachL = null;
       f.pencilAx = null;
-      if (this.gripV && f.grip === this.gripV) f.grip = null;
+      if (f.grip && (f.grip === this.gripV || f.grip === this.gripR)) f.grip = null;
+      if (f.gripL && f.gripL === this.gripL) f.gripL = null;
       this.still = false;
       if (this.saved) {
         f.carry = this.saved.carry === 'icecream' ? null : this.saved.carry;
@@ -197,11 +202,34 @@ export class HeldPage {
     this.at.copy(_c);
     // her hands on its two side edges, a little below their middle (her right hand on the edge to
     // her right: from the front, the picture's left)
-    const hw = this.W / 2 - 0.012;
+    // (round 25, the player's word: her hands went through the page - now each closed round its side
+    // edge, the paper in her fist: render/people.js fig.grip / fig.gripL, the edge up through the fist)
     f.reachR = f.reachR || new THREE.Vector3();
     f.reachL = f.reachL || new THREE.Vector3();
-    f.reachR.copy(_c).addScaledVector(_x, -hw).addScaledVector(_y, -0.02);
-    f.reachL.copy(_c).addScaledVector(_x, hw).addScaledVector(_y, -0.02);
+    const ew = this.W / 2 - 0.006;
+    this.fistOn(f, 1, _y, _a.copy(_c).addScaledVector(_x, -ew).addScaledVector(_y, -0.02), f.reachR);
+    this.fistOn(f, -1, _y, _a.copy(_c).addScaledVector(_x, ew).addScaledVector(_y, -0.02), f.reachL);
+  }
+
+  // (round 25) her hand (side 1 her right) closed round g at E - the hollow of the fist there (render/
+  // heroshapes.js heroHandGeo grip: 0.07 down the hand from the wrist, 0.062 out from the palm, the
+  // left hand's palm the other way): where her wrist goes, into out
+  fistOn(f, side, g, E, out) {
+    const j = f.j;
+    const S = f.scale || 1;
+    const hk = S * (f._handK || 0.862);
+    const key = side === 1 ? 'gripR' : 'gripL';
+    const gv = this[key] || (this[key] = new THREE.Vector3());
+    gv.copy(g).normalize();
+    if (side === 1) f.grip = gv;
+    else f.gripL = gv;
+    _h.subVectors(side === 1 ? j.handR : j.handL, side === 1 ? j.elbowR : j.elbowL);
+    _h.addScaledVector(gv, -_h.dot(gv));
+    if (_h.lengthSq() < 1e-8) _h.copy(f.forward).addScaledVector(gv, -f.forward.dot(gv));
+    if (_h.lengthSq() < 1e-8) return out.copy(E);
+    _h.normalize();
+    _hn.crossVectors(gv, _h);
+    return out.copy(E).addScaledVector(_h, -0.07 * hk).addScaledVector(_hn, -side * 0.0607 * hk);
   }
 
   drawPose(f) {
@@ -228,7 +256,8 @@ export class HeldPage {
     f.reachL = f.reachL || new THREE.Vector3();
     // her left hand on the book's edge; the right one drawing: across a little and down a little, in
     // short strokes, now and then lifted off to look up at what she draws
-    f.reachL.copy(_c).addScaledVector(_l, hw).addScaledVector(_y, -0.03);
+    // (round 25: the left closed round its edge, holding it, not an open hand through it)
+    this.fistOn(f, -1, _y, _a.copy(_c).addScaledVector(_l, hw + 0.006).addScaledVector(_y, -0.03), f.reachL);
     // (where her pencil is on the page, in the world: the page's own place for it, on its bowed face)
     const lx = (this.tip.u - 0.5) * this.W;
     const ly = (0.5 - this.tip.v) * this.H;
@@ -266,13 +295,13 @@ export class HeldPage {
     const gp = this.gripV || (this.gripV = new THREE.Vector3());
     gp.copy(ax).negate();
     f.grip = gp;
-    const hk = S * 0.862;
+    const hk = S * (f._handK || 0.862);
     _h.subVectors(j.handR, j.elbowR);
     _h.addScaledVector(gp, -_h.dot(gp));
     if (_h.lengthSq() < 1e-8) _h.copy(_l).negate();
     _h.normalize();
     _hn.crossVectors(gp, _h);
-    f.reachR.copy(_t).addScaledVector(ax, 0.075 * S + lift).addScaledVector(_h, -0.07 * hk).addScaledVector(_hn, -0.0607 * hk);
+    f.reachR.copy(_t).addScaledVector(ax, MARKER_TIP * S + lift).addScaledVector(_h, -0.07 * hk).addScaledVector(_hn, -0.0607 * hk);
     if (f.carry !== 'pencil') f.carry = 'pencil';
   }
 

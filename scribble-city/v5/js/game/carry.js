@@ -202,6 +202,29 @@ function hframe(fig) {
 
 const _gh2 = new THREE.Vector3();
 const _gn2 = new THREE.Vector3();
+const _fh = new THREE.Vector3();
+// (round 25) Lily's marker's point under the hollow of her fist (game/prologue/page.js the same)
+export const MARKER_TIP = 0.055;
+// (round 25) drawn with whole hands this moment - render/people.js drawFolk: the hand closes round what
+// it holds (fig.grip, or an ice cream's cone upright), and the thing is in its fist, not at its wrist
+function fullHands(fig) {
+  return !!fig._fullHands;
+}
+// the hollow of the closed fist (render/heroshapes.js heroHandGeo, grip): 0.07 down the hand from the
+// wrist, 0.062 out from the palm - towards +n on the right hand, -n on the left (the left is the right
+// mirrored front to back); g the way what it holds lies across it; the hand's size fig._handK
+function fistOf(fig, side, g, out) {
+  const h = handOf(fig, side);
+  const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
+  const hk = (fig.scale || 1) * (fig._handK || 1);
+  out.copy(h);
+  _gh2.subVectors(h, el);
+  _gh2.addScaledVector(g, -_gh2.dot(g));
+  if (_gh2.lengthSq() < 1e-8) return out;
+  _gh2.normalize();
+  _gn2.crossVectors(g, _gh2);
+  return out.addScaledVector(_gh2, 0.07 * hk).addScaledVector(_gn2, side * 0.0607 * hk);
+}
 function handOf(fig, side) {
   return side === 1 ? fig.j.handR : fig.j.handL;
 }
@@ -240,7 +263,9 @@ function shapesFor(fig, item, side, S) {
       e(_a, 0.041, 0.022, 0.041, [0.62, 0.42, 0.28]);
       break;
     case 'icecream':
-      _a.copy(h).addScaledVector(UP, 0.15 * S);
+      // (round 25: in a whole hand, its cone upright in the fist - the scoop over the fist, not the wrist)
+      if (fullHands(fig)) _a.copy(fistOf(fig, side, UP, _fh)).addScaledVector(UP, 0.1 * S);
+      else _a.copy(h).addScaledVector(UP, 0.15 * S);
       e(_a, 0.055, 0.05, 0.055, fig.scoopColor || [0.98, 0.66, 0.74]);
       break;
     case 'apple':
@@ -548,9 +573,15 @@ function strokesFor(fig, item, side, w) {
     }
     case 'icecream': {
       // the cone: a crisp waffle triangle under the scoop
-      _a.copy(h).addScaledVector(UP, 0.11 * S).addScaledVector(X, -0.04 * S);
-      _b.copy(h).addScaledVector(UP, 0.11 * S).addScaledVector(X, 0.04 * S);
-      _c.copy(h).addScaledVector(UP, -0.06 * S);
+      // (round 25, the player's word: her hand through the ice cream - in a whole hand the cone is in
+      // the fist, its point out under it and its rim over it, as a cone is held)
+      const o = fullHands(fig) ? fistOf(fig, side, UP, _fh) : null;
+      const base = o || h;
+      const top = o ? 0.06 : 0.11;
+      const tip = o ? -0.08 : -0.06;
+      _a.copy(base).addScaledVector(UP, top * S).addScaledVector(X, -0.04 * S);
+      _b.copy(base).addScaledVector(UP, top * S).addScaledVector(X, 0.04 * S);
+      _c.copy(base).addScaledVector(UP, tip * S);
       line(fig, _a, _b, [0.86, 0.66, 0.36], w * 3.4, sd + 41);
       _d.lerpVectors(_a, _b, 0.5).lerp(_c, 0.45);
       line(fig, _d, _c, [0.86, 0.66, 0.36], w * 3.2, sd + 42);
@@ -793,28 +824,29 @@ function strokesFor(fig, item, side, w) {
       // Her coloured one the colour it puts on; her drawing pencil yellow, its point graphite)
       if (fig.pencilAx) {
         const ax = fig.pencilAx;
-        const pc = fig.pencilCol || [0.96, 0.78, 0.22];
-        // (through the hollow of her fist - render/people.js closes it round the pencil, fig.grip - its
-        // point 0.075 below it)
-        const g = fig.grip;
-        _c.copy(h);
-        if (g) {
-          const hk = S * 0.862;
-          _gh2.subVectors(h, el);
-          _gh2.addScaledVector(g, -_gh2.dot(g));
-          if (_gh2.lengthSq() > 1e-8) {
-            _gh2.normalize();
-            _gn2.crossVectors(g, _gh2);
-            _c.addScaledVector(_gh2, 0.07 * hk).addScaledVector(_gn2, 0.0607 * hk);
-          }
+        // (through the hollow of her fist - render/people.js closes it round it, fig.grip - its point
+        // MARKER_TIP below it: game/prologue/page.js)
+        _c.copy(fig.grip ? fistOf(fig, 1, fig.grip, _fh) : h).addScaledVector(ax, -MARKER_TIP * S);
+        if (fig.pencilCol) {
+          // (round 25, the player's word: smaller markers, as a child's are - a felt tip the colour it
+          // draws, a grey collar, a white barrel, and its cap at the end in its colour)
+          const pc = fig.pencilCol;
+          _a.copy(_c).addScaledVector(ax, 0.011 * S);
+          line(fig, _c, _a, pc, w * 0.55, sd + 123);
+          _b.copy(_a).addScaledVector(ax, 0.009 * S);
+          line(fig, _a, _b, [0.62, 0.62, 0.66], w * 0.8, sd + 121);
+          _a.copy(_b).addScaledVector(ax, 0.075 * S);
+          line(fig, _b, _a, [0.95, 0.94, 0.9], w * 1.05, sd + 120);
+          _b.copy(_a).addScaledVector(ax, 0.032 * S);
+          line(fig, _a, _b, pc, w * 1.15, sd + 124);
+          break;
         }
-        _c.addScaledVector(ax, -0.075 * S);
-        _b.copy(_c).addScaledVector(ax, 0.034 * S);
-        _a.copy(_c).addScaledVector(ax, 0.175 * S);
-        line(fig, _b, _a, pc, w * 1.5, sd + 120);
-        line(fig, _c, _b, [0.93, 0.8, 0.62], w * 1.1, sd + 121);
-        _a.copy(_c).addScaledVector(ax, 0.012 * S);
-        line(fig, _c, _a, fig.pencilCol || [0.25, 0.22, 0.2], w * 0.75, sd + 123);
+        _b.copy(_c).addScaledVector(ax, 0.028 * S);
+        _a.copy(_c).addScaledVector(ax, 0.13 * S);
+        line(fig, _b, _a, [0.96, 0.78, 0.22], w * 1.05, sd + 120);
+        line(fig, _c, _b, [0.93, 0.8, 0.62], w * 0.8, sd + 121);
+        _a.copy(_c).addScaledVector(ax, 0.01 * S);
+        line(fig, _c, _a, [0.25, 0.22, 0.2], w * 0.55, sd + 123);
         break;
       }
       if (fig.pencilCol) {

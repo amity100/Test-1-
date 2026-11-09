@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Kit, itemMats, linC } from '../items.js';
 import { Pursuer } from './chase.js';
 import { PARK } from './carpark.js';
+import { seatPlace } from '../vehicles.js';
 
 // (v5, ROADMAP 18.9 round 11, the player's word) The car park fought through, not only driven up:
 // the gang's cars come at Danny out of it - one after him from the street, others waiting in the dark
@@ -236,7 +237,12 @@ export class PaintFight {
 
   // (round 16) the gang's men at the windows: each of them at the window of one of theirs after him,
   // the nearest first, towards him, the rifle out; none while it is not on
-  placeShooters(me) {
+  // (round 25, the player's word: the men in the cars after him seemed stuck on the outside of them -
+  // put here after the bodies were posed, every one of them was where his car had been a frame before:
+  // at speed, half a metre behind the window. Now put first right after the cars have moved (posOnly,
+  // game/prologue/director.js seatCast), before their bodies are posed; the rifle here, after, from
+  // the hands as posed)
+  placeShooters(me, posOnly = false) {
     const pool = this.shooters;
     if (!pool.length) return;
     const act = me && this.on ? this.enemies.filter((e) => e.mode === 'chase' && e.gun && e.car && !e.car.dead && e.d !== undefined).sort((a, b) => a.d - b.d) : [];
@@ -273,7 +279,9 @@ export class PaintFight {
       // legs under the floor of it, his chest at the sill)
       const out = 0.6;
       void sy;
-      c.pos.set(car.pos.x + fx * su + rx * side * out, (car.pos.y || 0) - 0.72, car.pos.z + fz * su + rz * side * out);
+      // (round 25: in the car's body as it is drawn - lifted, pitched, rolled with it: game/vehicles.js)
+      if (car.bodyPose) seatPlace(car, null, side * out, -0.72, su, c.pos);
+      else c.pos.set(car.pos.x + fx * su + rx * side * out, (car.pos.y || 0) - 0.72, car.pos.z + fz * su + rz * side * out);
       c.vel.set(0, 0, 0);
       c.riding = true;
       c.noCollide = true;
@@ -291,6 +299,7 @@ export class PaintFight {
         c.fig.setVisible(true);
         sh.shown = true;
       }
+      if (posOnly) continue;
       // the rifle in his hands, along his aim: drawn as a comic draws one - black, its paint tank on
       // top in the gang's colour (game/figure.js lines)
       const fr = this.g.figures;

@@ -66,6 +66,15 @@ export class Streamer {
       this.job.it.return();
       this.job = null;
     }
+    // (round 25: and if it was put aside half built)
+    if (this.parked) {
+      this.parked = this.parked.filter((j) => {
+        if (j.cell.id !== id) return true;
+        j.it.return();
+        return false;
+      });
+    }
+    if (this.busy) this.busy.delete(id);
     if (this.pending.length) {
       this.pending = this.pending.filter((p) => {
         if (p.cell.id !== id) return true;
@@ -105,7 +114,7 @@ export class Streamer {
     let best = null;
     let bd = Infinity;
     for (const c of this.cells) {
-      if (this.live.has(c.id) || c.failed) continue;
+      if (this.live.has(c.id) || c.failed || (this.busy && this.busy.has(c.id))) continue;
       // (looking ahead: where you will be in two seconds)
       const d = Math.min(this.distTo(c, x, z), this.distTo(c, x + vx * 2, z + vz * 2) + 8);
       if (d > c.near * this.scale) continue;
@@ -148,6 +157,25 @@ export class Streamer {
       this.rest--;
       return;
     }
+    // (round 25, the player's word: across the bridge, by the mall, the buildings stayed boxes even
+    // close up - one block at a time, never put aside: a block far off being made held up the one in
+    // front of you. Now a far one is put aside, half made, for one that is near and not there - and
+    // taken up again, where it was, once that is done)
+    const busy = this.busy || (this.busy = new Set());
+    const parked = this.parked || (this.parked = []);
+    if (this.job && !this.job.swap && (this.nearChk = (this.nearChk || 0) + 1) % 6 === 0 && this.distTo(this.job.cell, x, z) > 100) {
+      const n = this.pick(x, z, vx, vz);
+      if (n && n.d < 60) {
+        parked.push(this.job);
+        this.job = { cell: n.c, it: n.c.build(n.c), ms: 0 };
+        busy.add(n.c.id);
+      }
+    }
+    if (!this.job && parked.length) {
+      // (unless something is nearer still now)
+      const n = this.pick(x, z, vx, vz);
+      if (!(n && n.d < 60)) this.job = parked.pop();
+    }
     if (!this.job && this.redo.length) {
       const c = this.redo.shift();
       if (this.live.has(c.id)) this.job = { cell: c, it: c.build(c), ms: 0, swap: true };
@@ -156,6 +184,7 @@ export class Streamer {
       const n = this.pick(x, z, vx, vz);
       if (!n) return;
       this.job = { cell: n.c, it: n.c.build(n.c), ms: 0 };
+      busy.add(n.c.id);
     }
     // the slice of time: more when the cell is close to you and not there
     const near = this.distTo(this.job.cell, x, z);
@@ -165,7 +194,9 @@ export class Streamer {
     if (this.calm) slice = Math.min(slice, this.budget);
     if (this.adaptive) {
       const gap = lastAt ? t0 - lastAt : 0;
-      if (gap > 45 && near > 40) slice = Math.min(slice, near < 140 ? this.rush * 0.5 : this.budget * 0.5);
+      // (round 25: a phone's steady 20 a second is 50 ms between frames, every frame - not a slow one;
+      // halved at 45, it was halved all the time)
+      if (gap > 58 && near > 40) slice = Math.min(slice, near < 140 ? this.rush * 0.5 : this.budget * 0.5);
     }
     const job = this.job;
     for (;;) {
@@ -175,11 +206,13 @@ export class Streamer {
       } catch (e) {
         console.error('[stream] cell failed', job.cell.id, e);
         job.cell.failed = true;
+        busy.delete(job.cell.id);
         this.job = null;
         return;
       }
       if (r.done) {
         const live = r.value;
+        busy.delete(job.cell.id);
         this.job = null;
         job.ms += performance.now() - t0;
         this.stats.ms = Math.round(job.ms);
@@ -228,6 +261,7 @@ export class Streamer {
       } catch (e) {
         console.error('[stream] cell failed', this.job.cell.id, e);
         this.job.cell.failed = true;
+        if (this.busy) this.busy.delete(this.job.cell.id);
         this.job = null;
         continue;
       }
@@ -235,6 +269,7 @@ export class Streamer {
         const live = r.value;
         live.cell = this.job.cell;
         const swap = !!this.job.swap;
+        if (this.busy) this.busy.delete(live.cell.id);
         this.job = null;
         const meshes = [];
         if (live.group) live.group.traverse((m) => m.isMesh && meshes.push(m));

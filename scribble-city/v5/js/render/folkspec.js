@@ -677,8 +677,63 @@ export const LILY = {
   shoes: { ...feet('sneaker', '#5e4280'), accent: '#efe8da' },
   acc: {},
 };
-FOLK.splice(PHONE_N, 0, LILY);
-export const FOLK_PHONE = PHONE_N + 1;
+// (round 25, the player's word: the kids on the wheel were simple shapes, a doll's - drawn as the city's
+// people are, with children's faces, as Lily is. The two at the sill of the gondola the camera comes
+// near (game/prologue/director.js heroRiders): Theo, eight, curly black hair, an orange hoodie; Maya,
+// seven, long honey hair and freckles, a pink one. Each a role of their own (game/looks.js folkPick:
+// never walking the city's streets), and right after Lily, so that a phone makes them too)
+export const WHEEL_KIDS = [
+  {
+    key: 'theo', name: 'Theo', age: 8, fem: false, role: 'wheelkid', how: 'cast',
+    build: { height: 0.68, head: 1.16, bulk: 0.9, limbs: 0.92 },
+    body: { belly: 0.1, chest: -0.9, thick: -0.02 },
+    morph: {
+      'head-age-decr': 1, 'head-round': 0.45, 'cheek-volume-incr': 0.45, 'eye-scale-incr': 0.2, 'nose-scale-vert-decr': 0.35, 'nose-point-up': 0.3, 'nose-scale-horiz-decr': 0.1,
+      'mouth-scale-horiz-incr': 0.1, 'mouth-angles-up': 0.3, 'ear-scale-incr': 0.6, 'chin-width-decr': 0.2, 'forehead-scale-vert-incr': 0.1,
+    },
+    shape: { cheeks: 0.45, jaw: 0.9, dbl: 0, neck: 0.86 },
+    expr: 'smile',
+    head: { jaw: 0, chin: 0.88, nose: 0.86, lips: 0.96, brow: 0.55 },
+    skin: 'tan', eyes: { iris: 'dark', open: 1.0, lid: 0.35, lashes: 0.3, liner: 0, irisK: 1.18 },
+    brows: { col: ['#2a1a12', '#3a2418', '#20140e'], thick: 0.75, arch: 0.18, uneven: 0.15 },
+    mouth: { w: 1.0, full: 0.95, lip: [shade(SKINS.tan.warm[0], 0.85), SKINS.tan.warm[1]], lipstick: null },
+    beard: null, lines: 0, freckles: 0.2, blush: 0.35, grin: 0.3,
+    jawK: 0.78, lipK: 0.65, talkK: 1.25, wideK: 0.35, browK: 0.6, moodMouthK: 0.45, creaseK: 0.25,
+    hair: hairOf('black', 'curls'),
+    top: jacket('bomber', 'cotton', '#e8762a', { rib: '#c85a1a', lining: '#f2c230', buttons: '#efe8da', hood: true, open: 0.006 }),
+    inner: under('tee', '#f2f0ea'),
+    bottom: legs('jeans', '#3a5a8a'),
+    belt: null,
+    shoes: { ...feet('sneaker', '#d83a3a'), accent: '#f2f2ee' },
+    acc: {},
+  },
+  {
+    key: 'maya', name: 'Maya', age: 7, fem: true, role: 'wheelkid', how: 'cast',
+    build: { height: 0.65, head: 1.17, bulk: 0.84, limbs: 0.9 },
+    body: { belly: 0, chest: -0.95, thick: -0.05 },
+    morph: {
+      'head-age-decr': 1, 'head-round': 0.4, 'cheek-volume-incr': 0.4, 'eye-scale-incr': 0.25, 'nose-scale-vert-decr': 0.4, 'nose-point-up': 0.5, 'nose-scale-horiz-decr': 0.2,
+      'mouth-scale-horiz-incr': 0.05, 'mouth-angles-up': 0.35, 'ear-scale-incr': 0.3, 'chin-width-decr': 0.3, 'eyebrows-angle-up': 0.06, 'forehead-scale-vert-incr': 0.15,
+    },
+    shape: { cheeks: 0.4, jaw: 0.88, dbl: 0, neck: 0.86 },
+    expr: 'smile',
+    head: { jaw: 0, chin: 0.88, nose: 0.84, lips: 1.0, brow: 0.55 },
+    skin: 'fair', eyes: { iris: 'green', open: 1.0, lid: 0.35, lashes: 0.55, liner: 0, irisK: 1.2 },
+    brows: { col: ['#8a6a44', '#9a7a50', '#6a5034'], thick: 0.6, arch: 0.24, uneven: 0.2 },
+    mouth: { w: 0.98, full: 1.0, lip: [shade(SKINS.fair.warm[0], 0.85), SKINS.fair.warm[1]], lipstick: null },
+    beard: null, lines: 0, freckles: 0.8, blush: 0.5, grin: 0.32,
+    jawK: 0.78, lipK: 0.65, talkK: 1.25, wideK: 0.35, browK: 0.6, moodMouthK: 0.45, creaseK: 0.25,
+    hair: hairOf('honey', 'long', { len: 0.14, wave: 1 }),
+    top: jacket('bomber', 'cotton', '#e85aa0', { rib: '#c84a88', lining: '#fff4d8', buttons: '#efe8da', hood: true, open: 0.012 }),
+    inner: under('tee', '#fff4d8'),
+    bottom: legs('chinos', '#7a9ad8'),
+    belt: null,
+    shoes: { ...feet('sneaker', '#f2c230'), accent: '#f2f2ee' },
+    acc: {},
+  },
+];
+FOLK.splice(PHONE_N, 0, LILY, ...WHEEL_KIDS);
+export const FOLK_PHONE = PHONE_N + 1 + WHEEL_KIDS.length;
 
 // (how many of them the city's renderer made: phones fewer - render/people.js; game/looks.js picks
 // from those)
