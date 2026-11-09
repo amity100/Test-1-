@@ -3950,7 +3950,7 @@ export class Prologue {
     // his)
     if (L.fig.say && !L.fig.say.done) {
       L.fig.lookAt = this.headJ(P);
-      this.shot({ from: this.inCar(car, 0.1, 1.12, 0.52), look: this.faceOf(L), fov: 44, dur: 1.4, hand: 0.25 });
+      this.shot({ from: this.inCar(car, -0.3, 1.0, 0.7), look: this.faceOf(L), fov: 40, dur: 1.4, hand: 0.25 });
       let lt = 0;
       yield () => {
         lt += this.dtR || 1 / 30;
@@ -4102,9 +4102,9 @@ export class Prologue {
     // back with them in the car, the time still held: Lily, at her open window, staring at what is in
     // front of them; Danny, his hands on the wheel
     L.fig.lookAt = this.headJ(P);
-    // (round 23, the review: from nearer his side of the cabin - straight on, a black board's back stood
-    // beside her head)
-    this.shot({ from: this.inCar(car, 0.16, 1.16, 0.5), look: this.faceOf(L), fov: 46, dur: 2.4, hand: 0.4 });
+    // (round 23, the review: from in front of her own side, low - the sky and the city behind her; from
+    // the middle, a black board's back stood by her head. Six places tried, this the clean one)
+    this.shot({ from: this.inCar(car, -0.3, 1.0, 0.7), look: this.faceOf(L), fov: 40, dur: 2.4, hand: 0.4 });
     this.feel(L.fig, 'scared', 6);
     yield* this.say('L15', L.fig, 0.2);
     this.shot({ from: this.inCar(car, -0.04, 1.2, 0.5), look: this.faceOf(P), fov: 46, dur: 2.0, hand: 0.35 });
@@ -4681,7 +4681,7 @@ export class Prologue {
     const onD = (o = {}) => this.shot({ from: this.inCar(car, -0.1, 1.18, 0.52), look: this.faceOf(P), fov: 40, dur: 6, hand: 0.25, ...o });
     // (round 23, the review: hers from a little lower and nearer his side - the evening sky behind her,
     // not a sign's black back)
-    const onL = (o = {}) => this.shot({ from: this.inCar(car, -0.1, 1.0, 0.5), look: this.faceOf(L), fov: 40, dur: 6, hand: 0.25, ...o });
+    const onL = (o = {}) => this.shot({ from: this.inCar(car, -0.3, 1.0, 0.7), look: this.faceOf(L), fov: 40, dur: 6, hand: 0.25, ...o });
     this.feel(L.fig, 'angry', 6);
     L.fig.lookAt = P.fig.j.headC;
     onL();
