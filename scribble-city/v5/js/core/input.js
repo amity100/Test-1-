@@ -177,6 +177,7 @@ export class Input {
       knob.style.transform = 'translate(0px, 0px)';
     }, { passive: false });
     const moveStick = (e) => {
+      if (this.penHeld) return;
       for (const t of e.changedTouches) {
         if (t.identifier !== stickId) continue;
         let dx = t.clientX - sx;
@@ -215,6 +216,9 @@ export class Input {
       for (const t of e.changedTouches) lookTouches.set(t.identifier, { x: t.clientX, y: t.clientY, fire: isFire });
     };
     const moveLook = (e) => {
+      // (round 22: a finger that was looking round when the pen came out - not turning the camera
+      // under the drawing)
+      if (this.penHeld) return;
       for (const t of e.changedTouches) {
         const p = lookTouches.get(t.identifier);
         if (!p) continue;
@@ -376,11 +380,34 @@ export class Input {
     }
   }
 
+  // (round 22) the touch controls let go of at once - the pen opened over them: the stick back to its
+  // middle, the pedals and the wheel up, no look
+  holdTouch(on) {
+    this.penHeld = !!on;
+    if (!on) return;
+    this.move.x = 0;
+    this.move.y = 0;
+    this.stickMag = 0;
+    this.steer = 0;
+    this.gas = 0;
+    this.brake = 0;
+    this.handbrake = false;
+    this.boost = false;
+    this.fire = false;
+    this.lookDX = 0;
+    this.lookDY = 0;
+    const knob = document.getElementById('stick-knob');
+    if (knob) knob.style.transform = 'translate(0px, 0px)';
+  }
+
   // Movement vector from keys or stick (a gamepad's, core/gamepad.js, while it is pushed; at the
   // wheel of a phone, its driving buttons).
   readMove() {
     const pad = this.pad;
     if (pad && (pad.x || pad.y || pad.sprint)) return pad;
+    // (round 22, the player's word: on a phone, drawing moved him - the stick under the thumb that
+    // draws. While the pen is open the screen is the page: nothing of the stick or the pedals)
+    if (this.touch && this.penHeld) return { x: 0, y: 0, sprint: false };
     // (◀ ▶ and the pedals are all or nothing: the gas stays full while it steers)
     if (this.touch && this.driveButtons) return { x: this.steer, y: this.gas - this.brake, sprint: this.boost };
     if (this.touch) return { x: this.move.x, y: this.move.y, sprint: (this.stickMag || 0) > 0.92 };

@@ -286,16 +286,24 @@ export class Autopilot {
     }
     if (n === 4 || n === 5) {
       const S = PARK.dannyStop;
+      // (round 22: his car at the curb by the pier - walked to, got into - and driven to the car park,
+      // a cut to 5th Street on the way, the way there being long)
+      const own = P.dannyCar;
+      if (/your <b>car/.test(o) && own && !c) {
+        const d = this.walkTo(own.pos.x, own.pos.z, true, 1.8);
+        if (d < 2.8 && (this.since('owncar') < 0 || this.since('owncar') > 1.0)) {
+          this.did.owncar = g.time;
+          this.press('KeyE');
+        }
+        return;
+      }
+      if (/car park/.test(o) && c) {
+        if (Math.hypot(c.pos.x - S.x, c.pos.z - S.z) > 70) this.once('to5th', () => this.put(c, S.x + 52, 0.1, 299.2, -Math.PI / 2, 9));
+        this.driveTo(S.x, 299.2, 0.6);
+        return;
+      }
       if (/car/.test(o) || n === 5) {
         if (c) return;
-        // (a cut to the car park's door, the way there being long)
-        if (Math.hypot(pl.pos.x - S.x, pl.pos.z - S.z) > 14) {
-          P.putDanny(S.x + 7, S.z + 1, -Math.PI / 2);
-          if (L) {
-            P.put(L, S.x + 8, S.z + 2, -Math.PI / 2);
-            L.pl.follow = true;
-          }
-        }
         this.walkTo(S.x, S.z, false, 1);
         return;
       }

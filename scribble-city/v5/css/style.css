@@ -2009,3 +2009,51 @@ body.touch .fd-hint { font-size: 13.5px; top: max(6px, env(safe-area-inset-top))
 /* (round 16: on a computer the strip is centred; on a phone its right edge is the tools' - set by
    ui/freedraw.js showLegend) */
 body:not(.touch).fd-catalog .fd-leg { right: auto; }
+
+/* (round 22, the player's word: on a phone, drawing started the stick in its corner, and the buttons
+   were there to be hit - while the pen is open the whole screen is the page: the touch controls put
+   away, the drawing zone under the pen's own rows and tools, all of it) */
+body.touch.fd-open #touch { display: none !important; }
+body.touch.fd-open #fd-zone-a, body.touch.fd-car.drive-btns.fd-open #fd-zone-a { left: 0; right: 0; top: 0; bottom: 0; width: auto; height: auto; z-index: -1; }
+body.touch.fd-open #fd-zone-b { display: none; }
+body.touch.fd-open .pp-slots { z-index: 18; }
+/* (round 22, a phone - the pen open: what is not the pen's put away - the map and its distance, the
+   weapon, the score - so the page is the screen's and nothing the line runs over is another thing; the
+   game's words in the map's corner, one at a time) */
+body.touch.fd-open #minimap-wrap, body.touch.fd-open #gps-dist, body.touch.fd-open #weapon, body.touch.fd-open #scorebug, body.touch.fd-open #saving, body.touch.fd-open #subs, body.touch.fd-open #radio { display: none !important; }
+body.touch.fd-open #toasts { left: max(10px, env(safe-area-inset-left)); top: max(6px, env(safe-area-inset-top)); transform: none; align-items: flex-start; }
+body.touch.fd-open .toast { max-width: 38vw; }
+body.touch.fd-open #toasts .toast:not(:last-child) { display: none; }
+/* (and its buttons a finger's size: the tools down the right edge hung under the bars - in a car under
+   the car's too - each at least 36px high, the shelves of the list and the chips by the drawing as
+   well) */
+body.touch .fd-tools { top: calc(max(6px, env(safe-area-inset-top)) + 44px); transform: none; gap: 5px; }
+body.touch.fd-car .fd-tools { top: calc(max(6px, env(safe-area-inset-top)) + 92px); }
+body.touch .fd-tools .fd-btn:not(.fd-color) { min-height: 36px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+body.touch .fd-tools .fd-btn.primary { min-height: 40px; }
+body.touch .fd-shelf { position: relative; padding: 7px 11px; font-size: 13px; }
+body.touch .fd-shelf::after { content: ''; position: absolute; inset: -4px -2px; }
+body.touch #fd-alts .fd-chip { min-height: 34px; padding: 4px 10px; }
+/* (the map's buttons: a little bigger, a finger's reach apart; the saving note past them) */
+@media (max-height: 520px) {
+  body.touch #btn-pause, body.touch #btn-phone, body.touch #btn-radio { width: 36px; height: 36px; }
+  body.touch #btn-pause { left: calc(max(10px, env(safe-area-inset-left)) + 92px); }
+  body.touch #btn-phone { left: calc(max(10px, env(safe-area-inset-left)) + 138px); }
+  body.touch #btn-radio { left: calc(max(10px, env(safe-area-inset-left)) + 184px); }
+  body.touch #saving { left: calc(max(10px, env(safe-area-inset-left)) + 232px); }
+}
+/* (the stick's ring, where it waits: all of it on the screen) */
+@media (max-height: 520px) {
+  body.touch #stick-base { bottom: 52px; left: 58px; }
+}
+/* (round 22: what floats over the game from outside it - the car's part slots and their words, the
+   story's own layer, the arrow over a place - is not over the pause menu and the city's map: they are
+   inside the game's own page, and those sit over all of it. And on a phone, the phone out: nothing of
+   the game's own buttons and bars under it, half showing round its edges) */
+body.paused #pp-slots, body.paused #pp-live, body.paused #pp-tip, body.paused #pp-fly, body.paused #pl-root, body.paused .pro-beacon, body.paused .pro-teach, body.phone-open #pp-slots, body.phone-open #pp-live, body.phone-open #pp-tip, body.phone-open .pro-beacon { visibility: hidden !important; }
+body.touch.phone-open #touch, body.touch.phone-open #topbar, body.touch.phone-open #health, body.touch.phone-open #vehicle-hp, body.touch.phone-open #clock, body.touch.phone-open #money, body.touch.phone-open #ink, body.touch.phone-open #subs, body.touch.phone-open #radio, body.touch.phone-open #prompt, body.touch.phone-open #wanted { visibility: hidden !important; }
+body.touch.phone-open #toasts { left: 28%; }
+body.touch.phone-open .toast { max-width: 40vw; }
+/* (round 22: a phone, the radio's line one line high - a song's long name trailing off, not a second
+   line up into the words said over it) */
+body.touch #radio { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -92,6 +92,18 @@ body.touch #pl-hint.card.how { font-size: 15px; top: 8vh; padding: 10px 16px; ma
 body.touch #pl-hint.card.how.dock { right: auto; left: 50%; top: 4px; transform: translateX(-50%); width: auto; max-width: 44vw; padding: 5px 10px 6px; font-size: 12px; animation: none; }
 body.touch #pl-hint.card.how.dock .tag { display: none; }
 body.touch #pl-hint.card.how.dock li { margin: 1px 0; }
+/* (round 22, a phone: the task, the button's word and what is said - one over the other in the middle,
+   narrow enough to stay clear of the stick and the steering on one side and the buttons on the other) */
+body.touch #pl-obj { width: max-content; max-width: min(43vw, 420px); }
+body.touch.prologue #prompt { bottom: calc(7vh + 40px); max-width: 43vw; }
+body.touch #pl-root:not(.film) #pl-subs { bottom: calc(7vh + 76px); width: min(43vw, 420px); }
+/* (the pen open: its own line of words not under the card's; at the wheel the card in the top corner,
+   clear of the drawing behind the car and its name) */
+body.touch.prologue.fd-open .fd-hint { display: none !important; }
+body.touch.fd-car #pl-hint.card.how.dock { left: auto; right: max(8px, env(safe-area-inset-right)); transform: none; max-width: 40vw; }
+/* (a call: at the top corner, not over the pedals and the buttons) */
+body.touch #pl-call { top: max(8px, env(safe-area-inset-top)); bottom: auto; right: max(10px, env(safe-area-inset-right)); width: 200px; padding: 8px 12px; }
+body.touch #pl-call .n { font-size: 18px; margin: 2px 0 6px; }
 #pl-hint kbd { display: inline-block; min-width: 1.6em; padding: 1px 7px; margin: 0 2px; border-radius: 6px; background: #fff4e0; color: #1a1426; font: 800 0.95em "Rubik", sans-serif; box-shadow: 0 3px 0 #b8a98e; direction: ltr; }
 body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue-film #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue-film #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }

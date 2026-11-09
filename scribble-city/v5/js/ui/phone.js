@@ -106,6 +106,8 @@ export class Phone {
   open() {
     if (this.isOpen) return;
     this.isOpen = true;
+    // (round 22: the phone out - on a phone's screen what is under it put away, css body.phone-open)
+    document.body.classList.add('phone-open');
     this.page('home');
     this.el.classList.remove('hidden');
     this.el.classList.remove('up');
@@ -123,6 +125,7 @@ export class Phone {
   close(quiet = false) {
     if (!this.isOpen) return;
     this.isOpen = false;
+    document.body.classList.remove('phone-open');
     clearInterval(this.statusT);
     this.el.classList.add('hidden');
     if (!quiet && this.game.onPhoneClosed) this.game.onPhoneClosed();
