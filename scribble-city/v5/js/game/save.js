@@ -67,6 +67,9 @@ export class SaveGame {
     const g = this.game;
     if (g.state !== 'play' && g.state !== 'paused') return false;
     if (g.params.has('test') && !window.__saveTest) return false;
+    // (round 22b: not in the story - a save there is the city without it, and 'carry on' from it
+    // dropped the player into the city halfway through the story, with none of it)
+    if (g.prologue && g.prologue.active) return false;
     const p = g.player;
     if (p.mode === 'dead' || p.mode === 'draw' || g.airdraw.open || g.chute.open) return false;
     return !(g.police && g.police.level > 0);

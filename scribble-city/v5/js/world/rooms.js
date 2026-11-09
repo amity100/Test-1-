@@ -190,9 +190,11 @@ export function* buildStock(rec, M, parent, opts = {}) {
   // (ROADMAP 14.4: the goods of a shop of the new kind are put on its shelves a few at a time: a
   // shelf, a fridge's door, a crate of fruit a job - a few milliseconds a frame)
   let t = performance.now();
+  // (round 22b: on a phone a shorter slice before the frame is given back)
+  const slice = opts.low ? 1.2 : 3;
   for (const job of R.jobs) {
     job();
-    if (performance.now() - t > 3) {
+    if (performance.now() - t > slice) {
       yield;
       t = performance.now();
     }

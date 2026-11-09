@@ -604,6 +604,18 @@ function wrinkles() {
   return t;
 }
 
+// (round 22b) the maps every portrait shares, made while the game loads, a step at a time (each step
+// returns): the first face that came near made them in the middle of play - the game standing still
+// for half a second, on a phone for more
+export function* warmPortraitMaps() {
+  moves();
+  yield;
+  planes();
+  yield;
+  wrinkles();
+  return [PLANES, WRINKLES];
+}
+
 // ------------------------------------------------------------------ one person's portrait
 let SHARED_POS = null;
 

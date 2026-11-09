@@ -14,6 +14,7 @@ import { Game } from './game/game.js';
 import { prebuildFolkBodies } from './render/folkshapes.js';
 import { FOLK, FOLK_PHONE } from './render/folkspec.js';
 import { isTouchDevice } from './core/util.js';
+import { warmPortraitMaps } from './render/portrait.js';
 import { initProvoke } from './render/provoke.js';
 import { cacheUniformArrays } from './render/glcache.js';
 import { readMemo } from './render/depthtrial.js';
@@ -468,6 +469,21 @@ async function boot() {
   await game.init();
   game.breathe = null;
   mark('game init');
+  // (round 22b: the maps every face drawn as a portrait shares, made now - the first face that came near
+  // made them in the middle of play, the game standing still for a second on a phone - and sent up)
+  try {
+    const it = warmPortraitMaps();
+    let r = it.next();
+    while (!r.done) {
+      const b = breathe('portraits');
+      if (b) await b;
+      r = it.next();
+    }
+    for (const t of r.value || []) if (t) renderer.initTexture(t);
+  } catch (e) {
+    console.warn('portrait maps', e);
+  }
+  mark('portrait maps');
   // (ROADMAP 18.9: and every picture they are drawn with sent up, one at a time)
   progress('pictures', 0);
   await picturesUp(renderer, scene);
