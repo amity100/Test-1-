@@ -446,9 +446,16 @@ class DrawClass {
     // (nothing of this class on the screen: no draw call at all)
     this.mesh.visible = this.n > 0;
     const n = Math.max(1, this.n);
-    for (const at of this.iE ? [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS, this.iE] : [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS]) {
+    // (round 22b: the list, and each attribute's range, made once - a new array and a new range object
+    // each a frame, for every kind of figure, were garbage a phone stopped to sweep up)
+    const ats = this._ats || (this._ats = this.iE ? [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS, this.iE] : [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS]);
+    for (let i = 0; i < ats.length; i++) {
+      const at = ats[i];
+      const rg = at._rg || (at._rg = { start: 0, count: 0 });
+      rg.start = 0;
+      rg.count = n * at.itemSize;
       at.clearUpdateRanges();
-      at.addUpdateRange(0, n * at.itemSize);
+      at.updateRanges.push(rg);
       at.needsUpdate = true;
     }
     if (motion.on && this.n && !this.aux) {

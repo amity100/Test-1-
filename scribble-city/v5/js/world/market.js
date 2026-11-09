@@ -251,8 +251,10 @@ function shelving(R, run, len, o = {}) {
     const y = ys[i] + (i === 0 ? 0 : 0.0);
     const hMax = (i < rows - 1 ? ys[i + 1] - 0.03 : y0 + h - 0.02) - y;
     const reach = y - y0 > 0.6 && y - y0 < 1.55;
-    // (a metre and a half of the shelf at a time: a few milliseconds each, world/rooms.js buildStock)
-    for (let a = 0.03; a < len - 0.03; a += 1.5) later(R, () => fillShelf(R, run, a, Math.min(len - 0.03, a + 1.5), y, hMax, depth - 0.06, zone.rows[i % zone.rows.length], { spots: reach ? spots : null, low: y - y0 < 0.3, hand: Math.abs(y - y0 - 1.05) < 0.36, zoneLines: [...new Set(zone.rows.flat())] }));
+    // (a metre and a half of the shelf at a time: a few milliseconds each, world/rooms.js buildStock.
+    // Round 22b: a phone's, half that - its slower hand does a job in the same few milliseconds)
+    const seg = R.low ? 0.75 : 1.5;
+    for (let a = 0.03; a < len - 0.03; a += seg) later(R, () => fillShelf(R, run, a, Math.min(len - 0.03, a + seg), y, hMax, depth - 0.06, zone.rows[i % zone.rows.length], { spots: reach ? spots : null, low: y - y0 < 0.3, hand: Math.abs(y - y0 - 1.05) < 0.36, zoneLines: [...new Set(zone.rows.flat())] }));
   }
   return { ys, spots };
 }

@@ -61,8 +61,11 @@ export class Comic {
   keep(src) {
     this.wantKeep = false;
     try {
-      const W = Math.max(8, Math.round(src.width / 2));
-      const H = Math.max(8, Math.round(src.height / 2));
+      // (round 22b: a phone's at a third - its picture read back from the graphics card and bleached a
+      // pixel at a time held a frame of the film for a tenth of a second and more; a memory, soft)
+      const div = this.game && this.game.touch ? 3 : 2;
+      const W = Math.max(8, Math.round(src.width / div));
+      const H = Math.max(8, Math.round(src.height / div));
       const cv = this.memCv || (this.memCv = document.createElement('canvas'));
       cv.width = W;
       cv.height = H;

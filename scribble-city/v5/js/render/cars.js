@@ -766,8 +766,12 @@ class Pool {
     const ats = this._ats || (this._ats = this.iD0 ? [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iD0, this.iD1] : [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip]);
     for (let i = 0; i < ats.length; i++) {
       const at = ats[i];
+      // (round 22b: its range object made once, not each a frame)
+      const rg = at._rg || (at._rg = { start: 0, count: 0 });
+      rg.start = 0;
+      rg.count = Math.max(1, this.n) * at.itemSize;
       at.clearUpdateRanges();
-      at.addUpdateRange(0, Math.max(1, this.n) * at.itemSize);
+      at.updateRanges.push(rg);
       at.needsUpdate = true;
     }
     if (motion.on && this.n) {

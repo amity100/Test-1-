@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSurface } from './materials.js';
+import { makeSurface, sortDefines } from './materials.js';
 import { baseHead, headOf, exprMoves, EYE, neckOf } from './folkshapes.js';
 import { MORPHS } from './folkheads.js';
 import { faceMap } from './heroshapes.js';
@@ -616,6 +616,69 @@ export function* warmPortraitMaps() {
   return [PLANES, WRINKLES];
 }
 
+// (round 22b) a portrait's material - its own face's picture (map) and its moves (P: the portrait, or a
+// stand-in with nothing in it): one function, so that the stand-in the game loads with is the very same
+// program as a face's (portraitStandIn)
+function portraitMaterial(map, P) {
+  const m = makeSurface({ kind: 'skin', map, line: 0.97, partR: 0.06, side: THREE.DoubleSide, noShadow: true, density: 0, wash: 1 });
+  m.defines.PORTRAIT = '';
+  Object.assign(m.uniforms, {
+    uAUPos: { value: P.auPos },
+    uAUNor: { value: P.auNor },
+    uAUW: { value: 2048 },
+    uAUNv: { value: P.N },
+    uAU: { value: P.w },
+    uEyeC: { value: P.eyeC },
+    uGaze: { value: new THREE.Vector4() },
+    uPlane: { value: planes() },
+    uWrinkle: { value: wrinkles() },
+    uWrinkleW: { value: new THREE.Vector4() },
+    uAge: { value: P.spec.lines || 0 },
+    // (ROADMAP 18: a gap between the front teeth - render/folkspec.js gap)
+    uGap: { value: P.spec.gap || 0 },
+    // (round 17) the eye's own colours and the iris's size on its ball - render/glsl.js PORTRAIT
+    ...irisOf(P.spec),
+    uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
+    uNeckD: { value: P.neckD },
+    uNeckToHead: { value: P.neckToHead },
+    uFade: { value: 1 },
+    uIdK: { value: 1 },
+    uOpen: { value: 0 },
+  });
+  // (coming in over the city's way of drawing the same head: in front of it where it is drawn)
+  m.polygonOffset = true;
+  m.polygonOffsetFactor = -1;
+  m.polygonOffsetUnits = -4;
+  // (its defines in the canonical order - render/materials.js - as the stand-in's are when the shaders
+  // are made, so that the face's is that very program)
+  sortDefines(m);
+  m.needsUpdate = true;
+  return m;
+}
+
+// (round 22b) a stand-in portrait, drawn by nobody: its shader made while the game loads (render/
+// pipeline.js precompile, main.js) - the first face that came near had a phone make it in the middle of
+// the opening film, the picture standing still for it
+export function portraitStandIn() {
+  const px = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+  px.needsUpdate = true;
+  const stub = { auPos: px, auNor: px, w: new Float32Array(NA), eyeC: [new THREE.Vector3(), new THREE.Vector3()], spec: { lines: 0, gap: 0 }, N: 1, neckD: new THREE.Vector4(), neckToHead: new THREE.Matrix4() };
+  let m;
+  try {
+    m = portraitMaterial(px, stub);
+  } catch (e) {
+    return null;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(9), 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(9), 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(6), 2));
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.frustumCulled = false;
+  mesh.userData.noShadow = true;
+  return mesh;
+}
+
 // ------------------------------------------------------------------ one person's portrait
 let SHARED_POS = null;
 
@@ -878,36 +941,7 @@ export class Portrait {
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
-    const m = makeSurface({ kind: 'skin', map: tex, line: 0.97, partR: 0.06, side: THREE.DoubleSide, noShadow: true, density: 0, wash: 1 });
-    m.defines.PORTRAIT = '';
-    Object.assign(m.uniforms, {
-      uAUPos: { value: this.auPos },
-      uAUNor: { value: this.auNor },
-      uAUW: { value: 2048 },
-      uAUNv: { value: this.N },
-      uAU: { value: this.w },
-      uEyeC: { value: this.eyeC },
-      uGaze: { value: new THREE.Vector4() },
-      uPlane: { value: planes() },
-      uWrinkle: { value: wrinkles() },
-      uWrinkleW: { value: new THREE.Vector4() },
-      uAge: { value: this.spec.lines || 0 },
-      // (ROADMAP 18: a gap between the front teeth - render/folkspec.js gap)
-      uGap: { value: this.spec.gap || 0 },
-      // (round 17) the eye's own colours and the iris's size on its ball - render/glsl.js PORTRAIT
-      ...irisOf(this.spec),
-      uPLayers: { value: new THREE.Vector4(1, 1, 1, 0) },
-      uNeckD: { value: this.neckD },
-      uNeckToHead: { value: this.neckToHead },
-      uFade: { value: 1 },
-      uIdK: { value: 1 },
-      uOpen: { value: 0 },
-    });
-    // (coming in over the city's way of drawing the same head: in front of it where it is drawn)
-    m.polygonOffset = true;
-    m.polygonOffsetFactor = -1;
-    m.polygonOffsetUnits = -4;
-    m.needsUpdate = true;
+    const m = portraitMaterial(tex, this);
     const mesh = new THREE.Mesh(this.geo, m);
     mesh.matrixAutoUpdate = false;
     mesh.frustumCulled = true;

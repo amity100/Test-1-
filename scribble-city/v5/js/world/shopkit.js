@@ -354,6 +354,21 @@ export function fruitOf(kind, rng) {
 
 // a product into the room: the goods' soup, or - live - the live set (a hand may take it)
 export function put(R, look, p, yaw, o = {}) {
+  // (round 22b: a stock's goods - world/rooms.js buildStock - put on the shelves a product a job, a few
+  // milliseconds of them a frame: a whole counter's at once, as the room was furnished or a shelf
+  // filled, held a phone's frame for tens of milliseconds. Nothing put here is read back before the
+  // jobs are done, and what it is given is its own)
+  if (R.jobs && !R.putNow) {
+    R.jobs.push(() => {
+      R.putNow = true;
+      try {
+        put(R, look, p, yaw, o);
+      } finally {
+        R.putNow = false;
+      }
+    });
+    return -1;
+  }
   if (o.live && R.live) return R.live.add(R, look, p, yaw, o);
   const S = R.psoup(true);
   if (S.off) return -1;
