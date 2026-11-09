@@ -54,7 +54,17 @@ export function carryPose(fig, item, side, hipY, ny, nz, out) {
     case 'coffee':
       [x, y, z] = [side * 0.17, hipY + 0.2, 0.24];
       break;
-    case 'icecream':
+    case 'icecream': {
+      // (round 23, the review: down at the chest while its holder talks - held up at the chin, the
+      // scoop was over a mouth that spoke - and up again between the words, eased both ways on the
+      // figure's own clock)
+      const talk = fig.say && !fig.say.done ? 1 : 0;
+      const dtc = Math.min(0.1, Math.max(0, t - (fig._coneT !== undefined ? fig._coneT : t)));
+      fig._coneT = t;
+      const k = (fig._coneK = (fig._coneK || 0) + (talk - (fig._coneK || 0)) * (1 - Math.exp(-dtc * 7)));
+      [x, y, z] = [side * (0.12 + 0.05 * k), ny - 0.1 - 0.24 * k, 0.27 - 0.04 * k];
+      break;
+    }
     case 'apple':
       [x, y, z] = [side * 0.12, ny - 0.1, 0.27];
       break;

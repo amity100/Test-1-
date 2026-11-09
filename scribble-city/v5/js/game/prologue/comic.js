@@ -117,7 +117,9 @@ export class Comic {
   word(text, where, o = {}) {
     const uv = Array.isArray(where) ? where : this.at(where);
     if (!uv) return;
-    this.words.push({ text, u: Math.min(0.88, Math.max(0.12, uv[0])), v: Math.min(0.82, Math.max(0.18, uv[1])), t: 0, life: o.life || 0.75, size: o.size || 0.09, fill: o.fill || '#ffd23f', ink: o.ink || '#16121e', burst: o.burst || '#ff4f6a', tilt: o.tilt !== undefined ? o.tilt : (Math.random() - 0.5) * 0.4, seed: Math.random() * 100 });
+    // (round 23, the review: kept above the band at the foot of the picture - what to do next in the
+    // game, the subtitles in the film; a SPLAT! there was drawn over the goal's words)
+    this.words.push({ text, u: Math.min(0.88, Math.max(0.12, uv[0])), v: Math.min(0.62, Math.max(0.18, uv[1])), t: 0, life: o.life || 0.75, size: o.size || 0.09, fill: o.fill || '#ffd23f', ink: o.ink || '#16121e', burst: o.burst || '#ff4f6a', tilt: o.tilt !== undefined ? o.tilt : (Math.random() - 0.5) * 0.4, seed: Math.random() * 100 });
   }
 
   // speed lines: in from the edges towards a point of the world (or the middle of the sheet) for

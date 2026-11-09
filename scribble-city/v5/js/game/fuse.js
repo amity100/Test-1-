@@ -2793,7 +2793,12 @@ export class Fuse {
         if (o.role === 'wheel' && ud.spin) {
           ud.spin.rotation.x = (v.wheelSpin || 0) * (0.34 / r0);
           o.m.rotation.y = ud.front ? clamp((v.turn || 0) * 0.35, -0.45, 0.45) : 0;
-        } else if (o.role === 'rotor' && ud.spin) ud.spin.rotation.y += this.fdt * (v.fzLifting || (v.air && fz.rotor) ? 26 : v.driver ? 6 : 1);
+        } else if (o.role === 'rotor' && ud.spin) {
+          // (round 23: held still while the story's ending is filmed in the car on the sand - turning,
+          // its blades smeared into a white cloud behind the faces - till the car is off again)
+          if (v.rotorStill && (v.air || Math.abs(v.speed || 0) > 1)) v.rotorStill = false;
+          if (!v.rotorStill) ud.spin.rotation.y += this.fdt * (v.fzLifting || (v.air && fz.rotor) ? 26 : v.driver ? 6 : 1);
+        }
         else if (o.role === 'prop' && ud.spin) ud.spin.rotation.z += this.fdt * (v.fzWet ? 4 + Math.abs(v.speed || 0) * 1.6 : v.driver ? 2 : 0.5);
         else if (o.role === 'jet' && ud.flame) {
           const on = v.boosting || (v.fzThrust && v.air) ? 1 : 0;
