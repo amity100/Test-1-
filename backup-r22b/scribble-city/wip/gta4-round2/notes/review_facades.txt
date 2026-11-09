@@ -1,0 +1,65 @@
+review_facades - adversarial review of gta4/facades (worktree wf_a71e1740-598-1)
+=====================================================================
+Start (second reviewer): branch head 02ffd46 = previous reviewer's only fix commit
+  ("shop doorways open to the floor, stair hall dark behind flats door, gang blocks' boarded windows back").
+Previous reviewer's snapshots fix1..fix1i are all identical to 02ffd46 (no lost uncommitted work).
+Its later runs (looks2/3, low, island, perf3, perf_head2) were on 02ffd46; perf4 (CPU-calibrated) timed out.
+Worktree clean at start.
+
+Plan: read full diff, look at shots, hunt bugs; perf pair base/branch; fixes; lab smoke; images.
+
+Step 1 (node, r2/): dice.mjs all 166 mainland blocks, base_main vs head 02ffd46:
+  0 exceptions, 0 NaN; rngNext (block rng after full build) identical in all 166 -> city dice kept.
+  shops: same kinds/names; 177 doors moved <=0.65 m (flats door shifts sg0/sg1: expected).
+  col boxes +1..+4 (side-skin fcol). verts 24.64M -> 27.94M (+13.4%); worst block +42.5% (107 downtown offices).
+  steps.mjs (per it.next() hitch, best of 2): base total 57.1 s maxStep 138 ms; head 51.1 s, maxStep 108 ms.
+  onestep.mjs best-of-4 on the 5 blocks whose max step looked worse: identical within noise -> no build hitch regression.
+Code review: no runtime errors found; neon keys of blade signs equal the main sign's (no atlas growth);
+  no early returns before Parts.flush; LOW flag matches main.js (touch || ?low).
+Found + fixed (4a09095):
+  - blinds' slats 1.2 cm -> SLAT 3 cm: they rendered as rows of dots (aliasing) - "perforated tin" offices
+    (builder's own after_down_modern). facades.js deepWindow + kits.js modern.
+  - house doormat buried inside the porch deck (65% of houses) -> on the porch floor.
+  - apartments: identical ternary for pipe runs simplified.
+Recheck dice after fix: 0 mismatches.
+
+Step 2: found + fixed (417de43):
+  - AC drip streaks up to 1.9 m (deepWindow) / 1.5 m (hotels) ran past the window head below and hung in
+    the air across the recessed hole (or in front of a hotel's glass). Now <= 1.0 / 0.85 m (stop on the wall).
+  - hotels' through-wall ACs under the 1st-floor windows sat in the plane of the shop neon (w 0.3) -> AC
+    box through the letters. Now only from the 2nd floor.
+Browser chain started (r2/chain1.sh): look_head (1280x720, builder cams; havana_deco/down_strip exact,
+  others guessed C9), perf_head + perf_base (320x180, calibrated), lab_head (lab smoke). Outputs r2/runs/.
+Not fixed (cosmetic, noted): stickers can overlap a mullion; house window bars' posts touch shutters;
+  facades.js weather() is unused (dead helper); fire-escape/balconette bars 2.4 cm could alias at range.
+
+Step 3: look_head (417de43, 1280x720): exit 0, 0 pageerror. Cameras match the builder's for havana_deco,
+  down_deco, down_strip, down_deco_close (mean abs diff 2-8 /255); havana_med, down_modern guesses differ.
+  Blinds at 40 m still dotted with 3 cm slats -> cause is the inker's normal folds (slat top/bottom faces).
+  Fixed (18e6235): slats are front faces only (SLAT_FACE): no fold -> no dots; -313k verts over 166 blocks.
+  Totals now: 24.64M -> 27.63M (+12.1%).
+perf pair 1 (head 417de43 first, then base; 320x180; per-update ms over 300 frames, cal = fixed loop ms):
+  havana  base all 7.93/7.60 (cal 45.6/55.2, civ 1.68/1.80)  head all 8.84/8.56 (cal 44.2/51.6, civ 2.08/1.96)
+  downtown (still streaming) base 7.93/9.25  head 9.23/10.19
+  render (fixed cam): havana main tris 1.88M->2.07M (+10%), calls 821->793; downtown 2.16M->2.35M (+9%), 842->831
+  live verts: havana 3.39M->4.06M (+20%), downtown 3.83M->4.60M (+20%)
+  civ (unchanged code) also +0.3 ms -> machine noise suspected; repeat in reverse order (chain2: perfb_base, perfb_head).
+lab smoke (head1 = 417de43, 640x360, lab=1): exit 0, 0 pageerror, [eval] lines IDENTICAL to smoke/main.log
+  (sedan 170; harpoon tow 3.1 14; net 1; tesla emp; oil 2 spin; decoy true true 16.99 2; errors 0).
+low path (node, ?low): 24.64M -> 27.17M (+10.2%), worst block +26.3%; dice identical.
+perf pair 2 (reverse order: base first, then head 18e6235; 3 windows each):
+  havana steady all: base 8.04/7.32/6.99  head 8.55/8.59/6.16 (cal 41..82 ms: machine load swings 2x)
+  over both pairs: base mean 7.58 ms, head 8.14 (+0.56); normalised by the cal loop: base 15.9, head 15.6 -> no
+  measurable per-frame CPU change (facades have no per-frame code; civ, whose code is unchanged, moves as much).
+  render: havana main-pass tris 1.81M -> 2.06M (+14%), calls 835 -> 789; downtown 2.02M -> 2.30M (+14%), calls 809 -> 830.
+  live verts havana 3.39M -> 3.98M (+17%), downtown 3.83M -> 4.50M (+17%) (after the slat fix).
+  island city build: verts 4.105M -> 4.314M (+5%), build 9.7 s vs 10.8 s (noise level).
+look_head2 (18e6235): 0 pageerror. Blinds at 40 m: dots gone (plain panels) - but up close the face slats at 0.8x were
+  hidden by the hatching (blinds read as plain pale panels). Fixed (c80105e): slat colour 0.62x.
+chain3 started: look_head3 + lab_head3 on c80105e (final candidate).
+FINAL (c80105e): look_head3 0 pageerror; blinds: faint lines up close, no dots at 40 m.
+  lab_head3 (c80105e): [eval] lines IDENTICAL to smoke/main.log, errors 0, 0 pageerror.
+  after shots refreshed (same cameras as builder, verified by pixel diff): after_havana_deco, after_down_deco,
+  after_down_strip, after_down_deco_close; builder's copies in review_facades/r2/builder_backup/.
+  send/facades_1.jpg and facades_2.jpg recomposed (same labels); facades_3/4 unchanged (fixes don't touch them).
+  Branch diff vs 6277529: only the 4 owned files. Verdict: ready.

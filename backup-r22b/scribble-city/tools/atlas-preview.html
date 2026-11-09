@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="he">
+<head>
+<meta charset="utf-8">
+<title>atlas preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&family=Rubik:wght@400;600;800&family=Caveat:wght@500;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+<style>html,body{margin:0;background:#f8f4e9}canvas{width:1024px;height:1024px;display:block}</style>
+<script type="importmap">{ "imports": { "three": "../js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<script type="module">
+import { buildAtlas } from '../js/render/atlas.js';
+import { buildSignAtlas } from '../js/render/signs.js';
+try { await Promise.race([Promise.all([document.fonts.load('40px "Gveret Levin"', 'אבג'), document.fonts.load('40px "Permanent Marker"', 'ABC'), document.fonts.load('700 40px "Caveat"', 'ABC'), document.fonts.load('700 40px "Rubik"', 'אבג')]), new Promise(r => setTimeout(r, 5000))]); } catch (e) {}
+const a = new URLSearchParams(location.search).get('signs') ? buildSignAtlas() : buildAtlas();
+document.body.appendChild(a.canvas);
+window.__ready = true;
+</script>
+</body>
+</html>
