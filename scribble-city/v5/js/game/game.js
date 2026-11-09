@@ -698,6 +698,9 @@ export class Game {
   // started again to load it)
   async showContinue() {
     const S = this.saves;
+    // (round 22b: until the story has been played to its end, the one way in is the story itself -
+    // a save from before it, or from the middle of it, would be the city without it)
+    if (this.prologue && PROLOGUE_ON && !this.prologue.done && !this.prologue.param && !this.params.has('test')) return;
     const want = S.takePending();
     const h = want ? await S.header(want) : await S.latest();
     if (!h || this.state !== 'title') return;
@@ -711,6 +714,9 @@ export class Game {
 
   async continueGame() {
     if (!this.continueSlot || this.state !== 'title') return;
+    // (round 22b: the city after the story - the wheel it took away gone from it, built at the start
+    // for a new game's story all the same)
+    if (this.prolSet && this.prologue && this.prologue.done && !this.prolSet.wheelGone) this.prolSet.removeWheel();
     this.start({ saved: true });
     await this.saves.load(this.continueSlot);
   }

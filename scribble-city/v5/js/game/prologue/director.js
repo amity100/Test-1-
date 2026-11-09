@@ -168,7 +168,11 @@ export class Prologue {
     this.lookOn = !(P && P.get('look') === '0');
   }
 
-  // the prologue plays at the start of a new game (not in the tests, unless asked for)
+  // the prologue plays at the start of a new game (not in the tests, unless asked for). (round 22b,
+  // the player's word: a new game always begins with the story - its opening, its song, its how-to -
+  // even in a browser where it was played to the end before: that one went straight to the city and
+  // its old welcome, and looked like the game of before. Finished once, a saved game still carries on
+  // in the city: game.js continueGame)
   wants() {
     const g = this.game;
     if (g.classic || g.lab) return false;
@@ -176,7 +180,7 @@ export class Prologue {
     if (this.param) return true;
     if (!PROLOGUE_ON) return false;
     if (g.params.has('test')) return false;
-    return !this.done;
+    return true;
   }
 
   // ------------------------------------------------------------------ start

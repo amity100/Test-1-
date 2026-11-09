@@ -32,7 +32,9 @@ export class Interiors {
       world.group.add(g);
       this.buckets = [g];
     }
-    this.stream = new Streamer([], { budget: o.low ? 2 : 2.5, rush: o.low ? 5 : 7, warm: this.warmFn });
+    // (round 22b: a phone's frame of 33 ms has room for a few of them, not eight - the goods come in
+    // over a few more frames, drawn in all the same, and no frame waits for a shelf)
+    this.stream = new Streamer([], { budget: o.low ? 1.2 : 2.5, rush: o.low ? 2.5 : 7, warm: this.warmFn });
     this.byRec = new Map();
     this.verts = 0;
     // (ROADMAP 11.45) the shops being drawn in: { id, t0, group }
