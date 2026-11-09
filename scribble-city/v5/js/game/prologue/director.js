@@ -1363,6 +1363,9 @@ export class Prologue {
   // under it as it climbed. game/game.js calls this right after the cars move, as Danny is seated)
   seatCast() {
     if (!this.active) return;
+    // (round 25: the men at their cars' windows put where their cars are now, before they are posed -
+    // game/prologue/paintfight.js placeShooters)
+    if (this.fight && this.fight.shooters && this.fight.shooters.length) this.fight.placeShooters(this.game.player.inVehicle, true);
     const L = this.cast.lily;
     if (L && L.pl && L.pl.ride && L.alive) {
       const v = L.pl.ride;
@@ -2891,6 +2894,14 @@ export class Prologue {
     // stood behind one, a bar ran down the middle of the face)
     // (round 23, the review: the boy who shouts down to his mother a boy - the city's drawn "kid" read
     // as a grown man at the lens's closeness: a child's build, big head, round face, and smaller)
+    // (round 25, the player's word: they were simple shapes, a doll's - now two of the city's drawn
+    // people, children: Theo and Maya, render/folkspec.js WHEEL_KIDS - game/prologue/cast.js)
+    const theo = this.castMod && this.castMod.wheelKidLook ? this.castMod.wheelKidLook(0) : null;
+    const maya = this.castMod && this.castMod.wheelKidLook ? this.castMod.wheelKidLook(1) : null;
+    if (theo && maya) {
+      this.heroes = [mk('hk1', theo, -1.0, 0.0, 1), mk('hk2', maya, -1.0, 0.95, 1)];
+      return;
+    }
     const boy = civilianLook({ fem: false, kind: 'casual', build: 'chibi', pen: 'fineliner' });
     boy.face.beard = null;
     boy.face.lips = null;
@@ -4395,14 +4406,23 @@ export class Prologue {
     // (the car in the middle of the picture from behind and over it, the sky over its roof to draw on -
     // held there, steady, as it hangs: the pen's own camera put by - game/fuse.js sketchCam)
     if (g.fuse) g.fuse.camHeld = true;
+    // (round 25, the player's word: from straight behind it, into the sunset, the falling car was a
+    // black shape tipped on its nose - nothing to read; a crooked angle. Now from in front of it and to
+    // its side, low and level with it: the whole car in profile falling nose first, its wheels, the
+    // horizon level and the city's towers behind it - six places tried in the picture, this the clear
+    // one; the side the sun is on, chosen once, as it begins)
+    const sun = shared.uSunDir.value;
+    const sideSun = Math.sin(car.yaw + Math.PI / 2) * sun.x + Math.cos(car.yaw + Math.PI / 2) * sun.z >= 0 ? 1 : -1;
     const back = () => {
       const fx = Math.sin(car.yaw);
       const fz = Math.cos(car.yaw);
-      return v3(car.pos.x - fx * 7.5, car.pos.y + 3.2, car.pos.z - fz * 7.5);
+      const rx = Math.sin(car.yaw + Math.PI / 2) * sideSun;
+      const rz = Math.cos(car.yaw + Math.PI / 2) * sideSun;
+      return v3(car.pos.x + fx * 5.5 + rx * 6.0, car.pos.y + 1.2, car.pos.z + fz * 5.5 + rz * 6.0);
     };
     // (the car a little under the middle, the sky over its roof clear - the pen's rows of things put
     // away: the rotor is chosen already, and on a phone they covered the picture)
-    this.shot({ from: back, look: () => v3(car.pos.x, car.pos.y + 2.1, car.pos.z), fov: 50, dur: 600, hand: 0 });
+    this.shot({ from: back, look: () => v3(car.pos.x, car.pos.y + 1.0, car.pos.z), fov: 44, dur: 600, hand: 0 });
     if (!document.getElementById('pro-rotor-css')) {
       const st = document.createElement('style');
       st.id = 'pro-rotor-css';
@@ -4570,8 +4590,13 @@ export class Prologue {
   rotorBox(car) {
     const cam = this.game.camera;
     const H = (car.heightM || 1.45) + 0.85;
-    const rx = Math.cos(car.yaw);
-    const rz = -Math.sin(car.yaw);
+    // (round 25: across the picture, at the car - not across the car: seen from its side, that was
+    // nothing wide on the screen. The camera's own right, level)
+    cam.updateMatrixWorld();
+    const ce = cam.matrixWorld.elements;
+    const cl = Math.hypot(ce[0], ce[2]) || 1;
+    const rx = ce[0] / cl;
+    const rz = ce[2] / cl;
     const W = window.innerWidth;
     const Hh = window.innerHeight;
     const px = (a) => {
@@ -4584,8 +4609,9 @@ export class Prologue {
     // (half its width: two metres at the car, as the screen has it - within reason)
     const hw = Math.max(60, Math.min(W * 0.3, Math.hypot(R[0] - L[0], R[1] - L[1]) / 2));
     const hh = hw * 0.8;
-    // (over the roof, its foot a little above it, never off the top of the screen)
-    const cy = Math.max(hh + 70, m[1] - hh * 0.55);
+    // (over the roof, its foot a little above it, never off the top of the screen - round 25: nor
+    // under the bar of time there)
+    const cy = Math.max(hh + 100, m[1] - hh * 0.55);
     const c = [[m[0] - hw, cy - hh], [m[0] + hw, cy - hh], [m[0] + hw, cy + hh], [m[0] - hw, cy + hh]];
     return { c, m: [m[0], cy] };
   }

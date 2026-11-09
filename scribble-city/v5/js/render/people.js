@@ -511,6 +511,7 @@ function atW(out, x, y, z) {
 
 // (round 17: his fist's way on from the wrist, round the pencil - drawHero)
 const _gw = new THREE.Vector3();
+const _hRef = new THREE.Vector3();
 
 // (round 20, the player's word: Danny's and Lily's legs stuck out under the car as it flew - seen from
 // below, out through its floor. Sat in a car - game/traffic.js seat, the prologue's Lily - the legs are
@@ -1021,6 +1022,8 @@ export class PersonRenderer {
       // (round 17: his right hand closed round what he holds - fig.grip, game/weapons.js)
       heroGripR: P(HERO.heroHandGeo(false, 0.05), M.skin, 8),
       heroHandL: P(HERO.heroHandGeo(true), M.skin, 192),
+      // (round 25: and the left closed round what it holds - fig.gripL: Lily's page by its edge)
+      heroGripL: P(HERO.heroHandGeo(true, 0.05), M.skin, 8),
       heroThigh: P(HERO.heroThighGeo(), M.heroPants, 8),
       heroShin: P(HERO.heroShinGeo(), M.heroPants, 8),
       heroShoe: P(HERO.heroShoeGeo(), M.heroBoots, 8),
@@ -1790,6 +1793,8 @@ export class PersonRenderer {
   // ------------------------------------------------------------------ one person
   // fig: a Doodle (its joints, its look, its body frames); camDist: how far from the camera
   draw(fig, camDist) {
+    // (round 25: whole hands or not, as last drawn - drawFolk; game/carry.js fullHands)
+    fig._fullHands = false;
     if (camDist > (fig.lodFar || this.lodFar)) {
       this.drawLow(fig, false);
       return;
@@ -2374,6 +2379,9 @@ export class PersonRenderer {
     // ---- the arms in their sleeves, the hands; a watch on the left wrist
     const arms = fig._armJ || (fig._armJ = [[j.shoulderR, j.elbowR, j.handR], [j.shoulderL, j.elbowL, j.handL]]);
     const armK = k * Math.max(1, bulk * 0.85) * (fig.limbs || 1);
+    // (round 25: drawn with whole hands that close round what they hold - game/carry.js fullHands)
+    fig._fullHands = true;
+    fig._handK = 0.98 * (fem ? 0.88 : 1);
     for (let ai = 0; ai < 2; ai++) {
       if (P[ARM_PART[ai]] < 0.5) continue;
       const sh = arms[ai][0];
@@ -2389,12 +2397,26 @@ export class PersonRenderer {
       // (round 24, the player's word: Lily's hands unnatural as she drew, the pencils part of her hand -
       // her right hand now closed round her pencil as the hero's is round his: fig.grip, the way the
       // pencil lies across the fist - game/prologue/page.js; bent at the wrist to lie square across it)
-      const grip = ai === 0 ? fig.grip : null;
+      // (round 25, the player's word: her hands through what she held, the ice cream and the page, and
+      // maybe the wrong way round - the left closed round the page's edge too, fig.gripL; an ice cream's
+      // cone upright in the fist, thumb up - game/carry.js puts it in the fist's hollow (fullHands))
+      const held = ai === 0 ? fig.carry : fig.carryL;
+      const grip = (ai === 0 ? fig.grip : fig.gripL) || (held === 'icecream' ? UP : null);
       if (grip) {
         _gw.copy(_c).addScaledVector(grip, -_c.dot(grip));
         if (_gw.lengthSq() > 1e-6) _d.copy(hd).addScaledVector(_gw.normalize(), (fem ? 0.17 : 0.19) * S);
       }
-      (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), grip || fwd), skin, own, id(), ind);
+      // (an open hand reaching out in front: its thumb up - turned by the body's front alone, the
+      // hand along it had no way round to turn, and a hand reaching forward came out any way round)
+      let hRef = grip || fwd;
+      if (!grip) {
+        const dd = Math.abs(_c.dot(fwd));
+        if (dd > 0.55) {
+          const b = Math.min(1, (dd - 0.55) / 0.3);
+          hRef = _hRef.copy(fwd).multiplyScalar(1 - b).addScaledVector(UP, b).normalize();
+        }
+      }
+      (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : grip ? p.heroGripL : p.heroHandL).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), hRef), skin, own, id(), ind);
       if (ai === 1 && F.watch) {
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
         _x.copy(rgt).multiplyScalar(-1).addScaledVector(_c, rgt.dot(_c)).normalize();

@@ -41,6 +41,37 @@ export function buildMainlandTowers(ctx) {
   return out;
 }
 
+// (round 25) a wall's strips, foot to top: [from, to, kind] - 0 the wall, 1 a band of windows, 2 the
+// shop fronts along the street. A floor 3.4 m: 1.3 of wall and 2.1 of windows; the street's floor
+// taller and darker; the parapet over the last floor. Over the street (a bridge, raised): plain
+const FLOOR = 3.4;
+function stripsOf(y0, y1, raised) {
+  const h = y1 - y0;
+  if (raised || h < 2.5) return [[y0, y1, 0]];
+  const out = [];
+  const shop = Math.min(3.8, h * 0.45);
+  out.push([y0, y0 + shop, 2]);
+  let y = y0 + shop;
+  // (a sill over the shops, then the floors up to a parapet at least 0.6 high)
+  while (y + FLOOR + 0.6 <= y1) {
+    out.push([y, y + 1.3, 0]);
+    out.push([y + 1.3, y + FLOOR, 1]);
+    y += FLOOR;
+  }
+  out.push([y, y1, 0]);
+  return out;
+}
+const _cg = new THREE.Color();
+// the windows: the evening sky in the glass over a little of the wall's own colour
+// (dark enough to read as windows from across the water, under the evening's colours)
+function glassOf(c, out) {
+  return out.setRGB(c.r * 0.16 + 0.08, c.g * 0.16 + 0.11, c.b * 0.16 + 0.19);
+}
+// the shop fronts: their glass and their awnings' shade, warmer
+function shopOf(c, out) {
+  return out.setRGB(c.r * 0.3 + 0.1, c.g * 0.3 + 0.07, c.b * 0.3 + 0.06);
+}
+
 // the tiles of the far bodies: 3 x 3 blocks each
 const TILE = 3;
 const tileOf = (b) => `${Math.floor(b.col / TILE)},${Math.floor(b.row / TILE)}`;
@@ -106,10 +137,24 @@ export class FarShells {
         const y0 = s[6] !== undefined ? s[6] : CURB - 0.2;
         const y1 = top;
         // four walls and the roof (a little darker: the parapet's shadow)
-        face([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], c, id);
-        face([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], c, id);
-        face([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], c, id);
-        face([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], c, id);
+        // (round 25, the player's word: across the bridge, the buildings waiting to be built were
+        // plain boxes up close, "stupid squares" - each wall now in strips, as a building is: its shop
+        // fronts along the street darker, then floor over floor a band of wall and a band of windows,
+        // and the parapet; each strip its own, so the pen draws the lines between them. Strips, not
+        // windows laid over the wall: nothing to flicker against it from far off)
+        const walls = [
+          [[x0, z1], [x1, z1], [0, 0, 1]],
+          [[x1, z0], [x0, z0], [0, 0, -1]],
+          [[x1, z1], [x1, z0], [1, 0, 0]],
+          [[x0, z0], [x0, z1], [-1, 0, 0]],
+        ];
+        const strips = stripsOf(y0, y1, s[6] !== undefined);
+        for (const [pa, pb, n] of walls) {
+          for (const [ya, yb, kind] of strips) {
+            const cc = kind === 1 ? glassOf(c, _cg) : kind === 2 ? shopOf(c, _cg) : c;
+            face([pa[0], ya, pa[1]], [pb[0], ya, pb[1]], [pb[0], yb, pb[1]], [pa[0], yb, pa[1]], n, cc, kind ? nextId() : id);
+          }
+        }
         const roof = c.clone().multiplyScalar(0.82);
         face([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0], roof, id);
       }

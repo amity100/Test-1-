@@ -1,4 +1,4 @@
-import { FOLK, FOLK_ON, LILY, SKINS, hexRGB } from '../../render/folkspec.js';
+import { FOLK, FOLK_ON, LILY, WHEEL_KIDS, SKINS, hexRGB } from '../../render/folkspec.js';
 import { folkLook, civilianLook, modest } from '../looks.js';
 
 // (v5, ROADMAP 18) The prologue's people: how each of them looks, for game/civilians.js
@@ -9,6 +9,17 @@ import { folkLook, civilianLook, modest } from '../looks.js';
 // city never sends them walking its streets by themselves.
 
 const LILY_K = FOLK.indexOf(LILY);
+
+// (round 25, the player's word: the kids on the wheel drawn as the city's people are, children's faces
+// - render/folkspec.js WHEEL_KIDS: i 0 Theo, 1 Maya; null where this computer's renderer did not make
+// them)
+export function wheelKidLook(i) {
+  const k = FOLK.indexOf(WHEEL_KIDS[i]);
+  if (k < 0 || k >= FOLK_ON.n) return null;
+  const L = folkLook(k);
+  L.kid = true;
+  return L;
+}
 const BROWN = [0.5, 0.33, 0.2];
 
 // Lily Cruz, nine, the hero's daughter, as her sheet has her. On top of her drawing, the rig's own
