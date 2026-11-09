@@ -149,6 +149,38 @@ export class PrologueVoices {
     return this.game.audio && this.game.audio.ctx;
   }
 
+  // (round 24) a line's loudness, a hundred times a second, as a mouth follows it: its rms, quick to
+  // rise and a little slower to fall (a jaw), against its own loud syllables - 0 silent, 1 open
+  envOf(id, b) {
+    const E = this.envs || (this.envs = new Map());
+    if (E.has(id)) return E.get(id);
+    const d = b.getChannelData(0);
+    const hop = Math.max(1, Math.round(b.sampleRate / 100));
+    const n = Math.ceil(d.length / hop);
+    const a = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let s = 0;
+      const i0 = i * hop;
+      const i1 = Math.min(d.length, i0 + hop);
+      for (let k = i0; k < i1; k++) s += d[k] * d[k];
+      a[i] = Math.sqrt(s / Math.max(1, i1 - i0));
+    }
+    let v = 0;
+    for (let i = 0; i < n; i++) {
+      v += (a[i] - v) * (a[i] > v ? 0.55 : 0.2);
+      a[i] = v;
+    }
+    const sorted = Array.from(a).sort((x, y) => x - y);
+    const top = sorted[Math.floor(sorted.length * 0.95)] || 1e-4;
+    for (let i = 0; i < n; i++) {
+      const k = Math.max(0, Math.min(1, (a[i] / top - 0.12) / 0.88));
+      a[i] = Math.pow(k, 0.8);
+    }
+    const env = { a, rate: 100 };
+    E.set(id, env);
+    return env;
+  }
+
   // everything fetched and decoded (in the background: the opening does not wait for it)
   load() {
     if (this.loading) return this.loading;
@@ -390,7 +422,10 @@ export class PrologueVoices {
     const mouth = MOUTH[id] || L.en;
     // (round 13: the mouth on the real clock, as the voice is - on a slow phone the game's own clock
     // lags it, and the lips went on after the words: render/people.js)
-    if (fig) fig.say = { text: mouth, tone: o.tone || 'talk', at: 0, atT: performance.now() / 1000, real: true, cps: mouth.length / Math.max(0.4, dur), wait: false, done: false };
+    // (round 24, the player's word: mouths that hardly moved, or trembled - the jaw now opened by the
+    // voice itself, the recording's own loudness syllable by syllable (voiceEnv); the letters only
+    // shape the lips, wide or round)
+    if (fig) fig.say = { text: mouth, tone: o.tone || 'talk', at: 0, atT: performance.now() / 1000, real: true, cps: mouth.length / Math.max(0.4, dur), wait: false, done: false, env: b ? this.envOf(id, b) : null };
     if (this.ui && o.sub !== false) this.ui.sub(L.who, L.en, L.he, dur + 0.35);
     return dur;
   }

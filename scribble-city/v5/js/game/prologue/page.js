@@ -15,6 +15,12 @@ const _x = new THREE.Vector3();
 const _y = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _l = new THREE.Vector3();
+const _t = new THREE.Vector3();
+const _a = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _h = new THREE.Vector3();
+const _hn = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const hexRgb = (h) => {
   const n = parseInt(h.slice(1), 16);
@@ -66,6 +72,13 @@ export class HeldPage {
     this.tip = { u: 0.5, v: 0.5, col: '#e8457c', done: false };
     this.tipW = new THREE.Vector3();
     this.follow = false;
+    // (round 24: from one way of holding it to another over a moment, not at once - fromP/fromQ where
+    // it was, blend how far on; still: her pencil lifted off it, her hand resting)
+    this.fromP = new THREE.Vector3();
+    this.fromQ = new THREE.Quaternion();
+    this.blend = 1;
+    this.blendT = null;
+    this.still = false;
   }
 
   // (ROADMAP 18.9) her drawing as far as she has got with it: k of it (game/prologue/ui.js
@@ -84,6 +97,15 @@ export class HeldPage {
   // towards them), 'read' (up before her own eyes, the picture to her) or 'hug' (to her chest,
   // picture in)
   hold(fig, to, mode = 'show') {
+    // (her fist round the pencil let go: it is put away while she holds the page in her two hands)
+    if (fig && this.gripV && fig.grip === this.gripV) fig.grip = null;
+    // (round 24: held another way by the same hands - it goes there, it does not jump)
+    if (this.fig === fig && this.grp.visible && mode !== this.mode) {
+      this.fromP.setFromMatrixPosition(this.grp.matrix);
+      this.fromQ.setFromRotationMatrix(this.grp.matrix);
+      this.blend = 0;
+      this.blendT = null;
+    } else this.blend = 1;
     this.fig = fig;
     this.to = to;
     this.mode = mode;
@@ -99,6 +121,9 @@ export class HeldPage {
     if (f) {
       f.reachR = null;
       f.reachL = null;
+      f.pencilAx = null;
+      if (this.gripV && f.grip === this.gripV) f.grip = null;
+      this.still = false;
       if (this.saved) {
         f.carry = this.saved.carry === 'icecream' ? null : this.saved.carry;
         f.carryL = this.saved.carryL;
@@ -154,6 +179,18 @@ export class HeldPage {
     _x.crossVectors(UP, _n).normalize();
     _y.crossVectors(_n, _x).normalize();
     _m.makeBasis(_x, _y, _n);
+    if (this.blend < 1) {
+      const now = this.game.time || 0;
+      this.blend = Math.min(1, this.blend + Math.max(0, Math.min(0.1, now - (this.blendT === null ? now : this.blendT))) / 0.5);
+      this.blendT = now;
+      const k = this.blend * this.blend * (3 - 2 * this.blend);
+      _q.setFromRotationMatrix(_m);
+      _q2.copy(this.fromQ).slerp(_q, k);
+      _c.lerpVectors(this.fromP, _c, k);
+      _m.makeRotationFromQuaternion(_q2);
+      _x.setFromMatrixColumn(_m, 0);
+      _y.setFromMatrixColumn(_m, 1);
+    }
     // (her size: a child's hands hold a page as big as anybody's)
     this.grp.matrix.copy(_m).setPosition(_c);
     this.grp.matrixWorldNeedsUpdate = true;
@@ -197,21 +234,45 @@ export class HeldPage {
     const ly = (0.5 - this.tip.v) * this.H;
     const u = lx / (this.W / 2);
     this.tipW.copy(_c).addScaledVector(_x, lx).addScaledVector(_y, ly).addScaledVector(_n, 0.004 - 0.018 * (1 - u * u));
+    // (round 24, the player's word: her hands unnatural, the pencils part of her hand - the pencil went
+    // on along her forearm out of her fist, a stick grown out of her arm. Now held as a child holds a
+    // pencil to colour: its point on the page, its body slanting up out of her fingers and back over
+    // her knuckles towards her shoulder, her hand a little above the page at its side - game/carry.js
+    // fig.pencilAx)
+    let lift = 0;
     if (this.follow && !this.tip.done) {
-      // (round 14: her pencil's point on the page where the colour is going on - the hand as far back
-      // from it along her forearm as the pencil is long - and the pencil the colour it draws)
-      const el = j.elbowR;
-      _x.subVectors(this.tipW, el);
-      const l = _x.length() || 1;
-      // (round 15: her coloured pencil's point 0.17 ahead of her hand - game/carry.js)
-      f.reachR.copy(this.tipW).addScaledVector(_x, -(0.17 * S) / l).addScaledVector(_n, 0.006);
+      _t.copy(this.tipW);
       f.pencilCol = hexRgb(this.tip.col);
     } else {
-      const t = (this.game.time || 0) + (this.ph || (this.ph = Math.random() * 10));
-      const lift = Math.max(0, Math.sin(t * 0.9)) > 0.93 ? 0.05 : 0;
-      f.reachR.copy(_c).addScaledVector(_l, -0.04 + Math.sin(t * 6.3) * 0.05 + Math.sin(t * 1.7) * 0.03).addScaledVector(_y, -(Math.sin(t * 3.7) * 0.035 + Math.sin(t * 0.8) * 0.03)).addScaledVector(_n, 0.018 + lift);
-      if (!this.follow) f.pencilCol = null;
+      // (round 24: still - done, the pencil lifted off the page and resting there)
+      if (!this.still) this.stillT = (this.game.time || 0) + (this.ph || (this.ph = Math.random() * 10));
+      const t = this.stillT;
+      lift = this.still ? 0.05 : Math.max(0, Math.sin(t * 0.9)) > 0.93 ? 0.04 : 0;
+      _t.copy(_c).addScaledVector(_l, -0.06 + Math.sin(t * 6.3) * 0.045 + Math.sin(t * 1.7) * 0.03).addScaledVector(_y, -(Math.sin(t * 3.7) * 0.03 + Math.sin(t * 0.8) * 0.03));
+      // (the same pencil in her hand when she stops - not another)
+      if (!this.follow && !this.still) f.pencilCol = null;
     }
+    // (its slant: a child's fist round a coloured pencil - nearly upright on the page, leaning back a
+    // little towards her right shoulder)
+    _a.subVectors(j.shoulderR, _t);
+    _a.addScaledVector(_n, -_a.dot(_n));
+    if (_a.lengthSq() < 1e-6) _a.copy(_l).negate();
+    _a.normalize();
+    const ax = f.pencilAx || (f.pencilAx = new THREE.Vector3());
+    ax.copy(_n).multiplyScalar(0.9).addScaledVector(_a, 0.34).addScaledVector(_l, -0.1).normalize();
+    // (her fist closed round it - render/people.js, fig.grip towards its point - its hollow on the pencil
+    // a little above the point: render/heroshapes.js heroHandGeo, the hollow 0.07 down the hand from
+    // the wrist and 0.062 out from the palm; her hand 0.86 of a man's)
+    const gp = this.gripV || (this.gripV = new THREE.Vector3());
+    gp.copy(ax).negate();
+    f.grip = gp;
+    const hk = S * 0.862;
+    _h.subVectors(j.handR, j.elbowR);
+    _h.addScaledVector(gp, -_h.dot(gp));
+    if (_h.lengthSq() < 1e-8) _h.copy(_l).negate();
+    _h.normalize();
+    _hn.crossVectors(gp, _h);
+    f.reachR.copy(_t).addScaledVector(ax, 0.075 * S + lift).addScaledVector(_h, -0.07 * hk).addScaledVector(_hn, -0.0607 * hk);
     if (f.carry !== 'pencil') f.carry = 'pencil';
   }
 

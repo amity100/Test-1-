@@ -1044,7 +1044,9 @@ class Title extends Cue {
     this.bpm = 104;
     const spb = 60 / this.bpm / 4;
     // (the phrase is two bars; then it rings, and the chase takes over)
-    this.until = t0 + 32.5 * spb;
+    // (round 24, the player's word: the title held longer - the phrase played twice, four bars, under
+    // the camera's turn round the car, and down on its A at the end)
+    this.until = t0 + 64.5 * spb;
     this.hits = this.bus(0.3);
     this.snrOut = this.hits;
     this.keys = this.bus(0.42);
@@ -1054,11 +1056,11 @@ class Title extends Cue {
     this.ld = new Mono(this, this.lead, [['sawtooth', 0, -7, 0.5], ['square', 0, 7, 0.3], ['square', -1, 0, 0.32]], { cut: 3400, res: 2, vib: 14 });
     this.bs = new Mono(this, this.low, [['sawtooth', 0, 0, 0.45], ['sine', 0, 0, 0.8]], { cut: 260, res: 1.5 });
     this.echo(this.lead, spb * 3, 0.36, 0.3);
-    this.hand = o.then === null ? null : { name: o.then || 'chase', t: t0 + 32 * spb, fade: 5, heat: 1 };
+    this.hand = o.then === null ? null : { name: o.then || 'chase', t: t0 + 64 * spb, fade: 5, heat: 1 };
   }
 
   tick(i, t, spb) {
-    if (i > 32) return;
+    if (i > 64) return;
     const k = i % 16;
     const b = (i - k) / 16;
     const H = this.hits;
@@ -1079,6 +1081,17 @@ class Title extends Cue {
       this.pad(t, [55, 62, 64, 69, 71], 16 * spb, this.keys, { vol: 0.045, a: 0.005, r: 1, cut: 5000, cut1: 2000, ct: 0.7, det: 12 });
       this.bs.note(t, 31, 16 * spb, { vol: 0.32, a: 0.003, d: 0.6, s: 0.75, r: 0.3 });
     } else if (i === 32) {
+      // (round 24) again from F, without the boom: the phrase once more
+      this.kick(t, 0.6, H, 185, 43, 0.45);
+      this.crash(t, 0.07, H, 2.2);
+      this.pad(t, [53, 60, 64, 67, 69, 72], 16 * spb, this.keys, { vol: 0.046, a: 0.005, r: 1.1, cut: 6500, cut1: 2200, ct: 0.8, det: 12, mid: true });
+      this.bs.note(t, 29, 16 * spb, { vol: 0.32, a: 0.003, d: 0.6, s: 0.75, r: 0.3 });
+    } else if (i === 48) {
+      this.kick(t, 0.55, H, 170, 44, 0.4);
+      this.crash(t, 0.06, H, 2);
+      this.pad(t, [55, 62, 64, 69, 71], 16 * spb, this.keys, { vol: 0.045, a: 0.005, r: 1, cut: 5000, cut1: 2000, ct: 0.7, det: 12 });
+      this.bs.note(t, 31, 16 * spb, { vol: 0.32, a: 0.003, d: 0.6, s: 0.75, r: 0.3 });
+    } else if (i === 64) {
       // and down on A: open, neither major nor minor (the chase will say which)
       this.kick(t, 0.65, H, 180, 42, 0.45);
       this.kick(t, 0.45, H, 70, 28, 2, 1.2);
@@ -1087,16 +1100,16 @@ class Title extends Cue {
       this.bs.note(t, 33, 24 * spb, { vol: 0.32, a: 0.003, d: 0.6, s: 0.75, r: 0.4 });
     }
     // the hook's first two bars, big: the lead with its octave below, steel drums an octave over it
-    if (b < 2) {
-      for (const [st, m, len] of HOOK[b]) {
+    if (b < 4) {
+      for (const [st, m, len] of HOOK[b % 2]) {
         if (st !== k) continue;
         this.ld.note(t, m, len * spb * 0.92, { vol: 0.13, glide: 0.01, a: 0.005, d: 0.35, s: 0.8, r: 0.08 });
         this.steel(t, m + 12, 0.045, this.lead, 0.6);
       }
     }
     // half time: the snare on three; the toms down into the landing
-    if (i === 8 || i === 24) this.snare(t, 0.3, 0.2);
-    if (i >= 26 && i < 32) this.tom(t, TOMS[i - 26], 0.4, H);
+    if (i === 8 || i === 24 || i === 40 || i === 56) this.snare(t, 0.3, 0.2);
+    if (i >= 58 && i < 64) this.tom(t, TOMS[i - 58], 0.4, H);
   }
 }
 

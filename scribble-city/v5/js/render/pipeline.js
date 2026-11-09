@@ -85,6 +85,9 @@ float vn(vec2 p) { return textureLod(uNoise, (p + 0.5) / 256.0, 0.0).r; }
 // count: 1/z is flat across a plane), a fold between two faces, the edge of another object.
 // far: 0 near .. 1 far away, where the artist draws the shapes and leaves out most of the folds
 // and seams inside them (a small far thing drawn with every line would be a black knot)
+// (round 24) a face's eyes or the inside of its mouth (render/glsl.js gLineW: 243/255 drawn big,
+// 241/255 small)
+float fdOf(float w) { return step(0.9495, w) * step(w, 0.9555) + step(0.9435, w) * step(w, 0.9475); }
 float edgeAt(vec2 uv, float r, float far, out float zc) {
   vec4 a0 = texture(tAux, TC(uv));
   float z0 = linZ(uv);
@@ -103,11 +106,13 @@ float edgeAt(vec2 uv, float r, float far, out float zc) {
   // (the people's bodies are drawn in one line round each shape: no seams where an arm bends at
   // the elbow or a leg at the knee - their line weight is marked 0.97; their outlines against
   // what is behind them and between their parts stay)
-  float person = step(0.955, a0.w) * step(a0.w, 0.985);
+  // (round 24: a face's eyes and mouth inside, drawn big - 243/255 - theirs too)
+  float person = step(0.9495, a0.w) * step(a0.w, 0.985);
   // (characters round) a face drawn as a portrait, small on the screen (render/people.js portraitFor:
   // its line weight marked 0.94): its outline against what is behind it alone - a jaw's over its
   // neck, a nose's over its cheek, the eyes' round them drawn at that size are a few broken specks
-  float pfar = step(0.935, a0.w) * step(a0.w, 0.945);
+  // (round 24: and its eyes and mouth inside, drawn small - 241/255)
+  float pfar = step(0.935, a0.w) * step(a0.w, 0.9475);
   float e = smoothstep(0.025, 0.09, lap / w0) * (0.45 + 0.55 * behind) * mix(1.0, behind, person);
   e = mix(e, smoothstep(0.12, 0.3, lap / w0) * behind, pfar);
   vec4 al = texture(tAux, TC(uv - ox));
@@ -174,6 +179,22 @@ void main() {
     float aw = texture(tAux, TC(vUv)).w;
     r *= mix(1.0, uPersonW, step(0.925, aw) * step(aw, 0.99) * (1.0 - far));
   }
+  // (round 24, the player's word: Lily's eyes and mouth black, and others' - the body's thick black
+  // outline drawn round every part of an open mouth (the lips, the teeth, the tongue) and round the
+  // eyes filled them. Where a face's eyes or its mouth's inside are near (marked 243 or 241 of 255 - render/glsl.js
+  // gLineW), a fine line, and a warm dark brown, as an animator draws them)
+  float fd = 0.0;
+  {
+    vec2 ox = vec2(r * uTexel.x, 0.0);
+    vec2 oy = vec2(0.0, r * uTexel.y);
+    float w0 = texture(tAux, TC(vUv)).w;
+    float w1 = texture(tAux, TC(vUv + ox)).w;
+    float w2 = texture(tAux, TC(vUv - ox)).w;
+    float w3 = texture(tAux, TC(vUv + oy)).w;
+    float w4 = texture(tAux, TC(vUv - oy)).w;
+    fd = max(max(fdOf(w0), max(fdOf(w1), fdOf(w2))), max(fdOf(w3), fdOf(w4)));
+    r = mix(r, max(1.0, r * 0.38), fd);
+  }
   float z;
   float e = lineAt(tick, w, far, steady, r, z);
   // (the smart drawing: where this thing's line was drawn anew this frame and is not where it
@@ -198,6 +219,8 @@ void main() {
   e *= mix(1.0, 0.45, fz);
   vec3 ink = mix(vec3(0.018, 0.012, 0.04), c.rgb * 0.12, 0.2);
   ink = mix(ink, c.rgb * 0.38, fz * 0.55);
+  ink = mix(ink, vec3(0.2, 0.08, 0.06) * 0.6 + c.rgb * 0.25, fd);
+  e *= 1.0 - 0.3 * fd;
   vec3 col = mix(c.rgb, ink, clamp(e * 1.15, 0.0, 1.0) * 0.95);
   fragColor = vec4(col, c.a + 2.0 * anew);
 }`;

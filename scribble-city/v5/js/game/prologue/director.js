@@ -19,6 +19,7 @@ import { shared } from '../../render/materials.js';
 import { clamp } from '../../core/util.js';
 import { Kit, itemMats, linC } from '../items.js';
 import { groundHeight } from '../../world/layout.js';
+import { seatPlace } from '../vehicles.js';
 import { lang, tr } from '../../core/lang.js';
 import { objT, markT, thoughtT } from './i18n.js';
 
@@ -1374,11 +1375,14 @@ export class Prologue {
       L.fig.ones = true;
       // (on a booster cushion, as a child of her size rides: her face over the door, in the window)
       const boost = L.fig.scale && L.fig.scale < 0.9 ? 0.22 : 0;
-      L.pos.set(v.pos.x + fx * S.u - fz * S.s, (v.pos.y || 0) + S.y + boost, v.pos.z + fz * S.u + fx * S.s);
+      // (round 24: in the body as it is drawn, and never with her head through its roof: the cushion
+      // lowered as far as it asks - game/vehicles.js seatPlace)
+      if (v.bodyPose) seatPlace(v, L.fig, -S.s, S.y + boost, S.u, L.pos);
+      else L.pos.set(v.pos.x + fx * S.u - fz * S.s, (v.pos.y || 0) + S.y + boost, v.pos.z + fz * S.u + fx * S.s);
       L.vel.set(0, 0, 0);
       L.yaw = v.yaw;
       L.faceYaw = v.yaw;
-      L.baseY = S.y + boost;
+      L.baseY = S.y + boost - (L.fig.seatDrop || 0);
       L.fig.sit = 1;
       L.fig.seatedAt = performance.now();
       // (holding on to her seat)
@@ -2289,19 +2293,66 @@ export class Prologue {
     this.everyFrame = null;
     this.sketching = false;
     page.follow = false;
+    page.still = true;
     drawK = 1;
     drawOn();
-    // she cannot wait to show him: up off the bench, the page held up to him - the page, and her face
-    // over it
-    L.fig.sit = 0;
-    L.baseY = 0;
+    // (round 24, the player's word: a jump - drawing one moment, holding it up to him the next. Now
+    // the last stroke done, her pencil lifted, she looks up at him and beams; then up off the bench
+    // with the page to her chest, the steps over to him - and only then held up to him)
+    L.fig.lookAt = P.fig.j.headC;
+    this.feel(L.fig, 'joy', 8);
+    yield 0.85;
+    // (the two of them, him whole at the side of the picture, her getting up off the bench with the page
+    // to her chest and coming to him - towards us. Nine places tried in the picture: from her left a
+    // lamp post stood in front of her; nearer, his head was off the top of it; this one clear)
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, Math.atan2(-rx, -rz));
-    this.put(L, VIEW.x + rx * 0.4, VIEW.z + rz * 0.4, Math.atan2(rx, rz));
+    P.fig.lookAt = L.fig.j.headC;
+    this.shot({ from: [VIEW.x + ux * 3.6 + rx * 0.6, 1.6, VIEW.z + uz * 3.6 + rz * 0.6], to: [VIEW.x + ux * 3.35 + rx * 0.6, 1.6, VIEW.z + uz * 3.35 + rz * 0.6], look: [VIEW.x - ux * 0.5 + rx * 0.45, 1.18, VIEW.z - uz * 0.5 + rz * 0.45], fov: 40, dur: 3.2, hand: 0.3 });
+    page.hold(L.fig, null, 'hug');
+    {
+      let st = 0;
+      const y0 = L.baseY || 0;
+      this.everyFrame = (dt) => {
+        st += dt;
+        const k = Math.min(1, st / 0.55);
+        const e = k * k * (3 - 2 * k);
+        L.fig.sit = 1 - e;
+        L.baseY = y0 * (1 - e);
+      };
+      yield 0.55;
+      this.everyFrame = null;
+      L.fig.sit = 0;
+      L.baseY = 0;
+    }
+    // (her walk stops a third of a metre short of where it is going: aimed that much past the place,
+    // and a couple of seconds at most)
+    {
+      const lx = VIEW.x + rx * 0.4;
+      const lz = VIEW.z + rz * 0.4;
+      const ddx = lx - L.pos.x;
+      const ddz = lz - L.pos.z;
+      const dl = Math.hypot(ddx, ddz) || 1;
+      const ox = lx + (ddx / dl) * 0.3;
+      const oz = lz + (ddz / dl) * 0.3;
+      this.go(L, ox, oz, 1.1);
+      let wt = 0;
+      this.everyFrame = (dt) => {
+        wt += dt;
+      };
+      yield () => wt > 2.4 || Math.hypot(L.pos.x - ox, L.pos.z - oz) < 0.4;
+      this.everyFrame = null;
+      // (stopped where she is, turning to him - not snapped round)
+      L.pl.x = L.pos.x;
+      L.pl.z = L.pos.z;
+      L.pl.speed = 0;
+      this.faceTo(L, P.pos.x, P.pos.z);
+    }
+    // she cannot wait to show him: the page held up to him - the page, and her face over it
     page.hold(L.fig, () => P.fig.j.headC, 'show');
     L.fig.lookAt = P.fig.j.headC;
     P.fig.lookAt = page.at;
     this.feel(L.fig, 'joy', 4);
-    yield 0.5;
+    yield 0.45;
     {
       const pa = page.at;
       const hD = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
@@ -4201,19 +4252,44 @@ export class Prologue {
     yield () => J.apex;
     // the title: at the top of it the time all but stopped, the camera drawing round and up and away -
     // the game's name and who made it, five seconds of it
-    this.slow(0.03, 9);
+    // (round 24, the player's word: longer - six seconds more at least - and the camera's turn round
+    // the car a whole one, a film's: in from behind its tail, round its side low under it, up over it
+    // and down again ahead of it, the sky and the street far under it wheeling past; the name and who
+    // made it up the whole way round, the title's music played through twice under it)
+    this.slow(0.022, 9);
     this.cue('title');
     {
       const c0 = { pos: car.pos.clone() };
-      // (round 23, the review: the look nearer the car - two metres under it, the car went off the top
-      // of the picture for the first seconds of the turn, only its wheels in it as the name came up)
-      this.shot({ path: [off(c0, 4.5, 3.5, 0.6), off(c0, 1.5, 9, -1.2), off(c0, -3, 14, -3.2)], look: () => off(car, -1.5, 0, -1.35), fov: 44, fovTo: 54, dur: 6.8, ease: 'inout', hand: 0.15 });
+      const pts = [];
+      const N = 12;
+      for (let i = 0; i <= N; i++) {
+        const k = i / N;
+        // (round the car from behind it, a whole turn and a little more; nearer at its sides, further
+        // over it; low under it on the way round, high over it after, and level at the end)
+        const a = Math.PI * (1.12 + 2.15 * k);
+        const R = 7.5 + 2.2 * Math.sin(k * Math.PI) - 1.2 * k;
+        const up = 0.4 - 2.4 * Math.sin(Math.min(1, k * 2) * Math.PI) * (k < 0.5 ? 1 : 0) + 3.2 * Math.sin(Math.max(0, k * 2 - 1) * Math.PI) * (k >= 0.5 ? 1 : 0);
+        pts.push(off(c0, Math.cos(a) * R, Math.sin(a) * R, up));
+      }
+      // (the turn carried along with the car as it flies on - round where it is, not where it was;
+      // while the name is up the look goes under the car, so that it rides over the name, not behind
+      // it - before and after, on the car itself)
+      const tc0 = this.clock || 0;
+      const sm = (a, b, x) => {
+        const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
+        return k * k * (3 - 2 * k);
+      };
+      const under = () => {
+        const tt = (this.clock || 0) - tc0;
+        return sm(0.3, 1.2, tt) * (1 - sm(10.3, 11.4, tt));
+      };
+      this.shot({ path: pts, arc: true, rel: () => car.pos, look: () => off(car, 0, 0, 0.2 - 1.7 * under()), fov: 46, fovTo: 52, dur: 12.8, ease: 'inout', hand: 0.12, roll: 0.05, rollTo: -0.06 });
     }
-    yield 0.9;
+    yield 1.0;
     this.ui.title(true, GAME_TITLE, lang() === 'en' ? CREDIT_EN : CREDIT);
-    yield 5.0;
+    yield 9.6;
     this.ui.title(false);
-    yield 0.4;
+    yield 1.6;
     // and then the game's again: the time its own, the car falling as a car falls, its way on fading -
     // seen from behind it, the ground coming up. Her voice
     J.fall();
@@ -4338,9 +4414,16 @@ export class Prologue {
     g.hud.show();
     // (round 17: the time all but stopped while it is drawn - a slow hand's half a minute is a few
     // metres of the fall)
+    // (round 24, the player's word: not all the time in the world - slowed, but falling: a few seconds
+    // to draw it in (more on a phone), the time left seen, the ground coming; too slow, and the car
+    // comes down - and it is tried again from the fall)
     this.slow(0.005, 20);
     this.drawingRotor = true;
     this.howto('rotor', 0);
+    const J = this.jump;
+    const snap = J ? { t: J.t, vyNow: J.vyNow, y: J.y, sp: J.sp, dist: J.dist, g: J.g, yaw: car.yaw, x: car.pos.x, z: car.pos.z } : null;
+    const LIMIT = g.touch ? 20 : 15;
+    const alt0 = J ? Math.max(2, J.alt) : 10;
     // (the pen's own make, for this drawing: drawn small, the lines spread from their middle till the
     // rotor is a helicopter's - about four metres across at the car - then made as ever)
     if (pen) {
@@ -4351,13 +4434,29 @@ export class Prologue {
         return mk.call(pen, per > 0 ? spreadTo(strokes, 3.9 / per) : strokes, inkI, caps);
       };
     }
-    const teach = this.teachRotor(car);
+    let teach = this.teachRotor(car);
     const has = () => !!(car.fz && car.fz.rotor > 0);
     // (an X is two strokes: after the first, the pen waits for the second a little longer than it
     // waits for the rest of a drawing - game/partpen.js PEN_REST)
     let waited = false;
+    for (let tries = 0; ; tries++) {
+    let left = LIMIT;
+    let failed = false;
+    this.rotorClock(true, 1, tries);
     yield () => {
       if (has()) return true;
+      // (the time left, on the film's own clock; the fall paced to it - the ground there as it runs out)
+      left -= this.dtR || 1 / 30;
+      this.rotorClock(true, Math.max(0, left / LIMIT), tries);
+      if (J) {
+        const vy = Math.max(2, Math.abs(J.vyNow || 0));
+        const want = Math.max(0, J.alt - 1.2) / (vy * Math.max(0.5, left));
+        this.slow(clamp(want, 0.0015, 0.09) * Math.min(1, alt0 / 4), 30);
+      }
+      if (left <= 0) {
+        failed = true;
+        return true;
+      }
       if (fd && fd.group) {
         if (fd.group.length === 1 && !fd.cur && !waited) {
           fd.groupAt = Math.max(fd.groupAt || 0, performance.now() + 1700);
@@ -4377,6 +4476,37 @@ export class Prologue {
       teach.update(!!(fd && (fd.cur || (fd.group && fd.group.length))));
       return false;
     };
+    this.rotorClock(false);
+    if (!failed) break;
+    // (too slow: the pen shut, the time its own - it comes down, hard; black; and from the fall again)
+    teach.remove();
+    if (fd && fd.isOpen) fd.close();
+    this.ui.card(null);
+    this.slow(1, 40);
+    yield () => !J || J.alt < 1.4;
+    g.audio.play('boom', 1);
+    if (g.fx && g.fx.boom) g.fx.boom(car.pos.x, car.pos.y, car.pos.z, 3);
+    if (g.camRig && g.camRig.addShake) g.camRig.addShake(0.7);
+    this.flash(0.25, '#ffffff');
+    this.slow(0.05, 20);
+    yield 0.5;
+    this.ui.fade(true, 0.35);
+    this.thought(tr('המכונית התרסקה... ציירו את הרוטור מהר יותר!', 'It crashed... draw the rotor faster!'), 2.4);
+    yield 1.1;
+    if (J && snap) {
+      Object.assign(J, { t: snap.t, vyNow: snap.vyNow, y: snap.y, sp: snap.sp, dist: snap.dist, g: snap.g });
+      car.yaw = snap.yaw;
+      car.pos.set(snap.x, snap.y, snap.z);
+      car.vy = snap.vyNow;
+      if (car.fuse && car.fuse.parts) car.fuse.parts = car.fuse.parts.filter((q) => q.type !== 'rotor');
+    }
+    this.slow(0.005, 40);
+    this.ui.fade(false, 0.45);
+    this.howto('rotor', 0);
+    teach = this.teachRotor(car);
+    waited = false;
+    yield 0.3;
+    }
     teach.remove();
     if (pen) {
       delete pen.make;
@@ -4399,6 +4529,37 @@ export class Prologue {
     if (fd && fd.isOpen) fd.close();
     this.drawingRotor = false;
     this.ui.card(null);
+  }
+
+  // (round 24) the time left to draw the rotor in, big at the top of the screen: what to do, the bar
+  // of time going, red as it runs out (on: shown; k: the share left; tries: how many falls before)
+  rotorClock(on, k = 1, tries = 0) {
+    if (typeof document === 'undefined') return;
+    let el = this.rotorEl;
+    if (!on) {
+      if (el) el.remove();
+      this.rotorEl = null;
+      return;
+    }
+    if (!el) {
+      if (!document.getElementById('pro-rclock-css')) {
+        const st = document.createElement('style');
+        st.id = 'pro-rclock-css';
+        st.textContent = '.pro-rclock{position:fixed;z-index:59;left:50%;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);width:min(520px,70vw);padding:7px 14px 9px;background:rgba(14,10,26,.82);border:2px solid #ffd23f;border-radius:14px;color:#fff8ec;font:700 clamp(14px,2.4vw,19px)/1.25 "Rubik",system-ui,sans-serif;text-align:center;pointer-events:none;box-shadow:0 4px 18px rgba(0,0,0,.45)}.pro-rclock .bar{height:8px;margin-top:6px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden}.pro-rclock .bar i{display:block;height:100%;background:#ffd23f;border-radius:5px;transition:width .1s linear}.pro-rclock.low{border-color:#ff4f6a}.pro-rclock.low .bar i{background:#ff4f6a}.pro-rclock.low .t{animation:prc .5s infinite}@keyframes prc{50%{opacity:.45}}';
+        document.head.appendChild(st);
+      }
+      el = this.rotorEl = document.createElement('div');
+      el.className = 'pro-rclock';
+      el.innerHTML = '<div class="t"></div><div class="bar"><i></i></div>';
+      document.body.appendChild(el);
+    }
+    const he = lang() !== 'en';
+    const sec = Math.ceil(k * (this.game.touch ? 20 : 15));
+    const what = tries ? (he ? 'שוב! ציירו X מעל הגג - מהר' : 'Again! Draw an X over the roof - fast') : he ? 'ציירו רוטור (X) מעל הגג - לפני שהמכונית מתרסקת!' : 'Draw a rotor (an X) over the roof - before the car crashes!';
+    el.dir = he ? 'rtl' : 'ltr';
+    el.querySelector('.t').textContent = `${what} · ${sec}`;
+    el.querySelector('i').style.width = `${(k * 100).toFixed(1)}%`;
+    el.classList.toggle('low', k < 0.34);
   }
 
   // where on the screen the rotor goes: a box over the car's roof, about as tall as it is wide, an X
@@ -4632,6 +4793,18 @@ export class Prologue {
         told = false;
         this.ui.hint(null);
       }
+      // (round 24, the player's word: while it flies, small, how to bring it down - C, or ▼ on a phone)
+      const flying = !low;
+      // (not over the flying card while it is up: the same corner - C is on it already)
+      const H = this.ui.hintEl;
+      const cardUp = !!H && H.classList.contains('card') && H.classList.contains('on');
+      if (flying && !told && highT <= 0 && !cardUp && this.flyHint !== 1) {
+        this.flyHint = 1;
+        this.ui.plainHint(tr('<span dir="rtl">' + (g.touch ? '▼' : 'C') + ' - לנחות</span>', (g.touch ? '▼' : 'C') + ' - land'));
+      } else if (!flying && this.flyHint === 1) {
+        this.flyHint = 0;
+        if (!told && highT <= 0) this.ui.hint(null);
+      }
       if (this.outAsked && down) {
         // (set down where it is)
         c.air = false;
@@ -4642,6 +4815,7 @@ export class Prologue {
       if (this.outAsked && !down) {
         // (too high, or still going: how to come down)
         highT = 2.6;
+        this.flyHint = 0;
         this.ui.plainHint(tr('<span dir="rtl">כדי לצאת: נחתו קודם</span><small>' + (g.touch ? '▼ למטה, ועצרו' : 'C למטה, ועצרו') + '</small>', 'To get out: land first<small dir="ltr">' + (g.touch ? '▼ down, and stop' : 'C down, and stop') + '</small>'));
         told = false;
       }

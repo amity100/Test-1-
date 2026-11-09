@@ -36,7 +36,8 @@ export const AU = ['jaw', 'au1R', 'au1L', 'au2R', 'au2L', 'au4R', 'au4L', 'au5R'
 const NA = AU.length;
 const AUI = Object.fromEntries(AU.map((n, i) => [n, i]));
 // how fast each comes and goes (per second): the lids quickest, the cheeks slowest
-const RATE = AU.map((n) => (n.startsWith('blink') ? 30 : n.startsWith('au5') || n.startsWith('au7') ? 14 : n.startsWith('au1') || n.startsWith('au2') || n.startsWith('au4') ? 9 : n === 'jaw' || n === 'wide' || n === 'pucker' ? 16 : n.startsWith('au6') ? 5 : n.startsWith('au12') ? 7 : 8));
+// (round 24: the lips with the jaw at the voice's syllables - 9 a second dragged them behind it)
+const RATE = AU.map((n) => (n.startsWith('blink') ? 30 : n.startsWith('au5') || n.startsWith('au7') || n.startsWith('au10') || n.startsWith('au16') || n.startsWith('au23') ? 14 : n.startsWith('au1') || n.startsWith('au2') || n.startsWith('au4') ? 9 : n === 'jaw' || n === 'wide' || n === 'pucker' ? 16 : n.startsWith('au6') ? 5 : n.startsWith('au12') ? 7 : 8));
 
 // (round 17) an eye's own picture on its ball (render/glsl.js PORTRAIT, the eyes): its iris's colours
 // - its own, its dark, its light streaks (render/folkspec.js IRIS) - and the cosines of the angles at

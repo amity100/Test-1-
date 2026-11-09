@@ -34,7 +34,8 @@ export class Shots {
   }
 
   // a shot: { from, to, look, lookTo, path: [points], lookPath, arc (the path at an even pace), fov,
-  // fovTo, dur, ease, hand (0..1), follow: () => ({ from, look }) }
+  // fovTo, dur, ease, hand (0..1), follow: () => ({ from, look }),
+  // rel: () => a point - the path carried along with it as it moves (round 24: round a car in flight) }
   // (ROADMAP 18.9, round 9 - the film's own camera language, as an animated feature's:
   //   roll, rollTo   the frame tilted (a Dutch angle), and turning as the shot goes
   //   vertigo        the subject kept the same size as the camera travels: the lens widens as it
@@ -46,6 +47,7 @@ export class Shots {
   cut(s) {
     const sh = { dur: 3, ease: 'inout', hand: 0.6, fov: 50, ...s };
     if (sh.path) sh.curve = new THREE.CatmullRomCurve3(sh.path.map(V), false, 'centripetal', 0.5);
+    if (sh.rel) sh.rel0 = sh.rel().clone();
     if (sh.lookPath) sh.lookCurve = new THREE.CatmullRomCurve3(sh.lookPath.map(V), false, 'centripetal', 0.5);
     if (sh.from) sh.from = typeof sh.from === 'function' ? sh.from : V(sh.from);
     if (sh.to) sh.to = typeof sh.to === 'function' ? sh.to : V(sh.to);
@@ -85,8 +87,16 @@ export class Shots {
     // (arc: along the path at an even pace, the look at the same place along its own path as the
     // camera is along its: each look point stays with the camera point it was written with)
     const tt = sh.curve && sh.arc ? sh.curve.getUtoTmapping(e) : e;
-    if (sh.curve) sh.curve.getPoint(tt, P);
-    else {
+    if (sh.curve) {
+      sh.curve.getPoint(tt, P);
+      // (round 24: the path where the thing it goes round is now, not where it was at the cut)
+      if (sh.rel) {
+        const o = sh.rel();
+        P.x += o.x - sh.rel0.x;
+        P.y += o.y - sh.rel0.y;
+        P.z += o.z - sh.rel0.z;
+      }
+    } else {
       const f = typeof sh.from === 'function' ? sh.from() : sh.from;
       P.copy(f);
       if (sh.to) P.lerp(typeof sh.to === 'function' ? sh.to() : sh.to, e);

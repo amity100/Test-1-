@@ -22,7 +22,7 @@ export const LINES = {
   L20: { who: "L", en: "And all the colors! Look at the lights!", he: "וכל הצבעים! תראה את האורות!", dur: 2.83 },
   L21: { who: "L", en: "Can I go on it too? Please? Pleeease?", he: "אפשר גם אני לעלות? נו, בבקשה?", dur: 3.50 },
   D27: { who: "D", en: "Next time. I promise.", he: "בפעם הבאה. אני מבטיח.", dur: 1.87 },
-  K01: { who: "KB", en: "Mom! Mom, look at me!", he: "אמא! אמא, תראי אותי!", dur: 2.33 },
+  K01: { who: "KB", en: "Mom! Mom, look at me!", he: "אמא! אמא, תראי אותי!", dur: 3.29 },
   K02: { who: "KG", en: "Dad! Look how high we are!", he: "אבא! תראה כמה אנחנו גבוהים!", dur: 2.18 },
   L08: { who: "L", en: "Dad...?", he: "אבא...?", dur: 1.01 },
   // (ROADMAP 18.9: said in the player's own hands, the moment it is gone)

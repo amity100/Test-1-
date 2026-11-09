@@ -142,8 +142,8 @@ function howtoHe(key, touch) {
     // (round 12) the second drawing: a rotor, in the air
     case 'rotor':
       return {
-        title: 'ציירו רוטור!',
-        say: 'אין על מה לנחות! ציירו X גדול מעל הגג של המכונית - מדחף של מסוק, כמו שרואים אותו מלמעלה.',
+        title: 'ציירו רוטור - מהר!',
+        say: 'המכונית נופלת! ציירו X גדול מעל הגג שלה - מדחף של מסוק - לפני שהזמן למעלה נגמר.',
         lines: T ? [['אצבע', 'קו אחד באלכסון, ואז קו שני שחוצה אותו']] : [['עכבר', 'קו אחד באלכסון, ואז קו שני שחוצה אותו']],
         tip: 'העיפרון מראה איפה ואיך.',
       };
@@ -266,8 +266,8 @@ function howtoEn(key, touch) {
       return { title: 'Up the ramp!', say: 'The ramp you drew is waiting. Drive onto it at full speed.', lines: T ? (btns() ? [['Gas', 'hold it down, do not let go']] : [['Stick', 'forward, all the way']]) : [['W', 'gas, all the way']] };
     case 'rotor':
       return {
-        title: 'Draw a rotor!',
-        say: 'Nothing to land on! Draw a big X over the roof of the car - a helicopter\'s rotor, as it looks from above.',
+        title: 'Draw a rotor - fast!',
+        say: 'The car is falling! Draw a big X over its roof - a helicopter\'s rotor - before the time at the top runs out.',
         lines: T ? [['Finger', 'one line corner to corner, then one across it']] : [['Mouse', 'one line corner to corner, then one across it']],
         tip: 'The pencil shows where and how.',
       };
