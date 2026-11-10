@@ -366,16 +366,26 @@ class DrawClass {
     // (the points come from the shapes' texture: these only say how many)
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts * 3), 3));
     if (index) g.setIndex(new THREE.BufferAttribute(verts > 65535 ? Uint32Array.from(index) : Uint16Array.from(index), 1));
-    this.iX = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
-    this.iClip = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
-    this.iS = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    // (ROADMAP 19.8: an instance's own four numbers of each kind - iX, iClip, iS and a face's moves iE - side by side in one
+    // buffer, sent up to the card in one piece a frame instead of three or four: on a phone each sending is a step of its own for the
+    // browser, and the people's classes were half of the frame's. The same numbers, the same picture)
+    // (phones only, GFX.on: a computer keeps its four buffers as they were)
+    const expr = !!(mat.defines && mat.defines.USE_EXPR !== undefined);
+    this.W = expr ? 16 : 12;
+    const one = GFX.on;
+    this.ib = new THREE.InstancedInterleavedBuffer(new Float32Array(one ? cap * this.W : 4), one ? this.W : 4, 1).setUsage(THREE.DynamicDrawUsage);
+    const at = (o) => (one ? new THREE.InterleavedBufferAttribute(this.ib, 4, o) : new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage));
+    if (!one) this.W = 0;
+    this.iX = at(0);
+    this.iClip = at(4);
+    this.iS = at(8);
     g.setAttribute('iX', this.iX);
     g.setAttribute('iClip', this.iClip);
     g.setAttribute('iS', this.iS);
     // (ROADMAP 13.7: a face's moves - the city's people's pen; two to a number, render/glsl.js)
     this.iE = null;
-    if (mat.defines && mat.defines.USE_EXPR !== undefined) {
-      this.iE = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    if (expr) {
+      this.iE = at(12);
       g.setAttribute('iE', this.iE);
     }
     this.mesh = new THREE.InstancedMesh(g, mat, cap);
@@ -419,33 +429,39 @@ class DrawClass {
     c[i * 3] = color[0];
     c[i * 3 + 1] = color[1];
     c[i * 3 + 2] = color[2];
-    const x = this.iX.array;
-    x[i * 4] = owner;
-    x[i * 4 + 1] = part;
-    x[i * 4 + 2] = indoor;
-    x[i * 4 + 3] = 0;
-    const k = this.iClip.array;
+    // (one buffer, the four side by side - a phone; or each its own, o its place in each - a computer)
+    const W = this.W;
+    const o = W ? i * W : i * 4;
+    const B = W ? this.ib.array : this.iX.array;
+    const Bc = W ? B : this.iClip.array;
+    const Bs = W ? B : this.iS.array;
+    const oc = W ? o + 4 : o;
+    const os = W ? o + 8 : o;
+    B[o] = owner;
+    B[o + 1] = part;
+    B[o + 2] = indoor;
+    B[o + 3] = 0;
     if (clip) {
-      k[i * 4] = clip[0];
-      k[i * 4 + 1] = clip[1];
-      k[i * 4 + 2] = clip[2];
-      k[i * 4 + 3] = clip[3];
-    } else k[i * 4] = k[i * 4 + 1] = k[i * 4 + 2] = k[i * 4 + 3] = 0;
-    const S = this.iS.array;
-    S[i * 4] = sh.row;
-    S[i * 4 + 1] = sh.count;
-    S[i * 4 + 2] = sh.pen;
+      Bc[oc] = clip[0];
+      Bc[oc + 1] = clip[1];
+      Bc[oc + 2] = clip[2];
+      Bc[oc + 3] = clip[3];
+    } else Bc[oc] = Bc[oc + 1] = Bc[oc + 2] = Bc[oc + 3] = 0;
+    Bs[os] = sh.row;
+    Bs[os + 1] = sh.count;
+    Bs[os + 2] = sh.pen;
     // (the city's people's: whose pictures, and a face's moves - ROADMAP 13.7)
     let fl = sh.flags;
     if (sh.atlas) {
       fl += 16 * _fTile[0];
       if (sh.expr && this.iE) {
         fl += 4;
-        const E = this.iE.array;
-        for (let q = 0; q < 4; q++) E[i * 4 + q] = byteOf(_fEw[q * 2]) + 256 * byteOf(_fEw[q * 2 + 1]);
+        const Be = W ? B : this.iE.array;
+        const oe = W ? o + 12 : o;
+        for (let q = 0; q < 4; q++) Be[oe + q] = byteOf(_fEw[q * 2]) + 256 * byteOf(_fEw[q * 2 + 1]);
       }
     }
-    S[i * 4 + 3] = fl;
+    Bs[os + 3] = fl;
     return i;
   }
 
@@ -456,12 +472,12 @@ class DrawClass {
     const n = Math.max(1, this.n);
     // (round 22b: the list, and each attribute's range, made once - a new array and a new range object
     // each a frame, for every kind of figure, were garbage a phone stopped to sweep up)
-    const ats = this._ats || (this._ats = this.iE ? [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS, this.iE] : [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS]);
+    const ats = this._ats || (this._ats = this.W ? [this.mesh.instanceMatrix, this.mesh.instanceColor, this.ib] : [this.mesh.instanceMatrix, this.mesh.instanceColor, this.iX, this.iClip, this.iS, ...(this.iE ? [this.iE] : [])]);
     for (let i = 0; i < ats.length; i++) {
       const at = ats[i];
       const rg = at._rg || (at._rg = { start: 0, count: 0 });
       rg.start = 0;
-      rg.count = n * at.itemSize;
+      rg.count = n * (at.isInterleavedBuffer ? at.stride : at.itemSize);
       at.clearUpdateRanges();
       at.updateRanges.push(rg);
       at.needsUpdate = true;
