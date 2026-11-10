@@ -95,7 +95,7 @@ export function isTouchDevice() {
 // off: all of it switched off for a moment while the game runs (the test route's "as before" stand,
 // game/perf.js) - so every part reads its flag where it decides, each frame; what a part builds
 // once (lighter shapes) is built when its flag is on and simply not chosen while off is true.
-const APPROVED = { shopview: false, carlod: false, folklod: false, goodsfar: false, farhide: false, glowlite: false, finallite: false };
+const APPROVED = { shopview: true, carlod: true, folklod: false, goodsfar: false, farhide: false, glowlite: false, finallite: false };
 export const GFX = (() => {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   const phone = isTouchDevice() || q.has('low');
