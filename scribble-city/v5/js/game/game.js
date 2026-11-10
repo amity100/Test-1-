@@ -453,10 +453,14 @@ export class Game {
     const ws = $('opt-weather');
     ws.value = this.weather.mode;
     ws.addEventListener('change', (e) => this.weather.setMode(e.target.value));
-    $('bench-btn').addEventListener('click', () => {
-      this.resume();
-      this.perf.startBench();
-    });
+    // (ROADMAP 19: the test route's button also at the top of the pause menu on a phone - at the bottom
+    // it was 606 pixels down a sheet of which a phone shows 356)
+    for (const id of ['bench-btn', 'bench-btn-top']) {
+      $(id).addEventListener('click', () => {
+        this.resume();
+        this.perf.startBench();
+      });
+    }
     this.input.on('lock', (locked) => {
       // (the phone's camera: losing the pointer takes it down, back to the phone)
       if (this.phoneCam) {
@@ -1462,6 +1466,8 @@ export class Game {
     this.airdraw.frame(dt);
     // render dynamic figures
     if (dt > 0) {
+      // (ROADMAP 19.1: where this frame's cars are seen from - a car far off in fewer points)
+      if (this.cars && this.cars.view) this.cars.view(this.camera, this.pipe.size.y || this.renderer.domElement.height);
       // (the things in his hands put first: his right hand is drawn closed round the pencil as they
       // put it in it - round 17, fig.grip)
       this.weapons.updateModels();

@@ -8,6 +8,7 @@
 #
 # The backups so far (the site's copy, and the commit its game was published from):
 #   backup-r22b   7f630b9   round 22b, before round 23's film fixes
+#   backup-r25   809b51a   round 25, before the phone speed work (PHONE_SPEED_PLAN.md, ROADMAP 19)
 #
 # The code itself back to such a commit, as a new commit on the working branch (also nothing
 # rewritten):  git checkout <commit> -- scribble-city && git commit -m "Back to <name>"
