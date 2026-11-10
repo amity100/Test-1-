@@ -1091,3 +1091,8 @@ of 76 -> 30 ms is the two passes and how much the other browser and battery - th
 **the processor is the wall now**; the slowest 1% at 5.2. The drawing 29.0 ms (run 1, same browser: 75.9) - the two passes and the
 far-lighter pens (34.6 without them: 5.6 ms) took 47 ms off it. The crowd 14.8 against 11.1 (+33%). Frames over 100 ms: 76 of 1,040. The
 processor's fixed sum 7.4 at the start, 16.1 at the end (heat). Samsung Internet's processor numbers (run 2) were about 60% of Chrome's.
+
+**Run 4, Chrome 157, after round 2** (battery 70%): the boulevard **35.1** frames a second (28.5 ms = game 10.7 + sending 11.0 + waiting 6.8),
+the slowest 1% at 20.6; as before 32.3. The crowd 17.0 against 12.4. Frames over 100 ms: 24 (76 in run 3); the slowest five: 1,460 ms when
+the test's crowd of 54 is made, two at the switch to the lowest resolution, two of 210 ms waiting with little of the game's own in them.
+The processor's fixed sum 15.8 at the start and 16.0 at the end (already warm when it began).

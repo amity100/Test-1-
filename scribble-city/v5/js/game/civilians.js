@@ -1880,7 +1880,8 @@ export class Civilians {
       let step = dt + c.owed;
       // (the street's own people on the phone, stopping to talk, by the musician - game/streetsocial.js
       // - are walkers too: far away, the same every-other-frame steps)
-      if ((!c.ctrl && !c.scripted && !c.headless && !c.inside) || (social && c.owner === social && !c.still)) {
+      // (and the focused test's crowd, game/perf.js focusCrowd: standing like the street's own people, stepped as they are)
+      if ((!c.ctrl && !c.scripted && !c.headless && !c.inside) || (social && c.owner === social && !c.still) || (c.owner && c.owner.focus)) {
         if (c.dying >= 0 || c.panicT > 0) {
           // (as near)
         } else {

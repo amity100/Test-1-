@@ -1854,7 +1854,9 @@ export class PersonRenderer {
   draw(fig, camDist) {
     // (round 25: whole hands or not, as last drawn - drawFolk; game/carry.js fullHands)
     fig._fullHands = false;
-    if (camDist > (fig.lodFar || this.lodFar)) {
+    // (ROADMAP 19.9, GFX.peopleLite - the phone version: the simple shapes from 22 m instead of 32; a person there is some
+    // twenty pixels high. A person who has a distance of their own - the film's - keeps it)
+    if (camDist > (fig.lodFar || (GFX.peopleLite && !GFX.off ? Math.min(22, this.lodFar) : this.lodFar))) {
       this.drawLow(fig, false);
       return;
     }

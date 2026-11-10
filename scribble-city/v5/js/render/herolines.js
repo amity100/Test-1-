@@ -411,7 +411,11 @@ export class HeroLines {
   // as its skin does in the graphics card
   set(slot, part, m, ex = null, gaze = null, faceOff = false, def = null) {
     let s = this.slots[slot];
-    if (!s) s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: 0, def: new Float64Array(4), bent: false };
+    if (!s) {
+      s = this.slots[slot] = { part, e: new Float32Array(16), on: false, ex: null, gaze: null, faceOff: 0, def: new Float64Array(4), bent: false };
+      // (ROADMAP 19.9: the list of them kept, not made again each frame for each person - garbage a phone stops to sweep)
+      this._slots = null;
+    }
     s.e.set(m.elements);
     s.ex = ex;
     s.gaze = gaze;
@@ -424,7 +428,7 @@ export class HeroLines {
   // the strokes, into the lines of the figures (sink.lineXYZ). ctx: { cam, L (the light), Lr (the
   // coloured edge light), dark (0 day .. 1 night), t (seconds), dist (camera to him) }
   draw(sink, ctx) {
-    const slots = Object.values(this.slots);
+    const slots = this._slots || (this._slots = Object.values(this.slots));
     if (!slots.length || ctx.dist > 16) {
       for (const s of slots) s.on = false;
       return;
