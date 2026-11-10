@@ -739,6 +739,8 @@ that **drives** through the mainland at 20 m/s for 30 s (from the bridge to Bayv
 streamers working as in play, and report for it: frames over 50 ms and over 100 ms, the longest,
 and for each of the five worst what was being built then (`mainland.info()`, `interiors.info()`
 give the job) — that is what a stall is made of.
+*(Carried out, see 14.2e and ROADMAP 19.5: the test route now ends with that drive, and the link
+`?newgfx=1&perftest=1` runs the whole route on the device with one tap, no menus.)*
 
 **5.2 Then, by what the report shows:**
 - **Draws.** Every hidden thing of Stages 1 and 3 is draws saved too: count again. Pieces of under
@@ -907,6 +909,42 @@ The drawing pass at the 11 spots of `ab-phone.mjs pair` (stage 1 off in both pic
   room seen, today a piece holds several rooms' worth. At 20 to 30 shops seen from under the dome that is some 60 to 100 draws
   more for some 400 K triangles fewer: it depends on whether the processor or the card is the one that waits, which only the
   owner's test route says (its "draws" and "processor" lines). Not built.
+
+### 14.2e Stage 5.1 as carried out (see ROADMAP 19.5): the drive, and the link that runs the route by itself
+
+- **The drive** (`game/perf.js` `beginDrive`, `driveStep`, `driveNote`, `driveLines`): after the stands, the player is put on the
+  Venetian Causeway at (-420, -379) with the mainland built round him (`mainland.fill`, as after a jump across the map), 2.5 s to
+  settle, then camera and player go at 20 m/s for 30 s: out along the causeway, ashore at x = -650, round a corner of about 35 m,
+  down the bayfront boulevard (x = -700) to the door of Bayview Mall at z = -37 - 605 m, cut in pieces of two metres so that the
+  speed is even (a Catmull-Rom curve through uneven points had gone through one short piece at twice the speed: seen as 15.9 m in a
+  frame where 10 m was asked). The two streamers' own calls (`mainland.update`, `interiors.update`) are wrapped for the drive and
+  put back at its end (checked: no own property before or after).
+- **Each frame carries:** its time (raw), the game's part, the drawing's part, what is left (the browser, the card's wait), the ms of
+  each streamer's call, the cell being built or finished, the cell warmed up to the card (and its meshes left) and the cell shown,
+  the cells freed, whether the far shadows moved, and the heap of the page's code. Every 8th frame also the distance to the nearest
+  cell the mainland wants and has not got (a phone's blocks are wanted within 150 m).
+- **The report's lines** (the drive): frames a second, the 1% slowest, the slowest; frames over 50 ms and over 100 ms; cells shown
+  and freed; the nearest missing cell; shaders made in the drive (must be 0); heap and collections; and the five slowest frames,
+  each with its split and what was built then, and a verdict ("the building" when the two streamers took over 40% of the frame;
+  "outside the game's code: waiting for the card or the browser" when over 60% of it was not the game's own code).
+- **Checked here** (`tools/perf/drive.mjs`; no card here, so the milliseconds mean nothing): the page's clock still, 30 s at 0.5 s
+  a frame - the camera goes the whole way (x -441 to -689 on the causeway, then south along x = -700), the notes are on the frames,
+  the report's lines are all there, the game is left as it was (GFX.off false, the scale back, the player at his start); and with
+  the real clock (`NODET=1`) the per-frame numbers appear ("game 112, drawing 5, outside 83 - the game's code - the mainland 21.5 ms
+  (building t7_3)"). What the phone says is what this is for.
+  The whole route in one run (`bench.mjs`, `EXTRA=newgfx=1 SECS=2 STILL=1.5 DRIVE=6 DT=0.5 DSF=1`): 76 frames, ran to its end through the
+  island's stands, the two places and the drive; `GFX.off` false after, the scale back, the player at his start.
+- **The link** `?newgfx=1&perftest=1` (`main.js`, `index.html` `__loadLeave`, `game/perf.js` `autoBench`): `?perftest` is `?autostart`
+  and `?prologue=0` - the game goes straight into the city (the opening film left out; the city is as the browser's own story state
+  has it); the loading page leaves by itself; over the city a card with one big button; the tap (what a browser wants before going
+  full screen and sideways: without it the picture is smaller than the earlier measurements' 1764 x 822 and the numbers cannot be
+  compared) starts the route once the picture has kept its size for a second; the screen is kept awake (`navigator.wakeLock`), a
+  progress line is shown (part 1 of 3, 2 of 3, 3 of 3), and at the end the report with "copy". `?perftest=quick`: a few seconds of
+  each part, to try the link. `tools/perf/link.mjs` opens it in the real loop (no `test=1`) and checks all of that, with pictures:
+  the loading page leaves by itself (`window.__loadLeave`, index.html - the first try left it over the card, seen in the picture, not in
+  the numbers), the card is there and the route does not begin before the tap, the title page and the film are not shown, the screen
+  is asked to be kept awake and let go of at the end, the progress line is on the screen and taken off, the report is shown with
+  "copy" and "close", no page errors.
 
 ### 14.3 From the owner's phone
 

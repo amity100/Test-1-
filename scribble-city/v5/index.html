@@ -87,6 +87,8 @@
       }
     }, 900);
   };
+  // (?perftest, main.js: the game begun by itself - the screen goes without its button being pressed)
+  window.__loadLeave = leave;
   window.__loadDone = function () {
     window.__loadProgress(1);
     if (L.classList.contains('gone')) return;

@@ -31,6 +31,15 @@ const PLACES = [
   { name: 'הקניון מבחוץ', x: -700, z: -37, yaw: -1.57, pos: [-694, 2.2, -32], look: [-760, 6, -40] },
   { name: 'בתוך הקניון', x: -835, z: -37, yaw: -1.57, pos: [-828, 2.0, -37], look: [-880, 2.4, -37] },
 ];
+// (ROADMAP 19.4, PHONE_SPEED_PLAN.md 5.1, "what a stall is made of") after the stands, a drive on the mainland
+// the way a player comes into the city: out on the Venetian Causeway from the middle of the bay, ashore, round
+// the corner and down the bayfront boulevard to the door of Bayview Mall - at the car's own speed in play,
+// 20 m/s, for DRIVE_SECONDS. The player (unseen) goes under the camera at that speed, so the streamers (the
+// mainland's blocks, the shops' insides) work as they do in play, and every frame is noted: how long it took,
+// and what the streamers had in hand (the five slowest are told apart in the report)
+const DRIVE_SPEED = 20;
+const DRIVE_SECONDS = 30;
+const DRIVE = [[-420, -379], [-560, -379], [-640, -379], [-672, -377], [-692, -365], [-700, -343], [-700, -300], [-700, -200], [-700, -100], [-700, -37]];
 // the route: along the boulevard, through the shops and the park, up the avenue into downtown,
 // over the towers and out over the bay to the pier (x, height, z)
 const ROUTE = [
@@ -528,7 +537,18 @@ export class Perf {
     this.passTris = {};
     this.frameMs.push(f);
     if (this.frameMs.length > 240) this.frameMs.shift();
-    if (this.bench) (this.bench.still ? this.bench.still.frames : this.bench.frames).push(f);
+    if (this.bench) {
+      // (ROADMAP 19.4, 5.1: the drive's frames carry what the streamers did in them)
+      if (this.bench.drive) {
+        this.driveNote(f);
+        this.bench.drive.frames.push(f);
+      } else (this.bench.still ? this.bench.still.frames : this.bench.frames).push(f);
+      // (and its progress on the screen, twice a second)
+      if (now - (this._progAt || 0) > 500) {
+        this._progAt = now;
+        this.progress(this.bench);
+      }
+    }
     if (this.on && now - this.shownAt > 250) {
       this.shownAt = now;
       this.show();
@@ -613,7 +633,7 @@ export class Perf {
   }
 
   // ---------------------------------------------------------------- the test route
-  startBench(seconds = ROUTE_SECONDS, stillSeconds = STILL_SECONDS) {
+  startBench(seconds = ROUTE_SECONDS, stillSeconds = STILL_SECONDS, driveSeconds = DRIVE_SECONDS) {
     const g = this.game;
     if (this.bench) return;
     const pl = g.player;
@@ -640,7 +660,9 @@ export class Perf {
         if (GFX.on) stands.push({ name: 'כמו קודם', what: 'old', place: P });
       }
     }
-    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0, stands, islandN };
+    // (ROADMAP 19.4, 5.1: and the drive after them, where the mainland is built: driveSecs)
+    const driveSecs = g.world && g.world.mainland && g.world.mainland.on ? driveSeconds : 0;
+    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, drive: null, driveSecs, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0, stands, islandN };
     this.gpu.take(true);
     // the shaders made ready on the way (each a pause where it is first seen: on a phone, long)
     const b = this.bench;
@@ -690,13 +712,128 @@ export class Perf {
     g.pipe.taaFrac = 0.67;
     g.player.invuln = 1e9;
     this.toggle(this.on);
+    // (the screen kept awake while it runs: nobody touches it for these minutes, and a phone's screen
+    // goes dark by itself, the game stopping with it)
+    b.lock = null;
+    try {
+      if (navigator.wakeLock) {
+        navigator.wakeLock
+          .request('screen')
+          .then((l) => {
+            if (this.bench === b) b.lock = l;
+            else l.release().catch(() => {});
+          })
+          .catch(() => {});
+      }
+    } catch (e) {
+      b.lock = null;
+    }
     // (v5: and at the very end a few seconds with the picture still, each pass timed on its own)
-    g.hud.toast('מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בסוף התמונה עומדת כמה שניות. בלי לגעת…', 'info', 4);
+    g.hud.toast(driveSecs > 0 ? 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום, ובסוף נסיעה של חצי דקה ביבשה. בלי לגעת…' : 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בסוף התמונה עומדת כמה שניות. בלי לגעת…', 'info', 4);
   }
 
-  // where the camera is at distance d along the route (Catmull-Rom through the points)
-  routeAt(d, out) {
-    const b = this.bench;
+  // (?perftest, main.js: the owner's word - a link that runs the test by itself, without entering the game) the
+  // test route without the pause menu: the game is already in the city behind a card with one big button; a tap
+  // on it - the one thing a browser wants before it will go full screen and sideways, where the numbers are those
+  // of the game as it is played - and the test goes by itself, once the picture has stopped changing size.
+  // quick: a few seconds of each part, to try the link itself
+  autoBench(quick = false) {
+    const g = this.game;
+    if (document.getElementById('perf-start')) return;
+    const el = document.createElement('div');
+    el.id = 'perf-start';
+    el.style.cssText = 'position:fixed;inset:0;z-index:46;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(16,12,30,0.62);direction:rtl;font-family:"Rubik",system-ui,sans-serif';
+    el.innerHTML =
+      '<div style="max-width:min(460px,92vw);box-sizing:border-box;padding:14px 18px 16px;border-radius:14px;background:#fff8ec;color:#1b1430;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,0.45)">' +
+      '<div style="font-size:21px;font-weight:700;margin-bottom:6px">מבחן ביצועים</div>' +
+      '<div style="font-size:14px;line-height:1.5;margin-bottom:10px">המבחן עובר לבד: הליכה ברחובות, עמידה במקום ובקניון, ובסוף נסיעה ביבשה. כשלוש דקות. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח עם כפתור "העתקה".</div>' +
+      '<button data-a="go" style="font-weight:700;font-size:20px;line-height:1.2;font-family:inherit;padding:12px 30px;border:3px solid #1b1430;border-radius:12px;background:#ffd23f;color:#1b1430;box-shadow:2px 3px 0 #1b1430">התחלת המבחן</button>' +
+      '<div data-a="note" style="font-size:12px;opacity:0.75;margin-top:8px">הלחיצה מעבירה את המסך למסך מלא ולרוחב, כמו במשחק</div>' +
+      '</div>';
+    (document.getElementById('app') || document.body).appendChild(el);
+    const note = el.querySelector('[data-a="note"]');
+    const portrait = () => window.innerHeight > window.innerWidth;
+    const hint = () => {
+      if (!el.isConnected) return;
+      note.textContent = portrait() ? 'הטלפון מוחזק לאורך: הלחיצה תסובב אותו לרוחב' : 'הלחיצה מעבירה את המסך למסך מלא ולרוחב, כמו במשחק';
+      setTimeout(hint, 1000);
+    };
+    hint();
+    const begin = () => {
+      el.remove();
+      // (full screen and sideways, as the game takes the phone when it begins: start() in game.js)
+      try {
+        if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+      } catch (e) {
+        // (optional: the test goes on in the screen it has)
+      }
+      // (a moment for the screen to settle: the test begins when the picture has kept its size for a second, and
+      // the game is in play - at the latest after eight seconds; again each second if it did not begin)
+      const t0 = performance.now();
+      let size = '';
+      let same = 0;
+      const wait = () => {
+        if (this.bench) return;
+        const c = g.renderer.domElement;
+        const s = `${c.width}x${c.height}`;
+        same = s === size ? same + 1 : 0;
+        size = s;
+        const waited = performance.now() - t0;
+        if ((same >= 4 && waited > 1500 && g.state === 'play' && !(g.prologue && g.prologue.active)) || waited > 8000) {
+          if (quick) this.startBench(3, 1, 4);
+          else this.startBench();
+          if (this.bench) return;
+          setTimeout(wait, 1000);
+          return;
+        }
+        setTimeout(wait, 250);
+      };
+      wait();
+    };
+    el.querySelector('button').addEventListener('click', begin);
+  }
+
+  // (the test route's progress on the screen, twice a second: which part of it it is in, and how far; b: the
+  // route, or null to take it away)
+  progress(b) {
+    let el = this._prog || null;
+    if (!b) {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      this._prog = null;
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'perf-progress';
+      el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(8px,env(safe-area-inset-bottom)) + 4px);z-index:45;max-width:92vw;box-sizing:border-box;padding:6px 14px;border-radius:10px;background:rgba(16,12,30,0.78);color:#fff;font:600 14px/1.45 "Rubik",system-ui,sans-serif;text-align:center;direction:rtl;pointer-events:none';
+      (document.getElementById('app') || document.body).appendChild(el);
+      this._prog = el;
+    }
+    const n = b.driveSecs > 0 ? 3 : 2;
+    const sec = (v, of) => `${Math.max(0, Math.min(Math.round(of), Math.round(v)))} מתוך ${Math.round(of)} שניות`;
+    let part;
+    if (b.drive) part = `חלק 3 מתוך ${n}: נסיעה ביבשה, ${sec(b.drive.t - b.drive.settle, b.drive.secs)}`;
+    else if (b.still) part = `חלק 2 מתוך ${n}: עומדים במקום, ${Math.max(1, Math.min(b.still.i + 1, b.stands.length))} מתוך ${b.stands.length}`;
+    else part = `חלק 1 מתוך ${n}: הליכה ברחובות, ${sec(b.t - b.warm, b.secs)}`;
+    const text = `מבחן הביצועים רץ · ${part}\nבלי לגעת במסך. בסוף יופיע דוח עם כפתור העתקה`;
+    if (el.dataset.t !== text) {
+      el.dataset.t = text;
+      el.innerHTML = '';
+      const lines = text.split('\n');
+      el.appendChild(document.createTextNode(lines[0]));
+      el.appendChild(document.createElement('br'));
+      const small = document.createElement('span');
+      small.style.cssText = 'font-weight:400;font-size:12px;opacity:0.85';
+      small.textContent = lines[1];
+      el.appendChild(small);
+    }
+  }
+
+  // where the camera is at distance d along the route (Catmull-Rom through the points); R: another route's
+  // (the drive's), with the same pts, acc, len
+  routeAt(d, out, R = this.bench) {
+    const b = R;
     const pts = b.pts;
     d = Math.max(0, Math.min(b.len - 1e-3, d));
     let i = 1;
@@ -718,6 +855,11 @@ export class Perf {
     const b = this.bench;
     if (!b) return false;
     b.t += dt;
+    // (ROADMAP 19.4, 5.1: after the stands, the drive)
+    if (b.drive) {
+      this.driveStep(dt);
+      return true;
+    }
     const cam = this.game.camera;
     // (after the route: standing still at its start)
     const at = b.still ? b.still.at : null;
@@ -792,7 +934,9 @@ export class Perf {
       }
     }
     if (s.i >= b.stands.length) {
-      this.endBench();
+      // (ROADMAP 19.4, 5.1: and then the drive, where the mainland is built)
+      if (b.driveSecs > 0) this.beginDrive();
+      else this.endBench();
       return;
     }
     const st = b.stands[s.i];
@@ -820,6 +964,227 @@ export class Perf {
     else if (what === 'life') pipe.hideLife = true;
     else if (what === 'draw') b.noDraw = true;
     else if (what === 'old') GFX.off = true;
+  }
+
+  // ---------------------------------------------------------------- the drive (ROADMAP 19.4, 5.1)
+  // The stands are done: the player is put where the drive begins with everything round it built (as
+  // after a jump across the map), and the drive begins after a short settle. The two streamers' own
+  // calls are timed and noted for as long as it lasts (driveStep, driveNote), and put back at its end
+  beginDrive() {
+    const b = this.bench;
+    const g = this.game;
+    const ml = g.world.mainland;
+    const il = g.world.interiors;
+    // the curve through the drive's points, cut in pieces of two metres along it: a Catmull-Rom curve has no
+    // even speed through points that are unevenly spaced (a short piece between long ones is gone through at
+    // twice the speed), and the drive is to be at 20 m/s all the way
+    const ctrl = { pts: DRIVE.map(([x, z]) => ({ x, y: 0, z })), acc: [0], len: 0 };
+    for (let i = 1; i < ctrl.pts.length; i++) ctrl.acc.push(ctrl.acc[i - 1] + Math.hypot(ctrl.pts[i].x - ctrl.pts[i - 1].x, ctrl.pts[i].z - ctrl.pts[i - 1].z));
+    ctrl.len = ctrl.acc[ctrl.acc.length - 1];
+    const pts = [];
+    {
+      const q = {};
+      let along = 0;
+      let next = 0;
+      let px = 0;
+      let pz = 0;
+      for (let s = 0; s <= ctrl.len; s += 0.25) {
+        this.routeAt(s, q, ctrl);
+        if (s > 0) along += Math.hypot(q.x - px, q.z - pz);
+        px = q.x;
+        pz = q.z;
+        if (along >= next) {
+          pts.push({ x: q.x, y: 0, z: q.z });
+          next += 2;
+        }
+      }
+      const e = ctrl.pts[ctrl.pts.length - 1];
+      pts.push({ x: e.x, y: 0, z: e.z });
+    }
+    const acc = [0];
+    for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
+    const mem = () => (performance.memory ? performance.memory.usedJSHeapSize : 0);
+    const D = {
+      pts, acc, len: acc[acc.length - 1], t: 0, d: 0, settle: 2.5, secs: b.driveSecs, frames: [], n: 0,
+      // what the streamers did in the frame that is going on (driveNote puts it on the frame, then clears it)
+      ml: 0, il: 0, job: '', done: false, shown: '', warmed: '', freed: 0, far: false, ijob: '', pend: 0,
+      // and over the whole drive
+      built: 0, freedAll: 0, miss: 1e9, missId: '', missAt: 0, compiles0: b.compiles, compileMs0: b.compileMs, mem,
+      mem0: mem(), restore: null,
+    };
+    b.drive = D;
+    g.hud.toast('נוסעים ביבשה…', 'info', 4);
+    const x0 = DRIVE[0][0];
+    const z0 = DRIVE[0][1];
+    const yaw = Math.atan2(DRIVE[1][0] - x0, DRIVE[1][1] - z0);
+    try {
+      ml.fill({ x: x0, z: z0, y: 0 });
+    } catch (e) {
+      // (a drive whose start cannot be built is driven as it is)
+    }
+    g.player.spawn(x0, z0, yaw);
+    g.camRig.yaw = yaw;
+    // the two streamers' calls, each timed and noted (put back at the end: endBench)
+    const s = ml.stream;
+    const mUpdate = ml.update;
+    ml.update = function driveUpdate(dt, pos, vel) {
+      const st = s.stats;
+      const built0 = st.built;
+      const freed0 = st.freed;
+      const last0 = st.last;
+      const head = s.pending[0] || null;
+      const left0 = head ? head.meshes.length : 0;
+      const far0 = this.farAt;
+      const t0 = performance.now();
+      const r = mUpdate.call(this, dt, pos, vel);
+      D.ml = performance.now() - t0;
+      // (the cell it worked on, or finished, in this frame; the one it warmed up to the card or showed)
+      D.job = s.job ? s.job.cell.id : st.last !== last0 ? st.last : '';
+      D.done = st.last !== last0;
+      if (st.built > built0) {
+        D.shown = head ? head.cell.id : '?';
+        D.built += st.built - built0;
+      } else if (head && head.meshes.length < left0) D.warmed = `${head.cell.id} (${head.meshes.length})`;
+      D.freed = st.freed - freed0;
+      D.freedAll += D.freed;
+      D.far = this.farAt !== far0;
+      D.pend = s.pending.length;
+      return r;
+    };
+    let iUpdate = null;
+    if (il && il.update) {
+      iUpdate = il.update;
+      il.update = function driveUpdate2(x, z, vx, vz, y) {
+        const t0 = performance.now();
+        const r = iUpdate.call(this, x, z, vx, vz, y);
+        D.il = performance.now() - t0;
+        const j = this.stream && this.stream.job;
+        D.ijob = j ? j.cell.id : '';
+        return r;
+      };
+    }
+    D.restore = () => {
+      delete ml.update;
+      if (iUpdate) delete il.update;
+    };
+  }
+
+  // the camera and the player along the drive, a frame at a time
+  driveStep(dt) {
+    const b = this.bench;
+    const D = b.drive;
+    const g = this.game;
+    const cam = g.camera;
+    D.t += dt;
+    const run = D.t - D.settle;
+    const d = Math.max(0, Math.min(D.len, run * DRIVE_SPEED));
+    D.d = d;
+    const p = this.routeAt(d, this._p || (this._p = {}), D);
+    const q = this.routeAt(d + 14, this._q || (this._q = {}), D);
+    const gh = groundHeight(p.x, p.z);
+    const y = Math.max(0, gh) + 2.4;
+    cam.position.set(p.x, y, p.z);
+    cam.lookAt(q.x, y - 0.5, q.z);
+    // (the city's life lives round the player: he goes under the camera, at the speed of the drive)
+    if (gh >= 0) {
+      const pl = g.player;
+      pl.pos.set(p.x, gh, p.z);
+      pl.vel.set(0, 0, 0);
+    }
+    // (every few frames: how far from the car the nearest cell the streamer wants and has not got is)
+    if (run > 0 && (D.n++ & 7) === 0) {
+      const s = g.world.mainland.stream;
+      for (const c of s.cells) {
+        if (s.live.has(c.id) || c.failed) continue;
+        const m = s.distTo(c, p.x, p.z);
+        if (m < D.miss) {
+          D.miss = m;
+          D.missId = c.id;
+          D.missAt = d;
+        }
+      }
+    }
+    // (the first moments settle, and what was being built for the start; they are not counted)
+    if (run < 0) {
+      D.frames.length = 0;
+      D.miss = 1e9;
+      D.built = 0;
+      D.freedAll = 0;
+      D.compiles0 = b.compiles;
+      D.compileMs0 = b.compileMs;
+      D.mem0 = D.mem();
+    } else if (run >= D.secs || d >= D.len - 1e-3) this.endBench();
+  }
+
+  // (frameEnd) what the streamers did in this frame, put on its record
+  driveNote(f) {
+    const D = this.bench.drive;
+    f.dm = D.d;
+    f.at = Math.max(0, D.t - D.settle);
+    f.ml = D.ml;
+    f.il = D.il;
+    f.job = D.job;
+    f.done = D.done;
+    f.shown = D.shown;
+    f.warmed = D.warmed;
+    f.freed = D.freed;
+    f.far = D.far;
+    f.pend = D.pend || 0;
+    f.ijob = D.ijob;
+    f.mem = D.mem();
+    D.ml = D.il = D.freed = 0;
+    D.job = D.shown = D.warmed = D.ijob = '';
+    D.done = D.far = false;
+  }
+
+  // the drive's lines of the report
+  driveLines(b) {
+    const D = b.drive;
+    // (the frames of the drive itself: not the settle before it)
+    const fr = D ? D.frames.filter((f) => f.at > 0) : [];
+    if (fr.length < 2) return [];
+    const sm = this.summary(fr);
+    const n = fr.length;
+    const over = (ms) => fr.filter((f) => f.dt > ms).length;
+    const n50 = over(50);
+    const n100 = over(100);
+    const pc = (k) => Math.round((100 * k) / n);
+    // (the heap of the page's code: how much it grew, and how many times it fell by a megabyte or more - a collection)
+    let gcs = 0;
+    for (let i = 1; i < n; i++) {
+      if (fr[i].mem && fr[i - 1].mem && fr[i - 1].mem - fr[i].mem > 1e6) {
+        gcs++;
+        fr[i].gc = (fr[i - 1].mem - fr[i].mem) / 1e6;
+      }
+    }
+    const mb = (v) => (v / 1e6).toFixed(0);
+    const heap = fr[0].mem ? `זיכרון הקוד ${mb(D.mem0)}→${mb(fr[n - 1].mem)} מ"ב, ${gcs} איסופי זבל` : 'זיכרון הקוד: הדפדפן לא מאפשר למדוד';
+    const ms = (v) => (v || 0).toFixed(0);
+    const worst = fr.slice().sort((x, y) => y.dt - x.dt).slice(0, 5);
+    const what = (f) => {
+      const rest = Math.max(0, f.dt - f.upd - f.ren);
+      const parts = [];
+      if (f.job) parts.push(`${f.done ? 'סיימה' : 'בונה'} ${f.job}`);
+      if (f.warmed) parts.push(`העלאה לכרטיס ${f.warmed}`);
+      if (f.shown) parts.push(`הוצג ${f.shown}`);
+      if (f.freed) parts.push(`שוחררו ${f.freed}`);
+      if (f.far) parts.push('הצללים הרחוקים זזו');
+      const ml = `היבשה ${f.ml.toFixed(1)}ms${parts.length ? ` (${parts.join(' · ')}${f.pend ? ` · ממתינים ${f.pend}` : ''})` : ''}`;
+      const sh = f.il > 0.05 ? ` · חנויות ${f.il.toFixed(1)}ms${f.ijob ? ` (${f.ijob})` : ''}` : '';
+      const gc = f.gc ? ` · הזיכרון ירד ${f.gc.toFixed(1)} מ"ב (איסוף זבל)` : '';
+      const who = rest > 0.6 * f.dt ? 'מחוץ לקוד המשחק: ההמתנה לכרטיס או לדפדפן' : f.ml + f.il > 0.4 * f.dt ? 'הבנייה' : f.upd > f.ren ? 'קוד המשחק' : 'שליחת הציור';
+      return `${who} · ${ml}${sh}${gc}`;
+    };
+    const lines = [
+      `נסיעה ביבשה, מהגשר אל הקניון (${Math.round(sm.ms * n / 1000)} שניות, ${DRIVE_SPEED} מ' לשנייה, ${n} פריימים): פריימים בשנייה ${sm.fps.toFixed(1)} · 1% האיטיים ${sm.low1.toFixed(1)} · הפריים האיטי ביותר ${sm.worst.toFixed(0)}ms`,
+      `בנסיעה: פריימים מעל 50ms ${n50} (${pc(n50)}%) · מעל 100ms ${n100} (${pc(n100)}%) · הארוך ביותר ${sm.worst.toFixed(0)}ms · מעבד: משחק ${sm.upd.toFixed(1)}ms, שליחת הציור ${sm.ren.toFixed(1)}ms`,
+      `הבנייה בנסיעה: הוצגו ${D.built} תאים, שוחררו ${D.freedAll} · הכי קרוב שהיה חסר ${D.miss < 1e8 ? `${D.miss.toFixed(0)} מ' (${D.missId}, במטר ${Math.round(D.missAt)} של הנסיעה)` : '-'} · הכנת שיידרים בנסיעה ${b.compiles - D.compiles0} (${Math.round(b.compileMs - D.compileMs0)}ms) · ${heap}`,
+      'חמשת הפריימים האיטיים ביותר בנסיעה, ומה נבנה בהם:',
+    ];
+    worst.forEach((f, i) => {
+      lines.push(`  ${i + 1}. ${f.dt.toFixed(0)}ms בשנייה ${f.at.toFixed(1)} (מטר ${Math.round(f.dm)}): משחק ${ms(f.upd)} · שליחת ציור ${ms(f.ren)} · מחוץ לקוד ${ms(Math.max(0, f.dt - f.upd - f.ren))} — ${what(f)}`);
+    });
+    return lines;
   }
 
   // the passes timed one by one where the test stands (as the game draws it: the sun's box ahead of
@@ -852,6 +1217,15 @@ export class Perf {
     const gpu = b.gpuRoute !== undefined ? b.gpuRoute : this.gpu.ok ? this.gpu.take(true) : null;
     this.bench = null;
     if (b.unhook) b.unhook();
+    // (ROADMAP 19.4, 5.1: the streamers' calls as they were)
+    if (b.drive && b.drive.restore) b.drive.restore();
+    // (the screen let go of, and the progress taken off it)
+    try {
+      if (b.lock) b.lock.release().catch(() => {});
+    } catch (e) {
+      // (it goes dark by itself again)
+    }
+    this.progress(null);
     g.pipe.scale = b.scale;
     g.pipe.taaFrac = b.taaFrac;
     g.pipe.reflections = b.refl;
@@ -888,6 +1262,8 @@ export class Perf {
       b.still && b.still.tr.length >= b.islandN ? `עומדים במקום, אלפי משולשים / קריאות ציור: ${b.stands.slice(0, b.islandN).map(({ name }, i) => `${name} ${b.still.tr[i].toFixed(0)}/${Math.round(b.still.cl[i])}`).join(' · ')}` : '',
       // (and the places of the mainland: frames a second (thousands of triangles / draw calls))
       b.still && b.stands.length > b.islandN && b.still.fps.length === b.stands.length ? placeLine(b) : '',
+      // (ROADMAP 19.4, 5.1: the drive on the mainland: the stalls and what the streamers had in hand then)
+      ...this.driveLines(b),
       `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}`,
       `מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${b.cpu[0].toFixed(1)}, בסוף ${b.cpu[1].toFixed(1)} · כרטיס מסך בהתחלה ${b.gpuMs[0].toFixed(1)}, בסוף ${b.gpuMs[1].toFixed(1)}`,
       b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד',
