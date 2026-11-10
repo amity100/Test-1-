@@ -711,7 +711,7 @@ export class Perf {
       }
     }
     // (ROADMAP 19.4, 5.1: and the drive after them, where the mainland is built: driveSecs)
-    const driveSecs = mode !== 'focus' && g.world && g.world.mainland && g.world.mainland.on ? driveSeconds : 0;
+    const driveSecs = mode === 'route' && g.world && g.world.mainland && g.world.mainland.on ? driveSeconds : 0;
     this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, drive: null, driveSecs, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0, stands, islandN };
     this.gpu.take(true);
     // the shaders made ready on the way (each a pause where it is first seen: on a phone, long)
@@ -777,7 +777,7 @@ export class Perf {
       if (document.hidden) b.interrupted = true;
     };
     document.addEventListener('visibilitychange', b.onVis);
-    if (mode === 'focus') b.focus = this.focusInit(b);
+    if (mode === 'focus' || mode === 'island') b.focus = this.focusInit(b, mode === 'island');
     this.crumb(true);
     // the test is at the drawing's full quality: the self-adjusting resolution waits
     g.pipe.scale = g.pipe.defaultScale || g.pipe.scale;
@@ -801,7 +801,7 @@ export class Perf {
       b.lock = null;
     }
     // (v5: and at the very end a few seconds with the picture still, each pass timed on its own)
-    g.hud.toast(mode === 'focus' ? 'בדיקה ממוקדת במקומות ששופרו: ארבעה מקומות, בכל אחד "עכשיו" מול "כמו קודם". בלי לגעת…' : driveSecs > 0 ? 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום, ובסוף נסיעה של חצי דקה ביבשה. בלי לגעת…' : 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בסוף התמונה עומדת כמה שניות. בלי לגעת…', 'info', 4);
+    g.hud.toast(b.focus ? `בדיקה ממוקדת: ${b.focus.spots.length} מקומות, בכל אחד "עכשיו" מול "כמו קודם". בלי לגעת…` : driveSecs > 0 ? 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום, ובסוף נסיעה של חצי דקה ביבשה. בלי לגעת…' : 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בסוף התמונה עומדת כמה שניות. בלי לגעת…', 'info', 4);
   }
 
   // (?perftest, main.js: the owner's word - a link that runs the test by itself, without entering the game) the
@@ -813,15 +813,15 @@ export class Perf {
   autoBench(quick = false, mode = 'route') {
     const g = this.game;
     if (document.getElementById('perf-start') || document.getElementById('perf-recover')) return;
-    const focus = mode === 'focus';
+    const focus = mode === 'focus' || mode === 'island';
     const card = () => {
       const el = document.createElement('div');
       el.id = 'perf-start';
       el.style.cssText = 'position:fixed;inset:0;z-index:46;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(16,12,30,0.62);direction:rtl;font-family:"Rubik",system-ui,sans-serif';
       el.innerHTML =
         '<div style="max-width:min(480px,92vw);box-sizing:border-box;padding:14px 18px 16px;border-radius:14px;background:#fff8ec;color:#1b1430;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,0.45)">' +
-        `<div style="font-size:21px;font-weight:700;margin-bottom:6px">${focus ? 'בדיקה ממוקדת במקומות ששופרו' : 'מבחן ביצועים'}</div>` +
-        `<div style="font-size:14px;line-height:1.5;margin-bottom:10px">${focus ? 'ארבעה מקומות: השדרה הראשית באי, קהל אנשים, הרחוב מול הקניון ובתוך הקניון. בכל אחד המשחק מצויר לסירוגין "עכשיו" ו"כמו קודם", כדי לראות כמה מהר נהיה. כארבע דקות. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח מפורט עם כפתורי "העתקה" ו"שיתוף".' : 'המבחן עובר לבד: הליכה ברחובות, עמידה במקום ובקניון, ובסוף נסיעה ביבשה. כשלוש דקות. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח עם כפתורי "העתקה" ו"שיתוף".'}</div>` +
+        `<div style="font-size:21px;font-weight:700;margin-bottom:6px">${focus ? (mode === 'island' ? 'בדיקה ממוקדת: השדרה באי' : 'בדיקה ממוקדת במקומות ששופרו') : 'מבחן ביצועים'}</div>` +
+        `<div style="font-size:14px;line-height:1.5;margin-bottom:10px">${focus ? `${mode === 'island' ? 'שני מקומות באי: השדרה הראשית וקהל של אנשים סביבך' : 'ארבעה מקומות: השדרה הראשית באי, קהל אנשים, הרחוב מול הקניון ובתוך הקניון'}. בכל אחד המשחק מצויר לסירוגין "עכשיו" ו"כמו קודם", כדי לראות כמה מהר נהיה. ${mode === 'island' ? 'כשתי דקות' : 'כארבע דקות'}. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח מפורט עם כפתורי "העתקה" ו"שיתוף".` : 'המבחן עובר לבד: הליכה ברחובות, עמידה במקום ובקניון, ובסוף נסיעה ביבשה. כשלוש דקות. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח עם כפתורי "העתקה" ו"שיתוף".'}</div>` +
         '<button data-a="go" style="font-weight:700;font-size:20px;line-height:1.2;font-family:inherit;padding:12px 30px;border:3px solid #1b1430;border-radius:12px;background:#ffd23f;color:#1b1430;box-shadow:2px 3px 0 #1b1430">התחלת המבחן</button>' +
         '<div data-a="note" style="font-size:12px;opacity:0.75;margin-top:8px">הלחיצה מעבירה את המסך למסך מלא ולרוחב, כמו במשחק</div>' +
         '</div>';
@@ -857,7 +857,7 @@ export class Perf {
           const waited = performance.now() - t0;
           if ((same >= 4 && waited > 1500 && g.state === 'play' && !(g.prologue && g.prologue.active)) || waited > 8000) {
             if (focus) {
-              this.startBench(0, 0, 0, 'focus');
+              this.startBench(0, 0, 0, mode);
               if (this.bench && quick) this.bench.focus.quick = true;
             } else if (quick) this.startBench(3, 1, 4);
             else this.startBench();
@@ -890,7 +890,7 @@ export class Perf {
     const mins = Math.max(0, Math.round(age / 60000));
     const text = saved.done
       ? saved.text
-      : `Beyond the Outline — בדיקה שלא הסתיימה (${saved.mode === 'focus' ? 'ממוקדת' : 'מסלול'})\nהיא נעצרה בשלב: ${saved.stage} (אחרי ${saved.secs} שניות)\n${(saved.blocks || []).length ? `חסימות של הדף: ${saved.blocks.map((x) => `${x.gap}ms בשנייה ${x.at} בשלב ${x.stage}`).join(' · ')}\n` : ''}מה שנאסף עד אז:\n${(saved.lines || []).join('\n') || '(עוד לא נאסף כלום)'}`;
+      : `Beyond the Outline — בדיקה שלא הסתיימה (${saved.mode === 'route' ? 'מסלול' : 'ממוקדת'})\nהיא נעצרה בשלב: ${saved.stage} (אחרי ${saved.secs} שניות)\n${(saved.blocks || []).length ? `חסימות של הדף: ${saved.blocks.map((x) => `${x.gap}ms בשנייה ${x.at} בשלב ${x.stage}`).join(' · ')}\n` : ''}מה שנאסף עד אז:\n${(saved.lines || []).join('\n') || '(עוד לא נאסף כלום)'}`;
     const el = document.createElement('div');
     el.id = 'perf-recover';
     el.style.cssText = 'position:fixed;inset:0;z-index:47;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(16,12,30,0.7);direction:rtl;font-family:"Rubik",system-ui,sans-serif';
@@ -1180,6 +1180,26 @@ export class Perf {
     return false;
   }
 
+  // one part of the drawing timed by the wall clock, the card waited for before and after: the faster of two rounds of four
+  lightTime(fn, reps = 4) {
+    const pipe = this.game.pipe;
+    const T = pipe.timer;
+    pipe.timer = null;
+    let best = Infinity;
+    try {
+      for (let k = 0; k < 2; k++) {
+        pipe.syncGpu();
+        const t0 = performance.now();
+        for (let i = 0; i < reps; i++) fn();
+        pipe.syncGpu();
+        best = Math.min(best, (performance.now() - t0) / reps);
+      }
+    } finally {
+      pipe.timer = T;
+    }
+    return best;
+  }
+
   // (on a phone) the passes timed one by one, the few that matter: a timing of every way of drawing (render/pipeline.js profile: some twenty,
   // each a dozen times, and the shaders of the other way of drawing made on the way) holds the page for as long as it takes - seconds on a
   // computer, far longer on a phone
@@ -1238,9 +1258,9 @@ export class Perf {
   // marked key there are two more conditions in the turn: the lowest resolution (what the card's pixels cost) and no drawing at all
   // (the game's own code alone, the processor). The numbers of each condition are those of the frames after the first 0.3 s of its blocks
 
-  focusInit(b) {
+  focusInit(b, island = false) {
     const g = this.game;
-    const ml = !!(g.world && g.world.mainland && g.world.mainland.on);
+    const ml = !!(g.world && g.world.mainland && g.world.mainland.on) && !island;
     return { spots: FOCUS_SPOTS.filter((sp) => !sp.mainland || ml), i: -1, spot: null, phase: 'next', phaseHe: '', t: 0, acc: {}, res: [], k: 0, cond: 'now', conds: ['now', 'before'], blockT: 0, measuring: false, spotT0: 0, over50: 0, over100: 0, frames: 0, longest: 0, crowd: null, build: null, fx: null, quick: false };
   }
 
@@ -1391,6 +1411,10 @@ export class Perf {
   // (frameEnd) a frame of the focused test: counted for the stalls, and kept for its condition while it is measured
   focusFrame(f) {
     const F = this.bench.focus;
+    if (F.skipFrame) {
+      F.skipFrame = false;
+      return;
+    }
     if (F.phase === 'measure' || F.phase === 'settle') {
       F.frames++;
       if (f.dt > 50) F.over50++;
@@ -1458,6 +1482,25 @@ export class Perf {
     const sum = {};
     for (const c of Object.keys(F.acc)) sum[c] = this.focusSum(F.acc[c]);
     const r = { sp, sum, fx: F.fx, real: Math.round(performance.now() - F.spotT0), incomplete: F.phase !== 'next' };
+    // (a key place, measured to its end: each pass timed by itself as the game draws it now - and the drawing once more without the far
+    // pens made lighter, where they are: a few seconds the page waits for it, told in the report)
+    if (sp.key && !r.incomplete) {
+      try {
+        this.focusCond('now');
+        const cam = this.game.camera;
+        cam.updateMatrixWorld();
+        r.stages = this.stages(true);
+        // (the frame this timing stands in is not one of the place's: not counted with the stalls)
+        F.skipFrame = true;
+        if (GFX.penLite) {
+          shared.uPenLite.value = 0;
+          r.stages.mainFull = this.lightTime(() => this.game.pipe.drawMain());
+          shared.uPenLite.value = 1;
+        }
+      } catch (e) {
+        r.stages = null;
+      }
+    }
     F.res.push(r);
     if (F.crowd) {
       for (const c of F.crowd) c.gone = true;
@@ -1494,6 +1537,7 @@ export class Perf {
     L.push(`מכשיר: ${device || 'לא ידוע'}`);
     L.push(`מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'} · דפדפן: ${browserName()}${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}`);
     L.push(`מה ש"עכשיו" כולל (הטלפון מצייר כך כשהקישור מבקש): חנויות שהקירות מסתירים את הסחורה שלהן ${yn(GFX.shopView)} · מכוניות רחוקות בפחות נקודות ${yn(GFX.carLod)} · אנשים בצורות קלות לפי המרחק ${yn(GFX.folkLod)} · מעבר סיום קל ${yn(GFX.finalLite)}. "כמו קודם": כל אלה כבויים.${GFX.on ? '' : ' (כאן החלקים כבויים - מחשב או ?oldgfx: אין מה להשוות)'}`);
+    L.push(`ציור העטים: ${g.pipe.deferred ? 'בשני שלבים' : 'בשלב אחד'}${GFX.pens2 ? ' (בטלפון מתחילים בשני שלבים)' : ''} · עומק קודם: ${g.pipe.depthFirst ? 'כן' : 'לא'} · עומק הקירות קודם: ${g.pipe.wallsFirst && g.pipe.walls ? 'כן' : 'לא'} · עטים קלים מרחוק: ${GFX.penLite ? 'כן' : 'לא'}`);
     L.push('');
     L.push('תקציר: פריימים בשנייה "עכשיו" מול "כמו קודם". כל מקום נמדד בבלוקים של שנייה לסירוגין, באותו מקום ובאותו רגע:');
     for (const r of F.res) L.push(`  ${this.focusLine(r)}`);
@@ -1513,6 +1557,8 @@ export class Perf {
         const more = S.scale ? ` · ברזולוציה נמוכה ${pc(S.scale.fps, S.now.fps)} פריימים בשנייה` : '';
         L.push(`  מה מחזיק את הפריים כאן: ${part}${more}`);
       }
+      const st = r.stages;
+      if (st) L.push(`  כל שלב לבד, "עכשיו" (ms): צל ${f1(st.shadow)} · השתקפות ${f1(st.reflection)} · ציור ${f1(st.main)}${st.mainFull !== undefined ? ` (בלי העטים הקלים מרחוק: ${f1(st.mainFull)})` : ''} · בלי אנשים ומכוניות ${f1(st.city)} · דיו ${f1(st.ink)} · זוהר ${f1(st.glow)} · סיום ${f1(st.final)} · פריים שלם ${f1(st.frame)}`);
       const fx = r.fx;
       if (fx) {
         const parts = [];

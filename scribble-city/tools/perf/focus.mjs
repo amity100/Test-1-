@@ -12,8 +12,9 @@ import { open } from './lib.mjs';
 const DT = +(process.env.DT || 0.1);
 const QUICK = process.env.QUICK !== '0';
 const DSF = +(process.env.DSF || 1);
+const MODE = process.env.MODE || 'focus';
 const { pg, close } = await open({ frames: 4, dsf: DSF, query: process.env.EXTRA === undefined ? 'newgfx=1' : process.env.EXTRA });
-const out = await pg.evaluate(async ([DT, QUICK]) => {
+const out = await pg.evaluate(async ([DT, QUICK, MODE]) => {
   const g = window.__game;
   const { GFX } = await import('./js/core/util.js');
   g.enemies.spawnT = 1e9;
@@ -21,7 +22,7 @@ const out = await pg.evaluate(async ([DT, QUICK]) => {
   g.pause = () => {};
   const before = { x: g.player.pos.x, z: g.player.pos.z, scale: g.pipe.scale, civ: g.civilians.list.length };
   const perf = g.perf;
-  perf.startBench(0, 0, 0, 'focus');
+  perf.startBench(0, 0, 0, MODE);
   if (!perf.bench) return { error: 'the test did not start' };
   if (QUICK) perf.bench.focus.quick = true;
   const phases = [];
@@ -64,7 +65,7 @@ const out = await pg.evaluate(async ([DT, QUICK]) => {
       }
     })(),
   };
-}, [DT, QUICK]);
+}, [DT, QUICK, MODE]);
 if (out.error) console.log(out.error);
 else {
   console.log(out.report);

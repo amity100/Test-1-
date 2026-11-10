@@ -58,6 +58,7 @@ uniform vec4 uLightPos[MAX_LIGHTS];
 uniform vec4 uLightCol[MAX_LIGHTS];
 uniform float uLightN;
 uniform float uQuality;
+uniform float uPenLite;
 uniform float uMirror;
 uniform sampler2D uObjMask;
 uniform vec4 uWErase[MAX_SPOTS];
@@ -423,7 +424,14 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
   float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
   int pensN = uQuality > -1.0 ? 5 : 0;
+  // (ROADMAP 19.7, phones only - uPenLite, render/pipeline.js) far down a street fewer pens, as an artist draws the far end of it:
+  // the cross-strokes, the dark ink and the light edges fade out between 30% and 55% of the way to "far" (some 60 to 110 m), and
+  // the main pen too between 75% and 92% (some 140 to 175 m) - beyond that the colour's own wash. Each fades, nothing pops; and a
+  // pen faded out is not worked out at all: those pixels cost a fraction of what they did
+  float liteB = uPenLite > 0.5 ? 1.0 - smoothstep(0.3, 0.55, far) : 1.0;
+  float liteA = uPenLite > 0.5 ? 1.0 - smoothstep(0.75, 0.92, far) : 1.0;
   for (int i = 0; i < pensN; i++) {
+    if (i == 0 ? liteA <= 0.0 : liteB <= 0.0) continue;
     // the pen: its direction, the spacing of its strokes (pixels), their width, its own dice, their length
     float a = ang;
     float gap = 4.2;
@@ -484,7 +492,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
       pc = fract(L.y * 3.1) < 0.5 ? mix(lit, uSunCol, 0.45) * 1.25 : mix(uPaper * 1.2, lit, 0.25);
       k = L.x * step(fract(L.y * 7.13), hiAll * min(1.0, dens * 1.8));
     }
-    col = mix(col, pc, k);
+    col = mix(col, pc, k * (i == 0 ? liteA : liteB));
   }
   return col;
 #endif

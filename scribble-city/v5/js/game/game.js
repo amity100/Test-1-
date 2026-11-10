@@ -35,7 +35,7 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp, smoothstep, dampAngle } from '../core/util.js';
+import { clamp, smoothstep, dampAngle, GFX } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -926,6 +926,8 @@ export class Game {
   }
 
   renderFrame() {
+    // (ROADMAP 19.7, phones: far down a street fewer pens - render/glsl.js drawPens; 'as before' without, game/perf.js)
+    shared.uPenLite.value = GFX.penLite && !GFX.off ? 1 : 0;
     // the sun's box follows a point ahead of the camera
     const c = this.camera.position;
     const f = this.camera.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));

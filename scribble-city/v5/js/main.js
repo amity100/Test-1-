@@ -277,7 +277,8 @@ async function boot() {
   }
   // (11.5) what trying the ways in play chose here before, in this build of the game and this
   // browser: kept, and not tried again (render/depthtrial.js readMemo). ?trials: tried again
-  const trialDev = `${pipe.gpuName}|${browserName()}`;
+  // (ROADMAP 19.7: without the browser's version - each update of the browser forgot what was tried, and it began again the slow way)
+  const trialDev = `${pipe.gpuName}|${browserName().replace(/\s+[\d.]+$/, '')}`;
   const memo = params.has('trials') ? null : readMemo(BUILD, trialDev);
   pipe.trialMemo = { build: BUILD, dev: trialDev, kept: memo };
   const memoOf = (k) => (memo && typeof memo[k] === 'boolean' ? memo[k] : null);
@@ -308,7 +309,9 @@ async function boot() {
     // (the two ways tried here before: the one kept, from the start - render/depthtrial.js)
     const was = memoOf('pens');
     if (pipe.pensMode === 'auto' && was !== null) pipe.pensKnown = true;
-    pipe.setPens(pipe.pensMode === 'two' || (pipe.pensMode === 'auto' && (was !== null ? was : !low)));
+    // (ROADMAP 19.7, GFX.pens2: a phone begins in two passes - the owner's phone: the drawing 58 ms in two, 76 in one - and the trial
+    // in play still decides on its own device)
+    pipe.setPens(pipe.pensMode === 'two' || (pipe.pensMode === 'auto' && (was !== null ? was : !low || GFX.pens2)));
   }
 
   setStatus('מציירים את העיר…');
@@ -534,7 +537,7 @@ async function boot() {
     if (params.has('perftest')) {
       if (window.__loadLeave) window.__loadLeave();
       const pt = params.get('perftest') || '';
-      game.perf.autoBench(pt === 'quick' || pt === 'focusquick', pt.startsWith('focus') ? 'focus' : 'route');
+      game.perf.autoBench(/quick$/.test(pt) && pt !== '' , pt.startsWith('focus') ? 'focus' : pt.startsWith('island') ? 'island' : 'route');
     }
     window.__ready = true;
     console.log('load steps (ms)', JSON.stringify(loadT));

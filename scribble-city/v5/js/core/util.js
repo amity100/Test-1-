@@ -95,15 +95,18 @@ export function isTouchDevice() {
 // off: all of it switched off for a moment while the game runs (the test route's "as before" stand,
 // game/perf.js) - so every part reads its flag where it decides, each frame; what a part builds
 // once (lighter shapes) is built when its flag is on and simply not chosen while off is true.
-const APPROVED = { shopview: true, carlod: true, folklod: false, glowlite: false, finallite: false };
-const LOOK = new Set(['glowlite']);
+const APPROVED = { shopview: true, carlod: true, folklod: false, glowlite: false, finallite: false, pens2: false, penlite: false };
+const LOOK = new Set(['glowlite', 'penlite']);
 export const GFX = (() => {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   const phone = isTouchDevice() || q.has('low');
   const on = phone && !q.has('oldgfx');
   // (?newgfx turns on every part that changes no picture; one that changes the look - the glow in five passes - only by
   // its own name, ?glowlite, until the owner has said yes to its pictures)
-  const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || (q.has('newgfx') && !LOOK.has(name)));
+  // (ROADMAP 19.7, the owner's word: "build what is needed for it to be smooth" - ?fast: the phone's version being built, each
+  // round of it on the way to being tried on the phone: every part that changes no picture, and those of this round that do)
+  const fast = q.has('fast');
+  const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || ((q.has('newgfx') || fast) && !LOOK.has(name)) || (fast && name === 'penlite'));
   return {
     phone,
     on,
@@ -114,6 +117,8 @@ export const GFX = (() => {
     // (Stage 3's goodsFar and farHide were tried and not built: ROADMAP 19.3)
     glowLite: part('glowlite'), // Stage 4: the glow in five passes
     finalLite: part('finallite'), // Stage 4: the last pass reads the glow once
+    pens2: part('pens2'), // ROADMAP 19.7: the pens in two passes from the start (the same picture; the phone's report: 58 ms instead of 76)
+    penLite: part('penlite'), // ROADMAP 19.7: far down a street fewer pens (a change of look, far away)
   };
 })();
 
