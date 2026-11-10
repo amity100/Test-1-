@@ -172,6 +172,7 @@ export class Interiors {
   viewHide(cam, hidden) {
     const e = cam.matrixWorld.elements;
     const cx = e[12];
+    const cy = e[13];
     const cz = e[14];
     const st = this.viewStats;
     st.live = 0;
@@ -185,6 +186,9 @@ export class Interiors {
       st.live++;
       const f = rec.f;
       const sp = rec.spec;
+      // (above its ceiling: a room's ceiling is a face turned down, and seen from above it is not there -
+      // the street, a roof, a rotor: the goods are seen through it, as they always were)
+      if (cy > rec.y + sp.h - 0.3) continue;
       // (in front of its front - or at it, half a metre for the door's own depth)
       const w = f.toW(cx, cz);
       if (w > -0.5) continue;

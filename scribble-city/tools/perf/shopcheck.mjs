@@ -7,17 +7,21 @@
 //
 //   WHERE=at:-835,60,0 node tools/perf/shopcheck.mjs      (EXTRA="newgfx=1" is put on by itself)
 //   SHOPS=8             how many shops (one of each kind first)
+//   SHOPKIND=jewelry    only shops of that kind;  VIEWS='behind it,above'  only the views whose name has one of those in it;  ORBIT=0  no walk round it
 import { open } from './lib.mjs';
 
 const SHOPS = +(process.env.SHOPS || 8);
+const KIND = process.env.SHOPKIND || '';
+const VIEWS = process.env.VIEWS || '';
+const ORBIT = process.env.ORBIT !== '0';
 const { pg, where, close } = await open({ query: 'newgfx=1', frames: 40 });
 
-const rows = await pg.evaluate(async ([SHOPS]) => {
+const rows = await pg.evaluate(async ([SHOPS, KIND, VIEWS, ORBIT]) => {
   const g = window.__game;
   const { GFX } = await import('./js/core/util.js');
   if (!GFX.shopView) return { error: 'the shops\' view is not on (GFX.shopView false): a phone, or ?low, with ?newgfx=1' };
   const I = g.world.interiors;
-  const live = [...I.stream.live.values()].filter((l) => l.cell && l.cell.rec && l.group);
+  const live = [...I.stream.live.values()].filter((l) => l.cell && l.cell.rec && l.group && (!KIND || l.cell.rec.kind === KIND));
   // one of each kind first, then more of the same
   const seen = new Set();
   const first = [];
@@ -68,7 +72,7 @@ const rows = await pg.evaluate(async ([SHOPS]) => {
     ];
     // (and, for the first of them: all the way round it, in steps of 15 degrees at 12 metres, and in through
     // its door in ten steps - what is seen of its goods must not change by a pixel anywhere on the way)
-    if (l === list[0]) {
+    if (ORBIT && l === list[0]) {
       const cu = (sp.u0 + sp.u1) / 2;
       for (let k = 0; k < 24; k++) {
         const a = (k / 24) * Math.PI * 2;
@@ -84,6 +88,7 @@ const rows = await pg.evaluate(async ([SHOPS]) => {
       }
     }
     for (const [name, pos, look] of views) {
+      if (VIEWS && !VIEWS.split(',').some((v) => name.includes(v))) continue;
       window.__camOverride = { pos, look };
       const x = pos[0];
       const z = pos[2];
@@ -109,7 +114,7 @@ const rows = await pg.evaluate(async ([SHOPS]) => {
     }
   }
   return { rows: out, shops: list.map((l) => l.cell.rec.kind) };
-}, [SHOPS]);
+}, [SHOPS, KIND, VIEWS, ORBIT]);
 
 if (rows.error) {
   console.log(rows.error);
