@@ -1468,6 +1468,8 @@ export class Game {
     if (dt > 0) {
       // (ROADMAP 19.1: where this frame's cars are seen from - a car far off in fewer points)
       if (this.cars && this.cars.view) this.cars.view(this.camera, this.pipe.size.y || this.renderer.domElement.height);
+      // (ROADMAP 19.2: and the people - by their size on the screen, how many triangles their shapes have)
+      this.figures.bodies.view(this.camera, this.pipe.size.y || this.renderer.domElement.height);
       // (the things in his hands put first: his right hand is drawn closed round the pencil as they
       // put it in it - round 17, fig.grip)
       this.weapons.updateModels();

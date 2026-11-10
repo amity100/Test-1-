@@ -1,0 +1,444 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>lod</title>
+<script type="importmap">{ "imports": { "three": "/js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<script type="module">
+// (ROADMAP 19.2, PHONE_SPEED_PLAN.md Stage 2) The people's lighter shapes tried on their own, with no game
+// round them: tools/perf/lodtest.mjs drives this page. Each trial simplifies one of the people's shapes
+// (render/simplify.js) and measures, exactly and in both directions, how far the lighter surface is from the
+// full one: points on the full surface (its corners, its triangles' middles and edges) to the lighter
+// surface, and points on the lighter one back to the full.
+import * as THREE from 'three';
+import { simplify } from '/v5/js/render/simplify.js';
+
+const FS = await import('/v5/js/render/folkshapes.js');
+const FK = await import('/v5/js/render/folkspec.js');
+
+// ---------------------------------------------------------------- distance of a point from a triangle
+const D = new Float64Array(3);
+function closest(px, py, pz, ax, ay, az, bx, by, bz, cx, cy, cz) {
+  const abx = bx - ax, aby = by - ay, abz = bz - az;
+  const acx = cx - ax, acy = cy - ay, acz = cz - az;
+  const apx = px - ax, apy = py - ay, apz = pz - az;
+  const d1 = abx * apx + aby * apy + abz * apz;
+  const d2 = acx * apx + acy * apy + acz * apz;
+  if (d1 <= 0 && d2 <= 0) return apx * apx + apy * apy + apz * apz;
+  const bpx = px - bx, bpy = py - by, bpz = pz - bz;
+  const d3 = abx * bpx + aby * bpy + abz * bpz;
+  const d4 = acx * bpx + acy * bpy + acz * bpz;
+  if (d3 >= 0 && d4 <= d3) return bpx * bpx + bpy * bpy + bpz * bpz;
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+    const v = d1 / (d1 - d3);
+    const x = px - (ax + abx * v), y = py - (ay + aby * v), z = pz - (az + abz * v);
+    return x * x + y * y + z * z;
+  }
+  const cpx = px - cx, cpy = py - cy, cpz = pz - cz;
+  const d5 = abx * cpx + aby * cpy + abz * cpz;
+  const d6 = acx * cpx + acy * cpy + acz * cpz;
+  if (d6 >= 0 && d5 <= d6) return cpx * cpx + cpy * cpy + cpz * cpz;
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+    const w = d2 / (d2 - d6);
+    const x = px - (ax + acx * w), y = py - (ay + acy * w), z = pz - (az + acz * w);
+    return x * x + y * y + z * z;
+  }
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
+    const w = (d4 - d3) / (d4 - d3 + (d5 - d6));
+    const x = px - (bx + (cx - bx) * w), y = py - (by + (cy - by) * w), z = pz - (bz + (cz - bz) * w);
+    return x * x + y * y + z * z;
+  }
+  const den = 1 / (va + vb + vc);
+  const v = vb * den;
+  const w = vc * den;
+  const x = px - (ax + abx * v + acx * w), y = py - (ay + aby * v + acy * w), z = pz - (az + abz * v + acz * w);
+  return x * x + y * y + z * z;
+}
+
+function gridOf(pos, idx, cell) {
+  const map = new Map();
+  const key = (i, j, k) => (i + 4096) * 16777216 + (j + 4096) * 4096 + (k + 4096);
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+    const lo = [0, 0, 0], hi = [0, 0, 0];
+    for (let k = 0; k < 3; k++) {
+      lo[k] = Math.floor(Math.min(pos[a + k], pos[b + k], pos[c + k]) / cell);
+      hi[k] = Math.floor(Math.max(pos[a + k], pos[b + k], pos[c + k]) / cell);
+    }
+    for (let i = lo[0]; i <= hi[0]; i++) for (let j = lo[1]; j <= hi[1]; j++) for (let k = lo[2]; k <= hi[2]; k++) {
+      const q = key(i, j, k);
+      let l = map.get(q);
+      if (!l) map.set(q, (l = []));
+      l.push(t);
+    }
+  }
+  return { map, key, cell, pos, idx };
+}
+const seen = new Set();
+function nearest(G, x, y, z) {
+  const { map, key, cell, pos, idx } = G;
+  let r = 1;
+  for (;;) {
+    seen.clear();
+    let best = Infinity;
+    const ci = Math.floor(x / cell), cj = Math.floor(y / cell), ck = Math.floor(z / cell);
+    for (let i = ci - r; i <= ci + r; i++) for (let j = cj - r; j <= cj + r; j++) for (let k = ck - r; k <= ck + r; k++) {
+      const l = map.get(key(i, j, k));
+      if (!l) continue;
+      for (let n = 0; n < l.length; n++) {
+        const t = l[n];
+        if (seen.has(t)) continue;
+        seen.add(t);
+        const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+        const d = closest(x, y, z, pos[a], pos[a + 1], pos[a + 2], pos[b], pos[b + 1], pos[b + 2], pos[c], pos[c + 1], pos[c + 2]);
+        if (d < best) best = d;
+      }
+    }
+    // (found, and the cells searched reach farther than it)
+    if (best < Infinity && Math.sqrt(best) <= r * cell) return Math.sqrt(best);
+    r++;
+    if (r > 40) return Math.sqrt(best);
+  }
+}
+// samples of a surface: its corners, its triangles' middles, edges' middles, and a few more inside
+const BARY = [[1 / 3, 1 / 3, 1 / 3], [0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.6, 0.2, 0.2], [0.2, 0.6, 0.2], [0.2, 0.2, 0.6]];
+function samples(pos, idx, withCorners = true) {
+  const out = [];
+  if (withCorners) for (let i = 0; i < pos.length; i += 3) out.push(pos[i], pos[i + 1], pos[i + 2]);
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+    for (const [u, v, w] of BARY) out.push(pos[a] * u + pos[b] * v + pos[c] * w, pos[a + 1] * u + pos[b + 1] * v + pos[c + 1] * w, pos[a + 2] * u + pos[b + 2] * v + pos[c + 2] * w);
+  }
+  return out;
+}
+function measure(S, G) {
+  const d = [];
+  for (let i = 0; i < S.length; i += 3) d.push(nearest(G, S[i], S[i + 1], S[i + 2]));
+  d.sort((a, b) => a - b);
+  let sum = 0;
+  for (const v of d) sum += v;
+  const q = (p) => d[Math.min(d.length - 1, Math.floor(d.length * p))];
+  return { max: d[d.length - 1], p99: q(0.99), p90: q(0.9), mean: sum / d.length, n: d.length };
+}
+// both directions, millimetres
+function deviation(pos, idxFull, idxLight, cell = 0.012) {
+  const GF = gridOf(pos, idxFull, cell);
+  const GL = gridOf(pos, idxLight, cell);
+  const toLight = measure(samples(pos, idxFull), GL);
+  const toFull = measure(samples(pos, idxLight, false), GF);
+  const mm = (o) => ({ max: +(o.max * 1000).toFixed(2), p99: +(o.p99 * 1000).toFixed(2), mean: +(o.mean * 1000).toFixed(3) });
+  return { full_to_light: mm(toLight), light_to_full: mm(toFull) };
+}
+
+// ---------------------------------------------------------------- the base head
+function headData() {
+  const B = FS.baseHead();
+  const n = B.pos.length / 3;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(B.pos, 3));
+  g.setIndex(new THREE.BufferAttribute(B.idx, 1));
+  g.computeVertexNormals();
+  const nor = g.attributes.normal.array;
+  const X = FS.exprMoves();
+  const E = X.d.length / (n * 3);
+  const mv = new Float32Array(n * E * 3);
+  for (let v = 0; v < n; v++) for (let e = 0; e < E; e++) for (let c = 0; c < 3; c++) mv[(v * E + e) * 3 + c] = X.d[(e * n + v) * 3 + c];
+  return { pos: B.pos, idx: B.idx, uv: B.uv, mouth: B.mouth, nor, mv, E, n };
+}
+const HD = headData();
+
+window.headInfo = () => {
+  const { idx, pos, n } = HD;
+  const edges = new Map();
+  for (let t = 0; t < idx.length; t += 3) for (const [a, b] of [[idx[t], idx[t + 1]], [idx[t + 1], idx[t + 2]], [idx[t + 2], idx[t]]]) {
+    const k = a < b ? a * n + b : b * n + a;
+    edges.set(k, (edges.get(k) || 0) + 1);
+  }
+  let border = 0, bad = 0;
+  const bv = new Set();
+  for (const [k, c] of edges) {
+    if (c === 1) { border++; bv.add(Math.floor(k / n)); bv.add(k % n); }
+    if (c > 2) bad++;
+  }
+  const used = new Set(idx);
+  let mouthV = 0;
+  for (let i = 0; i < n; i++) if (HD.mouth[i] > 0) mouthV++;
+  return { corners: n, used: used.size, triangles: idx.length / 3, borderEdges: border, borderCorners: bv.size, nonManifoldEdges: bad, moves: HD.E, mouthCorners: mouthV };
+};
+
+// cfg: { maxErr (m), uvTol, norTol, mouthTol, moveTol (m), creaseCos, flipCos, measure }
+window.headTrial = (cfg) => {
+  const attrs = [];
+  if (cfg.uvTol) attrs.push({ a: HD.uv, dim: 2, tol: cfg.uvTol });
+  if (cfg.norTol) attrs.push({ a: HD.nor, dim: 3, tol: cfg.norTol });
+  if (cfg.mouthTol) attrs.push({ a: HD.mouth, dim: 1, tol: cfg.mouthTol });
+  if (cfg.moveTol) attrs.push({ a: HD.mv, dim: HD.E * 3, tol: cfg.moveTol });
+  const t0 = performance.now();
+  const r = simplify(HD.idx, HD.pos, { maxErr: cfg.maxErr, nor: HD.nor, attrs, creaseCos: cfg.creaseCos, flipCos: cfg.flipCos, target: cfg.target || 0 });
+  const ms = performance.now() - t0;
+  const out = { from: HD.idx.length / 3, to: r.triangles, collapsed: r.collapsed, errorMm: +(r.error * 1000).toFixed(2), ms: +ms.toFixed(1) };
+  if (cfg.measure !== false) out.dev = deviation(HD.pos, HD.idx, r.index);
+  window.__last = r;
+  return out;
+};
+// ---------------------------------------------------------------- the rest of a person
+const BODIES = new Map();
+function bodyOf(k) {
+  if (!BODIES.has(k)) BODIES.set(k, FS.folkBody(k));
+  return BODIES.get(k);
+}
+const sumOf = (ix) => {
+  let h = 0;
+  for (let i = 0; i < ix.length; i++) h = (Math.imul(h, 31) + ix[i]) | 0;
+  return h;
+};
+// every part of every kind the phone has, by name: how many layouts of triangles, how big
+window.partInfo = (n) => {
+  const nK = n || FK.FOLK_PHONE || 36;
+  const by = {};
+  for (let k = 0; k < nK; k++) {
+    const B = bodyOf(k);
+    for (const [name, g] of Object.entries(B.parts)) {
+      const ix = g.index ? g.index.array : null;
+      const row = (by[name] = by[name] || { layouts: {}, kinds: 0 });
+      row.kinds++;
+      const key = ix ? `${g.attributes.position.count}/${ix.length / 3}/${sumOf(ix)}` : `soup${g.attributes.position.count}`;
+      row.layouts[key] = (row.layouts[key] || 0) + 1;
+    }
+  }
+  const out = {};
+  for (const [name, r] of Object.entries(by)) out[name] = { kinds: r.kinds, layouts: Object.entries(r.layouts).map(([k, c]) => `${k} x${c}`) };
+  return { kinds: nK, parts: out };
+};
+function partData(g) {
+  const idx = g.index.array;
+  const pos = g.attributes.position.array;
+  const nor = g.attributes.normal ? g.attributes.normal.array : null;
+  const uv = g.attributes.uv ? g.attributes.uv.array : null;
+  return { idx, pos, nor, uv };
+}
+// cfg: { maxErr (m), uvTol, norTol, creaseCos, flipCos }
+window.partTrial = (name, k, cfg) => {
+  const B = bodyOf(k);
+  const g = B.parts[name];
+  if (!g || !g.index) return { error: 'no such indexed part' };
+  const { idx, pos, nor, uv } = partData(g);
+  const attrs = [];
+  if (uv && cfg.uvTol) attrs.push({ a: uv, dim: 2, tol: cfg.uvTol });
+  if (nor && cfg.norTol) attrs.push({ a: nor, dim: 3, tol: cfg.norTol });
+  const t0 = performance.now();
+  const r = simplify(idx, pos, { maxErr: cfg.maxErr, nor, attrs, creaseCos: cfg.creaseCos, flipCos: cfg.flipCos });
+  const ms = performance.now() - t0;
+  const out = { part: name, kind: k, corners: pos.length / 3, from: idx.length / 3, to: r.triangles, errorMm: +(r.error * 1000).toFixed(2), ms: +ms.toFixed(1) };
+  if (cfg.measure !== false) out.dev = deviation(pos, idx, r.index, 0.02);
+  return out;
+};
+// ---------------------------------------------------------------- the people as the game builds them
+// (a PersonRenderer on a scene of its own, nothing drawn: its shapes, the layouts of triangles they share, and the
+// texture their corners live in - exactly what the phone has)
+const PR = await import('/v5/js/render/people.js');
+const MAT = await import('/v5/js/render/materials.js');
+let people = null;
+window.people = () => {
+  if (!people) people = new PR.PersonRenderer(new THREE.Scene());
+  return people;
+};
+window.gameShapes = () => {
+  const pr = window.people();
+  const rows = [];
+  for (const [name, sh] of Object.entries(pr.p)) {
+    if (!sh.layout) continue;
+    const L = sh.layout;
+    rows.push({ name, corners: L.corners, tris: L.index.length / 3, sig: `${L.corners}/${L.index.length / 3}/${sumOf(L.index)}`, lod: sh.lod, id: L.id });
+  }
+  return rows;
+};
+// ---------------------------------------------------------------- the lighter lists, made beforehand
+// (tools/perf/lodtest.mjs bake writes render/folklod.js from these)
+const LODM = await import('/v5/js/render/lod.js');
+const BAKE_NAMES = /^folk\d+_(head|hair|locks|fall|bun|tail|neck|band|torso|tee|hood|pelvis|skirt|upper|fore|thigh|shin|shoe)$|^(heroHandR|heroHandL|heroGripR|heroGripL|heroSole)$/;
+let BAKE = null;
+function bakeSet() {
+  if (BAKE) return BAKE;
+  const pr = window.people();
+  const by = new Map();
+  for (const [name, sh] of Object.entries(pr.p)) {
+    if (!sh.layout || !BAKE_NAMES.test(name)) continue;
+    const L = sh.layout;
+    const sig = LODM.layoutSig(L.corners, L.index);
+    if (!by.has(sig)) by.set(sig, { sig, name, tris: L.index.length / 3, corners: L.corners, index: L.index, sh, shapes: [] });
+    by.get(sig).shapes.push([name, sh]);
+  }
+  BAKE = [...by.values()].sort((a, b) => b.tris - a.tris);
+  return BAKE;
+}
+// a shape's corners as the game holds them, out of the texture they live in
+function cornersOf(sh) {
+  const T = MAT.shared.uShapes.value.image.data;
+  const n = sh.count;
+  const pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), nor = new Float32Array(n * 3), len = new Float32Array(n);
+  for (let v = 0; v < n; v++) {
+    const o = (sh.row + v * 2) * 4;
+    pos[v * 3] = T[o]; pos[v * 3 + 1] = T[o + 1]; pos[v * 3 + 2] = T[o + 2];
+    uv[v * 2] = T[o + 3]; uv[v * 2 + 1] = T[o + 7];
+    const nx = T[o + 4], ny = T[o + 5], nz = T[o + 6];
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nor[v * 3] = nx / l; nor[v * 3 + 1] = ny / l; nor[v * 3 + 2] = nz / l;
+    len[v] = l;
+  }
+  return { pos, uv, nor, len };
+}
+const b64of = (u16) => {
+  const u8 = new Uint8Array(u16.buffer, u16.byteOffset, u16.byteLength);
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+// how many units of picture there are to a metre of the surface, the middle of its edges
+function uvDensity(e) {
+  const c = cornersOf(e.sh);
+  const r = [];
+  for (let t = 0; t < e.index.length; t += 3) for (let k = 0; k < 3; k++) {
+    const a = e.index[t + k], b = e.index[t + (k + 1) % 3];
+    const dp = Math.hypot(c.pos[a * 3] - c.pos[b * 3], c.pos[a * 3 + 1] - c.pos[b * 3 + 1], c.pos[a * 3 + 2] - c.pos[b * 3 + 2]);
+    const du = Math.hypot(c.uv[a * 2] - c.uv[b * 2], c.uv[a * 2 + 1] - c.uv[b * 2 + 1]);
+    if (dp > 1e-5 && du < 0.5) r.push(du / dp);
+  }
+  r.sort((x, y) => x - y);
+  return r.length ? r[Math.floor(r.length / 2)] : 0;
+}
+window.bakeList = () => bakeSet().map((e, i) => ({ i, sig: e.sig, name: e.name, tris: e.tris, corners: e.corners, shapes: e.shapes.length, uvPerMetre: +uvDensity(e).toFixed(3) }));
+// the kinds of people the shapes are checked against (the first 63 are a phone's)
+const CHECK_KINDS = [0, 6, 13, 21, 30, 41, 52, 60];
+const PHONE_KINDS = FK.FOLK_PHONE || 63;
+// levels: [{ maxErr (m: where the search starts), uv, nor, crease, mouth, move (m), limit (mm: the farthest the lighter
+// surface may be from the full one, on any of the kinds' shapes) }]. For each level the largest maxErr that keeps
+// every checked shape within its limit is looked for (and the displacement of every kind's head from the base head is
+// one of the head's attributes, so that a collapse is made only where all of them are smooth there).
+window.bakeOne = (i, levels) => {
+  const e = bakeSet()[i];
+  const pr = window.people();
+  const isHead = /_head$/.test(e.name);
+  const part = (e.name.match(/^folk\d+_(.+)$/) || [])[1] || null;
+  const idx = Uint32Array.from(e.index);
+  const own = cornersOf(e.sh);
+  let pos = own.pos, nor = own.nor, uv = own.uv;
+  let mouth = null;
+  let mv = null;
+  let disp = null;
+  let checks = [own.pos];
+  if (isHead) {
+    // the head from the base mesh itself (not any one kind's)
+    pos = HD.pos;
+    nor = HD.nor;
+    uv = HD.uv;
+    mouth = HD.mouth;
+    mv = HD.mv;
+    const n = HD.n;
+    const K = Math.min(PHONE_KINDS, 63);
+    disp = new Float32Array(n * K * 3);
+    for (let k = 0; k < K; k++) {
+      const P = cornersOf(pr.p[`folk${k}_head`]).pos;
+      for (let v = 0; v < n; v++) for (let c = 0; c < 3; c++) disp[(v * K + k) * 3 + c] = P[v * 3 + c] - HD.pos[v * 3 + c];
+    }
+    disp.K = K;
+    checks = [HD.pos];
+    for (const k of CHECK_KINDS) checks.push(cornersOf(pr.p[`folk${k}_head`]).pos);
+  } else if (part) {
+    // the same part of the kinds that share its layout: the shape to simplify is their mean, and how far each kind's is from it
+    // goes in as an attribute (the lighter list must reproduce all of them)
+    const list = [];
+    const K = Math.min(PHONE_KINDS, 63);
+    for (let k = 0; k < K; k++) {
+      const sh = pr.p[`folk${k}_${part}`];
+      if (sh && sh.layout && LODM.layoutSig(sh.layout.corners, sh.layout.index) === e.sig) list.push(cornersOf(sh));
+    }
+    if (list.length > 1) {
+      const n = own.pos.length / 3;
+      const mp = new Float32Array(n * 3);
+      const mn = new Float32Array(n * 3);
+      const mu = new Float32Array(n * 2);
+      for (const c of list) {
+        for (let i = 0; i < n * 3; i++) { mp[i] += c.pos[i] / list.length; mn[i] += c.nor[i]; }
+        for (let i = 0; i < n * 2; i++) mu[i] += c.uv[i] / list.length;
+      }
+      for (let v = 0; v < n; v++) {
+        const l = Math.hypot(mn[v * 3], mn[v * 3 + 1], mn[v * 3 + 2]) || 1;
+        mn[v * 3] /= l; mn[v * 3 + 1] /= l; mn[v * 3 + 2] /= l;
+      }
+      pos = mp; nor = mn; uv = mu;
+      const K2 = list.length;
+      disp = new Float32Array(n * K2 * 3);
+      const far = [];
+      for (let k = 0; k < K2; k++) {
+        let sum = 0;
+        for (let v = 0; v < n; v++) for (let c = 0; c < 3; c++) {
+          const d = list[k].pos[v * 3 + c] - mp[v * 3 + c];
+          disp[(v * K2 + k) * 3 + c] = d;
+          sum += d * d;
+        }
+        far.push([sum, k]);
+      }
+      disp.K = K2;
+      far.sort((a, b) => b[0] - a[0]);
+      // (the kinds that are farthest from the mean, and the mean itself)
+      checks = [mp, ...far.slice(0, 7).map(([, k]) => list[k].pos)];
+    }
+  }
+  const out = { sig: e.sig, name: e.name, tris: e.tris, shapes: e.shapes.length, levels: [] };
+  const rho = uvDensity(e);
+  out.uvPerMetre = +rho.toFixed(3);
+  const tryAt = (L, maxErr) => {
+    const attrs = [];
+    // (the picture's place may slide by uvMm millimetres of the surface: its units to a metre differ from part to part)
+    const uvTol = L.uvMm ? (L.uvMm / 1000) * rho : L.uv;
+    if (uvTol) attrs.push({ a: uv, dim: 2, tol: uvTol });
+    if (L.nor) attrs.push({ a: nor, dim: 3, tol: L.nor });
+    if (isHead && L.mouth) attrs.push({ a: mouth, dim: 1, tol: L.mouth });
+    if (isHead && L.move) attrs.push({ a: mv, dim: HD.E * 3, tol: L.move });
+    if (disp) attrs.push({ a: disp, dim: disp.K * 3, tol: maxErr * (L.dispK || 1) });
+    const t0 = performance.now();
+    const r = simplify(idx, pos, { maxErr, nor, attrs, creaseCos: L.crease, flipCos: 0.5 });
+    const ms = performance.now() - t0;
+    let worst = 0;
+    let p99 = 0;
+    for (const P of checks) {
+      const d = deviation(P, idx, r.index, isHead ? 0.012 : 0.02);
+      worst = Math.max(worst, d.full_to_light.max, d.light_to_full.max);
+      p99 = Math.max(p99, d.full_to_light.p99, d.light_to_full.p99);
+    }
+    return { tris: r.triangles, maxErr, devMax: worst, devP99: p99, ms, index: r.index };
+  };
+  for (const L of levels) {
+    const lim = L.limit;
+    let good = null;
+    let bad = null;
+    let e0 = L.maxErr;
+    let tries = 0;
+    // (first the other side of the limit, then halving between)
+    for (let it = 0; it < 9; it++) {
+      const r = tryAt(L, e0);
+      tries++;
+      if (r.devMax <= lim) {
+        if (!good || r.maxErr > good.maxErr) good = r;
+      } else if (!bad || r.maxErr < bad.maxErr) bad = r;
+      if (good && bad) {
+        if (bad.maxErr / good.maxErr < 1.06) break;
+        e0 = Math.sqrt(good.maxErr * bad.maxErr);
+      } else e0 = good ? Math.min(0.012, e0 * 1.5) : e0 * 0.6;
+      if (good && !bad && good.maxErr >= 0.012) break;
+    }
+    const f = good || tryAt(L, e0 * 0.5);
+    out.levels.push({ tris: f.tris, errMm: +(f.maxErr * 1000).toFixed(2), devMax: +f.devMax.toFixed(2), devP99: +f.devP99.toFixed(2), ms: +f.ms.toFixed(0), iter: tries - 1, ok: !!good, b64: b64of(Uint16Array.from(f.index)) });
+  }
+  return out;
+};
+window.ready = true;
+</script>
+</body>
+</html>

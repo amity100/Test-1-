@@ -9,6 +9,8 @@ import { FOLK, FOLK_ON, FOLK_PHONE, SKINS, hexRGB } from './folkspec.js';
 import { folkBody, eyeGeo, faceEx, exprMoves, EXPR, EYE } from './folkshapes.js';
 import { folkTone, folkBeard } from './folkink.js';
 import { Portrait } from './portrait.js';
+import { GFX } from '../core/util.js';
+import { lightOf, lodLevel, LOD_HEAD, LOD_BODY } from './lod.js';
 
 // The people of the city, drawn like everything else: a body of rounded parts under their clothes
 // (the first boulevard's own people: a shaped torso, tapering limbs, a head with a jaw and ears,
@@ -346,6 +348,12 @@ function paintPortrait(k, cb, w = 1024) {
 }
 // (a move's weight, -1..1, in a byte: 0 exactly 128)
 const byteOf = (a) => Math.round(Math.max(-1, Math.min(1, a)) * 127) + 128;
+// (ROADMAP 19.2, GFX.folkLod) a part in the version its person's size on the screen asks for: 0 the full shape,
+// 1 and 2 the lighter ones over the same corners (render/lod.js); a part that has none is drawn as it is
+const lite = (sh, lv) => (lv > 0 && sh.lods ? sh.lods[lv < sh.lods.length ? lv : sh.lods.length - 1] : sh);
+// (what of the city's people may have lighter versions: their own parts, and the hands and soles of the hero's
+// kind they wear - drawFolk)
+const LIGHTABLE = /^folk\d+_|^(heroHandR|heroHandL|heroGripR|heroGripL|heroSole)$/;
 
 class DrawClass {
   // index: the shared layout of triangles of the shapes drawn by their corners (or none); aux: the
@@ -1093,6 +1101,13 @@ export class PersonRenderer {
       this.p[name] = P(eyeGeo(sd), this.folkPens.face, 6 * nK);
       this.p[name].atlas = true;
     }
+    // (ROADMAP 19.2: a phone's, for the people far off: the same eyes as a ball of 10 by 8)
+    if (GFX.folkLod) {
+      for (const [name, sd] of [['folkEyeR1', 1], ['folkEyeL1', -1]]) {
+        this.p[name] = P(eyeGeo(sd, 10, 8), this.folkPens.face, 6 * nK);
+        this.p[name].atlas = true;
+      }
+    }
     this.folk = Array.from({ length: nK }, (_, k) => this.folkKind(FOLK[k], k, touch, P));
     for (const [k, sh] of Object.entries(this.p)) sh.lod = SHARED.has(k) ? 'shared' : k.startsWith('low') ? 'low' : 'full';
     // (farther than this a person is drawn in the simple shapes in the picture too: game.js sets
@@ -1305,7 +1320,7 @@ export class PersonRenderer {
       const L = sh.layout;
       const size = L ? L.corners : CLASS_SIZES.find((n) => n >= sh.count) || sh.count;
       const key = L ? `${side}:L${L.id}` : `${side}:${size}`;
-      if (!groups.has(key)) groups.set(key, { side, size, index: L ? L.index : null, list: [] });
+      if (!groups.has(key)) groups.set(key, { side, size, index: L ? L.index : null, layout: L || null, list: [] });
       groups.get(key).list.push(sh);
     }
     // (ROADMAP 13.11) the faces drawn near: their insides too, dark - all that is seen of them is the
@@ -1315,7 +1330,7 @@ export class PersonRenderer {
     headMat.userData = folkMat.userData;
     headMat.defines = { ...folkMat.defines, FOLK_HEAD: '' };
     headMat.side = THREE.DoubleSide;
-    for (const { side, size, index, list } of groups.values()) {
+    for (const { side, size, index, layout, list } of groups.values()) {
       const cap = list.reduce((a, sh) => a + sh.cap, 0);
       const heads = side === 'folk-full' && list.every((sh) => sh.expr);
       const mat = heads ? headMat : side.startsWith('folk') ? folkMat : side.startsWith('back') ? back : side.startsWith('hero') ? hero : front;
@@ -1327,6 +1342,27 @@ export class PersonRenderer {
       }
       for (const sh of list) sh.cls = cls;
       this.classes.push(cls);
+      // (ROADMAP 19.2, GFX.folkLod) the same shapes in fewer triangles over the same corners, for a person small on the
+      // screen (render/lod.js): a twin of each shape, reading its row, count, pen and flags from it, drawn by a class of
+      // its own with the lighter list. The same materials: no shader is made. A head's second one is drawn on one side
+      // only (beyond 11 m an open mouth is two pixels), the first as the full head is
+      if (GFX.folkLod && layout && side.endsWith('-full') && list.some((sh) => LIGHTABLE.test(names.get(sh)))) {
+        const lights = lightOf(layout);
+        if (lights) {
+          for (const sh of list) sh.lods = [sh];
+          lights.forEach((idx, li) => {
+            const lc = new DrawClass(scene, size, heads && li > 0 ? folkMat : mat, cap, idx);
+            lc.mesh.layers.set(LAYERS.MIRRORLESS);
+            lc.mesh.userData.noShadow = true;
+            this.classes.push(lc);
+            for (const sh of list) {
+              const t = Object.create(sh);
+              t.cls = lc;
+              sh.lods.push(t);
+            }
+          });
+        }
+      }
       if (side.endsWith('-low')) {
         const aux = new DrawClass(scene, size, mat, cap, index, true);
         aux.mesh.layers.set(LAYERS.AUX);
@@ -1378,6 +1414,13 @@ export class PersonRenderer {
     if (d[k] === v) return;
     d[k] = v;
     this.dirty = true;
+  }
+
+  // (ROADMAP 19.2, GFX.folkLod) where this frame is seen from: how many pixels a metre is on the screen at a metre's
+  // distance - the drawing's height over twice the tangent of half the field of view (0: not a perspective camera, or
+  // not set yet - whole shapes)
+  view(cam, heightPx) {
+    this.ppmK = cam && cam.isPerspectiveCamera && heightPx > 0 ? heightPx / (2 * Math.tan((cam.fov * Math.PI) / 360)) : 0;
   }
 
   begin() {
@@ -2333,19 +2376,30 @@ export class PersonRenderer {
     const bw = k * Math.max(0.92, bulk * 0.96) * (fem ? 1.02 : 1.05) * F.girth;
     const HL = F.lines;
     const dress = !!q.skirt;
+    // ---- (ROADMAP 19.2, GFX.folkLod) how many triangles their shapes have: by how many pixels a metre of them is on the
+    // screen - the head from its own distance, the rest of them from their hips' (render/lod.js; each version kept until its
+    // line is passed by 8%). Whole shapes for a person with a hole rubbed in them or being rubbed out (their holes and fade
+    // are worked out on the surface, on every triangle of it), and in the film where a shot asks for it (fig.lodFull)
+    let lvH = 0;
+    let lvB = 0;
+    if (GFX.folkLod && !GFX.off && this.ppmK > 0 && this.camPos && !fig.lodFull && !(fig.dissolve > 0) && !(fig.holes && fig.holes.length)) {
+      const sc = this.ppmK * S;
+      lvH = fig._lodH = lodLevel(sc / Math.max(0.5, this.camPos.distanceTo(j.headC)), LOD_HEAD, fig._lodH || 0);
+      lvB = fig._lodB = lodLevel(sc / Math.max(0.5, this.camPos.distanceTo(j.hip)), LOD_BODY, fig._lodB || 0);
+    } else if (fig._lodH || fig._lodB) fig._lodH = fig._lodB = 0;
     // ---- the jacket worn open, what is under it, its collar; the neck
     if (P.torso > 0.5) {
       const sy = Math.max(0.3, _b.subVectors(j.neck, j.hip).length()) / 0.5;
       framed(j.hip, rgt, ax, fwd, bw, sy, bw, _mH);
       // (its part's id kept: the jacket's cloth round the neck is the same part - q.band below)
       const tid = id();
-      q.torso.push(_mH, white, own, tid, ind);
+      lite(q.torso, lvB).push(_mH, white, own, tid, ind);
       HL.set('torso', 'torso', _mH);
-      q.zip.push(_mH, white, own, id(), ind);
-      q.tee.push(_mH, white, own, id(), ind);
-      if (q.welt) q.welt.push(_mH, white, own, id(), ind);
+      lite(q.zip, lvB).push(_mH, white, own, id(), ind);
+      lite(q.tee, lvB).push(_mH, white, own, id(), ind);
+      if (q.welt) lite(q.welt, lvB).push(_mH, white, own, id(), ind);
       // (ROADMAP 18: a hoodie's hood, down on the back)
-      if (q.hood) q.hood.push(_mH, white, own, id(), ind);
+      if (q.hood) lite(q.hood, lvB).push(_mH, white, own, id(), ind);
       // (characters round) the neck: the head's own edge carried on down into the collar
       // (render/folkshapes.js neckOf), twisted and bent as the head is turned - the rig's (game/
       // doodle.js placeHead, render/neckbend.js); its lines with it
@@ -2359,20 +2413,20 @@ export class PersonRenderer {
         portN.neckD.fromArray(fig.neckD);
         fig.__neckP = portN;
       } else fig.__neckP = null;
-      if (!(portN && portN.neckN) || portN.fade < 0.999) q.neck.push(_mH, F.face, own, fig.headId, ind, fig.neckD);
+      if (!(portN && portN.neckN) || portN.fade < 0.999) lite(q.neck, lvB).push(_mH, F.face, own, fig.headId, ind, fig.neckD);
       // (characters round 3) no collar of its own: the jacket's cloth carried on up round the neck's
       // foot and turned in onto it - made on their own neck, bent and turned with it, the jacket's part
       // (render/heroshapes.js neckbandGeo); round a neck the portrait draws too
-      q.band.push(_mH, white, own, tid, ind, fig.neckD);
+      lite(q.band, lvB).push(_mH, white, own, tid, ind, fig.neckD);
       HL.set('neck', 'neck', _mH, null, null, false, fig.neckD);
     }
     // ---- the seat, and a dress's skirt from the waist over the thighs
     if (P.pelvis > 0.5) {
       framed(j.hip, fig.prgt, ax, fig.pfwd, bw, k, bw, _mH);
-      q.pelvis.push(_mH, white, own, id(), ind);
+      lite(q.pelvis, lvB).push(_mH, white, own, id(), ind);
       HL.set('pelvis', 'pelvis', _mH);
       if (dress) {
-        q.skirt.push(_mH, white, own, id(), ind);
+        lite(q.skirt, lvB).push(_mH, white, own, id(), ind);
         HL.set('skirt', 'skirt', _mH);
       }
     }
@@ -2388,9 +2442,9 @@ export class PersonRenderer {
       const el = arms[ai][1];
       const hd = arms[ai][2];
       const armId = id();
-      q.upper.push(along(sh, el, 0.31, armK * 1.08, fwd), white, own, armId, ind);
+      lite(q.upper, lvB).push(along(sh, el, 0.31, armK * 1.08, fwd), white, own, armId, ind);
       HL.set(ai ? 'upperL' : 'upperR', 'upper', _m);
-      q.fore.push(along(el, hd, 0.29, armK * 1.06, fwd), white, own, armId, ind);
+      lite(q.fore, lvB).push(along(el, hd, 0.29, armK * 1.06, fwd), white, own, armId, ind);
       HL.set(ai ? 'foreL' : 'foreR', 'fore', _m);
       _c.subVectors(hd, el).normalize();
       _d.copy(hd).addScaledVector(_c, (fem ? 0.17 : 0.19) * S);
@@ -2416,7 +2470,7 @@ export class PersonRenderer {
           hRef = _hRef.copy(fwd).multiplyScalar(1 - b).addScaledVector(UP, b).normalize();
         }
       }
-      (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : grip ? p.heroGripL : p.heroHandL).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), hRef), skin, own, id(), ind);
+      lite(ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : grip ? p.heroGripL : p.heroHandL, lvB).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), hRef), skin, own, id(), ind);
       if (ai === 1 && F.watch) {
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
         _x.copy(rgt).multiplyScalar(-1).addScaledVector(_c, rgt.dot(_c)).normalize();
@@ -2437,9 +2491,9 @@ export class PersonRenderer {
       const ft = legs[li][2];
       const to = legs[li][3];
       const legId = id();
-      q.thigh.push(along(hp, kn, 0.47, legK, fwd), white, own, legId, ind);
+      lite(q.thigh, lvB).push(along(hp, kn, 0.47, legK, fwd), white, own, legId, ind);
       if (!dress) HL.set(li ? 'thighL' : 'thighR', 'thigh', _m);
-      q.shin.push(along(kn, ft, 0.47, legK, fwd), white, own, legId, ind);
+      lite(q.shin, lvB).push(along(kn, ft, 0.47, legK, fwd), white, own, legId, ind);
       if (!dress) HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
       _z.subVectors(to, ft);
       _z.y = 0;
@@ -2449,8 +2503,8 @@ export class PersonRenderer {
       _c.copy(ft).addScaledVector(_z, 0.05 * S);
       _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
       framed(_c, _x, UP, _z, fk, fk, fk, _mH);
-      q.shoe.push(_mH, white, own, id(), ind);
-      p.heroSole.push(_mH, F.sole, own, id(), ind);
+      lite(q.shoe, lvB).push(_mH, white, own, id(), ind);
+      lite(p.heroSole, lvB).push(_mH, F.sole, own, id(), ind);
     }
     // ---- the head: its face drawn on it, the hair (its cap, its locks, a fall of it, a bun), the ears
     // (characters round 2: under a ski mask none of it - the mask is the rig's own shape, over the
@@ -2493,15 +2547,15 @@ export class PersonRenderer {
       }
       // (the city's way of drawing the face - under the portrait while it comes in or goes)
       if (!port || port.fade < 0.999) {
-        q.head.push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
+        lite(q.head, lvH).push(framed(hc, hr, hu, hf, hs, hs, hs), F.face, own, fig.headId, ind);
         if (!port) HL.set('head', 'head', _m, _fEw, gaze);
       }
       framed(hc, hr, hu, hf, hs, hs, hs, _mH);
-      q.hair.push(_mH, white, own, id(), ind);
-      if (q.locks && !hatK) q.locks.push(_mH, white, own, id(), ind);
-      if (q.fall) q.fall.push(_mH, white, own, id(), ind);
-      if (q.bun && !hatK) q.bun.push(_mH, white, own, id(), ind);
-      if (q.tail) q.tail.push(_mH, white, own, id(), ind);
+      lite(q.hair, lvB).push(_mH, white, own, id(), ind);
+      if (q.locks && !hatK) lite(q.locks, lvB).push(_mH, white, own, id(), ind);
+      if (q.fall) lite(q.fall, lvB).push(_mH, white, own, id(), ind);
+      if (q.bun && !hatK) lite(q.bun, lvB).push(_mH, white, own, id(), ind);
+      if (q.tail) lite(q.tail, lvB).push(_mH, white, own, id(), ind);
       if (q.glasses) q.glasses.push(_mH, F.glasses, own, id(), ind);
       // (their eyes in their sockets, each turned to where they look. The head's frame is drawn
       // mirrored - DrawClass.push - and the eyes' with it: each in the mirror's place)
@@ -2510,7 +2564,7 @@ export class PersonRenderer {
         const c = F.eyes[e];
         _eyeT.makeTranslation(-c[0], c[1], c[2]).multiply(_eyeR);
         _eyeM.multiplyMatrices(_mH, _eyeT);
-        (e ? p.folkEyeL : p.folkEyeR).push(_eyeM, F.face, own, fig.headId, ind);
+        (lvH > 0 && p.folkEyeR1 ? (e ? p.folkEyeL1 : p.folkEyeR1) : e ? p.folkEyeL : p.folkEyeR).push(_eyeM, F.face, own, fig.headId, ind);
       }
       // (their ears are their head's; earrings at the lobes)
       if (F.earsOn && F.earring) {

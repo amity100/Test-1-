@@ -445,8 +445,9 @@ export function neckOf(H, hn, spec) {
 export const EYE = { x: 0.032, y: 0.0185, z: 0.072, r: 0.0155 };
 // (ROADMAP 13.7) an eye, round its middle (it turns to look): the same on every head - its drawing
 // laid on it where the base head has it (render/people.js drawFolk puts it in its socket)
-export function eyeGeo(sd) {
-  const g = new THREE.SphereGeometry(EYE.r, 22, 16);
+// (ROADMAP 19.2: w, h - its segments round and up: 22 and 16, the full ball's; a person far off has it in 10 and 8)
+export function eyeGeo(sd, w = 22, h = 16) {
+  const g = new THREE.SphereGeometry(EYE.r, w, h);
   g.translate(sd * EYE.x, EYE.y, EYE.z);
   faceMap(g);
   g.translate(-sd * EYE.x, -EYE.y, -EYE.z);
