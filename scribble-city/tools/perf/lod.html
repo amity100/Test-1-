@@ -438,6 +438,60 @@ window.bakeOne = (i, levels) => {
   }
   return out;
 };
+// ---------------------------------------------------------------- the shops' products
+// (ROADMAP 19.3) every model the shops make: its triangles in the full make and in the low one (a phone's)
+window.productInfo = async (maxErrMm = 5) => {
+  const PR = await import('/v5/js/world/products.js');
+  const names = PR.modelNames ? PR.modelNames() : [];
+  const rows = [];
+  // (the far make tried here only: a product's low make in fewer triangles over a part of its corners - it saved
+  // too little to be worth a place in the game, ROADMAP 19.3)
+  const lighter = (p, maxErr) => {
+    const nv = p.P.length / 3;
+    const nt = p.X.length / 3;
+    if (nt < 14) return { P: p.P, X: p.X, same: true };
+    const pos = Float32Array.from(p.P);
+    const nor = new Float32Array(nv * 3);
+    for (let i = 0; i < nv; i++) {
+      const l = Math.hypot(p.N[i * 3], p.N[i * 3 + 1], p.N[i * 3 + 2]) || 1;
+      nor[i * 3] = p.N[i * 3] / l; nor[i * 3 + 1] = p.N[i * 3 + 1] / l; nor[i * 3 + 2] = p.N[i * 3 + 2] / l;
+    }
+    const uv = Float32Array.from(p.U);
+    let sum = 0, cnt = 0;
+    for (let t = 0; t < nt; t++) for (let k = 0; k < 3; k++) {
+      const a = p.X[t * 3 + k], b = p.X[t * 3 + ((k + 1) % 3)];
+      const dp = Math.hypot(pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]);
+      const du = Math.hypot(uv[a * 2] - uv[b * 2], uv[a * 2 + 1] - uv[b * 2 + 1]);
+      if (dp > 1e-5) { sum += du / dp; cnt++; }
+    }
+    const rho = cnt ? sum / cnt : 1;
+    const r = simplify(Uint32Array.from(p.X), pos, { maxErr, nor, creaseCos: 0.5, attrs: [{ a: uv, dim: 2, tol: 0.006 * Math.max(rho, 1) }, { a: nor, dim: 3, tol: 0.5 }] });
+    if (r.triangles > nt * 0.85) return { P: p.P, X: p.X, same: true };
+    return { P: p.P, X: Array.from(r.index), same: false };
+  };
+  for (const n of names) {
+    try {
+      const full = PR.model(n, false);
+      const low = PR.model(n, true);
+      const cnt = (m) => m.parts.reduce((a, p) => a + p.X.length / 3, 0);
+      let far = 0;
+      let dev = 0;
+      let p99 = 0;
+      for (const A of low.parts) {
+        const F = lighter(A, maxErrMm / 1000);
+        far += F.X.length / 3;
+        if (F.same) continue;
+        const d = deviation(Float32Array.from(A.P), Uint32Array.from(A.X), Uint32Array.from(F.X), 0.01);
+        dev = Math.max(dev, d.full_to_light.max, d.light_to_full.max);
+        p99 = Math.max(p99, d.full_to_light.p99, d.light_to_full.p99);
+      }
+      rows.push({ name: n, full: cnt(full), low: cnt(low), far, farVerts: 0, lowVerts: low.verts, devMm: +dev.toFixed(2), p99Mm: +p99.toFixed(2), parts: full.parts.length });
+    } catch (e) {
+      rows.push({ name: n, error: String(e.message || e).slice(0, 80) });
+    }
+  }
+  return rows;
+};
 window.ready = true;
 </script>
 </body>

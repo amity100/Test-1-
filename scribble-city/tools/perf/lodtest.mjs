@@ -128,6 +128,13 @@ ${lines.join('\n')}
 } else if (mode === 'uvdensity') {
   const list = await pg.evaluate(() => window.bakeList());
   for (const e of list) console.log(String(e.tris).padStart(5), e.name.padEnd(16), `${e.uvPerMetre} uv units to a metre -> uv 0.006 is ${(0.006 / (e.uvPerMetre || 1) * 1000).toFixed(1)} mm of surface`);
+} else if (mode === 'products') {
+  const mm = +(rest[0] || 5);
+  const rows = await pg.evaluate((mm) => window.productInfo(mm), mm);
+  rows.sort((a, b) => (b.low || 0) - (a.low || 0));
+  for (const r of rows) console.log(r.error ? `${r.name}: ${r.error}` : `${String(r.full).padStart(6)} full ${String(r.low).padStart(6)} low ${String(r.far).padStart(6)} far   corners ${String(r.lowVerts).padStart(5)} -> ${String(r.farVerts).padStart(5)}   farthest ${String(r.devMm).padStart(5)} mm (99% ${r.p99Mm})   ${r.name}`);
+  const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  console.log(`${rows.length} products: ${sum('full')} triangles in the full make, ${sum('low')} in the low one, ${sum('far')} in the far one`);
 } else if (mode === 'bakex') {
   // one layout with settings of one's own: node tools/perf/lodtest.mjs bakex <name> <maxErr mm> <uv> <nor> <crease> <limit mm>
   const [name, mm, uv, nor, crease, limit] = rest;
