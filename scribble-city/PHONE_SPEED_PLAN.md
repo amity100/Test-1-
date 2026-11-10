@@ -427,6 +427,18 @@ room with goods is three solid walls, a ceiling and one front with the openings.
   camera above a roof): the rule uses x and z only. Make sure that is right for a room under a
   solid ceiling, and for the mirror's camera (it has the same x, z).
 
+- **What was found (Stage 1 as carried out):** every room is one facade with its openings on the front only
+  (`rooms.js` shell; callers: `deco.js`, `kits.js`, `home.js`, `hotels.js`, `venues.js`), so the rule holds for
+  all of them *where a building is round the room*. Two exceptions showed up in `tools/perf/shopcheck.mjs`
+  (8 shops of Via Inkwell × 9 views, off against on at one moment):
+  1. **From above** a room's ceiling (a face turned down) is not there, and the old picture shows its goods
+     through it: up to 5% of the picture. Fixed: a camera above `rec.y + spec.h - 0.3` keeps the goods
+     (`viewHide`). After that, "above" and "behind, high": 0.000–0.001%.
+  2. **A room with nothing round its wall** (the music shop at the end of an alley, its back to the alley): the
+     old picture shows its goods through the back wall; the new one, its empty shelves. 0.02–0.1% of the
+     picture, in 5 of 48 views. Not fixed: no cheap exact test exists; `tools/perf/shopwhy.mjs` names the shop.
+     (The honest fix is a solid back wall for that shop - a change to the game's picture, so the owner's call.)
+
 **1.3 Numbers** (before = no parameter, after = `EXTRA="newgfx=1"`; both on this commit):
 - `breakdown` at `mall`, `mall_in`, `at:-835,60,0` (Via Inkwell) and at one street of shops on the
   island (`at:-9,-40,0`): goods and draws, before and after. Expected at `mall`: goods from about
@@ -436,6 +448,10 @@ room with goods is three solid walls, a ceiling and one front with the openings.
   the spot `ocean_cars`; if few cars are there, find a street that has a row of them): cars'
   triangles and the draws, before and after. Keep the cars' part only if it saves at least 25 K
   triangles there and adds at most 8 draws; otherwise leave it out (`carLod` off) and say so.
+  **(Carried out:** as the experiment was, the car makes added 4–14 draws to the picture and 22 to a whole
+  frame; now one draw of the glass serves all the makes of a kind (the full glass) and the wheels are in fewer
+  points only from the far make: +2…+7 draws, −35…−92 K triangles at the four car spots. Each make is a draw
+  of its body, so the number of draws grows with the kinds of cars in view × the makes in use.)
 
 **1.4 Pictures.** `ab-phone.mjs shoot` twice (before, after), `diff`, `sheet`.
 - Goods: within the noise at every spot. Add spots that look at shops from behind, from the side,
@@ -805,6 +821,28 @@ Pause menu on the phone: the sheet shows 356 of its 652 pixels; the test route's
 | inside the mall: the drawing pass | 2,548 K | 2,459 K (goods 547 K both ways) |
 | island: cars | ~45 K | ~9 K |
 | pictures (3 island spots) | | 0.06%, 0.14%, 0.74% — see 3.6 |
+
+### 14.2b Stage 1 as carried out (commit `c3b2c77`), measured here, parts off against on at one moment (`ab-phone.mjs pair`)
+
+| spot | whole frame, K triangles | whole frame, draws | drawing pass, K triangles | pixels that differ |
+|---|---|---|---|---|
+| blvd | 1,311 → 1,264 | 276 → 283 | 1,115 → 1,087 | 0.01% |
+| blvd_south | 1,423 → 1,363 | 241 → 244 | 1,133 → 1,094 | 0.02% |
+| avenue_wet | 1,682 → 1,561 | 279 → 277 | 1,376 → 1,280 | 0.03% |
+| downtown | 1,157 → 991 | 227 → 227 | 951 → 818 | 0.00% |
+| park | 1,449 → 1,287 | 288 → 289 | 1,221 → 1,038 | 0.00% |
+| shopfront | 1,309 → 1,148 | 291 → 286 | 1,062 → 979 | 0.00% |
+| pier | 362 → 311 | 146 → 147 | 250 → 248 | 0.00% |
+| ocean_cars | 969 → 924 | 190 → 201 | 911 → 868 | 0.06% |
+| **mall_east** | **3,708 → 1,753** | 552 → 535 | **3,233 → 1,290** | 0.00% |
+| mall_in | 2,306 → 2,234 | 459 → 468 | 1,994 → 1,943 | 0.00% |
+| **inkwell** | **2,824 → 2,109** | 514 → 478 | 2,181 → 1,600 | 0.00% |
+
+- Shops of Via Inkwell, 8 × 9 views (`shopcheck.mjs`): 0.000–0.1% (5 of 48 views 0.02–0.1%: the music shop's
+  back wall); the island's street, 4 shops × 9 views: 0.000% where no cars are in view.
+- Cars alone, four car spots, draws in the drawing pass: +3, +5, +5, +7; triangles −36, −41, −92, −35 K.
+- What the numbers cannot say: milliseconds. The pixels' work (about 12 of the 37 ms the owner's card took
+  in 11.1ד) does not change in this stage; only triangles and draws do. The owner's test route says.
 
 ### 14.3 From the owner's phone
 
