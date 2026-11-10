@@ -32,6 +32,14 @@ import { browserName } from './game/perf.js';
 // with coloured pens. Everything you draw becomes real.
 
 const params = new URLSearchParams(location.search);
+// (ROADMAP 19.4, the owner's word: "a link that runs the performance test by itself, without entering the game")
+// ?perftest: straight into the city - no title page to press, no opening film - and the test route (game/perf.js
+// autoBench) begins by itself a few seconds after. With ?newgfx=1, on the parts of the phone's way of drawing
+// that are being tried. (?perftest=quick: a few seconds of each part - for trying the link itself)
+if (params.has('perftest')) {
+  if (!params.has('autostart')) params.set('autostart', '1');
+  if (!params.has('prologue')) params.set('prologue', '0');
+}
 
 function fatal(err) {
   const el = document.getElementById('fatal');
@@ -521,6 +529,12 @@ async function boot() {
     game.loadTotal = Math.round(performance.now());
     game.loop();
     if (params.has('autostart')) game.start();
+    // (?perftest: the start screen goes by itself - nobody pressed its button - and the test route's card is
+    // put up over the city, game/perf.js)
+    if (params.has('perftest')) {
+      if (window.__loadLeave) window.__loadLeave();
+      game.perf.autoBench(params.get('perftest') === 'quick');
+    }
     window.__ready = true;
     console.log('load steps (ms)', JSON.stringify(loadT));
     // (the pens' shaders for the other way of drawing, made ready in the background a little after
