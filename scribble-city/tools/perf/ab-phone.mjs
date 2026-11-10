@@ -4,6 +4,11 @@
 // at the phone's own screen (lib.mjs) and with the mainland's places too.
 //
 //   node tools/perf/ab-phone.mjs shoot <outDir>              photographs the spots -> <outDir>/<spot>.png, stats.json
+//   node tools/perf/ab-phone.mjs pair <outDir>               the same, each spot twice at one and the same moment, in one
+//                                                            session: with the phone's own way of drawing switched off
+//                                                            (GFX.off) -> <outDir>/before, and on -> <outDir>/after. No noise
+//                                                            at all but what the parts themselves change. Run it with
+//                                                            AB_QUERY="newgfx=1" (the parts that are not approved yet are on)
 //   node tools/perf/ab-phone.mjs diff <dirA> <dirB>          how many pixels differ, spot by spot
 //   node tools/perf/ab-phone.mjs sheet <dirA> <dirB> <outDir> [titleA] [titleB]
 //                                                            a sheet a spot for the player: A over B whole,
@@ -37,8 +42,9 @@ export const SPOTS = [
   ['inkwell', -835, 60, 0, [-835, 2.0, 40], [-835, 3, 110], 1],
 ];
 
-async function shoot(outDir) {
-  fs.mkdirSync(outDir, { recursive: true });
+async function shoot(outDir, pair = false) {
+  const dirs = pair ? [path.join(outDir, 'before'), path.join(outDir, 'after')] : [outDir];
+  for (const d of dirs) fs.mkdirSync(d, { recursive: true });
   const server = await startServer();
   const browser = await launch();
   const ctx = await browser.newContext({ viewport: { width: 882, height: 411 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
@@ -100,30 +106,41 @@ async function shoot(outDir) {
       window.__camOverride = { pos, look };
       window.__frame(30, 1 / 30);
     }, [px, pz, yaw, pos, look, fill]);
-    const st = await pg.evaluate(() => {
-      const g = window.__game;
-      const S = window.__ab;
-      S.pass = {};
-      for (let i = 0; i < 2; i++) {
-        g.renderer.info.reset();
-        window.__frame(1, 1 / 30);
-      }
-      const out = {};
-      for (const [k, v] of Object.entries(S.pass)) out[k] = { calls: Math.round(v.calls / v.n), ktris: Math.round(v.tris / v.n / 1000) };
-      out.t = +g.time.toFixed(4);
-      return out;
-    });
-    stats[name] = st;
+    // (the picture of the city only: the screen's cards and notes are not what is compared)
     await pg.evaluate(() => {
       for (const id of ['hud', 'touch']) {
         const el = document.getElementById(id);
         if (el) el.style.visibility = 'hidden';
       }
     });
-    await pg.screenshot({ path: path.join(outDir, `${name}.png`), timeout: 180000 });
-    process.stdout.write(`${name}: ${JSON.stringify(st)}\n`);
+    // each state of the parts: off (before) and on (after) - or, not paired, as the page was opened
+    for (const off of pair ? [true, false] : [null]) {
+      const k = off === null ? 0 : off ? 0 : 1;
+      const st = await pg.evaluate(async (off) => {
+        const g = window.__game;
+        const { GFX } = await import('./js/core/util.js');
+        if (off !== null) GFX.off = off;
+        const S = window.__ab;
+        S.pass = {};
+        // (a step of a hundred-thousandth of a second: the game stands where it was, and what is drawn
+        // is drawn anew - the cars choose their make again)
+        const dt = off === null ? 1 / 30 : 1e-5;
+        for (let i = 0; i < 2; i++) {
+          g.renderer.info.reset();
+          window.__frame(1, dt);
+        }
+        const out = {};
+        for (const [k, v] of Object.entries(S.pass)) out[k] = { calls: Math.round(v.calls / v.n), ktris: Math.round(v.tris / v.n / 1000) };
+        out.t = +g.time.toFixed(4);
+        return out;
+      }, off);
+      const key = pair ? `${name}.${k ? 'after' : 'before'}` : name;
+      stats[key] = st;
+      await pg.screenshot({ path: path.join(dirs[k], `${name}.png`), timeout: 180000 });
+      process.stdout.write(`${key}: ${JSON.stringify(st)}\n`);
+    }
   }
-  fs.writeFileSync(path.join(outDir, 'stats.json'), JSON.stringify(stats, null, 1));
+  for (const d of dirs) fs.writeFileSync(path.join(d, 'stats.json'), JSON.stringify(stats, null, 1));
   if (errors.length) console.log('page errors:', errors.slice(0, 5));
   await browser.close();
   server.close();
@@ -262,6 +279,7 @@ async function sheet(dirA, dirB, outDir, titleA = 'לפני', titleB = 'אחרי
 
 const [, , cmd, a, b, c, d, e] = process.argv;
 if (cmd === 'shoot') process.exitCode = await shoot(a);
+else if (cmd === 'pair') process.exitCode = await shoot(a, true);
 else if (cmd === 'diff') process.exitCode = await diff(a, b);
 else if (cmd === 'sheet') process.exitCode = await sheet(a, b, c, d, e);
-else console.log('usage: node tools/perf/ab-phone.mjs shoot <outDir> | diff <dirA> <dirB> | sheet <dirA> <dirB> <outDir> [titleA] [titleB]');
+else console.log('usage: node tools/perf/ab-phone.mjs shoot <outDir> | pair <outDir> | diff <dirA> <dirB> | sheet <dirA> <dirB> <outDir> [titleA] [titleB]');

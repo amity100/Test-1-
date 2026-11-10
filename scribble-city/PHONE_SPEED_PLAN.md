@@ -246,6 +246,9 @@ at the top of `tools/perf/lib.mjs` (`WHERE=island | mall | mall_in | at:x,z,yaw 
 | `node tools/perf/ab-phone.mjs shoot <dir>` | seeded photographs of 11 spots (island, mainland, mall) + `stats.json` (draws and triangles a pass). `AB_QUERY="newgfx=1"` for the "after" run, `AB_SPOTS=a,b` to pick |
 | `node tools/perf/ab-phone.mjs diff <a> <b>` | % of pixels that differ, spot by spot |
 | `node tools/perf/ab-phone.mjs sheet <a> <b> <out>` | the sheets for the owner: before over after, then two places at 3× |
+| `node tools/perf/ab-phone.mjs pair <dir>` | **the way to compare** (found in Stage 0.6): each spot twice at one and the same moment in one session, with the parts off (`GFX.off`) and on -> `<dir>/before`, `<dir>/after`; run with `AB_QUERY="newgfx=1"`. No noise at all but what the parts change |
+| `node tools/perf/shopcheck.mjs` | Stage 1's proof for the shops' goods: for shops of every kind, nine views (in front, at the window, from inside, from behind, both sides, above), each drawn with the parts off and on at one moment; every difference counted |
+| `node tools/perf/bench.mjs` | the test route run here in the real loop: every stand, the report, and that the game is left as it was |
 | `OUT=<prefix> node tools/perf/pause.mjs` | the pause menu on a phone: two pictures, and where the test route's button is |
 | `node tools/ab.mjs shoot <dir> v5/index.html` / `diff` | the computer's "same picture" check (2.1) |
 | the test route (pause menu) | the only source of milliseconds: on the owner's phone |
@@ -377,6 +380,16 @@ already in 3.2–3.4; redo them so that "before" and "after" come from the same 
   the café tables) wants its own seeded dice; `performance.now()` in `render/people.js` (`inCar`,
   the portraits' fade).
 - Do not go on to Stage 1 before two runs of the same build agree: every later proof stands on it.
+- **What was found (the first round of 0.6):** the same build photographed twice differed by 0.5–5.6% of
+  the pixels at 7 of 11 spots (`shopfront` 5.6%, `mall_in` 5.0%, `inkwell` 2.4%, `blvd_south` 1.6%,
+  `avenue_wet` 1.6%): traffic in other places, people in other places, the café's diners, and a shop's
+  goods in the middle of being drawn in. All by the wall clock: the streamers (`stream.js`, `interiors.js`)
+  take as many steps a frame as a millisecond slice allows, and the shops draw their goods in by
+  `performance.now()` - so a slower or a busier run is another city.
+- **The fix, in the test tools only** (the game is not changed): `tools/perf/lib.mjs` seeds the dice and
+  holds the page's clock still inside a frame, moving it by the frame's own step between frames
+  (`seed`, `virtualClock`; `NODET=1` for the browser's own). And a way of comparing that needs no repeat
+  at all: `ab-phone.mjs pair` draws each spot twice at one moment with `GFX.off` on and off.
 
 **0.7 Commit** ("The phone's test route: its button at the top of the pause menu, and 'as before'
 against 'now' in one run, on the island and at the mall"). Not published yet; it goes out with

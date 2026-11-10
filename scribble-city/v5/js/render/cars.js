@@ -1,6 +1,22 @@
 import * as THREE from 'three';
 import { makeSurface, srgb, lin3, LAYERS, mergedSurface, penRow, sortDefines } from './materials.js';
 import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
+import { GFX } from '../core/util.js';
+
+// (ROADMAP 19.1, the phone's own way of drawing - GFX.carLod, phones only) A car far off, in fewer
+// points. Every car was drawn with all of its 4,700 triangles out to 260 m, where it is ten pixels
+// long: on the island that is about 4% of a frame's triangles (the people are the big part there, and
+// more cars on a street full of them). Three makes of each kind now, chosen by how big a metre of
+// it is in the picture (pixels a metre, so a long lens or a bigger screen keeps the full one
+// further): the full one; from LOD_MID a body in a third of the points (its glasshouse, lamps and
+// trims the same - the windows and their pillars exactly as they are); from LOD_FAR the sun's own
+// lean body and glasshouse. Each is taken where it differs from the full one by under a pixel.
+// A car keeps the make it had a frame ago until it is 8% past the line (LOD_HOLD): a car standing
+// by a line does not flicker between two makes as the camera moves a little.
+const LOD_MID = 26;
+const LOD_FAR = 9;
+const LOD_LINES = [LOD_MID, LOD_FAR];
+const LOD_HOLD = 0.08;
 
 // The cars of the city: the first boulevard's low sports car (glossy paint full of the sunset, a
 // bar of red light across the back), and its family - a sedan, a taxi, a police cruiser with its
@@ -187,6 +203,8 @@ export function randomCarSpec(r = Math.random) {
 // the body below the windows: closed rounded sections (sills, wheel arches, hood, deck)
 // (lo, v5: the same body in a third of the sections and half the points round each, for the sun's
 // view: a texel of 12 cm, where the two cast the same shadow)
+// (lo 'mid', ROADMAP 19.1: half the sections and two thirds of the points round each - a car some
+// way off, the same to within three centimetres)
 function lowerBody(K, lo = false) {
   const L = K.len;
   const hw = curve(K.halfW);
@@ -201,13 +219,14 @@ function lowerBody(K, lo = false) {
   };
   // the sections: closer together round the wheels, so the arches come out round
   const ts = [];
-  const NS = lo ? 14 : 44;
-  const NW = lo ? 2 : 6;
+  const mid = lo === 'mid';
+  const NS = mid ? 22 : lo ? 14 : 44;
+  const NW = mid ? 3 : lo ? 2 : 6;
   for (let i = 0; i <= NS; i++) ts.push(i / NS);
   for (const t of K.wheels) for (let k = -NW; k <= NW; k++) ts.push(t + (k / NW) * ((K.r * 1.3) / L));
   ts.sort((a, b) => a - b);
   const uniq = ts.filter((t, i) => t >= 0 && t <= 1 && (i === 0 || t - ts[i - 1] > 1e-4));
-  const N = lo ? 10 : 22;
+  const N = mid ? 14 : lo ? 10 : 22;
   const pos = [];
   for (const t of uniq) {
     const z = t * L - L / 2;
@@ -432,7 +451,14 @@ function build(kind) {
   // lamps, the trims and the plates are inside its shadow by less than a texel
   const ghLo = glassHouse(K, true);
   const sunBody = merge([lowerBody(K, true).toNonIndexed(), ghLo.roof, ghLo.frames, ghLo.glass]);
-  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside, sunBody };
+  // (ROADMAP 19.1) the same car from further off: [the full one, some way off, far off] - the parts
+  // of its shell that change, and its glass
+  const lod = [null];
+  if (GFX.carLod) {
+    lod.push({ body: merge([lowerBody(K, 'mid').toNonIndexed(), gh.roof]), glass: gh.glass });
+    lod.push({ body: merge([lowerBody(K, true).toNonIndexed(), ghLo.roof]), glass: ghLo.glass, trim: merge([ghLo.frames, ...trimParts.slice(1)]) });
+  }
+  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside, sunBody, lod };
 }
 
 // (ROADMAP 4.6) a point on a car's side, from a picture of it from the side: z along it (forward),
@@ -782,7 +808,6 @@ class Pool {
   }
 }
 
-const PARTS = ['shell', 'glass'];
 // the lights and trims (the same arrays every frame)
 const TAXI_LIGHT = [0.85, 0.7, 0.22];
 const TAXI_BUSY = [0.32, 0.27, 0.12];
@@ -941,42 +966,55 @@ export class CarRenderer {
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);
       const n = kind === 'bus' ? 12 : DRAWN_ONLY.has(kind) ? 8 : cap;
-      const shell = merge(shellParts.map(([k]) => b[k]));
-      const cnt = shell.attributes.position.count;
-      const ids = new Float32Array(cnt);
-      const rows = new Float32Array(cnt);
-      const tint = new Float32Array(cnt);
-      let o = 0;
-      for (const [k, mat, part, t] of shellParts) {
-        const c = (b[k].index ? b[k].index.count : b[k].attributes.position.count);
-        ids.fill(part, o, o + c);
-        rows.fill(penRow(mat), o, o + c);
-        tint.fill(t, o, o + c);
-        o += c;
-      }
-      shell.setAttribute('aId', new THREE.BufferAttribute(ids, 1));
-      shell.setAttribute('aMat', new THREE.BufferAttribute(rows, 1));
-      shell.setAttribute('aTint', new THREE.BufferAttribute(tint, 1));
+      const shellOf = (src) => {
+        const shell = merge(shellParts.map(([k]) => src[k]));
+        const cnt = shell.attributes.position.count;
+        const ids = new Float32Array(cnt);
+        const rows = new Float32Array(cnt);
+        const tint = new Float32Array(cnt);
+        let o = 0;
+        for (const [k, mat, part, t] of shellParts) {
+          const c = (src[k].index ? src[k].index.count : src[k].attributes.position.count);
+          ids.fill(part, o, o + c);
+          rows.fill(penRow(mat), o, o + c);
+          tint.fill(t, o, o + c);
+          o += c;
+        }
+        shell.setAttribute('aId', new THREE.BufferAttribute(ids, 1));
+        shell.setAttribute('aMat', new THREE.BufferAttribute(rows, 1));
+        shell.setAttribute('aTint', new THREE.BufferAttribute(tint, 1));
+        return shell;
+      };
       // (what the sun sees of a car: its body and glasshouse in one shape, in fewer points (build's
       // sunBody), drawn with the shell's own instances - every part of a car has the car's matrix -
       // so a kind of car is one draw in the sun's view)
       const sun = byCorners(b.sunBody);
+      // (ROADMAP 19.1) a make of it for each distance: [the full one, some way off, far off] - each
+      // its shell and its glass, and the sun's view of the cars drawn with it
+      const makes = b.lod.map((src) => {
+        const parts = src ? { ...b, ...src } : b;
+        const L = { shell: new Pool(scene, shellOf(parts), shellPen, n, true), glass: new Pool(scene, parts.glass, mats.glass, n, true), sun: null };
+        L.shell.mesh.userData.noShadow = true;
+        L.glass.mesh.userData.noShadow = true;
+        L.sun = new THREE.InstancedMesh(sun, mats.paint.userData.depth, n);
+        L.sun.instanceMatrix = L.shell.mesh.instanceMatrix;
+        L.sun.frustumCulled = false;
+        L.sun.count = 0;
+        L.sun.visible = false;
+        L.sun.layers.set(LAYERS.SUN);
+        L.sun.userData.dynamic = true;
+        scene.add(L.sun);
+        return L;
+      });
       const P = (this.kinds[kind] = {
         b,
-        shell: new Pool(scene, shell, shellPen, n, true),
-        glass: new Pool(scene, b.glass, mats.glass, n, true),
+        makes,
+        shell: makes[0].shell,
+        glass: makes[0].glass,
+        sun: makes[0].sun,
         // (only the cars you drive: a few)
         inside: new Pool(scene, b.inside, mats.cabin, 6, true),
       });
-      for (const k of PARTS) P[k].mesh.userData.noShadow = true;
-      P.sun = new THREE.InstancedMesh(sun, mats.paint.userData.depth, n);
-      P.sun.instanceMatrix = P.shell.mesh.instanceMatrix;
-      P.sun.frustumCulled = false;
-      P.sun.count = 0;
-      P.sun.visible = false;
-      P.sun.layers.set(LAYERS.SUN);
-      P.sun.userData.dynamic = true;
-      scene.add(P.sun);
       P.inside.mesh.userData.noShadow = true;
       P.inside.mesh.userData.noReflect = true;
     }
@@ -992,9 +1030,28 @@ export class CarRenderer {
     const rim = merge(rimParts);
     this.tyres = new Pool(scene, tyre, mats.tyre, cap * 4);
     this.rims = new Pool(scene, rim, mats.rim, cap * 4);
+    // (ROADMAP 19.1) the wheels of the cars further off: a tyre of twelve sides and of eight, the rim
+    // a plain disc (its five spokes are under a pixel there)
+    this.tyreMakes = [this.tyres];
+    this.rimMakes = [this.rims];
+    if (GFX.carLod) {
+      for (const [ts, rs] of [[12, 10], [8, 6]]) {
+        this.tyreMakes.push(new Pool(scene, new THREE.CylinderGeometry(1, 1, 0.3, ts).rotateZ(Math.PI / 2), mats.tyre, cap * 4));
+        this.rimMakes.push(new Pool(scene, new THREE.CylinderGeometry(0.7, 0.7, 0.02, rs).rotateZ(Math.PI / 2), mats.rim, cap * 4));
+      }
+    }
     // (a rim's shadow is inside its tyre's; in the mirror it is a smear inside the tyre's)
-    this.rims.mesh.userData.noShadow = true;
-    this.rims.mesh.userData.noReflect = true;
+    for (const r of this.rimMakes) {
+      r.mesh.userData.noShadow = true;
+      r.mesh.userData.noReflect = true;
+    }
+    // (where this frame's cars are seen from, and the pixels a metre is one metre from there: view)
+    this.eye = new THREE.Vector3();
+    this.ppmK = Infinity;
+    // (the make each car had a frame ago, by where it stands - a parked car, or one that is waiting: a
+    // moving one is new every frame and has none - and this frame's)
+    this._lodWas = new Map();
+    this._lodNow = new Map();
     // a taxi's sign, a police car's light bar and its stripe, a van's roof rack
     this.lightBox = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), mats.light, cap * 3);
     this.trimBox = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), mats.trim, cap * 4);
@@ -1002,6 +1059,20 @@ export class CarRenderer {
   }
 
   // the box round a car of this kind, in its own frame
+  // (ROADMAP 19.1) this frame's eye: the camera, and how tall its picture is in pixels - before the
+  // frame's cars are put down (game/game.js)
+  view(camera, heightPx) {
+    this.eye.copy(camera.position);
+    this.ppmK = camera.isPerspectiveCamera && heightPx > 0 ? heightPx / (2 * Math.tan((camera.fov * Math.PI) / 360)) : Infinity;
+  }
+
+  // (how many wheels are down so far this frame, of every make: game/traffic.js keeps room by it)
+  get wheelsUsed() {
+    let n = 0;
+    for (const t of this.tyreMakes) n += t.n;
+    return n;
+  }
+
   boxOf(kind) {
     const K = (this.kinds[kind] || this.kinds.sedan).b.K;
     return new THREE.Box3(new THREE.Vector3(-K.W / 2, 0, -K.len / 2), new THREE.Vector3(K.W / 2, K.roofY + 0.04, K.len / 2));
@@ -1084,8 +1155,29 @@ export class CarRenderer {
     if (rv) _m.premultiply(rv.pre);
     if (motion.on) this.carWas(kind, x, y, z);
     const part = ((Math.abs(x * 0.37 + z * 0.11) % 1) + 1) % 1;
-    P.shell.push(_m, this.col(color), part, rv, D, o.open ? -1 : 0);
-    P.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D, o.open ? -1 : 0);
+    // (ROADMAP 19.1) which make of it: by how many pixels a metre of it is in the picture, at its
+    // near end. The car you drive, and one still turning from a drawing into a car, the full one
+    let lv = 0;
+    if (P.makes.length > 1 && !rv && !o.open && !GFX.off) {
+      const E = this.eye;
+      const d = Math.hypot(x - E.x, y - E.y, z - E.z) - K.len * 0.5 * s;
+      const ppm = (this.ppmK * s) / Math.max(0.5, d);
+      const key = Math.imul(Math.round(x * 4), 73856093) ^ Math.imul(Math.round(z * 4), 19349663);
+      const was = this._lodWas.get(key);
+      if (was === undefined) lv = ppm < LOD_FAR ? 2 : ppm < LOD_MID ? 1 : 0;
+      else {
+        // (farther only once the line is passed by 8%, nearer only once it is passed back by 8%)
+        lv = was;
+        while (lv < 2 && ppm < LOD_LINES[lv] * (1 - LOD_HOLD)) lv++;
+        while (lv > 0 && ppm > LOD_LINES[lv - 1] * (1 + LOD_HOLD)) lv--;
+      }
+      this._lodNow.set(key, lv);
+    }
+    const make = P.makes[lv];
+    make.shell.push(_m, this.col(color), part, rv, D, o.open ? -1 : 0);
+    make.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D, o.open ? -1 : 0);
+    const tyres = this.tyreMakes[lv] || this.tyres;
+    const rims = this.rimMakes[lv] || this.rims;
     // (ROADMAP 4.5) the car you drive: its side windows down, the inside seen through them
     if (o.open) {
       P.inside.push(_m, WHITE, part + 0.5, null, D);
@@ -1102,10 +1194,10 @@ export class CarRenderer {
       const wr = w === flat ? w.r * 0.74 : w.r;
       _w.compose(_p.set(w.x, wr, w.z), _q, _s.set(w.tw, wr, w.r));
       _w.premultiply(_m);
-      this.tyres.push(_w, WHITE, part + 0.7, rv);
+      tyres.push(_w, WHITE, part + 0.7, rv);
       _w.compose(_p.set(w.x + w.sd * (0.15 * w.tw + 0.015), wr, w.z), _q, _s.set(1, w.r, w.r));
       _w.premultiply(_m);
-      this.rims.push(_w, o.rim || WHITE, part + 0.8, rv);
+      rims.push(_w, o.rim || WHITE, part + 0.8, rv);
     }
     // (ROADMAP 4.6) the car's own frame, for what is drawn on it (game/vehicles.js); the garage's
     // upgrades you can see: a scoop on the hood and pipes, a bull bar, skirts, a roof rack
@@ -1341,16 +1433,26 @@ export class CarRenderer {
     const kinds = this._kindList || (this._kindList = Object.values(this.kinds));
     for (let i = 0; i < kinds.length; i++) {
       const P = kinds[i];
-      P.shell.end();
-      P.glass.end();
+      for (let k = 0; k < P.makes.length; k++) {
+        const L = P.makes[k];
+        L.shell.end();
+        L.glass.end();
+        L.sun.count = L.shell.mesh.count;
+        L.sun.visible = L.shell.mesh.visible;
+      }
       P.inside.end();
-      P.sun.count = P.shell.mesh.count;
-      P.sun.visible = P.shell.mesh.visible;
     }
-    this.tyres.end();
-    this.rims.end();
+    for (let k = 0; k < this.tyreMakes.length; k++) {
+      this.tyreMakes[k].end();
+      this.rimMakes[k].end();
+    }
     this.lightBox.end();
     this.trimBox.end();
+    // (ROADMAP 19.1) the makes of this frame's cars are what the next frame's had 'a frame ago'
+    const was = this._lodWas;
+    this._lodWas = this._lodNow;
+    this._lodNow = was;
+    was.clear();
     // (the smart drawing: this frame's cars are the last frame's for the next)
     if (this._now) {
       const was = this._was;
