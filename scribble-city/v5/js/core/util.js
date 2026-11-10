@@ -79,6 +79,17 @@ export const dist2 = (ax, az, bx, bz) => {
   return Math.sqrt(dx * dx + dz * dz);
 };
 
+// (ROADMAP 19, the phone's own way of drawing) what of it is on. ?oldgfx: none of it - the game as it
+// was drawn before, to compare the two on the same device (the pause menu's test route, once each way)
+const _gq = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+const _old = !!_gq && _gq.has('oldgfx');
+export const GFX = {
+  // what is behind a shop's walls is not drawn (world/interiors.js viewHide)
+  shopView: !_old && !(_gq && _gq.has('noshopview')),
+  // a car far off drawn in fewer points (render/cars.js)
+  carLod: !_old && !(_gq && _gq.has('nocarlod')),
+};
+
 export function isTouchDevice() {
   return (
     (typeof window !== 'undefined' && 'ontouchstart' in window) ||
