@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { lin3 } from '../render/materials.js';
-import { nextId, seeded, quadGeo, Batch } from './kit.js';
+import { nextId, seeded, quadGeo, Batch, ROOM_GROUPS } from './kit.js';
+import { GFX } from '../core/util.js';
 import { GOODS } from './paint.js';
 import { FSoup } from './soup.js';
 // (v5, ROADMAP 14.4) the products made the way they are, their printed labels, the live ones
@@ -18,6 +19,8 @@ import { LiveSet, soupMeshes } from './shopkit.js';
 // a little golden, the colour of the shop windows at dusk.
 
 const T = 0.25; // wall thickness
+// (the fronts with shops' rooms behind them, numbered: world/kit.js ROOM_GROUPS)
+let roomSeq = 0;
 const STYLE = { GLOW: 'glow' };
 
 const C = {
@@ -243,6 +246,26 @@ class Room {
     this.M = this.store ? ctx.M.store : ctx.M;
     this.f = f;
     this.spec = spec;
+    // (ROADMAP 19.10, phones: GFX.roomHide) a shop's room drawn in the pieces of the rooms behind its front - not in the city's chunks
+    // with the street round it - so a view that cannot see into any of them leaves them out (world/kit.js ROOM_GROUPS, world/interiors.js)
+    this.R = ctx.R;
+    if (GFX.roomHide && spec.shop && spec.mode !== 'stock' && f && f.toU && f.toW) {
+      const id = f.__rooms || (f.__rooms = ++roomSeq);
+      const key = `rooms:${id}`;
+      let G = ROOM_GROUPS.get(key);
+      const y0 = (spec.y0 || 0) + (f.dy || 0);
+      const y1 = y0 + (spec.h || 4);
+      if (!G) ROOM_GROUPS.set(key, (G = { f, u0: spec.u0, u1: spec.u1, depth: spec.depth || 0, y0, y1 }));
+      else {
+        G.u0 = Math.min(G.u0, spec.u0);
+        G.u1 = Math.max(G.u1, spec.u1);
+        G.depth = Math.max(G.depth, spec.depth || 0);
+        G.y0 = Math.min(G.y0, y0);
+        G.y1 = Math.max(G.y1, y1);
+      }
+      const R0 = ctx.R;
+      this.R = { add: (mat, geo, matrix, id2, o = {}) => R0.add(mat, geo, matrix, id2, { ...o, chunk: key }) };
+    }
     // 'build' (the room and its furniture now) or 'stock' (only its goods, streamed in later: the
     // things on the shelves, the clothes on the rails)
     this.mode = spec.mode || 'build';
@@ -288,7 +311,7 @@ class Room {
   add(mat, geo, color) {
     // (streaming the things on the shelves in: the room and its furniture are already there)
     if (this.mode === 'stock') return;
-    this.ctx.R.add(mat, geo, null, nextId(), { color: color ? L3(color) : undefined });
+    this.R.add(mat, geo, null, nextId(), { color: color ? L3(color) : undefined });
   }
 
   // (v5, ROADMAP 11.18) the soup of many small parts for a pen of the rooms: 'box', 'gloss', 'cyl',
@@ -301,7 +324,7 @@ class Room {
     const all = this.soups || (this.soups = {});
     let s = all[kind];
     if (!s) s = all[kind] = new FSoup(this.f);
-    else if (s.full) s.flushTo(this.ctx.R, this.soupPen(kind));
+    else if (s.full) s.flushTo(this.R, this.soupPen(kind));
     return s;
   }
 
@@ -327,10 +350,10 @@ class Room {
   }
 
   flushSoups() {
-    if (this.soups) for (const [kind, s] of Object.entries(this.soups)) s.flushTo(this.ctx.R, this.soupPen(kind));
+    if (this.soups) for (const [kind, s] of Object.entries(this.soups)) s.flushTo(this.R, this.soupPen(kind));
     if (this.psoups) {
       const pens = productPens(this.store ? 'store' : true);
-      for (const s of Object.values(this.psoups)) s.flushTo(this.ctx.R, pens);
+      for (const s of Object.values(this.psoups)) s.flushTo(this.R, pens);
       this.psoups = null;
     }
   }

@@ -20,6 +20,13 @@ const _box = new THREE.Box3();
 const _c = new THREE.Vector3();
 const WHITE = [1, 1, 1];
 
+// (ROADMAP 19.10, phones: GFX.roomHide) the shops' rooms behind one front, their walls, floors, ceilings and fixtures, drawn as pieces of
+// their own (world/rooms.js gives them the chunk key 'rooms:<n>'): what each such group is - its front, and the part of it the rooms take
+// (u from u0 to u1, as deep as depth, from y0 to y1) - and the pieces made of them, for world/interiors.js to leave out of a view that
+// cannot see into any of them, by the same rule as their goods
+export const ROOM_GROUPS = new Map();
+export const ROOM_MESHES = new Set();
+
 export class Batch {
   constructor() {
     this.groups = new Map(); // material -> Map(chunk -> [{ geo, id, color, obj, sway }])
@@ -228,6 +235,13 @@ export class Batch {
         m.matrixAutoUpdate = false;
         m.name = key;
         Object.assign(m.userData, opts);
+        if (key.startsWith('rooms:')) {
+          const G = ROOM_GROUPS.get(key.split('#')[0]);
+          if (G) {
+            m.userData.rooms = G;
+            ROOM_MESHES.add(m);
+          }
+        }
         delete m.userData.merge;
         delete m.userData.whole;
         delete m.userData.steps;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Streamer } from './mainland/stream.js';
 import { buildStock } from './rooms.js';
 import { GFX } from '../core/util.js';
+import { ROOM_MESHES } from './kit.js';
 
 // (v5, ROADMAP 11.18) The insides of the shops, streamed in. A shop of the real world is a thousand
 // small things - the cans, the boxes, the bottles, the clothes on their hangers - and the city has
@@ -198,6 +199,26 @@ export class Interiors {
       g.visible = false;
       hidden.push(g);
       st.hidden++;
+    }
+    // (the shops' own walls, shelves and counters, merged by their front - world/rooms.js, world/kit.js
+    // ROOM_GROUPS: the same rule, for the whole row of rooms behind one front)
+    if (!GFX.roomHide) return;
+    for (const m of ROOM_MESHES) {
+      if (!m.parent) {
+        ROOM_MESHES.delete(m);
+        continue;
+      }
+      if (!m.visible) continue;
+      const G = m.userData.rooms;
+      if (cy > G.y1 - 0.3) continue;
+      const f = G.f;
+      const w = f.toW(cx, cz);
+      if (w > -0.5) continue;
+      const u = f.toU(cx, cz);
+      if (u > G.u0 - 1 && u < G.u1 + 1 && w > -G.depth - 1) continue;
+      m.visible = false;
+      hidden.push(m);
+      st.rooms = (st.rooms || 0) + 1;
     }
   }
 
