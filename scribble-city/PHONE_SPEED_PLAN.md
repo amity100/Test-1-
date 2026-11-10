@@ -1078,3 +1078,11 @@ And after publishing:
 > פורסם ונבדק שהעלייה לאתר הצליחה: https://amity100.github.io/Test-1-/scribble-city/v5/
 > כשנוח לך: בטלפון, תפריט ההפסקה ← "מבחן ביצועים" (בראש התפריט). בלי לגעת כדקה וחצי, ובסוף "העתקה"
 > ולהדביק לי כאן. זה מודד גם "כמו קודם" מול "עכשיו" באותה ריצה.
+
+**Run 2, round 1 of the phone version (ROADMAP 19.7), `?fast=1&perftest=island`, site from `fae1f92`** - Samsung Internet 30 (run 1 was
+Chrome 157), battery 87% (run 1: 26%), screen 1706×822. The island's boulevard (the spot run 1 stood in): **35.5 frames a second, 28.2 ms**
+(game 9.4 + sending 9.5 + waiting 9.3), the slowest 1% at 19.6; as before (GFX.off; the pens stay in two passes) 34.8. The drawing 29.8 ms
+(run 1: 75.9), without the far-lighter pens 30.5 (they save 0.7 ms, 2%), people and cars 3.5 ms, the whole frame timed 43.1. The crowd of
+54: 16.8 against 12.8 (+31%, 779 K triangles fewer). Frames over 50 ms: 281 of 1,013 (most in the crowd), over 100 ms 10; the processor's
+fixed sum 6.4 ms at the start and 18.9 at the end (it slowed threefold: heat), the card's 8.0 then 6.0. Not separable in this run: how much
+of 76 -> 30 ms is the two passes and how much the other browser and battery - the same link in Chrome says.
